@@ -88,6 +88,12 @@ int onload_fd_stat(int fd, struct onload_stat* stat)
 /**************************************************************************/
 
 __attribute__((weak))
+int onload_zc_await_stack_sync(int fd)
+{
+  return 0;
+}
+
+__attribute__((weak))
 int onload_zc_alloc_buffers(int fd, struct onload_zc_iovec* iovecs,
                             int iovecs_len, 
                             enum onload_zc_buffer_type_flags flags)

@@ -61,6 +61,59 @@ static int fd_to_stack(int fd, ci_netif** pni, citp_fdinfo** pfdi)
 }
 
 
+static bool txqs_have_reached(ci_netif* ni, const uint32_t* dest)
+{
+  int i;
+  OO_STACK_FOR_EACH_INTF_I(ni, i) {
+    int32_t diff = dest[i] - ni->state->nic[i].tx_dmaq_done_seq;
+    if( diff > 0 )
+      return false;
+  }
+  return true;
+}
+
+
+int onload_zc_await_stack_sync(int fd)
+{
+  int rc, i;
+  citp_lib_context_t lib_context;
+  citp_fdinfo* fdi;
+  ci_netif* ni;
+  uint32_t added[CI_CFG_MAX_INTERFACES];
+
+  Log_CALL(ci_log("%s(%d)", __FUNCTION__, fd));
+  citp_enter_lib(&lib_context);
+
+  rc = fd_to_stack(fd, &ni, &fdi);
+  if( rc == 0 ) {
+    int tries = 0;
+    ci_netif_lock(ni);
+    OO_STACK_FOR_EACH_INTF_I(ni, i)
+      added[i] = ni->state->nic[i].tx_dmaq_insert_seq;
+    while( ! txqs_have_reached(ni, added) ) {
+      if( ++tries > 100 ) {
+        /* This hack exists for the purpose of coping with NIC reset. The
+         * tx_dmaq_* checking works fine in the presence of a reset, except
+         * that the code to fix it all up in the tcp_helper requires the stack
+         * lock. We therefore release the lock every so often for a bit. */
+        tries = 0;
+        ci_netif_unlock(ni);
+        usleep(1);
+        ci_netif_lock(ni);
+      }
+      ci_netif_poll(ni);
+    }
+    ci_netif_unlock(ni);
+    citp_fdinfo_release_ref(fdi, 0);
+  }
+
+  citp_exit_lib(&lib_context, TRUE);
+  Log_CALL_RESULT(rc);
+  return rc;
+}
+
+
+
 int onload_zc_alloc_buffers(int fd, struct onload_zc_iovec* iovecs,
                             int iovecs_len, 
                             enum onload_zc_buffer_type_flags flags)

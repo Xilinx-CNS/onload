@@ -104,6 +104,7 @@
     onload_stack_opt_reset;
     onload_version;
     onload_lib_ext_version;
+    onload_zc_await_stack_sync;
     onload_zc_recv;
     onload_zc_send;
     onload_zc_release_buffers;

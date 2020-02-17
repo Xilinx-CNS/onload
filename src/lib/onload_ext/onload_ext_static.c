@@ -139,6 +139,9 @@ wrap(int, onload_is_present, (void),
 wrap(int, onload_fd_stat, (int fd, struct onload_stat* stat),
      (fd, stat), 0)
 
+wrap(int, onload_zc_await_stack_sync, (int fd),
+     (fd), 0)
+
 wrap(int, onload_zc_alloc_buffers, (int fd, struct onload_zc_iovec* iovecs,
                                     int iovecs_len, 
                                     enum onload_zc_buffer_type_flags flags),

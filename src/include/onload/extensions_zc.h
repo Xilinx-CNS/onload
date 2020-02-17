@@ -83,6 +83,27 @@ struct onload_zc_mmsg {
 };
 
 
+/* onload_zc_await_stack_sync will block until a stack's transmit queues
+ * have cycled completely.
+ *
+ * fd indicates the stack that will be examined. Any accelerated socket on
+ * the stack of interest may be used.
+ *
+ * This call allows an application to synchronise with a stack to ensure that
+ * zero-copy application buffers are not being used at the time that they are
+ * being changed. It is typically called immediately before
+ * onload_zc_unregister_buffers().
+ *
+ * This synchronisation check examines only the NICs' transmit queues. It is
+ * the application's responsibility to ensure that socket send queues are
+ * empty as well. This function will usually block for at most a few
+ * microseconds.
+ *
+ * Returns zero on success, or <0 to indicate an error
+ */
+extern int onload_zc_await_stack_sync(int fd);
+
+
 /******************************************************************************
  * Buffer management
  ******************************************************************************/
@@ -196,7 +217,8 @@ extern int onload_zc_register_buffers(int fd,
 /* onload_zc_unregister_buffers undoes the effect of
  * onload_zc_register_buffers(). This function does not guarantee to perform
  * consistency checking: if the memory is still in use by Onload at the time
- * then this may cause an application crash or termination of the VI.
+ * then this may cause an application crash or termination of the VI. The
+ * onload_zc_await_stack_sync() function can help with this synchronisation.
  *
  * Returns zero on success, or <0 to indicate an error.
  */
