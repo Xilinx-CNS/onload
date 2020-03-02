@@ -426,7 +426,7 @@ install_modules_load_d() {
   else
     # For RHEL <= 6 (the only non-systemd platform we support)
     try mkdir -p "$i_etc/sysconfig/modules"
-    install_f onload_misc/sysconfig_onload_module "$i_etc/sysconfig/modules/onload.module"
+    install_x onload_misc/sysconfig_onload_modules "$i_etc/sysconfig/modules/onload.modules"
   fi
 }
 
