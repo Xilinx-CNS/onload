@@ -12,9 +12,24 @@ Introduction
 
 Build requirements
 ============
+ * binutils
+ * gettext
+ * gawk
+ * gcc
+ * sed
+ * make
+ * bash
+ * glibc-common
+ * libcap-devel
+ * libmnl-devel
+ * perl-Test-Harness
 
- TODO: get a list of required packages in order to build both in-tree Onload and
- TODO: the packaged tarball (including newly added cplane).
+
+ You will also need to install the kernel and its development headers (i.e. kernel
+ and kernel-devel) for which you wish to build against.
+
+ Note that these dependencies are given for building on Redhat distributions, and
+ package names may differ on other distributions.
 
 
 Distributing as tarball
@@ -35,7 +50,8 @@ Distributing as tarball
  Use the --release option with onload_mkdist to produce release packages.
 
  Please follow the README included in the tarball to install Onload on the
- target machine.
+ target machine. Note that the built tarball can be installed with `--debug`
+ to enable debugging mode, which provides additional logging and error-checking.
 
 
 Building directly from repository
@@ -45,24 +61,58 @@ Building directly from repository
  be useful to build directly out of the repository, rather than packaging into a
  tarball.
 
- There are two separate libraries that need to be compiled:
+ There are two separate parts that need to be compiled:
    * Driver code: Modules to be loaded into the kernel.
-   * User code:   Libraries that are used to add Onload stacks to user level
-                  programs.
+   * User code:   Libraries that are used to add Onload stacks to user level programs.
+
 
  Before building either of these sets of code, the make files and build tree
- needs to be contructed.  Scripts for doing this are included in the repository.
+ needs to be constructed.  Scripts for doing this are included in the repository.
 
- From a fresh checkout, to build both build trees and compile both libraries,
- do:
+ From the top directory of a fresh checkout, to build both build trees and compile
+ both parts, do:
 
     export PATH="$PWD/scripts:$PATH"
 
     mmakebuildtree --driver
     mmakebuildtree --user
 
-    make -C "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)" ${OPTS}
-    make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" NO_ZF=1 ${OPTS}  TODO: Should make NO_ZF default
+    make -C "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)"
+    make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)"
+
+
+ Building Onload from the repository will enable debugging mode (providing additional
+ logging) by default. This can be disabled by explicitly passing the following
+ argument to make:
+
+    NDEBUG=1
+
+
+Onload logging
+==========
+**Debugging mode must be enabled to make use of additional Onload logging**
+
+Logging can be configured in four different places:
+
+ * Environment variables:
+   * `EF_UNIX_LOG=[bitmask]` (default 0x3) User-level logging of stuff that doesn't involve a stack
+   * `TP_LOG=[bitmask]` (default 0xb)
+      User-level logging of stuff that involves a stack
+ * Onload module options:
+   * `oo_debug_bits=[bitmask]` (default 0x1, use 0x7fffffff for all)
+      Kernel logging of stuff that doesn't involve a stack
+   * `ci_tp_log=[bitmask]` (default 0xf)
+      Kernel logging of stuff that involves a stack
+
+Some log statements will be output in the terminal, while some will be in syslog. All messages
+can be forced to go to syslog by using `EF_LOG_VIA_IOCTL`, at the cost of overhead.
+
+The components indicated by the bits in each of these bitmasks are defined in the following
+files:
+
+ * _"tp" (i.e. transport) bits_ - src/include/ci/internal/ip_log.h
+ * _EF_UNIX_LOG bits_ - src/include/ci/internal/opts_citp_def.h
+ * _oo_debug_bits_ - src/include/onload/debug.h
 
 
 Unit tests
@@ -74,7 +124,8 @@ These are written in C; running "make" inside the user tree will compile each te
 into a separate binary which can be run.
 
 For convenience, we provide a script to build and run all of the tests:
-scripts/run_unit_tests.sh
+
+    scripts/run_unit_tests.sh
 
 
 Installing from repository
