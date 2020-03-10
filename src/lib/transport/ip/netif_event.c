@@ -1370,7 +1370,7 @@ ci_inline void __ci_netif_tx_pkt_complete(ci_netif* ni,
   if( pkt->flags & CI_PKT_FLAG_UDP )
     ci_netif_tx_pkt_complete_udp(ni, ps, pkt);
   else
-    ci_netif_pkt_release(ni, pkt);
+    ci_netif_pkt_release_in_poll(ni, pkt, ps);
 
 }
 
