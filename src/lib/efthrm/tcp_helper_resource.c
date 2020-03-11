@@ -60,7 +60,7 @@
 #define HW_PAGES_PER_SET_S (CI_CFG_PKTS_PER_SET_S - 2)
 #define PKTS_PER_HW_PAGE 4
 #else
-#error "Unkinown value for CI_CFG_PKT_BUF_SIZE"
+#error "Unknown value for CI_CFG_PKT_BUF_SIZE"
 #endif
 
 /* Sentinel value indicating that an entry in the table of lists of ephemeral
