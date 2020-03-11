@@ -81,23 +81,6 @@ do_top_level () {
 	$build_eftest
 	EOF
 
-  have_libelf_line=
-  if [[ ! "$PLATFORM" == *"linux" ]]; then
-    HAVE_LIBELF=$(TOPPATH="$TOPPATH" make -s -f <(cat - <<HERE
-include $TOPPATH/mk/platform/$PLATFORM.mk
-.PHONY: all
-all:
-	@CC="\${CC}" CFLAGS="\${CFLAGS} \${MMAKE_CFLAGS}" check_library_presence libelf.h elf 2>/dev/null
-HERE
-    ))
-    if [ ! -z $require_optional_targets ] && [ "$HAVE_LIBELF" -ne 1 ]; then
-      echo Failed to find libelf with header libelf.h
-      exit -1
-    fi
-    have_libelf_line="HAVE_LIBELF := $HAVE_LIBELF"
-  fi
-
-
   cat <<-EOF >config.mk
 	PLATFORM := $PLATFORM
 	BUILDPATH := $BUILDPATH
@@ -111,7 +94,6 @@ HERE
 	W_NO_STRING_TRUNCATION := $W_NO_STRING_TRUNCATION
 	W_IMPLICIT_FALLTHROUGH := $W_IMPLICIT_FALLTHROUGH
 	W_NO_IGNORED_ATTRIBUTES := $W_NO_IGNORED_ATTRIBUTES
-	$have_libelf_line
 	$nt
 	$kpath
 EOF
