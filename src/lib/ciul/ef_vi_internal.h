@@ -79,8 +79,13 @@
   ((char*)EF_VI_ALIGN_BACK(((intptr_t)(p)), ((intptr_t)(align))))
 #define EF_VI_IS_POW2(x)           ((x) && ! ((x) & ((x) - 1)))
 
+/* The reason this is in quotes and rather than angle brackets is
+ * caused by https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80005.
+ * In this case, linux gets defined as 1 earlier and gets expanded
+ * within the macro.
+ */
 #if defined __has_include
-  #if __has_include(<linux/if_xdp.h>)
+  #if __has_include("linux/if_xdp.h")
     #define CI_HAVE_AF_XDP 1
   #else
     #define CI_HAVE_AF_XDP 0
