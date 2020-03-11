@@ -611,14 +611,6 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
 		     MC_CMD_GET_CAPABILITIES_V3_OUT_RX_FORCE_EVENT_MERGING_LBN)) {
 		*capability_flags |= NIC_FLAG_RX_FORCE_EVENT_MERGING;
 	}
-	if (flags & (1u <<
-		     MC_CMD_GET_CAPABILITIES_V3_OUT_EVENT_CUT_THROUGH_LBN)) {
-		*capability_flags |= NIC_FLAG_EVENT_CUT_THROUGH;
-	}
-	if (flags & (1u <<
-		     MC_CMD_GET_CAPABILITIES_V3_OUT_RX_CUT_THROUGH_LBN)) {
-		*capability_flags |= NIC_FLAG_RX_CUT_THROUGH;
-	}
 
 	/* If MAC filters are policed then check we've got the right privileges
 	 * before saying we can do MAC spoofing.
@@ -647,6 +639,14 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
 			*capability_flags |= NIC_FLAG_EVQ_V2;
 		if (flags & (1u << MC_CMD_GET_CAPABILITIES_V2_OUT_CTPIO_LBN))
 			*capability_flags |= NIC_FLAG_TX_CTPIO;
+		if (flags & (1u <<
+			MC_CMD_GET_CAPABILITIES_V3_OUT_EVENT_CUT_THROUGH_LBN)) {
+			*capability_flags |= NIC_FLAG_EVENT_CUT_THROUGH;
+		}
+		if (flags & (1u <<
+			MC_CMD_GET_CAPABILITIES_V3_OUT_RX_CUT_THROUGH_LBN)) {
+			*capability_flags |= NIC_FLAG_RX_CUT_THROUGH;
+	}
         }
 	else {
 		/* We hard code this value, as lack of support for get caps V2
