@@ -1629,8 +1629,9 @@ int oo_cp_fwd_resolve_complete(ci_private_t *priv, void *arg)
   }
   if( &req->link == &cp->fwd_req ) {
     rc = -ENOENT;
-    ci_log("WARNING: %s: no route requests when asked to complete 0x%x; "
-           "next is 0x%x", __func__, req_id, cp->fwd_req_id);
+    CI_DEBUG(ci_log("WARNING: %s: no route requests when asked "
+                    "to complete 0x%x; next is 0x%x", __func__,
+                    req_id, cp->fwd_req_id));
     goto out_unlock;
   }
   ci_assert_equal(req->id, req_id);
