@@ -11,14 +11,10 @@ Linux distribution support
  - Red Hat Enterprise Linux 8.0 - 8.2
  - SuSE Linux Enterprise Server 12 sp4 and sp5
  - SuSE Linux Enterprise Server 15 and sp1
- - Canonical Ubuntu Server LTS 16.04 and 18.04
- - Canonical Ubuntu Server and 19.10
+ - Canonical Ubuntu Server LTS 16.04, 18.04 and 20.04
  - Debian 9 "Stretch"
  - Debian 10 "Buster"
- - Linux kernels 3.14 - 5.4
-
- * RHEL 7.8 and RHEL 8.2 were only available in pre-release form at the point
-   this release was tested.
+ - Linux kernels 4.4 - 5.6
 
 
 Feature activation
