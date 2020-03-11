@@ -1599,8 +1599,11 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
      * Connected send.
      */
 
-    if( CI_IPX_ADDR_IS_ANY(udp_ipx_raddr(us)) )
-      goto send_via_os;
+    /* Don't allow UDP connected send when in not connected socket state */
+    if( ! (us->s.s_flags & CI_SOCK_FLAG_CONNECTED) ) {
+      rc = -EDESTADDRREQ;
+      goto error;
+    }
 
     ci_ipcache_set_daddr(&sinf.ipcache, addr_any);
 

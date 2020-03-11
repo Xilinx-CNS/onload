@@ -462,6 +462,11 @@ int ci_udp_connect_conclude(citp_socket* ep, ci_fd_t fd,
 
   dst = ci_get_addr(serv_addr);
 
+  /* When performing UDP connected send with destination address any, data is
+   * really sent to linklocal destination. Make OS to take care of it. */
+  if( CI_IPX_ADDR_IS_ANY(dst) )
+    goto handover;
+
 #if CI_CFG_IPV6
   /* RHEL7 allows to connect from IPv4 address to IPv6 address.  For all
    * other distros ci_udp_connect() would fail after calling
