@@ -1,0 +1,98 @@
+#! /usr/bin/python
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+"""
+Script to show how to connect to onload_remote_monitor.
+
+Gets output from onload_remote_monitor and prints a subset of it
+"""
+
+import os, sys, socket, json, time, subprocess, re
+
+
+def usage():
+    print 'Usage: %s host:port' % sys.argv[0]
+    sys.exit(1)
+
+#Connect to onload_remote_monitor, request the stack_state_get
+# data, and return result as a json dictionary
+def orm_get(host, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.connect((host, port))
+    sock.send('stack_state_get\n')
+    out = ''
+    while '\n' not in out:
+        rc = sock.recv(1024)
+        if not rc:
+            break
+        out += rc
+    sock.close()
+    if out.strip():
+        return json.loads(out)
+    else:
+        return ''
+
+
+
+############################################################
+# Main
+############################################################
+
+def main():
+    if len(sys.argv) != 2:
+        usage()
+    host, port = sys.argv[1].split(':')
+    port = int(port)
+
+    orm_output = orm_get(host, port)
+
+    for stack in orm_output['json']:
+        stack_id = int(stack.keys()[0])
+        print "Stack", stack_id
+        stack_details = stack.values()[0]
+        
+        stack_stats = stack_details['stats']
+        print "   ", "Stack statistics"
+        for stat_name,stat_value in stack_stats.items():
+            print "       ", stat_name, ":", stat_value
+
+        netif = stack_details['stack']
+
+        for key,state in netif.items():
+            # For each of the main types of state returned, just return
+            # the integers values that they contain - there is lots more
+            # available, but this keeps the output clear and readable
+            
+            if key.startswith('stack_state'):
+                print "   ", "Stack state"
+                for netif_state_key, netif_state_value in state.items():
+                    if type(netif_state_value) == int:
+                        print "       ", netif_state_key, ":", netif_state_value
+            elif key.startswith('udp'):
+                for socket_id, socket_state in state.items():
+                    print "   ", "UDP socket state", socket_id
+                    for udp_state_key, udp_state_value in socket_state['udp_state'].items():
+                        if type(udp_state_value) == int:
+                            print "       ", udp_state_key, ":", udp_state_value
+            elif key.startswith('tcp_listen'):
+                for socket_id, socket_state in state.items():
+                    print "   ", "Listen socket state", socket_id
+                    for listen_state_key, listen_state_value in socket_state['tcp_listen_sockets'].items():
+                        if type(listen_state_value) == int:
+                            print "       ", listen_state_key, ":", listen_state_value
+            elif key.startswith('tcp'):
+                for socket_id, socket_state in state.items():
+                    print "   ", "TCP socket state", socket_id
+                    for tcp_state_key, tcp_state_value in socket_state['tcp_state'].items():
+                        if type(tcp_state_value) == int:
+                            print "       ", tcp_state_key, ":", tcp_state_value
+            elif key.startswith('pipe'):
+                for socket_id, socket_state in state.items():
+                    print "   ", "Pipe state", socket_id
+                    for pipe_state_key, pipe_state_value in socket_state['oo_pipe'].items():
+                        if type(pipe_state_value) == int:
+                            print "       ", pipe_state_key, ":", pipe_state_value
+
+if __name__ == '__main__':
+    main()

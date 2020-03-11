@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# netty.io performance profile
+
+# Enable polling / spinning.  When the application makes a blocking call
+# such as recv() or poll(), this causes Onload to busy wait for up to 100ms
+# before blocking.
+#
+onload_set EF_POLL_USEC 100000
+
+# Use EPOLL mode 3 as will provide the best scalability and speed
+onload_set EF_UL_EPOLL 3
+
+# EPOLL can be multithread safe, as redis poll architecture is single threaded
+onload_set EF_EPOLL_MT_SAFE 1
+
+onload_set EF_RXQ_SIZE 4096
+onload_set EF_CLUSTER_IGNORE 1
+
+# enable receive packet event batching, this adds a small latency
+# cost, but improves transaction rate/efficiency
+onload_set EF_HIGH_THROUGHPUT_MODE 1
+
+# disable CTPIO and PIO as these reduce CPU efficiency and don't
+# for this class of application, bring major benefits.  If
+# absolutely best latency is needed, then consider enabling them.
+onload_set EF_CTPIO 0
+onload_set EF_PIO 0

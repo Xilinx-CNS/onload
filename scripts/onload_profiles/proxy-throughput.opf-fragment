@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Enable clustering to spread connections over workers.
+# Name will need to be overridden for each cluster if
+# wanting to use multiple clusters.
+onload_set EF_CLUSTER_SIZE "$num_workers"
+onload_set EF_CLUSTER_NAME prox
+
+# Force termination of orphaned stacks on restart.
+onload_set EF_CLUSTER_RESTART 1
+
+# Allow sharing of stacks in cluster by two processes
+# to allow hot/seamless restart.
+onload_set EF_CLUSTER_HOT_RESTART 1
+
+# Enable scalable filters to avoid using a separate filter
+# for each connection.  A proxy both accepts passive connections
+# and makes active connections.
+# This will need to be overridden to not use 'any' interface if
+# wanting separate clusters on different interfaces.
+onload_set EF_SCALABLE_FILTERS "any=rss:active:passive"
+
+# Scalable filters mode for applications using master/worker
+# hierarchy.
+onload_set EF_SCALABLE_FILTERS_ENABLE 2
+
+# Connections not accepted through scalable filters interface
+# are refused.
+onload_set EF_SCALABLE_LISTEN_MODE 1
+
+# Allocate plenty of packet memory
+# (NB overrides setting in "throughput.opf-fragment")
+onload_set EF_MAX_PACKETS $(( (180000*16) / $num_workers ))
+
+onload_import throughput
+onload_import wan-traffic

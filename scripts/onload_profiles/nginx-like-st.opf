@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# nginx-like settings to use with non-nginx applications and tests.
+
+onload_import throughput_base
+onload_import wan-traffic
+

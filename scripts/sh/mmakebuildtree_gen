@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Helper for mmakebuildtree
+######################################################################
+
+. "$(dirname "$0")/fns"
+. "$bin/mmake-fns"
+
+######################################################################
+
+check_env () {
+  [ -n "$TOPPATH" ] && [ -n "$BUILD" ] && [ -n "$CURRENT" ] &&
+  [ -n "$PLATFORM" ]
+}
+
+do_copies () {
+  local path=$1
+  local source_path=$2
+  [ -z "$BUILD_TREE_COPY" ] && return
+  for f in $BUILD_TREE_COPY; do
+    #log "Copying: '$f'"
+    if [ -f "$TOPPATH/$CURRENT/$f" ]; then
+      cp $source_path/$f $path
+    elif [ -d "$TOPPATH/$CURRENT/$f" ]; then
+      cp -r $source_path/$f $path
+    else log "Warning: Copy file '$f' missing in '$CURRENT'"
+    fi
+  done
+}
+
+
+generate_gnumake () {
+  local path=$1
+  local ttop=$2
+  cat <<-EOF >$path/GNUmakefile
+	TOPPATH := $ttop
+        DISTFILES := $DISTFILES
+	BUILD := $BUILD
+	THISDIR := $THISDIR
+	CURRENT := $CURRENT
+	VPATH := $VPATH
+	include \$(TOPPATH)/mk/site/mmake.mk
+	EOF
+}
+
+generate_linux () {
+  local path=$1
+  [ -f $TOPPATH/$CURRENT/mmake.mk ] || return
+  cat <<-EOF >$path/Makefile
+	include $BUILDPATH/config.mk
+	include $TOPPATH/mk/linux_kbuild.mk
+	include $TOPPATH/$CURRENT/mmake.mk
+	EOF
+}
+
+######################################################################
+# main()
+
+#log mmakebuildtree_gen hello
+#log "TOPPATH=$TOPPATH"
+#log "BUILD=$BUILD"
+#log "CURRENT=$CURRENT"
+#log "PLATFORM=$PLATFORM"
+#log "VPATH=$VPATH"
+#log "SUBDIRS=$SUBDIRS"
+
+[ "$#" = 0 ] || fail "Eh?  I think you wanted mmakebuildtree..."
+check_env || fail "Environment check failed"
+
+if [ "$VPATH_ENABLED" = 1 ] ; then
+   export COPYDEPENDS=0
+else
+   export COPYDEPENDS=1
+fi
+
+if [ -z "$THISDIR" ] ; then
+ bp=$BUILDPATH
+else
+ bp=$BUILDPATH/$THISDIR
+fi
+
+tc=$TOPPATH/$CURRENT
+
+#log "$BUILDPATH/$THISDIR"
+
+do_copies $bp $tc
+[ -f Makefile ] || [ -f GNUmakefile ] || generate_gnumake $bp $TOPPATH
+
+case "$PLATFORM" in
+    linux)
+        generate_linux $bp;;
+esac
+
+true

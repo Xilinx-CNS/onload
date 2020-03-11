@@ -1,0 +1,186 @@
+#! /usr/bin/env python
+#
+# Create a linux install package (kernel or onload).  This script does not
+# affect the customer build.
+#
+# Translated from an earlier bash version of the same script
+#
+# David Russell, July 2010
+
+
+# THIS SCRIPT MUST RUN ON PYTHON 2.2 - 2.6
+#
+# Be careful with imports and syntax
+
+import os, sys, optparse, shutil
+
+# Each file is specified either as a string, in which case it is copied to the
+# top of the destination directory, or as a tuple, in which case the first
+# element is the source file and the second specifies a subdirectory within the
+# destination directory into which the file is copied.
+
+common_files = {
+    'ultree': [
+        'driver/linux_net/util/phy_power',
+        'driver/linux_net/util/reset_nic',
+        'driver/linux_net/util/set_carrier'],
+    }
+
+onload_files = {
+    'ktree': [
+        'driver/linux/unload.sh',
+        'driver/linux/shared.sh',
+        ],
+    'ultree': [
+        ('tests/syscalls/sendfile', 'tests/syscalls'),
+        ('tests/onload/hwtimestamping/rx_timestamping',
+         'tests/onload/hwtimestamping'),
+        ('tests/onload/hwtimestamping/cpacket_send',
+         'tests/onload/hwtimestamping'),
+        ('tests/onload/tproxy_preload/tproxy_preload.so',
+         'tests/onload/tproxy_preload'),
+        ('tests/onload/sync_preload/sync_preload.so',
+         'tests/onload/sync_preload'),
+        ('tests/rtt/rtt', 'tests/rtt'),
+        'tests/orm_test_client/orm_test_client',
+        ],
+    }
+
+kernel_files = {
+    'ktree': [
+        'driver/linux_net/load.sh',
+        'driver/linux_net/unload.sh',
+        'driver/linux_net/sfc.ko' ],
+    }
+
+# Runbench queries these lists to decide which portion of the trees to build.
+# If files are added to the above dictionaries, any dependencies should be
+# added here.
+kernel_build_dirs = [
+    'driver/linux',
+]
+
+ul_build_dirs = [
+    'include',
+
+    'driver/linux_net/util',
+
+    'lib/ciapp',
+    'lib/citools',
+    'lib/onload_ext',
+
+    'lib/ciul',
+    'tests/syscalls',
+    'tests/onload/hwtimestamping',
+    'tests/onload/tproxy_preload',
+    'tests/onload/sync_preload',
+    'tests/rtt',
+    'tests/orm_test_client',
+]
+
+def choose_files(onload):
+    if onload:
+        other = onload_files
+    else:
+        other = kernel_files
+    for tree,files in (common_files.items() + other.items()):
+        for f in files: yield tree,f
+
+def parse_args():
+    if '-u32' in sys.argv: # maintain compatibility with old bash version
+        sys.argv[sys.argv.index('-u32')] = '--ultree32'
+    parser = optparse.OptionParser()
+    parser.add_option('-o','--onload',action='store_true',help='create onload '
+                      'build package (default is linux_net)')
+    parser.add_option('-k', '--ktree', help='driver build tree path')
+    parser.add_option('-u', '--ultree', help='gnu build tree path')
+    parser.add_option('-U', '--ultree32', help='(64bit builds only) 32 bit '
+                      'gnu build tree path')
+    parser.add_option('-x', '--allow-missing', help='do not fail if this file '
+                      'is missing (may be specified multiple times',
+                      action='append')
+    parser.add_option('--print-ul-build-dirs', help='don\'t copy; just '
+                      'print the UL directories that should be built',
+                      action='store_true')
+    parser.add_option('--print-kernel-build-dirs', help='don\'t copy; just '
+                      'print the kernel directories that should be '
+                      'built', action='store_true')
+    parser.usage = '%prog [options] [destdir]'
+    options, args = parser.parse_args()
+
+    # If --print-*-build-dirs is given, we don't care about the other arguments.
+    if not options.print_ul_build_dirs and not options.print_kernel_build_dirs:
+        if args:
+            options.target_dir = args[0]
+        elif options.onload:
+            options.target_dir = 'onload_install_package'
+        else:
+            options.target_dir = 'kernel_install_package'
+        if not options.ultree:
+            print "ERROR: -u/--ultree is required\n"
+            parser.print_help()
+            sys.exit(1)
+        if (not options.onload) and (not options.ktree):
+            print "ERROR: -k/--ktree is required for kernel packages\n"
+            parser.print_help()
+            sys.exit(1)
+    return options
+
+def main(onload, ktree, ultree, target_dir=None, allow_missing=None,
+         ultree32=None, print_ul_build_dirs=False,
+         print_kernel_build_dirs=False):
+    if print_ul_build_dirs:
+        for directory in ul_build_dirs:
+            print directory
+    if print_kernel_build_dirs:
+        for directory in kernel_build_dirs:
+            print directory
+    if print_ul_build_dirs or print_kernel_build_dirs:
+        sys.exit(0)
+
+    if allow_missing is None:
+        allow_missing = []
+    for path in [ktree, ultree, ultree32]:
+        if path and not os.path.isdir(path):
+            print "ERROR: Cannot find",path
+            sys.exit(2)
+
+    if os.path.isdir(target_dir):
+        shutil.rmtree(target_dir)
+
+    print "TARGET=" + target_dir
+
+    for tree,f in choose_files(onload):
+        if tree == 'ktree':
+            trees = [(ktree,'')]
+        else:
+            trees = [(ultree,'')] + (ultree32 and [(ultree32,'32bit')] or [])
+        for tree,subdir in trees:
+            try:
+                source = os.path.join(tree, f)
+            except:
+                # Path joining failed, so try f as a (src, dest) tuple.
+                source = os.path.join(tree,   f[0])
+                subdir = os.path.join(subdir, f[1])
+            destdir = os.path.join(target_dir, subdir)
+            if not os.path.isfile(source):
+                if os.path.basename(source) in allow_missing:
+                    print "WARNING: Cannot find", source
+                    continue
+                else:
+                    print "ERROR: Cannot find",source
+                    sys.exit(3)
+            print "Copy '%s' to '$TARGET/%s'" % (source, subdir)
+            if not os.path.isdir(destdir):
+                os.makedirs(destdir)
+            if os.path.islink(source):
+                dest = os.path.realpath(source)
+                print "treating '%s' as a link to '%s'"%(source, dest)
+                source = dest
+            if os.system("cp '%s' '%s'" % (source, destdir)) != 0:
+                print "ERROR: Failed to copy",source,"to",destdir
+                sys.exit(4)
+
+if __name__ == '__main__':
+    options = parse_args()
+    main(**options.__dict__)

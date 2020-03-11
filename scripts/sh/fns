@@ -1,0 +1,24 @@
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# We use dirname and basename a lot which can be slow on Cygwin,
+# and they're simple enough to reimplement with built-ins.
+dirname () {
+    [ "${1%/*}" = "$1" ] && echo . || echo "${1%/*}"
+}
+basename () {
+    local name="${1##*/}"
+    echo "${name%$2}"
+}
+
+p=$(basename "$0")
+me=$(basename "$0")
+bin=$(cd "$(dirname "$0")" && /bin/pwd)
+export PATH="$bin:$PATH"
+
+err  () { echo 1>&2 "$*";   }
+log  () { err "$p: $*";     }
+fail () { log "$*"; exit 1; }
+try  () { "$@" || fail "'$*' failed"; }
+try_quiet  () { "$@" 2>&1 > /dev/null || fail "'$*' failed"; }
+

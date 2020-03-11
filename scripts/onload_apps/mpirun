@@ -1,0 +1,55 @@
+# -*- Mode: shell-script; -*-
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Onload application handler: mpirun
+
+# TODO:
+#   - handle multiple [-arch]s (tricky, needs wrapper per arch)
+#   - lam, scali
+arches=
+arch=
+app=
+mpirunargs=
+mpirun=$(sfc_protect "$1")
+shift
+# These args are most of the args for MPICH.
+# ?? TODO complete this list for mpich, scali and lam
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -arch)
+      	[ -n "$arch" ] && fail "Multiple architectures not supported."
+      	arg=$(sfc_protect "$2"); arch="$2"; arches="$arches $2"
+      	mpirunargs="$mpirunargs $1 $arg"; shift
+      	;;
+    -machine|-machinefile|-machinedir|-np|-nodes|-exclude|\
+    -map|-stdin)
+      	arg=$(sfc_protect "$2"); mpirunargs="$mpirunargs $1 $arg"
+      	shift
+      	;;
+    -h|-nolocal|-all-cpus|-allcpus|-all-local|-t|-v|-dbg|-ksq|-show)
+      	mpirunargs="$mpirunargs $1"
+      	;;
+    *)	app=$(rawecho "$1" | sed "s/%a/$arch/g")
+      	[ -x "$app" ] && break
+              # Pass arg unmodified to mpirun
+      	arg=$(sfc_protect "$1"); mpirunargs="$mpirunargs $arg"
+      	;;
+  esac
+  shift
+done
+[ $# = 0 ] && {  # Not found an app.
+  vlog "No executable found on mpirun command line."
+  vlog "invoking: $mpirun $mpirunargs"
+  $doit eval "$mpirun" "$mpirunargs"
+  exit $?
+}
+
+# MPICH turns the app name into an absolute (if not one already), so we
+# ought to do the same.  If that fails, lets try a relative one anyway.
+shift
+sfc_mkwrapper2 "$app"
+# NB. mustn't exec...else sfc_atexit will kill wrapper immediately!
+vlog "invoking: $mpirun $mpirunargs \"$wrapper\" $*"
+$doit eval "$mpirun" "$mpirunargs" "$wrapper" "$@"
+exit

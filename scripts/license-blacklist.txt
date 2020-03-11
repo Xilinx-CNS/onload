@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: Solarflare-Binary
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# This is a blacklist file for use with license-validate.py
+# Currently, it is only correct for the contents of tarball output by
+# onload_mkdist - more work is still required for the entire Onload developer
+# tree to be SPDX-perfect.
+.git
+.hg
+**/*.pyc
+build
+prebuilt
+*LICENSE
+**/*.png
+**/*.eps
+**/*.vsdx
+src/driver/linux_net
+README*
+ChangeLog
+ReleaseNotes*

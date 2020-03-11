@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# OpenOnload lowest latency profile.  Includes the standard "latency"
+# profile and adds further options that are likely to improve latency for
+# many applications.  NB. This may include options that are not safe for
+# all applications and all environments, so please use with care.
+
+onload_import latency
+
+# Use cut-through mode for CTPIO feature on X2 (and later) adapters. This can
+# result in poisoned packets being emitted.
+# At link speeds faster than 10Gb the CPU will generally not be able to keep
+# up so poisoned packets will often be emitted and latency will get worse;
+# disable cut-through in those cases.
+if [ -z "$EF_CTPIO_MODE" ]; then
+  have_indeterminate=
+  have_10k=
+  have_non10k=
+  for nic in /sys/class/net/*; do
+    driver=$(basename "$(readlink "$nic/device/driver")")
+    if [ "$driver" = sfc ]; then
+      speed=`(cat $nic/speed 2>/dev/null) || echo 0`
+      if [ $speed = 0 ]; then
+        have_indeterminate=1
+      elif [ $speed -le 10000 ]; then
+        have_10k=1
+      else
+        have_non10k=1
+      fi
+    fi
+  done
+  if [ "$have_non10k" ]; then
+    if [ "$have_indeterminate" -o "$have_10k" ]; then
+      log "Warning: Disabling CTPIO cut-through because only adapters running at 10GbE benefit from it. If your latency-sensitive traffic is using only a 10GbE adapter then set EF_CTPIO_MODE=ct explicitly"
+    else
+      log "Note: Disabling CTPIO cut-through because only adapters running at 10GbE benefit from it"
+    fi
+  else
+    onload_set EF_CTPIO_MODE ct
+    if [ $have_indeterminate ]; then
+      log "Warning: CTPIO cut-through is enabled, but the link speed of some adapters could not be determined. If latency-sensitive traffic is using an adapter running at a speed other than 10GbE then use EF_CTPIO_MODE=sf for best results"
+    fi
+  fi
+fi
+
+# Enable CTPIO even if using full-featured firmware.  N.B. This is
+# incompatible with multicast loopback.
+onload_set EF_CTPIO_SWITCH_BYPASS 1
+
+# Assume that application does not invoke calls on a single epoll object
+# concurrently.
+onload_set EF_EPOLL_MT_SAFE 1

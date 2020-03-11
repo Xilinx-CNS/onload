@@ -1,0 +1,967 @@
+#!/usr/bin/env python2
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Script to configure the sfc_affinity driver.
+
+# TODO:
+# - I'm concerned that the top-level-shared-cache might be the L1 when
+#   hyper-threading is enabled, which is probably not what we want.
+
+import sys, os, re
+from string import Template
+import sfcaffinity as affinity
+import sfcmask as mask
+import optparse
+
+
+usage_str = "%prog [options] <command> [args...]\n\n"
+usage_str += "commands:\n"
+usage_str += "  show [ethx]\n"
+usage_str += "  auto [ethx]...\n"
+usage_str += "  check [ethx]\n"
+usage_str += "  help [topic]\n"
+
+help_show = Template("""\
+$me show [ethx]
+
+Show current configuration
+
+""")
+
+help_auto = Template("""\
+$me auto [ethx]
+
+Configure sfc_affinity automatically
+
+""")
+
+help_check = Template("""\
+$me check [ethx]
+
+Check sfc_affinity configuration for problems
+
+""")
+
+######################################################################
+######################################################################
+######################################################################
+
+me = os.path.basename(sys.argv[0])
+
+# Last external command invoked via system(), popen() etc.
+last_sys_cmd = None
+
+# Global options.
+global_options = None
+
+# Current sub command.
+command = None
+# Args to current sub command.
+command_args = None
+
+######################################################################
+
+# Log levels
+LL_ALWAYS = 0
+LL_ERROR = 1
+LL_WARN = 2
+LL_INFO = 3
+LL_SYSTEM = 4
+LL_SYSTEM_CHK = 5
+LL_DEBUG = 10
+
+######################################################################
+
+def read_file(fname):
+    "Read a small ascii file with a single read() call."
+    # Looks like overkill?  Reason for this obfuscation is to get something
+    # that works on python 2.x and 3.x.
+    fd = os.open(fname, os.O_RDONLY)
+    bytes = os.read(fd, 8192)
+    return str(bytes.decode('ascii'))
+
+######################################################################
+
+class Bucket(object):
+    pass
+
+######################################################################
+
+class EthInterface(object):
+    def __init__(self, name):
+        self.name = name
+        self.__ifindex = -1
+        self.__driver = None
+        self.__type = None
+        assert self.__driver is None
+        self.__n_rxqs = -1
+
+    def __str__(self):
+        return self.name
+
+    def ifindex(self):
+        if self.__ifindex < 0:
+            fname = '/sys/class/net/%s/ifindex' % self.name
+            self.__ifindex = file_get_int(fname)
+        return self.__ifindex
+
+    def driver(self):
+        if self.__driver is None:
+            try:
+                path = '/sys/class/net/%s/device/driver' % self.name
+                l = os.readlink(path)
+                self.__driver = os.path.basename(l)
+            except:
+                self.__driver = ""
+        return self.__driver
+
+    def is_ethernet(self):
+        if self.__type is None:
+            if not os.path.isfile('/sys/class/net/%s/type' % self.name):
+                return False
+            self.__type = file_get_int('/sys/class/net/%s/type' % self.name)
+        return self.__type == 1
+
+    def n_rxqs(self):
+        if self.__n_rxqs < 0:
+            self.__n_rxqs = interface_n_rxqs(self.name)
+        return self.__n_rxqs
+
+######################################################################
+
+def top_and_tail(x, pre="", post=""):
+    if type(x) is list:
+        return map(lambda a: pre + str(a) + post, x)
+    else:
+        return pre + str(x) + post
+
+
+def out(x, file=sys.stdout):
+    x = top_and_tail(x, post="\n")
+    if type(x) is list:
+        x = ''.join(x)
+    try:
+        file.write(x)
+    except:
+        sys.stderr.write("INTERNAL ERROR: out: repr(x)=%s\n" % repr(x))
+        raise
+
+
+def log(x, file=sys.stdout, loglevel=LL_ALWAYS):
+    if global_options.loglevel >= loglevel:
+        x = top_and_tail(x, pre=("%s: " % me))
+        out(x, file=file)
+
+
+def debug(x):
+    x = top_and_tail(x, pre="DEBUG: ")
+    log(x, file=sys.stderr, loglevel=LL_DEBUG)
+
+
+def info(x):
+    x = top_and_tail(x, pre="INFO: ")
+    log(x, file=sys.stderr, loglevel=LL_INFO)
+
+
+def err(x):
+    x = top_and_tail(x, pre="ERROR: ")
+    log(x, file=sys.stderr, loglevel=LL_ERROR)
+
+
+warnings_emitted = []
+
+def warn(x):
+    x = top_and_tail(x, pre="WARNING: ")
+    if x in warnings_emitted:
+        return
+    warnings_emitted.append(x)
+    log(x, file=sys.stderr, loglevel=LL_WARN)
+
+
+def fail(x, exit_code=1):
+    err(x)
+    sys.exit(exit_code)
+
+
+def isint(x):
+    return type(x) is int or type(x) is long
+
+
+def do_system(command, loglevel=LL_SYSTEM):
+    log("SYSTEM: %s" % command, loglevel=loglevel)
+    if 1:
+        last_sys_cmd = command
+        return os.system(command)
+    else:
+        return 0
+
+
+def do_popen(command):
+    last_sys_cmd = command
+    return os.popen(command)
+
+
+def affinity_log_system(command):
+    log("SYSTEM: %s" % command, loglevel=LL_SYSTEM)
+
+######################################################################
+
+def count_bits(mask):
+    assert isint(mask)
+    n = 0
+    biti = 0
+    while mask:
+        bit = 1 << biti
+        biti += 1
+        if bit & mask:
+            n += 1
+            mask &= ~bit
+    return n
+
+
+def file_get_int(fname):
+    f = read_file(fname)
+    return int(f.strip())
+
+
+def file_get_int_list(fname):
+    l = read_file(fname).strip()
+    return [int(x) for x in l.split()]
+
+
+def file_get_cpumask(fname):
+    cscm = read_file(fname).strip()
+    return mask.comma_sep_hex_to_int(cscm)
+
+
+def get_topology():
+    topology = affinity.get_topology()
+    try:
+        if global_options.cores:
+            opt = 'cores'
+            topology = affinity.get_topology(cores=global_options.cores)
+        if global_options.packages:
+            opt = 'packages'
+            packages = mask.to_int_list(global_options.packages)
+            cores = [c.id for c in topology.get_cores()
+                     if c.pkg.id in packages]
+            topology = affinity.get_topology(cores=cores)
+    except affinity.NoCores:
+        fail("No cores left after applying filters.")
+    except affinity.BadCoreId:
+        inst = sys.exc_info()[1]
+        fail("Bad core id %d" % inst.core_id)
+    except mask.BadMask:
+        inst = sys.exc_info()[1]
+        fail("Bad mask in --%s=%s" % (opt, inst.msg))
+    return topology
+
+
+def service_is_running(name):
+    return do_system("service %s status >/dev/null 2>&1" % name,
+                     loglevel=LL_SYSTEM_CHK) == 0
+
+
+def irqbalance_is_running():
+    return service_is_running('irqbalance')
+
+
+def irqbalance_stop_if_necessary():
+    if irqbalance_is_running():
+        info("stopping irqbalance service")
+        do_system("service irqbalance stop >/dev/null 2>&1")
+        if irqbalance_is_running():
+            err("failed to stop the irqbalancer")
+
+
+def sys_check():
+    ok = True
+    if irqbalance_is_running():
+        err("irqbalance service is running")
+        ok = False
+    return ok
+
+
+def get_interfaces(sfc_only=False, names=False):
+    sys_net = '/sys/class/net'
+    interfaces = []
+    for ethname in os.listdir(sys_net):
+        ethx = EthInterface(ethname)
+        if not ethx.is_ethernet():
+            continue
+        if sfc_only and ethx.driver() != 'sfc':
+            continue
+        if names:
+            interfaces.append(ethname)
+        else:
+            interfaces.append(ethx)
+    return interfaces
+
+
+def is_interface(ethname, sfc_only=False):
+    return ethname in get_interfaces(sfc_only, names=True)
+
+
+# A bit ugly.  The entries in /proc/interrupts for an ethernet interface
+# should be named ethx-$n if for rx and tx, ethx-rx-$n for rx only.
+# Therefore to count rxqs, and to find their associated irqs, we need to
+# try ethx-rx-$n first, and if no match then ethx-$n.
+proc_interrupts_rxq_fmts = ['%s-rx-', '%s-']
+
+def __interface_n_rxqs(ethname, fmt):
+    match = fmt % ethname
+    f = do_popen("grep '\<%s[0-9]' /proc/interrupts | wc -l" % match)
+    return int(f.read().strip())
+
+
+def __interface_n_rxqs_fmt(ethname):
+    for fmt in proc_interrupts_rxq_fmts:
+        n = __interface_n_rxqs(ethname, fmt)
+        if n:  return (n, fmt)
+    return (0, None)
+
+
+def interface_n_rxqs(ethname):
+    (n, fmt) = __interface_n_rxqs_fmt(ethname)
+    return n
+
+
+def interface_fmt(ethname):
+    (n, fmt) = __interface_n_rxqs_fmt(ethname)
+    return fmt
+
+
+def sfc_interface_n_rxqs(ethname):
+    try:
+        dir = "/sys/class/net/%s/queues" % ethname
+        cmd = "cd %s 2>/dev/null && /bin/ls -d rx-[0-9]* | wc -w" % dir
+        f = do_popen(cmd)
+        return int(f.read().strip())
+    except:
+        warn(["%s is missing." % dir,
+              "Is debugfs mounted?"])
+        return interface_n_rxqs(ethname)
+
+
+def num_cpus():
+    # Or alternatively get cpu topology at start of day and use
+    # that info here.
+    f = do_popen("grep 'core id' /proc/cpuinfo | wc -l")
+    return int(f.read().strip())
+
+
+def module_loaded(modname):
+    f = do_popen("/sbin/lsmod | grep '^%s\>'" % modname)
+    return bool(f.read())
+
+
+def sfc_affinity_loaded():
+    return module_loaded('sfc_affinity')
+
+
+def sfc_check():
+    if not module_loaded('sfc'):
+        err("sfc driver is not loaded")
+        return False
+    if not get_interfaces(sfc_only=True):
+        err("no sfc network interfaces found")
+        return False
+    return True
+
+
+def sfc_affinity_check():
+    ok = True
+    if not sfc_affinity_loaded():
+        err("sfc_affinity driver is not loaded")
+        return False
+    info("sfc_affinity driver is loaded")
+    try:
+        os.stat('/dev/sfc_affinity')
+        info("/dev/sfc_affinity is present")
+    except:
+        err("/dev/sfc_affinity is missing")
+        ok = False
+    path = '/proc/driver/sfc_affinity/new_interface'
+    try:
+        os.stat(path)
+        info("%s is present" % path)
+    except:
+        err("%s is missing" % path)
+        ok = False
+    return ok
+
+
+def sfc_affinity_new_interface(ethx, cpu_to_q):
+    info("%s: configure sfc_affinity n_rxqs=%d cpu_to_rxq=%s" % \
+         (ethx, ethx.n_rxqs(), ','.join([str(i) for i in cpu_to_q])))
+    if not sfc_affinity_loaded():
+        if do_system("/sbin/modprobe sfc_affinity") != 0:
+            err("Failed to load sfc_affinity driver")
+            return
+    s = "%d %d %s" % (ethx.ifindex(), ethx.n_rxqs(),
+                      ' '.join([str(i) for i in cpu_to_q]))
+    cmd = "echo %s >/proc/driver/sfc_affinity/new_interface" % s
+    if do_system(cmd) != 0:
+        err("Failed to register interface %s" % ethx)
+        err("Command was:")
+        err(cmd)
+        return
+
+
+def sfc_affinity_get_cpu2rxq(ethx):
+    ifindex = ethx.ifindex()
+    return file_get_int_list('/proc/driver/sfc_affinity/%d/cpu2rxq' % ifindex)
+
+
+def sfc_affinity_ifindex_is_registered(ifindex):
+    try:
+        os.stat('/proc/driver/sfc_affinity/%d' % ifindex)
+        return True
+    except:
+        return False
+
+
+def pid_get_cpumask(pid):
+    # Can also be gotten with "taskset -p <pid>", but I'm not sure how that
+    # behaves when there are more than 32 processors, so this seems safer.
+    assert isint(pid)
+    cmd = "grep Cpus_allowed /proc/%d/status" % pid
+    f = do_popen(cmd)
+    cscm = f.read().split()[1]
+    return mask.comma_sep_hex_to_int(cscm)
+
+
+def irq_get_cpumask(irq):
+    # NB. Important to remember that this can return an old value.  Read
+    # after write does not return the written value until an interrupt has
+    # fired.
+    assert isint(irq)
+    return file_get_cpumask("/proc/irq/%d/smp_affinity" % irq)
+
+
+def rxq_get_irq(ethx, rxq):
+    (n_rxqs, fmt) = __interface_n_rxqs_fmt(ethx)
+    assert n_rxqs > 0
+    match = '\<' + (fmt % ethx) + str(rxq) + '\>'
+    f = do_popen("grep '%s' /proc/interrupts | awk -F: '{print $1}'" % match)
+    return int(f.read().strip())
+
+
+def rxq_set_affinity(ethx, rxq, cpumask):
+    assert type(ethx) is EthInterface
+    assert isint(rxq)
+    assert isint(cpumask)
+    irq = rxq_get_irq(ethx, rxq)
+    info("%s: bind rxq %d (irq %d) to core %s" % \
+         (ethx, rxq, irq, mask.to_comma_sep_list(cpumask)));
+    affinity.irq_set_affinity(irq, cpumask)
+    return
+
+    cscm = mask.int_to_comma_sep_hex(cpumask)
+    # There is no way to check whether current affinity is correct.
+    if 1:
+        cmd = "echo %s >/proc/irq/%d/smp_affinity" % (cscm, irq)
+        if do_system(cmd) != 0:
+            err("Failed to set affinity for %s rxq%d irq" % (ethx, rxq))
+            err("  irq=%d affinity=%s" % (irq, cscm))
+    # See if there is a kernel thread handling the irq (i.e. we have a
+    # realtime kernel).
+    irq_pid = affinity.irq_get_pid(irq)
+    if irq_pid < 0:
+        return
+    current_cpumask = pid_get_cpumask(irq_pid)
+    if cpumask != current_cpumask:
+        cpulist = mask.int_to_comma_sep_list(cpumask)
+        cmd = "taskset -p -c %s %d >/dev/null" % (cpulist, irq_pid)
+        if do_system(cmd) != 0:
+            err("Failed to set affinity for %s rxq%d irq thread" % (ethx, rxq))
+            err("  irq=%d irq-pid=%d affinity=%s" % (irq, irq_pid, cscm))
+            err("Command was:")
+            err("  %s" % cmd)
+
+
+have_warned_about_affinity = 0
+
+def affinity_warning():
+    global have_warned_about_affinity
+    if have_warned_about_affinity:
+        return
+    have_warned_about_affinity = 1
+    warn(["The above error may be bogus, because changes to",
+          "interrupt affinity are not visible until the",
+          "interrupt fires."])
+
+
+def rxq_check_affinity(ethx, rxq):
+    # Check irq is affinitised to a single cpu.
+    ok = True
+    irq = rxq_get_irq(ethx, rxq)
+    irq_m = irq_get_cpumask(irq)
+    assert irq_m != 0
+    if count_bits(irq_m) != 1:
+        err("%s rxq%d may be affinitised to multiple cpus" % (ethx, rxq))
+        err("  irq=%d affinity=%s" % (irq, mask.int_to_comma_sep_hex(irq_m)))
+        ok = False
+        affinity_warning()
+
+    # Check irq affinity and irq thread affinity are consistent.
+    irq_pid = affinity.irq_get_pid(irq)
+    if irq_pid < 0:
+        return ok
+    irq_pid_m = pid_get_cpumask(irq_pid)
+    if irq_pid_m != irq_m:
+        err("%s rxq%d irq affinity may not match irq-thread" % (ethx, rxq))
+        err("  irq=%d affinity=%s" % (irq, mask.int_to_comma_sep_hex(irq_m)))
+        err("  irq-pid=%d affinity=%s" % (irq_pid,
+                                         mask.int_to_comma_sep_hex(irq_pid_m)))
+        ok = False
+        affinity_warning()
+    return ok
+
+
+def rxq_show(ethx, rxq):
+    irq = rxq_get_irq(ethx, rxq)
+    irq_m = irq_get_cpumask(irq)
+    irq_cscm = mask.int_to_comma_sep_hex(irq_m, minlen=True)
+    irq_pid = affinity.irq_get_pid(irq)
+    if irq_pid > 0:
+        irq_pid_m = pid_get_cpumask(irq_pid)
+        irq_pid_cscm = mask.int_to_comma_sep_hex(irq_pid_m, minlen=True)
+        out("%s rxq%d irq=%d irqaffinity=%s pid=%d pidaffinity=%s" %
+            (ethx, rxq, irq, irq_cscm, irq_pid, irq_pid_cscm))
+    else:
+        out("%s rxq%d irq=%d irqaffinity=%s" %
+            (ethx, rxq, irq, irq_cscm))
+
+
+def interface_bind_rxqs(ethx, q_to_cpu):
+    assert type(q_to_cpu) is list
+    for (rxq, cpu) in enumerate(q_to_cpu):
+        if rxq >= ethx.n_rxqs():
+            break
+        rxq_set_affinity(ethx, rxq, 1 << cpu)
+
+
+def interface_show(ethx):
+    out("%s ifindex=%d" % (ethx, ethx.ifindex()))
+    if ethx.driver() != 'sfc':
+        return
+    out("%s n_rxqs=%d" % (ethx, ethx.n_rxqs()))
+    for rxq in range(ethx.n_rxqs()):
+        rxq_show(ethx, rxq)
+    if sfc_affinity_ifindex_is_registered(ethx.ifindex()):
+        cpu2rxq = sfc_affinity_get_cpu2rxq(ethx)
+        out("%s cpu2rxq=%s" % (ethx, ','.join([str(x) for x in cpu2rxq])))
+        out("%s req. core -> channel -> core(s)" % ethx)
+        for cpu in range(len(cpu2rxq)):
+            rxq = cpu2rxq[cpu]
+            if rxq < 0:
+                out("%s %7d   -> no mapping" % (ethx, cpu))
+            else:
+                irq = rxq_get_irq(ethx, rxq)
+                irq_m = irq_get_cpumask(irq)
+                core_list = mask.int_to_comma_sep_list(irq_m)
+                out("%s %7d   -> %5d   -> %5s" % (ethx, cpu, rxq, core_list))
+    else:
+        out("%s not registered with sfc_affinity" % ethx)
+
+
+def my_min(seq, key=None):
+    # Yuk -- older python versions don't support "key" arg to min(), so we
+    # need our own implementation for the time being.
+    if key is None:
+        key = lambda x: x
+    min_s = seq[0]
+    if len(seq) > 1:
+        for s in seq[1:]:
+            if cmp(key(s), key(min_s)) < 0:
+                min_s = s
+    return min_s
+
+
+def generate_core_to_rxq_map(topology, rxq_to_core_id):
+    """Generate a mapping from core_id to rxq.  If core has its own rxq,
+    use it.  Otherwise map to an rxq on a nearby core.  If there are
+    options then try to spread the load evenly."""
+
+    core_to_q = {}
+    # If a core has an rxq, map that core to that rxq.
+    for rxq, core_id in enumerate(rxq_to_core_id):
+        core_to_q[core_id] = rxq
+    # For remaining cores try to find a "close" core that has an rxq.  If
+    # there are options then try to spread evenly.
+    cores_unassigned = set(topology.core_ids) - set(core_to_q.keys())
+    cc_level = 0
+    while cores_unassigned:
+        for core_id in cores_unassigned:
+            cc = affinity.get_close_cores(topology, core_id)
+            if cc_level >= len(cc):
+                continue
+            # Find cores close to this that have rxqs assigned.
+            cwq = [topology.id2core[c_id] for c_id in cc[cc_level] \
+                   if c_id in rxq_to_core_id]
+            if not cwq:
+                continue
+            # Of those, find the core with the fewest other cores mapped on.
+            core = my_min(cwq, key=(lambda c: c.n_mapped))
+            core.n_mapped += 1
+            # Which rxq?  Pick the first.  (Ultimately it would be better
+            # to spread evenly over them if there are multiple).
+            rxq_id = rxq_to_core_id.index(core.id)
+            core_to_q[core_id] = rxq_id
+        cores_unassigned -= set(core_to_q.keys())
+        cc_level += 1
+    core_to_q = [core_to_q[core_id] for core_id in topology.core_ids]
+    return core_to_q
+
+
+def cores_spread_over(topology, core_groups):
+    """Return a list of all of the cores in [core_groups] ordered such that
+    a core is taken from each group in turn.  Groups with fewest interrupts
+    already assigned are selected first.  Within each group cores with
+    fewest interrupts already assigned to them are selected first."""
+
+    for g in core_groups:
+        g.core_ids_left = set(g.core_ids)
+        g.n_irqs = sum([topology.id2core[c_id].n_irqs for c_id in g.core_ids])
+    # Assign to groups with fewest interrupts first to ensure even
+    # spreading of interfaces over groups in the event that we have fewer
+    # interrupts than groups.
+    core_groups.sort(key=(lambda x: x.n_irqs))
+    core_ids = []
+    while max([len(g.core_ids_left) for g in core_groups]):
+        g = core_groups[0]
+        core_groups = core_groups[1:] + [g]
+        g_cores = [topology.id2core[core_id] for core_id in g.core_ids_left]
+        if g_cores:
+            core_w_fewest_irqs = my_min(g_cores, key=(lambda c: c.n_irqs))
+            g.core_ids_left.discard(core_w_fewest_irqs.id)
+            core_ids.append(core_w_fewest_irqs.id)
+    return core_ids
+
+
+def choose_core_ids(n_irqs, topology, interrupt_topology):
+    if n_irqs == len(interrupt_topology.real_cores):
+        strategy = "One interrupt per real core"
+        core_ids = interrupt_topology.real_core_ids
+    elif n_irqs == len(interrupt_topology.get_cores()):
+        strategy = "One interrupt per hyperthread"
+        core_ids = interrupt_topology.core_ids
+    elif n_irqs == len(interrupt_topology.tl_caches):
+        strategy = "One interrupt per shared cache"
+        core_ids = cores_spread_over(topology, interrupt_topology.tl_caches)
+    elif n_irqs == len(interrupt_topology.get_packages()):
+        strategy = "One interrupt per package"
+        # fixme: we really want to be intelligent about choosing cores
+        # that have minimal other interrupts on them
+        core_ids = [p.core_ids[0] for p in interrupt_topology.get_packages()]
+    elif interrupt_topology.tl_caches:
+        strategy = "Spreading %d interrupts evenly over %d shared caches" \
+                   % (n_irqs, len(interrupt_topology.tl_caches))
+        core_ids = cores_spread_over(topology, interrupt_topology.tl_caches)
+    else:
+        strategy = "Spreading %d interrupts evenly over %d packages" % \
+                   (n_irqs, len(interrupt_topology.get_packages()))
+        core_ids = cores_spread_over(topology,
+                                     interrupt_topology.get_packages())
+    return (list(core_ids), strategy)
+
+
+def interface_auto_core_ids(ethx, topology, interrupt_topology):
+    n_irqs = interface_n_rxqs(str(ethx))
+    if n_irqs == 0:
+        warn("interface %s has no rxqs" % ethx)
+        return
+
+    core_ids, strategy = \
+              choose_core_ids(n_irqs, topology, interrupt_topology)
+    n = min(len(core_ids), n_irqs)
+    if n_irqs == len(core_ids):
+        # If we're going to use all of the eligible cores, then it makes it
+        # easier to understand if we assign in natural order.
+        core_ids.sort()
+
+    return (core_ids, strategy)
+
+
+def localise_core_ids(ethx, core_ids):
+    # List the cores on which are NUMA-local with the NIC first
+    # This helps performance for kernel traffic. When the default sfc module
+    # option rss_numa_local=Y, the sfc driver will configure RSS to share
+    # traffic over the first X irqs, assuming these are mapped to NUMA-local
+    # cores.
+
+    local_cores = affinity.get_local_cores(ethx)
+    local_ids = [c for c in core_ids if c in local_cores]
+    remote_ids = [c for c in core_ids if c not in local_cores]
+    core_ids = local_ids + remote_ids
+
+    return core_ids
+
+
+def interface_mappings(ethx, topology, interrupt_topology, core_ids, strategy):
+    ret = Bucket()
+
+    n_irqs = interface_n_rxqs(str(ethx))
+    core_ids = localise_core_ids(ethx, core_ids)
+
+    q_to_core_id = [core_ids[i % len(core_ids)] for i in range(n_irqs)]
+    for core in [topology.id2core[id] for id in q_to_core_id]:
+        core.n_irqs += 1
+
+    debug("%s: q_to_core_id=%s" % \
+          (ethx, ','.join([str(i) for i in q_to_core_id])))
+    core_to_q = generate_core_to_rxq_map(topology, q_to_core_id)
+    debug("%s: core_to_q=%s" % \
+          (ethx, ','.join([str(i) for i in core_to_q])))
+    cpu_to_cpu = [q_to_core_id[core_to_q[c_id]] for c_id in topology.core_ids]
+    debug("%s: cpu_to_cpu=%s" % (ethx, ','.join([str(i) for i in cpu_to_cpu])))
+
+    ret.core_to_q = core_to_q
+    ret.q_to_core_id = q_to_core_id
+    ret.strategy = strategy
+    return ret
+
+
+def interface_auto(ethx, topology, interrupt_topology):
+    core_ids, strategy = interface_auto_core_ids(ethx, topology, interrupt_topology)
+    return interface_mappings(ethx, topology, interrupt_topology, core_ids, strategy)
+
+
+def interface_check(ethx):
+    ok = True
+    if ethx.n_rxqs() == 0:
+        err("%s has no rxqs" % ethx)
+        ok = False
+    elif ethx.n_rxqs() == 1:
+        warn("%s has only one rxq" % ethx)
+        ok = True
+    else:
+        info("%s has %d rxqs" % (ethx, ethx.n_rxqs()))
+        if ethx.n_rxqs() != sfc_interface_n_rxqs(str(ethx)):
+            # Mismatch in rxq count (possibly due to -ptp queue).
+            # List all queues relating to interface that don't match
+            # format and aren't named like a txq
+
+            match = interface_fmt(str(ethx)) % str(ethx)
+            info("Additional rxqs detected not matching format %s:" %
+                                                            (match + '[0-9]'))
+
+            ethx_qs = affinity.irq_names_matching_pattern(str(ethx) + '-')
+            for name in ethx_qs:
+                if not re.match(match + '[0-9]', name) \
+                        and not re.match(str(ethx)+'-tx-', name):
+                    info("\t" + name)
+    for rxq in range(ethx.n_rxqs()):
+        if not rxq_check_affinity(ethx, rxq):
+            ok = False
+    path = '/proc/driver/sfc_affinity/%d' % ethx.ifindex()
+    try:
+        os.stat(path)
+        info("%s is registered with sfc_affinity" % ethx)
+    except:
+        err("%s is not registered with sfc_affinity" % ethx)
+        ok = False
+    if ok:
+        cpu2rxq = sfc_affinity_get_cpu2rxq(ethx)
+        if len([x for x in cpu2rxq if x < 0]) == 0:
+            info("%s is configured" % ethx)
+        else:
+            err("%s is not configured" % ethx)
+            ok = False
+    # check entries in cpu2rxq are in range of num cpus
+    # check cpu2rxq2cpu mapping self consistent
+    # check sfc_affinity does not think there are more rxqs than there are
+    # warn if sfc_affinity thinkgs there are too few rxqs
+    return ok
+
+######################################################################
+######################################################################
+######################################################################
+
+opt_parser = None
+
+def usage(msg=None, exit_code=1, file=sys.stderr):
+    if msg:
+        file.write('\n')
+        log(msg, file=file, loglevel=LL_ALWAYS)
+        file.write('\n')
+    global opt_parser
+    opt_parser.print_help(file=file)
+    sys.exit(exit_code)
+
+
+def choose_interfaces(args, fail_if_none=True):
+    args = list(args)  # prevent collateral damage
+    interfaces = []
+    while args and is_interface(args[0], sfc_only=True):
+        interfaces.append(EthInterface(args.pop(0)))
+    if len(interfaces) == 0:
+        interfaces = get_interfaces(sfc_only=True)
+        if not interfaces and fail_if_none:
+            fail("no sfc interfaces found")
+    return (args, interfaces)
+
+
+    if args and is_interface(args[0]):
+        ethx = EthInterface(args[0])
+        if ethx.driver() != 'sfc':
+            global command
+            fail("%s: %s is not an sfc interface" % (command, ethx))
+        args = args[1:]
+        interfaces = [ethx]
+    else:
+        interfaces = get_interfaces(sfc_only=True)
+        if not interfaces and fail_if_none:
+            fail("no sfc interfaces found")
+    return (args, interfaces)
+
+
+def cmd_show(args):
+    args, interfaces = choose_interfaces(args)
+    if args:
+        usage("show: Don't understand '%s'" % args[0])
+    for ethx in interfaces:
+        interface_show(ethx)
+
+
+def cmd_auto(args):
+    op = optparse.OptionParser(usage="%prog auto [--spread] [ethx]...")
+    op.disable_interspersed_args()
+    op.add_option("--spread", action="store_const", const=True,
+                  help="Spread load evenly (interfaces may get different "+
+                  "mappings")
+    options, args = op.parse_args(args=args)
+    args, interfaces = choose_interfaces(args)
+    if args:
+        fail("auto: %s is not a supported network interface" % args[0])
+
+    irqbalance_stop_if_necessary()
+
+    # We setup topology info here once, and re-use for all interfaces,
+    # because when [options.spread] is enabled we want to spread load
+    # evenly.  So assignment of interrupts to cores and cores to interrupts
+    # for interface x depends on what we've already done for interface x-1
+    # etc.
+    topology = affinity.get_topology()
+    interrupt_topology = get_topology()
+    interrupt_topology.tl_caches = \
+        interrupt_topology.get_top_level_shared_caches()
+    for core in topology.get_cores():
+        core.n_irqs = 0   # num interrupts mapped to this core
+        core.n_mapped = 0 # num cores mapped to interrupts mapped to this core
+
+    if options.spread:
+        for ethx in interfaces:
+            b = interface_auto(ethx, topology, interrupt_topology)
+            info("%s: %s" % (ethx, b.strategy))
+            interface_bind_rxqs(ethx, b.q_to_core_id)
+            sfc_affinity_new_interface(ethx, b.core_to_q)
+    else:
+        nrxq2c = {}
+        info("Try to use the same cores for all interfaces")
+        for ethx in interfaces:
+            n_rxqs = ethx.n_rxqs()
+            if n_rxqs not in nrxq2c:
+                nrxq2c[n_rxqs] = interface_auto_core_ids(ethx, topology, interrupt_topology)
+            core_ids , strategy = nrxq2c[n_rxqs]
+            # need to remap for each interface as NUMA locality may vary
+            b = interface_mappings(ethx, topology, interrupt_topology, core_ids, strategy)
+            info("%s: %s" % (ethx, b.strategy))
+            interface_bind_rxqs(ethx, b.q_to_core_id)
+            sfc_affinity_new_interface(ethx, b.core_to_q)
+        if len(nrxq2c) > 1:
+            warn("Not all interfaces have the same number of receive channels")
+
+
+def cmd_check(args):
+    args, interfaces = choose_interfaces(args, fail_if_none=False)
+    if args:
+        fail("check: %s is not a supported network interface" % args[0])
+    rc = 0
+    if not sfc_check():
+        rc = 1
+    if not sfc_affinity_check():
+        rc = 1
+    for ethx in interfaces:
+        if not interface_check(ethx):
+            rc = 1
+    if not sys_check():
+        rc = 1
+    if rc == 0:
+        info("sfc_affinity configuration looks fine")
+    return rc
+
+
+def cmd_help(args):
+    # ?? TODO: give help about individual commands etc.
+    if len(args) > 1:
+        usage("help: Too many arguments")
+    if args:
+        topic = args[0]
+        try:
+            help = globals()['help_%s' % topic]
+        except:
+            err("Unknown help topic: %s" % topic)
+            out("Help topics:", file=sys.stderr)
+            topics = [x for x in globals().keys() if re.match(r'^help_', x)]
+            topics = ['  ' + x[5:] for x in topics]
+            out(topics, file=sys.stderr)
+            return 1
+        if type(help) is type(cmd_help):
+            help = help()
+        if type(help) is Template:
+            help = help.substitute(globals())
+        sys.stdout.write(help)
+        return
+    usage(exit_code=0, file=sys.stdout)
+
+
+def do_stuff(args):
+    if len(args) == 0:
+        usage()
+    global command
+    command = args[0]
+    global command_args
+    command_args = list(args[1:])
+    try:
+        cmd_fn = globals()['cmd_%s' % command]
+    except:
+        fail(["Unknown command: %s" % command,
+              "Try '%s help' for a list of commands" % me])
+    rc = cmd_fn(command_args)
+    if not rc:
+        rc = 0
+    return rc
+
+
+def main():
+    op = optparse.OptionParser(usage=usage_str)
+    op.disable_interspersed_args()
+    op.add_option("-p", "--packages", dest='packages',
+                  action="store",
+                  help="Restrict set of cores to given package(s)")
+    op.add_option("-c", "--cores", dest='cores',
+                  action="store",
+                  help="Restrict set of cores")
+    op.add_option("-l", "--loglevel", dest='loglevel',
+                  action="store", type='int', default=LL_INFO,
+                  help="Set log level")
+    op.add_option("-v", "--verbose", dest='loglevel',
+                  action="count", help="More verbose output")
+    op.add_option("-q", "--quiet", dest='loglevel',
+                  action="store_const", const=0, help="Quiet")
+
+    affinity.log_system = affinity_log_system
+
+    global opt_parser, global_options
+    opt_parser = op
+    global_options, args = op.parse_args()
+
+    return do_stuff(args)
+
+
+if __name__ == '__main__':
+    rc = main()
+    sys.exit(rc)

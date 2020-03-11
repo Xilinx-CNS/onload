@@ -1,0 +1,329 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/****************************************************************************
+ * Copyright 2004-2005: Level 5 Networks Inc.
+ * Copyright 2005-2018: Solarflare Communications Inc,
+ *                      7505 Irvine Center Drive, Suite 100
+ *                      Irvine, CA 92618, USA
+ *
+ * Maintained by Solarflare Communications
+ *  <linux-xen-drivers@solarflare.com>
+ *  <onload-dev@solarflare.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as published
+ * by the Free Software Foundation, incorporated herein by reference.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ ****************************************************************************
+ */
+
+/**************************************************************************\
+*//*! \file
+** \author    Solarflare Communications, Inc.
+** \brief     Additional Doxygen-format documentation for ef_vi.
+** \date      2018/11/06
+** \copyright Copyright &copy; 2018 Solarflare Communications, Inc. All
+**            rights reserved. Solarflare, OpenOnload and EnterpriseOnload
+**            are trademarks of Solarflare Communications, Inc.
+*//*
+\**************************************************************************/
+
+/**************************************************************************
+ * Example Applications page
+ *************************************************************************/
+/*! \page applications Example Applications
+
+Solarflare %ef_vi comes with a range of example applications - including
+source code and make files. This is a quick guide to using them, both for
+testing %ef_vi's effectiveness in an environment, and as starting points
+for developing applications.
+
+Most of these applications have additional options to test physical
+addressing mode, or hardware timestamping. Run with "--help" to check this.
+
+| Application                 | Description
+| :-------------------------- | :------------------------------------------------
+| \ref eflatency              | Measure latency by pinging a simple message between two interfaces.
+| \ref efsend                 | Send UDP packets on a specified interface.
+| \ref efsink                 | Receive streams of packets on a single interface.
+| \ref efforward              | Forward packets between two interfaces without modification.
+| \ref efsend_timestamping    | Send UDP packets on a specified interface, with TX timestamping.
+| \ref efsend_pio             | Send UDP packets on a specified interface using Programmed I/O.
+| \ref efsend_pio_warm        | Send UDP packets on a specified interface using Programmed I/O with transmit warming.
+| \ref efsink_packed          | Receive streams of packets on a single interface using packed streams.
+| \ref efforward_packed       | Forward packets between two interfaces without modification using packed stream mode for receive.
+| \ref efrss                  | Forward packets between two interfaces without modification, spreading the load over multiple virtual interfaces and threads.
+| \ref efjumborx              | Receive jumbo packets.
+| \ref exchange               | Simplified electronic trading exchange.
+| \ref trader_onload_ds_efvi  | Simplified electronic trader.
+| \ref efrink_controller      | Receive packets on a single interface into a shared memory ring.
+| \ref efrink_consumer        | Consume packets from a shared memory ring.
+
+\section eflatency eflatency
+
+The eflatency application echoes a single packet back and forth
+repeatedly, measuring the round-trip time.
+
+This is the most useful example application for testing lowest possible
+latency. It is not a very good sample for building an application, because:
+- it uses only one filter
+- it operates knowing that there is only ever a single packet on the wire,
+  and so:
+  - does not need to refill the rings
+  - does not handle multiple event types.
+
+\subsection eflatency_usage Usage
+
+__Server:__ <code>eflatency pong _interface_</code>
+
+__Client:__ <code>eflatency ping _interface_</code>
+
+where:
+- _interface_ is the interface on the server or client machine
+  (e.g. `eth0`)
+
+There are various additional options. See the help text for details.
+
+\section efsend efsend
+
+The efsend application sends UDP packets on a specified interface.
+
+The application sends a UDP packet, waits for transmission of the
+packet to finish and then sends the next.
+
+The number of packets sent, the size of the packet, the amount of
+time to wait between sends can be controlled.
+
+\section efsink efsink
+
+The efsink application is a demonstration of capturing packets, and the
+flexibility of filters.
+
+It supports all filter types that %ef_vi supports. By default it just
+reports the amount of data captured, but it also demonstrates simple
+actions upon the packet data, with the option to hexdump incoming packets.
+
+It is a very useful jumping off point as it shows:
+- creation of a virtual interface
+- creation and installation of filters
+- polling the event queue.
+
+\subsection efsink_usage Usage
+
+To receive a single multicast group:
+
+efsink <code>_local interface_ udp:<multicast-addr>:port</code>
+
+To receive multiple multicast groups:
+
+efsink <code>_interface_ udp:<multicast-addr>:port udp:<multicast-group>:port</code>
+
+To receive all multicast traffic:
+
+efsink <code>_interface_ multicast-all</code>
+
+The efsink application does not send packets.
+
+\section efforward efforward
+
+The efforward application listens for traffic on one interface and echoes
+it out of a second; and vice versa. It demonstrates a very simple
+high-performance bridge.
+
+Some route configuration on the clients might be necessary to get this
+working, but it is a very simple example, and is very easy to start adding
+packet re-writing rules etc.
+
+Although this is a viable starting point for a bridging application, a
+better option might be the SolarCapture API, which includes a more
+complete pre-made bridging application.
+
+\section efsend_timestamping efsend_timestamping
+
+The efsend_timestamping application sends UDP packets on a specified interface.
+
+The application sends a UDP packet, waits for transmission of the
+packet to finish and then sends the next.
+
+This application requests tx timestamping, allowing it to report the time
+each packet was transmitted.
+
+The number of packets sent, the size of the packet, the amount of
+time to wait between sends can be controlled.
+
+\section efsend_pio efsend_pio
+
+The efsend_pio application sends UDP packets on a specified interface.
+
+Packet data is copied to the NIC's PIO buffer before being sent,
+which typically results in lower latency sends compared to accessing
+packet data stored on the host via DMA, which is the method used by
+the efsend sample app.
+
+The application sends a UDP packet, waits for transmission of the
+packet to finish and then sends the next.
+
+The number of packets sent, the size of the packet, the amount of
+time to wait between sends can be controlled.
+
+\section efsend_pio_warm efsend_pio_warm
+
+The efsend_pio_warm application demonstrates PIO transmit warming.
+
+The application sends a UDP packet using PIO each time a trigger fires.
+While waiting for a trigger, the application can warm the PIO transmit path
+to reduce latency of the subsequent send.
+
+The effect of warming can be assessed by measuring the time from when the
+trigger fires to when the corresponding packet leaves the adapter.
+
+Several parameters can be controlled including the delay between triggers,
+the enablement of warming and the frequency of warming while waiting for a
+trigger.
+
+\section efsink_packed efsink_packed
+
+The efsink_packed application is a variant of \ref efsink that
+demonstrates usage of the packed-stream firmware.
+
+\section efforward_packed efforward_packed
+
+The efforward_packed application is a variant of \ref efforward that
+demonstrates usage of the packed-stream firmware.
+
+\section efrss efrss
+
+The efrss application is a variant of \ref efforward. It demonstrates
+automatically spreading the load over multiple threads, using a vi_set and
+RSS.
+
+\section efdelegated_client efdelegated_client
+
+The efdelegated_client application demonstrates usage of OpenOnload's
+"Delegated Sends" feature.  This API allows you to do delegate TCP sends
+for a particular socket to some other mechanism.  For example, this
+sample uses the %ef_vi layer-2 API in order to get lower latency than is
+possible with a normal send() call.
+
+The API essentially boils down to first retrieving the packet headers,
+adding your own payload to form a raw packet, sending the packet and
+finally telling Onload what it was you sent so it can update the
+internal TCP state of the socket.
+
+This sample application allows you to compare the performance of normal
+sends using the kernel stack, using OpenOnload and using %ef_vi with the
+delegated sends API.  It establishes a TCP connection to the server
+process, which starts sending UDP multicast messages.  The client
+receives these messages, and replies to a subset of them with a TCP
+message.  The server measures the latency from the UDP send to the TCP
+receive.
+
+\section efjumborx efjumborx
+
+The efjumborx application demonstrates receiving jumbo packets.
+
+Various parameters can be set, including the interface, IP address and port
+to use. Verbose output can be enabled to view progress. The received packet
+can be printed as text or in hexadecimal.
+
+\section exchange exchange
+
+The exchange application plays the role of a simplified electronic trading exchange. It is to be used in conjunction with the \ref trader_onload_ds_efvi application.
+
+\section trader_onload_ds_efvi trader_onload_ds_efvi
+
+The trader_onload_ds_efvi application demonstrates various techniques to
+reduce latency. These techniques are often useful in electronic trading
+applications, and so this example takes the form of an extremely simplified
+electronic trading system.
+
+The \ref exchange application provides a simplified electronic trading exchange, and this application provides a simplified electronic trader.
+
+A trader_onload_ds_efvi application demonstrates similar techniques for Onload.
+
+For full details, see the `README` file in the `tests/trade_sim` directory.
+
+\subsection trader_onload_ds_efvi_usage Usage
+
+For normal socket-based sends, run as follows:
+
+__Server:__ <code>onload -p latency-best ./exchange _mcast-intf_</code>
+
+__Client:__ <code>onload -p latency-best ./trader_onload_ds_efvi _mcast-intf_ _server_</code>
+
+For "delegated" sends, run as follows:
+
+__Server:__ <code>onload -p latency-best ./exchange _mcast-intf_</code>
+
+__Client:__ <code>onload -p latency-best ./trader_onload_ds_efvi -d _mcast-intf_ _server_</code>
+
+where:
+- _mcast-intf_ is the multicast interface on the server or client machine
+  (e.g. `eth0`)
+- _server_ is the IP address of the server machine (e.g. `192.168.0.10`)
+
+There are various additional options. See the help text for details.
+
+\section efrink_controller efrink_controller
+
+The efrink_controller application receives streams of packets on a single
+interface into a shared memory ring. This can be read by multiple consumers,
+such as \ref efrink_consumer.
+
+This is an advanced technique which has the potential to provide a more
+efficient way to receive data when multiple consumer processes want to
+receive the same data stream(s) from the network.
+
+A single controller sets up a region of shared memory, and posts chunks of
+this to the RX ring of the NIC. As the NIC writes packet data, it returns
+completion events. The controller receives these events and marks each packet
+buffer as complete.
+
+One or more readers such as \ref efrink_consumer can access the shared memory
+to read the packets. The data is protected via a generation counter.
+
+\section efrink_consumer efrink_consumer
+
+The efrink_consumer application consumes packets from a shared memory ring,
+that is being managed by \ref efrink_controller.
+
+Multiple copies of efrink_consumer can run at the same time. For best
+performance, all processes should share the same NUMA node/cache.
+
+\section building Building the Example Applications
+
+The %ef_vi example applications are built along with the Onload
+installation and will be present in the
+`/Onload-&lt;version>/build/gnu_x86_64/tests/ef_vi` subdirectory.  In the
+  build directory there will be `gnu`, `gnu_x86_64`,
+  `x86_64_linux-&lt;kernel version>` directories:
+- files under the `gnu` directory are 32-bit (if these are built)
+- files under the `gnu_x86_64` directory are 64-bit.
+
+Source code files for the example applications exist in the
+`/Onload-&lt;version>/src/tests/ef_vi` subdirectory.
+
+After running the onload_install command, example applications exist in the
+`/Onload-&lt;version>/build/gnu_x86_64/tests/ef_vi` subdirectory.
+
+To rebuild the example applications you must have the
+`Onload-&lt;version>/scripts` subdirectory in your path and use the
+following procedure:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.sh}
+[root@server01 Onload-<version>]# cd scripts/
+[root@server01 scripts]# export PATH="$PWD:$PATH"
+[root@server01 scripts]# cd ../build/gnu_x86_64/tests/ef_vi/
+[root@server01 ef_vi]# make clean
+[root@serverr01 ef_vi]# make
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*/

@@ -1,0 +1,7 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+set protocol 1
+set default 1
+name T1 E1_%
+name Thread1 Long_%
+num 2 Second

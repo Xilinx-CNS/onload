@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+#
+# Tuning profile for environments involving TCP traffic travelling over
+# unreliable or high-latency networks, such as the public Internet.
+# For use within another profile only.
+#
+
+# Adjustments for potentially-lossy network environment
+# Use a minimum congestion window of 10 MSS
+onload_set EF_TCP_INITIAL_CWND 14600
+
+# Set how many unacked segments force ACK.  Increasing this
+# will reduce network load but could result in peer needing to
+# retransmit more data if network is lossy.
+onload_set EF_DYNAMIC_ACK_THRESH 4
+
+# It is recommended to use TCP tail drop probe to retransmit faster.
+# By default, Onload uses the setting from /proc/sys/net/ipv4/tcp_early_retrans
+# which is typically on by default.
+# If needed, tail drop probe can be forced on by uncommenting the line below:
+# onload_set EF_TAIL_DROP_PROBE 1
+
+# Enable dynamically sized TCP receive buffers.
+onload_set EF_TCP_RCVBUF_MODE 1
+
+# Defense against attack on receive buffer
+onload_set EF_TCP_RCVBUF_STRICT 1
+onload_set EF_ENDPOINT_PACKET_RESERVE 3

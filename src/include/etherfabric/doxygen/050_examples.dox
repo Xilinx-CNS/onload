@@ -1,0 +1,278 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/****************************************************************************
+ * Copyright 2004-2005: Level 5 Networks Inc.
+ * Copyright 2005-2018: Solarflare Communications Inc,
+ *                      7505 Irvine Center Drive, Suite 100
+ *                      Irvine, CA 92618, USA
+ *
+ * Maintained by Solarflare Communications
+ *  <linux-xen-drivers@solarflare.com>
+ *  <onload-dev@solarflare.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as published
+ * by the Free Software Foundation, incorporated herein by reference.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ ****************************************************************************
+ */
+
+/**************************************************************************\
+*//*! \file
+** \author    Solarflare Communications, Inc.
+** \brief     Additional Doxygen-format documentation for ef_vi.
+** \date      2018/11/06
+** \copyright Copyright &copy; 2018 Solarflare Communications, Inc. All
+**            rights reserved. Solarflare, OpenOnload and EnterpriseOnload
+**            are trademarks of Solarflare Communications, Inc.
+*//*
+\**************************************************************************/
+
+/**************************************************************************
+ * Worked Example page
+ *************************************************************************/
+/*! \page example Worked Example
+
+This part of the documentation examines a simplified version of \ref
+eflatency. This is a small application which listens for packets and
+replies, with as low latency as possible.
+
+This documentation discusses the tradeoffs that have been chosen, some
+performance issues to avoid, and some possible additions that have been
+omitted for clarity.
+
+See also the supplied code for \ref eflatency , which includes many of
+these improvements.
+
+\section example_setup Setup
+
+The first step is to set up %ef_vi:
+- \#include the various headers we need (etherfabric/pd.h, vi.h, memreg.h)
+- open the driver
+- allocate a protection domain
+- allocate a virtual interface from the protection domain.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+ef_driver_handle  driver_handle;
+ef_vi             vi;
+ef_pd             pd;
+static void do_init(int ifindex){
+  ef_driver_open(&driver_handle);
+  ef_pd_alloc(&pd, driver_handle, ifindex, EF_PD_DEFAULT );
+  ef_vi_alloc_from_pd(&vi, driver_handle, &pd, driver_handle,
+                      -1, -1, -1, NULL, -1, 0);
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following improvements could be made:
+- check the return values from these functions, in case the card has run
+  out of resources and is unable to allocate more virtual interfaces
+- offer physical buffer mode here.
+
+\section example_buffers Creating Packet buffers
+
+The next step is to allocate a memory region and register it for packet
+buffers.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+    const int BUF_SIZE = 2048;  /* Hardware always wants 2k buffers */
+    int bytes = N_BUFS * BUF_SIZE;
+    void* p;
+    posix_memalign(&p, 4096, bytes)  /* allocate aligned memory */
+    ef_memreg_alloc(&memreg, driver_handle, &pd, driver_handle,
+	                p, bytes); /* Make it available to ef_vi */
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is all that is strictly necessary to set up the packet buffers.
+
+However, the packet buffer is 2048 bytes long, whereas the normal MTU size
+for a transmitted packet is only 1500 bytes. There is some spare memory in
+each packet buffer. Performance can be improved by using this space to
+cache some of the packet meta-data, so that it does not have to be
+recalculated:
+
+- The DMA address of the packet is cached. It is determined by getting the
+  DMA address of the base of the memory chunk, and then incrementing in 2KB
+  chunks.
+
+- The packet ID is also cached.
+
+A structure is used to store the cached meta-data and a few pointers in
+the buffer. An array is used to track all the buffers:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+#define MEMBER_OFFSET(c_type, mbr_name) \
+                     ((uint32_t) (uintptr_t)(&((c_type*)0)->mbr_name))
+#define CACHE_ALIGN  __attribute__((aligned(EF_VI_DMA_ALIGN)))
+struct pkt_buf {
+  struct pkt_buf* next;
+  /* We're not actually going to use this;
+   * but chaining multiple buffers together is a common and useful trick. */
+  ef_addr         dma_buf_addr;
+  int             id;
+  uint8_t         dma_buf[1] CACHE_ALIGN;
+  /* Not strictly required, but cache aligning the payload is a speed
+   * boost, so do it. */
+};
+/* We're also going to want to keep track of all our buffers, so have an
+ * array of them.  Not strictly needed, but convenient.  */
+    struct pkt_buf* pkt_bufs [N_BUFS];
+    for( i = 0; i < N_BUFS; ++i ) {
+      struct pkt_buf* pb = (struct pkt_buf*) ((char*) p + i * 2048);
+      pb->id = i;
+      pb->dma_buf_addr = ef_memreg_dma_addr(&memreg, i * 2048);
+      pb->dma_buf_addr += MEMBER_OFFSET(struct pkt_buf, dma_buf);
+      pkt_bufs[i] = pb;
+    }
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+\note When receiving, the hardware will only fill up to 1824 bytes per
+buffer. Larger jumbo frames are split across multiple buffers.
+
+\section example_filters Adding Filters
+
+Next, a filter is specified and added, so that the virtual interface
+receives traffic. Assuming there is a sockaddr to work from:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+  struct sockaddr_in sa_local;  /* TODO: Fill this out somehow */
+  ef_filter_spec filter_spec;
+  ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_NONE);
+  TRY(ef_filter_spec_set_ip4_local(&filter_spec, IPPROTO_UDP,
+                                   sa_local.sin_addr.s_addr,
+                                   sa_local.sin_port));
+  TRY(ef_vi_filter_add(&vi, driver_handle, &filter_spec, NULL));
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+\section example_receive Receiving packets
+
+At this point, packets will start arriving at the interface, be diverted
+to the application, and immediately be dropped.
+
+So the next step is to push some packet buffers to the RX descriptor ring,
+to receive the incoming packets.
+
+For efficiency, the code pushes packet buffers eight at a time.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+unsigned rx_posted = 0;  /* We need to keep track of which buffers are
+                          * already on the ring */
+void rx_post( int n ) {
+  for( int i = 0; i < n; ++i ) {
+    struct pkt_buf* pb = pkt_bufs[rx_posted % N_RX_BUFS];
+    ef_vi_receive_init(&vi, pb->dma_buf_addr, pb->id);
+    ++rx_posted;
+  }
+  ef_vi_receive_push(&vi);
+
+}
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+So now, there are packet buffers on the descriptor ring. But once they are
+filled, the application will start dropping again.
+
+\section example_events Handling Events
+
+The next step is to handle these incoming packets, by polling the event
+queue.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+void rx_wait(void) {
+  /* Again, for efficiency, poll multiple events at once.  */
+  ef_event      evs[NUM_POLL_EVENTS];
+  int           n_ev, i;
+
+  while( 1 ) {
+    n_ev = ef_eventq_poll(&vi, evs, NUM_POLL_EVENTS);
+    if( n_ev > 0 )
+      for( i = 0; i < n_ev; ++i )
+        switch( EF_EVENT_TYPE(evs[i]) ) {
+        case EF_EVENT_TYPE_RX:
+          handle_rx_packet(EF_EVENT_RX_RQ_ID(evs[i]),
+                           EF_EVENT_RX_BYTES(evs[i]) );
+          break;
+        case EF_EVENT_TYPE_RX_DISCARD:
+          /* Interesting to print out the cause of the discard */
+          fprintf(stderr, "ERROR: RX_DISCARD type=%d",
+                  EF_EVENT_RX_DISCARD_TYPE(evs[i]));
+          /* but let's handle it like a normal packet anyway */
+          handle_rx_packet(EF_EVENT_RX_RQ_ID(evs[i]),
+                           EF_EVENT_RX_BYTES(evs[i]) );
+          break;
+} } }
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This code is calling a `handle_rx_packet()` function, passing it the
+packet id (which corresponds directly to the `pkt_bufs` array - see \ref
+example_buffers) and the length of data. The body of this function is not
+shown, but it should do the following:
+
+- note that this packet buffer has been consumed, and so is ready to be
+  re-posted:
+
+  - the `rx_post()` function(see \ref example_receive) must also be
+    updated to use this information, so a buffer is not re-posted until it
+    is marked as consumed
+
+- ensure that the received packet is processed according to the purpose of
+  the application:
+
+  - if the application can always process incoming packets as fast as they
+    are received, then it can do its work inline, and immediately repost
+	the buffer on the ring
+
+  - otherwise, the application should probably post an item on a work
+    queue for another thread to act upon, and arrange for the refill to
+	come from a larger pool of buffers
+
+- optionally, handle discards in some different way (perhaps not raising
+  the work event).
+
+\section example_transmit Transmitting packets
+
+The next step is to implement the transmit side. The hard part is filling
+out the payload, and getting all the fields of IP and UDP correct. (%ef_vi
+is usually used to transmit UDP, as it's a much simpler protocol to
+implement than TCP.)
+
+There's some sample code to fill out the headers in the functions
+`ci_*_hdr_init()`, which can be found in `src/lib/citools/ippacket.c`.
+
+After that, to transmit one of the `pb` structures (see \ref
+example_buffers), a single function call is needed:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+ef_vi_transmit(&vi, pb->dma_buf_addr, frame_length, 0);
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+But the application must also keep track of when that buffer is used, and
+when it is free. This means adding some complexity to the poll loop (see
+\ref example_events). The absolute minimum is:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.c}
+        case EF_EVENT_TYPE_TX:
+          ef_vi_transmit_unbundle(&vi, &evs[i], ids);
+          break;
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is only sufficient if the TX buffers and the RX buffers are from
+different pools.
+
+\note In ping pong there is only ever one outstanding send. The
+application does not transmit another packet until the remote side has
+processed the current one, and so the application does not even need to
+keep track of its state.
+
+One option would be to free up sent buffers, to a pool ready to be filled
+with data.  Other applications may instead fill a few packet buffers with
+data, and then transmit them as and when, only keeping track to make sure
+that the TX ring never overfills.
+
+*/

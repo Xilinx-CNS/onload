@@ -1,0 +1,296 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/****************************************************************************
+ * Copyright 2004-2005: Level 5 Networks Inc.
+ * Copyright 2005-2018: Solarflare Communications Inc,
+ *                      7505 Irvine Center Drive, Suite 100
+ *                      Irvine, CA 92618, USA
+ *
+ * Maintained by Solarflare Communications
+ *  <linux-xen-drivers@solarflare.com>
+ *  <onload-dev@solarflare.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as published
+ * by the Free Software Foundation, incorporated herein by reference.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ ****************************************************************************
+ */
+
+/**************************************************************************\
+*//*! \file
+** \author    Solarflare Communications, Inc.
+** \brief     Additional Doxygen-format documentation for ef_vi.
+** \date      2018/11/06
+** \copyright Copyright &copy; 2018 Solarflare Communications, Inc. All
+**            rights reserved. Solarflare, OpenOnload and EnterpriseOnload
+**            are trademarks of Solarflare Communications, Inc.
+*//*
+\**************************************************************************/
+
+/**************************************************************************
+ * Concepts page
+ *************************************************************************/
+ /*! \page concepts Concepts
+
+This part of the documentation describes the concepts involved in %ef_vi.
+
+\section vi Virtual Interface
+
+Each %ef_vi instance provides a _virtual interface_ to the network adapter.
+
+\image html efvi_vnic.png "Virtual Interface Components"
+\image rtf efvi_vnic.png "Virtual Interface Components"
+\image latex efvi_vnic.png "Virtual Interface Components"
+
+A virtual interface includes the following components:
+- an \ref event_queue
+- a \ref tx_ring
+- a \ref rx_ring.
+
+A virtual interface can be allocated one of each of these components, but
+if the event queue is omitted an alternative virtual interface that has an
+event queue must be specified.
+
+A virtual interface also has a few hardware resources:
+- a doorbell register to inform the card that new RX buffers are available
+  for it to use
+- a doorbell register to inform the card that new TX buffers are ready for
+  it to send
+- some timers
+- a share of an interrupt.
+
+\subsection vi_sets Virtual Interface Set.
+
+A set of virtual interfaces can be created, to distribute load on the
+matching filters automatically, via _receive side scaling_ (RSS).
+
+\note For this to be of use, multiple filters or a wildcard filter are
+required. A single stream filter will have the same RSS hash for all
+packets. See \ref filters.
+
+\subsection event_queue Event queue
+
+An _event queue_ is a channel for passing information from the network
+adapter to the application. It is used to notify the application of events
+such as the arrival of packets.
+
+\subsection tx_ring Transmit descriptor ring
+
+The _transmit descriptor ring_ is used to pass packets from the
+application to the adapter. Each entry in the ring is a descriptor which
+references a buffer containing packet data. Each packet is described by
+one or more descriptors.
+
+The transmission of packets proceeds in the background, and the adapter
+notifies the application when they have finished via the event queue.
+
+\subsection rx_ring Receive descriptor ring
+
+The _receive descriptor ring_ is used to pass packets from the adapter to
+the application. The application must pre-allocate buffers and post them
+to the receive descriptor ring. Each entry in the ring is a descriptor
+which references a 'free' buffer that the adapter can place a packet into.
+
+When the adapter delivers a packet to an %ef_vi instance, it copies the
+packet data into the next available receive buffer and notifies the
+application via the event queue. Large packets can be scattered over
+multiple receive buffers.
+
+\section pd Protection Domain
+
+A _protection domain_ identifies a separate address space for the DMA
+addresses passed to the adapter. It is used to protect multiple %ef_vi
+applications from one another, or to allow them to share resources:
+- Each \ref vi is associated with one protection domain.
+- Multiple VIs can be associated with the same protection domain.
+- Each \ref memory_region is registered with one or more protection domains.
+- A memory region can only be used by a virtual interface that is in the
+  same protection domain.
+- Memory regions that are registered with multiple protection domains can
+  be used as a shared resource, for example for zero-copy forwarding. See
+  also \ref pb_addressing.
+
+\note Traditionally device drivers pass the physical addresses of memory
+buffers to I/O devices. This is usually acceptable because device drivers
+run within the privileged kernel, and so are isolated from untrusted
+user-space applications.
+
+\note Applications using %ef_vi cannot in general use unprotected physical
+addresses, because by manipulating those addresses prior to passing them
+to the adapter it would be possible to access memory and devices not
+otherwise accessible by the application. Protection domains are used to
+solve this problem.
+
+\section memory_region Memory Region
+
+Any _memory region_ used for transmit or receive buffers must be
+_registered_ using the ef_memreg interface. This ensures the memory region
+meets the requirements of %ef_vi:
+- The memory is pinned, so that it can't be swapped out to disk.
+- The memory is mapped for DMA, so that the network adapter can access it.
+  The adapter translates the DMA addresses provided by the application to
+  I/O addresses used on the PCIe bus.
+- The memory region is page-aligned, for performance.
+- The size of the memory region is a multiple of the packet buffer size, so
+  no memory is wasted.
+
+\section packet_buffer Packet Buffer
+
+A _packet buffer_ is a memory allocations on the host which the card will
+read from when sending packets, or write to when receiving packets. They
+are usually 2KB in size.
+
+Packets buffers are mapped by the card in such a way that only virtual
+interfaces in the same protection domain can access them, unless physical
+addressing mode is explicitly requested. (This feature can only be granted
+to a group of users by the root user setting an option on the driver.)
+
+\subsection jumbo Jumbo Packets
+
+Typically, some portion of a packet buffer will be used for meta-data,
+leaving enough space for a standard sized packet. On receive, large
+packets will be spread out over multiple packet buffers.
+
+When sending, multiple buffers may be used either to accommodate larger
+sends, or for convenience (for example: splitting off a standard header
+that is common to multiple packets).
+
+\subsection descriptor Packet Buffer Descriptor
+
+Each packet buffer is referred to by a descriptor, which contains:
+- a pointer
+- an offset
+- a length.
+
+It is those descriptors which are actually placed onto the receive and
+transmit descriptor rings.
+
+\section pio Programmed I/O
+
+The %ef_pio interface exposes a region of memory on the network adapter
+that can be used for low-latency sends. When using this interface packet
+data is pushed to the adapter using CPU instructions, instead of being
+pulled by the adapter using DMA. This reduces latency because it avoids
+the latency associated with a DMA read.
+
+Applications can get even better latency by writing packet data to the
+adapter in advance, before the latency critical path. On the critical path
+the packet data can optionally be updated before being transmitted. This
+improves latency because it reduces the amount of data that needs to be
+passed to the adapter on the critical path.
+
+\section ctpio Cut-through PIO
+
+CTPIO (Cut-through PIO) improves send latency by moving packets from the PCIe
+bus to network port with minimal latency.  It can be used in three modes:
+-# Cut-through: The frame is transmitted onto the network as it is streamed
+   across the PCIe bus.  This mode offers the best latency.
+-# Store-and-forward: The frame is buffered on the adapter before
+   transmitting onto the network.
+-# Store-and-forward with poison disabled: As for (2), except that it is
+   guaranteed that frames are never poisoned.  When this mode is enabled on
+   any VI, all VIs are placed into store-and-forward mode.
+
+Due to differences in hardware architecture, CTPIO is not available on
+SFN8000-series or earlier adapters.
+
+\subsection poisoning Underrun, poisoning and fallback
+
+When using cut-through mode, if the frame is not streamed to the adapter
+at at least line rate, then the frame is likely to be poisoned.  This is
+most likely to happen if the application thread is interrupted while
+writing the frame to the adapter.  In the underrun case, the frame is
+terminated with an invalid FCS -- this is referred to as "poisoning" --
+and so will be discarded by the link partner.  Cut-through mode is
+currently expected to perform well only on 10G links.
+
+CTPIO may be aborted for other reasons, including timeout while writing a
+frame, contention between threads using CTPIO at the same time, and the
+CPU writing data to the adapter in the wrong order.
+
+In all of the above failure cases the adapter falls-back to sending via
+the traditional DMA mechanism, which incurs a latency penalty.  So a valid
+copy of the packet is always transmitted, whether the CTPIO operation
+succeeds or not.
+
+After a non-CTPIO send (including DMA fallback), the TX queue must empty
+before a CTPIO can again succeed.
+
+Normally only an underrun in cut-through mode will result in a poisoned
+frame being transmitted.  In rare cases it is also possible for a poisoned
+frame to be emitted in store-and-forward mode.  If it is necessary to
+strictly prevent poisoned packets from reaching the network, then
+poisoning can be disabled globally.
+
+\subsection ctpio_diagnostics CTPIO diagnostics
+
+The adapter maintains counters that show whether CTPIO is being used, and any
+reasons for CTPIO sends failing.  These can be inspected as follows:
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~{.sh}
+ethtool -S ethX | grep ctpio
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Note that some of these counters are maintained on a per-adapter basis,
+whereas others are per network port.
+
+ \section filters Filters
+
+_Filters_ select which packets are delivered to a virtual interface.
+Packets that are not selected are ignored and allowed to pass on to the
+kernel.
+
+Each filter specifies the characteristics of packets for selection. These
+characteristics are typically packet header fields, including Ethernet MAC
+address, VLAN tags, IP addresses and port numbers.
+
+A selected packet can be:
+- Stolen: the packet is delivered to the virtual interface, but not to the
+  kernel stack.
+- Replicated: a copy is delivered to the virtual interface, and might also
+  be delivered to other consumers. Used for multicast packets.
+- Sniffed: the packet is delivered to the virtual interface, and to the
+  kernel stack.
+
+\note The set of header fields and filter modes that are available vary
+between adapter model and firmware variant.
+
+\subsection multiple_filters Multiple Filters
+
+An %ef_vi application can set multiple types of filters on the same
+virtual interface. Setting an invalid filter or combination of filters
+causes an error.
+
+\section vlan Virtual LANs
+
+Ef_vi only has limited support for _Virtual LANs_ (VLANs). This is because
+%ef_vi operates at the Ethernet frame level, whereas VLANs are usually
+handled at a higher level:
+- Received packets can be filtered by VLAN, but this requires a recent
+  adapter running full feature firmware. There are also limitations on what
+  other filters can simultaneously be used. For more details, see
+  ef_filter_spec_set_vlan().
+- Transmitted packets can have their VLAN set by adding the desired VLAN
+  tag to the extended header. Unlike checksums, %ef_vi does not provide an
+  offload for this.
+
+\section tx_alternatives TX Alternatives
+
+_TX alternatives_ is a feature available on Solarflare SFN8000 series adapters
+to provide multiple alternative queues for transmission, that can be used to
+minimize latency. Different possible responses can be pushed through the TX path
+on the NIC, and held in different queues ready to transmit. When it is decided
+which response to transmit, the appropriate alternative queue is selected, and
+the queued packets are sent. Because the packets are already prepared, and are held
+close to the wire, latency is greatly reduced.
+
+*/

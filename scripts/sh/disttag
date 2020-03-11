@@ -1,0 +1,65 @@
+# -*- Mode: shell-script; -*- 
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# "Get distribution tag" function
+
+err  () { echo >&2 "$*";    }
+log  () { err "$p: $*";    }
+fail () { log "$*"; exit 1; }
+try  () { "$@" || fail "'$*' failed"; }
+
+# Please DO NOT reduce the set of recognised distros, even if we are
+# dropping support elsewhere in the codebase.
+
+# ssh to rpmbuild and run this to show some examples
+#   grep -Hnr . /mnt/{rhel,sle}*/etc/*-release
+
+#Red Hat Enterprise Linux WS release 4 (Nahant)
+#Red Hat Enterprise Linux WS release 4 (Nahant Update 7)
+#Red Hat Enterprise Linux Client release 5 (Tikanga)
+#Red Hat Enterprise Linux Client release 5.1 (Tikanga)
+#SUSE Linux Enterprise Server 11 (x86_64)
+#VERSION = 11
+#PATCHLEVEL = 0
+
+sfc_disttag() {
+  if [ -f /etc/redhat-release ]; then
+    awk '
+	/Red Hat Linux release/ { gsub(/\./,""); printf "RH%s\n", $5; exit }
+	/Fedora Core release/ { printf "FC%s\n", $4; exit }
+        /Fedora release/ { printf "FC%s\n", $3; exit }
+	/Red Hat Enterprise Linux release/ { printf "RHEL%s\n", substr($6, 1, 1); exit }
+	/Red Hat Enterprise Linux (WS|Server|Client|Workstation)/ { printf "RHEL%s\n", substr($7, 1, 1); exit }
+        /CentOS release / { printf "RHEL%s\n", substr($3, 1, 1); exit }
+	' /etc/redhat-release
+  elif [ -f /etc/SuSE-release ]; then
+    awk '
+	/SUSE LINUX Enterprise Server/ { printf "SLES%s\n", $5; exit }
+	/SUSE Linux Enterprise Server/ { printf "SLES%s\n", $5; exit }
+	/SUSE SLES-8/ { printf "SLES8\n" ; exit }
+	/SUSE LINUX 10/ { printf "SUSE10\n"; exit }
+	/SuSE Linux/ { gsub(/\./,"");printf "SUSE%s\n", $3; exit }
+	/openSUSE/ { gsub(/\./,"");printf "OSUSE%s\n", $2; exit }
+	' /etc/SuSE-release
+  elif [ -f /etc/scyld-release ]; then
+    awk '
+	/Scyld Beowulf release/ { printf "SCYLD%s\n", $4; exit }
+	' /etc/scyld-release
+  elif [ -f /etc/debian_version ]; then
+    echo "Debian"$(cat /etc/debian_version | tr "/" _ )
+  elif [ "$OS" = Windows_NT ]; then
+    echo "Windows_NT"
+  elif [ "$(uname -s)" = "SunOS" ]; then
+    echo "sunos"
+  elif [ "$(uname -s)" = "Darwin" ]; then
+    echo "darwin"
+  elif [ "$(uname -s)" = "FreeBSD" ]; then
+    echo "freebsd"
+  else
+    echo "unknownOS"
+    return 1
+  fi
+  return 0
+}
+

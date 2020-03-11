@@ -1,0 +1,32 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Tuning profile for nginx in webserver configuration with OpenOnload
+# acceleration.
+
+# The performance profile is latency focused. It constantly polls for network
+# events to achieve the lowest latency possible, and so has higher CPU usage.
+
+# Read nginx config files and set num_workers accordingly.
+# Need to pass "$@" so application command line can be parsed by nginx-parse-config
+onload_import nginx-parse-config "$@"
+
+# nginx uses epoll within one process only
+onload_set EF_EPOLL_MT_SAFE 1
+
+# Enable clustering to spread connections over workers.
+onload_set EF_CLUSTER_SIZE "$num_workers"
+onload_set EF_CLUSTER_NAME webs
+onload_set EF_CLUSTER_RESTART 1
+onload_set EF_CLUSTER_HOT_RESTART 1
+
+# Enable spinning
+onload_set EF_POLL_USEC 1000000
+
+onload_import throughput
+onload_import wan-traffic
+
+# If nginx '-s' option is used, check whether old clusters are still in
+# existence and if needed wait for them to exit.
+# Pass "$@" so application command line can be parsed
+onload_import wait-old-cluster-exit "$@"

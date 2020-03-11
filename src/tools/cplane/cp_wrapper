@@ -1,0 +1,22 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) 2017 Solarflare Communications Inc
+
+set -eu
+
+CP_SERVER=$(dirname $0)/onload_cp_server
+
+# This wrapper script can be used to set parameters of the control
+# plane server such as CPU affinity and nice level, for instance by
+# doing
+#
+# NICE_LEVEL=5
+#
+# CPUS=0,1
+#
+# exec nice -n $NICE_LEVEL \
+#      taskset -c $CPUS \
+#      $CP_SERVER $@
+
+exec $CP_SERVER $@

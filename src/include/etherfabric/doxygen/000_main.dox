@@ -1,0 +1,54 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+
+/**************************************************************************\
+*//*! \file
+** \author    Solarflare Communications, Inc.
+** \brief     Additional Doxygen-format documentation for ef_vi.
+** \date      2018/11/06
+** \copyright Copyright &copy; 2018 Solarflare Communications, Inc. All
+**            rights reserved. Solarflare, OpenOnload and EnterpriseOnload
+**            are trademarks of Solarflare Communications, Inc.
+*//*
+\**************************************************************************/
+
+/**************************************************************************
+ * Main page
+ *************************************************************************/
+/*! \mainpage %ef_vi
+
+Solarflare's %ef_vi API is a flexible interface for passing Ethernet
+frames between applications and the network. It is the internal API used
+by Onload for sending and receiving packets.
+
+\section introduction Introduction
+
+%ef_vi grants an application direct access to the Solarflare network
+adapter datapath to deliver lower latency and reduced per message
+processing overheads. It can be used directly by applications that want
+the very lowest latency send and receive API, and that do not require a
+POSIX socket interface.
+
+The key features of %ef_vi are:
+- __User-space:__ Ef_vi can be used by unprivileged user-space applications.
+- __Kernel bypass__: Data path operations do not require system calls.
+- __Low CPU overhead__: Data path operations consume very few CPU cycles.
+- __Low latency__: Suitable for ultra-low latency applications.
+- __High packet rates__: Supports millions of packets per second per core.
+- __Zero-copy__: Particularly efficient for filtering and forwarding
+  applications.
+- __Flexibility__: Supports many use cases (see \ref use_cases).
+- __Redistributable__: %ef_vi is free software distributed under a LGPL
+  license.
+
+Each %ef_vi instance provides a \ref vi for an application to use:
+
+- Each virtual interface provides a TX channel for passing packets to the
+  adapter. Packets may be transmitted onto the wire, or looped-back in the
+  adapter for delivery back into the host, or both.
+
+- Each virtual interface also provides an RX channel for receiving packets
+  from the adapter. These can be packets received from the wire, or
+  looped-back from the TX path.
+
+*/

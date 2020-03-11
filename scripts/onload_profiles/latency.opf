@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# OpenOnload low latency profile.
+
+# Enable polling / spinning.  When the application makes a blocking call
+# such as recv() or poll(), this causes Onload to busy wait for up to 100ms
+# before blocking.
+#
+onload_set EF_POLL_USEC 100000
+
+# Disable FASTSTART when connection is new or has been idle for a while.
+# The additional acks it causes add latency on the receive path.
+onload_set EF_TCP_FASTSTART_INIT 0
+onload_set EF_TCP_FASTSTART_IDLE 0
+
+# Use a large initial congestion window so that the slow-start algorithm
+# doesn't cause delays.  We don't enable this by default because it breaks
+# the TCP specs, and could cause congestion in your network.  Uncomment if
+# you think you need this.
+#
+##onload_set EF_TCP_INITIAL_CWND 100000
+
+# When TCP_NODELAY is used, always kick packets out immediately.  This is
+# not enabled by default because most apps benefit from the default
+# behaviour.
+#
+##onload_set EF_NONAGLE_INFLIGHT_MAX 65535

@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# pass "$@" so application command line can be parsed by haproxy-parse-config
+onload_import haproxy-parse-config "$@"
+
+# Immediate push on TX to reduce send latency
+onload_set EF_TX_PUSH 1
+
+# Disable sleep spin
+onload_set EF_SLEEP_SPIN_USEC 0
+
+# HAProxy uses pipes in a manner incompatible with Onload, so disable pipe acceleration
+onload_set EF_PIPE 0
+
+# Assert application use of epoll is multithread safe.
+onload_set EF_EPOLL_MT_SAFE 1
+
+onload_import proxy-throughput

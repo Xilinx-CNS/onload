@@ -1,0 +1,97 @@
+
+Introduction
+============
+
+ OpenOnload(R) is a high performance user-level network stack, which
+ delivers absolutely the best performance to applications using the BSD
+ sockets API.
+
+ OpenOnload can be built directly from the repository for testing, or packaged
+ into a tarball for distribution.
+
+
+Build requirements
+============
+
+ TODO: get a list of required packages in order to build both in-tree Onload and
+ TODO: the packaged tarball (including newly added cplane).
+
+
+Distributing as tarball
+============
+
+ Onload is distributed as a tarball containing code for production environments.
+ The tarball can be built using the onload_mkdist script.
+
+    scripts/onload_mkdist
+
+ This will create the tarball at the base of the repository.
+
+ The tarball version depends on whether the tarball is a "release" or not.
+ Non-release tarballs can be produced for test setups and will be versioned
+ with the current commit hash.
+ Release tarballs are intended for wider distribution and will be versioned with
+ the current date only.
+ Use the --release option with onload_mkdist to produce release packages.
+
+ Please follow the README included in the tarball to install Onload on the
+ target machine.
+
+
+Building directly from repository
+============
+
+ If compiling Onload during active development, or in order to run tests, it may
+ be useful to build directly out of the repository, rather than packaging into a
+ tarball.
+
+ There are two separate libraries that need to be compiled:
+   * Driver code: Modules to be loaded into the kernel.
+   * User code:   Libraries that are used to add Onload stacks to user level
+                  programs.
+
+ Before building either of these sets of code, the make files and build tree
+ needs to be contructed.  Scripts for doing this are included in the repository.
+
+ From a fresh checkout, to build both build trees and compile both libraries,
+ do:
+
+    export PATH="$PWD/scripts:$PATH"
+
+    mmakebuildtree --driver
+    mmakebuildtree --user
+
+    make -C "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)" ${OPTS}
+    make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" NO_ZF=1 ${OPTS}  TODO: Should make NO_ZF default
+
+
+Unit tests
+==========
+The user build tree includes a number of unit tests in the tests/onload/cplane_unit
+and tests/onload/oof directories.
+
+These are written in C; running "make" inside the user tree will compile each test
+into a separate binary which can be run.
+
+For convenience, we provide a script to build and run all of the tests:
+scripts/run_unit_tests.sh
+
+
+Installing from repository
+============
+
+ To use Onload after building in the repository, the drivers need to be loaded
+ into the kernel and the user level processes need to load Onload libraries.
+
+ To load drivers into the kernel:
+
+    "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)/driver/linux/load.sh" onload
+
+ Then either use the LD_PRELOAD environment variable to load applications with
+ Onload, or call them with the onload script:
+
+    LD_PRELOAD="$(mmaketool --toppath)/build/$(mmaketool --userbuild)/lib/transport/unix/libcitransport0.so" <app>
+
+ OR
+
+    scripts/onload <app>

@@ -1,0 +1,56 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/****************************************************************************
+ * Copyright 2004-2005: Level 5 Networks Inc.
+ * Copyright 2005-2018: Solarflare Communications Inc,
+ *                      7505 Irvine Center Drive, Suite 100
+ *                      Irvine, CA 92618, USA
+ *
+ * Maintained by Solarflare Communications
+ *  <linux-xen-drivers@solarflare.com>
+ *  <onload-dev@solarflare.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as published
+ * by the Free Software Foundation, incorporated herein by reference.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ ****************************************************************************
+ */
+
+/**************************************************************************\
+*//*! \file
+** \author    Solarflare Communications, Inc.
+** \brief     Additional Doxygen-format documentation for ef_vi.
+** \date      2018/11/06
+** \copyright Copyright &copy; 2018 Solarflare Communications, Inc. All
+**            rights reserved. Solarflare, OpenOnload and EnterpriseOnload
+**            are trademarks of Solarflare Communications, Inc.
+*//*
+\**************************************************************************/
+
+/**************************************************************************
+ * What's New page
+ *************************************************************************/
+ /*! \page whatsnew What's New
+
+This chapter tells you what's new in this release of ef_vi.
+
+If you are not a previous user of ef_vi, go to \ref overview.
+
+\section whatsnew_ipv6_checksums IPv6 checksum functions
+
+New functions have been added for calculating IPv6 checksums.
+
+\section whatsnew_bugfixes Bug fixes
+
+Various bugs have been fixed. For details, see the `ChangeLog` file.
+
+*/

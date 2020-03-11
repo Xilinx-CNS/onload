@@ -1,0 +1,25 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Runs an application with sfcaffinity support.
+
+me=$(basename "$0")
+
+err()	{ echo >&2 "$*"; }
+log()	{ err  "$me: $*"; }
+vlog()	{ $verbose && log "$*"; }
+fail()	{ log "$*"; exit 1; }
+rawecho() { echo -E "x$*" | sed 's/^x//'; }
+
+
+preload=libsfcaffinity.so
+rawecho "$LD_PRELOAD" | grep -q "$(basename "$preload")" || {
+  if [ -z "$LD_PRELOAD" ]; then
+    LD_PRELOAD="$preload"; export LD_PRELOAD
+  else
+    LD_PRELOAD="$preload:$LD_PRELOAD"; export LD_PRELOAD
+  fi
+}
+exec "$@"
+exit

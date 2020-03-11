@@ -1,0 +1,124 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+#
+# Tuning profile for multi threaded nodejs configuration with OpenOnload
+# acceleration.
+#
+# User may supply the following environment variables:
+onload_set NODEJS_PORT_NUMBERS 8080
+onload_set NODEJS_WORKERS 24 #ignored if MODE=0
+onload_set NODEJS_MODE 1 #0 = Single process, 1 = Multiprocess multi port, 2 = Multiprocess reuseport, 3 = Cluster module (Experimental - only supports 2 workers)
+# Note: only 1 (multiprocess multiport) has been optimised
+
+echo "Running on port(s): $NODEJS_PORT_NUMBERS"
+case $NODEJS_MODE in
+0)
+  echo "Running single process"
+  ;;
+1)
+  echo "Running multiprocess multiport with $NODEJS_WORKERS worker(s)"
+  ;;
+2)
+  echo "Running multiprocess REUSEPORT with $NODEJS_WORKERS worker(s)"
+  ;;
+3)
+  echo "Running cluster module mode (experimental )with $NODEJS_WORKERS worker(s)"
+  ;;
+esac
+
+set -o pipefail
+
+# Extra tuning for Node.js - enable and edit as required
+#sysctl vm.nr_hugepages=1000
+#sysctl fs.file-max=10000000
+#sysctl net.ipv4.ip_local_port_range="10000 50000"
+#ulimit -n 1000000
+
+# For diagnostic output
+module="nodejs profile"
+
+# Mode dependent settings
+if [ $NODEJS_MODE -eq 0 ]; then
+  onload_set EF_CLUSTER_IGNORE 1
+  onload_set EF_EPOLL_CTL_FAST 1
+  onload_set EF_EPOLL_MT_SAFE 1
+  onload_set EF_UL_EPOLL 3
+  onload_set EF_INT_DRIVEN 1
+elif [ $NODEJS_MODE -eq 1 ]; then
+  onload_set EF_TCP_FORCE_REUSEPORT $NODEJS_PORT_NUMBERS
+  onload_set EF_CLUSTER_SIZE $NODEJS_WORKERS
+  onload_set EF_CLUSTER_NAME "node"
+  onload_set EF_EPOLL_CTL_FAST 1
+  onload_set EF_EPOLL_MT_SAFE 1
+  onload_set EF_UL_EPOLL 3
+  onload_set EF_INT_DRIVEN 1
+elif [ $NODEJS_MODE -eq 2 ]; then
+  onload_set EF_TCP_FORCE_REUSEPORT $NODEJS_PORT_NUMBERS
+  onload_set EF_CLUSTER_SIZE $NODEJS_WORKERS
+  onload_set EF_CLUSTER_NAME "node"
+  onload_set EF_EPOLL_CTL_FAST 1
+  onload_set EF_EPOLL_MT_SAFE 1
+  onload_set EF_UL_EPOLL 3
+elif [ $NODEJS_MODE -eq 3 ]; then
+  onload_set EF_CLUSTER_SIZE $NODEJS_WORKERS
+  onload_set EF_CLUSTER_NAME "node"
+  onload_set EF_FDS_MT_SAFE 0
+  onload_set EF_FDTABLE_STRICT 1
+  onload_set EF_EPOLL_CTL_FAST 0
+  onload_set EF_EPOLL_CTL_HANDOFF 0
+  onload_set EF_EPOLL_MT_SAFE 0
+  onload_set EF_UL_EPOLL 3
+  onload_set EF_TCP_FORCE_REUSEPORT $NODEJS_PORT_NUMBERS
+else
+  echo "Invalid NODE_JS_MODE, exiting..."
+  exit
+fi
+
+########## NETWORK ##########
+
+## MEMORY
+# Packets
+onload_set EF_KERNEL_PACKETS_BATCH_SIZE 1
+onload_set EF_MAX_PACKETS 32000
+onload_set EF_PREALLOC_PACKETS 1
+# Other
+onload_set EF_CTPIO_MODE sf-np # slightly faster than ct
+onload_set EF_USE_HUGE_PAGES 2
+
+## SOCKETS
+onload_set EF_MAX_ENDPOINTS 100000
+onload_set EF_SOCKET_CACHE_MAX $(( $EF_MAX_ENDPOINTS / $NODEJS_WORKERS ))
+
+## TCP
+# Shared ports
+onload_set EF_TCP_SHARED_LOCAL_PORTS 50
+onload_set EF_TCP_SHARED_LOCAL_PORTS_REUSE_FAST 1
+# Connection
+onload_set EF_TCP_INITIAL_CWND 14600
+onload_set EF_TAIL_DROP_PROBE 1
+onload_set EF_TCP_RCVBUF_MODE 1
+#should be enabled on public servers
+onload_set EF_TCP_SYNCOOKIES 1
+#tune TCP socket parameters
+onload_set EF_TCP_SYNRECV_MAX 10000
+
+## THROUGHPUT
+#disable low-latency sends
+onload_set EF_HIGH_THROUGHPUT_MODE 1
+onload_set EF_TX_PUSH 1
+
+########## SYSCALLS ##########
+
+## SPINNING
+# Timeout
+onload_set EF_POLL_USEC 1000000
+onload_set EF_SLEEP_SPIN_USEC 50
+# Toggles
+onload_set EF_EPOLL_SPIN 0
+onload_set EF_PKT_WAIT_SPIN 0
+onload_set EF_PIPE_RECV_SPIN 0
+onload_set EF_PIPE_SEND_SPIN 0
+onload_set EF_TCP_ACCEPT_SPIN 0
+onload_set EF_TCP_CONNECT_SPIN 0
+onload_set EF_TCP_RECV_SPIN 0
+onload_set EF_TCP_SEND_SPIN 0

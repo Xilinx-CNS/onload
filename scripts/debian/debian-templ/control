@@ -1,0 +1,22 @@
+Source: #TYPE#
+Section: net
+Priority: extra
+Maintainer: Support <support@solarflare.com>
+Build-Depends: debhelper (>= 8.0.0), bzip2, gawk, glibc | libc6, python-dev, libpcap-dev
+Standards-Version: 3.9.3
+Homepage: http://www.openonload.org
+
+Package: #TYPE#-user
+Architecture: any
+Pre-Depends: multiarch-support, lsb-core
+Depends: adduser, psmisc, ${shlibs:Depends}, ${misc:Depends}, python
+Suggests: #TYPE#-modules-${source:Version}
+Description: Onload TCP/IP stack - library
+
+Package: #TYPE#-source
+Architecture: all
+Depends: module-assistant, debhelper (>= 7), make, bzip2, #TYPE#-user (= ${source:Version}), ${misc:Depends}
+Description: source for the #TYPE# driver.
+ This package provides the source code for the #TYPE# kernel modules.
+ The #TYPE# package is also required in order to make use of these
+ modules. Kernel source or headers are required to compile these modules.

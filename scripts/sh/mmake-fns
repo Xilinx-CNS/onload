@@ -1,0 +1,79 @@
+# -*- Mode: shell-script; -*-
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Source a config.mk file, converting Makefile assignments into shell
+# variable assignments.
+sourceconfig () {
+  local tmpf=$(mktemp /tmp/mmakebuildtree.XXXXXX)
+  sed "s/ *:= *\(.*\)$/='\1'/" <"$1" >$tmpf
+  . $tmpf
+  rm -f $tmpf
+}
+
+
+# If in build tree, find out where we are.  If not, return false.  Sets
+# TOPPATH, BUILD, BUILDPATH, CURRENT, THISDIR and PLATFORM.
+# and other vars from config.mk
+orient-in-build-tree () {
+
+  local cwd="$PWD"
+  PLATFORM=
+  BUILD=.
+  CURRENT=
+
+  # it is sometimes possible for $PWD to be unknown 
+  if [ -z "$cwd" ]; then
+     return 0
+  fi
+  while true; do
+    # Stop early if we notice that we're about to move out of a tree.
+    # if we get to /home we don't want to use [ -d x ] - it's automounted
+    # and this may create new directories there (on some distributions)
+    [ "$PWD" = /home -o "$PWD" = /net ] && break;
+    [ -d build -a -d mk -a -d src -a -d scripts ] && break
+
+    if [ -f "config.mk" ] ; then
+      sourceconfig "config.mk"
+      [ -z "$PLATFORM" ] && break
+      THISDIR="${CURRENT%/}"
+      CURRENT="src/$CURRENT"
+      CURRENT="${CURRENT%/}"
+      cd "$cwd"
+      return  # i.e. fail if "cd" failed
+    fi
+
+    [ "$PWD" = / ] && break
+    CURRENT=$(basename "$PWD")"/$CURRENT"
+    BUILD="$BUILD/.."
+    cd .. || break
+  done
+
+  cd "$cwd"
+  return 1
+}
+
+
+# If anywhere in a ci check-out, find the top-level directory.  If not,
+# return false.  Sets TOP, TOPPATH.
+find-top () {
+  local cwd="$PWD"
+  TOP=.
+  # it is sometimes possible for $PWD to be unknown 
+  if [ -z "$cwd" ]; then
+     cwd=.
+  fi
+  while true; do
+    # if we get to /home we don't want to use [ -d x ] - it's automounted
+    # and this may create new directories there (on some distributions)
+    [ "$PWD" = /home ] && { cd "$cwd"; return 1; }
+    [ -d src ] && [ -d mk ] && [ -d scripts ] && break
+    [ "$PWD" = / ] && { cd "$cwd"; return 1; }
+    TOP="$TOP/.."
+    cd .. || { cd "$cwd"; return 1; }
+  done
+  cd "$cwd"
+  TOPPATH=$(cd "$TOP" && /bin/pwd)
+  return 0
+}
+

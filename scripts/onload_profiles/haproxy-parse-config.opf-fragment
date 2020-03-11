@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+#
+# Tuning profile for haproxy with OpenOnload acceleration.
+#
+# User may supply the following environment variables:
+#
+#   PROXY_WORKERS        - the number of worker processes that haproxy is
+#                          configured to use. Overrides value automatically
+#                          detected from haproxy configuration
+#
+
+# For diagnostic output
+module="haproxy-parse-config"
+
+# Parse the config file
+read_file() {
+  local setting
+  eval "local worker_values=$(perl -ne 'print "$1 " if'"/^\s*nbproc\s+(\S+)/" $1)" # need eval as the value can use shell variables
+  eval "local thread_values=$(perl -ne 'print "$1 " if'"/^\s*nbthread\s+(\S+)/" $1)"
+
+  for threads in $thread_values
+  do
+    if [ $threads -ne 1 ]
+    then
+      fail "ERROR: nbthread can only be set to 1 when using this Onload profile"
+    fi
+  done
+
+  for workers in $worker_values
+  do
+    setting=$workers
+  done
+  echo $setting
+}
+
+# Parse the config file or directory
+read_file_or_dir() {
+  local name="$1"
+  local setting
+  if [ -f $name ]
+  then
+    echo $(read_file "$name")
+  elif [ -d $name ]
+  then
+    for file in $name/*.cfg
+    do
+      if [ -f $file ]
+      then
+        local possible=$(read_file "$file")
+        if [ -n "$possible" ]
+        then
+          setting=$possible
+        fi
+      fi
+    done
+    echo $setting
+  fi
+}
+
+
+# Scan all the config files which haproxy would use
+# returns a numeric value if nbproc is configured, or "default" otherwise
+determine_worker_processes() {
+  local file
+  local num="default"
+
+  # Look for a -f, -- or -C option
+  local state="IDLE"
+  for option in "$@"
+  do
+    if [ "$state" = "MINUS_f" ]
+    then
+      file=$option
+      num=$(read_file_or_dir "$file")
+      state="IDLE"
+    elif [ "$state" = "MINUS_MINUS" ]
+    then
+      file=$option
+      num=$(read_file_or_dir "$file")
+    elif [ "$state" = "MINUS_C" ]
+    then
+      cd $option
+      state="IDLE"
+    elif [ "$option" = "-f" ]
+    then
+      state="MINUS_f"
+    elif [ "$option" = "--" ]
+    then
+      state="MINUS_MINUS"
+    elif [ "$option" = "-C" ]
+    then
+      state="MINUS_C"
+    fi
+  done
+
+  echo $num
+}
+
+# Define the number of workers
+
+if [ -o "PROXY_WORKERS" ]; then
+   num_workers="$PROXY_WORKERS"
+else
+   configured_workers=$(determine_worker_processes "$@")
+   if [ "$configured_workers" = "default" ]; then
+      num_workers=1
+   else
+      num_workers="$configured_workers"
+   fi
+   log "$module: configuring for $num_workers workers (from config appear to be $configured_workers)"
+fi
+
+if ! [ -n "$num_workers" ]; then
+  fail "ERROR: Environment variable PROXY_WORKERS is not set and worker count cannot be determined from haproxy configuration"
+fi
+
+

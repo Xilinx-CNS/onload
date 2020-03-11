@@ -1,0 +1,361 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Create onload device node.
+
+me=$(basename "$0")
+
+err()  { echo >&2 "$*"; }
+log()  { err "$me: $*"; }
+fail() { log "$*"; exit 1; }
+try()  { "$@" || fail "FAILED: $*"; }
+trylog() { echo "$me: $*"; "$@" || fail "FAILED: $*"; }
+
+usage() {
+  err
+  err "usage:"
+  err "  $me unload                       - unload sfc/onload drivers"
+  err "  $me reload                       - reload sfc/onload drivers"
+  err "  $me mknod <driver-name>          - make /dev/<driver-name>"
+  err "  $me mod_params <driver-name>     - return module parameters"
+  err "  $me configure_container <name>   - configure devices in container"
+  err
+  exit 1
+}
+
+isloaded() {
+  # NB. Check for /sys/module/onload is in case drivers are built-in.
+  /sbin/lsmod | grep -q "^$1\>" || [ -d "/sys/module/$1" ]
+}
+
+isdev() {
+  grep -qw "$1" /proc/devices
+}
+
+getmajor() {
+  grep -w "$1" /proc/devices | awk '{ print $1 }'
+}
+
+tryunload () {
+  local mod="$1"
+  if isloaded "$mod"; then
+    # rmmod is used, to avoid modprobe failure as these modules are not present
+    # in modprobe conf files in latest Onload.
+    if [ "$mod" = sfc_tune -o "$mod" = sfc_aoe -o "$mod" = onload_cplane ]; then
+       echo "$me: rmmod -f $mod"
+       rmmod -f $mod
+    else
+      echo "$me: /sbin/modprobe -r $mod"
+      if ! /sbin/modprobe -r "$mod"; then
+        log "ERROR: modprobe -r $mod failed ($?)"
+        rc=1
+        # rc is eventually returned by the script, but fail this function, too.
+        return 1
+      fi
+    fi
+  fi
+  if ! isdev "$mod" && [ -e "/dev/$mod" ]; then
+    rm -f "/dev/$mod"
+  fi
+}
+
+modusedby() {
+  local mod="$1"
+  local usedby="$2"
+  /sbin/lsmod | grep -q "^$mod\>.*\<$usedby\>"
+}
+
+modgotuserrefs() {
+  [ -d "/sys/module/$1/holders" ] && [ -f "/sys/module/$1/refcnt" ] &&
+  [ "$(cat /sys/module/$1/refcnt)" -gt "$(ls /sys/module/$1/holders | wc -l)" ]
+}
+
+check_node_device() {
+  local path="$1"
+  local major="$2"
+  local minor="$3"
+  local have=$(stat -c '%t %T' "$path" 2> /dev/null)
+  local want=$(printf '%x %x' "$major" "$minor")
+  [ "$have" = "$want" ]
+}
+
+domknod () {
+  local path="$1"
+  local major="$2"
+  local minor="$3"
+  local perm="$4"
+
+  # If several concurrent instances of this script run (which is quite possible
+  # as module initialisation can trigger further probe attempts), there are
+  # races between them. To ameliorate these, in the event of mknod failure we
+  # sleep briefly in the hope that a concurrent instance succeeds; then we
+  # check whether a suitable node has appeared and warn if not.
+  try rm -f "$path"
+  if ! mknod -m "$perm" "$path" c "$major" "$minor" 2> /dev/null
+  then
+    sleep 5
+    check_node_device "$path" "$major" "$minor" ||
+      log "WARNING: Failed to create $path."
+  fi
+
+  [ -x /sbin/restorecon ] && /sbin/restorecon "$path"
+}
+
+get_dev_perms() {
+  local DEV=$(echo "$1" | tr '[a-z]' '[A-Z]')
+  eval user=\"\${${DEV}_USER:-root}\"
+  eval group=\"\${${DEV}_GROUP:-root}\"
+  eval perm=\"\${${DEV}_MODE:-666}\"
+}
+
+mknod_for_dev() {
+  local name="$1"
+  local dev="$1"
+  local major=$(getmajor "$name")
+  if ! [ -n "$major" ]; then
+    err "ERROR: Did not find $name in /proc/devices"
+    rc=1
+    return
+  fi
+  get_dev_perms $dev
+  domknod "/dev/$dev" "$major" 0 "$perm"
+  chown "$user:$group" "/dev/$dev" 2> /dev/null
+}
+
+cmd_mknod() {
+  local driver device
+  case $# in
+    1)	device="$1";;
+    2)	device="$2";;
+    *)	usage;;
+  esac
+  local driver="$1"
+  rc=0
+  if isloaded "$driver"; then
+    mknod_for_dev "$device"
+  else
+    rm -f "/dev/$1"
+    rc=2
+  fi
+  exit $rc
+}
+
+######################################################################
+
+cmd_mod_params() {
+  case "$1" in
+    onload)
+      ONLOAD_CPLANE_USER=root
+      . /etc/sysconfig/openonload
+      echo cplane_server_uid=$(id -u $ONLOAD_CPLANE_USER) \
+           cplane_server_gid=$(id -g $ONLOAD_CPLANE_USER)
+      ;;
+  esac
+  exit 0
+}
+
+######################################################################
+
+get_cgroup_field() {
+  local field=$1
+  shift
+  echo "$@" | cut -d ':' -f $field
+}
+
+cmd_configure_container() {
+  DOCKER=$(which docker 2> /dev/null) || \
+    fail "ERROR: Docker does not appear to be installed."
+
+  container=$1
+  pid=$($DOCKER inspect --format {{.State.Pid}} $container) || \
+    fail "ERROR: Could not retrieve PID for container '$container'."
+  [ $($DOCKER inspect --format {{.State.Running}} $container) = 'true' ] || \
+    fail "ERROR: Container '$container' is not running."
+
+  # /proc/<pid>/cgroup consists of lines with the following format:
+  #  hierarchy_id:controller1,controller2,...:cgroup_path
+  cgroup=
+  for cgroup_hierarchy in $(cat /proc/$pid/cgroup); do
+    if get_cgroup_field 2 $cgroup_hierarchy | grep -w devices > /dev/null; then
+      cgroup=$(get_cgroup_field 3 $cgroup_hierarchy)
+      break
+    fi
+  done
+
+  [ -n "$cgroup" ] ||
+    fail "ERROR: Could not find devices cgroup for container '$container'."
+
+  devices="onload onload_epoll sfc_char"
+  for device in $devices; do
+    cgset -r "devices.allow=c $(getmajor $device):0 rwm" $cgroup ||
+      fail "ERROR: Failed to set permissions for device '$device'."
+  done
+
+  # If we have nsenter, we can create nodes inside the container; otherwise,
+  # this will have to be done manually.
+  NSENTER=$(which nsenter 2> /dev/null)
+  if [ -x "$NSENTER" ]; then
+    for device in $devices; do
+      $NSENTER -t $pid -m -u -i -n -p -- env -i -- su -lc \
+        "onload_tool mknod onload $device" || \
+        fail "ERROR: Failed to create node for device '$device' in container" \
+             "'$container'."
+    done
+  else
+    log "nsenter is not available, and so device nodes have not been"
+    log "created. Either install nsenter and rerun this script, or execute"
+    log "the following commands inside the container:"
+    for device in $devices; do
+      log "  onload_tool mknod onload $device"
+    done
+  fi
+
+  exit 0
+}
+
+######################################################################
+
+have_stacks() {
+  [ -f /proc/driver/onload/stacks_ul ] && grep -q . /proc/driver/onload/stacks_ul
+}
+
+wait_cplane_death() {
+  local count=0
+  while [ $count -le $1 ]; do
+    [ $count -eq 1 ] && echo "Waiting for onload_cp_server to terminate..."
+    [ $count -gt 0 ] && sleep 1
+    # wait until user references go away
+    if modgotuserrefs onload >/dev/null; then
+      true
+    elif ! pgrep -f onload_cp_server > /dev/null; then
+      return 0
+    fi
+    count=$(($count+1))
+  done
+  return 1
+}
+
+kill_cplane() {
+  pkill -f onload_cp_server
+  wait_cplane_death 5 &&
+    return 0
+  echo Timed out waiting for control plane to stop, trying SIGKILL...
+  pkill --signal KILL -f onload_cp_server
+  wait_cplane_death 1 &&
+    return 0
+  echo Failed to kill control plane - aborting
+  exit 1
+}
+
+do_unload() {
+  rc=0
+  # onload_cp_server can take a while to die, let's do it first if no stacks present
+  have_stacks || kill_cplane
+  # Old (pre-2011) systems had inverse dependency of sfc_affinity on 
+  # sfc_resource to modern ones. To allow old versions to unload try that first
+  modusedby sfc_resource sfc_affinity && tryunload sfc_affinity
+  tryunload af_onload      # Present in historical Onload versions
+  tryunload onload || ( [ -x "$(which onload_fuser 2>/dev/null)" ] && onload_fuser -v )
+  tryunload onload_cplane  # Present in historical Onload versions.
+  tryunload sfc_char
+  tryunload sfc_resource
+  tryunload sfc_affinity
+  tryunload sfc_tune       # Present in historical Onload versions.
+  tryunload sfc_mtd
+  tryunload sfc_control    # Present in historical Onload versions.
+  tryunload sfc_aoe        # Present in historical Onload versions.
+  tryunload sfc
+  tryunload sfc_ef100
+  tryunload sfc_driverlink
+  grep -q sfc/sfc.ko /lib/modules/$(uname -r)/modules.dep && \
+      log "WARNING: sfc driver may reload due to an in-distro driver"
+  return $rc
+}
+
+
+cmd_unload() {
+  [ $# = 0 ] || usage
+  do_unload
+  exit
+}
+
+######################################################################
+
+set_dev_perms() {
+  get_dev_perms $1
+  for dev in $@; do
+    chmod "$perm" "/dev/$dev"
+    chown "$user:$group" "/dev/$dev"
+  done
+}
+
+cmd_post_install() {
+  set_dev_perms onload onload_epoll
+  set_dev_perms sfc_char
+  set_dev_perms sfc_affinity
+}
+
+######################################################################
+
+cmd_reload() {
+  [ $# = 0 ] || usage
+  do_unload || fail "ERROR: could not unload all drivers"
+  # After v5_2_1_1003 net driver version, Onload module doesn't depend on sfc
+  # module (only on sfc_driverlink), so need to load sfc driver separately
+  # we want to load either sfc or sfc_ef100 and lspci will tell us which one is needed
+  loaded=
+  for driver in $(lspci -k |  grep '^\s*Kernel modules: ' | grep -woE '(sfc|sfc_ef100)$'); do
+    trylog /sbin/modprobe $driver
+    isloaded $driver || fail "ERROR: $driver driver did not load"
+    loaded=1
+  done
+  [ -n "$loaded" ] || fail "ERROR: no sfc device detected"
+  trylog /sbin/modprobe onload
+  isloaded onload || fail "ERROR: onload module did not load"
+  # NB. sfc_aoe not always installed; don't want to moan...
+  /sbin/modprobe sfc_aoe >/dev/null 2>&1
+  exit 0
+}
+
+######################################################################
+# main
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -*)  usage;;
+    *)   break;;
+  esac
+  shift
+done
+
+[ $# -ge 1 ] || usage
+
+[ -f /etc/sysconfig/openonload ] && . /etc/sysconfig/openonload
+
+cmd="$1"
+shift
+
+case "$cmd" in
+  mknod)
+    cmd_mknod "$@"
+    ;;
+  mod_params)
+    cmd_mod_params "$@"
+    ;;
+  reload)
+    cmd_reload "$@"
+    ;;
+  unload)
+    cmd_unload "$@"
+    ;;
+  configure_container)
+    cmd_configure_container "$@"
+    ;;
+  post_install)
+    cmd_post_install "$@"
+    ;;
+  *)
+    usage
+    ;;
+esac

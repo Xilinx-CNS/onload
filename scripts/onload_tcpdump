@@ -1,0 +1,124 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+set -o noglob
+
+usage() {
+  script=$(basename $0)
+  echo "Usage:"
+  echo "$script [-o stack_id|stack_name [-o ...]] [--dump-os=0] tcpdump_options_and_parameters"
+  echo "\"man tcpdump\" for details on tcpdump parameters."
+  echo "You may use stack id number or shell-like pattern for the stack name "
+  echo "to specify the Onload stacks to listen on, for example:"
+  echo " # onload_tcpdump -o 1 -o 23"
+  echo "   - dump stacks number 1 and 23"
+  echo " # onload_tcpdump -o myname"
+  echo "   - dump stack with name 'myname'"
+  echo " # onload_tcpdump -o 'myname*'"
+  echo "   - dump all stacks with name starting with 'myname'; monitor if "
+  echo "     new stacks with such a name are created"
+  echo " # onload_tcpdump -o 1 -o one -o '*two*'"
+  echo "   - dump stack number 1, dump stack with name 'one', dump all stacks "
+  echo "     with 'two' in their names and monitor for new stack with name '*two*'"
+  echo " # onload_tcpdump --no-match"
+  echo "   - of all stacks dump only rx packets that do not match any Onload "
+  echo "     sockets or speficially - packets for which there is no Onload "
+  echo "     software filter present"
+  echo "If you do not specify stacks, $script will monitor all onload stacks."
+  echo "If you do not specify interface via -i option, $script "
+  echo "listens on ALL interfaces instead of the first one."
+  echo "Use --dump-os=0 if you do not want to see Onload packets sent via OS"
+  echo "Use --no-match to see packets matching no Onload socket"
+  exit 1
+}
+
+onload_opts=
+tcpdump_opts=
+both_opts=
+w_opt=
+# stack names, ids have to be positional
+stack_names_or_ids=""
+
+while [ -n "$1" ]; do
+  case $1 in
+    -h*|--h*)
+      usage
+      ;;
+    -s)
+      both_opts+=" $1 $2"
+      shift 2
+      ;;
+    -s*)
+      both_opts+=" $1"
+      shift
+      ;;
+    -i)
+      onload_opts+=" $1 $2"
+      shift 2
+      ;;
+    -i*)
+      onload_opts+=" $1"
+      shift
+      ;;
+    -o)
+      stack_names_or_ids+=" $2"
+      shift 2
+      ;;
+    -o*)
+      stack_names_or_ids+=" ${1:2}"
+      shift
+      ;;
+    -w)
+      w_opt="-w$2"
+      shift 2
+      ;;
+    -w*)
+      w_opt="$1"
+      shift
+      ;;
+    --no-match*)
+      onload_opts+=" $1"
+      shift
+      ;;
+    --dump-os*)
+      onload_opts+=" $1"
+      shift
+      ;;
+    --time-stamp-precision)
+      both_opts+=" $1=$2"
+      shift 2
+      ;;
+    --time-stamp-precision=*)
+      both_opts+=" $1"
+      shift
+      ;;
+    *)
+      tcpdump_opts+=" $1"
+      shift 1
+      ;;
+  esac
+done
+
+# Worakround for tcpdump not being in path.
+if type tcpdump &>/dev/null; then
+  true
+else
+  PATH=$PATH:/usr/sbin:/sbin
+fi
+
+if [ -n "$w_opt" ] && [ -z "$tcpdump_opts" ]; then
+    # Writing to a file and no tcpdump options: Don't spawn tcpdump.
+    exec onload_tcpdump.bin $both_opts $onload_opts $stack_names_or_ids \
+         >${w_opt:2}
+else
+    # Exit scenarios:
+    # - onload_tcpdump.bin finishes; tcpdump gets EOF; exit
+    # - onload_tcpdump.bin killed by signal (^C or whatever);
+    #   tcpdump gets EOF; exit:
+    #   * take care that tcpdump is not killed by ^C: use setsid
+    # - tcpdump prints error (incorrect pcap expression or anything);
+    #   onload_tcpdump.bin is killed by SIGHUP.
+    onload_tcpdump.bin $both_opts $onload_opts $stack_names_or_ids | \
+        ( setsid tcpdump -r- $w_opt $both_opts $tcpdump_opts || kill -HUP $$ )
+fi

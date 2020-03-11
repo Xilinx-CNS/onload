@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# redis balanced profile
+
+# Enable small amount of polling / spinning.  When the application makes a
+# blocking call to epoll_wait(), this causes Onload to busy wait for up to 20us
+# before blocking.
+#
+onload_set EF_INT_DRIVEN 0
+onload_set EF_POLL_USEC 20
+
+# Prevent spinning inside socket calls.  (Spinning will take place
+# on epoll_wait polling).
+onload_set EF_PKT_WAIT_SPIN 0
+onload_set EF_TCP_RECV_SPIN 0
+onload_set EF_TCP_SEND_SPIN 0
+onload_set EF_TCP_CONNECT_SPIN 0
+onload_set EF_TCP_ACCEPT_SPIN 0
+onload_set EF_UDP_RECV_SPIN 0
+onload_set EF_UDP_SEND_SPIN 0
+
+
+# Use EPOLL mode 2 as this will be compatible with redis process forking and
+# can scale to large numbers of sockets
+onload_set EF_UL_EPOLL 2
+
+# EPOLL can be multithread safe, as redis poll architecture is single threaded
+onload_set EF_EPOLL_MT_SAFE 1
+
+onload_set EF_RXQ_SIZE 4096
+onload_set EF_CLUSTER_IGNORE 1
+
+# enable receive packet event batching, this adds a small latency
+# cost, but improves transaction rate/efficiency
+onload_set EF_HIGH_THROUGHPUT_MODE 1
+
+# disable CTPIO and PIO as these reduce CPU efficiency and don't
+# for this class of application, bring major benefits.
+onload_set EF_CTPIO 0
+onload_set EF_PIO 0

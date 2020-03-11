@@ -1,0 +1,17 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+#
+
+# Tuning profile for applications favouring high throughput and scale over low
+# latency.
+# For use within another profile only.
+#
+
+# Disable low-latency sends to minimise CPU overheads.
+onload_set EF_TX_PUSH 0
+onload_set EF_PIO 0
+onload_set EF_CTPIO 0
+
+# Optimize packet handling for throughput rather than latency.
+onload_set EF_HIGH_THROUGHPUT_MODE 1
+

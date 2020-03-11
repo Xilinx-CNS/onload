@@ -1,0 +1,90 @@
+# This file is included by scripts that need to prepare Onload source files
+# for distribution to customers.
+
+year=$(date '+%Y')
+# Copyright banner for version.h
+banner="Copyright 2006-$year Solarflare Communications, 2002-2005 Level 5 Networks"
+
+copy_distfiles() {
+  # Grab top-level files.
+
+  local distfiles_d="$1"
+
+  try cp -a "$distfiles_d"/{README,*LICENSE,ChangeLog} .
+  try cp -a "$distfiles_d"/README.ef_vi .
+  [ -f "$distfiles_d"/ReleaseNotes ] &&
+    try cp -a "$distfiles_d"/ReleaseNotes .
+  [ -f "$distfiles_d"/ReleaseNotes-sfc ] &&
+    try cp -a "$distfiles_d"/ReleaseNotes-sfc .
+}
+
+
+update_readme_strings() {
+  local product="$1"
+  local version="$2"
+  local src_rev="$3"
+
+  try [ -n "$src_rev" ]
+  echo "$version" | grep -q "," && fail "ERROR: Version contains a comma"
+
+  # Do not mention the release profile if it is the default
+
+  # Perform substitions in README file template
+  try sed -i -e "s,ONLOAD_VERSION,$product-$version," \
+             -e "s,ONLOAD_TAG,$src_rev," \
+             -e "s,PACKAGE_DATE,$(date)," README
+}
+
+
+update_product_strings() {
+  # Update some files with version information.
+
+  local Product="$1"
+  local product="$2"
+  local version="$3"
+
+  try sed -i \
+    -e "/define ONLOAD_VERSION/ c# define ONLOAD_VERSION \"$version\"" \
+    -e "/define ONLOAD_PRODUCT/ c#define ONLOAD_PRODUCT \"$Product\"" \
+    -e "/define ONLOAD_COPYRIGHT/ c#define ONLOAD_COPYRIGHT \"$banner\"" \
+    src/include/onload/version.h
+  try sed -i \
+    "/define pkgversion/ c%define pkgversion $version" \
+    scripts/onload_misc/openonload.spec
+  if [ "$Product" != OpenOnload ]; then
+    try sed -i \
+      -e "/^Summary[[:space:]]*:/ s/OpenOnload/$Product/" \
+      -e "/^Name[[:space:]]*:/ s/openonload/$product/" \
+      -e "/^Source0[[:space:]]*:/ s/openonload/$product/" \
+      scripts/onload_misc/openonload.spec
+  fi
+}
+
+# This is a wrapper around the various preprocessing stages for environments
+# with appropriately-defined global variables.
+preprocess_source() {
+  [ -n "$src_rev" ] || src_rev=$(cd "$TOP" && git rev-parse HEAD)
+
+  copy_distfiles "$distfiles_d"
+  update_readme_strings "$product" "$version" "$src_rev"
+  update_product_strings "$Product" "$product" "$version"
+}
+
+
+inittmp() {
+  preprocess_tmp=
+  trap 'rm -rf "$preprocess_tmp"' EXIT
+}
+
+settmp() {
+  try [ -z "$preprocess_tmp" ]
+  preprocess_tmp="$1";
+  try [ -n "$preprocess_tmp" ]
+}
+
+rmtmp() {
+  [ -n "$preprocess_tmp" ] && rm -rf "$preprocess_tmp"
+  preprocess_tmp=
+}
+
+inittmp

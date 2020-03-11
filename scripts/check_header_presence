@@ -1,0 +1,21 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Check whether the header exists.
+
+header=$1
+
+dir=$(mktemp -d)
+
+cat >$dir/checkheaderpresence.c <<EOF
+#include <$header>
+int main(int argc, char ** argv) {return 0;}
+EOF
+if $CC $CFLAGS -Werror -c $dir/checkheaderpresence.c -o $dir/checkheaderpresence.o &>/dev/null ; then
+    echo 1
+else
+    echo 0
+fi
+
+rm -rf $dir

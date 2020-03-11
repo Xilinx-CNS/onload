@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+onload_import latency-best
+onload_set EF_STACK_PER_THREAD 1

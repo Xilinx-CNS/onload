@@ -1,0 +1,86 @@
+#!/bin/bash -eu
+
+target_repo=net-next
+
+usage() {
+    cat >&2 <<EOF
+Usage: $(basename "$0") [--now] [options] \\
+           [<since> | <revision range>]
+
+Formats git commits for submission to netdev, including the usual recipients
+and subject prefix of [PATCH net-next].  If the -now option is used, change
+the subject prefix to [PATCH net].
+
+For any commit that isn't written by you (based on comparing email addresses),
+copies the From line into the body.
+
+All arguments except --help and --now are passed through to git format-patch.
+EOF
+    exit 2
+}
+
+if [ $# -eq 0 ]; then
+    usage
+fi
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+	--now)
+	    target_repo=net
+	    shift
+	    ;;
+	--help)
+	    usage
+	    ;;
+	*)
+	    break
+	    ;;
+    esac
+done
+
+to_stdout=false
+for arg in "$@"; do
+    if [ "x$arg" = x--stdout ]; then
+	to_stdout=true
+	break
+    fi
+done
+
+my_from="$(git config user.email)"
+
+# The From field will be changed to my own address, so wherever the
+# actual author was different, insert a pseudo-header with the
+# original From field at the top of the body.
+AWK_INSERT_FROM='
+BEGIN { FS = ":" }
+/^From / {
+    in_header = 1;
+    insert_from = 0;
+}
+in_header && /^From:/ {
+    if (index($2, "<'"$my_from"'>") == 0) {
+        insert_from = 1;
+        from = gensub("^ *", "", 1, $2);
+    }
+}
+in_header && /^$/ {
+    in_header = 0;
+    if (insert_from) {
+        print "\nFrom:", from;
+    }
+}
+{ print }
+'
+
+git format-patch --to='David Miller <davem@davemloft.net>' --cc='netdev@vger.kernel.org, linux-net-drivers@solarflare.com' --subject-prefix="PATCH $target_repo" --no-signature "$@" | \
+{
+    if $to_stdout; then
+	awk "$AWK_INSERT_FROM"
+    else
+	while read patch; do
+	    awk "$AWK_INSERT_FROM" < "$patch" > "$patch.new"
+	    mv "$patch.new" "$patch"
+	    echo "$patch"
+	done
+    fi
+}

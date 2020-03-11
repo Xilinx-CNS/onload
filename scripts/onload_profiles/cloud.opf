@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Cloud Onload approximation profile for OpenOnload
+#
+# This profile configures OpenOnload to behave like Cloud Onload for
+# features that are currently activated.
+
+# Enable event merging, which is always on in Cloud Onload
+
+onload_set EF_HIGH_THROUGHPUT_MODE 1
+
+# Disable CTPIO and PIO transfers. Cloud Onload uses DMA for all
+# transfers.
+
+onload_set EF_CTPIO 0
+onload_set EF_PIO 0
+
+# UDP acceleration is not available in Cloud Onload.  All UDP
+# traffic will be transparently handed over to the kernel
+
+onload_set EF_UDP 0

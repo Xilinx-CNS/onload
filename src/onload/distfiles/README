@@ -1,0 +1,127 @@
+
+Introduction
+============
+
+ OpenOnload(R) is a high performance user-level network stack, which
+ delivers absolutely the best performance to applications using the BSD
+ sockets API.  Please see www.openonload.org for more information.
+
+ EnterpriseOnload is a version of OpenOnload that includes an extended test
+ cycle, guaranteed support from Solarflare, bug fixes and a defined service
+ level agreement.
+
+ OpenOnload and EnterpriseOnload are licensed under the GNU General Public
+ License (Version 2, June 1991).  See the LICENSE file in this distribution
+ for details.
+
+
+Supported platforms
+===================
+
+ Linux kernels from 3.10.
+
+ The following processor architectures are supported:
+ - amd64/em64t (support for AMD processors prior to Zen is deprecated)
+ - ia32 (in userspace for Onloaded applications only)
+ - aarch64 (to preview level)
+
+ This release of Onload supports the following Xilinx adapter:
+   VCU1525
+
+ Onload supports Solarflare SFC9000 network controller chips,
+ including the following network adapters:
+   X2541, X2542
+   X2522, X2522-25G
+   SFN8042
+   SFN8522, SFN8522M, SFN8542, SFN8722
+   SFN7142Q
+   SFN7122F, SFN7322F, SFN7124F
+
+ Onload support for the following network adapters is deprecated:
+   SFN5122F, SFN5322F
+   SFN6122F, SFN6322F
+   SFN5812H, SFN5814H
+   SFN5802K
+   SFN5121T
+
+
+ If you are interested in trying or buying Solarflare network adapters,
+ please contact <sales@solarflare.com>.
+
+
+Documentation
+=============
+
+ The Onload User Guide is available to customers with supported cards.  You
+ can register and download a copy from: https://support.solarflare.com/.
+
+ You may also find the Server Adapter User Guide useful -- it is available from
+ the same place.
+
+
+Quick start
+===========
+
+ If deploying Onload from a tarball, then the following command will
+ build and install the Onload drivers into system directories (as root).
+ For instructions on other Onload installation packages (e.g. source RPM),
+ please refer to the Onload user guide.
+
+   <top>/scripts/onload_install
+
+ You may need to reload the drivers if you have drivers loaded already:
+
+   onload_tool reload
+
+ Or to load the Onload and sfc drivers if none are loaded:
+
+   modprobe sfc
+
+ You may need to configure your ethernet interface with an IP address using
+ the standard tools.  Please see the documentation that comes with your
+ Linux distribution for details.
+
+ To accelerate an application with the Onload user-level transport, simply
+ invoke the application on the command line as normal, prepended with
+ "onload".
+
+ ie. Instead of:
+
+   netperf -t TCP_RR -H myserver
+
+ do this:
+
+   onload netperf -t TCP_RR -H myserver
+
+ and tuned for best latency:
+
+   onload -p latency netperf -t TCP_RR -H myserver
+
+
+Configuration and tuning
+========================
+
+ Onload takes many configuration settings directly from the kernel stack.
+ In addition, there are a number of configuration and tuning options that
+ can be set via environment variables.  See the Onload User Guide for
+ details.
+
+ You can get detailed descriptions of the configuration options in the
+ version of Onload that you are using by running the following command:
+
+   onload_stackdump doc
+
+
+Any questions?
+==============
+
+ Website: www.openonload.org
+
+ For support please go to https://support.solarflare.com or email
+ <support@solarflare.com>.
+
+
+==========
+ version: ONLOAD_VERSION
+revision: ONLOAD_TAG
+    date: PACKAGE_DATE

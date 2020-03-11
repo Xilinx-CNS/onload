@@ -1,0 +1,72 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+#
+# Tuning profile for applications favouring high throughput and scale over low
+# latency.
+# For use within another profile only.
+#
+
+# Enable scalable epoll implementation.
+onload_set EF_UL_EPOLL 3
+
+# Max number of half-open connections
+onload_set EF_TCP_SYNRECV_MAX 1000000
+
+# Enable shared local ports which allows Onload to recycle resources
+# for active open connections more efficiently.
+# A large number of shared local ports are created and the maximum
+# is set to the same value.  I.e. all shared local ports are
+# allocated on stack creation and not allocated later.
+onload_set EF_TCP_SHARED_LOCAL_PORTS 570000
+onload_set EF_TCP_SHARED_LOCAL_PORTS_MAX $EF_TCP_SHARED_LOCAL_PORTS
+
+# EF_TCP_SHARED_LOCAL_PORTS_REUSE_FAST allows recycling ports
+# immediately when CLOSED state is reached via LAST-ACK (i.e.
+# when socket received FIN from server rather than sent FIN via
+# close())
+onload_set EF_TCP_SHARED_LOCAL_PORTS_REUSE_FAST 1
+
+# Validate shared local ports are used by setting
+# EF_TCP_SHARED_LOCAL_PORTS_NO_FALLBACK=1 which causes connect()
+# to fail when shared local ports are not used.
+onload_set EF_TCP_SHARED_LOCAL_PORTS_NO_FALLBACK 1
+
+# Use a separate pool of shared local ports per local IP
+onload_set EF_TCP_SHARED_LOCAL_PORTS_PER_IP 1
+
+# Set the limit of the shared ports pool per IP/cluster
+onload_set EF_TCP_SHARED_LOCAL_PORTS_PER_IP_MAX 32000
+
+# How many more shared local ports to allocate if current pool
+# exhausted.  Unused when all allocated at startup.
+onload_set EF_TCP_SHARED_LOCAL_PORTS_STEP 2048
+
+# Support lots of sockets and enable socket caching.
+onload_set EF_MAX_ENDPOINTS 1000000
+onload_set EF_SOCKET_CACHE_MAX $(( $EF_MAX_ENDPOINTS / 4 ))
+
+# A balance between being responsive at low throughput and being able to
+# avoid almost all interrupts at very high throughput
+onload_set EF_INT_DRIVEN 0
+onload_set EF_POLL_USEC 20
+
+# Allocate plenty of packet memory and force hugepages.
+onload_set EF_MAX_PACKETS $(( (180000*32) / $EF_CLUSTER_SIZE ))
+onload_set EF_PREALLOC_PACKETS 1
+onload_set EF_USE_HUGE_PAGES 2
+
+onload_import throughput_base
+
+# Prevent spinning inside socket calls.  (Spinning will take place
+# on epoll_wait polling).
+onload_set EF_PKT_WAIT_SPIN 0
+onload_set EF_TCP_RECV_SPIN 0
+onload_set EF_TCP_SEND_SPIN 0
+onload_set EF_TCP_CONNECT_SPIN 0
+onload_set EF_TCP_ACCEPT_SPIN 0
+onload_set EF_UDP_RECV_SPIN 0
+onload_set EF_UDP_SEND_SPIN 0
+
+# Forward packets arriving via scalable filter to the kernel
+# when required (e.g. IGMP)
+onload_set EF_KERNEL_PACKETS_BATCH_SIZE 1

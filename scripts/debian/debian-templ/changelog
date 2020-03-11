@@ -1,0 +1,5 @@
+#TYPE# (#VERSION#-1) unstable; urgency=low
+
+  * Initial release of Debian packages
+
+ -- Support <support@solarflare.com>  Wed, 08 Apr 2015 17:20:35 +0100

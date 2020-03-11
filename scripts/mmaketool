@@ -1,0 +1,405 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Useful info for other scripts.
+
+. "$(dirname "$0")/sh/fns"
+. "$bin/sh/mmake-fns"
+. "$bin/sh/disttag"
+
+usage () {
+  err
+  err "usage:  $p <request>"
+  err
+  err "requests:"
+  err "  --intree              - true if in a ci check-out or build tree"
+  err "  --inbuild             - true if in a build tree"
+  err "  --top                 - relative path to top of ci check-out"
+  err "  --toppath             - absolute path to top of ci check-out"
+  err "  --buildplatform       - platform name of build tree"
+  err "  --build               - relative path to top of build tree"
+  err "  --buildpath           - absolute path to top of build tree"
+  err "  --current             - path from top of build tree to current"
+  err "  --platforms           - list supported platforms"
+  err "  --allplatforms        - list all platforms including unsupported"
+  err "  --driverbuild         - canonical driver build name for this host"
+  err "  --driverbuild_base    - base canonical driver build name for this host"
+  err "  --userbuild           - canonical userlevel build name for this host"
+  err "  --userbuild_base      - base userlevel build name for this host"
+  err "  --userbuild_base32    - base userlevel 32 bit build name for this host"
+  err "  --ignoreenv           - Ignore MMAKE_*"
+  err "  --kernelid            - kernel-dependent part of --driverbuild"
+  err "  --transportlib        - location of userlevel transport library"
+  err "  --afonloadlib         - location of kernel transport preloader"
+  err "  --processor           - processor name for this machine"
+  err "  --userarch            - processor name for this machine"
+  err "  --toolplatform        - local tool platform mmaketool is running on"
+  err "  --distribution        - OS distribution name for this machine"
+  err "  --libc                - LibC version number"
+  err "  --interfaces          - list etherfabric interfaces"
+  err "  --sourcever           - software version from source code"
+  err
+  err "Environment variables used:"
+  err "  MMAKETOOL_ADD_LIBC    - add gcc library version to build dir, if set"
+  err "  MMAKETOOL_ADD_DISTRIBUTION - add linux distn to build dir, if set"
+  err "  MMAKETOOL_ADD_HOST    - add host name to build dir, if set"
+  err "  MMAKETOOL_ADD_DEBUG   - for debug builds append 'debug' suffix to "
+  err "                          build dir, if set"
+  err "  EF_USERBUILD          - use as user build dir, if set"
+  err "  EF_DRIVERBUILD        - use as driver build dir, if set"
+
+  exit 1
+}
+
+# This isn't ideal, as -p seems like the right thing to use, but it
+# doesn't exist on some Debian systems, and gives an unhelpful string
+# on others (bug29199).
+processor_linux() {
+  uname -m
+}
+
+processor() {
+  if test -n "$CROSS_COMPILE"; then
+    echo "${CROSS_COMPILE%%-*}"
+    return 0
+  fi
+  k=$(toolplatform)
+  case "$k" in
+      linux)	processor_linux;;
+      *) err "mmaketool:processor: unknown platform"; exit 1;;
+  esac
+}
+
+toolplatform() {
+    uname -s | tr '[A-Z]' '[a-z]'
+}
+
+######################################################################
+
+kernelver() {
+  if [ -n "$KVER" ]; then
+    echo "$KVER"
+  else
+    uname -r
+  fi
+}
+
+userarch() {
+  if test -n "$CROSS_COMPILE"; then
+    echo "${CROSS_COMPILE%%-*}" | sed s/powerpc/ppc/
+    return 0
+  fi
+  case $(uname -s) in
+    Linux)		gcc -dumpmachine | sed s/-.*$// | sed s/powerpc/ppc/;;
+    *)			err "mmaketool:userarch: unknown system type"; exit 1;;
+  esac
+}
+
+userbuild_linux32() {
+  local proc=$(processor)
+  case "$proc" in
+    ppc64)  echo gnu_ppc32 ;;
+    ppc64le)echo gnu_ppc32le ;;
+    x86_64) echo gnu ;;
+    i*86)   echo gnu ;;
+    *)      echo gnu_$proc ;;
+  esac
+}
+
+userbuild_linux() {
+  local ua=$(userarch)
+  case "$ua" in
+    i*86)   echo gnu ;;
+    *)      echo "gnu_$ua" ;;
+  esac
+}
+
+add_opts() {
+  local dir="$1"
+  local host=$(uname -n)
+  local k=$(toolplatform)
+
+  if [ -n "$MMAKETOOL_ADD_DEBUG" ]; then
+    if [ "$NDEBUG" != "1" ]; then
+      dir="$dir""_debug"
+    fi
+  fi
+  if [ -n "$MMAKETOOL_ADD_LIBC" ]; then
+    local libc=$(libc_version)
+    if [ -n "$libc" ]; then
+      dir="$libc""_$dir"
+    fi
+  fi
+
+  if [ -n "$MMAKETOOL_ADD_DISTRIBUTION" ]; then
+    local distrib=$(sfc_disttag)
+
+    if [ "$k" == "sunos" ]; then
+	distrib="$distrib""_"`kernelver`
+    fi
+
+    if [ -n "$distrib" ]; then
+      dir="$distrib""_$dir"
+    fi
+  fi
+
+  if [ -n "$MMAKETOOL_ADD_HOST" ]; then
+    echo "$host""_$dir"
+  else
+    echo "$dir"
+  fi
+}
+
+userbuild_base32() {
+  k=$(toolplatform)
+  case "$k" in
+    linux)      echo $(userbuild_linux32);;
+    *)          err "mmaketool:userbuild_base32: unknown system type"; exit 1;;
+  esac
+}
+
+userbuild_base() {
+  k=$(toolplatform)
+  case "$k" in
+    linux)      echo $(userbuild_linux);;
+    *)          err "mmaketool:userbuild_base: unknown system type"; exit 1;;
+  esac
+}
+
+userbuild() {
+  k=$(toolplatform)
+  if [ -n "$EF_USERBUILD" ]; then
+    echo "$EF_USERBUILD"
+  else
+    case "$k" in
+        linux)      add_opts $(userbuild_linux);;
+	*)          err "mmaketool:userbuild: unknown platform"; exit 1;;
+    esac
+  fi
+}
+
+driverbuild_linux() {
+  p=$(processor)
+  kv=$(kernelver)
+  echo "${p}_linux-${kv}"
+}
+
+driverbuild_base() {
+  k=$(toolplatform)
+  p=$(processor)
+  kv=$(kernelver)
+  us=$(uname -s | tr '[A-Z]' '[a-z]')
+  if [ "$k" = "linux" ]; then
+    case "$kv" in
+      2.6.* | [3-9].* | [1-9][0-9]*)
+	echo "${us}"
+	;;
+      *)
+	err "mmaketool:driverbuild_base: Linux version <2.6"; exit 1
+	;;
+    esac
+  else
+    err "mmaketool:driverbuild_base: unknown platform"; exit 1
+  fi
+}
+
+driverbuild() {
+  k=$(toolplatform)
+  if [ -n "$EF_DRIVERBUILD" ]; then
+    echo "$EF_DRIVERBUILD"
+  elif [ "$k" = "linux" ]; then
+    add_opts "$(driverbuild_linux)"
+  else
+    err "mmaketool:driverbuild: unknown platform"; exit 1
+  fi
+}
+
+distrib_is_ubuntu() {
+  lsb_release="/usr/bin/lsb_release"
+  if [ -f $lsb_release ] && [ "`$lsb_release -i -s`" = "Ubuntu" ] ; then
+    echo `$lsb_release -r -s`
+  fi
+}
+
+gcc_major_version() {
+  gcc --version |head -1 |sed "s/^gcc.*) \([1-9]*\)\..*$/\1/"
+}
+
+kernelid() {
+  k=$(toolplatform)
+  if [ "$k" = "linux" ]; then
+    echo "$(driverbuild_linux)"
+  elif [ "$k" = "sunos" ]; then
+    echo "$(driverbuild_sunos)"
+  elif [ "$k" = "darwin" ]; then
+    echo "$(driverbuild_darwin)"
+  else
+    err "mmaketool:kernelid: unknown platform"; exit 1
+  fi
+}
+
+do-find-top() {
+  mytoppath=$(cd "$bin/.." && /bin/pwd)
+  if find-top; then
+    # Check mmaketool is in same tree as working directory.
+    [ "$mytoppath" = "$TOPPATH" ] ||
+      fail "ERROR: Using mmaketool from $mytoppath in $TOPPATH."
+  else
+    TOPPATH="$mytoppath"
+  fi
+}
+
+fetchdef () {
+  awk "/#define $1/ { print \$3 }" $2 | sed 's/[() ]//g'
+}
+
+fetchver () {
+  maj=$(fetchdef CI_MAJ_RELEASE_VERSION "$1")
+  min=$(fetchdef CI_MIN_RELEASE_VERSION "$1")
+  maint=$(fetchdef CI_MAINT_RELEASE_VERSION "$1")
+  inc=$(fetchdef CI_INCREMENTING_VERSION "$1")
+  while [ ${#inc} -lt 4 ]; do inc="0$inc"; done
+  echo "$maj.$min.$maint.$inc"
+}
+
+libc_version_linux() {
+  strings /lib/libc.so.* | sed -n 's/^GNU C Library \w* release version \(.*\),.*/\1/; { T end; p; :end }'
+}
+
+libc_version() {
+  k=$(toolplatform)
+  case "$k" in
+      linux) libc_version_linux;;
+  esac
+}
+
+transportlib() {
+  suffix="lib/transport/unix/libcitransport0.so"
+  # $inbuild means that we may be in driver tree.  Check that there is no
+  # "linux" in the PLATFORM.
+  if $inbuild && [ "${PLATFORM%linux*}" == "$PLATFORM" ] ; then
+    echo "$BUILDPATH/$suffix"
+  else
+    echo "$TOPPATH/build/$(userbuild)/$suffix"
+  fi
+}
+
+afonloadlib() {
+  suffix="lib/tools/preload/libaf_onload.so"
+  if $inbuild; then
+    echo "$BUILDPATH/$suffix"
+  else
+    echo "$TOPPATH/build/$(userbuild)/$suffix"
+  fi
+}
+
+######################################################################
+# main()
+
+# filter out custom platforms here
+unsupported='-e'/sim_/d' -e'/falcon_/d''
+
+inbuild=false
+orient-in-build-tree && inbuild=true
+
+incitree=false
+find-top && incitree=true
+
+# execute --help even if called from the wrong place
+case "$1" in
+--help)		usage
+		;;
+esac
+
+# Check mmaketool is in same tree as working directory.
+mytoppath=$(cd "$bin/.." && /bin/pwd)
+if $incitree; then
+  [ "$mytoppath" = "$TOPPATH" ] ||
+    fail "ERROR: Using mmaketool from $mytoppath in $TOPPATH."
+else
+  TOPPATH="$mytoppath"
+fi
+
+
+option="yes"
+while [ "$option" = "yes" ]; do
+option=no
+case "$1" in
+--ignoreenv)    MMAKETOOL_ADD_LIBC=
+		MMAKETOOL_ADD_DISTRIBUTION=
+		MMAKETOOL_ADD_HOST=
+		MMAKETOOL_ADD_DEBUG=
+		MMAKETOOL_RB_NAMES=
+		option=yes
+		;;
+--intree)	$incitree
+		exit
+		;;
+--inbuild)	$inbuild
+		exit
+		;;
+--top)		$incitree || exit 1
+		echo "$TOP"
+		;;
+--toppath)	echo "$TOPPATH"
+		;;
+--buildplatform) $inbuild || exit 1
+		echo "$PLATFORM"
+		;;
+--build)	$inbuild || exit 1
+		echo "$BUILD"
+		;;
+--buildpath)	$inbuild || exit 1
+		echo "$BUILDPATH"
+		;;
+--current)	$inbuild || exit 1
+		echo "$CURRENT"
+		;;
+--toolplatform) toolplatform
+	        ;;
+--platforms)	$incitree || fail "Not in CI check-out"
+		cd "$TOPPATH"/mk/platform || fail "Could not cd $TOPPATH/mk/platform"
+		/bin/ls *.mk | sed $unsupported | sed 's/\.mk//'
+		;;
+--allplatforms)	$incitree || fail "Not in CI check-out"
+		cd "$TOPPATH"/mk/platform || fail "Could not cd $TOPPATH/mk/custom"
+		/bin/ls *.mk | sed 's/\.mk//'
+		;;
+--driverbuild)	driverbuild
+		;;
+--driverbuild_base) driverbuild_base
+		;;
+--userbuild)	userbuild
+		;;
+--userbuild_base) userbuild_base
+		;;
+--userbuild_base32) userbuild_base32
+		;;
+--kernelid)	kernelid
+		;;
+--transportlib)	transportlib
+		;;
+--afonloadlib)	afonloadlib
+		;;
+--processor)	processor
+		;;
+--userarch)	userarch
+		;;
+--distribution)	sfc_disttag
+		;;
+--distrib_is_ubuntu)	distrib_is_ubuntu
+		;;
+--gcc_major_version)	gcc_major_version
+		;;
+--libc)         libc_version
+		;;
+--interfaces)	sfc__list_interfaces
+		;;
+--sourcever)	fetchver "$TOPPATH/src/include/ci/internal/version.h"
+		;;
+*)	        usage
+		;;
+esac
+shift
+done

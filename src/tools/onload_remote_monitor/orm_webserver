@@ -1,0 +1,97 @@
+#! /usr/bin/env python2
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+import os
+import sys
+import socket
+import select
+import subprocess
+import BaseHTTPServer
+
+def run_cmd(cmd):
+    child = subprocess.Popen(cmd, stdout=subprocess.PIPE)
+    stdout = child.communicate()[0]
+    assert child.returncode == 0, child.returncode
+    return stdout
+
+
+def run_orm_json(command=[]):
+    command.insert(0, 'orm_json')
+    return run_cmd(command)
+
+def cmd_exists(cmd):
+    return any(
+        os.access(os.path.join(path, cmd), os.X_OK)
+        for path in os.environ["PATH"].split(os.pathsep)
+    )
+
+def check_orm_json():
+    if not cmd_exists('orm_json'):
+        print 'orm_json not found on PATH. Not able to start.'
+        sys.exit(1)
+
+def usage():
+    print 'Usage: %s port' % sys.argv[0]
+    sys.exit(1)
+
+class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
+    def valid_path(s):
+        valid_options = ['stats','stack','opts','lots','all']
+        dirname, basename = os.path.split(str.rstrip(s.path, '/'))
+        if dirname == '/onload' and basename in valid_options:
+            return True
+        dirname, stackname = os.path.split(dirname)
+        if dirname == '/onload/stackname' and stackname != '' and basename in valid_options:
+            return True
+        return False
+
+    def do_HEAD_OK(s):
+        s.send_response(200)
+        s.send_header("Content-type", "application/json")
+        s.end_headers()
+
+    def do_HEAD_FAIL(s):
+        s.send_response(404)
+        s.end_headers()
+
+    def do_HEAD(s):
+        if s.valid_path():
+            s.do_HEAD_OK()
+        else:
+            s.do_HEAD_FAIL()
+
+    def do_GET(s):
+        if s.valid_path():
+            try:
+                dirname, basename = os.path.split(str.rstrip(s.path, '/'))
+                if dirname == '/onload':
+                    # get output for all stacks
+                    r = run_orm_json([basename])
+                else:
+                    stackname = os.path.basename(dirname)
+                    r = run_orm_json(['--name', stackname, basename])
+                s.do_HEAD_OK()
+                s.wfile.write(r)
+            except AssertionError:
+                s.do_HEAD_FAIL() # content fail
+        else:
+            s.do_HEAD_FAIL() # unsupported request
+
+def main():
+    if len(sys.argv) != 2:
+        usage()
+    check_orm_json()
+    port = int(sys.argv[1])
+    server = BaseHTTPServer.HTTPServer
+    httpd = server(('', port), Handler)
+    print 'Started http server on port %s' % port
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    httpd.server_close()
+
+
+if __name__ == '__main__':
+    main()

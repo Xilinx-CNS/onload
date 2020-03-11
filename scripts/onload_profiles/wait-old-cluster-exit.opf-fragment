@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# In case of cold restart make sure previous instance (of the same name) has
+# ceased to exist
+# If references to old onload stacks are still being released - wait.
+
+if echo "$@" | perl -n -e 'if(/\s-s/) {exit 1}'; then
+  ITER=0
+  while true; do
+    stackdump_contents=$(onload_stackdump --nopids stacks) || break
+    echo "$stackdump_contents" | grep "\s${EF_CLUSTER_NAME}-c" >/dev/null || \
+         break
+    if [ "$(( ITER % 20 ))" -eq 19 ]; then
+      echo Onload stacks of name "${EF_CLUSTER_NAME}"-c## still present. >&2
+      echo Verify that previous instance of application has been killed. >&2
+      onload_stackdump --nopids stacks >&2
+      if [ $ITER -gt 50 ]; then
+        exit 16
+      fi
+    fi
+    ITER="$(( ITER + 1 ))"
+    sleep 0.2;
+  done
+fi

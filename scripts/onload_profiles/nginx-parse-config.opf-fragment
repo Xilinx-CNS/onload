@@ -1,0 +1,116 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# User may supply the following environment variables:
+#
+#   NGINX_NUM_WORKERS        - the number of workers that nginx is
+#                              configured to use. Overrides value
+#                              automatically detected from nginx
+#                              configuration
+#
+
+# For diagnostic output
+module="nginx-parse-config"
+
+# Regular expressions to match nginx config directives
+worker_processes_pattern="/(^|;)\s*worker_processes\s+(\w+)\s*;/"
+include_pattern="/(^|;)\s*include\s+(\S+)\s*;/"
+config_file_pattern="/configuration file (.+) syntax/"
+
+# Identify the config file that nginx would use
+# The only purpose of this function is to support nginx version 1.9.1.
+# tengine does not need this because all tengine versions supporting reuseport
+# also support -d or -T.
+identify_config_file() {
+  local file
+
+  # Look for a -c option
+  local state="IDLE"
+  for option in "$@"
+  do
+    if [ "$state" = "MINUS_C" ]
+    then
+      file=$option
+      state="FOUND"
+    elif [ "$option" = "-c" ]
+    then
+      state="MINUS_C"
+    fi
+  done
+
+  # Extract the compile-time default if config not specified on command line
+  if [ "$state" != "FOUND" ]
+  then
+    file=$($1 -t 2>&1 | perl -ne 'print $1 if '"$config_file_pattern")
+  fi
+
+  [ -f "$file" ] && echo "$file"
+}
+
+# Recursively look in included config files for a setting of worker_processes.
+# NB If this quantity is set in more than one place then the wrong setting might
+# be found, but this would be invalid anyway and is rejected by Nginx.
+read_config_file() {
+  local setting
+  local worker_values=$(perl -ne 'print "$2 " if '"$worker_processes_pattern" "$1")
+  local include_values=$(perl -ne 'print "$2 " if '"$include_pattern" "$1")
+
+  # First look in included files
+  for file in $include_values
+  do
+    local possible=$(read_config_file "$file")
+    if [ -n "$possible" ]
+    then
+      setting=$possible
+    fi
+  done
+
+  # Then look in explicit settings at this level
+  for workers in $worker_values
+  do
+    setting=$workers
+  done
+  echo "$setting"
+}
+
+# Method to parse configuration files directly
+try_config_files() {
+  local config_file=$(identify_config_file "$@")
+  [ -n "$config_file" ] && read_config_file "$config_file"
+}
+
+# Method to parse configuration via nginx, if supported
+# Supported in nginx since version 1.9.2
+# Supported in tengine since version 2.3.0
+try_nginx_minus_t() {
+  config_dump=$("$@" -T 2>/dev/null) && \
+  echo "$config_dump" | perl -ne 'print "$2" if '"$worker_processes_pattern"
+}
+
+# Method to parse configuration via tengine, if supported
+# Supported in tengine prior to version 2.3.0
+try_tengine_minus_d() {
+  #tengine -d prints dump to stderr instead of stdout
+  config_dump=$("$@" -d 2>&1) && \
+  echo "$config_dump" | perl -ne 'print "$2" if '"$worker_processes_pattern"
+}
+
+# Determine the number of workers nginx will use
+determine_worker_processes() {
+  # Prefer nginx's own parser, if available, for robustness
+  local workers=$(try_nginx_minus_t "$@" || try_tengine_minus_d "$@" || \
+                  try_config_files "$@")
+  if [ "$workers" = "auto" ]
+  then
+    # Default to the number of process cores
+    workers=$(nproc)
+  fi
+  echo "$workers"
+}
+
+# Define the number of workers
+num_workers=${NGINX_NUM_WORKERS:-$(determine_worker_processes "$@")}
+if [ -z "$num_workers" ]; then
+  fail "ERROR: Environment variable NGINX_NUM_WORKERS is not set and worker count cannot be determined from nginx configuration"
+fi
+log "$module: configuring for $num_workers workers"

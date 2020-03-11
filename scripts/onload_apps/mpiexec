@@ -1,0 +1,145 @@
+# -*- Mode: shell-script; -*-
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Onload application handler: mpiexec
+
+sfc_1arg() {
+  cmd="$cmd $1"
+  return 1
+}
+
+
+sfc_2args() {
+  cmd="$cmd $1"
+  case $# in
+    1)	return 1;;
+    *)	cmd="$cmd $(sfc_protect "$2")"
+	return 2;;
+  esac
+}
+
+
+sfc_3args() {
+  cmd="$cmd $1"
+  case $# in
+    1)	return 1;;
+    2)	cmd="$cmd $(sfc_protect "$2")"
+	return 2;;
+    *)	cmd="$cmd $(sfc_protect "$2") $(sfc_protect "$3")"
+	return 3;;
+  esac
+}
+
+
+sfc_mpich2_arg() {
+  case "$1" in
+  -envnone|-genvnone|-l|-exitinfo)
+	sfc_1arg "$@"
+	return
+	;;
+  -np|-envlist|-genvlist|-usize|-maxtime|-machinefile|-f)
+	sfc_2args "$@"
+	return
+	;;
+  -env|-genv)
+	sfc_3args "$@"
+	return
+	;;
+  -*)
+	# Arg we don't know about.  Does mpiexec know about it?
+	local l=$(eval "$mpiexec $(sfc_protect "$1")" | head -1)
+	if rawecho "$l" | grep -q invalid; then
+	  # Bad arg: pass through and let mpiexec complain.
+	  cmd="$cmd $(sfc_protect "$1")"
+	  return 1
+	fi
+	# mpiexec knows about this arg, but we don't.  More
+	# work needed.
+	fail "Unable to handle unknown mpiexec option '$1'"
+	;;
+  *)
+	return 0
+	;;
+  esac
+}
+
+
+sfc_mpiexec_configfile() {
+  wrapper=$(mktemp /tmp/onload.XXXXXX)
+  [ -f "$wrapper" ] || fail "Unable to create temporary file"
+  $keepwrapper || rmfiles="$rmfiles $wrapper"
+  while read -r l; do
+    if rawecho "$l" | grep -q "^[[:space:]]*#"; then
+      rawecho "$l"
+    else
+      local cmd=
+      sfc_mpiexec_cmd $l
+      eval rawecho "$cmd" | sed 's/^ *//'
+    fi
+  done <"$1" >"$wrapper"
+}
+
+
+sfc_mpiexec_arg() {
+  case "$1" in
+  # specified by mpi2
+  -n|-host|-arch|-wdir|-path|-soft|-file)
+	sfc_2args "$@"
+	return
+	;;
+  -configfile)
+	[ -r "$2" ] || {
+	  sfc_2args "$@"
+	  return
+	}
+	local wrapper
+	sfc_mpiexec_configfile "$2"
+	cmd="$cmd $1 $wrapper"
+	return 2
+	;;
+  *)
+	sfc_mpich2_arg "$@"
+	return $?
+	;;
+  esac
+}
+
+
+sfc_mpiexec_cmd() {
+  while [ $# -gt 0 ]; do
+    # : sections of the command line
+    if [ "$1" = : ]; then
+      cmd="$cmd :"
+      shift
+    fi
+    # consume mpiexec options
+    while [ $# -gt 0 ]; do
+      sfc_mpiexec_arg "$@"
+      n=$?
+      [ $n = 0 ] && break
+      while ((n-- > 0)); do shift; done
+    done
+    # next should be an app
+    [ $# = 0 ] && break
+    #local app=$(rawecho "$1" | sed "s/%a/$arch/g")
+    local wrapper
+    sfc_mkwrapper2 "$1"
+    shift
+    cmd="$cmd $(sfc_protect "$wrapper")"
+    # then the app's args
+    while [ $# -gt 0 ] && [ "$1" != ":" ]; do
+      cmd="$cmd $(sfc_protect "$1")"
+      shift
+    done
+  done
+}
+
+
+mpiexec=$(sfc_protect "$1")
+cmd="$mpiexec"
+shift
+sfc_mpiexec_cmd "$@"
+vlog "invoking: $cmd"
+$doit eval "$cmd"
+exit

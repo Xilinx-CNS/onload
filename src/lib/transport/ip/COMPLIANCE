@@ -1,0 +1,496 @@
+.. SPDX-License-Identifier: Solarflare-Binary
+.. X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+This file describes:
+1.  the status of the IP/TCP stack's compliance to various RFCs.
+2.  Observed behaviour in other stack implementations
+
+
+The status of the IP/TCP stack's compliance to various RFCs.
+------------------------------------------------------------
+
+This file describes the status of the IP/TCP stack's compliance to
+various RFCs and ANVL tests.
+
+ANVL tcp-core tests
+===================
+
+The following expected failures for tcp-core 1-18 are explained as
+follows.
+
+tcp-core 6.21: "If a RECEIVE call arrives on the SYN-RCVD state, TCP
+must queue the request for processing after entering the ESTABLISHED
+state" 
+
+  ANVL calls recv on a listening socket which fails and so the
+  test fails; this test does not make sense in this form.
+
+tcp-core 6.30: "For a CLOSE call on the SYN-RCVD state, if there is a
+pending SEND, TCP must queue the CLOSE call to be processed after
+entering the ESTABLISHED state"
+
+  We follow BSD/Linux implementation; drop the data and send a FIN. 
+
+tcp-core 8.28: "TCP, in the TIME-WAIT state, must send an ACK with the
+next expected SEQ number after receiving any segment with an OTW SEQ
+number and remain in the same state"
+
+  We do not implement the reopening of connections in the TIME-WAIT
+  state; rfc1122 section 4.2.2.13 says this is allowed:
+	"When a connection is closed actively, it MUST linger in
+	TIME-WAIT state for a time 2xMSL (Maximum Segment Lifetime).
+	However, it MAY accept a new SYN from the remote TCP to
+	reopen the connection directly from TIME-WAIT state"
+
+tcp-core 11.22: "TCP in the TIME-WAIT state may accept a new SYN from
+the remote TCP"
+
+  We do implement the reopening of connections in the TIME-WAIT
+  state; rfc1122 section 4.2.2.13 says this should only be done if
+  the sequence number on the incomming SYN is higher than any previous
+  sequence number.  Unfortunately the ANVL test generates a random
+  (new Initial Sequence Number) and will therefore be accepted only
+  50% of the time.
+  We copy Linux and take any time-stamp on the SYN into accont, allowing
+  the reopen if the SYN has a timestamp later than the last one we saw
+  on the connection.  ANVL, however, does not use PAWS timestamps and
+  so this does not modertate the failure.
+
+tcp-core 12.17: "TCP must be prepared to handle an illegal option
+length for MSS, in a SYN,ACK segment, without crashing and should
+reset the connection"
+
+  The action after an illegal option is underspecified. We could either
+  ignore all options or send a reset; compile time switchs are available to
+  set this. The ANVL test expects the connection to send a RST *and*
+  progress to the established state; this seems against the spirit of
+  sending active RSTs which denote the dropping of a connection in all
+  other cases. We fail this test because the generation of a RST also drops
+  the connection.
+
+tcp-core 13.18: "A full-sized segment must be acknowledged with a time
+of 0.5 seconds"
+
+  Sometimes this test can fail due to ANVL being aggressive with its
+  measurement of 0.5 seconds.
+
+tcp-core 14.19: "TCP MUST include an SWS avoidance algorithm in the receiver 
+when effective send MSS < (1/2)*RCV_BUFF" (bug 828)
+
+  The ANVL test fills the receive queue by sending a large amount of
+  data without having the user call recvmsg at all. It does this until
+  it sees a zero receive window advertised in an ACK from our
+  stack. Then, it has the application do a recvmsg of less than an MSS,
+  sends another single byte to the stack, and checks that the new ACK
+  again has a zero window. It is possible that the new ACK will have a
+  non-zero window if the receive queue was not previously completely
+  full, and so the combination of the space left in the receive queue
+  and the space freed up when ANVL receive data together exceeds an
+  MSS, allowing the right hand edge receive window to be advanced.
+  
+  A stack that implements the advice of RFC 1194 section 6.4 of having
+  the maximum and initial receive window size set to a multiple of the
+  MSS would end up passing this test because there would be exactly no
+  data left in the receive queue when the zero window is sent. It also
+  happens that the value of CI_CFG_TCP_MAX_WINDOW of 0x7fff, while not
+  being a multiple of the 1460 byte MSS, does leave little enough data
+  in the receive queue that the test passes. The more obvious 0xffff
+  does cause this problem to happen.
+
+  (This begs the question why the receive queue is not completely full
+  when the zero window is advertised. This happens when rcv_nxt
+  catches up with the last sent receive window right edge, and a new
+  right edge cannot be advertised as the window required to do so
+  would be less than an MSS, which is forbidden by RFC 1122 SWS
+  avoidance.)
+
+  See Bug 828.
+
+tcp-core 15.26: "TCP should use RTO = 3 seconds initially"
+
+  Sometimes this test can fail due to ANVL being aggressive with its
+  measurement of 3 seconds.
+
+tcp-core 15.27: "TCP should use RTT = zero seconds initially"
+
+  Sometimes this test can fail because ANVL uses a timing which is too
+  aggressive.
+
+tcp-core 15.30: "If a retransmitted packet is identical to the
+original packet then the same IP identification field may be used"
+
+  We always increment the IP identification field which is allowed and
+  so this test fails.
+
+tcp-core 16.19: "A sending TCP MUST be robust against window shrinking, which 
+may cause the "useable window" to become negative"
+
+  ANVL advertises a receive window right edge, then snaps it back, and gets
+  our stack to try to send again in the snapped back part of sequence
+  space. A design decision in our stack is to ignore receive window snap 
+  backs, so our stack will send the data anyway. This violates a SHOULD NOT 
+  in RFC 1122 4.2.2.16. There is a risk that if no ACKs are received then 
+  eventually the retransmissions will timeout. (See WONTFIX bug 967). 
+
+tcp-core 17.18: "TCP should implement the Nagle Algorithm - that is,
+it should buffer all the user data, regardless of the PSH bit, until
+the outstanding data has been acknowledged"
+
+  ANVL uses a timing that is too aggressive for the retransmission step
+  of the test.
+
+tcp-core 17.19: "TCP should implement the Nagle Algorithm - that is,
+it should buffer all user data, regardless of the PSH bit, until the
+TCP can send a full-sized segment"
+
+  ANVL uses a timing that is too aggressive for the retransmission step
+  of the test.
+
+tcp-core 18.17: "If PUSH flags are not implemented, then the sending
+TCP must not buffer data indefinitely"
+
+  We do not support transmission of a non-full MSS into a smaller receive
+  window and so fail this test.
+
+tcp-core 18.21: "TCP may aggregate data requested by an applicatoin
+for sending until accumulated data exceeds effective send MSS"
+
+  We do not support transmission queue coalesing yet and so fail this
+  test.
+
+
+The following expected failures for tcp-highperf 1-5 have
+explainations as follows.
+
+tcp-highperf 2.22: "Except for SYN segments, the window field in the
+header of every incoming segment is left-shifted by shift.cnt bits
+when using WSopt"
+
+  This fails at least due to RFC 3464 ABC rather than the traditional slow
+  start supported by ANVL.
+
+tcp-highperf 2.23: "Except SYN segments, the window field in the
+header of every outgoing segment is right-shifted by shift.cnt bits"
+
+  The stack has alledged Linux bug emulation code to set the receive buffer
+  size to twice what the application requested. ANVL works out what the
+  receive window should be based on the receive buffer size it set, and
+  because the actual buffer size is twice what is set ANVL identifies the
+  receive window size as bad.
+
+tcp-highperf 3.21: "The Timestamp Echo Reply field (TSecr) is only
+valid if the ACK bit is set in the TCP header"
+
+  Sometimes this test can fail because ANVL uses a timing which is too
+  aggressive.
+
+tcp-highperf 3.32: "The timestamp from the latest segment (which
+filled the hold) must be echoed"
+
+  This ANVL test has a bug. The packet sent by ANVL which is used to 
+  fill the hole, in test action 6, is addressed to the wrong port (the 
+  expected port + 1). This test therefore fails.
+
+tcp-highperf 7.24: "The data sender MUST retransmit the segment at the
+left edge of the window after a retransmit timeout irrespective of the
+SACKed bit.
+  Due to the difference in slow start algorithms used (we use RFC 3465
+  which is not supported by ANVL) this test can sometimes fail.  If
+  the cwnd_ini is set (in ANVL) to 2 then the same number of packets
+  are expected for both slow-start approaches, and so the test passes.
+  This is probably best described as a bug in ANVL.
+
+There are no expected failures for tcp-advanced 1-4.
+
+
+IETF RFC Compliance
+===================
+
+Status can be OK, FAILS, UNKNOWN.
+
+
+RFC793 - Transmission Control Protocol
+======================================
+
+Compliance:
+?? TODO - enter all the relevant SHOULD, MUST, MUST NOT, MAY  ?? 
+?? into here along with their current status                  ??
+
+RFC1122 - Requirements for hosts
+================================
+
+Compliance:
+?? TODO - finsih entering all the relevant SHOULD, MUST, MUST NOT, MAY  ??
+?? into here along with their current status                            ??
+
+4.2.2.16a "A TCP receiver SHOULD NOT shrink the window, i.e., move the 
+   right window edge to the left." - OK
+
+4.2.2.16b "a sending TCP MUST be robust against window shrinking. " - we do 
+   send data after snapbacks, so if the receiver keeps its window closed for
+   too long and does not ACK we may timeout. 
+
+4.2.2.16c "If this [snap back] happens, the sender SHOULD NOT send new data" -
+   we do send new data, violating this
+
+RFC2581 - TCP Congestion Control 
+================================
+
+Compliance:
+
+3. "... a TCP MUST NOT be more agressive than the following algorithms
+   allow" - OK
+
+3.1a "The slow-start and congestion avoidance algorithms MUST be used"
+     - OK
+
+3.1b "... the initial value of cwnd, MUST be less than or equal to
+     2*SMSS and MUST NOT be more than 2 segments." - Superceded by
+     RFC3390 OK
+
+3.1c "Note that during congestion avoidance, cwnd MUST NOT be
+     increased by more than the larger of either 1 full-sized segment per
+     RTT, or the value computed using equation 2." - OK
+
+3.1d "When a TCP sender detects segment loss using the retransmission
+     timer, the value of ssthresh MUST be set to no more than the value
+     given in equation 3" - OK
+
+3.1e "When a TCP sender detects segment loss using the retransmission
+     timer, the value of ssthresh MUST be set to no more than the value
+     given in equation 3" - OK
+
+3.2a "A TCP receiver SHOULD send an immediate duplicate ACK when an out-
+     of-order segment arrives." - OK
+
+3.2b "A TCP receiver SHOULD send an immediate duplicate ACK when an out-
+     of-order segment arrives." - OK
+
+3.2c "The TCP sender SHOULD use the "fast retransmit" algorithm to detect
+     and repair loss, based on incoming duplicate ACKs." - OK
+
+4.1 "Therefore, a TCP SHOULD set cwnd to no more than RW before beginning
+    transmission if the TCP has not sent data in an interval exceeding
+    the retransmission timeout." - OK
+
+4.2a "The delayed ACK algorithm specified in [Bra89] SHOULD be used by a
+     TCP receiver.  When used, a TCP receiver MUST NOT excessively delay
+     acknowledgments.  Specifically, an ACK SHOULD be generated for at
+     least every second full-sized segment, and MUST be generated within
+     500 ms of the arrival of the first unacknowledged packet." - OK
+
+4.2b "The requirement that an ACK "SHOULD" be generated for at least every
+     second full-sized segment is listed in [Bra89] in one place as a
+     SHOULD and another as a MUST.  Here we unambiguously state it is a
+     SHOULD." - OK
+
+4.2c "Out-of-order data segments SHOULD be acknowledged immediately, in
+     order to accelerate loss recovery.  To trigger the fast retransmit
+     algorithm, the receiver SHOULD send an immediate duplicate ACK when
+     it receives a data segment above a gap in the sequence space.  To
+     provide feedback to senders recovering from losses, the receiver
+     SHOULD send an immediate ACK when it receives a data segment that
+     fills in all or part of a gap in the sequence space." - OK
+
+4.2d "A TCP receiver MUST NOT generate more than one ACK for every incoming
+     segment, other than to update the offered window as the receiving
+     application consumes new data [page 42, Pos81][Cla82]." - OK
+
+4.3a "Therefore, when the first loss in a window of data is detected,
+     ssthresh MUST be set to no more than the value given by equation (3).
+     Second, until all lost segments in the window of data in question are
+     repaired, the number of segments transmitted in each RTT MUST be no
+     more than half the number of outstanding segments when the loss was
+     detected.  Finally, after all loss in the given window of segments
+     has been successfully retransmitted, cwnd MUST be set to no more than
+     ssthresh and congestion avoidance MUST be used to further increase
+     cwnd." - OK, consequence of fast recovery. 
+
+4.3b "Loss in two successive windows of data, or the loss of a
+     retransmission, should be taken as two indications of congestion and,
+     therefore, cwnd (and ssthresh) MUST be lowered twice in this case."
+     - OK
+
+
+RFC2582 - The NewReno Modification to TCP's Fast Recovery Algorithm
+===================================================================
+
+Implemented as an experimental option for fast recovery using the
+CI_TCP_NEWRENO compile flag. 
+
+Note we do not do the "bugfix" version to avoid multiple fast
+retransmits; instead the whole state is reset on an RTO for safety.
+
+?? We could add a TCP_CONG_CAUTION state which is invoked before
+reseting congstate to zero. This would opencwnd but would bypass fast
+recovery until the we have fully recovered past congrecover. However
+this would require some careful catching in handle_ack. For now we
+stick with the naive variant of NewReno, and take the hit of potential
+spurious fast retransmit during the recovery phase.
+
+
+RFC2988 - Computing TCP's Retransmission Timer
+==============================================
+
+Compliance: OK 
+
+?? being more agressive with the RTO than the RFC allows could be a
+performance improvement but breaks compliance with the spec.
+
+NB see 4. Clock Granularity for discussion of G. The timer management
+code is going to be on the fine grained end of things...
+
+(2.1) "Until a round-trip time (RTT) measurement has been made for a
+      segment sent between the sender and receiver, the sender SHOULD
+      set RTO <- 3 seconds (per RFC 1122 [Bra89]), though the
+      "backing off" on repeated retransmission discussed in (5.5)
+      still applies." - OK
+
+(2.2) "When the first RTT measurement R is made, the host MUST set
+
+            SRTT <- R
+            RTTVAR <- R/2
+            RTO <- SRTT + max (G, K*RTTVAR)
+
+         where K = 4." - OK (we ignore G, see comment above)
+
+(2.3) "When a subsequent RTT measurement R' is made, a host MUST set
+
+            RTTVAR <- (1 - beta) * RTTVAR + beta * |SRTT - R'|
+            SRTT <- (1 - alpha) * SRTT + alpha * R'
+
+      The value of SRTT used in the update to RTTVAR is its value
+      before updating SRTT itself using the second assignment.  That
+      is, updating RTTVAR and SRTT MUST be computed in the above
+      order.
+
+      The above SHOULD be computed using alpha=1/8 and beta=1/4 (as
+      suggested in [JK88]).
+
+      After the computation, a host MUST update
+      RTO <- SRTT + max (G, K*RTTVAR)" - OK, we use Jacobson 88.
+
+(2.4) "Whenever RTO is computed, if it is less than 1 second then the
+       RTO SHOULD be rounded up to 1 second." - OK, we use 1 second.
+      Some stacks are more agressive allowing 200ms, this could improve 
+      performance.
+
+(2.5) "A maximum value MAY be placed on RTO provided it is at least 60
+         seconds." - OK
+
+3a "TCP MUST use Karn's algorithm [KP87] for taking RTT samples.  That
+   is, RTT samples MUST NOT be made using segments that were
+   retransmitted (and thus for which it is ambiguous whether the reply
+   was for the first instance of the packet or a later instance).  The
+   only case when TCP can safely take RTT samples from retransmitted
+   segments is when the TCP timestamp option [JBB92] is employed, since
+   the timestamp option removes the ambiguity regarding which instance
+   of the data segment triggered the acknowledgment." - OK 
+
+3b "A TCP implementation MUST take at least one RTT measurement per
+   RTT (unless that is not possible per Karn's algorithm)." - OK we
+   take one every window without TS option, which is close
+   enough to every RTT...
+
+5  "An implementation MUST manage the retransmission timer(s) in such a
+   way that a segment is never retransmitted too early, i.e. less than
+   one RTO after the previous transmission of that segment." - OK, the ip 
+   timer code always fires after a tick not before. 
+
+(5.1)  "Every time a packet containing data is sent (including a
+       retransmission), if the timer is not running, start it running
+       so that it will expire after RTO seconds (for the current value
+       of RTO)." - OK
+
+(5.2) "When all outstanding data has been acknowledged, turn off the
+      retransmission timer." - OK
+
+(5.3) "When an ACK is received that acknowledges new data, restart the
+      retransmission timer so that it will expire after RTO seconds
+      (for the current value of RTO)." - OK
+
+(5.4) "Retransmit the earliest segment that has not been acknowledged
+      by the TCP receiver." - UNKNOWN pending retransmission stuff
+
+(5.5) "The host MUST set RTO <- RTO * 2 ("back off the timer").  The
+      maximum value discussed in (2.5) above may be used to provide an
+      upper bound to this doubling operation." - OK
+
+(5.6) "(5.6) Start the retransmission timer, such that it expires after RTO
+      seconds (for the value of RTO after the doubling operation
+      outlined in 5.5)." - OK
+
+
+RFC3390 - Increasing TCP's Initial Window
+=========================================
+
+Compliance:
+?? TODO: congestion window validation implementation for RW  ??
+?? TODO: PMTU code implementation needed                     ??
+
+1a "This increased initial window is optional: a TCP MAY start with a
+   larger initial window." - Supported and superceding RFC2581 OK.
+
+1b "Neither the SYN/ACK nor its acknowledgment (ACK) in the three-way
+   handshake should increase the initial window size above that outlined
+   in equation (1). If the SYN or SYN/ACK is lost, the initial window
+   used by a sender after a correctly transmitted SYN MUST be one segment
+   consisting of MSS bytes." - OK
+
+1c "TCP implementations use slow start in as many as three different
+   ways: (1) to start a new connection (the initial window); (2) to
+   restart transmission after a long idle period (the restart window);
+   and (3) to restart transmission after a retransmit timeout (the loss
+   window).  The change specified in this document affects the value of
+   the initial window.  Optionally, a TCP MAY set the restart window to
+   the minimum of the value used for the initial window and the current
+   value of cwnd (in other words, using a larger value for the restart
+   window should never increase the size of cwnd).  These changes do NOT
+   change the loss window, which must remain 1 segment of MSS bytes..." 
+   - IW OK, RW unimplemented UNKNOWN, LW unimplemented UNKNOWN
+
+2. "When larger initial windows are implemented along with Path MTU
+   Discovery [RFC1191], and the MSS being used is found to be too large,
+   the congestion window `cwnd' SHOULD be reduced to prevent large bursts
+   of smaller segments." - Awaiting PMTU support RFC1191 UNKNOWN
+
+
+RFC3465 - TCP Congestion Control with Appropriate Byte Counting (ABC) 
+=====================================================================
+
+Compliance: OK
+
+2.3a  "... ABC with L=1*SMSS bytes is more conservative in a number of
+     key ways (as discussed in the next section) and therefore,
+     this document suggests that even though with L=1*SMSS bytes TCP
+     stacks will see little performance change, ABC SHOULD be used." 
+      and
+     "This document specifies that TCP implementations MAY use L=2*SMSS
+     bytes and MUST NOT use L > 2*SMSS bytes." - OK, we use L=1*SMSS
+     because of 2.3b, if cheap to check whether in slow-start
+     following RTO then could use L=2*SMSS.
+
+2.3b "The exception to the above suggestion is during a slow start phase
+     that follows a retransmission timeout (RTO).  In this situation, a
+     TCP MUST use L=1*SMSS as specified in RFC 2581 since ACKs for large
+     amounts of previously unacknowledged data are common during this
+     phase of a transfer.  These ACKs do not necessarily indicate how much
+     data has left the network in the last RTT, and therefore ABC cannot
+     accurately determine how much to increase cwnd." - OK, but makes
+     use more conservative in initial slow start.
+
+
+Observed behaviour in other stack implementations
+-------------------------------------------------
+
+1. 2004/06/10, stg, Linux 2.4/RH9 stack, Use of lo device
+
+ In the following configurations: 
+   
+   eth2:192.168.10.1/24, eth3:192.168.10.2/24 
+   eth2:192.168.10.1/24, eth3:192.168.11.1/24 
+ 
+ A UDP packet sent from eth2 -> eth3 will be delivered through lo.  The
+ implication being that the lo device is the local host loopback rather 
+ than the interface loopback. (ctk: compliant behaviour).
+

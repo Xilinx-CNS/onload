@@ -1,0 +1,211 @@
+% SPDX-License-Identifier: GPL-2.0
+% X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+% SF: Based on the default Latex header for doxygen 1.8.13.
+% SF: Solarflare changes have comments starting "SF:"
+
+\documentclass[twoside]{book}
+
+% Packages required by doxygen
+\usepackage{fixltx2e}
+\usepackage{calc}
+\usepackage{doxygen}
+\usepackage[export]{adjustbox} % also loads graphicx
+\usepackage{graphicx}
+\usepackage[utf8]{inputenc}
+\usepackage{makeidx}
+\usepackage{multicol}
+\usepackage{multirow}
+\PassOptionsToPackage{warn}{textcomp}
+\usepackage{textcomp}
+\usepackage[nointegrals]{wasysym}
+\usepackage[table]{xcolor}
+
+% SF: Packages required by Solarflare
+\usepackage[yyyymmdd,hhmmss]{datetime}
+\usepackage{setspace}
+
+% Font selection
+\usepackage[T1]{fontenc}
+\usepackage[scaled=.90]{helvet}
+\usepackage{courier}
+\usepackage{amssymb}
+\usepackage{sectsty}
+\renewcommand{\familydefault}{\sfdefault}
+% SF: Use bold fonts for sections/labels, instead of bold condensed
+\allsectionsfont{%
+  \fontseries{b}\selectfont%
+  \color{darkgray}%
+}
+\renewcommand{\DoxyLabelFont}{%
+  \fontseries{b}\selectfont%
+  \color{darkgray}%
+}
+
+% SF: Disable additional line-breaking added by Doxygen
+% \newcommand{\+}{\discretionary{\mbox{\scriptsize$\hookleftarrow$}}{}{}}
+\newcommand{\+}{}
+
+% SF: Define corporate color
+\definecolor{pms300c}{cmyk}{1.0,0.42,0.0,0.0}
+
+% Page & text layout
+\usepackage{geometry}
+\geometry{%
+  a4paper,%
+  top=2.5cm,%
+  bottom=2.5cm,%
+  left=2.5cm,%
+  right=2.5cm%
+}
+% SF: Add raggedbottom
+\raggedbottom
+\tolerance=750
+\hfuzz=15pt
+\hbadness=750
+\setlength{\emergencystretch}{15pt}
+\setlength{\parindent}{0cm}
+\setlength{\parskip}{3ex plus 2ex minus 2ex}
+\makeatletter
+\renewcommand{\paragraph}{%
+  \@startsection{paragraph}{4}{0ex}{-1.0ex}{1.0ex}{%
+    \normalfont\normalsize\bfseries\SS@parafont%
+  }%
+}
+\renewcommand{\subparagraph}{%
+  \@startsection{subparagraph}{5}{0ex}{-1.0ex}{1.0ex}{%
+    \normalfont\normalsize\bfseries\SS@subparafont%
+  }%
+}
+\makeatother
+
+% SF: Disable hyphenation, and use ragged right to avoid large word spacing
+\usepackage[none]{hyphenat}
+\raggedright
+
+% SF: Doxygen <1.8.9: force graphics to fit on page even if no size given
+\makeatletter
+\def\CappedWidth{%
+  \ifdim\Gin@nat@width>\textwidth%
+    \textwidth%
+  \else%
+    \Gin@nat@width%
+  \fi%
+}
+\def\CappedHeight{%
+  \ifdim\Gin@nat@height>\textheight/2%
+    \textheight/2%
+  \else%
+    \Gin@nat@height%
+  \fi%
+}
+\makeatother
+\setkeys{Gin}{width=\CappedWidth,height=\CappedHeight,keepaspectratio=true}
+
+% Headers & footers
+\usepackage{fancyhdr}
+
+% SF: Add default headheight back to textheight...
+\addtolength{\textheight}{\headheight}
+% SF: ...then define and remove new headheight
+\setlength{\headheight}{1.35cm}
+\addtolength{\textheight}{-\headheight}
+
+\pagestyle{fancyplain}
+% SF: Change setup for headers, footers and rules
+\fancyhead[LE,RO]{\includegraphics[height=1.2cm]{sf_logo}}
+\fancyhead[CE,CO]{}
+\fancyhead[RE,LO]{$projectname\vspace{0.2\baselineskip}\linebreak\nouppercase\leftmark}
+\renewcommand{\headrulewidth}{0.25pt}
+\fancyfoot[LE,RO]{\thepage}
+\fancyfoot[CE,CO]{© Copyright \the\year{} Xilinx, Inc}
+\fancyfoot[RE,LO]{$projectbrief}
+\renewcommand{\footrulewidth}{0.25pt}
+
+\renewcommand{\chaptermark}[1]{%
+  \markboth{#1}{}%
+}
+\renewcommand{\sectionmark}[1]{%
+  \markright{\thesection\ #1}%
+}
+
+% SF: Add a plain page style
+\fancypagestyle{plain}{%
+\renewcommand{\headrulewidth}{0.25pt}
+\renewcommand{\footrulewidth}{0.25pt}}
+
+% Indices & bibliography
+\usepackage{natbib}
+\usepackage[titles]{tocloft}
+\setcounter{tocdepth}{3}
+\setcounter{secnumdepth}{5}
+\makeindex
+
+% Hyperlinks (required, but should be loaded last)
+\usepackage{ifpdf}
+\ifpdf
+  \usepackage[pdftex,pagebackref=true]{hyperref}
+\else
+  \usepackage[ps2pdf,pagebackref=true]{hyperref}
+\fi
+% SF: Change link coloring
+\hypersetup{%
+  colorlinks=true,%
+  linkcolor=pms300c,%
+  citecolor=pms300c,%
+  unicode%
+}
+
+% Custom commands
+\newcommand{\clearemptydoublepage}{%
+  \newpage{\pagestyle{empty}\cleardoublepage}%
+}
+
+\usepackage{caption}
+\captionsetup{labelsep=space,justification=centering,font={bf},singlelinecheck=off,skip=4pt,position=top}
+
+%===== C O N T E N T S =====
+
+\begin{document}
+
+% SF: Set bookmarks=true
+\hypersetup{pageanchor=false,
+             bookmarks=true,
+             bookmarksnumbered=true,
+             pdfencoding=unicode
+            }
+
+% SF: Start roman page numbering with title page as "i"
+\pagenumbering{roman}
+
+% SF: Change the titlepage
+\begin{titlepage}
+\includegraphics{sf_logo}
+\vspace*{4cm}
+\begin{center}%
+{\huge\bfseries $projectname}
+\vspace*{1cm}\linebreak
+{\large $projectnumber ,\ $projectbrief}
+\vspace*{0.25cm}\linebreak
+{\small \today\ \currenttime}
+\vspace*{1cm}\linebreak
+{\large Xilinx, Inc}\linebreak
+\end{center}
+\end{titlepage}
+\clearemptydoublepage
+
+% SF: Add standard corporate disclaimer
+{\large\bfseries $projectname}\par
+\input disclaimer.tex\par
+$projectnumber\par
+Last Revised: \monthname{} \the\year{}\par
+$projectbrief\par
+\cleardoublepage
+
+% ToC
+\tableofcontents
+\cleardoublepage
+
+\pagenumbering{arabic}
+\hypersetup{pageanchor=true}
+
+%--- Begin generated contents ---

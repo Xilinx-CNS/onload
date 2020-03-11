@@ -1,0 +1,98 @@
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+Name:		openonload-dkms
+Version:	
+Release:	
+Epoch:		0
+
+Summary:	Solarflare SFC4000/SFC9000-family network controller device driver
+
+Group:		System Environment/Kernel
+Vendor:		Solarflare Communications
+License:	GPL
+URL:		http://www.solarflare.com/
+
+%define pkgversion 
+
+BuildArch:	noarch
+Requires:	dkms >= 2.00
+Requires:	binutils, gcc, make
+Source0:	openonload-%{pkgversion}.dkms.tar.gz
+BuildRoot:	%{_tmppath}/openonload-%{pkgversion}}-root-%(%{__id_u} -n)/
+
+%description
+The Linux kernel driver for Solarflare SFC4000 and SFC9000-family 10G
+Ethernet controllers. 
+
+This is a DKMS (Dynamic Kernel Module System) package and requires
+dkms to be installed.
+
+The drivers contained in this package support the following Solarflare
+Onload Server adapters:
+
+  - Solarflare SFN6122F Dual Port SFP+ Server Adapter
+  - Solarflare SFN6322F Precision Time Synchronization Server Adapter
+  - Solarflare SFN5322F Precision Time Synchronization Server Adapter
+  - Solarflare SFN5122F Dual Port SFP+ Server Adapter
+  - Solarflare SFN5121T Dual Port 10GBASE-T Server Adapter
+  - Solarflare SFN5802K Mezzanine Adapter (for HP BladeSystem c-Class)
+  - Solarflare SFN5812H/SFN5814H Mezzanine Adapter (for IBM BladeCenter)
+
+%prep
+rm -rf openonload-dkms-%{pkgversion}
+mkdir openonload-dkms-%{pkgversion}
+cp "$RPM_SOURCE_DIR"/openonload-%{pkgversion}.dkms.tar.gz openonload-dkms-%{pkgversion}/
+cd openonload-dkms-%{pkgversion} && tar xzf openonload-%{pkgversion}.dkms.tar.gz ./dkms_source_tree
+
+%install
+if [ "$RPM_BUILD_ROOT" != "/" ]; then
+	rm -rf "$RPM_BUILD_ROOT"
+fi
+mkdir -p "$RPM_BUILD_ROOT"/usr/src/openonload-dkms-%{pkgversion}
+cp openonload-dkms-%{pkgversion}/openonload-%{pkgversion}.dkms.tar.gz \
+	"$RPM_BUILD_ROOT"/usr/src/openonload-dkms-%{pkgversion}/
+mkdir -p "$RPM_BUILD_ROOT"/usr/share/doc/openonload-dkms-%{pkgversion}
+for doc in LICENSE README; do
+	cp openonload-dkms-%{pkgversion}/dkms_source_tree/$doc \
+		"$RPM_BUILD_ROOT"/usr/share/doc/openonload-dkms-%{pkgversion}/
+done
+
+%clean
+if [ "$RPM_BUILD_ROOT" != "/" ]; then
+	rm -rf "$RPM_BUILD_ROOT"
+fi
+rm -rf openonload-dkms-%{pkgversion}
+
+%files
+%defattr(-,root,root)
+/usr/src/openonload-dkms-%{pkgversion}/
+/usr/share/doc/openonload-dkms-%{pkgversion}/
+
+%pre
+
+%post
+dkms ldtarball --archive /usr/src/openonload-dkms-%{pkgversion}/openonload-%{pkgversion}.dkms.tar.gz
+
+if ! uname -r | grep -q "BOOT" && [ -e /lib/modules/`uname -r`/build/include ]; then
+	dkms build -m openonload -v %{pkgversion}
+	dkms install -m openonload -v %{pkgversion} --force
+
+elif uname -r | grep -q "BOOT"; then
+        echo -e ""
+        echo -e "Module build for the currently running kernel was skipped since you"
+        echo -e "are running a BOOT variant of the kernel."
+else
+        echo -e ""
+        echo -e "Module build for the currently running kernel was skipped since the"
+        echo -e "kernel source for this kernel does not seem to be installed."
+fi
+
+exit 0
+
+%preun
+echo -e
+echo -e "Uninstall of openonload module (version %{pkgversion}) beginning:"
+dkms remove -m openonload -v %{pkgversion} --all --rpm_safe_upgrade
+onload_tool unload
+onload_uninstall
+exit 0

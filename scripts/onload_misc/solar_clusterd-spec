@@ -1,0 +1,74 @@
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# To build a solar_clusterd source RPM:
+# Replace version below with appropriate Onload tag
+# - onload_dev/scripts/onload_mkdist <options>
+# mv openonload-<version>.tgz ~/rpmbuild/SOURCES/
+# rpmbuild -bs onload_dev/scripts/onload_misc/solar_clusterd-spec 
+
+# To build a binary RPM
+# rpmbuild --rebuild ~/rpmbuild/SRPMS/solar_clusterd-<version>-0.src.rpm
+
+# The following definition is needed on RHEL5 and not on RHEL6 as it
+# is already provided by the system.  Duplicating it here doesn't do
+# any harm.
+%define python_sitelib %(%{__python} -c "from distutils.sysconfig import get_python_lib; import sys; sys.stdout.write(get_python_lib())")
+
+
+Name:           solar_clusterd
+Version:        replace_me_with_onload_tag
+Release:        0
+Summary:        Onload's Application Clustering daemon
+Group:          Applications/Internet
+License:        Various
+URL:            http://www.solarflare.com/
+Vendor:         Solarflare
+Source0:        openonload-%{version}.tgz
+BuildRoot:      %{_builddir}/%{name}-root
+
+%description
+
+This package provides solar_clusterd, the daemon to enable application
+clustering for SolarCapture and ef_vi layer.
+
+%prep
+%setup -n openonload-%{version}
+# Do not build debuginfo package
+%define  debug_package %{nil}
+
+%build
+cd "$RPM_BUILD_DIR/openonload-%{version}"
+./scripts/onload_build --user64
+prefix="$RPM_BUILD_DIR/openonload-%{version}/src/tools/solar_clusterd"
+cd "$prefix"
+export ONLOAD_TREE="$RPM_BUILD_DIR/openonload-%{version}"
+make
+
+%install
+prefix="$RPM_BUILD_DIR/openonload-%{version}/src/tools/solar_clusterd"
+%{__rm} -rf "$RPM_BUILD_ROOT"
+
+bindir="${RPM_BUILD_ROOT}%{_bindir}"
+%{__mkdir_p} "$bindir"
+install -m 755 "$prefix"/solar_clusterd "$bindir"
+
+py_sitelib_dir="${RPM_BUILD_ROOT}%{python_sitelib}/%{name}"
+%{__mkdir_p} "$py_sitelib_dir"
+install -m 644 "$prefix"/cluster_protocol.so "$py_sitelib_dir"
+install -m 644 "$prefix"/daemonize.py "$py_sitelib_dir"
+install -m 644 "$prefix"/parse_config.py "$py_sitelib_dir"
+install -m 644 "$prefix"/logger.py "$py_sitelib_dir"
+install -m 644 "$prefix"/__init__.py "$py_sitelib_dir"
+
+docdir="${RPM_BUILD_ROOT}/usr/share/doc/solar_clusterd"
+%{__mkdir_p} "$docdir/example_configs/"
+install -m 644 -t "$docdir/example_configs/" "$prefix"/example.conf
+
+%clean
+%{__rm} -rf $RPM_BUILD_ROOT
+
+%files
+%defattr(-,root,root)
+%{_bindir}
+%{python_sitelib}/solar_clusterd/*
+/usr/share/doc/solar_clusterd/*

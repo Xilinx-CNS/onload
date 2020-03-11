@@ -1,0 +1,524 @@
+#!/bin/sh
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Invokes a command so that it runs over the Open Onload userlevel IP
+# transport.
+
+me=$(basename "$0")
+bin=$(cd "$(dirname "$0")" && /bin/pwd)
+
+
+err()	{ echo >&2 "$*"; }
+log()	{ err  "$me: $*"; }
+vlog()	{ $verbose && log "$*"; }
+fail()	{ log "$*"; exit 1; }
+rawecho() { echo -E "x$*" | sed 's/^x//'; }
+prefix()  { sed "s/^/$me: /"; }
+
+
+sfc_version() {
+  local lib
+
+  # find which library is in use.  It is a bit tricky, as we install the
+  # library into different directories depending on the distribution, and
+  # we do not want to copy the dir-detectng code here.
+  if [ -n "$ONLOAD_PRELOAD" ]; then
+    lib="$ONLOAD_PRELOAD"
+  elif [ -x "$bin/mmaketool" ]; then
+    lib=$(sfc_lib_linux_intree "$1")
+  else
+    lib=$(LD_PRELOAD=libonload.so ldd /bin/sh |grep libonload |awk '{print $3}')
+  fi
+
+  "$lib" 2>/dev/null
+  echo -n "Kernel module: "
+  mod_ver=/sys/module/onload/version
+  [ -f $mod_ver ] && cat $mod_ver || echo "[onload module not loaded]"
+}
+
+
+sfc_usage() {
+  err
+  sfc_version >&2
+  err
+  err "usage:"
+  err "  $me [options] <command> <command-args>"
+  err
+  err "options:"
+  err "  -p,--profile=<profile> -- comma sep list of config profile(s)"
+  err "  --force-profiles       -- profile settings override environment"
+  err "  --no-app-handler       -- do not use app-specific settings"
+  err "  --app=<app-name>       -- identify application to run under onload"
+  err "  --version              -- print version information"
+  err "  -v                     -- verbose"
+  err "  -h --help              -- this help message"
+  err
+  exit 1
+}
+
+
+sfc_atexit() {
+  [ -n "$rmfiles" ] && eval rm -f "$rmfiles"
+}
+
+
+sfc_lib_linux_intree() {
+  efablib=$("$bin/mmaketool" --transportlib)
+  if file -L "$1" | grep -q 32-bit && file -L /bin/sh | grep -q 64-bit; then
+    efablib=$(echo "$efablib" | sed 's/gnu_x86_64/gnu/')
+  fi
+  [ -f "$efablib" ] || {
+    log  "The onload transport library is missing."
+    fail "Expected to find it here: $efablib"
+  }
+  echo $efablib
+}
+
+
+sfc_preload_linux() {
+  local preload
+
+  # Determine name of interposing library.
+  if [ -n "$ONLOAD_PRELOAD" ]; then
+    preload="$ONLOAD_PRELOAD"
+  elif [ -x "$bin/mmaketool" ]; then
+    preload=$(sfc_lib_linux_intree "$1")
+  else
+    preload=libonload.so
+  fi
+
+  # Enable the preload 
+  rawecho "$LD_PRELOAD" | grep -q "$(basename "$preload")" || {
+    if [ -z "$LD_PRELOAD" ]; then
+      LD_PRELOAD="$preload"
+    else
+      LD_PRELOAD="$preload:$LD_PRELOAD"
+    fi
+    export LD_PRELOAD
+  }
+
+  if $verbose; then
+    # Dump interesting bits of the environment.
+    env | egrep "^EF_|^LD_PRELOAD=|^LD_LIBRARY_PATH=|^LD_PRELOAD_64=" | sed "s/^/$me: env: /"
+  fi
+}
+
+
+sfc_preload_sunos() {
+  local efablib lib
+
+  # Determine name of interposing library.
+  if [ ! -x "$bin/mmaketool" ]; then
+    efablib=libetherfabric.so
+
+    rawecho "$LD_PRELOAD" | grep "$efablib" >/dev/null || {
+      lib="$efablib"
+      [ -z "$LD_PRELOAD" ] || lib="$lib:"
+      LD_PRELOAD="$lib$LD_PRELOAD"; export LD_PRELOAD
+    }
+
+    vlog "LD_PRELOAD=$LD_PRELOAD"
+  else
+    if isalist | grep amd64 >/dev/null; then
+      efablib=$("$bin/mmaketool" --transportlib)
+
+      rawecho "$LD_PRELOAD_64" | grep "$(basename "$efablib")" >/dev/null || {
+        lib="$efablib"
+        [ -z "$LD_PRELOAD_64" ] || lib="$lib:"
+        LD_PRELOAD_64="$lib$LD_PRELOAD_64"; export LD_PRELOAD_64
+      }
+
+      vlog "LD_PRELOAD_64=$LD_PRELOAD_64"
+
+      efablib=$("$bin/mmaketool" --transportlib | sed 's/solaris64/solaris/')
+
+      rawecho "$LD_PRELOAD_32" | grep "$(basename "$efablib")" >/dev/null || {
+        lib="$efablib"
+        [ -z "$LD_PRELOAD_32" ] || lib="$lib:"
+        LD_PRELOAD_32="$lib$LD_PRELOAD_32"; export LD_PRELOAD_32
+      }
+
+      vlog "LD_PRELOAD_32=$LD_PRELOAD_32"
+    else
+      efablib=$("$bin/mmaketool" --transportlib)
+
+      rawecho "$LD_PRELOAD" | grep "$(basename "$efablib")" >/dev/null || {
+        lib="$efablib"
+        [ -z "$LD_PRELOAD" ] || lib="$lib:"
+        LD_PRELOAD="$lib$LD_PRELOAD"; export LD_PRELOAD
+      }
+
+      vlog "LD_PRELOAD=$LD_PRELOAD"
+    fi
+  fi
+}
+
+
+sfc_preload() {
+  case "$os" in
+  linux)
+    sfc_preload_linux "$@";;
+  sunos)
+    sfc_preload_sunos "$@";;
+  *)
+    fail "Unknown system type $(uname -s)";;
+  esac
+}
+
+
+sfc_protect() {	# Escape args so they are unchanged under "eval"
+  if [ $# = 0 ]; then
+    sed -e 's/\(["$`\]\)/\\\1/g' -e 's/^/"/' -e 's/$/"/'
+  else
+    first=true
+    while [ $# -gt 0 ]; do
+      $first || echo -n " "; first=false
+      # Careful: echo swallows -e, -n and -E
+      echo -nE "x$1" | sed -e 's/\(["$`\]\)/\\\1/g' -e 's/^x/"/' -e 's/$/"/'
+      shift
+    done
+    echo
+  fi
+}
+
+
+sfc_genwrapper() {	# Generate the preload wrapper script.
+  local app t
+  cat <<-EOF
+	#!/usr/bin/env bash
+	# Open Onload wrapper script auto-generated by $0.
+	err() { echo >&2 "$me: \$*"; }
+	$ONLOAD_ENV
+	EOF
+  # Generate code to try to invoke the app.
+  for app in "$@"; do
+    t="which \"$app\" >/dev/null 2>&1 &&"
+    t="$t exec \"$onload\" $onload_args \"$app\" \"\$@\""
+    echo "$t"
+  done
+  # Generate code to give a helpful message if that failed.
+  echo 'err "Cannot find command on host $(hostname -s)."'
+  echo 'err "I tried executing the following:"'
+  for app in "$@"; do echo "err '  $app'"; done
+  cat <<-EOF
+	err "I was invoked on $(hostname -s) with command line:"
+	err "  $mycmdline"
+	err "       PATH: \$PATH"
+	err "        PWD: \$PWD"
+	err "        pwd: \$(pwd)"
+	err "   /bin/pwd: \$(/bin/pwd)"
+	exit 1
+	EOF
+}
+
+
+sfc_mkappabsolute() { # Make an app name absolute (if not already).
+  local pwd="$1"
+  local f="$2"
+  if [ "$f" = "${f#/}" ]; then
+    local d=$(dirname "$f")
+    d=$(cd "$d" && $pwd)
+    echo "$d/$(basename "$f")"
+  else
+    echo "$f"
+  fi
+}
+
+
+sfc_mkwrapper() {	# Choose where to put wrapper, and return its name.
+  # ?? TODO option to specify location of wrapper, or to put wrapper in
+  # same directory as the app.
+  wrapper=$(mktemp "$PWD/.onload.XXXXXX")
+  $keepwrapper || rmfiles="$rmfiles $(sfc_protect "$wrapper")"
+  [ -f "$wrapper" ] || fail "Unable to create temporary file '$wrapper'"
+
+  sfc_genwrapper "$@" >"$wrapper"
+
+  chmod +x "$wrapper"
+  $verbose && {
+    err "wrapper: \"$wrapper\""
+    cat "$wrapper" | sed 's/^/  /'
+  } 2>&1 | prefix >&2
+}
+
+
+sfc_mkwrapper2() {	# Call mkwrapper with abs and rel paths to app.
+  local app="$1"
+  if [ "$app" = "${app#/}" ]; then
+    local abs1=$(sfc_mkappabsolute /bin/pwd "$app")
+    local abs2=$(sfc_mkappabsolute pwd "$app")
+    if [ "$abs1" = "$abs2" ]; then
+      sfc_mkwrapper "$abs1" "$app"
+    else
+      sfc_mkwrapper "$abs1" "$abs2" "$app"
+    fi
+  else
+    sfc_mkwrapper "$app"
+  fi
+}
+
+
+######################################################################
+# Handlers for various supported applications.
+
+isloaded() {
+  case "$os" in
+  sunos)
+    /usr/sbin/modinfo | grep -qw "$1"
+    ;;
+  linux)
+    # NB. Check for /sys/module/foo is in case drivers are built-in.
+    /sbin/lsmod | grep -q "^$1\>" || [ -d "/sys/module/$1" ]
+    ;;
+  esac
+}
+
+
+nodrivers() {
+  $ONLOAD_DRIVERCHECK || return 0
+  err "The onload drivers are not loaded."
+  $test || exit 1
+}
+
+
+onload_set() {
+  # This is used by config scripts and profile scripts.  Sets an
+  # environment variable (a) if not already set, or (b) if --force-profiles
+  # option is enabled.
+  if [ -z "$2" ]; then
+    # it's not in onload_set x y form - try onload_set x=y
+    VAR=$(echo "$1" | cut -f1 -d=)
+    VAL=$(echo "$1" | cut -f2 -d=)
+  else
+    VAR="$1"
+    VAL="$2"
+  fi
+  if $profileforce || eval test -z "\"\$$VAR\""; then
+    vlog "onload_set: $VAR=$VAL"
+    # printf %q is a bashism, but is supported by bash even in POSIX mode.  For
+    # other shells, we fall back to relying on the variable not containing an
+    # embdedded single quote, for which there is no use-case anyway.
+    if printf %q test 2> /dev/null > /dev/null; then
+      eval "$VAR=$(printf %q "$VAL")"
+    else
+      eval "$VAR='$VAL'"
+    fi
+    export "$VAR"
+  else
+    eval vlog "\"onload_set: \$VAL=\$VAR IGNORED (\$$VAR)\""
+  fi
+}
+
+
+onload_import() {
+  # Called below to import a profile.  May also be called by config scripts
+  # and profile scripts to import another profile.
+  local profile="$1"
+  local pf1="$HOME/.openonload/profiles/$profile.opf"
+  local pf2="$profile_d/$profile.opf"
+  local pf3="$profile"
+  # *.opf-fragment files are searched only for secondary imports, i.e. use of
+  # onload_import within another profile. This is to prevent fragments being
+  # accidentally used as full-fledged profiles by themselves
+  local pf_frag1="$HOME/.openonload/profiles/$profile.opf-fragment"
+  local pf_frag2="$profile_d/$profile.opf-fragment"
+  local pf="$pf1"
+  $toplevelimport || [ -f "$pf" ] || pf="$pf_frag1"
+  [ -f "$pf" ] || pf="$pf2"
+  $toplevelimport || [ -f "$pf" ] || pf="$pf_frag2"
+  [ -f "$pf" ] || pf="$pf3"
+  if ! [ -f "$pf" ]; then
+    log "ERROR: Cannot find profile '$profile'"
+    log "I looked in these places:"
+    log "  $pf1"
+    $toplevelimport || log "  $pf_frag1"
+    log "  $pf2"
+    $toplevelimport || log "  $pf_frag1"
+    log "  $pf3"
+    exit 3
+  fi
+  toplevelimport=false
+  vlog "onload_import: $profile ($pf)"
+  # Source profile, with $@ representing the application and its options
+  shift
+  . "$pf"
+  vlog "onload_import-done: $profile"
+}
+
+
+sfc_source_config() {
+  # Pull in configuration options -- system-wide and per-user.
+  [ -f /etc/openonload.sh ] && . /etc/openonload.sh
+  [ -f ~/.openonload.sh ] && . ~/.openonload.sh
+
+  # Pull in canned configuration profiles.
+  for profile in $profiles; do
+    onload_import "$profile" "$@"
+  done
+}
+
+
+sfc_do_other() {	# The default: preload and go.
+  isloaded onload || nodrivers
+
+  # Preload and go!
+  sfc_source_config "$@"
+  sfc_preload "$1"
+  vlog "invoking: $*"
+  $doit exec "$@"
+  exit
+}
+
+
+sfc_do_appname() {	# Wrap specified application.
+  local cmdline=
+  local wrapped=false
+  local wrapper
+  while [ $# -gt 0 ]; do
+    local bn=$(basename "$1" 2>/dev/null)
+    if [ "$1" = "$appname" ]; then
+      sfc_mkwrapper2 "$1"
+      cmdline="$cmdline $(sfc_protect "$wrapper")"
+      wrapped=true
+    else
+      cmdline="$cmdline $(sfc_protect "$1")"
+    fi
+    shift
+  done
+  $wrapped || fail "Did not find '$appname' on the command line."
+  vlog "invoking:$cmdline"
+  $doit eval "$cmdline"
+  exit
+}
+
+
+sfc_do_unsupported() {
+  app=$(basename "$1")
+  fail "Application '$app' not yet support.  Sorry."
+}
+
+######################################################################
+# main()
+
+if [ -x "$bin/mmaketool" ]; then
+  handler_d="$bin/onload_apps"
+  profile_d="$bin/onload_profiles"
+else
+  handler_d=/usr/libexec/onload/apps
+  profile_d=/usr/libexec/onload/profiles
+fi
+
+mycmdline="$0 $*"
+verbose=false
+wrapper=
+rmfiles=
+appname=
+profiles=
+profileforce=false
+doit=
+keepwrapper=false
+onload="$bin/$me"
+onload_args=
+usehandler=true
+toplevelimport=true
+[ -z "$ONLOAD_DRIVERCHECK" ] && ONLOAD_DRIVERCHECK=true
+test=false
+os=$(uname -s | tr '[A-Z]' '[a-z]')
+
+trap sfc_atexit EXIT
+
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --app=*)
+	appname="${1#--app=}"
+	[ -n "$appname" ] || sfc_usage
+	;;
+    --app|-a)
+        shift
+	appname="$1"
+	[ -n "$appname" ] || sfc_usage
+	;;
+    --profile=*)
+	onload_args="$onload_args $1"
+	profile="${1#--profile=}"
+	[ -n "$profile" ] || sfc_usage
+	profiles="$profiles $(echo "$profile" | sed 's/,/ /g')"
+	;;
+    --profile|-p)
+	onload_args="$onload_args $1 $2"
+	shift
+	profile="$1"
+	[ -n "$profile" ] || sfc_usage
+	profiles="$profiles $(echo "$profile" | sed 's/,/ /g')"
+	;;
+    --force-profiles)
+	profileforce=true
+	;;
+    -v)	verbose=true
+	onload_args="$onload_args $1"
+	;;
+    --test|-t)
+	doit=:; verbose=true; test=true
+	;;
+    --keep-wrapper)
+	keep-wrapper=true
+	;;
+    --no-app-handler)
+	onload_args="$onload_args $1"
+	usehandler=false
+	;;
+    --preload=*)
+	onload_args="$onload_args $1"
+	ONLOAD_PRELOAD=${1#--preload=}; export ONLOAD_PRELOAD
+	ONLOAD_DRIVERCHECK=false; export ONLOAD_DRIVERCHECK
+	;;
+    --preload)
+	onload_args="$onload_args $1 $2"
+	shift
+	ONLOAD_PRELOAD="$1"; export ONLOAD_PRELOAD
+	ONLOAD_DRIVERCHECK=false; export ONLOAD_DRIVERCHECK
+	;;
+    --version)
+	sfc_version
+	exit
+	;;
+    -*)	sfc_usage
+	;;
+    *)	break
+	;;
+  esac
+  shift
+done
+
+[ $# = 0 ] && sfc_usage
+
+# Check command exists.
+[ -x "$1" ] || {
+  which "$1" >/dev/null 2>&1 || {
+    log "$1: command not found"
+    $test || exit 127
+  }
+}
+
+app=$(basename "$1")
+
+handler="$HOME/.openonload/apps/$app"
+[ -f "$handler" ] || handler="$handler_d/$app"
+if [ -f "$handler" ] && $usehandler; then
+  vlog "app-handler: $app ($handler)"
+  . "$handler"
+  vlog "app-handler-done: $app"
+  # NB. Handler should exit if it doesn't want to fall through...
+fi
+
+case "$app" in
+  mpimon)	sfc_do_unsupported "$@";;
+  charmrun)	sfc_do_unsupported "$@";;
+  *)		if [ -n "$appname" ]; then
+		  sfc_do_appname "$@"
+		else
+		  sfc_do_other "$@"
+		fi;;
+esac

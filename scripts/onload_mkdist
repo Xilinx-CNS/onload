@@ -1,0 +1,253 @@
+#!/bin/bash -u
+##############################################################################
+# Copy only portions of source tree needed for onload, apply copyright
+# messages and pre-process to strip platforms we're not releasing.
+#
+# Author: David Riddoch
+##############################################################################
+
+bin=$(cd $(dirname "$0") && /bin/pwd)
+
+# Pull in definitions of try, err, etc.
+source "${bin}/lib/mkdist/utils"
+
+usage() {
+  err
+  err "usage:"
+  err "  $me [options]"
+  err
+  err "options:"
+  err "  --version <version>"
+  err "  --release"
+  err "  --product <product>"
+  err "  --cloud"
+  err "  --enterprise"
+  err "  --srcrev <changeset>"
+  err "  --force"
+  err "  --testciul"
+  err "  --debug"
+  err
+  exit 1
+}
+
+
+bad() {
+  if $force || ! $release; then
+    log "WARNING: $*"
+  else
+    fail "ERROR: $*"
+  fi
+}
+
+
+docopy() {
+  local dir="$1"
+  shift
+  while [ $# -gt 0 ]; do
+    local src="$TOP/$dir/$1"
+    shift
+    try mkdir --mode=755 -p "$dir"
+    try cp -a "$src" "$dir"
+  done
+}
+
+
+rmmatch() {
+  find . -name "$1" | xargs rm -rf
+}
+
+
+# Pull in functions for preparing source files for distribution to customers.
+source "$bin/lib/mkdist/preprocess_source"
+
+
+######################################################################
+# main()
+
+release=false
+src_rev=
+version=
+Product=
+cloud=false
+enterprise=false
+force=false
+testciul=false
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --version)  shift; version="$1";;
+    --srcrev)   shift; src_rev="$1";;
+    --release)  release=true;;
+    --product)  shift; Product="$1";;
+    --cloud)    cloud=true;;
+    --enterprise)  enterprise=true;;
+    --force)    force=true;;
+    --testciul) testciul=true;;
+    --debug)    set -x;;
+    -*)  usage;;
+    *)   break;;
+  esac
+  shift
+done
+[ $# = 0 ] || usage
+
+if $testciul && ! $force; then
+    fail "ERROR: --force must be applied if testciul is requested"
+fi
+
+TOP=$("$bin/mmaketool" --toppath)
+[ -n "$TOP" ] || fail "ERROR: mmaketool --toppath failed"
+
+if [ -z "$version" ]; then
+  if $release; then
+    version=$(date '+%Y%m%d')
+  else
+    version=$(cd "$TOP" && git rev-parse HEAD)
+    [ -z "$version" ] && fail "ERROR: Could not find HEAD revision"
+  fi
+fi
+
+let count=0
+[ -z "$Product" ] || let count++
+if $cloud; then
+  Product="CloudOnload"
+  let count++
+fi
+if $enterprise; then
+  Product="EnterpriseOnload"
+  let count++
+fi
+if [ $count -gt 1 ]; then
+  fail "Only one product type may be specified with --product, --cloud and --enterprise options"
+fi
+if [ $count -eq 0 ]; then
+  Product="Onload"
+fi
+unset count
+
+product=$(echo "$Product" | tr '[A-Z]' '[a-z]' | tr -d ' ')
+distfiles_d="$TOP/src/onload/distfiles"
+try [ -d "$distfiles_d" ]
+
+releasedir="$product-$version"
+[ -d "$releasedir" ] && fail "ERROR: $releasedir already exists"
+[ -f "$releasedir.tgz" ] && fail "ERROR: $releasedir.tgz already exists"
+try mkdir --mode=755 "$releasedir"
+try cd "$releasedir"
+
+# Copy lots of sources.
+docopy src/lib                citools ciul ciapp efhw efrm efthrm cplane
+docopy src/lib                onload_ext
+docopy src/lib/transport      common ip unix
+docopy src/driver             linux linux_resource linux_char
+docopy src/driver             linux_onload
+docopy src/tools/ip           stackdump.c libstack.c libstack.h
+docopy src/tools/ip           sockbuf_filter.h
+docopy src/tools/ip           tcpdump_bin.c fuser.c
+docopy src/tools              jni onload_remote_monitor cplane onload_mibdump
+docopy src/include            etherfabric onload cplane
+docopy src/include/ci         compat compat.h tools tools.h app app.h
+docopy src/include/ci         driver efch efhw efrm internal net
+docopy src/include/ci         affinity
+
+docopy scripts                mmaketool mmakebuildtree mmake
+docopy scripts                onload_build onload_install
+docopy scripts                onload onload_apps onload_profiles onload_misc
+docopy scripts                onload_tool onload_tcpdump
+docopy scripts                onload_iptables
+docopy scripts                onload_rpmtest
+docopy scripts                libc_compat.sh check_library_presence
+docopy scripts                check_prototype
+docopy scripts                check_header_presence
+docopy scripts/sh             fns mmake-fns mmakebuildtree_gen disttag
+docopy .                      mk
+
+docopy scripts                sfcaffinity sfcaffinity_config
+docopy scripts                sfcaffinity.py sfcmask.py sfcirqaffinity
+docopy src/driver             linux_affinity
+docopy src/tools              sfcaffinity
+docopy src/lib                sfcaffinity
+
+docopy src/tests              ef_vi rtt trade_sim
+if $testciul; then
+    docopy src/tests              ciul
+fi
+docopy src/tests/onload       wire_order
+docopy src/tests/onload       extensions
+docopy src/tests/onload       hwtimestamping
+
+docopy src/tests/onload/onload_remote_monitor       orm_example_client using_collectd
+
+docopy src/tools              solar_clusterd
+
+# Remove files we don't want to distribute.
+try pushd src >/dev/null
+rm -rf include/ci/model
+rmmatch "*spektor*"
+rmmatch "nci*"
+rmmatch "sources_*"
+rmmatch "*iscsi*"
+rmmatch "*xbench*"
+rmmatch "*eftest*"
+rmmatch "*.xls"
+rmmatch "*.pdf"
+rmmatch "*etherboot*"
+rmmatch "*pio_driver*"
+rmmatch "*bus_driver*"
+rmmatch "*rbmw*"
+rmmatch "*cipacket_*"
+rmmatch "*v2phys*"
+try popd >/dev/null
+try pushd mk >/dev/null
+rmmatch "*gld*"
+try popd >/dev/null
+rmmatch "*mips*"
+rmmatch "*cosim*"
+rmmatch "*dini*"
+rmmatch "*microcode*"
+rmmatch "*vg_IOPort_access*"
+rmmatch "*ia64*"
+rmmatch "*bsd*"
+rmmatch "*esx*"
+rm -rf mk/tools mk/certificates
+find . -name CVS -type d | xargs rm -rf
+rm -f src/driver/linux/*.sh
+
+NET="$TOP/src/driver/linux_net"
+try [ -d "$NET" ]
+try mkdir src/driver/linux_net
+tryquiet make -C "$NET" "KPATH=$PWD/src/driver/linux_net" export-srpm
+
+# Copy some build support files.
+while read dir; do
+  try [ -d "$dir" ]
+  [ -d "$TOP/$dir" ] || continue
+  for f in mmake.mk; do
+    [ -e "$TOP/$dir/$f" ] && try cp -a "$TOP/$dir/$f" "$dir"
+  done
+done < <(find . -type d)
+
+preprocess_source
+
+verstub=$(echo "$version" | sed -e 's/-test.*//' -e 's/-rc.*//')
+if [ -f ChangeLog ] && ! grep -q "$verstub" ChangeLog; then
+  bad "Nothing in the ChangeLog for this version"
+fi
+if [ -f ReleaseNotes ] && ! grep -q "$verstub" ReleaseNotes; then
+  bad "Nothing in the ReleaseNotes for this version"
+fi
+
+# Get rid of junk!
+find . -type f -name '.#*'    -exec rm "{}" \;
+find . -type f -name '#*#'    -exec rm "{}" \;
+find . -type f -name '*~'     -exec rm "{}" \;
+find . -type f -name '*.rej'  -exec rm "{}" \;
+find . -type f -name '*.orig' -exec rm "{}" \;
+find . -type f -name 'cscope*.out' -exec rm "{}" \;
+find . -type f -name 'cscope.files' -exec rm "{}" \;
+
+# Package it up.
+try cd ..
+try tar czf "$releasedir.tgz" --owner=root --group=root "$releasedir"
+try md5sum "$releasedir.tgz" >"$releasedir.tgz.md5"
+try rm -r "$releasedir"

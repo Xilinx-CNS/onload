@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+############################################################################
+#
+# Settings for the OpenOnload drivers.
+#
+# OpenOnload is a middleware that accelerates network performance.  See
+# http://www.openonload.org/ for details.
+#
+############################################################################
+
+# OpenOnload permissions.
+#
+# The following settings control the permissions applied to /dev/onload.
+# This controls which users can make use of OpenOnload acceleration.
+
+ONLOAD_USER=root
+ONLOAD_GROUP=root
+ONLOAD_MODE=666
+
+
+# ef_vi permissions.
+#
+# The following settings control the permissions applied to /dev/sfc_char.
+# This controls which users can make use of the ef_vi interface.
+
+SFC_CHAR_USER=root
+SFC_CHAR_GROUP=root
+SFC_CHAR_MODE=666
+
+
+# sfc_affinity permissions.
+#
+# The following settings control the permissions applied to
+# /dev/sfc_affinity.  This controls which users can make use of the
+# sfc_affinity features.
+
+SFC_AFFINITY_USER=root
+SFC_AFFINITY_GROUP=root
+SFC_AFFINITY_MODE=666
+
+
+# onload_cp_server user.
+#
+# The following setting controls the user which will run the Onload control
+# plane server process. The user must exist, and does not need any privileges.
+#
+# If the setting is not defined, the server will run as root.
+
+ONLOAD_CPLANE_USER=onload_cplane
+

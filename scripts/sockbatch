@@ -1,0 +1,509 @@
+#!/bin/sh
+
+tmp=/tmp/intbat_$$
+pubtmp=~/tmp_intbat
+controlport=60042
+
+if [ "_$1" = "_-d" ]; then
+   shift
+   pubtmp="$1"
+   shift
+fi
+
+thiscommand=`basename "$0"`
+remotecmd=remote_interactive
+execute=yes
+autoquit=yes
+masterscript=
+verbose=no
+option=yes
+scripttree=`dirname "$0"`
+# let's assume we're in <scripttree>/scripts
+scripttree=`cd $scripttree>/dev/null; pwd`
+scripttree=`dirname "$scripttree"`
+
+if [ ! -z "$EF_TREE" ]; then
+    scripttree=$EF_TREE
+fi
+if [ ! -z "$SOCKBATCH_INTERACTIVE" ]; then
+    remotecmd=$SOCKBATCH_INTERACTIVE
+fi
+if [ ! -z "$SOCKBATCH_PUBLIC_PREFIX" ]; then
+    pubtmp=$SOCKBATCH_PUBLIC_PREFIX
+fi
+
+
+while [ $# -gt 0 -a "$option" = "yes" ]; do
+    arg="$1"
+    case $arg in
+        -v)
+            verbose=yes;;
+        -n)
+            execute=no
+	    shift
+	    masterscript="$1";;
+        -d)
+	    shift
+	    pubtmp="$1";;
+        -r)
+	    shift
+	    remotecmd="$1";;
+	-p)
+	    shift
+	    controlport="$1";;
+	-t)
+	    shift
+	    scripttree="$1";;
+        -h | -help | --help | \?)
+            help=yes;;
+        *)
+            option=no;;
+    esac
+
+    if [ "$option" = "yes" ]; then
+        shift
+    fi
+done
+
+if [ $# -lt 1 ]; then
+    help=yes
+fi
+
+usage()
+{   echo "syntax: $thiscommand [-v] [-d <dir>] [-p <port>] [-t <tree>] [-n <out>]"
+    echo "        <script> [<role>=<machine> [-u | <efabopt> | %<arg>=<value>]]..."
+    echo
+    echo "e.g. $thiscommand script client=dingo12 -u server=dingo07"
+    echo
+    echo "This command uses <script> to generate 'interactive' batch scripts"
+    echo "for each of a number of machines fulfilling separate roles (e.g. "
+    echo "a client and server). It can then schedule their execution."
+    echo
+    echo "    <script>    input script (normal 'interactive' commands + '%' lines"
+    echo "                   %role <rolename>    [switch to script for rolename]"
+    echo "                   %arg <argname>      [require %<argname>=<value>]"
+    echo "                   script can contain \${<rolename>} or \${<argname>} expansions"
+    echo "    -v          verbose output"
+    echo "    -n <out>    just generate the scripts - don't execute them, "
+    echo "                write the script that would have executed to <out>"
+    echo "    -d <prefix> file prefix to locations (\"<prefix>_<role>\"), readable"
+    echo "                by all machines, where the scripts will be written "
+    echo "                (default $pubdir)"
+    echo "    -p <port>   port used by the different versions of 'interactive'"
+    echo "                to communicate for control purposes (default $controlport)"
+    echo "    -r <cmd>    script to run remote 'interactive' given args:"
+    echo "                   <role> <machine> <script> <etherfabric option>..."
+    echo "                   -i <role> <machine> [initialization]"
+    echo "                   -x <machine>        [finalization]"
+    echo "                   -a <machine>        [abort]"
+    echo "                (internal default uses background ssh giving mixed output)"
+    echo "    -t <tree>   directory in which source tree has been checked out into"
+    echo "                (default $scripttree)"
+    echo "    <role>=<machine>"
+    echo "                use <machine> in place of references to the given role"
+    echo "    -u          use user library for previous role's 'interactive' invocation"
+    echo "    <efabopt>"
+    echo "                options to pass on to 'etherfabric' to run 'interactive'"
+    echo "                for previous role (implies -u)"
+    echo "    %<arg>=<value>"
+    echo "                values to supply for '%arg' expansions in script"
+    echo
+    echo "Only scripts for the nominated roles are produced (and executed)"
+    echo "This command is not suitable for multiple concurrent executions"
+    echo
+    echo "Default for -t is taken from env EF_TREE"
+    echo "Default for -d is taken from env SOCKBATCH_PUBLIC_PREFIX"
+    echo "Default for -r is taken from env SOCKBATCH_INTERACTIVE"
+}
+
+
+log()
+{   echo "$thiscommand: $@"
+}
+
+verbage()
+{   if [ "$verbose" = "yes" ]; then
+        log "$@" >&2
+    fi
+}
+
+if [ "$help" = "yes" ]; then
+    usage >&2
+    exit 1
+fi
+
+
+
+oneof()
+{   found=1
+    find="$1"
+    shift
+    while [ $# -gt 0 -a $found -eq 1 ]; do
+       if [ "_$1" = "_$find" ]; then
+          found=0
+       fi
+       shift
+    done
+    return $found
+}
+
+
+
+management_connections=
+
+
+
+is_new_connection()
+{   mc1="$1"
+    mc2="$2"
+    c=`(echo "$mc1"; echo "$mc2") | sort`
+    c=`echo $c | tr ' ' '_'`
+    # echo "connection: $c"
+    if ! oneof "$c" $management_connections; then
+        management_connections="$management_connections $c"
+        return 0
+    else
+        return 1
+    fi
+}
+
+
+first()
+{   echo "$1"
+}
+
+
+genfile()
+{   myrole="$1"
+    rolefile="$2"
+    partners=
+    required=
+    quitdone=no
+    while read op args; do
+        # log "OP $op - args $args" >&2
+	case $op in
+	    exit)
+	        quitdone=yes
+		;;
+
+            \%arg | \%ARG)
+	        required="$required $args"
+		;;
+		
+	    \%role | \%ROLE)
+	        # log "%role '$args' mine is '$myrole'" >&2
+	        rc=0
+	        while [ $rc -eq 0 -a "$args" != "all" -a "$args" != "$myrole" ]; do
+		    read skipop skipargs;
+		    rc=$?
+		    if [ $rc -eq 0 -a "%role" = "$skipop" ]; then
+		        args=$skipargs
+		    fi
+		done
+		;;
+		
+	    \%await | \%AWAIT | await)
+	        otherrole=`first $args`
+	        if ! oneof "$otherrole" $partners; then
+		    if is_new_connection $otherrole $myrole; then
+		        host=host
+		    else
+		        host=
+		    fi
+		    # log "echo \"role $otherrole \$$otherrole\" $host" >>$rolefile
+		    partners="$partners $otherrole"
+		fi
+	        echo "echo \"await $args\""
+		;;
+		
+	    \%handover | \%HANDOVER | handover)
+	        otherrole=`first $args`
+	        if ! oneof "$otherrole" $partners; then
+		    if is_new_connection $otherrole $myrole; then
+		        host=host
+		    else
+		        host=
+		    fi
+		    # echo "echo \"role $otherrole \$$otherrole\" $host">>$rolefile
+		    partners="$partners $otherrole"
+		fi
+	        echo "echo \"handover $args\""
+		;;
+
+	    *=*)
+	        echo "$op $args"
+	        ;;
+		
+	    *)
+	        if [ -z "$args" ]; then
+		    echo "echo \"$op\""
+	        else
+	            echo "echo \"$op $args\""
+		fi
+		;;
+	esac
+    done
+    echo "${role}_formal_args=\"$required\""
+    role_formal_args="$required"
+    if [ "$autoquit" = "yes" -a "$quitdone" = "no" ]; then
+        echo "echo exit"
+    fi
+}
+
+
+
+# arguments are all <name>=<value> pairs
+assign_parameters()
+{   while [ $# -gt 0 ]; do
+        eval $1
+	shift
+    done
+}
+
+
+# ensure given names all have been given values
+check_parameters()
+{   rc=0
+    while [ $# -gt 0 ]; do
+        arg="$1"
+	shift
+	if [ ! -z "$arg" ]; then
+	    # log "checking $arg (='`eval echo \\$$arg`')"
+	    if [ -z "`eval echo \\$$arg`" ]; then
+	        log "Error - no value set for parameter '$arg'" >&2
+	        rc=1
+	    fi
+	fi
+    done
+    return $rc
+}
+
+
+
+# write a script file we are about to execute that defines various
+# role attributes
+#     roles - list of roles
+#     actual_args - formal specification of %args in script
+#     <role> - machine used for role
+#     <role>_efabargs - arguments determining user library use
+genroles()
+{   roles=
+    lastrole=
+    actual_args=
+    for assign in "$@"; do
+        case "$assign" in
+	    %*)  actual_args="$actual_args `echo $assign | cut -d% -f2-`";;
+	    *=*) lastrole=`echo "$assign" | cut -d= -f1`
+	         roles="$roles $lastrole"
+	         echo "$assign"
+		 echo "${lastrole}_efabargs=";;
+	    *)   echo "${lastrole}_efabargs=\"\$${lastrole}_efabargs $assign\"";;
+	esac
+    done
+}
+
+
+
+# make sure each participant sets up its connections in exactly the
+# same order expecting the same party to take the lead
+setup_mgmt()
+{   role="$1"
+    shift
+    for connection in $*; do
+        host=`echo $connection | cut -d_ -f1`
+        other=`echo $connection | cut -d_ -f2`
+	if [ "$host" = "$role" ]; then
+	    hosted=host
+	else
+	    hosted=
+	fi
+	echo "# Set up connection hosted by $host to $other ${hosted}"
+	if [ "$host" = "$role" ]; then
+	    echo "echo \"role $other \$$other host\""
+	elif [ "$other" = "$role" ]; then
+	    echo "echo \"role $host \$$host\""
+	fi
+    done
+}
+
+# this function eliminates spurious output generated by init scripts when
+# ssh is used...
+remote_pid()
+{   ssh "$1" "PATH=/sbin:\$PATH; export PATH; echo;echo -n 'PID '; pidof $2 2> /dev/null" | awk '/^PID/ { printf("%s",$2);
+}'
+}
+
+# execute the interactive script we've written on the remote computer(s)
+# this is the default value of $remotecmd
+remote_interactive()
+{   if [ "_-i" = "_$1" ]; then
+        # initialise
+	shift
+	role="$1"
+	remote="$2"
+	# get rid of any old interactive scripts
+	ssh $remote "PATH=/usr/bin:/sbin:\$PATH; export PATH; killall interactive 2> /dev/null"
+        return 0
+    elif [ "_-a" = "_$1" ]; then
+        # abort
+	shift
+	remote="$1"
+	# log "ssh $remote \"killall interactive 2>/dev/null\""
+	ssh $remote "PATH=/usr/bin:/sbin:\$PATH; export PATH; killall interactive 2> /dev/null"
+        return 0
+    elif [ "_-x" = "_$1" ]; then
+        # tidy up
+	shift
+	remote="$1"
+        return 0
+    else
+	role="$1"
+	remote="$2"
+	iscript="$3"
+	shift
+	shift
+	shift
+	# log "run $role on $remote ($iscript) efab args: '$*'"
+	if [ $# -gt 0 ]; then
+	    use_efab=yes
+	    # some efab options or -u
+	else
+	    use_efab=no
+	fi
+	if [ "_-u" = "_$1" ]; then
+	    shift
+	fi
+	efabopts=
+	while [ $# -gt 0 ]; do
+	    case "$1" in
+	        *=*)
+		    # log "Executing assignment: $1"
+		    eval $1;;
+		*)
+		    efabopts="$efabopts $1"
+		    ;;
+	    esac
+	    shift
+	done
+	intopts=
+	if [ "$verbose" = "yes" ]; then
+	    efabopts="-v $efabopts"
+	    intopts="$intopts -v"
+	fi
+	# guiterm="xterm -si -sk -sb -title $role:$remote -e /bin/sh -c "
+	doexec="PATH=$scripttree/build/gnu/tests/ip/simple:\$PATH; export PATH; "
+	if [ "$use_efab" = "yes" ]; then
+	    doexec="$doexec cd $scripttree/scripts; ./etherfabric $efabopts"
+	fi
+	# verbage "Running $role on $remote"
+	# log "ssh $remote \"${doexec} interactive $intopts -u -e --id=$role \\\"--cmd=source $iscript\\\"\""
+	eval "ssh $remote \"${doexec} interactive $intopts -u -e --id=$role \\\"--cmd=source $iscript\\\"\" " &
+	sleep 1
+	# log "Checking that interactive is running"
+	rpid=`remote_pid $remote interactive`
+	if [ -z "$rpid" ]; then
+	    verbage "Couldn't find $role 'interactive' running on $remote"
+	    return 1
+	else
+	    verbage "Running $role 'interactive' on $remote in process $rpid (library: $use_efab)"
+	    return 0
+	fi
+    fi
+}
+
+
+genrunscript()
+{   cat <<EOF
+#!/bin/sh
+running=
+tidy_running()
+{   for machine in \$running; do
+        # log "Tidying machine \$machine"
+        $remotecmd -x \$machine
+    done
+}
+abort_running()
+{   for machine in \$running; do
+        # log "Aborting machine \$machine"
+        $remotecmd -a \$machine
+    done
+}
+try()
+{   if ! "\$@"; then
+        abort_running
+	exit
+    fi
+}
+EOF
+}
+
+
+
+# from generic input file and <role>=<machine> pairs generate interactive
+# scripts for each of the <roles> and run them on the denoted machines.
+genfiles()
+{   infile="$1"
+    management_connections=
+    shift
+    if [ ! -r "$infile" ]; then
+        log "Can't read file '$infile'" >&2
+    else
+        roles=""
+        genroles "$@" > ${tmp}_roles
+	. ${tmp}_roles
+	# the above sets up $roles, $actual_args, $<role> and $<role>_efabargs
+	# log "Supplied arguments: '$actual_args'" >&2
+	formal_args=
+	for role in $roles; do
+	    verbage "Writing interactive script for role $role" >&2
+	    rm -f ${tmp}_${role}_roles
+	    touch ${tmp}_${role}_roles
+	    genfile "$role" < $infile > ${tmp}_$role
+	    formal_args="$formal_args $role_formal_args"
+	done
+	assign_parameters $actual_args
+	# log "check_parameters $formal_args" >&2
+	if ! check_parameters $formal_args; then
+	    log "(Not executing because of errors)" >&2
+	    execute=no
+	fi
+	genrunscript >${tmp}_runscript
+	for role in $roles; do
+	    thisrole=`eval echo \\$$role`
+	    echo "if try $remotecmd -i $role $thisrole; then running=\"\$running $thisrole\"; fi" >>${tmp}_runscript
+	done
+	for role in $roles; do
+	    thisrole=`eval echo \\$$role`
+	    thisargs=`eval echo \\$${role}_efabargs`
+	    # echo "role $role is $thisrole args '$thisargs'" >&2
+	    echo "try $remotecmd $role $thisrole ${pubtmp}_${role} $thisargs" >>${tmp}_runscript
+	    setup_mgmt $role $management_connections > ${tmp}_${role}_roles
+	    . ${tmp}_${role}_roles > ${pubtmp}_${role}
+	    . ${tmp}_${role} >> ${pubtmp}_${role}
+	    rm -f ${tmp}_${role}_roles ${tmp}_$role
+	done
+	echo "tidy_running" >>${tmp}_runscript
+	if [ ! -z "$masterscript" ]; then
+	    cp "${tmp}_runscript" "$masterscript"
+	fi
+	if [ "$execute" = "yes" ]; then
+	    # log "Executing ${tmp}_ruscript" >&2
+	    . ${tmp}_runscript
+	    for role in $roles; do
+	        rm -f ${tmp}_${role}_roles
+	    done
+        else
+	    for role in $roles; do
+	        verbage "Script for $role in: ${pubtmp}_${role}"
+	    done
+	    if [ ! -z "$masterscript" ]; then
+	        verbage "Run script in: $masterscript"
+	    fi
+	fi
+	rm -f ${tmp}_runscript
+	rm -f ${tmp}_roles
+    fi
+}
+
+
+genfiles "$@"

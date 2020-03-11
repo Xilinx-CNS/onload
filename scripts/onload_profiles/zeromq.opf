@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# OpenOnload profile for applications using zeromq.
+
+# Zeromq uses unix sockets for inter-thread communication, and blocks using
+# poll() and epoll().  The following options ensure that the messages
+# passed through unix sockets are not delayed.
+onload_set EF_POLL_FAST_USEC 0
+onload_set EF_POLL_NONBLOCK_FAST_USEC 0
+
+# We also recommend that you use the latency profile.

@@ -1,0 +1,21 @@
+Source: #TYPE#
+Section: unknown
+Priority: optional
+Maintainer: Support <support@solarflare.com>
+Build-Depends: debhelper (>= 7)
+Standards-Version: 3.9.3
+
+Package: #TYPE#-modules-_KVERS_
+Architecture: any
+Provides: #TYPE#-modules
+#conflicts SFC
+Description: #TYPE# modules for Linux (kernel _KVERS_).
+ This package contains the #TYPE# loadable kernel modules for the
+ kernel-image-_KVERS_ package.
+ .
+ This package contains the compiled kernel modules for _KVERS_
+ .
+ If you have compiled your own kernel, you will most likely need to build
+ your own #TYPE#-modules. The #TYPE#-source package has been
+ provided for use with the Debian's module-assistant or kernel-package
+ utilities to produce a version of #TYPE#-modules for your kernel.

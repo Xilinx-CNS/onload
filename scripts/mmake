@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# A 'make' wrapper
+
+. "$(dirname "$0")/sh/fns"
+. "$bin/sh/mmake-fns"
+
+######################################################################
+# main()
+
+# Put this mmake (and associated scripts) at front of PATH.
+export PATH="$bin:$PATH"
+
+
+# Parse args.
+# ?? Fixme: add usage, verbose option...
+args=
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -C)		shift
+		[ -d "$1" ] ||
+		  { mkdir -p "$1" || fail "Failed to: mkdir -p '$1'"; }
+		cd "$1" || fail "Failed to: cd '$1'"
+		;;
+    *)		args="$args $1"
+		;;
+  esac
+  shift
+done
+
+# Use gnumake if it exists, otherwise make.
+[ -z "$MMAKE_MAKE" ] && {
+  MMAKE_MAKE=gmake
+  which "$MMAKE_MAKE" &>/dev/null || MMAKE_MAKE=make
+  which "$MMAKE_MAKE" &>/dev/null ||
+    fail "Cannot find a make command.  Please define MMAKE_MAKE."
+}
+
+# Setup make variables.
+orient-in-build-tree || fail "Not in a mmake build tree"
+
+[ -f "$TOPPATH/mk/platform/$PLATFORM.mk" ] || fail "No such platform '$PLATFORM' $TOPPATH/mk/platform/"
+
+"$MMAKE_MAKE" -r -f "$TOPPATH/mk/site/mmake.mk" "MAKE=mmake" \
+	"TOPPATH=$TOPPATH" \
+	"BUILD=$BUILD" "BUILDPATH=$BUILDPATH" "CURRENT=$CURRENT" \
+	"PLATFORM=$PLATFORM" "THISDIR=$THISDIR" "VPATH=$VPATH" $args
+

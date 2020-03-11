@@ -1,0 +1,214 @@
+#!/bin/bash
+
+# Update linux_net git repositories
+# Ben Hutchings, March 2008
+# Rewritten for Mercurial, August 2009
+# Removed git remote update and merge, January 2014
+
+# FIXME: This should not make any assumptions about home directory layout.
+#
+# TODO: Maybe use "Change-Id: SF$hg_hash" in converted revisions, as this format
+# should be acceptable in upstream submissions.
+#
+# TODO: Mirror multiple named hg branches.
+
+set -e
+
+master_repo=/project/ci/git/linux_net
+
+if [ -n "$SF_LINUX_REPO" ]; then
+    local_repo=$SF_LINUX_REPO
+else
+    local_repo=$1
+fi
+
+if [ -z "$local_repo" ]; then
+    echo "No git repo specified"; exit 1;
+fi
+if [ ! -d $local_repo ]; then
+    echo "git repo at $local_repo not found"; exit 2;
+fi
+
+v5_hg_repo=`hg root`
+v5_hg_source=default
+v5_hg_dest=v5-4.0-export
+
+hg_get_hash() {
+    hg log --template='{node}' -r$1
+}
+
+hg_get_rev() {
+    hg log --template='{rev}' -r$1
+}
+
+declare -a hg_rev_to_git_hash_cache
+declare -a hg_rev_has_latest_upstream
+
+hg_rev_set_git_hash() {
+    hg_rev_to_git_hash_cache[$1]=$2
+}
+
+hg_rev_get_git_hash() {
+    local hg_rev="$1"
+    local git_dir="$2"
+    local git_hash=${hg_rev_to_git_hash_cache[$hg_rev]}
+    if [ -z "$git_hash" ]; then
+	local hg_hash=$(hg_get_hash $hg_rev)
+	git_hash=$(cd "$git_dir" && \
+	    git log -n 1 --grep="^orig-hg-hash: $hg_hash\$" --pretty=format:%H --all)
+	if [ -n "$git_hash" ]; then
+	    hg_rev_set_git_hash $hg_rev $git_hash
+	fi
+    fi
+    echo $git_hash
+}
+
+git_get_hg_hash() {
+    # If the head is a merge from upstream, skip that and look at the
+    # hg-derived parent
+    hash="$(git log -n 1 --no-merges --first-parent --pretty=format:%b $1 | sed -n 's/^orig-hg-hash: //p')"
+    test -n "$hash"
+    echo "$hash"
+}
+
+add_hg_rev_to_git() {
+    local hg_repo="$1"
+    local hg_rev="$2"
+    local git_repo="$3"
+
+    # Read all the log fields we need
+    local GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE
+    local hg_hash hg_parents hg_message
+    {
+	read GIT_AUTHOR_NAME
+	read GIT_AUTHOR_EMAIL
+	read GIT_AUTHOR_DATE
+	read hg_hash
+	read hg_parents
+	read hg_tags
+    } < <(hg log --template='\
+{author|person}
+{author|email}
+{date|rfc822date}
+{node}
+{parents}
+{tags}
+' -r$hg_rev)
+    # 'parents' is empty if the previous revision is the parent
+    if [ -z "$hg_parents" ]; then
+	hg_parents=$((hg_rev - 1))
+    fi
+    # Message can be multi-line; read it separately
+    hg_message="$(hg log --template='{desc}' -r$hg_rev)"
+
+    # Find corresponding parents in git
+    local hg_parent git_parent git_upstream_parent git_parents
+    set -- $hg_parents
+    while [ $# -ge 1 ]; do
+	hg_parent="${1%:*}"
+	git_parent=$(hg_rev_get_git_hash $hg_parent "$git_repo")
+	if [ -z "$git_parent" ]; then
+	    # This revision was not converted in this run or to an ancestor
+	    # of the current head in git, so we can't find it.  Convert
+	    # it again by recursion.  Let's hope we don't have to do this
+	    # too often!
+            echo "- converting missing ancestor $hg_parent"
+	    add_hg_rev_to_git "$hg_repo" $hg_parent "$git_repo"
+	    git_parent=$(hg_rev_get_git_hash $hg_parent "$git_repo")
+	    test -n "$git_parent"
+	fi
+	if [ -z "$git_upstream_parent" -a \
+	    -n "${hg_rev_has_latest_upstream[$hg_parent]}" ]; then
+	    git_upstream_parent=$git_parent
+	fi
+	git_parents="${git_parents:+$git_parents }$git_parent"
+	shift
+    done
+
+    # Export this revision on top of any parent with the latest upstream
+    # version, otherwise the first parent
+    cd "$git_repo"
+    if [ -n "$git_upstream_parent" ]; then
+	git checkout -f $git_upstream_parent
+    else
+	git checkout -f ${git_parents%% *}
+    fi
+    if [ -f drivers/net/ethernet/Kconfig ]; then
+	rm -rf drivers/net/sfc
+    else
+	rm -rf drivers/net/ethernet/sfc
+    fi
+    cd "$hg_repo"
+    hg update -C -r$hg_rev
+    make -C src/driver/linux_net KPATH="$git_repo" export
+
+    # Commit the new revision as a merger of the corresponding parents
+    cd "$git_repo"
+    if [ -f drivers/net/ethernet/Kconfig ]; then
+	git add drivers/net/ethernet/sfc/
+	git add -u drivers/net/ethernet/sfc/
+    else
+	git add drivers/net/sfc/
+	git add -u drivers/net/sfc/
+    fi
+    if [ -f include/trace/events/sfc.h ]; then
+	git add include/trace/events/sfc.h
+    fi
+    export GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_AUTHOR_DATE
+    local git_hash=$(printf '%s\n\norig-hg-hash: %s\n' "$hg_message" "$hg_hash" \
+	| git commit-tree $(git write-tree) -p ${git_parents// / -p })
+    git reset $git_hash
+
+    hg_rev_set_git_hash $hg_rev $git_hash
+    if [ -n "$git_upstream_parent" ]; then
+	hg_rev_has_latest_upstream[$hg_rev]=y
+    fi
+
+    # Apply tags
+    set -- $hg_tags
+    while [ $# -ge 1 ]; do
+	git tag -a -f -m "Exported from Mercurial $tag" "v5/$1" $git_hash
+	shift
+    done
+
+    cd "$hg_repo"
+}
+
+# Prepare local repo
+cd "$local_repo"
+old_tip_hash=$(git_get_hg_hash $v5_hg_dest)
+git reset --hard
+git clean -d -f -x
+
+# Fudge version test.  Must be >=2.6.9 and <3.0.
+mkdir -p include/generated
+echo >include/generated/utsrelease.h '#define UTS_RELEASE "2.6.42"'
+
+# Prepare a temporary clone of the v5 repo, with mq patches stripped.
+# Cloning on the same disk is supposed to be faster, but thaNFS.
+v5_hg_temp_repo="$(mktemp -d)"
+trap 'rm -rf "$v5_hg_temp_repo"' EXIT
+hg clone -U "$v5_hg_repo" "$v5_hg_temp_repo"
+cd "$v5_hg_repo"
+hg_qbase="$(hg log 2>/dev/null --template='{node}' -rqbase || true)"
+cd "$v5_hg_temp_repo"
+if [ -n "$hg_qbase" ]; then
+    hg strip $hg_qbase
+fi
+    
+old_tip_rev=$(hg_get_rev $old_tip_hash)
+hg_rev_has_latest_upstream[$old_tip_rev]=y
+tip_rev=$(hg_get_rev "$v5_hg_source")
+
+# Iterate over new changes
+for ((rev = old_tip_rev + 1; rev <= tip_rev; ++rev)); do
+    echo "converting new revision $rev"
+    add_hg_rev_to_git "$v5_hg_temp_repo" $rev "$local_repo"
+done
+
+cd "$v5_hg_temp_repo"
+new_head=$(hg_rev_get_git_hash $tip_rev "$local_repo")
+test -n "$new_head"
+cd "$local_repo"
+git branch -f $v5_hg_dest $new_head
+git push -f sfc $v5_hg_dest $(git tag | grep '^v5/')

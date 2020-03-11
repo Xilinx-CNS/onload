@@ -1,0 +1,14 @@
+# SPDX-License-Identifier: Solarflare-Binary
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+---
+products:
+  Onload:
+    version: 7.2.0
+  OpenOnload:
+    version: 7.2.0
+  CloudOnload:
+    version: 7.2.0
+  EnterpriseOnload:
+    version: 7.2.0
+...

@@ -1,0 +1,469 @@
+/****************************************************************************
+ * Driver for Solarflare network controllers and boards
+ * Copyright 2019 Solarflare Communications Inc.
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as published
+ * by the Free Software Foundation, incorporated herein by reference.
+ */
+
+#include "ef100_rep.h"
+#include "ef100_netdev.h"
+#include "ef100_nic.h"
+#include "mae.h"
+#include "rx_common.h"
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+
+#define EFX_EF100_VFREP_DRIVER	"efx_ef100_vfrep"
+#define EFX_EF100_VFREP_VERSION	"0.0.1"
+
+static void efx_ef100_vfrep_rx_work(struct work_struct *work);
+
+static int efx_ef100_vfrep_init_struct(struct efx_nic *efx,
+				       struct efx_vfrep *efv, unsigned int i)
+{
+	efv->parent = efx;
+	BUILD_BUG_ON(MAE_MPORT_SELECTOR_NULL);
+	efv->vf_idx = i;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
+	INIT_LIST_HEAD(&efv->rx_list);
+#else
+	__skb_queue_head_init(&efv->rx_list);
+#endif
+	spin_lock_init(&efv->rx_lock);
+	INIT_WORK(&efv->rx_work, efx_ef100_vfrep_rx_work);
+	efv->msg_enable = NETIF_MSG_DRV | NETIF_MSG_PROBE |
+			  NETIF_MSG_LINK | NETIF_MSG_IFDOWN |
+			  NETIF_MSG_IFUP | NETIF_MSG_RX_ERR |
+			  NETIF_MSG_TX_ERR | NETIF_MSG_HW;
+	return 0;
+}
+
+static int efx_ef100_vfrep_open(struct net_device *net_dev)
+{
+	return 0;
+}
+
+static int efx_ef100_vfrep_close(struct net_device *net_dev)
+{
+	return 0;
+}
+
+static netdev_tx_t efx_ef100_vfrep_xmit(struct sk_buff *skb,
+					struct net_device *dev)
+{
+	struct efx_vfrep *efv = netdev_priv(dev);
+	struct efx_nic *efx = efv->parent;
+	netdev_tx_t rc;
+
+	/* __ef100_hard_start_xmit() will always return success even in the
+	 * case of TX drops, where it will increment efx's tx_dropped.  The
+	 * efv stats really only count attempted TX, not success/failure.
+	 */
+	atomic_inc(&efv->stats.tx_packets);
+	atomic_add(skb->len, &efv->stats.tx_bytes);
+	netif_tx_lock(efx->net_dev);
+	rc = __ef100_hard_start_xmit(skb, efx->net_dev, efv);
+	netif_tx_unlock(efx->net_dev);
+	return rc;
+}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PORT_PARENT_ID)
+static int efx_ef100_vfrep_get_port_parent_id(struct net_device *dev,
+					      struct netdev_phys_item_id *ppid)
+{
+	struct efx_vfrep *efv = netdev_priv(dev);
+	struct efx_nic *efx = efv->parent;
+	struct ef100_nic_data *nic_data;
+
+	nic_data = efx->nic_data;
+	/* nic_data->port_id is a u8[] */
+	ppid->id_len = sizeof(nic_data->port_id);
+	memcpy(ppid->id, nic_data->port_id, sizeof(nic_data->port_id));
+	return 0;
+}
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
+static int efx_ef100_vfrep_get_phys_port_name(struct net_device *dev,
+					      char *buf, size_t len)
+{
+	struct efx_vfrep *efv = netdev_priv(dev);
+	struct efx_nic *efx = efv->parent;
+	struct ef100_nic_data *nic_data;
+	int ret;
+
+	nic_data = efx->nic_data;
+	ret = snprintf(buf, len, "p%upf%uvf%u", efx->port_num,
+		       nic_data->pf_index, efv->vf_idx);
+	if (ret >= len)
+		return -EOPNOTSUPP;
+
+	return 0;
+}
+#endif
+
+/* Nothing to configure hw-wise, just set sw state */
+static int efx_ef100_vfrep_set_mac_address(struct net_device *net_dev,
+					   void *data)
+{
+	struct sockaddr *addr = data;
+	u8 *new_addr = addr->sa_data;
+
+	ether_addr_copy(net_dev->dev_addr, new_addr);
+
+	return 0;
+}
+
+static int efx_ef100_vfrep_setup_tc(struct net_device *net_dev,
+				    enum tc_setup_type type, void *type_data)
+{
+	struct efx_vfrep *efv = netdev_priv(net_dev);
+	struct efx_nic *efx = efv->parent;
+
+	if (type == TC_SETUP_CLSFLOWER)
+		return efx_tc_flower(efx, net_dev, type_data, efv);
+	if (type == TC_SETUP_BLOCK)
+		return efx_tc_setup_block(net_dev, efx, type_data, efv);
+
+	return -EOPNOTSUPP;
+}
+
+static void efx_ef100_vfrep_get_stats64(struct net_device *dev,
+					struct rtnl_link_stats64 *stats)
+{
+	struct efx_vfrep *efv = netdev_priv(dev);
+
+	stats->rx_packets = atomic_read(&efv->stats.rx_packets);
+	stats->tx_packets = atomic_read(&efv->stats.tx_packets);
+	stats->rx_bytes = atomic_read(&efv->stats.rx_bytes);
+	stats->tx_bytes = atomic_read(&efv->stats.tx_bytes);
+	stats->rx_dropped = atomic_read(&efv->stats.rx_dropped);
+	stats->tx_errors = atomic_read(&efv->stats.tx_errors);
+}
+
+const struct net_device_ops efx_ef100_vfrep_netdev_ops = {
+	.ndo_open		= efx_ef100_vfrep_open,
+	.ndo_stop		= efx_ef100_vfrep_close,
+	.ndo_start_xmit		= efx_ef100_vfrep_xmit,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PORT_PARENT_ID)
+	.ndo_get_port_parent_id	= efx_ef100_vfrep_get_port_parent_id,
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
+	.ndo_get_phys_port_name	= efx_ef100_vfrep_get_phys_port_name,
+#endif
+	.ndo_set_mac_address    = efx_ef100_vfrep_set_mac_address,
+	.ndo_get_stats64	= efx_ef100_vfrep_get_stats64,
+	.ndo_setup_tc		= efx_ef100_vfrep_setup_tc,
+};
+
+static void efx_ef100_vfrep_get_drvinfo(struct net_device *dev,
+					struct ethtool_drvinfo *drvinfo)
+{
+	strlcpy(drvinfo->driver, EFX_EF100_VFREP_DRIVER, sizeof(drvinfo->driver));
+	strlcpy(drvinfo->version, EFX_EF100_VFREP_VERSION, sizeof(drvinfo->version));
+}
+
+static u32 efx_ef100_vfrep_ethtool_get_msglevel(struct net_device *net_dev)
+{
+	struct efx_vfrep *efv = netdev_priv(net_dev);
+	return efv->msg_enable;
+}
+
+static void efx_ef100_vfrep_ethtool_set_msglevel(struct net_device *net_dev,
+						 u32 msg_enable)
+{
+	struct efx_vfrep *efv = netdev_priv(net_dev);
+	efv->msg_enable = msg_enable;
+}
+
+const static struct ethtool_ops efx_ef100_vfrep_ethtool_ops = {
+	.get_drvinfo		= efx_ef100_vfrep_get_drvinfo,
+	.get_msglevel		= efx_ef100_vfrep_ethtool_get_msglevel,
+	.set_msglevel		= efx_ef100_vfrep_ethtool_set_msglevel,
+};
+
+static struct efx_vfrep *efx_ef100_vfrep_create_netdev(struct efx_nic *efx,
+						       unsigned int i)
+{
+	struct net_device *net_dev;
+	struct efx_vfrep *efv;
+	int rc;
+
+	net_dev = alloc_etherdev_mq(sizeof(*efv), 1);
+	if (!net_dev)
+		return ERR_PTR(-ENOMEM);
+
+	/* Ensure we don't race with ef100_{start,stop}_reps() and the setting
+	 * of efx->port_enabled under ef100_net_{start,stop}().
+	 */
+	rtnl_lock();
+	if (efx->port_enabled)
+		netif_carrier_on(net_dev);
+	else
+		netif_carrier_off(net_dev);
+	rtnl_unlock();
+
+	efv = netdev_priv(net_dev);
+	rc = efx_ef100_vfrep_init_struct(efx, efv, i);
+	if (rc)
+		goto fail1;
+	efv->net_dev = net_dev;
+
+	net_dev->netdev_ops = &efx_ef100_vfrep_netdev_ops;
+	net_dev->ethtool_ops = &efx_ef100_vfrep_ethtool_ops;
+	net_dev->features |= NETIF_F_HW_TC;
+	net_dev->hw_features |= NETIF_F_HW_TC;
+	return efv;
+fail1:
+	free_netdev(net_dev);
+	return ERR_PTR(rc);
+}
+
+static void efx_ef100_vfrep_destroy_netdev(struct efx_vfrep *efv)
+{
+	free_netdev(efv->net_dev);
+}
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+static int efx_ef100_vfrep_tc_egdev_cb(enum tc_setup_type type, void *type_data,
+				       void *cb_priv)
+{
+	struct efx_vfrep *efv = cb_priv;
+
+	switch (type) {
+	case TC_SETUP_CLSFLOWER:
+		return efx_tc_flower(efv->parent, NULL, type_data, efv);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+#endif
+
+static int efx_ef100_configure_rep(struct efx_vfrep *efv)
+{
+	struct efx_nic *efx = efv->parent;
+	int rc;
+
+	rc = efx_mae_allocate_mport(efx, &efv->mport_id, &efv->mport_label);
+	if (rc)
+		return rc;
+	netif_dbg(efv->parent, probe, efv->net_dev,
+		  "Representor mport ID %#x label %#x\n",
+		  efv->mport_id, efv->mport_label);
+	/* mport label should fit in 16 bits */
+	WARN_ON(efv->mport_label >> 16);
+	mutex_lock(&efx->tc->mutex);
+	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
+	if (rc)
+		goto fail1;
+	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF_REP(efv->vf_idx));
+	if (rc)
+		goto fail2;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+	rc = tc_setup_cb_egdev_register(efv->net_dev,
+					efx_ef100_vfrep_tc_egdev_cb, efv);
+	if (rc) {
+		efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF_REP(efv->vf_idx));
+		goto fail2;
+	}
+#endif
+out:
+	mutex_unlock(&efx->tc->mutex);
+	return rc;
+fail2:
+	efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
+fail1:
+	efx_mae_free_mport(efx, efv->mport_id);
+	goto out;
+}
+
+static void efx_ef100_deconfigure_rep(struct efx_vfrep *efv)
+{
+	struct efx_nic *efx = efv->parent;
+
+	mutex_lock(&efx->tc->mutex);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+	tc_setup_cb_egdev_unregister(efv->net_dev, efx_ef100_vfrep_tc_egdev_cb,
+				     efv);
+#endif
+	efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF_REP(efv->vf_idx));
+	efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
+	efx_mae_free_mport(efx, efv->mport_id);
+	mutex_unlock(&efx->tc->mutex);
+}
+
+int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct efx_vfrep *efv;
+	int rc;
+
+	efv = efx_ef100_vfrep_create_netdev(efx, i);
+	if (IS_ERR(efv)) {
+		rc = PTR_ERR(efv);
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to create representor for VF %d, rc %d\n", i,
+			  rc);
+		return rc;
+	}
+	nic_data->vf_rep[i] = efv->net_dev;
+	rc = efx_ef100_configure_rep(efv);
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to configure representor for VF %d, rc %d\n",
+			  i, rc);
+		goto fail1;
+	}
+	rc = register_netdev(efv->net_dev);
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to register representor for VF %d, rc %d\n",
+			  i, rc);
+		goto fail2;
+	}
+	netif_dbg(efx, drv, efx->net_dev, "Representor for VF %d is %s\n", i,
+		  efv->net_dev->name);
+	return 0;
+fail2:
+	efx_ef100_deconfigure_rep(efv);
+fail1:
+	nic_data->vf_rep[i] = NULL;
+	efx_ef100_vfrep_destroy_netdev(efv);
+	return rc;
+}
+
+void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct net_device *rep_dev;
+	struct efx_vfrep *efv;
+
+	rep_dev = nic_data->vf_rep[i];
+	if (!rep_dev)
+		return;
+	efv = netdev_priv(rep_dev);
+	efx_ef100_deconfigure_rep(efv);
+	nic_data->vf_rep[i] = NULL;
+	unregister_netdev(rep_dev);
+	efx_ef100_vfrep_destroy_netdev(efv);
+}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
+static void efx_ef100_vfrep_rx_work(struct work_struct *work)
+{
+	struct efx_vfrep *efv = container_of(work, struct efx_vfrep, rx_work);
+	struct list_head head;
+
+	INIT_LIST_HEAD(&head);
+	/* Grab all pending SKBs */
+	spin_lock(&efv->rx_lock);
+	list_splice_init(&efv->rx_list, &head);
+	spin_unlock(&efv->rx_lock);
+	/* Receive them */
+	netif_receive_skb_list(&head);
+}
+#else
+static void efx_ef100_vfrep_rx_work(struct work_struct *work)
+{
+	struct efx_vfrep *efv = container_of(work, struct efx_vfrep, rx_work);
+	struct sk_buff_head head;
+
+	__skb_queue_head_init(&head);
+	/* Grab all pending SKBs */
+	spin_lock(&efv->rx_lock);
+	skb_queue_splice_init(&efv->rx_list, &head);
+	spin_unlock(&efv->rx_lock);
+	/* Receive them */
+	netif_receive_skb_list(&head);
+}
+#endif
+
+void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_buf)
+{
+	u8 *eh = efx_rx_buf_va(rx_buf);
+	struct sk_buff *skb;
+
+	skb = netdev_alloc_skb(efv->net_dev, rx_buf->len);
+	if (!skb) {
+		atomic_inc(&efv->stats.rx_dropped);
+		netif_dbg(efv->parent, rx_err, efv->net_dev,
+			  "noskb-dropped packet of length %u\n", rx_buf->len);
+		return;
+	}
+	memcpy(skb->data, eh, rx_buf->len);
+	__skb_put(skb, rx_buf->len);
+
+	skb_record_rx_queue(skb, 0); /* vfrep is single-queue */
+
+	/* Move past the ethernet header */
+	skb->protocol = eth_type_trans(skb, efv->net_dev);
+
+	skb_checksum_none_assert(skb);
+
+	atomic_inc(&efv->stats.rx_packets);
+	atomic_add(rx_buf->len, &efv->stats.rx_bytes);
+
+	/* Add it to the rx list */
+	spin_lock(&efv->rx_lock);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
+	list_add_tail(&skb->list, &efv->rx_list);
+#else
+	__skb_queue_tail(&efv->rx_list, skb);
+#endif
+	spin_unlock(&efv->rx_lock);
+	/* Trigger rx work */
+	schedule_work(&efv->rx_work);
+}
+
+/* Returns the representor netdevice owning a dynamic m-port, or NULL.
+ * @mport is an m-port label, *not* an m-port ID!
+ */
+struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct efx_vfrep *efv;
+	unsigned int i;
+
+	if (nic_data->vf_rep)
+		for (i = 0; i < efx->vf_count; i++) {
+			if (!nic_data->vf_rep[i])
+				continue;
+			efv = netdev_priv(nic_data->vf_rep[i]);
+			if (efv->mport_label == mport)
+				return nic_data->vf_rep[i];
+		}
+	return NULL;
+}
+
+#else /* EFX_TC_OFFLOAD */
+
+int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i)
+{
+	/* Without all the various bits we need to make TC flower offload work,
+	 * there's not much use in VFs or their representors, even if we
+	 * technically could create them - they'd never be connected to the
+	 * outside world.
+	 */
+	if (net_ratelimit())
+		netif_info(efx, drv, efx->net_dev, "VF representors not supported on this kernel version\n");
+	return -EOPNOTSUPP;
+}
+
+void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i)
+{
+}
+
+const struct net_device_ops efx_ef100_vfrep_netdev_ops = {};
+
+void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_buf)
+{
+	WARN_ON_ONCE(1);
+}
+
+struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport)
+{
+	return NULL;
+}
+#endif /* EFX_TC_OFFLOAD */

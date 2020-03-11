@@ -1,0 +1,39 @@
+#!/bin/bash -e
+
+# Generate patches with the headers required in SLE.  Not sure how useful it is.
+
+declare -a shifted_args
+i=1
+mainline=
+references=
+while [ $# -ne 0 ]; do
+    case "$1" in
+	--mainline)
+	    mainline="$2"
+	    shift 2
+	    ;;
+	--references)
+	    references="$2"
+	    shift 2
+	    ;;
+	--)
+	    break
+	    ;;
+	*)
+	    shifted_args[$i]="$1"
+	    i=$((i+1))
+	    shift 1
+	    ;;
+    esac
+done
+
+git format-patch "${shifted_args[@]}" "$@" | while read name; do
+    printf '%s\n' "$name"
+    mv "$name" "$name".orig
+    MAINLINE="$mainline" REFERENCES="$references" awk '
+FNR == 1 { hash = $2 }
+/^$/ && hash != "" { print "Patch-mainline:", ENVIRON["MAINLINE"]; print "Git-commit:", hash; print "References:", ENVIRON["REFERENCES"]; hash = "" }
+FNR > 1 { print $0 }' \
+        "$name".orig > "$name"
+    rm "$name".orig
+done

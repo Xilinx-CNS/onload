@@ -1,0 +1,101 @@
+.. SPDX-License-Identifier: BSD-2-Clause
+.. X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+Onload Extensions API JNI Wrapper
+
+Introduction
+============
+
+This provides access to the Onload extensions API from within Java.
+The interface is defined in the class OnloadExt; and tightly mimics the
+documented C interface.
+All the extension methods are static; though simple unit tests are included in
+the java files in this directory.
+
+Dependencies
+============
+You need the Onload source installation, a java compiler and a C compiler.
+
+Build
+=====
+
+To build the JNI component, first you need to set the location of your
+onload source files and where you want the jni library put:
+	export ONLOAD=openonload/
+	export ONLOAD_LIB=/tmp/onload_ext_lib/
+	export TMP=/tmp/
+
+Then you need the Java include directories.  We can autodetect this from
+where java is installed:
+	export JAVA_HOME=$(readlink -f `which javac` | sed "s:bin/javac::")
+
+And now we can build the java classes, and create the headers from them:
+	cd $TMP
+	javac $ONLOAD/src/tools/jni/OnloadExt.java -d $ONLOAD_LIB
+	javac $ONLOAD/src/tools/jni/OnloadZeroCopy.java -d $ONLOAD_LIB
+	javac $ONLOAD/src/tools/jni/OnloadTemplateSend.java -d $ONLOAD_LIB
+	javac $ONLOAD/src/tools/jni/OnloadWireOrderDelivery.java -d $ONLOAD_LIB
+	javah -classpath $ONLOAD_LIB -d $TMP OnloadExt
+	javah -classpath $ONLOAD_LIB -d $TMP OnloadZeroCopy
+	javah -classpath $ONLOAD_LIB -d $TMP OnloadTemplateSend
+	javah -classpath $ONLOAD_LIB -d $TMP OnloadWireOrderDelivery
+
+Result should be files (class files in the $ONLOAD_LIB directory and header
+files in $TMP):
+	OnloadExt.h, OnloadExt.class,
+	OnloadExt_Stat.h, OnloadExt$Stat.class,
+	OnloadZeroCopy.h, OnloadZeroCopy.class,
+	OnloadZeroCopy_Callback.h,  OnloadZeroCopy_Callback.class,
+	OnloadTemplateSend.h, OnloadTemplateSend.class,
+	OnloadWireOrderDelivery.class, OnloadZeroCopy$1CallbackTest.class
+        OnloadWireOrderDelivery$FdEvent.class, OnloadWireOrderDelivery_FdEvent.h
+
+
+5. And finally build the actual JNI implementation:
+	gcc -fPIC -I${ONLOAD}/src/include/onload -L${ONLOAD_LIB}/onload_ext \
+		-I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux \
+		-lonload_ext -shared $ONLOAD/src/tools/jni/libOnloadExt.c \
+		-I${TMP} -o ${ONLOAD_LIB}/libOnloadExt.so
+
+The result of this build will be an extra library - libOnloadExt.so,
+in the $ONLOAD_LIB directory)
+
+You can remove the .h files from $TMP once this step is complete.
+
+
+Usage
+=====
+
+You can use the java classes in your application just like any others.
+But note that when invoked, your library path must be able to find the
+libOnloadExt.so file, or you will get an exception, and error message like:
+	"failed to load the jni shared library"
+You can alter your library path so that this file can be found with:
+	export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$ONLOAD_LIB
+Forcing early binding is also a good way to ensure that the library is
+correctly located:
+	export LD_BIND_NOW=y
+
+Extensions library usage
+========================
+
+This is documented in the Onload User Guide, and the class files have javadoc
+comments.
+One thing to note is that the wrapper works best when provided native file
+descriptors.  Not all Java classes expose these; we have implemented some
+overloads which work with common Java socket classes; but you may need to
+implement your own.
+
+Note that we use public static final int, rather than enums, so that we can be
+compatible with older versions of Java.
+
+Most calls will raise an exception if the application is not being run under
+Onload.  The exceptions to this rule are OnloadExt.IsPresent() and
+OnloadZeroCopy.IsZeroCopyEnabled() which check for availability.  If they
+return True, your application can safely use the other functions.
+
+The zerocopy library operates by calling the provided Callback function.
+You need to have a class implement this.
+An example is given in the OnloadZeroCopy.java file.
+The performance gains from using ZeroCopy are unfortunately not very
+substantial, given the extra work needed to pass through the JNI layer.
+

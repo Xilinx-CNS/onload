@@ -1,0 +1,21 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Check if header+library are available.
+header=$1
+lib=$2
+dir=$(mktemp -d)
+
+cat >$dir/checklib.c <<EOF
+#include "$header"
+int main(int argc, char ** argv) {return 0;}
+EOF
+if $CC $CFLAGS $dir/checklib.c -l$lib -o $dir/checklib &>/dev/null; then
+    echo 1
+else
+    echo "Failed to find lib$lib with header $header" >&2
+    echo 0
+fi
+
+rm -rf $dir

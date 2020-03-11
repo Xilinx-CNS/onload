@@ -1,0 +1,99 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Uninstall onload files from system directories.
+
+bin=$(cd $(dirname "$0") && /bin/pwd)
+me=$(basename "$0")
+
+err()  { echo >&2 "$*"; }
+log()  { err "$me: $*"; }
+fail() { log "$*"; exit 1; }
+try()  { "$@" || fail "FAILED: $*"; }
+
+usage() {
+  err
+  err "usage:"
+  err "  $me"
+  err
+  exit 1
+}
+
+uninstall_ldconfig() {
+  local manifest_pathname="$1"
+  local dir_to_clean=""
+  local path
+
+  for path in $(cat $manifest_pathname | grep "\.so") ; do
+    path=${path%/*}
+    [ "$dir_to_clean" = "$path" ] && continue
+
+    dir_to_clean="$path"
+    ldconfig -n $dir_to_clean
+  done
+}
+
+######################################################################
+# main
+
+PATH="$PATH:/sbin"; export PATH
+
+[ $# = 0 ] || usage
+
+libexec=/usr/libexec/onload
+manifest="$libexec/uninstall_manifest"
+i_include=$i_prefix/usr/include/onload
+
+[ -f "$manifest" ] ||
+  fail "ERROR: Uninstall manifest not found at '$manifest'"
+
+m=$(mktemp)
+try [ -n "$m" ]
+try cp "$manifest" "$m"
+rm -f "$manifest" || {
+  rm -f "$m"
+  fail "ERROR: You need to be 'root' to run this script."
+}
+
+log "Removing init scripts..."
+if [ -x /usr/lib/lsb/remove_initd ]; then
+  /usr/lib/lsb/remove_initd /etc/init.d/openonload;
+elif command -v chkconfig >/dev/null 2>&1 ; then
+  chkconfig --del openonload;
+elif command -v update-rc.d >/dev/null 2>&1 ; then
+  update-rc.d -f openonload remove;
+else
+  rm -f /etc/rc.d/rc*.d/*openonload;
+fi
+
+log "Removing OpenOnload files..."
+cd /
+exec 5<"$m" || exit
+while read -r f <&5; do
+  rm -rf "$f"
+done
+exec 5<&-
+
+rmdir $i_include &> /dev/null || \
+    log "Leaving $i_include directoy as it's not empty."
+
+uninstall_ldconfig $m
+
+# We deliberately do not deluser onload_cplane because we might be using it
+# again and it would be inconvenient for its ID to change (potentially). This
+# is also the normal behaviour for RPM and deb packages.
+
+log "Updating kernel module dependencies..."
+grep "^/lib/modules/" "$m" | sed 's+/lib/modules/\([^/]*\)/.*+\1+' |
+  sort | uniq |
+  while read -r kver; do
+    log "  $kver..."
+    /sbin/depmod "$kver"
+  done
+
+log "Removing temporary files..."
+rm -f "$m"
+
+log "Done."
+

@@ -1,0 +1,207 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Make build trees and compile.
+
+bin=$(cd $(dirname "$0") && /bin/pwd)
+me=$(basename "$0")
+
+err()  { echo >&2 "$*"; }
+log()  { err "$me: $*"; }
+fail() { log "$*"; exit 1; }
+try()  { "$@" || fail "FAILED: $*"; }
+
+
+usage() {
+  err
+  err "usage:"
+  err "  $me"
+  err
+  err "options:"
+  err "  --kernelver <ver>           - Specify kernel version for modules"
+  err "  --user                      - Build only user-level components"
+  err "  --kernel                    - Build only kernel modules"
+  err "  --keep                      - Keep the existing build tree"
+  err "  --debug                     - Build debug binaries"
+  err "  --strict                    - Compiler warnings are errors"
+  err "  --require-optional-targets  - Require optional targets"
+  if is_ppc ; then
+  err "  --ppc-at <path>             - Path to IBM Advanced Toolchain install"
+  fi
+  err "  --build-profile             - Specify a build profile"
+  err
+  exit 1
+}
+
+
+have_64bit_userland() {
+  mmaketool --userarch | grep -q 64
+}
+
+is_ppc () {
+  uname -m | grep -qi ppc
+}
+
+
+######################################################################
+# main
+
+PATH="$bin:$PATH"; export PATH
+
+strict=false
+kernel=false
+user=false
+user32=false
+user64=false
+all=true
+keepbuild=false
+ppc_at=
+NDEBUG=1; export NDEBUG
+build_profile=
+parallel=-j$(nproc 2> /dev/null || echo 4)
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+  --kernelver)  [ $# -gt 1 ] || usage; KVER="$2"; export KVER; shift;;
+  --kernelver=*)KVER=${1#--kernelver=};;
+  --user)       all=false; user=true;;
+  --user32)     all=false; user32=true;;
+  --user64)     all=false; user64=true;;
+  --kernel)     all=false; kernel=true;;
+  --keep)       keepbuild=true;;
+  --debug)	unset NDEBUG;;
+  --strict)     strict=true;;
+  --require-optional-targets) require_optional_targets=true;
+                              export require_optional_targets;;
+  --ppc-at)     is_ppc || usage; ppc_at="$2"; shift;;
+  --build-profile)   [ $# -gt 1 ] || usage; build_profile="$2"; shift;;
+  --build-profile=*) build_profile=${1#--build-profile=};;
+  -*)           usage;;
+  *)            break;;
+  esac
+  shift
+done
+
+[ $# = 0 ] || usage
+
+# Try to build 64-bit userland if they asked for it, or if this system
+# looks like it has a 64-bit userland.
+if $user64 || have_64bit_userland; then
+  is64=true
+else
+  is64=false
+fi
+
+if [ -n "$ppc_at" ]; then
+  try [ -d "$ppc_at" ]
+  try [ -x "$ppc_at/bin/cc" ]
+fi
+
+if [ -n "$ONLOAD_BUILD_STRICT" ] || $strict; then
+  unset MMAKE_LIBERAL
+  unset NOWERROR
+else
+  # We allow compiler warnings by default.
+  MMAKE_LIBERAL=1; export MMAKE_LIBERAL
+  NOWERROR=1; export NOWERROR
+fi
+
+# Use build profile if specified
+if [ -n "$build_profile" ]
+then
+    TRANSPORT_CONFIG_OPT_HDR="ci/internal/transport_config_opt_${build_profile}.h"
+    export TRANSPORT_CONFIG_OPT_HDR
+fi
+
+try cd "$bin/.."
+d=$(mmaketool --driverbuild)
+try [ -n "$d" ]
+$keepbuild || rm -rf build
+try mkdir -p build
+try cd build
+
+if $all || $kernel; then
+  # Kernel drivers.
+  if [ -d "$d" ]; then
+    nodeps=
+  else
+    try mmakebuildtree --driver -d "$d"
+    echo "EFX_WANT_CONTROL := 0" >>"$d/options_config.mk"
+    echo "EFX_EXPORTED := 1" >>"$d/options_config.mk"
+    nodeps=MMAKE_NO_DEPS=1
+  fi
+
+  TOP=$("$bin/mmaketool" --toppath)
+  driver_prebuilt="$("$bin/mmaketool" --processor)_linux"
+  if [ -d "$TOP/prebuilt/${driver_prebuilt}" ]; then
+    try cp -ad "$TOP/prebuilt/${driver_prebuilt}"/* "$d"
+  fi
+
+  make $parallel -C "$d" ONLOAD_ONLY=1 $nodeps ||
+    fail "ERROR: Failed to build driver components."
+fi
+
+if $all || $user || $user64; then
+  if $is64; then
+    # 64-bit user-level drivers and tools.
+    userplatform=$(mmaketool --userbuild)
+    if [ -d "$userplatform" ]; then
+      nodeps=
+    else
+      try mmakebuildtree "$userplatform"
+      nodeps=MMAKE_NO_DEPS=1
+    fi
+    
+    TOP=$("$bin/mmaketool" --toppath)
+    if [ -d "$TOP/prebuilt/$userplatform" ]; then
+      try cp -ad "$TOP/prebuilt/$userplatform" .
+    fi
+
+    make $parallel -C "$userplatform" ONLOAD_ONLY=1 $nodeps ||
+      fail "ERROR: Failed to build 64-bit user-level components."
+
+    if [ -n "$ppc_at" ]; then
+      if [ -d "${userplatform}_at" ]; then
+        nodeps=
+      else
+        try mmakebuildtree -d "${userplatform}_at" "$userplatform"
+        echo "export PATH := $ppc_at/bin:\$(PATH)" \
+             >>"${userplatform}_at/options_config.mk"
+        nodeps=MMAKE_NO_DEPS=1
+      fi
+      make $parallel -C "${userplatform}_at" ONLOAD_ONLY=1 $nodeps ||
+        fail "ERROR: Failed to build with IBM Advanced Tools ($ppc_at)"
+    fi
+  fi
+fi
+
+if $all || $user || $user32; then
+  # 32-bit user-level drivers and tools.
+  userplatform=$(mmaketool --userbuild_base32)
+  if [ -d "$userplatform" ]; then
+    nodeps=
+  else
+    try mmakebuildtree "$userplatform"
+    nodeps=MMAKE_NO_DEPS=1
+  fi
+
+  TOP=$("$bin/mmaketool" --toppath)
+  if [ -d "$TOP/prebuilt/$userplatform" ]; then
+    try cp -ad "$TOP/prebuilt/$userplatform" .
+  fi
+
+  make $parallel -C "$userplatform" ONLOAD_ONLY=1 $nodeps || {
+    if $is64; then
+      err
+      log "WARNING: Failed to build 32-bit user-level components."
+      log "WARNING: Most likely this is because 32-bit development"
+      log "WARNING: packages are not installed."
+      err
+    else
+      fail "ERROR: Failed to build 32-bit user-level components."
+    fi
+  }
+fi
+
+exit 0

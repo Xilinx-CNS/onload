@@ -1,0 +1,361 @@
+#!/usr/bin/env bash
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Creates a build tree.
+
+. "$(dirname "$0")/sh/fns"
+. "$bin/sh/mmake-fns"
+
+export PATH="$bin/sh:$bin:$PATH"
+
+######################################################################
+
+usage () {
+  err
+  err "usage:  $p [options] [platform]"
+  err
+  err "options:"
+  err "  -d <directory-name>    - override name of build destination directory"
+  err "  -c --custom            - present custom / non-supported builds"
+  err "  -b|--build-dir <path>  - override default build directory path"
+  err "useful quick build selections for the current machine:"
+  err "  --driver               - make driver tree for this machine"
+  err "  --gnu|--user           - make gnu/user tree for  this machine"
+  err "  --cc <compiler>        - explicitly specify a compiler"
+  err "                           (primarily for cross-compilation)"
+  err
+  err "Environment variables used (via mmaketool):"
+  err "  MMAKETOOL_ADD_LIBC    - add gcc library version to build dir, if set"
+  err "  MMAKETOOL_ADD_DISTRIBUTION - add linux distn to build dir, if set"
+  err "  MMAKETOOL_ADD_HOST    - add host name to build dir, if set"
+  err "  MMAKETOOL_DISTFILES   - location of distfiles repository"
+  err "  CC                    - use the specified compiler, if set"
+  err "  CROSS_COMPILE, ARCH   - passed to the kernel build, if set"
+  exit 1
+}
+
+
+check_dir () {
+  [ -d "$1" ] && return 0
+  log "$p: Not in a mmake build directory"
+  log "    (cannot find directory '$1')"
+  log
+  usage
+}
+
+
+check_platform_exists () {
+  [ -f "$TOPPATH/mk/platform/$1.mk" ] && return 0
+  pwd
+  log "$p: Platform '$1' not known"
+  log "    (cannot find file '$TOPPATH/mk/platform/$1.mk')"
+  log
+  usage
+}
+
+
+choose_platform () {
+  local done=false  # hack for bash v1, which does not return on return!
+  echo "Select platform:"
+  select PLATFORM in $("$mmaketool" $what); do
+    [ -z "$PLATFORM" ] && fail "Aborted."
+    done=true
+    return
+  done
+  $done || fail "Aborted."
+}
+
+
+do_top_level () {
+  cat <<-EOF >options_config.mk
+	$cflags
+	$cppflags
+	$ndebug
+	$gcov
+	$mmake_toolchain
+	$mmake_distfiles
+	$mmake_firmware
+	$vpath_mode
+	$osol_build
+	$build_eftest
+	EOF
+
+  have_libelf_line=
+  if [[ ! "$PLATFORM" == *"linux" ]]; then
+    HAVE_LIBELF=$(TOPPATH="$TOPPATH" make -s -f <(cat - <<HERE
+include $TOPPATH/mk/platform/$PLATFORM.mk
+.PHONY: all
+all:
+	@CC="\${CC}" CFLAGS="\${CFLAGS} \${MMAKE_CFLAGS}" check_library_presence libelf.h elf 2>/dev/null
+HERE
+    ))
+    if [ ! -z $require_optional_targets ] && [ "$HAVE_LIBELF" -ne 1 ]; then
+      echo Failed to find libelf with header libelf.h
+      exit -1
+    fi
+    have_libelf_line="HAVE_LIBELF := $HAVE_LIBELF"
+  fi
+
+
+  cat <<-EOF >config.mk
+	PLATFORM := $PLATFORM
+	BUILDPATH := $BUILDPATH
+	SRCPATH := $SRCPATH
+	TOPPATH := $TOPPATH
+	BUILDENV := $($mmaketool --distribution)-$(gcc -dumpmachine)
+	$crosscc
+	$crosscompile
+	$crossarch
+	W_NO_UNUSED_RESULT := $W_NO_UNUSED_RESULT
+	W_NO_STRING_TRUNCATION := $W_NO_STRING_TRUNCATION
+	W_IMPLICIT_FALLTHROUGH := $W_IMPLICIT_FALLTHROUGH
+	W_NO_IGNORED_ATTRIBUTES := $W_NO_IGNORED_ATTRIBUTES
+	$have_libelf_line
+	$nt
+	$kpath
+EOF
+  echo "$PLATFORM" >mmake_platform
+}
+
+do_build_tree () {
+   local dir=$1
+
+   if [ "$INBUILD" = 1 ]; then
+       #log "cleaning $BUILDPATH/$THISDIR/*"
+       rm -rf "$BUILDPATH/$THISDIR"/*
+       cd "$BUILDPATH/$THISDIR"
+   else
+      if [ ! -d $dir ]; then
+         #log "making $dir"
+         try mkdir -p "$dir"
+      else
+         #log "cleaning $dir"
+         rm -rf $dir/*
+      fi
+      cd $dir
+   fi
+
+  [ "$CURRENT" = src ] && do_top_level
+  export MMAKE_NO_DEPS=1
+
+  recurse
+}
+
+
+recurse () {
+  # Invoke mmake, which will invoke mmakebuildtree_gen in the context of
+  # the make variables that are appropriate for this platform.
+
+  # mmakebuildtree_gen generates platform-specific makefiles, and does some
+  # more sym-linking to import source files.
+
+  [ -a "$TOPPATH/$CURRENT/mmake.mk" ] || return 0
+
+  csubdirs=$("$bin"/mmake -s buildtree MMAKEBUILDTREE=1)
+  [ $? = 0 ] || fail "mmake buildtree MMAKEBUILDTREE=1 FAILED"
+
+  for f in $csubdirs; do
+    try mkdir -p "$f"
+    (
+      THISDIR="$THISDIR/$f"
+      CURRENT="$CURRENT/$f"
+      try cd "$f"
+      recurse
+    ) || return
+  done
+}
+
+######################################################################
+# main()
+
+BUILD=.
+CURRENT=src
+THISDIR=.
+PLATFORM=
+BUILDPATH=
+SRCPATH=
+BUILDENV=
+INBUILD=0
+W_NO_UNUSED_RESULT=
+
+dest=
+what="--platforms"
+builddir=
+custom=0
+driver=
+gnu=
+
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -d)	if [ -z "$2" ]; then usage; fi; dest="$2"; shift;;
+    -c|--custom) custom=1; what="--allplatforms"; shift;;
+    -b|--build-dir) if [ -z "$2" ]; then usage; fi; builddir="$2";  shift;;
+    --driver) driver=1;;
+    --gnu|--user) gnu=1;;
+    --cc) CC="$2"; shift;;
+    --help | -*) usage;;
+    *)	break;;
+  esac
+  shift
+done
+
+case $# in
+ 0)	;;
+ 1)	PLATFORM="$1";;
+ *)	usage;;
+esac
+
+unset crosscc crosscompile crossarch
+if [ -n "$CC" ]; then
+    [ -z "$CROSS_COMPILE" ] && CROSS_COMPILE="$($CC -dumpmachine)-"
+    export CC
+    export CROSS_COMPILE
+    crosscc="export CC := $CC"
+    crosscompile="export CROSS_COMPILE := $CROSS_COMPILE"
+
+    # we only need ARCH for kernel builds
+    if [ -z "$gnu" ]; then
+        if [ -z "$ARCH" ]; then
+            case "${CROSS_COMPILE%%-*}" in
+                x86_64|i[3456]86)
+                    ARCH=x86
+                    ;;
+                arm*)
+                    ARCH=arm
+                    ;;
+                aarch64)
+                    ARCH=arm64
+                    ;;
+                powerpc*)
+                    ARCH=powerpc
+                    ;;
+                *)
+                    log "ERROR: cannot deduce kernel arch"
+                    exit 1
+                    ;;
+            esac
+        fi
+        export ARCH
+        crossarch="export ARCH := $ARCH"
+    fi
+fi
+
+# Sort out GNU builds
+if [ -n "$gnu" ]; then
+  PLATFORM=$(mmaketool --userbuild_base);
+  [ -z "$dest" ] && dest=$(mmaketool --userbuild)
+fi
+
+mmaketool="$bin/mmaketool"
+
+if "$mmaketool" --inbuild; then
+  INBUILD=1
+  try orient-in-build-tree
+
+  # N.B. this may set PLATFORM to a nic-prefixed value
+  [ -f "$BUILDPATH/options_config.mk" ] && sourceconfig "$BUILDPATH/options_config.mk"
+
+else
+  TOPPATH=$("$mmaketool" --toppath)
+  cd $TOPPATH
+fi
+
+[ -n "$driver" ] && {
+  [ -n "$PLATFORM" ] && fail "Cannot specify both driver and platform."
+  [ -z "$dest" ] && {
+    # This must be a kernel driver build
+    dest=$($mmaketool --driverbuild)
+    [ -d "$dest" ] && fail "Build tree for driver is $dest"
+  }
+  PLATFORM=$($mmaketool --driverbuild_base)
+  # Sanity checking
+  kernel=$(uname -s)
+  kernel=$(echo "$kernel" | tr '[A-Z]' '[a-z]')
+  [ -z "$KVER" ] && KVER=$(uname -r)
+  [ -d "$KPATH" ] || {
+    modules="/lib/modules/$KVER"
+    [ -d "${modules}" ] || fail "No kernel modules at '$modules'"
+    KPATH=$(readlink -f "${modules}/build")
+    [ -d "$KPATH" ] || fail "No kernel build at '$KPATH'"
+  }
+}
+
+# Choose platform if it is not set and add nic type
+if [ -z "$PLATFORM" ]; then
+    choose_platform
+fi
+check_platform_exists "$PLATFORM"
+
+[ "$CURRENT" = src ] && {  # Going to need to make top-level config files.
+  unset kpath cflags cppflags ndebug mmake_toolchain mmake_distfiles mmake_firmware
+  echo "$PLATFORM" | grep linux >/dev/null && {
+    [ -n "$KPATH" ] && {
+      kpath="KPATH := $KPATH"
+      [ -f "$KPATH/config.mk" ] && sourceconfig "$KPATH/config.mk"
+    }
+  }
+  [ -n "$CFLAGS"   ] && cflags="CFLAGS := $CFLAGS"
+  [ -n "$CPPFLAGS" ] && cppflags="CPPFLAGS := $CPPFLAGS"
+  [ -n "$NDEBUG"   ] && ndebug="NDEBUG := $NDEBUG"
+  [ -n "$GCOV"     ] && gcov="GCOV := $GCOV"
+
+  [ -n "$MMAKE_TOOLCHAIN"   ] && mmake_toolchain="MMAKE_TOOLCHAIN := $MMAKE_TOOLCHAIN"
+  [ -n "$MMAKE_DISTFILES"   ] && mmake_distfiles="MMAKE_DISTFILES := $MMAKE_DISTFILES"
+}
+
+[ -z "$dest" ] && dest="$PLATFORM"
+
+case "$PLATFORM" in
+   *linux)       VPATH_ENABLED=0;;
+   *x86_win32_*) VPATH_ENABLED=0;;
+   *x64_win64_*) VPATH_ENABLED=0;;
+   *_wxp)        VPATH_ENABLED=0;;
+   *_wnet)       VPATH_ENABLED=0;;
+   *_wlh)        VPATH_ENABLED=0;;
+   *_win7)       VPATH_ENABLED=0;;
+   *)            VPATH_ENABLED=1;;
+esac
+vpath_mode="VPATH_ENABLED := $VPATH_ENABLED"
+
+# Disable unused-result warning for Ubuntu build, because of extra checking
+# of unused values returned by functions e.g. in logging code.
+if [ -n "$($mmaketool --distrib_is_ubuntu)" ] ; then
+  W_NO_UNUSED_RESULT="1"
+  if [ "$($mmaketool --gcc_major_version)" -ge 6 ] ; then
+    W_NO_IGNORED_ATTRIBUTES="1"
+  fi
+fi
+
+# Disable stringop-truncation and format-truncation warnings for gcc-8.
+# It is exactly why we use all the strncpy and snprintf calls - to truncate
+# output and avoid memory corruption.
+if [ "$($mmaketool --gcc_major_version)" -ge 8 ] ; then
+  W_NO_STRING_TRUNCATION="1"
+fi
+
+if [ "$($mmaketool --gcc_major_version)" -ge 7 ] ; then
+  W_IMPLICIT_FALLTHROUGH="1"
+fi
+
+[ -z "$SRCPATH" ] && SRCPATH=$("$mmaketool" --toppath)/src
+
+if [ -z "$BUILDPATH" ] ; then
+    if [ -z "$builddir" ]; then
+        BUILDPATH="$TOPPATH/build/$dest"
+    else
+        BUILDPATH="$builddir/$dest"
+    fi
+fi
+
+do_build_tree "$BUILDPATH"
+rc=$?
+
+if [ $rc -eq 0 ]; then
+   echo "Build tree made for $PLATFORM as $dest"
+else
+   echo "Failed to build tree for $PLATFORM - exit $rc"
+fi
+
+exit $rc

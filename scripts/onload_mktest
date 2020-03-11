@@ -1,0 +1,243 @@
+#!/bin/bash -eu
+##############################################################################
+# Mix specified netdriver + onload from this tree
+# Push to onload-tests repo
+# See http://intranet.solarflarecom.com/staffwiki/OpenOnloadRepos
+# Puts the changes onto a staging branch for subsequent review
+##############################################################################
+
+set -o pipefail
+
+bin=$(cd $(dirname "$0") && /bin/pwd)
+me=$(basename "$0")
+
+err()  { echo >&2 "$*"; }
+log()  { err "$me: $*"; }
+fail() { log "$*"; exit 1; }
+try()  { "$@" || fail "FAILED: $*"; }
+
+# Constants
+staging_branch="onload_mktest_staging"
+
+# Settings
+legacyrepo="/project/hg/incoming/v5"
+netrepo="/project/ci/git/linux-net"
+fwrepo="/project/hg/incoming/sfutils_config"
+fwtag=""
+legacytag="default"
+
+usage() {
+  err
+  err "usage:"
+  err "  $me [options] <net driver changeset>"
+  err
+  err "options:"
+  err "  --netrepo=<path-to-repository> repository to get drivers from"
+  err "  --legacyrepo=<path-to-repository> legacy repository to get common 'v5' files from"
+  err "  --fwtag=<tag>"
+  err "  --legacytag=<tag>"
+  err "  --debug" 
+  err "  --nomcdi" 
+  exit 1
+}
+
+# Create the commit log for a new patch
+newpatch() {
+    local pname="$1"
+    local msg="$2"
+    echo "onload_mktest_$pname: $msg"
+}
+
+# Commit a patch if there's something to commit
+commitif() {
+    git status -s -uno
+    if [ -n "$(git status --porcelain -uno)" ]; then
+      git commit -m "$*"
+    else
+        echo "nothing to commit: omitting patch"
+    fi
+}
+
+
+# Execute a git command in a given repository.
+git-in() {
+    local repo="$1"
+    shift
+    # This is preferable to using --git-dir because then the user does
+    # not have to specify the .git directory for non-bare repos.
+    ( cd "$repo" && git "$@" )
+}
+
+
+# Export a set of files from a given revision of a given repository
+hg-export() {
+    local repo="$1"
+    local rev="$2"
+    shift 2
+    (
+	cd $repo
+	hg archive -r "$rev" \
+	   $(for i in "$@"; do echo "-I $i"; done) \
+	   -t tar -p '.' -
+    )
+}
+
+
+# Export a set of files from a given revision of a given repository
+git-export() {
+    local repo="$1"
+    local rev="$2"
+    shift 2
+    (
+	cd $repo
+	local extant_files=$(git ls-tree -r --name-only $rev "$@")
+	git archive $rev $extant_files
+    )
+}
+
+
+###############################################################################
+# main()
+
+push=false
+mcdi=true
+tmpdir=
+
+# CLI handling
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --netrepo=*)  netrepo=${1#--netrepo=};;
+    --netrepo)  shift; netrepo="$1";;
+    --legacyrepo=*)  legacyrepo=${1#--legacyrepo=};;
+    --legacyrepo)  shift; legacyrepo="$1";;
+    --fwtag=*) fwtag=${1#--fwtag=};;
+    --fwtag) shift; fwtag="$1";;
+    --legacytag=*) legacytag=${1#--legacytag=};;
+    --legacytag) shift; legacytag="$1";;
+    --debug) set -x;;
+    --nomcdi) mcdi=false;;
+    -*)  usage;;
+    *)   break;;
+  esac
+  shift
+done
+[ $# = 1 ] || usage
+netrev=$1
+
+
+###############################################################################
+echo "*** Please consult http://tinderbox/ to check that the current onload test engine is building without error on the default branch (to avoid bad tags) ***"
+read -p "Press enter to proceed ..."
+echo "Thanks, proceeding ..."
+
+echo "===== Sanity checks ====="
+[ "$EUID" != "0" ] || fail "Please do not run as root"
+export PATH="$bin:$PATH"
+top=$(mmaketool --toppath)
+[ -d "$top" ] || fail "Is mmaketool in your PATH?"
+cd "$top"
+
+[ -n "$netrepo" ] || netrepo="$top"
+[ -d "$netrepo" ] || fail "--netrepo is not valid"
+[ -d "$legacyrepo" ] || fail "--legacyrepo is not valid"
+onloadid=$(git describe --always --dirty=+)
+[ "${onloadid/\+/|/}" == "${onloadid}" ] ||
+  fail "onload repo has local changes.  See git status."
+git checkout -b "$staging_branch" || \
+    fail "$staging_branch branch already exists; clean up before re-running"
+
+# Validate the supplied net revision spec
+rawnetrev=$(git-in "$netrepo" rev-parse --verify "$netrev") || \
+    fail "Unknown revision '$netrev' in '$netrepo'"
+
+# Canonicalise the supplied net revision spec if not a tag
+git-in "$netrepo" rev-parse -q --verify "refs/tags/${netrev}" > /dev/null ||
+    netrev="${rawnetrev}"
+
+if [ -n "$fwtag" ] && ! hg -R "$fwrepo" id -r "$fwtag" > /dev/null 2>&1; then
+    fail "'$fwtag' does not exist in '$fwrepo'."
+fi
+
+if [ -n "$legacytag" ] && ! hg -R "$legacyrepo" id -r "$legacytag" > /dev/null 2>&1; then
+    fail "'$legacytag' does not exist in '$legacyrepo'."
+fi
+
+# Canonicalise the legacy name if it is not a valid tag
+if [ "$legacytag" == tip ] || [ "$(hg id -R "$legacyrepo" -r "$legacytag" -t)" != "$legacytag" ]; then
+    legacytag=$(hg id -R "$legacyrepo" --id -r ${legacytag})
+fi
+
+###############################################################################
+tmpdir=$(mktemp -d $me.XXXXXX)
+echo "In case of failure, please clean up temporary directory: $tmpdir"
+
+echo -e "\n\n===== revert to specified net driver ====="
+commitlog=$(newpatch net_driver "Replacing net driver with ${netrev}")
+
+# Compute net driver files that should be added and removed, excluding
+# the glue makefile from consideration
+legacy_driver_path=src/driver/linux_net
+canon_driver_path=drivers/net/ethernet/sfc
+netgot="$tmpdir/netgot"
+netwant="$tmpdir/netwant"
+glue_makefile_pattern="mmake.mk$"
+git ls-files \
+  src/driver/linux_net \
+    | grep -v ${glue_makefile_pattern} | sort > ${netgot}
+git-export "$netrepo" "$netrev" $canon_driver_path \
+    | tar xv -C $legacy_driver_path --strip-components 4 \
+    | sed s,^${canon_driver_path},${legacy_driver_path},g \
+    | sort > "$netwant"
+grep -q "$glue_makefile_pattern" "$netwant" && \
+    fail "mmake.mk found in non v5-style driver source would overwrite static glue."
+
+for file in $(comm -1 ${netgot} ${netwant}); do
+    git add ${file}
+done
+for file in $(comm -1 -3 ${netwant} ${netgot}); do
+    git rm ${file}
+done
+commitif $commitlog
+
+if [ -n "$fwtag" ]; then
+    echo -e "\n\n===== set specified firmware by changing imports.mk ====="
+    commitlog=$(newpatch firmware "$me: Change to import firmware ${netrev}")
+    sed -i -n '/FIRMWARE_VERSION/!p' imports.mk
+    echo "FIRMWARE_VERSION=${fwtag}" >> imports.mk
+    git add imports.mk
+    commitif "$commitlog"
+fi
+
+if $mcdi; then
+    echo -e "\n\n===== copying specified MCDI header ====="
+    commitlog=$(newpatch mcdi "Replacing MCDI header with ${legacytag}")
+    importhdr="mc_driver_pcol.h"
+    sourcedir="src/include/ci/mgmt/"
+    destdir="src/include/ci/efhw/"
+    transformpath="s+${sourcedir}+${destdir}+"
+
+    # Archive the correct revision of the header, then extract it to the
+    # correct onload location
+    files=$(hg-export "$legacyrepo" "$legacytag" \
+        "${sourcedir}/${importhdr}" | \
+        tar xv --transform="$transformpath" | sed $transformpath)
+
+    # This applies the license tagging, split across lines to avoid it
+    # looking like a license tag itself.  If v5 is updated to contain license
+    # tags we can remove this.
+    sed -i '1s+^+DX-Copyright-Text: (c) Solarflare Communications Inc */\n+' ${destdir}/${importhdr}
+    sed -i '1s+^+DX-License-Identifier: GPL-2.0 */\n/* X-SP+' ${destdir}/${importhdr}
+    sed -i '1s+^+/* SP+' ${destdir}/${importhdr}
+
+    git add $files
+    commitif "$commitlog"
+fi
+
+[ -n "$tmpdir" ] && rm -Rf ${tmpdir}
+
+echo
+echo "The next steps are manual:"
+echo "  1. Test the branch $staging_branch in tinderbox"
+echo "  2. Merge into your release or master branch"
+echo "  3. Push"
+

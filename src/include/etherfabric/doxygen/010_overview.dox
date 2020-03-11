@@ -1,0 +1,185 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/****************************************************************************
+ * Copyright 2004-2005: Level 5 Networks Inc.
+ * Copyright 2005-2018: Solarflare Communications Inc,
+ *                      7505 Irvine Center Drive, Suite 100
+ *                      Irvine, CA 92618, USA
+ *
+ * Maintained by Solarflare Communications
+ *  <linux-xen-drivers@solarflare.com>
+ *  <onload-dev@solarflare.com>
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License version 2 as published
+ * by the Free Software Foundation, incorporated herein by reference.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ ****************************************************************************
+ */
+
+/**************************************************************************\
+*//*! \file
+** \author    Solarflare Communications, Inc.
+** \brief     Additional Doxygen-format documentation for ef_vi.
+** \date      2018/11/06
+** \copyright Copyright &copy; 2018 Solarflare Communications, Inc. All
+**            rights reserved. Solarflare, OpenOnload and EnterpriseOnload
+**            are trademarks of Solarflare Communications, Inc.
+*//*
+\**************************************************************************/
+
+/**************************************************************************
+ * Overview page
+ *************************************************************************/
+ /*! \page overview Overview
+
+This part of the documentation gives an overview of %ef_vi and how it is
+often used.
+
+\section capabilities Capabilities
+
+Ef_vi is a low level OSI level 2 interface which sends and receives raw
+Ethernet frames. It is essentially a thin wrapper around the VNIC (virtual
+network interface controller) interface offered by the network adapters.
+It exposes, and can be used with, many of the advanced capabilities of
+Solarflare network adapters, including:
+- Checksum offloads
+- Hardware time stamping (RX and TX)
+- Switching functions, including:
+  - multicast replication
+  - loopback
+  - VLAN tag insert/strip
+- Load spreading by hashing (also known as receive-side scaling) and flow
+  steering
+- Data path sniffing
+- PIO mode for low latency
+- CTPIO mode for ultra-low latency
+- Scatter gather transmit and receive
+- PCI pass-through and SR-IOV for virtualized environments.
+
+But because the %ef_vi API operates at this low level, any application
+using it must implement the higher layer protocols itself, and also deal
+with any exceptions or other unusual conditions.
+
+\section flexibility Flexibility
+
+A key advantage of %ef_vi when compared to other similar technologies is
+the flexibility it offers. Each %ef_vi instance can be thought of as a
+virtual port on the network adapter's switch. Ef_vi can be used to handle
+all packets associated with a physical port, or just a subset. This means
+that %ef_vi can be used in parallel with the standard Linux kernel network
+stack and other acceleration technologies such as Solarflare's OpenOnload
+sockets acceleration. For example, a trading application might use %ef_vi
+to receive UDP market data, but use Onload sockets to make TCP trades.
+
+\section scalability Scalability
+
+Ef_vi is also very scalable. Each physical network port on Solarflare's
+network adapters supports up to 1024 VNIC interfaces. There can be many
+independent channels between software and the adapter, which can be used
+to spread load over many cores, or to accelerate large numbers of virtual
+machines and applications simultaneously.
+
+\section use_cases Use cases
+
+This section gives some examples of how %ef_vi can and is being used:
+
+\subsection sockets Sockets acceleration
+
+Ef_vi can be used to replace the BSD sockets API, or another API, for
+sending and receiving streams of traffic. A common example is handling
+multicast UDP datagrams in electronic trading systems, where low latency
+is needed and message rates can be very high.
+
+In this scenario the application establishes an %ef_vi instance, and
+specifies which packets it would like to receive via this path. For
+example, an application can select UDP packets with a given destination IP
+address and port number. All other packets arriving at the network
+interface continue to be delivered to the regular driver in the kernel
+stack via a separate path, so only the packets that need to be accelerated
+are handled by %ef_vi.
+
+Applications can create multiple %ef_vi instances if needed to handle
+different streams of packets, or to spread load over multiple threads. If
+transmitting threads each have their own %ef_vi instance then they can
+transmit packets concurrently without interlocking and without sharing
+state. This improves efficiency considerably.
+
+\subsection capture Packet capture
+
+Solarflare's SolarCapture software is built on top of the %ef_vi API. Like
+traditional capture APIs %ef_vi can be used to capture all of the packets
+arriving at a network port, or a subset. Ef_vi can capture traffic from a
+10 gigabit link at line rate at all packet sizes with a single core, and
+can provide a hardware timestamp for each captured packet.
+
+In "sniffing" mode an %ef_vi instance receives a copy of packets
+transmitted and/or received by other applications on the host.
+
+\subsection replay Packet replay
+
+Ef_vi can transmit packets from host memory to the network at very high
+rates, so can be used to construct high performance packet replay
+applications. (This is another feature of the SolarCapture software).
+
+\subsection end_station Application as an end-station
+
+Ef_vi can select packets by destination MAC address, which allows an
+application to behave as if it were a separate end-station on the Ethernet
+network. This can be used to implement arbitrary protocols over Ethernet,
+or to develop applications that simulate behaviour of an end station for
+benchmarking or test purposes.
+
+Other applications and virtual machines on the host can use the adapter at
+the same time, via kernel stack, via %ef_vi or via OpenOnload. The
+application simulating an end-station can communicate with those
+applications via the adapter, as well as with other remote applications
+over the physical network.
+
+\subsection bridging Software defined bridging, switching and routing
+
+Ef_vi is ideally suited to applications that forward packets between
+physical or virtual network ports. Zero-copy makes the forwarding path
+very efficient, and forwarding can be achieved with very low latency.
+
+An %ef_vi instance can be configured to receive "mismatching" packets.
+That is, all packets not wanted by other applications or virtual machines
+on the same host. This makes it possible to forward packets to another
+network segment without knowing the MAC addresses involved, and without
+cutting the host OS off from the network.
+
+Applications include: High performance firewall applications, network
+monitoring, intrusion detection, and custom switching and routing. Packets
+can be forwarded between physical ports and/or between virtual ports.
+(Virtual ports are logical network ports associated with virtual machines
+using PCI pass-through).
+
+Ef_vi is particularly well suited to Network Functions Virtualization (NFV).
+
+\section activation_requirements Activation requirements
+
+The activation requirements for ef_vi depend on the network adapter being used:
+
+- If an SFN7000 series adapter is being used, it must have an Onload
+  activation key installed.
+
+- If an SFN8000 or X2 series adapter is being used, and the fastest
+  performance is required, an Onload activation key must be installed.
+
+  Without an Onload activation key, the EF_VI_RX_EVENT_MERGE flag must be set
+  when allocating a virtual interface. This typically reduces performance.
+
+\subsection sniffing Using sniffing
+
+A SolarCapture Pro activation key is always required to use "sniffing" mode,
+whatever network adapter is used.
+
+*/

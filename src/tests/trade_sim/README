@@ -1,0 +1,61 @@
+.. SPDX-License-Identifier: GPL-2.0
+.. X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+Introduction
+------------
+
+ This directory contains a set of sample applications that demonstrate
+ various techniques to reduce latency.  These techniques are often useful
+ in electronic trading applications, and so these samples take the form of
+ an extremely simplified electronic trading system.
+
+ You need two components to run a test:
+
+   exchange: This application plays the role of an exchange.
+
+   trader_onload_ds_efvi: This application plays the role of traders.  The
+             implementation illustrates various technologies and techniques.
+
+ The exchange application accepts a TCP connection from a trader
+ application, and publishes a stream of UDP messages which play the role of
+ market data messages.  A subset of these market data messages contain a
+ magic string.
+
+ The trader application receives the stream of UDP messages, and when it
+ sees the magic string it sends a message on the TCP socket.  This TCP
+ message plays the role of an order submitted to the exchange.  The goal of
+ the trader is to respond to the magic string as quickly as possible.
+
+ The exchange application timestamps the market data messages, and
+ timestamps orders received from the trader.  It then compares these
+ timestamps to measure latency.  When used with Onload the exchange uses
+ hardware timestamps if possible, so that the latency measured excludes the
+ contribution of the exchange application itself.
+
+
+Running
+-------
+
+ First start the exchange application.  It is desirable to use Onload
+ acceleration in order to be able to use hardware timestamps (or to get
+ more accurate timestamps if hardware timestamping is not supported by your
+ network adapter).
+
+   # eth5 is the network interface that will be used for "market data"
+   onload -p latency-best ./exchange eth5
+
+ Then start the trader application on another host:
+
+   # eth3 is the network interface that "market data" is expected on.
+   # exchange-host is a name that resolves to an IP address of the host
+   # running "exchange".
+   onload -p latency-best ./trader_onload_ds_efvi eth3 exchange-host
+
+
+Applications
+------------
+
+ trader_onload_ds_efvi
+
+   This implementation illustrates the Onload extensions API, including the
+   delegated sends API.  It uses BSD sockets with Onload acceleration for
+   UDP receive, and ef_vi for the low-latency send path.

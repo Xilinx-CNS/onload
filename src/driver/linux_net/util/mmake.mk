@@ -1,0 +1,2 @@
+include $(TOPPATH)/$(CURRENT)/Makefile
+

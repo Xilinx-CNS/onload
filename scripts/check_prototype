@@ -1,0 +1,31 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+#Check whether symbol in header matches given prototype
+#
+#Check is done with _GNU_SOURCE defined.
+#Symbol prototype should be definition of function pointer of name foo.
+
+headers=$1
+symbol=$2
+prototype=$3
+
+dir=$(mktemp -d)
+
+cat >$dir/checkprototype.c <<EOF
+#define _GNU_SOURCE
+$( for h in $headers; do echo "#include \"$h\""; done )
+int main(int argc, char ** argv) {
+  $prototype = $symbol;
+  (void) foo;
+  return 0;
+}
+EOF
+if $CC $CFLAGS -Werror -c $dir/checkprototype.c -o $dir/checkprototype.o &>/dev/null ; then
+    echo 1
+else
+    echo 0
+fi
+
+rm -rf $dir

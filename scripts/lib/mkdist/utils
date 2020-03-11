@@ -1,0 +1,7 @@
+me="$(basename "$0")"
+
+err()  { echo >&2 "$*"; }
+log()  { err "$me: $*"; }
+fail() { log "$*"; exit 1; }
+try()  { "$@" || fail "FAILED: $*"; }
+tryquiet()  { "$@" >/dev/null || fail "FAILED: $*"; }

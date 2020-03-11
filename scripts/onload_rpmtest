@@ -1,0 +1,102 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+
+# Description: Simple quick OpenOnload test, for use with rpm-test.
+
+bin=$(cd $(dirname "$0") && /bin/pwd)
+me=$(basename "$0")
+
+err()  { echo >&2 "$*"; }
+log()  { err "$me: $*"; }
+fail() { log "$*"; exit 1; }
+try()  { "$@" || fail "FAILED: $*"; }
+
+
+test_trampolining() {(
+  OPTS="$1"
+  gcc -x c $OPTS -o tramp_test - <<EOF
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+
+#include <sys/types.h>
+#include <sys/socket.h>
+
+int main(int argc, char** argv) {
+  FILE *file;
+  int s;
+  s = socket(PF_INET, SOCK_STREAM, 0);
+  if( s < 0 )
+    return 1;
+  close(s);
+
+  s = socket(PF_INET, SOCK_STREAM, 0);
+  if( s < 0 )
+    return 2;
+
+  file = fdopen(s, "r");
+  if (!file)
+    return 3;
+  fclose(file);
+  s = socket(PF_INET, SOCK_STREAM, 0);
+  if( s < 0 )
+    return 4;
+  return 0;
+ }
+EOF
+
+  if [ $? != 0 ]; then
+    return 54 # some uncommon err code
+  fi
+
+  # use script to workaround onload logging suppression when stderr is redirected
+  script trampo.out -c 'onload ./tramp_test || echo ERROR: $?'
+
+  if grep ERROR trampo.out; then
+    return 55 # some other uncommon err code
+  fi
+
+  return 0;
+);}
+
+
+build_and_test() {(
+  [ -d "$1" ] || return 0
+  [ -f "$1/lib/transport/unix/libcitransport0.so" ] || return 0
+  try cd "$1"
+
+  if [ "$1" == gnu ]; then
+    OPTS=-m32
+  else
+    OPTS=-m64
+  fi
+
+
+  gcc -x c $OPTS -o onload_preload_test - <<EOF
+int main(int argc, char** argv) { return 0; }
+EOF
+
+  try ./onload_preload_test
+  try onload ./onload_preload_test
+  onload ./onload_preload_test 2>&1 | grep -q . && fail "Unexpected output from 'onload true'"
+
+  try onload_stackdump opts
+
+  rc=0
+  test_trampolining "$OPTS" || rc=$?
+
+  return $rc
+);}
+
+######################################################################
+# main()
+
+TOP=$PWD # $($bin/mmaketool --toppath)
+try cd "$TOP/build"
+
+# return first error or 0
+build_and_test gnu_x86_64 || rc=$?
+build_and_test gnu || rc=${rc-$?}
+exit ${rc-0}

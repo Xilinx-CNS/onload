@@ -1,0 +1,185 @@
+Onload-7.2.0
+============
+
+ This is a major feature release of Onload.
+
+
+Linux distribution support
+--------------------------
+ This package is supported on:
+ - Red Hat Enterprise Linux 7.5 - 7.8
+ - Red Hat Enterprise Linux 8.0 - 8.2
+ - SuSE Linux Enterprise Server 12 sp4 and sp5
+ - SuSE Linux Enterprise Server 15 and sp1
+ - Canonical Ubuntu Server LTS 16.04 and 18.04
+ - Canonical Ubuntu Server and 19.10
+ - Debian 9 "Stretch"
+ - Debian 10 "Buster"
+ - Linux kernels 3.14 - 5.4
+
+ * RHEL 7.8 and RHEL 8.2 were only available in pre-release form at the point
+   this release was tested.
+
+
+Feature activation
+------------------
+
+Activation files are no longer used in this Onload release. Neither activation
+files nor NIC activation are required for most Onload features, including
+IPv6, XDP and UDP acceleration. TCPDirect and ultra low latency NIC features
+still require NIC activation.
+
+TCPDirect is additionally supported on full-feature firmware in this release.
+
+The 'cloud' build profile is still required to enable IPv6 and XDP. This is
+to optimise performance for users who do not require these features and to
+ensure compatibility with older OSs.
+
+For further information, please contact your sales representative.
+
+
+System-level interface blacklisting
+-----------------------------------
+
+In addition to the per-stack EF_INTERFACE_BLACKLIST and EF_INTERFACE_WHITELIST
+in OpenOnload-201710, a system-level configuration has been added. Files
+in /proc/driver/sfc_resource/<intf-name>/enable may be written with "1" or
+"0" to enable or disable a network interface for all applications on the
+system. Onloaded applications will not accelerate sockets using a disabled
+interface (the socket will be handled by the kernel). ef_vi applications will
+fail the ef_pd_alloc call at startup. By default, all interfaces are enabled
+when the driver is loaded; to disable all interfaces initially pass the
+"enable_accel_by_default=0" module parameter to sfc_resource.
+
+
+Onload Remote Monitor enhancement
+---------------------------------
+
+The Onload Remote Monitor has been enhanced to add a new orm_json_lib library,
+which can be used by customers to build their own custom monitoring solutions.
+
+The existing orm_webserver and orm_json functionality has been retained
+(internally this now uses the orm_json_lib library).
+
+A simple example of how to use orm_json_lib is provided in
+src/tools/onload_remote_monitor/orm_zmq_publisher.c
+This will publish the chosen statistics via a ZeroMQ publisher every N seconds.
+A companion example src/tools/onload_remote_monitor/zmq_subscriber.c can be
+used to receive the JSON statistics via ZeroMQ.
+
+
+eBPF/XDP
+--------
+
+The implementation of XDP features is now delegated to the currently-running
+kernel. This expands the set of supported XDP features to those provided by
+the kernel but means that XDP is no longer supported on older OSs that do not
+provide the corresponding features natively.
+
+On Onload-7.0.0.176, XDP was implemented using a snapshot of the Linux 4.20
+implementation.
+
+
+New configuration options
+-------------------------
+
+ - EF_OPT_1
+   TBD.
+
+
+Modified configuration options
+------------------------------
+
+ - EF_OPT_2
+   TBD.
+=======
+ - Linux kernels 3.10 - 5.4
+
+ * RHEL 7.8 and RHEL 8.2 were only available in pre-release form at the point
+   this release was tested.
+
+
+Feature activation
+------------------
+
+Activation files are no longer used in this Onload release. Neither activation
+files nor NIC activation are required for most Onload features, including
+IPv6, XDP and UDP acceleration. TCPDirect and ultra low latency NIC features
+still require NIC activation.
+
+TCPDirect is additionally supported on full-feature firmware in this release.
+
+The 'cloud' build profile is still required to enable IPv6 and XDP. This is
+to optimise performance for users who do not require these features and to
+ensure compatibility with older OSs.
+
+For further information, please contact your sales representative.
+
+
+System-level interface blacklisting
+-----------------------------------
+
+In addition to the per-stack EF_INTERFACE_BLACKLIST and EF_INTERFACE_WHITELIST
+in OpenOnload-201710, a system-level configuration has been added. Files
+in /proc/driver/sfc_resource/<intf-name>/enable may be written with "1" or
+"0" to enable or disable a network interface for all applications on the
+system. Onloaded applications will not accelerate sockets using a disabled
+interface (the socket will be handled by the kernel). ef_vi applications will
+fail the ef_pd_alloc call at startup. By default, all interfaces are enabled
+when the driver is loaded; to disable all interfaces initially pass the
+"enable_accel_by_default=0" module parameter to sfc_resource.
+
+
+Onload Remote Monitor enhancement
+---------------------------------
+
+The Onload Remote Monitor has been enhanced to add a new orm_json_lib library,
+which can be used by customers to build their own custom monitoring solutions.
+
+The existing orm_webserver and orm_json functionality has been retained
+(internally this now uses the orm_json_lib library).
+
+A simple example of how to use orm_json_lib is provided in
+src/tools/onload_remote_monitor/orm_zmq_publisher.c
+This will publish the chosen statistics via a ZeroMQ publisher every N seconds.
+A companion example src/tools/onload_remote_monitor/zmq_subscriber.c can be
+used to receive the JSON statistics via ZeroMQ.
+
+
+eBPF/XDP
+--------
+
+The implementation of XDP features is now delegated to the currently-running
+kernel. This expands the set of supported XDP features to those provided by
+the kernel but means that XDP is no longer supported on older OSs that do not
+provide the corresponding features natively.
+
+On Onload-7.0.0.176, XDP was implemented using a snapshot of the Linux 4.20
+implementation.
+
+
+New configuration options
+-------------------------
+
+ - EF_OPT_1
+   TBD.
+
+
+Modified configuration options
+------------------------------
+
+ - EF_UDP_CONNECT_HANDOVER
+
+   In addition to the previously-accepted values, this option now also accepts
+   a value of 2, which will cause all UDP sockets to be handed over when
+   calling connect(), regardless of whether the socket could have been
+   accelerated.
+
+
+New dependencies
+----------------
+
+ Onload now has a build-time dependency on the headers for the libcap library.
+ Previous versions already depended on the library itself at runtime.  These
+ headers are packaged by most distributions in packages named libcap-devel or
+ libcap-dev.

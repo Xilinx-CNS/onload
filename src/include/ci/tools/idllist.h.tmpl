@@ -1,0 +1,408 @@
+/* -*- Mode: c; -*- */
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/**************************************************************************\
+*//*! \file
+** <L5_PRIVATE L5_HEADER >
+** \author  djr
+**  \brief  Linked list indirected pointers.
+**   \date  2004/10/04
+**    \cop  (c) Level 5 Networks Limited.
+** </L5_PRIVATE>
+*//*
+\**************************************************************************/
+
+/*! \cidoxg_include_ci_tools */
+
+/* NB. No header guards: may be included multiple times. */
+
+/*
+** This header implements a doubly linked list whose pointers are
+** indirected.  The caller must define the following macros:
+**
+**   CI_MK_ID(x)             - must create an identifier with suffix x
+**   CI_ILL_ADDR_T           - type for indirect addresses
+**   CI_ILL_CTX_T            - type for address conversion context
+**   CI_ILL_PTR(ctx,a)       - convert address to pointer, must return pointer
+**                             of type CI_MK_ID(_link)*
+**   CI_ILL_ADDR(ctx,lnk)    - return address of link (optional)
+**   CI_ILL_ADDR_EQ(a, b)    - Equality function for indirect address type
+**   CI_ILL_ADDR_NULL        - NULL value for indirect addresses
+**   CI_ILL_CAS(p, old, new) - CAS *p for indirect addresses (optional)
+**   CI_ILL_XCHG(p, new)     - Exchange new for *p (required iff CI_ILL_CAS is
+**                             defined)
+**
+** The code has been crafted with the assumption that CI_ILL_ADDR() is cheaper
+** than dereferencing a pointer.
+**
+*/
+
+#if !defined(CI_MK_ID) || !defined(CI_ILL_ADDR_T)
+# error CI_MK_ID or CI_ILL_ADDR_T not defined.
+#endif
+
+#if !defined(CI_ILL_NO_CODE) && \
+   (!defined(CI_ILL_CTX_T) || !defined(CI_ILL_PTR))
+# error CI_ILL_CTX_T or CI_ILL_PTR not defined.
+#endif
+
+
+#ifndef CI_ILL_ADDR
+# define CI_ILL_ADDR(ctx,lnk)	((lnk)->addr)
+# define CI_ILL_IF_ADDR_F(x)	x
+#else
+# define CI_ILL_IF_ADDR_F(x)
+#endif
+
+/* for now debug builds tag all indirected linked lists */
+#ifndef NDEBUG
+#define CI_ILL_EXTRA_CHECK
+#endif
+
+
+#ifdef CI_ILL_EXTRA_CHECK
+# define CI_ILL_NAME_DECLARE           ci_uint32 name;
+# define CI_ILL_SET_NAME(l, name)                     \
+          (l)->name = ( ((ci_uint32)name[0]) +        \
+                        (((ci_uint32)name[1])<<8) +   \
+                        (((ci_uint32)name[2])<<16) +  \
+                        (((ci_uint32)name[3])<<24) )
+#else
+# define CI_ILL_NAME_DECLARE
+# define CI_ILL_SET_NAME(l, name)      
+#endif
+
+#define list_t	CI_MK_ID(_t)
+#define link_t	CI_MK_ID(_link)
+#define ctx_t	CI_ILL_CTX_T
+
+
+#ifdef CI_ILL_NO_TYPES
+# undef CI_ILL_NO_TYPES
+#else
+
+typedef struct {
+  CI_ILL_IF_ADDR_F(CI_ILL_ADDR_T addr;)
+  CI_ILL_ADDR_T	next;
+  CI_ILL_ADDR_T	prev;
+  CI_ILL_NAME_DECLARE
+} link_t;
+
+
+typedef struct {
+  link_t	l;
+} list_t;
+
+#endif
+
+
+#ifdef CI_ILL_NO_CODE
+# undef CI_ILL_NO_CODE
+#else
+
+
+#define CI_IDLLIST_LINK_ASSERT_VALID(ctx, l)                            \
+  do{                                                                   \
+    ci_assert_equal(CI_ILL_PTR((ctx), CI_ILL_ADDR((ctx), (l))), (l));   \
+    ci_assert(CI_ILL_ADDR_EQ(CI_ILL_PTR((ctx), (l)->prev)->next,        \
+                             CI_ILL_ADDR((ctx), (l))));                 \
+    ci_assert(CI_ILL_ADDR_EQ(CI_ILL_PTR((ctx), (l)->next)->prev,        \
+                             CI_ILL_ADDR((ctx), (l))));                 \
+  }while(0)
+
+
+ci_inline int CI_MK_ID(_is_valid)(ctx_t ctx, link_t* l) {
+  return ( CI_ILL_ADDR_EQ(CI_ILL_PTR(ctx, (l)->prev)->next,
+                          CI_ILL_ADDR((ctx), (l))) &&
+           CI_ILL_ADDR_EQ(CI_ILL_PTR(ctx, (l)->next)->prev,
+                          CI_ILL_ADDR((ctx), (l))) );
+}
+
+
+ci_inline void CI_MK_ID(_init)(ctx_t ctx, list_t* list, CI_ILL_ADDR_T a,
+                               const char* name) {
+  CI_ILL_IF_ADDR_F(list->l.addr = a);
+  list->l.next = list->l.prev = CI_ILL_ADDR(ctx, &list->l);
+  ci_assert_equal(CI_ILL_PTR(ctx, list->l.next), &list->l);
+  CI_ILL_SET_NAME(&(list->l), name);
+}
+
+ci_inline void CI_MK_ID(_link_init)(ctx_t ctx, link_t* link,
+				    CI_ILL_ADDR_T a, const char* name) {
+  CI_ILL_IF_ADDR_F(link->addr = a;
+		   ci_assert_equal(CI_ILL_PTR(ctx, a), link));
+  CI_ILL_SET_NAME(link, name);
+}
+
+
+ci_inline int  CI_MK_ID(_is_empty)(ctx_t ctx, const list_t* list)
+{ return CI_ILL_ADDR_EQ(list->l.next, CI_ILL_ADDR(ctx, &list->l)); }
+
+ci_inline int  CI_MK_ID(_not_empty)(ctx_t ctx, const list_t* list)
+{ return ! CI_ILL_ADDR_EQ(list->l.next, CI_ILL_ADDR(ctx, &list->l)); }
+
+
+ci_inline void CI_MK_ID(_insert_after)(ctx_t ctx, link_t*list, link_t*link) {
+  link_t* next = CI_ILL_PTR(ctx, list->next);
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, list);
+  link->next = list->next;
+  link->prev = CI_ILL_ADDR(ctx, list);
+  list->next = next->prev = CI_ILL_ADDR(ctx, link);
+}
+
+ci_inline void CI_MK_ID(_insert_before)(ctx_t ctx, link_t*list, link_t*link) {
+  link_t* prev = CI_ILL_PTR(ctx, list->prev);
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, list);
+  link->prev = list->prev;
+  link->next = CI_ILL_ADDR(ctx, list);
+  list->prev = prev->next = CI_ILL_ADDR(ctx, link);
+}
+
+
+ci_inline void CI_MK_ID(_remove)(ctx_t ctx, link_t* link) {
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, link);
+  CI_ILL_PTR(ctx, link->prev)->next = link->next;
+  CI_ILL_PTR(ctx, link->next)->prev = link->prev;
+}
+
+ci_inline void CI_MK_ID(_remove_safe)(ctx_t ctx, link_t* link) {
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, link);
+  CI_ILL_PTR(ctx, link->prev)->next = link->next;
+  CI_ILL_PTR(ctx, link->next)->prev = link->prev;
+  link->next = link->prev = CI_ILL_ADDR(ctx, link);
+}
+
+
+ci_inline link_t* CI_MK_ID(_head)(ctx_t ctx, const list_t* list) {
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, &list->l);
+  return CI_ILL_PTR(ctx, list->l.next);
+}
+
+ci_inline link_t* CI_MK_ID(_tail)(ctx_t ctx, const list_t* list) {
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, &list->l);
+  return CI_ILL_PTR(ctx, list->l.prev);
+}
+
+
+ci_inline void CI_MK_ID(_push)(ctx_t ctx, list_t* list, link_t* link)
+{ CI_MK_ID(_insert_after)(ctx, &list->l, link); }
+
+ci_inline void CI_MK_ID(_push_tail)(ctx_t ctx, list_t* list, link_t* link)
+{ CI_MK_ID(_insert_before)(ctx, &list->l, link); }
+
+#ifdef CI_ILL_CAS
+/* As _push(), except that it is safe with concurrent traversal of the list
+ * obtained by _concurrent_start(). Multiple writers still require
+ * synchronisation. Returns non-zero on success and zero on failure. In case of
+ * failure, [list] will not be modified and [link] will be restored to its
+ * original state. */
+ci_inline int
+CI_MK_ID(_concurrent_push)(ctx_t ctx, list_t* list, link_t* link) {
+  link_t* list_link = &list->l;
+  CI_ILL_ADDR_T next = OO_ACCESS_ONCE(list_link->next);
+
+  CI_ILL_ADDR_T next_orig = link->next;
+  CI_ILL_ADDR_T prev_orig = link->prev;
+
+  if( next == CI_ILL_ADDR_NULL )
+    return 0;
+
+  link->next = next;
+  link->prev = CI_ILL_ADDR(ctx, list_link);
+  ci_wmb();
+
+  /* If the list changes underneath us, the final traversal is underway, so
+   * don't change anything. */
+  if( ! (CI_ILL_CAS(&list_link->next, next, CI_ILL_ADDR(ctx, link))) ) {
+    link->next = next_orig;
+    link->prev = prev_orig;
+    return 0;
+  }
+
+  CI_ILL_PTR(ctx, next)->prev = list_link->next;
+  return 1;
+}
+#endif
+
+
+ci_inline link_t* CI_MK_ID(_pop)(ctx_t ctx, list_t* list) {
+  link_t* l = CI_ILL_PTR(ctx, list->l.next);
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, l);
+  list->l.next = l->next;
+  CI_ILL_PTR(ctx, l->next)->prev = CI_ILL_ADDR(ctx, &list->l);
+  return l;
+}
+
+ci_inline link_t* CI_MK_ID(_pop_tail)(ctx_t ctx, list_t* list) {
+  link_t* l = CI_ILL_PTR(ctx, list->l.prev);
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, l);
+  list->l.prev = l->prev;
+  CI_ILL_PTR(ctx, l->prev)->next = CI_ILL_ADDR(ctx, &list->l);
+  return l;
+}
+
+
+ci_inline link_t* CI_MK_ID(_try_pop)(ctx_t ctx, list_t* list) {
+  link_t* l = CI_ILL_PTR(ctx, list->l.next);
+  link_t* rc = 0;
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, l);
+  if( l != &list->l ) {
+    list->l.next = l->next;
+    CI_ILL_PTR(ctx, l->next)->prev = CI_ILL_ADDR(ctx, &list->l);
+    rc = l;
+  }
+  return rc;
+}
+
+ci_inline link_t* CI_MK_ID(_try_pop_tail)(ctx_t ctx, list_t* list) {
+  link_t* l = CI_ILL_PTR(ctx, list->l.prev);
+  link_t* rc = 0;
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, l);
+  if( l != &list->l ) {
+    list->l.prev = l->prev;
+    CI_ILL_PTR(ctx, l->prev)->next = CI_ILL_ADDR(ctx, &list->l);
+    rc = l;
+  }
+  return rc;
+}
+
+/**********************************************************************/
+
+  /*! After doing this you can do x_remove() on the link, even though it is
+  ** not a member of a list.  This can be useful to avoid a conditional
+  ** when adding an object to a list, when the object may or may not
+  ** already be a member of the list.
+  */
+ci_inline void CI_MK_ID(_self_link)(ctx_t ctx, link_t* link)
+{ link->next = link->prev = CI_ILL_ADDR(ctx, link); }
+
+ci_inline int  CI_MK_ID(_is_self_linked)(ctx_t ctx, link_t* link)
+{ return CI_ILL_ADDR_EQ(link->next, CI_ILL_ADDR(ctx, link)); }
+
+ci_inline void CI_MK_ID(_mark_free)(link_t* link)
+{ link->next = CI_ILL_ADDR_NULL; }
+
+ci_inline int CI_MK_ID(_is_free)(link_t* link)
+{ return CI_ILL_ADDR_EQ(link->next, CI_ILL_ADDR_NULL); }
+
+/**********************************************************************/
+
+ci_inline void CI_MK_ID(_link_assert_valid)(ctx_t ctx, link_t* l)
+{ CI_IDLLIST_LINK_ASSERT_VALID(ctx, l); }
+
+
+ci_inline void CI_MK_ID(_link_assert_is_self_linked)(ctx_t ctx, link_t* l) {
+  ci_assert(CI_ILL_ADDR_EQ(l->next, CI_ILL_ADDR(ctx, l)));
+  ci_assert(CI_ILL_ADDR_EQ(l->prev, CI_ILL_ADDR(ctx, l)));
+}
+
+
+ci_inline void CI_MK_ID(_link_assert_not_self_linked)(ctx_t ctx, link_t* l) {
+  ci_assert(! CI_ILL_ADDR_EQ(l->next, CI_ILL_ADDR(ctx, l)));
+  ci_assert(! CI_ILL_ADDR_EQ(l->prev, CI_ILL_ADDR(ctx, l)));
+}
+
+
+ci_inline void CI_MK_ID(_link_assert_is_in_list)(ctx_t ctx, link_t* l) {
+  CI_MK_ID(_link_assert_not_self_linked)(ctx, l);
+  ci_assert(! CI_MK_ID(_is_free)(l));
+}
+
+
+ci_inline void CI_MK_ID(_assert_valid)(ctx_t ctx, list_t* list) {
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, &list->l);
+  if( CI_MK_ID(_is_empty)(ctx, list) ) {
+    CI_MK_ID(_link_assert_is_self_linked)(ctx, &list->l);
+  }
+  else {
+    CI_MK_ID(_link_assert_is_in_list)(ctx, &list->l);
+  }
+}
+
+
+/* we assume both lists are already initialised i.e. have offset and name */
+ci_inline void CI_MK_ID(_rehome)(ctx_t ctx, 
+                                 list_t* to, 
+                                 list_t* from) {
+  
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, &to->l);
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, &from->l);
+  
+  if( CI_MK_ID(_is_empty)(ctx, from) ) {
+    to->l.next = to->l.prev = CI_ILL_ADDR(ctx, &to->l);
+    ci_assert_equal(CI_ILL_PTR(ctx, to->l.next), &to->l);
+  }
+  else {
+    to->l.next = from->l.next;
+    to->l.prev = from->l.prev;
+    CI_ILL_PTR(ctx, to->l.next)->prev = 
+    CI_ILL_PTR(ctx, to->l.prev)->next = CI_ILL_ADDR(ctx, &to->l);
+    /* clear "from" list */
+    from->l.next = from->l.prev = CI_ILL_ADDR(ctx, &from->l);
+    ci_assert_equal(CI_ILL_PTR(ctx, from->l.next), &from->l);
+  }
+
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, &to->l);
+  CI_IDLLIST_LINK_ASSERT_VALID(ctx, &from->l);
+}
+
+
+ci_inline void CI_MK_ID(_put)(ctx_t ctx, list_t* list, link_t* link)
+{ CI_MK_ID(_insert_before)(ctx, &list->l, link); }
+
+ci_inline void CI_MK_ID(_put_back)(ctx_t ctx, list_t* list, link_t* link)
+{ CI_MK_ID(_insert_after)(ctx, &list->l, link); }
+
+ci_inline link_t* CI_MK_ID(_get)(ctx_t ctx, list_t* list)
+{ return CI_MK_ID(_pop)(ctx, list); }
+
+ci_inline link_t* CI_MK_ID(_try_get)(ctx_t ctx, list_t* list)
+{ return CI_MK_ID(_try_pop)(ctx, list); }
+
+/**********************************************************************/
+
+ci_inline link_t* CI_MK_ID(_start)(ctx_t ctx, list_t* list)
+{ return CI_ILL_PTR(ctx, list->l.next); }
+
+#ifdef CI_ILL_CAS
+/* As _start(), but also invalidates the list atomically to prevent further
+ * insertion. A consequence of this is that the function may only be called
+ * once on a given list. */
+ci_inline link_t* CI_MK_ID(_concurrent_start)(ctx_t ctx, list_t* list)
+{ return CI_ILL_PTR(ctx, CI_ILL_XCHG(&list->l.next, CI_ILL_ADDR_NULL)); }
+#endif
+
+ci_inline link_t* CI_MK_ID(_start_last)(ctx_t ctx, list_t* list)
+{ return CI_ILL_PTR(ctx, list->l.prev); }
+
+ci_inline link_t* CI_MK_ID(_end)(ctx_t ctx, list_t* list)
+{ return &list->l; }
+
+#if 0  /* You prob want something like this to iter. */
+# define ci_dllist_iter(l)  ((l) = CI_ILL_PTR((ctx), (l)->next))
+#endif
+
+/**********************************************************************/
+
+ci_inline CI_ILL_ADDR_T CI_MK_ID(_link_addr)(ctx_t ctx, link_t* link)
+{ return CI_ILL_ADDR(ctx, link); }
+
+#endif	/* ifndef CI_ILL_NO_CODE */
+
+
+#undef list_t
+#undef link_t
+#undef ctx_t
+#undef CI_MK_ID
+#undef CI_ILL_ADDR_T
+#undef CI_ILL_CTX_T
+#undef CI_ILL_PTR
+#undef CI_ILL_ADDR
+#undef CI_ILL_ADDR_EQ
+#undef CI_ILL_ADDR_NULL
+#undef CI_ILL_IF_ADDR_F
+#undef CI_ILL_CAS
+#undef CI_ILL_XCHG
+
+
+/*! \cidoxg_end */
