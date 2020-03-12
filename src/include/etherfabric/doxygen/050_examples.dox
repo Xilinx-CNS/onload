@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+
 /****************************************************************************
  * Copyright 2004-2005: Level 5 Networks Inc.
- * Copyright 2005-2018: Solarflare Communications Inc,
- *                      7505 Irvine Center Drive, Suite 100
- *                      Irvine, CA 92618, USA
+ * Copyright 2005-2019: Solarflare Communications Inc.
+ * Copyright 2019-2020: Xilinx Inc, 2100 Logic Drive, San Jose, CA 95124, USA.
  *
- * Maintained by Solarflare Communications
+ * Maintained by Solarflare Communications (A Xilinx Company):
  *  <linux-xen-drivers@solarflare.com>
  *  <onload-dev@solarflare.com>
  *
@@ -21,18 +21,20 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+ * Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA 02110-1301 USA.
  ****************************************************************************
  */
 
 /**************************************************************************\
 *//*! \file
-** \author    Solarflare Communications, Inc.
+** \author    Xilinx, Inc.
 ** \brief     Additional Doxygen-format documentation for ef_vi.
-** \date      2018/11/06
-** \copyright Copyright &copy; 2018 Solarflare Communications, Inc. All
-**            rights reserved. Solarflare, OpenOnload and EnterpriseOnload
-**            are trademarks of Solarflare Communications, Inc.
+** \date      2020/03/10
+** \copyright &copy;  Copyright 2020 Xilinx, Inc. Xilinx, the Xilinx logo,
+**            Solarflare, Onload, TCPDirect, and other designated brands
+**            included herein are trademarks of Xilinx in the United States
+**            and other countries. All other trademarks are the property of
+**            their respective owners.
 *//*
 \**************************************************************************/
 
