@@ -2042,14 +2042,11 @@ int ci_tcp_listen(citp_socket* ep, ci_fd_t fd, int backlog)
   if( NI_OPTS(netif).tcp_listen_handover )
     return CI_SOCKET_HANDOVER;
 
-
-  ts = SOCK_TO_TCP(s);
-
   /* We should handover if the socket is bound to alien address. */
   if( s->s_flags & CI_SOCK_FLAG_BOUND_ALIEN ) {
     /* We MUST NOT install filters for a loopback address */
     will_accelerate = (netif->state->flags & CI_NETIF_FLAG_USE_ALIEN_LADDRS ||
-        scalable) && !CI_IPX_IS_LOOPBACK(ts->s.laddr);
+        scalable) && !CI_IPX_IS_LOOPBACK(s->laddr);
   }
 
   if(
@@ -2079,6 +2076,8 @@ int ci_tcp_listen(citp_socket* ep, ci_fd_t fd, int backlog)
     CI_SET_ERROR(rc, EINVAL);
     return rc;
   }
+
+  ts = SOCK_TO_TCP(s);
 
   /* Bug 3376: if socket used for a previous, failed, connect then the error
    * numbers will not be as expected.  Only seen when not using listening
