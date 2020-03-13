@@ -706,6 +706,7 @@ OO_STAT("Number of active-cache hits",
         ci_uint32, activecache_hit, count)
 OO_STAT("Number of active-cache hits after reaping",
         ci_uint32, activecache_hit_reap, count)
+#endif
 OO_STAT("Number of times that cached endpoint had its fd forcecully detached.",
         ci_uint32, sock_attach_fd_detach, count)
 OO_STAT("Number of times fd detach failed legitimately. ",
@@ -720,7 +721,6 @@ OO_STAT("Number of times fd got uncached. ",
         ci_uint32, epoll_fd_uncache, count)
 OO_STAT("Number of times attach fd required retry in accept. ",
         ci_uint32, accept_attach_fd_retry, count)
-#endif
 OO_STAT("Number of times when TCP SO_RCVBUF value was found to be abused "
         "by too small incoming segments",
         ci_uint32, tcp_rcvbuf_abused, count)

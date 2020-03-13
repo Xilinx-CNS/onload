@@ -510,8 +510,10 @@ extern int ci_setup_fork(void);
 /*! Handles user-level netif internals pre bproc_move() */
 extern void citp_netif_pre_bproc_move_hook(void) CI_HF;
 
+#if CI_CFG_FD_CACHING
 extern void citp_uncache_fds_ul(ci_netif* netif);
 extern void uncache_active_netifs(void);
+#endif
 
 /**********************************************************************
  ** Misc.

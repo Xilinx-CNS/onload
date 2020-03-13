@@ -661,6 +661,7 @@ void __citp_netif_free(ci_netif* ni)
 }
 
 
+#if CI_CFG_FD_CACHING
 void uncache_active_netifs(void)
 {
   ci_netif* ni;
@@ -680,4 +681,5 @@ void uncache_active_netifs(void)
   CITP_FDTABLE_UNLOCK_RD();
   citp_exit_lib(&lib_context, 1);
 }
+#endif
 /*! \cidoxg_end */

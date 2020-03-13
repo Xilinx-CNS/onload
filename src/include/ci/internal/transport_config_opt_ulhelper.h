@@ -9,4 +9,8 @@
 #undef CI_CFG_UL_INTERRUPT_HELPER
 #define CI_CFG_UL_INTERRUPT_HELPER 1
 
+/* This mode does not support some features for now. */
+#undef CI_CFG_FD_CACHING
+#define CI_CFG_FD_CACHING 0
+
 #endif

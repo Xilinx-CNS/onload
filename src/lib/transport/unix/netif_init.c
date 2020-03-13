@@ -299,7 +299,9 @@ void  citp_netif_ctor_hook(ci_netif* ni, int realloc)
 /* Platform specific code, called proir to netif destruction */
 void  citp_netif_free_hook(ci_netif* ni)
 {
+#if CI_CFG_FD_CACHING
   citp_uncache_fds_ul(ni);
+#endif
   /* Unprotect the netif's FD table entry */
   __citp_fdtable_reserve(ci_netif_get_driver_handle(ni), 0);
 }

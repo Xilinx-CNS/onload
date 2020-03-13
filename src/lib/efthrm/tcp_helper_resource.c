@@ -6858,13 +6858,12 @@ void generic_tcp_helper_close(ci_private_t* priv)
     LOG_EP(ci_log("%s: %d:%d fd close while cached - not freeing endpoint",
                   __FUNCTION__, ep->thr->id, OO_SP_FMT(ep->id)));
   }
-  else {
+  else
+#endif
+  {
     ep->file_ptr = NULL;
-#endif
     efab_tcp_helper_close_endpoint(trs, ep->id);
-#if CI_CFG_FD_CACHING
   }
-#endif
 }
 
 

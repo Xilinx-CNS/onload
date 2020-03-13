@@ -458,7 +458,7 @@ void ci_tcp_passive_scalable_cache_drop_cache(ci_netif* ni)
 #endif
 
 
-#if CI_CFG_FD_CACHING || defined(__KERNEL__)
+#if OO_CFG_CLOSE_EPS
 
 #ifndef __KERNEL__
 static
@@ -502,6 +502,7 @@ void ci_tcp_linger(ci_netif* ni, ci_tcp_state* ts)
   if( flags )
     ci_netif_unlock(ni);
 }
+#endif
 
 #if OO_CFG_CLOSE_EPS
 #if defined(__KERNEL__)
@@ -616,7 +617,6 @@ int ci_tcp_close(ci_netif* netif, ci_tcp_state* ts)
   return 0;
 }
 #endif /* OO_CFG_CLOSE_EPS */
-#endif /* CI_CFG_FD_CACHING || defined(__KERNEL__) */
 
 
 #ifdef __KERNEL__
