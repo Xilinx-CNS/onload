@@ -920,15 +920,10 @@ typedef struct {
   /* have some deferred packets to send
    * (NB it is NOT in UNLOCK_FLAGS below!) */
 #define CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS  0x0004000000000000ULL
-#if CI_CFG_WANT_BPF_NATIVE
   /* need to handle postponed XDP prog update */
 # define CI_EPLOCK_NETIF_XDP_CHANGE        0x0002000000000000ULL
   /* mask for the above flags that must be handled before dropping lock */
 # define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff3a000000000000ULL
-#else
-  /* mask for the above flags that must be handled before dropping lock */
-# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff38000000000000ULL
-#endif
 } ci_eplock_t;
 
 
