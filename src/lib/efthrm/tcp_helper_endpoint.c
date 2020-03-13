@@ -694,6 +694,7 @@ tcp_helper_endpoint_filter_dump(tcp_helper_resource_t* thr, oo_sp sockp,
 /*--------------------------------------------------------------------
  *!
  * Shutdown endpoint socket
+ * NB it is called for a listening socket only
  *
  * \param thr             TCP helper resource
  * \param ep_id           ID of endpoint
@@ -710,13 +711,13 @@ tcp_helper_endpoint_shutdown(tcp_helper_resource_t* thr, oo_sp ep_id,
   tcp_helper_endpoint_t * ep = ci_trs_get_valid_ep(thr, ep_id);
   int rc, supress_hw_ops = thr->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT;
 
+  ci_assert_equal(old_state, CI_TCP_LISTEN);
 #if CI_CFG_FD_CACHING
   /* This must be done before we remove filters, as the information must be
    * correct for sockets sharing our filter when we do the un-share fixup.
    */
-  if( old_state == CI_TCP_LISTEN )
-    ci_tcp_listen_update_cached(&thr->netif,
-                                SP_TO_TCP_LISTEN(&thr->netif, ep->id));
+  ci_tcp_listen_update_cached(&thr->netif,
+                              SP_TO_TCP_LISTEN(&thr->netif, ep->id));
 #endif
 
   /* Calling shutdown on the socket unbinds it in most situations.
@@ -731,10 +732,10 @@ tcp_helper_endpoint_shutdown(tcp_helper_resource_t* thr, oo_sp ep_id,
 
   rc = efab_tcp_helper_shutdown_os_sock(ep, how);
 
-  if( old_state == CI_TCP_LISTEN ) {
-    ci_assert(ci_netif_is_locked(&thr->netif));
-    ci_tcp_listen_shutdown_queues(&thr->netif,
-                                  SP_TO_TCP_LISTEN(&thr->netif, ep->id));
-  }
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+  ci_assert(ci_netif_is_locked(&thr->netif));
+  ci_tcp_listen_shutdown_queues(&thr->netif,
+                                SP_TO_TCP_LISTEN(&thr->netif, ep->id));
+#endif
   return rc;
 }

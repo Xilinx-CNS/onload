@@ -219,7 +219,10 @@ enum {
   /* Wait for an interrupt */
   OO_OP_WAIT_FOR_INTERRUPT,
 #define OO_IOC_WAIT_FOR_INTERRUPT OO_IOC_RW(WAIT_FOR_INTERRUPT, struct oo_ulh_waiter)
+  OO_OP_GET_CLOSING_EP,
+#define OO_IOC_GET_CLOSING_EP     OO_IOC_R(GET_CLOSING_EP, oo_sp)
 #endif
+
   OO_OP_CONTIG_END,  /* This is the last in range of contigous opcodes */
 
   /* Here come only placeholder for operations with arbitrary codes */

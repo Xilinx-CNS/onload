@@ -923,7 +923,14 @@ typedef struct {
   /* need to handle postponed XDP prog update */
 # define CI_EPLOCK_NETIF_XDP_CHANGE        0x0002000000000000ULL
   /* mask for the above flags that must be handled before dropping lock */
+#if ! CI_CFG_UL_INTERRUPT_HELPER || ! defined(__KERNEL__)
 # define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff3a000000000000ULL
+#else /* if CI_CFG_UL_INTERRUPT_HELPER && __KERNEL__ */
+/* Unset CI_EPLOCK_NETIF_CLOSE_ENDPOINT.
+ * We won't need this ifdef when stack lock is removed from kernel
+ * completely in this UL_HELPER mode. */
+# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xbf3a000000000000ULL
+#endif
 } ci_eplock_t;
 
 

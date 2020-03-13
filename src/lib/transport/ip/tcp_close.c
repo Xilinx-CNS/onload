@@ -594,9 +594,16 @@ int ci_tcp_close(ci_netif* netif, ci_tcp_state* ts)
 #ifndef __KERNEL__
     /* Socket caching + SO_LINGER.  In-kernel case is handled in
      * efab_tcp_helper_close_endpoint() */
-    else if( (ts->s.b.sb_aflags & CI_SB_AFLAG_IN_CACHE) && 
+    else if(
              (ts->s.s_flags & CI_SOCK_FLAG_LINGER) &&
              ! SEQ_EQ(tcp_enq_nxt(ts), tcp_snd_una(ts))
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+            && (ts->s.b.sb_aflags & CI_SB_AFLAG_IN_CACHE)
+#else
+            /* Fixme: we should guarantee that this is running the right
+             * process.
+             */
+#endif
            ) {
         ci_assert(ts->s.so.linger != 0);
         ci_tcp_linger(netif, ts);
@@ -619,7 +626,7 @@ int ci_tcp_close(ci_netif* netif, ci_tcp_state* ts)
 #endif /* OO_CFG_CLOSE_EPS */
 
 
-#ifdef __KERNEL__
+#if (defined(__KERNEL__) && ! CI_CFG_UL_INTERRUPT_HELPER) || (! defined(__KERNEL__) && CI_CFG_UL_INTERRUPT_HELPER) 
 void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
 {
   int synrecvs;
@@ -652,7 +659,7 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
 
     w = ci_tcp_acceptq_get(netif, tls);
 
-#if CI_CFG_ENDPOINT_MOVE
+#if defined(__KERNEL__) && CI_CFG_ENDPOINT_MOVE
     if( w->sb_aflags & CI_SB_AFLAG_MOVED_AWAY ) {
       tcp_helper_resource_t *thr = NULL;
       oo_sp sp;
@@ -755,8 +762,9 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
   uncache_ep_list(netif, tls, &tls->epcache.pending);
 #endif
 }
+#endif
 
-#if CI_CFG_FD_CACHING
+#if defined(__KERNEL__) && CI_CFG_FD_CACHING
 void ci_tcp_listen_update_cached(ci_netif* netif, ci_tcp_socket_listen* tls)
 {
   tcp_helper_endpoint_t * cached_ep;
@@ -801,11 +809,14 @@ void ci_tcp_listen_update_cached(ci_netif* netif, ci_tcp_socket_listen* tls)
 }
 
 #endif
-#endif
 
+#if OO_CFG_CLOSE_EPS
 void __ci_tcp_listen_shutdown(ci_netif* netif, ci_tcp_socket_listen* tls)
 {
   int rc;
+#if CI_CFG_UL_INTERRUPT_HELPER
+  int saved_errno = errno;
+#endif
 
   ci_assert(netif);
   ci_assert(tls);
@@ -834,6 +845,14 @@ void __ci_tcp_listen_shutdown(ci_netif* netif, ci_tcp_socket_listen* tls)
   rc = ci_tcp_helper_endpoint_shutdown(netif, S_SP(tls),
                                        SHUT_RDWR, CI_TCP_LISTEN);
 # endif
+#if CI_CFG_UL_INTERRUPT_HELPER
+  if( rc == -1 && errno == EINVAL ) {
+    /* See the comment above - the socket is already closed */
+    rc = 0;
+    errno = saved_errno;
+  }
+  ci_tcp_listen_shutdown_queues(netif, tls);
+#endif
   if( rc < 0 )
     LOG_E(ci_log("%s: [%d:%d] shutdown(os_sock) failed %d",
                  __FUNCTION__, NI_ID(netif), S_FMT(tls), rc));
@@ -865,7 +884,6 @@ void ci_tcp_all_fds_gone_common(ci_netif* ni, ci_tcp_state* ts)
   }
 }
 
-#if OO_CFG_CLOSE_EPS
 void ci_tcp_listen_all_fds_gone(ci_netif* ni, ci_tcp_socket_listen* tls,
                                 int do_free)
 {

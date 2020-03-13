@@ -1004,6 +1004,11 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
   const ci_uint64 ALL_HANDLED_FLAGS = CI_EPLOCK_NETIF_IS_PKT_WAITER |
                                       CI_EPLOCK_NETIF_NEED_POLL |
                                       CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS |
+#if CI_CFG_UL_INTERRUPT_HELPER && ! defined (__KERNEL__)
+    /* NB !__KERNEL__ above will go when UL_INTERRUPT_HELPER mode is
+     * fully implemented */
+                                      CI_EPLOCK_NETIF_CLOSE_ENDPOINT |
+#endif
                                       CI_EPLOCK_NETIF_MERGE_ATOMIC_COUNTERS;
   ci_uint64 set_flags = 0;
 
@@ -1033,6 +1038,22 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
     CITP_STATS_NETIF(++ni->state->stats.deferred_polls);
     ci_netif_poll(ni);
   }
+
+#if CI_CFG_UL_INTERRUPT_HELPER && ! defined (__KERNEL__)
+  if( lock_val & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
+    /* Ask kernel for any sockets to be closed and really close them */
+    oo_sp id;
+    do {
+      int saved_errno = errno;
+      oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_GET_CLOSING_EP,
+                     &id);
+      errno = saved_errno;
+      if( OO_SP_IS_NULL(id) )
+        break;
+      citp_waitable_all_fds_gone(ni, id);
+    } while(1);
+  }
+#endif
 
   if( lock_val & CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS ) {
     if( ! oo_deferred_send(ni) )

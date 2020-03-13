@@ -153,10 +153,10 @@ static void
 tcp_helper_initialize_and_start_periodic_timer(tcp_helper_resource_t*);
 static void
 tcp_helper_stop_periodic_work(tcp_helper_resource_t*);
-#endif
 
 static void
 tcp_helper_close_pending_endpoints(tcp_helper_resource_t*);
+#endif
 
 static void
 tcp_helper_purge_txq_work(struct work_struct *data);
@@ -229,6 +229,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
     return;
   }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   if( l & OO_TRUSTED_LOCK_CLOSE_ENDPOINT ) {
     new_l = l & ~OO_TRUSTED_LOCK_CLOSE_ENDPOINT;
     if( ci_cas32_fail(&trs->trusted_lock, l, new_l) )
@@ -256,6 +257,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
     }
     goto again;
   }
+#endif
 
   if( l & OO_TRUSTED_LOCK_OS_READY ) {
     new_l = l & ~OO_TRUSTED_LOCK_OS_READY;
@@ -328,6 +330,7 @@ oo_trusted_lock_set_flags_if_locked(tcp_helper_resource_t* trs, unsigned flags)
 }
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /* Returns true if the lock is obtained, or false otherwise.  In the latter
  * case the flags will be set (unless AWAITING_FREE).
  */
@@ -348,6 +351,7 @@ oo_trusted_lock_lock_or_set_flags(tcp_helper_resource_t* trs, unsigned flags)
 
   return l == OO_TRUSTED_LOCK_UNLOCKED;
 }
+#endif
 
 
 /*----------------------------------------------------------------------------
@@ -1751,6 +1755,7 @@ static void release_vi(tcp_helper_resource_t* trs)
 }
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static int tcp_helper_is_expecting_events(ci_netif* ni)
 {
   int intf_i;
@@ -1796,6 +1801,8 @@ static void tcp_helper_gracious_dtor(tcp_helper_resource_t* trs)
                   ni->packets->n_pkts_allocated);
 }
 
+
+/* This leak check should be moved to UL in CI_CFG_UL_INTERRUPT_HELPER mode */
 
 static void tcp_helper_leak_check(tcp_helper_resource_t* trs)
 {
@@ -1844,6 +1851,7 @@ static void tcp_helper_leak_check(tcp_helper_resource_t* trs)
 
   ci_assert_equal(ni->state->reserved_pktbufs, 0);
 }
+#endif
 
 
 /* Set-up the IPIDs for netif [ni] */
@@ -2691,11 +2699,13 @@ static void tcp_helper_do_non_atomic(struct work_struct *data)
         CITP_STATS_NETIF_INC(&trs->netif, interrupt_primes);
       }
     }
+#if ! CI_CFG_UL_INTERRUPT_HELPER
     if( trs_aflags & OO_THR_AFLAG_CLOSE_ENDPOINTS ) {
       OO_DEBUG_TCPH(ci_log("%s: [%u] deferred CLOSE_ENDPOINTS",
                            __FUNCTION__, trs->id));
       tcp_helper_close_pending_endpoints(trs);
     }
+#endif
 
     efab_tcp_helper_netif_unlock(trs, 0);
   }
@@ -4730,6 +4740,18 @@ __efab_tcp_helper_k_ref_count_dec(tcp_helper_resource_t* trs,
 }
 
 
+static void
+tcp_helper_close_cleanup_ep(tcp_helper_resource_t* trs,
+                            tcp_helper_endpoint_t* ep)
+{
+    tcp_helper_endpoint_clear_aflags(ep, OO_THR_EP_AFLAG_PEER_CLOSED);
+    if( ep->alien_ref != NULL ) {
+      fput(ep->alien_ref->_filp);
+      ep->alien_ref = NULL;
+    }
+}
+
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /*! Close sockets.  Called with netif lock held.  Kernel netif lock may or
  * may not be held.
  */
@@ -4772,14 +4794,42 @@ tcp_helper_close_pending_endpoints(tcp_helper_resource_t* trs)
     ep = CI_CONTAINER(tcp_helper_endpoint_t, tobe_closed , link);
     OO_DEBUG_TCPH(ci_log("%s: [%u:%d] closing",
                          __FUNCTION__, trs->id, OO_SP_FMT(ep->id)));
-    tcp_helper_endpoint_clear_aflags(ep, OO_THR_EP_AFLAG_PEER_CLOSED);
-    if( ep->alien_ref != NULL ) {
-      fput(ep->alien_ref->_filp);
-      ep->alien_ref = NULL;
-    }
+    tcp_helper_close_cleanup_ep(trs, ep);
     citp_waitable_all_fds_gone(&trs->netif, ep->id);
   }
 }
+#else
+
+int oo_get_closing_ep(ci_private_t* priv, void* arg)
+{
+  oo_sp* p_id = arg;
+  ci_irqlock_state_t lock_flags;
+  tcp_helper_resource_t* trs = priv->thr;
+  tcp_helper_endpoint_t* ep;
+  ci_sllink* link;
+
+  ci_assert(ci_netif_is_locked(&trs->netif));
+
+  if( ci_sllist_is_empty(&trs->ep_tobe_closed) ) {
+    *p_id = OO_SP_NULL;
+    return 0;
+  }
+  ci_irqlock_lock(&trs->lock, &lock_flags);
+  if( ci_sllist_is_empty(&trs->ep_tobe_closed) ) {
+    ci_irqlock_unlock(&trs->lock, &lock_flags);
+    *p_id = OO_SP_NULL;
+    return 0;
+  }
+  link = ci_sllist_pop(&trs->ep_tobe_closed);
+  ci_irqlock_unlock(&trs->lock, &lock_flags);
+
+  ep = CI_CONTAINER(tcp_helper_endpoint_t, tobe_closed , link);
+  tcp_helper_close_cleanup_ep(trs, ep);
+  *p_id = ep->id;
+
+  return 0;
+}
+#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 
 static void
@@ -4859,9 +4909,10 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
                                int safe_destroy_now)
 {
   ci_netif* netif;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   int n_ep_closing;
   unsigned i;
-  int krc_old, krc_new;
+#endif
 
   ci_assert(NULL != trs);
   ci_assert(trs->trusted_lock == (OO_TRUSTED_LOCK_LOCKED |
@@ -4881,6 +4932,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
 
   OO_DEBUG_TCPH(ci_log("%s [%u]: starting", __FUNCTION__, trs->id));
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* At this point we need to determine the state of the shared lock.  There
    * is still potentially reset work running, which also uses the lock.
    *
@@ -5062,6 +5114,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
                        trs->id, n_ep_closing));
 
   if( n_ep_closing ) {
+    int krc_old, krc_new;
     ci_irqlock_state_t lock_flags;
     /* Add in a ref to the stack for each of the closing sockets.  Set
      * CI_NETIF_FLAGS_DROP_SOCK_REFS so that the extra refs are dropped
@@ -5088,6 +5141,8 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
 #if CI_CFG_DESTROY_WEDGED
  closeall:
 #endif
+#endif /* CI_CFG_UL_INTERRUPT_HELPER*/
+
   /* Don't need atomics here, because only we are permitted to touch
    * [trusted_lock] when AWAITING_FREE is set.
    */
@@ -5191,7 +5246,9 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
       oo_inject_packets_kernel(trs, 1);
       oo_deferred_free(&trs->netif);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
       tcp_helper_gracious_dtor(trs);
+#endif
     }
     else {
       /* Pretend to be wedged and do not check for leaks */
@@ -5210,8 +5267,10 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
    * closing socket or as a reply to a network packet. */
   release_ep_tbl(trs);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   if( ~trs->netif.flags & CI_NETIF_FLAG_WEDGED )
     tcp_helper_leak_check(trs);
+#endif
 
   /* Free the table of ephemeral ports unless we share it with the cluster. */
   if(
@@ -6746,6 +6805,7 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id)
 
   }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* SO_LINGER should be handled
    * (i) when we close the last reference to the file;
    * (ii) not postponed to any lock holder;
@@ -6765,6 +6825,7 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id)
     ci_tcp_linger(&trs->netif, &wo->tcp);
     /* ci_tcp_linger exits unlocked */
   }
+#endif
 
 #if CI_CFG_FD_CACHING
   if( SP_TO_WAITABLE(ni, ep_id)->state == CI_TCP_LISTEN )
@@ -6786,6 +6847,7 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id)
   }
   ci_irqlock_unlock(&trs->lock, &lock_flags);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* set flag in eplock to signify callback needed when netif unlocked
    * 
    * It is fine to pass 0 value as in_dl_context parameter to the function
@@ -6807,6 +6869,16 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id)
     OO_DEBUG_TCPH(ci_log("%s: [%d:%d] closing deferred to lock holder",
                          __FUNCTION__, trs->id, OO_SP_FMT(ep_id)));
   }
+#else
+  /* It must be simple set_flag in some shared area finally when
+   * CI_CFG_UL_INTERRUPT_HELPER is fully implemented. */
+  if( ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
+                                 CI_EPLOCK_NETIF_CLOSE_ENDPOINT) )  {
+    ef_eplock_holder_set_flag(&trs->netif.state->lock,
+                              CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
+    ci_netif_unlock(&trs->netif);
+  }
+#endif
 }
 
 
@@ -7274,6 +7346,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     ci_assert_nflags(flags_set & ~all_after_unlock_flags,
                      ~CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
     if( flags_set & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
       if( oo_trusted_lock_lock_or_set_flags(thr,
                                             OO_TRUSTED_LOCK_CLOSE_ENDPOINT) ) {
@@ -7300,6 +7373,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
                              __FUNCTION__, thr->id));
       }
     }
+#endif
 
     /* We can free some packets while closing endpoints, etc.  Check this
      * condition again, but do it only once. */

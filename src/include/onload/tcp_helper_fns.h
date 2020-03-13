@@ -644,6 +644,7 @@ tcp_helper_free_ephemeral_ports(struct efab_ephemeral_port_head* table,
 
 #if CI_CFG_UL_INTERRUPT_HELPER
 int oo_wait_for_interrupt(ci_private_t* priv, void* arg);
+int oo_get_closing_ep(ci_private_t* priv, void* arg);
 #endif
 
 /*----------------------------------------------------------------------------

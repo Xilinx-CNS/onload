@@ -67,8 +67,7 @@
  * We can close endpoints from citp_fdinfo_do_handover(), and
  * if !CI_CFG_UL_INTERRUPT_HELPER then we close endpoints from in-kernel.
  */
-//#if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
-#if 1 /* Fixme: CI_CFG_UL_INTERRUPT_HELPER for close() is not implemented yet */
+#if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
 #define OO_CFG_CLOSE_EPS 1
 #else
 #define OO_CFG_CLOSE_EPS 0

@@ -1567,6 +1567,7 @@ oo_operations_table_t oo_operations[] = {
 
 #if CI_CFG_UL_INTERRUPT_HELPER
   op(OO_IOC_WAIT_FOR_INTERRUPT, oo_wait_for_interrupt),
+  op(OO_IOC_GET_CLOSING_EP,     oo_get_closing_ep),
 #endif
 
 /* Here come non contigous operations only, their position need to match

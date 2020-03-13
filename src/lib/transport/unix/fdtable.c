@@ -964,6 +964,21 @@ citp_uncache_fds_ul(ci_netif* netif)
 }
 #endif
 
+#if CI_CFG_UL_INTERRUPT_HELPER
+static inline ci_netif* fdi_to_stack(citp_fdinfo* fdi)
+{
+  switch( fdi->protocol->type ) {
+    case CITP_TCP_SOCKET:
+    case CITP_UDP_SOCKET:
+      return fdi_to_socket(fdi)->netif;
+    case CITP_PIPE_FD:
+      return fdi_to_pipe_fdi(fdi)->ni;
+    case CITP_PASSTHROUGH_FD:
+      return fdi_to_alien_fdi(fdi)->netif;
+  }
+  return NULL;
+}
+#endif
 
 void __citp_fdinfo_ref_count_zero(citp_fdinfo* fdi, int fdt_locked)
 {
@@ -996,6 +1011,10 @@ void __citp_fdinfo_ref_count_zero(citp_fdinfo* fdi, int fdt_locked)
     else
 #endif
     {
+#if CI_CFG_UL_INTERRUPT_HELPER
+      ci_netif* netif = fdi_to_stack(fdi);
+#endif
+
       /* We mark the fd as busy before closing it to avoid races.  This means
        * that if this fd is looked up during this phase of the close the looker
        * upper will have to wait.
@@ -1016,6 +1035,18 @@ void __citp_fdinfo_ref_count_zero(citp_fdinfo* fdi, int fdt_locked)
         SC_TO_EPS(fdi_to_socket(fdi)->netif,fdi_to_socket(fdi)->s)->fd = CI_FD_BAD;
 
       ci_tcp_helper_close_no_trampoline(fdi->fd);
+
+#if CI_CFG_UL_INTERRUPT_HELPER
+      /* If it was the last fd for this socket, then we should proceed with
+       * the real closing right now.
+       * Todo: In case of SO_LINGER it is really important to handle it all
+       * here.
+       */
+      if( netif != NULL &&
+          (netif->state->lock.lock & CI_EPLOCK_NETIF_CLOSE_ENDPOINT) &&
+          ci_netif_trylock(netif) )
+        ci_netif_unlock(netif);
+#endif
 
       citp_fdtable_busy_clear(fdi->fd, fdip_unknown,
                               fdt_locked | fdtable_strict());
