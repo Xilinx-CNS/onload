@@ -222,6 +222,45 @@ again:
 }
 
 
+static int
+ci_tcp_use_mac_filter(ci_netif* ni, ci_sock_cmn* s, ci_ifid_t ifindex,
+                      oo_sp from_tcp_id)
+{
+  int use_mac_filter = 0;
+  int mode;
+
+  if( NI_OPTS(ni).scalable_filter_enable != CITP_SCALABLE_FILTERS_ENABLE )
+    return 0;
+
+  mode = NI_OPTS(ni).scalable_filter_mode;
+  if( mode & (CITP_SCALABLE_MODE_TPROXY_ACTIVE | CITP_SCALABLE_MODE_ACTIVE) ) {
+    /* TPROXY sockets don't get associated with a hw filter, so don't need
+     * oof management.
+     */
+    use_mac_filter |= (s->s_flags & CI_SOCK_FLAGS_SCALABLE);
+  }
+
+  if( ! use_mac_filter && (mode & CITP_SCALABLE_MODE_PASSIVE) ) {
+    /* Passively opened sockets accepted from a listener using a MAC filter
+     * also use the MAC filter.
+     */
+    use_mac_filter |= OO_SP_NOT_NULL(from_tcp_id) &&
+             (SP_TO_SOCK(ni, from_tcp_id)->s_flags & CI_SOCK_FLAG_STACK_FILTER);
+
+    if( (use_mac_filter == 0) && (s->b.state == CI_TCP_LISTEN) &&
+        ci_tcp_use_mac_filter_listen(ni, s, ifindex) )
+      use_mac_filter = 1;
+  }
+
+  if( use_mac_filter ) {
+    /* Only TCP sockets support use of MAC filters at the moment */
+    ci_assert_flags(s->b.state, CI_TCP_STATE_TCP);
+  }
+
+  return use_mac_filter;
+}
+
+
 int
 tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
                                 ci_ifid_t bindto_ifindex, oo_sp from_tcp_id)
@@ -371,8 +410,12 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
     ci_assert( ! in_atomic() );
     ci_assert( ~ep->thr->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT );
 
-    flags = (ep->thr->thc != NULL && (s->s_flags & CI_SOCK_FLAG_REUSEPORT) != 0) ?
-            OOF_SOCKET_ADD_FLAG_CLUSTERED : 0;
+    flags =
+#if CI_CFG_ENDPOINT_MOVE
+        (ep->thr->thc != NULL && (s->s_flags & CI_SOCK_FLAG_REUSEPORT) != 0) ?
+            OOF_SOCKET_ADD_FLAG_CLUSTERED :
+#endif
+            0;
 
     /* We need to add the socket here, even if it doesn't want unicast filters.
      * This ensures that the filter code knows when and how the socket is

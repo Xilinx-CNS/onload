@@ -609,6 +609,7 @@ static int citp_tcp_accept_complete(ci_netif* ni,
 }
 
 
+#if CI_CFG_ENDPOINT_MOVE
 #define CI_ACCEPT_FAKED_UP -3
 
 static int citp_tcp_accept_alien(ci_netif* ni, ci_tcp_socket_listen* listener,
@@ -733,6 +734,7 @@ fail:
   citp_netif_release_ref(ani, 0);
   return -1;
 }
+#endif
 
 
 static int citp_tcp_accept_ul(citp_fdinfo* fdinfo, ci_netif* ni,
@@ -760,6 +762,7 @@ redo:
   ci_assert(ci_tcp_acceptq_not_empty(listener));
   w = ci_tcp_acceptq_get(ni, listener);
 
+#if CI_CFG_ENDPOINT_MOVE
   if( w->sb_aflags & CI_SB_AFLAG_MOVED_AWAY ) {
     int rc;
     ci_sock_unlock(ni, &listener->s.b);
@@ -768,6 +771,7 @@ redo:
       return rc;
     unlocked = 1;
   }
+#endif
 
   ci_assert(w->state & CI_TCP_STATE_TCP);
   ci_assert(w->state != CI_TCP_LISTEN);

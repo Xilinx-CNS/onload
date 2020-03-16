@@ -667,6 +667,8 @@ efab_ep_filter_dump(ci_private_t *priv, void *arg)
                                          CI_USER_PTR_GET(op->buf),
                                          op->buf_len);
 }
+
+#if CI_CFG_ENDPOINT_MOVE
 static int
 efab_cluster_dump(ci_private_t *priv, void *arg)
 {
@@ -674,6 +676,7 @@ efab_cluster_dump(ci_private_t *priv, void *arg)
   return tcp_helper_cluster_dump(priv->thr, CI_USER_PTR_GET(op->buf),
                                  op->buf_len);
 }
+#endif
 
 
 /*--------------------------------------------------------------------
@@ -1133,9 +1136,11 @@ ioctl_kill_self(ci_private_t *priv, void *unused)
   return send_sig(SIGPIPE, current, 0);
 }
 
+#if CI_CFG_ENDPOINT_MOVE
 extern int efab_file_move_to_alien_stack_rsop(ci_private_t *priv, void *arg);
 extern int efab_tcp_loopback_connect(ci_private_t *priv, void *arg);
 extern int efab_tcp_helper_reuseport_bind(ci_private_t *priv, void *arg);
+#endif
 
 
 static int oo_get_cpu_khz_rsop(ci_private_t *priv, void *arg)
@@ -1542,10 +1547,12 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_INSTALL_STACK,    efab_install_stack),
   op(OO_IOC_RSOP_DUMP, thr_priv_dump),
   op(OO_IOC_GET_ONLOADFS_DEV, onloadfs_get_dev_t),
+#if CI_CFG_ENDPOINT_MOVE
   op(OO_IOC_TCP_LOOPBACK_CONNECT, efab_tcp_loopback_connect),
   op(OO_IOC_MOVE_FD, efab_file_move_to_alien_stack_rsop),
   op(OO_IOC_EP_REUSEPORT_BIND, efab_tcp_helper_reuseport_bind),
   op(OO_IOC_CLUSTER_DUMP,      efab_cluster_dump),
+#endif
 
   op(OO_IOC_ALLOC_ACTIVE_WILD, efab_tcp_helper_alloc_active_wild_rsop),
 

@@ -86,6 +86,7 @@ int ci_tcp_helper_ep_set_filters(ci_fd_t           fd,
 }
 
 
+#if CI_CFG_ENDPOINT_MOVE
 /*--------------------------------------------------------------------
  *!
  * TODO
@@ -131,6 +132,7 @@ int ci_tcp_helper_cluster_dump(void* opaque, void* buf, int buf_len)
   op.buf_len = buf_len;
   return oo_resource_op(args->fd, OO_IOC_CLUSTER_DUMP, &op);
 }
+#endif
 
 
 /*--------------------------------------------------------------------

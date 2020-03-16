@@ -1551,9 +1551,11 @@ typedef struct {
 
   ci_int32              sigown;  /** pid that receives signals from this */
 
+#if CI_CFG_ENDPOINT_MOVE
   ci_uint32             moved_to_stack_id;
 #define OO_STACK_ID_INVALID ((ci_uint32)(-1))
   oo_sp                 moved_to_sock_id;
+#endif
 
   /* Epoll3 support:
    * - ready_lists_in_use should be updated under the stack lock only,

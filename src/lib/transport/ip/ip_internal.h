@@ -227,7 +227,7 @@ ci_tcp_ep_set_filters(ci_netif *        ni,
   return rc;
 }
 
-#ifndef __ci_driver__
+#if !defined(__KERNEL__) && CI_CFG_ENDPOINT_MOVE
 ci_inline int
 ci_tcp_ep_reuseport_bind(ci_fd_t fd, const char* cluster_name,
                          ci_int32 cluster_size, ci_uint32 cluster_restart_opt,

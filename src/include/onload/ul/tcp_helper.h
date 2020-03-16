@@ -147,8 +147,10 @@ typedef struct {
   ci_fd_t fd;
 } cluster_dump_args;
 
+#if CI_CFG_ENDPOINT_MOVE
 extern int
 ci_tcp_helper_cluster_dump(void* opaque, void* buf, int buf_len) CI_HF;
+#endif
 
 /*--------------------------------------------------------------------
  *!

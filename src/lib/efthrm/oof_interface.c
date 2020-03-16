@@ -31,21 +31,31 @@ oof_cb_socket_stack(struct oof_socket* skf)
 struct tcp_helper_cluster_s*
 oof_cb_stack_thc(struct tcp_helper_resource_s* skf_stack)
 {
+#if CI_CFG_ENDPOINT_MOVE
   return skf_stack->thc;
+#else
+  return NULL;
+#endif
 }
 
 
 void
 oof_cb_thc_ref(struct tcp_helper_cluster_s* thc)
 {
+#if CI_CFG_ENDPOINT_MOVE
   tcp_helper_cluster_ref(thc);
+#endif
 }
 
 
 const char*
 oof_cb_thc_name(struct tcp_helper_cluster_s* thc)
 {
+#if CI_CFG_ENDPOINT_MOVE
   return thc->thc_name;
+#else
+  return NULL; /* we mustn't get here! */
+#endif
 }
 
 

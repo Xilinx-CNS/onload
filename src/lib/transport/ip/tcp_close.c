@@ -649,11 +649,12 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
   while( ci_tcp_acceptq_not_empty(tls) ) {
     citp_waitable* w;
     ci_tcp_state* ats;    /* accepted ts */
-    tcp_helper_resource_t *thr = NULL;
 
     w = ci_tcp_acceptq_get(netif, tls);
 
+#if CI_CFG_ENDPOINT_MOVE
     if( w->sb_aflags & CI_SB_AFLAG_MOVED_AWAY ) {
+      tcp_helper_resource_t *thr = NULL;
       oo_sp sp;
       ci_uint32 stack_id;
       ci_netif *ani;        /* netif of the accepted socket */
@@ -703,6 +704,7 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
       efab_thr_release(thr);
       continue;
     }
+#endif
 
     ats = &CI_CONTAINER(citp_waitable_obj, waitable, w)->tcp;
 

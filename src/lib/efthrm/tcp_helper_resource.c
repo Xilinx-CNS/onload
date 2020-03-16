@@ -1741,8 +1741,10 @@ static void release_vi(tcp_helper_resource_t* trs)
 
   }
 
+#if CI_CFG_ENDPOINT_MOVE
   if( trs->thc != NULL )
     tcp_helper_cluster_release(trs->thc, trs);
+#endif
 }
 
 
@@ -2750,9 +2752,7 @@ tcp_helper_rm_alloc_proxy(ci_resource_onload_alloc_t* alloc,
                           int ifindices_len,
                           tcp_helper_resource_t** rs_out)
 {
-  tcp_helper_resource_t* rs;
   int rc;
-  ci_netif* ni;
 
   ci_assert(alloc);
   ci_assert(rs_out);
@@ -2764,7 +2764,10 @@ tcp_helper_rm_alloc_proxy(ci_resource_onload_alloc_t* alloc,
 
   oo_timesync_wait_for_cpu_khz_to_stabilize();
 
+#if CI_CFG_ENDPOINT_MOVE
   if( alloc->in_flags & CI_NETIF_FLAG_DO_ALLOCATE_SCALABLE_FILTERS_RSS ) {
+    tcp_helper_resource_t* rs;
+    ci_netif* ni;
     /* Create stack that will be part of a cluster,
      * Cluster will be created if needed.
      */
@@ -2785,7 +2788,9 @@ tcp_helper_rm_alloc_proxy(ci_resource_onload_alloc_t* alloc,
     *rs_out = rs;
     return 0;
   }
-  else {
+  else
+#endif
+  {
     return tcp_helper_rm_alloc(alloc, opts, ifindices_len,
                                NULL, rs_out);
   }
@@ -3666,7 +3671,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   rs->intfs_to_reset = 0;
   rs->intfs_to_xdp_update = 0;
   rs->intfs_suspended = 0;
+#if CI_CFG_ENDPOINT_MOVE
   rs->thc = NULL;
+#endif
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   atomic_set(&rs->timer_running, 0);
 #endif
@@ -3894,7 +3901,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
    * freeing code which frees the reference to the thc leading us to
    * deadlock with thc creation code).
    */
+#if CI_CFG_ENDPOINT_MOVE
   rs->thc = thc;
+#endif
   ci_dllist_push(&THR_TABLE.all_stacks, &rs->all_stacks_link);
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
@@ -4237,12 +4246,14 @@ static void tcp_helper_reset_stack_locked(tcp_helper_resource_t* thr)
   thr->intfs_suspended &=~ intfs_to_reset;
   ci_irqlock_unlock(&thr->lock, &lock_flags);
 
+#if CI_CFG_ENDPOINT_MOVE
   if( thr->thc != NULL ) {
     /* This warning can be removed once Bug43452 is properly addressed */
     ci_log("Stack %s:%d in cluster %s can't restore filters post-NIC-reset.\n"
            "This stack will no longer receive packets",
            thr->name, thr->id, thr->thc->thc_name);
   }
+#endif
 
   pkt_sets_n = ni->pkt_sets_n;
 
@@ -5200,7 +5211,11 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
     tcp_helper_leak_check(trs);
 
   /* Free the table of ephemeral ports unless we share it with the cluster. */
-  if( trs->thc == NULL && trs->trs_ephem_table != NULL )
+  if(
+#if CI_CFG_ENDPOINT_MOVE
+      trs->thc == NULL &&
+#endif
+      trs->trs_ephem_table != NULL )
     tcp_helper_free_ephemeral_ports(trs->trs_ephem_table,
                                     trs->trs_ephem_table_entries);
 

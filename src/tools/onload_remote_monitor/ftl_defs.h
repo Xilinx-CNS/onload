@@ -53,6 +53,12 @@
 #define ON_CI_CFG_FD_CACHING IGNORE
 #endif
 
+#if CI_CFG_ENDPOINT_MOVE
+#define ON_CI_CFG_ENDPOINT_MOVE DO
+#else
+#define ON_CI_CFG_ENDPOINT_MOVE IGNORE
+#endif
+
 #if CI_CFG_PIO
 #define ON_CI_HAVE_PIO DO
 #else
@@ -635,8 +641,10 @@
     FTL_TFIELD_INT(ctx, ci_uint32, ready_lists_in_use, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))    \
     FTL_TFIELD_INT(ctx, oo_p, epoll, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                     \
     FTL_TFIELD_INT(ctx, ci_int32, sigown, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                \
-    FTL_TFIELD_INT(ctx, ci_uint32, moved_to_stack_id, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))    \
-    FTL_TFIELD_INT(ctx, ci_int32, moved_to_sock_id, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))      \
+    ON_CI_CFG_ENDPOINT_MOVE(                                                                      \
+      FTL_TFIELD_INT(ctx, ci_uint32, moved_to_stack_id, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))  \
+      FTL_TFIELD_INT(ctx, ci_int32, moved_to_sock_id, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))    \
+    )                                                                                             \
     FTL_TSTRUCT_END(ctx)
 
 #define STRUCT_ETHER_HDR(ctx)						      \

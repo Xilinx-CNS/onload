@@ -576,6 +576,7 @@ CI_CFG_OPT("EF_PACKET_BUFFER_MODE", packet_buffer_mode, ci_uint32,
 "phys_mode_gid module parameter of the onload module.",
            2, , 0, 0, 3, oneof:buf_table;sriov_iommu;phys;sriov_phys)
 
+#if CI_CFG_ENDPOINT_MOVE
 #define CITP_TCP_LOOPBACK_OFF           0
 #define CITP_TCP_LOOPBACK_SAMESTACK     1
 #define CITP_TCP_LOOPBACK_TO_CONNSTACK  2
@@ -616,6 +617,7 @@ CI_CFG_OPT("EF_TCP_CLIENT_LOOPBACK", tcp_client_loopback, ci_uint32,
 "a lot of additional Onload stacks eating a lot of low memory.",
            3, , CITP_TCP_LOOPBACK_OFF, 0, CITP_TCP_LOOPBACK_TO_NEWSTACK,
            oneof:no;samestack;toconn;tolist;nonew)
+#endif
 
 #if CI_CFG_PKTS_AS_HUGE_PAGES
 CI_CFG_OPT("EF_USE_HUGE_PAGES", huge_pages, ci_uint32,

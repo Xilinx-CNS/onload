@@ -22,6 +22,9 @@
 #include <onload/drv/dump_to_user.h>
 
 
+#if CI_CFG_ENDPOINT_MOVE
+/* Clustering is not supported wuthout endpoint move. */
+
 #define FMT_PROTOCOL(p)    ((p) == IPPROTO_TCP ? "TCP":         \
                             (p) == IPPROTO_UDP ? "UDP" : "???")
 
@@ -948,6 +951,7 @@ static int thc_alloc_thr(tcp_helper_cluster_t* thc,
   *thr_out = thr_walk;
   return 0;
 }
+#endif /* CI_CFG_ENDPOINT_MOVE */
 
 
 int
@@ -970,8 +974,12 @@ tcp_helper_install_tproxy(int install,
     cplane = thr->netif.cplane;
   }
   else {
+#if CI_CFG_ENDPOINT_MOVE
     ofm = oo_filter_ns_to_manager(thc->thc_filter_ns);
     cplane = thc->thc_cplane;
+#else
+    ci_assert(0);
+#endif
   }
 
   ci_assert(ofm);
@@ -1029,6 +1037,7 @@ cleanup:
 }
 
 
+#if CI_CFG_ENDPOINT_MOVE
 static int
 thc_install_tproxy(tcp_helper_cluster_t* thc,
                    const ci_netif_config_opts* ni_opts)
@@ -1651,3 +1660,4 @@ int tcp_helper_cluster_dump(tcp_helper_resource_t* thr, void* buf, int buf_len)
 {
   return oo_dump_to_user(thc_dump_fn, NULL, buf, buf_len);
 }
+#endif

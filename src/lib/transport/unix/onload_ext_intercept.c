@@ -165,6 +165,7 @@ int onload_thread_get_spin(unsigned* state)
 
 int onload_move_fd(int fd)
 {
+#if CI_CFG_ENDPOINT_MOVE
   ef_driver_handle fd_ni;
   ci_fixed_descriptor_t op_arg;
   int rc;
@@ -193,6 +194,9 @@ out:
   citp_exit_lib(&lib_context, CI_TRUE);
   Log_CALL_RESULT(rc);
   return rc;
+#else
+  return -ENOSYS;
+#endif
 }
 
 

@@ -62,7 +62,9 @@ static void efab_ep_handover_setup(ci_private_t* priv, int* in_epoll_p)
 
   /* Second, update the shared state: */
   ci_bit_set(&w->waitable.sb_aflags, CI_SB_AFLAG_MOVED_AWAY_BIT);
+#if CI_CFG_ENDPOINT_MOVE
   w->waitable.moved_to_stack_id = OO_STACK_ID_INVALID;
+#endif
 
   *in_epoll_p = 0;
   if( ! list_empty(&priv->_filp->f_ep_links) ) {

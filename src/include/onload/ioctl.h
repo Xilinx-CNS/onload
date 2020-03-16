@@ -180,6 +180,7 @@ enum {
   OO_OP_GET_ONLOADFS_DEV,
 #define OO_IOC_GET_ONLOADFS_DEV     OO_IOC_R(GET_ONLOADFS_DEV, ci_uint32)
 
+#if CI_CFG_ENDPOINT_MOVE
   OO_OP_TCP_LOOPBACK_CONNECT,
 #define OO_IOC_TCP_LOOPBACK_CONNECT OO_IOC_RW(TCP_LOOPBACK_CONNECT, \
                                               struct oo_op_loopback_connect)
@@ -194,6 +195,7 @@ enum {
   OO_OP_CLUSTER_DUMP,
 #define OO_IOC_CLUSTER_DUMP       OO_IOC_W(CLUSTER_DUMP,            \
                                              oo_cluster_dump_t)
+#endif
   OO_OP_ALLOC_ACTIVE_WILD,
 #define OO_IOC_ALLOC_ACTIVE_WILD  OO_IOC_W(ALLOC_ACTIVE_WILD, \
                                            oo_alloc_active_wild_t)

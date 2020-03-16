@@ -27,6 +27,12 @@
 
 #define LPF "tcp_connect: "
 
+
+
+
+#if !defined(__KERNEL__) || CI_CFG_ENDPOINT_MOVE
+/* TCP connect() implementation is not needed in-kernel except for loopback */
+
 #ifndef __KERNEL__
 /*!
  * Tests for valid sockaddr & sockaddr length & AF_INET or AF_INET6.
@@ -365,6 +371,7 @@ static int ci_tcp_connect_check_dest(citp_socket* ep, ci_addr_t dst,
       ci_ip_cache_invalidate(ipcache);
     return 0;
   }
+#if CI_CFG_ENDPOINT_MOVE
   else if( ipcache->status == retrrc_localroute ) {
     ci_tcp_state* ts = SOCK_TO_TCP(ep->s);
 
@@ -388,11 +395,13 @@ static int ci_tcp_connect_check_dest(citp_socket* ep, ci_addr_t dst,
     }
     return CI_SOCKET_HANDOVER;
   }
+#endif
 
   return CI_SOCKET_HANDOVER;
 }
 #endif
 
+#endif
 
 static int/*bool*/
 cicp_check_ipif_ifindex(struct oo_cplane_handle* cp,
@@ -439,46 +448,7 @@ ci_tcp_use_mac_filter_listen(ci_netif* ni, ci_sock_cmn* s, ci_ifid_t ifindex)
 }
 
 
-int
-ci_tcp_use_mac_filter(ci_netif* ni, ci_sock_cmn* s, ci_ifid_t ifindex,
-                      oo_sp from_tcp_id)
-{
-  int use_mac_filter = 0;
-  int mode;
-
-  if( NI_OPTS(ni).scalable_filter_enable != CITP_SCALABLE_FILTERS_ENABLE )
-    return 0;
-
-  mode = NI_OPTS(ni).scalable_filter_mode;
-  if( mode & (CITP_SCALABLE_MODE_TPROXY_ACTIVE | CITP_SCALABLE_MODE_ACTIVE) ) {
-    /* TPROXY sockets don't get associated with a hw filter, so don't need
-     * oof management.
-     */
-    use_mac_filter |= (s->s_flags & CI_SOCK_FLAGS_SCALABLE);
-  }
-
-  if( ! use_mac_filter && (mode & CITP_SCALABLE_MODE_PASSIVE) ) {
-    /* Passively opened sockets accepted from a listener using a MAC filter
-     * also use the MAC filter.
-     */
-    use_mac_filter |= OO_SP_NOT_NULL(from_tcp_id) &&
-             (SP_TO_SOCK(ni, from_tcp_id)->s_flags & CI_SOCK_FLAG_STACK_FILTER);
-
-    if( (use_mac_filter == 0) && (s->b.state == CI_TCP_LISTEN) &&
-        ci_tcp_use_mac_filter_listen(ni, s, ifindex) )
-      use_mac_filter = 1;
-  }
-
-  if( use_mac_filter ) {
-    /* Only TCP sockets support use of MAC filters at the moment */
-    ci_assert_flags(s->b.state, CI_TCP_STATE_TCP);
-  }
-
-  return use_mac_filter;
-}
-
-
-#ifndef __KERNEL__
+#if !defined(__KERNEL__) || CI_CFG_ENDPOINT_MOVE
 int ci_tcp_can_set_filter_in_ul(ci_netif *ni, ci_sock_cmn* s)
 {
   if( (s->s_flags & CI_SOCK_FLAGS_SCALABLE) == 0 )
@@ -870,6 +840,7 @@ void ci_tcp_prev_seq_remember(ci_netif* ni, ci_tcp_state* ts)
 }
 
 
+#if !defined(__KERNEL__) || CI_CFG_ENDPOINT_MOVE
 /* Linux clears implicit address on connect failure */
 ci_inline void ci_tcp_connect_drop_implicit_address(ci_tcp_state *ts)
 {
@@ -1525,6 +1496,7 @@ int ci_tcp_connect(citp_socket* ep, const struct sockaddr* serv_addr,
   rc = ci_tcp_connect_check_dest(ep, dst_addr, dst_port);
   if( rc )  goto unlock_out;
 
+#if CI_CFG_ENDPOINT_MOVE
   if( (ts->s.pkt.flags & CI_IP_CACHE_IS_LOCALROUTE) &&
       OO_SP_IS_NULL(ts->local_peer) ) {
     /* Try to connect to another stack; handover if can't */
@@ -1545,6 +1517,7 @@ int ci_tcp_connect(citp_socket* ep, const struct sockaddr* serv_addr,
       return CI_SOCKET_HANDOVER;
     return 0;
   }
+#endif
 
   if( dnat ) {
     ts->s.s_flags |= CI_SOCK_FLAG_DNAT;
@@ -1863,8 +1836,9 @@ cleanup:
 
 
  
-#ifndef  __KERNEL__
+#ifndef __KERNEL__
 
+#if CI_CFG_ENDPOINT_MOVE
 /* Set a reuseport bind on a socket.
  */
 int ci_tcp_reuseport_bind(ci_sock_cmn* sock, ci_fd_t fd)
@@ -1883,6 +1857,7 @@ int ci_tcp_reuseport_bind(ci_sock_cmn* sock, ci_fd_t fd)
   }
   return 0;
 }
+#endif
 
 /* In this bind handler we just check that the address to which
  * are binding is either "any" or one of ours. 
@@ -2077,7 +2052,11 @@ int ci_tcp_listen(citp_socket* ep, ci_fd_t fd, int backlog)
         scalable) && !CI_IPX_IS_LOOPBACK(ts->s.laddr);
   }
 
-  if( !NI_OPTS(netif).tcp_server_loopback && ! will_accelerate )
+  if(
+#if CI_CFG_ENDPOINT_MOVE
+      !NI_OPTS(netif).tcp_server_loopback &&
+#endif
+      ! will_accelerate )
     return CI_SOCKET_HANDOVER;
 
   if( ul_backlog < 0 )
@@ -2358,5 +2337,5 @@ int ci_tcp_getsockname(citp_socket* ep, ci_fd_t fd, struct sockaddr* sa,
 
 #endif
 
-
+#endif
 

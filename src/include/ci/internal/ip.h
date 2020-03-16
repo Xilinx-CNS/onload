@@ -915,12 +915,14 @@ extern int ci_udp_bind_start(citp_socket* ep, ci_fd_t fd,
                              ci_uint16* lport) CI_HF;
 extern int ci_udp_bind_conclude(citp_socket* ep, const struct sockaddr* addr,
                                 socklen_t addrlen, ci_uint16 lport);
+#if CI_CFG_ENDPOINT_MOVE
 extern void ci_udp_handle_force_reuseport(ci_fd_t fd, citp_socket* ep,
                                           const struct sockaddr* sa,
                                           socklen_t sa_len) CI_HF;
 extern int ci_udp_reuseport_bind(citp_socket* ep, ci_fd_t fd,
                                  const struct sockaddr* sa,
                                  socklen_t sa_len, ci_uint16 lport) CI_HF;
+#endif
 extern int ci_udp_connect(citp_socket*, ci_fd_t fd,
 			  const struct sockaddr*, socklen_t addrlen) CI_HF;
 extern int ci_udp_connect_conclude(citp_socket* ep, ci_fd_t fd,
@@ -1470,9 +1472,6 @@ extern void ci_tcp_set_sndbuf_from_sndbuf_pkts(ci_netif* ni, ci_tcp_state* ts);
 
 extern int
 ci_tcp_use_mac_filter_listen(ci_netif* ni, ci_sock_cmn* s, ci_ifid_t ifindex);
-extern int
-ci_tcp_use_mac_filter(ci_netif* ni, ci_sock_cmn* s,
-                      ci_ifid_t bindto_ifindex, oo_sp from_tcp_id);
 
 #ifndef __KERNEL__
 extern int

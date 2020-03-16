@@ -1522,11 +1522,13 @@ static void stack_filters(ci_netif* ni)
   dump_via_buffers(ci_tcp_helper_ep_filter_dump, &args, DVB_LOG_FAILURE);
 }
 
+#if CI_CFG_ENDPOINT_MOVE
 static void stack_clusters(ci_netif* ni)
 {
   cluster_dump_args args = {ci_netif_get_driver_handle(ni)};
   dump_via_buffers(ci_tcp_helper_cluster_dump, &args, DVB_LOG_FAILURE);
 }
+#endif
 
 static void stack_qs(ci_netif* ni)
 {
@@ -2252,7 +2254,9 @@ static const stack_op_t stack_ops[] = {
   STACK_OP(timers,             "dump state of stack timers"),
   STACK_OP(filter_table,       "show stack software filter table"),
   STACK_OP_F(filters,          "show stack hardware filters", FL_ONCE),
+#if CI_CFG_ENDPOINT_MOVE
   STACK_OP_F(clusters,         "show clusters", FL_ONCE),
+#endif
   STACK_OP(qs,                 "show queues for each socket in stack"),
   STACK_OP(lock,               "lock the stack"),
   STACK_OP_AX(lock_flags,      "lock the stack and set lock flags", "<flags>"),

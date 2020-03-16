@@ -1094,6 +1094,7 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_MCAST_JOIN_HANDOVER")) )
     opts->mcast_join_handover = atoi(s);
 
+#if CI_CFG_ENDPOINT_MOVE
   if( (s = getenv("EF_TCP_SERVER_LOOPBACK")) )
     opts->tcp_server_loopback = atoi(s);
   if( (s = getenv("EF_TCP_CLIENT_LOOPBACK")) )
@@ -1102,6 +1103,7 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( opts->tcp_server_loopback == CITP_TCP_LOOPBACK_OFF &&
       opts->tcp_client_loopback == CITP_TCP_LOOPBACK_SAMESTACK )
     opts->tcp_client_loopback = CITP_TCP_LOOPBACK_OFF;
+#endif
 
   if( (s = getenv("EF_TCP_RX_CHECKS")) ) {
     unsigned v;

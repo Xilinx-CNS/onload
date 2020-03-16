@@ -188,7 +188,9 @@ static int citp_udp_bind(citp_fdinfo* fdinfo, const struct sockaddr* sa,
     goto done;
   }
 
+#if CI_CFG_ENDPOINT_MOVE
   ci_udp_handle_force_reuseport(fdinfo->fd, ep, sa, sa_len);
+#endif
 
   ci_netif_lock_fdi(epi);
   /* Perform OS socket bind. This should be done before reuseport actions to
@@ -200,6 +202,7 @@ static int citp_udp_bind(citp_fdinfo* fdinfo, const struct sockaddr* sa,
   if( rc != 0 )
     goto done;
 
+#if CI_CFG_ENDPOINT_MOVE
   /* multicast sockets do not do clustering */
   if( (s->s_flags & CI_SOCK_FLAG_REUSEPORT) != 0 &&
       CI_SOCK_NOT_BOUND(s) &&
@@ -234,6 +237,7 @@ static int citp_udp_bind(citp_fdinfo* fdinfo, const struct sockaddr* sa,
       goto done;
     }
   }
+#endif
 
   ci_netif_lock_fdi(epi);
   rc = ci_udp_bind_conclude(ep, sa, sa_len, lport);

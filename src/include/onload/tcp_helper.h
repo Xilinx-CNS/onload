@@ -346,8 +346,10 @@ typedef struct tcp_helper_resource_s {
   
   struct tcp_helper_nic      nic[CI_CFG_MAX_INTERFACES];
 
+#if CI_CFG_ENDPOINT_MOVE
   /* The cluster this stack is associated with if any */
   tcp_helper_cluster_t*         thc;
+#endif
   /* TID of thread that created this stack within the cluster */
   pid_t                         thc_tid;
   /* TID of thread with right to do sticky binds on this stack in reheat mode */

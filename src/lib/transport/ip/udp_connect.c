@@ -309,6 +309,7 @@ int ci_udp_bind_conclude(citp_socket* ep, const struct sockaddr* addr,
 }
 
 
+#if CI_CFG_ENDPOINT_MOVE
 void ci_udp_handle_force_reuseport(ci_fd_t fd, citp_socket* ep,
                                    const struct sockaddr* sa, socklen_t sa_len)
 {
@@ -360,6 +361,7 @@ int ci_udp_reuseport_bind(citp_socket* ep, ci_fd_t fd,
   }
   return rc;
 }
+#endif
 
 
 /* To handle bind we just let the underlying OS socket make all

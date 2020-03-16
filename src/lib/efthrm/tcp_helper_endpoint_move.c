@@ -16,6 +16,7 @@
 #include <onload/version.h>
 #include <onload/oof_interface.h>
 
+#if CI_CFG_ENDPOINT_MOVE
 
 static int efab_file_move_supported_tcp(ci_netif *ni, ci_tcp_state *ts,
                                         int drop_filter, int do_assert)
@@ -842,3 +843,4 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
   return -ENOENT;
 }
 
+#endif

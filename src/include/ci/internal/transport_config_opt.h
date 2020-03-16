@@ -465,6 +465,16 @@
 /* Include support for caching file descriptors at user-level.  */
 #define CI_CFG_FD_CACHING      1
 
+/* Enable endpoint move.
+ * It is used in:
+ * - extension API onload_move_fd();
+ * - in accelerated TCP loopback (see EF_TCP_SERVER_LOOPBACK
+ *   & EF_TCP_CLIENT_LOOPBACK environment variables);
+ * - clustering (aka SO_REUSEPORT).
+ * You probably want it to be turned on.
+ */
+#define CI_CFG_ENDPOINT_MOVE 1
+
 /* Support physical addressing (as well as protected buffer addressing). */
 #ifdef __KERNEL__
 # define CI_CFG_SUPPORT_PHYS_ADDR  1

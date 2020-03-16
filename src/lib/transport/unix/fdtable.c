@@ -316,6 +316,7 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
     alien_fdi->ep = SP_TO_WAITABLE(ni, info->sock_id);
     citp_passthrough_init(alien_fdi);
   }
+#if CI_CFG_ENDPOINT_MOVE
   else if( info->fd_type == CI_PRIV_TYPE_ALIEN_EP ) {
     citp_waitable* w = SP_TO_WAITABLE(ni, info->sock_id);
     citp_sock_fdi* sock_fdi;
@@ -347,6 +348,7 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
       CI_TEST(0);
     }
   }
+#endif
   else {
     citp_pipe_fdi* pipe_fdi;
 
