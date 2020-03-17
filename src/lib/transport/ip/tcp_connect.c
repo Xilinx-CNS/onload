@@ -2169,8 +2169,18 @@ int ci_tcp_listen(citp_socket* ep, ci_fd_t fd, int backlog)
     ci_assert_nequal(rc, -EFILTERSSOME);
     VERB(ci_log("%s: set_filters  returned %d", __FUNCTION__, rc));
     if (rc < 0) {
-      CI_SET_ERROR(rc, -rc);
-      goto post_listen_fail;
+      if( s->s_flags & CI_SOCK_FLAG_BOUND_ALIEN &&
+          NI_OPTS(netif).tcp_server_loopback ) {
+        /* That alien address can't be served by filters despite
+         * CI_NETIF_FLAG_USE_ALIEN_LADDRS.  We'll accelerate loopback in
+         * any case.
+         */
+        rc = 0;
+      }
+      else {
+        CI_SET_ERROR(rc, -rc);
+        goto post_listen_fail;
+      }
     }
   }
 
