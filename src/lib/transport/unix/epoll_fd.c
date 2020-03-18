@@ -2769,6 +2769,7 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
    * the ordering - but the fds will be ready next time the user does a wait.
    */
   if( wait.poll_again ) {
+    ci_int64 old_timeout_hr = wait.next_timeout_hr;
     ci_assert_gt(rc, 0);
     Log_POLL(ci_log("%s: need repoll at user level", __FUNCTION__));
     citp_reenter_lib(lib_context);
@@ -2778,7 +2779,11 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
 
     rc = citp_epoll_wait(fdi, ep->wait_events, &wait, n_socks,
                          0, sigmask, lib_context);
-    if( rc == 0 && wait.next_timeout_hr != 0 ) {
+    if( rc == 0 && old_timeout_hr != 0 ) {
+      /* We've just called citp_epoll_wait() with timeout=0, and it may
+       * have rewritten the wait.next_timeout_hr value.  Rewrite it back. */
+      wait.next_timeout_hr = old_timeout_hr;
+
       citp_reenter_lib(lib_context);
       timeout_hr = wait.next_timeout_hr;
       Log_POLL(ci_log("%s: start over", __FUNCTION__));
