@@ -458,6 +458,7 @@ static int citp_tcp_bind(citp_fdinfo* fdinfo, const struct sockaddr* sa,
     }
   }
 
+#if CI_CFG_ENDPOINT_MOVE
   if( rc == 0 )
     if( (s->s_flags & CI_SOCK_FLAG_REUSEPORT) != 0 )
       /* If the following fails, we are not undoing the bind() done
@@ -490,6 +491,9 @@ static int citp_tcp_bind(citp_fdinfo* fdinfo, const struct sockaddr* sa,
           CI_SET_ERROR(rc, EBADF);
         }
       }
+#else
+  (void)s; /* appease compiler when NDEBUG */
+#endif
 
   if( fdinfo )
     citp_fdinfo_release_ref(fdinfo, 0);
@@ -1630,6 +1634,7 @@ static int citp_tcp_setsockopt(citp_fdinfo* fdinfo, int level,
       RET_WITH_ERRNO(EINVAL);
   }
 
+#if CI_CFG_ENDPOINT_MOVE
   if( rc == 0 &&
       (epi->sock.s->s_flags & CI_SOCK_FLAG_PORT_BOUND) != 0 &&
       (epi->sock.s->s_flags & CI_SOCK_FLAG_FILTER) == 0 &&
@@ -1648,6 +1653,7 @@ static int citp_tcp_setsockopt(citp_fdinfo* fdinfo, int level,
       epi = fdi_to_sock_fdi(fdinfo);
       ci_netif_cluster_prefault(epi->sock.netif);
     }
+#endif
 
   citp_fdinfo_release_ref(fdinfo, 0);
   return rc;

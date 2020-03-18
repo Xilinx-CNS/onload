@@ -1871,7 +1871,9 @@ typedef void (*citp_init_thread_callback)(struct oo_per_thread*);
 extern int ci_tp_init(citp_init_thread_callback cb) CI_HF;
 extern int ci_tcp_bind(citp_socket* ep, const struct sockaddr* my_addr,
                        socklen_t addrlen, ci_fd_t fd) CI_HF;
+#if CI_CFG_ENDPOINT_MOVE
 extern int ci_tcp_reuseport_bind(ci_sock_cmn* sock, ci_fd_t fd) CI_HF;
+#endif
 extern void ci_tcp_get_peer_addr(ci_tcp_state* ts, struct sockaddr* name,
                                  socklen_t* namelen) CI_HF;
 extern int ci_tcp_getpeername(citp_socket*, struct sockaddr*, socklen_t*) CI_HF;

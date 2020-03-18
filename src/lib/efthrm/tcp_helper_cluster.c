@@ -979,6 +979,7 @@ tcp_helper_install_tproxy(int install,
     cplane = thc->thc_cplane;
 #else
     ci_assert(0);
+    return -EINVAL;
 #endif
   }
 
