@@ -42,6 +42,11 @@ extern "C" {
  *
  * This flag corresponds to MSG_SYN in the kernel sources, which appears to
  * not be used.
+ *
+ * A send() ONLOAD_MSG_WARM can return 0 (length of data sent) if the send()
+ * was unsuccessful. This will be due to normal stack and TCP networking
+ * conditions e.g cannot get stack lock, insufficient send window available,
+ * other packets in the send queue or retransmit queue etc.
  */
 #define ONLOAD_MSG_WARM 0x400
 
