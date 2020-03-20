@@ -269,7 +269,7 @@ rm -fR $RPM_BUILD_ROOT
 %if %{systemd}
   /usr/local/lib/modules-load.d/onload.conf
 %else
-  /etc/sysconfig/modules/onload.module
+  /etc/sysconfig/modules/onload.modules
 %endif
 /usr/lib*/python*/site-packages/*
 
