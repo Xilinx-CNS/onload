@@ -1427,7 +1427,7 @@ void ci_udp_sendmsg_onload(ci_netif* ni, ci_udp_state* us,
   pf.alloc_pkt = NULL;
 
   if( ! UDP_HAS_SENDQ_SPACE(us, bytes_to_send)         |
-      (bytes_to_send > (unsigned long) CI_UDP_MAX_PAYLOAD_BYTES) )
+      (bytes_to_send > (unsigned long) CI_UDP_MAX_PAYLOAD_BYTES(af)) )
     goto no_space_or_too_big;
 
  back_to_fast_path:
@@ -1515,7 +1515,7 @@ void ci_udp_sendmsg_onload(ci_netif* ni, ci_udp_state* us,
   /* TODO: If we implement IP options we'll have to calculate
    * CI_UDP_MAX_PAYLOAD_BYTES depending on them.
    */
-  if( bytes_to_send > CI_UDP_MAX_PAYLOAD_BYTES ) {
+  if( bytes_to_send > CI_UDP_MAX_PAYLOAD_BYTES(af) ) {
     sinf->rc = -EMSGSIZE;
     return;
   }

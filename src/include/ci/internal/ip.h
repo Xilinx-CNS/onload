@@ -786,8 +786,13 @@ extern int __ci_icmp_send_error(ci_netif* ni, int af, ci_ipx_hdr_t* ipx,
 **********************************************************************/
 
 #define CI_UDP_INITIAL_MTU ETH_DATA_LEN
-#define CI_UDP_MAX_PAYLOAD_BYTES \
-  (0xffff - sizeof(ci_ip4_hdr) - sizeof(ci_udp_hdr))
+
+/* IPv4 "Total Length" 16-bit field defines the entire packet size in bytes,
+ * including header and data, while IPv6 "Payload Length" 16-bit field defines
+ * the size of payload only. So, when calculating UDP maximum payload size for
+ * IPv4 case, IPv4 header size should be considered, unlike IPv6 case. */
+#define CI_UDP_MAX_PAYLOAD_BYTES(af) \
+  (0xffff - sizeof(ci_udp_hdr) - (IS_AF_INET6(af) ? 0 : sizeof(ci_ip4_hdr)))
 
 #define UDP_FLAGS(us)           ((us)->udpflags)
 
