@@ -425,6 +425,7 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
   bool was_up = true; /* placate compiler */
 
   bool populate_llap = false;
+  bool dump_hwports = false;
   MIB_UPDATE_LOOP(mib, s, mib_i)
     cicp_llap_row_t* llap;
     id = cp_llap_find_row(mib, ifindex);
@@ -432,6 +433,9 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
     if( nlmsg_type == RTM_NEWLINK ) {
 
       if( id == CICP_ROWID_BAD ) {
+        /* Ensure we'll know about hwports of this new llap. */
+        dump_hwports = true;
+
         id = llap_find_free(mib);
         if( id == CICP_ROWID_BAD ) {
           static bool printed = false;
@@ -589,6 +593,12 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
                            bond_mii_status == BOND_LINK_UP, aggregator_id);
     }
   }
+
+  /* New llap, and we've already dumped all hwports, so have to ask about
+   * this one.
+   */
+  if( dump_hwports && (s->flags & CP_SESSION_HWPORT_DUMPED) )
+    cplane_ioctl(s->oo_fd, OO_IOC_CP_DUMP_HWPORTS, &ifindex);
 }
 
 void cp_llap_dump_done(struct cp_session* s)
@@ -652,8 +662,10 @@ void cp_llap_dump_done(struct cp_session* s)
 
   /* If we are not usable yet, then let's ask module to dump all the known
    * hwports. */
-  if( ! (s->flags & CP_SESSION_NETLINK_DUMPED) )
-    cplane_ioctl(s->oo_fd, OO_IOC_CP_DUMP_HWPORTS, NULL);
+  if( ! (s->flags & CP_SESSION_NETLINK_DUMPED) ) {
+    ci_ifid_t ifindex = CI_IFID_BAD;
+    cplane_ioctl(s->oo_fd, OO_IOC_CP_DUMP_HWPORTS, &ifindex);
+  }
 }
 
 

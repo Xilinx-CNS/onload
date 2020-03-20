@@ -30,7 +30,4 @@ extern int oo_check_nic_suitable_for_onload(struct oo_nic* onic);
 
 extern void oo_nic_shutdown(void);
 
-struct oo_cplane_handle;
-extern int oo_nic_announce_all(struct oo_cplane_handle* cp);
-
 #endif  /* __ONLOAD_NIC_H__ */

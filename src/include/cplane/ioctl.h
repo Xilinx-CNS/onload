@@ -58,7 +58,7 @@ enum {
 #define OO_IOC_GET_CPU_KHZ        OO_IOC_R(GET_CPU_KHZ, ci_uint32)
 
   OO_OP_CP_DUMP_HWPORTS,
-#define OO_IOC_CP_DUMP_HWPORTS    OO_IOC_NONE(CP_DUMP_HWPORTS)
+#define OO_IOC_CP_DUMP_HWPORTS    OO_IOC_W(CP_DUMP_HWPORTS, ci_ifid_t)
 
 #ifdef CP_SYSUNIT
 #define cp_set_hwport_t \

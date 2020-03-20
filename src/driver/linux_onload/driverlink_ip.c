@@ -245,11 +245,17 @@ static struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
       onic->oo_nic_flags |= OO_NIC_UP;
     else
       onic->oo_nic_flags &= ~OO_NIC_UP;
+
     /* Remove OO_NIC_UNPLUGGED regardless of whether the interface is IFF_UP,
      * as we don't want to attempt to create ghost VIs now that the hardware is
      * back.
      */
-    onic->oo_nic_flags &= ~OO_NIC_UNPLUGGED;
+    if( onic->oo_nic_flags & OO_NIC_UNPLUGGED ) {
+      ci_log("%s: Rediscovered %s ifindex %d hwport %d", __func__,
+             net_dev->name, net_dev->ifindex, (int)(onic - oo_nics));
+      cp_announce_hwport(net_dev, onic - oo_nics);
+      onic->oo_nic_flags &= ~OO_NIC_UNPLUGGED;
+    }
   }
 
   return onic;

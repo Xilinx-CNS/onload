@@ -188,19 +188,22 @@ struct oo_nic* oo_nic_find_dev(const struct net_device* dev)
   return oo_nic_find(efhw_nic_find(dev));
 }
 
-int oo_nic_announce_all(struct oo_cplane_handle* cp)
+int oo_nic_announce(struct oo_cplane_handle* cp, ci_ifid_t ifindex)
 {
   int i;
-  int rc;
+  int rc = -ENOENT;
+
   for( i = 0; i < CI_CFG_MAX_HWPORTS; ++i ) {
     struct net_device* dev;
 
     if( oo_nics[i].efrm_client == NULL )
       continue;
     dev = efhw_nic_get_net_dev(efrm_client_get_nic(oo_nics[i].efrm_client));
-    if( dev == NULL || dev_net(dev) != cp->cp_netns ) {
-      if( dev != NULL)
-        dev_put(dev);
+    if( dev == NULL)
+      continue;
+    if( dev_net(dev) != cp->cp_netns || 
+        (ifindex != CI_IFID_BAD && dev->ifindex != ifindex) ) {
+      dev_put(dev);
       continue;
     }
 
@@ -213,7 +216,10 @@ int oo_nic_announce_all(struct oo_cplane_handle* cp)
   }
 
   /* Tell cplane that it's all */
-  return __cp_announce_hwport(cp, CI_IFID_BAD, CI_HWPORT_ID_BAD);
+  if( ifindex == CI_IFID_BAD )
+    return __cp_announce_hwport(cp, CI_IFID_BAD, CI_HWPORT_ID_BAD);
+  else
+    return rc;
 }
 
 int oo_nic_hwport(struct oo_nic* onic)

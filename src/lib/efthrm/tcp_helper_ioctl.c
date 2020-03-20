@@ -1278,12 +1278,13 @@ static int oo_dshm_list_rsop(ci_private_t *priv, void *arg)
 static int
 oo_cp_dump_hwports(ci_private_t *priv, void *arg)
 {
+  ci_ifid_t ifindex = *(ci_ifid_t*)arg;
   struct oo_cplane_handle* cp;
   int rc = cp_acquire_from_priv_if_server(priv, &cp);
 
   if( rc < 0 )
     return rc;
-  rc = oo_nic_announce_all(cp);
+  rc = oo_nic_announce(cp, ifindex);
   cp_release(cp);
   return rc;
 }

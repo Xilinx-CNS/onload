@@ -76,4 +76,6 @@ __cp_announce_hwport(struct oo_cplane_handle* cp, ci_ifid_t ifindex,
 extern int
 cp_announce_hwport(const struct net_device* dev, ci_hwport_id_t hwport);
 
+extern int oo_nic_announce(struct oo_cplane_handle* cp, ci_ifid_t);
+
 #endif /* __ONLOAD_CPLANE_DRIVER_H__ */
