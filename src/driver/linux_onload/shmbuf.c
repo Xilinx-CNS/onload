@@ -84,10 +84,10 @@ int ci_shmbuf_alloc(ci_shmbuf_t* b, unsigned n_pages, unsigned n_fault_pages)
     unsigned long first_dummy_page = (unsigned long) b->base +
                                      CI_PAGE_SIZE * n_fault_pages;
     unsigned long dummy_pages_len = (n_pages - n_fault_pages) * CI_PAGE_SIZE;
-    flush_cache_vunmap(first_dummy_page, first_dummy_page + dummy_pages_len);
-    unmap_kernel_range_noflush(first_dummy_page, dummy_pages_len);
-    /* no need to flush TLB because we only just mapped the pages so they
-     * can't have been cached yet */
+    /* The evidence suggests that, on AMD at least, we need both the vcache and
+     * the tlb flush here even though nothing should have been touching these
+     * pages yet. */
+    unmap_kernel_range(first_dummy_page, dummy_pages_len);
   }
 
   for( i = n_fault_pages; i < n_pages; ++i )
