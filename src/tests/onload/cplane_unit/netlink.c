@@ -253,6 +253,7 @@ int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
     case OO_IOC_CP_READY:
     case OO_IOC_CP_ARP_RESOLVE:
     case OO_IOC_CP_CHECK_VETH_ACCELERATION:
+    case OO_IOC_CP_DUMP_HWPORTS:
       return 0;
   }
   ci_assert(! "No ioctl ops into onload expected");
