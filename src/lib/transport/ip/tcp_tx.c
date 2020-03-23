@@ -486,7 +486,7 @@ ci_inline void ci_tcp_tx_cwv_idle(ci_netif* netif, ci_tcp_state* ts)
     /* make sure cwnd doesn't go below one segment */
     ts->cwnd = CI_MAX(ts->cwnd, ts->smss);
 #endif
-    ts->cwnd = CI_MAX(ts->cwnd, NI_OPTS(ni).min_cwnd);
+    ts->cwnd = CI_MAX(ts->cwnd, NI_OPTS(netif).min_cwnd);
     /* Record this time to work out if app ltd */
     ts->t_last_full = ci_tcp_time_now(netif);
     /* Reset cwnd_used to zero for app ltd calculations */
@@ -527,7 +527,7 @@ ci_inline void ci_tcp_tx_cwv_app_lmtd(ci_netif* netif, ci_tcp_state* ts)
       win = CI_MIN(ts->cwnd, tcp_snd_wnd(ts));
       /* cwnd becomes average of cwnd and cwnd_used */
       ts->cwnd = CI_MAX(ts->smss, (win+ts->cwnd_used) >> 1u);
-      ts->cwnd = CI_MAX(ts->cwnd, NI_OPTS(ni).min_cwnd);
+      ts->cwnd = CI_MAX(ts->cwnd, NI_OPTS(netif).min_cwnd);
       ci_assert(ts->cwnd >= tcp_eff_mss(ts));
       /* record this time for next comparison */
       ts->t_last_full = ci_tcp_time_now(netif);
