@@ -96,7 +96,9 @@ static int/*bool*/ sockbuf_filter_matches(const sockbuf_filter_t* sft,
                + (w->waitable.state == CI_TCP_STATE_UDP ?
                    sizeof(ci_udp_hdr) : sizeof(ci_tcp_hdr));
   hdr.len = 1024;     /* totally arbitrary value */
-  return pcap_offline_filter(&sft->sock_filter, &hdr,
+  /* Cast to non-const below is for pre-1.4 versions of libpcap, which didn't
+   * have the prototype marked as such */
+  return pcap_offline_filter((struct bpf_program*)&sft->sock_filter, &hdr,
                              w->sock.pkt.ether_header + offset);
 #endif
 }
