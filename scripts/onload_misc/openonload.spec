@@ -52,7 +52,6 @@
 
 # Assume that all non-suse distributions can be treated as redhat
 %define redhat       %( [ "%{_vendor}" = "suse"   ] ; echo $?)
-%define systemd      %( [ `cat /proc/1/comm` != systemd ] ; echo $?)
 
 # Determine distro to use for package conflicts with SFC.  This is not
 # accurate in various cases, and should be updated to use the sfc-disttag
@@ -202,14 +201,38 @@ docdir="$i_prefix%{_defaultdocdir}/%{name}-%{pkgversion}"
 mkdir -p "$docdir"
 install -m 644 LICENSE README* ChangeLog* ReleaseNotes* "$docdir"
 install -D scripts/onload_install "%{buildroot}/lib/onload/onload_install"
+# Removing these files is fine since they would only ever be generated on a build machine.
+rm -f "$i_prefix/etc/sysconfig/modules/onload.modules"
+rm -f "$i_prefix/usr/local/lib/modules-load.d/onload.conf"
+mkdir -p "$i_prefix/usr/share/onload"
+cp ./scripts/onload_misc/onload_modules-load.d.conf $i_prefix/usr/share/onload/onload_modules-load.d.conf
+cp ./scripts/onload_misc/sysconfig_onload_modules $i_prefix/usr/share/onload/sysconfig_onload_modules
 
 %post
+
+if [ `cat /proc/1/comm` == systemd ]
+then
+  mkdir -p "/usr/local/lib/modules-load.d"
+  cp /usr/share/onload/onload_modules-load.d.conf /usr/local/lib/modules-load.d/onload.conf
+else
+  mkdir -p "/etc/sysconfig/modules"
+  cp /usr/share/onload/sysconfig_onload_modules /etc/sysconfig/modules/onload.modules
+fi
+
 /lib/onload/onload_install rpm_post
 ldconfig -n /usr/lib /usr/lib64
 
 %preun
 
 %postun
+
+if [ `cat /proc/1/comm` == systemd ]
+then
+  rm /usr/local/lib/modules-load.d/onload.conf
+else
+  rm /etc/sysconfig/modules/onload.modules
+fi
+
 ldconfig -n /usr/lib /usr/lib64
 
 %post kmod-%{kverrel}
@@ -266,11 +289,9 @@ rm -fR $RPM_BUILD_ROOT
 %attr(644, -, -) %{_sysconfdir}/depmod.d/onload.conf
 %config %attr(644, -, -) %{_sysconfdir}/sysconfig/openonload
 
-%if %{systemd}
-  /usr/local/lib/modules-load.d/onload.conf
-%else
-  /etc/sysconfig/modules/onload.modules
-%endif
+/usr/share/onload/onload_modules-load.d.conf
+/usr/share/onload/sysconfig_onload_modules
+
 /usr/lib*/python*/site-packages/*
 
 %files kmod-%{kverrel}
