@@ -649,8 +649,9 @@ direct received packets to a given virtual interface.
   and listen filters.
 
 - The SFN7000 and SFN8000 series NICs are not subject to this restriction.
-  If two applications insert the same filter, a copy of the packets is
-  delivered to each application and applications remain unaware of each other.
+  If two applications insert the same multicast filter, a copy of the packets
+  is delivered to each application and applications remain unaware of each
+  other.
 
 - IP filters do not match IP fragments, which are therefore received by
   the kernel stack. If this is an issue, layer 2 filters should be
