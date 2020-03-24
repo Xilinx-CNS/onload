@@ -57,8 +57,10 @@ Thumbs.db
 /rpm
 /tests
 /src/include/etherfabric/doxygen/html
+/src/include/etherfabric/doxygen/html.zip
 /src/include/etherfabric/doxygen/latex
 /src/include/etherfabric/doxygen/rtf
 /src/lib/zf/doxygen/html
+/src/lib/zf/doxygen/html.zip
 /src/lib/zf/doxygen/latex
 /src/lib/zf/doxygen/rtf
