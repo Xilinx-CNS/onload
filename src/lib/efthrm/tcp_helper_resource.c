@@ -1193,6 +1193,7 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
 
     if( NI_OPTS(ni).ctpio_mode == EF_CTPIO_MODE_SF_NP ) {
       info->ef_vi_flags |= EF_VI_TX_CTPIO_NO_POISON;
+      info->efhw_flags |= EFHW_VI_TX_CTPIO_NO_POISON;
     }
     if( NI_OPTS(ni).ctpio_mode == EF_CTPIO_MODE_CT )
       info->ctpio_threshold = NI_OPTS(ni).ctpio_ct_thresh;
