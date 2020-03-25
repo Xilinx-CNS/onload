@@ -84,10 +84,20 @@ int ci_shmbuf_alloc(ci_shmbuf_t* b, unsigned n_pages, unsigned n_fault_pages)
     unsigned long first_dummy_page = (unsigned long) b->base +
                                      CI_PAGE_SIZE * n_fault_pages;
     unsigned long dummy_pages_len = (n_pages - n_fault_pages) * CI_PAGE_SIZE;
+#ifdef EFRM_HAVE_UNMAP_KERNEL_RANGE /* exported from 3.16 */
+    unmap_kernel_range(first_dummy_page, dummy_pages_len);
+#else
+    /* We'd like to use unmap_kernel_range() here, which deals with the
+     * necessary flushing itself, but it's not exported on older kernels
+     * (RHEL7) so we need to do the separate steps ourselves.
+     */
     flush_cache_vunmap(first_dummy_page, first_dummy_page + dummy_pages_len);
     unmap_kernel_range_noflush(first_dummy_page, dummy_pages_len);
-    /* no need to flush TLB because we only just mapped the pages so they
-     * can't have been cached yet */
+    /* The kernel only flushes mappings lazily, so we want to force a flush
+     * here to be sure our unmap is visible everywhere.
+     */
+    vm_unmap_aliases();
+#endif
   }
 
   for( i = n_fault_pages; i < n_pages; ++i )

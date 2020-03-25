@@ -115,6 +115,8 @@ EFRM_HAVE_FILE_INODE			symbol file_inode include/linux/fs.h
 ERFM_NEIGH_USES_REFCOUNTS	memtype struct_neighbour refcnt include/net/neighbour.h refcount_t
 ERFM_NEIGH_HAS_PROTOCOL		memtype struct_neighbour protocol include/net/neighbour.h u8
 
+EFRM_HAVE_UNMAP_KERNEL_RANGE	export	unmap_kernel_range	include/linux/vmalloc.h	mm/vmalloc.c
+
 
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
