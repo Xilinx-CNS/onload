@@ -145,6 +145,7 @@ docopy src/tools/ip           stackdump.c libstack.c libstack.h
 docopy src/tools/ip           sockbuf_filter.h
 docopy src/tools/ip           tcpdump_bin.c fuser.c
 docopy src/tools              jni onload_remote_monitor cplane onload_mibdump
+docopy src/tools              onload_helper
 docopy src/include            etherfabric onload cplane
 docopy src/include/ci         compat compat.h tools tools.h app app.h
 docopy src/include/ci         driver efch efhw efrm internal net

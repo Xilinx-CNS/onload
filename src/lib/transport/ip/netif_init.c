@@ -2643,8 +2643,6 @@ static int ci_netif_start_helper(ci_netif* ni)
 {
   int rc;
 
-  /* Fixme: pass this via environment variable; default to
-   * /bin/onload_helper. */
   char* path = "onload_helper";
   char* argv[5];
   char stack_id_str[10];

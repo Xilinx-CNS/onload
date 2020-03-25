@@ -261,6 +261,8 @@ install_userland() {
     install_x "$u64/tools/cplane/onload_cp_server" "$i_sbin/onload_cp_server"
     install_x "$u64/tools/onload_mibdump/onload_mibdump" \
               "$i_usrbin/onload_mibdump"
+    [ -f "$u64/tools/onload_helper/onload_helper" ] && \
+      install_x "$u64/tools/onload_helper/onload_helper" "$i_usrbin/onload_helper"
     [ -f "$u64/tools/ip/onload_fe" ] && install_x "$u64/tools/ip/onload_fe" "$i_usrbin/onload_fe"
     failorm=true
     [ -f "$u64/tools/onload_remote_monitor/orm_json" ] && {
