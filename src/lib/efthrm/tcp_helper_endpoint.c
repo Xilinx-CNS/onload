@@ -123,6 +123,7 @@ tcp_helper_endpoint_dtor(tcp_helper_endpoint_t * ep)
 }
 
 
+#if CI_CFG_ENDPOINT_MOVE
 static int
 tcp_helper_endpoint_reuseaddr_cleanup(ci_netif* ni, ci_sock_cmn* s)
 {
@@ -150,6 +151,7 @@ tcp_helper_endpoint_reuseaddr_cleanup(ci_netif* ni, ci_sock_cmn* s)
 
   return 0;
 }
+#endif
 
 /*--------------------------------------------------------------------
  *!
@@ -430,6 +432,7 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
     rc = oof_socket_add(oo_filter_ns_to_manager(ep->thr->filter_ns),
                         &ep->oofilter, flags, protocol,
                         af_space, laddr, lport, raddr, rport, NULL);
+#if CI_CFG_ENDPOINT_MOVE
     if( rc != 0 && rc != -EFILTERSSOME &&
         (s->s_flags & CI_SOCK_FLAG_REUSEADDR) &&
         tcp_helper_endpoint_reuseaddr_cleanup(&ep->thr->netif, s) ) {
@@ -437,6 +440,7 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
                           &ep->oofilter, flags, protocol,
                           af_space, laddr, lport, raddr, rport, NULL);
     }
+#endif
     if( rc == 0 || rc == -EFILTERSSOME )
       s->s_flags |= CI_SOCK_FLAG_FILTER;
   }
