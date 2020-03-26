@@ -209,6 +209,7 @@ efab_ipp_icmp_validate( tcp_helper_resource_t* thr, ci_ip4_hdr *ip)
   return 1;
 }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /*!
  * Mapping of ICMP code field of destination unreachable message to errno.
  * The mapping is based on linux sources.
@@ -307,6 +308,7 @@ static void get_errno(int af, ci_uint8 type, ci_uint8 code,
     }
   }
 }
+#endif
 
 typedef struct {
   ci_icmp_hdr hdr;
@@ -324,6 +326,7 @@ typedef struct {
   CI_BSWAP_BE16(ipp_addr->dport_be16)
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void 
 ci_ipp_pmtu_rx(ci_netif *netif, ci_pmtu_state_t *pmtus,
                ci_ip_cached_hdrs *ipcache,
@@ -558,6 +561,7 @@ ci_ipp_pmtu_rx_udp(tcp_helper_resource_t* thr,
    * the second attempt. */
   queue_work(thr->wq, &w->w);
 }
+#endif
 
 /* efab_ipp_icmp_for_thr -
  * Is this ICMP message destined for this netif 
@@ -591,7 +595,9 @@ extern void
 efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr, 
 		   ci_sock_cmn* s, efab_ipp_addr* addr)
 {
-  ci_uint8 icmp_type, icmp_code, hard;
+  ci_uint8 icmp_type, icmp_code;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+  ci_uint8 hard;
   int err;
   ci_netif* ni = &thr->netif;
   int af = ipx_hdr_af(addr->ipx);
@@ -607,10 +613,12 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
   ci_assert(addr->icmp);
 
   ci_assert( ci_netif_is_locked(ni) );
+#endif
 
   icmp_type = addr->icmp->type;
   icmp_code = addr->icmp->code;
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* Path MTU interception */
   if ( ( IS_AF_INET6(af) && icmp_type == CI_ICMPV6_PKT_TOOBIG ) ||
        (!IS_AF_INET6(af) && icmp_type == CI_ICMP_DEST_UNREACH &&
@@ -639,6 +647,10 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
 
     ci_tcp_drop(ni, ts, err);
   }
+#else
+  /* Todo: kick it off to onload_helper. */
+  ci_log("ERROR: ICMP type %d code %d", icmp_type, icmp_code);
+#endif
 }
 
 /*! \cidoxg_end */
