@@ -437,13 +437,14 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
 {
   ci_irqlock_state_t lock_flags;
   int n_dec_needed;
-  int id;
 
   ci_assert( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND );
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* Fixme: timeout is not appropriate here.  We should not leak OS socket
    * and filters. */
   if( efab_eplock_lock_timeout(&thr->netif, msecs_to_jiffies(500)) == 0 ) {
+    int id;
     for( id = 0; id < thr->netif.state->n_ep_bufs; ++id ) {
       citp_waitable_obj* wo = ID_TO_WAITABLE_OBJ(&thr->netif, id);
       if( wo->waitable.state == CI_TCP_TIME_WAIT ||
@@ -454,6 +455,13 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
     ci_netif_timeout_state(&thr->netif);
     ci_netif_unlock(&thr->netif);
   }
+#else
+  /* All the gracious shutdown should be implemented in UL.
+   * Todo: non-gracious shutdown should drop OS sockets and filters,
+   * without sending FINs etc.
+   */
+  ci_assert(0);
+#endif
 
   /* If we've got the lock, we have already closed all time-wait sockets.
    * If we fail to get the lock, let's destroy the stack as-is. */
