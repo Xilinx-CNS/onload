@@ -15,6 +15,7 @@
 #include <onload/tcp_helper_fns.h>
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 CI_BUILD_ASSERT(CI_SB_AFLAG_O_NONBLOCK == MSG_DONTWAIT);
 
 
@@ -90,3 +91,4 @@ ssize_t linux_tcp_helper_fop_sendpage_udp(struct file* filp,
                    page, offset, size, ppos, flags);
   return rc;
 }
+#endif

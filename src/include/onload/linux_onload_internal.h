@@ -65,12 +65,14 @@ extern struct file_operations linux_tcp_helper_fops_alien;
  *
  *--------------------------------------------------------------------*/
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 extern ssize_t
 linux_tcp_helper_fop_sendpage(struct file*, struct page*, int offset,
                               size_t size, loff_t* ppos, int more);
 extern ssize_t
 linux_tcp_helper_fop_sendpage_udp(struct file*, struct page*, int offset,
                                   size_t size, loff_t* ppos, int more);
+#endif
 
 /* Decide whether a file descriptor is ours or not */
 /* Check if file is our endpoint */

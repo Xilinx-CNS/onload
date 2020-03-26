@@ -20,6 +20,10 @@
 #include <linux/spinlock.h>
 #include <driver/linux_affinity/autocompat.h>
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+/* CI_CFG_UL_INTERRUPT_HELPER mode does not support sendfile() and/or OS
+ * read()-write().  Yet.
+ */
 
 /* file_operations might have readv/writev, aio_read/aio_write,
  * read_iter/write_iter members.  To support this variety, we define one
@@ -75,6 +79,7 @@ static inline ssize_t oo___vfs_write(struct file *file, const char __user *buf,
 #define __vfs_write oo___vfs_write
 #endif
 
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
 
 
 /* poll_requested_events_min(): user will not block if got one of these */
@@ -152,6 +157,7 @@ efab_fop_poll__prime_if_needed(tcp_helper_resource_t* trs,
 }
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static ssize_t linux_tcp_helper_fop_read_iov_pipe(struct file *filp,
                                                   const struct iovec *iov,
                                                   unsigned long iovlen)
@@ -214,6 +220,7 @@ static ssize_t linux_tcp_helper_fop_aio_rw_notsupp(struct kiocb *iocb,
   return -EOPNOTSUPP;
 }
 #endif
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
 
 
 
@@ -445,6 +452,7 @@ int linux_tcp_helper_fop_fasync(int fd, struct file *filp, int mode)
 }
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 CI_BUILD_ASSERT(CI_SB_AFLAG_O_NONBLOCK == MSG_DONTWAIT);
 
 
@@ -747,6 +755,7 @@ linux_tcp_helper_fop_aio_write_passthrough(struct kiocb *iocb,
   return rc;
 }
 #endif
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
 
 static unsigned linux_tcp_helper_fop_poll_passthrough(struct file* filp,
                                                       poll_table* wait)
@@ -759,6 +768,7 @@ static unsigned linux_tcp_helper_fop_poll_passthrough(struct file* filp,
   return rc;
 }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #ifdef EFRM_HAVE_FOP_READ_ITER
 static ssize_t
 linux_tcp_helper_fop_read_iter_alien(struct kiocb *iocb, 
@@ -814,6 +824,7 @@ linux_tcp_helper_fop_aio_write_alien(struct kiocb *iocb,
   return alien_file->f_op->aio_write(iocb, iov, iovlen, pos);
 }
 #endif
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
 
 static unsigned linux_tcp_helper_fop_poll_alien(struct file* filp,
                                                       poll_table* wait)
@@ -829,6 +840,7 @@ static unsigned linux_tcp_helper_fop_poll_alien(struct file* filp,
 struct file_operations linux_tcp_helper_fops_tcp =
 {
   CI_STRUCT_MBR(owner, THIS_MODULE),
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #ifdef EFRM_HAVE_FOP_READ_ITER
   CI_STRUCT_MBR(read_iter, linux_tcp_helper_fop_read_iter_tcp),
   CI_STRUCT_MBR(write_iter, linux_tcp_helper_fop_write_iter_tcp),
@@ -838,6 +850,9 @@ struct file_operations linux_tcp_helper_fops_tcp =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_read_tcp),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_write_tcp),
 #endif
+  CI_STRUCT_MBR(sendpage, linux_tcp_helper_fop_sendpage),
+  CI_STRUCT_MBR(splice_write, generic_splice_sendpage),
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_tcp),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
   CI_STRUCT_MBR(compat_ioctl, oo_fop_compat_ioctl),
@@ -845,14 +860,13 @@ struct file_operations linux_tcp_helper_fops_tcp =
   CI_STRUCT_MBR(open, oo_fop_open),
   CI_STRUCT_MBR(release, linux_tcp_helper_fop_close),
   CI_STRUCT_MBR(fasync, linux_tcp_helper_fop_fasync),
-  CI_STRUCT_MBR(sendpage, linux_tcp_helper_fop_sendpage),
-  CI_STRUCT_MBR(splice_write, generic_splice_sendpage)
 };
 
 
 struct file_operations linux_tcp_helper_fops_udp =
 {
   CI_STRUCT_MBR(owner, THIS_MODULE),
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #ifdef EFRM_HAVE_FOP_READ_ITER
   CI_STRUCT_MBR(read_iter, linux_tcp_helper_fop_read_iter_udp),
   CI_STRUCT_MBR(write_iter, linux_tcp_helper_fop_write_iter_udp),
@@ -862,6 +876,9 @@ struct file_operations linux_tcp_helper_fops_udp =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_read_udp),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_write_udp),
 #endif
+  CI_STRUCT_MBR(sendpage, linux_tcp_helper_fop_sendpage_udp),
+  CI_STRUCT_MBR(splice_write, generic_splice_sendpage),
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_udp),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
   CI_STRUCT_MBR(compat_ioctl, oo_fop_compat_ioctl),
@@ -869,13 +886,12 @@ struct file_operations linux_tcp_helper_fops_udp =
   CI_STRUCT_MBR(open, oo_fop_open),
   CI_STRUCT_MBR(release, linux_tcp_helper_fop_close),
   CI_STRUCT_MBR(fasync, linux_tcp_helper_fop_fasync),
-  CI_STRUCT_MBR(sendpage, linux_tcp_helper_fop_sendpage_udp),
-  CI_STRUCT_MBR(splice_write, generic_splice_sendpage)
 };
 
 struct file_operations linux_tcp_helper_fops_passthrough =
 {
   CI_STRUCT_MBR(owner, THIS_MODULE),
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #ifdef EFRM_HAVE_FOP_READ_ITER
   CI_STRUCT_MBR(read_iter, linux_tcp_helper_fop_read_iter_passthrough),
   CI_STRUCT_MBR(write_iter, linux_tcp_helper_fop_write_iter_passthrough),
@@ -885,6 +901,8 @@ struct file_operations linux_tcp_helper_fops_passthrough =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_read_passthrough),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_write_passthrough),
 #endif
+  CI_STRUCT_MBR(splice_write, generic_splice_sendpage),
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_passthrough),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
   CI_STRUCT_MBR(compat_ioctl, oo_fop_compat_ioctl),
@@ -892,12 +910,12 @@ struct file_operations linux_tcp_helper_fops_passthrough =
   CI_STRUCT_MBR(open, oo_fop_open),
   CI_STRUCT_MBR(release, linux_tcp_helper_fop_close),
   CI_STRUCT_MBR(fasync, linux_tcp_helper_fop_fasync),
-  CI_STRUCT_MBR(splice_write, generic_splice_sendpage)
 };
 
 struct file_operations linux_tcp_helper_fops_alien =
 {
   CI_STRUCT_MBR(owner, THIS_MODULE),
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #ifdef EFRM_HAVE_FOP_READ_ITER
   CI_STRUCT_MBR(read_iter, linux_tcp_helper_fop_read_iter_alien),
   CI_STRUCT_MBR(write_iter, linux_tcp_helper_fop_write_iter_alien),
@@ -907,6 +925,8 @@ struct file_operations linux_tcp_helper_fops_alien =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_read_alien),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_write_alien),
 #endif
+  CI_STRUCT_MBR(splice_write, generic_splice_sendpage),
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_alien),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
   CI_STRUCT_MBR(compat_ioctl, oo_fop_compat_ioctl),
@@ -914,12 +934,12 @@ struct file_operations linux_tcp_helper_fops_alien =
   CI_STRUCT_MBR(open, oo_fop_open),
   CI_STRUCT_MBR(release, linux_tcp_helper_fop_close),
   CI_STRUCT_MBR(fasync, linux_tcp_helper_fop_fasync),
-  CI_STRUCT_MBR(splice_write, generic_splice_sendpage)
 };
 
 struct file_operations linux_tcp_helper_fops_pipe_reader =
 {
   CI_STRUCT_MBR(owner, THIS_MODULE),
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #ifdef EFRM_HAVE_FOP_READ_ITER
   CI_STRUCT_MBR(read_iter, linux_tcp_helper_fop_read_iter_pipe),
   CI_STRUCT_MBR(write_iter, linux_tcp_helper_fop_rw_iter_notsupp),
@@ -929,6 +949,7 @@ struct file_operations linux_tcp_helper_fops_pipe_reader =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_read_pipe),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_rw_notsupp),
 #endif
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_pipe_reader),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
   CI_STRUCT_MBR(compat_ioctl, oo_fop_compat_ioctl),
@@ -941,6 +962,7 @@ struct file_operations linux_tcp_helper_fops_pipe_reader =
 struct file_operations linux_tcp_helper_fops_pipe_writer =
 {
   CI_STRUCT_MBR(owner, THIS_MODULE),
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #ifdef EFRM_HAVE_FOP_READ_ITER
   CI_STRUCT_MBR(read_iter, linux_tcp_helper_fop_rw_iter_notsupp),
   CI_STRUCT_MBR(write_iter, linux_tcp_helper_fop_write_iter_pipe),
@@ -950,6 +972,7 @@ struct file_operations linux_tcp_helper_fops_pipe_writer =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_rw_notsupp),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_write_pipe),
 #endif
+#endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_pipe_writer),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
   CI_STRUCT_MBR(compat_ioctl, oo_fop_compat_ioctl),
