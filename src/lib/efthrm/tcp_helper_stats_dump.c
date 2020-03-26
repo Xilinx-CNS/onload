@@ -11,6 +11,8 @@
 
 
 #include <ci/internal/transport_config_opt.h>
+
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #include <onload_kernel_compat.h>
 #include <onload/linux_onload_internal.h>
 #include <onload/linux_onload.h>
@@ -317,3 +319,4 @@ int tcp_helper_dump_stack(unsigned id, unsigned orphan_only, void* user_buf,
   return tcp_helper_full_dump_stack(fn, id, orphan_only, user_buf,
                                     user_buf_len);
 }
+#endif

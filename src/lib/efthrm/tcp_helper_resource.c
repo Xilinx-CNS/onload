@@ -468,7 +468,7 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
     ci_log("%s: ERROR: force-kill stack [%d]: "
            "leaking %d OS sockets and filters",
            __func__, thr->id, n_dec_needed);
-#ifndef NDEBUG
+#if ! defined(NDEBUG) && ! CI_CFG_UL_INTERRUPT_HELPER
     dump_stack_to_logger(&thr->netif, ci_log_dump_fn, NULL);
 #endif
   }
@@ -6239,7 +6239,7 @@ tcp_helper_rm_nopage(tcp_helper_resource_t* trs, void* opaque,
 }
 
 
-
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 void
 tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
                    tcp_helper_resource_t* trs, const char *line_prefix) 
@@ -6302,6 +6302,7 @@ tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
     ci_log("%svi[%d]: %d", line_prefix, intf_i,
            ef_vi_instance(&ni->nic_hw[intf_i].vi));
 }
+#endif
 
 
 /**********************************************************************

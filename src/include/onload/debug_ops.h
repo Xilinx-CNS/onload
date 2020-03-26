@@ -19,6 +19,7 @@
 #include <onload/unix_intf.h>
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 typedef struct {
   ci_fd_t fp;
   int stack_id;
@@ -53,6 +54,7 @@ oo_debug_kill_stack(ci_fd_t fp, int stack_id)
   rc = oo_debug_op(fp, &op);
   return rc;
 }
+#endif
 
 #endif  /* __ONLOAD_DEBUG_OPS_H__ */
 /*! \cidoxg_end */

@@ -75,6 +75,7 @@ extern unsigned long tcp_helper_rm_nopage(tcp_helper_resource_t* trs,
                                           void* opaque, int map_id, 
                                           unsigned long offset);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 extern void tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
                                tcp_helper_resource_t* trs,
                                const char *line_prefix);
@@ -82,6 +83,7 @@ extern void tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
 #define THR_PRIV_DUMP(priv, line_prefix)                \
   tcp_helper_rm_dump((priv)->fd_type, (priv)->sock_id,  \
                      (priv)->thr, line_prefix)
+#endif
 
 extern unsigned efab_tcp_helper_netif_lock_callback(eplock_helper_t*,
                                                     ci_uint64 lock_val,

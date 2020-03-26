@@ -994,6 +994,7 @@ efab_install_stack(ci_private_t *priv, void *arg)
   op->in_name[CI_CFG_STACK_NAME_LEN] = '\0';
   return oo_priv_lookup_and_attach_stack(priv, op->in_name, -1);
 }
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static int
 thr_priv_dump(ci_private_t *priv, void *unused)
 {
@@ -1040,6 +1041,7 @@ oo_ioctl_debug_op(ci_private_t *priv, void *arg)
   }
   return rc;
 }
+#endif
 static int
 ioctl_printk(ci_private_t *priv, void *arg)
 {
@@ -1487,7 +1489,9 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_DBG_GET_STACK_INFO, efab_tcp_helper_get_info),
   op(OO_IOC_DBG_WAIT_STACKLIST_UPDATE, efab_tcp_helper_wait_stack_list_update),
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   op(OO_IOC_DEBUG_OP, oo_ioctl_debug_op),
+#endif
 
   op(OO_IOC_PRINTK, ioctl_printk),
 
@@ -1546,7 +1550,9 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_EPLOCK_LOCK_WAIT, efab_eplock_lock_wait_rsop),
 
   op(OO_IOC_INSTALL_STACK,    efab_install_stack),
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   op(OO_IOC_RSOP_DUMP, thr_priv_dump),
+#endif
   op(OO_IOC_GET_ONLOADFS_DEV, onloadfs_get_dev_t),
 #if CI_CFG_ENDPOINT_MOVE
   op(OO_IOC_TCP_LOOPBACK_CONNECT, efab_tcp_loopback_connect),

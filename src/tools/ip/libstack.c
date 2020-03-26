@@ -1133,6 +1133,7 @@ uint64_t arg_u[1];
 const char* arg_s[2];
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 void dump_kernel_stats_via_buffer(int id, dump_stack_args *args)
 {
   int rc;
@@ -1224,6 +1225,7 @@ void zombie_stack_lots(int id, void *arg)
     dump_kernel_stats_via_buffer(id, &args);
   }
 }
+#endif
 
 
 static void stack_dump(ci_netif* ni)
@@ -1253,6 +1255,7 @@ static void stack_netif(ci_netif* ni)
 }
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void stack_vi_info(ci_netif* ni)
 {
   int rc;
@@ -1279,6 +1282,7 @@ static void stack_vi_info(ci_netif* ni)
     ci_log("No such stack %d (error %d).", args.stack_id, -rc);
   }
 }
+#endif
 
 
 static void stack_netif_extra(ci_netif* ni)
@@ -2211,6 +2215,7 @@ static void stack_proc_delay_reset(ci_netif* ni)
 #define STACK_OP_F(nm, help, fl)  STACK_OP_A(nm, (help), NULL, 0, (fl))
 #define STACK_OP(nm, help)        STACK_OP_A(nm, (help), NULL, 0, 0)
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #define ZOMBIE_STACK_OP(nm, help)           \
   { (#nm), (NULL), (zombie_stack_##nm), (help), (NULL), 0, (FL_ID) }
 
@@ -2223,11 +2228,14 @@ static const stack_op_t zombie_stack_ops[] = {
 
 #define N_ZOMBIE_STACK_OPS                                     \
   (sizeof(zombie_stack_ops) / sizeof(zombie_stack_ops[0]))
+#endif
 
 static const stack_op_t stack_ops[] = {
   STACK_OP(dump,               "show core state of stack and sockets"),
   STACK_OP(netif,              "show core per-stack state"),
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   STACK_OP(vi_info,            "show vi information per-stack state"),
+#endif
   STACK_OP(netif_extra,        "show extra per-stack state"),
   STACK_OP(netstat,            "show netstat like output for sockets"),
   STACK_OP(dmaq,               "show state of DMA queue"),
@@ -2322,10 +2330,12 @@ void for_each_stack_op(stackop_fn_t* fn, void* arg)
   const stack_op_t* op;
   for( op = stack_ops; op < stack_ops + N_STACK_OPS; ++op )
     (*fn)(op, arg);
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   for( op = zombie_stack_ops; 
        op < zombie_stack_ops + N_ZOMBIE_STACK_OPS;
        ++op )
     (*fn)(op, arg);
+#endif
 }
 
 
@@ -2334,11 +2344,14 @@ const stack_op_t* get_stack_op(const char* name)
   const stack_op_t* op;
   const stack_op_t* ops;
   int n;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   if( cfg_zombie ) {
     n = N_ZOMBIE_STACK_OPS;
     ops = zombie_stack_ops;
   } 
-  else {
+  else
+#endif
+  {
     n = N_STACK_OPS;
     ops = stack_ops;
   }

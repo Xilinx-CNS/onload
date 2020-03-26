@@ -66,11 +66,13 @@ oo_vi_stats_query(ci_fd_t fp, int intf_i, void* data, int data_len,
   return oo_resource_op(fp, OO_IOC_VI_STATS_QUERY, &io);
 }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 ci_inline int
 oo_debug_op(ci_fd_t fp, ci_debug_onload_op_t *io)
 {
   return oo_resource_op(fp, OO_IOC_DEBUG_OP, io);
 }
+#endif
 
 #endif  /* _CI_DRIVER_UNIX_INTF_H_ */
 

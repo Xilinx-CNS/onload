@@ -32,8 +32,10 @@ enum {
 #define OO_IOC_DBG_WAIT_STACKLIST_UPDATE \
                                 OO_IOC_RW(DBG_WAIT_STACKLIST_UPDATE, \
                                           struct oo_stacklist_update)
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   OO_OP_DEBUG_OP,
 #define OO_IOC_DEBUG_OP         OO_IOC_RW(DEBUG_OP, ci_debug_onload_op_t)
+#endif
 
   /* Logging */
   OO_OP_PRINTK,
@@ -174,8 +176,10 @@ enum {
 #define OO_IOC_INSTALL_STACK        OO_IOC_W(INSTALL_STACK,             \
                                              struct oo_op_install_stack)
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   OO_OP_RSOP_DUMP,
 #define OO_IOC_RSOP_DUMP            OO_IOC_NONE(RSOP_DUMP)
+#endif
 
   OO_OP_GET_ONLOADFS_DEV,
 #define OO_IOC_GET_ONLOADFS_DEV     OO_IOC_R(GET_ONLOADFS_DEV, ci_uint32)
