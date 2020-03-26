@@ -1733,8 +1733,7 @@ static int citp_tcp_send(citp_fdinfo* fdinfo, const struct msghdr* msg,
     flags |= MSG_DONTWAIT;
   }
 
-  if(CI_LIKELY( msg->msg_iov != NULL && msg->msg_iovlen > 0 &&
-                (msg->msg_namelen == 0 || msg->msg_name != NULL) )) {
+  if(CI_LIKELY( msg->msg_iov != NULL && msg->msg_iovlen > 0 )) {
     Log_V(ci_log(LPF "send("EF_FMT", len=%d, "CI_SOCKCALL_FLAGS_FMT")",
                  EF_PRI_ARGS(epi,fdinfo->fd),
                  ci_iovec_bytes(msg->msg_iov, msg->msg_iovlen),
