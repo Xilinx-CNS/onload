@@ -1008,6 +1008,7 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
     /* NB !__KERNEL__ above will go when UL_INTERRUPT_HELPER mode is
      * fully implemented */
                                       CI_EPLOCK_NETIF_CLOSE_ENDPOINT |
+                                      CI_EPLOCK_NETIF_NEED_WAKE |
 #endif
                                       CI_EPLOCK_NETIF_MERGE_ATOMIC_COUNTERS;
   ci_uint64 set_flags = 0;
@@ -1052,6 +1053,40 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
         break;
       citp_waitable_all_fds_gone(ni, id);
     } while(1);
+  }
+
+  if( lock_val & CI_EPLOCK_NETIF_NEED_WAKE ) {
+    /* Tell kernel to wake up endpoints */
+    ci_ni_dllist_link* lnk;
+    citp_waitable* w;
+    struct oo_wakeup_eps op;
+    oo_sp eps[64];
+
+    op.eps_num = 0;
+    CI_USER_PTR_SET(op.eps, eps);
+
+    while( ci_ni_dllist_not_empty(ni, &ni->state->post_poll_list) ) {
+      lnk = ci_ni_dllist_head(ni, &ni->state->post_poll_list);
+      w = CI_CONTAINER(citp_waitable, post_poll_link, lnk);
+      ci_ni_dllist_remove_safe(ni, &w->post_poll_link);
+      eps[op.eps_num++] = w->bufid;
+
+      /* Todo: we'd better allocate larger eps and wake up all
+       * simultaneously, so that user's poll() returns all ready sockets in
+       * one go.
+       */
+      if( op.eps_num == sizeof(eps) / sizeof(eps[0]) ) {
+        oo_resource_op(ci_netif_get_driver_handle(ni),
+                       OO_IOC_WAKEUP_WAITERS, &op);
+        op.eps_num = 0;
+
+      }
+    }
+
+    if( op.eps_num != 0 )
+      oo_resource_op(ci_netif_get_driver_handle(ni),
+                     OO_IOC_WAKEUP_WAITERS, &op);
+
   }
 #endif
 

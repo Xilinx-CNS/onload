@@ -364,6 +364,11 @@ struct oo_ulh_waiter {
   ci_uint32 timeout_ms;     /* in */
   ci_uint32 rs_ref_count;   /* out */
 };
+
+struct oo_wakeup_eps {
+  ci_uint32 eps_num;
+  ci_user_ptr_t eps;
+};
 #endif
 
 

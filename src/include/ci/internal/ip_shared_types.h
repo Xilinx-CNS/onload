@@ -926,10 +926,10 @@ typedef struct {
 #if ! CI_CFG_UL_INTERRUPT_HELPER || ! defined(__KERNEL__)
 # define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff3a000000000000ULL
 #else /* if CI_CFG_UL_INTERRUPT_HELPER && __KERNEL__ */
-/* Unset CI_EPLOCK_NETIF_CLOSE_ENDPOINT.
+/* Unset CI_EPLOCK_NETIF_CLOSE_ENDPOINT | CI_EPLOCK_NETIF_NEED_WAKE.
  * We won't need this ifdef when stack lock is removed from kernel
  * completely in this UL_HELPER mode. */
-# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xbf3a000000000000ULL
+# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0x3f3a000000000000ULL
 #endif
 } ci_eplock_t;
 

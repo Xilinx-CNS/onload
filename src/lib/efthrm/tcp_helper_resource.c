@@ -208,7 +208,7 @@ oo_trusted_lock_try_lock(tcp_helper_resource_t* trs)
 static void
 oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
 {
-  unsigned l, new_l;
+  unsigned l;
   ci_uint64 sl_flags;
   ci_netif* ni = &trs->netif;
 
@@ -232,7 +232,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   if( l & OO_TRUSTED_LOCK_CLOSE_ENDPOINT ) {
-    new_l = l & ~OO_TRUSTED_LOCK_CLOSE_ENDPOINT;
+    unsigned new_l = l & ~OO_TRUSTED_LOCK_CLOSE_ENDPOINT;
     if( ci_cas32_fail(&trs->trusted_lock, l, new_l) )
       goto again;
     if( ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
@@ -258,13 +258,12 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
     }
     goto again;
   }
-#endif
 
   if( l & OO_TRUSTED_LOCK_OS_READY ) {
 #if CI_CFG_EPOLL3
     int i, tmp;
 #endif
-    new_l = l & ~OO_TRUSTED_LOCK_OS_READY;
+    unsigned new_l = l & ~OO_TRUSTED_LOCK_OS_READY;
     if( ci_cas32_fail(&trs->trusted_lock, l, new_l) )
       goto again;
     if( ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
@@ -290,6 +289,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
     }
     goto again;
   }
+#endif
 
   sl_flags = 0;
   if( l & OO_TRUSTED_LOCK_NEED_POLL )
@@ -4836,6 +4836,31 @@ int oo_get_closing_ep(ci_private_t* priv, void* arg)
 
   return 0;
 }
+
+int oo_wakeup_waiters(ci_private_t* priv, void* arg)
+{
+  struct oo_wakeup_eps* op = arg;
+  tcp_helper_resource_t* thr = priv->thr;
+  oo_sp ep_id[16];
+  oo_sp __user * user_ptr = CI_USER_PTR_GET(op->eps);
+  int n, i;
+
+  while( op->eps_num > 0 ) {
+    n = CI_MIN(op->eps_num, sizeof(ep_id) / sizeof(ep_id[0]));
+    if( copy_from_user(ep_id, user_ptr, n * sizeof(ep_id[0])) )
+      return -EFAULT;
+    user_ptr += n;
+    op->eps_num -= n;
+
+    for( i = 0; i < n; i++ ) {
+      tcp_helper_endpoint_t* ep;
+      ep = ci_netif_get_valid_ep(&thr->netif, ep_id[i]);
+      tcp_helper_endpoint_wakeup(thr, ep);
+    }
+  }
+
+  return 0;
+}
 #endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 
@@ -7132,6 +7157,7 @@ get_os_ready_list(tcp_helper_resource_t* thr, int ready_list)
 #endif
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void
 wakeup_post_poll_list(tcp_helper_resource_t* thr)
 {
@@ -7166,6 +7192,7 @@ wakeup_post_poll_list(tcp_helper_resource_t* thr)
   }
 #endif
 }
+#endif
 
 ci_inline int want_proactive_packet_allocation(ci_netif* ni)
 {
@@ -7281,6 +7308,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
       flags_set &=~ CI_EPLOCK_NETIF_SWF_UPDATE;
     }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
     if( flags_set & CI_EPLOCK_NETIF_NEED_WAKE ) {
       if( in_dl_context && oo_avoid_wakeup_from_dl() ) {
         OO_DEBUG_TCPH(ci_log("%s: [%u] defer endpoint wakeup to workitem",
@@ -7297,6 +7325,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
       CITP_STATS_NETIF(++ni->state->stats.unlock_slow_wake);
       flags_set &=~ CI_EPLOCK_NETIF_NEED_WAKE;
     }
+#endif
 
     /* Monitor the number of free packets: pretend that
     ** CI_EPLOCK_NETIF_NEED_PKT_SET was set if non-current packet sets are
