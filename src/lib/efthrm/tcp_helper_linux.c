@@ -109,6 +109,7 @@ static inline unsigned long poll_requested_events_min(const poll_table *p)
 static inline int
 efab_fop_poll__poll_if_needed(tcp_helper_resource_t* trs, citp_waitable* w)
 {
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   ci_netif* ni = &trs->netif;
 
   if(CI_UNLIKELY( ! (w->sb_aflags & CI_SB_AFLAG_AVOID_INTERRUPTS) &&
@@ -129,6 +130,7 @@ efab_fop_poll__poll_if_needed(tcp_helper_resource_t* trs, citp_waitable* w)
     }
     return 1;
   }
+#endif
   return 0;
 }
 
