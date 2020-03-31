@@ -18,5 +18,7 @@
 #define CI_CFG_EPOLL2 0
 #undef CI_CFG_EPOLL3
 #define CI_CFG_EPOLL3 0
+#undef CI_CFG_WANT_BPF_NATIVE
+#define CI_CFG_WANT_BPF_NATIVE 0
 
 #endif
