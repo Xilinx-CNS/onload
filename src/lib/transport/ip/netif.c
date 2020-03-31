@@ -997,6 +997,60 @@ void ci_netif_merge_atomic_counters(ci_netif* ni)
 #define KERNEL_DL_CONTEXT
 #endif
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER || ! defined(__KERNEL__)
+#if CI_CFG_UL_INTERRUPT_HELPER
+static
+#endif
+int oo_want_proactive_packet_allocation(ci_netif* ni)
+{
+  ci_uint32 current_free;
+
+  /* This is used from stack unlock callback, which can occur during failed
+   * stack allocation when we don't have any packet sets, and aren't going to
+   * get any.
+   */
+  if( ni->packets->sets_n == 0 )
+    return 0;
+
+  current_free = ni->packets->set[NI_PKT_SET(ni)].n_free;
+
+  /* All the packets allocated */
+  if( pkt_sets_n(ni) == pkt_sets_max(ni) )
+    return 0;
+
+  /* We need to have a decent number of free packets. */
+  if( ni->packets->n_free > NI_OPTS(ni).free_packets_low ) {
+    /* But these free packets may be distributed between sets in
+     * unfortunate way, so we do additional checks. */
+
+    /* Good if the packets are underused */
+    if( ni->packets->n_free > ni->packets->n_pkts_allocated / 3 )
+      return 0;
+
+    /* Good: a lot of packets in the current set and also some packets in
+     * non-current sets, so it'll be possible to switch to another set when
+     * this one is empty. */
+    if( current_free > PKTS_PER_SET / 2 &&
+        ni->packets->n_free > PKTS_PER_SET * 3 / 4 )
+      return 0;
+
+    /* Good: a lot of packets in non-current sets, and
+     * some of them have at least CI_CFG_RX_DESC_BATCH packets. */
+    if( ni->packets->n_free - current_free >
+        CI_MAX(PKTS_PER_SET / 2, CI_CFG_RX_DESC_BATCH * (pkt_sets_n(ni) - 1)) )
+      return 0;
+  }
+
+  CITP_STATS_NETIF_INC(ni, proactive_packet_allocation);
+  LOG_NC(ci_log("%s: [%d] proactive packet allocation: "
+                "%d sets n_freepkts=%d free_packets_low=%d "
+                "current_set.n_free=%d", __func__, NI_ID(ni),
+                pkt_sets_n(ni), ni->packets->n_free,
+                NI_OPTS(ni).free_packets_low, current_free));
+  return 1;
+}
+#endif
+
 
 /* Handling for lock flags that is common to UL and kernel paths. */
 ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
@@ -1087,6 +1141,11 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
       oo_resource_op(ci_netif_get_driver_handle(ni),
                      OO_IOC_WAKEUP_WAITERS, &op);
 
+  }
+
+  if( lock_val & CI_EPLOCK_NETIF_NEED_PKT_SET ||
+      oo_want_proactive_packet_allocation(ni) ) {
+    ci_tcp_helper_more_bufs(ni);
   }
 #endif
 

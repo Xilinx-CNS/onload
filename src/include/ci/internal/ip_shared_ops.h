@@ -36,6 +36,9 @@
 
 #define ci_netif_is_locked(ni)        ef_eplock_is_locked(&(ni)->state->lock)
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+extern int oo_want_proactive_packet_allocation(ci_netif* ni);
+#endif
 extern ci_uint64
 ci_netif_unlock_slow_common(ci_netif*, ci_uint64 lock_val) CI_HF;
 
@@ -318,6 +321,14 @@ ci_inline char* oo_sockp_to_ptr(ci_netif* ni, oo_sp sockp)
 ************************ Packet buffer access ************************
 *********************************************************************/
 
+#ifdef __KERNEL__
+# define pkt_sets_n(ni) (ni)->pkt_sets_n
+# define pkt_sets_max(ni) (ni)->pkt_sets_max
+#else
+# define pkt_sets_n(ni) (ni)->packets->sets_n
+# define pkt_sets_max(ni) (ni)->packets->sets_max
+#endif
+
 /* VALID_PKT_ID(ni, id)
 **
 ** Converts a packet id that may be out of range into one that definitely
@@ -325,14 +336,8 @@ ci_inline char* oo_sockp_to_ptr(ci_netif* ni, oo_sp sockp)
 ** fast-path code.
 */
 ci_inline oo_pkt_p VALID_PKT_ID(ci_netif* ni, oo_pkt_p pp) {
-#ifdef __KERNEL__
-# define pkt_sets_n(ni) (ni)->pkt_sets_n
-#else
-# define pkt_sets_n(ni) (ni)->packets->sets_n
-#endif
   OO_PP_INIT(ni, pp,
              OO_PP_ID(pp) % (pkt_sets_n(ni) << CI_CFG_PKTS_PER_SET_S));
-#undef pkt_sets_n
   return pp;
 }
 

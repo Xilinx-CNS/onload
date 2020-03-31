@@ -7194,57 +7194,6 @@ wakeup_post_poll_list(tcp_helper_resource_t* thr)
 }
 #endif
 
-ci_inline int want_proactive_packet_allocation(ci_netif* ni)
-{
-  ci_uint32 current_free;
-
-  /* This is used from stack unlock callback, which can occur during failed
-   * stack allocation when we don't have any packet sets, and aren't going to
-   * get any.
-   */
-  if( ni->packets->sets_n == 0 )
-    return 0;
-
-  current_free = ni->packets->set[NI_PKT_SET(ni)].n_free;
-
-  /* All the packets allocated */
-  if( ni->pkt_sets_n == ni->pkt_sets_max )
-    return 0;
-
-  /* We need to have a decent number of free packets. */
-  if( ni->packets->n_free > NI_OPTS(ni).free_packets_low ) {
-    /* But these free packets may be distributed between sets in
-     * unfortunate way, so we do additional checks. */
-
-    /* Good if the packets are underused */
-    if( ni->packets->n_free > ni->packets->n_pkts_allocated / 3 )
-      return 0;
-
-    /* Good: a lot of packets in the current set and also some packets in
-     * non-current sets, so it'll be possible to switch to another set when
-     * this one is empty. */
-    if( current_free > PKTS_PER_SET / 2 &&
-        ni->packets->n_free > PKTS_PER_SET * 3 / 4 )
-      return 0;
-
-    /* Good: a lot of packets in non-current sets, and
-     * some of them have at least CI_CFG_RX_DESC_BATCH packets. */
-    if( ni->packets->n_free - current_free >
-        CI_MAX(PKTS_PER_SET / 2, CI_CFG_RX_DESC_BATCH * (ni->pkt_sets_n - 1)) )
-      return 0;
-  }
-
-  CITP_STATS_NETIF_INC(ni, proactive_packet_allocation);
-  OO_DEBUG_TCPH(ci_log("%s: [%d] proactive packet allocation: "
-                       "%d sets n_freepkts=%d free_packets_low=%d "
-                       "current_set.n_free=%d",
-                       __func__, NI_ID(ni), ni->pkt_sets_n,
-                       ni->packets->n_free, NI_OPTS(ni).free_packets_low,
-                       current_free));
-  return 1;
-}
-
-
 /*--------------------------------------------------------------------
  *!
  * Callback installed with the netif (kernel/user mode shared) eplock
@@ -7325,14 +7274,13 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
       CITP_STATS_NETIF(++ni->state->stats.unlock_slow_wake);
       flags_set &=~ CI_EPLOCK_NETIF_NEED_WAKE;
     }
-#endif
 
     /* Monitor the number of free packets: pretend that
     ** CI_EPLOCK_NETIF_NEED_PKT_SET was set if non-current packet sets are
     ** short of packets.
     */
     if( (flags_set & CI_EPLOCK_NETIF_NEED_PKT_SET) ||
-        want_proactive_packet_allocation(ni) ) {
+        oo_want_proactive_packet_allocation(ni) ) {
       if( in_dl_context ) {
       OO_DEBUG_TCPH(ci_log("%s: [%u] NEED_PKT_SET to workitem",
                            __FUNCTION__, thr->id));
@@ -7346,6 +7294,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
       efab_tcp_helper_more_bufs(thr);
       flags_set &=~ CI_EPLOCK_NETIF_NEED_PKT_SET;
     }
+#endif
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
     if( flags_set & CI_EPLOCK_NETIF_XDP_CHANGE ) {
