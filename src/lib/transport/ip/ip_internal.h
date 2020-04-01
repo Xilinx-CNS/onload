@@ -453,7 +453,7 @@ ci_inline int
 ci_getsockopt_final(void *optval, socklen_t *optlen, int level,
                     void *val, size_t val_size)
 {
-  if( (level == SOL_SOCKET || level == SOL_IP || level == SOL_IPV6) &&
+  if( (level == SOL_SOCKET || level == SOL_IP) &&
       val_size == sizeof(int) && 
       *optlen >= sizeof(char) && *optlen < sizeof(int) ) {
     int ival = *((int *)val);
