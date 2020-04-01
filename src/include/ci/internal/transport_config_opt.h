@@ -635,6 +635,10 @@
 #define CI_CFG_WANT_BPF_NATIVE          0
 #endif
 
+/* Most users want epoll2 and epoll3 modes */
+#define CI_CFG_EPOLL2 1
+#define CI_CFG_EPOLL3 1
+
 
 #ifdef __KERNEL__
 #include <linux/version.h>

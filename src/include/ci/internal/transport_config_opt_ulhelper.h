@@ -14,5 +14,9 @@
 #define CI_CFG_FD_CACHING 0
 #undef CI_CFG_ENDPOINT_MOVE
 #define CI_CFG_ENDPOINT_MOVE 0
+#undef CI_CFG_EPOLL2
+#define CI_CFG_EPOLL2 0
+#undef CI_CFG_EPOLL3
+#define CI_CFG_EPOLL3 0
 
 #endif
