@@ -106,7 +106,9 @@ struct citp_epoll_member {
   ci_dllink             dllink;     /*!< Double-linked list links */
   ci_dllink             dead_stack_link; /*!< Link for dead stack list */
   ci_dllist*            item_list;  /*!< The list this member belong on */
+#if CI_CFG_EPOLL3
   int                   ready_list_id;
+#endif
   struct epoll_event    epoll_data;
   struct epoll_event    epfd_event; /*!< event synchronised to kernel */
   ci_uint64             fdi_seq;    /*!< fdi->seq */
@@ -145,6 +147,7 @@ struct citp_epoll_fd {
   struct oo_wqlock      lock;
   int                   not_mt_safe;
 
+#if CI_CFG_EPOLL3
   /* Lock for and [dead_stack_sockets].  fdtable lock must be taken
    * after this one to avoid deadlock.
    */
@@ -154,6 +157,7 @@ struct citp_epoll_fd {
   ci_dllist             oo_stack_sockets;
   ci_dllist             oo_stack_not_ready_sockets;
   int                   oo_stack_sockets_n;
+#endif
 
   /* List of onload sockets in non-home stack (struct citp_epoll_member) */
   ci_dllist             oo_sockets;
@@ -181,8 +185,10 @@ struct citp_epoll_fd {
   /* We've entered the citp_epoll_dtor() function */
   int closing;
 
+#if CI_CFG_EPOLL3
   ci_netif* home_stack;
   int ready_list;
+#endif
 
   /*!< phase of the poll to ensure fairness between groups of sockets
    * value of highest bit matters */

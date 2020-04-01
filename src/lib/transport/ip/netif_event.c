@@ -1135,7 +1135,9 @@ static void process_post_poll_list(ci_netif* ni)
   ci_ni_dllist_link* lnk;
   int i, need_wake = 0;
   citp_waitable* sb;
+#if CI_CFG_EPOLL3
   int lists_need_wake = 0;
+#endif
 
   (void) i;  /* prevent warning; effectively unused at userlevel */
 
@@ -1164,7 +1166,9 @@ static void process_post_poll_list(ci_netif* ni)
         ++sb->sleep_seq.rw.tx;
       ci_mb();
 
+#if CI_CFG_EPOLL3
       lists_need_wake |= sb->ready_lists_in_use;
+#endif
 
       if( ! (sb->sb_flags & sb->wake_request) ) {
         sb->sb_flags = 0;
@@ -1199,6 +1203,7 @@ static void process_post_poll_list(ci_netif* ni)
 
   CHECK_NI(ni);
 
+#if CI_CFG_EPOLL3
   /* Shouldn't have had a wake for a list we don't think exists */
   ci_assert_equal(lists_need_wake & ~((1 << CI_CFG_N_READY_LISTS)-1), 0);
 
@@ -1215,10 +1220,12 @@ static void process_post_poll_list(ci_netif* ni)
     }
   }
 #endif
+#endif
 
   if( need_wake )
     ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_NEED_WAKE);
 
+#if CI_CFG_EPOLL3
 #ifdef __KERNEL__
   /* Check whether any ready lists associated with a set need to be woken.
    */
@@ -1227,6 +1234,7 @@ static void process_post_poll_list(ci_netif* ni)
         (ni->state->ready_list_flags[i] & CI_NI_READY_LIST_FLAG_WAKE) )
       efab_tcp_helper_ready_list_wakeup(netif2tcp_helper_resource(ni), i);
   }
+#endif
 #endif
 }
 

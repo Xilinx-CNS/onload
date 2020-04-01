@@ -179,6 +179,7 @@ citp_ul_epoll_member_to_fdi(struct citp_epoll_member* eitem)
 }
 
 
+#if CI_CFG_EPOLL3
 static void
 citp_epoll_set_home_stack(struct citp_epoll_fd* ep, ci_netif* ni)
 {
@@ -442,6 +443,7 @@ static void citp_epoll_cleanup_home_sock_list(struct citp_epoll_fd* ep,
     oo_wqlock_unlock(&ep->dead_stack_lock, NULL);
   }
 }
+#endif
 
 static void citp_epoll_purge_other_socks(struct citp_epoll_fd* ep)
 {
@@ -462,6 +464,7 @@ static void citp_epoll_dtor(citp_fdinfo* fdi, int fdt_locked)
 
   ep->closing = 1;
 
+#if CI_CFG_EPOLL3
   if( ep->home_stack ) {
     /* Cleaning up the dead sockets must be done first, to ensure that they're
      * removed from the other lists before we process them.
@@ -475,6 +478,7 @@ static void citp_epoll_dtor(citp_fdinfo* fdi, int fdt_locked)
   ci_assert(ci_dllist_is_empty(&ep->oo_stack_sockets));
   ci_assert(ci_dllist_is_empty(&ep->oo_stack_not_ready_sockets));
   ci_assert(ci_dllist_is_empty(&ep->dead_stack_sockets));
+#endif
 
   citp_epoll_purge_other_socks(ep);
 
@@ -615,20 +619,22 @@ int citp_epoll_create(int size, int flags)
   epi->epoll = ep;
   ep->size = size;
   oo_wqlock_init(&ep->lock);
-  oo_wqlock_init(&ep->dead_stack_lock);
   ep->not_mt_safe = ! CITP_OPTS.ul_epoll_mt_safe;
+#if CI_CFG_EPOLL3
+  oo_wqlock_init(&ep->dead_stack_lock);
   ci_dllist_init(&ep->oo_stack_sockets);
   ep->oo_stack_sockets_n = 0;
   ci_dllist_init(&ep->oo_stack_not_ready_sockets);
+  ci_dllist_init(&ep->dead_stack_sockets);
+  ep->home_stack = NULL;
+  ep->ready_list = -1;
+#endif
   ci_dllist_init(&ep->oo_sockets);
   ep->oo_sockets_n = 0;
   ci_dllist_init(&ep->dead_sockets);
-  ci_dllist_init(&ep->dead_stack_sockets);
   oo_atomic_set(&ep->refcount, 1);
   ep->epfd_syncs_needed = 0;
   ep->blocking = 0;
-  ep->home_stack = NULL;
-  ep->ready_list = -1;
 #if CI_CFG_TIMESTAMPING
   ep->ordering_info = NULL;
   ep->wait_events = NULL;
@@ -696,8 +702,9 @@ ci_inline int
 citp_epoll_find(struct citp_epoll_fd* ep, const citp_fdinfo* fd_fdi,
                 struct citp_epoll_member** eitem_out, int epoll_fd)
 {
-  citp_socket* sock;
   struct citp_epoll_member* eitem_next;
+#if CI_CFG_EPOLL3
+  citp_socket* sock;
   ci_sb_epoll_state* epoll;
 
   /* We don't know how long ago the fdi was aquired - although we know it's
@@ -739,6 +746,7 @@ citp_epoll_find(struct citp_epoll_fd* ep, const citp_fdinfo* fd_fdi,
   return EPOLL_STACK_EITEM;
 
 out:
+#endif
   CI_DLLIST_FOR_EACH3(struct citp_epoll_member, *eitem_out,
                       dllink, &ep->oo_sockets, eitem_next) {
     if( (*eitem_out)->fd == fd_fdi->fd && (*eitem_out)->fdi_seq == fd_fdi->seq )
@@ -769,11 +777,14 @@ static void citp_eitem_init(struct citp_epoll_member* eitem,
   citp_eitem_reset_epollet(eitem, fd_fdi);
   eitem->fd = fd_fdi->fd;
   eitem->fdi_seq = fd_fdi->seq;
+#if CI_CFG_EPOLL3
   eitem->ready_list_id = -1;
+#endif
   eitem->flags = 0;
   ci_dllink_self_link(&eitem->dead_stack_link);
 }
 
+#if CI_CFG_EPOLL3
 static void citp_epoll_ctl_onload_add_home(struct citp_epoll_member* eitem,
                                            struct citp_epoll_fd* ep,
                                            citp_socket* sock,
@@ -795,6 +806,7 @@ static void citp_epoll_ctl_onload_add_home(struct citp_epoll_member* eitem,
 
   citp_epoll_sb_state_set(eitem, ep, sock);
 }
+#endif
 
 
 static void citp_epoll_ctl_onload_add_other(struct citp_epoll_member* eitem,
@@ -834,6 +846,7 @@ static void citp_epoll_ctl_onload_add_other(struct citp_epoll_member* eitem,
     fd_fdi->epoll_fd_seq = epoll_fd_seq;
 }
 
+#if CI_CFG_EPOLL3
 static int citp_epoll_can_rehome_on_scalable(ci_netif* ni)
 {
   return
@@ -845,6 +858,7 @@ static int citp_epoll_can_rehome_on_scalable(ci_netif* ni)
      * which is always true */
     (NI_OPTS(ni).scalable_filter_mode & CITP_SCALABLE_MODE_RSS) != 0;
 }
+#endif
 
 
 static int citp_epoll_ctl_onload_add_new(struct citp_epoll_member** eitem_out,
@@ -855,7 +869,6 @@ static int citp_epoll_ctl_onload_add_new(struct citp_epoll_member** eitem_out,
 {
   citp_socket* sock = NULL;
   ci_netif* ni;
-  int rc;
 
   *eitem_out = CI_ALLOC_OBJ(struct citp_epoll_member);
   if( *eitem_out == NULL ) {
@@ -874,10 +887,13 @@ static int citp_epoll_ctl_onload_add_new(struct citp_epoll_member** eitem_out,
   sock = fdi_to_socket(fd_fdi);
   ni = sock->netif;
 
+#if CI_CFG_EPOLL3
   if( (CITP_OPTS.ul_epoll == 3) && CI_UNLIKELY(!ep->home_stack) && sock &&
        citp_epoll_can_rehome_on_scalable(ni) ) {
     char* name;
     int empty;
+    int rc;
+
     CITP_FDTABLE_LOCK();
     oo_stackname_get(&name);
     empty = name[0] == 0;
@@ -920,7 +936,9 @@ static int citp_epoll_ctl_onload_add_new(struct citp_epoll_member** eitem_out,
                                    epoll_fd_seq);
     *sync_kernel = 0;
   }
-  else {
+  else
+#endif
+  {
     citp_epoll_ctl_onload_add_other(*eitem_out, ep, sync_kernel, fd_fdi,
                                     epoll_fd, epoll_fd_seq);
     CITP_STATS_NETIF_INC(ni, epoll_add_non_home);
@@ -937,8 +955,10 @@ static void citp_epoll_ctl_onload_readd(struct citp_epoll_member* eitem,
                                         citp_fdinfo* fd_fdi, int epoll_fd,
                                         ci_uint64 epoll_fd_seq)
 {
+#if CI_CFG_EPOLL3
   /* Sockets in the home stack don't hang around after EPOLL_CTL_DEL */
   ci_assert_equal(eitem->ready_list_id, -1);
+#endif
 
   /* Re-added having previously been deleted (but delete did not
    * yet make it as far as the kernel).
@@ -1003,14 +1023,19 @@ static int citp_epoll_ctl_onload_mod(struct citp_epoll_member* eitem,
       if( eitem->epfd_event.events == EP_NOT_REGISTERED ) {
         *sync_op = EPOLL_CTL_ADD;
       }
+#if CI_CFG_EPOLL3
       else if( eitem->ready_list_id >= 0 ) {
         ci_assert_flags(eitem->flags, CITP_EITEM_FLAG_OS_SYNC);
         *sync_op = EPOLL_CTL_DEL;
         eitem->flags &=~ CITP_EITEM_FLAG_OS_SYNC;
       }
-
+#endif
     }
-    else if( (eitem->ready_list_id < 0) && !citp_eitem_is_synced(eitem) )
+    else if(
+#if CI_CFG_EPOLL3
+            (eitem->ready_list_id < 0) &&
+#endif
+            !citp_eitem_is_synced(eitem) )
       ++ep->epfd_syncs_needed;
 
     /* Reinsert at front to exploit locality of reference if there
@@ -1033,6 +1058,7 @@ static int citp_epoll_ctl_onload_del(struct citp_epoll_member* eitem,
 {
   int rc = 0;
   if(CI_LIKELY( eitem != NULL )) {
+#if CI_CFG_EPOLL3
     if( eitem->ready_list_id >= 0 ) {
       /* Once upon a time, it was a non-home member, so we have to sync to
        * kernel.  See the comment in citp_epoll_promote_to_home(). */
@@ -1053,7 +1079,9 @@ static int citp_epoll_ctl_onload_del(struct citp_epoll_member* eitem,
       ci_assert_equal(fd_fdi->epoll_fd, -1);
       oo_wqlock_unlock(&ep->dead_stack_lock, NULL);
     }
-    else {
+    else
+#endif
+    {
       ci_dllist_remove(&eitem->dllink);
       ep->oo_sockets_n--;
       if( eitem->epfd_event.events == EP_NOT_REGISTERED ) {
@@ -1152,12 +1180,17 @@ static int citp_epoll_ctl_onload2(struct citp_epoll_fd* ep, int op,
   else {
     Log_POLL(ci_log("%s("EPOLL_CTL_FMT"): %s rc=%d errno=%d", __FUNCTION__,
                     EPOLL_CTL_ARGS(epoll_fd, op, fd_fdi->fd, event),
-                    eitem && eitem->ready_list_id >= 0 ? "HOME":"OTHER",
+#if CI_CFG_EPOLL3
+                    eitem && eitem->ready_list_id >= 0 ? "HOME":
+#endif
+                    "OTHER",
                     rc, errno));
   }
 
+#if CI_CFG_EPOLL3
   if( ci_dllist_not_empty(&ep->dead_stack_sockets) )
     citp_epoll_cleanup_dead_home_socks(ep, fdt_locked);
+#endif
 
   return rc;
 }
@@ -1383,7 +1416,9 @@ static void citp_ul_epoll_ctl_sync(struct citp_epoll_fd* ep, int epfd)
 
   while( ci_dllist_not_empty(&ep->dead_sockets) ) {
     eitem = EITEM_FROM_DLLINK(ci_dllist_pop(&ep->dead_sockets));
+#if CI_CFG_EPOLL3
     ci_assert_equal(eitem->ready_list_id, -1);
+#endif
 
     /* Check that this fd was not replaced by another file */
     if( citp_ul_epoll_member_to_fdi(eitem) ) {
@@ -1469,9 +1504,13 @@ static int citp_ul_epoll_one(struct oo_ul_epoll_state*__restrict__ eps,
    * If it's not closing then we should be able to tell by looking at whether
    * it's on the dead list - home sockets are bunged here when they're closed.
    */
-  if( ! (eps->ep->lock.lock & OO_WQLOCK_WORK_BITS) &&
+  if( ! (eps->ep->lock.lock & OO_WQLOCK_WORK_BITS)
+#if CI_CFG_EPOLL3
+      &&
       ci_dllink_is_self_linked(&eitem->dead_stack_link) &&
-      eitem->ready_list_id < 0) {
+      eitem->ready_list_id < 0
+#endif
+      ) {
     Log_POLL(ci_log("%s: auto remove fd %d from epoll set",
                     __FUNCTION__, eitem->fd));
 
@@ -1484,6 +1523,7 @@ static int citp_ul_epoll_one(struct oo_ul_epoll_state*__restrict__ eps,
 }
 
 
+#if CI_CFG_EPOLL3
 static void citp_epoll_get_ready_list(struct oo_ul_epoll_state*
                                       __restrict__ eps)
 {
@@ -1589,6 +1629,7 @@ static void citp_epoll_poll_ul_home_stack(struct oo_ul_epoll_state*
 
   citp_epoll_poll_home_socks(eps);
 }
+#endif
 
 
 static void citp_epoll_poll_ul_other(struct oo_ul_epoll_state* __restrict__ eps)
@@ -1628,14 +1669,18 @@ static void citp_epoll_poll_ul_other(struct oo_ul_epoll_state* __restrict__ eps)
 
 static void citp_epoll_poll_ul(struct oo_ul_epoll_state*__restrict__ eps)
 {
+#if CI_CFG_EPOLL3
   /* First check any sockets in our home stack */
   if( eps->ep->home_stack )
     citp_epoll_poll_ul_home_stack(eps);
+#endif
 
   /* Then check any other accelerated sockets if we still have space */
   if( eps->events < eps->events_top ) {
+#if CI_CFG_EPOLL3
     if( eps->ep->home_stack )
       ci_assert_flags(eps->phase, EPOLL_PHASE_DONE_ACCELERATED);
+#endif
     citp_epoll_poll_ul_other(eps);
   }
 
@@ -1751,8 +1796,10 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
   CITP_EPOLL_EP_LOCK(ep);
 
   if( ((CITP_OPTS.ul_epoll == 1 || ! ep->not_mt_safe) &&
+#if CI_CFG_EPOLL3
        ci_dllist_is_empty(&ep->oo_stack_sockets) &&
        ci_dllist_is_empty(&ep->oo_stack_not_ready_sockets) &&
+#endif
        ci_dllist_is_empty(&ep->oo_sockets)) ||
       maxevents <= 0 || events == NULL ) {
     /* No accelerated fds or invalid parameters). */
@@ -1810,8 +1857,10 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
      */
     int need_to_process_other = 0;
     /* get ready list anyway and tag its end */
+#if CI_CFG_EPOLL3
     if( eps.ep->home_stack )
       citp_epoll_get_ready_list(&eps);
+#endif
     if( ~eps.phase & EPOLL_PHASE_DONE_OTHER ) {
       /* Time for other socket priority round */
       ci_assert_equal(eps.phase, EPOLL_PHASE_DONE_ACCELERATED);
@@ -1856,8 +1905,10 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
     }
     ep->phase = 0; /* clear it for all the blocking/non-event paths */
     eps.phase = 0;
+#if CI_CFG_EPOLL3
     /* no need to check presence of home_stack */
     citp_epoll_poll_home_socks(&eps);
+#endif
     rc = eps.events - events;
     if( rc == maxevents ) {
       ep->phase = eps.phase;
@@ -2050,8 +2101,11 @@ no_events:
 
   ep->blocking = 1;
 
+#if CI_CFG_EPOLL3
   if( ! ep->home_stack &&
-      ( CITP_OPTS.ul_epoll == 1 || ! ep->not_mt_safe ) ) {
+      ( CITP_OPTS.ul_epoll == 1 || ! ep->not_mt_safe ) )
+#endif
+  {
     /* If there is no home stack and it can not be created while we are
      * blocked, we can block on epoll_wait() */
 
@@ -2074,6 +2128,7 @@ no_events:
       rc = ci_sys_epoll_wait(fdi->fd, events, maxevents, timeout_ms);
     ep->blocking = 0;
   }
+#if CI_CFG_EPOLL3
   else {
     struct oo_epoll1_block_on_arg op;
 
@@ -2135,6 +2190,7 @@ no_events:
       rc = op.flags & (OO_EPOLL1_EVENT_ON_HOME | OO_EPOLL1_EVENT_ON_OTHER);
     }
   }
+#endif
 
   if( rc && ordering ) {
     ordering->poll_again = 1;
@@ -2154,6 +2210,7 @@ citp_epoll_hook_start(struct citp_epoll_fd* ep, citp_fdinfo* fd_fdi,
 {
   struct citp_epoll_member* eitem;
 
+#if CI_CFG_EPOLL3
   /* This hook may be called after a completed handover, ie after the socket
    * buffer has been released, so we need to search through our list, rather
    * than going through the fdi.
@@ -2168,6 +2225,7 @@ citp_epoll_hook_start(struct citp_epoll_fd* ep, citp_fdinfo* fd_fdi,
     if( eitem->fd == fd_fdi->fd && eitem->fdi_seq == fd_fdi->seq )
       return eitem;
   }
+#endif
 
   CI_DLLIST_FOR_EACH2(struct citp_epoll_member, eitem,
                       dllink, &ep->oo_sockets) {
@@ -2192,17 +2250,27 @@ void citp_epoll_on_move_do(citp_fdinfo* epoll_fdi, citp_fdinfo* fd_fdi,
                            struct citp_epoll_member* eitem,
                            int fdt_locked)
 {
+#if CI_CFG_EPOLL3
   struct citp_epoll_fd* ep = fdi_to_epoll(epoll_fdi);
+#endif
 
   Log_POLL(ci_log("%s: epoll_fd=%d fd=%d %s", __FUNCTION__, fd_fdi->epoll_fd,
-                  fd_fdi->fd, eitem->ready_list_id > 0 ? "HOME":"OTHER"));
+                  fd_fdi->fd,
+#if CI_CFG_EPOLL3
+                  eitem->ready_list_id > 0 ? "HOME":
+#endif
+                  "OTHER"));
 
-  if( eitem->ready_list_id < 0 ) {
+#if CI_CFG_EPOLL3
+  if( eitem->ready_list_id < 0 )
+#endif
+  {
     /* Would be nice to move into the home stack if that's where we're moved
      * to, but not bothering for now.
      */
     eitem->fdi_seq = new_fdi->seq;
   }
+#if CI_CFG_EPOLL3
   else {
     /* This was in our home stack, but now isn't.  Need to update the eitem
      * state to be appropriate for a non-home sock.
@@ -2221,6 +2289,7 @@ void citp_epoll_on_move_do(citp_fdinfo* epoll_fdi, citp_fdinfo* fd_fdi,
     eitem->epfd_event.events = EP_NOT_REGISTERED;
     ++ep->epfd_syncs_needed;
   }
+#endif
 
   citp_fdinfo_release_ref(fd_fdi, fdt_locked);
   citp_fdinfo_release_ref(new_fdi, fdt_locked);
@@ -2244,12 +2313,15 @@ static void citp_epoll_on_handover_do(citp_fdinfo* epoll_fdi,
                   eitem->epoll_data.events,
                   (unsigned long long) eitem->epoll_data.data.u64));
 
-  if( eitem->ready_list_id == -1 ) {
+#if CI_CFG_EPOLL3
+  if( eitem->ready_list_id >= 0 ) {
+    citp_remove_home_member(ep, eitem, fd_fdi, fdt_locked);
+  }
+  else
+#endif
+  {
     ep->oo_sockets_n--;
     ci_dllist_remove(&eitem->dllink);
-  }
-  else {
-    citp_remove_home_member(ep, eitem, fd_fdi, fdt_locked);
   }
 
   if( fd_fdi->protocol->type == CITP_PASSTHROUGH_FD )
@@ -2342,6 +2414,7 @@ void citp_epoll_on_handover(citp_fdinfo* epoll_fdi, citp_fdinfo* fd_fdi,
   __citp_epoll_on_smth(epoll_fdi, fd_fdi, NULL, fdt_locked);
 }
 
+#if CI_CFG_EPOLL3
 void citp_epoll_on_close(citp_fdinfo* epoll_fdi, citp_fdinfo* fd_fdi,
                          int fdt_locked)
 {
@@ -2395,6 +2468,7 @@ void citp_epoll_on_close(citp_fdinfo* epoll_fdi, citp_fdinfo* fd_fdi,
 unlock:
   oo_wqlock_unlock(&ep->dead_stack_lock, NULL);
 }
+#endif
 
 
 ci_inline void
@@ -2426,8 +2500,11 @@ citp_ul_epoll_store_event(struct oo_ul_epoll_state*__restrict__ eps,
   }
 #endif
 
-  ci_assert(eitem->item_list == &eps->ep->oo_sockets ||
-            eitem->item_list == &eps->ep->oo_stack_sockets);
+  ci_assert(eitem->item_list == &eps->ep->oo_sockets
+#if CI_CFG_EPOLL3
+            || eitem->item_list == &eps->ep->oo_stack_sockets
+#endif
+            );
   ci_dllist_remove_safe(&eitem->dllink);
   ci_assert_lt(eitem->fd, citp_fdtable.inited_count);
   if( eitem->epoll_data.events & (EPOLLONESHOT | EPOLLET) )
@@ -2693,7 +2770,10 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
    * grown.
    */
   n_socks = CI_MAX(maxevents,
-                   ep->home_stack ? ep->oo_stack_sockets_n : ep->oo_sockets_n);
+#if CI_CFG_EPOLL3
+                   ep->home_stack ? ep->oo_stack_sockets_n :
+#endif
+                   ep->oo_sockets_n);
 
   if( n_socks > ep->n_woda_events ) {
     ci_free(ep->ordering_info);
@@ -2717,11 +2797,14 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
     return -1;
   }
 
+#if CI_CFG_EPOLL3
   if( ep->home_stack ) {
     ni = ep->home_stack;
     citp_netif_add_ref(ni);
   }
-  else if( ci_dllist_not_empty(&ep->oo_sockets) ) {
+  else
+#endif
+  if( ci_dllist_not_empty(&ep->oo_sockets) ) {
     ci_dllink *link;
     ci_assert(ep->oo_sockets_n);
 

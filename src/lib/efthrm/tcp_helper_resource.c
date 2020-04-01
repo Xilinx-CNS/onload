@@ -164,8 +164,10 @@ tcp_helper_purge_txq_work(struct work_struct *data);
 static void
 tcp_helper_reset_stack_work(struct work_struct *data);
 
+#if CI_CFG_EPOLL3
 static void
 get_os_ready_list(tcp_helper_resource_t* thr, int ready_list);
+#endif
 
 static void
 efab_tcp_helper_drop_os_socket(tcp_helper_resource_t* trs,
@@ -209,7 +211,6 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
   unsigned l, new_l;
   ci_uint64 sl_flags;
   ci_netif* ni = &trs->netif;
-  int i, tmp;
 
  again:
   l = trs->trusted_lock;
@@ -260,6 +261,9 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
 #endif
 
   if( l & OO_TRUSTED_LOCK_OS_READY ) {
+#if CI_CFG_EPOLL3
+    int i, tmp;
+#endif
     new_l = l & ~OO_TRUSTED_LOCK_OS_READY;
     if( ci_cas32_fail(&trs->trusted_lock, l, new_l) )
       goto again;
@@ -269,12 +273,14 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
       OO_DEBUG_TCPH(ci_log("%s: [%u] OS READY now",
                            __FUNCTION__, trs->id));
 
+#if CI_CFG_EPOLL3
       CI_READY_LIST_EACH(trs->netif.state->ready_lists_in_use, tmp, i) {
         get_os_ready_list(trs, i);
         if( ci_ni_dllist_not_empty(&trs->netif,
                                    &trs->netif.state->ready_lists[i]))
           ci_waitable_wakeup_all(&trs->ready_list_waitqs[i]);
       }
+#endif
       ci_netif_unlock(&trs->netif);
     }
     else {
@@ -7091,6 +7097,7 @@ void tcp_helper_endpoint_wakeup(tcp_helper_resource_t* thr,
 }
 
 
+#if CI_CFG_EPOLL3
 static void
 get_os_ready_list(tcp_helper_resource_t* thr, int ready_list)
 {
@@ -7122,6 +7129,7 @@ get_os_ready_list(tcp_helper_resource_t* thr, int ready_list)
   }
   spin_unlock_irqrestore(&thr->os_ready_list_lock, lock_flags);
 }
+#endif
 
 
 static void
@@ -7132,7 +7140,9 @@ wakeup_post_poll_list(tcp_helper_resource_t* thr)
   int n = ni->ep_tbl_n;
   ci_ni_dllist_link* lnk;
   citp_waitable* w;
+#if CI_CFG_EPOLL3
   int tmp;
+#endif
 
   LOG_TV(if( ci_ni_dllist_is_empty(ni, &ni->state->post_poll_list) )
            ci_log("netif_lock_callback: need_wake but empty"));
@@ -7148,11 +7158,13 @@ wakeup_post_poll_list(tcp_helper_resource_t* thr)
     tcp_helper_endpoint_wakeup(thr, ep);
   }
 
+#if CI_CFG_EPOLL3
   CI_READY_LIST_EACH(ni->state->ready_lists_in_use, tmp, n) {
     get_os_ready_list(thr, n);
     if( ci_ni_dllist_not_empty(ni, &ni->state->ready_lists[n]))
       efab_tcp_helper_ready_list_wakeup(thr, n);
   }
+#endif
 }
 
 ci_inline int want_proactive_packet_allocation(ci_netif* ni)
@@ -7337,10 +7349,12 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
       flags_set &= ~CI_EPLOCK_NETIF_KERNEL_PACKETS;
     }
 
+#if CI_CFG_EPOLL3
     if( flags_set & CI_EPLOCK_NETIF_FREE_READY_LIST ) {
       ci_netif_free_ready_lists(ni);
       flags_set &= ~CI_EPLOCK_NETIF_FREE_READY_LIST;
     }
+#endif
 
     /* CI_EPLOCK_NETIF_CLOSE_ENDPOINT must be the last flag handled, because
      * it can cause us to take an early exit from the function. */

@@ -429,19 +429,24 @@ static inline void
 efab_tcp_helper_ready_list_wakeup(tcp_helper_resource_t* trs,
                                   int ready_list)
 {
+#if CI_CFG_EPOLL3
   ci_atomic32_and(&trs->netif.state->ready_list_flags[ready_list],
                   ~CI_NI_READY_LIST_FLAG_WAKE);
   ci_waitable_wakeup_all(&trs->ready_list_waitqs[ready_list]);
-
+#endif
 }
 
 static inline unsigned
 efab_tcp_helper_ready_list_events(tcp_helper_resource_t* trs,
                                   int ready_list)
 {
+#if CI_CFG_EPOLL3
   return ci_ni_dllist_is_empty(&trs->netif,
                                &trs->netif.state->ready_lists[ready_list])
          ?  0 : POLLIN;
+#else
+  return 0;
+#endif
 }
 
 

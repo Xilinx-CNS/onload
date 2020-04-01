@@ -68,12 +68,14 @@ struct oo_epoll1_private {
   /* kernel epoll file */
   struct file *os_file;
 
+#if CI_CFG_EPOLL3
   /* home stack support */
   tcp_helper_resource_t* home_stack;
   int ready_list;
-  ci_waitable_t home_w;
   ci_uint32 flags;
 #define OO_EPOLL1_FLAG_HOME_STACK_CHANGED 1
+  ci_waitable_t home_w;
+#endif
 };
 
 /*************************************************************
@@ -652,8 +654,10 @@ static int oo_epoll1_release(struct oo_epoll_private* priv)
 
   __free_page(priv1->page);
 
+#if CI_CFG_EPOLL3
   if( priv1->home_stack )
     ci_netif_put_ready_list(&priv1->home_stack->netif, priv1->ready_list);
+#endif
 
   oo_epoll_release_common(priv);
 
@@ -696,6 +700,7 @@ static int oo_epoll1_wait(struct oo_epoll1_private *priv,
   return rc;
 }
 
+#if CI_CFG_EPOLL3
 static void oo_epoll1_set_home_stack(struct oo_epoll1_private* priv,
                                      tcp_helper_resource_t* thr, int ready_list)
 {
@@ -717,6 +722,7 @@ static void oo_epoll1_set_home_stack(struct oo_epoll1_private* priv,
   else
     ci_waitable_wakeup_all(&priv->home_w);
 }
+#endif
 
 static void oo_epoll_prime_all_stacks(struct oo_epoll_private* priv)
 {
@@ -731,6 +737,7 @@ static void oo_epoll_prime_all_stacks(struct oo_epoll_private* priv)
   }
 }
 
+#if CI_CFG_EPOLL3
 /* It is a f_op->poll() like function, but we poll from oo_epoll1_block_on()
  * only, so there is no need to propogate it as such. */
 /* Fixme: get rid of f_op->poll() prototype, and call
@@ -756,6 +763,7 @@ static unsigned oo_epoll1_poll(struct file* filp, poll_table* wait)
 
   return mask;
 }
+#endif
 
 struct oo_epoll_poll_table {
   poll_table pt;
@@ -815,6 +823,7 @@ static int oo_epoll1_block_on(struct file* home_filp,
   ept.task = current;
   ept.w[0] = ept.w[1] = NULL;
   init_poll_funcptr(&ept.pt, oo_epoll1_block_on_callback);
+#if CI_CFG_EPOLL3
   init_waitqueue_func_entry(&ept.wq[0], oo_epoll1_wake_home_callback);
 
   rc = oo_epoll1_poll(home_filp, &ept.pt);
@@ -825,7 +834,9 @@ static int oo_epoll1_block_on(struct file* home_filp,
     if( rc )
       ret |= OO_EPOLL1_EVENT_ON_OTHER;
   }
-  else {
+  else
+#endif
+  {
     init_waitqueue_func_entry(&ept.wq[1], oo_epoll1_wake_other_callback);
     rc = other_filp->f_op->poll(other_filp, &ept.pt);
     if( rc )
@@ -859,6 +870,7 @@ static int oo_epoll1_block_on(struct file* home_filp,
   return ret;
 }
 
+#if CI_CFG_EPOLL3
 static int oo_epoll_has_event(struct file* filp)
 {
   struct oo_epoll_private *priv = filp->private_data;
@@ -955,6 +967,7 @@ out:
 
   return ret;
 }
+#endif
 
 
 static int oo_epoll_move_fd(struct oo_epoll1_private* priv, int epoll_fd)
@@ -1072,6 +1085,7 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
     break;
   }
 
+#if CI_CFG_EPOLL3
   case OO_EPOLL1_IOC_SET_HOME_STACK: {
     struct oo_epoll1_set_home_arg local_arg;
     struct file *stack_file;
@@ -1109,6 +1123,7 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
     oo_epoll1_set_home_stack(&priv->p.p1, NULL, 0);
     rc = 0;
     break;
+#endif
 
   case OO_EPOLL1_IOC_SPIN_ON:
   case OO_EPOLL1_IOC_BLOCK_ON: {
@@ -1133,14 +1148,18 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
       sigprocmask(SIG_SETMASK, &sigmask, &sigsaved);
     }
 
+#if CI_CFG_EPOLL3
     /* drop OO_EPOLL1_FLAG_HOME_STACK_CHANGED flag */
     priv->p.p1.flags = 0;
+#endif
 
-    if( cmd == OO_EPOLL1_IOC_BLOCK_ON )
-      rc = oo_epoll1_block_on(filp, other_filp, local_arg.timeout_us);
-    else
+#if CI_CFG_EPOLL3
+    if( cmd == OO_EPOLL1_IOC_SPIN_ON )
       rc = oo_epoll1_spin_on(filp, other_filp, local_arg.timeout_us,
                                                local_arg.sleep_iter_us);
+    else
+#endif
+      rc = oo_epoll1_block_on(filp, other_filp, local_arg.timeout_us);
 
     if( signal_pending(current) )
       rc = -EINTR;
@@ -1307,8 +1326,10 @@ static int oo_epoll_fop_mmap(struct file* filp, struct vm_area_struct* vma)
     return rc;
   }
 
+#if CI_CFG_EPOLL3
   ci_waitable_ctor(&priv->p.p1.home_w);
   priv->p.p1.flags = 0;
+#endif
 
   priv->type = OO_EPOLL_TYPE_1;
   return rc;

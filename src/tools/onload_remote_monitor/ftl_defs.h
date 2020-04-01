@@ -59,6 +59,12 @@
 #define ON_CI_CFG_ENDPOINT_MOVE IGNORE
 #endif
 
+#if CI_CFG_EPOLL3
+#define ON_CI_CFG_EPOLL3 DO
+#else
+#define ON_CI_CFG_EPOLL3 IGNORE
+#endif
+
 #if CI_CFG_PIO
 #define ON_CI_HAVE_PIO DO
 #else
@@ -518,6 +524,7 @@
   FTL_TFIELD_INT(ctx, ci_int32, deferred_free_eps_head, ORM_OUTPUT_STACK) \
   FTL_TFIELD_INT(ctx, ci_uint32, max_ep_bufs, ORM_OUTPUT_STACK)           \
   FTL_TFIELD_INT(ctx, ci_uint32, n_ep_bufs, ORM_OUTPUT_STACK)             \
+  ON_CI_CFG_EPOLL3(                                                       \
   FTL_TFIELD_ARRAYOFINT(ctx, ci_int32,                 \
                         ready_list_pid, CI_CFG_N_READY_LISTS, ORM_OUTPUT_STACK)  \
   FTL_TFIELD_ARRAYOFSTRUCT(ctx, ci_ni_dllist_t,         \
@@ -525,6 +532,7 @@
   FTL_TFIELD_ARRAYOFINT(ctx, ci_uint32,                 \
                         ready_list_flags, CI_CFG_N_READY_LISTS, ORM_OUTPUT_EXTRA)         \
   FTL_TFIELD_INT(ctx, ci_uint32, ready_lists_in_use, ORM_OUTPUT_EXTRA)    \
+  )                                                                       \
   ON_CI_HAVE_PIO(                                                         \
     FTL_TFIELD_INT(ctx, ci_uint32, pio_bufs_ofs, ORM_OUTPUT_STACK)        \
   ) \

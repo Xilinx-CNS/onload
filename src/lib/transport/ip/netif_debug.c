@@ -974,6 +974,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
          ci_ni_dllist_is_empty(ni, &ns->passive_scalable_cache.cache) ? "EMPTY":"yes",
          ci_ni_dllist_is_empty(ni, &ns->passive_scalable_cache.pending) ? "EMPTY":"yes");
 #endif
+#if CI_CFG_EPOLL3
   {
     int i, tmp;
     CI_READY_LIST_EACH(ns->ready_lists_in_use, tmp, i)
@@ -983,6 +984,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
            ci_ni_dllist_is_empty(ni, &ns->unready_lists[i]) ? "EMPTY":"yes",
            ns->ready_list_flags[i]);
   }
+#endif
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     ci_netif_dump_vi(ni, intf_i, logger, log_arg);
 }

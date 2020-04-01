@@ -1190,6 +1190,7 @@ struct ci_netif_state_s {
   ci_uint32  max_ep_bufs;                /**< Upper limit of end points */
   CI_ULCONST ci_uint32  n_ep_bufs;       /**< Number of available endpoints */
 
+#if CI_CFG_EPOLL3
   ci_int32              ready_list_pid[CI_CFG_N_READY_LISTS];
   ci_ni_dllist_t        ready_lists[CI_CFG_N_READY_LISTS];
   ci_ni_dllist_t        unready_lists[CI_CFG_N_READY_LISTS];
@@ -1197,6 +1198,7 @@ struct ci_netif_state_s {
 #define CI_NI_READY_LIST_FLAG_PENDING_FREE   2 /* Pending free at netif unlock */
   ci_uint32             ready_list_flags[CI_CFG_N_READY_LISTS];
   ci_uint32             ready_lists_in_use;
+#endif
 
 #if CI_CFG_PIO
   CI_ULCONST ci_uint32  pio_bufs_ofs;    /**< Offset to pio_buffers */

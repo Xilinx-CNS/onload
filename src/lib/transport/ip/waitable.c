@@ -456,6 +456,7 @@ void citp_waitable_wakeup(ci_netif* ni, citp_waitable* w)
 static void
 citp_waitable_wake_epoll3_not_in_poll(ci_netif* ni, citp_waitable* sb)
 {
+#if CI_CFG_EPOLL3
   /* Normally we put an object on a ready list in ci_netif_put_on_post_poll,
    * but in this case we don't go via there, so have to explicitly queue on
    * the ready list here.
@@ -478,6 +479,7 @@ citp_waitable_wake_epoll3_not_in_poll(ci_netif* ni, citp_waitable* sb)
 #endif
     }
   }
+#endif
 }
 
 

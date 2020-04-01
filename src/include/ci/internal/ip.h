@@ -572,11 +572,13 @@ ci_netif_requested_scalable_interfaces(struct oo_cplane_handle* cp,
                                        const ci_netif_config_opts* ni_opts,
                                        ci_ifid_t* ifindices, int max_count)
                                       CI_HF;
+#if CI_CFG_EPOLL3
 #ifndef __KERNEL__
 extern int ci_netif_get_ready_list(ci_netif* ni) CI_HF;
 #endif
 extern void ci_netif_put_ready_list(ci_netif* ni, int id) CI_HF;
 extern void ci_netif_free_ready_lists(ci_netif* ni);
+#endif
 
 CI_DEBUG(extern void ci_netif_assert_valid(ci_netif*, const char*, int);)
 CI_DEBUG(extern void ci_netif_verify_freepkts(ci_netif *, const char *, int);)
@@ -4596,12 +4598,14 @@ ci_inline void ci_tcp_set_eff_mss(ci_netif* netif, ci_tcp_state* ts) {
 ci_inline void
 ci_netif_put_on_post_poll_epoll(ci_netif* ni, citp_waitable* sb)
 {
+#if CI_CFG_EPOLL3
   ci_sb_epoll_state* epoll = ci_ni_aux_p2epoll(ni, sb->epoll);
   ci_uint32 tmp, i;
   CI_READY_LIST_EACH(sb->ready_lists_in_use, tmp, i) {
     ci_ni_dllist_remove(ni, &epoll->e[i].ready_link);
     ci_ni_dllist_put(ni, &ni->state->ready_lists[i], &epoll->e[i].ready_link);
   }
+#endif
 }
 
 ci_inline void
@@ -4631,8 +4635,10 @@ ci_inline void ci_netif_put_on_post_poll(ci_netif* ni, citp_waitable* sb)
 {
   ci_ni_dllist_remove(ni, &sb->post_poll_link);
   ci_ni_dllist_put(ni, &ni->state->post_poll_list, &sb->post_poll_link);
+#if CI_CFG_EPOLL3
   if( sb->ready_lists_in_use != 0 )
     ci_netif_put_on_post_poll_epoll(ni, sb);
+#endif
 }
 
 

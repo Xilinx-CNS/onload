@@ -196,6 +196,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   /* hash_salt is used for TCP syncookies and IPv6 flowlabel generation */
   get_random_bytes(&nis->hash_salt, sizeof(nis->hash_salt));
 
+#if CI_CFG_EPOLL3
   nis->ready_lists_in_use = 0;
   for( i = 0; i < CI_CFG_N_READY_LISTS; i++ ) {
     ci_ni_dllist_init(ni, &nis->ready_lists[i],
@@ -206,6 +207,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
                       "unready_list");
     nis->ready_list_flags[i] = 0;
   }
+#endif
 
   for( i = 0;
        i < nis->active_wild_table_entries_n * nis->active_wild_pools_n;

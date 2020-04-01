@@ -1108,6 +1108,7 @@ static short efab_os_wakup_fix_mask(tcp_helper_endpoint_t *ep, short mask,
 }
 
 
+#if CI_CFG_EPOLL3
 static void
 efab_os_wakeup_epoll3_locked(tcp_helper_resource_t* trs,
                              citp_waitable* sb)
@@ -1128,6 +1129,7 @@ efab_os_wakeup_epoll3_locked(tcp_helper_resource_t* trs,
   tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_UNLOCK_TRUSTED);
   /* do not insert anything here - we should return immediately */
 }
+#endif
 
 
 /* Tell any waiters that there is an OS event.  This function is not
@@ -1137,8 +1139,6 @@ static void efab_os_wakeup_event(tcp_helper_endpoint_t *ep,
 {
   ci_sock_cmn *s = SP_TO_SOCK(&ep->thr->netif, ep->id);
   int wq_active;
-  unsigned long flags;
-  tcp_helper_resource_t* trs = ep->thr;
   ci_uint32 os_sock_status;
 
   OO_DEBUG_ASYNC(ci_log("%s: updated mask=%hx so_error=%d os_sock_status=%x",
@@ -1176,6 +1176,7 @@ static void efab_os_wakeup_event(tcp_helper_endpoint_t *ep,
   }
   ci_waitable_wakeup_all(&ep->waitq);
 
+#if CI_CFG_EPOLL3
   /* Epoll3 support: */
 
   /* It's safe to check the id before we decide whether to put stuff on the
@@ -1183,6 +1184,9 @@ static void efab_os_wakeup_event(tcp_helper_endpoint_t *ep,
    * may be ready, and this check is after we've set the os ready status.
    */
   if( s->b.ready_lists_in_use != 0 ) {
+    unsigned long flags;
+    tcp_helper_resource_t* trs = ep->thr;
+
     /* The best thing is if we can just get the lock - in that case we can
      * just bung this socket straight on the ready list.
      */
@@ -1219,6 +1223,7 @@ static void efab_os_wakeup_event(tcp_helper_endpoint_t *ep,
       }
     }
   }
+#endif
 }
 
 void

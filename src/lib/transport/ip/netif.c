@@ -1198,6 +1198,7 @@ void ci_netif_error_detected(ci_netif* ni, unsigned error_flag,
 }
 
 
+#if CI_CFG_EPOLL3
 #ifndef __KERNEL__
 int ci_netif_get_ready_list(ci_netif* ni)
 {
@@ -1275,6 +1276,7 @@ void ci_netif_put_ready_list(ci_netif* ni, int id)
   ci_netif_put_ready_list_locked(ni, id);
   ci_netif_unlock(ni);
 }
+#endif
 
 
 #ifndef __KERNEL__
