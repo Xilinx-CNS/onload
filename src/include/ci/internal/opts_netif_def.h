@@ -392,59 +392,6 @@ CI_CFG_OPT("EF_TAIL_DROP_PROBE", tail_drop_probe, ci_uint32,
            , , 1, 0, 1, yesno)
 #endif
 
-/* These EF_*_SPIN options are only here so that the application defaults
- * set by environment variables get exposed through stackdump.  (Because
- * stackdump only has visibility of per-stack options).
- */
-CI_CFG_OPT("EF_SELECT_SPIN", ul_select_spin, ci_uint32,
-           "", 1, ,0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_POLL_SPIN", ul_poll_spin, ci_uint32, 
-           "", 1, ,0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_EPOLL_SPIN", ul_epoll_spin, ci_uint32, 
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_UDP_RECV_SPIN", udp_recv_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_UDP_SEND_SPIN", udp_send_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_TCP_RECV_SPIN", tcp_recv_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_TCP_SEND_SPIN", tcp_send_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_TCP_ACCEPT_SPIN", tcp_accept_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_TCP_CONNECT_SPIN", tcp_connect_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_PKT_WAIT_SPIN", pkt_wait_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_PIPE_RECV_SPIN", pipe_recv_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_PIPE_SEND_SPIN", pipe_send_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_PIPE_SIZE", pipe_size, ci_uint32,
-           "", , , OO_PIPE_DEFAULT_SIZE, OO_PIPE_MIN_SIZE,
-           CI_CFG_MAX_PIPE_SIZE, count)
-
-CI_CFG_OPT("EF_SOCK_LOCK_BUZZ", sock_lock_buzz, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_STACK_LOCK_BUZZ", stack_lock_buzz, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
-CI_CFG_OPT("EF_SO_BUSY_POLL_SPIN", so_busy_poll_spin, ci_uint32,
-           "", 1, , 0, 0, 1, yesno)
-
 CI_CFG_OPT("EF_TCP_RST_DELAYED_CONN", rst_delayed_conn, ci_uint32,
 "This option tells Onload to reset TCP connections rather than allow data to "
 "be transmitted late.  Specifically, TCP connections are reset if the "

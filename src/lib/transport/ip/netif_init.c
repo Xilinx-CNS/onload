@@ -779,20 +779,6 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
        * Would be much better to initialise these from the CITP options to
        * avoid potential inconsistency.
        */
-      opts->sock_lock_buzz = 1;
-      opts->stack_lock_buzz = 1;
-      opts->ul_select_spin = 1;
-      opts->ul_poll_spin = 1;
-      opts->ul_epoll_spin = 1;
-      opts->udp_recv_spin = 1;
-      opts->udp_send_spin = 1;
-      opts->tcp_recv_spin = 1;
-      opts->tcp_send_spin = 1;
-#if 0
-      opts->tcp_accept_spin = 1;
-      opts->tcp_connect_spin = 1;
-#endif
-      opts->pkt_wait_spin = 1;
     }
   }
   if( (s = getenv("EF_SPIN_USEC")) ) {
@@ -828,17 +814,7 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_BUZZ_USEC")) ) {
     opts->buzz_usec = atoi(s);
-    if( opts->buzz_usec != 0 ) {
-      opts->sock_lock_buzz = 1;
-      opts->stack_lock_buzz = 1;
-    }
   }
-  if( (s = getenv("EF_SOCK_LOCK_BUZZ")) )
-    opts->sock_lock_buzz = atoi(s);
-  if( (s = getenv("EF_STACK_LOCK_BUZZ")) )
-    opts->stack_lock_buzz = atoi(s);
-  if( (s = getenv("EF_SO_BUSY_POLL_SPIN")) )
-    opts->so_busy_poll_spin = atoi(s);
 
   /* The options that follow are (at time of writing) not sensitive to the
    * order in which they are read.
@@ -1084,32 +1060,6 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
       opts->tcp_rx_log_flags = v;
     }
   }
-  if( (s = getenv("EF_SELECT_SPIN")) )
-    opts->ul_select_spin = atoi(s);
-  if( (s = getenv("EF_POLL_SPIN")) )
-    opts->ul_poll_spin = atoi(s);
-  if( (s = getenv("EF_EPOLL_SPIN")) )
-    opts->ul_epoll_spin = atoi(s);
-  if( (s = getenv("EF_UDP_RECV_SPIN")) )
-    opts->udp_recv_spin = atoi(s);
-  if( (s = getenv("EF_UDP_SEND_SPIN")) )
-    opts->udp_send_spin = atoi(s);
-  if( (s = getenv("EF_TCP_RECV_SPIN")) )
-    opts->tcp_recv_spin = atoi(s);
-  if( (s = getenv("EF_TCP_SEND_SPIN")) )
-    opts->tcp_send_spin = atoi(s);
-  if( (s = getenv("EF_TCP_ACCEPT_SPIN")) )
-    opts->tcp_accept_spin = atoi(s);
-  if( (s = getenv("EF_TCP_CONNECT_SPIN")) )
-    opts->tcp_connect_spin = atoi(s);
-  if( (s = getenv("EF_PKT_WAIT_SPIN")) )
-    opts->pkt_wait_spin = atoi(s);
-  if( (s = getenv("EF_PIPE_RECV_SPIN")) )
-    opts->pipe_recv_spin = atoi(s);
-  if( (s = getenv("EF_PIPE_SEND_SPIN")) )
-    opts->pipe_send_spin = atoi(s);
-  if( (s = getenv("EF_PIPE_SIZE")) )
-    opts->pipe_size = atoi(s);
 
   if( (s = getenv("EF_ACCEPTQ_MIN_BACKLOG")) )
     opts->acceptq_min_backlog = atoi(s);
