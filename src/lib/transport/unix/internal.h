@@ -458,7 +458,9 @@ extern int         __citp_exec_restore( int fd ) CI_HF;
 extern citp_protocol_impl citp_tcp_protocol_impl CI_HV;
 extern citp_protocol_impl citp_udp_protocol_impl CI_HV;
 extern citp_protocol_impl citp_epoll_protocol_impl CI_HV;
+#if CI_CFG_EPOLL2
 extern citp_protocol_impl citp_epollb_protocol_impl CI_HV;
+#endif
 extern citp_protocol_impl citp_pipe_read_protocol_impl CI_HV;
 extern citp_protocol_impl citp_pipe_write_protocol_impl CI_HV;
 extern citp_protocol_impl citp_passthrough_protocol_impl;

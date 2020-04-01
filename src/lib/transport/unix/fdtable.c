@@ -480,6 +480,7 @@ static citp_fdinfo * citp_fdtable_probe_locked(unsigned fd, int print_banner,
       break;
     }
   }
+#if CI_CFG_EPOLL2
   else if( ci_major(st.st_rdev) == ci_major(oo_get_st_rdev(OO_EPOLL_DEV)) ) {
     citp_epollb_fdi *epi = CI_ALLOC_OBJ(citp_epollb_fdi);
     if( ! epi ) {
@@ -494,6 +495,7 @@ static citp_fdinfo * citp_fdtable_probe_locked(unsigned fd, int print_banner,
     citp_fdtable_insert(fdi, fd, 1);
     goto exit;
   }
+#endif
 
 #ifndef NDEBUG
   /* /dev/onload may be netif only; they are closed on fork or exec */

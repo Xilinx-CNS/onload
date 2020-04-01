@@ -19,6 +19,8 @@
 #define LPF      "citp_epollb:"
 
 #include <ci/internal/transport_common.h>
+
+#if CI_CFG_EPOLL2
 #include <onload/ul/tcp_helper.h>
 #include <onload/epoll.h>
 #include "ul_epoll.h"
@@ -641,4 +643,4 @@ void citp_epollb_on_handover(citp_fdinfo* epoll_fdi, citp_fdinfo* fd_fdi)
    */
   citp_epollb_do_postponed_ctl(fdi_to_epollb_fdi(epoll_fdi), fd_fdi);
 }
-
+#endif

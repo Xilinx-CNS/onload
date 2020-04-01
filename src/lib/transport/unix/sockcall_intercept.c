@@ -1362,9 +1362,11 @@ OO_INTERCEPT(int, epoll_create1,
   Log_CALL(ci_log("%s(%d)", __FUNCTION__, flags));
   if( ! CITP_OPTS.ul_epoll )
     goto pass_through;
+#if CI_CFG_EPOLL2
   if( CITP_OPTS.ul_epoll == 2 )
     rc = citp_epollb_create(1, flags);
   else
+#endif
     rc = citp_epoll_create(1, flags);
   if( rc == CITP_NOT_HANDLED )
     goto pass_through;
@@ -1398,9 +1400,11 @@ OO_INTERCEPT(int, epoll_create,
   Log_CALL(ci_log("%s(%d)", __FUNCTION__, size));
   if( ! CITP_OPTS.ul_epoll )
     goto pass_through;
+#if CI_CFG_EPOLL2
   if( CITP_OPTS.ul_epoll == 2 )
     rc = citp_epollb_create(size, 0);
   else
+#endif
     rc = citp_epoll_create(size, 0);
   if( rc == CITP_NOT_HANDLED )
     goto pass_through;
@@ -1439,8 +1443,10 @@ OO_INTERCEPT(int, epoll_ctl,
     int rc;
     if( fdi->protocol->type == CITP_EPOLL_FD )
       rc = citp_epoll_ctl(fdi, op, fd, event);
+#if CI_CFG_EPOLL2
     else if (fdi->protocol->type == CITP_EPOLLB_FD )
       rc = citp_epollb_ctl(fdi, op, fd, event);
+#endif
     else {
       citp_fdinfo_release_ref(fdi, 0);
       goto error;
@@ -1485,10 +1491,12 @@ OO_INTERCEPT(int, epoll_wait,
                            &lib_context);
       citp_reenter_lib(&lib_context);
     }
+#if CI_CFG_EPOLL2
     else if (fdi->protocol->type == CITP_EPOLLB_FD ) {
       rc = citp_epollb_wait(fdi, events, maxevents, timeout, NULL,
                             &lib_context);
     }
+#endif
     citp_fdinfo_release_ref(fdi, 0);
     citp_exit_lib(&lib_context, rc >= 0);
     if( rc == CI_SOCKET_HANDOVER )
@@ -1534,10 +1542,12 @@ OO_INTERCEPT(int, epoll_pwait,
                            &lib_context);
       citp_reenter_lib(&lib_context);
     }
+#if CI_CFG_EPOLL2
     else if (fdi->protocol->type == CITP_EPOLLB_FD ) {
       rc = citp_epollb_wait(fdi, events, maxevents, timeout, sigmask,
                             &lib_context);
     }
+#endif
     citp_fdinfo_release_ref(fdi, 0);
     citp_exit_lib(&lib_context, rc >= 0);
     if( rc == CI_SOCKET_HANDOVER )

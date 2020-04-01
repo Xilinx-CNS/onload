@@ -30,9 +30,6 @@
   __MODULE_INFO(parmtype, name##type, #name ":" _type)
 #endif
 
-/*************************************************************
- * EPOLL2 private file data
- *************************************************************/
 static int set_max_stacks(const char *val, 
                           const struct kernel_param *kp);
 static unsigned epoll_max_stacks = CI_CFG_EPOLL_MAX_STACKS;
@@ -46,10 +43,16 @@ __MODULE_PARM_TYPE(epoll_max_stacks, "uint");
 MODULE_PARM_DESC(epoll_max_stacks,
 "Maximum number of onload stacks handled by single epoll object.");
 
+
+#if CI_CFG_EPOLL2
+/*************************************************************
+ * EPOLL2 private file data
+ *************************************************************/
 struct oo_epoll2_private {
   struct file  *kepo;
   int           do_spin;
 };
+#endif
 
 
 /*************************************************************
@@ -85,14 +88,18 @@ struct oo_epoll_private {
   int type;
 #define OO_EPOLL_TYPE_UNKNOWN   0
 #define OO_EPOLL_TYPE_1         1
+#if CI_CFG_EPOLL2
 #define OO_EPOLL_TYPE_2         2
+#endif
 
   spinlock_t    lock;
   tcp_helper_resource_t** stacks;
 
   union {
     struct oo_epoll1_private p1;
+#if CI_CFG_EPOLL2
     struct oo_epoll2_private p2;
+#endif
   } p;
 };
 
@@ -154,9 +161,6 @@ static void oo_epoll_release_common(struct oo_epoll_private* priv)
   kfree(priv->stacks);
 }
 
-/*************************************************************
- * EPOLL2-specific code
- *************************************************************/
 static int set_max_stacks(const char *val, 
                           const struct kernel_param *kp)
 {
@@ -171,6 +175,19 @@ static int set_max_stacks(const char *val,
   return 0;
 }
 
+#define OO_EPOLL_FOR_EACH_STACK(priv, i, thr, ni)                       \
+  for( i = 0; i < epoll_max_stacks; ++i )                              \
+    if( (thr = (priv)->stacks[i]) == NULL )                             \
+      break;                                                            \
+    else if(unlikely( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND )) \
+      continue;                                                         \
+    else if( (ni = &thr->netif) || 1 )
+
+
+#if CI_CFG_EPOLL2
+/*************************************************************
+ * EPOLL2-specific code
+ *************************************************************/
 static int oo_epoll2_init(struct oo_epoll_private *priv,
                          ci_fixed_descriptor_t kepfd)
 {
@@ -225,6 +242,7 @@ static int oo_epoll2_ctl(struct oo_epoll_private *priv, int op_kepfd,
           file->f_op == &linux_tcp_helper_fops_pipe_writer ) ) {
       priv->p.p2.do_spin = 1;
     }
+#if CI_CFG_EPOLL2
     else
     if( file->f_op == &oo_epoll_fops &&
         ((struct oo_epoll_private *)file->private_data)->type ==
@@ -234,6 +252,7 @@ static int oo_epoll2_ctl(struct oo_epoll_private *priv, int op_kepfd,
       fput(file);
       return -ELOOP;
     }
+#endif
 
     fput(file);
     return efab_linux_sys_epoll_ctl(op_kepfd, op_op, op_fd, op_event);
@@ -296,15 +315,6 @@ static int oo_epoll2_apply_ctl(struct oo_epoll_private *priv,
   /* Return the last rc */
   return rc;
 }
-
-
-#define OO_EPOLL_FOR_EACH_STACK(priv, i, thr, ni)                       \
-  for( i = 0; i < epoll_max_stacks; ++i )                              \
-    if( (thr = (priv)->stacks[i]) == NULL )                             \
-      break;                                                            \
-    else if(unlikely( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND )) \
-      continue;                                                         \
-    else if( (ni = &thr->netif) || 1 )
 
 
 static void oo_epoll2_wait(struct oo_epoll_private *priv,
@@ -543,6 +553,7 @@ static unsigned oo_epoll2_poll(struct oo_epoll_private* priv,
   /* Fixme: poll all netifs? */
   return priv->p.p2.kepo->f_op->poll(priv->p.p2.kepo, wait);
 }
+#endif
 
 
 /*************************************************************
@@ -1002,6 +1013,7 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
   int rc;
 
   switch( cmd ) {
+#if CI_CFG_EPOLL2
   case OO_EPOLL2_IOC_ACTION: {
     struct oo_epoll2_action_arg local_arg;
 
@@ -1029,6 +1041,7 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
     rc = oo_epoll2_init(priv, local_arg);
     break;
   }
+#endif
 
   case OO_EPOLL1_IOC_CTL: {
     struct oo_epoll1_ctl_arg local_arg;
@@ -1286,7 +1299,9 @@ static int oo_epoll_fop_release(struct inode* inode, struct file* filp)
   /* Type-specific cleanup */
   switch( priv->type ) {
     case OO_EPOLL_TYPE_1: oo_epoll1_release(priv); break;
+#if CI_CFG_EPOLL2
     case OO_EPOLL_TYPE_2: oo_epoll2_release(priv); break;
+#endif
     default: ci_assert_equal(priv->type, OO_EPOLL_TYPE_UNKNOWN);
   }
 
@@ -1301,9 +1316,11 @@ static unsigned oo_epoll_fop_poll(struct file* filp, poll_table* wait)
   struct oo_epoll_private *priv = filp->private_data;
 
   ci_assert(priv);
+#if CI_CFG_EPOLL2
   if( priv->type == OO_EPOLL_TYPE_2 )
     return oo_epoll2_poll(priv, wait);
   else
+#endif
     return POLLNVAL;
 }
 

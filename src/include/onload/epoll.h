@@ -33,6 +33,7 @@ struct oo_epoll_item {
   struct epoll_event    event;
 };
 
+#if CI_CFG_EPOLL2
 /* epoll_wait/epoll_pwait */
 struct oo_epoll2_action_arg {
   ci_fixed_descriptor_t kepfd;     /**< INOUT kernel epoll fd */
@@ -45,6 +46,7 @@ struct oo_epoll2_action_arg {
   ci_int32              rc;        /**< OUT return code */
   ci_uint32             epoll_ctl_n;
 };
+#endif
 
 struct oo_epoll1_ctl_arg {
   ci_fixed_descriptor_t epfd;      /**< epoll descriptor for all fds */
@@ -88,12 +90,15 @@ struct oo_epoll1_shared {
 
 #define OO_EPOLL_IOC_BASE 99
 enum {
+#if CI_CFG_EPOLL2
   OO_EPOLL2_OP_INIT,
 #define OO_EPOLL2_IOC_INIT \
   _IOW(OO_EPOLL_IOC_BASE, OO_EPOLL2_OP_INIT, ci_fixed_descriptor_t)
   OO_EPOLL2_OP_ACTION,
 #define OO_EPOLL2_IOC_ACTION \
   _IOWR(OO_EPOLL_IOC_BASE, OO_EPOLL2_OP_ACTION, struct oo_epoll2_action_arg)
+#endif
+
   OO_EPOLL1_OP_CTL,
 #define OO_EPOLL1_IOC_CTL \
   _IOW(OO_EPOLL_IOC_BASE, OO_EPOLL1_OP_CTL, struct oo_epoll1_ctl_arg)
