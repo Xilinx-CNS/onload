@@ -692,21 +692,24 @@ extern ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
                                         struct msghdr* msg, int flags);
 
 /* Performs a zero-copy receive on an hlrx state. This function will
- * return with as many of msgs populated with received segments as will
- * fit or are available. There is no guarantee about where the
+ * return with as many of msg->iov populated with received segments as will
+ * fit or are available, i.e. whichever of msg->msghdr.msg_iovlen or
+ * max_bytes is reached first. There is no guarantee about where the
  * boundaries between packets will be placed.
  *
  * The caller must release all packets returned by this function
  * using onload_zc_buffer_decref() (*not* onload_zc_release_buffers()).
  *
- * On input, iovs_len is the size of the msgs array. On output it is the
- * number of elements populated with buffers; this is the minimum of the
- * input count and the number of iovs required to cover max_bytes.
+ * On input, msg->msghdr.msg_iovlen is the size of the msg->iov array. On
+ * output it is the number of elements populated with buffers; this is the
+ * minimum of the input count and the number of iovs required to cover
+ * max_bytes.
  *
- * The MSG_PEEK and MSG_TRUNC flags are not supported.
+ * The MSG_PEEK, MSG_TRUNC and MSG_ERRQUEUE flags are not supported.
  *
  * Returns the total number of bytes of data obtained, i.e.
- * sum(msgs.iov_len), on success, or a negative error number on failure.
+ * sum(msg->iov[*].iov_len), on success, or a negative error number on
+ * failure.
  */
 extern ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
                                       struct onload_zc_msg* msg,

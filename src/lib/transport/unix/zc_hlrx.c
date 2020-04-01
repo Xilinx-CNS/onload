@@ -306,12 +306,7 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
   Log_CALL(ci_log("%s(%p, %p, %zu, %d)", __FUNCTION__, hlrx, msg, max_bytes,
                   flags));
 
-  if( flags & MSG_ERRQUEUE ) {
-    state.rc = onload_recvmsg(hlrx->fd, &msg->msghdr, flags);
-    if( state.rc < 0 )
-      state.rc = -errno;
-  }
-  else if( flags & (MSG_PEEK | MSG_TRUNC) ) {
+  if( flags & (MSG_PEEK | MSG_TRUNC | MSG_ERRQUEUE) ) {
     state.rc = -EINVAL;
   }
   else {
