@@ -1,3 +1,5 @@
+@Library('onload_jenkins_pipeline_lib')
+
 import groovy.transform.Field
 
 import com.solarflarecom.onload.autosmoke.AutosmokeManager;
