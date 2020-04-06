@@ -170,10 +170,10 @@ static int verbose = 0;
 #define IP_FMT "%s"
 #define IP_PORT_FMT "%s:%d"
 #define IP6_PORT_FMT "[%s]:%d"
-#define IP_PRM(af,a) (({ \
+#define IP_PRM(af,a) (&({ \
   struct { char buf[INET6_ADDRSTRLEN ] ;} s; \
   inet_ntop(af, a, s.buf, sizeof(s.buf)); \
-  s; }).buf)
+  s; }).buf[0])
 #define IP_PORT_PRM(af,a,p) IP_PRM(af,a), ntohs(p)
 
 static void apply(struct context* c, int sockfd,
