@@ -19,7 +19,7 @@ ef100_rx_desc_fill(uint64_t dest_addr,
 }
 
 ef_vi_inline void
-ef100_tx_send_desc_fill(unsigned n_segs,
+ef100_tx_send_desc_fill(ef_vi* vi, unsigned n_segs,
                         uint64_t src_dma_addr, unsigned bytes,
                         ef_vi_ef100_dma_tx_desc *dp)
 {
@@ -28,11 +28,13 @@ ef100_tx_send_desc_fill(unsigned n_segs,
   RANGECHCK(bytes, ESF_GZ_TX_SEND_LEN_WIDTH);
   RANGECHCK(n_segs, ESF_GZ_TX_SEND_NUM_SEGS_WIDTH);
 
-  CI_POPULATE_OWORD_4(*dp,
+  CI_POPULATE_OWORD_6(*dp,
                       ESF_GZ_TX_SEND_NUM_SEGS, n_segs,
                       ESF_GZ_TX_SEND_LEN, bytes,
                       ESF_GZ_TX_SEND_ADDR, src_dma_addr,
-                      ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_SEND);
+                      ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_SEND,
+                      ESF_GZ_TX_SEND_CSO_OUTER_L3, !(vi->vi_flags & EF_VI_TX_IP_CSUM_DIS),
+                      ESF_GZ_TX_SEND_CSO_OUTER_L4, !(vi->vi_flags & EF_VI_TX_TCPUDP_CSUM_DIS));
 }
 
 ef_vi_inline void
@@ -69,7 +71,7 @@ static int ef100_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
   di = qs->added++ & q->mask;
   dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
 
-  ef100_tx_send_desc_fill(n_segs,
+  ef100_tx_send_desc_fill(vi, n_segs,
                           iov->iov_base,
                           iov->iov_len, dp);
   iov++;
