@@ -475,14 +475,17 @@ oo_deferred_arp_failed(ci_netif *ni, int af, ci_ip_pkt_fmt* pkt)
 {
   CITP_STATS_NETIF_INC(ni, tx_defer_pkt_drop_arp_failed);
 
-  /* For TCP SYN_SENT, we drop the connection */
-  if( ! (pkt->flags & CI_PKT_FLAG_UDP) &&
-      (TX_PKT_IPX_TCP(af, pkt)->tcp_flags & CI_TCP_FLAG_SYN) &&
-      OO_SP_NOT_NULL(pkt->pf.tcp_tx.sock_id) ) {
+  if( pkt->flags & CI_PKT_FLAG_UDP ) {
+    ci_udp_state* us = SP_TO_UDP(ni, pkt->pf.udp.tx_sock_id);
+    if( is_sockopt_flag_ip_recverr_set(&us->s, af) )
+      CI_SET_UDP_SO_ERROR(us, EHOSTUNREACH);
+  }
+  else if( (TX_PKT_IPX_TCP(af, pkt)->tcp_flags & CI_TCP_FLAG_SYN) &&
+           OO_SP_NOT_NULL(pkt->pf.tcp_tx.sock_id) ) {
     citp_waitable_obj* wo = SP_TO_WAITABLE_OBJ(ni, pkt->pf.tcp_tx.sock_id);
+    /* For TCP SYN_SENT, we drop the connection */
     if( wo->waitable.state == CI_TCP_SYN_SENT )
       ci_tcp_drop(ni, &wo->tcp, EHOSTUNREACH);
-    /* Is it necessary to send a sort of ICMP in UDP case? */
   }
 
   cicp_pkt_complete_fake(ni, pkt);
