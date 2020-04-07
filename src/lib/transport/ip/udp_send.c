@@ -450,19 +450,18 @@ ci_inline int ci_udp_sendmsg_os(ci_netif* ni, ci_udp_state* us,
 
 
 #ifndef __KERNEL__
-/* Send the data using the OS backing socket and updates the efab binding
- * information appropriately.  Must only be called with the local port
- * set to 0 (default).
+/* Bind OS socket to zero port to obtain a port value.
+ * Must only be called with the local port set to 0 (default).
  *
- * TODO: wrap it into ioctl: sendmsg+getsockname.
+ * TODO: wrap it into ioctl: bind+getsockname.
  * */
 static int ci_udp_sendmsg_os_get_binding(citp_socket *ep, ci_fd_t fd,
                                          const struct msghdr * msg, int flags)
 {
   ci_netif* ni = ep->netif;
   ci_udp_state* us = SOCK_TO_UDP(ep->s);
-  int ret, rc, err;
-  union ci_sockaddr_u sa_u;
+  int rc;
+  union ci_sockaddr_u sa_u = {};
   socklen_t salen = sizeof(sa_u);
   ci_fd_t os_sock = (ci_fd_t)ci_get_os_sock_fd(fd);
   ci_addr_t laddr;
@@ -483,30 +482,12 @@ static int ci_udp_sendmsg_os_get_binding(citp_socket *ep, ci_fd_t fd,
   /* We're not actually sending over the ef stack! :-) */
   UDP_CLR_FLAG(us, CI_UDPF_EF_SEND);
 
-  /* ret/err are what we'll tell the caller - any errors after here
-    * are just between us & the kernel */
-  ++us->stats.n_tx_os;
-  ++us->stats.n_tx_os_slow;
-  ret = ci_sys_sendmsg(os_sock, msg, flags);
-  /* In theory, we should poll() os_sock and find POLLOUT state, removing
-   * OO_OS_STATUS_TX flag if necessary.  In practice, it costs us another
-   * syscall (or implementation of just-another-ioctl), with very low
-   * probability of full sendq.
-   *
-   * To get full sendq now, there should be following:
-   * - non-blocking sendmsg;
-   * - small sndbuf, large datagram
-   * or
-   * - a lot of parallel sendmsg from different threads at start-of-day.
-   *
-   * If application developer is crazy, we should not solve his problem.
-   * And there is no much harm in indicating POLLOUT when sendq is full -
-   * user should be always ready to block or get EAGAIN.
-   */
-  err = CI_GET_ERROR(ret);
+  sa_u.sa.sa_family = us->s.domain;
+  rc = ci_sys_bind(os_sock, &sa_u.sa, sizeof(sa_u.sin));
 
   /* see what the kernel did - we'll do just the same */
-  rc = ci_sys_getsockname( os_sock, &sa_u.sa, &salen);
+  if( rc == 0 )
+    rc = ci_sys_getsockname( os_sock, &sa_u.sa, &salen);
 
   /* Must release the os_sock fd before we can take the stack lock, as the
    * citp_dup2_lock is held until we do so, and lock ordering does not allow
@@ -524,31 +505,28 @@ static int ci_udp_sendmsg_os_get_binding(citp_socket *ep, ci_fd_t fd,
 		"len:%d - exp %u)",
 		__FUNCTION__, NT_PRI_ARGS(ni,us), rc, errno, sa_u.sa.sa_family,
 		salen, (unsigned)IPX_SOCKADDR_SIZE(sa_u.sa.sa_family)));
-    errno = err;
-    return ret;
+    return rc;
   }
 
   ci_netif_lock(ni);
-  if( udp_lport_be16(us) == 0 ) {
-    us->udpflags |= CI_UDPF_IMPLICIT_BIND;
-    laddr = ci_get_addr(&sa_u.sa);
-    lport = ci_get_port(&sa_u.sa);
-    ci_sock_cmn_set_laddr(ep->s, laddr, lport);
+  us->udpflags |= CI_UDPF_IMPLICIT_BIND;
+  laddr = ci_get_addr(&sa_u.sa);
+  lport = ci_get_port(&sa_u.sa);
+  ci_sock_cmn_set_laddr(ep->s, laddr, lport);
 
-    /* Add a filter if the local addressing is appropriate. */
-    if( ~ni->state->flags & CI_NETIF_FLAG_USE_ALIEN_LADDRS &&
-        lport != 0 && (CI_IPX_ADDR_IS_ANY(laddr) ||
-        cicp_user_addr_is_local_efab(ni, laddr)) ) {
-      ci_assert( ! (us->udpflags & CI_UDPF_FILTERED) );
+  /* Add a filter if the local addressing is appropriate. */
+  if( ~ni->state->flags & CI_NETIF_FLAG_USE_ALIEN_LADDRS &&
+      lport != 0 && (CI_IPX_ADDR_IS_ANY(laddr) ||
+      cicp_user_addr_is_local_efab(ni, laddr)) ) {
+    ci_assert( ! (us->udpflags & CI_UDPF_FILTERED) );
 
-      rc = ci_tcp_ep_set_filters(ni, S_SP(us), us->s.cp.so_bindtodevice,
-                                 OO_SP_NULL);
-      if( rc ) {
-        LOG_U(log("%s: FILTER ADD FAIL %d", __FUNCTION__, -rc));
-      }
-      else {
-        UDP_SET_FLAG(us, CI_UDPF_FILTERED);
-      }
+    rc = ci_tcp_ep_set_filters(ni, S_SP(us), us->s.cp.so_bindtodevice,
+                               OO_SP_NULL);
+    if( rc ) {
+      LOG_U(log("%s: FILTER ADD FAIL %d", __FUNCTION__, -rc));
+    }
+    else {
+      UDP_SET_FLAG(us, CI_UDPF_FILTERED);
     }
   }
   ci_netif_unlock(ni);
@@ -558,8 +536,7 @@ static int ci_udp_sendmsg_os_get_binding(citp_socket *ep, ci_fd_t fd,
                 __FUNCTION__, NT_PRI_ARGS(ni,us),
                 IPX_ARG(AF_IP(laddr)), udp_lport_be16(us)));
 
-  errno = err;
-  return ret;
+  return rc;
 }
 #endif
 
@@ -1674,13 +1651,12 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
 
 #ifndef __KERNEL__
     if(CI_UNLIKELY( udp_lport_be16(us) == 0 )) {
-      /* We haven't yet allocated a local port.  So send this packet using
-       * the OS, which will allocate an ephemeral local port, which we'll
-       * use for subsequent sends.
-       */
+      /* We haven't yet allocated a local port.  Do it now. */
       if( sinf.stack_locked )
         ci_netif_unlock(ni);
-      return ci_udp_sendmsg_os_get_binding(a->ep, a->fd, msg, flags);
+      rc = ci_udp_sendmsg_os_get_binding(a->ep, a->fd, msg, flags);
+      if( rc < 0 )
+        return rc;
     }
 #endif
 
