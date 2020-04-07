@@ -280,7 +280,8 @@ static void apply6(struct context6* c, int sockfd,
     /* TODO: Make sure s6_addr is in valid range
      * currently we just dodge bottom 24 bit */
     int v = rand();
-    for(int j = 0; j < 3; ++j, v>>= 8)
+    int j;
+    for( j = 0; j < 3; ++j, v>>= 8 )
       addr.sin6_addr.s6_addr[13+j] += v & 0xFF;
 
     addr.sin6_family = AF_INET6;
