@@ -113,7 +113,7 @@ oo_dshm_register_impl(ci_int32 shm_class, ci_user_ptr_t user_addr,
                       buffer->pages, NULL);
   up_read(&current->mm->mmap_sem);
 
-  if( rc < buffer->num_pages ) {
+  if( rc < (int)buffer->num_pages ) {
     /* We pinned fewer pages than we asked for.  This should never happen, so
      * treat it as fatal. */
     int i;
