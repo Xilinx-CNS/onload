@@ -1313,10 +1313,10 @@ static int oo_epoll_fop_release(struct inode* inode, struct file* filp)
 
 static unsigned oo_epoll_fop_poll(struct file* filp, poll_table* wait)
 {
+#if CI_CFG_EPOLL2
   struct oo_epoll_private *priv = filp->private_data;
 
   ci_assert(priv);
-#if CI_CFG_EPOLL2
   if( priv->type == OO_EPOLL_TYPE_2 )
     return oo_epoll2_poll(priv, wait);
   else

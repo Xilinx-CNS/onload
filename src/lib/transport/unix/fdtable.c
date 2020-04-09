@@ -816,11 +816,13 @@ static void citp_fdinfo_do_handover(citp_fdinfo* fdi, int fdt_locked)
   Log_V(ci_log("%s: fd=%d nonb_switch=%d", __FUNCTION__, fdi->fd,
 	       fdi->on_rcz.handover_nonb_switch));
 
+#if CI_CFG_EPOLL2
   if( fdi->epoll_fd >= 0 &&
       (epoll_fdi = citp_epoll_fdi_from_member(fdi, fdt_locked)) != NULL &&
       epoll_fdi->protocol->type == CITP_EPOLLB_FD ) {
       citp_epollb_on_handover(epoll_fdi, fdi);
   }
+#endif
 
   /* Handover requires stack state modification, but we also need the dup2
    * lock to avoid the fd we're furtling changing under our feet, and lock
@@ -1636,6 +1638,8 @@ int citp_ep_dup3(unsigned fromfd, unsigned tofd, int flags)
   if( fdip_is_normal(tofdip) ) {
     /* We're duping onto a user-level socket. */
     citp_fdinfo* tofdi = fdip_to_fdi(tofdip);
+
+#if CI_CFG_EPOLL3
     if( tofdi->epoll_fd >= 0 ) {
       citp_fdinfo* epoll_fdi = citp_epoll_fdi_from_member(tofdi, 0);
       if( epoll_fdi ) {
@@ -1644,6 +1648,7 @@ int citp_ep_dup3(unsigned fromfd, unsigned tofd, int flags)
         citp_fdinfo_release_ref(epoll_fdi, 0);
       }
     }
+#endif
 
 #if CI_CFG_FD_CACHING
     if( citp_fdinfo_get_ops(tofdi)->close != NULL )
@@ -1800,6 +1805,7 @@ int citp_ep_close(unsigned fd)
     ci_assert_equal(fdi->on_ref_count_zero, FDI_ON_RCZ_NONE);
     fdi->on_ref_count_zero = FDI_ON_RCZ_CLOSE;
 
+#if CI_CFG_EPOLL3
     if( fdi->epoll_fd >= 0 ) {
       citp_fdinfo* epoll_fdi = citp_epoll_fdi_from_member(fdi, 0);
       if( epoll_fdi ) {
@@ -1808,6 +1814,7 @@ int citp_ep_close(unsigned fd)
         citp_fdinfo_release_ref(epoll_fdi, 0);
       }
     }
+#endif
 
 #if CI_CFG_FD_CACHING
     if( citp_fdinfo_get_ops(fdi)->close != NULL )
@@ -1884,12 +1891,15 @@ citp_fdinfo* citp_reprobe_moved(citp_fdinfo* fdinfo, int from_fast_lookup,
 
   if( fdinfo->epoll_fd >= 0 ) {
     citp_fdinfo* epoll_fdi = citp_epoll_fdi_from_member(fdinfo, 1);
-    if( epoll_fdi->protocol->type == CITP_EPOLL_FD ) {
-      citp_epoll_on_move(epoll_fdi, fdinfo, new_fdinfo, 1);
-    }
-    else {
+#if CI_CFG_EPOLL2
+    if( epoll_fdi->protocol->type == CITP_EPOLLB_FD ) {
       citp_epollb_on_handover(epoll_fdi, fdinfo);
       citp_fdinfo_release_ref(epoll_fdi, 1);
+    }
+    else
+#endif
+    {
+      citp_epoll_on_move(epoll_fdi, fdinfo, new_fdinfo, 1);
     }
   }
 
