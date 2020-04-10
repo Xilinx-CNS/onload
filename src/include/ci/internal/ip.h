@@ -1763,6 +1763,23 @@ ci_netif_filter_remove(ci_netif* netif, oo_sp tcp_id, int af_space,
                        const ci_addr_t raddr, unsigned rport,
                        unsigned protocol) CI_HF;
 
+#if CI_CFG_UL_INTERRUPT_HELPER || defined(__KERNEL__)
+ci_inline void
+oo_sw_filter_apply(ci_netif* ni, struct oo_sw_filter_op* op)
+{
+  if( op->op == OO_SW_FILTER_OP_ADD ) {
+    ci_netif_filter_insert(ni, op->sock_id, op->af_space,
+                           op->laddr, op->lport,
+                           op->raddr, op->rport, op->protocol);
+  }
+  else {
+    ci_netif_filter_remove(ni, op->sock_id, op->af_space,
+                           op->laddr, op->lport,
+                           op->raddr, op->rport, op->protocol);
+  }
+}
+#endif
+
 /* Applies to the IPv4 table only. */
 ci_inline ci_uint32 ci_netif_filter_table_size(ci_netif* ni)
 {

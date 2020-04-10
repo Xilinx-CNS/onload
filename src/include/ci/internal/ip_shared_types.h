@@ -2819,5 +2819,24 @@ struct oo_eth_hdr {
 /* Default value for sysctl net/ipv6/auto_flowlabels parameter */
 #define CI_AUTO_FLOWLABELS_DEFAULT 1
 
+
+#if CI_CFG_UL_INTERRUPT_HELPER || defined(__KERNEL__)
+/* This type is kernel-only for ! CI_CFG_UL_INTERRUPT_HELPER,
+ * but in case of UL helper it is used in ioctl.
+ */
+struct oo_sw_filter_op {
+  ci_addr_t laddr CI_ALIGN(8);
+  ci_addr_t raddr;
+  oo_sp sock_id;
+  ci_uint16 lport;
+  ci_uint16 rport;
+  ci_uint8 af_space;
+  ci_uint8 protocol;
+  ci_uint8 op;
+#define OO_SW_FILTER_OP_ADD    1
+#define OO_SW_FILTER_OP_REMOVE 2
+};
+#endif
+
 #endif  /* __CI_INTERNAL_IP_SHARED_TYPES_H__ */
 /*! \cidoxg_end */

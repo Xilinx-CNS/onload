@@ -85,17 +85,7 @@ oof_cb_callback_set_filter(struct oof_socket* skf)
 
 struct oof_cb_sw_filter_op {
   struct oof_cb_sw_filter_op *next;
-  oo_sp sock_id;
-  int af_space;
-  ci_addr_t laddr;
-  ci_addr_t raddr;
-  int lport;
-  int rport;
-  int protocol;
-  enum {
-    OOF_CB_SW_FILTER_OP_ADD,
-    OOF_CB_SW_FILTER_OP_REMOVE
-  } op;
+  struct oo_sw_filter_op op;
 };
 
 
@@ -113,15 +103,7 @@ oof_cb_sw_filter_apply(ci_netif* ni)
       ni->swf_update_last = NULL;
     spin_unlock_bh(&ni->swf_update_lock);
 
-    if( op->op == OOF_CB_SW_FILTER_OP_ADD ) {
-      ci_netif_filter_insert(ni, op->sock_id, op->af_space, op->laddr,
-                             op->lport, op->raddr, op->rport, op->protocol);
-    }
-    else {
-      ci_netif_filter_remove(ni, op->sock_id, op->af_space, op->laddr,
-                             op->lport, op->raddr, op->rport, op->protocol);
-    }
-
+    oo_sw_filter_apply(ni, &op->op);
     ci_free(op);
     spin_lock_bh(&ni->swf_update_lock);
   }
@@ -142,14 +124,14 @@ oof_cb_sw_filter_postpone(struct oof_socket* skf, int af_space,
     return;
   }
 
-  op->sock_id = OO_SP_FROM_INT(ni, skf_to_ep(skf)->id);
-  op->af_space = af_space;
-  op->laddr = laddr;
-  op->raddr = raddr;
-  op->lport = lport;
-  op->rport = rport;
-  op->protocol = protocol;
-  op->op = op_op;
+  op->op.sock_id = OO_SP_FROM_INT(ni, skf_to_ep(skf)->id);
+  op->op.af_space = af_space;
+  op->op.laddr = laddr;
+  op->op.raddr = raddr;
+  op->op.lport = lport;
+  op->op.rport = rport;
+  op->op.protocol = protocol;
+  op->op.op = op_op;
 
   op->next = NULL;
 
@@ -196,8 +178,8 @@ oof_cb_sw_filter_update(struct oof_socket* skf, int af_space,
       efab_tcp_helper_netif_unlock(trs, 1);
   } else {
     oof_cb_sw_filter_postpone(skf, af_space, laddr, lport, raddr, rport,
-                              protocol, insert ? OOF_CB_SW_FILTER_OP_ADD :
-                              OOF_CB_SW_FILTER_OP_REMOVE);
+                              protocol, insert ? OO_SW_FILTER_OP_ADD :
+                              OO_SW_FILTER_OP_REMOVE);
   }
   return rc;
 }
