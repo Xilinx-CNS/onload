@@ -4853,6 +4853,9 @@ int oo_wakeup_waiters(ci_private_t* priv, void* arg)
   oo_sp __user * user_ptr = CI_USER_PTR_GET(op->eps);
   int n, i;
 
+  if( thr == NULL )
+    return -EINVAL;
+
   while( op->eps_num > 0 ) {
     n = CI_MIN(op->eps_num, sizeof(ep_id) / sizeof(ep_id[0]));
     if( copy_from_user(ep_id, user_ptr, n * sizeof(ep_id[0])) )
