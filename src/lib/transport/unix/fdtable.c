@@ -1046,10 +1046,10 @@ void __citp_fdinfo_ref_count_zero(citp_fdinfo* fdi, int fdt_locked)
        * Todo: In case of SO_LINGER it is really important to handle it all
        * here.
        */
-      if( netif != NULL &&
-          (netif->state->lock.lock & CI_EPLOCK_NETIF_CLOSE_ENDPOINT) &&
-          ci_netif_trylock(netif) )
+      if( netif != NULL && ci_netif_trylock(netif) ) {
+        ci_netif_handle_actions(netif);
         ci_netif_unlock(netif);
+      }
 #endif
 
       citp_fdtable_busy_clear(fdi->fd, fdip_unknown,

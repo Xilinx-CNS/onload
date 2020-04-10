@@ -1026,6 +1026,13 @@ struct ci_netif_state_s {
 
   CI_ULCONST ci_uint16  max_mss;
 
+#if CI_CFG_UL_INTERRUPT_HELPER
+  /* When kernel asks UL to perform some action, it uses these flags. */
+  ci_atomic_t action_flags;
+#define OO_ACTION_CLOSE_EP   0x0001
+#define OO_ACTION_SWF_UPDATE 0x0002
+#endif
+
   ci_uint32  flags;
 # define CI_NETIF_FLAG_DEBUG              0x1 /* driver is debug build   */
 # define CI_NETIF_FLAG_ONLOAD_UNSUPPORTED 0x2 /* OOL unsupported on this h/w */

@@ -5209,5 +5209,9 @@ static inline ef_addr zc_usermem_dma_addr(struct ci_zc_usermem* um,
          (offset & (EF_VI_NIC_PAGE_SIZE - 1));
 }
 
+#if CI_CFG_UL_INTERRUPT_HELPER && ! defined(__KERNEL__)
+extern void ci_netif_handle_actions(ci_netif* ni);
+#endif
+
 #endif  /* __CI_INTERNAL_IP_H__ */
 /*! \cidoxg_end */

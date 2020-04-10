@@ -6911,14 +6911,7 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id)
                          __FUNCTION__, trs->id, OO_SP_FMT(ep_id)));
   }
 #else
-  /* It must be simple set_flag in some shared area finally when
-   * CI_CFG_UL_INTERRUPT_HELPER is fully implemented. */
-  if( ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
-                                 CI_EPLOCK_NETIF_CLOSE_ENDPOINT) )  {
-    ef_eplock_holder_set_flag(&trs->netif.state->lock,
-                              CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
-    ci_netif_unlock(&trs->netif);
-  }
+  ci_atomic_or(&trs->netif.state->action_flags, OO_ACTION_CLOSE_EP);
 #endif
 }
 

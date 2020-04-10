@@ -1893,4 +1893,21 @@ void oo_tcpdump_free_pkts(ci_netif* ni, ci_uint16 i)
   } while( (++i - read_i) % CI_CFG_DUMPQUEUE_LEN );
 }
 
+
+#if CI_CFG_UL_INTERRUPT_HELPER && ! defined(__KERNEL__)
+/* Do actions asked by kernel.
+ * Some actions should be performed immediatedly (sw filter update
+ * must happen before the stack poll), others may go to stack lock
+ * and deferred to unlock function.
+ */
+void ci_netif_handle_actions(ci_netif* ni)
+{
+  ci_int32 val = ci_atomic_xchg(&ni->state->action_flags, 0);
+
+  ci_assert(ci_netif_is_locked(ni));
+  if( val & OO_ACTION_CLOSE_EP )
+    ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
+
+}
+#endif
 /*! \cidoxg_end */

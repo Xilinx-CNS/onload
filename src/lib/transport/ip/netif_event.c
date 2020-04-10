@@ -1957,6 +1957,9 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
 #endif
 
   ci_ip_time_resync(IPTIMER_STATE(netif));
+#if CI_CFG_UL_INTERRUPT_HELPER && ! defined(__KERNEL__)
+  ci_netif_handle_actions(netif);
+#endif
 
 #if CI_CFG_HW_TIMER
   if( ci_netif_need_timer_prime(netif, IPTIMER_STATE(netif)->frc) ) {
