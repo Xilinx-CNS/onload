@@ -1908,6 +1908,16 @@ void ci_netif_handle_actions(ci_netif* ni)
   if( val & OO_ACTION_CLOSE_EP )
     ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
 
+  if( val & OO_ACTION_SWF_UPDATE ) {
+    struct oo_sw_filter_op op;
+
+    /* TODO As with OO_IOC_GET_CLOSING_EP, we'd better get an array of
+     * these structiures in one ioctl..
+     */
+    while( oo_resource_op(ci_netif_get_driver_handle(ni),
+                          OO_IOC_SWF_UPDATE, &op) == 0 )
+      oo_sw_filter_apply(ni, &op);
+  }
 }
 #endif
 /*! \cidoxg_end */

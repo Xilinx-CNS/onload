@@ -210,7 +210,13 @@ oof_cb_sw_filter_remove(struct oof_socket* skf, int af,
                         int protocol, int stack_locked);
 
 struct ci_netif_s;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 extern void oof_cb_sw_filter_apply(struct ci_netif_s* ni);
+#else
+struct oo_sw_filter_op;
+extern int oo_swf_get_update(struct ci_netif_s* ni,
+                             struct oo_sw_filter_op* user_op);
+#endif
 
 extern void
 oof_dl_filter_set(struct oo_hw_filter* filter, int stack_id, int protocol,

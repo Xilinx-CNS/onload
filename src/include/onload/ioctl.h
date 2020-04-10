@@ -227,6 +227,8 @@ enum {
 #define OO_IOC_GET_CLOSING_EP     OO_IOC_R(GET_CLOSING_EP, oo_sp)
   OO_OP_WAKEUP_WAITERS,
 #define OO_IOC_WAKEUP_WAITERS     OO_IOC_W(WAKEUP_WAITERS, struct oo_wakeup_eps)
+  OO_OP_SWF_UPDATE,
+#define OO_IOC_SWF_UPDATE         OO_IOC_R(SWF_UPDATE, struct oo_sw_filter_op)
 #endif
 
   OO_OP_CONTIG_END,  /* This is the last in range of contigous opcodes */

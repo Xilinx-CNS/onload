@@ -7253,13 +7253,13 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     ** subsequently get re-set, then we'll come round the loop again.
     */
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
     if( flags_set & CI_EPLOCK_NETIF_SWF_UPDATE ) {
       oof_cb_sw_filter_apply(ni);
       CITP_STATS_NETIF(++ni->state->stats.unlock_slow_swf_update);
       flags_set &=~ CI_EPLOCK_NETIF_SWF_UPDATE;
     }
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
     if( flags_set & CI_EPLOCK_NETIF_NEED_WAKE ) {
       if( in_dl_context && oo_avoid_wakeup_from_dl() ) {
         OO_DEBUG_TCPH(ci_log("%s: [%u] defer endpoint wakeup to workitem",

@@ -89,6 +89,7 @@ struct oof_cb_sw_filter_op {
 };
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 void
 oof_cb_sw_filter_apply(ci_netif* ni)
 {
@@ -109,6 +110,30 @@ oof_cb_sw_filter_apply(ci_netif* ni)
   }
   spin_unlock_bh(&ni->swf_update_lock);
 }
+#else
+int
+oo_swf_get_update(ci_netif* ni, struct oo_sw_filter_op* user_op)
+{
+  struct oof_cb_sw_filter_op* op;
+
+  spin_lock_bh(&ni->swf_update_lock);
+  op = ni->swf_update_first;
+
+  if( op == NULL ) {
+    spin_unlock_bh(&ni->swf_update_lock);
+    return -ENOENT;
+  }
+
+  ni->swf_update_first = op->next;
+  if( op->next == NULL )
+    ni->swf_update_last = NULL;
+  spin_unlock_bh(&ni->swf_update_lock);
+
+  *user_op = op->op;
+  ci_free(op);
+  return 0;
+}
+#endif
 
 static void
 oof_cb_sw_filter_postpone(struct oof_socket* skf, int af_space,
@@ -116,7 +141,9 @@ oof_cb_sw_filter_postpone(struct oof_socket* skf, int af_space,
                           ci_addr_t raddr, int rport, int protocol, int op_op)
 {
   ci_netif* ni = skf_to_ni(skf);
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   struct tcp_helper_resource_s *trs = netif2tcp_helper_resource(ni);
+#endif
   struct oof_cb_sw_filter_op* op = CI_ALLOC_OBJ(struct oof_cb_sw_filter_op);
   
   if( op == NULL ) {
@@ -143,12 +170,16 @@ oof_cb_sw_filter_postpone(struct oof_socket* skf, int af_space,
   ni->swf_update_last = op;
   spin_unlock_bh(&ni->swf_update_lock);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* We are holding a spinlock, so claim to be in driverlink context here */
   if( efab_tcp_helper_netif_lock_or_set_flags(trs, OO_TRUSTED_LOCK_SWF_UPDATE,
                                               CI_EPLOCK_NETIF_SWF_UPDATE, 1) ) {
     ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_SWF_UPDATE);
     efab_tcp_helper_netif_unlock(trs, 1);
   }
+#else
+  ci_atomic_or(&ni->state->action_flags, OO_ACTION_SWF_UPDATE);
+#endif
 }
 
 static int
@@ -157,9 +188,10 @@ oof_cb_sw_filter_update(struct oof_socket* skf, int af_space,
                         const ci_addr_t raddr, int rport,
                         int protocol, int stack_locked, bool insert)
 {
+  int rc = 0;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   ci_netif* ni = skf_to_ni(skf);
   struct tcp_helper_resource_s *trs = netif2tcp_helper_resource(ni);
-  int rc = 0;
 
   /* We are holding a spinlock, so claim to be in driverlink context here */
   if( stack_locked || efab_tcp_helper_netif_try_lock(trs, 1) ) {
@@ -176,7 +208,9 @@ oof_cb_sw_filter_update(struct oof_socket* skf, int af_space,
     }
     if( ! stack_locked )
       efab_tcp_helper_netif_unlock(trs, 1);
-  } else {
+  } else
+#endif
+  {
     oof_cb_sw_filter_postpone(skf, af_space, laddr, lport, raddr, rport,
                               protocol, insert ? OO_SW_FILTER_OP_ADD :
                               OO_SW_FILTER_OP_REMOVE);
