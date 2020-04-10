@@ -483,7 +483,7 @@ static int ci_udp_sendmsg_os_get_binding(citp_socket *ep, ci_fd_t fd,
   UDP_CLR_FLAG(us, CI_UDPF_EF_SEND);
 
   sa_u.sa.sa_family = us->s.domain;
-  rc = ci_sys_bind(os_sock, &sa_u.sa, sizeof(sa_u.sin));
+  rc = ci_sys_bind(os_sock, &sa_u.sa, IPX_SOCKADDR_SIZE(sa_u.sa.sa_family));
 
   /* see what the kernel did - we'll do just the same */
   if( rc == 0 )
