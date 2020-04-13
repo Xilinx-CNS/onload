@@ -643,6 +643,10 @@
  * match software ones.  See inject_kernel_gid module parameter. */
 #define CI_CFG_INJECT_PACKETS 1
 
+/* NIC reset, suspend and hot-plug support */
+#define CI_CFG_NIC_RESET_SUPPORT 1
+
+
 #ifdef __KERNEL__
 #include <linux/version.h>
 /* Enable Berkeley Packet Filter program functionality

@@ -310,7 +310,9 @@ static void oo_dl_remove(struct efx_dl_device* dl_dev)
    * defer the work to the lock holders as we need to speak to the hardware
    * right now, before it goes away.
    */
+#if CI_CFG_NIC_RESET_SUPPORT
   ci_netif* ni = NULL;
+#endif
   struct net_device* netdev = dl_dev->priv;
   struct oo_nic* onic;
   if( (onic = oo_nic_find_dev(netdev)) != NULL ) {
@@ -323,6 +325,7 @@ static void oo_dl_remove(struct efx_dl_device* dl_dev)
     oof_onload_hwport_up_down(&efab_tcp_driver,
                               oo_nic_hwport(onic), 0, 0, 0, 1);
 
+#if CI_CFG_NIC_RESET_SUPPORT
     /* We need to prevent simultaneous resets so that the queues that are to be
      * shut down don't get brought back up again.  We do this by disabling any
      * further scheduling of resets, and then flushing any already scheduled on
@@ -332,6 +335,7 @@ static void oo_dl_remove(struct efx_dl_device* dl_dev)
     onic->oo_nic_flags |= OO_NIC_UNPLUGGED;
     while( iterate_netifs_unlocked(&ni, 0, 0) == 0 )
       tcp_helper_flush_resets(ni);
+#endif
 
     /* The actual business of flushing the queues will be handled by the
      * resource driver in its own driverlink removal hook in a moment. */

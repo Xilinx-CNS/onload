@@ -240,18 +240,20 @@ typedef struct tcp_helper_resource_s {
   /* List of endpoints requiring work in non-atomic context. */
   ci_sllist     non_atomic_list;
 
+#if CI_CFG_NIC_RESET_SUPPORT
   /* For deferring resets to a non-atomic context. */
 #define ONLOAD_RESET_WQ_NAME "onload-rst-wq:%s"
 #define ONLOAD_RESET_WQ_NAME_BASELEN 15
   char reset_wq_name[ONLOAD_RESET_WQ_NAME_BASELEN + ONLOAD_PRETTY_NAME_MAXLEN];
   struct workqueue_struct *reset_wq;
   struct work_struct reset_work;
+  struct delayed_work purge_txq_work;
+#endif
 
 #define ONLOAD_PERIODIC_WQ_NAME "onload-periodic-wq:%s"
 #define ONLOAD_PERIODIC_WQ_NAME_BASELEN 20
   char periodic_wq_name[ONLOAD_PERIODIC_WQ_NAME_BASELEN + ONLOAD_PRETTY_NAME_MAXLEN];
   struct workqueue_struct *periodic_wq;
-  struct delayed_work purge_txq_work;
 
 #ifdef CONFIG_NAMESPACES
 #ifdef ERFM_HAVE_NEW_KALLSYMS
@@ -312,10 +314,12 @@ typedef struct tcp_helper_resource_s {
    */
   ci_irqlock_t          lock;
 
+#if CI_CFG_NIC_RESET_SUPPORT
   /* Bit mask of intf_i that need resetting by the lock holder */
   unsigned              intfs_to_reset;
   /* Bit mask of intf_i that have been removed/suspended and not yet reset */
   unsigned              intfs_suspended;
+#endif
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   /* Bit mask of intf_i that need xdp updating by the lock holder */
   unsigned              intfs_to_xdp_update;

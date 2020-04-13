@@ -56,9 +56,11 @@ extern int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 extern void tcp_helper_dtor(tcp_helper_resource_t* trs);
 
 
+#if CI_CFG_NIC_RESET_SUPPORT
 extern void tcp_helper_suspend_interface(ci_netif* ni, int intf_i);
 
 extern void tcp_helper_reset_stack(ci_netif* ni, int intf_i);
+#endif
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
 extern void tcp_helper_xdp_change(ci_netif* ni, int intf_i);

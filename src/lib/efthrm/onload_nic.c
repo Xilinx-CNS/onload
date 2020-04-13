@@ -54,6 +54,7 @@ static struct oo_nic* oo_nic_find(struct efhw_nic* nic)
 }
 
 
+#if CI_CFG_NIC_RESET_SUPPORT || (CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE)
 /* Our responses to the pre- and post-reset notifications from the resource
  * driver have much in common with one another.  This function implements the
  * basic pattern. */
@@ -92,18 +93,23 @@ oo_efrm_callback_hook_generic(struct efrm_client* client,
         impl_fn(ni, intf_i);
   }
 }
+#endif
 
 static void oo_efrm_reset_callback(struct efrm_client* client, void* arg)
 {
   /* Schedule the reset work for the stack. */
+#if CI_CFG_NIC_RESET_SUPPORT
   oo_efrm_callback_hook_generic(client, tcp_helper_reset_stack);
+#endif
 }
 
 static void
 oo_efrm_reset_suspend_callback(struct efrm_client* client, void* arg)
 {
   /* Label each stack as needing reset, but don't schedule that reset yet. */
+#if CI_CFG_NIC_RESET_SUPPORT
   oo_efrm_callback_hook_generic(client, tcp_helper_suspend_interface);
+#endif
 }
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE

@@ -158,11 +158,13 @@ static void
 tcp_helper_close_pending_endpoints(tcp_helper_resource_t*);
 #endif
 
+#if CI_CFG_NIC_RESET_SUPPORT
 static void
 tcp_helper_purge_txq_work(struct work_struct *data);
 
 static void
 tcp_helper_reset_stack_work(struct work_struct *data);
+#endif
 
 #if CI_CFG_EPOLL3
 static void
@@ -1685,6 +1687,12 @@ static void vi_complete(void *completion_void)
   complete((struct completion *)completion_void);
 }
 
+#if CI_CFG_NIC_RESET_SUPPORT
+#define intfs_suspended(trs) ((trs)->intfs_suspended)
+#else
+#define intfs_suspended(trs) 0
+#endif
+
 static void release_pkts(tcp_helper_resource_t* trs)
 {
   ci_netif* ni = &trs->netif;
@@ -1701,7 +1709,7 @@ static void release_pkts(tcp_helper_resource_t* trs)
 #endif
     OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
       oo_iobufset_resource_release(ni->nic_hw[intf_i].pkt_rs[i],
-                                   trs->intfs_suspended & (1 << intf_i));
+                                   intfs_suspended(trs) & (1 << intf_i));
   }
 #ifndef NDEBUG
   if( ~trs->netif.flags & CI_NETIF_FLAG_WEDGED )
@@ -3696,11 +3704,13 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   rs->trusted_lock = OO_TRUSTED_LOCK_LOCKED;
   rs->k_ref_count = 1;          /* 1 reference for userland */
   rs->n_ep_closing_refs = 0;
+#if CI_CFG_NIC_RESET_SUPPORT
   rs->intfs_to_reset = 0;
+  rs->intfs_suspended = 0;
+#endif
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   rs->intfs_to_xdp_update = 0;
 #endif
-  rs->intfs_suspended = 0;
 #if CI_CFG_ENDPOINT_MOVE
   rs->thc = NULL;
 #endif
@@ -3723,8 +3733,10 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
    * Some of them are used in reset handler and in error path. */
   INIT_WORK(&rs->non_atomic_work, tcp_helper_do_non_atomic);
   INIT_WORK(&rs->work_item_dtor, tcp_helper_destroy_work);
+#if CI_CFG_NIC_RESET_SUPPORT
   INIT_DELAYED_WORK(&rs->purge_txq_work, tcp_helper_purge_txq_work);
   INIT_WORK(&rs->reset_work, tcp_helper_reset_stack_work);
+#endif
   ci_sllist_init(&rs->non_atomic_list);
   ci_sllist_init(&rs->ep_tobe_closed);
   ci_irqlock_ctor(&rs->lock);
@@ -3767,6 +3779,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     goto fail5;
   }
 
+#if CI_CFG_NIC_RESET_SUPPORT
   /* "onload-wq-reset:pretty_name workqueue for handling resets */
   snprintf(rs->reset_wq_name, sizeof(rs->reset_wq_name), ONLOAD_RESET_WQ_NAME,
            ni->state->pretty_name);
@@ -3781,6 +3794,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     rc = - ENOMEM;
     goto fail5a;
   }
+#endif
 
   /* "onload-wq-periodic:pretty_name" workqueue for handling periodic polling
    * and TXQ purging.
@@ -3846,8 +3860,10 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
     if( nic->flags & NIC_FLAG_ONLOAD_UNSUPPORTED )
       ni->state->flags |= CI_NETIF_FLAG_ONLOAD_UNSUPPORTED;
+#if CI_CFG_NIC_RESET_SUPPORT
     if( nic->resetting )
       tcp_helper_suspend_interface(ni, intf_i);
+#endif
   }
   if( oof_use_all_local_ip_addresses || cplane_use_prefsrc_as_local )
     ni->state->flags |= CI_NETIF_FLAG_USE_ALIEN_LADDRS;
@@ -4037,7 +4053,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
    * doesn't require that we handle any of the flags. */
   ef_eplock_clear_flags(&ni->state->lock, CI_EPLOCK_NETIF_UNLOCK_FLAGS);
   efab_tcp_helper_netif_unlock(rs, 0);
+#if CI_CFG_NIC_RESET_SUPPORT
   flush_workqueue(rs->reset_wq);
+#endif
   efab_tcp_helper_netif_try_lock(rs, 0);
 
   if( hw_resources_allocated )
@@ -4051,8 +4069,10 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 
   destroy_workqueue(rs->periodic_wq);
  fail5b:
+#if CI_CFG_NIC_RESET_SUPPORT
   destroy_workqueue(rs->reset_wq);
  fail5a:
+#endif
   destroy_workqueue(rs->wq);
  fail5:
 #ifdef EFRM_DO_USER_NS
@@ -4120,6 +4140,7 @@ int tcp_helper_alloc_kernel(ci_resource_onload_alloc_t* alloc,
 }
 
 
+#if CI_CFG_NIC_RESET_SUPPORT
 static void thr_reset_stack_rx_cb(ef_request_id id, void* arg)
 {
   tcp_helper_resource_t* thr = (tcp_helper_resource_t*)arg;
@@ -4161,6 +4182,7 @@ static void thr_reset_stack_tx_cb(ef_request_id id, void* arg)
   ++ni->state->nic[cb_state->intf_i].tx_dmaq_done_seq;
   ci_netif_tx_pkt_complete(ni, &cb_state->ps, pkt);
 }
+#endif
 
 /* All delayed work is now run on the periodic workqueue. */
 static inline int thr_queue_delayed_work(tcp_helper_resource_t* thr,
@@ -4178,7 +4200,7 @@ static inline int thr_queue_delayed_work(tcp_helper_resource_t* thr,
     return queue_delayed_work(thr->periodic_wq, dwork, delay);
 }
 
-
+#if CI_CFG_NIC_RESET_SUPPORT
 #define TXQ_PURGE_PERIOD (HZ / 10)
 static void tcp_helper_purge_txq_locked(tcp_helper_resource_t* thr)
 {
@@ -4225,6 +4247,7 @@ static void tcp_helper_purge_txq_locked(tcp_helper_resource_t* thr)
   if( reschedule )
     thr_queue_delayed_work(thr, &thr->purge_txq_work, TXQ_PURGE_PERIOD);
 }
+#endif
 
 
 static void set_pkt_bufset_hwaddrs(ci_netif* ni, int bufset_id, int intf_i,
@@ -4244,6 +4267,7 @@ static void set_pkt_bufset_hwaddrs(ci_netif* ni, int bufset_id, int intf_i,
 }
 
 
+#if CI_CFG_NIC_RESET_SUPPORT
 static void tcp_helper_reset_stack_locked(tcp_helper_resource_t* thr)
 {
   ci_irqlock_state_t lock_flags;
@@ -4451,6 +4475,8 @@ void tcp_helper_reset_stack(ci_netif* ni, int intf_i)
    * todo: net driver should tell us if it is dl context */
   queue_work(thr->reset_wq, &thr->reset_work);
 }
+#endif
+
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
 /* This callback from efrm occurs with a spinlock held, so we cannot handle
@@ -4503,6 +4529,7 @@ void tcp_helper_handle_xdp_change(tcp_helper_resource_t *thr)
 #endif
 
 
+#if CI_CFG_NIC_RESET_SUPPORT
 static void tcp_helper_purge_txq_work(struct work_struct *data)
 {
   tcp_helper_resource_t* trs;
@@ -4566,6 +4593,7 @@ static void tcp_helper_reset_stack_work(struct work_struct *data)
   tcp_helper_reset_stack_locked(trs);
   ci_netif_unlock(&trs->netif);
 }
+#endif
 
 
 /*--------------------------------------------------------------------
@@ -4929,6 +4957,7 @@ efab_tcp_helper_rm_schedule_free(tcp_helper_resource_t* trs)
  *--------------------------------------------------------------------*/
 
 
+#if CI_CFG_NIC_RESET_SUPPORT
 static void
 efab_tcp_helper_flush_reset_wq(tcp_helper_resource_t* trs)
 {
@@ -4947,6 +4976,7 @@ void tcp_helper_flush_resets(ci_netif* ni)
   tcp_helper_resource_t* thr = CI_CONTAINER(tcp_helper_resource_t, netif, ni);
   efab_tcp_helper_flush_reset_wq(thr);
 }
+#endif
 
 
 static void
@@ -5233,7 +5263,9 @@ tcp_helper_stop(tcp_helper_resource_t* trs)
   /* stop postponed packet allocations: we are the only thread using this
    * thr, so nobody can scedule anything new */
   flush_workqueue(trs->wq);
+#if CI_CFG_NIC_RESET_SUPPORT
   efab_tcp_helper_flush_reset_wq(trs);
+#endif
 
   OO_DEBUG_TCPH(ci_log("%s [%d]: finished --- all async processes finished",
                        __FUNCTION__, trs->id));
@@ -5338,7 +5370,9 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
   release_netif_resources(trs);
 
   destroy_workqueue(trs->wq);
+#if CI_CFG_NIC_RESET_SUPPORT
   destroy_workqueue(trs->reset_wq);
+#endif
   destroy_workqueue(trs->periodic_wq);
 
   while( trs->usermem ) {
@@ -5725,7 +5759,7 @@ efab_tcp_helper_iobufset_map(tcp_helper_resource_t* trs,
 
     rc = oo_iobufset_resource_alloc(pages, pd, &iobuf,
                                     &hw_addrs[intf_i * n_hw_pages],
-                                    trs->intfs_suspended & (1 << intf_i),
+                                    intfs_suspended(trs) & (1 << intf_i),
                                     &cur_map_order);
     if( rc < 0 ) {
       while( --intf_i >= 0 )
@@ -7321,10 +7355,12 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     }
 #endif
 
+#if CI_CFG_NIC_RESET_SUPPORT
     if( flags_set & CI_EPLOCK_NETIF_PURGE_TXQS ) {
       tcp_helper_purge_txq_locked(thr);
       flags_set &= ~CI_EPLOCK_NETIF_PURGE_TXQS;
     }
+#endif
 
     if( flags_set & CI_EPLOCK_NETIF_KERNEL_PACKETS ) {
       OO_DEBUG_TCPH(ci_log("%s: [%u] forward %u packets to kernel",
