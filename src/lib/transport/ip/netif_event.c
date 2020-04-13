@@ -483,7 +483,8 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
   if( ci_netif_pkt_pass_to_kernel(netif, pkt) ) {
     CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_non_ip);
   }
-  else {
+  else
+  {
     LOG_U(CI_RLLOG(10, LPF "UNEXPECTED ether_type "PKT_DBG_FMT,
                    PKT_DBG_ARGS(pkt)));
     LOG_DU(ci_hex_dump(ci_log_fn, PKT_START(pkt), 64, 0));
@@ -1988,6 +1989,7 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
   ci_assert_equal(netif->state->n_looppkts, 0);
   --netif->state->in_poll;
 
+#if CI_CFG_INJECT_PACKETS
   /* If we've got packets that need to be forwarded to the kernel, and they are
    * sufficiently numerous or sufficiently old, do the forwarding when we drop
    * the lock. */
@@ -2004,6 +2006,7 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
       ef_eplock_holder_set_flag(&netif->state->lock,
                                 CI_EPLOCK_NETIF_KERNEL_PACKETS);
   }
+#endif
 
   /* Timer code can't use in-poll wakeup, since endpoints are out of
    * post-poll list.  So, poll timers after --in_poll. */

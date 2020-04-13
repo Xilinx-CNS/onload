@@ -639,6 +639,9 @@
 #define CI_CFG_EPOLL2 1
 #define CI_CFG_EPOLL3 1
 
+/* Inject packets into kernel if they match hardware filters but do not
+ * match software ones.  See inject_kernel_gid module parameter. */
+#define CI_CFG_INJECT_PACKETS 1
 
 #ifdef __KERNEL__
 #include <linux/version.h>

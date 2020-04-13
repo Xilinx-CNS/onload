@@ -165,6 +165,12 @@
 #define ON_CI_CFG_TIMESTAMPING IGNORE
 #endif
 
+#if CI_CFG_INJECT_PACKETS
+#define ON_CI_CFG_INJECT_PACKETS DO
+#else
+#define ON_CI_CFG_INJECT_PACKETS IGNORE
+#endif
+
 #if CI_CFG_PROC_DELAY
 #define ON_CI_CFG_PROC_DELAY DO
 #else
@@ -596,11 +602,13 @@
   FTL_TFIELD_INT(ctx, ci_uint32, cplane_pid, ORM_OUTPUT_STACK)          \
   FTL_TFIELD_INT(ctx, ci_uint16, rss_instance, ORM_OUTPUT_STACK)        \
   FTL_TFIELD_INT(ctx, ci_uint16, cluster_size, ORM_OUTPUT_STACK)        \
-  FTL_TFIELD_INT(ctx, oo_pkt_p, kernel_packets_head, ORM_OUTPUT_STACK)  \
-  FTL_TFIELD_INT(ctx, oo_pkt_p, kernel_packets_tail, ORM_OUTPUT_STACK)  \
-  FTL_TFIELD_INT(ctx, ci_uint32, kernel_packets_pending, ORM_OUTPUT_STACK) \
-  FTL_TFIELD_INT(ctx, ci_uint64, kernel_packets_last_forwarded, ORM_OUTPUT_STACK) \
-  FTL_TFIELD_INT(ctx, ci_uint64, kernel_packets_cycles, ORM_OUTPUT_STACK) \
+  ON_CI_CFG_INJECT_PACKETS(                                             \
+    FTL_TFIELD_INT(ctx, oo_pkt_p, kernel_packets_head, ORM_OUTPUT_STACK)  \
+    FTL_TFIELD_INT(ctx, oo_pkt_p, kernel_packets_tail, ORM_OUTPUT_STACK)  \
+    FTL_TFIELD_INT(ctx, ci_uint32, kernel_packets_pending, ORM_OUTPUT_STACK) \
+    FTL_TFIELD_INT(ctx, ci_uint64, kernel_packets_last_forwarded, ORM_OUTPUT_STACK) \
+    FTL_TFIELD_INT(ctx, ci_uint64, kernel_packets_cycles, ORM_OUTPUT_STACK) \
+  )                                                                       \
   ON_CI_CFG_PROC_DELAY(                                                   \
     FTL_TFIELD_INT(ctx, ci_uint64, sync_frc, ORM_OUTPUT_STACK)            \
     FTL_TFIELD_INT(ctx, ci_uint64, sync_cost, ORM_OUTPUT_STACK)           \

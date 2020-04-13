@@ -1329,6 +1329,7 @@ struct ci_netif_state_s {
   CI_ULCONST ci_uint16  rss_instance;
   CI_ULCONST ci_uint16  cluster_size;
 
+#if CI_CFG_INJECT_PACKETS
   /* In some configurations, packets that ought to go the kernel can get
    * delivered to Onload instead.  If we see such packets inside a poll, we
    * queue them up on this list and deliver them to the kernel at some point in
@@ -1340,6 +1341,10 @@ struct ci_netif_state_s {
   ci_uint64             kernel_packets_last_forwarded  CI_ALIGN(8);
   /* Timer period. */
   ci_uint64             kernel_packets_cycles          CI_ALIGN(8);
+#define kernel_packets_pending(ns) ((ns)->kernel_packets_pending)
+#else
+#define kernel_packets_pending(ns) 0
+#endif
 
 #if CI_CFG_PROC_DELAY
   /* Feature to measure delays between receiving packets at NIC and

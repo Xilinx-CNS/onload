@@ -354,6 +354,7 @@ int ci_netif_pkt_pass_to_kernel(ci_netif* ni, ci_ip_pkt_fmt* pkt)
 {
   ci_assert(ci_netif_is_locked(ni));
 
+#if CI_CFG_INJECT_PACKETS
 #ifdef __KERNEL__
   if( ! (ni->flags & CI_NETIF_FLAG_MAY_INJECT_TO_KERNEL) )
 #else
@@ -403,6 +404,9 @@ int ci_netif_pkt_pass_to_kernel(ci_netif* ni, ci_ip_pkt_fmt* pkt)
   pkt->next = OO_PP_NULL;
 
   return 1;
+#else
+  return 0;
+#endif
 }
 
 

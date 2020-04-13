@@ -2612,7 +2612,7 @@ static void
 oo_inject_packets_kernel_force(ci_netif* ni)
 {
   ci_assert(ci_netif_is_locked(ni));
-  if( ni->state->kernel_packets_pending == 0 )
+  if( kernel_packets_pending(ni->state) == 0 )
     return;
   ef_eplock_holder_set_flag(&ni->state->lock,
                             CI_EPLOCK_NETIF_KERNEL_PACKETS);
@@ -7327,7 +7327,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     if( flags_set & CI_EPLOCK_NETIF_KERNEL_PACKETS ) {
       OO_DEBUG_TCPH(ci_log("%s: [%u] forward %u packets to kernel",
                            __FUNCTION__, thr->id,
-                           ni->state->kernel_packets_pending));
+                           kernel_packets_pending(ni->state)));
       oo_inject_packets_kernel(thr, 0);
       flags_set &= ~CI_EPLOCK_NETIF_KERNEL_PACKETS;
     }
@@ -7600,6 +7600,7 @@ efab_tcp_helper_vi_stats_query(tcp_helper_resource_t* trs, unsigned int intf_i,
 }
 
 
+#if CI_CFG_INJECT_PACKETS
 static int oo_inject_packet_kernel(ci_netif* ni, ci_ip_pkt_fmt* pkt)
 {
   struct net_device* dev;
@@ -7717,10 +7718,12 @@ static void oo_inject_packets_work(struct work_struct* work)
 
   kfree(data);
 }
+#endif
 
 /* Injects all pending kernel packets into the kernel's network stack. */
 static void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
 {
+#if CI_CFG_INJECT_PACKETS
   ci_netif* ni = &trs->netif;
   struct oo_inject_packets_work_data* data;
 
@@ -7771,6 +7774,7 @@ static void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
   ni->state->kernel_packets_tail = OO_PP_NULL;
   ni->state->kernel_packets_pending = 0;
   ci_frc64(&ni->state->kernel_packets_last_forwarded);
+#endif
 }
 
 

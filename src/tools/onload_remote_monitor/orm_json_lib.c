@@ -601,7 +601,9 @@ REDISPATCH_INT_DUMP(ci_uint8, uint, )
 REDISPATCH_INT_DUMP(ci_int32, int, )
 REDISPATCH_INT_DUMP(int, int, )
 REDISPATCH_INT_DUMP(oo_p, int, )
+#if CI_CFG_INJECT_PACKETS
 REDISPATCH_INT_DUMP(oo_pkt_p, int, )
+#endif
 REDISPATCH_INT_DUMP(ci_int16, int, )
 REDISPATCH_INT_DUMP(ci_int8, int, )
 

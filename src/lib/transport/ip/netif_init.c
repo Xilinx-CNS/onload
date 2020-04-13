@@ -159,9 +159,11 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
             __oo_usec_to_cycles64(cpu_khz, NI_OPTS(ni).buzz_usec);
   nis->timer_prime_cycles =
             __oo_usec_to_cycles64(cpu_khz, NI_OPTS(ni).timer_prime_usec);
+#if CI_CFG_INJECT_PACKETS
   nis->kernel_packets_cycles =
             __oo_usec_to_cycles64(cpu_khz,
                                   NI_OPTS(ni).kernel_packets_timer_usec);
+#endif
 
   ci_ip_timer_state_init(ni, cpu_khz);
   nis->last_spin_poll_frc = IPTIMER_STATE(ni)->frc;
@@ -248,9 +250,11 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
     (ni, &ni->state->passive_cache_avail_stack);
 #endif
 
+#if CI_CFG_INJECT_PACKETS
   nis->kernel_packets_head = nis->kernel_packets_tail = OO_PP_NULL;
   assert_zero(nis->kernel_packets_last_forwarded);
   assert_zero(nis->kernel_packets_pending);
+#endif
 }
 
 #endif
