@@ -316,8 +316,10 @@ typedef struct tcp_helper_resource_s {
   unsigned              intfs_to_reset;
   /* Bit mask of intf_i that have been removed/suspended and not yet reset */
   unsigned              intfs_suspended;
+#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   /* Bit mask of intf_i that need xdp updating by the lock holder */
   unsigned              intfs_to_xdp_update;
+#endif
 
   unsigned              mem_mmap_bytes;
   unsigned              io_mmap_bytes;

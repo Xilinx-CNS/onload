@@ -3697,7 +3697,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   rs->k_ref_count = 1;          /* 1 reference for userland */
   rs->n_ep_closing_refs = 0;
   rs->intfs_to_reset = 0;
+#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   rs->intfs_to_xdp_update = 0;
+#endif
   rs->intfs_suspended = 0;
 #if CI_CFG_ENDPOINT_MOVE
   rs->thc = NULL;
