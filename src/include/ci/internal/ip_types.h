@@ -44,7 +44,8 @@ typedef struct ci_netif_nic_s {
 #ifdef __KERNEL__
   struct oo_iobufset** pkt_rs;
 #endif
-#ifndef __KERNEL__
+#if ! defined(__KERNEL__) && CI_CFG_WANT_BPF_NATIVE
+#define OO_HAS_POLL_IN_KERNEL
   ci_uint8              poll_in_kernel;
 #endif
 } ci_netif_nic_t;

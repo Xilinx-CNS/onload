@@ -1524,7 +1524,7 @@ static int ci_netif_poll_evq(ci_netif* ni, struct ci_netif_poll_state* ps,
   int i;
   oo_pkt_p pp;
   int completed_tx = 0;
-#ifndef __KERNEL__
+#ifdef OO_HAS_POLL_IN_KERNEL
   int poll_in_kernel;
 #endif
   s.frag_pkt = NULL;
@@ -1538,7 +1538,7 @@ static int ci_netif_poll_evq(ci_netif* ni, struct ci_netif_poll_state* ps,
     CI_DEBUG(pkt->pay_len = -1);
   }
 
-#ifndef __KERNEL__
+#ifdef OO_HAS_POLL_IN_KERNEL
   poll_in_kernel = ni->nic_hw[intf_i].poll_in_kernel;
 #endif
 
@@ -1546,7 +1546,7 @@ static int ci_netif_poll_evq(ci_netif* ni, struct ci_netif_poll_state* ps,
     goto have_events;
 
   do {
-#ifndef __KERNEL__
+#ifdef OO_HAS_POLL_IN_KERNEL
     if( poll_in_kernel ) {
       n_evs = 0;
       if( ci_netif_intf_has_event(ni, intf_i) )
@@ -1789,7 +1789,9 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
 
   ci_assert(ci_netif_is_locked(ni));
   ci_assert(ni->state->in_poll == 0);
+#if CI_CFG_WANT_BPF_NATIVE
   ci_assert_equal(NI_OPTS(ni).poll_in_kernel, 0);
+#endif
 
   pkt = ci_netif_intf_next_rx_pkt(ni, intf_i);
   if( pkt == NULL || ci_netif_rx_pkt_is_poisoned(pkt) )

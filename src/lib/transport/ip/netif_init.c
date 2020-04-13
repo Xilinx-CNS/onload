@@ -838,9 +838,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_INT_DRIVEN")) )
     opts->int_driven = atoi(s);
+#if CI_CFG_WANT_BPF_NATIVE
   if( (s = getenv("EF_POLL_IN_KERNEL")) )
     opts->poll_in_kernel = atoi(s);
-#if CI_CFG_WANT_BPF_NATIVE
   static const char* const xdp_mode_opts[] = { "disabled", "compatible", 0 };
   opts->xdp_mode = parse_enum(opts, "EF_XDP_MODE", xdp_mode_opts, "disabled");
   if( opts->xdp_mode ) {
@@ -914,8 +914,10 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->mcast_recv_hw_loop = atoi(s);
   if( (s = getenv("EF_EVS_PER_POLL")) )
     opts->evs_per_poll = atoi(s);
+#if CI_CFG_WANT_BPF_NATIVE
   else if( opts->poll_in_kernel )
     opts->evs_per_poll = 192;     /* See EF_EVS_PER_POLL documentation */
+#endif
   if( (s = getenv("EF_TCP_TCONST_MSL")) )
     opts->msl_seconds = atoi(s);
   if( (s = getenv("EF_TCP_FIN_TIMEOUT")) )
@@ -2005,7 +2007,10 @@ unsigned ci_netif_build_future_intf_mask(ci_netif* ni)
      * alter the destination socket, in which case the future code would be
      * wrong.  XDP-attachment implies poll_in_kernel, which is what we actually
      * check here. */
-    if( ! ni->nic_hw[nic_i].poll_in_kernel &&
+    if(
+#ifdef OO_HAS_POLL_IN_KERNEL
+       ! ni->nic_hw[nic_i].poll_in_kernel &&
+#endif
         ~ef_vi_flags(&ni->nic_hw[nic_i].vi) & EF_VI_RX_EVENT_MERGE &&
         ni->nic_hw[nic_i].vi.nic_type.arch != EF_VI_ARCH_EF100 )
       mask |= 1u << nic_i;
@@ -2122,7 +2127,9 @@ static int netif_tcp_helper_build(ci_netif* ni)
       ef_vi_ctpio_init(&(ni->nic_hw[nic_i].vi));
     }
 #endif
+#ifdef OO_HAS_POLL_IN_KERNEL
     ni->nic_hw[nic_i].poll_in_kernel = NI_OPTS(ni).poll_in_kernel;
+#endif
   }
   ni->future_intf_mask = ci_netif_build_future_intf_mask(ni);
 

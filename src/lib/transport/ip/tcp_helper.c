@@ -545,6 +545,7 @@ int ci_tcp_helper_alloc_active_wild(ci_netif *ni, ci_addr_t laddr)
 }
 
 
+#if CI_CFG_WANT_BPF_NATIVE
 int ci_netif_evq_poll_k(ci_netif* ni, int _n)
 {
   ci_uint32 intf_i = _n;
@@ -553,6 +554,7 @@ int ci_netif_evq_poll_k(ci_netif* ni, int _n)
   return oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_EVQ_POLL,
                         &intf_i);
 }
+#endif
 
 
 int ci_tcp_helper_zc_register_buffers(ci_netif* ni, void* base, int num_pages,

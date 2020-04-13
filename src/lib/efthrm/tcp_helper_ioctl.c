@@ -1172,6 +1172,7 @@ static int efab_tcp_helper_alloc_active_wild_rsop(ci_private_t *priv,
 }
 
 
+#if CI_CFG_WANT_BPF_NATIVE
 static int efab_tcp_helper_evq_poll_rsop(ci_private_t *priv, void* arg)
 {
   tcp_helper_resource_t* trs = priv->thr;
@@ -1184,6 +1185,7 @@ static int efab_tcp_helper_evq_poll_rsop(ci_private_t *priv, void* arg)
 
   return ci_netif_evq_poll(&trs->netif, *vp);
 }
+#endif
 
 
 static int usermem_release_by_id(tcp_helper_resource_t* trs, ci_uint64 id)
@@ -1576,7 +1578,9 @@ oo_operations_table_t oo_operations[] = {
 
   op(OO_IOC_VETH_ACCELERATION_ENABLED, oo_veth_acceleration_enabled_rsop),
 
+#if CI_CFG_WANT_BPF_NATIVE
   op(OO_IOC_EVQ_POLL, efab_tcp_helper_evq_poll_rsop),
+#endif
 
 
   op(OO_IOC_ZC_REGISTER_BUFFERS, efab_tcp_helper_zc_register_buffers_rsop),

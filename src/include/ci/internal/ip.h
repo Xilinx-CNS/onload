@@ -474,12 +474,14 @@ extern int  ci_netif_poll_intf_future(ci_netif*, int intf_i, ci_uint64 now_frc)
 #endif
 extern int  ci_netif_poll_n(ci_netif*, int max_evs) CI_HF;
 #define     ci_netif_poll(ni)  ci_netif_poll_n((ni), NI_OPTS(ni).evs_per_poll)
+#if CI_CFG_WANT_BPF_NATIVE
 #ifdef __KERNEL__
 /* in-kernel backend for ci_netif_evq_poll_k */
 extern int  ci_netif_evq_poll(ci_netif*, int intf);
 #else
 /* makes syscall to invoke ci_netif_evq_poll */
 extern int  ci_netif_evq_poll_k(ci_netif* ni, int intf_i);
+#endif
 #endif
 
 extern void ci_netif_tx_pkt_complete(ci_netif*, struct ci_netif_poll_state*,
@@ -2643,7 +2645,7 @@ ci_inline int ci_netif_has_actionable_event(ci_netif* ni) {
   int intf_i;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     if( ci_netif_intf_has_event(ni, intf_i) ) {
-#ifndef __KERNEL__
+#ifdef OO_HAS_POLL_IN_KERNEL
       if( ! ni->nic_hw[intf_i].poll_in_kernel )
 #endif
       {

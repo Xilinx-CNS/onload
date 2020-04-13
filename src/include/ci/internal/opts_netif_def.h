@@ -171,11 +171,11 @@ CI_CFG_OPT("EF_INT_DRIVEN", int_driven, ci_uint32,
 "moderation be set to a reasonably high value (eg. 100us) to prevent too high "
 "a rate of interrupts.",
            1, , 1, 0, 1, yesno)
+#if CI_CFG_WANT_BPF_NATIVE
 CI_CFG_OPT("EF_POLL_IN_KERNEL", poll_in_kernel, ci_uint32,
 "Do polling of eventq in kernel.  This introduces cost of additional syscall(s) "
 "per poll.",
            1, , 0, 0, 1, count)
-#if CI_CFG_WANT_BPF_NATIVE
 #define EF_XDP_MODE_DISABLED 0
 #define EF_XDP_MODE_COMPATIBLE 1
 CI_CFG_OPT("EF_XDP_MODE", xdp_mode, ci_uint32,
