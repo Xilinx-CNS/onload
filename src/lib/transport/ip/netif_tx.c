@@ -47,8 +47,8 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, int intf_i, int is_fresh)
     {
       ef_iovec iov[CI_IP_PKT_SEGMENTS_MAX];
       int iov_len;
-      /* FIXME: EF100 hasn't checksum oflload */
-      if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_EF100) ) {
+      /* Calculate packet checksum in case of AF_XDP */
+      if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_AF_XDP) ) {
           struct iovec my_iov;
           ci_uint8 protocol;
 
@@ -221,8 +221,8 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
       }
     }
 #endif
-    /* FIXME: EF100 hasn't checksum oflload */
-    if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_EF100) ) {
+    /* Calculate packet checksum in case of AF_XDP */
+    if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_AF_XDP) ) {
         struct iovec my_iov[CI_IP_PKT_SEGMENTS_MAX];
         ci_uint8 protocol;
 
