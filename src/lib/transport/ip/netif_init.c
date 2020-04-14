@@ -655,53 +655,6 @@ void ci_netif_config_opts_rangecheck(ci_netif_config_opts* opts)
 # include <ci/internal/opts_netif_def.h>
 }
 
-#ifdef __KERNEL__
-/* This function returns an upper bound on the number of interfaces on which
- * the user has requested that scalable interfaces be created. */
-int ci_netif_requested_scalable_intf_count(struct oo_cplane_handle* cp,
-                                           const ci_netif_config_opts* ni_opts)
-{
-  ci_assert_equiv(ni_opts->scalable_filter_ifindex_active ==
-                  CITP_SCALABLE_FILTERS_ALL,
-                  ni_opts->scalable_filter_ifindex_passive ==
-                  CITP_SCALABLE_FILTERS_ALL);
-
-  if( ni_opts->scalable_filter_ifindex_passive == CITP_SCALABLE_FILTERS_ALL )
-    return oo_cp_get_acceleratable_llap_count(cp);
-
-  /* When specifying interfaces explicitly, we support at most one passive and
-   * one active. */
-  return 2;
-}
-
-
-int
-ci_netif_requested_scalable_interfaces(struct oo_cplane_handle* cp,
-                                       const ci_netif_config_opts* ni_opts,
-                                       ci_ifid_t* ifindices, int max_count)
-{
-  int count;
-
-  ci_assert_equiv(ni_opts->scalable_filter_ifindex_active ==
-                  CITP_SCALABLE_FILTERS_ALL,
-                  ni_opts->scalable_filter_ifindex_passive ==
-                  CITP_SCALABLE_FILTERS_ALL);
-
-  if( ni_opts->scalable_filter_ifindex_passive == CITP_SCALABLE_FILTERS_ALL )
-    return oo_cp_get_acceleratable_ifindices(cp, ifindices, max_count);
-
-  /* Report the passive and active scalable interfaces if they are specified.
-   */
-  count = 0;
-  if( count < max_count && ni_opts->scalable_filter_ifindex_active > 0 )
-    ifindices[count++] = ni_opts->scalable_filter_ifindex_active;
-  if( count < max_count && ni_opts->scalable_filter_ifindex_passive > 0 )
-    ifindices[count++] = ni_opts->scalable_filter_ifindex_passive;
-
-  return count;
-}
-#endif
-
 
 
 #ifndef __KERNEL__

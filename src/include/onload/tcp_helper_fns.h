@@ -56,6 +56,11 @@ extern int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 extern void tcp_helper_dtor(tcp_helper_resource_t* trs);
 
 
+extern int
+ci_netif_requested_scalable_intf_count(struct oo_cplane_handle* cp,
+                                       const ci_netif_config_opts* ni_opts)
+                                      CI_HF;
+
 #if CI_CFG_NIC_RESET_SUPPORT
 extern void tcp_helper_suspend_interface(ci_netif* ni, int intf_i);
 

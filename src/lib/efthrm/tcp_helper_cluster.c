@@ -954,6 +954,51 @@ static int thc_alloc_thr(tcp_helper_cluster_t* thc,
 #endif /* CI_CFG_ENDPOINT_MOVE */
 
 
+/* This function returns an upper bound on the number of interfaces on which
+ * the user has requested that scalable interfaces be created. */
+int ci_netif_requested_scalable_intf_count(struct oo_cplane_handle* cp,
+                                           const ci_netif_config_opts* ni_opts)
+{
+  ci_assert_equiv(ni_opts->scalable_filter_ifindex_active ==
+                  CITP_SCALABLE_FILTERS_ALL,
+                  ni_opts->scalable_filter_ifindex_passive ==
+                  CITP_SCALABLE_FILTERS_ALL);
+
+  if( ni_opts->scalable_filter_ifindex_passive == CITP_SCALABLE_FILTERS_ALL )
+    return oo_cp_get_acceleratable_llap_count(cp);
+
+  /* When specifying interfaces explicitly, we support at most one passive and
+   * one active. */
+  return 2;
+}
+
+static int
+ci_netif_requested_scalable_interfaces(struct oo_cplane_handle* cp,
+                                       const ci_netif_config_opts* ni_opts,
+                                       ci_ifid_t* ifindices, int max_count)
+{
+  int count;
+
+  ci_assert_equiv(ni_opts->scalable_filter_ifindex_active ==
+                  CITP_SCALABLE_FILTERS_ALL,
+                  ni_opts->scalable_filter_ifindex_passive ==
+                  CITP_SCALABLE_FILTERS_ALL);
+
+  if( ni_opts->scalable_filter_ifindex_passive == CITP_SCALABLE_FILTERS_ALL )
+    return oo_cp_get_acceleratable_ifindices(cp, ifindices, max_count);
+
+  /* Report the passive and active scalable interfaces if they are specified.
+   */
+  count = 0;
+  if( count < max_count && ni_opts->scalable_filter_ifindex_active > 0 )
+    ifindices[count++] = ni_opts->scalable_filter_ifindex_active;
+  if( count < max_count && ni_opts->scalable_filter_ifindex_passive > 0 )
+    ifindices[count++] = ni_opts->scalable_filter_ifindex_passive;
+
+  return count;
+}
+
+
 int
 tcp_helper_install_tproxy(int install,
                           tcp_helper_resource_t* thr,

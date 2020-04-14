@@ -565,15 +565,6 @@ extern void ci_tcp_listen_rx_checks(ci_netif*, ci_tcp_socket_listen*,
 
 extern int  ci_netif_force_wake(ci_netif* ni, int everyone) CI_HF;
 
-extern int
-ci_netif_requested_scalable_intf_count(struct oo_cplane_handle* cp,
-                                       const ci_netif_config_opts* ni_opts)
-                                      CI_HF;
-extern int
-ci_netif_requested_scalable_interfaces(struct oo_cplane_handle* cp,
-                                       const ci_netif_config_opts* ni_opts,
-                                       ci_ifid_t* ifindices, int max_count)
-                                      CI_HF;
 #if CI_CFG_EPOLL3
 #ifndef __KERNEL__
 extern int ci_netif_get_ready_list(ci_netif* ni) CI_HF;
