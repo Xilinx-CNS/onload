@@ -465,7 +465,7 @@ void cp_veth_fwd_table_id_do(struct cp_session* s, ci_ifid_t veth_ifindex,
 
 
 void cp_populate_llap_hwports(struct cp_session* s, ci_ifid_t ifindex,
-                              ci_hwport_id_t hwport)
+                              ci_hwport_id_t hwport, ci_uint64 nic_flags)
 {
   struct cp_mibs* mib = cp_get_active_mib(s);
   int mib_i;
@@ -477,9 +477,10 @@ void cp_populate_llap_hwports(struct cp_session* s, ci_ifid_t ifindex,
       hwp = &mib->hwport[hwport];
       new_flags = (hwp->flags & CP_LLAP_UP) |
                   CP_HWPORT_ROW_IN_USE;
-      if( new_flags != hwp->flags ) {
+      if( new_flags != hwp->flags || nic_flags != hwp->nic_flags ) {
         cp_mibs_llap_under_change(s);
         mib->hwport[hwport].flags = new_flags;
+        mib->hwport[hwport].nic_flags = nic_flags;
       }
     }
     else {

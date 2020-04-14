@@ -488,7 +488,8 @@ static void cp_kmsg_handle(struct cp_session* s, struct cp_epoll_state* state)
       /* ifindex == CI_IFID_BAD denotes "dump done" */
       if( msg.u.set_hwport.ifindex != CI_IFID_BAD ) {
         cp_populate_llap_hwports(s, msg.u.set_hwport.ifindex,
-                                 msg.u.set_hwport.hwport);
+                                 msg.u.set_hwport.hwport,
+                                 msg.u.set_hwport.nic_flags);
         cp_llap_fix_upper_layers(s);
       }
       else if( ! (s->flags & CP_SESSION_HWPORT_DUMPED) ) {

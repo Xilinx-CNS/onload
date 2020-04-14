@@ -101,6 +101,12 @@ static void oo_efrm_reset_callback(struct efrm_client* client, void* arg)
 #if CI_CFG_NIC_RESET_SUPPORT
   oo_efrm_callback_hook_generic(client, tcp_helper_reset_stack);
 #endif
+
+  /* The post-reset hook in the resource driver might have changed the
+   * efhw_nic's flags, so in principle we should re-announce this hwport to all
+   * control plane instances at this point.  However, we don't expect any flags
+   * that the control plane cares about to change across a reset, so this is
+   * unimplemented. */
 }
 
 static void
@@ -157,7 +163,7 @@ struct oo_nic* oo_nic_add(const struct net_device* dev)
   onic->oo_nic_flags = 0;
 
   /* Tell cp_server about this hwport */
-  rc = cp_announce_hwport(dev, i);
+  rc = cp_announce_hwport(efrm_client_get_nic(efrm_client), i);
   if( rc < 0 && rc != -ENOENT ) {
     /* -ENOENT means there is no cp_server yet; it is OK */
     ci_log("%s: failed to announce ifindex=%d oo_index=%d to cp_server: %d",
@@ -203,10 +209,12 @@ int oo_nic_announce(struct oo_cplane_handle* cp, ci_ifid_t ifindex)
 
   for( i = 0; i < CI_CFG_MAX_HWPORTS; ++i ) {
     struct net_device* dev;
+    struct efhw_nic* nic;
 
     if( oo_nics[i].efrm_client == NULL )
       continue;
-    dev = efhw_nic_get_net_dev(efrm_client_get_nic(oo_nics[i].efrm_client));
+    nic = efrm_client_get_nic(oo_nics[i].efrm_client);
+    dev = efhw_nic_get_net_dev(nic);
     if( dev == NULL)
       continue;
     if( dev_net(dev) != cp->cp_netns || 
@@ -215,7 +223,7 @@ int oo_nic_announce(struct oo_cplane_handle* cp, ci_ifid_t ifindex)
       continue;
     }
 
-    rc = __cp_announce_hwport(cp, dev->ifindex, i);
+    rc = __cp_announce_hwport(cp, dev->ifindex, i, nic->flags);
     dev_put(dev);
     if( rc < 0 ) {
       ci_log("%s: ERROR: failed to announce hwport=%d", __func__, i);
@@ -225,7 +233,7 @@ int oo_nic_announce(struct oo_cplane_handle* cp, ci_ifid_t ifindex)
 
   /* Tell cplane that it's all */
   if( ifindex == CI_IFID_BAD )
-    return __cp_announce_hwport(cp, CI_IFID_BAD, CI_HWPORT_ID_BAD);
+    return __cp_announce_hwport(cp, CI_IFID_BAD, CI_HWPORT_ID_BAD, 0);
   else
     return rc;
 }

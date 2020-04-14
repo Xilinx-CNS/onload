@@ -63,6 +63,7 @@ struct cp_helper_msg {
     struct {
       ci_ifid_t ifindex;
       ci_hwport_id_t hwport;
+      ci_uint64 nic_flags;
     } set_hwport;
   } u;
 };

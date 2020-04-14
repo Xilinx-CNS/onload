@@ -24,7 +24,8 @@ void cp_dump_hwport_table(struct cp_mibs* mib)
 
   for( hwport = 0; hwport < mib->dim->hwport_max; hwport++ ) {
     if( ! cicp_hwport_row_is_free(&mib->hwport[hwport]) ) {
-      printf("hwport[%03d]:\n", hwport);
+      printf("hwport[%03d]: flags=%08x nic_flags=%016"CI_PRIx64"\n", hwport,
+             mib->hwport[hwport].flags, mib->hwport[hwport].nic_flags);
     }
   }
 }

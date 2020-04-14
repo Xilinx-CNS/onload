@@ -1406,7 +1406,7 @@ cp_message_enqueue(struct oo_cplane_handle* cp, struct cp_message_buffer* msg)
 
 int
 __cp_announce_hwport(struct oo_cplane_handle* cp, ci_ifid_t ifindex,
-                     ci_hwport_id_t hwport)
+                     ci_hwport_id_t hwport, ci_uint64 nic_flags)
 {
   struct cp_message_buffer* msg;
 
@@ -1417,22 +1417,23 @@ __cp_announce_hwport(struct oo_cplane_handle* cp, ci_ifid_t ifindex,
   msg->data.hmsg_type = CP_HMSG_SET_HWPORT;
   msg->data.u.set_hwport.ifindex = ifindex;
   msg->data.u.set_hwport.hwport = hwport;
+  msg->data.u.set_hwport.nic_flags = nic_flags;
   cp_message_enqueue(cp, msg);
 
   return 0;
 }
 
 int
-cp_announce_hwport(const struct net_device* dev, ci_hwport_id_t hwport)
+cp_announce_hwport(const struct efhw_nic* nic, ci_hwport_id_t hwport)
 {
   struct oo_cplane_handle* cp;
   int rc;
 
-  cp = __cp_acquire_from_netns_if_exists(dev_net(dev), CI_TRUE);
+  cp = __cp_acquire_from_netns_if_exists(dev_net(nic->net_dev), CI_TRUE);
   if( cp == NULL )
     return -ENOENT;
 
-  rc = __cp_announce_hwport(cp, dev->ifindex, hwport);
+  rc = __cp_announce_hwport(cp, nic->net_dev->ifindex, hwport, nic->flags);
   cp_release(cp);
   return rc;
 }

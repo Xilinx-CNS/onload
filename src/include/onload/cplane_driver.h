@@ -72,9 +72,10 @@ cicp_kernel_resolve(struct ci_netif_s* ni, struct oo_cplane_handle* cp,
 
 extern int
 __cp_announce_hwport(struct oo_cplane_handle* cp, ci_ifid_t ifindex,
-                     ci_hwport_id_t hwport);
+                     ci_hwport_id_t hwport, ci_uint64 nic_flags);
+struct efhw_nic;
 extern int
-cp_announce_hwport(const struct net_device* dev, ci_hwport_id_t hwport);
+cp_announce_hwport(const struct efhw_nic* nic, ci_hwport_id_t hwport);
 
 extern int oo_nic_announce(struct oo_cplane_handle* cp, ci_ifid_t);
 

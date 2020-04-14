@@ -201,6 +201,7 @@ typedef struct cicp_llap_row_s {
 struct cp_hwport_row {
 /* we reuse CP_LLAP flags here */
   cp_hwport_flags_t flags;
+  ci_uint64 nic_flags;
 };
 
 

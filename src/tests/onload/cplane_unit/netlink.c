@@ -7,6 +7,7 @@
 #include <libmnl/libmnl.h>
 
 #include "cplane_unit.h"
+#include <ci/efhw/common.h>
 #include <cplane/ioctl.h>
 
 
@@ -54,7 +55,8 @@ cp_unit_nl_handle_link_msg(struct cp_session* s, uint16_t nlmsg_type,
   cp_nl_net_handle_msg(s, nlh, nlh->nlmsg_len);
 
   /* Tell the control plane that this llap has hwport. */
-  cp_populate_llap_hwports(s, ifindex, hwport++);
+  cp_populate_llap_hwports(s, ifindex, hwport++,
+                           ~(ci_uint64) NIC_FLAG_ONLOAD_UNSUPPORTED);
 }
 
 

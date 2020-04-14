@@ -255,7 +255,7 @@ static struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
     if( onic->oo_nic_flags & OO_NIC_UNPLUGGED ) {
       ci_log("%s: Rediscovered %s ifindex %d hwport %d", __func__,
              net_dev->name, net_dev->ifindex, (int)(onic - oo_nics));
-      cp_announce_hwport(net_dev, onic - oo_nics);
+      cp_announce_hwport(efhw_nic, onic - oo_nics);
       onic->oo_nic_flags &= ~OO_NIC_UNPLUGGED;
     }
   }
