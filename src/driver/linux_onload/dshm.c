@@ -99,7 +99,9 @@ oo_dshm_register_impl(ci_int32 shm_class, ci_user_ptr_t user_addr,
   }
 
   /* Allocate an ID for the buffer. */
+  ci_irqlock_lock(&oo_dshm_state.lock, &lock_flags);
   *buffer_id_out = ci_id_pool_alloc(&oo_dshm_state.ids[shm_class]);
+  ci_irqlock_unlock(&oo_dshm_state.lock, &lock_flags);
   if( *buffer_id_out == CI_ID_POOL_ID_NONE ) {
     rc = -EBUSY;
     goto fail2;
