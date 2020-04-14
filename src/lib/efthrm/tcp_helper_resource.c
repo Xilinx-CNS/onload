@@ -7906,7 +7906,7 @@ static int tcp_helper_nic_attach_xdp(ci_netif* ni,
 }
 
 ci_inline int oo_xdp_rx_pkt_locked(ci_netif* ni,
-                                   struct tcp_helper_nic* trs_nic,
+                                   struct net_device* dev,
                                    struct bpf_prog* xdp_prog,
                                    ci_ip_pkt_fmt* pkt)
 {
@@ -7917,18 +7917,11 @@ ci_inline int oo_xdp_rx_pkt_locked(ci_netif* ni,
   struct xdp_buff _xdp;
   struct xdp_buff* xdp = &_xdp;
   void *orig_data, *orig_data_end;
-  struct efhw_nic* nic = efrm_client_get_nic(trs_nic->thn_oo_nic->efrm_client);
   struct xdp_rxq_info xdp_rx_queue = {
-    .dev = efhw_nic_get_net_dev(nic),
+    .dev = dev,
   };
   int act;
 
-  if( ! xdp_rx_queue.dev ) {
-    /* We can't let a NULL value into bpf_run() because some helper functions
-     * can crash the kernel with that. We don't really want to accept these
-     * packets blindly either, so I suppose this will have to do */
-    return XDP_ABORTED;
-  }
   /* The XDP program wants to see the packet starting at the MAC
    * header.
    */
@@ -7951,7 +7944,6 @@ ci_inline int oo_xdp_rx_pkt_locked(ci_netif* ni,
   xdp->rxq = &xdp_rx_queue; /* TODO: would that do? */
 
   act = bpf_prog_run_xdp(xdp_prog, xdp);
-  dev_put(xdp_rx_queue.dev);
 
   return act;
 }
@@ -7963,19 +7955,33 @@ efab_tcp_helper_xdp_rx_pkt(tcp_helper_resource_t* trs, int intf_i, ci_ip_pkt_fmt
   struct bpf_prog* xdp_prog;
   int ret = XDP_PASS;
   struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
+  struct efhw_nic* nic;
+  struct net_device* dev;
   ci_netif* ni = &trs->netif;
 
   xdp_prog = trs_nic->thn_xdp_prog;
   if( xdp_prog == NULL )
     return 1;
 
+  nic = efrm_client_get_nic(trs_nic->thn_oo_nic->efrm_client);
+  dev = efhw_nic_get_net_dev(nic);
+  if( ! dev ) {
+    /* We can't let a NULL value into bpf_run() because some helper functions
+     * can crash the kernel with that. We don't really want to accept these
+     * packets blindly either, so I suppose this will have to do */
+    CITP_STATS_NETIF_INC(ni, rx_xdp_aborted);
+    return 0;
+  }
+
   /* As kernel stack disable preemption and start read lock critical section
    * seperately for each pkt */
   preempt_disable();
   rcu_read_lock();
-  ret = oo_xdp_rx_pkt_locked(ni, trs_nic, xdp_prog, pkt);
+  ret = oo_xdp_rx_pkt_locked(ni, dev, xdp_prog, pkt);
   rcu_read_unlock();
   preempt_enable();
+
+  dev_put(dev);
 
   switch( ret ) {
     case XDP_PASS:
