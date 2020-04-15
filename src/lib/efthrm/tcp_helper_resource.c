@@ -5889,19 +5889,88 @@ static void efab_put_pages(struct page** pages, size_t n)
 
 
 static long efab_get_all_user_pages(unsigned long base, long max_pages,
-                                    struct page** pages)
+                                    struct page** pages, unsigned gup_flags)
 {
   long n;
   long rc;
   for( n = 0; n < max_pages; n += rc ) {
-    rc = get_user_pages(base + n * PAGE_SIZE, max_pages - n, FOLL_WRITE,
+    rc = get_user_pages(base + n * PAGE_SIZE, max_pages - n, gup_flags,
                         pages + n, NULL);
     if (rc <= 0) {
       efab_put_pages(pages, n);
-      return rc;
+      return rc ? rc : -EFAULT;
     }
   }
   return n;
+}
+
+
+/* Same as efab_get_all_user_pages(), but guarantees that the returned page
+ * range neither starts nor ends with a partial-hugepage. map_usermem has
+ * three options for what to do in that circumstance:
+ *  1) Fail the registration. This was tried and got tricky because of
+ *     transparent hugepages making it difficult for the user to be sure that
+ *     they'd done an allocation which is going to work.
+ *  2) Extend the registered area to encompass the full size of the huge pages
+ *     at the beginning and end. This seems like a bad idea for the same
+ *     hugepage reason: the user could be unaware that they've got straddling
+ *     and be surprised at the implicit extension.
+ *  3) (This implementation) Split the hugepages down to normal pages to make
+ *     the registration unstraddled. This causes least functional surprise to
+ *     users, and if (as they normally would) users pass in correctly mmapped
+ *     and aligned hugepages then no splitting happens and they never notice
+ *     this fixup code. */
+static long efab_get_unstraddled_user_pages(unsigned long base, long max_pages,
+                                            struct page** pages)
+{
+  long rc;
+  long count;
+  ci_assert_gt(max_pages, 0);
+
+  rc = efab_get_all_user_pages(base, max_pages, pages, FOLL_WRITE);
+  if( rc < 0 )
+    return rc;
+
+  if( PageTail(pages[0]) ) {
+    /* Beginning of the region straddles a hugepage. Put those pages and
+     * re-get them with FOLL_SPLIT */
+    for( count = 1; count < max_pages; ++count)
+      if( ! PageTail(pages[count]) )
+        break;
+    efab_put_pages(pages, count);
+    rc = efab_get_all_user_pages(base, count, pages, FOLL_WRITE | FOLL_SPLIT);
+    if( rc < 0 ) {
+      efab_put_pages(pages + count, max_pages - count);
+      return rc;
+    }
+    if( PageTail(pages[0]) ) {
+      /* If we hit an already-mlocked page then it silently fails to split,
+       * hence this extra check. */
+      efab_put_pages(pages, max_pages);
+      return -EBUSY;
+    }
+  }
+
+  /* Check that the last chunk doesn't straddle a hugepage */
+  count = max_pages;
+  while( --count && PageTail(pages[count]) )
+    ;
+  ci_assert(!PageTail(pages[count]));
+  if( count + (1L << compound_order(pages[count])) != max_pages ) {
+    efab_put_pages(pages + count, max_pages - count);
+    rc = efab_get_all_user_pages(base + count * PAGE_SIZE, max_pages - count,
+                                 pages + count, FOLL_WRITE | FOLL_SPLIT);
+    if( rc < 0 ) {
+      efab_put_pages(pages, count);
+      return rc;
+    }
+    if( PageCompound(pages[max_pages - 1]) ) {
+      /* Already-mlocked, failed to split. */
+      efab_put_pages(pages, max_pages);
+      return -EBUSY;
+    }
+  }
+  return 0;
 }
 
 
@@ -5923,7 +5992,7 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
   int group_i;
   int min_nics_order = efab_tcp_helper_min_nics_order(trs);
 
-  if( user_base & (PAGE_SIZE - 1) )
+  if( user_base & (PAGE_SIZE - 1) || n_pages == 0 )
     return -EINVAL;
 
   pages = kmalloc_array(n_pages, sizeof(*pages), GFP_KERNEL);
@@ -5931,7 +6000,7 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
     return -ENOMEM;
 
   down_read(&current->mm->mmap_sem);
-  rc = efab_get_all_user_pages(user_base, n_pages, pages);
+  rc = efab_get_unstraddled_user_pages(user_base, n_pages, pages);
   up_read(&current->mm->mmap_sem);
   if( rc < 0 ) {
     NI_LOG(ni, RESOURCE_WARNINGS, "[%s]: get_user_pages(%d) returned %ld",
@@ -5945,15 +6014,13 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
   ioum->n_groups = 0;
   for( i = 0; i < n_pages; ) {
     int order = compound_order(pages[i]);
-    if( PageTail(pages[i]) )
-      goto misaligned_not_supported;
+    ci_assert(!PageTail(pages[i]));
     if( order != last_order )
       ++ioum->n_groups;
     last_order = order;
     i += 1 << order;
   }
-  if( i != n_pages )
-    goto misaligned_not_supported;
+  ci_assert_equal(i, n_pages);
 
   ioum->groups = kmalloc_array(ioum->n_groups, sizeof(*ioum->groups),
                                GFP_KERNEL);
@@ -6020,16 +6087,6 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
  fail1:
   kfree(pages);
   return rc;
- misaligned_not_supported:
-  /* The user asked us to map only a part of a huge page. More code could be
-   * written to fix this up, but it's icky code that will rarely be used, so
-   * let's just say that's not supported. Transparent huge pages could make
-   * the user unaware that this has happened, but that would require the stars
-   * to have aligned in a very unusual way */
-  kfree(pages);
-  NI_LOG(ni, RESOURCE_WARNINGS, "[%s]: user hugepage mappings must be aligned",
-         __FUNCTION__);
-  return -ERANGE;
 #endif
 }
 
