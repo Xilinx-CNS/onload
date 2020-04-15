@@ -1288,7 +1288,11 @@ oo_cp_dump_hwports(ci_private_t *priv, void *arg)
 
   if( rc < 0 )
     return rc;
+
+  rtnl_lock();
   rc = oo_nic_announce(cp, ifindex);
+  rtnl_unlock();
+
   cp_release(cp);
   return rc;
 }

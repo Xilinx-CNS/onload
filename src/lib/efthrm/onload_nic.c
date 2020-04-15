@@ -199,6 +199,8 @@ int oo_nic_announce(struct oo_cplane_handle* cp, ci_ifid_t ifindex)
   int i;
   int rc = -ENOENT;
 
+  CI_DEBUG(ASSERT_RTNL());
+
   for( i = 0; i < CI_CFG_MAX_HWPORTS; ++i ) {
     struct net_device* dev;
 
