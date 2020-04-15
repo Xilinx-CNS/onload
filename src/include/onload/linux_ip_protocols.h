@@ -27,6 +27,7 @@
 #include <ci/internal/transport_config_opt.h> /* for CI_CFG_ERROR_PASS_UP */
 
 
+#if CI_CFG_HANDLE_ICMP
 /*! efab_handle_ipp_pkt_task -
  * ICMP, IGMP, UDP etc. delivery handler.  Called from the 
  * ARP keventd tasklet. */
@@ -69,6 +70,7 @@ efab_ipp_icmp_for_thr( tcp_helper_resource_t* thr,
 extern void efab_ipp_icmp_qpkt( tcp_helper_resource_t* thr, 
 				struct ci_sock_cmn_s* s,
 				efab_ipp_addr* addr );
+#endif
 
 #endif
 

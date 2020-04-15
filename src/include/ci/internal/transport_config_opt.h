@@ -646,6 +646,8 @@
 /* NIC reset, suspend and hot-plug support */
 #define CI_CFG_NIC_RESET_SUPPORT 1
 
+/* Handle incoming ICMP for Onloaded sockets */
+#define CI_CFG_HANDLE_ICMP 1
 
 #ifdef __KERNEL__
 #include <linux/version.h>

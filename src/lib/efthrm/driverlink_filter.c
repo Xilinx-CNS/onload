@@ -46,6 +46,7 @@
  * Compilation control
  */
 
+#if CI_CFG_HANDLE_ICMP
 /* Define this to get a lot more debug info */
 #define VERB(x)
 
@@ -200,7 +201,7 @@ static int icmp_handled_ip6[ CI_ICMPV6_TYPE_MAX ] = {
 };
 #endif
 
-/*! efab_ipp_icmp_parse -
+/*! dlfilter_ipp_icmp_parse -
  * Get the important info out of the ICMP hdr & it's payload.  This function
  * assumes that we've already filtered the ICMP messages we're planning to
  * handle in the char driver AND it knows that all of the ones we (currently)
@@ -821,6 +822,7 @@ void efx_dlfilter_dump(efx_dlfilter_cb_t* fcb)
       dlfilter_dump_entry(fcb, 0, ctr, &fcb->table[ctr]);
   }
 }
+#endif
 #endif
 
 /*! \cidoxg_end */

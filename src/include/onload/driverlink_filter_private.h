@@ -24,6 +24,7 @@
 #endif
 
 
+#if CI_CFG_HANDLE_ICMP
 /*! Defines one entry in the master filter table */
 typedef struct efx_dlfilt_entry_s {
   int       thr_id;     /*!< TCP helper res. ID from char driver 
@@ -58,6 +59,7 @@ typedef struct efx_dlfilt_cb_s {
   void* ctx;
   efx_dlfilter_is_onloaded_t is_onloaded;
 } efx_dlfilter_cb_t;
+#endif
 
 
 #endif /* __CI_DRIVER_EFAB_DRIVERLINK__FILTER__PRIVATE_H__ */

@@ -77,7 +77,9 @@ struct proc_dir_entry *oo_proc_root = NULL;
  *--------------------------------------------------------------------*/
 
 static const struct file_operations efab_version_fops;
+#if CI_CFG_HANDLE_ICMP
 static const struct file_operations efab_dlfilters_fops;
+#endif
 
 /*--------------------------------------------------------------------
  *
@@ -92,7 +94,9 @@ typedef struct ci_proc_efab_entry_s {
 } ci_proc_efab_entry_t;
 static ci_proc_efab_entry_t ci_proc_efab_table[] = {
     {"version",       &efab_version_fops},
+#if CI_CFG_HANDLE_ICMP
     {"dlfilters",     &efab_dlfilters_fops},
+#endif
 };
 
 #define CI_PROC_EFAB_TABLE_SIZE \
@@ -321,6 +325,7 @@ static const struct file_operations efab_version_fops = {
 };
 
 
+#if CI_CFG_HANDLE_ICMP
 /****************************************************************************
  *
  * /proc/driver/onload/dlfilters
@@ -349,6 +354,7 @@ static const struct file_operations efab_dlfilters_fops = {
     .llseek  = seq_lseek,
     .release = single_release,
 };
+#endif
 
 
 /****************************************************************************

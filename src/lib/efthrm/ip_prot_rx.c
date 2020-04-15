@@ -22,6 +22,7 @@
 #define VERB(x)
 
 
+#if CI_CFG_HANDLE_ICMP
 /*--------------------------------------------------------------------
  *!
  * This function is intended to safely decode a TCP helper resource
@@ -105,5 +106,6 @@ int efab_handle_ipp_pkt_task(int thr_id, ci_ifid_t ifindex,
 exit_handler:
   return 0;
 }
+#endif
 
 /*! \cidoxg_end */

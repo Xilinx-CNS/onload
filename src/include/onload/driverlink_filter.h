@@ -17,6 +17,7 @@
 #define __CI_DRIVER_EFAB_DRIVERLINK__FILTER_H__
 
 
+#if CI_CFG_HANDLE_ICMP
 struct ci_ether_hdr_s;
 struct efx_dlfilt_cb_s;
 
@@ -66,5 +67,6 @@ extern void
 efx_dlfilter_count_stats(struct efx_dlfilt_cb_s* fcb,
                          int *n_empty, int *n_tomp, int *n_used);
 
+#endif
 #endif /* __CI_DRIVER_EFAB_DRIVERLINK__FILTER_H__ */
 /*! \cidoxg_end */

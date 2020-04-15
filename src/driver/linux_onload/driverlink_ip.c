@@ -58,6 +58,7 @@ MODULE_PARM_DESC(oo_bond_peak_polls,
 #endif
 
 
+#if CI_CFG_HANDLE_ICMP
 /* Check whether device may match software filters for Onload.
  *
  * In the ideal world, we'd like to have a fast check if the device is onloadable.
@@ -211,6 +212,7 @@ static struct nf_hook_ops oo_netfilter_ip6_hook = {
 #endif
   .priority = NF_IP_PRI_FIRST,
 };
+#endif
 #endif
 
 
@@ -533,20 +535,24 @@ void oo_driverlink_unregister(void)
 #ifdef EFRM_HAVE_NF_NET_HOOK
 int oo_register_nfhook(struct net *net)
 {
-  int rc;
+  int rc = 0;
+#if CI_CFG_HANDLE_ICMP
   if( (rc = nf_register_net_hook(net, &oo_netfilter_ip_hook)) != 0 )
     return rc;
 #if CI_CFG_IPV6
   if( (rc = nf_register_net_hook(net, &oo_netfilter_ip6_hook)) != 0 )
     nf_unregister_net_hook(net, &oo_netfilter_ip_hook);
 #endif
+#endif
   return rc;
 }
 void oo_unregister_nfhook(struct net *net)
 {
+#if CI_CFG_HANDLE_ICMP
   nf_unregister_net_hook(net, &oo_netfilter_ip_hook);
 #if CI_CFG_IPV6
   nf_unregister_net_hook(net, &oo_netfilter_ip6_hook);
+#endif
 #endif
 }
 #endif

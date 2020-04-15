@@ -84,6 +84,7 @@ int ci_ipp_icmp_csum_ok( ci_icmp_hdr* icmp, int icmp_total_len)
   return csum == csum_pkt;
 }
 
+#if CI_CFG_HANDLE_ICMP
 /*! efab_ipp_icmp_parse -
  * Get the important info out of the ICMP hdr & it's payload
  *
@@ -169,6 +170,7 @@ efab_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr,
   return 1;
 }
 
+
 /*! efab_ipp_icmp_validate -
  * Check to see if the ICMP pkt is one we want to handle and is 
  * well-formed. We don't check the sums as there should only be one
@@ -209,7 +211,6 @@ efab_ipp_icmp_validate( tcp_helper_resource_t* thr, ci_ip4_hdr *ip)
   return 1;
 }
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
 /*!
  * Mapping of ICMP code field of destination unreachable message to errno.
  * The mapping is based on linux sources.
@@ -308,7 +309,6 @@ static void get_errno(int af, ci_uint8 type, ci_uint8 code,
     }
   }
 }
-#endif
 
 typedef struct {
   ci_icmp_hdr hdr;
@@ -326,7 +326,6 @@ typedef struct {
   CI_BSWAP_BE16(ipp_addr->dport_be16)
 
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void 
 ci_ipp_pmtu_rx(ci_netif *netif, ci_pmtu_state_t *pmtus,
                ci_ip_cached_hdrs *ipcache,
@@ -561,7 +560,6 @@ ci_ipp_pmtu_rx_udp(tcp_helper_resource_t* thr,
    * the second attempt. */
   queue_work(thr->wq, &w->w);
 }
-#endif
 
 /* efab_ipp_icmp_for_thr -
  * Is this ICMP message destined for this netif 
@@ -652,5 +650,6 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
   ci_log("ERROR: ICMP type %d code %d", icmp_type, icmp_code);
 #endif
 }
+#endif
 
 /*! \cidoxg_end */

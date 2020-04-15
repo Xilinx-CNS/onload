@@ -74,7 +74,9 @@ typedef struct efab_tcp_driver_s {
   /*! An overall limit of pinned pages for all sendpage() users */
   int sendpage_pinpages_max;
 
+#if CI_CFG_HANDLE_ICMP
   struct efx_dlfilt_cb_s* dlfilter;
+#endif
 
   /* Dynamic stack list update: flag and wait queue.  Used by tcpdump */
   ci_uint32         stack_list_seq;

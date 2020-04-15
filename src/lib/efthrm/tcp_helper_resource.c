@@ -5416,6 +5416,7 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
  *
  *--------------------------------------------------------------------*/
 
+#if CI_CFG_HANDLE_ICMP
 static int efab_is_onloaded(void* ctx, struct net* netns, ci_ifid_t ifindex)
 {
   struct oo_filter_ns* ns;
@@ -5431,6 +5432,7 @@ static int efab_is_onloaded(void* ctx, struct net* netns, ci_ifid_t ifindex)
   oo_filter_ns_put_atomic(&efab_tcp_driver, ns);
   return v;
 }
+#endif
 
 
 /* Allocates a shmbuf and faults in all of its pages.  Historically,
@@ -5480,6 +5482,7 @@ efab_tcp_driver_ctor()
   if( (rc = oo_filter_ns_manager_ctor(&efab_tcp_driver)) < 0 )
     goto fail_filter_ns_manager;
 
+#if CI_CFG_HANDLE_ICMP
   /* Create driverlink filter. */
   efab_tcp_driver.dlfilter =
       efx_dlfilter_ctor(&efab_tcp_driver, efab_is_onloaded);
@@ -5487,6 +5490,7 @@ efab_tcp_driver_ctor()
     rc = -ENOMEM;
     goto fail_dlf;
   }
+#endif
 
   if( (rc = ci_contig_shmbuf_alloc(&efab_tcp_driver.shmbuf,
                                    sizeof(struct oo_timesync))) < 0 )
@@ -5518,8 +5522,10 @@ efab_tcp_driver_ctor()
 fail_timesync:
   ci_shmbuf_free(&efab_tcp_driver.shmbuf);
 fail_shmbuf:
+#if CI_CFG_HANDLE_ICMP
   efx_dlfilter_dtor(efab_tcp_driver.dlfilter);
 fail_dlf:
+#endif
   oo_filter_ns_manager_dtor(&efab_tcp_driver);
 fail_filter_ns_manager:
   thr_table_dtor(&efab_tcp_driver.thr_table);
@@ -5564,7 +5570,9 @@ efab_tcp_driver_dtor(void)
   ci_shmbuf_free(&efab_tcp_driver.shmbuf);
 
   destroy_workqueue(CI_GLOBAL_WORKQUEUE);
+#if CI_CFG_HANDLE_ICMP
   efx_dlfilter_dtor(efab_tcp_driver.dlfilter);
+#endif
   oo_filter_ns_manager_dtor(&efab_tcp_driver);
 
   ci_waitq_dtor(&efab_tcp_driver.stack_list_wq);

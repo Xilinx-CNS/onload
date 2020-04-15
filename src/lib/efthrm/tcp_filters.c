@@ -58,7 +58,9 @@ void oo_hw_filter_init2(struct oo_hw_filter* oofilter,
                         struct tcp_helper_cluster_s* thc)
 {
   int i;
+#if CI_CFG_HANDLE_ICMP
   oofilter->dlfilter_handle = EFX_DLFILTER_HANDLE_BAD;
+#endif
   oofilter->trs = trs;
   oofilter->thc = thc;
   for( i = 0; i < CI_CFG_MAX_HWPORTS; ++i )
