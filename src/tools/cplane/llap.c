@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: Solarflare-Binary */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 
+#include <ci/efhw/common.h>
+
 #include "private.h"
 #include <cplane/cplane.h>
 #include <cplane/ioctl.h>
@@ -490,6 +492,12 @@ void cp_populate_llap_hwports(struct cp_session* s, ci_ifid_t ifindex,
         hwport = CI_HWPORT_ID_BAD;
       }
     }
+
+    /* If this hwport doesn't support Onload, don't propagate it to any LLAP
+     * entries.  This will cause routes over the hwport to appear
+     * unacceleratable. */
+    if( nic_flags & NIC_FLAG_ONLOAD_UNSUPPORTED )
+      continue;
 
     cicp_hwport_mask_t hwports = cp_hwport_make_mask(hwport);
     cicp_rowid_t llap_id = cp_llap_find_row(mib, ifindex);
