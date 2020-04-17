@@ -21,7 +21,7 @@
 
 #define ONLOAD_PRODUCT  "Onload"
 
-#define ONLOAD_COPYRIGHT  "Copyright 2006-2014 Solarflare Communications, 2002-2005 Level 5 Networks"
+#define ONLOAD_COPYRIGHT  "Copyright 2019-present Xilinx, 2006-2019 Solarflare Communications, 2002-2005 Level 5 Networks"
 
 /* Max length of version string used for version skew checking. */
 enum { OO_VER_STR_LEN = 40 };

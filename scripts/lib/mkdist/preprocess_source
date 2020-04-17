@@ -3,7 +3,7 @@
 
 year=$(date '+%Y')
 # Copyright banner for version.h
-banner="Copyright 2006-$year Solarflare Communications, 2002-2005 Level 5 Networks"
+banner="Copyright 2019-$year Xilinx, 2006-2019 Solarflare Communications, 2002-2005 Level 5 Networks"
 
 copy_distfiles() {
   # Grab top-level files.
