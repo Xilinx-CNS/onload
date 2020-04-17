@@ -1167,12 +1167,11 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
     info->wakeup_cpu_core = raw_smp_processor_id();
     info->log_resource_warnings = 0;
   }
-  /* NICs with a ScaleOut AppFlex key claim support for event cut-through
-   * (incorrectly) but not for RX cut-through, so we check for the latter.
-   * Also, Huntington NICs with some firmware versions incorrectly report
-   * that they do not support low latency mode. */
-  if( NI_OPTS(ni).rx_merge_mode || (nic->devtype.variant != 'A' &&
-				    ! (nic->flags & NIC_FLAG_RX_CUT_THROUGH)) ) {
+  /* NICs that do not have the low-latency licensed feature (e.g. those with
+   * a ScaleOut key) claim incorrectly that they support event cut-through.
+   * They report correctly, however, that they do not support RX cut-through,
+   * so we check for this here. */
+  if( NI_OPTS(ni).rx_merge_mode || ! (nic->flags & NIC_FLAG_RX_CUT_THROUGH) ) {
     info->efhw_flags |= HIGH_THROUGHPUT_EFHW_VI_FLAGS;
     info->ef_vi_flags |= EF_VI_RX_EVENT_MERGE;
   }

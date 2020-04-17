@@ -643,18 +643,22 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
 			MC_CMD_GET_CAPABILITIES_V3_OUT_EVENT_CUT_THROUGH_LBN)) {
 			*capability_flags |= NIC_FLAG_EVENT_CUT_THROUGH;
 		}
+		/* Huntington NICs with some firmware versions incorrectly
+		 * report that they do not support RX cut-through. */
 		if (flags & (1u <<
-			MC_CMD_GET_CAPABILITIES_V3_OUT_RX_CUT_THROUGH_LBN)) {
+			MC_CMD_GET_CAPABILITIES_V3_OUT_RX_CUT_THROUGH_LBN) ||
+		    nic->devtype.variant == 'A' ) {
 			*capability_flags |= NIC_FLAG_RX_CUT_THROUGH;
-	}
+		}
         }
 	else {
-		/* We hard code this value, as lack of support for get caps V2
-		 * implies we're on Torino.
+		/* We hard code these values, as lack of support for get caps
+		 * V2 implies we're on Torino.
 		 */
 		EFHW_ASSERT( nic->devtype.variant == 'A' );
 		nic->pio_num = 16;
 		nic->pio_size = 2048;
+		*capability_flags |= NIC_FLAG_RX_CUT_THROUGH;
 	}
 
 	if (out_size >= MC_CMD_GET_CAPABILITIES_V3_OUT_LEN) {
