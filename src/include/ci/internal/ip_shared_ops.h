@@ -49,7 +49,12 @@ extern void ci_netif_unlock(ci_netif*) CI_HF;
  * called at userlevel, this is the only possible outcome.  In the kernel,
  * they return -EINTR if interrupted by a signal.
  */
+#if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
 #define ci_netif_lock(ni)        ef_eplock_lock(ni)
+#else
+ci_inline int ci_netif_lock(ci_netif* ni) { BUG(); return 0; }
+#endif
+
 #ifdef __KERNEL__
 #define ci_netif_lock_maybe_wedged(ni) ef_eplock_lock_maybe_wedged(ni)
 #endif
