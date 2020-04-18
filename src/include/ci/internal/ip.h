@@ -473,7 +473,12 @@ extern int  ci_netif_poll_intf_future(ci_netif*, int intf_i, ci_uint64 now_frc)
   CI_HF;
 #endif
 extern int  ci_netif_poll_n(ci_netif*, int max_evs) CI_HF;
+#if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
 #define     ci_netif_poll(ni)  ci_netif_poll_n((ni), NI_OPTS(ni).evs_per_poll)
+#else
+ci_inline int ci_netif_poll(ci_netif* ni) { BUG(); return 0; }
+#endif
+
 #if CI_CFG_WANT_BPF_NATIVE
 #ifdef __KERNEL__
 /* in-kernel backend for ci_netif_evq_poll_k */
