@@ -493,7 +493,7 @@ int oo_driverlink_register(void)
   if (rc != 0)
     goto fail2;
 
-#ifndef EFRM_HAVE_NF_NET_HOOK
+#if CI_CFG_HANDLE_ICMP && ! defined(EFRM_HAVE_NF_NET_HOOK)
   if( (rc = nf_register_hook(&oo_netfilter_ip_hook)) < 0 )
     goto fail4;
 #if CI_CFG_IPV6
@@ -504,7 +504,7 @@ int oo_driverlink_register(void)
 
   return 0;
 
-#ifndef EFRM_HAVE_NF_NET_HOOK
+#if CI_CFG_HANDLE_ICMP && ! defined(EFRM_HAVE_NF_NET_HOOK)
 #if CI_CFG_IPV6
   fail5:
    nf_unregister_hook(&oo_netfilter_ip_hook);
@@ -522,7 +522,7 @@ int oo_driverlink_register(void)
 
 void oo_driverlink_unregister(void)
 {
-#ifndef EFRM_HAVE_NF_NET_HOOK
+#if CI_CFG_HANDLE_ICMP && ! defined(EFRM_HAVE_NF_NET_HOOK)
   nf_unregister_hook(&oo_netfilter_ip_hook);
 #if CI_CFG_IPV6
   nf_unregister_hook(&oo_netfilter_ip6_hook);
