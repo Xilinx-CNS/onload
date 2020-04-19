@@ -212,7 +212,7 @@ again:
                         ep_aflags & ~ OO_THR_EP_AFLAG_CLEAR_FILTERS) )
         goto again;
       /* we have stolen the flag, clearing the filters */
-      tcp_helper_endpoint_clear_filters(ep, 0, 0);
+      tcp_helper_endpoint_clear_filters(ep, 0);
       return 0;
     }
     /* Looks we clashed with the tcp_helper_do_non_atomic() while it is running,
@@ -391,7 +391,9 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
        * However, as we are afraid that endpoint is compromised we
        * return error to prevent its use. */
       tcp_helper_endpoint_clear_filters
-        (ep, ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT, 0);
+        (ep,
+         (ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT) ?
+            EP_CLEAR_FILTERS_FLAG_SUPRESS_HW : 0);
       return -EALREADY;
     }
     oof_socket_del(oo_filter_ns_to_manager(ep->thr->filter_ns), &ep->oofilter);
@@ -459,26 +461,26 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
  * Clear all filters for an endpoint
  *
  * \param ep              endpoint kernel data structure
- * \param supress_hw_ops  set to 1 if you know you are in a context 
- *                        where hw ops are not safe
- * \param need_update     whether the filter details need update before clear
+ * \param flags           see EP_CLEAR_FILTERS_FLAG_*
  *
  * \return                standard error codes
  *
  *--------------------------------------------------------------------*/
 
 int
-tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep, 
-                                  int supress_hw_ops, int need_update)
+tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
+                                  int flags)
 {
   struct file* os_sock_ref;
   ci_sock_cmn* s = SP_TO_SOCK(&ep->thr->netif, ep->id);
   int rc = 0;
 
-  OO_DEBUG_TCPH(ci_log("%s: [%d:%d] %s %s", __FUNCTION__, ep->thr->id,
-                       OO_SP_FMT(ep->id), 
-                       in_atomic() ? "ATOMIC":"",
-                       supress_hw_ops ? "SUPRESS_HW":""));
+  OO_DEBUG_TCPH(
+    ci_log("%s: [%d:%d] %s%s%s", __FUNCTION__, ep->thr->id, OO_SP_FMT(ep->id),
+           in_atomic() ? "ATOMIC":"",
+           flags & EP_CLEAR_FILTERS_FLAG_SUPRESS_HW ? " SUPRESS_HW":"",
+           flags & EP_CLEAR_FILTERS_FLAG_NEED_UPDATE ? " NEED_UPDATE":"")
+  );
 
   /* Sockets have either FILTER or MAC_FILTER with exception of
    * scalable SO_REUSEPORT listen sockets, which can have both */
@@ -488,12 +490,13 @@ tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
                  (s->s_flags & CI_SOCK_FLAG_STACK_FILTER) == 0);
 
 #if CI_CFG_FD_CACHING
-  if( need_update && !(s->s_flags & CI_SOCK_FLAGS_SCALABLE) )
+  if( (flags & EP_CLEAR_FILTERS_FLAG_NEED_UPDATE) &&
+      !(s->s_flags & CI_SOCK_FLAGS_SCALABLE) )
     tcp_helper_endpoint_update_filter_details(ep);
 #endif
 
   if( in_atomic() ) {
-    ci_assert( supress_hw_ops );
+    ci_assert_flags(flags, EP_CLEAR_FILTERS_FLAG_SUPRESS_HW);
   }
 
   if( (s->s_flags & (CI_SOCK_FLAGS_SCALABLE | CI_SOCK_FLAG_STACK_FILTER)) != 0 ) {
@@ -511,7 +514,7 @@ tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
      * (for SW filter) as well as FILTER flag for dummy cluster oof
      * filter. */
   }
-  if( supress_hw_ops ) {
+  if( flags & EP_CLEAR_FILTERS_FLAG_SUPRESS_HW ) {
     /* Remove software filters immediately to ensure packets are not
      * delivered to this endpoint.  Defer oof_socket_del() if needed
      * to non-atomic context.
@@ -629,7 +632,7 @@ void
 tcp_helper_endpoint_move_filters_post(tcp_helper_endpoint_t* ep_from,
                                       tcp_helper_endpoint_t* ep_to)
 {
-  tcp_helper_endpoint_clear_filters(ep_from, 0, 0);
+  tcp_helper_endpoint_clear_filters(ep_from, 0);
 }
 
 /* Move filters from one endpoint to another: undo the actions from pre().
@@ -651,7 +654,7 @@ tcp_helper_endpoint_move_filters_undo(tcp_helper_endpoint_t* ep_from,
       fput(old_ref);
   }
 
-  tcp_helper_endpoint_clear_filters(ep_to, 0, 0);
+  tcp_helper_endpoint_clear_filters(ep_to, 0);
 }
 
 void
@@ -727,7 +730,8 @@ tcp_helper_endpoint_shutdown(tcp_helper_resource_t* thr, oo_sp ep_id,
   /* Calling shutdown on the socket unbinds it in most situations.
    * Since we must never have a filter configured for an unbound
    * socket, we clear the filters here. */
-  tcp_helper_endpoint_clear_filters(ep, supress_hw_ops, 0);
+  tcp_helper_endpoint_clear_filters(
+                ep, supress_hw_ops ? EP_CLEAR_FILTERS_FLAG_SUPRESS_HW : 0);
   /* Filter flags should have been cleared by
    * tcp_helper_endpoint_clear_filters.
    */

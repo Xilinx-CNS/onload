@@ -110,9 +110,13 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
  *
  *--------------------------------------------------------------------*/
 
+/* whether the filter details need update before clear */
+#define EP_CLEAR_FILTERS_FLAG_NEED_UPDATE   1
+/* We are in a context where hw ops are not safe */
+#define EP_CLEAR_FILTERS_FLAG_SUPRESS_HW    2
 extern int
-tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep, 
-                                  int supress_hw_ops, int need_update);
+tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
+                                  int flags);
 
 extern int
 tcp_helper_endpoint_move_filters_pre(tcp_helper_endpoint_t* ep_from,

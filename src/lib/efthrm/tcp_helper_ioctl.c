@@ -635,7 +635,8 @@ efab_ep_filter_clear(ci_private_t *priv, void *arg)
   int rc = efab_ioctl_get_ep(priv, op->tcp_id, &ep);
   if (rc != 0)
     return rc;
-  return tcp_helper_endpoint_clear_filters(ep, 0, op->need_update);
+  return tcp_helper_endpoint_clear_filters(
+            ep, op->need_update ? EP_CLEAR_FILTERS_FLAG_NEED_UPDATE : 0);
 }
 static int
 efab_ep_filter_mcast_add(ci_private_t *priv, void *arg)

@@ -286,8 +286,10 @@ ci_tcp_ep_clear_filters(ci_netif*         ni,
   ci_assert(ci_netif_is_locked(ni));
 
 #ifdef __ci_driver__
-  rc = tcp_helper_endpoint_clear_filters(ci_netif_get_valid_ep(ni, sock_id),
-                                         supress_hw_ops, need_update);
+  rc = tcp_helper_endpoint_clear_filters(
+                    ci_netif_get_valid_ep(ni, sock_id),
+                    (supress_hw_ops ? EP_CLEAR_FILTERS_FLAG_SUPRESS_HW : 0) |
+                    (need_update ? EP_CLEAR_FILTERS_FLAG_NEED_UPDATE : 0));
 #else
   if( (SP_TO_SOCK(ni, sock_id)->s_flags & CI_SOCK_FLAG_STACK_FILTER) &&
       ci_tcp_can_set_filter_in_ul(ni, SP_TO_SOCK(ni, sock_id)) ) {

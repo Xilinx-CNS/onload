@@ -2660,10 +2660,10 @@ static void tcp_helper_do_non_atomic(struct work_struct *data)
     OO_DEBUG_TCPH(ci_log("%s: [%u:%d] aflags=%x", __FUNCTION__, trs->id,
                          OO_SP_FMT(ep->id), ep_aflags));
     if( ep_aflags & OO_THR_EP_AFLAG_CLEAR_FILTERS )
-      tcp_helper_endpoint_clear_filters(ep, 0, 0);
+      tcp_helper_endpoint_clear_filters(ep, 0);
     if( ep_aflags & OO_THR_EP_AFLAG_NEED_FREE ) {
       /* make sure that the filters are released: */
-      tcp_helper_endpoint_clear_filters(ep, 0, 0);
+      tcp_helper_endpoint_clear_filters(ep, 0);
       citp_waitable_obj_free_nnl(&trs->netif,
                                  SP_TO_WAITABLE(&trs->netif, ep->id));
     }
