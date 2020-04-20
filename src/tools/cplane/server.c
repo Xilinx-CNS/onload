@@ -349,7 +349,6 @@ cp_session_init_memory(struct cp_session* s, struct cp_tables_dim* m,
     return -ENOMEM;
 
   CHECK_CALLOC(s->llap_priv, m->llap_max);
-  CHECK_CALLOC(s->hwport_flags_trusted, m->hwport_max);
   CHECK_CALLOC(s->bond, cfg_bond_max);
   CHECK_CALLOC(s->mac, s->mac_mask + 1);
   CHECK_CALLOC(s->ip6_mac, s->mac_mask + 1);

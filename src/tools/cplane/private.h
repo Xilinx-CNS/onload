@@ -554,11 +554,6 @@ struct cp_session {
   struct cp_route_table* rt_table[ROUTE_TABLE_HASH_SIZE];
   struct cp_route_table* rt6_table[ROUTE_TABLE_HASH_SIZE];
 
-  /* Trusted copies of hwport flags.  These flags indicate licensing state, and
-   * the hwport mib is exposed to clients, so we use these trusted values to
-   * check that no-one is trying any funny business. */
-  cp_hwport_flags_t* hwport_flags_trusted;
-
 #define CICP_LLAP_TYPE_CHILD (CICP_LLAP_TYPE_MACVLAN | \
                               CICP_LLAP_TYPE_IPVLAN  | \
                               CICP_LLAP_TYPE_VLAN)
