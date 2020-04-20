@@ -191,7 +191,7 @@ void citp_waitable_obj_free(ci_netif* ni, citp_waitable* w)
 {
   ci_assert(ci_netif_is_locked(ni));
 
-#ifdef __KERNEL__
+#if OO_HAS_ATOMIC_CONTEXT
   {
     /* Avoid racing with tcp_helper_do_non_atomic(). */
     tcp_helper_endpoint_t* ep = ci_netif_get_valid_ep(ni, w->bufid);

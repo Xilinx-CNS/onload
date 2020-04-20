@@ -177,9 +177,11 @@ tcp_helper_endpoint_shutdown(tcp_helper_resource_t*, oo_sp, int how,
 extern void
 tcp_helper_endpoint_wakeup(tcp_helper_resource_t*, tcp_helper_endpoint_t*);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 extern void
 tcp_helper_endpoint_queue_non_atomic(tcp_helper_endpoint_t* ep,
                                      unsigned ep_aflag);
+#endif
 
 
 /*

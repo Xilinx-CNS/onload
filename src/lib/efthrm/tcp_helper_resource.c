@@ -2568,6 +2568,7 @@ ci_inline void efab_notify_stacklist_change(tcp_helper_resource_t *thr)
 }
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static int tcp_helper_reprime_is_needed(ci_netif* ni)
 {
   ci_assert_equal( NI_OPTS(ni).int_driven, 0);
@@ -2615,7 +2616,6 @@ tcp_helper_defer_dl2work(tcp_helper_resource_t* trs, ci_uint32 flag)
   queue_work(trs->wq, &trs->non_atomic_work);
 }
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void
 oo_inject_packets_kernel_force(ci_netif* ni)
 {
@@ -2625,7 +2625,6 @@ oo_inject_packets_kernel_force(ci_netif* ni)
   ef_eplock_holder_set_flag(&ni->state->lock,
                             CI_EPLOCK_NETIF_KERNEL_PACKETS);
 }
-#endif
 
 
 static void tcp_helper_do_non_atomic(struct work_struct *data)
@@ -2722,13 +2721,11 @@ static void tcp_helper_do_non_atomic(struct work_struct *data)
         CITP_STATS_NETIF_INC(&trs->netif, interrupt_primes);
       }
     }
-#if ! CI_CFG_UL_INTERRUPT_HELPER
     if( trs_aflags & OO_THR_AFLAG_CLOSE_ENDPOINTS ) {
       OO_DEBUG_TCPH(ci_log("%s: [%u] deferred CLOSE_ENDPOINTS",
                            __FUNCTION__, trs->id));
       tcp_helper_close_pending_endpoints(trs);
     }
-#endif
 
     efab_tcp_helper_netif_unlock(trs, 0);
   }
@@ -2752,6 +2749,7 @@ void tcp_helper_endpoint_queue_non_atomic(tcp_helper_endpoint_t* ep,
   }
   ci_irqlock_unlock(&ep->thr->lock, &lock_flags);
 }
+#endif
 
 /* Woritem routine to handle postponed stack destruction.
  * Should be run in global workqueue only, not in the stack workqueue
@@ -3731,13 +3729,15 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 
   /* Initialise work items.
    * Some of them are used in reset handler and in error path. */
-  INIT_WORK(&rs->non_atomic_work, tcp_helper_do_non_atomic);
   INIT_WORK(&rs->work_item_dtor, tcp_helper_destroy_work);
 #if CI_CFG_NIC_RESET_SUPPORT
   INIT_DELAYED_WORK(&rs->purge_txq_work, tcp_helper_purge_txq_work);
   INIT_WORK(&rs->reset_work, tcp_helper_reset_stack_work);
 #endif
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+  INIT_WORK(&rs->non_atomic_work, tcp_helper_do_non_atomic);
   ci_sllist_init(&rs->non_atomic_list);
+#endif
   ci_sllist_init(&rs->ep_tobe_closed);
   ci_irqlock_ctor(&rs->lock);
   init_completion(&rs->complete);
@@ -3756,6 +3756,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   get_user_ns(rs->user_ns);
 #endif
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   rs->periodic_timer_cpu = NI_OPTS(ni).periodic_timer_cpu;
 
   /* "onload-wq:pretty_name workqueue for non-atomic works */
@@ -3778,6 +3779,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     rc = -ENOMEM;
     goto fail5;
   }
+#endif
 
 #if CI_CFG_NIC_RESET_SUPPORT
   /* "onload-wq-reset:pretty_name workqueue for handling resets */
@@ -3796,6 +3798,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   }
 #endif
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* "onload-wq-periodic:pretty_name" workqueue for handling periodic polling
    * and TXQ purging.
    */
@@ -3820,6 +3823,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     rc = - ENOMEM;
     goto fail5b;
   }
+#endif
 
   /* Ready for possible reset: after workqueue is ready, but before any hw
    * resources are allocated. */
@@ -4065,16 +4069,18 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   /* tcp_helper_stop_periodic_work() has the side-effect of flushing the
    * workqueue. */
   tcp_helper_stop_periodic_work(rs);
-#endif
 
   destroy_workqueue(rs->periodic_wq);
  fail5b:
+#endif
 #if CI_CFG_NIC_RESET_SUPPORT
   destroy_workqueue(rs->reset_wq);
  fail5a:
 #endif
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   destroy_workqueue(rs->wq);
  fail5:
+#endif
 #ifdef EFRM_DO_USER_NS
   put_user_ns(rs->user_ns);
 #endif
@@ -4184,6 +4190,7 @@ static void thr_reset_stack_tx_cb(ef_request_id id, void* arg)
 }
 #endif
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /* All delayed work is now run on the periodic workqueue. */
 static inline int thr_queue_delayed_work(tcp_helper_resource_t* thr,
                                          struct delayed_work *dwork,
@@ -4199,6 +4206,7 @@ static inline int thr_queue_delayed_work(tcp_helper_resource_t* thr,
   else
     return queue_delayed_work(thr->periodic_wq, dwork, delay);
 }
+#endif
 
 #if CI_CFG_NIC_RESET_SUPPORT
 #define TXQ_PURGE_PERIOD (HZ / 10)
@@ -4994,6 +5002,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
                                   OO_TRUSTED_LOCK_AWAITING_FREE));
 
   netif = &trs->netif;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   if( netif->flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
     /* It is extremely bad idea to flush workqueue from the driverlink
      * context blocking napi thread, even if it is non-atomic. */
@@ -5003,6 +5012,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
   ci_assert(!in_atomic());
   /* Make sure all postponed actions are done and endpoints freed */
   flush_workqueue(trs->wq);
+#endif
 
 
   OO_DEBUG_TCPH(ci_log("%s [%u]: starting", __FUNCTION__, trs->id));
@@ -5260,9 +5270,11 @@ tcp_helper_stop(tcp_helper_resource_t* trs)
     efrm_eventq_kill_callback(trs->nic[intf_i].thn_vi_rs);
   }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* stop postponed packet allocations: we are the only thread using this
    * thr, so nobody can scedule anything new */
   flush_workqueue(trs->wq);
+#endif
 #if CI_CFG_NIC_RESET_SUPPORT
   efab_tcp_helper_flush_reset_wq(trs);
 #endif
@@ -5369,11 +5381,15 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
   release_netif_hw_resources(trs);
   release_netif_resources(trs);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   destroy_workqueue(trs->wq);
+#endif
 #if CI_CFG_NIC_RESET_SUPPORT
   destroy_workqueue(trs->reset_wq);
 #endif
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   destroy_workqueue(trs->periodic_wq);
+#endif
 
   while( trs->usermem ) {
     struct tcp_helper_usermem* next = trs->usermem->next;

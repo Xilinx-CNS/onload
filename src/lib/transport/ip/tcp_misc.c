@@ -825,11 +825,14 @@ void ci_tcp_drop(ci_netif* netif, ci_tcp_state* ts, int so_error)
 #ifdef __KERNEL__
     /* If the filters have not gone yet, we should not free the endpoint. */
     __ci_tcp_state_free(netif, ts);
+#if OO_HAS_ATOMIC_CONTEXT
     if( rc == -EAGAIN ) {
       tcp_helper_endpoint_t* ep = ci_netif_get_valid_ep(netif,  S_SP(ts));
       tcp_helper_endpoint_queue_non_atomic(ep, OO_THR_EP_AFLAG_NEED_FREE);
     }
-    else {
+    else
+#endif
+    {
       ci_assert_equal(rc, 0);
       citp_waitable_obj_free(netif, &ts->s.b);
     }

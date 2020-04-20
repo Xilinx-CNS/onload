@@ -228,6 +228,7 @@ typedef struct tcp_helper_resource_s {
   struct work_struct work_item_dtor;
   struct completion complete;
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* For pinning periodic work */
   int periodic_timer_cpu;
 
@@ -254,6 +255,7 @@ typedef struct tcp_helper_resource_s {
 #define ONLOAD_PERIODIC_WQ_NAME_BASELEN 20
   char periodic_wq_name[ONLOAD_PERIODIC_WQ_NAME_BASELEN + ONLOAD_PRETTY_NAME_MAXLEN];
   struct workqueue_struct *periodic_wq;
+#endif
 
 #ifdef CONFIG_NAMESPACES
 #ifdef ERFM_HAVE_NEW_KALLSYMS
@@ -474,7 +476,9 @@ struct tcp_helper_endpoint_s {
   /*! Atomic endpoint flags not visible for UL. */
   volatile ci_uint32 ep_aflags;
 #define OO_THR_EP_AFLAG_PEER_CLOSED    0x2  /* Used for pipe */
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 #define OO_THR_EP_AFLAG_NON_ATOMIC     0x4  /* On the non-atomic list */
+#endif
 #define OO_THR_EP_AFLAG_CLEAR_FILTERS  0x8  /* Needs filters clearing */
 #define OO_THR_EP_AFLAG_NEED_FREE      0x10 /* Endpoint to be freed */
 #define OO_THR_EP_AFLAG_OS_NOTIFIER    0x20 /* Pollwait registration for os */

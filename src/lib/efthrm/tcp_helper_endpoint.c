@@ -193,6 +193,7 @@ tcp_helper_endpoint_reuseaddr_cleanup(ci_netif* ni, ci_sock_cmn* s)
 static int
 tcp_helper_flush_clear_filters(tcp_helper_endpoint_t* ep)
 {
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* Avoid racing with tcp_helper_do_non_atomic(). */
   unsigned ep_aflags;
   ci_assert( ci_netif_is_locked(&ep->thr->netif) );
@@ -220,6 +221,7 @@ again:
     flush_work(&ep->thr->non_atomic_work);
     ci_assert(!(ep->ep_aflags & OO_THR_EP_AFLAG_NON_ATOMIC));
   }
+#endif
   return 0;
 }
 
@@ -514,6 +516,7 @@ tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
      * (for SW filter) as well as FILTER flag for dummy cluster oof
      * filter. */
   }
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   if( flags & EP_CLEAR_FILTERS_FLAG_SUPRESS_HW ) {
     /* Remove software filters immediately to ensure packets are not
      * delivered to this endpoint.  Defer oof_socket_del() if needed
@@ -534,7 +537,9 @@ tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
         fput(os_sock_ref);
     }
   }
-  else {
+  else
+#endif
+  {
     oof_socket_del(oo_filter_ns_to_manager(ep->thr->filter_ns), &ep->oofilter);
     oof_socket_mcast_del_all(oo_filter_ns_to_manager(ep->thr->filter_ns),
                              &ep->oofilter);

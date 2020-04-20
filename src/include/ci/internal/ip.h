@@ -33,6 +33,12 @@
 #include <ci/tools.h>
 #include <ci/tools/istack.h>
 
+#if defined(__KERNEL__) && ! CI_CFG_UL_INTERRUPT_HELPER
+#define OO_HAS_ATOMIC_CONTEXT 1
+#else
+#define OO_HAS_ATOMIC_CONTEXT 0
+#endif
+
 #ifdef __KERNEL__
 # include <onload/shmbuf.h>
 # include <onload/iobufset.h>
