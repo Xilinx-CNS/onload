@@ -888,7 +888,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
     logger(log_arg, "  namespace=net:[%u]", ni->state->netns_id);
   }
   logger(log_arg, "  %s %s uid=%d pid=%d ns_flags=%x %s %s %s %s",
-         ONLOAD_PRODUCT, ONLOAD_VERSION
+         ni->cplane->mib->sku->value, ONLOAD_VERSION
       , (int) ns->uuid, (int) ns->pid
       , ns->flags
       , (ns->flags & CI_NETIF_FLAG_ONLOAD_UNSUPPORTED)

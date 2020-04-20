@@ -402,7 +402,7 @@ static void dump_current_namespace(uint32_t which)
 
   cplane_ioctl(fd, OO_IOC_GET_CPU_KHZ, &khz);
 
-  printf("%s %s\n", ONLOAD_PRODUCT, ONLOAD_VERSION);
+  printf("%s %s\n", cp.mib[0].sku->value, ONLOAD_VERSION);
 
   printf("Table version number: %d\n", *(cp.mib[0].version));
   printf("LLAP version number: %d\n", *(cp.mib[0].llap_version));

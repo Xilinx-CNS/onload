@@ -326,6 +326,7 @@ cp_session_init_memory(struct cp_session* s, struct cp_tables_dim* m,
       cicp_ip6if_row_free(&mib->ip6if[id]);
     for( id = 0; id < mib->dim->llap_max; id++ )
       cicp_llap_row_free(&mib->llap[id]);
+    snprintf(mib->sku->value, sizeof(mib->sku->value), "%s", ONLOAD_PRODUCT);
   }
   ci_wmb();
 

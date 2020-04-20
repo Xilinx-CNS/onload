@@ -83,6 +83,8 @@ static const struct cp_mib_region cp_mib_regions[] = {
   SB_MEMBER(cp_version_t, idle_version),
   SB_MEMBER(cp_version_t, oof_version),
 
+  DB_MEMBER(cp_string_t, sku),
+
   DB_MEMBER(cp_version_t, llap_version),
   DB_TABLE(struct cp_hwport_row, hwport, hwport_max),
   DB_TABLE(cicp_llap_row_t, llap, llap_max),

@@ -699,6 +699,9 @@ struct cp_mibs {
   /* Version exposed to oof subsystem. */
   cp_version_t* oof_version;
 
+  /* Branding string. */
+  cp_string_t* sku;
+
   struct cp_hwport_row* hwport;
   cicp_llap_row_t* llap;
   cicp_ipif_row_t* ipif;

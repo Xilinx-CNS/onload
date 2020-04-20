@@ -10,6 +10,8 @@ void cp_mibs_verify_identical(struct cp_session* s, bool llap_only)
 {
   int i, j;
   ci_assert_equal(*s->mib[0].llap_version, *s->mib[1].llap_version);
+  ci_assert_equal(strncmp(s->mib[0].sku->value, s->mib[1].sku->value,
+                          sizeof(s->mib[0].sku->value)), 0);
   for( i = 0; i < s->mib[0].dim->hwport_max; i++ ) {
     struct cp_hwport_row* a = &s->mib[0].hwport[i];
     struct cp_hwport_row* b = &s->mib[1].hwport[i];
