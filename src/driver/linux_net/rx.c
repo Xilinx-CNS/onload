@@ -24,26 +24,18 @@
 #ifdef EFX_NOT_UPSTREAM
 #include <net/ipv6.h>
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
-#include <net/xdp.h>
-#endif
 #include "net_driver.h"
 #include "efx.h"
 #include "rx_common.h"
 #include "filter.h"
 #include "nic.h"
+#include "xdp.h"
 #include "selftest.h"
 #include "workarounds.h"
 #ifdef CONFIG_SFC_TRACING
 #include <trace/events/sfc.h>
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_TRACE)
-#include <trace/events/xdp.h>
-#endif
 #include "mcdi_pcol.h"
-
-/* Maximum rx prefix used by any architecture. */
-#define EFX_MAX_RX_PREFIX_SIZE 16
 
 #ifdef EFX_NOT_UPSTREAM
 static bool underreport_skb_truesize;
@@ -163,11 +155,12 @@ static void efx_rx_packet__check_len(struct efx_rx_queue *rx_queue,
 static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 				     struct efx_rx_buffer **_rx_buf,
 				     unsigned int n_frags,
-				     u8 *eh, int hdr_len)
+				     u8 **ehp, int hdr_len)
 {
 	struct efx_rx_buffer *rx_buf = *_rx_buf;
 	struct efx_nic *efx = channel->efx;
 	struct sk_buff *skb = NULL;
+	u8 *new_eh;
 
 	/* Allocate an SKB to store the headers */
 	skb = netdev_alloc_skb(efx->net_dev,
@@ -180,9 +173,10 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 
 	EFX_WARN_ON_ONCE_PARANOID(rx_buf->len < hdr_len);
 
-	memcpy(skb->data + efx->rx_ip_align, eh - efx->rx_prefix_size,
+	memcpy(skb->data + efx->rx_ip_align, *ehp - efx->rx_prefix_size,
 	       efx->rx_prefix_size + hdr_len);
 	skb_reserve(skb, efx->rx_ip_align + efx->rx_prefix_size);
+	new_eh = skb->data;
 	__skb_put(skb, hdr_len);
 
 	/* Append the remaining page(s) onto the frag list */
@@ -217,6 +211,7 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 			*_rx_buf = NULL;
 		}
 #endif
+		*ehp = new_eh;
 		rx_buf->page = NULL;
 		n_frags = 0;
 	}
@@ -325,14 +320,15 @@ static void efx_rx_deliver(struct efx_channel *channel, u8 *eh,
 			   struct efx_rx_buffer *rx_buf,
 			   unsigned int n_frags)
 {
-	struct sk_buff *skb;
 	u16 hdr_len = min_t(u16, rx_buf->len, rx_cb_size);
-	u16 rx_buf_flags = rx_buf->flags;
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
 	u16 rx_buf_vlan_tci = rx_buf->vlan_tci;
 #endif
+	u16 rx_buf_flags = rx_buf->flags;
+	struct sk_buff *skb;
 
-	skb = efx_rx_mk_skb(channel, &rx_buf, n_frags, eh, hdr_len);
+	skb = efx_rx_mk_skb(channel, &rx_buf, n_frags, &eh, hdr_len);
+
 	if (unlikely(skb == NULL)) {
 		struct efx_rx_queue *rx_queue;
 
@@ -396,144 +392,6 @@ static void efx_rx_deliver(struct efx_channel *channel, u8 *eh,
 		netif_receive_skb(skb);
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
-/** efx_do_xdp: perform XDP processing on a received packet
- *
- * Returns true if packet should still be delivered.
- */
-static bool efx_do_xdp(struct efx_nic *efx, struct efx_channel *channel,
-		       struct efx_rx_buffer *rx_buf, u8 **ehp)
-{
-	u8 rx_prefix[EFX_MAX_RX_PREFIX_SIZE];
-	struct efx_rx_queue *rx_queue;
-	struct bpf_prog *xdp_prog;
-	struct xdp_frame *xdpf;
-	struct xdp_buff xdp;
-	u32 xdp_act;
-	s16 offset;
-	int rc;
-
-	rcu_read_lock();
-	xdp_prog = rcu_dereference(efx->xdp_prog);
-	if (!xdp_prog) {
-		rcu_read_unlock();
-		return true;
-	}
-
-	rx_queue = efx_channel_get_rx_queue(channel);
-
-	if (unlikely(channel->rx_pkt_n_frags > 1)) {
-		/* We can't do XDP on fragmented packets - drop. */
-		rcu_read_unlock();
-		efx_free_rx_buffers(rx_queue, rx_buf,
-				    channel->rx_pkt_n_frags);
-		if (net_ratelimit())
-			netif_err(efx, rx_err, efx->net_dev,
-				  "XDP is not possible with multiple receive fragments (%d)\n",
-				  channel->rx_pkt_n_frags);
-		channel->n_rx_xdp_bad_drops++;
-		return false;
-	}
-
-	dma_sync_single_for_cpu(&efx->pci_dev->dev, rx_buf->dma_addr,
-				rx_buf->len, DMA_FROM_DEVICE);
-
-	/* Save the rx prefix. */
-	EFX_WARN_ON_PARANOID(efx->rx_prefix_size > EFX_MAX_RX_PREFIX_SIZE);
-	memcpy(rx_prefix, *ehp - efx->rx_prefix_size,
-	       efx->rx_prefix_size);
-
-	xdp.data = *ehp;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_HEAD)
-	xdp.data_hard_start = xdp.data - XDP_PACKET_HEADROOM;
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_DATA_META)
-	/* No support yet for XDP metadata */
-	xdp_set_data_meta_invalid(&xdp);
-#endif
-	xdp.data_end = xdp.data + rx_buf->len;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
-	xdp.rxq = &rx_queue->xdp_rxq_info;
-#endif
-
-	xdp_act = bpf_prog_run_xdp(xdp_prog, &xdp);
-	rcu_read_unlock();
-
-	offset = (u8 *)xdp.data - *ehp;
-
-	switch (xdp_act) {
-	case XDP_PASS:
-		/* Fix up rx prefix. */
-		if (offset) {
-			*ehp += offset;
-			rx_buf->page_offset += offset;
-			rx_buf->len -= offset;
-			memcpy(*ehp - efx->rx_prefix_size, rx_prefix,
-			       efx->rx_prefix_size);
-		}
-		break;
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_TX)
-	case XDP_TX:
-		/* Buffer ownership passes to tx on success. */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_FRAME_API)
-		xdpf = convert_to_xdp_frame(&xdp);
-#else
-		xdpf = &xdp;
-#endif
-		rc = efx_xdp_tx_buffers(efx, 1, &xdpf, true);
-		if (rc != 1) {
-			efx_free_rx_buffers(rx_queue, rx_buf, 1);
-			if (net_ratelimit())
-				netif_err(efx, rx_err, efx->net_dev,
-					  "XDP TX failed (%d)\n", rc);
-			channel->n_rx_xdp_bad_drops++;
-		} else {
-			channel->n_rx_xdp_tx++;
-		}
-		break;
-#endif
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)
-	case XDP_REDIRECT:
-		rc = xdp_do_redirect(efx->net_dev, &xdp, xdp_prog);
-		if (rc) {
-			efx_free_rx_buffers(rx_queue, rx_buf, 1);
-			if (net_ratelimit())
-				netif_err(efx, rx_err, efx->net_dev,
-					  "XDP redirect failed (%d)\n", rc);
-			channel->n_rx_xdp_bad_drops++;
-		} else {
-			channel->n_rx_xdp_redirect++;
-		}
-		break;
-#endif
-
-	default:
-		bpf_warn_invalid_xdp_action(xdp_act);
-		/* Fall through */
-	case XDP_ABORTED:
-		trace_xdp_exception(efx->net_dev, xdp_prog, xdp_act);
-		efx_free_rx_buffers(rx_queue, rx_buf, 1);
-		channel->n_rx_xdp_bad_drops++;
-		break;
-
-	case XDP_DROP:
-		efx_free_rx_buffers(rx_queue, rx_buf, 1);
-		channel->n_rx_xdp_drops++;
-		break;
-	}
-
-	return xdp_act == XDP_PASS;
-}
-#else
-static bool efx_do_xdp(struct efx_nic *efx, struct efx_channel *channel,
-		       struct efx_rx_buffer *rx_buf, u8 **ehp)
-{
-	return true;
-}
-#endif
-
 /* Handle a received packet.  Second half: Touches packet payload. */
 void __efx_rx_packet(struct efx_channel *channel)
 {
@@ -565,7 +423,7 @@ void __efx_rx_packet(struct efx_channel *channel)
 		goto out;
 	}
 
-	if (!efx_do_xdp(efx, channel, rx_buf, &eh))
+	if (!efx_xdp_rx(efx, channel, rx_buf, &eh))
 		goto out;
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
@@ -1013,7 +871,7 @@ efx_ssr_merge_page(struct efx_ssr_state *st, struct efx_ssr_conn *c,
 	struct efx_rx_buffer *rx_buf = &c->next_buf;
 	struct efx_channel *channel;
 	size_t rx_prefix_size;
-	char *eh = c->next_eh;
+	u8 *eh = c->next_eh;
 
 	if (likely(c->skb)) {
 		skb_fill_page_desc(c->skb, skb_shinfo(c->skb)->nr_frags,
@@ -1030,7 +888,7 @@ efx_ssr_merge_page(struct efx_ssr_state *st, struct efx_ssr_conn *c,
 	} else {
 		channel = container_of(st, struct efx_channel, ssr);
 
-		c->skb = efx_rx_mk_skb(channel, &rx_buf, 1, eh, hdr_length);
+		c->skb = efx_rx_mk_skb(channel, &rx_buf, 1, &eh, hdr_length);
 		if (unlikely(c->skb == NULL))
 			return 0;
 

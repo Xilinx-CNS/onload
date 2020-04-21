@@ -17,6 +17,7 @@
 #include "mcdi_filters.h"
 #include "mcdi_functions.h"
 #include "efx_common.h"
+#include "efx_channels.h"
 #include "rx_common.h"
 #include "tx_common.h"
 #include "workarounds.h"
@@ -544,98 +545,6 @@ static int efx_ef10_get_mac_address_vf(struct efx_nic *efx, u8 *mac_address)
 }
 #endif
 
-#ifdef EFX_NOT_UPSTREAM
-static ssize_t efx_ef10_show_forward_fcs(struct device *dev,
-					 struct device_attribute *attr,
-					 char *buf)
-{
-	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-	return scnprintf(buf, PAGE_SIZE, "%d\n", efx->forward_fcs);
-#else
-	if (!(efx->net_dev->features & NETIF_F_RXFCS) !=
-	    !(efx->net_dev->features & NETIF_F_RXALL))
-		return scnprintf(buf, PAGE_SIZE, "mixed\n");
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n",
-			 !!(efx->net_dev->features & NETIF_F_RXFCS));
-#endif
-}
-
-static ssize_t efx_ef10_store_forward_fcs(struct device *dev,
-					  struct device_attribute *attr,
-					  const char *buf, size_t count)
-{
-	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-	bool old_forward_fcs = efx->forward_fcs;
-#endif
-
-	if (!strcmp(buf, "1\n"))
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-		efx->forward_fcs = true;
-#else
-		efx->net_dev->wanted_features |= NETIF_F_RXFCS | NETIF_F_RXALL;
-#endif
-	else if (!strcmp(buf, "0\n"))
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-		efx->forward_fcs = false;
-#else
-		efx->net_dev->wanted_features &= ~(NETIF_F_RXFCS | NETIF_F_RXALL);
-#endif
-	else
-		return -EINVAL;
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
-	if (efx->forward_fcs != old_forward_fcs) {
-		mutex_lock(&efx->mac_lock);
-		(void)efx_mac_reconfigure(efx, false);
-		mutex_unlock(&efx->mac_lock);
-	}
-#else
-	/* will call our ndo_set_features to actually make the change */
-	rtnl_lock();
-	netdev_update_features(efx->net_dev);
-	rtnl_unlock();
-#endif
-
-	return count;
-}
-
-static ssize_t efx_ef10_show_physical_port(struct device *dev,
-					   struct device_attribute *attr,
-					   char *buf)
-{
-	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-	return sprintf(buf, "%d\n", efx->port_num);
-}
-#endif
-
-static ssize_t efx_ef10_show_link_control_flag(struct device *dev,
-					       struct device_attribute *attr,
-					       char *buf)
-{
-	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-
-	return sprintf(buf, "%d\n",
-		       ((efx->mcdi->fn_flags) &
-			(1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_LINKCTRL))
-		       ? 1 : 0);
-}
-
-static ssize_t efx_ef10_show_primary_flag(struct device *dev,
-					  struct device_attribute *attr,
-					  char *buf)
-{
-	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-
-	return sprintf(buf, "%d\n",
-		       ((efx->mcdi->fn_flags) &
-			(1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_PRIMARY))
-		       ? 1 : 0);
-}
-
 static struct efx_ef10_vlan *efx_ef10_find_vlan(struct efx_nic *efx, u16 vid)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
@@ -789,316 +698,6 @@ static int efx_vf_parent(struct efx_nic *efx, struct efx_nic **efx_pf)
 }
 #endif
 
-#ifdef EFX_NOT_UPSTREAM
-static DEVICE_ATTR(forward_fcs, 0644, efx_ef10_show_forward_fcs,
-		   efx_ef10_store_forward_fcs);
-static DEVICE_ATTR(physical_port, 0444, efx_ef10_show_physical_port,
-		   NULL);
-#endif
-static DEVICE_ATTR(link_control_flag, 0444, efx_ef10_show_link_control_flag,
-		   NULL);
-static DEVICE_ATTR(primary_flag, 0444, efx_ef10_show_primary_flag,
-		   NULL);
-
-static void efx_ef10__udp_tnl_push_ports(struct work_struct *data);
-
-static int efx_ef10_probe(struct efx_nic *efx)
-{
-	struct efx_ef10_nic_data *nic_data;
-	unsigned int bar_size = efx_ef10_bar_size(efx);
-	int i, rc;
-
-	if (WARN_ON(bar_size == 0))
-		return -EIO;
-
-	nic_data = kzalloc(sizeof(*nic_data), GFP_KERNEL);
-	if (!nic_data)
-		return -ENOMEM;
-	efx->nic_data = nic_data;
-	nic_data->efx = efx;
-
-	/* we assume later that we can copy from this buffer in dwords */
-	BUILD_BUG_ON(MCDI_CTL_SDU_LEN_MAX_V2 % 4);
-
-	/* MCDI buffers must be 256 byte aligned, so pad the first N-1
-	 * buffers and add the last on the end.
-	 */
-	rc = efx_nic_alloc_buffer(efx, &nic_data->mcdi_buf,
-				  ALIGN(MCDI_BUF_LEN, 256) *
-					(EF10_NUM_MCDI_BUFFERS - 1) +
-				  MCDI_BUF_LEN,
-				  GFP_KERNEL);
-	if (rc)
-		goto fail1;
-
-	/* Get the MC's warm boot count.  In case it's rebooting right
-	 * now, be prepared to retry.
-	 */
-	i = 0;
-	for (;;) {
-		rc = efx_ef10_get_warm_boot_count(efx);
-		if (rc >= 0)
-			break;
-		if (++i == 5)
-			goto fail2;
-		ssleep(1);
-	}
-	nic_data->warm_boot_count = rc;
-
-	/* In case we're recovering from a crash (kexec), we want to
-	 * cancel any outstanding request by the previous user of this
-	 * function.  We send a special message using the least
-	 * significant bits of the 'high' (doorbell) register.
-	 */
-	_efx_writed(efx, cpu_to_le32(1), ER_DZ_MC_DB_HWRD);
-
-	rc = efx_mcdi_init(efx);
-	if (rc == -ENODEV)
-		return 0;
-	else if (rc)
-		goto fail2;
-
-	spin_lock_init(&nic_data->udp_tunnels_lock);
-	nic_data->udp_tunnels_busy = false;
-	INIT_WORK(&nic_data->udp_tunnel_work, efx_ef10__udp_tnl_push_ports);
-
-	/* Reset (most) configuration for this function */
-	rc = efx_mcdi_reset(efx, RESET_TYPE_ALL);
-	if (rc)
-		goto fail3;
-
-	/* Enable event logging */
-	rc = efx_mcdi_log_ctrl(efx, true, false, 0);
-	if (rc)
-		goto fail3;
-
-	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_link_control_flag);
-	if (rc)
-		goto fail3;
-
-	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_primary_flag);
-	if (rc)
-		goto fail4;
-
-	rc = efx_get_pf_index(efx, &nic_data->pf_index);
-	if (rc)
-		goto fail5;
-
-	/* License checking on the firmware must finish before we can trust the
-	 * capabilities. Before that some will not be set.
-	 */
-	efx_ef10_read_licensed_features(efx);
-
-	rc = efx_ef10_init_datapath_caps(efx);
-	if (rc < 0)
-		goto fail5;
-
-	efx->tx_queues_per_channel = 1;
-	efx->select_tx_queue = efx_ef10_select_tx_queue;
-#ifdef EFX_USE_OVERLAY_TX_CSUM
-	if (efx_ef10_has_cap(nic_data->datapath_caps, VXLAN_NVGRE) &&
-	    !efx_ef10_is_vf(efx)) {
-		efx->tx_queues_per_channel = 2;
-		efx->select_tx_queue = efx_ef10_select_tx_queue_overlay;
-	}
-#endif
-#ifdef EFX_NOT_UPSTREAM
-	if (tx_non_csum_queue) {
-		efx->tx_queues_per_channel = 2;
-		efx->select_tx_queue = efx_ef10_select_tx_queue_non_csum;
-#ifdef EFX_USE_OVERLAY_TX_CSUM
-		if (efx_ef10_has_cap(nic_data->datapath_caps, VXLAN_NVGRE) &&
-		    !efx_ef10_is_vf(efx)) {
-			efx->tx_queues_per_channel = 3;
-			efx->select_tx_queue =
-				efx_ef10_select_tx_queue_non_csum_overlay;
-		}
-#endif
-	}
-#endif
-
-	/* We can have one VI for each vi_stride-byte region.
-	 * Note we have more TX queues than channels, so TX queues are the
-	 * limit on the number of channels we can have with our VIs.
-	 */
-	efx->max_vis = bar_size / efx->vi_stride;
-	if (!efx->max_vis) {
-		netif_err(efx, drv, efx->net_dev, "error determining max VIs\n");
-		goto fail5;
-	}
-	efx->max_channels = efx->max_tx_channels =
-		min_t(unsigned int,
-		      efx->max_channels,
-		      (bar_size /
-			(efx->vi_stride * efx->tx_queues_per_channel)));
-	if (efx->max_channels == 0) {
-		netif_err(efx, drv, efx->net_dev, "error determining max channels\n");
-		goto fail5;
-	}
-
-	efx->rx_packet_len_offset =
-		ES_DZ_RX_PREFIX_PKTLEN_OFST - ES_DZ_RX_PREFIX_SIZE;
-
-	if (efx_ef10_has_cap(nic_data->datapath_caps, RX_INCLUDE_FCS)) {
-		efx_add_hw_features(efx, NETIF_F_RXFCS);
-#ifdef EFX_NOT_UPSTREAM
-		rc = device_create_file(&efx->pci_dev->dev,
-					&dev_attr_forward_fcs);
-		if (rc)
-			goto fail5;
-#endif
-	}
-
-	rc = efx_mcdi_port_get_number(efx);
-	if (rc < 0)
-		goto fail6;
-	efx->port_num = rc;
-#ifdef EFX_NOT_UPSTREAM
-	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_physical_port);
-	if (rc)
-		goto fail6;
-#endif
-
-	rc = efx->type->get_mac_address(efx, efx->net_dev->perm_addr);
-	if (rc)
-		goto fail7;
-
-	rc = efx_ef10_get_timer_config(efx);
-	if (rc < 0)
-		goto fail7;
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-	/* Get capabilities mask */
-	nic_data->caps = 0;
-	rc = efx_mcdi_get_board_cfg(efx, efx_port_num(efx), NULL, NULL,
-				    &nic_data->caps);
-	if (rc)
-		goto fail7;
-#endif
-	rc = efx_mcdi_mon_probe(efx);
-	if (rc && rc != -EPERM)
-		goto fail7;
-
-#ifdef CONFIG_SFC_SRIOV
-	efx_sriov_init_max_vfs(efx, nic_data->pf_index);
-#endif
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-        if (aoe_enabled(efx->nic_data)) {
-                rc = efx_aoe_attach(efx);
-                if (rc)
-			goto fail7;
-        }
-#endif
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
-	efx_ptp_get_attributes(efx);
-	if (efx_ptp_uses_separate_channel(efx) ||
-	    efx_ptp_use_mac_tx_timestamps(efx))
-#endif
-	efx_ptp_defer_probe_with_channel(efx);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHYSFN)
-#ifdef CONFIG_SFC_SRIOV
-	if ((efx->pci_dev->physfn) && (!efx->pci_dev->is_physfn)) {
-		struct pci_dev *pci_dev_pf = efx->pci_dev->physfn;
-		struct efx_nic *efx_pf = pci_get_drvdata(pci_dev_pf);
-		efx_pf->type->get_mac_address(efx_pf, nic_data->port_id);
-	} else
-#endif
-#endif /* HAVE_PHYSFN */
-		ether_addr_copy(nic_data->port_id, efx->net_dev->perm_addr);
-#endif
-	/* If tx_coalesce_doorbell=Y disable tx_push, we do this here to avoid
-	 * additional checks on the fast path */
-	if (tx_coalesce_doorbell) {
-		netif_info(efx, drv, efx->net_dev,
-			   "Tx push disabled due to tx_coalesce_doorbell=Y\n");
-		tx_push_max_fill=0;
-	}
-
-	INIT_LIST_HEAD(&nic_data->vlan_list);
-	mutex_init(&nic_data->vlan_lock);
-
-	/* Add unspecified VID to support VLAN filtering being disabled */
-	rc = efx_ef10_add_vlan(efx, EFX_FILTER_VID_UNSPEC);
-	if (rc)
-		goto fail_add_vid_unspec;
-
-	/* If VLAN filtering is enabled, we need VID 0 to get untagged
-	 * traffic.  It is added automatically if 8021q module is loaded,
-	 * but we can't rely on it since module may be not loaded.
-	 */
-	rc = efx_ef10_add_vlan(efx, 0);
-	if (rc)
-		goto fail_add_vid_0;
-
-	return 0;
-
-fail_add_vid_0:
-	efx_ef10_cleanup_vlans(efx);
-fail_add_vid_unspec:
-	mutex_destroy(&nic_data->vlan_lock);
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-        if ((aoe_enabled(efx->nic_data)) && efx->aoe_data) {
-                efx_aoe_detach(efx);
-        }
-#endif
-
-fail7:
-	efx_mcdi_mon_remove(efx);
-#ifdef EFX_NOT_UPSTREAM
-	device_remove_file(&efx->pci_dev->dev, &dev_attr_physical_port);
-#endif
-fail6:
-#ifdef EFX_NOT_UPSTREAM
-	if (efx_ef10_has_cap(nic_data->datapath_caps, RX_INCLUDE_FCS))
-		device_remove_file(&efx->pci_dev->dev, &dev_attr_forward_fcs);
-#endif
-fail5:
-	device_remove_file(&efx->pci_dev->dev, &dev_attr_primary_flag);
-fail4:
-	device_remove_file(&efx->pci_dev->dev, &dev_attr_link_control_flag);
-fail3:
-	efx_mcdi_detach(efx);
-
-	efx_mcdi_fini(efx);
-fail2:
-	efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
-fail1:
-	kfree(nic_data);
-	efx->nic_data = NULL;
-	return rc;
-}
-
-static int efx_ef10_probe_pf(struct efx_nic *efx)
-{
-#ifdef EFX_NOT_UPSTREAM
-	unsigned int desired_bandwidth;
-
-	switch (efx->pci_dev->device) {
-	case 0x0923:
-		/* Greenport devices can make use of 8 lanes of Gen3. */
-		desired_bandwidth = EFX_BW_PCIE_GEN3_X8;
-		break;
-	case 0x0a03:
-	case 0x0b03:
-		/* Medford and Medford2 devices want 16 lanes, even though
-		 * not all have that.
-		 * We suppress this optimism in efx_nic_check_pcie_link().
-		 */
-		desired_bandwidth = EFX_BW_PCIE_GEN3_X16;
-		break;
-	default:
-		desired_bandwidth = EFX_BW_PCIE_GEN2_X8;
-	}
-
-	efx_nic_check_pcie_link(efx, desired_bandwidth, NULL, NULL);
-#endif
-	return efx_ef10_probe(efx);
-}
-
 int efx_ef10_vswitch_alloc(struct efx_nic *efx, unsigned int port_id,
 			   unsigned int vswitch_type)
 {
@@ -1122,7 +721,8 @@ int efx_ef10_vswitch_alloc(struct efx_nic *efx, unsigned int port_id,
 				  sizeof(inbuf), NULL, 0, NULL);
 	} else if (rc) {
 		efx_mcdi_display_error(efx, MC_CMD_VSWITCH_ALLOC,
-				       MC_CMD_VSWITCH_ALLOC_IN_LEN, NULL, 0, rc);
+				       MC_CMD_VSWITCH_ALLOC_IN_LEN, NULL, 0,
+				       rc);
 	}
 	return rc;
 }
@@ -1148,9 +748,11 @@ int efx_ef10_vport_alloc(struct efx_nic *efx, u16 vlan, bool vlan_restrict,
 	EFX_WARN_ON_PARANOID(!port_id_out);
 
 	/* we only ever want a single level of vports, so parent is ASSIGNED */
-	MCDI_SET_DWORD(inbuf, VPORT_ALLOC_IN_UPSTREAM_PORT_ID, EVB_PORT_ID_ASSIGNED);
+	MCDI_SET_DWORD(inbuf, VPORT_ALLOC_IN_UPSTREAM_PORT_ID,
+		       EVB_PORT_ID_ASSIGNED);
 	/* we also only ever want NORMAL type, the others are obsolete */
-	MCDI_SET_DWORD(inbuf, VPORT_ALLOC_IN_TYPE, MC_CMD_VPORT_ALLOC_IN_VPORT_TYPE_NORMAL);
+	MCDI_SET_DWORD(inbuf, VPORT_ALLOC_IN_TYPE,
+		       MC_CMD_VPORT_ALLOC_IN_VPORT_TYPE_NORMAL);
 	MCDI_SET_DWORD(inbuf, VPORT_ALLOC_IN_NUM_VLAN_TAGS,
 		       (vlan != EFX_FILTER_VID_UNSPEC));
 	MCDI_POPULATE_DWORD_2(inbuf, VPORT_ALLOC_IN_FLAGS,
@@ -1200,8 +802,7 @@ static void efx_ef10_restore_vports(struct efx_nic *efx)
 					  &vpx->vport_id);
 		if (rc)
 			netif_warn(efx, probe, efx->net_dev,
-				   "failed to restore vport %u, rc=%d"
-				   "; vport filters may fail to be applied\n",
+				   "failed to restore vport %u, rc=%d; vport filters may fail to be applied\n",
 				   vpx->user_id, rc);
 	}
 	nic_data->must_restore_vports = false;
@@ -1221,7 +822,8 @@ int efx_ef10_vadaptor_query(struct efx_nic *efx, unsigned int port_id,
 		MCDI_SET_DWORD(inbuf, VADAPTOR_QUERY_IN_UPSTREAM_PORT_ID,
 			       port_id);
 
-		rc = efx_mcdi_rpc(efx, MC_CMD_VADAPTOR_QUERY, inbuf, sizeof(inbuf),
+		rc = efx_mcdi_rpc(efx, MC_CMD_VADAPTOR_QUERY,
+				  inbuf, sizeof(inbuf),
 				  outbuf, sizeof(outbuf), &outlen);
 		if (rc)
 			return rc;
@@ -1251,8 +853,8 @@ int efx_ef10_vadaptor_alloc(struct efx_nic *efx, unsigned int port_id)
 
 	MCDI_SET_DWORD(inbuf, VADAPTOR_ALLOC_IN_UPSTREAM_PORT_ID, port_id);
 	MCDI_POPULATE_DWORD_1(inbuf, VADAPTOR_ALLOC_IN_FLAGS,
-			      VADAPTOR_ALLOC_IN_FLAG_PERMIT_SET_MAC_WHEN_FILTERS_INSTALLED,
-			      1);
+		VADAPTOR_ALLOC_IN_FLAG_PERMIT_SET_MAC_WHEN_FILTERS_INSTALLED,
+		1);
 	return efx_mcdi_rpc(efx, MC_CMD_VADAPTOR_ALLOC, inbuf, sizeof(inbuf),
 			    NULL, 0, NULL);
 }
@@ -1319,10 +921,10 @@ static void efx_ef10_free_piobufs(struct efx_nic *efx)
 			       nic_data->piobuf_handle[i]);
 		rc = efx_mcdi_rpc(efx, MC_CMD_FREE_PIOBUF, inbuf, sizeof(inbuf),
 				  NULL, 0, NULL);
-		if (unlikely(rc && rc != -ENETDOWN && !efx_ef10_hw_unavailable(efx)))
+		if (unlikely(rc && rc != -ENETDOWN &&
+			     !efx_ef10_hw_unavailable(efx)))
 			netif_warn(efx, probe, efx->net_dev,
-				   "Failed to free PIO buffers: %d\n",
-				   rc);
+				   "Failed to free PIO buffers: %d\n", rc);
 	}
 
 	nic_data->n_piobufs = 0;
@@ -1340,7 +942,7 @@ static int efx_ef10_alloc_piobufs(struct efx_nic *efx, unsigned int n)
 
 	for (i = 0; i < n; i++) {
 		rc = efx_mcdi_rpc_quiet(efx, MC_CMD_ALLOC_PIOBUF, NULL, 0,
-				  outbuf, sizeof(outbuf), &outlen);
+					outbuf, sizeof(outbuf), &outlen);
 		if (rc == -EPERM) {
 			netif_info(efx, probe, efx->net_dev, "no PIO support\n");
 			break;
@@ -1350,7 +952,7 @@ static int efx_ef10_alloc_piobufs(struct efx_nic *efx, unsigned int n)
 			 */
 			if (!(efx_ef10_is_vf(efx) && rc == -ENOSPC))
 				efx_mcdi_display_error(efx, MC_CMD_ALLOC_PIOBUF,
-						0, outbuf, outlen, rc);
+						       0, outbuf, outlen, rc);
 			break;
 		}
 		if (outlen < MC_CMD_ALLOC_PIOBUF_OUT_LEN) {
@@ -1515,156 +1117,9 @@ static void efx_ef10_forget_old_piobufs(struct efx_nic *efx)
 
 #endif /* EFX_USE_PIO */
 
-static void efx_ef10_remove(struct efx_nic *efx)
-{
-	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-#if defined(CONFIG_SFC_SRIOV) && (!defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN)))
-	struct efx_ef10_nic_data *nic_data_pf;
-	struct pci_dev *pci_dev_pf;
-	struct efx_nic *efx_pf;
-	struct ef10_vf *vf;
-#endif
-	int i;
-
-#ifdef EFX_NOT_UPSTREAM
-	if (efx->mcdi->fn_flags &
-	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
-		goto no_active_port;
-#endif
-
-#if defined(CONFIG_SFC_SRIOV) && (!defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN)))
-	if (efx->pci_dev->is_virtfn) {
-		pci_dev_pf = efx->pci_dev->physfn;
-		if (pci_dev_pf) {
-			efx_pf = pci_get_drvdata(pci_dev_pf);
-			nic_data_pf = efx_pf->nic_data;
-			vf = nic_data_pf->vf + nic_data->vf_index;
-			vf->efx = NULL;
-		} else
-			netif_info(efx, drv, efx->net_dev,
-				   "Could not get the PF id from VF\n");
-	}
-#endif
-
-	efx_ef10_cleanup_vlans(efx);
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-	if ((aoe_enabled(nic_data)) && efx->aoe_data) {
-		efx_aoe_detach(efx);
-	}
-#endif
-
-	efx_mcdi_mon_remove(efx);
-
-	efx_mcdi_rx_free_indir_table(efx);
-
-	if (nic_data->wc_membase)
-		iounmap(nic_data->wc_membase);
-
-	(void) efx_mcdi_free_vis(efx);
-
-	if (!nic_data->must_restore_piobufs)
-		efx_ef10_free_piobufs(efx);
-
-#ifdef EFX_NOT_UPSTREAM
-	device_remove_file(&efx->pci_dev->dev, &dev_attr_physical_port);
-
-	if (efx_ef10_has_cap(nic_data->datapath_caps, RX_INCLUDE_FCS))
-		device_remove_file(&efx->pci_dev->dev, &dev_attr_forward_fcs);
-#endif
-
-	device_remove_file(&efx->pci_dev->dev, &dev_attr_primary_flag);
-	device_remove_file(&efx->pci_dev->dev, &dev_attr_link_control_flag);
-
-	cancel_work_sync(&nic_data->udp_tunnel_work);
-
-	/* mark all UDP tunnel ports for remove... */
-	spin_lock_bh(&nic_data->udp_tunnels_lock);
-	/* Since the udp_tunnel_work has been finished, no-one can still be
-	 * busy.
-	 */
-	WARN_ON(nic_data->udp_tunnels_busy);
-	nic_data->udp_tunnels_busy = true;
-	for(i = 0; i < ARRAY_SIZE(nic_data->udp_tunnels); i++)
-		nic_data->udp_tunnels[i].removing = true;
-	/* ... then remove them */
-	efx_ef10_set_udp_tnl_ports(efx, true); /* drops the lock */
-
-#ifdef EFX_NOT_UPSTREAM
-no_active_port:
-#endif
-	efx_mcdi_detach(efx);
-	efx_mcdi_fini(efx);
-	efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
-	kfree(nic_data);
-	efx->nic_data = NULL;
-}
-
-#if defined(CONFIG_SFC_SRIOV)
-static int efx_ef10_probe_vf(struct efx_nic *efx)
-{
-	struct efx_ef10_nic_data *nic_data;
-	struct efx_nic *efx_pf;
-	int rc = efx_vf_parent(efx, &efx_pf);
-
-	/* Fail if the parent is not a Solarflare PF */
-	if (rc)
-		return rc;
-
-	/* If the parent PF has no VF data structure, it doesn't know about this
-	 * VF so fail probe.  The VF needs to be re-created.  This can happen
-	 * if the PF driver is unloaded while the VF is assigned to a guest.
-	 */
-	if (efx_pf) {
-		nic_data = efx_pf->nic_data;
-		if (!nic_data->vf) {
-			netif_info(efx, drv, efx->net_dev,
-				   "The VF cannot link to its parent PF; "
-				   "please destroy and re-create the VF\n");
-			return -EBUSY;
-		}
-	}
-
-	rc = efx_ef10_probe(efx);
-	if (rc)
-		return rc;
-
-	nic_data = efx->nic_data;
-
-	rc = efx_ef10_get_vf_index(efx);
-	if (rc)
-		goto fail;
-
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN))
-	if (efx->pci_dev->is_virtfn) {
-		if (efx->pci_dev->physfn) {
-			struct efx_nic *efx_pf = pci_get_drvdata(efx->pci_dev->physfn);
-			struct efx_ef10_nic_data *nic_data_pf = efx_pf->nic_data;
-
-			nic_data_pf->vf[nic_data->vf_index].efx = efx;
-			nic_data_pf->vf[nic_data->vf_index].pci_dev =
-				efx->pci_dev;
-		} else
-			netif_info(efx, drv, efx->net_dev,
-				   "Could not get the PF id from VF\n");
-	}
-#endif
-
-	INIT_DELAYED_WORK(&nic_data->vf_stats_work,
-			  efx_ef10_vf_update_stats_work);
-
-	return 0;
-
-fail:
-	efx_ef10_remove(efx);
-	return rc;
-}
-#endif /* CONFIG_SFC_SRIOV */
-
 static int efx_ef10_alloc_vis(struct efx_nic *efx,
 			      unsigned int min_vis, unsigned int max_vis)
 {
-
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 
 	return efx_mcdi_alloc_vis(efx, min_vis, max_vis,
@@ -1677,9 +1132,21 @@ static int efx_ef10_alloc_vis(struct efx_nic *efx,
 				  &nic_data->n_allocated_vis);
 }
 
-/* Note that the failure path of this function does not free
- * resources, as this will be done by efx_ef10_remove().
- */
+static void efx_ef10_free_resources(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	efx_mcdi_free_vis(efx);
+
+	if (nic_data->wc_membase) {
+		iounmap(nic_data->wc_membase);
+		nic_data->wc_membase = NULL;
+	}
+
+	if (!nic_data->must_restore_piobufs)
+		efx_ef10_free_piobufs(efx);
+}
+
 static int efx_ef10_dimension_resources(struct efx_nic *efx)
 {
 #ifdef EFX_NOT_UPSTREAM
@@ -1709,8 +1176,7 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 	rx_vis = efx_rx_channels(efx) * rx_vis_per_queue;
 	tx_vis = efx_tx_channels(efx) * efx->tx_queues_per_channel;
 
-	if (efx->xdp_en)
-		tx_vis += efx->n_xdp_channels * efx->xdp_tx_per_channel;
+	tx_vis += efx_xdp_channels(efx) * efx->xdp_tx_per_channel;
 
 	channel_vis = max(rx_vis, tx_vis);
 
@@ -1820,7 +1286,11 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 	}
 
 	/* Extend the original UC mapping of the memory BAR */
-	membase = ioremap_nocache(efx->membase_phys, uc_mem_map_size);
+#if defined(EFX_USE_KCOMPAT)
+	membase = efx_ioremap(efx->membase_phys, uc_mem_map_size);
+#else
+	membase = ioremap(efx->membase_phys, uc_mem_map_size);
+#endif
 	if (!membase) {
 		netif_err(efx, probe, efx->net_dev,
 			  "could not extend memory BAR to %x\n",
@@ -2016,14 +1486,19 @@ efx_ef10_select_tx_queue_overlay(struct efx_channel *channel,
 }
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 static void efx_ef10_fini_nic(struct efx_nic *efx)
 {
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	kfree(nic_data->mc_stats);
+	nic_data->mc_stats = NULL;
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 	if (!efx_ptp_uses_separate_channel(efx) &&
 	    !efx_ptp_use_mac_tx_timestamps(efx))
 		efx_ptp_remove(efx);
-}
 #endif
+}
 
 static int efx_ef10_init_nic(struct efx_nic *efx)
 {
@@ -2234,8 +1709,12 @@ static int efx_ef10_reset(struct efx_nic *efx, enum reset_type reset_type)
 
 static bool efx_ef10_hw_unavailable(struct efx_nic *efx)
 {
-	if ((efx->state == STATE_DISABLED) || (efx->state == STATE_RECOVERY))
+	if (efx->state == STATE_DISABLED || efx_recovering(efx->state))
 		return true;
+
+	/* we just haven't initialised I/O yet. */
+	if (!efx->membase)
+		return false;
 
 	if (_efx_readd(efx, ER_DZ_BIU_MC_SFT_STATUS) ==
 	    cpu_to_le32(0xffffffff)) {
@@ -3343,7 +2822,6 @@ static int efx_ef10_tx_init(struct efx_tx_queue *tx_queue)
 	 */
 	tx_queue->buffer[0].flags = EFX_TX_BUF_OPTION;
 	tx_queue->insert_count = 1;
-	tx_queue->notify_count = 0;
 	txd = efx_tx_desc(tx_queue, 0);
 	EFX_POPULATE_QWORD_7(*txd,
 			     ESF_DZ_TX_DESC_IS_OPT, true,
@@ -3658,7 +3136,6 @@ static struct efx_debugfs_parameter netdev_debugfs[] = {
 static int efx_ef10_filter_table_probe(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-	struct efx_ef10_vlan *vlan;
 	bool rss_limited = efx_ef10_has_cap(nic_data->datapath_caps,
 					    RX_RSS_LIMITED);
 	bool additional_rss = efx_ef10_has_cap(nic_data->datapath_caps,
@@ -3671,21 +3148,34 @@ static int efx_ef10_filter_table_probe(struct efx_nic *efx)
 	if (rc)
 		return rc;
 
-	list_for_each_entry(vlan, &nic_data->vlan_list, list) {
-		rc = efx_mcdi_filter_add_vlan(efx, vlan->vid);
-		if (rc) {
-			efx_ef10_cleanup_vlans(efx);
-			efx_mcdi_filter_table_remove(efx);
-			return rc;
-		}
-	}
-
 #ifdef CONFIG_SFC_DEBUGFS
 	efx_extend_debugfs_port(efx, efx, 0, efx_debugfs);
 	efx_extend_debugfs_port(efx, efx->net_dev, 0, netdev_debugfs);
 #endif
 
 	return 0;
+}
+
+static int efx_ef10_filter_table_up(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	struct efx_ef10_vlan *vlan;
+	int rc = efx_mcdi_filter_table_up(efx);
+
+	if (rc)
+		return rc;
+
+	list_for_each_entry(vlan, &nic_data->vlan_list, list) {
+		rc = efx_mcdi_filter_add_vlan(efx, vlan->vid);
+		if (rc)
+			break;
+	}
+	if (rc) {
+		efx_ef10_cleanup_vlans(efx);
+		efx_mcdi_filter_table_down(efx);
+	}
+
+	return rc;
 }
 
 static void efx_ef10_filter_table_remove(struct efx_nic *efx)
@@ -3695,6 +3185,19 @@ static void efx_ef10_filter_table_remove(struct efx_nic *efx)
 	efx_trim_debugfs_port(efx, netdev_debugfs);
 #endif
 	efx_mcdi_filter_table_remove(efx);
+}
+
+static int efx_ef10_filter_table_probe_and_up(struct efx_nic *efx)
+{
+	int rc = efx_ef10_filter_table_probe(efx);
+
+	if (rc)
+		return rc;
+
+	rc = efx_ef10_filter_table_up(efx);
+	if (rc)
+		efx_ef10_filter_table_remove(efx);
+	return rc;
 }
 
 static int efx_ef10_rx_init(struct efx_rx_queue *rx_queue)
@@ -4566,6 +4069,7 @@ static int efx_ef10_vport_set_mac_address(struct efx_nic *efx)
 	efx_device_detach_sync(efx);
 	efx_net_stop(efx->net_dev);
 	down_write(&efx->filter_sem);
+	efx_mcdi_filter_table_down(efx);
 	efx_mcdi_filter_table_remove(efx);
 	up_write(&efx->filter_sem);
 
@@ -4600,6 +4104,8 @@ restore_filters:
 	mutex_lock(&efx->mac_lock);
 	down_write(&efx->filter_sem);
 	rc2 = efx_ef10_filter_table_probe(efx);
+	if (!rc2)
+		rc2 = efx_ef10_filter_table_up(efx);
 	up_write(&efx->filter_sem);
 	mutex_unlock(&efx->mac_lock);
 	if (rc2)
@@ -4652,12 +4158,14 @@ static int efx_ef10_set_mac_address(struct efx_nic *efx)
 
 		mutex_lock(&efx->mac_lock);
 		down_write(&efx->filter_sem);
-		efx_mcdi_filter_table_remove(efx);
+		efx_mcdi_filter_table_down(efx);
+		efx_ef10_filter_table_remove(efx);
 
 		rc = efx_mcdi_rpc_quiet(efx, MC_CMD_VADAPTOR_SET_MAC, inbuf,
 					sizeof(inbuf), NULL, 0, NULL);
 
 		efx_ef10_filter_table_probe(efx);
+		efx_ef10_filter_table_up(efx);
 		up_write(&efx->filter_sem);
 		mutex_unlock(&efx->mac_lock);
 
@@ -4751,18 +4259,6 @@ static int efx_ef10_mac_reconfigure(struct efx_nic *efx, bool mtu_only)
 	return rc;
 }
 
-/* On older firmwares there is only a single thread on the MC, so even
- * the shortest operation can be blocked for some time by an operation
- * requested by a different function.
- * See bug61269 for further discussion.
- *
- * On newer firmwares that support multithreaded MCDI commands we extend
- * the timeout for commands we know can run longer.
- */
-#define MCDI_EF10_RPC_TIMEOUT       (10 * HZ)
-#define MCDI_EF10_RPC_LONG_TIMEOUT  (60 * HZ)
-#define MCDI_EF10_RPC_POST_RST_TIME (10 * HZ)
-
 static unsigned int efx_ef10_mcdi_rpc_timeout(struct efx_nic *efx,
 					      unsigned int cmd)
 {
@@ -4776,14 +4272,14 @@ static unsigned int efx_ef10_mcdi_rpc_timeout(struct efx_nic *efx,
 		/* Potentially longer running commands. */
 		if (efx_ef10_has_cap(nic_data->datapath_caps2,
 				     NVRAM_UPDATE_REPORT_VERIFY_RESULT))
-			return MCDI_EF10_RPC_LONG_TIMEOUT;
+			return MCDI_RPC_LONG_TIMEOUT;
 		/* fall through */
 	default:
 		/* Some things take longer shortly after a reset. */
 		if (time_before(jiffies,
-				efx->last_reset + MCDI_EF10_RPC_POST_RST_TIME))
-			return MCDI_EF10_RPC_POST_RST_TIME;
-		return MCDI_EF10_RPC_TIMEOUT;
+				efx->last_reset + MCDI_RPC_POST_RST_TIME))
+			return MCDI_RPC_POST_RST_TIME;
+		return MCDI_RPC_TIMEOUT;
 	}
 }
 
@@ -5453,8 +4949,10 @@ static void efx_ef10_udp_tnl_push_ports_sync(struct efx_nic *efx)
 
 static void efx_ef10__udp_tnl_push_ports(struct work_struct *data)
 {
-	struct efx_ef10_nic_data *nic_data = container_of(
-				data, struct efx_ef10_nic_data, udp_tunnel_work);
+	struct efx_ef10_nic_data *nic_data;
+
+	nic_data = container_of(data, struct efx_ef10_nic_data,
+				udp_tunnel_work);
 
 	efx_ef10_udp_tnl_push_ports_sync(nic_data->efx);
 }
@@ -5466,8 +4964,8 @@ static void efx_ef10_udp_tnl_push_ports_async(struct efx_nic *efx)
 	schedule_work(&nic_data->udp_tunnel_work);
 }
 
-static struct efx_udp_tunnel *__efx_ef10_udp_tnl_lookup_port(struct efx_nic *efx,
-							     __be16 port)
+static struct efx_udp_tunnel *_efx_ef10_udp_tnl_lookup_port(struct efx_nic *efx,
+							    __be16 port)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	size_t i;
@@ -5499,8 +4997,8 @@ static void efx_ef10_udp_tnl_add_port(struct efx_nic *efx,
 
 	spin_lock_bh(&nic_data->udp_tunnels_lock);
 
-	match = __efx_ef10_udp_tnl_lookup_port(efx, tnl.port);
-	if (match != NULL) {
+	match = _efx_ef10_udp_tnl_lookup_port(efx, tnl.port);
+	if (match) {
 		if (match->type == tnl.type) {
 			netif_dbg(efx, drv, efx->net_dev,
 				  "Referencing existing tunnel entry\n");
@@ -5562,7 +5060,6 @@ out_unlock:
 	spin_unlock_bh(&nic_data->udp_tunnels_lock);
 	if (possible_reboot)	/* Wait for a reboot to complete */
 		msleep(200);
-	return;
 }
 
 /* Called under the TX lock with the TX queue running, hence no-one can be
@@ -5581,7 +5078,7 @@ static bool efx_ef10_udp_tnl_has_port(struct efx_nic *efx, __be16 port)
 	/* We're not under the spinlock, but that's OK because we're only
 	 * reading.  See above comment.
 	 */
-	tnl = __efx_ef10_udp_tnl_lookup_port(efx, port);
+	tnl = _efx_ef10_udp_tnl_lookup_port(efx, port);
 	return tnl && !tnl->adding && !tnl->removing;
 }
 
@@ -5602,8 +5099,8 @@ static void efx_ef10_udp_tnl_del_port(struct efx_nic *efx,
 
 	spin_lock_bh(&nic_data->udp_tunnels_lock);
 
-	match = __efx_ef10_udp_tnl_lookup_port(efx, tnl.port);
-	if (match != NULL) {
+	match = _efx_ef10_udp_tnl_lookup_port(efx, tnl.port);
+	if (match) {
 		if (match->type == tnl.type) {
 			/* if we hit the max value, we stopped counting, so
 			 * saturate and keep this port forever
@@ -5613,7 +5110,8 @@ static void efx_ef10_udp_tnl_del_port(struct efx_nic *efx,
 			if (match->count) {
 				netif_dbg(efx, drv, efx->net_dev,
 					  "Keeping UDP tunnel (%s) port %d, refcount %u\n",
-					  typebuf, ntohs(tnl.port), match->count);
+					  typebuf, ntohs(tnl.port),
+					  match->count);
 				/* No MCDI to do */
 				goto out_unlock;
 			}
@@ -5645,7 +5143,551 @@ out_unlock:
 	spin_unlock_bh(&nic_data->udp_tunnels_lock);
 	if (possible_reboot)	/* Wait for a reboot to complete */
 		msleep(200);
-	return;
+}
+
+#ifdef EFX_NOT_UPSTREAM
+static ssize_t forward_fcs_show(struct device *dev,
+				struct device_attribute *attr, char *buf)
+{
+	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
+	return scnprintf(buf, PAGE_SIZE, "%d\n", efx->forward_fcs);
+#else
+	if (!(efx->net_dev->features & NETIF_F_RXFCS) !=
+	    !(efx->net_dev->features & NETIF_F_RXALL))
+		return scnprintf(buf, PAGE_SIZE, "mixed\n");
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
+			 !!(efx->net_dev->features & NETIF_F_RXFCS));
+#endif
+}
+
+static ssize_t forward_fcs_store(struct device *dev,
+				 struct device_attribute *attr,
+				 const char *buf, size_t count)
+{
+	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
+	bool old_forward_fcs = efx->forward_fcs;
+#endif
+
+	if (!strcmp(buf, "1\n"))
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
+		efx->forward_fcs = true;
+#else
+		efx->net_dev->wanted_features |= NETIF_F_RXFCS | NETIF_F_RXALL;
+#endif
+	else if (!strcmp(buf, "0\n"))
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
+		efx->forward_fcs = false;
+#else
+		efx->net_dev->wanted_features &= ~(NETIF_F_RXFCS |
+						   NETIF_F_RXALL);
+#endif
+	else
+		return -EINVAL;
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
+	if (efx->forward_fcs != old_forward_fcs) {
+		mutex_lock(&efx->mac_lock);
+		(void)efx_mac_reconfigure(efx, false);
+		mutex_unlock(&efx->mac_lock);
+	}
+#else
+	/* will call our ndo_set_features to actually make the change */
+	rtnl_lock();
+	netdev_update_features(efx->net_dev);
+	rtnl_unlock();
+#endif
+
+	return count;
+}
+static DEVICE_ATTR_RW(forward_fcs);
+
+static ssize_t physical_port_show(struct device *dev,
+				  struct device_attribute *attr, char *buf)
+{
+	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
+
+	return sprintf(buf, "%d\n", efx->port_num);
+}
+static DEVICE_ATTR_RO(physical_port);
+#endif
+
+static ssize_t link_control_flag_show(struct device *dev,
+				      struct device_attribute *attr, char *buf)
+{
+	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
+
+	return sprintf(buf, "%d\n",
+		       ((efx->mcdi->fn_flags) &
+			(1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_LINKCTRL))
+		       ? 1 : 0);
+}
+static DEVICE_ATTR_RO(link_control_flag);
+
+static ssize_t primary_flag_show(struct device *dev,
+				 struct device_attribute *attr, char *buf)
+{
+	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
+
+	return sprintf(buf, "%d\n",
+		       ((efx->mcdi->fn_flags) &
+			(1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_PRIMARY))
+		       ? 1 : 0);
+}
+static DEVICE_ATTR_RO(primary_flag);
+
+/*	NIC probe and remove
+ */
+static void efx_ef10_remove_post_io(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	int i;
+
+	if (!nic_data)
+		return;
+
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
+	if ((aoe_enabled(nic_data)) && efx->aoe_data)
+		efx_aoe_detach(efx);
+#endif
+
+	efx_ef10_cleanup_vlans(efx);
+	mutex_destroy(&nic_data->vlan_lock);
+
+	efx_mcdi_mon_remove(efx);
+
+#ifdef EFX_NOT_UPSTREAM
+	device_remove_file(&efx->pci_dev->dev, &dev_attr_physical_port);
+
+	if (efx_ef10_has_cap(nic_data->datapath_caps, RX_INCLUDE_FCS))
+		device_remove_file(&efx->pci_dev->dev, &dev_attr_forward_fcs);
+#endif
+
+	cancel_work_sync(&nic_data->udp_tunnel_work);
+
+	/* mark all UDP tunnel ports for remove... */
+	spin_lock_bh(&nic_data->udp_tunnels_lock);
+	/* Since the udp_tunnel_work has been finished, no-one can still be
+	 * busy.
+	 */
+	WARN_ON(nic_data->udp_tunnels_busy);
+	nic_data->udp_tunnels_busy = true;
+	for (i = 0; i < ARRAY_SIZE(nic_data->udp_tunnels); i++)
+		nic_data->udp_tunnels[i].removing = true;
+	/* ... then remove them */
+	efx_ef10_set_udp_tnl_ports(efx, true); /* drops the lock */
+}
+
+static int efx_ef10_probe_post_io(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	unsigned int bar_size = efx_ef10_bar_size(efx);
+	int rc;
+
+	rc = efx_get_pf_index(efx, &nic_data->pf_index);
+	if (rc)
+		return rc;
+
+	/* License checking on the firmware must finish before we can trust the
+	 * capabilities. Before that some will not be set.
+	 */
+	efx_ef10_read_licensed_features(efx);
+
+	rc = efx_ef10_init_datapath_caps(efx);
+	if (rc < 0)
+		return rc;
+
+	efx->tx_queues_per_channel = 1;
+	efx->select_tx_queue = efx_ef10_select_tx_queue;
+#ifdef EFX_USE_OVERLAY_TX_CSUM
+	if (efx_ef10_has_cap(nic_data->datapath_caps, VXLAN_NVGRE) &&
+	    !efx_ef10_is_vf(efx)) {
+		efx->tx_queues_per_channel = 2;
+		efx->select_tx_queue = efx_ef10_select_tx_queue_overlay;
+	}
+#endif
+#ifdef EFX_NOT_UPSTREAM
+	if (tx_non_csum_queue) {
+		efx->tx_queues_per_channel = 2;
+		efx->select_tx_queue = efx_ef10_select_tx_queue_non_csum;
+#ifdef EFX_USE_OVERLAY_TX_CSUM
+		if (efx_ef10_has_cap(nic_data->datapath_caps, VXLAN_NVGRE) &&
+		    !efx_ef10_is_vf(efx)) {
+			efx->tx_queues_per_channel = 3;
+			efx->select_tx_queue =
+				efx_ef10_select_tx_queue_non_csum_overlay;
+		}
+#endif
+	}
+#endif
+
+	/* We can have one VI for each vi_stride-byte region.
+	 * Note we have more TX queues than channels, so TX queues are the
+	 * limit on the number of channels we can have with our VIs.
+	 */
+	efx->max_vis = bar_size / efx->vi_stride;
+	if (!efx->max_vis) {
+		netif_err(efx, drv, efx->net_dev, "error determining max VIs\n");
+		return -EIO;
+	}
+	efx->max_channels = min_t(unsigned int, efx->max_channels,
+				  (bar_size / (efx->vi_stride *
+					       efx->tx_queues_per_channel)));
+	efx->max_tx_channels = efx->max_channels;
+	if (efx->max_channels == 0) {
+		netif_err(efx, drv, efx->net_dev, "error determining max channels\n");
+		return -EIO;
+	}
+
+	efx->rx_packet_len_offset =
+		ES_DZ_RX_PREFIX_PKTLEN_OFST - ES_DZ_RX_PREFIX_SIZE;
+
+	if (efx_ef10_has_cap(nic_data->datapath_caps, RX_INCLUDE_FCS))
+		efx_add_hw_features(efx, NETIF_F_RXFCS);
+
+	rc = efx_mcdi_port_get_number(efx);
+	if (rc < 0)
+		return rc;
+	efx->port_num = rc;
+
+	rc = efx->type->get_mac_address(efx, efx->net_dev->perm_addr);
+	if (rc)
+		return rc;
+
+	rc = efx_ef10_get_timer_config(efx);
+	if (rc < 0)
+		return rc;
+
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
+	/* Get capabilities mask */
+	nic_data->caps = 0;
+	rc = efx_mcdi_get_board_cfg(efx, efx_port_num(efx), NULL, NULL,
+				    &nic_data->caps);
+	if (rc)
+		return rc;
+#endif
+	rc = efx_mcdi_mon_probe(efx);
+	if (rc && rc != -EPERM)
+		return rc;
+
+#ifdef CONFIG_SFC_SRIOV
+	efx_sriov_init_max_vfs(efx, nic_data->pf_index);
+#endif
+
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
+	if (aoe_enabled(efx->nic_data)) {
+		rc = efx_aoe_attach(efx);
+		if (rc)
+			return rc;
+	}
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHYSFN)
+#ifdef CONFIG_SFC_SRIOV
+	if (efx->pci_dev->physfn && !efx->pci_dev->is_physfn) {
+		struct pci_dev *pci_dev_pf = efx->pci_dev->physfn;
+		struct efx_nic *efx_pf = pci_get_drvdata(pci_dev_pf);
+
+		efx_pf->type->get_mac_address(efx_pf, nic_data->port_id);
+	} else
+#endif
+#endif /* HAVE_PHYSFN */
+		ether_addr_copy(nic_data->port_id, efx->net_dev->perm_addr);
+#endif
+	/* If tx_coalesce_doorbell=Y disable tx_push, we do this here to avoid
+	 * additional checks on the fast path.
+	 */
+	if (tx_coalesce_doorbell) {
+		netif_info(efx, drv, efx->net_dev,
+			   "Tx push disabled due to tx_coalesce_doorbell=Y\n");
+		tx_push_max_fill = 0;
+	}
+
+	/* Add unspecified VID to support VLAN filtering being disabled */
+	rc = efx_ef10_add_vlan(efx, EFX_FILTER_VID_UNSPEC);
+	if (rc)
+		return rc;
+
+	/* If VLAN filtering is enabled, we need VID 0 to get untagged
+	 * traffic.  It is added automatically if 8021q module is loaded,
+	 * but we can't rely on it since module may be not loaded.
+	 */
+	return efx_ef10_add_vlan(efx, 0);
+}
+
+static int efx_ef10_probe(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data;
+	unsigned int bar_size = efx_ef10_bar_size(efx);
+	int i, rc;
+
+	if (WARN_ON(bar_size == 0))
+		return -EIO;
+
+	nic_data = kzalloc(sizeof(*nic_data), GFP_KERNEL);
+	if (!nic_data)
+		return -ENOMEM;
+	efx->nic_data = nic_data;
+	nic_data->efx = efx;
+
+	/* we assume later that we can copy from this buffer in dwords */
+	BUILD_BUG_ON(MCDI_CTL_SDU_LEN_MAX_V2 % 4);
+
+	/* MCDI buffers must be 256 byte aligned, so pad the first N-1
+	 * buffers and add the last on the end.
+	 */
+	rc = efx_nic_alloc_buffer(efx, &nic_data->mcdi_buf,
+				  ALIGN(MCDI_BUF_LEN, 256) *
+					(EF10_NUM_MCDI_BUFFERS - 1) +
+				  MCDI_BUF_LEN,
+				  GFP_KERNEL);
+	if (rc)
+		return rc;
+
+	/* Get the MC's warm boot count.  In case it's rebooting right
+	 * now, be prepared to retry.
+	 */
+	i = 0;
+	for (;;) {
+		rc = efx_ef10_get_warm_boot_count(efx);
+		if (rc >= 0)
+			break;
+		if (++i == 5)
+			return rc;
+		ssleep(1);
+	}
+	nic_data->warm_boot_count = rc;
+
+	/* In case we're recovering from a crash (kexec), we want to
+	 * cancel any outstanding request by the previous user of this
+	 * function.  We send a special message using the least
+	 * significant bits of the 'high' (doorbell) register.
+	 */
+	_efx_writed(efx, cpu_to_le32(1), ER_DZ_MC_DB_HWRD);
+
+	spin_lock_init(&nic_data->udp_tunnels_lock);
+	nic_data->udp_tunnels_busy = false;
+	INIT_WORK(&nic_data->udp_tunnel_work, efx_ef10__udp_tnl_push_ports);
+
+	INIT_LIST_HEAD(&nic_data->vlan_list);
+	mutex_init(&nic_data->vlan_lock);
+
+	/* retry probe 3 times on EF10 due to UDP tunnel ports
+	 * sometimes causing a reset during probe.
+	 */
+	rc = efx_pci_probe_post_io(efx, efx_ef10_probe_post_io);
+	if (rc) {
+		/* On failure, retry once immediately.
+		 * If we aborted probe due to a scheduled reset, dismiss it.
+		 */
+		efx->reset_pending = 0;
+		efx_pci_remove_post_io(efx, efx_ef10_remove_post_io);
+		rc = efx_pci_probe_post_io(efx, efx_ef10_probe_post_io);
+		if (rc) {
+			/* On another failure, retry once more
+			 * after a 50-305ms delay.
+			 */
+			unsigned char r;
+
+			get_random_bytes(&r, 1);
+			msleep((unsigned int)r + 50);
+
+			efx->reset_pending = 0;
+			efx_pci_remove_post_io(efx, efx_ef10_remove_post_io);
+			rc = efx_pci_probe_post_io(efx, efx_ef10_probe_post_io);
+		}
+	}
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed too many attempts to probe. Aborting.\n");
+		return rc;
+	}
+
+#ifdef EFX_NOT_UPSTREAM
+	if (efx->mcdi->fn_flags &
+	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
+		return 0;
+#endif
+
+	rc = efx_ef10_filter_table_probe(efx);
+	if (rc)
+		return rc;
+
+	netdev_rss_key_fill(efx->rss_context.rx_hash_key,
+			    sizeof(efx->rss_context.rx_hash_key));
+
+	/* Don't fail init if RSS setup doesn't work. */
+	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
+
+#ifdef EFX_NOT_UPSTREAM
+	if (efx_ef10_has_cap(nic_data->datapath_caps, RX_INCLUDE_FCS))
+		rc = device_create_file(&efx->pci_dev->dev,
+					&dev_attr_forward_fcs);
+	if (rc)
+		return rc;
+
+	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_physical_port);
+	if (rc)
+		return rc;
+#endif
+
+	rc = device_create_file(&efx->pci_dev->dev,
+				&dev_attr_link_control_flag);
+	if (rc)
+		return rc;
+
+	return device_create_file(&efx->pci_dev->dev, &dev_attr_primary_flag);
+}
+
+static int efx_ef10_probe_pf(struct efx_nic *efx)
+{
+#ifdef EFX_NOT_UPSTREAM
+	unsigned int desired_bandwidth;
+
+	switch (efx->pci_dev->device) {
+	case 0x0923:
+		/* Greenport devices can make use of 8 lanes of Gen3. */
+		desired_bandwidth = EFX_BW_PCIE_GEN3_X8;
+		break;
+	case 0x0a03:
+	case 0x0b03:
+		/* Medford and Medford2 devices want 16 lanes, even though
+		 * not all have that.
+		 * We suppress this optimism in efx_nic_check_pcie_link().
+		 */
+		desired_bandwidth = EFX_BW_PCIE_GEN3_X16;
+		break;
+	default:
+		desired_bandwidth = EFX_BW_PCIE_GEN2_X8;
+	}
+
+	efx_nic_check_pcie_link(efx, desired_bandwidth, NULL, NULL);
+#endif
+	return efx_ef10_probe(efx);
+}
+
+static void efx_ef10_remove(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	if (!nic_data)
+		return;
+
+	device_remove_file(&efx->pci_dev->dev, &dev_attr_link_control_flag);
+	device_remove_file(&efx->pci_dev->dev, &dev_attr_primary_flag);
+
+	efx_ef10_filter_table_remove(efx);
+	efx_pci_remove_post_io(efx, efx_ef10_remove_post_io);
+
+	efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
+
+	kfree(nic_data);
+	efx->nic_data = NULL;
+}
+
+static void efx_ef10_remove_vf(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+#if defined(CONFIG_SFC_SRIOV) && (!defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN)))
+	struct efx_ef10_nic_data *nic_data_pf;
+	struct pci_dev *pci_dev_pf;
+	struct efx_nic *efx_pf;
+	struct ef10_vf *vf;
+#endif
+
+	efx_ef10_remove(efx);
+
+#if defined(CONFIG_SFC_SRIOV) && (!defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN)))
+	if (efx->pci_dev->is_virtfn) {
+		pci_dev_pf = efx->pci_dev->physfn;
+		if (pci_dev_pf) {
+			efx_pf = pci_get_drvdata(pci_dev_pf);
+			nic_data_pf = efx_pf->nic_data;
+			vf = nic_data_pf->vf + nic_data->vf_index;
+			vf->efx = NULL;
+		}
+	}
+#endif
+}
+
+#if defined(CONFIG_SFC_SRIOV)
+static int efx_ef10_probe_vf(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data;
+	struct efx_nic *efx_pf;
+	int rc = efx_vf_parent(efx, &efx_pf);
+
+	/* Fail if the parent is not a Solarflare PF */
+	if (rc)
+		return rc;
+
+	/* If the parent PF has no VF data structure, it doesn't know about this
+	 * VF so fail probe.  The VF needs to be re-created.  This can happen
+	 * if the PF driver is unloaded while the VF is assigned to a guest.
+	 */
+	if (efx_pf) {
+		nic_data = efx_pf->nic_data;
+		if (!nic_data->vf) {
+			netif_info(efx, drv, efx->net_dev,
+				   "The VF cannot link to its parent PF; "
+				   "please destroy and re-create the VF\n");
+			return -EBUSY;
+		}
+	}
+
+	rc = efx_ef10_probe(efx);
+	if (rc)
+		return rc;
+
+	nic_data = efx->nic_data;
+
+	rc = efx_ef10_get_vf_index(efx);
+	if (rc)
+		goto fail;
+
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN))
+	if (efx->pci_dev->physfn) {
+		struct efx_nic *efx_pf = pci_get_drvdata(efx->pci_dev->physfn);
+		struct efx_ef10_nic_data *nic_data_pf = efx_pf->nic_data;
+
+		nic_data_pf->vf[nic_data->vf_index].efx = efx;
+		nic_data_pf->vf[nic_data->vf_index].pci_dev =
+			efx->pci_dev;
+	} else {
+		netif_info(efx, drv, efx->net_dev,
+			   "Could not get the PF id from VF\n");
+	}
+#endif
+
+	INIT_DELAYED_WORK(&nic_data->vf_stats_work,
+			  efx_ef10_vf_update_stats_work);
+
+	return 0;
+
+fail:
+	efx_ef10_remove_vf(efx);
+	return rc;
+}
+#endif /* CONFIG_SFC_SRIOV */
+
+static unsigned int ef10_check_caps(const struct efx_nic *efx,
+				    u8 flag,
+				    u32 offset)
+{
+	const struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	switch (offset) {
+	case(MC_CMD_GET_CAPABILITIES_V8_OUT_FLAGS1_OFST):
+		return nic_data->datapath_caps & BIT_ULL(flag);
+	case(MC_CMD_GET_CAPABILITIES_V8_OUT_FLAGS2_OFST):
+		return nic_data->datapath_caps2 & BIT_ULL(flag);
+	default:
+		return 0;
+	}
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(NETIF_F_IPV6_CSUM)
@@ -5669,12 +5711,10 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.mem_bar = efx_ef10_vf_mem_bar,
 	.mem_map_size = efx_ef10_initial_mem_map_size,
 	.probe = efx_ef10_probe_vf,
-	.remove = efx_ef10_remove,
+	.remove = efx_ef10_remove_vf,
 	.dimension_resources = efx_ef10_dimension_resources,
 	.init = efx_ef10_init_nic,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 	.fini = efx_ef10_fini_nic,
-#endif
 	.monitor = efx_ef10_monitor,
 	.hw_unavailable = efx_ef10_hw_unavailable,
 	.map_reset_reason = efx_ef10_map_reset_reason,
@@ -5733,9 +5773,9 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.ev_mcdi_pending = efx_ef10_ev_mcdi_pending,
 	.ev_read_ack = efx_ef10_ev_read_ack,
 	.ev_test_generate = efx_ef10_ev_test_generate,
-	.filter_table_probe = efx_ef10_filter_table_probe,
+	.filter_table_probe = efx_ef10_filter_table_probe_and_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
-	.filter_table_remove = efx_ef10_filter_table_remove,
+	.filter_table_remove = efx_mcdi_filter_table_down,
 	.filter_match_supported = efx_mcdi_filter_match_supported,
 	.filter_insert = efx_mcdi_filter_insert,
 	.filter_remove_safe = efx_mcdi_filter_remove_safe,
@@ -5816,6 +5856,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	1 << HWTSTAMP_FILTER_PTP_V2_L4_EVENT,
 #endif
 	.rx_hash_key_size = 40,
+	.check_caps = ef10_check_caps,
 };
 #endif
 
@@ -5826,10 +5867,9 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.probe = efx_ef10_probe_pf,
 	.remove = efx_ef10_remove,
 	.dimension_resources = efx_ef10_dimension_resources,
+	.free_resources = efx_ef10_free_resources,
 	.init = efx_ef10_init_nic,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 	.fini = efx_ef10_fini_nic,
-#endif
 	.monitor = efx_ef10_monitor,
 	.hw_unavailable = efx_ef10_hw_unavailable,
 	.map_reset_reason = efx_ef10_map_reset_reason,
@@ -5893,9 +5933,9 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.ev_mcdi_pending = efx_ef10_ev_mcdi_pending,
 	.ev_read_ack = efx_ef10_ev_read_ack,
 	.ev_test_generate = efx_ef10_ev_test_generate,
-	.filter_table_probe = efx_ef10_filter_table_probe,
+	.filter_table_probe = efx_ef10_filter_table_probe_and_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
-	.filter_table_remove = efx_ef10_filter_table_remove,
+	.filter_table_remove = efx_mcdi_filter_table_down,
 	.filter_match_supported = efx_mcdi_filter_match_supported,
 	.filter_insert = efx_mcdi_filter_insert,
 	.filter_remove_safe = efx_mcdi_filter_remove_safe,
@@ -5972,7 +6012,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.always_rx_scatter = true,
 	.option_descriptors = true,
 	.supported_interrupt_modes = BIT(EFX_INT_MODE_MSIX) |
-	                             BIT(EFX_INT_MODE_MSI),
+				     BIT(EFX_INT_MODE_MSI),
     .timer_period_max = 1 << ERF_DD_EVQ_IND_TIMER_VAL_WIDTH,
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -6007,4 +6047,5 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 			    1 << HWTSTAMP_FILTER_PTP_V2_L4_EVENT,
 #endif
 	.rx_hash_key_size = 40,
+	.check_caps = ef10_check_caps,
 };

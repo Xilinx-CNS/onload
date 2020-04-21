@@ -31,13 +31,12 @@
 #include "tc.h"
 #include "efx_devlink.h"
 #include "ef100_rep.h"
+#include "xdp.h"
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 #include "io.h"
 #endif
-
-#define EF100_ONLOAD_VIS 8
 #endif
 
 static void ef100_update_name(struct efx_nic *efx)
@@ -53,6 +52,36 @@ static void ef100_update_name(struct efx_nic *efx)
 #endif
 }
 
+static int ef100_alloc_vis(struct efx_nic *efx, unsigned int *allocated_vis)
+{
+	unsigned int rx_vis = efx_rx_channels(efx);
+	unsigned int tx_vis = efx_tx_channels(efx) * efx->tx_queues_per_channel;
+	unsigned int min_vis, max_vis;
+
+	tx_vis += efx_xdp_channels(efx) * efx->xdp_tx_per_channel;
+
+	max_vis = max(rx_vis, tx_vis);
+	/* Currently don't handle resource starvation and only accept
+	 * our maximum needs and no less.
+	 */
+	min_vis = max_vis;
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	efx->ef10_resources.vi_min = min_vis;
+	max_vis += EF100_ONLOAD_VIS;
+#endif
+#endif
+
+	return efx_mcdi_alloc_vis(efx, min_vis, max_vis,
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_DRIVERLINK)
+				  &efx->ef10_resources.vi_base,
+				  &efx->ef10_resources.vi_shift,
+#else
+				  NULL, NULL,
+#endif
+				  allocated_vis);
+}
+
 static int ef100_remap_bar(struct efx_nic *efx, int max_vis)
 {
 	unsigned int uc_mem_map_size;
@@ -62,7 +91,11 @@ static int ef100_remap_bar(struct efx_nic *efx, int max_vis)
 	uc_mem_map_size = PAGE_ALIGN(max_vis * efx->vi_stride);
 
 	/* Extend the original UC mapping of the memory BAR */
-	membase = ioremap_nocache(efx->membase_phys, uc_mem_map_size);
+#if defined(EFX_USE_KCOMPAT)
+	membase = efx_ioremap(efx->membase_phys, uc_mem_map_size);
+#else
+	membase = ioremap(efx->membase_phys, uc_mem_map_size);
+#endif
 	if (!membase) {
 		netif_err(efx, probe, efx->net_dev,
 			  "could not extend memory BAR to %x\n",
@@ -74,22 +107,26 @@ static int ef100_remap_bar(struct efx_nic *efx, int max_vis)
 	return 0;
 }
 
-static void ef100_start_reps(struct efx_nic *efx)
+void ef100_start_reps(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	int i;
 
-	for (i = 0; i < efx->vf_count; i++)
+	spin_lock_bh(&nic_data->vf_reps_lock);
+	for (i = 0; i < nic_data->rep_count; i++)
 		netif_carrier_on(nic_data->vf_rep[i]);
+	spin_unlock_bh(&nic_data->vf_reps_lock);
 }
 
-static void ef100_stop_reps(struct efx_nic *efx)
+void ef100_stop_reps(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	int i;
 
-	for (i = 0; i < efx->vf_count; i++)
+	spin_lock_bh(&nic_data->vf_reps_lock);
+	for (i = 0; i < nic_data->rep_count; i++)
 		netif_carrier_off(nic_data->vf_rep[i]);
+	spin_unlock_bh(&nic_data->vf_reps_lock);
 }
 
 /* Context: process, rtnl_lock() held.
@@ -103,21 +140,20 @@ static int ef100_net_stop(struct net_device *net_dev)
 	netif_dbg(efx, ifdown, efx->net_dev, "closing on CPU %d\n",
 		  raw_smp_processor_id());
 
-	ef100_stop_reps(efx);
-	netif_stop_queue(net_dev);
-	efx_fini_debugfs_netdev(efx->net_dev);
-	efx_stop_all(efx);
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
-	if (efx_dl_supported(efx))
-		efx_dl_unregister_nic(&efx->dl_nic);
+	if (--efx->open_count) {
+		netif_dbg(efx, drv, efx->net_dev, "still open\n");
+		return 0;
+	}
 #endif
 #endif
-	efx_remove_filters(efx);
+
+	ef100_stop_reps(efx);
+	netif_stop_queue(net_dev);
+	efx_stop_all(efx);
 	efx_mcdi_mac_fini_stats(efx);
 	efx_disable_interrupts(efx);
-	efx_fini_napi(efx);
-	efx_mcdi_free_vis(efx);
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
 	if (efx->interrupt_mode != EFX_INT_MODE_POLLED) {
 		efx_clear_interrupt_affinity(efx);
@@ -127,9 +163,14 @@ static int ef100_net_stop(struct net_device *net_dev)
 	efx_clear_interrupt_affinity(efx);
 	efx_nic_fini_interrupt(efx);
 #endif
+	efx_remove_filters(efx);
+	efx_fini_napi(efx);
 	efx_remove_channels(efx);
+	efx_mcdi_free_vis(efx);
 	efx_unset_channels(efx);
 	efx_remove_interrupts(efx);
+
+	efx->state = STATE_NET_DOWN;
 
 	return 0;
 }
@@ -137,13 +178,28 @@ static int ef100_net_stop(struct net_device *net_dev)
 /* Context: process, rtnl_lock() held. */
 static int ef100_net_open(struct net_device *net_dev)
 {
-	unsigned int min_vis, max_vis, vi_base, vi_shift, allocated_vis;
 	struct efx_nic *efx = netdev_priv(net_dev);
+	unsigned int allocated_vis;
 	int rc;
 
 	ef100_update_name(efx);
 	netif_dbg(efx, ifup, net_dev, "opening device on CPU %d\n",
 		  raw_smp_processor_id());
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx->open_count++) {
+		netif_dbg(efx, drv, efx->net_dev, "already open\n");
+		/* inform the kernel about link state again */
+		efx_link_status_changed(efx);
+		return 0;
+	}
+#endif
+#endif
+
+	rc = efx_check_disabled(efx);
+	if (rc)
+		goto fail;
 
 	efx->stats_initialised = false;
 
@@ -155,31 +211,27 @@ static int ef100_net_open(struct net_device *net_dev)
 	if (rc)
 		goto fail;
 
-	rc = efx_probe_channels(efx);
-	if (rc)
-		return rc;
-
 	rc = efx_mcdi_free_vis(efx);
 	if (rc)
 		goto fail;
 
-	min_vis = max_vis = efx_channels(efx);
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	max_vis += efx->n_dl_irqs;
-#endif
-#endif
-
-	rc = efx_mcdi_alloc_vis(efx, min_vis, max_vis,
-				&vi_base, &vi_shift, &allocated_vis);
+	rc = ef100_alloc_vis(efx, &allocated_vis);
 	if (rc)
 		goto fail;
+
+	rc = efx_probe_channels(efx);
+	if (rc)
+		return rc;
 
 	rc = ef100_remap_bar(efx, allocated_vis);
 	if (rc)
 		goto fail;
 
 	rc = efx_init_napi(efx);
+	if (rc)
+		goto fail;
+
+	rc = efx_probe_filters(efx);
 	if (rc)
 		goto fail;
 
@@ -197,19 +249,13 @@ static int ef100_net_open(struct net_device *net_dev)
 	efx_set_interrupt_affinity(efx, true);
 #endif
 
-
 	rc = efx_enable_interrupts(efx);
-	if (rc)
-		goto fail;
-
-	rc = efx_probe_filters(efx);
 	if (rc)
 		goto fail;
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	/* Register with driverlink layer */
-	efx->ef10_resources.vi_min = min_vis;
 	efx->ef10_resources.vi_lim = allocated_vis;
 	efx->ef10_resources.timer_quantum_ns = efx->timer_quantum_ns;
 	efx->ef10_resources.rss_channel_count = efx->rss_spread;
@@ -217,8 +263,6 @@ static int ef100_net_open(struct net_device *net_dev)
 	efx->ef10_resources.flags = EFX_DL_EF10_USE_MSI;
 	efx->ef10_resources.vi_stride = efx->vi_stride;
 	efx->ef10_resources.mem_bar = efx->mem_bar;
-	efx->ef10_resources.vi_shift = vi_shift;
-	efx->ef10_resources.vi_base = vi_base;
 
 	if (efx->irq_resources)
 		efx->irq_resources->int_prime =
@@ -227,15 +271,8 @@ static int ef100_net_open(struct net_device *net_dev)
 				       &efx->irq_resources->hdr : NULL;
 
 	efx->dl_nic.dl_info = &efx->ef10_resources.hdr;
-
-	if (efx_dl_supported(efx))
-		efx_dl_register_nic(&efx->dl_nic);
 #endif
 #endif
-
-	rc = efx_check_disabled(efx);
-	if (rc)
-		goto fail;
 
 	/* in case the MC rebooted while we were stopped, consume the change
 	 * to the warm reboot count
@@ -250,17 +287,6 @@ static int ef100_net_open(struct net_device *net_dev)
 	if (rc)
 		goto fail;
 
-	/* Create debugfs symlinks */
-#ifdef CONFIG_SFC_DEBUGFS
-	mutex_lock(&efx->debugfs_symlink_mutex);
-	rc = efx_init_debugfs_netdev(net_dev);
-	mutex_unlock(&efx->debugfs_symlink_mutex);
-	if (rc) {
-		netif_warn(efx, drv, efx->net_dev,
-			   "failed to init net dev debugfs. rc=%d\n", rc);
-	}
-#endif
-
 	/* Link state detection is normally event-driven; we have
 	 * to poll now because we could have missed a change
 	 */
@@ -270,6 +296,8 @@ static int ef100_net_open(struct net_device *net_dev)
 	mutex_unlock(&efx->mac_lock);
 
 	ef100_start_reps(efx);
+
+	efx->state = STATE_NET_UP;
 
 	return 0;
 
@@ -551,17 +579,13 @@ static const struct net_device_ops ef100_netdev_ops = {
 #endif
 #endif
 #endif
-#if 0
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_XDP_EXT)
-	.extended.ndo_bpf       = efx_xdp,
-#elif !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
 	.ndo_bpf                = efx_xdp,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)
 	.ndo_xdp_xmit           = efx_xdp_xmit,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_NEED_XDP_FLUSH)
 	.ndo_xdp_flush          = efx_xdp_flush,
-#endif
 #endif
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
@@ -644,7 +668,7 @@ int ef100_register_netdev(struct efx_nic *efx)
 	/* Always start with carrier off; PHY events will detect the link */
 	netif_carrier_off(net_dev);
 
-	efx->state = STATE_READY;
+	efx->state = STATE_NET_DOWN;
 	rtnl_unlock();
 	efx_init_mcdi_logging(efx);
 	efx_probe_devlink(efx);
@@ -659,9 +683,11 @@ fail_locked:
 
 void ef100_unregister_netdev(struct efx_nic *efx)
 {
-	efx_fini_devlink(efx);
-	efx_fini_mcdi_logging(efx);
-	efx->state = STATE_UNINIT;
-	unregister_netdev(efx->net_dev);
+	if (efx_dev_registered(efx)) {
+		efx_fini_devlink(efx);
+		efx_fini_mcdi_logging(efx);
+		efx->state = STATE_UNINIT;
+		unregister_netdev(efx->net_dev);
+	}
 }
 

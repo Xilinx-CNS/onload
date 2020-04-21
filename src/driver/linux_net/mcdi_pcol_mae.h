@@ -91,9 +91,7 @@
 /* enum: The VNI input to the conntrack lookup will be both VLAN tags. */
 #define          MAE_CT_VNI_MODE_2VLAN 0x3
 
-/* MAE_FIELD enum: TODO: this enum shares namespace with the support status
- * enum; is that okay? TODO: Can we pollute the MAE_* namespace? Should be have
- * an MCDI prefix too?
+/* MAE_FIELD enum: NB: this enum shares namespace with the support status enum.
  */
 #define          MAE_FIELD_INGRESS_PORT 0x0 /* enum */
 #define          MAE_FIELD_MARK 0x1 /* enum */
@@ -119,22 +117,7 @@
 #define          MAE_FIELD_ETH_SADDR 0x28
 /* enum: Inner when encap */
 #define          MAE_FIELD_ETH_DADDR 0x29
-/* enum: Inner when encap TODO: At present, we consider IP4 and IP6 addresses
- * as distinct fields. In an IP4 packet, then IP6 fields will have a value of
- * 'missing' and will therefore never match a rule with a non-zero mask for an
- * IP6 field (and vice-versa). This feels the cleanest, and I can't see a
- * usecase for the case that it cannot handler---I want to match on some bits
- * on an IP address but I don't care what type of address it is. However, if we
- * really do want to change this, we should add *_IP fields which take a well-
- * defined value for both IP4 and IP6 packets. N.B. The above does not require
- * us to have space in the TCAM match/mask for both IP4 and IP6 addresses.
- * They're exclusive, so can be overlaid and the correct semantics can be
- * provided by adding a qualifying have_ip4/have_ip6 bit to the TCAM match.
- * N.B. The above would allow us to provide *_IP4 / *_IP6 and *_IP (as
- * described) semantics simultaneously. The IP addresses would be overload in
- * the TCAM key, and matches would be qualified by a have_ip4/have_ip6/have_ip
- * bit in the TCAM match.
- */
+/* enum: Inner when encap. NB: IPv4 and IPv6 fields are mutually exclusive. */
 #define          MAE_FIELD_SRC_IP4 0x2a
 /* enum: Inner when encap */
 #define          MAE_FIELD_SRC_IP6 0x2b
@@ -146,17 +129,7 @@
 #define          MAE_FIELD_IP_PROTO 0x2e
 /* enum: Inner when encap */
 #define          MAE_FIELD_IP_TOS 0x2f
-/* enum: Inner when encap TODO: How do OVS/DPDK expect to use this field? GFT
- * is only interested in matching on whether the TTL field is equal to 1. I
- * suggest: 1) we create a new field called IP_TTL_IS_ONE (or similar) 2)
- * define the new field as having value, (TTL == 1) ? 1 : 0, and width 1. The
- * semantics implied by this are easy to implement in hardware; we just need a
- * trivial translation between the TTL value parsed from the packet and the
- * value used in the TCAM lookup. We can choose which of IP_TTL and
- * IP_TTL_IS_ONE we implement at a later date, maybe offering both. The choice
- * can be conveyed to drivers using the already defined match field capability
- * discovery mechanism.
- */
+/* enum: Inner when encap */
 #define          MAE_FIELD_IP_TTL 0x30
 /* enum: Inner when encap TODO: how this is defined? The raw flags +
  * frag_offset from the packet, or some derived value more amenable to ternary
@@ -171,38 +144,15 @@
 #define          MAE_FIELD_L4_SPORT 0x32
 /* enum: Ports (UDP, TCP) Inner when encap */
 #define          MAE_FIELD_L4_DPORT 0x33
-/* enum: TCP flags Inner when encap TODO: how is this field defined? How should
- * we match against it? I understand that GFT doesn't want to the normal
- * ternary matching of, pkt_field & key_mask == key_match & key_mask [1] but
- * instead wants matching of, pkt_field & key_mask != 0 || key_mask == 0 [2]
- * There are ways of implementhing these semantics in the hardware with various
- * level of flexibility. Of more immediate relevance is how to express it
- * within the API. I suggest: 1) we define a new field called TCP_FLAGS_ANY or
- * similar. 2) we define a new field support status like
- * MAE_FIELD_SUPPORTED_MATCH_MASK_ANY, although with a more descriptive name.
- * This value indicates that matches on the corresponding field have semantics
- * as per [2] 3) We advertise FIELD_TCP_FLAGS_ANY as having support of
- * MAE_FIELD_SUPPORTED_MATCH_NEVER or MAE_FIELD_SUPPORTED_MATCH_MASK_ANY Notes:
- * o The above suggested change can be made at any time and will be backwards
- * compatible given that the driver is required to supply a mask of zero for
- * fields with a support status of zero, and is deemed to have supplied a mask
- * of zero for fields not included in its rule insertion requests. o Both
- * TCP_FLAGS and TCP_FLAGS_ANY can coexist in the API, with neither, either or
- * both being advertise as supported (though implementing both may be
- * unpalatable in hardware).
- */
+/* enum: Inner when encap */
 #define          MAE_FIELD_TCP_FLAGS 0x34
 /* enum: The type of encapsulated used for this packet. Value as per
  * ENCAP_TYPE_*.
  */
 #define          MAE_FIELD_ENCAP_TYPE 0x3f
 #define          MAE_FIELD_ENCAP_RULE_ID 0x40 /* enum */
-/* enum: The ID of the encap match rule that marked this packet as
- * encapsulated. TODO: This field is included because it might allow the use of
- * narrower TCAMs for match-action rules, chaining of the fields already
- * matched on when determining the encapsulation type. It's not clear whether
- * this is useful, and the mixining of IDs with packet data is admittedly a bit
- * gross. That said, we are doing the same with m-port ids...
+/* enum: The ID of the outer rule that marked this packet as encapsulated.
+ * Useful for implicitly matching on outer fields.
  */
 #define          MAE_FIELD_OUTER_RULE_ID 0x40
 /* enum: Outer; only present when encap */
@@ -233,10 +183,7 @@
 #define          MAE_FIELD_ENC_IP_TOS 0x4f
 /* enum: Outer; only present when encap */
 #define          MAE_FIELD_ENC_IP_TTL 0x50
-/* enum: Outer; only present when encap TODO: how this is defined? The raw
- * flags + frag_offset from the packet, or some derived value more amenable to
- * ternary matching?
- */
+/* enum: Outer; only present when encap */
 #define          MAE_FIELD_ENC_IP_FLAGS 0x51
 /* enum: Outer; only present when encap */
 #define          MAE_FIELD_ENC_L4_SPORT 0x52
@@ -253,7 +200,6 @@
 #define          MAE_MCDI_ENCAP_TYPE_VXLAN 0x1
 #define          MAE_MCDI_ENCAP_TYPE_NVGRE 0x2 /* enum */
 #define          MAE_MCDI_ENCAP_TYPE_GENEVE 0x3 /* enum */
-#define          MAE_MCDI_ENCAP_TYPE_TODO_OTHERS 0x3e7 /* enum */
 
 /* MAE_FIELD_FLAGS structuredef */
 #define    MAE_FIELD_FLAGS_LEN 4
@@ -1155,29 +1101,8 @@
 /* MAE_MPORT_SELECTOR structuredef: MPORTS are identified by an opaque unsigned
  * integer value (mport_id) that is guaranteed to be representable within
  * 32-bits or within any NIC interface field that needs store the value
- * (whichever is narrowers). TODO: there's a desire to give mport_id some
- * structure such that there's a low index part and a high type part. The
- * driver would be able to request a mask for the index part, and this extract
- * just the index. Moreover, there'd be a guarantee that the index part would
- * be small (maybe best done by making the mask as small as possible) so that
- * the driver could use the index as, well, an index. We'd ensure that it was
- * implicit in the API what the type field represented, such that the driver
- * could avoid collisions when indexing by the index. We'd probably reserve the
- * special types for things that the driver didn't need to index on. There are
- * MCDI commands for obtaining the m-port id for preexisting m-ports, and for
- * creating new m-ports and obtaining their IDs. In order to provide a simpler
- * MAE API, it is not necessary for the driver to look up the mport_id for
- * certain pre-existing mports. Instead, the MAE MCDI interface uses an 'm-port
- * selector', which is a 32-bit value with a well known format that is used to
- * identify an m-port based upon what that m-port is connected to. This
- * structure defines the format of an mport selector. TODO: The MCDI commands
- * for querying/creating mports don't exist yet. Moreover, it's not clear
- * who'll be responsible for creating the m-ports necessary for certain
- * applications (e.g. should the MC or the driver create the m-mports for guest
- * representers? What about the m-ports for guest VNICs?) For prototyping
- * purposes, the driver should just assume that the m-ports necessary for OVS
- * already exist, and should identify them using the appropriate m-port
- * selector value. TODO: is mport_selector a good term? I'm not happy with it.
+ * (whichever is narrowers). This selector structure provides a stable way to
+ * refer to m-ports.
  */
 #define    MAE_MPORT_SELECTOR_LEN 4
 /* Used to force the tools to output bitfield-style defines for this structure.
@@ -1246,9 +1171,7 @@
 
 /***********************************/
 /* MC_CMD_MAE_GET_CAPABILITIES
- * TODO: Format TBD; lots missing. We likely want some bits that say we meet a
- * set capabilities sufficient for, e.g., OVS (where the exact meaning of each
- * bit is in DoxBox somewhere)
+ * Describes capabilities of the MAE (Match-Action Engine)
  */
 #define MC_CMD_MAE_GET_CAPABILITIES 0x140
 #undef MC_CMD_0x140_PRIVILEGE_CTG
@@ -1271,14 +1194,18 @@
 #define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_VXLAN_OFST 4
 #define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_VXLAN_LBN 0
 #define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_VXLAN_WIDTH 1
-#define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_TODO_OTHERS_OFST 4
-#define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_TODO_OTHERS_LBN 1
-#define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_TODO_OTHERS_WIDTH 1
+#define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_NVGRE_OFST 4
+#define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_NVGRE_LBN 1
+#define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_NVGRE_WIDTH 1
+#define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_GENEVE_OFST 4
+#define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_GENEVE_LBN 2
+#define        MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_GENEVE_WIDTH 1
 /* The total number of counters available to allocate. */
 #define       MC_CMD_MAE_GET_CAPABILITIES_OUT_COUNTERS_OFST 8
 #define       MC_CMD_MAE_GET_CAPABILITIES_OUT_COUNTERS_LEN 4
 /* The total number of counters lists available to allocate. A value of zero
- * indicates that counter lists are not supported by the NIC.
+ * indicates that counter lists are not supported by the NIC. (But single
+ * counters may still be.)
  */
 #define       MC_CMD_MAE_GET_CAPABILITIES_OUT_COUNTER_LISTS_OFST 12
 #define       MC_CMD_MAE_GET_CAPABILITIES_OUT_COUNTER_LISTS_LEN 4
@@ -1558,6 +1485,80 @@
 
 
 /***********************************/
+/* MC_CMD_MAE_COUNTERS_STREAM_START
+ * Start streaming counter values, specifying an RxQ to deliver packets to.
+ * Counters allocated to the calling function will be written in a round robin
+ * at a fixed cycle rate, assuming sufficient credits are available. The driver
+ * may cause the counter values to be written at a slower rate by constraining
+ * the availability of credits. Note that if the driver wishes to deliver
+ * packets to a different queue, it must call MAE_COUNTERS_STREAM_STOP to stop
+ * delivering packets to the current queue first.
+ */
+#define MC_CMD_MAE_COUNTERS_STREAM_START 0x151
+
+/* MC_CMD_MAE_COUNTERS_STREAM_START_IN msgrequest */
+#define    MC_CMD_MAE_COUNTERS_STREAM_START_IN_LEN 8
+/* The RxQ to write packets to. */
+#define       MC_CMD_MAE_COUNTERS_STREAM_START_IN_QID_OFST 0
+#define       MC_CMD_MAE_COUNTERS_STREAM_START_IN_QID_LEN 2
+/* Maximum size in bytes of packets that may be written to the RxQ. */
+#define       MC_CMD_MAE_COUNTERS_STREAM_START_IN_PACKET_SIZE_OFST 2
+#define       MC_CMD_MAE_COUNTERS_STREAM_START_IN_PACKET_SIZE_LEN 2
+/* Optional flags. */
+#define       MC_CMD_MAE_COUNTERS_STREAM_START_IN_FLAGS_OFST 4
+#define       MC_CMD_MAE_COUNTERS_STREAM_START_IN_FLAGS_LEN 4
+#define        MC_CMD_MAE_COUNTERS_STREAM_START_IN_ZERO_SQUASH_DISABLE_OFST 4
+#define        MC_CMD_MAE_COUNTERS_STREAM_START_IN_ZERO_SQUASH_DISABLE_LBN 0
+#define        MC_CMD_MAE_COUNTERS_STREAM_START_IN_ZERO_SQUASH_DISABLE_WIDTH 1
+#define        MC_CMD_MAE_COUNTERS_STREAM_START_IN_COUNTER_STALL_EN_OFST 4
+#define        MC_CMD_MAE_COUNTERS_STREAM_START_IN_COUNTER_STALL_EN_LBN 1
+#define        MC_CMD_MAE_COUNTERS_STREAM_START_IN_COUNTER_STALL_EN_WIDTH 1
+
+/* MC_CMD_MAE_COUNTERS_STREAM_START_OUT msgresponse */
+#define    MC_CMD_MAE_COUNTERS_STREAM_START_OUT_LEN 4
+#define       MC_CMD_MAE_COUNTERS_STREAM_START_OUT_FLAGS_OFST 0
+#define       MC_CMD_MAE_COUNTERS_STREAM_START_OUT_FLAGS_LEN 4
+#define        MC_CMD_MAE_COUNTERS_STREAM_START_OUT_USES_CREDITS_OFST 0
+#define        MC_CMD_MAE_COUNTERS_STREAM_START_OUT_USES_CREDITS_LBN 0
+#define        MC_CMD_MAE_COUNTERS_STREAM_START_OUT_USES_CREDITS_WIDTH 1
+
+
+/***********************************/
+/* MC_CMD_MAE_COUNTERS_STREAM_STOP
+ * Stop streaming counter values to the specified RxQ.
+ */
+#define MC_CMD_MAE_COUNTERS_STREAM_STOP 0x152
+
+/* MC_CMD_MAE_COUNTERS_STREAM_STOP_IN msgrequest */
+#define    MC_CMD_MAE_COUNTERS_STREAM_STOP_IN_LEN 2
+/* The RxQ to stop writing packets to. */
+#define       MC_CMD_MAE_COUNTERS_STREAM_STOP_IN_QID_OFST 0
+#define       MC_CMD_MAE_COUNTERS_STREAM_STOP_IN_QID_LEN 2
+
+/* MC_CMD_MAE_COUNTERS_STREAM_STOP_OUT msgrequest */
+#define    MC_CMD_MAE_COUNTERS_STREAM_STOP_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS
+ * Give a number of credits to the packetiser. Each credit received allows the
+ * MC to write one packet to the RxQ, therefore for each credit the driver must
+ * have written sufficient descriptors for a packet of length
+ * MAE_COUNTERS_PACKETISER_STREAM_START/PACKET_SIZE and rung the doorbell.
+ */
+#define MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS 0x153
+
+/* MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS_IN msgrequest */
+#define    MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS_IN_LEN 4
+/* Number of credits to give to the packetiser. */
+#define       MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS_IN_NUM_CREDITS_OFST 0
+#define       MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS_IN_NUM_CREDITS_LEN 4
+
+/* MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS_OUT msgresponse */
+#define    MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS_OUT_LEN 0
+
+
+/***********************************/
 /* MC_CMD_MAE_ENCAP_HEADER_ALLOC
  * Allocate encap action metadata
  */
@@ -1765,13 +1766,8 @@
  */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_DELIVER_OFST 20
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_DELIVER_LEN 4
-/* Set to COUNTER_LIST_ID_NULL to request no counter action. TODO: do we want
- * counters to be associated with an action set? Apparently, both OVS and DPDK
- * associate counters with rules. Associating counters with actions is more
- * flexible (and may be necessary for counters to be meaningful if we ever want
- * to provide the option of counters based upon lengths after modifications).
- * However, it is wasteful if the driver wished to install lots of rules whose
- * actions only differ in which counters they increase.
+/* Allows an action set to trigger several counter updates. Set to
+ * COUNTER_LIST_ID_NULL to request no counter action.
  */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_COUNTER_LIST_ID_OFST 24
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_COUNTER_LIST_ID_LEN 4
@@ -1779,26 +1775,7 @@
  * it can supply a COUNTER_ID instead of allocating a single-element counter
  * list. This field should be set to COUNTER_ID_NULL if this behaviour is not
  * required. It is not valid to supply a non-NULL value for both
- * COUNTER_LIST_ID and COUNTER_ID. TODO: I'm unsure about this feature. It's
- * not yet clear how the firmware will internally manage resources. For
- * example, if the driver passed in a counter id, will the firmware then need
- * to internally allocate a single-entry counter list, and then automatically
- * free that list when the referencing action set is freed? Would it be
- * preferrable to only accept a counter list, and push the resource management
- * up to the driver? TODO: I'm also unsure about the way this feature is
- * exposed. In general, this API uses NULL values for ID fields where there
- * should be no linked resource. However, this doesn't naturally describe the
- * situation where, where the two linked resoures are mutually exclusive. The
- * alternative is to have a union of a COUNTER_ID and a COUNTER_LIST_ID, with a
- * separate field indicating what type of ID the field contains. This makes it
- * clear that the two are mutually exclusive, but brings inconsistency to the
- * API. [CJK] Having written the above, my preference is to remove this
- * feature, and require that the driver supply a counter list. This is the
- * simplest option for firmware, and also feels the safest. However, I'm happy
- * to be told that not dealing with the extra resource management in the driver
- * is worth the risk / complexity. If we do retain the current approach of
- * allowing either a counter or a counter list to be specified, I'm ambivalent
- * between the product type vs. tagged union type approaches, and dislike both.
+ * COUNTER_LIST_ID and COUNTER_ID.
  */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_COUNTER_ID_OFST 28
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_COUNTER_ID_LEN 4
@@ -2017,9 +1994,7 @@
 /*               MAE_MCDI_ENCAP_TYPE */
 /* Match priority. Lower values have higher priority. Must be less than
  * MC_CMD_MAE_GET_CAPABILITIES_OUT.ENCAP_PRIOS If a packet matches two filters
- * with equal priority then it is unspecified which takes priority. TODO: some
- * thought may need to go to security if distinct drivers are able to install
- * colliding rules.
+ * with equal priority then it is unspecified which takes priority.
  */
 #define       MC_CMD_MAE_OUTER_RULE_INSERT_IN_PRIO_OFST 4
 #define       MC_CMD_MAE_OUTER_RULE_INSERT_IN_PRIO_LEN 4
@@ -2211,8 +2186,7 @@
 /* MC_CMD_MAE_ACTION_RULE_INSERT
  * Insert a rule specify that packets matching a filter be processed according
  * to a previous allocated action. Masks can be set as indicated by
- * MC_CMD_MAE_GET_MATCH_FIELD_CAPABILITIES TODO: see thoughts in outer_rule
- * about naming.
+ * MC_CMD_MAE_GET_MATCH_FIELD_CAPABILITIES.
  */
 #define MC_CMD_MAE_ACTION_RULE_INSERT 0x15c
 #undef MC_CMD_0x15c_PRIVILEGE_CTG
@@ -2446,6 +2420,93 @@
 /* MC_CMD_MAE_MPORT_FREE_OUT msgresponse */
 #define    MC_CMD_MAE_MPORT_FREE_OUT_LEN 0
 
+/* MAE_MPORT_DESC structuredef */
+#define    MAE_MPORT_DESC_LEN 52
+#define       MAE_MPORT_DESC_MPORT_ID_OFST 0
+#define       MAE_MPORT_DESC_MPORT_ID_LEN 4
+#define       MAE_MPORT_DESC_MPORT_ID_LBN 0
+#define       MAE_MPORT_DESC_MPORT_ID_WIDTH 32
+/* Reserved for future purposes, contains information independent of caller */
+#define       MAE_MPORT_DESC_FLAGS_OFST 4
+#define       MAE_MPORT_DESC_FLAGS_LEN 4
+#define       MAE_MPORT_DESC_FLAGS_LBN 32
+#define       MAE_MPORT_DESC_FLAGS_WIDTH 32
+#define       MAE_MPORT_DESC_CALLER_FLAGS_OFST 8
+#define       MAE_MPORT_DESC_CALLER_FLAGS_LEN 4
+#define        MAE_MPORT_DESC_CAN_RECEIVE_ON_OFST 8
+#define        MAE_MPORT_DESC_CAN_RECEIVE_ON_LBN 0
+#define        MAE_MPORT_DESC_CAN_RECEIVE_ON_WIDTH 1
+#define        MAE_MPORT_DESC_CAN_DELIVER_TO_OFST 8
+#define        MAE_MPORT_DESC_CAN_DELIVER_TO_LBN 1
+#define        MAE_MPORT_DESC_CAN_DELIVER_TO_WIDTH 1
+#define        MAE_MPORT_DESC_CAN_DELETE_OFST 8
+#define        MAE_MPORT_DESC_CAN_DELETE_LBN 2
+#define        MAE_MPORT_DESC_CAN_DELETE_WIDTH 1
+#define       MAE_MPORT_DESC_CALLER_FLAGS_LBN 64
+#define       MAE_MPORT_DESC_CALLER_FLAGS_WIDTH 32
+/* Not the ideal name; it's really the type of thing connected to the m-port */
+#define       MAE_MPORT_DESC_MPORT_TYPE_OFST 12
+#define       MAE_MPORT_DESC_MPORT_TYPE_LEN 4
+/* enum: Connected to a MAC... */
+#define          MAE_MPORT_DESC_MPORT_TYPE_NET_PORT 0x0
+/* enum: Adds metadata and delivers to another m-port */
+#define          MAE_MPORT_DESC_MPORT_TYPE_ALIAS 0x1
+/* enum: Connected to a VNIC. */
+#define          MAE_MPORT_DESC_MPORT_TYPE_VNIC 0x2
+#define       MAE_MPORT_DESC_MPORT_TYPE_LBN 96
+#define       MAE_MPORT_DESC_MPORT_TYPE_WIDTH 32
+/* 128-bit value available to drivers for m-port identification. */
+#define       MAE_MPORT_DESC_UUID_OFST 16
+#define       MAE_MPORT_DESC_UUID_LEN 16
+#define       MAE_MPORT_DESC_UUID_LBN 128
+#define       MAE_MPORT_DESC_UUID_WIDTH 128
+/* Big wadge of space reserved for other common properties */
+#define       MAE_MPORT_DESC_RESERVED_OFST 32
+#define       MAE_MPORT_DESC_RESERVED_LEN 8
+#define       MAE_MPORT_DESC_RESERVED_LO_OFST 32
+#define       MAE_MPORT_DESC_RESERVED_HI_OFST 36
+#define       MAE_MPORT_DESC_RESERVED_LBN 256
+#define       MAE_MPORT_DESC_RESERVED_WIDTH 64
+/* Logical port index. Only valid when type NET Port. */
+#define       MAE_MPORT_DESC_NET_PORT_IDX_OFST 40
+#define       MAE_MPORT_DESC_NET_PORT_IDX_LEN 4
+#define       MAE_MPORT_DESC_NET_PORT_IDX_LBN 320
+#define       MAE_MPORT_DESC_NET_PORT_IDX_WIDTH 32
+/* The m-port delivered to */
+#define       MAE_MPORT_DESC_ALIAS_DELIVER_MPORT_ID_OFST 40
+#define       MAE_MPORT_DESC_ALIAS_DELIVER_MPORT_ID_LEN 4
+#define       MAE_MPORT_DESC_ALIAS_DELIVER_MPORT_ID_LBN 320
+#define       MAE_MPORT_DESC_ALIAS_DELIVER_MPORT_ID_WIDTH 32
+/* The type of thing that owns the VNIC */
+#define       MAE_MPORT_DESC_VNIC_CLIENT_TYPE_OFST 40
+#define       MAE_MPORT_DESC_VNIC_CLIENT_TYPE_LEN 4
+#define          MAE_MPORT_DESC_VNIC_CLIENT_TYPE_FUNCTION 0x1 /* enum */
+#define          MAE_MPORT_DESC_VNIC_CLIENT_TYPE_PLUGIN 0x2 /* enum */
+#define       MAE_MPORT_DESC_VNIC_CLIENT_TYPE_LBN 320
+#define       MAE_MPORT_DESC_VNIC_CLIENT_TYPE_WIDTH 32
+/* The PCIe interface on which the funcion lives. CJK: We need an enumeration
+ * of interfaces that we extend as new interface (types) appear. This belongs
+ * elsewhere and should be referenced from here
+ */
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_INTERFACE_OFST 44
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_INTERFACE_LEN 4
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_INTERFACE_LBN 352
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_INTERFACE_WIDTH 32
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_PF_IDX_OFST 48
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_PF_IDX_LEN 2
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_PF_IDX_LBN 384
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_PF_IDX_WIDTH 16
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_VF_IDX_OFST 50
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_VF_IDX_LEN 2
+/* enum: Indicates that the function is a PF */
+#define          MAE_MPORT_DESC_VF_IDX_NULL 0xffff
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_VF_IDX_LBN 400
+#define       MAE_MPORT_DESC_VNIC_FUNCTION_VF_IDX_WIDTH 16
+#define       MAE_MPORT_DESC_VNIC_PLUGIN_TBD_OFST 44
+#define       MAE_MPORT_DESC_VNIC_PLUGIN_TBD_LEN 4
+#define       MAE_MPORT_DESC_VNIC_PLUGIN_TBD_LBN 352
+#define       MAE_MPORT_DESC_VNIC_PLUGIN_TBD_WIDTH 32
+
 
 /***********************************/
 /* MC_CMD_MAE_MPORT_REUUID
@@ -2467,6 +2528,35 @@
 
 /* MC_CMD_MAE_MPORT_REUUID_OUT msgresponse */
 #define    MC_CMD_MAE_MPORT_REUUID_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_MAE_MPORT_ENUMERATE
+ */
+#define MC_CMD_MAE_MPORT_ENUMERATE 0x17c
+
+/* MC_CMD_MAE_MPORT_ENUMERATE_IN msgrequest */
+#define    MC_CMD_MAE_MPORT_ENUMERATE_IN_LEN 0
+
+/* MC_CMD_MAE_MPORT_ENUMERATE_OUT msgresponse */
+#define    MC_CMD_MAE_MPORT_ENUMERATE_OUT_LENMIN 8
+#define    MC_CMD_MAE_MPORT_ENUMERATE_OUT_LENMAX 252
+#define    MC_CMD_MAE_MPORT_ENUMERATE_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_MAE_MPORT_ENUMERATE_OUT_LEN(num) (8+1*(num))
+#define    MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_NUM(len) (((len)-8)/1)
+#define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_COUNT_OFST 0
+#define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_COUNT_LEN 4
+#define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_SIZEOF_MPORT_DESC_OFST 4
+#define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_SIZEOF_MPORT_DESC_LEN 4
+/* Any array of MAE_MPORT_DESC structures. The MAE_MPORT_DESC structure may
+ * grow in future version of this command. Drivers should use a stride of
+ * SIZEOF_MPORT_DESC. Fields beyond SIZEOF_MPORT_DESC are not present.
+ */
+#define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_OFST 8
+#define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_LEN 1
+#define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_MINNUM 0
+#define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_MAXNUM 244
+#define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_MAXNUM_MCDI2 1012
 
 
 /***********************************/
@@ -2500,32 +2590,32 @@
  */
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_DOMAIN_OFST 2
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_DOMAIN_LEN 2
-/* Source IP address to match. IPv4 should be in first 4 bytes with other bytes
- * zero.
+/* Source IP address to match, as bytes in network order. IPv4 should be in
+ * first 4 bytes with other bytes zero.
  */
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_SRC_ADDR_OFST 4
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_SRC_ADDR_LEN 16
-/* Destination IP address to match. IPv4 should be in first 4 bytes with other
- * bytes zero.
+/* Destination IP address to match, as bytes in network order. IPv4 should be
+ * in first 4 bytes with other bytes zero.
  */
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_DST_ADDR_OFST 20
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_DST_ADDR_LEN 16
-/* Source TCP or UDP port to match. */
+/* Source TCP or UDP port to match as bytes in network order. */
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_SRC_PORT_OFST 36
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_SRC_PORT_LEN 2
-/* Destination TCP or UDP port to match. */
+/* Destination TCP or UDP port to match as bytes in network order. */
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_DST_PORT_OFST 38
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_DST_PORT_LEN 2
-/* Match input. Depending on CT_VNI_MODE, could contain VNI, outer VLAN, both
- * VLANs, or zero.
- */
-#define       MC_CMD_MAE_TRACK_CONNECTION_IN_VNI_OR_VLANS_OR_ZERO_OFST 40
-#define       MC_CMD_MAE_TRACK_CONNECTION_IN_VNI_OR_VLANS_OR_ZERO_LEN 3
-/* Match input. Discriminator for VNI_OR_VLANS_OR_ZERO field. */
-#define       MC_CMD_MAE_TRACK_CONNECTION_IN_CT_VNI_MODE_LBN 344
-#define       MC_CMD_MAE_TRACK_CONNECTION_IN_CT_VNI_MODE_WIDTH 2
-/*            Enum values, see field(s): */
-/*               MAE_CT_VNI_MODE */
+#define       MC_CMD_MAE_TRACK_CONNECTION_IN_NETWORK_OFST 40
+#define       MC_CMD_MAE_TRACK_CONNECTION_IN_NETWORK_LEN 4
+#define        MC_CMD_MAE_TRACK_CONNECTION_IN_VNI_OR_VLANS_OR_ZERO_OFST 40
+#define        MC_CMD_MAE_TRACK_CONNECTION_IN_VNI_OR_VLANS_OR_ZERO_LBN 0
+#define        MC_CMD_MAE_TRACK_CONNECTION_IN_VNI_OR_VLANS_OR_ZERO_WIDTH 24
+#define        MC_CMD_MAE_TRACK_CONNECTION_IN_CT_VNI_MODE_OFST 40
+#define        MC_CMD_MAE_TRACK_CONNECTION_IN_CT_VNI_MODE_LBN 24
+#define        MC_CMD_MAE_TRACK_CONNECTION_IN_CT_VNI_MODE_WIDTH 2
+/*             Enum values, see field(s): */
+/*                MAE_CT_VNI_MODE */
 /* Mark output, will be given to following ACTION_RULE lookup. */
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_CT_MARK_OFST 44
 #define       MC_CMD_MAE_TRACK_CONNECTION_IN_CT_MARK_LEN 4

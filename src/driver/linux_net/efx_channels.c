@@ -304,7 +304,9 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 
 static unsigned int efx_num_rss_channels(struct efx_nic *efx)
 {
-	unsigned int rss_channels = efx_rx_channels(efx);
+	/* do not RSS to extra_channels, such as PTP */
+	unsigned int rss_channels = efx_rx_channels(efx) -
+				    efx->n_extra_channels;
 
 #if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_PACKAGES)
 	if (rss_numa_local) {
@@ -368,14 +370,14 @@ static void efx_allocate_xdp_channels(struct efx_nic *efx,
 	 */
 	if (n_channels + n_xdp_ev > max_channels) {
 		netif_err(efx, drv, efx->net_dev,
-			   "Insufficient resources for %d XDP event queues (%d other channels, max %d)\n",
+			   "Insufficient resources for %d XDP event queues (%d current channels, max %d)\n",
 			   n_xdp_ev, n_channels, max_channels);
 		efx->n_xdp_channels = 0;
 		efx->xdp_tx_per_channel = 0;
 		efx->xdp_tx_queue_count = 0;
 	} else if (n_channels + n_xdp_tx > efx->max_vis) {
 		netif_err(efx, drv, efx->net_dev,
-			  "Insufficient resources for %d XDP TX queues (%d other channels, max VIs %d)\n",
+			  "Insufficient resources for %d XDP TX queues (%d current channels, max VIs %d)\n",
 			  n_xdp_tx, n_channels, efx->max_vis);
 		efx->n_xdp_channels = 0;
 		efx->xdp_tx_per_channel = 0;
@@ -395,6 +397,7 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 				      unsigned int parallelism)
 {
 	unsigned int n_channels = parallelism;
+	unsigned int extra_channel_type;
 #ifdef EFX_HAVE_MSIX_CAP
 	int vec_count;
 #endif
@@ -411,18 +414,23 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		return -ENOSPC;
 	}
 
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	n_channels += efx->n_dl_irqs;
-#endif
-#endif
+	for (extra_channel_type = 0;
+	     extra_channel_type < EFX_MAX_EXTRA_CHANNELS &&
+	     !separate_tx_channels && n_channels < max_channels;
+	     extra_channel_type++)
+		n_channels += !!efx->extra_channel_type[extra_channel_type];
 
 	efx_allocate_xdp_channels(efx, max_channels, n_channels);
 	n_channels += efx->n_xdp_channels;
 
-	n_channels = min(n_channels, max_channels);
-
 #ifdef EFX_HAVE_MSIX_CAP
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	/* dl IRQs don't need VIs, so no need to clamp to max_channels */
+	n_channels += efx->n_dl_irqs;
+#endif
+#endif
+
 	vec_count = pci_msix_vec_count(efx->pci_dev);
 	if (vec_count < 0)
 		return vec_count;
@@ -443,19 +451,28 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		/* reduce driverlink allocated IRQs first, to a minimum of 1 */
 		n_channels -= efx->n_dl_irqs;
 		efx->n_dl_irqs = vec_count == min_channels ? 0 :
-				 max(vec_count - (int) n_channels, 1);
+				 max(vec_count - (int)n_channels, 1);
+		/* Make driverlink-consumed IRQ vectors unavailable for net
+		 * driver use.
+		 */
+		vec_count -= efx->n_dl_irqs;
 #endif
 #endif
+		/* reduce XDP channels */
+		n_channels -= efx->n_xdp_channels;
+		efx->n_xdp_channels = max(vec_count - (int)n_channels, 0);
+
 		n_channels = vec_count;
 	}
-#endif
-
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
-	/* driverlink IRQs don't have a channel in the net driver, so remove
-	 * them from further calculations.
-	 */
-	n_channels -= efx->n_dl_irqs;
+	else {
+		/* driverlink IRQs don't have a channel in the net driver, so
+		 * remove them from further calculations.
+		 */
+		n_channels -= efx->n_dl_irqs;
+	}
+#endif
 #endif
 #endif
 
@@ -463,6 +480,7 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 	n_channels -= efx->n_xdp_channels;
 
 	if (separate_tx_channels) {
+		efx->n_extra_channels = 0;
 		efx->n_combined_channels = 0;
 		efx->n_tx_only_channels =
 			min(max(n_channels / 2, 1U),
@@ -473,20 +491,30 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 			max(n_channels -
 			    efx->n_tx_only_channels, 1U);
 	} else {
+		efx->n_extra_channels = 0;
+		/* allocate other channels, leaving at least one channel */
+		for (extra_channel_type = 0;
+		     extra_channel_type < EFX_MAX_EXTRA_CHANNELS &&
+		     n_channels > 1 &&
+		     efx->n_extra_channels + 1 < efx->max_tx_channels;
+		     extra_channel_type++)
+			efx->n_extra_channels += !!efx->extra_channel_type[extra_channel_type];
+		n_channels -= efx->n_extra_channels;
+
 		efx->n_combined_channels = min(n_channels,
 					       efx->max_tx_channels);
 		efx->n_tx_only_channels = 0;
 		efx->tx_channel_offset = 0;
-		efx->n_rx_only_channels = n_channels - efx->n_combined_channels;
+		/* if we have other channels then don't use RX only channels */
+		efx->n_rx_only_channels = efx->n_extra_channels ? 0 :
+			n_channels - efx->n_combined_channels;
 	}
 	efx->n_rss_channels = efx_num_rss_channels(efx);
 
-	efx->xdp_channel_offset = efx->tx_channel_offset +
-				  efx_tx_channels(efx);
-
 	EFX_WARN_ON_PARANOID(efx->n_rx_only_channels &&
 			     efx->n_tx_only_channels &&
-			     efx->n_combined_channels);
+			     (efx->n_combined_channels ||
+			      efx->n_extra_channels));
 
 	return 0;
 }
@@ -556,14 +584,8 @@ static void efx_dl_make_irq_resources(struct efx_nic *efx, size_t entries,
  */
 int efx_probe_interrupts(struct efx_nic *efx)
 {
-	unsigned int n_tx_channels;
-	unsigned int extra_channels = 0;
-	unsigned int i, j;
+	unsigned int i;
 	int rc;
-
-	for (i = 0; i < EFX_MAX_EXTRA_CHANNELS; i++)
-		if (efx->extra_channel_type[i])
-			++extra_channels;
 
 	if (efx->interrupt_mode == EFX_INT_MODE_MSIX) {
 		struct msix_entry *xentries;
@@ -636,6 +658,7 @@ int efx_probe_interrupts(struct efx_nic *efx)
 
 	/* Try single interrupt MSI */
 	if (efx->interrupt_mode == EFX_INT_MODE_MSI) {
+		efx->n_extra_channels = 0;
 		efx->n_combined_channels = 1;
 		efx->n_rx_only_channels = 0;
 		efx->n_rss_channels = 1;
@@ -662,31 +685,6 @@ int efx_probe_interrupts(struct efx_nic *efx)
     if (efx->interrupt_mode == EFX_INT_MODE_POLLED) ;
         /* Do nothing */
 #endif
-
-	/* Assign extra channels if possible, before XDP channels */
-	j = efx_channels(efx) - efx_xdp_channels(efx);
-	for (i = 0; i < EFX_MAX_EXTRA_CHANNELS; i++) {
-		if (!efx->extra_channel_type[i])
-			continue;
-		if (efx->interrupt_mode != EFX_INT_MODE_MSIX ||
-		    efx_channels(efx) <= extra_channels) {
-			efx->extra_channel_type[i]->handle_no_channel(efx);
-		} else {
-			--j;
-			efx_get_channel(efx, j)->type =
-				efx->extra_channel_type[i];
-		}
-	}
-
-	n_tx_channels = efx_tx_channels(efx);
-	/* Hide the PTP TX queue from the network stack, so it is not
-	 * used for normal packets.
-	 */
-	if (efx->extra_channel_type[EFX_EXTRA_CHANNEL_PTP] &&
-	    (n_tx_channels > 1) && efx_ptp_use_mac_tx_timestamps(efx))
-		n_tx_channels--;
-	netif_set_real_num_tx_queues(efx->net_dev, n_tx_channels);
-	netif_set_real_num_rx_queues(efx->net_dev, efx_rx_channels(efx));
 
 	/* RSS on the PF might now be impossible due to interrupt allocation
 	 * failure
@@ -1012,7 +1010,7 @@ static void efx_set_affinity_notifier(struct efx_channel *channel)
 				       &channel->irq_affinity.notifier);
 	if (rc)
 		netif_warn(channel->efx, probe, channel->efx->net_dev,
-			   "Failed to set irq notifier for IRQ %d",
+			   "Failed to set irq notifier for IRQ %d\n",
 			   channel->irq);
 }
 
@@ -1238,7 +1236,7 @@ static int efx_set_channel_xdp(struct efx_nic *efx, struct efx_channel *channel)
 	/* TX queue index for first XDP queue overall. */
 	xdp_zero_base = efx->tx_queues_per_channel * efx_tx_channels(efx);
 	/* TX queue index for first queue on this channel. */
-	xdp_base = channel->channel - efx->xdp_channel_offset;
+	xdp_base = channel->channel - efx_xdp_channel_offset(efx);
 	xdp_base *= efx->xdp_tx_per_channel;
 
 	/* Do we need the full allowance of XDP tx queues for this channel?
@@ -1254,7 +1252,7 @@ static int efx_set_channel_xdp(struct efx_nic *efx, struct efx_channel *channel)
 	EFX_WARN_ON_PARANOID(channel->tx_queue_count == 0);
 
 	EFX_WARN_ON_PARANOID(channel->tx_queues);
-	channel->tx_queues = kcalloc(efx->xdp_tx_per_channel,
+	channel->tx_queues = kcalloc(channel->tx_queue_count,
 				     sizeof(*tx_queue),
 				     GFP_KERNEL);
 	if (!channel->tx_queues) {
@@ -1302,9 +1300,20 @@ efx_alloc_channel(struct efx_nic *efx, int i, struct efx_channel *old_channel)
 	return channel;
 }
 
-bool efx_init_channels(struct efx_nic *efx)
+void efx_fini_channels(struct efx_nic *efx)
 {
 	unsigned int i;
+
+	for (i = 0; i < EFX_MAX_CHANNELS; ++i) {
+		kfree(efx->channel[i]);
+		efx->channel[i] = NULL;
+	}
+}
+
+int efx_init_channels(struct efx_nic *efx)
+{
+	unsigned int i;
+	int rc = 0;
 
 	if (WARN_ON(efx->type->supported_interrupt_modes == 0))
 		return false;
@@ -1319,45 +1328,36 @@ bool efx_init_channels(struct efx_nic *efx)
 		efx->interrupt_mode = EFX_INT_MODE_MSI;
 #endif
 
-	if (efx_nic_rev(efx) == EFX_REV_EF100)
-		separate_tx_channels = false;
-	/* Maximum for ethtool -l/-L */
-	efx->max_channels = EFX_MAX_CHANNELS;
-	efx->max_tx_channels = EFX_MAX_CHANNELS;
-
 	if (efx->interrupt_mode == EFX_INT_MODE_MSIX) {
 		unsigned int parallelism = efx_wanted_parallelism(efx);
 
-		efx_allocate_msix_channels(efx, efx->max_channels,
-					   parallelism);
-
 #ifdef EFX_HAVE_MSIX_CAP
 		i = pci_msix_vec_count(efx->pci_dev);
-		if (i > 0)
-			efx->max_channels = min(efx->max_channels, (u16) i);
+		if (i > 0) {
+			efx->max_channels =
+				min(efx->max_channels, (u16)i);
+			efx->max_tx_channels = efx->max_channels;
+		}
 #endif
+
+		rc = efx_allocate_msix_channels(efx, efx->max_channels,
+						parallelism);
+		if (rc)
+			return rc;
 	}
-	efx->max_tx_channels = efx->max_channels;
 
 	for (i = 0; i < EFX_MAX_CHANNELS; i++) {
 		efx->channel[i] = efx_alloc_channel(efx, i, NULL);
-		if (!efx->channel[i])
-			return false;
+		if (!efx->channel[i]) {
+			netif_err(efx, drv, efx->net_dev,
+				  "out of memory allocating channel\n");
+			rc = -ENOMEM;
+		}
 		efx->msi_context[i].efx = efx;
 		efx->msi_context[i].index = i;
 	}
 
-	return true;
-}
-
-void efx_fini_channels(struct efx_nic *efx)
-{
-	unsigned int i;
-
-	for (i = 0; i < EFX_MAX_CHANNELS; i++) {
-		kfree(efx->channel[i]);
-		efx->channel[i] = NULL;
-	}
+	return rc;
 }
 
 /* Allocate and initialise a channel structure, copying parameters
@@ -1414,6 +1414,7 @@ efx_copy_channel(struct efx_channel *old_channel)
 			if (tx_queue->channel)
 				tx_queue->channel = channel;
 			tx_queue->buffer = NULL;
+			tx_queue->cb_page = NULL;
 			memset(&tx_queue->txd, 0, sizeof(tx_queue->txd));
 		}
 	} else {
@@ -1484,9 +1485,9 @@ efx_get_channel_name(struct efx_channel *channel, char *buf, size_t len)
 
 	number = channel->channel;
 
-	if (efx->n_xdp_channels && number >= efx->xdp_channel_offset) {
+	if (efx->n_xdp_channels && number >= efx_xdp_channel_offset(efx)) {
 		type = "-xdp";
-		number -= efx->xdp_channel_offset;
+		number -= efx_xdp_channel_offset(efx);
 	} else if (efx->tx_channel_offset == 0) {
 		type = "";
 	} else if (number < efx->tx_channel_offset) {
@@ -1531,20 +1532,12 @@ int efx_probe_channels(struct efx_nic *efx)
 			netif_err(efx, probe, efx->net_dev,
 				  "failed to create channel %d\n",
 				  channel->channel);
-			goto fail;
+			return rc;
 		}
 	}
 	efx_set_channel_names(efx);
 
-	rc = efx_init_debugfs_channels(efx);
-	if (rc)
-		goto fail;
-
-	return 0;
-
-fail:
-	efx_remove_channels(efx);
-	return rc;
+	return efx_init_debugfs_channels(efx);
 }
 
 static void efx_remove_channel(struct efx_channel *channel)
@@ -1579,8 +1572,6 @@ void efx_remove_channels(struct efx_nic *efx)
 
 	efx_for_each_channel(channel, efx)
 		efx_remove_channel(channel);
-
-	kfree(efx->xdp_tx_queues);
 }
 
 int
@@ -1701,6 +1692,7 @@ rollback:
 
 int efx_set_channels(struct efx_nic *efx)
 {
+	unsigned int i, j, hidden_tx_channels = 0;
 	struct efx_channel *channel;
 	int rc = 0;
 
@@ -1713,6 +1705,34 @@ int efx_set_channels(struct efx_nic *efx)
 					     GFP_KERNEL);
 		if (!efx->xdp_tx_queues)
 			return -ENOMEM;
+	}
+
+	/* set all channels to default type.
+	 * will be overridden for extra_channels
+	 */
+	efx_for_each_channel(channel, efx)
+		channel->type = &efx_default_channel_type;
+
+	/* Assign extra channels if possible in to extra_channel range */
+	for (i = 0, j = efx_extra_channel_offset(efx);
+	     i < EFX_MAX_EXTRA_CHANNELS; i++) {
+		if (!efx->extra_channel_type[i])
+			continue;
+
+		if (j < efx_extra_channel_offset(efx) + efx->n_extra_channels) {
+			efx_get_channel(efx, j++)->type =
+				efx->extra_channel_type[i];
+			/* Other TX channels exposed to the kernel must be
+			 * before hidden ones in the extra_channel_type array.
+			 */
+			WARN_ON(hidden_tx_channels &&
+				!efx->extra_channel_type[i]->hide_tx);
+			hidden_tx_channels +=
+				efx->extra_channel_type[i]->hide_tx ||
+				hidden_tx_channels != 0;
+		} else {
+			efx->extra_channel_type[i]->handle_no_channel(efx);
+		}
 	}
 
 	/* We need to mark which channels really have RX and TX
@@ -1733,6 +1753,10 @@ int efx_set_channels(struct efx_nic *efx)
 		if (rc)
 			return rc;
 	}
+
+	netif_set_real_num_tx_queues(efx->net_dev, efx_tx_channels(efx) -
+						   hidden_tx_channels);
+	netif_set_real_num_rx_queues(efx->net_dev, efx_rx_channels(efx));
 
 	return 0;
 }
@@ -1872,6 +1896,11 @@ int efx_start_channels(struct efx_nic *efx)
 	int rc;
 
 	efx_for_each_channel(channel, efx) {
+		if (channel->type->start) {
+			rc = channel->type->start(channel);
+			if (rc)
+				return rc;
+		}
 		efx_for_each_channel_tx_queue(tx_queue, channel) {
 			rc = efx_init_tx_queue(tx_queue);
 			if (rc)
@@ -1909,6 +1938,8 @@ void efx_stop_channels(struct efx_nic *efx)
 	}
 
 	efx_for_each_channel(channel, efx) {
+		if (channel->type->stop)
+			channel->type->stop(channel);
 		/* RX packet processing is pipelined, so wait for the
 		 * NAPI handler to complete.  At least event queue 0
 		 * might be kept active by non-data events, so don't
@@ -2234,7 +2265,7 @@ void efx_pause_napi(struct efx_nic *efx)
 {
 	struct efx_channel *channel;
 
-	if (efx->state != STATE_READY)
+	if (efx->state != STATE_NET_UP)
 		return;
 
 	ASSERT_RTNL();
@@ -2263,7 +2294,7 @@ int efx_resume_napi(struct efx_nic *efx)
 {
 	struct efx_channel *channel;
 
-	if (efx->state != STATE_READY)
+	if (efx->state != STATE_NET_UP)
 		return 0;
 
 	ASSERT_RTNL();

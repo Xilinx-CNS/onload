@@ -23,6 +23,10 @@ void efx_mae_mport_mport(struct efx_nic *efx, u32 mport_id, u32 *out);
 
 int efx_mae_lookup_mport(struct efx_nic *efx, u32 selector, u32 *id);
 
+int efx_mae_start_counters(struct efx_nic *efx, struct efx_channel *channel);
+int efx_mae_stop_counters(struct efx_nic *efx, struct efx_channel *channel);
+void efx_mae_counters_grant_credits(struct work_struct *work);
+
 #define MAE_NUM_FIELDS	(MAE_FIELD_ENC_VNET_ID + 1)
 
 struct mae_caps {
@@ -46,8 +50,6 @@ int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv);
 
 int efx_mae_allocate_counter(struct efx_nic *efx, u32 *id);
 int efx_mae_free_counter(struct efx_nic *efx, u32 id);
-
-int efx_mae_read_counters(struct efx_nic *efx, const struct efx_buffer *buffer);
 
 int efx_mae_allocate_encap_md(struct efx_nic *efx,
 			      struct efx_tc_encap_action *encap);

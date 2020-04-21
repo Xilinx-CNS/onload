@@ -34,7 +34,7 @@ static int efx_ioctl_reset(struct efx_nic *efx, union efx_ioctl_data *data)
 			  "unsupported reset_method=%d\n", method);
 		return -EINVAL;
 	}
-	if (efx->state != STATE_READY)
+	if (!efx_net_active(efx->state))
 		return -EOPNOTSUPP;
 
 	efx_schedule_reset(efx, method);
@@ -65,7 +65,7 @@ static int efx_ioctl_set_loopback(struct efx_nic *efx,
 	/* Check that any mode is supported before we search for a set bit */
 	if (efx->loopback_modes == 0)
 		return -EOPNOTSUPP;
-	if (efx->state != STATE_READY)
+	if (!efx_net_active(efx->state))
 		return -EOPNOTSUPP;
 
 	if (mode == LOOPBACK_NEAR)

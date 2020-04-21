@@ -51,6 +51,7 @@
 #include <linux/jhash.h>
 #include <linux/ktime.h>
 #include <linux/ctype.h>
+#include <linux/aer.h>
 #ifdef CONFIG_SFC_MTD
 /* This is conditional because it's fairly disgusting */
 #include "linux_mtd_mtd.h"
@@ -349,6 +350,10 @@
 
 #ifndef DEVICE_ATTR_RO
 #define DEVICE_ATTR_RO(_name)  DEVICE_ATTR(_name, 0444, _name##_show, NULL)
+#endif
+#ifndef DEVICE_ATTR_RW
+#define DEVICE_ATTR_RW(_name)  DEVICE_ATTR(_name, 0644, _name##_show, \
+					   _name##_store)
 #endif
 
 #ifndef sysfs_attr_init
@@ -1437,6 +1442,13 @@ static inline void skb_checksum_none_assert(const struct sk_buff *skb)
 }
 #endif
 
+#ifndef NETIF_F_TSO_MANGLEID
+	#define NETIF_F_TSO_MANGLEID 0
+#endif
+#ifndef SKB_GSO_TCP_FIXEDID
+	#define SKB_GSO_TCP_FIXEDID 0
+#endif
+
 #ifndef __read_mostly
 	#define __read_mostly
 #endif
@@ -1529,6 +1541,13 @@ static inline struct sk_buff *
 		WARN_ON(1);
 		return NULL;
 	}
+#endif
+
+#ifdef EFX_HAVE_IOREMAP_NOCACHE
+	/* On old kernels ioremap_nocache() differs from ioremap() */
+	#define efx_ioremap(phys,size)	ioremap_nocache(phys,size)
+#else
+	#define efx_ioremap(phys,size)	ioremap(phys,size)
 #endif
 
 #ifdef EFX_NEED_SKB_TRANSPORT_HEADER_WAS_SET
@@ -1665,6 +1684,13 @@ static inline bool mod_delayed_work(struct workqueue_struct *wq,
 	cancel_delayed_work(dwork);
 	queue_delayed_work(wq, dwork, delay);
 	return true;
+}
+#endif
+
+#ifdef EFX_NEED_PCI_AER_CLEAR_NONFATAL_STATUS
+static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
+{
+	return pci_cleanup_aer_uncorrect_error_status(dev);
 }
 #endif
 
@@ -2115,6 +2141,14 @@ static inline unsigned long __attribute_const__ rounddown_pow_of_two(unsigned lo
 
 #ifdef EFX_NEED_NS_TO_TIMESPEC
 	struct timespec ns_to_timespec(const s64 nsec);
+#endif
+
+#ifdef EFX_NEED_RTC_TIME64_TO_TM
+	#include <linux/rtc.h>
+	static inline void rtc_time64_to_tm(unsigned long time, struct rtc_time *tm)
+	{
+		rtc_time_to_tm(time, tm);
+	}
 #endif
 
 #ifdef EFX_NEED_KTIME_SUB_NS
@@ -3231,6 +3265,20 @@ static inline void netif_receive_skb_list(struct sk_buff_head *head)
 		netif_receive_skb(skb);
 }
 #endif
+#endif
+
+#ifdef EFX_NEED_SKB_MARK_NOT_ON_LIST
+static inline void skb_mark_not_on_list(struct sk_buff *skb)
+{
+	skb->next = NULL;
+}
+#endif
+
+#ifndef skb_list_walk_safe
+/* Iterate through singly-linked GSO fragments of an skb. */
+#define skb_list_walk_safe(first, skb, next_skb)                               \
+	for ((skb) = (first), (next_skb) = (skb) ? (skb)->next : NULL; (skb);  \
+	     (skb) = (next_skb), (next_skb) = (skb) ? (skb)->next : NULL)
 #endif
 
 #if defined(EFX_HAVE_NDO_GET_DEVLINK) && defined(EFX_HAVE_DEVLINK_INFO)

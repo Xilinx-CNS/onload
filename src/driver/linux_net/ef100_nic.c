@@ -25,16 +25,14 @@
 #include "ef100_tx.h"
 #include "ef100_sriov.h"
 #include "ef100_rep.h"
+#include "ef100_netdev.h"
 #include "tc.h"
 #include "mae.h"
+#include "xdp.h"
 
+#define EF100_MAX_VIS 4096
 #define EF100_NUM_MCDI_BUFFERS	1
 #define MCDI_BUF_LEN (8 + MCDI_CTL_SDU_LEN_MAX)
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-#define EF100_ONLOAD_VIS 8
-#endif
-#endif
 
 #ifndef EF100_RESET_PORT
 #define EF100_RESET_PORT ((ETH_RESET_MAC | ETH_RESET_PHY) << ETH_RESET_SHARED_SHIFT)
@@ -462,7 +460,6 @@ static int ef100_filter_table_probe(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	bool rss_limited, additional_rss, encap;
-	int rc;
 
 	rss_limited = efx_ef100_has_cap(nic_data->datapath_caps,
 					RX_RSS_LIMITED);
@@ -470,46 +467,37 @@ static int ef100_filter_table_probe(struct efx_nic *efx)
 					   ADDITIONAL_RSS_MODES);
 	encap = efx_ef100_has_cap(nic_data->datapath_caps, VXLAN_NVGRE);
 
-	down_write(&efx->filter_sem);
-	rc = efx_mcdi_filter_table_probe(efx, true, rss_limited,
-					 additional_rss, encap);
-	if (rc)
-		goto out_unlock;
+	return efx_mcdi_filter_table_probe(efx, true, rss_limited,
+					   additional_rss, encap);
+}
 
-	netdev_rss_key_fill(efx->rss_context.rx_hash_key,
-			    sizeof(efx->rss_context.rx_hash_key));
-	/* Don't fail init if RSS setup doesn't work, except that EAGAIN needs
-	 * passing up.
-	 */
-	rc = efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
-	if (rc == -EAGAIN)
-		goto out_unlock;
+static int ef100_filter_table_up(struct efx_nic *efx)
+{
+	int rc = efx_mcdi_filter_table_up(efx);
+
+	if (rc)
+		return rc;
 
 	rc = efx_mcdi_filter_add_vlan(efx, EFX_FILTER_VID_UNSPEC);
 	if (rc) {
-		efx_mcdi_filter_table_remove(efx);
-		goto out_unlock;
+		efx_mcdi_filter_table_down(efx);
+		return rc;
 	}
 
 	rc = efx_mcdi_filter_add_vlan(efx, 0);
 	if (rc) {
 		efx_mcdi_filter_del_vlan(efx, EFX_FILTER_VID_UNSPEC);
-		efx_mcdi_filter_table_remove(efx);
+		efx_mcdi_filter_table_down(efx);
 	}
 
-out_unlock:
-	up_write(&efx->filter_sem);
 	return rc;
 }
 
-static void ef100_filter_table_remove(struct efx_nic *efx)
+static void ef100_filter_table_down(struct efx_nic *efx)
 {
-	down_write(&efx->filter_sem);
 	efx_mcdi_filter_del_vlan(efx, 0);
 	efx_mcdi_filter_del_vlan(efx, EFX_FILTER_VID_UNSPEC);
-	efx_mcdi_rx_free_indir_table(efx);
-	efx_mcdi_filter_table_remove(efx);
-	up_write(&efx->filter_sem);
+	efx_mcdi_filter_table_down(efx);
 }
 
 /*	Other
@@ -545,6 +533,10 @@ static int ef100_map_reset_flags(u32 *flags)
 		*flags &= ~EF100_RESET_PORT;
 		return RESET_TYPE_ALL;
 	}
+	if (*flags & ETH_RESET_MGMT) {
+		*flags &= ~ETH_RESET_MGMT;
+		return RESET_TYPE_RECOVER_OR_DISABLE;
+	}
 
 	return -EINVAL;
 }
@@ -556,22 +548,35 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 	dev_close(efx->net_dev);
 
 	if (reset_type == RESET_TYPE_TX_WATCHDOG) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+		if (efx->type->attach_reps)
+			efx->type->attach_reps(efx);
+#endif
 		netif_device_attach(efx->net_dev);
 		__clear_bit(reset_type, &efx->reset_pending);
+		efx->state = STATE_NET_DOWN;
 		rc = dev_open(efx->net_dev, NULL);
 	} else if (reset_type == RESET_TYPE_ALL) {
 		/* A RESET_TYPE_ALL will cause filters to be removed, so we remove filters
 		 * and reprobe after reset to avoid removing filters twice
 		 */
-		ef100_filter_table_remove(efx);
+		down_read(&efx->filter_sem);
+		ef100_filter_table_down(efx);
+		up_read(&efx->filter_sem);
 		rc = efx_mcdi_reset(efx, reset_type);
 		if (rc)
 			return rc;
 
 		efx->last_reset = jiffies;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+		if (efx->type->attach_reps)
+			efx->type->attach_reps(efx);
+#endif
 		netif_device_attach(efx->net_dev);
 
-		rc = ef100_filter_table_probe(efx);
+		down_read(&efx->filter_sem);
+		rc = ef100_filter_table_up(efx);
+		up_read(&efx->filter_sem);
 		if (rc)
 			return rc;
 
@@ -811,6 +816,70 @@ static struct net_device *ef100_get_vf_rep(struct efx_nic *efx, unsigned int vf)
 		return nic_data->vf_rep[vf];
 	return NULL;
 }
+
+void __ef100_detach_reps(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct net_device *rep_dev;
+	unsigned int vf;
+
+	netif_dbg(efx, drv, efx->net_dev, "Detaching %d vfreps\n",
+		  nic_data->rep_count);
+	for (vf = 0; vf < nic_data->rep_count; vf++) {
+		rep_dev = nic_data->vf_rep[vf];
+		/* See efx_device_detach_sync() */
+		netif_tx_lock_bh(rep_dev);
+		netif_device_detach(rep_dev);
+		netif_tx_unlock_bh(rep_dev);
+	}
+}
+
+static void ef100_detach_reps(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+
+	spin_lock_bh(&nic_data->vf_reps_lock);
+	__ef100_detach_reps(efx);
+	spin_unlock_bh(&nic_data->vf_reps_lock);
+}
+
+void __ef100_attach_reps(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	unsigned int vf;
+
+	netif_dbg(efx, drv, efx->net_dev, "Attaching %d vfreps\n",
+		  nic_data->rep_count);
+	for (vf = 0; vf < nic_data->rep_count; vf++)
+		netif_device_attach(nic_data->vf_rep[vf]);
+}
+
+static void ef100_attach_reps(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+
+	spin_lock_bh(&nic_data->vf_reps_lock);
+	__ef100_attach_reps(efx);
+	spin_unlock_bh(&nic_data->vf_reps_lock);
+}
+
+static void ef100_link_state_change(struct efx_nic *efx)
+{
+	struct efx_link_state *link_state = &efx->link_state;
+
+	if (link_state->up)
+		ef100_start_reps(efx);
+	else
+		ef100_stop_reps(efx);
+}
+#else /* EFX_TC_OFFLOAD */
+void __ef100_detach_reps(struct efx_nic *efx)
+{
+}
+
+void __ef100_attach_reps(struct efx_nic *efx)
+{
+}
 #endif
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
@@ -923,16 +992,45 @@ fail:
 	netif_err(efx, hw, efx->net_dev, "%s: failed rc=%d\n", __func__, rc);
 }
 
+static unsigned int efx_ef100_mcdi_rpc_timeout(struct efx_nic *efx,
+					       unsigned int cmd)
+{
+	switch (cmd) {
+	case MC_CMD_NVRAM_ERASE:
+	case MC_CMD_NVRAM_UPDATE_FINISH:
+		return MCDI_RPC_LONG_TIMEOUT;
+	default:
+		return MCDI_RPC_TIMEOUT;
+	}
+}
+
+static unsigned int ef100_check_caps(const struct efx_nic *efx,
+				     u8 flag,
+				     u32 offset)
+{
+	const struct ef100_nic_data *nic_data = efx->nic_data;
+
+	switch (offset) {
+	case(MC_CMD_GET_CAPABILITIES_V8_OUT_FLAGS1_OFST):
+		return nic_data->datapath_caps & BIT_ULL(flag);
+	case(MC_CMD_GET_CAPABILITIES_V8_OUT_FLAGS2_OFST):
+		return nic_data->datapath_caps2 & BIT_ULL(flag);
+	default: return 0;
+	}
+}
+
 /*	NIC level access functions
  */
 #ifdef EFX_C_MODEL
 #define EF100_OFFLOAD_FEATURES	(NETIF_F_HW_CSUM | NETIF_F_RXCSUM |	\
 	NETIF_F_HIGHDMA | NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_NTUPLE | \
-	NETIF_F_RXHASH | NETIF_F_RXFCS | NETIF_F_TSO_ECN | NETIF_F_RXALL)
+	NETIF_F_RXHASH | NETIF_F_RXFCS | NETIF_F_TSO_ECN | NETIF_F_RXALL | \
+	NETIF_F_TSO_MANGLEID | NETIF_F_HW_VLAN_CTAG_TX)
 #else
 #define EF100_OFFLOAD_FEATURES	(NETIF_F_HW_CSUM | NETIF_F_RXCSUM |	\
 	NETIF_F_HIGHDMA | NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_NTUPLE | \
-	NETIF_F_RXHASH | NETIF_F_RXFCS | NETIF_F_TSO_ECN | NETIF_F_RXALL)
+	NETIF_F_RXHASH | NETIF_F_RXFCS | NETIF_F_TSO_ECN | NETIF_F_RXALL | \
+	NETIF_F_TSO_MANGLEID | NETIF_F_HW_VLAN_CTAG_TX)
 #endif
 
 const struct efx_nic_type ef100_pf_nic_type = {
@@ -941,6 +1039,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.probe = ef100_probe_pf,
 	.offload_features = EF100_OFFLOAD_FEATURES,
 	.mcdi_max_ver = 2,
+	.mcdi_rpc_timeout = efx_ef100_mcdi_rpc_timeout,
 	.mcdi_request = ef100_mcdi_request,
 	.mcdi_poll_response = ef100_mcdi_poll_response,
 	.mcdi_read_response = ef100_mcdi_read_response,
@@ -962,6 +1061,8 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.map_reset_flags = ef100_map_reset_flags,
 	.reset = ef100_reset,
 
+	.check_caps = ef100_check_caps,
+
 	.ev_probe = ef100_ev_probe,
 	.ev_init = ef100_ev_init,
 	.ev_fini = efx_mcdi_ev_fini,
@@ -973,6 +1074,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.ev_test_generate = efx_ef100_ev_test_generate,
 	.tx_probe = ef100_tx_probe,
 	.tx_init = ef100_tx_init,
+	.tx_write = ef100_tx_write,
 	.tx_notify = ef100_notify_tx_desc,
 	.tx_max_skb_descs = ef100_tx_max_skb_descs,
 	.rx_set_rss_flags = efx_mcdi_set_rss_context_flags,
@@ -982,7 +1084,9 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_remove = efx_mcdi_rx_remove,
 	.rx_write = ef100_rx_write,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
+	.filter_table_probe = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
+	.filter_table_remove = ef100_filter_table_down,
 	.filter_insert = efx_mcdi_filter_insert,
 	.filter_remove_safe = efx_mcdi_filter_remove_safe,
 	.filter_get_safe = efx_mcdi_filter_get_safe,
@@ -1036,6 +1140,9 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.sriov_configure = efx_ef100_sriov_configure,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	.get_vf_rep = ef100_get_vf_rep,
+	.detach_reps = ef100_detach_reps,
+	.attach_reps = ef100_attach_reps,
+	.link_state_change = ef100_link_state_change,
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
@@ -1053,6 +1160,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.probe = ef100_probe_vf,
 	.offload_features = EF100_OFFLOAD_FEATURES,
 	.mcdi_max_ver = 2,
+	.mcdi_rpc_timeout = efx_ef100_mcdi_rpc_timeout,
 	.mcdi_request = ef100_mcdi_request,
 	.mcdi_poll_response = ef100_mcdi_poll_response,
 	.mcdi_read_response = ef100_mcdi_read_response,
@@ -1070,6 +1178,10 @@ const struct efx_nic_type ef100_vf_nic_type = {
 #else
 	.supported_interrupt_modes = BIT(EFX_INT_MODE_MSIX),
 #endif
+	.map_reset_reason = ef100_map_reset_reason,
+	.map_reset_flags = ef100_map_reset_flags,
+	.reset = ef100_reset,
+	.check_caps = ef100_check_caps,
 	.ev_probe = ef100_ev_probe,
 	.ev_init = ef100_ev_init,
 	.ev_fini = efx_mcdi_ev_fini,
@@ -1081,6 +1193,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.ev_test_generate = efx_ef100_ev_test_generate,
 	.tx_probe = ef100_tx_probe,
 	.tx_init = ef100_tx_init,
+	.tx_write = ef100_tx_write,
 	.tx_notify = ef100_notify_tx_desc,
 	.tx_max_skb_descs = ef100_tx_max_skb_descs,
 	.rx_set_rss_flags = efx_mcdi_set_rss_context_flags,
@@ -1090,7 +1203,9 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.rx_remove = efx_mcdi_rx_remove,
 	.rx_write = ef100_rx_write,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
+	.filter_table_probe = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
+	.filter_table_remove = ef100_filter_table_down,
 	.filter_insert = efx_mcdi_filter_insert,
 	.filter_remove_safe = efx_mcdi_filter_remove_safe,
 	.filter_get_safe = efx_mcdi_filter_get_safe,
@@ -1204,6 +1319,7 @@ static int ef100_probe_main(struct efx_nic *efx)
 		return -ENOMEM;
 	efx->nic_data = nic_data;
 	nic_data->efx = efx;
+	spin_lock_init(&nic_data->vf_reps_lock);
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
     !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	spin_lock_init(&nic_data->udp_tunnels_lock);
@@ -1220,7 +1336,7 @@ static int ef100_probe_main(struct efx_nic *efx)
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	efx->ef10_resources = efx->type->ef10_resources;
-	efx->n_dl_irqs = EF100_ONLOAD_VIS;
+	efx->n_dl_irqs = EF100_ONLOAD_IRQS;
 #endif
 #endif
 
@@ -1254,17 +1370,15 @@ static int ef100_probe_main(struct efx_nic *efx)
 	 */
 	_efx_writed(efx, cpu_to_le32(1), efx_reg(efx, ER_GZ_MC_DB_HWRD));
 
-	rc = efx_mcdi_init(efx);
-	if (rc)
-		goto fail;
+	/* Post-IO section. */
 
-	/* Reset (most) configuration for this function */
-	rc = efx_mcdi_reset(efx, RESET_TYPE_ALL);
-	if (rc)
-		goto fail;
-
-	/* Enable event logging */
-	rc = efx_mcdi_log_ctrl(efx, true, false, 0);
+	rc = efx_probe_common(efx);
+	if (!rc && efx->mcdi->fn_flags &
+		   (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)) {
+		netif_info(efx, probe, efx->net_dev,
+			   "No network port on this PCI function");
+		rc = -ENODEV;
+	}
 	if (rc)
 		goto fail;
 
@@ -1275,6 +1389,8 @@ static int ef100_probe_main(struct efx_nic *efx)
 	rc = efx_ef100_init_datapath_caps(efx);
 	if (rc < 0)
 		goto fail;
+
+	efx->max_vis = EF100_MAX_VIS;
 
 	rc = efx_mcdi_port_get_number(efx);
 	if (rc < 0)
@@ -1295,20 +1411,26 @@ static int ef100_probe_main(struct efx_nic *efx)
 	if (rc)
 		goto fail;
 
-	rc = -ENOMEM;
-	if (!efx_init_channels(efx))
-		goto fail;
-
-	rc = efx_init_debugfs_nic(efx);
+	rc = efx_init_channels(efx);
 	if (rc)
 		goto fail;
 
 	rc = ef100_filter_table_probe(efx);
 	if (rc)
 		goto fail;
+
+	netdev_rss_key_fill(efx->rss_context.rx_hash_key,
+			    sizeof(efx->rss_context.rx_hash_key));
+
+	/* Don't fail init if RSS setup doesn't work. */
+	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
+
+	rc = ef100_register_netdev(efx);
+	if (rc)
+		goto fail;
+
 	return 0;
 fail:
-	ef100_remove(efx);
 	return rc;
 }
 
@@ -1319,7 +1441,7 @@ int ef100_probe_pf(struct efx_nic *efx)
 	int rc = ef100_probe_main(efx);
 
 	if (rc)
-		return rc;
+		goto fail;
 
 	nic_data = efx->nic_data;
 	rc = ef100_get_mac_address(efx, net_dev->perm_addr);
@@ -1368,7 +1490,6 @@ int ef100_probe_pf(struct efx_nic *efx)
 	return 0;
 
 fail:
-	ef100_remove(efx);
 	return rc;
 }
 
@@ -1383,24 +1504,31 @@ void ef100_remove(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 
+	ef100_unregister_netdev(efx);
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
+	rtnl_lock();
+	efx_xdp_setup_prog(efx, NULL);
+	rtnl_unlock();
+#endif
+
 	if (!efx->type->is_vf) {
 		if (efx->vf_count) /* Disable any VFs */
 			efx_ef100_pci_sriov_disable(efx, true);
-		/* Normally ef100_unregister_netdev() will have already done
-		 * this.  But if we're in the failure path of ef100_probe_pf()
-		 * then ef100_unregister_netdev() will never be called.
-		 */
 		efx_fini_tc(efx);
-		kfree(nic_data->vf_rep);
+		if (nic_data) {
+			kfree(nic_data->vf_rep);
+			nic_data->vf_rep = NULL;
+		}
 	}
-	ef100_filter_table_remove(efx);
-	efx_fini_debugfs_nic(efx);
-	if (efx->phy_data)
-	    kfree(efx->phy_data);
+
+	efx_mcdi_filter_table_remove(efx);
+	efx_fini_channels(efx);
+	kfree(efx->phy_data);
 	efx->phy_data = NULL;
-	efx_mcdi_detach(efx);
-	efx_mcdi_fini(efx);
-	efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
+	efx_remove_common(efx);
+	if (nic_data)
+		efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
 	kfree(nic_data);
 	efx->nic_data = NULL;
 }

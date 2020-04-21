@@ -6,11 +6,16 @@
  * under the terms of the GNU General Public License version 2 as published
  * by the Free Software Foundation, incorporated herein by reference.
  */
+#include <linux/firmware.h>
+#include <linux/crc32.h>
+
 #include "net_driver.h"
 #include "efx.h"
 #include "nic.h"
 #include "mcdi_functions.h"
 #include "rx_common.h"
+#include "mcdi.h"
+#include "ef100_nic.h"
 
 int efx_mcdi_free_vis(struct efx_nic *efx)
 {
@@ -245,14 +250,11 @@ int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool tso_v2)
 			efx_mcdi_display_error(efx, MC_CMD_INIT_TXQ,
 					MC_CMD_INIT_TXQ_EXT_IN_LEN,
 					NULL, 0, rc);
-			goto fail;
+			return rc;
 		}
 	} while (rc);
 
 	return 0;
-
-fail:
-	return rc;
 }
 
 void efx_mcdi_tx_fini(struct efx_tx_queue *tx_queue)
@@ -436,3 +438,222 @@ int efx_get_pf_index(struct efx_nic *efx, unsigned int *pf_index)
 	*pf_index = MCDI_DWORD(outbuf, GET_FUNCTION_INFO_OUT_PF);
 	return 0;
 }
+
+#ifdef EFX_FLASH_FIRMWARE
+/* Some defines to correctly read the bundle reflash header .
+ * Header definition can be found in SF-121352
+ */
+#ifndef EFX_REFLASH_HEADER
+#define EFX_REFLASH_HEADER
+
+#define EFX_REFLASH_MAGIC_VAL 0x106F1A5
+#define MC_CMD_EFX_REFLASH_MAGIC_OFST 0
+#define MC_CMD_EFX_REFLASH_TYPE_OFST 8
+#define MC_CMD_EFX_REFLASH_BUNDLE_SIZE_OFST 16
+#define MC_CMD_EFX_REFLASH_HEADER_LEN_OFST 20
+#define MC_CMD_EFX_REFLASH_HEADER_LEN_LEN 4
+
+#define EFX_REFLASH_TRAILER_LEN 4
+
+/* This is required to look at the type as listed in the bundle,
+ * as they are different from partition types return by MCDI
+ */
+#define FIRMWARE_TYPE_BOOTROM 0x2
+#define FIRMWARE_TYPE_BUNDLE 0xd
+
+#endif
+
+static bool efx_check_crc_checksum(const struct firmware *fw,
+				   int offset)
+{
+	unsigned int expected_crc, crc = 0;
+	unsigned int bundle_size;
+	unsigned int header_len;
+
+	if (offset + MC_CMD_EFX_REFLASH_HEADER_LEN_OFST +
+	    fw->size < MC_CMD_EFX_REFLASH_HEADER_LEN_LEN)
+		return false;
+
+	bundle_size = MCDI_DWORD((efx_dword_t *)&fw->data[offset],
+				 EFX_REFLASH_BUNDLE_SIZE);
+
+	header_len = MCDI_DWORD((efx_dword_t *)&fw->data[offset],
+				EFX_REFLASH_HEADER_LEN);
+
+	if (offset + header_len > fw->size)
+		return false;
+
+	bundle_size += header_len;
+
+	if (bundle_size > fw->size)
+		return false;
+
+	crc = crc32_le(crc, &fw->data[offset], bundle_size);
+	expected_crc = *(unsigned int *)&fw->data[offset + bundle_size];
+
+	if (crc != expected_crc)
+		return false;
+
+	return true;
+}
+
+static int efx_check_reflash_header(const struct firmware *fw,
+				    unsigned int *type,
+				    unsigned int *payload_offset,
+				    unsigned int *header_size)
+{
+	unsigned int offset = 0;
+	unsigned int magic = 0;
+	unsigned int fw_type;
+
+	/* Try to find the magic value at a non zero offset, this is because
+	 * signed images have the CMS header for which finding the size is a
+	 * non trivial task.
+	 */
+	for (; offset < fw->size; offset += 4) {
+		magic = MCDI_DWORD((efx_dword_t *)&fw->data[offset],
+				   EFX_REFLASH_MAGIC);
+		if (magic == EFX_REFLASH_MAGIC_VAL &&
+		    efx_check_crc_checksum(fw, offset))
+			break;
+	}
+
+	if (offset == fw->size)
+		return -EINVAL;
+
+	fw_type = MCDI_DWORD((efx_dword_t *)&fw->data[offset],
+			     EFX_REFLASH_TYPE);
+
+	/* The Partition types labelled in the bundle differ from the partition
+	 * types that the MC expexts, translate them here.
+	 */
+	if (fw_type == FIRMWARE_TYPE_BOOTROM) {
+		*type = NVRAM_PARTITION_TYPE_EXPANSION_ROM;
+	} else if (fw_type == FIRMWARE_TYPE_BUNDLE) {
+		*type = NVRAM_PARTITION_TYPE_BUNDLE;
+	} else {
+		*type = 0;
+		return -EINVAL;
+	}
+
+	*payload_offset = offset;
+	*header_size = MCDI_DWORD((efx_dword_t *)&fw->data[offset],
+				  EFX_REFLASH_HEADER_LEN);
+
+	return 0;
+}
+
+int efx_mcdi_flash_bundle(struct net_device *net_dev,
+			  struct ethtool_flash *flash)
+{
+	unsigned int type, header_len = 0, payload_offset = 0;
+	size_t erase_size, write_size, size, total_write_size;
+	struct efx_nic *efx = netdev_priv(net_dev);
+	const struct firmware *fw;
+	loff_t offset = 0;
+	bool protected;
+	char *data;
+	int rc;
+
+	if (!net_dev || !flash || !efx)
+		return -EINVAL;
+
+	if (!efx_has_cap(efx, MCDI_BACKGROUND))
+		return -EOPNOTSUPP;
+
+	rc = request_firmware_direct(&fw, flash->data, &efx->pci_dev->dev);
+	if (rc) {
+		netif_warn(efx, hw, efx->net_dev,
+			   "Error %d, failed to request firmware for %s\n",
+			   rc, flash->data);
+		return rc;
+	}
+
+	rc = efx_check_reflash_header(fw, &type, &payload_offset, &header_len);
+	if (rc) {
+		netif_warn(efx, hw, efx->net_dev,
+			   "Reflash Header could not be read properly\n");
+		rc = -EINVAL;
+		goto fail1;
+	}
+
+	switch (type) {
+	case NVRAM_PARTITION_TYPE_BUNDLE:
+	case NVRAM_PARTITION_TYPE_EXPANSION_ROM:
+		break;
+	default:
+		netif_warn(efx, hw, efx->net_dev,
+			   "Error unsupported flash partition, supported flash partitions are {bundle: 0x%x, bootrom: 0x%x}\n",
+			   NVRAM_PARTITION_TYPE_BUNDLE,
+			   NVRAM_PARTITION_TYPE_EXPANSION_ROM);
+		rc = -EINVAL;
+		goto fail1;
+	}
+
+	rc = efx_mcdi_nvram_info(efx, type, &size, &erase_size,
+				 &write_size, &protected);
+	if (rc)
+		goto fail1;
+
+	if (protected) {
+		rc = -EPERM;
+		goto fail1;
+	}
+
+	rc = efx_mcdi_nvram_update_start(efx, type);
+	if (rc) {
+		netif_warn(efx, hw, efx->net_dev,
+			   "failed to start nvram update with rc=%d\n", rc);
+		goto fail1;
+	}
+
+	/* Erase in chunks in order to avoid the mcdi timeout */
+	while (offset < size) {
+		rc = efx_mcdi_nvram_erase(efx, type, offset, erase_size);
+		if (rc < 0) {
+			netif_warn(efx, hw, efx->net_dev,
+				   "failed to erase nvram with rc=%d\n", rc);
+			goto fail;
+		}
+
+		offset += erase_size;
+	}
+
+	offset = 0;
+	total_write_size = fw->size;
+	data = (char *)fw->data;
+
+	if (type == NVRAM_PARTITION_TYPE_EXPANSION_ROM) {
+		data += header_len + payload_offset;
+		total_write_size -= header_len +
+				    EFX_REFLASH_TRAILER_LEN;
+	}
+
+	/* Write in chunks in order to avoid the mcdi timeout.
+	 * For some reason writing an entire image makes the mc complain.
+	 */
+	while (offset < total_write_size && offset < size) {
+		rc = efx_mcdi_nvram_write(efx, type, offset,
+					  data + offset, write_size);
+		if (rc) {
+			netif_warn(efx, hw, efx->net_dev,
+				   "error %d, failed to write to nvram with offset %x\n",
+				   rc, (int)offset);
+			goto fail;
+		}
+
+		offset += write_size;
+	}
+
+fail:
+	/* Don't store rc for efx-mcdi_nvram_update_finish to not
+	 * overwrite potential failures
+	 */
+	efx_mcdi_nvram_update_finish(efx, type);
+
+fail1:
+	release_firmware(fw);
+
+	return rc;
+}
+#endif

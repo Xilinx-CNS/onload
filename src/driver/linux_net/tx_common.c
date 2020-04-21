@@ -117,6 +117,7 @@ int efx_init_tx_queue(struct efx_tx_queue *tx_queue)
 				    efx->tx_channel_offset);
 
 	tx_queue->insert_count = 0;
+	tx_queue->notify_count = 0;
 	tx_queue->write_count = 0;
 	tx_queue->packet_write_count = 0;
 	tx_queue->old_write_count = 0;
@@ -512,12 +513,9 @@ int efx_tx_tso_fallback(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 		return PTR_ERR(segments);
 
 	dev_consume_skb_any(skb);
-	skb = segments;
 
-	while (skb) {
-		next = skb->next;
-		skb->next = NULL;
-
+	skb_list_walk_safe(segments, skb, next) {
+		skb_mark_not_on_list(skb);
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_SKB_XMIT_MORE)
 		/* This explicitly sets the flag. Note that checks of this flag
 		 * are buried in the netdev_xmit_more() kcompat macro.
@@ -526,7 +524,6 @@ int efx_tx_tso_fallback(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 			skb->xmit_more = true;
 #endif
 		efx_enqueue_skb(tx_queue, skb);
-		skb = next;
 	}
 
 	return 0;

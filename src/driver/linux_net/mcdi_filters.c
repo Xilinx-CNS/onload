@@ -175,6 +175,10 @@ static int efx_debugfs_read_filter_list(struct seq_file *file, void *data)
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
+	if (!table) {
+		up_read(&efx->filter_sem);
+		return -ENETDOWN;
+	}
 
 	/* deliberately don't lock the table->lock, so that we can
 	 * dump the table mid-operation if needed.
@@ -195,7 +199,6 @@ static int efx_debugfs_read_filter_list(struct seq_file *file, void *data)
 	}
 
 	up_read(&efx->filter_sem);
-
 	return 0;
 }
 
@@ -636,7 +639,14 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 
 	WARN_ON(!rwsem_is_locked(&efx->filter_sem));
 	table = efx->filter_state;
+	if (!table)
+		return -ENETDOWN;
 	down_write(&table->lock);
+
+	if (!table->entry) {
+		rc = -ENETDOWN;
+		goto out_unlock;
+	}
 
 	/* Support only RX or RX+TX filters. */
 	if ((spec->flags & EFX_FILTER_FLAG_RX) == 0) {
@@ -664,23 +674,6 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 	if (is_mc_recip)
 		bitmap_zero(mc_rem_map, EFX_MCDI_FILTER_SEARCH_LIMIT);
 
-	if (spec->flags & EFX_FILTER_FLAG_VPORT_ID) {
-		mutex_lock(&efx->vport_lock);
-		vport_locked = true;
-		if (spec->vport_id == 0)
-			vpx = &efx->vport;
-		else
-			vpx = efx_find_vport_entry(efx, spec->vport_id);
-		if (!vpx) {
-			rc = -ENOENT;
-			goto out_unlock;
-		}
-		if (vpx->vport_id == EVB_PORT_ID_NULL) {
-			rc = -EOPNOTSUPP;
-			goto out_unlock;
-		}
-	}
-
 	if (spec->flags & EFX_FILTER_FLAG_RX_RSS) {
 		mutex_lock(&efx->rss_lock);
 		rss_locked = true;
@@ -693,6 +686,23 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 			goto out_unlock;
 		}
 		if (ctx->context_id == EFX_MCDI_RSS_CONTEXT_INVALID) {
+			rc = -EOPNOTSUPP;
+			goto out_unlock;
+		}
+	}
+
+	if (spec->flags & EFX_FILTER_FLAG_VPORT_ID) {
+		mutex_lock(&efx->vport_lock);
+		vport_locked = true;
+		if (spec->vport_id == 0)
+			vpx = &efx->vport;
+		else
+			vpx = efx_find_vport_entry(efx, spec->vport_id);
+		if (!vpx) {
+			rc = -ENOENT;
+			goto out_unlock;
+		}
+		if (vpx->vport_id == EVB_PORT_ID_NULL) {
 			rc = -EOPNOTSUPP;
 			goto out_unlock;
 		}
@@ -895,6 +905,9 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 	DEFINE_WAIT(wait);
 	int rc;
 
+	if (!table->entry)
+		return -ENETDOWN;
+
 	spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 	if (!spec ||
 	    (!by_index &&
@@ -969,10 +982,14 @@ int efx_mcdi_filter_remove_safe(struct efx_nic *efx,
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
-	down_write(&table->lock);
-	rc = efx_mcdi_filter_remove_internal(efx, 1U << priority, filter_id,
-					     false);
-	up_write(&table->lock);
+	if (table) {
+		down_write(&table->lock);
+		rc = efx_mcdi_filter_remove_internal(efx, 1U << priority,
+						     filter_id, false);
+		up_write(&table->lock);
+	} else {
+		rc = -ENETDOWN;
+	}
 	up_read(&efx->filter_sem);
 	return rc;
 }
@@ -1266,7 +1283,7 @@ static int efx_mcdi_filter_insert_def(struct efx_nic *efx,
 }
 
 /* Caller must hold efx->filter_sem for read if race against
- * efx_mcdi_filter_table_remove() is possible
+ * efx_mcdi_filter_table_down() is possible
  */
 static void efx_mcdi_filter_vlan_sync_rx_mode(struct efx_nic *efx,
 					      struct efx_mcdi_filter_vlan *vlan)
@@ -1407,7 +1424,7 @@ int efx_mcdi_filter_clear_rx(struct efx_nic *efx,
 	struct efx_mcdi_filter_table *table;
 	unsigned int priority_mask;
 	unsigned int i;
-	int rc;
+	int rc = -ENETDOWN;
 
 	priority_mask = (((1U << (priority + 1)) - 1) &
 			 ~(1U << EFX_FILTER_PRI_AUTO));
@@ -1415,13 +1432,14 @@ int efx_mcdi_filter_clear_rx(struct efx_nic *efx,
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
 	down_write(&table->lock);
-	for (i = 0; i < EFX_MCDI_FILTER_TBL_ROWS; i++) {
-		rc = efx_mcdi_filter_remove_internal(efx, priority_mask,
-						     i, true);
-		if (rc && rc != -ENOENT)
-			break;
-		rc = 0;
-	}
+	if (table->entry)
+		for (i = 0; i < EFX_MCDI_FILTER_TBL_ROWS; i++) {
+			rc = efx_mcdi_filter_remove_internal(efx, priority_mask,
+							     i, true);
+			if (rc && rc != -ENOENT)
+				break;
+			rc = 0;
+		}
 
 	up_write(&table->lock);
 	up_read(&efx->filter_sem);
@@ -1442,6 +1460,10 @@ int efx_mcdi_filter_redirect(struct efx_nic *efx, u32 filter_id,
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
+	if (!table) {
+		rc = -ENETDOWN;
+		goto out;
+	}
 	down_write(&table->lock);
 	/* We only need the RSS lock if this is an RSS filter, but let's just
 	 * take it anyway for simplicity's sake.  Same goes for the vport lock.
@@ -1518,6 +1540,7 @@ out_unlock:
 	mutex_unlock(&efx->vport_lock);
 	mutex_unlock(&efx->rss_lock);
 	up_write(&table->lock);
+out:
 	up_read(&efx->filter_sem);
 	return rc;
 }
@@ -1535,12 +1558,15 @@ u32 efx_mcdi_filter_count_rx_used(struct efx_nic *efx,
 	table = efx->filter_state;
 	down_read(&table->lock);
 
-	for (filter_idx = 0; filter_idx < EFX_MCDI_FILTER_TBL_ROWS; filter_idx++) {
-		spec = efx_mcdi_filter_entry_spec(table, filter_idx);
+	if (table->entry)
+		for (filter_idx = 0;
+		     filter_idx < EFX_MCDI_FILTER_TBL_ROWS;
+		     filter_idx++) {
+			spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 
-		if (spec && spec->priority == priority)
-			++count;
-	}
+			if (spec && spec->priority == priority)
+				++count;
+		}
 	up_read(&table->lock);
 	up_read(&efx->filter_sem);
 	return count;
@@ -1566,19 +1592,23 @@ s32 efx_mcdi_filter_get_rx_ids(struct efx_nic *efx,
 	table = efx->filter_state;
 	down_read(&table->lock);
 
-	for (filter_idx = 0; filter_idx < EFX_MCDI_FILTER_TBL_ROWS; filter_idx++) {
-		spec = efx_mcdi_filter_entry_spec(table, filter_idx);
-		if (spec && spec->priority == priority) {
-			if (count == size) {
-				count = -EMSGSIZE;
-				break;
+	if (table->entry)
+		for (filter_idx = 0;
+		     filter_idx < EFX_MCDI_FILTER_TBL_ROWS;
+		     filter_idx++) {
+			spec = efx_mcdi_filter_entry_spec(table, filter_idx);
+			if (spec && spec->priority == priority) {
+				if (count == size) {
+					count = -EMSGSIZE;
+					break;
+				}
+				buf[count++] =
+					efx_mcdi_filter_make_filter_id(
+						efx_mcdi_filter_pri(table,
+								    spec),
+						filter_idx);
 			}
-			buf[count++] =
-				efx_mcdi_filter_make_filter_id(
-					efx_mcdi_filter_pri(table, spec),
-					filter_idx);
 		}
-	}
 	up_read(&table->lock);
 	up_read(&efx->filter_sem);
 	return count;
@@ -1745,8 +1775,6 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool mc_chaining,
 	struct efx_mcdi_filter_table *table;
 	int rc;
 
-	efx_rwsem_assert_write_locked(&efx->filter_sem);
-
 	if (efx->filter_state) /* already probed */
 		return 0;
 
@@ -1766,12 +1794,6 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool mc_chaining,
 	rc = efx_mcdi_filter_probe_supported_filters(efx);
 	if (rc)
 		goto fail;
-
-	table->entry = vzalloc(EFX_MCDI_FILTER_TBL_ROWS * sizeof(*table->entry));
-	if (!table->entry) {
-		rc = -ENOMEM;
-		goto fail;
-	}
 
 	table->mc_promisc_last = false;
 	table->vlan_filter =
@@ -1815,9 +1837,20 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool mc_chaining,
 
 fail:
 	efx->filter_state = NULL;
-	vfree(table->entry);
 	kfree(table);
 	return rc;
+}
+
+int efx_mcdi_filter_table_up(struct efx_nic *efx)
+{
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	table->entry = vzalloc(EFX_MCDI_FILTER_TBL_ROWS *
+			       sizeof(*table->entry));
+	if (!table->entry)
+		return -ENOMEM;
+
+	return 0;
 }
 
 static void efx_mcdi_filter_invalidate_filter_id(struct efx_nic *efx,
@@ -1846,8 +1879,8 @@ void efx_mcdi_filter_table_reset_mc_allocations(struct efx_nic *efx)
 }
 
 /* Caller must hold efx->filter_sem for read if race against
- *  * efx_mcdi_filter_table_remove() is possible
- *   */
+ * efx_mcdi_filter_table_down() is possible
+ */
 void efx_mcdi_filter_table_restore(struct efx_nic *efx)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
@@ -1967,7 +2000,7 @@ invalid:
 	up_write(&table->lock);
 }
 
-void efx_mcdi_filter_table_remove(struct efx_nic *efx)
+void efx_mcdi_filter_table_down(struct efx_nic *efx)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_FILTER_OP_IN_LEN);
@@ -1975,19 +2008,12 @@ void efx_mcdi_filter_table_remove(struct efx_nic *efx)
 	unsigned int filter_idx;
 	int rc;
 
-	efx_rwsem_assert_write_locked(&efx->filter_sem);
-
-	if (!table)
+	if (!table || !table->entry)
 		return;
 
-#ifdef CONFIG_SFC_DEBUGFS
-	efx_trim_debugfs_port(efx, efx_debugfs);
-	efx_trim_debugfs_port(efx, filter_debugfs);
-#endif
+	efx_rwsem_assert_write_locked(&efx->filter_sem);
 
 	efx_mcdi_filter_cleanup_vlans(efx);
-
-	efx->filter_state = NULL;
 
 	for (filter_idx = 0; filter_idx < EFX_MCDI_FILTER_TBL_ROWS; filter_idx++) {
 		spec = efx_mcdi_filter_entry_spec(table, filter_idx);
@@ -2010,6 +2036,22 @@ void efx_mcdi_filter_table_remove(struct efx_nic *efx)
 	}
 
 	vfree(table->entry);
+	table->entry = NULL;
+}
+
+void efx_mcdi_filter_table_remove(struct efx_nic *efx)
+{
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	if (!table)
+		return;
+
+#ifdef CONFIG_SFC_DEBUGFS
+	efx_trim_debugfs_port(efx, efx_debugfs);
+	efx_trim_debugfs_port(efx, filter_debugfs);
+#endif
+
+	efx->filter_state = NULL;
 	kfree(table);
 }
 
@@ -2050,7 +2092,7 @@ static void _efx_mcdi_filter_vlan_mark_old(struct efx_nic *efx,
 
 /* Mark old filters that may need to be removed.
  * Caller must hold efx->filter_sem for read if race against
- * efx_mcdi_filter_table_remove() is possible
+ * efx_mcdi_filter_table_down() is possible
  */
 static void efx_mcdi_filter_mark_old(struct efx_nic *efx)
 {
@@ -2309,7 +2351,7 @@ static unsigned int efx_mcdi_filter_vlan_count_filters(struct efx_nic *efx,
 }
 
 /* Caller must hold efx->filter_sem for read if race against
- * efx_mcdi_filter_table_remove() is possible
+ * efx_mcdi_filter_table_down() is possible
  */
 void efx_mcdi_filter_sync_rx_mode(struct efx_nic *efx)
 {
@@ -2374,6 +2416,11 @@ bool efx_mcdi_filter_rfs_expire_one(struct efx_nic *efx, u32 flow_id,
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
 	down_write(&table->lock);
+
+	WARN_ON(!table->entry);
+	if (!table->entry)
+		goto out_unlock;
+
 	spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 
 	/* If it's somehow gone, or been replaced with a higher priority filter
@@ -2443,6 +2490,10 @@ int efx_mcdi_filter_block_kernel(struct efx_nic *efx,
 	mutex_lock(&efx->mac_lock);
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
+	if (!table) {
+		rc = -ENETDOWN;
+		goto out;
+	}
 	down_write(&table->lock);
 	table->kernel_blocked[type] = true;
 	up_write(&table->lock);
@@ -2451,6 +2502,7 @@ int efx_mcdi_filter_block_kernel(struct efx_nic *efx,
 
 	if (type == EFX_DL_FILTER_BLOCK_KERNEL_UCAST)
 		rc = efx_mcdi_filter_clear_rx(efx, EFX_FILTER_PRI_HINT);
+out:
 	up_read(&efx->filter_sem);
 	mutex_unlock(&efx->mac_lock);
 	return rc;
@@ -2464,11 +2516,14 @@ void efx_mcdi_filter_unblock_kernel(struct efx_nic *efx,
 	mutex_lock(&efx->mac_lock);
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
+	if (!table)
+		goto out;
 	down_write(&table->lock);
 	table->kernel_blocked[type] = false;
 	up_write(&table->lock);
 
 	efx_mcdi_filter_sync_rx_mode(efx);
+out:
 	up_read(&efx->filter_sem);
 	mutex_unlock(&efx->mac_lock);
 }

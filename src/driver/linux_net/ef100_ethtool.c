@@ -13,6 +13,7 @@
 #include "mcdi_port_common.h"
 #include "ethtool_common.h"
 #include "ef100_ethtool.h"
+#include "mcdi_functions.h"
 
 /* This is the maximum number of descriptor rings supported by the QDMA */
 #define EFX_EF100_MAX_DMAQ_SIZE 16384UL
@@ -62,6 +63,9 @@ const struct ethtool_ops ef100_ethtool_ops = {
 #elif defined(EFX_HAVE_ETHTOOL_RXNFC)
 	.get_rxnfc              = efx_ethtool_get_rxnfc_wrapper,
 	.set_rxnfc              = efx_ethtool_set_rxnfc_wrapper,
+#endif
+#ifdef EFX_FLASH_FIRMWARE
+	.flash_device		= efx_mcdi_flash_bundle,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_RESET) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
 	.reset                  = efx_ethtool_reset,

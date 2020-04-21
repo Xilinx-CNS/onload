@@ -87,7 +87,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.2.1.1017"
+#define EFX_DRIVER_VERSION	"5.2.1.1024"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -122,7 +122,8 @@
 #define EFX_MAX_CHANNELS 64U
 #define EFX_MAX_RX_QUEUES EFX_MAX_CHANNELS
 #define EFX_EXTRA_CHANNEL_PTP	0
-#define EFX_MAX_EXTRA_CHANNELS	1U
+#define EFX_EXTRA_CHANNEL_TC	1
+#define EFX_MAX_EXTRA_CHANNELS	2U
 
 #define EFX_SIENA_MAX_CHANNELS 32U
 
@@ -477,8 +478,12 @@ struct efx_rx_page_state {
  * @refill_enabled: Enable refill whenever fill level is low
  * @flush_pending: Set when a RX flush is pending. Has the same lifetime as
  *	@rxq_flush_pending.
+ * @grant_credits: Posted RX descriptors need to be granted to the MAE with
+ *	%MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS.  For %EFX_EXTRA_CHANNEL_TC,
+ *	and only supported on EF100.
  * @added_count: Number of buffers added to the receive queue.
  * @notified_count: Number of buffers given to NIC (<= @added_count).
+ * @granted_count: Number of buffers granted to the MAE (<= @notified_count).
  * @removed_count: Number of buffers removed from the receive queue.
  * @scatter_n: Used by NIC specific receive code.
  * @scatter_len: Used by NIC specific receive code.
@@ -499,6 +504,7 @@ struct efx_rx_page_state {
  *	refill was triggered.
  * @recycle_count: RX buffer recycle counter.
  * @slow_fill: Timer used to defer efx_nic_generate_fill_event().
+ * @grant_work: workitem used to grant credits to the MAE if @grant_credits
  * @xdp_rxq_info: XDP specific RX queue information.
  */
 struct efx_rx_queue {
@@ -509,8 +515,10 @@ struct efx_rx_queue {
 	unsigned int ptr_mask;
 	bool refill_enabled;
 	bool flush_pending;
+	bool grant_credits;
 	unsigned int added_count;
 	unsigned int notified_count;
+	unsigned int granted_count;
 	unsigned int removed_count;
 	unsigned int scatter_n;
 	unsigned int scatter_len;
@@ -530,6 +538,7 @@ struct efx_rx_queue {
 	unsigned int recycle_count;
 	unsigned int slow_fill_count;
 	struct delayed_work slow_fill_work;
+	struct work_struct grant_work;
 	/* Statistics to supplement MAC stats */
 	unsigned long rx_packets;
 #if defined(EFX_NOT_UPSTREAM)
@@ -991,23 +1000,30 @@ struct efx_msi_context {
  * struct efx_channel_type - distinguishes traffic and extra channels
  * @handle_no_channel: Handle failure to allocate an extra channel
  * @pre_probe: Set up extra state prior to initialisation
+ * @start: called early in efx_start_channels()
+ * @stop: called early in efx_stop_channels()
  * @post_remove: Tear down extra state after finalisation, if allocated.
  *	May be called on channels that have not been probed.
  * @get_name: Generate the channel's name (used for its IRQ handler)
  * @copy: Copy the channel state prior to reallocation.  May be %NULL if
  *	reallocation is not supported.
  * @receive_skb: Handle an skb ready to be passed to netif_receive_skb()
+ * @receive_raw: Handle an RX buffer ready to be passed to __efx_rx_packet()
  * @keep_eventq: Flag for whether event queue should be kept initialised
  *	while the device is stopped
  */
 struct efx_channel_type {
 	void (*handle_no_channel)(struct efx_nic *);
 	int (*pre_probe)(struct efx_channel *);
+	int (*start)(struct efx_channel *);
+	void (*stop)(struct efx_channel *);
 	void (*post_remove)(struct efx_channel *);
 	void (*get_name)(struct efx_channel *, char *buf, size_t len);
 	struct efx_channel *(*copy)(struct efx_channel *);
 	bool (*receive_skb)(struct efx_channel *, struct sk_buff *);
+	bool (*receive_raw)(struct efx_channel *);
 	bool keep_eventq;
+	bool hide_tx;
 };
 
 enum efx_led_mode {
@@ -1017,7 +1033,7 @@ enum efx_led_mode {
 };
 
 #define STRING_TABLE_LOOKUP(val, member) \
-	((val) < member ## _max) ? member ## _names[val] : "(invalid)"
+	((val) < member ## _max) && member ## _names[val] ? member ## _names[val] : "(invalid)"
 
 extern const char *const efx_loopback_mode_names[];
 extern const unsigned int efx_loopback_mode_max;
@@ -1042,11 +1058,53 @@ enum efx_int_mode {
 };
 
 enum nic_state {
-	STATE_UNINIT = 0,	/* device being probed/removed or is frozen */
-	STATE_READY = 1,	/* hardware ready and netdev registered */
-	STATE_DISABLED = 2,	/* device disabled due to hardware errors */
-	STATE_RECOVERY = 3,	/* device recovering from PCI error */
+	STATE_UNINIT = 0,	/* device being probed/removed */
+	STATE_NET_DOWN,		/* hardware probed and netdev registered */
+	STATE_NET_UP,		/* ready for traffic */
+	STATE_DISABLED,		/* device disabled due to hardware errors */
+
+	STATE_RECOVERY = 0x100,/* recovering from PCI error */
+	STATE_FROZEN = 0x200,	/* frozen by power management */
 };
+
+static inline bool efx_net_active(enum nic_state state)
+{
+	return state == STATE_NET_DOWN || state == STATE_NET_UP;
+}
+
+static inline bool efx_frozen(enum nic_state state)
+{
+	return state & STATE_FROZEN;
+}
+
+static inline bool efx_recovering(enum nic_state state)
+{
+	return state & STATE_RECOVERY;
+}
+
+static inline enum nic_state efx_freeze(enum nic_state state)
+{
+	WARN_ON(!efx_net_active(state));
+	return state | STATE_FROZEN;
+}
+
+static inline enum nic_state efx_thaw(enum nic_state state)
+{
+	WARN_ON(!efx_frozen(state));
+	return state & ~STATE_FROZEN;
+}
+
+static inline enum nic_state efx_begin_recovery(enum nic_state state)
+{
+	WARN_ON(!efx_net_active(state));
+	return state | STATE_RECOVERY;
+}
+
+static inline enum nic_state efx_end_recovery(enum nic_state state)
+{
+	WARN_ON(!efx_recovering(state));
+	return state & ~STATE_RECOVERY;
+}
 
 /* Forward declaration */
 struct efx_nic;
@@ -1231,6 +1289,28 @@ struct efx_vport {
 	bool vlan_restrict;
 };
 
+
+/**
+ * struct efx_mtd - Struct to holds mtd list and krer for deletion without efx
+ * @efx: The associated efx_nic
+ * @list: List of MTDs attached to the NIC
+ * @parts: Memory allocated for MTD data
+ * @creation_work: I don't know what this is
+ * @probed_flag: I don't know what this is
+ */
+#ifdef CONFIG_SFC_MTD
+struct efx_mtd {
+	struct efx_nic *efx;
+	struct list_head list;
+	void *parts;
+	struct kref parts_kref;
+#if defined(EFX_WORKAROUND_87308)
+	atomic_t probed_flag;
+	struct delayed_work creation_work;
+};
+#endif
+#endif
+
 /**
  * struct efx_nic - an Efx NIC
  * @name: Device name (net device name or bus id before net device registered)
@@ -1246,6 +1326,7 @@ struct efx_vport {
  * @timer_quantum_ns: Interrupt timer quantum, in nanoseconds
  * @timer_max_ns: Interrupt timer maximum value, in nanoseconds
  * @irq_rx_adaptive: Adaptive IRQ moderation enabled for RX event queues
+ * @irqs_hooked: Channel interrupts are hooked
  * @irq_rx_moderation_us: IRQ moderation time for RX event queues
  * @msg_enable: Log message enable flags
  * @state: Device state number (%STATE_*). Serialised by the rtnl_lock.
@@ -1255,7 +1336,7 @@ struct efx_vport {
  * @rx_queue: RX DMA queues
  * @channel: Channels
  * @msi_context: Context for each MSI
- * @extra_channel_types: Types of extra (non-traffic) channels that
+ * @extra_channel_type: Types of extra (non-traffic) channels that
  *	should be allocated for this NIC
  * @xdp_tx_queue_count: Number of entries in %xdp_tx_queues.
  * @xdp_tx_queues: Array of pointers to tx queues used for XDP transmit.
@@ -1278,7 +1359,6 @@ struct efx_vport {
  * @tx_channel_offset: Offset of zeroth channel used for TX.
  * @tx_queues_per_channel: Number of TX queues on a normal (non-XDP) TX channel.
  * @n_xdp_channels: Number of channels used for XDP TX (after TX)
- * @xdp_channel_offset: Offset of zeroth channel used for XPD TX.
  * @xdp_tx_per_channel: Max number of TX queues on an XDP TX channel.
  * @rx_ip_align: RX DMA address offset to have IP header aligned in
  *	in accordance with NET_IP_ALIGN
@@ -1307,8 +1387,7 @@ struct efx_vport {
  * @irq_status: Interrupt status buffer
  * @irq_level: IRQ level/index for IRQs not triggered by an event queue
  * @selftest_work: Work item for asynchronous self-test
- * @mtd_list: List of MTDs attached to the NIC
- * @mtd_parts: Memory allocated for MTD data
+ * @mtd_struct: A struct for holding combined mtd data for freeing independently
  * @nic_data: Hardware dependent state
  * @mcdi: Management-Controller-to-Driver Interface state
  * @mac_lock: MAC access lock. Protects @port_enabled, @link_up, @phy_mode,
@@ -1378,8 +1457,6 @@ struct efx_vport {
  *	Serialised by ptp_all_funcs_list_lock
  * @netdev_notifier: Netdevice notifier.
  * @netevent_notifier: Netevent notifier (for neighbour updates).
- * @tc_counter_work: TC counters-update workitem.  Has to be in &struct efx_nic
- *	rather than @tc so that we can use container_of to get *efx.
  * @tc: state for TC offload (EF100).
  * @mem_bar: The BAR that is mapped into membase.
  * @reg_base: Offset from the start of the bar to the function control window.
@@ -1425,7 +1502,8 @@ struct efx_nic {
 	unsigned int timer_quantum_ns;
 	unsigned int timer_max_ns;
 	bool irq_rx_adaptive;
-	bool xdp_en;
+	bool xdp_tx;
+	bool irqs_hooked;
 	unsigned int irq_mod_step_us;
 	unsigned int irq_rx_moderation_us;
 	enum efx_rss_mode rss_mode;
@@ -1475,7 +1553,22 @@ struct efx_nic {
 	u16 max_channels;
 	u16 max_vis;
 	unsigned int max_tx_channels;
+
+	/* RX and TX channel ranges must be contiguous.
+	 * other channels are always combined channels.
+	 * combined channels are first, followed by other channels OR
+	 *   TX-only channels OR RX-only channels.
+	 * OR we can have RX-only then TX-only, but no combined or other.
+	 * XDP is a special set of TX channels that go on the end and can
+	 * coexist with anything.
+	 * So we can have:
+	 * combined and other
+	 * combined and RX-only
+	 * combined and TX-only
+	 * RX-only and TX-only
+	 */
 	unsigned int n_combined_channels;
+	unsigned int n_extra_channels;
 	unsigned int n_rx_only_channels;
 	unsigned int n_rss_channels;
 	unsigned int rss_spread;
@@ -1483,7 +1576,6 @@ struct efx_nic {
 	unsigned int tx_channel_offset;
 	unsigned int tx_queues_per_channel;
 	unsigned int n_xdp_channels;
-	unsigned int xdp_channel_offset;
 	unsigned int xdp_tx_per_channel;
 	unsigned int rx_ip_align;
 	unsigned int rx_dma_len;
@@ -1516,13 +1608,7 @@ struct efx_nic {
 	struct delayed_work selftest_work;
 
 #ifdef CONFIG_SFC_MTD
-	struct list_head mtd_list;
-	void *mtd_parts;
-	struct kref mtd_parts_kref;
-#if defined(EFX_WORKAROUND_87308)
-	struct delayed_work mtd_creation_work;
-	atomic_t mtds_probed_flag;
-#endif
+	struct efx_mtd *mtd_struct;
 #endif
 
 	void *nic_data;
@@ -1530,6 +1616,11 @@ struct efx_nic {
 
 	struct mutex mac_lock;
 	struct work_struct mac_work;
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	u16 open_count;
+#endif
+#endif
 	bool port_enabled;
 	bool datapath_started;
 
@@ -1661,7 +1752,6 @@ struct efx_nic {
 
 	struct notifier_block netdev_notifier;
 	struct notifier_block netevent_notifier;
-	struct delayed_work tc_counter_work;
 	struct efx_tc_state *tc;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK)
 	void *devlink;
@@ -1690,23 +1780,36 @@ struct efx_nic {
 
 static inline unsigned int efx_xdp_channels(struct efx_nic *efx)
 {
-	return efx->xdp_en ? efx->n_xdp_channels : 0;
+	return efx->xdp_tx ? efx->n_xdp_channels : 0;
 }
 
 static inline unsigned int efx_channels(struct efx_nic *efx)
 {
-	return efx->n_combined_channels + efx->n_rx_only_channels +
-	       efx->n_tx_only_channels + efx_xdp_channels(efx);
+	return efx->n_combined_channels + efx->n_extra_channels +
+	       efx->n_rx_only_channels + efx->n_tx_only_channels +
+	       efx_xdp_channels(efx);
 }
 
 static inline unsigned int efx_rx_channels(struct efx_nic *efx)
 {
-	return efx->n_combined_channels + efx->n_rx_only_channels;
+	return efx->n_combined_channels + efx->n_rx_only_channels +
+	       efx->n_extra_channels;
 }
 
 static inline unsigned int efx_tx_channels(struct efx_nic *efx)
 {
-	return efx->n_combined_channels + efx->n_tx_only_channels;
+	return efx->n_combined_channels + efx->n_tx_only_channels +
+	       efx->n_extra_channels;
+}
+
+static inline unsigned int efx_extra_channel_offset(struct efx_nic *efx)
+{
+	return efx->n_combined_channels;
+}
+
+static inline unsigned int efx_xdp_channel_offset(struct efx_nic *efx)
+{
+	return efx->tx_channel_offset + efx_tx_channels(efx);
 }
 
 static inline int efx_dev_registered(struct efx_nic *efx)
@@ -1722,7 +1825,7 @@ static inline unsigned int efx_port_num(struct efx_nic *efx)
 #ifdef CONFIG_SFC_MTD
 struct efx_mtd_partition {
 	struct list_head node;
-	struct efx_nic *efx;
+	struct efx_mtd *mtd_struct;
 	struct mtd_info mtd;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_MTD_WRITESIZE)
 	size_t writesize;
@@ -1767,6 +1870,7 @@ struct ef100_udp_tunnel {
  * @init: Initialise the controller
  * @dimension_resources: Dimension controller resources (buffer table,
  *	and VIs once the available interrupt resources are clear)
+ * @free_resources: Free resources allocated by dimension_resources
  * @fini: Shut down the controller
  * @monitor: Periodic function for polling link state and hardware monitor
  * @map_reset_reason: Map ethtool reset reason to a reset method
@@ -1910,6 +2014,8 @@ struct ef100_udp_tunnel {
  * @udp_tnl_has_port: Check if a port has been added as UDP tunnel
  * @udp_tnl_del_port: Remove a UDP tunnel port
  * @get_vf_rep: get the VF representor netdevice for given VF index
+ * @detach_reps: detach (stop TX on) all representors
+ * @attach_reps: attach (restart TX on) all representors
  * @revision: Hardware architecture revision
  * @txd_ptr_tbl_base: TX descriptor ring base address
  * @rxd_ptr_tbl_base: RX descriptor ring base address
@@ -1939,6 +2045,7 @@ struct efx_nic_type {
 	unsigned int (*mem_map_size)(struct efx_nic *efx);
 	int (*probe)(struct efx_nic *efx);
 	int (*dimension_resources)(struct efx_nic *efx);
+	void (*free_resources)(struct efx_nic *efx);
 	void (*remove)(struct efx_nic *efx);
 	int (*init)(struct efx_nic *efx);
 	void (*fini)(struct efx_nic *efx);
@@ -1977,6 +2084,9 @@ struct efx_nic_type {
 	void (*get_wol)(struct efx_nic *efx, struct ethtool_wolinfo *wol);
 	int (*set_wol)(struct efx_nic *efx, u32 type);
 	void (*resume_wol)(struct efx_nic *efx);
+	unsigned int (*check_caps)(const struct efx_nic *efx,
+				   u8 flag,
+				   u32 offset);
 	int (*test_chip)(struct efx_nic *efx, struct efx_self_tests *tests);
 	int (*test_memory)(struct efx_nic *efx,
 			void (*pattern)(unsigned int, efx_qword_t *, int, int),
@@ -2138,6 +2248,11 @@ struct efx_nic_type {
 	void (*udp_tnl_del_port2)(struct efx_nic *efx, struct ef100_udp_tunnel tnl);
 #endif
 	struct net_device *(*get_vf_rep)(struct efx_nic *efx, unsigned int vf);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	void (*detach_reps)(struct efx_nic *efx);
+	void (*attach_reps)(struct efx_nic *efx);
+#endif
+	void (*link_state_change)(struct efx_nic *efx);
 
 	int revision;
 	unsigned int txd_ptr_tbl_base;
@@ -2210,7 +2325,7 @@ static inline struct efx_channel *
 efx_get_xdp_channel(struct efx_nic *efx, unsigned int index)
 {
 	EFX_WARN_ON_ONCE_PARANOID(index >= efx->n_xdp_channels);
-	return efx->channel[efx->xdp_channel_offset + index];
+	return efx->channel[efx_xdp_channel_offset(efx) + index];
 }
 
 static inline bool efx_channel_has_tx_queues(struct efx_channel *channel)
@@ -2288,8 +2403,8 @@ efx_channel_get_rx_queue(struct efx_channel *channel)
 
 static inline bool efx_channel_is_xdp_tx(struct efx_channel *channel)
 {
-	return channel->channel - channel->efx->xdp_channel_offset <
-	       channel->efx->n_xdp_channels;
+	return channel->channel - efx_xdp_channel_offset(channel->efx) <
+	       efx_xdp_channels(channel->efx);
 }
 
 /* Name formats */

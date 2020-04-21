@@ -12,6 +12,7 @@
 #include "efx.h"
 #include "nic.h"
 #include "rx_common.h"
+#include "xdp.h"
 #include "mcdi_functions.h"
 #include "ef100_regs.h"
 #include "ef100_nic.h"
@@ -124,8 +125,12 @@ void __efx_rx_packet(struct efx_channel *channel)
 							ing_port);
 
 		if (rep_dev) {
-			efx_ef100_vfrep_rx_packet(netdev_priv(rep_dev),
-						  rx_buf);
+			if (rep_dev->flags & IFF_UP)
+				efx_ef100_vfrep_rx_packet(netdev_priv(rep_dev),
+							  rx_buf);
+			else
+				efx_free_rx_buffers(efx_channel_get_rx_queue(channel),
+						    rx_buf, 1);
 			goto out;
 		}
 		if (net_ratelimit())
@@ -139,6 +144,9 @@ void __efx_rx_packet(struct efx_channel *channel)
 		efx_free_rx_buffers(efx_channel_get_rx_queue(channel), rx_buf, 1);
 		goto out;
 	}
+
+	if (!efx_xdp_rx(efx, channel, rx_buf, &eh))
+		goto out;
 
 	if (likely(efx->net_dev->features & NETIF_F_RXCSUM)) {
 		if (PREFIX_FIELD(prefix, NT_OR_INNER_L3_CLASS) == 1) {
@@ -192,9 +200,9 @@ static void ef100_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index)
 
 	efx_recycle_rx_pages(channel, rx_buf, 1);
 
+	efx_rx_flush_packet(channel);
 	channel->rx_pkt_n_frags = 1;
 	channel->rx_pkt_index = index;
-	efx_rx_flush_packet(channel);
 }
 
 void efx_ef100_ev_rx(struct efx_channel *channel, const efx_qword_t *p_event)
@@ -219,19 +227,20 @@ void efx_ef100_ev_rx(struct efx_channel *channel, const efx_qword_t *p_event)
 
 void ef100_rx_write(struct efx_rx_queue *rx_queue)
 {
+	unsigned int notified_count = rx_queue->notified_count;
 	struct efx_rx_buffer *rx_buf;
 	unsigned int idx;
 	efx_qword_t *rxd;
 	efx_dword_t rxdb;
 
-	while (rx_queue->notified_count != rx_queue->added_count) {
-		idx = rx_queue->notified_count & rx_queue->ptr_mask;
+	while (notified_count != rx_queue->added_count) {
+		idx = notified_count & rx_queue->ptr_mask;
 		rx_buf = efx_rx_buffer(rx_queue, idx);
 		rxd = efx_rx_desc(rx_queue, idx);
 
 		EFX_POPULATE_QWORD_1(*rxd, ESF_GZ_RX_BUF_ADDR, rx_buf->dma_addr);
 
-		++rx_queue->notified_count;
+		++notified_count;
 	}
 
 	wmb();
@@ -239,6 +248,11 @@ void ef100_rx_write(struct efx_rx_queue *rx_queue)
 			     rx_queue->added_count & rx_queue->ptr_mask);
 	efx_writed_page(rx_queue->efx, &rxdb,
 			ER_GZ_RX_RING_DOORBELL, efx_rx_queue_index(rx_queue));
+	if (rx_queue->grant_credits)
+		wmb();
+	rx_queue->notified_count = notified_count;
+	if (rx_queue->grant_credits)
+		schedule_work(&rx_queue->grant_work);
 }
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)

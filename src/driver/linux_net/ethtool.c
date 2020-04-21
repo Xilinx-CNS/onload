@@ -24,6 +24,7 @@
 #include "efx_channels.h"
 #include "tx_common.h"
 #include "ethtool_common.h"
+#include "mcdi_functions.h"
 #ifdef CONFIG_SFC_DUMP
 #include "dump.h"
 #endif
@@ -478,6 +479,9 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.self_test_count	= efx_ethtool_self_test_count,
 	.get_stats_count	= efx_ethtool_get_stats_count,
 #endif
+#ifdef EFX_FLASH_FIRMWARE
+	.flash_device		= efx_mcdi_flash_bundle,
+#endif
 	.get_priv_flags		= efx_ethtool_get_priv_flags,
 	.set_priv_flags		= efx_ethtool_set_priv_flags,
 	.self_test		= efx_ethtool_self_test,
@@ -553,6 +557,7 @@ const struct ethtool_ops_ext efx_ethtool_ops_ext = {
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_CHANNELS) || defined(EFX_HAVE_ETHTOOL_EXT_CHANNELS)
 	.get_channels		= efx_ethtool_get_channels,
+	.set_channels		= efx_ethtool_set_channels,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
 	.get_link_ksettings	= efx_ethtool_get_link_ksettings,

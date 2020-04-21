@@ -34,13 +34,14 @@ struct efx_vfrep {
 	u32 mport_id;
 	u32 mport_label;
 	unsigned int vf_idx;
+	unsigned int write_index, read_index;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	struct list_head rx_list;
 #else
 	struct sk_buff_head rx_list;
 #endif
 	spinlock_t rx_lock;
-	struct work_struct rx_work;
+	struct napi_struct napi;
 	struct efx_vfrep_sw_stats stats;
 };
 

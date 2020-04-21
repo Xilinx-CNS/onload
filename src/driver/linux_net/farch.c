@@ -813,7 +813,7 @@ int efx_farch_fini_dmaq(struct efx_nic *efx)
 	int rc = 0;
 
 	/* Do not attempt to write to the NIC during EEH recovery */
-	if (efx->state != STATE_RECOVERY) {
+	if (!efx_recovering(efx->state)) {
 		/* Only perform flush if DMA is enabled */
 		if (efx->pci_dev->is_busmaster) {
 			efx->type->prepare_flush(efx);
@@ -3135,6 +3135,9 @@ void efx_farch_filter_table_remove(struct efx_nic *efx)
 {
 	struct efx_farch_filter_state *state = efx->filter_state;
 	enum efx_farch_filter_table_id table_id;
+
+	if (!state)
+		return;
 
 #ifdef CONFIG_SFC_DEBUGFS
 	efx_trim_debugfs_port(efx, filter_debugfs);

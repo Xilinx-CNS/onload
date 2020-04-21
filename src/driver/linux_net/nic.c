@@ -136,6 +136,7 @@ int efx_nic_init_interrupt(struct efx_nic *efx)
 	netdev_extended(efx->net_dev)->rfs_data.rx_cpu_rmap = cpu_rmap;
 #endif
 #endif
+	efx->irqs_hooked = true;
 	return 0;
 
  fail2:
@@ -169,12 +170,14 @@ void efx_nic_fini_interrupt(struct efx_nic *efx)
 #endif
 #endif
 
-	/* Disable MSI/MSI-X interrupts */
-	efx_for_each_channel(channel, efx) {
-		if (channel->irq)
-			free_irq(channel->irq,
-				 &efx->msi_context[channel->channel]);
-	}
+	if (efx->irqs_hooked)
+		/* Disable MSI/MSI-X interrupts */
+		efx_for_each_channel(channel, efx) {
+			if (channel->irq)
+				free_irq(channel->irq,
+					 &efx->msi_context[channel->channel]);
+		}
+	efx->irqs_hooked = false;
 }
 
 #ifdef EFX_NOT_UPSTREAM

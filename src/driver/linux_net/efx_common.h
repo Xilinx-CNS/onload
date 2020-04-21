@@ -21,6 +21,9 @@ int efx_init_struct(struct efx_nic *efx,
                     struct pci_dev *pci_dev, struct net_device *net_dev);
 void efx_fini_struct(struct efx_nic *efx);
 
+int efx_probe_common(struct efx_nic *efx);
+void efx_remove_common(struct efx_nic *efx);
+
 int efx_start_all(struct efx_nic *efx);
 void efx_stop_all(struct efx_nic *efx);
 int efx_try_recovery(struct efx_nic *efx);
@@ -42,9 +45,7 @@ void efx_watchdog(struct net_device *net_dev);
 
 #define EFX_ASSERT_RESET_SERIALISED(efx)                \
 	do {                                            \
-		if (efx->state == STATE_READY ||        \
-		    efx->state == STATE_RECOVERY ||     \
-		    efx->state == STATE_DISABLED)       \
+		if (efx->state != STATE_UNINIT)         \
 			ASSERT_RTNL();                  \
 	} while (0)
 
@@ -64,12 +65,12 @@ void efx_schedule_reset(struct efx_nic *efx, enum reset_type type);
 
 static inline int efx_check_disabled(struct efx_nic *efx)
 {
-        if (efx->state == STATE_DISABLED || efx->state == STATE_RECOVERY) {
-                netif_err(efx, drv, efx->net_dev,
-                          "device is disabled due to earlier errors\n");
-                return -EIO;
-        }
-        return 0;
+	if (efx->state == STATE_DISABLED || efx_recovering(efx->state)) {
+		netif_err(efx, drv, efx->net_dev,
+			  "device is disabled due to earlier errors\n");
+		return -EIO;
+	}
+	return 0;
 }
 int efx_check_queue_size(struct efx_nic *efx, u32 *entries,
 			 u32 min, u32 max, bool fix);
@@ -86,7 +87,6 @@ int efx_mac_reconfigure(struct efx_nic *efx, bool mtu_only);
 void efx_link_status_changed(struct efx_nic *efx);
 int efx_reconfigure_port(struct efx_nic *efx);
 int __efx_reconfigure_port(struct efx_nic *efx);
-unsigned int efx_xdp_max_mtu(struct efx_nic *efx);
 int efx_change_mtu(struct net_device *net_dev, int new_mtu);
 int efx_set_mac_address(struct net_device *net_dev, void *data);
 void efx_set_rx_mode(struct net_device *net_dev);

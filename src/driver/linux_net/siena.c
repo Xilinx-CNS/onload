@@ -24,6 +24,7 @@
 #include "io.h"
 #include "workarounds.h"
 #include "mcdi.h"
+#include "mcdi_filters.h"
 #include "mcdi_pcol.h"
 #include "selftest.h"
 #include "sriov.h"
@@ -475,6 +476,44 @@ static unsigned int siena_mem_map_size(struct efx_nic *efx)
 		FR_CZ_MC_TREG_SMEM_STEP * FR_CZ_MC_TREG_SMEM_ROWS;
 }
 
+static int siena_probe_post_io(struct efx_nic *efx)
+{
+	int rc;
+
+	/* Read in the non-volatile configuration */
+	rc = siena_probe_nvconfig(efx);
+	if (rc == -EINVAL) {
+		netif_err(efx, probe, efx->net_dev,
+			  "NVRAM is invalid therefore using defaults\n");
+		efx->phy_type = PHY_TYPE_NONE;
+		efx->mdio.prtad = MDIO_PRTAD_NONE;
+	} else if (rc) {
+		return rc;
+	}
+
+	rc = efx_mcdi_mon_probe(efx);
+	if (rc)
+		return rc;
+
+	siena_init_wol(efx);
+
+	if (maranello_possible(efx->nic_data)) {
+		rc = device_create_file(&efx->pci_dev->dev,
+					&dev_attr_turbo_mode);
+		if (rc)
+			return rc;
+	}
+
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
+	if (aoe_enabled(efx->nic_data)) {
+		rc = efx_aoe_attach(efx);
+		if (rc)
+			return rc;
+	}
+#endif
+	return rc;
+}
+
 static int siena_probe_nic(struct efx_nic *efx)
 {
 	struct siena_nic_data *nic_data;
@@ -492,7 +531,7 @@ static int siena_probe_nic(struct efx_nic *efx)
 		netif_err(efx, probe, efx->net_dev,
 			  "Siena FPGA not supported\n");
 		rc = -ENODEV;
-		goto fail1;
+		return rc;
 	}
 
 	efx->max_channels = efx->max_tx_channels = EFX_SIENA_MAX_CHANNELS;
@@ -522,24 +561,11 @@ static int siena_probe_nic(struct efx_nic *efx)
 	}
 #endif
 
-	rc = efx_mcdi_init(efx);
-	if (rc)
-		goto fail1;
-
-	/* Now we can reset the NIC */
-	rc = efx_mcdi_reset(efx, RESET_TYPE_ALL);
-	if (rc) {
-		netif_err(efx, probe, efx->net_dev, "failed to reset NIC\n");
-		goto fail3;
-	}
-
-	siena_init_wol(efx);
-
 	/* Allocate memory for INT_KER */
 	rc = efx_nic_alloc_buffer(efx, &efx->irq_status, sizeof(efx_oword_t),
 				  GFP_KERNEL);
 	if (rc)
-		goto fail4;
+		return rc;
 	BUG_ON(efx->irq_status.dma_addr & 0x0f);
 
 	netif_dbg(efx, probe, efx->net_dev,
@@ -548,58 +574,19 @@ static int siena_probe_nic(struct efx_nic *efx)
 		  efx->irq_status.addr,
 		  (unsigned long long)virt_to_phys(efx->irq_status.addr));
 
-	/* Read in the non-volatile configuration */
-	rc = siena_probe_nvconfig(efx);
-	if (rc == -EINVAL) {
-		netif_err(efx, probe, efx->net_dev,
-			  "NVRAM is invalid therefore using defaults\n");
-		efx->phy_type = PHY_TYPE_NONE;
-		efx->mdio.prtad = MDIO_PRTAD_NONE;
-	} else if (rc) {
-		goto fail5;
-	}
+	netdev_rss_key_fill(efx->rss_context.rx_hash_key,
+			    sizeof(efx->rss_context.rx_hash_key));
 
-	rc = efx_mcdi_mon_probe(efx);
+	rc = efx_pci_probe_post_io(efx, siena_probe_post_io);
 	if (rc)
-		goto fail5;
+		return rc;
 
-	if (maranello_possible(efx->nic_data)) {
-		rc = device_create_file(&efx->pci_dev->dev,
-					&dev_attr_turbo_mode);
-		if (rc)
-			goto fail6;
-	}
+	rc = efx_farch_filter_table_probe(efx);
+	if (rc)
+		return rc;
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-	if (aoe_enabled(efx->nic_data)) {
-		rc = efx_aoe_attach(efx);
-		if (rc)
-			goto fail7;
-	}
-#endif
-
-	efx_ptp_defer_probe_with_channel(efx);
-
+	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
 	return 0;
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-fail7:
-	if (maranello_possible(efx->nic_data))
-		device_remove_file(&efx->pci_dev->dev,
-				   &dev_attr_turbo_mode);
-#endif
-fail6:
-	efx_mcdi_mon_remove(efx);
-fail5:
-	efx_nic_free_buffer(efx, &efx->irq_status);
-fail4:
-fail3:
-	efx_mcdi_detach(efx);
-	efx_mcdi_fini(efx);
-fail1:
-	kfree(efx->nic_data);
-	efx->nic_data = NULL;
-	return rc;
 }
 
 static int siena_rx_pull_rss_config(struct efx_nic *efx)
@@ -715,23 +702,24 @@ static int siena_init_nic(struct efx_nic *efx)
 	return 0;
 }
 
-static void siena_remove_nic(struct efx_nic *efx)
+static void siena_remove_post_io(struct efx_nic *efx)
 {
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
 	efx_aoe_detach(efx);
 #endif
 	efx_mcdi_mon_remove(efx);
 
-	efx_nic_free_buffer(efx, &efx->irq_status);
-
-	efx_mcdi_reset(efx, RESET_TYPE_ALL);
-
 	if (maranello_possible(efx->nic_data))
 		device_remove_file(&efx->pci_dev->dev,
 				   &dev_attr_turbo_mode);
+}
 
-	efx_mcdi_detach(efx);
-	efx_mcdi_fini(efx);
+static void siena_remove_nic(struct efx_nic *efx)
+{
+	efx_farch_filter_table_remove(efx);
+	efx_pci_remove_post_io(efx, siena_remove_post_io);
+
+	efx_nic_free_buffer(efx, &efx->irq_status);
 
 	/* Tear down the private nic state */
 	kfree(efx->nic_data);
@@ -1269,6 +1257,20 @@ fail_free:
 
 #endif /* CONFIG_SFC_MTD */
 
+static unsigned int siena_check_caps(const struct efx_nic *efx,
+				     u8 flag,
+				     u32 offset)
+{
+	const struct siena_nic_data *nic_data = efx->nic_data;
+
+	switch (offset) {
+	case(MC_CMD_GET_CAPABILITIES_V8_OUT_FLAGS1_OFST):
+		return nic_data->caps & BIT_ULL(flag);
+	default:
+		return 0;
+	}
+}
+
 /**************************************************************************
  *
  * Revision-dependent attributes used by efx.c and nic.c
@@ -1349,9 +1351,7 @@ const struct efx_nic_type siena_a0_nic_type = {
 	.ev_mcdi_pending = efx_farch_ev_mcdi_pending,
 	.ev_read_ack = efx_farch_ev_read_ack,
 	.ev_test_generate = efx_farch_ev_test_generate,
-	.filter_table_probe = efx_farch_filter_table_probe,
 	.filter_table_restore = efx_farch_filter_table_restore,
-	.filter_table_remove = efx_farch_filter_table_remove,
 	.filter_match_supported = efx_farch_filter_match_supported,
 	.filter_update_rx_scatter = efx_farch_filter_update_rx_scatter,
 	.filter_insert = efx_farch_filter_insert,
@@ -1434,4 +1434,5 @@ const struct efx_nic_type siena_a0_nic_type = {
 			     1 << HWTSTAMP_FILTER_PTP_V1_L4_EVENT |
 			     1 << HWTSTAMP_FILTER_PTP_V2_L4_EVENT),
 	.rx_hash_key_size = 16,
+	.check_caps = siena_check_caps,
 };

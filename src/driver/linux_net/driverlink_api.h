@@ -27,9 +27,10 @@ struct efx_dl_device_info;
  * is not used for binary compatibility checking, as that is done by
  * kbuild and the module loader using symbol versions.
  */
-#define EFX_DRIVERLINK_API_VERSION 27
+#define EFX_DRIVERLINK_API_VERSION 28
 #define EFX_DRIVERLINK_API_VERSION_MINOR_MAX 0
 
+/* If the client didn't define their VERSION_MINOR, default to 0 */
 #ifndef EFX_DRIVERLINK_API_VERSION_MINOR
 #define EFX_DRIVERLINK_API_VERSION_MINOR 0
 #endif
@@ -59,12 +60,17 @@ enum efx_dl_ev_prio {
  *	promise to use the VI stride and memory BAR supplied by the net
  *	driver on Medford2.  If this flag is not set, the client driver
  *	will not be probed for Medford2 (or newer) NICs.  Defined from API 22.5.
+ * @EFX_DL_DRIVER_NO_STACK: Set by client drivers to indicate they are only
+ *      interested in querying interfaces and are not a stack.
+ *      This will cause the driver not to allocate resources for them, but
+ *      they cannot insert filters or create queues.
  */
 enum efx_dl_driver_flags {
 	EFX_DL_DRIVER_CHECKS_FALCON_RX_USR_BUF_SIZE = 0x1,
 	EFX_DL_DRIVER_REQUIRES_MINOR_VER = 0x2,
 	EFX_DL_DRIVER_SUPPORTS_MINOR_VER = 0x4,
 	EFX_DL_DRIVER_CHECKS_MEDFORD2_VI_STRIDE = 0x8,
+	EFX_DL_DRIVER_NO_PUBLISH = 0x10,
 };
 
 /**
@@ -435,6 +441,8 @@ struct efx_dl_ops {
 			unsigned int cmd, size_t inlen, size_t outlen,
 			size_t *outlen_actual,
 			const u8 *inbuf, u8 *outbuf);
+	int (*publish)(struct efx_dl_device *dl_dev);
+	void (*unpublish)(struct efx_dl_device *dl_dev);
 };
 
 /**
@@ -537,6 +545,9 @@ static inline void efx_dl_schedule_reset(struct efx_dl_device *efx_dev)
 {
 	efx_dev->nic->ops->schedule_reset(efx_dev);
 }
+
+int efx_dl_publish(struct efx_dl_device *efx_dev);
+void efx_dl_unpublish(struct efx_dl_device *efx_dev);
 
 /**
  * efx_dl_rss_flags_default() - return appropriate default RSS flags for NIC

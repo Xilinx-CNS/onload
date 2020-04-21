@@ -35,10 +35,36 @@ MODULE_PARM_DESC(efx_allow_nvconfig_writes,
 
 /* MTD interface */
 
+int efx_mtd_init(struct efx_nic *efx)
+{
+	efx->mtd_struct = kzalloc(sizeof(*efx->mtd_struct), GFP_KERNEL);
+	if (!efx->mtd_struct)
+		return -ENOMEM;
+
+	efx->mtd_struct->efx = efx;
+	INIT_LIST_HEAD(&efx->mtd_struct->list);
+
+#ifdef EFX_WORKAROUND_87308
+	atomic_set(&efx->mtd_struct->probed_flag, 0);
+	INIT_DELAYED_WORK(&efx->mtd_struct->creation_work,
+			   efx_mtd_creation_work);
+#endif
+
+	return 0;
+}
+
+void efx_mtd_free(struct efx_nic *efx)
+{
+	if (efx->mtd_struct)
+		kfree(efx->mtd_struct);
+
+	efx->mtd_struct = NULL;
+}
+
 static int efx_mtd_erase(struct mtd_info *mtd, struct erase_info *erase)
 {
 	struct efx_mtd_partition *part = mtd->priv;
-	struct efx_nic *efx = part->efx;
+	struct efx_nic *efx = part->mtd_struct->efx;
 	int rc;
 
 	rc = efx->type->mtd_erase(mtd, erase->addr, erase->len);
@@ -52,7 +78,7 @@ static int efx_mtd_erase(struct mtd_info *mtd, struct erase_info *erase)
 static void efx_mtd_sync(struct mtd_info *mtd)
 {
 	struct efx_mtd_partition *part = mtd->priv;
-	struct efx_nic *efx = part->efx;
+	struct efx_nic *efx = part->mtd_struct->efx;
 	int rc;
 
 	rc = efx->type->mtd_sync(mtd);
@@ -63,10 +89,15 @@ static void efx_mtd_sync(struct mtd_info *mtd)
 
 static void efx_mtd_free_parts(struct kref *kref)
 {
-	struct efx_nic *efx = container_of(kref, struct efx_nic, mtd_parts_kref);
+	struct efx_mtd *mtd_struct = container_of(kref, struct efx_mtd, parts_kref);
 
-	kfree(efx->mtd_parts);
-	efx->mtd_parts = NULL;
+	kfree(mtd_struct->parts);
+	mtd_struct->parts = NULL;
+
+	if (mtd_struct->efx)
+		mtd_struct->efx->mtd_struct = NULL;
+
+	kfree(mtd_struct);
 }
 
 static void efx_mtd_scrub(struct efx_mtd_partition *part)
@@ -101,11 +132,11 @@ static void efx_mtd_release_partition(struct device *dev)
 
 	efx_mtd_scrub(part);
 	list_del(&part->node);
-	kref_put(&part->efx->mtd_parts_kref, efx_mtd_free_parts);
+	kref_put(&part->mtd_struct->parts_kref, efx_mtd_free_parts);
 }
 #endif
 
-static void efx_mtd_remove_partition(struct efx_nic *efx,
+static void efx_mtd_remove_partition(struct efx_mtd *mtd_struct,
 				     struct efx_mtd_partition *part)
 {
 	int rc;
@@ -125,9 +156,14 @@ static void efx_mtd_remove_partition(struct efx_nic *efx,
 #ifdef EFX_WORKAROUND_63680
 		/* Try to disown the other process */
 		if ((retry <= 5) && (part->mtd.usecount > 0)) {
-			netif_err(efx, hw, efx->net_dev,
-				  "MTD device %s stuck for %d seconds, disowning it\n",
-				  part->name, 15-retry);
+			if (mtd_struct->efx)
+				netif_err(mtd_struct->efx, hw, mtd_struct->efx->net_dev,
+					  "MTD device %s stuck for %d seconds, disowning it\n",
+					  part->name, 15-retry);
+			else
+				printk(KERN_ERR
+				       "sfc: MTD device %s stuck for %d seconds, disowning it\n",
+				       part->name, 15-retry);
 			part->mtd.usecount--;
 		}
 #endif
@@ -138,16 +174,21 @@ static void efx_mtd_remove_partition(struct efx_nic *efx,
 #else
 	if (rc) {
 #endif
-		netif_err(efx, hw, efx->net_dev,
-			  "Error %d removing MTD device %s. A reboot is needed to fix this\n",
-			  rc, part->name);
+		if (mtd_struct->efx)
+			netif_err(mtd_struct->efx, hw, mtd_struct->efx->net_dev,
+				  "Error %d removing MTD device %s. A reboot is needed to fix this\n",
+				  rc, part->name);
+		else
+			printk(KERN_ERR
+			       "sfc: Error %d removing MTD device %s. A reboot is needed to fix this\n",
+			       rc, part->name);
 		part->name[0] = '\0';
 	}
 
 #ifndef EFX_NOT_UPSTREAM
 	efx_mtd_scrub(part);
 	list_del(&part->node);
-	kref_put(&efx->mtd_parts_kref, efx_mtd_free_parts);
+	kref_put(&mtd_struct->parts_kref, efx_mtd_free_parts);
 #endif
 }
 
@@ -155,14 +196,15 @@ int efx_mtd_add(struct efx_nic *efx, struct efx_mtd_partition *parts,
 		size_t n_parts)
 {
 	struct efx_mtd_partition *part;
+	struct efx_mtd *mtd_struct = efx->mtd_struct;
 	size_t i;
 
-	efx->mtd_parts = parts;
-	kref_init(&efx->mtd_parts_kref);
+	mtd_struct->parts = parts;
+	kref_init(&mtd_struct->parts_kref);
 
 	for (i = 0; i < n_parts; i++) {
 		part = &parts[i];
-		part->efx = efx;
+		part->mtd_struct = mtd_struct;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_MTD_WRITESIZE)
 		if (!part->mtd.writesize)
 			part->mtd.writesize = 1;
@@ -191,7 +233,7 @@ int efx_mtd_add(struct efx_nic *efx, struct efx_mtd_partition *parts,
 		if (mtd_device_register(&part->mtd, NULL, 0))
 			goto fail;
 
-		kref_get(&efx->mtd_parts_kref);
+		kref_get(&mtd_struct->parts_kref);
 
 #ifdef EFX_NOT_UPSTREAM
 		/* The core MTD functionality does not comply completely with
@@ -203,15 +245,15 @@ int efx_mtd_add(struct efx_nic *efx, struct efx_mtd_partition *parts,
 #endif
 
 		/* Add to list in order - efx_mtd_remove() depends on this */
-		list_add_tail(&part->node, &efx->mtd_list);
+		list_add_tail(&part->node, &mtd_struct->list);
 	}
 
 	return 0;
 
 fail:
 	while (i--)
-		efx_mtd_remove_partition(efx, &parts[i]);
-	kref_put(&efx->mtd_parts_kref, efx_mtd_free_parts);
+		efx_mtd_remove_partition(mtd_struct, &parts[i]);
+	kref_put(&mtd_struct->parts_kref, efx_mtd_free_parts);
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_MTD_TABLE)
 	/* The number of MTDs is limited (to 16 or 32 by default) and
@@ -227,24 +269,30 @@ fail:
 void efx_mtd_remove(struct efx_nic *efx)
 {
 	struct efx_mtd_partition *part, *next;
+	struct efx_mtd *mtd_struct = efx->mtd_struct;
+
+	/* This is done here because it can't be performed when the
+	 *  mtd_struct is actually freed as efx might not exist
+	 */
 
 	WARN_ON(efx_dev_registered(efx));
 
-	if (list_empty(&efx->mtd_list))
+	if (list_empty(&mtd_struct->list))
 		return;
 
-	list_for_each_entry_safe(part, next, &efx->mtd_list, node)
-		efx_mtd_remove_partition(efx, part);
-	kref_put(&efx->mtd_parts_kref, efx_mtd_free_parts);
+	list_for_each_entry_safe(part, next, &mtd_struct->list, node)
+		efx_mtd_remove_partition(mtd_struct, part);
+	kref_put(&mtd_struct->parts_kref, efx_mtd_free_parts);
 }
 
 void efx_mtd_rename(struct efx_nic *efx)
 {
 	struct efx_mtd_partition *part;
+	struct efx_mtd *mtd_struct = efx->mtd_struct;
 
 	ASSERT_RTNL();
 
-	list_for_each_entry(part, &efx->mtd_list, node)
+	list_for_each_entry(part, &mtd_struct->list, node)
 		efx->type->mtd_rename(part);
 }
 
@@ -252,18 +300,18 @@ void efx_mtd_rename(struct efx_nic *efx)
 void efx_mtd_creation_work(struct work_struct *data)
 {
 #if !defined(EFX_USE_KCOMPAT) || !defined(EFX_NEED_WORK_API_WRAPPERS)
-	struct efx_nic *efx = container_of(data, struct efx_nic,
-					   mtd_creation_work.work);
+	struct efx_mtd *mtd_struct = container_of(data, struct efx_mtd,
+					   creation_work.work);
 #else
-	struct efx_nic *efx = container_of(data, struct efx_nic,
-					   mtd_creation_work);
+	struct efx_mtd *mtd_struct = container_of(data, struct efx_mtd,
+					   creation_work);
 #endif
 
-	if (atomic_xchg(&efx->mtds_probed_flag, 1) != 0)
+	if (atomic_xchg(&mtd_struct->probed_flag, 1) != 0)
 		return;
 
 	rtnl_lock();
-	(void)efx_mtd_probe(efx);
+	(void)efx_mtd_probe(mtd_struct->efx);
 	rtnl_unlock();
 }
 #endif

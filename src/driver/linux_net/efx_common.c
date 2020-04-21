@@ -15,6 +15,7 @@
 #include "efx_channels.h"
 #include "efx.h"
 #include "mcdi.h"
+#include "debugfs.h"
 #include "mcdi_port_common.h"
 #include "selftest.h"
 #include "rx_common.h"
@@ -25,6 +26,7 @@
 #include "dump.h"
 #include "mcdi_pcol.h"
 #include "tc.h"
+#include "xdp.h"
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD)
 #include <net/gre.h>
 #endif
@@ -275,6 +277,9 @@ void efx_link_status_changed(struct efx_nic *efx)
 			netif_carrier_off(efx->net_dev);
 	}
 
+	if (efx->type->link_state_change)
+		efx->type->link_state_change(efx);
+
 	/* Status message for kernel log */
 	if (!net_ratelimit())
 		return;
@@ -310,19 +315,6 @@ void efx_link_status_changed(struct efx_nic *efx)
 	}
 
 }
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
-unsigned int efx_xdp_max_mtu(struct efx_nic *efx)
-{
-	/* The maximum MTU that we can fit in a single page, allowing for
-	 * framing, overhead and XDP headroom. */
-	int overhead = EFX_MAX_FRAME_LEN(0) + sizeof(struct efx_rx_page_state) +
-		       efx->rx_prefix_size + efx->type->rx_buffer_padding +
-		       efx->rx_ip_align + XDP_PACKET_HEADROOM;
-
-	return PAGE_SIZE - overhead;
-}
-#endif
 
 /* Context: process, rtnl_lock() held. */
 int efx_change_mtu(struct net_device *net_dev, int new_mtu)
@@ -383,6 +375,9 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 /* Is Driverlink supported on this device? */
 bool efx_dl_supported(struct efx_nic *efx)
 {
+	if (!efx->mcdi)
+		return false;
+
 	/* VI spreading will confuse driverlink clients, so prevent
 	 * registration if it's in use.
 	 */
@@ -393,7 +388,7 @@ bool efx_dl_supported(struct efx_nic *efx)
 		return false;
 	}
 
-	return efx->dl_nic.dl_info != NULL;
+	return true;
 }
 #endif
 #endif
@@ -606,6 +601,8 @@ fail:
 			efx_remove_rx_queue(rx_queue);
 			atomic_dec(&efx->active_queues);
 		}
+		if (channel->type->stop)
+			channel->type->stop(channel);
 	}
 
 out:
@@ -703,7 +700,7 @@ int efx_start_all(struct efx_nic *efx)
 	 * of these flags are safe to read under just the rtnl lock
 	 */
 	if (efx->state == STATE_DISABLED || efx->port_enabled ||
-	    !netif_running(efx->net_dev) || efx->reset_pending)
+	    efx->reset_pending)
 		return 0;
 
 	efx_start_port(efx);
@@ -733,12 +730,6 @@ int efx_start_all(struct efx_nic *efx)
 	/* release stats_lock obtained in update_stats */
 	spin_unlock_bh(&efx->stats_lock);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	/* Start TC stats gathering. */
-	if (efx->type->revision == EFX_REV_EF100)
-		efx_tc_start_stats(efx);
-#endif
-
 	return rc;
 }
 
@@ -754,12 +745,6 @@ void efx_stop_all(struct efx_nic *efx)
 	/* port_enabled can be read safely under the rtnl lock */
 	if (!efx->port_enabled)
 		return;
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	/* Stop TC stats gathering. */
-	if (efx->type->revision == EFX_REV_EF100)
-		efx_tc_stop_stats(efx);
-#endif
 
 	/* update stats before we go down so we can accurately count
 	 * rx_nodesc_drops
@@ -818,7 +803,8 @@ void efx_reset_sw_stats(struct efx_nic *efx)
 	struct efx_tx_queue *tx_queue;
 
 	efx_for_each_channel(channel, efx) {
-		efx_channel_get_rx_queue(channel)->rx_packets = 0;
+		if (efx_channel_has_rx_queue(channel))
+			efx_channel_get_rx_queue(channel)->rx_packets = 0;
 		efx_for_each_channel_tx_queue(tx_queue, channel) {
 			tx_queue->tx_packets = 0;
 			tx_queue->pushes = 0;
@@ -1236,7 +1222,7 @@ static void efx_reset_work(struct work_struct *data)
 	 * have changed by now.  Now that we have the RTNL lock,
 	 * it cannot change again.
 	 */
-	if (efx->state == STATE_READY)
+	if (efx_net_active(efx->state))
 		(void)efx_reset(efx, method);
 
 	rtnl_unlock();
@@ -1248,7 +1234,7 @@ void efx_schedule_reset(struct efx_nic *efx, enum reset_type type)
 	unsigned long last_reset = READ_ONCE(efx->last_reset);
 	enum reset_type method;
 
-	if (efx->state == STATE_RECOVERY) {
+	if (efx_recovering(efx->state)) {
 		netif_dbg(efx, drv, efx->net_dev,
 			  "recovering: skip scheduling %s reset\n",
 			  RESET_TYPE(type));
@@ -1293,12 +1279,16 @@ void efx_schedule_reset(struct efx_nic *efx, enum reset_type type)
 	/* If we're not READY then just leave the flags set as the cue
 	 * to abort probing or reschedule the reset later.
 	 */
-	if (READ_ONCE(efx->state) != STATE_READY)
+	if (!efx_net_active(READ_ONCE(efx->state)))
 		return;
 
 	/* we might be resetting because things are broken, so detach so we
 	 * don't get things like the TX watchdog firing while we wait to reset.
 	 */
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	if (efx->type->detach_reps)
+		efx->type->detach_reps(efx);
+#endif
 	netif_device_detach(efx->net_dev);
 
 	efx_queue_reset_work(efx);
@@ -1337,10 +1327,14 @@ void efx_fini_struct(struct efx_nic *efx)
 	kfree(efx->rps_hash_table);
 #endif
 
-	efx_fini_channels(efx);
-
 #ifdef CONFIG_SFC_DEBUGFS
 	mutex_destroy(&efx->debugfs_symlink_mutex);
+#endif
+#ifdef CONFIG_SFC_MTD
+	if (efx->mtd_struct) {
+		efx->mtd_struct->efx = NULL;
+		efx->mtd_struct = NULL;
+	}
 #endif
 }
 
@@ -1354,12 +1348,6 @@ int efx_init_struct(struct efx_nic *efx,
 
 	/* Initialise common structures */
 	spin_lock_init(&efx->biu_lock);
-#ifdef CONFIG_SFC_MTD
-	INIT_LIST_HEAD(&efx->mtd_list);
-#ifdef EFX_WORKAROUND_87308
-	atomic_set(&efx->mtds_probed_flag, 0);
-#endif
-#endif
 	INIT_WORK(&efx->reset_work, efx_reset_work);
 	INIT_DELAYED_WORK(&efx->monitor_work, efx_monitor);
 	efx_selftest_async_init(efx);
@@ -1424,7 +1412,7 @@ int efx_init_struct(struct efx_nic *efx,
 	init_waitqueue_head(&efx->flush_wq);
 	rc = efx_init_struct_tc(efx);
 	if (rc)
-		goto fail;
+		return rc;
 
 #ifdef CONFIG_SFC_DEBUGFS
 	mutex_init(&efx->debugfs_symlink_mutex);
@@ -1439,11 +1427,10 @@ int efx_init_struct(struct efx_nic *efx,
 	efx->mem_bar = UINT_MAX;
 	efx->reg_base = 0;
 
-	return 0;
+	efx->max_channels = EFX_MAX_CHANNELS;
+	efx->max_tx_channels = EFX_MAX_CHANNELS;
 
-fail:
-	efx_fini_struct(efx);
-	return rc;
+	return 0;
 }
 
 /* This configures the PCI device to enable I/O and DMA. */
@@ -1501,7 +1488,11 @@ int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int 
 		goto fail3;
 	}
 	efx->mem_bar = bar;
-	efx->membase = ioremap_nocache(efx->membase_phys, mem_map_size);
+#if defined(EFX_USE_KCOMPAT)
+	efx->membase = efx_ioremap(efx->membase_phys, mem_map_size);
+#else
+	efx->membase = ioremap(efx->membase_phys, mem_map_size);
+#endif
 
 	if (!efx->membase) {
 		netif_err(efx, probe, efx->net_dev,
@@ -1540,13 +1531,62 @@ void efx_fini_io(struct efx_nic *efx)
 		pci_release_region(efx->pci_dev, efx->mem_bar);
 		efx->membase_phys = 0;
 		efx->mem_bar = UINT_MAX;
-	}
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
-	/* Don't disable bus-mastering if VFs are assigned */
-	if (!pci_vfs_assigned(efx->pci_dev))
+		/* Don't disable bus-mastering if VFs are assigned */
+		if (!pci_vfs_assigned(efx->pci_dev))
 #endif
-		pci_disable_device(efx->pci_dev);
+			pci_disable_device(efx->pci_dev);
+	}
+}
+
+int efx_probe_common(struct efx_nic *efx)
+{
+	int rc = efx_mcdi_init(efx);
+
+	if (rc)
+		return rc;
+	if (efx->mcdi->fn_flags &
+	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
+		return 0;
+
+	/* Reset (most) configuration for this function */
+	rc = efx_mcdi_reset(efx, RESET_TYPE_ALL);
+	if (rc)
+		return rc;
+	/* Enable event logging */
+	rc = efx_mcdi_log_ctrl(efx, true, false, 0);
+	if (rc)
+		return rc;
+
+	/* Create debugfs symlinks */
+#ifdef CONFIG_SFC_DEBUGFS
+	mutex_lock(&efx->debugfs_symlink_mutex);
+	rc = efx_init_debugfs_nic(efx);
+	if (!rc)
+		rc = efx_init_debugfs_netdev(efx->net_dev);
+	mutex_unlock(&efx->debugfs_symlink_mutex);
+
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "failed to init net dev debugfs\n");
+	}
+#endif
+
+	return 0;
+}
+
+void efx_remove_common(struct efx_nic *efx)
+{
+#ifdef CONFIG_SFC_DEBUGFS
+	mutex_lock(&efx->debugfs_symlink_mutex);
+	efx_fini_debugfs_netdev(efx->net_dev);
+	efx_fini_debugfs_nic(efx);
+	mutex_unlock(&efx->debugfs_symlink_mutex);
+#endif
+
+	efx_mcdi_detach(efx);
+	efx_mcdi_fini(efx);
 }
 
 /** Check queue size for range and rounding.
@@ -1741,7 +1781,7 @@ static pci_ers_result_t efx_io_error_detected(struct pci_dev *pdev,
 	rtnl_lock();
 
 	if (efx->state != STATE_DISABLED) {
-		efx->state = STATE_RECOVERY;
+		efx->state = efx_begin_recovery(efx->state);
 		efx->reset_pending = 0;
 
 		efx_device_detach_sync(efx);
@@ -1777,10 +1817,10 @@ static pci_ers_result_t efx_io_slot_reset(struct pci_dev *pdev)
 		status =  PCI_ERS_RESULT_DISCONNECT;
 	}
 
-	rc = pci_cleanup_aer_uncorrect_error_status(pdev);
+	rc = pci_aer_clear_nonfatal_status(pdev);
 	if (rc) {
 		netif_err(efx, hw, efx->net_dev,
-		"pci_cleanup_aer_uncorrect_error_status failed (%d)\n", rc);
+		"pci_aer_clear_nonfatal_status failed (%d)\n", rc);
 		/* Non-fatal error. Continue. */
 	}
 
@@ -1803,7 +1843,7 @@ static void efx_io_resume(struct pci_dev *pdev)
 		netif_err(efx, hw, efx->net_dev,
 			  "efx_reset failed after PCI error (%d)\n", rc);
 	} else {
-		efx->state = STATE_READY;
+		efx->state = efx_end_recovery(efx->state);
 		efx->reset_count = 0;
 		netif_dbg(efx, hw, efx->net_dev,
 			  "Done resetting and resuming IO after PCI error.\n");
@@ -2014,6 +2054,20 @@ int efx_set_features(struct net_device *net_dev, u32 data)
 static struct efx_nic *efx_dl_device_priv(struct efx_dl_device *efx_dev)
 {
 	return container_of(efx_dev->nic, struct efx_nic, dl_nic);
+}
+
+static int __efx_dl_publish(struct efx_dl_device *efx_dev)
+{
+	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
+
+	return efx->net_dev->netdev_ops->ndo_open(efx->net_dev);
+}
+
+static void __efx_dl_unpublish(struct efx_dl_device *efx_dev)
+{
+	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
+
+	efx->net_dev->netdev_ops->ndo_stop(efx->net_dev);
 }
 
 static void __efx_dl_pause(struct efx_dl_device *efx_dev)
@@ -2457,7 +2511,9 @@ static struct efx_dl_ops efx_driverlink_ops = {
 		__efx_dl_set_multicast_loopback_suppression,
 	.filter_block_kernel = __efx_dl_filter_block_kernel,
 	.filter_unblock_kernel = __efx_dl_filter_unblock_kernel,
-	.mcdi_rpc = __efx_dl_mcdi_rpc
+	.mcdi_rpc = __efx_dl_mcdi_rpc,
+	.publish = __efx_dl_publish,
+	.unpublish = __efx_dl_unpublish,
 };
 #endif
 #endif

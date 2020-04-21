@@ -194,6 +194,7 @@ donet () {
 	test -f $DIR/$m.ko || continue
 	# Only pass known options to the modules
 	modinfo -F parm $DIR/$m.ko > /tmp/parm.$$
+	echo "dyndbg: Dynamic module debugging" >> /tmp/parm.$$
 	MOD_OPT=
 	for option in $NET_OPT;
 	do

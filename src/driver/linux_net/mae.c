@@ -111,6 +111,69 @@ int efx_mae_lookup_mport(struct efx_nic *efx, u32 selector, u32 *id)
 	return 0;
 }
 
+int efx_mae_start_counters(struct efx_nic *efx, struct efx_channel *channel)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_COUNTERS_STREAM_START_OUT_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_COUNTERS_STREAM_START_IN_LEN);
+	u32 out_flags;
+	size_t outlen;
+	int rc;
+
+	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_START_IN_QID, channel->channel);
+	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_START_IN_PACKET_SIZE,
+		      efx->net_dev->mtu);
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_COUNTERS_STREAM_START,
+			  inbuf, sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	out_flags = MCDI_DWORD(outbuf, MAE_COUNTERS_STREAM_START_OUT_FLAGS);
+	if (out_flags & BIT(MC_CMD_MAE_COUNTERS_STREAM_START_OUT_USES_CREDITS_OFST)) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "MAE counter stream uses credits\n");
+		channel->rx_queue.grant_credits = true;
+		out_flags &= ~BIT(MC_CMD_MAE_COUNTERS_STREAM_START_OUT_USES_CREDITS_OFST);
+	}
+	if (out_flags) {
+		netif_err(efx, drv, efx->net_dev,
+			  "MAE counter stream start: unrecognised flags %x\n",
+			  out_flags);
+		goto out_stop;
+	}
+	return 0;
+out_stop:
+	efx_mae_stop_counters(efx, channel);
+	return -EOPNOTSUPP;
+}
+
+int efx_mae_stop_counters(struct efx_nic *efx, struct efx_channel *channel)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_COUNTERS_STREAM_STOP_IN_LEN);
+
+	BUILD_BUG_ON(MC_CMD_MAE_COUNTERS_STREAM_STOP_OUT_LEN);
+	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_STOP_IN_QID, channel->channel);
+	return efx_mcdi_rpc(efx, MC_CMD_MAE_COUNTERS_STREAM_STOP,
+			    inbuf, sizeof(inbuf), NULL, 0, NULL);
+}
+
+void efx_mae_counters_grant_credits(struct work_struct *work)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS_IN_LEN);
+	struct efx_rx_queue *rx_queue = container_of(work, struct efx_rx_queue,
+						     grant_work);
+	struct efx_nic *efx = rx_queue->efx;
+	unsigned int credits;
+
+	BUILD_BUG_ON(MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS_OUT_LEN);
+	credits = READ_ONCE(rx_queue->notified_count) - rx_queue->granted_count;
+	MCDI_SET_DWORD(inbuf, MAE_COUNTERS_STREAM_GIVE_CREDITS_IN_NUM_CREDITS,
+		       credits);
+	if (!efx_mcdi_rpc(efx, MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS,
+			  inbuf, sizeof(inbuf), NULL, 0, NULL))
+		rx_queue->granted_count += credits;
+}
+
 static int efx_mae_get_basic_caps(struct efx_nic *efx, struct mae_caps *caps)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_GET_CAPABILITIES_OUT_LEN);
@@ -413,18 +476,6 @@ int efx_mae_free_counter(struct efx_nic *efx, u32 id)
 	return 0;
 }
 
-int efx_mae_read_counters(struct efx_nic *efx, const struct efx_buffer *buffer)
-{
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_COUNTERS_READ_IN_LEN);
-
-	BUILD_BUG_ON(MC_CMD_MAE_COUNTERS_READ_OUT_LEN);
-
-	MCDI_SET_DWORD(inbuf, MAE_COUNTERS_READ_IN_MAX_COUNTERS, EFX_TC_MAX_COUNTER);
-	MCDI_SET_QWORD(inbuf, MAE_COUNTERS_READ_IN_DMA_ADDR, buffer->dma_addr);
-	return efx_mcdi_rpc(efx, MC_CMD_MAE_COUNTERS_READ, inbuf, sizeof(inbuf),
-			    NULL, 0, NULL);
-}
-
 static int efx_mae_encap_type_to_mae_type(enum efx_encap_type type)
 {
 	switch (type & EFX_ENCAP_TYPES_MASK) {
@@ -570,9 +621,9 @@ int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 			      MAE_ACTION_SET_ALLOC_IN_VLAN_POP, vlan_pop,
 			      MAE_ACTION_SET_ALLOC_IN_DECAP, act->decap);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	if (act->count)
+	if (act->count && !WARN_ON(!act->count->cnt))
 		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_COUNTER_ID,
-			       act->count->fw_id);
+			       act->count->cnt->fw_id);
 	else
 #endif
 		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_COUNTER_ID,

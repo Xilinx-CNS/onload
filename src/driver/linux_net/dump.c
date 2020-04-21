@@ -222,6 +222,9 @@ static void efx_dump_free_buffer(struct efx_nic *efx)
 	struct efx_dump_data *dump_data = efx->dump_data;
 	size_t pgn;
 
+	if (!dump_data)
+		return;
+
 	/* Free all MLI pages */
 	if (dump_data->addr && dump_data->dma_addr) {
 		for (pgn = 0; pgn < dump_data->total_pages; pgn++) {

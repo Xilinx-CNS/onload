@@ -177,13 +177,13 @@ static void ef100_tx_push_buffers(struct efx_tx_queue *tx_queue)
 	}
 }
 
-static void set_tx_csum_partial(const struct sk_buff *skb,
-				struct efx_tx_buffer *buffer, efx_oword_t *txd)
+static void ef100_set_tx_csum_partial(const struct sk_buff *skb,
+				      struct efx_tx_buffer *buffer, efx_oword_t *txd)
 {
 	efx_oword_t csum;
 	int csum_start;
 
-	if (skb->ip_summed != CHECKSUM_PARTIAL)
+	if (!skb || skb->ip_summed != CHECKSUM_PARTIAL)
 		return;
 
 	/* skb->csum_start has the offset from head, but we need the offset
@@ -199,11 +199,48 @@ static void set_tx_csum_partial(const struct sk_buff *skb,
 	EFX_OR_OWORD(*txd, *txd, csum);
 }
 
-static void make_tso_desc(const struct sk_buff *skb,
-			  struct efx_tx_buffer *buffer, efx_oword_t *txd,
-			  unsigned int segment_count)
+static void ef100_set_tx_hw_vlan(const struct sk_buff *skb, efx_oword_t *txd)
 {
+	u16 vlan_tci = skb_vlan_tag_get(skb);
+	efx_oword_t vlan;
+
+	EFX_POPULATE_OWORD_2(vlan,
+			     ESF_GZ_TX_SEND_VLAN_INSERT_EN, 1,
+			     ESF_GZ_TX_SEND_VLAN_INSERT_TCI, vlan_tci);
+	EFX_OR_OWORD(*txd, *txd, vlan);
+}
+
+static void ef100_make_send_desc(struct efx_nic *efx,
+				 const struct sk_buff *skb,
+				 struct efx_tx_buffer *buffer, efx_oword_t *txd,
+				 unsigned int segment_count)
+{
+	/* TX send descriptor */
+	EFX_POPULATE_OWORD_3(*txd,
+			     ESF_GZ_TX_SEND_NUM_SEGS, segment_count,
+			     ESF_GZ_TX_SEND_LEN, buffer->len,
+			     ESF_GZ_TX_SEND_ADDR, buffer->dma_addr);
+
+	if (likely(efx->net_dev->features & NETIF_F_HW_CSUM))
+		ef100_set_tx_csum_partial(skb, buffer, txd);
+	if (efx->net_dev->features & NETIF_F_HW_VLAN_CTAG_TX &&
+	    skb && skb_vlan_tag_present(skb))
+		ef100_set_tx_hw_vlan(skb, txd);
+}
+
+static void ef100_make_tso_desc(struct efx_nic *efx,
+				const struct sk_buff *skb,
+				struct efx_tx_buffer *buffer, efx_oword_t *txd,
+				unsigned int segment_count)
+{
+	u32 mangleid = (efx->net_dev->features & NETIF_F_TSO_MANGLEID) ||
+		skb_shinfo(skb)->gso_type & SKB_GSO_TCP_FIXEDID ?
+		ESE_GZ_TX_DESC_IP4_ID_NO_OP :
+		ESE_GZ_TX_DESC_IP4_ID_INC_MOD16;
+	u16 vlan_enable =  efx->net_dev->features & NETIF_F_HW_VLAN_CTAG_TX ?
+		skb_vlan_tag_present(skb) : 0;
 	unsigned int len, ip_offset, tcp_offset, payload_segs;
+	u16 vlan_tci = skb_vlan_tag_get(skb);
 	u32 mss = skb_shinfo(skb)->gso_size;
 
 	len = skb->len - buffer->len;
@@ -212,7 +249,7 @@ static void make_tso_desc(const struct sk_buff *skb,
 	ip_offset =  skb_network_offset(skb);
 	tcp_offset = skb_transport_offset(skb);
 
-	EFX_POPULATE_OWORD_11(*txd,
+	EFX_POPULATE_OWORD_13(*txd,
 			      ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_TSO,
 			      ESF_GZ_TX_TSO_MSS, mss,
 			      ESF_GZ_TX_TSO_HDR_NUM_SEGS, 1,
@@ -222,8 +259,10 @@ static void make_tso_desc(const struct sk_buff *skb,
 			      ESF_GZ_TX_TSO_CSO_INNER_L4, 1,
 			      ESF_GZ_TX_TSO_INNER_L3_OFF_W, ip_offset >> 1,
 			      ESF_GZ_TX_TSO_INNER_L4_OFF_W, tcp_offset >> 1,
-			      ESF_GZ_TX_TSO_ED_INNER_IP4_ID, ESE_GZ_TX_DESC_IP4_ID_NO_OP,
-			      ESF_GZ_TX_TSO_ED_INNER_IP_LEN, 1
+			      ESF_GZ_TX_TSO_ED_INNER_IP4_ID, mangleid,
+			      ESF_GZ_TX_TSO_ED_INNER_IP_LEN, 1,
+			      ESF_GZ_TX_TSO_VLAN_INSERT_EN, vlan_enable,
+			      ESF_GZ_TX_TSO_VLAN_INSERT_TCI, vlan_tci
 		);
 }
 
@@ -269,6 +308,10 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 		nr_descs--;
 	}
 
+	/* if it's a raw write (such as XDP) then always SEND single frames */
+	if (!skb)
+		nr_descs = 1;
+
 	do {
 		write_ptr = new_write_count & tx_queue->ptr_mask;
 		buffer = &tx_queue->buffer[write_ptr];
@@ -280,19 +323,14 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 
 		switch (next_desc_type) {
 		case ESE_GZ_TX_DESC_TYPE_SEND:
-			/* TX send descriptor */
-			EFX_POPULATE_OWORD_3(*txd,
-					ESF_GZ_TX_SEND_NUM_SEGS, nr_descs,
-					ESF_GZ_TX_SEND_LEN, buffer->len,
-					ESF_GZ_TX_SEND_ADDR, buffer->dma_addr);
-
-			if (likely(tx_queue->efx->net_dev->features & NETIF_F_HW_CSUM))
-				set_tx_csum_partial(skb, buffer, txd);
+			ef100_make_send_desc(tx_queue->efx, skb,
+					     buffer, txd, nr_descs);
 			break;
 		case ESE_GZ_TX_DESC_TYPE_TSO:
 			/* TX TSO descriptor */
 			WARN_ON_ONCE(!(buffer->flags & EFX_TX_BUF_TSO_V3));
-			make_tso_desc(skb, buffer, txd, nr_descs);
+			ef100_make_tso_desc(tx_queue->efx, skb,
+					    buffer, txd, nr_descs);
 			break;
 		default:
 			/* TX segment descriptor */
@@ -301,7 +339,9 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 					ESF_GZ_TX_SEG_LEN, buffer->len,
 					ESF_GZ_TX_SEG_ADDR, buffer->dma_addr);
 		}
-		next_desc_type = ESE_GZ_TX_DESC_TYPE_SEG;
+		/* if it's a raw write (such as XDP) then always SEND */
+		next_desc_type = skb ? ESE_GZ_TX_DESC_TYPE_SEG :
+				       ESE_GZ_TX_DESC_TYPE_SEND;
 
 #if 0		/* Dump the TX descriptor */
 		netif_dbg(tx_queue->efx, tx_queued, tx_queue->efx->net_dev,
@@ -324,10 +364,20 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 	smp_mb();
 }
 
+void ef100_tx_write(struct efx_tx_queue *tx_queue)
+{
+	ef100_tx_make_descriptors(tx_queue, NULL, 0, NULL);
+	ef100_tx_push_buffers(tx_queue);
+}
+
 void ef100_ev_tx(struct efx_channel *channel, const efx_qword_t *p_event)
 {
-	unsigned int tx_done = EFX_QWORD_FIELD(*p_event, ESF_GZ_EV_TXCMPL_NUM_DESC);
-	struct efx_tx_queue *tx_queue = efx_channel_get_tx_queue(channel, 0);
+	unsigned int tx_done =
+		EFX_QWORD_FIELD(*p_event, ESF_GZ_EV_TXCMPL_NUM_DESC);
+	unsigned int qlabel =
+		EFX_QWORD_FIELD(*p_event, ESF_GZ_EV_TXCMPL_Q_LABEL);
+	struct efx_tx_queue *tx_queue =
+		efx_channel_get_tx_queue(channel, qlabel);
 	unsigned int tx_index = (tx_queue->read_count + tx_done - 1) &
 				tx_queue->ptr_mask;
 

@@ -19,18 +19,14 @@
 #include <net/tc_act/tc_pedit.h>
 #include "ef100_rep.h"
 
-/* Using a single 4kB page for the counters DMA means limit of 256 counters.
- * XXX This is unsuitable for production, but so is MC_CMD_MAE_COUNTERS_READ.
- */
-#define EFX_TC_MAX_COUNTER	256
 struct efx_tc_counter {
+	u32 fw_id; /* index in firmware counter table */
+	struct rhash_head linkage; /* efx->tc->counter_ht */
 	u64 packets, bytes;
 	u64 old_packets, old_bytes; /* Values last time passed to userspace */
 	/* jiffies of the last time we saw packets increase */
 	unsigned long touched;
-	/* owners of corresponding count actions
-	 * must be last, see efx_tc_flower_allocate_counter()
-	 */
+	/* owners of corresponding count actions */
 	struct list_head users;
 };
 
@@ -64,19 +60,15 @@ struct efx_tc_pedit_action {
 	u32 fw_id; /* index of this entry in firmware pedit table */
 };
 
-/* TODO flip this around when upstream has action_cookie */
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
 struct efx_tc_counter_index {
-	unsigned long cookie;
-	struct rhash_head linkage;
-	refcount_t ref;
-	u32 fw_id;
-};
-#else
-struct efx_tc_counter_index {
-	u32 fw_id;
-};
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_ACTION_COOKIE)
+	/* cookie is rule, not action, cookie */
 #endif
+	unsigned long cookie;
+	struct rhash_head linkage; /* efx->tc->counter_id_ht */
+	refcount_t ref;
+	struct efx_tc_counter *cnt;
+};
 
 /* Driver-internal numbering scheme for vports.  See efx_tc_flower_lookup_dev() */
 #define EFX_VPORT_PF		0
@@ -171,10 +163,10 @@ enum efx_tc_default_rules { /* named by ingress port */
 
 struct efx_tc_flow_rule {
 	unsigned long cookie;
+	struct rhash_head linkage;
 	struct efx_tc_match match;
 	struct efx_tc_action_set_list acts;
 	enum efx_tc_default_rules fallback; /* what to use when unready? */
-	struct rhash_head linkage;
 	u32 fw_id;
 };
 
@@ -190,7 +182,8 @@ enum efx_tc_rule_prios {
  * @caps: MAE capabilities reported by MCDI
  * @block_list: List of &struct efx_tc_block_binding
  * @mutex: Used to serialise operations on TC hashtables
- * @counter_ht: Hashtable of TC counter index mappings
+ * @counter_ht: Hashtable of TC counters (FW IDs and counter values)
+ * @counter_id_ht: Hashtable mapping TC counter cookies to counters
  * @encap_ht: Hashtable of TC encap actions
  * @pedit_ht: Hashtable of TC pedit actions
  * @match_action_ht: Hashtable of TC match-action rules
@@ -198,8 +191,6 @@ enum efx_tc_rule_prios {
  * @dflt_rules: Match-action rules for default switching; at priority
  *	%EFX_TC_PRIO_DFLT, and indexed by &enum efx_tc_default_rules.
  *	Also used for fallback actions when actual action isn't ready
- * @counters: last DMA results from MC_CMD_MAE_COUNTERS_READ
- * @counter_buffer: DMA mapping for MC_CMD_MAE_COUNTERS_READ
  * @up: have TC datastructures been set up?
  */
 struct efx_tc_state {
@@ -207,14 +198,13 @@ struct efx_tc_state {
 	struct list_head block_list;
 	struct mutex mutex;
 	struct rhashtable counter_ht;
+	struct rhashtable counter_id_ht;
 	struct rhashtable encap_ht;
 	struct rhashtable pedit_ht;
 	struct rhashtable encap_match_ht;
 	struct rhashtable match_action_ht;
 	struct rhashtable neigh_ht;
 	struct efx_tc_flow_rule *dflt_rules;
-	struct efx_tc_counter counters[EFX_TC_MAX_COUNTER];
-	struct efx_buffer counter_buffer;
 	bool up;
 };
 
@@ -228,8 +218,6 @@ int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
 		       struct flow_block_offload *tcb, struct efx_vfrep *efv);
 int efx_setup_tc(struct net_device *net_dev, enum tc_setup_type type,
 		 void *type_data);
-int efx_tc_start_stats(struct efx_nic *efx);
-void efx_tc_stop_stats(struct efx_nic *efx);
 
 #else /* EFX_TC_OFFLOAD */
 

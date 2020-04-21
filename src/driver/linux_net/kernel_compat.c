@@ -259,7 +259,11 @@ efx_for_each_msix_vector(struct efx_nic *efx,
 	/* Map enough of the table for all our interrupts */
 	membase_phys = pci_resource_start(pci_dev, bar);
 	length = efx_channels(efx) * 0x10;
-	membase = ioremap_nocache(membase_phys + offset, length);
+#if defined(EFX_USE_KCOMPAT)
+	membase = efx_ioremap(membase_phys + offset, length);
+#else
+	membase = ioremap(membase_phys + offset, length);
+#endif
 	if (!membase) {
 		dev_dbg(&pci_dev->dev, "failed to remap MSI-X table\n");
 		return;
@@ -314,6 +318,7 @@ void efx_pci_restore_state(struct pci_dev *pci_dev)
 #endif /* EFX_NEED_UNMASK_MSIX_VECTORS || EFX_NEED_SAVE_MSIX_MESSAGES */
 
 #ifdef EFX_NEED_NS_TO_TIMESPEC
+#ifndef EFX_HAVE_TIMESPEC64
 
 #ifdef EFX_HAVE_DIV_S64_REM
 #include <linux/math64.h>
@@ -363,6 +368,7 @@ struct timespec ns_to_timespec(const s64 nsec)
 	return ts;
 }
 
+#endif /* EFX_HAVE_TIMESPEC64 */
 #endif /* EFX_NEED_NS_TO_TIMESPEC */
 
 #if defined(EFX_NEED_KTIME_SUB_NS) &&				\

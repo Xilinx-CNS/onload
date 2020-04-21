@@ -269,7 +269,6 @@ int efx_probe_rx_queue(struct efx_rx_queue *rx_queue)
 	entries = max(roundup_pow_of_two(efx->rxq_entries), EFX_MIN_DMAQ_SIZE);
 	EFX_WARN_ON_PARANOID(entries > EFX_MAX_DMAQ_SIZE);
 	rx_queue->ptr_mask = entries - 1;
-	efx->rxq_entries = entries;
 
 	netif_dbg(efx, probe, efx->net_dev,
 		  "creating RX queue %d size %#x mask %#x\n",
@@ -305,6 +304,7 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 	/* Initialise ptr fields */
 	rx_queue->added_count = 0;
 	rx_queue->notified_count = 0;
+	rx_queue->granted_count = 0;
 	rx_queue->removed_count = 0;
 	rx_queue->min_fill = -1U;
 	rx_queue->failed_flush_count = 0;
@@ -363,6 +363,8 @@ void efx_fini_rx_queue(struct efx_rx_queue *rx_queue)
 		  "shutting down RX queue %d\n", efx_rx_queue_index(rx_queue));
 
 	efx_cancel_slow_fill(rx_queue);
+	if (rx_queue->grant_credits)
+		flush_work(&rx_queue->grant_work);
 
 	/* Release RX buffers from the current read ptr to the write ptr */
 	if (rx_queue->buffer) {
@@ -1051,7 +1053,8 @@ int efx_probe_filters(struct efx_nic *efx)
 				kfree(channel->rps_flow_id);
 				channel->rps_flow_id = NULL;
 			}
-			efx->type->filter_table_remove(efx);
+			if (efx->type->filter_table_remove)
+				efx->type->filter_table_remove(efx);
 			rc = -ENOMEM;
 			goto out_unlock;
 		}

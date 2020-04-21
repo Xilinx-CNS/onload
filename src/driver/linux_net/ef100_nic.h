@@ -10,6 +10,19 @@
 #include "net_driver.h"
 #include "nic.h"
 
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+
+#ifdef EFX_C_MODEL
+#define EF100_ONLOAD_VIS 4
+#else
+#define EF100_ONLOAD_VIS 32
+#endif
+
+#define EF100_ONLOAD_IRQS 8
+#endif
+#endif
+
 extern const struct efx_nic_type ef100_pf_nic_type;
 extern const struct efx_nic_type ef100_vf_nic_type;
 
@@ -69,6 +82,8 @@ struct ef100_nic_data {
 	u64 licensed_features;
 	DECLARE_BITMAP(evq_phases, EFX_MAX_CHANNELS);
 	u64 stats[EF100_STAT_COUNT];
+	spinlock_t vf_reps_lock; /* Synchronises 'all-VFreps' operations */
+	unsigned int rep_count; /* usually but not always efx->vf_count */
 	struct net_device **vf_rep;
 	u32 base_mport;
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
@@ -77,6 +92,9 @@ struct ef100_nic_data {
 	struct list_head udp_tunnels;
 #endif
 };
+
+void __ef100_detach_reps(struct efx_nic *efx);
+void __ef100_attach_reps(struct efx_nic *efx);
 
 #define efx_ef100_has_cap(caps, flag) \
 	(!!((caps) & BIT_ULL(MC_CMD_GET_CAPABILITIES_V4_OUT_ ## flag ## _LBN)))

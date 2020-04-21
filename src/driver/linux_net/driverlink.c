@@ -37,6 +37,7 @@ struct efx_dl_handle {
 	struct efx_dl_device efx_dev;
 	struct list_head nic_node;
 	struct list_head driver_node;
+	unsigned int publish_count;
 	unsigned int block_kernel_count[EFX_DL_FILTER_BLOCK_KERNEL_MAX];
 };
 
@@ -69,6 +70,7 @@ static struct efx_dl_handle *efx_dl_handle(struct efx_dl_device *efx_dev)
 static void efx_dl_del_device(struct efx_dl_device *efx_dev)
 {
 	struct efx_dl_handle *efx_handle = efx_dl_handle(efx_dev);
+	struct efx_dl_driver *driver = efx_dev->driver;
 	struct efx_dl_nic *nic = efx_dev->nic;
 	unsigned int type;
 	u64 before, after, duration;
@@ -79,8 +81,10 @@ static void efx_dl_del_device(struct efx_dl_device *efx_dev)
 
 	before = get_jiffies_64();
 
-	if (efx_dev->driver->remove)
-		efx_dev->driver->remove(efx_dev);
+	if (driver->remove)
+		driver->remove(efx_dev);
+	while (efx_handle->publish_count)
+		efx_dl_unpublish(efx_dev);
 
 	after = get_jiffies_64();
 	duration = after - before;
@@ -115,7 +119,7 @@ static void efx_dl_try_add_device(struct efx_dl_nic *nic,
 	struct efx_dl_handle *ex_efx_handle;
 	struct efx_dl_device *efx_dev;
 	struct net_device *net_dev = nic->net_dev;
-	int rc;
+	int rc = 0;
 	bool added = false;
 	u64 before, after, duration;
 
@@ -129,8 +133,10 @@ static void efx_dl_try_add_device(struct efx_dl_nic *nic,
 	}
 
 	efx_handle = kzalloc(sizeof(*efx_handle), GFP_KERNEL);
-	if (!efx_handle)
+	if (!efx_handle) {
+		rc = -ENOMEM;
 		goto fail;
+	}
 	efx_dev = &efx_handle->efx_dev;
 	efx_dev->driver = driver;
 	efx_dev->nic = nic;
@@ -139,6 +145,11 @@ static void efx_dl_try_add_device(struct efx_dl_nic *nic,
 	INIT_LIST_HEAD(&efx_handle->driver_node);
 
 	before = get_jiffies_64();
+
+	if (!(driver->flags & EFX_DL_DRIVER_NO_PUBLISH))
+		efx_dl_publish(efx_dev);
+	if (rc)
+		goto fail;
 
 	rc = driver->probe(efx_dev, net_dev, nic->dl_info, "");
 
@@ -151,7 +162,7 @@ static void efx_dl_try_add_device(struct efx_dl_nic *nic,
 #endif
 
 	if (rc)
-		goto fail;
+		goto fail_unpublish;
 
 	/* Rather than just add to the end of the list,
 	 * find the point that is at the end of the desired priority level
@@ -177,6 +188,8 @@ static void efx_dl_try_add_device(struct efx_dl_nic *nic,
 		   "%s driverlink client registered\n", driver->name);
 	return;
 
+fail_unpublish:
+	efx_dl_unpublish(efx_dev);
 fail:
 	netif_info(nic, drv, net_dev,
 		   "%s driverlink client skipped\n", driver->name);
@@ -300,6 +313,25 @@ struct efx_dl_device *efx_dl_dev_from_netdev(const struct net_device *net_dev,
 	return NULL;
 }
 EXPORT_SYMBOL(efx_dl_dev_from_netdev);
+
+int efx_dl_publish(struct efx_dl_device *efx_dev)
+{
+	struct efx_dl_handle *handle = efx_dl_handle(efx_dev);
+	int rc = handle->publish_count ? 0 :
+		 efx_dev->nic->ops->publish(efx_dev);
+
+	if (!rc)
+		++handle->publish_count;
+	return rc;
+}
+
+void efx_dl_unpublish(struct efx_dl_device *efx_dev)
+{
+	struct efx_dl_handle *handle = efx_dl_handle(efx_dev);
+
+	if (handle->publish_count && --handle->publish_count == 0)
+		efx_dev->nic->ops->unpublish(efx_dev);
+}
 
 /* Suspend ready for reset, calling the reset_suspend() callback of every
  * registered driver */

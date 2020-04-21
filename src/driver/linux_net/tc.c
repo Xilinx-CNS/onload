@@ -25,6 +25,7 @@
 #include "mae.h"
 #include "ef100_rep.h"
 #include "nic.h"
+#include "rx_common.h"
 #include "debugfs.h"
 
 static enum efx_encap_type efx_tc_indr_netdev_type(struct net_device *net_dev)
@@ -137,13 +138,17 @@ const static struct rhashtable_params efx_neigh_ht_params = {
 	.head_offset	= offsetof(struct efx_neigh_binder, linkage),
 };
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
-const static struct rhashtable_params efx_tc_counter_ht_params = {
+const static struct rhashtable_params efx_tc_counter_id_ht_params = {
 	.key_len	= offsetof(struct efx_tc_counter_index, linkage),
 	.key_offset	= 0,
 	.head_offset	= offsetof(struct efx_tc_counter_index, linkage),
 };
-#endif
+
+const static struct rhashtable_params efx_tc_counter_ht_params = {
+	.key_len	= offsetof(struct efx_tc_counter, linkage),
+	.key_offset	= 0,
+	.head_offset	= offsetof(struct efx_tc_counter, linkage),
+};
 
 const static struct rhashtable_params efx_tc_encap_ht_params = {
 	.key_len	= offsetofend(struct efx_tc_encap_action, key),
@@ -304,7 +309,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 			dev_put(neigh->egdev);
 			goto out_free;
 		}
-		refcount_inc(&neigh->ref);
+		refcount_set(&neigh->ref, 1);
 		INIT_LIST_HEAD(&neigh->users);
 		read_lock_bh(&n->lock);
 		ether_addr_copy(neigh->ha, n->ha);
@@ -386,6 +391,9 @@ static int efx_neigh_event(struct efx_nic *efx, struct neighbour *n)
 	size_t keysize;
 	bool n_valid;
 
+	if (WARN_ON(!efx->tc))
+		return NOTIFY_DONE;
+
 	/* Only care about IPv4 for now */
 	if (n->tbl == &arp_tbl) {
 		ipv = 4;
@@ -448,71 +456,90 @@ done:
 	return NOTIFY_DONE;
 }
 
-/* Returns counter ID or negative error. */
-static long efx_tc_flower_allocate_counter(struct efx_nic *efx)
+static struct efx_tc_counter *efx_tc_flower_allocate_counter(struct efx_nic *efx)
 {
-	u32 id;
-	int rc;
+	struct efx_tc_counter *cnt;
+	int rc, rc2;
 
-	rc = efx_mae_allocate_counter(efx, &id);
-	if (rc < 0)
-		return rc;
-	if (rc) /* Shouldn't ever return > 0, but let's check for it */
-		return -EIO;
-	if (id >= EFX_TC_MAX_COUNTER) {
-		/* Counter ID is too big for us to successfully read the
-		 * counter value through our implementation of the hacky
-		 * interim MC_CMD_MAE_COUNTERS_READ API.
-		 * So free it and return failure.
-		 */
-		efx_mae_free_counter(efx, id);
-		return -ERANGE;
-	}
-	/* Clear counts (incl. old_ counts), they might have been filled with
-	 * garbage by a counters-read DMA before this counter was allocated
+	cnt = kzalloc(sizeof(*cnt), GFP_USER);
+	if (!cnt)
+		return ERR_PTR(-ENOMEM);
+
+	rc = efx_mae_allocate_counter(efx, &cnt->fw_id);
+	if (rc)
+		goto fail1;
+	INIT_LIST_HEAD(&cnt->users);
+	rc = rhashtable_insert_fast(&efx->tc->counter_ht, &cnt->linkage,
+				    efx_tc_counter_ht_params);
+	if (rc)
+		goto fail2;
+	return cnt;
+fail2:
+	/* If we get here, it implies that we couldn't insert into the table,
+	 * which in turn probably means that the fw_id was already taken.
+	 * In that case, it's unclear whether we really 'own' the fw_id; but
+	 * the firmware seemed to think we did, so it's proper to free it.
 	 */
-	memset(efx->tc->counters + id, 0, offsetof(struct efx_tc_counter, users));
-	return id;
+	rc2 = efx_mae_free_counter(efx, cnt->fw_id);
+	if (rc2)
+		netif_warn(efx, hw, efx->net_dev,
+			   "Failed to free MAE counter %u, rc %d\n",
+			   cnt->fw_id, rc2);
+fail1:
+	kfree(cnt);
+	return ERR_PTR(rc > 0 ? -EIO : rc);
 }
 
-static void efx_tc_flower_release_counter(struct efx_nic *efx, u32 counter_id)
+static void efx_tc_flower_release_counter(struct efx_nic *efx,
+					  struct efx_tc_counter *cnt)
 {
-	int rc = efx_mae_free_counter(efx, counter_id);
+	int rc;
 
+	rhashtable_remove_fast(&efx->tc->counter_ht, &cnt->linkage,
+			       efx_tc_counter_ht_params);
+	rc = efx_mae_free_counter(efx, cnt->fw_id);
 	if (rc)
 		netif_warn(efx, hw, efx->net_dev,
 			   "Failed to free MAE counter %u, rc %d\n",
-			   counter_id, rc);
-	if (WARN_ON(counter_id >= EFX_TC_MAX_COUNTER))
-		return;
-	WARN_ON(!list_empty(&efx->tc->counters[counter_id].users));
+			   cnt->fw_id, rc);
+	WARN_ON(!list_empty(&cnt->users));
+	kfree(cnt);
 }
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
+static struct efx_tc_counter *efx_tc_flower_find_counter_by_fw_id(
+				struct efx_nic *efx, u32 fw_id)
+{
+	struct efx_tc_counter key = {};
+
+	key.fw_id = fw_id;
+	return rhashtable_lookup_fast(&efx->tc->counter_ht, &key,
+				      efx_tc_counter_ht_params);
+}
+
 static void efx_tc_flower_put_counter_index(struct efx_nic *efx,
 					    struct efx_tc_counter_index *ctr)
 {
 	if (!refcount_dec_and_test(&ctr->ref))
 		return; /* still in use */
-	rhashtable_remove_fast(&efx->tc->counter_ht, &ctr->linkage,
-			       efx_tc_counter_ht_params);
-	efx_tc_flower_release_counter(efx, ctr->fw_id);
+	rhashtable_remove_fast(&efx->tc->counter_id_ht, &ctr->linkage,
+			       efx_tc_counter_id_ht_params);
+	efx_tc_flower_release_counter(efx, ctr->cnt);
 	kfree(ctr);
 }
 
-static struct efx_tc_counter_index *efx_tc_flower_get_counter_by_index(
+static struct efx_tc_counter_index *efx_tc_flower_get_counter_index(
 				struct efx_nic *efx, unsigned long cookie)
 {
 	struct efx_tc_counter_index *ctr, *old;
-	long rc;
+	struct efx_tc_counter *cnt;
 
 	ctr = kzalloc(sizeof(*ctr), GFP_USER);
 	if (!ctr)
 		return ERR_PTR(-ENOMEM);
 	ctr->cookie = cookie;
-	old = rhashtable_lookup_get_insert_fast(&efx->tc->counter_ht,
+	old = rhashtable_lookup_get_insert_fast(&efx->tc->counter_id_ht,
 						&ctr->linkage,
-						efx_tc_counter_ht_params);
+						efx_tc_counter_id_ht_params);
 	if (old) {
 		/* don't need our new entry */
 		kfree(ctr);
@@ -521,55 +548,29 @@ static struct efx_tc_counter_index *efx_tc_flower_get_counter_by_index(
 		/* existing entry found */
 		ctr = old;
 	} else {
-		rc = efx_tc_flower_allocate_counter(efx);
-		if (rc < 0) {
-			rhashtable_remove_fast(&efx->tc->counter_ht,
+		cnt = efx_tc_flower_allocate_counter(efx);
+		if (IS_ERR(cnt)) {
+			rhashtable_remove_fast(&efx->tc->counter_id_ht,
 					       &ctr->linkage,
-					       efx_tc_counter_ht_params);
+					       efx_tc_counter_id_ht_params);
 			kfree(ctr);
-			return ERR_PTR(rc);
+			return (void *)cnt; /* it's an ERR_PTR */
 		}
-		ctr->fw_id = rc;
-		refcount_inc(&ctr->ref);
+		ctr->cnt = cnt;
+		refcount_set(&ctr->ref, 1);
 	}
 	return ctr;
 }
 
-static struct efx_tc_counter_index *efx_tc_flower_find_counter_index(
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_ACTION_COOKIE) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+struct efx_tc_counter_index *efx_tc_flower_find_counter_index(
 				struct efx_nic *efx, unsigned long cookie)
 {
 	struct efx_tc_counter_index key = {};
 
 	key.cookie = cookie;
-	return rhashtable_lookup_fast(&efx->tc->counter_ht, &key,
-				      efx_tc_counter_ht_params);
-}
-
-#else /* !EFX_HAVE_TC_ACTION_COOKIE */
-
-static void efx_tc_flower_put_counter_index(struct efx_nic *efx,
-					    struct efx_tc_counter_index *ctr)
-{
-	efx_tc_flower_release_counter(efx, ctr->fw_id);
-	kfree(ctr);
-}
-
-static struct efx_tc_counter_index *efx_tc_flower_get_counter_by_index(
-				struct efx_nic *efx)
-{
-	struct efx_tc_counter_index *ctr;
-	long rc;
-
-	ctr = kzalloc(sizeof(*ctr), GFP_USER);
-	if (!ctr)
-		return ERR_PTR(-ENOMEM);
-	rc = efx_tc_flower_allocate_counter(efx);
-	if (rc < 0) {
-		kfree(ctr);
-		return ERR_PTR(rc);
-	}
-	ctr->fw_id = rc;
-	return ctr;
+	return rhashtable_lookup_fast(&efx->tc->counter_id_ht, &key,
+				      efx_tc_counter_id_ht_params);
 }
 #endif
 
@@ -632,6 +633,10 @@ static void efx_gen_tun_header_udp(struct efx_tc_encap_action *encap)
 	udp = (void *)(encap->encap_hdr + encap->encap_hdr_len);
 	encap->encap_hdr_len += sizeof(*udp);
 	udp->dest = key->tp_dst;
+#ifdef EFX_C_MODEL
+	/* Work around Cproto UDP parser bug */
+	udp->len = 8;
+#endif
 }
 
 static void efx_gen_tun_header_vxlan(struct efx_tc_encap_action *encap)
@@ -883,7 +888,7 @@ static struct efx_tc_encap_action *efx_tc_flower_create_encap_md(
 	}
 
 	/* ref and return */
-	refcount_inc(&encap->ref);
+	refcount_set(&encap->ref, 1);
 	return encap;
 out_release:
 	efx_release_neigh(efx, encap);
@@ -987,7 +992,14 @@ static void efx_tc_encap_match_free(void *ptr, void *__unused)
 	kfree(encap);
 }
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
+static void efx_tc_counter_id_free(void *ptr, void *__unused)
+{
+	struct efx_tc_counter *cnt = ptr;
+
+	WARN_ON(!list_empty(&cnt->users));
+	kfree(cnt);
+}
+
 static void efx_tc_counter_free(void *ptr, void *__unused)
 {
 	struct efx_tc_counter_index *ctr = ptr;
@@ -995,7 +1007,6 @@ static void efx_tc_counter_free(void *ptr, void *__unused)
 	WARN_ON(refcount_read(&ctr->ref));
 	kfree(ctr);
 }
-#endif
 
 static void efx_neigh_free(void *ptr, void *__unused)
 {
@@ -1008,71 +1019,183 @@ static void efx_neigh_free(void *ptr, void *__unused)
 	kfree(neigh);
 }
 
-/* XXX Completely arbitrary.  Later this will probably need to be variable. */
-#define TC_COUNTER_INTERVAL	HZ / 2
-
-static void efx_tc_counter_work(struct work_struct *work)
+static void efx_tc_handle_no_channel(struct efx_nic *efx)
 {
-	struct efx_nic *efx = container_of(work, struct efx_nic,
-					   tc_counter_work.work);
-	__le64 (*counters)[2];
-	int rc, i;
+	netif_warn(efx, drv, efx->net_dev,
+		   "MAE counters require MSI-X and 1 additional interrupt vector.\n");
+}
 
-	if (!efx->tc->counter_buffer.addr)
+static int efx_tc_probe_channel(struct efx_channel *channel)
+{
+	struct efx_rx_queue *rx_queue = &channel->rx_queue;
+
+	channel->irq_moderation_us = 0;
+	rx_queue->core_index = 0;
+
+	INIT_WORK(&rx_queue->grant_work, efx_mae_counters_grant_credits);
+
+	return 0;
+}
+
+static int efx_tc_start_channel(struct efx_channel *channel)
+{
+	struct efx_nic *efx = channel->efx;
+
+	return efx_mae_start_counters(efx, channel);
+}
+
+static void efx_tc_stop_channel(struct efx_channel *channel)
+{
+	struct efx_nic *efx = channel->efx;
+	int rc;
+
+	flush_work(&channel->rx_queue.grant_work);
+	rc = efx_mae_stop_counters(efx, channel);
+	if (rc)
+		netif_warn(efx, drv, efx->net_dev,
+			   "Failed to stop MAE counters streaming, rc=%d.\n",
+			   rc);
+}
+
+static void efx_tc_remove_channel(struct efx_channel *channel)
+{
+}
+
+static void efx_tc_get_channel_name(struct efx_channel *channel,
+				    char *buf, size_t len)
+{
+	snprintf(buf, len, "%s-mae", channel->efx->name);
+}
+
+static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
+				  u64 packets, u64 bytes)
+__must_hold(efx->tc->mutex)
+{
+	struct efx_tc_encap_action *encap;
+	struct efx_tc_action_set *act;
+	struct efx_tc_counter *cnt;
+	struct neighbour *n;
+
+	cnt = efx_tc_flower_find_counter_by_fw_id(efx, counter_idx);
+	if (!cnt && net_ratelimit()) {
+		/* This could theoretically happen due to a race where an
+		 * update from the counter is generated between allocating
+		 * it and adding it to the hashtable, in
+		 * efx_tc_flower_allocate_counter().  But during that race
+		 * window, the counter will not yet have been attached to
+		 * any action, so should not have counted any packets; thus
+		 * the HW should not be sending updates (zero squash).
+		 */
+		netif_warn(efx, drv, efx->net_dev,
+			   "Got update for unwanted MAE counter %u\n",
+			   counter_idx);
 		return;
-	rc = efx_mae_read_counters(efx, &efx->tc->counter_buffer);
-	/* No need for a message on failure, as MCDI will generate one */
-	if (!rc) {
-		counters = efx->tc->counter_buffer.addr;
-		mutex_lock(&efx->tc->mutex);
-		for (i = 0; i < EFX_TC_MAX_COUNTER; i++) {
-			u64 packets = le64_to_cpu(counters[i][0]);
-			struct efx_tc_encap_action *encap;
-			struct efx_tc_action_set *act;
-			struct neighbour *n;
-
-			if (efx->tc->counters[i].packets == packets)
-				continue;
-			efx->tc->counters[i].packets = packets;
-			efx->tc->counters[i].bytes = le64_to_cpu(counters[i][1]);
-			efx->tc->counters[i].touched = jiffies;
-			list_for_each_entry(act, &efx->tc->counters[i].users,
-					    count_user) {
-				encap = act->encap_md;
-				if (!encap)
-					continue;
-				if (!encap->neigh) /* can't happen */
-					continue;
-				if (time_after_eq(encap->neigh->used,
-						  efx->tc->counters[i].touched))
-					continue;
-				encap->neigh->used = efx->tc->counters[i].touched;
-				/* We have passed traffic using this ARP entry, so
-				 * indicate to the ARP cache that it's still active
-				 */
-				n = neigh_lookup(&arp_tbl, &encap->neigh->dst_ip,
-				/* XXX is this the right device? */
-						 encap->neigh->egdev);
-				if (!n)
-					continue;
-
-				neigh_event_send(n, NULL);
-				neigh_release(n);
-			}
-		}
-		mutex_unlock(&efx->tc->mutex);
 	}
 
-	/* If we get ENOSYS, then the NIC doesn't support MAE counters, so not
-	 * much point in repeatedly calling the same thing.
-	 */
-	if (rc != -ENOSYS)
-		schedule_delayed_work(&efx->tc_counter_work, TC_COUNTER_INTERVAL);
+	cnt->packets += packets;
+	cnt->bytes += bytes;
+	cnt->touched = jiffies;
+	list_for_each_entry(act, &cnt->users, count_user) {
+		encap = act->encap_md;
+		if (!encap)
+			continue;
+		if (!encap->neigh) /* can't happen */
+			continue;
+		if (time_after_eq(encap->neigh->used, cnt->touched))
+			continue;
+		encap->neigh->used = cnt->touched;
+		/* We have passed traffic using this ARP entry, so
+		 * indicate to the ARP cache that it's still active
+		 */
+		n = neigh_lookup(&arp_tbl, &encap->neigh->dst_ip,
+		/* XXX is this the right device? */
+				 encap->neigh->egdev);
+		if (!n)
+			continue;
+
+		neigh_event_send(n, NULL);
+		neigh_release(n);
+	}
 }
+
+/* We always swallow the packet, whether successful or not, since it's not
+ * a network packet and shouldn't ever be forwarded to the stack
+ */
+static bool efx_tc_rx(struct efx_channel *channel)
+{
+	struct efx_rx_buffer *rx_buf =
+		efx_rx_buffer(&channel->rx_queue, channel->rx_pkt_index);
+	struct efx_nic *efx = channel->efx;
+	u8 *data = efx_rx_buf_va(rx_buf);
+	u16 seq_index, n_counters, i;
+	const char *reason;
+	int rc = -EINVAL;
+	u8 version;
+
+	/* Header format:
+	 * + |   0    |   1    |   2    |   3    |
+	 * 0 |version |         reserved         |
+	 * 4 |    seq_index    |   n_counters    |
+	 */
+	version = *data;
+	if (version != 1) {
+		rc = -EINVAL;
+		reason = "counter packet is not version 1";
+		goto fail;
+	}
+	seq_index = le16_to_cpu(*(__le16 *)(data + 4));
+	n_counters = le16_to_cpu(*(__le16 *)(data + 6));
+
+	mutex_lock(&efx->tc->mutex);
+	/* Counter update entry format:
+	 * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | a | b | c | d | e | f |
+	 * |  counter_idx  |     packet_count      |      byte_count       |
+	 */
+	for (i = 0; i < n_counters; i++) {
+		void *entry = data + 8 + 16 * i;
+		u64 packet_count, byte_count;
+		u32 counter_idx;
+
+		counter_idx = le32_to_cpu(*(__le32 *)entry);
+		packet_count = le32_to_cpu(*(__le32 *)(entry + 4)) |
+			       ((u64)le16_to_cpu(*(__le16 *)(entry + 8)) << 32);
+		byte_count = le16_to_cpu(*(__le16 *)(entry + 10)) |
+			     ((u64)le32_to_cpu(*(__le32 *)(entry + 12)) << 16);
+		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count);
+	}
+	mutex_unlock(&efx->tc->mutex);
+
+	goto out;
+fail:
+	if (net_ratelimit())
+		netif_err(efx, drv, efx->net_dev,
+			  "choked on MAE counter packet (%s rc %d); counters inaccurate\n",
+			  reason, rc);
+out:
+	efx_free_rx_buffers(&channel->rx_queue, rx_buf, 1);
+	channel->rx_pkt_n_frags = 0;
+	return true;
+}
+
+static const struct efx_channel_type efx_tc_channel_type = {
+	.handle_no_channel	= efx_tc_handle_no_channel,
+	.pre_probe		= efx_tc_probe_channel,
+	.start			= efx_tc_start_channel,
+	.stop			= efx_tc_stop_channel,
+	.post_remove		= efx_tc_remove_channel,
+	.get_name		= efx_tc_get_channel_name,
+	/* no copy operation; there is no need to reallocate this channel */
+	.receive_raw		= efx_tc_rx,
+	.keep_eventq		= true,
+	.hide_tx		= true,
+};
 
 int efx_init_struct_tc(struct efx_nic *efx)
 {
 	int rc, i;
+
+	if (efx->type->is_vf)
+		return 0;
 
 	efx->tc = kzalloc(sizeof(*efx->tc), GFP_KERNEL);
 	if (!efx->tc)
@@ -1085,27 +1208,25 @@ int efx_init_struct_tc(struct efx_nic *efx)
 	INIT_LIST_HEAD(&efx->tc->block_list);
 
 	mutex_init(&efx->tc->mutex);
-	for (i = 0; i < EFX_TC_MAX_COUNTER; i++)
-		INIT_LIST_HEAD(&efx->tc->counters[i].users);
-	INIT_DELAYED_WORK(&efx->tc_counter_work, efx_tc_counter_work);
 
 	rc = rhashtable_init(&efx->tc->neigh_ht, &efx_neigh_ht_params);
 	if (rc < 0)
 		goto fail1;
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
-	rc = rhashtable_init(&efx->tc->counter_ht, &efx_tc_counter_ht_params);
+	rc = rhashtable_init(&efx->tc->counter_id_ht, &efx_tc_counter_id_ht_params);
 	if (rc < 0)
 		goto fail2;
-#endif
-	rc = rhashtable_init(&efx->tc->encap_ht, &efx_tc_encap_ht_params);
+	rc = rhashtable_init(&efx->tc->counter_ht, &efx_tc_counter_ht_params);
 	if (rc < 0)
 		goto fail3;
+	rc = rhashtable_init(&efx->tc->encap_ht, &efx_tc_encap_ht_params);
+	if (rc < 0)
+		goto fail4;
 	rc = rhashtable_init(&efx->tc->encap_match_ht, &efx_tc_encap_match_ht_params);
 	if(rc < 0)
-		goto fail4;
+		goto fail5;
 	rc = rhashtable_init(&efx->tc->match_action_ht, &efx_tc_match_action_ht_params);
 	if (rc < 0)
-		goto fail5;
+		goto fail6;
 	/* TODO consider making this dynamically resized, rather than always
 	 * allocating space for the maximum possible # of VFs
 	 */
@@ -1114,23 +1235,24 @@ int efx_init_struct_tc(struct efx_nic *efx)
 					 GFP_KERNEL);
 	rc = -ENOMEM;
 	if (!efx->tc->dflt_rules)
-		goto fail6;
+		goto fail7;
 	for (i = 0; i < EFX_TC_DFLT__MAX; i++) {
 		efx->tc->dflt_rules[i].fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
 		efx->tc->dflt_rules[i].cookie = i;
 	}
+	efx->extra_channel_type[EFX_EXTRA_CHANNEL_TC] = &efx_tc_channel_type;
 	return 0;
-fail6:
+fail7:
 	rhashtable_destroy(&efx->tc->match_action_ht);
-fail5:
+fail6:
 	rhashtable_destroy(&efx->tc->encap_match_ht);
-fail4:
+fail5:
 	rhashtable_destroy(&efx->tc->encap_ht);
+fail4:
+	rhashtable_destroy(&efx->tc->counter_id_ht);
 fail3:
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
 	rhashtable_destroy(&efx->tc->counter_ht);
 fail2:
-#endif
 	rhashtable_destroy(&efx->tc->neigh_ht);
 fail1:
 	kfree(efx->tc->caps);
@@ -1141,42 +1263,25 @@ fail0:
 
 void efx_fini_struct_tc(struct efx_nic *efx)
 {
+	if (efx->type->is_vf)
+		return;
+
+	if (WARN_ON(!efx->tc))
+		return;
+
 	mutex_lock(&efx->tc->mutex);
 	kfree(efx->tc->dflt_rules);
 	rhashtable_free_and_destroy(&efx->tc->match_action_ht, efx_tc_flow_free,
 				    efx);
 	rhashtable_free_and_destroy(&efx->tc->encap_match_ht, efx_tc_encap_match_free, NULL);
 	rhashtable_free_and_destroy(&efx->tc->encap_ht, efx_tc_encap_free, NULL);
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
+	rhashtable_free_and_destroy(&efx->tc->counter_id_ht, efx_tc_counter_id_free, NULL);
 	rhashtable_free_and_destroy(&efx->tc->counter_ht, efx_tc_counter_free, NULL);
-#endif
 	rhashtable_free_and_destroy(&efx->tc->neigh_ht, efx_neigh_free, NULL);
 	mutex_unlock(&efx->tc->mutex);
 	mutex_destroy(&efx->tc->mutex);
 	kfree(efx->tc->caps);
 	kfree(efx->tc);
-}
-
-int efx_tc_start_stats(struct efx_nic *efx)
-{
-	int rc;
-
-	rc = efx_nic_alloc_buffer(efx, &efx->tc->counter_buffer,
-				  sizeof(efx->tc->counters), GFP_KERNEL);
-	if (rc) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Failed to allocate TC counters buffer, rc %d\n", rc);
-		return rc;
-	}
-
-	schedule_delayed_work(&efx->tc_counter_work, 0);
-	return 0;
-}
-
-void efx_tc_stop_stats(struct efx_nic *efx)
-{
-	cancel_delayed_work_sync(&efx->tc_counter_work);
-	efx_nic_free_buffer(efx, &efx->tc->counter_buffer);
 }
 
 #define IS_ALL_ONES(v)	(!(typeof (v))~(v))
@@ -1405,6 +1510,11 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 }
 #undef MAP_KEY_AND_MASK
 
+static bool efx_ipv6_addr_all_ones(struct in6_addr *addr)
+{
+	return !memchr_inv(addr, 0xff, sizeof(*addr));
+}
+
 static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 					    struct efx_tc_match *match,
 					    enum efx_encap_type type)
@@ -1439,12 +1549,12 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 		}
 	} else {
 		ipv = 6;
-		if (ipv6_addr_any(&match->mask.enc_dst_ip6)) {
+		if (!efx_ipv6_addr_all_ones(&match->mask.enc_dst_ip6)) {
 			netif_err(efx, drv, efx->net_dev,
 				  "Egress encap match is not exact on dst IP address\n");
 			return -EOPNOTSUPP;
 		}
-		if (ipv6_addr_any(&match->mask.enc_src_ip6)) {
+		if (!efx_ipv6_addr_all_ones(&match->mask.enc_src_ip6)) {
 			netif_err(efx, drv, efx->net_dev,
 				  "Egress encap match is not exact on src IP address\n");
 			return -EOPNOTSUPP;
@@ -1504,7 +1614,7 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 	if (old) {
 		/* don't need our new entry */
 		kfree(encap);
-		if (old->tun_type != encap->tun_type) {
+		if (old->tun_type != type) {
 			netif_err(efx, drv, efx->net_dev, "Egress encap match with conflicting tun_type\n");
 			return -EEXIST;
 		}
@@ -1538,7 +1648,7 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 		netif_dbg(efx, drv, efx->net_dev,
 			  "Recorded new encap match %s:%u\n",
 			  buf, ntohs(encap->udp_dport));
-		refcount_inc(&encap->ref);
+		refcount_set(&encap->ref, 1);
 	}
 	match->encap = encap;
 	return 0;
@@ -1799,28 +1909,39 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 			 * long explanations of what's going on here.
 			 */
 			save = *act;
-			if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_COUNT)) {
-				rc = -EOPNOTSUPP;
-				goto release;
-			} else {
-				struct efx_tc_counter_index *ctr;
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
-				ctr = efx_tc_flower_get_counter_by_index(
-							efx, fa->cookie);
-#else
-				ctr = efx_tc_flower_get_counter_by_index(efx);
-#endif
-				if (IS_ERR(ctr)) {
-					rc = PTR_ERR(ctr);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_STATS_TYPE)
+			if (fa->hw_stats) {
+				if (!(fa->hw_stats & FLOW_ACTION_HW_STATS_DELAYED)) {
+					NL_SET_ERR_MSG_MOD(extack, "Only hw_stats_type delayed is supported");
+					rc = -EOPNOTSUPP;
 					goto release;
 				}
-				act->count = ctr;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-				act->count_action_idx = i;
 #endif
-				INIT_LIST_HEAD(&act->count_user);
+				if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_COUNT)) {
+					rc = -EOPNOTSUPP;
+					goto release;
+				} else {
+					struct efx_tc_counter_index *ctr;
+
+					ctr = efx_tc_flower_get_counter_index(efx,
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
+									      fa->cookie);
+#else
+									      tc->cookie);
+#endif
+					if (IS_ERR(ctr)) {
+						rc = PTR_ERR(ctr);
+						goto release;
+					}
+					act->count = ctr;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+					act->count_action_idx = i;
+#endif
+					INIT_LIST_HEAD(&act->count_user);
+				}
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_STATS_TYPE)
 			}
+#endif
 
 			if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_DELIVER)) {
 				/* can't happen */
@@ -2062,9 +2183,18 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 			rc = -EINVAL;
 			goto release;
 		}
-		if (fa->id == FLOW_ACTION_REDIRECT ||
-		    fa->id == FLOW_ACTION_MIRRED ||
-		    fa->id == FLOW_ACTION_DROP) {
+		/* If encap_info is set, then we need a counter even if the
+		 * user doesn't want stats, because we have to prod
+		 * neighbouring periodically if the rule is in use.
+		 */
+		if ((fa->id == FLOW_ACTION_REDIRECT ||
+		     fa->id == FLOW_ACTION_MIRRED ||
+		     fa->id == FLOW_ACTION_DROP) &&
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_STATS_TYPE)
+		    (fa->hw_stats || encap_info)) {
+#else
+		    true) {
+#endif
 			struct efx_tc_counter_index *ctr;
 
 			/* Currently the only actions that want stats are
@@ -2086,12 +2216,19 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 				goto release;
 			}
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_STATS_TYPE)
+			if (!(fa->hw_stats & FLOW_ACTION_HW_STATS_DELAYED)) {
+				NL_SET_ERR_MSG_MOD(extack, "Only hw_stats_type delayed is supported");
+				rc = -EOPNOTSUPP;
+				goto release;
+			}
+#endif
 
+			ctr = efx_tc_flower_get_counter_index(efx,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
-			ctr = efx_tc_flower_get_counter_by_index(
-						efx, fa->cookie);
+							      fa->cookie);
 #else
-			ctr = efx_tc_flower_get_counter_by_index(efx);
+							      tc->cookie);
 #endif
 			if (IS_ERR(ctr)) {
 				rc = PTR_ERR(ctr);
@@ -2140,18 +2277,14 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 				list_add_tail(&act->encap_user, &encap->users);
 				act->dest_mport = encap->dest_mport;
 				act->deliver = 1;
-				if (act->count) {
-					struct efx_tc_counter *counter =
-						&efx->tc->counters[act->count->fw_id];
-
+				if (act->count && !WARN_ON(!act->count->cnt))
 					/* This counter is used by an encap
 					 * action, which needs a reference back
 					 * so it can prod neighbouring whenever
 					 * traffic is seen.
 					 */
 					list_add_tail(&act->count_user,
-						      &counter->users);
-				}
+						      &act->count->cnt->users);
 				rc = efx_mae_alloc_action_set(efx, act);
 				if (rc) {
 					NL_SET_ERR_MSG_MOD(extack, "Failed to write action set to hw (encap)");
@@ -2371,7 +2504,6 @@ release:
 	 */
 	if (act)
 		efx_tc_free_action_set(efx, act, false);
-	kfree(act);
 	if (rule) {
 		rhashtable_remove_fast(&efx->tc->match_action_ht,
 				       &rule->linkage,
@@ -2436,21 +2568,29 @@ static int efx_tc_flower_destroy(struct efx_nic *efx,
 static int efx_tc_action_stats(struct efx_nic *efx,
 			       struct tc_action_offload *tca)
 {
+	struct netlink_ext_ack *extack = tc->common.extack;
 	struct efx_tc_counter_index *ctr;
 	struct efx_tc_counter *cnt;
 	u64 packets, bytes;
 
 	ctr = efx_tc_flower_find_counter_index(efx, tca->cookie);
-	if (!ctr)
+	if (!ctr) {
+		/* See comment in efx_tc_flower_destroy() */
+		if (efx_tc_flower_lookup_dev(efx, net_dev) >= 0)
+			netif_warn(efx, drv, efx->net_dev,
+				   "Action %lx not found for stats\n", tca->cookie);
+		NL_SET_ERR_MSG_MOD(extack, "Action cookie not found in offload");
 		return -ENOENT;
-	if (ctr->fw_id >= EFX_TC_MAX_COUNTER)
+	}
+	if (WARN_ON(!ctr->cnt)) /* can't happen */
 		return -EIO;
-	cnt = &efx->tc->counters[ctr->fw_id];
+	cnt = ctr->cnt;
 	/* Report only new pkts/bytes since last time TC asked */
 	packets = cnt->packets;
 	bytes = cnt->bytes;
 	flow_stats_update(&tca->stats, bytes - cnt->old_bytes,
-			  packets - cnt->old_packets, cnt->touched);
+			  packets - cnt->old_packets, cnt->touched,
+			  FLOW_ACTION_HW_STATS_DELAYED);
 	cnt->old_packets = packets;
 	cnt->old_bytes = bytes;
 	return 0;
@@ -2487,9 +2627,9 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 		if (act->count) {
 			struct tc_action *a;
 
-			if (act->count->fw_id >= EFX_TC_MAX_COUNTER)
+			if (WARN_ON(!act->count->cnt)) /* can't happen */
 				continue;
-			cnt = &efx->tc->counters[act->count->fw_id];
+			cnt = act->count->cnt;
 			/* Report only new pkts/bytes since last time TC asked */
 			packets = cnt->packets;
 			bytes = cnt->bytes;
@@ -2511,14 +2651,12 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 			       struct flow_cls_offload *tc)
 {
 	struct netlink_ext_ack *extack = tc->common.extack;
-	struct efx_tc_flow_rule *rule;
-	struct efx_tc_action_set *act;
+	struct efx_tc_counter_index *ctr;
 	struct efx_tc_counter *cnt;
 	u64 packets, bytes;
 
-	rule = rhashtable_lookup_fast(&efx->tc->match_action_ht, &tc->cookie,
-				     efx_tc_match_action_ht_params);
-	if (!rule) {
+	ctr = efx_tc_flower_find_counter_index(efx, tc->cookie);
+	if (!ctr) {
 		/* See comment in efx_tc_flower_destroy() */
 		if (efx_tc_flower_lookup_dev(efx, net_dev) >= 0)
 			netif_warn(efx, drv, efx->net_dev,
@@ -2526,24 +2664,22 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 		NL_SET_ERR_MSG_MOD(extack, "Flow cookie not found in offloaded rules");
 		return -ENOENT;
 	}
+	if (WARN_ON(!ctr->cnt)) /* can't happen */
+		return -EIO;
+	cnt = ctr->cnt;
 
-	/* Find the first COUNT action in the action-set list, and use that for
-	 * all actions.
-	 */
-	list_for_each_entry(act, &rule->acts.list, list)
-		if (act->count) {
-			if (act->count->fw_id >= EFX_TC_MAX_COUNTER)
-				continue;
-			cnt = &efx->tc->counters[act->count->fw_id];
-			/* Report only new pkts/bytes since last time TC asked */
-			packets = cnt->packets;
-			bytes = cnt->bytes;
-			flow_stats_update(&tc->stats, bytes - cnt->old_bytes,
-					  packets - cnt->old_packets, cnt->touched);
-			cnt->old_packets = packets;
-			cnt->old_bytes = bytes;
-			break;
-		}
+	/* Report only new pkts/bytes since last time TC asked */
+	packets = cnt->packets;
+	bytes = cnt->bytes;
+	flow_stats_update(&tc->stats, bytes - cnt->old_bytes,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_STATS_TYPE)
+			  packets - cnt->old_packets, cnt->touched,
+			  FLOW_ACTION_HW_STATS_DELAYED);
+#else
+			  packets - cnt->old_packets, cnt->touched);
+#endif
+	cnt->old_packets = packets;
+	cnt->old_bytes = bytes;
 	return 0;
 }
 #endif
@@ -3034,11 +3170,17 @@ static void efx_tc_debugfs_dump_one_rule(struct seq_file *file,
 				   be16_to_cpu(act->vlan_tci[1]),
 				   be16_to_cpu(act->vlan_proto[1]));
 		if (act->count) {
+			u32 fw_id;
+
+			if (WARN_ON(!act->count->cnt))
+				fw_id = MC_CMD_MAE_COUNTER_ALLOC_OUT_COUNTER_ID_NULL;
+			else
+				fw_id = act->count->cnt->fw_id;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 			seq_printf(file, "\t\t\tcount (%#x) act_idx=%d\n",
-				   act->count->fw_id, act->count_action_idx);
+				   fw_id, act->count_action_idx);
 #else
-			seq_printf(file, "\t\t\tcount (%#x)\n", act->count->fw_id);
+			seq_printf(file, "\t\t\tcount (%#x)\n", fw_id);
 #endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
 			seq_printf(file, "\t\t\t\tcookie = %#lx\n",
@@ -3332,6 +3474,9 @@ int efx_setup_tc(struct net_device *net_dev, enum tc_setup_type type,
 {
 	struct efx_nic *efx = netdev_priv(net_dev);
 
+	if (efx->type->is_vf)
+		return -EOPNOTSUPP;
+
 	if (type == TC_SETUP_CLSFLOWER)
 		return efx_tc_flower(efx, net_dev, type_data, NULL);
 	if (type == TC_SETUP_BLOCK)
@@ -3346,6 +3491,9 @@ int efx_tc_netdev_event(struct efx_nic *efx, unsigned long event,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	enum efx_encap_type etyp = efx_tc_indr_netdev_type(net_dev);
 	int rc;
+
+	if (efx->type->is_vf)
+		return NOTIFY_DONE;
 
 	if (event == NETDEV_UNREGISTER)
 		efx_tc_unregister_egdev(efx, net_dev);
@@ -3378,6 +3526,9 @@ int efx_tc_netdev_event(struct efx_nic *efx, unsigned long event,
 int efx_tc_netevent_event(struct efx_nic *efx, unsigned long event,
 			  void *ptr)
 {
+	if (efx->type->is_vf)
+		return NOTIFY_DONE;
+
 	switch (event) {
 	case NETEVENT_NEIGH_UPDATE:
 		return efx_neigh_event(efx, ptr);
@@ -3510,6 +3661,9 @@ int efx_init_struct_tc(struct efx_nic *efx)
 {
 	int rc, i;
 
+	if (efx->type->is_vf)
+		return 0;
+
 	efx->tc = kzalloc(sizeof(*efx->tc), GFP_KERNEL);
 	if (!efx->tc)
 		return -ENOMEM;
@@ -3532,14 +3686,19 @@ fail2:
 	kfree(efx->tc->caps);
 fail1:
 	kfree(efx->tc);
+	efx->tc = NULL;
 	return rc;
 }
 
 void efx_fini_struct_tc(struct efx_nic *efx)
 {
+	if (!efx->tc)
+		return;
+
 	kfree(efx->tc->dflt_rules);
 	kfree(efx->tc->caps);
 	kfree(efx->tc);
+	efx->tc = NULL;
 }
 
 int efx_tc_netdev_event(struct efx_nic *efx, unsigned long event,

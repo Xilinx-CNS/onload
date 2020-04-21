@@ -25,6 +25,18 @@ enum efx_mcdi_mode {
 	MCDI_MODE_FAIL,
 };
 
+/* On older firmwares there is only a single thread on the MC, so even
+ * the shortest operation can be blocked for some time by an operation
+ * requested by a different function.
+ * See bug61269 for further discussion.
+ *
+ * On newer firmwares that support multithreaded MCDI commands we extend
+ * the timeout for commands we know can run longer.
+ */
+#define MCDI_RPC_TIMEOUT       (10 * HZ)
+#define MCDI_RPC_LONG_TIMEOUT  (60 * HZ)
+#define MCDI_RPC_POST_RST_TIME (10 * HZ)
+
 /**
  * enum efx_mcdi_cmd_state - State for an individual MCDI command
  * @MCDI_STATE_QUEUED: Command not started
@@ -133,19 +145,19 @@ struct efx_mcdi_cmd {
 struct efx_mcdi_iface {
 	struct efx_nic *efx;
 	spinlock_t iface_lock;
+	unsigned int outstanding_cleanups;
 	struct list_head cmd_list;
 	struct workqueue_struct *workqueue;
-	unsigned int outstanding_cleanups;
 	wait_queue_head_t cmd_complete_wq;
 	struct efx_mcdi_cmd *db_held_by;
 	struct efx_mcdi_cmd *seq_held_by[16];
-	u8 prev_seq;
 	unsigned int prev_handle;
 	enum efx_mcdi_mode mode;
+	u8 prev_seq;
 	bool new_epoch;
 #ifdef CONFIG_SFC_MCDI_LOGGING
-	char *logging_buffer;
 	bool logging_enabled;
+	char *logging_buffer;
 #endif
 };
 
@@ -506,6 +518,17 @@ static inline void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
 #define MCDI_EVENT_FIELD(_ev, _field)			\
 	EFX_QWORD_FIELD(_ev, MCDI_EVENT_ ## _field)
 
+#define MCDI_CAPABILITY(field)						\
+	MC_CMD_GET_CAPABILITIES_V8_OUT_ ## field ## _LBN
+
+#define MCDI_CAPABILITY_OFST(field) \
+	MC_CMD_GET_CAPABILITIES_V8_OUT_ ## field ## _OFST
+
+#define efx_has_cap(efx, field) \
+	efx->type->check_caps(efx, \
+			      MCDI_CAPABILITY(field), \
+			      MCDI_CAPABILITY_OFST(field))
+
 void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len);
 void efx_mcdi_dump_versions(struct efx_nic *efx, void *print_info);
 int efx_mcdi_drv_attach(struct efx_nic *efx, u32 fw_variant, u32 *out_flags,
@@ -554,6 +577,14 @@ static inline void efx_mcdi_mon_remove(struct efx_nic *efx) {}
 #endif
 
 #ifdef CONFIG_SFC_MTD
+int efx_mcdi_nvram_update_start(struct efx_nic *efx, unsigned int type);
+int efx_mcdi_nvram_read(struct efx_nic *efx, unsigned int type,
+			loff_t offset, u8 *buffer, size_t length);
+int efx_mcdi_nvram_write(struct efx_nic *efx, unsigned int type,
+			 loff_t offset, const u8 *buffer, size_t length);
+int efx_mcdi_nvram_erase(struct efx_nic *efx, unsigned int type,
+			 loff_t offset, size_t length);
+int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type);
 int efx_mcdi_mtd_read(struct mtd_info *mtd, loff_t start, size_t len,
 		      size_t *retlen, u8 *buffer);
 int efx_mcdi_mtd_erase(struct mtd_info *mtd, loff_t start, size_t len);

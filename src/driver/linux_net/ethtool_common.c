@@ -106,10 +106,12 @@ static const struct efx_sw_stat_desc efx_sw_stat_desc[] = {
 static const char efx_ethtool_priv_flags_strings[][ETH_GSTRING_LEN] = {
 	"phy-power-follows-link",
 	"link-down-on-reset",
+	"xdp-tx",
 };
 
 #define EFX_ETHTOOL_PRIV_FLAGS_PHY_POWER		BIT(0)
 #define EFX_ETHTOOL_PRIV_FLAGS_LINK_DOWN_ON_RESET	BIT(1)
+#define EFX_ETHTOOL_PRIV_FLAGS_XDP			BIT(2)
 
 #define EFX_ETHTOOL_PRIV_FLAGS_COUNT ARRAY_SIZE(efx_ethtool_priv_flags_strings)
 
@@ -161,10 +163,10 @@ void efx_ethtool_self_test(struct net_device *net_dev,
 	if (!efx_tests)
 		goto fail;
 
-	efx_tests->eventq_dma = kcalloc(efx_rx_channels(efx),
+	efx_tests->eventq_dma = kcalloc(efx_channels(efx),
 					sizeof(*efx_tests->eventq_dma),
 					GFP_KERNEL);
-	efx_tests->eventq_int = kcalloc(efx_rx_channels(efx),
+	efx_tests->eventq_int = kcalloc(efx_channels(efx),
 					sizeof(*efx_tests->eventq_int),
 					GFP_KERNEL);
 
@@ -172,7 +174,7 @@ void efx_ethtool_self_test(struct net_device *net_dev,
 		goto fail;
 	}
 
-	if (efx->state != STATE_READY) {
+	if (!efx_net_active(efx->state)) {
 		rc = -EBUSY;
 		goto out;
 	}
@@ -225,28 +227,23 @@ fail:
 int efx_ethtool_nway_reset(struct net_device *net_dev)
 {
 	struct efx_nic *efx = netdev_priv(net_dev);
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_LINK_OUT_V2_LEN);
-	u32 flags, caps, loopback_mode;
+	u32 flags = efx_get_mcdi_phy_flags(efx);
 	int rc;
-
-	rc = efx_mcdi_rpc(efx, MC_CMD_GET_LINK, NULL, 0, outbuf, sizeof(outbuf), NULL);
-	if (rc)
-		return rc;
-
-	flags = MCDI_DWORD(outbuf, GET_LINK_OUT_V2_FLAGS);
-	caps = MCDI_DWORD(outbuf, GET_LINK_OUT_V2_CAP);
-	loopback_mode = MCDI_DWORD(outbuf, GET_LINK_OUT_V2_LOOPBACK_MODE);
 
 	flags |= (1 << MC_CMD_SET_LINK_IN_POWEROFF_LBN);
 
-	rc = efx_mcdi_set_link(efx, caps, flags, loopback_mode, false, SET_LINK_SEQ_IGNORE);
+	rc = efx_mcdi_set_link(efx, efx_get_mcdi_caps(efx), flags,
+			       efx->loopback_mode, false,
+			       SET_LINK_SEQ_IGNORE);
 	if (rc)
 		return rc;
 
 	flags &= ~(1 << MC_CMD_SET_LINK_IN_POWEROFF_LBN);
 	flags &= ~(1 << MC_CMD_SET_LINK_IN_LOWPOWER_LBN);
 
-	return efx_mcdi_set_link(efx, caps, flags, loopback_mode, false, SET_LINK_SEQ_IGNORE);
+	return efx_mcdi_set_link(efx, efx_get_mcdi_caps(efx), flags,
+				 efx->loopback_mode, false,
+				 SET_LINK_SEQ_IGNORE);
 }
 
 void efx_ethtool_get_pauseparam(struct net_device *net_dev,
@@ -502,11 +499,14 @@ static size_t efx_describe_per_queue_stats(struct efx_nic *efx, u8 *strings)
 		unsigned short xdp;
 
 		for (xdp = 0; xdp < efx->xdp_tx_queue_count; xdp++) {
-			n_stats++;
-			if (strings != NULL) {
-				snprintf(strings, ETH_GSTRING_LEN,
-					 "tx-xdp-cpu-%hu.tx_packets", xdp);
-				strings += ETH_GSTRING_LEN;
+			if (efx->xdp_tx_queues[xdp]) {
+				n_stats++;
+				if (strings != NULL) {
+					snprintf(strings, ETH_GSTRING_LEN,
+						 "tx-xdp-cpu-%hu.tx_packets",
+						 xdp);
+					strings += ETH_GSTRING_LEN;
+				}
 			}
 		}
 	}
@@ -577,17 +577,44 @@ u32 efx_ethtool_get_priv_flags(struct net_device *net_dev)
 	if (efx->link_down_on_reset)
 		ret_flags |= EFX_ETHTOOL_PRIV_FLAGS_LINK_DOWN_ON_RESET;
 
+	if (efx->xdp_tx)
+		ret_flags |= EFX_ETHTOOL_PRIV_FLAGS_XDP;
+
 	return ret_flags;
 }
 
 int efx_ethtool_set_priv_flags(struct net_device *net_dev, u32 flags)
 {
+	u32 prev_flags = efx_ethtool_get_priv_flags(net_dev);
 	struct efx_nic *efx = netdev_priv(net_dev);
+	bool is_up = !efx_check_disabled(efx) && netif_running(efx->net_dev);
+	bool xdp_change =
+		(flags & EFX_ETHTOOL_PRIV_FLAGS_XDP) !=
+		(prev_flags & EFX_ETHTOOL_PRIV_FLAGS_XDP);
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (xdp_change && efx->open_count > is_up) {
+		netif_err(efx, drv, efx->net_dev,
+			  "unable to set XDP. device in use by driverlink stack\n");
+		return -EBUSY;
+	}
+#endif
+#endif
+
+	/* can't change XDP state when interface is up */
+	if (is_up && xdp_change)
+		dev_close(net_dev);
 
 	efx->phy_power_follows_link =
 		!!(flags & EFX_ETHTOOL_PRIV_FLAGS_PHY_POWER);
 	efx->link_down_on_reset =
 		!!(flags & EFX_ETHTOOL_PRIV_FLAGS_LINK_DOWN_ON_RESET);
+	efx->xdp_tx =
+		!!(flags & EFX_ETHTOOL_PRIV_FLAGS_XDP);
+
+	if (is_up && xdp_change)
+		return dev_open(net_dev, NULL);
 
 	return 0;
 }
@@ -658,8 +685,10 @@ void efx_ethtool_get_stats(struct net_device *net_dev,
 		int xdp;
 
 		for (xdp = 0; xdp < efx->xdp_tx_queue_count; xdp++) {
-			data[0] = efx->xdp_tx_queues[xdp]->tx_packets;
-			data++;
+			if (efx->xdp_tx_queues[xdp]) {
+				data[0] = efx->xdp_tx_queues[xdp]->tx_packets;
+				data++;
+			}
 		}
 	}
 
@@ -671,33 +700,24 @@ void efx_ethtool_get_channels(struct net_device *net_dev,
 			      struct ethtool_channels *channels)
 {
 	struct efx_nic *efx = netdev_priv(net_dev);
-	unsigned int i, j;
 
-	channels->max_combined = efx->max_channels;
-	channels->max_rx = 0;
-	channels->max_tx = 0;
-
-	/* When n_combined_channels is 0 provide the values that were determined
-	 * via the rss_cpus module parameter.
-	 */
 	channels->combined_count = efx->n_combined_channels;
 	channels->rx_count = efx->n_rx_only_channels;
 	channels->tx_count = efx->n_tx_only_channels;
 
 	/* count up 'other' channels */
-	channels->max_other = efx->n_xdp_channels;
-	channels->other_count = efx->n_xdp_channels;
-	for (i = 0; i < EFX_MAX_EXTRA_CHANNELS; i++) {
-		if (!efx->extra_channel_type[i])
-			continue;
-		channels->max_other++;
-		for (j = 0; j < EFX_MAX_EXTRA_CHANNELS; j++) {
-			if (j >= efx_channels(efx))
-				continue;
-			if (efx_get_channel(efx, efx_channels(efx) - j - 1)->type ==
-					efx->extra_channel_type[i])
-				channels->other_count++;
-		}
+	channels->max_other = efx_xdp_channels(efx) + efx->n_extra_channels;
+	channels->other_count = channels->max_other;
+
+	if (efx->n_tx_only_channels && efx->n_rx_only_channels) {
+		channels->max_combined = 0;
+		channels->max_rx = efx->n_rx_only_channels;
+		channels->max_tx = efx->n_tx_only_channels;
+	} else {
+		channels->max_combined = efx->max_tx_channels -
+					 channels->max_other;
+		channels->max_rx = 0;
+		channels->max_tx = 0;
 	}
 }
 
@@ -711,6 +731,23 @@ int efx_ethtool_set_channels(struct net_device *net_dev,
 	/* Cannot change special channels yet */
 	if (channels->other_count != channels->max_other)
 		return -EINVAL;
+
+	/* If we're in a separate TX channels config then reject any changes.
+	 * If we're not then reject an attempt to make these non-zero.
+	 */
+	if (channels->rx_count != channels->max_rx ||
+	    channels->tx_count != channels->max_tx)
+		return -EINVAL;
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx->open_count > is_up) {
+		netif_err(efx, drv, efx->net_dev,
+			  "unable to set channels. device in use by driverlink stack\n");
+		return -EBUSY;
+	}
+#endif
+#endif
 
 	if (is_up)
 		dev_close(net_dev);
@@ -1123,8 +1160,7 @@ int efx_ethtool_get_rxnfc(struct net_device *net_dev,
 
 	switch (info->cmd) {
 	case ETHTOOL_GRXRINGS:
-		info->data = (efx->n_combined_channels?
-			      efx->n_combined_channels: efx->n_rss_channels);
+		info->data = efx->n_rss_channels;
 		if (!info->data)
 			return -ENOENT;
 		return 0;

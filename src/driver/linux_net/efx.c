@@ -58,6 +58,7 @@
 #include "efx_devlink.h"
 #include "selftest.h"
 #include "sriov.h"
+#include "xdp.h"
 #ifdef EFX_USE_KCOMPAT
 #include "efx_ioctl.h"
 #endif
@@ -215,10 +216,6 @@ MODULE_PARM_DESC(performance_profile,
 		 "Tune settings for different performance profiles: 'throughput', 'latency' or (default) 'auto'");
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
-static int efx_xdp_setup_prog(struct efx_nic *efx, struct bpf_prog *prog);
-#endif
-
 /**************************************************************************
  *
  * Port handling
@@ -226,23 +223,6 @@ static int efx_xdp_setup_prog(struct efx_nic *efx, struct bpf_prog *prog);
  **************************************************************************/
 
 static void efx_fini_port(struct efx_nic *efx);
-
-static int efx_probe_port(struct efx_nic *efx)
-{
-	int rc;
-
-	netif_dbg(efx, probe, efx->net_dev, "create port\n");
-
-	/* Connect up MAC/PHY operations table */
-	rc = efx->type->probe_port(efx);
-	if (rc)
-		return rc;
-
-	/* Initialise MAC address to permanent address */
-	ether_addr_copy(efx->net_dev->dev_addr, efx->net_dev->perm_addr);
-
-	return 0;
-}
 
 static int efx_init_port(struct efx_nic *efx)
 {
@@ -279,193 +259,6 @@ static void efx_fini_port(struct efx_nic *efx)
 
 	efx->link_state.up = false;
 	efx_link_status_changed(efx);
-}
-
-static void efx_remove_port(struct efx_nic *efx)
-{
-	netif_dbg(efx, drv, efx->net_dev, "destroying port\n");
-
-	efx->type->remove_port(efx);
-}
-
-/**************************************************************************
- *
- * NIC handling
- *
- **************************************************************************/
-static int efx_probe_nic(struct efx_nic *efx)
-{
-	int rc;
-
-	netif_dbg(efx, probe, efx->net_dev, "creating NIC\n");
-
-	/* Register debugfs entries */
-	rc = efx_init_debugfs_nic(efx);
-	if (rc)
-		return rc;
-
-#ifdef CONFIG_SFC_DUMP
-	rc = efx_dump_init(efx);
-	if (rc)
-		goto fail_dump;
-#endif
-
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	/* Initialise NIC resource information */
-	efx->farch_resources = efx->type->farch_resources;
-	efx->farch_resources.biu_lock = &efx->biu_lock;
-	efx->ef10_resources = efx->type->ef10_resources;
-#endif
-#endif
-
-	/* Carry out hardware-type specific initialisation */
-	rc = efx->type->probe(efx);
-	if (rc)
-		goto fail2;
-
-	efx->txq_min_entries = roundup_pow_of_two(2 * efx->type->tx_max_skb_descs(efx));
-
-	/* Initialise the interrupt moderation settings */
-	efx->irq_mod_step_us = DIV_ROUND_UP(efx->timer_quantum_ns, 1000);
-	efx_init_irq_moderation(efx, tx_irq_mod_usec, rx_irq_mod_usec,
-				irq_adapt_enable, true);
-
-	return 0;
-
-fail2:
-#ifdef CONFIG_SFC_DUMP
-	efx_dump_fini(efx);
-fail_dump:
-#endif
-
-	efx_fini_debugfs_nic(efx);
-	return rc;
-}
-
-static void efx_remove_nic(struct efx_nic *efx)
-{
-	netif_dbg(efx, drv, efx->net_dev, "destroying NIC\n");
-
-	efx->type->remove(efx);
-#ifdef CONFIG_SFC_DUMP
-	efx_dump_fini(efx);
-#endif
-	efx_fini_debugfs_nic(efx);
-}
-
-/**************************************************************************
- *
- * NIC startup/shutdown
- *
- *************************************************************************/
-
-static int efx_probe_all(struct efx_nic *efx)
-{
-	int rc;
-
-#ifdef EFX_NOT_UPSTREAM
-	if (performance_profile == NULL)
-		efx->performance_profile = EFX_PERFORMANCE_PROFILE_AUTO;
-	else if (strcmp(performance_profile, "throughput") == 0)
-		efx->performance_profile = EFX_PERFORMANCE_PROFILE_THROUGHPUT;
-	else if (strcmp(performance_profile, "latency") == 0)
-		efx->performance_profile = EFX_PERFORMANCE_PROFILE_LATENCY;
-	else
-		efx->performance_profile = EFX_PERFORMANCE_PROFILE_AUTO;
-#endif
-
-	rc = efx_probe_nic(efx);
-	if (rc) {
-		netif_err(efx, probe, efx->net_dev, "failed to create NIC\n");
-		goto fail1;
-	}
-
-#ifdef EFX_NOT_UPSTREAM
-	if (efx->mcdi->fn_flags &
-			(1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
-		return 0;
-#endif
-
-	rc = efx_probe_port(efx);
-	if (rc) {
-		netif_err(efx, probe, efx->net_dev, "failed to create port\n");
-		goto fail2;
-	}
-
-	rc = efx_check_queue_size(efx, &rx_ring,
-				  EFX_RXQ_MIN_ENT, EFX_MAX_DMAQ_SIZE, true);
-	if (rc == -ERANGE)
-		netif_warn(efx, probe, efx->net_dev,
-			   "rx_ring parameter must be between %u and %lu; clamped to %u\n",
-			   EFX_RXQ_MIN_ENT, EFX_MAX_DMAQ_SIZE, rx_ring);
-	else if (rc == -EINVAL)
-		netif_warn(efx, probe, efx->net_dev,
-			   "rx_ring parameter must be a power of two; rounded to %u\n",
-			   rx_ring);
-	efx->rxq_entries = rx_ring;
-
-	rc = efx_check_queue_size(efx, &tx_ring,
-				  efx->txq_min_entries, EFX_TXQ_MAX_ENT(efx),
-				  true);
-	if (rc == -ERANGE)
-		netif_warn(efx, probe, efx->net_dev,
-			   "tx_ring parameter must be between %u and %lu; clamped to %u\n",
-			   efx->txq_min_entries, EFX_TXQ_MAX_ENT(efx), tx_ring);
-	else if (rc == -EINVAL)
-		netif_warn(efx, probe, efx->net_dev,
-			   "tx_ring parameter must be a power of two; rounded to %u\n",
-			   tx_ring);
-	efx->txq_entries = tx_ring;
-
-	/* We fixed queue size errors so don't care about rc at this point */
-
-	rc = efx->type->vswitching_probe(efx);
-	if (rc) /* not fatal; the PF will still work fine */
-		netif_warn(efx, probe, efx->net_dev,
-			   "failed to setup vswitching rc=%d, VFs may not function\n",
-			   rc);
-
-	rc = efx_probe_filters(efx);
-	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "failed to create filter tables\n");
-		goto fail3;
-	}
-
-#ifdef EFX_NOT_UPSTREAM
-	if (efx_channels(efx) > 1 && efx_rss_use_fixed_key) {
-		BUILD_BUG_ON(sizeof(efx_rss_fixed_key) <
-			     sizeof(efx->rss_context.rx_hash_key));
-		memcpy(&efx->rss_context.rx_hash_key, efx_rss_fixed_key,
-		       sizeof(efx->rss_context.rx_hash_key));
-	} else
-#endif
-	if (efx_channels(efx) > 1)
-		netdev_rss_key_fill(efx->rss_context.rx_hash_key,
-				    sizeof(efx->rss_context.rx_hash_key));
-	/* Don't fail init if RSS setup doesn't work. */
-	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
-
-	return 0;
- fail3:
-	efx->type->vswitching_remove(efx);
-	efx_remove_port(efx);
- fail2:
-	efx_remove_nic(efx);
- fail1:
-	return rc;
-}
-
-static void efx_remove_all(struct efx_nic *efx)
-{
-	if (efx->mcdi &&
-	    !(efx->mcdi->fn_flags &
-	      (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)))
-		efx_remove_port(efx);
-	efx_remove_filters(efx);
-	efx->type->vswitching_remove(efx);
-	efx_remove_nic(efx);
 }
 
 /**************************************************************************
@@ -602,16 +395,32 @@ int efx_net_open(struct net_device *net_dev)
 	netif_dbg(efx, ifup, efx->net_dev, "opening device on CPU %d\n",
 		  raw_smp_processor_id());
 
-	efx->stats_initialised = false;
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx->open_count++) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "already open, now by %hu clients\n", efx->open_count);
+		/* inform the kernel about link state again */
+		efx_link_status_changed(efx);
+		return 0;
+	}
+#endif
+#endif
 
 	rc = efx_check_disabled(efx);
 	if (rc)
-		return rc;
-	if (efx->phy_mode & PHY_MODE_SPECIAL)
-		return -EBUSY;
-	if (efx_mcdi_poll_reboot(efx) && efx_reset(efx, RESET_TYPE_ALL))
-		return -EIO;
+		goto fail;
+	if (efx->phy_mode & PHY_MODE_SPECIAL) {
+		rc = -EBUSY;
+		goto fail;
+	}
+	if (efx_mcdi_poll_reboot(efx) && efx_reset(efx, RESET_TYPE_ALL)) {
+		rc = -EIO;
+		goto fail;
+	}
 	efx->reset_count = 0;
+
+	efx->stats_initialised = false;
 
 	do {
 		if (!efx->max_channels || !efx->max_tx_channels) {
@@ -642,10 +451,9 @@ int efx_net_open(struct net_device *net_dev)
 			efx_unset_channels(efx);
 			efx_remove_interrupts(efx);
 		}
-
 	} while (rc == -EAGAIN);
-	if (rc)
-		return rc;
+	/* rc should be 0 here or we would have jumped to fail: */
+	WARN_ON(rc);
 
 	rc = efx_probe_channels(efx);
 	if (rc)
@@ -656,11 +464,12 @@ int efx_net_open(struct net_device *net_dev)
 		goto fail;
 
 	rc = efx_init_port(efx);
-	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "failed to initialise port\n");
+	if (rc)
 		goto fail;
-	}
+
+	rc = efx_probe_filters(efx);
+	if (rc)
+		goto fail;
 
 	rc = efx_nic_init_interrupt(efx);
 	if (rc)
@@ -673,23 +482,12 @@ int efx_net_open(struct net_device *net_dev)
 	down_write(&efx->filter_sem);
 	rc = efx->type->init(efx);
 	up_write(&efx->filter_sem);
-	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "failed to initialise NIC\n");
+	if (rc)
 		goto fail;
-	}
 
 	rc = efx_enable_interrupts(efx);
 	if (rc)
 		goto fail;
-
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	/* Register with driverlink layer */
-	if (efx_dl_supported(efx))
-		efx_dl_register_nic(&efx->dl_nic);
-#endif
-#endif
 
 	/* Notify the kernel of the link state polled during driver load,
 	 * before the monitor starts running */
@@ -699,8 +497,16 @@ int efx_net_open(struct net_device *net_dev)
 	if (rc)
 		goto fail;
 
-	if (efx->state == STATE_DISABLED || efx->reset_pending)
+	if (efx->state == STATE_DISABLED || efx->reset_pending) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+		if (efx->type->detach_reps)
+			efx->type->detach_reps(efx);
+#endif
 		netif_device_detach(efx->net_dev);
+	} else {
+		efx->state = STATE_NET_UP;
+	}
+
 	efx_selftest_async_start(efx);
 
 	return 0;
@@ -721,30 +527,40 @@ int efx_net_stop(struct net_device *net_dev)
 	netif_dbg(efx, ifdown, efx->net_dev, "closing on CPU %d\n",
 			raw_smp_processor_id());
 
-	netif_stop_queue(net_dev);
-	efx_fini_debugfs_netdev(efx->net_dev);
-	efx_stop_all(efx);
-
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
-	if (efx_dl_supported(efx))
-		efx_dl_unregister_nic(&efx->dl_nic);
+	if (--efx->open_count) {
+		netif_dbg(efx, drv, efx->net_dev, "still open by %hu clients\n",
+			  efx->open_count);
+		return 0;
+	}
 #endif
 #endif
 
+	if (efx->state == STATE_DISABLED)
+		return 0;
+
+	netif_stop_queue(efx->net_dev);
+	efx_stop_all(efx);
+
 	efx_disable_interrupts(efx);
+	if (efx->type->fini)
+		efx->type->fini(efx);
 	efx_clear_interrupt_affinity(efx);
 #ifdef EFX_USE_IRQ_NOTIFIERS
 	efx_unregister_irq_notifiers(efx);
 #endif
-	if (efx->type->fini)
-		efx->type->fini(efx);
 	efx_nic_fini_interrupt(efx);
+	efx_remove_filters(efx);
 	efx_fini_port(efx);
 	efx_fini_napi(efx);
 	efx_remove_channels(efx);
+	if (efx->type->free_resources)
+		efx->type->free_resources(efx);
 	efx_unset_channels(efx);
 	efx_remove_interrupts(efx);
+
+	efx->state = STATE_NET_DOWN;
 
 	return 0;
 }
@@ -926,92 +742,6 @@ void efx_geneve_del_port(struct net_device *dev, sa_family_t sa_family,
 #endif
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
-static int efx_xdp_setup_prog(struct efx_nic *efx, struct bpf_prog *prog)
-{
-	struct bpf_prog *old_prog;
-
-	if (prog && (efx->net_dev->mtu > efx_xdp_max_mtu(efx))) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Unable to configure XDP with MTU of %d (max: %d)\n",
-			  efx->net_dev->mtu, efx_xdp_max_mtu(efx));
-		return -EINVAL;
-	}
-
-	old_prog = rtnl_dereference(efx->xdp_prog);
-	rcu_assign_pointer(efx->xdp_prog, prog);
-	/* Release the reference that was originally passed by the caller. */
-	if (old_prog)
-		bpf_prog_put(old_prog);
-
-	return 0;
-}
-
-/* Context: process, rtnl_lock() held. */
-static int efx_xdp(struct net_device *dev, struct netdev_bpf *xdp)
-{
-	struct efx_nic *efx = netdev_priv(dev);
-	struct bpf_prog *xdp_prog;
-
-	switch (xdp->command) {
-	case XDP_SETUP_PROG:
-		return efx_xdp_setup_prog(efx, xdp->prog);
-	case XDP_QUERY_PROG:
-		xdp_prog = rtnl_dereference(efx->xdp_prog);
-#if defined(EFX_USE_KCOMPAT) && (defined(EFX_HAVE_XDP_PROG_ATTACHED) || defined(EFX_HAVE_XDP_OLD))
-		xdp->prog_attached = !!xdp_prog;
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_PROG_ID) || !defined(EFX_HAVE_XDP_OLD)
-		xdp->prog_id = xdp_prog ? xdp_prog->aux->id : 0;
-#endif
-		return 0;
-	default:
-		return -EINVAL;
-	}
-}
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)
-/* Context: NAPI */
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_TX_FLAGS)
-static int efx_xdp_xmit(struct net_device *dev, int n, struct xdp_frame **xdpfs,
-			u32 flags)
-{
-	struct efx_nic *efx = netdev_priv(dev);
-
-	if (!netif_running(dev))
-		return -EINVAL;
-
-	return efx_xdp_tx_buffers(efx, n, xdpfs, flags & XDP_XMIT_FLUSH);
-}
-#else
-static int efx_xdp_xmit(struct net_device *dev, struct xdp_frame *xdpf)
-{
-	struct efx_nic *efx = netdev_priv(dev);
-	int rc;
-
-	if (!netif_running(dev))
-		return -EINVAL;
-
-	rc = efx_xdp_tx_buffers(efx, 1, &xdpf, false);
-
-	if (rc == 1)
-		return 0;
-	if (rc == 0)
-		return -ENOSPC;
-	return rc;
-}
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_NEED_XDP_FLUSH)
-/* Context: NAPI */
-static void efx_xdp_flush(struct net_device *dev)
-{
-	efx_xdp_tx_buffers(netdev_priv(dev), 0, NULL, true);
-}
-#endif /* NEED_XDP_FLUSH */
-#endif /* HAVE_XDP_REDIR */
-#endif /* HAVE_XDP */
-
 extern const struct net_device_ops efx_netdev_ops;
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NET_DEVICE_OPS_EXT)
@@ -1047,7 +777,7 @@ static int efx_netdev_event(struct notifier_block *this,
 		efx_update_name(efx);
 
 #if defined(CONFIG_SFC_MTD) && defined(EFX_WORKAROUND_87308)
-		if (atomic_xchg(&efx->mtds_probed_flag, 1) == 0)
+		if (atomic_xchg(&efx->mtd_struct->probed_flag, 1) == 0)
 			(void)efx_mtd_probe(efx);
 #endif
 	}
@@ -1129,10 +859,10 @@ static void efx_init_features(struct efx_nic *efx)
 	efx->fixed_features |= NETIF_F_HW_VLAN_CTAG_TX;
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_VLAN_FEATURES)
-		/* Mask for features that also apply to VLAN devices */
-		net_dev->vlan_features |= (NETIF_F_CSUM_MASK | NETIF_F_SG |
-					   NETIF_F_HIGHDMA | NETIF_F_ALL_TSO |
-					   NETIF_F_RXCSUM);
+	/* Mask for features that also apply to VLAN devices */
+	net_dev->vlan_features |= (NETIF_F_CSUM_MASK | NETIF_F_SG |
+				   NETIF_F_HIGHDMA | NETIF_F_ALL_TSO |
+				   NETIF_F_RXCSUM);
 #else
 	/* Alternative to vlan_features in RHEL 5.5+.  These all
 	 * depend on NETIF_F_HW_CSUM or NETIF_F_HW_VLAN_TX because
@@ -1240,58 +970,15 @@ static int efx_register_netdev(struct efx_nic *efx)
 	/* Always start with carrier off; PHY events will detect the link */
 	netif_carrier_off(net_dev);
 
-	efx->state = STATE_READY;
+	efx->state = STATE_NET_DOWN;
 
 	rtnl_unlock();
 
-	/* Create debugfs symlinks */
-#ifdef CONFIG_SFC_DEBUGFS
-	mutex_lock(&efx->debugfs_symlink_mutex);
-	rc = efx_init_debugfs_netdev(net_dev);
-	mutex_unlock(&efx->debugfs_symlink_mutex);
-#endif
-
-	if (rc) {
-		netif_err(efx, drv, efx->net_dev,
-			  "failed to init net dev debugfs\n");
-		goto fail_registered;
-	}
-
-	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_phy_type);
-	if (rc) {
-		netif_err(efx, drv, efx->net_dev,
-			  "failed to init net dev attributes\n");
-		goto fail_attr_phy_type;
-	}
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_lro);
-	if (rc) {
-		netif_err(efx, drv, efx->net_dev,
-			  "failed to init net dev attributes\n");
-		goto fail_attr_lro;
-	}
-#endif
 	efx_init_mcdi_logging(efx);
 	efx_probe_devlink(efx);
 
 	return 0;
 
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-fail_attr_lro:
-	device_remove_file(&efx->pci_dev->dev, &dev_attr_phy_type);
-#endif
-fail_attr_phy_type:
-	efx_fini_debugfs_netdev(net_dev);
-fail_registered:
-	rtnl_lock();
-	efx->state = STATE_UNINIT;
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	if (efx_dl_supported(efx))
-		efx_dl_unregister_nic(&efx->dl_nic);
-#endif
-#endif
-	unregister_netdevice(net_dev);
 fail_locked:
 	rtnl_unlock();
 	netif_err(efx, drv, efx->net_dev, "could not register net dev\n");
@@ -1318,12 +1005,10 @@ static void efx_unregister_netdev(struct efx_nic *efx)
 		strlcpy(efx->name, pci_name(efx->pci_dev), sizeof(efx->name));
 		efx_fini_devlink(efx);
 		efx_fini_mcdi_logging(efx);
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-		device_remove_file(&efx->pci_dev->dev, &dev_attr_lro);
-#endif
-		device_remove_file(&efx->pci_dev->dev, &dev_attr_phy_type);
-		efx_fini_debugfs_netdev(efx->net_dev);
-		unregister_netdev(efx->net_dev);
+		rtnl_lock();
+		unregister_netdevice(efx->net_dev);
+		efx->state = STATE_UNINIT;
+		rtnl_unlock();
 	}
 }
 
@@ -1375,29 +1060,135 @@ void efx_update_sw_stats(struct efx_nic *efx, u64 *stats)
  *
  **************************************************************************/
 
-/* This must be called with rtnl_lock held. */
-static void efx_pci_remove_post_io(struct efx_nic *efx)
+void efx_pci_remove_post_io(struct efx_nic *efx,
+			    void (*nic_remove)(struct efx_nic *efx))
 {
+	efx_unregister_netdev(efx);
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
+	rtnl_lock();
 	efx_xdp_setup_prog(efx, NULL);
+	rtnl_unlock();
 #endif
 	if (efx->type->sriov_fini)
 		efx->type->sriov_fini(efx);
-	efx_remove_all(efx);
+	if (efx->type->vswitching_remove)
+		efx->type->vswitching_remove(efx);
+	efx_fini_channels(efx);
+	efx->type->remove_port(efx);
+	nic_remove(efx);
+	efx_remove_common(efx);
 }
 
-static int efx_pci_probe_post_io(struct efx_nic *efx)
+int efx_pci_probe_post_io(struct efx_nic *efx,
+			  int (*nic_probe)(struct efx_nic *efx))
 {
-	int rc = efx_probe_all(efx);
+	int rc;
 
+#ifdef EFX_NOT_UPSTREAM
+	if (!performance_profile)
+		efx->performance_profile = EFX_PERFORMANCE_PROFILE_AUTO;
+	else if (strcmp(performance_profile, "throughput") == 0)
+		efx->performance_profile = EFX_PERFORMANCE_PROFILE_THROUGHPUT;
+	else if (strcmp(performance_profile, "latency") == 0)
+		efx->performance_profile = EFX_PERFORMANCE_PROFILE_LATENCY;
+	else
+		efx->performance_profile = EFX_PERFORMANCE_PROFILE_AUTO;
+#endif
+
+	rc = efx_probe_common(efx);
+	if (rc)
+		return rc;
+#ifdef EFX_NOT_UPSTREAM
+	if (efx->mcdi->fn_flags &
+	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
+		return 0;
+#endif
+
+	netif_dbg(efx, probe, efx->net_dev, "creating NIC\n");
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	/* Initialise NIC resource information */
+	efx->farch_resources = efx->type->farch_resources;
+	efx->farch_resources.biu_lock = &efx->biu_lock;
+	efx->ef10_resources = efx->type->ef10_resources;
+#endif
+#endif
+
+	/* Carry out hardware-type specific initialisation */
+	rc = nic_probe(efx);
+	if (rc)
+		return rc;
+
+	efx->txq_min_entries =
+		roundup_pow_of_two(2 * efx->type->tx_max_skb_descs(efx));
+
+	/* Initialise the interrupt moderation settings */
+	efx->irq_mod_step_us = DIV_ROUND_UP(efx->timer_quantum_ns, 1000);
+	efx_init_irq_moderation(efx, tx_irq_mod_usec, rx_irq_mod_usec,
+				irq_adapt_enable, true);
+
+	netif_dbg(efx, probe, efx->net_dev, "create port\n");
+
+	/* Connect up MAC/PHY operations table */
+	rc = efx->type->probe_port(efx);
+	if (rc)
+		return rc;
+
+	/* Initialise MAC address to permanent address */
+	ether_addr_copy(efx->net_dev->dev_addr, efx->net_dev->perm_addr);
+
+	rc = efx_check_queue_size(efx, &rx_ring,
+				  EFX_RXQ_MIN_ENT, EFX_MAX_DMAQ_SIZE, true);
+	if (rc == -ERANGE)
+		netif_warn(efx, probe, efx->net_dev,
+			   "rx_ring parameter must be between %u and %lu; clamped to %u\n",
+			   EFX_RXQ_MIN_ENT, EFX_MAX_DMAQ_SIZE, rx_ring);
+	else if (rc == -EINVAL)
+		netif_warn(efx, probe, efx->net_dev,
+			   "rx_ring parameter must be a power of two; rounded to %u\n",
+			   rx_ring);
+	efx->rxq_entries = rx_ring;
+
+	rc = efx_check_queue_size(efx, &tx_ring,
+				  efx->txq_min_entries, EFX_TXQ_MAX_ENT(efx),
+				  true);
+	if (rc == -ERANGE)
+		netif_warn(efx, probe, efx->net_dev,
+			   "tx_ring parameter must be between %u and %lu; clamped to %u\n",
+			   efx->txq_min_entries, EFX_TXQ_MAX_ENT(efx), tx_ring);
+	else if (rc == -EINVAL)
+		netif_warn(efx, probe, efx->net_dev,
+			   "tx_ring parameter must be a power of two; rounded to %u\n",
+			   tx_ring);
+	efx->txq_entries = tx_ring;
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
+	efx_ptp_get_attributes(efx);
+	if (efx_ptp_uses_separate_channel(efx) ||
+	    efx_ptp_use_mac_tx_timestamps(efx))
+#endif
+	efx_ptp_defer_probe_with_channel(efx);
+
+	rc = efx_init_channels(efx);
 	if (rc)
 		return rc;
 
 #ifdef EFX_NOT_UPSTREAM
-	if (efx->mcdi->fn_flags &
-			(1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
-		return 0;
+	if (efx_rss_use_fixed_key) {
+		BUILD_BUG_ON(sizeof(efx_rss_fixed_key) <
+			     sizeof(efx->rss_context.rx_hash_key));
+		memcpy(&efx->rss_context.rx_hash_key, efx_rss_fixed_key,
+		       sizeof(efx->rss_context.rx_hash_key));
+	} else
 #endif
+
+	rc = efx->type->vswitching_probe(efx);
+	if (rc) /* not fatal; the PF will still work fine */
+		netif_warn(efx, probe, efx->net_dev,
+			   "failed to setup vswitching rc=%d, VFs may not function\n",
+			   rc);
 
 	if (efx->type->sriov_init) {
 		rc = efx->type->sriov_init(efx);
@@ -1406,13 +1197,7 @@ static int efx_pci_probe_post_io(struct efx_nic *efx)
 				  "SR-IOV can't be enabled rc %d\n", rc);
 	}
 
-	rc = efx_register_netdev(efx);
-	if (!rc)
-		return 0;
-
-	efx_pci_remove_post_io(efx);
-
-	return rc;
+	return efx_register_netdev(efx);
 }
 
 /* Final NIC shutdown
@@ -1434,26 +1219,39 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	if (!efx_nic_hw_unavailable(efx))
 		efx->state = STATE_UNINIT;
 
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx_dl_supported(efx))
+		efx_dl_unregister_nic(&efx->dl_nic);
+#endif
+#endif
+
 	/* Allow any queued efx_resets() to complete */
 	rtnl_unlock();
 	efx_flush_reset_workqueue(efx);
 
 #if defined(CONFIG_SFC_MTD) && defined(EFX_WORKAROUND_87308)
-	(void)cancel_delayed_work_sync(&efx->mtd_creation_work);
+	(void)cancel_delayed_work_sync(&efx->mtd_struct->creation_work);
 #endif
 
-	efx_unregister_netdev(efx);
-	rtnl_lock();
-	efx_pci_remove_post_io(efx);
-	rtnl_unlock();
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
+	device_remove_file(&efx->pci_dev->dev, &dev_attr_lro);
+#endif
+	device_remove_file(&efx->pci_dev->dev, &dev_attr_phy_type);
+
+	efx->type->remove(efx);
 
 #ifdef CONFIG_SFC_MTD
 #ifdef EFX_WORKAROUND_87308
-	if (atomic_read(&efx->mtds_probed_flag) == 1)
+	if (atomic_read(&efx->mtd_struct->probed_flag) == 1)
 		efx_mtd_remove(efx);
 #else
 	efx_mtd_remove(efx);
 #endif
+#endif
+
+#ifdef CONFIG_SFC_DUMP
+	efx_dump_fini(efx);
 #endif
 
 	unregister_netdevice_notifier(&efx->netdev_notifier);
@@ -1500,7 +1298,11 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	SET_NETDEV_DEV(net_dev, &pci_dev->dev);
 	rc = efx_init_struct(efx, pci_dev, net_dev);
 	if (rc)
-		goto fail1;
+		goto fail;
+#ifdef CONFIG_SFC_MTD
+	if (efx_mtd_init(efx) < 0)
+		goto fail;
+#endif
 
 	netif_info(efx, probe, efx->net_dev,
 		   "Solarflare NIC detected: device %04x:%04x subsys %04x:%04x\n",
@@ -1509,48 +1311,31 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 		   efx->pci_dev->subsystem_device);
 
 #ifdef EFX_NOT_UPSTREAM
-	efx->xdp_en = xdp_alloc_tx_resources;
+	efx->xdp_tx = xdp_alloc_tx_resources;
 #else
-	efx->xdp_en = true;
+	efx->xdp_tx = true;
 #endif
-
-	rc = -ENOMEM;
-	if (!efx_init_channels(efx))
-		goto fail1;
 
 	/* Set up basic I/O (BAR mappings etc) */
 	rc = efx_init_io(efx, efx->type->mem_bar(efx), efx->type->max_dma_mask,
 			 efx->type->mem_map_size(efx));
 	if (rc)
-		goto fail2;
+		goto fail;
 
 	efx->netdev_notifier.notifier_call = efx_netdev_event;
 	rc = register_netdevice_notifier(&efx->netdev_notifier);
 	if (rc)
-		goto fail3;
+		goto fail;
 
-	rc = efx_pci_probe_post_io(efx);
-	if (rc) {
-		/* On failure, retry once immediately.
-		 * If we aborted probe due to a scheduled reset, dismiss it.
-		 */
-		efx->reset_pending = 0;
-		rc = efx_pci_probe_post_io(efx);
-		if (rc) {
-			/* On another failure, retry once more
-			 * after a 50-305ms delay.
-			 */
-			unsigned char r;
-
-			get_random_bytes(&r, 1);
-			msleep((unsigned int)r + 50);
-
-			efx->reset_pending = 0;
-			rc = efx_pci_probe_post_io(efx);
-		}
-	}
+#ifdef CONFIG_SFC_DUMP
+	rc = efx_dump_init(efx);
 	if (rc)
-		goto fail4;
+		goto fail;
+#endif
+
+	rc = efx->type->probe(efx);
+	if (rc)
+		goto fail;
 
 #ifdef EFX_NOT_UPSTREAM
 	if (efx->mcdi->fn_flags &
@@ -1561,14 +1346,28 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	}
 #endif
 
+	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_phy_type);
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "failed to init net dev attributes\n");
+		goto fail;
+	}
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
+	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_lro);
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "failed to init net dev attributes\n");
+		goto fail;
+	}
+#endif
+
 	netif_dbg(efx, probe, efx->net_dev, "initialisation successful\n");
 	if (PCI_FUNC(pci_dev->devfn) == 0)
 		efx_mcdi_log_puts(efx, "probe");
 
 #ifdef CONFIG_SFC_MTD
 #ifdef EFX_WORKAROUND_87308
-	INIT_DELAYED_WORK(&efx->mtd_creation_work, efx_mtd_creation_work);
-	schedule_delayed_work(&efx->mtd_creation_work, 5 * HZ);
+	schedule_delayed_work(&efx->mtd_struct->creation_work, 5 * HZ);
 #else
 	/* Try to create MTDs, but allow this to fail */
 	rtnl_lock();
@@ -1592,23 +1391,23 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	(void)pci_enable_pcie_error_reporting(pci_dev);
 #endif
 
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx_dl_supported(efx)) {
+		rtnl_lock();
+		efx_dl_register_nic(&efx->dl_nic);
+		rtnl_unlock();
+	}
+#endif
+#endif
+
 	if (efx->type->udp_tnl_push_ports)
 		efx->type->udp_tnl_push_ports(efx);
 
-
 	return 0;
 
- fail4:
-	unregister_netdevice_notifier(&efx->netdev_notifier);
- fail3:
-	efx_fini_io(efx);
- fail2:
-	efx_fini_struct(efx);
- fail1:
-	pci_set_drvdata(pci_dev, NULL);
-	WARN_ON(rc > 0);
-	netif_dbg(efx, drv, efx->net_dev, "initialisation failed. rc=%d\n", rc);
-	free_netdev(net_dev);
+fail:
+	efx_pci_remove(pci_dev);
 	return rc;
 }
 
@@ -1649,13 +1448,13 @@ static int efx_pm_freeze(struct device *dev)
 #endif
 #endif
 
-	if (efx->state != STATE_DISABLED) {
+	if (efx_net_active(efx->state)) {
 		efx_device_detach_sync(efx);
 
 		efx_stop_all(efx);
 		efx_disable_interrupts(efx);
 
-		efx->state = STATE_UNINIT;
+		efx->state = efx_freeze(efx->state);
 	}
 
 	rtnl_unlock();
@@ -1681,7 +1480,7 @@ static int efx_pm_thaw(struct device *dev)
 
 	rtnl_lock();
 
-	if (efx->state != STATE_DISABLED) {
+	if (efx_frozen(efx->state)) {
 		rc = efx_enable_interrupts(efx);
 		if (rc)
 			goto fail;
@@ -1694,7 +1493,7 @@ static int efx_pm_thaw(struct device *dev)
 
 		efx_device_attach_if_not_resetting(efx);
 
-		efx->state = STATE_READY;
+		efx->state = efx_thaw(efx->state);
 
 		efx->type->resume_wol(efx);
 	}

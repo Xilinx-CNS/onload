@@ -193,7 +193,8 @@ fi
 if [ -f $KPATH/.config ];
 then
     cp $KPATH/.config $KPATH/.config.old
-    grep -v "CONFIG_SFC" $KPATH/.config.old > $KPATH/.config
+    grep -v -E "CONFIG_SFC|CONFIG_NET_VENDOR_SOLARFLARE" $KPATH/.config.old > $KPATH/.config
+    echo "CONFIG_NET_VENDOR_SOLARFLARE=y" >> $KPATH/.config
 
     for kernel_config in `grep "^config SFC" Kconfig | sed 's/config //'`;
     do
@@ -206,4 +207,6 @@ then
 	fi
 	echo "CONFIG_$kernel_config=$4" >> $KPATH/.config
     done
+else
+    echo "WARNING: No .config in $KPATH"
 fi

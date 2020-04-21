@@ -147,14 +147,14 @@ sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 			   selftest.o ethtool_common.o ethtool.o \
 			   mcdi.o mcdi_port.o mcdi_port_common.o mcdi_functions.o \
 			   mcdi_filters.o ef10_sriov.o tx_tso.o tc-stub.o \
-			   efx_devlink.o
+			   efx_devlink.o xdp.o
 
 sfc_ef100-y             := mcdi.o ef100.o efx_common.o efx_channels.o \
                            ef100_nic.o nic.o ef100_netdev.o ef100_ethtool.o \
                            ef100_rx.o rx_common.o ef100_tx.o tx_common.o \
 			   ethtool_common.o mcdi_port_common.o mcdi_functions.o \
 			   mcdi_filters.o ef100_sriov.o ef100_rep.o tc.o mae.o \
-			   efx_devlink.o selftest.o
+			   efx_devlink.o selftest.o xdp.o
 
 sfc_driverlink-y	:= driverlink.o
 

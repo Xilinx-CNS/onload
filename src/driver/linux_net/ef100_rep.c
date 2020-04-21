@@ -18,7 +18,7 @@
 #define EFX_EF100_VFREP_DRIVER	"efx_ef100_vfrep"
 #define EFX_EF100_VFREP_VERSION	"0.0.1"
 
-static void efx_ef100_vfrep_rx_work(struct work_struct *work);
+static int efx_ef100_vfrep_poll(struct napi_struct *napi, int weight);
 
 static int efx_ef100_vfrep_init_struct(struct efx_nic *efx,
 				       struct efx_vfrep *efv, unsigned int i)
@@ -32,7 +32,6 @@ static int efx_ef100_vfrep_init_struct(struct efx_nic *efx,
 	__skb_queue_head_init(&efv->rx_list);
 #endif
 	spin_lock_init(&efv->rx_lock);
-	INIT_WORK(&efv->rx_work, efx_ef100_vfrep_rx_work);
 	efv->msg_enable = NETIF_MSG_DRV | NETIF_MSG_PROBE |
 			  NETIF_MSG_LINK | NETIF_MSG_IFDOWN |
 			  NETIF_MSG_IFUP | NETIF_MSG_RX_ERR |
@@ -42,11 +41,19 @@ static int efx_ef100_vfrep_init_struct(struct efx_nic *efx,
 
 static int efx_ef100_vfrep_open(struct net_device *net_dev)
 {
+	struct efx_vfrep *efv = netdev_priv(net_dev);
+
+	netif_napi_add(net_dev, &efv->napi, efx_ef100_vfrep_poll, NAPI_POLL_WEIGHT);
+	napi_enable(&efv->napi);
 	return 0;
 }
 
 static int efx_ef100_vfrep_close(struct net_device *net_dev)
 {
+	struct efx_vfrep *efv = netdev_priv(net_dev);
+
+	napi_disable(&efv->napi);
+	netif_napi_del(&efv->napi);
 	return 0;
 }
 
@@ -195,6 +202,12 @@ static struct efx_vfrep *efx_ef100_vfrep_create_netdev(struct efx_nic *efx,
 	if (!net_dev)
 		return ERR_PTR(-ENOMEM);
 
+	efv = netdev_priv(net_dev);
+	rc = efx_ef100_vfrep_init_struct(efx, efv, i);
+	if (rc)
+		goto fail1;
+	efv->net_dev = net_dev;
+
 	/* Ensure we don't race with ef100_{start,stop}_reps() and the setting
 	 * of efx->port_enabled under ef100_net_{start,stop}().
 	 */
@@ -204,12 +217,6 @@ static struct efx_vfrep *efx_ef100_vfrep_create_netdev(struct efx_nic *efx,
 	else
 		netif_carrier_off(net_dev);
 	rtnl_unlock();
-
-	efv = netdev_priv(net_dev);
-	rc = efx_ef100_vfrep_init_struct(efx, efv, i);
-	if (rc)
-		goto fail1;
-	efv->net_dev = net_dev;
 
 	net_dev->netdev_ops = &efx_ef100_vfrep_netdev_ops;
 	net_dev->ethtool_ops = &efx_ef100_vfrep_ethtool_ops;
@@ -350,40 +357,54 @@ void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i)
 	efx_ef100_vfrep_destroy_netdev(efv);
 }
 
+static int efx_ef100_vfrep_poll(struct napi_struct *napi, int weight)
+{
+	struct efx_vfrep *efv = container_of(napi, struct efx_vfrep, napi);
+	unsigned int read_index;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
-static void efx_ef100_vfrep_rx_work(struct work_struct *work)
-{
-	struct efx_vfrep *efv = container_of(work, struct efx_vfrep, rx_work);
 	struct list_head head;
-
-	INIT_LIST_HEAD(&head);
-	/* Grab all pending SKBs */
-	spin_lock(&efv->rx_lock);
-	list_splice_init(&efv->rx_list, &head);
-	spin_unlock(&efv->rx_lock);
-	/* Receive them */
-	netif_receive_skb_list(&head);
-}
 #else
-static void efx_ef100_vfrep_rx_work(struct work_struct *work)
-{
-	struct efx_vfrep *efv = container_of(work, struct efx_vfrep, rx_work);
 	struct sk_buff_head head;
+#endif
+	struct sk_buff *skb;
+	int spent = 0;
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
+	INIT_LIST_HEAD(&head);
+#else
 	__skb_queue_head_init(&head);
-	/* Grab all pending SKBs */
-	spin_lock(&efv->rx_lock);
-	skb_queue_splice_init(&efv->rx_list, &head);
-	spin_unlock(&efv->rx_lock);
+#endif
+	/* Grab up to 'weight' pending SKBs */
+	spin_lock_bh(&efv->rx_lock);
+	read_index = efv->write_index;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
+	while (spent < weight && !list_empty(&efv->rx_list)) {
+		skb = list_first_entry(&efv->rx_list, struct sk_buff, list);
+		list_del(&skb->list);
+		list_add_tail(&skb->list, &head);
+#else
+	while (spent < weight) {
+		skb = __skb_dequeue(&efv->rx_list);
+		if (!skb)
+			break;
+		__skb_queue_tail(&head, skb);
+#endif
+		spent++;
+	}
+	spin_unlock_bh(&efv->rx_lock);
 	/* Receive them */
 	netif_receive_skb_list(&head);
+	if (spent < weight)
+		if (napi_complete_done(napi, spent))
+			efv->read_index = read_index;
+	return spent;
 }
-#endif
 
 void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_buf)
 {
 	u8 *eh = efx_rx_buf_va(rx_buf);
 	struct sk_buff *skb;
+	bool primed;
 
 	skb = netdev_alloc_skb(efv->net_dev, rx_buf->len);
 	if (!skb) {
@@ -406,15 +427,18 @@ void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_b
 	atomic_add(rx_buf->len, &efv->stats.rx_bytes);
 
 	/* Add it to the rx list */
-	spin_lock(&efv->rx_lock);
+	spin_lock_bh(&efv->rx_lock);
+	primed = efv->read_index == efv->write_index;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	list_add_tail(&skb->list, &efv->rx_list);
 #else
 	__skb_queue_tail(&efv->rx_list, skb);
 #endif
-	spin_unlock(&efv->rx_lock);
+	efv->write_index++;
+	spin_unlock_bh(&efv->rx_lock);
 	/* Trigger rx work */
-	schedule_work(&efv->rx_work);
+	if (primed)
+		napi_schedule(&efv->napi);
 }
 
 /* Returns the representor netdevice owning a dynamic m-port, or NULL.

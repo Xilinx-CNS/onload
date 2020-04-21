@@ -19,3 +19,5 @@ void ef100_unregister_netdev(struct efx_nic *efx);
 netdev_tx_t __ef100_hard_start_xmit(struct sk_buff *skb,
 				    struct net_device *net_dev,
 				    struct efx_vfrep *efv);
+void ef100_start_reps(struct efx_nic *efx);
+void ef100_stop_reps(struct efx_nic *efx);

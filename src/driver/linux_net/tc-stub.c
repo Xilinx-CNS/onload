@@ -20,17 +20,3 @@ int efx_init_struct_tc(struct efx_nic *efx)
 void efx_fini_struct_tc(struct efx_nic *efx)
 {
 }
-
-/* Since these calls are only ever made on ef100 NICs, these functions should
- * never be called.
- */
-int efx_tc_start_stats(struct efx_nic *efx)
-{
-	WARN_ON_ONCE(1);
-	return 0;
-}
-
-void efx_tc_stop_stats(struct efx_nic *efx)
-{
-	WARN_ON_ONCE(1);
-}

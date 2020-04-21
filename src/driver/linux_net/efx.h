@@ -25,6 +25,11 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu);
 void efx_vlan_rx_register(struct net_device *dev, struct vlan_group *vlan_group);
 #endif
 
+int efx_pci_probe_post_io(struct efx_nic *efx,
+			  int (*nic_probe)(struct efx_nic *efx));
+void efx_pci_remove_post_io(struct efx_nic *efx,
+			    void (*nic_remove)(struct efx_nic *efx));
+
 /* TX */
 netdev_tx_t efx_hard_start_xmit(struct sk_buff *skb,
 				struct net_device *net_dev);
@@ -45,7 +50,9 @@ void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 static inline void efx_rx_flush_packet(struct efx_channel *channel)
 {
 	if (channel->rx_pkt_n_frags)
-		__efx_rx_packet(channel);
+		if (!channel->type->receive_raw ||
+		    !channel->type->receive_raw(channel))
+			__efx_rx_packet(channel);
 }
 
 #define EFX_MAX_DMAQ_SIZE 4096UL
@@ -301,6 +308,8 @@ static inline int efx_mtd_probe(struct efx_nic *efx)
 {
 	return efx->type->mtd_probe(efx);
 }
+int efx_mtd_init(struct efx_nic *efx);
+void efx_mtd_free(struct efx_nic *efx);
 void efx_mtd_rename(struct efx_nic *efx);
 void efx_mtd_remove(struct efx_nic *efx);
 #ifdef EFX_WORKAROUND_87308
@@ -342,6 +351,11 @@ static inline void efx_device_detach_sync(struct efx_nic *efx)
 {
 	struct net_device *dev = efx->net_dev;
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	/* We must stop reps (which use our TX) before we stop ourselves. */
+	if (efx->type->detach_reps)
+		efx->type->detach_reps(efx);
+#endif
 	/* Lock/freeze all TX queues so that we can be sure the
 	 * TX scheduler is stopped when we're done and before
 	 * netif_device_present() becomes false.
@@ -353,8 +367,13 @@ static inline void efx_device_detach_sync(struct efx_nic *efx)
 
 static inline void efx_device_attach_if_not_resetting(struct efx_nic *efx)
 {
-	if ((efx->state != STATE_DISABLED) && !efx->reset_pending)
+	if ((efx->state != STATE_DISABLED) && !efx->reset_pending) {
 		netif_device_attach(efx->net_dev);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+		if (efx->type->attach_reps)
+			efx->type->attach_reps(efx);
+#endif
+	}
 }
 
 static inline void efx_rwsem_assert_write_locked(struct rw_semaphore *sem)
@@ -362,14 +381,9 @@ static inline void efx_rwsem_assert_write_locked(struct rw_semaphore *sem)
 #ifdef DEBUG
 	if (down_read_trylock(sem)) {
 		up_read(sem);
-		BUG();
+		WARN_ON(1);
 	}
 #endif
 }
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_TX)
-int efx_xdp_tx_buffers(struct efx_nic *efx, int n, struct xdp_frame **xdpfs,
-		       bool flush);
-#endif
 
 #endif /* EFX_EFX_H */

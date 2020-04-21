@@ -8,9 +8,11 @@
  */
 #include "ef100_sriov.h"
 #include "ef100_rep.h"
+#include "ef100_nic.h"
 
 static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 {
+	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct pci_dev *dev = efx->pci_dev;
 	int rc, i;
 
@@ -26,6 +28,13 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 		if (rc)
 			goto fail2;
 	}
+	spin_lock_bh(&nic_data->vf_reps_lock);
+	nic_data->rep_count = num_vfs;
+	if (netif_running(efx->net_dev))
+		__ef100_attach_reps(efx);
+	else
+		__ef100_detach_reps(efx);
+	spin_unlock_bh(&nic_data->vf_reps_lock);
 
 	return 0;
 
@@ -41,6 +50,7 @@ fail1:
 
 int efx_ef100_pci_sriov_disable(struct efx_nic *efx, bool force)
 {
+	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct pci_dev *dev = efx->pci_dev;
 	unsigned int vfs_assigned = 0;
 	int i;
@@ -54,6 +64,13 @@ int efx_ef100_pci_sriov_disable(struct efx_nic *efx, bool force)
 		return -EBUSY;
 	}
 #endif
+
+	/* We take the lock as a barrier to ensure no-one holding the lock
+	 * still sees nonzero rep_count when we start destroying reps
+	 */
+	spin_lock_bh(&nic_data->vf_reps_lock);
+	nic_data->rep_count = 0;
+	spin_unlock_bh(&nic_data->vf_reps_lock);
 
 	for (i = 0; i < efx->vf_count; i++)
 		efx_ef100_vfrep_destroy(efx, i);

@@ -54,7 +54,7 @@ static int ef100_pci_walk_xilinx_table(struct efx_nic *efx, u64 offset,
 
 static u32 _ef100_pci_get_bar_bits_with_width(struct efx_nic *efx,
 					      int structure_start,
-				              int lbn, int width)
+					      int lbn, int width)
 {
 	efx_dword_t dword;
 
@@ -71,9 +71,9 @@ static int ef100_pci_parse_ef100_entry(struct efx_nic *efx, int entry_location,
 				       struct ef100_func_ctl_window *result)
 {
 	u32 bar = ef100_pci_get_bar_bits(efx, entry_location,
-				         ESF_GZ_CFGBAR_EF100_BAR);
+					 ESF_GZ_CFGBAR_EF100_BAR);
 	u64 offset = ef100_pci_get_bar_bits(efx, entry_location,
-				            ESF_GZ_CFGBAR_EF100_FUNC_CTL_WIN_OFF) << ESE_GZ_EF100_FUNC_CTL_WIN_OFF_SHIFT;
+					    ESF_GZ_CFGBAR_EF100_FUNC_CTL_WIN_OFF) << ESE_GZ_EF100_FUNC_CTL_WIN_OFF_SHIFT;
 
 	netif_dbg(efx, probe, efx->net_dev,
 		  "Found EF100 function control window bar=%d offset=0x%llx\n",
@@ -189,22 +189,22 @@ static int ef100_pci_walk_xilinx_table(struct efx_nic *efx, u64 offset,
 
 	while (true) {
 		u32 id = ef100_pci_get_bar_bits(efx, current_entry,
-					        ESF_GZ_CFGBAR_ENTRY_FORMAT);
+						ESF_GZ_CFGBAR_ENTRY_FORMAT);
 		u32 last = ef100_pci_get_bar_bits(efx, current_entry,
-					          ESF_GZ_CFGBAR_ENTRY_LAST);
+						  ESF_GZ_CFGBAR_ENTRY_LAST);
 		u32 rev = ef100_pci_get_bar_bits(efx, current_entry,
-					         ESF_GZ_CFGBAR_ENTRY_REV);
+						 ESF_GZ_CFGBAR_ENTRY_REV);
 		u32 entry_size;
 
 		if (id == ESE_GZ_CFGBAR_ENTRY_LAST)
 			return 0;
 
 		entry_size = ef100_pci_get_bar_bits(efx, current_entry,
-					            ESF_GZ_CFGBAR_ENTRY_SIZE);
+						    ESF_GZ_CFGBAR_ENTRY_SIZE);
 
 		netif_dbg(efx, probe, efx->net_dev,
 			  "Seen Xilinx table entry 0x%x size 0x%x at 0x%llx in BAR[%d]\n",
-		          id, entry_size, current_entry, efx->mem_bar);
+			  id, entry_size, current_entry, efx->mem_bar);
 
 		if (entry_size < sizeof(uint32_t)*2) {
 			netif_err(efx, probe, efx->net_dev,
@@ -215,15 +215,15 @@ static int ef100_pci_walk_xilinx_table(struct efx_nic *efx, u64 offset,
 		switch(id) {
 		case ESE_GZ_CFGBAR_ENTRY_EF100:
 			if ((rev != ESE_GZ_CFGBAR_ENTRY_REV_EF100) ||
-                            (entry_size < ESE_GZ_CFGBAR_ENTRY_SIZE_EF100)) {
+			    (entry_size < ESE_GZ_CFGBAR_ENTRY_SIZE_EF100)) {
 				netif_err(efx, probe, efx->net_dev,
 					  "Bad length or rev for EF100 entry in Xilinx capabilities table. entry_size=%d rev=%d.\n",
-				          entry_size, rev);
+					  entry_size, rev);
 				return -EINVAL;
 			}
 
 			rc = ef100_pci_parse_ef100_entry(efx, current_entry,
-				result);
+							 result);
 			if (rc)
 				return rc;
 			break;
@@ -259,7 +259,7 @@ static int ef100_pci_walk_xilinx_table(struct efx_nic *efx, u64 offset,
 }
 
 static int _ef100_pci_get_config_bits_with_width(struct efx_nic *efx,
-	                                         int structure_start, int lbn,
+						 int structure_start, int lbn,
 						 int width, u32 *result)
 {
 	int pos = structure_start + ROUND_DOWN_TO_DWORD(lbn);
@@ -412,7 +412,7 @@ static int ef100_pci_find_func_ctrl_window(struct efx_nic *efx,
 			bool has_offset_hi = (vsec_len >= ESE_GZ_VSEC_LEN_HIGH_OFFT);
 
 			rc = ef100_pci_parse_xilinx_cap(efx, vndr_cap,
-				                        has_offset_hi, result);
+							has_offset_hi, result);
 			if (rc)
 				return rc;
 		}
@@ -427,6 +427,59 @@ static int ef100_pci_find_func_ctrl_window(struct efx_nic *efx,
 
 	return 0;
 }
+
+/* Final NIC shutdown
+ * This is called only at module unload (or hotplug removal).  A PF can call
+ * this on its VFs to ensure they are unbound first.
+ */
+static void ef100_pci_remove(struct pci_dev *pci_dev)
+{
+	struct efx_nic *efx;
+
+	efx = pci_get_drvdata(pci_dev);
+	if (!efx)
+		return;
+
+	rtnl_lock();
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx_dl_supported(efx))
+		efx_dl_unregister_nic(&efx->dl_nic);
+#endif
+#endif
+	dev_close(efx->net_dev);
+	rtnl_unlock();
+
+	/* Unregistering our netdev notifier triggers unbinding of TC indirect
+	 * blocks, so we have to do it before PCI removal.
+	 */
+	unregister_netdevice_notifier(&efx->netdev_notifier);
+	unregister_netevent_notifier(&efx->netevent_notifier);
+	ef100_remove(efx);
+	efx_fini_io(efx);
+	netif_dbg(efx, drv, efx->net_dev, "shutdown successful\n");
+
+	pci_set_drvdata(pci_dev, NULL);
+	efx_fini_struct(efx);
+	free_netdev(efx->net_dev);
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
+	pci_disable_pcie_error_reporting(pci_dev);
+#endif
+};
+
+#ifdef EFX_C_MODEL
+static int efx_check_func_ctl_magic(struct efx_nic *efx)
+{
+	efx_dword_t reg;
+
+	efx_readd(efx, &reg, efx_reg(efx, ER_GZ_NIC_MAGIC));
+	if (EFX_DWORD_FIELD(reg, EFX_DWORD_0) != EFE_GZ_NIC_MAGIC_EXPECTED)
+		return -EIO;
+
+	return 0;
+}
+#endif
 
 static int ef100_pci_probe(struct pci_dev *pci_dev,
 			   const struct pci_device_id *entry)
@@ -447,7 +500,7 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	SET_NETDEV_DEV(net_dev, &pci_dev->dev);
 	rc = efx_init_struct(efx, pci_dev, net_dev);
 	if (rc)
-		goto fail1;
+		goto fail;
 
 	efx->vi_stride = EF100_DEFAULT_VI_STRIDE;
 	netif_info(efx, probe, efx->net_dev,
@@ -458,7 +511,7 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 		netif_err(efx, probe, efx->net_dev,
 			"Error looking for ef100 function control window, rc=%d\n",
 			rc);
-		goto fail0;
+		goto fail;
 	}
 
 	if (!fcw.valid) {
@@ -471,7 +524,7 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	if (fcw.offset > pci_resource_len(efx->pci_dev, fcw.bar) - ESE_GZ_FCW_LEN) {
 		netif_err(efx, probe, efx->net_dev,
 			  "Func control window overruns BAR\n");
-		return -EINVAL;
+		goto fail;
 	}
 
 	/* Set up basic I/O (BAR mappings etc) */
@@ -479,16 +532,25 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 			 DMA_BIT_MASK(ESF_GZ_TX_SEND_ADDR_WIDTH),
 			 pci_resource_len(efx->pci_dev, fcw.bar));
 	if (rc)
-		goto fail1;
+		goto fail;
 
 	efx->reg_base = fcw.offset;
+
+#ifdef EFX_C_MODEL
+	rc = efx_check_func_ctl_magic(efx);
+	if (rc) {
+		netif_err(efx, probe, efx->net_dev,
+			  "Func control window magic is wrong\n");
+		goto fail;
+	}
+#endif
 
 	efx->netdev_notifier.notifier_call = ef100_netdev_event;
 	rc = register_netdevice_notifier(&efx->netdev_notifier);
 	if (rc) {
 		netif_err(efx, probe, efx->net_dev,
 			  "Failed to register netdevice notifier, rc=%d\n", rc);
-		goto fail1;
+		goto fail;
 	}
 
 	efx->netevent_notifier.notifier_call = ef100_netevent_event;
@@ -496,70 +558,31 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	if (rc) {
 		netif_err(efx, probe, efx->net_dev,
 			  "Failed to register netevent notifier, rc=%d\n", rc);
-		goto fail2;
+		goto fail;
 	}
 
 	rc = efx->type->probe(efx);
 	if (rc)
-		goto fail3;
+		goto fail;
 
-	rc = ef100_register_netdev(efx);
-	if (rc)
-		goto fail4;
+	netif_dbg(efx, probe, efx->net_dev, "initialisation successful\n");
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx_dl_supported(efx)) {
+		rtnl_lock();
+		efx_dl_register_nic(&efx->dl_nic);
+		rtnl_unlock();
+	}
+#endif
+#endif
 
 	return 0;
 
-fail4:
-	free_netdev(efx->net_dev);
-fail3:
-	unregister_netevent_notifier(&efx->netevent_notifier);
-fail2:
-	unregister_netdevice_notifier(&efx->netdev_notifier);
-fail1:
-	efx_fini_io(efx);
-fail0:
-	pci_set_drvdata(pci_dev, NULL);
-	WARN_ON(rc > 0);
-	if (rc == -ENODEV)
-		netif_info(efx, probe, efx->net_dev,
-			   "No network port on this PCI function");
-	else
-		netif_dbg(efx, drv, efx->net_dev,
-			  "initialisation failed. rc=%d\n", rc);
-	free_netdev(net_dev);
+fail:
+	ef100_pci_remove(pci_dev);
 	return rc;
 }
-
-/* Final NIC shutdown
- * This is called only at module unload (or hotplug removal).  A PF can call
- * this on its VFs to ensure they are unbound first.
- */
-static void ef100_pci_remove(struct pci_dev *pci_dev)
-{
-	struct efx_nic *efx;
-
-	efx = pci_get_drvdata(pci_dev);
-	if (!efx)
-		return;
-
-	ef100_unregister_netdev(efx);
-	/* Unregistering our netdev notifier triggers unbinding of TC indirect
-	 * blocks, so we have to do it before PCI removal.
-	 */
-	unregister_netdevice_notifier(&efx->netdev_notifier);
-	unregister_netevent_notifier(&efx->netevent_notifier);
-	ef100_remove(efx);
-	efx_fini_io(efx);
-	netif_dbg(efx, drv, efx->net_dev, "shutdown successful\n");
-
-	pci_set_drvdata(pci_dev, NULL);
-	efx_fini_struct(efx);
-	free_netdev(efx->net_dev);
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
-	pci_disable_pcie_error_reporting(pci_dev);
-#endif
-};
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_CONFIGURE) || (defined(CONFIG_SFC_SRIOV) && defined(EFX_HAVE_PCI_DRIVER_RH))
 static int ef100_pci_sriov_configure(struct pci_dev *dev, int num_vfs)
