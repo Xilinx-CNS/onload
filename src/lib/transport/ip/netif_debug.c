@@ -869,9 +869,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   ci_ip_timer_state its;
 #endif
   ci_uint64 tmp;
-#ifdef __KERNEL__
-  struct timespec nowspec;
-#else
+#ifndef __KERNEL__
   time_t nowt;
   char buff[20];
 #endif
@@ -906,9 +904,8 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
           ? "USE_ALIEN_LADDRS" : ""
       );
 #ifdef __KERNEL__
-  getnstimeofday(&nowspec);
   logger(log_arg, "  creation_time=%u (delta=%usecs)", ns->creation_time_sec,
-         (ci_uint32) nowspec.tv_sec - ns->creation_time_sec);
+         (ci_uint32) get_seconds() - ns->creation_time_sec);
 #else
   nowt = ns->creation_time_sec;
   strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&nowt));

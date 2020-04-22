@@ -53,7 +53,6 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
 {
   ci_netif_state_nic_t* nn;
   ci_netif_state* nis = ni->state;
-  struct timespec timetemp;
   int nic_i;
   int i;
 
@@ -186,8 +185,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   nis->pid = task_pid_vnr(current);
 #endif
 
-  getnstimeofday(&timetemp);
-  nis->creation_time_sec = timetemp.tv_sec;
+  nis->creation_time_sec = get_seconds();
 #if CI_CFG_FD_CACHING
   nis->passive_cache_avail_stack = nis->opts.sock_cache_max;
 #endif
