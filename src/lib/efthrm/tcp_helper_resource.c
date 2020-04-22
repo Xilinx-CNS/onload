@@ -947,10 +947,11 @@ static int allocate_pio(tcp_helper_resource_t* trs, int intf_i,
           return 0;
         }
         else {
-          CI_NDEBUG( if( rc != -ENETDOWN ) )
+          CI_NDEBUG( if( rc != -ENETDOWN && rc != -EPERM ) )
             /* ENETDOWN means absent hardware, so this failure is
              * expected, and we should not warn about it in NDEBUG
-             * builds 
+             * builds.  EPERM is expected on NICs that don't
+             * support PIO.
              */
             NI_LOG(ni, RESOURCE_WARNINGS,
                    "[%s]: Unable to alloc PIO (%d), will continue without it",

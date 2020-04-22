@@ -137,7 +137,7 @@ int efrm_pio_alloc(struct efrm_pd *pd, struct efrm_pio **pio_out)
 
 	rc = ef10_nic_piobuf_alloc(nic, &pio->epio_handle);
 	if (rc < 0) {
-		if( rc == -ENOSPC || rc == -ENETDOWN )
+		if( rc == -ENOSPC || rc == -ENETDOWN || rc == -EPERM )
 			EFRM_TRACE("%s: ef10_nic_piobuf_alloc failed: %d\n",
 				 __FUNCTION__, rc);
 		else
