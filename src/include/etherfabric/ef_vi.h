@@ -419,6 +419,18 @@ typedef struct {
 } ef_iovec;
 
 
+/*! \brief ef_timespec is equal to struct timespec (for now),
+** but may change in future for 2038Y.
+*/
+#ifdef __KERNEL__
+typedef struct {
+  long tv_sec;
+  long tv_nsec;
+} ef_timespec;
+#else
+#define ef_timespec struct timespec
+#endif
+
 /**********************************************************************
  * ef_vi **************************************************************
  **********************************************************************/
@@ -1221,7 +1233,7 @@ extern int ef_vi_receive_post(ef_vi* vi, ef_addr addr, ef_request_id dma_id);
 ** behavior of this function is undefined.
 */
 extern int ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
-                                       struct timespec* ts_out);
+                                       ef_timespec* ts_out);
 
 
 /*! \brief Retrieve the UTC timestamp associated with a received packet,
@@ -1273,7 +1285,7 @@ extern int ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
 */
 extern int
 ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
-                                            struct timespec* ts_out,
+                                            ef_timespec* ts_out,
                                             unsigned* flags_out);
 
 

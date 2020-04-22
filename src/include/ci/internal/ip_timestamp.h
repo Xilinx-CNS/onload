@@ -60,7 +60,7 @@ onload_timestamping_want_tx_nic(unsigned flags)
 
 static inline void
 onload_timestamp_to_timespec(const struct onload_timestamp* in,
-                             struct timespec* out)
+                             ef_timespec* out)
 {
   out->tv_sec = in->sec;
   out->tv_nsec = in->sec == 0 ? 0 : in->nsec;
@@ -135,7 +135,7 @@ ci_rx_pkt_timestamp(const ci_ip_pkt_fmt* pkt, struct onload_timestamp* ts_out, i
 }
 
 static inline void
-ci_rx_pkt_timespec(const ci_ip_pkt_fmt* pkt, struct timespec* ts_out, int src)
+ci_rx_pkt_timespec(const ci_ip_pkt_fmt* pkt, ef_timespec* ts_out, int src)
 {
   struct onload_timestamp ts;
   ci_rx_pkt_timestamp(pkt, &ts, src);

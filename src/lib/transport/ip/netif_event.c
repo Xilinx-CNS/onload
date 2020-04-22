@@ -227,7 +227,7 @@ static void measure_processing_delay(ci_netif* ni, struct timespec pkt_ts,
 #else
 
 static inline void measure_processing_delay(ci_netif* ni,
-                                            struct timespec pkt_ts,
+                                            ef_timespec pkt_ts,
                                             unsigned sync_flags)
 {
 }
@@ -295,7 +295,7 @@ static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
 
   if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_HW_TS_EN ) {
     unsigned sync_flags;
-    struct timespec stamp;
+    ef_timespec stamp;
     int rc = ef_vi_receive_get_timestamp_with_sync_flags
       (&netif->nic_hw[pkt->intf_i].vi,
        PKT_START(pkt) - nsn->rx_prefix_len, &stamp, &sync_flags);
@@ -314,7 +314,7 @@ static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
       measure_processing_delay(netif, stamp, sync_flags);
 
       LOG_NR(log(LPF "RX id=%d timestamp: %lu.%09lu sync %d",
-          OO_PKT_FMT(pkt), stamp.tv_sec, stamp.tv_nsec, sync_flags));
+          OO_PKT_FMT(pkt), (long)stamp.tv_sec, stamp.tv_nsec, sync_flags));
     } else {
       LOG_NR(log(LPF "RX id=%d missing timestamp", OO_PKT_FMT(pkt)));
       pkt->hw_stamp.tv_sec = 0;

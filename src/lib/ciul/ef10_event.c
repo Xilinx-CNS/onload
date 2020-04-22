@@ -519,7 +519,7 @@ ef_vi_inline void ef10_tx_event(ef_vi* evq, const ef_vi_event* ev,
 
 ef_vi_inline int
 ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync(ef_vi* vi,
-	const void* pkt, struct timespec* ts_out, unsigned* flags_out,
+	const void* pkt, ef_timespec* ts_out, unsigned* flags_out,
 	uint32_t tsync_minor, uint32_t tsync_major)
 {
   const uint32_t FLAG_NO_TIMESTAMP = 0x80000000;
@@ -602,7 +602,7 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync(ef_vi* vi,
 
 ef_vi_inline int
 ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync_qns
-	(ef_vi* vi, const void* pkt, struct timespec* ts_out,
+	(ef_vi* vi, const void* pkt, ef_timespec* ts_out,
 	 unsigned* flags_out, uint32_t tsync_minor, uint32_t tsync_major)
 {
   const uint32_t NO_TIMESTAMP = 0xFFFFFFFF;
@@ -657,7 +657,7 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync_qns
   else if(likely( pkt_minor != NO_TIMESTAMP + vi->rx_ts_correction ))
     pkt_minor += ONE_SEC;
   else {
-    *ts_out = (struct timespec) { 0 };
+    *ts_out = (ef_timespec) { 0 };
     return -ENODATA;
   }
   EF_VI_ASSERT( pkt_minor < ONE_SEC );
@@ -684,7 +684,7 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync_qns
   }
   else {
     /* Zero ts_out in case of failure to avoid returning garbage. */
-    *ts_out = (struct timespec) { 0 };
+    *ts_out = (ef_timespec) { 0 };
     evqs->sync_timestamp_synchronised = 0;
     return (tsync_major == ~0u) ? -ENOMSG : -EL2NSYNC;
   }
@@ -696,7 +696,7 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync_qns
 }
 
 int ef10_receive_get_timestamp_with_sync_flags_internal
-	(ef_vi* vi, const void* pkt, struct timespec* ts_out,
+	(ef_vi* vi, const void* pkt, ef_timespec* ts_out,
 	 unsigned* flags_out, uint32_t tsync_minor, uint32_t tsync_major)
 {
   /* This function is where TCPDirect hooks in to implement its own
@@ -713,7 +713,7 @@ int ef10_receive_get_timestamp_with_sync_flags_internal
 
 int
 ef10_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
-					   struct timespec* ts_out,
+					   ef_timespec* ts_out,
 					   unsigned* flags_out)
 {
 
@@ -731,7 +731,7 @@ ef10_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
    * storing timestamps to translate them later and will be dealing with
    * the case of the eventq being out of sync itself. */
   if(unlikely( ! evqs->sync_timestamp_synchronised )) {
-    *ts_out = (struct timespec) { 0 };
+    *ts_out = (ef_timespec) { 0 };
     return -EL2NSYNC;
   }
   else {
@@ -743,7 +743,7 @@ ef10_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
 
 int
 ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
-					    struct timespec* ts_out,
+					    ef_timespec* ts_out,
 				            unsigned* flags_out)
 {
   return ef10_receive_get_timestamp_with_sync_flags(vi, pkt, ts_out,
@@ -753,7 +753,7 @@ ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
 
 extern int
 ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
-			    struct timespec* ts_out)
+			    ef_timespec* ts_out)
 {
   unsigned flags_out;
   int rc = ef10_receive_get_timestamp_with_sync_flags
@@ -968,7 +968,7 @@ ef_vi_inline int ef10_unbundle_one_packet(ef_vi* vi,
   const uint8_t* prefix = (void*)((char*) pkt + EF_VI_PS_METADATA_OFFSET);
   uint16_t pkt_len, orig_len;
   unsigned ts_flags = 0;
-  struct timespec ts;
+  ef_timespec ts;
   int offset, rc;
 
   EF_VI_ASSERT(((ci_uintptr_t) prefix & (EF_VI_PS_ALIGNMENT - 1)) == 0);
