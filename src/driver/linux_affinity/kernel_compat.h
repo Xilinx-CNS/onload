@@ -6,6 +6,7 @@
 
 #include "driver/linux_affinity/autocompat.h"
 #include <linux/proc_fs.h>
+#include <linux/version.h>
 
 
 #ifndef EFRM_HAVE_WAIT_QUEUE_ENTRY
@@ -73,6 +74,20 @@ static inline struct inode *file_inode(const struct file *f)
 #define get_netns_id(net_ns)     ((net_ns)->proc_inum)
 #else
 #define get_netns_id(net_ns)     0
+#endif
+
+
+/* Compat for linux < 5.5 */
+#ifndef EFRM_HAVE_STRUCT_PROC_OPS
+#define proc_ops file_operations
+#define proc_open open
+#define proc_read read
+#define proc_write write
+#define proc_lseek llseek
+#define proc_release release
+#define PROC_OPS_SET_OWNER .owner = THIS_MODULE,
+#else
+#define PROC_OPS_SET_OWNER
 #endif
 
 #endif

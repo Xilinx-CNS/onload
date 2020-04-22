@@ -89,12 +89,12 @@ static int efrm_open_pd_stats(struct inode *inode, struct file *file)
 {
 	return single_open(file, efrm_read_pd_stats, PDE_DATA(inode));
 }
-static const struct file_operations efrm_fops_pd_stats = {
-	.owner		= THIS_MODULE,
-	.open		= efrm_open_pd_stats,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+static const struct proc_ops efrm_fops_pd_stats = {
+	PROC_OPS_SET_OWNER
+	.proc_open	= efrm_open_pd_stats,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
 };
 
 void *

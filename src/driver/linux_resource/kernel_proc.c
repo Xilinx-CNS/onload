@@ -218,8 +218,7 @@ int efrm_proc_intf_dir_put(efrm_pd_handle handle)
 
 efrm_pd_handle
 efrm_proc_create_file( char const* name, mode_t mode, efrm_pd_handle parent,
-                       const struct file_operations *fops,
-                       void* context )
+                       const struct proc_ops *fops, void* context )
 {
 	/* Tracking the files within a /proc/ directory. */
 	struct proc_dir_entry* entry;
@@ -339,7 +338,7 @@ efrm_proc_dir_check_all_removed(struct proc_dir_entry* parent,
  ****************************************************************************/
 
 
-static const struct file_operations efrm_resource_fops_proc;
+static const struct proc_ops efrm_resource_fops_proc;
 
 int efrm_install_proc_entries(void)
 {
@@ -442,11 +441,11 @@ static int efrm_resource_open_proc(struct inode *inode, struct file *file)
 {
 	return single_open(file, efrm_resource_read_proc, PDE_DATA(inode));
 }
-static const struct file_operations efrm_resource_fops_proc = {
-	.owner		= THIS_MODULE,
-	.open		= efrm_resource_open_proc,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+static const struct proc_ops efrm_resource_fops_proc = {
+	PROC_OPS_SET_OWNER
+	.proc_open		= efrm_resource_open_proc,
+	.proc_read		= seq_read,
+	.proc_lseek		= seq_lseek,
+	.proc_release	= single_release,
 };
 

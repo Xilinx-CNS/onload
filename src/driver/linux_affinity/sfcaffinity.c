@@ -96,12 +96,12 @@ static int aff_proc_open_int(struct inode *inode, struct file *file)
 {
 	return single_open(file, aff_proc_read_int, PDE_DATA(inode));
 }
-static const struct file_operations aff_proc_fops_int = {
-	.owner		= THIS_MODULE,
-	.open		= aff_proc_open_int,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+static const struct proc_ops aff_proc_fops_int = {
+	PROC_OPS_SET_OWNER
+	.proc_open	= aff_proc_open_int,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
 };
 
 
@@ -122,12 +122,12 @@ static int aff_proc_open_cpu2rxq(struct inode *inode, struct file *file)
 {
 	return single_open(file, aff_proc_read_cpu2rxq, PDE_DATA(inode));
 }
-static const struct file_operations aff_proc_fops_cpu2rxq = {
-	.owner		= THIS_MODULE,
-	.open		= aff_proc_open_cpu2rxq,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+static const struct proc_ops aff_proc_fops_cpu2rxq = {
+	PROC_OPS_SET_OWNER
+	.proc_open	= aff_proc_open_cpu2rxq,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_release	= single_release,
 };
 
 
@@ -151,12 +151,12 @@ static int aff_proc_open_filters(struct inode *inode, struct file *file)
 {
 	return single_open(file, aff_proc_read_filters, PDE_DATA(inode));
 }
-static const struct file_operations aff_proc_fops_filters = {
-	.owner		= THIS_MODULE,
-	.open		= aff_proc_open_filters,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
+static const struct proc_ops aff_proc_fops_filters = {
+	PROC_OPS_SET_OWNER
+	.proc_open = aff_proc_open_filters,
+	.proc_read = seq_read,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
 };
 
 
@@ -173,7 +173,7 @@ static struct aff_interface *interface_find(const struct net_device* dev)
 
 static void interface_add_proc(struct aff_interface *intf,
 			       const char *name, void *data,
-			       const struct file_operations *proc_fops)
+			       const struct proc_ops *proc_fops)
 {
 	proc_create_data(name, 0444, intf->proc_dir, proc_fops, data);
 }
@@ -589,9 +589,9 @@ fail2:
 fail1:
 	return rc;
 }
-static const struct file_operations aff_proc_fops_new_interface = {
-	.owner		= THIS_MODULE,
-	.write		= aff_proc_write_new_interface,
+static const struct proc_ops aff_proc_fops_new_interface = {
+	PROC_OPS_SET_OWNER
+	.proc_write		= aff_proc_write_new_interface,
 };
 
 

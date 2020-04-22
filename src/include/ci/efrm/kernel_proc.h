@@ -46,6 +46,8 @@
 
 #include <ci/tools/debug.h>
 
+#include <driver/linux_affinity/kernel_compat.h>
+
 /* This must be at least long enough to store a PCI domain:bus:slot.fn address.
  * The kernel uses a hard-coded value of 32 in lots of places for this. */
 #define EFRM_PROC_NAME_LEN 32
@@ -66,8 +68,7 @@ extern int efrm_proc_intf_dir_put(efrm_pd_handle handle);
 
 efrm_pd_handle
 efrm_proc_create_file( char const* name, mode_t mode, efrm_pd_handle parent,
-                       const struct file_operations *fops,
-                       void* context );
+                       const struct proc_ops *fops, void* context );
 extern void efrm_proc_remove_file( efrm_pd_handle handle );
 
 

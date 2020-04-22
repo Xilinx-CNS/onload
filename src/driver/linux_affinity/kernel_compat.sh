@@ -119,6 +119,8 @@ EFRM_HAVE_UNMAP_KERNEL_RANGE	export	unmap_kernel_range	include/linux/vmalloc.h	m
 
 EFRM_HAS_STRUCT_TIMEVAL		member	struct_timeval	tv_sec	include/linux/time.h
 
+EFRM_HAVE_STRUCT_PROC_OPS	member	struct_proc_ops	proc_open	include/linux/proc_fs.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

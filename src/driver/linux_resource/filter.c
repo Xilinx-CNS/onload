@@ -620,7 +620,7 @@ static void efrm_remove_files( efrm_filter_table_t* table )
 	}
 }
 
-static const struct file_operations efrm_fops_rules;
+static const struct proc_ops efrm_fops_rules;
 
 static void efrm_add_files( efrm_filter_table_t* table )
 {
@@ -1657,9 +1657,9 @@ static ssize_t efrm_add_rule(struct file *file, const char __user *ubuf,
 	kfree(orig_buf);
 	return count;
 }
-static const struct file_operations efrm_fops_add_rule = {
-	.owner		= THIS_MODULE,
-	.write		= efrm_add_rule,
+static const struct proc_ops efrm_fops_add_rule = {
+	PROC_OPS_SET_OWNER
+	.proc_write		= efrm_add_rule,
 };
 
 static ssize_t efrm_del_rule(struct file *file, const char __user *ubuf,
@@ -1729,9 +1729,9 @@ static ssize_t efrm_del_rule(struct file *file, const char __user *ubuf,
 	kfree(orig_buf);
 	return count;
 }
-static const struct file_operations efrm_fops_del_rule = {
-	.owner		= THIS_MODULE,
-	.write		= efrm_del_rule,
+static const struct proc_ops efrm_fops_del_rule = {
+	PROC_OPS_SET_OWNER
+	.proc_write		= efrm_del_rule,
 };
 
 /* ********************************************* */
@@ -1865,12 +1865,12 @@ static int efrm_read_rules_release(struct inode* inode, struct file* file) {
   return seq_release( inode, file );
 }
 
-static const struct file_operations efrm_fops_rules = {
-  .owner    = THIS_MODULE,
-  .open     = efrm_read_rules_seq_open,
-  .read     = seq_read,
-  .llseek   = seq_lseek,
-  .release  = efrm_read_rules_release
+static const struct proc_ops efrm_fops_rules = {
+  PROC_OPS_SET_OWNER
+  .proc_open     = efrm_read_rules_seq_open,
+  .proc_read     = seq_read,
+  .proc_lseek    = seq_lseek,
+  .proc_release  = efrm_read_rules_release
 };
 
 /* ***************************************** */

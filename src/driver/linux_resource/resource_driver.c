@@ -468,13 +468,13 @@ static int efrm_nic_enable_open_proc(struct inode *inode, struct file *file)
 }
 
 
-static const struct file_operations efrm_nic_enable_fops_proc = {
-	.owner		= THIS_MODULE,
-	.open		= efrm_nic_enable_open_proc,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.write      = efrm_nic_enable_write,
-	.release	= single_release,
+static const struct proc_ops efrm_nic_enable_fops_proc = {
+	PROC_OPS_SET_OWNER
+	.proc_open	= efrm_nic_enable_open_proc,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_write     = efrm_nic_enable_write,
+	.proc_release	= single_release,
 };
 
 
