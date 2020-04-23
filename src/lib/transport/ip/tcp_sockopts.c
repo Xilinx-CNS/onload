@@ -577,9 +577,10 @@ static void ci_tcp_sync_opt_timeval(struct socket* sock, int* err,
   rc = kernel_setsockopt(sock, level, optname, (char*)(ci_uintptr_t)tv,
                          sizeof(struct timeval));
   if( rc < 0 ) {
-    ci_log("%s: ERROR (%d) failed to set socket option %d %d to val %lx:%lx "
-           "on kernel socket",
-           __FUNCTION__, rc, level, optname, tv->tv_sec, tv->tv_usec);
+    ci_log("%s: ERROR (%d) failed to set socket option %d %d "
+           "to val %llx:%llx on kernel socket",
+           __FUNCTION__, rc, level, optname,
+           (long long) tv->tv_sec, (long long)tv->tv_usec);
     *err = rc;
   }
 }

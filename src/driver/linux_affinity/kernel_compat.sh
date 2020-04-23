@@ -117,6 +117,7 @@ ERFM_NEIGH_HAS_PROTOCOL		memtype struct_neighbour protocol include/net/neighbour
 
 EFRM_HAVE_UNMAP_KERNEL_RANGE	export	unmap_kernel_range	include/linux/vmalloc.h	mm/vmalloc.c
 
+EFRM_HAS_STRUCT_TIMEVAL		member	struct_timeval	tv_sec	include/linux/time.h
 
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'

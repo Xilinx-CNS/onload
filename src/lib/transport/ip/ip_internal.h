@@ -512,6 +512,12 @@ extern int ci_get_sol_ip6( ci_netif* netif, ci_sock_cmn* s, ci_fd_t fd,
                            socklen_t *optlen ) CI_HF;
 #endif
 
+#if defined(__KERNEL__) && ! defined(EFRM_HAS_STRUCT_TIMEVAL)
+/* In-kernel user of ci_get_sol_socket(SO_RCVTIMEO) needs struct timeval,
+ * which does not exist in linux>=5.6 */
+#define timeval __kernel_sock_timeval
+#endif
+
 /*! Handler for common getsockopt:SOL_SOCKET options.
  * \param ni      [in] Netif context
  * \param s       [in] Socket state context
