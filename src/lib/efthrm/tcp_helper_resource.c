@@ -5315,6 +5315,7 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
    */
   tcp_helper_stop(trs);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* Get the stack lock; it is needed for filter removal and leak check. */
   if( ~trs->netif.flags & CI_NETIF_FLAG_WEDGED ) {
     if( efab_tcp_helper_netif_try_lock(trs, 0) ) {
@@ -5323,9 +5324,7 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
       oo_inject_packets_kernel(trs, 1);
       oo_deferred_free(&trs->netif);
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
       tcp_helper_gracious_dtor(trs);
-#endif
     }
     else {
       /* Pretend to be wedged and do not check for leaks */
@@ -5339,6 +5338,7 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
       ci_assert(0);
     }
   }
+#endif
 
   /* Remove all filters - and make sure we do not send anything, while
    * closing socket or as a reply to a network packet. */
