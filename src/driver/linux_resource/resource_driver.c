@@ -155,7 +155,7 @@ static int iomap_bar(struct linux_efhw_nic *lnic, size_t len)
 {
 	volatile char __iomem *ioaddr;
 
-	ioaddr = ioremap_nocache(lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr, len);
+	ioaddr = efx_ioremap(lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr, len);
 	if (ioaddr == 0)
 		return -ENOMEM;
 
