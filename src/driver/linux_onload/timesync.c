@@ -108,11 +108,11 @@ static spinlock_t timesync_lock;
 int oo_timesync_ctor(struct oo_timesync *oo_ts)
 {
   ci_uint64 now_frc;
-  struct timespec mono_now, wall_now;
+  struct timespec64 mono_now, wall_now;
 
   ci_frc64(&now_frc);
-  ktime_get_ts(&mono_now);
-  getnstimeofday(&wall_now);
+  ktime_get_ts64(&mono_now);
+  ktime_get_real_ts64(&wall_now);
 
   oo_ts->wall_clock.tv_sec = wall_now.tv_sec;
   oo_ts->wall_clock.tv_nsec = wall_now.tv_nsec;
@@ -158,7 +158,7 @@ static int timesync_smooth_i = 0;
 void oo_timesync_update(struct oo_timesync *oo_ts)
 {
   ci_uint64 frc, ticks, ns;
-  struct timespec mono_ts, wall_ts;
+  struct timespec64 mono_ts, wall_ts;
   int use_this_sample = 1;
 
   if( time_after(jiffies, (unsigned long)oo_ts->update_jiffies) ) {
@@ -175,8 +175,8 @@ void oo_timesync_update(struct oo_timesync *oo_ts)
        * ktime_get_ts() (it doesn't include NTP adjustments) but it's
        * not available on older (RHEL5) kernels
        */
-      ktime_get_ts(&mono_ts);
-      getnstimeofday(&wall_ts);
+      ktime_get_ts64(&mono_ts);
+      ktime_get_real_ts64(&wall_ts);
 
       /* FRC ticks since last update */
       ticks = frc - oo_ts->clock_made;

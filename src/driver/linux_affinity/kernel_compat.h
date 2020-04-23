@@ -90,4 +90,10 @@ static inline struct inode *file_inode(const struct file *f)
 #define PROC_OPS_SET_OWNER
 #endif
 
+/* Compat for linux <= 3.16 */
+#ifndef EFRM_HAS_STRUCT_TIMESPEC64
+#define timespec64 timespec
+#define ktime_get_ts64 ktime_get_ts
+#endif
+
 #endif
