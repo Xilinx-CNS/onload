@@ -252,18 +252,16 @@ static vm_fault_t vm_op_fault(
 
   ops = efch_ops_table[rs->rs_type];
   if( ops->rm_nopage ) {
-    unsigned pfn;
-    pfn = ops->rm_nopage(rs, vma, address - vma->vm_start,
-                         vma->vm_end - vma->vm_start);
-    if( pfn != (unsigned) -1 ) {
-      vmf->page = pfn_to_page(pfn);
+    vmf->page = ops->rm_nopage(rs, vma, address - vma->vm_start,
+                               vma->vm_end - vma->vm_start);
+    if( vmf->page != NULL ) {
       get_page(vmf->page);
 
-      EFCH_TRACE("%s: "EFRM_RESOURCE_FMT" vma=%p sz=%lx pageoff=%lx id=%d "
-                 "pfn=%x", __FUNCTION__, EFRM_RESOURCE_PRI_ARG(rs),
+      EFCH_TRACE("%s: "EFRM_RESOURCE_FMT" vma=%p sz=%lx pageoff=%lx id=%d",
+                 __FUNCTION__, EFRM_RESOURCE_PRI_ARG(rs),
                  vma, vma->vm_end - vma->vm_start,
                  (address - vma->vm_start) >> CI_PAGE_SHIFT,
-                 EFAB_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma)), pfn);
+                 EFAB_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma)));
       return 0;
     }
   }

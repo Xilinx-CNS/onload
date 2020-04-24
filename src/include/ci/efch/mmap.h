@@ -15,7 +15,7 @@ efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
 extern int
 efab_vi_resource_mmap_bytes(struct efrm_vi* virs, int map_type);
 
-extern unsigned long
+extern struct page*
 efab_vi_resource_nopage(struct efrm_vi *virs, void *opaque,
                         unsigned long offset, unsigned long map_size);
 

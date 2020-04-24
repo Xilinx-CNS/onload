@@ -5705,7 +5705,7 @@ int efab_tcp_helper_clear_epcache(tcp_helper_resource_t* trs)
 
 
 /*! map offset in shared data to physical page frame number */
-static unsigned long
+static struct page*
 tcp_helper_rm_nopage_mem(tcp_helper_resource_t* trs,
                          void* opaque, unsigned long offset)
 {
@@ -5719,25 +5719,22 @@ tcp_helper_rm_nopage_mem(tcp_helper_resource_t* trs,
          region.
   */
 
-  if( offset < ci_shmbuf_size(&ni->pages_buf) ) {
-    unsigned rc =  ci_shmbuf_nopage(&ni->pages_buf, offset);
-    OO_DEBUG_SHM(ci_log("1 ... ci_shmbuf_nopage() = %u", rc));
-    return rc;
-  }
+  if( offset < ci_shmbuf_size(&ni->pages_buf) )
+    return ci_shmbuf_page(&ni->pages_buf, offset);
 
   OO_DEBUG_SHM(ci_log("%s: offset %lx out of range", __FUNCTION__, offset));
   ci_assert(0);
-  return (unsigned) -1;
+  return NULL;
 }
 
 
-static unsigned long
+static struct page*
 tcp_helper_rm_nopage_timesync(tcp_helper_resource_t* trs,
                               void* opaque, unsigned long offset)
 {
   OO_DEBUG_SHM(ci_log("%s: %u", __FUNCTION__, trs->id));
 
-  return ci_shmbuf_nopage(&efab_tcp_driver.shmbuf, offset);
+  return ci_shmbuf_page(&efab_tcp_driver.shmbuf, offset);
 }
 
 
@@ -6243,7 +6240,7 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
 }
 
 
-static unsigned long
+static struct page*
 tcp_helper_rm_nopage_iobuf(tcp_helper_resource_t* trs, void* opaque,
                            unsigned long offset)
 {
@@ -6265,10 +6262,10 @@ tcp_helper_rm_nopage_iobuf(tcp_helper_resource_t* trs, void* opaque,
   }
   OO_DEBUG_SHM(ci_log("%s: %u offset %ld too great",
                       __FUNCTION__, trs->id, offset));
-  return (unsigned) -1;
+  return NULL;
 }
 
-static unsigned long
+static struct page*
 tcp_helper_rm_nopage_pkts(tcp_helper_resource_t* trs, void* opaque,
                           unsigned long offset)
 {
@@ -6278,14 +6275,14 @@ tcp_helper_rm_nopage_pkts(tcp_helper_resource_t* trs, void* opaque,
   if( ! ni->pkt_bufs[bufset_id] ) {
     OO_DEBUG_ERR(ci_log("%s: %u BAD offset=%lx bufset_id=%d",
                         __FUNCTION__, trs->id, offset, bufset_id));
-    return (unsigned) -1;
+    return NULL;
   }
 
   offset -= bufset_id * CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET;
-  return oo_iobufset_pfn(ni->pkt_bufs[bufset_id], offset);
+  return pfn_to_page(oo_iobufset_pfn(ni->pkt_bufs[bufset_id], offset));
 }
 
-unsigned long
+struct page*
 tcp_helper_rm_nopage(tcp_helper_resource_t* trs, void* opaque,
                      int map_id, unsigned long offset)
 {
@@ -6311,7 +6308,7 @@ tcp_helper_rm_nopage(tcp_helper_resource_t* trs, void* opaque,
       OO_DEBUG_SHM(ci_log("%s: map_id=%d. Debugger?", __FUNCTION__, map_id));
       /* IO mappings are always present, and so a page fault should never come
        * down this path, but ptrace() can get us here. */
-      return (unsigned) -1;
+      return NULL;
     default:
       ci_assert_ge(map_id, CI_NETIF_MMAP_ID_PKTS);
       return tcp_helper_rm_nopage_pkts(trs, opaque,

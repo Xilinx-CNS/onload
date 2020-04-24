@@ -78,7 +78,7 @@ extern int efab_tcp_helper_rm_mmap(tcp_helper_resource_t*,
                                    void* opaque, int map_id,
                                    int is_writable);
 
-extern unsigned long tcp_helper_rm_nopage(tcp_helper_resource_t* trs,
+extern struct page* tcp_helper_rm_nopage(tcp_helper_resource_t* trs,
                                           void* opaque, int map_id, 
                                           unsigned long offset);
 

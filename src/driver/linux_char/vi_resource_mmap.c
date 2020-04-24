@@ -245,21 +245,21 @@ efab_vi_resource_mmap_bytes(struct efrm_vi* virs, int map_type)
 EXPORT_SYMBOL(efab_vi_resource_mmap_bytes);
 
 
-static 
-ci_boolean_t
-efab_vi_rm_nopage_nic(struct efrm_vi *virs, unsigned *pfn_ptr,
-                      unsigned long offset)
+struct page*
+efab_vi_resource_nopage(struct efrm_vi *virs, void *opaque,
+                        unsigned long offset, unsigned long map_size)
 {
   unsigned long len;
   int queue_type;
+  struct page* pg;
 
   if( virs->q[EFHW_EVQ].capacity != 0 ) {
     len = efhw_iopages_size(&virs->q[EFHW_EVQ].pages);
     if( offset < len ) {
-      *pfn_ptr = efhw_iopages_pfn(&virs->q[EFHW_EVQ].pages,
-                                  offset >> PAGE_SHIFT);
+      pg = pfn_to_page(efhw_iopages_pfn(&virs->q[EFHW_EVQ].pages,
+                                        offset >> PAGE_SHIFT));
       EFCH_TRACE("%s: Matched the EVQ", __FUNCTION__);
-      return CI_TRUE;
+      return pg;
     }
     offset -= len;
   }
@@ -269,28 +269,15 @@ efab_vi_rm_nopage_nic(struct efrm_vi *virs, unsigned *pfn_ptr,
        queue_type--) {
     len = efhw_iopages_size(&virs->q[queue_type].pages);
     if( offset < len ) {
-      *pfn_ptr = efhw_iopages_pfn(&virs->q[queue_type].pages,
-                                  offset >> PAGE_SHIFT);
+      pg = pfn_to_page(efhw_iopages_pfn(&virs->q[queue_type].pages,
+                                        offset >> PAGE_SHIFT));
       EFCH_TRACE("%s: Matched the %s", __FUNCTION__, q_names[queue_type]);
-      return CI_TRUE;
+      return pg;
     }
     offset -= len;
   }
 
-  return CI_FALSE;
-}
-
-unsigned long
-efab_vi_resource_nopage(struct efrm_vi *virs, void *opaque,
-                        unsigned long offset, unsigned long map_size)
-{
-  unsigned result = -1;
-  ci_boolean_t found = CI_FALSE;
-
-  found = efab_vi_rm_nopage_nic(virs, &result, offset);
-  ci_assert(found);
-
-  return result;
+  return NULL;
 }
 EXPORT_SYMBOL(efab_vi_resource_nopage);
 

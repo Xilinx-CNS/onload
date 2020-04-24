@@ -267,22 +267,19 @@ static struct page*
 __vm_op_nopage(tcp_helper_resource_t* trs, struct vm_area_struct* vma,
                unsigned long address, int* type)
 {
-  struct page* pg;
   int map_id = OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma));
-  unsigned long pfn = tcp_helper_rm_nopage(trs, vma, map_id,
+  struct page* pg = tcp_helper_rm_nopage(trs, vma, map_id,
                                            address - vma->vm_start);
 
-  if( pfn == (unsigned) -1 )
+  if( pg == NULL )
     return NULL;
 
-  pg = pfn_to_page(pfn);
   get_page(pg);
 
-  OO_DEBUG_TRAMP(ci_log("%s: %u vma=%p sz=%lx pageoff=%lx id=%"CI_PRIx64
-                        " pfn=%lx",
+  OO_DEBUG_TRAMP(ci_log("%s: %u vma=%p sz=%lx pageoff=%lx id=%"CI_PRIx64,
                  __FUNCTION__, trs->id, vma, vma->vm_end - vma->vm_start,
                  (address - vma->vm_start) >> CI_PAGE_SHIFT,
-                 OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma)), pfn));
+                 OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma))));
 
   return pg;
 }

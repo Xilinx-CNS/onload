@@ -78,15 +78,12 @@ ci_inline char* ci_shmbuf_ptr(ci_shmbuf_t* b, unsigned off) {
 extern int ci_shmbuf_demand_page(ci_shmbuf_t* b, unsigned page_i,
 				 ci_irqlock_t* lock);
 
-ci_inline unsigned ci_shmbuf_nopage(ci_shmbuf_t* b, unsigned offset)
+ci_inline struct page* ci_shmbuf_page(ci_shmbuf_t* b, unsigned offset)
 {
   ci_assert(CI_OFFSET(offset, CI_PAGE_SIZE) == 0);
   offset >>= CI_PAGE_SHIFT;
   ci_assert(offset < b->n_pages);
-  if( b->pages[offset] )
-    return page_to_pfn(b->pages[offset]);
-  else 
-    return (unsigned) -1;
+  return b->pages[offset];
 }
 
 ci_inline int ci_shmbuf_mmap(ci_shmbuf_t* b, unsigned offset,

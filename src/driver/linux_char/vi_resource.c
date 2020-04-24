@@ -568,7 +568,7 @@ static int efch_vi_rm_mmap(struct efrm_resource *rs, unsigned long *bytes,
 }
 
 
-static unsigned long
+static struct page*
 efch_vi_rm_nopage(struct efrm_resource *rs, void *opaque,
                   unsigned long offset, unsigned long map_size)
 {

@@ -77,8 +77,8 @@ typedef struct efch_resource_ops_s {
   /** No-page handler.  Returns page number or (unsigned) -1 if fails.
    *  The only current implementation is Linux.
    */
-  unsigned long (*rm_nopage)(struct efrm_resource*, void* opaque,
-                             unsigned long offset, unsigned long map_size);
+  struct page* (*rm_nopage)(struct efrm_resource*, void* opaque,
+                            unsigned long offset, unsigned long map_size);
 
   /** dump resource info (optionally within context with priv_opt), and write
    line_prefix at the start of each line. */
