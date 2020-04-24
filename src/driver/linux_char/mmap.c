@@ -230,63 +230,6 @@ static void vm_op_close(struct vm_area_struct* vma)
 
 #define VMA_OFFSET(vma)  ((vma)->vm_pgoff << PAGE_SHIFT)
 
-static struct page* vm_op_nopage(struct vm_area_struct* vma, 
-				  unsigned long address,
-				  int* type)
-{
-  struct efrm_resource *rs = vma->vm_private_data;
-  efch_resource_ops *ops;
-
-  EFRM_RESOURCE_ASSERT_VALID(rs, 0);
-
-  ops = efch_ops_table[rs->rs_type];
-  if( ops->rm_nopage ) {
-    unsigned pfn;
-    struct page *pg;
-    pfn = ops->rm_nopage(rs, vma, address - vma->vm_start,
-                         vma->vm_end - vma->vm_start);
-    if( pfn != (unsigned) -1 ) {
-      pg = pfn_to_page(pfn);
-
-      /* Linux 2.6.15 introduce VM_PFNMAP.  At that stage, put_page
-       * was modified to decrement the page reference count even if
-       * PG_reserved is set.  The idea is that put_page is never
-       * called for areas with VM_PFNMAP set and that the two flags
-       * match up.  Under some circumstances (2.6.13/x86_64) we have
-       * PG_reserved set, but never have VM_PFNMAP set.  We need to
-       * know if get_page needs to be called.  Really, get_page should
-       * never have incremented the reference count if put_page wasn't
-       * going to decrement it, but it's a bit late now.
-       */
-#ifdef VM_PFNMAP
-      get_page(pg);
-#else
-      if(!PageReserved(pg))
-        get_page(pg);
-#endif
-
-      EFCH_TRACE("%s: "EFRM_RESOURCE_FMT" vma=%p sz=%lx pageoff=%lx id=%d "
-                 "pfn=%x", __FUNCTION__, EFRM_RESOURCE_PRI_ARG(rs),
-                 vma, vma->vm_end - vma->vm_start,
-                 (address - vma->vm_start) >> CI_PAGE_SHIFT,
-                 EFAB_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma)), pfn);
-      return pg;
-    }
-  }
-
-  /* Linux walks VMAs on core dump, suppress the message */
-  if( ~current->flags & PF_DUMPCORE )
-    EFCH_ERR("%s: "EFRM_RESOURCE_FMT" vma=%p sz=%lx pageoff=%lx id=%d FAILED%s",
-             __FUNCTION__, EFRM_RESOURCE_PRI_ARG(rs),
-             vma, vma->vm_end - vma->vm_start,
-             (address - vma->vm_start) >> CI_PAGE_SHIFT,
-             EFAB_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma)),
-             ops->rm_nopage ? "":" NO HANDLER");
-
-  return NOPAGE_SIGBUS;
-}
-
-
 /* The fault callback has different prototypes in different linux versions:
  * - linux<=4.10: 2 arguments (EFRM_HAVE_OLD_FAULT);
  * - 4.11<=linux<=5.0: 1 argument, returns int;
@@ -303,11 +246,38 @@ static vm_fault_t vm_op_fault(
 #ifndef EFRM_HAVE_OLD_FAULT
   struct vm_area_struct *vma = vmf->vma;
 #endif
-  struct page* ret;
+  struct efrm_resource *rs = vma->vm_private_data;
+  unsigned long address = VM_FAULT_ADDRESS(vmf);
+  efch_resource_ops *ops;
 
-  ret = vm_op_nopage(vma, VM_FAULT_ADDRESS(vmf), NULL);
-  vmf->page = ret;
-  return (ret==NOPAGE_SIGBUS) ? VM_FAULT_SIGBUS : 0; 
+  ops = efch_ops_table[rs->rs_type];
+  if( ops->rm_nopage ) {
+    unsigned pfn;
+    pfn = ops->rm_nopage(rs, vma, address - vma->vm_start,
+                         vma->vm_end - vma->vm_start);
+    if( pfn != (unsigned) -1 ) {
+      vmf->page = pfn_to_page(pfn);
+      get_page(vmf->page);
+
+      EFCH_TRACE("%s: "EFRM_RESOURCE_FMT" vma=%p sz=%lx pageoff=%lx id=%d "
+                 "pfn=%x", __FUNCTION__, EFRM_RESOURCE_PRI_ARG(rs),
+                 vma, vma->vm_end - vma->vm_start,
+                 (address - vma->vm_start) >> CI_PAGE_SHIFT,
+                 EFAB_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma)), pfn);
+      return 0;
+    }
+  }
+
+  /* Linux walks VMAs on core dump, suppress the message */
+  if( ~current->flags & PF_DUMPCORE )
+    EFCH_ERR("%s: "EFRM_RESOURCE_FMT" vma=%p sz=%lx pageoff=%lx id=%d FAILED%s",
+             __FUNCTION__, EFRM_RESOURCE_PRI_ARG(rs),
+             vma, vma->vm_end - vma->vm_start,
+             (address - vma->vm_start) >> CI_PAGE_SHIFT,
+             EFAB_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma)),
+             ops->rm_nopage ? "":" NO HANDLER");
+
+  return VM_FAULT_SIGBUS;
 }
 
 static struct vm_operations_struct vm_ops = {

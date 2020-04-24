@@ -80,10 +80,6 @@
 #endif
 
 
-#ifndef NOPAGE_SIGBUS
-#  define NOPAGE_SIGBUS (NULL)
-#endif
-
 #ifndef FOLL_WRITE
 #define FOLL_WRITE	0x01
 #endif

@@ -288,21 +288,22 @@ __vm_op_nopage(tcp_helper_resource_t* trs, struct vm_area_struct* vma,
 }
 
 
-static struct page* vm_op_nopage(struct vm_area_struct* vma,
-                                 unsigned long address,
-				 int* type)
-{
+static vm_fault_t vm_op_fault(
+#ifdef EFRM_HAVE_OLD_FAULT
+                       struct vm_area_struct *vma,
+#endif
+                       struct vm_fault *vmf) {
+#ifndef EFRM_HAVE_OLD_FAULT
+  struct vm_area_struct *vma = vmf->vma;
+#endif
   tcp_helper_resource_t* trs = (tcp_helper_resource_t*) vma->vm_private_data;
-  struct page *pg;
+  unsigned long address = VM_FAULT_ADDRESS(vmf);
 
   TCP_HELPER_RESOURCE_ASSERT_VALID(trs, 0);
 
-  pg = __vm_op_nopage(trs, vma, address, type);
-  if( pg != NULL )
-    return pg;
+  vmf->page = __vm_op_nopage(trs, vma, address, NULL);
 
-  /* Linux walks VMAs on core dump, suppress the message */
-  if( ~current->flags & PF_DUMPCORE ) {
+  if( vmf->page == NULL && ~current->flags & PF_DUMPCORE ) {
     /* We don't generally expect to fail to map, but there are legitimate
      * cases where this occurs, such as the application using
      * mlockall(MCL_FUTURE) resulting in the kernel trying to fault in pages
@@ -317,23 +318,7 @@ static struct page* vm_op_nopage(struct vm_area_struct* vma,
                           OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma))));
   }
 
-  return NOPAGE_SIGBUS;
-}
-
-static vm_fault_t vm_op_fault(
-#ifdef EFRM_HAVE_OLD_FAULT
-                       struct vm_area_struct *vma,
-#endif
-                       struct vm_fault *vmf) {
-#ifndef EFRM_HAVE_OLD_FAULT
-  struct vm_area_struct *vma = vmf->vma;
-#endif
-  struct page* page;
-
-  page = vm_op_nopage(vma, VM_FAULT_ADDRESS(vmf), NULL);
-  vmf->page = page;
-
-  return ( page == NULL ) ? VM_FAULT_SIGBUS : 0; 
+  return ( vmf->page == NULL ) ? VM_FAULT_SIGBUS : 0;
 }
 
 
