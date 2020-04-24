@@ -87,7 +87,8 @@ ci_inline struct page* ci_shmbuf_page(ci_shmbuf_t* b, unsigned offset)
 }
 
 ci_inline int ci_shmbuf_mmap(ci_shmbuf_t* b, unsigned offset,
-			     unsigned long* bytes, void* opaque,
+			     unsigned long* bytes,
+			     struct vm_area_struct *vma,
 			     int* map_num, unsigned long* p_offset)
 {
   unsigned n = ci_shmbuf_size(b) - offset;

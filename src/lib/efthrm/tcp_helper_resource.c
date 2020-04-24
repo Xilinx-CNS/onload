@@ -5707,7 +5707,7 @@ int efab_tcp_helper_clear_epcache(tcp_helper_resource_t* trs)
 /*! map offset in shared data to physical page frame number */
 static struct page*
 tcp_helper_rm_nopage_mem(tcp_helper_resource_t* trs,
-                         void* opaque, unsigned long offset)
+                         struct vm_area_struct *vma, unsigned long offset)
 {
   ci_netif* ni = &trs->netif;
 
@@ -5730,7 +5730,8 @@ tcp_helper_rm_nopage_mem(tcp_helper_resource_t* trs,
 
 static struct page*
 tcp_helper_rm_nopage_timesync(tcp_helper_resource_t* trs,
-                              void* opaque, unsigned long offset)
+                              struct vm_area_struct *vma,
+                              unsigned long offset)
 {
   OO_DEBUG_SHM(ci_log("%s: %u", __FUNCTION__, trs->id));
 
@@ -6241,7 +6242,7 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
 
 
 static struct page*
-tcp_helper_rm_nopage_iobuf(tcp_helper_resource_t* trs, void* opaque,
+tcp_helper_rm_nopage_iobuf(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
                            unsigned long offset)
 {
   ci_netif* ni = &trs->netif;
@@ -6253,7 +6254,7 @@ tcp_helper_rm_nopage_iobuf(tcp_helper_resource_t* trs, void* opaque,
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
     if( offset + CI_PAGE_SIZE <= trs_nic->thn_vi_mmap_bytes ) {
-      return efab_vi_resource_nopage(trs_nic->thn_vi_rs, opaque,
+      return efab_vi_resource_nopage(trs_nic->thn_vi_rs, vma,
                                      offset, trs_nic->thn_vi_mmap_bytes);
     }
     else {
@@ -6266,7 +6267,7 @@ tcp_helper_rm_nopage_iobuf(tcp_helper_resource_t* trs, void* opaque,
 }
 
 static struct page*
-tcp_helper_rm_nopage_pkts(tcp_helper_resource_t* trs, void* opaque,
+tcp_helper_rm_nopage_pkts(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
                           unsigned long offset)
 {
   int bufset_id = offset / (CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET);
@@ -6283,7 +6284,7 @@ tcp_helper_rm_nopage_pkts(tcp_helper_resource_t* trs, void* opaque,
 }
 
 struct page*
-tcp_helper_rm_nopage(tcp_helper_resource_t* trs, void* opaque,
+tcp_helper_rm_nopage(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
                      int map_id, unsigned long offset)
 {
 
@@ -6293,11 +6294,11 @@ tcp_helper_rm_nopage(tcp_helper_resource_t* trs, void* opaque,
 
   switch( map_id ) {
     case CI_NETIF_MMAP_ID_STATE:
-      return tcp_helper_rm_nopage_mem(trs, opaque, offset);
+      return tcp_helper_rm_nopage_mem(trs, vma, offset);
     case CI_NETIF_MMAP_ID_TIMESYNC:
-      return tcp_helper_rm_nopage_timesync(trs, opaque, offset);
+      return tcp_helper_rm_nopage_timesync(trs, vma, offset);
     case CI_NETIF_MMAP_ID_IOBUFS:
-      return tcp_helper_rm_nopage_iobuf(trs, opaque, offset);
+      return tcp_helper_rm_nopage_iobuf(trs, vma, offset);
     case CI_NETIF_MMAP_ID_IO:
 #if CI_CFG_PIO
     case CI_NETIF_MMAP_ID_PIO:
@@ -6311,7 +6312,7 @@ tcp_helper_rm_nopage(tcp_helper_resource_t* trs, void* opaque,
       return NULL;
     default:
       ci_assert_ge(map_id, CI_NETIF_MMAP_ID_PKTS);
-      return tcp_helper_rm_nopage_pkts(trs, opaque,
+      return tcp_helper_rm_nopage_pkts(trs, vma,
                                        offset +
                                        (map_id - CI_NETIF_MMAP_ID_PKTS) *
                                        CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET);

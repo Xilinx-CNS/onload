@@ -94,7 +94,7 @@ static void vi_set_rm_free(efch_resource_t *rs)
 
 static int
 vi_set_mmap_not_supported(struct efrm_resource* ors, unsigned long* bytes,
-                          void* opaque, int index)
+                          struct vm_area_struct* vma, int index)
 {
   return -EINVAL;
 }

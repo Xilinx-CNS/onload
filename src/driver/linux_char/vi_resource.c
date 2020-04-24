@@ -559,20 +559,20 @@ efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
 /*** Resource manager methods ********************************************/
 
 static int efch_vi_rm_mmap(struct efrm_resource *rs, unsigned long *bytes,
-                           void *opaque, int index)
+                           struct vm_area_struct *vma, int index)
 {
   int map_num = 0;
   unsigned long offset = 0;
-  return efab_vi_resource_mmap(efrm_vi(rs), bytes, opaque,
+  return efab_vi_resource_mmap(efrm_vi(rs), bytes, vma,
                                &map_num, &offset, index);
 }
 
 
 static struct page*
-efch_vi_rm_nopage(struct efrm_resource *rs, void *opaque,
+efch_vi_rm_nopage(struct efrm_resource *rs, struct vm_area_struct *vma,
                   unsigned long offset, unsigned long map_size)
 {
-  return efab_vi_resource_nopage(efrm_vi(rs), opaque, offset, map_size);
+  return efab_vi_resource_nopage(efrm_vi(rs), vma, offset, map_size);
 }
 
 

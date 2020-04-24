@@ -9,14 +9,15 @@ struct efrm_vi;
 
 
 extern int
-efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
+efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes,
+                      struct vm_area_struct *vma,
                       int *map_num, unsigned long *offset, int map_type);
 
 extern int
 efab_vi_resource_mmap_bytes(struct efrm_vi* virs, int map_type);
 
 extern struct page*
-efab_vi_resource_nopage(struct efrm_vi *virs, void *opaque,
+efab_vi_resource_nopage(struct efrm_vi *virs, struct vm_area_struct *vma,
                         unsigned long offset, unsigned long map_size);
 
 

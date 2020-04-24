@@ -68,16 +68,16 @@ typedef struct efch_resource_ops_s {
    * area the resource has to be mmap()ed.  Clearly the implementation
    * should not attempt to map more than [*bytes]!
    *
-   * [map_num], [offset] and [opaque] should be passed through to
+   * [map_num], [offset] and [vma] should be passed through to
    * ci_mmap_pages() etc. unmodified.
    */
-  int  (*rm_mmap)(struct efrm_resource*, unsigned long* bytes, void* opaque,
-		  int index);
+  int  (*rm_mmap)(struct efrm_resource*, unsigned long* bytes,
+                  struct vm_area_struct* vma, int index);
 
   /** No-page handler.  Returns page number or (unsigned) -1 if fails.
    *  The only current implementation is Linux.
    */
-  struct page* (*rm_nopage)(struct efrm_resource*, void* opaque,
+  struct page* (*rm_nopage)(struct efrm_resource*, struct vm_area_struct* vma,
                             unsigned long offset, unsigned long map_size);
 
   /** dump resource info (optionally within context with priv_opt), and write

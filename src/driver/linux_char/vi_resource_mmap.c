@@ -191,8 +191,8 @@ efab_vi_rm_mmap_mem(struct efrm_vi *virs,
 }
 
 int efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes,
-                          void *opaque, int *map_num, unsigned long *offset,
-                          int index)
+                          struct vm_area_struct* vma, int *map_num,
+                          unsigned long *offset, int index)
 {
   int rc = -EINVAL;
 
@@ -201,16 +201,16 @@ int efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes,
 
   switch( index ) {
     case EFCH_VI_MMAP_IO:
-      rc = efab_vi_rm_mmap_io(virs, bytes, opaque, map_num, offset);
+      rc = efab_vi_rm_mmap_io(virs, bytes, vma, map_num, offset);
       break;
     case EFCH_VI_MMAP_MEM:
-      rc = efab_vi_rm_mmap_mem(virs, bytes, opaque, map_num, offset);
+      rc = efab_vi_rm_mmap_mem(virs, bytes, vma, map_num, offset);
       break;
     case EFCH_VI_MMAP_PIO:
-      rc = efab_vi_rm_mmap_pio(virs, bytes, opaque, map_num, offset);
+      rc = efab_vi_rm_mmap_pio(virs, bytes, vma, map_num, offset);
       break;
     case EFCH_VI_MMAP_CTPIO:
-      rc = efab_vi_rm_mmap_ctpio(virs, bytes, opaque, map_num, offset);
+      rc = efab_vi_rm_mmap_ctpio(virs, bytes, vma, map_num, offset);
       break;
     default:
       ci_assert(0);
@@ -246,7 +246,7 @@ EXPORT_SYMBOL(efab_vi_resource_mmap_bytes);
 
 
 struct page*
-efab_vi_resource_nopage(struct efrm_vi *virs, void *opaque,
+efab_vi_resource_nopage(struct efrm_vi *virs, struct vm_area_struct *opaque,
                         unsigned long offset, unsigned long map_size)
 {
   unsigned long len;
