@@ -149,6 +149,7 @@ typedef uint32_t cp_fwd_table_id;
 
 typedef ci_uint32 cp_hwport_flags_t;
 typedef cp_hwport_flags_t cp_llap_flags_t;
+typedef ci_uint64 cp_nic_flags_t;
 
 typedef struct cicp_llap_row_s {
   ci_ifid_t ifindex;
@@ -201,7 +202,7 @@ typedef struct cicp_llap_row_s {
 struct cp_hwport_row {
 /* we reuse CP_LLAP flags here */
   cp_hwport_flags_t flags;
-  ci_uint64 nic_flags CI_ALIGN(8);
+  cp_nic_flags_t nic_flags CI_ALIGN(8);
 };
 
 

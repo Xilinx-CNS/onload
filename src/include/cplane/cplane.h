@@ -109,7 +109,7 @@ oo_cp_get_hwport_ifindex(struct oo_cplane_handle* cp, ci_hwport_id_t hwport);
 extern int
 oo_cp_get_hwport_properties(struct oo_cplane_handle*, ci_hwport_id_t hwport,
                             cp_hwport_flags_t* out_mib_flags,
-                            ci_uint64* out_nic_flags);
+                            cp_nic_flags_t* out_nic_flags);
 
 
 /* Initialize verinfo before the first use */

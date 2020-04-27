@@ -833,7 +833,7 @@ void cp_agent_sock_init(struct cp_session* s);
 void cp_agent_sock_handle(struct cp_session* s, struct cp_epoll_state*);
 
 void cp_populate_llap_hwports(struct cp_session* s, ci_ifid_t ifindex,
-                              ci_hwport_id_t hwport, ci_uint64 nic_flags);
+                              ci_hwport_id_t hwport, cp_nic_flags_t nic_flags);
 
 #define RTA_GET(ptr) \
   ((struct rtattr*)(((char*)(ptr)) + NLMSG_ALIGN(sizeof(typeof(*ptr)))))
