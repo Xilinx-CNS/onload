@@ -73,10 +73,6 @@ extern void tcp_helper_xdp_change(ci_netif* ni, int intf_i);
 
 extern void tcp_helper_flush_resets(ci_netif* ni);
 
-extern struct page* tcp_helper_rm_nopage(tcp_helper_resource_t* trs,
-                                          struct vm_area_struct *vma,
-                                          int map_id, unsigned long offset);
-
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 extern void tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
                                tcp_helper_resource_t* trs,

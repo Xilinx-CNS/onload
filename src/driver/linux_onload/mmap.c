@@ -264,6 +264,127 @@ static void vm_op_close(struct vm_area_struct* vma)
 }
 
 
+/****************************************************************************
+ *
+ * Page faulting
+ *
+ ****************************************************************************/
+
+/*! map offset in shared data to physical page frame number */
+static struct page*
+tcp_helper_rm_nopage_mem(tcp_helper_resource_t* trs,
+                         struct vm_area_struct *vma, unsigned long offset)
+{
+  ci_netif* ni = &trs->netif;
+
+  OO_DEBUG_SHM(ci_log("%s: %u", __FUNCTION__, trs->id));
+
+  /* NB: the order in which offsets are compared against shared memory
+         areas must be the same order that is used to allocate those offsets in
+         allocate_netif_resources() above.  Currently there's only a single
+         region.
+  */
+
+  if( offset < ci_shmbuf_size(&ni->pages_buf) )
+    return ci_shmbuf_page(&ni->pages_buf, offset);
+
+  OO_DEBUG_SHM(ci_log("%s: offset %lx out of range", __FUNCTION__, offset));
+  ci_assert(0);
+  return NULL;
+}
+
+
+static struct page*
+tcp_helper_rm_nopage_timesync(tcp_helper_resource_t* trs,
+                              struct vm_area_struct *vma,
+                              unsigned long offset)
+{
+  OO_DEBUG_SHM(ci_log("%s: %u", __FUNCTION__, trs->id));
+
+  return ci_shmbuf_page(&efab_tcp_driver.shmbuf, offset);
+}
+
+
+static struct page*
+tcp_helper_rm_nopage_iobuf(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
+                           unsigned long offset)
+{
+  ci_netif* ni = &trs->netif;
+  int intf_i;
+
+  OO_DEBUG_SHM(ci_log("%s: %u", __FUNCTION__, trs->id));
+
+  /* VIs (descriptor rings and event queues). */
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
+    if( offset + CI_PAGE_SIZE <= trs_nic->thn_vi_mmap_bytes ) {
+      return efab_vi_resource_nopage(trs_nic->thn_vi_rs, vma,
+                                     offset, trs_nic->thn_vi_mmap_bytes);
+    }
+    else {
+       offset -= trs_nic->thn_vi_mmap_bytes;
+    }
+  }
+  OO_DEBUG_SHM(ci_log("%s: %u offset %ld too great",
+                      __FUNCTION__, trs->id, offset));
+  return NULL;
+}
+
+static struct page*
+tcp_helper_rm_nopage_pkts(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
+                          unsigned long offset)
+{
+  int bufset_id = offset / (CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET);
+  ci_netif* ni = &trs->netif;
+
+  if( ! ni->pkt_bufs[bufset_id] ) {
+    OO_DEBUG_ERR(ci_log("%s: %u BAD offset=%lx bufset_id=%d",
+                        __FUNCTION__, trs->id, offset, bufset_id));
+    return NULL;
+  }
+
+  offset -= bufset_id * CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET;
+  return pfn_to_page(oo_iobufset_pfn(ni->pkt_bufs[bufset_id], offset));
+}
+
+static struct page*
+tcp_helper_rm_nopage(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
+                     int map_id, unsigned long offset)
+{
+
+  TCP_HELPER_RESOURCE_ASSERT_VALID(trs, 0);
+
+  OO_DEBUG_SHM(ci_log("%s: %u", __FUNCTION__, trs->id));
+
+  switch( map_id ) {
+    case CI_NETIF_MMAP_ID_STATE:
+      return tcp_helper_rm_nopage_mem(trs, vma, offset);
+    case CI_NETIF_MMAP_ID_TIMESYNC:
+      return tcp_helper_rm_nopage_timesync(trs, vma, offset);
+    case CI_NETIF_MMAP_ID_IOBUFS:
+      return tcp_helper_rm_nopage_iobuf(trs, vma, offset);
+    case CI_NETIF_MMAP_ID_IO:
+#if CI_CFG_PIO
+    case CI_NETIF_MMAP_ID_PIO:
+#endif
+#if CI_CFG_CTPIO
+    case CI_NETIF_MMAP_ID_CTPIO:
+#endif
+      OO_DEBUG_SHM(ci_log("%s: map_id=%d. Debugger?", __FUNCTION__, map_id));
+      /* IO mappings are always present, and so a page fault should never come
+       * down this path, but ptrace() can get us here. */
+      return NULL;
+    default:
+      ci_assert_ge(map_id, CI_NETIF_MMAP_ID_PKTS);
+      return tcp_helper_rm_nopage_pkts(trs, vma,
+                                       offset +
+                                       (map_id - CI_NETIF_MMAP_ID_PKTS) *
+                                       CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET);
+  }
+
+}
+
+
 static struct page*
 __vm_op_nopage(tcp_helper_resource_t* trs, struct vm_area_struct* vma,
                unsigned long address, int* type)
