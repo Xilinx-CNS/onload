@@ -441,9 +441,13 @@ static vm_fault_t vm_op_fault(
 }
 
 
-static struct vm_operations_struct vm_ops = {
+static struct vm_operations_struct vm_state_ops = {
   .open  = vm_op_open,
   .close = vm_op_close,
+  .fault = vm_op_fault,
+};
+
+static struct vm_operations_struct vm_ops = {
   .fault = vm_op_fault,
 };
 
@@ -464,6 +468,13 @@ static int tcp_helper_rm_mmap_mem(tcp_helper_resource_t* trs,
 
   OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
 
+  /* Hook into the VM so we can keep a proper reference count on this
+  ** resource.
+  */
+  vma->vm_ops = &vm_state_ops;
+  if( efab_add_mm_ref(vma->vm_mm) )
+    return -EFAULT;
+
   rc = ci_shmbuf_mmap(&trs->netif.pages_buf, 0, &bytes, vma,
                            &map_num, &offset);
   if( rc < 0 )  goto out;
@@ -472,6 +483,8 @@ static int tcp_helper_rm_mmap_mem(tcp_helper_resource_t* trs,
   ci_assert_equal(bytes, 0);
 
  out:
+  if( rc < 0 )
+    efab_del_mm_ref (vma->vm_mm);
   return rc;
 }
 
@@ -649,10 +662,9 @@ efab_tcp_helper_rm_mmap(tcp_helper_resource_t* trs, unsigned long bytes,
   OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx map_id=%x", __func__,
                      trs->id, bytes, map_id));
 
+  vma->vm_ops = &vm_ops;
+
   switch( map_id ) {
-    case CI_NETIF_MMAP_ID_STATE:
-      rc = tcp_helper_rm_mmap_mem(trs, bytes, vma);
-      break;
     case CI_NETIF_MMAP_ID_TIMESYNC:
       rc = tcp_helper_rm_mmap_timesync(trs, bytes, vma, is_writable);
       break;
@@ -690,35 +702,22 @@ oo_stack_mmap(ci_private_t* priv, struct vm_area_struct* vma)
   off_t offset = VMA_OFFSET(vma);
   unsigned long bytes = vma->vm_end - vma->vm_start;
   int map_id = OO_MMAP_OFFSET_TO_MAP_ID(offset);
-  int rc;
 
   if( !priv->thr ) return -ENODEV;
 
   ci_assert((offset & PAGE_MASK) == offset);
 
-  if( map_id == CI_NETIF_MMAP_ID_STATE &&
-      (rc = efab_add_mm_ref (vma->vm_mm)) < 0 )
-    return rc;
-
   vma->vm_flags |= EFRM_VM_BASE_FLAGS;
-
-  /* Hook into the VM so we can keep a proper reference count on this
-  ** resource.
-  */
-  vma->vm_ops = &vm_ops;
   vma->vm_private_data = (void *) priv->thr;
 
-  OO_DEBUG_TRAMP(ci_log("mmap:  -> %u %d pages offset=0x%lx "
-                 "vma=%p ptr=0x%lx-%lx", 
-		 priv->thr->id, (int) (bytes >> CI_PAGE_SHIFT), offset, 
-		 vma, vma->vm_start, vma->vm_end));
-
-  rc = efab_tcp_helper_rm_mmap(priv->thr, bytes, vma, map_id,
-                               vma->vm_flags & VM_WRITE);
-  if( map_id == CI_NETIF_MMAP_ID_STATE && rc < 0 )
-    efab_del_mm_ref (vma->vm_mm);
-
-  return rc;
+  switch( map_id )
+  {
+    case CI_NETIF_MMAP_ID_STATE:
+      return tcp_helper_rm_mmap_mem(priv->thr, bytes, vma);
+    default:
+      return efab_tcp_helper_rm_mmap(priv->thr, bytes, vma, map_id,
+                                     vma->vm_flags & VM_WRITE);
+  }
 }
 
 
