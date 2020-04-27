@@ -21,7 +21,7 @@ src ?= .
 
 EFTHRM_SRCS	:= eplock_resource_manager.c \
 		tcp_helper_endpoint.c tcp_helper_resource.c \
-		tcp_helper_ioctl.c tcp_helper_mmap.c tcp_helper_sleep.c \
+		tcp_helper_ioctl.c tcp_helper_sleep.c \
 		tcp_helper_endpoint_move.c \
 		tcp_filters.c oof_filters.c oof_onload.c oof_nat.c \
 		driverlink_filter.c ip_prot_rx.c ip_protocols.c \

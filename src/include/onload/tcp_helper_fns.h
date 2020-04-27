@@ -73,11 +73,6 @@ extern void tcp_helper_xdp_change(ci_netif* ni, int intf_i);
 
 extern void tcp_helper_flush_resets(ci_netif* ni);
 
-extern int efab_tcp_helper_rm_mmap(tcp_helper_resource_t*,
-                                   unsigned long bytes,
-                                   struct vm_area_struct *vma,
-                                   int map_id, int is_writable);
-
 extern struct page* tcp_helper_rm_nopage(tcp_helper_resource_t* trs,
                                           struct vm_area_struct *vma,
                                           int map_id, unsigned long offset);
