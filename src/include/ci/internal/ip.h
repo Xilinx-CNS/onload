@@ -74,9 +74,9 @@
  * if !CI_CFG_UL_INTERRUPT_HELPER then we close endpoints from in-kernel.
  */
 #if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
-#define OO_CFG_CLOSE_EPS 1
+#define OO_DO_STACK_POLL 1
 #else
-#define OO_CFG_CLOSE_EPS 0
+#define OO_DO_STACK_POLL 0
 #endif
 
 
@@ -1011,7 +1011,7 @@ ci_netif_raw_send(ci_netif* ni, int intf_i,
 extern void ci_ip_cmsg_recv(ci_netif*, ci_udp_state*, const ci_ip_pkt_fmt*,
                             struct msghdr*, int netif_locked,
                             int *p_msg_flags) CI_HF;
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 extern void ci_udp_all_fds_gone(ci_netif* netif, oo_sp, int do_free);
 #endif
 extern void ci_udp_state_free(ci_netif*, ci_udp_state*) CI_HF;
@@ -1417,7 +1417,7 @@ extern int ci_tcp_try_to_free_pkts(ci_netif* ni, ci_tcp_state* ts,
                                     int desperation) CI_HF;
 extern void ci_tcp_state_free(ci_netif* ni, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_state_free_to_cache(ci_netif* ni, ci_tcp_state* ts) CI_HF;
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 extern void ci_tcp_listen_all_fds_gone(ci_netif*, ci_tcp_socket_listen*,
                                        int do_free) CI_HF;
 extern void ci_tcp_all_fds_gone(ci_netif* netif, ci_tcp_state*,
@@ -1505,7 +1505,7 @@ extern ci_uint32 ci_tcp_prev_seq_lookup(ci_netif*, const ci_tcp_state*);
 ****************************** PIPE ***********************************
 **********************************************************************/
 
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 extern void ci_pipe_all_fds_gone(ci_netif* netif, struct oo_pipe* p,
                                  int do_free);
 #endif
@@ -1557,7 +1557,7 @@ extern void citp_waitable_obj_free_nnl(ci_netif*, citp_waitable*) CI_HF;
 #if CI_CFG_FD_CACHING
 extern void citp_waitable_obj_free_to_cache(ci_netif*, citp_waitable*) CI_HF;
 #endif
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 extern void citp_waitable_all_fds_gone(ci_netif*, oo_sp) CI_HF;
 extern void citp_waitable_cleanup(ci_netif* ni, citp_waitable_obj* wo,
                                   int do_free);

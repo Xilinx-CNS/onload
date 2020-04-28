@@ -732,7 +732,7 @@ void ci_udp_set_no_unicast(citp_socket* ep)
 #endif /* !__ci_driver__*/
 
 
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 
 void ci_udp_all_fds_gone(ci_netif* netif, oo_sp sock_id, int do_free)
 {

@@ -458,7 +458,7 @@ void ci_tcp_passive_scalable_cache_drop_cache(ci_netif* ni)
 #endif
 
 
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 
 #ifndef __KERNEL__
 static
@@ -504,7 +504,7 @@ void ci_tcp_linger(ci_netif* ni, ci_tcp_state* ts)
 }
 #endif
 
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 #if defined(__KERNEL__)
 static
 #endif
@@ -623,7 +623,7 @@ int ci_tcp_close(ci_netif* netif, ci_tcp_state* ts)
   ci_tcp_drop(netif, ts, ECONNRESET);
   return 0;
 }
-#endif /* OO_CFG_CLOSE_EPS */
+#endif /* OO_DO_STACK_POLL */
 
 
 #if (defined(__KERNEL__) && ! CI_CFG_UL_INTERRUPT_HELPER) || (! defined(__KERNEL__) && CI_CFG_UL_INTERRUPT_HELPER) 
@@ -810,7 +810,7 @@ void ci_tcp_listen_update_cached(ci_netif* netif, ci_tcp_socket_listen* tls)
 
 #endif
 
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 void __ci_tcp_listen_shutdown(ci_netif* netif, ci_tcp_socket_listen* tls)
 {
   int rc;

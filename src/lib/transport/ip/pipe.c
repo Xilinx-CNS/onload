@@ -1925,7 +1925,7 @@ int ci_pipe_write(ci_netif* ni, struct oo_pipe* p,
 }
 
 
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 static void oo_pipe_free_bufs(ci_netif* ni, struct oo_pipe* p)
 {
   oo_pkt_p pp = oo_pipe_buf_list_start(&p->pipe_bufs);

@@ -234,7 +234,7 @@ void citp_waitable_obj_free_nnl(ci_netif* ni, citp_waitable* w)
 }
 
 
-#if OO_CFG_CLOSE_EPS
+#if OO_DO_STACK_POLL
 
 
 void citp_waitable_cleanup(ci_netif* ni, citp_waitable_obj* wo, int do_free)
