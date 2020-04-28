@@ -18,6 +18,7 @@
 
 #define VERB(x)
 
+#if OO_DO_STACK_POLL
 
 void ci_udp_state_free(ci_netif* ni, ci_udp_state* us)
 {
@@ -45,5 +46,6 @@ void ci_udp_perform_deferred_socket_work(ci_netif* ni, ci_udp_state* us)
 
   ci_udp_sendmsg_send_async_q(ni, us);
 }
+#endif
 
 /*! \cidoxg_end */

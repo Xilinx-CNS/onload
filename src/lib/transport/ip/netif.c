@@ -25,6 +25,7 @@ char* CI_NETIF_PTR(ci_netif* ni, oo_p off)
 #endif
 
 
+#if OO_DO_STACK_POLL
 /*--------------------------------------------------------------------
  *
  * Common routines for timeout lists
@@ -517,6 +518,7 @@ void ci_netif_rxq_low_on_recv(ci_netif* ni, ci_sock_cmn* s,
   CITP_STATS_NETIF_INC(ni, rx_refill_recv);
   ci_netif_unlock(ni);
 }
+#endif /* OO_DO_STACK_POLL */
 
 
 void ci_netif_mem_pressure_pkt_pool_fill(ci_netif* ni)
@@ -537,6 +539,7 @@ void ci_netif_mem_pressure_pkt_pool_fill(ci_netif* ni)
 }
 
 
+#if OO_DO_STACK_POLL
 static void ci_netif_mem_pressure_pkt_pool_use(ci_netif* ni)
 {
   /* Empty the special [mem_pressure_pkt_pool] into the free pool. */
@@ -624,6 +627,7 @@ int ci_netif_mem_pressure_try_exit(ci_netif* ni)
   ci_netif_mem_pressure_exit_critical(ni);
   return 1;
 }
+#endif
 
 /*--------------------------------------------------------------------
  *
@@ -757,6 +761,7 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i)
   /* [rx_allowed] can go negative. */
   if( rx_allowed < 0 )
     rx_allowed = 0;
+#if OO_DO_STACK_POLL
   /* Only reap if ring is getting pretty empty. */
   if( ef_vi_receive_fill_level(vi) + rx_allowed < low_thresh(netif) ) {
     CITP_STATS_NETIF_INC(netif, reap_rx_limited);
@@ -783,12 +788,15 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i)
     rx_allowed = CI_CFG_RX_DESC_BATCH;
     max_n_to_post = ci_netif_rx_vi_space(netif, vi);
   }
+#endif
   max_n_to_post = CI_MIN(max_n_to_post, rx_allowed);
   if(CI_LIKELY( max_n_to_post >= CI_CFG_RX_DESC_BATCH ))
     goto not_rx_limited;
   CITP_STATS_NETIF_INC(netif, refill_rx_limited);
+#if OO_DO_STACK_POLL
   if( ef_vi_receive_fill_level(vi) < CI_CFG_RX_DESC_BATCH )
     ci_netif_mem_pressure_enter_critical(netif, intf_i);
+#endif
   return;
 
  not_enough_pkts:
@@ -820,6 +828,7 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i)
     goto good_bufset;
   }
 
+#if OO_DO_STACK_POLL
   if( ef_vi_receive_fill_level(vi) < low_thresh(netif) ) {
     CITP_STATS_NETIF_INC(netif, reap_buf_limited);
     ci_netif_try_to_reap(netif, max_n_to_post);
@@ -835,9 +844,11 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i)
   CITP_STATS_NETIF_INC(netif, refill_buf_limited);
   if( ef_vi_receive_fill_level(vi) < CI_CFG_RX_DESC_BATCH )
     ci_netif_mem_pressure_enter_critical(netif, intf_i);
+#endif
 }
 
 
+#if OO_DO_STACK_POLL
 static void citp_waitable_deferred_work(ci_netif* ni, citp_waitable* w)
 {
   citp_waitable_obj* wo = CI_CONTAINER(citp_waitable_obj, waitable, w);
@@ -997,7 +1008,6 @@ void ci_netif_merge_atomic_counters(ci_netif* ni)
 #define KERNEL_DL_CONTEXT
 #endif
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER || ! defined(__KERNEL__)
 #if CI_CFG_UL_INTERRUPT_HELPER
 static
 #endif
@@ -1049,7 +1059,6 @@ int oo_want_proactive_packet_allocation(ci_netif* ni)
                 NI_OPTS(ni).free_packets_low, current_free));
   return 1;
 }
-#endif
 
 
 /* Handling for lock flags that is common to UL and kernel paths. */
@@ -1275,6 +1284,24 @@ void ci_netif_unlock(ci_netif* ni)
   ci_assert_equal(saved_errno, errno);
 #endif
 }
+#else /* OO_DO_STACK_POLL */
+/* FIXME Sort it out somehow.
+ * This call is used from:
+ * (1) efab_tcp_helper_sock_sleep() when CI_SLEEP_NETIF_LOCKED is set;
+ * (2) efab_terminate_unlock_all_stacks().
+ * For now we just mark the stack unlocked and hope that someone (e.g.
+ * onload_helper process) will take care about all the lock flags
+ * eventually.
+ */
+void ci_netif_unlock(ci_netif* ni)
+{
+  ci_uint64 l;
+  do {
+    l = ni->state->lock.lock;
+  } while( ci_cas64u_fail(&ni->state->lock.lock, l,
+                          (l & ~CI_EPLOCK_LOCKED) | CI_EPLOCK_UNLOCKED) );
+}
+#endif /* OO_DO_STACK_POLL */
 
 
 void ci_netif_error_detected(ci_netif* ni, unsigned error_flag,
@@ -1292,6 +1319,7 @@ void ci_netif_error_detected(ci_netif* ni, unsigned error_flag,
 }
 
 
+#if OO_DO_STACK_POLL
 #if CI_CFG_EPOLL3
 #ifndef __KERNEL__
 int ci_netif_get_ready_list(ci_netif* ni)
@@ -1425,6 +1453,7 @@ int ci_netif_raw_send(ci_netif* ni, int intf_i,
   ci_netif_unlock(ni);
   return 0;
 }
+#endif
 #endif
 
 
@@ -1875,6 +1904,7 @@ void ci_netif_active_wild_sharer_closed(ci_netif* ni, ci_sock_cmn* s)
 #endif /* CI_CFG_TCP_SHARED_LOCAL_PORTS */
 
 
+#if OO_DO_STACK_POLL
 void oo_tcpdump_free_pkts(ci_netif* ni, ci_uint16 i)
 {
   ci_uint16 read_i = ni->state->dump_read_i;
@@ -1894,6 +1924,7 @@ void oo_tcpdump_free_pkts(ci_netif* ni, ci_uint16 i)
     }
   } while( (++i - read_i) % CI_CFG_DUMPQUEUE_LEN );
 }
+#endif
 
 
 #if CI_CFG_UL_INTERRUPT_HELPER && ! defined(__KERNEL__)

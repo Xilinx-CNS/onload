@@ -27,6 +27,7 @@
 #include <ci/internal/pio_buddy.h>
 
 
+#if OO_DO_STACK_POLL
 #define LPF "TCP SEND "
 
 
@@ -3133,6 +3134,7 @@ send_q_full:
 
 }
 
+#endif
 #endif
 
 /*! \cidoxg_end */

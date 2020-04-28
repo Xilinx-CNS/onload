@@ -485,12 +485,6 @@
 # define CI_CFG_SUPPORT_PHYS_ADDR  0
 #endif
 
-/* If set to 1, build ci_netif_dump() and friends inside the kernel, to allow
- * stackdump-like output to be generated for debugging purposes (useful for
- * iSCSI in particular).  Only tested with Linux so far.
- */
-#define CI_CFG_BUILD_DUMP_CODE_IN_KERNEL 1
-
 /* Maintain statistics for listening sockets.  At time of writing these are
 ** all gathered off the fast path, so there is no significant performance
 ** penalty for having them on.

@@ -16,6 +16,7 @@
 #include "ip_internal.h"
 #include "tcp_rx.h"
 
+#if OO_DO_STACK_POLL
 #if 0
 #undef LOG_TV
 #define LOG_TV(x) x
@@ -963,4 +964,5 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
   return -ENOSPC;
 }
 
+#endif
 /*! \cidoxg_end */

@@ -26,6 +26,7 @@
 #include <onload/extensions_zc.h>
 #endif
 
+#if OO_DO_STACK_POLL
 #define VERB(x)
 
 #define LPF "ci_udp_"
@@ -1542,4 +1543,5 @@ int ci_udp_recvmsg_kernel(int fd, ci_netif* ni, ci_udp_state* us,
 
   return rc;
 }
+#endif
 #endif

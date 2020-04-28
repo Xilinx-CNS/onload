@@ -96,6 +96,7 @@
 
 
 
+#if OO_DO_STACK_POLL
 
 
 
@@ -661,4 +662,5 @@ void oo_deferred_free(ci_netif *ni)
                   ni->state->stats.tx_defer_pkt_drop_arp_failed +
                   ni->state->stats.tx_defer_pkt_drop_failed + n);
 }
+#endif
 #endif

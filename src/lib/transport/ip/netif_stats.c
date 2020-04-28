@@ -17,6 +17,7 @@
 #include "ip_internal.h"
 
 
+#if OO_DO_STACK_POLL
 #if CI_CFG_SUPPORT_STATS_COLLECTION
 
 
@@ -44,6 +45,7 @@ ci_netif_stats_handle_timer(ci_netif* ni, ci_iptime_t timeout)
           ci_ip_timer_set(ni, it, ci_tcp_time_now(ni)+timeout);
   }
 }
+#endif
 
 
 /* called to setup the UL stack statistics/logging */

@@ -23,6 +23,7 @@
 #include <etherfabric/vi.h>
 #include <ci/internal/pio_buddy.h>
 
+#if OO_DO_STACK_POLL
 #include <linux/ip.h>
 #ifdef __KERNEL__
 #include <linux/time.h>
@@ -2031,4 +2032,5 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
   return n_evs_handled;
 }
 
+#endif /* OO_DO_STACK_POLL */
 /*! \cidoxg_end */

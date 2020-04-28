@@ -155,6 +155,7 @@ void ci_ip_timer_state_init(ci_netif* netif, unsigned cpu_khz)
 #endif /* __KERNEL */
 
 
+#if OO_DO_STACK_POLL
 /* insert a non-pending timer into the scheduler */
 void __ci_ip_timer_set(ci_netif *netif, ci_ip_timer *ts, ci_iptime_t t)
 {
@@ -458,6 +459,7 @@ void ci_ip_timer_poll(ci_netif *netif) {
   }
 }
 
+#endif
 
 #ifndef NDEBUG
 
@@ -539,6 +541,7 @@ void ci_ip_timer_state_assert_valid(ci_netif* ni, const char* file, int line)
 
 #endif
 
+#if OO_DO_STACK_POLL
 #ifdef DUMP_TIMER_SUPPORT 
 static const char* ci_ip_timer_dump(const ci_ip_timer* ts)
 {
@@ -635,4 +638,5 @@ void ci_ip_timer_state_dump(ci_netif* ni)
 #endif
 
 
+#endif
 /*! \cidoxg_end */

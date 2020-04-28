@@ -19,6 +19,7 @@
 
 #define LPF "TCP MISC "
 
+#if OO_DO_STACK_POLL
 #define VERB(x)
 
 enum {
@@ -130,6 +131,7 @@ const char* ip_addr_str(ci_uint32 addr_be32)
   ci_format_ip4_addr(buf[i], addr_be32);
   return buf[i];
 }
+#endif /* OO_DO_STACK_POLL */
 
 
 const char* ci_tcp_state_num_str(int state_i)
@@ -159,6 +161,7 @@ const char* ci_tcp_state_num_str(int state_i)
 }
 
 
+#if OO_DO_STACK_POLL
 const char* ci_tcp_congstate_str(unsigned s)
 {
   switch( s ) {
@@ -1461,4 +1464,5 @@ int /*bool*/ ci_tcp_is_cacheable_active_wild_sharer(ci_sock_cmn* s)
 #endif
 
 
+#endif
 /*! \cidoxg_end */

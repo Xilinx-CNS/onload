@@ -13,6 +13,7 @@
 #include "ip_internal.h"
 #include <onload/pkt_filler.h>
 
+#if OO_DO_STACK_POLL
 
 void oo_pkt_filler_free_unused_pkts(ci_netif* ni, int* p_netif_locked,
                                     struct oo_pkt_filler* pf)
@@ -133,3 +134,4 @@ int oo_pkt_fill(ci_netif* ni, ci_sock_cmn* s, int* p_netif_locked,
   pf->last_pkt->buf_len = pf->buf_start - PKT_START(pf->last_pkt);
   return 0;
 }
+#endif

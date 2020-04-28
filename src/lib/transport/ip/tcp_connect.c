@@ -23,6 +23,7 @@
 #include <ci/internal/efabcfg.h>
 #endif
 
+#if OO_DO_STACK_POLL
 #define VERB(x)
 
 #define LPF "tcp_connect: "
@@ -2357,5 +2358,6 @@ int ci_tcp_getsockname(citp_socket* ep, ci_fd_t fd, struct sockaddr* sa,
 
 #endif
 
+#endif
 #endif
 

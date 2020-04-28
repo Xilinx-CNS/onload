@@ -20,6 +20,7 @@
 #endif
 
 
+#if OO_DO_STACK_POLL
 #define LPF "TCP RECV "
 
 struct tcp_recv_info;
@@ -1560,6 +1561,7 @@ int ci_tcp_zc_recvmsg(const ci_tcp_recvmsg_args* a,
                            &a->msg->msg_namelen);
   return ci_tcp_recvmsg_impl(a, zc_call_callback, args);
 }
+#endif
 #endif
 
 /*! \cidoxg_end */

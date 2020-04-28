@@ -18,10 +18,6 @@
 
 #define LPF "TCP TIMER "
 
-
-static void ci_tcp_timeout_taildrop(ci_netif* netif, ci_tcp_state* ts);
-
-
 /* Called to setup the TCP time constants in terms of ticks for this
 ** machine.
 **
@@ -90,6 +86,11 @@ void ci_tcp_timer_init(ci_netif* netif)
   NI_CONF(netif).tconst_stats = 
     ci_tcp_time_ms2ticks(netif, CI_TCONST_STATS);
 }
+
+
+#if OO_DO_STACK_POLL
+
+static void ci_tcp_timeout_taildrop(ci_netif* netif, ci_tcp_state* ts);
 
 
 /* Called as action on a listen timeout */
@@ -668,4 +669,5 @@ static void ci_tcp_timeout_taildrop(ci_netif* netif, ci_tcp_state* ts)
 }
 
 
+#endif
 /*! \cidoxg_end */

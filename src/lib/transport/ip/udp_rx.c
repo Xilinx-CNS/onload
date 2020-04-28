@@ -25,6 +25,7 @@
 #define VERB(x)
 
 
+#if OO_DO_STACK_POLL
 
 
 
@@ -340,4 +341,5 @@ void ci_udp_handle_rx(ci_netif* ni, ci_ip_pkt_fmt* pkt, ci_udp_hdr* udp,
   return;
 }
 
+#endif
 /*! \cidoxg_end */

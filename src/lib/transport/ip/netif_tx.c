@@ -18,6 +18,7 @@
 #include <ci/tools/pktdump.h>
 #include <ci/internal/pio_buddy.h>
 
+#if OO_DO_STACK_POLL
 
 /* [is_fresh] is a hint indicating that the requested TXs are latency-
  * sensitive. */
@@ -296,4 +297,5 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
   }
 }
 
+#endif
 /*! \cidoxg_end */

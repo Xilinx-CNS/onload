@@ -23,6 +23,8 @@
 #define LPFOUT "<- " LPF
 
 
+#if OO_DO_STACK_POLL
+
 /* STATS */
 /*! \todo Temporary stats in ICMP tx module need replacing */
 typedef struct {
@@ -222,4 +224,5 @@ extern int __ci_icmp_send_error(ci_netif *ni, int af,
 
 
 
+#endif
 /*! \cidoxg_end */

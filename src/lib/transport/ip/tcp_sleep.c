@@ -263,6 +263,7 @@ void ci_sock_unlock_slow(ci_netif* ni, citp_waitable* w)
 }
 
 
+#if OO_DO_STACK_POLL
 /**********************************************************************
  *
  * ci_netif_pkt_wait()
@@ -386,5 +387,6 @@ int ci_netif_pkt_wait(ci_netif* ni, ci_sock_cmn* s, int lock_flags)
 
   return 0;
 }
+#endif
 
 /*! \cidoxg_end */

@@ -261,7 +261,7 @@ void ci_assert_valid_pkt(ci_netif* ni, ci_ip_pkt_fmt* pkt,
  * Dumping state.
  */
 
-#if (!defined(__KERNEL__)) || defined(CI_CFG_BUILD_DUMP_CODE_IN_KERNEL)
+#if OO_DO_STACK_POLL
 
 void ci_netif_dump_sockets(ci_netif* ni)
 {
@@ -985,7 +985,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     ci_netif_dump_vi(ni, intf_i, logger, log_arg);
 }
-#endif /* __KERNEL__ */
+#endif /* OO_DO_STACK_POLL */
 
 #ifndef __KERNEL__
 void ci_netif_dump_vi_stats_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,

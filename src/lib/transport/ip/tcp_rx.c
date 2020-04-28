@@ -34,6 +34,7 @@
 #include "tcp_rx.h"
 
 
+#if OO_DO_STACK_POLL
 #define LPF "TCP RX "
 
 /* TCP RX status */
@@ -4659,4 +4660,5 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
   ci_netif_pkt_release_rx_1ref(netif, pkt);
 }
 
+#endif
 /*! \cidoxg_end */

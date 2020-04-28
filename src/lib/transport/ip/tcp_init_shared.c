@@ -16,6 +16,8 @@
 #include "ip_internal.h"
 
 
+#if OO_DO_STACK_POLL
+
 #define TCP_STATE_POISON 0xff
 
 
@@ -411,6 +413,7 @@ ci_tcp_state* ci_tcp_get_state_buf(ci_netif* netif)
   ci_tcp_state_init(netif, &wo->tcp, 0);
   return &wo->tcp;
 }
+#endif
 
 void ci_ni_aux_more_bufs(ci_netif* ni)
 {

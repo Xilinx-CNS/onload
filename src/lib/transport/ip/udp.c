@@ -24,6 +24,7 @@
 #define VERB(x)
 
 
+#if OO_DO_STACK_POLL
 /* Set up ip4/udp headers.  The dest addr and ports are not set and 
  * there are no IP options.  The source port is defaulted to port 0 
  */
@@ -318,4 +319,5 @@ void ci_udp_state_dump(ci_netif* ni, ci_udp_state* us, const char* pf,
          uss.n_tx_cp_no_mac, percent(uss.n_tx_cp_no_mac, tx_total));
 }
 
+#endif
 /*! \cidoxg_end */

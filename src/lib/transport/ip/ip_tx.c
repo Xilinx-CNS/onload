@@ -18,6 +18,7 @@
 #include <ci/tools/pktdump.h>
 
 
+#if OO_DO_STACK_POLL
 void ci_ip_send_pkt_lookup(ci_netif* ni,
                            const struct oo_sock_cplane* sock_cp_opt,
                            ci_ip_pkt_fmt* pkt,
@@ -282,4 +283,5 @@ void ci_ipcache_update_flowlabel(ci_netif* ni, ci_sock_cmn* s)
 }
 #endif
 
+#endif
 /*! \cidoxg_end */

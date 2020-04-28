@@ -65,6 +65,7 @@ set_entry_state(ci_netif_filter_table_entry_fast* entry, ci_uint32 state)
   entry->__id_and_state = __ID(entry) | state;
 }
 
+#if OO_DO_STACK_POLL
 ci_inline void
 set_entry_id(ci_netif_filter_table_entry_fast* entry, ci_uint32 id)
 {
@@ -579,6 +580,7 @@ ci_netif_filter_remove(ci_netif* netif, oo_sp sock_p, int af_space,
                                raddr.ip4, rport, protocol);
   }
 }
+#endif
 
 /**********************************************************************
  **********************************************************************
@@ -609,6 +611,7 @@ void ci_netif_filter_init(ci_netif* ni, int size_lg2)
 
 #endif
 
+#if OO_DO_STACK_POLL
 int
 __ci_ip4_netif_filter_lookup(ci_netif* netif,
                              unsigned laddr, unsigned lport,
@@ -717,4 +720,5 @@ void ci_netif_filter_dump(ci_netif* ni)
   log("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++");
 }
 
+#endif
 /*! \cidoxg_end */

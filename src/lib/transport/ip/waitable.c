@@ -75,12 +75,14 @@ citp_waitable_obj* citp_waitable_obj_alloc(ci_netif* netif)
     }
   }
 
+#if OO_DO_STACK_POLL
   if( OO_SP_IS_NULL(netif->state->free_eps_head) ) {
     ci_tcp_helper_more_socks(netif);
 
     if( OO_SP_IS_NULL(netif->state->free_eps_head) )
       ci_netif_timeout_reap(netif);
   }
+#endif
 
   if( OO_SP_IS_NULL(netif->state->free_eps_head) )
     return NULL;
@@ -306,7 +308,6 @@ void citp_waitable_all_fds_gone(ci_netif* ni, oo_sp w_id)
   citp_waitable_cleanup(ni, wo, 1);
 }
 
-#endif  /* __KERNEL__ */
 
 
 const char* citp_waitable_type_str(citp_waitable* w)
@@ -442,6 +443,7 @@ void citp_waitable_print_to_logger(ci_netif* ni, citp_waitable* w,
   }
 }
 
+#endif  /* OO_DO_STACK_POLL */
 
 #ifndef __KERNEL__
 

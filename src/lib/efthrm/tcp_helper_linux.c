@@ -332,9 +332,9 @@ static unsigned linux_tcp_helper_fop_poll_udp(struct file* filp,
   us = SP_TO_UDP(ni, id);
   tep_p = ci_trs_ep_get(trs, id);
 
-  OO_DEBUG_ASYNC(ci_log("%s: %d:%d %s:%d wait=%p", __FUNCTION__,
+  OO_DEBUG_ASYNC(ci_log("%s: %d:%d "IPX_FMT":%d wait=%p", __FUNCTION__,
                         NI_ID(ni), OO_SP_FMT(id),
-                        ip_addr_str(sock_laddr_be32(&us->s)),
+                        IPX_ARG(AF_IP(sock_ipx_laddr(&us->s))),
                         (unsigned) CI_BSWAP_BE16(sock_lport_be16(&us->s)),
                         wait));
 
@@ -1318,10 +1318,10 @@ int efab_os_sock_callback(wait_queue_entry_t *wait, unsigned mode,
 
   fixed_mask = efab_os_wakup_fix_mask(ep, mask, &so_error);
   OO_DEBUG_ASYNC(ci_sock_cmn *s = SP_TO_SOCK(&ep->thr->netif, ep->id);
-                 ci_log("%s: %d:%d %s:%d mask=%lx fixed_mask=%hx so_error=%d",
+                 ci_log("%s: %d:%d "IPX_FMT":%d mask=%lx fixed_mask=%hx so_error=%d",
                         __FUNCTION__,
                          ep->thr->id, OO_SP_FMT(ep->id),
-                         ip_addr_str(sock_laddr_be32(s)),
+                         IPX_ARG(AF_IP(sock_ipx_laddr(s))),
                         (unsigned) CI_BSWAP_BE16(sock_lport_be16(s)),
                         mask, fixed_mask, so_error));
 

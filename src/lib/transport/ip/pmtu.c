@@ -18,6 +18,7 @@
 
 #define LPF "ci_pmtu_"
 
+#if OO_DO_STACK_POLL
 
 static const ci_uint16 mtu_plateau[] = CI_PMTU_PLATEAU_ENTRIES;
 
@@ -140,4 +141,5 @@ void ci_pmtu_update_fast(ci_netif* ni, ci_pmtu_state_t *pmtus,
                   pmtus->pmtu, pmtu, ipcache->mtu));
 }
 
+#endif
 /*! \cidoxg_end */

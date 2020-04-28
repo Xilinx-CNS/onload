@@ -68,11 +68,7 @@
 #endif
 #endif
 
-/* Where do we close endpoints?
- *
- * We can close endpoints from citp_fdinfo_do_handover(), and
- * if !CI_CFG_UL_INTERRUPT_HELPER then we close endpoints from in-kernel.
- */
+/* Do we compile the core TCP/IP stack functionality in? */
 #if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
 #define OO_DO_STACK_POLL 1
 #else
@@ -474,16 +470,13 @@ extern unsigned ci_netif_build_future_intf_mask(ci_netif* ni) CI_HF;
 extern void ci_netif_error_detected(ci_netif*, unsigned error_flag,
                                     const char* caller) CI_HF;
 
+#if OO_DO_STACK_POLL
 #ifndef __KERNEL__
 extern int  ci_netif_poll_intf_future(ci_netif*, int intf_i, ci_uint64 now_frc)
   CI_HF;
 #endif
 extern int  ci_netif_poll_n(ci_netif*, int max_evs) CI_HF;
-#if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
 #define     ci_netif_poll(ni)  ci_netif_poll_n((ni), NI_OPTS(ni).evs_per_poll)
-#else
-ci_inline int ci_netif_poll(ci_netif* ni) { BUG(); return 0; }
-#endif
 
 #if CI_CFG_WANT_BPF_NATIVE
 #ifdef __KERNEL__
@@ -505,6 +498,7 @@ cicp_pkt_complete_fake(ci_netif* ni, ci_ip_pkt_fmt* pkt)
   ni->state->nic[pkt->intf_i].tx_bytes_removed -= TX_PKT_LEN(pkt);
   ci_netif_tx_pkt_complete(ni, NULL, pkt);
 }
+#endif
 
 
 extern void __ci_netif_send(ci_netif*, ci_ip_pkt_fmt* pkt) CI_HF;

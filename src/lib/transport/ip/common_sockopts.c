@@ -480,6 +480,7 @@ int ci_get_sol_socket( ci_netif* netif, ci_sock_cmn* s,
   int u;
 
   switch(optname) {
+#if OO_DO_STACK_POLL
 #if CI_CFG_TCP_SOCK_STATS
   case CI_SO_L5_GET_SOCK_STATS:
     /* Way to get access to our socket statistics data
@@ -529,6 +530,7 @@ int ci_get_sol_socket( ci_netif* netif, ci_sock_cmn* s,
                           CI_IP_STATS_OUTPUT_NONE, optval, optlen );
     break;
 #endif
+#endif /* OO_DO_STACK_POLL */
 
   case SO_KEEPALIVE:
     u = !!(s->s_flags & CI_SOCK_FLAG_KALIVE);
@@ -725,7 +727,9 @@ int ci_get_sol_socket( ci_netif* netif, ci_sock_cmn* s,
   } 
   /* deliberate drop through */ 
 
+#if OO_DO_STACK_POLL
  fail_inval:
+#endif
   LOG_SC(log("%s: "NS_FMT" option %i ptr/len error (EINVAL or EFAULT)",
              __FUNCTION__, NS_PRI_ARGS(netif, s), optname));
   RET_WITH_ERRNO(EINVAL);

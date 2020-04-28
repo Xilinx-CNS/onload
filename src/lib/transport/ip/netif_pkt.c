@@ -134,7 +134,9 @@ ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif* ni, int flags)
   ci_assert_equal(ni->packets->id, NI_PKT_SET(ni));
   ci_assert_equal(ni->packets->set[NI_PKT_SET(ni)].n_free, 0);
   ci_assert(OO_PP_IS_NULL(ni->packets->set[NI_PKT_SET(ni)].free));
+#if OO_DO_STACK_POLL
  again:
+#endif
   bufset_id = ci_netif_pktset_best(ni);
   if( bufset_id != -1 ) {
     ci_netif_pkt_set_change(ni, bufset_id,
@@ -154,12 +156,14 @@ ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif* ni, int flags)
       break;
   }
 
+#if OO_DO_STACK_POLL
   if( ! (flags & CI_PKT_ALLOC_NO_REAP) ) {
     if( ni->packets->n_free == 0 )
       ci_netif_try_to_reap(ni, 1);
     if( ni->packets->n_free > 0 )
       goto again;
   }
+#endif
 
   return NULL;
 }
@@ -176,7 +180,7 @@ ci_inline void __ci_dbg_poison_header(ci_ip_pkt_fmt* pkt, ci_uint32 pattern)
 }
 
 
-#ifdef __KERNEL__
+#if defined(__KERNEL__) && OO_DO_STACK_POLL
 void ci_netif_set_merge_atomic_flag(ci_netif* ni)
 {
   ci_uint64 val;
@@ -261,7 +265,7 @@ void ci_netif_pkt_free(ci_netif* ni, ci_ip_pkt_fmt* pkt
     ci_netif_pkt_put(ni, pkt);
   }
 
-#ifdef __KERNEL__
+#if defined(__KERNEL__) && OO_DO_STACK_POLL
   if( CI_UNLIKELY( ! *p_netif_is_locked ) ) {
     ci_netif_set_merge_atomic_flag(ni);
   }
@@ -269,6 +273,7 @@ void ci_netif_pkt_free(ci_netif* ni, ci_ip_pkt_fmt* pkt
 }
 
 
+#if OO_DO_STACK_POLL
 int ci_netif_pkt_try_to_free(ci_netif* ni, int desperation, int stop_once_freed_n)
 {
   unsigned id;
@@ -408,6 +413,6 @@ int ci_netif_pkt_pass_to_kernel(ci_netif* ni, ci_ip_pkt_fmt* pkt)
   return 0;
 #endif
 }
-
+#endif
 
 /*! \cidoxg_end */

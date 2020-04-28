@@ -138,11 +138,11 @@ efab_tcp_driver_t efab_tcp_driver;
 
 static void
 efab_tcp_helper_rm_free_locked(tcp_helper_resource_t*, int can_destroy_now);
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void
 efab_tcp_helper_rm_schedule_free(tcp_helper_resource_t*);
 
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
 static int
 oo_handle_wakeup_int_driven(void*, int is_timeout,
                             struct efhw_nic*, int budget);
@@ -175,8 +175,10 @@ static void
 efab_tcp_helper_drop_os_socket(tcp_helper_resource_t* trs,
                                tcp_helper_endpoint_t* ep);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void
 oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync);
+#endif
 
 /* Allocate a block of IDs from the pool of ID blocks */
 static int efab_ipid_alloc(efab_ipid_cb_t* ipid);
@@ -185,6 +187,7 @@ static int efab_ipid_alloc(efab_ipid_cb_t* ipid);
  * Base MUST be the base address returned by efab_ipid_alloc(). */
 static int efab_ipid_free(efab_ipid_cb_t* ipid, int base);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /*----------------------------------------------------------------------------
  *
  * oo_trusted_lock
@@ -415,6 +418,7 @@ efab_tcp_helper_netif_lock_or_set_flags(tcp_helper_resource_t* trs,
        return 0;
   } while( 1 );
 }
+#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 
 /*----------------------------------------------------------------------------
@@ -4047,9 +4051,12 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   tcp_helper_initialize_and_start_periodic_timer(rs);
   if( NI_OPTS(ni).int_driven )
     tcp_helper_request_wakeup(netif2tcp_helper_resource(ni));
+  efab_tcp_helper_netif_unlock(rs, 0);
+#else
+  ni->state->lock.lock = CI_EPLOCK_UNLOCKED;
+  rs->trusted_lock = OO_TRUSTED_LOCK_UNLOCKED;
 #endif
 
-  efab_tcp_helper_netif_unlock(rs, 0);
 
   efab_notify_stacklist_change(rs);
 
@@ -4084,16 +4091,16 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   ci_dllink_mark_free(&rs->all_stacks_link);
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
+#if CI_CFG_NIC_RESET_SUPPORT
   /* We might have been reset, so provide a lock for potential waiter.  We
    * don't want to (and can't safely) run any unlock hooks.  Ignoring them is
    * safe since the only other possible user of this stack is reset work, which
    * doesn't require that we handle any of the flags. */
   ef_eplock_clear_flags(&ni->state->lock, CI_EPLOCK_NETIF_UNLOCK_FLAGS);
   efab_tcp_helper_netif_unlock(rs, 0);
-#if CI_CFG_NIC_RESET_SUPPORT
   flush_workqueue(rs->reset_wq);
-#endif
   efab_tcp_helper_netif_try_lock(rs, 0);
+#endif
 
   if( hw_resources_allocated )
     release_netif_hw_resources(rs);
@@ -4946,6 +4953,7 @@ int oo_wakeup_waiters(ci_private_t* priv, void* arg)
 #endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void
 efab_tcp_helper_rm_reset_untrusted(tcp_helper_resource_t* trs)
 {
@@ -4982,6 +4990,7 @@ efab_tcp_helper_rm_schedule_free(tcp_helper_resource_t* trs)
   OO_DEBUG_TCPH(ci_log("%s [%u]: defer", __FUNCTION__, trs->id));
   queue_work(CI_GLOBAL_WORKQUEUE, &trs->work_item_dtor);
 }
+#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 /*--------------------------------------------------------------------
  *!
@@ -5346,12 +5355,14 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
                        trs->netif.flags & CI_NETIF_FLAG_WEDGED ?
                        "wedged" : "gracious"));
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   if( trs->netif.flags & CI_NETIF_FLAG_WEDGED ) {
     /* We're doing this here because we need to be in a context that allows
      * us to block.
      */
     efab_tcp_helper_rm_reset_untrusted(trs);
   }
+#endif
 
   /* stop any async callbacks from kernel mode (waiting if necessary)
    *  - as these callbacks are the only events that can take the kernel
@@ -7245,6 +7256,7 @@ wakeup_post_poll_list(tcp_helper_resource_t* thr)
 }
 #endif
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /*--------------------------------------------------------------------
  *!
  * Callback installed with the netif (kernel/user mode shared) eplock
@@ -7472,6 +7484,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
 
   return lock_val;
 }
+#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 
 /**********************************************************************
@@ -7768,6 +7781,7 @@ static void oo_inject_packets_work(struct work_struct* work)
 }
 #endif
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /* Injects all pending kernel packets into the kernel's network stack. */
 static void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
 {
@@ -7822,8 +7836,9 @@ static void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
   ni->state->kernel_packets_tail = OO_PP_NULL;
   ni->state->kernel_packets_pending = 0;
   ci_frc64(&ni->state->kernel_packets_last_forwarded);
-#endif
+#endif /* CI_CFG_INJECT_PACKETS */
 }
+#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE

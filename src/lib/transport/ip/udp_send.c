@@ -22,6 +22,7 @@
 #include <onload/sleep.h>
 
 
+#if OO_DO_STACK_POLL
 #define VERB(x)
 
 #define LPF "ci_udp_"
@@ -1746,4 +1747,5 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
     RET_WITH_ERRNO(-rc);
 }
 
+#endif
 /*! \cidoxg_end */

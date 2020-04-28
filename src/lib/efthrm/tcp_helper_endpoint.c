@@ -63,13 +63,22 @@ tcp_helper_endpoint_ctor(tcp_helper_endpoint_t *ep,
 
 /*--------------------------------------------------------------------*/
 
+#if CI_CFG_UL_INTERRUPT_HELPER
+/* FIXME Sasha
+ * ci_tcp_sock_set_stack_filter() and ci_tcp_sock_clear_stack_filter()
+ * should be called from UL only in this mode.  There is no easy way to
+ * do it now, so scalable filters are deliberately broken.*/
+#define BREAK_SCALABLE_FILTERS
+#endif
 
 /* See description in include/onload/tcp_helper_endpoint.h */
 void
 tcp_helper_endpoint_dtor(tcp_helper_endpoint_t * ep)
 {
   unsigned long lock_flags;
+#ifndef BREAK_SCALABLE_FILTERS
   ci_sock_cmn* s = SP_TO_SOCK(&ep->thr->netif, ep->id);
+#endif
 
   /* We need to release zero, one or two file references after dropping a
    * spinlock. */
@@ -81,9 +90,11 @@ tcp_helper_endpoint_dtor(tcp_helper_endpoint_t * ep)
      it is freed - therefore ensure properly cleaned up */
   OO_DEBUG_VERB(ci_log(FEP_FMT, FEP_PRI_ARGS(ep)));
 
+#ifndef BREAK_SCALABLE_FILTERS
   if( s->s_flags & CI_SOCK_FLAG_STACK_FILTER )
     ci_tcp_sock_clear_stack_filter(&ep->thr->netif,
                                    SP_TO_TCP(&ep->thr->netif, ep->id));
+#endif
   oof_socket_del(oo_filter_ns_to_manager(ep->thr->filter_ns), &ep->oofilter);
   oof_socket_mcast_del_all(oo_filter_ns_to_manager(ep->thr->filter_ns),
                            &ep->oofilter);
@@ -251,9 +262,11 @@ ci_tcp_use_mac_filter(ci_netif* ni, ci_sock_cmn* s, ci_ifid_t ifindex,
     use_mac_filter |= OO_SP_NOT_NULL(from_tcp_id) &&
              (SP_TO_SOCK(ni, from_tcp_id)->s_flags & CI_SOCK_FLAG_STACK_FILTER);
 
+#ifndef BREAK_SCALABLE_FILTERS
     if( (use_mac_filter == 0) && (s->b.state == CI_TCP_LISTEN) &&
         ci_tcp_use_mac_filter_listen(ni, s, ifindex) )
       use_mac_filter = 1;
+#endif
   }
 
   if( use_mac_filter ) {
@@ -405,9 +418,12 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
    * We would have no information on how to clear the MAC filter. */
   ci_assert((s->s_flags & CI_SOCK_FLAG_STACK_FILTER) == 0);
 
+#ifndef BREAK_SCALABLE_FILTERS
   if( use_mac_filter )
     rc = ci_tcp_sock_set_stack_filter(ni, SP_TO_SOCK(ni, ep->id));
-  else if( OO_SP_NOT_NULL(from_tcp_id) )
+  else
+#endif
+  if( OO_SP_NOT_NULL(from_tcp_id) )
     rc = oof_socket_share(oo_filter_ns_to_manager(ep->thr->filter_ns),
                           &ep->oofilter, &listen_ep->oofilter,
                           af_space, laddr, raddr, lport, rport);
@@ -502,9 +518,11 @@ tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
   }
 
   if( (s->s_flags & (CI_SOCK_FLAGS_SCALABLE | CI_SOCK_FLAG_STACK_FILTER)) != 0 ) {
+#ifndef BREAK_SCALABLE_FILTERS
     if( (s->s_flags & CI_SOCK_FLAG_STACK_FILTER) != 0 )
       ci_tcp_sock_clear_stack_filter(&ep->thr->netif,
                                      SP_TO_TCP(&ep->thr->netif,ep->id));
+#endif
 
     if( (s->s_flags & CI_SOCK_FLAG_FILTER) == 0 ) {
       os_sock_ref = oo_file_xchg(&ep->os_port_keeper, NULL);

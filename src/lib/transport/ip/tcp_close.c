@@ -23,6 +23,7 @@
 
 #define LPF "tcp_close: "
 
+#if OO_DO_STACK_POLL
 
 
 /* Transform a listening socket back to a normal socket. */
@@ -915,4 +916,5 @@ void ci_tcp_all_fds_gone(ci_netif* ni, ci_tcp_state* ts, int do_free)
 #endif
 
 
+#endif
 /*! \cidoxg_end */

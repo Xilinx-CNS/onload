@@ -21,6 +21,7 @@
 #define LPF "TCP TX RFMT "
 
 
+#if OO_DO_STACK_POLL
 
 /* CVS history for all these functions is in tcp_tx.c v1.382 
 ** A unit testbench for this code is available in 
@@ -629,3 +630,4 @@ void ci_tcp_retrans_coalesce_block(ci_netif* ni, ci_tcp_state* ts,
       pkt = PKT_CHK(ni, pkt->next);
   }
 }
+#endif

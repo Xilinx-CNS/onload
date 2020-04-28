@@ -117,7 +117,7 @@ void ci_tcp_state_listen_assert_valid(ci_netif* netif,
               tsl->acceptq_max));
 }
 
-#ifndef NDEBUG
+#if ! defined(NDEBUG) && OO_DO_STACK_POLL
 static void ci_tcp_state_retrans_assert_valid(ci_netif* ni, ci_tcp_state* ts,
                                               const char* file, int line)
 {
@@ -384,7 +384,7 @@ static void ci_tcp_state_rob_assert_valid(ci_netif* ni, ci_tcp_state* ts,
 void ci_tcp_state_assert_valid(ci_netif* netif, ci_tcp_state* ts,
                                const char* file, int line)
 {
-#ifndef NDEBUG
+#if ! defined(NDEBUG) && OO_DO_STACK_POLL
   ci_ip_pkt_fmt *pkt, *prev_pkt;
   int sack_points_in_rob;
   int num, need_unlock;
@@ -528,7 +528,7 @@ void ci_tcp_ep_assert_valid(citp_socket* ep, const char* file, int line)
  * Dumping state.
  */
 
-#if (!defined(__KERNEL__)) || defined(CI_CFG_BUILD_DUMP_CODE_IN_KERNEL)
+#if OO_DO_STACK_POLL
 
 void ci_tcp_pkt_dump(ci_netif *ni, ci_ip_pkt_fmt* pkt, int is_recv, int dump)
 {
@@ -667,7 +667,6 @@ void ci_tcp_state_dump_retrans(ci_netif* ni, ci_tcp_state* ts)
   }
 }
 
-#endif
 
 
 static void ci_tcp_socket_cmn_dump(ci_netif* ni, ci_tcp_socket_cmn* tsc,
@@ -1020,4 +1019,5 @@ void ci_tcp_listen_rx_checks(ci_netif* ni, ci_tcp_socket_listen* tls,
   tcp_rx_checks_dump_cmn(ni, pkt, dump);
 }
 
+#endif
 /*! \cidoxg_end */

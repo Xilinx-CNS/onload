@@ -20,6 +20,7 @@
 #include "tcp_tx.h"
 
 
+#if OO_DO_STACK_POLL
 #define LPF "TCP TX "
 
 
@@ -2105,4 +2106,5 @@ void ci_ipx_hdr_init_fixed(ci_ipx_hdr_t* ip, int af, int protocol,
     ci_ip_hdr_init_fixed(&ip->ip4, protocol, ttl, tos);
 }
 
+#endif
 /*! \cidoxg_end */
