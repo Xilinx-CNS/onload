@@ -4,10 +4,10 @@
 CWARNINGS	:= -Wall -Wundef -Wstrict-prototypes -Wpointer-arith \
 		   -Wnested-externs
 
-PYTHON_VER	:= $(shell python -V 2>&1 | \
+PYTHON_VER	:= $(shell python2 -V 2>&1 | \
 			sed 's/Python \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/')
-PYTHON_CFLAGS	+= $(shell python-config --cflags 2>/dev/null)
-PYTHON_LIBS	:= $(shell python-config --libs 2>/dev/null)
+PYTHON_CFLAGS	+= $(shell python2-config --cflags 2>/dev/null)
+PYTHON_LIBS	:= $(shell python2-config --libs 2>/dev/null)
 
 ifeq ($(PYTHON_CFLAGS),)
 PYTHON_CFLAGS	:= -fno-strict-aliasing -fPIC -I/usr/include/python$(PYTHON_VER)
