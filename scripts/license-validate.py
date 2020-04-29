@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 # SPDX-License-Identifier: Solarflare-Binary
 # X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
 from __future__ import print_function

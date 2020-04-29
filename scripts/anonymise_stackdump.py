@@ -1,4 +1,4 @@
-#! /usr/bin/env python
+#! /usr/bin/env python2
 
 # This tool is intended to anonymise the output of onload_stackdump
 # so that they can be shared without giving away IP addresses
