@@ -299,6 +299,12 @@ ci_tcp_ep_clear_filters(ci_netif*         ni,
   else
     rc = ci_tcp_helper_ep_clear_filters(ci_netif_get_driver_handle(ni), sock_id,
                                         need_update);
+#if CI_CFG_UL_INTERRUPT_HELPER
+    /* When called from stack poll, it is important to remove sw filters
+     * immediately, before receiving next packets. */
+    if( ni->state->in_poll )
+      ci_netif_handle_actions(ni);
+#endif
 #endif
 
   LOG_TC( if (rc < 0 && rc != -EAGAIN)
