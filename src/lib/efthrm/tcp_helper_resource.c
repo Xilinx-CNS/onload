@@ -5350,6 +5350,9 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
       ci_assert(0);
     }
   }
+#elif ! defined(NDEBUG)
+  /* Appease dtor code, pretend to be locked */
+  trs->netif.state->lock.lock = CI_EPLOCK_LOCKED;
 #endif
 
   /* Remove all filters - and make sure we do not send anything, while
