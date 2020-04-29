@@ -249,8 +249,7 @@ void doUnitTestsPipeline() {
     }
 
     def publisher = new ArtifactoryPublisher(this)
-    assert built_package_locations.containsKey('raw_tarball')
-    publisher.publishStashed('raw_tarball',  built_package_locations['raw_tarball'], env.BRANCH_NAME, onload_version_short)
+    publisher.publishStashedPackages(product, built_package_locations, env.BRANCH_NAME, onload_version_short)
 
     def bookmark = updateLastKnownGoodBookmark(env.BRANCH_NAME, long_revision)
 
