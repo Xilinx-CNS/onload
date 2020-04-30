@@ -8,7 +8,6 @@ Homepage: http://www.openonload.org
 
 Package: #TYPE#-user
 Architecture: any
-Pre-Depends: multiarch-support
 Depends: adduser, psmisc, ${shlibs:Depends}, ${misc:Depends}, python2 | python
 Suggests: #TYPE#-modules-${source:Version}
 Description: Onload TCP/IP stack - library
