@@ -812,6 +812,11 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
         ci_tcp_state_free(netif, ts);
         return rc;
       }
+#if CI_CFG_UL_INTERRUPT_HELPER && ! defined(__KERNEL__)
+      /* We are in stack poll, and should insert sw filters before handling
+       * the next packet. */
+      ci_netif_handle_actions(netif);
+#endif
     }
 #if CI_CFG_FD_CACHING
     else {
