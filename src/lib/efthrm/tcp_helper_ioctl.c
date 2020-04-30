@@ -240,7 +240,7 @@ efab_tcp_helper_sock_attach(ci_private_t* priv, void *arg)
   if( efab_tcp_helper_os_sock_is_needed(&trs->netif, fd_type) ) {
     rc = efab_create_os_socket(trs, ep, op->domain, sock_type, flags);
     if( rc < 0 ) {
-      efab_tcp_helper_close_endpoint(trs, ep->id);
+      efab_tcp_helper_close_endpoint(trs, ep->id, 0);
       return rc;
     }
   }
@@ -265,7 +265,7 @@ efab_tcp_helper_sock_attach(ci_private_t* priv, void *arg)
   /* File should have not existed */
   ci_assert_nequal(rc, -ENOANO);
   if( rc < 0 ) {
-    efab_tcp_helper_close_endpoint(trs, ep->id);
+    efab_tcp_helper_close_endpoint(trs, ep->id, 0);
     return rc;
   }
 
@@ -585,7 +585,7 @@ efab_tcp_helper_pipe_attach(ci_private_t* priv, void *arg)
     LOG_E(ci_log("%s: ERROR: failed to bind reader [%d:%d] to fd",
                  __func__, trs->id, ep->id));
     tcp_helper_endpoint_set_aflags(ep, OO_THR_EP_AFLAG_PEER_CLOSED);
-    efab_tcp_helper_close_endpoint(trs, ep->id);
+    efab_tcp_helper_close_endpoint(trs, ep->id, 0);
     return rc;
   }
   op->rfd = rc;
@@ -595,7 +595,7 @@ efab_tcp_helper_pipe_attach(ci_private_t* priv, void *arg)
     LOG_E(ci_log("%s: ERROR: failed to bind writer [%d:%d] to fd",
                  __func__, trs->id, ep->id));
     efab_linux_sys_close(op->rfd);
-    efab_tcp_helper_close_endpoint(trs, ep->id);
+    efab_tcp_helper_close_endpoint(trs, ep->id, 0);
     return rc;
   }
   op->wfd = rc;

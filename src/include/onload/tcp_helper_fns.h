@@ -260,7 +260,8 @@ extern int efab_tcp_helper_clear_epcache(tcp_helper_resource_t* trs);
 #endif
 
 extern void efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs,
-                                           oo_sp ep_id);
+                                           oo_sp ep_id,
+                                           int already_locked);
 extern int efab_file_move_to_alien_stack(ci_private_t *priv,
                                          ci_netif *alien_ni,
                                          int drop_filter,

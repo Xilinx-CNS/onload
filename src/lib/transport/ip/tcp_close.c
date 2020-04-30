@@ -336,7 +336,7 @@ static void uncache_ep(ci_netif *netif, ci_tcp_socket_listen* tls,
    * control this using [CI_SB_AFLAG_IN_CACHE_NO_FD_BIT]. */
   /* Fixme: what about timewait? */
   if( ci_bit_test_and_set(&ts->s.b.sb_aflags, CI_SB_AFLAG_IN_CACHE_NO_FD_BIT) )
-    efab_tcp_helper_close_endpoint(netif2tcp_helper_resource(netif), S_SP(ts));
+    efab_tcp_helper_close_endpoint(netif2tcp_helper_resource(netif), S_SP(ts), 0);
 
   if( tls ) {
     /* increase per socket counter even if passive cache is shared */
@@ -707,7 +707,7 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
       /* Do not remove IN_ACCEPTQ flag: ci_tcp_close should know that we
        * are sending RST, not FIN. */
       ci_bit_clear(&ats->s.b.sb_aflags, CI_SB_AFLAG_ORPHAN_BIT);
-      efab_tcp_helper_close_endpoint(thr, sp);
+      efab_tcp_helper_close_endpoint(thr, sp, 0);
       efab_thr_release(thr);
       continue;
     }

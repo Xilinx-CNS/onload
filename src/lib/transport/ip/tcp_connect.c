@@ -1826,7 +1826,7 @@ cleanup:
   ci_assert(w->sb_aflags & CI_SB_AFLAG_ORPHAN);
   ci_bit_mask_clear(&w->sb_aflags,
                     CI_SB_AFLAG_TCP_IN_ACCEPTQ | CI_SB_AFLAG_ORPHAN);
-  efab_tcp_helper_close_endpoint(netif2tcp_helper_resource(c_ni), w->bufid);
+  efab_tcp_helper_close_endpoint(netif2tcp_helper_resource(c_ni), w->bufid, 0);
   /* we can not guarantee c_ni lock, so we can' call
    * ci_tcp_drop(c_ni, ts).  So, we return error; UL will handover
    * and close ts endpoint. */

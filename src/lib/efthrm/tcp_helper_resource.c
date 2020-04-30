@@ -3076,7 +3076,17 @@ ci_active_wild* tcp_helper_alloc_active_wild(
   return aw;
 
  fail_ep:
-  efab_tcp_helper_close_endpoint(rs, ep->id);
+  /* We are already under stack lock, this ensures that we can
+   * immediately and safely close the endpoint in
+   * efab_tcp_helper_close_endpoint() function.
+   * It helps to avoid problems in out-of-resources situation.
+   * If we do not close ep immediately, then we got a bad situation
+   * when the ep will have multiple entries in the filter table with
+   * the same local address. It happens only when we try to allocate
+   * active wild for the port which was already used but failed due to
+   * out-of-resources.
+   */
+  efab_tcp_helper_close_endpoint(rs, ep->id, 1);
  fail:
   return NULL;
 }
@@ -6874,7 +6884,8 @@ efab_tcp_helper_drop_os_socket(tcp_helper_resource_t* trs,
  *     See (1) for the result.
  */
 void
-efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id)
+efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id,
+                               int already_locked)
 {
   ci_netif* ni;
   tcp_helper_endpoint_t* tep_p;
@@ -6892,6 +6903,7 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id)
                        trs->id, OO_SP_FMT(ep_id), trs->k_ref_count,
                        ci_tcp_state_str(wo->waitable.state)));
 
+  ci_assert_impl(already_locked, ci_netif_is_locked(ni));
   ci_assert(!(w->sb_aflags & CI_SB_AFLAG_ORPHAN));
   ci_assert(! in_atomic());
 
@@ -6928,6 +6940,7 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id)
       w->state !=  CI_TCP_LISTEN && w->state !=  CI_TCP_CLOSED &&
       (wo->sock.s_flags & CI_SOCK_FLAG_LINGER) && wo->sock.so.linger != 0 &&
       ci_netif_lock(&trs->netif) == 0 ) {
+    ci_assert( !already_locked );
     __ci_tcp_shutdown(&trs->netif, &wo->tcp, SHUT_WR);
     ci_tcp_linger(&trs->netif, &wo->tcp);
     /* ci_tcp_linger exits unlocked */
@@ -6955,22 +6968,26 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id)
   ci_irqlock_unlock(&trs->lock, &lock_flags);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
-  /* set flag in eplock to signify callback needed when netif unlocked
-   * 
+  /* Close pending endpoints if we are already under lock or
+   * set flag in eplock to signify callback needed when netif unlocked
+   *
    * It is fine to pass 0 value as in_dl_context parameter to the function
    * for in the driverlink context the trusted lock is already held and
    * effectively the following clause only sets a flag, no lock
    * gets obtained and the inner clause is skipped.
    */
 
-  if( efab_tcp_helper_netif_lock_or_set_flags(trs,
-                                            OO_TRUSTED_LOCK_CLOSE_ENDPOINT,
-                                            CI_EPLOCK_NETIF_CLOSE_ENDPOINT,
-                                            0) ) {
+
+  if( (already_locked && (~trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT)) ||
+      efab_tcp_helper_netif_lock_or_set_flags(trs,
+                                             OO_TRUSTED_LOCK_CLOSE_ENDPOINT,
+                                             CI_EPLOCK_NETIF_CLOSE_ENDPOINT,
+                                             0) ) {
     OO_DEBUG_TCPH(ci_log("%s: [%d:%d] closing now",
                          __FUNCTION__, trs->id, OO_SP_FMT(ep_id)));
     tcp_helper_close_pending_endpoints(trs);
-    efab_tcp_helper_netif_unlock(trs, 0);
+    if( !already_locked )
+      efab_tcp_helper_netif_unlock(trs, 0);
   }
   else {
     OO_DEBUG_TCPH(ci_log("%s: [%d:%d] closing deferred to lock holder",
@@ -7052,7 +7069,7 @@ void generic_tcp_helper_close(ci_private_t* priv)
 #endif
   {
     ep->file_ptr = NULL;
-    efab_tcp_helper_close_endpoint(trs, ep->id);
+    efab_tcp_helper_close_endpoint(trs, ep->id, 0);
   }
 }
 
