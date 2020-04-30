@@ -21,7 +21,6 @@ set -e
 
 case "$1" in
     purge|remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
-      /usr/lib/lsb/remove_initd /etc/init.d/openonload;
       ldconfig -n /usr/lib /usr/lib64
     ;;
 
