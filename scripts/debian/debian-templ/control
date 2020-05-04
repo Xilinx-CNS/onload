@@ -2,14 +2,14 @@ Source: #TYPE#
 Section: net
 Priority: extra
 Maintainer: Support <support@solarflare.com>
-Build-Depends: debhelper (>= 8.0.0), bzip2, gawk, glibc | libc6, python-dev, libpcap-dev
+Build-Depends: debhelper (>= 8.0.0), bzip2, gawk, glibc | libc6, python2-dev | python-dev, libpcap-dev
 Standards-Version: 3.9.3
 Homepage: http://www.openonload.org
 
 Package: #TYPE#-user
 Architecture: any
-Pre-Depends: multiarch-support, lsb-core
-Depends: adduser, psmisc, ${shlibs:Depends}, ${misc:Depends}, python
+Pre-Depends: multiarch-support
+Depends: adduser, psmisc, ${shlibs:Depends}, ${misc:Depends}, python2 | python
 Suggests: #TYPE#-modules-${source:Version}
 Description: Onload TCP/IP stack - library
 
