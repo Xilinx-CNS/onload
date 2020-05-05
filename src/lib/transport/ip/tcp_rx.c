@@ -3330,6 +3330,7 @@ static void handle_rx_last_ack_or_closing(ci_tcp_state* ts, ci_netif* netif,
     if( next_state == CI_TCP_CLOSED ) {
       ci_tcp_drop(netif, ts, 0);
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
       /* If we're sharing an active wild then we've just made our 4-tuple
        * available for re-use, by removing filters.  The peer will be sitting
        * in TIME-WAIT however, so we need to be careful about our sequence
@@ -3337,6 +3338,7 @@ static void handle_rx_last_ack_or_closing(ci_tcp_state* ts, ci_netif* netif,
        */
       if( ts->tcpflags & CI_TCPT_FLAG_ACTIVE_WILD )
         ci_netif_active_wild_sharer_closed(netif, &ts->s);
+#endif
     }
     else {
       ci_assert(next_state == CI_TCP_TIME_WAIT);

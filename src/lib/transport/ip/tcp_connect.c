@@ -127,8 +127,11 @@ int __ci_tcp_bind(ci_netif *ni, ci_sock_cmn *s, ci_fd_t fd,
   user_port = *port_be16;
 
   if( !(s->s_flags & CI_SOCK_FLAG_TPROXY) ) {
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
     /* In active-wild mode we might not want to bind yet. */
-    if( !may_defer || !NI_OPTS(ni).tcp_shared_local_ports || user_port != 0 ) {
+    if( !may_defer || !NI_OPTS(ni).tcp_shared_local_ports || user_port != 0 )
+#endif
+    {
 #if CI_CFG_FAKE_IPV6
       ci_assert(s->domain == AF_INET || s->domain == AF_INET6);
       if( s->domain == AF_INET )
@@ -158,6 +161,7 @@ int __ci_tcp_bind(ci_netif *ni, ci_sock_cmn *s, ci_fd_t fd,
         s->s_flags &= ~(CI_SOCK_FLAG_CONNECT_MUST_BIND |
                         CI_SOCK_FLAG_DEFERRED_BIND);
     }
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
     /* We can defer this bind.  We need to make an extra check for the socket
      * already having been bound.  In the non-deferred case this is enforced by
      * the binding of the OS socket, but we don't have that luxury here. */
@@ -180,6 +184,7 @@ int __ci_tcp_bind(ci_netif *ni, ci_sock_cmn *s, ci_fd_t fd,
       s->s_flags |= CI_SOCK_FLAG_DEFERRED_BIND;
       rc = 0;
     }
+#endif
   }
   else {
     /* CI_SOCK_FLAG_TPROXY is set.  We don't use OS backing sockets for these,
@@ -915,9 +920,9 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
     ci_uint16 source_be16 = 0;
     ci_sock_cmn* s = &ts->s;
 
-    saddr = sock_ipx_laddr(&ts->s);
+    saddr = sock_ipx_laddr(s);
 
-#ifndef __KERNEL__
+#if !defined(__KERNEL__) && CI_CFG_TCP_SHARED_LOCAL_PORTS
     active_wild = ci_netif_active_wild_get(ni, sock_ipx_laddr(&ts->s),
                                            sock_ipx_raddr(&ts->s),
                                            dport_be16, &source_be16, &prev_seq);
@@ -926,10 +931,13 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
     /* Defer active_wild related state update to after potential lock drops
      * (pkt wait) */
     if( active_wild == OO_SP_NULL ) {
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
       if( NI_OPTS(ni).tcp_shared_local_no_fallback )
         /* error matching exhaustion of ephemeral ports */
         CI_SET_ERROR(rc, EADDRNOTAVAIL);
-      else if( s->cp.sock_cp_flags & OO_SCP_BOUND_ADDR )
+      else
+#endif
+      if( s->cp.sock_cp_flags & OO_SCP_BOUND_ADDR )
         rc = __ci_tcp_bind(ni, &ts->s, fd, saddr, &source_be16, 0);
       else
         rc = __ci_tcp_bind(ni, &ts->s, fd, addr_any, &source_be16, 0);

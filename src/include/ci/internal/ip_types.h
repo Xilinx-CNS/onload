@@ -143,7 +143,9 @@ struct ci_netif_s {
 #if CI_CFG_IPV6
   ci_ip6_netif_filter_table* ip6_filter_table;
 #endif
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   ci_ni_dllist_t*      active_wild_table;
+#endif
   ci_tcp_prev_seq_t*   seq_table;
 
   struct oo_deferred_pkt* deferred_pkts;

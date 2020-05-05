@@ -1416,6 +1416,7 @@ CI_CFG_OPT("EF_LOG", log_category, ci_uint32,
            , , CI_EF_LOG_DEFAULT, 0, MAX, count)
 
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 CI_CFG_OPT("EF_TCP_SHARED_LOCAL_PORTS", tcp_shared_local_ports, ci_uint32,
 "This feature improves the performance of TCP active-opens.  It reduces the "
 "cost of both blocking and non-blocking connect() calls, reduces the "
@@ -1479,6 +1480,7 @@ CI_CFG_OPT("EF_TCP_SHARED_LOCAL_PORTS_STEP",
 "Controls the number of ports allocated when expanding the pool of shared "
 "local ports.",
            , , 1, 1, MAX, count)
+#endif /* CI_CFG_TCP_SHARED_LOCAL_PORTS */
 
 CI_CFG_STR_OPT("EF_SCALABLE_FILTERS", scalable_filter_string, ci_string256,
 "Specifies the interface on which to enable support for scalable filters, "
@@ -1595,6 +1597,7 @@ CI_CFG_OPT("EF_SCALABLE_LISTEN_MODE", scalable_listen, ci_uint32,
 "        issue with large numbers of listen sockets.\n",
          , , 0, 0, 1, oneof:bound;accelerated_only;)
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 CI_CFG_OPT("EF_SCALABLE_ACTIVE_WILDS_NEED_FILTER",
            scalable_active_wilds_need_filter, ci_uint32,
 "When set to 1, IP filter is installed for every cached active-opened socket "
@@ -1604,6 +1607,7 @@ CI_CFG_OPT("EF_SCALABLE_ACTIVE_WILDS_NEED_FILTER",
 "Default: 1 if EF_SCALABLE_FILTERS_ENABLE=1 and scalable mode in "
 "EF_SCALABLE_FILTERS_MODE is \"active\"; 0 otherwise.",
            , , 0, 0, 1, yesno)
+#endif
 
 CI_CFG_STR_OPT("EF_INTERFACE_WHITELIST", iface_whitelist, ci_string256,
                "List of names of interfaces to use by the stack.  "

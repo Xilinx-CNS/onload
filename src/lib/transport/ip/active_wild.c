@@ -5,6 +5,7 @@
 #include "ip_internal.h"
 
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 static void ci_active_wild_state_init(ci_netif* netif, ci_active_wild* aw)
 {
   oo_p p;
@@ -63,4 +64,5 @@ void ci_active_wild_all_fds_gone(ci_netif* ni, ci_active_wild* aw, int do_free)
 }
 
 
+#endif /* CI_CFG_TCP_SHARED_LOCAL_PORTS */
 /*! \cidoxg_end */

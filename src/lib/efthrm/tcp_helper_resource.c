@@ -1926,8 +1926,10 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 {
   ci_netif* ni = &trs->netif;
   ci_netif_state* ns;
-  int i, sz, rc, no_table_entries, no_active_wild_pools;
-  int no_active_wild_table_entries;
+  int i, sz, rc, no_table_entries;
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
+  int no_active_wild_pools, no_active_wild_table_entries;
+#endif
   int no_seq_table_entries;
   unsigned vi_state_bytes;
   unsigned dma_addrs_bytes;
@@ -1982,6 +1984,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   vi_state_bytes = ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size,
                                           NI_OPTS(ni).txq_size);
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   if( ci_netif_should_allocate_tcp_shared_local_ports(ni) ) {
     no_active_wild_pools = is_power_of_2(cluster_size) ? cluster_size :
                                                          RSS_HASH_SIZE;
@@ -2002,6 +2005,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
     no_active_wild_pools = 0;
     no_active_wild_table_entries = 0;
   }
+#endif
 
   filter_table_size = sizeof(ci_netif_filter_table) +
     sizeof(ci_netif_filter_table_entry_fast) * (no_table_entries - 1);
@@ -2033,8 +2037,10 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
                     sizeof(ef_addr);
   sz += dma_addrs_bytes;
   sz = CI_ROUND_UP(sz, __alignof__(ci_ni_dllist_t));
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   sz += sizeof(ci_ni_dllist_t) * no_active_wild_table_entries *
         no_active_wild_pools;
+#endif
   sz = CI_ROUND_UP(sz, __alignof__(ci_tcp_prev_seq_t));
   sz += sizeof(ci_tcp_prev_seq_t) * no_seq_table_entries;
   sz = CI_ROUND_UP(sz, __alignof__(struct oo_deferred_pkt));
@@ -2116,6 +2122,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   ns->dma_ofs += sizeof(oo_pktbuf_set) * ni->pkt_sets_max;
   ns->dma_ofs = CI_ROUND_UP(ns->dma_ofs, CI_CACHE_LINE_SIZE);
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   ns->active_wild_ofs = ns->dma_ofs + dma_addrs_bytes;
   ns->active_wild_ofs = CI_ROUND_UP(ns->active_wild_ofs,
                                     __alignof__(ci_ni_dllist_t));
@@ -2125,6 +2132,10 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   ns->seq_table_ofs = ns->active_wild_ofs + (sizeof(ci_ni_dllist_t) *
                                              ns->active_wild_table_entries_n *
                                              ns->active_wild_pools_n);
+#else
+  ns->seq_table_ofs = ns->dma_ofs + dma_addrs_bytes;
+#endif
+
   ns->seq_table_ofs = CI_ROUND_UP(ns->seq_table_ofs,
                                   __alignof__(ci_tcp_prev_seq_t));
   ns->seq_table_entries_n = no_seq_table_entries;
@@ -2154,7 +2165,9 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   ni->packets = (void*) ((char*) ns + ns->buf_ofs);
   ni->dma_addrs = (void*) ((char*) ns + ns->dma_ofs);
   ni->dma_addr_next = 0;
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   ni->active_wild_table = (void*) ((char*) ns + ns->active_wild_ofs);
+#endif
   ni->seq_table = (void*) ((char*) ns + ns->seq_table_ofs);
   ni->deferred_pkts = (void*) ((char*) ns + ns->deferred_pkts_ofs);
   ni->filter_table = (void*) ((char*) ns + ns->table_ofs);
@@ -3036,6 +3049,7 @@ static int
 __efab_create_os_socket(tcp_helper_resource_t* trs, tcp_helper_endpoint_t* ep,
                         struct file* os_file, ci_int32 domain);
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 static
 ci_active_wild* tcp_helper_alloc_active_wild(
                                     tcp_helper_resource_t* rs,
@@ -3199,6 +3213,7 @@ tcp_helper_alloc_list_to_aw_pool(tcp_helper_resource_t* rs,
 
   return 0;
 }
+#endif
 
 
 /* These hashing functions are the same as for the per-stack active-wild table,
@@ -3264,6 +3279,7 @@ tcp_helper_get_ephemeral_port_list(struct efab_ephemeral_port_head* table,
 }
 
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 /* Allocates active wilds for ephemeral ports on the list [list_head].  The
  * traversal of the list will terminate when a port is reached for which we
  * have previously allocated an active wild. */
@@ -3374,6 +3390,7 @@ int tcp_helper_increase_active_wild_pool(tcp_helper_resource_t* rs,
     return 0;
   return rc;
 }
+#endif
 
 
 static int
@@ -3905,6 +3922,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     }
   }
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   /* Create or get the table used to hold the ephemeral ports that are used for
    * active wilds.  If we are clustered then we get this from the cluster;
    * otherwise, we create it ourselves. */
@@ -3943,6 +3961,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   else {
     rs->trs_ephem_table_consumed = NULL;
   }
+#endif
 
   /* We're about to expose this stack to other people.  so we should be
    * sufficiently initialised here that other people don't get upset.
@@ -3967,6 +3986,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   ci_dllist_push(&THR_TABLE.all_stacks, &rs->all_stacks_link);
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   /* This must be done after setting rs->thc, as active-wild behaviour depends
    * on the scalable-filter mode, and in particular on whether the scalable
    * filter is clustered.  Doing this after adding the stack to the global list
@@ -3998,6 +4018,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     }
     tcp_helper_alloc_list_to_aw_pool(rs, addr_any, ephemeral_ports);
   }
+#endif
 
   /* We deliberately avoid starting periodic timer and callback until now,
    * so we don't have to worry about stopping them if we bomb out early.
@@ -4039,12 +4060,14 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   return 0;
 
  fail13:
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   vfree(rs->trs_ephem_table_consumed);
  fail12:
   /* Free the table of ephemeral ports unless we share it with the cluster. */
   if( thc == NULL )
     vfree(rs->trs_ephem_table);
  fail11:
+#endif
  fail10:
  fail9:
   release_ep_tbl(rs);
@@ -4933,13 +4956,13 @@ efab_tcp_helper_rm_reset_untrusted(tcp_helper_resource_t* trs)
   int i;
 
   for( i = 0; i < netif->ep_tbl_n; ++i ) {
-    tcp_helper_endpoint_t *ep = netif->ep_tbl[i];
     citp_waitable_obj* wo = ID_TO_WAITABLE_OBJ(netif, i);
 
     if( (wo->waitable.state & CI_TCP_STATE_TCP_CONN) &&
         wo->waitable.state != CI_TCP_TIME_WAIT ) {
       ci_tcp_reset_untrusted(netif, &wo->tcp);
     }
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
     else if( wo->waitable.state == CI_TCP_STATE_ACTIVE_WILD ) {
       /* In the case of normal endpoints they are associated with a file
        * descriptor, so even with a wedged netif they will have come through
@@ -4947,8 +4970,9 @@ efab_tcp_helper_rm_reset_untrusted(tcp_helper_resource_t* trs)
        * dropped.  Active wilds aren't associated with an fd so we drop the
        * os socket explicitly here.
        */
-      efab_tcp_helper_drop_os_socket(trs, ep);
+      efab_tcp_helper_drop_os_socket(trs, netif->ep_tbl[i]);
     }
+#endif
   }
 }
 
@@ -5374,6 +5398,7 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
     tcp_helper_leak_check(trs);
 #endif
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   /* Free the table of ephemeral ports unless we share it with the cluster. */
   if(
 #if CI_CFG_ENDPOINT_MOVE
@@ -5386,6 +5411,7 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
   /* We just vfree() the consumed table, as the pointers that it contains point
    * straight into the the table of ephemeral ports itself. */
   vfree(trs->trs_ephem_table_consumed);
+#endif
 
   thr_uninstall_tproxy(trs);
 

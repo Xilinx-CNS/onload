@@ -1802,6 +1802,7 @@ ci_inline ci_uint32 ci_netif_filter_table_size(ci_netif* ni)
 }
 
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 #ifndef __KERNEL__
 extern oo_sp ci_netif_active_wild_get(ci_netif* ni, ci_addr_t laddr,
                                       ci_addr_t raddr, unsigned lport,
@@ -1818,6 +1819,7 @@ extern int ci_netif_active_wild_nic_hash(ci_netif *ni,
 extern int
 ci_netif_get_active_wild_list(ci_netif* ni, int aw_pool,
                               ci_addr_t laddr, ci_ni_dllist_t** list_out);
+#endif
 
 /* Bind RX of socket to given interface.  Used by implementation of
  * SO_BINDTODEVICE and EF_MCAST_JOIN_BINDTODEVICE.  Returns 0 on success,
@@ -2791,12 +2793,14 @@ ci_inline int ci_netif_need_poll_maybe_spinning(ci_netif* ni, ci_uint64 frc_now,
     return ci_netif_need_poll_frc(ni, frc_now);
 }
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 ci_inline int ci_netif_should_allocate_tcp_shared_local_ports(ci_netif* ni)
 {
   return
     NI_OPTS(ni).tcp_shared_local_ports > 0 &&
     NI_OPTS(ni).scalable_filter_enable != CITP_SCALABLE_FILTERS_ENABLE_WORKER;
 }
+#endif
 
 
 ci_inline int oo_tx_zc_payload_size(ci_netif* ni) {

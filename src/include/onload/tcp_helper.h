@@ -376,6 +376,7 @@ typedef struct tcp_helper_resource_s {
   uint16_t*             tproxy_ifindex;
   int                   tproxy_ifindex_count;
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   /* The available ephemeral ports for active wilds are maintained in a hash
    * table keyed by local IP address.  If the stack is clustered, then this
    * table is shared by all stacks in the cluster. */
@@ -386,6 +387,7 @@ typedef struct tcp_helper_resource_s {
    * N.B.: While the table of ports may be shared between stacks, the tracking
    * of consumed ports is always per-stack. */
   struct efab_ephemeral_port_head* trs_ephem_table_consumed;
+#endif
 
   /* Allocations performed by onload_zc_register_buffers */
   struct mutex usermem_mutex;

@@ -1154,6 +1154,7 @@ static int oo_get_cpu_khz_rsop(ci_private_t *priv, void *arg)
   return 0;
 }
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 static int efab_tcp_helper_alloc_active_wild_rsop(ci_private_t *priv,
                                                   void *arg)
 {
@@ -1171,6 +1172,7 @@ static int efab_tcp_helper_alloc_active_wild_rsop(ci_private_t *priv,
 
   return -ENOBUFS;
 }
+#endif
 
 
 #if CI_CFG_WANT_BPF_NATIVE
@@ -1579,7 +1581,9 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_CLUSTER_DUMP,      efab_cluster_dump),
 #endif
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   op(OO_IOC_ALLOC_ACTIVE_WILD, efab_tcp_helper_alloc_active_wild_rsop),
+#endif
 
   op(OO_IOC_VETH_ACCELERATION_ENABLED, oo_veth_acceleration_enabled_rsop),
 

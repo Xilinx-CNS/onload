@@ -209,6 +209,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   }
 #endif
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   for( i = 0;
        i < nis->active_wild_table_entries_n * nis->active_wild_pools_n;
        ++i ) {
@@ -216,11 +217,12 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
                       oo_ptr_to_statep(ni, &ni->active_wild_table[i]),
                       "active_wild");
   }
+  nis->active_wild_n = 0;
+#endif
 
   for( i = 0; i < nis->seq_table_entries_n; ++i )
     assert_zero(ni->seq_table[i].route_count);
 
-  nis->active_wild_n = 0;
   nis->packet_alloc_numa_nodes = 0;
   nis->sock_alloc_numa_nodes = 0;
   nis->interrupt_numa_nodes = 0;
@@ -1297,6 +1299,7 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   else
     opts->cluster_ignore = 1;
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   if( (s = getenv("EF_TCP_SHARED_LOCAL_PORTS")) )
     opts->tcp_shared_local_ports = atoi(s);
   if( (s = getenv("EF_TCP_SHARED_LOCAL_PORTS_REUSE_FAST")) )
@@ -1312,6 +1315,7 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->tcp_shared_local_ports_per_ip_max = atoi(s);
   if( (s = getenv("EF_TCP_SHARED_LOCAL_PORTS_STEP")) )
     opts->tcp_shared_local_ports_step = atoi(s);
+#endif
 
   if( (s = getenv("EF_HIGH_THROUGHPUT_MODE")) )
     opts->rx_merge_mode = atoi(s);
@@ -1552,7 +1556,9 @@ ci_netif_config_opts_getenv_ef_scalable_filters(ci_netif_config_opts* opts)
   int enable = 0;
   int mode = CITP_SCALABLE_MODE_NONE;
   int listen_mode = CITP_SCALABLE_LISTEN_BOUND;
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   int active_wilds_need_filter = 1;
+#endif
   int rc = 0;
   ci_int32 ifindexes[2] = {};
 
@@ -1648,10 +1654,12 @@ ci_netif_config_opts_getenv_ef_scalable_filters(ci_netif_config_opts* opts)
 
       if( (s = getenv("EF_SCALABLE_LISTEN_MODE")) )
         listen_mode = atoi(s);
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
       if( mode & CITP_SCALABLE_MODE_ACTIVE )
         active_wilds_need_filter = 0;
       if( (s = getenv("EF_SCALABLE_ACTIVE_WILDS_NEED_FILTER")) )
         active_wilds_need_filter = atoi(s);
+#endif
     }
     else {
       enable = CITP_SCALABLE_FILTERS_DISABLE;
@@ -1695,7 +1703,9 @@ ci_netif_config_opts_getenv_ef_scalable_filters(ci_netif_config_opts* opts)
   opts->scalable_filter_enable = enable;
   opts->scalable_filter_mode = mode;
   opts->scalable_listen = listen_mode;
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   opts->scalable_active_wilds_need_filter = active_wilds_need_filter;
+#endif
   return;
 invalid_mode:
   return; /* ideally, exit application */
@@ -1714,8 +1724,10 @@ invalid_mode:
 #ifndef __KERNEL__
 static void netif_tcp_helper_build2(ci_netif* ni)
 {
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   ni->active_wild_table =
     (ci_ni_dllist_t*) ((char*) ni->state + ni->state->active_wild_ofs);
+#endif
   ni->seq_table =
     (ci_tcp_prev_seq_t*) ((char*) ni->state + ni->state->seq_table_ofs);
   ni->deferred_pkts =

@@ -1428,6 +1428,7 @@ int ci_netif_raw_send(ci_netif* ni, int intf_i,
 #endif
 
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 static ci_uint32 __ci_netif_active_wild_hash(ci_netif *ni,
                                              ci_addr_t laddr, ci_uint16 lport,
                                              ci_addr_t raddr, ci_uint16 rport)
@@ -1871,6 +1872,7 @@ void ci_netif_active_wild_sharer_closed(ci_netif* ni, ci_sock_cmn* s)
     aw->last_rport = sock_rport_be16(s);
   }
 }
+#endif /* CI_CFG_TCP_SHARED_LOCAL_PORTS */
 
 
 void oo_tcpdump_free_pkts(ci_netif* ni, ci_uint16 i)

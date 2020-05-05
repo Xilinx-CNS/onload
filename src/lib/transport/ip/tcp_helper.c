@@ -535,6 +535,7 @@ int ci_tcp_helper_os_sock_create_and_set(ci_netif *ni, ci_fd_t fd,
 }
 
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 int ci_tcp_helper_alloc_active_wild(ci_netif *ni, ci_addr_t laddr)
 {
   oo_alloc_active_wild_t aaw = {
@@ -543,6 +544,7 @@ int ci_tcp_helper_alloc_active_wild(ci_netif *ni, ci_addr_t laddr)
   return oo_resource_op(ci_netif_get_driver_handle(ni),
                         OO_IOC_ALLOC_ACTIVE_WILD, &aaw);
 }
+#endif
 
 
 #if CI_CFG_WANT_BPF_NATIVE

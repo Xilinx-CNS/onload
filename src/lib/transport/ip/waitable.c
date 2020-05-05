@@ -251,8 +251,10 @@ void citp_waitable_cleanup(ci_netif* ni, citp_waitable_obj* wo, int do_free)
     ci_udp_all_fds_gone(ni, wo->waitable.bufid, do_free);
   else if( wo->waitable.state == CI_TCP_STATE_PIPE )
     ci_pipe_all_fds_gone(ni, &wo->pipe, do_free);
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   else if( wo->waitable.state == CI_TCP_STATE_ACTIVE_WILD )
     ci_active_wild_all_fds_gone(ni, &wo->aw, do_free);
+#endif
   else if( do_free ) {
     /* The only non-TCP and non-UDP state in FREE.  But FREE endpoint is
      * already free, we can't free it again.  Possibly, it is a

@@ -200,9 +200,11 @@ enum {
 #define OO_IOC_CLUSTER_DUMP       OO_IOC_W(CLUSTER_DUMP,            \
                                              oo_cluster_dump_t)
 #endif
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   OO_OP_ALLOC_ACTIVE_WILD,
 #define OO_IOC_ALLOC_ACTIVE_WILD  OO_IOC_W(ALLOC_ACTIVE_WILD, \
                                            oo_alloc_active_wild_t)
+#endif
 
   OO_OP_VETH_ACCELERATION_ENABLED,
 #define OO_IOC_VETH_ACCELERATION_ENABLED OO_IOC_NONE(VETH_ACCELERATION_ENABLED)

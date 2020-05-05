@@ -171,6 +171,12 @@
 #define ON_CI_CFG_INJECT_PACKETS IGNORE
 #endif
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
+#define ON_CI_CFG_TCP_SHARED_LOCAL_PORTS DO
+#else
+#define ON_CI_CFG_TCP_SHARED_LOCAL_PORTS IGNORE
+#endif
+
 #if CI_CFG_PROC_DELAY
 #define ON_CI_CFG_PROC_DELAY DO
 #else
@@ -507,8 +513,10 @@
   FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_t, deferred_list_free, ORM_OUTPUT_EXTRA) \
   FTL_TFIELD_INT(ctx, ci_uint64, nonb_pkt_pool, ORM_OUTPUT_STACK)         \
   FTL_TFIELD_STRUCT(ctx, ci_netif_ipid_cb_t, ipid, ORM_OUTPUT_EXTRA) \
-  FTL_TFIELD_INT(ctx, ci_uint32, active_wild_ofs, ORM_OUTPUT_STACK)             \
-  FTL_TFIELD_INT(ctx, ci_uint16, active_wild_pools_n, ORM_OUTPUT_STACK)             \
+  ON_CI_CFG_TCP_SHARED_LOCAL_PORTS(                                       \
+  FTL_TFIELD_INT(ctx, ci_uint32, active_wild_ofs, ORM_OUTPUT_STACK)       \
+  FTL_TFIELD_INT(ctx, ci_uint16, active_wild_pools_n, ORM_OUTPUT_STACK)   \
+  )                                                                       \
   FTL_TFIELD_INT(ctx, ci_uint32, dma_ofs, ORM_OUTPUT_STACK)               \
   FTL_TFIELD_INT(ctx, ci_uint32, table_ofs, ORM_OUTPUT_STACK)             \
   FTL_TFIELD_INT(ctx, ci_uint32, table_ext_ofs, ORM_OUTPUT_STACK)             \

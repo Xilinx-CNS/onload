@@ -1154,7 +1154,9 @@ struct ci_netif_state_s {
 
   ci_netif_ipid_cb_t    ipid;
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   CI_ULCONST ci_uint32  active_wild_ofs; /**< offset of active wild table */
+#endif
   CI_ULCONST ci_uint32  table_ofs;       /**< offset of s/w filter table */
   CI_ULCONST ci_uint32  table_ext_ofs;   /**< offset of slow s/w filter state */
 #if CI_CFG_IPV6
@@ -1315,6 +1317,7 @@ struct ci_netif_state_s {
   ci_uint32             netns_id;
   ci_uint32             cplane_pid;
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
   /* Active wilds are separated into pools according to their Toeplitz
    * hashing characteristics.  We need to be able to look them up keyed by (IP,
    * pool) pairs.  To allow this, the active wilds are stored in IP-hashed
@@ -1322,6 +1325,7 @@ struct ci_netif_state_s {
   CI_ULCONST ci_uint16  active_wild_pools_n;
   CI_ULCONST ci_uint32  active_wild_table_entries_n;
   ci_uint32             active_wild_n;
+#endif
 
   /* Number of entries in the table of previously-used sequence numbers. */
   CI_ULCONST ci_uint32  seq_table_entries_n;

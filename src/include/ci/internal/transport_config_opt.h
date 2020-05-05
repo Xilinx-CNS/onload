@@ -465,6 +465,9 @@
 /* Include support for caching file descriptors at user-level.  */
 #define CI_CFG_FD_CACHING      1
 
+/* Active wild support */
+#define CI_CFG_TCP_SHARED_LOCAL_PORTS 1
+
 /* Enable endpoint move.
  * It is used in:
  * - extension API onload_move_fd();

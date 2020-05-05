@@ -204,11 +204,13 @@ int ci_tcp_helper_open_shared_event(ci_netif *ni, ci_fd_t fd,
 extern int ci_tcp_helper_set_tcp_close_os_sock(ci_netif *ni,
                                                oo_sp sock_id) CI_HF;
 
+#if CI_CFG_TCP_SHARED_LOCAL_PORTS
 /*--------------------------------------------------------------------
  *!
  * Try and expand the active wild pool
  *--------------------------------------------------------------------*/
 extern int ci_tcp_helper_alloc_active_wild(ci_netif *ni, ci_addr_t laddr);
+#endif
 
 extern int
 ci_tcp_inject_packets(ci_netif *ni, int ifindex, struct iovec* kernel_packets,
