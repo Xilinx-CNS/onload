@@ -67,7 +67,7 @@ extern int		cfg_notable;
 extern int		cfg_zombie;
 extern int              cfg_nopids;
 extern int		ci_cfg_verbose;
-const char*		cfg_filter;
+extern const char*	cfg_filter;
 
 /**********************************************************************
 ********************** stacks *****************************************

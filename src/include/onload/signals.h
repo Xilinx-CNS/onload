@@ -64,7 +64,7 @@ typedef struct citp_signal_state_s {
 typedef void (*sa_sigaction_t)(int, siginfo_t *, void *);
 
 /* signal data for trampoline */
-struct oo_sigaction citp_signal_data[NSIG];
+extern struct oo_sigaction citp_signal_data[NSIG];
 void citp_signal_intercept(int signum, siginfo_t *info, void *context);
 extern void *citp_signal_sarestorer_get(void);
 extern sa_sigaction_t citp_signal_handlers[OO_SIGHANGLER_DFL_MAX+1];
