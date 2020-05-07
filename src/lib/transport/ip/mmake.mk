@@ -51,7 +51,8 @@ LIB_SRCS	:=		\
 		tcp_sockopts.c	\
 		tcp_syncookie.c	\
 		active_wild.c	\
-		pkt_checksum.c
+		pkt_checksum.c	\
+		netif_dtor.c
 
 ifneq ($(DRIVER),1)
 LIB_SRCS	+=		\

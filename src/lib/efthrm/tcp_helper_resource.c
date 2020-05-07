@@ -36,6 +36,7 @@
 #include <onload/oof_interface.h>
 #include <onload/nic.h>
 #include <onload/cplane_ops.h>
+#include <onload/netif_dtor.h>
 #include <ci/internal/pio_buddy.h>
 #include <onload/tmpl.h>
 #include <onload/dshm.h>
@@ -1783,52 +1784,6 @@ static void release_vi(tcp_helper_resource_t* trs)
 
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
-static int tcp_helper_is_expecting_events(ci_netif* ni)
-{
-  int intf_i;
-
-  if(  ni->state->poll_work_outstanding || OO_PP_NOT_NULL(ni->state->looppkts) )
-    return 1;
-  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    ci_netif_state_nic_t* nic = &ni->state->nic[intf_i];
-    if( ci_netif_intf_has_event(ni, intf_i) || 
-         nic->tx_dmaq_insert_seq != nic->tx_dmaq_done_seq ) {
-      return 1;
-    }
-  }
-  return 0;
-}
-
-static void tcp_helper_gracious_dtor(tcp_helper_resource_t* trs)
-{
-  ci_netif* ni = &trs->netif;
-  unsigned long start_jiffies = jiffies;
-
-  if( ni->error_flags )
-    return;
-
-  ci_assert(ci_netif_is_locked(ni));
-
-  /* If we have some events or wait for TX complete events,
-   * we should handle them all. */
-  while( tcp_helper_is_expecting_events(ni) ) {
-    ci_netif_poll(ni);
-    if( jiffies - start_jiffies > HZ ) {
-      ci_log("%s: WARNING: [%d] Failed to get TX complete events "
-             "for some packets", __func__, trs->id);
-      return;
-    }
-  }
-
-  /* Check for packet leak */
-  ci_assert_equal(ni->packets->n_pkts_allocated,
-                  ni->pkt_sets_n << CI_CFG_PKTS_PER_SET_S);
-  ci_assert_equal(ni->packets->n_free + ni->state->n_rx_pkts +
-                  ni->state->n_async_pkts,
-                  ni->packets->n_pkts_allocated);
-}
-
-
 /* This leak check should be moved to UL in CI_CFG_UL_INTERRUPT_HELPER mode */
 
 static void tcp_helper_leak_check(tcp_helper_resource_t* trs)
@@ -5380,8 +5335,7 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
        */
       oo_inject_packets_kernel(trs, 1);
       oo_deferred_free(&trs->netif);
-
-      tcp_helper_gracious_dtor(trs);
+      oo_netif_dtor_pkts(&trs->netif);
     }
     else {
       /* Pretend to be wedged and do not check for leaks */

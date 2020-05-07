@@ -20,6 +20,7 @@
 
 #include <onload/common.h>
 #include <onload/ioctl.h>
+#include <onload/netif_dtor.h>
 #include <ci/internal/ip.h>
 
 static char* log_prefix;
@@ -74,19 +75,36 @@ stack_next_timer_ms(ci_netif* ni)
   return ms_delay + 1;
 }
 
+/* Finalize stack.  Exit with the stack locked, allowing module code to
+ * shut down the queues, free the memory, etc.
+ */
+static void
+do_exit(ci_netif* ni)
+{
+  ci_log("No time-waiting sockets: exit");
+  ci_assert(ci_netif_is_locked(ni));
+  oo_deferred_free(ni);
+  oo_netif_dtor_pkts(ni);
+  exit(0);
+}
+
 /* The main loop: wait for something to happen, poll the stack, sleep
  * again. */
-void main_loop(ci_netif* ni)
+static void
+main_loop(ci_netif* ni)
 {
   struct oo_ulh_waiter arg;
   bool is_last = false;
+  bool is_locked = false;
+
   arg.timeout_ms = 0;
 
   while( ioctl(ni->driver_handle, OO_IOC_WAIT_FOR_INTERRUPT, &arg) == 0 ) {
+    ci_assert( ! is_locked );
     if( ci_netif_trylock(ni) ) {
       int n = ci_netif_poll(ni);
       CITP_STATS_NETIF_ADD(ni, interrupt_evs, n);
-      ci_netif_unlock(ni);
+      is_locked = true;
     }
 
     /* Fixme: this check breaks if any other entity does the same: looks at
@@ -108,11 +126,18 @@ void main_loop(ci_netif* ni)
        */
       if( ci_ni_dllist_is_empty(ni, &ni->state->timeout_q[0]) &&
           ci_ni_dllist_is_empty(ni, &ni->state->timeout_q[1]) ) {
-        ci_log("No time-waiting sockets: exit");
-        exit(0);
+        if( ! is_locked ) {
+          ci_netif_lock(ni);
+          ci_netif_poll(ni);
+        }
+        do_exit(ni);
       }
     }
 
+    if( is_locked ) {
+      ci_netif_unlock(ni);
+      is_locked = false;
+    }
     arg.timeout_ms = stack_next_timer_ms(ni);
   }
 }

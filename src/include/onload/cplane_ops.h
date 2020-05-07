@@ -143,10 +143,6 @@ cicp_user_is_local_addr(struct oo_cplane_handle *cplane, ci_addr_t ip)
 extern int oo_deferred_send_one(ci_netif *ni, struct oo_deferred_pkt* dpkt);
 /* Try to send all deferred packets.  Returns TRUE if all sent. */
 extern int oo_deferred_send(ci_netif *ni);
-#ifdef __KERNEL__
-/* Release all the deferred packets */
-void oo_deferred_free(ci_netif *ni);
-#endif
 
 
 extern int

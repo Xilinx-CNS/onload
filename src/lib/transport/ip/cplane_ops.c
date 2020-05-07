@@ -638,29 +638,4 @@ int oo_deferred_send(ci_netif *ni)
   return ret;
 }
 
-#ifdef __KERNEL__
-/* Release all the deferred packets */
-void oo_deferred_free(ci_netif *ni)
-{
-  CI_DEBUG(int n = 0;)
-  ci_ni_dllist_link* l = ci_ni_dllist_start(ni, &ni->state->deferred_list);
-
-  while( l != ci_ni_dllist_end(ni, &ni->state->deferred_list) ) {
-    struct oo_deferred_pkt* dpkt = CI_CONTAINER(struct oo_deferred_pkt,
-                                                link, l);
-    ci_ni_dllist_iter(ni, l);
-
-    cicp_pkt_complete_fake(ni, PKT_CHK(ni, dpkt->pkt_id));
-    CI_DEBUG(n++;)
-  }
-
-  /* Every deferred packet was handled somehow: */
-  ci_assert_equal(ni->state->stats.tx_defer_pkt +
-                  ni->state->stats.tx_defer_pkt_fast,
-                  ni->state->stats.tx_defer_pkt_sent +
-                  ni->state->stats.tx_defer_pkt_drop_timeout +
-                  ni->state->stats.tx_defer_pkt_drop_arp_failed +
-                  ni->state->stats.tx_defer_pkt_drop_failed + n);
-}
-#endif
 #endif
