@@ -442,14 +442,15 @@ static int thr_table_ctor(tcp_helpers_table_t *table)
 
 static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
 {
-  ci_irqlock_state_t lock_flags;
-  int n_dec_needed;
+  int n_dec_needed = thr->netif.state->n_ep_orphaned;
 
   ci_assert( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND );
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   /* Fixme: timeout is not appropriate here.  We should not leak OS socket
-   * and filters. */
+   * and filters.
+   * And as all the UL have gone, it can't prevent us from taking the lock.
+   */
   if( efab_eplock_lock_timeout(&thr->netif, msecs_to_jiffies(500)) == 0 ) {
     int id;
     for( id = 0; id < thr->netif.state->n_ep_bufs; ++id ) {
@@ -460,23 +461,10 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
     }
     ci_ip_timer_clear(&thr->netif, &thr->netif.state->timeout_tid);
     ci_netif_timeout_state(&thr->netif);
+    n_dec_needed = thr->netif.state->n_ep_orphaned;
     ci_netif_unlock(&thr->netif);
   }
-#else
-  /* All the gracious shutdown should be implemented in UL.
-   * Todo: non-gracious shutdown should drop OS sockets and filters,
-   * without sending FINs etc.
-   */
-  ci_assert(0);
 #endif
-
-  /* If we've got the lock, we have already closed all time-wait sockets.
-   * If we fail to get the lock, let's destroy the stack as-is. */
-
-  ci_irqlock_lock(&thr->lock, &lock_flags);
-  n_dec_needed = thr->n_ep_closing_refs;
-  thr->n_ep_closing_refs = 0;
-  ci_irqlock_unlock(&thr->lock, &lock_flags);
 
   ci_assert_ge(n_dec_needed, 0);
   if( n_dec_needed > 0 ) {
@@ -3687,7 +3675,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 
   rs->trusted_lock = OO_TRUSTED_LOCK_LOCKED;
   rs->k_ref_count = 1;          /* 1 reference for userland */
-  rs->n_ep_closing_refs = 0;
 #if CI_CFG_NIC_RESET_SUPPORT
   rs->intfs_to_reset = 0;
   rs->intfs_suspended = 0;
@@ -4990,9 +4977,6 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
                                int safe_destroy_now)
 {
   ci_netif* netif;
-#if ! CI_CFG_UL_INTERRUPT_HELPER
-  int n_ep_closing;
-#endif
 
   ci_assert(NULL != trs);
   ci_assert(trs->trusted_lock == (OO_TRUSTED_LOCK_LOCKED |
@@ -5096,10 +5080,8 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
    * the fds will be released.
    */
 #if CI_CFG_DESTROY_WEDGED
-  if( netif->flags & CI_NETIF_FLAG_WEDGED ) {
-    n_ep_closing = 0;
+  if( netif->flags & CI_NETIF_FLAG_WEDGED )
     goto closeall;
-  }
 #endif /*CI_CFG_DESTROY_WEDGED*/
 
 #if CI_CFG_FD_CACHING
@@ -5113,31 +5095,19 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
    */
   tcp_helper_close_pending_endpoints(trs);
 
-  n_ep_closing = oo_netif_apps_gone(netif);
+  oo_netif_apps_gone(netif);
 
+  /* The netif->state is not mapped to UL any more, so we can use the state
+   * values as trusted after oo_netif_apps_gone() has set it. */
   OO_DEBUG_TCPH(ci_log("%s: [%u] %d socket(s) closing", __FUNCTION__,
-                       trs->id, n_ep_closing));
+                       trs->id, netif->state->n_ep_orphaned));
 
-  if( n_ep_closing ) {
+  if( netif->state->n_ep_orphaned ) {
     int krc_old, krc_new;
-    ci_irqlock_state_t lock_flags;
-    /* Add in a ref to the stack for each of the closing sockets.  Set
-     * CI_NETIF_FLAGS_DROP_SOCK_REFS so that the extra refs are dropped
-     * when the sockets close.
-     */
     do {
       krc_old = trs->k_ref_count;
-      krc_new = krc_old + n_ep_closing;
+      krc_new = krc_old + netif->state->n_ep_orphaned;
     } while( ci_cas32_fail(&trs->k_ref_count, krc_old, krc_new) );
-
-    ci_irqlock_lock(&trs->lock, &lock_flags);
-
-    ci_assert_equal(trs->n_ep_closing_refs, 0);
-    trs->n_ep_closing_refs = n_ep_closing;
-
-    ci_irqlock_unlock(&trs->lock, &lock_flags);
-
-    netif->flags |= CI_NETIF_FLAGS_DROP_SOCK_REFS;
   }
 
   /* Drop lock so that sockets can proceed towards close. */

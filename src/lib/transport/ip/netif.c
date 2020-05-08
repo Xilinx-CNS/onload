@@ -1105,17 +1105,7 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
 
 #if CI_CFG_UL_INTERRUPT_HELPER && ! defined (__KERNEL__)
   if( lock_val & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
-    /* Ask kernel for any sockets to be closed and really close them */
-    oo_sp id;
-    do {
-      int saved_errno = errno;
-      oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_GET_CLOSING_EP,
-                     &id);
-      errno = saved_errno;
-      if( OO_SP_IS_NULL(id) )
-        break;
-      citp_waitable_all_fds_gone(ni, id);
-    } while(1);
+    ci_netif_close_pending(ni);
   }
 
   if( lock_val & CI_EPLOCK_NETIF_NEED_WAKE ) {
@@ -1951,6 +1941,21 @@ void ci_netif_handle_actions(ci_netif* ni)
                           OO_IOC_SWF_UPDATE, &op) == 0 )
       oo_sw_filter_apply(ni, &op);
   }
+}
+
+/* Ask kernel for any sockets to be closed and really close them */
+void ci_netif_close_pending(ci_netif* ni)
+{
+  oo_sp id;
+  do {
+    int saved_errno = errno;
+    oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_GET_CLOSING_EP,
+                   &id);
+    errno = saved_errno;
+    if( OO_SP_IS_NULL(id) )
+      break;
+    citp_waitable_all_fds_gone(ni, id);
+  } while(1);
 }
 #endif
 /*! \cidoxg_end */

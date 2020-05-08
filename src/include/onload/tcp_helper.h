@@ -219,11 +219,6 @@ typedef struct tcp_helper_resource_s {
 # define TCP_HELPER_K_RC_DEAD           0x20000000
 # define TCP_HELPER_K_RC_REFS(krc)      ((krc) & 0xffffff)
 
-  /* A count of the refs added to k_ref_count for closing endpoints in
-   * efab_tcp_helper_rm_free_locked().  Protected by thr->lock *not*
-   * ci_netif lock */
-  int n_ep_closing_refs;
-
   /*! this is used so we can schedule destruction at task time */
   struct work_struct work_item_dtor;
   struct completion complete;
@@ -310,7 +305,6 @@ typedef struct tcp_helper_resource_s {
    *    - ep_tobe_closed
    *    - non_atomic_list
    *    - wakeup_list
-   *    - n_ep_closing_refs
    *    - intfs_to_reset 
    *    - intfs_to_xdp_update
    */

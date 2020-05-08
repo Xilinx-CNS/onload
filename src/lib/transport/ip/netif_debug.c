@@ -885,7 +885,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   if(ni->state->netns_id != 0) {
     logger(log_arg, "  namespace=net:[%u]", ni->state->netns_id);
   }
-  logger(log_arg, "  %s %s uid=%d pid=%d ns_flags=%x%s%s%s%s",
+  logger(log_arg, "  %s %s uid=%d pid=%d ns_flags=%x%s%s%s%s%s",
          ni->cplane->mib->sku->value, ONLOAD_VERSION
       , (int) ns->uuid, (int) ns->pid
       , ns->flags
@@ -902,7 +902,12 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
           ? " INIT_NET_CPLANE" : ""
       , (ns->flags & CI_NETIF_FLAG_USE_ALIEN_LADDRS)
           ? " USE_ALIEN_LADDRS" : ""
+      , (ns->flags & CI_NETIF_FLAGS_DROP_SOCK_REFS)
+          ? " NO_APPS" : ""
       );
+  if( ns->flags & CI_NETIF_FLAGS_DROP_SOCK_REFS )
+    logger(log_arg, "  orphaned sockets %d", ns->n_ep_orphaned);
+
 #ifdef __KERNEL__
   logger(log_arg, "  creation_time=%u (delta=%usecs)", ns->creation_time_sec,
          (ci_uint32) get_seconds() - ns->creation_time_sec);
@@ -922,10 +927,9 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   {
     /* This is useful mostly for orphaned stacks */
     tcp_helper_resource_t* trs = netif2tcp_helper_resource(ni);
-    logger(log_arg, "  ref=%d trusted_lock=0x%x k_ref=0x%x "
-           "n_ep_closing=%d",
+    logger(log_arg, "  ref=%d trusted_lock=0x%x k_ref=0x%x",
            oo_atomic_read(&trs->ref_count),
-           trs->trusted_lock, trs->k_ref_count, trs->n_ep_closing_refs);
+           trs->trusted_lock, trs->k_ref_count);
   }
 #endif
 

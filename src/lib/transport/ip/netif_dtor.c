@@ -81,16 +81,16 @@ void oo_netif_dtor_pkts(ci_netif* ni)
 }
 
 /* Called when all the user applications have gone.
- * Returns number of non-closed endpoints, such as TCP TIME-WAIT
- * or UDP socket which did not get TX complete yet.
+ * Initialises netif->state->n_ep_orphaned.
  */
-int oo_netif_apps_gone(ci_netif* netif)
+void oo_netif_apps_gone(ci_netif* netif)
 {
-  int n_ep_closing;
   unsigned i;
 
+  ci_assert(ci_netif_is_locked(netif));
+
  again:
-  for( i=0, n_ep_closing=0; i < ep_tbl_n(netif); i++ ) {
+  for( i=0, netif->state->n_ep_orphaned=0; i < ep_tbl_n(netif); i++ ) {
     citp_waitable_obj* wo = ID_TO_WAITABLE_OBJ(netif, i);
     citp_waitable* w = &wo->waitable;
 
@@ -146,7 +146,7 @@ int oo_netif_apps_gone(ci_netif* netif)
       if( OO_SP_NOT_NULL(wo->tcp.local_peer) ) {
         ci_netif_poll(netif); /* push RST through the stack */
         /* It closed the other end, which may be already counted in
-         * n_ep_closing.  Let's start again */
+         * n_ep_orphaned.  Let's start again */
         goto again;
       }
       continue;
@@ -165,10 +165,11 @@ int oo_netif_apps_gone(ci_netif* netif)
                    i, ci_tcp_state_str(w->state) ));
       ci_bit_set(&w->sb_aflags, CI_SB_AFLAG_ORPHAN_BIT);
     }
-    ++n_ep_closing;
+    ++netif->state->n_ep_orphaned;
   }
 
-  return n_ep_closing;
+  if( netif->state->n_ep_orphaned > 0 )
+    netif->state->flags |= CI_NETIF_FLAGS_DROP_SOCK_REFS;
 }
 
 #endif /* OO_DO_STACK_DTOR */

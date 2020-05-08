@@ -222,8 +222,6 @@ struct ci_netif_s {
 
   /* netif is a kernel-only stack and thus is trusted */
 # define CI_NETIF_FLAGS_IS_TRUSTED       0x100
-  /* Stack [k_ref_count] to be decremented when sockets close. */
-# define CI_NETIF_FLAGS_DROP_SOCK_REFS   0x200
   /* Currently being used from a driverlink context */
 # define CI_NETIF_FLAG_IN_DL_CONTEXT     0x400
   /* Should not allocate packets in atomic/driverlink context */

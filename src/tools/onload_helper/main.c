@@ -88,6 +88,16 @@ do_exit(ci_netif* ni)
   exit(0);
 }
 
+static void
+stack_lock(ci_netif* ni, bool* is_locked)
+{
+  if( *is_locked )
+    return;
+  ci_netif_lock(ni);
+  ci_netif_poll(ni);
+  *is_locked = true;
+}
+
 /* The main loop: wait for something to happen, poll the stack, sleep
  * again. */
 static void
@@ -114,22 +124,19 @@ main_loop(ci_netif* ni)
      * overwise-orphaned stack. */
     if( arg.rs_ref_count == 1 ) {
       if( ! is_last ) {
-        ci_log("I'm the only user of the stack");
         is_last = true;
+        stack_lock(ni, &is_locked);
+
+        /* Ensure all close() requests are handled */
+        ci_netif_close_pending(ni);
+
+        oo_netif_apps_gone(ni);
+        ci_log("User application gone, %d sockets to be closed",
+               ni->state->n_ep_orphaned);
       }
 
-      /* Fixme: there is no efficient way to check whether there are any
-       * non-freed endpoints.  We keep non-UL-attached endpoints for
-       * 2 reasons:
-       * - TCP time-wait;
-       * - UDP to process TX complete.
-       */
-      if( ci_ni_dllist_is_empty(ni, &ni->state->timeout_q[0]) &&
-          ci_ni_dllist_is_empty(ni, &ni->state->timeout_q[1]) ) {
-        if( ! is_locked ) {
-          ci_netif_lock(ni);
-          ci_netif_poll(ni);
-        }
+      if( ni->state->n_ep_orphaned == 0 ) {
+        stack_lock(ni, &is_locked);
         do_exit(ni);
       }
     }

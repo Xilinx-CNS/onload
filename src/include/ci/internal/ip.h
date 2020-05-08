@@ -5230,6 +5230,7 @@ static inline ef_addr zc_usermem_dma_addr(struct ci_zc_usermem* um,
 
 #if CI_CFG_UL_INTERRUPT_HELPER && ! defined(__KERNEL__)
 extern void ci_netif_handle_actions(ci_netif* ni);
+extern void ci_netif_close_pending(ci_netif* ni);
 #endif
 
 #endif  /* __CI_INTERNAL_IP_H__ */

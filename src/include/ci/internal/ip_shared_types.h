@@ -1051,6 +1051,8 @@ struct ci_netif_state_s {
   /* oof subsystem is capable to work with some addresses which are blamed
    * to be non-local by cicp_user_addr_is_local_efab() */
 # define CI_NETIF_FLAG_USE_ALIEN_LADDRS  0x200
+  /* All the applications have gone, and we account orphaned sockets. */
+# define CI_NETIF_FLAGS_DROP_SOCK_REFS   0x200
 
 
   /* To give insight into runtime errors detected.  See also copy in
@@ -1199,6 +1201,9 @@ struct ci_netif_state_s {
   /* Max number of ep bufs is CI_CFG_NETIF_MAX_ENDPOINTS_MAX */
   ci_uint32  max_ep_bufs;                /**< Upper limit of end points */
   CI_ULCONST ci_uint32  n_ep_bufs;       /**< Number of available endpoints */
+
+  /* Number of orphaned endpoints after all the applications have gone. */
+  ci_uint32 n_ep_orphaned;
 
 #if CI_CFG_EPOLL3
   ci_int32              ready_list_pid[CI_CFG_N_READY_LISTS];

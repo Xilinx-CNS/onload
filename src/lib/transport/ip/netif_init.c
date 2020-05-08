@@ -134,6 +134,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   nis->deferred_free_eps_head = CI_ILL_END;
   assert_zero(nis->n_ep_bufs);
   nis->max_ep_bufs = NI_OPTS(ni).max_ep_bufs;
+  nis->n_ep_orphaned = 0;
 
   assert_zero(ni->packets->sets_n);
   ni->packets->sets_max = ni->pkt_sets_max;
