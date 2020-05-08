@@ -157,7 +157,7 @@ struct ci_netif_s {
 
   /*! Trusted per-socket state. */
   struct tcp_helper_endpoint_s**  ep_tbl;
-  unsigned                        ep_tbl_n;
+  ci_uint32                       ep_tbl_n;
   unsigned                        ep_tbl_max;
 #endif
 

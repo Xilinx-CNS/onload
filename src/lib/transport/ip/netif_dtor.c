@@ -79,4 +79,96 @@ void oo_netif_dtor_pkts(ci_netif* ni)
                   ni->state->n_async_pkts,
                   ni->packets->n_pkts_allocated);
 }
+
+/* Called when all the user applications have gone.
+ * Returns number of non-closed endpoints, such as TCP TIME-WAIT
+ * or UDP socket which did not get TX complete yet.
+ */
+int oo_netif_apps_gone(ci_netif* netif)
+{
+  int n_ep_closing;
+  unsigned i;
+
+ again:
+  for( i=0, n_ep_closing=0; i < ep_tbl_n(netif); i++ ) {
+    citp_waitable_obj* wo = ID_TO_WAITABLE_OBJ(netif, i);
+    citp_waitable* w = &wo->waitable;
+
+    /* We don't expect ACTIVE_WILD endpoints to be freed yet - they're not
+     * associated with a user file descriptor.  We will free them once
+     * all their users have gone in the stack dtor.
+     */
+    if( w->state == CI_TCP_STATE_FREE || w->state == CI_TCP_STATE_AUXBUF ||
+        w->state == CI_TCP_STATE_ACTIVE_WILD )
+      continue;
+
+    if( w->state == CI_TCP_CLOSED ) {
+#if CI_CFG_FD_CACHING
+      LOG_E(ci_log("%s [%u]: ERROR endpoint %d leaked state "
+                   "(cached=%d/%d flags %x)", __FUNCTION__, NI_ID(netif),
+                   i, wo->tcp.cached_on_fd, wo->tcp.cached_on_pid,
+                   w->sb_aflags));
+#else
+      LOG_E(ci_log("%s [%u:%d]: ERROR endpoint leaked (flags %x)",
+                   __FUNCTION__, NI_ID(netif), i, w->sb_aflags));
+#endif
+      if( (w->sb_aflags & CI_SB_AFLAG_TCP_IN_ACCEPTQ) ) {
+        /* It happens with TCP loopback as a result of race condition,
+         * when the listening stack is teared down at the same time.
+         * Let's drop the endpoint properly. */
+        ci_bit_clear(&w->sb_aflags, CI_SB_AFLAG_TCP_IN_ACCEPTQ_BIT);
+        ci_assert(w->sb_aflags & CI_SB_AFLAG_ORPHAN);
+        ci_tcp_drop(netif, &wo->tcp, ECONNRESET);
+      }
+      else {
+        w->state = CI_TCP_STATE_FREE;
+      }
+      continue;
+    }
+
+    /* All user files are closed; all FINs should be sent.
+     * There are some cases when we fail to send FIN to passively-opened
+     * connection: reset such connections. */
+    if( w->state & CI_TCP_STATE_TCP_CONN && wo->sock.tx_errno == 0 ) {
+      if( OO_SP_IS_NULL(wo->tcp.local_peer) ||
+          (~w->sb_aflags & CI_SB_AFLAG_TCP_IN_ACCEPTQ) ) {
+        /* It is normal for EF_TCP_SERVER_LOOPBACK=2,4 if client closes
+         * loopback connection before it is accepted. */
+        LOG_E(ci_log("%s: %d:%d in %s state when stack is closed",
+                     __func__, NI_ID(netif), i, ci_tcp_state_str(w->state)));
+      }
+      /* Make sure the receive queue is freed,
+       * to avoid packet leak warning: */
+      ci_bit_clear(&w->sb_aflags, CI_SB_AFLAG_TCP_IN_ACCEPTQ_BIT);
+      ci_assert(w->sb_aflags & CI_SB_AFLAG_ORPHAN);
+      ci_tcp_send_rst(netif, &wo->tcp);
+      ci_tcp_drop(netif, &wo->tcp, ECONNRESET);
+      if( OO_SP_NOT_NULL(wo->tcp.local_peer) ) {
+        ci_netif_poll(netif); /* push RST through the stack */
+        /* It closed the other end, which may be already counted in
+         * n_ep_closing.  Let's start again */
+        goto again;
+      }
+      continue;
+    }
+
+    LOG_NC(ci_log("%s [%u]: endpoint %d in state %s", __FUNCTION__,
+                  NI_ID(netif), i, ci_tcp_state_str(w->state)));
+    /* \TODO: validate connection,
+     *          - do we want to mark as closed or leave to close?
+     *          - timers OK ?
+     * for now we we just check the ORPHAN flag
+     */
+    if( ! (w->sb_aflags & CI_SB_AFLAG_ORPHAN) ) {
+      LOG_E(ci_log("%s [%u]: ERROR found non-orphaned endpoint %d in"
+                   " state %s", __FUNCTION__, NI_ID(netif),
+                   i, ci_tcp_state_str(w->state) ));
+      ci_bit_set(&w->sb_aflags, CI_SB_AFLAG_ORPHAN_BIT);
+    }
+    ++n_ep_closing;
+  }
+
+  return n_ep_closing;
+}
+
 #endif /* OO_DO_STACK_DTOR */

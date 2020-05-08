@@ -12,6 +12,8 @@ void oo_deferred_free(ci_netif *ni);
 /* Get all RX and TX complete events and check for packet leaks. */
 void oo_netif_dtor_pkts(ci_netif* ni);
 
+int oo_netif_apps_gone(ci_netif* netif);
+
 #else
 #define OO_DO_STACK_DTOR 0
 #endif

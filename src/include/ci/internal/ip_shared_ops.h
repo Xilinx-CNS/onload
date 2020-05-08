@@ -329,9 +329,11 @@ ci_inline char* oo_sockp_to_ptr(ci_netif* ni, oo_sp sockp)
 #ifdef __KERNEL__
 # define pkt_sets_n(ni) (ni)->pkt_sets_n
 # define pkt_sets_max(ni) (ni)->pkt_sets_max
+# define ep_tbl_n(ni) (ni)->ep_tbl_n
 #else
 # define pkt_sets_n(ni) (ni)->packets->sets_n
 # define pkt_sets_max(ni) (ni)->packets->sets_max
+# define ep_tbl_n(ni) (ni)->state->n_ep_bufs
 #endif
 
 /* VALID_PKT_ID(ni, id)
