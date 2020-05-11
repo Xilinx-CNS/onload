@@ -170,8 +170,10 @@ extern int efab_thr_table_lookup(const char* name, struct net* netns,
                                  unsigned id, int flags,
                                  tcp_helper_resource_t** stack_out);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /*! Try to kill an orphan/zombie stack */
 extern int tcp_helper_kill_stack_by_id(unsigned id);
+#endif
 
 extern int
 oo_version_check(const char* version, const char* uk_intf_ver, int debug_lib);

@@ -428,13 +428,13 @@ static int thr_table_ctor(tcp_helpers_table_t *table)
 }
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
 {
   int n_dec_needed = thr->netif.state->n_ep_orphaned;
 
   ci_assert( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND );
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* Fixme: timeout is not appropriate here.  We should not leak OS socket
    * and filters.
    * And as all the UL have gone, it can't prevent us from taking the lock.
@@ -452,14 +452,13 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
     n_dec_needed = thr->netif.state->n_ep_orphaned;
     ci_netif_unlock(&thr->netif);
   }
-#endif
 
   ci_assert_ge(n_dec_needed, 0);
   if( n_dec_needed > 0 ) {
     ci_log("%s: ERROR: force-kill stack [%d]: "
            "leaking %d OS sockets and filters",
            __func__, thr->id, n_dec_needed);
-#if ! defined(NDEBUG) && ! CI_CFG_UL_INTERRUPT_HELPER
+#ifndef NDEBUG
     dump_stack_to_logger(&thr->netif, ci_log_dump_fn, NULL);
 #endif
   }
@@ -467,6 +466,7 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
   for( ; n_dec_needed > 0; --n_dec_needed )
     efab_tcp_helper_k_ref_count_dec(thr);
 }
+#endif
 
 
 static void thr_table_dtor(tcp_helpers_table_t *table)
@@ -497,8 +497,10 @@ static void thr_table_dtor(tcp_helpers_table_t *table)
              __FUNCTION__, thr->id, oo_atomic_read(&thr->ref_count),
              thr->k_ref_count);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
     OO_DEBUG_TCPH(ci_log("%s: killing stack %d", __FUNCTION__, thr->id));
     tcp_helper_kill_stack(thr);
+#endif
 
     /* The only ref is ours.  Instead of releasing the ref, call dtor
      * directly. */
@@ -743,7 +745,9 @@ static void tcp_helper_reduce_max_packets(ci_netif* ni, int new_max_packets)
 }
 
 
-int __tcp_helper_kill_stack_by_id(unsigned id, unsigned ignore_id)
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+static int
+__tcp_helper_kill_stack_by_id(unsigned id, unsigned ignore_id)
 {
   tcp_helpers_table_t* table = &THR_TABLE;
   ci_irqlock_state_t lock_flags;
@@ -785,6 +789,7 @@ int tcp_helper_kill_stack_by_id(unsigned id)
 {
   return __tcp_helper_kill_stack_by_id(id, 0);
 }
+#endif
 
 
 void
@@ -1235,11 +1240,16 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
 static int find_and_release_orphaned_stack(void)
 {
   int rc = -ENODEV;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   rc = __tcp_helper_kill_stack_by_id(0, 1);
 
   if( rc == 0 ) {
     flush_workqueue(CI_GLOBAL_WORKQUEUE);
   }
+#else
+  /* TODO We should try to kill all the services which use some app-orphaned
+   * stack */
+#endif
   return rc;
 }
 
