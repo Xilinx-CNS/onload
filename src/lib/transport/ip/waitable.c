@@ -116,14 +116,18 @@ static void ci_drop_orphan(ci_netif * ni)
    *    of such connections so we can free the stack when
    *    they've all gone away.
    */
-  if( ni->state->flags & CI_NETIF_FLAGS_DROP_SOCK_REFS ) {
-    if( ni->state->n_ep_orphaned > 0 ) {
-      --ni->state->n_ep_orphaned;
+  do {
+    ci_uint32 val = ni->state->n_ep_orphaned;
+    if( val == 0 )
+      return;
+    if( ci_cas32u_succeed(&ni->state->n_ep_orphaned, val, val - 1) ) {
 #ifdef __KERNEL__
-      efab_tcp_helper_k_ref_count_dec(netif2tcp_helper_resource(ni));
+      if( val == 1 )
+        efab_tcp_helper_k_ref_count_dec(netif2tcp_helper_resource(ni));
 #endif
+      return;
     }
-  }
+  } while(1);
 }
 #else
 # define ci_drop_orphan(ni)  do{}while(0)

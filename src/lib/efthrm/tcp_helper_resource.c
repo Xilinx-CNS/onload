@@ -431,7 +431,8 @@ static int thr_table_ctor(tcp_helpers_table_t *table)
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
 {
-  int n_dec_needed = thr->netif.state->n_ep_orphaned;
+  ci_uint32 n_ep_orphaned;
+  ci_netif* netif = &thr->netif;
 
   ci_assert( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND );
 
@@ -439,32 +440,36 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
    * and filters.
    * And as all the UL have gone, it can't prevent us from taking the lock.
    */
-  if( efab_eplock_lock_timeout(&thr->netif, msecs_to_jiffies(500)) == 0 ) {
+  if( efab_eplock_lock_timeout(netif, msecs_to_jiffies(500)) == 0 ) {
     int id;
-    for( id = 0; id < thr->netif.state->n_ep_bufs; ++id ) {
-      citp_waitable_obj* wo = ID_TO_WAITABLE_OBJ(&thr->netif, id);
+    for( id = 0; id < netif->state->n_ep_bufs; ++id ) {
+      citp_waitable_obj* wo = ID_TO_WAITABLE_OBJ(netif, id);
       if( wo->waitable.state == CI_TCP_TIME_WAIT ||
           ci_tcp_is_timeout_orphan(&wo->tcp) )
-        wo->tcp.t_last_sent = ci_ip_time_now(&thr->netif);
+        wo->tcp.t_last_sent = ci_ip_time_now(netif);
     }
-    ci_ip_timer_clear(&thr->netif, &thr->netif.state->timeout_tid);
-    ci_netif_timeout_state(&thr->netif);
-    n_dec_needed = thr->netif.state->n_ep_orphaned;
-    ci_netif_unlock(&thr->netif);
+    ci_ip_timer_clear(netif, &netif->state->timeout_tid);
+    ci_netif_timeout_state(netif);
+    ci_netif_unlock(netif);
   }
 
-  ci_assert_ge(n_dec_needed, 0);
-  if( n_dec_needed > 0 ) {
+  /* Atomically replace n_ep_orphaned by 0: the code which sets 0 is
+   * responsible for decrementing refcount. */
+  do {
+    n_ep_orphaned = netif->state->n_ep_orphaned;
+    if( n_ep_orphaned == 0 )
+      break;
+  } while( ci_cas32u_fail(&netif->state->n_ep_orphaned, n_ep_orphaned, 0) );
+
+  if( n_ep_orphaned > 0 ) {
     ci_log("%s: ERROR: force-kill stack [%d]: "
            "leaking %d OS sockets and filters",
-           __func__, thr->id, n_dec_needed);
+           __func__, thr->id, n_ep_orphaned);
 #ifndef NDEBUG
     dump_stack_to_logger(&thr->netif, ci_log_dump_fn, NULL);
 #endif
-  }
-
-  for( ; n_dec_needed > 0; --n_dec_needed )
     efab_tcp_helper_k_ref_count_dec(thr);
+  }
 }
 #endif
 
@@ -5113,19 +5118,12 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
    */
   tcp_helper_close_pending_endpoints(trs);
 
-  oo_netif_apps_gone(netif);
-
   /* The netif->state is not mapped to UL any more, so we can use the state
-   * values as trusted after oo_netif_apps_gone() has set it. */
-  OO_DEBUG_TCPH(ci_log("%s: [%u] %d socket(s) closing", __FUNCTION__,
-                       trs->id, netif->state->n_ep_orphaned));
-
-  if( netif->state->n_ep_orphaned ) {
-    int krc_old, krc_new;
-    do {
-      krc_old = trs->k_ref_count;
-      krc_new = krc_old + netif->state->n_ep_orphaned;
-    } while( ci_cas32_fail(&trs->k_ref_count, krc_old, krc_new) );
+   * values as trusted after oo_netif_apps_gone() has set it.
+   */
+  if( oo_netif_apps_gone(netif) ) {
+    /* Get a refcount associated with non-zero n_ep_orphaned */
+    efab_tcp_helper_k_ref_count_inc(trs);
   }
 
   /* Drop lock so that sockets can proceed towards close. */

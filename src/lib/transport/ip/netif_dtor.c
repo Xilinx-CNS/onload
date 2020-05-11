@@ -82,15 +82,17 @@ void oo_netif_dtor_pkts(ci_netif* ni)
 
 /* Called when all the user applications have gone.
  * Initialises netif->state->n_ep_orphaned.
+ * Returns 1 if this value is non-zero.
  */
-void oo_netif_apps_gone(ci_netif* netif)
+int/*bool*/ oo_netif_apps_gone(ci_netif* netif)
 {
   unsigned i;
+  int orphaned;
 
   ci_assert(ci_netif_is_locked(netif));
 
  again:
-  for( i=0, netif->state->n_ep_orphaned=0; i < ep_tbl_n(netif); i++ ) {
+  for( i=0, orphaned=0; i < ep_tbl_n(netif); i++ ) {
     citp_waitable_obj* wo = ID_TO_WAITABLE_OBJ(netif, i);
     citp_waitable* w = &wo->waitable;
 
@@ -165,11 +167,18 @@ void oo_netif_apps_gone(ci_netif* netif)
                    i, ci_tcp_state_str(w->state) ));
       ci_bit_set(&w->sb_aflags, CI_SB_AFLAG_ORPHAN_BIT);
     }
-    ++netif->state->n_ep_orphaned;
+    ++orphaned;
   }
 
-  if( netif->state->n_ep_orphaned > 0 )
-    netif->state->flags |= CI_NETIF_FLAGS_DROP_SOCK_REFS;
+  LOG_NC(ci_log("%s: [%u] %d socket(s) closing", __FUNCTION__,
+                NI_ID(netif), orphaned));
+  if( ci_cas32u_fail(&netif->state->n_ep_orphaned, 0, orphaned) ) {
+    LOG_E(ci_log("%s: ERROR: nonzero n_ep_orphaned value: %d when "
+                 "setting it to %d",
+                 __func__, netif->state->n_ep_orphaned, orphaned));
+    ci_assert(0);
+  }
+  return orphaned > 0;
 }
 
 #endif /* OO_DO_STACK_DTOR */

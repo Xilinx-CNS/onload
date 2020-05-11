@@ -876,6 +876,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   long diff;
   int intf_i;
   int i;
+  ci_uint32 n_ep_orphaned;
 
   logger(log_arg, "%s: stack=%d name=%s",
          __FUNCTION__, NI_ID(ni), ni->state->name);
@@ -885,7 +886,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   if(ni->state->netns_id != 0) {
     logger(log_arg, "  namespace=net:[%u]", ni->state->netns_id);
   }
-  logger(log_arg, "  %s %s uid=%d pid=%d ns_flags=%x%s%s%s%s%s",
+  logger(log_arg, "  %s %s uid=%d pid=%d ns_flags=%x%s%s%s%s",
          ni->cplane->mib->sku->value, ONLOAD_VERSION
       , (int) ns->uuid, (int) ns->pid
       , ns->flags
@@ -902,11 +903,11 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
           ? " INIT_NET_CPLANE" : ""
       , (ns->flags & CI_NETIF_FLAG_USE_ALIEN_LADDRS)
           ? " USE_ALIEN_LADDRS" : ""
-      , (ns->flags & CI_NETIF_FLAGS_DROP_SOCK_REFS)
-          ? " NO_APPS" : ""
       );
-  if( ns->flags & CI_NETIF_FLAGS_DROP_SOCK_REFS )
-    logger(log_arg, "  orphaned sockets %d", ns->n_ep_orphaned);
+
+  n_ep_orphaned = ns->n_ep_orphaned;
+  if( n_ep_orphaned != 0 )
+    logger(log_arg, "  orphaned sockets %d", n_ep_orphaned);
 
 #ifdef __KERNEL__
   logger(log_arg, "  creation_time=%u (delta=%usecs)", ns->creation_time_sec,
