@@ -2041,10 +2041,10 @@ no_events:
     if( CITP_OPTS.sleep_spin_usec ) {
       struct oo_epoll1_block_on_arg op = {};
       op.epoll_fd = fdi->fd;
-      /* do not spend too much time spinning in kernel */
       op.timeout_us = timeout_hr_to_us(timeout_hr);
       op.sleep_iter_us = CITP_OPTS.sleep_spin_usec;
       rc = ci_sys_ioctl(ep->epfd_os, OO_EPOLL1_IOC_SPIN_ON, &op);
+      citp_epoll_find_timeout(&timeout_hr, &poll_start_frc);
       Log_POLL(ci_log("%s(%d): SPIN ON %d ", __FUNCTION__, fdi->fd, op.flags));
     }
     goto poll_again;
