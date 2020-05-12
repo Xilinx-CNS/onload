@@ -119,6 +119,13 @@ ci_tcp_info_get(ci_netif* netif, ci_sock_cmn* s, struct ci_tcp_info* uinfo,
       info.tcpi_snd_cwnd     = 0;
     }
     info.tcpi_advmss     = ts->amss;
+    /* Onload, unlike Linux, includes timestamp options size in amss.
+     * However, the difference is only in implementation, not in
+     * the correctness of behavior, since the calculation of ef_mss
+     * and smss takes into account the length of timestamp options.
+     */
+    if( ts->tcpflags & CI_TCPT_FLAG_TSO )
+      info.tcpi_advmss -= 12;
 
     if ( NI_OPTS(netif).tcp_rcvbuf_mode == 1 ) {
       info.tcpi_rcv_rtt = info.tcpi_rtt; /* we currently use same measure */
