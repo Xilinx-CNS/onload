@@ -88,7 +88,7 @@ void doDeveloperBuild(String build_profile=null) {
           node('dev-build') {
             ws("workspace/${new URLDecoder().decode(env.JOB_NAME)}/exec-${env.EXECUTOR_NUMBER}-${thread_title}") {
               checkout scm
-              utils.rake("build:${component}", defines)
+              utils.rake("build:${component}", defines: defines)
               deleteDir() // Delete the manually allocated workspace
             }
             deleteDir() // Delete the workspace allocated implicitly by node
@@ -224,7 +224,7 @@ void doUnitTestsPipeline() {
         timeout(30) {
           sh 'bundle install'
         }
-        def gcov = utils.rake('build:which_gcov')
+        def gcov = utils.rake(['build:which_gcov'], capture: true)
         gcovr_options = [
           '--gcov-executable', gcov,
         ]
