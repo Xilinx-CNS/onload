@@ -4,6 +4,7 @@
 #define CI_DRIVER_CHRDEV_H_
 #include <linux/fs.h>
 #include <linux/device.h>
+#include <linux/cdev.h>
 #include "driver/linux_affinity/autocompat.h"
 
 /* This file contains some simple utility functions for creating char

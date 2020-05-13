@@ -48,7 +48,6 @@
 #include <linux/errno.h>
 #include <linux/mm.h>
 #include <ci/efhw/debug.h>
-#include <driver/linux_net/kernel_compat.h>
 
 
 /*--------------------------------------------------------------------

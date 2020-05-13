@@ -122,6 +122,14 @@ EFRM_HAS_STRUCT_TIMESPEC64	member	struct_timespec64	tv_sec	include/linux/time.h
 
 EFRM_HAVE_STRUCT_PROC_OPS	member	struct_proc_ops	proc_open	include/linux/proc_fs.h
 
+EFRM_HAVE_NFPROTO_CONSTANTS	symbol	NFPROTO_NUMPROTO	include/linux/netfilter.h
+
+EFRM_HAVE_IOREMAP_NOCACHE	symbol	ioremap_nocache	include/asm-generic/io.h
+
+EFRM_NEED_IS_COMPAT_TASK	custom
+
+EFRM_NEED_SKB_FRAG_OFF	nsymbol	skb_frag_off	include/linux/skbuff.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
@@ -161,4 +169,12 @@ int func(unsigned long v, volatile unsigned long *ptr)
 "
 }
 
-source $(dirname "$0")/../linux_net/kernel_compat_funcs.sh
+function do_EFRM_NEED_IS_COMPAT_TASK
+{
+    defer_test_compile neg "
+#include <linux/compat.h>
+int test(void) { return is_compat_task(); }
+"
+}
+
+source $(dirname "$0")/kernel_compat_funcs.sh

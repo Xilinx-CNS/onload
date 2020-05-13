@@ -6,6 +6,7 @@
 #define EFX_DRIVERLINK_API_VERSION_MINOR 0
 
 #include <driver/linux_net/driverlink_api.h>
+#include <driver/linux_net/filter.h>
 
 /* Every time the major driverlink version is bumped, this check forces a build
  * failure, as it's necessary to audit the net driver change for compatibility

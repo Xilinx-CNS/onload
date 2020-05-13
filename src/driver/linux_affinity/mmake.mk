@@ -46,7 +46,7 @@ define filechk_autocompat.h
 endef
 endif
 
-$(obj)/autocompat.h: $(src)/kernel_compat.sh $(src)/../linux_net/kernel_compat_funcs.sh
+$(obj)/autocompat.h: $(src)/kernel_compat.sh $(src)/kernel_compat_funcs.sh
 	+$(call filechk,autocompat.h)
 	@touch $@
 

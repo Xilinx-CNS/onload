@@ -106,7 +106,7 @@ efab_terminate_find_all_stacks(tcp_helper_resource_t *stacks[],
     if( i >= fdt->max_fds )
       goto unlock;
 
-    set = efx_get_open_fds(j++, fdt);
+    set = fdt->open_fds[j++];
 
     for( ; set != 0; i++, set >>= 1 ) {
       struct file *file;

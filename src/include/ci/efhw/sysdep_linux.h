@@ -50,8 +50,7 @@
 
 #include <linux/netdevice.h> /* necessary for etherdevice.h on some kernels */
 #include <linux/etherdevice.h>
-
-#include <driver/linux_net/kernel_compat.h>
+#include <linux/pci.h>
 
 
 typedef unsigned long irq_flags_t;

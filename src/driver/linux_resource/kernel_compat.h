@@ -45,6 +45,7 @@
 #include <linux/moduleparam.h>
 #include <linux/sched.h>
 # include <linux/io.h>
+#include <linux/pci.h>
 #include <driver/linux_affinity/kernel_compat.h>
 
 /********* Memory allocation *************/
@@ -157,6 +158,14 @@ get_user_pages_onload_compat(unsigned long start, unsigned long nr_pages,
 #define VM_FAULT_ADDRESS(_vmf) (_vmf)->address
 #else
 #define VM_FAULT_ADDRESS(_vmf) (unsigned long)(_vmf)->virtual_address
+#endif
+
+/* ioremap_nocache() was removed in linux-5.6 */
+#ifdef EFRM_HAVE_IOREMAP_NOCACHE
+	/* On old kernels ioremap_nocache() differs from ioremap() */
+	#define ci_ioremap(phys,size)	ioremap_nocache(phys,size)
+#else
+	#define ci_ioremap(phys,size)	ioremap(phys,size)
 #endif
 
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

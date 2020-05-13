@@ -56,7 +56,6 @@
 #include <linux/in.h>
 #include <linux/kfifo.h>
 #include <linux/log2.h>
-#include <driver/linux_net/kernel_compat.h>
 #include <driver/linux_affinity/autocompat.h>
 
 

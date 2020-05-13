@@ -181,7 +181,7 @@ static struct nf_hook_ops oo_netfilter_ip_hook = {
 #ifdef EFRM_HAVE_NETFILTER_OPS_HAVE_OWNER
   .owner = THIS_MODULE,
 #endif
-#ifdef EFX_HAVE_NFPROTO_CONSTANTS
+#ifdef EFRM_HAVE_NFPROTO_CONSTANTS
   .pf = NFPROTO_IPV4,
 #else
   .pf = PF_INET,
@@ -200,7 +200,7 @@ static struct nf_hook_ops oo_netfilter_ip6_hook = {
 #ifdef EFRM_HAVE_NETFILTER_OPS_HAVE_OWNER
   .owner = THIS_MODULE,
 #endif
-#ifdef EFX_HAVE_NFPROTO_CONSTANTS
+#ifdef EFRM_HAVE_NFPROTO_CONSTANTS
   .pf = NFPROTO_IPV6,
 #else
   .pf = PF_INET6,

@@ -73,6 +73,7 @@
 #include <linux/mount.h>
 #include <linux/moduleparam.h>
 #include <linux/pid.h>
+#include <linux/tcp.h>
 
 #ifndef LINUX_VERSION_CODE
 # error No LINUX_VERSION_CODE.
@@ -86,7 +87,6 @@
 
 #include <linux/init.h>     /* module_init/module_exit */
 
-#include <driver/linux_net/kernel_compat.h>
 #include <driver/linux_affinity/kernel_compat.h>
 
 typedef int socklen_t;

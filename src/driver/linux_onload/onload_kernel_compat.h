@@ -3,12 +3,13 @@
 #ifndef __ONLOAD_KERNEL_COMPAT_H__
 #define __ONLOAD_KERNEL_COMPAT_H__
 
-#include <driver/linux_net/kernel_compat.h>
-#include <driver/linux_net/autocompat.h>
 #include <driver/linux_affinity/autocompat.h>
 #include <linux/file.h>
 #include <linux/signal.h>
 #include <linux/uaccess.h>
+#include <linux/version.h>
+#include <linux/seq_file.h>
+#include <linux/skbuff.h>
 
 
 #ifndef __NFDBITS
@@ -52,5 +53,36 @@ ci_call_usermodehelper(char *path, char **argv, char **envp, int wait);
 #define efab_access_ok access_ok
 #endif
 
+/* is_compat_task() was removed for x86 in linux-4.6 */
+#ifdef EFRM_NEED_IS_COMPAT_TASK
+static inline int is_compat_task(void)
+{
+#if !defined(CONFIG_COMPAT)
+  return 0;
+#elif defined(CONFIG_X86_64)
+  return test_thread_flag(TIF_IA32);
+#elif defined(CONFIG_PPC64)
+  return test_thread_flag(TIF_32BIT);
+#else
+  #error "cannot define is_compat_task() for this architecture"
+#endif
+}
+#endif
+
+/* skb_frag_off() was added in linux-5.4 */
+#ifdef EFRM_NEED_SKB_FRAG_OFF
+/**
+ * skb_frag_off() - Returns the offset of a skb fragment
+ * @frag: the paged fragment
+ */
+static inline unsigned int skb_frag_off(const skb_frag_t *frag)
+{
+	/* This later got renamed bv_offset (because skb_frag_t is now really
+	 * a struct bio_vec), but the page_offset name should work in any
+	 * kernel that doesn't already have skb_frag_off defined.
+	 */
+	return frag->page_offset;
+}
+#endif
 
 #endif /* __ONLOAD_KERNEL_COMPAT_H__ */

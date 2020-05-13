@@ -62,7 +62,6 @@
 #include <ci/efrm/vi_resource_private.h>
 #include <ci/efrm/driver_private.h>
 #include <ci/efrm/pd.h>
-#include <driver/linux_net/filter.h>
 #include <ci/efrm/efrm_filter.h>
 #include <ci/driver/internal.h>
 #include "efrm_internal.h"
@@ -155,7 +154,7 @@ static int iomap_bar(struct linux_efhw_nic *lnic, size_t len)
 {
 	volatile char __iomem *ioaddr;
 
-	ioaddr = efx_ioremap(lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr, len);
+	ioaddr = ci_ioremap(lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr, len);
 	if (ioaddr == 0)
 		return -ENOMEM;
 

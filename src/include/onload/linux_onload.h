@@ -32,8 +32,8 @@
 #include <linux/fs.h>
 #include <linux/eventpoll.h>
 #include <linux/fcntl.h>
+#include <linux/net.h>
 
-#include <driver/linux_net/kernel_compat.h>
 #include <driver/linux_affinity/kernel_compat.h>
 
 #ifndef EFRM_HAVE_MSG_ITER
