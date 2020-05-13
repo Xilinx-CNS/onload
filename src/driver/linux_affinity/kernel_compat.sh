@@ -17,7 +17,7 @@ EFRM_HAVE_NETFILTER_OPS_HAVE_OWNER	memtype	struct_nf_hook_ops	owner	include/linu
 
 EFRM_HAVE_REINIT_COMPLETION	symbol	reinit_completion	include/linux/completion.h
 
-ERFM_HAVE_NEW_KALLSYMS	symtype	kallsyms_on_each_symbol	include/linux/kallsyms.h int(int (*)(void *, const char *, struct module *, unsigned long), void *)
+ERFM_HAVE_NEW_KALLSYMS	export	kallsyms_on_each_symbol	include/linux/kallsyms.h	kernel/kallsyms.c
 
 EFRM_HAVE_TASK_NSPROXY	symbol	task_nsproxy	include/linux/nsproxy.h
 

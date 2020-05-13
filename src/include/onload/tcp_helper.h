@@ -258,8 +258,6 @@ typedef struct tcp_helper_resource_s {
 #define EFRM_DO_NAMESPACES
   /* Namespaces this stack is living into */
   struct nsproxy *nsproxy;
-#else /* ERFM_HAVE_NEW_KALLSYMS */
-
 #endif /* ERFM_HAVE_NEW_KALLSYMS */
 #endif /* CONFIG_NAMESPACES */
 
