@@ -88,7 +88,7 @@ void doDeveloperBuild(String build_profile=null) {
           node('dev-build') {
             ws("workspace/${new URLDecoder().decode(env.JOB_NAME)}/exec-${env.EXECUTOR_NUMBER}-${thread_title}") {
               checkout scm
-              utils.rake("build:${component}", defines: defines)
+              utils.rake(["build:${component}"], defines: defines)
               deleteDir() // Delete the manually allocated workspace
             }
             deleteDir() // Delete the workspace allocated implicitly by node
