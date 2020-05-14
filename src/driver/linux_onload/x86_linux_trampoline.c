@@ -275,53 +275,9 @@ static void* oo_entry_SYSCALL_64(void)
   return oo_entry_SYSCALL_64_addr;
 }
 
-/* "old" kernels: find "call *table" to syscall table,
- * see the comment in find_syscall_table(). */
-static void **find_syscall_ind_call(unsigned char *p)
-{
-  unsigned long result = 0;
-  unsigned char *pend;
-
-  result = (unsigned long)p;
-  pend = p + 1024 - 7;
-  while (p < pend) {
-    if ((p[0] == 0xff) && (p[1] == 0x14) && (p[2] == 0xc5)) {
-      result &= ~ 0xffffffffUL;
-      result |= (p[3] | (p[4] << 8) | (p[5] << 16) | (p[6] << 24));
-      TRAMP_DEBUG("syscall table at %lx", result);
-      return (void **)result;
-    }
-    p++;
-  }
-  return NULL;
-}
-
-/* "new" kernels: find "movq sys_call_table",
- * see the comment in find_syscall_table().*/
-static void **find_syscall_movq(unsigned char *p)
-{
-  unsigned long result = 0;
-  unsigned char *pend;
-
-  result = (unsigned long)p;
-  pend = p + 1024 - 9;
-  while (p < pend) {
-    if ((p[0] == 0x48) && (p[1] == 0x8b) && (p[2] == 0x04) &&
-        (p[3] == 0xc5) && (p[8] == 0xe8)) {
-      result &= ~ 0xffffffffUL;
-      result |= (p[4] | (p[5] << 8) | (p[6] << 16) | (p[7] << 24));
-      TRAMP_DEBUG("syscall table at %lx", result);
-      return (void **)result;
-    }
-    p++;
-  }
-  return NULL;
-}
-
 static void **find_syscall_table(void)
 {
   unsigned char *p;
-  void **result;
 
   /* First see if it is in kallsyms */
   p = oo_entry_sys_call_table();
@@ -332,28 +288,13 @@ static void **find_syscall_table(void)
 
   /* If kallsyms lookup failed, fall back to looking at some assembly
    * code that we know references the syscall table.
-   * 
-   * For x86_64, we can find the syscall entry point directly from the
-   * LSTAR MSR.  The opcode we need to locate is either
-   * "call *table(,%rax,8)" which is 0xff,0x14,0xc5,<table>
-   * or (on some newewer kernels)
-   * "movq    sys_call_table(, %rax, 8), %rax" which is
-   * 0x48,0x8b,0x04,0xc5,<table>
-   * (but note that <table> here is only 4 bytes, not 8).
-   * In the latter case we also check for the next opcode to be call (0xe8),
-   * in order to avoid false positives.
    */
   p = oo_entry_SYSCALL_64();
   if( p == NULL )
     return NULL;
 
   TRAMP_DEBUG("entry_SYSCALL_64=%p", p);
-  result = find_syscall_ind_call(p);
-  if (result != NULL)
-    return result;
-  result = find_syscall_movq(p);
-  if (result != NULL)
-    return result;
+  /* Sasha fixme: get the syscall table address out of asm. */
   TRAMP_DEBUG("didn't find syscall table address");
   return NULL;
 }
@@ -366,10 +307,6 @@ static void **find_syscall_table(void)
  */
 static void **find_ia32_syscall_table(void)
 {
-  unsigned long result = 0;
-  unsigned char *p = NULL;
-  void **table;
-
 #ifdef ERFM_HAVE_NEW_KALLSYMS
   /* It works with CONFIG_KALLSYMS_ALL=y only. */
   /* Linux>=4.2: ia32_sys_call_table is not a local variable any more, so
@@ -378,37 +315,12 @@ static void **find_ia32_syscall_table(void)
   addr = efrm_find_ksym("ia32_sys_call_table");
   if( addr != NULL )
     return addr;
-
-  /* Linux-4.4 & 4.5: do_syscall_32_irqs_off is a function, so it does not
-   * require CONFIG_KALLSYMS_ALL=y. */
-  p = efrm_find_ksym("do_syscall_32_irqs_off");
-  /* Linux-4.6: */
-  if( p == NULL )
-    p = efrm_find_ksym("do_int80_syscall_32");
 #endif
 
-  if( p == NULL ) {
-    /* linux<4.4: get ia32_sys_call_table variable from asm code at
-     * linux/arch/x86/entry/entry_64_compat.S. */
-    unsigned int *idtbase;
-    unsigned char idt[10];
+  /* Sasha fixme: get ia32_sys_call_table out of asm
+   * based on oo_entry_sys_call_table()
+   */
 
-    __asm__("sidt %0" : "=m"(idt));
-    idtbase = *(unsigned int **)(&idt[2]);
-    TRAMP_DEBUG("idt base=%p, entry 0x80=%08x,%08x,%08x", idtbase,
-                idtbase[0x80*4], idtbase[0x80*4+1], idtbase[0x80*4+2]);
-    result = (idtbase[0x80*4] & 0xffff) | (idtbase[0x80*4+1] & 0xffff0000)
-             | ((unsigned long)idtbase[0x80*4+2] << 32);
-    p = (unsigned char *)result;
-  }
-
-  TRAMP_DEBUG("int 0x80 entry point at %p", p);
-  table = find_syscall_ind_call(p);
-  if (table != NULL)
-    return table;
-  table = find_syscall_movq(p);
-  if (table != NULL)
-    return table;
   ci_log("ERROR: didn't find ia32_sys_call_table address");
 
   return NULL;
