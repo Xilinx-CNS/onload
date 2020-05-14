@@ -51,6 +51,7 @@
 #include <linux/interrupt.h>/* in_interrupt()  */
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/ipv6.h>
 #include <linux/spinlock.h>
 #include <linux/highmem.h>
 #include <linux/sched.h>
