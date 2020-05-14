@@ -671,7 +671,7 @@ static int ci_tcp_sync_so_sockopts(ci_netif* ni, ci_tcp_state* ts,
     char* ifname;
     struct net_device *dev = dev_get_by_index(
 #ifdef EFRM_DO_NAMESPACES
-                               netif2tcp_helper_resource(ni)->nsproxy->net_ns,
+                               netif2tcp_helper_resource(ni)->net_ns,
 #else
                                &init_net,
 #endif

@@ -253,11 +253,16 @@ typedef struct tcp_helper_resource_s {
 #endif
 
 #ifdef CONFIG_NAMESPACES
-#ifdef ERFM_HAVE_NEW_KALLSYMS
 
 #define EFRM_DO_NAMESPACES
   /* Namespaces this stack is living into */
-  struct nsproxy *nsproxy;
+  struct net* net_ns;
+  struct pid_namespace* pid_ns;
+#ifdef ERFM_HAVE_NEW_KALLSYMS
+#define OO_HAS_IPC_NS
+  /* put_ipc_ns() is not exported, so we can't use it without
+   * kallsyms_on_each_symbol() */
+  struct ipc_namespace* ipc_ns;
 #endif /* ERFM_HAVE_NEW_KALLSYMS */
 #endif /* CONFIG_NAMESPACES */
 
@@ -515,8 +520,7 @@ ci_get_pid_ns(struct nsproxy* proxy)
 ci_inline struct pid_namespace* ci_netif_get_pidns(ci_netif* ni)
 {
   tcp_helper_resource_t* thr = netif2tcp_helper_resource(ni);
-  struct pid_namespace* ns = ci_get_pid_ns(thr->nsproxy);
-  return ns;
+  return thr->pid_ns;
 }
 
 /* Log an error and return failure if the current process is not in
@@ -536,8 +540,8 @@ ci_inline int ci_netif_check_namespace(ci_netif* ni)
     ci_log("In ci_netif_check_namespace() without valid namespaces");
     return -EINVAL;
   }
-  if( (thr->nsproxy->net_ns != current->nsproxy->net_ns) ||
-      (ci_get_pid_ns(thr->nsproxy) != ci_get_pid_ns(current->nsproxy)) )
+  if( (thr->net_ns != current->nsproxy->net_ns) ||
+      (thr->pid_ns != ci_get_pid_ns(current->nsproxy)) )
   {
     ci_log("NAMESPACE MISMATCH: pid %d accessed a foreign stack",
            current->pid);

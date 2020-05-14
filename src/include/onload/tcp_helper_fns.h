@@ -507,10 +507,10 @@ efab_get_os_settings(tcp_helper_resource_t* trs)
 
   /* Linux 4.15 moved these values into network namespace structures */
 #if defined(EFRM_DO_NAMESPACES) && defined(EFRM_HAVE_NS_SYSCTL_TCP_MEM)
-  opts->tcp_sndbuf_def = trs->nsproxy->net_ns->ipv4.sysctl_tcp_wmem[1];
-  opts->tcp_sndbuf_max = trs->nsproxy->net_ns->ipv4.sysctl_tcp_wmem[2];
-  opts->tcp_rcvbuf_def = trs->nsproxy->net_ns->ipv4.sysctl_tcp_rmem[1];
-  opts->tcp_rcvbuf_max = trs->nsproxy->net_ns->ipv4.sysctl_tcp_rmem[2];
+  opts->tcp_sndbuf_def = trs->net_ns->ipv4.sysctl_tcp_wmem[1];
+  opts->tcp_sndbuf_max = trs->net_ns->ipv4.sysctl_tcp_wmem[2];
+  opts->tcp_rcvbuf_def = trs->net_ns->ipv4.sysctl_tcp_rmem[1];
+  opts->tcp_rcvbuf_max = trs->net_ns->ipv4.sysctl_tcp_rmem[2];
 #elif defined(EFRM_HAVE_NS_SYSCTL_TCP_MEM)
   opts->tcp_sndbuf_def = init_net.ipv4.sysctl_tcp_wmem[1];
   opts->tcp_sndbuf_max = init_net.ipv4.sysctl_tcp_wmem[2];

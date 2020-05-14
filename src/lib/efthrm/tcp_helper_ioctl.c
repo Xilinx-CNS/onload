@@ -315,7 +315,7 @@ efab_tcp_helper_detach_file(tcp_helper_endpoint_t* ep,
   ci_assert_nflags(wo->waitable.sb_aflags, CI_SB_AFLAG_ORPHAN);
 
 #ifdef EFRM_DO_NAMESPACES
-  ci_assert_nequal(pid, task_pid_nr_ns(current, ci_netif_get_pidns(&trs->netif)));
+  ci_assert_nequal(pid, task_pid_nr_ns(current, trs->pid_ns));
 #endif
   ci_assert_ge(fd, 0);
 

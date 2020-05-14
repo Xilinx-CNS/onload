@@ -70,18 +70,6 @@
 #define EPHEMERAL_PORT_LIST_NO_PORT ((uint32_t) -1)
 
 
-#ifdef EFRM_DO_NAMESPACES
-static void (*my_free_nsproxy)(struct nsproxy *ns);
-static inline void my_put_nsproxy(struct nsproxy *ns)
-{
-	if (atomic_dec_and_test(&ns->count)) {
-		my_free_nsproxy(ns);
-	}
-}
-
-#define put_nsproxy my_put_nsproxy
-#endif
-
 #define EFAB_THR_MAX_NUM_INSTANCES  0x00010000
 
 /* Provides upper limit to EF_MAX_PACKETS. default is 512K packets,
@@ -3581,6 +3569,25 @@ static int oo_handle_wakeup_in_ul(void* context, int is_timeout,
 }
 #endif
 
+#if defined(EFRM_DO_NAMESPACES) && defined(ERFM_HAVE_NEW_KALLSYMS)
+#include <linux/ipc_namespace.h>
+/* put_ipc_ns() is not exported */
+static void (*my_put_ipc_ns)(struct ipc_namespace *ns);
+#endif
+static void put_namespaces(tcp_helper_resource_t* rs)
+{
+#ifdef EFRM_DO_USER_NS
+  put_user_ns(rs->user_ns);
+#endif
+#ifdef EFRM_DO_NAMESPACES
+#ifdef OO_HAS_IPC_NS
+  if( my_put_ipc_ns != NULL )
+    my_put_ipc_ns(rs->ipc_ns);
+#endif
+  put_pid_ns(rs->pid_ns);
+  put_net(rs->net_ns);
+#endif
+}
 
 int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
                         const ci_netif_config_opts* opts,
@@ -3593,6 +3600,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   int rc, intf_i;
   ci_netif* ni;
   int hw_resources_allocated = 0;
+  struct nsproxy* nsproxy;
 
   ci_assert(alloc);
   ci_assert(rs_out);
@@ -3716,12 +3724,17 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   init_completion(&rs->complete);
 
 #ifdef EFRM_DO_NAMESPACES
-  /* Initialise nsproxy field */
-  rs->nsproxy = task_nsproxy_start(current);
-  ci_assert(rs->nsproxy);
-  get_nsproxy(rs->nsproxy);
-  netns_get_identifiers(rs->netif.state, rs->nsproxy->net_ns);
+  /* Initialise namespaces */
+  nsproxy = task_nsproxy_start(current);
+  ci_assert(nsproxy);
+  rs->net_ns = get_net(nsproxy->net_ns);
+  rs->pid_ns = get_pid_ns(ci_get_pid_ns(nsproxy));
+#ifdef OO_HAS_IPC_NS
+  if( my_put_ipc_ns != NULL )
+    rs->ipc_ns = get_ipc_ns(nsproxy->ipc_ns);
+#endif
   task_nsproxy_done(current);
+  netns_get_identifiers(rs->netif.state, rs->net_ns);
 #endif
 
 #ifdef EFRM_DO_USER_NS
@@ -4063,12 +4076,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   destroy_workqueue(rs->wq);
  fail5:
 #endif
-#ifdef EFRM_DO_USER_NS
-  put_user_ns(rs->user_ns);
-#endif
-#ifdef EFRM_DO_NAMESPACES
-  put_nsproxy(rs->nsproxy);
-#endif
+  put_namespaces(rs);
   release_netif_resources(rs);
  fail4:
   ci_id_pool_free(&THR_TABLE.instances, rs->id, &THR_TABLE.lock);
@@ -5297,12 +5305,7 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
   if( trs->netif.cplane_init_net != NULL )
     cp_release(trs->netif.cplane_init_net);
   cp_release(trs->netif.cplane);
-#ifdef EFRM_DO_NAMESPACES
-  put_nsproxy(trs->nsproxy);
-#endif
-#ifdef EFRM_DO_USER_NS
-  put_user_ns(trs->user_ns);
-#endif
+  put_namespaces(trs);
 
   rc = ci_id_pool_free(&THR_TABLE.instances, trs->id, &THR_TABLE.lock);
   OO_DEBUG_ERR(if (rc)
@@ -5363,12 +5366,10 @@ efab_tcp_driver_ctor()
 {
   int rc = 0;
 
-#ifdef EFRM_DO_NAMESPACES
-  my_free_nsproxy = efrm_find_ksym("free_nsproxy");
-  if( my_free_nsproxy == NULL ) {
-    ci_log("Failed to find free_nsproxy() function in the running kernel.");
-    return -EINVAL;
-  }
+#if defined(EFRM_DO_NAMESPACES) && defined(OO_HAS_IPC_NS)
+  my_put_ipc_ns = efrm_find_ksym("put_ipc_ns");
+  if( my_put_ipc_ns == NULL )
+    ci_log("Failed to find put_ipc_ns(), proceeding without.");
 #endif
 
   CI_ZERO(&efab_tcp_driver);
@@ -5726,7 +5727,12 @@ efab_tcp_helper_iobufset_alloc(tcp_helper_resource_t* trs,
     /* Use huge pages if we are in the same namespace only.
      * ipc_ns has a pointer to user_ns, so we may compare uids
      * if ipc namespaces match. */
-    if( ns != NULL && ns->ipc_ns == trs->nsproxy->ipc_ns
+    if( ns != NULL
+#ifdef OO_HAS_IPC_NS
+        && (ns->ipc_ns == trs->ipc_ns || my_put_ipc_ns == NULL)
+#elif defined(EFRM_DO_USER_NS)
+        && current_user_ns() == trs->user_ns
+#endif
         && ci_geteuid() == ni->keuid ) {
       flags |= NI_OPTS(ni).huge_pages;
     }
