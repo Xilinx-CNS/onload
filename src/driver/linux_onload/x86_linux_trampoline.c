@@ -235,21 +235,6 @@ static SYSCALL_PTR_DEF(saved_sys_exit_group32, (int));
 atomic_t efab_syscall_used;
 
 
-/* Find the syscall table...
- */
-static void* oo_entry_sys_call_table(void)
-{
-  static void* res = NULL;
-
-  if( res != NULL )
-    return res;
-#ifdef ERFM_HAVE_NEW_KALLSYMS
-  /* It works with CONFIG_KALLSYMS_ALL=y only. */
-  res = efrm_find_ksym("sys_call_table");
-#endif
-  return res;
-}
-
 static void* oo_entry_SYSCALL_64(void)
 {
   static void *oo_entry_SYSCALL_64_addr = NULL;
@@ -283,10 +268,13 @@ static void* oo_entry_SYSCALL_64(void)
 
 static void **find_syscall_table(void)
 {
-  unsigned char *p;
+  unsigned char *p = NULL;
 
   /* First see if it is in kallsyms */
-  p = oo_entry_sys_call_table();
+#ifdef ERFM_HAVE_NEW_KALLSYMS
+  /* It works with CONFIG_KALLSYMS_ALL=y only. */
+  p = efrm_find_ksym("sys_call_table");
+#endif
   if( p != NULL ) {
     TRAMP_DEBUG("syscall table ksym at %p", (unsigned long*)p);
     return (void**)p;
