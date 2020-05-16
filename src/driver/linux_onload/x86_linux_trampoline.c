@@ -240,15 +240,6 @@ atomic_t efab_syscall_used;
 
 /* Find the syscall table...
  */
-#if defined(CONFIG_X86_XEN)
-static void **find_syscall_table(void)
-{
-  /* We don't currently have any non-appalling way of doing this. */
-  return NULL;
-}
-
-#elif defined(__x86_64__)
-
 static void* oo_entry_sys_call_table(void)
 {
   static void* res = NULL;
@@ -325,10 +316,6 @@ static void **find_ia32_syscall_table(void)
 
   return NULL;
 }
-#endif
-
-#else
-#error "Don't know how to find syscall table on this platform"
 #endif
 
 
