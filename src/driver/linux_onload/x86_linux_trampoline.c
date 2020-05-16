@@ -269,6 +269,8 @@ static void* oo_entry_SYSCALL_64(void)
 static void **find_syscall_table(void)
 {
   unsigned char *p = NULL;
+  unsigned long result;
+  unsigned char *pend;
 
   /* First see if it is in kallsyms */
 #ifdef ERFM_HAVE_NEW_KALLSYMS
@@ -276,7 +278,7 @@ static void **find_syscall_table(void)
   p = efrm_find_ksym("sys_call_table");
 #endif
   if( p != NULL ) {
-    TRAMP_DEBUG("syscall table ksym at %p", (unsigned long*)p);
+    TRAMP_DEBUG("syscall table ksym at %px", (unsigned long*)p);
     return (void**)p;
   }
 
@@ -287,8 +289,73 @@ static void **find_syscall_table(void)
   if( p == NULL )
     return NULL;
 
-  TRAMP_DEBUG("entry_SYSCALL_64=%p", p);
-  /* Sasha fixme: get the syscall table address out of asm. */
+  TRAMP_DEBUG("entry_SYSCALL_64=%px", p);
+  /* linux>=4.17 has following layout:
+   * linux/arch/x86/entry/entry_64.S: entry_SYSCALL_64():
+   * movq	%rax, %rdi
+   *    48 89 c7
+   * movq	%rsp, %rsi
+   *    48 89 e6
+   * call	do_syscall_64
+   *    e8 XX XX XX XX
+   *
+   * NB It is possible to extend this to support linux>=4.6,
+   * which is slightly different.  We do not have any DUTs to test such
+   * a linux system without KALLSYMS, though.
+   */
+  p += 0x40; /* skip the first part of entry_SYSCALL_64() */
+  result = 0;
+  pend = p + 1024 - 11;
+  while (p < pend) {
+    if( p[0] == 0x48 && p[1] == 0x89 && p[2] == 0xc7 &&
+        p[3] == 0x48 && p[4] == 0x89 && p[5] == 0xe6 &&
+        p[6] == 0xe8 ) {
+      result = (unsigned long)p + 11;
+      result += p[7] | (p[8] << 8) | (p[9] << 16) | (p[10] << 24);
+      break;
+    }
+    p++;
+  }
+
+  if( result == 0 ) {
+    ci_log("ERROR: didn't find do_syscall_64()");
+    return 0;
+  }
+
+  p = (void*)result;
+  TRAMP_DEBUG("do_syscall_64=%px", p);
+  /* For linux>=4.6 do_syscall_64() resides in
+   * linux/arch/x86/entry/common.c:
+   * regs->ax = sys_call_table[nr](regs);
+   * in objdump -Dl:
+   * 48 8b 04 fd XX XX XX XX	mov    0x0(,%rdi,8),%rax
+   * 48 89 ef            	mov    %rbp,%rdi
+   * (or
+   *    4c 89 e7: mov    %r12,%rdi
+   * or whatever)
+   * (or the 2 movs above swapped)
+   * e8 YY YY YY YY      	callq
+   */
+  p += 0x20; /* skip the first part of do_syscall_64() */
+  result = 0;
+  pend = p + 1024 - 12;
+  while (p < pend) {
+    if( p[0] == 0x48 && p[1] == 0x8b && p[2] == 0x04 && p[3] == 0xfd ) {
+      TRAMP_DEBUG("%px: %02x %02x %02x %02x %02x %02x %02x %02x %02x "
+                  "%02x %02x %02x %02x %02x %02x %02x %02x",
+                  p, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8],
+                  p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16]);
+      if( (p[9] == 0x89 && p[11] == 0xe8) ||
+          (*(p-2) == 0x89 && p[8] == 0xe8) ) {
+        s32 addr = p[4] | (p[5] << 8) | (p[6] << 16) | (p[7] << 24);
+        result = (long)addr;
+        TRAMP_DEBUG("sys_call_table=%lx", result);
+        return (void**)result;
+      }
+    }
+    p++;
+  }
+
   TRAMP_DEBUG("didn't find syscall table address");
   return NULL;
 }
