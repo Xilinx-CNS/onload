@@ -10,6 +10,7 @@
 #include <linux/version.h>
 #include <linux/seq_file.h>
 #include <linux/skbuff.h>
+#include <linux/netdevice.h>
 
 
 #ifndef __NFDBITS
@@ -83,6 +84,25 @@ static inline unsigned int skb_frag_off(const skb_frag_t *frag)
 	 */
 	return frag->page_offset;
 }
+#endif
+
+
+#ifdef EFRM_HAVE_NETDEV_REGISTER_RH
+/* The _rh versions of these appear in RHEL7.3.
+ * Wrap them to make the calling code simpler.
+ */
+static inline int efrm_register_netdevice_notifier(struct notifier_block *b)
+{
+	return register_netdevice_notifier_rh(b);
+}
+
+static inline int efrm_unregister_netdevice_notifier(struct notifier_block *b)
+{
+	return unregister_netdevice_notifier_rh(b);
+}
+
+#define register_netdevice_notifier efrm_register_netdevice_notifier
+#define unregister_netdevice_notifier efrm_unregister_netdevice_notifier
 #endif
 
 #endif /* __ONLOAD_KERNEL_COMPAT_H__ */
