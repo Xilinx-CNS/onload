@@ -33,9 +33,13 @@
 #  define TERM_DEBUG(x...) (void)0
 #endif
 
-/* This is equivalent of the kernel signal_wake_up(t, 1)
- * function which is not an export symbol. Let's hope
- * it works in the same manner in all the kernels */
+
+/* X-SPDX-Source-URL: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git */
+/* X-SPDX-Source-Tag: v5.7 */
+/* X-SPDX-Source-File: kernel/signal.c */
+/* X-SPDX-License-Identifier: GPL-2.0-only */
+
+/* This is equivalent of the kernel's signal_wake_up(t, 1) */
 static inline void efab_signal_wake_up(struct task_struct* t)
 {
   DECLARE_WAITQUEUE(wq, NULL);
@@ -44,37 +48,51 @@ static inline void efab_signal_wake_up(struct task_struct* t)
 
   /* default_wake_function  is equivalent to
    * wake_up_state(t, TASK_INTERRUPTIBLE | TASK_WAKEKILL)
-   * kick_process is not exported prior to 2.6.31, and there is almost
-   * no way to copy it. */
+   */
   wq.private = t;
   if( !default_wake_function(&wq, TASK_WAKEKILL | TASK_INTERRUPTIBLE, 0, NULL) )
       kick_process(t);
 }
 
-
-/* Function should act the same as zap_other_threads() kernel
- * function does. For reasons I don't understand zap_other_threads
- * is not an exported symbol.
+/* This is equivalent of the kernel's
+ * task_clear_jobctl_pending(task, JOBCTL_PENDING_MASK)
  */
-static void efab_zap_other_threads(struct task_struct *p)
+void efab_task_clear_jobctl_pending(struct task_struct* task)
 {
-  struct task_struct *t;
+  unsigned long mask = JOBCTL_PENDING_MASK |
+                       JOBCTL_STOP_CONSUME | JOBCTL_STOP_DEQUEUED;
+  task->jobctl &= ~mask;
 
-  p->signal->group_stop_count = 0;
-
-  for (t = next_thread(p); t != p; t = next_thread(t)) {
-    /*
-     * Don't bother with already dead threads
-     */
-    if (t->exit_state)
-      continue;
-
-    sigaddset(&t->pending.signal, SIGKILL);
-    efab_signal_wake_up(t);
+  if (unlikely(task->jobctl & JOBCTL_TRAPPING)) {
+    task->jobctl &= ~JOBCTL_TRAPPING;
+    smp_mb(); /* advised by wake_up_bit() */
+    wake_up_bit(&task->jobctl, JOBCTL_TRAPPING_BIT);
   }
 }
 
-static void (*efab_my_zap_other_threads)(struct task_struct *p);
+static int efab_zap_other_threads(struct task_struct *p)
+{
+  struct task_struct *t = p;
+  int count = 0;
+
+  p->signal->group_stop_count = 0;
+
+  while_each_thread(p, t) {
+    efab_task_clear_jobctl_pending(t);
+    count++;
+
+    /* Don't bother with already dead threads */
+    if (t->exit_state)
+      continue;
+    sigaddset(&t->pending.signal, SIGKILL);
+    efab_signal_wake_up(t);
+  }
+
+  return count;
+}
+/* X-SPDX-Restore: */
+
+static int (*efab_my_zap_other_threads)(struct task_struct *p);
 
 
 /* Find all stacks in multithreaded application.
