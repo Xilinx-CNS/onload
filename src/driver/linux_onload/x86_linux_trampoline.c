@@ -207,9 +207,6 @@
  */
 static void **syscall_table = 0;
 
-/* The address of the syscall entry point. */
-static void *oo_entry_SYSCALL_64_addr = NULL;
-
 #ifdef CONFIG_COMPAT
 
 /* The address of the 32-bit compatibility system call table.
@@ -255,12 +252,30 @@ static void* oo_entry_sys_call_table(void)
 
 static void* oo_entry_SYSCALL_64(void)
 {
+  static void *oo_entry_SYSCALL_64_addr = NULL;
   unsigned long result = 0;
 
   if( oo_entry_SYSCALL_64_addr != NULL )
     return oo_entry_SYSCALL_64_addr;
 
-  /* linux<4.2 does not define entry_SYSCALL_64().  It uses system_call(). */
+  /* linux<4.2:
+   *   MSR_LSTAR points to system_call(); we are returning this address.
+   * 4.3<=linux<5.0:
+   *   MSR_LSTAR points to per-cpu SYSCALL64_entry_trampoline variable,
+   *   which is a wrapper for entry_SYSCALL_64_trampoline(),
+   *   which is a wrapper for entry_SYSCALL_64_stage2(),
+   *   which is a wrapper for entry_SYSCALL_64().
+   *   We need the entry_SYSCALL_64() address to parse the content of this
+   *   function.
+   * 5.1<=linux:
+   *   MSR_LSTAR points to entry_SYSCALL_64().
+   */
+#ifdef ERFM_HAVE_NEW_KALLSYMS
+  oo_entry_SYSCALL_64_addr = efrm_find_ksym("entry_SYSCALL_64");
+  if( oo_entry_SYSCALL_64_addr != NULL )
+    return oo_entry_SYSCALL_64_addr;
+#endif
+
   rdmsrl(MSR_LSTAR, result);
   oo_entry_SYSCALL_64_addr = (void*)result;
   return oo_entry_SYSCALL_64_addr;
@@ -1227,10 +1242,6 @@ int efab_linux_trampoline_ctor(int no_sct)
     OO_DEBUG_ERR(ci_log("ERROR: syscall table not found"));
     return -ENOEXEC;
   }
-
-#ifdef ERFM_HAVE_NEW_KALLSYMS
-  oo_entry_SYSCALL_64_addr = efrm_find_ksym("entry_SYSCALL_64");
-#endif
 
 #ifdef CONFIG_COMPAT
 
