@@ -386,15 +386,9 @@ efab_linux_trampoline_exit_group(int status)
   }
 }
 
-#if defined EFRM_DO_COREDUMP_BINFMTS_SIGNR || \
-    defined EFRM_DO_COREDUMP_COREDUMP_SIGNR
-/* RHEL6, etc. */
-#define EFRM_DO_COREDUMP_SIGNR
-static void (*efab_coredump)(long signr, int exit_core, struct pt_regs*);
-#else
-/* pt_regs parameter was only present for a month in 2012, but it's easy to
- * keep */
-static void (*efab_coredump)(const siginfo_t *siginfo, struct pt_regs*);
+#if defined(CONFIG_COREDUMP) && defined(ERFM_HAVE_NEW_KALLSYMS)
+#define OO_DO_COREDUMP
+static void (*efab_do_coredump)(const siginfo_t *siginfo);
 #endif
 
 
@@ -418,20 +412,18 @@ efab_signal_die(ci_private_t *priv_unused, void *arg)
 
     /* lock all the stacks */
     efab_terminate_lock_all_stacks(stacks, stacks_num);
+#ifdef OO_DO_COREDUMP
     /* kill all threads while they do not have netif locks (we have them!),
      * dump the core with all the threads. */
-    if( sig_kernel_coredump(sig) && efab_coredump != NULL ) {
+    if( sig_kernel_coredump(sig) && efab_do_coredump != NULL ) {
       siginfo_t siginfo;
       struct pt_regs regs;
       memset(&regs, 0, sizeof(regs));
       siginfo.si_signo = sig;
-#ifdef EFRM_DO_COREDUMP_SIGNR
-      efab_coredump(siginfo.si_signo, sig, &regs);
-#else
-      efab_coredump(&siginfo, &regs);
-#endif
+      efab_do_coredump(&siginfo);
     }
     else
+#endif
       efab_exit_group(&status);
     /* now when everybody is dead we can release netifs */
     efab_terminate_unlock_all_stacks(stacks, stacks_num);
@@ -453,18 +445,20 @@ void efab_linux_termination_ctor(void)
 {
 #ifdef ERFM_HAVE_NEW_KALLSYMS
   efab_my_zap_other_threads = efrm_find_ksym("zap_other_threads");
-  efab_coredump = efrm_find_ksym("do_coredump");
-  TERM_DEBUG("Find zap_other_threads,do_coredump via kallsyms at %p,%p",
-             efab_my_zap_other_threads, efab_coredump);
-
+  TERM_DEBUG("Find zap_other_threads via kallsyms at %px",
+             efab_my_zap_other_threads);
   if( efab_my_zap_other_threads == NULL )
 #endif
     efab_my_zap_other_threads = efab_zap_other_threads;
 
-  if( efab_coredump == NULL ) {
+#ifdef OO_DO_COREDUMP
+  efab_do_coredump = efrm_find_ksym("do_coredump");
+  TERM_DEBUG("Find do_coredump via kallsyms at %px", do_coredump);
+  if( efab_do_coredump == NULL )
+#endif
     ci_log("WARNING: failed to find do_coredump() symbol.  Use "
-           "module parameter safe_signals_and_exit=0 if you want SIGSEGV "
-           "to produce core dump.");
-  }
+           "module parameter safe_signals_and_exit=0 or add SIGSEGV "
+           "to EF_SIGNALS_NOPOSTPONE environment variable "
+           "if you want SIGSEGV to produce core dump.");
 }
 
