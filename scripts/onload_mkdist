@@ -181,6 +181,8 @@ docopy src/tests/onload/onload_remote_monitor       orm_example_client using_col
 
 docopy src/tools              solar_clusterd
 
+docopy src/driver             linux_net
+
 # Remove files we don't want to distribute.
 try pushd src >/dev/null
 rm -rf include/ci/model
@@ -213,11 +215,6 @@ rmmatch "*esx*"
 rm -rf mk/tools mk/certificates
 find . -name CVS -type d | xargs rm -rf
 rm -f src/driver/linux/*.sh
-
-NET="$TOP/src/driver/linux_net"
-try [ -d "$NET" ]
-try mkdir src/driver/linux_net
-tryquiet make -C "$NET" "KPATH=$PWD/src/driver/linux_net" export-srpm
 
 # Copy some build support files.
 while read dir; do

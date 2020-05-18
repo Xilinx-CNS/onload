@@ -7,14 +7,14 @@ SFCAFF_TARGET_SRCS := $(SFCAFF_SRCS)
 
 TARGETS		:= $(SFCAFF_TARGET)
 
-IMPORT		:= ../linux_net/driverlink_api.h
+IMPORT		:= ../linux_net/drivers/net/ethernet/sfc/driverlink_api.h
 
 
 ######################################################
 # linux kbuild support
 #
 
-KBUILD_EXTRA_SYMBOLS := $(BUILDPATH)/driver/linux_net/Module.symvers
+KBUILD_EXTRA_SYMBOLS := $(BUILDPATH)/driver/linux_net/drivers/net/ethernet/sfc/Module.symvers
 
 all: $(KBUILD_EXTRA_SYMBOLS)
 	$(MAKE) $(MMAKE_KBUILD_ARGS) M=$(CURDIR)

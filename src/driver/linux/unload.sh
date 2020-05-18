@@ -112,7 +112,7 @@ donet () {
       echo -n "$pci_dev" > /sys/class/net/$ethif/device/driver/unbind
   done
 
-  for m in sfc_mtd sfc_control sfc_mdio_trace $LINUX_NET sfc_driverlink; do
+  for m in sfc_mtd sfc_control sfc_mdio_trace $LINUX_NET virtual_bus sfc_driverlink; do
     tryunload "$m"
   done
   [ -f /dev/sfc_control ] || rm -f /dev/sfc_tweak

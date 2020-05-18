@@ -21,9 +21,9 @@ import os, sys, optparse, shutil
 
 common_files = {
     'ultree': [
-        'driver/linux_net/util/phy_power',
-        'driver/linux_net/util/reset_nic',
-        'driver/linux_net/util/set_carrier'],
+        'driver/linux_net/drivers/net/ethernet/sfc/util/phy_power',
+        'driver/linux_net/drivers/net/ethernet/sfc/util/reset_nic',
+        'driver/linux_net/drivers/net/ethernet/sfc/util/set_carrier'],
     }
 
 onload_files = {
@@ -48,9 +48,9 @@ onload_files = {
 
 kernel_files = {
     'ktree': [
-        'driver/linux_net/load.sh',
-        'driver/linux_net/unload.sh',
-        'driver/linux_net/sfc.ko' ],
+        'driver/linux_net/drivers/net/ethernet/sfc/load.sh',
+        'driver/linux_net/drivers/net/ethernet/sfc/unload.sh',
+        'driver/linux_net/drivers/net/ethernet/sfc/sfc.ko' ],
     }
 
 # Runbench queries these lists to decide which portion of the trees to build.
@@ -63,7 +63,7 @@ kernel_build_dirs = [
 ul_build_dirs = [
     'include',
 
-    'driver/linux_net/util',
+    'driver/linux_net/drivers/net/ethernet/sfc/util',
 
     'lib/ciapp',
     'lib/citools',

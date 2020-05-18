@@ -71,6 +71,7 @@ MMAKE_ORIG_SRCS := \
     $(wildcard $(TOPPATH)/$(CURRENT)/*.asm) \
     $(wildcard $(TOPPATH)/$(CURRENT)/*.ldpre) \
     $(wildcard $(TOPPATH)/$(CURRENT)/*.plist) \
+    $(wildcard $(TOPPATH)/$(CURRENT)/*.common) \
     $(addprefix $(TOPPATH)/$(CURRENT)/,$(IMPORT)))
 
 MMAKE_C_SRCS := $(notdir $(filter %.c, ${MMAKE_ORIG_SRCS}))
