@@ -779,9 +779,9 @@ static void citp_eitem_init(struct citp_epoll_member* eitem,
   eitem->fdi_seq = fd_fdi->seq;
 #if CI_CFG_EPOLL3
   eitem->ready_list_id = -1;
+  ci_dllink_self_link(&eitem->dead_stack_link);
 #endif
   eitem->flags = 0;
-  ci_dllink_self_link(&eitem->dead_stack_link);
 }
 
 #if CI_CFG_EPOLL3

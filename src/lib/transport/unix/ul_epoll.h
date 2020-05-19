@@ -104,9 +104,9 @@ CI_BUILD_ASSERT(EPOLLIN == POLLIN);
 /*! Per-fd structure to keep in epoll file. */
 struct citp_epoll_member {
   ci_dllink             dllink;     /*!< Double-linked list links */
-  ci_dllink             dead_stack_link; /*!< Link for dead stack list */
   ci_dllist*            item_list;  /*!< The list this member belong on */
 #if CI_CFG_EPOLL3
+  ci_dllink             dead_stack_link; /*!< Link for dead stack list */
   int                   ready_list_id;
 #endif
   struct epoll_event    epoll_data;
