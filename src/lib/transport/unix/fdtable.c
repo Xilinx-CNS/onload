@@ -816,9 +816,9 @@ static void citp_fdinfo_do_handover(citp_fdinfo* fdi, int fdt_locked)
   Log_V(ci_log("%s: fd=%d nonb_switch=%d", __FUNCTION__, fdi->fd,
 	       fdi->on_rcz.handover_nonb_switch));
 
+  epoll_fdi = citp_epoll_fdi_from_member(fdi, fdt_locked);
 #if CI_CFG_EPOLL2
-  if( fdi->epoll_fd >= 0 &&
-      (epoll_fdi = citp_epoll_fdi_from_member(fdi, fdt_locked)) != NULL &&
+  if( fdi->epoll_fd >= 0 && epoll_fdi != NULL &&
       epoll_fdi->protocol->type == CITP_EPOLLB_FD ) {
       citp_epollb_on_handover(epoll_fdi, fdi);
   }
