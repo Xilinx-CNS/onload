@@ -87,10 +87,13 @@ hg-export() {
 git-export() {
     local repo="$1"
     local rev="$2"
-    shift 2
+    local whitelist="$3"
+    local blacklist="$4"
+    shift 4
     (
 	cd $repo
-	local extant_files=$(git ls-tree -r --name-only $rev "$@")
+	local extant_files=$(git ls-tree -r --name-only $rev "$@" \
+                             | grep -E "$whitelist" | grep -v "$blacklist")
 	git archive $rev $extant_files
     )
 }
@@ -176,17 +179,23 @@ commitlog=$(newpatch net_driver "Replacing net driver with ${netrev}")
 
 # Compute net driver files that should be added and removed, excluding
 # the glue makefile from consideration
-legacy_driver_path=src/driver/linux_net
-canon_driver_path=drivers/net/ethernet/sfc
+legacy_driver_path=src/driver/linux_net/
 netgot="$tmpdir/netgot"
 netwant="$tmpdir/netwant"
 glue_makefile_pattern="mmake.mk$"
+# We need the whole of the drivers and include directories, as well as
+# the top level makefile and some scripts
+whitelist="^((Makefile)|(scripts/export.sh)|(scripts/kernel_compat_funcs.sh)|(scripts/Makefile.common)|(include)|(drivers))"
+# We don't want directories in the list
+blacklist="/$"
+# We use || true for the grep here to allow the case where we currently
+# have no files, as the script is run with -o pipefail.
 git ls-files \
   src/driver/linux_net \
-    | grep -v ${glue_makefile_pattern} | sort > ${netgot}
-git-export "$netrepo" "$netrev" $canon_driver_path \
-    | tar xv -C $legacy_driver_path --strip-components 4 \
-    | sed s,^${canon_driver_path},${legacy_driver_path},g \
+    | (grep -v ${glue_makefile_pattern} || true) | sort > ${netgot}
+git-export "$netrepo" "$netrev" "$whitelist" "$blacklist" \
+    | tar xv -C $legacy_driver_path \
+    | sed s,^,${legacy_driver_path},g \
     | sort > "$netwant"
 grep -q "$glue_makefile_pattern" "$netwant" && \
     fail "mmake.mk found in non v5-style driver source would overwrite static glue."
