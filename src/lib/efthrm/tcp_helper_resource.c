@@ -433,6 +433,15 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
 {
   ci_uint32 n_ep_orphaned;
   ci_netif* netif = &thr->netif;
+  unsigned int timeout = 500;
+
+  /* Timeout to lock netif should be increased for debug builds.
+   * This is due to the fact that lock can be held for a long time
+   * to print various log messages.
+   */
+#ifndef NDEBUG
+  timeout = 2000;
+#endif
 
   ci_assert( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND );
 
@@ -440,7 +449,7 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
    * and filters.
    * And as all the UL have gone, it can't prevent us from taking the lock.
    */
-  if( efab_eplock_lock_timeout(netif, msecs_to_jiffies(500)) == 0 ) {
+  if( efab_eplock_lock_timeout(netif, msecs_to_jiffies(timeout)) == 0 ) {
     int id;
     for( id = 0; id < netif->state->n_ep_bufs; ++id ) {
       citp_waitable_obj* wo = ID_TO_WAITABLE_OBJ(netif, id);
