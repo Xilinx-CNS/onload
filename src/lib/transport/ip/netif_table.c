@@ -460,8 +460,7 @@ ci_ip4_netif_filter_remove(ci_netif_filter_table* tbl,
 #ifdef __KERNEL__
             /* release_ep_tbl might be called without the stack lock.
              * Do not complain about this. */
-            || (netif2tcp_helper_resource(netif)->k_ref_count &
-                TCP_HELPER_K_RC_DEAD)
+            || netif2tcp_helper_resource(netif)->ref[OO_THR_REF_BASE] == 0
 #endif
             );
 

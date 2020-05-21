@@ -248,7 +248,9 @@ static int tcp_helper_full_dump_stack(oo_dump_fn_t fn, unsigned id,
   ci_netif* netif = NULL;
   int rc = -ENODEV;
 
-  while( iterate_netifs_unlocked(&netif, orphan_only, 0) == 0 ) {
+  while( iterate_netifs_unlocked(
+                &netif, OO_THR_REF_BASE,
+                orphan_only ? OO_THR_REF_APP : OO_THR_REF_INFTY) == 0 ) {
     if( netif->state->stack_id == id ) {
       if ( user_buf != NULL )
         rc = oo_dump_to_user(fn, netif, user_buf, user_buf_len);
@@ -256,7 +258,7 @@ static int tcp_helper_full_dump_stack(oo_dump_fn_t fn, unsigned id,
         fn(netif, ci_log_dump_fn, NULL);
         rc = 0;
       }
-      iterate_netifs_unlocked_dropref(netif);
+      iterate_netifs_unlocked_dropref(netif, OO_THR_REF_BASE);
       break;
     }
   }

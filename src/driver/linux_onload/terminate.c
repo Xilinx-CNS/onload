@@ -158,7 +158,7 @@ efab_terminate_find_all_stacks(tcp_helper_resource_t *stacks[],
         /* We already keep a ref for this thr via file, but we need
          * one more ref because other threads may close this file
          * before we'll kill them. */
-        efab_thr_ref(thr);
+        oo_thr_ref_get(thr->ref, OO_THR_REF_BASE);
         stacks[stacks_num++] = thr;
       }
       fput(file);
@@ -192,7 +192,7 @@ efab_terminate_lock_all_stacks(tcp_helper_resource_t *stacks[],
         != 0 ) {
       OO_DEBUG_ERR(ci_log("Pid %d failed to terminate stack %d properly",
                           current->pid, thr->id));
-      efab_thr_release(thr);
+      oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
       stacks[0] = NULL;
     }
     ci_assert(ci_netif_is_locked(&thr->netif));
@@ -242,7 +242,7 @@ efab_terminate_lock_all_stacks(tcp_helper_resource_t *stacks[],
         if( tries >= MAX_ADD_TRIES + stacks_num ) {
           OO_DEBUG_ERR(ci_log("Pid %d failed to terminate stack %d properly",
                               current->pid, thr->id));
-          efab_thr_release(thr);
+          oo_thr_ref_drop(stacks[i]->ref, OO_THR_REF_BASE);
           stacks[i] = NULL;
         }
       }
@@ -270,7 +270,7 @@ efab_terminate_unlock_all_stacks(tcp_helper_resource_t *stacks[],
       continue;
     ci_netif_unlock(&stacks[i]->netif);
     TERM_DEBUG("%s: %d unlock stack %d", __func__, current->pid, stacks[i]->id);
-    efab_thr_release(stacks[i]);
+    oo_thr_ref_drop(stacks[i]->ref, OO_THR_REF_BASE);
   }
 }
 

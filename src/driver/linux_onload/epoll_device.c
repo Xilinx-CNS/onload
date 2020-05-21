@@ -139,8 +139,8 @@ static int oo_epoll_add_stack(struct oo_epoll_private* priv,
       continue;
     priv->stacks[i] = fd_thr;
     /* We already keep ref for this thr via file,
-     * so efab_tcp_helper_k_ref_count_inc() can't fail. */
-    efab_tcp_helper_k_ref_count_inc(fd_thr);
+     * so oo_thr_ref_get() can't fail. */
+    oo_thr_ref_get(fd_thr->ref, OO_THR_REF_BASE);
     break;
   }
   spin_unlock(&priv->lock);
@@ -155,7 +155,7 @@ static void oo_epoll_release_common(struct oo_epoll_private* priv)
   for( i = 0; i < epoll_max_stacks; i++ ) {
     if( priv->stacks[i] == NULL )
       break;
-    efab_tcp_helper_k_ref_count_dec(priv->stacks[i]);
+    oo_thr_ref_drop(priv->stacks[i]->ref, OO_THR_REF_BASE);
     priv->stacks[i] = NULL;
   }
   kfree(priv->stacks);
@@ -175,12 +175,12 @@ static int set_max_stacks(const char *val,
   return 0;
 }
 
-#define OO_EPOLL_FOR_EACH_STACK(priv, i, thr, ni)                       \
-  for( i = 0; i < epoll_max_stacks; ++i )                              \
-    if( (thr = (priv)->stacks[i]) == NULL )                             \
-      break;                                                            \
-    else if(unlikely( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND )) \
-      continue;                                                         \
+#define OO_EPOLL_FOR_EACH_STACK(priv, i, thr, ni)      \
+  for( i = 0; i < epoll_max_stacks; ++i )              \
+    if( (thr = (priv)->stacks[i]) == NULL )            \
+      break;                                           \
+    else if(unlikely( thr->ref[OO_THR_REF_APP] == 0 )) \
+      continue;                                        \
     else if( (ni = &thr->netif) || 1 )
 
 

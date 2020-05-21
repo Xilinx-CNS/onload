@@ -68,12 +68,17 @@ oo_priv_lookup_and_attach_stack(ci_private_t* priv, const char* name,
   if( (rc = efab_thr_table_lookup(name, current->nsproxy->net_ns, id,
                                   EFAB_THR_TABLE_LOOKUP_CHECK_USER,
                                   &trs)) == 0 ) {
-    if( (rc = oo_priv_set_stack(priv, trs)) == 0 ) {
+    if( (rc = oo_thr_ref_upgrade(trs->ref, OO_THR_REF_BASE, OO_THR_REF_APP))
+        != 0 ) {
+      oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
+    }
+    else if( (rc = oo_priv_set_stack(priv, trs)) == 0 ) {
       priv->fd_type = CI_PRIV_TYPE_NETIF;
       priv->sock_id = OO_SP_NULL;
     }
-    else
-      efab_thr_release(trs);
+    else {
+      oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
+    }
   }
   return rc;
 }
@@ -713,11 +718,11 @@ efab_tcp_helper_get_info(ci_private_t *unused, void *arg)
   rc = efab_thr_table_lookup(NULL, NULL, info->ni_index, flags, &thr);
   if( rc == 0 ) {
     info->ni_exists = 1;
-    info->ni_orphan = (thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND);
+    info->ni_orphan = (thr->ref[OO_THR_REF_FILE] == 0);
     ni = &thr->netif;
     info->mmap_bytes = thr->mem_mmap_bytes;
-    info->k_ref_count = thr->k_ref_count;
-    info->rs_ref_count = oo_atomic_read(&thr->ref_count);
+    info->k_ref_count = thr->ref[OO_THR_REF_BASE];
+    info->rs_ref_count = thr->ref[OO_THR_REF_APP];
     memcpy(info->ni_name, ni->state->name, sizeof(ni->state->name));
   } else if( rc == -EACCES ) {
     info->ni_no_perms_id = info->ni_index;
@@ -739,10 +744,7 @@ efab_tcp_helper_get_info(ci_private_t *unused, void *arg)
          ++index ) {
       rc = efab_thr_table_lookup(NULL, NULL, index, flags, &next_thr);
       if( rc == 0 ) {
-        if( next_thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND )
-          efab_tcp_helper_k_ref_count_dec(next_thr);
-        else
-          efab_thr_release(next_thr);
+        oo_thr_ref_drop(next_thr->ref, OO_THR_REF_BASE);
         info->u.ni_next_ni.index = index;
         break;
       }
@@ -809,15 +811,8 @@ efab_tcp_helper_get_info(ci_private_t *unused, void *arg)
       rc = -EINVAL;
       break;
   }
-  if( thr ) {
-    /* Lookup needs a matching efab_thr_release() in case of ordinary
-     * stack but just a ref_count_dec in case of orphan
-     */
-    if( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND )
-      efab_tcp_helper_k_ref_count_dec(thr);
-    else
-      efab_thr_release(thr);
-  }
+  if( thr )
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
   return rc;
 }
 
@@ -1075,7 +1070,7 @@ static DEFINE_MUTEX(ctor_mutex);
       priv->sock_id = OO_SP_NULL;
     }
     else
-      efab_thr_release(trs);
+      oo_thr_ref_drop(trs->ref, OO_THR_REF_APP);
   }
   mutex_unlock(&ctor_mutex);
   return rc;

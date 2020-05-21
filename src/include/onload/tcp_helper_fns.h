@@ -178,25 +178,6 @@ extern int tcp_helper_kill_stack_by_id(unsigned id);
 extern int
 oo_version_check(const char* version, const char* uk_intf_ver, int debug_lib);
 
-ci_inline void
-efab_thr_ref(tcp_helper_resource_t *thr)
-{
-  TCP_HELPER_RESOURCE_ASSERT_VALID(thr, -1);
-#ifndef NDEBUG
-  /* Only allowed to increment from zero under rm lock.  See
-  ** efab_thr_release(). */
-  if( oo_atomic_read(&thr->ref_count) == 0 )
-    ci_irqlock_check_locked(&efab_tcp_driver.thr_table.lock);
-  /* We MUST NOT increment refcount after userland disappear */
-  ci_assert(~thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND);
-#endif
-  oo_atomic_inc(&thr->ref_count);
-}
-
-
-extern void efab_thr_release(tcp_helper_resource_t *thr);
-
-
 
 
 extern int efab_tcp_helper_sock_sleep(tcp_helper_resource_t*,
@@ -280,39 +261,6 @@ extern int tcp_helper_cluster_alloc_thr(const char* name,
                                         const ci_netif_config_opts* ni_opts,
                                         tcp_helper_resource_t** thr_out);
 
-/*--------------------------------------------------------------------
- *!
- * Called to release a kernel reference to a stack.  This is called
- * by ci_drop_orphan() when userlevel is no longer around.
- * 
- * \param trs             TCP helper resource
- * \param can_destroy_now true if in a context than can call destructor
- *
- *--------------------------------------------------------------------*/
-
-extern void
-efab_tcp_helper_k_ref_count_dec(tcp_helper_resource_t* trs);
-
-/*--------------------------------------------------------------------
- *!
- * Called to increment a kernel reference to a stack.
- * Returns error if the stack is dead.
- * 
- * \param trs             TCP helper resource
- * \todo add parameter to forbid TCP_HELPER_K_RC_NO_USERLAND flag
- *
- *--------------------------------------------------------------------*/
-ci_inline int
-efab_tcp_helper_k_ref_count_inc(tcp_helper_resource_t* trs)
-{
-  int tmp;
-  do {
-    tmp = trs->k_ref_count;
-    if( tmp & TCP_HELPER_K_RC_DEAD )
-      return -EBUSY;
-  } while( ci_cas32_fail(&trs->k_ref_count, tmp, tmp + 1) );
-  return 0;
-}
 
 /*--------------------------------------------------------------------
  *!
@@ -353,14 +301,15 @@ efab_tcp_helper_netif_unlock(tcp_helper_resource_t*, int in_dl_context);
 /**********************************************************************
 ***************** Iterators to find netifs ***************************
 **********************************************************************/
-extern int iterate_netifs_unlocked(ci_netif **p_ni, int only_orphans,
-                                   int skip_orphans);
+extern int
+iterate_netifs_unlocked(ci_netif **p_ni, enum oo_thr_ref_type ref_type,
+                        enum oo_thr_ref_type ref_zero);
 
 ci_inline void
-iterate_netifs_unlocked_dropref(ci_netif * netif)
+iterate_netifs_unlocked_dropref(ci_netif * netif, enum oo_thr_ref_type ref_type)
 {
   ci_assert(netif);
-  efab_tcp_helper_k_ref_count_dec(netif2tcp_helper_resource(netif)); 
+  oo_thr_ref_drop(netif2tcp_helper_resource(netif)->ref, ref_type);
 }
 
 

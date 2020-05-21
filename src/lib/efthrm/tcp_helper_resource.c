@@ -443,7 +443,7 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
   timeout = 2000;
 #endif
 
-  ci_assert( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND );
+  ci_assert_equal(thr->ref[OO_THR_REF_FILE], 0);
 
   /* Fixme: timeout is not appropriate here.  We should not leak OS socket
    * and filters.
@@ -477,7 +477,7 @@ static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
 #ifndef NDEBUG
     dump_stack_to_logger(&thr->netif, ci_log_dump_fn, NULL);
 #endif
-    efab_tcp_helper_k_ref_count_dec(thr);
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
   }
 }
 #endif
@@ -501,15 +501,14 @@ static void thr_table_dtor(tcp_helpers_table_t *table)
     ci_dllink_mark_free(&thr->all_stacks_link);
 
     /* Get a ref to avoid races: thr should not disappear */
-    rc = efab_tcp_helper_k_ref_count_inc(thr);
+    rc = oo_thr_ref_get(thr->ref, OO_THR_REF_BASE);
     if( rc != 0 )
       continue;
     ci_irqlock_unlock(&table->lock, &lock_flags);
 
-    if( ! (thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND) )
-      ci_log("%s: ERROR: non-orphaned stack=%u ref_count=%d k_ref_count=%x",
-             __FUNCTION__, thr->id, oo_atomic_read(&thr->ref_count),
-             thr->k_ref_count);
+    if( thr->ref[OO_THR_REF_FILE] != 0 )
+      ci_log("%s: ERROR: non-orphaned stack=%u ref "OO_THR_REF_FMT,
+             __FUNCTION__, thr->id, OO_THR_REF_ARG(thr->ref));
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     OO_DEBUG_TCPH(ci_log("%s: killing stack %d", __FUNCTION__, thr->id));
@@ -540,7 +539,7 @@ int efab_thr_table_check_name(const char* name, struct net* netns)
     thr2 = CI_CONTAINER(tcp_helper_resource_t, all_stacks_link, link);
     if( netns == thr2->netif.cplane->cp_netns &&
         strncmp(thr2->netif.state->name, name, CI_CFG_STACK_NAME_LEN) == 0 &&
-        (thr2->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND) == 0 )
+        thr2->ref[OO_THR_REF_APP] != 0 )
       return -EEXIST;
   }
   return 0;
@@ -693,27 +692,16 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
         }
         rc = -EACCES;
       }
-      else if( thr->k_ref_count & TCP_HELPER_K_RC_DEAD )
+      else if( thr->ref[OO_THR_REF_BASE] == 0 )
         rc = -EBUSY;
-      else if( thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND ) {
-        /* Orphan stacks */
-        if( flags & EFAB_THR_TABLE_LOOKUP_NO_UL ) {
-          *thr_p = thr;
-          /* do not call efab_thr_ref() */
-          efab_tcp_helper_k_ref_count_inc(thr);
-          ci_irqlock_unlock(&table->lock, &lock_flags);
-          return 0;
-        }
-        else
-          rc = -EBUSY;
-      }
-      else if( flags & EFAB_THR_TABLE_LOOKUP_NO_UL ) {
-        /* Caller has asked for orphan stacks, this one isn't an orphan */ 
+      else if( (thr->ref[OO_THR_REF_APP] != 0) !=
+               ! (flags & EFAB_THR_TABLE_LOOKUP_NO_UL) ) {
+        /* Orphan stacks flag does not match  */
         rc = -EBUSY;
       }
       else {
         /* Success */
-        efab_thr_ref(thr);
+        oo_thr_ref_get(thr->ref, OO_THR_REF_BASE);
         *thr_p = thr;
         rc = 0;
       }
@@ -774,9 +762,9 @@ __tcp_helper_kill_stack_by_id(unsigned id, unsigned ignore_id)
     thr = CI_CONTAINER(tcp_helper_resource_t, all_stacks_link, link);
     if( ignore_id || thr->id == id ) {
       OO_DEBUG_TCPH(ci_log("Stack to release [%d]", thr->id));
-      if( !(thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND) )
+      if( thr->ref[OO_THR_REF_APP] != 0 )
         break;
-      rc = efab_tcp_helper_k_ref_count_inc(thr);
+      rc = oo_thr_ref_get(thr->ref, OO_THR_REF_BASE);
       break;
     }
   }
@@ -793,7 +781,7 @@ __tcp_helper_kill_stack_by_id(unsigned id, unsigned ignore_id)
                            ci_current_from_kuid_munged(thr->netif.keuid)));
 
     /* Remove reference we took in this function */
-    efab_tcp_helper_k_ref_count_dec(thr);
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
   }
 
   return rc;
@@ -807,21 +795,21 @@ int tcp_helper_kill_stack_by_id(unsigned id)
 
 
 void
-tcp_helper_resource_assert_valid(tcp_helper_resource_t* thr, int rc_is_zero,
+tcp_helper_resource_assert_valid(tcp_helper_resource_t* thr, int no_app,
                                  const char *file, int line)
 {
   _ci_assert(thr, file, line);
   _ci_assert_nequal(thr->id, CI_ID_POOL_ID_NONE, file, line);
   _ci_assert_equal(thr->id, thr->netif.state->stack_id, file, line);
 
-  if (rc_is_zero >=0) {
-    if ((rc_is_zero && oo_atomic_read(&thr->ref_count) > 0) ||
-        (!rc_is_zero && oo_atomic_read(&thr->ref_count) == 0)) {
+  if (no_app >=0) {
+    if ((no_app && thr->ref[OO_THR_REF_APP] > 0) ||
+        (!no_app && thr->ref[OO_THR_REF_APP] == 0)) {
       ci_log("%s %d: %s check %u for %szero ref=%d", file, line,
-             __FUNCTION__, thr->id, rc_is_zero ? "" : "non-",
-             oo_atomic_read(&thr->ref_count));
+             __FUNCTION__, thr->id, no_app ? "" : "non-",
+             thr->ref[OO_THR_REF_APP]);
     }
-    _ci_assert(rc_is_zero || oo_atomic_read(&thr->ref_count), file, line);
+    _ci_assert(no_app || thr->ref[OO_THR_REF_APP], file, line);
   }
 }
 
@@ -2732,7 +2720,7 @@ tcp_helper_destroy_work(struct work_struct *data)
   tcp_helper_resource_t* trs = container_of(data, tcp_helper_resource_t,
                                             work_item_dtor);
 
-  if( TCP_HELPER_K_RC_REFS(trs->k_ref_count) == 0 ) {
+  if( trs->ref[OO_THR_REF_BASE] == 0 ) {
     tcp_helper_dtor(trs);
     return;
   }
@@ -3550,7 +3538,7 @@ int oo_wait_for_interrupt(ci_private_t* priv, void* argp)
       return rc;
 
     /* the helper is the last user */
-    if( (arg->rs_ref_count = oo_atomic_read(&trs->ref_count)) > 1 )
+    if( (arg->rs_ref_count = trs->ref[OO_THR_REF_APP]) > 1 )
       break;
     /* interrupts were not handled by the app, do it by the helper */
     if( stack_has_events(&trs->netif, intfs) )
@@ -3660,7 +3648,20 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     rc = -ENOMEM;
     goto fail1;
   }
-  oo_atomic_set(&rs->ref_count, 1);
+
+  /* We're attaching to a user app: take all the refcounts
+   * for user.
+   *
+   * We also get an additional refcount of each level to serialize dtor.
+   * Destruction functions can be deferred to workqueue, so it is important
+   * that lower-level dtor does not start until the previous one has
+   * finished.  To archive this, each dtor level drops next-level refcount
+   * when done.
+   */
+  rs->ref[OO_THR_REF_BASE] = 3;
+  rs->ref[OO_THR_REF_FILE] = 2;
+  rs->ref[OO_THR_REF_APP] = 1;
+
   ni = &rs->netif;
 
   ni->opts = *opts;
@@ -3706,7 +3707,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   }
 
   rs->trusted_lock = OO_TRUSTED_LOCK_LOCKED;
-  rs->k_ref_count = 1;          /* 1 reference for userland */
 #if CI_CFG_NIC_RESET_SUPPORT
   rs->intfs_to_reset = 0;
   rs->intfs_suspended = 0;
@@ -4673,36 +4673,6 @@ tcp_helper_rm_free(tcp_helper_resource_t* trs)
 }
 
 
-void
-efab_thr_release(tcp_helper_resource_t *thr)
-{
-  ci_irqlock_state_t lock_flags;
-  unsigned tmp;
-  int is_ref;
-
-  TCP_HELPER_RESOURCE_ASSERT_VALID(thr, 0);
-
-
-  if( ! oo_atomic_dec_and_test(&thr->ref_count) ) {
-    if( oo_atomic_read(&thr->ref_count) == 1 )
-      efab_notify_stacklist_change(thr);
-    return;
-  }
-  ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
-  if( (is_ref = oo_atomic_read(&thr->ref_count)) == 0 ) {
-    /* Interlock against efab_thr_table_lookup(). */
-    do {
-      tmp = thr->k_ref_count;
-      ci_assert( ! (tmp & TCP_HELPER_K_RC_DEAD) );
-      ci_assert( ! (tmp & TCP_HELPER_K_RC_NO_USERLAND) );
-    } while( ci_cas32_fail(&thr->k_ref_count, tmp,
-                           tmp | TCP_HELPER_K_RC_NO_USERLAND) );
-  }
-  ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
-  if( ! is_ref )
-    tcp_helper_rm_free(thr);
-}
-
 /*--------------------------------------------------------------------
  *!
  * Enqueues a work-item to call tcp_helper_dtor() at a safe time.
@@ -4737,12 +4707,12 @@ efab_tcp_helper_k_ref_count_is_zero(tcp_helper_resource_t* trs)
   ci_irqlock_state_t lock_flags;
 
   ci_assert(trs);
-  ci_assert_equal(TCP_HELPER_K_RC_REFS(trs->k_ref_count), 0);
-  ci_assert(trs->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND);
-  ci_assert(trs->k_ref_count & TCP_HELPER_K_RC_DEAD);
+  ci_assert_equal(trs->ref[OO_THR_REF_BASE], 0);
+  ci_assert_equal(trs->ref[OO_THR_REF_FILE], 0);
+  ci_assert_equal(trs->ref[OO_THR_REF_APP], 0);
 
-  OO_DEBUG_TCPH(ci_log("%s: [%u] k_ref_count=%x",
-                       __FUNCTION__, trs->id, trs->k_ref_count));
+  OO_DEBUG_TCPH(ci_log("%s: [%u] ref "OO_THR_REF_FMT,
+                       __FUNCTION__, trs->id, OO_THR_REF_ARG(trs->ref)));
 
   ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
   if( !ci_dllink_is_free(&trs->all_stacks_link) ) {
@@ -4762,43 +4732,6 @@ efab_tcp_helper_k_ref_count_is_zero(tcp_helper_resource_t* trs)
     }
   }
   OO_DEBUG_TCPH(ci_log("%s: finished", __FUNCTION__));
-}
-
-
-/*--------------------------------------------------------------------
- *!
- * Called to release a kernel reference to a stack.  This is called
- * by ci_drop_orphan() when userlevel is no longer around.
- *
- * \param trs             TCP helper resource
- *
- *--------------------------------------------------------------------*/
-
-void
-efab_tcp_helper_k_ref_count_dec(tcp_helper_resource_t* trs)
-{
-  int tmp;
-
-  ci_assert(NULL != trs);
-
-  OO_DEBUG_TCPH(ci_log("%s: [%d] k_ref_count=%x",
-                       __FUNCTION__, trs->id, trs->k_ref_count));
-  ci_assert(~trs->k_ref_count & TCP_HELPER_K_RC_DEAD);
-
- again:
-  tmp = trs->k_ref_count;
-  if( TCP_HELPER_K_RC_REFS(tmp) == 1 ) {
-    /* No-one apart from us is referencing this stack any more.  Mark it as
-    ** dead to prevent anyone grabbing another reference.
-    */
-    if( ci_cas32_fail(&trs->k_ref_count, tmp,
-                     TCP_HELPER_K_RC_DEAD | TCP_HELPER_K_RC_NO_USERLAND) )
-      goto again;
-    efab_tcp_helper_k_ref_count_is_zero(trs);
-  }
-  else
-    if( ci_cas32_fail(&trs->k_ref_count, tmp, tmp - 1) )
-      goto again;
 }
 
 
@@ -5121,7 +5054,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
    */
   if( oo_netif_apps_gone(netif) ) {
     /* Get a refcount associated with non-zero n_ep_orphaned */
-    efab_tcp_helper_k_ref_count_inc(trs);
+    oo_thr_ref_get(trs->ref, OO_THR_REF_BASE);
   }
 
   /* Drop lock so that sockets can proceed towards close. */
@@ -5138,7 +5071,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
   ci_assert(trs->trusted_lock == (OO_TRUSTED_LOCK_LOCKED |
                                   OO_TRUSTED_LOCK_AWAITING_FREE));
   trs->trusted_lock = OO_TRUSTED_LOCK_UNLOCKED;
-  efab_tcp_helper_k_ref_count_dec(trs);
+  oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
   OO_DEBUG_TCPH(ci_log("%s: finished", __FUNCTION__));
 }
 
@@ -6237,8 +6170,7 @@ tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
     ci_log("%sUNKNOWN fd_type (%d)", line_prefix, fd_type);
   }
 
-  ci_log("%sref_count=%d k_ref_count=%d", line_prefix,
-         oo_atomic_read(&trs->ref_count), trs->k_ref_count);
+  ci_log("%sref "OO_THR_REF_FMT, line_prefix, OO_THR_REF_ARG(trs->ref));
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     ci_log("%svi[%d]: %d", line_prefix, intf_i,
@@ -6757,8 +6689,8 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id,
   w = SP_TO_WAITABLE(ni, ep_id);
   wo = SP_TO_WAITABLE_OBJ(&trs->netif, tep_p->id);
 
-  OO_DEBUG_TCPH(ci_log("%s: [%d:%d] k_ref_count=%d %s", __FUNCTION__,
-                       trs->id, OO_SP_FMT(ep_id), trs->k_ref_count,
+  OO_DEBUG_TCPH(ci_log("%s: [%d:%d] ref "OO_THR_REF_FMT" %s", __FUNCTION__,
+                       trs->id, OO_SP_FMT(ep_id), OO_THR_REF_ARG(trs->ref),
                        ci_tcp_state_str(wo->waitable.state)));
 
   ci_assert_impl(already_locked, ci_netif_is_locked(ni));
@@ -7396,15 +7328,18 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
  *
  * \param p_ni       IN: previous netif (NULL to start)
  *                   OUT: next netif
- * \param only_orphans: if set don't include stacks which are ul mapped
- * \param skip_orphans: if set don't include stacks which are orphans/zombies
+ * \param ref_type: take refcount of this type
+ *                  (and skip the stack if it fails)
+ * \param ref_zero: require that this refcount type is zero
+ *                  (i.e. there is no UL, no app)
  *
  * \return either an unlocked netif or NULL if no more netifs
  *
  *--------------------------------------------------------------------*/
 
 extern int
-iterate_netifs_unlocked(ci_netif **p_ni, int only_orphans, int skip_orphans)
+iterate_netifs_unlocked(ci_netif **p_ni, enum oo_thr_ref_type ref_type,
+                        enum oo_thr_ref_type ref_zero)
 {
   ci_netif *ni_prev = *p_ni;
   ci_irqlock_state_t lock_flags;
@@ -7412,12 +7347,7 @@ iterate_netifs_unlocked(ci_netif **p_ni, int only_orphans, int skip_orphans)
   ci_dllink *link = NULL;
   int rc = -ENOENT;
 
-  /* We can iterate either all (only = 0, skip = 0),
-   *             just orphans, (only = 1, skip = 0),
-   *        or just ul-mapped  (only = 0, skip = 1),
-   *                       but (only = 1, skip = 1) makes no sense
-   */
-  ci_assert(!(only_orphans && skip_orphans));
+  ci_assert_lt(ref_type, ref_zero);
 
   if (ni_prev) {
     thr_prev = CI_CONTAINER(tcp_helper_resource_t, netif, ni_prev);
@@ -7436,27 +7366,21 @@ iterate_netifs_unlocked(ci_netif **p_ni, int only_orphans, int skip_orphans)
     link = ci_dllist_start(&THR_TABLE.all_stacks);
 
   if (link) {
-    int ref_count;
     tcp_helper_resource_t * thr;
 
     /* Skip dead thr's */
 again:
     thr = CI_CONTAINER(tcp_helper_resource_t, all_stacks_link, link);
 
-    /* get a kernel refcount */
-    do {
-      ref_count = thr->k_ref_count;
-      if ((ref_count & TCP_HELPER_K_RC_DEAD) ||
-          (only_orphans && !(ref_count & TCP_HELPER_K_RC_NO_USERLAND)) ||
-          (skip_orphans &&  (ref_count & TCP_HELPER_K_RC_NO_USERLAND))) {
-        link = link->next;
-        if (ci_dllist_end(&THR_TABLE.all_stacks) == link) {
-          *p_ni = NULL;
-          goto out;
-        }
-        goto again;
+    if( ! oo_thr_ref_is_zero(thr->ref, ref_zero) ||
+        oo_thr_ref_get(thr->ref, ref_type) != 0 ) {
+      link = link->next;
+      if (ci_dllist_end(&THR_TABLE.all_stacks) == link) {
+        *p_ni = NULL;
+        goto out;
       }
-    } while (ci_cas32_fail(&thr->k_ref_count, ref_count, ref_count + 1));
+      goto again;
+    }
 
     rc = 0;
     *p_ni = &thr->netif;
@@ -7465,7 +7389,7 @@ again:
 out:
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
   if (ni_prev != NULL)
-    efab_tcp_helper_k_ref_count_dec(thr_prev);
+    iterate_netifs_unlocked_dropref(&thr_prev->netif, ref_type);
   return rc;
 }
 
@@ -7952,5 +7876,37 @@ efab_tcp_helper_xdp_rx_pkt(tcp_helper_resource_t* trs, int intf_i, ci_ip_pkt_fmt
 }
 #endif
 
+static tcp_helper_resource_t*
+thr_ref2thr(oo_thr_ref_t ref)
+{
+  return CI_CONTAINER(tcp_helper_resource_t, ref[0], &ref[0]);
+}
+
+static void thr_release_base(oo_thr_ref_t ref)
+{
+  tcp_helper_resource_t* thr = thr_ref2thr(ref);
+  OO_DEBUG_TCPH(ci_log("%s "OO_THR_REF_FMT, __func__, OO_THR_REF_ARG(ref)));
+  efab_tcp_helper_k_ref_count_is_zero(thr);
+}
+
+static void thr_release_file(oo_thr_ref_t ref)
+{
+  tcp_helper_resource_t* thr = thr_ref2thr(ref);
+  OO_DEBUG_TCPH(ci_log("%s "OO_THR_REF_FMT, __func__, OO_THR_REF_ARG(ref)));
+  tcp_helper_rm_free(thr);
+}
+
+static void thr_release_app(oo_thr_ref_t ref)
+{
+  OO_DEBUG_TCPH(ci_log("%s "OO_THR_REF_FMT, __func__, OO_THR_REF_ARG(ref)));
+  oo_thr_ref_drop(ref, OO_THR_REF_FILE);
+}
+
+oo_thr_ref_release_fn oo_thr_ref_release[OO_THR_REF_INFTY] =
+{
+  thr_release_base,
+  thr_release_file,
+  thr_release_app
+};
 
 /*! \cidoxg_end */

@@ -612,13 +612,13 @@ int efab_file_move_to_alien_stack_rsop(ci_private_t *stack_priv, void *arg)
     return rc;
   }
 
-  efab_thr_ref(new_thr);
+  oo_thr_ref_get(new_thr->ref, OO_THR_REF_APP);
   rc = efab_file_move_to_alien_stack(sock_priv, &stack_priv->thr->netif, 0,
                                      &new_sock_id);
   fput(sock_file);
 
   if( rc != 0 )
-    efab_thr_release(new_thr);
+    oo_thr_ref_drop(new_thr->ref, OO_THR_REF_APP);
   else {
     ci_netif_unlock(&new_thr->netif);
     ci_sock_unlock(&new_thr->netif,
@@ -665,7 +665,8 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
       efab_tcp_helper_create_os_sock(priv);
   }
 
-  while( iterate_netifs_unlocked(&alien_ni, 0, 0) == 0 ) {
+  while( iterate_netifs_unlocked(&alien_ni, OO_THR_REF_APP,
+                                 OO_THR_REF_INFTY) == 0 ) {
 
     if( alien_ni->cplane->cp_netns != priv->thr->netif.cplane->cp_netns )
       continue; /* can't accelerate inter-namespace connections */
@@ -693,29 +694,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
 
     if( OO_SP_NOT_NULL(tls_id) ) {
       int rc;
-      ci_irqlock_state_t lock_flags;
       tcp_helper_resource_t* alien_thr = netif2tcp_helper_resource(alien_ni);
-
-      /* We need to check that the stack that we've found still has a user
-       * ref before going ahead and using it.  By taking the ref with the
-       * THR_TABLE.lock held we ensure that the stack won't be released before
-       * we've got our user ref.  If we find that it has already been released
-       * then we simply continue looking through the stack list.
-       */
-      ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
-      if( !(alien_thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND) ) {
-        efab_thr_ref(alien_thr);
-      }
-      else {
-        ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
-        continue;
-      }
-      ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
-
-      /* Now we know we're going to stop iterating the stack list, and we
-       * have a user ref, so can drop our kref from iteration.
-       */
-      iterate_netifs_unlocked_dropref(alien_ni);
 
       switch( NI_OPTS(&priv->thr->netif).tcp_client_loopback ) {
       case CITP_TCP_LOOPBACK_TO_CONNSTACK:
@@ -723,7 +702,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
         carg->out_rc =
             ci_tcp_connect_lo_toconn(&priv->thr->netif, priv->sock_id,
                                      carg->dst_addr, alien_ni, tls_id);
-        efab_thr_release(netif2tcp_helper_resource(alien_ni));
+        oo_thr_ref_drop(alien_thr->ref, OO_THR_REF_APP);
         return 0;
 
       case CITP_TCP_LOOPBACK_TO_LISTSTACK:
@@ -737,7 +716,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
                                             priv->sock_id));
         if( rc == 0 ) {
           ci_netif_unlock(&priv->thr->netif);
-          efab_thr_release(netif2tcp_helper_resource(alien_ni));
+          oo_thr_ref_drop(alien_thr->ref, OO_THR_REF_APP);
           return -ECONNREFUSED;
         }
 
@@ -745,7 +724,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
         rc = efab_file_move_to_alien_stack(priv, alien_ni, 1, &new_sock_id);
         if( rc != 0 ) {
           /* error - everything is already unlocked */
-          efab_thr_release(netif2tcp_helper_resource(alien_ni));
+          oo_thr_ref_drop(alien_thr->ref, OO_THR_REF_APP);
           /* if we return error, UL will hand the socket over. */
           return rc;
         }
@@ -775,7 +754,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
         opts = ci_alloc(sizeof(*opts));
         if( opts == NULL ) {
           ci_netif_unlock(&priv->thr->netif);
-          efab_thr_release(netif2tcp_helper_resource(alien_ni));
+          oo_thr_ref_drop(alien_thr->ref, OO_THR_REF_APP);
           return -ECONNREFUSED;
         }
         memcpy(opts, &NI_OPTS(&priv->thr->netif), sizeof(*opts));
@@ -794,7 +773,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
         ci_free(opts);
         if( rc != 0 ) {
           ci_netif_unlock(&priv->thr->netif);
-          efab_thr_release(netif2tcp_helper_resource(alien_ni));
+          oo_thr_ref_drop(alien_thr->ref, OO_THR_REF_APP);
           return -ECONNREFUSED;
         }
 
@@ -803,8 +782,8 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
                                             priv->sock_id));
         if( rc == 0 ) {
           ci_netif_unlock(&priv->thr->netif);
-          efab_thr_release(netif2tcp_helper_resource(alien_ni));
-          efab_thr_release(new_thr);
+          oo_thr_ref_drop(alien_thr->ref, OO_THR_REF_APP);
+          oo_thr_ref_drop(new_thr->ref, OO_THR_REF_APP);
           return -ECONNREFUSED;
         }
 
@@ -813,8 +792,8 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
                                            &new_sock_id);
         if( rc != 0 ) {
           /* error - everything is already unlocked */
-          efab_thr_release(netif2tcp_helper_resource(alien_ni));
-          efab_thr_release(new_thr);
+          oo_thr_ref_drop(alien_thr->ref, OO_THR_REF_APP);
+          oo_thr_ref_drop(new_thr->ref, OO_THR_REF_APP);
           return -ECONNREFUSED;
         }
         /* now new_thr->netif is locked */
@@ -826,7 +805,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
         carg->out_rc =
             ci_tcp_connect_lo_toconn(&new_thr->netif, new_sock_id,
                                      carg->dst_addr, alien_ni, tls_id);
-        efab_thr_release(netif2tcp_helper_resource(alien_ni));
+        oo_thr_ref_drop(alien_thr->ref, OO_THR_REF_APP);
         ci_sock_unlock(&new_thr->netif,
                        SP_TO_WAITABLE(&new_thr->netif, new_sock_id));
         return 0;
@@ -834,7 +813,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
       }
     }
     else if( tls_id == OO_SP_INVALID ) {
-      iterate_netifs_unlocked_dropref(alien_ni);
+      iterate_netifs_unlocked_dropref(alien_ni, OO_THR_REF_APP);
       break;
     }
   }

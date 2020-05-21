@@ -700,7 +700,7 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
         LOG_U(log("%s: listening socket %d:%d has non-TCP "
                   "acceptq memeber %d:%d", __FUNCTION__,
                   netif->state->stack_id, tls->s.b.bufid, stack_id, sp));
-        efab_thr_release(thr);
+        oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
         continue;
       }
       ats = SP_TO_TCP(ani, sp);
@@ -709,7 +709,7 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
        * are sending RST, not FIN. */
       ci_bit_clear(&ats->s.b.sb_aflags, CI_SB_AFLAG_ORPHAN_BIT);
       efab_tcp_helper_close_endpoint(thr, sp, 0);
-      efab_thr_release(thr);
+      oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
       continue;
     }
 #endif

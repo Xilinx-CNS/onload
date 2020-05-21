@@ -123,7 +123,7 @@ static void ci_drop_orphan(ci_netif * ni)
     if( ci_cas32u_succeed(&ni->state->n_ep_orphaned, val, val - 1) ) {
 #ifdef __KERNEL__
       if( val == 1 )
-        efab_tcp_helper_k_ref_count_dec(netif2tcp_helper_resource(ni));
+        oo_thr_ref_drop(netif2tcp_helper_resource(ni)->ref, OO_THR_REF_BASE);
 #endif
       return;
     }

@@ -118,7 +118,7 @@ efab_stacks_seq_start(struct seq_file *seq, loff_t *ppos)
   int i, rc;
 
   for( i = 0; i <= *ppos; i++) {
-    rc = iterate_netifs_unlocked(&ni, 0, 0);
+    rc = iterate_netifs_unlocked(&ni, OO_THR_REF_BASE, OO_THR_REF_INFTY);
     if( rc != 0 )
       return NULL;
   }
@@ -131,7 +131,7 @@ efab_stacks_seq_next(struct seq_file *seq, void *v, loff_t *ppos)
   ci_netif *ni = v;
   int rc;
   (*ppos)++;
-  rc = iterate_netifs_unlocked(&ni, 0, 0);
+  rc = iterate_netifs_unlocked(&ni, OO_THR_REF_BASE, OO_THR_REF_INFTY);
   if( rc != 0 )
     return NULL;
   return ni;
@@ -141,7 +141,7 @@ static void
 efab_stacks_seq_stop(struct seq_file *seq, void *v)
 {
   if( v )
-    iterate_netifs_unlocked_dropref(v);
+    iterate_netifs_unlocked_dropref(v, OO_THR_REF_BASE);
 }
 
 static int
@@ -204,7 +204,7 @@ efab_stacks_seq_start_ul(struct seq_file *seq, loff_t *ppos)
   int i, rc;
 
   for( i = 0; i <= *ppos; i++) {
-    rc = iterate_netifs_unlocked(&ni, 0, 1);
+    rc = iterate_netifs_unlocked(&ni, OO_THR_REF_FILE, OO_THR_REF_INFTY);
     if( rc != 0 )
       return NULL;
   }
@@ -217,16 +217,23 @@ efab_stacks_seq_next_ul(struct seq_file *seq, void *v, loff_t *ppos)
   ci_netif *ni = v;
   int rc;
   (*ppos)++;
-  rc = iterate_netifs_unlocked(&ni, 0, 1);
+  rc = iterate_netifs_unlocked(&ni, OO_THR_REF_FILE, OO_THR_REF_INFTY);
   if( rc != 0 )
     return NULL;
   return ni;
 }
 
+static void
+efab_stacks_seq_stop_ul(struct seq_file *seq, void *v)
+{
+  if( v )
+    iterate_netifs_unlocked_dropref(v, OO_THR_REF_FILE);
+}
+
 static struct seq_operations efab_stacks_ul_seq_ops = {
   .start    = efab_stacks_seq_start_ul,
   .next     = efab_stacks_seq_next_ul,
-  .stop     = efab_stacks_seq_stop,
+  .stop     = efab_stacks_seq_stop_ul,
   .show     = efab_stacks_seq_show,
 };
 
@@ -254,7 +261,7 @@ efab_stacks_seq_start_k(struct seq_file *seq, loff_t *ppos)
   int i, rc;
 
   for( i = 0; i <= *ppos; i++) {
-    rc = iterate_netifs_unlocked(&ni, 1, 0);
+    rc = iterate_netifs_unlocked(&ni, OO_THR_REF_BASE, OO_THR_REF_APP);
     if( rc != 0 )
       return NULL;
   }
@@ -267,7 +274,7 @@ efab_stacks_seq_next_k(struct seq_file *seq, void *v, loff_t *ppos)
   ci_netif *ni = v;
   int rc;
   (*ppos)++;
-  rc = iterate_netifs_unlocked(&ni, 1, 0);
+  rc = iterate_netifs_unlocked(&ni, OO_THR_REF_BASE, OO_THR_REF_APP);
   if( rc != 0 )
     return NULL;
   return ni;

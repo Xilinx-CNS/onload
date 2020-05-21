@@ -928,9 +928,8 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   {
     /* This is useful mostly for orphaned stacks */
     tcp_helper_resource_t* trs = netif2tcp_helper_resource(ni);
-    logger(log_arg, "  ref=%d trusted_lock=0x%x k_ref=0x%x",
-           oo_atomic_read(&trs->ref_count),
-           trs->trusted_lock, trs->k_ref_count);
+    logger(log_arg, "  trusted_lock=0x%x ref "OO_THR_REF_FMT,
+           trs->trusted_lock, OO_THR_REF_ARG(trs->ref));
   }
 #endif
 

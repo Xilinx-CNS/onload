@@ -175,7 +175,7 @@ typedef struct tcp_helper_resource_s {
    */
   unsigned               id;
   char                   name[CI_CFG_STACK_NAME_LEN + 1];
-  oo_atomic_t            ref_count;
+  oo_thr_ref_t           ref;
 
   ci_netif               netif;
 
@@ -204,23 +204,8 @@ typedef struct tcp_helper_resource_s {
   /*! Link for global list of stacks. */
   ci_dllink              all_stacks_link;
 
-  /*! A count of kernel references to this stack.  Normally there is one
-   * reference to indicate that this stack is still referenced by userland.
-   * Some other bits of code may hold a reference.
-   *
-   * Once the userland reference has gone away we set
-   * TCP_HELPER_K_RC_NO_USERLAND to prevent new user-level references being
-   * taken.
-   *
-   * When the ref count goes to zero we set TCP_HELPER_K_RC_DEAD to ensure
-   * other code won't grab another ref to this stack.
-   */
-  volatile int           k_ref_count;
-# define TCP_HELPER_K_RC_NO_USERLAND    0x10000000
-# define TCP_HELPER_K_RC_DEAD           0x20000000
-# define TCP_HELPER_K_RC_REFS(krc)      ((krc) & 0xffffff)
-
-  /*! this is used so we can schedule destruction at task time */
+  /*! this is used so we can schedule destruction at task time,
+   * using the global workqueue */
   struct work_struct work_item_dtor;
   struct completion complete;
 

@@ -335,7 +335,8 @@ static void oo_dl_remove(struct efx_dl_device* dl_dev)
     efrm_client_disable_post_reset(onic->efrm_client);
 
     onic->oo_nic_flags |= OO_NIC_UNPLUGGED;
-    while( iterate_netifs_unlocked(&ni, 0, 0) == 0 )
+    while( iterate_netifs_unlocked(&ni, OO_THR_REF_BASE,
+                                     OO_THR_REF_INFTY) == 0 )
       tcp_helper_flush_resets(ni);
 #endif
 
@@ -372,7 +373,8 @@ static void oo_fixup_wakeup_breakage(struct net_device* dev)
   int hwport, intf_i;
   if( (onic = oo_nic_find_dev(dev)) != NULL ) {
     hwport = onic - oo_nics;
-    while( iterate_netifs_unlocked(&ni, 0, 0) == 0 )
+    while( iterate_netifs_unlocked(&ni, OO_THR_REF_BASE,
+                                   OO_THR_REF_INFTY) == 0 )
       if( (intf_i = ni->hwport_to_intf_i[hwport]) >= 0 )
         ci_bit_clear(&ni->state->evq_primed, intf_i);
   }

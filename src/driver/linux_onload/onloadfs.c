@@ -383,7 +383,7 @@ oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags, int fd_type,
                           rc, thr->id, ep_id));
       goto ret_put_fd;
     }
-    efab_thr_ref(thr);
+    oo_thr_ref_get(thr->ref, OO_THR_REF_APP);
   }
 
   fd_install(fd, priv->_filp);

@@ -238,8 +238,8 @@ static void vm_op_open(struct vm_area_struct* vma)
   map = (tcp_helper_resource_t*) vma->vm_private_data;
   TCP_HELPER_RESOURCE_ASSERT_VALID(map, 0);
 
-  OO_DEBUG_TRAMP(ci_log("vm_op_open: %u vma=%p rs_refs=%d",
-		 map->id, vma, (int) oo_atomic_read(&map->ref_count)));
+  OO_DEBUG_TRAMP(ci_log("vm_op_open: %u vma=%p refs: "OO_THR_REF_FMT,
+		 map->id, vma, OO_THR_REF_ARG(map->ref)));
 
   if( OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma)) == CI_NETIF_MMAP_ID_STATE ) {
     rc = efab_add_mm_ref (vma->vm_mm);
@@ -254,8 +254,8 @@ static void vm_op_close(struct vm_area_struct* vma)
   tcp_helper_resource_t* map;
   map = (tcp_helper_resource_t*) vma->vm_private_data;
 
-  OO_DEBUG_TRAMP(ci_log("vm_op_close: %u vma=%p rs_refs=%d",
-		 map->id, vma, (int) oo_atomic_read(&map->ref_count)));
+  OO_DEBUG_TRAMP(ci_log("vm_op_close: %u vma=%p refs: "OO_THR_REF_FMT,
+		 map->id, vma, OO_THR_REF_ARG(map->ref)));
 
   if( OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma)) == CI_NETIF_MMAP_ID_STATE )
     efab_del_mm_ref (vma->vm_mm);

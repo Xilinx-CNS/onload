@@ -123,10 +123,10 @@ static int thc_get_an_orphan(tcp_helper_cluster_t* thc,
   CI_DLLIST_FOR_EACH(link, &thc->thc_thr_list) {
     tcp_helper_resource_t* thr_walk = CI_CONTAINER(tcp_helper_resource_t,
                                                    thc_thr_link, link);
-    if( thr_walk->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND ) {
+    if( thr_walk->ref[OO_THR_REF_APP] == 0 ) {
       rc = 0;
       if( thr_out != NULL ) {
-        rc = efab_tcp_helper_k_ref_count_inc(thr_walk);
+        rc = oo_thr_ref_get(thr_walk->ref, OO_THR_REF_BASE);
         *thr_out = thr_walk;
       }
       break;
@@ -163,7 +163,7 @@ static int /*bool*/ thc_has_live_stacks(tcp_helper_cluster_t* thc)
   CI_DLLIST_FOR_EACH(link, &thc->thc_thr_list) {
     tcp_helper_resource_t* thr_walk = CI_CONTAINER(tcp_helper_resource_t,
                                                    thc_thr_link, link);
-    if( ! (thr_walk->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND) ) {
+    if( thr_walk->ref[OO_THR_REF_APP] != 0 ) {
       rc = 1;
       break;
     }
@@ -567,7 +567,7 @@ static int thc_kill_an_orphan(tcp_helper_cluster_t* thc)
     /* remove reference taken by thc_get_an_orphan()
      * Note: this will likely trigger stack destruction
      */
-    efab_tcp_helper_k_ref_count_dec(thr);
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
 
   rc = wait_event_interruptible_timeout(thc->thr_release_done,
                                         ! thc_contains_thr(thc, thr), 10 * HZ);
@@ -674,8 +674,8 @@ static int thc_get_prior_round_robin_index(const tcp_helper_cluster_t* thc)
 
 /* Look for a suitable stack within the cluster.
  *
- * You need to efab_thr_release() the stack returned by this function
- * when done.
+ * You need to oo_thr_ref_drop(OO_THR_REF_BASE) the stack returned by this
+ * function when done.
  *
  * You must hold the thc_mutex before calling this function.
  */
@@ -698,11 +698,11 @@ static int thc_get_thr(tcp_helper_cluster_t* thc,
   CI_DLLIST_FOR_EACH(link, &thc->thc_thr_list) {
     tcp_helper_resource_t* thr_walk = CI_CONTAINER(tcp_helper_resource_t,
                                                    thc_thr_link, link);
-    if( (~thr_walk->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND) &&
+    if( thr_walk->ref[OO_THR_REF_APP] != 0 &&
        thr_walk->thc_tid == current->pid &&
        oof_socket_can_update_stack(oo_filter_ns_to_manager(thc->thc_filter_ns),
                                    oofilter, thr_walk) ) {
-      efab_thr_ref(thr_walk);
+      oo_thr_ref_get(thr_walk->ref, OO_THR_REF_BASE);
       *thr_out = thr_walk;
       ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
       return 0;
@@ -723,8 +723,8 @@ static int thc_get_thr(tcp_helper_cluster_t* thc,
  * If a stack is found for reheating, the stack owner will be updated to
  * the current pid/tid.
  *
- * You need to efab_thr_release() the stack returned by this function
- * when done.
+ * You need to oo_thr_ref_drop(OO_THR_REF_APP) the stack returned by this
+ * function when done.
  *
  * You must hold the thc_mutex before calling this function.
  *
@@ -798,11 +798,7 @@ static int thc_get_thr_reheat(tcp_helper_cluster_t* thc,
       thc->thc_thr_rrobin_index = 0;
   }
   if( thr != NULL ) {
-    if( ~thr->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND ) {
-      efab_thr_ref(thr);
-      rc = 0;
-    }
-    else {
+    if( (rc = oo_thr_ref_get(thr->ref, OO_THR_REF_APP)) != 0 ) {
       /* Stack is dying; let thc_alloc_thr() kill an orphan. */
       thr = NULL;
       rc = 1;
@@ -849,8 +845,8 @@ static void thc_round_robin_add(tcp_helper_cluster_t*   thc,
 
 /* Allocates a new stack in thc.
  *
- * You need to efab_thr_release() the stack returned by this function
- * when done.
+ * You need to oo_thr_ref_drop(OO_THR_REF_APP) the stack returned by this
+ * function when done.
  */
 static int thc_alloc_thr(tcp_helper_cluster_t* thc,
                          int cluster_restart_opt,
@@ -1226,7 +1222,7 @@ int tcp_helper_cluster_alloc_thr(const char* cname,
     /* TODO: wait for resources if another's cluster destruction is in progress */
     rc = thc_install_tproxy(thc, ni_opts);
     if( rc != 0 )
-      efab_thr_release(thr);
+      oo_thr_ref_drop(thr->ref, OO_THR_REF_APP);
   }
   if( thc_alloced || thc_found )
     /* free the reference we have taken in thc_alloc() or thc_search_by_name() */
@@ -1561,7 +1557,7 @@ int efab_tcp_helper_reuseport_bind(ci_private_t *priv, void *arg)
      * (firmware needs initialized vi) */
     rc = thc_install_tproxy(thc, &NI_OPTS(ni));
     if( rc != 0 )
-      efab_thr_release(thr);
+      oo_thr_ref_drop(thr->ref, OO_THR_REF_APP);
   }
 
   tcp_helper_cluster_release(thc, NULL);
@@ -1583,10 +1579,10 @@ int efab_tcp_helper_reuseport_bind(ci_private_t *priv, void *arg)
    * * reference to the destination stack (thr) */
 
   /* thr referencing scheme comes from efab_file_move_to_alien_stack_rsop */
-  efab_thr_ref(thr);
+  oo_thr_ref_get(thr->ref, OO_THR_REF_APP);
   rc = efab_file_move_to_alien_stack(priv, &thr->netif, 0, &new_sock_id);
   if( rc != 0 ) {
-    efab_thr_release(thr);
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_APP);
     do_sock_unlock = 0;
     /* both sockets are unlocked, and there is still single reference to thr */
   }
@@ -1610,7 +1606,7 @@ int efab_tcp_helper_reuseport_bind(ci_private_t *priv, void *arg)
     oof_socket_del(fm, &dummy_oofilter);
   /* Drop the reference we got from thc_get_thr or thc_alloc_thr().
    * If things went wrong both stack and cluster might disappear. */
-  efab_thr_release(thr);
+  oo_thr_ref_drop(thr->ref, OO_THR_REF_APP);
   oof_socket_dtor(&dummy_oofilter);
   mutex_unlock(&thc_init_mutex);
 unlock_sock:

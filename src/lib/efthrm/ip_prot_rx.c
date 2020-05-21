@@ -31,7 +31,7 @@
  * Given a TCP helper resource handle, this function attempts to
  * return a locked netif. If it succeeds its up to the callee to drop
  * the netif lock by calling efab_tcp_helper_netif_unlock, and drop a
- * reference by calling efab_thr_release().  This function can fail
+ * reference by calling oo_thr_ref_drop().  This function can fail
  * because the handle is no longer valid OR its not possible to get
  * the netif lock at this time
  *
@@ -61,7 +61,7 @@ efab_ipp_get_locked_thr_from_tcp_handle(unsigned tcp_id)
     */
     if ( !efab_tcp_helper_netif_try_lock(thr, 1) ) {
       OO_DEBUG_IPP( ci_log("%s: Failed to lock TCP helper", __FUNCTION__) );
-      efab_thr_release(thr);
+      oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
       thr = NULL;
     }
   }
@@ -100,7 +100,7 @@ int efab_handle_ipp_pkt_task(int thr_id, ci_ifid_t ifindex,
     s = efab_ipp_icmp_for_thr( thr, &addr );
     if( s )  efab_ipp_icmp_qpkt( thr, s, &addr );
     efab_tcp_helper_netif_unlock( thr, 1 );
-    efab_thr_release(thr);
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
   }
 
 exit_handler:
