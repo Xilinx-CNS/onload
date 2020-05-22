@@ -46,6 +46,7 @@ static int cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
 static int cfg_iter = 10;
 static int cfg_usleep = 0;
 static int cfg_precopy = 1;
+static int cfg_loopback = 0;
 static int n_sent;
 static int ifindex;
 
@@ -84,12 +85,16 @@ int main(int argc, char* argv[])
   ef_pio pio;
   int i;
   void* p;
+  enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
 
   TRY(parse_opts(argc, argv));
 
+  if( cfg_loopback )
+    pd_flags |= EF_PD_MCAST_LOOP;
+
   /* Intialize and configure hardware resources */
   TRY(ef_driver_open(&dh));
-  TRY(ef_pd_alloc(&pd, dh, ifindex, EF_PD_DEFAULT));
+  TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
   /* In the following call, note that no rxq is allocated because this app
    * does not receive packets.
    */
@@ -148,8 +153,9 @@ void usage(void)
 {
   common_usage();
 
-  fprintf(stderr, "  -c                  - Copy packet to hardware PIO region "
+  fprintf(stderr, "  -c                  - copy packet to hardware PIO region "
                   "on critical path\n");
+  fprintf(stderr, "  -b                  - enable loopback on the VI\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "e.g.:\n");
   fprintf(stderr, "  - Send pkts to 239.1.2.3:1234 from eth2:\n"
@@ -162,7 +168,7 @@ static int parse_opts(int argc, char*argv[])
 {
   int c;
 
-  while( (c = getopt(argc, argv, "n:m:s:l:c")) != -1 )
+  while( (c = getopt(argc, argv, "n:m:s:l:c:b")) != -1 )
     switch( c ) {
     case 'n':
       cfg_iter = atoi(optarg);
@@ -178,6 +184,9 @@ static int parse_opts(int argc, char*argv[])
       break;
     case 'c':
       cfg_precopy = 0;
+      break;
+    case 'b':
+      cfg_loopback = 1;
       break;
     case '?':
       usage();
