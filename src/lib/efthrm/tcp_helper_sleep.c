@@ -85,10 +85,12 @@ efab_tcp_helper_sock_sleep(tcp_helper_resource_t* trs,
    * To make it work, we have to copy op back to user in
    * oo_fop_unlocked_ioctl().
    */
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   if( op->lock_flags & CI_SLEEP_NETIF_LOCKED ) {
     ci_netif_unlock(ni);
     op->lock_flags &=~ CI_SLEEP_NETIF_LOCKED;
   }
+#endif
   if( op->lock_flags & CI_SLEEP_SOCK_LOCKED ) {
     ci_sock_unlock(ni, w);
     op->lock_flags &=~ CI_SLEEP_SOCK_LOCKED;

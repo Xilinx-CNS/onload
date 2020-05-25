@@ -35,9 +35,7 @@ int ci_sock_sleep(ci_netif* ni, citp_waitable* w, ci_bits why,
                   unsigned lock_flags, ci_uint64 sleep_seq,
                   ci_uint32 *timeout_ms_p)
 {
-#if HANDLE_SIGNALS
-  citp_signal_info* si;
-#endif
+  citp_signal_info* si = citp_signal_get_specific_inited();
   oo_tcp_sock_sleep_t op;
   int rc;
 
@@ -56,6 +54,26 @@ int ci_sock_sleep(ci_netif* ni, citp_waitable* w, ci_bits why,
   ci_assert(!(lock_flags & CI_SLEEP_NETIF_LOCKED) || ci_netif_is_locked(ni));
   ci_assert(!(lock_flags & CI_SLEEP_SOCK_LOCKED) || ci_sock_is_locked(ni, w));
 
+#if CI_CFG_UL_INTERRUPT_HELPER
+  if( lock_flags & CI_SLEEP_NETIF_LOCKED ) {
+    ci_netif_unlock(ni);
+
+    /* We've done a lot of things above; let's check the sequence number
+     * before diving into kernel.
+     */
+    if( sleep_seq != w->sleep_seq.all ) {
+      /* There are no callers which want us to unlock both stack and
+       * socket.  If they show up, we should handle CI_SLEEP_SOCK_LOCKED
+       * somehow.
+       */
+      ci_assert_nflags(lock_flags, CI_SLEEP_SOCK_LOCKED);
+      return 0;
+    }
+  }
+  CI_DEBUG(lock_flags &=~ CI_SLEEP_NETIF_LOCKED;)
+
+#endif
+
   op.sock_id = W_SP(w);
   op.why = why;
   op.sleep_seq = sleep_seq;
@@ -64,17 +82,14 @@ int ci_sock_sleep(ci_netif* ni, citp_waitable* w, ci_bits why,
     op.timeout_ms = 0;
   else
     op.timeout_ms = *timeout_ms_p;
-#if HANDLE_SIGNALS
-  si = citp_signal_get_specific_inited();
   CI_USER_PTR_SET(op.sig_state, si);
   ci_assert(si->inside_lib != 0);
  again:
   /* Danger: "again" label must immediately precede the blocking call. */
-#endif
 
   rc = oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_TCP_SOCK_SLEEP,
                       &op);
-#if HANDLE_SIGNALS
+  ci_assert_nequal(rc, -EINVAL);
   ci_assert(si->inside_lib == 0);
   if(CI_UNLIKELY( rc == -EBUSY )) {
     if( si->aflags & OO_SIGNAL_FLAG_HAVE_PENDING )
@@ -84,7 +99,6 @@ int ci_sock_sleep(ci_netif* ni, citp_waitable* w, ci_bits why,
     goto again;
   }
   si->inside_lib = 1;
-#endif
   if( timeout_ms_p != NULL )
     *timeout_ms_p = op.timeout_ms;
 
@@ -98,7 +112,7 @@ int ci_sock_sleep(ci_netif* ni, citp_waitable* w, ci_bits why,
 }
 
 
-#else  /* __KERNEL__ */
+#elif ! CI_CFG_UL_INTERRUPT_HELPER
 
 int ci_sock_sleep(ci_netif* ni, citp_waitable* w, ci_bits why,
                   unsigned lock_flags, ci_uint64 sleep_seq,

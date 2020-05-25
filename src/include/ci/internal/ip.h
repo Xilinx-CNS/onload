@@ -2043,6 +2043,7 @@ extern void ci_sock_unlock_slow(ci_netif*, citp_waitable*) CI_HF;
 #define CI_SLEEP_NETIF_RQ               0x4
 #define CI_SLEEP_SOCK_RQ                0x8
 
+#if OO_DO_STACK_POLL
 /*! Sleep until something happens.
 **
 **   [why] should be a combination of CI_SB_FLAG_WAKE_RX and
@@ -2063,6 +2064,7 @@ extern void ci_sock_unlock_slow(ci_netif*, citp_waitable*) CI_HF;
 extern int ci_sock_sleep(ci_netif* ni, citp_waitable* w, ci_bits why,
                          unsigned lock_flags, ci_uint64 sleep_seq,
                          ci_uint32 *timeout_ms_p) CI_HF;
+#endif
 
 
 /**********************************************************************
