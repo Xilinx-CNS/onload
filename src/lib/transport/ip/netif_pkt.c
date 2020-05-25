@@ -231,7 +231,7 @@ void ci_netif_pkt_free(ci_netif* ni, ci_ip_pkt_fmt* pkt
     pkt->frag_next = OO_PP_NULL;
   }
 
-#ifdef __KERNEL__
+#if defined(__KERNEL__) && OO_DO_STACK_POLL
   if( CI_UNLIKELY( (! *p_netif_is_locked) &&
                    (~pkt->flags & CI_PKT_FLAG_NONB_POOL)) ) {
     /* It is useless to call ci_netif_lock(), because we can get here only

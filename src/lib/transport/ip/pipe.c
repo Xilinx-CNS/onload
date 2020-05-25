@@ -36,6 +36,7 @@
 #endif
 
 
+#if OO_DO_STACK_POLL
 void pipe_dump(ci_netif* ni, struct oo_pipe* p)
 {
   if( OO_PIPE_DUMP ) {
@@ -158,6 +159,7 @@ oo_pipe_buf_list_pop_after(ci_netif* ni, struct oo_pipe* p,
   return pkt;
 }
 #endif
+#endif /* OO_DO_STACK_POLL */
 
 
 ci_inline void __oo_pipe_wake_peer(ci_netif* ni, struct oo_pipe* p,
@@ -184,6 +186,7 @@ void oo_pipe_wake_peer(ci_netif* ni, struct oo_pipe* p, unsigned wake)
 #endif
 
 
+#if OO_DO_STACK_POLL
 ci_inline ci_uint8* pipe_get_point(ci_netif* ni, struct oo_pipe *p,
                                    ci_ip_pkt_fmt* pkt, ci_uint32 offset)
 {
@@ -2017,3 +2020,4 @@ void oo_pipe_dump(ci_netif* ni, struct oo_pipe* p, const char* pf,
   logger(log_arg, "%s  num_bufs=%d/%d", pf, p->bufs_num, p->bufs_max);
 }
 
+#endif

@@ -36,13 +36,17 @@
 
 #define ci_netif_is_locked(ni)        ef_eplock_is_locked(&(ni)->state->lock)
 
+/* Todo: remove this, ON-12116 */
+extern void ci_netif_unlock(ci_netif*) CI_HF;
+
+
+#if OO_DO_STACK_POLL
+
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 extern int oo_want_proactive_packet_allocation(ci_netif* ni);
 #endif
 extern ci_uint64
 ci_netif_unlock_slow_common(ci_netif*, ci_uint64 lock_val) CI_HF;
-
-extern void ci_netif_unlock(ci_netif*) CI_HF;
 
 
 /*! Blocking calls that grab the stack lock return 0 on success.  When
@@ -51,8 +55,6 @@ extern void ci_netif_unlock(ci_netif*) CI_HF;
  */
 #if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
 #define ci_netif_lock(ni)        ef_eplock_lock(ni)
-#else
-ci_inline int ci_netif_lock(ci_netif* ni) { BUG(); return 0; }
 #endif
 
 #ifdef __KERNEL__
@@ -86,6 +88,7 @@ ci_inline int __ci_netif_lock_count(ci_netif* ni, ci_uint32* stat) {
 # define ci_netif_lock_count(ni, stat)  ci_netif_lock(ni)
 #endif
 
+#endif /* OO_DO_STACK_POLL */
 
 
 /**********************************************************************

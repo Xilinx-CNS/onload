@@ -50,6 +50,14 @@
 #include <ci/driver/efab/open.h>
 #include <ci/internal/ip_types.h>
 #include <onload/eplock.h>
+
+/* Do we compile the core TCP/IP stack functionality in? */
+#if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
+#define OO_DO_STACK_POLL 1
+#else
+#define OO_DO_STACK_POLL 0
+#endif
+
 #include <ci/internal/ip_shared_ops.h>
 #include <ci/internal/ip_stats_ops.h>
 #include <onload/pktq.h>
@@ -66,13 +74,6 @@
 #else
 #include <onload/extensions.h>
 #endif
-#endif
-
-/* Do we compile the core TCP/IP stack functionality in? */
-#if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
-#define OO_DO_STACK_POLL 1
-#else
-#define OO_DO_STACK_POLL 0
 #endif
 
 
