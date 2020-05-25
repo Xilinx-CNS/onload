@@ -2164,6 +2164,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 
 #if CI_CFG_UL_INTERRUPT_HELPER
   init_waitqueue_head(&trs->ulh_waitq);
+  trs->ulh_flags = 0;
 
   { CI_BUILD_ASSERT(CI_CFG_MAX_INTERFACES<=32); }
   ci_atomic_set(&trs->intr_intfs, 0);
@@ -3499,6 +3500,19 @@ stack_has_events(ci_netif* ni, ci_uint32 intfs)
   return false;
 }
 
+static bool
+stack_has_ul_job(tcp_helper_resource_t* trs, ci_uint32* intfs, ci_uint32* flags)
+{
+  *intfs = ci_atomic_xchg(&trs->intr_intfs, 0);
+  do {
+    *flags = trs->ulh_flags;
+    if( *flags == 0 )
+      break;
+  } while( ci_cas32u_fail(&trs->ulh_flags, *flags, 0) );
+  
+  return *intfs != 0 || *flags != 0;
+}
+
 static void
 request_pending_wakeups(tcp_helper_resource_t* trs)
 {
@@ -3530,7 +3544,7 @@ int oo_wait_for_interrupt(ci_private_t* priv, void* argp)
     ci_assert_ge(timeout, 1);
     rc = wait_event_interruptible_timeout(
                   trs->ulh_waitq,
-                  (intfs = ci_atomic_xchg(&trs->intr_intfs, 0)) != 0,
+                  stack_has_ul_job(trs, &intfs, &arg->flags),
                   timeout);
     if( NI_OPTS(&trs->netif).int_driven && intfs != 0 )
       ci_atomic_or(&trs->wake_intfs, intfs);
@@ -3541,7 +3555,7 @@ int oo_wait_for_interrupt(ci_private_t* priv, void* argp)
     if( (arg->rs_ref_count = trs->ref[OO_THR_REF_APP]) > 1 )
       break;
     /* interrupts were not handled by the app, do it by the helper */
-    if( stack_has_events(&trs->netif, intfs) )
+    if( stack_has_events(&trs->netif, intfs) || arg->flags != 0 )
       break;
     /* No interrupts, but the stack was not touched for too long.
      * Fixme: Ideally, we'd like to ensure there are no pending ip timers,

@@ -268,7 +268,13 @@ efab_terminate_unlock_all_stacks(tcp_helper_resource_t *stacks[],
   for( i = 0; i < stacks_num; i++ ) {
     if( stacks[i] == NULL )
       continue;
+#if CI_CFG_UL_INTERRUPT_HELPER
+    ci_assert_nflags(stacks[i]->ulh_flags, OO_ULH_WAIT_FLAG_LOCKED);
+    ci_atomic32_or(&stacks[i]->ulh_flags, OO_ULH_WAIT_FLAG_LOCKED);
+    wake_up(&stacks[i]->ulh_waitq);
+#else
     ci_netif_unlock(&stacks[i]->netif);
+#endif
     TERM_DEBUG("%s: %d unlock stack %d", __func__, current->pid, stacks[i]->id);
     oo_thr_ref_drop(stacks[i]->ref, OO_THR_REF_BASE);
   }

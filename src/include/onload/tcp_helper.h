@@ -333,6 +333,8 @@ typedef struct tcp_helper_resource_s {
   ci_atomic_t intr_intfs;
   /* intfs to request wakeup */
   ci_atomic_t wake_intfs;
+
+  ci_uint32 ulh_flags;
 #endif
   
   struct tcp_helper_nic      nic[CI_CFG_MAX_INTERFACES];

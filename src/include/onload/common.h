@@ -361,6 +361,10 @@ struct oo_op_loopback_connect {
 
 #if CI_CFG_UL_INTERRUPT_HELPER
 struct oo_ulh_waiter {
+  ci_uint32 flags CI_ALIGN(8);
+  /* Stack is already locked, the helper should release the stack lock */
+#define OO_ULH_WAIT_FLAG_LOCKED 1
+
   ci_uint32 timeout_ms;     /* in */
   ci_uint32 rs_ref_count;   /* out */
 };

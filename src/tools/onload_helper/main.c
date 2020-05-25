@@ -110,8 +110,11 @@ main_loop(ci_netif* ni)
   arg.timeout_ms = 0;
 
   while( ioctl(ni->driver_handle, OO_IOC_WAIT_FOR_INTERRUPT, &arg) == 0 ) {
-    ci_assert( ! is_locked );
-    if( ci_netif_trylock(ni) ) {
+    if( arg.flags & OO_ULH_WAIT_FLAG_LOCKED )
+      is_locked = true;
+    else
+      ci_assert( ! is_locked );
+    if( is_locked || ci_netif_trylock(ni) ) {
       int n = ci_netif_poll(ni);
       CITP_STATS_NETIF_ADD(ni, interrupt_evs, n);
       is_locked = true;
@@ -146,6 +149,7 @@ main_loop(ci_netif* ni)
       is_locked = false;
     }
     arg.timeout_ms = stack_next_timer_ms(ni);
+    ci_assert( ! is_locked );
   }
 }
 
