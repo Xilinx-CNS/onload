@@ -563,7 +563,7 @@ static struct efx_tc_counter_index *efx_tc_flower_get_counter_index(
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_ACTION_COOKIE) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-struct efx_tc_counter_index *efx_tc_flower_find_counter_index(
+static struct efx_tc_counter_index *efx_tc_flower_find_counter_index(
 				struct efx_nic *efx, unsigned long cookie)
 {
 	struct efx_tc_counter_index key = {};
@@ -606,6 +606,10 @@ static void efx_gen_tun_header_ipv4(struct efx_tc_encap_action *encap, u8 ipprot
 	ip->protocol = ipproto;
 	ip->version = 0x4;
 	ip->ihl = 0x5;
+#ifdef EFX_C_MODEL
+	/* Work around Cproto IP parser bug: IPlen must be >= IHL + UDPlen */
+	ip->tot_len = cpu_to_be16(28);
+#endif
 }
 
 static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipproto)
@@ -623,6 +627,10 @@ static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipprot
 	ip->hop_limit = neigh->ttl;
 	ip->nexthdr = IPPROTO_UDP;
 	ip->version = 0x6;
+#ifdef EFX_C_MODEL
+	/* Work around Cproto parser bug: IP6len must be >= UDPlen */
+	ip->payload_len = cpu_to_be16(8);
+#endif
 }
 
 static void efx_gen_tun_header_udp(struct efx_tc_encap_action *encap)
@@ -635,7 +643,7 @@ static void efx_gen_tun_header_udp(struct efx_tc_encap_action *encap)
 	udp->dest = key->tp_dst;
 #ifdef EFX_C_MODEL
 	/* Work around Cproto UDP parser bug */
-	udp->len = 8;
+	udp->len = cpu_to_be16(8);
 #endif
 }
 
@@ -1266,7 +1274,7 @@ void efx_fini_struct_tc(struct efx_nic *efx)
 	if (efx->type->is_vf)
 		return;
 
-	if (WARN_ON(!efx->tc))
+	if (!efx->tc)
 		return;
 
 	mutex_lock(&efx->tc->mutex);
@@ -3446,6 +3454,9 @@ void efx_fini_tc(struct efx_nic *efx)
 {
 	int i;
 
+	/* We can get called even if efx_init_struct_tc() failed */
+	if (!efx->tc)
+		return;
 #ifdef CONFIG_SFC_DEBUGFS
 	efx_trim_debugfs_port(efx, efx_tc_debugfs);
 #endif
@@ -3653,6 +3664,9 @@ void efx_fini_tc(struct efx_nic *efx)
 {
 	int i;
 
+	/* We can get called even if efx_init_struct_tc() failed */
+	if (!efx->tc)
+		return;
 	for (i = 0; i < EFX_TC_DFLT__MAX; i++)
 		efx_tc_deconfigure_default_rule(efx, i);
 }

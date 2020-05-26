@@ -141,7 +141,6 @@ enum efx_loopback_mode {
  * if unsuccessful.
  * @RESET_TYPE_ALL: Reset datapath, MAC and PHY
  * @RESET_TYPE_WORLD: Reset as much as possible
- * @RESET_TYPE_RECOVER_OR_DISABLE: Try to recover. Apply RESET_TYPE_DISABLE if
  * unsuccessful.
  * @RESET_TYPE_DATAPATH: Reset datapath only.
  * @RESET_TYPE_MC_BIST: MC entering BIST mode.
@@ -158,7 +157,6 @@ enum reset_type {
 	RESET_TYPE_RECOVER_OR_ALL,
 	RESET_TYPE_ALL,
 	RESET_TYPE_WORLD,
-	RESET_TYPE_RECOVER_OR_DISABLE,
 	RESET_TYPE_DATAPATH,
 	RESET_TYPE_MC_BIST,
 	RESET_TYPE_DISABLE,

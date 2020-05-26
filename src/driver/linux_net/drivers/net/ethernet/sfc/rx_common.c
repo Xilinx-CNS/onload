@@ -8,6 +8,9 @@
  */
 #include "net_driver.h"
 #include <linux/module.h>
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#include <net/xdp_sock.h>
+#endif
 #include "efx.h"
 #include "nic.h"
 #include "rx_common.h"
@@ -53,6 +56,26 @@ MODULE_PARM_DESC(rx_recycle_ring_size,
 /* Preferred number of descriptors to fill at once */
 #define EFX_RX_PREFERRED_BATCH 8U
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+static void efx_reuse_rx_buffer_zc(struct efx_rx_queue *rx_queue,
+				   struct efx_rx_buffer *rx_buf_reuse);
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+void efx_recycle_rx_bufs_zc(struct efx_channel *channel,
+			    struct efx_rx_buffer *rx_buf,
+			    unsigned int n_frags)
+{
+	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
+
+	while (n_frags) {
+		rx_buf->flags |= EFX_RX_BUF_XSK_REUSE;
+		rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
+		--n_frags;
+	}
+}
+#endif
+
 static void efx_rx_slow_fill(struct work_struct *data);
 
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
@@ -65,6 +88,9 @@ static struct page *efx_reuse_page(struct efx_rx_queue *rx_queue)
 	if (!rx_recycle_ring_size)
 		return NULL;
 
+	/* No page recycling when queue in ZC mode */
+	if (!rx_queue->page_ring)
+		return NULL;
 	index = rx_queue->page_remove & rx_queue->page_ptr_mask;
 	rx_queue->page_remove++;
 
@@ -133,9 +159,18 @@ void efx_recycle_rx_pages(struct efx_channel *channel,
 
 static void efx_init_rx_recycle_ring(struct efx_rx_queue *rx_queue)
 {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
+#endif
 	struct efx_nic *efx = rx_queue->efx;
 	unsigned int page_ring_size;
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc) {
+		rx_queue->page_ring = NULL;
+		return;
+	}
+#endif
 	if (!rx_recycle_ring_size)
 		return;
 
@@ -154,6 +189,8 @@ static void efx_fini_rx_recycle_ring(struct efx_rx_queue *rx_queue)
 	if (rx_recycle_ring_size == 0)
 		return;
 
+	if (!rx_queue->page_ring)
+		return;
 	/* Unmap and release the pages in the recycle ring. Remove the ring. */
 	for (i = 0; i <= rx_queue->page_ptr_mask; i++) {
 		struct page *page = rx_queue->page_ring[i];
@@ -209,11 +246,24 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 			   unsigned int n_frags)
 {
 	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	struct efx_rx_buffer *_rx_buf = rx_buf;
+#endif
 
 	do {
-		efx_recycle_rx_buf(rx_queue, rx_buf);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+		if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM)
+			rx_buf->flags |= EFX_RX_BUF_XSK_REUSE;
+		else
+#endif
+			efx_recycle_rx_buf(rx_queue, rx_buf);
 		rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
 	} while (--n_frags);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc)
+		efx_free_rx_buffers(efx_channel_get_rx_queue(channel), _rx_buf,
+				    n_frags);
+#endif
 }
 #else
 struct page *efx_reuse_page(struct efx_rx_queue *rx_queue)
@@ -235,12 +285,32 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 			   struct efx_rx_buffer *rx_buf,
 			   unsigned int n_frags)
 {
-	efx_free_rx_buffers(efx_channel_get_rx_queue(channel), rx_buf, n_frags);
+	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
+	struct efx_rx_buffer *_rx_buf = rx_buf;
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc) {
+		do {
+			rx_buf->flags |= EFX_RX_BUF_XSK_REUSE;
+			rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
+		} while (--n_frags);
+	}
+#endif
+	efx_free_rx_buffers(rx_queue, _rx_buf, n_frags);
 }
 #endif
 
-static void efx_fini_rx_buffer(struct efx_rx_queue *rx_queue,
-			       struct efx_rx_buffer *rx_buf)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+static void efx_fini_rx_buffer_zc(struct efx_rx_queue *rx_queue,
+				  struct efx_rx_buffer *rx_buf)
+{
+	if (rx_buf->addr)
+		efx_free_rx_buffers(rx_queue, rx_buf, 1);
+}
+#endif
+
+static void efx_fini_rx_buffer_nzc(struct efx_rx_queue *rx_queue,
+				   struct efx_rx_buffer *rx_buf)
 {
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 	/* Release the page reference we hold for the buffer. */
@@ -257,6 +327,20 @@ static void efx_fini_rx_buffer(struct efx_rx_queue *rx_queue,
 			efx_free_rx_buffers(rx_queue, rx_buf, 1);
 	}
 	rx_buf->page = NULL;
+}
+
+static void efx_fini_rx_buffer(struct efx_rx_queue *rx_queue,
+			       struct efx_rx_buffer *rx_buf)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
+
+	if (channel->zc) {
+		efx_fini_rx_buffer_zc(rx_queue, rx_buf);
+		return;
+	}
+#endif
+	efx_fini_rx_buffer_nzc(rx_queue, rx_buf);
 }
 
 int efx_probe_rx_queue(struct efx_rx_queue *rx_queue)
@@ -290,8 +374,22 @@ int efx_probe_rx_queue(struct efx_rx_queue *rx_queue)
 	return rc;
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+static void efx_zca_free(struct zero_copy_allocator *alloc,
+			 unsigned long handle)
+{
+	struct efx_rx_queue *rx_queue =
+		container_of(alloc, struct efx_rx_queue, zca);
+
+	xsk_umem_fq_reuse(rx_queue->umem, handle & rx_queue->umem->chunk_mask);
+}
+#endif
+
 int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
+#endif
 	struct efx_nic *efx = rx_queue->efx;
 	unsigned int max_fill, trigger, max_trigger;
 	int rc;
@@ -308,6 +406,12 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 	rx_queue->removed_count = 0;
 	rx_queue->min_fill = -1U;
 	rx_queue->failed_flush_count = 0;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	rx_queue->umem = NULL;
+	if (channel->zc)
+		rx_queue->umem = xdp_get_umem_from_qid(efx->net_dev,
+						       rx_queue->core_index);
+#endif
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 	efx_init_rx_recycle_ring(rx_queue);
 
@@ -339,6 +443,14 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 	/* Initialise XDP queue information */
 	rc = xdp_rxq_info_reg(&rx_queue->xdp_rxq_info, efx->net_dev,
 			      rx_queue->core_index);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (!rc && channel->zc) {
+		rx_queue->zca.free = efx_zca_free;
+		rc = xdp_rxq_info_reg_mem_model(&rx_queue->xdp_rxq_info,
+						MEM_TYPE_ZERO_COPY,
+						&rx_queue->zca);
+	}
+#endif
 	if (rc)
 		return rc;
 #endif
@@ -383,6 +495,9 @@ void efx_fini_rx_queue(struct efx_rx_queue *rx_queue)
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
 	xdp_rxq_info_unreg(&rx_queue->xdp_rxq_info);
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	rx_queue->umem = NULL;
 #endif
 }
 
@@ -429,13 +544,25 @@ void efx_free_rx_buffers(struct efx_rx_queue *rx_queue,
 				struct efx_rx_buffer *rx_buf,
 				unsigned int num_bufs)
 {
-	do {
+	while (num_bufs) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+		if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM) {
+			if (rx_buf->flags & EFX_RX_BUF_XSK_REUSE) {
+				efx_reuse_rx_buffer_zc(rx_queue, rx_buf);
+			} else {
+				rx_buf->addr = NULL;
+				rx_buf->flags = 0;
+			}
+		} else if (rx_buf->page) {
+#else
 		if (rx_buf->page) {
+#endif
 			put_page(rx_buf->page);
 			rx_buf->page = NULL;
 		}
 		rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
-	} while (--num_bufs);
+		--num_bufs;
+	}
 }
 
 static void efx_rx_slow_fill(struct work_struct *data)
@@ -473,6 +600,136 @@ void efx_cancel_slow_fill(struct efx_rx_queue *rx_queue)
 	flush_workqueue(efx_workqueue);
 #endif
 }
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+static void efx_xdp_umem_discard_addr(struct xdp_umem *umem, bool slow)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_UMEM_RELEASE_ADDR)
+	if (slow)
+		xsk_umem_release_addr_rq(umem);
+	else
+		xsk_umem_release_addr(umem);
+#else
+	if (slow)
+		xsk_umem_discard_addr_rq(umem);
+	else
+		xsk_umem_discard_addr(umem);
+#endif
+}
+
+static bool efx_alloc_buffer_zc(struct efx_rx_queue *rx_queue,
+				struct efx_rx_buffer *rx_buf, bool slow)
+{
+	struct xdp_umem *umem = rx_queue->umem;
+	u64 handle = 0;
+	u64 hr;
+	bool alloc_failed = true;
+
+	if (slow) {
+		if (!xsk_umem_peek_addr_rq(umem, &handle))
+			goto alloc_fail;
+	} else {
+		if (!xsk_umem_peek_addr(umem, &handle))
+			goto alloc_fail;
+	}
+	alloc_failed = false;
+
+	handle &= umem->chunk_mask;
+
+	hr = umem->headroom + XDP_PACKET_HEADROOM;
+
+	rx_buf->dma_addr = xdp_umem_get_dma(umem, handle);
+	rx_buf->dma_addr += hr;
+
+	rx_buf->addr = xdp_umem_get_data(umem, handle);
+	rx_buf->addr += hr;
+
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
+				  defined(EFX_HAVE_XSK_OFFSET_ADJUST))
+	rx_buf->handle = xsk_umem_adjust_offset(umem, handle, umem->headroom);
+#endif
+	efx_xdp_umem_discard_addr(umem, slow);
+
+
+alloc_fail:
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_NEED_WAKEUP)
+	if (xsk_umem_uses_need_wakeup(umem)) {
+		if (alloc_failed)
+			xsk_set_rx_need_wakeup(umem);
+		else
+			xsk_clear_rx_need_wakeup(umem);
+	}
+#endif
+	return alloc_failed;
+}
+
+/**
+ * efx_reuse_rx_buffer_zc - reuse a single zc rx_buf structure
+ *
+ * @rx_queue:           Efx RX queue
+ * @rx-buf_reuse:       EFX RX buffer that can be reused
+ * This will reuse zc buffer dma addresses.
+ *
+ */
+static void efx_reuse_rx_buffer_zc(struct efx_rx_queue *rx_queue,
+				   struct efx_rx_buffer *rx_buf_reuse)
+{
+	struct efx_rx_buffer *rx_buf;
+	struct efx_nic *efx = rx_queue->efx;
+	unsigned int index;
+
+	index = rx_queue->added_count & rx_queue->ptr_mask;
+	rx_buf = efx_rx_buffer(rx_queue, index);
+	rx_buf->dma_addr = rx_buf_reuse->dma_addr;
+	rx_buf->addr = rx_buf_reuse->addr;
+	rx_buf->handle = rx_buf_reuse->handle;
+	rx_buf_reuse->flags = 0;
+	rx_buf->page_offset = 0;
+	rx_buf->len = efx->rx_dma_len;
+	rx_buf->flags = EFX_RX_BUF_FROM_UMEM;
+	rx_buf->vlan_tci = 0;
+	++rx_queue->added_count;
+}
+
+/**
+ * efx_init_rx_buffer_zc - inititalise a single zc rx_buf structure
+ *
+ * @rx_queue:           Efx RX queue
+ * @flags:              Flags field
+ * This will initialise a single rx_buf structure for use at the end of
+ * the rx_buf array.
+ *
+ * WARNING: The page_offset calculated here must match with the value of
+ * calculated by efx_rx_buffer_step().
+ */
+static int efx_init_rx_buffer_zc(struct efx_rx_queue *rx_queue,
+				 u16 flags)
+{
+	struct efx_rx_buffer *rx_buf;
+	struct efx_nic *efx = rx_queue->efx;
+	unsigned int index;
+	bool slow = true;//!rx_queue->removed_count;
+
+	index = rx_queue->added_count & rx_queue->ptr_mask;
+	rx_buf = efx_rx_buffer(rx_queue, index);
+	if (rx_buf->flags & EFX_RX_BUF_XSK_REUSE)
+		goto init_buf; /* can be reused at same index */
+	if (!efx_alloc_buffer_zc(rx_queue, rx_buf, slow)) {
+		dma_sync_single_range_for_device(&efx->net_dev->dev,
+						 rx_buf->dma_addr, 0,
+						 efx->rx_dma_len,
+						 DMA_BIDIRECTIONAL);
+init_buf:
+		++rx_queue->added_count;
+		rx_buf->page_offset = 0;
+		rx_buf->len = efx->rx_dma_len;
+		rx_buf->flags = flags;
+		rx_buf->vlan_tci = 0;
+		return 0;
+	}
+	return -ENOMEM;
+}
+#endif
 
 /**
  * efx_init_rx_buffer - inititalise a single rx_buf structure
@@ -524,8 +781,34 @@ void efx_init_rx_buffer(struct efx_rx_queue *rx_queue,
 			     PAGE_SIZE << efx->rx_buffer_order);
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 /**
- * efx_init_rx_buffers - create EFX_RX_BATCH page-based RX buffers
+ * efx_init_rx_buffers_zc - create umem->fq based RX buffers
+ *
+ * @rx_queue:           Efx RX queue
+ *
+ * This allocates a buffers from umem->fq using memory model alloc calls for
+ * zero-copy RX, and populates struct efx_rx_buffers for each one.
+ */
+static int efx_init_rx_buffers_zc(struct efx_rx_queue *rx_queue)
+{
+	u16 flags = 0;
+
+	if (unlikely(!rx_queue->umem))
+		return -EINVAL;
+
+	if ((rx_queue->added_count - rx_queue->removed_count) <
+	       rx_queue->ptr_mask) {
+		flags = EFX_RX_BUF_FROM_UMEM;
+		return efx_init_rx_buffer_zc(rx_queue, flags);
+	}
+
+	return 0;
+}
+#endif
+
+/**
+ * efx_init_rx_buffers_nzc - create EFX_RX_BATCH page-based RX buffers
  *
  * @rx_queue:           Efx RX queue
  *
@@ -534,7 +817,7 @@ void efx_init_rx_buffer(struct efx_rx_queue *rx_queue,
  * 0 on success. If a single page can be used for multiple buffers,
  * then the page will either be inserted fully, or not at all.
  */
-static int efx_init_rx_buffers(struct efx_rx_queue *rx_queue, bool atomic)
+static int efx_init_rx_buffers_nzc(struct efx_rx_queue *rx_queue, bool atomic)
 {
 	struct efx_nic *efx = rx_queue->efx;
 	struct page *page;
@@ -605,6 +888,17 @@ static int efx_init_rx_buffers(struct efx_rx_queue *rx_queue, bool atomic)
 	} while (++count < efx->rx_pages_per_batch);
 
 	return 0;
+}
+
+static int efx_init_rx_buffers(struct efx_rx_queue *rx_queue, bool atomic)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
+
+	if (channel->zc)
+		return efx_init_rx_buffers_zc(rx_queue);
+#endif
+	return efx_init_rx_buffers_nzc(rx_queue, atomic);
 }
 
 void efx_rx_config_page_split(struct efx_nic *efx)

@@ -13,8 +13,13 @@
 #include "nic.h"
 #include "tx_common.h"
 #include "rx_common.h"
+#include "efx_channels.h"
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_TRACE)
 #include <trace/events/xdp.h>
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#include <net/xdp_sock.h>
 #endif
 
 /* Maximum rx prefix used by any architecture. */
@@ -54,6 +59,225 @@ int efx_xdp_setup_prog(struct efx_nic *efx, struct bpf_prog *prog)
 }
 
 /* Context: process, rtnl_lock() held. */
+#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XDP_SOCK)
+static int efx_xsk_umem_dma_map(struct pci_dev *pci_dev, struct xdp_umem *umem)
+{
+	struct device *dev = &pci_dev->dev;
+	unsigned int i, j;
+	dma_addr_t dma;
+
+	for (i = 0; i < umem->npgs; i++) {
+		dma = dma_map_page(dev, umem->pgs[i], 0, PAGE_SIZE,
+				   DMA_BIDIRECTIONAL);
+		if (dma_mapping_error(dev, dma))
+			goto out_unmap;
+
+		umem->pages[i].dma = dma;
+	}
+
+	return 0;
+
+out_unmap:
+	for (j = 0; j < i; j++) {
+		dma_unmap_page(dev, umem->pages[j].dma, PAGE_SIZE,
+			       DMA_BIDIRECTIONAL);
+		umem->pages[j].dma = 0;
+	}
+
+	return -EINVAL;
+}
+
+static void efx_xsk_umem_dma_unmap(struct pci_dev *pci_dev,
+				   struct xdp_umem *umem)
+{
+	struct device *dev = &pci_dev->dev;
+	unsigned int i;
+
+	for (i = 0; i < umem->npgs; i++) {
+		dma_unmap_page(dev, umem->pages[i].dma, PAGE_SIZE,
+			       DMA_BIDIRECTIONAL);
+
+		umem->pages[i].dma = 0;
+	}
+}
+
+static int efx_xsk_umem_disable(struct efx_nic *efx, u16 qid)
+{
+	struct net_device *netdev = efx->net_dev;
+	struct xdp_umem *umem;
+	bool if_running;
+	int rc;
+
+	umem = xdp_get_umem_from_qid(netdev, qid);
+	if (!umem)
+		return -EINVAL;
+
+	if_running = (efx->state == STATE_NET_UP);
+
+	if (if_running) {
+		rc = efx_channel_stop_xsk_queue(efx->channel[qid]);
+		WARN_ON(rc);
+		if (rc)
+			goto xsk_q_stop_fail;
+	}
+
+	efx->channel[qid]->zc = false;
+
+	if (if_running) {
+		rc = efx_channel_start_xsk_queue(efx->channel[qid]);
+		WARN_ON(rc);
+	}
+
+	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
+
+	return 0;
+xsk_q_stop_fail:
+	efx->channel[qid]->zc = false;
+	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
+	return rc;
+}
+
+static int efx_xsk_umem_enable(struct efx_nic *efx, struct xdp_umem *umem,
+			       u16 qid)
+{
+	struct xdp_umem_fq_reuse *reuseq;
+	bool if_running;
+	int err;
+
+	reuseq = xsk_reuseq_prepare(efx->channel[qid]->rx_queue.ptr_mask + 1);
+	if (!reuseq)
+		return -ENOMEM;
+
+	xsk_reuseq_free(xsk_reuseq_swap(umem, reuseq));
+
+	err = efx_xsk_umem_dma_map(efx->pci_dev, umem);
+	if (err)
+		return err;
+
+	if_running = (efx->state == STATE_NET_UP);
+
+	if (if_running) {
+		err = efx_channel_stop_xsk_queue(efx->channel[qid]);
+		if (err) {
+			netif_err(efx, drv, efx->net_dev,
+				  "Channel %u Stop data path failed\n",
+					qid);
+			goto xsk_q_stop_fail;
+		}
+	}
+
+	efx->channel[qid]->zc = true;
+
+	if (if_running) {
+		err = efx_channel_start_xsk_queue(efx->channel[qid]);
+		if (err) {
+			netif_err(efx, drv, efx->net_dev,
+				  "Channel %u Start data path failed\n",
+					qid);
+			goto xsk_q_start_fail;
+		}
+	}
+
+	return 0;
+xsk_q_start_fail: /* try to recover old configuration */
+	efx->channel[qid]->zc = false;
+	efx_channel_start_xsk_queue(efx->channel[qid]);
+xsk_q_stop_fail:
+	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
+	return err;
+}
+
+static int efx_xsk_umem_setup(struct efx_nic *efx, struct xdp_umem *umem,
+			      u16 qid)
+{
+	struct net_device *netdev = efx->net_dev;
+
+	if (qid >= netdev->real_num_rx_queues ||
+	    qid >= netdev->real_num_tx_queues)
+		return -EINVAL;
+
+	return umem ? efx_xsk_umem_enable(efx, umem, qid) :
+		efx_xsk_umem_disable(efx, qid);
+}
+
+static inline bool efx_xsk_umem_consume_tx(struct xdp_umem *umem,
+					   struct xdp_desc *desc,
+					   dma_addr_t *dma)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM)
+	if (xsk_umem_consume_tx(umem, desc)) {
+		*dma = xdp_umem_get_dma(umem, desc->addr);
+		return true;
+	}
+#else
+	return xsk_umem_consume_tx(umem, dma, &desc->len);
+#endif
+	return false;
+}
+
+static void efx_xmit_zc(struct efx_tx_queue *tx_queue)
+{
+	struct efx_nic *efx = tx_queue->efx;
+	struct efx_tx_buffer *tx_buf;
+	unsigned int total_bytes = 0;
+	unsigned int pkt_cnt = 0;
+	struct xdp_desc desc;
+	dma_addr_t dma;
+
+	while (tx_queue->umem) {
+		if (!efx_xsk_umem_consume_tx(tx_queue->umem, &desc, &dma))
+			break;
+
+		prefetchw(__efx_tx_queue_get_insert_buffer(tx_queue));
+
+		dma_sync_single_for_device(&efx->net_dev->dev, dma, desc.len,
+					   DMA_BIDIRECTIONAL);
+
+		tx_buf = efx_tx_map_chunk(tx_queue, dma, desc.len);
+		if (!tx_buf)
+			break;
+
+		tx_buf->flags |= EFX_TX_BUF_XSK;
+		tx_buf->flags &= ~EFX_TX_BUF_CONT;
+		pkt_cnt++;
+		total_bytes += desc.len;
+	}
+	if (tx_queue->umem && pkt_cnt) {
+		efx_nic_push_buffers(tx_queue);
+
+		tx_queue->tx_packets += pkt_cnt;
+		tx_queue->tx_bytes += total_bytes;
+
+		xsk_umem_consume_tx_done(tx_queue->umem);
+	}
+}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_NEED_WAKEUP)
+int efx_xsk_wakeup(struct net_device *dev, u32 queue_id, u32 flags)
+#else
+int efx_xsk_async_xmit(struct net_device *dev, u32 queue_id)
+#endif
+{
+	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_tx_queue *tx_queue;
+	struct efx_channel *channel;
+
+	if (!netif_running(dev))
+		return -EINVAL;
+
+	channel = efx_get_tx_channel(efx, queue_id);
+	if (!channel || !channel->zc)
+		return -EINVAL;
+	tx_queue = efx_channel_get_xsk_tx_queue(channel);
+	if (unlikely(!tx_queue || !tx_queue->umem ||
+		     !efx_is_xsk_tx_queue(tx_queue)))
+		return -EINVAL;
+	efx_xmit_zc(tx_queue);
+
+	return 0;
+}
+#endif
+
 int efx_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	struct efx_nic *efx = netdev_priv(dev);
@@ -71,6 +295,11 @@ int efx_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 		xdp->prog_id = xdp_prog ? xdp_prog->aux->id : 0;
 #endif
 		return 0;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	case XDP_SETUP_XSK_UMEM:
+		return efx_xsk_umem_setup(efx, xdp->xsk.umem,
+				xdp->xsk.queue_id);
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -208,11 +437,12 @@ int efx_xdp_tx_buffers(struct efx_nic *efx, int n, struct xdp_frame **xdpfs,
  *
  * Returns true if packet should still be delivered.
  */
-bool efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
-		struct efx_rx_buffer *rx_buf, u8 **ehp)
+int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
+	       struct efx_rx_buffer *rx_buf, u8 **ehp)
 {
 	u8 rx_prefix[EFX_MAX_RX_PREFIX_SIZE];
 	struct efx_rx_queue *rx_queue;
+	bool free_buf_on_fail = true;
 	struct bpf_prog *xdp_prog;
 	struct xdp_frame *xdpf;
 	struct xdp_buff xdp;
@@ -224,7 +454,7 @@ bool efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 	xdp_prog = rcu_dereference(efx->xdp_prog);
 	if (!xdp_prog) {
 		rcu_read_unlock();
-		return true;
+		return XDP_PASS;
 	}
 
 	rx_queue = efx_channel_get_rx_queue(channel);
@@ -239,7 +469,7 @@ bool efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 				  "XDP is not possible with multiple receive fragments (%d)\n",
 				  channel->rx_pkt_n_frags);
 		channel->n_rx_xdp_bad_drops++;
-		return false;
+		return XDP_DROP;
 	}
 
 	dma_sync_single_for_cpu(&efx->pci_dev->dev, rx_buf->dma_addr,
@@ -263,11 +493,24 @@ bool efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 	xdp.rxq = &rx_queue->xdp_rxq_info;
 #endif
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc) {
+		xdp.handle = rx_buf->handle;
+		free_buf_on_fail = false;
+	}
+#endif
 	xdp_act = bpf_prog_run_xdp(xdp_prog, &xdp);
 	rcu_read_unlock();
 
 	offset = (u8 *)xdp.data - *ehp;
 
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
+				  defined(EFX_HAVE_XSK_OFFSET_ADJUST))
+	if (channel->zc)
+		xdp.handle = xsk_umem_adjust_offset(rx_queue->umem, xdp.handle,
+						    xdp.data -
+						    xdp.data_hard_start);
+#endif
 	switch (xdp_act) {
 	case XDP_PASS:
 		/* Fix up rx prefix. */
@@ -290,11 +533,13 @@ bool efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 #endif
 		rc = efx_xdp_tx_buffers(efx, 1, &xdpf, true);
 		if (rc != 1) {
-			efx_free_rx_buffers(rx_queue, rx_buf, 1);
+			if (free_buf_on_fail)
+				efx_free_rx_buffers(rx_queue, rx_buf, 1);
 			if (net_ratelimit())
 				netif_err(efx, rx_err, efx->net_dev,
 					  "XDP TX failed (%d)\n", rc);
 			channel->n_rx_xdp_bad_drops++;
+			xdp_act = XDP_DROP;
 		} else {
 			channel->n_rx_xdp_tx++;
 		}
@@ -305,11 +550,13 @@ bool efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 	case XDP_REDIRECT:
 		rc = xdp_do_redirect(efx->net_dev, &xdp, xdp_prog);
 		if (rc) {
-			efx_free_rx_buffers(rx_queue, rx_buf, 1);
+			if (free_buf_on_fail)
+				efx_free_rx_buffers(rx_queue, rx_buf, 1);
 			if (net_ratelimit())
 				netif_err(efx, rx_err, efx->net_dev,
 					  "XDP redirect failed (%d)\n", rc);
 			channel->n_rx_xdp_bad_drops++;
+			xdp_act = XDP_DROP;
 		} else {
 			channel->n_rx_xdp_redirect++;
 		}
@@ -321,17 +568,19 @@ bool efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 		/* Fall through */
 	case XDP_ABORTED:
 		trace_xdp_exception(efx->net_dev, xdp_prog, xdp_act);
-		efx_free_rx_buffers(rx_queue, rx_buf, 1);
+		if (free_buf_on_fail)
+			efx_free_rx_buffers(rx_queue, rx_buf, 1);
 		channel->n_rx_xdp_bad_drops++;
 		break;
 
 	case XDP_DROP:
-		efx_free_rx_buffers(rx_queue, rx_buf, 1);
+		if (free_buf_on_fail)
+			efx_free_rx_buffers(rx_queue, rx_buf, 1);
 		channel->n_rx_xdp_drops++;
 		break;
 	}
 
-	return xdp_act == XDP_PASS;
+	return xdp_act;
 }
 #endif
 

@@ -109,6 +109,7 @@ static int ef100_remap_bar(struct efx_nic *efx, int max_vis)
 
 void ef100_start_reps(struct efx_nic *efx)
 {
+#if defined(CONFIG_SFC_SRIOV)
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	int i;
 
@@ -116,10 +117,12 @@ void ef100_start_reps(struct efx_nic *efx)
 	for (i = 0; i < nic_data->rep_count; i++)
 		netif_carrier_on(nic_data->vf_rep[i]);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
+#endif
 }
 
 void ef100_stop_reps(struct efx_nic *efx)
 {
+#if defined(CONFIG_SFC_SRIOV)
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	int i;
 
@@ -127,6 +130,7 @@ void ef100_stop_reps(struct efx_nic *efx)
 	for (i = 0; i < nic_data->rep_count; i++)
 		netif_carrier_off(nic_data->vf_rep[i]);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
+#endif
 }
 
 /* Context: process, rtnl_lock() held.

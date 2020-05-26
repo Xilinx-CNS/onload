@@ -16,7 +16,6 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool mc_chaining,
 				bool rss_limited, bool additional_rss,
 				bool encap);
 void efx_mcdi_filter_table_remove(struct efx_nic *efx);
-int efx_mcdi_filter_table_up(struct efx_nic *efx);
 void efx_mcdi_filter_table_down(struct efx_nic *efx);
 void efx_mcdi_filter_table_restore(struct efx_nic *efx);
 

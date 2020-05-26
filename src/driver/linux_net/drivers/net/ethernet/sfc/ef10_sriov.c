@@ -488,9 +488,6 @@ void efx_ef10_sriov_fini(struct efx_nic *efx)
 			rtnl_lock();
 			efx_net_stop(vf_efx->net_dev);
 			rtnl_unlock();
-			down_write(&vf_efx->filter_sem);
-			vf_efx->type->filter_table_remove(vf_efx);
-			up_write(&vf_efx->filter_sem);
 			efx_ef10_vadaptor_free(vf_efx, EVB_PORT_ID_ASSIGNED);
 			vf_efx->pci_dev->driver->remove(vf_efx->pci_dev);
 		}
@@ -621,10 +618,41 @@ static int efx_ef10_vport_reconfigure(struct efx_nic *efx, unsigned int port_id,
 	return 0;
 }
 
+static int efx_ef10_sriov_close(struct efx_nic *efx)
+{
+	efx_device_detach_sync(efx);
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	efx_dl_reset_suspend(&efx->dl_nic);
+#endif
+#endif
+	efx_net_stop(efx->net_dev);
+
+	if (efx->state == STATE_NET_UP)
+		return -EBUSY;
+
+	return efx_ef10_vadaptor_free(efx, EVB_PORT_ID_ASSIGNED);
+}
+
+static int efx_ef10_sriov_reopen(struct efx_nic *efx)
+{
+	int rc;
+
+	rc = efx_net_open(efx->net_dev);
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (!rc)
+		efx_dl_reset_resume(&efx->dl_nic, efx->state != STATE_DISABLED);
+#endif
+#endif
+	return rc;
+}
+
 int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, u8 *mac)
 {
+	enum nic_state old_state = STATE_UNINIT;
 	struct ef10_vf *vf;
-	int rc;
+	int rc, rc2 = 0;
 
 	vf = efx_ef10_vf_info(efx, vf_i);
 	if (!vf)
@@ -638,16 +666,10 @@ int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, u8 *mac)
 	 * without VF datapath reset triggered by VPORT_RECONFIGURE.
 	 */
 	if (vf->efx) {
-		efx_device_detach_sync(vf->efx);
-		efx_net_stop(vf->efx->net_dev);
-
-		mutex_lock(&vf->efx->mac_lock);
-		down_write(&vf->efx->filter_sem);
-		vf->efx->type->filter_table_remove(vf->efx);
-
-		rc = efx_ef10_vadaptor_free(vf->efx, EVB_PORT_ID_ASSIGNED);
+		old_state = vf->efx->state;
+		rc = efx_ef10_sriov_close(vf->efx);
 		if (rc)
-			goto fail;
+			goto reopen;
 	} else {
 		bool reset = false;
 
@@ -677,13 +699,13 @@ int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, u8 *mac)
 			   "This is likely because the VF is bound to a driver in a VM.\n");
 		netif_warn(efx, drv, efx->net_dev,
 			   "Please unload the driver in the VM.\n");
-		goto fail;
+		goto restore_vadaptor;
 	}
 
 	if (!is_zero_ether_addr(vf->mac)) {
 		rc = efx_ef10_vport_del_vf_mac(efx, vf->vport_id, vf->mac);
 		if (rc)
-			goto fail;
+			goto restore_evb_port;
 		eth_zero_addr(vf->mac);
 		if (vf->efx)
 			eth_zero_addr(vf->efx->net_dev->dev_addr);
@@ -692,41 +714,55 @@ int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, u8 *mac)
 	if (!is_zero_ether_addr(mac)) {
 		rc = efx_ef10_vport_add_mac(efx, vf->vport_id, mac);
 		if (rc)
-			goto fail;
+			goto reset_nic;
 		ether_addr_copy(vf->mac, mac);
 		if (vf->efx)
 			ether_addr_copy(vf->efx->net_dev->dev_addr, mac);
 	}
 
+restore_evb_port:
 	rc = efx_ef10_evb_port_assign(efx, vf->vport_id, vf_i);
 	if (rc)
-		goto fail;
+		goto reset_nic;
 
+restore_vadaptor:
 	if (vf->efx) {
 		/* VF cannot use the vport_id that the PF created */
 		rc = efx_ef10_vadaptor_alloc(vf->efx, EVB_PORT_ID_ASSIGNED);
 		if (rc)
-			goto fail;
-		vf->efx->type->filter_table_probe(vf->efx);
-		up_write(&vf->efx->filter_sem);
-		mutex_unlock(&vf->efx->mac_lock);
-		efx_net_open(vf->efx->net_dev);
+			goto reset_nic;
+	}
+reopen:
+	if (vf->efx) {
+		if (old_state == STATE_NET_UP) {
+			rc2 = efx_ef10_sriov_reopen(vf->efx);
+			if (rc2)
+				goto reset_nic;
+		}
 		efx_device_attach_if_not_resetting(vf->efx);
 	}
 
-	return 0;
-
-fail:
-	if (vf->efx) {
-		up_write(&vf->efx->filter_sem);
-		mutex_unlock(&vf->efx->mac_lock);
-	}
 	return rc;
+
+reset_nic:
+	if (vf->efx) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to restore the VF - scheduling reset.\n");
+
+		efx_schedule_reset(vf->efx, RESET_TYPE_DATAPATH);
+	} else {
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to restore the VF and cannot reset the VF - VF is not functional.\n");
+		netif_err(efx, drv, efx->net_dev,
+			  "Please reload the driver attached to the VF.\n");
+	}
+	return rc ? rc : rc2;
 }
 
 int efx_ef10_sriov_set_vf_vlan(struct efx_nic *efx, int vf_i, u16 vlan,
 			       u8 qos)
 {
+	enum nic_state old_state = STATE_UNINIT;
 	struct ef10_vf *vf;
 	u16 new_vlan;
 	int rc = 0, rc2 = 0;
@@ -743,16 +779,10 @@ int efx_ef10_sriov_set_vf_vlan(struct efx_nic *efx, int vf_i, u16 vlan,
 	 * without VF datapath reset triggered by VPORT_RECONFIGURE.
 	 */
 	if (vf->efx) {
-		efx_device_detach_sync(vf->efx);
-		efx_net_stop(vf->efx->net_dev);
-
-		mutex_lock(&vf->efx->mac_lock);
-		down_write(&vf->efx->filter_sem);
-		vf->efx->type->filter_table_remove(vf->efx);
-
-		rc = efx_ef10_vadaptor_free(vf->efx, EVB_PORT_ID_ASSIGNED);
+		old_state = vf->efx->state;
+		rc = efx_ef10_sriov_close(vf->efx);
 		if (rc)
-			goto restore_filters;
+			goto reopen;
 	} else {
 		bool reset = false;
 
@@ -809,54 +839,42 @@ int efx_ef10_sriov_set_vf_vlan(struct efx_nic *efx, int vf_i, u16 vlan,
 	rc = efx_ef10_vport_alloc(efx, vf->vlan, vf->vlan_restrict,
 				  &vf->vport_id);
 	if (rc)
-		goto reset_nic_up_write;
+		goto reset_nic;
 
 restore_mac:
 	if (!is_zero_ether_addr(vf->mac)) {
 		rc2 = efx_ef10_vport_add_mac(efx, vf->vport_id, vf->mac);
 		if (rc2) {
 			eth_zero_addr(vf->mac);
-			goto reset_nic_up_write;
+			goto reset_nic;
 		}
 	}
 
 restore_evb_port:
 	rc2 = efx_ef10_evb_port_assign(efx, vf->vport_id, vf_i);
 	if (rc2)
-		goto reset_nic_up_write;
-	else
-		vf->vport_assigned = 1;
+		goto reset_nic;
+	vf->vport_assigned = 1;
 
 restore_vadaptor:
 	if (vf->efx) {
 		rc2 = efx_ef10_vadaptor_alloc(vf->efx, EVB_PORT_ID_ASSIGNED);
 		if (rc2)
-			goto reset_nic_up_write;
+			goto reset_nic;
 	}
 
-restore_filters:
+reopen:
 	if (vf->efx) {
-		rc2 = vf->efx->type->filter_table_probe(vf->efx);
-		if (rc2)
-			goto reset_nic_up_write;
-
-		up_write(&vf->efx->filter_sem);
-		mutex_unlock(&vf->efx->mac_lock);
-
-		rc2 = efx_net_open(vf->efx->net_dev);
-		if (rc2)
-			goto reset_nic;
-
+		if (old_state == STATE_NET_UP) {
+			rc2 = efx_ef10_sriov_reopen(vf->efx);
+			if (rc2)
+				goto reset_nic;
+		}
 		efx_device_attach_if_not_resetting(vf->efx);
 	}
 
 	return rc;
 
-reset_nic_up_write:
-	if (vf->efx) {
-		up_write(&vf->efx->filter_sem);
-		mutex_unlock(&vf->efx->mac_lock);
-	}
 reset_nic:
 	if (vf->efx) {
 		netif_err(efx, drv, efx->net_dev,

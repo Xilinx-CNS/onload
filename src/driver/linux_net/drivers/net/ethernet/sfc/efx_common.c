@@ -78,7 +78,6 @@ static const char *const efx_reset_type_names[] = {
 	[RESET_TYPE_ALL]                = "ALL",
 	[RESET_TYPE_RECOVER_OR_ALL]     = "RECOVER_OR_ALL",
 	[RESET_TYPE_WORLD]              = "WORLD",
-	[RESET_TYPE_RECOVER_OR_DISABLE] = "RECOVER_OR_DISABLE",
 	[RESET_TYPE_DATAPATH]           = "DATAPATH",
 	[RESET_TYPE_MC_BIST]            = "MC_BIST",
 	[RESET_TYPE_DISABLE]            = "DISABLE",
@@ -320,8 +319,8 @@ void efx_link_status_changed(struct efx_nic *efx)
 int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 {
 	struct efx_nic *efx = netdev_priv(net_dev);
-	int rc;
 	int old_mtu;
+	int rc;
 
 	rc = efx_check_disabled(efx);
 	if (rc)
@@ -365,7 +364,8 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 		net_dev->mtu = old_mtu;
 	mutex_unlock(&efx->mac_lock);
 
-	efx_start_all(efx);
+	if (efx->state == STATE_NET_UP)
+		efx_start_all(efx);
 	efx_device_attach_if_not_resetting(efx);
 	return rc;
 }
@@ -494,9 +494,9 @@ static int efx_start_datapath(struct efx_nic *efx)
 		BUILD_BUG_ON(EFX_RX_USR_BUF_SIZE % L1_CACHE_BYTES);
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 		BUILD_BUG_ON(sizeof(struct efx_rx_page_state) +
-				2 * ALIGN(NET_IP_ALIGN + EFX_RX_USR_BUF_SIZE,
-					EFX_RX_BUF_ALIGNMENT) >
-				PAGE_SIZE);
+			     2 * ALIGN(NET_IP_ALIGN + EFX_RX_USR_BUF_SIZE,
+				       EFX_RX_BUF_ALIGNMENT) +
+			     XDP_PACKET_HEADROOM > PAGE_SIZE);
 #endif
 		efx->rx_scatter = true;
 		efx->rx_dma_len = EFX_RX_USR_BUF_SIZE;
@@ -1025,9 +1025,11 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 				  "could not restore PHY settings\n");
 	}
 
-	rc = efx_enable_interrupts(efx);
-	if (rc)
-		goto fail;
+	if (efx->state == STATE_NET_UP) {
+		rc = efx_enable_interrupts(efx);
+		if (rc)
+			goto fail;
+	}
 
 #ifdef CONFIG_SFC_DUMP
 	rc = efx_dump_reset(efx);
@@ -1060,17 +1062,19 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 	if (efx->type->rx_restore_rss_contexts)
 		efx->type->rx_restore_rss_contexts(efx);
 	mutex_unlock(&efx->rss_lock);
-	efx->type->filter_table_restore(efx);
+	if (efx->state == STATE_NET_UP)
+		efx->type->filter_table_restore(efx);
 	up_write(&efx->filter_sem);
-	if (efx->type->sriov_reset)
-		efx->type->sriov_reset(efx);
-
 	mutex_unlock(&efx->mac_lock);
 
-	rc = efx_start_all(efx);
-	if (rc) {
+	if (efx->state == STATE_NET_UP) {
+		rc = efx_start_all(efx);
+		if (rc) {
+			efx->port_initialized = false;
+			return rc;
+		}
+	} else {
 		efx->port_initialized = false;
-		return rc;
 	}
 
 	if (efx->type->udp_tnl_push_ports)
@@ -1151,8 +1155,7 @@ out:
 
 	/* Leave device stopped if necessary */
 	disabled = (rc && !retry) ||
-		method == RESET_TYPE_DISABLE ||
-		method == RESET_TYPE_RECOVER_OR_DISABLE;
+		method == RESET_TYPE_DISABLE;
 
 	if (efx->link_down_on_reset && link_up) {
 		efx->link_state.up = true;
@@ -1208,8 +1211,7 @@ static void efx_reset_work(struct work_struct *data)
 	if (method == RESET_TYPE_MC_BIST)
 		efx_wait_for_bist_end(efx);
 
-	if ((method == RESET_TYPE_RECOVER_OR_DISABLE ||
-	     method == RESET_TYPE_RECOVER_OR_ALL) &&
+	if (method == RESET_TYPE_RECOVER_OR_ALL &&
 	    efx_try_recovery(efx))
 		return;
 

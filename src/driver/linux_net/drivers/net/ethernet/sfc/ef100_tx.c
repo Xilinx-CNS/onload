@@ -17,6 +17,7 @@
 #include "ef100_regs.h"
 #include "io.h"
 #include "ef100_tx.h"
+#include "ef100_nic.h"
 
 #ifdef EFX_C_MODEL
 #define EF100_MAX_DESC_BATCH	63	/* Bug 85534 */
@@ -73,11 +74,14 @@ int efx_nic_tx_tso_sw(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 static bool ef100_tx_can_tso(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 {
 	struct efx_nic *efx = tx_queue->efx;
+	struct ef100_nic_data *nic_data;
 	struct efx_tx_buffer *buffer;
 	struct tcphdr *tcphdr;
 	struct iphdr *iphdr;
 	size_t header_len;
 	u32 mss;
+
+	nic_data = efx->nic_data;
 
 	if (!skb_is_gso_tcp(skb))
 		return false;
@@ -92,14 +96,22 @@ static bool ef100_tx_can_tso(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 
 	header_len = efx_tx_tso_header_length(skb);
 	if (header_len < 0 ||
-	    header_len > ESE_EF100_DP_GZ_TSO_MAX_HDR_LEN_DEFAULT)
+	    header_len > nic_data->tso_max_hdr_len)
 		return false;
 
-	if (skb_shinfo(skb)->gso_segs >
-	    ESE_EF100_DP_GZ_TSO_MAX_PAYLOAD_NUM_SEGS_DEFAULT)
+	if (skb_shinfo(skb)->gso_segs > nic_data->tso_max_payload_num_segs) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
+		/* net_dev->gso_max_segs should've caught this */
+		WARN_ON_ONCE(1);
+#endif
+		return false;
+	}
+
+	if (skb->data_len / mss > nic_data->tso_max_frames)
 		return false;
 
-	if (skb->data_len / mss > ESE_EF100_DP_GZ_TSO_MAX_NUM_FRAMES_DEFAULT)
+	/* net_dev->gso_max_size should've caught this */
+	if (WARN_ON_ONCE(skb->data_len > nic_data->tso_max_payload_len))
 		return false;
 
 	/* Reserve an empty buffer for the TSO V3 descriptor.
@@ -303,8 +315,8 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 		tx_queue->packet_write_count = new_write_count;
 		EFX_POPULATE_OWORD_3(*txd,
 				     ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_PREFIX,
-				     ESF_GZ_TX_PREFIX_MPORT, efv->mport_id,
-				     ESF_GZ_TX_PREFIX_SRC_MPORT_EN, 1);
+				     ESF_GZ_TX_PREFIX_INGRESS_MPORT, efv->mport_id,
+				     ESF_GZ_TX_PREFIX_INGRESS_MPORT_EN, 1);
 		nr_descs--;
 	}
 

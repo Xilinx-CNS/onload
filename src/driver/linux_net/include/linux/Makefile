@@ -10,7 +10,25 @@
 # by the Free Software Foundation, incorporated herein by reference.
 #
 ################################################################################
-# This file is for backward compatibility with older Onload versions.
 
-TOPDIR=../../../..
-exec $TOPDIR/scripts/kernel_compat_funcs.sh "$@"
+ifndef KERNELRELEASE
+ifndef EFX_UPSTREAM
+# Compat: KDIR used to be called KPATH
+ifdef KPATH
+  KDIR ?= $(KPATH)
+endif
+endif
+KDIR ?= /lib/modules/`uname -r`/build
+
+export-srpm export: $(KDIR)/include/linux/virtual_bus.h \
+	$(KDIR)/include/linux/net/sfc/sfc_rdma.h
+
+# To not overwrite the upstream version
+$(KDIR)/include/linux/virtual_bus.h: virtual_bus.h
+	@mkdir -p $(@D)
+	test -f $@ || cp $^ $@
+
+$(KDIR)/include/linux/net/sfc/sfc_rdma.h: net/sfc/sfc_rdma.h
+	@mkdir -p $(@D)
+	cp $^ $@
+endif

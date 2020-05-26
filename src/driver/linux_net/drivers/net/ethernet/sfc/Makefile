@@ -47,7 +47,7 @@ export CONFIG_SFC_BUSYPOLL := n
 endif
 
 ifdef KSRCDIR
-$(error KSRCDIR has been replaced with KPATH)
+$(error KSRCDIR has been replaced with KDIR)
 endif
 
 ifdef KERNELRELEASE
@@ -95,27 +95,21 @@ endif
 ifndef CONFIG_SFC_MCDI_LOGGING
 $(warning => MCDI tracing will not be supported)
 endif
+ifndef CONFIG_VIRTUAL_BUS
+# Pick up exported symbols of our build of virtual_bus.ko
+KBUILD_EXTRA_SYMBOLS += $(KBUILD_EXTMOD)/../../../bus/Module.symvers
+
+$(KBUILD_EXTMOD)/../../../bus/Module.symvers:
+	make -C ../../../bus
+endif
 endif # CONFIG_NET
 
 else # !KERNELRELEASE ###### The following is for the standalone Makefile case
 
+TOPDIR = ../../../..
+include $(TOPDIR)/scripts/Makefile.common
+
 ifneq ($(MAKECMDGOALS),export-srpm)
-# Get kernel version and source directory.  Either may be specified and
-# we work out the other automatically.  If neither is specified then we
-# assume the current kernel version.
-ifdef KPATH
-ifndef KVER
-KVER := $(shell sed -r 's/^\#define UTS_RELEASE "(.*)"/\1/; t; d' $(KPATH)/include/generated/utsrelease.h $(KPATH)/include/linux/utsrelease.h $(KPATH)/include/linux/version.h 2>/dev/null)
-ifeq ($(KVER),)
-$(error Failed to find kernel version for $(KPATH))
-endif
-endif
-else # !KPATH
-ifndef KVER
-KVER := $(shell uname -r)
-endif
-KPATH := /lib/modules/$(KVER)/build
-endif # KPATH
 
 KVERPARTS = $(subst -, ,$(subst ., ,$(KVER)))
 ifeq ($(word 1,$(KVERPARTS)),2)
@@ -131,12 +125,12 @@ endif # export-srpm
 
 endif # !KERNELRELEASE
 #
-ifneq ($(findstring 2.6.32-573,$(KPATH)),)
+ifneq ($(findstring 2.6.32-573,$(KDIR)),)
 # RedHat 6.7 kbuild is missing a patch to build multiple modules
 override CONFIG_SFC_EF100 :=
 endif
 # RedHat 6.8 and later only need separate builds if dynamic debugging is enabled
-ifneq ($(findstring .el6,$(KPATH)),)
+ifneq ($(findstring .el6,$(KDIR)),)
   EFX_BUILD_SEPARATE_MODULES := y
 endif
 
@@ -147,14 +141,14 @@ sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 			   selftest.o ethtool_common.o ethtool.o \
 			   mcdi.o mcdi_port.o mcdi_port_common.o mcdi_functions.o \
 			   mcdi_filters.o ef10_sriov.o tx_tso.o tc-stub.o \
-			   efx_devlink.o xdp.o
+			   efx_devlink.o xdp.o efx_virtbus.o
 
 sfc_ef100-y             := mcdi.o ef100.o efx_common.o efx_channels.o \
                            ef100_nic.o nic.o ef100_netdev.o ef100_ethtool.o \
                            ef100_rx.o rx_common.o ef100_tx.o tx_common.o \
 			   ethtool_common.o mcdi_port_common.o mcdi_functions.o \
 			   mcdi_filters.o ef100_sriov.o ef100_rep.o tc.o mae.o \
-			   efx_devlink.o selftest.o xdp.o
+			   efx_devlink.o selftest.o xdp.o efx_virtbus.o
 
 sfc_driverlink-y	:= driverlink.o
 
@@ -202,19 +196,13 @@ obj-$(CONFIG_SFC_DRIVERLINK) += sfc_driverlink.o
 ifndef EFX_UPSTREAM
 
 # Compiler flags
-EXTRA_CFLAGS += -I$(src) -Wall -Wno-deprecated-declarations -DEFX_USE_KCOMPAT=1 -DWITH_MCDI_V2
-ifdef EFX_FOR_UPSTREAM
-EXTRA_CFLAGS += -include config.h
-else
-EXTRA_CFLAGS += -DEFX_NOT_UPSTREAM=1
-endif
+EXTRA_CFLAGS += -I$(src) -DWITH_MCDI_V2
+
 ifdef KMP_RELEASE
 EXTRA_CFLAGS += -DKMP_RELEASE
 endif
 
 ifdef EFX_NOT_EXPORTED
-EXTRA_CFLAGS += -DEFX_NOT_EXPORTED
-
 ifdef GCOV
 sfc_gcov-y		+= gcov.o
 obj-m			+= sfc_gcov.o
@@ -231,67 +219,12 @@ endif
 ifndef EFX_DISABLE_OVERLAY_TX_CSUM
 EXTRA_CFLAGS += -DEFX_USE_OVERLAY_TX_CSUM
 endif
-ifdef EFX_C_MODEL
-EXTRA_CFLAGS += -DEFX_C_MODEL
-endif
-
-ifndef NOWERROR
-EXTRA_CFLAGS += -Werror
-endif # NOWERROR
-
-# Debugging-enabled builds
-ifndef NDEBUG
-EXTRA_CFLAGS += -DDEBUG -g
-endif
 
 all_sfc_ko = $(subst .o,.ko,$(obj-m))
 
 ifdef KERNELRELEASE
-
-# Define filechk if necessary
-ifndef filechk
-define filechk
-	$(Q)set -e;				\
-	$(if Q,echo '  CHK     $@';)		\
-	mkdir -p $(dir $@);			\
-	$(filechk_$(1)) < $< > $@.tmp;		\
-	if [ -r $@ ] && cmp -s $@ $@.tmp; then	\
-		rm -f $@.tmp;			\
-	else					\
-		$(if Q,echo '  UPD     $@';)	\
-		mv -f $@.tmp $@;		\
-	fi
-endef
-endif
-
-# autocompat.h depends on the kernel compiled against.
-# However, there is nothing stopping the user compiling on multiple
-# machines in the same directory. The .kpath target provides a simple
-# dependency check for this.
-#
-# Module(s).symvers also depends on the kernel compiled against, but
-# can simply be deleted here.  However mmake does some more complicated
-# management of Module.symvers and does not allow changing the kernel
-# path, so don't touch it when invoked from an mmake tree.
-$(obj)/.kpath: FORCE
-	@if ! [ -f $@ ] || [ $$(cat $@) != $(objtree) ]; then		\
-		echo $(objtree) >$@;					\
-		$(if $(MMAKE_IN_KBUILD),,rm -f $(obj)/*.symvers;)	\
-	fi
-
-ifdef KBUILD_SRC
-define filechk_autocompat.h
-	$(src)/kernel_compat.sh -k $(KBUILD_SRC) -o "$(CURDIR)" $(if $(filter 1,$(V)),-v,-q)
-endef
-else
-define filechk_autocompat.h
-	$(src)/kernel_compat.sh -k "$(CURDIR)" -o "$(CURDIR)" $(if $(filter 1,$(V)),-v,-q)
-endef
-endif
-
-$(obj)/autocompat.h: $(obj)/.kpath $(src)/kernel_compat.sh $(src)/kernel_compat_funcs.sh
-	+$(call filechk,autocompat.h)
-	@touch $@
+TOPDIR = $(src)/../../../..
+include $(TOPDIR)/scripts/Makefile.common
 
 define filechk_config.h
 	printf "$(foreach name,SFC_DEBUGFS SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PRIVATE_MDIO SFC_AOE SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL,#undef CONFIG_$(name)\n$(if $(filter y m,$(CONFIG_$(name))),#define CONFIG_$(name) $(CONFIG_$(name))\n))"
@@ -328,24 +261,6 @@ else # !KERNELRELEASE
 ifneq ($(filter 2.6.16-% 2.6.16.%,$(KVER)),)
 EXTRA_MAKEFLAGS := KERNELRELEASE=$(KVER)
 endif
-ifeq ($(origin CC),default)
-ifneq ($(CROSS_COMPILE),)
-CC=$(CROSS_COMPILE)gcc
-endif
-endif
-ifneq ($(CC),)
-EXTRA_MAKEFLAGS += CC="$(CC)"
-endif
-ifneq ($(C),)
-EXTRA_MAKEFLAGS += C="$(C)"
-endif
-ifdef KMP_RELEASE
-EXTRA_MAKEFLAGS += KMP_RELEASE=1
-endif
-
-ifeq ($(INSTALL_MOD_DIR),)
-INSTALL_MOD_DIR := updates
-endif
 
 default : all
 
@@ -358,13 +273,13 @@ modules :
 ifdef EFX_BUILD_SEPARATE_MODULES
   # The kernel is too old to build multiple modules in 1 build
   ifdef CONFIG_SFC
-	$(MAKE) -C $(KPATH) $(EXTRA_MAKEFLAGS) M=$$(pwd) CONFIG_SFC_EF100=
+	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd) CONFIG_SFC_EF100=
   endif
   ifdef CONFIG_SFC_EF100
-	$(MAKE) -C $(KPATH) $(EXTRA_MAKEFLAGS) M=$$(pwd) CONFIG_SFC=
+	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd) CONFIG_SFC=
   endif
 else
-	$(MAKE) -C $(KPATH) $(EXTRA_MAKEFLAGS) M=$$(pwd)
+	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd)
 endif
 # strip objects
 ifdef NDEBUG
@@ -376,11 +291,8 @@ ifdef EFX_NOT_EXPORTED
 endif # EFX_NOT_EXPORTED
 
 modules_install :
-  # See bug 35865 for discussion on updates vs. extra location
-	echo INSTALL_MOD_PATH=$(INSTALL_MOD_PATH)
-	echo INSTALL_MOD_DIR=$(INSTALL_MOD_DIR)
 	mkdir -p $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/$(INSTALL_MOD_DIR)
-	$(MAKE) -C $(KPATH) $(EXTRA_MAKEFLAGS) M=$$(pwd) INSTALL_MOD_DIR=$(INSTALL_MOD_DIR) modules_install
+	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd) INSTALL_MOD_DIR=$(INSTALL_MOD_DIR) modules_install
 
 clean : clean_modules clean_tests
 
@@ -389,7 +301,7 @@ clean_tests:
 
 clean_modules :
 	rm -f *.o *.s *.ko *.mod.c *.symvers config.h autocompat.h .kpath
-	$(MAKE) -C $(KPATH) $(EXTRA_MAKEFLAGS) M=$$(pwd) clean
+	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd) clean
 
 .PHONY : all modules modules_install clean clean_modules FORCE
 
@@ -428,19 +340,19 @@ endif # EFX_NOT_EXPORTED
 
 # Export into kernel tree
 export:
-	./export.sh $(KPATH) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) $(sfc_ef100-y:%.o=%.c)
+	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) $(sfc_ef100-y:%.o=%.c)
 
 export-resolve-kcompat:
-	./export.sh -k -kk $(KPATH) $(sfc-y:%.o=%.c)
+	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c)
 
 # Export into a Xen kernel tree
 export-xen:
-	./export.sh -k -kk --suffix=xen $(KPATH) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) $(sfc_ef100-y:%.o=%.c)
+	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) $(sfc_ef100-y:%.o=%.c)
 
 # Export for SRPM
 export-srpm:
-	mkdir -p $(KPATH)/mtd
-	./export.sh -o $(KPATH) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) $(sfc_ef100-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh kernel_compat_funcs.sh
+	mkdir -p $(KDIR)/mtd
+	$(EXPORT_CMD) -o $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) $(sfc_ef100-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh
 
 .PHONY : intranet doc clean_doc util clean_util export export-xen export-srpm
 

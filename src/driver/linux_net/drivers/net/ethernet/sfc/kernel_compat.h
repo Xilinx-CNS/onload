@@ -1694,6 +1694,10 @@ static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 }
 #endif
 
+#ifndef pci_warn
+#define pci_warn(pdev, fmt, arg...)	dev_warn(&(pdev)->dev, fmt, ##arg)
+#endif
+
 /**************************************************************************
  *
  * Missing functions provided by kernel_compat.c

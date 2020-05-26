@@ -75,6 +75,25 @@ MODULE_PARM_DESC(tx_non_csum_queue,
 		 "not requiring checksum offload; default=N");
 #endif
 
+#ifdef EFX_NOT_UPSTREAM
+/* A fixed key for RSS that has been tested and found to provide good
+ * spreading behaviour.  It also has the desirable property of being
+ * symmetric.
+ */
+static const u8 efx_rss_fixed_key[40] = {
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
+};
+
+static bool efx_rss_use_fixed_key = true;
+module_param_named(rss_use_fixed_key, efx_rss_use_fixed_key, bool, 0444);
+MODULE_PARM_DESC(rss_use_fixed_key, "Use a fixed RSS hash key, "
+		"tested for reliable spreading across channels");
+#endif
+
 /* Hardware control for EF10 architecture including 'Huntington'. */
 
 #define EFX_EF10_DRVGEN_EV		7
@@ -1157,7 +1176,7 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	unsigned int uc_mem_map_size, wc_mem_map_size;
 	unsigned int channel_vis, pio_write_vi_base, max_vis;
-	unsigned int tx_vis, rx_vis, pio_vis;
+	unsigned int tx_channels, tx_vis, rx_vis, pio_vis;
 	unsigned int rx_vis_per_queue;
 	void __iomem *membase;
 	unsigned int min_vis;
@@ -1174,11 +1193,24 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 		       rx_vis_per_queue);
 
 	rx_vis = efx_rx_channels(efx) * rx_vis_per_queue;
-	tx_vis = efx_tx_channels(efx) * efx->tx_queues_per_channel;
+	tx_channels = efx_tx_channels(efx);
+	if (efx->max_tx_channels && efx->max_tx_channels < tx_channels) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Reducing TX channels from %u to %u\n",
+			  tx_channels, efx->max_tx_channels);
+		tx_channels = efx->max_tx_channels;
+	}
+	tx_vis = tx_channels * efx->tx_queues_per_channel;
 
 	tx_vis += efx_xdp_channels(efx) * efx->xdp_tx_per_channel;
 
 	channel_vis = max(rx_vis, tx_vis);
+	if (efx->max_vis && efx->max_vis < channel_vis) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Reducing channel VIs from %u to %u\n",
+			  channel_vis, efx->max_vis);
+		channel_vis = efx->max_vis;
+	}
 
 #ifdef EFX_USE_PIO
 	/* Try to allocate PIO buffers if wanted and if the full
@@ -1246,6 +1278,12 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 			efx_target_num_vis :
 			efx_ef10_is_vf(efx) ? EF10_ONLOAD_VF_VIS
 					    : EF10_ONLOAD_PF_VIS;
+	if (efx->max_vis && efx->max_vis < max_vis) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "reducing max VIs requested from %u to %u\n",
+			  max_vis, efx->max_vis);
+		max_vis = efx->max_vis;
+	}
 #endif
 
 	max_vis = max(min_vis, max_vis);
@@ -1255,8 +1293,11 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 		return rc;
 
 	rc = efx_ef10_alloc_vis(efx, min_vis, max_vis);
-	if (rc != 0)
+	if (rc != 0) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Could not allocate %u VIs.\n", min_vis);
 		return rc;
+	}
 
 	if (nic_data->n_allocated_vis < channel_vis) {
 		netif_info(efx, drv, efx->net_dev,
@@ -1702,6 +1743,7 @@ static int efx_ef10_reset(struct efx_nic *efx, enum reset_type reset_type)
 	 * resources assigned to us, so we have to trigger reallocation now.
 	 */
 	if ((reset_type == RESET_TYPE_ALL ||
+	     reset_type == RESET_TYPE_RECOVER_OR_ALL ||
 	     reset_type == RESET_TYPE_MCDI_TIMEOUT) && !rc)
 		efx_ef10_reset_mc_allocations(efx);
 	return rc;
@@ -3133,6 +3175,61 @@ static struct efx_debugfs_parameter netdev_debugfs[] = {
 };
 #endif /* CONFIG_SFC_DEBUGFS */
 
+static int efx_ef10_probe_multicast_chaining(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	unsigned int enabled, implemented;
+	bool want_workaround_26807;
+	int rc;
+
+	rc = efx_mcdi_get_workarounds(efx, &implemented, &enabled);
+	if (rc == -ENOSYS) {
+		/* GET_WORKAROUNDS was implemented before this workaround,
+		 * thus it must be unavailable in this firmware.
+		 */
+		nic_data->workaround_26807 = false;
+		return 0;
+	}
+	if (rc)
+		return rc;
+	want_workaround_26807 = multicast_chaining && \
+		(implemented & MC_CMD_GET_WORKAROUNDS_OUT_BUG26807);
+	nic_data->workaround_26807 =
+		!!(enabled & MC_CMD_GET_WORKAROUNDS_OUT_BUG26807);
+
+	if (want_workaround_26807 && !nic_data->workaround_26807) {
+		unsigned int flags;
+
+		rc = efx_mcdi_set_workaround(efx,
+					     MC_CMD_WORKAROUND_BUG26807,
+					     true, &flags);
+		if (!rc) {
+			if (flags &
+			    1 << MC_CMD_WORKAROUND_EXT_OUT_FLR_DONE_LBN) {
+				netif_info(efx, drv, efx->net_dev,
+					   "other functions on NIC have been reset\n");
+
+				/* With MCFW v4.6.x and earlier, the
+				 * boot count will have incremented,
+				 * so re-read the warm_boot_count
+				 * value now to ensure this function
+				 * doesn't think it has changed next
+				 * time it checks.
+				 */
+				rc = efx_ef10_get_warm_boot_count(efx);
+				if (rc >= 0) {
+					nic_data->warm_boot_count = rc;
+					rc = 0;
+				}
+			}
+			nic_data->workaround_26807 = true;
+		} else if (rc == -EPERM) {
+			rc = 0;
+		}
+	}
+	return rc;
+}
+
 static int efx_ef10_filter_table_probe(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
@@ -3141,9 +3238,12 @@ static int efx_ef10_filter_table_probe(struct efx_nic *efx)
 	bool additional_rss = efx_ef10_has_cap(nic_data->datapath_caps,
 					       ADDITIONAL_RSS_MODES);
 	bool encap = efx_ef10_has_cap(nic_data->datapath_caps, VXLAN_NVGRE);
-	int rc = efx_mcdi_filter_table_probe(efx, nic_data->workaround_26807,
-					     rss_limited, additional_rss,
-					     encap);
+	int rc = efx_ef10_probe_multicast_chaining(efx);
+
+	if (rc)
+		return rc;
+	rc = efx_mcdi_filter_table_probe(efx, nic_data->workaround_26807,
+					 rss_limited, additional_rss, encap);
 
 	if (rc)
 		return rc;
@@ -3160,10 +3260,7 @@ static int efx_ef10_filter_table_up(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	struct efx_ef10_vlan *vlan;
-	int rc = efx_mcdi_filter_table_up(efx);
-
-	if (rc)
-		return rc;
+	int rc = 0;
 
 	list_for_each_entry(vlan, &nic_data->vlan_list, list) {
 		rc = efx_mcdi_filter_add_vlan(efx, vlan->vid);
@@ -3295,70 +3392,10 @@ static int efx_ef10_ev_init(struct efx_channel *channel)
 {
 	struct efx_nic *efx = channel->efx;
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-	unsigned int enabled, implemented;
 	bool use_v2 = efx_ef10_has_cap(nic_data->datapath_caps2, INIT_EVQ_V2);
 	bool cut_thru = !efx_ef10_has_cap(nic_data->datapath_caps, RX_BATCHING);
 
-	int rc = efx_mcdi_ev_init(channel, cut_thru, use_v2);
-
-	if (rc || channel->channel)
-		return rc;
-
-	/* Successfully created event queue on channel 0 */
-	rc = efx_mcdi_get_workarounds(efx, &implemented, &enabled);
-	if (rc == -ENOSYS) {
-		/* GET_WORKAROUNDS was implemented before this workaround,
-		 * thus it must be unavailable in this firmware.
-		 */
-		nic_data->workaround_26807 = false;
-		rc = 0;
-	} else if (rc) {
-		goto fail;
-	} else {
-		bool want_workaround_26807 = multicast_chaining && \
-			(implemented & MC_CMD_GET_WORKAROUNDS_OUT_BUG26807);
-		nic_data->workaround_26807 =
-			!!(enabled & MC_CMD_GET_WORKAROUNDS_OUT_BUG26807);
-
-		if (want_workaround_26807 && !nic_data->workaround_26807) {
-			unsigned int flags;
-
-			rc = efx_mcdi_set_workaround(efx,
-						     MC_CMD_WORKAROUND_BUG26807,
-						     true, &flags);
-
-			if (!rc) {
-				if (flags &
-				    1 << MC_CMD_WORKAROUND_EXT_OUT_FLR_DONE_LBN) {
-					netif_info(efx, drv, efx->net_dev,
-						   "other functions on NIC have been reset\n");
-
-					/* With MCFW v4.6.x and earlier, the
-					 * boot count will have incremented,
-					 * so re-read the warm_boot_count
-					 * value now to ensure this function
-					 * doesn't think it has changed next
-					 * time it checks.
-					 */
-					rc = efx_ef10_get_warm_boot_count(efx);
-					if (rc >= 0) {
-						nic_data->warm_boot_count = rc;
-						rc = 0;
-					}
-				}
-				nic_data->workaround_26807 = true;
-			} else if (rc == -EPERM) {
-				rc = 0;
-			}
-		}
-	}
-
-	if (!rc)
-		return 0;
-
-fail:
-	efx_mcdi_ev_fini(channel);
-	return rc;
+	return efx_mcdi_ev_init(channel, cut_thru, use_v2);
 }
 
 static void efx_ef10_handle_rx_wrong_queue(struct efx_rx_queue *rx_queue,
@@ -4777,7 +4814,7 @@ static int efx_ef10_vlan_rx_add_vid(struct efx_nic *efx, __be16 proto, u16 vid)
 	if (proto != htons(ETH_P_8021Q))
 		return -EINVAL;
 
-	return efx_mcdi_filter_add_vlan(efx, vid);
+	return efx_ef10_add_vlan(efx, vid);
 }
 
 static int efx_ef10_vlan_rx_kill_vid(struct efx_nic *efx, __be16 proto, u16 vid)
@@ -5517,6 +5554,14 @@ static int efx_ef10_probe(struct efx_nic *efx)
 	if (rc)
 		return rc;
 
+#ifdef EFX_NOT_UPSTREAM
+	if (efx_rss_use_fixed_key) {
+		BUILD_BUG_ON(sizeof(efx_rss_fixed_key) <
+			     sizeof(efx->rss_context.rx_hash_key));
+		memcpy(&efx->rss_context.rx_hash_key, efx_rss_fixed_key,
+		       sizeof(efx->rss_context.rx_hash_key));
+	} else
+#endif
 	netdev_rss_key_fill(efx->rss_context.rx_hash_key,
 			    sizeof(efx->rss_context.rx_hash_key));
 
@@ -5589,6 +5634,7 @@ static void efx_ef10_remove(struct efx_nic *efx)
 	efx->nic_data = NULL;
 }
 
+#if defined(CONFIG_SFC_SRIOV)
 static void efx_ef10_remove_vf(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
@@ -5614,7 +5660,6 @@ static void efx_ef10_remove_vf(struct efx_nic *efx)
 #endif
 }
 
-#if defined(CONFIG_SFC_SRIOV)
 static int efx_ef10_probe_vf(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data;
@@ -5983,7 +6028,6 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.sriov_init = efx_ef10_sriov_init,
 	.sriov_fini = efx_ef10_sriov_fini,
 	.sriov_wanted = efx_ef10_sriov_wanted,
-	.sriov_reset = efx_port_dummy_op_void,
 	.sriov_flr = efx_ef10_sriov_flr,
 	.sriov_set_vf_mac = efx_ef10_sriov_set_vf_mac,
 	.sriov_set_vf_vlan = efx_ef10_sriov_set_vf_vlan,

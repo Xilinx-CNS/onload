@@ -87,7 +87,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.2.1.1024"
+#define EFX_DRIVER_VERSION	"5.2.1.1028"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -151,7 +151,7 @@
 /* Size of an RX scatter buffer.  Small enough to pack 2 into a 4K page,
  * and should be a multiple of the cache line size.
  */
-#define EFX_RX_USR_BUF_SIZE	(2048 - 256)
+#define EFX_RX_USR_BUF_SIZE	(2048 - 256 - XDP_PACKET_HEADROOM)
 #else
 /* Size of an RX scatter buffer. */
 #define EFX_RX_USR_BUF_SIZE	(PAGE_SIZE - L1_CACHE_BYTES)
@@ -166,7 +166,6 @@
 #else
 #define EFX_RX_BUF_ALIGNMENT	4
 #endif
-
 
 /* Forward declare Precision Time Protocol (PTP) support structure. */
 struct efx_ptp_data;
@@ -272,6 +271,9 @@ struct efx_tx_buffer {
 #define EFX_TX_BUF_OPTION	0x10	/* empty buffer for option descriptor */
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_TX)
 #define EFX_TX_BUF_XDP		0x20	/* buffer was sent with XDP */
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#define EFX_TX_BUF_XSK		0x80	/* buffer was sent for XSK */
+#endif
 #endif
 #define EFX_TX_BUF_TSO_V3	0x40	/* empty buffer for a TSO_V3 descriptor */
 
@@ -306,6 +308,7 @@ struct efx_tx_buffer {
  * @piobuf_offset: Buffer offset to be specified in PIO descriptors
  * @timestamping: Is timestamping enabled for this channel?
  * @xdp_tx: Is this an XDP tx queue?
+ * @umem: umem assigned to this queue.
  * @handle_vlan: VLAN insertion offload handler.
  * @handle_tso: TSO offload handler.
  * @read_count: Current read pointer.
@@ -371,6 +374,9 @@ struct efx_tx_queue {
 	unsigned int piobuf_offset;
 	bool timestamping;
 	bool xdp_tx;
+#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XDP_SOCK)
+	struct xdp_umem *umem;
+#endif
 #ifdef CONFIG_SFC_DEBUGFS
 	struct dentry *debug_dir;
 #endif
@@ -432,7 +438,16 @@ struct efx_tx_queue {
  */
 struct efx_rx_buffer {
 	dma_addr_t dma_addr;
-	struct page *page;
+	union {
+		struct page *page;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+		struct {
+			void *addr;
+			u64 handle;
+		};
+#endif
+	};
+
 	u16 page_offset;
 	u16 len;
 	u16 flags;
@@ -451,6 +466,10 @@ struct efx_rx_buffer {
 #define EFX_RX_PAGE_IN_RECYCLE_RING	0x0100
 #define EFX_RX_PKT_CSUM_LEVEL		0x0200
 #define EFX_RX_BUF_VLAN_XTAG		0x8000
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#define EFX_RX_BUF_FROM_UMEM		0x0400
+#define EFX_RX_BUF_XSK_REUSE		0x0800
+#endif
 
 /**
  * struct efx_rx_page_state - Page-based rx buffer state
@@ -505,6 +524,8 @@ struct efx_rx_page_state {
  * @recycle_count: RX buffer recycle counter.
  * @slow_fill: Timer used to defer efx_nic_generate_fill_event().
  * @grant_work: workitem used to grant credits to the MAE if @grant_credits
+ * @umem: umem assigned to this queue.
+ * @zca: zero copy allocator for rx_queue
  * @xdp_rxq_info: XDP specific RX queue information.
  */
 struct efx_rx_queue {
@@ -559,6 +580,10 @@ struct efx_rx_queue {
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	struct xdp_umem *umem;
+	struct zero_copy_allocator zca; /* ZC allocator anchor */
+#endif
 	struct xdp_rxq_info xdp_rxq_info;
 #endif
 };
@@ -740,6 +765,7 @@ struct efx_rss_context {
  * @rx_pkt_index: Ring index of first buffer for next packet to be delivered
  *	by __efx_rx_packet(), if @rx_pkt_n_frags != 0
  * @rx_list: list of SKBs from current RX, awaiting processing
+ * @zc: zero-copy enabled on channel
  * @rx_queue: RX queue for this channel
  * @tx_queue_count: Number of TX queues pointed to by %tx_queues
  * @tx_queues: Pointer to TX queues for this channel
@@ -832,6 +858,9 @@ struct efx_channel {
 	struct sk_buff_head *rx_list;
 #endif
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	bool zc;
+#endif
 	struct efx_rx_queue rx_queue;
 	unsigned int tx_queue_count;
 	struct efx_tx_queue *tx_queues;
@@ -1199,6 +1228,7 @@ struct efx_nic_errors {
 };
 
 struct vfdi_status;
+struct sfc_rdma_dev;
 
 /* Useful collections of RSS flags.  Caller needs mcdi_pcol.h. */
 #define RSS_CONTEXT_FLAGS_DEFAULT	(1 << MC_CMD_RSS_CONTEXT_GET_FLAGS_OUT_TOEPLITZ_IPV4_EN_LBN |\
@@ -1321,6 +1351,7 @@ struct efx_mtd {
  * @reset_work: Scheduled reset workitem
  * @membase_phys: Memory BAR value as physical address
  * @membase: Memory BAR value
+ * @rdev: Device information for the virtual bus
  * @vi_stride: step between per-VI registers / memory regions
  * @interrupt_mode: Interrupt mode
  * @timer_quantum_ns: Interrupt timer quantum, in nanoseconds
@@ -1495,6 +1526,7 @@ struct efx_nic {
 #endif
 	resource_size_t membase_phys;
 	void __iomem *membase;
+	struct sfc_rdma_dev *rdev;
 
 	unsigned int vi_stride;
 
@@ -2217,7 +2249,6 @@ struct efx_nic_type {
 	int (*sriov_init)(struct efx_nic *efx);
 	void (*sriov_fini)(struct efx_nic *efx);
 	bool (*sriov_wanted)(struct efx_nic *efx);
-	void (*sriov_reset)(struct efx_nic *efx);
 	int (*sriov_configure)(struct efx_nic *efx, int num_vfs);
 	void (*sriov_flr)(struct efx_nic *efx, unsigned int vf_i);
 	int (*sriov_set_vf_mac)(struct efx_nic *efx, int vf_i, u8 *mac);
@@ -2328,11 +2359,37 @@ efx_get_xdp_channel(struct efx_nic *efx, unsigned int index)
 	return efx->channel[efx_xdp_channel_offset(efx) + index];
 }
 
+static inline struct efx_channel *
+efx_get_rx_queue_channel(struct efx_rx_queue *rx_queue)
+{
+	struct efx_channel *channel = container_of(rx_queue,
+						   struct efx_channel,
+						   rx_queue);
+	return channel;
+}
+
 static inline bool efx_channel_has_tx_queues(struct efx_channel *channel)
 {
 	return channel->channel - channel->efx->tx_channel_offset <
 	       efx_tx_channels(channel->efx);
 }
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+static inline struct efx_tx_queue *
+efx_channel_get_xsk_tx_queue(struct efx_channel *channel)
+{
+	if (unlikely(channel->tx_queue_count <= 1))
+		return NULL;
+
+	/* The Last TX queue is used for XSK Transmits */
+	return channel->tx_queues + (channel->tx_queue_count - 1);
+}
+
+static inline bool efx_is_xsk_tx_queue(struct efx_tx_queue *tx_queue)
+{
+	return (tx_queue->label == (tx_queue->channel->tx_queue_count - 1));
+}
+#endif
 
 static inline struct efx_tx_queue *
 efx_channel_get_tx_queue(struct efx_channel *channel, unsigned int label)

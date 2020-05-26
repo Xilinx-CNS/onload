@@ -71,7 +71,20 @@ TRACE_EVENT(sfc_receive,
 		__entry->vlan_proto = ETH_P_8021Q;
 		__entry->vlan_tci = vlan_tci;
 #endif
-		__entry->protocol = ntohs(skb->protocol);
+		{
+			const struct ethhdr* eth;
+			unsigned int hlen;
+			unsigned int off;
+
+			off = skb_gro_offset(skb);
+			hlen = off + sizeof(*eth);
+			eth = skb_gro_header_hard((struct sk_buff *) skb, hlen) ?
+			      skb_gro_header_slow((struct sk_buff *) skb, hlen, off) :
+			      skb_gro_header_fast((struct sk_buff *) skb, off);
+			__entry->protocol = gro && eth ?
+				ntohs(eth->h_proto) :
+				ntohs(skb->protocol);
+		};
 		__entry->ip_summed = skb->ip_summed;
 #ifdef EFX_HAVE_SKB_HASH
 		__entry->rxhash = skb->hash;

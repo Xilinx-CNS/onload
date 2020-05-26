@@ -729,7 +729,10 @@ static int efx_test_loopbacks(struct efx_nic *efx, struct efx_self_tests *tests,
 					 payload_dest);
 
 		temp_filter_id = efx_filter_insert_filter(efx, &spec, false);
-		if (temp_filter_id < 0)
+		/* RSS filters are not supported in some firmware variants */
+		if (temp_filter_id == -EOPNOTSUPP)
+			return 0;
+		else if (temp_filter_id < 0)
 			return temp_filter_id;
 	}
 

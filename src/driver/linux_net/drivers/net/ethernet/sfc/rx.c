@@ -35,6 +35,9 @@
 #ifdef CONFIG_SFC_TRACING
 #include <trace/events/sfc.h>
 #endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#include <net/xdp_sock.h>
+#endif
 #include "mcdi_pcol.h"
 
 #ifdef EFX_NOT_UPSTREAM
@@ -160,12 +163,19 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 	struct efx_rx_buffer *rx_buf = *_rx_buf;
 	struct efx_nic *efx = channel->efx;
 	struct sk_buff *skb = NULL;
+	unsigned int data_cp_len = efx->rx_prefix_size + hdr_len;
+	unsigned int alloc_len = efx->rx_ip_align + efx->rx_prefix_size +
+			hdr_len;
 	u8 *new_eh;
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc) {
+		alloc_len = rx_buf->len;
+		data_cp_len = rx_buf->len;
+	}
+#endif
 	/* Allocate an SKB to store the headers */
-	skb = netdev_alloc_skb(efx->net_dev,
-			       efx->rx_ip_align + efx->rx_prefix_size +
-			       hdr_len);
+	skb = netdev_alloc_skb(efx->net_dev, alloc_len);
 	if (unlikely(skb == NULL)) {
 		atomic_inc(&efx->n_rx_noskb_drops);
 		return NULL;
@@ -174,8 +184,14 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 	EFX_WARN_ON_ONCE_PARANOID(rx_buf->len < hdr_len);
 
 	memcpy(skb->data + efx->rx_ip_align, *ehp - efx->rx_prefix_size,
-	       efx->rx_prefix_size + hdr_len);
+	       data_cp_len);
 	skb_reserve(skb, efx->rx_ip_align + efx->rx_prefix_size);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc) {
+		__skb_put(skb, rx_buf->len);
+		goto finalize_skb;
+	}
+#endif
 	new_eh = skb->data;
 	__skb_put(skb, hdr_len);
 
@@ -216,6 +232,9 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 		n_frags = 0;
 	}
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+finalize_skb:
+#endif
 	/* Move past the ethernet header */
 	skb->protocol = eth_type_trans(skb, efx->net_dev);
 
@@ -278,7 +297,13 @@ void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 	/* Release and/or sync the DMA mapping - assumes all RX buffers
 	 * consumed in-order per RX queue.
 	 */
-	efx_sync_rx_buffer(efx, rx_buf, rx_buf->len);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc)
+		dma_sync_single_for_cpu(&efx->pci_dev->dev, rx_buf->dma_addr,
+					len, DMA_BIDIRECTIONAL);
+	else
+#endif
+		efx_sync_rx_buffer(efx, rx_buf, rx_buf->len);
 
 	/* Prefetch nice and early so data will (hopefully) be in cache by
 	 * the time we look at it.
@@ -287,6 +312,11 @@ void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 
 	rx_buf->page_offset += efx->rx_prefix_size;
 	rx_buf->len -= efx->rx_prefix_size;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	/* XDP does not support more than 1 frag */
+	if (channel->zc)
+		goto skip_recycle_pages;
+#endif
 
 	if (n_frags > 1) {
 		/* Release/sync DMA mapping for additional fragments.
@@ -308,6 +338,9 @@ void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 	rx_buf = efx_rx_buffer(rx_queue, index);
 	efx_recycle_rx_pages(channel, rx_buf, n_frags);
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+skip_recycle_pages:
+#endif
 	/* Pipeline receives so that we give time for packet headers to be
 	 * prefetched into cache.
 	 */
@@ -325,18 +358,23 @@ static void efx_rx_deliver(struct efx_channel *channel, u8 *eh,
 	u16 rx_buf_vlan_tci = rx_buf->vlan_tci;
 #endif
 	u16 rx_buf_flags = rx_buf->flags;
+	struct efx_rx_queue *rx_queue;
+	bool free_buf_on_fail = true;
 	struct sk_buff *skb;
 
+	rx_queue = efx_channel_get_rx_queue(channel);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc)
+		free_buf_on_fail = false;
+#endif
 	skb = efx_rx_mk_skb(channel, &rx_buf, n_frags, &eh, hdr_len);
 
 	if (unlikely(skb == NULL)) {
-		struct efx_rx_queue *rx_queue;
-
-		rx_queue = efx_channel_get_rx_queue(channel);
-		efx_free_rx_buffers(rx_queue, rx_buf, n_frags);
+		if (free_buf_on_fail)
+			efx_free_rx_buffers(rx_queue, rx_buf, n_frags);
 		return;
 	}
-	skb_record_rx_queue(skb, channel->rx_queue.core_index);
+	skb_record_rx_queue(skb, rx_queue->core_index);
 
 	/* Set the SKB flags */
 	skb_checksum_none_assert(skb);
@@ -402,6 +440,8 @@ void __efx_rx_packet(struct efx_channel *channel)
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
 	struct vlan_ethhdr *veh;
 #endif
+	bool rx_deliver = false;
+	int rc;
 
 	/* Read length from the prefix if necessary.  This already
 	 * excludes the length of the prefix itself.
@@ -423,8 +463,26 @@ void __efx_rx_packet(struct efx_channel *channel)
 		goto out;
 	}
 
-	if (!efx_xdp_rx(efx, channel, rx_buf, &eh))
+	rc = efx_xdp_rx(efx, channel, rx_buf, &eh);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (channel->zc) {
+		if (rc == XDP_REDIRECT || rc == XDP_TX)
+			goto free_buf;
+		else
+			efx_recycle_rx_bufs_zc(channel, rx_buf,
+					       channel->rx_pkt_n_frags);
+	} else if (rc != XDP_PASS) {
 		goto out;
+	}
+#else
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
+	if (rc != XDP_PASS)
+		goto out;
+#else
+	if (rc != -ENOTSUPP)
+		goto out;
+#endif
+#endif
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
 	/* Fake VLAN tagging */
@@ -450,6 +508,12 @@ void __efx_rx_packet(struct efx_channel *channel)
 	}
 #endif
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM) {
+		rx_deliver = true;
+		goto deliver_now;
+	}
+#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_FEATURES) || defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
 	if (unlikely(!(efx->net_dev->features & NETIF_F_RXCSUM)))
 #else
@@ -467,16 +531,29 @@ void __efx_rx_packet(struct efx_channel *channel)
 		/* fall through */
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_GRO)
-	if ((rx_buf->flags & EFX_RX_PKT_TCP) && !channel->type->receive_skb
+		if ((rx_buf->flags & EFX_RX_PKT_TCP) &&
+		    !channel->type->receive_skb
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
-	    && !efx_channel_busy_polling(channel)
+		    && !efx_channel_busy_polling(channel)
 #endif
-	    )
-		efx_rx_packet_gro(channel, rx_buf, channel->rx_pkt_n_frags,
-				  eh, 0);
-	else
+		   ) {
+			efx_rx_packet_gro(channel, rx_buf,
+					  channel->rx_pkt_n_frags,
+					  eh, 0);
+		} else {
+			rx_deliver = true;
+			goto deliver_now;
+		}
 #endif
+deliver_now:
+	if (rx_deliver)
 		efx_rx_deliver(channel, eh, rx_buf, channel->rx_pkt_n_frags);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+free_buf:
+	if (channel->zc)
+		efx_free_rx_buffers(&channel->rx_queue, rx_buf,
+				    channel->rx_pkt_n_frags);
+#endif
 out:
 	channel->rx_pkt_n_frags = 0;
 }

@@ -14,6 +14,7 @@
 #endif
 #include "efx_common.h"
 #include "efx_channels.h"
+#include "efx_virtbus.h"
 #include "debugfs.h"
 #include "io.h"
 #include "ef100_nic.h"
@@ -449,6 +450,7 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 #endif
 	dev_close(efx->net_dev);
 	rtnl_unlock();
+	efx_virtbus_unregister(efx);
 
 	/* Unregistering our netdev notifier triggers unbinding of TC indirect
 	 * blocks, so we have to do it before PCI removal.
@@ -564,6 +566,11 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	rc = efx->type->probe(efx);
 	if (rc)
 		goto fail;
+
+	rc = efx_virtbus_register(efx);
+	if (rc)
+		pci_warn(efx->pci_dev,
+			 "Unable to register virtual bus driver (%d)\n", rc);
 
 	netif_dbg(efx, probe, efx->net_dev, "initialisation successful\n");
 

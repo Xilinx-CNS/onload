@@ -44,6 +44,12 @@ void efx_free_rx_buffers(struct efx_rx_queue *rx_queue,
 			 struct efx_rx_buffer *rx_buf,
 			 unsigned int num_bufs);
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+void efx_recycle_rx_bufs_zc(struct efx_channel *channel,
+			    struct efx_rx_buffer *rx_buf,
+			    unsigned int n_frags);
+#endif
+
 void efx_recycle_rx_pages(struct efx_channel *channel,
 			  struct efx_rx_buffer *rx_buf,
 			  unsigned int n_frags);
@@ -54,6 +60,10 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 
 static inline u8 *efx_rx_buf_va(struct efx_rx_buffer *buf)
 {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	if (buf->flags & EFX_RX_BUF_FROM_UMEM)
+		return ((u8 *)buf->addr + buf->page_offset);
+#endif
 	return page_address(buf->page) + buf->page_offset;
 }
 

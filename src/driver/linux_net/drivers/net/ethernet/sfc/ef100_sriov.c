@@ -10,6 +10,7 @@
 #include "ef100_rep.h"
 #include "ef100_nic.h"
 
+#if defined(CONFIG_SFC_SRIOV)
 static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
@@ -89,3 +90,4 @@ int efx_ef100_sriov_configure(struct efx_nic *efx, int num_vfs)
 	else
 		return efx_ef100_pci_sriov_enable(efx, num_vfs);
 }
+#endif

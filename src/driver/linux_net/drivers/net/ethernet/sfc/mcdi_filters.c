@@ -214,6 +214,11 @@ static struct efx_debugfs_parameter filter_debugfs[] = {
 		       efx_debugfs_read_dev_uc_list),
 	_EFX_PARAMETER(struct efx_mcdi_filter_table, dev_mc_list,
 		       efx_debugfs_read_dev_mc_list),
+	EFX_BOOL_PARAMETER(struct efx_mcdi_filter_table, uc_promisc),
+	EFX_BOOL_PARAMETER(struct efx_mcdi_filter_table, mc_promisc),
+	EFX_BOOL_PARAMETER(struct efx_mcdi_filter_table, mc_promisc_last),
+	EFX_BOOL_PARAMETER(struct efx_mcdi_filter_table, mc_overflow),
+	EFX_BOOL_PARAMETER(struct efx_mcdi_filter_table, mc_chaining),
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	_EFX_PARAMETER(struct efx_mcdi_filter_table, kernel_blocked,
@@ -643,11 +648,6 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 		return -ENETDOWN;
 	down_write(&table->lock);
 
-	if (!table->entry) {
-		rc = -ENETDOWN;
-		goto out_unlock;
-	}
-
 	/* Support only RX or RX+TX filters. */
 	if ((spec->flags & EFX_FILTER_FLAG_RX) == 0) {
 		rc = -EINVAL;
@@ -904,9 +904,6 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 	struct efx_filter_spec *spec;
 	DEFINE_WAIT(wait);
 	int rc;
-
-	if (!table->entry)
-		return -ENETDOWN;
 
 	spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 	if (!spec ||
@@ -1432,14 +1429,14 @@ int efx_mcdi_filter_clear_rx(struct efx_nic *efx,
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
 	down_write(&table->lock);
-	if (table->entry)
-		for (i = 0; i < EFX_MCDI_FILTER_TBL_ROWS; i++) {
-			rc = efx_mcdi_filter_remove_internal(efx, priority_mask,
-							     i, true);
-			if (rc && rc != -ENOENT)
-				break;
-			rc = 0;
-		}
+
+	for (i = 0; i < EFX_MCDI_FILTER_TBL_ROWS; i++) {
+		rc = efx_mcdi_filter_remove_internal(efx, priority_mask,
+						     i, true);
+		if (rc && rc != -ENOENT)
+			break;
+		rc = 0;
+	}
 
 	up_write(&table->lock);
 	up_read(&efx->filter_sem);
@@ -1558,15 +1555,14 @@ u32 efx_mcdi_filter_count_rx_used(struct efx_nic *efx,
 	table = efx->filter_state;
 	down_read(&table->lock);
 
-	if (table->entry)
-		for (filter_idx = 0;
-		     filter_idx < EFX_MCDI_FILTER_TBL_ROWS;
-		     filter_idx++) {
-			spec = efx_mcdi_filter_entry_spec(table, filter_idx);
+	for (filter_idx = 0;
+	     filter_idx < EFX_MCDI_FILTER_TBL_ROWS;
+	     filter_idx++) {
+		spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 
-			if (spec && spec->priority == priority)
-				++count;
-		}
+		if (spec && spec->priority == priority)
+			++count;
+	}
 	up_read(&table->lock);
 	up_read(&efx->filter_sem);
 	return count;
@@ -1592,23 +1588,22 @@ s32 efx_mcdi_filter_get_rx_ids(struct efx_nic *efx,
 	table = efx->filter_state;
 	down_read(&table->lock);
 
-	if (table->entry)
-		for (filter_idx = 0;
-		     filter_idx < EFX_MCDI_FILTER_TBL_ROWS;
-		     filter_idx++) {
-			spec = efx_mcdi_filter_entry_spec(table, filter_idx);
-			if (spec && spec->priority == priority) {
-				if (count == size) {
-					count = -EMSGSIZE;
-					break;
-				}
-				buf[count++] =
-					efx_mcdi_filter_make_filter_id(
-						efx_mcdi_filter_pri(table,
-								    spec),
-						filter_idx);
+	for (filter_idx = 0;
+	     filter_idx < EFX_MCDI_FILTER_TBL_ROWS;
+	     filter_idx++) {
+		spec = efx_mcdi_filter_entry_spec(table, filter_idx);
+		if (spec && spec->priority == priority) {
+			if (count == size) {
+				count = -EMSGSIZE;
+				break;
 			}
+			buf[count++] =
+				efx_mcdi_filter_make_filter_id(
+					efx_mcdi_filter_pri(table,
+							    spec),
+					filter_idx);
 		}
+	}
 	up_read(&table->lock);
 	up_read(&efx->filter_sem);
 	return count;
@@ -1782,6 +1777,13 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool mc_chaining,
 	if (!table)
 		return -ENOMEM;
 
+	table->entry = vzalloc(EFX_MCDI_FILTER_TBL_ROWS *
+			       sizeof(*table->entry));
+	if (!table->entry) {
+		rc = -ENOMEM;
+		goto fail;
+	}
+
 	efx->filter_state = table;
 
 	INIT_LIST_HEAD(&table->vlan_list);
@@ -1837,20 +1839,9 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool mc_chaining,
 
 fail:
 	efx->filter_state = NULL;
+	kfree(table->entry);
 	kfree(table);
 	return rc;
-}
-
-int efx_mcdi_filter_table_up(struct efx_nic *efx)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-
-	table->entry = vzalloc(EFX_MCDI_FILTER_TBL_ROWS *
-			       sizeof(*table->entry));
-	if (!table->entry)
-		return -ENOMEM;
-
-	return 0;
 }
 
 static void efx_mcdi_filter_invalidate_filter_id(struct efx_nic *efx,
@@ -2008,7 +1999,7 @@ void efx_mcdi_filter_table_down(struct efx_nic *efx)
 	unsigned int filter_idx;
 	int rc;
 
-	if (!table || !table->entry)
+	if (!table)
 		return;
 
 	efx_rwsem_assert_write_locked(&efx->filter_sem);
@@ -2034,9 +2025,6 @@ void efx_mcdi_filter_table_down(struct efx_nic *efx)
 					__func__, filter_idx, rc);
 		kfree(spec);
 	}
-
-	vfree(table->entry);
-	table->entry = NULL;
 }
 
 void efx_mcdi_filter_table_remove(struct efx_nic *efx)
@@ -2051,6 +2039,8 @@ void efx_mcdi_filter_table_remove(struct efx_nic *efx)
 	efx_trim_debugfs_port(efx, filter_debugfs);
 #endif
 
+	vfree(table->entry);
+	table->entry = NULL;
 	efx->filter_state = NULL;
 	kfree(table);
 }
@@ -2416,11 +2406,6 @@ bool efx_mcdi_filter_rfs_expire_one(struct efx_nic *efx, u32 flow_id,
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
 	down_write(&table->lock);
-
-	WARN_ON(!table->entry);
-	if (!table->entry)
-		goto out_unlock;
-
 	spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 
 	/* If it's somehow gone, or been replaced with a higher priority filter

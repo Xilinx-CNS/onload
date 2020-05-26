@@ -576,7 +576,6 @@ static inline int efx_mcdi_mon_probe(struct efx_nic *efx) { return 0; }
 static inline void efx_mcdi_mon_remove(struct efx_nic *efx) {}
 #endif
 
-#ifdef CONFIG_SFC_MTD
 int efx_mcdi_nvram_update_start(struct efx_nic *efx, unsigned int type);
 int efx_mcdi_nvram_read(struct efx_nic *efx, unsigned int type,
 			loff_t offset, u8 *buffer, size_t length);
@@ -585,6 +584,8 @@ int efx_mcdi_nvram_write(struct efx_nic *efx, unsigned int type,
 int efx_mcdi_nvram_erase(struct efx_nic *efx, unsigned int type,
 			 loff_t offset, size_t length);
 int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type);
+
+#ifdef CONFIG_SFC_MTD
 int efx_mcdi_mtd_read(struct mtd_info *mtd, loff_t start, size_t len,
 		      size_t *retlen, u8 *buffer);
 int efx_mcdi_mtd_erase(struct mtd_info *mtd, loff_t start, size_t len);

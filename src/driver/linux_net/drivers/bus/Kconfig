@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# Bus Devices
+#
+
+menu "Bus devices"
+
+config VIRTUAL_BUS
+       tristate "Software based Virtual Bus"
+       depends on PM
+       help
+         Provides a software bus for virtbus_devices to be added to it
+         and virtbus_drivers to be registered on it.  It matches driver
+         and device based on id and calls the driver's pobe routine.
+         One example is the irdma driver needing to connect with various
+         PCI LAN drivers to request resources (queues) to be able to perform
+         its function.
+
+endmenu

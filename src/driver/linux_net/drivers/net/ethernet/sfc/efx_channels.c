@@ -1211,7 +1211,15 @@ static int efx_set_channel_tx(struct efx_nic *efx, struct efx_channel *channel)
 		tx_queue = &channel->tx_queues[j];
 		tx_queue->efx = efx;
 		tx_queue->channel = channel;
-		tx_queue->csum_offload = j;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+		/* for xsk queue, no csum_offload is used as the onus is put on,
+		 * application for the same.
+		 */
+		if (j && (j == channel->tx_queue_count - 1))
+			tx_queue->csum_offload =  EFX_TXQ_TYPE_NO_OFFLOAD;
+		else
+#endif
+			tx_queue->csum_offload = j;
 		tx_queue->label = j;
 		tx_queue->queue = queue_base + j;
 		/* When using an even number of queues, for even numbered
@@ -1670,7 +1678,8 @@ out:
 			  "unable to restart interrupts on channel reallocation\n");
 		efx_schedule_reset(efx, RESET_TYPE_DISABLE);
 	} else {
-		efx_start_all(efx);
+		if (efx->state == STATE_NET_UP)
+			efx_start_all(efx);
 		efx_device_attach_if_not_resetting(efx);
 	}
 	return rc;
@@ -1888,6 +1897,85 @@ void efx_disable_interrupts(struct efx_nic *efx)
 	efx->type->irq_disable_non_ev(efx);
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+int efx_channel_start_xsk_queue(struct efx_channel *channel)
+{
+	struct efx_rx_queue *rx_queue;
+	struct efx_tx_queue *tx_queue;
+	int rc = 0;
+
+	efx_for_each_channel_rx_queue(rx_queue, channel) {
+		channel->rx_list = NULL;
+		rc = efx_init_rx_queue(rx_queue);
+		if (rc)
+			goto fail;
+		atomic_inc(&channel->efx->active_queues);
+		rx_queue->refill_enabled = true;
+		efx_fast_push_rx_descriptors(rx_queue, false);
+	}
+
+	tx_queue = efx_channel_get_xsk_tx_queue(channel);
+	if (tx_queue) {
+		rc = efx_init_tx_queue(tx_queue);
+		if (rc)
+			goto fail;
+		atomic_inc(&channel->efx->active_queues);
+	}
+
+	return 0;
+fail:
+	return rc;
+}
+
+int efx_channel_stop_xsk_queue(struct efx_channel *channel)
+{
+	struct efx_rx_queue *rx_queue;
+	struct efx_tx_queue *tx_queue;
+	unsigned int active_queues;
+	int pending;
+
+	if (efx_channel_has_rx_queue(channel)) {
+		/* Stop RX refill */
+		efx_for_each_channel_rx_queue(rx_queue, channel)
+			rx_queue->refill_enabled = false;
+	}
+
+	/* RX packet processing is pipelined, so wait for the
+	 * NAPI handler to complete.
+	 */
+	efx_stop_eventq(channel);
+	efx_start_eventq(channel);
+
+	active_queues = atomic_read(&channel->efx->active_queues);
+	efx_for_each_channel_rx_queue(rx_queue, channel) {
+		efx_mcdi_rx_fini(rx_queue);
+		active_queues--;
+	}
+	tx_queue = efx_channel_get_xsk_tx_queue(channel);
+	if (tx_queue) {
+		efx_mcdi_tx_fini(tx_queue);
+		active_queues--;
+	}
+	wait_event_timeout(channel->efx->flush_wq,
+			   atomic_read(&channel->efx->active_queues) ==
+			   active_queues,
+			   msecs_to_jiffies(EFX_MAX_FLUSH_TIME));
+	pending = atomic_read(&channel->efx->active_queues);
+	if (pending != active_queues) {
+		netif_err(channel->efx, hw, channel->efx->net_dev,
+			  "failed to flush %d queues\n",
+			  pending);
+		return -ETIMEDOUT;
+	}
+	efx_for_each_channel_rx_queue(rx_queue, channel)
+		efx_fini_rx_queue(rx_queue);
+	if (tx_queue)
+		efx_fini_tx_queue(tx_queue);
+
+	return 0;
+}
+#endif
+
 int efx_start_channels(struct efx_nic *efx)
 {
 	struct efx_channel *channel;
@@ -1965,7 +2053,7 @@ void efx_stop_channels(struct efx_nic *efx)
 		} else {
 			netif_err(efx, drv, efx->net_dev,
 				  "Recover or disable due to flush queue failure\n");
-			efx_schedule_reset(efx, RESET_TYPE_RECOVER_OR_DISABLE);
+			efx_schedule_reset(efx, RESET_TYPE_RECOVER_OR_ALL);
 		}
 	} else {
 		netif_dbg(efx, drv, efx->net_dev,

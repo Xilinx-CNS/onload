@@ -114,6 +114,9 @@ static void efx_mcdi_set_link_completer(struct efx_nic *efx,
 					efx_dword_t *outbuf,
 					size_t outlen_actual)
 {
+	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising);
+
 	/* EAGAIN means another MODULECHANGE event came in while we were
 	 * doing the SET_LINK. Ignore the failure, we should be
 	 * trying again shortly.
@@ -130,7 +133,8 @@ static void efx_mcdi_set_link_completer(struct efx_nic *efx,
 		return;
 	}
 
-	efx_link_set_advertising(efx, &cookie);
+	mcdi_to_ethtool_linkset(efx, phy_cfg->media, cookie, advertising);
+	efx_link_set_advertising(efx, advertising);
 }
 
 int efx_mcdi_set_link(struct efx_nic *efx, u32 capabilities,

@@ -371,6 +371,7 @@ EFX_HAVE_TCB_EXTACK			member	struct_tc_block_offload	extack	include/net/pkt_cls.
 EFX_HAVE_NETIF_IS_VXLAN			symbol	netif_is_vxlan	include/net/vxlan.h
 EFX_HAVE_NETIF_IS_GENEVE		symbol	netif_is_geneve	include/net/geneve.h
 EFX_HAVE_IPV6_STUBS_DST_LOOKUP_FLOW	member	struct_ipv6_stub	ipv6_dst_lookup_flow	include/net/ipv6_stubs.h
+EFX_HAVE_IPV6_STUBS_DST_LOOKUP_FLOW	member	struct_ipv6_stub	ipv6_dst_lookup_flow	include/net/addrconf.h
 EFX_HAVE_SKB__LIST			member	struct_sk_buff	list	include/linux/skbuff.h
 EFX_HAVE_RECEIVE_SKB_LIST		symbol	netif_receive_skb_list	include/linux/netdevice.h
 EFX_NEED_SKB_LIST_DEL_INIT		nsymbol	skb_list_del_init	include/linux/skbuff.h
@@ -379,6 +380,11 @@ EFX_HAVE_MMIOWB				symbol	mmiowb	include/asm-generic/io.h
 EFX_HAVE_NDO_GET_DEVLINK	member	struct_net_device_ops	ndo_get_devlink_port	include/linux/netdevice.h
 EFX_HAVE_DEVLINK_INFO		symbol	devlink_info_version_running_put	include/net/devlink.h
 EFX_HAVE_PCI_FIND_NEXT_EXT_CAPABILITY	symbol	pci_find_next_ext_capability	include/linux/pci.h
+EFX_HAVE_XDP_SOCK			export	xdp_get_umem_from_qid	include/net/xdp_sock.h net/xdp/xdp_umem.c
+EFX_HAVE_XSK_OFFSET_ADJUST             symbol  xsk_umem_adjust_offset  include/net/xdp_sock.h
+EFX_HAVE_XDP_UMEM_RELEASE_ADDR         symbol  xsk_umem_release_addr  include/net/xdp_sock.h
+EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM 	symtype xsk_umem_consume_tx	include/net/xdp_sock.h bool(struct xdp_umem *umem, struct xdp_desc *)
+EFX_HAVE_XSK_NEED_WAKEUP		symbol	xsk_umem_uses_need_wakeup	include/net/xdp_sock.h
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 
@@ -585,4 +591,5 @@ function do_EFX_HAVE_TC_ACTION_COOKIE
     return 1
 }
 
-source $(dirname "$0")/kernel_compat_funcs.sh
+TOPDIR=$(dirname "$0")/../../../..
+source $TOPDIR/scripts/kernel_compat_funcs.sh

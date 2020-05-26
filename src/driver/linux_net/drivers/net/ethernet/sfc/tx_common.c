@@ -9,6 +9,9 @@
 
 #include "net_driver.h"
 #include <linux/highmem.h>
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#include <net/xdp_sock.h>
+#endif
 #include "efx.h"
 #include "nic.h"
 #include "efx_common.h"
@@ -135,6 +138,17 @@ int efx_init_tx_queue(struct efx_tx_queue *tx_queue)
 	tx_queue->completed_timestamp_minor = 0;
 
 	tx_queue->xdp_tx = efx_channel_is_xdp_tx(tx_queue->channel);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	tx_queue->umem = NULL;
+	if (tx_queue->channel->zc &&
+	    efx_is_xsk_tx_queue(tx_queue)) {
+		tx_queue->umem =
+			xdp_get_umem_from_qid(efx->net_dev,
+					      tx_queue->channel->channel);
+		if (!tx_queue->umem)
+			return 0;
+	}
+#endif
 
 	/* Set up default function pointers. These may get replaced by
 	 * efx_nic_init_tx() based off NIC/queue capabilities.
@@ -160,7 +174,11 @@ void efx_fini_tx_queue(struct efx_tx_queue *tx_queue)
 
 	efx_purge_tx_queue(tx_queue);
 	tx_queue->xmit_pending = false;
-	netdev_tx_reset_queue(tx_queue->core_txq);
+ #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	tx_queue->umem = NULL;
+	if (!efx_is_xsk_tx_queue(tx_queue))
+ #endif
+		netdev_tx_reset_queue(tx_queue->core_txq);
 }
 
 void efx_remove_tx_queue(struct efx_tx_queue *tx_queue)
@@ -251,6 +269,10 @@ void efx_dequeue_buffer(struct efx_tx_queue *tx_queue,
 		page_frag_free(buffer->buf);
 #endif
 #endif
+ #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	} else if (buffer->flags & EFX_TX_BUF_XSK) {
+		xsk_umem_complete_tx(tx_queue->umem, 1);
+ #endif
 	}
 
 	buffer->len = 0;
@@ -318,6 +340,11 @@ void efx_xmit_done(struct efx_tx_queue *tx_queue, unsigned int index)
 
 	if (pkts_compl > 1)
 		++tx_queue->merge_events;
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
+	defined(EFX_HAVE_XSK_NEED_WAKEUP))
+	if (tx_queue->umem && xsk_umem_uses_need_wakeup(tx_queue->umem))
+		xsk_set_tx_need_wakeup(tx_queue->umem);
+#endif
 
 	efx_xmit_done_check_empty(tx_queue);
 }

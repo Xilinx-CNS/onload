@@ -1258,17 +1258,9 @@ fail_free:
 #endif /* CONFIG_SFC_MTD */
 
 static unsigned int siena_check_caps(const struct efx_nic *efx,
-				     u8 flag,
-				     u32 offset)
+				     u8 flag, u32 offset)
 {
-	const struct siena_nic_data *nic_data = efx->nic_data;
-
-	switch (offset) {
-	case(MC_CMD_GET_CAPABILITIES_V8_OUT_FLAGS1_OFST):
-		return nic_data->caps & BIT_ULL(flag);
-	default:
-		return 0;
-	}
+	return 0;
 }
 
 /**************************************************************************

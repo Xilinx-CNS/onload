@@ -23,7 +23,7 @@ DIR=$(dirname "$0")
 
 NET_SUFFIX=("l" "m" "p" "q")  # textual suffixes for test networks
 
-N_MODS="sfc_driverlink sfc sfc_ef100"
+N_MODS="sfc_driverlink virtual_bus sfc sfc_ef100"
 
 INTERRUPT_MODE=""
 EEPROM_ARG=""
@@ -192,6 +192,7 @@ donet () {
     /sbin/modprobe -q ptp
 
     for m in $N_MODS; do
+	test $m = virtual_bus -a -f $DIR/../../../bus/virtual_bus.ko && m=../../../bus/virtual_bus
 	test -f $DIR/$m.ko || continue
 	# Only pass known options to the modules
 	modinfo -F parm $DIR/$m.ko > /tmp/parm.$$
@@ -207,6 +208,7 @@ donet () {
 	      echo "Module $m has no option ${option%%=*}, ignoring it";
 	  fi
 	done
+	test -d /sys/module/$(basename $m) && continue
 
         trylog /sbin/insmod $DIR/$m.ko $MOD_OPT
     done

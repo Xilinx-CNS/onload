@@ -510,6 +510,19 @@ static size_t efx_describe_per_queue_stats(struct efx_nic *efx, u8 *strings)
 			}
 		}
 	}
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	efx_for_each_channel(channel, efx) {
+		unsigned int core_txq = channel->channel -
+			efx->tx_channel_offset;
+		n_stats++;
+		if (strings) {
+			snprintf(strings, ETH_GSTRING_LEN,
+				 "tx-xsk-%u.tx_packets",
+				 core_txq);
+			strings += ETH_GSTRING_LEN;
+		}
+	}
+#endif
 
 	return n_stats;
 }
@@ -667,7 +680,10 @@ void efx_ethtool_get_stats(struct net_device *net_dev,
 		if (efx_channel_has_tx_queues(channel)) {
 			data[0] = 0;
 			efx_for_each_channel_tx_queue(tx_queue, channel) {
-				data[0] += tx_queue->tx_packets;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+				if (!efx_is_xsk_tx_queue(tx_queue))
+#endif
+					data[0] += tx_queue->tx_packets;
 			}
 			data++;
 		}
@@ -690,6 +706,14 @@ void efx_ethtool_get_stats(struct net_device *net_dev,
 				data++;
 			}
 		}
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+		efx_for_each_channel(channel, efx) {
+			tx_queue = efx_channel_get_xsk_tx_queue(channel);
+			if (tx_queue)
+				data[0] = tx_queue->tx_packets;
+			data++;
+		}
+#endif
 	}
 
 	efx_ptp_update_stats(efx, data);
@@ -704,6 +728,10 @@ void efx_ethtool_get_channels(struct net_device *net_dev,
 	channels->combined_count = efx->n_combined_channels;
 	channels->rx_count = efx->n_rx_only_channels;
 	channels->tx_count = efx->n_tx_only_channels;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	/* extra xsk queues */
+	channels->tx_count += efx->n_combined_channels;
+#endif
 
 	/* count up 'other' channels */
 	channels->max_other = efx_xdp_channels(efx) + efx->n_extra_channels;

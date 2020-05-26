@@ -446,6 +446,7 @@ void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_b
  */
 struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport)
 {
+#if defined(CONFIG_SFC_SRIOV)
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct efx_vfrep *efv;
 	unsigned int i;
@@ -458,6 +459,7 @@ struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport)
 			if (efv->mport_label == mport)
 				return nic_data->vf_rep[i];
 		}
+#endif
 	return NULL;
 }
 

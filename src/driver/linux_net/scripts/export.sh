@@ -9,11 +9,13 @@ set -e
 SOURCE_SED_COMMANDS=''
 MAKEFILE_SED_COMMANDS=''
 UNIFDEF_DEFINES=''
-SUBDIR=
+SUBDIR=drivers/net/ethernet/sfc
 KCOMPAT=
 AUTOCOMPAT=
 VERSION_SUFFIX=
 NOT_UPSTREAM=
+
+test -d $KPATH/drivers/net/sfc && SUBDIR=drivers/net/sfc || true
 
 for i in "$@"
 do
@@ -28,6 +30,9 @@ case $i in
 	-o)
 		AUTOCOMPAT=
 		NOT_UPSTREAM=1
+		;;
+	-s)	shift
+		SUBDIR=$1
 		;;
 	--suffix=*)
 		VERSION_SUFFIX="${i#*=}"
@@ -44,7 +49,6 @@ if [ -z "$NOT_UPSTREAM" ]; then
 	UNIFDEF_DEFINES="-UEFX_NOT_UPSTREAM"
 	SOURCE_SED_COMMANDS='s/\bEFX_FATAL\b/netif_err/g; '
 	MAKEFILE_SED_COMMANDS='/^ifndef EFX_UPSTREAM/,/^endif # !EFX_UPSTREAM/d; '
-	SUBDIR=drivers/net/sfc
 
 	if [ -n "$KCOMPAT" ]; then
 		if [ "$AUTOCOMPAT" != "apply" ]; then
@@ -74,10 +78,6 @@ shift
 if [ ! -d "$KPATH" ]; then
     echo >&2 "'$KPATH' does not exist"
     exit 2
-fi
-
-if [ -n SUBDIR -a -d "$KPATH/drivers/net/ethernet" ]; then
-    SUBDIR=drivers/net/ethernet/sfc
 fi
 
 sources="$*"
@@ -120,6 +120,24 @@ if [ -n "$AUTOCOMPAT" ]; then
 #define EFX_USE_KCOMPAT"
 fi
 
+# Handle Makefiles
+if [ "$SUBDIR" = drivers/bus -a -f $KPATH/$SUBDIR/Makefile -a \
+     ! -f $KPATH/$SUBDIR/virtual_bus.c ]; then
+    # Patch the existing bus Makefile
+    echo 'obj-$(CONFIG_VIRTUAL_BUS)	+= virtual_bus.o' >> $KPATH/$SUBDIR/Makefile
+else
+    # Copy Makefile, deleting unwanted sections
+    sed "$MAKEFILE_SED_COMMANDS" <Makefile >$KPATH/$SUBDIR/Makefile
+fi
+TOPDIR=$(echo "$SUBDIR" | sed 's#[a-z]*#..#g')
+if [ ! -f $KPATH/Makefile ]; then
+    sed "$MAKEFILE_SED_COMMANDS" < $TOPDIR/Makefile > $KPATH/Makefile
+fi
+if [ -f $TOPDIR/scripts/Makefile.common ]; then
+    mkdir -p $KPATH/scripts
+    sed "$MAKEFILE_SED_COMMANDS" < $TOPDIR/scripts/Makefile.common > $KPATH/scripts/Makefile.common
+fi
+
 # Copy top-level sources, then find required headers and copy them
 while [ -n "$sources" ]; do
     missing=""
@@ -132,7 +150,9 @@ while [ -n "$sources" ]; do
 		dest=$KPATH/$SUBDIR/$source
 		;;
 	esac
-	if [ "$source" = kernel_compat.sh -o "$source" = kernel_compat_funcs.sh ]; then
+	sourcename=$(basename $source)
+	if [ "$sourcename" = kernel_compat.sh -o "$sourcename" = kernel_compat_funcs.sh ]; then
+		mkdir -p $(dirname $dest)
 		cp $source $dest
 		continue
 	fi
@@ -162,12 +182,21 @@ while [ -n "$sources" ]; do
     sources="$missing"
 done
 
-# Copy Makefile, deleting unwanted sections
-sed "$MAKEFILE_SED_COMMANDS" <Makefile >$KPATH/$SUBDIR/Makefile
-
-if [ -n "$SUBDIR" ]; then
-    # Copy Kconfig
-    cp Kconfig $KPATH/$SUBDIR/
+# Handle Kconfig
+if [ -n "$SUBDIR" -a -f $KPATH/$SUBDIR/Kconfig ]; then
+    if [ "$SUBDIR" = drivers/bus ]; then
+	# Merge VIRTUAL_BUS
+	if [ ! `grep -q "VIRTUAL_BUS" $KPATH/$SUBDIR/Kconfig` ]; then
+	    grep -v endmenu $KPATH/$SUBDIR/Kconfig > $KPATH/$SUBDIR/Kconfig.new
+	    grep -A 9 VIRTUAL_BUS Kconfig >> $KPATH/$SUBDIR/Kconfig.new
+	    echo "
+endmenu" >> $KPATH/$SUBDIR/Kconfig.new
+	    mv $KPATH/$SUBDIR/Kconfig.new $KPATH/$SUBDIR/Kconfig
+	fi
+    else
+	# Copy Kconfig
+	cp Kconfig $KPATH/$SUBDIR/
+    fi
 fi
 
 if [ "$SUBDIR" = drivers/net/sfc ]; then
@@ -190,13 +219,15 @@ source "drivers/net/sfc/Kconfig"\
 fi
 
 # Update .config with our settings
+test -f $KPATH/$SUBDIR/Kconfig || exit 0
+
 if [ -f $KPATH/.config ];
 then
     cp $KPATH/.config $KPATH/.config.old
     grep -v -E "CONFIG_SFC|CONFIG_NET_VENDOR_SOLARFLARE" $KPATH/.config.old > $KPATH/.config
     echo "CONFIG_NET_VENDOR_SOLARFLARE=y" >> $KPATH/.config
 
-    for kernel_config in `grep "^config SFC" Kconfig | sed 's/config //'`;
+    for kernel_config in `grep -E "^config SFC|^config VIRTUAL_BUS" Kconfig | sed 's/config //'`;
     do
 	set -- `grep "export CONFIG_$kernel_config " Makefile | head -1`
 	if [ $# -ne 4 ];
@@ -208,5 +239,5 @@ then
 	echo "CONFIG_$kernel_config=$4" >> $KPATH/.config
     done
 else
-    echo "WARNING: No .config in $KPATH"
+    test -z "$NOT_UPSTREAM" && echo "WARNING: No .config in $KPATH" || true
 fi

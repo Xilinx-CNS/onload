@@ -91,6 +91,10 @@ struct ef100_nic_data {
 	spinlock_t udp_tunnels_lock;
 	struct list_head udp_tunnels;
 #endif
+	u16 tso_max_hdr_len;
+	u16 tso_max_payload_num_segs;
+	u16 tso_max_frames;
+	unsigned int tso_max_payload_len;
 };
 
 void __ef100_detach_reps(struct efx_nic *efx);

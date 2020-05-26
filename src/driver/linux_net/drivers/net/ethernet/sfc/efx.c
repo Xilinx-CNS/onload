@@ -56,6 +56,7 @@
 #include "rx_common.h"
 #include "tx_common.h"
 #include "efx_devlink.h"
+#include "efx_virtbus.h"
 #include "selftest.h"
 #include "sriov.h"
 #include "xdp.h"
@@ -162,25 +163,6 @@ static unsigned int tx_irq_mod_usec = 150;
 #endif
 #if !defined(EFX_USE_KCOMPAT) || (defined(topology_sibling_cpumask) && defined(EFX_HAVE_EXPORTED_CPU_SIBLING_MAP))
 #define HAVE_EFX_NUM_CORES
-#endif
-
-#ifdef EFX_NOT_UPSTREAM
-/* A fixed key for RSS that has been tested and found to provide good
- * spreading behaviour.  It also has the desirable property of being
- * symmetric.
- */
-static const u8 efx_rss_fixed_key[40] = {
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-	0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a, 0x6d, 0x5a,
-};
-
-static bool efx_rss_use_fixed_key = true;
-module_param_named(rss_use_fixed_key, efx_rss_use_fixed_key, bool, 0444);
-MODULE_PARM_DESC(rss_use_fixed_key, "Use a fixed RSS hash key, "
-		"tested for reliable spreading across channels");
 #endif
 
 extern unsigned int interrupt_mode;
@@ -390,6 +372,7 @@ int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 int efx_net_open(struct net_device *net_dev)
 {
 	struct efx_nic *efx = netdev_priv(net_dev);
+	unsigned loops = 2;
 	int rc;
 
 	netif_dbg(efx, ifup, efx->net_dev, "opening device on CPU %d\n",
@@ -451,7 +434,7 @@ int efx_net_open(struct net_device *net_dev)
 			efx_unset_channels(efx);
 			efx_remove_interrupts(efx);
 		}
-	} while (rc == -EAGAIN);
+	} while (rc == -EAGAIN && --loops);
 	/* rc should be 0 here or we would have jumped to fail: */
 	WARN_ON(rc);
 
@@ -529,7 +512,7 @@ int efx_net_stop(struct net_device *net_dev)
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
-	if (--efx->open_count) {
+	if (efx->open_count && --efx->open_count) {
 		netif_dbg(efx, drv, efx->net_dev, "still open by %hu clients\n",
 			  efx->open_count);
 		return 0;
@@ -1175,15 +1158,6 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 	if (rc)
 		return rc;
 
-#ifdef EFX_NOT_UPSTREAM
-	if (efx_rss_use_fixed_key) {
-		BUILD_BUG_ON(sizeof(efx_rss_fixed_key) <
-			     sizeof(efx->rss_context.rx_hash_key));
-		memcpy(&efx->rss_context.rx_hash_key, efx_rss_fixed_key,
-		       sizeof(efx->rss_context.rx_hash_key));
-	} else
-#endif
-
 	rc = efx->type->vswitching_probe(efx);
 	if (rc) /* not fatal; the PF will still work fine */
 		netif_warn(efx, probe, efx->net_dev,
@@ -1234,6 +1208,7 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	(void)cancel_delayed_work_sync(&efx->mtd_struct->creation_work);
 #endif
 
+	efx_virtbus_unregister(efx);
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_lro);
 #endif
@@ -1337,6 +1312,14 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	if (rc)
 		goto fail;
 
+	rc = efx_virtbus_register(efx);
+	if (rc)
+		pci_warn(efx->pci_dev,
+			 "Unable to register virtual bus driver (%d)\n", rc);
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	efx->tx_queues_per_channel++;
+#endif
 #ifdef EFX_NOT_UPSTREAM
 	if (efx->mcdi->fn_flags &
 	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)) {
@@ -1489,7 +1472,8 @@ static int efx_pm_thaw(struct device *dev)
 		efx_mcdi_port_reconfigure(efx);
 		mutex_unlock(&efx->mac_lock);
 
-		efx_start_all(efx);
+		if (efx->state == (STATE_NET_UP | STATE_FROZEN))
+			efx_start_all(efx);
 
 		efx_device_attach_if_not_resetting(efx);
 
@@ -1766,6 +1750,13 @@ const struct net_device_ops efx_netdev_ops = {
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
 	.ndo_bpf		= efx_xdp,
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_NEED_WAKEUP)
+	.ndo_xsk_wakeup		= efx_xsk_wakeup,
+#else
+	.ndo_xsk_async_xmit	= efx_xsk_async_xmit,
+#endif
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)
 	.ndo_xdp_xmit		= efx_xdp_xmit,

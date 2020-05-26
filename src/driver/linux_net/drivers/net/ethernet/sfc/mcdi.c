@@ -2111,6 +2111,8 @@ static int efx_mcdi_nvram_test(struct efx_nic *efx, unsigned int type)
 	case MC_CMD_NVRAM_TEST_NOTSUPP:
 		return 0;
 	default:
+		netif_err(efx, hw, efx->net_dev, "%s: failed type=%u\n",
+			  __func__, type);
 		return -EIO;
 	}
 }
@@ -2133,7 +2135,7 @@ static int efx_old_mcdi_nvram_test_all(struct efx_nic *efx)
 		if (nvram_types & 1) {
 			rc = efx_mcdi_nvram_test(efx, type);
 			if (rc)
-				goto fail2;
+				goto fail1;
 		}
 		type++;
 		nvram_types >>= 1;
@@ -2141,9 +2143,6 @@ static int efx_old_mcdi_nvram_test_all(struct efx_nic *efx)
 
 	return rc;
 
-fail2:
-	netif_err(efx, hw, efx->net_dev, "%s: failed type=%u\n",
-		  __func__, type);
 fail1:
 	if (rc != -EPERM)
 		netif_err(efx, hw, efx->net_dev, "%s: failed rc=%d\n", __func__, rc);
@@ -2169,6 +2168,10 @@ int efx_new_mcdi_nvram_test_all(struct efx_nic *efx)
 	rc = -EAGAIN;
 
 	for (i = 0; i < number; i++) {
+		if (nvram_types[i] == NVRAM_PARTITION_TYPE_PARTITION_MAP ||
+		    nvram_types[i] == NVRAM_PARTITION_TYPE_DYNAMIC_CONFIG)
+			continue;
+
 		rc = efx_mcdi_nvram_test(efx, nvram_types[i]);
 		if (rc)
 			goto fail;
@@ -2663,7 +2666,6 @@ int efx_mcdi_rpc_proxy_cmd(struct efx_nic *efx, u32 pf, u32 vf,
 	return rc;
 }
 
-#ifdef CONFIG_SFC_MTD
 
 #define EFX_MCDI_NVRAM_LEN_MAX 128
 
@@ -2806,6 +2808,8 @@ int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type)
 	}
 	return rc;
 }
+
+#ifdef CONFIG_SFC_MTD
 
 int efx_mcdi_mtd_read(struct mtd_info *mtd, loff_t start,
 		      size_t len, size_t *retlen, u8 *buffer)

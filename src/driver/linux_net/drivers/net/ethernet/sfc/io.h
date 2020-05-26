@@ -307,10 +307,10 @@ static inline void efx_reado_table(struct efx_nic *efx, efx_oword_t *value,
 }
 
 /* default VI stride (step between per-VI registers) is 8K on EF10 and
- * 16K on EF100
+ * 64K on EF100
  */
 #define EFX_DEFAULT_VI_STRIDE		0x2000
-#define EF100_DEFAULT_VI_STRIDE		0x4000
+#define EF100_DEFAULT_VI_STRIDE		0x10000
 
 /* Calculate offset to page-mapped register */
 static inline unsigned int efx_paged_reg(struct efx_nic *efx, unsigned int page,
