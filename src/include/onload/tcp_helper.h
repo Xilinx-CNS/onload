@@ -20,6 +20,7 @@
 #include <onload/osfile.h>
 #include <onload/oof_hw_filter.h>
 #include <onload/oof_socket.h>
+#include <onload/tcp_helper_ref.h>
 
 
 /* Forwards. */
