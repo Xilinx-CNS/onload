@@ -126,12 +126,12 @@ efab_tcp_driver_t efab_tcp_driver;
 
 
 static void
-efab_tcp_helper_rm_free_locked(tcp_helper_resource_t*, int can_destroy_now);
-#if ! CI_CFG_UL_INTERRUPT_HELPER
+efab_tcp_helper_rm_free_locked(tcp_helper_resource_t*);
 static void
 efab_tcp_helper_rm_schedule_free(tcp_helper_resource_t*);
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static int
 oo_handle_wakeup_int_driven(void*, int is_timeout,
                             struct efhw_nic*, int budget);
@@ -2737,7 +2737,7 @@ tcp_helper_destroy_work(struct work_struct *data)
     return;
   }
 
-  efab_tcp_helper_rm_free_locked(trs, 1);
+  efab_tcp_helper_rm_free_locked(trs);
 }
 
 
@@ -4618,6 +4618,13 @@ static void tcp_helper_reset_stack_work(struct work_struct *data)
 #endif
 
 
+static bool
+current_is_proper_ul_context(void)
+{
+  return ! in_interrupt() &&
+      (current->flags & (PF_KTHREAD | PF_WQ_WORKER)) == 0;
+}
+
 /*--------------------------------------------------------------------
  *!
  * Called when reference count on a TCP helper resource reaches zero.
@@ -4657,7 +4664,11 @@ tcp_helper_rm_free(tcp_helper_resource_t* trs)
     /* Lock holder will call efab_tcp_helper_rm_free_locked(). */
     return;
 
-  efab_tcp_helper_rm_free_locked(trs, 0);
+  if( trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT ||
+      ! current_is_proper_ul_context() )
+    efab_tcp_helper_rm_schedule_free(trs);
+  else
+    efab_tcp_helper_rm_free_locked(trs);
   OO_DEBUG_TCPH(ci_log("%s: [%u] done", __FUNCTION__, trs->id));
 }
 
@@ -4705,13 +4716,6 @@ tcp_helper_dtor_schedule(tcp_helper_resource_t * trs)
 {
   OO_DEBUG_TCPH(ci_log("%s [%u]: starting", __FUNCTION__, trs->id));
   ci_verify( queue_work(CI_GLOBAL_WORKQUEUE, &trs->work_item_dtor) != 0);
-}
-
-static bool
-current_is_proper_ul_context(void)
-{
-  return ! in_interrupt() &&
-      (current->flags & (PF_KTHREAD | PF_WQ_WORKER)) == 0;
 }
 
 /*--------------------------------------------------------------------
@@ -4954,6 +4958,7 @@ efab_tcp_helper_rm_reset_untrusted(tcp_helper_resource_t* trs)
 #endif
   }
 }
+#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 static void
 efab_tcp_helper_rm_schedule_free(tcp_helper_resource_t* trs)
@@ -4961,7 +4966,6 @@ efab_tcp_helper_rm_schedule_free(tcp_helper_resource_t* trs)
   OO_DEBUG_TCPH(ci_log("%s [%u]: defer", __FUNCTION__, trs->id));
   queue_work(CI_GLOBAL_WORKQUEUE, &trs->work_item_dtor);
 }
-#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 /*--------------------------------------------------------------------
  *!
@@ -5002,8 +5006,7 @@ void tcp_helper_flush_resets(ci_netif* ni)
 
 
 static void
-efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
-                               int safe_destroy_now)
+efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
 {
   ci_netif* netif;
 
@@ -5013,12 +5016,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
 
   netif = &trs->netif;
 #if ! CI_CFG_UL_INTERRUPT_HELPER
-  if( netif->flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
-    /* It is extremely bad idea to flush workqueue from the driverlink
-     * context blocking napi thread, even if it is non-atomic. */
-    efab_tcp_helper_rm_schedule_free(trs);
-    return;
-  }
+  ci_assert_nflags(netif->flags, CI_NETIF_FLAG_IN_DL_CONTEXT);
   ci_assert(!in_atomic());
   /* Make sure all postponed actions are done and endpoints freed */
   flush_workqueue(trs->wq);
@@ -5146,7 +5144,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs,
   ci_assert(trs->trusted_lock == (OO_TRUSTED_LOCK_LOCKED |
                                   OO_TRUSTED_LOCK_AWAITING_FREE));
   trs->trusted_lock = OO_TRUSTED_LOCK_UNLOCKED;
-  __efab_tcp_helper_k_ref_count_dec(trs, safe_destroy_now);
+  __efab_tcp_helper_k_ref_count_dec(trs, 1);
   OO_DEBUG_TCPH(ci_log("%s: finished", __FUNCTION__));
 }
 
