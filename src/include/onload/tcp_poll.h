@@ -22,27 +22,26 @@ ci_tcp_poll_events_listen(ci_netif *ni, ci_tcp_socket_listen *tls)
   return 0;
 }
 
-#if CI_CFG_TIMESTAMPING
 /* When the first packet in the timestamp queue is TX-pending, then
  * ci_tcp_recvmsg() does not put it into control message, so we should not
  * signal poll() that there is an event. */
 ci_inline int/*bool*/
 ci_tcp_poll_timestamp_q_nonempty(ci_netif *ni, ci_tcp_state *ts)
 {
+#if CI_CFG_TIMESTAMPING
   ci_ip_pkt_fmt* pkt = ci_udp_recv_q_get(ni, &ts->timestamp_q);
   return pkt != NULL && ! (pkt->flags & CI_PKT_FLAG_TX_PENDING);
-}
+#else
+  return 0;
 #endif
+}
 
 ci_inline int/*bool*/
 ci_tcp_poll_events_nolisten_haspri(ci_netif *ni, ci_tcp_state *ts)
 {
   return ( tcp_urg_data(ts) & CI_TCP_URG_IS_HERE )
-#if CI_CFG_TIMESTAMPING
          || ( (ts->s.s_aflags & CI_SOCK_AFLAG_SELECT_ERR_QUEUE)
-              && ci_tcp_poll_timestamp_q_nonempty(ni, ts) )
-#endif
-         ;
+              && ci_tcp_poll_timestamp_q_nonempty(ni, ts) );
 }
 
 /* This function should not be used for listening sockets.

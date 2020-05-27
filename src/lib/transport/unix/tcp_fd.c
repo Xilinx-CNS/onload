@@ -1828,18 +1828,12 @@ static int citp_tcp_select(citp_fdinfo* fdi, int* n, int rd, int wr, int ex,
   if( (s->b.state & CI_TCP_STATE_SYNCHRONISED) && s->tx_errno == 0 ) {
     ci_tcp_state* ts = SOCK_TO_TCP(s);
     if( rd && ( ci_tcp_recv_not_blocked(ts)
-#if CI_CFG_TIMESTAMPING
-                || ci_tcp_poll_timestamp_q_nonempty(ni, ts)
-#endif
-                ) ) {
+                || ci_tcp_poll_timestamp_q_nonempty(ni, ts) ) ) {
         FD_SET(fdi->fd, ss->rdu);
         ++*n;
     }
     if( wr && ( ci_tcp_tx_advertise_space(ni, ts)
-#if CI_CFG_TIMESTAMPING
-                || ci_tcp_poll_timestamp_q_nonempty(ni, ts)
-#endif
-                ) ) {
+                || ci_tcp_poll_timestamp_q_nonempty(ni, ts) ) ) {
         FD_SET(fdi->fd, ss->wru);
         ++*n;
     }
