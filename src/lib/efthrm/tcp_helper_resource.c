@@ -4707,6 +4707,12 @@ tcp_helper_dtor_schedule(tcp_helper_resource_t * trs)
   ci_verify( queue_work(CI_GLOBAL_WORKQUEUE, &trs->work_item_dtor) != 0);
 }
 
+static bool
+current_is_proper_ul_context(void)
+{
+  return ! in_interrupt() &&
+      (current->flags & (PF_KTHREAD | PF_WQ_WORKER)) == 0;
+}
 
 /*--------------------------------------------------------------------
  * Called when [trs->k_ref_count] goes to zero.  This can only happen
@@ -4747,16 +4753,7 @@ efab_tcp_helper_k_ref_count_is_zero(tcp_helper_resource_t* trs,
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
   if( trs ) {
-    if( can_destroy_now
-#if defined(PF_KTHREAD) && defined(PF_WQ_WORKER)
-        /* We can safely destroy the stack from the UL process or
-         * from the global workqueue.  Global workqueue is undetectable;
-         * UL process is non-atomic non-kthread non-workqueue. */
-        && ( ! in_atomic() &&
-             (current->flags & (PF_KTHREAD | PF_WQ_WORKER)) == 0 )
-#endif
-        
-        ) {
+    if( can_destroy_now || current_is_proper_ul_context() ) {
       tcp_helper_dtor(trs);
     }
     else {
