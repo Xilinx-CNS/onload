@@ -5962,6 +5962,29 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
 
     i += group_pages;
   }
+  ci_assert_equal(i, n_pages);
+
+  /* For compound pages we only store the head page and we're about to lose
+   * the struct page* for all the tail pages. Decref all those tail pages
+   * here. The lock we keep on the head page is sufficient to keep the whole
+   * compound page locked. We could have resurrected the struct page* pointers
+   * from the head page later on, but that involves unnecessary poking at
+   * Linux internals.
+   * No jumping to the 'fail' labels allowed after this point. */
+  for( i = 0, group_i = 0; group_i < ioum->n_groups; ++group_i ) {
+    struct oo_iobufs_usermem_group* g = &ioum->groups[group_i];
+    int order = compound_order(g->pages->pages[0]);
+    int group_pages = g->pages->n_bufs << order;
+
+    if (order) {
+      int j;
+      for( j = 0; j < group_pages >> order; ++j )
+        efab_put_pages(pages + i + (j << order) + 1, (1 << order) - 1);
+    }
+    i += group_pages;
+  }
+  ci_assert_equal(i, n_pages);
+  kfree(pages);
 
   *hw_addrs_out = hw_addrs;
   return 0;
