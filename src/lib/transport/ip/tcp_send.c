@@ -2526,11 +2526,17 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
         while( contig_len < CI_MIN(iov_len, MAX_CONTIG_LEN) ) {
           uint64_t ix = (iov_base + contig_len - (uintptr_t)um->base) >>
                         EF_VI_NIC_PAGE_SHIFT;
+          uint64_t size = um->size >> EF_VI_NIC_PAGE_SHIFT;
+          bool noncontig = false;
           OO_STACK_FOR_EACH_INTF_I(ni, i) {
-            if( um->hw_addrs[i * um->size + ix] !=
-                um->hw_addrs[i * um->size + ix - 1] + EF_VI_NIC_PAGE_SIZE )
+            if( um->hw_addrs[i * size + ix] !=
+                um->hw_addrs[i * size + ix - 1] + EF_VI_NIC_PAGE_SIZE ) {
+              noncontig = true;
               break;
+            }
           }
+          if (noncontig)
+            break;
           contig_len += EF_VI_NIC_PAGE_SIZE;
         }
         if( contig_len > iov_len )
