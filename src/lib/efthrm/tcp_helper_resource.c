@@ -4724,12 +4724,10 @@ tcp_helper_dtor_schedule(tcp_helper_resource_t * trs)
  * reached closed.
  *
  * \param trs               TCP helper resource
- * \param can_destroy_now   OK to destroy now?  (else schedule work item)
  *--------------------------------------------------------------------*/
 
 static void
-efab_tcp_helper_k_ref_count_is_zero(tcp_helper_resource_t* trs,
-                                                int can_destroy_now)
+efab_tcp_helper_k_ref_count_is_zero(tcp_helper_resource_t* trs)
 {
   /* although we have atomically got to zero we still have to contend
    * with a possible race from the resource manager destruction
@@ -4743,9 +4741,8 @@ efab_tcp_helper_k_ref_count_is_zero(tcp_helper_resource_t* trs,
   ci_assert(trs->k_ref_count & TCP_HELPER_K_RC_NO_USERLAND);
   ci_assert(trs->k_ref_count & TCP_HELPER_K_RC_DEAD);
 
-  OO_DEBUG_TCPH(ci_log("%s: [%u] k_ref_count=%x can_destroy_now=%d",
-                       __FUNCTION__, trs->id, trs->k_ref_count,
-                       can_destroy_now));
+  OO_DEBUG_TCPH(ci_log("%s: [%u] k_ref_count=%x",
+                       __FUNCTION__, trs->id, trs->k_ref_count));
 
   ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
   if( !ci_dllink_is_free(&trs->all_stacks_link) ) {
@@ -4757,7 +4754,7 @@ efab_tcp_helper_k_ref_count_is_zero(tcp_helper_resource_t* trs,
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
   if( trs ) {
-    if( can_destroy_now || current_is_proper_ul_context() ) {
+    if( current_is_proper_ul_context() ) {
       tcp_helper_dtor(trs);
     }
     else {
@@ -4774,21 +4771,18 @@ efab_tcp_helper_k_ref_count_is_zero(tcp_helper_resource_t* trs,
  * by ci_drop_orphan() when userlevel is no longer around.
  *
  * \param trs             TCP helper resource
- * \param can_destroy_now true if in a context than can call destructor
  *
  *--------------------------------------------------------------------*/
 
 void
-__efab_tcp_helper_k_ref_count_dec(tcp_helper_resource_t* trs,
-                                  int can_destroy_now)
+efab_tcp_helper_k_ref_count_dec(tcp_helper_resource_t* trs)
 {
   int tmp;
 
   ci_assert(NULL != trs);
 
-  OO_DEBUG_TCPH(ci_log("%s: [%d] k_ref_count=%x can_destroy_now=%d",
-                       __FUNCTION__, trs->id, trs->k_ref_count,
-                       can_destroy_now));
+  OO_DEBUG_TCPH(ci_log("%s: [%d] k_ref_count=%x",
+                       __FUNCTION__, trs->id, trs->k_ref_count));
   ci_assert(~trs->k_ref_count & TCP_HELPER_K_RC_DEAD);
 
  again:
@@ -4800,7 +4794,7 @@ __efab_tcp_helper_k_ref_count_dec(tcp_helper_resource_t* trs,
     if( ci_cas32_fail(&trs->k_ref_count, tmp,
                      TCP_HELPER_K_RC_DEAD | TCP_HELPER_K_RC_NO_USERLAND) )
       goto again;
-    efab_tcp_helper_k_ref_count_is_zero(trs, can_destroy_now);
+    efab_tcp_helper_k_ref_count_is_zero(trs);
   }
   else
     if( ci_cas32_fail(&trs->k_ref_count, tmp, tmp - 1) )
@@ -5144,7 +5138,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
   ci_assert(trs->trusted_lock == (OO_TRUSTED_LOCK_LOCKED |
                                   OO_TRUSTED_LOCK_AWAITING_FREE));
   trs->trusted_lock = OO_TRUSTED_LOCK_UNLOCKED;
-  __efab_tcp_helper_k_ref_count_dec(trs, 1);
+  efab_tcp_helper_k_ref_count_dec(trs);
   OO_DEBUG_TCPH(ci_log("%s: finished", __FUNCTION__));
 }
 

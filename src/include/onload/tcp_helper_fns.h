@@ -291,13 +291,7 @@ extern int tcp_helper_cluster_alloc_thr(const char* name,
  *--------------------------------------------------------------------*/
 
 extern void
-__efab_tcp_helper_k_ref_count_dec(tcp_helper_resource_t* trs,
-                                int can_destroy_now);
-/* It is usually unsafe to destroy the stack from a random context */
-ci_inline void efab_tcp_helper_k_ref_count_dec(tcp_helper_resource_t* trs)
-{
-  __efab_tcp_helper_k_ref_count_dec(trs, 0);
-}
+efab_tcp_helper_k_ref_count_dec(tcp_helper_resource_t* trs);
 
 /*--------------------------------------------------------------------
  *!
