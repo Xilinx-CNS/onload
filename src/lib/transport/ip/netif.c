@@ -1067,9 +1067,7 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
   const ci_uint64 ALL_HANDLED_FLAGS = CI_EPLOCK_NETIF_IS_PKT_WAITER |
                                       CI_EPLOCK_NETIF_NEED_POLL |
                                       CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS |
-#if CI_CFG_UL_INTERRUPT_HELPER && ! defined (__KERNEL__)
-    /* NB !__KERNEL__ above will go when UL_INTERRUPT_HELPER mode is
-     * fully implemented */
+#if CI_CFG_UL_INTERRUPT_HELPER
                                       CI_EPLOCK_NETIF_CLOSE_ENDPOINT |
                                       CI_EPLOCK_NETIF_NEED_WAKE |
 #endif
