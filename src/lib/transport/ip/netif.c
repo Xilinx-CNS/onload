@@ -977,11 +977,19 @@ ci_uint64 ci_netif_purge_deferred_socket_list(ci_netif* ni)
 
   ci_assert(ci_netif_is_locked(ni));
 
-  while( (l = ni->state->lock.lock) & CI_EPLOCK_NETIF_SOCKET_LIST )
+  while( (l = ni->state->lock.lock) & CI_EPLOCK_NETIF_SOCKET_LIST ) {
     if( ci_cas64u_succeed(&ni->state->lock.lock, l,
                         l &~ CI_EPLOCK_NETIF_SOCKET_LIST) )
       ci_netif_perform_deferred_socket_work(ni,
                                             l & CI_EPLOCK_NETIF_SOCKET_LIST);
+
+    /* It is not possible to clear defer_work_count atomically together
+     * with NETIF_SOCKET_LIST.  We can do it before or after.
+     * In both cases the real length of the deferred list is limited by
+     * 2 * defer_work_limit.
+     */
+    ni->state->defer_work_count = 0;
+  }
 
   return l;
 }
@@ -1178,9 +1186,6 @@ static void ci_netif_unlock_slow(ci_netif* ni KERNEL_DL_CONTEXT_DECL)
   ci_assert(ci_netif_is_locked(ni));  /* double unlock? */
 
   after_unlock_flags = ci_netif_unlock_slow_common(ni, ni->state->lock.lock);
-
-  /* OK to clear this before dropping the lock here, as not in a loop */
-  ni->state->defer_work_count = 0;
 
   /* Store NEED_PRIME flag and clear it - we'll handle it if set,
    * either below or by dropping to the kernel 

@@ -7267,12 +7267,6 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
                                   CI_EPLOCK_NETIF_UNLOCK_FLAGS |
                                   CI_EPLOCK_NETIF_SOCKET_LIST) );
 
-  /* Its important that we clear [defer_work_count] after dropping the
-   * lock.  Otherwise it won't stop us from continuing to do deferred work
-   * forever!
-   */
-  ni->state->defer_work_count = 0;
-
   if( after_unlock_flags & CI_EPLOCK_NETIF_NEED_PRIME ) {
     CITP_STATS_NETIF_INC(&thr->netif, unlock_slow_need_prime);
     if( NI_OPTS(ni).int_driven ) {
