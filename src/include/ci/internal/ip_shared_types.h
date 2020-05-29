@@ -922,8 +922,19 @@ typedef struct {
 #define CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS  0x0004000000000000ULL
   /* need to handle postponed XDP prog update */
 # define CI_EPLOCK_NETIF_XDP_CHANGE        0x0002000000000000ULL
+
   /* mask for the above flags that must be handled before dropping lock */
 # define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff3a000000000000ULL
+
+  /* these flags can be handled in UL */
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+# define CI_EPLOCK_NETIF_UL_MASK \
+    (CI_EPLOCK_NETIF_IS_PKT_WAITER | CI_EPLOCK_NETIF_NEED_POLL | \
+     CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS | \
+     CI_EPLOCK_NETIF_MERGE_ATOMIC_COUNTERS)
+#else
+# define CI_EPLOCK_NETIF_UL_MASK CI_EPLOCK_NETIF_UNLOCK_FLAGS
+#endif
 } ci_eplock_t;
 
 

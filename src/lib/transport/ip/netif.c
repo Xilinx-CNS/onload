@@ -1072,14 +1072,12 @@ int oo_want_proactive_packet_allocation(ci_netif* ni)
 /* Handling for lock flags that is common to UL and kernel paths. */
 ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
 {
-  const ci_uint64 ALL_HANDLED_FLAGS = CI_EPLOCK_NETIF_IS_PKT_WAITER |
-                                      CI_EPLOCK_NETIF_NEED_POLL |
-                                      CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS |
-#if CI_CFG_UL_INTERRUPT_HELPER
-                                      CI_EPLOCK_NETIF_CLOSE_ENDPOINT |
-                                      CI_EPLOCK_NETIF_NEED_WAKE |
+  const ci_uint64 ALL_HANDLED_FLAGS = CI_EPLOCK_NETIF_UL_MASK
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+      /* Fixme: remove this exception under ON-12119 */
+      & ~CI_EPLOCK_NETIF_NEED_PRIME
 #endif
-                                      CI_EPLOCK_NETIF_MERGE_ATOMIC_COUNTERS;
+      ;
   ci_uint64 set_flags = 0;
 
   /* Do this first, because ci_netif_purge_deferred_socket_list() acts on the
@@ -1181,57 +1179,53 @@ static void ci_netif_unlock_slow(ci_netif* ni KERNEL_DL_CONTEXT_DECL)
   */
   ci_uint64 l;
   int intf_i;
-  ci_uint64 after_unlock_flags;
+  bool dive_in_kernel = false;
+  ci_uint64 all_handled_flags =
+        CI_EPLOCK_NETIF_UL_MASK | CI_EPLOCK_NETIF_SOCKET_LIST;
+
+  if( ~ni->state->flags & CI_NETIF_FLAG_EVQ_KERNEL_PRIME_ONLY )
+    all_handled_flags |= CI_EPLOCK_NETIF_NEED_PRIME;
 
   ci_assert(ci_netif_is_locked(ni));  /* double unlock? */
 
-  after_unlock_flags = ci_netif_unlock_slow_common(ni, ni->state->lock.lock);
+  do {
+    l = ni->state->lock.lock;
+    l = ci_netif_unlock_slow_common(ni, ni->state->lock.lock);
 
-  /* Store NEED_PRIME flag and clear it - we'll handle it if set,
-   * either below or by dropping to the kernel 
-   */
-  if( after_unlock_flags & CI_EPLOCK_NETIF_NEED_PRIME )
-    ef_eplock_clear_flags(&ni->state->lock, CI_EPLOCK_NETIF_NEED_PRIME);
+    /* If the NEED_PRIME flag was set, handle it here */
+    if( l & CI_EPLOCK_NETIF_NEED_PRIME ) {
+      l = ef_eplock_clear_flags(&ni->state->lock, CI_EPLOCK_NETIF_NEED_PRIME);
 
-  l = ni->state->lock.lock;
-
-  /* Could loop here if flags have been set again, but to keep things
-   * simple just drop to the kernel unless we've already done
-   * everything we needed to do
-   */
-
-  if( !(l & (CI_EPLOCK_NETIF_UNLOCK_FLAGS |
-             CI_EPLOCK_NETIF_SOCKET_LIST |
-             CI_EPLOCK_FL_NEED_WAKE)) &&
-      !(ni->state->flags & CI_NETIF_FLAG_EVQ_KERNEL_PRIME_ONLY) ) {
-    if( ci_cas64u_succeed(&ni->state->lock.lock,
-                          l, (l &~ CI_EPLOCK_LOCKED) | CI_EPLOCK_UNLOCKED) ) {
-      /* If the NEED_PRIME flag was set, handle it here */
-      if( after_unlock_flags & CI_EPLOCK_NETIF_NEED_PRIME ) {
-        CITP_STATS_NETIF_INC(ni, unlock_slow_need_prime);
-        CITP_STATS_NETIF_INC(ni, unlock_slow_prime_ul);
-        ci_assert(NI_OPTS(ni).int_driven);
-        /* TODO: When interrupt driven, evq_primed is never cleared, so we
-        * don't know here which subset of interfaces needs to be primed.
-        * Would be more efficient if we did.
-        */
-        OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-          ef_eventq_prime(&ni->nic_hw[intf_i].vi);
-      }
-
-      /* We've handled everything we needed to, so can return without
-      * dropping to the kernel 
+      CITP_STATS_NETIF_INC(ni, unlock_slow_need_prime);
+      CITP_STATS_NETIF_INC(ni, unlock_slow_prime_ul);
+      ci_assert(NI_OPTS(ni).int_driven);
+      /* TODO: When interrupt driven, evq_primed is never cleared, so we
+      * don't know here which subset of interfaces needs to be primed.
+      * Would be more efficient if we did.
       */
-      return;
+      OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
+        ef_eventq_prime(&ni->nic_hw[intf_i].vi);
     }
-  }
 
-  /* N.B. We don't update [l] to reflect subsequent changes in the lock flags.
-   */
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+    /* If some flags should be handled in kernel, then there is no point in
+     * looping here.  Dive! */
+    if( l & (CI_EPLOCK_NETIF_UNLOCK_FLAGS | CI_EPLOCK_NETIF_SOCKET_LIST) &
+        ~all_handled_flags ) {
+      dive_in_kernel = true;
+      break;
+    }
+#endif
 
-  /* We cleared NEED_PRIME above, but haven't handled it - restore setting */
-  if( after_unlock_flags & CI_EPLOCK_NETIF_NEED_PRIME )
-    ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_NEED_PRIME);
+  } while( (l & all_handled_flags) != 0 ||
+          ci_cas64u_fail(&ni->state->lock.lock,
+                          l, (l &~ CI_EPLOCK_LOCKED) | CI_EPLOCK_UNLOCKED) );
+
+  /* We've handled everything we needed to, so can return without
+  * dropping to the kernel 
+  */
+  if( ! dive_in_kernel )
+    return;
 
 #endif
 
