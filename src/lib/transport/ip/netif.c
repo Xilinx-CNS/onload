@@ -1215,6 +1215,9 @@ static void ci_netif_unlock_slow(ci_netif* ni KERNEL_DL_CONTEXT_DECL)
       dive_in_kernel = true;
       break;
     }
+#else
+    if( l & CI_EPLOCK_FL_NEED_WAKE )
+      dive_in_kernel = true;
 #endif
 
   } while( (l & all_handled_flags) != 0 ||
@@ -1230,11 +1233,14 @@ static void ci_netif_unlock_slow(ci_netif* ni KERNEL_DL_CONTEXT_DECL)
 #endif
 
   {
-    int rc;
+    int rc = 0;
 
 #ifndef __KERNEL__
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+    /* Do these assertions have any value? */
     ci_assert(ni->state->lock.lock & CI_EPLOCK_LOCKED);
     ci_assert(~ni->state->lock.lock & CI_EPLOCK_UNLOCKED);
+#endif
     CITP_STATS_NETIF_INC(ni, unlock_slow_syscall);
     rc = oo_resource_op(ci_netif_get_driver_handle(ni),
                         OO_IOC_EPLOCK_WAKE, NULL);

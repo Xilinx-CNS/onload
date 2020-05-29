@@ -973,8 +973,13 @@ efab_eplock_unlock_and_wake_rsop(ci_private_t *priv, void *unused)
 {
   if (priv->thr == NULL)
     return -EINVAL;
+#if CI_CFG_UL_INTERRUPT_HELPER
+  efab_eplock_wake(&priv->thr->netif);
+  return 0;
+#else
   ci_assert_equal(priv->thr->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT, 0);
   return efab_eplock_unlock_and_wake(&priv->thr->netif, 0);
+#endif
 }
 static int
 efab_eplock_lock_wait_rsop(ci_private_t *priv, void *unused)

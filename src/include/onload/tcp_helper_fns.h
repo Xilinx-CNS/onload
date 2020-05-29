@@ -599,6 +599,13 @@ int oo_get_closing_ep(ci_private_t* priv, void* arg);
 int oo_wakeup_waiters(ci_private_t* priv, void* arg);
 #endif
 
+static inline void
+efab_eplock_wake(ci_netif *ni)
+{
+  CITP_STATS_NETIF_INC(ni, lock_wakes);
+  wake_up_interruptible(&ni->eplock_helper.wq);
+}
+
 /*----------------------------------------------------------------------------
  * eBPF/XDP
  *---------------------------------------------------------------------------*/

@@ -85,12 +85,12 @@ efab_eplock_record_pid(ci_netif *ni)
  * CI_RESOURCE_OPs.
  */
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 int
 efab_eplock_unlock_and_wake(ci_netif *ni, int in_dl_context)
 {
   ci_uint64 l = ni->state->lock.lock;
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
   /* We use in_dl_context from now on, and we should remove
    * CI_NETIF_FLAG_IN_DL_CONTEXT under the stack lock. */
   if( in_dl_context )
@@ -123,22 +123,13 @@ efab_eplock_unlock_and_wake(ci_netif *ni, int in_dl_context)
     l = ni->state->lock.lock;
     goto again;
   }
-#else
-  /* Keep all the flags except CI_EPLOCK_FL_NEED_WAKE, trust the next UL
-   * holder to handler them */
-  while( ci_cas64u_fail(&ni->state->lock.lock, l,
-                        (l & ~(CI_EPLOCK_FL_NEED_WAKE | CI_EPLOCK_LOCKED))
-                        | CI_EPLOCK_UNLOCKED) )
-    l = ni->state->lock.lock;
-#endif
 
-  if( l & CI_EPLOCK_FL_NEED_WAKE ) {
-    CITP_STATS_NETIF_INC(ni, lock_wakes);
-    wake_up_interruptible(&ni->eplock_helper.wq);
-  }
+  if( l & CI_EPLOCK_FL_NEED_WAKE )
+    efab_eplock_wake(ni);
 
   return 0;
 }
+#endif
 
 
 static int efab_eplock_is_unlocked_or_request_wake(ci_eplock_t* epl)
