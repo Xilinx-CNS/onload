@@ -1747,8 +1747,12 @@ static int citp_tcp_send(citp_fdinfo* fdinfo, const struct msghdr* msg,
      * state inside ci_tcp_sendmsg(). */
     if( CI_UNLIKELY(state == CI_TCP_CLOSED || state == CI_TCP_LISTEN ||
                     state == CI_TCP_INVALID) ) {
-      errno = EPIPE;
-      rc = -1;
+      if( CI_UNLIKELY(flags & ONLOAD_MSG_WARM) )
+        ++SOCK_TO_TCP(epi->sock.s)->stats.tx_msg_warm_abort;
+      if( (rc = ci_get_so_error(epi->sock.s)) != 0 )
+        CI_SET_ERROR(rc, rc);
+      else
+        CI_SET_ERROR(rc, EPIPE);
     }
     else {
       rc = ci_tcp_sendmsg(epi->sock.netif, SOCK_TO_TCP(epi->sock.s),
