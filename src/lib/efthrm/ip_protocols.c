@@ -117,7 +117,7 @@ efab_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr)
   ip_paylen = ipx_hdr_tot_len(af, ipx);
 
   /* remotely generated (ICMP) errors */
-  addr->ipx = ipx;
+  addr->af = af;
   addr->icmp = icmp = (ci_icmp_hdr*)((char*)ipx + CI_IPX_IHL(af, ipx));
 
   if( ip_paylen > ip_len ) {
@@ -545,7 +545,6 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
   ci_uint8 hard;
   int err;
   ci_netif* ni = &thr->netif;
-  int af = ipx_hdr_af(addr->ipx);
 
   ci_assert(thr);
   ci_assert(thr->netif.state);
@@ -553,7 +552,6 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
   ci_assert(addr);
   /* If the address was created without an
    * IP/ICMP hdr then these will be 0 */
-  ci_assert(addr->ipx);
   ci_assert(addr->icmp);
 
   ci_assert( ci_netif_is_locked(ni) );
@@ -564,8 +562,8 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   /* Path MTU interception */
-  if ( ( IS_AF_INET6(af) && icmp_type == CI_ICMPV6_PKT_TOOBIG ) ||
-       (!IS_AF_INET6(af) && icmp_type == CI_ICMP_DEST_UNREACH &&
+  if ( ( IS_AF_INET6(addr->af) && icmp_type == CI_ICMPV6_PKT_TOOBIG ) ||
+       (!IS_AF_INET6(addr->af) && icmp_type == CI_ICMP_DEST_UNREACH &&
        icmp_code == CI_ICMP_DU_FRAG_NEEDED) )
   {
     if (addr->protocol == IPPROTO_TCP)
@@ -586,7 +584,7 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
     ci_tcp_state* ts = SOCK_TO_TCP(s);
 
     CITP_STATS_NETIF(++ni->state->stats.tcp_connect_icmp);
-    get_errno(af, icmp_type, icmp_code, &err, &hard);
+    get_errno(addr->af, icmp_type, icmp_code, &err, &hard);
     OO_DEBUG_IPP(ci_log("%s: TCP", __FUNCTION__));
 
     ci_tcp_drop(ni, ts, err);

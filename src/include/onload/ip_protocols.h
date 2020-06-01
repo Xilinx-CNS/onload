@@ -27,7 +27,7 @@
 /*! struct containing ptrs into icmp data area and 
  * addressing & protocol data from an ICMP pkt */
 typedef struct {
-  const ci_ipx_hdr_t* ipx; /*< IP PDU holding ICMP message */
+  int af;               /*< Address family */
   ci_icmp_hdr *icmp;    /*< ICMP header in IP PDU */
   ci_addr_t saddr;      /*< dest IP of IP PDU in ICMP reply data */
   ci_addr_t daddr;      /*< src IP of IP PDU in ICMP reply data */
