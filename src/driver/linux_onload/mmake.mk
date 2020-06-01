@@ -24,7 +24,7 @@ EFTHRM_SRCS	:= eplock_resource_manager.c \
 		tcp_helper_ioctl.c tcp_helper_sleep.c \
 		tcp_helper_endpoint_move.c \
 		tcp_filters.c oof_filters.c oof_onload.c oof_nat.c \
-		driverlink_filter.c ip_prot_rx.c ip_protocols.c \
+		driverlink_filter.c ip_protocols.c \
 		onload_nic.c id_pool.c dump_to_user.c iobufset.c \
 		tcp_helper_cluster.c oof_interface.c tcp_helper_stats_dump.c
 

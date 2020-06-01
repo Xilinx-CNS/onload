@@ -29,47 +29,12 @@
 
 #if CI_CFG_HANDLE_ICMP
 /*! efab_handle_ipp_pkt_task -
- * ICMP, IGMP, UDP etc. delivery handler.  Called from the 
- * ARP keventd tasklet. */
+ * ICMP delivery handler.  Called from netfilter hook.
+ */
 extern int 
 efab_handle_ipp_pkt_task(int thr_id, ci_ifid_t ifindex,
                          const void* ip_hdr, int len);
 
-/*! efab_ipp_icmp_parse -
- * Get the important info out of the ICMP hdr & it's payload
- *
- * If ok, the addr struct will have the addresses/ports and protocol
- * in it.
- *
- * \param  data_only   0 = *[ip] points to IP/ICMP hdr + data
- *                     non-0 = *[ip] points to IP/[TCP|UDP]
- *
- * \return 1 - ok, 0 - failed
- */
-extern int 
-efab_ipp_icmp_parse(const ci_ipx_hdr_t*, int ip_len, efab_ipp_addr* addr,
-		    int data_only );
-
-/*! efab_ipp_icmp_validate -
- * Check to see if the ICMP pkt is well-formed.
- *
- * \return 0 - ok, else failed
- */
-extern int 
-efab_ipp_icmp_validate( tcp_helper_resource_t* thr, 
-			ci_ip4_hdr* ip );
-
-/* efab_ipp_icmp_for_thr -
- * Is this ICMP message destined for this netif */
-extern struct ci_sock_cmn_s* 
-efab_ipp_icmp_for_thr( tcp_helper_resource_t* thr, 
-		       efab_ipp_addr* addr );
-
-/*! Enqueue an ICMP packet from skb into the TCP helper's netif. 
- */
-extern void efab_ipp_icmp_qpkt( tcp_helper_resource_t* thr, 
-				struct ci_sock_cmn_s* s,
-				efab_ipp_addr* addr );
 #endif
 
 #endif

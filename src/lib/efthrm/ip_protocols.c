@@ -100,7 +100,7 @@ int ci_ipp_icmp_csum_ok( ci_icmp_hdr* icmp, int icmp_total_len)
  * addr->ip & addr->icmp will both be 0.  If [data_only] == 0 then
  * on success both addr->ip and addr->icmp will be valid pointers.
  */
-extern int
+static int
 efab_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr,
 		    int data_only )
 {
@@ -170,46 +170,6 @@ efab_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr,
   return 1;
 }
 
-
-/*! efab_ipp_icmp_validate -
- * Check to see if the ICMP pkt is one we want to handle and is 
- * well-formed. We don't check the sums as there should only be one
- * copy passed-in.
- *
- * If ok, the addr struct will have the addresses/ports and protocol
- * in it.
- *
- * \return 1 - ok, 0 - failed
- */
-extern int 
-efab_ipp_icmp_validate( tcp_helper_resource_t* thr, ci_ip4_hdr *ip)
-{
-  ci_icmp_hdr* icmp;
-  int ip_paylen, ip_tot_len;
-
-  __ENTRY;
-  ci_assert( thr );
-  ci_assert( ip );
-   
-  icmp = (ci_icmp_hdr*)((char*)ip + CI_IP4_IHL(ip));
-  ip_tot_len = CI_BSWAP_BE16(ip->ip_tot_len_be16);
-  ip_paylen = ip_tot_len - CI_IP4_IHL(ip);
-
-  OO_DEBUG_IPP( ci_log("%s: ip: tot len:%u, pay_len:%u", 
-		   __FUNCTION__, ip_tot_len, ip_paylen ));
-
-  /* Done in net driver */
-
-  /* as we may be making more than one copy of this ICMP message we
-   * may be saving time by doing the sum just once. Or maybe not. */
-  if( CI_UNLIKELY( !ci_ipp_icmp_csum_ok( icmp, ip_paylen))) {
-    __EXIT("bad ICMP sum");
-    return 0;
-  }
-
-  __EXIT(0);
-  return 1;
-}
 
 /*!
  * Mapping of ICMP code field of destination unreachable message to errno.
@@ -567,8 +527,8 @@ ci_ipp_pmtu_rx_udp(tcp_helper_resource_t* thr,
  * MUST NOT make use of addr->ip & addr->icmp fields without
  * checking as they can both be 0 
  */
-ci_sock_cmn* efab_ipp_icmp_for_thr( tcp_helper_resource_t* thr, 
-				    efab_ipp_addr* addr )
+static ci_sock_cmn*
+efab_ipp_icmp_for_thr(tcp_helper_resource_t* thr, efab_ipp_addr* addr)
 {
   int af_space;
 
@@ -589,7 +549,7 @@ ci_sock_cmn* efab_ipp_icmp_for_thr( tcp_helper_resource_t* thr,
  * This function is assumed to be called within a lock on the 
  * tcp_helper_resource's ep.
  */
-extern void
+static void
 efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr, 
 		   ci_sock_cmn* s, efab_ipp_addr* addr)
 {
@@ -649,6 +609,86 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
   /* Todo: kick it off to onload_helper. */
   ci_log("ERROR: ICMP type %d code %d", icmp_type, icmp_code);
 #endif
+}
+
+
+/*--------------------------------------------------------------------
+ *!
+ * This function is intended to safely decode a TCP helper resource
+ * handle that we passed to the NET driver back into a locked netif
+ *
+ * Given a TCP helper resource handle, this function attempts to
+ * return a locked netif. If it succeeds its up to the callee to drop
+ * the netif lock by calling efab_tcp_helper_netif_unlock, and drop a
+ * reference by calling oo_thr_ref_drop().  This function can fail
+ * because the handle is no longer valid OR its not possible to get
+ * the netif lock at this time
+ *
+ * \param nic           nic object the handle relates to
+ * \param tcp_id        TCP helper resource id
+ *
+ * \returns pointer to locked TCP helper resource or NULL
+ *
+ *--------------------------------------------------------------------*/
+
+static tcp_helper_resource_t *
+efab_ipp_get_locked_thr_from_tcp_handle(unsigned tcp_id)
+{
+  tcp_helper_resource_t * thr = NULL;
+  int rc;
+
+  /* ask resource manager to decode to a resource */
+  rc = efab_thr_table_lookup(NULL, NULL, tcp_id,
+                             EFAB_THR_TABLE_LOOKUP_NO_CHECK_USER,
+                             OO_THR_REF_BASE, &thr);
+  if (rc < 0) {
+    OO_DEBUG_IPP( ci_log("%s: Invalid TCP helper resource handle %u", 
+                         __FUNCTION__, tcp_id) );
+  }
+  else {
+    /* so we have found the resource in the table and have incremented
+    ** its reference count  - now lets try and lock the associated netif 
+    */
+    if ( !efab_tcp_helper_netif_try_lock(thr, 1) ) {
+      OO_DEBUG_IPP( ci_log("%s: Failed to lock TCP helper", __FUNCTION__) );
+      oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
+      thr = NULL;
+    }
+  }
+  return thr;
+}
+
+
+
+/* NOTE: the current implementation discards data when it
+ * cannot get a lock.  As the mechanism is for protocols that
+ * do not guarantee data delivery this is considered acceptible.
+ */
+int efab_handle_ipp_pkt_task(int thr_id, ci_ifid_t ifindex,
+                             const void* in_data, int len)
+{
+  tcp_helper_resource_t* thr;
+  const ci_ipx_hdr_t* in_ipx;
+  efab_ipp_addr addr;
+
+  in_ipx = in_data;
+
+  /* Have a full IP,ICMP hdr - so [data_only] arg is 0 */
+  if( !efab_ipp_icmp_parse( in_ipx, len, &addr, 0))
+    goto exit_handler;
+  addr.ifindex = ifindex;
+
+  if( (thr = efab_ipp_get_locked_thr_from_tcp_handle(thr_id))) {
+    ci_sock_cmn* s;
+
+    s = efab_ipp_icmp_for_thr( thr, &addr );
+    if( s )  efab_ipp_icmp_qpkt( thr, s, &addr );
+    efab_tcp_helper_netif_unlock( thr, 1 );
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
+  }
+
+exit_handler:
+  return 0;
 }
 #endif
 
