@@ -214,7 +214,8 @@ static int icmp_handled_ip6[ CI_ICMPV6_TYPE_MAX ] = {
  * \return 1 - ok, 0 - failed
  */
 static int
-dlfilter_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr)
+dlfilter_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, int ifindex,
+                        efab_ipp_addr* addr)
 {
   const ci_ipx_hdr_t* data_ipx;
   ci_icmp_msg* icmpl;
@@ -226,6 +227,11 @@ dlfilter_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr
   ci_assert( addr );
 
   af = ipx_hdr_af(ipx);
+  if( ipx_hdr_tot_len(af, ipx) > ip_len ) {
+    OO_DEBUG_IPP(ci_log("%s: truncated packet %d %d", __FUNCTION__,
+                        ipx_hdr_tot_len(af, ipx), ip_len));
+    return 0;
+  }
 
   CI_ASSERT_ICMP_TYPES_VALID;
   icmpl = (ci_icmp_msg*)((char*)ipx + CI_IPX_IHL(af, ipx));
@@ -258,6 +264,10 @@ dlfilter_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr
   addr->dport_be16 = data_tcp->tcp_source_be16;
   addr->saddr = ipx_hdr_daddr(data_ipx_af, data_ipx);
   addr->daddr = ipx_hdr_saddr(data_ipx_af, data_ipx);
+
+  addr->ifindex = ifindex;
+  addr->af = af;
+  addr->icmp = &icmpl->icmp;
   return 1;
 }
 
@@ -276,10 +286,9 @@ dlfilter_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr
  */
 static int dlfilter_handle_icmp(struct net* netns, int ifindex,
                                 efx_dlfilter_cb_t* fcb, const ci_ipx_hdr_t* ipx,
-                                int len, int* thr_id )
+                                int len, efab_ipp_addr* addr, int* thr_id )
 {
   ci_icmp_hdr* icmp;
-  efab_ipp_addr addr;
   int* icmp_handled_ipx, icmp_type_max;
   int af = ipx_hdr_af(ipx);
 
@@ -313,7 +322,7 @@ static int dlfilter_handle_icmp(struct net* netns, int ifindex,
 
   /* Parse the message to get the addressing info.  Note that ONLY
    * the source & dest addr/ports & protocol are filled in [addr] */
-  if( !dlfilter_ipp_icmp_parse( ipx, len, &addr ) ) {
+  if( !dlfilter_ipp_icmp_parse( ipx, len, ifindex, addr ) ) {
     OO_DEBUG_DLF(ci_log(LPF "handle_icmp: couldn't parse ICMP pkt"));
     return 0;
   }
@@ -337,8 +346,9 @@ static int dlfilter_handle_icmp(struct net* netns, int ifindex,
   /* Finally, do we have a filter?
    * NOTE: this is the point at which the char driver's TCP helper
    *       resource handle is picked up */
-  if( dlfilter_full_lookup(fcb, addr.daddr, addr.dport_be16, addr.saddr,
-                           addr.sport_be16, addr.protocol, thr_id) < 0 ) {
+  if( dlfilter_full_lookup(fcb, addr->daddr, addr->dport_be16,
+                           addr->saddr, addr->sport_be16, addr->protocol,
+                           thr_id) < 0 ) {
     OO_DEBUG_DLF( ci_log( LPF "handle_icmp: no filter"));
     return 0;
   }
@@ -762,14 +772,16 @@ int efx_dlfilter_handler(struct net* netns, int ifindex, efx_dlfilter_cb_t* fcb,
   /* ICMP only, no fragments */
   if( (af == AF_INET && proto == IPPROTO_ICMP) ||
       (af == AF_INET6 && proto == IPPROTO_ICMPV6) ) {
+    efab_ipp_addr addr;
+
     if( CI_UNLIKELY(ip_paylen < sizeof(ci_icmp_hdr)) )
       return 0;
 
-    if( dlfilter_handle_icmp(netns, ifindex, fcb, ipx, len, &thr_id) ) {
+    if( dlfilter_handle_icmp(netns, ifindex, fcb, ipx, len, &addr, &thr_id) ) {
       if( thr_id != -1 ) {
         OO_DEBUG_DLF(ci_log(LPF "handler: pass ICMP len:%d thr:%d", 
                             len, thr_id));
-        efab_handle_ipp_pkt_task(thr_id, ifindex, ipx, len);
+        efab_handle_ipp_pkt_task(thr_id, &addr);
       }
       else {
         OO_DEBUG_DLF(ci_log(LPF "handler: reject ICMP, INVALID THR ID %d",

@@ -85,80 +85,6 @@ int ci_ipp_icmp_csum_ok( ci_icmp_hdr* icmp, int icmp_total_len)
 }
 
 #if CI_CFG_HANDLE_ICMP
-/*! efab_ipp_icmp_parse -
- * Get the important info out of the ICMP hdr & it's payload
- *
- * If ok, the addr struct will have the addresses/ports and protocol
- * in it.
- * \param  ip  pointer to IP header - if [dta_only] != 0 then this is 
- *  the *data* IP address (i.e. the failing packet hdr)
- * \param  ip_len length of *ip
- * \param  addr   output: addressing data parsed from *[ip]
- *
- * \return 1 - ok, 0 - failed.
- * On success both addr->ipx and addr->icmp will be valid pointers.
- */
-static int
-efab_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr)
-{
-  const ci_ipx_hdr_t* data_ipx;
-  ci_icmp_hdr* icmp;
-  ci_tcp_hdr* data_tcp;
-  ci_udp_hdr* data_udp;
-  int ip_paylen, af, data_ipx_af;
-  ci_uint8 data_ipx_proto;
-
-  __ENTRY;
-  ci_assert( ipx );
-  ci_assert( addr );
-
-  af = ipx_hdr_af(ipx);
-
-  ip_paylen = ipx_hdr_tot_len(af, ipx);
-
-  /* remotely generated (ICMP) errors */
-  addr->af = af;
-  addr->icmp = icmp = (ci_icmp_hdr*)((char*)ipx + CI_IPX_IHL(af, ipx));
-
-  if( ip_paylen > ip_len ) {
-    /* ?? how do I record this in the ICMP stats */
-    OO_DEBUG_IPP(ci_log("%s: truncated packet %d %d", __FUNCTION__, 
-                        ip_paylen, ip_len));
-    return 0;
-  }
-  /* uncount the ICMP message IP hdr & ICMP hdr */
-  ci_assert( sizeof(ci_icmp_hdr) == 4 );
-  ip_paylen -= (int)CI_IPX_IHL(af, ipx) + sizeof(ci_icmp_hdr) + 4;
-  data_ipx = (ci_ipx_hdr_t*)((char*)icmp + sizeof(ci_icmp_hdr) + 4);
-
-  data_ipx_af = ipx_hdr_af(data_ipx);
-  data_ipx_proto = ipx_hdr_protocol(data_ipx_af, data_ipx);
-
-  /* note that we swap the source/dest addr:port info - this means
-   * that the sense of the addresses is correct for the lookup */
-  if( data_ipx_proto == IPPROTO_IP || data_ipx_proto == IPPROTO_TCP ) {
-    data_tcp = (ci_tcp_hdr*)((char*)data_ipx + CI_IPX_IHL(data_ipx_af, data_ipx));
-    addr->protocol = IPPROTO_TCP;
-    addr->sport_be16 = data_tcp->tcp_dest_be16;
-    addr->dport_be16 = data_tcp->tcp_source_be16;
-  } else if ( data_ipx_proto == IPPROTO_UDP ) {
-    data_udp = (ci_udp_hdr*)((char*)data_ipx + CI_IPX_IHL(data_ipx_af, data_ipx));
-    addr->protocol = IPPROTO_UDP;
-    addr->sport_be16 = data_udp->udp_dest_be16;
-    addr->dport_be16 = data_udp->udp_source_be16;
-  } else {
-    OO_DEBUG_IPP(ci_log("%s: Unknown protocol %d", __FUNCTION__, 
-                        data_ipx_proto));
-    return 0;
-  }
-
-  addr->saddr = ipx_hdr_daddr(data_ipx_af, data_ipx);
-  addr->daddr = ipx_hdr_saddr(data_ipx_af, data_ipx);
-  __EXIT(0);
-  return 1;
-}
-
-
 /*!
  * Mapping of ICMP code field of destination unreachable message to errno.
  * The mapping is based on linux sources.
@@ -648,30 +574,19 @@ efab_ipp_get_locked_thr_from_tcp_handle(unsigned tcp_id)
  * cannot get a lock.  As the mechanism is for protocols that
  * do not guarantee data delivery this is considered acceptible.
  */
-int efab_handle_ipp_pkt_task(int thr_id, ci_ifid_t ifindex,
-                             const void* in_data, int len)
+int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr)
 {
   tcp_helper_resource_t* thr;
-  const ci_ipx_hdr_t* in_ipx;
-  efab_ipp_addr addr;
-
-  in_ipx = in_data;
-
-  /* Have a full IP,ICMP hdr - so [data_only] arg is 0 */
-  if( !efab_ipp_icmp_parse( in_ipx, len, &addr))
-    goto exit_handler;
-  addr.ifindex = ifindex;
 
   if( (thr = efab_ipp_get_locked_thr_from_tcp_handle(thr_id))) {
     ci_sock_cmn* s;
 
-    s = efab_ipp_icmp_for_thr( thr, &addr );
-    if( s )  efab_ipp_icmp_qpkt( thr, s, &addr );
+    s = efab_ipp_icmp_for_thr( thr, addr );
+    if( s )  efab_ipp_icmp_qpkt( thr, s, addr );
     efab_tcp_helper_netif_unlock( thr, 1 );
     oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
   }
 
-exit_handler:
   return 0;
 }
 #endif
