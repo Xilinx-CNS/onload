@@ -1165,7 +1165,8 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
   /* Caveat: there is nothing to stop the flags in ALL_HANDLED_FLAGS from being
    * re-added to the lock.  As such, clearing them in the value that we return
    * is valid, but we mustn't clear them from the lock itself. */
-  return (lock_val | set_flags) & ~ALL_HANDLED_FLAGS;
+  return (lock_val | set_flags) &
+         (~ALL_HANDLED_FLAGS | CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS);
 }
 
 
