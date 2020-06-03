@@ -1221,7 +1221,8 @@ static void ci_netif_unlock_slow(ci_netif* ni KERNEL_DL_CONTEXT_DECL)
       dive_in_kernel = true;
 #endif
 
-  } while( (l & all_handled_flags) != 0 ||
+  } while( (l & all_handled_flags &
+            (CI_EPLOCK_NETIF_UNLOCK_FLAGS | CI_EPLOCK_NETIF_SOCKET_LIST)) != 0 ||
           ci_cas64u_fail(&ni->state->lock.lock,
                           l, (l &~ CI_EPLOCK_LOCKED) | CI_EPLOCK_UNLOCKED) );
 
