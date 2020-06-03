@@ -180,7 +180,7 @@ int citp_netif_by_id(ci_uint32 stack_id, ci_netif** out_ni, int locked)
 
   if( ! locked )
     CITP_FDTABLE_LOCK();
-  rc = ci_netif_restore_id(ni, stack_id);
+  rc = ci_netif_restore_id(ni, stack_id, false);
   if( rc < 0 ) {
     if( ! locked )
       CITP_FDTABLE_UNLOCK();

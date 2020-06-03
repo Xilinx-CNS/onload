@@ -694,7 +694,7 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
       }
       else if( thr->ref[OO_THR_REF_BASE] == 0 )
         rc = -EBUSY;
-      else if( (thr->ref[OO_THR_REF_APP] != 0) !=
+      else if( (thr->ref[OO_THR_REF_FILE] != 0) !=
                ! (flags & EFAB_THR_TABLE_LOOKUP_NO_UL) ) {
         /* Orphan stacks flag does not match  */
         rc = -EBUSY;
@@ -795,21 +795,21 @@ int tcp_helper_kill_stack_by_id(unsigned id)
 
 
 void
-tcp_helper_resource_assert_valid(tcp_helper_resource_t* thr, int no_app,
+tcp_helper_resource_assert_valid(tcp_helper_resource_t* thr, int no_ul,
                                  const char *file, int line)
 {
   _ci_assert(thr, file, line);
   _ci_assert_nequal(thr->id, CI_ID_POOL_ID_NONE, file, line);
   _ci_assert_equal(thr->id, thr->netif.state->stack_id, file, line);
 
-  if (no_app >=0) {
-    if ((no_app && thr->ref[OO_THR_REF_APP] > 0) ||
-        (!no_app && thr->ref[OO_THR_REF_APP] == 0)) {
-      ci_log("%s %d: %s check %u for %szero ref=%d", file, line,
-             __FUNCTION__, thr->id, no_app ? "" : "non-",
-             thr->ref[OO_THR_REF_APP]);
+  if (no_ul >=0) {
+    if ((no_ul && thr->ref[OO_THR_REF_FILE] > 0) ||
+        (!no_ul && thr->ref[OO_THR_REF_FILE] == 0)) {
+      ci_log("%s %d: %s check %u for %szero ul ref=%d", file, line,
+             __FUNCTION__, thr->id, no_ul ? "" : "non-",
+             thr->ref[OO_THR_REF_FILE]);
     }
-    _ci_assert(no_app || thr->ref[OO_THR_REF_APP], file, line);
+    _ci_assert(no_ul || thr->ref[OO_THR_REF_FILE], file, line);
   }
 }
 
@@ -7895,7 +7895,7 @@ static void thr_release_app(oo_thr_ref_t ref)
   tcp_helper_resource_t* thr = thr_ref2thr(ref);
   OO_DEBUG_TCPH(ci_log("%s [%d] "OO_THR_REF_FMT, __func__, thr->id,
                        OO_THR_REF_ARG(ref)));
-  (void)thr;
+  efab_notify_stacklist_change(thr_ref2thr(ref));
   oo_thr_ref_drop(ref, OO_THR_REF_FILE);
 }
 

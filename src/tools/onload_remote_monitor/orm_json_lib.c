@@ -109,7 +109,7 @@ static int orm_map_stack(orm_state_t* state, unsigned stack_id)
   state->stacks = new_stacks;
   state->stacks[state->n_stacks++] = orm_stack;
   orm_stack->os_id = stack_id;
-  if( (rc = ci_netif_restore_id(&orm_stack->os_ni, stack_id)) != 0 )
+  if( (rc = ci_netif_restore_id(&orm_stack->os_ni, stack_id, true)) != 0 )
     LOG("%s: Fail: ci_netif_restore_id(%d)=%d\n", __func__,
             stack_id, rc);
   return rc;

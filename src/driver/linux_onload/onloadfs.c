@@ -368,7 +368,9 @@ oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags,
                           rc, thr->id, ep_id));
       goto ret_put_fd;
     }
-    oo_thr_ref_get(thr->ref, OO_THR_REF_APP);
+    oo_thr_ref_get(thr->ref,
+                   (fd_flags & OO_FDFLAG_SERVICE) ?
+                   OO_THR_REF_FILE : OO_THR_REF_APP);
   }
 
   fd_install(fd, priv->_filp);

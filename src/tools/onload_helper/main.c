@@ -125,7 +125,7 @@ main_loop(ci_netif* ni)
      * Currently onload_tcpdump does it, so onload_tcpdump and
      * onload_helper will not detach if they both are using an
      * overwise-orphaned stack. */
-    if( arg.rs_ref_count == 1 ) {
+    if( arg.rs_ref_count == 0 ) {
       if( ! is_last ) {
         is_last = true;
         stack_lock(ni, &is_locked);
@@ -189,7 +189,7 @@ int main(int argc, char** argv)
   }
 
   /* Find the stack */
-  rc = ci_netif_restore_id(ni, cfg_ni_id);
+  rc = ci_netif_restore_id(ni, cfg_ni_id, true);
   if( rc != 0 ) {
     ci_log("no Onload stack [%d]", cfg_ni_id);
     return 1;

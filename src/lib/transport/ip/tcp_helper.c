@@ -227,15 +227,17 @@ int ci_tcp_helper_ep_mcast_add_del(ci_fd_t           fd,
 }
 
 
-int ci_tcp_helper_stack_attach(ci_fd_t from_fd,
-                               efrm_nic_set_t *out_ptr_nic_set,
-                               ci_uint32 *out_map_size)
+int __ci_tcp_helper_stack_attach(ci_fd_t from_fd,
+                                 efrm_nic_set_t *out_ptr_nic_set,
+                                 ci_uint32 *out_map_size,
+                                 bool is_service)
 {
   int rc;
   oo_stack_attach_t op;
 
   ci_assert(out_ptr_nic_set);
   ci_assert(out_map_size);
+  op.is_service = is_service;
   rc = oo_resource_op(from_fd, OO_IOC_STACK_ATTACH, &op);
   if( rc < 0 )
     return rc;
@@ -244,6 +246,13 @@ int ci_tcp_helper_stack_attach(ci_fd_t from_fd,
   return op.fd;
 }
 
+int ci_tcp_helper_stack_attach(ci_fd_t from_fd,
+                               efrm_nic_set_t *out_ptr_nic_set,
+                               ci_uint32 *out_map_size)
+{
+  return __ci_tcp_helper_stack_attach(from_fd, out_ptr_nic_set,
+                                      out_map_size, false);
+}
 
 int ci_tcp_helper_sock_attach(ci_fd_t stack_fd, oo_sp ep_id,
                               int domain, int type)

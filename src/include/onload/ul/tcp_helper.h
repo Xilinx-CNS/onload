@@ -24,6 +24,10 @@ extern int ci_tcp_helper_more_bufs(struct ci_netif_s* ni) CI_HF;
 extern int ci_tcp_helper_stack_attach(ci_fd_t from_fd,
                                       efrm_nic_set_t *out_ptr_nic_set,
                                       ci_uint32 *out_map_size);
+int __ci_tcp_helper_stack_attach(ci_fd_t from_fd,
+                                 efrm_nic_set_t *out_ptr_nic_set,
+                                 ci_uint32 *out_map_size,
+                                 bool is_service);
 
 /*! Allocate fd for socket ep_id and create OS socket for UDP socks */
 extern int ci_tcp_helper_sock_attach(ci_fd_t stack_fd, oo_sp ep_id,

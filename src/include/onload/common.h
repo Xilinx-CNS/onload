@@ -178,6 +178,7 @@ typedef struct {
   ci_fixed_descriptor_t fd;     /* OUT */
   efrm_nic_set_t        out_nic_set;
   ci_uint32             out_map_size;
+  ci_uint32             is_service;
 } oo_stack_attach_t;
 
 typedef struct {
@@ -292,6 +293,10 @@ typedef ci_uint16 oo_fd_flags;
  */
 #define OO_FDFLAG_REATTACH       0x80
 
+/* This is Onload service like stackdump. */
+#define OO_FDFLAG_SERVICE       0x100
+
+
 #define OO_FDFLAG_TYPE_STR(flags) \
   (flags) & OO_FDFLAG_STACK ? "stack" :             \
   (flags) & OO_FDFLAG_EP_TCP ? "tcp" :              \
@@ -301,8 +306,10 @@ typedef ci_uint16 oo_fd_flags;
   (flags) & OO_FDFLAG_EP_PIPE_READ ? "piper" :      \
   (flags) & OO_FDFLAG_EP_PIPE_WRITE ? "pipew" : "?" \
 
-#define OO_FDFLAG_FMT "0x%x %s"
-#define OO_FDFLAG_ARG(flags) (flags), OO_FDFLAG_TYPE_STR(flags)
+#define OO_FDFLAG_FMT "0x%x %s %s"
+#define OO_FDFLAG_ARG(flags) \
+  (flags), OO_FDFLAG_TYPE_STR(flags), \
+  (flags & OO_FDFLAG_SERVICE) ? "service" : "app"
 
 typedef struct {
   oo_fd_flags            fd_flags;

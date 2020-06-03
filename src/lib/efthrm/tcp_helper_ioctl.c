@@ -102,7 +102,7 @@ efab_tcp_helper_stack_attach(ci_private_t* priv, void *arg)
   }
   OO_DEBUG_TCPH(ci_log("%s: [%d]", __FUNCTION__, NI_ID(&trs->netif)));
 
-  rc = oo_create_stack_fd(trs);
+  rc = oo_create_stack_fd(trs, op->is_service ? OO_FDFLAG_SERVICE : 0);
   if( rc < 0 ) {
     OO_DEBUG_ERR(ci_log("%s: oo_create_stack_fd failed (%d)",
                         __FUNCTION__, rc));

@@ -333,7 +333,9 @@ int oo_fop_release(struct inode* inode, struct file* filp)
   filp->private_data = 0;
   if (priv->thr != NULL) {
     TCP_HELPER_RESOURCE_ASSERT_VALID(priv->thr, 0);
-    oo_thr_ref_drop(priv->thr->ref, OO_THR_REF_APP);
+    oo_thr_ref_drop(priv->thr->ref,
+                    (priv->fd_flags & OO_FDFLAG_SERVICE) ?
+                    OO_THR_REF_FILE : OO_THR_REF_APP);
   }
   if (priv->priv_cp != NULL)
     cp_release(priv->priv_cp);

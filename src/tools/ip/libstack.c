@@ -728,7 +728,7 @@ int stack_attach(unsigned id)
 
   if( ! cfg_zombie ) {
     /* Possibly, this stack was already destroyed, so do not CI_TRY here. */
-    int rc = ci_netif_restore_id(&n->ni, id);
+    int rc = ci_netif_restore_id(&n->ni, id, true);
     if( rc != 0 )
         return 0;
     if( ci_dllist_is_empty(&stacks_list) )
@@ -790,11 +790,9 @@ void list_all_stacks2(stackfilter_t *filter,
     if( info.ni_exists ) {
       /* Are we already attached? */
       if( i < stacks_size && stacks[i] != NULL ) {
-        ci_assert_ge(info.rs_ref_count, 2);
-        //ci_log("known stack %d rs_ref_count=%d", i, info.rs_ref_count);
         /* Is the stack dead?  Should we detach? */
-        if( info.rs_ref_count == 2 ) {
-          IGNORE(ci_log("We are the only user of stack %d", i));
+        if( info.rs_ref_count == 0 ) {
+          IGNORE(ci_log("No app is using stack %d", i));
           if( pre_detach )
             pre_detach(&stacks[i]->ni);
           stack_detach(stacks[i], 0);

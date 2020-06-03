@@ -421,9 +421,10 @@ oo_create_ep_fd(tcp_helper_endpoint_t* ep, int flags, oo_fd_flags fd_flags)
                       &ep->file_ptr : NULL);
 }
 static inline int
-oo_create_stack_fd(tcp_helper_resource_t *thr)
+oo_create_stack_fd(tcp_helper_resource_t *thr, oo_fd_flags fd_flags)
 {
-  return oo_create_fd(thr, OO_SP_NULL, O_CLOEXEC, OO_FDFLAG_STACK, NULL);
+  return oo_create_fd(thr, OO_SP_NULL, O_CLOEXEC,
+                      OO_FDFLAG_STACK | fd_flags, NULL);
 }
 
 extern int onloadfs_get_dev_t(ci_private_t* priv, void* arg);

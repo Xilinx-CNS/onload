@@ -460,7 +460,7 @@ extern int  ci_netif_ctor(ci_netif*, ef_driver_handle, const char* name,
                           unsigned flags) CI_HF;
 extern void ci_netif_cluster_prefault(ci_netif* ni) CI_HF;
 #endif
-extern int  ci_netif_restore_id(ci_netif*, unsigned stack_id) CI_HF;
+extern int  ci_netif_restore_id(ci_netif*, unsigned stack_id, bool is_service) CI_HF;
 extern int citp_netif_by_id(ci_uint32 stack_id, ci_netif** out_ni, int locked) CI_HF;
 extern int  ci_netif_restore_name(ci_netif*, const char*) CI_HF;
 extern int  ci_netif_restore(ci_netif* ni, ci_fd_t fd,

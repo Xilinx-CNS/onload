@@ -2911,7 +2911,7 @@ static int install_stack_by_name(ci_fd_t fd, const char* name)
 
 
 /* This is used by utilities such as stackdump to restore an abitrary netif */
-int ci_netif_restore_id(ci_netif* ni, unsigned thr_id)
+int ci_netif_restore_id(ci_netif* ni, unsigned thr_id, bool is_service)
 {
   ef_driver_handle fd, fd2;
   ci_uint32 map_size;
@@ -2933,7 +2933,7 @@ int ci_netif_restore_id(ci_netif* ni, unsigned thr_id)
     CI_TRY(ef_onload_driver_close(fd2));
     return rc;
   }
-  fd = ci_tcp_helper_stack_attach(fd2, &ni->nic_set, &map_size);
+  fd = __ci_tcp_helper_stack_attach(fd2, &ni->nic_set, &map_size, is_service);
   if( fd < 0 )
     return fd;
   CI_TRY(ef_onload_driver_close(fd2));

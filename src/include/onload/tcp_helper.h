@@ -390,10 +390,10 @@ typedef struct tcp_helper_resource_s {
 #define TCP_HELPER_RESOURCE_ASSERT_VALID(trs, rc_mbz)
 #else
 extern void tcp_helper_resource_assert_valid(tcp_helper_resource_t*,
-                                             int rc_is_zero,
+                                             int ul_rc_is_zero,
                                              const char *file, int line);
-#define TCP_HELPER_RESOURCE_ASSERT_VALID(trs, rc_mbz) \
-    tcp_helper_resource_assert_valid(trs, rc_mbz, __FILE__, __LINE__)
+#define TCP_HELPER_RESOURCE_ASSERT_VALID(trs, ul_rc_mbz) \
+    tcp_helper_resource_assert_valid(trs, ul_rc_mbz, __FILE__, __LINE__)
 #endif
 
 
