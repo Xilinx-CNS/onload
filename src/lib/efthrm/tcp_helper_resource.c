@@ -1159,8 +1159,10 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
   /* NICs that do not have the low-latency licensed feature (e.g. those with
    * a ScaleOut key) claim incorrectly that they support event cut-through.
    * They report correctly, however, that they do not support RX cut-through,
-   * so we check for this here. */
-  if( NI_OPTS(ni).rx_merge_mode || ! (nic->flags & NIC_FLAG_RX_CUT_THROUGH) ) {
+   * so we check for this here.
+   * EF100 has different Rx merging mechanism and hasn't RX cut-through. */
+  if( NI_OPTS(ni).rx_merge_mode || (nic->devtype.arch != EFHW_ARCH_EF100 &&
+      ! (nic->flags & NIC_FLAG_RX_CUT_THROUGH)) ) {
     info->efhw_flags |= HIGH_THROUGHPUT_EFHW_VI_FLAGS;
     info->ef_vi_flags |= EF_VI_RX_EVENT_MERGE;
   }
