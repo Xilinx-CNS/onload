@@ -1073,7 +1073,7 @@ int oo_want_proactive_packet_allocation(ci_netif* ni)
 ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
 {
   const ci_uint64 ALL_HANDLED_FLAGS = CI_EPLOCK_NETIF_UL_MASK
-#if ! CI_CFG_UL_INTERRUPT_HELPER
+#if CI_CFG_UL_INTERRUPT_HELPER
       /* Fixme: remove this exception under ON-12119 */
       & ~CI_EPLOCK_NETIF_NEED_PRIME
 #endif
