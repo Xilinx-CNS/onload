@@ -1211,7 +1211,8 @@ static void ci_netif_unlock_slow(ci_netif* ni KERNEL_DL_CONTEXT_DECL)
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     /* If some flags should be handled in kernel, then there is no point in
      * looping here.  Dive! */
-    if( l & (CI_EPLOCK_NETIF_UNLOCK_FLAGS | CI_EPLOCK_NETIF_SOCKET_LIST) &
+    if( l & (CI_EPLOCK_NETIF_UNLOCK_FLAGS | CI_EPLOCK_NETIF_SOCKET_LIST |
+             CI_EPLOCK_FL_NEED_WAKE) &
         ~all_handled_flags ) {
       dive_in_kernel = true;
       break;
