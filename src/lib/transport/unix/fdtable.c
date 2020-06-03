@@ -230,22 +230,22 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
   ci_assert_nequal(info->resource_id, CI_ID_POOL_ID_NONE);
 
   /* Will need to review this function if the following assert fires */
-  switch( info->fd_type ) {
-  case CI_PRIV_TYPE_TCP_EP:  proto = &citp_tcp_protocol_impl;  break;
-  case CI_PRIV_TYPE_UDP_EP:  proto = &citp_udp_protocol_impl;  break;
-  case CI_PRIV_TYPE_PASSTHROUGH_EP:
+  switch( info->fd_flags & OO_FDFLAG_EP_MASK ) {
+  case OO_FDFLAG_EP_TCP:  proto = &citp_tcp_protocol_impl;  break;
+  case OO_FDFLAG_EP_UDP:  proto = &citp_udp_protocol_impl;  break;
+  case OO_FDFLAG_EP_PASSTHROUGH:
     proto = &citp_passthrough_protocol_impl;
     c_sock_fdi = 0;
     break;
-  case CI_PRIV_TYPE_ALIEN_EP:
+  case OO_FDFLAG_EP_ALIEN:
     proto = NULL;
     c_sock_fdi = 0;
     break;
-  case CI_PRIV_TYPE_PIPE_READER:
+  case OO_FDFLAG_EP_PIPE_READ:
     proto = &citp_pipe_read_protocol_impl;
     c_sock_fdi = 0;
     break;
-  case CI_PRIV_TYPE_PIPE_WRITER:
+  case OO_FDFLAG_EP_PIPE_WRITE:
     proto = &citp_pipe_write_protocol_impl;
     c_sock_fdi = 0;
     break;
@@ -297,7 +297,7 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
     sock_fdi->sock.s = SP_TO_SOCK_CMN(ni, info->sock_id);
     sock_fdi->sock.netif = ni;
   }
-  else if( info->fd_type == CI_PRIV_TYPE_PASSTHROUGH_EP ) {
+  else if( info->fd_flags & OO_FDFLAG_EP_PASSTHROUGH ) {
     citp_waitable* w = SP_TO_WAITABLE(ni, info->sock_id);
     citp_alien_fdi* alien_fdi;
     if( ~w->sb_aflags & CI_SB_AFLAG_MOVED_AWAY_IN_EPOLL &&
@@ -317,7 +317,7 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
     citp_passthrough_init(alien_fdi);
   }
 #if CI_CFG_ENDPOINT_MOVE
-  else if( info->fd_type == CI_PRIV_TYPE_ALIEN_EP ) {
+  else if( info->fd_flags & OO_FDFLAG_EP_ALIEN ) {
     citp_waitable* w = SP_TO_WAITABLE(ni, info->sock_id);
     citp_sock_fdi* sock_fdi;
     ci_netif* alien_ni;
@@ -428,25 +428,24 @@ static citp_fdinfo * citp_fdtable_probe_locked(unsigned fd, int print_banner,
   if(  st.st_dev == oo_onloadfs_dev_t() ) {
     /* Retrieve user-level endpoint info */
     if( oo_ep_info(fd, &info) < 0 ) {
-      Log_V(log("%s: fd=%d type=%d unknown", __FUNCTION__,fd,info.fd_type));
+      Log_V(log("%s: fd=%d unknown type "OO_FDFLAG_FMT,
+                __FUNCTION__, fd, OO_FDFLAG_ARG(info.fd_flags)));
       citp_fdtable_busy_clear(fd, fdip_passthru, 1);
       goto exit;
     }
 
-    switch( info.fd_type ) {
-    case CI_PRIV_TYPE_TCP_EP:
-    case CI_PRIV_TYPE_UDP_EP:
-    case CI_PRIV_TYPE_PASSTHROUGH_EP:
-    case CI_PRIV_TYPE_ALIEN_EP:
-    case CI_PRIV_TYPE_PIPE_READER:
-    case CI_PRIV_TYPE_PIPE_WRITER:
+    switch( info.fd_flags & (OO_FDFLAG_EP_MASK | OO_FDFLAG_STACK) ) {
+    case OO_FDFLAG_EP_TCP:
+    case OO_FDFLAG_EP_UDP:
+    case OO_FDFLAG_EP_PASSTHROUGH:
+    case OO_FDFLAG_EP_ALIEN:
+    case OO_FDFLAG_EP_PIPE_READ:
+    case OO_FDFLAG_EP_PIPE_WRITE:
     {
       citp_fdinfo_p fdip;
 
-      Log_V(log("%s: fd=%d %s restore", __FUNCTION__, fd,
-		info.fd_type == CI_PRIV_TYPE_TCP_EP ? "TCP":
-                info.fd_type != CI_PRIV_TYPE_UDP_EP ? "PIPE" :
-                "UDP"));
+      Log_V(log("%s: fd=%d restore type "OO_FDFLAG_FMT, __FUNCTION__, fd,
+                OO_FDFLAG_ARG(info.fd_flags)));
       fdip = citp_fdtable_probe_restore(fd, &info, print_banner);
       if( fdip_is_normal(fdip) )
         fdi = fdip_to_fdi(fdip);
@@ -455,7 +454,7 @@ static citp_fdinfo * citp_fdtable_probe_locked(unsigned fd, int print_banner,
       goto exit;
     }
 
-    case CI_PRIV_TYPE_NETIF:
+    case OO_FDFLAG_STACK:
       /* This should never happen, because netif fds are close-on-exec.
       ** But let's leave this code here just in case my reasoning is bad.
       */
@@ -465,7 +464,7 @@ static citp_fdinfo * citp_fdtable_probe_locked(unsigned fd, int print_banner,
       citp_fdinfo_ref(fdi);
       goto exit;
 
-    case CI_PRIV_TYPE_NONE:
+    default:
       /* This happens if a thread gets at an onload driver fd that has just
        * been created, but not yet specialised.  On Linux I think this
        * means it will shortly be a new netif internal fd.  (fds associated
@@ -474,10 +473,6 @@ static citp_fdinfo * citp_fdtable_probe_locked(unsigned fd, int print_banner,
       Log_V(log("%s: fd=%d TYPE_NONE", __FUNCTION__, fd));
       citp_fdtable_busy_clear(fd, fdip_passthru, 1);
       goto exit;
-
-    default:
-      CI_TEST(0);
-      break;
     }
   }
 #if CI_CFG_EPOLL2

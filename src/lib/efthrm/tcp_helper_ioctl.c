@@ -73,7 +73,7 @@ oo_priv_lookup_and_attach_stack(ci_private_t* priv, const char* name,
       oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
     }
     else if( (rc = oo_priv_set_stack(priv, trs)) == 0 ) {
-      priv->fd_type = CI_PRIV_TYPE_NETIF;
+      priv->fd_flags = OO_FDFLAG_STACK;
       priv->sock_id = OO_SP_NULL;
     }
     else {
@@ -182,14 +182,14 @@ efab_tcp_helper_sock_attach_common(tcp_helper_resource_t* trs,
  * socket to reserve their own local ip/port
  */
 static int /*bool*/
-efab_tcp_helper_os_sock_is_needed(ci_netif* netif, int fd_type)
+efab_tcp_helper_os_sock_is_needed(ci_netif* netif, oo_fd_flags fd_flags)
 {
   if( ((NI_OPTS(netif).scalable_filter_enable !=
        CITP_SCALABLE_FILTERS_ENABLE)
 #if CI_CFG_FD_CACHING
       && (NI_OPTS(netif).sock_cache_max == 0 )
 #endif
-      ) || (fd_type == CI_PRIV_TYPE_UDP_EP) )
+      ) || (fd_flags & OO_FDFLAG_EP_UDP) )
     return 1;
 
   return 0;
@@ -213,7 +213,7 @@ efab_tcp_helper_sock_attach(ci_private_t* priv, void *arg)
   int rc;
   int flags;
   int sock_type = op->type;
-  int fd_type;
+  oo_fd_flags fd_flags;
 
   OO_DEBUG_TCPH(ci_log("%s: ep_id=%d", __FUNCTION__, op->ep_id));
   if( trs == NULL ) {
@@ -230,8 +230,8 @@ efab_tcp_helper_sock_attach(ci_private_t* priv, void *arg)
 
   ci_assert( (wo->waitable.state == CI_TCP_STATE_UDP) ||
              (wo->waitable.state & CI_TCP_STATE_TCP) );
-  fd_type = (wo->waitable.state & CI_TCP_STATE_TCP) ?
-            CI_PRIV_TYPE_TCP_EP : CI_PRIV_TYPE_UDP_EP;
+  fd_flags = (wo->waitable.state & CI_TCP_STATE_TCP) ?
+             OO_FDFLAG_EP_TCP : OO_FDFLAG_EP_UDP;
 
   ci_atomic32_and(&wo-> waitable.sb_aflags,
                   ~(CI_SB_AFLAG_ORPHAN | CI_SB_AFLAG_TCP_IN_ACCEPTQ));
@@ -242,7 +242,7 @@ efab_tcp_helper_sock_attach(ci_private_t* priv, void *arg)
   /* We always need an OS socket for UDP endpoints.
    * Creation of the OS socket may be deferred for all TCP cases.
    */
-  if( efab_tcp_helper_os_sock_is_needed(&trs->netif, fd_type) ) {
+  if( efab_tcp_helper_os_sock_is_needed(&trs->netif, fd_flags) ) {
     rc = efab_create_os_socket(trs, ep, op->domain, sock_type, flags);
     if( rc < 0 ) {
       efab_tcp_helper_close_endpoint(trs, ep->id, 0);
@@ -266,7 +266,7 @@ efab_tcp_helper_sock_attach(ci_private_t* priv, void *arg)
 #endif
   }
 
-  rc = efab_tcp_helper_sock_attach_common(trs, ep, op->type, fd_type, flags);
+  rc = efab_tcp_helper_sock_attach_common(trs, ep, op->type, fd_flags, flags);
   /* File should have not existed */
   ci_assert_nequal(rc, -ENOANO);
   if( rc < 0 ) {
@@ -356,10 +356,10 @@ efab_tcp_helper_detach_file(tcp_helper_endpoint_t* ep,
     CITP_STATS_NETIF_INC(&trs->netif, sock_attach_fd_detach_fail_hard);
     goto file_put;
   }
-  if( priv->fd_type != CI_PRIV_TYPE_TCP_EP ) {
+  if( ! (priv->fd_flags & OO_FDFLAG_EP_TCP) ) {
     rc = -EINVAL;
-    LOG_E(ci_log("%s: pid=%d fd=%d => fd priv type not TCP",
-          __FUNCTION__, pid, fd));
+    LOG_E(ci_log("%s: pid=%d fd=%d => fd priv type not TCP: "OO_FDFLAG_FMT,
+          __FUNCTION__, pid, fd, OO_FDFLAG_ARG(priv->fd_flags)));
     CITP_STATS_NETIF_INC(&trs->netif, sock_attach_fd_detach_fail_hard);
     goto file_put;
   }
@@ -523,7 +523,7 @@ efab_tcp_helper_tcp_accept_sock_attach(ci_private_t* priv, void *arg)
 
   flags = efab_tcp_helper_sock_attach_setup_flags(&sock_type);
   rc = efab_tcp_helper_sock_attach_common(trs, ep, op->type,
-                                          CI_PRIV_TYPE_TCP_EP, flags);
+                                          OO_FDFLAG_EP_TCP, flags);
   if( rc < 0 )
     goto on_error;
 
@@ -585,7 +585,7 @@ efab_tcp_helper_pipe_attach(ci_private_t* priv, void *arg)
   ci_atomic32_and(&wo->waitable.sb_aflags,
                   ~(CI_SB_AFLAG_ORPHAN | CI_SB_AFLAG_TCP_IN_ACCEPTQ));
 
-  rc = oo_create_ep_fd(ep, op->flags, CI_PRIV_TYPE_PIPE_READER);
+  rc = oo_create_ep_fd(ep, op->flags, OO_FDFLAG_EP_PIPE_READ);
   if( rc < 0 ) {
     LOG_E(ci_log("%s: ERROR: failed to bind reader [%d:%d] to fd",
                  __func__, trs->id, ep->id));
@@ -595,7 +595,7 @@ efab_tcp_helper_pipe_attach(ci_private_t* priv, void *arg)
   }
   op->rfd = rc;
 
-  rc = oo_create_ep_fd(ep, op->flags, CI_PRIV_TYPE_PIPE_WRITER);
+  rc = oo_create_ep_fd(ep, op->flags, OO_FDFLAG_EP_PIPE_WRITE);
   if( rc < 0 ) {
     LOG_E(ci_log("%s: ERROR: failed to bind writer [%d:%d] to fd",
                  __func__, trs->id, ep->id));
@@ -871,11 +871,11 @@ efab_tcp_helper_os_sock_create_and_set_rsop(ci_private_t* priv, void* arg)
   ci_assert(priv);
   ci_assert(op);
 
-  if (!CI_PRIV_TYPE_IS_ENDPOINT(priv->fd_type))
+  if( ! (priv->fd_flags & OO_FDFLAG_EP_MASK) )
     return -EINVAL;
 
   ci_assert(priv->thr);
-  ci_assert_equal(priv->fd_type, CI_PRIV_TYPE_TCP_EP);
+  ci_assert_flags(priv->fd_flags, OO_FDFLAG_EP_TCP);
   ep = efab_priv_to_ep(priv);
 
   OO_DEBUG_TCPH(ci_log("%s: ep_id=%d", __FUNCTION__, ep->id));
@@ -1071,7 +1071,7 @@ static DEFINE_MUTEX(ctor_mutex);
   if( rc == 0 ) {
     rc = oo_priv_set_stack(priv, trs);
     if( rc == 0 ) {
-      priv->fd_type = CI_PRIV_TYPE_NETIF;
+      priv->fd_flags = OO_FDFLAG_STACK;
       priv->sock_id = OO_SP_NULL;
     }
     else
@@ -1084,7 +1084,7 @@ static int
 ioctl_ep_info(ci_private_t *priv, void *arg)
 {
   ci_ep_info_t *ep_info = arg;
-  ep_info->fd_type = priv->fd_type;
+  ep_info->fd_flags = priv->fd_flags;
   if (priv->thr != NULL) {
     ep_info->resource_id = priv->thr->id;
     ep_info->sock_id = priv->sock_id;

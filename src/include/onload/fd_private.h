@@ -41,7 +41,7 @@ typedef struct ci_private_s {
   ** following fields (prefixed with spec_) relate to specialised
   ** endpoints:
   */
-  char			fd_type;
+  oo_fd_flags		fd_flags;
   /*! See common.h CI_PRIV_TYPE_* for type definitions. */
   oo_sp                 sock_id;	/*! id of ep */
 

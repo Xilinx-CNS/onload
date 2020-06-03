@@ -306,7 +306,7 @@ int oo_fop_open(struct inode* inode, struct file* filp)
 
   CI_ZERO(priv);
   priv->_filp = filp;
-  priv->fd_type = CI_PRIV_TYPE_NONE;
+  priv->fd_flags = 0;
   priv->priv_cp = NULL;
   ci_dllist_init(&priv->dshm_list);
 
@@ -326,7 +326,8 @@ int oo_fop_release(struct inode* inode, struct file* filp)
 {
   ci_private_t *priv = (ci_private_t *) filp->private_data;
 
-  OO_DEBUG_VERB(ci_log("ci_char_fop_close %d", priv->fd_type));
+  OO_DEBUG_VERB(ci_log("ci_char_fop_close "OO_FDFLAG_FMT,
+                       OO_FDFLAG_ARG(priv->fd_flags)));
 
   /* cleanup private state */
   filp->private_data = 0;

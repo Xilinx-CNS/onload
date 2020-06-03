@@ -97,6 +97,9 @@ typedef struct ci_resource_onload_alloc_s {
  *
  *--------------------------------------------------------------------*/
 
+/* These are shared structures. They should not use "int", "long", etc
+ * because kernel and userland may have different size for such types. */
+
 typedef struct {
   oo_sp         sock_id;
   ci_bits       why;  /* 32 bits */
@@ -272,24 +275,37 @@ typedef struct {
   ci_ifid_t	ifindex;
 } cp_user_pkt_dest_ifid_t;
 
-/* This is shared structure. It should not use "int", "long", etc because
- * kernel and userland may have different size for such types. */
-typedef struct {
-  ci_int16               fd_type;
-# define CI_PRIV_TYPE_NONE      0
-# define CI_PRIV_TYPE_TCP_EP    1
-# define CI_PRIV_TYPE_UDP_EP    2
-# define CI_PRIV_TYPE_NETIF     3
-# define CI_PRIV_TYPE_PASSTHROUGH_EP 4
-# define CI_PRIV_TYPE_ALIEN_EP   5
-# define CI_PRIV_TYPE_PIPE_READER 6
-# define CI_PRIV_TYPE_PIPE_WRITER 7
-# define CI_PRIV_TYPE_IS_ENDPOINT(t)                                \
-    ((t) == CI_PRIV_TYPE_TCP_EP || (t) == CI_PRIV_TYPE_UDP_EP ||    \
-     (t) == CI_PRIV_TYPE_PASSTHROUGH_EP ||                          \
-     (t) == CI_PRIV_TYPE_ALIEN_EP ||                                \
-     (t) == CI_PRIV_TYPE_PIPE_READER || (t) == CI_PRIV_TYPE_PIPE_WRITER)
 
+/* Flags & types.  It could be enum if enum had fixed size. */
+typedef ci_uint16 oo_fd_flags;
+/* File type: */
+#define OO_FDFLAG_STACK          0x01
+#define OO_FDFLAG_EP_TCP         0x02
+#define OO_FDFLAG_EP_UDP         0x04
+#define OO_FDFLAG_EP_PASSTHROUGH 0x08
+#define OO_FDFLAG_EP_ALIEN       0x10
+#define OO_FDFLAG_EP_PIPE_READ   0x20
+#define OO_FDFLAG_EP_PIPE_WRITE  0x40
+#define OO_FDFLAG_EP_MASK        0x7e
+/* Replacement for "type" when it is not known, to be used as function
+ * parameter only.
+ */
+#define OO_FDFLAG_REATTACH       0x80
+
+#define OO_FDFLAG_TYPE_STR(flags) \
+  (flags) & OO_FDFLAG_STACK ? "stack" :             \
+  (flags) & OO_FDFLAG_EP_TCP ? "tcp" :              \
+  (flags) & OO_FDFLAG_EP_UDP ? "udp" :              \
+  (flags) & OO_FDFLAG_EP_PASSTHROUGH ? "os_sock" :  \
+  (flags) & OO_FDFLAG_EP_ALIEN ? "moved" :          \
+  (flags) & OO_FDFLAG_EP_PIPE_READ ? "piper" :      \
+  (flags) & OO_FDFLAG_EP_PIPE_WRITE ? "pipew" : "?" \
+
+#define OO_FDFLAG_FMT "0x%x %s"
+#define OO_FDFLAG_ARG(flags) (flags), OO_FDFLAG_TYPE_STR(flags)
+
+typedef struct {
+  oo_fd_flags            fd_flags;
   ci_uint32              resource_id;
   ci_uint32              mem_mmap_bytes;
   oo_sp                  sock_id;

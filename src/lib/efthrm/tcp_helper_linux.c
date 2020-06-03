@@ -392,7 +392,7 @@ static int linux_tcp_helper_fop_close_pipe(struct inode* inode,
     struct oo_pipe* p = SP_TO_PIPE(&trs->netif, ep->id);
     ci_atomic32_or(&p->aflags,
                    CI_PFD_AFLAG_CLOSED <<
-                   (priv->fd_type == CI_PRIV_TYPE_PIPE_READER ?
+                   ((priv->fd_flags & OO_FDFLAG_EP_PIPE_READ) ?
                     CI_PFD_AFLAG_READER_SHIFT : CI_PFD_AFLAG_WRITER_SHIFT));
     oo_pipe_wake_peer(&trs->netif, p, CI_SB_FLAG_WAKE_RX | CI_SB_FLAG_WAKE_TX);
   }

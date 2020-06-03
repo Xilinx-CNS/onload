@@ -74,12 +74,12 @@ extern void tcp_helper_xdp_change(ci_netif* ni, int intf_i);
 extern void tcp_helper_flush_resets(ci_netif* ni);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
-extern void tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
+extern void tcp_helper_rm_dump(oo_fd_flags fd_flags, oo_sp sock_id,
                                tcp_helper_resource_t* trs,
                                const char *line_prefix);
 
 #define THR_PRIV_DUMP(priv, line_prefix)                \
-  tcp_helper_rm_dump((priv)->fd_type, (priv)->sock_id,  \
+  tcp_helper_rm_dump((priv)->fd_flags, (priv)->sock_id, \
                      (priv)->thr, line_prefix)
 #endif
 
@@ -411,24 +411,25 @@ tcp_helper_defer_dl2work(tcp_helper_resource_t* trs, ci_uint32 flag);
 
 
 extern int
-oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags, int fd_type,
-             ci_os_file* _file_ptr);
+oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags,
+             oo_fd_flags fd_flags, ci_os_file* _file_ptr);
 static inline int
-oo_create_ep_fd(tcp_helper_endpoint_t* ep, int flags, int fd_type)
+oo_create_ep_fd(tcp_helper_endpoint_t* ep, int flags, oo_fd_flags fd_flags)
 {
-  return oo_create_fd(ep->thr, ep->id, flags, fd_type,
-                      (fd_type == -1 || (fd_type == CI_PRIV_TYPE_TCP_EP)) ?
+  return oo_create_fd(ep->thr, ep->id, flags, fd_flags,
+                      (fd_flags & (OO_FDFLAG_EP_TCP | OO_FDFLAG_REATTACH)) ?
                       &ep->file_ptr : NULL);
 }
 static inline int
 oo_create_stack_fd(tcp_helper_resource_t *thr)
 {
-  return oo_create_fd(thr, OO_SP_NULL, O_CLOEXEC, CI_PRIV_TYPE_NETIF, NULL);
+  return oo_create_fd(thr, OO_SP_NULL, O_CLOEXEC, OO_FDFLAG_STACK, NULL);
 }
 
 extern int onloadfs_get_dev_t(ci_private_t* priv, void* arg);
 extern int onload_alloc_file(tcp_helper_resource_t *thr, oo_sp ep_id,
-                             int flags, int fd_type, ci_private_t **priv_p);
+                             int flags, oo_fd_flags fd_flags,
+                             ci_private_t **priv_p);
 
 extern int oo_clone_fd(struct file* filp, int do_cloexec);
 

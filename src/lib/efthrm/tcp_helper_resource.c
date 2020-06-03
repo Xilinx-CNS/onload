@@ -6132,7 +6132,7 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 void
-tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
+tcp_helper_rm_dump(oo_fd_flags fd_flags, oo_sp sock_id,
                    tcp_helper_resource_t* trs, const char *line_prefix) 
 {
   ci_netif* ni;
@@ -6143,14 +6143,14 @@ tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
     ci_dllink *link;
     CI_DLLIST_FOR_EACH(link, &THR_TABLE.all_stacks) {
       trs = CI_CONTAINER(tcp_helper_resource_t, all_stacks_link, link);
-      tcp_helper_rm_dump(CI_PRIV_TYPE_NETIF, OO_SP_NULL, trs, line_prefix);
+      tcp_helper_rm_dump(OO_FDFLAG_STACK, OO_SP_NULL, trs, line_prefix);
       for( i = 0; i < trs->netif.ep_tbl_n; ++i )
         if (trs->netif.ep_tbl[i]) {
           ci_sock_cmn *s = ID_TO_SOCK(&trs->netif, i);
           if (s->b.state == CI_TCP_STATE_FREE || s->b.state == CI_TCP_CLOSED)
             continue;
           tcp_helper_rm_dump(s->b.state == CI_TCP_STATE_UDP ?
-                             CI_PRIV_TYPE_UDP_EP : CI_PRIV_TYPE_TCP_EP,
+                             OO_FDFLAG_EP_UDP : OO_FDFLAG_EP_TCP,
                              OO_SP_FROM_INT(&trs->netif, i), trs, line_prefix);
         }
     }
@@ -6159,31 +6159,13 @@ tcp_helper_rm_dump(int fd_type, oo_sp sock_id,
 
   ni = &trs->netif;
 
-  switch (fd_type) {
-  case CI_PRIV_TYPE_NETIF: 
-    ci_log("%stcp helper used as a NETIF mmap_bytes=%x", 
-           line_prefix, trs->mem_mmap_bytes); 
-    break;
-  case CI_PRIV_TYPE_NONE:
-    ci_log("%stcp helper, unspecialized (?!)", line_prefix);
-    break;
-  case CI_PRIV_TYPE_TCP_EP:
-  case CI_PRIV_TYPE_UDP_EP:
-    ci_log("%stcp helper specialized as %s endpoint with id=%u", 
-           line_prefix, fd_type == CI_PRIV_TYPE_TCP_EP ? "TCP":"UDP", 
-           OO_SP_FMT(sock_id));
+  ci_log("%sfd "OO_FDFLAG_FMT, line_prefix, OO_FDFLAG_ARG(fd_flags));
+  if( fd_flags & OO_FDFLAG_STACK ) {
+    ci_log("%smmap_bytes=%x", line_prefix, trs->mem_mmap_bytes);
+  }
+  else if( fd_flags & OO_FDFLAG_EP_MASK ) {
+    ci_log("%sendpoint with id=%u", line_prefix, OO_SP_FMT(sock_id));
     citp_waitable_dump(ni, SP_TO_WAITABLE(ni, sock_id), line_prefix);
-    break;
-  case CI_PRIV_TYPE_PIPE_READER:
-  case CI_PRIV_TYPE_PIPE_WRITER:
-    ci_log("%stcp_helper specialized as PIPE-%s endpoint with id=%u",
-           line_prefix,
-           fd_type == CI_PRIV_TYPE_PIPE_WRITER ? "WR" : "RD",
-           OO_SP_FMT(sock_id));
-    citp_waitable_dump(ni, SP_TO_WAITABLE(ni, sock_id), line_prefix);
-    break;
-  default:
-    ci_log("%sUNKNOWN fd_type (%d)", line_prefix, fd_type);
   }
 
   ci_log("%sref "OO_THR_REF_FMT, line_prefix, OO_THR_REF_ARG(trs->ref));
@@ -6813,7 +6795,7 @@ void generic_tcp_helper_close(ci_private_t* priv)
   citp_waitable_obj* wo;
 #endif
 
-  ci_assert(CI_PRIV_TYPE_IS_ENDPOINT(priv->fd_type));
+  ci_assert(priv->fd_flags & OO_FDFLAG_EP_MASK);
   if( priv->sock_id < 0 ) {
     LOG_EP(ci_log("%s: closing detached fd", __FUNCTION__));
     return;
@@ -6830,7 +6812,7 @@ void generic_tcp_helper_close(ci_private_t* priv)
     linux_tcp_helper_fop_fasync(-1, priv->_filp, 0);
   }
 
- if( priv->fd_type == CI_PRIV_TYPE_ALIEN_EP )
+ if( priv->fd_flags & OO_FDFLAG_EP_ALIEN )
     fput(priv->_filp);
 
 #if CI_CFG_FD_CACHING
@@ -6861,7 +6843,7 @@ void generic_tcp_helper_close(ci_private_t* priv)
    * identity, but we might not know about it yet.  At the moment we don't
    * cope properly with this, just logging that it occurred.
    */
-  if( (priv->fd_type == CI_PRIV_TYPE_TCP_EP) &&
+  if( (priv->fd_flags & OO_FDFLAG_EP_TCP) &&
       (wo->waitable.sb_aflags & CI_SB_AFLAG_IN_CACHE) )  {
     /* Clear file_ptr before NO_FD flag to ensure correct behaviour of
      * efab_tcp_helper_detach_file */

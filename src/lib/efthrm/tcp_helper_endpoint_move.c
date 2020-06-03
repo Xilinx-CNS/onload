@@ -408,7 +408,7 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
 
   /* Allocate a new file for the new endpoint */
   rc = onload_alloc_file(new_thr, new_s->b.bufid, priv->_filp->f_flags,
-                         priv->fd_type, &old_ep->alien_ref);
+                         priv->fd_flags, &old_ep->alien_ref);
   if( rc != 0 )
     goto fail4;
   ci_assert(old_ep->alien_ref);
@@ -427,7 +427,7 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
 
   /********* Point of no return  **********/
   ci_wmb();
-  priv->fd_type = CI_PRIV_TYPE_ALIEN_EP;
+  priv->fd_flags = OO_FDFLAG_EP_ALIEN;
   priv->_filp->f_op = &linux_tcp_helper_fops_alien;
   ci_wmb();
 
@@ -574,13 +574,13 @@ int efab_file_move_to_alien_stack_rsop(ci_private_t *stack_priv, void *arg)
   if( sock_file == NULL )
     return -EINVAL;
   if( !FILE_IS_ENDPOINT_SOCK(sock_file) ||
-      stack_priv->fd_type != CI_PRIV_TYPE_NETIF ) {
+      ! (stack_priv->fd_flags & OO_FDFLAG_STACK) ) {
     fput(sock_file);
     return -EINVAL;
   }
   sock_priv = sock_file->private_data;
-  ci_assert(sock_priv->fd_type == CI_PRIV_TYPE_TCP_EP ||
-            sock_priv->fd_type == CI_PRIV_TYPE_UDP_EP);
+  ci_assert_nflags(sock_priv->fd_flags,
+                   OO_FDFLAG_EP_MASK & ~(OO_FDFLAG_EP_TCP | OO_FDFLAG_EP_UDP));
 
   old_thr = sock_priv->thr;
   new_thr = stack_priv->thr;
@@ -643,7 +643,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
   ci_assert(ci_netif_is_locked(&priv->thr->netif));
   carg->out_moved = 0;
 
-  if( !CI_PRIV_TYPE_IS_ENDPOINT(priv->fd_type) )
+  if( ! (priv->fd_flags & OO_FDFLAG_EP_TCP) )
     return -EINVAL;
   if( NI_OPTS(&priv->thr->netif).tcp_client_loopback !=
       CITP_TCP_LOOPBACK_TO_CONNSTACK &&

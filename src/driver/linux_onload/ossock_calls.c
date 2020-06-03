@@ -54,9 +54,10 @@ static void efab_ep_handover_setup(ci_private_t* priv, int* in_epoll_p)
    * referencing this file will reprobe the state.
    */
 
-  /* First, be sure that CI_PRIV_TYPE_TCP_EP does not meet anything
-   * unecpected in the shared state: */
-  priv->fd_type = CI_PRIV_TYPE_PASSTHROUGH_EP;
+  /* First, be sure that OO_FDFLAG_EP_TCP does not meet anything
+   * unexpected in the shared state: */
+  priv->fd_flags = (priv->fd_flags & ~OO_FDFLAG_EP_MASK) |
+                   OO_FDFLAG_EP_PASSTHROUGH;
   priv->_filp->f_op = &linux_tcp_helper_fops_passthrough;
   ci_wmb();
 
@@ -136,15 +137,14 @@ int oo_file_moved_rsop(ci_private_t* priv, void *p_fd)
   int rc;
   int new_fd;
 
-  if( priv->fd_type != CI_PRIV_TYPE_PASSTHROUGH_EP &&
-      priv->fd_type != CI_PRIV_TYPE_ALIEN_EP)
+  if( ! (priv->fd_flags & (OO_FDFLAG_EP_PASSTHROUGH | OO_FDFLAG_EP_ALIEN)) )
     return -EINVAL;
 
   ci_assert(priv->thr);
 
   ep = ci_trs_ep_get(priv->thr, priv->sock_id);
 
-  if( priv->fd_type == CI_PRIV_TYPE_PASSTHROUGH_EP ) {
+  if( priv->fd_flags & OO_FDFLAG_EP_PASSTHROUGH ) {
     struct file* os_file;
 
     ci_assert_equal(priv->_filp->f_op, &linux_tcp_helper_fops_passthrough);
@@ -178,8 +178,7 @@ int efab_tcp_helper_handover(ci_private_t* priv, void *p_fd)
   int rc, line, in_epoll, new_fd;
   struct file* os_file;
 
-  if( priv->fd_type != CI_PRIV_TYPE_TCP_EP &&
-      priv->fd_type != CI_PRIV_TYPE_UDP_EP ) {
+  if( ! (priv->fd_flags & (OO_FDFLAG_EP_TCP | OO_FDFLAG_EP_UDP)) ) {
     line = __LINE__;
     goto unexpected_error;
   }
@@ -834,7 +833,7 @@ extern int efab_tcp_helper_bind_os_sock_rsop(ci_private_t *priv, void *arg)
 
   ci_assert(priv);
   ci_assert(op);
-  if( !CI_PRIV_TYPE_IS_ENDPOINT(priv->fd_type) )
+  if( ! (priv->fd_flags & OO_FDFLAG_EP_MASK) )
     return -EINVAL;
   ci_assert(priv->thr);
 
@@ -854,7 +853,7 @@ extern int efab_tcp_helper_bind_os_sock_rsop(ci_private_t *priv, void *arg)
    * IP_TRANSPARENT set, which we require to be set before bind time to be
    * accelerated.
    */
-  if( (sock == NULL) && (priv->fd_type == CI_PRIV_TYPE_TCP_EP) ) {
+  if( (sock == NULL) && (priv->fd_flags & OO_FDFLAG_EP_TCP) ) {
     rc = efab_tcp_helper_create_os_sock(priv);
     if( rc < 0 )
       return rc;
@@ -885,7 +884,7 @@ int efab_tcp_helper_listen_os_sock(ci_private_t* priv, void* p_backlog)
   struct socket *sock;
   int backlog;
 
-  if( !CI_PRIV_TYPE_IS_ENDPOINT(priv->fd_type) )
+  if( ! (priv->fd_flags & OO_FDFLAG_EP_MASK) )
     return -EINVAL;
   ci_assert(priv->thr);
 

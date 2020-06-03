@@ -22,21 +22,20 @@
 #endif
 
 
-static struct file_operations *oo_fops_by_type(int fd_type)
+static struct file_operations *oo_fops_by_type(oo_fd_flags fd_flags)
 {
-  switch( fd_type ) {
-    case CI_PRIV_TYPE_NETIF: return &oo_fops;
-    case CI_PRIV_TYPE_TCP_EP: return &linux_tcp_helper_fops_tcp;
-    case CI_PRIV_TYPE_UDP_EP: return &linux_tcp_helper_fops_udp;
-    case CI_PRIV_TYPE_PASSTHROUGH_EP: return &linux_tcp_helper_fops_passthrough;
-    case CI_PRIV_TYPE_ALIEN_EP: return &linux_tcp_helper_fops_alien;
-    case CI_PRIV_TYPE_PIPE_READER: return &linux_tcp_helper_fops_pipe_reader;
-    case CI_PRIV_TYPE_PIPE_WRITER: return &linux_tcp_helper_fops_pipe_writer;
+  switch( fd_flags & (OO_FDFLAG_EP_MASK | OO_FDFLAG_STACK) ) {
+    case OO_FDFLAG_STACK: return &oo_fops;
+    case OO_FDFLAG_EP_TCP: return &linux_tcp_helper_fops_tcp;
+    case OO_FDFLAG_EP_UDP: return &linux_tcp_helper_fops_udp;
+    case OO_FDFLAG_EP_PASSTHROUGH: return &linux_tcp_helper_fops_passthrough;
+    case OO_FDFLAG_EP_ALIEN: return &linux_tcp_helper_fops_alien;
+    case OO_FDFLAG_EP_PIPE_READ: return &linux_tcp_helper_fops_pipe_reader;
+    case OO_FDFLAG_EP_PIPE_WRITE: return &linux_tcp_helper_fops_pipe_writer;
     default:
-      CI_DEBUG(ci_log("%s: error fd_type = %d",
-                      __FUNCTION__, fd_type));
+      CI_DEBUG(ci_log("%s: error fd_flags "OO_FDFLAG_FMT,
+                      __FUNCTION__, OO_FDFLAG_ARG(fd_flags)));
       return NULL;
-
   }
 }
 
@@ -78,29 +77,16 @@ static const struct super_operations onloadfs_ops = {
   .statfs        = simple_statfs,
 };
 
-static const char *priv_type_to_str(char fd_type)
-{
-  switch( fd_type ) {
-    case CI_PRIV_TYPE_TCP_EP: return "tcp";
-    case CI_PRIV_TYPE_UDP_EP: return "udp";
-    case CI_PRIV_TYPE_PASSTHROUGH_EP: return "os_sock";
-    case CI_PRIV_TYPE_ALIEN_EP: return "moved";
-    case CI_PRIV_TYPE_PIPE_READER: return "piper";
-    case CI_PRIV_TYPE_PIPE_WRITER: return "pipew";
-    default: return "?";
-  }
-  return NULL;
-}
 static int onloadfs_name(ci_private_t *priv, char *buffer, int buflen)
 {
   int len;
   int sock_id = priv->sock_id;
 
-  if( priv->fd_type == CI_PRIV_TYPE_NETIF)
+  if( priv->fd_flags & OO_FDFLAG_STACK)
     len = snprintf(buffer, buflen, "[stack:%d]", priv->thr->id);
   /* without d_dname, this is called before listen(), so
    * we have no chance to print tcpl:N:N. */
-  else if( priv->fd_type == CI_PRIV_TYPE_TCP_EP && sock_id >= 0 &&
+  else if( (priv->fd_flags & OO_FDFLAG_EP_TCP) && sock_id >= 0 &&
            SP_TO_WAITABLE_OBJ(&priv->thr->netif,
                               sock_id)->waitable.state ==
            CI_TCP_LISTEN)
@@ -108,7 +94,7 @@ static int onloadfs_name(ci_private_t *priv, char *buffer, int buflen)
                    priv->thr->id, priv->sock_id);
   else
     len = snprintf(buffer, buflen, "[%s:%d:%d]",
-                   priv_type_to_str(priv->fd_type), priv->thr->id,
+                   OO_FDFLAG_TYPE_STR(priv->fd_flags), priv->thr->id,
                    priv->sock_id);
   buffer[buflen-1] = '\0';
   return len + 1;
@@ -287,14 +273,14 @@ struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
 
 int
 onload_alloc_file(tcp_helper_resource_t *thr, oo_sp ep_id,
-                  int flags, int fd_type, ci_private_t **priv_p)
+                  int flags, oo_fd_flags fd_flags, ci_private_t **priv_p)
 {
   struct file *file;
   struct inode *inode;
   ci_private_t *priv;
   struct file_operations *fops;
 
-  fops = oo_fops_by_type(fd_type);
+  fops = oo_fops_by_type(fd_flags);
   if( fops == NULL )
     return -EINVAL;
   ci_assert_equal(fops->owner, THIS_MODULE);
@@ -306,8 +292,7 @@ onload_alloc_file(tcp_helper_resource_t *thr, oo_sp ep_id,
   /* We can't set S_IFSOCK, as the kernel would assume incorrectly that our
    * inode is preceded by a struct socket.  This is no real loss: we intercept
    * fstat() at user-level and report the flag there. */
-  if( fd_type == CI_PRIV_TYPE_NETIF || fd_type == CI_PRIV_TYPE_TCP_EP ||
-      fd_type == CI_PRIV_TYPE_UDP_EP )
+  if( fd_flags & (OO_FDFLAG_STACK | OO_FDFLAG_EP_TCP | OO_FDFLAG_EP_UDP) )
     inode->i_mode = S_IRWXUGO;
   else
     inode->i_mode = S_IFIFO | S_IRUSR | S_IWUSR;
@@ -316,7 +301,7 @@ onload_alloc_file(tcp_helper_resource_t *thr, oo_sp ep_id,
   priv = &container_of(inode, struct onload_inode, vfs_inode)->priv;
   priv->thr = thr;
   priv->sock_id = ep_id;
-  priv->fd_type = fd_type;
+  priv->fd_flags = fd_flags;
   priv->priv_cp = NULL;
 
 
@@ -347,8 +332,8 @@ void onload_priv_free(ci_private_t *priv)
 
 
 int
-oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags, int fd_type,
-             struct file** _filp)
+oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags,
+             oo_fd_flags fd_flags, struct file** _filp)
 {
   int fd, rc;
   ci_private_t *priv;
@@ -368,15 +353,15 @@ oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags, int fd_type,
       goto ret_put_fd;
     }
     priv = (*_filp)->private_data;
-    ci_assert_equal(priv->fd_type, CI_PRIV_TYPE_TCP_EP);
+    ci_assert_flags(priv->fd_flags, OO_FDFLAG_EP_TCP);
     CITP_STATS_NETIF_INC(&thr->netif, sock_attach_fd_more);
   }
   else {
-    if( fd_type == -1 ) {
+    if( fd_flags & OO_FDFLAG_REATTACH ) {
       rc = -EINVAL;
       goto ret_put_fd;
     }
-    rc = onload_alloc_file(thr, ep_id, flags, fd_type, &priv);
+    rc = onload_alloc_file(thr, ep_id, flags, fd_flags, &priv);
     if( rc != 0 ) {
       OO_DEBUG_ERR(ci_log("%s: ERROR: onload_alloc_file failed (%d) "
                           "for [%d:%d]", __func__,
