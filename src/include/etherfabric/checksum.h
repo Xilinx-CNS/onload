@@ -26,9 +26,7 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #endif
-
-#include <ci/compat.h>
-#include <ci/net/ipv6.h>
+#include <linux/ipv6.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -129,7 +127,7 @@ ef_tcp_checksum(const struct iphdr* ip, const struct tcphdr* tcp,
 ** ignored) before calling this function.
 */
 extern uint32_t
-ef_tcp_checksum_ip6(const ci_ip6_hdr* ip6, const struct tcphdr* tcp,
+ef_tcp_checksum_ip6(const struct ipv6hdr* ip6, const struct tcphdr* tcp,
                     const struct iovec* iov, int iovlen);
 
 /*! \brief Calculate the checksum for a TCP packet

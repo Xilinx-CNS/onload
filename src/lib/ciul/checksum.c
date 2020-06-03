@@ -9,9 +9,7 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #endif
-
-#include <ci/compat.h>
-#include <ci/net/ipv6.h>
+#include <linux/ipv6.h>
 
 #include "ef_vi_internal.h"
 
@@ -214,7 +212,7 @@ uint32_t ef_tcp_checksum(const struct iphdr* ip, const struct tcphdr* tcp,
   return ip_proto_csum64_finish(csum64);
 }
 
-uint32_t ef_tcp_checksum_ip6(const ci_ip6_hdr* ip6, const struct tcphdr* tcp,
+uint32_t ef_tcp_checksum_ip6(const struct ipv6hdr* ip6, const struct tcphdr* tcp,
                              const struct iovec* iov, int iovlen)
 {
 

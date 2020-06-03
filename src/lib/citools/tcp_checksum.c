@@ -43,7 +43,7 @@ unsigned ci_ip6_tcp_checksum(const ci_ip6_hdr* ip6, const ci_tcp_hdr* tcp,
     .iov_base = (void*)payload,
     .iov_len = CI_BSWAP_BE16(ip6->payload_len) - CI_TCP_HDR_LEN(tcp)
   };
-  return ef_tcp_checksum_ip6(ip6, (struct tcphdr*)tcp, &iov, 1);
+  return ef_tcp_checksum_ip6((struct ipv6hdr*)ip6, (struct tcphdr*)tcp, &iov, 1);
 }
 
 /*! \cidoxg_end */
