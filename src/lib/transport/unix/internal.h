@@ -441,9 +441,6 @@ extern int citp_ep_dup_fcntl_dup_cloexec(int oldfd, long arg) CI_HF;
 extern int citp_ep_dup3(unsigned oldfd, unsigned newfd, int flags) CI_HF;
 extern int citp_ep_close(unsigned fd) CI_HF;
 
-extern void citp_fdtable_dump(void)  CI_HF;
-extern void citp_fdtable_dump_fd(int fd)  CI_HF;
-
 
 /**********************************************************************
  ** exec() support

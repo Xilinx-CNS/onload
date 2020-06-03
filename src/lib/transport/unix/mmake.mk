@@ -45,7 +45,6 @@ LIB_SRCS	:=			\
 		wqlock.c		\
 		poll_select.c		\
 		passthrough_fd.c	\
-		debug.c                 \
 		utils.c
 
 MMAKE_OBJ_PREFIX := ci_tp_unix_
