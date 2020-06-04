@@ -75,13 +75,6 @@ LIB_SRCS	+=              \
 		tcp_driver_ops.c
 endif
 
-ifneq ($(strip $(CI_PREBUILT_IPDRV)),)
-CI_SEPARATE_IP_BUILD := 1
-endif
-ifneq ($(strip $(CI_SEPARATE_IP_BUILD)),)
-CPPFLAGS += -DCI_SEPARATE_IP_BUILD -DCI_DEPENDENT_DRIVER
-endif
-
 ifndef MMAKE_NO_RULES
 
 MMAKE_OBJ_PREFIX := ci_ip_

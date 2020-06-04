@@ -91,21 +91,10 @@ ifeq ($(ARCH),arm64)
 EXTRA_CFLAGS+= -Wno-error=discarded-qualifiers
 endif
 
-ifeq ($(strip $(CI_PREBUILT_IPDRV)),)
 onload-objs  := $(IP_TARGET_SRCS:%.c=%.o) $($(ARCH)_TARGET_SRCS:%.c=%.o)
 onload-objs  += $(BUILD)/lib/transport/ip/ci_ip_lib.o	\
 		$(BUILD)/lib/cplane/cplane_lib.o \
 		$(BUILD)/lib/citools/citools_lib.o	\
 		$(BUILD)/lib/ciul/ci_ul_lib.o
-
-else # CI_PREBUILT_IPDRV
-
-onload-objs := onload.copy.o
-
-$(BUILDPATH)/driver/linux_onload/onload.copy.o: $(CI_PREBUILT_IPDRV)
-	@echo +++ Using prebuilt IP driver: $(CI_PREBUILT_IPDRV)
-	cp $(CI_PREBUILT_IPDRV) $(BUILDPATH)/driver/linux_onload/onload.copy.o
-
-endif # CI_PREBUILT_IPDRV
 
 endif # MMAKE_IN_KBUILD
