@@ -120,6 +120,7 @@ static int oo_epoll_add_stack(struct oo_epoll_private* priv,
                               tcp_helper_resource_t* fd_thr)
 {
   unsigned i;
+  int rc;
 
   /* Common case is that we already know about this stack, so make that
    * fast.
@@ -138,13 +139,12 @@ static int oo_epoll_add_stack(struct oo_epoll_private* priv,
     if( priv->stacks[i] != NULL )
       continue;
     priv->stacks[i] = fd_thr;
-    /* We already keep ref for this thr via file,
-     * so oo_thr_ref_get() can't fail. */
-    oo_thr_ref_get(fd_thr->ref, OO_THR_REF_BASE);
-    break;
+    rc = oo_thr_ref_get(fd_thr->ref, OO_THR_REF_BASE);
+    spin_unlock(&priv->lock);
+    return rc == 0;
   }
   spin_unlock(&priv->lock);
-  return i < epoll_max_stacks;
+  return 0;
 }
 
 static void oo_epoll_release_common(struct oo_epoll_private* priv)

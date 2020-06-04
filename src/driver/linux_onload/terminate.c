@@ -158,8 +158,8 @@ efab_terminate_find_all_stacks(tcp_helper_resource_t *stacks[],
         /* We already keep a ref for this thr via file, but we need
          * one more ref because other threads may close this file
          * before we'll kill them. */
-        oo_thr_ref_get(thr->ref, OO_THR_REF_BASE);
-        stacks[stacks_num++] = thr;
+        if( oo_thr_ref_get(thr->ref, OO_THR_REF_BASE) == 0 )
+          stacks[stacks_num++] = thr;
       }
       fput(file);
     }

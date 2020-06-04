@@ -600,31 +600,37 @@ int efab_file_move_to_alien_stack_rsop(ci_private_t *stack_priv, void *arg)
 
   w = SP_TO_WAITABLE(&old_thr->netif, sock_priv->sock_id);
   rc = ci_sock_lock(&old_thr->netif, w);
-  if( rc != 0 ) {
-    fput(sock_file);
-    return rc;
-  }
+  if( rc != 0 )
+    goto sock_lock_fail;
 
   rc = ci_netif_lock(&old_thr->netif);
-  if( rc != 0 ) {
-    ci_sock_unlock(&old_thr->netif, w);
+  if( rc != 0 )
+    goto netif_lock_fail;
+
+  rc = oo_thr_ref_get(new_thr->ref, OO_THR_REF_APP);
+  if( rc != 0 )
+    goto ref_get_fail;
+
+  rc = efab_file_move_to_alien_stack(sock_priv, &stack_priv->thr->netif, 0,
+                                     &new_sock_id);
+
+  if( rc == 0 ) {
+    fput(sock_file);
+    return 0;
+  }
+  else {
+    /* Stack and socket are unlocked by move_to_alien() in case of error. */
+    oo_thr_ref_drop(new_thr->ref, OO_THR_REF_APP);
     fput(sock_file);
     return rc;
   }
 
-  oo_thr_ref_get(new_thr->ref, OO_THR_REF_APP);
-  rc = efab_file_move_to_alien_stack(sock_priv, &stack_priv->thr->netif, 0,
-                                     &new_sock_id);
+ ref_get_fail:
+  ci_netif_unlock(&old_thr->netif);
+ netif_lock_fail:
+  ci_sock_unlock(&old_thr->netif, w);
+ sock_lock_fail:
   fput(sock_file);
-
-  if( rc != 0 )
-    oo_thr_ref_drop(new_thr->ref, OO_THR_REF_APP);
-  else {
-    ci_netif_unlock(&new_thr->netif);
-    ci_sock_unlock(&new_thr->netif,
-                   SP_TO_WAITABLE(&new_thr->netif, new_sock_id));
-  }
-
   return rc;
 }
 

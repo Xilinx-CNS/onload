@@ -701,9 +701,8 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
       }
       else {
         /* Success */
-        oo_thr_ref_get(thr->ref, OO_THR_REF_BASE);
+        rc = oo_thr_ref_get(thr->ref, OO_THR_REF_BASE);
         *thr_p = thr;
-        rc = 0;
       }
       break;
     }

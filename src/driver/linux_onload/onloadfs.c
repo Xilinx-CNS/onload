@@ -368,9 +368,11 @@ oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags,
                           rc, thr->id, ep_id));
       goto ret_put_fd;
     }
-    oo_thr_ref_get(thr->ref,
-                   (fd_flags & OO_FDFLAG_SERVICE) ?
-                   OO_THR_REF_FILE : OO_THR_REF_APP);
+    rc = oo_thr_ref_get(thr->ref,
+                        (fd_flags & OO_FDFLAG_SERVICE) ?
+                        OO_THR_REF_FILE : OO_THR_REF_APP);
+    if( rc != 0 )
+      goto ret_put_file;
   }
 
   fd_install(fd, priv->_filp);
@@ -378,6 +380,8 @@ oo_create_fd(tcp_helper_resource_t* thr, oo_sp ep_id, int flags,
     *_filp = priv->_filp;
   return fd;
 
+ret_put_file:
+  fput(priv->_filp);
 ret_put_fd:
   put_unused_fd(fd);
   return rc;

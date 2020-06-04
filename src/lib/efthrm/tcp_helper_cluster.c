@@ -1553,7 +1553,11 @@ int efab_tcp_helper_reuseport_bind(ci_private_t *priv, void *arg)
    * * reference to the destination stack (thr) */
 
   /* thr referencing scheme comes from efab_file_move_to_alien_stack_rsop */
-  oo_thr_ref_get(thr->ref, OO_THR_REF_APP);
+  rc = oo_thr_ref_get(thr->ref, OO_THR_REF_APP);
+  if( rc != 0 ) {
+    ci_netif_unlock(ni);
+    goto drop_and_done;
+  }
   rc = efab_file_move_to_alien_stack(priv, &thr->netif, 0, &new_sock_id);
   if( rc != 0 ) {
     oo_thr_ref_drop(thr->ref, OO_THR_REF_APP);

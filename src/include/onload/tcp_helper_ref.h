@@ -57,6 +57,9 @@ extern oo_thr_ref_release_fn oo_thr_ref_release[OO_THR_REF_INFTY];
  * created.
  */
 static inline int
+oo_thr_ref_get_one(oo_thr_ref_t ref,
+                   enum oo_thr_ref_type type) OO_MUST_CHECK_RET;
+static inline int
 oo_thr_ref_get_one(oo_thr_ref_t ref, enum oo_thr_ref_type type)
 {
   ci_uint32 val;
@@ -102,6 +105,9 @@ oo_thr_ref_drop_one(oo_thr_ref_t ref, enum oo_thr_ref_type type)
  */
 static inline int
 oo_thr_ref_upgrade(oo_thr_ref_t ref, enum oo_thr_ref_type from,
+                       enum oo_thr_ref_type to) OO_MUST_CHECK_RET;
+static inline int
+oo_thr_ref_upgrade(oo_thr_ref_t ref, enum oo_thr_ref_type from,
                        enum oo_thr_ref_type to)
 {
   enum oo_thr_ref_type t;
@@ -124,6 +130,8 @@ oo_thr_ref_upgrade(oo_thr_ref_t ref, enum oo_thr_ref_type from,
 }
 
 /* Get a full stack of refcounts up to type. */
+static inline int
+oo_thr_ref_get(oo_thr_ref_t ref, enum oo_thr_ref_type type) OO_MUST_CHECK_RET;
 static inline int
 oo_thr_ref_get(oo_thr_ref_t ref, enum oo_thr_ref_type type)
 {
