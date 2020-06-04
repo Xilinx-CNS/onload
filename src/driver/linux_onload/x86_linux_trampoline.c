@@ -207,6 +207,9 @@
  */
 static void **syscall_table = 0;
 
+/* The address of entry_SYSCALL_64() */
+static void *oo_entry_SYSCALL_64_addr = NULL;
+
 #ifdef CONFIG_COMPAT
 
 /* The address of the 32-bit compatibility system call table.
@@ -234,14 +237,9 @@ static SYSCALL_PTR_DEF(saved_sys_exit_group32, (int));
 
 atomic_t efab_syscall_used;
 
-
 static void* oo_entry_SYSCALL_64(void)
 {
-  static void *oo_entry_SYSCALL_64_addr = NULL;
   unsigned long result = 0;
-
-  if( oo_entry_SYSCALL_64_addr != NULL )
-    return oo_entry_SYSCALL_64_addr;
 
   /* linux<4.2:
    *   MSR_LSTAR points to system_call(); we are returning this address.
@@ -256,14 +254,13 @@ static void* oo_entry_SYSCALL_64(void)
    *   MSR_LSTAR points to entry_SYSCALL_64().
    */
 #ifdef ERFM_HAVE_NEW_KALLSYMS
-  oo_entry_SYSCALL_64_addr = efrm_find_ksym("entry_SYSCALL_64");
-  if( oo_entry_SYSCALL_64_addr != NULL )
-    return oo_entry_SYSCALL_64_addr;
+  void *ret = efrm_find_ksym("entry_SYSCALL_64");
+  if( ret != NULL )
+    return ret;
 #endif
 
   rdmsrl(MSR_LSTAR, result);
-  oo_entry_SYSCALL_64_addr = (void*)result;
-  return oo_entry_SYSCALL_64_addr;
+  return (void*)result;
 }
 
 static void **find_syscall_table(void)
@@ -285,8 +282,7 @@ static void **find_syscall_table(void)
   /* If kallsyms lookup failed, fall back to looking at some assembly
    * code that we know references the syscall table.
    */
-  p = oo_entry_SYSCALL_64();
-  if( p == NULL )
+  if( oo_entry_SYSCALL_64_addr == NULL )
     return NULL;
 
   TRAMP_DEBUG("entry_SYSCALL_64=%px", p);
@@ -724,7 +720,7 @@ ci_inline unsigned long *get_oldrsp_addr(void)
     unsigned long kernel_stack_p = (unsigned long) percpu_p(OO_KERNEL_STACK);
     unsigned char *p_end;
 
-    p = oo_entry_SYSCALL_64();
+    p = oo_entry_SYSCALL_64_addr;
 #ifndef NDEBUG
     ptr = p;
 #define OOPS(msg) { \
@@ -1316,6 +1312,7 @@ patch_syscall_table (void **table, unsigned entry, void *func,
  */
 int efab_linux_trampoline_ctor(int no_sct)
 {
+  oo_entry_SYSCALL_64_addr = oo_entry_SYSCALL_64();
   syscall_table = find_syscall_table();
 
   atomic_set(&efab_syscall_used, 0);
