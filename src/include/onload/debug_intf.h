@@ -79,7 +79,6 @@ typedef struct {
   char                  ni_name[CI_CFG_STACK_NAME_LEN + 1];
 
   ci_uint32		mmap_bytes;
-  ci_int32		k_ref_count;
   ci_int32		rs_ref_count;
 
   /*! OUT: netif exists but not sufficient permissions to access it */

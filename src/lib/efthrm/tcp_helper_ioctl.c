@@ -721,7 +721,6 @@ efab_tcp_helper_get_info(ci_private_t *unused, void *arg)
     info->ni_orphan = (thr->ref[OO_THR_REF_FILE] == 0);
     ni = &thr->netif;
     info->mmap_bytes = thr->mem_mmap_bytes;
-    info->k_ref_count = thr->ref[OO_THR_REF_BASE];
     info->rs_ref_count = thr->ref[OO_THR_REF_APP];
     memcpy(info->ni_name, ni->state->name, sizeof(ni->state->name));
   } else if( rc == -EACCES ) {
