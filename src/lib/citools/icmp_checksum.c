@@ -15,6 +15,7 @@
 
 #include "citools_internal.h"
 #include <ci/net/ipv4.h>
+#include <ci/net/ipv6.h>
 #include <ci/tools/ipcsum_base.h>
 #include <etherfabric/checksum.h>
 
@@ -46,7 +47,7 @@ unsigned ci_icmpv6_checksum(const ci_ip6_hdr* ip6, const ci_icmp_hdr* icmp)
     .iov_base = (void*)(icmp + 1),
     .iov_len = CI_BSWAP_BE16(ip6->payload_len) - sizeof(ci_icmp_hdr)
   };
-  return ef_icmpv6_checksum(ip6, icmp, &iov, 1);
+  return ef_icmpv6_checksum((struct ipv6hdr*)ip6, icmp, &iov, 1);
 }
 
 /*! \cidoxg_end */

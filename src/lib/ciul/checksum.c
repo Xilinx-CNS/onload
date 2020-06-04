@@ -153,7 +153,7 @@ uint32_t ef_ip_checksum(const struct iphdr* ip)
 }
 
 static uint64_t
-ef_ip6_pseudo_hdr_checksum(const ci_ip6_hdr* ip6, uint16_t length_be16,
+ef_ip6_pseudo_hdr_checksum(const struct ipv6hdr* ip6, uint16_t length_be16,
                            uint8_t protocol)
 {
   /* Calculate checksum for both saddr and daddr */
@@ -176,7 +176,7 @@ uint32_t ef_udp_checksum(const struct iphdr* ip, const struct udphdr* udp,
   return csum ? csum : 0xffff;
 }
 
-uint32_t ef_udp_checksum_ip6(const ci_ip6_hdr* ip6, const struct udphdr* udp,
+uint32_t ef_udp_checksum_ip6(const struct ipv6hdr* ip6, const struct udphdr* udp,
                              const struct iovec* iov, int iovlen)
 {
   uint32_t csum;
@@ -191,7 +191,7 @@ uint32_t ef_udp_checksum_ipx(int af, const void* ipx, const struct udphdr* udp,
                              const struct iovec* iov, int iovlen)
 {
   if( af == AF_INET6 )
-    return ef_udp_checksum_ip6((const ci_ip6_hdr*)ipx, udp, iov, iovlen);
+    return ef_udp_checksum_ip6((const struct ipv6hdr*)ipx, udp, iov, iovlen);
   else
     return ef_udp_checksum((const struct iphdr*)ipx, udp, iov, iovlen);
 }
@@ -228,12 +228,12 @@ uint32_t ef_tcp_checksum_ipx(int af, const void* ipx, const struct tcphdr* tcp,
                              const struct iovec* iov, int iovlen)
 {
   if( af == AF_INET6 )
-    return ef_tcp_checksum_ip6((const ci_ip6_hdr*)ipx, tcp, iov, iovlen);
+    return ef_tcp_checksum_ip6((const struct ipv6hdr*)ipx, tcp, iov, iovlen);
   else
     return ef_tcp_checksum((const struct iphdr*)ipx, tcp, iov, iovlen);
 }
 
-uint32_t ef_icmpv6_checksum(const ci_ip6_hdr* ip6, const void* icmp,
+uint32_t ef_icmpv6_checksum(const struct ipv6hdr* ip6, const void* icmp,
                             const struct iovec* iov, int iovlen)
 {
   uint64_t csum64 =

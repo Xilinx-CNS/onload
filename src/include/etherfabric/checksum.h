@@ -26,11 +26,12 @@
 #include <netinet/tcp.h>
 #include <netinet/udp.h>
 #endif
-#include <linux/ipv6.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+struct ipv6hdr;
 
 /*! \brief Calculate the checksum for an IP header
 **
@@ -75,7 +76,7 @@ ef_udp_checksum(const struct iphdr* ip, const struct udphdr* udp,
 ** ignored) before calling this function.
 */
 extern uint32_t
-ef_udp_checksum_ip6(const ci_ip6_hdr* ip6, const struct udphdr* udp,
+ef_udp_checksum_ip6(const struct ipv6hdr* ip6, const struct udphdr* udp,
                     const struct iovec* iov, int iovlen);
 
 /*! \brief Calculate the checksum for a UDP packet
@@ -162,7 +163,7 @@ ef_tcp_checksum_ipx(int af, const void* ipx, const struct tcphdr* tcp,
 ** ignored) before calling this function.
 */
 extern uint32_t
-ef_icmpv6_checksum(const ci_ip6_hdr* ip6, const void* icmp,
+ef_icmpv6_checksum(const struct ipv6hdr* ip6, const void* icmp,
                    const struct iovec* iov, int iovlen);
 
 #ifdef __cplusplus
