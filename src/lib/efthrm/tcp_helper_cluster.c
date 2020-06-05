@@ -137,14 +137,6 @@ static int thc_get_an_orphan(tcp_helper_cluster_t* thc,
 }
 
 
-/* Returns 1 if the thc has orphaned stacks else 0.
- */
-static int thc_has_orphans(tcp_helper_cluster_t* thc)
-{
-  /* we either have an orphan (0) or a thr being destructed (-EBUSY) */
-  return thc_get_an_orphan(thc, NULL) != -ENOENT ? 1 : 0;
-}
-
 static int thc_is_scalable(int thc_flags)
 {
   return !! (thc_flags & THC_FLAG_SCALABLE);
@@ -538,7 +530,9 @@ static int thc_kill_an_orphan(tcp_helper_cluster_t* thc)
   ci_assert(mutex_is_locked(&thc_mutex));
 
   rc = thc_get_an_orphan(thc, &thr);
-  ci_assert_nequal(rc, -ENOENT);
+  if( rc == -ENOENT )
+    return rc;
+
   /* -EBUSY means the stack is dying already - no need to kill */
   ci_assert_impl(rc != 0, rc == -EBUSY);
 
@@ -614,11 +608,7 @@ thc_search_by_name(const char* user_cluster_name, struct net* netns,
 
     /* Start by clearing out any stacks.  Caveat: killing a stack drops and
      * retakes [thc_mutex]. */
-    while( thc_has_orphans(thc) )
-      if( (rc = thc_kill_an_orphan(thc)) < 0 )
-        break;
-
-    if( rc == 0 ) {
+    while( thc_kill_an_orphan(thc) == 0 ) {
       /* All stacks were orphans, and we succeeded in clearing all of the
        * orphaned stacks, so now there should be no stacks at all. */
       ci_assert(ci_dllist_is_empty(&thc->thc_thr_list));
@@ -650,11 +640,6 @@ thc_search_by_name(const char* user_cluster_name, struct net* netns,
         rc = -ENOENT;
         thc = NULL;
       }
-    }
-    else {
-      /* We failed to clear out all of the stacks, which means we must return
-       * the cluster successfully to the caller. */
-      rc = 0;
     }
   }
 
@@ -869,23 +854,18 @@ static int thc_alloc_thr(tcp_helper_cluster_t* thc,
   if( (rc = thc_get_next_thr_name(thc, roa.in_name)) != 0 ) {
     /* All stack names taken i.e. cluster is full.  Based on setting
      * of cluster_restart_opt, either kill a orphan or return error. */
-    if( thc_has_orphans(thc) == 1 ) {
-      /* Checking for CITP_CLUSTER_RESTART_TERMINATE_ORPHANS */
-      if( cluster_restart_opt == 1 ) {
-        thc_kill_an_orphan(thc);
-        rc = thc_get_next_thr_name(thc, roa.in_name);
-        ci_assert_equal(rc, 0);
-      }
-      else {
-        LOG_E(ci_log("%s: Clustered stack creation failed because of "
-                     "orphans.  Either try again later or use "
-                     "EF_CLUSTER_RESTART", __FUNCTION__));
+    if( cluster_restart_opt == 1 ) {
+      if( (rc = thc_kill_an_orphan(thc)) != 0 ||
+          (rc = thc_get_next_thr_name(thc, roa.in_name)) != 0 ) {
+        LOG_E(ci_log("%s: Stack creation failed because all instances in "
+                     "cluster already allocated.", __FUNCTION__));
         return rc;
       }
     }
     else {
-      LOG_E(ci_log("%s: Stack creation failed because all instances in "
-                   "cluster already allocated.", __FUNCTION__));
+      LOG_E(ci_log("%s: Clustered stack creation failed because of "
+                   "orphans.  Either try again later or use "
+                   "EF_CLUSTER_RESTART", __FUNCTION__));
       return rc;
     }
   }
