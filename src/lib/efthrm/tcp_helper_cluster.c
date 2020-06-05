@@ -126,7 +126,7 @@ static int thc_get_an_orphan(tcp_helper_cluster_t* thc,
     if( thr_walk->ref[OO_THR_REF_APP] == 0 ) {
       rc = 0;
       if( thr_out != NULL ) {
-        rc = oo_thr_ref_get(thr_walk->ref, OO_THR_REF_BASE);
+        rc = oo_thr_ref_get(thr_walk->ref, OO_THR_REF_APP);
         *thr_out = thr_walk;
       }
       break;
@@ -567,7 +567,7 @@ static int thc_kill_an_orphan(tcp_helper_cluster_t* thc)
     /* remove reference taken by thc_get_an_orphan()
      * Note: this will likely trigger stack destruction
      */
-    oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_APP);
 
   rc = wait_event_interruptible_timeout(thc->thr_release_done,
                                         ! thc_contains_thr(thc, thr), 10 * HZ);
@@ -674,7 +674,7 @@ static int thc_get_prior_round_robin_index(const tcp_helper_cluster_t* thc)
 
 /* Look for a suitable stack within the cluster.
  *
- * You need to oo_thr_ref_drop(OO_THR_REF_BASE) the stack returned by this
+ * You need to oo_thr_ref_drop(OO_THR_REF_APP) the stack returned by this
  * function when done.
  *
  * You must hold the thc_mutex before calling this function.
@@ -702,7 +702,7 @@ static int thc_get_thr(tcp_helper_cluster_t* thc,
        thr_walk->thc_tid == current->pid &&
        oof_socket_can_update_stack(oo_filter_ns_to_manager(thc->thc_filter_ns),
                                    oofilter, thr_walk) ) {
-      oo_thr_ref_get(thr_walk->ref, OO_THR_REF_BASE);
+      oo_thr_ref_get(thr_walk->ref, OO_THR_REF_APP);
       *thr_out = thr_walk;
       ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
       return 0;
