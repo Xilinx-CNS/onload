@@ -7893,20 +7893,25 @@ thr_ref2thr(oo_thr_ref_t ref)
 static void thr_release_base(oo_thr_ref_t ref)
 {
   tcp_helper_resource_t* thr = thr_ref2thr(ref);
-  OO_DEBUG_TCPH(ci_log("%s "OO_THR_REF_FMT, __func__, OO_THR_REF_ARG(ref)));
+  OO_DEBUG_TCPH(ci_log("%s [%d] "OO_THR_REF_FMT, __func__, thr->id,
+                       OO_THR_REF_ARG(ref)));
   efab_tcp_helper_k_ref_count_is_zero(thr);
 }
 
 static void thr_release_file(oo_thr_ref_t ref)
 {
   tcp_helper_resource_t* thr = thr_ref2thr(ref);
-  OO_DEBUG_TCPH(ci_log("%s "OO_THR_REF_FMT, __func__, OO_THR_REF_ARG(ref)));
+  OO_DEBUG_TCPH(ci_log("%s [%d] "OO_THR_REF_FMT, __func__, thr->id,
+                       OO_THR_REF_ARG(ref)));
   tcp_helper_rm_free(thr);
 }
 
 static void thr_release_app(oo_thr_ref_t ref)
 {
-  OO_DEBUG_TCPH(ci_log("%s "OO_THR_REF_FMT, __func__, OO_THR_REF_ARG(ref)));
+  tcp_helper_resource_t* thr = thr_ref2thr(ref);
+  OO_DEBUG_TCPH(ci_log("%s [%d] "OO_THR_REF_FMT, __func__, thr->id,
+                       OO_THR_REF_ARG(ref)));
+  (void)thr;
   oo_thr_ref_drop(ref, OO_THR_REF_FILE);
 }
 
