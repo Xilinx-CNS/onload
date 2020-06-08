@@ -7895,7 +7895,7 @@ static void thr_release_app(oo_thr_ref_t ref)
   tcp_helper_resource_t* thr = thr_ref2thr(ref);
   OO_DEBUG_TCPH(ci_log("%s [%d] "OO_THR_REF_FMT, __func__, thr->id,
                        OO_THR_REF_ARG(ref)));
-  efab_notify_stacklist_change(thr_ref2thr(ref));
+  efab_notify_stacklist_change(thr);
   oo_thr_ref_drop(ref, OO_THR_REF_FILE);
 }
 
