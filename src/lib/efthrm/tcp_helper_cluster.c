@@ -108,7 +108,7 @@ static int thc_get_next_thr_name(tcp_helper_cluster_t* thc, char* name_out)
  * Returns
  *  * -EBUSY - if a stack is being destructed (no need to kill)
  *  * -ENOENT - no stack present
- *  * 0 on success and if thr_out not NULL gives thr with extra kernel ref
+ *  * 0 on success and gives thr with extra kernel ref
  */
 static int thc_get_an_orphan(tcp_helper_cluster_t* thc,
                              tcp_helper_resource_t** thr_out)
@@ -124,11 +124,8 @@ static int thc_get_an_orphan(tcp_helper_cluster_t* thc,
     tcp_helper_resource_t* thr_walk = CI_CONTAINER(tcp_helper_resource_t,
                                                    thc_thr_link, link);
     if( thr_walk->ref[OO_THR_REF_APP] == 0 ) {
-      rc = 0;
-      if( thr_out != NULL ) {
-        rc = oo_thr_ref_get(thr_walk->ref, OO_THR_REF_APP);
-        *thr_out = thr_walk;
-      }
+      rc = oo_thr_ref_get(thr_walk->ref, OO_THR_REF_BASE);
+      *thr_out = thr_walk;
       break;
     }
   }
@@ -561,7 +558,7 @@ static int thc_kill_an_orphan(tcp_helper_cluster_t* thc)
     /* remove reference taken by thc_get_an_orphan()
      * Note: this will likely trigger stack destruction
      */
-    oo_thr_ref_drop(thr->ref, OO_THR_REF_APP);
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
 
   rc = wait_event_interruptible_timeout(thc->thr_release_done,
                                         ! thc_contains_thr(thc, thr), 10 * HZ);
