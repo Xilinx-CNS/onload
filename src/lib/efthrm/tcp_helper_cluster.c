@@ -657,7 +657,7 @@ static int thc_get_prior_round_robin_index(const tcp_helper_cluster_t* thc)
 /* Look for a suitable stack within the cluster.
  *
  * You need to oo_thr_ref_drop(OO_THR_REF_APP) the stack returned by this
- * function when done.
+ * function if you fail to install it for a user application.
  *
  * You must hold the thc_mutex before calling this function.
  */
@@ -680,11 +680,10 @@ static int thc_get_thr(tcp_helper_cluster_t* thc,
   CI_DLLIST_FOR_EACH(link, &thc->thc_thr_list) {
     tcp_helper_resource_t* thr_walk = CI_CONTAINER(tcp_helper_resource_t,
                                                    thc_thr_link, link);
-    if( thr_walk->ref[OO_THR_REF_APP] != 0 &&
-       thr_walk->thc_tid == current->pid &&
+    if( thr_walk->thc_tid == current->pid &&
        oof_socket_can_update_stack(oo_filter_ns_to_manager(thc->thc_filter_ns),
-                                   oofilter, thr_walk) ) {
-      oo_thr_ref_get(thr_walk->ref, OO_THR_REF_APP);
+                                   oofilter, thr_walk) &&
+       oo_thr_ref_get(thr_walk->ref, OO_THR_REF_APP) == 0 ) {
       *thr_out = thr_walk;
       ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
       return 0;
