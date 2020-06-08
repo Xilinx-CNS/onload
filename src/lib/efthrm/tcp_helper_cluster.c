@@ -539,9 +539,7 @@ static int thc_kill_an_orphan(tcp_helper_cluster_t* thc)
      * path.  So we remove thr from the thc now. */
     LOG_U(ci_log("Clustering: Killing orphan stack %d", thr->id));
 
-    rc = tcp_helper_kill_stack_by_id(thr->id);
-    ci_assert_equal(rc, 0);
-
+    tcp_helper_kill_stack(thr);
   }
   else {
     LOG_U(ci_log("%s: a suitable stack is dying - waiting\n", __FUNCTION__));

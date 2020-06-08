@@ -429,7 +429,7 @@ static int thr_table_ctor(tcp_helpers_table_t *table)
 
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
-static void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
+void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
 {
   ci_uint32 n_ep_orphaned;
   ci_netif* netif = &thr->netif;

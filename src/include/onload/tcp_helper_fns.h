@@ -173,6 +173,7 @@ extern int efab_thr_table_lookup(const char* name, struct net* netns,
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 /*! Try to kill an orphan/zombie stack */
 extern int tcp_helper_kill_stack_by_id(unsigned id);
+extern void tcp_helper_kill_stack(tcp_helper_resource_t *thr);
 #endif
 
 extern int
