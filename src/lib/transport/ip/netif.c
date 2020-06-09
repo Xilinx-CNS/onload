@@ -1194,7 +1194,8 @@ static void ci_netif_unlock_slow(ci_netif* ni KERNEL_DL_CONTEXT_DECL)
     l = ci_netif_unlock_slow_common(ni, ni->state->lock.lock);
 
     /* If the NEED_PRIME flag was set, handle it here */
-    if( l & CI_EPLOCK_NETIF_NEED_PRIME ) {
+    if( ! (ni->state->flags & CI_NETIF_FLAG_EVQ_KERNEL_PRIME_ONLY) &&
+       (l & CI_EPLOCK_NETIF_NEED_PRIME) ) {
       l = ef_eplock_clear_flags(&ni->state->lock, CI_EPLOCK_NETIF_NEED_PRIME);
 
       CITP_STATS_NETIF_INC(ni, unlock_slow_need_prime);
