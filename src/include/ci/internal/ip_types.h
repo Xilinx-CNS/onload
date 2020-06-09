@@ -159,6 +159,15 @@ struct ci_netif_s {
   struct tcp_helper_endpoint_s**  ep_tbl;
   ci_uint32                       ep_tbl_n;
   unsigned                        ep_tbl_max;
+
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+  /* Number of orphaned sockets which prevent the stack from destroying.
+   *
+   * In case of ulhelper build profile we use a similar field in the netif
+   * state.
+   */
+  ci_uint32 n_ep_orphaned;
+#endif
 #endif
 
   /* This is pointer to the shared state of packet sets */

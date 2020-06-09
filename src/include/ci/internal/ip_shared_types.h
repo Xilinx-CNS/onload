@@ -1203,11 +1203,14 @@ struct ci_netif_state_s {
   ci_uint32  max_ep_bufs;                /**< Upper limit of end points */
   CI_ULCONST ci_uint32  n_ep_bufs;       /**< Number of available endpoints */
 
-  /* Number of orphaned endpoints after all the applications have gone.
-   * Must be modified in atomic way, because locking is not always trusted
-   * in the context it is used.
+#if CI_CFG_UL_INTERRUPT_HELPER
+  /* Number of orphaned sockets which prevent the stack from destroying.
+   *
+   * In case of non-ulhelper build profile we use a similar field in the
+   * tcp helper resource, so that it can be trusted.
    */
   ci_uint32 n_ep_orphaned;
+#endif
 
 #if CI_CFG_EPOLL3
   ci_int32              ready_list_pid[CI_CFG_N_READY_LISTS];

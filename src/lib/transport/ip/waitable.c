@@ -117,10 +117,10 @@ static void ci_drop_orphan(ci_netif * ni)
    *    they've all gone away.
    */
   do {
-    ci_uint32 val = ni->state->n_ep_orphaned;
-    if( val == 0 )
+    ci_uint32 val = n_ep_orphaned(ni);
+    if( val == OO_N_EP_ORPHANED_INIT )
       return;
-    if( ci_cas32u_succeed(&ni->state->n_ep_orphaned, val, val - 1) ) {
+    if( ci_cas32u_succeed(&n_ep_orphaned(ni), val, val - 1) ) {
 #ifdef __KERNEL__
       if( val == 1 )
         oo_thr_ref_drop(netif2tcp_helper_resource(ni)->ref, OO_THR_REF_BASE);

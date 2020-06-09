@@ -81,13 +81,13 @@ void oo_netif_dtor_pkts(ci_netif* ni)
 }
 
 /* Called when all the user applications have gone.
- * Initialises netif->state->n_ep_orphaned.
- * Returns 1 if this value is non-zero.
+ * Returns the number of orphaned sockets which can't be dropped yet
+ * (TIME-WAIT and so on).
  */
-int/*bool*/ oo_netif_apps_gone(ci_netif* netif)
+ci_uint32 oo_netif_apps_gone(ci_netif* netif)
 {
   unsigned i;
-  int orphaned;
+  ci_uint32 orphaned;
 
   ci_assert(ci_netif_is_locked(netif));
 
@@ -130,7 +130,7 @@ int/*bool*/ oo_netif_apps_gone(ci_netif* netif)
 
     /* All user files are closed; all FINs should be sent.
      * There are some cases when we fail to send FIN to passively-opened
-     * connection: reset such connections. */
+     * connection (see ON-2108): reset such connections. */
     if( w->state & CI_TCP_STATE_TCP_CONN && wo->sock.tx_errno == 0 ) {
       if( OO_SP_IS_NULL(wo->tcp.local_peer) ||
           (~w->sb_aflags & CI_SB_AFLAG_TCP_IN_ACCEPTQ) ) {
@@ -172,13 +172,7 @@ int/*bool*/ oo_netif_apps_gone(ci_netif* netif)
 
   LOG_NC(ci_log("%s: [%u] %d socket(s) closing", __FUNCTION__,
                 NI_ID(netif), orphaned));
-  if( ci_cas32u_fail(&netif->state->n_ep_orphaned, 0, orphaned) ) {
-    LOG_E(ci_log("%s: ERROR: nonzero n_ep_orphaned value: %d when "
-                 "setting it to %d",
-                 __func__, netif->state->n_ep_orphaned, orphaned));
-    ci_assert(0);
-  }
-  return orphaned > 0;
+  return orphaned;
 }
 
 #endif /* OO_DO_STACK_DTOR */

@@ -465,10 +465,10 @@ void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
   /* Atomically replace n_ep_orphaned by 0: the code which sets 0 is
    * responsible for decrementing refcount. */
   do {
-    n_ep_orphaned = netif->state->n_ep_orphaned;
+    n_ep_orphaned = netif->n_ep_orphaned;
     if( n_ep_orphaned == 0 )
       break;
-  } while( ci_cas32u_fail(&netif->state->n_ep_orphaned, n_ep_orphaned, 0) );
+  } while( ci_cas32u_fail(&netif->n_ep_orphaned, n_ep_orphaned, 0) );
 
   if( n_ep_orphaned > 0 ) {
     ci_log("%s: ERROR: force-kill stack [%d]: "
@@ -2049,6 +2049,12 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 #endif
   ns->n_ep_bufs = 0;
   ns->nic_n = trs->netif.nic_n;
+
+#if CI_CFG_UL_INTERRUPT_HELPER
+  ns->n_ep_orphaned = OO_N_EP_ORPHANED_INIT;
+#else
+  ni->n_ep_orphaned = OO_N_EP_ORPHANED_INIT;
+#endif
 
   /* An entry in intf_i_to_hwport should not be touched if the intf does
    * not exist.  Belt-and-braces: initialise to 0.
@@ -3673,8 +3679,10 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
    * that lower-level dtor does not start until the previous one has
    * finished.  To archive this, each dtor level drops next-level refcount
    * when done.
+   *
+   * And another additional BASE reference is for non-zero n_ep_orphaned.
    */
-  rs->ref[OO_THR_REF_BASE] = 3;
+  rs->ref[OO_THR_REF_BASE] = 4;
   rs->ref[OO_THR_REF_FILE] = 2;
   rs->ref[OO_THR_REF_APP] = 1;
 
@@ -5065,12 +5073,16 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
    */
   tcp_helper_close_pending_endpoints(trs);
 
-  /* The netif->state is not mapped to UL any more, so we can use the state
-   * values as trusted after oo_netif_apps_gone() has set it.
-   */
-  if( oo_netif_apps_gone(netif) ) {
-    /* Get a refcount associated with non-zero n_ep_orphaned */
-    oo_thr_ref_get(trs->ref, OO_THR_REF_BASE);
+  {
+    /* Do we have any endpoints which can't be dropped yet? */
+    ci_uint32 n_orphaned = 0;
+    n_orphaned = oo_netif_apps_gone(netif);
+    if( ci_cas32u_succeed(&netif->n_ep_orphaned, OO_N_EP_ORPHANED_INIT,
+                          n_orphaned) && n_orphaned == 0 ) {
+      /* Who sets n_ep_orphaned to zero, the same code should drop the
+       * associated BASE refcount. */
+      oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
+    }
   }
 
   /* Drop lock so that sockets can proceed towards close. */
@@ -7896,6 +7908,14 @@ static void thr_release_app(oo_thr_ref_t ref)
   OO_DEBUG_TCPH(ci_log("%s [%d] "OO_THR_REF_FMT, __func__, thr->id,
                        OO_THR_REF_ARG(ref)));
   efab_notify_stacklist_change(thr);
+  /* We could run the most part of efab_tcp_helper_rm_free_locked() here.
+   * But as we don't trust the "services" running in UL, we'll have to
+   * re-do this at thr_release_file() above.  So it does not worth the
+   * hassle.
+   *
+   * However it may result in slightly different behaviour when
+   * onload_tcpdump is present in somewhat broken cases like ON-2108.
+   */
   oo_thr_ref_drop(ref, OO_THR_REF_FILE);
 }
 

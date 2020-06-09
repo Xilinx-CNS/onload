@@ -133,7 +133,8 @@ main_loop(ci_netif* ni)
         /* Ensure all close() requests are handled */
         ci_netif_close_pending(ni);
 
-        oo_netif_apps_gone(ni);
+        ci_assert_equal(ni->state->n_ep_orphaned, OO_N_EP_ORPHANED_INIT);
+        ni->state->n_ep_orphaned = oo_netif_apps_gone(ni);
         ci_log("User application gone, %d sockets to be closed",
                ni->state->n_ep_orphaned);
       }

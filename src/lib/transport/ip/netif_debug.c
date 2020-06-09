@@ -14,6 +14,7 @@
 #include "uk_intf_ver.h"
 #include <onload/version.h>
 #include <onload/sleep.h>
+#include <onload/netif_dtor.h>
 #include <etherfabric/vi.h>
 
 #ifdef NDEBUG
@@ -876,7 +877,6 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   long diff;
   int intf_i;
   int i;
-  ci_uint32 n_ep_orphaned;
 
   logger(log_arg, "%s: stack=%d name=%s",
          __FUNCTION__, NI_ID(ni), ni->state->name);
@@ -905,9 +905,14 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
           ? " USE_ALIEN_LADDRS" : ""
       );
 
-  n_ep_orphaned = ns->n_ep_orphaned;
-  if( n_ep_orphaned != 0 )
-    logger(log_arg, "  orphaned sockets %d", n_ep_orphaned);
+#if OO_DO_STACK_DTOR
+  {
+    ci_uint32 n_ep_orphaned;
+    n_ep_orphaned = n_ep_orphaned(ni);
+    if( n_ep_orphaned != 0 )
+      logger(log_arg, "  orphaned sockets %d", n_ep_orphaned);
+  }
+#endif
 
 #ifdef __KERNEL__
   logger(log_arg, "  creation_time=%u (delta=%usecs)", ns->creation_time_sec,
