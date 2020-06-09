@@ -237,8 +237,12 @@ void citp_waitable_obj_free_nnl(ci_netif* ni, citp_waitable* w)
 void citp_waitable_cleanup(ci_netif* ni, citp_waitable_obj* wo, int do_free)
 {
   if( wo->waitable.sb_aflags & CI_SB_AFLAG_MOVED_AWAY ) {
-    if( do_free )
-      citp_waitable_obj_free(ni, &wo->waitable);
+    if( do_free ) {
+      if( wo->waitable.state == CI_TCP_STATE_UDP )
+        ci_udp_state_try_free(ni, SP_TO_UDP(ni, wo->waitable.bufid));
+      else
+        citp_waitable_obj_free(ni, &wo->waitable);
+    }
   }
   else if( wo->waitable.state == CI_TCP_LISTEN )
     ci_tcp_listen_all_fds_gone(ni, &wo->tcp_listen, do_free);

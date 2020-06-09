@@ -1010,6 +1010,7 @@ extern void ci_ip_cmsg_recv(ci_netif*, ci_udp_state*, const ci_ip_pkt_fmt*,
 extern void ci_udp_all_fds_gone(ci_netif* netif, oo_sp, int do_free);
 #endif
 extern void ci_udp_state_free(ci_netif*, ci_udp_state*) CI_HF;
+extern void ci_udp_state_try_free(ci_netif*, ci_udp_state*) CI_HF;
 extern int ci_udp_csum_correct(ci_ip_pkt_fmt* pkt, ci_udp_hdr* udp) CI_HF;
 
 extern void ci_udp_sendmsg_send_async_q(ci_netif*, ci_udp_state*) CI_HF;

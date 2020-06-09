@@ -33,6 +33,16 @@ void ci_udp_state_free(ci_netif* ni, ci_udp_state* us)
   citp_waitable_obj_free(ni, &us->s.b);
 }
 
+void ci_udp_state_try_free(ci_netif* ni, ci_udp_state* us)
+{
+  /* Only free state if no outgoing tx packets: otherwise it'll get
+   * freed by the tx completion event.
+   */
+  if( us->tx_count == 0 )
+    ci_udp_state_free(ni, us);
+  else
+    CITP_STATS_NETIF_INC(ni, udp_free_with_tx_active);
+}
 
 int ci_udp_try_to_free_pkts(ci_netif* ni, ci_udp_state* us, int desperation)
 {

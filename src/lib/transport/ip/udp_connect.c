@@ -769,15 +769,8 @@ void ci_udp_all_fds_gone(ci_netif* netif, oo_sp sock_id, int do_free)
     us->zc_kernel_datagram_count = 0;
   }
 
-  /* Only free state if no outstanding tx packets: otherwise it'll get
-   * freed by the tx completion event.
-   */
-  if( do_free ) {
-    if( us->tx_count == 0 )
-      ci_udp_state_free(netif, us);
-    else
-      CITP_STATS_NETIF_INC(netif, udp_free_with_tx_active);
-  }
+  if( do_free )
+    ci_udp_state_try_free(netif, us);
 }
 
 #endif /* __ci_driver__ */
