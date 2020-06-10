@@ -107,7 +107,11 @@ ci_inline void ef_eplock_holder_set_flags(ci_eplock_t* l, ci_uint64 flags) {
   /*! Clear the specified lock flags. */
 ci_inline ci_uint64 ef_eplock_clear_flags(ci_eplock_t* l, ci_uint64 flags) {
   ci_uint64 v;
-  ci_assert((flags & CI_EPLOCK_LOCK_FLAGS) == 0u);
+#if CI_CFG_UL_INTERRUPT_HELPER
+  ci_assert_nflags(flags, CI_EPLOCK_LOCK_FLAGS & ~CI_EPLOCK_FL_NEED_WAKE);
+#else
+  ci_assert_nflags(flags, CI_EPLOCK_LOCK_FLAGS);
+#endif
   do {
     v = l->lock;
   } while( ci_cas64u_fail(&l->lock, v, v &~ flags) );

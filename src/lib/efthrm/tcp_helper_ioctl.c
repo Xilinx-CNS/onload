@@ -965,19 +965,24 @@ efab_tcp_helper_clear_epcache_rsop(ci_private_t* priv, void *unused)
   return efab_tcp_helper_clear_epcache(priv->thr);
 }
 #endif
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static int
 efab_eplock_unlock_and_wake_rsop(ci_private_t *priv, void *unused)
 {
   if (priv->thr == NULL)
     return -EINVAL;
-#if CI_CFG_UL_INTERRUPT_HELPER
-  efab_eplock_wake(&priv->thr->netif);
-  return 0;
-#else
-  ci_assert_equal(priv->thr->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT, 0);
   return efab_eplock_unlock_and_wake(&priv->thr->netif, 0);
-#endif
 }
+#else
+static int
+efab_eplock_wake_and_do_rsop(ci_private_t *priv, void *arg)
+{
+  ci_uint64 l = *(ci_uint64*)arg;
+  if (priv->thr == NULL)
+    return -EINVAL;
+  return efab_eplock_wake_and_do(&priv->thr->netif, l);
+}
+#endif
 static int
 efab_eplock_lock_wait_rsop(ci_private_t *priv, void *unused)
 {
@@ -1563,7 +1568,11 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_TCP_CLOSE_OS_SOCK,     efab_tcp_helper_set_tcp_close_os_sock_rsop),
   op(OO_IOC_OS_POLLERR_CLEAR,      efab_tcp_helper_os_pollerr_clear),
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   op(OO_IOC_EPLOCK_WAKE,      efab_eplock_unlock_and_wake_rsop),
+#else
+  op(OO_IOC_EPLOCK_WAKE_AND_DO, efab_eplock_wake_and_do_rsop),
+#endif
   op(OO_IOC_EPLOCK_LOCK_WAIT, efab_eplock_lock_wait_rsop),
 
   op(OO_IOC_INSTALL_STACK,    efab_install_stack),

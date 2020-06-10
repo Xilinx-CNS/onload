@@ -7079,6 +7079,23 @@ wakeup_post_poll_list(tcp_helper_resource_t* thr)
 }
 #endif
 
+static inline void
+tcp_helper_unlock_prime(tcp_helper_resource_t* thr)
+{
+  ci_netif *ni = &thr->netif;
+  int intf_i;
+
+  CITP_STATS_NETIF_INC(ni, unlock_slow_need_prime);
+  if( NI_OPTS(ni).int_driven ) {
+    OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
+      if( ci_bit_test_and_clear(&ni->state->evq_prime_deferred, intf_i) )
+        tcp_helper_request_wakeup_nic(thr, intf_i);
+  }
+  else {
+    tcp_helper_request_wakeup(thr);
+  }
+}
+
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 /*--------------------------------------------------------------------
  *!
@@ -7111,7 +7128,6 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
   ci_netif* ni = &thr->netif;
   ci_uint64 flags_set;
   ci_uint64 after_unlock_flags = 0;
-  int intf_i;
   int/*bool*/ pkt_waiter_retried = 0;
 
   ci_assert(ci_netif_is_locked(ni));
@@ -7277,17 +7293,8 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
                                   CI_EPLOCK_NETIF_UNLOCK_FLAGS |
                                   CI_EPLOCK_NETIF_SOCKET_LIST) );
 
-  if( after_unlock_flags & CI_EPLOCK_NETIF_NEED_PRIME ) {
-    CITP_STATS_NETIF_INC(&thr->netif, unlock_slow_need_prime);
-    if( NI_OPTS(ni).int_driven ) {
-      OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-        if( ci_bit_test_and_clear(&ni->state->evq_prime_deferred, intf_i) )
-          tcp_helper_request_wakeup_nic(thr, intf_i);
-    }
-    else {
-      tcp_helper_request_wakeup(thr);
-    }
-  }
+  if( after_unlock_flags & CI_EPLOCK_NETIF_NEED_PRIME )
+    tcp_helper_unlock_prime(thr);
 
   if( after_unlock_flags & CI_EPLOCK_NETIF_PKT_WAKE ) {
     CITP_STATS_NETIF_INC(&thr->netif, pkt_wakes);
@@ -7301,8 +7308,27 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
 
   return lock_val;
 }
-#endif /* CI_CFG_UL_INTERRUPT_HELPER */
+#else /* CI_CFG_UL_INTERRUPT_HELPER */
+int
+efab_eplock_wake_and_do(ci_netif *ni, ci_uint64 l)
+{
+  tcp_helper_resource_t* thr = netif2tcp_helper_resource(ni);
 
+  /* First of all, request wakeup for EF100 */
+  if( l & CI_EPLOCK_NETIF_NEED_PRIME )
+    tcp_helper_unlock_prime(thr);
+
+  if( l & CI_EPLOCK_NETIF_PKT_WAKE ) {
+    CITP_STATS_NETIF_INC(&thr->netif, pkt_wakes);
+    ci_waitq_wakeup(&thr->pkt_waitq);
+  }
+
+  if( l & CI_EPLOCK_FL_NEED_WAKE )
+    efab_eplock_wake(ni);
+
+  return 0;
+}
+#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 /**********************************************************************
 ***************** Iterators to find netifs ***************************

@@ -49,8 +49,13 @@ typedef struct {
 extern int eplock_ctor(ci_netif *ni);
 extern void eplock_dtor(ci_netif *ni);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /*! Comment? */
 extern int efab_eplock_unlock_and_wake(ci_netif *ni, int in_dl_context);
+#else
+extern int efab_eplock_wake_and_do(ci_netif *ni, ci_uint64 l);
+
+#endif
 
 /*! Comment? */
 extern int efab_eplock_lock_wait(ci_netif* ni, int maybe_wedged);

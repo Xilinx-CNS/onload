@@ -1072,12 +1072,7 @@ int oo_want_proactive_packet_allocation(ci_netif* ni)
 /* Handling for lock flags that is common to UL and kernel paths. */
 ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
 {
-  const ci_uint64 ALL_HANDLED_FLAGS = CI_EPLOCK_NETIF_UL_MASK
-#if CI_CFG_UL_INTERRUPT_HELPER
-      /* Fixme: remove this exception under ON-12119 */
-      & ~CI_EPLOCK_NETIF_NEED_PRIME
-#endif
-      ;
+  const ci_uint64 ALL_HANDLED_FLAGS = CI_EPLOCK_NETIF_UL_MASK;
   ci_uint64 set_flags = 0;
 
   /* Do this first, because ci_netif_purge_deferred_socket_list() acts on the
@@ -1170,17 +1165,22 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
 }
 
 
-static void ci_netif_unlock_slow(ci_netif* ni KERNEL_DL_CONTEXT_DECL)
+#ifdef __KERNEL__
+static void ci_netif_unlock_slow(ci_netif* ni, int in_dl_context)
 {
-#ifndef __KERNEL__
+  efab_eplock_unlock_and_wake(ni, in_dl_context);
+}
+#else
+static void ci_netif_unlock_slow(ci_netif* ni)
+{
   /* All we are doing here is seeing if we can avoid a syscall.  Everything
   ** we do here has to be checked again if we do take the
   ** efab_eplock_unlock_and_wake() path, so no need to do this stuff if
   ** already in kernel.
   */
-  ci_uint64 l;
+  ci_uint64 l, k_flags = 0;
   int intf_i;
-  bool dive_in_kernel = false;
+  int rc = 0;
   ci_uint64 all_handled_flags =
         CI_EPLOCK_NETIF_UL_MASK | CI_EPLOCK_NETIF_SOCKET_LIST;
 
@@ -1209,52 +1209,44 @@ static void ci_netif_unlock_slow(ci_netif* ni KERNEL_DL_CONTEXT_DECL)
         ef_eventq_prime(&ni->nic_hw[intf_i].vi);
     }
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
     /* If some flags should be handled in kernel, then there is no point in
      * looping here.  Dive! */
-    if( l & (CI_EPLOCK_NETIF_UNLOCK_FLAGS | CI_EPLOCK_NETIF_SOCKET_LIST |
-             CI_EPLOCK_FL_NEED_WAKE) &
-        ~all_handled_flags ) {
-      dive_in_kernel = true;
+    k_flags |= l & (CI_EPLOCK_NETIF_UNLOCK_FLAGS | CI_EPLOCK_FL_NEED_WAKE) &
+        ~all_handled_flags;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+    if( k_flags != 0 )
       break;
-    }
 #else
-    if( l & CI_EPLOCK_FL_NEED_WAKE )
-      dive_in_kernel = true;
+    /* In kernel we can handle following flags only: */
+    ci_assert_nflags(k_flags,
+                     ~(CI_EPLOCK_NETIF_PKT_WAKE |
+                       CI_EPLOCK_NETIF_NEED_PRIME |
+                       CI_EPLOCK_FL_NEED_WAKE));
+    l = ef_eplock_clear_flags(&ni->state->lock, k_flags);
 #endif
-
   } while( (l & all_handled_flags &
             (CI_EPLOCK_NETIF_UNLOCK_FLAGS | CI_EPLOCK_NETIF_SOCKET_LIST)) != 0 ||
-          ci_cas64u_fail(&ni->state->lock.lock,
-                          l, (l &~ CI_EPLOCK_LOCKED) | CI_EPLOCK_UNLOCKED) );
+          ci_cas64u_fail(&ni->state->lock.lock, l,
+                          (l &~ CI_EPLOCK_LOCKED) | CI_EPLOCK_UNLOCKED) );
 
   /* We've handled everything we needed to, so can return without
-  * dropping to the kernel 
-  */
-  if( ! dive_in_kernel )
+   * dropping to the kernel.
+   */
+  if( k_flags == 0 )
     return;
 
-#endif
-
-  {
-    int rc = 0;
-
-#ifndef __KERNEL__
+  CITP_STATS_NETIF_INC(ni, unlock_slow_syscall);
 #if ! CI_CFG_UL_INTERRUPT_HELPER
-    /* Do these assertions have any value? */
-    ci_assert(ni->state->lock.lock & CI_EPLOCK_LOCKED);
-    ci_assert(~ni->state->lock.lock & CI_EPLOCK_UNLOCKED);
-#endif
-    CITP_STATS_NETIF_INC(ni, unlock_slow_syscall);
-    rc = oo_resource_op(ci_netif_get_driver_handle(ni),
-                        OO_IOC_EPLOCK_WAKE, NULL);
+  rc = oo_resource_op(ci_netif_get_driver_handle(ni),
+                      OO_IOC_EPLOCK_WAKE, NULL);
 #else
-    rc = efab_eplock_unlock_and_wake(ni, in_dl_context);
+  rc = oo_resource_op(ci_netif_get_driver_handle(ni),
+                      OO_IOC_EPLOCK_WAKE_AND_DO, &k_flags);
 #endif
 
-    if( rc < 0 )  LOG_NV(ci_log("%s: rc=%d", __FUNCTION__, rc));
-  }
+  if( rc < 0 )  LOG_NV(ci_log("%s: rc=%d", __FUNCTION__, rc));
 }
+#endif /* __KERNEL__ */
 
 
 void ci_netif_unlock(ci_netif* ni)
