@@ -97,25 +97,18 @@ oo_thr_ref_drop_one(oo_thr_ref_t ref, enum oo_thr_ref_type type)
     oo_thr_ref_release[type](ref);
 }
 
-/* Upgrade refcount from <from> to <to>
- *
- * For example, efab_thr_table_lookup() gets the BASE refcoint,
- * and the FILE or the APP refcount should be taken when installing it to
- * a struct file.
- */
+/* Get a full stack of refcounts up to type. */
 static inline int
-oo_thr_ref_upgrade(oo_thr_ref_t ref, enum oo_thr_ref_type from,
-                       enum oo_thr_ref_type to) OO_MUST_CHECK_RET;
+oo_thr_ref_get(oo_thr_ref_t ref, enum oo_thr_ref_type type) OO_MUST_CHECK_RET;
 static inline int
-oo_thr_ref_upgrade(oo_thr_ref_t ref, enum oo_thr_ref_type from,
-                       enum oo_thr_ref_type to)
+oo_thr_ref_get(oo_thr_ref_t ref, enum oo_thr_ref_type type)
 {
   enum oo_thr_ref_type t;
   int rc = 0;
 
-  ci_assert_lt(from, to);
+  ci_assert_lt(OO_THR_REF_NONE, type);
 
-  for( t = from + 1; t <= to; t++ ) {
+  for( t = OO_THR_REF_NONE + 1; t <= type; t++ ) {
     if( (rc = oo_thr_ref_get_one(ref, t)) != 0 )
       break;
   }
@@ -123,43 +116,22 @@ oo_thr_ref_upgrade(oo_thr_ref_t ref, enum oo_thr_ref_type from,
     return 0;
 
   /* The <t> level failed; we should release all the previous ones. */
-  for( t--; t > from; t-- )
+  for( t--; t > OO_THR_REF_NONE; t-- )
     oo_thr_ref_drop_one(ref, t);
 
   return rc;
-}
-
-/* Get a full stack of refcounts up to type. */
-static inline int
-oo_thr_ref_get(oo_thr_ref_t ref, enum oo_thr_ref_type type) OO_MUST_CHECK_RET;
-static inline int
-oo_thr_ref_get(oo_thr_ref_t ref, enum oo_thr_ref_type type)
-{
-  return oo_thr_ref_upgrade(ref, OO_THR_REF_NONE, type);
-}
-
-/* Downgrade refcount from <from> to <to>
- *
- * The opposite for oo_thr_ref_get_upgrade() above.
- */
-static inline void
-oo_thr_ref_downgrade(oo_thr_ref_t ref, enum oo_thr_ref_type from,
-                         enum oo_thr_ref_type to)
-{
-  enum oo_thr_ref_type t;
-
-  ci_assert_gt(from, to);
-
-  for( t = from; t > to; t-- ) {
-    oo_thr_ref_drop_one(ref, t);
-  }
 }
 
 /* Drop all the refcounts, starting from type. */
 static inline void
 oo_thr_ref_drop(oo_thr_ref_t ref, enum oo_thr_ref_type type)
 {
-  oo_thr_ref_downgrade(ref, type, OO_THR_REF_NONE);
+  enum oo_thr_ref_type t;
+
+  ci_assert_gt(type, OO_THR_REF_NONE);
+
+  for( t = type; t > OO_THR_REF_NONE; t-- )
+    oo_thr_ref_drop_one(ref, t);
 }
 
 /* Checks whether a particular refcount is zero.
