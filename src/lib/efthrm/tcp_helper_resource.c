@@ -645,6 +645,7 @@ int efab_thr_can_access_stack(tcp_helper_resource_t* thr, int check_user)
  */
 int efab_thr_table_lookup(const char* name, struct net* netns,
                           unsigned id, int flags,
+                          enum oo_thr_ref_type ref_type,
                           tcp_helper_resource_t** thr_p)
 {
   tcp_helpers_table_t* table = &THR_TABLE;
@@ -656,6 +657,8 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
   ci_assert(thr_p != NULL);
   ci_assert(flags == EFAB_THR_TABLE_LOOKUP_NO_CHECK_USER ||
             (flags & EFAB_THR_TABLE_LOOKUP_CHECK_USER));
+  if( ref_type >= OO_THR_REF_FILE )
+    ci_assert_flags(flags, EFAB_THR_TABLE_LOOKUP_CHECK_USER);
 
   ci_irqlock_lock(&table->lock, &lock_flags);
   CI_DLLIST_FOR_EACH(link, &table->all_stacks) {
@@ -692,8 +695,6 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
         }
         rc = -EACCES;
       }
-      else if( thr->ref[OO_THR_REF_BASE] == 0 )
-        rc = -EBUSY;
       else if( (thr->ref[OO_THR_REF_FILE] != 0) !=
                ! (flags & EFAB_THR_TABLE_LOOKUP_NO_UL) ) {
         /* Orphan stacks flag does not match  */
@@ -701,7 +702,7 @@ int efab_thr_table_lookup(const char* name, struct net* netns,
       }
       else {
         /* Success */
-        rc = oo_thr_ref_get(thr->ref, OO_THR_REF_BASE);
+        rc = oo_thr_ref_get(thr->ref, ref_type);
         *thr_p = thr;
       }
       break;

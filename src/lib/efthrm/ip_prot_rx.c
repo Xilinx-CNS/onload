@@ -50,7 +50,8 @@ efab_ipp_get_locked_thr_from_tcp_handle(unsigned tcp_id)
 
   /* ask resource manager to decode to a resource */
   rc = efab_thr_table_lookup(NULL, NULL, tcp_id,
-                             EFAB_THR_TABLE_LOOKUP_NO_CHECK_USER, &thr);
+                             EFAB_THR_TABLE_LOOKUP_NO_CHECK_USER,
+                             OO_THR_REF_BASE, &thr);
   if (rc < 0) {
     OO_DEBUG_IPP( ci_log("%s: Invalid TCP helper resource handle %u", 
                          __FUNCTION__, tcp_id) );

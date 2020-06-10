@@ -168,6 +168,7 @@ extern int efab_thr_user_can_access_stack(uid_t uid, uid_t euid,
  */
 extern int efab_thr_table_lookup(const char* name, struct net* netns,
                                  unsigned id, int flags,
+                                 enum oo_thr_ref_type ref_type,
                                  tcp_helper_resource_t** stack_out);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER

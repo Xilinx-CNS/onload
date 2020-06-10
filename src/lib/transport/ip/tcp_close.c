@@ -687,7 +687,7 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
 
       if( efab_thr_table_lookup(NULL, NULL, stack_id,
                                 EFAB_THR_TABLE_LOOKUP_CHECK_USER,
-                                &thr) != 0 ) {
+                                OO_THR_REF_BASE, &thr) != 0 ) {
         LOG_U(log("%s: listening socket %d:%d can't find "
                   "acceptq memeber %d:%d", __FUNCTION__,
                   netif->state->stack_id, tls->s.b.bufid, stack_id, sp));

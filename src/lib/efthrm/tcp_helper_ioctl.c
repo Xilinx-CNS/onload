@@ -67,17 +67,13 @@ oo_priv_lookup_and_attach_stack(ci_private_t* priv, const char* name,
   int rc;
   if( (rc = efab_thr_table_lookup(name, current->nsproxy->net_ns, id,
                                   EFAB_THR_TABLE_LOOKUP_CHECK_USER,
-                                  &trs)) == 0 ) {
-    if( (rc = oo_thr_ref_upgrade(trs->ref, OO_THR_REF_BASE, OO_THR_REF_APP))
-        != 0 ) {
-      oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
-    }
-    else if( (rc = oo_priv_set_stack(priv, trs)) == 0 ) {
+                                  OO_THR_REF_APP, &trs)) == 0 ) {
+    if( (rc = oo_priv_set_stack(priv, trs)) == 0 ) {
       priv->fd_flags = OO_FDFLAG_STACK;
       priv->sock_id = OO_SP_NULL;
     }
     else {
-      oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
+      oo_thr_ref_drop(trs->ref, OO_THR_REF_APP);
     }
   }
   return rc;
@@ -715,7 +711,8 @@ efab_tcp_helper_get_info(ci_private_t *unused, void *arg)
     flags |= EFAB_THR_TABLE_LOOKUP_NO_UL;
     info->ni_orphan = 0;
   }
-  rc = efab_thr_table_lookup(NULL, NULL, info->ni_index, flags, &thr);
+  rc = efab_thr_table_lookup(NULL, NULL, info->ni_index, flags,
+                             OO_THR_REF_BASE, &thr);
   if( rc == 0 ) {
     info->ni_exists = 1;
     info->ni_orphan = (thr->ref[OO_THR_REF_FILE] == 0);
@@ -741,7 +738,8 @@ efab_tcp_helper_get_info(ci_private_t *unused, void *arg)
     for( index = info->ni_index + 1;
          index < 10000 /* FIXME: magic! */;
          ++index ) {
-      rc = efab_thr_table_lookup(NULL, NULL, index, flags, &next_thr);
+      rc = efab_thr_table_lookup(NULL, NULL, index, flags, OO_THR_REF_BASE,
+                                 &next_thr);
       if( rc == 0 ) {
         oo_thr_ref_drop(next_thr->ref, OO_THR_REF_BASE);
         info->u.ni_next_ni.index = index;
