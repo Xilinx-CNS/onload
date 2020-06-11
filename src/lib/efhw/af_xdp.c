@@ -81,19 +81,8 @@ static struct efhw_af_xdp_vi* vi_by_owner(struct efhw_nic* nic, int owner_id)
  *
  *---------------------------------------------------------------------------*/
 
-/* Arguments for the bpf() syscall, which must be mapped into user-addressable
- * memory */
-struct sys_bpf_args
-{
-  union bpf_attr attr;
-  int key;
-  int value;
-  char license[16];
-  char prog[];
-};
-
-/* Invoke the bpf() syscall */
-static int sys_bpf(int cmd, struct sys_bpf_args* args)
+/* Invoke the bpf() syscall args is assumed to be kernel memory */
+static int sys_bpf(int cmd, union bpf_attr* attr)
 {
 #if defined(__NR_bpf) && defined(ONLOAD_SYSCALL_PTREGS)
   struct pt_regs regs;
@@ -108,32 +97,20 @@ static int sys_bpf(int cmd, struct sys_bpf_args* args)
   }
 
   regs.di = cmd;
-  regs.si = (unsigned long)(&args->attr);
-  regs.dx = sizeof(args->attr);
+  regs.si = (uintptr_t)(attr);
+  regs.dx = sizeof(*attr);
+  {
+    int rc;
+    mm_segment_t oldfs = get_fs();
 
-  return sys_call(&regs);
+    set_fs(KERNEL_DS);
+    rc = sys_call(&regs);
+    set_fs(oldfs);
+    return rc;
+  }
 #else
   return -ENOSYS;
 #endif
-}
-
-/* Allocate some mapped memory for arguments to sys_bpf() */
-static struct sys_bpf_args* sys_bpf_map(int prog_bytes)
-{
-  /* TODO onload wants to destroy the stack from a kernel thread.
-   * It would be nice to support that properly.
-   */
-  if( current->mm == NULL )
-    return ERR_PTR(-ENOMEM);
-
-  return (void*)vm_mmap(0, 0, sizeof(struct sys_bpf_args) + prog_bytes,
-                        PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, 0);
-}
-
-/* Unmap memory after calling sys_bpf() */
-static void sys_bpf_unmap(struct sys_bpf_args* args, int prog_bytes)
-{
-  vm_munmap((unsigned long)args, sizeof(struct sys_bpf_args) + prog_bytes);
 }
 
 /* Allocate an FD for a file. Some operations need them. */
@@ -154,19 +131,14 @@ static int xdp_alloc_fd(struct file* file)
 static int xdp_map_create(void)
 {
   int rc;
-  struct sys_bpf_args* args = sys_bpf_map(0);
+  union bpf_attr attr = {};
 
-  if( IS_ERR(args) )
-    return PTR_ERR(args);
-
-  args->attr.map_type = BPF_MAP_TYPE_XSKMAP;
-  args->attr.key_size = sizeof(int);
-  args->attr.value_size = sizeof(int);
-  args->attr.max_entries = MAX_SOCKETS;
-  strncpy(args->attr.map_name, "onload_xsks", BPF_OBJ_NAME_LEN);
-
-  rc = sys_bpf(BPF_MAP_CREATE, args);
-  sys_bpf_unmap(args, 0);
+  attr.map_type = BPF_MAP_TYPE_XSKMAP;
+  attr.key_size = sizeof(int);
+  attr.value_size = sizeof(int);
+  attr.max_entries = MAX_SOCKETS;
+  strncpy(attr.map_name, "onload_xsks", strlen("onload_xsks"));
+  rc = sys_bpf(BPF_MAP_CREATE, &attr);
   return rc;
 }
 
@@ -228,23 +200,17 @@ static int xdp_prog_load(int map_fd)
     0x0000000000000000,0x00000000000002b7,0x00000000000003b7,0x0000003300000085,
     0x0000000000000095
   };
-
+  char license[] = "GPL";
+  union bpf_attr attr = {};
   int rc;
-  struct sys_bpf_args* args = sys_bpf_map(sizeof(prog));
-  if( IS_ERR(args) )
-    return PTR_ERR(args);
 
-  strcpy(args->license, "GPL");
-  memcpy(args->prog, prog, sizeof(prog));
+  attr.prog_type = BPF_PROG_TYPE_XDP;
+  attr.insn_cnt = sizeof(prog) / sizeof(struct bpf_insn);
+  attr.insns = (uintptr_t)prog;
+  attr.license = (uintptr_t)license;
+  strncpy(attr.prog_name, "xdpsock", strlen("xdpsock"));
 
-  args->attr.prog_type = BPF_PROG_TYPE_XDP;
-  args->attr.insn_cnt = sizeof(prog) / sizeof(struct bpf_insn);
-  args->attr.insns = (uintptr_t)args->prog;
-  args->attr.license = (uintptr_t)args->license;
-  strncpy(args->attr.prog_name, "xdpsock", BPF_OBJ_NAME_LEN);
-
-  rc = sys_bpf(BPF_PROG_LOAD, args);
-  sys_bpf_unmap(args, sizeof(prog));
+  rc = sys_bpf(BPF_PROG_LOAD, &attr);
   return rc;
 }
 
@@ -252,25 +218,18 @@ static int xdp_prog_load(int map_fd)
 static int xdp_map_update_elem(struct file* map, int key, int value)
 {
   int rc;
-  struct sys_bpf_args* args = sys_bpf_map(0);
-  if( IS_ERR(args) )
-    return PTR_ERR(args);
+  union bpf_attr attr = {};
 
   rc = xdp_alloc_fd(map);
   if( rc < 0 )
-    goto fail;
+    return rc;
 
-  args->key = key;
-  args->value = value;
+  attr.map_fd = rc;
+  attr.key = (uintptr_t)(&key);
+  attr.value = (uintptr_t)(&value);
 
-  args->attr.map_fd = rc;
-  args->attr.key = (uintptr_t)(&args->key);
-  args->attr.value = (uintptr_t)(&args->value);
-
-  rc = sys_bpf(BPF_MAP_UPDATE_ELEM, args);
-  __close_fd(current->files, args->attr.map_fd);
-fail:
-  sys_bpf_unmap(args, 0);
+  rc = sys_bpf(BPF_MAP_UPDATE_ELEM, &attr);
+  __close_fd(current->files, attr.map_fd);
   return rc;
 }
 
@@ -278,23 +237,17 @@ fail:
 static int xdp_map_delete_elem(struct file* map, int key)
 {
   int rc;
-  struct sys_bpf_args* args = sys_bpf_map(0);
-  if( IS_ERR(args) )
-    return PTR_ERR(args);
+  union bpf_attr attr = {};
 
   rc = xdp_alloc_fd(map);
   if( rc < 0 )
-    goto fail;
+    return rc;
 
-  args->key = key;
+  attr.map_fd = rc;
+  attr.key = (uintptr_t)(&key);
 
-  args->attr.map_fd = rc;
-  args->attr.key = (uintptr_t)(&args->key);
-
-  rc = sys_bpf(BPF_MAP_DELETE_ELEM, args);
-  __close_fd(current->files, args->attr.map_fd);
-fail:
-  sys_bpf_unmap(args, 0);
+  rc = sys_bpf(BPF_MAP_DELETE_ELEM, &attr);
+  __close_fd(current->files, attr.map_fd);
   return rc;
 }
 
