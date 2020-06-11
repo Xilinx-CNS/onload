@@ -558,11 +558,8 @@ efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
       break;
 
     case CI_RSOP_VI_AF_XDP_KICK:
-      {
-        struct msghdr msg = {.msg_flags = MSG_DONTWAIT};
-        rc = sock_sendmsg(virs->af_xdp_sock, &msg);
-        break;
-      }
+      rc = efrm_vi_af_xdp_kick(virs);
+      break;
 
     default:
       rc = efch_filter_list_op_add(rs->rs_base, efrm_vi_get_pd(virs),

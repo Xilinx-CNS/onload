@@ -1467,9 +1467,7 @@ static int oo_swf_update_rsop(ci_private_t* priv, void* arg)
 static int oo_af_xdp_kick_rsop(ci_private_t *priv, void *arg)
 {
   int intf_i = *(int32_t*)arg;
-  struct socket* sock = priv->thr->nic[intf_i].thn_vi_rs->af_xdp_sock;
-  struct msghdr msg = {.msg_flags = MSG_DONTWAIT};
-  return sock_sendmsg(sock, &msg);
+  return efrm_vi_af_xdp_kick(priv->thr->nic[intf_i].thn_vi_rs);
 }
 
 

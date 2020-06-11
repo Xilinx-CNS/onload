@@ -175,6 +175,14 @@ int efrm_vi_set_get_vi_instance(struct efrm_vi *virs)
 EXPORT_SYMBOL(efrm_vi_set_get_vi_instance);
 
 
+int efrm_vi_af_xdp_kick(struct efrm_vi *vi)
+{
+  struct msghdr msg = {.msg_flags = MSG_DONTWAIT};
+  return kernel_sendmsg(vi->af_xdp_sock, &msg, NULL, 0, 0);
+}
+EXPORT_SYMBOL(efrm_vi_af_xdp_kick);
+
+
 /* Try to allocate an instance out of the VIset.  If no free instances
  * and some instances are flushing, block.  Else return error.
  */
