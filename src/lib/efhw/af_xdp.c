@@ -118,6 +118,12 @@ static int xdp_alloc_fd(struct file* file)
 {
   int rc;
 
+  /* TODO AF_XDP:
+   * In weird context or when exiting process (that is current->files == NULL)
+   * we cannot do much (for now this is a stack teardown) */
+  if( !current || !current->files )
+    return -EAGAIN;
+
   rc = get_unused_fd_flags(0);
   if( rc < 0 )
     return rc;
