@@ -78,10 +78,6 @@ enum efrm_vi_q_flags {
 	EFRM_VI_IP_CSUM               = 0x2,
 	/** TXQ: Enable TCP/UDP checksum offload. */
 	EFRM_VI_TCP_UDP_CSUM          = 0x4,
-	/** TXQ: Enable iSCSI header digest offload. */
-	EFRM_VI_ISCSI_HEADER_DIGEST   = 0x8,
-	/** TXQ: Enable iSCSI data digest offload. */
-	EFRM_VI_ISCSI_DATA_DIGEST     = 0x10,
 	/** TXQ: Outgoing packets must match an Ethernet filter. */
 	EFRM_VI_ETH_FILTER            = 0x20,
 	/** TXQ: Outgoing packets must match a TCP/UDP filter. */

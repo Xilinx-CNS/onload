@@ -501,10 +501,6 @@ static unsigned vi_flags_to_q_flags(unsigned vi_flags, enum efhw_q_type q_type)
 			q_flags |= EFRM_VI_IP_CSUM;
 		if (!(vi_flags & EFHW_VI_TX_TCPUDP_CSUM_DIS))
 			q_flags |= EFRM_VI_TCP_UDP_CSUM;
-		if (vi_flags & EFHW_VI_ISCSI_TX_HDIG_EN)
-			q_flags |= EFRM_VI_ISCSI_HEADER_DIGEST;
-		if (vi_flags & EFHW_VI_ISCSI_TX_DDIG_EN)
-			q_flags |= EFRM_VI_ISCSI_DATA_DIGEST;
 		if (vi_flags & EFHW_VI_TX_ETH_FILTER_EN)
 			q_flags |= EFRM_VI_ETH_FILTER;
 		if (vi_flags & EFHW_VI_TX_IP_FILTER_EN)
