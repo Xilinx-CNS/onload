@@ -6727,6 +6727,7 @@ efab_tcp_helper_drop_os_socket(tcp_helper_resource_t* trs,
   os_socket = ep->os_socket;
   ep->os_socket = NULL;
   spin_unlock_irqrestore(&ep->lock, lock_flags);
+  oo_os_sock_poll_register(&ep->os_sock_poll, NULL);
   if( os_socket != NULL )
     fput(os_socket);
 }
