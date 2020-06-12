@@ -835,6 +835,7 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
   int i, j, owner, order;
   long first_page;
   struct efhw_af_xdp_vi* vi;
+  int rc = 0;
 
   owner = block->btb_hw.ef10.handle >> 8;
   order = block->btb_hw.ef10.handle & 0xff;
@@ -885,9 +886,9 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
   }
 
   if( vi->umem.ready == vi->umem.count )
-    xdp_bind_vi(nic, vi);
+    rc = xdp_bind_vi(nic, vi);
 
-  return 0;
+  return rc;
 #else
   return -EPROTONOSUPPORT;
 #endif
