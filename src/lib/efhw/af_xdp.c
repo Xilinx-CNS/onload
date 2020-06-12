@@ -434,7 +434,10 @@ int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
     return -EBUSY;
 
   memset(vi, 0, sizeof(*vi));
-  rc = sock_create(AF_XDP, SOCK_RAW, 0, &sock);
+  /* We need to use network namespace of network device so that
+   * ifindex passed in bpf syscalls makes sense
+   * AF_XDP TODO: there is a race here whit device changing netns */
+  rc = __sock_create(dev_net(nic->net_dev), AF_XDP, SOCK_RAW, 0, &sock, 0);
   if( rc < 0 )
     return rc;
 
