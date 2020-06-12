@@ -1372,6 +1372,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_AUTO_FLOWLABELS")) )
     opts->auto_flowlabels = atoi(s);
 #endif
+
+  if( (s = getenv("EF_AF_XDP_ZEROCOPY")) )
+    opts->af_xdp_zerocopy = atoi(s);
 }
 
 static int

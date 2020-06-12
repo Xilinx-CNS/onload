@@ -1190,8 +1190,16 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
   info->try_ctpio = 0;
   info->retry_without_ctpio = 0;
 
-  if( (nic->flags & NIC_FLAG_RX_ZEROCOPY) && NI_OPTS(ni).af_xdp_zerocopy )
-    info->ef_vi_flags |= EF_VI_RX_ZEROCOPY;
+  if( NI_OPTS(ni).af_xdp_zerocopy ) {
+    if (nic->flags & NIC_FLAG_RX_ZEROCOPY) {
+      info->ef_vi_flags |= EF_VI_RX_ZEROCOPY;
+      info->efhw_flags |= EFHW_VI_RX_ZEROCOPY;
+    } else {
+      NI_LOG(ni, CONFIG_WARNINGS,
+             "[%s]: WARNING: Zerocopy is required but NIC does not support it",
+             ni->state->pretty_name);
+    }
+  }
 
 #if CI_CFG_CTPIO
   if( should_try_ctpio(ni, nic, info) ) {

@@ -62,6 +62,7 @@ typedef union {
 
 /* Flags for TX/RX queues */
 #define EFHW_VI_JUMBO_EN           0x01    /*! scatter RX over multiple desc */
+#define EFHW_VI_RX_ZEROCOPY        0x02    /*! Zerocopy for AF_XDP */
 #define EFHW_VI_TX_PHYS_ADDR_EN    0x20    /*! TX physical address mode */
 #define EFHW_VI_RX_PHYS_ADDR_EN    0x40    /*! RX physical address mode */
 #define EFHW_VI_TX_IP_CSUM_DIS     0x100   /*! enable ip checksum generation */
@@ -98,7 +99,6 @@ typedef union {
 #define EFHW_VI_TX_ALT             0x4000000  /*! Provision for alternatives */
 #define EFHW_VI_TX_CTPIO           0x8000000  /*! Cut-through PIO */
 #define EFHW_VI_TX_CTPIO_NO_POISON 0x10000000 /*! Prevent CTPIO poisoning */
-#define EFHW_VI_RX_ZEROCOPY        0x20000000 /*! Zerocopy for AF_XDP */
 
 /* Note that the EFRM_VI_* flags (0x20000000 and above) are stored in
  * the same word and so no more bits are available for use as new

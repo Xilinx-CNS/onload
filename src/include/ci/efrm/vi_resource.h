@@ -78,6 +78,8 @@ enum efrm_vi_q_flags {
 	EFRM_VI_IP_CSUM               = 0x2,
 	/** TXQ: Enable TCP/UDP checksum offload. */
 	EFRM_VI_TCP_UDP_CSUM          = 0x4,
+	/** RXQ: Force zerocopy with AF_XDP - this also affects TX */
+	EFRM_VI_RX_ZEROCOPY           = 0x8,
 	/** TXQ: Outgoing packets must match an Ethernet filter. */
 	EFRM_VI_ETH_FILTER            = 0x20,
 	/** TXQ: Outgoing packets must match a TCP/UDP filter. */
@@ -110,8 +112,6 @@ enum efrm_vi_q_flags {
 	EFRM_VI_TX_CTPIO              = 0x40000,
 	/** TXQ: CTPIO: Require store-and-forward. */
 	EFRM_VI_TX_CTPIO_NO_POISON    = 0x80000,
-	/** RXQ: Force zerocopy with AF_XDP*/
-	EFRM_VI_RX_ZEROCOPY           = 0x100000,
 };
 
 
