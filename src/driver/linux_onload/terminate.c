@@ -459,7 +459,7 @@ void efab_linux_termination_ctor(void)
 
 #ifdef OO_DO_COREDUMP
   efab_do_coredump = efrm_find_ksym("do_coredump");
-  TERM_DEBUG("Find do_coredump via kallsyms at %px", do_coredump);
+  TERM_DEBUG("Find do_coredump via kallsyms at %px", efab_do_coredump);
   if( efab_do_coredump == NULL )
 #endif
     ci_log("WARNING: failed to find do_coredump() symbol.  Use "
