@@ -3679,12 +3679,15 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
    * that lower-level dtor does not start until the previous one has
    * finished.  To archive this, each dtor level drops next-level refcount
    * when done.
-   *
-   * And another additional BASE reference is for non-zero n_ep_orphaned.
    */
-  rs->ref[OO_THR_REF_BASE] = 4;
+  rs->ref[OO_THR_REF_BASE] = 3;
   rs->ref[OO_THR_REF_FILE] = 2;
   rs->ref[OO_THR_REF_APP] = 1;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+  /* And another additional BASE reference is for non-zero n_ep_orphaned
+   * (in case of non-ulhelper). */
+  rs->ref[OO_THR_REF_BASE]++;
+#endif
 
   ni = &rs->netif;
 
