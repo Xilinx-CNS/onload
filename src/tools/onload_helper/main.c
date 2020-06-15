@@ -88,12 +88,20 @@ do_exit(ci_netif* ni)
   exit(0);
 }
 
+static void sigalarm_exit(int sig, siginfo_t *info, void *context)
+{
+  ci_log("Failed to get stack lock for 1s.  Exiting...");
+  exit(1);
+}
+
 static void
 stack_lock(ci_netif* ni, bool* is_locked)
 {
   if( *is_locked )
     return;
+  alarm(1);
   ci_netif_lock(ni);
+  alarm(0);
   ci_netif_poll(ni);
   *is_locked = true;
 }
@@ -160,6 +168,7 @@ int main(int argc, char** argv)
   int rc;
   struct rlimit rlim;
   int i;
+  struct sigaction act;
 
   set_log_prefix("starting...");
   ci_app_getopt("", &argc, argv, cfg_opts, N_CFG_OPTS);
@@ -201,6 +210,12 @@ int main(int argc, char** argv)
   log_fd = ni->driver_handle;
   ci_log_fn = citp_log_fn_drv;
   set_log_prefix(ni->state->pretty_name);
+
+  /* Ensure we do not hand forever trying to lock a wedged stack. */
+  memset(&act, 0, sizeof(act));
+  act.sa_flags = SA_SIGINFO;
+  act.sa_sigaction = sigalarm_exit;
+  sigaction(SIGALRM, &act, NULL);
 
   main_loop(ni);
   return 0;
