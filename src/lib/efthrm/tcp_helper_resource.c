@@ -4963,6 +4963,9 @@ static void
 efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
 {
   ci_netif* netif;
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+  ci_uint32 n_orphaned = 0;
+#endif
 
   ci_assert(NULL != trs);
   ci_assert(trs->trusted_lock == (OO_TRUSTED_LOCK_LOCKED |
@@ -5061,39 +5064,37 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
    * the fds will be released.
    */
 #if CI_CFG_DESTROY_WEDGED
-  if( netif->flags & CI_NETIF_FLAG_WEDGED )
-    goto closeall;
-#endif /*CI_CFG_DESTROY_WEDGED*/
+  if( ! (netif->flags & CI_NETIF_FLAG_WEDGED) )
+#endif
+  {
 
 #if CI_CFG_FD_CACHING
-  ci_tcp_active_cache_drop_cache(netif);
-  ci_tcp_passive_scalable_cache_drop_cache(netif);
+    ci_tcp_active_cache_drop_cache(netif);
+    ci_tcp_passive_scalable_cache_drop_cache(netif);
 #endif
 
-  /* purge list of connections waiting to be closed
-   *   - ones where we couldn't continue in fop_close because
-   *     we didn't have the netif lock
-   */
-  tcp_helper_close_pending_endpoints(trs);
+    /* purge list of connections waiting to be closed
+     *   - ones where we couldn't continue in fop_close because
+     *     we didn't have the netif lock
+     */
+    tcp_helper_close_pending_endpoints(trs);
 
-  {
     /* Do we have any endpoints which can't be dropped yet? */
-    ci_uint32 n_orphaned = 0;
     n_orphaned = oo_netif_apps_gone(netif);
-    if( ci_cas32u_succeed(&netif->n_ep_orphaned, OO_N_EP_ORPHANED_INIT,
-                          n_orphaned) && n_orphaned == 0 ) {
-      /* Who sets n_ep_orphaned to zero, the same code should drop the
-       * associated BASE refcount. */
-      oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
-    }
   }
 
-  /* Drop lock so that sockets can proceed towards close. */
-  ci_netif_unlock(&trs->netif);
+  /* Who sets n_ep_orphaned to zero, the same code should drop the
+   * associated BASE refcount. */
+  if( ci_cas32u_succeed(&netif->n_ep_orphaned, OO_N_EP_ORPHANED_INIT,
+                        n_orphaned) && n_orphaned == 0 )
+    oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
 
+  /* Drop lock so that sockets can proceed towards close. */
 #if CI_CFG_DESTROY_WEDGED
- closeall:
+  if( ! (netif->flags & CI_NETIF_FLAG_WEDGED) )
 #endif
+    ci_netif_unlock(&trs->netif);
+
 #endif /* CI_CFG_UL_INTERRUPT_HELPER*/
 
   /* Don't need atomics here, because only we are permitted to touch
