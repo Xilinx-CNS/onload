@@ -990,15 +990,23 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 		EFRM_ERR("%s: Failed to allocate %s DMA buffer",
 			 __FUNCTION__, q_names[q_type]);
 		return rc;
-		goto fail_iopages;
 	}
 	if (q_type == EFHW_EVQ)
 		memset(efhw_iopages_ptr(&q->pages), EFHW_CLEAR_EVENT_VALUE,
 		       qsize.q_len_bytes);
 
+	rc = efhw_page_map_add_pages(&virs->mem_mmap, &q->pages);
+	if (rc < 0)
+		goto fail;
+
 	dma_addrs_size = 1 << EFHW_GFP_ORDER_TO_NIC_ORDER(qsize.q_len_page_order);
 	EFRM_ASSERT(dma_addrs_size <= EFRM_VI_MAX_DMA_ADDR);
 	dma_addrs = kmalloc(sizeof(*dma_addrs) * dma_addrs_size, GFP_KERNEL);
+	if (dma_addrs == NULL) {
+		rc = -ENOMEM;
+		goto fail;
+	}
+
 	for (i = 0; i < dma_addrs_size; ++i)
 		dma_addrs[i] = efhw_iopages_dma_addr(&q->pages, i);
 
@@ -1012,18 +1020,15 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 			    q_tag_in, q_flags, evq);
 	kfree(dma_addrs);
 	if (rc < 0)
-		goto fail_q_init;
+		goto fail;
 
-	virs->mem_mmap_bytes += PAGE_SIZE * (1 << qsize.q_len_page_order);
 	return 0;
 
-
-fail_q_init:
+fail:
 	dev = efrm_vi_get_pci_dev(virs);
 	efhw_iopages_free(dev, &q->pages);
 	if (dev)
 		pci_dev_put(dev);
-fail_iopages:
 	return rc;
 }
 EXPORT_SYMBOL(efrm_vi_q_alloc);
@@ -1238,16 +1243,15 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	if ((rc = efrm_vi_q_alloc(virs, EFHW_EVQ, evq_capacity,
 				  0, vi_flags, NULL)) < 0)
 		goto fail_q_alloc;
-
-	if ((rc = efrm_vi_q_alloc(virs, EFHW_TXQ, txq_capacity,
-				  tx_q_tag, vi_flags, evq_virs)) < 0)
-		goto fail_q_alloc;
 	if ((rc = efrm_vi_q_alloc(virs, EFHW_RXQ, rxq_capacity,
 				  rx_q_tag, vi_flags, evq_virs)) < 0)
 		goto fail_q_alloc;
+	if ((rc = efrm_vi_q_alloc(virs, EFHW_TXQ, txq_capacity,
+				  tx_q_tag, vi_flags, evq_virs)) < 0)
+		goto fail_q_alloc;
 
-        if( vi_flags & EFHW_VI_TX_CTPIO )
-                ctpio_mmap_bytes = EF_VI_CTPIO_APERTURE_SIZE;
+	if( vi_flags & EFHW_VI_TX_CTPIO )
+		ctpio_mmap_bytes = EF_VI_CTPIO_APERTURE_SIZE;
 
 	if (out_io_mmap_bytes != NULL) {
 		if (client->nic->devtype.arch == EFHW_ARCH_AF_XDP)
@@ -1256,9 +1260,9 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 			*out_io_mmap_bytes = PAGE_SIZE;
 	}
 	if (out_mem_mmap_bytes != NULL)
-		*out_mem_mmap_bytes = virs->mem_mmap_bytes;
+		*out_mem_mmap_bytes = efhw_page_map_bytes(&virs->mem_mmap);
 	if (out_ctpio_mmap_bytes != NULL)
-                *out_ctpio_mmap_bytes = ctpio_mmap_bytes;
+		*out_ctpio_mmap_bytes = ctpio_mmap_bytes;
 	if (out_txq_capacity != NULL)
 		*out_txq_capacity = virs->q[EFHW_TXQ].capacity;
 	if (out_rxq_capacity != NULL)

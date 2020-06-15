@@ -152,5 +152,80 @@ static inline unsigned efhw_iopages_n_pages(struct efhw_iopages *p)
 	return p->n_pages;
 }
 
+/*--------------------------------------------------------------------
+ *
+ * struct efhw_page_map: A set of pages comprising one or more lumps
+ * that are contiguous in the kernel address space and may be mapped
+ * to user-level.
+ *
+ *--------------------------------------------------------------------*/
 
+struct efhw_page_map {
+#define EFHW_PAGE_MAP_MAX_LUMPS 16
+	unsigned n_lumps;
+	unsigned n_pages;
+
+	struct efhw_page_map_lump {
+	  void* ptr;
+	  unsigned n_pages;
+	} lumps[EFHW_PAGE_MAP_MAX_LUMPS];
+};
+
+static inline int
+efhw_page_map_add_lump(struct efhw_page_map* map, void* ptr, long n_pages)
+{
+	struct efhw_page_map_lump* lump = &map->lumps[map->n_lumps];
+
+	if (map->n_lumps >= EFHW_PAGE_MAP_MAX_LUMPS)
+		return -ENOSPC;
+
+	lump->ptr = ptr;
+	lump->n_pages = n_pages;
+
+	map->n_lumps += 1;
+	map->n_pages += n_pages;
+
+	return 0;
+}
+
+static inline int
+efhw_page_map_add_page(struct efhw_page_map* map, struct efhw_page* page)
+{
+	return efhw_page_map_add_lump(map, efhw_page_ptr(page), 1);
+}
+
+static inline int
+efhw_page_map_add_pages(struct efhw_page_map* map, struct efhw_iopages* pages)
+{
+	return efhw_page_map_add_lump(map, efhw_iopages_ptr(pages),
+		                           efhw_iopages_n_pages(pages));
+}
+
+static inline struct page*
+efhw_page_map_page(struct efhw_page_map* map, int page_i)
+{
+	int i;
+	for (i = 0; i < map->n_lumps; ++i) {
+		struct efhw_page_map_lump* lump = &map->lumps[i];
+
+		if (page_i < lump->n_pages)
+			return virt_to_page((char*)lump->ptr + (page_i << PAGE_SHIFT));
+
+		page_i -= lump->n_pages;
+	}
+
+	return NULL;
+}
+
+static inline unsigned
+efhw_page_map_n_pages(struct efhw_page_map* map)
+{
+  return map->n_pages;
+}
+
+static inline unsigned
+efhw_page_map_bytes(struct efhw_page_map* map)
+{
+  return map->n_pages << PAGE_SHIFT;
+}
 #endif /* __CI_EFHW_IOPAGE_LINUX_H__ */

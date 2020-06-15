@@ -63,7 +63,8 @@ static void efch_vi_rm_dump(struct efrm_resource* rs, ci_resource_table_t *rt,
     ci_log("%s  rxq_evq:" EFRM_RESOURCE_FMT, line_prefix,
            EFRM_RESOURCE_PRI_ARG(&virs->q[EFHW_RXQ].evq_ref->rs));
 
-  ci_log("%s  mmap bytes: mem=%d", line_prefix, virs->mem_mmap_bytes);
+  ci_log("%s  mmap bytes: mem=%d", line_prefix,
+         efhw_page_map_bytes(&virs->mem_mmap));
 
   ci_log("%s  capacity: EVQ=%d TXQ=%d RXQ=%d", line_prefix,
          virs->q[EFHW_EVQ].capacity,
@@ -316,7 +317,7 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
     alloc_out->io_mmap_bytes = 0;
   else
     alloc_out->io_mmap_bytes = 4096;
-  alloc_out->mem_mmap_bytes = virs->mem_mmap_bytes;
+  alloc_out->mem_mmap_bytes = efhw_page_map_bytes(&virs->mem_mmap);
   alloc_out->rx_prefix_len = virs->rx_prefix_len;
   alloc_out->out_flags = virs->out_flags;
   alloc_out->out_flags |= EFHW_VI_PS_BUF_SIZE_SET;
