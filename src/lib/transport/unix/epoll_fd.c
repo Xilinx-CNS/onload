@@ -1914,8 +1914,11 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
       ep->phase = eps.phase;
       goto unlock_release_exit_ret;
     }
-    if( need_to_process_other && (eps.phase & EPOLL_PHASE_DONE_ACCELERATED) ) {
-      ci_assert_equal(eps.phase, EPOLL_PHASE_DONE_ACCELERATED);
+    if( need_to_process_other
+#if CI_CFG_EPOLL3
+        && (eps.phase & EPOLL_PHASE_DONE_ACCELERATED)
+#endif
+        ) {
       citp_epoll_poll_ul_other(&eps);
       rc = eps.events - events;
     }
