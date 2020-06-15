@@ -570,18 +570,6 @@ int efx_mae_free_encap_md(struct efx_nic *efx,
 }
 #endif /* EFX_TC_OFFLOAD */
 
-int efx_mae_mport_port_repr(struct efx_nic *efx, u32 *out)
-{
-	struct net_device *rep_dev = efx_get_rep(efx, -1);
-	struct efx_vfrep *efv;
-
-	if (IS_ERR(rep_dev))
-		return PTR_ERR(rep_dev);
-	efv = netdev_priv(rep_dev);
-	*out = efv->mport_id;
-	return 0;
-}
-
 int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_ACTION_SET_ALLOC_OUT_LEN);

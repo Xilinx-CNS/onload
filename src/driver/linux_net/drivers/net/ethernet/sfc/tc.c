@@ -456,6 +456,8 @@ done:
 	return NOTIFY_DONE;
 }
 
+static void efx_tc_counter_work(struct work_struct *work);
+
 static struct efx_tc_counter *efx_tc_flower_allocate_counter(struct efx_nic *efx)
 {
 	struct efx_tc_counter *cnt;
@@ -464,6 +466,11 @@ static struct efx_tc_counter *efx_tc_flower_allocate_counter(struct efx_nic *efx
 	cnt = kzalloc(sizeof(*cnt), GFP_USER);
 	if (!cnt)
 		return ERR_PTR(-ENOMEM);
+
+	spin_lock_init(&cnt->lock);
+	INIT_WORK(&cnt->work, efx_tc_counter_work);
+	cnt->touched = jiffies;
+	cnt->tc = efx->tc;
 
 	rc = efx_mae_allocate_counter(efx, &cnt->fw_id);
 	if (rc)
@@ -503,6 +510,15 @@ static void efx_tc_flower_release_counter(struct efx_nic *efx,
 			   "Failed to free MAE counter %u, rc %d\n",
 			   cnt->fw_id, rc);
 	WARN_ON(!list_empty(&cnt->users));
+	/* There is still a race here; counter updates can come in arbitrarily
+	 * long after we deleted the counter.  The RCU just ensures that we
+	 * won't free the counter while another thread has a pointer to it; we
+	 * can still update the wrong counter if the ID gets re-used.  See
+	 * SWNETLINUX-3595, and comments on CT-8026, for further discussion.
+	 */
+	synchronize_rcu();
+	flush_work(&cnt->work);
+	EFX_WARN_ON_PARANOID(spin_is_locked(&cnt->lock));
 	kfree(cnt);
 }
 
@@ -1000,15 +1016,23 @@ static void efx_tc_encap_match_free(void *ptr, void *__unused)
 	kfree(encap);
 }
 
-static void efx_tc_counter_id_free(void *ptr, void *__unused)
+static void efx_tc_counter_free(void *ptr, void *__unused)
 {
 	struct efx_tc_counter *cnt = ptr;
 
 	WARN_ON(!list_empty(&cnt->users));
+	/* We'd like to synchronize_rcu() here, but unfortunately we aren't
+	 * removing the element from the hashtable (it's not clear that's a
+	 * safe thing to do in an rhashtable_free_and_destroy free_fn), so
+	 * threads could still be obtaining new pointers to *cnt if they can
+	 * race against this function at all.
+	 */
+	flush_work(&cnt->work);
+	EFX_WARN_ON_PARANOID(spin_is_locked(&cnt->lock));
 	kfree(cnt);
 }
 
-static void efx_tc_counter_free(void *ptr, void *__unused)
+static void efx_tc_counter_id_free(void *ptr, void *__unused)
 {
 	struct efx_tc_counter_index *ctr = ptr;
 
@@ -1075,15 +1099,47 @@ static void efx_tc_get_channel_name(struct efx_channel *channel,
 	snprintf(buf, len, "%s-mae", channel->efx->name);
 }
 
-static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
-				  u64 packets, u64 bytes)
-__must_hold(efx->tc->mutex)
+static void efx_tc_counter_work(struct work_struct *work)
 {
+	struct efx_tc_counter *cnt = container_of(work, struct efx_tc_counter, work);
 	struct efx_tc_encap_action *encap;
 	struct efx_tc_action_set *act;
-	struct efx_tc_counter *cnt;
+	unsigned long touched;
 	struct neighbour *n;
 
+	touched = READ_ONCE(cnt->touched);
+
+	mutex_lock(&cnt->tc->mutex);
+	list_for_each_entry(act, &cnt->users, count_user) {
+		encap = act->encap_md;
+		if (!encap)
+			continue;
+		if (!encap->neigh) /* can't happen */
+			continue;
+		if (time_after_eq(encap->neigh->used, touched))
+			continue;
+		encap->neigh->used = touched;
+		/* We have passed traffic using this ARP entry, so
+		 * indicate to the ARP cache that it's still active
+		 */
+		n = neigh_lookup(&arp_tbl, &encap->neigh->dst_ip,
+		/* XXX is this the right device? */
+				 encap->neigh->egdev);
+		if (!n)
+			continue;
+
+		neigh_event_send(n, NULL);
+		neigh_release(n);
+	}
+	mutex_unlock(&cnt->tc->mutex);
+}
+
+static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
+				  u64 packets, u64 bytes)
+{
+	struct efx_tc_counter *cnt;
+
+	rcu_read_lock(); /* Protect against deletion of 'cnt' */
 	cnt = efx_tc_flower_find_counter_by_fw_id(efx, counter_idx);
 	if (!cnt && net_ratelimit()) {
 		/* This could theoretically happen due to a race where an
@@ -1097,33 +1153,17 @@ __must_hold(efx->tc->mutex)
 		netif_warn(efx, drv, efx->net_dev,
 			   "Got update for unwanted MAE counter %u\n",
 			   counter_idx);
-		return;
+		goto out;
 	}
 
+	spin_lock_bh(&cnt->lock);
 	cnt->packets += packets;
 	cnt->bytes += bytes;
 	cnt->touched = jiffies;
-	list_for_each_entry(act, &cnt->users, count_user) {
-		encap = act->encap_md;
-		if (!encap)
-			continue;
-		if (!encap->neigh) /* can't happen */
-			continue;
-		if (time_after_eq(encap->neigh->used, cnt->touched))
-			continue;
-		encap->neigh->used = cnt->touched;
-		/* We have passed traffic using this ARP entry, so
-		 * indicate to the ARP cache that it's still active
-		 */
-		n = neigh_lookup(&arp_tbl, &encap->neigh->dst_ip,
-		/* XXX is this the right device? */
-				 encap->neigh->egdev);
-		if (!n)
-			continue;
-
-		neigh_event_send(n, NULL);
-		neigh_release(n);
-	}
+	spin_unlock_bh(&cnt->lock);
+	schedule_work(&cnt->work);
+out:
+	rcu_read_unlock();
 }
 
 /* We always swallow the packet, whether successful or not, since it's not
@@ -1154,7 +1194,6 @@ static bool efx_tc_rx(struct efx_channel *channel)
 	seq_index = le16_to_cpu(*(__le16 *)(data + 4));
 	n_counters = le16_to_cpu(*(__le16 *)(data + 6));
 
-	mutex_lock(&efx->tc->mutex);
 	/* Counter update entry format:
 	 * | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | a | b | c | d | e | f |
 	 * |  counter_idx  |     packet_count      |      byte_count       |
@@ -1171,7 +1210,6 @@ static bool efx_tc_rx(struct efx_channel *channel)
 			     ((u64)le32_to_cpu(*(__le32 *)(entry + 12)) << 16);
 		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count);
 	}
-	mutex_unlock(&efx->tc->mutex);
 
 	goto out;
 fail:
@@ -2430,31 +2468,20 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 		}
 	}
 	if (act) {
-		struct net_device *rep_dev;
-		struct efx_vfrep *efv;
-
 		/* Not shot/redirected, so deliver to default dest */
 		switch (vport_id) {
 		case EFX_VPORT_PF:
-			efx_mae_mport_wire(efx, &act->dest_mport);
+			/* Rule applies to traffic from the wire,
+			 * and default dest is thus the PF
+			 */
+			efx_mae_mport_uplink(efx, &act->dest_mport);
 			break;
 		default:
 			/* VFrep, so rule applies to traffic from VF,
-			 * and default dest is thus the VFrep
+			 * and default dest is thus the VFrep (which for
+			 * now uses the PF's mport)
 			 */
-			rep_dev = efx_get_rep(efx, vport_id - EFX_VPORT_VF_OFFSET);
-			if (IS_ERR(rep_dev)) {
-				rc = PTR_ERR(rep_dev);
-				NL_SET_ERR_MSG_MOD(extack, "Failed to find VFrep for default dest");
-				goto release;
-			}
-			if (!rep_dev) {
-				rc = -EINVAL;
-				NL_SET_ERR_MSG_MOD(extack, "VFrep is NULL for default dest");
-				goto release;
-			}
-			efv = netdev_priv(rep_dev);
-			efx_mae_mport_mport(efx, efv->mport_id, &act->dest_mport);
+			efx_mae_mport_uplink(efx, &act->dest_mport);
 		}
 		act->deliver = 1;
 		rc = efx_mae_alloc_action_set(efx, act);
@@ -2479,7 +2506,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 	}
 	switch (vport_id) {
 	case EFX_VPORT_PF:
-		rule->fallback = EFX_TC_DFLT_PF;
+		rule->fallback = EFX_TC_DFLT_WIRE;
 		break;
 	default:
 		/* VFrep, so rule applies to traffic from VF */
@@ -2593,6 +2620,7 @@ static int efx_tc_action_stats(struct efx_nic *efx,
 	if (WARN_ON(!ctr->cnt)) /* can't happen */
 		return -EIO;
 	cnt = ctr->cnt;
+	spin_lock_bh(&cnt->lock);
 	/* Report only new pkts/bytes since last time TC asked */
 	packets = cnt->packets;
 	bytes = cnt->bytes;
@@ -2601,6 +2629,7 @@ static int efx_tc_action_stats(struct efx_nic *efx,
 			  FLOW_ACTION_HW_STATS_DELAYED);
 	cnt->old_packets = packets;
 	cnt->old_bytes = bytes;
+	spin_unlock_bh(&cnt->lock);
 	return 0;
 }
 #elif defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
@@ -2638,6 +2667,7 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 			if (WARN_ON(!act->count->cnt)) /* can't happen */
 				continue;
 			cnt = act->count->cnt;
+			spin_lock_bh(&cnt->lock);
 			/* Report only new pkts/bytes since last time TC asked */
 			packets = cnt->packets;
 			bytes = cnt->bytes;
@@ -2651,6 +2681,7 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 						);
 			cnt->old_packets = packets;
 			cnt->old_bytes = bytes;
+			spin_unlock_bh(&cnt->lock);
 		}
 	return 0;
 }
@@ -2676,6 +2707,7 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 		return -EIO;
 	cnt = ctr->cnt;
 
+	spin_lock_bh(&cnt->lock);
 	/* Report only new pkts/bytes since last time TC asked */
 	packets = cnt->packets;
 	bytes = cnt->bytes;
@@ -2688,6 +2720,7 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 #endif
 	cnt->old_packets = packets;
 	cnt->old_bytes = bytes;
+	spin_unlock_bh(&cnt->lock);
 	return 0;
 }
 #endif
@@ -2957,22 +2990,16 @@ int efx_tc_configure_default_rule(struct efx_nic *efx,
 		efx_mae_mport_uplink(efx, &eg_port);
 		break;
 	default:
-		vf_idx = (dflt - EFX_TC_DFLT_VF_BASE) / 2;
+		vf_idx = dflt - EFX_TC_DFLT_VF_BASE;
 		rep_dev = efx_get_rep(efx, vf_idx);
 		if (IS_ERR(rep_dev))
 			return PTR_ERR(rep_dev);
 		if (!rep_dev)
 			return -EINVAL;
 		efv = netdev_priv(rep_dev);
-		if (dflt % 2) {
-			/* VF rep -> VF */
-			efx_mae_mport_mport(efx, efv->mport_id, &ing_port);
-			efx_mae_mport_vf(efx, vf_idx, &eg_port);
-		} else {
-			/* VF -> VF rep */
-			efx_mae_mport_mport(efx, efv->mport_id, &eg_port);
-			efx_mae_mport_vf(efx, vf_idx, &ing_port);
-		}
+		/* VF -> VF rep (PF) */
+		efx_mae_mport_vf(efx, vf_idx, &ing_port);
+		efx_mae_mport_uplink(efx, &eg_port);
 		break;
 	}
 	match->value.ingress_port = ing_port;
@@ -3279,6 +3306,50 @@ static int efx_tc_debugfs_dump_default_rules(struct seq_file *file, void *data)
 	return 0;
 }
 
+static void efx_tc_debugfs_dump_one_counter(struct seq_file *file,
+					    struct efx_tc_counter *cnt)
+{
+	u64 packets, bytes, old_packets, old_bytes;
+	unsigned long age;
+
+	/* get a consistent view */
+	spin_lock_bh(&cnt->lock);
+	packets = cnt->packets;
+	bytes = cnt->bytes;
+	old_packets = cnt->old_packets;
+	old_bytes = cnt->old_bytes;
+	age = jiffies - cnt->touched;
+	spin_unlock_bh(&cnt->lock);
+
+	seq_printf(file, "%#x: %llu pkts %llu bytes (old %llu pkts %llu bytes) age %lu\n",
+		   cnt->fw_id, packets, bytes, old_packets, old_bytes, age);
+}
+
+static int efx_tc_debugfs_dump_mae_counters(struct seq_file *file, void *data)
+{
+	struct rhashtable_iter walk;
+	struct efx_nic *efx = data;
+	struct efx_tc_counter *cnt;
+
+	mutex_lock(&efx->tc->mutex);
+	if (efx->tc->up) {
+		rhashtable_walk_enter(&efx->tc->counter_ht, &walk);
+		rhashtable_walk_start(&walk);
+		while ((cnt = rhashtable_walk_next(&walk)) != NULL) {
+			if (IS_ERR(cnt))
+				continue;
+			efx_tc_debugfs_dump_one_counter(file, cnt);
+		}
+		rhashtable_walk_stop(&walk);
+		rhashtable_walk_exit(&walk);
+	} else {
+		seq_printf(file, "tc is down\n");
+	}
+	mutex_unlock(&efx->tc->mutex);
+
+	return 0;
+}
+
 static const char *efx_mae_field_names[] = {
 #define NAME(_name)	[MAE_FIELD_##_name] = #_name
 	NAME(INGRESS_PORT),
@@ -3402,6 +3473,7 @@ static int efx_tc_debugfs_dump_mae_neighs(struct seq_file *file, void *data)
 static struct efx_debugfs_parameter efx_tc_debugfs[] = {
 	_EFX_RAW_PARAMETER(mae_rules, efx_tc_debugfs_dump_rules),
 	_EFX_RAW_PARAMETER(mae_default_rules, efx_tc_debugfs_dump_default_rules),
+	_EFX_RAW_PARAMETER(mae_counters, efx_tc_debugfs_dump_mae_counters),
 	_EFX_RAW_PARAMETER(mae_action_rule_caps, efx_tc_debugfs_dump_mae_ar_caps),
 	_EFX_RAW_PARAMETER(mae_encap_rule_caps, efx_tc_debugfs_dump_mae_er_caps),
 	_EFX_RAW_PARAMETER(mae_neighs, efx_tc_debugfs_dump_mae_neighs),

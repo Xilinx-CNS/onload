@@ -436,7 +436,7 @@ u32 efx_get_mcdi_phy_flags(struct efx_nic *efx)
 	if (mode & PHY_MODE_OFF)
 		flags |= (1 << MC_CMD_SET_LINK_IN_POWEROFF_LBN);
 
-	if (!netif_running(efx->net_dev))
+	if (efx_dev_registered(efx) && !netif_running(efx->net_dev))
 		flags |= (1 << MC_CMD_SET_LINK_IN_LINKDOWN_LBN);
 
 	return flags;

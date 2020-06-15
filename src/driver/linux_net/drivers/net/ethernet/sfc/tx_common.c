@@ -9,9 +9,6 @@
 
 #include "net_driver.h"
 #include <linux/highmem.h>
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#include <net/xdp_sock.h>
-#endif
 #include "efx.h"
 #include "nic.h"
 #include "efx_common.h"

@@ -417,6 +417,7 @@ int efx_mcdi_port_probe(struct efx_nic *efx)
 
 void efx_mcdi_port_remove(struct efx_nic *efx)
 {
+	efx_mcdi_port_reconfigure(efx);
 	efx_mcdi_phy_remove(efx);
 	efx_mcdi_mac_fini_stats(efx);
 }

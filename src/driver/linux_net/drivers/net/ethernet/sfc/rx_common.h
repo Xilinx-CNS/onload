@@ -62,7 +62,11 @@ static inline u8 *efx_rx_buf_va(struct efx_rx_buffer *buf)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (buf->flags & EFX_RX_BUF_FROM_UMEM)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
+		return ((u8 *)buf->xsk_buf->data + buf->page_offset);
+#else
 		return ((u8 *)buf->addr + buf->page_offset);
+#endif
 #endif
 	return page_address(buf->page) + buf->page_offset;
 }

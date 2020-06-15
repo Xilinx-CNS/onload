@@ -315,8 +315,8 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 		tx_queue->packet_write_count = new_write_count;
 		EFX_POPULATE_OWORD_3(*txd,
 				     ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_PREFIX,
-				     ESF_GZ_TX_PREFIX_INGRESS_MPORT, efv->mport_id,
-				     ESF_GZ_TX_PREFIX_INGRESS_MPORT_EN, 1);
+				     ESF_GZ_TX_PREFIX_EGRESS_MPORT, efv->vf_mport,
+				     ESF_GZ_TX_PREFIX_EGRESS_MPORT_EN, 1);
 		nr_descs--;
 	}
 

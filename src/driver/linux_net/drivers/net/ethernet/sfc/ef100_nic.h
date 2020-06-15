@@ -86,6 +86,9 @@ struct ef100_nic_data {
 	unsigned int rep_count; /* usually but not always efx->vf_count */
 	struct net_device **vf_rep;
 	u32 base_mport;
+	u32 old_base_mport; /* compat for old C-models.  XXX remove after Cmod flag day */
+	bool have_mport; /* base_mport was populated successfully */
+	bool have_old_mport; /* old_base_mport was populated successfully */
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
     !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	spinlock_t udp_tunnels_lock;

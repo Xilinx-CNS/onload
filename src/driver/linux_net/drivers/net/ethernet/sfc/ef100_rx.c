@@ -119,8 +119,10 @@ void __efx_rx_packet(struct efx_channel *channel)
 	nic_data = efx->nic_data;
 
 	ing_port = le16_to_cpu((__force __le16) PREFIX_FIELD(prefix, INGRESS_VPORT));
-	BUILD_BUG_ON(MAE_MPORT_SELECTOR_NULL);
-	if (nic_data->base_mport && ing_port != nic_data->base_mport) {
+
+	if (nic_data->have_mport && ing_port != nic_data->base_mport &&
+	    /* XXX oldbase compat; remove after C-model flag day */
+	    nic_data->have_old_mport && ing_port != nic_data->old_base_mport) {
 		struct net_device *rep_dev = efx_ef100_find_vfrep_by_mport(efx,
 							ing_port);
 
@@ -134,9 +136,9 @@ void __efx_rx_packet(struct efx_channel *channel)
 			goto out;
 		}
 		if (net_ratelimit())
-			netif_dbg(efx, drv, efx->net_dev,
-				  "Unrecognised ing_port %04x (base %04x), dropping\n",
-				  ing_port, nic_data->base_mport);
+			netif_warn(efx, drv, efx->net_dev,
+				   "Unrecognised ing_port %04x (base %04x), dropping\n",
+				   ing_port, nic_data->base_mport);
 		/* TODO hook this up to SW stats reporting (when that's fully
 		 * implemented).
 		 */

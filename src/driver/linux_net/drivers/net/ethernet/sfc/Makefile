@@ -262,7 +262,10 @@ ifneq ($(filter 2.6.16-% 2.6.16.%,$(KVER)),)
 EXTRA_MAKEFLAGS := KERNELRELEASE=$(KVER)
 endif
 
-default : all
+default : top
+
+top:
+	$(MAKE) -C ../../../.. all
 
 all : modules
 ifdef BUILD_INKERNEL_TESTS
@@ -303,7 +306,7 @@ clean_modules :
 	rm -f *.o *.s *.ko *.mod.c *.symvers config.h autocompat.h .kpath
 	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd) clean
 
-.PHONY : all modules modules_install clean clean_modules FORCE
+.PHONY : all modules modules_install clean clean_modules top FORCE
 
 ifdef EFX_NOT_EXPORTED
 

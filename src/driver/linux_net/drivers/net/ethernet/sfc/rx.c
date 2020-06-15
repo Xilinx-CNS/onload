@@ -35,9 +35,6 @@
 #ifdef CONFIG_SFC_TRACING
 #include <trace/events/sfc.h>
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#include <net/xdp_sock.h>
-#endif
 #include "mcdi_pcol.h"
 
 #ifdef EFX_NOT_UPSTREAM
@@ -463,6 +460,7 @@ void __efx_rx_packet(struct efx_channel *channel)
 		goto out;
 	}
 
+
 	rc = efx_xdp_rx(efx, channel, rx_buf, &eh);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (channel->zc) {
@@ -471,6 +469,8 @@ void __efx_rx_packet(struct efx_channel *channel)
 		else
 			efx_recycle_rx_bufs_zc(channel, rx_buf,
 					       channel->rx_pkt_n_frags);
+		if (rc != XDP_PASS)
+			goto free_buf;
 	} else if (rc != XDP_PASS) {
 		goto out;
 	}

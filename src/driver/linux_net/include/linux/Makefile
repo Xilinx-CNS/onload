@@ -18,7 +18,7 @@ ifdef KPATH
   KDIR ?= $(KPATH)
 endif
 endif
-KDIR ?= /lib/modules/`uname -r`/build
+KDIR ?= /lib/modules/$(shell uname -r)/build
 
 export-srpm export: $(KDIR)/include/linux/virtual_bus.h \
 	$(KDIR)/include/linux/net/sfc/sfc_rdma.h

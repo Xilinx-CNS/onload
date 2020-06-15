@@ -22,10 +22,13 @@
 struct efx_tc_counter {
 	u32 fw_id; /* index in firmware counter table */
 	struct rhash_head linkage; /* efx->tc->counter_ht */
+	spinlock_t lock; /* Serialises updates to counter values */
 	u64 packets, bytes;
 	u64 old_packets, old_bytes; /* Values last time passed to userspace */
 	/* jiffies of the last time we saw packets increase */
 	unsigned long touched;
+	struct work_struct work; /* For notifying encap actions */
+	struct efx_tc_state *tc; /* Allows workitem to access tc->mutex */
 	/* owners of corresponding count actions */
 	struct list_head users;
 };
@@ -152,12 +155,10 @@ struct efx_tc_action_set_list {
 enum efx_tc_default_rules { /* named by ingress port */
 	EFX_TC_DFLT_PF,
 	EFX_TC_DFLT_WIRE,
-	EFX_TC_DFLT_VF_BASE,
-	EFX_TC_DFLT_VF_REP_BASE
+	EFX_TC_DFLT_VF_BASE
 };
 
-#define	EFX_TC_DFLT_VF(_vf)	(EFX_TC_DFLT_VF_BASE + (_vf) * 2)
-#define	EFX_TC_DFLT_VF_REP(_vf)	(EFX_TC_DFLT_VF_REP_BASE + (_vf) * 2)
+#define	EFX_TC_DFLT_VF(_vf)	(EFX_TC_DFLT_VF_BASE + (_vf))
 /* In principle up to 255 VFs are possible; the last one is #254 */
 #define EFX_TC_DFLT__MAX	EFX_TC_DFLT_VF(255)
 

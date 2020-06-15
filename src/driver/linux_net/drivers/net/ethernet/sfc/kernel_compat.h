@@ -3293,4 +3293,19 @@ static inline void skb_mark_not_on_list(struct sk_buff *skb)
 int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 #endif
 
+/* XDP_SOCK check on latest kernels */
+#if defined(EFX_HAVE_XDP_SOCK_DRV)
+#undef EFX_HAVE_XDP_SOCK_DRV
+#define EFX_USE_XSK_BUFFER_ALLOC
+#ifndef EFX_HAVE_XDP_SOCK
+#define EFX_HAVE_XDP_SOCK
+#endif
+#ifndef EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM
+#define EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM
+#endif
+#include <net/xdp_sock_drv.h>
+#elif defined(EFX_HAVE_XDP_SOCK)
+#include <net/xdp_sock.h>
+#endif /* EFX_HAVE_XDP_SOCK_DRV */
+
 #endif /* EFX_KERNEL_COMPAT_H */

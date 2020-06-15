@@ -265,8 +265,10 @@ static int efx_ethtool_set_coalesce(struct net_device *net_dev,
 	unsigned int stats_usecs;
 	int rc = 0;
 
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_COALESCE_PARAMS)
 	if (coalesce->use_adaptive_tx_coalesce)
 		return -EINVAL;
+#endif
 
 	efx_for_each_channel(channel, efx)
 		if (channel->enabled) {
@@ -436,6 +438,12 @@ int efx_ethtool_get_ts_info(struct net_device *net_dev,
 }
 
 const struct ethtool_ops efx_ethtool_ops = {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_COALESCE_PARAMS)
+	.supported_coalesce_params = (ETHTOOL_COALESCE_USECS |
+				      ETHTOOL_COALESCE_USECS_IRQ |
+				      ETHTOOL_COALESCE_STATS_BLOCK_USECS |
+				      ETHTOOL_COALESCE_USE_ADAPTIVE_RX),
+#endif
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_LINKSETTINGS) || defined(EFX_HAVE_ETHTOOL_LEGACY)
 	.get_settings		= efx_ethtool_get_settings,
 	.set_settings		= efx_ethtool_set_settings,

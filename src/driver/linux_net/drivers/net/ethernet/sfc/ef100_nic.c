@@ -686,7 +686,7 @@ static size_t ef100_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 					struct rtnl_link_stats64 *core_stats)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	DECLARE_BITMAP(mask, EF10_STAT_COUNT);
+	DECLARE_BITMAP(mask, EF100_STAT_COUNT);
 	size_t stats_count = 0, index;
 	u64 *stats = nic_data->stats;
 
@@ -1259,8 +1259,8 @@ static int efx_ef100_get_base_mport(struct efx_nic *efx)
 	u32 selector, id;
 	int rc;
 
-	/* Construct mport selector for "calling PF" */
-	efx_mae_mport_uplink(efx, &selector);
+	/* Construct mport selector for "physical network port" */
+	efx_mae_mport_wire(efx, &selector);
 	/* Look up actual mport ID */
 	rc = efx_mae_lookup_mport(efx, selector, &id);
 	if (rc)
@@ -1272,6 +1272,22 @@ static int efx_ef100_get_base_mport(struct efx_nic *efx)
 		netif_warn(efx, probe, efx->net_dev, "Bad base m-port id %#x\n",
 			   id);
 	nic_data->base_mport = id;
+	nic_data->have_mport = true;
+
+	/* For compat with older C models, we also need a destination base
+	 * mport.  XXX remove after C-model flag day
+	 */
+	/* Construct mport selector for "calling PF" */
+	efx_mae_mport_uplink(efx, &selector);
+	/* Look up actual mport ID */
+	rc = efx_mae_lookup_mport(efx, selector, &id);
+	if (rc)
+		return rc;
+	if (id >> 16)
+		netif_warn(efx, probe, efx->net_dev, "Bad oldbase m-port id %#x\n",
+			   id);
+	nic_data->old_base_mport = id;
+	nic_data->have_old_mport = true;
 	return 0;
 }
 
@@ -1522,6 +1538,11 @@ static int ef100_probe_main(struct efx_nic *efx)
 	net_dev->features |= efx->type->offload_features;
 	efx_add_hw_features(efx, efx->type->offload_features);
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_VLAN_FEATURES)
+	net_dev->vlan_features |= (NETIF_F_HW_CSUM | NETIF_F_SG |
+				   NETIF_F_HIGHDMA | NETIF_F_ALL_TSO);
+#endif
+
 	/* Populate design-parameter defaults */
 	nic_data->tso_max_hdr_len = ESE_EF100_DP_GZ_TSO_MAX_HDR_LEN_DEFAULT;
 	nic_data->tso_max_frames = ESE_EF100_DP_GZ_TSO_MAX_NUM_FRAMES_DEFAULT;
@@ -1666,12 +1687,10 @@ int ef100_probe_pf(struct efx_nic *efx)
 	}
 
 	rc = efx_ef100_get_base_mport(efx);
-	if (rc) {
+	if (rc)
 		netif_warn(efx, probe, net_dev,
 			   "Failed to probe base mport rc %d; representors will not function\n",
 			   rc);
-		BUILD_BUG_ON(MAE_MPORT_SELECTOR_NULL);
-	}
 
 	rc = efx_init_tc(efx);
 	if (rc) {

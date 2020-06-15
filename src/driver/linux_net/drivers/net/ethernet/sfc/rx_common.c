@@ -8,9 +8,6 @@
  */
 #include "net_driver.h"
 #include <linux/module.h>
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#include <net/xdp_sock.h>
-#endif
 #include "efx.h"
 #include "nic.h"
 #include "rx_common.h"
@@ -301,11 +298,31 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
+static void efx_free_xsk_buffers(struct efx_rx_queue *rx_queue,
+			 struct efx_rx_buffer *rx_buf,
+			 unsigned int num_bufs)
+{
+
+	while (num_bufs) {
+		xsk_buff_free(rx_buf->xsk_buf);
+		rx_buf->xsk_buf = NULL;
+		rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
+		num_bufs--;
+	}
+}
+#endif
+
 static void efx_fini_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 				  struct efx_rx_buffer *rx_buf)
 {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
+	if (rx_buf->xsk_buf)
+		efx_free_xsk_buffers(rx_queue, rx_buf, 1);
+#else
 	if (rx_buf->addr)
 		efx_free_rx_buffers(rx_queue, rx_buf, 1);
+#endif
 }
 #endif
 
@@ -375,6 +392,7 @@ int efx_probe_rx_queue(struct efx_rx_queue *rx_queue)
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
 static void efx_zca_free(struct zero_copy_allocator *alloc,
 			 unsigned long handle)
 {
@@ -383,6 +401,7 @@ static void efx_zca_free(struct zero_copy_allocator *alloc,
 
 	xsk_umem_fq_reuse(rx_queue->umem, handle & rx_queue->umem->chunk_mask);
 }
+#endif
 #endif
 
 int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
@@ -411,6 +430,18 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 	if (channel->zc)
 		rx_queue->umem = xdp_get_umem_from_qid(efx->net_dev,
 						       rx_queue->core_index);
+	if (channel->zc &&
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
+	    efx->rx_dma_len > xsk_umem_get_rx_frame_size(rx_queue->umem)) {
+#else
+	    efx->rx_dma_len > (rx_queue->umem->chunk_mask + 1)) {
+#endif
+		netif_err(rx_queue->efx, drv, rx_queue->efx->net_dev,
+			  "MTU and UMEM frame size not in sync\n. Required min. UMEM frame size = %u",
+			  efx->rx_dma_len);
+		rx_queue->umem = NULL;
+		return -EINVAL;
+	}
 #endif
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 	efx_init_rx_recycle_ring(rx_queue);
@@ -445,10 +476,16 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 			      rx_queue->core_index);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (!rc && channel->zc) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
+		rc = xdp_rxq_info_reg_mem_model(&rx_queue->xdp_rxq_info,
+						MEM_TYPE_XSK_BUFF_POOL,
+						NULL);
+#else
 		rx_queue->zca.free = efx_zca_free;
 		rc = xdp_rxq_info_reg_mem_model(&rx_queue->xdp_rxq_info,
 						MEM_TYPE_ZERO_COPY,
 						&rx_queue->zca);
+#endif
 	}
 #endif
 	if (rc)
@@ -541,8 +578,8 @@ void efx_unmap_rx_buffer(struct efx_nic *efx,
 }
 
 void efx_free_rx_buffers(struct efx_rx_queue *rx_queue,
-				struct efx_rx_buffer *rx_buf,
-				unsigned int num_bufs)
+			 struct efx_rx_buffer *rx_buf,
+			 unsigned int num_bufs)
 {
 	while (num_bufs) {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
@@ -550,7 +587,11 @@ void efx_free_rx_buffers(struct efx_rx_queue *rx_queue,
 			if (rx_buf->flags & EFX_RX_BUF_XSK_REUSE) {
 				efx_reuse_rx_buffer_zc(rx_queue, rx_buf);
 			} else {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
+				rx_buf->xsk_buf = NULL;
+#else
 				rx_buf->addr = NULL;
+#endif
 				rx_buf->flags = 0;
 			}
 		} else if (rx_buf->page) {
@@ -602,6 +643,7 @@ void efx_cancel_slow_fill(struct efx_rx_queue *rx_queue)
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
 static void efx_xdp_umem_discard_addr(struct xdp_umem *umem, bool slow)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_UMEM_RELEASE_ADDR)
@@ -643,7 +685,6 @@ static bool efx_alloc_buffer_zc(struct efx_rx_queue *rx_queue,
 
 	rx_buf->addr = xdp_umem_get_data(umem, handle);
 	rx_buf->addr += hr;
-
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
 				  defined(EFX_HAVE_XSK_OFFSET_ADJUST))
 	rx_buf->handle = xsk_umem_adjust_offset(umem, handle, umem->headroom);
@@ -662,6 +703,29 @@ alloc_fail:
 #endif
 	return alloc_failed;
 }
+#else
+static bool efx_alloc_buffer_zc(struct efx_rx_queue *rx_queue,
+				struct efx_rx_buffer *rx_buf, bool slow)
+{
+	struct xdp_umem *umem = rx_queue->umem;
+	bool alloc_failed = false;
+	struct xdp_buff *xsk_buf;
+	dma_addr_t dma;
+
+	xsk_buf = xsk_buff_alloc(umem);
+	if (!xsk_buf) {
+		alloc_failed = true;
+		goto alloc_fail;
+	}
+	dma = xsk_buff_xdp_get_frame_dma(xsk_buf);;
+	rx_buf->dma_addr = cpu_to_le64(dma);
+	xsk_buf->rxq = &rx_queue->xdp_rxq_info;
+	rx_buf->xsk_buf = xsk_buf;
+
+alloc_fail:
+	return alloc_failed;
+}
+#endif
 
 /**
  * efx_reuse_rx_buffer_zc - reuse a single zc rx_buf structure
@@ -681,8 +745,12 @@ static void efx_reuse_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 	index = rx_queue->added_count & rx_queue->ptr_mask;
 	rx_buf = efx_rx_buffer(rx_queue, index);
 	rx_buf->dma_addr = rx_buf_reuse->dma_addr;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
+	rx_buf->xsk_buf = rx_buf_reuse->xsk_buf;
+#else
 	rx_buf->addr = rx_buf_reuse->addr;
 	rx_buf->handle = rx_buf_reuse->handle;
+#endif
 	rx_buf_reuse->flags = 0;
 	rx_buf->page_offset = 0;
 	rx_buf->len = efx->rx_dma_len;
@@ -708,17 +776,19 @@ static int efx_init_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 	struct efx_rx_buffer *rx_buf;
 	struct efx_nic *efx = rx_queue->efx;
 	unsigned int index;
-	bool slow = true;//!rx_queue->removed_count;
+	bool slow = (rx_queue->added_count < rx_queue->ptr_mask);
 
 	index = rx_queue->added_count & rx_queue->ptr_mask;
 	rx_buf = efx_rx_buffer(rx_queue, index);
 	if (rx_buf->flags & EFX_RX_BUF_XSK_REUSE)
 		goto init_buf; /* can be reused at same index */
 	if (!efx_alloc_buffer_zc(rx_queue, rx_buf, slow)) {
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
 		dma_sync_single_range_for_device(&efx->net_dev->dev,
 						 rx_buf->dma_addr, 0,
 						 efx->rx_dma_len,
 						 DMA_BIDIRECTIONAL);
+#endif
 init_buf:
 		++rx_queue->added_count;
 		rx_buf->page_offset = 0;
@@ -796,7 +866,6 @@ static int efx_init_rx_buffers_zc(struct efx_rx_queue *rx_queue)
 
 	if (unlikely(!rx_queue->umem))
 		return -EINVAL;
-
 	if ((rx_queue->added_count - rx_queue->removed_count) <
 	       rx_queue->ptr_mask) {
 		flags = EFX_RX_BUF_FROM_UMEM;
@@ -959,14 +1028,15 @@ void efx_fast_push_rx_descriptors(struct efx_rx_queue *rx_queue, bool atomic)
 		   efx_rx_queue_index(rx_queue), fill_level,
 		   rx_queue->max_fill);
 
-	do {
+	while (space >= batch_size) {
 		rc = efx_init_rx_buffers(rx_queue, atomic);
 		if (unlikely(rc)) {
 			/* Ensure that we don't leave the rx queue empty */
 			efx_schedule_slow_fill(rx_queue);
 			goto out;
 		}
-	} while ((space -= batch_size) >= batch_size);
+		space -= batch_size;
+	}
 
 	netif_vdbg(rx_queue->efx, rx_status, rx_queue->efx->net_dev,
 		   "RX queue %d fast-filled descriptor ring to level %d\n",

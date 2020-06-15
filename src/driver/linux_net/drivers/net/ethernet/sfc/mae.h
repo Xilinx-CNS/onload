@@ -59,8 +59,6 @@ int efx_mae_free_encap_md(struct efx_nic *efx,
 			  struct efx_tc_encap_action *encap);
 #endif
 
-int efx_mae_mport_port_repr(struct efx_nic *efx, u32 *out);
-
 int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act);
 int efx_mae_free_action_set(struct efx_nic *efx, struct efx_tc_action_set *act);
 

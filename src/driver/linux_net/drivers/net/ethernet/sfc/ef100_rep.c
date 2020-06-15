@@ -251,39 +251,32 @@ static int efx_ef100_vfrep_tc_egdev_cb(enum tc_setup_type type, void *type_data,
 static int efx_ef100_configure_rep(struct efx_vfrep *efv)
 {
 	struct efx_nic *efx = efv->parent;
+	u32 selector;
 	int rc;
 
-	rc = efx_mae_allocate_mport(efx, &efv->mport_id, &efv->mport_label);
+	/* Construct mport selector for corresponding VF */
+	efx_mae_mport_vf(efx, efv->vf_idx, &selector);
+	/* Look up actual mport ID */
+	rc = efx_mae_lookup_mport(efx, selector, &efv->vf_mport);
 	if (rc)
 		return rc;
 	netif_dbg(efv->parent, probe, efv->net_dev,
-		  "Representor mport ID %#x label %#x\n",
-		  efv->mport_id, efv->mport_label);
+		  "Representor mport ID %#x\n", efv->vf_mport);
 	/* mport label should fit in 16 bits */
-	WARN_ON(efv->mport_label >> 16);
+	WARN_ON(efv->vf_mport >> 16);
 	mutex_lock(&efx->tc->mutex);
 	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
-	if (rc)
-		goto fail1;
-	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF_REP(efv->vf_idx));
-	if (rc)
-		goto fail2;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+	if (rc)
+		goto out;
 	rc = tc_setup_cb_egdev_register(efv->net_dev,
 					efx_ef100_vfrep_tc_egdev_cb, efv);
-	if (rc) {
-		efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF_REP(efv->vf_idx));
-		goto fail2;
-	}
-#endif
+	if (rc)
+		efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
 out:
+#endif
 	mutex_unlock(&efx->tc->mutex);
 	return rc;
-fail2:
-	efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
-fail1:
-	efx_mae_free_mport(efx, efv->mport_id);
-	goto out;
 }
 
 static void efx_ef100_deconfigure_rep(struct efx_vfrep *efv)
@@ -295,9 +288,7 @@ static void efx_ef100_deconfigure_rep(struct efx_vfrep *efv)
 	tc_setup_cb_egdev_unregister(efv->net_dev, efx_ef100_vfrep_tc_egdev_cb,
 				     efv);
 #endif
-	efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF_REP(efv->vf_idx));
 	efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
-	efx_mae_free_mport(efx, efv->mport_id);
 	mutex_unlock(&efx->tc->mutex);
 }
 
@@ -441,7 +432,7 @@ void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_b
 		napi_schedule(&efv->napi);
 }
 
-/* Returns the representor netdevice owning a dynamic m-port, or NULL.
+/* Returns the representor netdevice corresponding to a VF m-port, or NULL.
  * @mport is an m-port label, *not* an m-port ID!
  */
 struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport)
@@ -456,7 +447,7 @@ struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport)
 			if (!nic_data->vf_rep[i])
 				continue;
 			efv = netdev_priv(nic_data->vf_rep[i]);
-			if (efv->mport_label == mport)
+			if (efv->vf_mport == mport)
 				return nic_data->vf_rep[i];
 		}
 #endif

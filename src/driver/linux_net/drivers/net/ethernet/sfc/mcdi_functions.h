@@ -12,8 +12,8 @@
 
 int efx_mcdi_alloc_vis(struct efx_nic *efx,
                        unsigned int min_vis, unsigned int max_vis,
-                       unsigned int *vi_base, unsigned int *allocated_vis,
-                       unsigned int *vi_shift);
+                       unsigned int *vi_base, unsigned int *vi_shift,
+                       unsigned int *allocated_vis);
 int efx_mcdi_free_vis(struct efx_nic *efx);
 
 int efx_mcdi_ev_probe(struct efx_channel *channel);

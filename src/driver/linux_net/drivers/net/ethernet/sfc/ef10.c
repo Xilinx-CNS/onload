@@ -1654,14 +1654,10 @@ static void efx_ef10_reset_mc_allocations(struct efx_nic *efx)
 	unsigned int i;
 #endif
 
-	/* All our allocations have been reset */
-	nic_data->must_realloc_vis = true;
 	efx_mcdi_filter_table_reset_mc_allocations(efx);
-	nic_data->must_restore_vports = true;
-	nic_data->must_restore_piobufs = true;
-	efx_ef10_forget_old_piobufs(efx);
 	efx->rss_context.context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
-	efx->stats_initialised = false;
+	efx_ef10_forget_old_piobufs(efx);
+
 
 	/* Driver-created vswitches and vports must be re-created */
 	nic_data->must_probe_vswitching = true;
@@ -1671,6 +1667,15 @@ static void efx_ef10_reset_mc_allocations(struct efx_nic *efx)
 		for (i = 0; i < efx->vf_count; i++)
 			nic_data->vf[i].vport_id = 0;
 #endif
+
+	/* All our allocations have been reset */
+	if (efx->state != STATE_NET_UP)
+		return;
+
+	nic_data->must_realloc_vis = true;
+	nic_data->must_restore_vports = true;
+	nic_data->must_restore_piobufs = true;
+	efx->stats_initialised = false;
 }
 
 static enum reset_type efx_ef10_map_reset_reason(enum reset_type reason)

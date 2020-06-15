@@ -31,8 +31,7 @@ struct efx_vfrep {
 	struct efx_nic *parent;
 	struct net_device *net_dev;
 	u32 msg_enable;
-	u32 mport_id;
-	u32 mport_label;
+	u32 vf_mport; /* m-port ID of corresponding VF */
 	unsigned int vf_idx;
 	unsigned int write_index, read_index;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)

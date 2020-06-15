@@ -348,6 +348,7 @@ EFX_HAVE_ETHTOOL_RXFH_CONTEXT	member	struct_ethtool_ops	get_rxfh_context	include
 EFX_HAVE_ETHTOOL_RXNFC_CONTEXT	member	struct_ethtool_rxnfc	rss_context	include/linux/ethtool.h
 EFX_NEED_HASH_64		nsymbol	hash_64	include/linux/hash.h
 EFX_HAVE_XDP_FRAME_API		symbol	xdp_frame	include/net/xdp.h
+EFX_HAVE_XDP_COVERT_XDP_BUFF_FRAME_API	symbol	xdp_convert_buff_to_frame include/net/xdp.h
 EFX_HAVE_XDP_DATA_META		member	struct_xdp_buff	data_meta	include/linux/filter.h
 EFX_HAVE_OLD_DEV_OPEN	symtype	dev_open	include/linux/netdevice.h	int (struct net_device *)
 EFX_NEED_CONSUME_SKB_ANY	nsymbol	dev_consume_skb_any	include/linux/netdevice.h
@@ -380,11 +381,13 @@ EFX_HAVE_MMIOWB				symbol	mmiowb	include/asm-generic/io.h
 EFX_HAVE_NDO_GET_DEVLINK	member	struct_net_device_ops	ndo_get_devlink_port	include/linux/netdevice.h
 EFX_HAVE_DEVLINK_INFO		symbol	devlink_info_version_running_put	include/net/devlink.h
 EFX_HAVE_PCI_FIND_NEXT_EXT_CAPABILITY	symbol	pci_find_next_ext_capability	include/linux/pci.h
-EFX_HAVE_XDP_SOCK			export	xdp_get_umem_from_qid	include/net/xdp_sock.h net/xdp/xdp_umem.c
+EFX_HAVE_XDP_SOCK			export	xdp_get_umem_from_qid	include/net/xdp_sock.h
+EFX_HAVE_XDP_SOCK_DRV			export	xdp_get_umem_from_qid	include/net/xdp_sock_drv.h
 EFX_HAVE_XSK_OFFSET_ADJUST             symbol  xsk_umem_adjust_offset  include/net/xdp_sock.h
 EFX_HAVE_XDP_UMEM_RELEASE_ADDR         symbol  xsk_umem_release_addr  include/net/xdp_sock.h
 EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM 	symtype xsk_umem_consume_tx	include/net/xdp_sock.h bool(struct xdp_umem *umem, struct xdp_desc *)
-EFX_HAVE_XSK_NEED_WAKEUP		symbol	xsk_umem_uses_need_wakeup	include/net/xdp_sock.h
+EFX_HAVE_XSK_NEED_WAKEUP		symbol	xsk_umem_uses_need_wakeup	include/net/xdp_sock.h include/net/xdp_sock_drv.h
+EFX_HAVE_COALESCE_PARAMS		member struct_ethtool_ops supported_coalesce_params include/linux/ethtool.h
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 

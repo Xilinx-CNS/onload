@@ -87,7 +87,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.2.1.1028"
+#define EFX_DRIVER_VERSION	"5.2.1.1029"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -427,6 +427,9 @@ struct efx_tx_queue {
  * @dma_addr: DMA base address of the buffer
  * @page: The associated page buffer.
  *	Will be %NULL if the buffer slot is currently free.
+ * @addr: virtual address of buffer
+ * @handle: hande to the umem buffer
+ * @xsk_buf: umem buffer
  * @page_offset: If pending: offset in @page of DMA base address.
  *	If completed: offset in @page of Ethernet header.
  * @len: If pending: length for DMA descriptor.
@@ -441,10 +444,14 @@ struct efx_rx_buffer {
 	union {
 		struct page *page;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
+		struct xdp_buff *xsk_buf;
+#else
 		struct {
 			void *addr;
 			u64 handle;
 		};
+#endif
 #endif
 	};
 
@@ -582,7 +589,9 @@ struct efx_rx_queue {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	struct xdp_umem *umem;
-	struct zero_copy_allocator zca; /* ZC allocator anchor */
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
+	struct zero_copy_allocator zca;
+#endif
 #endif
 	struct xdp_rxq_info xdp_rxq_info;
 #endif
