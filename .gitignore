@@ -30,6 +30,7 @@ semantic.cache
 *.so
 Thumbs.db
 .reviewboardrc
+.gdb_history
 
 .#*
 /build
