@@ -448,10 +448,8 @@ static int oo_netdev_event(struct notifier_block *this,
                            unsigned long event, void *ptr)
 {
   struct net_device *netdev = netdev_notifier_info_to_dev(ptr);
-  if( ! oo_netdev_is_dl(netdev) ) {
-    ci_log("%s: net dev event %s ignoring as non-dl", __FUNCTION__, netdev->name);
+  if( ! oo_netdev_is_dl(netdev) )
     return NOTIFY_DONE;
-  }
 
   switch( event ) {
   case NETDEV_UP:
