@@ -1526,6 +1526,8 @@ static int ci_netif_poll_evq(ci_netif* ni, struct ci_netif_poll_state* ps,
   int i;
   oo_pkt_p pp;
   int completed_tx = 0;
+  int rx_ofs_base = (evq->nic_type.arch == EF_VI_ARCH_AF_XDP) ?
+                    CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start) : 0;
 #ifdef OO_HAS_POLL_IN_KERNEL
   int poll_in_kernel;
 #endif
@@ -1575,7 +1577,9 @@ have_events:
         CITP_STATS_NETIF_INC(ni, rx_evs);
         OO_PP_INIT(ni, pp, EF_EVENT_RX_RQ_ID(ev[i]));
         pkt = PKT_CHK(ni, pp);
-        pkt->pkt_start_off = ev[i].rx.ofs - CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start);
+        /* AF_XDP has potentially variable offset and this is taken it into account here,
+         * ef10 always reports 0 */
+        pkt->pkt_start_off = ev[i].rx.ofs - rx_ofs_base;
         ci_prefetch_ppc(PKT_START(pkt));
         ci_prefetch_ppc(pkt);
         ci_assert_equal(pkt->intf_i, intf_i);
