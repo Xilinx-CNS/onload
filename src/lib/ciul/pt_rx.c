@@ -54,6 +54,29 @@ ef_vi_receive_get_bytes(ef_vi* vi, const void* pkt, uint16_t* bytes_out)
 }
 
 
+int
+ef_vi_receive_get_user_data(ef_vi* vi, const void* pkt, uint32_t* user_mark,
+                            uint8_t* user_flag)
+{
+  uint32_t dw;
+  EF_VI_ASSERT(vi->nic_type.arch == EF_VI_ARCH_EF100);
+  EF_VI_ASSERT(ef_vi_receive_prefix_len(vi) > 4);
+
+  /* The 32-bitness of the mark is so fundamental to everything that it's not
+   * worth pretending that other sizes could happen */
+  EF_VI_BUILD_ASSERT(ESF_GZ_RX_PREFIX_USER_MARK_LBN % 32 == 0);
+  EF_VI_BUILD_ASSERT(ESF_GZ_RX_PREFIX_USER_MARK_WIDTH == 32);
+  memcpy(&dw, (const uint8_t*) pkt + ESF_GZ_RX_PREFIX_USER_MARK_LBN / 8, 4);
+  *user_mark = le32_to_cpu(dw);
+
+  EF_VI_BUILD_ASSERT(ESF_GZ_RX_PREFIX_USER_FLAG_WIDTH == 1);
+  memcpy(&dw,
+         (const uint8_t*) pkt + ESF_GZ_RX_PREFIX_USER_FLAG_LBN / 32 * 4, 4);
+  *user_flag = (le32_to_cpu(dw) >> (ESF_GZ_RX_PREFIX_USER_FLAG_LBN % 32)) & 1;
+  return 0;
+}
+
+
 ef_request_id ef_vi_rxq_next_desc_id(ef_vi* vi)
 {
   ef_vi_rxq* q = &vi->vi_rxq;

@@ -46,7 +46,8 @@
 #define __EF_VI_BUILD_ASSERT_NAME(_x) __EF_VI_BUILD_ASSERT_ILOATHECPP(_x)
 #define __EF_VI_BUILD_ASSERT_ILOATHECPP(_x)  __EF_VI_BUILD_ASSERT__##_x
 #define EF_VI_BUILD_ASSERT(e)                                           \
-  { typedef char __EF_VI_BUILD_ASSERT_NAME(__LINE__)[(e) ? 1 : -1]; }
+  { __attribute__((__unused__))                                         \
+    typedef char __EF_VI_BUILD_ASSERT_NAME(__LINE__)[(e) ? 1 : -1]; }
 
 
 #ifdef NDEBUG
