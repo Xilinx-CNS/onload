@@ -615,6 +615,9 @@ int efab_file_move_to_alien_stack_rsop(ci_private_t *stack_priv, void *arg)
                                      &new_sock_id);
 
   if( rc == 0 ) {
+    ci_netif_unlock(&new_thr->netif);
+    ci_sock_unlock(&new_thr->netif,
+                   SP_TO_WAITABLE(&new_thr->netif, new_sock_id));
     fput(sock_file);
     return 0;
   }
