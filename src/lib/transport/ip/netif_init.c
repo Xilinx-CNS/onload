@@ -2898,9 +2898,13 @@ static int __ci_netif_init_fill_rx_rings(ci_netif* ni)
    */
   int intf_i, rxq_limit = ni->state->rxq_limit;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    ci_netif_rx_post(ni, intf_i);
-    if( ef_vi_receive_fill_level(ci_netif_vi(ni, intf_i)) < rxq_limit )
-      return -ENOMEM;
+    int vi_i;
+    for( vi_i = 0; vi_i < ci_netif_num_vis(ni); ++vi_i ) {
+      ef_vi* vi = &ni->nic_hw[intf_i].vis[vi_i];
+      ci_netif_rx_post(ni, intf_i, vi);
+      if( ef_vi_receive_fill_level(vi) < rxq_limit )
+        return -ENOMEM;
+    }
   }
   return 0;
 }

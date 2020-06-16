@@ -510,7 +510,7 @@ ci_inline void ci_netif_send(ci_netif* ni, ci_ip_pkt_fmt* pkt)
   pkt->flags |= CI_PKT_FLAG_TX_PENDING;
   __ci_netif_send(ni, pkt);
 }
-extern void ci_netif_rx_post(ci_netif* netif, int nic_index) CI_HF;
+extern void ci_netif_rx_post(ci_netif* netif, int nic_index, ef_vi* vi) CI_HF;
 #ifdef __KERNEL__
 extern int  ci_netif_set_rxq_limit(ci_netif*) CI_HF;
 extern int  ci_netif_init_fill_rx_rings(ci_netif*) CI_HF;
@@ -2326,6 +2326,18 @@ ci_inline int oo_stack_intf_max(ci_netif* ni) {
 }
 
 
+ci_inline void ci_netif_rx_post_all_batch(ci_netif* netif, int nic_index)
+{
+  int i;
+  int num_vis = ci_netif_num_vis(netif);
+  for( i = 0; i < num_vis; ++i ) {
+    ef_vi* vi = &netif->nic_hw[nic_index].vis[i];
+    if( ci_netif_rx_vi_space(netif, vi) >= CI_CFG_RX_DESC_BATCH )
+      ci_netif_rx_post(netif, nic_index, vi);
+  }
+}
+
+
 /**********************************************************************
  * Handling return from ci_netif_pkt_wait() and ci_netif_lock().
  */
@@ -2842,6 +2854,9 @@ ci_inline void __ci_netif_pkt_clean(ci_ip_pkt_fmt* pkt)
   pkt->rx_flags = 0;
   pkt->n_buffers = 1;
   pkt->frag_next = OO_PP_NULL;
+#if CI_CFG_TCP_OFFLOAD_RECYCLER || ! defined NDEBUG
+  pkt->q_id = CI_Q_ID_NORMAL;
+#endif
   CI_DEBUG(pkt->pkt_start_off = PKT_START_OFF_BAD;
            pkt->pkt_eth_payload_off = PKT_START_OFF_BAD);
 #if CI_CFG_TIMESTAMPING

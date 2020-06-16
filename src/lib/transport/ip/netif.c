@@ -512,9 +512,7 @@ void ci_netif_rxq_low_on_recv(ci_netif* ni, ci_sock_cmn* s,
       CITP_STATS_NETIF_INC(ni, memory_pressure_exit_recv);
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-    if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i))
-        >= CI_CFG_RX_DESC_BATCH )
-      ci_netif_rx_post(ni, intf_i);
+    ci_netif_rx_post_all_batch(ni, intf_i);
   CITP_STATS_NETIF_INC(ni, rx_refill_recv);
   ci_netif_unlock(ni);
 }
@@ -567,9 +565,7 @@ static void ci_netif_mem_pressure_enter_critical(ci_netif* ni, int intf_i)
   ni->state->mem_pressure |= OO_MEM_PRESSURE_CRITICAL;
   ni->state->rxq_limit = 2*CI_CFG_RX_DESC_BATCH;
   ci_netif_mem_pressure_pkt_pool_use(ni);
-  if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i)) >=
-      CI_CFG_RX_DESC_BATCH )
-    ci_netif_rx_post(ni, intf_i);
+  ci_netif_rx_post_all_batch(ni, intf_i);
 }
 
 
@@ -699,7 +695,7 @@ static int __ci_netif_rx_post(ci_netif* ni, ef_vi* vi, int intf_i,
 #define low_thresh(ni)       ((ni)->state->rxq_limit / 2)
 
 
-void ci_netif_rx_post(ci_netif* netif, int intf_i)
+void ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
 {
   /* TODO: When under packet buffer pressure, post fewer on the receive
   ** queue.  As an easy first stab could have a threshold for the number of
@@ -709,7 +705,6 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i)
   ** possibly be consumed by existing sockets receive windows.  This would
   ** reduce resource consumption for apps that have few sockets.
   */
-  ef_vi* vi = ci_netif_vi(netif, intf_i);
   ci_ip_pkt_fmt* pkt;
   int max_n_to_post, rx_allowed, n_to_post;
   int bufset_id = NI_PKT_SET(netif);

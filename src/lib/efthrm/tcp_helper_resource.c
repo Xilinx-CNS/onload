@@ -1025,7 +1025,7 @@ static int allocate_pio(tcp_helper_resource_t* trs, int intf_i,
   nsn->pio_io_len = netif_nic->pio.pio_len;
   /* and record a copy that UL can't modify */
   trs_nic->thn_pio_io_mmap_bytes = nsn->pio_io_mmap_bytes;
-  netif_nic->vis[0].linked_pio = &netif_nic->pio;
+  netif_nic->vis[CI_Q_ID_NORMAL].linked_pio = &netif_nic->pio;
   trs->pio_mmap_bytes += CI_PAGE_SIZE;
   *pio_buf_offset += efrm_pio_get_size(trs_nic->thn_pio_rs);
   /* Drop original ref to PIO region as linked VI now holds it */ 
@@ -1615,7 +1615,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       goto error_out;
     nsn->pd_owner = efrm_pd_owner_id(alloc_info.pd);
 
-    alloc_info.virs = &trs_nic->thn_vi_rs[0];
+    alloc_info.virs = &trs_nic->thn_vi_rs[CI_Q_ID_NORMAL];
     alloc_info.txq_capacity = NI_OPTS(ni).txq_size;
     rc = allocate_vi(ni, &alloc_info, NULL, 0);
     if( rc != 0 )

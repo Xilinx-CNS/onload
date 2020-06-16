@@ -397,6 +397,10 @@ struct ci_ip_pkt_fmt_s {
    *   'tail' they're protected by the socket lock. */
 #define CI_PKT_RX_FLAG_RECV_Q_CONSUMED 0x01 /* recv_q: consumed    */
 #define CI_PKT_RX_FLAG_KEEP            0x02 /* recv_q: do not drop pkt  */
+#define CI_PKT_RX_FLAG_USER_FLAG       0x04 /* The user_flag field of this
+                                   * packet was set by the NIC during datapath
+                                   * processing (EF100 feature). The user_mark
+                                   * is put in pf.tcp_rx.lo.rx_sock */
   ci_uint8              rx_flags;
 
   /*! Number of these buffers that are chained together using
@@ -434,6 +438,19 @@ struct ci_ip_pkt_fmt_s {
    * the outer Ethernet header (including VLANs if any).
    */
   ci_int16              pkt_outer_l3_off;
+
+#define CI_Q_ID_NORMAL        0
+#define CI_Q_ID_TCP_RECYCLER  1
+#define CI_Q_ID_TCP_APP       2
+/* ...and potentially more q_ids beyond TCP_APP, all of which are also owned
+ * by the TCP_APP */
+  /*! For rx packets, the VI/rxq on which this packet was enqueued/received.
+   * For tx packets, the VI/txq on which to send this packet.
+   * If !CI_CFG_TCP_OFFLOAD_RECYCLER then there is only one queue and this
+   * field is irrelevant. Otherwise, plugins tend to use multiple VIs to
+   * distinguish different classes of packet and/or content targetting at
+   * different levels of the stack. */
+  ci_uint8              q_id;
 
   /*! Ensure we have space before [dma_start] so we can expand the Ethernet
    * header to add a VLAN tag.  This member should never be referenced

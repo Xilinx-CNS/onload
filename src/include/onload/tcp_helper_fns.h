@@ -137,7 +137,7 @@ ci_inline tcp_helper_endpoint_t* efab_priv_to_ep(ci_private_t* priv)
 ci_inline struct efrm_vi*
 tcp_helper_vi(tcp_helper_resource_t* trs, int intf_i)
 {
-  return trs->nic[intf_i].thn_vi_rs[0];
+  return trs->nic[intf_i].thn_vi_rs[CI_Q_ID_NORMAL];
 }
 
 extern int efab_thr_get_inaccessible_stack_info(unsigned id,

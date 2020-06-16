@@ -333,6 +333,27 @@ static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
 }
 
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+/* Process a packet which has been received on a 'secondary' VI about which
+ * we know nothing - they may not even have Ethernet headers */
+static void handle_rx_plugin_data(ci_netif* netif,
+                                  struct ci_netif_poll_state* ps,
+                                  ci_ip_pkt_fmt* pkt)
+{
+  LOG_DR(ci_hex_dump(ci_log_fn, PKT_START(pkt),
+                     ip_pkt_dump_len(oo_offbuf_left(&pkt->buf)), 0));
+
+  /* Writing these things to the pcap will confuse Wireshark, but it's an
+   * important debugging feature so let's do it anyway */
+  if( oo_tcpdump_check(netif, pkt, pkt->intf_i) )
+    oo_tcpdump_dump_pkt(netif, pkt);
+
+  /* TODO: call out to some plugin-specific code, in Ceph's case dumping the
+   * payload in to the socket recvq */
+}
+#endif
+
+
 static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
                           ci_ip_pkt_fmt* pkt)
 {
@@ -381,7 +402,13 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
      * Also check for valid IP length for non-fragmented packets.*/
     not_fast = (ip->ip_frag_off_be16 &
                 (CI_IP4_OFFSET_MASK | CI_IP4_FRAG_MORE)) |
-               (ip_tot_len > pkt->pay_len - oo_pre_l3_len(pkt));
+               (ip_tot_len > pkt->pay_len - oo_pre_l3_len(pkt))
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+               /* All plugins are assumed to have done sufficient checks that
+                * their mangled packets are fast-path */
+               && pkt->q_id == CI_Q_ID_NORMAL;
+#endif
+               ;
 
     hdr_size = CI_IP4_IHL(ip);
 
@@ -481,6 +508,9 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
   }
 #endif
 
+  /* If this assert fails then it's likely either a bug in the plugin or the
+   * plugin has tried to do something so clever that it won't work: */
+  ci_assert_equal(pkt->q_id, CI_Q_ID_NORMAL);
   if( ci_netif_pkt_pass_to_kernel(netif, pkt) ) {
     CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_non_ip);
   }
@@ -619,9 +649,17 @@ ci_inline int oo_xdp_check_pkt(ci_netif* ni, int intf_i, ci_ip_pkt_fmt** pkt)
 ci_inline void __handle_rx_pkt(ci_netif* ni, struct ci_netif_poll_state* ps,
                               int intf_i, ci_ip_pkt_fmt** pkt)
 {
-  if( *pkt != NULL && oo_xdp_check_pkt(ni, intf_i, pkt) ) {
-    ci_parse_rx_vlan(*pkt);
-    handle_rx_pkt(ni, ps, *pkt);
+  if( *pkt ) {
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    if( (*pkt)->q_id >= CI_Q_ID_TCP_APP ) {
+      handle_rx_plugin_data(ni, ps, *pkt);
+      return;
+    }
+#endif
+    if( oo_xdp_check_pkt(ni, intf_i, pkt) ) {
+      ci_parse_rx_vlan(*pkt);
+      handle_rx_pkt(ni, ps, *pkt);
+    }
   }
 }
 
@@ -1104,7 +1142,7 @@ static ci_ip_pkt_fmt* rx_multi_get_next_desc(ci_netif* ni, ef_vi* vi, int intf_i
 static void handle_rx_multi_pkts(ci_netif* ni, struct oo_rx_state* s,
                                  int prefix_bytes,
                                  ef_vi* vi, int intf_i,
-                                 struct ci_netif_poll_state* ps)
+                                 struct ci_netif_poll_state* ps, int q_id)
 {
   int full_buffer = ef_vi_receive_buffer_len(vi);
   uint16_t pkt_bytes, total_bytes, cur_bytes;
@@ -1116,6 +1154,19 @@ static void handle_rx_multi_pkts(ci_netif* ni, struct oo_rx_state* s,
   ef_vi_receive_get_bytes(vi, pkt->dma_start, &pkt_bytes);
   total_bytes = pkt_bytes + prefix_bytes;
   ef_vi_receive_get_discard_flags(vi, pkt->dma_start, &discard_flags);
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  pkt->q_id = q_id;
+  {
+    uint32_t mark;
+    uint8_t flag;
+    ef_vi_receive_get_user_data(vi, pkt->dma_start, &mark, &flag);
+    pkt->pf.tcp_rx.lo.rx_sock = mark;
+    /* Asserting this solely so that a more efficient assignment can be done.
+     * If this ever fails then we just need to do the read-modify-write */
+    ci_assert_equal(pkt->rx_flags, 0);
+    pkt->rx_flags = flag * CI_PKT_RX_FLAG_USER_FLAG;
+  }
+#endif
 
   /* if 1 pkt = 1 desc */
   if( total_bytes <= full_buffer ) {
@@ -1750,12 +1801,14 @@ have_events:
 
       else if( EF_EVENT_TYPE(ev[i]) == EF_EVENT_TYPE_RX_MULTI_PKTS ) {
         int j, n_pkts;
-        ef_vi* vi = CI_NETIF_RX_VI(ni, intf_i, ev[i].rx_multi_pkts.q_id);
+        int q_id = ev[i].rx_multi_pkts.q_id;
+        ef_vi* vi = CI_NETIF_RX_VI(ni, intf_i, q_id);
         CITP_STATS_NETIF_INC(ni, rx_evs);
         n_pkts = ev[i].rx_multi_pkts.n_pkts;
         for( j = 0; j < n_pkts; ++j ) {
           __handle_rx_pkt(ni, ps, intf_i, &s.rx_pkt);
-          handle_rx_multi_pkts(ni, &s, evq->rx_prefix_len, vi, intf_i, ps);
+          handle_rx_multi_pkts(ni, &s, evq->rx_prefix_len, vi, intf_i, ps,
+                               q_id);
         }
       }
 
@@ -1813,14 +1866,14 @@ have_events:
     }
 
 #ifndef NDEBUG
-    {
-      ef_vi* vi = CI_NETIF_TX_VI(ni, intf_i, 0);
-      if( vi->nic_type.arch != EF_VI_ARCH_AF_XDP ) {
-        ci_assert_equiv((ef_vi_transmit_fill_level(vi) == 0 &&
-                        ni->state->nic[intf_i].dmaq.num == 0),
-                        (ni->state->nic[intf_i].tx_dmaq_insert_seq ==
-                        ni->state->nic[intf_i].tx_dmaq_done_seq));
-      }
+    if( CI_NETIF_TX_VI(ni, intf_i, 0)->nic_type.arch != EF_VI_ARCH_AF_XDP ) {
+      int vi_i;
+      int txq_level = ni->state->nic[intf_i].dmaq.num;
+      for( vi_i = 0; vi_i < ci_netif_num_vis(ni); ++vi_i)
+        txq_level += ef_vi_transmit_fill_level(&ni->nic_hw[intf_i].vis[vi_i]);
+      ci_assert_equiv(txq_level == 0,
+                      (ni->state->nic[intf_i].tx_dmaq_insert_seq ==
+                      ni->state->nic[intf_i].tx_dmaq_done_seq));
     }
 #endif
 
@@ -1874,9 +1927,7 @@ static int ci_netif_poll_intf(ci_netif* ni, int intf_i, int max_evs)
   /* The following steps probably aren't needed if we haven't handled any
    * events, but that is a rare case and so not worth testing for.
    */
-  if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i))
-      >= CI_CFG_RX_DESC_BATCH )
-    ci_netif_rx_post(ni, intf_i);
+  ci_netif_rx_post_all_batch(ni, intf_i);
 
   if( ci_netif_dmaq_not_empty(ni, intf_i) )
     ci_netif_dmaq_shove1(ni, intf_i);
