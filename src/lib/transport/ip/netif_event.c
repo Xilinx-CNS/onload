@@ -1416,8 +1416,14 @@ static void process_post_poll_list(ci_netif* ni)
 
 #define UDP_CAN_FREE(us)  ((us)->tx_count == 0)
 
-#define CI_NETIF_TX_VI(ni, nic_i, label)  ci_netif_vi((ni), (nic_i))
-#define CI_NETIF_RX_VI(ni, nic_i, label)  ci_netif_vi((ni), (nic_i))
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#define CI_NETIF_RX_VI(ni, nic_i, label) (&(ni)->nic_hw[(nic_i)].vis[(label)])
+#else
+/* This implementation is effectively identical to the other one, but with the
+ * vi index known to be a constant so it's more optimisable */
+#define CI_NETIF_RX_VI(ni, nic_i, label) (&(ni)->nic_hw[(nic_i)].vis[0])
+#endif
+#define CI_NETIF_TX_VI   CI_NETIF_RX_VI
 
 
 static void ci_netif_tx_pkt_complete_udp(ci_netif* netif,
@@ -1808,7 +1814,7 @@ have_events:
 
 #ifndef NDEBUG
     {
-      ef_vi* vi = CI_NETIF_TX_VI(ni, intf_i, ev[i].tx_timestamp.q_id);
+      ef_vi* vi = CI_NETIF_TX_VI(ni, intf_i, 0);
       if( vi->nic_type.arch != EF_VI_ARCH_AF_XDP ) {
         ci_assert_equiv((ef_vi_transmit_fill_level(vi) == 0 &&
                         ni->state->nic[intf_i].dmaq.num == 0),

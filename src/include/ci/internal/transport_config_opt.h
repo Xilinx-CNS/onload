@@ -646,6 +646,14 @@
 /* Handle incoming ICMP for Onloaded sockets */
 #define CI_CFG_HANDLE_ICMP 1
 
+/* Enable cooperation with the SmartNIC TCP reordering plugin */
+#define CI_CFG_TCP_OFFLOAD_RECYCLER 0
+
+/* When using CI_CFG_TCP_OFFLOAD_RECYCLER, the number of additional VIs
+ * (beyond the core TCP recycler) that the TCP processing plugin wants to use
+ * to enable whatever application-specific processing it has. */
+#define CI_CFG_TCP_PLUGIN_EXTRA_VIS 0
+
 #ifdef __KERNEL__
 #include <linux/version.h>
 /* Enable Berkeley Packet Filter program functionality

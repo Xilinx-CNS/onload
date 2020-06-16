@@ -108,7 +108,6 @@ ef_vi_inline void ef100_rx_event(ef_vi* evq_vi, const ef_vi_event* ev,
 {
   unsigned q_label = QWORD_GET_U(ESF_GZ_EV_RXPKTS_Q_LABEL, *ev);
   ef_vi* vi = evq_vi->vi_qs[q_label];
-
   if(likely( vi != NULL )) {
     riverhead_rx_pkts_consumed(vi, ev, evs, evs_len, q_label);
   }

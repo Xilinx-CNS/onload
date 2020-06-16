@@ -767,6 +767,27 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
 #endif
          nic->tx_dmaq_done_seq, nic->tx_bytes_added - nic->tx_bytes_removed);
   logger(log_arg, "  txq: ts_nsec=%x", vi->ep_state->txq.ts_nsec);
+
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  {
+    int num_vis = ci_netif_num_vis(ni);
+    int i;
+    for( i = 1; i < num_vis; ++i ) {
+      ef_vi* pvi = &ni->nic_hw[intf_i].vis[i];
+      logger(log_arg, "  rxq[%d]: cap=%d lim=%d spc=%d level=%d total_desc=%d",
+             i, ef_vi_receive_capacity(pvi), ni->state->rxq_limit,
+             ci_netif_rx_vi_space(ni, pvi), ef_vi_receive_fill_level(pvi),
+             pvi->ep_state->rxq.removed);
+      logger(log_arg, "  txq[%d]: cap=%d lim=%d spc=%d level=%d pkts=%d "
+                      "oflow_pkts=%d",
+             i, ef_vi_transmit_capacity(pvi), ef_vi_transmit_capacity(pvi),
+             ef_vi_transmit_space(pvi), ef_vi_transmit_fill_level(pvi),
+             nic->tx_dmaq_insert_seq - nic->tx_dmaq_done_seq - nic->dmaq.num,
+             nic->dmaq.num);
+    }
+  }
+#endif
+
 #if CI_CFG_TIMESTAMPING
   logger(log_arg, "  clk: %s%s",
          (nic->last_sync_flags & EF_VI_SYNC_FLAG_CLOCK_SET) ? "SET " : "",

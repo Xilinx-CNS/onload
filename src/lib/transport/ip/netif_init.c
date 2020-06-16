@@ -1377,6 +1377,12 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_ICMP_PKTS")) )
     opts->icmp_msg_max = atoi(s);
+
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  static const char* const tcp_offload_opts[] = { "off", "tcp", "ceph", 0 };
+  opts->tcp_offload_plugin = parse_enum(opts, "EF_TCP_OFFLOAD",
+                                        tcp_offload_opts, "off");
+#endif
 }
 
 static int
@@ -2053,7 +2059,9 @@ static int netif_tcp_helper_build(ci_netif* ni)
 
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ci_netif_state_nic_t* nsn = &ns->nic[nic_i];
-    ef_vi* vi = ci_netif_vi(ni, nic_i);
+    ef_vi* vi;
+    int i;
+    int num_vis = ci_netif_num_vis(ni);
 
     /* Get interface properties. */
     rc = oo_cp_get_hwport_properties(ni->cplane, ns->intf_i_to_hwport[nic_i],
@@ -2070,14 +2078,22 @@ static int netif_tcp_helper_build(ci_netif* ni)
     rc = ef_vi_arch_from_efhw_arch(nsn->vi_arch);
     CI_TEST(rc >= 0);
 
-    init_ef_vi(ni, nic_i, vi_state_offset, vi_io_offset, &vi_mem_ptr,
-               vi, nsn->vi_instance, nsn->vi_evq_bytes,
-               nsn->vi_txq_size, &ni->state->vi_stats);
-    vi_state_bytes = ef_vi_calc_state_bytes(nsn->vi_rxq_size,
-                                            nsn->vi_txq_size);
-    vi_state_offset += vi_state_bytes;
-    vi_io_offset += nsn->vi_io_mmap_bytes;
+    vi_state_bytes = 0;
+    for( i = 0; i < num_vis; ++i ) {
+      vi = &ni->nic_hw[nic_i].vis[i];
+      init_ef_vi(ni, nic_i, vi_state_offset, vi_io_offset, &vi_mem_ptr, vi,
+                 nsn->vi_instance[i], i ? 0 : nsn->vi_evq_bytes,
+                 nsn->vi_txq_size, &ni->state->vi_stats);
+      if( NI_OPTS(ni).tx_push )
+        ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
 
+      vi_state_bytes += ef_vi_calc_state_bytes(nsn->vi_rxq_size,
+                                               nsn->vi_txq_size);
+      vi_io_offset += nsn->vi_io_mmap_bytes;
+    }
+    vi_state_offset += vi_state_bytes;
+
+    vi = ci_netif_vi(ni, nic_i);
     vi->xdp_kick = af_xdp_kick;
     vi->xdp_kick_context = ni;
 
@@ -2085,10 +2101,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
     if( vi->nic_type.arch == EF_VI_ARCH_EF100 )
       ni->state->flags |= CI_NETIF_FLAG_EVQ_KERNEL_PRIME_ONLY;
 
-    ci_assert(vi_state_bytes == ns->vi_state_bytes);
-
-    if( NI_OPTS(ni).tx_push )
-      ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
+    ci_assert_equal(vi_state_bytes, ns->vi_state_bytes);
 
 #if CI_CFG_PIO
     if( NI_OPTS(ni).pio &&
@@ -2106,7 +2119,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
         pio_buf_offset;
       pio_buf_offset += nsn->pio_io_len;
       /* And set up rest of PIO struct so we can call ef_vi_pio_memcpy */
-      vi_bar_off = nsn->vi_instance * 8192;
+      vi_bar_off = nsn->vi_instance[0] * 8192;
       ni->nic_hw[nic_i].pio.pio_io = ni->pio_ptr + pio_io_offset;
       ni->nic_hw[nic_i].pio.pio_io += (vi_bar_off + 4096) & (CI_PAGE_SIZE - 1);
       ni->nic_hw[nic_i].pio.pio_len = nsn->pio_io_len;

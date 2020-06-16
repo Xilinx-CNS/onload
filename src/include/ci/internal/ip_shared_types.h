@@ -77,6 +77,11 @@
 /* See ci_netif_pkt_try_to_free(). */
 #define CI_NETIF_PKT_TRY_TO_FREE_MAX_DESP  2
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#define CI_MAX_VIS_PER_INTF (2 + CI_CFG_TCP_PLUGIN_EXTRA_VIS)
+#else
+#define CI_MAX_VIS_PER_INTF 1
+#endif
 
 /* Timer wheels are used to schedule the timers. There are 4 level's on
 ** the wheel each of 256 buckets each bucket is a doubly linked list
@@ -990,7 +995,7 @@ typedef struct {
    */
   CI_ULCONST ci_uint32  vi_io_mmap_bytes;
   CI_ULCONST ci_uint32  vi_evq_bytes;
-  CI_ULCONST ci_uint16  vi_instance;
+  CI_ULCONST ci_uint16  vi_instance[CI_MAX_VIS_PER_INTF];
   CI_ULCONST ci_uint16  vi_rxq_size;
   CI_ULCONST ci_uint16  vi_txq_size;
   CI_ULCONST ci_uint8   vi_arch;

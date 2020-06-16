@@ -1288,7 +1288,8 @@ static int find_and_release_orphaned_stack(void)
 }
 
 
-static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
+static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
+                       struct efrm_vi *evq_virs, int q_tag)
 {
   int rc = -EDOM;  /* Placate compiler. */
   unsigned evq_min;
@@ -1375,11 +1376,11 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
     /* This is a loop to try double allocation. If it fails initialy an attempt
      * is made to find and release orphaned stack and try allocation again.  */
     for( i = 0; i < 2; ++i ) {
-      rc = efrm_vi_resource_alloc(info->client, NULL, info->vi_set, -1,
+      rc = efrm_vi_resource_alloc(info->client, evq_virs, info->vi_set, -1,
                                   info->pd, info->name,
                                   info->efhw_flags,
                                   info->evq_capacity, info->txq_capacity,
-                                  info->rxq_capacity, 0, 0,
+                                  info->rxq_capacity, q_tag, q_tag,
                                   info->wakeup_cpu_core,
                                   info->wakeup_channel,
                                   info->virs,
@@ -1553,8 +1554,11 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     base_ef_vi_flags |= EF_VI_TX_PUSH_DISABLE;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    trs->nic[intf_i].thn_vi_rs[0] = NULL;
-    trs->nic[intf_i].thn_vi_mmap_bytes[0] = 0;
+    int vi_i;
+    for( vi_i = 0; vi_i < CI_MAX_VIS_PER_INTF; ++vi_i ) {
+      trs->nic[intf_i].thn_vi_rs[vi_i] = NULL;
+      trs->nic[intf_i].thn_vi_mmap_bytes[vi_i] = 0;
+    }
 #if CI_CFG_PIO
     trs->nic[intf_i].thn_pio_rs = NULL;
     trs->nic[intf_i].thn_pio_io_mmap_bytes = 0;
@@ -1613,7 +1617,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
     alloc_info.virs = &trs_nic->thn_vi_rs[0];
     alloc_info.txq_capacity = NI_OPTS(ni).txq_size;
-    rc = allocate_vi(ni, &alloc_info);
+    rc = allocate_vi(ni, &alloc_info, NULL, 0);
     if( rc != 0 )
       goto error_out;
 
@@ -1650,7 +1654,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     if( dev )
       pci_dev_put(dev);
     nsn->pci_dev[sizeof(nsn->pci_dev) - 1] = '\0';
-    nsn->vi_instance =
+    nsn->vi_instance[0] =
         (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(vi_rs);
     nsn->vi_arch = (ci_uint8) nic->devtype.arch;
     nsn->vi_variant = (ci_uint8) nic->devtype.variant;
@@ -1700,6 +1704,62 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       rc = tcp_helper_nic_attach_xdp(ni, trs_nic, nic);
 #endif
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    /* The TCP plugin uses multiple VIs per intf to distinguish various types
+     * of traffic.
+     *  - The 'normal' VI (CI_Q_ID_NORMAL) isn't used at all by the plugin; it
+     *    exists to keep non-pluginized traffic clearly delineated
+     *  - CI_Q_ID_TCP_RECYCLER is used by the core of the TCP plugin. The
+     *    plugin sends headers-only and to-recycle payloads to Onload over
+     *    this VI, and Onload sends the to-recycle packets back again when
+     *    it's their time
+     *  - Subsequent VIs (CI_Q_ID_TCP_APP..+inf) are owned by the TCP
+     *    processing plugin, i.e. the protocol-specific part of the plugin. In
+     *    Ceph's case there's only one of these additional VIs and it's used
+     *    for sending in-order TCP payloads from plugin to Onload, where the
+     *    payloads are in a structure of their own which allows some parts to
+     *    be inline while other parts are pointers to remote memory which must
+     *    be mem2mem-copied to get at it.
+     * All of this is discussed in detail in the design doc: SF-123622 */
+    if( NI_OPTS(ni).tcp_offload_plugin ) {
+      int release_pd = alloc_info.release_pd;
+      int vi_i;
+      int num_vis = ci_netif_num_vis(ni);
+
+      /* The TCP plugin is a throughput-oriented feature - tweak the alloc
+       * to be the best for that */
+      alloc_info.try_ctpio = false;
+
+      for( vi_i = 1; vi_i < num_vis; ++vi_i) {
+        struct efrm_vi *vi_rs;
+        int qid = ef_vi_add_queue(ci_netif_vi(ni, intf_i),
+                                  &ni->nic_hw[intf_i].vis[vi_i]);
+        ci_assert_equal(qid, vi_i);
+        alloc_info.virs = &trs_nic->thn_vi_rs[vi_i];
+        rc = allocate_vi(ni, &alloc_info, tcp_helper_vi(trs, intf_i), qid);
+        if( rc ) {
+          if( release_pd )
+            efrm_pd_release(alloc_info.pd); /* vi keeps a ref to pd */
+          goto error_out;
+        }
+        vi_rs = trs_nic->thn_vi_rs[vi_i];
+        initialise_vi(ni, &ni->nic_hw[intf_i].vis[vi_i],
+                      vi_rs, vm,
+                      vi_state, nic->devtype.arch, nic->devtype.variant,
+                      nic->devtype.revision, efhw_vi_nic_flags(nic),
+                      &alloc_info, &vi_out_flags, &ni->state->vi_stats);
+
+        nsn->vi_instance[vi_i] =
+                  (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(vi_rs);
+        trs->io_mmap_bytes += alloc_info.vi_io_mmap_bytes;
+        vi_state = (char*) vi_state +
+                   ef_vi_calc_state_bytes(vm->rxq_size, vm->txq_size);
+      }
+    }
+    else
+#endif
+      ci_assert_equal(ci_netif_num_vis(ni), 1);
+
     if( alloc_info.release_pd )
       efrm_pd_release(alloc_info.pd); /* vi keeps a ref to pd */
   }
@@ -1710,9 +1770,12 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
 error_out:
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    if( tcp_helper_vi(trs, intf_i) ) {
-      efrm_vi_resource_release(tcp_helper_vi(trs, intf_i));
-      trs->nic[intf_i].thn_vi_rs[0] = NULL;
+    int vi_i;
+    for( vi_i = ci_netif_num_vis(ni) - 1; vi_i >= 0; --vi_i ) {
+      if( trs->nic[intf_i].thn_vi_rs[vi_i] ) {
+        efrm_vi_resource_release(trs->nic[intf_i].thn_vi_rs[vi_i]);
+        trs->nic[intf_i].thn_vi_rs[vi_i] = NULL;
+      }
     }
   }
   return rc;
@@ -1743,25 +1806,33 @@ static int deferred_vis(tcp_helper_resource_t* trs)
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
-    uint32_t mmap_bytes;
+    int vi_i;
 
-    rc = efrm_vi_resource_deferred(tcp_helper_vi(trs, intf_i),
-                                   CI_CFG_PKT_BUF_SIZE,
-                                   offsetof(ci_ip_pkt_fmt, dma_start),
-                                   &mmap_bytes);
-    if( rc < 0 )
-      return rc;
+    for( vi_i = 0; vi_i < ci_netif_num_vis(&trs->netif); ++vi_i ) {
+      uint32_t mmap_bytes;
 
-    trs->buf_mmap_bytes += mmap_bytes;
-    trs_nic->thn_vi_mmap_bytes[0] = mmap_bytes;
+      rc = efrm_vi_resource_deferred(trs_nic->thn_vi_rs[vi_i],
+                                     CI_CFG_PKT_BUF_SIZE,
+                                     offsetof(ci_ip_pkt_fmt, dma_start),
+                                     &mmap_bytes);
+      if( rc < 0 )
+        return rc;
 
-    /* We used the info we were told - check that's consistent with what someone
-     * else would get if they checked separately.
-     */
-    ci_assert_equal(ni->state->nic[intf_i].vi_io_mmap_bytes,
-                   efab_vi_resource_mmap_bytes(tcp_helper_vi(trs, intf_i), 0));
-    ci_assert_equal(trs_nic->thn_vi_mmap_bytes[0],
-                   efab_vi_resource_mmap_bytes(tcp_helper_vi(trs, intf_i), 1));
+      trs->buf_mmap_bytes += mmap_bytes;
+      trs_nic->thn_vi_mmap_bytes[vi_i] = mmap_bytes;
+
+      /* We used the info we were told - check that's consistent with what
+       * someone else would get if they checked separately.
+       */
+      ci_assert_equal(ni->state->nic[intf_i].vi_io_mmap_bytes,
+                     efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs[vi_i], 0));
+      ci_assert_equal(trs_nic->thn_vi_mmap_bytes[vi_i],
+                     efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs[vi_i], 1));
+
+      ci_assert_equal(
+                    efab_vi_resource_mmap_bytes(tcp_helper_vi(trs, intf_i), 0),
+                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs[vi_i], 0));
+    }
   }
 
   ni->state->buf_mmap_bytes = trs->buf_mmap_bytes;
@@ -1812,23 +1883,27 @@ static void release_pkts(tcp_helper_resource_t* trs)
   ci_free(ni->pkt_bufs);
 }
 
+
 static void release_vi(tcp_helper_resource_t* trs)
 {
   int intf_i;
 
   /* Flush vis first to ensure our bufs won't be used any more */
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
-    reinit_completion(&trs->complete);
-    efrm_vi_register_flush_callback(tcp_helper_vi(trs, intf_i),
-                                    &vi_complete,
-                                    &trs->complete);
-    efrm_vi_resource_stop_callback(tcp_helper_vi(trs, intf_i));
-    wait_for_completion(&trs->complete);
-
+    int vi_i;
+    for( vi_i = ci_netif_num_vis(&trs->netif) - 1; vi_i >= 0; --vi_i ) {
+      struct efrm_vi *vi_rs = trs->nic[intf_i].thn_vi_rs[vi_i];
+      reinit_completion(&trs->complete);
+      efrm_vi_register_flush_callback(vi_rs, &vi_complete, &trs->complete);
+      efrm_vi_resource_stop_callback(vi_rs);
+      wait_for_completion(&trs->complete);
+    }
   }
 
   /* Now do the rest of vi release */
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
+    int num_vis = ci_netif_num_vis(&trs->netif);
+    int vi_i;
     struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
     ci_netif_nic_t *netif_nic = &trs->netif.nic_hw[intf_i];
 #if CI_CFG_PIO || (CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE)
@@ -1854,10 +1929,11 @@ static void release_vi(tcp_helper_resource_t* trs)
     if( trs_nic->thn_xdp_prog )
       tcp_helper_nic_detach_xdp(trs_nic, nic);
 #endif
-    efrm_vi_resource_release_flushed(tcp_helper_vi(trs, intf_i));
-    trs->nic[intf_i].thn_vi_rs[0] = NULL;
-    CI_DEBUG_ZERO(ci_netif_vi(&trs->netif, intf_i));
-
+    for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
+      efrm_vi_resource_release_flushed(trs_nic->thn_vi_rs[vi_i]);
+      trs_nic->thn_vi_rs[vi_i] = NULL;
+      CI_DEBUG_ZERO(&trs->netif.nic_hw[intf_i].vis[vi_i]);
+    }
   }
 
 #if CI_CFG_ENDPOINT_MOVE
@@ -2028,6 +2104,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   /* Find size of netif state to allocate. */
   vi_state_bytes = ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size,
                                           NI_OPTS(ni).txq_size);
+  vi_state_bytes *= ci_netif_num_vis(ni);
 
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
   if( ci_netif_should_allocate_tcp_shared_local_ports(ni) ) {
@@ -2376,7 +2453,10 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
                           trs->id,
                           trs->mem_mmap_bytes, trs->mem_mmap_bytes));
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    LOG_NC(ci_log("VI=%d", ef_vi_instance(ci_netif_vi(ni, intf_i))));
+    int i;
+    for( i = 0; i < ci_netif_num_vis(ni); ++i )
+      LOG_NC(ci_log("VI[%d]=%d", i,
+                    ef_vi_instance(&ni->nic_hw[intf_i].vis[i])));
   }
 
   /* This is needed because release_netif_hw_resources() tries to free the ep

@@ -30,9 +30,9 @@ typedef struct tcp_helper_endpoint_s tcp_helper_endpoint_t;
 struct tcp_helper_nic {
   int                  thn_intf_i;
   struct oo_nic*       thn_oo_nic;
-  struct efrm_vi*      thn_vi_rs[1];
+  struct efrm_vi*      thn_vi_rs[CI_MAX_VIS_PER_INTF];
   /* Track the size of the VI mmap in the kernel. */
-  unsigned             thn_vi_mmap_bytes[1];
+  unsigned             thn_vi_mmap_bytes[CI_MAX_VIS_PER_INTF];
 #if CI_CFG_PIO
   struct efrm_pio*     thn_pio_rs;
   unsigned             thn_pio_io_mmap_bytes;
