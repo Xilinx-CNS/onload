@@ -549,9 +549,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   /* TODO AF_XDP tidy this up */
   vi->xdp_kick = af_xdp_kick;
   vi->xdp_kick_context.n = vi_dh;
-  rc = efxdp_vi_mmap(vi, vi->vi_i);
-  if( rc != 0 )
-    goto fail5;
 
   if( vi_flags & (EF_VI_RX_TIMESTAMPS | EF_VI_TX_TIMESTAMPS) ) {
     int rx_ts_correction, tx_ts_correction;
@@ -696,10 +693,6 @@ int ef_vi_free(ef_vi* ep, ef_driver_handle fd)
       return rc;
     }
   }
-
-  /* TODO AF_XDP */
-  if( ep->nic_type.arch == EF_VI_ARCH_AF_XDP )
-    efxdp_vi_munmap(ep);
 
   free(ep->ep_state);
   free(ep->tx_alt_id2hw);

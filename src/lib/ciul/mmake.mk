@@ -23,7 +23,6 @@ EFVI_SRCS	:=		\
 LIB_SRCS	:=		\
 		$(EFVI_SRCS)	\
 		ef10_evtimer.c	\
-		efxdp_alloc.c   \
 		logging.c \
 		checksum.c
 

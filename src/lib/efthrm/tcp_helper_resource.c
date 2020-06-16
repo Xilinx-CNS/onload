@@ -1366,7 +1366,6 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
                                   offsetof(ci_ip_pkt_fmt, dma_start),
                                   info->virs,
                                   &info->vi_io_mmap_bytes,
-                                  &info->vi_mem_mmap_bytes,
                                   &info->vi_ctpio_mmap_bytes, NULL, NULL,
                                   info->log_resource_warnings);
       /* If we succeeded, there is no need to find and release orphan stack. */
@@ -1649,8 +1648,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
     trs_nic->thn_ctpio_io_mmap_bytes = alloc_info.vi_ctpio_mmap_bytes;
     trs_nic->thn_ctpio_io_mmap = NULL;
-    trs_nic->thn_vi_mmap_bytes = alloc_info.vi_mem_mmap_bytes;
-    trs->buf_mmap_bytes += alloc_info.vi_mem_mmap_bytes;
     trs->io_mmap_bytes += alloc_info.vi_io_mmap_bytes;
     trs->ctpio_mmap_bytes += alloc_info.vi_ctpio_mmap_bytes;
     vi_state = (char*) vi_state +
@@ -1665,16 +1662,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
         goto error_out;
       }
     }
-
-    /* We used the info we were told - check that's consistent with what someone
-     * else would get if they checked separately.
-     */
-    ci_assert_equal(trs_nic->thn_vi_mmap_bytes,
-                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 1));
-    ci_assert_equal(nsn->vi_io_mmap_bytes,
-                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 0));
-
-
 
 #if CI_CFG_PIO
     if( NI_OPTS(ni).pio && (nic->devtype.arch == EFHW_ARCH_EF10) ) {
@@ -1708,6 +1695,43 @@ error_out:
     }
   }
   return rc;
+}
+
+
+static int deferred_vis(tcp_helper_resource_t* trs)
+{
+  int rc, intf_i;
+
+  if( trs->netif.flags & CI_NETIF_FLAG_AF_XDP ) {
+    /* All buffers need to be allocated before AF_XDP sockets are usable. */
+    while( (rc = efab_tcp_helper_more_bufs(trs)) == 0 );
+    if( rc != -ENOSPC )
+      return rc;
+  }
+
+  OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
+    struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
+    ef_vi* vi = &trs->netif.nic_hw[intf_i].vi;
+    uint32_t mmap_bytes;
+
+    rc = efrm_vi_resource_deferred(trs_nic->thn_vi_rs, vi, &mmap_bytes);
+    if( rc < 0 )
+      return rc;
+
+    trs->buf_mmap_bytes += mmap_bytes;
+    trs_nic->thn_vi_mmap_bytes = mmap_bytes;
+
+    /* We used the info we were told - check that's consistent with what someone
+     * else would get if they checked separately.
+     */
+    ci_assert_equal(trs->netif.state->nic[intf_i].vi_io_mmap_bytes,
+                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 0));
+    ci_assert_equal(trs_nic->thn_vi_mmap_bytes,
+                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 1));
+  }
+
+  trs->netif.state->buf_mmap_bytes = trs->buf_mmap_bytes;
+  return 0;
 }
 
 
@@ -1796,10 +1820,6 @@ static void release_vi(tcp_helper_resource_t* trs)
 #endif
     efrm_vi_resource_release_flushed(trs->nic[intf_i].thn_vi_rs);
     trs->nic[intf_i].thn_vi_rs = NULL;
-    if( netif_nic->vi.nic_type.arch == EF_VI_ARCH_AF_XDP ) {
-      efxdp_vi_munmap(&netif_nic->vi);
-      fput(netif_nic->af_xdp_sock->file);
-    }
     CI_DEBUG_ZERO(&netif_nic->vi);
 
   }
@@ -2266,9 +2286,10 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
     memset(ni->nic_hw[intf_i].pkt_rs, 0, sz);
   }
 
-  /* Advertise the size of the IO and buf mmap that needs to be performed. */
+  /* Advertise the size of the IO and buf mmap that needs to be performed.
+   * The queue map size (buf_mmap_bytes) is not known yet, as queue creation
+   * might be deferred until after buffer memory allocation. */
   ns->io_mmap_bytes = trs->io_mmap_bytes;
-  ns->buf_mmap_bytes = trs->buf_mmap_bytes;
 #if CI_CFG_PIO
   ns->pio_mmap_bytes = trs->pio_mmap_bytes;
 #endif
@@ -3943,26 +3964,11 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 
   efab_tcp_helper_more_socks(rs);
 
+  rc = deferred_vis(rs);
+  if( rc < 0 )
+    goto fail9;
+
   CI_MAGIC_SET(ni, NETIF_MAGIC);
-
-  if( ni->flags & CI_NETIF_FLAG_AF_XDP ) {
-    /* All buffers need to be allocated before the AF_XDP socket is usable. */
-    while( (rc = efab_tcp_helper_more_bufs(rs)) == 0 );
-    if( rc != -ENOSPC )
-      goto fail9;
-
-    /* TODO AF_XDP queues must be mapped after registering buffer memory (which
-     * also creates the queues) and before attempting to fill the rx queue.
-     */
-    OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-      struct socket* sock = ni->nic_hw[intf_i].af_xdp_sock;
-      if( sock != NULL ) {
-        rc = efxdp_vi_mmap(&ni->nic_hw[intf_i].vi, sock);
-        if( rc < 0 )
-          goto fail9;
-      }
-    }
-  }
 
   if( (rc = ci_netif_init_fill_rx_rings(ni)) != 0 )
     goto fail9;

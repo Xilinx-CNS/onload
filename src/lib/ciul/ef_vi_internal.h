@@ -79,21 +79,6 @@
   ((char*)EF_VI_ALIGN_BACK(((intptr_t)(p)), ((intptr_t)(align))))
 #define EF_VI_IS_POW2(x)           ((x) && ! ((x) & ((x) - 1)))
 
-/* The reason this is in quotes and rather than angle brackets is
- * caused by https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80005.
- * In this case, linux gets defined as 1 earlier and gets expanded
- * within the macro.
- */
-#if defined __has_include
-  #if __has_include("linux/if_xdp.h")
-    #define CI_HAVE_AF_XDP 1
-  #else
-    #define CI_HAVE_AF_XDP 0
-  #endif
-#else
-  #define CI_HAVE_AF_XDP 0
-#endif
-
 /* This macro must be defined to the same value as EFHW_NIC_PAGE_SIZE
  * in ci/efhw/common.h. Only defined numerically so that there be no
  * dependency on that header here
@@ -240,7 +225,6 @@ extern void ef100_ef_eventq_timer_run(ef_vi*, unsigned v);
 extern void ef100_ef_eventq_timer_clear(ef_vi*);
 extern void ef100_ef_eventq_timer_zero(ef_vi*);
 
-extern long (*efxdp_syscall)(long, ...);
 extern void efxdp_vi_init(ef_vi*) EF_VI_HF;
 
 extern int ef_pd_cluster_free(ef_pd*, ef_driver_handle);

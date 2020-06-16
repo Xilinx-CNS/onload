@@ -1,11 +1,21 @@
 /* SPDX-License-Identifier: LGPL-2.1 */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 
+/* The reason this is in quotes and rather than angle brackets is
+ * caused by https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80005.
+ * In this case, linux gets defined as 1 earlier and gets expanded
+ * within the macro.
+ */
+#ifdef __has_include
+# if __has_include("linux/if_xdp.h")
+#  define HAVE_AF_XDP
+# endif
+#endif
+
 #include "ef_vi_internal.h"
 
-#if CI_HAVE_AF_XDP
+#ifdef HAVE_AF_XDP
 
-#include <ci/efhw/common.h>
 #include <linux/if_xdp.h>
 #include "logging.h"
 
@@ -35,7 +45,7 @@ static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
 {
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
-  struct xdp_desc* dq = vi->xdp_tx.desc;
+  struct xdp_desc* dq = vi->xdp_rings.tx.desc;
   uint32_t* iq = q->ids;
   int i;
 
@@ -55,7 +65,7 @@ static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
 
 static void efxdp_ef_vi_transmit_push(ef_vi* vi)
 {
-  *vi->xdp_tx.producer = vi->ep_state->txq.added;
+  *vi->xdp_rings.tx.producer = vi->ep_state->txq.added;
   efxdp_tx_kick(vi);
 }
 
@@ -150,7 +160,7 @@ static int efxdp_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
 {
   ef_vi_rxq* q = &vi->vi_rxq;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  uint64_t* dq = vi->xdp_fr.desc;
+  uint64_t* dq = vi->xdp_rings.fr.desc;
   int i;
 
   if( qs->added - qs->removed >= q->mask )
@@ -166,7 +176,7 @@ static int efxdp_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
 static void efxdp_ef_vi_receive_push(ef_vi* vi)
 {
   wmb();
-  *vi->xdp_fr.producer = vi->ep_state->rxq.added;
+  *vi->xdp_rings.fr.producer = vi->ep_state->rxq.added;
 }
 
 static void efxdp_ef_eventq_prime(ef_vi* vi)
@@ -183,7 +193,7 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 
   /* Check rx ring, which won't exist on tx-only interfaces */
   if( n < evs_len && ef_vi_receive_capacity(vi) != 0 ) {
-    struct ef_vi_xdp_ring* ring = &vi->xdp_rx;
+    ef_vi_xdp_ring* ring = &vi->xdp_rings.rx;
     uint32_t cons = *ring->consumer;
     uint32_t prod = *ring->producer;
 
@@ -220,7 +230,7 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 
   /* Check tx completion ring */
   if( n < evs_len ) {
-    struct ef_vi_xdp_ring* ring = &vi->xdp_cr;
+    ef_vi_xdp_ring* ring = &vi->xdp_rings.cr;
     uint32_t cons = *ring->consumer;
     uint32_t prod = *ring->producer;
 

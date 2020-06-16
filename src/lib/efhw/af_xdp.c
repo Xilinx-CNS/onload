@@ -226,6 +226,12 @@ static int xdp_map_update_elem(struct file* map, int key, int value)
   int rc;
   union bpf_attr attr = {};
 
+  /* TODO The BPF program is hard-coded to support only one socket, with
+   * a key of zero. This resricts us to a single VI per interface for now.
+   */
+  if( key != 0 )
+    return -ENOSPC;
+
   rc = xdp_alloc_fd(map);
   if( rc < 0 )
     return rc;
@@ -334,64 +340,98 @@ static int xdp_register_umem(struct socket* sock, struct umem_pages* pages)
   return rc;
 }
 
-/* Create the queues for an AF_XDP socket and associated umem */
-static int xdp_create_queues(struct socket* sock, int rx_cap, int tx_cap)
+/* Create the rings for an AF_XDP socket and associated umem */
+static int xdp_create_ring(struct socket* sock, struct efhw_page_map* page_map,
+                           int capacity, int desc_size, int sockopt, long pgoff,
+                           const struct xdp_ring_offset* xdp_offset,
+                           ef_vi_xdp_offset* offset, ef_vi_xdp_ring* ring)
 {
   int rc;
-  char* rx = (char*)&rx_cap;
-  char* tx = (char*)&tx_cap;
-  const int sz = sizeof(int);
+  unsigned long map_size, addr, pfn, pages, offset_base;
+  struct vm_area_struct* vma;
+  void* ring_base;
 
-  rc = kernel_setsockopt(sock, SOL_XDP, XDP_RX_RING, rx, sz);
+  offset_base = page_map->n_pages << PAGE_SHIFT;
+
+  rc = kernel_setsockopt(sock, SOL_XDP, sockopt, (char*)&capacity, sizeof(int));
   if( rc < 0 )
     return rc;
 
-  rc = kernel_setsockopt(sock, SOL_XDP, XDP_TX_RING, tx, sz);
+  map_size = xdp_offset->desc + (capacity + 1) * desc_size;
+  addr = vm_mmap(sock->file, 0, map_size, PROT_READ | PROT_WRITE,
+                 MAP_SHARED | MAP_POPULATE, pgoff);
+  if( IS_ERR_VALUE(addr) )
+      return addr;
+
+  vma = find_vma(current->mm, addr);
+  if( vma == NULL ) {
+    rc = -EFAULT;
+  }
+  else {
+    rc = follow_pfn(vma, addr, &pfn);
+    pages = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
+  }
+
+  vm_munmap(addr, map_size);
   if( rc < 0 )
     return rc;
 
-  rc = kernel_setsockopt(sock, SOL_XDP, XDP_UMEM_FILL_RING, rx, sz);
+  ring_base = phys_to_virt(pfn << PAGE_SHIFT);
+  rc = efhw_page_map_add_lump(page_map, ring_base, pages);
   if( rc < 0 )
     return rc;
 
-  rc = kernel_setsockopt(sock, SOL_XDP, XDP_UMEM_COMPLETION_RING, tx, sz);
-  if( rc < 0 )
-    return rc;
+  ring->producer = ring_base + xdp_offset->producer;
+  ring->consumer = ring_base + xdp_offset->consumer;
+  ring->desc     = ring_base + xdp_offset->desc;
+
+  offset->producer = offset_base + xdp_offset->producer;
+  offset->consumer = offset_base + xdp_offset->consumer;
+  offset->desc     = offset_base + xdp_offset->desc;
 
   return 0;
 }
 
-static int xdp_bind_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
+static int xdp_create_rings(struct socket* sock, struct efhw_page_map* page_map,
+                            long rxq_capacity, long txq_capacity,
+                            struct ef_vi_xdp_offsets* offsets,
+                            struct ef_vi_xdp_rings* rings)
 {
-  int rc, fd, stack_id = vi_stack_id(nic, vi);
-  struct socket* sock;
+  int rc, optlen;
+  struct xdp_mmap_offsets mmap_offsets;
 
-  sock = sock_from_file(vi->sock, &rc);
-  if( sock == NULL )
-    return rc;
-
-  rc = xdp_register_umem(sock, &vi->umem);
+  optlen = sizeof(mmap_offsets);
+  rc = kernel_getsockopt(sock, SOL_XDP, XDP_MMAP_OFFSETS,
+                         (char*)&mmap_offsets, &optlen);
   if( rc < 0 )
     return rc;
 
-  rc = xdp_create_queues(sock, vi->rxq_capacity, vi->txq_capacity);
+  rc = xdp_create_ring(sock, page_map, rxq_capacity, sizeof(struct xdp_desc),
+                       XDP_RX_RING, XDP_PGOFF_RX_RING,
+                       &mmap_offsets.rx, &offsets->rx, &rings->rx);
   if( rc < 0 )
     return rc;
 
-  fd = xdp_alloc_fd(vi->sock);
-  if( fd < 0 )
-    return fd;
-
-  rc = xdp_map_update_elem(nic->af_xdp->map, stack_id, fd);
-  __close_fd(current->files, fd);
+  rc = xdp_create_ring(sock, page_map, txq_capacity, sizeof(struct xdp_desc),
+                       XDP_TX_RING, XDP_PGOFF_TX_RING,
+                       &mmap_offsets.tx, &offsets->tx, &rings->tx);
   if( rc < 0 )
     return rc;
 
-  rc = xdp_bind(sock, nic->net_dev->ifindex, vi->flags);
+  rc = xdp_create_ring(sock, page_map, rxq_capacity, sizeof(uint64_t),
+                       XDP_UMEM_FILL_RING, XDP_UMEM_PGOFF_FILL_RING,
+                       &mmap_offsets.fr, &offsets->fr, &rings->fr);
   if( rc < 0 )
-    xdp_map_delete_elem(nic->af_xdp->map, stack_id);
+    return rc;
 
-  return rc;
+  rc = xdp_create_ring(sock, page_map, txq_capacity, sizeof(uint64_t),
+                       XDP_UMEM_COMPLETION_RING, XDP_UMEM_PGOFF_COMPLETION_RING,
+                       &mmap_offsets.cr, &offsets->cr, &rings->cr);
+  if( rc < 0 )
+    return rc;
+
+  offsets->total = efhw_page_map_bytes(page_map);
+  return 0;
 }
 
 static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
@@ -409,10 +449,11 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
  *
  *---------------------------------------------------------------------------*/
 int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
-                                 long buffers, int buffer_size, int headroom)
+                                 long buffers, int buffer_size, int headroom,
+                                 struct socket** sock_out)
 {
 #ifdef AF_XDP
-  int rc, fd;
+  int rc;
   struct socket* sock;
   struct efhw_af_xdp_vi* vi;
   struct file* file;
@@ -445,24 +486,76 @@ int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
   if( IS_ERR(file) )
     return PTR_ERR(file);
 
-  fd = xdp_alloc_fd(file);
-  if( fd < 0 )
-    return fd;
-
+  rc = -ENOMEM;
   umem_count = buffers / (PAGE_SIZE / buffer_size);
   umem_addrs = kzalloc(sizeof(void*) * umem_count, GFP_KERNEL);
-  if( umem_addrs == NULL ) {
-    __close_fd(current->files, rc);
-    return -ENOMEM;
-  }
+  if( umem_addrs == NULL )
+    goto fail;
 
   vi->sock = file;
   vi->umem.chunk_size = buffer_size;
   vi->umem.headroom = headroom;
   vi->umem.count = umem_count;
   vi->umem.addrs = umem_addrs;
-  return fd;
 
+  *sock_out = sock;
+  return 0;
+
+fail:
+  fput(file);
+  return rc;
+#else
+  return -EPROTONOSUPPORT;
+#endif
+}
+
+int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
+                                struct efhw_page_map* page_map,
+                                struct ef_vi_xdp_offsets* offsets,
+                                struct ef_vi_xdp_rings* rings)
+{
+#ifdef AF_XDP
+  int rc, fd;
+  struct efhw_af_xdp_vi* vi;
+  struct socket* sock;
+
+  vi = vi_by_stack(nic, stack_id);
+  if( vi == NULL )
+    return -ENODEV;
+
+  if( vi->umem.ready != vi->umem.count ) {
+    EFHW_ERR("%s: unexpected umem pages %ld != %ld", __FUNCTION__,
+             vi->umem.ready, vi->umem.count);
+    return -EPROTO;
+  }
+
+  sock = sock_from_file(vi->sock, &rc);
+  if( sock == NULL )
+    return rc;
+
+  rc = xdp_register_umem(sock, &vi->umem);
+  if( rc < 0 )
+    return rc;
+
+  rc = xdp_create_rings(sock, page_map, vi->rxq_capacity, vi->txq_capacity,
+                        offsets, rings);
+  if( rc < 0 )
+    return rc;
+
+  fd = xdp_alloc_fd(vi->sock);
+  if( fd < 0 )
+    return fd;
+
+  rc = xdp_map_update_elem(nic->af_xdp->map, stack_id, fd);
+  __close_fd(current->files, fd);
+  if( rc < 0 )
+    return rc;
+
+  rc = xdp_bind(sock, nic->net_dev->ifindex, vi->flags);
+  if( rc < 0 )
+    xdp_map_delete_elem(nic->af_xdp->map, stack_id);
+
+  return 0;
 #else
   return -EPROTONOSUPPORT;
 #endif
@@ -838,7 +931,6 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
   int i, j, owner, order;
   long first_page;
   struct efhw_af_xdp_vi* vi;
-  int rc = 0;
 
   owner = block->btb_hw.ef10.handle >> 8;
   order = block->btb_hw.ef10.handle & 0xff;
@@ -882,16 +974,7 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
   }
 
   vi->umem.ready += (n_entries << order);
-  if( vi->umem.ready > vi->umem.count ) {
-    EFHW_ERR("%s: too many umem pages %ld > %ld", __FUNCTION__,
-             vi->umem.ready, vi->umem.count);
-    return -EPROTO;
-  }
-
-  if( vi->umem.ready == vi->umem.count )
-    rc = xdp_bind_vi(nic, vi);
-
-  return rc;
+  return 0;
 #else
   return -EPROTONOSUPPORT;
 #endif

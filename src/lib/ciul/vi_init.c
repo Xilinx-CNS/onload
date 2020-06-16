@@ -279,13 +279,29 @@ void ef_vi_init_txq(struct ef_vi* vi, int ring_size, void* descriptors,
 static char* ef_vi_xdp_init_qs(struct ef_vi* vi, char* q_mem, uint32_t* ids,
                                int rxq_size, int rx_prefix_len, int txq_size)
 {
-  ef_vi_init_evq(vi, 0, NULL);
-  if( rxq_size )
-    ef_vi_init_rxq(vi, rxq_size, NULL, ids, rx_prefix_len);
-  if( txq_size )
-    ef_vi_init_txq(vi, txq_size, NULL, ids + rxq_size);
+  struct ef_vi_xdp_offsets* offsets = &vi->ep_state->xdp;
 
-  return q_mem;
+  ef_vi_init_evq(vi, 0, NULL);
+  ef_vi_init_rxq(vi, rxq_size, NULL, ids, rx_prefix_len);
+  ef_vi_init_txq(vi, txq_size, NULL, ids + rxq_size);
+
+  vi->xdp_rings.rx.producer = (void*)(q_mem + offsets->rx.producer);
+  vi->xdp_rings.rx.consumer = (void*)(q_mem + offsets->rx.consumer);
+  vi->xdp_rings.rx.desc     = (void*)(q_mem + offsets->rx.desc);
+
+  vi->xdp_rings.tx.producer = (void*)(q_mem + offsets->tx.producer);
+  vi->xdp_rings.tx.consumer = (void*)(q_mem + offsets->tx.consumer);
+  vi->xdp_rings.tx.desc     = (void*)(q_mem + offsets->tx.desc);
+
+  vi->xdp_rings.fr.producer = (void*)(q_mem + offsets->fr.producer);
+  vi->xdp_rings.fr.consumer = (void*)(q_mem + offsets->fr.consumer);
+  vi->xdp_rings.fr.desc     = (void*)(q_mem + offsets->fr.desc);
+
+  vi->xdp_rings.cr.producer = (void*)(q_mem + offsets->cr.producer);
+  vi->xdp_rings.cr.consumer = (void*)(q_mem + offsets->cr.consumer);
+  vi->xdp_rings.cr.desc     = (void*)(q_mem + offsets->cr.desc);
+
+  return q_mem + offsets->total;
 }
 
 

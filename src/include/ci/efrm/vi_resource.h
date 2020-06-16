@@ -321,11 +321,14 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		       long xdp_buffers, int xdp_buffer_size, int xdp_headroom,
 		       struct efrm_vi **virs_in_out,
 		       uint32_t *out_io_mmap_bytes,
-		       uint32_t *out_mem_mmap_bytes,
-                       uint32_t *out_ctpio_mmap_bytes,
+		       uint32_t *out_ctpio_mmap_bytes,
 		       uint32_t *out_txq_capacity,
 		       uint32_t *out_rxq_capacity,
 		       int print_resource_warnings);
+
+extern int
+efrm_vi_resource_deferred(struct efrm_vi *evq_virs, ef_vi* vi,
+                          uint32_t *out_mem_mmap_bytes);
 
 extern void efrm_vi_resource_release(struct efrm_vi *);
 extern void efrm_vi_resource_stop_callback(struct efrm_vi *virs);

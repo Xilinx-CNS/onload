@@ -2012,7 +2012,6 @@ static int netif_tcp_helper_build(ci_netif* ni)
   unsigned vi_io_offset, vi_state_offset;
   char* vi_mem_ptr;
   int vi_state_bytes;
-  int shared;
 #if CI_CFG_PIO
   unsigned pio_io_offset = 0, pio_buf_offset = 0, vi_bar_off;
 #endif
@@ -2041,8 +2040,6 @@ static int netif_tcp_helper_build(ci_netif* ni)
 
   ni->future_intf_mask = 0;
 
-  shared = ni->state->pid != getpid();
-
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ci_netif_state_nic_t* nsn = &ns->nic[nic_i];
     ef_vi* vi = &ni->nic_hw[nic_i].vi;
@@ -2070,21 +2067,8 @@ static int netif_tcp_helper_build(ci_netif* ni)
     vi_state_offset += vi_state_bytes;
     vi_io_offset += nsn->vi_io_mmap_bytes;
 
-    /* TODO AF_XDP allow sharing of AF_XDP interfaces
-     *
-     * We do not currently have the ability to share AF_XDP sockets (and hence
-     * user memory) between processes, so if we are not creating the stack then
-     * we cannot make a usable VI. We still want to allow stack creation by
-     * things like onload_stackdump which do not need to use the interfaces.
-     */
-    if( vi->nic_type.arch == EF_VI_ARCH_AF_XDP && ! shared) {
-      vi->xdp_kick = af_xdp_kick;
-      vi->xdp_kick_context.p = ni;
-
-      rc = efxdp_vi_mmap(vi, nsn->vi_instance);
-      if( rc < 0 )
-        goto fail1;
-    }
+    vi->xdp_kick = af_xdp_kick;
+    vi->xdp_kick_context.p = ni;
 
     /* On EF100 EVQ cannot be primed from UL */
     if( vi->nic_type.arch == EF_VI_ARCH_EF100 )

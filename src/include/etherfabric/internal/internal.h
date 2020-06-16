@@ -148,15 +148,6 @@ extern int ef10_receive_get_timestamp_with_sync_flags_internal
 
 #endif
 
-#ifdef __KERNEL__
-typedef struct socket* efxdp_sock_t;
-#else
-typedef int efxdp_sock_t;
-#endif
-
-extern int efxdp_vi_mmap(ef_vi*, efxdp_sock_t sock);
-extern void efxdp_vi_munmap(ef_vi*);
-
 /*! Size of the CTPIO aperture in bytes (if present) */
 #define EF_VI_CTPIO_APERTURE_SIZE     4096
 
