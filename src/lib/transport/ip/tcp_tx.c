@@ -329,6 +329,20 @@ ci_inline int ci_tcp_tx_opt_sack_perm(ci_uint8** opt)
   return 2;
 }
 
+
+ci_inline bool rob_is_empty(ci_netif* netif, ci_tcp_state* ts)
+{
+  if( ci_ip_queue_is_empty(&ts->rob) )
+    return true;
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  if( SEQ_LE(PKT_CHK(netif, ts->rob.tail)->pf.tcp_rx.end_seq,
+             tcp_rcv_nxt(ts)) )
+    return true;
+#endif
+  return false;
+}
+
+
 /*
 ** Set Sack (and DSACK) option on a given packet
 ** used_length is length of existing options.
@@ -349,8 +363,7 @@ static int ci_tcp_tx_opt_sack(ci_uint8** opt, int used_length,
   ci_assert(ts->tcpflags & CI_TCPT_FLAG_SACK);
 
   /* If there is nothing to SACK or no place for SACK option, just return. */
-  if( (OO_PP_EQ(ts->dsack_block, OO_PP_INVALID) &&
-       ci_ip_queue_is_empty(rob)) ||
+  if( (OO_PP_EQ(ts->dsack_block, OO_PP_INVALID) && rob_is_empty(netif, ts)) ||
       used_length + 5 + 8 > CI_TCP_MAX_OPTS_LEN ){
     /* have to clear dsack_block as we're not going to send it now */
     ts->dsack_block = OO_PP_INVALID;
@@ -410,6 +423,10 @@ static int ci_tcp_tx_opt_sack(ci_uint8** opt, int used_length,
   while( OO_PP_NOT_NULL(cid) &&
          used_length + 4 + 8 * (block + 1) < CI_TCP_MAX_OPTS_LEN ) {
     pkt = PKT_CHK(netif, cid);
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    if( SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) )
+      goto next_block;
+#endif
     for( i = 0; i < j; i++ ) {
       if( OO_PP_EQ(cid, used[i]) )
         goto next_block;

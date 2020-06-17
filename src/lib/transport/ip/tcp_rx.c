@@ -48,6 +48,16 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
 			   ciip_tcp_rx_pkt* rxp);
 
 
+static inline bool tcp_plugin_elided_payload(const ci_ip_pkt_fmt* pkt)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  return (pkt->rx_flags & CI_PKT_RX_FLAG_USER_FLAG) != 0;
+#else
+  return false;
+#endif
+}
+
+
 ci_ip_pkt_fmt* __ci_netif_pkt_rx_to_tx(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                        const char* caller)
 {
@@ -143,6 +153,20 @@ void ci_tcp_rx_reap_rxq_last_buf(ci_netif* netif, ci_tcp_state* ts)
 }
 
 
+static void remove_from_last_sack(ci_tcp_state* ts, oo_pkt_p id)
+{
+  if( ts->tcpflags & CI_TCPT_FLAG_SACK ) {
+    int i;
+    for( i = 0; i <= CI_TCP_SACK_MAX_BLOCKS; i++ )
+      if( OO_PP_EQ(ts->last_sack[i], id) )
+        ts->last_sack[i] = OO_PP_NULL;
+        /* We should not break from for(), because duplicate last_sack
+         * entries are possible after the arrival of a new segment which
+         * caused ci_tcp_rx_glue_rob() to glue two blocks. */
+  }
+}
+
+
 /** Enqueue a single packet pkt on the receive queue of [ts]. */
 static void ci_tcp_rx_enqueue_packet(ci_netif *netif, ci_tcp_state *ts,
                                      ci_ip_pkt_fmt *pkt)
@@ -158,6 +182,27 @@ static void ci_tcp_rx_enqueue_packet(ci_netif *netif, ci_tcp_state *ts,
                   oo_offbuf_left(&pkt->buf));
 
   tcp_rcv_nxt(ts) = pkt->pf.tcp_rx.end_seq;
+
+  if( ci_tcp_is_pluginized(ts) ) {
+    /* Just bin it - we're going to get the actual payload from a different
+     * queue, and shoehorn it in to the recvq from there. In pluginized mode
+     * the rob doubles up as the to-recycle queue so we must clean that up now
+     * that we've guaranteed that the plugin will give us the ooo data. (the
+     * rob is conceptually in two halves, head..rcv_nxt (what's dropped here)
+     * and tcp_nxt..tail (the 'classic' rob); see commentary in
+     * ci_tcp_rx_deliver_rob()) */
+    ci_ip_pkt_fmt* p;
+    uint32_t nxt = tcp_rcv_nxt(ts);
+    while( ci_ip_queue_not_empty(&ts->rob) &&
+           (p = PKT_CHK(netif, ts->rob.head)) != NULL &&
+           SEQ_LE(p->pf.tcp_rx.end_seq, nxt) ) {
+      remove_from_last_sack(ts, ts->rob.head);
+      ci_ip_queue_dequeue(netif, &ts->rob, p);
+      ci_netif_pkt_release_rx(netif, p);
+    }
+    ci_netif_pkt_release_rx(netif, pkt);
+    return;
+  }
 
   bytes = oo_offbuf_left(&pkt->buf);
 
@@ -1586,7 +1631,10 @@ static void ci_tcp_rx_process_fin(ci_netif* netif, ci_tcp_state* ts)
 {
   CI_DEBUG(unsigned prev_state = ts->s.b.state);
 
-  if( ! ci_ip_queue_is_empty(&ts->rob) ) {
+  /* If we're pluginized then the first 'half' of the ROB may still need to be
+   * recycled, so we leave the entire ROB in place. It's only consuming a few
+   * packets for a bit longer. */
+  if( ! ci_ip_queue_is_empty(&ts->rob) && ! ci_tcp_is_pluginized(ts) ) {
     LOG_U(log(LNTS_FMT "non-empty ROB after FIN", LNTS_PRI_ARGS(netif, ts)));
     ci_tcp_rx_queue_drop(netif, ts, &ts->rob);
   }
@@ -1672,6 +1720,35 @@ static int ci_tcp_check_ooo_stripe(ci_netif* netif, ci_tcp_state* ts)
 #endif
 
 
+static bool ci_tcp_rx_plugin_recycle(ci_netif* netif, ci_tcp_state* ts,
+                                     ci_ip_pkt_fmt* pkt)
+{
+  bool rc;
+  /* Smarter retry logic would be better here, in particular we shouldn't
+   * keep trying if we reckon the plugin's blocked because of insufficient
+   * FPGA DDR. This smarter logic probably belongs near the top of
+   * ci_tcp_rx_deliver_rob(), not here */
+
+  /* We're quite aggressive about recycling, so a double attempt is totally
+   * possible */
+  if( pkt->flags & CI_PKT_FLAG_TX_PENDING )
+    return true;
+  ci_assert_equal(pkt->frag_next, OO_PP_NULL);
+  pkt->q_id = CI_Q_ID_TCP_RECYCLER;
+  pkt->buf_len = pkt->pay_len;
+  ci_netif_pkt_hold(netif, pkt);  /* It stays on the recycle queue until we
+                                   * know that the plugin processed it in
+                                   * order */
+  pkt->flags |= CI_PKT_FLAG_TX_PENDING;
+  /* Need to use the immediate version to avoid the possibility of putting the
+   * packet on the dmaq - we can't do that because we're already using
+   * pkt::next for the rob. */
+  rc = ci_netif_send_immediate(netif, pkt);
+  ci_tcp_recycle_reset(netif, ts);
+  return rc;
+}
+
+
 static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
 {
   ci_ip_pkt_fmt* pkt;
@@ -1691,37 +1768,32 @@ static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
   pkt = PKT_CHK(netif, id);
   seq = CI_BSWAP_BE32(PKT_IPX_TCP_HDR(af, pkt)->tcp_seq_be32);
 
-  /* Remove all packets covered by already delivered packets. */
   end_block_id = PKT_TCP_RX_ROB(pkt)->end_block;
   ASSERT_VALID_PKT_ID(netif, end_block_id);
-  while( SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) ) {
-    /* This should only happen if there was a retransmission after
-       coalescing, so the retransmitted packet covers a "hole" and a
-       pile of things that were received out of order */
-    LOG_TR(log(LPF "%d drop packet from ROB %d: %x-%x",
-               S_FMT(ts), OO_PP_FMT(id), seq,
-               pkt->pf.tcp_rx.end_seq));
-    if( ts->tcpflags & CI_TCPT_FLAG_SACK ) {
-      int i;
-      for( i = 0; i <= CI_TCP_SACK_MAX_BLOCKS; i++ )
-        if( OO_PP_EQ(ts->last_sack[i], id) )
-          ts->last_sack[i] = OO_PP_NULL;
-          /* We should not break from for(), because duplicates are possible
-           * after arriving new segment which glued two blocks. */
-    }
-
-    ci_tcp_rx_queue_dequeue(netif, ts, rob, pkt);
-    if( OO_PP_EQ(id, end_block_id) )
-      end_block_id = OO_PP_NULL;
-    ci_netif_pkt_release_rx(netif, pkt);
-    if( ci_ip_queue_is_empty(rob) )
-      return 0;
-    id = rob->head;
-    pkt = PKT_CHK(netif, id);
-    seq = CI_BSWAP_BE32(PKT_IPX_TCP_HDR(af, pkt)->tcp_seq_be32);
-    if( OO_PP_IS_NULL(end_block_id) ) {
-      end_block_id = PKT_TCP_RX_ROB(pkt)->end_block;
-      ASSERT_VALID_PKT_ID(netif, end_block_id);
+  /* In pluginized mode this cleanup is done in ci_tcp_rx_enqueue_packet() */
+  if( ! ci_tcp_is_pluginized(ts) ) {
+    /* Remove all packets covered by already delivered packets. */
+    while( SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) ) {
+      /* This should only happen if there was a retransmission after
+         coalescing, so the retransmitted packet covers a "hole" and a
+         pile of things that were received out of order */
+      LOG_TR(log(LPF "%d drop packet from ROB %d: %x-%x",
+                S_FMT(ts), OO_PP_FMT(id), seq,
+                pkt->pf.tcp_rx.end_seq));
+      remove_from_last_sack(ts, id);
+      ci_tcp_rx_queue_dequeue(netif, ts, rob, pkt);
+      if( OO_PP_EQ(id, end_block_id) )
+        end_block_id = OO_PP_NULL;
+      ci_netif_pkt_release_rx(netif, pkt);
+      if( ci_ip_queue_is_empty(rob) )
+        return 0;
+      id = rob->head;
+      pkt = PKT_CHK(netif, id);
+      seq = CI_BSWAP_BE32(PKT_IPX_TCP_HDR(af, pkt)->tcp_seq_be32);
+      if( OO_PP_IS_NULL(end_block_id) ) {
+        end_block_id = PKT_TCP_RX_ROB(pkt)->end_block;
+        ASSERT_VALID_PKT_ID(netif, end_block_id);
+      }
     }
   }
   tcp = PKT_IPX_TCP_HDR(af, pkt);
@@ -1742,7 +1814,8 @@ static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
              S_FMT(ts), tcp_rcv_nxt(ts), tcp_rcv_wnd_right_edge_sent(ts),
              tcp_rcv_wnd_current(ts), seq,
              PKT(netif, end_block_id)->pf.tcp_rx.end_seq));
-  ci_assert(SEQ_LE(tcp_rcv_nxt(ts),
+  if( ! ci_tcp_is_pluginized(ts) )
+    ci_assert(SEQ_LE(tcp_rcv_nxt(ts),
                    PKT(netif, end_block_id)->pf.tcp_rx.end_seq));
 
   if( ts->tcpflags & CI_TCPT_FLAG_SACK ) {
@@ -1761,11 +1834,13 @@ static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
     LOG_TV(log(LPF "%d ROB deliver packet %d: %x-%x, last_seq = %x, "
                "pay_len = %d", S_FMT(ts), OO_PP_FMT(id), seq,
                pkt->pf.tcp_rx.end_seq, last_seq, pkt->pf.tcp_rx.pay_len));
-    ci_assert(SEQ_LE(seq, last_seq));
-    ci_assert(SEQ_LT(last_seq, pkt->pf.tcp_rx.end_seq));
-    oo_offbuf_init(&pkt->buf,
-                   CI_TCP_PAYLOAD(tcp) + (last_seq - seq),
-                   pkt->pf.tcp_rx.pay_len - (last_seq - seq));
+    if( ! ci_tcp_is_pluginized(ts) ) {
+      ci_assert(SEQ_LE(seq, last_seq));
+      ci_assert(SEQ_LT(last_seq, pkt->pf.tcp_rx.end_seq));
+      oo_offbuf_init(&pkt->buf,
+                     CI_TCP_PAYLOAD(tcp) + (last_seq - seq),
+                     pkt->pf.tcp_rx.pay_len - (last_seq - seq));
+    }
 
     if( CI_UNLIKELY(tcp->tcp_flags & CI_TCP_FLAG_FIN) ) {
       LOG_TC(log(LPF "%d out-of-order FIN", S_FMT(ts)));
@@ -1791,10 +1866,41 @@ static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
   ci_assert(num > 0 || (tcp->tcp_flags & CI_TCP_FLAG_FIN));
 
   /* Attach list of packets in the block to receive queue. */
-  if( num != 0 )
-    ci_tcp_rx_enqueue_chain(netif, ts, rob, end_pkt, num);
+  if( num != 0 ) {
+    if( ci_tcp_is_pluginized(ts) ) {
+      /* ...unless we're using the TCP plugin, in which case the rob works as
+       * the to-recycle queue. These packets are now known to be in-order so
+       * we feed them back in to the hardware so that it sees everything
+       * in-order too and can do simple processing. The payload of these
+       * packets is irrelevant to us (i.e. we don't enqueue it to the recvq)
+       * because it's the plugin which wants it, not us (although the plugin
+       * can choose to give subsets of it back to us, it does that through
+       * completely different means). */
+      int i;
+      ci_ip_pkt_fmt* p = PKT_CHK(netif, rob->head);
+      for( i = 0; ; ) {
+        ci_tcp_rx_plugin_recycle(netif, ts, p);
+        if( ++i >= num )
+          break;
+        p = PKT_CHK(netif, p->next);
+      }
+      /* The rob is effectively two back-to-back queues, where the join is
+       * rcv_nxt. head..rcv_nxt are in-order/contiguous and are being sent to
+       * the plugin ("recycled"). rcv_nxt..tail are discontiguous and are
+       * still being buffered in Onload (the same as the traditional rob). The
+       * first half remain on the rob until the plugin ACKs them (by sending
+       * us the equivalent elided-payload packet back, handled in
+       * ci_tcp_rx_enqueue_packet()), since the plugin may have to drop
+       * anything at any time due to lack of buffering. */
+      tcp_rcv_nxt(ts) = p->pf.tcp_rx.end_seq;
+    }
+    else {
+      ci_tcp_rx_enqueue_chain(netif, ts, rob, end_pkt, num);
+    }
+  }
 
   if(CI_UNLIKELY( tcp->tcp_flags & CI_TCP_FLAG_FIN )) {
+    bool has_data = pkt->pf.tcp_rx.end_seq - seq != 1;
     if( ts->tcpflags & CI_TCPT_FLAG_SACK ) {
       int i;
       for( i = 0; i <= CI_TCP_SACK_MAX_BLOCKS; i++ ) {
@@ -1805,15 +1911,21 @@ static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
         }
       }
     }
-    ci_tcp_rx_queue_dequeue(netif, ts, rob, pkt);
-    /* Deal with any data that was also in the pkt with a FIN */
-    if( pkt->pf.tcp_rx.end_seq - seq != 1 ) {
-      ci_tcp_rx_enqueue_packet(netif, ts, pkt);
-    } else {
+    if( ci_tcp_is_pluginized(ts) && has_data ) {
+      ci_tcp_rx_plugin_recycle(netif, ts, pkt);
       tcp_rcv_nxt(ts) = pkt->pf.tcp_rx.end_seq;
-      ci_netif_pkt_release_rx(netif, pkt);
     }
-    ci_tcp_rx_process_fin(netif, ts);
+    else {
+      ci_tcp_rx_queue_dequeue(netif, ts, rob, pkt);
+      /* Deal with any data that was also in the pkt with a FIN */
+      if( has_data ) {
+        ci_tcp_rx_enqueue_packet(netif, ts, pkt);
+      } else {
+        tcp_rcv_nxt(ts) = pkt->pf.tcp_rx.end_seq;
+        ci_netif_pkt_release_rx(netif, pkt);
+      }
+      ci_tcp_rx_process_fin(netif, ts);
+    }
   }
 
   ci_assert(ci_ip_queue_is_valid(netif, rob));
@@ -1848,6 +1960,12 @@ static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
       TCP_FORCE_ACK(ts);
       return ci_ip_queue_not_empty(&ts->rob);
     }
+}
+
+
+void ci_tcp_timeout_recycle(ci_netif* netif, ci_tcp_state* ts)
+{
+  ci_tcp_rx_deliver_rob(netif, ts);
 }
 
 
@@ -2068,6 +2186,11 @@ static int ci_tcp_rx_enqueue_ooo(ci_netif* netif, ci_tcp_state* ts,
   ++ts->stats.rx_ooo_pkts;
   LOG_TO(log(LNT_FMT "ENQ-OOO "TCP_RCV_FMT" s=%08x",
              LNT_PRI_ARGS(netif, ts), TCP_RCV_PRI_ARG(ts), rxp->seq));
+
+  /* Races between recycling and retransmits from the peer can cause duplicate
+   * elided-payload packets to be received, but they'll always be of
+   * present-or-past packets, never future */
+  ci_assert(! tcp_plugin_elided_payload(pkt));
 
   ci_assert(OO_SP_IS_NULL(ts->local_peer));
   ci_assert(ci_ip_queue_is_valid(netif, rob));
@@ -4524,7 +4647,8 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
   rxp.poll_state = ps;
   rxp.pkt = pkt;
   rxp.tcp = tcp;
-  ci_assert_gt(pkt->pay_len, ip_paylen);
+  if( pkt->q_id != CI_Q_ID_TCP_RECYCLER || ! tcp_plugin_elided_payload(pkt) )
+    ci_assert_gt(pkt->pay_len, ip_paylen);
   pkt->pf.tcp_rx.pay_len = ip_paylen;
 
   rxp.seq = CI_BSWAP_BE32(tcp->tcp_seq_be32);
@@ -4600,6 +4724,37 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
     return;
   }
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  if( pkt->q_id == CI_Q_ID_TCP_RECYCLER ) {
+    int ep_id = pkt->pf.tcp_rx.lo.rx_sock & 0x7fffffff;
+    /* TODO: bool was_recycled = pkt->pf.tcp_rx.lo.rx_sock >> 31; */
+    ci_sock_cmn* s = ID_TO_SOCK(netif, ep_id);
+    /* We might transform this same packet and send it out as an ACK or
+     * something, so prepare for that eventuality: */
+    pkt->q_id = CI_Q_ID_NORMAL;
+    /* Only a broken/buggy plugin or a race at socket close can cause this to
+     * fail: */
+    if(CI_LIKELY( s->b.state & CI_TCP_STATE_TCP_CONN &&
+                  sock_rport_be16(s) == tcp->tcp_source_be16 &&
+                  sock_lport_be16(s) == tcp->tcp_dest_be16 &&
+                  CI_IPX_ADDR_EQ(sock_ipx_raddr(s), saddr) &&
+                  CI_IPX_ADDR_EQ(sock_ipx_laddr(s), daddr) )) {
+      if( tcp_plugin_elided_payload(pkt) ) {
+        /* Hack around with the payload size to undo the plugin's removal of
+         * it. The actual payload contents we have in memory are drivel, of
+         * course. */
+        char *payload = (char*)tcp + CI_TCP_HDR_LEN(tcp);
+        uint16_t pay_len = ntohs(*(uint16_t*)payload);
+        pkt->pf.tcp_rx.pay_len = CI_TCP_HDR_LEN(tcp) + pay_len;
+      }
+      ci_tcp_rx_deliver_to_conn(s, &rxp);
+      return;
+    }
+    handle_no_match(netif, &rxp);
+    return;
+  }
+#endif
+
 #if CI_CFG_IPV6
   if( oo_pkt_af(pkt) == AF_INET6 ) {
     ci_netif_filter_for_each_match_ip6(netif,
@@ -4663,6 +4818,21 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
   return;
 
  scattered:
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_assert_le(pkt->q_id, CI_Q_ID_TCP_RECYCLER);
+  if( pkt->q_id != CI_Q_ID_NORMAL && tcp_plugin_elided_payload(pkt) ) {
+    /* This packet isn't formatted normally, so we mustn't pass it to the
+     * kernel. This essentially can't happen, because the plugin is going to
+     * remove all the payload when it sets the user_flag so the only way we
+     * could get here is with a super-small PKT_BUF_SIZE. */
+    LOG_E(ci_log(FN_FMT "plugin scattered or fragmented packet dropped"
+                 "(ep %d, seq %08x, %d IP bytes),", FN_PRI_ARGS(netif),
+                 pkt->pf.tcp_rx.lo.rx_sock, CI_BSWAP_BE32(tcp->tcp_seq_be32),
+                 ip_paylen));
+    ci_netif_pkt_release_rx_1ref(netif, pkt);
+    return;
+  }
+#endif
   if( ci_netif_pkt_pass_to_kernel(netif, pkt) ) {
     CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_tcp);
     return;

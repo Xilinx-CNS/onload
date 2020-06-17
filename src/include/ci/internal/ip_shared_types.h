@@ -809,6 +809,7 @@ typedef struct {
 # define CI_IP_TIMER_DEBUG_HOOK         0x9  /* Hook for timer debugging */
 # define CI_IP_TIMER_NETIF_STATS        0xa  /* netif statistics timer   */
 # define CI_IP_TIMER_TCP_CORK           0xb  /* TCP_CORK timer           */
+# define CI_IP_TIMER_NETIF_TCP_RECYCLE  0xc  /* EF100 plugin recycling   */
 } ci_ip_timer;
 
 
@@ -1235,6 +1236,12 @@ struct ci_netif_state_s {
 #define OO_TIMEOUT_Q_FINWAIT  1
 #define OO_TIMEOUT_Q_MAX      2
   ci_ni_dllist_t        timeout_q[OO_TIMEOUT_Q_MAX]; /**< time-out queues */
+
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_ip_timer           recycle_tid;
+  ci_ni_dllist_t        recycle_retry_q;  /**< linked
+                                               ci_tcp_state_t::recycle_link */
+#endif
 
   /* List of sockets that may have reapable buffers. */
   ci_ni_dllist_t        reap_list;
@@ -1831,6 +1838,9 @@ struct ci_sock_cmn_s {
 #define CI_SOCK_FLAG_FILTER       0x00000040   /* socket has h/w filter      */
 /* bind() has been successfully called on this socket. */
 #define CI_SOCK_FLAG_BOUND        0x00000080 
+/* In-order data is being processed on the FPGA, so Onload must do
+ * reordering/recyling for this connection */
+#define CI_SOCK_FLAG_TCP_OFFLOAD  0x00000100
 /* Socket was bound to explicit port number. It is used by Linux stack to
  * determaine if the socket should be re-bound by connect()/listen() after 
  * shutdown().
@@ -1908,7 +1918,8 @@ struct ci_sock_cmn_s {
    CI_SOCK_FLAG_PMTU_DO | CI_SOCK_FLAG_ALWAYS_DF | CI_SOCK_FLAG_BROADCAST | \
    CI_SOCK_FLAG_SET_SNDBUF | CI_SOCK_FLAG_SET_RCVBUF |                      \
    CI_SOCK_FLAG_AUTOFLOWLABEL_REQ | CI_SOCK_FLAG_AUTOFLOWLABEL_OPT |        \
-   CI_SOCK_FLAG_IP6_PMTU_DO | CI_SOCK_FLAG_IP6_ALWAYS_DF)
+   CI_SOCK_FLAG_IP6_PMTU_DO | CI_SOCK_FLAG_IP6_ALWAYS_DF |                  \
+   CI_SOCK_FLAG_TCP_OFFLOAD)
 #define CI_SOCK_AFLAG_TCP_INHERITED \
     (CI_SOCK_AFLAG_CORK | CI_SOCK_AFLAG_NODELAY)
 
@@ -2779,6 +2790,12 @@ struct ci_tcp_state_s {
 #endif
   ci_ip_timer          cork_tid;    /* TCP timer for TCP_CORK/MSG_MORE   */
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  /* Technically a timer, but it always has a single-tick expiry so we save
+   * space by just having the linked list part and using ns->recycle_tid to
+   * trigger it. */
+  ci_ni_dllist_link    recycle_link;
+#endif
 
 #if CI_CFG_TCP_SOCK_STATS
   ci_ip_sock_stats     stats_snapshot CI_ALIGN(8);   /**< statistics snapshot */

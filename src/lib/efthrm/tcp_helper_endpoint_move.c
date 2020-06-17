@@ -32,6 +32,9 @@ static int efab_file_move_supported_tcp(ci_netif *ni, ci_tcp_state *ts,
     return false;
   }
 #endif
+  /* Offload plugin has no API for updating the VI info  */
+  if( ci_tcp_is_pluginized(ts) )
+    return false;
 
   /* TCP closed: supported */
   if( ts->s.b.state == CI_TCP_CLOSED ) {

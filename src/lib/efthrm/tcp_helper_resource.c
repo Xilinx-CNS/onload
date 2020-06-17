@@ -464,6 +464,9 @@ void tcp_helper_kill_stack(tcp_helper_resource_t *thr)
         wo->tcp.t_last_sent = ci_ip_time_now(netif);
     }
     ci_ip_timer_clear(netif, &netif->state->timeout_tid);
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    ci_ip_timer_clear(netif, &netif->state->recycle_tid);
+#endif
     ci_netif_timeout_state(netif);
     ci_netif_unlock(netif);
   }

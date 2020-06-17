@@ -1409,6 +1409,16 @@ ci_inline int sock_af_space(ci_sock_cmn* s)
     ((ts)->s.b.sb_aflags & CI_SB_AFLAG_ORPHAN))
 #endif
 
+static inline bool
+ci_tcp_is_pluginized(ci_tcp_state* ts)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  return (ts->s.s_flags & CI_SOCK_FLAG_TCP_OFFLOAD) != 0;
+#else
+  return false;
+#endif
+}
+
 extern ci_tcp_state* ci_tcp_get_state_buf(ci_netif*) CI_HF;
 #if ! defined(__KERNEL__) && CI_CFG_FD_CACHING
 extern ci_tcp_state* ci_tcp_get_state_buf_from_cache(ci_netif*, int pid) CI_HF;
@@ -1877,6 +1887,7 @@ extern void ci_tcp_timeout_zwin(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_timeout_delack(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_timeout_rto(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_timeout_cork(ci_netif* netif, ci_tcp_state* ts) CI_HF;
+extern void ci_tcp_timeout_recycle(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_stop_timers(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_send_corked_packets(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 
@@ -3902,6 +3913,26 @@ ci_inline void ci_tcp_zwin_set(ci_netif* netif, ci_tcp_state* ts)
     t = ts->rto << ts->zwin_probes;
   ci_assert(TIME_GT(t, 0));
   ci_ip_timer_set(netif, &ts->zwin_tid, ci_tcp_time_now(netif) + t);
+}
+
+
+/* Put ts on the 'some recycling needs to be done for this socket' timer
+ * queue, starting the timer if needed. */
+ci_inline void ci_tcp_recycle_reset(ci_netif* netif, ci_tcp_state* ts) {
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_assert(ci_ip_queue_not_empty(&ts->rob));
+  if( ! ci_ni_dllist_is_free(&ts->recycle_link) )
+    return;
+  ci_ni_dllist_push(netif, &netif->state->recycle_retry_q, &ts->recycle_link);
+  if( ! ci_ip_timer_pending(netif, &netif->state->recycle_tid) ) {
+    /* This recycle timer exists to deal with the possibility of drops
+     * and/or queue overflows in the link between plugin and host. Since
+     * that's guaranteed to be a very fast link, we hard-code the minimum
+     * possible timeout and share the timer across all sockets. */
+    ci_ip_timer_set(netif, &netif->state->recycle_tid,
+                    ci_tcp_time_now(netif) + 1);
+  }
+#endif
 }
 
 
