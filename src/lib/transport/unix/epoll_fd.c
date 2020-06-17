@@ -1757,6 +1757,19 @@ static ci_uint64 timeout_hr_to_us(ci_int64 hr)
 }
 
 
+/* Synchronise state to kernel if:
+   - EF_EPOLL_CTL_FAST=0;
+   - or we are going to block (timeout != 0 && rc == 0) */
+ci_inline void
+citp_epoll_ctl_try_sync(struct citp_epoll_fd* ep, citp_fdinfo* fdi,
+                        ci_int64 timeout_hr, int rc)
+{
+  if( ep->epfd_syncs_needed &&
+      ( ! CITP_OPTS.ul_epoll_ctl_fast || (rc == 0 && timeout_hr != 0) ) )
+    citp_ul_epoll_ctl_sync(ep, fdi->fd);
+}
+
+
 int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
                     struct citp_ordered_wait* ordering, int maxevents,
                     ci_int64 timeout_hr, const sigset_t *sigmask,
@@ -2046,6 +2059,9 @@ no_events:
       op.epoll_fd = fdi->fd;
       op.timeout_us = timeout_hr_to_us(timeout_hr);
       op.sleep_iter_us = CITP_OPTS.sleep_spin_usec;
+
+      citp_epoll_ctl_try_sync(ep, fdi, timeout_hr, 0);
+
       rc = ci_sys_ioctl(ep->epfd_os, OO_EPOLL1_IOC_SPIN_ON, &op);
       citp_epoll_find_timeout(&timeout_hr, &poll_start_frc);
       Log_POLL(ci_log("%s(%d): SPIN ON %d ", __FUNCTION__, fdi->fd, op.flags));
@@ -2063,10 +2079,8 @@ no_events:
 
  unlock_release_exit_ret:
   /* Synchronise state to kernel (if necessary) and block. */
-  if( ep->epfd_syncs_needed &&
-      ( ! CITP_OPTS.ul_epoll_ctl_fast || (rc == 0 && timeout_hr != 0) ) ) {
-    citp_ul_epoll_ctl_sync(ep, fdi->fd);
-  }
+  citp_epoll_ctl_try_sync(ep, fdi, timeout_hr, rc);
+
   CITP_EPOLL_EP_UNLOCK(ep, 0);
   Log_POLL(ci_log("%s(%d): to kernel", __FUNCTION__, fdi->fd));
 
