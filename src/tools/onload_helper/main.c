@@ -11,6 +11,7 @@
 
 #include <sys/resource.h>
 #include <string.h>
+#include <dirent.h>
 
 #include <ci/compat.h>
 #include <ci/tools/log.h>
@@ -128,11 +129,6 @@ main_loop(ci_netif* ni)
       is_locked = true;
     }
 
-    /* Fixme: this check breaks if any other entity does the same: looks at
-     * ref_count and exits when it is the only user of the stack.
-     * Currently onload_tcpdump does it, so onload_tcpdump and
-     * onload_helper will not detach if they both are using an
-     * overwise-orphaned stack. */
     if( arg.rs_ref_count == 0 ) {
       if( ! is_last ) {
         is_last = true;
@@ -166,27 +162,33 @@ int main(int argc, char** argv)
 {
   ci_netif* ni = malloc(sizeof(ci_netif));
   int rc;
-  struct rlimit rlim;
-  int i;
+  DIR* dir;
+  struct dirent* ent;
   struct sigaction act;
 
   set_log_prefix("starting...");
   ci_app_getopt("", &argc, argv, cfg_opts, N_CFG_OPTS);
 
-  /* Fixme: steal daemonise() from tools/cplane/server.c,
-   * and split it between this place and ci_netif_start_helper(). */
+  /* See man 7 daemon for what's going on here.
+   * And see ci_netif_start_helper() for the first part of
+   * daemonizing. */
 
-  /* Fixme: keep the stack fd and reuse it below:
-   * use ci_tcp_helper_stack_attach()+ci_netif_restore()
-   * instead of ci_netif_restore_id().
-   *
-   * Fixme2: RLIMIT_NOFILE is inherited from the user app and may be very
-   * high; but the number of files at stack creation time is likely to
-   * be low.  We'd better use opendir(/proc/self/fd).
+  /* We can getrlimit(RLIMIT_NOFILE) and then close() all the files up to
+   * rlim_max, but RLIMIT_NOFILE is inherited from the user app and may be
+   * very high; but the number of files at stack creation time is likely to
+   * be low.  So let's use fewer syscalls.
    */
-  if( getrlimit(RLIMIT_NOFILE, &rlim) == 0 )
-    for( i = 0; i < rlim.rlim_max; ++i )
-      close(i);
+  dir = opendir("/proc/self/fd");
+  if( dir == NULL ) {
+    ci_log("Can't open /proc/self/fd: not closing "
+           "inherited file descriptors");
+  }
+  else {
+    while( (ent = readdir(dir)) != NULL ) {
+      int fd = atoi(ent->d_name);
+      close(fd);
+    }
+  }
 
   rc = fork();
   if( rc != 0 ) {
