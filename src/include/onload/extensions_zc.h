@@ -722,6 +722,29 @@ extern ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
                                       struct onload_zc_msg* msg,
                                       size_t max_bytes, int flags);
 
+
+/******************************************************************************
+ * TCP processing offload
+ ******************************************************************************/
+
+/* A socket option for use with setsockopt/getsockopt with the IPPROTO_TCP
+ * level. Takes an int for the optval: 0 to disable offload (default), a
+ * nonzero value to enable it using the engine for a particular protocol. The
+ * set of nonzero values which are available is dependent on what plugins are
+ * loaded in to the NIC; the policy is to use the IANA port number
+ * registration for the protocol being used.
+ *
+ * Offloading must be enabled before the socket is connected or bound. Setting
+ * the option on a listening socket will apply it to all accepted sockets: the
+ * listen itself is not offloaded. Requires EF_TCP_OFFLOAD set to a value
+ * other than 'off' and which allows for the protocol which is requested.
+ *
+ * Protocol offloads typically involve some amount of data being modified on
+ * the NIC and/or being delivered through an alternative route. These
+ * applications must use the Onload zero-copy receive extension API,
+ * onload_zc_recv(). */
+#define ONLOAD_TCP_OFFLOAD  47429
+
 #ifdef __cplusplus
 }
 #endif
