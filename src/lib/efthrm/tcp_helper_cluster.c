@@ -603,38 +603,38 @@ thc_search_by_name(const char* user_cluster_name, struct net* netns,
 
     /* Start by clearing out any stacks.  Caveat: killing a stack drops and
      * retakes [thc_mutex]. */
-    while( thc_kill_an_orphan(thc) == 0 ) {
-      /* All stacks were orphans, and we succeeded in clearing all of the
-       * orphaned stacks, so now there should be no stacks at all. */
-      ci_assert(ci_dllist_is_empty(&thc->thc_thr_list));
+    while( thc_kill_an_orphan(thc) == 0 );
 
-      /* Now that the stacks have gone, our reference to the cluster ought to
-       * be the last one... unless, that is, that we used the default cluster,
-       * to which the caller will have a reference. */
-      ci_assert_equal(oo_atomic_read(&thc->thc_ref_count),
-                      thc == thc_default ? 2 : 1);
+    /* All stacks were orphans, and we succeeded in clearing all of the
+     * orphaned stacks, so now there should be no stacks at all. */
+    ci_assert(ci_dllist_is_empty(&thc->thc_thr_list));
 
-      /* Drop our reference to the cluster. */
-      tcp_helper_cluster_release_locked(thc, NULL);
+    /* Now that the stacks have gone, our reference to the cluster ought to
+     * be the last one... unless, that is, that we used the default cluster,
+     * to which the caller will have a reference. */
+    ci_assert_equal(oo_atomic_read(&thc->thc_ref_count),
+                    thc == thc_default ? 2 : 1);
 
-      if( thc != thc_default ) {
-        /* If the cluster is not the default cluster, it will have been
-         * destroyed by now, and so repeating the search will not find it but
-         * instead will fall back to the default cluster (whether that be the
-         * explicit default or the process cluster).  We call the double-
-         * underscore variant directly, as we don't want to kill the next
-         * cluster that we find. */
-        rc = __thc_search_by_name(user_cluster_name, netns, protocol,
-                                  port_be16, euid, actual_cluster_name_out,
-                                  thc_default, &thc);
-      }
-      else {
-        /* On the other hand, if we did clean out the default cluster, it won't
-         * quite be dead yet, and so we don't want to repeat the search, or
-         * we'll just find it again. */
-        rc = -ENOENT;
-        thc = NULL;
-      }
+    /* Drop our reference to the cluster. */
+    tcp_helper_cluster_release_locked(thc, NULL);
+
+    if( thc != thc_default ) {
+      /* If the cluster is not the default cluster, it will have been
+       * destroyed by now, and so repeating the search will not find it but
+       * instead will fall back to the default cluster (whether that be the
+       * explicit default or the process cluster).  We call the double-
+       * underscore variant directly, as we don't want to kill the next
+       * cluster that we find. */
+      rc = __thc_search_by_name(user_cluster_name, netns, protocol,
+                                port_be16, euid, actual_cluster_name_out,
+                                thc_default, &thc);
+    }
+    else {
+      /* On the other hand, if we did clean out the default cluster, it won't
+       * quite be dead yet, and so we don't want to repeat the search, or
+       * we'll just find it again. */
+      rc = -ENOENT;
+      thc = NULL;
     }
   }
 
