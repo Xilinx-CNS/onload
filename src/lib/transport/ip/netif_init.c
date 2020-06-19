@@ -2621,13 +2621,17 @@ static int ci_netif_start_helper(ci_netif* ni)
 
   char* path = "onload_helper";
   char* argv[5];
-  char stack_id_str[10];
+  char stack_id_str[strlen(OO_STRINGIFY(INT_MAX)) + 1];
 
   argv[0] = path;
   argv[1] = "-s";
   snprintf(stack_id_str, sizeof(stack_id_str), "%d", NI_ID(ni));
   argv[2] = stack_id_str;
   argv[3] = NULL;
+  if( CITP_OPTS.log_via_ioctl ) {
+    argv[3] = "-K";
+    argv[4] = NULL;
+  }
 
   rc = ci_sys_vfork();
   if( rc != 0 ) {

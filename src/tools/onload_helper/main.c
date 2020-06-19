@@ -12,6 +12,7 @@
 #include <sys/resource.h>
 #include <string.h>
 #include <dirent.h>
+#include <syslog.h>
 
 #include <ci/compat.h>
 #include <ci/tools/log.h>
@@ -24,25 +25,33 @@
 #include <onload/netif_dtor.h>
 #include <ci/internal/ip.h>
 
+
+
 static char* log_prefix;
 
 static int cfg_ni_id = -1;
-static int cfg_timer_ms = 90;
+static int /*bool*/ ci_cfg_log_to_kern = false;
 
 static ci_cfg_desc cfg_opts[] = {
   { 's', "stack", CI_CFG_UINT, &cfg_ni_id,
     "Stack id, numeric" },
-  { 't', "timer-ms", CI_CFG_UINT, &cfg_timer_ms,
-    "Interval between periodic unsolicited polls" },
+  { 'K', "log-to-kmsg", CI_CFG_FLAG, &ci_cfg_log_to_kern,
+    "log via kernel messages" },
 };
 #define N_CFG_OPTS (sizeof(cfg_opts) / sizeof(cfg_opts[0]))
 
 static void set_log_prefix(const char* stack_name)
 {
-#define CI_LOG_PREFIX_FMT "onload_helper[%d]: [%s] "
-  char pref[strlen(CI_LOG_PREFIX_FMT) + strlen(OO_STRINGIFY(INT_MAX)) +
+#define CI_LOG_PREFIX_FMT1 "onload_helper[%d]: "
+#define CI_LOG_PREFIX_FMT2 "[%s] "
+  char pref[strlen(CI_LOG_PREFIX_FMT1 CI_LOG_PREFIX_FMT2
+                   OO_STRINGIFY(INT_MAX)) +
             ONLOAD_PRETTY_NAME_MAXLEN + 1];
-  sprintf(pref, CI_LOG_PREFIX_FMT, getpid(), stack_name);
+  if( ci_cfg_log_to_kern )
+    sprintf(pref, CI_LOG_PREFIX_FMT1 CI_LOG_PREFIX_FMT2,
+            getpid(), stack_name);
+  else
+    sprintf(pref, CI_LOG_PREFIX_FMT2, stack_name);
   log_prefix = strdup(pref);
   ci_set_log_prefix(log_prefix);
 #undef CI_LOG_PREFIX_FMT
@@ -165,9 +174,23 @@ int main(int argc, char** argv)
   DIR* dir;
   struct dirent* ent;
   struct sigaction act;
+  char stack_name[strlen(OO_STRINGIFY(INT_MAX)) + 1];
 
-  set_log_prefix("starting...");
   ci_app_getopt("", &argc, argv, cfg_opts, N_CFG_OPTS);
+
+  ci_set_log_prefix("");
+  if( cfg_ni_id < 0 ) {
+    ci_log("Usage: %s -s <stack id>", argv[0]);
+    ci_log("Version: %s\n%s", ONLOAD_VERSION, ONLOAD_COPYRIGHT);
+    return 1;
+  }
+
+  /* Let's log to stderr for now */
+  snprintf(stack_name, sizeof(stack_name), "%d", cfg_ni_id);
+  stack_name[sizeof(stack_name) - 1] ='\0';
+  set_log_prefix(stack_name);
+  if( ci_cfg_log_to_kern )
+    log_fd = STDERR_FILENO;
 
   /* See man 7 daemon for what's going on here.
    * And see ci_netif_start_helper() for the first part of
@@ -186,16 +209,22 @@ int main(int argc, char** argv)
   else {
     while( (ent = readdir(dir)) != NULL ) {
       int fd = atoi(ent->d_name);
-      close(fd);
+      if( fd != log_fd )
+        close(fd);
     }
+  }
+
+  /* Set up logging via syslog */
+  if( ! ci_cfg_log_to_kern ) {
+    ci_log_options &=~ CI_LOG_PID;
+    ci_log_fn = ci_log_syslog;
+    openlog(NULL, LOG_PID, LOG_DAEMON);
   }
 
   rc = fork();
   if( rc != 0 ) {
-    if( rc > 0 ) {
-      ci_log("Spawned helper pid %d", rc);
+    if( rc > 0 )
       return 0;
-    }
     ci_log("Failed to spawn helper: %s", strerror(errno));
     return 1;
   }
@@ -206,12 +235,15 @@ int main(int argc, char** argv)
     ci_log("no Onload stack [%d]", cfg_ni_id);
     return 1;
   }
-
-
-  ci_log_options &=~ CI_LOG_PID;
-  log_fd = ni->driver_handle;
-  ci_log_fn = citp_log_fn_drv;
   set_log_prefix(ni->state->pretty_name);
+
+
+  /* Set up logging via ioctl */
+  if( ci_cfg_log_to_kern ) {
+    close(log_fd);
+    log_fd = ni->driver_handle;
+    ci_log_fn = citp_log_fn_drv;
+  }
 
   /* Ensure we do not hand forever trying to lock a wedged stack. */
   memset(&act, 0, sizeof(act));
@@ -219,6 +251,7 @@ int main(int argc, char** argv)
   act.sa_sigaction = sigalarm_exit;
   sigaction(SIGALRM, &act, NULL);
 
+  ci_log("Starting helper pid %d "ONLOAD_VERSION, rc);
   main_loop(ni);
   return 0;
 }
