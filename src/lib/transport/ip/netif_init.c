@@ -2670,6 +2670,13 @@ static void ci_netif_start_helper1(ci_netif* ni)
     exit(1);
   }
 
+  umask(0);
+  rc = chdir("/");
+  if( rc == -1 ) {
+    ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: chdir(/) failed: %s",
+           ni->state->pretty_name, strerror(errno));
+    exit(1);
+  }
   /* The second part of "man 7 daemon" is in onload_helper itself. */
 
   /* Flags:

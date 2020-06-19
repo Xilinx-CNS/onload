@@ -173,6 +173,7 @@ int main(int argc, char** argv)
   int rc;
   DIR* dir;
   struct dirent* ent;
+  int devnull;
   struct sigaction act;
   char stack_name[strlen(OO_STRINGIFY(INT_MAX)) + 1];
 
@@ -185,10 +186,12 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  /* Let's log to stderr for now */
+  /* We have the stack number: set up logging prefix */
   snprintf(stack_name, sizeof(stack_name), "%d", cfg_ni_id);
   stack_name[sizeof(stack_name) - 1] ='\0';
   set_log_prefix(stack_name);
+
+  /* We can't log to kernel yet, so keep using stderr. */
   if( ci_cfg_log_to_kern )
     log_fd = STDERR_FILENO;
 
@@ -214,19 +217,23 @@ int main(int argc, char** argv)
     }
   }
 
+  /* STDIN */
+  devnull = open("/dev/null", O_RDONLY);
+  if( devnull == -1 ) {
+    ci_log("Failed to open /dev/null for reading: %s", strerror(errno));
+    exit(1);
+  }
+  rc = dup2(devnull, STDIN_FILENO);
+  if( rc < -1 ) {
+    ci_log("Failed to dup /dev/null onto stdin: %s", strerror(errno));
+    exit(1);
+  }
+
   /* Set up logging via syslog */
   if( ! ci_cfg_log_to_kern ) {
     ci_log_options &=~ CI_LOG_PID;
     ci_log_fn = ci_log_syslog;
     openlog(NULL, LOG_PID, LOG_DAEMON);
-  }
-
-  rc = fork();
-  if( rc != 0 ) {
-    if( rc > 0 )
-      return 0;
-    ci_log("Failed to spawn helper: %s", strerror(errno));
-    return 1;
   }
 
   /* Find the stack */
@@ -237,6 +244,16 @@ int main(int argc, char** argv)
   }
   set_log_prefix(ni->state->pretty_name);
 
+  /* Fork() for the last time, to tell caller that
+   * we have successully started
+   */
+  rc = fork();
+  if( rc != 0 ) {
+    if( rc > 0 )
+      return 0;
+    ci_log("Failed to spawn helper: %s", strerror(errno));
+    return 1;
+  }
 
   /* Set up logging via ioctl */
   if( ci_cfg_log_to_kern ) {
