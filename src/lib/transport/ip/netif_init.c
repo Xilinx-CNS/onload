@@ -2615,15 +2615,17 @@ static void ci_netif_deinit(ci_netif* ni)
 #if CI_CFG_UL_INTERRUPT_HELPER
 #include <sys/wait.h>
 
-static int ci_netif_start_helper(ci_netif* ni)
-{
-  int rc;
+#define ONLOAD_HELPER_NAME "onload_helper"
 
-  char* path = "onload_helper";
+/* Run this in the second-level cloned process: exec */
+static void ci_netif_start_helper2(ci_netif* ni) __attribute__((noreturn));
+static void ci_netif_start_helper2(ci_netif* ni)
+{
   char* argv[5];
   char stack_id_str[strlen(OO_STRINGIFY(INT_MAX)) + 1];
+  int rc;
 
-  argv[0] = path;
+  argv[0] = ONLOAD_HELPER_NAME;
   argv[1] = "-s";
   snprintf(stack_id_str, sizeof(stack_id_str), "%d", NI_ID(ni));
   argv[2] = stack_id_str;
@@ -2633,41 +2635,102 @@ static int ci_netif_start_helper(ci_netif* ni)
     argv[4] = NULL;
   }
 
-  rc = ci_sys_vfork();
-  if( rc != 0 ) {
-    if( rc > 0 ) {
-      /* The child will setsid() - exec() - fork() - exit from parent,
-       * so we want to catch the the SIGCHILD here */
-      int wstatus;
-      waitpid(rc, &wstatus, 0);
-      if( WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0 ) {
-        ci_log("Spawned helper pid %d", rc);
-        return 0;
-      }
-      ci_log("Helper failed with status %x", wstatus);
-      return -1;
-    }
-    return rc;
-  }
+  rc = ci_sys_execvpe(ONLOAD_HELPER_NAME, argv, NULL);
+  ci_assert_lt(rc, 0);
+  ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: execve() failed: %s",
+         ni->state->pretty_name, strerror(errno));
+  exit(4);
+}
 
-  /* Fixme: see daemonize() - do it here */
+/* Run this in the first-level cloned process: fork and exit.
+ * We should not exec here, because execve() overwrites exit_signal. */
+static void ci_netif_start_helper1(ci_netif* ni) __attribute__((noreturn));
+static void ci_netif_start_helper1(ci_netif* ni)
+{
+  int i;
+  sigset_t sigset;
+  int rc;
+  int wstatus;
+
+  /* The first part of "man 7 daemon": */
+
+  /* Reset all signal handlers. */
+  for( i = 0; i < _NSIG; ++i )
+    signal(i, SIG_DFL);
+
+  /* Unblock all signals. */
+  sigfillset(&sigset);
+  sigprocmask(SIG_UNBLOCK, &sigset, NULL);
+
+  /* Get a new session. */
   rc = setsid();
   if( rc == -1 ) {
-    ci_log("spawning onload_helper for [%s]: setsid() failed: %s",
+    ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: setsid() failed: %s",
            ni->state->pretty_name, strerror(errno));
     exit(1);
   }
 
-  rc = ci_sys_execvpe(path, argv, NULL);
-  if( rc != 0 ) {
-    ci_log("spawning onload_helper for [%s]: execve() failed: %s",
+  /* The second part of "man 7 daemon" is in onload_helper itself. */
+
+  /* Flags:
+   * CLONE_FILES: execve() unshares files so it is overridden later
+   * CLONE_VFORK: stop parent until the child exits or execs.
+   *
+   * NB: CLONE_VFORK != vfork(); vfork uses CLONE_VFORK | CLONE_VM,
+   * and CLONE_VM is really scary.  All the danderous things in man vfork
+   * come from CLONE_VM.
+   */
+  rc = ci_sys_syscall(__NR_clone,
+                      CLONE_FILES | CLONE_VFORK | SIGCHLD,
+                      NULL, NULL, NULL);
+  if( rc == 0 )
+    ci_netif_start_helper2(ni);
+
+  if( rc < 0 ) {
+    ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: "
+           "second clone() failed %s",
+           ni->state->pretty_name, strerror(errno));
+    exit(2);
+  }
+
+  ci_assert_nequal(rc, 0);
+  waitpid(rc, &wstatus, 0);
+  if( WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0 )
+    exit(0);
+
+  /* Error message was printed by the child process */
+  exit(3);
+}
+
+static int ci_netif_start_helper(ci_netif* ni)
+{
+  int rc;
+  int wstatus;
+
+  /* See ci_netif_start_helper1() above for comments about the CLONE_*
+   * flags.  We do not specify any signal, because we do not want the user
+   * application to be signalled.
+   */
+  rc = ci_sys_syscall(__NR_clone,
+                      CLONE_FILES | CLONE_VFORK,
+                      NULL, NULL, NULL);
+  if( rc == 0 )
+    ci_netif_start_helper1(ni);
+
+  if( rc < 0 ) {
+    ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: "
+           "first clone() failed %s",
            ni->state->pretty_name, strerror(errno));
     exit(1);
   }
 
-  /* unreachable */
-  ci_assert(0);
-  return 0;
+  rc = waitpid(rc, &wstatus, __WCLONE);
+  if( WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0 )
+    return 0;
+
+  LOG_S(ci_log("%s: spawning "ONLOAD_HELPER_NAME" for [%s]: exit status=%d",
+               __func__, ni->state->pretty_name, wstatus));
+  return -1;
 }
 #endif
 
