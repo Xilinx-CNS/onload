@@ -284,6 +284,7 @@ static void **find_syscall_table(void)
    */
   if( oo_entry_SYSCALL_64_addr == NULL )
     return NULL;
+  p = oo_entry_SYSCALL_64_addr;
 
   TRAMP_DEBUG("entry_SYSCALL_64=%px", p);
   /* linux>=4.17 has following layout:
