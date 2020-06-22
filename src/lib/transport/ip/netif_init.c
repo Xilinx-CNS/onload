@@ -2614,6 +2614,7 @@ static void ci_netif_deinit(ci_netif* ni)
 
 #if CI_CFG_UL_INTERRUPT_HELPER
 #include <sys/wait.h>
+#include <ci/internal/syscall.h>
 
 #define ONLOAD_HELPER_NAME "onload_helper"
 
@@ -2688,9 +2689,8 @@ static void ci_netif_start_helper1(ci_netif* ni)
    * and CLONE_VM is really scary.  All the danderous things in man vfork
    * come from CLONE_VM.
    */
-  rc = ci_sys_syscall(__NR_clone,
-                      CLONE_FILES | CLONE_VFORK | SIGCHLD,
-                      NULL, NULL, NULL);
+  rc = my_do_syscall3(__NR_clone, CLONE_FILES | CLONE_VFORK | SIGCHLD,
+                      0, 0);
   if( rc == 0 )
     ci_netif_start_helper2(ni);
 
@@ -2719,9 +2719,7 @@ static int ci_netif_start_helper(ci_netif* ni)
    * flags.  We do not specify any signal, because we do not want the user
    * application to be signalled.
    */
-  rc = ci_sys_syscall(__NR_clone,
-                      CLONE_FILES | CLONE_VFORK,
-                      NULL, NULL, NULL);
+  rc = my_do_syscall3(__NR_clone, CLONE_FILES | CLONE_VFORK, 0, 0);
   if( rc == 0 )
     ci_netif_start_helper1(ni);
 
