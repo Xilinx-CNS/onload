@@ -812,8 +812,7 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 
   vi->owner_id = own_id;
   vi->rxq_capacity = dmaq_size;
-  if( flags & EFHW_VI_RX_ZEROCOPY )
-    vi->flags |= XDP_ZEROCOPY;
+  vi->flags |= (flags & EFHW_VI_RX_ZEROCOPY) ? XDP_ZEROCOPY : XDP_COPY;
 
   return 0;
 #else
