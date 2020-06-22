@@ -94,15 +94,12 @@ int ci_ipp_icmp_csum_ok( ci_icmp_hdr* icmp, int icmp_total_len)
  *  the *data* IP address (i.e. the failing packet hdr)
  * \param  ip_len length of *ip
  * \param  addr   output: addressing data parsed from *[ip]
- * \param  data_only  [ip] points to data IP rather than ICMP IP hdr
  *
- * \return 1 - ok, 0 - failed.  If [data_only] != 0 then on success
- * addr->ip & addr->icmp will both be 0.  If [data_only] == 0 then
- * on success both addr->ip and addr->icmp will be valid pointers.
+ * \return 1 - ok, 0 - failed.
+ * On success both addr->ipx and addr->icmp will be valid pointers.
  */
 static int
-efab_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr,
-		    int data_only )
+efab_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr)
 {
   const ci_ipx_hdr_t* data_ipx;
   ci_icmp_hdr* icmp;
@@ -119,27 +116,20 @@ efab_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr,
 
   ip_paylen = ipx_hdr_tot_len(af, ipx);
 
-  if( !data_only ) {
-    /* remotely generated (ICMP) errors */
-    addr->ipx = ipx;
-    addr->icmp = icmp = (ci_icmp_hdr*)((char*)ipx + CI_IPX_IHL(af, ipx));
+  /* remotely generated (ICMP) errors */
+  addr->ipx = ipx;
+  addr->icmp = icmp = (ci_icmp_hdr*)((char*)ipx + CI_IPX_IHL(af, ipx));
 
-    if( ip_paylen > ip_len ) {
-      /* ?? how do I record this in the ICMP stats */
-      OO_DEBUG_IPP(ci_log("%s: truncated packet %d %d", __FUNCTION__, 
-		      ip_paylen, ip_len));
-      return 0;
-    }
-    /* uncount the ICMP message IP hdr & ICMP hdr */
-    ci_assert( sizeof(ci_icmp_hdr) == 4 );
-    ip_paylen -= (int)CI_IPX_IHL(af, ipx) + sizeof(ci_icmp_hdr) + 4;
-    data_ipx = (ci_ipx_hdr_t*)((char*)icmp + sizeof(ci_icmp_hdr) + 4);
-  } else { 
-    /* Locally generated errors */
-    addr->ipx = 0;
-    addr->icmp = icmp = 0;
-    data_ipx = ipx;
+  if( ip_paylen > ip_len ) {
+    /* ?? how do I record this in the ICMP stats */
+    OO_DEBUG_IPP(ci_log("%s: truncated packet %d %d", __FUNCTION__, 
+                        ip_paylen, ip_len));
+    return 0;
   }
+  /* uncount the ICMP message IP hdr & ICMP hdr */
+  ci_assert( sizeof(ci_icmp_hdr) == 4 );
+  ip_paylen -= (int)CI_IPX_IHL(af, ipx) + sizeof(ci_icmp_hdr) + 4;
+  data_ipx = (ci_ipx_hdr_t*)((char*)icmp + sizeof(ci_icmp_hdr) + 4);
 
   data_ipx_af = ipx_hdr_af(data_ipx);
   data_ipx_proto = ipx_hdr_protocol(data_ipx_af, data_ipx);
@@ -162,8 +152,6 @@ efab_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, efab_ipp_addr* addr,
     return 0;
   }
 
-  addr->data = (ci_uint8*)data_ipx;
-  addr->data_len =  ip_paylen;
   addr->saddr = ipx_hdr_daddr(data_ipx_af, data_ipx);
   addr->daddr = ipx_hdr_saddr(data_ipx_af, data_ipx);
   __EXIT(0);
@@ -534,9 +522,8 @@ efab_ipp_icmp_for_thr(tcp_helper_resource_t* thr, efab_ipp_addr* addr)
 
   ci_assert( thr );
   ci_assert( addr );
-  ci_assert( addr->data );
 
-  af_space = (CI_IS_ADDR_IP6(addr->saddr)) ? AF_SPACE_FLAG_IP6 : AF_SPACE_FLAG_IP4;
+  af_space = IS_AF_INET6(addr->af) ? AF_SPACE_FLAG_IP6 : AF_SPACE_FLAG_IP4;
 
   return  __ci_netif_filter_lookup(&thr->netif, af_space,
                                    addr->daddr, addr->dport_be16,
@@ -564,7 +551,6 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
   ci_assert(thr->netif.state);
   ci_assert(s);
   ci_assert(addr);
-  ci_assert(addr->data);
   /* If the address was created without an
    * IP/ICMP hdr then these will be 0 */
   ci_assert(addr->ipx);
@@ -674,7 +660,7 @@ int efab_handle_ipp_pkt_task(int thr_id, ci_ifid_t ifindex,
   in_ipx = in_data;
 
   /* Have a full IP,ICMP hdr - so [data_only] arg is 0 */
-  if( !efab_ipp_icmp_parse( in_ipx, len, &addr, 0))
+  if( !efab_ipp_icmp_parse( in_ipx, len, &addr))
     goto exit_handler;
   addr.ifindex = ifindex;
 

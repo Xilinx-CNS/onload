@@ -29,10 +29,8 @@
 typedef struct {
   const ci_ipx_hdr_t* ipx; /*< IP PDU holding ICMP message */
   ci_icmp_hdr *icmp;    /*< ICMP header in IP PDU */
-  ci_uint8* data;       /*< ICMP reply data following header */
   ci_addr_t saddr;      /*< dest IP of IP PDU in ICMP reply data */
   ci_addr_t daddr;      /*< src IP of IP PDU in ICMP reply data */
-  int data_len;         /*< ICMP len if icmp set & whole IP PDU in reply */
   ci_uint16 sport_be16; /*< dest port of TCP/UDP IP PDU in ICMP reply data */
   ci_uint16 dport_be16; /*< src port of TCP/UDP IP PDU in ICMP reply data */
   ci_uint8  protocol;   /*< protocol of IP PDU in ICMP reply data */
