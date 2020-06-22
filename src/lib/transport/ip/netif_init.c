@@ -2637,6 +2637,7 @@ static void ci_netif_start_helper2(ci_netif* ni)
 
   rc = ci_sys_execvpe(ONLOAD_HELPER_NAME, argv, NULL);
   ci_assert_lt(rc, 0);
+  (void)rc; /* appease gcc in NDEBUG build */
   ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: execve() failed: %s",
          ni->state->pretty_name, strerror(errno));
   exit(4);
