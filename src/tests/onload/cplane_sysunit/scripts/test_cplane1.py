@@ -559,7 +559,8 @@ def do_test_alien_bond(cpserver,cp,netns,mode,v6,include_non_sf_intf=False):
     k = cp_fwd_key(any_ip(v6), fake_ip(v6, 0))
 
     for active in hwports + list(reversed(hwports)):
-        bond_set_active(cpserver, bond_name, slavenames[active])
+        if mode not in [0, 2, 3]: # some modes do not allow setting active inteface
+            bond_set_active(cpserver, bond_name, slavenames[active])
         # FIMXE: for some reason the system call to check bond is needed
         #        without it cpresolve might produce out of date result
         #        see bug72877
