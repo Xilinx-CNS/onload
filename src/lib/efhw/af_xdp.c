@@ -4,6 +4,7 @@
 #include <ci/driver/efab/hardware.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/af_xdp.h>
+#include <ci/efhw/af_xdp_types.h>
 
 #include <linux/socket.h>
 
@@ -36,6 +37,8 @@ struct efhw_af_xdp_vi
   int txq_capacity;
   unsigned flags;
 
+  struct efhw_af_xdp_offsets kernel_offsets;
+  struct efhw_page user_offsets_page;
   struct umem_pages umem;
 };
 
@@ -341,17 +344,20 @@ static int xdp_register_umem(struct socket* sock, struct umem_pages* pages)
 }
 
 /* Create the rings for an AF_XDP socket and associated umem */
-static int xdp_create_ring(struct socket* sock, struct efhw_page_map* page_map,
+static int xdp_create_ring(struct socket* sock,
+                           struct efhw_page_map* page_map, void* kern_mem_base,
                            int capacity, int desc_size, int sockopt, long pgoff,
                            const struct xdp_ring_offset* xdp_offset,
-                           ef_vi_xdp_offset* offset, ef_vi_xdp_ring* ring)
+                           struct efhw_af_xdp_offsets_ring* kern_offset,
+                           struct efhw_af_xdp_offsets_ring* user_offset)
 {
   int rc;
-  unsigned long map_size, addr, pfn, pages, offset_base;
+  unsigned long map_size, addr, pfn, pages;
+  int64_t user_base, kern_base;
   struct vm_area_struct* vma;
   void* ring_base;
 
-  offset_base = page_map->n_pages << PAGE_SHIFT;
+  user_base = page_map->n_pages << PAGE_SHIFT;
 
   rc = kernel_setsockopt(sock, SOL_XDP, sockopt, (char*)&capacity, sizeof(int));
   if( rc < 0 )
@@ -381,21 +387,23 @@ static int xdp_create_ring(struct socket* sock, struct efhw_page_map* page_map,
   if( rc < 0 )
     return rc;
 
-  ring->producer = ring_base + xdp_offset->producer;
-  ring->consumer = ring_base + xdp_offset->consumer;
-  ring->desc     = ring_base + xdp_offset->desc;
+  kern_base = ring_base - kern_mem_base;
+  kern_offset->producer = kern_base + xdp_offset->producer;
+  kern_offset->consumer = kern_base + xdp_offset->consumer;
+  kern_offset->desc     = kern_base + xdp_offset->desc;
 
-  offset->producer = offset_base + xdp_offset->producer;
-  offset->consumer = offset_base + xdp_offset->consumer;
-  offset->desc     = offset_base + xdp_offset->desc;
+  user_offset->producer = user_base + xdp_offset->producer;
+  user_offset->consumer = user_base + xdp_offset->consumer;
+  user_offset->desc     = user_base + xdp_offset->desc;
 
   return 0;
 }
 
-static int xdp_create_rings(struct socket* sock, struct efhw_page_map* page_map,
+static int xdp_create_rings(struct socket* sock,
+                            struct efhw_page_map* page_map, void* kern_mem_base,
                             long rxq_capacity, long txq_capacity,
-                            struct ef_vi_xdp_offsets* offsets,
-                            struct ef_vi_xdp_rings* rings)
+                            struct efhw_af_xdp_offsets_rings* kern_offsets,
+                            struct efhw_af_xdp_offsets_rings* user_offsets)
 {
   int rc, optlen;
   struct xdp_mmap_offsets mmap_offsets;
@@ -406,31 +414,34 @@ static int xdp_create_rings(struct socket* sock, struct efhw_page_map* page_map,
   if( rc < 0 )
     return rc;
 
-  rc = xdp_create_ring(sock, page_map, rxq_capacity, sizeof(struct xdp_desc),
+  rc = xdp_create_ring(sock, page_map, kern_mem_base,
+                       rxq_capacity, sizeof(struct xdp_desc),
                        XDP_RX_RING, XDP_PGOFF_RX_RING,
-                       &mmap_offsets.rx, &offsets->rx, &rings->rx);
+                       &mmap_offsets.rx, &kern_offsets->rx, &user_offsets->rx);
   if( rc < 0 )
     return rc;
 
-  rc = xdp_create_ring(sock, page_map, txq_capacity, sizeof(struct xdp_desc),
+  rc = xdp_create_ring(sock, page_map, kern_mem_base,
+                       txq_capacity, sizeof(struct xdp_desc),
                        XDP_TX_RING, XDP_PGOFF_TX_RING,
-                       &mmap_offsets.tx, &offsets->tx, &rings->tx);
+                       &mmap_offsets.tx, &kern_offsets->tx, &user_offsets->tx);
   if( rc < 0 )
     return rc;
 
-  rc = xdp_create_ring(sock, page_map, rxq_capacity, sizeof(uint64_t),
+  rc = xdp_create_ring(sock, page_map, kern_mem_base,
+                       rxq_capacity, sizeof(uint64_t),
                        XDP_UMEM_FILL_RING, XDP_UMEM_PGOFF_FILL_RING,
-                       &mmap_offsets.fr, &offsets->fr, &rings->fr);
+                       &mmap_offsets.fr, &kern_offsets->fr, &user_offsets->fr);
   if( rc < 0 )
     return rc;
 
-  rc = xdp_create_ring(sock, page_map, txq_capacity, sizeof(uint64_t),
+  rc = xdp_create_ring(sock, page_map, kern_mem_base,
+                       txq_capacity, sizeof(uint64_t),
                        XDP_UMEM_COMPLETION_RING, XDP_UMEM_PGOFF_COMPLETION_RING,
-                       &mmap_offsets.cr, &offsets->cr, &rings->cr);
+                       &mmap_offsets.cr, &kern_offsets->cr, &user_offsets->cr);
   if( rc < 0 )
     return rc;
 
-  offsets->total = efhw_page_map_bytes(page_map);
   return 0;
 }
 
@@ -438,6 +449,7 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 {
   xdp_map_delete_elem(nic->af_xdp->map, vi_stack_id(nic, vi));
   kfree(vi->umem.addrs);
+  efhw_page_free(&vi->user_offsets_page);
   fput(vi->sock);
   memset(vi, 0, sizeof(*vi));
 }
@@ -450,7 +462,7 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
  *---------------------------------------------------------------------------*/
 int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
                                  long buffers, int buffer_size, int headroom,
-                                 struct socket** sock_out)
+                                 struct socket** sock_out, void** mem_out)
 {
 #ifdef AF_XDP
   int rc;
@@ -499,6 +511,7 @@ int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
   vi->umem.addrs = umem_addrs;
 
   *sock_out = sock;
+  *mem_out = &vi->kernel_offsets;
   return 0;
 
 fail:
@@ -510,14 +523,13 @@ fail:
 }
 
 int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
-                                struct efhw_page_map* page_map,
-                                struct ef_vi_xdp_offsets* offsets,
-                                struct ef_vi_xdp_rings* rings)
+                                struct efhw_page_map* page_map)
 {
 #ifdef AF_XDP
   int rc, fd;
   struct efhw_af_xdp_vi* vi;
   struct socket* sock;
+  struct efhw_af_xdp_offsets* user_offsets;
 
   vi = vi_by_stack(nic, stack_id);
   if( vi == NULL )
@@ -529,6 +541,15 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
     return -EPROTO;
   }
 
+  rc = efhw_page_alloc_zeroed(&vi->user_offsets_page);
+  if( rc < 0 )
+    return rc;
+  user_offsets = (void*)efhw_page_ptr(&vi->user_offsets_page);
+
+  rc = efhw_page_map_add_page(page_map, &vi->user_offsets_page);
+  if( rc < 0 )
+    return rc;
+
   sock = sock_from_file(vi->sock, &rc);
   if( sock == NULL )
     return rc;
@@ -537,8 +558,9 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
   if( rc < 0 )
     return rc;
 
-  rc = xdp_create_rings(sock, page_map, vi->rxq_capacity, vi->txq_capacity,
-                        offsets, rings);
+  rc = xdp_create_rings(sock, page_map, &vi->kernel_offsets,
+                        vi->rxq_capacity, vi->txq_capacity,
+                        &vi->kernel_offsets.rings, &user_offsets->rings);
   if( rc < 0 )
     return rc;
 
@@ -555,6 +577,7 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
   if( rc < 0 )
     xdp_map_delete_elem(nic->af_xdp->map, stack_id);
 
+  user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
   return 0;
 #else
   return -EPROTONOSUPPORT;

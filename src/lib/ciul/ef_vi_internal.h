@@ -227,6 +227,7 @@ extern void ef100_ef_eventq_timer_clear(ef_vi*);
 extern void ef100_ef_eventq_timer_zero(ef_vi*);
 
 extern void efxdp_vi_init(ef_vi*) EF_VI_HF;
+extern long efxdp_vi_mmap_bytes(ef_vi*);
 
 extern int ef_pd_cluster_free(ef_pd*, ef_driver_handle);
 

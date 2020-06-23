@@ -279,29 +279,20 @@ void ef_vi_init_txq(struct ef_vi* vi, int ring_size, void* descriptors,
 static char* ef_vi_xdp_init_qs(struct ef_vi* vi, char* q_mem, uint32_t* ids,
                                int rxq_size, int rx_prefix_len, int txq_size)
 {
-  struct ef_vi_xdp_offsets* offsets = &vi->ep_state->xdp;
-
-  ef_vi_init_evq(vi, 0, NULL);
+  /* Fake up a single-entry event queue so that ef_eventq_has_event() will
+   * return true. The queue memory begins with the size of the memory region,
+   * and is suitably aligned, so if we pretend there's an event there, it
+   * will look like it might be valid.
+   *
+   * This means that the function is safe to use for an AF_XDP VI, without
+   * impacting performance of standard VIs. We may want to make this work
+   * properly in order to improve AF_XDP performance.
+   */
+  ef_vi_init_evq(vi, 1, q_mem);
   ef_vi_init_rxq(vi, rxq_size, NULL, ids, rx_prefix_len);
   ef_vi_init_txq(vi, txq_size, NULL, ids + rxq_size);
 
-  vi->xdp_rings.rx.producer = (void*)(q_mem + offsets->rx.producer);
-  vi->xdp_rings.rx.consumer = (void*)(q_mem + offsets->rx.consumer);
-  vi->xdp_rings.rx.desc     = (void*)(q_mem + offsets->rx.desc);
-
-  vi->xdp_rings.tx.producer = (void*)(q_mem + offsets->tx.producer);
-  vi->xdp_rings.tx.consumer = (void*)(q_mem + offsets->tx.consumer);
-  vi->xdp_rings.tx.desc     = (void*)(q_mem + offsets->tx.desc);
-
-  vi->xdp_rings.fr.producer = (void*)(q_mem + offsets->fr.producer);
-  vi->xdp_rings.fr.consumer = (void*)(q_mem + offsets->fr.consumer);
-  vi->xdp_rings.fr.desc     = (void*)(q_mem + offsets->fr.desc);
-
-  vi->xdp_rings.cr.producer = (void*)(q_mem + offsets->cr.producer);
-  vi->xdp_rings.cr.consumer = (void*)(q_mem + offsets->cr.consumer);
-  vi->xdp_rings.cr.desc     = (void*)(q_mem + offsets->cr.desc);
-
-  return q_mem + offsets->total;
+  return q_mem + efxdp_vi_mmap_bytes(vi);
 }
 
 
@@ -342,24 +333,8 @@ char* ef_vi_init_qs(struct ef_vi* vi, char* q_mem, uint32_t* ids,
 void ef_vi_init_evq(struct ef_vi* vi, int ring_size, void* event_ring)
 {
   EF_VI_BUG_ON(vi->inited & EF_VI_INITED_EVQ);
-  /* TODO AF_XDP */
-  /* Fake up a single-entry event queue so that ef_eventq_has_event() will
-   * return true. The state structure begins with the zero-valued evq_ptr,
-   * and is suitably aligned, so if we pretend there's an event there, it
-   * will look like it might be valid.
-   *
-   * This means that the function is safe to use for an AF_XDP VI, without
-   * impacting performance of standard VIs. We may want to make this work
-   * properly in order to improve AF_XDP performance.
-   */
-  if( vi->nic_type.arch == EF_VI_ARCH_AF_XDP ) {
-    vi->evq_mask = 0;
-    vi->evq_base = (char*)vi->ep_state;
-  }
-  else {
-    vi->evq_mask = ring_size * 8 - 1;
-    vi->evq_base = event_ring;
-  }
+  vi->evq_mask = ring_size * 8 - 1;
+  vi->evq_base = event_ring;
   vi->inited |= EF_VI_INITED_EVQ;
 }
 

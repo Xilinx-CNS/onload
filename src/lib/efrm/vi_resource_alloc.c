@@ -234,7 +234,8 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 			vi_attr->xdp_buffers,
 			vi_attr->xdp_buffer_size,
 			vi_attr->xdp_headroom,
-			&virs->af_xdp_sock);
+			&virs->af_xdp_sock,
+			&virs->af_xdp_mem);
 	}
 
 	efrm_nic = efrm_nic(efhw_nic);
@@ -1303,9 +1304,7 @@ efrm_vi_resource_deferred(struct efrm_vi *virs, ef_vi *vi,
 		/* TODO AF_XDP is this the right choice of stack identifier? */
 		int stack_id = efrm_pd_stack_id_get(virs->pd);
 
-		rc = efhw_nic_bodge_af_xdp_ready(nic, stack_id, &virs->mem_mmap,
-		                                 &vi->ep_state->xdp,
-		                                 &vi->xdp_rings);
+		rc = efhw_nic_bodge_af_xdp_ready(nic, stack_id, &virs->mem_mmap);
 		if (rc < 0)
 			return rc;
 	}

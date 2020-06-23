@@ -17,6 +17,7 @@
 #ifdef HAVE_AF_XDP
 
 #include <linux/if_xdp.h>
+#include <ci/efhw/af_xdp_types.h>
 #include "logging.h"
 
 /* Currently, AF_XDP requires a system call to start transmitting.
@@ -40,12 +41,32 @@ static void efxdp_tx_kick(ef_vi* vi)
   }
 }
 
+/* Access the AF_XDP rings, using the offsets provided in the mapped memory.
+ * The (fake) event queue pointer must be initialised to point to the start
+ * of this memory in order to access the offsets.
+ */
+static struct efhw_af_xdp_offsets* xdp_offsets(ef_vi* vi)
+{
+  return (struct efhw_af_xdp_offsets*)vi->evq_base;
+}
+
+#define RING_THING(vi, ring, thing) \
+  ((void*)(vi->evq_base + xdp_offsets(vi)->rings.ring.thing))
+
+#define RING_PRODUCER(vi, ring) \
+  ((volatile uint32_t*)RING_THING(vi, ring, producer))
+
+#define RING_CONSUMER(vi, ring) \
+  ((volatile uint32_t*)RING_THING(vi, ring, consumer))
+
+#define RING_DESC(vi, ring) RING_THING(vi, ring, desc)
+
 static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
                                       int iov_len, ef_request_id dma_id)
 {
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
-  struct xdp_desc* dq = vi->xdp_rings.tx.desc;
+  struct xdp_desc* dq = RING_DESC(vi, tx);
   int i;
 
   if( iov_len != 1 )
@@ -64,7 +85,7 @@ static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
 
 static void efxdp_ef_vi_transmit_push(ef_vi* vi)
 {
-  *vi->xdp_rings.tx.producer = vi->ep_state->txq.added;
+  *RING_PRODUCER(vi, tx) = vi->ep_state->txq.added;
   efxdp_tx_kick(vi);
 }
 
@@ -160,7 +181,7 @@ static int efxdp_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
 {
   ef_vi_rxq* q = &vi->vi_rxq;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  uint64_t* dq = vi->xdp_rings.fr.desc;
+  uint64_t* dq = RING_DESC(vi, fr);
   int i;
 
   if( qs->added - qs->removed >= q->mask )
@@ -174,7 +195,7 @@ static int efxdp_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
 static void efxdp_ef_vi_receive_push(ef_vi* vi)
 {
   wmb();
-  *vi->xdp_rings.fr.producer = vi->ep_state->rxq.added;
+  *RING_PRODUCER(vi, fr) = vi->ep_state->rxq.added;
 }
 
 static void efxdp_ef_eventq_prime(ef_vi* vi)
@@ -191,14 +212,13 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 
   /* Check rx ring, which won't exist on tx-only interfaces */
   if( n < evs_len && ef_vi_receive_capacity(vi) != 0 ) {
-    ef_vi_xdp_ring* ring = &vi->xdp_rings.rx;
-    uint32_t cons = *ring->consumer;
-    uint32_t prod = *ring->producer;
+    uint32_t cons = *RING_CONSUMER(vi, rx);
+    uint32_t prod = *RING_PRODUCER(vi, rx);
 
     if( cons != prod ) {
       ef_vi_rxq* q = &vi->vi_rxq;
       ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-      struct xdp_desc* dq = ring->desc;
+      struct xdp_desc* dq = RING_DESC(vi, rx);
 
       do {
         unsigned desc_i = qs->removed++ & q->mask;
@@ -231,15 +251,14 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
       /* Full memory barrier needed to ensure the descriptors aren't overwritten
        * by incoming packets before the read accesses above */
       ci_mb();
-      *ring->consumer = cons;
+      *RING_CONSUMER(vi, rx) = cons;
     }
   }
 
   /* Check tx completion ring */
   if( n < evs_len ) {
-    ef_vi_xdp_ring* ring = &vi->xdp_rings.cr;
-    uint32_t cons = *ring->consumer;
-    uint32_t prod = *ring->producer;
+    uint32_t cons = *RING_CONSUMER(vi, cr);
+    uint32_t prod = *RING_PRODUCER(vi, cr);
 
     if( cons != prod ) {
       do {
@@ -258,7 +277,7 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
       /* No memory barrier needed as we aren't accessing the descriptor data.
        * We just recorded the value of 'cons` for later use to access `q->ids`
        * from `ef_vi_transmit_unbundle`. */
-      *ring->consumer = cons;
+      *RING_CONSUMER(vi, cr) = cons;
 
       if( efxdp_tx_need_kick(vi) )
         efxdp_tx_kick(vi);
@@ -317,8 +336,12 @@ void efxdp_vi_init(ef_vi* vi)
   vi->rx_buffer_len = 2048;
   vi->rx_prefix_len = 0;
 }
-#else
-void efxdp_vi_init(ef_vi* vi)
+
+long efxdp_vi_mmap_bytes(ef_vi* vi)
 {
+  return xdp_offsets(vi)->mmap_bytes;
 }
+#else
+void efxdp_vi_init(ef_vi* vi) {}
+long efxdp_vi_mmap_bytes(ef_vi* vi) { return 0; }
 #endif

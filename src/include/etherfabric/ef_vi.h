@@ -650,75 +650,6 @@ typedef struct {
   uint32_t*        ids;
 } ef_vi_rxq;
 
-/*! \brief Memory-mapped AF_XDP descriptor ring
-**
-** A ring transfers ownership of UMEM buffers between kernel and user space.
-** It consists of a memory-mapped region containing an array of descriptors
-** (of different types for different rings), and indexes used by the producer
-** and consumer to indicate which have been written and read.
-**
-** Each index is written by one side and read by the other. They are declared
-** volatile to make sure there are no unexpected accesses, and we assume
-** accesses are atomic. Further barriers or synchronisation are sometimes
-** needed, for example to ensure updates to the descriptors occur before
-** updating the producer index to expose the new values.
-**
-** Users should not access this structure.
-*/
-typedef struct {
-  /** Pointer to the producer's index (shared with kernel) */
-  volatile uint32_t* producer;
-  /** Pointer to the consumer's index (shared with kernel) */
-  volatile uint32_t* consumer;
-  /** Base of the descriptor array */
-  void*  desc;
-} ef_vi_xdp_ring;
-
-/*! \brief Collection of AF_XDP descriptor rings
-**
-** Users should not access this structure.
-*/
-typedef struct ef_vi_xdp_rings {
-  /** Receive ring */
-  ef_vi_xdp_ring rx;
-  /** Transmit ring */
-  ef_vi_xdp_ring tx;
-  /** Fill ring */
-  ef_vi_xdp_ring fr;
-  /** Completion ring */
-  ef_vi_xdp_ring cr;
-} ef_vi_xdp_rings;
-
-/*! \brief Offsets of elements of a memory-mapped AF_XDP ring
-**
-** Users should not access this structure.
-*/
-typedef struct {
-  /** Offset of the producer's index */
-  uint64_t producer;
-  /** Offset of the consumer's index */
-  uint64_t consumer;
-  /** Offset of the descriptor array */
-  uint64_t desc;
-} ef_vi_xdp_offset;
-
-/*! \brief Collection of AF_XDP descriptor ring offsets
-**
-** Users should not access this structure.
-*/
-typedef struct ef_vi_xdp_offsets {
-  /** Receive ring */
-  ef_vi_xdp_offset rx;
-  /** Transmit ring */
-  ef_vi_xdp_offset tx;
-  /** Fill ring */
-  ef_vi_xdp_offset fr;
-  /** Completion ring */
-  ef_vi_xdp_offset cr;
-  /** Total number of bytes for all four rings */
-  uint64_t total;
-} ef_vi_xdp_offsets;
-
 /*! \brief State of a virtual interface
 **
 ** Users should not access this structure.
@@ -730,8 +661,6 @@ typedef struct {
   ef_vi_txq_state txq;
   /** RX descriptor ring state */
   ef_vi_rxq_state rxq;
-  /** AF_XDP ring memory layout */
-  ef_vi_xdp_offsets xdp;
   /* Followed by request id fifos. */
 } ef_vi_state;
 
@@ -890,8 +819,6 @@ typedef struct ef_vi {
   /** Callback to invoke AF_XDP send operations */
   int                         (*xdp_kick)(struct ef_vi*);
   union {int64_t n; void* p;}   xdp_kick_context;
-  /** AF_XDP rings */
-  ef_vi_xdp_rings               xdp_rings;
 
   /*! \brief Driver-dependent operations. */
   /* Doxygen comment above is the detailed description of ef_vi::ops */
