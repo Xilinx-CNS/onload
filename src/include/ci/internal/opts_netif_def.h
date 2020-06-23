@@ -1712,6 +1712,11 @@ CI_CFG_OPT("EF_TCP_OFFLOAD", tcp_offload_plugin, ci_uint32,
 "        the NIC. The Onloaded application must use the zero-copy receive"
 "        extension APIs.\n",
            , , CITP_TCP_OFFLOAD_OFF, 0, 2, oneof:off;tcp;ceph)
+
+CI_CFG_OPT("EF_CEPH_DATA_BUF_BYTES", ceph_data_buf_bytes, ci_uint32,
+"Number of bytes of on-NIC RAM to reserve for each TCP connection, for "
+"offloaded zero-copy data. Requires EF_TCP_OFFLOAD+ceph.\n",
+           , , 16*1024*1024, 4*1024, 1024*1024*1024, count)
 #endif
 
 #ifdef CI_CFG_OPTGROUP

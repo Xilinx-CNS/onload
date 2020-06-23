@@ -1391,6 +1391,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   static const char* const tcp_offload_opts[] = { "off", "tcp", "ceph", 0 };
   opts->tcp_offload_plugin = parse_enum(opts, "EF_TCP_OFFLOAD",
                                         tcp_offload_opts, "off");
+
+  if( (s = getenv("EF_CEPH_DATA_BUF_BYTES")) )
+    opts->ceph_data_buf_bytes = atoi(s);
 #endif
 }
 
@@ -1936,6 +1939,23 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
   }
 #endif
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  /****************************************************************************
+   * Create the plugin CSR mapping.
+   */
+  if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_CEPH ) {
+    rc = oo_resource_mmap(ci_netif_get_driver_handle(ni),
+                          OO_MMAP_TYPE_NETIF,
+                          CI_NETIF_MMAP_ID_PLUGIN, CI_PAGE_SIZE,
+                          OO_MMAP_FLAG_POPULATE, &p);
+    if( rc < 0 ) {
+      LOG_NV(ci_log("%s: oo_resource_mmap plugin %d", __FUNCTION__, rc));
+      goto fail2;
+    }
+    ni->plugin_ptr = (uint8_t*) p;
+  }
+#endif
+
   /****************************************************************************
    * Create the I/O buffer mapping.
    */
@@ -2044,6 +2064,9 @@ static int netif_tcp_helper_build(ci_netif* ni)
 #if CI_CFG_CTPIO
   unsigned ctpio_io_offset = 0;
 #endif
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  unsigned plugin_io_offset = 0;
+#endif
 
   /****************************************************************************
    * Do other mmaps.
@@ -2147,6 +2170,12 @@ static int netif_tcp_helper_build(ci_netif* ni)
 #endif
 #ifdef OO_HAS_POLL_IN_KERNEL
     ni->nic_hw[nic_i].poll_in_kernel = NI_OPTS(ni).poll_in_kernel;
+#endif
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    if( ns->nic[nic_i].oo_vi_flags & OO_VI_FLAGS_PLUGIN_IO_EN ) {
+      ni->nic_hw[nic_i].plugin_io = ni->plugin_ptr + plugin_io_offset;
+      plugin_io_offset += CI_PAGE_SIZE;
+    }
 #endif
   }
   ni->future_intf_mask = ci_netif_build_future_intf_mask(ni);
@@ -2908,12 +2937,20 @@ static int __ci_netif_init_fill_rx_rings(ci_netif* ni)
   int intf_i, rxq_limit = ni->state->rxq_limit;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     int vi_i;
+    int n_posted = 0;
     for( vi_i = 0; vi_i < ci_netif_num_vis(ni); ++vi_i ) {
       ef_vi* vi = &ni->nic_hw[intf_i].vis[vi_i];
-      ci_netif_rx_post(ni, intf_i, vi);
+      n_posted = ci_netif_rx_post(ni, intf_i, vi);
       if( ef_vi_receive_fill_level(vi) < rxq_limit )
         return -ENOMEM;
     }
+    (void)n_posted;
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    /* See ci_netif_rx_post_all_batch() for the description of what's going on
+     * here */
+    ci_assert_equal(ci_netif_num_vis(ni), 3);
+    ci_netif_ring_ceph_doorbell(ni, intf_i, n_posted);
+#endif
   }
   return 0;
 }

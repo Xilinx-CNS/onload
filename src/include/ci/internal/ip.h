@@ -511,7 +511,7 @@ ci_inline void ci_netif_send(ci_netif* ni, ci_ip_pkt_fmt* pkt)
   __ci_netif_send(ni, pkt);
 }
 extern bool ci_netif_send_immediate(ci_netif* netif, ci_ip_pkt_fmt* pkt) CI_HF;
-extern void ci_netif_rx_post(ci_netif* netif, int nic_index, ef_vi* vi) CI_HF;
+extern int ci_netif_rx_post(ci_netif* netif, int nic_index, ef_vi* vi) CI_HF;
 #ifdef __KERNEL__
 extern int  ci_netif_set_rxq_limit(ci_netif*) CI_HF;
 extern int  ci_netif_init_fill_rx_rings(ci_netif*) CI_HF;
@@ -2338,15 +2338,35 @@ ci_inline int oo_stack_intf_max(ci_netif* ni) {
 }
 
 
+ci_inline void ci_netif_ring_ceph_doorbell(ci_netif* netif, int nic_index,
+                                           int n)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  if( NI_OPTS(netif).tcp_offload_plugin == CITP_TCP_OFFLOAD_CEPH && n != 0 )
+    *(volatile uint32_t*)netif->nic_hw[nic_index].plugin_io = n;
+#endif
+}
+
+
 ci_inline void ci_netif_rx_post_all_batch(ci_netif* netif, int nic_index)
 {
   int i;
   int num_vis = ci_netif_num_vis(netif);
+  int n_posted = 0;
   for( i = 0; i < num_vis; ++i ) {
     ef_vi* vi = &netif->nic_hw[nic_index].vis[i];
+    n_posted = 0;
     if( ci_netif_rx_vi_space(netif, vi) >= CI_CFG_RX_DESC_BATCH )
-      ci_netif_rx_post(netif, nic_index, vi);
+      n_posted = ci_netif_rx_post(netif, nic_index, vi);
   }
+  (void)n_posted;
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  /* The VI owning the doorbell is always the last VI, so the loop above has
+   * the effect of ignoring n_posted for all the others and only passing the
+   * last one here. */
+  ci_assert_equal(num_vis, 3);
+  ci_netif_ring_ceph_doorbell(netif, nic_index, n_posted);
+#endif
 }
 
 

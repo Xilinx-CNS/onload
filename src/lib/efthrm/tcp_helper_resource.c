@@ -31,6 +31,7 @@
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/efrm/pd.h>
 #include <ci/efrm/vi_set.h>
+#include <ci/efrm/slice_ext.h>
 #include <ci/driver/efab/hardware.h>
 #include <onload/oof_onload.h>
 #include <onload/oof_interface.h>
@@ -44,6 +45,7 @@
 #include <ci/internal/more_stats.h>
 #include "tcp_helper_resource.h"
 #include "tcp_helper_stats_dump.h"
+#include <onload/tcp-ceph.h>
 
 #ifdef NDEBUG
 # define DEBUG_STR  ""
@@ -2405,6 +2407,119 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   return rc;
 }
 
+
+static int
+create_plugin_app(tcp_helper_resource_t* trs)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_netif* ni = &trs->netif;
+  bool got_nic = false;
+  int intf_i;
+
+  ni->state->plugin_mmap_bytes = 0;
+  if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_CEPH )
+    return 0;
+
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    struct efrm_pd* pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
+    struct efrm_resource* rs = efrm_pd_to_resource(pd);
+    struct xsn_ceph_create_app create;
+    struct ef_vi* tcp_vi;
+    struct ef_vi* ceph_vi;
+    ci_uint32 mch;
+    struct efhw_nic* nic;
+    size_t bar_off;
+    ci_uint32 app_id;
+    struct efrm_ext_svc_meta meta;
+    int rc;
+
+    ni->nic_hw[intf_i].plugin_handle = INVALID_PLUGIN_HANDLE;
+    nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
+    if( nic->devtype.arch != EFHW_ARCH_EF100 )
+      continue;
+    rc = efrm_ext_alloc(rs, XSN_TCP_CEPH_PLUGIN, &mch);
+    if( rc ) {
+      /* We don't immediately fail here because we don't want to require
+       * that every EF100 in the system be provisioned identically. We only
+       * fail if no NICs are capable */
+      continue;
+    }
+
+    rc = efrm_ext_get_meta_global(rs, mch, &meta);
+    if( rc ) {
+      OO_DEBUG_ERR(ci_log("%s: Failed to get plugin metadata (%d, %d)",
+                          __FUNCTION__, intf_i, rc));
+      goto fail_plugin_1;
+    }
+
+    tcp_vi = &ni->nic_hw[intf_i].vis[CI_Q_ID_TCP_RECYCLER];
+    ceph_vi = &ni->nic_hw[intf_i].vis[CI_Q_ID_TCP_APP];
+    create = (struct xsn_ceph_create_app){
+      .tcp.in_vi_id = cpu_to_le16(ef_vi_instance(tcp_vi)),
+      .in_meta_vi_id = cpu_to_le16(ef_vi_instance(ceph_vi)),
+      .in_meta_buflen = cpu_to_le16(ef_vi_receive_buffer_len(ceph_vi) -
+                                    ef_vi_receive_prefix_len(ceph_vi)),
+    };
+    rc = efrm_ext_msg(rs, mch, XSN_CEPH_CREATE_APP, &create, sizeof(create));
+    if( rc ) {
+      OO_DEBUG_ERR(ci_log("%s: CEPH_CREATE_APP failed (%d, %d)",
+                          __FUNCTION__, intf_i, rc));
+      goto fail_plugin_1;
+    }
+    app_id = le32_to_cpu(create.tcp.out_app_id);
+
+    bar_off = ef10_tx_dma_page_base(nic->vi_stride,
+                          trs->nic[intf_i].thn_vi_rs[CI_Q_ID_TCP_APP]->
+                                  rs.rs_instance);
+    bar_off += meta.mapped_csr_offset;
+    ni->nic_hw[intf_i].plugin_io = ioremap_nocache(nic->ctr_ap_dma_addr +
+                                                    (bar_off & PAGE_MASK),
+                                                    meta.mapped_csr_size);
+    if( ! ni->nic_hw[intf_i].plugin_io ) {
+      OO_DEBUG_ERR(ci_log("%s: Ceph app failed to map VI window (%d)",
+                          __FUNCTION__, intf_i));
+      efrm_ext_destroy_rsrc(rs, mch, XSN_CEPH_RSRC_CLASS_APP, app_id);
+     fail_plugin_1:
+      efrm_ext_free(rs, mch);
+      continue;
+    }
+    ni->nic_hw[intf_i].plugin_handle = mch;
+    ni->nic_hw[intf_i].plugin_app_id = app_id;
+    trs->nic[intf_i].thn_plugin_mapped_csr_offset = meta.mapped_csr_offset;
+    ni->state->plugin_mmap_bytes += meta.mapped_csr_size;
+    ni->state->nic[intf_i].oo_vi_flags |= OO_VI_FLAGS_PLUGIN_IO_EN;
+    got_nic = true;
+  }
+  if( ! got_nic ) {
+    OO_DEBUG_ERR(ci_log("%s: no EF100 NICs have the requested plugin",
+                        __FUNCTION__));
+    return -ENOTSUPP;
+  }
+#endif
+  return 0;
+}
+
+
+static void
+destroy_plugin_app(tcp_helper_resource_t* trs)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_netif* ni = &trs->netif;
+  int intf_i;
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
+    struct efrm_resource* rs = efrm_pd_to_resource(pd);
+    ci_uint32 mch = ni->nic_hw[intf_i].plugin_handle;
+    if( mch == INVALID_PLUGIN_HANDLE )
+      continue;
+    efrm_ext_destroy_rsrc(rs, mch, XSN_CEPH_RSRC_CLASS_APP,
+                          ni->nic_hw[intf_i].plugin_app_id);
+    efrm_ext_free(rs, mch);
+  }
+#endif
+}
+
+
 static int
 allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
                             tcp_helper_cluster_t* thc,
@@ -2461,6 +2576,10 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
       LOG_NC(ci_log("VI[%d]=%d", i,
                     ef_vi_instance(&ni->nic_hw[intf_i].vis[i])));
   }
+
+  rc = create_plugin_app(trs);
+  if( rc )
+    goto fail5;
 
   /* This is needed because release_netif_hw_resources() tries to free the ep
   ** table. */
@@ -2529,6 +2648,7 @@ release_netif_hw_resources(tcp_helper_resource_t* trs)
 
   OO_DEBUG_SHM(ci_log("%s:", __func__));
 
+  destroy_plugin_app(trs);
   release_vi(trs);
 
   /* Once all vis are flushed we can release pkt memory */

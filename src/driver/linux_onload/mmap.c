@@ -605,6 +605,38 @@ static int tcp_helper_rm_mmap_ctpio(tcp_helper_resource_t* trs,
 #endif
 
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+static int tcp_helper_rm_mmap_plugin(tcp_helper_resource_t* trs,
+                                     unsigned long bytes,
+                                     struct vm_area_struct* vma)
+{
+  int rc, intf_i;
+  int map_num = 0;
+  unsigned long offset = 0;
+
+  OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
+
+  OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
+    unsigned long n = PAGE_SIZE;
+    if( trs->netif.nic_hw[intf_i].plugin_handle == INVALID_PLUGIN_HANDLE )
+      continue;
+    rc = efab_vi_resource_mmap(trs->nic[intf_i].thn_vi_rs[CI_Q_ID_TCP_APP], &n,
+                    vma, &map_num, &offset,
+                    EFCH_VI_MMAP_PLUGIN_BASE +
+                    trs->nic[intf_i].thn_plugin_mapped_csr_offset / PAGE_SIZE);
+    if( rc < 0 )
+      return rc;
+    ci_assert_equal(n, 0);
+    bytes -= PAGE_SIZE;
+  }
+  ci_assert_equal(bytes, 0);
+
+  return 0;
+}
+#endif
+
+
+
 static int tcp_helper_rm_mmap_buf(tcp_helper_resource_t* trs,
                                   unsigned long bytes,
                                   struct vm_area_struct* vma)
@@ -697,6 +729,11 @@ efab_tcp_helper_rm_mmap(tcp_helper_resource_t* trs, unsigned long bytes,
 #if CI_CFG_CTPIO
     case CI_NETIF_MMAP_ID_CTPIO:
       rc = tcp_helper_rm_mmap_ctpio(trs, bytes, vma);
+      break;
+#endif
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    case CI_NETIF_MMAP_ID_PLUGIN:
+      rc = tcp_helper_rm_mmap_plugin(trs, bytes, vma);
       break;
 #endif
     case CI_NETIF_MMAP_ID_IOBUFS:

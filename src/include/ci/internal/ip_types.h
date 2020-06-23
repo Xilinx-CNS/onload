@@ -48,6 +48,14 @@ typedef struct ci_netif_nic_s {
 #define OO_HAS_POLL_IN_KERNEL
   ci_uint8              poll_in_kernel;
 #endif
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#ifdef __KERNEL__
+#define INVALID_PLUGIN_HANDLE              (~0u)
+  ci_uint32                  plugin_handle;
+  ci_uint32                  plugin_app_id;
+#endif
+  volatile void*             plugin_io;
+#endif
 } ci_netif_nic_t;
 
 
@@ -125,6 +133,9 @@ struct ci_netif_s {
 #if CI_CFG_CTPIO
   uint8_t*             ctpio_ptr;
   ci_uint32            ctpio_bytes_mapped;
+#endif
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  uint8_t*             plugin_ptr;
 #endif
   char*                buf_ptr;
 #endif

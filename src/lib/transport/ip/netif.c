@@ -695,7 +695,7 @@ static int __ci_netif_rx_post(ci_netif* ni, ef_vi* vi, int intf_i,
 #define low_thresh(ni)       ((ni)->state->rxq_limit / 2)
 
 
-void ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
+int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
 {
   /* TODO: When under packet buffer pressure, post fewer on the receive
   ** queue.  As an easy first stab could have a threshold for the number of
@@ -706,7 +706,7 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
   ** reduce resource consumption for apps that have few sockets.
   */
   ci_ip_pkt_fmt* pkt;
-  int max_n_to_post, rx_allowed, n_to_post;
+  int max_n_to_post, rx_allowed, n_to_post, n_posted = 0;
   int bufset_id = NI_PKT_SET(netif);
   int ask_for_more_packets = 0;
 
@@ -727,9 +727,11 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
 
  good_bufset:
   do {
+    int n;
     n_to_post = CI_MIN(max_n_to_post, netif->packets->set[bufset_id].n_free);
-    max_n_to_post -= __ci_netif_rx_post(netif, vi, intf_i,
-                                        bufset_id, n_to_post);
+    n = __ci_netif_rx_post(netif, vi, intf_i, bufset_id, n_to_post);
+    max_n_to_post -= n;
+    n_posted += n;
     ci_assert_ge(max_n_to_post, 0);
 
     if( max_n_to_post < CI_CFG_RX_DESC_BATCH ) {
@@ -738,7 +740,7 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
                                 ask_for_more_packets);
       }
       CHECK_FREEPKTS(netif);
-      return;
+      return n_posted;
     }
 
  find_new_bufset:
@@ -792,7 +794,7 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
   if( ef_vi_receive_fill_level(vi) < CI_CFG_RX_DESC_BATCH )
     ci_netif_mem_pressure_enter_critical(netif, intf_i);
 #endif
-  return;
+  return n_posted;
 
  not_enough_pkts:
   /* The best packet set has less than CI_CFG_RX_DESC_BATCH packets.
@@ -840,6 +842,7 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
   if( ef_vi_receive_fill_level(vi) < CI_CFG_RX_DESC_BATCH )
     ci_netif_mem_pressure_enter_critical(netif, intf_i);
 #endif
+  return n_posted;
 }
 
 

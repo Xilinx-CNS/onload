@@ -1336,6 +1336,9 @@ struct ci_netif_state_s {
    */
   CI_ULCONST ci_uint32   ctpio_mmap_bytes;
 #endif
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  CI_ULCONST ci_uint32   plugin_mmap_bytes;
+#endif
 
   /* Set to true when endpoints are woken. */
   CI_ULCONST ci_int32 poll_did_wake;
