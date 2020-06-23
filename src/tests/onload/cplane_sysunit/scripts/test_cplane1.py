@@ -109,10 +109,12 @@ def bond_set_mode(cpserver, bond_name, bond_mode):
              bond_mode, bond_name))
 
 
-def cpsystem(cpserver, cmd):
+def cpsystem(cpserver, cmd, ignore_status=False):
     cmd = ' '.join([cpserver.getCmdPrefix(),cmd])
     print >> sys.stderr, datetime.now().strftime('%H:%M:%S.%f'), cmd
-    return os.system(cmd)
+    status = os.system(cmd)
+    if not ignore_status and status != 0:
+        raise Exception('Execution of %s failed with code %d'%(cmd, status))
 
 
 def cpresolve(cp, v, k, attempts=10, af=None):
@@ -167,8 +169,8 @@ def cpdecorate(tag=None, parent_tag=None):
                 if tag and d:
                     # in case class restarted cpserver get new object
                     cpserver = d[tag].cpserver
-                cpsystem(cpserver, 'ip -d addr show')
-                cpsystem(cpserver, 'ip -d route show table all')
+                cpsystem(cpserver, 'ip -d addr show', ignore_status=True)
+                cpsystem(cpserver, 'ip -d route show table all', ignore_status=True)
                 cpserver.mibdump('all')
                 raise
             finally:
