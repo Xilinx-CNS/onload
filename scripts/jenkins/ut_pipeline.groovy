@@ -59,8 +59,7 @@ void doORMPipeline(List gcovr_options)
 }
 
 void doDeveloperBuild(String build_profile=null) {
-  // TODO: ON-12091 Fix 32 bit builds before merging into master
-  def components = ['kernel_driver', 'userspace']
+  def components = ['kernel_driver', 'userspace', 'userspace_32']
   def debugnesses = ['DEBUG', 'NDEBUG']
 
   def stage_name = 'Developer Build'
