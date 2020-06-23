@@ -163,11 +163,9 @@ docopy scripts                check_header_presence
 docopy scripts/sh             fns mmake-fns mmakebuildtree_gen disttag
 docopy .                      mk
 
-docopy scripts                sfcaffinity sfcaffinity_config
+docopy scripts                sfcaffinity_config
 docopy scripts                sfcaffinity.py sfcmask.py sfcirqaffinity
 docopy src/driver             linux_affinity
-docopy src/tools              sfcaffinity
-docopy src/lib                sfcaffinity
 
 docopy src/tests              ef_vi rtt trade_sim
 if $testciul; then

@@ -10,7 +10,7 @@ ifneq ($(PLATFORM),gnu)
 SUBDIRS		+= cplane
 endif
 
-SUBDIRS		+= onload_helper ip sfcaffinity \
+SUBDIRS		+= onload_helper ip \
 		   solar_clusterd onload_remote_monitor \
 		   onload_mibdump
 

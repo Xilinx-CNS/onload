@@ -6,7 +6,6 @@
  * those that specified cpu rather than rxq of course).
  */
 
-#include <ci/affinity/ul_drv_intf.h>
 #include <ci/affinity/k_drv_intf.h>
 #include <linux/module.h>
 #include <linux/fs.h>
@@ -29,45 +28,12 @@ MODULE_AUTHOR("Solarflare Communications");
 MODULE_LICENSE("GPL");
 
 
-#ifndef NIPQUAD
-# define NIPQUAD(addr) \
-    ((unsigned char *)&addr)[0], \
-    ((unsigned char *)&addr)[1], \
-    ((unsigned char *)&addr)[2], \
-    ((unsigned char *)&addr)[3]
-#endif
-#ifndef NIPQUAD_FMT
-# define NIPQUAD_FMT "%u.%u.%u.%u"
-#endif
-#define NIPP_FMT        NIPQUAD_FMT":%d"
-#define NIPP(ip,port)   NIPQUAD(ip), ntohs(port)
-
-
 struct aff_interface {
 	struct list_head all_interfaces_link;
-	struct list_head filters;
 	struct efx_dl_device *dl_device;
 	int* cpu_to_q;
 	char proc_name[12];
 	struct proc_dir_entry *proc_dir;
-};
-
-
-struct aff_fd {
-	struct list_head filters;
-};
-
-
-struct aff_filter {
-	struct list_head fd_filters_link;
-	struct list_head intf_filters_link;
-	struct aff_interface *intf;
-	int filter_id;
-	int rq_rxq, rq_cpu;
-	int rxq;
-	int protocol;
-	unsigned daddr, dport;
-	unsigned saddr, sport;
 };
 
 
@@ -131,35 +97,6 @@ static const struct proc_ops aff_proc_fops_cpu2rxq = {
 };
 
 
-static int aff_proc_read_filters(struct seq_file *seq, void *s)
-{
-	struct aff_interface *intf = seq->private;
-	struct aff_filter *f;
-	mutex_lock(&lock);
-	list_for_each_entry(f, &intf->filters, intf_filters_link) {
-		seq_printf(seq, 
-			   "%s "NIPP_FMT" "NIPP_FMT" %d %d %d\n",
-			   f->protocol == IPPROTO_TCP ? "tcp":"udp",
-			   NIPP(f->daddr, f->dport),
-			   NIPP(f->saddr, f->sport),
-			   f->rq_cpu, f->rq_rxq, f->rxq);
-	}
-	mutex_unlock(&lock);
-	return 0;
-}
-static int aff_proc_open_filters(struct inode *inode, struct file *file)
-{
-	return single_open(file, aff_proc_read_filters, PDE_DATA(inode));
-}
-static const struct proc_ops aff_proc_fops_filters = {
-	PROC_OPS_SET_OWNER
-	.proc_open = aff_proc_open_filters,
-	.proc_read = seq_read,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
-};
-
-
 static struct aff_interface *interface_find(const struct net_device* dev)
 {
 	/* Caller must hold [lock]. */
@@ -198,8 +135,6 @@ static void interface_add_proc_entries(struct aff_interface *intf)
 		interface_add_proc_int(intf, "n_rxqs", &zero);
 		interface_add_proc(intf, "cpu2rxq", intf,
 				   &aff_proc_fops_cpu2rxq);
-		interface_add_proc(intf, "filters", intf,
-				   &aff_proc_fops_filters);
 	}
 }
 
@@ -210,7 +145,6 @@ static void interface_remove_proc_entries(struct aff_interface *intf)
 		remove_proc_entry("ifindex", intf->proc_dir);
 		remove_proc_entry("n_rxqs", intf->proc_dir);
 		remove_proc_entry("cpu2rxq", intf->proc_dir);
-		remove_proc_entry("filters", intf->proc_dir);
 		intf->proc_dir = NULL;
 	}
 	remove_proc_entry(intf->proc_name, aff_proc_root);
@@ -235,7 +169,6 @@ static struct aff_interface *interface_up(const struct net_device* dev,
 		intf = new_intf;
 		new_intf = NULL;
 		sprintf(intf->proc_name, "%d", dev->ifindex);
-		INIT_LIST_HEAD(&intf->filters);
 		intf->cpu_to_q = NULL;
 	} else {
 		printk(KERN_NOTICE "[sfcaffinity] interface_up: %d RESURECT\n",
@@ -291,249 +224,6 @@ static int interface_configure(struct net_device* dev,
 	return 0;
 
 fail1:
-	mutex_unlock(&lock);
-	return rc;
-}
-
-
-static int filter_eq(struct aff_filter *f, int protocol,
-		     unsigned daddr, unsigned dport,
-		     unsigned saddr, unsigned sport)
-{
-	return  f->protocol == protocol &&
-		f->daddr == daddr &&
-		f->dport == dport &&
-		f->saddr == saddr &&
-		f->sport == sport;
-}
-
-
-static struct aff_filter *filter_find(struct aff_interface *intf,
-				      int protocol,
-				      unsigned daddr, unsigned dport,
-				      unsigned saddr, unsigned sport)
-{
-	/* Caller must hold [lock]. */
-	struct aff_filter *f;
-	list_for_each_entry(f, &intf->filters, intf_filters_link)
-		if (filter_eq(f, protocol, daddr, dport, saddr, sport))
-			return f;
-	return NULL;
-}
-
-
-static void filter_remove(struct aff_filter *f)
-{
-	/* Caller must hold [lock]. */
-	list_del(&f->fd_filters_link);
-	list_del(&f->intf_filters_link);
-	if (f->intf->dl_device != NULL)
-		efx_dl_filter_remove(f->intf->dl_device, f->filter_id);
-	kfree(f);
-}
-
-
-enum sfc_aff_err insert_fail_reason(int rc)
-{
-	switch (rc) {
-	case EBUSY:
-		return sfc_aff_table_full;
-	case EEXIST:
-		return sfc_aff_filter_exists;
-	case EPERM:
-		return sfc_aff_cannot_replace;
-	default:
-		return sfc_aff_filter_set_fail;
-	}
-}
-
-
-static int filter_add(struct aff_fd *aff, int cpu, int rxq,
-		      struct net_device* dev, int protocol,
-		      unsigned daddr, unsigned dport,
-		      unsigned saddr, unsigned sport,
-		      enum sfc_aff_err *err_out)
-{
-	struct efx_filter_spec spec;
-	struct aff_interface *intf;
-	struct aff_filter *newf;
-	struct aff_filter *f;
-	int filter_type, rc;
-
-	*err_out = sfc_aff_no_error;
-	rc = -EINVAL;
-
-	switch (protocol) {
-	case IPPROTO_TCP:
-		if (saddr)
-			filter_type = EFHW_IP_FILTER_TYPE_TCP_FULL;
-		else
-			filter_type = EFHW_IP_FILTER_TYPE_TCP_WILDCARD;
-		break;
-	case IPPROTO_UDP:
-		if (saddr)
-			filter_type = EFHW_IP_FILTER_TYPE_UDP_FULL;
-		else
-			filter_type = EFHW_IP_FILTER_TYPE_UDP_WILDCARD;
-		break;
-	default:
-		printk("sfc_affinity: bad protocol=%d\n", protocol);
-		*err_out = sfc_aff_bad_protocol;
-		goto fail1;
-	};
-
-	if ((saddr == 0) != (sport == 0)) {
-		printk("sfc_affinity: bad saddr="NIPP_FMT"\n",
-		       NIPP(saddr, sport));
-		*err_out = sfc_aff_bad_saddr;
-		goto fail1;
-	}
-	if (daddr == 0 || dport == 0) {
-		printk("sfc_affinity: bad daddr="NIPP_FMT"\n",
-		       NIPP(daddr, dport));
-		*err_out = sfc_aff_bad_daddr;
-		goto fail1;
-	}
-	if (cpu < 0) {
-		/* Using smp_processor_id() generates false positives
-		 * on preemptable kernels because right after doing
-		 * this the application thread can move to a different
-		 * core.  That is something that the application has
-		 * to deal with with with proper affinitisation.  So
-		 * we use raw_smp_processor_id() to silence the
-		 * warning.
-		 */
-		cpu = raw_smp_processor_id();
-	} else if (cpu >= num_possible_cpus()) {
-		printk("sfc_affinity: bad cpu=%d (0-%d)\n", cpu,
-		       (int)num_possible_cpus() - 1);
-		*err_out = sfc_aff_bad_cpu;
-		goto fail1;
-	}
-
-	newf = kmalloc(sizeof(*newf), GFP_KERNEL);
-	if (newf == NULL) {
-		rc = -ENOMEM;
-		goto fail1;
-	}
-	newf->rq_rxq = rxq;
-	newf->rq_cpu = cpu;
-
-	mutex_lock(&lock);
-
-	rc = -EINVAL;
-	intf = interface_find(dev);
-	if (intf == NULL) {
-		printk(KERN_ERR "[sfc_affinity] %s: ERROR: ifindex=%d not "
-		       "supported\n", __FUNCTION__, dev->ifindex);
-		*err_out = sfc_aff_intf_not_supported;
-		goto fail2;
-	}
-	if (rxq >= 0) {
-		printk(KERN_ERR "[sfc_affinity] %s: ERROR: bad rxq=%d. Must be -1\n",
-		       __FUNCTION__, rxq);
-		*err_out = sfc_aff_bad_rxq;
-		goto fail2;
-	} else {
-		rxq = intf->cpu_to_q[cpu];
-	}
-	if (rxq < 0) {
-		printk(KERN_ERR "[sfc_affinity] %s: ERROR: ifindex=%d not "
-		       "initialised\n", __FUNCTION__, dev->ifindex);
-		*err_out = sfc_aff_intf_not_configured;
-		goto fail2;
-	}
-
-	T(printk(KERN_NOTICE "[sfc_affinity] %s: cpu=%d rxq=%d ifindex=%d "
-		 "protocol=%d local="NIPP_FMT" remote="NIPP_FMT"\n",
-		 __FUNCTION__, cpu, rxq, dev->ifindex,
-		 protocol, NIPP(daddr, dport), NIPP(saddr, sport)));
-
-	f = filter_find(intf, protocol, daddr, dport, saddr, sport);
-	if (f != NULL) {
-		if (f->rxq == rxq) {
-			/* Take ownership of existing filter. */
-			list_del(&f->fd_filters_link);
-			list_add(&f->fd_filters_link, &aff->filters);
-			f->rq_cpu = newf->rq_cpu;
-			f->rq_rxq = newf->rq_rxq;
-			rc = 0;
-			goto fail2;
-		} else {
-			filter_remove(f);
-		}
-	}
-
-	newf->rxq = rxq;
-	newf->protocol = protocol;
-	newf->daddr = daddr;
-	newf->dport = dport;
-	newf->saddr = saddr;
-	newf->sport = sport;
-	newf->intf = intf;
-
-	efx_filter_init_rx(&spec, EFX_FILTER_PRI_MANUAL,
-			   EFX_FILTER_FLAG_RX_SCATTER, rxq);
-	if( saddr != 0 )
-		rc = efx_filter_set_ipv4_full(&spec, protocol, daddr, dport,
-					      saddr, sport);
-	else
-		rc = efx_filter_set_ipv4_local(&spec, protocol, daddr, dport);
-	if (rc != 0) {  /* Not expected to ever fail. */
-		printk("sfc_affinity: ERROR: efx_filter_set failed\n");
-		*err_out = sfc_aff_filter_set_fail;
-		goto fail2;
-	}
-	rc = efx_dl_filter_insert(intf->dl_device, &spec, true);
-	if (rc < 0) {
-		*err_out = insert_fail_reason(rc);
-		printk("sfc_affinity: unable to add filter: %d %s\n", rc,
-		       sfc_aff_err_msg(*err_out));
-		printk("sfc_affinity: ifindex=%d rxq=%d protocol=%d "
-		       "local="NIPP_FMT" remote="NIPP_FMT"\n",
-		       dev->ifindex, rxq, protocol, NIPP(daddr, dport),
-		       NIPP(saddr, sport));
-		goto fail2;
-	}
-	else {
-		newf->filter_id = rc;
-		list_add(&newf->intf_filters_link, &intf->filters);
-		list_add(&newf->fd_filters_link, &aff->filters);
-	}
-
-	mutex_unlock(&lock);
-	return 0;
-
-fail2:
-	mutex_unlock(&lock);
-	kfree(newf);
-fail1:
-	return rc;
-}
-
-
-static int filter_del(struct aff_fd *aff, struct net_device* dev,
-		      int protocol,
-		      unsigned daddr, unsigned dport,
-		      unsigned saddr, unsigned sport,
-		      enum sfc_aff_err *err_out)
-{
-	struct list_head *l;
-	struct aff_filter *f;
-	int rc = -EINVAL;
-	*err_out = sfc_aff_not_found;
-
-	mutex_lock(&lock);
-	for (l = aff->filters.next; l != &aff->filters; ) {
-		f = list_entry(l, struct aff_filter, fd_filters_link);
-		l = l->next;
-		if (filter_eq(f, protocol, daddr, dport, saddr, sport))
-			if (! dev || dev == f->intf->dl_device->priv) {
-				*err_out = sfc_aff_no_error;
-				rc = 0;
-				filter_remove(f);
-			}
-	}
 	mutex_unlock(&lock);
 	return rc;
 }
@@ -622,98 +312,20 @@ static void aff_proc_fini(void)
 }
 
 
-static int sfc_aff_set(struct aff_fd *aff, void __user *user_aff_set)
-{
-	struct sfc_aff_set as;
-	struct net_device* dev;
-	int rc;
-	if (copy_from_user(&as, user_aff_set, sizeof(as)))
-		return -EFAULT;
-	dev = dev_get_in_current_netns(as.ifindex);
-	if (! dev)
-		return -EINVAL;
-	rc = filter_add(aff, as.cpu, as.rxq, dev, as.protocol,
-			as.daddr, as.dport, as.saddr, as.sport, &as.err_out);
-	dev_put(dev);
-	if (rc < 0)
-		if (copy_to_user(user_aff_set, &as, sizeof(as)))
-			return -EFAULT;
-	return rc;
-}
-
-
-static int sfc_aff_clear(struct aff_fd *aff, void __user *user_aff_clear)
-{
-	struct sfc_aff_clear ac;
-	struct net_device* dev = NULL;
-	int rc;
-	if (copy_from_user(&ac, user_aff_clear, sizeof(ac)))
-		return -EFAULT;
-	if (ac.ifindex >= 0) {
-		dev = dev_get_in_current_netns(ac.ifindex);
-		if (! dev)
-			return -EINVAL;
-	}
-	rc = filter_del(aff, dev, ac.protocol,
-			ac.daddr, ac.dport, ac.saddr, ac.sport,
-			&ac.err_out);
-	if (dev)
-		dev_put(dev);
-	if (rc < 0)
-		if (copy_to_user(user_aff_clear, &ac, sizeof(ac)))
-			return -EFAULT;
-	return rc;
-}
-
-
-static long fop_ioctl(struct file *filp,
-		      unsigned cmd, unsigned long arg) 
-{
-	struct aff_fd *aff = filp->private_data;
-
-	switch (cmd) {
-	case SFC_AFF_SET:
-		return sfc_aff_set(aff, (void __user *) arg);
-	case SFC_AFF_CLEAR:
-		return sfc_aff_clear(aff, (void __user *) arg);
-	default:
-		printk("sfc_affinity: unknown ioctl (%u, %lx)\n", cmd, arg);
-		return -ENOTTY;
-	}
-}
-
-
 static int fop_open(struct inode *inode, struct file *filp)
 {
-	struct aff_fd *aff;
-	aff = kmalloc(sizeof(*aff), GFP_KERNEL);
-	if (aff == NULL)
-		return -ENOMEM;
-	INIT_LIST_HEAD(&aff->filters);
-	filp->private_data = aff;
 	return 0;
 }
 
 
 static int fop_close(struct inode *inode, struct file *filp) 
 {
-	struct aff_fd *aff = filp->private_data;
-	struct aff_filter *f;
-	mutex_lock(&lock);
-	while (! list_empty(&aff->filters)) {
-		f = list_entry(aff->filters.next, struct aff_filter,
-			       fd_filters_link);
-		filter_remove(f);
-	}
-	mutex_unlock(&lock);
 	return 0;
 }
 
 
 struct file_operations fops = {
 	.owner = THIS_MODULE,
-	.unlocked_ioctl = fop_ioctl,
-	.compat_ioctl = fop_ioctl,
 	.open = fop_open,
 	.release = fop_close,
 };
@@ -725,12 +337,6 @@ static struct aff_interface* interface_down(struct net_device *dev)
 
 	mutex_lock(&lock);
 	if ((intf = interface_find(dev)) != NULL) {
-		while (! list_empty(&intf->filters)) {
-			struct aff_filter *f;
-			f = list_entry(intf->filters.next, struct aff_filter,
-			               intf_filters_link);
-			filter_remove(f);
-		}
 		list_del(&intf->all_interfaces_link);
 	}
 	mutex_unlock(&lock);
@@ -740,10 +346,6 @@ static struct aff_interface* interface_down(struct net_device *dev)
 
 static void interface_free(struct aff_interface *intf)
 {
-	/* NB: assertion is being checked without holding lock. Technically bad,
-	 * but actually harmless because it's only wrong if the assertion was
-	 * going to fail anyway */
-	BUG_ON(! list_empty(&intf->filters));
 	interface_remove_proc_entries(intf);
 	kfree(intf->cpu_to_q);
 	kfree(intf);

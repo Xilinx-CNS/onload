@@ -271,14 +271,6 @@ install_userland() {
       failorm=false
     }
     install_solar_clusterd
-    $affinity && {
-      install_plib32 "$u32/lib/sfcaffinity/libsfcaffinity.so" \
-                  "$i_lib32/libsfcaffinity.so"
-      install_plib "$u64/lib/sfcaffinity/libsfcaffinity.so" \
-                "$i_lib64/libsfcaffinity.so"
-      install_x "$u64/tools/sfcaffinity/sfcaffinity_tool" \
-               "$i_usrbin/sfcaffinity_tool"
-    }
   else
     install_plib "$u32/lib/transport/unix/libcitransport0.so" \
               "$i_lib32/libonload.so"
@@ -294,12 +286,6 @@ install_userland() {
     [ -f "$u32/tools/ip/onload_fe" ] && install_x "$u32/tools/ip/onload_fe" "$i_usrbin/onload_fe"
     install_x "$u32/tools/onload_mibdump/onload_mibdump" \
               "$i_usrbin/onload_mibdump"
-    $affinity && {
-      install_plib "$u32/lib/sfcaffinity/libsfcaffinity.so" \
-                "$i_lib32/libsfcaffinity.so"
-      install_x "$u32/tools/sfcaffinity/sfcaffinity_tool" \
-               "$i_usrbin/sfcaffinity_tool"
-    }
   fi
 
   # Install scripts.

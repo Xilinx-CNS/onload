@@ -16,3 +16,9 @@ Linux distribution support
  - Debian 10 "Buster"
  - Linux kernels 4.4 - 5.7
 
+
+sfc_affinity
+------------
+
+The deprecated support for adding steering filters through the sfc_affinity
+driver and the sfcaffinity tool has been removed.

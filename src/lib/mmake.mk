@@ -5,7 +5,7 @@ SUBDIRS		:= citools ciapp
 
 ifeq ($(LINUX),1)
 DRIVER_SUBDIRS	:= citools ciul cplane transport
-SUBDIRS		+= sfcaffinity onload_ext
+SUBDIRS		+= onload_ext
 endif
 
 ifeq ($(GNU),1)
