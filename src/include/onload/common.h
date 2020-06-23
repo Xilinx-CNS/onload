@@ -182,6 +182,11 @@ typedef struct {
 } oo_stack_attach_t;
 
 typedef struct {
+  ci_uint32 stack_id;
+  ci_uint32 is_service;
+} oo_stack_lookup_and_attach_t;
+
+typedef struct {
   ci_fixed_descriptor_t fd;     /* OUT */
   oo_sp                 ep_id;
   ci_int32              domain;

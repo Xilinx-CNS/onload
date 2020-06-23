@@ -2966,10 +2966,12 @@ int ci_netif_dtor(ci_netif* ni)
 
 
 
-static int install_stack_by_id(ci_fd_t fp, unsigned id)
+static int install_stack_by_id(ci_fd_t fp, unsigned id, bool is_service)
 {
-  ci_uint32 stack_id = id;
-  return oo_resource_op(fp, OO_IOC_INSTALL_STACK_BY_ID, &stack_id);
+  oo_stack_lookup_and_attach_t op;
+  op.stack_id = id;
+  op.is_service = is_service;
+  return oo_resource_op(fp, OO_IOC_INSTALL_STACK_BY_ID, &op);
 }
 
 
@@ -3000,7 +3002,7 @@ int ci_netif_restore_id(ci_netif* ni, unsigned thr_id, bool is_service)
   if( rc != 0 ) {
     return rc;
   }
-  rc = install_stack_by_id(fd2, thr_id);
+  rc = install_stack_by_id(fd2, thr_id, is_service);
   if( rc != 0 ) {
     CI_TRY(ef_onload_driver_close(fd2));
     return rc;

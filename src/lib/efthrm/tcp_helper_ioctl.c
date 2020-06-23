@@ -61,19 +61,22 @@ oo_priv_set_stack(ci_private_t* priv, tcp_helper_resource_t* trs)
 
 static int
 oo_priv_lookup_and_attach_stack(ci_private_t* priv, const char* name,
-                                unsigned id)
+                                unsigned id, bool is_service)
 {
   tcp_helper_resource_t* trs;
   int rc;
+  enum oo_thr_ref_type ref_type = is_service ? OO_THR_REF_FILE : OO_THR_REF_APP;
+
   if( (rc = efab_thr_table_lookup(name, current->nsproxy->net_ns, id,
                                   EFAB_THR_TABLE_LOOKUP_CHECK_USER,
-                                  OO_THR_REF_APP, &trs)) == 0 ) {
+                                  ref_type, &trs)) == 0 ) {
     if( (rc = oo_priv_set_stack(priv, trs)) == 0 ) {
-      priv->fd_flags = OO_FDFLAG_STACK;
+      priv->fd_flags = OO_FDFLAG_STACK |
+                       (is_service ? OO_FDFLAG_SERVICE : 0);
       priv->sock_id = OO_SP_NULL;
     }
     else {
-      oo_thr_ref_drop(trs->ref, OO_THR_REF_APP);
+      oo_thr_ref_drop(trs->ref, ref_type);
     }
   }
   return rc;
@@ -82,7 +85,9 @@ oo_priv_lookup_and_attach_stack(ci_private_t* priv, const char* name,
 static int
 efab_tcp_helper_lookup_and_attach_stack(ci_private_t* priv, void *arg)
 {
-  return oo_priv_lookup_and_attach_stack(priv, NULL, *(ci_uint32 *)arg);
+  oo_stack_lookup_and_attach_t* op = arg;
+  return oo_priv_lookup_and_attach_stack(priv, NULL,
+                                         op->stack_id, op->is_service);
 }
 
 static int
@@ -995,7 +1000,7 @@ efab_install_stack(ci_private_t *priv, void *arg)
 {
   struct oo_op_install_stack* op = arg;
   op->in_name[CI_CFG_STACK_NAME_LEN] = '\0';
-  return oo_priv_lookup_and_attach_stack(priv, op->in_name, -1);
+  return oo_priv_lookup_and_attach_stack(priv, op->in_name, -1, 0);
 }
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 static int
