@@ -221,17 +221,28 @@ class CPServer(object):
             # launch server
             executable = self.server_executable
             if netns_pid:
-                executable='nsenter -t %d --net %s'%(netns_pid, executable)
+                executable='nsenter -t %d --mount --net %s'%(netns_pid, executable)
             opts = extra_opts
             if main_shim_file:
                 # Note: confusing implementation detail
                 # in this case CP_SHIM_FILE needs to be set to the shim file of main ns
                 # and the actual shim file is with network-namespace-file option
+                #
+                # Workaround:
+                #   On some systems sysfs still points to old netns incorrectly, (RHEL7 3.10.0-862.el7.x86_64).
+                #   the workaround is to mount proper sysfs and rebind at the old location.
+                #   This is for testing only e.g. for sysfs based bond set-up.
+                #
+                # Note: exec is used to retain PID.
                 opts += ' --network-namespace-file %s'%cp_shim_file
                 cp_shim_file = main_shim_file
             os.execlp('/bin/bash', '/bin/bash', '-c',
-                      'CP_SHIM_FILE=%s unshare --net --mount %s %s'%(
-                      cp_shim_file,executable,opts))
+                      '''CP_SHIM_FILE=%s exec unshare --net --mount bash -x -c '
+                           MNT=`mktemp -d` && mount -t sysfs none $MNT &&
+                           mount --bind $MNT/ /sys/ &&
+                           exec %s %s
+                        '
+                      '''%(cp_shim_file,executable,opts))
 
         # remember pid of the server to use it later to switch namespaces
         self.pid = server_pid
