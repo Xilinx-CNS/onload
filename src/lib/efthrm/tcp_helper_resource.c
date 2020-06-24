@@ -1365,7 +1365,6 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
                                   info->rxq_capacity, 0, 0,
                                   info->wakeup_cpu_core,
                                   info->wakeup_channel,
-                                  (long)ni->pkt_sets_max<<CI_CFG_PKTS_PER_SET_S,
                                   CI_CFG_PKT_BUF_SIZE,
                                   offsetof(ci_ip_pkt_fmt, dma_start),
                                   info->virs,

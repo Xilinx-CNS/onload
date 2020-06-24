@@ -11,7 +11,7 @@ struct efhw_nic;
 struct efhw_page_map;
 
 extern int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
-                                        long buffers, int size, int headroom,
+                                        int size, int headroom,
                                         struct socket** sock_out,
                                         void** mem_base_out);
 extern int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,

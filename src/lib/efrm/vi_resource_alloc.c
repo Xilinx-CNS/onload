@@ -72,7 +72,6 @@ struct vi_attr {
 	uint8_t             vi_set_instance;
 	int8_t              packed_stream;
 	int32_t             ps_buffer_size;
-	int64_t             xdp_buffers;
 	int16_t             xdp_buffer_size;
 	int16_t             xdp_headroom;
 };
@@ -231,7 +230,6 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 		virs->allocation.instance = 0;
 		return efhw_nic_bodge_af_xdp_socket(
 			efhw_nic, efrm_pd_stack_id_get(pd),
-			vi_attr->xdp_buffers,
 			vi_attr->xdp_buffer_size,
 			vi_attr->xdp_headroom,
 			&virs->af_xdp_sock,
@@ -1193,7 +1191,7 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		       int evq_capacity, int txq_capacity, int rxq_capacity,
 		       int tx_q_tag, int rx_q_tag, int wakeup_cpu_core,
 		       int wakeup_channel,
-		       long xdp_buffers, int xdp_size, int xdp_headroom,
+		       int xdp_size, int xdp_headroom,
 		       struct efrm_vi **virs_out,
 		       uint32_t *out_io_mmap_bytes,
 		       uint32_t *out_ctpio_mmap_bytes,
@@ -1215,7 +1213,7 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		efrm_vi_attr_set_interrupt_core(&attr, wakeup_cpu_core);
 	if (wakeup_channel >= 0)
 		efrm_vi_attr_set_wakeup_channel(&attr, wakeup_channel);
-	efrm_vi_attr_set_af_xdp(&attr, xdp_buffers, xdp_size, xdp_headroom);
+	efrm_vi_attr_set_af_xdp(&attr, xdp_size, xdp_headroom);
 
 	if ((rc = efrm_vi_alloc(client, &attr, print_resource_warnings,
 				name, &virs)) < 0)
@@ -1350,7 +1348,6 @@ int __efrm_vi_attr_init(struct efrm_client *client_obsolete,
 	a->interrupt_core = -1;
 	a->channel = -1;
 	a->packed_stream = 0;
-	a->xdp_buffers = 0;
 	a->xdp_buffer_size = 0;
 	a->xdp_headroom = 0;
 	return 0;
@@ -1420,10 +1417,9 @@ void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *attr, int channel_id)
 EXPORT_SYMBOL(efrm_vi_attr_set_wakeup_channel);
 
 
-void efrm_vi_attr_set_af_xdp(struct efrm_vi_attr *attr, long n, int s, int h)
+void efrm_vi_attr_set_af_xdp(struct efrm_vi_attr *attr, int s, int h)
 {
 	struct vi_attr *a = VI_ATTR_FROM_O_ATTR(attr);
-	a->xdp_buffers = n;
 	a->xdp_buffer_size = s;
 	a->xdp_headroom = h;
 }

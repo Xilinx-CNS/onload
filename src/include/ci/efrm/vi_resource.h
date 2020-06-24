@@ -172,7 +172,6 @@ extern void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *,
 
 /** Parameters required for AF_XDP buffer management */
 extern void efrm_vi_attr_set_af_xdp(struct efrm_vi_attr *,
-                                    long buffer_count,
                                     int buffer_size,
                                     int headroom);
 
@@ -313,7 +312,7 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		       int evq_capacity, int txq_capacity, int rxq_capacity,
 		       int tx_q_tag, int rx_q_tag, int wakeup_cpu_core,
 		       int wakeup_channel,
-		       long xdp_buffers, int xdp_buffer_size, int xdp_headroom,
+		       int xdp_buffer_size, int xdp_headroom,
 		       struct efrm_vi **virs_in_out,
 		       uint32_t *out_io_mmap_bytes,
 		       uint32_t *out_ctpio_mmap_bytes,

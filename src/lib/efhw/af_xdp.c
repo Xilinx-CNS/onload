@@ -18,16 +18,28 @@
 
 #define MAX_SOCKETS 128
 
+#define UMEM_BLOCK (PAGE_SIZE / sizeof(void*))
+
+/* A block of addresses of user memory pages */
+struct umem_block
+{
+  void* addrs[UMEM_BLOCK];
+};
+
+/* A collection of all the user memory pages for a VI */
 struct umem_pages
 {
   int chunk_size;
   int headroom;
-  long count;   /* Total number of pages */
-  long alloc;   /* Pages that have been assigned to allocated buffer tables */
-  long ready;   /* Pages that have an address, via buffer_table_set */
-  void** addrs; /* Start address of each page in kernel memory, once ready */
+
+  long page_count;
+  long block_count;
+  long used_page_count;
+
+  struct umem_block** blocks;
 };
 
+/* Per-VI AF_XDP resources */
 struct efhw_af_xdp_vi
 {
   struct file* sock;
@@ -41,17 +53,88 @@ struct efhw_af_xdp_vi
   struct umem_pages umem;
 };
 
+/* Per-NIC AF_XDP resources */
 struct efhw_nic_af_xdp
 {
   struct file* map;
   struct efhw_af_xdp_vi vi[MAX_SOCKETS];
 };
 
+/*----------------------------------------------------------------------------
+ *
+ * User memory helper functions
+ *
+ *---------------------------------------------------------------------------*/
+
+/* Free the collection of page addresses. Does not free the pages themselves. */
+static void umem_pages_free(struct umem_pages* pages)
+{
+  long block;
+
+  for( block = 0; block < pages->block_count; ++block )
+    kfree(pages->blocks[block]);
+
+  kfree(pages->blocks);
+}
+
+/* Allocate storage for a number of new page addresses, initially NULL */
+static int umem_pages_alloc(struct umem_pages* pages, long new_pages)
+{
+  long blocks = (pages->page_count + new_pages + UMEM_BLOCK - 1) / UMEM_BLOCK;
+  void* alloc;
+
+  alloc = krealloc(pages->blocks, blocks * sizeof(void*), GFP_KERNEL);
+  if( alloc == NULL )
+    return -ENOMEM;
+  pages->blocks = alloc;
+
+  /* It is important to update block_count after each allocation so that
+   * it has the correct value if an allocation fails. umem_pages_free
+   * will need the correct value to free everything that was allocated.
+   */
+  while( pages->block_count < blocks ) {
+    alloc = kzalloc(sizeof(struct umem_block), GFP_KERNEL);
+    if( alloc == NULL )
+      return -ENOMEM;
+
+    pages->blocks[pages->block_count++] = alloc;
+  }
+
+  pages->page_count += new_pages;
+  return 0;
+}
+
+/* Access the user memory page address with the given linear index */
+static void** umem_pages_addr_ptr(struct umem_pages* pages, long index)
+{
+  return &pages->blocks[index / UMEM_BLOCK]->addrs[index % UMEM_BLOCK];
+}
+
+static void umem_pages_set_addr(struct umem_pages* pages, long page, void* addr)
+{
+  *umem_pages_addr_ptr(pages, page) = addr;
+  if( page > pages->used_page_count )
+    pages->used_page_count = page;
+}
+
+static void* umem_pages_get_addr(struct umem_pages* pages, long page)
+{
+  return *umem_pages_addr_ptr(pages, page);
+}
+
+/*----------------------------------------------------------------------------
+ *
+ * VI access functions
+ *
+ *---------------------------------------------------------------------------*/
+
+/* Get the stack ID of the given VI */
 static int vi_stack_id(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 {
   return vi - nic->af_xdp->vi;
 }
 
+/* Get the VI with the given stack ID */
 static struct efhw_af_xdp_vi* vi_by_stack(struct efhw_nic* nic, int stack_id)
 {
   struct efhw_nic_af_xdp* xdp = nic->af_xdp;
@@ -62,6 +145,7 @@ static struct efhw_af_xdp_vi* vi_by_stack(struct efhw_nic* nic, int stack_id)
   return &xdp->vi[stack_id];
 }
 
+/* Get the VI with the given owner ID */
 static struct efhw_af_xdp_vi* vi_by_owner(struct efhw_nic* nic, int owner_id)
 {
   int i;
@@ -295,10 +379,10 @@ static vm_fault_t fault(struct vm_fault* vmf) {
   struct umem_pages* pages = vmf->vma->vm_private_data;
   long page = (vmf->address - vmf->vma->vm_start) >> PAGE_SHIFT;
 
-  if( page >= pages->count )
+  if( page >= pages->used_page_count )
     return VM_FAULT_SIGSEGV;
 
-  get_page(vmf->page = virt_to_page(pages->addrs[page]));
+  get_page(vmf->page = virt_to_page(umem_pages_get_addr(pages, page)));
   return 0;
 }
 
@@ -317,7 +401,7 @@ static int xdp_register_umem(struct socket* sock, struct umem_pages* pages)
    * so just zero everything we don't use.
    */
   struct xdp_umem_reg mr = {
-    .len = pages->count << PAGE_SHIFT,
+    .len = pages->used_page_count << PAGE_SHIFT,
     .chunk_size = pages->chunk_size,
     .headroom = pages->headroom
   };
@@ -447,7 +531,7 @@ static int xdp_create_rings(struct socket* sock,
 static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 {
   xdp_map_delete_elem(nic->af_xdp->map, vi_stack_id(nic, vi));
-  kfree(vi->umem.addrs);
+  umem_pages_free(&vi->umem);
   efhw_page_free(&vi->user_offsets_page);
   fput(vi->sock);
   memset(vi, 0, sizeof(*vi));
@@ -460,7 +544,7 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
  *
  *---------------------------------------------------------------------------*/
 int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
-                                 long buffers, int buffer_size, int headroom,
+                                 int buffer_size, int headroom,
                                  struct socket** sock_out, void** mem_out)
 {
 #ifdef AF_XDP
@@ -468,9 +552,6 @@ int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
   struct socket* sock;
   struct efhw_af_xdp_vi* vi;
   struct file* file;
-
-  long umem_count;
-  void** umem_addrs;
 
   if( buffer_size == 0 ||
       buffer_size < headroom ||
@@ -497,25 +578,13 @@ int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
   if( IS_ERR(file) )
     return PTR_ERR(file);
 
-  rc = -ENOMEM;
-  umem_count = buffers / (PAGE_SIZE / buffer_size);
-  umem_addrs = kzalloc(sizeof(void*) * umem_count, GFP_KERNEL);
-  if( umem_addrs == NULL )
-    goto fail;
-
   vi->sock = file;
   vi->umem.chunk_size = buffer_size;
   vi->umem.headroom = headroom;
-  vi->umem.count = umem_count;
-  vi->umem.addrs = umem_addrs;
 
   *sock_out = sock;
   *mem_out = &vi->kernel_offsets;
   return 0;
-
-fail:
-  fput(file);
-  return rc;
 #else
   return -EPROTONOSUPPORT;
 #endif
@@ -533,12 +602,6 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
   vi = vi_by_stack(nic, stack_id);
   if( vi == NULL )
     return -ENODEV;
-
-  if( vi->umem.ready != vi->umem.count ) {
-    EFHW_ERR("%s: unexpected umem pages %ld != %ld", __FUNCTION__,
-             vi->umem.ready, vi->umem.count);
-    return -EPROTO;
-  }
 
   rc = efhw_page_alloc_zeroed(&vi->user_offsets_page);
   if( rc < 0 )
@@ -892,16 +955,10 @@ af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
 #ifdef AF_XDP
   struct efhw_buffer_table_block* block;
   struct efhw_af_xdp_vi* vi = vi_by_owner(nic, owner);
+  int rc;
 
   if( vi == NULL )
     return -ENODEV;
-
-  if( vi->umem.alloc >= vi->umem.count )
-    return -ENOMEM;
-
-  block = kzalloc(sizeof(**block_out), GFP_KERNEL);
-  if( block == NULL )
-    return -ENOMEM;
 
   /* We reserve some bits of the handle to store the order, needed later to
    * calculate the address of each entry within the block. This limits the
@@ -911,10 +968,19 @@ af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
   if( owner >= (1 << 24) )
     return -ENOSPC;
 
+  block = kzalloc(sizeof(**block_out), GFP_KERNEL);
+  if( block == NULL )
+    return -ENOMEM;
+
   /* TODO use af_xdp-specific data rather than repurposing ef10-specific */
   block->btb_hw.ef10.handle = order | (owner << 8);
-  block->btb_vaddr = vi->umem.alloc << PAGE_SHIFT;
-  vi->umem.alloc += EFHW_BUFFER_TABLE_BLOCK_SIZE << order;
+  block->btb_vaddr = vi->umem.page_count << PAGE_SHIFT;
+
+  rc = umem_pages_alloc(&vi->umem, EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
+  if( rc < 0 ) {
+    kfree(block);
+    return rc;
+  }
 
   *block_out = block;
   return 0;
@@ -950,7 +1016,7 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
 {
 #ifdef AF_XDP
   int i, j, owner, order;
-  long first_page;
+  long page;
   struct efhw_af_xdp_vi* vi;
 
   owner = block->btb_hw.ef10.handle >> 8;
@@ -983,18 +1049,16 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
    * finding each page during mmap.
    */
 
-  first_page = (block->btb_vaddr >> PAGE_SHIFT) + (first_entry << order);
-  if( first_page + (n_entries << order) > vi->umem.count )
+  page = (block->btb_vaddr >> PAGE_SHIFT) + (first_entry << order);
+  if( page + (n_entries << order) > vi->umem.page_count )
     return -EINVAL;
 
   for( i = 0; i < n_entries; ++i ) {
-    void** addrs = vi->umem.addrs + first_page + (i << order);
     char* dma_addr = (char*)dma_addrs[i];
-    for( j = 0; j < (1 << order); ++j )
-      addrs[j] = dma_addr + j * PAGE_SIZE;
+    for( j = 0; j < (1 << order); ++j, ++page, dma_addr += PAGE_SIZE )
+      umem_pages_set_addr(&vi->umem, page, dma_addr);
   }
 
-  vi->umem.ready += (n_entries << order);
   return 0;
 #else
   return -EPROTONOSUPPORT;
@@ -1008,6 +1072,8 @@ af_xdp_nic_buffer_table_clear(struct efhw_nic *nic,
                               int first_entry, int n_entries)
 {
 #ifdef AF_XDP
+  /* FIXME: I don't think this is called if initialisation failed, in which
+   * case we'll leak any allocated resources. */
   int owner = block->btb_hw.ef10.handle >> 8;
   struct efhw_af_xdp_vi* vi = vi_by_owner(nic, owner);
   if( vi != NULL )
