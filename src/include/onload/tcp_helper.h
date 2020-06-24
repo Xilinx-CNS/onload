@@ -477,6 +477,7 @@ struct tcp_helper_endpoint_s {
 #define OO_THR_EP_AFLAG_CLEAR_FILTERS  0x8  /* Needs filters clearing */
 #define OO_THR_EP_AFLAG_NEED_FREE      0x10 /* Endpoint to be freed */
 #define OO_THR_EP_AFLAG_OS_NOTIFIER    0x20 /* Pollwait registration for os */
+#define OO_THR_EP_AFLAG_TCP_OFFLOAD_ISN 0x40 /* Send sync_stream to plugin */
 
   struct ci_private_s* alien_ref;
 

@@ -250,6 +250,10 @@ extern int efab_file_move_to_alien_stack(ci_private_t *priv,
                                          int drop_filter,
                                          oo_sp* new_sock_id);
 
+extern int efab_tcp_helper_tcp_offload_set_isn(tcp_helper_resource_t* trs,
+                                               oo_sp ep_id, ci_uint32 isn);
+
+
 extern void
 tcp_helper_cluster_ref(tcp_helper_cluster_t* thc);
 

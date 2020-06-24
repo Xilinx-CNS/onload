@@ -337,6 +337,11 @@ typedef struct {
 } ci_clone_fd_t;
 
 
+typedef struct {
+  oo_sp ep_id;
+  ci_uint32 isn;
+} ci_tcp_offload_set_isn_t;
+
 /* "Donation" shared memory ioctl structures. */
 
 typedef struct {

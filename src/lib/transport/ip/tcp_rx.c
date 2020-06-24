@@ -3332,6 +3332,28 @@ static void handle_rx_syn_sent(ci_netif* netif, ci_tcp_state* ts,
 set_isn:
   /* Snarf their initial sequence no. and window. */
   ci_tcp_rx_set_isn(ts, pkt->pf.tcp_rx.end_seq);
+  if( ci_tcp_is_pluginized(ts) ) {
+#ifdef __KERNEL__
+    if( in_atomic() ) {
+      /* The workqueue lag here will tend to cause us to go in to recycling
+       * instantly. We'll recover. */
+      tcp_helper_endpoint_t* ep = ci_netif_get_valid_ep(netif, S_SP(ts));
+      tcp_helper_endpoint_queue_non_atomic(ep,
+                                           OO_THR_EP_AFLAG_TCP_OFFLOAD_ISN);
+    }
+    else {
+      efab_tcp_helper_tcp_offload_set_isn(netif2tcp_helper_resource(netif),
+                                          S_SP(ts), tcp_rcv_nxt(ts));
+    }
+#else
+    ci_tcp_offload_set_isn_t set = {
+      .ep_id = S_SP(ts),
+      .isn = tcp_rcv_nxt(ts),
+    };
+    oo_resource_op(ci_netif_get_driver_handle(netif),
+                   OO_IOC_TCP_OFFLOAD_SET_ISN, &set);
+#endif
+  }
 
   ci_tcp_set_established_state(netif, ts);
   CITP_STATS_NETIF(++netif->state->stats.active_opens);

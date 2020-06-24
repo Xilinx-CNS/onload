@@ -2932,7 +2932,8 @@ static void tcp_helper_do_non_atomic(struct work_struct *data)
   tcp_helper_resource_t* trs = container_of(data, tcp_helper_resource_t,
                                             non_atomic_work);
   const unsigned handled_aflags = (OO_THR_EP_AFLAG_CLEAR_FILTERS |
-                                   OO_THR_EP_AFLAG_NEED_FREE);
+                                   OO_THR_EP_AFLAG_NEED_FREE |
+                                   OO_THR_EP_AFLAG_TCP_OFFLOAD_ISN);
   ci_irqlock_state_t lock_flags;
   tcp_helper_endpoint_t* ep;
   unsigned ep_aflags, new_aflags;
@@ -2966,6 +2967,13 @@ static void tcp_helper_do_non_atomic(struct work_struct *data)
       citp_waitable_obj_free_nnl(&trs->netif,
                                  SP_TO_WAITABLE(&trs->netif, ep->id));
     }
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    if( ep_aflags & OO_THR_EP_AFLAG_TCP_OFFLOAD_ISN ) {
+      ci_tcp_state* ts = SP_TO_TCP(&trs->netif, ep->id);
+      if( ts->s.b.state == CI_TCP_ESTABLISHED )
+        efab_tcp_helper_tcp_offload_set_isn(trs, ep->id, tcp_rcv_nxt(ts));
+    }
+#endif
     /* Clear the NON_ATOMIC flag while checking to see if more work has
      * been requested.  (Done this way to avoid race with
      * citp_waitable_obj_free().
@@ -8222,6 +8230,36 @@ efab_tcp_helper_xdp_rx_pkt(tcp_helper_resource_t* trs, int intf_i, ci_ip_pkt_fmt
   return ret == XDP_PASS;
 }
 #endif
+
+int efab_tcp_helper_tcp_offload_set_isn(tcp_helper_resource_t* trs,
+                                        oo_sp ep_id, ci_uint32 isn)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_netif* ni = &trs->netif;
+  int intf_i;
+  tcp_helper_endpoint_t* tep_p = ci_trs_get_valid_ep(trs, ep_id);
+
+  ci_assert(! in_atomic());
+
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    if( ni->nic_hw[intf_i].plugin_handle != INVALID_PLUGIN_HANDLE) {
+      struct xsn_tcp_sync_stream sync = {
+        .in_conn_id = tep_p->plugin_stream_id[intf_i],
+        .in_seq = isn,
+      };
+      struct efrm_pd* pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
+      int rc = efrm_ext_msg(efrm_pd_to_resource(pd),
+                            ni->nic_hw[intf_i].plugin_handle,
+                            XSN_CEPH_SYNC_STREAM, &sync, sizeof(sync));
+      if( rc < 0 )
+        return rc;
+    }
+  }
+  return 0;
+#else
+  return -ENOTSUPP;
+#endif
+}
 
 static tcp_helper_resource_t*
 thr_ref2thr(oo_thr_ref_t ref)
