@@ -35,7 +35,7 @@
  * Need to know the kernel version.
  */
 
-#include <driver/linux_affinity/autocompat.h>
+#include <driver/linux_resource/autocompat.h>
 
 #ifndef LINUX_VERSION_CODE
 # include <linux/version.h>

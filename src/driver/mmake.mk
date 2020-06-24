@@ -10,8 +10,7 @@ MMAKE_NO_DEPS	:= 1
 ifeq ($(LINUX),1)
 
 # DRIVER_SUBDIRS must be ordered according to inter-driver dependencies
-DRIVER_SUBDIRS	:= linux_net linux_affinity linux_resource \
-		linux_char linux_onload linux
+DRIVER_SUBDIRS	:= linux_net linux_resource linux_char linux_onload linux
 
 endif # ifeq ($(LINUX),1)
 

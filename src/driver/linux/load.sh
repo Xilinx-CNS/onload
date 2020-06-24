@@ -164,7 +164,6 @@ get_cp_server_path() {
 
 dores () {
   donet
-  doaffinity
   startcmd res && return 0
 
   # linux may load alien sfc_resource for PCI VFs
@@ -199,13 +198,6 @@ doonload () {
     O_MOD_ARGS="cplane_server_path=$(get_cp_server_path) ${O_MOD_ARGS}"
   loadmod onload $O_MOD_ARGS
   $LOAD_CONFIG && doonloadconfig
-}
-
-
-doaffinity () {
-  donet
-  startcmd affinity && return 0
-  loadmod sfc_affinity
 }
 
 
@@ -726,12 +718,6 @@ else
       ;;
     onload)
       doonload
-      ;;
-    afonload)
-      doafonload
-      ;;
-    affinity)
-      doaffinity
       ;;
     mknod)
       mknod_for_drv sfc_char 0666

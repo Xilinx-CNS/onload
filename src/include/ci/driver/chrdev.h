@@ -5,7 +5,7 @@
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
-#include "driver/linux_affinity/autocompat.h"
+#include "driver/linux_resource/autocompat.h"
 
 /* This file contains some simple utility functions for creating char
  * devices and their corresponding nodes in /dev, which are needed by most of

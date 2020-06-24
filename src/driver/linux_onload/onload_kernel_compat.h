@@ -3,7 +3,7 @@
 #ifndef __ONLOAD_KERNEL_COMPAT_H__
 #define __ONLOAD_KERNEL_COMPAT_H__
 
-#include <driver/linux_affinity/autocompat.h>
+#include <driver/linux_resource/autocompat.h>
 #include <linux/file.h>
 #include <linux/signal.h>
 #include <linux/uaccess.h>

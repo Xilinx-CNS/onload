@@ -6,7 +6,6 @@
  * those that specified cpu rather than rxq of course).
  */
 
-#include <ci/affinity/k_drv_intf.h>
 #include <linux/module.h>
 #include <linux/fs.h>
 #include <linux/in.h>
@@ -18,6 +17,7 @@
 #include <linux/nsproxy.h>
 
 #include "kernel_compat.h"
+#include "sfcaffinity.h"
 
 
 #define T(x)  x
@@ -390,7 +390,7 @@ static struct efx_dl_driver dl_driver = {
 static struct ci_chrdev_registration* sfc_affinity_chrdev;
 
 
-static int __init init_sfc_affinity(void)
+int init_sfc_affinity(void)
 {
 	int rc;
 
@@ -420,7 +420,7 @@ fail1:
 }
 
 
-static void cleanup_sfc_affinity(void)
+void cleanup_sfc_affinity(void)
 {
 	/* TODO shouldn't this take [lock]? */
 	T(printk("sfc_affinity: cleaning up\n"));
@@ -438,10 +438,6 @@ static void cleanup_sfc_affinity(void)
 }
 
 
-module_init(init_sfc_affinity);
-module_exit(cleanup_sfc_affinity);
-
-
 int sfc_affinity_cpu_to_channel_dev(const struct net_device* dev, int cpu)
 {
 	struct aff_interface *intf;
@@ -453,4 +449,3 @@ int sfc_affinity_cpu_to_channel_dev(const struct net_device* dev, int cpu)
 	mutex_unlock(&lock);
 	return rc;
 }
-EXPORT_SYMBOL(sfc_affinity_cpu_to_channel_dev);

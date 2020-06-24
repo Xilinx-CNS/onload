@@ -87,7 +87,7 @@
 
 #include <linux/init.h>     /* module_init/module_exit */
 
-#include <driver/linux_affinity/kernel_compat.h>
+#include <driver/linux_resource/kernel_compat.h>
 
 typedef int socklen_t;
 

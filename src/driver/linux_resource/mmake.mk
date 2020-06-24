@@ -11,7 +11,7 @@
 RESOURCE_SRCS	:= resource_driver.c \
 	iopage.c driverlink_new.c kernel_proc.c filter.c \
 	bt_stats.c compat_pat_wc.c port_sniff.c nondl_resource.c sysfs.c \
-	nondl_driver.c
+	nondl_driver.c sfcaffinity.c
 
 EFHW_SRCS	:= nic.c eventq.c ef10.c ef100.c af_xdp.c
 
@@ -42,7 +42,8 @@ EFRM_HDRS	:= efrm_internal.h efrm_vi.h efrm_vi_set.h \
 IMPORT		:= $(EFHW_SRCS:%=../../lib/efhw/%) \
 		   $(EFHW_HDRS:%=../../lib/efhw/%) \
 		   $(EFRM_SRCS:%=../../lib/efrm/%) \
-		   $(EFRM_HDRS:%=../../lib/efrm/%)
+		   $(EFRM_HDRS:%=../../lib/efrm/%) \
+		   ../linux_net/drivers/net/ethernet/sfc/driverlink_api.h
 
 RESOURCE_TARGET	:= sfc_resource.o
 RESOURCE_TARGET_SRCS := $(RESOURCE_SRCS) $(EFHW_SRCS) $(EFRM_SRCS)
@@ -50,13 +51,11 @@ RESOURCE_TARGET_SRCS := $(RESOURCE_SRCS) $(EFHW_SRCS) $(EFRM_SRCS)
 TARGETS		:= $(RESOURCE_TARGET)
 
 
-
-
 ######################################################
 # linux kbuild support
 #
 
-KBUILD_EXTRA_SYMBOLS := $(BUILDPATH)/driver/linux_affinity/Module.symvers
+KBUILD_EXTRA_SYMBOLS := $(BUILDPATH)/driver/linux_net/drivers/net/ethernet/sfc/Module.symvers
 
 all: $(KBUILD_EXTRA_SYMBOLS)
 	$(MAKE) $(MMAKE_KBUILD_ARGS) M=$(CURDIR)
@@ -67,7 +66,7 @@ endif
 
 clean:
 	@$(MakeClean)
-	rm -rf *.ko Module.symvers .*.cmd
+	rm -rf *.ko Module.symvers .*.cmd autocompat.h
 
 
 ifdef MMAKE_IN_KBUILD
@@ -75,5 +74,21 @@ ifdef MMAKE_IN_KBUILD
 obj-m := $(RESOURCE_TARGET) 
 
 sfc_resource-objs := $(RESOURCE_TARGET_SRCS:%.c=%.o)
+
+ifdef KBUILD_SRC
+define filechk_autocompat.h
+	$(src)/kernel_compat.sh -k $(KBUILD_SRC) -o "$(CURDIR)" $(if $(filter 1,$(V)),-v,-q)
+endef
+else
+define filechk_autocompat.h
+	$(src)/kernel_compat.sh -k "$(CURDIR)" -o "$(CURDIR)" $(if $(filter 1,$(V)),-v,-q)
+endef
+endif
+
+$(obj)/autocompat.h: $(src)/kernel_compat.sh $(src)/kernel_compat_funcs.sh
+	+$(call filechk,autocompat.h)
+	@touch $@
+
+$(addprefix $(obj)/,$(sfc_resource-objs)): $(obj)/autocompat.h
 
 endif # MMAKE_IN_KBUILD

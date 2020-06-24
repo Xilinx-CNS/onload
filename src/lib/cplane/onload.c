@@ -5,7 +5,7 @@
 #include <cplane/mmap.h>
 
 #ifdef __KERNEL__
-#include <driver/linux_affinity/kernel_compat.h>
+#include <driver/linux_resource/kernel_compat.h>
 #else
 #include <cplane/create.h>
 #endif

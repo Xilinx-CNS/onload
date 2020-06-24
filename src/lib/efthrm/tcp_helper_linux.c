@@ -18,7 +18,7 @@
 #include <onload/tcp_poll.h>
 #include <linux/fs.h>
 #include <linux/spinlock.h>
-#include <driver/linux_affinity/autocompat.h>
+#include <driver/linux_resource/autocompat.h>
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 /* CI_CFG_UL_INTERRUPT_HELPER mode does not support sendfile() and/or OS

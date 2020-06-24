@@ -23,9 +23,9 @@ else
 all:
 ifeq ($(LINUX),1)
 ifneq ($(GNU),1)
-	# Build both autocompat.h files: linux_net and linux_affinity.
+	# Build both autocompat.h files: linux_net and linux_resource.
 	$(MAKE) -C driver/linux_net
-	$(MAKE) -C driver/linux_affinity
+	$(MAKE) -C driver/linux_resource
 endif
 endif
 	+@$(MakeSubdirs)

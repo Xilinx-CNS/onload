@@ -50,7 +50,6 @@
 #include <ci/efrm/vi_set.h>
 #include <ci/efrm/pd.h>
 #include <ci/efrm/pio.h>
-#include <ci/affinity/k_drv_intf.h>
 #include <ci/tools/utils.h>
 #include <ci/tools/debug.h>
 #include <etherfabric/vi.h>
@@ -60,6 +59,7 @@
 #include "efrm_vi_set.h"
 #include "efrm_pd.h"
 #include "bt_manager.h"
+#include "sfcaffinity.h"
 
 
 struct vi_attr {
