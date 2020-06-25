@@ -1634,6 +1634,8 @@ extern const char* ci_tcp_congstate_str(unsigned state) CI_HF;
 extern void ci_tcp_handle_rx(ci_netif*, struct ci_netif_poll_state*,
                              ci_ip_pkt_fmt*, ci_tcp_hdr*, int ip_paylen) CI_HF;
 extern void ci_tcp_rx_deliver2(ci_tcp_state*,ci_netif*,ciip_tcp_rx_pkt*) CI_HF;
+extern void ci_tcp_rx_plugin_meta(ci_netif*, struct ci_netif_poll_state*,
+                                  ci_ip_pkt_fmt* pkt) CI_HF;
 
 extern void ci_tcp_tx_change_mss(ci_netif*, ci_tcp_state*) CI_HF;
 extern void ci_tcp_enqueue_no_data(ci_tcp_state* ts, ci_netif* netif,

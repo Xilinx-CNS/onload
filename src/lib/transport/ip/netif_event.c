@@ -348,8 +348,7 @@ static void handle_rx_plugin_data(ci_netif* netif,
   if( oo_tcpdump_check(netif, pkt, pkt->intf_i) )
     oo_tcpdump_dump_pkt(netif, pkt);
 
-  /* TODO: call out to some plugin-specific code, in Ceph's case dumping the
-   * payload in to the socket recvq */
+  ci_tcp_rx_plugin_meta(netif, ps, pkt);
 }
 #endif
 

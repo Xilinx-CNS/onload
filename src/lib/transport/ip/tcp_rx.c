@@ -167,14 +167,40 @@ static void remove_from_last_sack(ci_tcp_state* ts, oo_pkt_p id)
 }
 
 
+static void ci_tcp_rx_add_to_recvq(ci_netif *netif, ci_tcp_state *ts,
+                                   ci_ip_pkt_fmt *pkt)
+{
+  ci_ip_pkt_queue* rxq = TS_QUEUE_RX(ts);
+  oo_pkt_p prevhead = rxq->head;
+  int bytes = oo_offbuf_left(&pkt->buf);
+
+  ci_assert(ci_netif_is_locked(netif));
+  pkt->next = OO_PP_NULL;
+  /* Barrier ensures concurring thread is able to read metadata
+   * of pkt buffers pointed to by recv1_extract. */
+  ci_wmb();
+  __ci_tcp_rx_queue_enqueue(netif, ts, rxq, pkt);
+
+  if( rxq == &ts->recv1 ) {
+    if( OO_PP_IS_NULL(prevhead) ) {
+      ci_assert(OO_PP_IS_NULL(ts->recv1_extract));
+      /* recv1_extract is protected by socket lock.  However,
+       * modification here is correct as both rxq->head and
+       * recv1_extract have been NULL, which excludes simultaneous
+       * processing. */
+      ts->recv1_extract = rxq->head;
+    }
+    ci_tcp_rx_reap_rxq_bufs(netif, ts);
+  }
+
+  ci_tcp_rx_update_state_on_add(ts, bytes);
+}
+
+
 /** Enqueue a single packet pkt on the receive queue of [ts]. */
 static void ci_tcp_rx_enqueue_packet(ci_netif *netif, ci_tcp_state *ts,
                                      ci_ip_pkt_fmt *pkt)
 {
-  ci_ip_pkt_queue* rxq = TS_QUEUE_RX(ts);
-  oo_pkt_p prevhead = rxq->head;
-  int bytes;
-
   ci_assert(ci_netif_is_locked(netif));
   ci_assert_equal(SEQ_SUB(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) -
                   ((PKT_IPX_TCP_HDR(ipcache_af(&ts->s.pkt),
@@ -204,27 +230,7 @@ static void ci_tcp_rx_enqueue_packet(ci_netif *netif, ci_tcp_state *ts,
     return;
   }
 
-  bytes = oo_offbuf_left(&pkt->buf);
-
-  pkt->next = OO_PP_NULL;
-  /* Barrier ensures concurring thread is able to read metadata
-   * of pkt buffers pointed to by recv1_extract. */
-  ci_wmb();
-  __ci_tcp_rx_queue_enqueue(netif, ts, rxq, pkt);
-
-  if( rxq == &ts->recv1 ) {
-    if( OO_PP_IS_NULL(prevhead) ) {
-      ci_assert(OO_PP_IS_NULL(ts->recv1_extract));
-      /* recv1_extract is protected by socket lock.  However,
-       * modification here is correct as both rxq->head and
-       * recv1_extract have been NULL, which excludes simultaneous
-       * processing. */
-      ts->recv1_extract = rxq->head;
-    }
-    ci_tcp_rx_reap_rxq_bufs(netif, ts);
-  }
-
-  ci_tcp_rx_update_state_on_add(ts, bytes);
+  ci_tcp_rx_add_to_recvq(netif, ts, pkt);
 }
 
 
@@ -4865,5 +4871,27 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
   ci_netif_pkt_release_rx_1ref(netif, pkt);
 }
 
+void ci_tcp_rx_plugin_meta(ci_netif* netif, struct ci_netif_poll_state* ps,
+                           ci_ip_pkt_fmt* pkt)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  int ep_id = pkt->pf.tcp_rx.lo.rx_sock;
+  ci_tcp_state* ts = ID_TO_TCP(netif, ep_id);
+  if( ts->s.b.state != CI_TCP_ESTABLISHED || ! ci_tcp_is_pluginized(ts) ) {
+    ci_netif_pkt_release_rx_1ref(netif, pkt);
+    return;
+  }
+  /* For Ceph, we enqueue the whole thing in to the socket recvq, mini-headers
+   * and all. The alternative would be to try to break it up here, but that's
+   * tricky because we could switch between zc and non-zc arbitrarily and the
+   * recv path needs to be able to cope with that kind of thing anyway. */
+
+  ci_assert(oo_offbuf_not_empty(&pkt->buf));  /* broken plugin */
+  ci_tcp_rx_add_to_recvq(netif, ts, pkt);
+  ci_tcp_wake(netif, ts, CI_SB_FLAG_WAKE_RX);
 #endif
+}
+
+#endif
+
 /*! \cidoxg_end */
