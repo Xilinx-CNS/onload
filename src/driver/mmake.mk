@@ -13,10 +13,6 @@ ifeq ($(LINUX),1)
 DRIVER_SUBDIRS	:= linux_net linux_affinity linux_resource \
 		linux_char linux_onload linux
 
-ifeq ($(BUILD_AFONLOAD),1)
-DRIVER_SUBDIRS  += openonload
-endif
-
 endif # ifeq ($(LINUX),1)
 
 all: passthruparams := "CI_FROM_DRIVER=1"
