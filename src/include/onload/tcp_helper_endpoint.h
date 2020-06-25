@@ -30,6 +30,11 @@ extern void efab_tcp_driver_dtor(void);
  */
 extern int tcp_helper_rx_vi_id(tcp_helper_resource_t*, int hwport);
 
+/* Same as tcp_helper_rx_vi_id(), but for the sub-VIs associated with
+ * plugins */
+extern int tcp_helper_plugin_vi_id(tcp_helper_resource_t*, int hwport,
+                                   int subvi);
+
 
 /* Return the hw stack id of the VI associated with the named hwport,
  * or -1 if we don't have a VI for that hwport.

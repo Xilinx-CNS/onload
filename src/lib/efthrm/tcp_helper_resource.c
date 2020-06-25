@@ -836,6 +836,16 @@ int tcp_helper_rx_vi_id(tcp_helper_resource_t* trs, int hwport)
 }
 
 
+int tcp_helper_plugin_vi_id(tcp_helper_resource_t* trs, int hwport, int subvi)
+{
+  int intf_i;
+  ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
+  ci_assert_lt((unsigned) subvi, ci_netif_num_vis(&trs->netif));
+  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 )
+    return EFAB_VI_RESOURCE_INSTANCE(trs->nic[intf_i].thn_vi_rs[subvi]);
+  else
+    return -1;
+}
 
 
 int tcp_helper_vi_hw_stack_id(tcp_helper_resource_t* trs, int hwport)

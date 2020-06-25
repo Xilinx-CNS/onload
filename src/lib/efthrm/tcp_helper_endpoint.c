@@ -321,6 +321,10 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
   int rc;
   unsigned long lock_flags;
   int use_mac_filter, af_space;
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  bool enable_recycler = s->s_flags & CI_SOCK_FLAG_TCP_OFFLOAD &&
+                         ! CI_IPX_ADDR_IS_ANY(sock_raddr(s));
+#endif
 
   OO_DEBUG_TCPH(ci_log("%s: [%d:%d] bindto_ifindex=%d from_tcp_id=%d",
                        __FUNCTION__, ep->thr->id,
@@ -469,6 +473,11 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
 #endif
             0;
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    if( enable_recycler )
+      flags |= CI_Q_ID_TCP_RECYCLER << OOF_SOCKET_ADD_FLAG_SUBVI_SHIFT;
+#endif
+
     /* We need to add the socket here, even if it doesn't want unicast filters.
      * This ensures that the filter code knows when and how the socket is
      * bound, so can appropriately install multicast filters.
@@ -502,8 +511,7 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
     fput(os_sock_ref);
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
-  if( rc == 0 && s->s_flags & CI_SOCK_FLAG_TCP_OFFLOAD &&
-      ! CI_IPX_ADDR_IS_ANY(raddr) ) {
+  if( rc == 0 && enable_recycler ) {
     int intf_i;
     ci_assert( ! in_atomic() );
     OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {

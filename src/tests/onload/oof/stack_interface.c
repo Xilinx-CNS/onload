@@ -5,6 +5,11 @@ int tcp_helper_rx_vi_id(tcp_helper_resource_t* trs, int hwport)
   return trs->stack_id;
 }
 
+int tcp_helper_plugin_vi_id(tcp_helper_resource_t* trs, int hwport, int subvi)
+{
+  return trs->stack_id | (subvi << 16);
+}
+
 int tcp_helper_vi_hw_stack_id(tcp_helper_resource_t* trs, int hwport)
 {
   return trs->stack_id;

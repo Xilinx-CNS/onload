@@ -63,6 +63,9 @@ void oo_hw_filter_init2(struct oo_hw_filter* oofilter,
 #endif
   oofilter->trs = trs;
   oofilter->thc = thc;
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  oofilter->plugin_vi = 0;
+#endif
   for( i = 0; i < CI_CFG_MAX_HWPORTS; ++i )
     oofilter->filter_id[i] = -1;
 }
@@ -136,11 +139,15 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
 
   if( kernel_redirect )
     vi_id = KERNEL_REDIRECT_VI_ID;
-  else {
-    vi_id = cluster ?
-      tcp_helper_cluster_vi_base(oofilter->thc, hwport) :
-      tcp_helper_rx_vi_id(oofilter->trs, hwport);
-  }
+  else if( cluster )
+    vi_id = tcp_helper_cluster_vi_base(oofilter->thc, hwport);
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  else if( oofilter->plugin_vi )
+    vi_id = tcp_helper_plugin_vi_id(oofilter->trs, hwport,
+                                    oofilter->plugin_vi);
+#endif
+  else
+    vi_id = tcp_helper_rx_vi_id(oofilter->trs, hwport);
 
   if( vi_id  >= 0 ) {
     int flags = EFX_FILTER_FLAG_RX_SCATTER;

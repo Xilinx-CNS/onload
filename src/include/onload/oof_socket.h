@@ -36,6 +36,8 @@ struct oof_socket {
  * filter related searches.  Exception being an installation of
  * NO_STACK DUMMY socket in search of presence of an existing cluster */
 #define OOF_SOCKET_NO_UCAST               0x00000040
+#define OOF_SOCKET_SUBVI_MASK             0x00000f00
+#define OOF_SOCKET_SUBVI_SHIFT            8
   unsigned  sf_flags;
 
   /* All other fields are only valid when [sf_local_port] is not NULL */

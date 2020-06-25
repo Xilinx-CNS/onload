@@ -13,6 +13,9 @@ struct oo_hw_filter {
   struct tcp_helper_resource_s* trs;
   struct tcp_helper_cluster_s*  thc;
   unsigned dlfilter_handle;
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  int plugin_vi;
+#endif
   int filter_id[CI_CFG_MAX_HWPORTS];
 };
 
