@@ -411,7 +411,7 @@ ci_setup_ipstack_params(void)
       ci_log("ERROR: failed to open "CI_CFG_PROC_PATH"net/ipv4");
       return -1;
     }
-    close(fd);
+    ci_sys_close(fd);
   }
   /* We will re-read following values in kernel mode for every socket,
    * but we need them before the first socket is initialized. */
