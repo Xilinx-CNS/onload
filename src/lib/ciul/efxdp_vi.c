@@ -46,7 +46,6 @@ static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
   struct xdp_desc* dq = vi->xdp_rings.tx.desc;
-  uint32_t* iq = q->ids;
   int i;
 
   if( iov_len != 1 )
@@ -56,8 +55,6 @@ static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
     return -EAGAIN;
 
   i = qs->added++ & q->mask;
-  EF_VI_BUG_ON(iq[i] != EF_REQUEST_ID_MASK);
-  iq[i] = dma_id;
   dq[i].addr = iov->iov_base;
   dq[i].len = iov->iov_len;
   return 0;
@@ -155,6 +152,7 @@ static int efxdp_ef_vi_transmit_alt_go(ef_vi* vi, unsigned alt_id)
   return -EOPNOTSUPP;
 }
 
+/* Note: for AF_XDP devices dma_id is disregarded */
 static int efxdp_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
                                     ef_request_id dma_id)
 {
@@ -167,8 +165,6 @@ static int efxdp_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
     return -EAGAIN;
 
   i = qs->added++ & q->mask;
-  EF_VI_BUG_ON(q->ids[i] != EF_REQUEST_ID_MASK);
-  q->ids[i] = dma_id;
   dq[i] = addr;
   return 0;
 }
@@ -189,7 +185,7 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
   int n = 0;
 
   /* rx_buffer_len is power of two */
-  EF_VI_ASSERT(((vi->rx_buffer_len -1) & vi->rx_buffer_len) == 0);
+  EF_VI_ASSERT(((vi->rx_buffer_len - 1) & vi->rx_buffer_len) == 0);
 
   /* Check rx ring, which won't exist on tx-only interfaces */
   if( n < evs_len && ef_vi_receive_capacity(vi) != 0 ) {
@@ -207,14 +203,23 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 
         evs[n].rx.type = EF_EVENT_TYPE_RX;
         evs[n].rx.q_id = 0;
-        evs[n].rx.rq_id = q->ids[desc_i];
+
+        /* AF_XDP devices do not use dma_ids as
+         * FIFO behaviour of rx ring is not guaranteed (Zerocopy).
+         * However, based on the device specifics, that is:
+         *  * dma addr space is contiguous, and
+         *  * buffers are fixed size
+         * we produce here buffer number withing that dma addr space
+         * for the client to resolve themselves. */
+        evs[n].rx.rq_id = dq[desc_i].addr / vi->rx_buffer_len;
+
         q->ids[desc_i] = EF_REQUEST_ID_MASK;  /* Debug only? */
 
         /* FIXME: handle jumbo, multicast */
         evs[n].rx.flags = EF_EVENT_FLAG_SOP;
         /* In case of AF_XDP offset of the placement of payload from
          * the beginning of the packet buffer may vary. */
-        evs[n].rx.ofs = dq[desc_i].addr & (vi->rx_buffer_len -1 );
+        evs[n].rx.ofs = dq[desc_i].addr & (vi->rx_buffer_len - 1); 
         evs[n].rx.len = dq[desc_i].len;
 
         ++n;
