@@ -64,10 +64,15 @@ efrm_bt_blocks_alloc(struct efhw_nic *nic,
 	int size = a->bta_size;
 	int n_blocks = (size - 1) / EFHW_BUFFER_TABLE_BLOCK_SIZE + 1;
 	struct efhw_buffer_table_block *block;
+	struct efhw_buffer_table_block *blocks = NULL;
+	struct efhw_buffer_table_block *blocks_end = NULL;
 
 	a->bta_blocks = NULL;
 	a->bta_first_entry_offset = 0;
 
+	/* Consecutive allocations are likely to result in consecutive addresses,
+	 * FIXME AF_XDP: for AF_XDP this is guaranteed and is required behaviour for
+	 * descriptor address->pkt_id resolution */
 	for (i = 0; i < n_blocks; i++) {
 		rc = efhw_nic_buffer_table_alloc(nic, manager->owner,
 						 manager->order, &block,
@@ -77,16 +82,20 @@ efrm_bt_blocks_alloc(struct efhw_nic *nic,
 		 * in anticipation of the hardware's reappearance. */
 		if (rc != 0 && rc != -ENETDOWN)
 			goto fail;
-		block->btb_next = a->bta_blocks;
+		if( blocks == NULL )
+			blocks = block;
+		if( blocks_end != NULL )
+			blocks_end->btb_next = block;
+		blocks_end = block;
 		if (size >= EFHW_BUFFER_TABLE_BLOCK_SIZE)
 			block->btb_free_mask = 0;
 		else
 			block->btb_free_mask = EFHW_BT_BLOCK_FREE_ALL &
 					~EFHW_BT_BLOCK_RANGE(0, size);
-		a->bta_blocks = block;
 		size -= EFHW_BUFFER_TABLE_BLOCK_SIZE;
 	}
 
+	a->bta_blocks = blocks;
 	atomic_add(n_blocks, &manager->btm_blocks);
 
 	return 0;
@@ -94,8 +103,8 @@ efrm_bt_blocks_alloc(struct efhw_nic *nic,
 fail:
 	EFRM_ERR_LIMITED("%s: failed size=%d order=%d rc=%d",
 			 __FUNCTION__, size, manager->order, rc);
-	while ( (block = a->bta_blocks) != NULL) {
-		a->bta_blocks = block->btb_next;
+	while ( (block = blocks) != NULL) {
+		blocks = block->btb_next;
 		efhw_nic_buffer_table_free(nic, block, reset_pending);
 	}
 	return rc;
