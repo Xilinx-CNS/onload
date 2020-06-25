@@ -859,7 +859,7 @@ static int af_xdp_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
  *
  *--------------------------------------------------------------------*/
 
-static const int __af_xdp_nic_buffer_table_get_orders[] = {0,4,8,10};
+static const int __af_xdp_nic_buffer_table_get_orders[] = {0,1,2,3,4,5,6,7,8,9,10};
 
 
 static int
