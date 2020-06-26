@@ -1716,10 +1716,12 @@ have_events:
 #ifndef NDEBUG
     {
       ef_vi* vi = CI_NETIF_TX_VI(ni, intf_i, ev[i].tx_timestamp.q_id);
-      ci_assert_equiv((ef_vi_transmit_fill_level(vi) == 0 &&
-                       ni->state->nic[intf_i].dmaq.num == 0),
-                      (ni->state->nic[intf_i].tx_dmaq_insert_seq ==
-                       ni->state->nic[intf_i].tx_dmaq_done_seq));
+      if( vi->nic_type.arch != EF_VI_ARCH_AF_XDP ) {
+        ci_assert_equiv((ef_vi_transmit_fill_level(vi) == 0 &&
+                        ni->state->nic[intf_i].dmaq.num == 0),
+                        (ni->state->nic[intf_i].tx_dmaq_insert_seq ==
+                        ni->state->nic[intf_i].tx_dmaq_done_seq));
+      }
     }
 #endif
 
