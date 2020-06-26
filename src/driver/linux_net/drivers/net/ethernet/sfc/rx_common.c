@@ -642,6 +642,7 @@ static bool efx_alloc_buffer_zc(struct efx_rx_queue *rx_queue,
 	rx_buf->dma_addr += hr;
 
 	rx_buf->addr = xdp_umem_get_data(umem, handle);
+	/* TODO AF_XDP: workaround for SWNETLINUX-3735 - onload internal */
 	rx_buf->addr += hr;
 
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
