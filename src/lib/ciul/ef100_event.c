@@ -120,23 +120,37 @@ ef_vi_inline void ef100_rx_event(ef_vi* evq_vi, const ef_vi_event* ev,
 
 static inline void ef100_tx_event_completion(ef_vi* evq, const ef_vi_event* ev,
                                             ef_event** evs, int* evs_len,
-                                            unsigned* desc_id)
+                                            unsigned* desc_id,
+                                            unsigned* desc_init)
 {
-  ef_event* ev_out = (*evs)++;
+  int q_label = QWORD_GET_U(ESF_GZ_EV_TXCMPL_Q_LABEL, *ev);
+  ef_event* ev_out;
+
+  if(likely( ! (*desc_init & (1u << q_label)) )) {
+    ef_vi* vi = evq->vi_qs[q_label];
+    if( ! vi ) {
+      INC_ERROR_STAT(evq, rx_ev_bad_q_label);
+      return;
+    }
+    desc_id[q_label] = vi->ep_state->txq.removed;
+    *desc_init |= 1u << q_label;
+  }
+
+  ev_out = (*evs)++;
   --(*evs_len);
 
   ev_out->tx.type = EF_EVENT_TYPE_TX;
-  ev_out->tx.q_id = QWORD_GET_U(ESF_GZ_EV_TXCMPL_Q_LABEL, *ev);
-  *desc_id += QWORD_GET_U(ESF_GZ_EV_TXCMPL_NUM_DSC, *ev);
-  ev_out->tx.desc_id = *desc_id;
+  ev_out->tx.q_id = q_label;
+  desc_id[q_label] += QWORD_GET_U(ESF_GZ_EV_TXCMPL_NUM_DSC, *ev);
+  ev_out->tx.desc_id = desc_id[q_label];
 }
 
 
 ef_vi_inline void ef100_tx_event(ef_vi* evq, const ef_vi_event* ev,
-				ef_event** evs, int* evs_len, unsigned* desc_id)
+				ef_event** evs, int* evs_len, unsigned* desc_id, unsigned* desc_init)
 {
   if( (evq->vi_flags & EF_VI_TX_TIMESTAMPS) == 0 ) {
-    ef100_tx_event_completion(evq, ev, evs, evs_len, desc_id);
+    ef100_tx_event_completion(evq, ev, evs, evs_len, desc_id, desc_init);
   }
   else {
     /* TODO: */
@@ -152,7 +166,8 @@ int ef100_ef_eventq_poll(ef_vi* evq, ef_event* evs, int evs_len)
   int evs_len_orig = evs_len;
   ef_vi_event *pev, ev;
   static int overflow_logged = 0;
-  unsigned tx_desc_id = evq->ep_state->txq.removed & evq->vi_txq.mask;
+  unsigned tx_desc_id[EF_VI_MAX_QS];
+  unsigned tx_desc_init = 0;
 
   EF_VI_BUG_ON(evs == NULL);
   EF_VI_BUG_ON(ESF_GZ_EV_RXPKTS_PHASE_LBN != ESF_GZ_EV_TXCMPL_PHASE_LBN);
@@ -176,7 +191,7 @@ int ef100_ef_eventq_poll(ef_vi* evq, ef_event* evs, int evs_len)
       break;
 
     case ESE_GZ_EF100_EV_TX_COMPLETION:
-      ef100_tx_event(evq, &ev, &evs, &evs_len, &tx_desc_id);
+      ef100_tx_event(evq, &ev, &evs, &evs_len, tx_desc_id, &tx_desc_init);
       break;
 
     case ESE_GZ_EF100_EV_MCDI:
