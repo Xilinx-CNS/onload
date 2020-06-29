@@ -2090,7 +2090,7 @@ static int ci_tcp_rx_enqueue_ooo(ci_netif* netif, ci_tcp_state* ts,
     LOG_TL(log(LNT_FMT "OOO DROP duplicate %08x-%08x",
                LNT_PRI_ARGS(netif, ts), rxp->seq,
                PKT_TCP_RX_ROB(pkt)->end_block_seq));
-    if( (ts->tcpflags & CI_TCPT_FLAG_SACK) ) {
+    if( NI_OPTS(netif).use_dsack && (ts->tcpflags & CI_TCPT_FLAG_SACK) ) {
       ts->dsack_start = rxp->seq;
       ts->dsack_end = pkt->pf.tcp_rx.end_seq;
       ts->dsack_block = prev_id;
@@ -4165,7 +4165,7 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
   }
 
   /* Should we DSACK it? */
-  if( (ts->tcpflags & CI_TCPT_FLAG_SACK) &&
+  if( NI_OPTS(netif).use_dsack && (ts->tcpflags & CI_TCPT_FLAG_SACK) &&
       SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) &&
       SEQ_LT(rxp->seq, pkt->pf.tcp_rx.end_seq) ) {
     /* This is data we've already received; so DSACK it. */
