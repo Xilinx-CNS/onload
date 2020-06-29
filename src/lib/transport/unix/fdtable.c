@@ -1186,7 +1186,8 @@ citp_fdtable_new_fd_set(unsigned fd, citp_fdinfo_p new_fdip, int fdt_locked)
     ** builds we accept that the user-level state got out-of-sync, and
     ** leak [fdi] since it seems like a suitably cautious thing to do.
     */
-    ci_log("%s: ERROR: Orphaned entry in user-level fd-table", __FUNCTION__);
+    ci_log("%s: ERROR: Orphaned entry %d in user-level fd-table",
+           __FUNCTION__, fd);
   }
   else
     /* We (at time of writing) only register a trampoline handler when we
