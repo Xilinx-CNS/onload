@@ -213,10 +213,12 @@ static int citp_epoll_sb_state_alloc(citp_socket* sock)
   ci_sb_epoll_state* epoll;
   int i;
 
-  if( OO_PP_NOT_NULL(sock->s->b.epoll) )
-    return 0;
-
   ci_netif_lock(sock->netif);
+  if( OO_PP_NOT_NULL(sock->s->b.epoll) ) {
+    ci_netif_unlock(sock->netif);
+    return 0;
+  }
+
   sp = ci_ni_aux_alloc(sock->netif, CI_TCP_AUX_TYPE_EPOLL);
   if( OO_PP_NOT_NULL(sp) ) {
     sock->s->b.epoll = sp;
