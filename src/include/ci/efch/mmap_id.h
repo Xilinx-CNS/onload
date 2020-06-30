@@ -7,5 +7,7 @@
 #define EFCH_VI_MMAP_MEM 1
 #define EFCH_VI_MMAP_PIO 2
 #define EFCH_VI_MMAP_CTPIO 3
+#define EFCH_VI_MMAP_PLUGIN_BASE 0x10
+#define EFCH_VI_MMAP_PLUGIN_MAX 0x1f
 
 #endif

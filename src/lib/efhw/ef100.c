@@ -515,7 +515,10 @@ int ef100_nic_ext_free(struct efhw_nic* nic, uint32_t mc_handle)
 int ef100_nic_ext_get_meta_global(struct efhw_nic* nic, uint32_t mc_handle,
                                   uint8_t* uuid, uint16_t* minor_ver,
                                   uint16_t* patch_ver, uint32_t* nmsgs,
-                                  uint32_t* nrsrc_classes)
+                                  uint32_t* nrsrc_classes,
+                                  uint16_t* mapped_csr_offset,
+                                  uint16_t* mapped_csr_size,
+                                  uint8_t* mapped_csr_flags)
 {
 	int rc;
 	size_t out_size;
@@ -535,6 +538,12 @@ int ef100_nic_ext_get_meta_global(struct efhw_nic* nic, uint32_t mc_handle,
 	*patch_ver = EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_PATCH_VER);
 	*nmsgs = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_GLOBAL_OUT_NUM_MSGS);
 	*nrsrc_classes = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_GLOBAL_OUT_NUM_RCS);
+	*mapped_csr_offset =
+	        EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_MAPPED_CSR_OFFSET);
+	*mapped_csr_size =
+	        EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_MAPPED_CSR_SIZE);
+	*mapped_csr_flags =
+	        EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_MAPPED_CSR_FLAGS);
 	return rc;
 }
 

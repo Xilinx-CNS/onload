@@ -17,6 +17,9 @@ struct efrm_ext_svc_meta {
     uint16_t patch_ver;
     uint32_t nmsgs;
     uint32_t nrsrc_classes;
+    uint16_t mapped_csr_offset;
+    uint16_t mapped_csr_size;
+    uint8_t mapped_csr_flags;
 };
 
 extern int efrm_ext_get_meta_global(struct efrm_resource *rs,

@@ -45,7 +45,10 @@ int efrm_ext_get_meta_global(struct efrm_resource *rs, uint32_t mc_handle,
 	return ef100_nic_ext_get_meta_global(rs->rs_client->nic, mc_handle,
 	                                     out->uuid, &out->minor_ver,
 	                                     &out->patch_ver, &out->nmsgs,
-	                                     &out->nrsrc_classes);
+	                                     &out->nrsrc_classes,
+	                                     &out->mapped_csr_offset,
+	                                     &out->mapped_csr_size,
+	                                     &out->mapped_csr_flags);
 }
 EXPORT_SYMBOL(efrm_ext_get_meta_global);
 

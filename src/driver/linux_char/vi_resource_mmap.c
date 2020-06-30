@@ -152,6 +152,32 @@ efab_vi_rm_mmap_ctpio(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
 }
 
 
+static int
+efab_vi_rm_mmap_plugin(struct efrm_vi *virs, unsigned subpage,
+                       unsigned long *bytes, void *opaque,
+                       int *map_num, unsigned long *offset)
+{
+  int rc;
+  int instance = virs->rs.rs_instance;
+  struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
+
+  /* More checking should be here, to avoid mapping non-plugin regions */
+  if( subpage == 0 || subpage >= nic->vi_stride / PAGE_SIZE ||
+      *bytes % PAGE_SIZE || subpage * PAGE_SIZE + *bytes > nic->vi_stride ) {
+    EFRM_ERR("%s: abuse of plugin mmap\n", __FUNCTION__);
+    return -EINVAL;
+  }
+
+  rc = ci_mmap_bar(nic, nic->vi_stride * instance + subpage * PAGE_SIZE,
+                   *bytes, opaque, map_num, offset, 0);
+  if( rc < 0 )
+    EFCH_ERR("%s: ERROR: ci_mmap_bar failed rc=%d", __FUNCTION__, rc);
+  else
+    *bytes = 0;
+  return rc;
+}
+
+
 static int 
 efab_vi_rm_mmap_mem(struct efrm_vi *virs,
                     unsigned long *bytes, void *opaque,
@@ -187,6 +213,10 @@ int efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes,
       break;
     case EFCH_VI_MMAP_CTPIO:
       rc = efab_vi_rm_mmap_ctpio(virs, bytes, vma, map_num, offset);
+      break;
+    case EFCH_VI_MMAP_PLUGIN_BASE ... EFCH_VI_MMAP_PLUGIN_MAX:
+      rc = efab_vi_rm_mmap_plugin(virs, index - EFCH_VI_MMAP_PLUGIN_BASE,
+                                  bytes, vma, map_num, offset);
       break;
     default:
       ci_assert(0);

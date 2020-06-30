@@ -16,7 +16,10 @@ extern int ef100_nic_ext_get_meta_global(struct efhw_nic* nic,
                                          uint32_t mc_handle,
                                          uint8_t* uuid, uint16_t* minor_ver,
                                          uint16_t* patch_ver, uint32_t* nmsgs,
-                                         uint32_t* nrsrc_classes);
+                                         uint32_t* nrsrc_classes,
+                                         uint16_t* mapped_csr_offset,
+                                         uint16_t* mapped_csr_size,
+                                         uint8_t* mapped_csr_flags);
 
 extern int ef100_nic_ext_get_meta_rc(struct efhw_nic* nic, uint32_t mc_handle,
                                      uint32_t clas,
