@@ -281,6 +281,7 @@ static int oo_bufpage_init(struct oo_buffer_pages **pages_out,
   if( ! pages )
     return -ENOMEM;
   pages->n_bufs = n_bufs;
+  pages->shmid = -1;
   oo_atomic_set(&pages->ref_count, 1);
   *pages_out = pages;
   return 0;
