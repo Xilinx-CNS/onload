@@ -849,8 +849,17 @@ static int thc_alloc_thr(tcp_helper_cluster_t* thc,
     /* All stack names taken i.e. cluster is full.  Based on setting
      * of cluster_restart_opt, either kill a orphan or return error. */
     if( cluster_restart_opt == 1 ) {
-      if( (rc = thc_kill_an_orphan(thc)) != 0 ||
-          (rc = thc_get_next_thr_name(thc, roa.in_name)) != 0 ) {
+      rc = thc_kill_an_orphan(thc);
+
+      /* thc_kill_an_orphan() can return ENOENT if there are no
+       * orphan stacks. It means that all instances in cluster already
+       * allocated, so proper(ENOSPC) return code should be set. */
+      if( rc == 0 )
+        rc = thc_get_next_thr_name(thc, roa.in_name);
+      else if( rc == -ENOENT )
+        rc = -ENOSPC;
+
+      if( rc != 0 ) {
         LOG_E(ci_log("%s: Stack creation failed because all instances in "
                      "cluster already allocated.", __FUNCTION__));
         return rc;
