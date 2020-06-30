@@ -404,11 +404,6 @@ static const test_t* do_init(int ifindex)
   TRY(ef_driver_open(&driver_handle));
   TRY(ef_pd_alloc(&pd, driver_handle, ifindex, pd_flags));
 
-  /* TODO AF_XDP */
-  pd.xdp_buffers = N_BUFS;
-  pd.xdp_buffer_size = BUF_SIZE;
-  pd.xdp_headroom = offsetof(struct pkt_buf, dma_buf);
-
   if( cfg_ctpio_no_poison )
     vi_flags |= EF_VI_TX_CTPIO_NO_POISON;
 
@@ -453,13 +448,10 @@ static const test_t* do_init(int ifindex)
   }
 
  got_vi:
-  /* TODO AF_XDP */
-  if( vi.nic_type.arch != EF_VI_ARCH_AF_XDP ) {
-    ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_NONE);
-    TRY(ef_filter_spec_set_ip4_local(&filter_spec, IPPROTO_UDP, htonl(raddr_he),
-                                     htons(port_he)));
-    TRY(ef_vi_filter_add(&vi, driver_handle, &filter_spec, NULL));
-  }
+  ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_NONE);
+  TRY(ef_filter_spec_set_ip4_local(&filter_spec, IPPROTO_UDP, htonl(raddr_he),
+                                   htons(port_he)));
+  TRY(ef_vi_filter_add(&vi, driver_handle, &filter_spec, NULL));
 
   {
     int bytes = N_BUFS * BUF_SIZE;

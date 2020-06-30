@@ -361,27 +361,18 @@ void ef_vi_set_intf_ver(char* intf_ver, size_t len)
    * It'd also be possible to enhance the checksum computation to be smarter
    * (e.g. by ignoring comments, etc.).
    */
-  if( strcmp(EFCH_INTF_VER, "e95e59e3385ac983dbfee3f6bc131a5a") ) {
+  if( strcmp(EFCH_INTF_VER, "f88542ca171afef7d7a842acb83e101f") ) {
     fprintf(stderr, "ef_vi: ERROR: char interface has changed\n");
     abort();
   }
 }
 
-static int af_xdp_kick(ef_vi* vi)
-{
-  ci_resource_op_t op;
-
-  op.op = CI_RSOP_VI_AF_XDP_KICK;
-  op.id = efch_make_resource_id(vi->vi_resource_id);
-  return ci_resource_op(vi->xdp_kick_context.n, &op);
-}
 
 int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
                   efch_resource_id_t pd_or_vi_set_id,
                   ef_driver_handle pd_or_vi_set_dh,
                   int index_in_vi_set, int evq_capacity,
                   int rxq_capacity, int txq_capacity,
-                  long xdp_buffers, int xdp_buffer_size, int xdp_headroom,
                   ef_vi* evq, ef_driver_handle evq_dh,
                   int vi_clustered, enum ef_vi_flags vi_flags)
 {
@@ -460,9 +451,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   ra.u.vi_in.evq_capacity = evq_capacity;
   ra.u.vi_in.txq_capacity = txq_capacity;
   ra.u.vi_in.rxq_capacity = rxq_capacity;
-  ra.u.vi_in.xdp_buffers = xdp_buffers;
-  ra.u.vi_in.xdp_buffer_size = xdp_buffer_size;
-  ra.u.vi_in.xdp_headroom = xdp_headroom;
   ra.u.vi_in.tx_q_tag = q_label;
   ra.u.vi_in.rx_q_tag = q_label;
   ra.u.vi_in.flags = vi_flags_to_efab_flags(vi_flags);
@@ -545,10 +533,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   vi->vi_i = ra.u.vi_out.instance;
   ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
-
-  /* TODO AF_XDP tidy this up */
-  vi->xdp_kick = af_xdp_kick;
-  vi->xdp_kick_context.n = vi_dh;
 
   if( vi_flags & (EF_VI_RX_TIMESTAMPS | EF_VI_TX_TIMESTAMPS) ) {
     int rx_ts_correction, tx_ts_correction;
@@ -641,7 +625,6 @@ int ef_vi_alloc_from_pd(ef_vi* vi, ef_driver_handle vi_dh,
   }
   return __ef_vi_alloc(vi, vi_dh, res_id, pd_dh, index_in_vi_set, evq_capacity,
                        rxq_capacity, txq_capacity,
-                       pd->xdp_buffers, pd->xdp_buffer_size, pd->xdp_headroom,
                        evq_opt, evq_dh, vi_clustered, flags);
 }
 
@@ -660,7 +643,7 @@ int ef_vi_alloc_from_set(ef_vi* vi, ef_driver_handle vi_dh,
   return __ef_vi_alloc(vi, vi_dh,
                        efch_make_resource_id(vi_set->vis_res_id),
                        vi_set_dh, index_in_vi_set,
-                       evq_capacity, rxq_capacity, txq_capacity, 0, 0, 0,
+                       evq_capacity, rxq_capacity, txq_capacity,
                        evq_opt, evq_dh, 0, flags);
 }
 

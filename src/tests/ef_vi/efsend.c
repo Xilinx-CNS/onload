@@ -130,12 +130,6 @@ int main(int argc, char* argv[])
   /* Intialize and configure hardware resources */
   TRY(ef_driver_open(&dh));
   TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
-
-  /* TODO AF_XDP */
-  pd.xdp_buffers = 1;
-  pd.xdp_buffer_size = BUF_SIZE;
-  pd.xdp_headroom = 0;
-
   TRY(ef_vi_alloc_from_pd(&vi, dh, &pd, dh, -1, 0, -1, NULL, -1, vi_flags));
 
   printf("txq_size=%d\n", ef_vi_transmit_capacity(&vi));
@@ -152,9 +146,7 @@ int main(int argc, char* argv[])
   dma_buf_addr = ef_memreg_dma_addr(&mr, 0);
 
   /* Prepare packet contents */
-  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, cfg_vlan,
-                              /* TODO AF_XDP */
-                              vi.nic_type.arch == EF_VI_ARCH_AF_XDP);
+  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, cfg_vlan, 0);
 
   /* Continue until all sends are complete */
   while( n_sent < cfg_iter ) {

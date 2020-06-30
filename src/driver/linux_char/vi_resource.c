@@ -267,11 +267,6 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   if( rmpd != NULL && efrm_pd_stack_id_get(rmpd) > 0 )
     in_flags |= EFHW_VI_TX_LOOPBACK;
 
-  efrm_vi_attr_set_af_xdp(&attr,
-                          alloc_in->xdp_buffers,
-                          alloc_in->xdp_buffer_size,
-                          alloc_in->xdp_headroom);
-
   rc = vi_resource_alloc(&attr, client, evq ? efrm_vi(evq) : NULL,
                          in_flags,
                          alloc_in->evq_capacity,
@@ -556,10 +551,6 @@ efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
         efrm_client_get_nic(virs->rs.rs_client)->ts_format;
       rc = 0;
       *copy_out = 1;
-      break;
-
-    case CI_RSOP_VI_AF_XDP_KICK:
-      rc = efrm_vi_af_xdp_kick(virs);
       break;
 
     default:

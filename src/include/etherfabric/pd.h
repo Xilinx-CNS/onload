@@ -76,8 +76,6 @@ typedef struct ef_pd {
   unsigned         pd_cluster_viset_resource_id;
   /** Index of VI wanted within a cluster. */
   int              pd_cluster_viset_index;
-  /* TODO AF_XDP is there a better way to pass these through to the vi? */
-  int xdp_buffers, xdp_buffer_size, xdp_headroom;
 } ef_pd;
 
 
