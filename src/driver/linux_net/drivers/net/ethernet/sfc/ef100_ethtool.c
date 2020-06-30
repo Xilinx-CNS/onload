@@ -21,7 +21,7 @@
 static void ef100_ethtool_get_ringparam(struct net_device *net_dev,
 					struct ethtool_ringparam *ring)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	ring->rx_max_pending = EFX_EF100_MAX_DMAQ_SIZE;
 	ring->tx_max_pending = EFX_EF100_MAX_DMAQ_SIZE;

@@ -30,6 +30,7 @@
 #endif
 #include "tc.h"
 #include "efx_devlink.h"
+#include "ef100_sriov.h"
 #include "ef100_rep.h"
 #include "xdp.h"
 
@@ -44,10 +45,9 @@ static void ef100_update_name(struct efx_nic *efx)
 	strcpy(efx->name, efx->net_dev->name);
 #ifdef CONFIG_SFC_DEBUGFS
 	mutex_lock(&efx->debugfs_symlink_mutex);
-	if (efx->debug_symlink) {
+	if (efx->debug_symlink)
 		efx_fini_debugfs_netdev(efx->net_dev);
-		efx_init_debugfs_netdev(efx->net_dev);
-	}
+	efx_init_debugfs_netdev(efx->net_dev);
 	mutex_unlock(&efx->debugfs_symlink_mutex);
 #endif
 }
@@ -113,6 +113,8 @@ void ef100_start_reps(struct efx_nic *efx)
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	int i;
 
+	WARN_ON(efx->state != STATE_NET_UP);
+
 	spin_lock_bh(&nic_data->vf_reps_lock);
 	for (i = 0; i < nic_data->rep_count; i++)
 		netif_carrier_on(nic_data->vf_rep[i]);
@@ -139,7 +141,7 @@ void ef100_stop_reps(struct efx_nic *efx)
  */
 static int ef100_net_stop(struct net_device *net_dev)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	netif_dbg(efx, ifdown, efx->net_dev, "closing on CPU %d\n",
 		  raw_smp_processor_id());
@@ -152,6 +154,8 @@ static int ef100_net_stop(struct net_device *net_dev)
 	}
 #endif
 #endif
+
+	efx->state = STATE_NET_DOWN;
 
 	ef100_stop_reps(efx);
 	netif_stop_queue(net_dev);
@@ -174,15 +178,13 @@ static int ef100_net_stop(struct net_device *net_dev)
 	efx_unset_channels(efx);
 	efx_remove_interrupts(efx);
 
-	efx->state = STATE_NET_DOWN;
-
 	return 0;
 }
 
 /* Context: process, rtnl_lock() held. */
 static int ef100_net_open(struct net_device *net_dev)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	unsigned int allocated_vis;
 	int rc;
 
@@ -299,9 +301,9 @@ static int ef100_net_open(struct net_device *net_dev)
 		efx_link_status_changed(efx);
 	mutex_unlock(&efx->mac_lock);
 
-	ef100_start_reps(efx);
-
 	efx->state = STATE_NET_UP;
+
+	ef100_start_reps(efx);
 
 	return 0;
 
@@ -327,7 +329,7 @@ netdev_tx_t __ef100_hard_start_xmit(struct sk_buff *skb,
 				    struct net_device *net_dev,
 				    struct efx_vfrep *efv)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct efx_tx_queue *tx_queue;
 	struct efx_channel *channel;
 	int rc;
@@ -358,7 +360,7 @@ err:
 static int ef100_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 {
 #ifdef EFX_NOT_UPSTREAM
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 #endif
 	int rc = -EOPNOTSUPP;
 
@@ -401,7 +403,7 @@ static int ef100_udp_tunnel_type_map(enum udp_parsable_tunnel_type in)
 
 static void ef100_udp_tunnel_add(struct net_device *dev, struct udp_tunnel_info *ti)
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 	struct ef100_udp_tunnel tnl;
 
 	tnl.type = ef100_udp_tunnel_type_map(ti->type);
@@ -416,7 +418,7 @@ static void ef100_udp_tunnel_add(struct net_device *dev, struct udp_tunnel_info 
 
 static void ef100_udp_tunnel_del(struct net_device *dev, struct udp_tunnel_info *ti)
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 	struct ef100_udp_tunnel tnl;
 
 	tnl.type = ef100_udp_tunnel_type_map(ti->type);
@@ -435,7 +437,7 @@ void ef100_vxlan_add_port(struct net_device *dev, sa_family_t sa_family,
 {
 	struct ef100_udp_tunnel tnl = {.port = port,
 				       .type = EFX_ENCAP_TYPE_VXLAN};
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (efx->type->udp_tnl_add_port2)
 		efx->type->udp_tnl_add_port2(efx, tnl);
@@ -446,7 +448,7 @@ void ef100_vxlan_del_port(struct net_device *dev, sa_family_t sa_family,
 {
 	struct ef100_udp_tunnel tnl = {.port = port,
 				       .type = EFX_ENCAP_TYPE_VXLAN};
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (efx->type->udp_tnl_del_port2)
 		efx->type->udp_tnl_del_port2(efx, tnl);
@@ -458,7 +460,7 @@ void ef100_geneve_add_port(struct net_device *dev, sa_family_t sa_family,
 {
 	struct ef100_udp_tunnel tnl = {.port = port,
 				       .type = EFX_ENCAP_TYPE_GENEVE};
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (efx->type->udp_tnl_add_port2)
 		efx->type->udp_tnl_add_port2(efx, tnl);
@@ -469,7 +471,7 @@ void ef100_geneve_del_port(struct net_device *dev, sa_family_t sa_family,
 {
 	struct ef100_udp_tunnel tnl = {.port = port,
 				       .type = EFX_ENCAP_TYPE_GENEVE};
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (efx->type->udp_tnl_del_port2)
 		efx->type->udp_tnl_del_port2(efx, tnl);
@@ -618,7 +620,8 @@ int ef100_netdev_event(struct notifier_block *this,
 	struct net_device *net_dev = netdev_notifier_info_to_dev(ptr);
 	int err;
 
-	if (netdev_priv(net_dev) == efx && event == NETDEV_CHANGENAME)
+	if (efx->net_dev == net_dev &&
+	    (event == NETDEV_CHANGENAME || event == NETDEV_REGISTER))
 		ef100_update_name(efx);
 
 	err = efx_tc_netdev_event(efx, event, net_dev);
@@ -641,7 +644,7 @@ int ef100_netevent_event(struct notifier_block *this, unsigned long event,
 	return NOTIFY_DONE;
 };
 
-int ef100_register_netdev(struct efx_nic *efx)
+static int ef100_register_netdev(struct efx_nic *efx)
 {
 	struct net_device *net_dev = efx->net_dev;
 	int rc;
@@ -685,13 +688,181 @@ fail_locked:
 	return rc;
 }
 
-void ef100_unregister_netdev(struct efx_nic *efx)
+static void ef100_unregister_netdev(struct efx_nic *efx)
 {
 	if (efx_dev_registered(efx)) {
 		efx_fini_devlink(efx);
 		efx_fini_mcdi_logging(efx);
-		efx->state = STATE_UNINIT;
+		efx->state = STATE_PROBED;
 		unregister_netdev(efx->net_dev);
 	}
 }
 
+void ef100_remove_netdev(struct efx_probe_data *probe_data)
+{
+	struct efx_nic *efx = &probe_data->efx;
+
+	if (!efx->net_dev)
+		return;
+
+	rtnl_lock();
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx_dl_supported(efx))
+		efx_dl_unregister_nic(&efx->dl_nic);
+#endif
+#endif
+	dev_close(efx->net_dev);
+	rtnl_unlock();
+
+	/* Unregistering our netdev notifier triggers unbinding of TC indirect
+	 * blocks, so we have to do it before PCI removal.
+	 */
+	unregister_netdevice_notifier(&efx->netdev_notifier);
+	unregister_netevent_notifier(&efx->netevent_notifier);
+
+	ef100_unregister_netdev(efx);
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
+	rtnl_lock();
+	efx_xdp_setup_prog(efx, NULL);
+	rtnl_unlock();
+#endif
+
+	if (!efx->type->is_vf) {
+		struct ef100_nic_data *nic_data = efx->nic_data;
+
+#if defined(CONFIG_SFC_SRIOV)
+		if (efx->vf_count) /* Disable any VFs */
+			efx_ef100_pci_sriov_disable(efx, true);
+#endif
+		efx_fini_tc(efx);
+		if (nic_data) {
+			kfree(nic_data->vf_rep);
+			nic_data->vf_rep = NULL;
+		}
+	}
+
+#ifdef CONFIG_SFC_DEBUGFS
+	mutex_lock(&efx->debugfs_symlink_mutex);
+	efx_fini_debugfs_netdev(efx->net_dev);
+	mutex_unlock(&efx->debugfs_symlink_mutex);
+#endif
+
+	efx_mcdi_filter_table_remove(efx);
+	efx_fini_channels(efx);
+	kfree(efx->phy_data);
+	efx->phy_data = NULL;
+
+	free_netdev(efx->net_dev);
+	efx->net_dev = NULL;
+	efx->state = STATE_PROBED;
+}
+
+int ef100_probe_netdev(struct efx_probe_data *probe_data)
+{
+	struct efx_nic *efx = &probe_data->efx;
+	struct efx_probe_data **probe_ptr;
+	struct net_device *net_dev;
+	int rc;
+
+	if (efx->mcdi->fn_flags &
+	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)) {
+		pci_info(efx->pci_dev, "No network port on this PCI function");
+		return 0;
+	}
+
+	/* Allocate and initialise a struct net_device */
+	net_dev = alloc_etherdev_mq(sizeof(probe_data), EFX_MAX_CORE_TX_QUEUES);
+	if (!net_dev)
+		return -ENOMEM;
+	probe_ptr = netdev_priv(net_dev);
+	*probe_ptr = probe_data;
+	efx->net_dev = net_dev;
+	SET_NETDEV_DEV(net_dev, &efx->pci_dev->dev);
+
+	net_dev->features |= efx->type->offload_features;
+	efx_add_hw_features(efx, efx->type->offload_features);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_VLAN_FEATURES)
+	net_dev->vlan_features |= (NETIF_F_HW_CSUM | NETIF_F_SG |
+				   NETIF_F_HIGHDMA | NETIF_F_ALL_TSO);
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
+	if (!net_dev->gso_max_segs)
+		net_dev->gso_max_segs =
+			ESE_EF100_DP_GZ_TSO_MAX_HDR_NUM_SEGS_DEFAULT;
+#endif
+	efx->mdio.dev = net_dev;
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	efx_dl_probe(efx);
+	efx->ef10_resources = efx->type->ef10_resources;
+	efx->n_dl_irqs = EF100_ONLOAD_IRQS;
+#endif
+#endif
+
+	rc = efx_ef100_init_datapath_caps(efx);
+	if (rc < 0)
+		goto fail;
+
+	rc = ef100_phy_probe(efx);
+	if (rc)
+		goto fail;
+
+	rc = efx_init_channels(efx);
+	if (rc)
+		goto fail;
+
+	rc = ef100_filter_table_probe(efx);
+	if (rc)
+		goto fail;
+
+	netdev_rss_key_fill(efx->rss_context.rx_hash_key,
+			    sizeof(efx->rss_context.rx_hash_key));
+
+	/* Don't fail init if RSS setup doesn't work. */
+	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
+
+	rc = efx_init_struct_tc(efx);
+	if (rc)
+		goto fail;
+
+	rc = ef100_register_netdev(efx);
+	if (rc)
+		goto fail;
+
+	if (!efx->type->is_vf) {
+		rc = ef100_probe_netdev_pf(efx);
+		if (rc)
+			goto fail;
+	}
+
+	efx->netdev_notifier.notifier_call = ef100_netdev_event;
+	rc = register_netdevice_notifier(&efx->netdev_notifier);
+	if (rc) {
+		netif_err(efx, probe, efx->net_dev,
+			  "Failed to register netdevice notifier, rc=%d\n", rc);
+		goto fail;
+	}
+
+	efx->netevent_notifier.notifier_call = ef100_netevent_event;
+	rc = register_netevent_notifier(&efx->netevent_notifier);
+	if (rc) {
+		netif_err(efx, probe, efx->net_dev,
+			  "Failed to register netevent notifier, rc=%d\n", rc);
+		goto fail;
+	}
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx_dl_supported(efx)) {
+		rtnl_lock();
+		efx_dl_register_nic(&efx->dl_nic);
+		rtnl_unlock();
+	}
+#endif
+#endif
+
+fail:
+	return rc;
+}

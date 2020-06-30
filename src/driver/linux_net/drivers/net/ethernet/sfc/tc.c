@@ -1924,6 +1924,7 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 		rc = -ENOMEM;
 		goto release;
 	}
+	INIT_LIST_HEAD(&rule->acts.list);
 	rule->cookie = tc->cookie;
 	old = rhashtable_lookup_get_insert_fast(&efx->tc->match_action_ht,
 						&rule->linkage,
@@ -1937,7 +1938,6 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 	}
 
 	/* Parse actions */
-	INIT_LIST_HEAD(&rule->acts.list);
 	act = kzalloc(sizeof(*act), GFP_USER);
 	if (!act) {
 		rc = -ENOMEM;
@@ -2198,6 +2198,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 		rc = -ENOMEM;
 		goto release;
 	}
+	INIT_LIST_HEAD(&rule->acts.list);
 	rule->cookie = tc->cookie;
 	old = rhashtable_lookup_get_insert_fast(&efx->tc->match_action_ht,
 						&rule->linkage,
@@ -2211,7 +2212,6 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 	}
 
 	/* Parse actions */
-	INIT_LIST_HEAD(&rule->acts.list);
 	act = kzalloc(sizeof(*act), GFP_USER);
 	if (!act) {
 		rc = -ENOMEM;
@@ -3555,7 +3555,7 @@ static int efx_tc_indr_setup_cb(struct net_device *net_dev, void *cb_priv,
 int efx_setup_tc(struct net_device *net_dev, enum tc_setup_type type,
 		 void *type_data)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->type->is_vf)
 		return -EOPNOTSUPP;

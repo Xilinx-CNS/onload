@@ -2413,7 +2413,7 @@ int efx_resume_napi(struct efx_nic *efx)
  */
 void efx_netpoll(struct net_device *net_dev)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct efx_channel *channel;
 
 	efx_for_each_channel(channel, efx)

@@ -1607,7 +1607,7 @@ void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len)
 	return;
 
 fail:
-	netif_err(efx, probe, efx->net_dev, "%s: failed rc=%d\n", __func__, rc);
+	pci_err(efx->pci_dev, "%s: failed rc=%d\n", __func__, rc);
 	buf[0] = 0;
 }
 
@@ -1867,9 +1867,9 @@ int efx_mcdi_drv_attach(struct efx_nic *efx, u32 fw_variant, u32 *out_flags,
 	 * we should retry the attach without the request.
 	 */
 	if (request_spreading && (rc == -EINVAL || rc == -EOPNOTSUPP)) {
-		netif_dbg(efx, probe, efx->net_dev,
-			  "efx_mcdi_drv_attach failed (%d) when requesting VI spreading mode; retrying\n",
-			  rc);
+		pci_dbg(efx->pci_dev,
+			"%s failed (%d) when requesting VI spreading mode; retrying\n",
+			__func__, rc);
 
 		/* Retry without asking for spreading. */
 		in &= ~(1 << MC_CMD_DRV_ATTACH_IN_WANT_TX_ONLY_SPREADING_LBN);
@@ -1880,15 +1880,14 @@ int efx_mcdi_drv_attach(struct efx_nic *efx, u32 fw_variant, u32 *out_flags,
 
 	if (rc == 0 && efx_mcdi_drv_attach_bad_spreading(flags)) {
 		efx_mcdi_drv_detach(efx);
-		netif_err(efx, probe, efx->net_dev,
-			  "efx_mcdi_drv_attach gave unsupported VI spreading mode\n");
+		pci_err(efx->pci_dev,
+			"%s gave unsupported VI spreading mode\n", __func__);
 		rc = -EINVAL;
 	}
 
 	if (rc == 0) {
-		netif_dbg(efx, probe, efx->net_dev,
-			  "efx_mcdi_drv_attach attached with flags %#x\n",
-			  flags);
+		pci_dbg(efx->pci_dev,
+			"%s attached with flags %#x\n", __func__, flags);
 		if (out_flags)
 			*out_flags = flags;
 	}

@@ -332,7 +332,7 @@ void efx_get_irq_moderation(struct efx_nic *efx, unsigned int *tx_usecs,
  */
 int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct mii_ioctl_data *data = if_mii(ifr);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
@@ -371,7 +371,7 @@ int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 /* Context: process, rtnl_lock() held. */
 int efx_net_open(struct net_device *net_dev)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	unsigned loops = 2;
 	int rc;
 
@@ -505,7 +505,7 @@ fail:
  */
 int efx_net_stop(struct net_device *net_dev)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	netif_dbg(efx, ifdown, efx->net_dev, "closing on CPU %d\n",
 			raw_smp_processor_id());
@@ -551,7 +551,7 @@ int efx_net_stop(struct net_device *net_dev)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO)
 static int efx_vlan_rx_add_vid(struct net_device *net_dev, __be16 proto, u16 vid)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->type->vlan_rx_add_vid)
 		return efx->type->vlan_rx_add_vid(efx, proto, vid);
@@ -561,7 +561,7 @@ static int efx_vlan_rx_add_vid(struct net_device *net_dev, __be16 proto, u16 vid
 
 static int efx_vlan_rx_kill_vid(struct net_device *net_dev, __be16 proto, u16 vid)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->type->vlan_rx_kill_vid)
 		return efx->type->vlan_rx_kill_vid(efx, proto, vid);
@@ -571,7 +571,7 @@ static int efx_vlan_rx_kill_vid(struct net_device *net_dev, __be16 proto, u16 vi
 #elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_RC)
 static int efx_vlan_rx_add_vid(struct net_device *net_dev, u16 vid)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->type->vlan_rx_add_vid)
 		return efx->type->vlan_rx_add_vid(efx, htons(ETH_P_8021Q), vid);
@@ -581,7 +581,7 @@ static int efx_vlan_rx_add_vid(struct net_device *net_dev, u16 vid)
 
 static int efx_vlan_rx_kill_vid(struct net_device *net_dev, u16 vid)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->type->vlan_rx_kill_vid)
 		return efx->type->vlan_rx_kill_vid(efx, htons(ETH_P_8021Q), vid);
@@ -591,7 +591,7 @@ static int efx_vlan_rx_kill_vid(struct net_device *net_dev, u16 vid)
 #elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 static void efx_vlan_rx_add_vid(struct net_device *net_dev, unsigned short vid)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->type->vlan_rx_add_vid)
 		efx->type->vlan_rx_add_vid(efx, htons(ETH_P_8021Q), vid);
@@ -599,7 +599,7 @@ static void efx_vlan_rx_add_vid(struct net_device *net_dev, unsigned short vid)
 
 static void efx_vlan_rx_kill_vid(struct net_device *net_dev, unsigned short vid)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->type->vlan_rx_kill_vid)
 		efx->type->vlan_rx_kill_vid(efx, htons(ETH_P_8021Q), vid);
@@ -609,7 +609,7 @@ static void efx_vlan_rx_kill_vid(struct net_device *net_dev, unsigned short vid)
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
 void efx_vlan_rx_register(struct net_device *dev, struct vlan_group *vlan_group)
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 	struct efx_channel *channel;
 
 	/* Before changing efx_nic::vlan_group to null, we must flush
@@ -645,7 +645,7 @@ static int efx_udp_tunnel_type_map(enum udp_parsable_tunnel_type in)
 
 static void efx_udp_tunnel_add(struct net_device *dev, struct udp_tunnel_info *ti)
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 	struct efx_udp_tunnel tnl;
 	int efx_tunnel_type;
 
@@ -662,7 +662,7 @@ static void efx_udp_tunnel_add(struct net_device *dev, struct udp_tunnel_info *t
 
 static void efx_udp_tunnel_del(struct net_device *dev, struct udp_tunnel_info *ti)
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 	struct efx_udp_tunnel tnl;
 	int efx_tunnel_type;
 
@@ -683,7 +683,7 @@ void efx_vxlan_add_port(struct net_device *dev, sa_family_t sa_family,
 {
 	struct efx_udp_tunnel tnl = {.port = port,
 				     .type = TUNNEL_ENCAP_UDP_PORT_ENTRY_VXLAN};
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (efx->type->udp_tnl_add_port)
 		efx->type->udp_tnl_add_port(efx, tnl);
@@ -694,7 +694,7 @@ void efx_vxlan_del_port(struct net_device *dev, sa_family_t sa_family,
 {
 	struct efx_udp_tunnel tnl = {.port = port,
 				     .type = TUNNEL_ENCAP_UDP_PORT_ENTRY_VXLAN};
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (efx->type->udp_tnl_del_port)
 		efx->type->udp_tnl_del_port(efx, tnl);
@@ -706,7 +706,7 @@ void efx_geneve_add_port(struct net_device *dev, sa_family_t sa_family,
 {
 	struct efx_udp_tunnel tnl = {.port = port,
 				     .type = TUNNEL_ENCAP_UDP_PORT_ENTRY_GENEVE};
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (efx->type->udp_tnl_add_port)
 		efx->type->udp_tnl_add_port(efx, tnl);
@@ -717,7 +717,7 @@ void efx_geneve_del_port(struct net_device *dev, sa_family_t sa_family,
 {
 	struct efx_udp_tunnel tnl = {.port = port,
 				     .type = TUNNEL_ENCAP_UDP_PORT_ENTRY_GENEVE};
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (efx->type->udp_tnl_del_port)
 		efx->type->udp_tnl_del_port(efx, tnl);
@@ -742,10 +742,9 @@ static void efx_update_name(struct efx_nic *efx)
 	efx_set_channel_names(efx);
 #ifdef CONFIG_SFC_DEBUGFS
 	mutex_lock(&efx->debugfs_symlink_mutex);
-	if (efx->debug_symlink) {
+	if (efx->debug_symlink)
 		efx_fini_debugfs_netdev(efx->net_dev);
-		efx_init_debugfs_netdev(efx->net_dev);
-	}
+	efx_init_debugfs_netdev(efx->net_dev);
 	mutex_unlock(&efx->debugfs_symlink_mutex);
 #endif
 }
@@ -756,7 +755,8 @@ static int efx_netdev_event(struct notifier_block *this,
 	struct efx_nic *efx = container_of(this, struct efx_nic, netdev_notifier);
 	struct net_device *net_dev = netdev_notifier_info_to_dev(ptr);
 
-	if (netdev_priv(net_dev) == efx && event == NETDEV_CHANGENAME) {
+	if (efx->net_dev == net_dev &&
+	    (event == NETDEV_CHANGENAME || event == NETDEV_REGISTER)) {
 		efx_update_name(efx);
 
 #if defined(CONFIG_SFC_MTD) && defined(EFX_WORKAROUND_87308)
@@ -970,7 +970,8 @@ fail_locked:
 
 static void efx_unregister_netdev(struct efx_nic *efx)
 {
-	BUG_ON(netdev_priv(efx->net_dev) != efx);
+	if (WARN_ON(efx_netdev_priv(efx->net_dev) != efx))
+		return;
 
 #if defined(EFX_NOT_UPSTREAM)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
@@ -1061,6 +1062,11 @@ void efx_pci_remove_post_io(struct efx_nic *efx,
 	efx->type->remove_port(efx);
 	nic_remove(efx);
 	efx_remove_common(efx);
+#ifdef CONFIG_SFC_DEBUGFS
+	mutex_lock(&efx->debugfs_symlink_mutex);
+	efx_fini_debugfs_netdev(efx->net_dev);
+	mutex_unlock(&efx->debugfs_symlink_mutex);
+#endif
 }
 
 int efx_pci_probe_post_io(struct efx_nic *efx,
@@ -1180,6 +1186,7 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
  */
 static void efx_pci_remove(struct pci_dev *pci_dev)
 {
+	struct efx_probe_data *probe_data;
 	struct efx_nic *efx;
 
 	efx = pci_get_drvdata(pci_dev);
@@ -1232,11 +1239,13 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	unregister_netdevice_notifier(&efx->netdev_notifier);
 
 	efx_fini_io(efx);
-	netif_dbg(efx, drv, efx->net_dev, "shutdown successful\n");
+	pci_dbg(efx->pci_dev, "shutdown successful\n");
 
 	efx_fini_struct(efx);
 	pci_set_drvdata(pci_dev, NULL);
 	free_netdev(efx->net_dev);
+	probe_data = container_of(efx, struct efx_probe_data, efx);
+	kfree(probe_data);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 	pci_disable_pcie_error_reporting(pci_dev);
@@ -1255,15 +1264,24 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 static int efx_pci_probe(struct pci_dev *pci_dev,
 			 const struct pci_device_id *entry)
 {
+	struct efx_probe_data *probe_data, **probe_ptr;
 	struct net_device *net_dev;
 	struct efx_nic *efx;
 	int rc;
 
-	/* Allocate and initialise a struct net_device and struct efx_nic */
-	net_dev = alloc_etherdev_mq(sizeof(*efx), EFX_MAX_CORE_TX_QUEUES);
+	/* Allocate probe data and struct efx_nic */
+	probe_data = kzalloc(sizeof(*probe_data), GFP_KERNEL);
+	if (!probe_data)
+		return -ENOMEM;
+	probe_data->pci_dev = pci_dev;
+	efx = &probe_data->efx;
+
+	/* Allocate and initialise a struct net_device */
+	net_dev = alloc_etherdev_mq(sizeof(probe_data), EFX_MAX_CORE_TX_QUEUES);
 	if (!net_dev)
 		return -ENOMEM;
-	efx = netdev_priv(net_dev);
+	probe_ptr = netdev_priv(net_dev);
+	*probe_ptr = probe_data;
 	efx->net_dev = net_dev;
 	efx->type = (const struct efx_nic_type *) entry->driver_data;
 
@@ -1271,9 +1289,10 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 
 	pci_set_drvdata(pci_dev, efx);
 	SET_NETDEV_DEV(net_dev, &pci_dev->dev);
-	rc = efx_init_struct(efx, pci_dev, net_dev);
+	rc = efx_init_struct(efx, pci_dev);
 	if (rc)
 		goto fail;
+	efx->mdio.dev = net_dev;
 #ifdef CONFIG_SFC_MTD
 	if (efx_mtd_init(efx) < 0)
 		goto fail;
@@ -1376,6 +1395,7 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
+	efx_dl_probe(efx);
 	if (efx_dl_supported(efx)) {
 		rtnl_lock();
 		efx_dl_register_nic(&efx->dl_nic);
@@ -1431,13 +1451,17 @@ static int efx_pm_freeze(struct device *dev)
 #endif
 #endif
 
-	if (efx_net_active(efx->state)) {
+	if (efx->state == STATE_NET_UP) {
 		efx_device_detach_sync(efx);
 
 		efx_stop_all(efx);
 		efx_disable_interrupts(efx);
+	}
 
+	if (efx_net_active(efx->state)) {
 		efx->state = efx_freeze(efx->state);
+
+		efx_mcdi_port_reconfigure(efx);
 	}
 
 	rtnl_unlock();
@@ -1458,12 +1482,12 @@ static void efx_pci_shutdown(struct pci_dev *pci_dev)
 
 static int efx_pm_thaw(struct device *dev)
 {
-	int rc;
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
+	int rc;
 
 	rtnl_lock();
 
-	if (efx_frozen(efx->state)) {
+	if (efx->state == (STATE_NET_UP | STATE_FROZEN)) {
 		rc = efx_enable_interrupts(efx);
 		if (rc)
 			goto fail;
@@ -1472,12 +1496,15 @@ static int efx_pm_thaw(struct device *dev)
 		efx_mcdi_port_reconfigure(efx);
 		mutex_unlock(&efx->mac_lock);
 
-		if (efx->state == (STATE_NET_UP | STATE_FROZEN))
-			efx_start_all(efx);
+		efx_start_all(efx);
 
 		efx_device_attach_if_not_resetting(efx);
+	}
 
+	if (efx_frozen(efx->state)) {
 		efx->state = efx_thaw(efx->state);
+
+		efx_mcdi_port_reconfigure(efx);
 
 		efx->type->resume_wol(efx);
 	}

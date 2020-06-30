@@ -201,7 +201,7 @@ static void efx_mac_work(struct work_struct *data)
 
 int efx_set_mac_address(struct net_device *net_dev, void *data)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct sockaddr *addr = data;
 	u8 *new_addr = addr->sa_data;
 	u8 old_addr[6];
@@ -236,7 +236,7 @@ int efx_set_mac_address(struct net_device *net_dev, void *data)
 /* Context: netif_addr_lock held, BHs disabled. */
 void efx_set_rx_mode(struct net_device *net_dev)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->port_enabled)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_WORK_SYNC)
@@ -318,7 +318,7 @@ void efx_link_status_changed(struct efx_nic *efx)
 /* Context: process, rtnl_lock() held. */
 int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	int old_mtu;
 	int rc;
 
@@ -779,7 +779,7 @@ struct rtnl_link_stats64 *efx_net_stats(struct net_device *net_dev,
 struct net_device_stats *efx_net_stats(struct net_device *net_dev)
 #endif
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_NETDEV_STATS64)
 #if defined(EFX_USE_NETDEV_STATS)
 	struct net_device_stats *stats = &net_dev->stats;
@@ -977,7 +977,7 @@ void efx_watchdog(struct net_device *net_dev, unsigned int txqueue)
 void efx_watchdog(struct net_device *net_dev)
 #endif
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	efx_print_stopped_queues(efx);
 	netif_err(efx, tx_err, efx->net_dev,
@@ -1343,8 +1343,7 @@ void efx_fini_struct(struct efx_nic *efx)
 /* This zeroes out and then fills in the invariants in a struct
  * efx_nic (including all sub-structures).
  */
-int efx_init_struct(struct efx_nic *efx,
-		struct pci_dev *pci_dev, struct net_device *net_dev)
+int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 {
 	int rc;
 
@@ -1358,7 +1357,6 @@ int efx_init_struct(struct efx_nic *efx,
 	efx->state = STATE_UNINIT;
 	strlcpy(efx->name, pci_name(pci_dev), sizeof(efx->name));
 
-	efx->net_dev = net_dev;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SET_FEATURES) && !defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
 	efx->rx_checksum_enabled = true;
 #endif
@@ -1398,18 +1396,6 @@ int efx_init_struct(struct efx_nic *efx,
 	efx->rps_hash_table = kcalloc(EFX_ARFS_HASH_TABLE_SIZE,
 				      sizeof(*efx->rps_hash_table), GFP_KERNEL);
 #endif
-	efx->mdio.dev = net_dev;
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	mutex_init(&efx->dl_block_kernel_mutex);
-	efx->dl_nic.pci_dev = pci_dev;
-	efx->dl_nic.net_dev = net_dev;
-	efx->dl_nic.ops = &efx_driverlink_ops;
-	efx->dl_nic.msg_enable = efx->msg_enable;
-	INIT_LIST_HEAD(&efx->dl_nic.nic_node);
-	INIT_LIST_HEAD(&efx->dl_nic.device_list);
-#endif
-#endif
 	INIT_WORK(&efx->mac_work, efx_mac_work);
 	init_waitqueue_head(&efx->flush_wq);
 	rc = efx_init_struct_tc(efx);
@@ -1442,13 +1428,11 @@ int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int 
 	int rc;
 
 	efx->mem_bar = UINT_MAX;
-
-	netif_dbg(efx, probe, efx->net_dev, "initialising I/O bar=%d\n", bar);
+	pci_dbg(pci_dev, "initialising I/O bar=%d\n", bar);
 
 	rc = pci_enable_device(pci_dev);
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "failed to enable PCI device\n");
+		pci_err(pci_dev, "failed to enable PCI device\n");
 		goto fail1;
 	}
 
@@ -1466,26 +1450,23 @@ int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int 
 		dma_mask >>= 1;
 	}
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "could not find a suitable DMA mask\n");
+		pci_err(pci_dev, "could not find a suitable DMA mask\n");
 		goto fail2;
 	}
-	netif_dbg(efx, probe, efx->net_dev,
-		  "using DMA mask %llx\n", (unsigned long long)dma_mask);
+	pci_dbg(pci_dev, "using DMA mask %llx\n", (unsigned long long)dma_mask);
 
 	efx->membase_phys = pci_resource_start(efx->pci_dev, bar);
 	if (!efx->membase_phys) {
-		netif_err(efx, probe, efx->net_dev,
-			  "ERROR: No BAR%d mapping from the BIOS. Try pci=realloc on the kernel command line\n",
-			  bar);
+		pci_err(pci_dev,
+			"ERROR: No BAR%d mapping from the BIOS. Try pci=realloc on the kernel command line\n",
+			bar);
 		rc = -ENODEV;
 		goto fail3;
 	}
 	rc = pci_request_region(pci_dev, bar, "sfc");
 
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "request for memory BAR[%d] failed\n", bar);
+		pci_err(pci_dev, "request for memory BAR[%d] failed\n", bar);
 		rc = -EIO;
 		goto fail3;
 	}
@@ -1497,16 +1478,15 @@ int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int 
 #endif
 
 	if (!efx->membase) {
-		netif_err(efx, probe, efx->net_dev,
-			  "could not map memory BAR[%d] at %llx+%x\n", bar,
-			  (unsigned long long)efx->membase_phys, mem_map_size);
+		pci_err(pci_dev, "could not map memory BAR[%d] at %llx+%x\n",
+			bar, (unsigned long long)efx->membase_phys,
+			mem_map_size);
 		rc = -ENOMEM;
 		goto fail4;
 	}
-	netif_dbg(efx, probe, efx->net_dev,
-		  "memory BAR[%d] at %llx+%x (virtual 0x%llx)\n", bar,
-		  (unsigned long long)efx->membase_phys, mem_map_size,
-		  (unsigned long long __force)efx->membase);
+	pci_dbg(pci_dev, "memory BAR[%d] at %llx+%x (virtual 0x%llx)\n", bar,
+		(unsigned long long)efx->membase_phys, mem_map_size,
+		(unsigned long long __force)efx->membase);
 
 	return 0;
 
@@ -1522,7 +1502,7 @@ fail1:
 
 void efx_fini_io(struct efx_nic *efx)
 {
-	netif_dbg(efx, drv, efx->net_dev, "shutting down I/O\n");
+	pci_dbg(efx->pci_dev, "shutting down I/O\n");
 
 	if (efx->membase) {
 		iounmap(efx->membase);
@@ -1565,14 +1545,9 @@ int efx_probe_common(struct efx_nic *efx)
 #ifdef CONFIG_SFC_DEBUGFS
 	mutex_lock(&efx->debugfs_symlink_mutex);
 	rc = efx_init_debugfs_nic(efx);
-	if (!rc)
-		rc = efx_init_debugfs_netdev(efx->net_dev);
 	mutex_unlock(&efx->debugfs_symlink_mutex);
-
-	if (rc) {
-		netif_err(efx, drv, efx->net_dev,
-			  "failed to init net dev debugfs\n");
-	}
+	if (rc)
+		pci_err(efx->pci_dev, "failed to init device debugfs\n");
 #endif
 
 	return 0;
@@ -1582,7 +1557,6 @@ void efx_remove_common(struct efx_nic *efx)
 {
 #ifdef CONFIG_SFC_DEBUGFS
 	mutex_lock(&efx->debugfs_symlink_mutex);
-	efx_fini_debugfs_netdev(efx->net_dev);
 	efx_fini_debugfs_nic(efx);
 	mutex_unlock(&efx->debugfs_symlink_mutex);
 #endif
@@ -1788,8 +1762,10 @@ static pci_ers_result_t efx_io_error_detected(struct pci_dev *pdev,
 
 		efx_device_detach_sync(efx);
 
-		efx_stop_all(efx);
-		efx_disable_interrupts(efx);
+		if (efx_net_active(efx->state)) {
+			efx_stop_all(efx);
+			efx_disable_interrupts(efx);
+		}
 
 		status = PCI_ERS_RESULT_NEED_RESET;
 	} else {
@@ -1952,7 +1928,7 @@ netdev_features_t efx_features_check(struct sk_buff *skb,
 					    netdev_features_t features)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_ENCAPSULATION)
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (skb->encapsulation) {
 		if (features & NETIF_F_GSO_MASK)
@@ -1976,7 +1952,7 @@ netdev_features_t efx_features_check(struct sk_buff *skb,
 int efx_get_phys_port_id(struct net_device *net_dev,
 			 struct netdev_phys_item_id *ppid)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->type->get_phys_port_id)
 		return efx->type->get_phys_port_id(efx, ppid);
@@ -1989,7 +1965,7 @@ int efx_get_phys_port_id(struct net_device *net_dev,
 int efx_get_phys_port_name(struct net_device *net_dev,
 			   char *name, size_t len)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (snprintf(name, len, "p%u", efx->port_num) >= len)
 		return -EINVAL;
@@ -2011,7 +1987,7 @@ netdev_features_t efx_fix_features(struct net_device *net_dev,
 u32 efx_fix_features(struct net_device *net_dev, u32 data)
 #endif
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (!efx->lro_available)
 		data &= ~NETIF_F_LRO;
@@ -2026,7 +2002,7 @@ int efx_set_features(struct net_device *net_dev, netdev_features_t data)
 int efx_set_features(struct net_device *net_dev, u32 data)
 #endif
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	int rc;
 
 	/* If disabling RX n-tuple filtering, clear existing filters */
@@ -2517,6 +2493,17 @@ static struct efx_dl_ops efx_driverlink_ops = {
 	.publish = __efx_dl_publish,
 	.unpublish = __efx_dl_unpublish,
 };
+
+void efx_dl_probe(struct efx_nic *efx)
+{
+	mutex_init(&efx->dl_block_kernel_mutex);
+	efx->dl_nic.pci_dev = efx->pci_dev;
+	efx->dl_nic.net_dev = efx->net_dev;
+	efx->dl_nic.ops = &efx_driverlink_ops;
+	efx->dl_nic.msg_enable = efx->msg_enable;
+	INIT_LIST_HEAD(&efx->dl_nic.nic_node);
+	INIT_LIST_HEAD(&efx->dl_nic.device_list);
+}
 #endif
 #endif
 

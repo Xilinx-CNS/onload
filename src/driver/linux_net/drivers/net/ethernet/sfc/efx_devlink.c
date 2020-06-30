@@ -77,7 +77,7 @@ static int efx_devlink_info_get(struct devlink *devlink,
 
 struct devlink_port *efx_get_devlink_port(struct net_device *dev)
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 	struct efx_devlink *devlink_private;
 
 	if (!efx->devlink)

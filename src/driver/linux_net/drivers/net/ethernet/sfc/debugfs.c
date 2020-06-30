@@ -239,11 +239,13 @@ static int efx_debugfs_read_loop_mode(struct seq_file *file, void *data)
 
 static const char *const nic_state_names[] = {
 	[STATE_UNINIT] =	"UNINIT",
+	[STATE_PROBED] =	"PROBED",
 	[STATE_NET_UP] =	"READY",
 	[STATE_NET_DOWN] =	"DOWN",
 	[STATE_DISABLED] =	"DISABLED",
 	[STATE_NET_UP | STATE_RECOVERY] =	"READY_RECOVERY",
 	[STATE_NET_DOWN | STATE_RECOVERY] =	"DOWN_RECOVERY",
+	[STATE_PROBED | STATE_RECOVERY] =	"PROBED_RECOVERY",
 	[STATE_NET_UP | STATE_FROZEN] =	"READY_FROZEN",
 	[STATE_NET_DOWN | STATE_FROZEN] =	"DOWN_FROZEN",
 };
@@ -333,7 +335,7 @@ err:
  */
 int efx_init_debugfs_netdev(struct net_device *net_dev)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	char name[EFX_DEBUGFS_NAME_LEN];
 	char target[EFX_DEBUGFS_NAME_LEN];
 	int rc = -ENAMETOOLONG;
@@ -384,7 +386,7 @@ err:
  */
 void efx_fini_debugfs_netdev(struct net_device *net_dev)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	debugfs_remove(efx->debug_port_symlink);
 	efx->debug_port_symlink = NULL;

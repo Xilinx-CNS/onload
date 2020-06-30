@@ -337,8 +337,7 @@ void efx_xmit_done(struct efx_tx_queue *tx_queue, unsigned int index)
 
 	if (pkts_compl > 1)
 		++tx_queue->merge_events;
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
-	defined(EFX_HAVE_XSK_NEED_WAKEUP))
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && defined(EFX_HAVE_XSK_NEED_WAKEUP))
 	if (tx_queue->umem && xsk_umem_uses_need_wakeup(tx_queue->umem))
 		xsk_set_tx_need_wakeup(tx_queue->umem);
 #endif

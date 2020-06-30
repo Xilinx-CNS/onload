@@ -435,39 +435,25 @@ static int ef100_pci_find_func_ctrl_window(struct efx_nic *efx,
  */
 static void ef100_pci_remove(struct pci_dev *pci_dev)
 {
-	struct efx_nic *efx;
+	struct efx_probe_data *probe_data;
+	struct efx_nic *efx = pci_get_drvdata(pci_dev);
 
-	efx = pci_get_drvdata(pci_dev);
 	if (!efx)
 		return;
 
-	rtnl_lock();
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	if (efx_dl_supported(efx))
-		efx_dl_unregister_nic(&efx->dl_nic);
-#endif
-#endif
-	dev_close(efx->net_dev);
-	rtnl_unlock();
+	probe_data = container_of(efx, struct efx_probe_data, efx);
+	ef100_remove_netdev(probe_data);
 	efx_virtbus_unregister(efx);
-
-	/* Unregistering our netdev notifier triggers unbinding of TC indirect
-	 * blocks, so we have to do it before PCI removal.
-	 */
-	unregister_netdevice_notifier(&efx->netdev_notifier);
-	unregister_netevent_notifier(&efx->netevent_notifier);
 	ef100_remove(efx);
 	efx_fini_io(efx);
-	netif_dbg(efx, drv, efx->net_dev, "shutdown successful\n");
-
-	pci_set_drvdata(pci_dev, NULL);
-	efx_fini_struct(efx);
-	free_netdev(efx->net_dev);
+	pci_dbg(pci_dev, "shutdown successful\n");
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 	pci_disable_pcie_error_reporting(pci_dev);
 #endif
+	pci_set_drvdata(pci_dev, NULL);
+	efx_fini_struct(efx);
+	kfree(probe_data);
 };
 
 #ifdef EFX_C_MODEL
@@ -487,30 +473,30 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 			   const struct pci_device_id *entry)
 {
 	struct ef100_func_ctl_window fcw = { 0 };
-	struct net_device *net_dev;
+	struct efx_probe_data *probe_data;
 	struct efx_nic *efx;
 	int rc;
 
-	/* Allocate and initialise a struct net_device and struct efx_nic */
-	net_dev = alloc_etherdev_mq(sizeof(*efx), EFX_MAX_CORE_TX_QUEUES);
-	if (!net_dev)
+	/* Allocate probe data and struct efx_nic */
+	probe_data = kzalloc(sizeof(*probe_data), GFP_KERNEL);
+	if (!probe_data)
 		return -ENOMEM;
-	efx = netdev_priv(net_dev);
-	efx->type = (const struct efx_nic_type *)entry->driver_data;
+	probe_data->pci_dev = pci_dev;
+	efx = &probe_data->efx;
 
+	efx->type = (const struct efx_nic_type *)entry->driver_data;
+	efx->pci_dev = pci_dev;
 	pci_set_drvdata(pci_dev, efx);
-	SET_NETDEV_DEV(net_dev, &pci_dev->dev);
-	rc = efx_init_struct(efx, pci_dev, net_dev);
+	rc = efx_init_struct(efx, pci_dev);
 	if (rc)
 		goto fail;
 
 	efx->vi_stride = EF100_DEFAULT_VI_STRIDE;
-	netif_info(efx, probe, efx->net_dev,
-		   "Solarflare EF100 NIC detected\n");
+	pci_info(pci_dev, "Solarflare EF100 NIC detected\n");
 
 	rc = ef100_pci_find_func_ctrl_window(efx, &fcw);
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
+		pci_err(pci_dev,
 			"Error looking for ef100 function control window, rc=%d\n",
 			rc);
 		goto fail;
@@ -524,8 +510,7 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	}
 
 	if (fcw.offset > pci_resource_len(efx->pci_dev, fcw.bar) - ESE_GZ_FCW_LEN) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Func control window overruns BAR\n");
+		pci_err(pci_dev, "Func control window overruns BAR\n");
 		goto fail;
 	}
 
@@ -541,27 +526,10 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 #ifdef EFX_C_MODEL
 	rc = efx_check_func_ctl_magic(efx);
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Func control window magic is wrong\n");
+		pci_err(pci_dev, "Func control window magic is wrong\n");
 		goto fail;
 	}
 #endif
-
-	efx->netdev_notifier.notifier_call = ef100_netdev_event;
-	rc = register_netdevice_notifier(&efx->netdev_notifier);
-	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Failed to register netdevice notifier, rc=%d\n", rc);
-		goto fail;
-	}
-
-	efx->netevent_notifier.notifier_call = ef100_netevent_event;
-	rc = register_netevent_notifier(&efx->netevent_notifier);
-	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Failed to register netevent notifier, rc=%d\n", rc);
-		goto fail;
-	}
 
 	rc = efx->type->probe(efx);
 	if (rc)
@@ -569,21 +537,18 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 
 	rc = efx_virtbus_register(efx);
 	if (rc)
-		pci_warn(efx->pci_dev,
+		pci_warn(pci_dev,
 			 "Unable to register virtual bus driver (%d)\n", rc);
 
-	netif_dbg(efx, probe, efx->net_dev, "initialisation successful\n");
-
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	if (efx_dl_supported(efx)) {
-		rtnl_lock();
-		efx_dl_register_nic(&efx->dl_nic);
-		rtnl_unlock();
-	}
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
+	(void)pci_enable_pcie_error_reporting(pci_dev);
 #endif
-#endif
+	efx->state = STATE_PROBED;
+	rc = ef100_probe_netdev(probe_data);
+	if (rc)
+		goto fail;
 
+	pci_dbg(pci_dev, "initialisation successful\n");
 	return 0;
 
 fail:

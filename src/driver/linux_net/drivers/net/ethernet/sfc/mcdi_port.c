@@ -189,7 +189,7 @@ static void efx_mcdi_phy_stats_fini(struct efx_nic *efx)
 static int efx_mcdi_mdio_read(struct net_device *net_dev,
 			      int prtad, int devad, u16 addr)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MDIO_READ_IN_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MDIO_READ_OUT_LEN);
 	size_t outlen;
@@ -215,7 +215,7 @@ static int efx_mcdi_mdio_read(struct net_device *net_dev,
 static int efx_mcdi_mdio_write(struct net_device *net_dev,
 			       int prtad, int devad, u16 addr, u16 value)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MDIO_WRITE_IN_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MDIO_WRITE_OUT_LEN);
 	size_t outlen;

@@ -270,7 +270,7 @@ int efx_xsk_wakeup(struct net_device *dev, u32 queue_id, u32 flags)
 int efx_xsk_async_xmit(struct net_device *dev, u32 queue_id)
 #endif
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 	struct efx_tx_queue *tx_queue;
 	struct efx_channel *channel;
 
@@ -292,7 +292,7 @@ int efx_xsk_async_xmit(struct net_device *dev, u32 queue_id)
 
 int efx_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 	struct bpf_prog *xdp_prog;
 
 	switch (xdp->command) {
@@ -323,7 +323,7 @@ int efx_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 int efx_xdp_xmit(struct net_device *dev, int n, struct xdp_frame **xdpfs,
 		 u32 flags)
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 
 	if (!netif_running(dev))
 		return -EINVAL;
@@ -333,7 +333,7 @@ int efx_xdp_xmit(struct net_device *dev, int n, struct xdp_frame **xdpfs,
 #else
 int efx_xdp_xmit(struct net_device *dev, struct xdp_frame *xdpf)
 {
-	struct efx_nic *efx = netdev_priv(dev);
+	struct efx_nic *efx = efx_netdev_priv(dev);
 	int rc;
 
 	if (!netif_running(dev))
@@ -353,7 +353,7 @@ int efx_xdp_xmit(struct net_device *dev, struct xdp_frame *xdpf)
 /* Context: NAPI */
 void efx_xdp_flush(struct net_device *dev)
 {
-	efx_xdp_tx_buffers(netdev_priv(dev), 0, NULL, true);
+	efx_xdp_tx_buffers(efx_netdev_priv(dev), 0, NULL, true);
 }
 #endif /* NEED_XDP_FLUSH */
 #endif /* HAVE_XDP_REDIR */
@@ -517,7 +517,7 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (channel->zc) {
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_XDP_SOCK) && defined(EFX_HAVE_XSK_OFFSET_ADJUST)
 		xdp.handle = rx_buf->handle;
 #endif
 		free_buf_on_fail = false;
@@ -528,8 +528,7 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 
 	offset = (u8 *)xdp.data - *ehp;
 
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
-				  defined(EFX_HAVE_XSK_OFFSET_ADJUST))
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_XDP_SOCK) && defined(EFX_HAVE_XSK_OFFSET_ADJUST)
 	if (channel->zc)
 		xdp.handle = xsk_umem_adjust_offset(rx_queue->umem, xdp.handle,
 						    xdp.data -
@@ -551,15 +550,14 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_TX)
 	case XDP_TX:
 		/* Buffer ownership passes to tx on success. */
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
-				  defined(EFX_USE_XSK_BUFFER_ALLOC))
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && defined(EFX_USE_XSK_BUFFER_ALLOC))
 		if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM) {
 			xdp_ptr = rx_buf->xsk_buf;
 			xdp_ptr->data = xdp.data;
 		}
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_COVERT_XDP_BUFF_FRAME_API)
-		xdpf = xdp_convert_buff_to_frame(&xdp_ptr);
+		xdpf = xdp_convert_buff_to_frame(xdp_ptr);
 #else
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_FRAME_API)
 		xdpf = convert_to_xdp_frame(xdp_ptr);
@@ -584,8 +582,7 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)
 	case XDP_REDIRECT:
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
-				  defined(EFX_USE_XSK_BUFFER_ALLOC))
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && defined(EFX_USE_XSK_BUFFER_ALLOC))
 		if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM) {
 			xdp_ptr = rx_buf->xsk_buf;
 			xdp_ptr->data = xdp.data;

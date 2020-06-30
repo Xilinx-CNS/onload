@@ -47,6 +47,9 @@
 #include <net/xdp.h>
 #endif
 #include <net/netevent.h>
+#if !defined(EFX_USE_KCOMPAT)
+#include <net/xdp_sock_drv.h>
+#endif
 
 #ifdef EFX_NOT_UPSTREAM
 #include "config.h"
@@ -87,7 +90,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.2.1.1029"
+#define EFX_DRIVER_VERSION	"5.2.1.1030"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -1097,7 +1100,8 @@ enum efx_int_mode {
 
 enum nic_state {
 	STATE_UNINIT = 0,	/* device being probed/removed */
-	STATE_NET_DOWN,		/* hardware probed and netdev registered */
+	STATE_PROBED,		/* hardware probed */
+	STATE_NET_DOWN,		/* netdev registered */
 	STATE_NET_UP,		/* ready for traffic */
 	STATE_DISABLED,		/* device disabled due to hardware errors */
 
@@ -1818,6 +1822,24 @@ struct efx_nic {
 	struct mutex debugfs_symlink_mutex;
 #endif
 };
+
+/**
+ * struct efx_probe_data - State after hardware probe
+ * @pci_dev: The PCI device
+ * @efx: Efx NIC details
+ */
+struct efx_probe_data {
+	struct pci_dev *pci_dev;
+	struct efx_nic efx;
+};
+
+static inline struct efx_nic *efx_netdev_priv(struct net_device *dev)
+{
+	struct efx_probe_data **probe_ptr = netdev_priv(dev);
+	struct efx_probe_data *probe_data = *probe_ptr;
+
+	return &probe_data->efx;
+}
 
 static inline unsigned int efx_xdp_channels(struct efx_nic *efx)
 {

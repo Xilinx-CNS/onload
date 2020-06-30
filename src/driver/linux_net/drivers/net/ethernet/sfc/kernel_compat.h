@@ -1694,8 +1694,17 @@ static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 }
 #endif
 
+#ifndef pci_info
+#define pci_info(pdev, fmt, arg...)	dev_info(&(pdev)->dev, fmt, ##arg)
+#endif
 #ifndef pci_warn
 #define pci_warn(pdev, fmt, arg...)	dev_warn(&(pdev)->dev, fmt, ##arg)
+#endif
+#ifndef pci_err
+#define pci_err(pdev, fmt, arg...)	dev_err(&(pdev)->dev, fmt, ##arg)
+#endif
+#ifndef pci_dbg
+#define pci_dbg(pdev, fmt, arg...)	dev_dbg(&(pdev)->dev, fmt, ##arg)
 #endif
 
 /**************************************************************************

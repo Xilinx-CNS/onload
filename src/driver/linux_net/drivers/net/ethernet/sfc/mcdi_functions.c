@@ -548,7 +548,7 @@ int efx_mcdi_flash_bundle(struct net_device *net_dev,
 {
 	unsigned int type, header_len = 0, payload_offset = 0;
 	size_t erase_size, write_size, size, total_write_size;
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	const struct firmware *fw;
 	loff_t offset = 0;
 	bool protected;

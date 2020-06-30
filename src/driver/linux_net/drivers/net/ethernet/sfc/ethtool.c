@@ -47,7 +47,7 @@
 static int efx_ethtool_phys_id(struct net_device *net_dev,
 			       enum ethtool_phys_id_state state)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	enum efx_led_mode mode = EFX_LED_DEFAULT;
 
 	switch (state) {
@@ -95,13 +95,13 @@ static int efx_ethtool_phys_id_loop(struct net_device *net_dev, u32 count)
 
 static int efx_ethtool_get_regs_len(struct net_device *net_dev)
 {
-	return efx_nic_get_regs_len(netdev_priv(net_dev));
+	return efx_nic_get_regs_len(efx_netdev_priv(net_dev));
 }
 
 static void efx_ethtool_get_regs(struct net_device *net_dev,
 				 struct ethtool_regs *regs, void *buf)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	regs->version = efx->type->revision;
 	efx_nic_get_regs(efx, buf);
@@ -122,7 +122,7 @@ static int efx_ethtool_self_test_count(struct net_device *net_dev)
 
 static int efx_ethtool_set_tso(struct net_device *net_dev, u32 enable)
 {
-	struct efx_nic *efx __attribute__ ((unused)) = netdev_priv(net_dev);
+	struct efx_nic *efx __attribute__ ((unused)) = efx_netdev_priv(net_dev);
 	u32 features;
 
 	features = NETIF_F_TSO;
@@ -141,7 +141,7 @@ static int efx_ethtool_set_tso(struct net_device *net_dev, u32 enable)
 
 static int efx_ethtool_set_tx_csum(struct net_device *net_dev, u32 enable)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	u32 features = efx->type->offload_features & NETIF_F_CSUM_MASK;
 
 	if (enable)
@@ -154,7 +154,7 @@ static int efx_ethtool_set_tx_csum(struct net_device *net_dev, u32 enable)
 
 static int efx_ethtool_set_rx_csum(struct net_device *net_dev, u32 enable)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	/* No way to stop the hardware doing the checks; we just
 	 * ignore the result.
@@ -166,7 +166,7 @@ static int efx_ethtool_set_rx_csum(struct net_device *net_dev, u32 enable)
 
 static u32 efx_ethtool_get_rx_csum(struct net_device *net_dev)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	return efx->rx_checksum_enabled;
 }
@@ -174,7 +174,7 @@ static u32 efx_ethtool_get_rx_csum(struct net_device *net_dev)
 #if defined(EFX_USE_ETHTOOL_FLAGS)
 static int efx_ethtool_set_flags(struct net_device *net_dev, u32 data)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	u32 supported = (efx->type->offload_features &
 			 (ETH_FLAG_RXHASH | ETH_FLAG_NTUPLE));
 	int rc;
@@ -239,7 +239,7 @@ static u32 efx_ethtool_get_link(struct net_device *net_dev)
 static int efx_ethtool_get_coalesce(struct net_device *net_dev,
 				    struct ethtool_coalesce *coalesce)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	unsigned int tx_usecs, rx_usecs;
 	bool rx_adaptive;
 
@@ -258,7 +258,7 @@ static int efx_ethtool_get_coalesce(struct net_device *net_dev,
 static int efx_ethtool_set_coalesce(struct net_device *net_dev,
 				    struct ethtool_coalesce *coalesce)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct efx_channel *channel;
 	unsigned int tx_usecs, rx_usecs;
 	bool adaptive, rx_may_override_tx;
@@ -323,7 +323,7 @@ static int efx_ethtool_set_coalesce(struct net_device *net_dev,
 static void efx_ethtool_get_ringparam(struct net_device *net_dev,
 				      struct ethtool_ringparam *ring)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	ring->rx_max_pending = EFX_MAX_DMAQ_SIZE;
 	ring->tx_max_pending = EFX_TXQ_MAX_ENT(efx);
@@ -334,7 +334,7 @@ static void efx_ethtool_get_ringparam(struct net_device *net_dev,
 static int efx_ethtool_set_ringparam(struct net_device *net_dev,
 				     struct ethtool_ringparam *ring)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	int rc;
 
 	if (ring->rx_mini_pending || ring->rx_jumbo_pending)
@@ -380,7 +380,7 @@ static int efx_ethtool_set_ringparam(struct net_device *net_dev,
 static void efx_ethtool_get_wol(struct net_device *net_dev,
 				struct ethtool_wolinfo *wol)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	return efx->type->get_wol(efx, wol);
 }
 
@@ -388,7 +388,7 @@ static void efx_ethtool_get_wol(struct net_device *net_dev,
 static int efx_ethtool_set_wol(struct net_device *net_dev,
 			       struct ethtool_wolinfo *wol)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	return efx->type->set_wol(efx, wol->wolopts);
 }
 
@@ -396,7 +396,7 @@ static int efx_ethtool_set_wol(struct net_device *net_dev,
 int efx_ethtool_get_dump_flag(struct net_device *net_dev,
 			      struct ethtool_dump *dump)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	return efx_dump_get_flag(efx, dump);
 }
@@ -404,14 +404,14 @@ int efx_ethtool_get_dump_flag(struct net_device *net_dev,
 int efx_ethtool_get_dump_data(struct net_device *net_dev,
 			      struct ethtool_dump *dump, void *buffer)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	return efx_dump_get_data(efx, dump, buffer);
 }
 
 int efx_ethtool_set_dump(struct net_device *net_dev, struct ethtool_dump *val)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	return efx_dump_set(efx, val);
 }
@@ -423,7 +423,7 @@ static
 int efx_ethtool_get_ts_info(struct net_device *net_dev,
 			    struct ethtool_ts_info *ts_info)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	/* Software capabilities */
 	ts_info->so_timestamping = (SOF_TIMESTAMPING_RX_SOFTWARE |

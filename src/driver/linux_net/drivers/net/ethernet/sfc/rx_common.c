@@ -685,8 +685,7 @@ static bool efx_alloc_buffer_zc(struct efx_rx_queue *rx_queue,
 
 	rx_buf->addr = xdp_umem_get_data(umem, handle);
 	rx_buf->addr += hr;
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && \
-				  defined(EFX_HAVE_XSK_OFFSET_ADJUST))
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_XDP_SOCK) && defined(EFX_HAVE_XSK_OFFSET_ADJUST)
 	rx_buf->handle = xsk_umem_adjust_offset(umem, handle, umem->headroom);
 #endif
 	efx_xdp_umem_discard_addr(umem, slow);
@@ -1564,7 +1563,7 @@ static void efx_filter_rfs_work(struct work_struct *data)
 	struct efx_async_filter_insertion *req =
 		container_of(data, struct efx_async_filter_insertion,
 			     work);
-	struct efx_nic *efx = netdev_priv(req->net_dev);
+	struct efx_nic *efx = efx_netdev_priv(req->net_dev);
 	struct efx_channel *channel = efx_get_channel(efx, req->rxq_index);
 	int slot_idx = req - efx->rps_slot;
 	struct efx_arfs_rule *rule;
@@ -1656,7 +1655,7 @@ static void efx_filter_rfs_work(struct work_struct *data)
 int efx_filter_rfs(struct net_device *net_dev, const struct sk_buff *skb,
 		   u16 rxq_index, u32 flow_id)
 {
-	struct efx_nic *efx = netdev_priv(net_dev);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct efx_async_filter_insertion *req;
 	struct efx_arfs_rule *rule;
 	int slot_idx;

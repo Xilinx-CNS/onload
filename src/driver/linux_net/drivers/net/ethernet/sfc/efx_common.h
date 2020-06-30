@@ -17,8 +17,7 @@ void efx_port_dummy_op_void(struct efx_nic *efx);
 
 int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int mem_map_size);
 void efx_fini_io(struct efx_nic *efx);
-int efx_init_struct(struct efx_nic *efx,
-                    struct pci_dev *pci_dev, struct net_device *net_dev);
+int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev);
 void efx_fini_struct(struct efx_nic *efx);
 
 int efx_probe_common(struct efx_nic *efx);
@@ -45,7 +44,7 @@ void efx_watchdog(struct net_device *net_dev);
 
 #define EFX_ASSERT_RESET_SERIALISED(efx)                \
 	do {                                            \
-		if (efx->state != STATE_UNINIT)         \
+		if (efx->state != STATE_UNINIT && efx->state != STATE_PROBED) \
 			ASSERT_RTNL();                  \
 	} while (0)
 
@@ -93,6 +92,7 @@ void efx_set_rx_mode(struct net_device *net_dev);
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
+void efx_dl_probe(struct efx_nic *efx);
 bool efx_dl_supported(struct efx_nic *efx);
 #endif
 #endif
