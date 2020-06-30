@@ -1927,8 +1927,12 @@ void ci_netif_handle_actions(ci_netif* ni)
   ci_int32 val = ci_atomic_xchg(&ni->state->action_flags, 0);
 
   ci_assert(ci_netif_is_locked(ni));
+
+  /* Poll to process incoming FIN, and close endpoint from unlock hook. */
   if( val & OO_ACTION_CLOSE_EP )
-    ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
+    ef_eplock_holder_set_flags(&ni->state->lock,
+                               CI_EPLOCK_NETIF_CLOSE_ENDPOINT |
+                               CI_EPLOCK_NETIF_NEED_POLL);
 
   if( val & OO_ACTION_SWF_UPDATE ) {
     struct oo_sw_filter_op op;
