@@ -25,7 +25,7 @@
 static void __ci_netif_dmaq_shove(ci_netif* ni, int intf_i, int is_fresh)
 {
   oo_pktq* dmaq = &ni->state->nic[intf_i].dmaq;
-  ef_vi* vi = &ni->nic_hw[intf_i].vi;
+  ef_vi* vi = ci_netif_vi(ni, intf_i);
   ci_ip_pkt_fmt* pkt = PKT_CHK(ni, dmaq->head);
   int rc;
 #if CI_CFG_USE_CTPIO && !defined(__KERNEL__)
@@ -140,7 +140,7 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, int intf_i, int is_fresh)
 
 void ci_netif_dmaq_shove1(ci_netif* ni, int intf_i)
 {
-  ef_vi* vi = &ni->nic_hw[intf_i].vi;
+  ef_vi* vi = ci_netif_vi(ni, intf_i);
   if( ef_vi_transmit_space(vi) >= (ef_vi_transmit_capacity(vi) >> 1) )
     __ci_netif_dmaq_shove(ni, intf_i, 0 /*is_fresh*/);
 }
@@ -148,7 +148,7 @@ void ci_netif_dmaq_shove1(ci_netif* ni, int intf_i)
 
 void ci_netif_dmaq_shove2(ci_netif* ni, int intf_i, int is_fresh)
 {
-  ef_vi* vi = &ni->nic_hw[intf_i].vi;
+  ef_vi* vi = ci_netif_vi(ni, intf_i);
   if( ef_vi_transmit_space(vi) > CI_IP_PKT_SEGMENTS_MAX )
     __ci_netif_dmaq_shove(ni, intf_i, is_fresh);
 }
@@ -193,10 +193,7 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
   intf_i = pkt->intf_i;
 
   dmaq = ci_netif_dmaq(netif, intf_i);
-  vi = &netif->nic_hw[intf_i].vi;
-
-  /* Check that the VI we're given matches the pkt's intf_i */
-  ci_assert_equal(vi, &netif->nic_hw[pkt->intf_i].vi);
+  vi = ci_netif_vi(netif, intf_i);
 
   if( oo_pktq_is_empty(dmaq) && ! (pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
 #if CI_CFG_USE_PIO
@@ -209,8 +206,8 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
         netif->state->nic[intf_i].oo_vi_flags & OO_VI_FLAGS_PIO_EN ) {
       if( pkt->pay_len <= NI_OPTS(netif).pio_thresh && pkt->n_buffers == 1 ) {
         if( (offset = ci_pio_buddy_alloc(netif, buddy, order)) >= 0 ) {
-          rc = ef_vi_transmit_copy_pio(&netif->nic_hw[pkt->intf_i].vi, offset,
-                                       PKT_START(pkt), pkt->buf_len,
+          rc = ef_vi_transmit_copy_pio(vi,
+                                       offset, PKT_START(pkt), pkt->buf_len,
                                        OO_PKT_ID(pkt));
           if( rc == 0 ) {
             CITP_STATS_NETIF_INC(netif, pio_pkts);

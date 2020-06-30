@@ -324,7 +324,7 @@ tcp_helper_request_wakeup_nic(tcp_helper_resource_t* trs, int intf_i) {
    * nor safe to prime the interrupt. */
   if( ci_netif_may_poll_in_kernel(&trs->netif, intf_i) ) {
     unsigned current_i =
-      ef_eventq_current(&trs->netif.nic_hw[intf_i].vi) / sizeof(efhw_event_t);
+      ef_eventq_current(ci_netif_vi(&trs->netif, intf_i)) / sizeof(efhw_event_t);
     efrm_eventq_request_wakeup(trs->nic[intf_i].thn_vi_rs, current_i);
   }
 }

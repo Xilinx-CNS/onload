@@ -2283,8 +2283,8 @@ ci_inline ef_driver_handle ci_netif_get_driver_handle(const ci_netif* ni) {
 }
 
 
-ci_inline ef_vi* ci_netif_rx_vi(ci_netif* ni, int nic_i) {
-  return &ni->nic_hw[nic_i].vi;
+ci_inline ef_vi* ci_netif_vi(ci_netif* ni, int nic_i) {
+  return &ni->nic_hw[nic_i].vis[0];
 }
 
 
@@ -2622,7 +2622,7 @@ ci_inline int ci_netif_not_primed(ci_netif* ni)
  * interface.
  */
 ci_inline int ci_netif_intf_has_event(ci_netif* ni, int intf_i)
-{ return ef_eventq_has_event(&ni->nic_hw[intf_i].vi); }
+{ return ef_eventq_has_event(ci_netif_vi(ni, intf_i)); }
 
 
 /* Returns true if there are any hardware events outstanding on any
@@ -2664,7 +2664,7 @@ ci_inline int ci_netif_has_actionable_event(ci_netif* ni) {
 ci_inline int ci_netif_has_many_events(ci_netif* ni, int lookahead) {
   int intf_i, rc = 0;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-    if( ef_eventq_has_many_events(&ni->nic_hw[intf_i].vi, lookahead) ) {
+    if( ef_eventq_has_many_events(ci_netif_vi(ni, intf_i), lookahead) ) {
       rc = 1;
       break;
     }
@@ -2711,7 +2711,7 @@ ci_inline ci_ip_pkt_fmt* ci_netif_intf_next_rx_pkt(ci_netif* ni, int intf_i)
   ci_assert_ge(intf_i, 0);
   ci_assert_lt(intf_i, oo_stack_intf_max(ni));
 
-  id = ef_vi_next_rx_rq_id(&ni->nic_hw[intf_i].vi);
+  id = ef_vi_next_rx_rq_id(ci_netif_vi(ni, intf_i));
   OO_PP_INIT(ni, pp, id);
   return OO_PP_IS_NULL(pp) ? NULL : PKT_CHK(ni, pp);
 }

@@ -37,7 +37,7 @@
 ** replicated per NIC.
 */
 typedef struct ci_netif_nic_s {
-  ef_vi                      vi;
+  ef_vi                      vis[1];
 #if CI_CFG_PIO
   ef_pio                     pio;
 #endif // CI_CFG_PIO

@@ -1982,14 +1982,15 @@ unsigned ci_netif_build_future_intf_mask(ci_netif* ni)
      * alter the destination socket, in which case the future code would be
      * wrong.  XDP-attachment implies poll_in_kernel, which is what we actually
      * check here. */
+    ef_vi* vi = ci_netif_vi(ni, nic_i);
     if(
 #ifdef OO_HAS_POLL_IN_KERNEL
        ! ni->nic_hw[nic_i].poll_in_kernel &&
 #endif
-        ~ef_vi_flags(&ni->nic_hw[nic_i].vi) & EF_VI_RX_EVENT_MERGE &&
-        ni->nic_hw[nic_i].vi.nic_type.arch != EF_VI_ARCH_EF100 &&
+        ~ef_vi_flags(vi) & EF_VI_RX_EVENT_MERGE &&
+        vi->nic_type.arch != EF_VI_ARCH_EF100 &&
         /* TODO AF_XDP future detection is not currently supported */
-        ni->nic_hw[nic_i].vi.nic_type.arch != EF_VI_ARCH_AF_XDP )
+        vi->nic_type.arch != EF_VI_ARCH_AF_XDP )
       mask |= 1u << nic_i;
   }
   return mask;
@@ -1998,7 +1999,7 @@ unsigned ci_netif_build_future_intf_mask(ci_netif* ni)
 static int af_xdp_kick(ef_vi* vi)
 {
   ci_netif* ni = vi->xdp_kick_context;
-  ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vi, vi);
+  ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vis[0], vi);
   uint32_t intf_i = nic - ni->nic_hw;
   int saved_errno = errno, fd = ci_netif_get_driver_handle(ni), rc;
 
@@ -2052,7 +2053,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
 
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ci_netif_state_nic_t* nsn = &ns->nic[nic_i];
-    ef_vi* vi = &ni->nic_hw[nic_i].vi;
+    ef_vi* vi = ci_netif_vi(ni, nic_i);
 
     /* Get interface properties. */
     rc = oo_cp_get_hwport_properties(ni->cplane, ns->intf_i_to_hwport[nic_i],
@@ -2109,7 +2110,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
       ni->nic_hw[nic_i].pio.pio_io = ni->pio_ptr + pio_io_offset;
       ni->nic_hw[nic_i].pio.pio_io += (vi_bar_off + 4096) & (CI_PAGE_SIZE - 1);
       ni->nic_hw[nic_i].pio.pio_len = nsn->pio_io_len;
-      ni->nic_hw[nic_i].vi.linked_pio = &ni->nic_hw[nic_i].pio;
+      vi->linked_pio = &ni->nic_hw[nic_i].pio;
       pio_io_offset += nsn->pio_io_mmap_bytes;
     }
 #endif
@@ -2831,7 +2832,7 @@ int ci_netif_set_rxq_limit(ci_netif* ni)
    */
   n_intf = 0;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    ef_vi* vi = ci_netif_rx_vi(ni, intf_i);
+    ef_vi* vi = ci_netif_vi(ni, intf_i);
     rxq_cap = ef_vi_receive_capacity(vi);
     ++n_intf;
   }
@@ -2885,7 +2886,7 @@ static int __ci_netif_init_fill_rx_rings(ci_netif* ni)
   int intf_i, rxq_limit = ni->state->rxq_limit;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     ci_netif_rx_post(ni, intf_i);
-    if( ef_vi_receive_fill_level(ci_netif_rx_vi(ni, intf_i)) < rxq_limit )
+    if( ef_vi_receive_fill_level(ci_netif_vi(ni, intf_i)) < rxq_limit )
       return -ENOMEM;
   }
   return 0;

@@ -375,7 +375,7 @@ static int verify_addrspace_override(ci_netif* ni)
   /* Only EF100 hardware supports address space overrides. Fail if the
    * machine only contains older NICs. */
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
-    if( ni->nic_hw[nic_i].vi.nic_type.arch == EF_VI_ARCH_EF100 )
+    if( ci_netif_vi(ni, nic_i)->nic_type.arch == EF_VI_ARCH_EF100 )
       has_ef100 = 1;
   }
 

@@ -67,7 +67,7 @@ static void ci_netif_dump_vi_info_stats(ci_netif* ni, int intf_i,
                                         oo_dump_log_fn_t logger, void* log_arg)
 {
   ci_netif_state_nic_t* nic = &ni->state->nic[intf_i];
-  ef_vi* vi = &ni->nic_hw[intf_i].vi;
+  ef_vi* vi = ci_netif_vi(ni, intf_i);
   tcp_helper_resource_t* thr = NULL;
   struct efhw_nic *efhw_nic = NULL;
 

@@ -325,8 +325,8 @@ static void ci_netif_dump_pkt_summary(ci_netif* ni, oo_dump_log_fn_t logger,
   rx_ring = 0;
   tx_ring = 0;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    rx_ring += ef_vi_receive_fill_level(ci_netif_rx_vi(ni, intf_i));
-    tx_ring += ef_vi_transmit_fill_level(&ni->nic_hw[intf_i].vi);
+    rx_ring += ef_vi_receive_fill_level(ci_netif_vi(ni, intf_i));
+    tx_ring += ef_vi_transmit_fill_level(ci_netif_vi(ni, intf_i));
     tx_oflow += ns->nic[intf_i].dmaq.num;
   }
   used = ni->packets->n_pkts_allocated - ni->packets->n_free - ns->n_async_pkts;
@@ -723,7 +723,7 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
                              void* log_arg)
 {
   ci_netif_state_nic_t* nic = &ni->state->nic[intf_i];
-  ef_vi* vi = &ni->nic_hw[intf_i].vi;
+  ef_vi* vi = ci_netif_vi(ni, intf_i);
 
   if( intf_i < 0 || intf_i >= CI_CFG_MAX_INTERFACES ||
       ! efrm_nic_set_read(&ni->nic_set, intf_i) ) {
@@ -789,7 +789,7 @@ static void ci_netif_dump_vi_stats_vi(ci_netif* ni, int intf_i,
                                  oo_dump_log_fn_t logger,
                                  void* log_arg)
 {
-  ef_vi* vi = &ni->nic_hw[intf_i].vi;
+  ef_vi* vi = ci_netif_vi(ni, intf_i);
   const ef_vi_stats_layout* vi_stats_layout;
   int i, rc;
   ef_driver_handle dh = ci_netif_get_driver_handle(ni);

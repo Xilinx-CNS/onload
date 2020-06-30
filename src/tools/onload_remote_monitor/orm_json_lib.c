@@ -874,13 +874,13 @@ static int orm_vis_dump(ci_netif* ni, int output_flags)
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     dump_buf_literal("{");
     orm_dump_struct_ef_vi_rxq_state("rxq",
-                                    &ni->nic_hw[intf_i].vi.ep_state->rxq,
+                                    &ci_netif_vi(ni, intf_i)->ep_state->rxq,
                                     output_flags);
     orm_dump_struct_ef_vi_txq_state("txq",
-                                    &ni->nic_hw[intf_i].vi.ep_state->txq,
+                                    &ci_netif_vi(ni, intf_i)->ep_state->txq,
                                     output_flags);
     orm_dump_struct_ef_eventq_state("evq",
-                                    &ni->nic_hw[intf_i].vi.ep_state->evq,
+                                    &ci_netif_vi(ni, intf_i)->ep_state->evq,
                                     output_flags);
     dump_buf_cleanup();
     dump_buf_literal_comma("}");

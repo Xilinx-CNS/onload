@@ -512,7 +512,7 @@ void ci_netif_rxq_low_on_recv(ci_netif* ni, ci_sock_cmn* s,
       CITP_STATS_NETIF_INC(ni, memory_pressure_exit_recv);
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-    if( ci_netif_rx_vi_space(ni, ci_netif_rx_vi(ni, intf_i))
+    if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i))
         >= CI_CFG_RX_DESC_BATCH )
       ci_netif_rx_post(ni, intf_i);
   CITP_STATS_NETIF_INC(ni, rx_refill_recv);
@@ -567,7 +567,7 @@ static void ci_netif_mem_pressure_enter_critical(ci_netif* ni, int intf_i)
   ni->state->mem_pressure |= OO_MEM_PRESSURE_CRITICAL;
   ni->state->rxq_limit = 2*CI_CFG_RX_DESC_BATCH;
   ci_netif_mem_pressure_pkt_pool_use(ni);
-  if( ci_netif_rx_vi_space(ni, ci_netif_rx_vi(ni, intf_i)) >=
+  if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i)) >=
       CI_CFG_RX_DESC_BATCH )
     ci_netif_rx_post(ni, intf_i);
 }
@@ -593,7 +593,7 @@ int ci_netif_mem_pressure_try_exit(ci_netif* ni)
   ci_ip_pkt_fmt* pkt;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    ef_vi* vi = ci_netif_rx_vi(ni, intf_i);
+    ef_vi* vi = ci_netif_vi(ni, intf_i);
     pkts_needed += NI_OPTS(ni).rxq_limit - ef_vi_receive_fill_level(vi);
   }
 
@@ -709,7 +709,7 @@ void ci_netif_rx_post(ci_netif* netif, int intf_i)
   ** possibly be consumed by existing sockets receive windows.  This would
   ** reduce resource consumption for apps that have few sockets.
   */
-  ef_vi* vi = ci_netif_rx_vi(netif, intf_i);
+  ef_vi* vi = ci_netif_vi(netif, intf_i);
   ci_ip_pkt_fmt* pkt;
   int max_n_to_post, rx_allowed, n_to_post;
   int bufset_id = NI_PKT_SET(netif);
@@ -1206,7 +1206,7 @@ static void ci_netif_unlock_slow(ci_netif* ni)
       * Would be more efficient if we did.
       */
       OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-        ef_eventq_prime(&ni->nic_hw[intf_i].vi);
+        ef_eventq_prime(ci_netif_vi(ni, intf_i));
     }
 
     /* If some flags should be handled in kernel, then there is no point in

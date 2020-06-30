@@ -457,7 +457,7 @@ static void __ci_tcp_tmpl_handle_nic_reset(ci_netif* ni, ci_tcp_state* ts)
     ci_ip_pkt_fmt* tmpl = PKT_CHK(ni, *pp);
     if( tmpl->pio_addr >= 0 ) {
       if( ni->state->nic[tmpl->intf_i].oo_vi_flags & OO_VI_FLAGS_PIO_EN ) {
-        CI_DEBUG_TRY(ef_pio_memcpy(&ni->nic_hw[tmpl->intf_i].vi,
+        CI_DEBUG_TRY(ef_pio_memcpy(ci_netif_vi(ni, tmpl->intf_i),
                                    PKT_START(tmpl),
                                    tmpl->pio_addr, tmpl->buf_len));
       }
@@ -822,7 +822,7 @@ int ci_tcp_tmpl_alloc(ci_netif* ni, ci_tcp_state* ts,
   ci_ip_set_mac_and_port(ni, ipcache, pkt);
 
   if( pkt->pio_addr >= 0 ) {
-    rc = ef_pio_memcpy(&ni->nic_hw[intf_i].vi, PKT_START(pkt),
+    rc = ef_pio_memcpy(ci_netif_vi(ni, intf_i), PKT_START(pkt),
                        pkt->pio_addr, pkt->buf_len);
     ci_assert_equal(rc, 0);
   }
@@ -871,7 +871,7 @@ ci_tcp_tmpl_update(ci_netif* ni, ci_tcp_state* ts,
   ipcache = &ts->s.pkt;
   pkt = ci_tcp_tmpl_omt_to_pkt(omt);
   tcp = TX_PKT_IPX_TCP(af, pkt);;
-  vi = &ni->nic_hw[pkt->intf_i].vi;
+  vi = ci_netif_vi(ni, pkt->intf_i);
   tcp_opts = CI_TCP_HDR_OPTS(tcp);
   sinf = ci_tcp_tmpl_omt_to_sinf(omt);
 
@@ -899,7 +899,7 @@ ci_tcp_tmpl_update(ci_netif* ni, ci_tcp_state* ts,
       ci_pio_buddy_alloc(ni, &ni->state->nic[pkt->intf_i].pio_buddy,
                          pkt->pio_order);
     if( pkt->pio_addr >= 0 ) {
-      rc = ef_pio_memcpy(&ni->nic_hw[pkt->intf_i].vi, PKT_START(pkt),
+      rc = ef_pio_memcpy(vi, PKT_START(pkt),
                          pkt->pio_addr, pkt->buf_len);
       ci_assert(rc == 0);
     }

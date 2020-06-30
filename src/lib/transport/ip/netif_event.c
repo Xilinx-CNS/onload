@@ -298,7 +298,7 @@ static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
     unsigned sync_flags;
     ef_timespec stamp;
     int rc = ef_vi_receive_get_timestamp_with_sync_flags
-      (&netif->nic_hw[pkt->intf_i].vi,
+      (ci_netif_vi(netif, pkt->intf_i),
        PKT_START(pkt) - nsn->rx_prefix_len, &stamp, &sync_flags);
     if( rc == 0 ) {
       int tsf = (NI_OPTS(netif).timestamping_reporting &
@@ -507,7 +507,7 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
 
 int ci_netif_evq_poll(ci_netif* ni, int intf_i)
 {
-  ef_vi* evq = &ni->nic_hw[intf_i].vi;
+  ef_vi* evq = ci_netif_vi(ni, intf_i);
   int n_evs;
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   ef_event *ev = ni->state->events;
@@ -1271,7 +1271,7 @@ static void handle_rx_discard(ci_netif* ni, struct ci_netif_poll_state* ps,
 {
   int discard_type = EF_EVENT_RX_DISCARD_TYPE(ev);
   int frame_len = EF_EVENT_RX_DISCARD_BYTES(ev) -
-                  ni->nic_hw[intf_i].vi.rx_prefix_len;
+                  ci_netif_vi(ni, intf_i)->rx_prefix_len;
   oo_pkt_p pp;
   OO_PP_INIT(ni, pp, EF_EVENT_RX_DISCARD_RQ_ID(ev));
 
@@ -1416,8 +1416,8 @@ static void process_post_poll_list(ci_netif* ni)
 
 #define UDP_CAN_FREE(us)  ((us)->tx_count == 0)
 
-#define CI_NETIF_TX_VI(ni, nic_i, label)  (&(ni)->nic_hw[nic_i].vi)
-#define CI_NETIF_RX_VI(ni, nic_i, label)  (&(ni)->nic_hw[nic_i].vi)
+#define CI_NETIF_TX_VI(ni, nic_i, label)  ci_netif_vi((ni), (nic_i))
+#define CI_NETIF_RX_VI(ni, nic_i, label)  ci_netif_vi((ni), (nic_i))
 
 
 static void ci_netif_tx_pkt_complete_udp(ci_netif* netif,
@@ -1610,7 +1610,7 @@ static int ci_netif_poll_evq(ci_netif* ni, struct ci_netif_poll_state* ps,
                              int intf_i, int n_evs)
 {
   struct oo_rx_state s;
-  ef_vi* evq = &ni->nic_hw[intf_i].vi;
+  ef_vi* evq = ci_netif_vi(ni, intf_i);
   unsigned total_evs = 0;
   ci_ip_pkt_fmt* pkt;
   ef_event *ev = ni->state->events;
@@ -1824,7 +1824,8 @@ have_events:
   } while( total_evs < NI_OPTS(ni).evs_per_poll );
 
   /* If we've drained the TXQ, we can start trying CTPIO again. */
-  if( completed_tx && ef_vi_transmit_fill_level(&ni->nic_hw[intf_i].vi) == 0 )
+  if( completed_tx &&
+      ef_vi_transmit_fill_level(ci_netif_vi(ni, intf_i)) == 0 )
     ci_netif_ctpio_resume(ni, intf_i);
 
   if( s.frag_pkt != NULL ) {
@@ -1867,7 +1868,7 @@ static int ci_netif_poll_intf(ci_netif* ni, int intf_i, int max_evs)
   /* The following steps probably aren't needed if we haven't handled any
    * events, but that is a rare case and so not worth testing for.
    */
-  if( ci_netif_rx_vi_space(ni, ci_netif_rx_vi(ni, intf_i))
+  if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i))
       >= CI_CFG_RX_DESC_BATCH )
     ci_netif_rx_post(ni, intf_i);
 
@@ -1884,7 +1885,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   int i, rc = 0, status;
   struct oo_rx_future future;
   ci_uint64 now_frc, max_spin;
-  ef_vi* evq = &ni->nic_hw[intf_i].vi;
+  ef_vi* evq = ci_netif_vi(ni, intf_i);
   ef_event* ev = ni->state->events;
   struct ci_netif_poll_state ps;
   ci_ip_pkt_fmt* pkt;
@@ -2069,7 +2070,7 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
   if( ci_netif_need_timer_prime(netif, IPTIMER_STATE(netif)->frc) ) {
     if( NI_OPTS(netif).timer_usec != 0 )
       OO_STACK_FOR_EACH_INTF_I(netif, intf_i)
-        ef_eventq_timer_prime(&netif->nic_hw[intf_i].vi,
+        ef_eventq_timer_prime(ci_netif_vi(netif, intf_i),
                               NI_OPTS(netif).timer_usec);
     netif->state->evq_last_prime = IPTIMER_STATE(netif)->frc;
   }

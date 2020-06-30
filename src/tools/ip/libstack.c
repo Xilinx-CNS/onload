@@ -1960,7 +1960,7 @@ static void stack_segments(ci_netif* ni)
 
 static void stack_ev(ci_netif* ni)
 {
-  int rc = ef_eventq_put(ef_vi_resource_id(&ni->nic_hw[0].vi), 
+  int rc = ef_eventq_put(ef_vi_resource_id(ci_netif_vi(ni, 0)), 
 			 ci_netif_get_driver_handle(ni), 0xff);
   ci_log("%d: ef_eventq_put: rc=%d", NI_ID(ni), rc);
 }

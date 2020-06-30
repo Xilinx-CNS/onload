@@ -1024,7 +1024,7 @@ static int allocate_pio(tcp_helper_resource_t* trs, int intf_i,
   nsn->pio_io_len = netif_nic->pio.pio_len;
   /* and record a copy that UL can't modify */
   trs_nic->thn_pio_io_mmap_bytes = nsn->pio_io_mmap_bytes;
-  netif_nic->vi.linked_pio = &netif_nic->pio;
+  netif_nic->vis[0].linked_pio = &netif_nic->pio;
   trs->pio_mmap_bytes += CI_PAGE_SIZE;
   *pio_buf_offset += efrm_pio_get_size(trs_nic->thn_pio_rs);
   /* Drop original ref to PIO region as linked VI now holds it */ 
@@ -1496,7 +1496,7 @@ static int af_xdp_kick(ef_vi* vi)
   else
 #endif
   {
-    int intf_i = CI_CONTAINER(ci_netif_nic_t, vi, vi) - trs->netif.nic_hw;
+    int intf_i = CI_CONTAINER(ci_netif_nic_t, vis[0], vi) - trs->netif.nic_hw;
     return efrm_vi_af_xdp_kick(trs->nic[intf_i].thn_vi_rs);
   }
 }
@@ -1572,6 +1572,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     struct efrm_vi_mappings* vm = (void*) ni->vi_data;
     unsigned vi_out_flags = 0;
     struct pci_dev* dev;
+    ef_vi* vi;
 
     BUILD_BUG_ON(sizeof(ni->vi_data) < sizeof(struct efrm_vi_mappings));
 
@@ -1624,13 +1625,14 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       ns->cluster_size = 1;
     }
 
-    initialise_vi(ni, &(ni->nic_hw[intf_i].vi), trs_nic->thn_vi_rs, vm,
+    vi = ci_netif_vi(ni, intf_i);
+    initialise_vi(ni, vi, trs_nic->thn_vi_rs, vm,
                   vi_state, nic->devtype.arch, nic->devtype.variant,
                   nic->devtype.revision, efhw_vi_nic_flags(nic), &alloc_info,
                   &vi_out_flags, &ni->state->vi_stats);
 
-    ni->nic_hw[intf_i].vi.xdp_kick = af_xdp_kick;
-    ni->nic_hw[intf_i].vi.xdp_kick_context = trs;
+    vi->xdp_kick = af_xdp_kick;
+    vi->xdp_kick_context = trs;
 
     nsn->oo_vi_flags = alloc_info.oo_vi_flags;
     nsn->vi_io_mmap_bytes = alloc_info.vi_io_mmap_bytes;
@@ -1850,7 +1852,7 @@ static void release_vi(tcp_helper_resource_t* trs)
 #endif
     efrm_vi_resource_release_flushed(trs->nic[intf_i].thn_vi_rs);
     trs->nic[intf_i].thn_vi_rs = NULL;
-    CI_DEBUG_ZERO(&netif_nic->vi);
+    CI_DEBUG_ZERO(ci_netif_vi(&trs->netif, intf_i));
 
   }
 
@@ -2370,7 +2372,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
                           trs->id,
                           trs->mem_mmap_bytes, trs->mem_mmap_bytes));
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    LOG_NC(ci_log("VI=%d", ef_vi_instance(&ni->nic_hw[intf_i].vi)));
+    LOG_NC(ci_log("VI=%d", ef_vi_instance(ci_netif_vi(ni, intf_i))));
   }
 
   /* This is needed because release_netif_hw_resources() tries to free the ep
@@ -4388,7 +4390,7 @@ static void tcp_helper_purge_txq_locked(tcp_helper_resource_t* thr)
        * that we do here, and that's what matters. */
       if( nic->resetting & NIC_RESETTING_FLAG_UNPLUGGED ) {
         struct thr_reset_stack_tx_cb_state cb_state;
-        ef_vi* vi = &ni->nic_hw[intf_i].vi;
+        ef_vi* vi = ci_netif_vi(ni, intf_i);
         thr_reset_stack_tx_cb_state_init(&cb_state, thr, intf_i);
         ef_vi_txq_reinit(vi, thr_reset_stack_tx_cb, &cb_state);
         /* Purge the eventq as well, to get rid of any references to TX
@@ -4478,7 +4480,7 @@ static void tcp_helper_reset_stack_locked(tcp_helper_resource_t* thr)
     if( intfs_to_reset & (1 << intf_i) ) {
       ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
       ci_uint32 old_errors = nsn->nic_error_flags;
-      vi = &ni->nic_hw[intf_i].vi;
+      vi = ci_netif_vi(ni, intf_i);
 
       EFRM_WARN_LIMITED("%s: reset stack %d intf %d (0x%x)",
                         __FUNCTION__, thr->id, intf_i, intfs_to_reset);
@@ -5229,7 +5231,7 @@ tcp_helper_stop(tcp_helper_resource_t* trs)
   /* stop callbacks from the event queue
         - wait for any running callback to complete */
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
-    ef_eventq_timer_clear(&(trs->netif.nic_hw[intf_i].vi));
+    ef_eventq_timer_clear(ci_netif_vi(&trs->netif, intf_i));
     efrm_eventq_kill_callback(trs->nic[intf_i].thn_vi_rs);
   }
 
@@ -6279,7 +6281,7 @@ tcp_helper_rm_dump(oo_fd_flags fd_flags, oo_sp sock_id,
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     ci_log("%svi[%d]: %d", line_prefix, intf_i,
-           ef_vi_instance(&ni->nic_hw[intf_i].vi));
+           ef_vi_instance(ci_netif_vi(ni, intf_i)));
 }
 #endif
 
@@ -6383,7 +6385,7 @@ static int tcp_helper_timeout(tcp_helper_resource_t* trs, int intf_i, int budget
   ci_frc64(&ni->state->evq_last_prime);
   if( NI_OPTS(ni).timer_usec != 0 )
     OO_STACK_FOR_EACH_INTF_I(ni, i)
-      ef_eventq_timer_prime(&ni->nic_hw[i].vi, NI_OPTS(ni).timer_usec);
+      ef_eventq_timer_prime(ci_netif_vi(ni, i), NI_OPTS(ni).timer_usec);
 
   if( ci_netif_intf_has_event(ni, intf_i) ) {
     if( efab_tcp_helper_netif_try_lock(trs, 1) ) {

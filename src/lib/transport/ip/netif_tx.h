@@ -160,10 +160,10 @@ ci_inline int /*bool*/ ci_netif_may_ctpio(ci_netif* ni, int intf_i,
    * a fallback).
    */
   const ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
-  const ci_netif_nic_t* nnic = &ni->nic_hw[intf_i];
-  int max_fill = ef_vi_transmit_capacity(&nnic->vi) >> 2;
+  ef_vi* vi = ci_netif_vi(ni, intf_i);
+  int max_fill = ef_vi_transmit_capacity(vi) >> 2;
   return frame_len <= nsn->ctpio_frame_len_check &&
-         ef_vi_transmit_fill_level(&nnic->vi) < max_fill;
+         ef_vi_transmit_fill_level(vi) < max_fill;
 #else
   return 0;
 #endif
@@ -220,7 +220,7 @@ extern void ci_netif_dmaq_shove2(ci_netif*, int intf_i, int is_fresh);
 ci_inline void ci_netif_dmaq_and_vi_for_pkt(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                             oo_pktq** dmaq, ef_vi** vi) {
   *dmaq = &ni->state->nic[pkt->intf_i].dmaq;
-  *vi = &ni->nic_hw[pkt->intf_i].vi;
+  *vi = ci_netif_vi(ni, pkt->intf_i);
 }
 
 /* for use from __ci_netif_send() only */
