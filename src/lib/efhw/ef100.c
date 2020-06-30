@@ -11,6 +11,7 @@
 #include <ci/efhw/ef10.h>
 #include <ci/efhw/ef100.h>
 #include <ci/efhw/mc_driver_pcol.h>
+#include <ci/efhw/mcdi_pcol_plugins.h>
 #include "ef10_mcdi.h"
 
 /*----------------------------------------------------------------------------
@@ -469,6 +470,216 @@ ef100_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 	return -EOPNOTSUPP;
 }
 
+int ef100_nic_ext_alloc(struct efhw_nic* nic,
+                        const unsigned char* service_guid,
+                        uint32_t* out_mc_handle)
+{
+	int rc;
+	size_t out_size;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_ALLOC_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_ALLOC_OUT_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+	EFHW_MCDI_INITIALISE_BUF(out);
+
+	memcpy(EFHW_MCDI_PTR(in, PLUGIN_ALLOC_IN_UUID),
+	       service_guid, 16);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_ALLOC,
+				 sizeof(in), sizeof(out), &out_size, in, out);
+	MCDI_CHECK(MC_CMD_PLUGIN_ALLOC, rc, out_size, 0);
+	*out_mc_handle = EFHW_MCDI_DWORD(out, PLUGIN_ALLOC_OUT_HANDLE);
+	return rc;
+}
+
+
+int ef100_nic_ext_free(struct efhw_nic* nic, uint32_t mc_handle)
+{
+	int rc;
+	size_t out_size;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_FREE_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_FREE_OUT_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+	EFHW_MCDI_INITIALISE_BUF(out);
+
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_FREE_IN_HANDLE, mc_handle);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_FREE,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
+	MCDI_CHECK(MC_CMD_PLUGIN_FREE, rc, out_size, 0);
+	return rc;
+}
+
+
+int ef100_nic_ext_get_meta_global(struct efhw_nic* nic, uint32_t mc_handle,
+                                  uint8_t* uuid, uint16_t* minor_ver,
+                                  uint16_t* patch_ver, uint32_t* nmsgs,
+                                  uint32_t* nrsrc_classes)
+{
+	int rc;
+	size_t out_size;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_GET_META_GLOBAL_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_GET_META_GLOBAL_OUT_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+	EFHW_MCDI_INITIALISE_BUF(out);
+
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_GLOBAL_IN_HANDLE, mc_handle);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_GET_META_GLOBAL,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
+	MCDI_CHECK(MC_CMD_PLUGIN_GET_META_GLOBAL, rc, out_size, 0);
+	memcpy(uuid, EFHW_MCDI_PTR(out, PLUGIN_GET_META_GLOBAL_OUT_UUID), 16);
+	*minor_ver = EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_MINOR_VER);
+	*patch_ver = EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_PATCH_VER);
+	*nmsgs = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_GLOBAL_OUT_NUM_MSGS);
+	*nrsrc_classes = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_GLOBAL_OUT_NUM_RCS);
+	return rc;
+}
+
+
+int ef100_nic_ext_get_meta_rc(struct efhw_nic* nic, uint32_t mc_handle,
+                              uint32_t clas,
+                              uint32_t* max, uint32_t* kern_extra)
+{
+	int rc;
+	size_t out_size;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_GET_META_RC_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_GET_META_RC_OUT_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+	EFHW_MCDI_INITIALISE_BUF(out);
+
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_RC_IN_HANDLE, mc_handle);
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_RC_IN_CLASS, clas);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_GET_META_RC,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
+	MCDI_CHECK(MC_CMD_PLUGIN_GET_META_RC, rc, out_size, 0);
+	*max = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_RC_OUT_MAX_ALLOWED);
+	*kern_extra = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_RC_OUT_KERN_EXTRA);
+	return rc;
+}
+
+
+int ef100_nic_ext_get_meta_msg(struct efhw_nic* nic, uint32_t mc_handle,
+                               uint32_t msg_id, uint32_t* index, char* name,
+                               size_t name_len, uint32_t* ef_vi_param_size,
+                               uint32_t* mcdi_param_size, uint32_t* ninsns)
+{
+	int rc;
+	size_t out_size;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_GET_META_MSG_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_GET_META_MSG_OUT_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+	EFHW_MCDI_INITIALISE_BUF(out);
+
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_IN_HANDLE, mc_handle);
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_IN_ID, msg_id);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_GET_META_MSG,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
+	MCDI_CHECK(MC_CMD_PLUGIN_GET_META_MSG, rc, out_size, 0);
+	*index = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_MSG_OUT_INDEX);
+	memset(name, 0, name_len);
+	memcpy(name, EFHW_MCDI_PTR(out, PLUGIN_GET_META_MSG_OUT_NAME),
+	       CI_MIN(name_len, MC_CMD_PLUGIN_GET_META_MSG_OUT_NAME_LEN));
+	*ef_vi_param_size = EFHW_MCDI_DWORD(out,
+	                                 PLUGIN_GET_META_MSG_OUT_USER_PARAM_SIZE);
+	*mcdi_param_size = EFHW_MCDI_DWORD(out,
+	                                 PLUGIN_GET_META_MSG_OUT_MCDI_PARAM_SIZE);
+	*ninsns = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_MSG_OUT_PROG_NUM_INSNS);
+	return rc;
+}
+
+
+int ef100_nic_ext_get_meta_msg_prog(struct efhw_nic* nic, uint32_t mc_handle,
+                                    uint32_t msg_id,
+                                    void* prog, size_t prog_bytes)
+{
+	int rc;
+	size_t out_size;
+	uint32_t offset = 0;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_GET_META_MSG_PROG_IN_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_PROG_IN_HANDLE, mc_handle);
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_PROG_IN_ID, msg_id);
+	do {
+		EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_PROG_IN_OFFSET, offset);
+		rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_GET_META_MSG_PROG,
+								 sizeof(in), prog_bytes - offset, &out_size,
+								 in, (char*)prog + offset);
+		ef10_ef100_mcdi_check_response(__func__,
+		                               "MC_CMD_PLUGIN_GET_META_MSG_PROG",
+		                               rc, 0, out_size, 0);
+		if (rc < 0)
+			break;
+		if (out_size == 0)
+			return -ENODATA;
+		offset += out_size;
+	} while (offset < prog_bytes);
+	return rc;
+}
+
+
+int ef100_nic_ext_msg(struct efhw_nic* nic, uint32_t mc_handle,
+                      uint32_t msg_id, void* payload, size_t len)
+{
+	ci_dword_t* bufs;
+	void* out;
+	size_t in_len = len + MC_CMD_PLUGIN_REQ_IN_DATA_OFST;
+	size_t out_size;
+	int rc;
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	if (len >= MC_CMD_PLUGIN_REQ_IN_DATA_MAXNUM_MCDI2)
+		return -E2BIG;
+	/* space for two, because we're putting the output in the same alloc: */
+	bufs = kzalloc(CI_ROUND_UP(in_len, 8) + CI_ROUND_UP(len, 8), GFP_KERNEL);
+	if (!bufs)
+		return -ENOMEM;
+	out = (char*)bufs + CI_ROUND_UP(in_len, 8);
+
+	EFHW_MCDI_SET_DWORD(bufs, PLUGIN_REQ_IN_HANDLE, mc_handle);
+	EFHW_MCDI_SET_DWORD(bufs, PLUGIN_REQ_IN_ID, msg_id);
+	memcpy(EFHW_MCDI_PTR(bufs, PLUGIN_REQ_IN_DATA), payload, len);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_REQ, CI_ROUND_UP(in_len, 4),
+	                         CI_ROUND_UP(len, 8), &out_size, bufs, out);
+	ef10_ef100_mcdi_check_response(__func__, "MC_CMD_PLUGIN_REQ", rc,
+	                               len, out_size, 0);
+
+	if (rc >= 0)
+		memcpy(payload, out, len);
+	kfree(bufs);
+	return rc;
+}
+
+
+int ef100_nic_ext_destroy_rsrc(struct efhw_nic* nic, uint32_t mc_handle,
+                               uint32_t clas, uint32_t id)
+{
+	int rc;
+	size_t out_size;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_DESTROY_RSRC_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_DESTROY_RSRC_OUT_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+	EFHW_MCDI_INITIALISE_BUF(out);
+
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_DESTROY_RSRC_IN_HANDLE, mc_handle);
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_DESTROY_RSRC_IN_CLASS, clas);
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_DESTROY_RSRC_IN_ID, id);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_DESTROY_RSRC,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
+	MCDI_CHECK(MC_CMD_PLUGIN_DESTROY_RSRC, rc, out_size, 0);
+	return rc;
+}
 
 /*--------------------------------------------------------------------
  *

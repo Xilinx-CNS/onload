@@ -22,6 +22,7 @@ EFRM_SRCS	:=			\
 		efrm_vi_set.c		\
 		efrm_pd.c		\
 		efrm_pio.c		\
+		efrm_slice_ext.c	\
 		resource_manager.c	\
 		resources.c		\
 		vi_resource_alloc.c	\
