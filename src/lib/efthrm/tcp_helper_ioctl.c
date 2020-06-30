@@ -1463,7 +1463,7 @@ static int oo_cp_init_kernel_mibs_rsop(ci_private_t *priv, void *arg)
 static int oo_af_xdp_kick_rsop(ci_private_t *priv, void *arg)
 {
   int intf_i = *(int32_t*)arg;
-  return efrm_vi_af_xdp_kick(priv->thr->nic[intf_i].thn_vi_rs);
+  return efrm_vi_af_xdp_kick(tcp_helper_vi(priv->thr, intf_i));
 }
 
 

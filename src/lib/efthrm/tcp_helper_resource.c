@@ -825,7 +825,7 @@ int tcp_helper_rx_vi_id(tcp_helper_resource_t* trs, int hwport)
   int intf_i;
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 )
-    return EFAB_VI_RESOURCE_INSTANCE(trs->nic[intf_i].thn_vi_rs);
+    return EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
   else
     return -1;
 }
@@ -838,7 +838,7 @@ int tcp_helper_vi_hw_stack_id(tcp_helper_resource_t* trs, int hwport)
   int intf_i;
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
-    struct efrm_vi* vi = trs->nic[intf_i].thn_vi_rs;
+    struct efrm_vi* vi = tcp_helper_vi(trs, intf_i);
     struct efrm_pd* pd = efrm_vi_get_pd(vi);
     return efrm_pd_stack_id_get(pd);
   }
@@ -875,7 +875,7 @@ int tcp_helper_vi_hw_rx_loopback_supported(tcp_helper_resource_t* trs,
   int intf_i;
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 )
-    return efrm_vi_is_hw_rx_loopback_supported(trs->nic[intf_i].thn_vi_rs);
+    return efrm_vi_is_hw_rx_loopback_supported(tcp_helper_vi(trs, intf_i));
   else
     return -1;
 }
@@ -887,7 +887,7 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
   int intf_i;
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 )
-    return efrm_vi_is_hw_drop_filter_supported(trs->nic[intf_i].thn_vi_rs);
+    return efrm_vi_is_hw_drop_filter_supported(tcp_helper_vi(trs, intf_i));
   else
     return -1;
 }
@@ -974,7 +974,7 @@ static int allocate_pio(tcp_helper_resource_t* trs, int intf_i,
   }
 
   /* efrm_pio_alloc() success */
-  rc = efrm_pio_link_vi(trs_nic->thn_pio_rs, trs_nic->thn_vi_rs);
+  rc = efrm_pio_link_vi(trs_nic->thn_pio_rs, tcp_helper_vi(trs, intf_i));
   if( rc < 0 ) {
     efrm_pio_release(trs_nic->thn_pio_rs, true);
     trs_nic->thn_pio_rs = NULL;
@@ -992,9 +992,10 @@ static int allocate_pio(tcp_helper_resource_t* trs, int intf_i,
   }
    
   /* efrm_pio_link_vi() success */
-  rc = efrm_pio_map_kernel(trs_nic->thn_vi_rs, (void**) &netif_nic->pio.pio_io);
+  rc = efrm_pio_map_kernel(tcp_helper_vi(trs, intf_i),
+                           (void**) &netif_nic->pio.pio_io);
   if( rc < 0 ) {
-    efrm_pio_unlink_vi(trs_nic->thn_pio_rs, trs_nic->thn_vi_rs, NULL);
+    efrm_pio_unlink_vi(trs_nic->thn_pio_rs, tcp_helper_vi(trs, intf_i), NULL);
     efrm_pio_release(trs_nic->thn_pio_rs, true);
     trs_nic->thn_pio_rs = NULL;
     if( NI_OPTS(ni).pio == 1 ) {
@@ -1497,7 +1498,7 @@ static int af_xdp_kick(ef_vi* vi)
 #endif
   {
     int intf_i = CI_CONTAINER(ci_netif_nic_t, vis[0], vi) - trs->netif.nic_hw;
-    return efrm_vi_af_xdp_kick(trs->nic[intf_i].thn_vi_rs);
+    return efrm_vi_af_xdp_kick(tcp_helper_vi(trs, intf_i));
   }
 }
 
@@ -1552,8 +1553,8 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     base_ef_vi_flags |= EF_VI_TX_PUSH_DISABLE;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    trs->nic[intf_i].thn_vi_rs = NULL;
-    trs->nic[intf_i].thn_vi_mmap_bytes = 0;
+    trs->nic[intf_i].thn_vi_rs[0] = NULL;
+    trs->nic[intf_i].thn_vi_mmap_bytes[0] = 0;
 #if CI_CFG_PIO
     trs->nic[intf_i].thn_pio_rs = NULL;
     trs->nic[intf_i].thn_pio_io_mmap_bytes = 0;
@@ -1572,6 +1573,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     struct efrm_vi_mappings* vm = (void*) ni->vi_data;
     unsigned vi_out_flags = 0;
     struct pci_dev* dev;
+    struct efrm_vi* vi_rs;
     ef_vi* vi;
 
     BUILD_BUG_ON(sizeof(ni->vi_data) < sizeof(struct efrm_vi_mappings));
@@ -1593,7 +1595,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     alloc_info.efhw_flags = base_efhw_flags;
     alloc_info.ef_vi_flags = base_ef_vi_flags;
 
-    ci_assert(trs_nic->thn_vi_rs == NULL);
+    ci_assert_equal(tcp_helper_vi(trs, intf_i), NULL);
     ci_assert(trs_nic->thn_oo_nic != NULL);
     ci_assert(alloc_info.client != NULL);
 
@@ -1609,15 +1611,16 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       goto error_out;
     nsn->pd_owner = efrm_pd_owner_id(alloc_info.pd);
 
-    alloc_info.virs = &trs_nic->thn_vi_rs;
+    alloc_info.virs = &trs_nic->thn_vi_rs[0];
     alloc_info.txq_capacity = NI_OPTS(ni).txq_size;
     rc = allocate_vi(ni, &alloc_info);
     if( rc != 0 )
       goto error_out;
 
+    vi_rs = tcp_helper_vi(trs, intf_i);
     /* FIXME we should impose vi_set instance top down */
     if( thc ) {
-      trs->thc_rss_instance = efrm_vi_set_get_vi_instance(trs_nic->thn_vi_rs);
+      trs->thc_rss_instance = efrm_vi_set_get_vi_instance(vi_rs);
       ns->rss_instance = trs->thc_rss_instance;
       ns->cluster_size = thc->thc_cluster_size;
     }
@@ -1626,7 +1629,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     }
 
     vi = ci_netif_vi(ni, intf_i);
-    initialise_vi(ni, vi, trs_nic->thn_vi_rs, vm,
+    initialise_vi(ni, vi, tcp_helper_vi(trs, intf_i), vm,
                   vi_state, nic->devtype.arch, nic->devtype.variant,
                   nic->devtype.revision, efhw_vi_nic_flags(nic), &alloc_info,
                   &vi_out_flags, &ni->state->vi_stats);
@@ -1642,21 +1645,21 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       nsn->oo_vi_flags & OO_VI_FLAGS_CTPIO_EN ?
       NI_OPTS(ni).ctpio_max_frame_len : 0;
 #endif
-    dev = efrm_vi_get_pci_dev(trs_nic->thn_vi_rs);
+    dev = efrm_vi_get_pci_dev(vi_rs);
     strncpy(nsn->pci_dev, dev ? pci_name(dev) : "?", sizeof(nsn->pci_dev));
     if( dev )
       pci_dev_put(dev);
     nsn->pci_dev[sizeof(nsn->pci_dev) - 1] = '\0';
     nsn->vi_instance =
-        (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(trs_nic->thn_vi_rs);
+        (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(vi_rs);
     nsn->vi_arch = (ci_uint8) nic->devtype.arch;
     nsn->vi_variant = (ci_uint8) nic->devtype.variant;
     nsn->vi_revision = (ci_uint8) nic->devtype.revision;
     nsn->vi_nic_flags = efhw_vi_nic_flags(nic);
-    nsn->vi_channel = (ci_uint8)efrm_vi_get_channel(trs_nic->thn_vi_rs);
+    nsn->vi_channel = (ci_uint8)efrm_vi_get_channel(vi_rs);
     nsn->vi_flags = alloc_info.ef_vi_flags;
     nsn->vi_out_flags = vi_out_flags;
-    nsn->vi_evq_bytes = efrm_vi_rm_evq_bytes(trs_nic->thn_vi_rs, -1);
+    nsn->vi_evq_bytes = efrm_vi_rm_evq_bytes(vi_rs, -1);
     nsn->vi_rxq_size = vm->rxq_size;
     nsn->vi_txq_size = vm->txq_size;
     nsn->timer_quantum_ns = vm->timer_quantum_ns;
@@ -1673,8 +1676,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
                ef_vi_calc_state_bytes(vm->rxq_size, vm->txq_size);
 
     if( nsn->oo_vi_flags & OO_VI_FLAGS_CTPIO_EN ) {
-      rc = efrm_ctpio_map_kernel(trs_nic->thn_vi_rs,
-                                 &(trs_nic->thn_ctpio_io_mmap));
+      rc = efrm_ctpio_map_kernel(vi_rs, &(trs_nic->thn_ctpio_io_mmap));
       if( rc < 0 ) {
         ci_log("%s: ERROR: efrm_ctpio_map_kernel failed (%d)\n", __func__, rc);
         efrm_pd_release(alloc_info.pd);
@@ -1708,9 +1710,9 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
 error_out:
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    if( trs->nic[intf_i].thn_vi_rs ) {
-      efrm_vi_resource_release(trs->nic[intf_i].thn_vi_rs);
-      trs->nic[intf_i].thn_vi_rs = NULL;
+    if( tcp_helper_vi(trs, intf_i) ) {
+      efrm_vi_resource_release(tcp_helper_vi(trs, intf_i));
+      trs->nic[intf_i].thn_vi_rs[0] = NULL;
     }
   }
   return rc;
@@ -1743,7 +1745,7 @@ static int deferred_vis(tcp_helper_resource_t* trs)
     struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
     uint32_t mmap_bytes;
 
-    rc = efrm_vi_resource_deferred(trs_nic->thn_vi_rs,
+    rc = efrm_vi_resource_deferred(tcp_helper_vi(trs, intf_i),
                                    CI_CFG_PKT_BUF_SIZE,
                                    offsetof(ci_ip_pkt_fmt, dma_start),
                                    &mmap_bytes);
@@ -1751,15 +1753,15 @@ static int deferred_vis(tcp_helper_resource_t* trs)
       return rc;
 
     trs->buf_mmap_bytes += mmap_bytes;
-    trs_nic->thn_vi_mmap_bytes = mmap_bytes;
+    trs_nic->thn_vi_mmap_bytes[0] = mmap_bytes;
 
     /* We used the info we were told - check that's consistent with what someone
      * else would get if they checked separately.
      */
     ci_assert_equal(ni->state->nic[intf_i].vi_io_mmap_bytes,
-                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 0));
-    ci_assert_equal(trs_nic->thn_vi_mmap_bytes,
-                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 1));
+                   efab_vi_resource_mmap_bytes(tcp_helper_vi(trs, intf_i), 0));
+    ci_assert_equal(trs_nic->thn_vi_mmap_bytes[0],
+                   efab_vi_resource_mmap_bytes(tcp_helper_vi(trs, intf_i), 1));
   }
 
   ni->state->buf_mmap_bytes = trs->buf_mmap_bytes;
@@ -1817,10 +1819,10 @@ static void release_vi(tcp_helper_resource_t* trs)
   /* Flush vis first to ensure our bufs won't be used any more */
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
     reinit_completion(&trs->complete);
-    efrm_vi_register_flush_callback(trs->nic[intf_i].thn_vi_rs,
+    efrm_vi_register_flush_callback(tcp_helper_vi(trs, intf_i),
                                     &vi_complete,
                                     &trs->complete);
-    efrm_vi_resource_stop_callback(trs->nic[intf_i].thn_vi_rs);
+    efrm_vi_resource_stop_callback(tcp_helper_vi(trs, intf_i));
     wait_for_completion(&trs->complete);
 
   }
@@ -1837,21 +1839,23 @@ static void release_vi(tcp_helper_resource_t* trs)
     if( NI_OPTS(&trs->netif).pio &&
         (nic->devtype.arch == EFHW_ARCH_EF10) &&
         (trs_nic->thn_pio_io_mmap_bytes != 0) ) {
-      efrm_pio_unmap_kernel(trs_nic->thn_vi_rs, (void*)netif_nic->pio.pio_io);
+      efrm_pio_unmap_kernel(tcp_helper_vi(trs, intf_i),
+                            (void*)netif_nic->pio.pio_io);
       ci_pio_buddy_dtor(&trs->netif,
                         &trs->netif.state->nic[intf_i].pio_buddy);
     }
 #endif
 #if CI_CFG_CTPIO
     if( trs_nic->thn_ctpio_io_mmap != NULL )
-      efrm_ctpio_unmap_kernel(trs_nic->thn_vi_rs, trs_nic->thn_ctpio_io_mmap);
+      efrm_ctpio_unmap_kernel(tcp_helper_vi(trs, intf_i),
+                              trs_nic->thn_ctpio_io_mmap);
 #endif
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
     if( trs_nic->thn_xdp_prog )
       tcp_helper_nic_detach_xdp(trs_nic, nic);
 #endif
-    efrm_vi_resource_release_flushed(trs->nic[intf_i].thn_vi_rs);
-    trs->nic[intf_i].thn_vi_rs = NULL;
+    efrm_vi_resource_release_flushed(tcp_helper_vi(trs, intf_i));
+    trs->nic[intf_i].thn_vi_rs[0] = NULL;
     CI_DEBUG_ZERO(ci_netif_vi(&trs->netif, intf_i));
 
   }
@@ -4160,16 +4164,16 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
    */
   OO_STACK_FOR_EACH_INTF_I(&rs->netif, intf_i) {
 #if CI_CFG_UL_INTERRUPT_HELPER
-      efrm_eventq_register_callback(rs->nic[intf_i].thn_vi_rs,
+      efrm_eventq_register_callback(tcp_helper_vi(rs, intf_i),
                                     &oo_handle_wakeup_in_ul,
                                     &rs->nic[intf_i]);
 #else
     if( NI_OPTS(ni).int_driven )
-      efrm_eventq_register_callback(rs->nic[intf_i].thn_vi_rs,
+      efrm_eventq_register_callback(tcp_helper_vi(rs, intf_i),
                                     &oo_handle_wakeup_int_driven,
                                     &rs->nic[intf_i]);
     else
-      efrm_eventq_register_callback(rs->nic[intf_i].thn_vi_rs,
+      efrm_eventq_register_callback(tcp_helper_vi(rs, intf_i),
                                     &oo_handle_wakeup_or_timeout,
                                     &rs->nic[intf_i]);
 #endif
@@ -4490,11 +4494,11 @@ static void tcp_helper_reset_stack_locked(tcp_helper_resource_t* thr)
       if( NI_OPTS(ni).pio &&
           (nic->devtype.arch == EFHW_ARCH_EF10) && 
           (thr->nic[intf_i].thn_pio_io_mmap_bytes != 0) ) {
-        struct efrm_pd *pd = efrm_vi_get_pd(thr->nic[intf_i].thn_vi_rs);
+        struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(thr, intf_i));
         OO_DEBUG_TCPH(ci_log("%s: realloc PIO", __FUNCTION__));
         /* Now try to recreate and link the PIO region */
         rc = efrm_pio_realloc(pd, thr->nic[intf_i].thn_pio_rs, 
-                              thr->nic[intf_i].thn_vi_rs);
+                              tcp_helper_vi(thr, intf_i));
         if( rc < 0 ) {
           OO_DEBUG_TCPH(ci_log("%s: [%d:%d] pio_realloc failed %d, "
                                "removing PIO capability", 
@@ -4562,9 +4566,9 @@ static void tcp_helper_reset_stack_locked(tcp_helper_resource_t* thr)
          we failed to map packet buffers, we don't bring the hw queues back up
          to ensure that we don't attempt to DMA to an invalid address. */
       if( ~nsn->nic_error_flags & CI_NETIF_NIC_ERROR_REMAP )
-        efrm_vi_qs_reinit(thr->nic[intf_i].thn_vi_rs);
+        efrm_vi_qs_reinit(tcp_helper_vi(thr, intf_i));
       else
-        efrm_vi_resource_mark_shut_down(thr->nic[intf_i].thn_vi_rs);
+        efrm_vi_resource_mark_shut_down(tcp_helper_vi(thr, intf_i));
 
       if( cb_state.ps.tx_pkt_free_list_n )
         ci_netif_poll_free_pkts(ni, &cb_state.ps);
@@ -5232,7 +5236,7 @@ tcp_helper_stop(tcp_helper_resource_t* trs)
         - wait for any running callback to complete */
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
     ef_eventq_timer_clear(ci_netif_vi(&trs->netif, intf_i));
-    efrm_eventq_kill_callback(trs->nic[intf_i].thn_vi_rs);
+    efrm_eventq_kill_callback(tcp_helper_vi(trs, intf_i));
   }
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
@@ -5692,7 +5696,7 @@ efab_tcp_helper_iobufset_map(tcp_helper_resource_t* trs,
   int map_order = INT_MAX;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    struct efrm_pd *pd = efrm_vi_get_pd(trs->nic[intf_i].thn_vi_rs);
+    struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
     struct oo_iobufset *iobuf;
     int cur_map_order;
 
@@ -7601,7 +7605,7 @@ efab_tcp_helper_vi_stats_query(tcp_helper_resource_t* trs, unsigned int intf_i,
   if( intf_i >= CI_CFG_MAX_INTERFACES )
     return -EINVAL;
 
-  virs = trs->nic[intf_i].thn_vi_rs;
+  virs = tcp_helper_vi(trs, intf_i);
   return efrm_vi_get_rx_error_stats(virs, data, data_len, do_reset);
 }
 

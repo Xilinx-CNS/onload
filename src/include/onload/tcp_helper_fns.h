@@ -133,6 +133,13 @@ ci_inline tcp_helper_endpoint_t* efab_priv_to_ep(ci_private_t* priv)
   return ci_trs_ep_get(thr, priv->sock_id);
 }
 
+/* Returns the 'base'/'normal'/'non-plugin' VI for the given NIC. */
+ci_inline struct efrm_vi*
+tcp_helper_vi(tcp_helper_resource_t* trs, int intf_i)
+{
+  return trs->nic[intf_i].thn_vi_rs[0];
+}
+
 extern int efab_thr_get_inaccessible_stack_info(unsigned id,
                                                 uid_t* uid, 
                                                 uid_t* euid,
@@ -325,7 +332,7 @@ tcp_helper_request_wakeup_nic(tcp_helper_resource_t* trs, int intf_i) {
   if( ci_netif_may_poll_in_kernel(&trs->netif, intf_i) ) {
     unsigned current_i =
       ef_eventq_current(ci_netif_vi(&trs->netif, intf_i)) / sizeof(efhw_event_t);
-    efrm_eventq_request_wakeup(trs->nic[intf_i].thn_vi_rs, current_i);
+    efrm_eventq_request_wakeup(tcp_helper_vi(trs, intf_i), current_i);
   }
 }
 

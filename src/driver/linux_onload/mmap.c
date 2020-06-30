@@ -317,12 +317,12 @@ tcp_helper_rm_nopage_iobuf(tcp_helper_resource_t* trs, struct vm_area_struct *vm
   /* VIs (descriptor rings and event queues). */
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
-    if( offset + CI_PAGE_SIZE <= trs_nic->thn_vi_mmap_bytes ) {
-      return efab_vi_resource_nopage(trs_nic->thn_vi_rs, vma,
-                                     offset, trs_nic->thn_vi_mmap_bytes);
+    if( offset + CI_PAGE_SIZE <= trs_nic->thn_vi_mmap_bytes[0] ) {
+      return efab_vi_resource_nopage(tcp_helper_vi(trs, intf_i), vma,
+                                     offset, trs_nic->thn_vi_mmap_bytes[0]);
     }
     else {
-       offset -= trs_nic->thn_vi_mmap_bytes;
+       offset -= trs_nic->thn_vi_mmap_bytes[0];
     }
   }
   OO_DEBUG_SHM(ci_log("%s: %u offset %ld too great",
@@ -524,7 +524,7 @@ static int tcp_helper_rm_mmap_io(tcp_helper_resource_t* trs,
   OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
 
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
-    rc = efab_vi_resource_mmap(trs->nic[intf_i].thn_vi_rs, &bytes, vma,
+    rc = efab_vi_resource_mmap(tcp_helper_vi(trs, intf_i), &bytes, vma,
                                &map_num, &offset, EFCH_VI_MMAP_IO);
     if( rc < 0 )
       return rc;
@@ -549,7 +549,7 @@ static int tcp_helper_rm_mmap_pio(tcp_helper_resource_t* trs,
 
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
     if( trs->nic[intf_i].thn_pio_io_mmap_bytes != 0 ) {
-      rc = efab_vi_resource_mmap(trs->nic[intf_i].thn_vi_rs, &bytes, vma,
+      rc = efab_vi_resource_mmap(tcp_helper_vi(trs, intf_i), &bytes, vma,
                                  &map_num, &offset, EFCH_VI_MMAP_PIO);
       if( rc < 0 )
         return rc;
@@ -574,7 +574,7 @@ static int tcp_helper_rm_mmap_ctpio(tcp_helper_resource_t* trs,
 
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
     if( trs->nic[intf_i].thn_ctpio_io_mmap_bytes != 0 ) {
-      rc = efab_vi_resource_mmap(trs->nic[intf_i].thn_vi_rs, &bytes, vma,
+      rc = efab_vi_resource_mmap(tcp_helper_vi(trs, intf_i), &bytes, vma,
                                  &map_num, &offset, EFCH_VI_MMAP_CTPIO);
       if( rc < 0 )
         return rc;
@@ -600,7 +600,7 @@ static int tcp_helper_rm_mmap_buf(tcp_helper_resource_t* trs,
   OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i ) {
-    rc = efab_vi_resource_mmap(trs->nic[intf_i].thn_vi_rs, &bytes, vma,
+    rc = efab_vi_resource_mmap(tcp_helper_vi(trs, intf_i), &bytes, vma,
                                &map_num, &offset, EFCH_VI_MMAP_MEM);
     if( rc < 0 )  return rc;
 
