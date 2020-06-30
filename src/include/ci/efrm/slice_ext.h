@@ -4,12 +4,21 @@
 #define __CI_EFRM_SLICE_EXT_H__
 
 struct efrm_resource;
+struct efrm_resource_manager;
+
+int efrm_create_ext_resource_manager(struct efrm_resource_manager **rm_out);
 
 extern int efrm_ext_alloc(struct efrm_resource *rs,
-                          const unsigned char* service_guid,
+                          const unsigned char* ext_guid,
                           uint32_t* out_mc_handle);
 
+extern int efrm_ext_alloc_rs(struct efrm_resource *pd_rs,
+                             struct efrm_resource *ext_rs,
+                            const unsigned char* ext_guid);
+
 extern int efrm_ext_free(struct efrm_resource *rs, uint32_t mc_handle);
+
+extern void efrm_ext_release(struct efrm_resource *rs);
 
 struct efrm_ext_svc_meta {
     uint8_t uuid[16];

@@ -19,14 +19,29 @@ static bool check_ef100(const struct efrm_resource *rs)
 
 
 int efrm_ext_alloc(struct efrm_resource *rs,
-                   const unsigned char* service_guid, uint32_t* out_mc_id)
+                   const unsigned char* ext_guid, uint32_t* out_mc_id)
 {
 	if (!check_ef100(rs))
 		return -EOPNOTSUPP;
-	return ef100_nic_ext_alloc(rs->rs_client->nic, service_guid, false,
+	return ef100_nic_ext_alloc(rs->rs_client->nic, ext_guid, false,
 	                           out_mc_id);
 }
 EXPORT_SYMBOL(efrm_ext_alloc);
+
+
+int efrm_ext_alloc_rs(struct efrm_resource* pd_rs,
+                      struct efrm_resource *ext_rs,
+                      const unsigned char* ext_guid)
+{
+	uint32_t mc_handle;
+	int rc = efrm_ext_alloc(pd_rs, ext_guid, &mc_handle);
+	if (rc < 0)
+		return rc;
+	efrm_resource_init(ext_rs, EFRM_RESOURCE_SLICE_EXT, mc_handle);
+	efrm_client_add_resource(pd_rs->rs_client, ext_rs);
+	return 0;
+}
+EXPORT_SYMBOL(efrm_ext_alloc_rs);
 
 
 int efrm_ext_free(struct efrm_resource *rs, uint32_t mc_id)
@@ -36,6 +51,14 @@ int efrm_ext_free(struct efrm_resource *rs, uint32_t mc_id)
 	return ef100_nic_ext_free(rs->rs_client->nic, mc_id);
 }
 EXPORT_SYMBOL(efrm_ext_free);
+
+
+void efrm_ext_release(struct efrm_resource *rs)
+{
+	if (__efrm_resource_release(rs))
+		efrm_client_put(rs->rs_client);
+}
+EXPORT_SYMBOL(efrm_ext_release);
 
 
 int efrm_ext_get_meta_global(struct efrm_resource *rs, uint32_t mc_handle,
@@ -85,3 +108,32 @@ int efrm_ext_destroy_rsrc(struct efrm_resource *rs, uint32_t mc_handle,
 	return ef100_nic_ext_destroy_rsrc(rs->rs_client->nic, mc_handle, clas, id);
 }
 EXPORT_SYMBOL(efrm_ext_destroy_rsrc);
+
+
+static void efrm_ext_rm_dtor(struct efrm_resource_manager *rm)
+{
+	/* NOP */
+}
+
+
+int efrm_create_ext_resource_manager(struct efrm_resource_manager **rm_out)
+{
+	struct efrm_resource_manager *rm;
+	int rc;
+
+	rm = kzalloc(sizeof(*rm), GFP_KERNEL);
+	if (rm == NULL)
+		return -ENOMEM;
+
+	rc = efrm_resource_manager_ctor(rm, efrm_ext_rm_dtor, "EXT",
+					EFRM_RESOURCE_SLICE_EXT);
+	if (rc < 0)
+		goto fail;
+
+	*rm_out = rm;
+	return 0;
+
+fail:
+	kfree(rm);
+	return rc;
+}

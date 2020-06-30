@@ -38,6 +38,7 @@
  */
 
 #include <ci/efrm/private.h>
+#include <ci/efrm/slice_ext.h>
 #include "efrm_vi.h"
 #include "efrm_vi_set.h"
 #include "efrm_pd.h"
@@ -66,6 +67,9 @@ efrm_resources_init(void)
 			break;
 		case EFRM_RESOURCE_PIO:
 			rc = efrm_create_pio_resource_manager(rmp);
+			break;
+		case EFRM_RESOURCE_SLICE_EXT:
+			rc = efrm_create_ext_resource_manager(rmp);
 			break;
 		default:
 			rc = 0;

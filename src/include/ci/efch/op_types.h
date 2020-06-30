@@ -125,6 +125,13 @@ struct efch_pd_alloc {
 };
 
 
+struct efch_ext_alloc {
+  efch_resource_id_t  in_pd_rs_id;
+  unsigned char       in_ext_id[16];
+  uint32_t            in_flags;
+};
+
+
 typedef struct ci_resource_alloc_s {
   char               intf_ver[EFCH_INTF_VER_LEN];
   uint32_t           ra_type;
@@ -136,6 +143,7 @@ typedef struct ci_resource_alloc_s {
     struct efch_memreg_alloc   memreg;
     struct efch_pd_alloc       pd;
     struct efch_pio_alloc      pio;
+    struct efch_ext_alloc      ext;
   } u;
 } ci_resource_alloc_t;
 
@@ -188,6 +196,9 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_VI_TX_ALT_ALLOC         0x86
 # define                CI_RSOP_VI_TX_ALT_FREE          0x87
 # define                CI_RSOP_VI_GET_TS_FORMAT        0x88
+# define                CI_RSOP_EXT_FREE                0x89
+# define                CI_RSOP_EXT_MSG                 0x8A
+# define                CI_RSOP_EXT_DESTROY_RSRC        0x8B
 
   union {
     struct {
@@ -281,6 +292,17 @@ typedef struct ci_resource_op_s {
       /* enum ef_timestamp_format */
       uint32_t          out_ts_format;
     } vi_ts_format;
+    struct {
+      uint32_t          msg_id;
+      uint64_t          payload_ptr;
+      uint64_t          payload_len;
+      uint32_t          flags;
+    } ext_msg;
+    struct {
+      uint32_t          clas;
+      uint64_t          id;
+      uint32_t          flags;
+    } ext_destroy_rsrc;
   } u CI_ALIGN(8);
 } ci_resource_op_t;
 

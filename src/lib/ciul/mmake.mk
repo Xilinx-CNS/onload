@@ -44,6 +44,7 @@ LIB_SRCS	+=		\
 		vi_prime.c	\
 		vi_discard.c	\
 		capabilities.c	\
+		slice_exts.c	\
 		ctpio.c
 
 # librt is needed on old glibc, e.g. on RHEL 6
