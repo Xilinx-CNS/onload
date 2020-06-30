@@ -863,6 +863,60 @@ extern int
 ef_filter_spec_set_ip_proto(ef_filter_spec *filter_spec, uint8_t ip_proto);
 
 
+/*! \brief Set the value of the user mark associated with a filter.
+**
+** \param filter_spec   The ef_filter_spec of the filter.
+** \param user_mark     Mark value to set.
+** \param bitwise_or    Whether to OR the specified value into the mark.
+**
+** \return 0 on success, or a negative error code.
+**
+** Associates a 32-bit "user mark" with the filter.  This mark is applied to
+** packets that match the filter, which in due course can be retrieved for a
+** given received packet by calling ef_vi_receive_get_user_mark() on that
+** packet.
+**
+** Packets may already have a mark associated them at the point at which
+** filters are evaluated in hardware.  If \param bitwise_or is non-zero, the
+** value of \param user_mark will be bitwise-ORed into the mark of matching
+** packets; otherwise, it will replace the mark.
+**
+** User marks are only supported on U26Z and later adapters.  Attempts to
+** install filters with user marks on unsupported adapters will fail.
+*/
+extern int
+ef_filter_spec_set_user_mark(ef_filter_spec *filter_spec, uint32_t user_mark,
+                             int bitwise_or);
+
+
+/*! \brief Set the value of the user flag associated with a filter.
+**
+** \param filter_spec   The ef_filter_spec of the filter.
+** \param user_flag     Flag value to set.  Normalized to Boolean.
+** \param bitwise_or    Whether to OR the specified value into the flag.
+**
+** \return 0 on success, or a negative error code.
+**
+** Associates a one-bit "user flag" with the filter.  This flag is applied to
+** packets that match the filter, which in due course can be retrieved for a
+** given received packet by calling ef_vi_receive_get_user_flag() on that
+** packet.
+**
+** Packets may already have a flag associated them at the point at which
+** filters are evaluated in hardware.  The value of \param user_flag is first
+** normalized to 0 or 1 as the provided value is respectively zero or non-zero;
+** then, if \param bitwise_or is non-zero, the value of \param user_flag will
+** be bitwise-ORed into the flag of matching packets; otherwise, it will
+** replace the flag.
+**
+** User flags are only supported on U26Z and later adapters.  Attempts to
+** install filters with user flags on unsupported adapters will fail.
+*/
+extern int
+ef_filter_spec_set_user_flag(ef_filter_spec *filter_spec, uint8_t user_flag,
+                             int bitwise_or);
+
+
 /*! \brief Set a Block Kernel Unicast filter on the filter specification
 **
 ** \param filter_spec The ef_filter_spec on which to set the filter.
