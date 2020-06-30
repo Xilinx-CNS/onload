@@ -1,10 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 
-#include <ci/driver/efab/hardware.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/af_xdp.h>
-#include <ci/efhw/af_xdp_types.h>
+#include <ci/driver/efab/hardware/af_xdp.h>
 
 #include <linux/socket.h>
 
@@ -37,7 +36,7 @@ struct efhw_af_xdp_vi
   int txq_capacity;
   unsigned flags;
 
-  struct efhw_af_xdp_offsets kernel_offsets;
+  struct efab_af_xdp_offsets kernel_offsets;
   struct efhw_page user_offsets_page;
   struct umem_pages umem;
 };
@@ -348,8 +347,8 @@ static int xdp_create_ring(struct socket* sock,
                            struct efhw_page_map* page_map, void* kern_mem_base,
                            int capacity, int desc_size, int sockopt, long pgoff,
                            const struct xdp_ring_offset* xdp_offset,
-                           struct efhw_af_xdp_offsets_ring* kern_offset,
-                           struct efhw_af_xdp_offsets_ring* user_offset)
+                           struct efab_af_xdp_offsets_ring* kern_offset,
+                           struct efab_af_xdp_offsets_ring* user_offset)
 {
   int rc;
   unsigned long map_size, addr, pfn, pages;
@@ -402,8 +401,8 @@ static int xdp_create_ring(struct socket* sock,
 static int xdp_create_rings(struct socket* sock,
                             struct efhw_page_map* page_map, void* kern_mem_base,
                             long rxq_capacity, long txq_capacity,
-                            struct efhw_af_xdp_offsets_rings* kern_offsets,
-                            struct efhw_af_xdp_offsets_rings* user_offsets)
+                            struct efab_af_xdp_offsets_rings* kern_offsets,
+                            struct efab_af_xdp_offsets_rings* user_offsets)
 {
   int rc, optlen;
   struct xdp_mmap_offsets mmap_offsets;
@@ -529,7 +528,7 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
   int rc, fd;
   struct efhw_af_xdp_vi* vi;
   struct socket* sock;
-  struct efhw_af_xdp_offsets* user_offsets;
+  struct efab_af_xdp_offsets* user_offsets;
 
   vi = vi_by_stack(nic, stack_id);
   if( vi == NULL )

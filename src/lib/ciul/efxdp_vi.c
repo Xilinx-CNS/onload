@@ -17,7 +17,7 @@
 #ifdef HAVE_AF_XDP
 
 #include <linux/if_xdp.h>
-#include <ci/efhw/af_xdp_types.h>
+#include "af_xdp_defs.h"
 #include "logging.h"
 
 /* Currently, AF_XDP requires a system call to start transmitting.
@@ -45,9 +45,9 @@ static void efxdp_tx_kick(ef_vi* vi)
  * The (fake) event queue pointer must be initialised to point to the start
  * of this memory in order to access the offsets.
  */
-static struct efhw_af_xdp_offsets* xdp_offsets(ef_vi* vi)
+static struct efab_af_xdp_offsets* xdp_offsets(ef_vi* vi)
 {
-  return (struct efhw_af_xdp_offsets*)vi->evq_base;
+  return (struct efab_af_xdp_offsets*)vi->evq_base;
 }
 
 #define RING_THING(vi, ring, thing) \
