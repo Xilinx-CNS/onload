@@ -199,8 +199,14 @@ extern void ci_netif_dmaq_shove1(ci_netif*, int intf_i);
  */
 extern void ci_netif_dmaq_shove2(ci_netif*, int intf_i, int is_fresh);
 
+/* Moves packets from the non-first overflow queue (i.e. for communicating
+ * with EF100 slice plugins) to the hardware ring if the hardware queue has at
+ * least space for one packet.
+ */
+void ci_netif_dmaq_shove_plugin(ci_netif* ni, int intf_i, int q_id);
 
-#define ci_netif_dmaq(ni, nic_i)  (&(ni)->state->nic[nic_i].dmaq)
+
+#define ci_netif_dmaq(ni, nic_i)  (&(ni)->state->nic[nic_i].dmaq[0])
 
 
 #define ci_netif_dmaq_is_empty(ni, nic_i)               \
@@ -219,7 +225,8 @@ extern void ci_netif_dmaq_shove2(ci_netif*, int intf_i, int is_fresh);
 
 ci_inline void ci_netif_dmaq_and_vi_for_pkt(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                             oo_pktq** dmaq, ef_vi** vi) {
-  *dmaq = &ni->state->nic[pkt->intf_i].dmaq;
+  ci_assert_equal(pkt->q_id, CI_Q_ID_NORMAL);
+  *dmaq = ci_netif_dmaq(ni, pkt->intf_i);
   *vi = ci_netif_vi(ni, pkt->intf_i);
 }
 

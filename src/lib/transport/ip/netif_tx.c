@@ -20,12 +20,31 @@
 
 #if OO_DO_STACK_POLL
 
+static inline bool is_to_primary_vi(ci_ip_pkt_fmt* pkt)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  return pkt->q_id == CI_Q_ID_NORMAL;
+#else
+  return true;
+#endif
+}
+
+
+static inline int pkt_q_id(ci_ip_pkt_fmt* pkt)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  return pkt->q_id;
+#else
+  return 0;
+#endif
+}
+
+
 /* [is_fresh] is a hint indicating that the requested TXs are latency-
  * sensitive. */
-static void __ci_netif_dmaq_shove(ci_netif* ni, int intf_i, int is_fresh)
+static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
+                                  int intf_i, int is_fresh)
 {
-  oo_pktq* dmaq = &ni->state->nic[intf_i].dmaq;
-  ef_vi* vi = ci_netif_vi(ni, intf_i);
   ci_ip_pkt_fmt* pkt = PKT_CHK(ni, dmaq->head);
   int rc;
 #if CI_CFG_USE_CTPIO && !defined(__KERNEL__)
@@ -45,6 +64,7 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, int intf_i, int is_fresh)
     pkt = PKT_CHK(ni, dmaq->head);
     ci_assert(pkt->flags & CI_PKT_FLAG_TX_PENDING);
     ci_assert_equal(intf_i, pkt->intf_i);
+    ci_assert_equal(dmaq, &ni->state->nic[intf_i].dmaq[pkt_q_id(pkt)]);
     {
       ef_iovec iov[CI_IP_PKT_SEGMENTS_MAX];
       int iov_len;
@@ -142,7 +162,8 @@ void ci_netif_dmaq_shove1(ci_netif* ni, int intf_i)
 {
   ef_vi* vi = ci_netif_vi(ni, intf_i);
   if( ef_vi_transmit_space(vi) >= (ef_vi_transmit_capacity(vi) >> 1) )
-    __ci_netif_dmaq_shove(ni, intf_i, 0 /*is_fresh*/);
+    __ci_netif_dmaq_shove(ni, ci_netif_dmaq(ni, intf_i), vi, intf_i,
+                          0 /*is_fresh*/);
 }
 
 
@@ -150,7 +171,17 @@ void ci_netif_dmaq_shove2(ci_netif* ni, int intf_i, int is_fresh)
 {
   ef_vi* vi = ci_netif_vi(ni, intf_i);
   if( ef_vi_transmit_space(vi) > CI_IP_PKT_SEGMENTS_MAX )
-    __ci_netif_dmaq_shove(ni, intf_i, is_fresh);
+    __ci_netif_dmaq_shove(ni, ci_netif_dmaq(ni, intf_i), vi, intf_i, is_fresh);
+}
+
+
+void ci_netif_dmaq_shove_plugin(ci_netif* ni, int intf_i, int q_id)
+{
+  ef_vi* vi = &ni->nic_hw[intf_i].vis[q_id];
+  ci_assert_ge(q_id, 1);
+  if( ef_vi_transmit_space(vi) > CI_IP_PKT_SEGMENTS_MAX )
+    __ci_netif_dmaq_shove(ni, &ni->state->nic[intf_i].dmaq[q_id], vi, intf_i,
+                          0 /*is_fresh*/);
 }
 
 
@@ -192,8 +223,9 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
    */
   intf_i = pkt->intf_i;
 
-  dmaq = ci_netif_dmaq(netif, intf_i);
-  vi = ci_netif_vi(netif, intf_i);
+  ci_assert_lt(pkt->q_id, CI_MAX_VIS_PER_INTF);
+  dmaq = &netif->state->nic[intf_i].dmaq[pkt_q_id(pkt)];
+  vi = &netif->nic_hw[intf_i].vis[pkt_q_id(pkt)];
 
   if( oo_pktq_is_empty(dmaq) && ! (pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
 #if CI_CFG_USE_PIO
@@ -203,7 +235,8 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
     order = ci_log2_ge(pkt->pay_len, CI_CFG_MIN_PIO_BLOCK_ORDER);
     buddy = &netif->state->nic[intf_i].pio_buddy;
     if( ! ci_netif_may_ctpio(netif, intf_i, pkt->pay_len) &&
-        netif->state->nic[intf_i].oo_vi_flags & OO_VI_FLAGS_PIO_EN ) {
+        netif->state->nic[intf_i].oo_vi_flags & OO_VI_FLAGS_PIO_EN &&
+        is_to_primary_vi(pkt) ) {
       if( pkt->pay_len <= NI_OPTS(netif).pio_thresh && pkt->n_buffers == 1 ) {
         if( (offset = ci_pio_buddy_alloc(netif, buddy, order)) >= 0 ) {
           rc = ef_vi_transmit_copy_pio(vi,
@@ -237,6 +270,7 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
         struct iovec my_iov[CI_IP_PKT_SEGMENTS_MAX];
         ci_uint8 protocol;
 
+        ci_assert(is_to_primary_vi(pkt));
         ci_netif_pkt_to_host_iovec(netif, pkt, my_iov,
                                    sizeof(my_iov) / sizeof(my_iov[0]));
 
@@ -249,7 +283,8 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
                                     sizeof(iov) / sizeof(iov[0]));
 #if CI_CFG_USE_CTPIO && !defined(__KERNEL__)
     if( (iov_len > 0) && (iov_len <= CI_IP_PKT_SEGMENTS_MAX) &&
-        ci_netif_may_ctpio(netif, intf_i, pkt->pay_len) ) {
+        ci_netif_may_ctpio(netif, intf_i, pkt->pay_len) &&
+        is_to_primary_vi(pkt) ) {
       ci_netif_state_nic_t* nsn = &netif->state->nic[intf_i];
       struct iovec host_iov[CI_IP_PKT_SEGMENTS_MAX];
       unsigned total_length;
@@ -307,5 +342,49 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
   }
 }
 
+
+/* Transmit the given packet right now, failing if it can't be done
+ * (ci_netif_send() will put deferrals on to the dmaq for later). This is a
+ * low-level function used by VIs which are used for communicating with
+ * plugins, where the caller typically has their own reliability policy and
+ * hence they don't want automatic handling of it behind the scenes. */
+bool ci_netif_send_immediate(ci_netif* netif, ci_ip_pkt_fmt* pkt)
+{
+  int intf_i;
+  ef_vi* vi;
+  ef_iovec iov[CI_IP_PKT_SEGMENTS_MAX];
+  int iov_len;
+
+  ci_assert(netif);
+  ci_assert(pkt);
+  ci_assert_ge(pkt->intf_i, 0);
+  ci_assert_lt(pkt->intf_i, CI_CFG_MAX_INTERFACES);
+  ci_assert_flags(pkt->flags, CI_PKT_FLAG_TX_PENDING);
+  ci_assert_nflags(pkt->flags, CI_PKT_FLAG_INDIRECT);
+
+  LOG_NT(log("%s: [%d] id=%d nseg=%d 0:["EF_ADDR_FMT":%d] dhost="
+             CI_MAC_PRINTF_FORMAT, __FUNCTION__, NI_ID(netif),
+             OO_PKT_FMT(pkt), pkt->n_buffers,
+             pkt_dma_addr(netif, pkt, pkt->intf_i),
+             pkt->buf_len, CI_MAC_PRINTF_ARGS(oo_ether_dhost(pkt))));
+
+  intf_i = pkt->intf_i;
+
+  ci_assert_lt(pkt->q_id, CI_MAX_VIS_PER_INTF);
+  vi = &netif->nic_hw[intf_i].vis[pkt_q_id(pkt)];
+
+  iov_len = ci_netif_pkt_to_iovec(netif, pkt, iov,
+                                  sizeof(iov) / sizeof(iov[0]));
+  if( ef_vi_transmitv(vi, iov, iov_len, OO_PKT_ID(pkt)) != 0 )
+    return false;
+
+  ___ci_netif_dmaq_insert_prep_pkt(netif, pkt);
+  CITP_STATS_NETIF_INC(netif, tx_dma_doorbells);
+  LOG_AT(ci_analyse_pkt(oo_ether_hdr(pkt), pkt->buf_len));
+  LOG_DT(ci_hex_dump(ci_log_fn, oo_ether_hdr(pkt), pkt->buf_len, 0));
+
+  return true;
+}
 #endif
+
 /*! \cidoxg_end */

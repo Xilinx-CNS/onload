@@ -61,7 +61,8 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   /* TX DMA overflow queue. */
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     nn = &nis->nic[nic_i];
-    oo_pktq_init(&nn->dmaq);
+    for( i = 0; i < sizeof(nn->dmaq) / sizeof(nn->dmaq[0]); ++i )
+      oo_pktq_init(&nn->dmaq[i]);
     assert_zero(nn->tx_bytes_added);
     assert_zero(nn->tx_bytes_removed);
     assert_zero(nn->tx_dmaq_insert_seq);

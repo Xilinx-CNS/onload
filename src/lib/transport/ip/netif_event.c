@@ -1868,9 +1868,10 @@ have_events:
 #ifndef NDEBUG
     if( CI_NETIF_TX_VI(ni, intf_i, 0)->nic_type.arch != EF_VI_ARCH_AF_XDP ) {
       int vi_i;
-      int txq_level = ni->state->nic[intf_i].dmaq.num;
+      int txq_level = 0;
       for( vi_i = 0; vi_i < ci_netif_num_vis(ni); ++vi_i)
-        txq_level += ef_vi_transmit_fill_level(&ni->nic_hw[intf_i].vis[vi_i]);
+        txq_level += ef_vi_transmit_fill_level(&ni->nic_hw[intf_i].vis[vi_i]) +
+                     ni->state->nic[intf_i].dmaq[vi_i].num;
       ci_assert_equiv(txq_level == 0,
                       (ni->state->nic[intf_i].tx_dmaq_insert_seq ==
                       ni->state->nic[intf_i].tx_dmaq_done_seq));
@@ -1931,6 +1932,15 @@ static int ci_netif_poll_intf(ci_netif* ni, int intf_i, int max_evs)
 
   if( ci_netif_dmaq_not_empty(ni, intf_i) )
     ci_netif_dmaq_shove1(ni, intf_i);
+
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  {
+    int i;
+    for( i = 1; i < ci_netif_num_vis(ni); ++i )
+      if( oo_pktq_not_empty(&ni->state->nic[intf_i].dmaq[i]) )
+        ci_netif_dmaq_shove_plugin(ni, intf_i, i);
+  }
+#endif
 
   return total_evs;
 }
