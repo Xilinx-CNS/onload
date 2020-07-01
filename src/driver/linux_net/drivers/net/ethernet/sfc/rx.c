@@ -171,7 +171,7 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (channel->zc) {
 		alloc_len = rx_buf->len;
-		data_cp_len = rx_buf->len;
+		data_cp_len = rx_buf->len + efx->rx_prefix_size;
 	}
 #endif
 	/* Allocate an SKB to store the headers */
