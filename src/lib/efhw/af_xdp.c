@@ -300,10 +300,9 @@ static int xdp_prog_load(int map_fd)
   return rc;
 }
 
-/* Update an element in the XDP socket map */
-static int xdp_map_update_elem(struct file* map, int key, int value)
+/* Update an element in the XDP socket map (using fds) */
+static int xdp_map_update_fd(int map_fd, int key, int sock_fd)
 {
-  int rc;
   union bpf_attr attr = {};
 
   /* TODO The BPF program is hard-coded to support only one socket, with
@@ -312,16 +311,32 @@ static int xdp_map_update_elem(struct file* map, int key, int value)
   if( key != 0 )
     return -ENOSPC;
 
-  rc = xdp_alloc_fd(map);
-  if( rc < 0 )
-    return rc;
-
-  attr.map_fd = rc;
+  attr.map_fd = map_fd;
   attr.key = (uintptr_t)(&key);
-  attr.value = (uintptr_t)(&value);
+  attr.value = (uintptr_t)(&sock_fd);
 
-  rc = sys_bpf(BPF_MAP_UPDATE_ELEM, &attr);
-  __close_fd(current->files, attr.map_fd);
+  return sys_bpf(BPF_MAP_UPDATE_ELEM, &attr);
+}
+
+/* Update an element in the XDP socket map (using file pointers) */
+static int xdp_map_update(struct file* map, int key, struct file* sock)
+{
+  int rc, map_fd, sock_fd;
+
+  map_fd = xdp_alloc_fd(map);
+  if( map_fd < 0 )
+    return map_fd;
+
+  sock_fd = xdp_alloc_fd(sock);
+  if( sock_fd < 0 ) {
+    __close_fd(current->files, map_fd);
+    return sock_fd;
+  }
+
+  rc = xdp_map_update_fd(map_fd, key, sock_fd);
+
+  __close_fd(current->files, sock_fd);
+  __close_fd(current->files, map_fd);
   return rc;
 }
 
@@ -569,7 +584,7 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
                                 struct efhw_page_map* page_map)
 {
 #ifdef AF_XDP
-  int rc, fd;
+  int rc;
   struct efhw_af_xdp_vi* vi;
   struct socket* sock;
   struct efab_af_xdp_offsets* user_offsets;
@@ -601,12 +616,7 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
   if( rc < 0 )
     return rc;
 
-  fd = xdp_alloc_fd(vi->sock);
-  if( fd < 0 )
-    return fd;
-
-  rc = xdp_map_update_elem(nic->af_xdp->map, stack_id, fd);
-  __close_fd(current->files, fd);
+  rc = xdp_map_update(nic->af_xdp->map, stack_id, vi->sock);
   if( rc < 0 )
     return rc;
 
