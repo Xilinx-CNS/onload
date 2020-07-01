@@ -128,12 +128,6 @@ static void* umem_pages_get_addr(struct umem_pages* pages, long page)
  *
  *---------------------------------------------------------------------------*/
 
-/* Get the stack ID of the given VI */
-static int vi_stack_id(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
-{
-  return vi - nic->af_xdp->vi;
-}
-
 /* Get the VI with the given stack ID */
 static struct efhw_af_xdp_vi* vi_by_stack(struct efhw_nic* nic, int stack_id)
 {
@@ -331,24 +325,6 @@ static int xdp_map_update_elem(struct file* map, int key, int value)
   return rc;
 }
 
-/* Delete an element from the XDP socket map */
-static int xdp_map_delete_elem(struct file* map, int key)
-{
-  int rc;
-  union bpf_attr attr = {};
-
-  rc = xdp_alloc_fd(map);
-  if( rc < 0 )
-    return rc;
-
-  attr.map_fd = rc;
-  attr.key = (uintptr_t)(&key);
-
-  rc = sys_bpf(BPF_MAP_DELETE_ELEM, &attr);
-  __close_fd(current->files, attr.map_fd);
-  return rc;
-}
-
 /* Bind an AF_XDP socket to an interface */
 static int xdp_bind(struct socket* sock, int ifindex, unsigned flags)
 {
@@ -528,9 +504,8 @@ static int xdp_create_rings(struct socket* sock,
   return 0;
 }
 
-static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
+static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
 {
-  xdp_map_delete_elem(nic->af_xdp->map, vi_stack_id(nic, vi));
   umem_pages_free(&vi->umem);
   efhw_page_free(&vi->user_offsets_page);
   fput(vi->sock);
@@ -637,7 +612,7 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
 
   rc = xdp_bind(sock, nic->net_dev->ifindex, vi->flags);
   if( rc < 0 )
-    xdp_map_delete_elem(nic->af_xdp->map, stack_id);
+    return rc;
 
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
   return 0;
@@ -1077,7 +1052,7 @@ af_xdp_nic_buffer_table_clear(struct efhw_nic *nic,
   int owner = block->btb_hw.ef10.handle >> 8;
   struct efhw_af_xdp_vi* vi = vi_by_owner(nic, owner);
   if( vi != NULL )
-    xdp_release_vi(nic, vi);
+    xdp_release_vi(vi);
 #endif
 }
 
