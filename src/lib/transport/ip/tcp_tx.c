@@ -1259,8 +1259,6 @@ static int ci_tcp_tx_handle_cork(ci_netif* ni, ci_tcp_state* ts,
       ci_ip_timer_clear(ni, &ts->cork_tid);
       ci_ip_timer_set(ni, &ts->cork_tid, timeout);
     }
-    /* Next time do not block transmission. */
-    pkt->flags |= CI_PKT_FLAG_TX_PSH_ON_ACK;
     return 1;
   }
 }

@@ -51,8 +51,17 @@ ci_inline void ci_tcp_rx_post_poll(ci_netif* ni, ci_tcp_state* ts)
 
   ts->s.b.sb_flags &=~ CI_SB_FLAG_TCP_POST_POLL;
 
-  if( ci_tcp_sendq_not_empty(ts) )
+  if( ci_tcp_sendq_not_empty(ts) ) {
     ci_tcp_tx_advance(ts, ni);
+
+    /* If we did not send something because of MSG_MORE or TCP_CORK,
+     * then do not stop from sending it next time. */
+    if( ts->send.num == 1 ) {
+      ci_ip_pkt_fmt* pkt = PKT_CHK(ni, ts->send.head);
+      if( pkt->flags & CI_PKT_FLAG_TX_MORE )
+        pkt->flags |= CI_PKT_FLAG_TX_PSH_ON_ACK;
+    }
+  }
 
 #if CI_CFG_TCP_FASTSTART
   if( ci_tcp_time_now(ni) - ts->t_prev_recv_payload > NI_CONF(ni).tconst_idle ) {
