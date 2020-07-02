@@ -267,7 +267,6 @@ dlfilter_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, int ifindex,
 
   addr->ifindex = ifindex;
   addr->af = af;
-  addr->icmp = &icmpl->icmp;
   return 1;
 }
 
@@ -284,9 +283,10 @@ dlfilter_ipp_icmp_parse(const ci_ipx_hdr_t* ipx, int ip_len, int ifindex,
  * returns 0 : not for us
  *         1 : want to pass this over the link
  */
-static int dlfilter_handle_icmp(struct net* netns, int ifindex,
-                                efx_dlfilter_cb_t* fcb, const ci_ipx_hdr_t* ipx,
-                                int len, efab_ipp_addr* addr, int* thr_id )
+static int
+dlfilter_handle_icmp(struct net* netns, int ifindex, efx_dlfilter_cb_t* fcb,
+                     const ci_ipx_hdr_t* ipx, int len,
+                     efab_ipp_addr* addr, ci_icmp_hdr** icmp_p, int* thr_id)
 {
   ci_icmp_hdr* icmp;
   int* icmp_handled_ipx, icmp_type_max;
@@ -326,6 +326,7 @@ static int dlfilter_handle_icmp(struct net* netns, int ifindex,
     OO_DEBUG_DLF(ci_log(LPF "handle_icmp: couldn't parse ICMP pkt"));
     return 0;
   }
+  *icmp_p = icmp;
 
   /* sums etc?
    * IPv6 header does not have checksum field, so IPv4-only check is left. */
@@ -773,15 +774,17 @@ int efx_dlfilter_handler(struct net* netns, int ifindex, efx_dlfilter_cb_t* fcb,
   if( (af == AF_INET && proto == IPPROTO_ICMP) ||
       (af == AF_INET6 && proto == IPPROTO_ICMPV6) ) {
     efab_ipp_addr addr;
+    ci_icmp_hdr* icmp;
 
     if( CI_UNLIKELY(ip_paylen < sizeof(ci_icmp_hdr)) )
       return 0;
 
-    if( dlfilter_handle_icmp(netns, ifindex, fcb, ipx, len, &addr, &thr_id) ) {
+    if( dlfilter_handle_icmp(netns, ifindex, fcb, ipx, len,
+                             &addr, &icmp, &thr_id) ) {
       if( thr_id != -1 ) {
         OO_DEBUG_DLF(ci_log(LPF "handler: pass ICMP len:%d thr:%d", 
                             len, thr_id));
-        efab_handle_ipp_pkt_task(thr_id, &addr);
+        efab_handle_ipp_pkt_task(thr_id, &addr, icmp);
       }
       else {
         OO_DEBUG_DLF(ci_log(LPF "handler: reject ICMP, INVALID THR ID %d",

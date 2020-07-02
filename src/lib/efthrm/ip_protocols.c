@@ -200,15 +200,15 @@ typedef struct {
   CI_BSWAP_BE16(ipp_addr->dport_be16)
 
 
-static void 
+static void
 ci_ipp_pmtu_rx(ci_netif *netif, ci_pmtu_state_t *pmtus,
                ci_ip_cached_hdrs *ipcache,
-               efab_ipp_addr* addr)
+               efab_ipp_addr* addr, const ci_icmp_hdr* icmp)
 {
   const ci_uint16 plateau[] = CI_PMTU_PLATEAU_ENTRIES;
   ci_ipx_hdr_t* ipx;        /* hdr of failing packet */
   ci_uint16 len;         /* length of failing packet */
-  ci_icmp_too_big_t *tb = (ci_icmp_too_big_t*)addr->icmp;
+  const ci_icmp_too_big_t *tb = (const ci_icmp_too_big_t*)icmp;
   int ctr;
 
   if( !CI_IPX_ADDR_EQ(ipcache_raddr(ipcache), addr->saddr) ) {
@@ -299,14 +299,14 @@ ci_ipp_pmtu_rx(ci_netif *netif, ci_pmtu_state_t *pmtus,
  * just extracts the most likely plateau to use.
  */
 static void 
-ci_ipp_pmtu_rx_tcp(tcp_helper_resource_t* thr, 
-                   ci_tcp_state* ts, efab_ipp_addr* addr)
+ci_ipp_pmtu_rx_tcp(tcp_helper_resource_t* thr, ci_tcp_state* ts,
+                   efab_ipp_addr* addr, ci_icmp_hdr* icmp)
 {
   ci_pmtu_state_t* pmtus;
   ci_assert( thr );
   ci_assert( ts );
   ci_assert( addr );
-  ci_assert( addr->icmp );
+  ci_assert( icmp );
   ci_assert( sizeof(ci_icmp_hdr) == 4 );
 
   if (ts->s.b.state == CI_TCP_LISTEN) {
@@ -342,7 +342,7 @@ ci_ipp_pmtu_rx_tcp(tcp_helper_resource_t* thr,
     pmtus = ci_ni_aux_p2pmtus(&thr->netif, ts->pmtus);
   }
 
-  ci_ipp_pmtu_rx(&thr->netif, pmtus, &ts->s.pkt, addr);
+  ci_ipp_pmtu_rx(&thr->netif, pmtus, &ts->s.pkt, addr, icmp);
 
   DEBUGPMTU(ci_log("%s: set eff_mss & change tx q to match", __FUNCTION__));
   ci_tcp_tx_change_mss(&thr->netif, ts);
@@ -463,8 +463,8 @@ efab_ipp_icmp_for_thr(tcp_helper_resource_t* thr, efab_ipp_addr* addr)
  * tcp_helper_resource's ep.
  */
 static void
-efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr, 
-		   ci_sock_cmn* s, efab_ipp_addr* addr)
+efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr, ci_sock_cmn* s,
+                   efab_ipp_addr* addr, ci_icmp_hdr* icmp)
 {
   ci_uint8 icmp_type, icmp_code;
 #if ! CI_CFG_UL_INTERRUPT_HELPER
@@ -478,13 +478,13 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
   ci_assert(addr);
   /* If the address was created without an
    * IP/ICMP hdr then these will be 0 */
-  ci_assert(addr->icmp);
+  ci_assert(icmp);
 
   ci_assert( ci_netif_is_locked(ni) );
 #endif
 
-  icmp_type = addr->icmp->type;
-  icmp_code = addr->icmp->code;
+  icmp_type = icmp->type;
+  icmp_code = icmp->code;
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   /* Path MTU interception */
@@ -493,7 +493,7 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
        icmp_code == CI_ICMP_DU_FRAG_NEEDED) )
   {
     if (addr->protocol == IPPROTO_TCP)
-      ci_ipp_pmtu_rx_tcp(thr, SOCK_TO_TCP(s), addr);
+      ci_ipp_pmtu_rx_tcp(thr, SOCK_TO_TCP(s), addr, icmp);
     else
       ci_ipp_pmtu_rx_udp(thr, SOCK_TO_UDP(s), addr);
     return;
@@ -526,7 +526,8 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr,
  * cannot get a lock.  As the mechanism is for protocols that
  * do not guarantee data delivery this is considered acceptible.
  */
-int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr)
+int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
+                             ci_icmp_hdr* icmp)
 {
   tcp_helper_resource_t* thr;
   int rc;
@@ -549,7 +550,7 @@ int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr)
   }
 
   s = efab_ipp_icmp_for_thr( thr, addr );
-  if( s )  efab_ipp_icmp_qpkt( thr, s, addr );
+  if( s )  efab_ipp_icmp_qpkt( thr, s, addr, icmp );
   efab_tcp_helper_netif_unlock( thr, 1 );
   oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
 
