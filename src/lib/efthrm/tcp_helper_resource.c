@@ -3589,6 +3589,8 @@ static int oo_handle_wakeup_in_ul(void* context, int is_timeout,
 {
   struct tcp_helper_nic* tcph_nic = context;
   tcp_helper_resource_t* trs;
+  ci_uint64 l;
+
   trs = CI_CONTAINER(tcp_helper_resource_t, nic[tcph_nic->thn_intf_i],
                      tcph_nic);
 
@@ -3601,6 +3603,17 @@ static int oo_handle_wakeup_in_ul(void* context, int is_timeout,
   }
 
   wake_up(&trs->ulh_waitq);
+
+  /* Ask for poll if anybody is holding the stack lock.
+   * Do it after wakeup, because we want to wake the ulhelper up as soon as
+   * possible. */
+  do {
+    l = trs->netif.state->lock.lock;
+    if( l & CI_EPLOCK_NETIF_NEED_POLL )
+      break;
+  } while( ci_cas64u_fail(&trs->netif.state->lock.lock,
+                          l, l | CI_EPLOCK_NETIF_NEED_POLL) );
+
   return 1;
 }
 #endif
