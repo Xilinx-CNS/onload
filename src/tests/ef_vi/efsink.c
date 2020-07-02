@@ -89,7 +89,6 @@ static int cfg_rx_merge;
 static int cfg_eventq_wait;
 static int cfg_fd_wait;
 static int cfg_max_fill = -1;
-static int cfg_af_xdp;
 static int cfg_exit_pkts = -1;
 
 /* Mutex to protect printing from different threads */
@@ -467,7 +466,6 @@ static __attribute__ ((__noreturn__)) void usage(void)
   fprintf(stderr, "  -f       block on fd instead of busy wait\n");
   fprintf(stderr, "  -F <fl>  set max fill level for RX ring\n");
   fprintf(stderr, "  -n <num> exit after receiving n packets\n");
-  fprintf(stderr, "  -x       use AF_XDP\n");
   exit(1);
 }
 
@@ -515,9 +513,6 @@ int main(int argc, char* argv[])
     case 'n':
       cfg_exit_pkts = atoi(optarg);
       break;
-    case 'x':
-      cfg_af_xdp = 1;
-      break;
     case '?':
       usage();
     default:
@@ -546,27 +541,24 @@ int main(int argc, char* argv[])
     vi_flags |= EF_VI_RX_EVENT_MERGE;
 
   pd_flags = EF_PD_DEFAULT;
-  if( cfg_af_xdp )
-    pd_flags |= EF_PD_AF_XDP;
 
   /* Open driver and allocate a VI. */
-  if( ! cfg_af_xdp )
-    TRY(ef_driver_open(&res->dh));
+  TRY(ef_driver_open(&res->dh));
   if( cfg_vport )
     TRY(ef_pd_alloc_with_vport(&res->pd, res->dh, interface,
                                pd_flags, cfg_vlan_id));
   else
     TRY(ef_pd_alloc_by_name(&res->pd, res->dh, interface, pd_flags));
+
+  /* TODO AF_XDP */
+  res->pd.xdp_buffers = cfg_max_fill;
+  res->pd.xdp_buffer_size = PKT_BUF_SIZE;
+  res->pd.xdp_headroom = RX_DMA_OFF;
+
   TRY(ef_vi_alloc_from_pd(&res->vi, res->dh, &res->pd, res->dh,
                           -1, cfg_max_fill, 0, NULL, -1, vi_flags));
 
-  if( cfg_af_xdp ) {
-    ef_vi_receive_set_buffer_len(&res->vi, PKT_BUF_SIZE);
-    ef_vi_receive_set_prefix_len(&res->vi, RX_DMA_OFF);
-  }
-  else {
-    res->rx_prefix_len = ef_vi_receive_prefix_len(&res->vi);
-  }
+  res->rx_prefix_len = ef_vi_receive_prefix_len(&res->vi);
 
   if( cfg_rx_merge ) {
     const ef_vi_layout_entry* layout;
@@ -631,7 +623,7 @@ int main(int argc, char* argv[])
     refill_rx_ring(res);
 
   /* Add filters so that adapter will send packets to this VI. */
-  if( cfg_af_xdp ) {
+  if( res->vi.nic_type.arch == EF_VI_ARCH_AF_XDP ) {
     LOGW("WARNING: filters are ignored for AF_XDP\n");
     argc = 0;
   }

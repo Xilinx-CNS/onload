@@ -131,6 +131,7 @@ typedef union {
     unsigned       rq_id      :32;
     unsigned       len        :16;
     unsigned       flags      :16;
+    unsigned       ofs        :16; /* AF_XDP specific */
   } rx;
   /** An event of type EF_EVENT_TYPE_RX_DISCARD */
   struct {  /* This *must* have same initial layout as [rx]. */
@@ -510,6 +511,8 @@ enum ef_vi_flags {
   /** When using CTPIO, prevent poisoned frames from reaching the wire (X2000
    ** series and newer). */
   EF_VI_TX_CTPIO_NO_POISON = 0x2000000,
+  /** Zerocopy - relevant for AF_XDP */
+  EF_VI_RX_ZEROCOPY = 0x4000000,
 };
 
 
@@ -840,14 +843,9 @@ typedef struct ef_vi {
   /** The type of NIC hosting the virtual interface */
   struct ef_vi_nic_type	        nic_type;
 
-  /** Socket used by AF_XDP */
-  int                           xdp_sock;
-  /** Index of interface bound to AF_XDP */
-  int                           xdp_ifindex;
-  /** Key of socket map entry for BPF program */
-  int                           xdp_sock_key;
-  /** List of VIs awaiting configuration of user memory */
-  struct ef_vi*                 xdp_vi_next;
+  /** Callback to invoke AF_XDP send operations */
+  int                         (*xdp_kick)(struct ef_vi*);
+  union {int64_t n; void* p;}   xdp_kick_context;
   /** Four AF_XDP rings: receive, transmit, fill and completion */
   struct ef_vi_xdp_ring         xdp_rx, xdp_tx, xdp_fr, xdp_cr;
 
@@ -994,7 +992,6 @@ extern const char* ef_vi_version_str(void);
 extern const char* ef_vi_driver_interface_str(void);
 
 
-
 /**********************************************************************
  * Receive interface **************************************************
  **********************************************************************/
@@ -1013,32 +1010,10 @@ extern const char* ef_vi_driver_interface_str(void);
 **
 ** When a large packet is received that is scattered over multiple packet
 ** buffers, the prefix is only present in the first buffer.
-**
-** For AF_XDP, this has a slightly different meaning. It is the length of
-** any user metadata stored at the beginning of each packet buffer, which
-** is present in all buffers. It defaults to zero, and must be set before
-** registering user memory if such metadata is present.
 */
 ef_vi_inline int ef_vi_receive_prefix_len(const ef_vi* vi)
 {
   return vi->rx_prefix_len;
-}
-
-
-/*! \brief Set the length of the prefix before a received packet.
-**
-** \param vi         The virtual interface for which to set the prefix length
-** \param prefix_len The length of the prefix before buffers
-**
-** For AF_XDP, sets the length of any user metadata at the start of each packet.
-** This must be set before registering user memory for the VI.
-**
-** This has no effect if AF_XDP is not in use.
-*/
-ef_vi_inline void ef_vi_receive_set_prefix_len(ef_vi* vi, unsigned prefix_len)
-{
-  if( vi->nic_type.arch == EF_VI_ARCH_AF_XDP )
-    vi->rx_prefix_len = prefix_len;
 }
 
 

@@ -66,4 +66,19 @@ efrm_nic_rename(struct efhw_nic* nic, struct net_device *net_dev);
 extern int efrm_install_proc_entries(void);
 extern void efrm_uninstall_proc_entries(void);
 
+extern void efrm_install_sysfs_entries(void);
+extern void efrm_remove_sysfs_entries(void);
+
+extern void efrm_nondl_register(void);
+extern void efrm_nondl_unregister(void);
+
+
+
+void efrm_nondl_init(void);
+void efrm_nondl_shutdown(void);
+
+
+int efrm_nondl_unregister_netdev(struct net_device *netdev);
+int efrm_nondl_register_netdev(struct net_device *netdev,
+                              unsigned int n_vis);
 #endif  /* __LINUX_RESOURCE_INTERNAL__ */

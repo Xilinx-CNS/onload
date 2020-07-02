@@ -59,8 +59,8 @@ ci_ip_pkt_fmt* __ci_netif_pkt_rx_to_tx(ci_netif* ni, ci_ip_pkt_fmt* pkt,
       pkt->flags &= ~CI_PKT_FLAG_RX;
       --ni->state->n_rx_pkts;
     }
-    CI_DEBUG(pkt->pkt_start_off = 0xff;
-             pkt->pkt_eth_payload_off = 0xff);
+    CI_DEBUG(pkt->pkt_start_off = PKT_START_OFF_BAD;
+             pkt->pkt_eth_payload_off = PKT_START_OFF_BAD);
   }
   else {
     /* Let's cheat and avoid slow path: try bufset of this packet first,

@@ -48,6 +48,12 @@ static void ef100_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
   vm->io_page = (void*) vi_rs->io_page;
 }
 
+static void af_xdp_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
+				   struct efrm_vi_mappings* vm)
+{
+  vm->io_page = NULL;
+}
+
 void efrm_vi_get_mappings(struct efrm_vi* vi, struct efrm_vi_mappings* vm)
 {
   struct efhw_nic *nic = vi->rs.rs_client->nic;
@@ -62,6 +68,9 @@ void efrm_vi_get_mappings(struct efrm_vi* vi, struct efrm_vi_mappings* vm)
     break;
   case EFHW_ARCH_EF100:
     ef100_vi_get_mappings(vi, nic, vm);
+    break;
+  case EFHW_ARCH_AF_XDP:
+    af_xdp_vi_get_mappings(vi, nic, vm);
     break;
   default:
     EFRM_ASSERT(0);

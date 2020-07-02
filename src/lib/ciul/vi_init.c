@@ -241,7 +241,7 @@ int ef_vi_init(struct ef_vi* vi, int arch, int variant, int revision,
 void ef_vi_init_io(struct ef_vi* vi, void* io_area)
 {
   EF_VI_BUG_ON(vi->inited & EF_VI_INITED_IO);
-  EF_VI_BUG_ON(io_area == NULL);
+  EF_VI_BUG_ON(vi->nic_type.arch != EF_VI_ARCH_AF_XDP && io_area == NULL);
   vi->io = io_area;
   vi->inited |= EF_VI_INITED_IO;
 }
@@ -276,11 +276,74 @@ void ef_vi_init_txq(struct ef_vi* vi, int ring_size, void* descriptors,
 }
 
 
+static char* ef_vi_xdp_init_qs(struct ef_vi* vi, char* q_mem, uint32_t* ids,
+                               int rxq_size, int rx_prefix_len, int txq_size)
+{
+  ef_vi_init_evq(vi, 0, NULL);
+  if( rxq_size )
+    ef_vi_init_rxq(vi, rxq_size, NULL, ids, rx_prefix_len);
+  if( txq_size )
+    ef_vi_init_txq(vi, txq_size, NULL, ids + rxq_size);
+
+  return q_mem;
+}
+
+
+static char* ef_vi_sfc_init_qs(struct ef_vi* vi, char* q_mem, uint32_t* ids,
+                               int evq_size, int rxq_size, int rx_prefix_len,
+                               int txq_size)
+{
+  if( evq_size ) {
+    ef_vi_init_evq(vi, evq_size, q_mem);
+    q_mem += ((evq_size * 8 + CI_PAGE_SIZE - 1) & CI_PAGE_MASK);
+  }
+  if( rxq_size ) {
+    ef_vi_init_rxq(vi, rxq_size, q_mem, ids, rx_prefix_len);
+    q_mem += (ef_vi_rx_ring_bytes(vi) + CI_PAGE_SIZE-1) & CI_PAGE_MASK;
+    ids += rxq_size;
+  }
+  if( txq_size ) {
+    ef_vi_init_txq(vi, txq_size, q_mem, ids);
+    q_mem += (ef_vi_tx_ring_bytes(vi) + CI_PAGE_SIZE-1) & CI_PAGE_MASK;
+  }
+
+  return q_mem;
+}
+
+
+char* ef_vi_init_qs(struct ef_vi* vi, char* q_mem, uint32_t* ids,
+                    int evq_size, int rxq_size, int rx_prefix_len,
+                    int txq_size)
+{
+  if( vi->nic_type.arch == EF_VI_ARCH_AF_XDP )
+    return ef_vi_xdp_init_qs(vi, q_mem, ids, rxq_size, rx_prefix_len, txq_size);
+  else
+    return ef_vi_sfc_init_qs(vi, q_mem, ids, evq_size, rxq_size,
+                             rx_prefix_len, txq_size);
+}
+
+
 void ef_vi_init_evq(struct ef_vi* vi, int ring_size, void* event_ring)
 {
   EF_VI_BUG_ON(vi->inited & EF_VI_INITED_EVQ);
-  vi->evq_mask = ring_size * 8 - 1;
-  vi->evq_base = event_ring;
+  /* TODO AF_XDP */
+  /* Fake up a single-entry event queue so that ef_eventq_has_event() will
+   * return true. The state structure begins with the zero-valued evq_ptr,
+   * and is suitably aligned, so if we pretend there's an event there, it
+   * will look like it might be valid.
+   *
+   * This means that the function is safe to use for an AF_XDP VI, without
+   * impacting performance of standard VIs. We may want to make this work
+   * properly in order to improve AF_XDP performance.
+   */
+  if( vi->nic_type.arch == EF_VI_ARCH_AF_XDP ) {
+    vi->evq_mask = 0;
+    vi->evq_base = (char*)vi->ep_state;
+  }
+  else {
+    vi->evq_mask = ring_size * 8 - 1;
+    vi->evq_base = event_ring;
+  }
   vi->inited |= EF_VI_INITED_EVQ;
 }
 

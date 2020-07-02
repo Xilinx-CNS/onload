@@ -51,7 +51,6 @@ static int                cfg_disable_tx_push;
 static int                cfg_use_vf;
 static int                cfg_max_batch = 8192;
 static int                cfg_vlan = -1;
-static int                cfg_af_xdp;
 static int                n_sent;
 static int                n_pushed;
 static int                ifindex;
@@ -125,15 +124,18 @@ int main(int argc, char* argv[])
     pd_flags |= EF_PD_PHYS_MODE;
   if( cfg_loopback )
     pd_flags |= EF_PD_MCAST_LOOP;
-  if( cfg_af_xdp )
-    pd_flags |= EF_PD_AF_XDP;
   if( cfg_disable_tx_push )
     vi_flags |= EF_VI_TX_PUSH_DISABLE;
 
   /* Intialize and configure hardware resources */
-  if( ! cfg_af_xdp )
-    TRY(ef_driver_open(&dh));
+  TRY(ef_driver_open(&dh));
   TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
+
+  /* TODO AF_XDP */
+  pd.xdp_buffers = 1;
+  pd.xdp_buffer_size = BUF_SIZE;
+  pd.xdp_headroom = 0;
+
   TRY(ef_vi_alloc_from_pd(&vi, dh, &pd, dh, -1, 0, -1, NULL, -1, vi_flags));
 
   printf("txq_size=%d\n", ef_vi_transmit_capacity(&vi));
@@ -150,7 +152,9 @@ int main(int argc, char* argv[])
   dma_buf_addr = ef_memreg_dma_addr(&mr, 0);
 
   /* Prepare packet contents */
-  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, cfg_vlan);
+  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, cfg_vlan,
+                              /* TODO AF_XDP */
+                              vi.nic_type.arch == EF_VI_ARCH_AF_XDP);
 
   /* Continue until all sends are complete */
   while( n_sent < cfg_iter ) {
@@ -180,7 +184,6 @@ void usage(void)
   fprintf(stderr, "  -s                  - microseconds to sleep between batches\n");
   fprintf(stderr, "  -v                  - use a VF\n");
   fprintf(stderr, "  -V <vlan>           - vlan to send to (interface must have an IP)\n");
-  fprintf(stderr, "  -x                  - use AF_XDP\n");
   fprintf(stderr, "\n");
   fprintf(stderr, "e.g.:\n");
   fprintf(stderr, "  - Send pkts to 239.1.2.3:1234 from eth2:\n"
@@ -224,9 +227,6 @@ static int parse_opts(int argc, char *argv[])
       break;
     case 'v':
       cfg_use_vf = 1;
-      break;
-    case 'x':
-      cfg_af_xdp = 1;
       break;
     case '?':
       usage();

@@ -265,8 +265,6 @@ int ef_pd_alloc_by_name(ef_pd* pd, ef_driver_handle pd_dh,
 
   if( flags & EF_PD_VF )
     flags |= EF_PD_PHYS_MODE;
-  if( flags & EF_PD_AF_XDP )
-    goto alloc_locally;
 
   pd->pd_intf_name = malloc(IF_NAMESIZE);
   if( pd->pd_intf_name == NULL ) {

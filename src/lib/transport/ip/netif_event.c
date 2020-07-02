@@ -114,8 +114,8 @@ static void ci_parse_rx_vlan(ci_ip_pkt_fmt* pkt)
 {
   uint16_t* p_ether_type;
 
-  ci_assert_nequal((ci_uint8) pkt->pkt_start_off, 0xff);
-  ci_assert_equal(pkt->pkt_eth_payload_off, 0xff);
+  ci_assert_nequal(pkt->pkt_start_off, PKT_START_OFF_BAD);
+  ci_assert_equal(pkt->pkt_eth_payload_off, PKT_START_OFF_BAD);
 
   p_ether_type = &(oo_ether_hdr(pkt)->ether_type);
   if( *p_ether_type != CI_ETHERTYPE_8021Q ) {
@@ -345,7 +345,7 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
 
   ci_uint16 ether_type = *((ci_uint16*)oo_l3_hdr(pkt) - 1);
 
-  ci_assert_nequal(pkt->pkt_eth_payload_off, 0xff);
+  ci_assert_nequal(pkt->pkt_eth_payload_off, PKT_START_OFF_BAD);
 
 #if CI_CFG_RANDOM_DROP && !defined(__KERNEL__)
   if( CI_UNLIKELY(rand() < NI_OPTS(netif).rx_drop_rate) )  goto drop;
@@ -571,7 +571,7 @@ ci_inline int handle_rx_pre_future(ci_netif* ni, ci_ip_pkt_fmt* pkt,
     return FUTURE_DROP;
   }
 no_future:
-  CI_DEBUG(pkt->pkt_eth_payload_off = 0xff);
+  CI_DEBUG(pkt->pkt_eth_payload_off = PKT_START_OFF_BAD);
   return FUTURE_NONE;
 }
 
@@ -583,7 +583,7 @@ ci_inline void rollback_rx_future(ci_netif* ni, ci_ip_pkt_fmt* pkt, int status,
   CITP_STATS_NETIF_INC(ni, rx_future_rollback);
 
   ci_assert_nequal(status, FUTURE_NONE);
-  CI_DEBUG(pkt->pkt_eth_payload_off = 0xff);
+  CI_DEBUG(pkt->pkt_eth_payload_off = PKT_START_OFF_BAD);
 
   /* Should we add official macros to decrease these counters? */
   CITP_STATS_NETIF_ADD(ni, rx_evs, -1);
@@ -1455,7 +1455,7 @@ int ci_netif_evq_poll(ci_netif* ni, int intf_i)
        * pkt_eth_payload_off.  However, the main RX loop will call that
        * function again, and it asserts at entry that the field is
        * uninitialised, so we reset it here. */
-      CI_DEBUG(pkt->pkt_eth_payload_off = 0xff);
+      CI_DEBUG(pkt->pkt_eth_payload_off = PKT_START_OFF_BAD);
     }
   }
 
@@ -1575,7 +1575,8 @@ have_events:
         CITP_STATS_NETIF_INC(ni, rx_evs);
         OO_PP_INIT(ni, pp, EF_EVENT_RX_RQ_ID(ev[i]));
         pkt = PKT_CHK(ni, pp);
-        ci_prefetch_ppc(pkt->dma_start);
+        pkt->pkt_start_off = ev[i].rx.ofs - CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start);
+        ci_prefetch_ppc(PKT_START(pkt));
         ci_prefetch_ppc(pkt);
         ci_assert_equal(pkt->intf_i, intf_i);
         __handle_rx_pkt(ni, ps, intf_i, &s.rx_pkt);

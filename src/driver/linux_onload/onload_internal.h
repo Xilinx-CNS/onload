@@ -9,6 +9,8 @@
 extern int oo_driverlink_register(void);
 extern void oo_driverlink_unregister(void);
 
+extern void oo_nondl_register(void);
+extern void oo_nondl_unregister(void);
 #ifdef EFRM_HAVE_NF_NET_HOOK
 struct net;
 int oo_register_nfhook(struct net *net);

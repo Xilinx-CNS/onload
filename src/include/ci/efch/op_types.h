@@ -64,6 +64,9 @@ struct efch_vi_alloc_in {
   uint8_t             tx_q_tag;
   uint8_t             rx_q_tag;
   uint16_t            ps_buf_size_kb;
+  uint64_t            xdp_buffers;
+  uint16_t            xdp_buffer_size;
+  uint16_t            xdp_headroom;
 };
 
 
@@ -188,6 +191,7 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_VI_TX_ALT_ALLOC         0x86
 # define                CI_RSOP_VI_TX_ALT_FREE          0x87
 # define                CI_RSOP_VI_GET_TS_FORMAT        0x88
+# define                CI_RSOP_VI_AF_XDP_KICK          0x89
 
   union {
     struct {

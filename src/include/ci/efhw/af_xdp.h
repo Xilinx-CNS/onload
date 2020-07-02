@@ -6,4 +6,8 @@
 
 extern struct efhw_func_ops af_xdp_char_functional_units;
 
+extern int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
+                                        long buffers, int size, int headroom);
+extern void efhw_nic_bodge_af_xdp_dtor(struct efhw_nic* nic);
+
 #endif /* CI_EFHW_AF_XDP_H */

@@ -52,13 +52,17 @@
 #include <ci/efrm/pio.h>
 #include <ci/affinity/k_drv_intf.h>
 #include <ci/tools/utils.h>
+#include <ci/tools/debug.h>
 #include <etherfabric/vi.h>
 #include <etherfabric/internal/internal.h>
+#include <linux/file.h>
 #include "efrm_internal.h"
 #include "efrm_vi_set.h"
 #include "efrm_pd.h"
 #include "bt_manager.h"
 
+/* TODO AF_XDP temporarily needed until efhw interface supports AF_XDP */
+#include <ci/efhw/af_xdp.h>
 
 struct vi_attr {
 	struct efrm_pd     *pd;
@@ -68,8 +72,12 @@ struct vi_attr {
 	uint8_t             vi_set_instance;
 	int8_t              packed_stream;
 	int32_t             ps_buffer_size;
+	int64_t             xdp_buffers;
+	int16_t             xdp_buffer_size;
+	int16_t             xdp_headroom;
 };
 
+CI_BUILD_ASSERT(sizeof(struct vi_attr) <= sizeof(struct efrm_vi_attr));
 
 union vi_attr_u {
 	struct vi_attr      vi_attr;
@@ -199,15 +207,32 @@ static int efrm_vi_set_alloc_instance(struct efrm_vi *virs,
 }
 
 
-static int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
-				     struct efrm_vi *virs,
-				     const struct vi_attr *vi_attr,
-				     int print_resource_warnings)
+int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
+                              struct efrm_vi *virs,
+                              const struct vi_attr *vi_attr,
+                              int print_resource_warnings)
 {
 	struct efrm_nic *efrm_nic;
+	struct efhw_nic *efhw_nic;
 	int channel;
 
-	efrm_nic = efrm_nic(efrm_pd_to_resource(pd)->rs_client->nic);
+	efhw_nic = efrm_client_get_nic(efrm_pd_to_resource(pd)->rs_client);
+
+	/* TODO AF_XDP */
+	if (efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP) {
+		int rc = efhw_nic_bodge_af_xdp_socket(
+			efhw_nic, efrm_pd_stack_id_get(pd),
+			vi_attr->xdp_buffers,
+			vi_attr->xdp_buffer_size,
+			vi_attr->xdp_headroom);
+		if( rc >= 0 ) {
+			virs->allocation.instance = rc;
+			virs->af_xdp_sock = sockfd_lookup(rc, &rc);
+		}
+		return rc;
+	}
+
+	efrm_nic = efrm_nic(efhw_nic);
 	channel = vi_attr->channel;
 	if (vi_attr->interrupt_core >= 0) {
 		struct net_device *dev = efhw_nic_get_net_dev(&efrm_nic->efhw_nic);
@@ -273,10 +298,20 @@ static void efrm_vi_rm_free_instance(struct efrm_vi *virs)
 			complete(&vi_set->allocation_completion);
 	}
 	else {
+		struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
+
 		if (virs->irq != 0)
 			efrm_vi_irq_free(virs);
-		efrm_vi_allocator_free_set(efrm_nic(virs->rs.rs_client->nic),
-					   &virs->allocation);
+
+		/* TODO AF_XDP hack while figuring out vi allocator */
+		if(nic->devtype.arch == EFHW_ARCH_AF_XDP) {
+			if (virs->af_xdp_sock && virs->af_xdp_sock->file)
+				fput(virs->af_xdp_sock->file);
+		}
+		else {
+			efrm_vi_allocator_free_set(efrm_nic(nic),
+						   &virs->allocation);
+		}
 	}
 }
 
@@ -304,6 +339,8 @@ static uint32_t efrm_vi_rm_txq_bytes(struct efrm_vi *virs, int n_entries)
 		return n_entries * EF10_DMA_TX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EF100)
 		return n_entries * EF100_DMA_TX_DESC_BYTES;
+	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
+		return n_entries * 8; /* TODO AF_XDP sizeof struct xdp_desc */
 	else {
 		EFRM_ASSERT(0);
 		return -EINVAL;
@@ -320,6 +357,8 @@ static uint32_t efrm_vi_rm_rxq_bytes(struct efrm_vi *virs, int n_entries)
 		bytes_per_desc = EF10_DMA_RX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EF100)
 		bytes_per_desc = EF100_DMA_RX_DESC_BYTES;
+	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
+		return n_entries * 8; /* TODO AF_XDP sizeof struct xdp_desc */
 	else {
 		EFRM_ASSERT(0);	
 		return -EINVAL;
@@ -419,6 +458,8 @@ static unsigned q_flags_to_vi_flags(unsigned q_flags, enum efhw_q_type q_type)
 			vi_flags |= EFHW_VI_RX_PREFIX;
 		if (q_flags & EFRM_VI_NO_RX_CUT_THROUGH)
 			vi_flags |= EFHW_VI_NO_RX_CUT_THROUGH;
+		if (q_flags & EFRM_VI_RX_ZEROCOPY)
+			vi_flags |= EFHW_VI_RX_ZEROCOPY;
 		break;
 	case EFHW_EVQ:
 		if (q_flags & EFRM_VI_RX_TIMESTAMPS)
@@ -482,6 +523,8 @@ static unsigned vi_flags_to_q_flags(unsigned vi_flags, enum efhw_q_type q_type)
 			q_flags |= EFRM_VI_RX_PREFIX;
 		if (vi_flags & EFHW_VI_NO_RX_CUT_THROUGH)
 			q_flags |= EFRM_VI_NO_RX_CUT_THROUGH;
+		if (vi_flags & EFHW_VI_RX_ZEROCOPY)
+			q_flags |= EFRM_VI_RX_ZEROCOPY;
 		break;
 	case EFHW_EVQ:
 		if (vi_flags & EFHW_VI_RX_TIMESTAMPS)
@@ -571,6 +614,8 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		 */
 		else if (nic->devtype.arch == EFHW_ARCH_EF100)
 			interrupting = 1;
+		else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
+			interrupting = 0;
 		else {
 			EFRM_ASSERT(0);
 			interrupting = 0;
@@ -650,7 +695,8 @@ efrm_vi_rm_fini_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type)
 	if (efhw_iopages_n_pages(&q->pages)) {
 		struct pci_dev* dev = efrm_vi_get_pci_dev(virs);
 		efhw_iopages_free(dev, &q->pages);
-		pci_dev_put(dev);
+		if (dev)
+			pci_dev_put(dev);
 	}
 }
 
@@ -668,6 +714,8 @@ efrm_vi_io_map(struct efrm_vi* virs, struct efhw_nic *nic, int instance)
 		if (virs->io_page == NULL)
 			return -ENOMEM;
 		break;
+	case EFHW_ARCH_AF_XDP:
+		break;
 	default:
 		EFRM_ASSERT(0);
 		break;
@@ -684,6 +732,8 @@ efrm_vi_io_unmap(struct efrm_vi* virs)
 	case EFHW_ARCH_EF10:
 	case EFHW_ARCH_EF100:
 		iounmap(virs->io_page);
+		break;
+	case EFHW_ARCH_AF_XDP:
 		break;
 	default:
 		EFRM_ASSERT(0);
@@ -930,7 +980,8 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 	dev = efrm_vi_get_pci_dev(virs);
 	rc = efhw_iopages_alloc(dev, &q->pages, qsize.q_len_page_order,
 				nic->devtype.arch == EFHW_ARCH_EF100, iova_base);
-	pci_dev_put(dev);
+	if (dev)
+		pci_dev_put(dev);
 	if (rc < 0) {
 		EFRM_ERR("%s: Failed to allocate %s DMA buffer",
 			 __FUNCTION__, q_names[q_type]);
@@ -966,7 +1017,8 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 fail_q_init:
 	dev = efrm_vi_get_pci_dev(virs);
 	efhw_iopages_free(dev, &q->pages);
-	pci_dev_put(dev);
+	if (dev)
+		pci_dev_put(dev);
 fail_iopages:
 	return rc;
 }
@@ -1117,6 +1169,7 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		       int evq_capacity, int txq_capacity, int rxq_capacity,
 		       int tx_q_tag, int rx_q_tag, int wakeup_cpu_core,
 		       int wakeup_channel,
+		       long xdp_buffers, int xdp_size, int xdp_headroom,
 		       struct efrm_vi **virs_out,
 		       uint32_t *out_io_mmap_bytes,
 		       uint32_t *out_mem_mmap_bytes,
@@ -1139,6 +1192,7 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		efrm_vi_attr_set_interrupt_core(&attr, wakeup_cpu_core);
 	if (wakeup_channel >= 0)
 		efrm_vi_attr_set_wakeup_channel(&attr, wakeup_channel);
+	efrm_vi_attr_set_af_xdp(&attr, xdp_buffers, xdp_size, xdp_headroom);
 
 	if ((rc = efrm_vi_alloc(client, &attr, print_resource_warnings,
 				name, &virs)) < 0)
@@ -1191,8 +1245,12 @@ efrm_vi_resource_alloc(struct efrm_client *client,
         if( vi_flags & EFHW_VI_TX_CTPIO )
                 ctpio_mmap_bytes = EF_VI_CTPIO_APERTURE_SIZE;
 
-	if (out_io_mmap_bytes != NULL)
-		*out_io_mmap_bytes = PAGE_SIZE;
+	if (out_io_mmap_bytes != NULL) {
+		if (client->nic->devtype.arch == EFHW_ARCH_AF_XDP)
+			*out_io_mmap_bytes = 0;
+		else
+			*out_io_mmap_bytes = PAGE_SIZE;
+	}
 	if (out_mem_mmap_bytes != NULL)
 		*out_mem_mmap_bytes = virs->mem_mmap_bytes;
 	if (out_ctpio_mmap_bytes != NULL)
@@ -1248,6 +1306,9 @@ int __efrm_vi_attr_init(struct efrm_client *client_obsolete,
 	a->interrupt_core = -1;
 	a->channel = -1;
 	a->packed_stream = 0;
+	a->xdp_buffers = 0;
+	a->xdp_buffer_size = 0;
+	a->xdp_headroom = 0;
 	return 0;
 }
 EXPORT_SYMBOL(__efrm_vi_attr_init);
@@ -1313,6 +1374,16 @@ void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *attr, int channel_id)
 	a->channel = channel_id;
 }
 EXPORT_SYMBOL(efrm_vi_attr_set_wakeup_channel);
+
+
+void efrm_vi_attr_set_af_xdp(struct efrm_vi_attr *attr, long n, int s, int h)
+{
+	struct vi_attr *a = VI_ATTR_FROM_O_ATTR(attr);
+	a->xdp_buffers = n;
+	a->xdp_buffer_size = s;
+	a->xdp_headroom = h;
+}
+EXPORT_SYMBOL(efrm_vi_attr_set_af_xdp);
 
 
 int  efrm_vi_alloc(struct efrm_client *client,
@@ -1387,19 +1458,21 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	EFRM_ASSERT(&virs->rs == (struct efrm_resource *) (virs));
 
 	efrm_vi_rm_salvage_flushed_vis(client->nic);
-	rc = efrm_vi_rm_alloc_instance(pd, virs, attr, print_resource_warnings);
+	rc = efrm_vi_rm_alloc_instance(pd, virs, attr,
+				       print_resource_warnings);
 	if (rc < 0) {
 		if (print_resource_warnings) {
 			EFRM_ERR("%s: Out of VI instances with given "
-				 "attributes (%d)", __FUNCTION__, rc);
+			 	 "attributes (%d)", __FUNCTION__, rc);
 		}
 		goto fail_alloc_id;
 	}
-        EFRM_ASSERT(virs->allocation.instance >= 0);
-	rc = efrm_vi_io_map(virs, client->nic, virs->allocation.instance);
+       	EFRM_ASSERT(virs->allocation.instance >= 0);
+	rc = efrm_vi_io_map(virs, client->nic,
+			    virs->allocation.instance);
 	if (rc < 0) {
 		EFRM_ERR("%s: failed to I/O map id=%d (rc=%d)\n",
-			 __FUNCTION__, virs->rs.rs_instance, rc);
+		  	 __FUNCTION__, virs->rs.rs_instance, rc);
 		goto fail_mmap;
 	}
 

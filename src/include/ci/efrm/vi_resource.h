@@ -114,6 +114,8 @@ enum efrm_vi_q_flags {
 	EFRM_VI_TX_CTPIO              = 0x40000,
 	/** TXQ: CTPIO: Require store-and-forward. */
 	EFRM_VI_TX_CTPIO_NO_POISON    = 0x80000,
+	/** RXQ: Force zerocopy with AF_XDP*/
+	EFRM_VI_RX_ZEROCOPY           = 0x100000,
 };
 
 
@@ -172,6 +174,11 @@ extern void efrm_vi_attr_set_interrupt_core(struct efrm_vi_attr *, int core);
 extern void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *,
 					    int channel_id);
 
+/** Parameters required for AF_XDP buffer management */
+extern void efrm_vi_attr_set_af_xdp(struct efrm_vi_attr *,
+                                    long buffer_count,
+                                    int buffer_size,
+                                    int headroom);
 
 extern struct efrm_vi *
 efrm_vi_from_resource(struct efrm_resource *);
@@ -279,11 +286,11 @@ efrm_vi_q_alloc_sanitize_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 
 struct pci_dev;
 extern struct pci_dev *efrm_vi_get_pci_dev(struct efrm_vi *);
+extern void efrm_vi_get_dev_name(struct efrm_vi *virs, char* name);
 
 extern int efrm_vi_get_channel(struct efrm_vi *);
 
 extern int efrm_vi_set_get_vi_instance(struct efrm_vi *);
-
 
 /* Make these inline instead of macros for type checking */
 static inline struct efrm_vi *
@@ -313,6 +320,7 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		       int evq_capacity, int txq_capacity, int rxq_capacity,
 		       int tx_q_tag, int rx_q_tag, int wakeup_cpu_core,
 		       int wakeup_channel,
+		       long xdp_buffers, int xdp_buffer_size, int xdp_headroom,
 		       struct efrm_vi **virs_in_out,
 		       uint32_t *out_io_mmap_bytes,
 		       uint32_t *out_mem_mmap_bytes,

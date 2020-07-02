@@ -408,25 +408,26 @@ struct ci_ip_pkt_fmt_s {
 
   ci_ip_pkt_fmt_prefix  pf CI_ALIGN(8);
 
+#define PKT_START_OFF_BAD ((ci_int16)0xffff)
   /*! Offset of the start of data from [dma_start].  This is usually the
    * Ethernet header, but points to the start of payload for fragments in a
    * chain.
    */
-  ci_int8               pkt_start_off;
+  ci_int16              pkt_start_off;
 
   /*! Offset from [dma_start] of the layer-3 header (usually the IPv4/IPv6
    * header).  If the frame is encapsulated this is the inner header.  It
    * should not be assumed that there is an Ethernet header immediately in
    * front of this header.
    */
-  ci_uint8              pkt_eth_payload_off;
+  ci_int16              pkt_eth_payload_off;
 
   /*! Offset from [dma_start] of the outer layer-3 header.  Used only on
    * the transmit path.  If the frame is not encapsulated then this is the
    * same as [pkt_eth_payload_off].  This always corresponds to the end of
    * the outer Ethernet header (including VLANs if any).
    */
-  ci_int8               pkt_outer_l3_off;
+  ci_int16              pkt_outer_l3_off;
 
   /*! Ensure we have space before [dma_start] so we can expand the Ethernet
    * header to add a VLAN tag.  This member should never be referenced

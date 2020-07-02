@@ -240,13 +240,8 @@ extern void ef100_ef_eventq_timer_run(ef_vi*, unsigned v);
 extern void ef100_ef_eventq_timer_clear(ef_vi*);
 extern void ef100_ef_eventq_timer_zero(ef_vi*);
 
+extern long (*efxdp_syscall)(long, ...);
 extern void efxdp_vi_init(ef_vi*) EF_VI_HF;
-extern int efxdp_vi_alloc(ef_vi*, int rxq_capacity, int txq_capacity,
-                          unsigned ifindex, enum ef_vi_flags, ef_pd* pd);
-extern int efxdp_vi_free(ef_vi*);
-extern unsigned efxdp_vi_mtu(ef_vi*);
-extern int efxdp_vi_get_mac(ef_vi* vi, void* mac_out);
-extern int efxdp_umem_alloc(ef_pd*, void* mem, size_t bytes);
 
 extern int ef_pd_cluster_free(ef_pd*, ef_driver_handle);
 

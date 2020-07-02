@@ -117,6 +117,14 @@ int efhw_device_type_init(struct efhw_device_type *dt,
 }
 
 
+/* Return 0 if not a known type */
+int efhw_device_nondl_init(struct efhw_device_type *dt)
+{
+	memset(dt, 0, sizeof(*dt));
+	dt->arch = EFHW_ARCH_AF_XDP;
+	return 1;
+}
+
 /*--------------------------------------------------------------------
  *
  * NIC Initialisation
@@ -239,7 +247,8 @@ struct pci_dev* efhw_nic_get_pci_dev(struct efhw_nic* nic)
 	struct pci_dev* dev;
 	spin_lock_bh(&nic->pci_dev_lock);
 	dev = nic->pci_dev;
-	pci_dev_get(dev);
+	if( dev )
+		pci_dev_get(dev);
 	spin_unlock_bh(&nic->pci_dev_lock);
 	return dev;
 }

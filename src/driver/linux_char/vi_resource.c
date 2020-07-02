@@ -15,6 +15,7 @@
 #include "filter_list.h"
 #include "linux_char_internal.h"
 
+
 /* Reserved space in evq for a reasonable number of time sync events.
  * They arrive at a rate of 4 per second.  This allows app to get
  * 25s behind...
@@ -265,6 +266,11 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   if( rmpd != NULL && efrm_pd_stack_id_get(rmpd) > 0 )
     in_flags |= EFHW_VI_TX_LOOPBACK;
 
+  efrm_vi_attr_set_af_xdp(&attr,
+                          alloc_in->xdp_buffers,
+                          alloc_in->xdp_buffer_size,
+                          alloc_in->xdp_headroom);
+
   rc = vi_resource_alloc(&attr, client, evq ? efrm_vi(evq) : NULL,
                          in_flags,
                          alloc_in->evq_capacity,
@@ -296,16 +302,20 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   alloc_out = &alloc->u.vi_out;
   CI_DEBUG(alloc = NULL);
   CI_DEBUG(alloc_in = NULL);
+
+  nic = efrm_client_get_nic(virs->rs.rs_client);
   alloc_out->instance = virs->rs.rs_instance;
   alloc_out->evq_capacity = virs->q[EFHW_EVQ].capacity;
   alloc_out->rxq_capacity = virs->q[EFHW_RXQ].capacity;
   alloc_out->txq_capacity = virs->q[EFHW_TXQ].capacity;
-  nic = efrm_client_get_nic(virs->rs.rs_client);
   alloc_out->nic_arch = nic->devtype.arch;
   alloc_out->nic_variant = nic->devtype.variant;
   alloc_out->nic_revision = nic->devtype.revision;
   alloc_out->nic_flags = efhw_vi_nic_flags(nic);
-  alloc_out->io_mmap_bytes = 4096;
+  if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
+    alloc_out->io_mmap_bytes = 0;
+  else
+    alloc_out->io_mmap_bytes = 4096;
   alloc_out->mem_mmap_bytes = virs->mem_mmap_bytes;
   alloc_out->rx_prefix_len = virs->rx_prefix_len;
   alloc_out->out_flags = virs->out_flags;
@@ -546,6 +556,13 @@ efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
       rc = 0;
       *copy_out = 1;
       break;
+
+    case CI_RSOP_VI_AF_XDP_KICK:
+      {
+        struct msghdr msg = {.msg_flags = MSG_DONTWAIT};
+        rc = sock_sendmsg(virs->af_xdp_sock, &msg);
+        break;
+      }
 
     default:
       rc = efch_filter_list_op_add(rs->rs_base, efrm_vi_get_pd(virs),

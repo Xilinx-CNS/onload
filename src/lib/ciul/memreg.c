@@ -68,50 +68,38 @@ int ef_memreg_alloc(ef_memreg* mr, ef_driver_handle mr_dh,
   if( mr->mr_dma_addrs_base == NULL )
     return -ENOMEM;
 
-  if( pd->pd_flags & EF_PD_AF_XDP ) {
-    size_t i;
-    for( i = 0; i < n_nic_pages; ++i )
-      mr->mr_dma_addrs_base[i] = i << EFHW_NIC_PAGE_SHIFT;
-    int rc = efxdp_umem_alloc(pd, p_mem_sys_base, sys_len);
+  /* In openonload-201509-u2 and earlier the driver has an overflow bug so
+   * that registering >= 4GiB goes wrong.  We work around this bug here,
+   * with some care to ensure we register chunks that are nicely aligned to
+   * take advantage of large NIC page sizes.
+   */
+  char* chunk_start = p_mem_sys_base;
+  char* chunk_end = p_mem_sys_end;
+  size_t align = 1 << 22;
+  size_t max_chunk = ((uint64_t) 1u << 32) - align;
+  if( chunk_end - chunk_start >= ((uint64_t) 1u << 32) ) {
+    chunk_end = chunk_start + max_chunk;
+    chunk_end = CI_PTR_ALIGN_BACK(chunk_end, align);
+  }
+  ef_addr* dma_addrs = mr->mr_dma_addrs_base;
+
+  do {
+    LOGVVV(ef_log("ef_memreg_alloc(base=%p, len=%zu): chunk=%p+%zu\n",
+		  p_mem, len_bytes, chunk_start, chunk_end - chunk_start));
+    int rc = memreg_alloc(mr_dh, pd, pd_dh, dma_addrs, chunk_start, chunk_end);
     if( rc < 0 ) {
+      LOGVV(ef_log("ef_memreg_alloc(base=%p, len=%zu): ERROR: chunk=%p-%p "
+		   "rc=%d", p_mem, len_bytes, chunk_start, chunk_end, rc));
       free(mr->mr_dma_addrs_base);
       return rc;
     }
-  }
-  else {
-    /* In openonload-201509-u2 and earlier the driver has an overflow bug so
-     * that registering >= 4GiB goes wrong.  We work around this bug here,
-     * with some care to ensure we register chunks that are nicely aligned to
-     * take advantage of large NIC page sizes.
-     */
-    char* chunk_start = p_mem_sys_base;
-    char* chunk_end = p_mem_sys_end;
-    size_t align = 1 << 22;
-    size_t max_chunk = ((uint64_t) 1u << 32) - align;
-    if( chunk_end - chunk_start >= ((uint64_t) 1u << 32) ) {
+    dma_addrs += (chunk_end - chunk_start) >> EFHW_NIC_PAGE_SHIFT;
+    chunk_start = chunk_end;
+    if( p_mem_sys_end - chunk_start <= max_chunk )
+      chunk_end = p_mem_sys_end;
+    else
       chunk_end = chunk_start + max_chunk;
-      chunk_end = CI_PTR_ALIGN_BACK(chunk_end, align);
-    }
-    ef_addr* dma_addrs = mr->mr_dma_addrs_base;
-
-    do {
-      LOGVVV(ef_log("ef_memreg_alloc(base=%p, len=%zu): chunk=%p+%zu\n",
-                    p_mem, len_bytes, chunk_start, chunk_end - chunk_start));
-      int rc = memreg_alloc(mr_dh, pd, pd_dh, dma_addrs, chunk_start, chunk_end);
-      if( rc < 0 ) {
-        LOGVV(ef_log("ef_memreg_alloc(base=%p, len=%zu): ERROR: chunk=%p-%p "
-                     "rc=%d", p_mem, len_bytes, chunk_start, chunk_end, rc));
-        free(mr->mr_dma_addrs_base);
-        return rc;
-      }
-      dma_addrs += (chunk_end - chunk_start) >> EFHW_NIC_PAGE_SHIFT;
-      chunk_start = chunk_end;
-      if( p_mem_sys_end - chunk_start <= max_chunk )
-        chunk_end = p_mem_sys_end;
-      else
-        chunk_end = chunk_start + max_chunk;
-    } while( chunk_start < p_mem_sys_end );
-  }
+  } while( chunk_start < p_mem_sys_end );
 
   mr->mr_dma_addrs = mr->mr_dma_addrs_base;
   mr->mr_dma_addrs += ((char*) p_mem - p_mem_sys_base) >> EFHW_NIC_PAGE_SHIFT;

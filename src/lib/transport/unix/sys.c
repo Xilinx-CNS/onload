@@ -19,6 +19,7 @@
 #include <internal.h>
 #include <dlfcn.h>
 
+extern long (*efxdp_syscall)(long nr, ...);
 
 static int load_sym_fail(const char* sym)
 {
@@ -79,6 +80,8 @@ citp_find_all_sys_calls(void)
   if( dlclose(dlhandle) != 0 )
     Log_E(log("%s: ERROR: dlclose != 0", __FUNCTION__));
 #endif
+
+  efxdp_syscall = ci_sys_syscall;
 
   return 0;
 }

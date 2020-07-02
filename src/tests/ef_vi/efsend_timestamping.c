@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
   dma_buf_addr = ef_memreg_dma_addr(&mr, 0);
 
   /* Prepare packet content */
-  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, -1);
+  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, -1, 0);
 
   /* Start sending */
   for( i = 0; i < cfg_iter; ++i ) {

@@ -21,6 +21,7 @@
  * - CI_NETIF_MMAP_ID_PIO       VI resource: PIO IO BAR
  * - CI_NETIF_MMAP_ID_CTPIO     VI resource: CTPIO IO BAR
  * - CI_NETIF_MMAP_ID_CPLANE    Control plame MIBs mapping
+ * - CI_NETIF_MMAP_ID_PKTS_ALL  Map all packets in single go
  * - CI_NETIF_MMAP_ID_PKTS + packet set id
  *   packet sets
  */
@@ -31,6 +32,7 @@
 #define CI_NETIF_MMAP_ID_PIO      4
 #define CI_NETIF_MMAP_ID_CTPIO    5
 #define CI_NETIF_MMAP_ID_PKTS     8
+#define CI_NETIF_MMAP_ID_PKTS_ALL 7
 #define CI_NETIF_MMAP_ID_PKTSET(id) (CI_NETIF_MMAP_ID_PKTS+(id))
 
 

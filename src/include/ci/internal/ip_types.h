@@ -43,6 +43,7 @@ typedef struct ci_netif_nic_s {
 #endif // CI_CFG_PIO
 #ifdef __KERNEL__
   struct oo_iobufset** pkt_rs;
+  struct socket* af_xdp_sock;
 #endif
 #if ! defined(__KERNEL__) && CI_CFG_WANT_BPF_NATIVE
 #define OO_HAS_POLL_IN_KERNEL
@@ -233,7 +234,9 @@ struct ci_netif_s {
   /* Shared state wedged */
 #define CI_NETIF_FLAG_WEDGED             0x4000
   /* May inject packets to kernel */
-#define CI_NETIF_FLAG_MAY_INJECT_TO_KERNEL 0x8000
+#define CI_NETIF_FLAG_MAY_INJECT_TO_KERNEL 0x08000
+/* one of the NICs is AF_XDP */
+#define CI_NETIF_FLAG_AF_XDP               0x10000
 
 #endif
 

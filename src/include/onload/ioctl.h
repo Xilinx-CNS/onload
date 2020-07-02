@@ -235,6 +235,9 @@ enum {
 #define OO_IOC_SWF_UPDATE         OO_IOC_R(SWF_UPDATE, struct oo_sw_filter_op)
 #endif
 
+  OO_OP_AF_XDP_KICK,
+#define OO_IOC_AF_XDP_KICK OO_IOC_W(AF_XDP_KICK, ci_int32)
+
   OO_OP_CONTIG_END,  /* This is the last in range of contigous opcodes */
 
   /* Here come only placeholder for operations with arbitrary codes */

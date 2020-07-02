@@ -39,44 +39,39 @@ static int __ef_pd_alloc(ef_pd* pd, ef_driver_handle pd_dh,
   if( flags & EF_PD_VF )
     flags |= EF_PD_PHYS_MODE;
 
-  if( flags & EF_PD_AF_XDP ) {
-    pd->pd_resource_id = 0;
-  }
-  else {
-    memset(&ra, 0, sizeof(ra));
-    ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
-    ra.ra_type = EFRM_RESOURCE_PD;
-    ra.u.pd.in_ifindex = ifindex;
-    ra.u.pd.in_flags = 0;
-    if( flags & EF_PD_VF )
-      ra.u.pd.in_flags |= EFCH_PD_FLAG_VF;
-    if( flags & EF_PD_PHYS_MODE )
-      ra.u.pd.in_flags |= EFCH_PD_FLAG_PHYS_ADDR;
-    if( flags & EF_PD_RX_PACKED_STREAM )
-      ra.u.pd.in_flags |= EFCH_PD_FLAG_RX_PACKED_STREAM;
-    if( flags & EF_PD_VPORT )
-      ra.u.pd.in_flags |= EFCH_PD_FLAG_VPORT;
-    if( flags & EF_PD_MCAST_LOOP )
-      ra.u.pd.in_flags |= EFCH_PD_FLAG_MCAST_LOOP;
-    if( flags & EF_PD_MEMREG_64KiB )
-      /* FIXME: We're overloading the packed-stream flag here.  The only
-       * effect it has is to force ef_memreg to use at least 64KiB buffer
-       * table entries.  Unfortunately this won't work if the adapter is not
-       * in packed-stream mode.
-       */
-      ra.u.pd.in_flags |= EFCH_PD_FLAG_RX_PACKED_STREAM;
-    if( flags & EF_PD_IGNORE_BLACKLIST )
-      ra.u.pd.in_flags |= EFCH_PD_FLAG_IGNORE_BLACKLIST;
-    ra.u.pd.in_vlan_id = vlan_id;
+  memset(&ra, 0, sizeof(ra));
+  ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
+  ra.ra_type = EFRM_RESOURCE_PD;
+  ra.u.pd.in_ifindex = ifindex;
+  ra.u.pd.in_flags = 0;
+  if( flags & EF_PD_VF )
+    ra.u.pd.in_flags |= EFCH_PD_FLAG_VF;
+  if( flags & EF_PD_PHYS_MODE )
+    ra.u.pd.in_flags |= EFCH_PD_FLAG_PHYS_ADDR;
+  if( flags & EF_PD_RX_PACKED_STREAM )
+    ra.u.pd.in_flags |= EFCH_PD_FLAG_RX_PACKED_STREAM;
+  if( flags & EF_PD_VPORT )
+    ra.u.pd.in_flags |= EFCH_PD_FLAG_VPORT;
+  if( flags & EF_PD_MCAST_LOOP )
+    ra.u.pd.in_flags |= EFCH_PD_FLAG_MCAST_LOOP;
+  if( flags & EF_PD_MEMREG_64KiB )
+    /* FIXME: We're overloading the packed-stream flag here.  The only
+     * effect it has is to force ef_memreg to use at least 64KiB buffer
+     * table entries.  Unfortunately this won't work if the adapter is not
+     * in packed-stream mode.
+     */
+    ra.u.pd.in_flags |= EFCH_PD_FLAG_RX_PACKED_STREAM;
+  if( flags & EF_PD_IGNORE_BLACKLIST )
+    ra.u.pd.in_flags |= EFCH_PD_FLAG_IGNORE_BLACKLIST;
+  ra.u.pd.in_vlan_id = vlan_id;
 
-    rc = ci_resource_alloc(pd_dh, &ra);
-    if( rc < 0 ) {
-      LOGVV(ef_log("ef_pd_alloc: ci_resource_alloc %d", rc));
-      return rc;
-    }
-
-    pd->pd_resource_id = ra.out_id.index;
+  rc = ci_resource_alloc(pd_dh, &ra);
+  if( rc < 0 ) {
+    LOGVV(ef_log("ef_pd_alloc: ci_resource_alloc %d", rc));
+    return rc;
   }
+
+  pd->pd_resource_id = ra.out_id.index;
 
   pd->pd_intf_name = malloc(IF_NAMESIZE);
   if( pd->pd_intf_name == NULL ) {
@@ -101,9 +96,6 @@ static int __ef_pd_alloc(ef_pd* pd, ef_driver_handle pd_dh,
   pd->pd_cluster_sock = -1;
   pd->pd_cluster_dh = 0;
   pd->pd_cluster_viset_resource_id = 0;
-  pd->pd_xdp_umem.iov_base = NULL;
-  pd->pd_xdp_umem.iov_len = 0;
-  pd->pd_xdp_vi_pending = NULL;
 
   return 0;
 }

@@ -799,12 +799,16 @@ ci_udp_recvmsg_socklocked_spin(ci_netif* ni, ci_udp_state* us,
       if( ni->state->poll_work_outstanding ||
           ci_netif_need_poll_spinning(ni, now_frc) )
         if( ci_netif_trylock(ni) ) {
-          ci_netif_poll(ni);
+          int evs = ci_netif_poll(ni);
           ci_netif_unlock(ni);
 #ifndef __KERNEL__
           spin_state->future = NULL;
 #endif
-          return 0;
+          /* TODO AF_XDP reports poll needed when it isn't. Only return
+           * here if there really was an event. This test can be removed
+           * if we get a working version of ef_eventq_has_event for AF_XDP */
+          if(CI_LIKELY( evs != 0 ))
+            return 0;
         }
       if( ! ni->state->is_spinner )
         ni->state->is_spinner = 1;

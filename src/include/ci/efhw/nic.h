@@ -52,6 +52,11 @@
 extern int efhw_device_type_init(struct efhw_device_type *dt,
 				 int vendor_id, int device_id, int revision);
 
+/* Initialise the device type as appropriate for a userspace-managed
+ * device such as AF_XDP */
+extern int efhw_device_nondl_init(struct efhw_device_type *dt);
+
+
 /* Initialise fields that do not involve touching hardware. */
 #define EFHW_MEM_BAR_UNDEFINED ((unsigned)~0)
 extern void efhw_nic_init(struct efhw_nic *nic, unsigned flags,

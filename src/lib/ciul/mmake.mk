@@ -17,12 +17,13 @@ EFVI_SRCS	:=		\
 		ef10_event.c	\
 		ef10_vi.c	\
 		ef100_event.c	\
-		ef100_vi.c       \
+		ef100_vi.c      \
 		efxdp_vi.c
 
 LIB_SRCS	:=		\
 		$(EFVI_SRCS)	\
 		ef10_evtimer.c	\
+		efxdp_alloc.c   \
 		logging.c \
 		checksum.c
 
@@ -32,7 +33,6 @@ LIB_SRCS	+=		\
 		event_q.c	\
 		event_q_put.c	\
 		pt_endpoint.c	\
-		efxdp_alloc.c   \
 		filter.c	\
 		vi_set.c	\
 		memreg.c	\

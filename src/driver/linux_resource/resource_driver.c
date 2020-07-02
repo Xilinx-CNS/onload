@@ -101,6 +101,19 @@ MODULE_PARM_DESC(enable_accel_by_default,
 				 "is set to zero then devices must be enabled in this way "
 				 "to allow Onload acceleration or use of ef_vi.");
 
+static int enable_driverlink = 1;
+module_param(enable_driverlink, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(enable_driverlink,
+				 "Attach SFC devices using driverlink interface."
+				 "When disabled, it is possible to attach SFC devices "
+				 "with AF_XDP interface.");
+
+static char *af_xdp_dev = "";
+module_param(af_xdp_dev, charp, S_IRUGO);
+MODULE_PARM_DESC(af_xdp_dev,
+                 "PCI address for dev to use as AF_XDP NIC (must be SF)");
+
+
 #ifdef HAS_COMPAT_PAT_WC
 static int compat_pat_wc_inited = 0;
 #endif
@@ -196,7 +209,7 @@ static int linux_efhw_nic_map_ctr_ap(struct linux_efhw_nic *lnic)
 static inline int
 efrm_nic_bar_is_good(struct efhw_nic* nic, struct pci_dev* dev)
 {
-	return nic->ctr_ap_dma_addr == pci_resource_start(dev, nic->ctr_ap_bar);
+	return !dev || nic->ctr_ap_dma_addr == pci_resource_start(dev, nic->ctr_ap_bar);
 }
 
 
@@ -242,10 +255,11 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct efx_dl_device *dl_device
 	unsigned vi_shift = 0;
 	unsigned mem_bar = EFHW_MEM_BAR_UNDEFINED;
 	unsigned vi_stride = 0;
-	struct pci_dev *dev = dl_device->pci_dev;
+	struct pci_dev *dev = dl_device ? dl_device->pci_dev : NULL;
 
 	/* Tie the lifetime of the kernel's state to that of our own. */
-	pci_dev_get(dev);
+	if( dev )
+		pci_dev_get(dev);
 	dev_hold(net_dev);
 
 	if (dev_type->arch == EFHW_ARCH_EF10 ||
@@ -259,8 +273,8 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct efx_dl_device *dl_device
 		vi_stride = res_dim->vi_stride;
 	}
 	else if (dev_type->arch == EFHW_ARCH_AF_XDP) {
-		map_min = 0;
-		map_max = 0;
+		map_min = res_dim->vi_min;
+		map_max = res_dim->vi_lim;;
 	}
 	else {
 		rc = -EINVAL;
@@ -272,14 +286,31 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct efx_dl_device *dl_device
 		      );
 	lnic->efrm_nic.efhw_nic.pci_dev = dev;
 	lnic->efrm_nic.efhw_nic.net_dev = net_dev;
-	lnic->efrm_nic.efhw_nic.bus_number = dev->bus->number;
-	lnic->efrm_nic.efhw_nic.domain = pci_domain_nr(dev->bus);
-	lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr =
-		pci_resource_start(dev, nic->ctr_ap_bar);
+	lnic->efrm_nic.efhw_nic.bus_number = dev ? dev->bus->number : 0;
+	lnic->efrm_nic.efhw_nic.domain = dev ? pci_domain_nr(dev->bus) : 0;
+	if( dev ) {
+		lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr = pci_resource_start(dev, nic->ctr_ap_bar);
+	} else {
+		/* we need a page for a VI */
+		unsigned long space_needed = map_max * PAGE_SIZE;
+		int order = get_order(space_needed);
+		unsigned long addr = __get_free_pages(GFP_KERNEL, order);
 
+		if(addr == 0) {
+			rc = -ENOMEM;
+			goto fail;
+		}
+
+		lnic->efrm_nic.efhw_nic.bar_ioaddr = (void *)addr;
+		memset((void *)lnic->efrm_nic.efhw_nic.bar_ioaddr,
+			   0, map_max * PAGE_SIZE);
+		lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr = __pa(addr);
+	}
+	EFRM_WARN("%s: ctr_ap_dma_addr=%p", __func__,
+		  (void*) lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr);
 	irq_ranges_init(nic, res_dim);
 
-	EFRM_ASSERT(dev_type->arch == EFHW_ARCH_AF_XDP ||
+	EFRM_ASSERT(!dev || dev_type->arch == EFHW_ARCH_AF_XDP ||
                     efrm_nic_bar_is_good(nic, dev));
 
 	spin_lock_init(&lnic->efrm_nic.efhw_nic.pci_dev_lock);
@@ -293,22 +324,28 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct efx_dl_device *dl_device
 
 	rc = efrm_nic_ctor(&lnic->efrm_nic, res_dim);
 	if (rc < 0) {
-		if (nic->bar_ioaddr) {
-			iounmap(nic->bar_ioaddr);
-			nic->bar_ioaddr = 0;
+		if (dev == NULL) {
+			unsigned long space_needed = map_max * PAGE_SIZE;
+			int order = get_order(space_needed);
+			free_pages((unsigned long)nic->bar_ioaddr, order);
 		}
+		else if (nic->bar_ioaddr) {
+			iounmap(nic->bar_ioaddr);
+		}
+		nic->bar_ioaddr = 0;
 		goto fail;
 	}
 
 	if (enable_accel_by_default)
 		lnic->efrm_nic.rnic_flags |= EFRM_NIC_FLAG_ADMIN_ENABLED;
 
-	efrm_init_resource_filter(&dev->dev, net_dev->ifindex);
+	efrm_init_resource_filter(dev ? &dev->dev : &net_dev->dev, net_dev->ifindex);
 
 	return 0;
 
 fail:
-	pci_dev_put(dev);
+	if( dev )
+		pci_dev_put(dev);
 	dev_put(net_dev);
 	return rc;
 }
@@ -367,12 +404,15 @@ static void linux_efrm_nic_dtor(struct linux_efhw_nic *lnic)
 	efrm_nic_dtor(&lnic->efrm_nic);
 	efhw_nic_dtor(nic);
 
-	if (nic->bar_ioaddr) {
+	if (nic->bar_ioaddr && (nic->pci_dev != NULL)) {
 		iounmap(nic->bar_ioaddr);
 		nic->bar_ioaddr = 0;
 	}
-	efrm_shutdown_resource_filter(&nic->pci_dev->dev);
-	pci_dev_put(nic->pci_dev);
+	if(nic->pci_dev) {
+		efrm_shutdown_resource_filter(&nic->pci_dev->dev);
+		pci_dev_put(nic->pci_dev);
+		EFRM_ASSERT(nic->net_dev == NULL);
+	}
 	EFRM_ASSERT(nic->net_dev == NULL);
 }
 
@@ -380,9 +420,10 @@ static void efrm_dev_show(struct pci_dev *dev, int revision,
 			  struct efhw_device_type *dev_type, int ifindex,
 			  const struct vi_resource_dimensions *res_dim)
 {
-	const char *dev_name = pci_name(dev) ? pci_name(dev) : "?";
+	const char *dev_name = dev && pci_name(dev) ? pci_name(dev) : "?";
 	EFRM_NOTICE("%s pci_dev=%04x:%04x(%d) type=%d:%c%d ifindex=%d",
-		    dev_name, (unsigned) dev->vendor, (unsigned) dev->device,
+		    dev_name, (unsigned) (dev ? dev->vendor : 0),
+		    (unsigned) (dev ? dev->device : 0),
 		    revision, dev_type->arch, dev_type->variant,
 		    dev_type->revision, ifindex);
 }
@@ -523,6 +564,7 @@ static void efrm_nic_proc_intf_removed(struct linux_efhw_nic* nic)
  * So basically just make sure that any code you add checks rc>=0 before
  * doing any work and you'll be fine.
  *
+ * TODO AF_XDP: more elegantly handle non-driverlink devices
  ****************************************************************************/
 int
 efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags, 
@@ -535,7 +577,7 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 	struct linux_efhw_nic *lnic = NULL;
 	struct efrm_nic *efrm_nic = NULL;
 	struct efhw_nic *nic = NULL;
-	struct pci_dev *dev = dl_device->pci_dev;
+	struct pci_dev *dev = dl_device ? dl_device->pci_dev : NULL;
 	int count = 0, rc = 0, resources_init = 0;
 	int constructed = 0;
 	int registered_nic = 0;
@@ -544,18 +586,32 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 	int nics_probed_delta = 0;
 	struct efhw_nic* old_nic;
 
-	rc = pci_read_config_byte(dev, PCI_CLASS_REVISION, &class_revision);
-	if (rc != 0) {
-		EFRM_ERR("%s: pci_read_config_byte failed (%d)",
-			 __func__, rc);
-		return rc;
+
+	if (dl_device && !enable_driverlink) {
+		EFRM_NOTICE("%s: Driverlink reports sfc device %s, ignoring as module "
+					"param enable_driverlink=0", __func__, net_dev->name);
+		return -EPERM;
 	}
-	if (!efhw_device_type_init(&dev_type, dev->vendor, dev->device,
-				   class_revision)) {
-		EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x(%d)",
-			 __func__, (unsigned) dev->vendor,
-			 (unsigned) dev->device, (int) class_revision);
-		return -ENODEV;
+
+	if(dl_device) {
+		rc = pci_read_config_byte(dev, PCI_CLASS_REVISION, &class_revision);
+		if (rc != 0) {
+			EFRM_ERR("%s: pci_read_config_byte failed (%d)",
+				 __func__, rc);
+			return rc;
+		}
+		if (!efhw_device_type_init(&dev_type, dev->vendor, dev->device,
+					   class_revision)) {
+			EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x(%d)",
+				 __func__, (unsigned) dev->vendor,
+				 (unsigned) dev->device, (int) class_revision);
+			return -ENODEV;
+		}
+		efrm_dev_show(dev, class_revision, &dev_type, net_dev->ifindex, res_dim);
+	}
+	else {
+		efhw_device_nondl_init(&dev_type);
+		EFRM_NOTICE("%s rx_chans=%d", net_dev->name, res_dim->rss_channel_count);
 	}
 
 	efrm_dev_show(dev, class_revision, &dev_type, net_dev->ifindex, res_dim);
@@ -567,33 +623,41 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 		resources_init = 1;
 	}
 
-	spin_lock_bh(&efrm_nic_tablep->lock);
-	EFRM_FOR_EACH_NIC(nic_index, old_nic) {
-		/* We would like to break out of this loop after rediscovering
-		 * a NIC, but the EFRM_FOR_EACH_NIC construct doesn't allow
-		 * this, so instead we check explicitly that we haven't set
-		 * [lnic] yet. */
-		if (lnic == NULL && old_nic != NULL &&
-		    efrm_nic_matches_device(old_nic, dev, &dev_type)) {
-			EFRM_ASSERT(old_nic->resetting);
-			if (efrm_nic_bar_is_good(old_nic, dev)) {
-				EFRM_NOTICE("%s: Rediscovered nic_index %d",
-					    __func__, nic_index);
-				lnic = linux_efhw_nic(old_nic);
-			}
-			else {
-				EFRM_WARN("%s: New device matches nic_index %d "
-					  "but has different BAR. Existing "
-					  "Onload stacks will not use the new "
-					  "device.",
-					  __func__, nic_index);
+	if (strcmp(af_xdp_dev, dev && pci_name(dev) ? pci_name(dev) : "?") == 0) {
+		/* TODO AF_XDP */
+		EFRM_ERR("%s: hack dev %s to be AF_XDP", __FUNCTION__,
+			 pci_name(dev));
+		dev_type.arch = EFHW_ARCH_AF_XDP;
+	}
+
+	if(dl_device) {
+		spin_lock_bh(&efrm_nic_tablep->lock);
+		EFRM_FOR_EACH_NIC(nic_index, old_nic) {
+			/* We would like to break out of this loop after rediscovering
+			 * a NIC, but the EFRM_FOR_EACH_NIC construct doesn't allow
+			 * this, so instead we check explicitly that we haven't set
+			 * [lnic] yet. */
+			if (lnic == NULL && old_nic != NULL &&
+				efrm_nic_matches_device(old_nic, dev, &dev_type)) {
+				EFRM_ASSERT(old_nic->resetting);
+				if (efrm_nic_bar_is_good(old_nic, dev)) {
+					EFRM_NOTICE("%s: Rediscovered nic_index %d",
+						    __func__, nic_index);
+					lnic = linux_efhw_nic(old_nic);
+				}
+				else {
+					EFRM_WARN("%s: New device matches nic_index %d "
+						  "but has different BAR. Existing "
+						  "Onload stacks will not use the new "
+						  "device.",
+						  __func__, nic_index);
+				}
 			}
 		}
+		spin_unlock_bh(&efrm_nic_tablep->lock);
+		/* We can drop the lock now as [lnic] will not go away until the module
+		 * unloads. */
 	}
-	spin_unlock_bh(&efrm_nic_tablep->lock);
-	/* We can drop the lock now as [lnic] will not go away until the module
-	 * unloads. */
-
 	if (lnic != NULL) {
 		linux_efrm_nic_reclaim(lnic, dl_device, net_dev, res_dim,
 				       &dev_type);
@@ -647,7 +711,10 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 	lnic->dl_device = dl_device;
 	efrm_nic = &lnic->efrm_nic;
 	nic = &efrm_nic->efhw_nic;
-	efrm_driverlink_resume(efrm_nic);
+	if( dl_device )
+		efrm_driverlink_resume(efrm_nic);
+	else
+		efrm_nic->rnic_flags |= EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED;
 
 	if( timer_quantum_ns )
 		nic->timer_quantum_ns = timer_quantum_ns;
@@ -675,28 +742,27 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 
 		/* pain */
 		EFRM_TRACE("%s hardware init failed (%d, attempt %d of %d)",
-			   pci_name(dev) ? pci_name(dev) : "?",
+			   dev && pci_name(dev) ? pci_name(dev) : "?",
 			   rc, count + 1, max_hardware_init_repeats);
 	}
 	if (rc < 0) {
 		/* Again, PCI VFs may be available. */
 		EFRM_ERR("%s: ERROR: hardware init failed rc=%d",
-			 pci_name(dev) ? pci_name(dev) : "?", rc);
+			 dev && pci_name(dev) ? pci_name(dev) : "?", rc);
 	}
-
-        efrm_resource_manager_add_total(EFRM_RESOURCE_VI,
-                                        efrm_nic->max_vis);
-        efrm_resource_manager_add_total(EFRM_RESOURCE_PD,
-                                        efrm_nic->max_vis);
+	efrm_resource_manager_add_total(EFRM_RESOURCE_VI,
+					efrm_nic->max_vis);
+	efrm_resource_manager_add_total(EFRM_RESOURCE_PD,
+					efrm_nic->max_vis);
 
 	/* Tell NIC to spread wakeup events. */
 	efrm_nic->rss_channel_count = res_dim->rss_channel_count;
 
 	EFRM_NOTICE("%s index=%d ifindex=%d",
-		    pci_name(dev) ? pci_name(dev) : "?",
+		    dl_device ? (pci_name(dev) ? pci_name(dev) : "?") : net_dev->name,
 		    nic->index, net_dev->ifindex);
 
-        efrm_nic->dmaq_state.unplugging = 0;
+	efrm_nic->dmaq_state.unplugging = 0;
 
 	*lnic_out = lnic;
 	n_nics_probed += nics_probed_delta;
@@ -727,11 +793,15 @@ efrm_nic_rename(struct efhw_nic* nic, struct net_device *net_dev)
 	efrm_nic_proc_intf_added(net_dev->name, lnic);
 }
 
+/* TODO AF_XDP */
+#include <ci/efhw/af_xdp.h>
 
 int
 efrm_nic_unplug(struct efhw_nic* nic, struct efx_dl_device *dl_device)
 {
 	struct net_device* net_dev;
+
+	efhw_nic_bodge_af_xdp_dtor(nic);
 
 	/* We keep the pci device to reclaim it after hot-plug, but release
 	 * the net device. */
@@ -747,9 +817,60 @@ efrm_nic_unplug(struct efhw_nic* nic, struct efx_dl_device *dl_device)
 }
 
 
+int efrm_nic_add_device(struct net_device *net_dev, int n_vis)
+{
+	struct vi_resource_dimensions res_dim = {};
+	struct efx_dl_ef10_resources *ef10_res = NULL;
+	struct linux_efhw_nic *lnic;
+	unsigned timer_quantum_ns = 0;
+	struct efhw_nic *nic;
+	int rc;
+
+	ASSERT_RTNL();
+
+	if( efhw_nic_find(net_dev) ) {
+		EFRM_TRACE("efrm_nic_add_ifindex: netdev %s already registered",
+			   net_dev->name);
+		return 0;
+	}
+
+	ef10_res = kmalloc(sizeof(*ef10_res), GFP_KERNEL);
+	memset(ef10_res, 0, sizeof(*ef10_res));
+	ef10_res->rss_channel_count = 1;
+	ef10_res->vi_min = 0;
+	ef10_res->vi_lim = n_vis;
+	ef10_res->hdr.type = EFX_DL_EF10_RESOURCES;
+	timer_quantum_ns = ef10_res->timer_quantum_ns = 60000;
+
+	res_dim.vi_min = ef10_res->vi_min;
+	res_dim.vi_lim = ef10_res->vi_lim;
+	res_dim.rss_channel_count = ef10_res->rx_channel_count;
+	res_dim.vi_base = ef10_res->vi_base;
+	res_dim.vi_shift = ef10_res->vi_shift;
+
+	EFRM_TRACE("Using VI range %d+(%d-%d)<<%d", res_dim.vi_base,
+		   res_dim.vi_min, res_dim.vi_lim, res_dim.vi_shift);
+
+	rc = efrm_nic_add(NULL, 0, net_dev, &lnic, &res_dim,
+			  timer_quantum_ns);
+	if (rc != 0)
+		return rc;
+
+	lnic->efrm_nic.dl_dev_info = &ef10_res->hdr;
+
+	nic = &lnic->efrm_nic.efhw_nic;
+	nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
+
+	return 0;
+}
+EXPORT_SYMBOL(efrm_nic_add_device);
+
 /****************************************************************************
  *
  * efrm_nic_shutdown: Shut down our access to the NIC hw
+ *
+ * Note: After execution of this function device is no longer associated with
+ *       net_device
  *
  ****************************************************************************/
 static void efrm_nic_shutdown(struct linux_efhw_nic *lnic)
@@ -759,13 +880,17 @@ static void efrm_nic_shutdown(struct linux_efhw_nic *lnic)
 	EFRM_TRACE("%s:", __func__);
 	EFRM_ASSERT(nic);
 
+	/* Absent hardware is treated as a protracted reset. */
+	efrm_nic_reset_suspend(nic);
+	ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNPLUGGED);
+
 	efrm_vi_wait_nic_complete_flushes(nic);
 	linux_efrm_nic_dtor(lnic);
 
-        efrm_resource_manager_del_total(EFRM_RESOURCE_VI,
-                                        lnic->efrm_nic.max_vis);
-        efrm_resource_manager_del_total(EFRM_RESOURCE_PD,
-                                        lnic->efrm_nic.max_vis);
+	efrm_resource_manager_del_total(EFRM_RESOURCE_VI,
+					lnic->efrm_nic.max_vis);
+	efrm_resource_manager_del_total(EFRM_RESOURCE_PD,
+					lnic->efrm_nic.max_vis);
 
 	EFRM_TRACE("%s: done", __func__);
 }
@@ -790,6 +915,31 @@ static void efrm_nic_del(struct linux_efhw_nic *lnic)
 	EFRM_TRACE("%s: done", __func__);
 }
 
+/* Removes device from efrm
+ *
+ * Complete teardown includes efrm nic shutdown and efrm nic deletion
+ *
+ * Note: after shutdown device has no associated net_device meaning
+ *       the removal needs to be done in one step.
+ */
+void efrm_nic_del_device(struct net_device *net_dev)
+{
+	int i;
+	struct efhw_nic* nic;
+
+	ASSERT_RTNL();
+
+	EFRM_TRACE("%s:", __func__);
+	EFRM_FOR_EACH_NIC(i, nic) {
+		if( nic->net_dev == net_dev ) {
+			efrm_nic_unplug(nic, NULL);
+			efrm_nic_shutdown(linux_efhw_nic(nic));
+			efrm_nic_del(linux_efhw_nic(nic));
+		}
+	}
+	EFRM_TRACE("%s: done", __func__);
+}
+EXPORT_SYMBOL(efrm_nic_del_device);
 
 /****************************************************************************
  *
@@ -854,6 +1004,10 @@ static int init_sfc_resource(void)
 	if (rc < 0)
 		goto failed_driverlink;
 
+	efrm_nondl_init();
+	efrm_install_sysfs_entries();
+	efrm_nondl_register();
+
 #ifdef HAS_COMPAT_PAT_WC
 	compat_pat_wc_inited = 0;
 	if (pio)
@@ -886,6 +1040,9 @@ static void cleanup_sfc_resource(void)
 	}
 #endif
 
+	efrm_nondl_unregister();
+	efrm_remove_sysfs_entries();
+	efrm_nondl_shutdown();
 	/* Unregister from driverlink first, free
 	 * the per-NIC structures next. */
 	efrm_driverlink_unregister();

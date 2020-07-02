@@ -374,6 +374,8 @@ tcp_helper_rm_nopage(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
       /* IO mappings are always present, and so a page fault should never come
        * down this path, but ptrace() can get us here. */
       return NULL;
+    case CI_NETIF_MMAP_ID_PKTS_ALL:
+      return tcp_helper_rm_nopage_pkts(trs, vma, offset);
     default:
       ci_assert_ge(map_id, CI_NETIF_MMAP_ID_PKTS);
       return tcp_helper_rm_nopage_pkts(trs, vma,
@@ -609,14 +611,14 @@ static int tcp_helper_rm_mmap_buf(tcp_helper_resource_t* trs,
   return 0;
 }
 
-/* fixme: this handler is linux-only */
-static int tcp_helper_rm_mmap_pkts(tcp_helper_resource_t* trs,
-                                   unsigned long bytes,
-                                   struct vm_area_struct* vma, int map_id)
+
+static int __tcp_helper_rm_mmap_pkts(tcp_helper_resource_t* trs,
+                                     unsigned long start, unsigned long bytes,
+                                     struct vm_area_struct* vma, int bufid,
+                                     int force_faulting)
 {
   ci_netif* ni;
   ci_netif_state* ns;
-  int bufid = map_id - CI_NETIF_MMAP_ID_PKTS;
 
   if( bytes != CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET )
     return -EINVAL;
@@ -639,14 +641,57 @@ static int tcp_helper_rm_mmap_pkts(tcp_helper_resource_t* trs,
   }
 #endif
 
-  if( oo_iobufset_npages(ni->pkt_bufs[bufid]) == 1 ) {
+  if( oo_iobufset_npages(ni->pkt_bufs[bufid]) == 1 && !force_faulting ) {
     /* Avoid nopage handler, mmap it all at once */
-    return remap_pfn_range(vma, vma->vm_start,
+    return remap_pfn_range(vma, start,
                            oo_iobufset_pfn(ni->pkt_bufs[bufid], 0), bytes,
                            vma->vm_page_prot);
   }
 
   return 0;
+}
+
+static int tcp_helper_rm_mmap_pkts(tcp_helper_resource_t* trs,
+                                   unsigned long bytes,
+                                   struct vm_area_struct* vma, int map_id)
+{
+  int bufid = map_id - CI_NETIF_MMAP_ID_PKTS;
+
+  if( bytes != CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET )
+    return -EINVAL;
+
+  return __tcp_helper_rm_mmap_pkts(trs, vma->vm_start, bytes, vma, bufid, false);
+}
+
+
+static int tcp_helper_rm_mmap_pkts_all(tcp_helper_resource_t* trs,
+                                       unsigned long bytes,
+                                       struct vm_area_struct* vma)
+{
+  ci_netif* ni;
+  int bufid;
+  int rc = 0;
+  unsigned long pkt_buf_size = CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET;
+
+  ni = &trs->netif;
+
+  if( bytes != pkt_buf_size * ni->packets->sets_max )
+    return -EINVAL;
+
+  for( bufid = 0; bufid < ni->packets->sets_max; ++bufid) {
+    if( ni->pkt_bufs[bufid] == NULL )
+      return -EINVAL;
+  }
+
+  for( bufid = 0; bufid < ni->packets->sets_max; ++bufid) {
+    /* TODO: This mapping is for AF_XDP we need to force page_faulting to
+     * get ensure get_user_pages on packet buffer memory can be performed */
+    rc = __tcp_helper_rm_mmap_pkts(trs, vma->vm_start + pkt_buf_size * bufid,
+                                   pkt_buf_size, vma, bufid, true);
+    if( rc < 0 )
+      break;
+  }
+  return rc;
 }
 
 
@@ -683,6 +728,9 @@ efab_tcp_helper_rm_mmap(tcp_helper_resource_t* trs, unsigned long bytes,
 #endif
     case CI_NETIF_MMAP_ID_IOBUFS:
       rc = tcp_helper_rm_mmap_buf(trs, bytes, vma);
+      break;
+    case CI_NETIF_MMAP_ID_PKTS_ALL:
+      rc = tcp_helper_rm_mmap_pkts_all(trs, bytes, vma);
       break;
     default:
       /* CI_NETIF_MMAP_ID_PKTS + set_id */

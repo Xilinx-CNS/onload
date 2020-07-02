@@ -417,6 +417,9 @@ struct efhw_nic {
         uint16_t rx_variant;
         /* TX datapath firmware variant */
         uint16_t tx_variant;
+
+        /* AF_XDP-only state */
+        struct efhw_nic_af_xdp* af_xdp;
 };
 
 

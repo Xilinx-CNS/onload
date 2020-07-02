@@ -44,6 +44,8 @@ efab_vi_rm_mmap_io(struct efrm_vi *virs,
   struct efhw_nic *nic;
 
   nic = efrm_client_get_nic(virs->rs.rs_client);
+  if( nic->devtype.arch == EFHW_ARCH_AF_XDP )
+    return 0;
 
   instance = virs->rs.rs_instance;
 
@@ -224,11 +226,13 @@ int
 efab_vi_resource_mmap_bytes(struct efrm_vi* virs, int map_type)
 {
   int bytes = 0;
+  struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
 
   EFRM_RESOURCE_ASSERT_VALID(&virs->rs, 0);
 
   if( map_type == 0 ) {  /* I/O mapping. */
-    bytes += CI_PAGE_SIZE;
+    if( nic->devtype.arch != EFHW_ARCH_AF_XDP )
+      bytes += CI_PAGE_SIZE;
   }
   else {              /* Memory mapping. */
     if( virs->q[EFHW_EVQ].capacity != 0 )

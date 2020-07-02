@@ -1983,6 +1983,9 @@ void efrm_init_resource_filter(struct device *dev, int ifindex)
 	char const* ifname;
 	struct net_device* ndev;
 
+	if ( !dev )
+		return;
+
 	mutex_lock( &efrm_ft_mutex );
 
 	pciname = efrm_get_pciname_from_device( dev );

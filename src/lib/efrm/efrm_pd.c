@@ -39,6 +39,7 @@
 #include <ci/efrm/buffer_table.h>
 #include <ci/efrm/efrm_filter.h>
 #include <ci/efhw/ef10.h>
+#include <ci/efhw/af_xdp.h>
 #include <ci/efhw/nic.h>
 #include <ci/tools/utils.h>
 #include "efrm_internal.h"
@@ -237,7 +238,7 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 	int rc, instance;
 	struct efrm_pd_owner_ids *owner_ids;
 	int orders_num = 0;
-
+	int use_buffer_table = (flags & EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE) == 0;
 
 	/* Support for SRIOV VF was removed (see bug 84927). */
 	EFRM_ASSERT(client_opt != NULL);
@@ -248,7 +249,7 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 		goto fail1;
 	}
 
-	if (!(flags & EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE)) {
+	if (use_buffer_table) {
 		orders_num = efhw_nic_buffer_table_orders_num(
 						client_opt->nic);
 		EFRM_ASSERT(orders_num);
@@ -269,7 +270,7 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 
 	spin_lock_bh(&pd_manager->rm.rm_lock);
 	instance = pd_manager->next_instance++;
-	if (flags & EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE) {
+	if (!use_buffer_table) {
 		pd->owner_id = OWNER_ID_PHYS_MODE;
 	}
 	else {
@@ -283,7 +284,7 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 		goto fail2;
 	}
 
-	if (!(flags & EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE)) {
+	if (use_buffer_table) {
 		int ord;
 		for (ord = 0; ord < orders_num; ord++) {
 			efrm_bt_manager_ctor(
@@ -485,6 +486,19 @@ fail:
 	return -ENOMEM;
 }
 
+static int efrm_pd_dma_map_nonpci(
+			       int n_pages, int nic_order,
+			       void **addrs, int addrs_stride,
+			       dma_addr_t *pci_addrs, int pci_addrs_stride)
+{
+	int i;
+	for (i = 0; i < n_pages; ++i) {
+		*pci_addrs = (dma_addr_t)*addrs;
+		addrs = (void *)((char *)addrs + addrs_stride);
+		pci_addrs = (void *)((char *)pci_addrs + pci_addrs_stride);
+	}
+	return 0;
+}
 
 static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 				  int n_pages, int nic_order,
@@ -492,10 +506,11 @@ static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
 	struct pci_dev* dev = efhw_nic_get_pci_dev(nic);
-
-	efrm_pd_dma_unmap_pci(dev, n_pages, nic_order, pci_addrs,
-			      pci_addrs_stride);
-	pci_dev_put(dev);
+	if (dev) {
+		efrm_pd_dma_unmap_pci(dev, n_pages, nic_order, pci_addrs,
+					pci_addrs_stride);
+		pci_dev_put(dev);
+	}
 }
 
 
@@ -506,10 +521,18 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
 	struct pci_dev* dev = efhw_nic_get_pci_dev(nic);
-	int rc = efrm_pd_dma_map_pci(dev, n_pages, nic_order, addrs,
-				     addrs_stride, pci_addrs,
-				     pci_addrs_stride);
-	pci_dev_put(dev);
+	int rc;
+	if (dev) {
+		rc = efrm_pd_dma_map_pci(dev, n_pages, nic_order, addrs,
+						addrs_stride, pci_addrs,
+						pci_addrs_stride);
+		pci_dev_put(dev);
+	}
+	else {
+		rc = efrm_pd_dma_map_nonpci(n_pages, nic_order, addrs,
+						addrs_stride, pci_addrs,
+						pci_addrs_stride);
+	}
 
 	return rc;
 }

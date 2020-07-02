@@ -97,6 +97,10 @@ extern int  ef_vi_init(struct ef_vi*, int arch, int variant, int revision,
 
 extern void ef_vi_init_io(struct ef_vi*, void* io_area);
 
+extern char* ef_vi_init_qs(struct ef_vi*, char* q_mem, uint32_t* ids,
+                           int evq_size, int rxq_size, int rx_prefix_len,
+                           int txq_size);
+
 extern void ef_vi_init_rxq(struct ef_vi*, int ring_size, void* descriptors,
 			   void* ids, int prefix_len);
 
@@ -143,6 +147,15 @@ extern int ef10_receive_get_timestamp_with_sync_flags_internal
 	 unsigned* flags, uint32_t t_minor, uint32_t t_major);
 
 #endif
+
+#ifdef __KERNEL__
+typedef struct socket* efxdp_sock_t;
+#else
+typedef int efxdp_sock_t;
+#endif
+
+extern int efxdp_vi_mmap(ef_vi*, efxdp_sock_t sock);
+extern void efxdp_vi_munmap(ef_vi*);
 
 /*! Size of the CTPIO aperture in bytes (if present) */
 #define EF_VI_CTPIO_APERTURE_SIZE     4096

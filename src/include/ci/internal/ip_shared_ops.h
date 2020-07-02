@@ -593,8 +593,8 @@ ci_inline void oo_pkt_af_set(ci_ip_pkt_fmt* pkt, int af)
 
 ci_inline void oo_tx_pkt_layout_init(ci_ip_pkt_fmt* pkt)
 {
-  ci_assert_equal((ci_uint8) pkt->pkt_start_off, 0xff);
-  ci_assert_equal(pkt->pkt_eth_payload_off, 0xff);
+  ci_assert_equal(pkt->pkt_start_off, PKT_START_OFF_BAD);
+  ci_assert_equal(pkt->pkt_eth_payload_off, PKT_START_OFF_BAD);
   pkt->pkt_start_off = 0;
   pkt->pkt_eth_payload_off = ETH_HLEN;
   pkt->pkt_outer_l3_off = ETH_HLEN;
@@ -604,7 +604,7 @@ ci_inline void oo_tx_pkt_layout_update(ci_ip_pkt_fmt* pkt, int ether_offset)
 {
   /* ether_offset==0 means VLAN tag is present.  ==4 means no VLAN. */
   int eth_hdr_len = (ETH_HLEN + ETH_VLAN_HLEN) - ether_offset;
-  int8_t new_start_off = pkt->pkt_outer_l3_off - eth_hdr_len;
+  int16_t new_start_off = pkt->pkt_outer_l3_off - eth_hdr_len;
   int16_t delta = new_start_off - pkt->pkt_start_off;
 
   /* Sanity check the consistency of the values.  We only support two options,
