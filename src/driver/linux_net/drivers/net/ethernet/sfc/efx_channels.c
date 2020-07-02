@@ -1904,22 +1904,24 @@ int efx_channel_start_xsk_queue(struct efx_channel *channel)
 	struct efx_tx_queue *tx_queue;
 	int rc = 0;
 
-	efx_for_each_channel_rx_queue(rx_queue, channel) {
-		channel->rx_list = NULL;
-		rc = efx_init_rx_queue(rx_queue);
-		if (rc)
-			goto fail;
-		atomic_inc(&channel->efx->active_queues);
-		rx_queue->refill_enabled = true;
-		efx_fast_push_rx_descriptors(rx_queue, false);
-	}
-
 	tx_queue = efx_channel_get_xsk_tx_queue(channel);
 	if (tx_queue) {
 		rc = efx_init_tx_queue(tx_queue);
 		if (rc)
 			goto fail;
 		atomic_inc(&channel->efx->active_queues);
+	}
+
+	efx_for_each_channel_rx_queue(rx_queue, channel) {
+		rc = efx_init_rx_queue(rx_queue);
+		if (rc)
+			goto fail;
+		atomic_inc(&channel->efx->active_queues);
+		efx_stop_eventq(channel);
+		rx_queue->refill_enabled = true;
+		efx_fast_push_rx_descriptors(rx_queue, false);
+		efx_start_eventq(channel);
+
 	}
 
 	return 0;
