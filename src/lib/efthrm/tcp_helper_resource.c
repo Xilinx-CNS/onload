@@ -2720,7 +2720,6 @@ void tcp_helper_endpoint_queue_non_atomic(tcp_helper_endpoint_t* ep,
   }
   ci_irqlock_unlock(&ep->thr->lock, &lock_flags);
 }
-#endif
 
 /* Woritem routine to handle postponed stack destruction.
  * Should be run in global workqueue only, not in the stack workqueue
@@ -2738,6 +2737,7 @@ tcp_helper_destroy_work(struct work_struct *data)
 
   efab_tcp_helper_rm_free_locked(trs);
 }
+#endif
 
 
 ci_inline void tcp_helper_init_max_mss(tcp_helper_resource_t* rs)
@@ -3763,12 +3763,12 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 
   /* Initialise work items.
    * Some of them are used in reset handler and in error path. */
-  INIT_WORK(&rs->work_item_dtor, tcp_helper_destroy_work);
 #if CI_CFG_NIC_RESET_SUPPORT
   INIT_DELAYED_WORK(&rs->purge_txq_work, tcp_helper_purge_txq_work);
   INIT_WORK(&rs->reset_work, tcp_helper_reset_stack_work);
 #endif
 #if ! CI_CFG_UL_INTERRUPT_HELPER
+  INIT_WORK(&rs->work_item_dtor, tcp_helper_destroy_work);
   INIT_WORK(&rs->non_atomic_work, tcp_helper_do_non_atomic);
   ci_sllist_init(&rs->non_atomic_list);
 #endif
@@ -4695,7 +4695,11 @@ tcp_helper_rm_free(tcp_helper_resource_t* trs)
   if( l & OO_TRUSTED_LOCK_LOCKED )
     /* Lock holder will call efab_tcp_helper_rm_free_locked(). */
     return;
+#endif
 
+#if CI_CFG_UL_INTERRUPT_HELPER
+  ci_assert(current_is_proper_ul_context());
+#else
   if( trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT ||
       ! current_is_proper_ul_context() )
     efab_tcp_helper_rm_schedule_free(trs);
@@ -4706,6 +4710,7 @@ tcp_helper_rm_free(tcp_helper_resource_t* trs)
 }
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 /*--------------------------------------------------------------------
  *!
  * Enqueues a work-item to call tcp_helper_dtor() at a safe time.
@@ -4720,6 +4725,7 @@ tcp_helper_dtor_schedule(tcp_helper_resource_t * trs)
   OO_DEBUG_TCPH(ci_log("%s [%u]: starting", __FUNCTION__, trs->id));
   ci_verify( queue_work(CI_GLOBAL_WORKQUEUE, &trs->work_item_dtor) != 0);
 }
+#endif
 
 /*--------------------------------------------------------------------
  * Called when [trs->k_ref_count] goes to zero.  This can only happen
@@ -4757,12 +4763,14 @@ efab_tcp_helper_k_ref_count_is_zero(tcp_helper_resource_t* trs)
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
   if( trs ) {
-    if( current_is_proper_ul_context() ) {
-      tcp_helper_dtor(trs);
-    }
-    else {
+#if CI_CFG_UL_INTERRUPT_HELPER
+    ci_assert(current_is_proper_ul_context());
+#else
+    if( ! current_is_proper_ul_context() )
       tcp_helper_dtor_schedule(trs);
-    }
+    else
+#endif
+      tcp_helper_dtor(trs);
   }
   OO_DEBUG_TCPH(ci_log("%s: finished", __FUNCTION__));
 }

@@ -201,14 +201,16 @@ typedef struct tcp_helper_resource_s {
 #define OO_TRUSTED_LOCK_XDP_CHANGE        0x200
 #endif
   volatile unsigned      trusted_lock;
+
+  /*! this is used so we can schedule destruction at task time,
+   * using the global workqueue */
+  struct work_struct work_item_dtor;
 #endif
 
   /*! Link for global list of stacks. */
   ci_dllink              all_stacks_link;
 
-  /*! this is used so we can schedule destruction at task time,
-   * using the global workqueue */
-  struct work_struct work_item_dtor;
+  /* VI descruction completion helper. */
   struct completion complete;
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
