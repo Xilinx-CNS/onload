@@ -234,7 +234,7 @@ struct ci_netif_s {
   /* Shared state wedged */
 #define CI_NETIF_FLAG_WEDGED             0x4000
   /* May inject packets to kernel */
-#define CI_NETIF_FLAG_MAY_INJECT_TO_KERNEL 0x08000
+#define CI_NETIF_FLAG_MAY_INJECT_TO_KERNEL 0x8000
 /* one of the NICs is AF_XDP */
 #define CI_NETIF_FLAG_AF_XDP               0x10000
 
