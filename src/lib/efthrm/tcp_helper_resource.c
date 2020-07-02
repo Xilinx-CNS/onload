@@ -127,8 +127,10 @@ efab_tcp_driver_t efab_tcp_driver;
 
 static void
 efab_tcp_helper_rm_free_locked(tcp_helper_resource_t*);
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 static void
 efab_tcp_helper_rm_schedule_free(tcp_helper_resource_t*);
+#endif
 
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
@@ -3733,7 +3735,10 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     goto fail3;
   }
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   rs->trusted_lock = OO_TRUSTED_LOCK_LOCKED;
+  atomic_set(&rs->timer_running, 0);
+#endif
 #if CI_CFG_NIC_RESET_SUPPORT
   rs->intfs_to_reset = 0;
   rs->intfs_suspended = 0;
@@ -3743,9 +3748,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 #endif
 #if CI_CFG_ENDPOINT_MOVE
   rs->thc = NULL;
-#endif
-#if ! CI_CFG_UL_INTERRUPT_HELPER
-  atomic_set(&rs->timer_running, 0);
 #endif
   strcpy(rs->name, alloc->in_name);
   mutex_init(&rs->usermem_mutex);
@@ -4058,9 +4060,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   if( NI_OPTS(ni).int_driven )
     tcp_helper_request_wakeup(netif2tcp_helper_resource(ni));
   efab_tcp_helper_netif_unlock(rs, 0);
+  rs->trusted_lock = OO_TRUSTED_LOCK_UNLOCKED;
 #else
   ni->state->lock.lock = CI_EPLOCK_UNLOCKED;
-  rs->trusted_lock = OO_TRUSTED_LOCK_UNLOCKED;
 #endif
 
 
@@ -4672,12 +4674,15 @@ current_is_proper_ul_context(void)
 static void
 tcp_helper_rm_free(tcp_helper_resource_t* trs)
 {
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   unsigned l, new_l;
+#endif
 
   TCP_HELPER_RESOURCE_ASSERT_VALID(trs, 1);
 
   OO_DEBUG_TCPH(ci_log("%s: [%u]", __FUNCTION__, trs->id));
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   do {
     l = trs->trusted_lock;
     /* NB. We clear other flags when setting AWAITING_FREE.
@@ -4695,6 +4700,7 @@ tcp_helper_rm_free(tcp_helper_resource_t* trs)
       ! current_is_proper_ul_context() )
     efab_tcp_helper_rm_schedule_free(trs);
   else
+#endif
     efab_tcp_helper_rm_free_locked(trs);
   OO_DEBUG_TCPH(ci_log("%s: [%u] done", __FUNCTION__, trs->id));
 }
@@ -4912,7 +4918,6 @@ efab_tcp_helper_rm_reset_untrusted(tcp_helper_resource_t* trs)
 #endif
   }
 }
-#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 static void
 efab_tcp_helper_rm_schedule_free(tcp_helper_resource_t* trs)
@@ -4920,6 +4925,7 @@ efab_tcp_helper_rm_schedule_free(tcp_helper_resource_t* trs)
   OO_DEBUG_TCPH(ci_log("%s [%u]: defer", __FUNCTION__, trs->id));
   queue_work(CI_GLOBAL_WORKQUEUE, &trs->work_item_dtor);
 }
+#endif /* CI_CFG_UL_INTERRUPT_HELPER */
 
 /*--------------------------------------------------------------------
  *!
@@ -4968,8 +4974,10 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
 #endif
 
   ci_assert(NULL != trs);
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   ci_assert(trs->trusted_lock == (OO_TRUSTED_LOCK_LOCKED |
                                   OO_TRUSTED_LOCK_AWAITING_FREE));
+#endif
 
   netif = &trs->netif;
 #if ! CI_CFG_UL_INTERRUPT_HELPER
@@ -5095,7 +5103,6 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
 #endif
     ci_netif_unlock(&trs->netif);
 
-#endif /* CI_CFG_UL_INTERRUPT_HELPER*/
 
   /* Don't need atomics here, because only we are permitted to touch
    * [trusted_lock] when AWAITING_FREE is set.
@@ -5103,6 +5110,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
   ci_assert(trs->trusted_lock == (OO_TRUSTED_LOCK_LOCKED |
                                   OO_TRUSTED_LOCK_AWAITING_FREE));
   trs->trusted_lock = OO_TRUSTED_LOCK_UNLOCKED;
+#endif /* CI_CFG_UL_INTERRUPT_HELPER*/
   oo_thr_ref_drop(trs->ref, OO_THR_REF_BASE);
   OO_DEBUG_TCPH(ci_log("%s: finished", __FUNCTION__));
 }

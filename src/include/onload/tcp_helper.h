@@ -179,6 +179,7 @@ typedef struct tcp_helper_resource_s {
 
   ci_netif               netif;
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /*! Kernel side stack lock. Needed so we can determine who "owns" the
    *   netif lock (kernel or user).
    *
@@ -200,6 +201,7 @@ typedef struct tcp_helper_resource_s {
 #define OO_TRUSTED_LOCK_XDP_CHANGE        0x200
 #endif
   volatile unsigned      trusted_lock;
+#endif
 
   /*! Link for global list of stacks. */
   ci_dllink              all_stacks_link;
