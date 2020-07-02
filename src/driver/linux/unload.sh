@@ -56,6 +56,10 @@ dochar () {
   # if /dev/onload still exists
   cat /proc/driver/onload/cp_server_pids 2>/dev/null | xargs -r kill
 
+  # onload_helper is spawned from UL, so kernel does not have a list of
+  # them.  Let's kill them by name!
+  pkill '\<onload_helper\>'
+
   modusedby sfc_resource sfc_affinity &&
     tryunload sfc_affinity
   tryunload onload
