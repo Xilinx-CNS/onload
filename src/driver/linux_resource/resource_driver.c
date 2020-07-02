@@ -65,6 +65,7 @@
 #include <ci/efrm/efrm_filter.h>
 #include <ci/driver/internal.h>
 #include "efrm_internal.h"
+#include "sfcaffinity.h"
 
 MODULE_AUTHOR("Solarflare Communications");
 MODULE_LICENSE("GPL");
@@ -530,6 +531,7 @@ static void efrm_nic_proc_intf_added(const char* intf_name,
 		                                         &efrm_nic_enable_fops_proc,
 												 nic);
 	}
+	efrm_affinity_interface_up(nic);
 	/* efrm_proc_* already logged warnings on error, no need to log more
 	 * here */
 }
@@ -542,6 +544,7 @@ static void efrm_nic_proc_intf_removed(struct linux_efhw_nic* nic)
 		efrm_proc_remove_file(nic->enable_file);
 		nic->enable_file = NULL;
 	}
+	efrm_affinity_interface_down(nic);
 	if (nic->proc_dir) {
 		efrm_proc_intf_dir_put(nic->proc_dir);
 		nic->proc_dir = NULL;
@@ -992,6 +995,7 @@ static int init_sfc_resource(void)
 			  __func__);
 	}
 	efrm_filter_install_proc_entries();
+	efrm_affinity_install_proc_entries();
 
 	/* Register the driver so that our 'probe' function is called for
 	 * each EtherFabric device in the system.
@@ -1016,6 +1020,7 @@ static int init_sfc_resource(void)
 	return 0;
 
 failed_driverlink:
+	efrm_affinity_remove_proc_entries();
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();
 	efrm_driver_stop();
@@ -1047,6 +1052,7 @@ static void cleanup_sfc_resource(void)
 	efrm_nic_shutdown_all();
 	efrm_nic_del_all();
 
+	efrm_affinity_remove_proc_entries();
 	efrm_filter_shutdown();
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();
