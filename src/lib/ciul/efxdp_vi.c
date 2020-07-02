@@ -57,6 +57,8 @@ static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
   i = qs->added++ & q->mask;
   dq[i].addr = iov->iov_base;
   dq[i].len = iov->iov_len;
+  EF_VI_BUG_ON(q->ids[i] != EF_REQUEST_ID_MASK);
+  q->ids[i] = dma_id;
   return 0;
 }
 
