@@ -30,17 +30,6 @@ SFC_CHAR_GROUP=root
 SFC_CHAR_MODE=666
 
 
-# sfc_affinity permissions.
-#
-# The following settings control the permissions applied to
-# /dev/sfc_affinity.  This controls which users can make use of the
-# sfc_affinity features.
-
-SFC_AFFINITY_USER=root
-SFC_AFFINITY_GROUP=root
-SFC_AFFINITY_MODE=666
-
-
 # onload_cp_server user.
 #
 # The following setting controls the user which will run the Onload control

@@ -216,7 +216,7 @@ ldconfig -n /usr/lib /usr/lib64
 # If the weak-modules script is present this will handle running depmod and
 # dracut for required kernels.
 if [ -x "/sbin/weak-modules" ]; then
-  for m in sfc sfc_resource sfc_char onload sfc_affinity; do
+  for m in sfc sfc_resource sfc_char onload; do
     echo "/lib/modules/%{kernel}/extra/$m.ko"
   done | /sbin/weak-modules --verbose --add-modules
 else
@@ -236,7 +236,7 @@ fi
 %postun kmod-%{kverrel}
 if [ "$1" = 0 ]; then  # Erase, not upgrade
   if [ -x "/sbin/weak-modules" ]; then
-    for m in sfc sfc_resource sfc_char onload sfc_affinity; do
+    for m in sfc sfc_resource sfc_char onload; do
       echo "/lib/modules/%{kernel}/extra/$m.ko"
     done | /sbin/weak-modules --verbose --remove-modules
   else

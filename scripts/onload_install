@@ -28,8 +28,8 @@ usage() {
   err "  --require32                - Fail if 32-bit binaries are not installed"
   err "  --setuid                   - Preload libraries are set-uid and set-gid"
   err "  --nosetuid                 - Preload libraries are not set-uid/gid"
-  err "  --affinity                 - Include sfcaffinity"
-  err "  --noaffinity               - Do not include sfcaffinity"
+  err "  --affinity                 - Include sfcaffinity_config"
+  err "  --noaffinity               - Do not include sfcaffinity_config"
   err "  --debug                    - Build debug binaries"
   err "  --no-debug-info            - Omit debug info from binaries"
   err "  --strict                   - Compiler warnings are errors"
@@ -298,7 +298,6 @@ install_userland() {
   install_x onload_iptables "$i_usrbin/onload_iptables"
   $affinity && {
     install_x sfcaffinity_config "$i_usrsbin/sfcaffinity_config"
-    install_x sfcaffinity "$i_usrbin/sfcaffinity"
   }
   install_dir "$i_usrlibexec/apps"
   try $docd "$TOP/scripts/onload_apps"
@@ -393,7 +392,6 @@ install_kernel_modules() {
   install_f sfc_resource.ko "$i_kernelmodules/sfc_resource.ko"
   install_f sfc_char.ko "$i_kernelmodules/sfc_char.ko"
   install_f onload.ko "$i_kernelmodules/onload.ko"
-  $affinity && install_f sfc_affinity.ko "$i_kernelmodules/sfc_affinity.ko"
   if [ -z "$i_prefix" ]; then
     $do /sbin/depmod -a "$KVER" || log "depmod exited with status $?"
   fi
@@ -432,7 +430,6 @@ install_kernel_modules() {
   install_f linux_resource/Module.symvers "$i_kernelmodules/sfc_resource.symvers"
   install_f linux_char/Module.symvers "$i_kernelmodules/sfc_char.symvers"
   install_f linux_onload/Module.symvers "$i_kernelmodules/onload.symvers"
-  install_f linux_affinity/Module.symvers "$i_kernelmodules/sfc_affinity.symvers"
   # Install driver headers
   install_f linux_net/drivers/net/ethernet/sfc/driverlink_api.h "$i_kernelmodules/driverlink_api.h"
   install_f linux_net/drivers/net/ethernet/sfc/filter.h "$i_kernelmodules/filter.h"

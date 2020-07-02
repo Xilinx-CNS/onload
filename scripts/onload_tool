@@ -260,7 +260,7 @@ do_unload() {
   tryunload onload_cplane  # Present in historical Onload versions.
   tryunload sfc_char
   tryunload sfc_resource
-  tryunload sfc_affinity
+  tryunload sfc_affinity   # Present in historical Onload versions.
   tryunload sfc_tune       # Present in historical Onload versions.
   tryunload sfc_mtd
   tryunload sfc_control    # Present in historical Onload versions.
@@ -294,7 +294,6 @@ set_dev_perms() {
 cmd_post_install() {
   set_dev_perms onload onload_epoll
   set_dev_perms sfc_char
-  set_dev_perms sfc_affinity
 }
 
 ######################################################################

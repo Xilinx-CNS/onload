@@ -149,7 +149,6 @@ docopy src/tools              onload_helper
 docopy src/include            etherfabric onload cplane
 docopy src/include/ci         compat compat.h tools tools.h app app.h
 docopy src/include/ci         driver efch efhw efrm internal net
-docopy src/include/ci         affinity
 
 docopy scripts                mmaketool mmakebuildtree mmake
 docopy scripts                onload_build onload_install
@@ -165,7 +164,6 @@ docopy .                      mk
 
 docopy scripts                sfcaffinity_config
 docopy scripts                sfcaffinity.py sfcmask.py sfcirqaffinity
-docopy src/driver             linux_affinity
 
 docopy src/tests              ef_vi rtt trade_sim
 if $testciul; then
