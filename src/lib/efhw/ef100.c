@@ -153,6 +153,13 @@ ef100_nic_init_hardware(struct efhw_nic *nic,
 }
 
 
+static void
+ef100_nic_release_hardware(struct efhw_nic *nic)
+{
+	EFHW_TRACE("%s:", __FUNCTION__);
+}
+
+
 /* This function will enable the given event queue with the requested
  * properties.
  */
@@ -465,6 +472,26 @@ ef100_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 
 /*--------------------------------------------------------------------
  *
+ * AF_XDP
+ *
+ *--------------------------------------------------------------------*/
+
+static void* ef100_af_xdp_mem(struct efhw_nic* nic, int instance)
+{
+  return NULL;
+}
+
+static int ef100_af_xdp_init(struct efhw_nic* nic, int instance,
+                             int chunk_size, int headroom,
+                             struct socket** sock_out,
+                             struct efhw_page_map* pages_out)
+{
+  return 0;
+}
+
+
+/*--------------------------------------------------------------------
+ *
  * Abstraction Layer Hooks
  *
  *--------------------------------------------------------------------*/
@@ -472,6 +499,7 @@ ef100_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 struct efhw_func_ops ef100_char_functional_units = {
 	ef100_nic_init_hardware,
 	ef100_nic_tweak_hardware,
+	ef100_nic_release_hardware,
 	ef100_nic_event_queue_enable,
 	ef100_nic_event_queue_disable,
 	ef100_nic_wakeup_request,
@@ -500,4 +528,6 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_get_rx_error_stats,
 	ef100_tx_alt_alloc,
 	ef100_tx_alt_free,
+	ef100_af_xdp_mem,
+	ef100_af_xdp_init,
 };

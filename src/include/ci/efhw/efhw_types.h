@@ -144,6 +144,9 @@ struct efhw_func_ops {
 	/*! re-set necessary configuration after a reset */
 	void (*post_reset) (struct efhw_nic *nic);
 
+	/*! release any allocated resources */
+	void (*release_hardware) (struct efhw_nic *nic);
+
   /*-------------- Event support  ------------ */
 
 	/*! Enable the given event queue
@@ -290,6 +293,23 @@ struct efhw_func_ops {
 			    unsigned *cp_id_out, unsigned *alt_ids_out);
 	int (*tx_alt_free)(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 			   const unsigned *alt_ids);
+
+  /*-------------- AF_XDP ------------------------ */
+	/*! Get the base address of the queue memory descriptor for a VI.
+	 * This is available at any time after calling init_hardware,
+	 * although the queue memory itself will not be accessible until
+	 * after calling af_xdp_init. */
+	void* (*af_xdp_mem) (struct efhw_nic* nic, int instance);
+
+	/*! Initialise a VI for use with AF_XDP.
+	 * This must be called after registering all buffer memory through
+	 * the buffer table interface. The AF_XDP socket is exposed for use
+	 * to trigger transmission, pages_out is populated with the queue
+	 * memory pages, which can be mapped into user space. */
+	int (*af_xdp_init) (struct efhw_nic* nic, int instance,
+	                    int chunk_size, int headroom,
+	                    struct socket** sock_out,
+	                    struct efhw_page_map* pages_out);
 };
 
 

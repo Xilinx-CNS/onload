@@ -61,8 +61,6 @@
 #include "efrm_pd.h"
 #include "bt_manager.h"
 
-/* TODO AF_XDP temporarily needed until efhw interface supports AF_XDP */
-#include <ci/efhw/af_xdp.h>
 
 struct vi_attr {
 	struct efrm_pd     *pd;
@@ -1274,13 +1272,11 @@ efrm_vi_resource_deferred(struct efrm_vi *virs, int chunk_size, int headroom,
 	int rc;
 	struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
 
-	if (nic->devtype.arch == EFHW_ARCH_AF_XDP) {
-		rc = efhw_nic_bodge_af_xdp_ready(nic, virs->allocation.instance,
-		                                 chunk_size, headroom,
-		                                 &virs->af_xdp_sock, &virs->mem_mmap);
-		if (rc < 0)
-			return rc;
-	}
+	rc = nic->efhw_func->af_xdp_init(nic, virs->allocation.instance,
+	                                 chunk_size, headroom,
+	                                 &virs->af_xdp_sock, &virs->mem_mmap);
+	if (rc < 0)
+		return rc;
 
 	if (out_mem_mmap_bytes != NULL)
 		*out_mem_mmap_bytes = efhw_page_map_bytes(&virs->mem_mmap);
@@ -1494,10 +1490,6 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	atomic_set(&virs->evq_refs, 1);
 	virs->flags = 0;
 	virs->pd = pd;
-
-	/* TODO AF_XDP */
-	virs->af_xdp_mem = efhw_nic_bodge_af_xdp_mem(client->nic,
-	                                             virs->allocation.instance);
 
 #ifdef __PPC__
 	/* On PPC it is impossible to get DMA addresses that are aligned on

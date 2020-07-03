@@ -861,6 +861,13 @@ ef10_nic_init_hardware(struct efhw_nic *nic,
 }
 
 
+static void
+ef10_nic_release_hardware(struct efhw_nic *nic)
+{
+	EFHW_TRACE("%s:", __FUNCTION__);
+}
+
+
 /*--------------------------------------------------------------------
  *
  * Events - MCDI cmds and register interface
@@ -2230,6 +2237,26 @@ ef10_vport_free(struct efhw_nic *nic, unsigned vport_id)
 
 /*--------------------------------------------------------------------
  *
+ * AF_XDP
+ *
+ *--------------------------------------------------------------------*/
+
+static void* ef10_af_xdp_mem(struct efhw_nic* nic, int instance)
+{
+  return NULL;
+}
+
+static int ef10_af_xdp_init(struct efhw_nic* nic, int instance,
+                            int chunk_size, int headroom,
+                            struct socket** sock_out,
+                            struct efhw_page_map* pages_out)
+{
+  return 0;
+}
+
+
+/*--------------------------------------------------------------------
+ *
  * Abstraction Layer Hooks
  *
  *--------------------------------------------------------------------*/
@@ -2237,6 +2264,7 @@ ef10_vport_free(struct efhw_nic *nic, unsigned vport_id)
 struct efhw_func_ops ef10_char_functional_units = {
 	ef10_nic_init_hardware,
 	ef10_nic_tweak_hardware,
+	ef10_nic_release_hardware,
 	ef10_nic_event_queue_enable,
 	ef10_nic_event_queue_disable,
 	ef10_nic_wakeup_request,
@@ -2265,4 +2293,6 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_get_rx_error_stats,
 	ef10_tx_alt_alloc,
 	ef10_tx_alt_free,
+	ef10_af_xdp_mem,
+	ef10_af_xdp_init,
 };

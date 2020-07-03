@@ -527,10 +527,10 @@ static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
 
 /*----------------------------------------------------------------------------
  *
- * Temporary bodge to mess around with the AF_XDP socket map
+ * Public AF_XDP interface
  *
  *---------------------------------------------------------------------------*/
-void* efhw_nic_bodge_af_xdp_mem(struct efhw_nic* nic, int instance)
+static void* af_xdp_mem(struct efhw_nic* nic, int instance)
 {
 #ifdef AF_XDP
   struct efhw_af_xdp_vi* vi = vi_by_instance(nic, instance);
@@ -540,10 +540,10 @@ void* efhw_nic_bodge_af_xdp_mem(struct efhw_nic* nic, int instance)
 #endif
 }
 
-int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int instance,
-                                int chunk_size, int headroom,
-                                struct socket** sock_out,
-                                struct efhw_page_map* page_map)
+static int af_xdp_init(struct efhw_nic* nic, int instance,
+                       int chunk_size, int headroom,
+                       struct socket** sock_out,
+                       struct efhw_page_map* page_map)
 {
 #ifdef AF_XDP
   int rc;
@@ -609,17 +609,6 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int instance,
   return 0;
 #else
   return -EPROTONOSUPPORT;
-#endif
-}
-
-void efhw_nic_bodge_af_xdp_dtor(struct efhw_nic* nic)
-{
-#ifdef AF_XDP
-  xdp_set_link(nic->net_dev, NULL);
-  if( nic->af_xdp != NULL ) {
-    fput(nic->af_xdp->map);
-    kfree(nic->af_xdp);
-  }
 #endif
 }
 
@@ -743,6 +732,17 @@ fail:
 #endif
 }
 
+static void
+af_xdp_nic_release_hardware(struct efhw_nic* nic)
+{
+#ifdef AF_XDP
+  xdp_set_link(nic->net_dev, NULL);
+  if( nic->af_xdp != NULL ) {
+    fput(nic->af_xdp->map);
+    kfree(nic->af_xdp);
+  }
+#endif
+}
 
 /*--------------------------------------------------------------------
  *
@@ -1095,6 +1095,7 @@ af_xdp_get_rx_error_stats(struct efhw_nic *nic, int instance,
 struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_nic_init_hardware,
 	af_xdp_nic_tweak_hardware,
+	af_xdp_nic_release_hardware,
 	af_xdp_nic_event_queue_enable,
 	af_xdp_nic_event_queue_disable,
 	af_xdp_nic_wakeup_request,
@@ -1123,4 +1124,6 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_get_rx_error_stats,
 	af_xdp_tx_alt_alloc,
 	af_xdp_tx_alt_free,
+	af_xdp_mem,
+	af_xdp_init,
 };

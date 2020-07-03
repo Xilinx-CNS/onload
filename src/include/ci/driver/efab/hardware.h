@@ -74,6 +74,8 @@
 	((nic)->efhw_func->init_hardware((nic), (ev_handlers), (mac_addr)))
 #define efhw_nic_post_reset(nic) \
 	((nic)->efhw_func->post_reset((nic)))
+#define efhw_nic_release_hardware(nic)      \
+	((nic)->efhw_func->release_hardware((nic)))
 
 /*-------------- Event support  ------------ */
 

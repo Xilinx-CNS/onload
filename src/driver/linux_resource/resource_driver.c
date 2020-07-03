@@ -793,15 +793,13 @@ efrm_nic_rename(struct efhw_nic* nic, struct net_device *net_dev)
 	efrm_nic_proc_intf_added(net_dev->name, lnic);
 }
 
-/* TODO AF_XDP */
-#include <ci/efhw/af_xdp.h>
 
 int
 efrm_nic_unplug(struct efhw_nic* nic, struct efx_dl_device *dl_device)
 {
 	struct net_device* net_dev;
 
-	efhw_nic_bodge_af_xdp_dtor(nic);
+	efhw_nic_release_hardware(nic);
 
 	/* We keep the pci device to reclaim it after hot-plug, but release
 	 * the net device. */
