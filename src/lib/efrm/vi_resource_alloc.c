@@ -293,10 +293,6 @@ static void efrm_vi_rm_free_instance(struct efrm_vi *virs)
 		if (virs->irq != 0)
 			efrm_vi_irq_free(virs);
 
-		/* TODO AF_XDP */
-		if (virs->af_xdp_sock && virs->af_xdp_sock->file)
-			fput(virs->af_xdp_sock->file);
-
 		efrm_vi_allocator_free_set(efrm_nic(nic), &virs->allocation);
 	}
 }

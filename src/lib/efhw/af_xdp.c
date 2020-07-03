@@ -519,7 +519,8 @@ static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
 {
   umem_pages_free(&vi->umem);
   efhw_page_free(&vi->user_offsets_page);
-  fput(vi->sock);
+  if( vi->sock != NULL )
+    fput(vi->sock);
   memset(vi, 0, sizeof(*vi));
 }
 #endif /* AF_XDP */
@@ -970,7 +971,14 @@ af_xdp_nic_buffer_table_free(struct efhw_nic *nic,
                              struct efhw_buffer_table_block *block,
                              int reset_pending)
 {
+#ifdef AF_XDP
+  int owner = block->btb_hw.ef10.handle >> 8;
+  struct efhw_af_xdp_vi* vi = vi_by_owner(nic, owner);
+  if( vi != NULL )
+    xdp_release_vi(vi);
+
   kfree(block);
+#endif
 }
 
 
@@ -1037,14 +1045,6 @@ af_xdp_nic_buffer_table_clear(struct efhw_nic *nic,
                               struct efhw_buffer_table_block *block,
                               int first_entry, int n_entries)
 {
-#ifdef AF_XDP
-  /* FIXME: I don't think this is called if initialisation failed, in which
-   * case we'll leak any allocated resources. */
-  int owner = block->btb_hw.ef10.handle >> 8;
-  struct efhw_af_xdp_vi* vi = vi_by_owner(nic, owner);
-  if( vi != NULL )
-    xdp_release_vi(vi);
-#endif
 }
 
 
