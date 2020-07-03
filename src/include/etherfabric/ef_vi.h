@@ -818,7 +818,7 @@ typedef struct ef_vi {
 
   /** Callback to invoke AF_XDP send operations */
   int                         (*xdp_kick)(struct ef_vi*);
-  union {int64_t n; void* p;}   xdp_kick_context;
+  void*                         xdp_kick_context;
 
   /*! \brief Driver-dependent operations. */
   /* Doxygen comment above is the detailed description of ef_vi::ops */

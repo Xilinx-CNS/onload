@@ -1986,7 +1986,7 @@ unsigned ci_netif_build_future_intf_mask(ci_netif* ni)
 
 static int af_xdp_kick(ef_vi* vi)
 {
-  ci_netif* ni = vi->xdp_kick_context.p;
+  ci_netif* ni = vi->xdp_kick_context;
   ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vi, vi);
   uint32_t intf_i = nic - ni->nic_hw;
   int saved_errno = errno, fd = ci_netif_get_driver_handle(ni), rc;
@@ -2067,7 +2067,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
     vi_io_offset += nsn->vi_io_mmap_bytes;
 
     vi->xdp_kick = af_xdp_kick;
-    vi->xdp_kick_context.p = ni;
+    vi->xdp_kick_context = ni;
 
     /* On EF100 EVQ cannot be primed from UL */
     if( vi->nic_type.arch == EF_VI_ARCH_EF100 )

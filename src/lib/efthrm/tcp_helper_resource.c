@@ -1473,7 +1473,7 @@ static int tcp_helper_nic_attach_xdp(ci_netif* ni,
 static int af_xdp_kick(ef_vi* vi)
 {
   ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vi, vi);
-  tcp_helper_resource_t* trs = vi->xdp_kick_context.p;
+  tcp_helper_resource_t* trs = vi->xdp_kick_context;
 
   if( trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
     tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
@@ -1616,7 +1616,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     /* TODO AF_XDP */
     ni->nic_hw[intf_i].af_xdp_sock = trs_nic->thn_vi_rs->af_xdp_sock;
     ni->nic_hw[intf_i].vi.xdp_kick = af_xdp_kick;
-    ni->nic_hw[intf_i].vi.xdp_kick_context.p = trs;
+    ni->nic_hw[intf_i].vi.xdp_kick_context = trs;
 
     nsn->oo_vi_flags = alloc_info.oo_vi_flags;
     nsn->vi_io_mmap_bytes = alloc_info.vi_io_mmap_bytes;
