@@ -4660,12 +4660,14 @@ static void tcp_helper_reset_stack_work(struct work_struct *data)
 #endif
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER || ! defined(NDEBUG)
 static bool
 current_is_proper_ul_context(void)
 {
   return ! in_interrupt() &&
       (current->flags & (PF_KTHREAD | PF_WQ_WORKER)) == 0;
 }
+#endif
 
 /*--------------------------------------------------------------------
  *!
