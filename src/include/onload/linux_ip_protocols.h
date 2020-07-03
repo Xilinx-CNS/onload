@@ -34,6 +34,9 @@
 extern int 
 efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr, ci_icmp_hdr* icmp);
 
+/* Handle all ICMP messages queued for this stack.
+ * Called with stack lock held. */
+void oo_icmp_handle(tcp_helper_resource_t* thr);
 #endif
 
 #endif

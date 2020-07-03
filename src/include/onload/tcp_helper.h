@@ -194,7 +194,7 @@ typedef struct tcp_helper_resource_s {
 #define OO_TRUSTED_LOCK_CLOSE_ENDPOINT    0x8
 #define OO_TRUSTED_LOCK_OS_READY          0x10
 #define OO_TRUSTED_LOCK_NEED_PRIME        0x20
-/* 0x40 is available for reuse; was OO_TRUSTED_LOCK_DONT_BLOCK_SHARED. */
+#define OO_TRUSTED_LOCK_HANDLE_ICMP       0x40
 #define OO_TRUSTED_LOCK_SWF_UPDATE        0x80
 #define OO_TRUSTED_LOCK_PURGE_TXQS        0x100
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
@@ -300,6 +300,7 @@ typedef struct tcp_helper_resource_s {
    *    - wakeup_list
    *    - intfs_to_reset 
    *    - intfs_to_xdp_update
+   *    - icmp_msg
    */
   ci_irqlock_t          lock;
 
@@ -382,6 +383,8 @@ typedef struct tcp_helper_resource_s {
   struct mutex usermem_mutex;
   uint64_t usermem_prev_id;
   struct tcp_helper_usermem* usermem;
+
+  struct oo_icmp_msg* icmp_msg;
 } tcp_helper_resource_t;
 
 

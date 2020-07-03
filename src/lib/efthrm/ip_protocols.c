@@ -521,6 +521,45 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr, ci_sock_cmn* s,
 #endif
 }
 
+struct oo_icmp_msg {
+  struct oo_icmp_msg* next;
+  efab_ipp_addr addr;
+  ci_icmp_too_big_t icmp;
+};
+
+void oo_icmp_handle(tcp_helper_resource_t* thr)
+{
+  ci_irqlock_state_t lock_flags;
+  ci_sock_cmn* s;
+  struct oo_icmp_msg* msg;
+  struct oo_icmp_msg* p;
+  struct oo_icmp_msg* n;
+
+  ci_irqlock_lock(&thr->lock, &lock_flags);
+  msg = thr->icmp_msg;
+  thr->icmp_msg = NULL;
+  ci_irqlock_unlock(&thr->lock, &lock_flags);
+  if( msg == NULL )
+    return;
+
+  /* This list is ordered as "last first".  Let's reorder the messages
+   * back. */
+  n = NULL;
+  while( msg->next != NULL ) {
+    p = msg->next;
+    msg->next = n;
+    n = msg;
+    msg = p;
+  }
+
+  /* And now handle them all */
+ do {
+    s = efab_ipp_icmp_for_thr(thr, &msg->addr);
+    if( s )  efab_ipp_icmp_qpkt(thr, s, &msg->addr, &msg->icmp.hdr);
+    n = msg->next;
+    kfree(msg);
+  } while( (msg = n) != NULL );
+}
 
 /* NOTE: the current implementation discards data when it
  * cannot get a lock.  As the mechanism is for protocols that
@@ -529,9 +568,10 @@ efab_ipp_icmp_qpkt(tcp_helper_resource_t* thr, ci_sock_cmn* s,
 int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
                              ci_icmp_hdr* icmp)
 {
+  ci_irqlock_state_t lock_flags;
   tcp_helper_resource_t* thr;
   int rc;
-  ci_sock_cmn* s;
+  struct oo_icmp_msg* msg;
 
   /* ask resource manager to decode to a resource */
   rc = efab_thr_table_lookup(NULL, NULL, thr_id,
@@ -543,15 +583,28 @@ int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
     return -ENOENT;
   }
 
-  if ( !efab_tcp_helper_netif_try_lock(thr, 1) ) {
-    OO_DEBUG_IPP( ci_log("%s: Failed to lock TCP helper", __FUNCTION__) );
+  msg = kmalloc(sizeof(struct oo_icmp_msg), GFP_ATOMIC);
+  if( msg == NULL ) {
     oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
-    return -EAGAIN;
+    return -ENOMEM;
   }
 
-  s = efab_ipp_icmp_for_thr( thr, addr );
-  if( s )  efab_ipp_icmp_qpkt( thr, s, addr, icmp );
-  efab_tcp_helper_netif_unlock( thr, 1 );
+  memcpy(&msg->addr, addr, sizeof(msg->addr));
+  memcpy(&msg->icmp, icmp, sizeof(msg->icmp));
+
+  ci_irqlock_lock(&thr->lock, &lock_flags);
+  msg->next = thr->icmp_msg;
+  thr->icmp_msg = msg;
+  ci_irqlock_unlock(&thr->lock, &lock_flags);
+
+  if( efab_tcp_helper_netif_lock_or_set_flags(thr,
+                                              OO_TRUSTED_LOCK_HANDLE_ICMP,
+                                              CI_EPLOCK_NETIF_HANDLE_ICMP,
+                                              1) ) {
+    oo_icmp_handle(thr);
+    efab_tcp_helper_netif_unlock(thr, 1);
+  }
+
   oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
 
   return 0;

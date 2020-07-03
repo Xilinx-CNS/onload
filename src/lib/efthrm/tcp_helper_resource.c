@@ -300,6 +300,10 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
   if( l & OO_TRUSTED_LOCK_XDP_CHANGE )
     sl_flags |= CI_EPLOCK_NETIF_XDP_CHANGE;
 #endif
+#if CI_CFG_HANDLE_ICMP
+  if( l & OO_TRUSTED_LOCK_HANDLE_ICMP )
+    sl_flags |= CI_EPLOCK_NETIF_HANDLE_ICMP;
+#endif
   ci_assert(sl_flags != 0);
   if( ci_cas32_succeed(&trs->trusted_lock, l, OO_TRUSTED_LOCK_LOCKED) &&
       ef_eplock_trylock_and_set_flags(&trs->netif.state->lock, sl_flags) ) {
@@ -3861,6 +3865,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   ci_sllist_init(&rs->ep_tobe_closed);
   ci_irqlock_ctor(&rs->lock);
   init_completion(&rs->complete);
+#if CI_CFG_HANDLE_ICMP
+  rs->icmp_msg = NULL;
+#endif
 
 #ifdef EFRM_DO_NAMESPACES
   /* Initialise namespaces */
@@ -7354,6 +7361,12 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
      * it can cause us to take an early exit from the function. */
     ci_assert_nflags(flags_set & ~all_after_unlock_flags,
                      ~CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
+
+#if CI_CFG_HANDLE_ICMP
+    if( flags_set & CI_EPLOCK_NETIF_HANDLE_ICMP ) {
+      oo_icmp_handle(thr);
+    }
+#endif
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     if( flags_set & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
