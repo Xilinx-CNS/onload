@@ -281,7 +281,9 @@ static int oo_bufpage_init(struct oo_buffer_pages **pages_out,
   if( ! pages )
     return -ENOMEM;
   pages->n_bufs = n_bufs;
+#ifdef OO_DO_HUGE_PAGES
   pages->shmid = -1;
+#endif
   oo_atomic_set(&pages->ref_count, 1);
   *pages_out = pages;
   return 0;
@@ -314,7 +316,6 @@ static int oo_bufpage_alloc(struct oo_buffer_pages **pages_out,
       return 0;
     }
   }
-  pages->shmid = -1;
   if( *flags & OO_IOBUFSET_FLAG_HUGE_PAGE_FORCE ) {
     ci_assert_equal(low_order, HPAGE_SHIFT - PAGE_SHIFT);
     return -ENOMEM;
