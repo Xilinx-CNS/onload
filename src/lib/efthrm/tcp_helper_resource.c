@@ -1365,8 +1365,6 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
                                   info->rxq_capacity, 0, 0,
                                   info->wakeup_cpu_core,
                                   info->wakeup_channel,
-                                  CI_CFG_PKT_BUF_SIZE,
-                                  offsetof(ci_ip_pkt_fmt, dma_start),
                                   info->virs,
                                   &info->vi_io_mmap_bytes,
                                   &info->vi_ctpio_mmap_bytes, NULL, NULL,
@@ -1711,10 +1709,12 @@ static int deferred_vis(tcp_helper_resource_t* trs)
 
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
     struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
-    ef_vi* vi = &trs->netif.nic_hw[intf_i].vi;
     uint32_t mmap_bytes;
 
-    rc = efrm_vi_resource_deferred(trs_nic->thn_vi_rs, vi, &mmap_bytes);
+    rc = efrm_vi_resource_deferred(trs_nic->thn_vi_rs,
+                                   CI_CFG_PKT_BUF_SIZE,
+                                   offsetof(ci_ip_pkt_fmt, dma_start),
+                                   &mmap_bytes);
     if( rc < 0 )
       return rc;
 

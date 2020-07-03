@@ -10,11 +10,10 @@ struct socket;
 struct efhw_nic;
 struct efhw_page_map;
 
-extern int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
-                                        int size, int headroom,
-                                        struct socket** sock_out,
-                                        void** mem_base_out);
+extern void* efhw_nic_bodge_af_xdp_mem(struct efhw_nic* nic, int stack_id);
 extern int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
+                                       int chunk_size, int headroom,
+                                       struct socket** sock_out,
                                        struct efhw_page_map* pages_out);
 extern void efhw_nic_bodge_af_xdp_dtor(struct efhw_nic* nic);
 

@@ -29,9 +29,6 @@ struct umem_block
 /* A collection of all the user memory pages for a VI */
 struct umem_pages
 {
-  int chunk_size;
-  int headroom;
-
   long page_count;
   long block_count;
   long used_page_count;
@@ -382,7 +379,8 @@ static struct vm_operations_struct vm_ops = {
 };
 
 /* Register user memory with an XDP socket */
-static int xdp_register_umem(struct socket* sock, struct umem_pages* pages)
+static int xdp_register_umem(struct socket* sock, struct umem_pages* pages,
+                             int chunk_size, int headroom)
 {
   struct vm_area_struct* vma;
   int rc = -EFAULT;
@@ -393,8 +391,8 @@ static int xdp_register_umem(struct socket* sock, struct umem_pages* pages)
    */
   struct xdp_umem_reg mr = {
     .len = pages->used_page_count << PAGE_SHIFT,
-    .chunk_size = pages->chunk_size,
-    .headroom = pages->headroom
+    .chunk_size = chunk_size,
+    .headroom = headroom
   };
 
   mr.addr = vm_mmap(NULL, 0, mr.len, PROT_READ | PROT_WRITE, MAP_SHARED, 0);
@@ -533,20 +531,32 @@ static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
  * Temporary bodge to mess around with the AF_XDP socket map
  *
  *---------------------------------------------------------------------------*/
-int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
-                                 int buffer_size, int headroom,
-                                 struct socket** sock_out, void** mem_out)
+void* efhw_nic_bodge_af_xdp_mem(struct efhw_nic* nic, int stack_id)
+{
+#ifdef AF_XDP
+  struct efhw_af_xdp_vi* vi = vi_by_stack(nic, stack_id);
+  return vi ? &vi->kernel_offsets : NULL;
+#else
+  return NULL;
+#endif
+}
+
+int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
+                                int chunk_size, int headroom,
+                                struct socket** sock_out,
+                                struct efhw_page_map* page_map)
 {
 #ifdef AF_XDP
   int rc;
-  struct socket* sock;
   struct efhw_af_xdp_vi* vi;
+  struct socket* sock;
   struct file* file;
+  struct efab_af_xdp_offsets* user_offsets;
 
-  if( buffer_size == 0 ||
-      buffer_size < headroom ||
-      buffer_size > PAGE_SIZE ||
-      PAGE_SIZE % buffer_size != 0 )
+  if( chunk_size == 0 ||
+      chunk_size < headroom ||
+      chunk_size > PAGE_SIZE ||
+      PAGE_SIZE % chunk_size != 0 )
     return -EINVAL;
 
   vi = vi_by_stack(nic, stack_id);
@@ -556,7 +566,6 @@ int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
   if( vi->sock != NULL )
     return -EBUSY;
 
-  memset(vi, 0, sizeof(*vi));
   /* We need to use network namespace of network device so that
    * ifindex passed in bpf syscalls makes sense
    * AF_XDP TODO: there is a race here whit device changing netns */
@@ -567,31 +576,7 @@ int efhw_nic_bodge_af_xdp_socket(struct efhw_nic* nic, int stack_id,
   file = sock_alloc_file(sock, 0, NULL);
   if( IS_ERR(file) )
     return PTR_ERR(file);
-
   vi->sock = file;
-  vi->umem.chunk_size = buffer_size;
-  vi->umem.headroom = headroom;
-
-  *sock_out = sock;
-  *mem_out = &vi->kernel_offsets;
-  return 0;
-#else
-  return -EPROTONOSUPPORT;
-#endif
-}
-
-int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
-                                struct efhw_page_map* page_map)
-{
-#ifdef AF_XDP
-  int rc;
-  struct efhw_af_xdp_vi* vi;
-  struct socket* sock;
-  struct efab_af_xdp_offsets* user_offsets;
-
-  vi = vi_by_stack(nic, stack_id);
-  if( vi == NULL )
-    return -ENODEV;
 
   rc = efhw_page_alloc_zeroed(&vi->user_offsets_page);
   if( rc < 0 )
@@ -602,11 +587,7 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
   if( rc < 0 )
     return rc;
 
-  sock = sock_from_file(vi->sock, &rc);
-  if( sock == NULL )
-    return rc;
-
-  rc = xdp_register_umem(sock, &vi->umem);
+  rc = xdp_register_umem(sock, &vi->umem, chunk_size, headroom);
   if( rc < 0 )
     return rc;
 
@@ -624,6 +605,7 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
   if( rc < 0 )
     return rc;
 
+  *sock_out = sock;
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
   return 0;
 #else

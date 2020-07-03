@@ -170,11 +170,6 @@ extern void efrm_vi_attr_set_interrupt_core(struct efrm_vi_attr *, int core);
 extern void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *,
 					    int channel_id);
 
-/** Parameters required for AF_XDP buffer management */
-extern void efrm_vi_attr_set_af_xdp(struct efrm_vi_attr *,
-                                    int buffer_size,
-                                    int headroom);
-
 extern struct efrm_vi *
 efrm_vi_from_resource(struct efrm_resource *);
 
@@ -312,7 +307,6 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		       int evq_capacity, int txq_capacity, int rxq_capacity,
 		       int tx_q_tag, int rx_q_tag, int wakeup_cpu_core,
 		       int wakeup_channel,
-		       int xdp_buffer_size, int xdp_headroom,
 		       struct efrm_vi **virs_in_out,
 		       uint32_t *out_io_mmap_bytes,
 		       uint32_t *out_ctpio_mmap_bytes,
@@ -321,7 +315,8 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		       int print_resource_warnings);
 
 extern int
-efrm_vi_resource_deferred(struct efrm_vi *evq_virs, ef_vi* vi,
+efrm_vi_resource_deferred(struct efrm_vi *evq_virs,
+	                       int chunk_size, int headroom,
                           uint32_t *out_mem_mmap_bytes);
 
 extern void efrm_vi_resource_release(struct efrm_vi *);
