@@ -535,6 +535,7 @@ void oo_icmp_handle(tcp_helper_resource_t* thr)
   struct oo_icmp_msg* p;
   struct oo_icmp_msg* n;
 
+  CITP_STATS_NETIF(++thr->netif.state->stats.rx_icmp_handler_batches);
   ci_irqlock_lock(&thr->lock, &lock_flags);
   msg = thr->icmp_msg;
   thr->icmp_msg = NULL;
@@ -556,7 +557,11 @@ void oo_icmp_handle(tcp_helper_resource_t* thr)
   /* And now handle them all */
  do {
     s = efab_ipp_icmp_for_thr(thr, &msg->addr);
-    if( s )  efab_ipp_icmp_qpkt(thr, s, &msg->addr, &msg->icmp.hdr);
+    if( s )
+      efab_ipp_icmp_qpkt(thr, s, &msg->addr, &msg->icmp.hdr);
+    else
+      CITP_STATS_NETIF(++thr->netif.state->stats.rx_icmp_dropped);
+
     n = msg->next;
     kfree(msg);
   } while( (msg = n) != NULL );
@@ -592,6 +597,7 @@ int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
 
   msg = kmalloc(sizeof(struct oo_icmp_msg), GFP_ATOMIC);
   if( msg == NULL ) {
+    CITP_STATS_NETIF(++thr->netif.state->stats.rx_icmp_enomem);
     oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
     return -ENOMEM;
   }
@@ -605,6 +611,7 @@ int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
   thr->icmp_msg_n++;
   ci_irqlock_unlock(&thr->lock, &lock_flags);
 
+  CITP_STATS_NETIF(++thr->netif.state->stats.rx_icmp);
   if( efab_tcp_helper_netif_lock_or_set_flags(thr,
                                               OO_TRUSTED_LOCK_HANDLE_ICMP,
                                               CI_EPLOCK_NETIF_HANDLE_ICMP,

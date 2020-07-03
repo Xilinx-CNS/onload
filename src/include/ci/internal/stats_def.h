@@ -869,3 +869,17 @@ OO_STAT("Number of rx packets rejected due to XDP program returning ABORTED code
 OO_STAT("Number of rx packets rejected due to XDP program returning unknown code",
         ci_uint32, rx_xdp_unknown, count)
 #endif
+
+#if CI_CFG_HANDLE_ICMP
+OO_STAT("Number of ICMP messages handled",
+        ci_uint32, rx_icmp, count)
+OO_STAT("Number of ICMP messages dropped",
+        ci_uint32, rx_icmp_dropped, count)
+OO_STAT("Number of ICMP messages dropped because of no memory",
+        ci_uint32, rx_icmp_enomem, count)
+OO_STAT("Number of batches when ICMP messages were handled",
+        ci_uint32, rx_icmp_handler_batches, count)
+OO_STAT("Number of ICMP messages handled from lock hook",
+        ci_uint32, rx_icmp_hooked, count)
+
+#endif

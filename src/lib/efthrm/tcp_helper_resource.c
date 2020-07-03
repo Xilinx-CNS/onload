@@ -7365,6 +7365,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
 
 #if CI_CFG_HANDLE_ICMP
     if( flags_set & CI_EPLOCK_NETIF_HANDLE_ICMP ) {
+      CITP_STATS_NETIF(++ni->state->stats.rx_icmp_hooked);
       oo_icmp_handle(thr);
     }
 #endif
