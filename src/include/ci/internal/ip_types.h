@@ -43,7 +43,6 @@ typedef struct ci_netif_nic_s {
 #endif // CI_CFG_PIO
 #ifdef __KERNEL__
   struct oo_iobufset** pkt_rs;
-  struct socket* af_xdp_sock;
 #endif
 #if ! defined(__KERNEL__) && CI_CFG_WANT_BPF_NATIVE
 #define OO_HAS_POLL_IN_KERNEL

@@ -1472,7 +1472,6 @@ static int tcp_helper_nic_attach_xdp(ci_netif* ni,
 
 static int af_xdp_kick(ef_vi* vi)
 {
-  ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vi, vi);
   tcp_helper_resource_t* trs = vi->xdp_kick_context;
 
   if( trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
@@ -1480,8 +1479,8 @@ static int af_xdp_kick(ef_vi* vi)
     return -EAGAIN;
   }
   else {
-    struct msghdr msg = {.msg_flags = MSG_DONTWAIT};
-    return sock_sendmsg(nic->af_xdp_sock, &msg);
+    int intf_i = CI_CONTAINER(ci_netif_nic_t, vi, vi) - trs->netif.nic_hw;
+    return efrm_vi_af_xdp_kick(trs->nic[intf_i].thn_vi_rs);
   }
 }
 
@@ -1613,8 +1612,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
                   nic->devtype.revision, efhw_vi_nic_flags(nic), &alloc_info,
                   &vi_out_flags, &ni->state->vi_stats);
 
-    /* TODO AF_XDP */
-    ni->nic_hw[intf_i].af_xdp_sock = trs_nic->thn_vi_rs->af_xdp_sock;
     ni->nic_hw[intf_i].vi.xdp_kick = af_xdp_kick;
     ni->nic_hw[intf_i].vi.xdp_kick_context = trs;
 
