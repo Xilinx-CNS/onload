@@ -62,10 +62,7 @@ typedef union {
 
 /* Flags for TX/RX queues */
 #define EFHW_VI_JUMBO_EN           0x01    /*! scatter RX over multiple desc */
-#define EFHW_VI_ISCSI_RX_HDIG_EN   0x02    /*! iscsi rx header digest */
-#define EFHW_VI_ISCSI_TX_HDIG_EN   0x04    /*! iscsi tx header digest */
-#define EFHW_VI_ISCSI_RX_DDIG_EN   0x08    /*! iscsi rx data digest */
-#define EFHW_VI_ISCSI_TX_DDIG_EN   0x10    /*! iscsi tx data digest */
+#define EFHW_VI_RX_ZEROCOPY        0x02    /*! Zerocopy for AF_XDP */
 #define EFHW_VI_TX_PHYS_ADDR_EN    0x20    /*! TX physical address mode */
 #define EFHW_VI_RX_PHYS_ADDR_EN    0x40    /*! RX physical address mode */
 #define EFHW_VI_TX_IP_CSUM_DIS     0x100   /*! enable ip checksum generation */
@@ -233,6 +230,7 @@ typedef union {
 #define NIC_FLAG_RX_FORCE_EVENT_MERGING 0x40000000000LL
 #define NIC_FLAG_EVENT_CUT_THROUGH 0x80000000000LL
 #define NIC_FLAG_RX_CUT_THROUGH 0x100000000000LL
+#define NIC_FLAG_RX_ZEROCOPY 0x200000000000LL
 
 
 #endif /* __CI_EFHW_COMMON_H__ */

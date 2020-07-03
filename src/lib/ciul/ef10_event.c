@@ -96,6 +96,7 @@ ef_vi_inline void huntington_rx_desc_consumed(ef_vi* vi, const ef_vi_event* ev,
   ef_event* ev_out = (*evs)++;
   --(*evs_len);
   ev_out->rx.type = EF_EVENT_TYPE_RX;
+  ev_out->rx.ofs = 0;
   ev_out->rx.q_id = q_label;
   ev_out->rx.rq_id = vi->vi_rxq.ids[desc_i];
   vi->vi_rxq.ids[desc_i] = EF_REQUEST_ID_MASK;  /* ?? killme */

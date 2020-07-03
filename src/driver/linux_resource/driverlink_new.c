@@ -84,6 +84,18 @@ static struct efx_dl_driver efrm_dl_driver = {
 };
 
 
+static inline struct efhw_nic *
+efhw_nic_from_netdev(
+			const struct net_device *net_dev,
+			struct efx_dl_driver *driver)
+{
+	struct efx_dl_device *dl_dev;
+	dl_dev = efx_dl_dev_from_netdev(net_dev, &efrm_dl_driver);
+	if (dl_dev && dl_dev->priv)
+		return (struct efhw_nic *) dl_dev->priv;
+	return NULL;
+}
+
 static void
 init_vi_resource_dimensions(struct vi_resource_dimensions *rd,
 			    const struct efx_dl_ef10_resources *ef10_res,
@@ -225,6 +237,9 @@ static void efrm_dl_reset_suspend(struct efx_dl_device *efrm_dev)
 {
 	struct efhw_nic *nic = efrm_dev->priv;
 
+	if (!nic)
+		return;
+
 	EFRM_NOTICE("%s:", __func__);
 
 	efrm_nic_reset_suspend(nic);
@@ -235,7 +250,12 @@ static void efrm_dl_reset_suspend(struct efx_dl_device *efrm_dev)
 static void efrm_dl_reset_resume(struct efx_dl_device *efrm_dev, int ok)
 {
 	struct efhw_nic *nic = efrm_dev->priv;
-	struct efrm_nic *efrm_nic = efrm_nic(nic);
+	struct efrm_nic *efrm_nic;
+
+	if (!nic)
+		return;
+
+	efrm_nic = efrm_nic(nic);
 
 	EFRM_NOTICE("%s: ok=%d", __func__, ok);
 
@@ -362,31 +382,27 @@ static int efrm_netdev_event(struct notifier_block *this,
 			     unsigned long event, void *ptr)
 {
 	struct net_device *net_dev = netdev_notifier_info_to_dev(ptr);
-	struct efx_dl_device *dl_dev;
 	struct efhw_nic *nic;
 
 	if (event == NETDEV_CHANGEMTU) {
-		dl_dev = efx_dl_dev_from_netdev(net_dev, &efrm_dl_driver);
-		if (dl_dev) {
-			nic = dl_dev->priv;
+		nic = efhw_nic_from_netdev(net_dev, &efrm_dl_driver);
+		if (nic) {
 			EFRM_TRACE("%s: old=%d new=%d", __func__,
 				   nic->mtu, net_dev->mtu + ETH_HLEN);
 			nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
 		}
 	}
 	if (event == NETDEV_CHANGENAME) {
-		dl_dev = efx_dl_dev_from_netdev(net_dev, &efrm_dl_driver);
-		if (dl_dev) {
-			nic = dl_dev->priv;
+		nic = efhw_nic_from_netdev(net_dev, &efrm_dl_driver);
+		if (nic) {
 			efrm_filter_rename(nic, net_dev);
 			efrm_nic_rename(nic, net_dev);
 		}
 	}
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
 	if (event == NETDEV_CHANGE) {
-		dl_dev = efx_dl_dev_from_netdev(net_dev, &efrm_dl_driver);
-		if (dl_dev) {
-			nic = dl_dev->priv;
+		nic = efhw_nic_from_netdev(net_dev, &efrm_dl_driver);
+		if (nic) {
 			efrm_nic_xdp_change(nic);
 		}
 	}
@@ -399,11 +415,17 @@ static int efrm_netdev_event(struct notifier_block *this,
 static int
 efrm_dl_event(struct efx_dl_device *efx_dev, void *p_event, int budget)
 {
-	struct efhw_nic *nic = efx_dev->priv;
-	struct linux_efhw_nic *lnic = linux_efhw_nic(nic);
+	struct linux_efhw_nic *lnic;
+	struct efhw_nic *nic;
 	efhw_event_t *ev = p_event;
 	int rc;
 
+	if (! (efx_dev && efx_dev->priv) )
+		/* this device has not been registered via driverlink ... perhaps AF_XDP */
+		return 0;
+
+	nic = efx_dev->priv;
+	lnic = linux_efhw_nic(efx_dev->priv);
 	rc = efhw_nic_handle_event(nic, lnic->ev_handlers, ev, budget);
 	return rc;
 }

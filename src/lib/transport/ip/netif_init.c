@@ -1371,6 +1371,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_AUTO_FLOWLABELS")) )
     opts->auto_flowlabels = atoi(s);
 #endif
+
+  if( (s = getenv("EF_AF_XDP_ZEROCOPY")) )
+    opts->af_xdp_zerocopy = atoi(s);
 }
 
 static int
@@ -1932,7 +1935,7 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
 
 
 static void init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
-                       int vi_io_offset, unsigned* vi_mem_offset,
+                       int vi_io_offset, char** vi_mem_ptr,
                        ef_vi* vi, unsigned vi_instance, int evq_bytes,
                        int txq_size, ef_vi_stats* vi_stats)
 {
@@ -1947,18 +1950,12 @@ static void init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   vi_io_offset += vi_bar_off & (CI_PAGE_SIZE - 1);
   ef_vi_init_io(vi, ni->io_ptr + vi_io_offset);
   ef_vi_init_timer(vi, nsn->timer_quantum_ns);
-  ef_vi_init_evq(vi, evq_bytes / 8, ni->buf_ptr + *vi_mem_offset);
-  *vi_mem_offset += (evq_bytes + CI_PAGE_SIZE - 1) & CI_PAGE_MASK;
-  ef_vi_init_rxq(vi, nsn->vi_rxq_size, ni->buf_ptr + *vi_mem_offset, ids,
-                 nsn->rx_prefix_len);
-  *vi_mem_offset += (ef_vi_rx_ring_bytes(vi) + CI_PAGE_SIZE-1) & CI_PAGE_MASK;
-  ids += nsn->vi_rxq_size;
-  ef_vi_init_txq(vi, txq_size, ni->buf_ptr + *vi_mem_offset, ids);
   vi->vi_i = vi_instance;
+  *vi_mem_ptr = ef_vi_init_qs(vi, *vi_mem_ptr, ids, evq_bytes / 8,
+                              nsn->vi_rxq_size, nsn->rx_prefix_len, txq_size);
   ef_vi_set_ts_format(vi, nsn->ts_format);
   ef_vi_init_rx_timestamping(vi, nsn->rx_ts_correction);
   ef_vi_init_tx_timestamping(vi, nsn->tx_ts_correction);
-  *vi_mem_offset += (ef_vi_tx_ring_bytes(vi) + CI_PAGE_SIZE-1) & CI_PAGE_MASK;
   ef_vi_add_queue(vi, vi);
   ef_vi_set_stats_buf(vi, vi_stats);
 }
@@ -1979,12 +1976,28 @@ unsigned ci_netif_build_future_intf_mask(ci_netif* ni)
        ! ni->nic_hw[nic_i].poll_in_kernel &&
 #endif
         ~ef_vi_flags(&ni->nic_hw[nic_i].vi) & EF_VI_RX_EVENT_MERGE &&
-        ni->nic_hw[nic_i].vi.nic_type.arch != EF_VI_ARCH_EF100 )
+        ni->nic_hw[nic_i].vi.nic_type.arch != EF_VI_ARCH_EF100 &&
+        /* TODO AF_XDP future detection is not currently supported */
+        ni->nic_hw[nic_i].vi.nic_type.arch != EF_VI_ARCH_AF_XDP )
       mask |= 1u << nic_i;
   }
   return mask;
 }
 
+static int af_xdp_kick(ef_vi* vi)
+{
+  ci_netif* ni = vi->xdp_kick_context.p;
+  ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vi, vi);
+  uint32_t intf_i = nic - ni->nic_hw;
+  int saved_errno = errno, fd = ci_netif_get_driver_handle(ni), rc;
+
+  rc = oo_resource_op(fd, OO_IOC_AF_XDP_KICK, &intf_i);
+  if( rc < 0 ) {
+    rc = -errno;
+    errno = saved_errno;
+  }
+  return rc;
+}
 
 static int netif_tcp_helper_build(ci_netif* ni)
 {
@@ -1995,7 +2008,8 @@ static int netif_tcp_helper_build(ci_netif* ni)
   */
   ci_netif_state* ns = ni->state;
   int rc, nic_i, size, expected_buf_ofs;
-  unsigned vi_io_offset, vi_mem_offset, vi_state_offset;
+  unsigned vi_io_offset, vi_state_offset;
+  char* vi_mem_ptr;
   int vi_state_bytes;
 #if CI_CFG_PIO
   unsigned pio_io_offset = 0, pio_buf_offset = 0, vi_bar_off;
@@ -2020,13 +2034,14 @@ static int netif_tcp_helper_build(ci_netif* ni)
   ** nic_index.
   */
   vi_io_offset = 0;
-  vi_mem_offset = 0;
+  vi_mem_ptr = ni->buf_ptr;
   vi_state_offset = sizeof(*ni->state);
 
   ni->future_intf_mask = 0;
 
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ci_netif_state_nic_t* nsn = &ns->nic[nic_i];
+    ef_vi* vi = &ni->nic_hw[nic_i].vi;
 
     /* Get interface properties. */
     rc = oo_cp_get_hwport_properties(ni->cplane, ns->intf_i_to_hwport[nic_i],
@@ -2034,32 +2049,34 @@ static int netif_tcp_helper_build(ci_netif* ni)
     if( rc < 0 )
       goto fail1;
 
-    LOG_NV(ci_log("%s: ni->io_ptr=%p io_offset=%d mem_offset=%d "
+    LOG_NV(ci_log("%s: ni->io_ptr=%p io_offset=%d mem_ptr=%p "
                   "state_offset=%d", __FUNCTION__, ni->io_ptr,
-                  vi_io_offset, vi_mem_offset, vi_state_offset));
+                  vi_io_offset, vi_mem_ptr, vi_state_offset));
 
-    ci_assert((vi_mem_offset & (CI_PAGE_SIZE - 1)) == 0);
+    ci_assert(((vi_mem_ptr - ni->buf_ptr) & (CI_PAGE_SIZE - 1)) == 0);
 
     rc = ef_vi_arch_from_efhw_arch(nsn->vi_arch);
     CI_TEST(rc >= 0);
 
-    init_ef_vi(ni, nic_i, vi_state_offset, vi_io_offset, &vi_mem_offset,
-               &ni->nic_hw[nic_i].vi, nsn->vi_instance, nsn->vi_evq_bytes,
+    init_ef_vi(ni, nic_i, vi_state_offset, vi_io_offset, &vi_mem_ptr,
+               vi, nsn->vi_instance, nsn->vi_evq_bytes,
                nsn->vi_txq_size, &ni->state->vi_stats);
     vi_state_bytes = ef_vi_calc_state_bytes(nsn->vi_rxq_size,
                                             nsn->vi_txq_size);
     vi_state_offset += vi_state_bytes;
     vi_io_offset += nsn->vi_io_mmap_bytes;
 
+    vi->xdp_kick = af_xdp_kick;
+    vi->xdp_kick_context.p = ni;
+
     /* On EF100 EVQ cannot be primed from UL */
-    if( ni->nic_hw[nic_i].vi.nic_type.arch == EF_VI_ARCH_EF100 )
+    if( vi->nic_type.arch == EF_VI_ARCH_EF100 )
       ni->state->flags |= CI_NETIF_FLAG_EVQ_KERNEL_PRIME_ONLY;
 
     ci_assert(vi_state_bytes == ns->vi_state_bytes);
 
     if( NI_OPTS(ni).tx_push )
-      ef_vi_set_tx_push_threshold(&ni->nic_hw[nic_i].vi,
-                                  NI_OPTS(ni).tx_push_thresh);
+      ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
 
 #if CI_CFG_PIO
     if( NI_OPTS(ni).pio &&
@@ -2086,12 +2103,12 @@ static int netif_tcp_helper_build(ci_netif* ni)
     }
 #endif
 #if CI_CFG_CTPIO
-    if( ni->nic_hw[nic_i].vi.vi_flags & EF_VI_TX_CTPIO ) {
+    if( vi->vi_flags & EF_VI_TX_CTPIO ) {
       void* ctpio_ptr = ni->ctpio_ptr + ctpio_io_offset;
       ci_assert_lt(ctpio_io_offset, ns->ctpio_mmap_bytes);
-      ni->nic_hw[nic_i].vi.vi_ctpio_mmap_ptr = ctpio_ptr;
+      vi->vi_ctpio_mmap_ptr = ctpio_ptr;
       ctpio_io_offset += CI_PAGE_SIZE;
-      ef_vi_ctpio_init(&(ni->nic_hw[nic_i].vi));
+      ef_vi_ctpio_init(vi);
     }
 #endif
 #ifdef OO_HAS_POLL_IN_KERNEL
@@ -2327,7 +2344,6 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
                         ra.out_netif_mmap_bytes, OO_MMAP_FLAG_DEFAULT, &p);
   if( rc < 0 ) {
     LOG_E(ci_log("%s: oo_resource_mmap %d", __FUNCTION__, rc));
-    /* nothing to clear up: return */
     return rc;
   }
 

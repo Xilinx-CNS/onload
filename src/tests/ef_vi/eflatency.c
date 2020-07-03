@@ -43,8 +43,7 @@ enum mode {
   MODE_PIO = 2,
   MODE_ALT = 4,
   MODE_CTPIO = 8,
-  MODE_XDP = 16,
-  MODE_DEFAULT = MODE_CTPIO | MODE_ALT | MODE_PIO | MODE_DMA | MODE_XDP
+  MODE_DEFAULT = MODE_CTPIO | MODE_ALT | MODE_PIO | MODE_DMA
 };
 static unsigned         cfg_mode = MODE_DEFAULT;
 
@@ -200,14 +199,6 @@ static const test_t dma_test = {
   .pong = dma_pong,
   .cleanup = NULL,
 };
-
-static const test_t xdp_test = {
-  .name = "XDP",
-  .ping = dma_ping,
-  .pong = dma_pong,
-  .cleanup = NULL,
-};
-
 
 
 /*
@@ -410,37 +401,8 @@ static const test_t* do_init(int ifindex)
   const test_t* t;
   unsigned long capability_val;
 
-
-  rc = -ENODEV;
-
-  if( cfg_mode & ~MODE_XDP ) {
-    /* Try native SFC support, and allow fallback to XDP */
-    rc = ef_driver_open(&driver_handle);
-    if( rc == 0 ) {
-      rc = ef_pd_alloc(&pd, driver_handle, ifindex, pd_flags);
-      if( rc )
-        ef_driver_close(driver_handle);
-    }
-    if( ~cfg_mode & MODE_XDP )
-      TRY(rc);
-  }
-
-  if( rc != 0 ) {
-
-    TEST(cfg_mode & MODE_XDP);
-
-    /* ENODEV means non-SFC device, warn only when something went wrong with
-     * with native SFC mode */
-    if( rc != 0 && rc != -ENODEV && rc != -ENOENT ) {
-      fprintf(stderr, "Failed to allocate SFC device natively, "
-                      "falling back to XDP\n");
-    }
-    driver_handle = 0;
-    pd_flags |= EF_PD_AF_XDP;
-    TRY(ef_pd_alloc(&pd, driver_handle, ifindex, pd_flags));
-    TRY(ef_vi_alloc_from_pd(&vi, 0, &pd, 0, 1024, 1024, -1, NULL, -1, vi_flags));
-    goto got_vi_and_filter;
-  }
+  TRY(ef_driver_open(&driver_handle));
+  TRY(ef_pd_alloc(&pd, driver_handle, ifindex, pd_flags));
 
   if( cfg_ctpio_no_poison )
     vi_flags |= EF_VI_TX_CTPIO_NO_POISON;
@@ -491,11 +453,6 @@ static const test_t* do_init(int ifindex)
                                    htons(port_he)));
   TRY(ef_vi_filter_add(&vi, driver_handle, &filter_spec, NULL));
 
- got_vi_and_filter:
-
-  ef_vi_receive_set_prefix_len(&vi, offsetof(struct pkt_buf, dma_buf));
-
-
   {
     int bytes = N_BUFS * BUF_SIZE;
     void* p;
@@ -543,9 +500,6 @@ static const test_t* do_init(int ifindex)
     t = &pio_test;
   }
 #endif
-  else if( pd_flags & EF_PD_AF_XDP ) {
-    t = &xdp_test;
-  }
   /* In the worst case, fall back to DMA sends. */
   else if( cfg_mode & MODE_DMA ) {
     t = &dma_test;
@@ -607,8 +561,7 @@ int main(int argc, char* argv[])
         OPT_C('c') * MODE_CTPIO |
         OPT_C('a') * MODE_ALT |
         OPT_C('p') * MODE_PIO |
-        OPT_C('d') * MODE_DMA |
-        OPT_C('x') * MODE_XDP;
+        OPT_C('d') * MODE_DMA;
       #undef OPT_C
       break;
     case '?':

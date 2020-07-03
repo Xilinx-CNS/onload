@@ -57,6 +57,7 @@ static unsigned vi_flags_to_efab_flags(unsigned vi_flags)
   if( vi_flags & EF_VI_TX_CTPIO          ) efab_flags |= EFHW_VI_TX_CTPIO;
   if( vi_flags & EF_VI_TX_CTPIO_NO_POISON ) efab_flags |=
                                                     EFHW_VI_TX_CTPIO_NO_POISON;
+  if( vi_flags & EF_VI_RX_ZEROCOPY ) efab_flags |= EFHW_VI_RX_ZEROCOPY;
   return efab_flags;
 }
 
@@ -91,7 +92,25 @@ static int check_nic_compatibility(unsigned vi_flags, unsigned ef_vi_arch)
       return -EOPNOTSUPP;
     }
     return 0;
-    
+
+  case EFHW_ARCH_AF_XDP:
+    if (vi_flags & EF_VI_TX_PUSH_ALWAYS) {
+      LOGVV(ef_log("%s: ERROR: TX PUSH ALWAYS flag not supported"
+                   " on AF_XDP architecture", __FUNCTION__));
+      return -EOPNOTSUPP;
+    }
+    if (vi_flags & EF_VI_RX_TIMESTAMPS) {
+      LOGVV(ef_log("%s: ERROR: RX TIMESTAMPS flag not supported"
+                   " on AF_XDP architecture", __FUNCTION__));
+      return -EOPNOTSUPP;
+    }
+    if (vi_flags & EF_VI_TX_TIMESTAMPS) {
+      LOGVV(ef_log("%s: ERROR: TX TIMESTAMPS flag not supported"
+                   " on AF_XDP architecture", __FUNCTION__));
+      return -EOPNOTSUPP;
+    }
+    return 0;
+
   default:
     return -EINVAL;
   }
@@ -355,8 +374,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
                   int index_in_vi_set, int evq_capacity,
                   int rxq_capacity, int txq_capacity,
                   ef_vi* evq, ef_driver_handle evq_dh,
-                  int vi_clustered, enum ef_vi_flags vi_flags,
-                  ef_pd* xdp_pd, int xdp_intf_index)
+                  int vi_clustered, enum ef_vi_flags vi_flags)
 {
   struct ef_vi_nic_type nic_type;
   ci_resource_alloc_t ra;
@@ -374,10 +392,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     txq_capacity = atoi(s);
   if( rxq_capacity < 0 && (s = getenv("EF_VI_RXQ_SIZE")) )
     rxq_capacity = atoi(s);
-
-  if( xdp_pd != NULL )
-    return efxdp_vi_alloc(vi, rxq_capacity, txq_capacity, xdp_intf_index,
-                          vi_flags, xdp_pd);
 
   EF_VI_BUG_ON((evq == NULL) != (evq_capacity != 0));
   EF_VI_BUG_ON(! evq_capacity && ! rxq_capacity && ! txq_capacity);
@@ -448,6 +462,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     goto fail1;
   }
 
+  /* TODO AF_XDP capacity might need furtling somewhere for AF_XDP */
   evq_capacity = ra.u.vi_out.evq_capacity;
   txq_capacity = ra.u.vi_out.txq_capacity;
   rxq_capacity = ra.u.vi_out.rxq_capacity;
@@ -515,19 +530,10 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   ef_vi_init_out_flags(vi, (ra.u.vi_out.out_flags & EFHW_VI_CLOCK_SYNC_STATUS) ?
                        EF_VI_OUT_CLOCK_SYNC_STATUS : 0);
   ef_vi_init_io(vi, io_mmap_ptr);
-  if( evq_capacity ) {
-    ef_vi_init_evq(vi, evq_capacity, mem_mmap_ptr);
-    mem_mmap_ptr += ((evq_capacity * sizeof(efhw_event_t) + CI_PAGE_SIZE - 1)
-		     & CI_PAGE_MASK);
-  }
-  if( rxq_capacity ) {
-    ef_vi_init_rxq(vi, rxq_capacity, mem_mmap_ptr, ids,
-		   ra.u.vi_out.rx_prefix_len);
-    mem_mmap_ptr += (ef_vi_rx_ring_bytes(vi) + CI_PAGE_SIZE-1) & CI_PAGE_MASK;
-    ids += rxq_capacity;
-  }
-  if( txq_capacity )
-    ef_vi_init_txq(vi, txq_capacity, mem_mmap_ptr, ids);
+  vi->vi_i = ra.u.vi_out.instance;
+  ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
+                ra.u.vi_out.rx_prefix_len, txq_capacity);
+
   if( vi_flags & (EF_VI_RX_TIMESTAMPS | EF_VI_TX_TIMESTAMPS) ) {
     int rx_ts_correction, tx_ts_correction;
     enum ef_timestamp_format ts_format;
@@ -566,7 +572,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   BUG_ON(vi->vi_ps_buf_size != 64*1024 &&
          vi->vi_ps_buf_size != 1024*1024);
   vi->vi_clustered = vi_clustered;
-  vi->vi_i = ra.u.vi_out.instance;
   vi->vi_is_packed_stream = !! (vi_flags & EF_VI_RX_PACKED_STREAM);
   ef_vi_init_state(vi);
   rc = ef_vi_add_queue(evq, vi);
@@ -619,10 +624,8 @@ int ef_vi_alloc_from_pd(ef_vi* vi, ef_driver_handle vi_dh,
     vi_clustered = 1;
   }
   return __ef_vi_alloc(vi, vi_dh, res_id, pd_dh, index_in_vi_set, evq_capacity,
-                       rxq_capacity, txq_capacity, evq_opt, evq_dh,
-                       vi_clustered, flags,
-                       (pd->pd_flags & EF_PD_AF_XDP) ? pd : NULL,
-                       if_nametoindex(pd->pd_intf_name));
+                       rxq_capacity, txq_capacity,
+                       evq_opt, evq_dh, vi_clustered, flags);
 }
 
 
@@ -641,7 +644,7 @@ int ef_vi_alloc_from_set(ef_vi* vi, ef_driver_handle vi_dh,
                        efch_make_resource_id(vi_set->vis_res_id),
                        vi_set_dh, index_in_vi_set,
                        evq_capacity, rxq_capacity, txq_capacity,
-                       evq_opt, evq_dh, 0, flags, NULL, 0);
+                       evq_opt, evq_dh, 0, flags);
 }
 
 
@@ -674,14 +677,6 @@ int ef_vi_free(ef_vi* ep, ef_driver_handle fd)
     }
   }
 
-  if( ep->nic_type.arch == EF_VI_ARCH_AF_XDP ) {
-    rc = efxdp_vi_free(ep);
-    if( rc < 0 ) {
-      LOGVV(ef_log("%s: efxdp_vi_free %d", __FUNCTION__, rc));
-      return rc;
-    }
-  }
-
   free(ep->ep_state);
   free(ep->tx_alt_id2hw);
   free(ep->tx_alt_hw2id);
@@ -699,9 +694,6 @@ unsigned ef_vi_mtu(ef_vi* vi, ef_driver_handle fd)
   ci_resource_op_t op;
   int rc;
 
-  if( vi->nic_type.arch == EF_VI_ARCH_AF_XDP )
-    return efxdp_vi_mtu(vi);
-
   op.op = CI_RSOP_VI_GET_MTU;
   op.id = efch_make_resource_id(vi->vi_resource_id);
   rc = ci_resource_op(fd, &op);
@@ -717,9 +709,6 @@ int ef_vi_get_mac(ef_vi* vi, ef_driver_handle dh, void* mac_out)
 {
   ci_resource_op_t op;
   int rc;
-
-  if( vi->nic_type.arch == EF_VI_ARCH_AF_XDP )
-    return efxdp_vi_get_mac(vi, mac_out);
 
   op.op = CI_RSOP_VI_GET_MAC;
   op.id = efch_make_resource_id(vi->vi_resource_id);
@@ -762,6 +751,8 @@ int ef_vi_arch_from_efhw_arch(int efhw_arch)
     return EF_VI_ARCH_EF10;
   case EFHW_ARCH_EF100:
     return EF_VI_ARCH_EF100;
+  case EFHW_ARCH_AF_XDP:
+    return EF_VI_ARCH_AF_XDP;
   default:
     return -1;
   }

@@ -131,6 +131,7 @@ typedef union {
     unsigned       rq_id      :32;
     unsigned       len        :16;
     unsigned       flags      :16;
+    unsigned       ofs        :16; /* AF_XDP specific */
   } rx;
   /** An event of type EF_EVENT_TYPE_RX_DISCARD */
   struct {  /* This *must* have same initial layout as [rx]. */
@@ -510,6 +511,8 @@ enum ef_vi_flags {
   /** When using CTPIO, prevent poisoned frames from reaching the wire (X2000
    ** series and newer). */
   EF_VI_TX_CTPIO_NO_POISON = 0x2000000,
+  /** Zerocopy - relevant for AF_XDP */
+  EF_VI_RX_ZEROCOPY = 0x4000000,
 };
 
 
@@ -647,6 +650,75 @@ typedef struct {
   uint32_t*        ids;
 } ef_vi_rxq;
 
+/*! \brief Memory-mapped AF_XDP descriptor ring
+**
+** A ring transfers ownership of UMEM buffers between kernel and user space.
+** It consists of a memory-mapped region containing an array of descriptors
+** (of different types for different rings), and indexes used by the producer
+** and consumer to indicate which have been written and read.
+**
+** Each index is written by one side and read by the other. They are declared
+** volatile to make sure there are no unexpected accesses, and we assume
+** accesses are atomic. Further barriers or synchronisation are sometimes
+** needed, for example to ensure updates to the descriptors occur before
+** updating the producer index to expose the new values.
+**
+** Users should not access this structure.
+*/
+typedef struct {
+  /** Pointer to the producer's index (shared with kernel) */
+  volatile uint32_t* producer;
+  /** Pointer to the consumer's index (shared with kernel) */
+  volatile uint32_t* consumer;
+  /** Base of the descriptor array */
+  void*  desc;
+} ef_vi_xdp_ring;
+
+/*! \brief Collection of AF_XDP descriptor rings
+**
+** Users should not access this structure.
+*/
+typedef struct ef_vi_xdp_rings {
+  /** Receive ring */
+  ef_vi_xdp_ring rx;
+  /** Transmit ring */
+  ef_vi_xdp_ring tx;
+  /** Fill ring */
+  ef_vi_xdp_ring fr;
+  /** Completion ring */
+  ef_vi_xdp_ring cr;
+} ef_vi_xdp_rings;
+
+/*! \brief Offsets of elements of a memory-mapped AF_XDP ring
+**
+** Users should not access this structure.
+*/
+typedef struct {
+  /** Offset of the producer's index */
+  uint64_t producer;
+  /** Offset of the consumer's index */
+  uint64_t consumer;
+  /** Offset of the descriptor array */
+  uint64_t desc;
+} ef_vi_xdp_offset;
+
+/*! \brief Collection of AF_XDP descriptor ring offsets
+**
+** Users should not access this structure.
+*/
+typedef struct ef_vi_xdp_offsets {
+  /** Receive ring */
+  ef_vi_xdp_offset rx;
+  /** Transmit ring */
+  ef_vi_xdp_offset tx;
+  /** Fill ring */
+  ef_vi_xdp_offset fr;
+  /** Completion ring */
+  ef_vi_xdp_offset cr;
+  /** Total number of bytes for all four rings */
+  uint64_t total;
+} ef_vi_xdp_offsets;
+
 /*! \brief State of a virtual interface
 **
 ** Users should not access this structure.
@@ -658,6 +730,8 @@ typedef struct {
   ef_vi_txq_state txq;
   /** RX descriptor ring state */
   ef_vi_rxq_state rxq;
+  /** AF_XDP ring memory layout */
+  ef_vi_xdp_offsets xdp;
   /* Followed by request id fifos. */
 } ef_vi_state;
 
@@ -711,33 +785,6 @@ struct ef_vi_transmit_alt_overhead {
 
 struct ef_pio;
 
-/*! \brief Memory-mapped AF_XDP descriptor ring
-**
-** A ring transfers ownership of UMEM buffers between kernel and user space.
-** It consists of a memory-mapped region containing an array of descriptors
-** (of different types for different rings), and indexes used by the producer
-** and consumer to indicate which have been written and read.
-**
-** Each index is written by one side and read by the other. They are declared
-** volatile to make sure there are no unexpected accesses, and we assume
-** accesses are atomic. Further barriers or synchronisation are sometimes
-** needed, for example to ensure updates to the descriptors occur before
-** updating the producer index to expose the new values.
-**
-** Users should not access this structure.
-*/
-struct ef_vi_xdp_ring {
-  /** Base address of mapped region */
-  char*  addr;
-  /** Size of mapped region */
-  size_t size;
-  /** Base of the descriptor array */
-  void*  desc;
-  /** Pointer to the producer's index (shared with kernel) */
-  volatile uint32_t* producer;
-  /** Pointer to the consumer's index (shared with kernel) */
-  volatile uint32_t* consumer;
-};
 
 /*! \brief A virtual interface.
 **
@@ -840,16 +887,11 @@ typedef struct ef_vi {
   /** The type of NIC hosting the virtual interface */
   struct ef_vi_nic_type	        nic_type;
 
-  /** Socket used by AF_XDP */
-  int                           xdp_sock;
-  /** Index of interface bound to AF_XDP */
-  int                           xdp_ifindex;
-  /** Key of socket map entry for BPF program */
-  int                           xdp_sock_key;
-  /** List of VIs awaiting configuration of user memory */
-  struct ef_vi*                 xdp_vi_next;
-  /** Four AF_XDP rings: receive, transmit, fill and completion */
-  struct ef_vi_xdp_ring         xdp_rx, xdp_tx, xdp_fr, xdp_cr;
+  /** Callback to invoke AF_XDP send operations */
+  int                         (*xdp_kick)(struct ef_vi*);
+  union {int64_t n; void* p;}   xdp_kick_context;
+  /** AF_XDP rings */
+  ef_vi_xdp_rings               xdp_rings;
 
   /*! \brief Driver-dependent operations. */
   /* Doxygen comment above is the detailed description of ef_vi::ops */
@@ -994,7 +1036,6 @@ extern const char* ef_vi_version_str(void);
 extern const char* ef_vi_driver_interface_str(void);
 
 
-
 /**********************************************************************
  * Receive interface **************************************************
  **********************************************************************/
@@ -1013,32 +1054,10 @@ extern const char* ef_vi_driver_interface_str(void);
 **
 ** When a large packet is received that is scattered over multiple packet
 ** buffers, the prefix is only present in the first buffer.
-**
-** For AF_XDP, this has a slightly different meaning. It is the length of
-** any user metadata stored at the beginning of each packet buffer, which
-** is present in all buffers. It defaults to zero, and must be set before
-** registering user memory if such metadata is present.
 */
 ef_vi_inline int ef_vi_receive_prefix_len(const ef_vi* vi)
 {
   return vi->rx_prefix_len;
-}
-
-
-/*! \brief Set the length of the prefix before a received packet.
-**
-** \param vi         The virtual interface for which to set the prefix length
-** \param prefix_len The length of the prefix before buffers
-**
-** For AF_XDP, sets the length of any user metadata at the start of each packet.
-** This must be set before registering user memory for the VI.
-**
-** This has no effect if AF_XDP is not in use.
-*/
-ef_vi_inline void ef_vi_receive_set_prefix_len(ef_vi* vi, unsigned prefix_len)
-{
-  if( vi->nic_type.arch == EF_VI_ARCH_AF_XDP )
-    vi->rx_prefix_len = prefix_len;
 }
 
 

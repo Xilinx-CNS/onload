@@ -12,7 +12,7 @@ static uint8_t mcast_mac[6];
 static struct sockaddr_in sa_local, sa_mcast;
 
 int init_udp_pkt(void* pkt_buf, int paylen, ef_vi *vi,
-                 ef_driver_handle dh, int vlan)
+                 ef_driver_handle dh, int vlan, int ip_checksum)
 {
   int ip_len = sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr) + paylen;
   ci_ether_hdr* eth;
@@ -38,7 +38,7 @@ int init_udp_pkt(void* pkt_buf, int paylen, ef_vi *vi,
 
   ci_ip4_hdr_init(ip4, CI_NO_OPTS, ip_len, 0, IPPROTO_UDP,
 		  sa_local.sin_addr.s_addr,
-		  sa_mcast.sin_addr.s_addr, 0);
+		  sa_mcast.sin_addr.s_addr, ip_checksum);
   ci_udp_hdr_init(udp, ip4, sa_local.sin_port,
 		  sa_mcast.sin_port, udp + 1, paylen, 0);
 

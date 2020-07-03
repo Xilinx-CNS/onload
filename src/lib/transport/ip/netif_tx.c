@@ -222,8 +222,9 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
       }
     }
 #endif
-    /* Calculate packet checksum in case of AF_XDP */
-    if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_AF_XDP) ) {
+    /* FIXME: EF100 and AF_XDP don't have checksum offload */
+    if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_EF100 ||
+                    vi->nic_type.arch == EF_VI_ARCH_AF_XDP) ) {
         struct iovec my_iov[CI_IP_PKT_SEGMENTS_MAX];
         ci_uint8 protocol;
 

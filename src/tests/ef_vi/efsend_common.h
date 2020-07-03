@@ -27,7 +27,7 @@ extern void usage(void);
   }while(0)
 
 extern int init_udp_pkt(void* pkt_buf, int paylen, ef_vi *vi,
-                        ef_driver_handle dh, int vlan);
+                        ef_driver_handle dh, int vlan, int ip_checksum);
 extern void common_usage(void);
 extern void parse_args(char *argv[], int *ifindex, int local_port, int vlan);
 

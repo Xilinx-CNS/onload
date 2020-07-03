@@ -105,7 +105,7 @@ struct efrm_vi {
 	struct efrm_pio *pio; /*!< Only set if linked to a pio. */
 
 	struct efrm_vi_allocation allocation;
-	unsigned mem_mmap_bytes;
+	struct efhw_page_map mem_mmap;
 
 	unsigned rx_prefix_len;
 
@@ -162,6 +162,8 @@ struct efrm_vi {
 	unsigned tx_alt_cp;
 	int      tx_alt_num;
 	unsigned tx_alt_ids[EFRM_VI_TX_ALTERNATIVES_MAX];
+
+	struct socket* af_xdp_sock;
 };
 
 

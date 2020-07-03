@@ -103,7 +103,6 @@ ci_inline unsigned ci_netif_pkt_to_host_iovec(ci_netif* ni,
   }
 }
 
-
 /**********************************************************************
  * CTPIO.
  */

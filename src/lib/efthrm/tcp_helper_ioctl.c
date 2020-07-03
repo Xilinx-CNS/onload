@@ -1471,6 +1471,13 @@ static int oo_swf_update_rsop(ci_private_t* priv, void* arg)
 #endif
 
 
+static int oo_af_xdp_kick_rsop(ci_private_t *priv, void *arg)
+{
+  int intf_i = *(int32_t*)arg;
+  return efrm_vi_af_xdp_kick(priv->thr->nic[intf_i].thn_vi_rs);
+}
+
+
 /*************************************************************************
  * ATTENTION! ACHTUNG! ATENCION!                                         *
  * This table MUST be synchronised with enum of OO_OP_* operations!      *
@@ -1612,6 +1619,8 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_WAKEUP_WAITERS,     oo_wakeup_waiters),
   op(OO_IOC_SWF_UPDATE,         oo_swf_update_rsop),
 #endif
+
+  op(OO_IOC_AF_XDP_KICK, oo_af_xdp_kick_rsop),
 
 /* Here come non contigous operations only, their position need to match
  * index according to their placeholder */

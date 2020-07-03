@@ -117,6 +117,9 @@ efrm_pd_os_stats_ctor(struct efrm_pd *pd)
 	nic = efrm_pd_to_resource(pd)->rs_client->nic;
 
 	dev = efhw_nic_get_pci_dev(efrm_pd_to_resource(pd)->rs_client->nic);
+	if (dev == NULL)
+		return NULL;
+
 	ret->parent = efrm_proc_device_dir_get(pci_name(dev));
 	pci_dev_put(dev);
 	if (ret->parent == NULL)

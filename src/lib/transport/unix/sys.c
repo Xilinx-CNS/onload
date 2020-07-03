@@ -19,7 +19,6 @@
 #include <internal.h>
 #include <dlfcn.h>
 
-
 static int load_sym_fail(const char* sym)
 {
   Log_E(log("citp_find_calls: ERROR: dlsym(\"%s\") failed '%s'",

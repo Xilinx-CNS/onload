@@ -30,4 +30,10 @@ extern int oo_check_nic_suitable_for_onload(struct oo_nic* onic);
 
 extern void oo_nic_shutdown(void);
 
+extern struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev);
+
+extern void oo_common_remove(struct net_device* dev);
+
+extern void oo_netdev_up(struct net_device* netdev);
+
 #endif  /* __ONLOAD_NIC_H__ */

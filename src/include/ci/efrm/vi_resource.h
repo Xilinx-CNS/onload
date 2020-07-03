@@ -78,10 +78,8 @@ enum efrm_vi_q_flags {
 	EFRM_VI_IP_CSUM               = 0x2,
 	/** TXQ: Enable TCP/UDP checksum offload. */
 	EFRM_VI_TCP_UDP_CSUM          = 0x4,
-	/** TXQ: Enable iSCSI header digest offload. */
-	EFRM_VI_ISCSI_HEADER_DIGEST   = 0x8,
-	/** TXQ: Enable iSCSI data digest offload. */
-	EFRM_VI_ISCSI_DATA_DIGEST     = 0x10,
+	/** RXQ: Force zerocopy with AF_XDP - this also affects TX */
+	EFRM_VI_RX_ZEROCOPY           = 0x8,
 	/** TXQ: Outgoing packets must match an Ethernet filter. */
 	EFRM_VI_ETH_FILTER            = 0x20,
 	/** TXQ: Outgoing packets must match a TCP/UDP filter. */
@@ -172,6 +170,11 @@ extern void efrm_vi_attr_set_interrupt_core(struct efrm_vi_attr *, int core);
 extern void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *,
 					    int channel_id);
 
+/** Parameters required for AF_XDP buffer management */
+extern void efrm_vi_attr_set_af_xdp(struct efrm_vi_attr *,
+                                    long buffer_count,
+                                    int buffer_size,
+                                    int headroom);
 
 extern struct efrm_vi *
 efrm_vi_from_resource(struct efrm_resource *);
@@ -279,11 +282,13 @@ efrm_vi_q_alloc_sanitize_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 
 struct pci_dev;
 extern struct pci_dev *efrm_vi_get_pci_dev(struct efrm_vi *);
+extern void efrm_vi_get_dev_name(struct efrm_vi *virs, char* name);
 
 extern int efrm_vi_get_channel(struct efrm_vi *);
 
 extern int efrm_vi_set_get_vi_instance(struct efrm_vi *);
 
+extern int efrm_vi_af_xdp_kick(struct efrm_vi *vi);
 
 /* Make these inline instead of macros for type checking */
 static inline struct efrm_vi *
@@ -313,13 +318,17 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		       int evq_capacity, int txq_capacity, int rxq_capacity,
 		       int tx_q_tag, int rx_q_tag, int wakeup_cpu_core,
 		       int wakeup_channel,
+		       long xdp_buffers, int xdp_buffer_size, int xdp_headroom,
 		       struct efrm_vi **virs_in_out,
 		       uint32_t *out_io_mmap_bytes,
-		       uint32_t *out_mem_mmap_bytes,
-                       uint32_t *out_ctpio_mmap_bytes,
+		       uint32_t *out_ctpio_mmap_bytes,
 		       uint32_t *out_txq_capacity,
 		       uint32_t *out_rxq_capacity,
 		       int print_resource_warnings);
+
+extern int
+efrm_vi_resource_deferred(struct efrm_vi *evq_virs, ef_vi* vi,
+                          uint32_t *out_mem_mmap_bytes);
 
 extern void efrm_vi_resource_release(struct efrm_vi *);
 extern void efrm_vi_resource_stop_callback(struct efrm_vi *virs);

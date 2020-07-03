@@ -84,13 +84,18 @@ efhw_iopages_alloc_kernel_cont(struct device *dev, struct efhw_iopages *p,
 		struct page *page;
 		page = vmalloc_to_page(p->ptr + (i << PAGE_SHIFT));
 
-		p->dma_addrs[i] = dma_map_page(dev, page, 0, PAGE_SIZE,
-					       DMA_BIDIRECTIONAL);
+		if( dev ) {
+			p->dma_addrs[i] = dma_map_page(dev, page, 0, PAGE_SIZE,
+						       DMA_BIDIRECTIONAL);
 
-		if (dma_mapping_error(dev, p->dma_addrs[i])) {
-			EFHW_ERR("%s: ERROR dma_map_page failed",
-				 __FUNCTION__);
-			goto fail2;
+			if (dma_mapping_error(dev, p->dma_addrs[i])) {
+				EFHW_ERR("%s: ERROR dma_map_page failed",
+					 __FUNCTION__);
+				goto fail2;
+			}
+		}
+		else {
+			p->dma_addrs[i] = page_to_phys(page);
 		}
 	}
 
@@ -118,7 +123,7 @@ efhw_iopages_alloc(struct pci_dev *pci_dev, struct efhw_iopages *p,
 	 * memory.
 	 * But we try to allocate contiguous physical memory first.
 	 */
-	struct device *dev = &pci_dev->dev;
+	struct device *dev = pci_dev ? &pci_dev->dev : NULL;
 	int rc = 0;
 	int gfp_flag = __GFP_COMP;
 
@@ -131,14 +136,15 @@ efhw_iopages_alloc(struct pci_dev *pci_dev, struct efhw_iopages *p,
 
 	/* __GFP_NOWARN is necessary in case when we handle high-order page
 	 * allocation failure by allocating pages one-by-one. */
-	if (!phys_cont_only && order > 0)
-		gfp_flag |= __GFP_NOWARN;
-	rc = efhw_iopages_alloc_phys_cont(dev, p, order, gfp_flag);
-	if (rc == 0)
-		return 0;
-	else if (rc != 0 && (phys_cont_only || order == 0))
-		goto fail2;
-
+	if( dev ) {
+		if (!phys_cont_only && order > 0)
+			gfp_flag |= __GFP_NOWARN;
+		rc = efhw_iopages_alloc_phys_cont(dev, p, order, gfp_flag);
+		if (rc == 0)
+			return 0;
+		else if (rc != 0 && (phys_cont_only || order == 0))
+			goto fail2;
+	}
 	/* If allocation of contiguous physical memory is failed and
 	 * non-contiguous physical memory could be used then try to allocate it.
 	 */
@@ -156,17 +162,19 @@ fail1:
 
 void efhw_iopages_free(struct pci_dev *pci_dev, struct efhw_iopages *p)
 {
-	struct device *dev = &pci_dev->dev;
-	int i;
-
-	if (p->phys_cont) {
+	if( pci_dev == NULL) {
+		vfree(p->ptr);
+	}
+	else if (p->phys_cont) {
+		struct device *dev = &pci_dev->dev;
 		unsigned order = __ffs64(p->n_pages);
 		dma_unmap_page(dev, p->dma_addrs[0], PAGE_SIZE << order,
 			DMA_BIDIRECTIONAL);
 
 		free_pages((unsigned long)p->ptr, order);
-		kfree(p->dma_addrs);
 	} else {
+		struct device *dev = &pci_dev->dev;
+		int i;
 		for (i = 0; i < p->n_pages; ++i)
 			dma_unmap_page(dev, p->dma_addrs[i],
 				PAGE_SIZE, DMA_BIDIRECTIONAL);
@@ -175,6 +183,6 @@ void efhw_iopages_free(struct pci_dev *pci_dev, struct efhw_iopages *p)
 		schedule();
 #endif
 		vfree(p->ptr);
-		kfree(p->dma_addrs);
 	}
+	kfree(p->dma_addrs);
 }

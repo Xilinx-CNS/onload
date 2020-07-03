@@ -1194,6 +1194,17 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
   info->try_ctpio = 0;
   info->retry_without_ctpio = 0;
 
+  if( NI_OPTS(ni).af_xdp_zerocopy ) {
+    if (nic->flags & NIC_FLAG_RX_ZEROCOPY) {
+      info->ef_vi_flags |= EF_VI_RX_ZEROCOPY;
+      info->efhw_flags |= EFHW_VI_RX_ZEROCOPY;
+    } else {
+      NI_LOG(ni, CONFIG_WARNINGS,
+             "[%s]: WARNING: Zerocopy is required but NIC does not support it",
+             ni->state->pretty_name);
+    }
+  }
+
 #if CI_CFG_CTPIO
   if( should_try_ctpio(ni, nic, info) ) {
     info->try_ctpio = 1;
@@ -1353,9 +1364,12 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info)
                                   info->evq_capacity, info->txq_capacity,
                                   info->rxq_capacity, 0, 0,
                                   info->wakeup_cpu_core,
-                                  info->wakeup_channel, info->virs,
+                                  info->wakeup_channel,
+                                  (long)ni->pkt_sets_max<<CI_CFG_PKTS_PER_SET_S,
+                                  CI_CFG_PKT_BUF_SIZE,
+                                  offsetof(ci_ip_pkt_fmt, dma_start),
+                                  info->virs,
                                   &info->vi_io_mmap_bytes,
-                                  &info->vi_mem_mmap_bytes,
                                   &info->vi_ctpio_mmap_bytes, NULL, NULL,
                                   info->log_resource_warnings);
       /* If we succeeded, there is no need to find and release orphan stack. */
@@ -1456,6 +1470,21 @@ static int tcp_helper_nic_attach_xdp(ci_netif* ni,
                                      struct tcp_helper_nic* trs_nic,
                                      struct efhw_nic* nic);
 #endif
+
+static int af_xdp_kick(ef_vi* vi)
+{
+  ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vi, vi);
+  tcp_helper_resource_t* trs = vi->xdp_kick_context.p;
+
+  if( trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
+    tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
+    return -EAGAIN;
+  }
+  else {
+    struct msghdr msg = {.msg_flags = MSG_DONTWAIT};
+    return sock_sendmsg(nic->af_xdp_sock, &msg);
+  }
+}
 
 static int allocate_vis(tcp_helper_resource_t* trs,
                         ci_resource_onload_alloc_t* alloc,
@@ -1585,6 +1614,11 @@ static int allocate_vis(tcp_helper_resource_t* trs,
                   nic->devtype.revision, efhw_vi_nic_flags(nic), &alloc_info,
                   &vi_out_flags, &ni->state->vi_stats);
 
+    /* TODO AF_XDP */
+    ni->nic_hw[intf_i].af_xdp_sock = trs_nic->thn_vi_rs->af_xdp_sock;
+    ni->nic_hw[intf_i].vi.xdp_kick = af_xdp_kick;
+    ni->nic_hw[intf_i].vi.xdp_kick_context.p = trs;
+
     nsn->oo_vi_flags = alloc_info.oo_vi_flags;
     nsn->vi_io_mmap_bytes = alloc_info.vi_io_mmap_bytes;
 #if CI_CFG_CTPIO
@@ -1594,11 +1628,12 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       NI_OPTS(ni).ctpio_max_frame_len : 0;
 #endif
     dev = efrm_vi_get_pci_dev(trs_nic->thn_vi_rs);
-    strncpy(nsn->pci_dev, pci_name(dev), sizeof(nsn->pci_dev));
-    pci_dev_put(dev);
+    strncpy(nsn->pci_dev, dev ? pci_name(dev) : "?", sizeof(nsn->pci_dev));
+    if( dev )
+      pci_dev_put(dev);
     nsn->pci_dev[sizeof(nsn->pci_dev) - 1] = '\0';
     nsn->vi_instance =
-      (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(trs_nic->thn_vi_rs);
+        (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(trs_nic->thn_vi_rs);
     nsn->vi_arch = (ci_uint8) nic->devtype.arch;
     nsn->vi_variant = (ci_uint8) nic->devtype.variant;
     nsn->vi_revision = (ci_uint8) nic->devtype.revision;
@@ -1617,8 +1652,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
     trs_nic->thn_ctpio_io_mmap_bytes = alloc_info.vi_ctpio_mmap_bytes;
     trs_nic->thn_ctpio_io_mmap = NULL;
-    trs_nic->thn_vi_mmap_bytes = alloc_info.vi_mem_mmap_bytes;
-    trs->buf_mmap_bytes += alloc_info.vi_mem_mmap_bytes;
     trs->io_mmap_bytes += alloc_info.vi_io_mmap_bytes;
     trs->ctpio_mmap_bytes += alloc_info.vi_ctpio_mmap_bytes;
     vi_state = (char*) vi_state +
@@ -1633,16 +1666,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
         goto error_out;
       }
     }
-
-    /* We used the info we were told - check that's consistent with what someone
-     * else would get if they checked separately.
-     */
-    ci_assert_equal(trs_nic->thn_vi_mmap_bytes,
-                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 1));
-    ci_assert_equal(nsn->vi_io_mmap_bytes,
-                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 0));
-
-
 
 #if CI_CFG_PIO
     if( NI_OPTS(ni).pio && (nic->devtype.arch == EFHW_ARCH_EF10) ) {
@@ -1676,6 +1699,43 @@ error_out:
     }
   }
   return rc;
+}
+
+
+static int deferred_vis(tcp_helper_resource_t* trs)
+{
+  int rc, intf_i;
+
+  if( trs->netif.flags & CI_NETIF_FLAG_AF_XDP ) {
+    /* All buffers need to be allocated before AF_XDP sockets are usable. */
+    while( (rc = efab_tcp_helper_more_bufs(trs)) == 0 );
+    if( rc != -ENOSPC )
+      return rc;
+  }
+
+  OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
+    struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
+    ef_vi* vi = &trs->netif.nic_hw[intf_i].vi;
+    uint32_t mmap_bytes;
+
+    rc = efrm_vi_resource_deferred(trs_nic->thn_vi_rs, vi, &mmap_bytes);
+    if( rc < 0 )
+      return rc;
+
+    trs->buf_mmap_bytes += mmap_bytes;
+    trs_nic->thn_vi_mmap_bytes = mmap_bytes;
+
+    /* We used the info we were told - check that's consistent with what someone
+     * else would get if they checked separately.
+     */
+    ci_assert_equal(trs->netif.state->nic[intf_i].vi_io_mmap_bytes,
+                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 0));
+    ci_assert_equal(trs_nic->thn_vi_mmap_bytes,
+                    efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 1));
+  }
+
+  trs->netif.state->buf_mmap_bytes = trs->buf_mmap_bytes;
+  return 0;
 }
 
 
@@ -1740,12 +1800,12 @@ static void release_vi(tcp_helper_resource_t* trs)
   /* Now do the rest of vi release */
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
     struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
+    ci_netif_nic_t *netif_nic = &trs->netif.nic_hw[intf_i];
 #if CI_CFG_PIO || (CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE)
     struct efhw_nic* nic =
       efrm_client_get_nic(trs_nic->thn_oo_nic->efrm_client);
 #endif
 #if CI_CFG_PIO
-    ci_netif_nic_t *netif_nic = &trs->netif.nic_hw[intf_i];
     if( NI_OPTS(&trs->netif).pio &&
         (nic->devtype.arch == EFHW_ARCH_EF10) &&
         (trs_nic->thn_pio_io_mmap_bytes != 0) ) {
@@ -1764,7 +1824,7 @@ static void release_vi(tcp_helper_resource_t* trs)
 #endif
     efrm_vi_resource_release_flushed(trs->nic[intf_i].thn_vi_rs);
     trs->nic[intf_i].thn_vi_rs = NULL;
-    CI_DEBUG_ZERO(&trs->netif.nic_hw[intf_i].vi);
+    CI_DEBUG_ZERO(&netif_nic->vi);
 
   }
 
@@ -1930,6 +1990,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   ni->pkt_sets_n = 0;
   ni->pkt_sets_max =
     (NI_OPTS(ni).max_packets + PKTS_PER_SET - 1) >> CI_CFG_PKTS_PER_SET_S;
+
 
   /* Find size of netif state to allocate. */
   vi_state_bytes = ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size,
@@ -2235,9 +2296,10 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
     memset(ni->nic_hw[intf_i].pkt_rs, 0, sz);
   }
 
-  /* Advertise the size of the IO and buf mmap that needs to be performed. */
+  /* Advertise the size of the IO and buf mmap that needs to be performed.
+   * The queue map size (buf_mmap_bytes) is not known yet, as queue creation
+   * might be deferred until after buffer memory allocation. */
   ns->io_mmap_bytes = trs->io_mmap_bytes;
-  ns->buf_mmap_bytes = trs->buf_mmap_bytes;
 #if CI_CFG_PIO
   ns->pio_mmap_bytes = trs->pio_mmap_bytes;
 #endif
@@ -3914,6 +3976,8 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   ci_netif_state_init(&rs->netif, oo_timesync_cpu_khz, alloc->in_name);
   OO_STACK_FOR_EACH_INTF_I(&rs->netif, intf_i) {
     nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
+    if( nic->devtype.arch == EFHW_ARCH_AF_XDP )
+      ni->flags |= CI_NETIF_FLAG_AF_XDP;
     if( nic->flags & NIC_FLAG_ONLOAD_UNSUPPORTED )
       ni->state->flags |= CI_NETIF_FLAG_ONLOAD_UNSUPPORTED;
 #if CI_CFG_NIC_RESET_SUPPORT
@@ -3928,8 +3992,11 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 
   efab_tcp_helper_more_socks(rs);
 
-  CI_MAGIC_SET(ni, NETIF_MAGIC);
+  rc = deferred_vis(rs);
+  if( rc < 0 )
+    goto fail9;
 
+  CI_MAGIC_SET(ni, NETIF_MAGIC);
 
   if( (rc = ci_netif_init_fill_rx_rings(ni)) != 0 )
     goto fail9;
@@ -4174,7 +4241,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   return rc;
 }
 
-
 int tcp_helper_alloc_ul(ci_resource_onload_alloc_t* alloc,
                         int ifindices_len, tcp_helper_resource_t** rs_out)
 {
@@ -4325,8 +4391,8 @@ static void set_pkt_bufset_hwaddrs(ci_netif* ni, int bufset_id, int intf_i,
 
   for( i = 0; i < PKTS_PER_SET >> page_order; i++ ) {
     int pkti = i << page_order;
-    addr[i] = hw_addrs[pkti / PKTS_PER_HW_PAGE] +
-              CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start);
+    ci_uint64 pkt_addr = hw_addrs[pkti / PKTS_PER_HW_PAGE];
+    addr[i] = pkt_addr + CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start);
   }
 }
 

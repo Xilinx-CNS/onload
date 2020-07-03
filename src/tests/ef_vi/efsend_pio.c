@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
   TEST(posix_memalign(&p, CI_PAGE_SIZE, BUF_SIZE) == 0);
 
   /* Prepare packet contents */
-  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, -1);
+  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, -1, 0);
   /* Copy packet data into the NIC's PIO region.  If the -c option was
    * specified on the command line, this step is skipped, as the copy will
    * be performed later as part of the send operation.

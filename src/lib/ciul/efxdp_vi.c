@@ -1,40 +1,43 @@
 /* SPDX-License-Identifier: LGPL-2.1 */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 
+/* The reason this is in quotes and rather than angle brackets is
+ * caused by https://gcc.gnu.org/bugzilla/show_bug.cgi?id=80005.
+ * In this case, linux gets defined as 1 earlier and gets expanded
+ * within the macro.
+ */
+#ifdef __has_include
+# if __has_include("linux/if_xdp.h")
+#  define HAVE_AF_XDP
+# endif
+#endif
+
 #include "ef_vi_internal.h"
 
-/* Not currently supported in kernel. We will probably need kernel support to
- * allow use by onload. */
-#if !defined __KERNEL__ && CI_HAVE_AF_XDP
+#ifdef HAVE_AF_XDP
 
-#include <ci/efhw/common.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <linux/if_xdp.h>
 #include "logging.h"
 
 /* Currently, AF_XDP requires a system call to start transmitting.
- *
- * This is the call used by the kernel's sample code; it might be worth
- * experimenting to see whether another "send" call has lower overhead.
  *
  * There is a limit (undocumented, so we can't rely on it being 16) to the
  * number of packets which will be sent each time. We use the "previous"
  * field to store the last packet known to be sent; if this does not cover
  * all those in the queue, we will try again once a send has completed.
  */
-static void efxdp_tx_kick(ef_vi* vi)
-{
-  if( sendto(vi->xdp_sock, NULL, 0, MSG_DONTWAIT, NULL, 0) == 0 ) {
-    ef_vi_txq_state* qs = &vi->ep_state->txq;
-    qs->previous = qs->added;
-  }
-}
-
 static int efxdp_tx_need_kick(ef_vi* vi)
 {
   ef_vi_txq_state* qs = &vi->ep_state->txq;
   return qs->previous != qs->added;
+}
+
+static void efxdp_tx_kick(ef_vi* vi)
+{
+  if( vi->xdp_kick(vi) == 0 ) {
+    ef_vi_txq_state* qs = &vi->ep_state->txq;
+    qs->previous = qs->added;
+  }
 }
 
 static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
@@ -42,8 +45,7 @@ static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
 {
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
-  struct xdp_desc* dq = vi->xdp_tx.desc;
-  uint32_t* iq = q->ids;
+  struct xdp_desc* dq = vi->xdp_rings.tx.desc;
   int i;
 
   if( iov_len != 1 )
@@ -53,16 +55,16 @@ static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
     return -EAGAIN;
 
   i = qs->added++ & q->mask;
-  EF_VI_BUG_ON(iq[i] != EF_REQUEST_ID_MASK);
-  iq[i] = dma_id;
   dq[i].addr = iov->iov_base;
   dq[i].len = iov->iov_len;
+  EF_VI_BUG_ON(q->ids[i] != EF_REQUEST_ID_MASK);
+  q->ids[i] = dma_id;
   return 0;
 }
 
 static void efxdp_ef_vi_transmit_push(ef_vi* vi)
 {
-  *vi->xdp_tx.producer = vi->ep_state->txq.added;
+  *vi->xdp_rings.tx.producer = vi->ep_state->txq.added;
   efxdp_tx_kick(vi);
 }
 
@@ -152,25 +154,19 @@ static int efxdp_ef_vi_transmit_alt_go(ef_vi* vi, unsigned alt_id)
   return -EOPNOTSUPP;
 }
 
+/* Note: for AF_XDP devices dma_id is disregarded */
 static int efxdp_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
                                     ef_request_id dma_id)
 {
   ef_vi_rxq* q = &vi->vi_rxq;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  uint64_t* dq = vi->xdp_fr.desc;
+  uint64_t* dq = vi->xdp_rings.fr.desc;
   int i;
 
   if( qs->added - qs->removed >= q->mask )
     return -EAGAIN;
 
-  /* Currently AF_XDP writes received packets at a fixed offset within each
-   * buffer, regardless of the requested address. In the future, there might be
-   * an "unaligned" mode which relaxes this requirement. */
-  EF_VI_ASSERT(addr % vi->rx_buffer_len == vi->rx_prefix_len);
-
   i = qs->added++ & q->mask;
-  EF_VI_BUG_ON(q->ids[i] != EF_REQUEST_ID_MASK);
-  q->ids[i] = dma_id;
   dq[i] = addr;
   return 0;
 }
@@ -178,7 +174,7 @@ static int efxdp_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
 static void efxdp_ef_vi_receive_push(ef_vi* vi)
 {
   wmb();
-  *vi->xdp_fr.producer = vi->ep_state->rxq.added;
+  *vi->xdp_rings.fr.producer = vi->ep_state->rxq.added;
 }
 
 static void efxdp_ef_eventq_prime(ef_vi* vi)
@@ -190,9 +186,12 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int n = 0;
 
+  /* rx_buffer_len is power of two */
+  EF_VI_ASSERT(((vi->rx_buffer_len - 1) & vi->rx_buffer_len) == 0);
+
   /* Check rx ring, which won't exist on tx-only interfaces */
   if( n < evs_len && ef_vi_receive_capacity(vi) != 0 ) {
-    struct ef_vi_xdp_ring* ring = &vi->xdp_rx;
+    ef_vi_xdp_ring* ring = &vi->xdp_rings.rx;
     uint32_t cons = *ring->consumer;
     uint32_t prod = *ring->producer;
 
@@ -206,11 +205,23 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 
         evs[n].rx.type = EF_EVENT_TYPE_RX;
         evs[n].rx.q_id = 0;
-        evs[n].rx.rq_id = q->ids[desc_i];
+
+        /* AF_XDP devices do not use dma_ids as
+         * FIFO behaviour of rx ring is not guaranteed (Zerocopy).
+         * However, based on the device specifics, that is:
+         *  * dma addr space is contiguous, and
+         *  * buffers are fixed size
+         * we produce here buffer number withing that dma addr space
+         * for the client to resolve themselves. */
+        evs[n].rx.rq_id = dq[desc_i].addr / vi->rx_buffer_len;
+
         q->ids[desc_i] = EF_REQUEST_ID_MASK;  /* Debug only? */
 
         /* FIXME: handle jumbo, multicast */
         evs[n].rx.flags = EF_EVENT_FLAG_SOP;
+        /* In case of AF_XDP offset of the placement of payload from
+         * the beginning of the packet buffer may vary. */
+        evs[n].rx.ofs = dq[desc_i].addr & (vi->rx_buffer_len - 1); 
         evs[n].rx.len = dq[desc_i].len;
 
         ++n;
@@ -226,7 +237,7 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 
   /* Check tx completion ring */
   if( n < evs_len ) {
-    struct ef_vi_xdp_ring* ring = &vi->xdp_cr;
+    ef_vi_xdp_ring* ring = &vi->xdp_rings.cr;
     uint32_t cons = *ring->consumer;
     uint32_t prod = *ring->producer;
 
@@ -302,6 +313,9 @@ void efxdp_vi_init(ef_vi* vi)
   vi->ops.eventq_timer_run       = efxdp_ef_eventq_timer_run;
   vi->ops.eventq_timer_clear     = efxdp_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = efxdp_ef_eventq_timer_zero;
+
+  vi->rx_buffer_len = 2048;
+  vi->rx_prefix_len = 0;
 }
 #else
 void efxdp_vi_init(ef_vi* vi)

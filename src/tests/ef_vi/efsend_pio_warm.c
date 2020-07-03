@@ -156,7 +156,7 @@ int main(int argc, char* argv[])
 
   /* Prepare packet content and copy to PIO buffer.
    * This test application always sends the same data. */
-  tx_frame_len = init_udp_pkt(pbuf, cfg_payload_len, &vi, dh, -1);
+  tx_frame_len = init_udp_pkt(pbuf, cfg_payload_len, &vi, dh, -1, 0);
   TRY(ef_pio_memcpy(&vi, pbuf, 0, tx_frame_len));
 
   /* Start triggering thread */

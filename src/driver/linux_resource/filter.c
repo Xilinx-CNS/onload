@@ -38,6 +38,8 @@
  */
 #include <linux/device.h>
 #include <linux/ctype.h>
+#include <linux/ethtool.h>
+
 #include "linux_resource_internal.h"
 #include <ci/driver/driverlink_api.h>
 #include "kernel_compat.h"
@@ -1983,6 +1985,9 @@ void efrm_init_resource_filter(struct device *dev, int ifindex)
 	char const* ifname;
 	struct net_device* ndev;
 
+	if ( !dev )
+		return;
+
 	mutex_lock( &efrm_ft_mutex );
 
 	pciname = efrm_get_pciname_from_device( dev );
@@ -2218,6 +2223,95 @@ EXPORT_SYMBOL(efrm_vport_free);
 /* Entry point: check if a filter is valid, and insert it if so. */
 /* ************************************************************* */
 
+#define EFX_IP_FILTER_MATCH_FLAGS \
+                (EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_IP_PROTO | \
+                 EFX_FILTER_MATCH_LOC_HOST | EFX_FILTER_MATCH_LOC_PORT)
+
+static int efrm_efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
+					 struct ethtool_rx_flow_spec* fs)
+{
+	/* In order to support different driver capabilities we need to
+	 * always install the same filter type. This means that we will
+	 * always use a 3-tuple IP filter, even if a 5-tuple was requested.
+	 * Although this can in theory match traffic not destined for us, in
+	 * practice common usage means that it's sufficiently specific.
+	 *
+	 * The ethtool interface does not complain if a duplicate filter is
+	 * inserted, and does not reference count such filters. That causes
+	 * issues for the case where onload tries to replace a wild match
+	 * filter with a full match filter, as it will add the new full match
+	 * before removing the original wild. However, we treat both of these
+	 * as the same 3-tuple and so the net result is that we remove the
+	 * filter entirely. This occurs in two circumstances:
+	 * - closing a listening socket with accepted sockets still open
+	 * - connecting an already bound UDP socket
+	 * We can avoid the first by setting oof_shared_keep_thresh=0 when
+	 * using AF_XDP.
+	 * The second is a rare case, and the failure mode here is to fall
+	 * back to traffic via the kernel, so I'm living with it for now.
+	 */
+
+	/* Check that this is an IP filter */
+	if ((efx_spec->match_flags & EFX_IP_FILTER_MATCH_FLAGS) !=
+	    EFX_IP_FILTER_MATCH_FLAGS)
+		return -EOPNOTSUPP;
+
+	/* FIXME AF_XDP need to check whether we can install both IPv6 and
+	 * IPv4 filters. For now just support IPv4.
+	 */
+	if (efx_spec->ether_type != ntohs(ETH_P_IP))
+		return -EOPNOTSUPP;
+
+	if (efx_spec->ip_proto == IPPROTO_TCP)
+		fs->flow_type = TCP_V4_FLOW;
+	else if (efx_spec->ip_proto == IPPROTO_UDP)
+		fs->flow_type = UDP_V4_FLOW;
+	else
+		return -EINVAL;
+
+	/* Populate the match fields. For each field we need to set both the
+	 * value, and a mask of which bits in that field to match against.
+	 */
+	fs->h_u.tcp_ip4_spec.ip4dst = efx_spec->loc_host[0];
+	fs->m_u.tcp_ip4_spec.ip4dst = 0xffffffff;
+	fs->h_u.tcp_ip4_spec.pdst = efx_spec->loc_port;
+	fs->m_u.tcp_ip4_spec.pdst = 0xffff;
+
+	/* Give the driver free rein on where to insert the filter. */
+	fs->location = RX_CLS_LOC_ANY;
+
+	/* At the moment we haven't added support for queue selection, and
+	 * things are hardcoded to always use queue 0. When we fix that, we'll
+	 * need to update this code too, to select the right queue.
+	 */
+	fs->ring_cookie = 0;
+
+	return 0;
+}
+
+static int efrm_ethtool_filter_insert(struct net_device* dev,
+				      struct efx_filter_spec* spec)
+{
+	int rc;
+	struct ethtool_rxnfc info;
+	const struct ethtool_ops *ops = dev->ethtool_ops;
+
+	memset(&info, 0, sizeof(info));
+	info.cmd = ETHTOOL_SRXCLSRLINS;
+	rc = efrm_efx_spec_to_ethtool_flow(spec, &info.fs);
+	if ( rc < 0 )
+		return rc;
+
+	if (!ops->set_rxnfc)
+		return -EOPNOTSUPP;
+
+	rc = ops->set_rxnfc(dev, &info);
+	if ( rc >= 0 )
+		rc = info.fs.location;
+
+	return rc;
+}
+
 int efrm_filter_insert(struct efrm_client *client,
 		       struct efx_filter_spec *spec,
 		       bool replace)
@@ -2225,6 +2319,10 @@ int efrm_filter_insert(struct efrm_client *client,
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
 	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
 	int rc;
+
+	if ( efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP )
+		return efrm_ethtool_filter_insert(efhw_nic->net_dev, spec);
+
 	/* If [efx_dev] is NULL, the hardware is morally absent. */
 	if ( efx_dev == NULL )
 		return -ENETDOWN;
@@ -2251,12 +2349,32 @@ int efrm_filter_insert(struct efrm_client *client,
 EXPORT_SYMBOL(efrm_filter_insert);
 
 
+static int efrm_ethtool_filter_remove(struct net_device* dev, int filter_id)
+{
+	struct ethtool_rxnfc info;
+	const struct ethtool_ops *ops = dev->ethtool_ops;
+
+	memset(&info, 0, sizeof(info));
+	info.cmd = ETHTOOL_SRXCLSRLDEL;
+	info.fs.location = filter_id;
+
+	if (!ops->set_rxnfc)
+		return -EOPNOTSUPP;
+
+	return ops->set_rxnfc(dev, &info);
+}
+
+
 void efrm_filter_remove(struct efrm_client *client, int filter_id)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
 	struct efrm_nic *rnic = efrm_nic(efhw_nic);
 	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
-	if( efx_dev != NULL ) {
+
+	if ( efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP ) {
+		efrm_ethtool_filter_remove(efhw_nic->net_dev, filter_id);
+	}
+	else if( efx_dev != NULL ) {
 		/* If the filter op fails with ENETDOWN, that indicates that
 		 * the hardware is inacessible but that the device has not
 		 * (yet) been shut down.  It will be recovered by a subsequent

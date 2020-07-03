@@ -44,8 +44,6 @@ enum ef_pd_flags {
   /** Bypass the /proc/driver/sfc_resource/.../enable blacklist feature.
    * Required CAP_NET_ADMIN */
   EF_PD_IGNORE_BLACKLIST = 0x40,
-  /** Use AF_XDP instead of sfc driver */
-  EF_PD_AF_XDP           = 0x80,
 };
 
 
@@ -78,11 +76,6 @@ typedef struct ef_pd {
   unsigned         pd_cluster_viset_resource_id;
   /** Index of VI wanted within a cluster. */
   int              pd_cluster_viset_index;
-
-  /** Additional state for AF_XDP user memory */
-  struct iovec     pd_xdp_umem;
-  /** List of VIs awaiting configuration of user memory */
-  struct ef_vi*    pd_xdp_vi_pending;
 } ef_pd;
 
 

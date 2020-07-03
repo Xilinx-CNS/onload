@@ -54,6 +54,16 @@ extern int efrm_client_accel_allowed(struct efrm_client *client);
 
 extern struct efhw_nic* efhw_nic_find(const struct net_device *);
 
+/* Functions to explicitly register/unregister a network device as
+ * being "acceleratable" by Onload. This is used for devices detected
+ * by userspace, such as non-driverlink; genuine Solarflare NICs don't
+ * use this path.
+ *
+ * Both these functions require that the RTNL lock is held. */
+struct net_device;
+extern int efrm_nic_add_device(struct net_device *, int n_vis);
+extern void efrm_nic_del_device(struct net_device *);
+
 extern void efrm_client_disable_post_reset(struct efrm_client*);
 
 

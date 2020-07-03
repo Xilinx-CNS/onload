@@ -23,11 +23,6 @@
 #include "char_internal.h"
 
 
-#ifndef NDEBUG
-static const char *q_names[EFHW_N_Q_TYPES] = { "TXQ", "RXQ", "EVQ" };
-#endif
-
-
 /*************************************************************************/
 
 
@@ -44,6 +39,8 @@ efab_vi_rm_mmap_io(struct efrm_vi *virs,
   struct efhw_nic *nic;
 
   nic = efrm_client_get_nic(virs->rs.rs_client);
+  if( nic->devtype.arch == EFHW_ARCH_AF_XDP )
+    return 0;
 
   instance = virs->rs.rs_instance;
 
@@ -160,32 +157,11 @@ efab_vi_rm_mmap_mem(struct efrm_vi *virs,
                     unsigned long *bytes, void *opaque,
                     int *map_num, unsigned long *offset)
 {
-  int queue_type;
-  uint32_t len;
+  unsigned long map_bytes = efhw_page_map_bytes(&virs->mem_mmap);
 
-  if( virs->q[EFHW_EVQ].capacity != 0 ) {
-    len = efhw_iopages_size(&virs->q[EFHW_EVQ].pages);
-    len = CI_MIN(len, *bytes);
-    ci_assert_gt(len, 0);
-    ci_mmap_iopages(&virs->q[EFHW_EVQ].pages, 0,
-                    len, bytes, opaque, map_num, offset);
-    if(*bytes == 0)
-      return 0;
-  }
-
-  for( queue_type=EFRM_VI_RM_DMA_QUEUE_COUNT-1;
-       queue_type>=0;
-       queue_type-- ) {
-    if( virs->q[queue_type].capacity != 0 ) {
-      len = efhw_iopages_size(&virs->q[queue_type].pages);
-      len = CI_MIN(len, *bytes);
-      ci_assert_gt(len, 0);
-      ci_mmap_iopages(&virs->q[queue_type].pages, 0,
-                      len, bytes, opaque, map_num, offset);
-      if(*bytes == 0)
-        return 0;
-    }
-  }
+  *bytes -= map_bytes;
+  *map_num += virs->mem_mmap.n_lumps;
+  *offset += map_bytes;
 
   return 0;
 }
@@ -224,19 +200,16 @@ int
 efab_vi_resource_mmap_bytes(struct efrm_vi* virs, int map_type)
 {
   int bytes = 0;
+  struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
 
   EFRM_RESOURCE_ASSERT_VALID(&virs->rs, 0);
 
   if( map_type == 0 ) {  /* I/O mapping. */
-    bytes += CI_PAGE_SIZE;
+    if( nic->devtype.arch != EFHW_ARCH_AF_XDP )
+      bytes += CI_PAGE_SIZE;
   }
   else {              /* Memory mapping. */
-    if( virs->q[EFHW_EVQ].capacity != 0 )
-      bytes += efhw_iopages_size(&virs->q[EFHW_EVQ].pages);
-    if( virs->q[EFHW_TXQ].capacity )
-      bytes += efhw_iopages_size(&virs->q[EFHW_TXQ].pages);
-    if( virs->q[EFHW_RXQ].capacity )
-      bytes += efhw_iopages_size(&virs->q[EFHW_RXQ].pages);
+    bytes += efhw_page_map_bytes(&virs->mem_mmap);
   }
 
   /* Round up to whole number of pages. */
@@ -249,35 +222,7 @@ struct page*
 efab_vi_resource_nopage(struct efrm_vi *virs, struct vm_area_struct *opaque,
                         unsigned long offset, unsigned long map_size)
 {
-  unsigned long len;
-  int queue_type;
-  struct page* pg;
-
-  if( virs->q[EFHW_EVQ].capacity != 0 ) {
-    len = efhw_iopages_size(&virs->q[EFHW_EVQ].pages);
-    if( offset < len ) {
-      pg = pfn_to_page(efhw_iopages_pfn(&virs->q[EFHW_EVQ].pages,
-                                        offset >> PAGE_SHIFT));
-      EFCH_TRACE("%s: Matched the EVQ", __FUNCTION__);
-      return pg;
-    }
-    offset -= len;
-  }
-
-  for( queue_type=EFRM_VI_RM_DMA_QUEUE_COUNT-1;
-       queue_type>=0;
-       queue_type--) {
-    len = efhw_iopages_size(&virs->q[queue_type].pages);
-    if( offset < len ) {
-      pg = pfn_to_page(efhw_iopages_pfn(&virs->q[queue_type].pages,
-                                        offset >> PAGE_SHIFT));
-      EFCH_TRACE("%s: Matched the %s", __FUNCTION__, q_names[queue_type]);
-      return pg;
-    }
-    offset -= len;
-  }
-
-  return NULL;
+  return efhw_page_map_page(&virs->mem_mmap, offset >> PAGE_SHIFT);
 }
 EXPORT_SYMBOL(efab_vi_resource_nopage);
 

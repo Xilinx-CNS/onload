@@ -2830,8 +2830,8 @@ ci_inline void __ci_netif_pkt_clean(ci_ip_pkt_fmt* pkt)
   pkt->rx_flags = 0;
   pkt->n_buffers = 1;
   pkt->frag_next = OO_PP_NULL;
-  CI_DEBUG(pkt->pkt_start_off = 0xff;
-           pkt->pkt_eth_payload_off = 0xff);
+  CI_DEBUG(pkt->pkt_start_off = PKT_START_OFF_BAD;
+           pkt->pkt_eth_payload_off = PKT_START_OFF_BAD);
 #if CI_CFG_TIMESTAMPING
   memset(&pkt->hw_stamp, 0, sizeof(pkt->hw_stamp));
 #endif

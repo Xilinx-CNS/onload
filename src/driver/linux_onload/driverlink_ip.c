@@ -216,6 +216,23 @@ static struct nf_hook_ops oo_netfilter_ip6_hook = {
 #endif
 
 
+int oo_netdev_is_dl(const struct net_device *net_dev)
+{
+  struct efhw_nic* efhw_nic;
+  struct oo_nic* onic;
+  onic = oo_nic_find_dev(net_dev);
+  if( onic == NULL )
+    return 0;
+  efhw_nic = efrm_client_get_nic(onic->efrm_client);
+  return efhw_nic->devtype.arch == EFHW_ARCH_EF10 ||
+         efhw_nic->devtype.arch == EFHW_ARCH_EF100;
+}
+
+int oo_netdev_is_non_dl(const struct net_device *net_dev)
+{
+  return ! oo_netdev_is_dl(net_dev) && oo_nic_find_dev(net_dev) != NULL;
+}
+
 /* This function will create an oo_nic if one hasn't already been created.
  *
  * There are two code paths whereby this function can be called multiple
@@ -225,10 +242,10 @@ static struct nf_hook_ops oo_netfilter_ip6_hook = {
  *   oo_netdev_event() will call oo_netdev_may_add() before dl_probe is run,
  *   which will call oo_netdev_may_add() itself.
  *
- * Once a device is noticed by onload, it should stay registered in cplane 
+ * Once a device is noticed by onload, it should stay registered in cplane
  * despite going up or being hotplugged.
  */
-static struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
+struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
 {
   struct efhw_nic* efhw_nic;
   struct oo_nic* onic;
@@ -269,7 +286,10 @@ static int oo_dl_probe(struct efx_dl_device* dl_dev,
                        const char* silicon_rev)
 {
   struct oo_nic* onic = NULL;
-
+  if( oo_netdev_is_non_dl(net_dev) ) {
+    ci_log("%s: net dev event %s ignoring as already non-dl", __FUNCTION__, net_dev->name);
+    return -1;
+  }
   if( ! netif_running(net_dev) ) {
     onic = oo_nic_find_dev(net_dev);
     if( onic != NULL ) {
@@ -299,8 +319,7 @@ static int oo_dl_probe(struct efx_dl_device* dl_dev,
   return 0;
 }
 
-
-static void oo_dl_remove(struct efx_dl_device* dl_dev)
+void oo_common_remove(struct net_device* netdev)
 {
   /* We need to fini all of the hardware queues immediately. The net driver
    * will tidy up its own queues and *all* VIs, so if we don't free our own
@@ -315,7 +334,6 @@ static void oo_dl_remove(struct efx_dl_device* dl_dev)
 #if CI_CFG_NIC_RESET_SUPPORT
   ci_netif* ni = NULL;
 #endif
-  struct net_device* netdev = dl_dev->priv;
   struct oo_nic* onic;
   if( (onic = oo_nic_find_dev(netdev)) != NULL ) {
     /* Filter status need to be synced as after this function is finished
@@ -343,6 +361,16 @@ static void oo_dl_remove(struct efx_dl_device* dl_dev)
     /* The actual business of flushing the queues will be handled by the
      * resource driver in its own driverlink removal hook in a moment. */
   }
+}
+
+static void oo_dl_remove(struct efx_dl_device* dl_dev)
+{
+  struct net_device* netdev = dl_dev->priv;
+  if( ! oo_netdev_is_dl(netdev) ) {
+    ci_log("%s: net dev event %s ignoring as non-dl", __FUNCTION__, netdev->name);
+    return;
+  }
+  oo_common_remove(netdev);
 }
 
 
@@ -381,7 +409,7 @@ static void oo_fixup_wakeup_breakage(struct net_device* dev)
 }
 
 
-static void oo_netdev_up(struct net_device* netdev)
+void oo_netdev_up(struct net_device* netdev)
 {
   struct oo_nic *onic;
   struct efhw_nic* efhw_nic;
@@ -420,6 +448,8 @@ static int oo_netdev_event(struct notifier_block *this,
                            unsigned long event, void *ptr)
 {
   struct net_device *netdev = netdev_notifier_info_to_dev(ptr);
+  if( ! oo_netdev_is_dl(netdev) )
+    return NOTIFY_DONE;
 
   switch( event ) {
   case NETDEV_UP:
