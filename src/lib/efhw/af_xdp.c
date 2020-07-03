@@ -16,8 +16,6 @@
 
 #include <onload/linux_trampoline.h>
 
-#define MAX_SOCKETS 128
-
 #define UMEM_BLOCK (PAGE_SIZE / sizeof(void*))
 
 /* A block of addresses of user memory pages */
@@ -54,7 +52,7 @@ struct efhw_af_xdp_vi
 struct efhw_nic_af_xdp
 {
   struct file* map;
-  struct efhw_af_xdp_vi vi[MAX_SOCKETS];
+  struct efhw_af_xdp_vi vi[];
 };
 
 /*----------------------------------------------------------------------------
@@ -125,15 +123,15 @@ static void* umem_pages_get_addr(struct umem_pages* pages, long page)
  *
  *---------------------------------------------------------------------------*/
 
-/* Get the VI with the given stack ID */
-static struct efhw_af_xdp_vi* vi_by_stack(struct efhw_nic* nic, int stack_id)
+/* Get the VI with the given instance number */
+static struct efhw_af_xdp_vi* vi_by_instance(struct efhw_nic* nic, int instance)
 {
   struct efhw_nic_af_xdp* xdp = nic->af_xdp;
 
-  if( xdp == NULL || stack_id >= MAX_SOCKETS )
+  if( xdp == NULL || instance >= nic->vi_lim )
     return NULL;
 
-  return &xdp->vi[stack_id];
+  return &xdp->vi[instance];
 }
 
 /* Get the VI with the given owner ID */
@@ -145,7 +143,7 @@ static struct efhw_af_xdp_vi* vi_by_owner(struct efhw_nic* nic, int owner_id)
   if( xdp == NULL )
     return NULL;
 
-  for( i = 0; i < MAX_SOCKETS; ++i )
+  for( i = 0; i < nic->vi_lim; ++i )
     if( xdp->vi[i].owner_id == owner_id )
       return &xdp->vi[i];
 
@@ -211,7 +209,7 @@ static int xdp_alloc_fd(struct file* file)
 }
 
 /* Create the xdp socket map to share with the BPF program */
-static int xdp_map_create(void)
+static int xdp_map_create(int max_entries)
 {
   int rc;
   union bpf_attr attr = {};
@@ -219,7 +217,7 @@ static int xdp_map_create(void)
   attr.map_type = BPF_MAP_TYPE_XSKMAP;
   attr.key_size = sizeof(int);
   attr.value_size = sizeof(int);
-  attr.max_entries = MAX_SOCKETS;
+  attr.max_entries = max_entries;
   strncpy(attr.map_name, "onload_xsks", strlen("onload_xsks"));
   rc = sys_bpf(BPF_MAP_CREATE, &attr);
   return rc;
@@ -531,17 +529,17 @@ static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
  * Temporary bodge to mess around with the AF_XDP socket map
  *
  *---------------------------------------------------------------------------*/
-void* efhw_nic_bodge_af_xdp_mem(struct efhw_nic* nic, int stack_id)
+void* efhw_nic_bodge_af_xdp_mem(struct efhw_nic* nic, int instance)
 {
 #ifdef AF_XDP
-  struct efhw_af_xdp_vi* vi = vi_by_stack(nic, stack_id);
+  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, instance);
   return vi ? &vi->kernel_offsets : NULL;
 #else
   return NULL;
 #endif
 }
 
-int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
+int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int instance,
                                 int chunk_size, int headroom,
                                 struct socket** sock_out,
                                 struct efhw_page_map* page_map)
@@ -559,7 +557,7 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
       PAGE_SIZE % chunk_size != 0 )
     return -EINVAL;
 
-  vi = vi_by_stack(nic, stack_id);
+  vi = vi_by_instance(nic, instance);
   if( vi == NULL )
     return -ENODEV;
 
@@ -597,7 +595,7 @@ int efhw_nic_bodge_af_xdp_ready(struct efhw_nic* nic, int stack_id,
   if( rc < 0 )
     return rc;
 
-  rc = xdp_map_update(nic->af_xdp->map, stack_id, vi->sock);
+  rc = xdp_map_update(nic->af_xdp->map, instance, vi->sock);
   if( rc < 0 )
     return rc;
 
@@ -700,11 +698,12 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	struct bpf_prog* prog;
 	struct efhw_nic_af_xdp* xdp;
 
-	xdp = kzalloc(sizeof(*xdp), GFP_KERNEL);
+	xdp = kzalloc(sizeof(*xdp) + nic->vi_lim * sizeof(struct efhw_af_xdp_vi),
+	              GFP_KERNEL);
 	if( xdp == NULL )
 		return -ENOMEM;
 
-	map_fd = xdp_map_create();
+	map_fd = xdp_map_create(nic->vi_lim);
 	if( map_fd < 0 ) {
 		kfree(xdp);
 		return map_fd;
@@ -837,7 +836,7 @@ af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
                       uint vport_id, uint stack_id, uint flags)
 {
 #ifdef AF_XDP
-  struct efhw_af_xdp_vi* vi = vi_by_stack(nic, stack_id);
+  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, dmaq);
   if( vi == NULL )
     return -ENODEV;
 
@@ -858,7 +857,7 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 		    uint vport_id, uint stack_id, uint ps_buf_size, uint flags)
 {
 #ifdef AF_XDP
-  struct efhw_af_xdp_vi* vi = vi_by_stack(nic, stack_id);
+  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, dmaq);
   if( vi == NULL )
     return -ENODEV;
 

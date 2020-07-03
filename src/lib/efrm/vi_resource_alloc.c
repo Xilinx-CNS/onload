@@ -222,13 +222,6 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 	int channel;
 
 	efhw_nic = efrm_client_get_nic(efrm_pd_to_resource(pd)->rs_client);
-
-	/* TODO AF_XDP */
-	if (efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP) {
-		virs->allocation.instance = 0;
-		return 0;
-	}
-
 	efrm_nic = efrm_nic(efhw_nic);
 	channel = vi_attr->channel;
 	if (vi_attr->interrupt_core >= 0) {
@@ -300,15 +293,11 @@ static void efrm_vi_rm_free_instance(struct efrm_vi *virs)
 		if (virs->irq != 0)
 			efrm_vi_irq_free(virs);
 
-		/* TODO AF_XDP hack while figuring out vi allocator */
-		if(nic->devtype.arch == EFHW_ARCH_AF_XDP) {
-			if (virs->af_xdp_sock && virs->af_xdp_sock->file)
-				fput(virs->af_xdp_sock->file);
-		}
-		else {
-			efrm_vi_allocator_free_set(efrm_nic(nic),
-						   &virs->allocation);
-		}
+		/* TODO AF_XDP */
+		if (virs->af_xdp_sock && virs->af_xdp_sock->file)
+			fput(virs->af_xdp_sock->file);
+
+		efrm_vi_allocator_free_set(efrm_nic(nic), &virs->allocation);
 	}
 }
 
@@ -1290,10 +1279,8 @@ efrm_vi_resource_deferred(struct efrm_vi *virs, int chunk_size, int headroom,
 	struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
 
 	if (nic->devtype.arch == EFHW_ARCH_AF_XDP) {
-		/* TODO AF_XDP is this the right choice of stack identifier? */
-		int stack_id = efrm_pd_stack_id_get(virs->pd);
-
-		rc = efhw_nic_bodge_af_xdp_ready(nic, stack_id, chunk_size, headroom,
+		rc = efhw_nic_bodge_af_xdp_ready(nic, virs->allocation.instance,
+		                                 chunk_size, headroom,
 		                                 &virs->af_xdp_sock, &virs->mem_mmap);
 		if (rc < 0)
 			return rc;
@@ -1514,7 +1501,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 
 	/* TODO AF_XDP */
 	virs->af_xdp_mem = efhw_nic_bodge_af_xdp_mem(client->nic,
-	                                             efrm_pd_stack_id_get(pd));
+	                                             virs->allocation.instance);
 
 #ifdef __PPC__
 	/* On PPC it is impossible to get DMA addresses that are aligned on

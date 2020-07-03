@@ -45,14 +45,8 @@ int efrm_vi_allocator_ctor(struct efrm_nic *efrm_nic,
 	int rc;
 	unsigned vi_min, vi_lim;
 
-	/* TODO AF_XDP Need to consider whole vi allocator bobbins, for now
-	 * just claim something.
-	 */
-	if (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP) {
-		vi_min = dims->vi_min;
-		vi_lim = dims->vi_lim;
-	}
-	else if (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10) {
+	if (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10 ||
+	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP) {
 		vi_min = dims->vi_min; 
 		vi_lim = dims->vi_lim;
 	}
