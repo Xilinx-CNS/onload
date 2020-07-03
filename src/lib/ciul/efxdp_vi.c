@@ -27,6 +27,7 @@
  * field to store the last packet known to be sent; if this does not cover
  * all those in the queue, we will try again once a send has completed.
  */
+#define AF_XDP_TX_BATCH_MAX 16
 static int efxdp_tx_need_kick(ef_vi* vi)
 {
   ef_vi_txq_state* qs = &vi->ep_state->txq;
@@ -86,7 +87,18 @@ static int efxdp_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
 static void efxdp_ef_vi_transmit_push(ef_vi* vi)
 {
   *RING_PRODUCER(vi, tx) = vi->ep_state->txq.added;
-  efxdp_tx_kick(vi);
+  /* Kicking TX is very expensinve, hence the need to moderate it.
+   *  Two cases are allowed:
+   *  * if there is nothing or almost nothing in the TX queue
+   *    - as we cannot rely on interrupt to pick TX up
+   *    - we kick after 1st and 2nd packet to make sure latency is low
+   *      for typical ping-pong usecases even if interrupts are moderated.
+   *  * at least every AF_XDP_TX_BATCH_MAX packets if queue is stuffed.
+   */
+  EF_VI_BUG_ON(vi->ep_state->txq.added == vi->ep_state->txq.previous);
+  if( vi->ep_state->txq.added - vi->ep_state->txq.removed < 3 ||
+      (vi->ep_state->txq.added ^ vi->ep_state->txq.previous) / AF_XDP_TX_BATCH_MAX )
+    efxdp_tx_kick(vi);
 }
 
 static int efxdp_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
@@ -279,10 +291,10 @@ static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
        * from `ef_vi_transmit_unbundle`. */
       *RING_CONSUMER(vi, cr) = cons;
 
-      if( efxdp_tx_need_kick(vi) )
-        efxdp_tx_kick(vi);
     }
   }
+  if( efxdp_tx_need_kick(vi) )
+    efxdp_tx_kick(vi);
 
   return n;
 }
