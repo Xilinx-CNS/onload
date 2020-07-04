@@ -215,6 +215,17 @@ static void efxdp_ef_eventq_prime(ef_vi* vi)
   // TODO
 }
 
+int efxdp_ef_eventq_check_event(const ef_vi* _vi, int look_ahead)
+{
+  ef_vi* vi = (ef_vi*) _vi; /* drop const */
+  EF_VI_ASSERT(vi->evq_base);
+  EF_VI_BUG_ON(look_ahead < 0);
+  return *RING_CONSUMER(vi, rx) - *RING_PRODUCER(vi, rx) +
+         *RING_CONSUMER(vi, cr) - *RING_PRODUCER(vi, cr)
+         > look_ahead;
+}
+
+
 static int efxdp_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int n = 0;
@@ -347,6 +358,7 @@ void efxdp_vi_init(ef_vi* vi)
 
   vi->rx_buffer_len = 2048;
   vi->rx_prefix_len = 0;
+  vi->evq_phase_bits = 1; /* We set this flag for ef_eventq_has_event */
 }
 
 long efxdp_vi_mmap_bytes(ef_vi* vi)

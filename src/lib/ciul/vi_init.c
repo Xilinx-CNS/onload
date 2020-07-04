@@ -279,15 +279,7 @@ void ef_vi_init_txq(struct ef_vi* vi, int ring_size, void* descriptors,
 static char* ef_vi_xdp_init_qs(struct ef_vi* vi, char* q_mem, uint32_t* ids,
                                int rxq_size, int rx_prefix_len, int txq_size)
 {
-  /* Fake up a single-entry event queue so that ef_eventq_has_event() will
-   * return true. The queue memory begins with the size of the memory region,
-   * and is suitably aligned, so if we pretend there's an event there, it
-   * will look like it might be valid.
-   *
-   * This means that the function is safe to use for an AF_XDP VI, without
-   * impacting performance of standard VIs. We may want to make this work
-   * properly in order to improve AF_XDP performance.
-   */
+  /* We need to initialise event queue to access things in the mapped memory */
   ef_vi_init_evq(vi, 1, q_mem);
   ef_vi_init_rxq(vi, rxq_size, NULL, ids, rx_prefix_len);
   ef_vi_init_txq(vi, txq_size, NULL, ids + rxq_size);

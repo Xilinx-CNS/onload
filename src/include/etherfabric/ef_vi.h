@@ -2078,6 +2078,8 @@ extern int ef_eventq_check_event(const ef_vi* vi, int look_ahead);
 */
 extern int ef_eventq_check_event_phase_bit(const ef_vi* vi, int look_ahead);
 
+extern int efxdp_ef_eventq_check_event(const ef_vi* vi, int look_ahead);
+
 
 /*! \brief Returns true if ef_eventq_poll() will return event(s)
 **
@@ -2090,10 +2092,12 @@ extern int ef_eventq_check_event_phase_bit(const ef_vi* vi, int look_ahead);
 ef_vi_inline int
 ef_eventq_has_event(const ef_vi* vi)
 {
-  if( vi->evq_phase_bits )
+  if( ! vi->evq_phase_bits )
+    return ef_eventq_check_event(vi, 0);
+  else if( vi->nic_type.arch != EF_VI_ARCH_AF_XDP )
     return ef_eventq_check_event_phase_bit(vi, 0);
   else
-    return ef_eventq_check_event(vi, 0);
+    return efxdp_ef_eventq_check_event(vi, 0);
 }
 
 
