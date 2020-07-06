@@ -29,12 +29,6 @@
 #undef CI_CFG_TCP_SHARED_LOCAL_PORTS
 #define CI_CFG_TCP_SHARED_LOCAL_PORTS 0
 
-/*
- * I've cut this Gordian Knot instead of untieing it.
- * - see comment at BREAK_SCALABLE_FILTERS;
- * - see comment at ci_netif_unlock();
- * - CI_EPLOCK_NETIF_NEED_PRIME for ef100 is not really handled;
- * - CI_EPLOCK_NETIF_PKT_WAKE is not handled.
- */
+/* See also BREAK_SCALABLE_FILTERS in src/lib/efthrm/tcp_helper_endpoint.c */
 
 #endif
