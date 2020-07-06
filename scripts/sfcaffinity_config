@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 # X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
 
-# Script to configure the sfc_affinity driver.
+# Script to configure affinity through the sfc_resource driver.
 
 # TODO:
 # - I'm concerned that the top-level-shared-cache might be the L1 when
@@ -32,14 +32,14 @@ Show current configuration
 help_auto = Template("""\
 $me auto [ethx]
 
-Configure sfc_affinity automatically
+Configure affinity automatically
 
 """)
 
 help_check = Template("""\
 $me check [ethx]
 
-Check sfc_affinity configuration for problems
+Check sfc_resource configuration for problems
 
 """)
 
@@ -356,8 +356,8 @@ def module_loaded(modname):
     return bool(f.read())
 
 
-def sfc_affinity_loaded():
-    return module_loaded('sfc_affinity')
+def sfc_resource_loaded():
+    return module_loaded('sfc_resource')
 
 
 def sfc_check():
@@ -372,17 +372,11 @@ def sfc_check():
 
 def sfc_affinity_check():
     ok = True
-    if not sfc_affinity_loaded():
-        err("sfc_affinity driver is not loaded")
+    if not sfc_resource_loaded():
+        err("sfc_resource driver is not loaded")
         return False
-    info("sfc_affinity driver is loaded")
-    try:
-        os.stat('/dev/sfc_affinity')
-        info("/dev/sfc_affinity is present")
-    except:
-        err("/dev/sfc_affinity is missing")
-        ok = False
-    path = '/proc/driver/sfc_affinity/new_interface'
+    info("sfc_resource driver is loaded")
+    path = '/proc/driver/sfc_resource/new_interface'
     try:
         os.stat(path)
         info("%s is present" % path)
@@ -393,15 +387,15 @@ def sfc_affinity_check():
 
 
 def sfc_affinity_new_interface(ethx, cpu_to_q):
-    info("%s: configure sfc_affinity n_rxqs=%d cpu_to_rxq=%s" % \
+    info("%s: configure affinity n_rxqs=%d cpu_to_rxq=%s" % \
          (ethx, ethx.n_rxqs(), ','.join([str(i) for i in cpu_to_q])))
-    if not sfc_affinity_loaded():
-        if do_system("/sbin/modprobe sfc_affinity") != 0:
-            err("Failed to load sfc_affinity driver")
+    if not sfc_resource_loaded():
+        if do_system("/sbin/modprobe sfc_resource") != 0:
+            err("Failed to load sfc_resource driver")
             return
     s = "%d %d %s" % (ethx.ifindex(), ethx.n_rxqs(),
                       ' '.join([str(i) for i in cpu_to_q]))
-    cmd = "echo %s >/proc/driver/sfc_affinity/new_interface" % s
+    cmd = "echo %s >/proc/driver/sfc_resource/new_interface" % s
     if do_system(cmd) != 0:
         err("Failed to register interface %s" % ethx)
         err("Command was:")
@@ -410,13 +404,12 @@ def sfc_affinity_new_interface(ethx, cpu_to_q):
 
 
 def sfc_affinity_get_cpu2rxq(ethx):
-    ifindex = ethx.ifindex()
-    return file_get_int_list('/proc/driver/sfc_affinity/%d/cpu2rxq' % ifindex)
+    return file_get_int_list('/proc/driver/sfc_resource/%s/cpu2rxq' % ethx)
 
 
-def sfc_affinity_ifindex_is_registered(ifindex):
+def sfc_affinity_intf_is_registered(ethx):
     try:
-        os.stat('/proc/driver/sfc_affinity/%d' % ifindex)
+        os.stat('/proc/driver/sfc_resource/%s' % ethx)
         return True
     except:
         return False
@@ -550,7 +543,7 @@ def interface_show(ethx):
     out("%s n_rxqs=%d" % (ethx, ethx.n_rxqs()))
     for rxq in range(ethx.n_rxqs()):
         rxq_show(ethx, rxq)
-    if sfc_affinity_ifindex_is_registered(ethx.ifindex()):
+    if sfc_affinity_intf_is_registered(ethx):
         cpu2rxq = sfc_affinity_get_cpu2rxq(ethx)
         out("%s cpu2rxq=%s" % (ethx, ','.join([str(x) for x in cpu2rxq])))
         out("%s req. core -> channel -> core(s)" % ethx)
@@ -564,7 +557,7 @@ def interface_show(ethx):
                 core_list = mask.int_to_comma_sep_list(irq_m)
                 out("%s %7d   -> %5d   -> %5s" % (ethx, cpu, rxq, core_list))
     else:
-        out("%s not registered with sfc_affinity" % ethx)
+        out("%s not registered with sfc_resource" % ethx)
 
 
 def my_min(seq, key=None):
@@ -756,12 +749,12 @@ def interface_check(ethx):
     for rxq in range(ethx.n_rxqs()):
         if not rxq_check_affinity(ethx, rxq):
             ok = False
-    path = '/proc/driver/sfc_affinity/%d' % ethx.ifindex()
+    path = '/proc/driver/sfc_resource/%s' % ethx
     try:
         os.stat(path)
-        info("%s is registered with sfc_affinity" % ethx)
+        info("%s is registered with sfc_resource" % ethx)
     except:
-        err("%s is not registered with sfc_affinity" % ethx)
+        err("%s is not registered with sfc_resource" % ethx)
         ok = False
     if ok:
         cpu2rxq = sfc_affinity_get_cpu2rxq(ethx)
@@ -772,8 +765,8 @@ def interface_check(ethx):
             ok = False
     # check entries in cpu2rxq are in range of num cpus
     # check cpu2rxq2cpu mapping self consistent
-    # check sfc_affinity does not think there are more rxqs than there are
-    # warn if sfc_affinity thinkgs there are too few rxqs
+    # check sfc_resource does not think there are more rxqs than there are
+    # warn if sfc_resource thinkgs there are too few rxqs
     return ok
 
 ######################################################################
@@ -890,7 +883,7 @@ def cmd_check(args):
     if not sys_check():
         rc = 1
     if rc == 0:
-        info("sfc_affinity configuration looks fine")
+        info("sfc_resource configuration looks fine")
     return rc
 
 
