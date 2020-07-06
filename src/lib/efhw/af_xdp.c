@@ -84,7 +84,7 @@ static struct efhw_af_xdp_vi* vi_by_owner(struct efhw_nic* nic, int owner_id)
 /* Invoke the bpf() syscall args is assumed to be kernel memory */
 static int sys_bpf(int cmd, union bpf_attr* attr)
 {
-#if defined(__NR_bpf) && defined(ONLOAD_SYSCALL_PTREGS)
+#if defined(__NR_bpf) && defined(ONLOAD_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
   struct pt_regs regs;
   static asmlinkage long (*sys_call)(const struct pt_regs*) = NULL;
 
