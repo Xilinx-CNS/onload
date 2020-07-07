@@ -1521,8 +1521,6 @@ static int ci_netif_poll_evq(ci_netif* ni, struct ci_netif_poll_state* ps,
   int i;
   oo_pkt_p pp;
   int completed_tx = 0;
-  int rx_ofs_base = (evq->nic_type.arch == EF_VI_ARCH_AF_XDP) ?
-                    CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start) : 0;
 #ifdef OO_HAS_POLL_IN_KERNEL
   int poll_in_kernel;
 #endif
@@ -1578,10 +1576,12 @@ have_events:
         OO_PP_INIT(ni, pp, EF_EVENT_RX_RQ_ID(ev[i]));
         pkt = PKT_CHK(ni, pp);
         /* AF_XDP has potentially variable offset and this is taken it into account here,
-         * ef10 always reports 0 */
-        pkt->pkt_start_off = ev[i].rx.ofs - rx_ofs_base;
-        ci_prefetch_ppc(PKT_START(pkt));
-        ci_prefetch_ppc(pkt);
+         * but we shouldn't touch pkt_start_off for ef10 case as it is used to calculate
+         * pkt_eth_payload_off properly. */
+        if( evq->nic_type.arch == EF_VI_ARCH_AF_XDP ) {
+          pkt->pkt_start_off = ev[i].rx.ofs -
+                               CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start);
+        }
         ci_assert_equal(pkt->intf_i, intf_i);
         __handle_rx_pkt(ni, ps, intf_i, &s.rx_pkt);
         if( (ev[i].rx.flags & (EF_EVENT_FLAG_SOP | EF_EVENT_FLAG_CONT))
