@@ -18,6 +18,7 @@
 #include <ci/efrm/syscall.h>
 
 #define UMEM_BLOCK (PAGE_SIZE / sizeof(void*))
+#define MAX_PDS 256
 
 /* A block of addresses of user memory pages */
 struct umem_block
@@ -30,6 +31,7 @@ struct umem_pages
 {
   long page_count;
   long block_count;
+  long freed_block_count;
   long used_page_count;
 
   struct umem_block** blocks;
@@ -46,6 +48,10 @@ struct efhw_af_xdp_vi
 
   struct efab_af_xdp_offsets kernel_offsets;
   struct efhw_page user_offsets_page;
+};
+
+struct protection_domain
+{
   struct umem_pages umem;
 };
 
@@ -53,7 +59,8 @@ struct efhw_af_xdp_vi
 struct efhw_nic_af_xdp
 {
   struct file* map;
-  struct efhw_af_xdp_vi vi[];
+  struct efhw_af_xdp_vi* vi;
+  struct protection_domain* pd;
 };
 
 /*----------------------------------------------------------------------------
@@ -136,19 +143,14 @@ static struct efhw_af_xdp_vi* vi_by_instance(struct efhw_nic* nic, int instance)
 }
 
 /* Get the VI with the given owner ID */
-static struct efhw_af_xdp_vi* vi_by_owner(struct efhw_nic* nic, int owner_id)
+static struct protection_domain* pd_by_owner(struct efhw_nic* nic, int owner_id)
 {
-  int i;
   struct efhw_nic_af_xdp* xdp = nic->af_xdp;
 
-  if( xdp == NULL )
+  if( xdp == NULL || owner_id > MAX_PDS || owner_id < 0 )
     return NULL;
 
-  for( i = 0; i < nic->vi_lim; ++i )
-    if( xdp->vi[i].owner_id == owner_id )
-      return &xdp->vi[i];
-
-  return NULL;
+  return &xdp->pd[owner_id];
 }
 
 /*----------------------------------------------------------------------------
@@ -515,9 +517,13 @@ static int xdp_create_rings(struct socket* sock,
   return 0;
 }
 
+static void xdp_release_pd(struct protection_domain* pd)
+{
+  umem_pages_free(&pd->umem);
+}
+
 static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
 {
-  umem_pages_free(&vi->umem);
   efhw_page_free(&vi->user_offsets_page);
   if( vi->sock != NULL )
     fput(vi->sock);
@@ -548,6 +554,8 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
 #ifdef AF_XDP
   int rc;
   struct efhw_af_xdp_vi* vi;
+  int owner_id;
+  struct protection_domain* pd;
   struct socket* sock;
   struct file* file;
   struct efab_af_xdp_offsets* user_offsets;
@@ -564,6 +572,11 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
 
   if( vi->sock != NULL )
     return -EBUSY;
+
+  owner_id = vi->owner_id;
+  pd = pd_by_owner(nic, owner_id);
+  if( vi == NULL )
+    return -EINVAL;
 
   /* We need to use network namespace of network device so that
    * ifindex passed in bpf syscalls makes sense
@@ -586,7 +599,7 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     return rc;
 
-  rc = xdp_register_umem(sock, &vi->umem, chunk_size, headroom);
+  rc = xdp_register_umem(sock, &pd->umem, chunk_size, headroom);
   if( rc < 0 )
     return rc;
 
@@ -688,10 +701,14 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	struct bpf_prog* prog;
 	struct efhw_nic_af_xdp* xdp;
 
-	xdp = kzalloc(sizeof(*xdp) + nic->vi_lim * sizeof(struct efhw_af_xdp_vi),
-	              GFP_KERNEL);
+	xdp = kzalloc(sizeof(*xdp) +
+		      nic->vi_lim * sizeof(struct efhw_af_xdp_vi) +
+		      MAX_PDS * sizeof(struct protection_domain),
+		      GFP_KERNEL);
 	if( xdp == NULL )
 		return -ENOMEM;
+	xdp->vi = (struct efhw_af_xdp_vi*) (xdp + 1);
+	xdp->pd = (struct protection_domain*) (xdp->vi + nic->vi_lim);
 
 	map_fd = xdp_map_create(nic->vi_lim);
 	if( map_fd < 0 ) {
@@ -768,7 +785,8 @@ static void
 af_xdp_nic_event_queue_disable(struct efhw_nic *nic, uint evq,
 			     int time_sync_events_enabled)
 {
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
+	struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq);
+	xdp_release_vi(vi);
 }
 
 static void
@@ -921,11 +939,13 @@ af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
 {
 #ifdef AF_XDP
   struct efhw_buffer_table_block* block;
-  struct efhw_af_xdp_vi* vi = vi_by_owner(nic, owner);
+  struct protection_domain* pd = pd_by_owner(nic, owner);
   int rc;
 
-  if( vi == NULL )
+  if( pd == NULL )
     return -ENODEV;
+
+  EFHW_ERR("%s: owner %d pd 0x%llx", __FUNCTION__, owner, (long long)pd);
 
   /* We reserve some bits of the handle to store the order, needed later to
    * calculate the address of each entry within the block. This limits the
@@ -941,9 +961,9 @@ af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
 
   /* TODO use af_xdp-specific data rather than repurposing ef10-specific */
   block->btb_hw.ef10.handle = order | (owner << 8);
-  block->btb_vaddr = vi->umem.page_count << PAGE_SHIFT;
+  block->btb_vaddr = pd->umem.page_count << PAGE_SHIFT;
 
-  rc = umem_pages_alloc(&vi->umem, EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
+  rc = umem_pages_alloc(&pd->umem, EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
   if( rc < 0 ) {
     kfree(block);
     return rc;
@@ -973,11 +993,15 @@ af_xdp_nic_buffer_table_free(struct efhw_nic *nic,
 {
 #ifdef AF_XDP
   int owner = block->btb_hw.ef10.handle >> 8;
-  struct efhw_af_xdp_vi* vi = vi_by_owner(nic, owner);
-  if( vi != NULL )
-    xdp_release_vi(vi);
+  struct protection_domain* pd = pd_by_owner(nic, owner);
+  if( pd == NULL )
+    return;
 
   kfree(block);
+
+  if( pd->umem.freed_block_count++ == pd->umem.block_count )
+    xdp_release_pd(pd);
+
 #endif
 }
 
@@ -991,12 +1015,12 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
 #ifdef AF_XDP
   int i, j, owner, order;
   long page;
-  struct efhw_af_xdp_vi* vi;
+  struct protection_domain* pd;
 
   owner = block->btb_hw.ef10.handle >> 8;
   order = block->btb_hw.ef10.handle & 0xff;
-  vi = vi_by_owner(nic, owner);
-  if( vi == NULL )
+  pd = pd_by_owner(nic, owner);
+  if( pd == NULL )
     return -ENODEV;
 
   /* We are mapping between two address types.
@@ -1024,13 +1048,13 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
    */
 
   page = (block->btb_vaddr >> PAGE_SHIFT) + (first_entry << order);
-  if( page + (n_entries << order) > vi->umem.page_count )
+  if( page + (n_entries << order) > pd->umem.page_count )
     return -EINVAL;
 
   for( i = 0; i < n_entries; ++i ) {
     char* dma_addr = (char*)dma_addrs[i];
     for( j = 0; j < (1 << order); ++j, ++page, dma_addr += PAGE_SIZE )
-      umem_pages_set_addr(&vi->umem, page, dma_addr);
+      umem_pages_set_addr(&pd->umem, page, dma_addr);
   }
 
   return 0;
