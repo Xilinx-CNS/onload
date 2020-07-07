@@ -1578,13 +1578,6 @@ int efrm_vi_is_hw_rx_loopback_supported(struct efrm_vi *virs)
 EXPORT_SYMBOL(efrm_vi_is_hw_rx_loopback_supported);
 
 
-struct efrm_pd* efrm_vi_pd_get(struct efrm_vi *virs)
-{
-	return virs->pd;
-}
-EXPORT_SYMBOL(efrm_vi_pd_get);
-
-
 int  efrm_vi_q_get_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 			int n_q_entries, struct efrm_vi_q_size *qso)
 {

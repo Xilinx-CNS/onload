@@ -202,11 +202,6 @@ extern int  efrm_vi_alloc(struct efrm_client *client,
 extern int efrm_vi_is_hw_rx_loopback_supported(struct efrm_vi *virs);
 
 
-/**
- * Returns the pd associated with the VI
- */
-extern struct efrm_pd* efrm_vi_pd_get(struct efrm_vi *virs);
-
 #define EFRM_VI_Q_GET_SIZE_CURRENT  -123
 
 /**

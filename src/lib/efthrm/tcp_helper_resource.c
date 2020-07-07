@@ -835,7 +835,7 @@ int tcp_helper_vi_hw_stack_id(tcp_helper_resource_t* trs, int hwport)
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
     struct efrm_vi* vi = trs->nic[intf_i].thn_vi_rs;
-    struct efrm_pd* pd = efrm_vi_pd_get(vi);
+    struct efrm_pd* pd = efrm_vi_get_pd(vi);
     return efrm_pd_stack_id_get(pd);
   }
   else
