@@ -31,7 +31,6 @@ struct umem_pages
 {
   long page_count;
   long block_count;
-  long freed_block_count;
   long used_page_count;
 
   struct umem_block** blocks;
@@ -53,6 +52,8 @@ struct efhw_af_xdp_vi
 struct protection_domain
 {
   struct umem_pages umem;
+  long buffer_table_count;
+  long freed_buffer_table_count;
 };
 
 /* Per-NIC AF_XDP resources */
@@ -517,9 +518,19 @@ static int xdp_create_rings(struct socket* sock,
   return 0;
 }
 
-static void xdp_release_pd(struct protection_domain* pd)
+static void xdp_release_pd(struct efhw_nic* nic, int owner)
 {
+  struct protection_domain* pd = pd_by_owner(nic, owner);
+  BUG_ON(pd == NULL);
+  BUG_ON(pd->freed_buffer_table_count >= pd->buffer_table_count);
+
+  if( ++pd->freed_buffer_table_count != pd->buffer_table_count )
+    return;
+
+  EFHW_ERR("%s: FIXME AF_XDP: resetting pd", __FUNCTION__);
+
   umem_pages_free(&pd->umem);
+  memset(pd, 0, sizeof(*pd));
 }
 
 static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
@@ -968,6 +979,7 @@ af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
     kfree(block);
     return rc;
   }
+  ++pd->buffer_table_count;
 
   *block_out = block;
   return 0;
@@ -993,15 +1005,8 @@ af_xdp_nic_buffer_table_free(struct efhw_nic *nic,
 {
 #ifdef AF_XDP
   int owner = block->btb_hw.ef10.handle >> 8;
-  struct protection_domain* pd = pd_by_owner(nic, owner);
-  if( pd == NULL )
-    return;
-
   kfree(block);
-
-  if( pd->umem.freed_block_count++ == pd->umem.block_count )
-    xdp_release_pd(pd);
-
+  xdp_release_pd(nic, owner);
 #endif
 }
 
