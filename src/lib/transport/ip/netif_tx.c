@@ -60,38 +60,50 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, int intf_i, int is_fresh)
           if( protocol == IPPROTO_TCP || protocol == IPPROTO_UDP )
             oo_pkt_calc_checksums(ni, pkt, &my_iov);
       }
-      iov_len = ci_netif_pkt_to_iovec(ni, pkt, iov,
-                                      sizeof(iov) / sizeof(iov[0]));
-#if CI_CFG_USE_CTPIO && !defined(__KERNEL__)
-      if( ctpio && (iov_len < 1 || iov_len > CI_IP_PKT_SEGMENTS_MAX ||
-                    ! ci_netif_may_ctpio(ni, intf_i, pkt->pay_len) ||
-                    pkt->flags & CI_PKT_FLAG_INDIRECT) )
-        ctpio = 0;
-      if( ctpio ) {
-        ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
-        struct iovec host_iov[CI_IP_PKT_SEGMENTS_MAX];
-        unsigned total_length;
+      if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_EF100 &&
+                      pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
+        ef_remote_iovec remote_iov[CI_IP_PKT_SEGMENTS_MAX];
 
-        ci_assert(! posted_dma);
-
-        total_length = ci_netif_pkt_to_host_iovec(ni, pkt, host_iov,
-                                                  sizeof(host_iov) / sizeof(host_iov[0]));
-        oo_pkt_calc_checksums(ni, pkt, host_iov);
-        ef_vi_transmitv_ctpio(vi, total_length, host_iov, iov_len,
-                              nsn->ctpio_ct_threshold);
-        CITP_STATS_NETIF_INC(ni, ctpio_pkts);
-        rc = ef_vi_transmitv_ctpio_fallback(vi, iov, iov_len,
-                                            OO_PKT_ID(pkt));
-        ci_assert_equal(rc, 0);
+        iov_len = ci_netif_pkt_to_remote_iovec(ni, pkt, remote_iov,
+                                               sizeof(remote_iov) / sizeof(remote_iov[0]));
+        rc = ef_vi_transmitv_init_extra(vi, NULL, remote_iov, iov_len, OO_PKT_ID(pkt));
       }
-      else
+      else {
+        iov_len = ci_netif_pkt_to_iovec(ni, pkt, iov,
+                                        sizeof(iov) / sizeof(iov[0]));
+        if( CI_UNLIKELY(iov_len < 0) )
+          break;
+#if CI_CFG_USE_CTPIO && !defined(__KERNEL__)
+        if( ctpio && (iov_len < 1 || iov_len > CI_IP_PKT_SEGMENTS_MAX ||
+                      ! ci_netif_may_ctpio(ni, intf_i, pkt->pay_len) ||
+                      pkt->flags & CI_PKT_FLAG_INDIRECT) )
+          ctpio = 0;
+        if( ctpio ) {
+          ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
+          struct iovec host_iov[CI_IP_PKT_SEGMENTS_MAX];
+          unsigned total_length;
+
+          ci_assert(! posted_dma);
+
+          total_length = ci_netif_pkt_to_host_iovec(ni, pkt, host_iov,
+                                                    sizeof(host_iov) / sizeof(host_iov[0]));
+          oo_pkt_calc_checksums(ni, pkt, host_iov);
+          ef_vi_transmitv_ctpio(vi, total_length, host_iov, iov_len,
+                                nsn->ctpio_ct_threshold);
+          CITP_STATS_NETIF_INC(ni, ctpio_pkts);
+          rc = ef_vi_transmitv_ctpio_fallback(vi, iov, iov_len,
+                                              OO_PKT_ID(pkt));
+          ci_assert_equal(rc, 0);
+        }
+        else
 #endif
-      {
-        rc = ef_vi_transmitv_init(vi, iov, iov_len, OO_PKT_ID(pkt));
+        {
+          rc = ef_vi_transmitv_init(vi, iov, iov_len, OO_PKT_ID(pkt));
 #if CI_CFG_CTPIO && !defined(__KERNEL__)
-        if( rc >= 0 )
-          posted_dma = 1;
+          if( rc >= 0 )
+            posted_dma = 1;
 #endif
+        }
       }
       if( rc >= 0 ) {
         __oo_pktq_next(ni, dmaq, pkt, netif.tx.dmaq_next);

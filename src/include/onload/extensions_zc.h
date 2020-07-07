@@ -173,7 +173,9 @@ extern int onload_zc_buffer_decref(int fd, onload_zc_handle buf);
  * fd indicates the stack on which to register the buffers. It can be any
  * socket allocated on that stack.
  *
- * addr_space must be EF_ADDRSPACE_LOCAL. flags must be 0.
+ * addr_space must be EF_ADDRSPACE_LOCAL (to send from the process's
+ * local address space) or a value obtained from elsewhere. flags must
+ * be 0.
  *
  * Returns zero on success, or <0 to indicate an error.
  *

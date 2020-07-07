@@ -5225,11 +5225,16 @@ static inline struct ci_zc_usermem* zc_handle_to_usermem(onload_zc_handle h)
 static inline ef_addr zc_usermem_dma_addr(struct ci_zc_usermem* um,
                                           uint64_t user_ptr, int intf_i)
 {
-  uint64_t offset = user_ptr - um->base;
-  uint64_t* hw_addrs = um->hw_addrs +
-                       ((intf_i * um->size) >> EF_VI_NIC_PAGE_SHIFT);
-  return hw_addrs[offset >> EF_VI_NIC_PAGE_SHIFT] |
-         (offset & (EF_VI_NIC_PAGE_SIZE - 1));
+  if( um->addr_space == EF_ADDRSPACE_LOCAL ) {
+    uint64_t offset = user_ptr - um->base;
+    uint64_t* hw_addrs = um->hw_addrs +
+                         ((intf_i * um->size) >> EF_VI_NIC_PAGE_SHIFT);
+    return hw_addrs[offset >> EF_VI_NIC_PAGE_SHIFT] |
+           (offset & (EF_VI_NIC_PAGE_SIZE - 1));
+  }
+  else {
+    return user_ptr;
+  }
 }
 
 #if CI_CFG_UL_INTERRUPT_HELPER && ! defined(__KERNEL__)

@@ -364,6 +364,31 @@ static bool is_page_aligned(uint64_t v)
   return (v & (CI_PAGE_SIZE - 1)) == 0;
 }
 
+/* Is the caller allowed to use remote address spaces on this netif?
+ *
+ * If not, return an error code. */
+static int verify_addrspace_override(ci_netif* ni)
+{
+  int nic_i;
+  int has_ef100 = 0;
+
+  /* Only EF100 hardware supports address space overrides. Fail if the
+   * machine only contains older NICs. */
+  OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
+    if( ni->nic_hw[nic_i].vi.nic_type.arch == EF_VI_ARCH_EF100 )
+      has_ef100 = 1;
+  }
+
+  if( !has_ef100 )
+    return -EINVAL;
+
+  /* Address space override is only allowed in physical addressing
+   * mode (for now) */
+  if( (NI_OPTS(ni).packet_buffer_mode & CITP_PKTBUF_MODE_PHYS) == 0 )
+    return -EPERM;
+
+  return 0;
+}
 
 int onload_zc_register_buffers(int fd, ef_addrspace addr_space,
                                uint64_t base_ptr, uint64_t len, int flags,
@@ -379,11 +404,10 @@ int onload_zc_register_buffers(int fd, ef_addrspace addr_space,
 
   citp_enter_lib(&lib_context);
 
-  if( addr_space != EF_ADDRSPACE_LOCAL )
+  if( flags )
     rc = -EINVAL;
-  else if( flags )
-    rc = -EINVAL;
-  else if( base_ptr == 0 || ! is_page_aligned(base_ptr) )
+  else if( addr_space == EF_ADDRSPACE_LOCAL &&
+           (base_ptr == 0 || ! is_page_aligned(base_ptr)) )
     rc = -EINVAL;
   else if( len == 0 || ! is_page_aligned(len) )
     rc = -EINVAL;
@@ -396,13 +420,20 @@ int onload_zc_register_buffers(int fd, ef_addrspace addr_space,
                                       oo_stack_intf_max(ni));
     if( ! um )
       rc = -ENOMEM;
+    else if( addr_space != EF_ADDRSPACE_LOCAL &&
+             (rc = verify_addrspace_override(ni)) < 0 ) {
+      /* error code already set appropriately */
+    }
     else {
       um->addr_space = addr_space;
       um->base = base_ptr;
       um->size = len;
-      rc = ci_tcp_helper_zc_register_buffers(ni, (void*)(uintptr_t)base_ptr,
-                                             num_pages, um->hw_addrs,
-                                             &um->kernel_id);
+
+      if( addr_space == EF_ADDRSPACE_LOCAL )
+        rc = ci_tcp_helper_zc_register_buffers(ni, (void*)(uintptr_t)base_ptr,
+                                               num_pages, um->hw_addrs,
+                                               &um->kernel_id);
+
       if( rc )
         free(um);
       else
@@ -436,7 +467,9 @@ int onload_zc_unregister_buffers(int fd, onload_zc_handle handle, int flags)
   else if( (rc = fd_to_stack(fd, &ni, &fdi)) == 0 ) {
     struct ci_zc_usermem* um = zc_handle_to_usermem(handle);
 
-    rc = ci_tcp_helper_zc_unregister_buffers(ni, um->kernel_id);
+    if( um->addr_space == EF_ADDRSPACE_LOCAL )
+      rc = ci_tcp_helper_zc_unregister_buffers(ni, um->kernel_id);
+
     if( rc == 0 )
       free(um);
 
