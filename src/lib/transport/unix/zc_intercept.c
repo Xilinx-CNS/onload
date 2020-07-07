@@ -245,7 +245,7 @@ int onload_zc_query_rx_memregs(int fd, struct onload_zc_iovec* iov,
         iov[i].iov_len = PKTS_PER_SET * CI_CFG_PKT_BUF_SIZE;
         iov[i].iov_flags = 0;
         iov[i].buf = NULL;
-        iov[i].addr_space = 0;
+        iov[i].addr_space = EF_ADDRSPACE_LOCAL;
         iov[i].iov_base = PKT(ni, i << CI_CFG_PKTS_PER_SET_S);
         if( ! iov[i].iov_base ) {
           /* Mapping in to the current address space failed */
@@ -365,7 +365,7 @@ static bool is_page_aligned(uint64_t v)
 }
 
 
-int onload_zc_register_buffers(int fd, uint64_t addr_space,
+int onload_zc_register_buffers(int fd, ef_addrspace addr_space,
                                uint64_t base_ptr, uint64_t len, int flags,
                                onload_zc_handle* handle)
 {
@@ -379,7 +379,7 @@ int onload_zc_register_buffers(int fd, uint64_t addr_space,
 
   citp_enter_lib(&lib_context);
 
-  if( addr_space != 0 )
+  if( addr_space != EF_ADDRSPACE_LOCAL )
     rc = -EINVAL;
   else if( flags )
     rc = -EINVAL;

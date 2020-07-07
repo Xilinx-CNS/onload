@@ -18,6 +18,8 @@
 #include <sys/socket.h> // for struct msghdr
 #include <stdint.h>
 
+#include <etherfabric/ef_vi.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -60,7 +62,7 @@ struct onload_zc_iovec {
                               onload_zc_query_rx_memregs() of the region
                               containing 'buf'. Populated by the recv
                               functions */
-    uint64_t addr_space;   /* Populated by onload_zc_query_rx_memregs */
+    ef_addrspace addr_space; /* Populated by onload_zc_query_rx_memregs */
   };
 };
 
@@ -171,7 +173,7 @@ extern int onload_zc_buffer_decref(int fd, onload_zc_handle buf);
  * fd indicates the stack on which to register the buffers. It can be any
  * socket allocated on that stack.
  *
- * addr_space must be 0. flags must be 0.
+ * addr_space must be EF_ADDRSPACE_LOCAL. flags must be 0.
  *
  * Returns zero on success, or <0 to indicate an error.
  *
@@ -180,7 +182,7 @@ extern int onload_zc_buffer_decref(int fd, onload_zc_handle buf);
  * onload_zc_unregister_buffers() to unregister the buffers.
  */
 extern int onload_zc_register_buffers(int fd,
-                                      uint64_t addr_space,
+                                      ef_addrspace addr_space,
                                       uint64_t base_ptr, uint64_t len,
                                       int flags, onload_zc_handle* handle);
 

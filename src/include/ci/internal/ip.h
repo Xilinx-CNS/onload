@@ -5166,7 +5166,7 @@ typedef struct oo_zc_buf* onload_zc_handle;
 #endif
 
 struct ci_zc_usermem {
-  uint64_t addr_space;
+  ef_addrspace addr_space;
   uint64_t base;
   uint64_t size;
   uint64_t kernel_id;

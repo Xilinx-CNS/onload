@@ -455,7 +455,7 @@ struct ci_pkt_zc_payload {
   union {
     struct {
       ci_uint64 app_cookie CI_ALIGN(8);  /* From onload_zc_iovec::app_cookie */
-      ci_uint64 addr_space CI_ALIGN(8);  /* Not currently used */
+      ef_addrspace addr_space CI_ALIGN(8); /* Address space of this data segment */
       ef_addr dma_addr[0] CI_ALIGN(8);   /* Length is oo_stack_intf_max() */
     } remote;
     char local[1];
