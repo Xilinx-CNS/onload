@@ -523,7 +523,10 @@ enum ef_vi_out_flags {
 };
 
 
-/*! \brief Flags that define which errors will cause RX_DISCARD events. */
+/*! \brief Flags that define which errors will cause either:
+** - RX_DISCARD events; or
+** - reporting of errors in EF_EVENT_TYPE_RX_MULTI_PKTS events.
+*/
 enum ef_vi_rx_discard_err_flags {
   /** TCP or UDP checksum error */
   EF_VI_DISCARD_RX_L4_CSUM_ERR       = 0x1,
@@ -532,7 +535,7 @@ enum ef_vi_rx_discard_err_flags {
   /** Ethernet FCS error */
   EF_VI_DISCARD_RX_ETH_FCS_ERR       = 0x4,
   /** Ethernet frame length error */
-  EF_VI_DISCARD_RX_ETH_LEN_ERR       = 0x8,      /* ef10 only */
+  EF_VI_DISCARD_RX_ETH_LEN_ERR       = 0x8,
   /** To be discard in software (includes frame length error) */
   EF_VI_DISCARD_RX_TOBE_DISC         = 0x10,     /* Siena only */
   /* Inner TCP or UDP checksum error */
@@ -2247,6 +2250,28 @@ extern int
 ef_vi_receive_query_layout(ef_vi* vi,
                            const ef_vi_layout_entry**const layout_out,
                            int* layout_len_out);
+
+
+/*! \brief Retrieve the discard flags associated with a received packet.
+**
+** \param vi             The virtual interface to query.
+** \param pkt            The received packet.
+** \param discard_flags  Pointer to an unsigned, that is updated on return with
+**                       the discard flags for the packet.
+**
+** \return 0 on success, or a negative error code
+**
+** For EF_EVENT_TYPE_RX_MULTI_PKTS events an information about Rx offload
+** classification is contained in the prefix of received packet.
+** The EF_EVENT_TYPE_RX_MULTI_PKTS events and prefix type are EF100 specific.
+**
+** Read CLASS field from the prefix of received packet and return discard flags
+** about packet length, CRC or checksum validation errors.
+** 
+*/
+extern int
+ef_vi_receive_get_discard_flags(ef_vi* vi, const void* pkt,
+                                unsigned* discard_flags);
 
 #ifdef __cplusplus
 }
