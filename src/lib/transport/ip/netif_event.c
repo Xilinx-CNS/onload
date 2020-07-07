@@ -931,81 +931,6 @@ static void handle_rx_scatter_merge(ci_netif* ni, struct oo_rx_state* s,
   }
 }
 
-static ci_ip_pkt_fmt* rx_multi_get_next_desc(ci_netif* ni, ef_vi* vi, int intf_i)
-{
-  ef_request_id di;
-  oo_pkt_p pp;
-  ci_ip_pkt_fmt* pkt;
-
-  di = ef_vi_rxq_next_desc_id(vi);
-  OO_PP_INIT(ni, pp, di);
-  pkt = PKT_CHK(ni, pp);
-  ci_prefetch_ppc(pkt->dma_start);
-  ci_prefetch_ppc(pkt);
-  ci_assert_equal(pkt->intf_i, intf_i);
-  return pkt;
-}
-
-
-static void handle_rx_multi_pkts(ci_netif* ni, struct oo_rx_state* s,
-                                 int prefix_bytes,
-                                 ef_vi* vi, int intf_i)
-{
-  int full_buffer = ef_vi_receive_buffer_len(vi);
-  uint16_t pkt_bytes, total_bytes, cur_bytes;
-  ci_ip_pkt_fmt* pkt;
-
-
-  pkt = rx_multi_get_next_desc(ni, vi, intf_i);
-  ef_vi_receive_get_bytes(vi, pkt->dma_start, &pkt_bytes);
-  total_bytes = pkt_bytes + prefix_bytes;
-
-  /* if 1 pkt = 1 desc */
-  if( total_bytes <= full_buffer ) {
-    /* Whole packet in a single buffer. */
-    pkt->pay_len = pkt_bytes;
-    oo_offbuf_init(&pkt->buf, PKT_START(pkt), pkt->pay_len);
-    s->rx_pkt = pkt;
-    return;
-  }
-  /* else */
-  s->rx_pkt = NULL;
-  /* - First fragment of packet - */
-  ci_assert(s->frag_pkt == NULL);
-  ci_assert_gt(total_bytes, full_buffer );
-
-  /* The packet prefix is present in the first buffer */
-  pkt->buf_len = full_buffer - prefix_bytes;
-  oo_offbuf_init(&pkt->buf, PKT_START(pkt), pkt->buf_len);
-  s->frag_pkt = pkt;
-  s->frag_bytes = pkt_bytes;
-  cur_bytes = full_buffer;
-
-  while( total_bytes - cur_bytes > full_buffer ) {
-    /* - Middle fragments - */
-    pkt = rx_multi_get_next_desc(ni, vi, intf_i);
-    /* Middle fragments are completely filled, and don't contain a prefix */
-    pkt->buf_len = full_buffer;
-    oo_offbuf_init(&pkt->buf, pkt->dma_start, pkt->buf_len);
-    CI_DEBUG(pkt->pay_len = -1);
-
-    pkt->frag_next = OO_PKT_P(s->frag_pkt);
-    s->frag_pkt = pkt;
-    cur_bytes += full_buffer;
-  }
-
-  /* - Last fragment - */
-  pkt = rx_multi_get_next_desc(ni, vi, intf_i);
-  /* The first buffer contains a prefix, but all intervening buffers are
-   * are filled, so this contains whatever's leftover.
-   */
-  pkt->buf_len = total_bytes - cur_bytes;
-  oo_offbuf_init(&pkt->buf, pkt->dma_start, pkt->buf_len);
-  CI_DEBUG(pkt->pay_len = -1);
-
-  handle_rx_scatter_last_frag(ni, s, pkt);
-}
-
 
 static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
                               int intf_i, ci_ip_pkt_fmt* pkt, int frame_len)
@@ -1115,6 +1040,136 @@ drop:
   LOG_NR(log(LPF "DROP"));
   LOG_DR(ci_hex_dump(ci_log_fn, pkt, 40, 0));
   return 0;
+}
+
+
+static void discard_rx_multi_pkts(ci_netif* ni, struct ci_netif_poll_state* ps,
+                                  int intf_i, struct oo_rx_state* s,
+                                  int frame_len, unsigned discard_flags,
+                                  ci_ip_pkt_fmt* pkt)
+{
+  int is_frag = OO_PP_NOT_NULL(pkt->frag_next);
+  int handled = 0;
+
+  LOG_U(log(LPF "[%d] intf %d discard RX_MULTI_PKTS 0x%x", NI_ID(ni), intf_i,
+            discard_flags));
+
+  /* Previous packet is already handled, s->rx_pkt can contain only current
+   * packet. Fragmented packet must be processed and linked, i.e. it is in
+   * s->rx_pkt and s->frag_pkt is NULL. */
+  ci_assert(s->frag_pkt == NULL);
+  if( s->rx_pkt != NULL )
+    s->rx_pkt = NULL;
+
+  /* Fragmented packets cannot be processed by handle_rx_csum_bad().
+   * See also comment in __handle_rx_discard(). */
+  if( (discard_flags & (EF_VI_DISCARD_RX_L3_CSUM_ERR |
+                        EF_VI_DISCARD_RX_L4_CSUM_ERR)) &&
+      !is_frag )
+    handled = handle_rx_csum_bad(ni, ps, intf_i, pkt, frame_len);
+
+  if( discard_flags & EF_VI_DISCARD_RX_ETH_LEN_ERR )
+    CITP_STATS_NETIF_INC(ni, rx_discard_len_err);
+  else if( discard_flags & EF_VI_DISCARD_RX_ETH_FCS_ERR )
+    CITP_STATS_NETIF_INC(ni, rx_discard_crc_bad);
+  else if( discard_flags & (EF_VI_DISCARD_RX_L3_CSUM_ERR |
+                            EF_VI_DISCARD_RX_L4_CSUM_ERR) )
+    CITP_STATS_NETIF_INC(ni, rx_discard_csum_bad);
+
+  if( !handled ) {
+    if( oo_tcpdump_check(ni, pkt, pkt->intf_i) ) {
+        pkt->pay_len = frame_len;
+        oo_tcpdump_dump_pkt(ni, pkt);
+    }
+
+    ci_netif_pkt_release_rx_1ref(ni, pkt);
+  }
+}
+
+
+static ci_ip_pkt_fmt* rx_multi_get_next_desc(ci_netif* ni, ef_vi* vi, int intf_i)
+{
+  ef_request_id di;
+  oo_pkt_p pp;
+  ci_ip_pkt_fmt* pkt;
+
+  di = ef_vi_rxq_next_desc_id(vi);
+  OO_PP_INIT(ni, pp, di);
+  pkt = PKT_CHK(ni, pp);
+  ci_assert_equal(pkt->intf_i, intf_i);
+  return pkt;
+}
+
+
+static void handle_rx_multi_pkts(ci_netif* ni, struct oo_rx_state* s,
+                                 int prefix_bytes,
+                                 ef_vi* vi, int intf_i,
+                                 struct ci_netif_poll_state* ps)
+{
+  int full_buffer = ef_vi_receive_buffer_len(vi);
+  uint16_t pkt_bytes, total_bytes, cur_bytes;
+  ci_ip_pkt_fmt* pkt;
+  unsigned discard_flags;
+
+
+  pkt = rx_multi_get_next_desc(ni, vi, intf_i);
+  ef_vi_receive_get_bytes(vi, pkt->dma_start, &pkt_bytes);
+  total_bytes = pkt_bytes + prefix_bytes;
+  ef_vi_receive_get_discard_flags(vi, pkt->dma_start, &discard_flags);
+
+  /* if 1 pkt = 1 desc */
+  if( total_bytes <= full_buffer ) {
+    /* Whole packet in a single buffer. */
+    if(CI_UNLIKELY( discard_flags != 0 )) {
+      discard_rx_multi_pkts(ni, ps, intf_i, s, pkt_bytes, discard_flags, pkt);
+      return;
+    }
+    pkt->pay_len = pkt_bytes;
+    oo_offbuf_init(&pkt->buf, PKT_START(pkt), pkt->pay_len);
+    s->rx_pkt = pkt;
+    return;
+  }
+  /* else */
+  s->rx_pkt = NULL;
+  /* - First fragment of packet - */
+  ci_assert(s->frag_pkt == NULL);
+  ci_assert_gt(total_bytes, full_buffer );
+
+  /* The packet prefix is present in the first buffer */
+  pkt->buf_len = full_buffer - prefix_bytes;
+  oo_offbuf_init(&pkt->buf, PKT_START(pkt), pkt->buf_len);
+  s->frag_pkt = pkt;
+  s->frag_bytes = pkt_bytes;
+  cur_bytes = full_buffer;
+
+  while( total_bytes - cur_bytes > full_buffer ) {
+    /* - Middle fragments - */
+    pkt = rx_multi_get_next_desc(ni, vi, intf_i);
+    /* Middle fragments are completely filled, and don't contain a prefix */
+    pkt->buf_len = full_buffer;
+    oo_offbuf_init(&pkt->buf, pkt->dma_start, pkt->buf_len);
+    CI_DEBUG(pkt->pay_len = -1);
+
+    pkt->frag_next = OO_PKT_P(s->frag_pkt);
+    s->frag_pkt = pkt;
+    cur_bytes += full_buffer;
+  }
+
+  /* - Last fragment - */
+  pkt = rx_multi_get_next_desc(ni, vi, intf_i);
+  /* The first buffer contains a prefix, but all intervening buffers are
+   * are filled, so this contains whatever's leftover.
+   */
+  pkt->buf_len = total_bytes - cur_bytes;
+  oo_offbuf_init(&pkt->buf, pkt->dma_start, pkt->buf_len);
+  CI_DEBUG(pkt->pay_len = -1);
+
+  handle_rx_scatter_last_frag(ni, s, pkt);
+
+  if(CI_UNLIKELY( discard_flags != 0 )) {
+    /* Discard the fragmented packet in the end of processing to unbundle RxQ */
+    discard_rx_multi_pkts(ni, ps, intf_i, s, pkt_bytes, discard_flags, s->rx_pkt);
+  }
 }
 
 
@@ -1675,7 +1730,7 @@ have_events:
         n_pkts = ev[i].rx_multi_pkts.n_pkts;
         for( j = 0; j < n_pkts; ++j ) {
           __handle_rx_pkt(ni, ps, intf_i, &s.rx_pkt);
-          handle_rx_multi_pkts(ni, &s, evq->rx_prefix_len, vi, intf_i);
+          handle_rx_multi_pkts(ni, &s, evq->rx_prefix_len, vi, intf_i, ps);
         }
       }
 

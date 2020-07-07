@@ -520,6 +520,9 @@ OO_STAT("Number of RX discards (buffer ownership error).",
 OO_STAT("Number of RX discards ( bad IP options;"
         "ie. Source routing or unknown option) ",
         ci_uint32, rx_discard_ip_options_bad, count)
+OO_STAT("Number of RX discards (length error; "
+        "ie. over-length frame or a runt was received).",
+        ci_uint32, rx_discard_len_err, count)
 OO_STAT("Number of RX discards (other).",
         ci_uint32, rx_discard_other, count)
 OO_STAT("Number of times we have refilled RX ring from recv() path.  This is "
