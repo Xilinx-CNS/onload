@@ -13,6 +13,7 @@
 #include <linux/file.h>
 #include <linux/bpf.h>
 #include <linux/mman.h>
+#include <linux/fdtable.h>
 
 #include <onload/linux_trampoline.h>
 
