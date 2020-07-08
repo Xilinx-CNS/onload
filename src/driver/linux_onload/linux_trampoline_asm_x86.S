@@ -3,7 +3,6 @@
 	.file	"linux_trampoline_asm.S"
 
 #include <linux/version.h>
-#include <ci/internal/trampoline.h>
 
 	/* This wraps our replacement for sys_close.  It calls our handler with
 	 * a second argument pointing to the stack frame so that we can hook in
@@ -47,7 +46,10 @@ efab_linux_trampoline_close:
 	.type	efab_linux_trampoline_close32,@function
 	.align 16
 efab_linux_trampoline_close32:
-#ifdef ONLOAD_SYSCALL_PTREGS
+/* Unfortunately, ci/efrm/syscall.h where EFRM_SYSCALL_PTREGS is defined,
+ * cannot be included in an assembler source
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,17,0)
 	jmp	efab_linux_trampoline_handler_close32
 #else
 	leaq	RSP_TP_PT_REGS_OFFSET(%rsp),%rax	/* struct pt_regs */

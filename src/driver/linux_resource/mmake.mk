@@ -50,6 +50,10 @@ RESOURCE_TARGET_SRCS := $(RESOURCE_SRCS) $(EFHW_SRCS) $(EFRM_SRCS)
 
 TARGETS		:= $(RESOURCE_TARGET)
 
+x86_TARGET_SRCS   := syscall_x86.o
+
+arm64_TARGET_SRCS := syscall_aarch64.o
+
 
 ######################################################
 # linux kbuild support
@@ -73,7 +77,7 @@ ifdef MMAKE_IN_KBUILD
 
 obj-m := $(RESOURCE_TARGET) 
 
-sfc_resource-objs := $(RESOURCE_TARGET_SRCS:%.c=%.o)
+sfc_resource-objs := $(RESOURCE_TARGET_SRCS:%.c=%.o) $($(ARCH)_TARGET_SRCS:%.c=%.o)
 
 ifdef KBUILD_SRC
 define filechk_autocompat.h

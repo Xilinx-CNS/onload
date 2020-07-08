@@ -17,6 +17,7 @@
 
 #include "onload_kernel_compat.h"
 
+#include <ci/efrm/syscall.h>
 #include <onload/linux_onload_internal.h>
 #include <onload/tcp_helper_fns.h>
 #include <onload/linux_onload.h>
@@ -338,20 +339,20 @@ static void efab_exit_group(int *status_p)
 }
 
 asmlinkage long
-#ifdef ONLOAD_SYSCALL_PTREGS
+#ifdef EFRM_SYSCALL_PTREGS
 efab_linux_trampoline_exit_group(const struct pt_regs *regs)
 #else
 efab_linux_trampoline_exit_group(int status)
 #endif
 {
-#ifdef ONLOAD_SYSCALL_PTREGS
+#ifdef EFRM_SYSCALL_PTREGS
   int status;
 #endif
   tcp_helper_resource_t *stacks[TERMINATE_STACKS_NUM];
   ci_uint32 stacks_num = 0;
 
   efab_syscall_enter();
-#ifdef ONLOAD_SYSCALL_PTREGS
+#ifdef EFRM_SYSCALL_PTREGS
 #if defined(__x86_64__)
   if( current->thread_info.status & TS_COMPAT )
     status = regs->bx;

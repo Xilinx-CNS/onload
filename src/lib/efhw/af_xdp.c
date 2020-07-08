@@ -15,7 +15,7 @@
 #include <linux/mman.h>
 #include <linux/fdtable.h>
 
-#include <onload/linux_trampoline.h>
+#include <ci/efrm/syscall.h>
 
 #define UMEM_BLOCK (PAGE_SIZE / sizeof(void*))
 
@@ -160,16 +160,15 @@ static struct efhw_af_xdp_vi* vi_by_owner(struct efhw_nic* nic, int owner_id)
 /* Invoke the bpf() syscall args is assumed to be kernel memory */
 static int sys_bpf(int cmd, union bpf_attr* attr)
 {
-#if defined(__NR_bpf) && defined(ONLOAD_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
+#if defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
   struct pt_regs regs;
   static asmlinkage long (*sys_call)(const struct pt_regs*) = NULL;
 
   if( sys_call == NULL ) {
-    void** table = efrm_find_ksym("sys_call_table");
-    if( table == NULL || table[__NR_bpf] == NULL )
+    if( efrm_syscall_table == NULL || efrm_syscall_table[__NR_bpf] == NULL )
       return -ENOSYS;
 
-    sys_call = table[__NR_bpf];
+    sys_call = efrm_syscall_table[__NR_bpf];
   }
 
   regs.di = cmd;

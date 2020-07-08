@@ -63,6 +63,7 @@
 #include <ci/efrm/driver_private.h>
 #include <ci/efrm/pd.h>
 #include <ci/efrm/efrm_filter.h>
+#include <ci/efrm/syscall.h>
 #include <ci/driver/internal.h>
 #include "efrm_internal.h"
 #include "sfcaffinity.h"
@@ -981,6 +982,12 @@ static int init_sfc_resource(void)
 	int rc = 0;
 
 	EFRM_TRACE("%s: RESOURCE driver starting", __func__);
+
+	rc = efrm_syscall_ctor();
+	if( rc != 0 ) {
+		EFRM_ERR("%s: ERROR: failed to find syscall table", __func__);
+		return rc;
+	}
 
 	efrm_driver_ctor();
 	efrm_filter_init();

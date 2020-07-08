@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 
+#include <ci/efrm/syscall.h>
 #include "onload_kernel_compat.h"
 
 #include <onload/linux_onload_internal.h>
@@ -20,7 +21,7 @@
    ptregs argument.
    (The user-space calling convention is the same as before, though).
 */
-#ifdef ONLOAD_SYSCALL_PTREGS
+#ifdef EFRM_SYSCALL_PTREGS
 #  define SYSCALL_PTR_DEF(_name)                        \
   asmlinkage long (*saved_##_name)(const struct pt_regs *regs)
 #  define PASS_SYSCALL1(_name, _arg)                    \
@@ -56,184 +57,6 @@
 #  define PASS_SYSCALL6(_name, _arg1, _arg2, _arg3, _arg4, _arg5, _arg6)    \
   ((saved_##_name)(_arg1, _arg2, _arg3, _arg4, _arg5, _arg6))
 #endif
-
-static typeof(aarch64_insn_decode_immediate) *aarch64_insn_decode_immediate_sym;
-static typeof(aarch64_insn_read) *aarch64_insn_read_sym;
-static typeof(aarch64_insn_extract_system_reg) *aarch64_insn_extract_system_reg_sym;
-static typeof(aarch64_get_branch_offset) *aarch64_get_branch_offset_sym;
-static typeof(aarch64_insn_adrp_get_offset) *aarch64_insn_adrp_get_offset_sym;
-
-/* Depending on the kernel version, locating the syscall table may be more
- * or less straigthforward.
- * In the most lucky event, sys_call_table symbol is declared extern, and so
- * it can be fetched directly with efrm_find_ksym().
- * Otherwise we need to proceed through syscall calling sequence. There are
- * some intermediate symbols that may happen to be available so we try to
- * use them first, and if they are not found, resort to assembler code
- * scanning.
- *
- * So the syscall routine looks like this:
- * - the address of exception handler table is in vbar_el1 system register;
- *   this is the value used by `svc` instruction in the user space and so
- *   it is always available irrespective to any kernel symbols being exposed
- * - the exception table is a table of 128-byte blocks. The handler for
- *   user-space generated exceptions is 9th. The content of the block is
- *   some code which includes a jump to real handler. Depending on the
- *   kernel version and configuration, that may be either a first instruction
- *   in the block or at some fixed position forward.
- * - the handler is labelled `el0_sync` and it may be an extern symbol.
- *   Locating it is the task of find_el_sync() function.
- *   The handler itself does some dispatching based on the exception
- *   syndrome register.
- *   So it consist of the kernel entry code which we must skip and then a
- *   read from esr_el1 register which uniquely identifies the start of the
- *   code we're looking for.
- *   Then there will be a cascade of comparisons, and we expect that the
- *   branch we are interested in is the first one. However, we make sure
- *   that this is the case by ensuring that there is indeed the cmp
- *   instruction with a proper immediate argument.
- *   The next instruction is a jump to the actual handler for syscalls.
- * - it is labelled `el0_svc` and it may also be an extern symbol, and
- *   finding it is the task of find_el_svc() function.
- *   Now the first instruction of `el0_svc` should be the load of the
- *   address of the sys_call_table, where we can obtain it in the function
- *   find_syscall_table_via_vbar().
- *
- * The employed scheme should be robust enough to survive small changes in
- * the syscall calling sequence across the kernel, but of course we cannot
- * be sure it will never break, so there are as many safety checks here as possible.
- */
-
-static ci_uint8 *
-find_el_sync(void)
-{
-  ci_uint8 *vectors;
-  ci_uint32 insn;
-  ci_uint8 *el_sync = efrm_find_ksym("el0_sync");
-
-  if (el_sync != NULL)
-    return el_sync;
-
-  vectors = (ci_uint8 *)read_sysreg(vbar_el1);
-  vectors += 8 * 128;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-  vectors += sizeof(ci_uint32);
-#if defined(CONFIG_VMAP_STACK)
-  vectors += 5 * sizeof(ci_uint32);
-#endif
-#endif
-  if (aarch64_insn_read_sym(vectors, &insn)) {
-    ci_log("cannot read vbar_el1");
-    return NULL;
-  }
-  if (!aarch64_insn_is_b(insn)) {
-    ci_log("el0_sync entry is not a branch");
-    return NULL;
-  }
-  el_sync = vectors + aarch64_get_branch_offset_sym(insn);
-
-  return el_sync;
-}
-
-static ci_uint8 *
-find_el_svc_entry(void)
-{
-  ci_uint8 *el_svc = efrm_find_ksym("el0_svc");
-  ci_uint8 *el_sync;
-  ci_uint32 insn;
-
-  if (el_svc != NULL)
-    return el_svc;
-  el_sync = find_el_sync();
-  if (el_sync == NULL)
-    return NULL;
-
-  while (1) {
-    if (aarch64_insn_read_sym(el_sync, &insn)) {
-      ci_log("cannot read el0_sync code @ %d", __LINE__);
-      return NULL;
-    }
-    if (aarch64_insn_is_mrs(insn) &&
-        aarch64_insn_extract_system_reg_sym(insn) == SYS_ESR_EL1) {
-      el_sync += 2 * sizeof(ci_uint32);
-      if (aarch64_insn_read_sym(el_sync, &insn)) {
-        ci_log("cannot read el0_sync code @ %d", __LINE__);
-        return NULL;
-      }
-      if (!aarch64_insn_is_subs_imm(insn) ||
-          aarch64_insn_decode_immediate_sym(AARCH64_INSN_IMM_12, insn) !=
-          ESR_ELx_EC_SVC64) {
-        ci_log("expected check for ESR_ELx_EC_SVC64");
-        return NULL;
-      }
-      el_sync += sizeof(ci_uint32);
-      if (aarch64_insn_read_sym(el_sync, &insn)) {
-        ci_log("cannot read el0_sync code @ %d", __LINE__);
-        return NULL;
-      }
-      if (!aarch64_insn_is_bcond(insn) ||
-          (insn & 0x0f) != AARCH64_INSN_COND_EQ) {
-        ci_log("branching to el0_svc not found");
-        return NULL;
-      }
-      el_svc = el_sync + aarch64_get_branch_offset_sym(insn);
-      break;
-    }
-    el_sync += sizeof(ci_uint32);
-  }
-  return el_svc;
-}
-
-static ci_uint8 *
-find_syscall_table_via_vbar(void)
-{
-  ci_uint8 *el_svc = find_el_svc_entry();
-  ci_uint32 insn;
-
-  if (el_svc == NULL)
-    return NULL;
-
-  if (aarch64_insn_read_sym(el_svc, &insn)) {
-    ci_log("cannot read el0_svc start @ %016lx", (unsigned long)el_svc);
-    return NULL;
-  }
-  if (!aarch64_insn_is_adrp(insn)) {
-    ci_log("expected adrp instruction at el0_svc, found %08x", insn);
-    return NULL;
-  }
-  return CI_PTR_ALIGN_BACK(el_svc, SZ_4K) + aarch64_insn_adrp_get_offset_sym(insn);
-}
-
-static void *find_syscall_table(void)
-{
-  void *syscalls = efrm_find_ksym("sys_call_table");
-
-  if (syscalls != NULL)
-    return syscalls;
-
-/* The kernel contains some neat routines for doing AArch64 code inspection.
- * Some of them are available as inline routines, but some are
- * unfortunately not exported to modules. We could reimplement them, of
- * course, but since we do efrm_find_ksym in other places, that seems like
- * the least effort path
- */
-
-  aarch64_insn_decode_immediate_sym = efrm_find_ksym("aarch64_insn_decode_immediate");
-  aarch64_insn_read_sym = efrm_find_ksym("aarch64_insn_read");
-  aarch64_insn_extract_system_reg_sym = efrm_find_ksym("aarch64_insn_extract_system_reg");
-  aarch64_get_branch_offset_sym = efrm_find_ksym("aarch64_get_branch_offset");
-  aarch64_insn_adrp_get_offset_sym = efrm_find_ksym("aarch64_insn_adrp_get_offset");
-  if (aarch64_insn_decode_immediate_sym == NULL ||
-      aarch64_insn_read_sym == NULL ||
-      aarch64_insn_extract_system_reg_sym == NULL ||
-      aarch64_get_branch_offset_sym == NULL ||
-      aarch64_insn_adrp_get_offset_sym == NULL) {
-    ci_log("some symbols required for AArch64 assembler analysis are not found");
-    return NULL;
-  }
-
-  return find_syscall_table_via_vbar();
-}
 
 /* ARM64 TODO these are stub implementations only */
 atomic_t efab_syscall_used;
@@ -402,13 +225,13 @@ tramp_close_passthrough(int fd)
   return rc;
 }
 
-#ifndef ONLOAD_SYSCALL_PTREGS
+#ifndef EFRM_SYSCALL_PTREGS
 asmlinkage long efab_linux_aarch64_trampoline_close(int fd, struct pt_regs *regs)
 #else
 asmlinkage int efab_linux_trampoline_close(struct pt_regs *regs)
 #endif
 {
-#ifdef ONLOAD_SYSCALL_PTREGS
+#ifdef EFRM_SYSCALL_PTREGS
   int fd = regs->regs[0];
 #endif
   ci_uintptr_t trampoline_entry = 0;
@@ -476,14 +299,12 @@ static int patch_syscall_table(void **table,
   return 0;
 }
 
-static void **syscall_table = NULL;
-
 int efab_linux_trampoline_ctor(int no_sct)
 {
   void *check_sys_close;
 
-  syscall_table = find_syscall_table();
-  if (syscall_table == NULL) {
+  efrm_syscall_table = find_syscall_table();
+  if (efrm_syscall_table == NULL) {
     ci_log("Cannot detect syscall table!!!");
     return -ENOTSUPP;
   }
@@ -491,7 +312,7 @@ int efab_linux_trampoline_ctor(int no_sct)
   atomic_set(&efab_syscall_used, 0);
   efab_linux_termination_ctor();
 
-  saved_sys_close = syscall_table[__NR_close];
+  saved_sys_close = efrm_syscall_table[__NR_close];
 #if defined(CONFIG_ARCH_HAS_SYSCALL_WRAPPER)
   check_sys_close = efrm_find_ksym("__arm64_sys_close");
 #else
@@ -504,12 +325,12 @@ int efab_linux_trampoline_ctor(int no_sct)
       return -EFAULT;
     }
   }
-  saved_sys_exit_group = syscall_table[__NR_exit_group];
-  saved_sys_sendmsg = syscall_table[__NR_sendmsg];
-  saved_sys_rt_sigaction = syscall_table[__NR_rt_sigaction];
-  saved_sys_epoll_create1 = syscall_table[__NR_epoll_create1];
-  saved_sys_epoll_ctl = syscall_table[__NR_epoll_ctl];
-  saved_sys_epoll_pwait = syscall_table[__NR_epoll_pwait];
+  saved_sys_exit_group = efrm_syscall_table[__NR_exit_group];
+  saved_sys_sendmsg = efrm_syscall_table[__NR_sendmsg];
+  saved_sys_rt_sigaction = efrm_syscall_table[__NR_rt_sigaction];
+  saved_sys_epoll_create1 = efrm_syscall_table[__NR_epoll_create1];
+  saved_sys_epoll_ctl = efrm_syscall_table[__NR_epoll_ctl];
+  saved_sys_epoll_pwait = efrm_syscall_table[__NR_epoll_pwait];
 
   if (!no_sct) {
     struct patch_item patches[] = {
@@ -518,7 +339,7 @@ int efab_linux_trampoline_ctor(int no_sct)
       {__NR_rt_sigaction, efab_linux_trampoline_sigaction},
       {0, NULL}
     };
-    int rc = patch_syscall_table(syscall_table, patches);
+    int rc = patch_syscall_table(efrm_syscall_table, patches);
 
     if (rc != 0)
       return rc;
@@ -544,7 +365,7 @@ int efab_linux_trampoline_dtor (int no_sct)
       {__NR_rt_sigaction, *saved_sys_rt_sigaction},
       {0, NULL}
     };
-    int rc = patch_syscall_table(syscall_table, patches);
+    int rc = patch_syscall_table(efrm_syscall_table, patches);
 
     if (rc != 0)
       return rc;

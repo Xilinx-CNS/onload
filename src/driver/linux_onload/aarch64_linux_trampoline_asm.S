@@ -5,8 +5,7 @@
 #include <asm/assembler.h>
 #include <ci/internal/trampoline.h>
 
-/* Unfortunately, onload/linux_trampoline.h
- * where ONLOAD_SYSCALL_PTREGS is defined,
+/* Unfortunately, ci/efrm/syscall.h where EFRM_SYSCALL_PTREGS is defined,
  * cannot be included in an assembler source
  */
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4,17,0)
