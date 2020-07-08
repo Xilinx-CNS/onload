@@ -1472,11 +1472,14 @@ static int af_xdp_kick(ef_vi* vi)
 {
   tcp_helper_resource_t* trs = vi->xdp_kick_context;
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   if( trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
     tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
     return -EAGAIN;
   }
-  else {
+  else
+#endif
+  {
     int intf_i = CI_CONTAINER(ci_netif_nic_t, vi, vi) - trs->netif.nic_hw;
     return efrm_vi_af_xdp_kick(trs->nic[intf_i].thn_vi_rs);
   }

@@ -408,8 +408,10 @@ oo_os_sock_status_bit_clear_handled(tcp_helper_endpoint_t *ep,
                                     struct file* os_sock,
                                     ci_uint32 bits_handled);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 extern void
 tcp_helper_defer_dl2work(tcp_helper_resource_t* trs, ci_uint32 flag);
+#endif
 
 
 extern int
