@@ -90,6 +90,7 @@ static int cfg_eventq_wait;
 static int cfg_fd_wait;
 static int cfg_max_fill = -1;
 static int cfg_exit_pkts = -1;
+static int cfg_register_mcast;
 
 /* Mutex to protect printing from different threads */
 static pthread_mutex_t printf_mutex;
@@ -110,6 +111,30 @@ static inline void pkt_buf_free(struct resources* res, struct pkt_buf* pkt_buf)
   ++(res->free_pkt_bufs_n);
 }
 
+static int join_mc_group(const char* interface, const struct in_addr *sa_mcast, int *sock) {
+  int ifindex, rc = 0;
+  char* local_ip;
+  struct ip_mreqn mreq;
+
+  // Assuming IPv4
+  *sock = socket(AF_INET, SOCK_DGRAM, 0);
+  TEST(*sock);
+
+  get_ipaddr_of_intf(interface, &local_ip);
+  if( ! parse_interface(interface, &ifindex) ) {
+    LOGE("ERROR: Failed to parse interface %s\n",interface);
+    rc = -1;
+  }
+
+  bzero(&mreq, sizeof(mreq));
+  mreq.imr_address.s_addr = inet_addr(local_ip);
+  mreq.imr_ifindex = ifindex;
+  mreq.imr_multiaddr = *sa_mcast;
+
+  //If multicast address is invalid, setsockopt(2) fails with the error EINVAL
+  rc = setsockopt(*sock, IPPROTO_IP, IP_ADD_MEMBERSHIP, &mreq, sizeof(mreq));
+  return rc;
+}
 
 static void hexdump(const void* pv, int len)
 {
@@ -466,6 +491,7 @@ static __attribute__ ((__noreturn__)) void usage(void)
   fprintf(stderr, "  -f       block on fd instead of busy wait\n");
   fprintf(stderr, "  -F <fl>  set max fill level for RX ring\n");
   fprintf(stderr, "  -n <num> exit after receiving n packets\n");
+  fprintf(stderr, "  -j       join multicast ipv4 address mentioned in filter-spec\n");
   exit(1);
 }
 
@@ -476,9 +502,10 @@ int main(int argc, char* argv[])
   pthread_t thread_id;
   struct resources* res;
   unsigned pd_flags, vi_flags;
-  int c;
+  struct in_addr sa_mcast;
+  int c, sock;
 
-  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:x")) != -1 )
+  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:j")) != -1 )
     switch( c ) {
     case 'd':
       cfg_hexdump = 1;
@@ -512,6 +539,9 @@ int main(int argc, char* argv[])
       break;
     case 'n':
       cfg_exit_pkts = atoi(optarg);
+      break;
+    case 'j':
+      cfg_register_mcast = 1;
       break;
     case '?':
       usage();
@@ -620,12 +650,19 @@ int main(int argc, char* argv[])
   /* Add filters so that adapter will send packets to this VI. */
   while( argc > 0 ) {
     ef_filter_spec filter_spec;
-    if( filter_parse(&filter_spec, argv[0]) != 0 ) {
+    if( filter_parse(&filter_spec, argv[0], &sa_mcast) != 0 ) {
       LOGE("ERROR: Bad filter spec '%s'\n", argv[0]);
       exit(1);
     }
     TRY(ef_vi_filter_add(&res->vi, res->dh, &filter_spec, NULL));
     ++argv; --argc;
+  }
+
+  if(cfg_register_mcast && join_mc_group(interface, &sa_mcast, &sock)) {
+    if(sock >=0 )
+      close(sock);
+    LOGE("ERROR: multicast join failed");
+    exit(1);
   }
 
   pthread_mutex_init(&printf_mutex, NULL);
@@ -644,5 +681,8 @@ int main(int argc, char* argv[])
   else
     event_loop_throughput(res);
 
+  /* Ideally, we should have a socket clean up here */
+  /*if(sock >=0 )
+    close(sock);*/
   return 0;
 }

@@ -43,7 +43,7 @@ static int consume_parameter(char **arg)
 }
 
 
-int filter_parse(ef_filter_spec* fs, const char* s_in)
+int filter_parse(ef_filter_spec* fs, const char* s_in, struct in_addr *sa_mcast)
 {
   union {
     struct sockaddr_storage ss;
@@ -116,6 +116,9 @@ int filter_parse(ef_filter_spec* fs, const char* s_in)
         TRY(ef_filter_spec_set_ip4_local(fs, protocol,
                                          laddr.s4.sin_addr.s_addr,
                                          laddr.s4.sin_port));
+        /*In multicast receive case local address will be the multicast address */
+        if( sa_mcast )
+          *sa_mcast = laddr.s4.sin_addr;
       } else if( laddr.ss.ss_family == AF_INET6 ) {
         TRY(ef_filter_spec_set_ip6_local(fs, protocol, &laddr.s6.sin6_addr,
                                          laddr.s6.sin6_port));

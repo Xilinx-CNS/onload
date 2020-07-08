@@ -390,7 +390,7 @@ static void port_install_filters(struct port* port)
    TRY( ef_vi_filter_add(&(port->vi), port->dh, &filter_spec, NULL) );
  }
  else {
-   if( filter_parse(&filter_spec, port->filter) != 0 ) {
+   if( filter_parse(&filter_spec, port->filter, NULL) != 0 ) {
      LOGE("ERROR: Bad filter spec '%s'\n", port->filter);
      exit(1);
    }
