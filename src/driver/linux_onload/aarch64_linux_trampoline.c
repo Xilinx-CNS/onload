@@ -303,11 +303,7 @@ int efab_linux_trampoline_ctor(int no_sct)
 {
   void *check_sys_close;
 
-  efrm_syscall_table = find_syscall_table();
-  if (efrm_syscall_table == NULL) {
-    ci_log("Cannot detect syscall table!!!");
-    return -ENOTSUPP;
-  }
+  ci_assert(efrm_syscall_table);
 
   atomic_set(&efab_syscall_used, 0);
   efab_linux_termination_ctor();

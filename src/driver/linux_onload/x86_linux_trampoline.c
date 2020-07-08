@@ -1088,6 +1088,8 @@ patch_syscall_table (void **table, unsigned entry, void *func,
  */
 int efab_linux_trampoline_ctor(int no_sct)
 {
+  ci_assert(efrm_syscall_table);
+
   atomic_set(&efab_syscall_used, 0);
   if (efrm_syscall_table) {
     /* We really have to hope that efrm_syscall_table was found correctly.  There
@@ -1130,6 +1132,7 @@ int efab_linux_trampoline_ctor(int no_sct)
   }
 
 #ifdef CONFIG_COMPAT
+  ci_assert(efrm_compat_syscall_table);
 
   if (efrm_compat_syscall_table && !no_sct) {
     /* On pre-4.17 kernels we can do a sanity check on the

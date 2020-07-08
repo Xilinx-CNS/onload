@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 
+#include <ci/compat.h>
 #include <ci/efrm/sysdep_linux.h>
+#include <ci/efrm/debug_linux.h>
 #include <ci/efrm/syscall.h>
 
 void** efrm_syscall_table = NULL;
