@@ -566,7 +566,7 @@ int ci_netif_evq_poll(ci_netif* ni, int intf_i)
        * pkt_eth_payload_off.  However, the main RX loop will call that
        * function again, and it asserts at entry that the field is
        * uninitialised, so we reset it here. */
-      CI_DEBUG(pkt->pkt_eth_payload_off = 0xff);
+      CI_DEBUG(pkt->pkt_eth_payload_off = PKT_START_OFF_BAD);
     }
   }
 
