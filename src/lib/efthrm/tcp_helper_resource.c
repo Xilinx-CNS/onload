@@ -210,7 +210,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
 
  again:
   l = trs->trusted_lock;
-  ci_assert(l & OO_TRUSTED_LOCK_LOCKED);
+  ci_assert_flags(l, OO_TRUSTED_LOCK_LOCKED);
 
   if(CI_UNLIKELY( l & OO_TRUSTED_LOCK_AWAITING_FREE )) {
     /* We may be called from the stack workqueue, so postpone destruction
