@@ -29,4 +29,7 @@ extern int tcp_helper_cluster_vi_base(tcp_helper_cluster_t* thc, int hwport);
 extern int tcp_helper_vi_hw_rx_loopback_supported(tcp_helper_resource_t* trs,
                                                   int hwport);
 
+extern int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
+                                                  int hwport);
+
 #endif /* __OOF_TEST_STACK_INTERFACE_H__ */

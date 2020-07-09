@@ -26,3 +26,9 @@ int tcp_helper_vi_hw_rx_loopback_supported(tcp_helper_resource_t* trs,
   return 0;
 }
 
+int tcp_helper_vi_hw_rx_drop_filter_supported(tcp_helper_resource_t* trs,
+                                                  int hwport)
+{
+  return 1;
+}
+

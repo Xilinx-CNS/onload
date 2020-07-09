@@ -148,7 +148,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
     int hw_rx_loopback_supported = (cluster || kernel_redirect || drop) ?
       0 : tcp_helper_vi_hw_rx_loopback_supported(oofilter->trs, hwport);
 
-    if( drop )
+    if( drop && tcp_helper_vi_hw_drop_filter_supported(oofilter->trs, hwport) )
       vi_id = EFX_FILTER_RX_DMAQ_ID_DROP;
 
     ci_assert( hw_rx_loopback_supported >= 0 );
@@ -391,8 +391,8 @@ int oo_hw_filter_update(struct oo_hw_filter* oofilter,
   for( hwport = 0; hwport < CI_CFG_MAX_HWPORTS; ++hwport )
     if( hwport_mask & (1 << hwport) ) {
       /* has the target stack got hwport */
-      if( drop_hwport_mask & (1 << hwport) ||
-          src_flags & OO_HW_SRC_FLAG_DROP )
+      if( (drop_hwport_mask & (1 << hwport) || src_flags & OO_HW_SRC_FLAG_DROP) &&
+          tcp_helper_vi_hw_drop_filter_supported(oofilter->trs, hwport) )
         vi_id = EFX_FILTER_RX_DMAQ_ID_DROP;
       else if( new_stack != NULL )
         vi_id = tcp_helper_rx_vi_id(new_stack, hwport);

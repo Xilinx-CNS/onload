@@ -877,6 +877,18 @@ int tcp_helper_vi_hw_rx_loopback_supported(tcp_helper_resource_t* trs,
 }
 
 
+int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
+                                           int hwport)
+{
+  int intf_i;
+  ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
+  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 )
+    return efrm_vi_is_hw_drop_filter_supported(trs->nic[intf_i].thn_vi_rs);
+  else
+    return -1;
+}
+
+
 #if CI_CFG_PIO
 
 # if ! CI_CFG_USE_PIO

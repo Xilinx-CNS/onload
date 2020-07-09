@@ -195,6 +195,10 @@ extern int  efrm_vi_alloc(struct efrm_client *client,
  */
 extern int efrm_vi_is_hw_rx_loopback_supported(struct efrm_vi *virs);
 
+/**
+ * Tells whether VI supports drop filters.
+ */
+extern int efrm_vi_is_hw_drop_filter_supported(struct efrm_vi *virs);
 
 #define EFRM_VI_Q_GET_SIZE_CURRENT  -123
 

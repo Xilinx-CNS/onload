@@ -1533,6 +1533,14 @@ int efrm_vi_is_hw_rx_loopback_supported(struct efrm_vi *virs)
 EXPORT_SYMBOL(efrm_vi_is_hw_rx_loopback_supported);
 
 
+int efrm_vi_is_hw_drop_filter_supported(struct efrm_vi *virs)
+{
+	struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
+	return ! (nic->devtype.arch == EFHW_ARCH_AF_XDP);
+}
+EXPORT_SYMBOL(efrm_vi_is_hw_drop_filter_supported);
+
+
 int  efrm_vi_q_get_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 			int n_q_entries, struct efrm_vi_q_size *qso)
 {
