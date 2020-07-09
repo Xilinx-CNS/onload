@@ -837,7 +837,7 @@ af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
                       uint vport_id, uint stack_id, uint flags)
 {
 #ifdef AF_XDP
-  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, dmaq);
+  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq_id);
   if( vi == NULL )
     return -ENODEV;
 
@@ -858,7 +858,7 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 		    uint vport_id, uint stack_id, uint ps_buf_size, uint flags)
 {
 #ifdef AF_XDP
-  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, dmaq);
+  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq_id);
   if( vi == NULL )
     return -ENODEV;
 
