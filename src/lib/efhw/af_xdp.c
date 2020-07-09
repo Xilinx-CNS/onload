@@ -349,13 +349,13 @@ static int xdp_map_update(struct file* map, int key, struct file* sock)
 }
 
 /* Bind an AF_XDP socket to an interface */
-static int xdp_bind(struct socket* sock, int ifindex, unsigned flags)
+static int xdp_bind(struct socket* sock, int ifindex, unsigned queue, unsigned flags)
 {
   struct sockaddr_xdp sxdp = {};
 
   sxdp.sxdp_family = PF_XDP;
   sxdp.sxdp_ifindex = ifindex;
-  sxdp.sxdp_queue_id = 0; // TODO configure?
+  sxdp.sxdp_queue_id = queue;
   sxdp.sxdp_flags = flags;
 
   return kernel_bind(sock, (struct sockaddr*)&sxdp, sizeof(sxdp));
@@ -634,7 +634,8 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     return rc;
 
-  rc = xdp_bind(sock, nic->net_dev->ifindex, vi->flags);
+  /* TODO AF_XDP: currently instance number matches net_device channel */
+  rc = xdp_bind(sock, nic->net_dev->ifindex, instance, vi->flags);
   if( rc < 0 )
     return rc;
 
@@ -798,7 +799,7 @@ af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint evq, uint evq_size,
 			    uint n_pages, int interrupting, int enable_dos_p,
 			    int wakeup_evq, int flags, int* flags_out)
 {
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
+	EFHW_ERR("%s: FIXME AF_XDP evq %d sz %d", __FUNCTION__, evq, evq_size);
 	return 0;
 }
 

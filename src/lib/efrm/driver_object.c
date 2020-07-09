@@ -110,21 +110,17 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 	unsigned max_vis;
 	int rc;
 
-	if (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10 ||
-	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF100) {
-		max_vis = res_dim->vi_lim;
-	}
-	else if (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP) {
-		max_vis = 1;
-	}
-	else {
+	if (!(efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10 ||
+	      efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF100 ||
+	      efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP)) {
 		EFRM_ERR("%s: unknown efhw device architecture %u)",
 			 __FUNCTION__, efrm_nic->efhw_nic.devtype.arch);
 		rc = -EINVAL;
 		goto fail1;
 	}
 
-        efrm_nic->max_vis = max_vis;
+	max_vis = res_dim->vi_lim;
+	efrm_nic->max_vis = max_vis;
 	efrm_nic->vis = vmalloc(max_vis * sizeof(efrm_nic->vis[0]));
 	if (efrm_nic->vis == NULL) {
 		EFRM_ERR("%s: Out of memory (max_vis=%u)",
