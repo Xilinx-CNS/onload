@@ -195,9 +195,7 @@ HARNESS_TIME_OUT=240
 
 .PHONY: test
 test: $(TARGETS)
-	# The rm command is for ensuring stale pipes are removed before the test.
 	sudo $(UNIT_TEST_ENV_VARS) /usr/bin/timeout $(HARNESS_TIME_OUT) \
-	  sudo rm -f /tmp/onload_cp_server.* ; \
 	  python2 -B $(shell which py.test) -p no:cacheprovider \
 	    $(PYTEST_JUNIT_XML_OPT) $(PYTEST_SELECT_OPT); \
 	  sudo chmod a+rw $(PYTEST_JUNIT_XML_FILE) ; \
