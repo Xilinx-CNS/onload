@@ -2280,11 +2280,9 @@ static int efrm_efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
 	/* Give the driver free rein on where to insert the filter. */
 	fs->location = RX_CLS_LOC_ANY;
 
-	/* At the moment we haven't added support for queue selection, and
-	 * things are hardcoded to always use queue 0. When we fix that, we'll
-	 * need to update this code too, to select the right queue.
-	 */
-	fs->ring_cookie = 0;
+	/* TODO AF_XDP: for now assume dmaq_id matches NIC channel
+	 * based on insight into efhw/af_xdp.c */
+	fs->ring_cookie = efx_spec->dmaq_id;
 
 	return 0;
 }
