@@ -237,52 +237,68 @@ static int xdp_prog_load(int map_fd)
    * It was compiled from the following:
    *
    * // clang -I../../bpf -target bpf -O2 -o xdpprog.o -c xdpprog.c
-   * #include <uapi/linux/bpf.h>
-   * #include "bpf_helpers.h"
-   *
-   * struct bpf_map_def SEC("maps") xsks_map = {
-   *         .type = BPF_MAP_TYPE_XSKMAP,
-   *         .key_size = 4,
-   *         .value_size = 4,
-   *         .max_entries = 4,
-   * };
-   *
-   * SEC("xdp_sock")
-   * int xdp_sock_prog(struct xdp_md *ctx)
-   * {
-   *   char* data = (char*)(long)ctx->data;
-   *   char* end = (char*)(long)ctx->data_end;
-   *   if( data + 14 + 20 > end )
-   *     return XDP_PASS;
-   *   unsigned short ethertype = *(unsigned short*)(data+12);
-   *   unsigned char proto;
-   *   if( ethertype == 8 )
-   *     proto = *(unsigned char*)(data+23);
-   *   else if( ethertype == 0xdd86 )
-   *     proto = *(unsigned char*)(data+20);
-   *   else
-   *     return XDP_PASS;
-   *   if( proto != 6 && proto != 17 )
-   *     return XDP_PASS;
-   *   return bpf_redirect_map(&xsks_map, 0, 0);
-   * }
-   *
-   * char _license[] SEC("license") = "GPL";
-   */
-  const uint64_t prog[] = {
-    0x00000002000000b7,0x0000000000041261,0x0000000000001161,0x00000000000013bf,
-    0x0000002200000307,0x00000000000e232d,0x00000017000002b7,0x00000000000c1369,
-    0x0000000800020315,0x0000dd86000a0355,0x00000014000002b7,0x000000000000210f,
-    0x0000000000001171,0x0000001100010115,0x0000000600050155,
+#include <uapi/linux/bpf.h>
+#include "bpf_helpers.h"
 
-    /* This is the instruction to place the map's fd into a register for the
+struct bpf_map_def SEC("maps") xsks_map = {
+        .type = BPF_MAP_TYPE_XSKMAP,
+        .key_size = 4,
+        .value_size = 4,
+        .max_entries = 256,
+};
+
+SEC("xdp_sock")
+int xdp_sock_prog(struct xdp_md *ctx)
+{
+  char* data = (char*)(long)ctx->data;
+  char* end = (char*)(long)ctx->data_end;
+  if( data + 14 + 20 > end )
+    return XDP_PASS;
+  unsigned short ethertype = *(unsigned short*)(data+12);
+  unsigned char proto;
+  if( ethertype == 8 )
+    proto = *(unsigned char*)(data+23);
+  else if( ethertype == 0xdd86 )
+    proto = *(unsigned char*)(data+20);
+  else
+    return XDP_PASS;
+  if( proto != 6 && proto != 17 )
+    return XDP_PASS;
+
+  int index = ctx->rx_queue_index;
+  // A set entry here means that the correspnding queue_id
+  // has an active AF_XDP socket bound to it.
+  if (bpf_map_lookup_elem(&xsks_map, &index))
+      return bpf_redirect_map(&xsks_map, index, 0);
+  // no stack on this queue
+  return XDP_PASS;
+}
+
+char _license[] SEC("license") = "GPL";
+   */
+  uint64_t fdH = (uint64_t) map_fd << 32;
+  const uint64_t __attribute__((aligned(8))) prog[] = {
+    /* Note handling of relocations below that is
+     * to place the map's fd into a register for the
      * call to bpf_redirect_map. The fd is the "immediate value" field of the
      * instruction, which is the upper 32 bits of this representation.
      */
-    0x0000000000001118 | ((uint64_t)map_fd << 32),
-
-    0x0000000000000000,0x00000000000002b7,0x00000000000003b7,0x0000003300000085,
-    0x0000000000000095
+    0x00000002000000b7,   0x0000000000041361,
+    0x0000000000001261,   0x00000000000024bf,
+    0x0000002200000407,   0x000000000018342d,
+    0x00000017000003b7,   0x00000000000c2469,
+    0x0000000800020415,   0x0000dd8600140455,
+    0x00000014000003b7,   0x000000000000320f,
+    0x0000000000002271,   0x0000001100010215,
+    0x00000006000f0255,   0x0000000000101161,
+    0x00000000fffc1a63,   0x000000000000a2bf,
+    0xfffffffc00000207,     fdH | 0x00001118,
+    0x0000000000000000,   0x0000000100000085,
+    0x00000000000001bf,   0x00000002000000b7,
+    0x0000000000050115,   0x00000000fffca261,
+      fdH | 0x00001118,   0x0000000000000000,
+    0x00000000000003b7,   0x0000003300000085,
+    0x0000000000000095,
   };
   char license[] = "GPL";
   union bpf_attr attr = {};
@@ -302,12 +318,6 @@ static int xdp_prog_load(int map_fd)
 static int xdp_map_update_fd(int map_fd, int key, int sock_fd)
 {
   union bpf_attr attr = {};
-
-  /* TODO The BPF program is hard-coded to support only one socket, with
-   * a key of zero. This resricts us to a single VI per interface for now.
-   */
-  if( key != 0 )
-    return -ENOSPC;
 
   attr.map_fd = map_fd;
   attr.key = (uintptr_t)(&key);
