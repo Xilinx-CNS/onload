@@ -452,6 +452,8 @@ static int xdp_create_ring(struct socket* sock,
   if( IS_ERR_VALUE(addr) )
       return addr;
 
+  down_write(&current->mm->mmap_sem);
+
   vma = find_vma(current->mm, addr);
   if( vma == NULL ) {
     rc = -EFAULT;
@@ -460,13 +462,15 @@ static int xdp_create_ring(struct socket* sock,
     rc = follow_pfn(vma, addr, &pfn);
     pages = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
   }
+  up_write(&current->mm->mmap_sem);
+
+  if( rc >= 0 ) {
+    ring_base = phys_to_virt(pfn << PAGE_SHIFT);
+    rc = efhw_page_map_add_lump(page_map, ring_base, pages);
+  }
 
   vm_munmap(addr, map_size);
-  if( rc < 0 )
-    return rc;
 
-  ring_base = phys_to_virt(pfn << PAGE_SHIFT);
-  rc = efhw_page_map_add_lump(page_map, ring_base, pages);
   if( rc < 0 )
     return rc;
 
