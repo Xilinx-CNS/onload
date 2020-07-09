@@ -82,6 +82,10 @@ typedef uint64_t                ef_addr;
 /*! \brief An address of an I/O area for a virtual interface */
 typedef char*                   ef_vi_ioaddr_t;
 
+/*! \brief Reference to a non-local address space */
+typedef uint64_t ef_addrspace;
+
+#define EF_ADDRSPACE_LOCAL ((uint64_t)-1)
 
 /**********************************************************************
  * Dimensions *********************************************************
@@ -419,6 +423,21 @@ typedef struct {
   unsigned iov_len;
 } ef_iovec;
 
+#define EF_RIOV_FLAG_TRANSLATE_ADDR 0x1
+
+/*! \brief ef_remote_iovec describes a scatter/gather list of I/O
+**  buffers that can optionally be located in another address space
+**  that is not directly accessible by the host CPU.
+*/
+typedef struct {
+  /** base address of the buffer */
+  ef_addr  iov_base EF_VI_ALIGN(8);
+  /** length of the buffer */
+  unsigned iov_len;
+  uint32_t flags; /* EF_RIOV_FLAG_* */
+  ef_addrspace addrspace;
+} ef_remote_iovec;
+
 
 /*! \brief ef_timespec is equal to struct timespec (for now),
 ** but may change in future for 2038Y.
@@ -718,6 +737,32 @@ struct ef_vi_transmit_alt_overhead {
 struct ef_pio;
 
 
+/*! \brief Flags that can be passed to ef_vi_transmitv_init_extra()
+**  via the 'struct ef_vi_tx_extra' structure.
+*/
+enum ef_vi_tx_extra_flags {
+  /** Enable use of the mark field. */
+  EF_VI_TX_EXTRA_MARK = 0x1,
+  /** True to enable use of the ingress_mport field. */
+  EF_VI_TX_EXTRA_INGRESS_MPORT = 0x2,
+  /** True to enable use of the egress_mport field. */
+  EF_VI_TX_EXTRA_EGRESS_MPORT = 0x4,
+  /** Capsule metadata is present as prefix to frame data. */
+  EF_VI_TX_EXTRA_CAPSULE_METADATA = 0x8,
+};
+
+/*! \brief TX extra options */
+struct ef_vi_tx_extra {
+  /** Flags indicating which options to apply. */
+  enum ef_vi_tx_extra_flags flags;
+  /** Packet mark value. */
+  uint32_t mark;
+  /** Port used to enter virtual switch. */
+  uint16_t ingress_mport;
+  /** Port used to leave virtual switch. */
+  uint16_t egress_mport;
+};
+
 /*! \brief A virtual interface.
 **
 ** An ef_vi represents a virtual interface on a specific NIC.  A virtual
@@ -885,6 +930,11 @@ typedef struct ef_vi {
     void (*eventq_timer_clear)(struct ef_vi*);
     /** Prime an event queue timer to expire immediately */
     void (*eventq_timer_zero)(struct ef_vi*);
+    /** Initialize TX descriptors on the TX descriptor ring, using
+     * extra options and (optionally) remote buffers */
+    int (*transmitv_init_extra)(struct ef_vi*, const struct ef_vi_tx_extra*,
+                                const ef_remote_iovec*, int iov_len,
+                                ef_request_id);
   } ops;  /**< Driver-dependent operations. */
   /* Doxygen comment above is documentation for the ops member of ef_vi */
 } ef_vi;
@@ -1448,6 +1498,22 @@ extern int ef_vi_transmit_init(ef_vi* vi, ef_addr addr, int bytes,
 #define ef_vi_transmitv_init(vi, iov, iov_len, dma_id)          \
   (vi)->ops.transmitv_init((vi), (iov), (iov_len), (dma_id))
 
+/*! \brief Initialize TX descriptors on the TX descriptor ring, with
+**         extra options and a vector of optionally remote packet
+**         buffers
+**
+** \param extra Pointer to extra options to apply to this packet.
+**              May be NULL.
+**
+** Refer to ef_vi_transmitv_init() for details.
+**
+** Note that the first iovec in the array must be in the local address
+** space (EF_ADDRSPACE_LOCAL) and cannot be translated; this is a
+** limitation of the hardware. It can, however, be zero length.
+*/
+#define ef_vi_transmitv_init_extra(vi, extra, iov, iov_len, dma_id)     \
+  (vi)->ops.transmitv_init_extra((vi), (extra), (iov),                  \
+                                 (iov_len), (dma_id))
 
 /*! \brief Submit newly initialized TX descriptors to the NIC
 **

@@ -39,14 +39,20 @@ ef100_tx_send_desc_fill(ef_vi* vi, unsigned n_segs,
 
 ef_vi_inline void
 ef100_tx_segment_desc_fill(uint64_t src_dma_addr, unsigned bytes,
+                           ef_addrspace addr_space, uint32_t flags,
                            ef_vi_ef100_dma_tx_desc *dp)
 {
+  int translate_addr = (flags & EF_RIOV_FLAG_TRANSLATE_ADDR) != 0;
+  int as_override = addr_space != EF_ADDRSPACE_LOCAL;
   LWCHK(ESF_GZ_TX_SEG_ADDR_LBN, ESF_GZ_TX_SEG_ADDR_WIDTH);
   RANGECHCK(bytes, ESF_GZ_TX_SEG_LEN_WIDTH);
 
-  CI_POPULATE_OWORD_3(*dp,
+  CI_POPULATE_OWORD_6(*dp,
                       ESF_GZ_TX_SEG_LEN, bytes,
                       ESF_GZ_TX_SEG_ADDR, src_dma_addr,
+                      ESF_GZ_TX_SEG_ADDR_SPC, as_override ? addr_space : 0,
+                      ESF_GZ_TX_SEG_ADDR_SPC_EN, as_override,
+                      ESF_GZ_TX_SEG_TRANSLATE_ADDR, translate_addr,
                       ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_SEG);
 }
 
@@ -82,7 +88,83 @@ static int ef100_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
     dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
 
     ef100_tx_segment_desc_fill(iov->iov_base,
-                               iov->iov_len, dp);
+                               iov->iov_len,
+                               EF_ADDRSPACE_LOCAL, 0,
+                               dp);
+    iov++;
+    n_segs--;
+  }
+
+  EF_VI_BUG_ON(q->ids[di] != EF_REQUEST_ID_MASK);
+  q->ids[di] = dma_id;
+  return 0;
+}
+
+static int ef100_ef_vi_transmitv_init_extra(ef_vi* vi,
+                                            const struct ef_vi_tx_extra* extra,
+                                            const ef_remote_iovec* iov,
+                                            int iov_len, ef_request_id dma_id)
+{
+  ef_vi_txq* q = &vi->vi_txq;
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  ef_vi_ef100_dma_tx_desc* dp;
+  unsigned di, n_segs = iov_len;
+
+  EF_VI_BUG_ON((iov_len <= 0));
+  EF_VI_BUG_ON(iov == NULL);
+  EF_VI_BUG_ON((dma_id & EF_REQUEST_ID_MASK) != dma_id);
+  EF_VI_BUG_ON(dma_id == 0xffffffff);
+  EF_VI_BUG_ON(iov[0].addrspace != EF_ADDRSPACE_LOCAL);
+  EF_VI_BUG_ON((iov[0].flags & EF_RIOV_FLAG_TRANSLATE_ADDR) != 0);
+
+  if( CI_UNLIKELY(extra != NULL) )
+    n_segs++;
+
+  /* Check for enough space in the queue */
+  if( qs->added + n_segs - qs->removed >= q->mask )
+    return -EAGAIN;
+
+  if( CI_UNLIKELY(extra != NULL) ) {
+    di = qs->added++ & q->mask;
+    dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
+    n_segs--;
+
+    CI_POPULATE_OWORD_7(*dp,
+                        ESF_GZ_TX_PREFIX_MARK_EN,
+                        (extra->flags & EF_VI_TX_EXTRA_MARK) != 0,
+
+                        ESF_GZ_TX_PREFIX_INGRESS_MPORT_EN,
+                        (extra->flags & EF_VI_TX_EXTRA_INGRESS_MPORT) != 0,
+
+                        ESF_GZ_TX_PREFIX_INLINE_CAPSULE_META,
+                        (extra->flags & EF_VI_TX_EXTRA_CAPSULE_METADATA) != 0,
+
+                        ESF_GZ_TX_PREFIX_EGRESS_MPORT_EN,
+                        (extra->flags & EF_VI_TX_EXTRA_EGRESS_MPORT) != 0,
+
+                        ESF_GZ_TX_PREFIX_EGRESS_MPORT, extra->egress_mport,
+                        ESF_GZ_TX_PREFIX_INGRESS_MPORT, extra->ingress_mport,
+                        ESF_GZ_TX_PREFIX_MARK, extra->mark);
+  }
+
+  /* Generate a SEND descriptor which includes the first segment of data */
+  di = qs->added++ & q->mask;
+  dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
+
+  ef100_tx_send_desc_fill(vi, n_segs,
+                          iov->iov_base,
+                          iov->iov_len, dp);
+  iov++;
+  n_segs--;
+
+  while( n_segs > 0 ) {
+    di = qs->added++ & q->mask;
+    dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
+
+    ef100_tx_segment_desc_fill(iov->iov_base,
+                               iov->iov_len,
+                               iov->addrspace,
+                               iov->flags, dp);
     iov++;
     n_segs--;
   }
@@ -285,6 +367,7 @@ static void ef100_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_run       = ef100_ef_eventq_timer_run;
   vi->ops.eventq_timer_clear     = ef100_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = ef100_ef_eventq_timer_zero;
+  vi->ops.transmitv_init_extra   = ef100_ef_vi_transmitv_init_extra;
 }
 
 void ef100_vi_init(ef_vi* vi)
