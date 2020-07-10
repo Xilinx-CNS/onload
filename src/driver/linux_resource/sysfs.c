@@ -66,7 +66,7 @@ static ssize_t nondl_register_store(struct kobject *kobj,
 {
         const char *end, *space;
         char ifname[IFNAMSIZ];
-        unsigned long n_vis = 1;
+        unsigned long n_vis = 0;
         int rc;
         struct net_device *dev;
 
@@ -98,6 +98,21 @@ static ssize_t nondl_register_store(struct kobject *kobj,
         if(!dev) {
                 rtnl_unlock();
                 return -ENOENT;
+        }
+
+        if(n_vis == 0) {
+                /* TODO AF_XDP: push this detection down to device initialisation */
+                struct ethtool_channels channels = { .cmd = ETHTOOL_GCHANNELS };
+                rc = -EOPNOTSUPP;
+
+                if (dev->ethtool_ops->get_channels) {
+                        dev->ethtool_ops->get_channels(dev, &channels);
+                        n_vis = channels.combined_count;
+                }
+        }
+        if(n_vis == 0) {
+                n_vis = 1;
+                EFRM_WARN("%s: cannot detect number of channels for device %s assuming 1", __func__, ifname);
         }
 
         rc = efrm_nondl_register_netdev(dev, n_vis);
