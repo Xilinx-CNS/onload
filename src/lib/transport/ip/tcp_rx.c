@@ -1522,15 +1522,13 @@ static void ci_tcp_rx_handle_ack(ci_tcp_state* ts, ci_netif* netif,
   }
 
   if( SEQ_SUB(ts->snd_max, rxp->ack) <= 0 &&
+      ci_ip_queue_is_empty(&ts->retrans) &&
       OO_SP_IS_NULL(ts->local_peer) ) {
     /* Zero window: need to start probes.
      *
-     * If we are in a state that has an active TXQ, zero-ish window,
-     * and the retrans queue is empty then zwin timer should be
-     * running.  The zwin timer may not send anything when it expires
-     * (e.g. if sendq is empty)
+     * If retransmit queue is non-empty (i.e. if the peer shrunk window),
+     * then retransmits will serve as zero window probes.
      */
-    ci_assert(ci_ip_queue_is_empty(&ts->retrans));
     if( ci_ip_timer_pending(netif, &ts->zwin_tid) ) {
       if( ts->zwin_probes > 0 ) {
         ++ts->zwin_acks;
