@@ -241,7 +241,8 @@ static int shim_cp_hmsg_send(struct cp_mibs* mib, struct cp_helper_msg* msg)
     pipe_name[sizeof(pipe_name) - 1] = '\0';
     close(comm_pipe);
     comm_pipe = open(pipe_name, O_WRONLY);
-    ci_assert_ge(comm_pipe, 0);
+    if( comm_pipe < 0 )
+      return comm_pipe;
   }
 
   int rc = write(comm_pipe, msg, sizeof(*msg));

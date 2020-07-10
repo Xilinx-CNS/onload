@@ -182,7 +182,9 @@ class CPlane(object):
         return data
 
     def newHwport(self, ifindex, hwport):
-        self.cp.py_oo_cp_set_hwport(self.handle, ifindex, hwport)
+        rc = self.cp.py_oo_cp_set_hwport(self.handle, ifindex, hwport)
+        if rc < 0:
+            raise Exception("Setting new hwport failed %d"%rc)
 
 
 ''' The class manages CPServer process life within its own private
