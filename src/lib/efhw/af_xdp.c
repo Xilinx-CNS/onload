@@ -811,8 +811,11 @@ static void
 af_xdp_nic_event_queue_disable(struct efhw_nic *nic, uint evq,
 			     int time_sync_events_enabled)
 {
+#ifdef AF_XDP
 	struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq);
-	xdp_release_vi(vi);
+	if( vi != NULL )
+		xdp_release_vi(vi);
+#endif
 }
 
 static void
