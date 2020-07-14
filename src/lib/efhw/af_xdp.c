@@ -948,7 +948,7 @@ af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
   if( pd == NULL )
     return -ENODEV;
 
-  EFHW_ERR("%s: owner %d pd 0x%llx", __FUNCTION__, owner, (long long)pd);
+  EFHW_ERR("%s: FIXME AF_XDP owner %d pd 0x%llx", __FUNCTION__, owner, (long long)pd);
 
   /* We reserve some bits of the handle to store the order, needed later to
    * calculate the address of each entry within the block. This limits the
