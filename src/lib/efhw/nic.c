@@ -210,6 +210,7 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		nic->vi_shift = vi_shift;
 		nic->vi_stride = vi_stride;
 		break;
+#ifdef EFHW_HAS_AF_XDP
 	case EFHW_ARCH_AF_XDP:
 		/* TODO AF_XDP fix these */
 		nic->q_sizes[EFHW_EVQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
@@ -223,6 +224,7 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		nic->num_timers = 0;
 		nic->efhw_func = &af_xdp_char_functional_units;
 		break;
+#endif
 	default:
 		EFHW_ASSERT(0);
 		break;

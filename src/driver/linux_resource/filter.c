@@ -51,6 +51,7 @@
 #include <ci/efrm/efrm_client.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/mc_driver_pcol.h>
+#include <ci/efhw/af_xdp.h>
 #include <ci/tools/bitfield.h>
 
 
@@ -2222,6 +2223,7 @@ EXPORT_SYMBOL(efrm_vport_free);
 /* ************************************************************* */
 /* Entry point: check if a filter is valid, and insert it if so. */
 /* ************************************************************* */
+#ifdef EFHW_HAS_AF_XDP
 
 #define EFX_IP_FILTER_MATCH_FLAGS \
                 (EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_IP_PROTO | \
@@ -2310,6 +2312,8 @@ static int efrm_ethtool_filter_insert(struct net_device* dev,
 	return rc;
 }
 
+#endif
+
 int efrm_filter_insert(struct efrm_client *client,
 		       struct efx_filter_spec *spec,
 		       bool replace)
@@ -2318,9 +2322,10 @@ int efrm_filter_insert(struct efrm_client *client,
 	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
 	int rc;
 
+#ifdef EFHW_HAS_AF_XDP
 	if ( efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP )
 		return efrm_ethtool_filter_insert(efhw_nic->net_dev, spec);
-
+#endif
 	/* If [efx_dev] is NULL, the hardware is morally absent. */
 	if ( efx_dev == NULL )
 		return -ENETDOWN;
@@ -2347,6 +2352,7 @@ int efrm_filter_insert(struct efrm_client *client,
 EXPORT_SYMBOL(efrm_filter_insert);
 
 
+#ifdef EFHW_HAS_AF_XDP
 static int efrm_ethtool_filter_remove(struct net_device* dev, int filter_id)
 {
 	struct ethtool_rxnfc info;
@@ -2361,7 +2367,7 @@ static int efrm_ethtool_filter_remove(struct net_device* dev, int filter_id)
 
 	return ops->set_rxnfc(dev, &info);
 }
-
+#endif
 
 void efrm_filter_remove(struct efrm_client *client, int filter_id)
 {
@@ -2369,10 +2375,13 @@ void efrm_filter_remove(struct efrm_client *client, int filter_id)
 	struct efrm_nic *rnic = efrm_nic(efhw_nic);
 	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
 
+#ifdef EFHW_HAS_AF_XDP
 	if ( efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP ) {
 		efrm_ethtool_filter_remove(efhw_nic->net_dev, filter_id);
+		return;
 	}
-	else if( efx_dev != NULL ) {
+#endif
+	if( efx_dev != NULL ) {
 		/* If the filter op fails with ENETDOWN, that indicates that
 		 * the hardware is inacessible but that the device has not
 		 * (yet) been shut down.  It will be recovered by a subsequent

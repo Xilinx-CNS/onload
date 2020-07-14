@@ -1,13 +1,13 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+#include <ci/efhw/af_xdp.h>
+
+#ifdef EFHW_HAS_AF_XDP
 
 #include <ci/efhw/nic.h>
-#include <ci/efhw/af_xdp.h>
 #include <ci/driver/efab/hardware/af_xdp.h>
 
 #include <linux/socket.h>
-
-#ifdef AF_XDP
 
 #include <linux/if_xdp.h>
 #include <linux/file.h>
@@ -554,7 +554,6 @@ static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
     fput(vi->sock);
   memset(vi, 0, sizeof(*vi));
 }
-#endif /* AF_XDP */
 
 /*----------------------------------------------------------------------------
  *
@@ -563,12 +562,8 @@ static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
  *---------------------------------------------------------------------------*/
 static void* af_xdp_mem(struct efhw_nic* nic, int instance)
 {
-#ifdef AF_XDP
   struct efhw_af_xdp_vi* vi = vi_by_instance(nic, instance);
   return vi ? &vi->kernel_offsets : NULL;
-#else
-  return NULL;
-#endif
 }
 
 static int af_xdp_init(struct efhw_nic* nic, int instance,
@@ -576,7 +571,6 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
                        struct socket** sock_out,
                        struct efhw_page_map* page_map)
 {
-#ifdef AF_XDP
   int rc;
   struct efhw_af_xdp_vi* vi;
   int owner_id;
@@ -646,9 +640,6 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   *sock_out = sock;
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
   return 0;
-#else
-  return -EPROTONOSUPPORT;
-#endif
 }
 
 /*----------------------------------------------------------------------------
@@ -722,7 +713,6 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		       struct efhw_ev_handler *ev_handlers,
 		       const uint8_t *mac_addr)
 {
-#ifdef AF_XDP
 	int map_fd, rc;
 	struct bpf_prog* prog;
 	struct efhw_nic_af_xdp* xdp;
@@ -770,21 +760,16 @@ fail:
 	kfree(xdp);
 	__close_fd(current->files, map_fd);
 	return rc;
-#else
-	return -EPROTONOSUPPORT;
-#endif
 }
 
 static void
 af_xdp_nic_release_hardware(struct efhw_nic* nic)
 {
-#ifdef AF_XDP
   xdp_set_link(nic->net_dev, NULL);
   if( nic->af_xdp != NULL ) {
     fput(nic->af_xdp->map);
     kfree(nic->af_xdp);
   }
-#endif
 }
 
 /*--------------------------------------------------------------------
@@ -811,11 +796,9 @@ static void
 af_xdp_nic_event_queue_disable(struct efhw_nic *nic, uint evq,
 			     int time_sync_events_enabled)
 {
-#ifdef AF_XDP
 	struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq);
 	if( vi != NULL )
 		xdp_release_vi(vi);
-#endif
 }
 
 static void
@@ -883,7 +866,6 @@ af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
                       dma_addr_t *dma_addrs, int n_dma_addrs,
                       uint vport_id, uint stack_id, uint flags)
 {
-#ifdef AF_XDP
   struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq_id);
   if( vi == NULL )
     return -ENODEV;
@@ -892,9 +874,6 @@ af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
   vi->txq_capacity = dmaq_size;
 
   return 0;
-#else
-  return -EPROTONOSUPPORT;
-#endif
 }
 
 
@@ -904,7 +883,6 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 		    dma_addr_t *dma_addrs, int n_dma_addrs,
 		    uint vport_id, uint stack_id, uint ps_buf_size, uint flags)
 {
-#ifdef AF_XDP
   struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq_id);
   if( vi == NULL )
     return -ENODEV;
@@ -914,9 +892,6 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
   vi->flags |= (flags & EFHW_VI_RX_ZEROCOPY) ? XDP_ZEROCOPY : XDP_COPY;
 
   return 0;
-#else
-  return -EPROTONOSUPPORT;
-#endif
 }
 
 
@@ -966,7 +941,6 @@ af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
                               struct efhw_buffer_table_block **block_out,
                               int reset_pending)
 {
-#ifdef AF_XDP
   struct efhw_buffer_table_block* block;
   struct protection_domain* pd = pd_by_owner(nic, owner);
   int rc;
@@ -1001,9 +975,6 @@ af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
 
   *block_out = block;
   return 0;
-#else
-  return -EPROTONOSUPPORT;
-#endif
 }
 
 
@@ -1021,11 +992,9 @@ af_xdp_nic_buffer_table_free(struct efhw_nic *nic,
                              struct efhw_buffer_table_block *block,
                              int reset_pending)
 {
-#ifdef AF_XDP
   int owner = block->btb_hw.ef10.handle >> 8;
   kfree(block);
   xdp_release_pd(nic, owner);
-#endif
 }
 
 
@@ -1035,7 +1004,6 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
                             int first_entry, int n_entries,
                             dma_addr_t *dma_addrs)
 {
-#ifdef AF_XDP
   int i, j, owner, order;
   long page;
   struct protection_domain* pd;
@@ -1081,9 +1049,6 @@ af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
   }
 
   return 0;
-#else
-  return -EPROTONOSUPPORT;
-#endif
 }
 
 
@@ -1174,3 +1139,5 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_mem,
 	af_xdp_init,
 };
+
+#endif /* EFHW_HAS_AF_XDP */

@@ -3,6 +3,7 @@
 #ifndef CI_EFAB_AF_XDP_TYPES_H
 #define CI_EFAB_AF_XDP_TYPES_H
 
+#include <ci/compat.h>
 /* AF_XDP doesn't have any hardware definitions as such, but
  * we use data structures which are shared between kernel and
  * userland. We define these here. */
