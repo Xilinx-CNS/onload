@@ -538,6 +538,7 @@ void oo_icmp_handle(tcp_helper_resource_t* thr)
   ci_irqlock_lock(&thr->lock, &lock_flags);
   msg = thr->icmp_msg;
   thr->icmp_msg = NULL;
+  thr->icmp_msg_n = 0;
   ci_irqlock_unlock(&thr->lock, &lock_flags);
   if( msg == NULL )
     return;
@@ -583,6 +584,12 @@ int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
     return -ENOENT;
   }
 
+  /* We are in NAPI context here.  There are limited number of NAPI
+   * threads, so it is safe to verify icmp_msg_n value before kmalloc,
+   * without any locks, to minimise possible error paths. */
+  if( thr->icmp_msg_n >= thr->netif.opts.icmp_msg_max )
+    return -ENOBUFS;
+
   msg = kmalloc(sizeof(struct oo_icmp_msg), GFP_ATOMIC);
   if( msg == NULL ) {
     oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
@@ -595,6 +602,7 @@ int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
   ci_irqlock_lock(&thr->lock, &lock_flags);
   msg->next = thr->icmp_msg;
   thr->icmp_msg = msg;
+  thr->icmp_msg_n++;
   ci_irqlock_unlock(&thr->lock, &lock_flags);
 
   if( efab_tcp_helper_netif_lock_or_set_flags(thr,

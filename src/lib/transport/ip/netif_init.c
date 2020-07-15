@@ -1374,6 +1374,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_AF_XDP_ZEROCOPY")) )
     opts->af_xdp_zerocopy = atoi(s);
+
+  if( (s = getenv("EF_ICMP_PKTS")) )
+    opts->icmp_msg_max = atoi(s);
 }
 
 static int

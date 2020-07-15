@@ -1719,3 +1719,8 @@ CI_CFG_OPTGROUP(rto,                         tcp_retransmission, 100)
 CI_CFG_OPT("EF_AF_XDP_ZEROCOPY", af_xdp_zerocopy, ci_uint32,
 "Enables zerocopy on AF_XDP NICs. Support for zerocopy is required. ",
            1, , 0, 0, 1, yesno)
+
+CI_CFG_OPT("EF_ICMP_PKTS", icmp_msg_max, ci_uint32,
+           "Maximum number of ICMP messages which can be queued to "
+           "one Onload stack.",
+           , , 64, 2, 1024, count)

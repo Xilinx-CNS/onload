@@ -3867,6 +3867,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   init_completion(&rs->complete);
 #if CI_CFG_HANDLE_ICMP
   rs->icmp_msg = NULL;
+  rs->icmp_msg_n = 0;
 #endif
 
 #ifdef EFRM_DO_NAMESPACES

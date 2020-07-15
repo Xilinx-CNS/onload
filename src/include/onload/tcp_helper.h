@@ -385,6 +385,7 @@ typedef struct tcp_helper_resource_s {
   struct tcp_helper_usermem* usermem;
 
   struct oo_icmp_msg* icmp_msg;
+  int icmp_msg_n;
 } tcp_helper_resource_t;
 
 
