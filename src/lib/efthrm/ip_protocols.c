@@ -449,7 +449,7 @@ efab_ipp_icmp_for_thr(tcp_helper_resource_t* thr, efab_ipp_addr* addr)
   ci_assert( thr );
   ci_assert( addr );
 
-  af_space = IS_AF_INET6(addr->af) ? AF_SPACE_FLAG_IP6 : AF_SPACE_FLAG_IP4;
+  af_space = OO_AF_FAMILY2SPACE(addr->af);
 
   return  __ci_netif_filter_lookup(&thr->netif, af_space,
                                    addr->daddr, addr->dport_be16,

@@ -179,6 +179,12 @@ typedef enum {
 #define IS_AF_INET6(af) 0
 #endif
 
+/* Use this carefully, because AF_INET6 sometimes mean
+ * AF_SPACE_FLAG_IP6 | AF_SPACE_FLAG_IP4.  See sock_af_space()
+ * for complicated cases. */
+#define OO_AF_FAMILY2SPACE(af) \
+  (IS_AF_INET6(af) ? AF_SPACE_FLAG_IP6 : AF_SPACE_FLAG_IP4)
+
 ci_inline char *ci_get_ip_str(const ci_addr_t src, char *dst, size_t size,
                               int ipv6_add_brackets)
 {

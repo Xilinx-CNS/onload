@@ -566,6 +566,15 @@ static void oof_sw_insert_fail(struct oof_socket* skf,
 ***********************************************************************
 **********************************************************************/
 
+static inline int/*af_space*/
+oof_addr_to_af_space(ci_addr_t addr)
+{
+  if( CI_IS_ADDR_IP6(addr) )
+    return AF_SPACE_FLAG_IP6;
+  else
+    return AF_SPACE_FLAG_IP4;
+}
+
 static void
 oof_local_port_addr_init(struct oof_local_port_addr* lpa, int flags)
 {
@@ -1214,7 +1223,7 @@ oof_manager_sw_filter_insert(struct oof_manager *fm, int af, ci_addr_t laddr,
       { &lpa->lpa_semi_wild_socks, &lp->lp_wild_socks };
   int i, af_space;
 
-  af_space = (IS_AF_INET6(af)) ? AF_SPACE_FLAG_IP6 : AF_SPACE_FLAG_IP4;
+  af_space = OO_AF_FAMILY2SPACE(af);
 
   /* Add s/w filters for wild sockets. */
   for( i = 0; i < 2; ++i )
@@ -1253,7 +1262,7 @@ oof_manager_sw_filter_remove(int af, ci_addr_t laddr, struct oof_local_port* lp,
       { &lpa->lpa_semi_wild_socks, &lp->lp_wild_socks };
   int i, af_space;
 
-  af_space = (IS_AF_INET6(af)) ? AF_SPACE_FLAG_IP6 : AF_SPACE_FLAG_IP4;
+  af_space = OO_AF_FAMILY2SPACE(af);
 
   /* Remove s/w filters for wild sockets. */
   for( i = 0; i < 2; ++i ) {
@@ -1366,9 +1375,7 @@ __oof_manager_addr_add(struct oof_manager *fm, int af, ci_addr_t laddr,
     CI_DLLIST_FOR_EACH2(struct oof_local_port, lp, lp_manager_link,
                         &fm->fm_local_ports[hash]) {
       lpa = &lp->lp_addr[la_i];
-      skf = oof_wild_socket(lp, lpa,
-                            IS_AF_INET6(af) ?
-                            AF_SPACE_FLAG_IP6 : AF_SPACE_FLAG_IP4);
+      skf = oof_wild_socket(lp, lpa, OO_AF_FAMILY2SPACE(af));
       if( skf != NULL )
         oof_hw_filter_set(fm, skf, &lpa->lpa_filter,
                           oof_socket_stack_effective(skf),
@@ -1596,9 +1603,7 @@ oof_manager_dnat_add(struct oof_manager* fm, int af, ci_uint16 lp_protocol,
     goto out;
 
   lpa = &lp->lp_addr[la_i];
-  skf = oof_wild_socket(lp, lpa,
-                        IS_AF_INET6(af) ?
-                        AF_SPACE_FLAG_IP6 : AF_SPACE_FLAG_IP4);
+  skf = oof_wild_socket(lp, lpa, OO_AF_FAMILY2SPACE(af));
   if( skf != NULL ) {
     nat_filter = oof_nat_table_filter_get(nat_table);
     ci_assert(nat_filter);
@@ -2136,9 +2141,7 @@ oof_local_port_addr_fixup_wild(struct oof_manager* fm,
   /* Decide whether we need to insert full-match filters for sockets that
    * are currently sharing a wild filter.
    */
-  skf = oof_wild_socket(lp, lpa,
-                        CI_IS_ADDR_IP6(laddr) ?
-                        AF_SPACE_FLAG_IP6 : AF_SPACE_FLAG_IP4);
+  skf = oof_wild_socket(lp, lpa, oof_addr_to_af_space(laddr));
   unshare_full_match = lpa->lpa_n_full_sharers > 0;
   if( skf == NULL ) {
     thresh = oof_shared_keep_thresh;
@@ -2244,15 +2247,6 @@ oof_local_port_addr_fixup_wild(struct oof_manager* fm,
   }
 }
 
-
-static inline int/*af_space*/
-oof_addr_to_af_space(ci_addr_t addr)
-{
-  if( CI_IS_ADDR_IP6(addr) )
-    return AF_SPACE_FLAG_IP6;
-  else
-    return AF_SPACE_FLAG_IP4;
-}
 
 static void
 oof_local_port_fixup_wild(struct oof_manager* fm, struct oof_local_port* lp,
