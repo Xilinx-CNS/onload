@@ -4,6 +4,8 @@
 
 #ifdef EFHW_HAS_AF_XDP
 
+#include "kernel_compat.h"
+
 #include <ci/efhw/nic.h>
 #include <ci/driver/efab/hardware/af_xdp.h>
 
