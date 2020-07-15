@@ -1966,7 +1966,8 @@ static int citp_tcp_zc_send(citp_fdinfo* fdi, struct onload_zc_mmsg* msg,
                                     CI_SB_AFLAG_O_NDELAY) ) 
       flags |= MSG_DONTWAIT;
 
-    rc = ci_tcp_zc_send(ni, ts, msg, flags);
+    if( rc == 0 )
+      rc = ci_tcp_zc_send(ni, ts, msg, flags);
   }
   else {
     msg->rc = -epi->sock.s->tx_errno;
