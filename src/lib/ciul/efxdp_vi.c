@@ -368,4 +368,5 @@ long efxdp_vi_mmap_bytes(ef_vi* vi)
 #else
 void efxdp_vi_init(ef_vi* vi) {}
 long efxdp_vi_mmap_bytes(ef_vi* vi) { return 0; }
+int efxdp_ef_eventq_check_event(const ef_vi* _vi, int look_ahead) { return 0; }
 #endif
