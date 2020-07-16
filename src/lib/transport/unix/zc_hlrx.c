@@ -45,20 +45,19 @@ int onload_zc_hlrx_alloc(int fd, int flags, struct onload_zc_hlrx** hlrx_out)
   Log_CALL(ci_log("%s(%d, %p)", __FUNCTION__, fd, hlrx_out));
 
   rc = onload_getsockopt(fd, SOL_SOCKET, SO_TYPE, &sock_type, &optlen);
-  if( rc == 0 ) {
-    if( sock_type != SOCK_STREAM && sock_type != SOCK_DGRAM )
-      rc = -ESOCKTNOSUPPORT;
+  if( rc )
+    rc = -errno;
+  else if( sock_type != SOCK_STREAM && sock_type != SOCK_DGRAM )
+    rc = -ESOCKTNOSUPPORT;
+  else {
+    hlrx = calloc(1, sizeof(*hlrx));
+    if( ! hlrx ) {
+      rc = -ENOMEM;
+    }
     else {
-      hlrx = calloc(1, sizeof(*hlrx));
-      if( ! hlrx ) {
-        rc = -ENOMEM;
-      }
-      else {
-        hlrx->fd = fd;
-        hlrx->udp = sock_type == SOCK_DGRAM;
-        *hlrx_out = hlrx;
-        rc = 0;
-      }
+      hlrx->fd = fd;
+      hlrx->udp = sock_type == SOCK_DGRAM;
+      *hlrx_out = hlrx;
     }
   }
 
