@@ -787,8 +787,10 @@ int ci_tcp_tmpl_alloc(ci_netif* ni, ci_tcp_state* ts,
 #if CI_CFG_TIMESTAMPING
   /* This flag should not be set on a segment of length 0,
    * we assume this is never the case with templated sends */
-  if( onload_timestamping_want_tx_nic(ts->s.timestamping_flags) )
+  if( onload_timestamping_want_tx_nic(ts->s.timestamping_flags) ) {
     pkt->flags |= CI_PKT_FLAG_TX_TIMESTAMPED;
+    pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
+  }
 #endif
 
   /* XXX: Do I have to worry about MSG_CORK? */
@@ -2555,6 +2557,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           reusing_prev_pkt = false;
           ++ni->state->n_async_pkts;
           pkt->flags |= CI_PKT_FLAG_INDIRECT;
+          pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
           oo_pkt_af_set(pkt, af);
           oo_tx_pkt_layout_init(pkt);
           __ci_tcp_tx_pkt_init(pkt, ts->outgoing_hdrs_len, eff_mss);

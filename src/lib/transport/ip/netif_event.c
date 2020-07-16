@@ -1427,6 +1427,28 @@ static void ci_netif_tx_pkt_complete_udp(ci_netif* netif,
 }
 
 
+static void ci_netif_rx_pkt_complete_tcp(ci_netif* ni,
+                                         struct ci_netif_poll_state* ps,
+                                         ci_ip_pkt_fmt* pkt)
+{
+#if CI_CFG_TIMESTAMPING
+  if( pkt->flags & (CI_PKT_FLAG_TX_TIMESTAMPED | CI_PKT_FLAG_INDIRECT) ) {
+    /* This packet is destined for the timestamp_q. We need to check if our
+     * removal of the TX_PENDING flag will have caused the return value of
+     * ci_tcp_poll_timestamp_q_nonempty() to have changed. If so, we need to
+     * wake. The above if() is technically lax, but it's a very quick way of
+     * detecting when we can avoid the relatively costly ci_udp_recv_q_get */
+    ci_tcp_state* ts = SP_TO_TCP(ni, pkt->pf.tcp_tx.sock_id);
+    if( pkt == ci_udp_recv_q_get(ni, &ts->timestamp_q) ) {
+      ts->s.b.sb_flags |= CI_SB_FLAG_RX_DELIVERED;
+      ci_netif_put_on_post_poll(ni, &ts->s.b);
+      ci_tcp_wake_possibly_not_in_poll(ni, ts, CI_SB_FLAG_WAKE_RX);
+    }
+  }
+#endif
+  ci_netif_pkt_release_in_poll(ni, pkt, ps);
+}
+
 
 ci_inline void __ci_netif_tx_pkt_complete(ci_netif* ni,
                                           struct ci_netif_poll_state* ps,
@@ -1498,7 +1520,7 @@ ci_inline void __ci_netif_tx_pkt_complete(ci_netif* ni,
   if( pkt->flags & CI_PKT_FLAG_UDP )
     ci_netif_tx_pkt_complete_udp(ni, ps, pkt);
   else
-    ci_netif_pkt_release_in_poll(ni, pkt, ps);
+    ci_netif_rx_pkt_complete_tcp(ni, ps, pkt);
 
 }
 
