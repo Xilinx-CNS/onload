@@ -250,11 +250,27 @@ class CPServer(object):
         self.pid = server_pid
         self.shim_file = f
 
+        timeout = 5
+        if not self.waitForPipePath(timeout=timeout):
+            raise Exception("The pipe {0} wasn't created within {1} seconds"\
+                            .format(self.getPipePath(), timeout))
+
     def getCmdPrefix(self):
         return 'nsenter -t %d --net --mount --'%self.pid
 
     def getNetNsPath(self):
         return '/proc/%d/ns/net'%self.pid
+
+    def getPipePath(self):
+        return '/tmp/onload_cp_server.%d'%self.pid
+
+    def waitForPipePath(self, timeout=5):
+        time_to_finish = time.time() + timeout
+        while time.time() < time_to_finish:
+            if os.path.exists(self.getPipePath()):
+                return True
+            time.sleep(0.5)
+        return os.path.exists(self.getPipePath())
 
     def getClient(self):
         self.CP_SHIM_FILE_lock.acquire()
@@ -269,7 +285,7 @@ class CPServer(object):
 
     def cleanup(self):
         os.kill(self.pid, signal.SIGTERM)
-        os.unlink('/tmp/onload_cp_server.%d'%self.pid);
+        os.unlink(self.getPipePath())
         self.shim_file.close()
 
     def mibdump(self, args=""):
