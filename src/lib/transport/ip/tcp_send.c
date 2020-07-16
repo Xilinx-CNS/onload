@@ -20,6 +20,7 @@
 #if !defined(__KERNEL__)
 #include <sys/socket.h>
 #include <onload/extensions_zc.h>
+#include <limits.h>
 #endif
 #include <onload/pkt_filler.h>
 #include <onload/sleep.h>
@@ -2517,7 +2518,9 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
       iov_len = msg->msg.iov[j].iov_len;
       while( iov_len ) {
         const uint64_t NIC_PAGE_MASK = ~(uint64_t)(EF_VI_NIC_PAGE_SIZE - 1);
-        const uint32_t MAX_CONTIG_LEN = 0xffffffffu - EF_VI_NIC_PAGE_SIZE;
+        /* Max size is bounded by ci_ip_pkt_fmt::pay_len, minus slack to make
+         * the boundary case in the loop below easier */
+        const uint32_t MAX_CONTIG_LEN = INT_MAX - EF_VI_NIC_PAGE_SIZE;
         uint32_t contig_len;
 
         /* Up to the end of the current page is guaranteed to be contiguous */

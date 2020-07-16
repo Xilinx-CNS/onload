@@ -310,10 +310,7 @@ struct ci_ip_pkt_fmt_s {
    * starting from this point */
 
   /* payload length for passing between layers */
-  ci_int16              pay_len;
-
-  /*! Length of data from base_addr used in this buffer. */
-  ci_int16              buf_len;
+  ci_int32              pay_len;
 
   /* For receive packets, describes position of payload data.  For transmit
    * packets, identifies free space. 
@@ -325,8 +322,9 @@ struct ci_ip_pkt_fmt_s {
    * correct per-interface address of this buffer
    */
   ci_int16              intf_i;
-  /* VLAN tag from packet header (RX). */
-  ci_int16              vlan;
+
+  /*! Length of data from base_addr used in this buffer. */
+  ci_int16              buf_len;
 
 #if CI_CFG_TIMESTAMPING
   /*! UTC time we were sent or received according to hw */
@@ -407,6 +405,9 @@ struct ci_ip_pkt_fmt_s {
   ci_uint64             tstamp_frc CI_ALIGN(8);
 
   ci_ip_pkt_fmt_prefix  pf CI_ALIGN(8);
+
+  /* VLAN tag from packet header (RX). */
+  ci_int16              vlan;
 
 #define PKT_START_OFF_BAD ((ci_int16)0xffff)
   /*! Offset of the start of data from [dma_start].  This is usually the
