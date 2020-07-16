@@ -88,6 +88,7 @@ struct zc_cb_copy_state {
   struct onload_zc_hlrx* hlrx;
   ssize_t rc;
   ci_iovec_ptr dest;
+  int msg_flags;
 };
 
 
@@ -140,8 +141,11 @@ copy_cb(struct onload_zc_recv_args *args, int flags)
                sizeof(state->hlrx->pending) / sizeof(state->hlrx->pending[0]));
   copy_iovs(state, args->msg.iov, &begin, end);
 
-  if( state->hlrx->udp )
+  if( state->hlrx->udp ) {
+    if( end != begin )
+      state->msg_flags |= MSG_TRUNC;
     return ONLOAD_ZC_TERMINATE;
+  }
   if( end != begin ) {
     save_pending(state->hlrx, args, begin, end);
     /* No need for complex refcount management here: we keep the one and only
@@ -161,6 +165,7 @@ ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
   struct zc_cb_copy_state state = {
     .hlrx = hlrx,
     .rc = 0,
+    .msg_flags = 0,
   };
 
   Log_CALL(ci_log("%s(%p, %p, %d)", __FUNCTION__, hlrx, msg, flags));
@@ -198,6 +203,7 @@ ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
       if( n < 0 && state.rc == 0 )
         state.rc = n;
     }
+    msg->msg_flags = state.msg_flags;
   }
 
   Log_CALL_RESULT((int)state.rc);
@@ -269,8 +275,11 @@ zc_cb(struct onload_zc_recv_args *args, int flags)
                sizeof(state->hlrx->pending) / sizeof(state->hlrx->pending[0]));
   zc_iovs(state, args->msg.iov, &begin, end);
 
-  if( state->hlrx->udp )
+  if( state->hlrx->udp ) {
+    if( end != begin )
+      state->msg->msghdr.msg_flags |= MSG_TRUNC;
     return ONLOAD_ZC_KEEP | ONLOAD_ZC_TERMINATE;
+  }
   if( end != begin ) {
     save_pending(state->hlrx, args, begin, end);
     /* zc_iovs() gave out additional refcounts to the user for all iovs
@@ -310,6 +319,7 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
     state.rc = -EINVAL;
   }
   else {
+    msg->msghdr.msg_flags = 0;
     /* Consume leftovers from previous call */
     zc_iovs(&state, hlrx->pending, &hlrx->pending_begin, hlrx->pending_end);
     if( state.rc ) {
