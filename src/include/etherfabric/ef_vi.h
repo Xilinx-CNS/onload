@@ -561,7 +561,7 @@ enum ef_vi_arch {
   EF_VI_ARCH_FALCON,
   /** 7000 and 8000-series NICs */
   EF_VI_ARCH_EF10,
-  /** Riverhead */
+  /** U26z and later NICs */
   EF_VI_ARCH_EF100,
   /** Arbitrary NICs using AF_XDP */
   EF_VI_ARCH_AF_XDP,
@@ -1263,8 +1263,8 @@ ef_vi_receive_get_bytes(ef_vi* vi, const void* pkt, uint16_t* bytes_out);
 ** \param user_mark On return, set to the 32-bit value assigned by the NIC
 ** \param user_flag On return, set to the 1-bit value assigned by the NIC
 **
-** These fields are available on EF100 NICs only, and only when using the full
-** rx prefix. Use of this function in other configurations will return
+** These fields are available on U26z and later adapters, and only when using
+** the full rx prefix. Use of this function in other configurations will return
 ** nonsense data, or assert in a debug build.
 **
 ** The value of the mark and flag may be set by filter rules assigned to the
