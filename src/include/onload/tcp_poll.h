@@ -61,11 +61,7 @@ ci_tcp_poll_events_nolisten(ci_netif *ni, ci_tcp_state *ts)
   if( ts->s.tx_errno && TCP_RX_DONE(ts) )
     revents |= POLLHUP; /* SHUT_RDWR */
   /* Errors */
-  if( ts->s.so_error
-#if CI_CFG_TIMESTAMPING
-      || ci_udp_recv_q_not_empty(&ts->timestamp_q)
-#endif
-      )
+  if( ts->s.so_error || ci_tcp_poll_timestamp_q_nonempty(ni, ts) )
     revents |= POLLERR;
 
   /* synchronised: !CLOSED !SYN_SENT */
