@@ -3084,7 +3084,8 @@ ci_inline void ci_netif_pkt_release(ci_netif* ni, ci_ip_pkt_fmt* pkt) {
 #define ci_netif_pkt_release_rx(ni, pkt)        \
   ci_netif_pkt_release(ni, pkt)
 
-ci_inline int ci_netif_pkt_release_check_keep(ci_netif* ni, ci_ip_pkt_fmt* pkt)
+ci_inline int
+ci_netif_pkt_release_check_keep(ci_netif* ni, ci_ip_pkt_fmt* pkt)
 {
   /* If this flag is set it counts as another reference, as the single
    * reference gets shared between UDP receive queue and application

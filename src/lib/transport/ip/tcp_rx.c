@@ -116,7 +116,8 @@ void ci_tcp_rx_reap_rxq_bufs(ci_netif* netif, ci_tcp_state* ts)
     ci_ip_pkt_fmt* pkt = PKT_CHK(netif, rxq->head);
     oo_pkt_p next = pkt->next;
 
-    ci_netif_pkt_release_check_keep(netif, pkt);
+    if( ci_netif_pkt_release_check_keep(netif, pkt) == 0 )
+      break;
     ++n;
     rxq->head = next;
   }
@@ -136,9 +137,10 @@ void ci_tcp_rx_reap_rxq_last_buf(ci_netif* netif, ci_tcp_state* ts)
 
   if( oo_offbuf_is_empty(&pkt->buf) ) {
     ts->recv1_extract = ts->recv1.head = pkt->next;
-    ci_netif_pkt_release_check_keep(netif, pkt);
-    ci_tcp_rx_buf_adjust(netif, ts, &ts->recv1, -1);
-    --ts->recv1.num;
+    if( ci_netif_pkt_release_check_keep(netif, pkt) ) {
+      ci_tcp_rx_buf_adjust(netif, ts, &ts->recv1, -1);
+      --ts->recv1.num;
+    }
   }
 }
 
