@@ -4159,7 +4159,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   if( NI_OPTS(ni).int_driven )
     tcp_helper_request_wakeup(netif2tcp_helper_resource(ni));
   efab_tcp_helper_netif_unlock(rs, 0);
-  rs->trusted_lock = OO_TRUSTED_LOCK_UNLOCKED;
 #else
   ni->state->lock.lock = CI_EPLOCK_UNLOCKED;
 #endif
