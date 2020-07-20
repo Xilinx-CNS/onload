@@ -2339,13 +2339,25 @@ ci_inline int oo_stack_intf_max(ci_netif* ni) {
 #endif
 }
 
+extern void ci_netif_send_plugin_app_ctrl(ci_netif* ni, int nic_index,
+                                          ci_ip_pkt_fmt* pkt,
+                                          const void* payload, size_t paylen);
 
-ci_inline void ci_netif_ring_ceph_doorbell(ci_netif* netif, int nic_index,
-                                           int n)
+extern void __ci_netif_ring_plugin_app_doorbell(ci_netif* netif,
+                                                int nic_index);
+
+ci_inline void ci_netif_ring_ceph_doorbell(ci_netif* netif,
+                                                 int nic_index, int n)
 {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
-  if( NI_OPTS(netif).tcp_offload_plugin == CITP_TCP_OFFLOAD_CEPH && n != 0 )
-    *(volatile uint32_t*)netif->nic_hw[nic_index].plugin_io = n;
+  if( NI_OPTS(netif).tcp_offload_plugin == CITP_TCP_OFFLOAD_CEPH ) {
+    netif->state->nic[nic_index].plugin_app_credit += n;
+    /* /4 is an arbitrary slowdown factor, because ringing this doorbell is
+     * quite CPU-costly */
+    if( netif->state->nic[nic_index].plugin_app_credit >=
+        NI_OPTS(netif).rxq_size / 4 )
+      __ci_netif_ring_plugin_app_doorbell(netif, nic_index);
+  }
 #endif
 }
 

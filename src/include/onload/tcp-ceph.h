@@ -50,4 +50,22 @@ struct xsn_ceph_create_stream {
 #define XSN_CEPH_RSRC_CLASS_APP     0
 #define XSN_CEPH_RSRC_CLASS_STREAM  1
 
+union ceph_control_pkt {
+  uint8_t cmd;
+  struct {
+    uint8_t cmd;  /* 0 */
+    uint8_t unused1[3];
+    uint32_t credit;
+  } add_credit;
+  struct {
+    uint8_t cmd;  /* 1 */
+    uint8_t unused[3];
+    uint32_t stream_id;
+    uint64_t buf_head;
+  } consume_payload;
+};
+
+#define XSN_CEPH_CTRL_ADD_CREDIT       0
+#define XSN_CEPH_CTRL_CONSUME_PAYLOAD  1
+
 #endif

@@ -2438,7 +2438,6 @@ create_plugin_app(tcp_helper_resource_t* trs)
     struct ef_vi* ceph_vi;
     ci_uint32 mch;
     struct efhw_nic* nic;
-    size_t bar_off;
     ci_uint32 app_id;
     struct efrm_ext_svc_meta meta;
     int rc;
@@ -2478,26 +2477,29 @@ create_plugin_app(tcp_helper_resource_t* trs)
     }
     app_id = le32_to_cpu(create.tcp.out_app_id);
 
-    bar_off = ef10_tx_dma_page_base(nic->vi_stride,
-                          trs->nic[intf_i].thn_vi_rs[CI_Q_ID_TCP_APP]->
-                                  rs.rs_instance);
-    bar_off += meta.mapped_csr_offset;
-    ni->nic_hw[intf_i].plugin_io = ci_ioremap(nic->ctr_ap_dma_addr +
-                                              (bar_off & PAGE_MASK),
-                                              meta.mapped_csr_size);
-    if( ! ni->nic_hw[intf_i].plugin_io ) {
-      OO_DEBUG_ERR(ci_log("%s: Ceph app failed to map VI window (%d)",
-                          __FUNCTION__, intf_i));
-      efrm_ext_destroy_rsrc(rs, mch, XSN_CEPH_RSRC_CLASS_APP, app_id);
-     fail_plugin_1:
-      efrm_ext_free(rs, mch);
-      continue;
+    ni->nic_hw[intf_i].plugin_io = NULL;
+    if( meta.mapped_csr_size ) {
+      size_t bar_off = ef10_tx_dma_page_base(nic->vi_stride,
+                            trs->nic[intf_i].thn_vi_rs[CI_Q_ID_TCP_APP]->
+                                    rs.rs_instance);
+      bar_off += meta.mapped_csr_offset;
+      ni->nic_hw[intf_i].plugin_io = ci_ioremap(nic->ctr_ap_dma_addr +
+                                                (bar_off & PAGE_MASK),
+                                                meta.mapped_csr_size);
+      if( ! ni->nic_hw[intf_i].plugin_io ) {
+        OO_DEBUG_ERR(ci_log("%s: Ceph app failed to map VI window (%d)",
+                            __FUNCTION__, intf_i));
+        efrm_ext_destroy_rsrc(rs, mch, XSN_CEPH_RSRC_CLASS_APP, app_id);
+      fail_plugin_1:
+        efrm_ext_free(rs, mch);
+        continue;
+      }
+      ni->state->nic[intf_i].oo_vi_flags |= OO_VI_FLAGS_PLUGIN_IO_EN;
+      trs->nic[intf_i].thn_plugin_mapped_csr_offset = meta.mapped_csr_offset;
+      ni->state->plugin_mmap_bytes += meta.mapped_csr_size;
     }
     ni->nic_hw[intf_i].plugin_handle = mch;
     ni->nic_hw[intf_i].plugin_app_id = app_id;
-    trs->nic[intf_i].thn_plugin_mapped_csr_offset = meta.mapped_csr_offset;
-    ni->state->plugin_mmap_bytes += meta.mapped_csr_size;
-    ni->state->nic[intf_i].oo_vi_flags |= OO_VI_FLAGS_PLUGIN_IO_EN;
     got_nic = true;
   }
   if( ! got_nic ) {

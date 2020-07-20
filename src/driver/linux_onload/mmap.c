@@ -620,6 +620,11 @@ static int tcp_helper_rm_mmap_plugin(tcp_helper_resource_t* trs,
     unsigned long n = PAGE_SIZE;
     if( trs->netif.nic_hw[intf_i].plugin_handle == INVALID_PLUGIN_HANDLE )
       continue;
+    if( ! trs->netif.nic_hw[intf_i].plugin_io ) {
+      OO_DEBUG_ERR(ci_log("%s: mapping CSR region when plugin doesn't use it",
+                          __FUNCTION__));
+      return -EINVAL;
+    }
     rc = efab_vi_resource_mmap(trs->nic[intf_i].thn_vi_rs[CI_Q_ID_TCP_APP], &n,
                     vma, &map_num, &offset,
                     EFCH_VI_MMAP_PLUGIN_BASE +

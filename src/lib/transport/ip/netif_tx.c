@@ -212,7 +212,11 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
              pkt_dma_addr(netif, pkt, pkt->intf_i),
              pkt->buf_len, CI_MAC_PRINTF_ARGS(oo_ether_dhost(pkt))));
 
-  ci_check( ! ci_eth_addr_is_zero((ci_uint8 *)oo_ether_dhost(pkt)));
+  /* Packets to non-primary VIs could be control messages to a plugin, so
+   * there's no requirement that they be Ethernet (or any other recognisable
+   * protocol). */
+  ci_check( ! is_to_primary_vi(pkt) ||
+            ! ci_eth_addr_is_zero((ci_uint8 *)oo_ether_dhost(pkt)));
 
   /*
    * Packets can be now be n fragments long. If the packet at the head of the
@@ -265,12 +269,12 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
     }
 #endif
     /* FIXME: EF100 and AF_XDP don't have checksum offload */
-    if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_EF100 ||
-                    vi->nic_type.arch == EF_VI_ARCH_AF_XDP) ) {
+    if( CI_UNLIKELY((vi->nic_type.arch == EF_VI_ARCH_EF100 ||
+                     vi->nic_type.arch == EF_VI_ARCH_AF_XDP) &&
+                     is_to_primary_vi(pkt)) ) {
         struct iovec my_iov[CI_IP_PKT_SEGMENTS_MAX];
         ci_uint8 protocol;
 
-        ci_assert(is_to_primary_vi(pkt));
         ci_netif_pkt_to_host_iovec(netif, pkt, my_iov,
                                    sizeof(my_iov) / sizeof(my_iov[0]));
 

@@ -18,6 +18,7 @@
 #include <onload/version.h>
 #include <etherfabric/internal/internal.h>
 #include <stddef.h>
+#include <onload/tcp-ceph.h>
 
 #ifndef __KERNEL__
 #include <cplane/cplane.h>
@@ -1893,16 +1894,25 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
   /****************************************************************************
    * Create the plugin CSR mapping.
    */
-  if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_CEPH ) {
-    rc = oo_resource_mmap(ci_netif_get_driver_handle(ni),
-                          OO_MMAP_TYPE_NETIF,
-                          CI_NETIF_MMAP_ID_PLUGIN, CI_PAGE_SIZE,
-                          OO_MMAP_FLAG_POPULATE, &p);
-    if( rc < 0 ) {
-      LOG_NV(ci_log("%s: oo_resource_mmap plugin %d", __FUNCTION__, rc));
-      goto fail2;
+  {
+    bool have_plugin_io = false;
+    int nic_i;
+
+    OO_STACK_FOR_EACH_INTF_I(ni, nic_i)
+      if( ns->nic[nic_i].oo_vi_flags & OO_VI_FLAGS_PLUGIN_IO_EN )
+        have_plugin_io = true;
+
+    if( have_plugin_io ) {
+      rc = oo_resource_mmap(ci_netif_get_driver_handle(ni),
+                            OO_MMAP_TYPE_NETIF,
+                            CI_NETIF_MMAP_ID_PLUGIN, CI_PAGE_SIZE,
+                            OO_MMAP_FLAG_POPULATE, &p);
+      if( rc < 0 ) {
+        LOG_NV(ci_log("%s: oo_resource_mmap plugin %d", __FUNCTION__, rc));
+        goto fail2;
+      }
+      ni->plugin_ptr = (uint8_t*) p;
     }
-    ni->plugin_ptr = (uint8_t*) p;
   }
 #endif
 
@@ -2477,6 +2487,49 @@ static void ci_netif_pkt_reserve_free(ci_netif* ni, oo_pkt_p pkt_list, int n)
   ci_assert_equal(n, 0);
   ci_assert(OO_PP_IS_NULL(pkt_list));
 }
+
+
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+void ci_netif_send_plugin_app_ctrl(ci_netif* ni, int nic_index,
+                                   ci_ip_pkt_fmt* pkt,
+                                   const void* payload, size_t paylen)
+{
+  pkt->intf_i = nic_index;
+  pkt->q_id = CI_Q_ID_TCP_APP;
+  pkt->pay_len = ETH_HLEN + paylen;
+  /* Fake values to ensure this doesn't look like IPv4 or IPv6, both to
+   * various bits of Onload and to the NIC */
+  pkt->pkt_start_off = 0;
+  pkt->pkt_eth_payload_off = 0;
+  pkt->pkt_outer_l3_off = 0;
+  memset(pkt->dma_start, 0, ETH_HLEN);
+
+  pkt->n_buffers = 1;
+  pkt->buf_len = ETH_HLEN + paylen;
+  memcpy(pkt->dma_start + ETH_HLEN, payload, paylen);
+  ci_netif_send(ni, pkt);
+}
+
+
+void __ci_netif_ring_plugin_app_doorbell(ci_netif* ni, int nic_index)
+{
+  union ceph_control_pkt cmd = {
+    .cmd = XSN_CEPH_CTRL_ADD_CREDIT,
+    .add_credit.credit = ni->state->nic[nic_index].plugin_app_credit,
+  };
+  ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(ni, 0);
+  if( ! pkt ) {
+    /* Out-of-packets is an unfortunately-probable circumstance, since this
+     * function is run immediately after we've just taken a load of packets to
+     * refill the rxqs. The problem is mitigated by this function getting
+     * (potentially) run on every poll so, assuming we're not totally wedged,
+     * we'll recover eventually. */
+    return;
+  }
+  ci_netif_send_plugin_app_ctrl(ni, nic_index, pkt, &cmd, sizeof(cmd));
+  ni->state->nic[nic_index].plugin_app_credit = 0;
+}
+#endif
 
 
 #ifndef __KERNEL__

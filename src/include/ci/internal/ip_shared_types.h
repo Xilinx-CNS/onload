@@ -1054,6 +1054,9 @@ typedef struct {
   ci_uint32             ctpio_frame_len_check;
   ci_uint32             ctpio_max_frame_len;
 #endif
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_uint32             plugin_app_credit;
+#endif
 } ci_netif_state_nic_t;
 
 
