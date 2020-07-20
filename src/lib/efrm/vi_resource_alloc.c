@@ -1226,6 +1226,8 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	if (evq_virs == NULL && evq_capacity < 0)
 		evq_capacity = rxq_capacity + txq_capacity;
 
+        /* TODO AF_XDP: allocation order must match the order that ef_vi
+         * expects the queues to be mapped into user memory. */
 	if ((rc = efrm_vi_q_alloc(virs, EFHW_EVQ, evq_capacity,
 				  0, vi_flags, NULL)) < 0)
 		goto fail_q_alloc;

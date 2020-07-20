@@ -161,14 +161,17 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
     if (evq_capacity == 0)
       evq_capacity = -1;
   }
+
+  /* TODO AF_XDP: allocation order must match the order that ef_vi
+   * expects the queues to be mapped into user memory. */
   if ((rc = efrm_vi_q_alloc(virs, EFHW_EVQ, evq_capacity,
                             0, vi_flags, NULL)) < 0)
     goto fail_q_alloc;
-  if ((rc = efrm_vi_q_alloc(virs, EFHW_TXQ, txq_capacity,
-                            tx_q_tag, vi_flags, evq_virs)) < 0)
-    goto fail_q_alloc;
   if ((rc = efrm_vi_q_alloc(virs, EFHW_RXQ, rxq_capacity,
                             rx_q_tag, vi_flags, evq_virs)) < 0)
+    goto fail_q_alloc;
+  if ((rc = efrm_vi_q_alloc(virs, EFHW_TXQ, txq_capacity,
+                            tx_q_tag, vi_flags, evq_virs)) < 0)
     goto fail_q_alloc;
 
   *virs_out = virs;
