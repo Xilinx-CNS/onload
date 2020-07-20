@@ -197,6 +197,8 @@ ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
         .cb = copy_cb,
         .user_ptr = &state,
         .flags = flags,
+        .msg.msghdr.msg_name = msg->msg_name,
+        .msg.msghdr.msg_namelen = msg->msg_namelen,
       };
       int n = onload_zc_recv(hlrx->fd, &args);
       if( n < 0 && state.rc == 0 )
@@ -337,6 +339,8 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
         .cb = zc_cb,
         .user_ptr = &state,
         .flags = flags,
+        .msg.msghdr.msg_name = msg->msghdr.msg_name,
+        .msg.msghdr.msg_namelen = msg->msghdr.msg_namelen,
       };
       int n = onload_zc_recv(hlrx->fd, &args);
       if( n < 0 && state.rc == 0 )
