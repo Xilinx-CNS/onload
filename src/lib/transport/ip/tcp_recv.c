@@ -25,7 +25,7 @@
 
 struct tcp_recv_info;
 typedef int (*pkt_copy_t)(ci_netif* netif, struct tcp_recv_info* rinf,
-                          ci_ip_pkt_fmt* pkt, int peek_off);
+                          ci_ip_pkt_fmt* pkt, int peek_off, int* rc);
 
 struct tcp_recv_info {
   int rc;
@@ -311,7 +311,7 @@ ci_tcp_fill_recv_timestamp(struct tcp_recv_info* rinf, ci_ip_pkt_fmt* pkt)
 
 
 static int copy_one_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
-                        ci_ip_pkt_fmt* pkt, int peek_off)
+                        ci_ip_pkt_fmt* pkt, int peek_off, int* rc)
 {
   int n;
 
@@ -324,6 +324,10 @@ static int copy_one_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
     n = CI_MIN(oo_offbuf_left(&pkt->buf) - peek_off, rinf->piov.io.iov_len);
     CI_IOVEC_LEN(&rinf->piov.io) -= n;
   }
+  /* NB: on failure of this function (i.e. n<0) the caller doesn't make any
+   * assumptions about the validity or otherwise of the output (including the
+   * 'out' parameter), so the side-effect of mangling *rc here is fine. */
+  *rc += n;
   return n;
 }
 
@@ -344,7 +348,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
 {
   ci_netif* netif = rinf->a->ni;
   ci_tcp_state* ts = rinf->a->ts;
-  int n, peek_off, total;
+  int n, peek_off, total, rc;
   ci_ip_pkt_fmt* pkt;
   int max_bytes;
 #if CI_CFG_TIMESTAMPING && ! defined(__KERNEL__)
@@ -359,6 +363,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
 
   peek_off = 0;
   total = 0;
+  rc = 0;
 
   /* Maximum number of bytes we have in both recv1 and recv2.
    * In this function, we get data from recv1 only, so the actual amount
@@ -366,13 +371,13 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
   max_bytes = tcp_rcv_usr(ts);
 
   if( max_bytes <= 0 || OO_PP_IS_NULL(ts->recv1_extract))
-    return total;       /* Receive queue is empty. */
+    return rc;       /* Receive queue is empty. */
 
   ci_assert(OO_PP_NOT_NULL(ts->recv1.head));
 
   pkt = PKT_CHK_NNL(netif, ts->recv1_extract);
   if( oo_offbuf_is_empty(&pkt->buf) ) {
-    if( OO_PP_IS_NULL(pkt->next) )  return total;  /* recv1 is empty. */
+    if( OO_PP_IS_NULL(pkt->next) )  return rc;  /* recv1 is empty. */
     ts->recv1_extract = pkt->next;
     pkt = PKT_CHK_NNL(netif, ts->recv1_extract);
     ci_assert(oo_offbuf_not_empty(&pkt->buf));
@@ -408,9 +413,9 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
   }
 #endif
 
-    n = rinf->copier(netif, rinf, pkt, peek_off);
+    n = rinf->copier(netif, rinf, pkt, peek_off, &rc);
 #ifdef  __KERNEL__
-    if( n < 0 )  return total;
+    if( n < 0 )  return n;
 #endif
     oo_offbuf_advance(&pkt->buf, n);
 
@@ -420,7 +425,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
     if(CI_LIKELY( ! (rinf->a->flags & (MSG_PEEK | ONLOAD_MSG_ONEPKT)) )) {
       if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, n,
                                     max_bytes) != 0 )
-        return total;
+        return rc;
     }
     else {
       if( rinf->a->flags & MSG_PEEK ) {
@@ -432,7 +437,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
           /* We've emptied the current packet. */
           if( total == max_bytes || OO_PP_IS_NULL(pkt->next) )
             /* We've emptied the receive queue. */
-            return total;
+            return rc;
           pkt = PKT_CHK_NNL(netif, pkt->next);
           peek_off = 0;
           ci_assert(oo_offbuf_not_empty(&pkt->buf));
@@ -441,16 +446,16 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
       else {
         if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, n,
                                       max_bytes) != 0 )
-          return total;
+          return rc;
       }
 
       if( rinf->a->flags & ONLOAD_MSG_ONEPKT )
-        return total;
+        return rc;
     }
 
     /* Exit here if we've filled the app's buffer. */
     if( ! iovec_roll_over(&rinf->piov) )
-      return total;
+      return rc;
     /* Yes, [piov->io.iov_len] could be zero here.  Just means we'll waste
     ** time going round the loop an extra time and not copy an data.  This
     ** is harmless.  Doing it this way makes the common case faster, and
@@ -1157,7 +1162,7 @@ static void ci_tcp_recvmsg_recv2_peek2(struct tcp_recv_info *rinfo,
   ci_ip_pkt_queue* recv2 = &ts->recv2;
   ci_ip_pkt_fmt* pkt = PKT_CHK(ni, recv2->head);
   oo_offbuf* buf = &pkt->buf;
-  int n, peek_off = start_skip;
+  int rc, n, peek_off = start_skip;
   int orig_buf_end;
 
   ci_assert(oo_offbuf_left(buf) >= start_skip);
@@ -1185,7 +1190,9 @@ static void ci_tcp_recvmsg_recv2_peek2(struct tcp_recv_info *rinfo,
       pkt->buf.end = CI_MIN(pkt->buf.end, pkt->buf.off + dist_to_urg);
     }
 
-    n = rinfo->copier(ni, rinfo, pkt, peek_off);
+    rc = 0;
+    n = rinfo->copier(ni, rinfo, pkt, peek_off, &rc);
+    ci_assert_equal(n, rc); /* zc shenanigans not supported with urgent data */
     pkt->buf.end = orig_buf_end;
 #ifdef __KERNEL__
     if( n < 0 ) {
@@ -1500,7 +1507,7 @@ static int ci_tcp_recvmsg_recv2(struct tcp_recv_info *rinf)
 
 #ifndef __KERNEL__
 static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
-                            ci_ip_pkt_fmt* pkt, int peek_off)
+                            ci_ip_pkt_fmt* pkt, int peek_off, int* rc)
 {
   int n = oo_offbuf_left(&pkt->buf);
   enum onload_zc_callback_rc cb_rc;
@@ -1547,6 +1554,7 @@ static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
 
   rinf->a->msg->msg_controllen = 0;
 
+  *rc += n;
   return n;
 }
 

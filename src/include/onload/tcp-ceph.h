@@ -61,7 +61,7 @@ union ceph_control_pkt {
     uint8_t cmd;  /* 1 */
     uint8_t unused[3];
     uint32_t stream_id;
-    uint64_t buf_head;
+    uint64_t buf_tail;
   } consume_payload;
 };
 
