@@ -24,6 +24,19 @@
 #define LPF "TCP TX "
 
 
+ci_inline void check_tx_timestamping(ci_tcp_state* ts, int af,
+                                     ci_ip_pkt_fmt* pkt)
+{
+#if CI_CFG_TIMESTAMPING
+  if( onload_timestamping_want_tx_nic(ts->s.timestamping_flags) &&
+      CI_TCP_PAYLEN(oo_tx_ip_hdr(pkt), TX_PKT_IPX_TCP(af, pkt)) != 0 ) {
+    pkt->flags |= CI_PKT_FLAG_TX_TIMESTAMPED;
+    pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
+  }
+#endif
+}
+
+
 ci_inline void ci_ip_tcp_list_to_dmaq(ci_netif* ni, ci_tcp_state* ts,
                                       oo_pkt_p head_id, 
                                       ci_ip_pkt_fmt* tail_pkt)
@@ -45,11 +58,7 @@ ci_inline void ci_ip_tcp_list_to_dmaq(ci_netif* ni, ci_tcp_state* ts,
   do {
     pkt = PKT_CHK(ni, pp);
     pp = pkt->next;
-#if CI_CFG_TIMESTAMPING
-    if( onload_timestamping_want_tx_nic(ts->s.timestamping_flags) &&
-        CI_TCP_PAYLEN(oo_tx_ip_hdr(pkt), TX_PKT_TCP(pkt)) != 0 )
-      pkt->flags |= CI_PKT_FLAG_TX_TIMESTAMPED;
-#endif
+    check_tx_timestamping(ts, oo_pkt_af(pkt), pkt);
     ci_ip_set_mac_and_port(ni, &ts->s.pkt, pkt);
     ci_netif_pkt_hold(ni, pkt);
     if(CI_UNLIKELY( ts->tcpflags & CI_TCPT_FLAG_MSG_WARM ))
@@ -132,11 +141,7 @@ static void ci_ip_tcp_list_to_dmaq_striping(ci_netif* ni, ci_tcp_state* ts,
   n = 0;
   do {
     pkt = PKT_CHK(ni, pp);
-#if CI_CFG_TIMESTAMPING
-    if( onload_timestamping_want_tx_nic(ts->s.timestamping_flags) &&
-        CI_TCP_PAYLEN(oo_tx_ip_hdr(pkt), TX_PKT_IPX_TCP(af, pkt)) != 0 )
-      pkt->flags |= CI_PKT_FLAG_TX_TIMESTAMPED;
-#endif
+    check_tx_timestamping(ts, af, pkt);
     ci_ip_set_mac_and_port(ni, &ts->s.pkt, pkt);
     pp = pkt->next;
     ci_netif_pkt_hold(ni, pkt);
@@ -268,14 +273,7 @@ fast:
       pkt = PKT_CHK(ni, head_id);
       head_id = pkt->next;
 
-#if CI_CFG_TIMESTAMPING
-      if( onload_timestamping_want_tx_nic(ts->s.timestamping_flags) &&
-          CI_TCP_PAYLEN(oo_tx_ip_hdr(pkt), TX_PKT_IPX_TCP(af, pkt)) != 0 )
-        pkt->flags |= CI_PKT_FLAG_TX_TIMESTAMPED;
-#else
-      (void)af;
-#endif
-
+      check_tx_timestamping(ts, af, pkt);
       ci_ip_send_tcp_slow(ni, ts, pkt);
       if( pkt == tail_pkt )
         break;
