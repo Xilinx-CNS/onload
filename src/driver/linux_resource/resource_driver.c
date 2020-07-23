@@ -238,7 +238,7 @@ irq_ranges_init(struct efhw_nic *nic, const struct vi_resource_dimensions *res_d
 
 
 static int
-linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct efx_dl_device *dl_device,
+linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 		    unsigned nic_flags,
 		    struct net_device *net_dev,
 		    const struct vi_resource_dimensions *res_dim,
@@ -251,7 +251,6 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct efx_dl_device *dl_device
 	unsigned vi_shift = 0;
 	unsigned mem_bar = EFHW_MEM_BAR_UNDEFINED;
 	unsigned vi_stride = 0;
-	struct pci_dev *dev = dl_device ? dl_device->pci_dev : NULL;
 
 	/* Tie the lifetime of the kernel's state to that of our own. */
 	if( dev )
@@ -352,14 +351,13 @@ fail:
  */
 static void
 linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
-                       struct efx_dl_device *dl_device,
+                       struct pci_dev *dev,
 		       struct net_device *net_dev,
 		       const struct vi_resource_dimensions *res_dim,
                        struct efhw_device_type *dev_type)
 {
 	struct efhw_nic* nic = &lnic->efrm_nic.efhw_nic;
 	struct pci_dev* old_pci_dev;
-	struct pci_dev* dev = dl_device->pci_dev;
 #ifndef NDEBUG
 	struct net_device* old_net_dev;
 #endif
@@ -565,7 +563,7 @@ static void efrm_nic_proc_intf_removed(struct linux_efhw_nic* nic)
  * TODO AF_XDP: more elegantly handle non-driverlink devices
  ****************************************************************************/
 int
-efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags, 
+efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 	     struct net_device *net_dev,
 	     struct linux_efhw_nic **lnic_out,
 	     const struct vi_resource_dimensions *res_dim,
@@ -585,13 +583,13 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 	struct efhw_nic* old_nic;
 
 
-	if (dl_device && !enable_driverlink) {
+	if (dev && !enable_driverlink) {
 		EFRM_NOTICE("%s: Driverlink reports sfc device %s, ignoring as module "
 					"param enable_driverlink=0", __func__, net_dev->name);
 		return -EPERM;
 	}
 
-	if(dl_device) {
+	if(dev) {
 		rc = pci_read_config_byte(dev, PCI_CLASS_REVISION, &class_revision);
 		if (rc != 0) {
 			EFRM_ERR("%s: pci_read_config_byte failed (%d)",
@@ -621,7 +619,7 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 		resources_init = 1;
 	}
 
-	if(dl_device) {
+	if(dev) {
 		spin_lock_bh(&efrm_nic_tablep->lock);
 		EFRM_FOR_EACH_NIC(nic_index, old_nic) {
 			/* We would like to break out of this loop after rediscovering
@@ -650,7 +648,7 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 		 * unloads. */
 	}
 	if (lnic != NULL) {
-		linux_efrm_nic_reclaim(lnic, dl_device, net_dev, res_dim,
+		linux_efrm_nic_reclaim(lnic, dev, net_dev, res_dim,
 				       &dev_type);
 		/* We have now taken ownership of the state and should pull it
 		 * down on failure. */
@@ -670,7 +668,7 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 		lnic->ev_handlers = &ev_handler;
 
 		/* OS specific hardware mappings */
-		rc = linux_efrm_nic_ctor(lnic, dl_device, flags,
+		rc = linux_efrm_nic_ctor(lnic, dev, flags,
 					 net_dev, res_dim, &dev_type);
 		if (rc < 0) {
 			EFRM_ERR("%s: ERROR: linux_efrm_nic_ctor failed (%d)",
@@ -702,7 +700,7 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 	lnic->dl_device = dl_device;
 	efrm_nic = &lnic->efrm_nic;
 	nic = &efrm_nic->efhw_nic;
-	if( dl_device )
+	if( dev )
 		efrm_driverlink_resume(efrm_nic);
 	else
 		efrm_nic->rnic_flags |= EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED;
@@ -750,7 +748,7 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 	efrm_nic->rss_channel_count = res_dim->rss_channel_count;
 
 	EFRM_NOTICE("%s index=%d ifindex=%d",
-		    dl_device ? (pci_name(dev) ? pci_name(dev) : "?") : net_dev->name,
+		    dev ? (pci_name(dev) ? pci_name(dev) : "?") : net_dev->name,
 		    nic->index, net_dev->ifindex);
 
 	efrm_nic->dmaq_state.unplugging = 0;
