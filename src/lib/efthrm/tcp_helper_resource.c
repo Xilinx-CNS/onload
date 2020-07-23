@@ -1967,6 +1967,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 #if CI_CFG_IPV6
   ci_uint32 ip6_filter_table_size;
 #endif
+  ci_uint32 ns_ofs;
 
   OO_DEBUG_SHM(ci_log("%s:", __func__));
 
@@ -2145,52 +2146,50 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
     if( ns->hwport_to_intf_i[i] >= 0 )
       ns->intf_i_to_hwport[(int) ns->hwport_to_intf_i[i]] = i;
 
-  ns->buf_ofs = sizeof(ci_netif_state);
-  ns->buf_ofs = CI_ROUND_UP(ns->buf_ofs, __alignof__(ef_vi_state));
-  ns->buf_ofs += vi_state_bytes * trs->netif.nic_n;
-  ns->buf_ofs = CI_ROUND_UP(ns->buf_ofs, __alignof__(oo_pktbuf_manager));
+  ns_ofs = sizeof(ci_netif_state);
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(ef_vi_state));
+  ns_ofs += vi_state_bytes * trs->netif.nic_n;
 
-  ns->dma_ofs = ns->buf_ofs + sizeof(oo_pktbuf_manager);
-  ns->dma_ofs = CI_ROUND_UP(ns->dma_ofs, __alignof__(oo_pktbuf_set));
-  ns->dma_ofs += sizeof(oo_pktbuf_set) * ni->pkt_sets_max;
-  ns->dma_ofs = CI_ROUND_UP(ns->dma_ofs, CI_CACHE_LINE_SIZE);
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(oo_pktbuf_manager));
+  ns->buf_ofs = ns_ofs;
+  ns_ofs += sizeof(oo_pktbuf_manager);
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(oo_pktbuf_set));
+  ns_ofs += sizeof(oo_pktbuf_set) * ni->pkt_sets_max;
+
+  ns_ofs = CI_ROUND_UP(ns_ofs, CI_CACHE_LINE_SIZE);
+  ns->dma_ofs = ns_ofs;
+  ns_ofs += dma_addrs_bytes;
 
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
-  ns->active_wild_ofs = ns->dma_ofs + dma_addrs_bytes;
-  ns->active_wild_ofs = CI_ROUND_UP(ns->active_wild_ofs,
-                                    __alignof__(ci_ni_dllist_t));
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(ci_ni_dllist_t));
+  ns->active_wild_ofs = ns_ofs;
   ns->active_wild_table_entries_n = no_active_wild_table_entries;
   ns->active_wild_pools_n = no_active_wild_pools;
 
-  ns->seq_table_ofs = ns->active_wild_ofs + (sizeof(ci_ni_dllist_t) *
-                                             ns->active_wild_table_entries_n *
-                                             ns->active_wild_pools_n);
-#else
-  ns->seq_table_ofs = ns->dma_ofs + dma_addrs_bytes;
+  ns_ofs += (sizeof(ci_ni_dllist_t) * ns->active_wild_table_entries_n *
+            ns->active_wild_pools_n);
 #endif
 
-  ns->seq_table_ofs = CI_ROUND_UP(ns->seq_table_ofs,
-                                  __alignof__(ci_tcp_prev_seq_t));
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(ci_tcp_prev_seq_t));
+  ns->seq_table_ofs = ns_ofs;
   ns->seq_table_entries_n = no_seq_table_entries;
+  ns_ofs += sizeof(ci_tcp_prev_seq_t) * ns->seq_table_entries_n;
 
-  ns->deferred_pkts_ofs = ns->seq_table_ofs +
-                          sizeof(ci_tcp_prev_seq_t) * ns->seq_table_entries_n;
-  ns->deferred_pkts_ofs = CI_ROUND_UP(ns->deferred_pkts_ofs,
-                                      __alignof__(struct oo_deferred_pkt));
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(struct oo_deferred_pkt));
+  ns->deferred_pkts_ofs = ns_ofs;
+  ns_ofs += sizeof(struct oo_deferred_pkt) * NI_OPTS(ni).defer_arp_pkts;
 
-  ns->table_ofs = ns->deferred_pkts_ofs +
-                  sizeof(struct oo_deferred_pkt) * NI_OPTS(ni).defer_arp_pkts;
-  ns->table_ofs = CI_ROUND_UP(ns->table_ofs,
-                              __alignof__(ci_netif_filter_table));
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(ci_netif_filter_table));
+  ns->table_ofs = ns_ofs;
+  ns_ofs += filter_table_size;
 
-  ns->table_ext_ofs = ns->table_ofs + filter_table_size;
-  ns->table_ext_ofs = CI_ROUND_UP(ns->table_ext_ofs,
-                                  __alignof__(ci_netif_filter_table_entry_ext));
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(ci_netif_filter_table_entry_ext));
+  ns->table_ext_ofs = ns_ofs;
+  ns_ofs += filter_table_ext_size;
 
 #if CI_CFG_IPV6
-  ns->ip6_table_ofs = ns->table_ext_ofs + filter_table_ext_size;
-  ns->ip6_table_ofs = CI_ROUND_UP(ns->ip6_table_ofs,
-                              __alignof__(ci_ip6_netif_filter_table));
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(ci_ip6_netif_filter_table));
+  ns->ip6_table_ofs = ns_ofs;
 #endif
 
   ns->vi_state_bytes = vi_state_bytes;
