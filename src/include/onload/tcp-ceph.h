@@ -68,4 +68,25 @@ union ceph_control_pkt {
 #define XSN_CEPH_CTRL_ADD_CREDIT       0
 #define XSN_CEPH_CTRL_CONSUME_PAYLOAD  1
 
+struct ceph_data_pkt {
+  uint16_t msg_type;
+  uint16_t msg_len;
+  union {
+    uint8_t data[0];  /* msg_type == 0 */
+    struct {
+      uint32_t start_ptr;
+      uint16_t data_len;
+      uint32_t data_crc;
+    } __attribute__((packed)) remote;  /* msg_type == 1 */
+    struct {
+      uint32_t reason;
+      uint32_t subreason;
+    } lost_sync;  /* msg_type == 2 */
+  };
+};
+
+#define XSN_CEPH_DATA_INLINE     0
+#define XSN_CEPH_DATA_REMOTE     1
+#define XSN_CEPH_DATA_LOST_SYNC  2
+
 #endif
