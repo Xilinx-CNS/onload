@@ -37,13 +37,6 @@ Supported platforms
    SFN7142Q
    SFN7122F, SFN7322F, SFN7124F
 
- Onload support for the following network adapters is deprecated:
-   SFN5122F, SFN5322F
-   SFN6122F, SFN6322F
-   SFN5812H, SFN5814H
-   SFN5802K
-   SFN5121T
-
 
  If you are interested in trying or buying Solarflare network adapters,
  please contact <sales@solarflare.com>.
