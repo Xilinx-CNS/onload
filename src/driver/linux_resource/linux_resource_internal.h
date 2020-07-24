@@ -81,4 +81,10 @@ void efrm_nondl_shutdown(void);
 int efrm_nondl_unregister_netdev(struct net_device *netdev);
 int efrm_nondl_register_netdev(struct net_device *netdev,
                               unsigned int n_vis);
+
+
+void efrm_notify_nic_probe(const struct net_device* netdev);
+void efrm_notify_nic_remove(const struct net_device* netdev);
+
+
 #endif  /* __LINUX_RESOURCE_INTERNAL__ */

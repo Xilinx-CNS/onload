@@ -17,13 +17,13 @@
 
 #include <ci/internal/ip.h>
 #include <onload/driverlink_filter.h>
-#include <ci/driver/driverlink_api.h>
 #include <onload/linux_onload_internal.h>
 #include <onload/tcp_helper_fns.h>
 #include <onload/nic.h>
 #include <onload/oof_interface.h>
 #include <onload/oof_onload.h>
 #include <ci/efrm/efrm_client.h>
+#include <ci/efrm/nic_notifier.h>
 #include "onload_internal.h"
 #include "onload_kernel_compat.h"
 #include <ci/driver/efab/hardware.h>
@@ -280,10 +280,7 @@ struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
   return onic;
 }
 
-static int oo_dl_probe(struct efx_dl_device* dl_dev,
-                       const struct net_device* net_dev,
-                       const struct efx_dl_device_info* dev_info,
-                       const char* silicon_rev)
+static int oo_nic_probe(const struct net_device* net_dev)
 {
   struct oo_nic* onic = NULL;
   if( oo_netdev_is_non_dl(net_dev) ) {
@@ -315,11 +312,10 @@ static int oo_dl_probe(struct efx_dl_device* dl_dev,
       return -1;
   }
 
-  dl_dev->priv = (void *)net_dev;
   return 0;
 }
 
-void oo_common_remove(struct net_device* netdev)
+void oo_common_remove(const struct net_device* netdev)
 {
   /* We need to fini all of the hardware queues immediately. The net driver
    * will tidy up its own queues and *all* VIs, so if we don't free our own
@@ -338,7 +334,7 @@ void oo_common_remove(struct net_device* netdev)
   if( (onic = oo_nic_find_dev(netdev)) != NULL ) {
     /* Filter status need to be synced as after this function is finished
      * no further operations will be allowed.
-     * Also note on polite hotplug oo_dl_remove() is called before
+     * Also note on polite hotplug oo_nic_remove() is called before
      * oo_netdev_going_down(), which will not have a chance to do its job
      * regarding filters.
      */
@@ -363,26 +359,13 @@ void oo_common_remove(struct net_device* netdev)
   }
 }
 
-static void oo_dl_remove(struct efx_dl_device* dl_dev)
+static void oo_nic_remove(const struct net_device* netdev)
 {
-  struct net_device* netdev = dl_dev->priv;
   if( ! oo_netdev_is_dl(netdev) ) {
     ci_log("%s: net dev event %s ignoring as non-dl", __FUNCTION__, netdev->name);
     return;
   }
   oo_common_remove(netdev);
-}
-
-
-static void oo_dl_reset_suspend(struct efx_dl_device* dl_dev)
-{
-  ci_log("%s:", __FUNCTION__);
-}
-
-
-static void oo_dl_reset_resume(struct efx_dl_device* dl_dev, int ok)
-{
-  ci_log("%s:", __FUNCTION__);
 }
 
 
@@ -502,18 +485,13 @@ static struct notifier_block oo_netdev_notifier = {
 };
 
 
-static struct efx_dl_driver oo_dl_driver = {
-  .name = "onload",
-  .flags = EFX_DL_DRIVER_CHECKS_FALCON_RX_USR_BUF_SIZE |
-           EFX_DL_DRIVER_CHECKS_MEDFORD2_VI_STRIDE,
-  .probe = oo_dl_probe,
-  .remove = oo_dl_remove,
-  .reset_suspend = oo_dl_reset_suspend,
-  .reset_resume = oo_dl_reset_resume
+static struct efrm_nic_notifier oo_nic_notifier = {
+  .probe = oo_nic_probe,
+  .remove = oo_nic_remove,
 };
 
 
-int oo_driverlink_register(void)
+int oo_hooks_register(void)
 {
   int rc;
 
@@ -521,9 +499,7 @@ int oo_driverlink_register(void)
   if (rc != 0)
     goto fail1;
 
-  rc = efx_dl_register_driver(&oo_dl_driver);
-  if (rc != 0)
-    goto fail2;
+  efrm_register_nic_notifier(&oo_nic_notifier);
 
 #if CI_CFG_HANDLE_ICMP && ! defined(EFRM_HAVE_NF_NET_HOOK)
   if( (rc = nf_register_hook(&oo_netfilter_ip_hook)) < 0 )
@@ -542,9 +518,8 @@ int oo_driverlink_register(void)
    nf_unregister_hook(&oo_netfilter_ip_hook);
 #endif
   fail4:
-   efx_dl_unregister_driver(&oo_dl_driver);
+   efrm_unregister_nic_notifier(&oo_nic_notifier);
 #endif
- fail2:
   unregister_netdevice_notifier(&oo_netdev_notifier);
  fail1:
   ci_log("%s: efx_dl_register_driver failed (%d)", __FUNCTION__, rc);
@@ -552,7 +527,7 @@ int oo_driverlink_register(void)
 }
 
 
-void oo_driverlink_unregister(void)
+void oo_hooks_unregister(void)
 {
 #if CI_CFG_HANDLE_ICMP && ! defined(EFRM_HAVE_NF_NET_HOOK)
   nf_unregister_hook(&oo_netfilter_ip_hook);
@@ -561,7 +536,7 @@ void oo_driverlink_unregister(void)
 #endif
 #endif
   unregister_netdevice_notifier(&oo_netdev_notifier);
-  efx_dl_unregister_driver(&oo_dl_driver);
+  efrm_unregister_nic_notifier(&oo_nic_notifier);
 }
 
 #ifdef EFRM_HAVE_NF_NET_HOOK

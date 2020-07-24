@@ -6,8 +6,8 @@
 #include <linux/init.h>
 
 
-extern int oo_driverlink_register(void);
-extern void oo_driverlink_unregister(void);
+extern int oo_hooks_register(void);
+extern void oo_hooks_unregister(void);
 
 extern void oo_nondl_register(void);
 extern void oo_nondl_unregister(void);

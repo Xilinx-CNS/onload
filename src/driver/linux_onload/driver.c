@@ -578,16 +578,16 @@ static int __init onload_module_init(void)
   }
 
   /* Now cplane is ready to handle hwport announcements.
-   * Let's register in driverlink. */
-  rc = oo_driverlink_register();
+   * Let's register hooks. */
+  rc = oo_hooks_register();
   if( rc < 0 )
-    goto failed_driverlink;
+    goto failed_hooks;
 
   OO_DEBUG_LOAD(ci_log("Onload module initialised successfully."));
   return 0;
 
-  oo_driverlink_unregister();
- failed_driverlink:
+  oo_hooks_unregister();
+ failed_hooks:
   oo_cp_driver_dtor();
  failed_cp_ctor:
   oo_epoll_chrdev_dtor();
@@ -607,7 +607,7 @@ static int __init onload_module_init(void)
   oo_nondl_unregister();
   /* Remove all NICs.
    * It is possible that efx_dl_register_driver() call was successful, so
-   * we have to shut down all NICs even if oo_driverlink_register() failed. */
+   * we have to shut down all NICs even if oo_hooks_register() failed. */
   oo_nic_shutdown();
   efab_tcp_driver_dtor();
  fail_ip_ctor:
@@ -636,8 +636,8 @@ static void onload_module_exit(void)
    * It should be done early, as soon as User API is not available. */
   efab_tcp_driver_stop();
 
-  /* Remove driverlink hook before cplane. */
-  oo_driverlink_unregister();
+  /* Remove hooks before cplane. */
+  oo_hooks_unregister();
 
   /* By reverse order of creation, we should have destroyed the cplane driver
    * earlier than this, but because stacks have references to cplanes, we need
@@ -649,7 +649,7 @@ static void onload_module_exit(void)
   ci_uninstall_proc_entries();
   oo_nondl_unregister();
 
-  /* Remove all NICs when driverlink is gone. */
+  /* Remove all NICs when hooks are gone. */
   oo_nic_shutdown();
 
   efab_tcp_driver_dtor();

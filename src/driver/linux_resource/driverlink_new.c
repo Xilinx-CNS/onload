@@ -199,6 +199,7 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 	nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
 	efrm_dev->priv = nic;
 
+	efrm_notify_nic_probe(net_dev);
 	return 0;
 }
 
@@ -211,7 +212,11 @@ static void efrm_dl_remove(struct efx_dl_device *efrm_dev)
 	struct efhw_nic *nic = efrm_dev->priv;
 	EFRM_TRACE("%s called", __func__);
 	if (nic) {
+		struct net_device* net_dev = efhw_nic_get_net_dev(nic);
 		struct linux_efhw_nic *lnic = linux_efhw_nic(nic);
+
+		efrm_notify_nic_remove(net_dev);
+		dev_put(net_dev);
 
                 /* flush all outstanding dma queues */
                 efrm_nic_flush_all_queues(nic, 0);
@@ -230,7 +235,6 @@ static void efrm_dl_remove(struct efx_dl_device *efrm_dev)
 		efrm_nic_reset_suspend(nic);
 		ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNPLUGGED);
 	}
-
 }
 
 static void efrm_dl_reset_suspend(struct efx_dl_device *efrm_dev)
