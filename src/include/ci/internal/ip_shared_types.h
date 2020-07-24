@@ -948,6 +948,18 @@ typedef struct {
 
 
 
+/*********************************************************************
+************************ Ring buffer meta data ***********************
+*********************************************************************/
+
+/* Ringbuffer, mostly used in ulhelper profile. */
+struct oo_ringbuffer_state {
+  CI_ULCONST ci_uint32 mask;
+  CI_ULCONST ci_uint32 stride;
+  ci_uint32 read;
+  CI_ULCONST ci_uint32 write;
+  ci_uint32 overflow_cnt;
+};
 
 
 /*********************************************************************

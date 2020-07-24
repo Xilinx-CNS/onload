@@ -73,6 +73,25 @@ struct ci_extra_ep {
 };
 #endif
 
+
+/* Non-shared data structure for ringbuffer. */
+struct oo_ringbuffer {
+#ifdef __KERNEL__
+  /* We need a trusted value of the ringbuffer sizes to use from kernel. */
+  ci_uint32 mask;
+  ci_uint32 stride;
+#endif
+#if OO_DO_STACK_POLL
+  const char* name;
+#endif
+  struct oo_ringbuffer_state* state;
+#ifndef __KERNEL__
+  const
+#endif
+        char* data;
+};
+
+
 /*!
 ** ci_netif
 **

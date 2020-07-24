@@ -39,6 +39,13 @@
 #define OO_HAS_ATOMIC_CONTEXT 0
 #endif
 
+/* Do we compile the core TCP/IP stack functionality in? */
+#if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
+#define OO_DO_STACK_POLL 1
+#else
+#define OO_DO_STACK_POLL 0
+#endif
+
 #ifdef __KERNEL__
 # include <onload/shmbuf.h>
 # include <onload/iobufset.h>
@@ -51,13 +58,6 @@
 #include <ci/internal/ip_types.h>
 #include <onload/eplock.h>
 
-/* Do we compile the core TCP/IP stack functionality in? */
-#if ! defined(__KERNEL__) || ! CI_CFG_UL_INTERRUPT_HELPER
-#define OO_DO_STACK_POLL 1
-#else
-#define OO_DO_STACK_POLL 0
-#endif
-
 #include <ci/internal/ip_shared_ops.h>
 #include <ci/internal/ip_stats_ops.h>
 #include <onload/pktq.h>
@@ -66,6 +66,7 @@
 #include <onload/hash.h>
 #include <ci/internal/ni_dllist.h>
 #include <ci/internal/iptimer.h>
+#include <onload/ringbuffer.h>
 
 #if CI_CFG_TIMESTAMPING
 #ifdef __KERNEL__
