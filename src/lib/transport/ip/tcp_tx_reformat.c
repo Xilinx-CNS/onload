@@ -225,6 +225,7 @@ static ci_ip_pkt_fmt* ci_tcp_tx_allocate_pkt(ci_netif* ni, ci_tcp_state* ts,
   next->pf.tcp_tx.start_seq = pkt->pf.tcp_tx.end_seq;
   next->pf.tcp_tx.end_seq   = next->pf.tcp_tx.start_seq;
   next->pf.tcp_tx.block_end = OO_PP_NULL;
+  next->pf.tcp_tx.sock_id   = pkt->pf.tcp_tx.sock_id;
 
   /* Flags in [next] match those in [pkt], with the exception of the SENDPAGE
   ** flag, which may be different depending on the distribution of zerocopied
