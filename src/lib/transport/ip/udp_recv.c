@@ -277,6 +277,7 @@ static void ci_udp_pkt_to_zc_msg(ci_netif* ni, ci_ip_pkt_fmt* pkt,
     zc_msg->iov[i].buf = zc_pktbuf_to_handle(handle_frag);
     zc_msg->iov[i].iov_flags = 0;
     zc_msg->iov[i].rx_memreg_idx = PKT_ID2SET(frag->pp);
+    zc_msg->iov[i].addr_space = EF_ADDRSPACE_LOCAL;
     bytes_left -= zc_msg->iov[i].iov_len;
     ++i;
     if( OO_PP_IS_NULL(frag->frag_next) || 

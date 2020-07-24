@@ -1524,6 +1524,7 @@ static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
   iov.iov_len = oo_offbuf_left(&pkt->buf) - peek_off;
   iov.iov_flags = 0;
   iov.rx_memreg_idx = PKT_ID2SET(pkt->pp);
+  iov.addr_space = EF_ADDRSPACE_LOCAL;
   pkt->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
   cb_rc = rinf->zc_args->cb(rinf->zc_args, 0);
 

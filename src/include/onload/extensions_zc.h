@@ -55,14 +55,15 @@ struct onload_zc_iovec {
   onload_zc_handle buf;    /* Corresponding (opaque) buffer handle or
                               ONLOAD_ZC_HANDLE_NONZC */
   unsigned iov_flags;      /* Not currently used */
-  union {
-    void* app_cookie;      /* Arbitrary data passed back to the application
-                              after send completion through the MSG_ERRQUEUE */
-    int rx_memreg_idx;     /* Index into the array returned from
+  int rx_memreg_idx;       /* Index into the array returned from
                               onload_zc_query_rx_memregs() of the region
                               containing 'buf'. Populated by the recv
                               functions */
-    ef_addrspace addr_space; /* Populated by onload_zc_query_rx_memregs */
+  union {
+    void* app_cookie;      /* Arbitrary data passed back to the application
+                              after send completion through the MSG_ERRQUEUE */
+    ef_addrspace addr_space; /* Populated by onload_zc_query_rx_memregs and the
+                                recv functions */
   };
 };
 
