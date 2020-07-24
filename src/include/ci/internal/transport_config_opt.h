@@ -654,6 +654,17 @@
  * to enable whatever application-specific processing it has. */
 #define CI_CFG_TCP_PLUGIN_EXTRA_VIS 0
 
+#ifdef NDEBUG
+/* When using a SmartNIC plugin which can cause complex data to be received by
+ * the host (e.g. pointers to non-local memory regions), implement recv().
+ * We default to allowing this in debug builds only because testing is the
+ * only valid use-case: production apps must use the zero-copy APIs otherwise
+ * they will lose the valuable plugin-offloaded data. */
+#define CI_CFG_TCP_PLUGIN_RECV_NONZC 0
+#else
+#define CI_CFG_TCP_PLUGIN_RECV_NONZC 1
+#endif
+
 #ifdef __KERNEL__
 #include <linux/version.h>
 /* Enable Berkeley Packet Filter program functionality

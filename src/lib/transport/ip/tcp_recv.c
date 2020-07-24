@@ -15,9 +15,9 @@
 
 #include "ip_internal.h"
 #include <ci/internal/ip_timestamp.h>
+#include <onload/tcp-ceph.h>
 #ifndef __KERNEL__
 #include <onload/extensions_zc.h>
-#include <onload/tcp-ceph.h>
 #include <stddef.h>
 #endif
 
@@ -312,10 +312,161 @@ ci_tcp_fill_recv_timestamp(struct tcp_recv_info* rinf, ci_ip_pkt_fmt* pkt)
 #endif
 
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER && CI_CFG_TCP_PLUGIN_RECV_NONZC
+static int offloaded_copy_block(ci_iovec* iov, const void* src, size_t max,
+                                int flags, int* rc)
+{
+  int n = CI_MIN(max, CI_IOVEC_LEN(iov));
+  if(CI_LIKELY( ! (flags & MSG_TRUNC) )) {
+#ifdef __KERNEL__
+    if( copy_to_user(CI_IOVEC_BASE(iov), src, n) )
+      return -EFAULT;
+#else
+    memcpy(CI_IOVEC_BASE(iov), src, n);
+#endif
+  }
+  CI_IOVEC_BASE(iov) = (char*)CI_IOVEC_BASE(iov) + n;
+  CI_IOVEC_LEN(iov) -= n;
+  *rc += n;
+  return n;
+}
+
+static int copy_ceph_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
+                            ci_ip_pkt_fmt* pkt, int peek_off, int* rc)
+{
+  /* This function is essentially entirely bogus, most prominently in the fact
+   * that it'll emit zeros for all 'remote' data. It exists primarily so that
+   * test tools (e.g. packetdrill) can work on pluginized streams. */
+  int total = oo_offbuf_left(&pkt->buf);
+  int ofs = 0;
+  char* p = oo_offbuf_ptr(&pkt->buf);
+  int out_rc = 0;
+  static const char zeros[64];
+
+  /* Not currently required, and a little tricky to get right: */
+  if( rinf->msg_flags & MSG_PEEK )
+    return -EOPNOTSUPP;
+
+  while( ofs != total && CI_IOVEC_LEN(&rinf->piov.io) != 0 ) {
+    const int hdr_len = offsetof(struct ceph_data_pkt, data);
+    struct ceph_data_pkt data;
+    int n;
+
+    if( total - ofs < hdr_len ) {
+      LOG_TR(log(LNTS_FMT "bogus plugin metastream ofs=%d total=%d", 
+                 LNTS_PRI_ARGS(netif, rinf->a->ts), ofs, total));
+      goto unrecoverable;
+    }
+
+    memcpy(&data, p + ofs, hdr_len);
+    ofs += hdr_len;
+    /* NB: if adding a new msg_type here, don't forget that zc_ceph_callback()
+     * has a similar switch statement */
+    switch( data.msg_type ) {
+    case XSN_CEPH_DATA_INLINE:
+      if( total - ofs < data.msg_len ) {
+        LOG_TR(log(LNTS_FMT "bogus plugin inline len %d-%d<%u", 
+                  LNTS_PRI_ARGS(netif, rinf->a->ts), total, ofs,
+                  data.msg_len));
+        goto unrecoverable;
+      }
+      n = offloaded_copy_block(&rinf->piov.io, p + ofs, data.msg_len,
+                               rinf->a->flags, &out_rc);
+      if( n < 0 )
+        return -EFAULT;
+      if( n != data.msg_len ) {
+        /* Stopped in the middle: hack the packet so that we can resume next
+         * time. NB: this can potentially make onload_tcpdump output a little
+         * odd */
+        data.msg_len -= n;
+        memcpy(p + ofs + n - hdr_len, &data, hdr_len);
+        ofs += n - hdr_len;
+        goto out;
+      }
+      break;
+
+    case XSN_CEPH_DATA_REMOTE:
+      if( total - ofs < sizeof(data.remote) ||
+          data.msg_len != sizeof(data.remote) ) {
+        LOG_TR(log(LNTS_FMT "bogus plugin remote block %d-%d/%u", 
+                  LNTS_PRI_ARGS(netif, rinf->a->ts), total, ofs,
+                  data.msg_len));
+        goto unrecoverable;
+      }
+      memcpy(&data.remote, p + ofs, sizeof(data.remote));
+      while( data.remote.data_len ) {
+        n = offloaded_copy_block(&rinf->piov.io, zeros,
+                                 CI_MIN(sizeof(zeros), data.remote.data_len),
+                                 rinf->a->flags, &out_rc);
+        if( n < 0 )
+          return -EFAULT;
+        data.remote.data_len -= n;
+        data.remote.start_ptr += n;
+        if( n != sizeof(zeros) ) {
+          memcpy(p + ofs, &data.remote, sizeof(data.remote));
+          ofs -= hdr_len;
+          goto out;
+        }
+      }
+      break;
+
+    case XSN_CEPH_DATA_LOST_SYNC:
+      if( total - ofs < sizeof(data.lost_sync) ||
+          data.msg_len != sizeof(data.lost_sync) ) {
+        LOG_TR(log(LNTS_FMT "bogus plugin lost-sync block %d-%d/%u", 
+                  LNTS_PRI_ARGS(netif, rinf->a->ts), total, ofs,
+                  data.msg_len));
+        goto unrecoverable;
+      }
+      memcpy(&data.lost_sync, p, sizeof(data.lost_sync));
+      log(LNTS_FMT "plugin lost sync: %u/%u", 
+          LNTS_PRI_ARGS(netif, rinf->a->ts), data.lost_sync.reason,
+          data.lost_sync.subreason);
+      /* Set the return value so that we'll keep hitting this same lost-sync
+       * message on every receive, and hence block the socket from making
+       * further progress */
+      ofs -= hdr_len;
+      goto out;
+
+    default:
+      LOG_TR(log(LNTS_FMT "bogus plugin metastream header %u/%u", 
+                 LNTS_PRI_ARGS(netif, rinf->a->ts), data.msg_type,
+                 data.msg_len));
+      goto unrecoverable;
+    }
+    ofs += data.msg_len;
+  }
+
+ out:
+  *rc += out_rc;
+  return ofs;
+
+ unrecoverable:
+  /* Return the number of bytes successfully consumed, so that if the user
+   * tries again then we'll log the same error again. This is a different
+   * decision to the one we made at the identical label in zc_ceph_callback()
+   * because this function is only targetted at debugging/testing scenarios,
+   * where freezing in place and allowing the user to debug it is likely to be
+   * preferable. */
+  return total;
+}
+#endif
+
+
 static int copy_one_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
                         ci_ip_pkt_fmt* pkt, int peek_off, int* rc)
 {
   int n;
+
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  if( ci_tcp_is_pluginized(rinf->a->ts) ) {
+#if CI_CFG_TCP_PLUGIN_RECV_NONZC
+    return copy_ceph_pkt(netif, rinf, pkt, peek_off, rc);
+#else
+    return -EOPNOTSUPP;
+#endif
+  }
+#endif
 
   if(CI_LIKELY( ! (rinf->a->flags & MSG_TRUNC) ))
     n = ci_ip_copy_pkt_to_user(netif, &rinf->piov.io, pkt, peek_off);
@@ -995,8 +1146,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
 
 int ci_tcp_recvmsg(const ci_tcp_recvmsg_args* a)
 {
-  int rc = ci_tcp_is_pluginized(a->ts) ? -EOPNOTSUPP :
-           ci_tcp_recvmsg_impl(a, copy_one_pkt, NULL);
+  int rc = ci_tcp_recvmsg_impl(a, copy_one_pkt, NULL);
   if( rc < 0 )
     CI_SET_ERROR(rc, -rc);
   return rc;
@@ -1565,6 +1715,8 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
     memcpy(&data, p, hdr_len);
     n -= hdr_len;
     p += hdr_len;
+    /* NB: if adding a new msg_type here, don't forget that copy_ceph_pkt()
+     * has a similar switch statement */
     switch( data.msg_type ) {
     case XSN_CEPH_DATA_INLINE:
       if( n < data.msg_len ) {
