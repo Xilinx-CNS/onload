@@ -518,6 +518,8 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
       struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(ep->thr, intf_i));
       struct efrm_resource* rs = efrm_pd_to_resource(pd);
       struct xsn_ceph_create_stream create;
+      ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
+
       if( ni->nic_hw[intf_i].plugin_handle == INVALID_PLUGIN_HANDLE )
         continue;
       create = (struct xsn_ceph_create_stream){
@@ -535,7 +537,10 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
         continue;
       }
       ep->plugin_stream_id[intf_i] = le32_to_cpu(create.tcp.out_conn_id);
-      /* TODO: capture out_addr_spc_id to give it to zc API */
+      /* In reality, all streams are bound to have the same address space: */
+      ci_assert(nsn->plugin_addr_space == 0 ||
+                nsn->plugin_addr_space == create.out_addr_spc_id);
+      nsn->plugin_addr_space = create.out_addr_spc_id;
     }
   }
 #endif

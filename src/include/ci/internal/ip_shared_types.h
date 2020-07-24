@@ -1056,6 +1056,7 @@ typedef struct {
 #endif
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_uint32             plugin_app_credit;
+  CI_ULCONST ef_addrspace  plugin_addr_space CI_ALIGN(8);
 #endif
 } ci_netif_state_nic_t;
 
