@@ -7357,17 +7357,18 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     }
 #endif
 
-    /* CI_EPLOCK_NETIF_CLOSE_ENDPOINT must be the last flag handled, because
-     * it can cause us to take an early exit from the function. */
-    ci_assert_nflags(flags_set & ~all_after_unlock_flags,
-                     ~CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
-
 #if CI_CFG_HANDLE_ICMP
     if( flags_set & CI_EPLOCK_NETIF_HANDLE_ICMP ) {
       CITP_STATS_NETIF(++ni->state->stats.rx_icmp_hooked);
       oo_icmp_handle(thr);
+      flags_set &= ~CI_EPLOCK_NETIF_HANDLE_ICMP;
     }
 #endif
+
+    /* CI_EPLOCK_NETIF_CLOSE_ENDPOINT must be the last flag handled, because
+     * it can cause us to take an early exit from the function. */
+    ci_assert_nflags(flags_set & ~all_after_unlock_flags,
+                     ~CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     if( flags_set & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
