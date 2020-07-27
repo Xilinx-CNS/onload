@@ -2086,6 +2086,8 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 #if CI_CFG_UL_INTERRUPT_HELPER
   sz = CI_ROUND_UP(sz, __alignof__(oo_sp));
   sz += sizeof(oo_sp) * OO_CLOSED_EPS_RING_SIZE;
+  sz = CI_ROUND_UP(sz, __alignof__(struct oo_sw_filter_op));
+  sz += sizeof(struct oo_sw_filter_op) * OO_SW_FILTER_OPS_SIZE;
 #endif
 
 #if CI_CFG_PIO
@@ -2202,6 +2204,10 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(oo_sp));
   ns->closed_eps_ofs = ns_ofs;
   ns_ofs += sizeof(oo_sp) * OO_CLOSED_EPS_RING_SIZE;
+
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(struct oo_sw_filter_op));
+  ns->sw_filter_ofs = ns_ofs;
+  ns_ofs += sizeof(struct oo_sw_filter_op) * OO_SW_FILTER_OPS_SIZE;
 #endif
 
   /* The last addition to ns_ofs is not really used */
@@ -2229,6 +2235,11 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
                            sizeof(oo_sp));
   oo_ringbuffer_init(&ni->closed_eps, &ns->closed_eps,
                      (void*)((char*) ns + ns->closed_eps_ofs));
+
+  oo_ringbuffer_state_init(&ns->sw_filter_ops, OO_SW_FILTER_OPS_SIZE,
+                           sizeof(struct oo_sw_filter_op));
+  oo_ringbuffer_init(&ni->sw_filter_ops, &ns->sw_filter_ops,
+                     (void*)((char*) ns + ns->sw_filter_ofs));
 #endif
 
   ni->packets->sets_max = ni->pkt_sets_max;

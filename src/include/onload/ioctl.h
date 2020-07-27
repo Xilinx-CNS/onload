@@ -234,8 +234,6 @@ enum {
 #define OO_IOC_WAIT_FOR_INTERRUPT OO_IOC_RW(WAIT_FOR_INTERRUPT, struct oo_ulh_waiter)
   OO_OP_WAKEUP_WAITERS,
 #define OO_IOC_WAKEUP_WAITERS     OO_IOC_W(WAKEUP_WAITERS, struct oo_wakeup_eps)
-  OO_OP_SWF_UPDATE,
-#define OO_IOC_SWF_UPDATE         OO_IOC_R(SWF_UPDATE, struct oo_sw_filter_op)
 #endif
 
   OO_OP_AF_XDP_KICK,

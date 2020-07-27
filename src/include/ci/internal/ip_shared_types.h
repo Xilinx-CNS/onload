@@ -1060,6 +1060,14 @@ struct ci_netif_state_s {
 #define OO_CLOSED_EPS_RING_SIZE 512
   struct oo_ringbuffer_state closed_eps;
 
+  /* We do not expect a lot of filter operations happaning at once, with
+   * one exception: add/remove IP addresses.  In such a case all listening
+   * (or UDP-wildcard) socket filters are adjusted.  Let's use the number
+   * of IP addresses as a size of ringbuffer her.  Twice, to be sure.
+   */
+#define OO_SW_FILTER_OPS_SIZE (CI_CFG_MAX_LOCAL_IPADDRS * 2)
+  struct oo_ringbuffer_state sw_filter_ops;
+
   ci_uint32  flags;
 # define CI_NETIF_FLAG_DEBUG              0x1 /* driver is debug build   */
 # define CI_NETIF_FLAG_ONLOAD_UNSUPPORTED 0x2 /* OOL unsupported on this h/w */
@@ -1191,6 +1199,7 @@ struct ci_netif_state_s {
 #endif
 #if CI_CFG_UL_INTERRUPT_HELPER
   CI_ULCONST ci_uint32  closed_eps_ofs; /**< offset of colsed eps ringbuffer */
+  CI_ULCONST ci_uint32  sw_filter_ofs;  /**< offset of sw filter operations */
 #endif
   CI_ULCONST ci_uint32  seq_table_ofs;   /**< offset of seq no table */
   CI_ULCONST ci_uint32  deferred_pkts_ofs; /**< offset of deferred pkts array */

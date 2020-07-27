@@ -1459,17 +1459,6 @@ static int oo_cp_init_kernel_mibs_rsop(ci_private_t *priv, void *arg)
   return rc;
 }
 
-#if CI_CFG_UL_INTERRUPT_HELPER
-static int oo_swf_update_rsop(ci_private_t* priv, void* arg)
-{
-  tcp_helper_resource_t* thr = priv->thr;
-
-  if( thr == NULL )
-    return -EINVAL;
-  return oo_swf_get_update(&thr->netif, arg);
-}
-#endif
-
 
 static int oo_af_xdp_kick_rsop(ci_private_t *priv, void *arg)
 {
@@ -1616,7 +1605,6 @@ oo_operations_table_t oo_operations[] = {
 #if CI_CFG_UL_INTERRUPT_HELPER
   op(OO_IOC_WAIT_FOR_INTERRUPT, oo_wait_for_interrupt),
   op(OO_IOC_WAKEUP_WAITERS,     oo_wakeup_waiters),
-  op(OO_IOC_SWF_UPDATE,         oo_swf_update_rsop),
 #endif
 
   op(OO_IOC_AF_XDP_KICK, oo_af_xdp_kick_rsop),

@@ -83,13 +83,13 @@ oof_cb_callback_set_filter(struct oof_socket* skf)
 
 
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
 struct oof_cb_sw_filter_op {
   struct oof_cb_sw_filter_op *next;
   struct oo_sw_filter_op op;
 };
 
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
 void
 oof_cb_sw_filter_apply(ci_netif* ni)
 {
@@ -110,29 +110,6 @@ oof_cb_sw_filter_apply(ci_netif* ni)
   }
   spin_unlock_bh(&ni->swf_update_lock);
 }
-#else
-int
-oo_swf_get_update(ci_netif* ni, struct oo_sw_filter_op* user_op)
-{
-  struct oof_cb_sw_filter_op* op;
-
-  spin_lock_bh(&ni->swf_update_lock);
-  op = ni->swf_update_first;
-
-  if( op == NULL ) {
-    spin_unlock_bh(&ni->swf_update_lock);
-    return -ENOENT;
-  }
-
-  ni->swf_update_first = op->next;
-  if( op->next == NULL )
-    ni->swf_update_last = NULL;
-  spin_unlock_bh(&ni->swf_update_lock);
-
-  *user_op = op->op;
-  ci_free(op);
-  return 0;
-}
 #endif
 
 static void
@@ -143,31 +120,52 @@ oof_cb_sw_filter_postpone(struct oof_socket* skf, int af_space,
   ci_netif* ni = skf_to_ni(skf);
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   struct tcp_helper_resource_s *trs = netif2tcp_helper_resource(ni);
-#endif
-  struct oof_cb_sw_filter_op* op = CI_ALLOC_OBJ(struct oof_cb_sw_filter_op);
+  struct oof_cb_sw_filter_op* oof_op = CI_ALLOC_OBJ(struct oof_cb_sw_filter_op);
+  struct oo_sw_filter_op* op;
   
-  if( op == NULL ) {
+  if( oof_op == NULL ) {
     /* Linux complains about failed allocations */
     return;
   }
+  op = &oof_op->op;
+#else
+  struct oo_sw_filter_op op_;
+  struct oo_sw_filter_op* op = &op_;
+#endif
 
-  op->op.sock_id = OO_SP_FROM_INT(ni, skf_to_ep(skf)->id);
-  op->op.af_space = af_space;
-  op->op.laddr = laddr;
-  op->op.raddr = raddr;
-  op->op.lport = lport;
-  op->op.rport = rport;
-  op->op.protocol = protocol;
-  op->op.op = op_op;
-
-  op->next = NULL;
+  op->sock_id = OO_SP_FROM_INT(ni, skf_to_ep(skf)->id);
+  op->af_space = af_space;
+  op->laddr = laddr;
+  op->raddr = raddr;
+  op->lport = lport;
+  op->rport = rport;
+  op->protocol = protocol;
+  op->op = op_op;
 
   spin_lock_bh(&ni->swf_update_lock);
+#if ! CI_CFG_UL_INTERRUPT_HELPER
+  oof_op->next = NULL;
   if( ni->swf_update_last == NULL )
-    ni->swf_update_first = op;
+    ni->swf_update_first = oof_op;
   else
-    ni->swf_update_last->next = op;
-  ni->swf_update_last = op;
+    ni->swf_update_last->next = oof_op;
+  ni->swf_update_last = oof_op;
+#else
+  /* ULhelper does not assume that UL behaves.  The message can be lost
+   * because of UL misbehaves, or because the ringbuffer overrun (again,
+   * malicious overrun or unintentional).
+   *
+   * In any case, this is all about the stack internal data structure:
+   * sw filter table.  It does not affect any per-driver or other stacks'
+   * structures.
+   *
+   * In case of overrun of well-meaning stack it will misbehave; it will
+   * drop packets it must handle and in some rare cases it may process
+   * packets it must drop.  OO_SW_FILTER_OPS_SIZE should be increased in
+   * such a case.
+   */
+  oo_ringbuffer_write(&ni->sw_filter_ops, op);
+#endif
   spin_unlock_bh(&ni->swf_update_lock);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER

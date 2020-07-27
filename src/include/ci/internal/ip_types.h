@@ -191,6 +191,7 @@ struct ci_netif_s {
 
 #if CI_CFG_UL_INTERRUPT_HELPER
   struct oo_ringbuffer closed_eps;
+  struct oo_ringbuffer sw_filter_ops;
 #endif
 
   /* This is pointer to the shared state of packet sets */

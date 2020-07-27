@@ -1754,6 +1754,9 @@ static void netif_tcp_helper_build2(ci_netif* ni)
 #if CI_CFG_UL_INTERRUPT_HELPER
   oo_ringbuffer_init(&ni->closed_eps, &ni->state->closed_eps, "closed_eps",
                      (void*)((char*) ni->state + ni->state->closed_eps_ofs));
+  oo_ringbuffer_init(&ni->sw_filter_ops, &ni->state->sw_filter_ops,
+                     "sw_filters",
+                     (void*)((char*) ni->state + ni->state->sw_filter_ofs));
 #endif
 }
 
