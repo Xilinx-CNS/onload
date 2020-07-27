@@ -22,16 +22,18 @@ struct onload_zc_hlrx {
   /* Total number of items in the 'pending' array */
   int pending_end;
 
+  /* Allocated size of the 'pending' array */
+  int pending_capacity;
+
   /* true if this is a UDP socket, so we can implement the right semantics
    * for recv */
   bool udp;
 
-  /* 6 elements is a nominal value, chosen because it's 9000/1500. We only use
-   * this buffer for TCP which, at the time of writing, can only pass a single
-   * buffer in a zc recv. This code is written to cope with a future where
-   * that changes (for jumbograms and GRO). When that happens, we'll know the
-   * true value to put here. */
-  struct onload_zc_iovec pending[6];
+  /* 32 is CI_ZC_IOV_STATIC_MAX in tcp_recv.c, but there's no reason this
+   * value has to be the same. This buffer is only used for TCP - UDP is
+   * always immediate so doesn't need buffering. */
+  struct onload_zc_iovec static_pending[32];
+  struct onload_zc_iovec* pending;
 };
 
 
@@ -57,6 +59,9 @@ int onload_zc_hlrx_alloc(int fd, int flags, struct onload_zc_hlrx** hlrx_out)
     else {
       hlrx->fd = fd;
       hlrx->udp = sock_type == SOCK_DGRAM;
+      hlrx->pending = hlrx->static_pending;
+      hlrx->pending_capacity = sizeof(hlrx->static_pending) /
+                               sizeof(hlrx->static_pending[0]);
       *hlrx_out = hlrx;
     }
   }
@@ -73,6 +78,8 @@ int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx)
   Log_CALL(ci_log("%s(%p)", __FUNCTION__, hlrx));
   if( hlrx->pending_begin != hlrx->pending_end )
     onload_zc_buffer_decref(hlrx->fd, hlrx->pending[0].buf);
+  if( hlrx->pending != hlrx->static_pending )
+    free(hlrx->pending);
   free(hlrx);
   Log_CALL_RESULT(rc);
   return rc;
@@ -93,10 +100,23 @@ struct zc_cb_copy_state {
 
 /* Stash in hlrx->pending the set of iovs which haven't yet been passed to the
  * user */
-static void save_pending(struct onload_zc_hlrx* hlrx,
+static bool save_pending(struct onload_zc_hlrx* hlrx,
                          struct onload_zc_recv_args* args, int begin, int end)
 {
   ci_assert_equal(hlrx->udp, false);
+  if( end > hlrx->pending_capacity ) {
+    if( hlrx->pending != hlrx->static_pending )
+      free(hlrx->pending);
+    hlrx->pending_capacity = end;
+    hlrx->pending = malloc(end * sizeof(*hlrx->pending));
+    if( ! hlrx->pending ) {
+      hlrx->pending = hlrx->static_pending;
+      hlrx->pending = hlrx->static_pending;
+      hlrx->pending_capacity = sizeof(hlrx->static_pending) /
+                               sizeof(hlrx->static_pending[0]);
+      return false;
+    }
+  }
   memcpy(hlrx->pending + begin, args->msg.iov + begin,
         (end - begin) * sizeof(args->msg.iov[0]));
   hlrx->pending_begin = begin;
@@ -105,6 +125,7 @@ static void save_pending(struct onload_zc_hlrx* hlrx,
    * only tracks ownership of the first packet, therefore we must ensure that
    * we hold on to that one so we can release it again when done. */
   hlrx->pending[0].buf = args->msg.iov[0].buf;
+  return true;
 }
 
 
@@ -136,8 +157,6 @@ copy_cb(struct onload_zc_recv_args *args, int flags)
   int end = args->msg.msghdr.msg_iovlen;
 
   ci_assert_equal(state->hlrx->pending_begin, state->hlrx->pending_end);
-  ci_assert_le(end,
-               sizeof(state->hlrx->pending) / sizeof(state->hlrx->pending[0]));
   copy_iovs(state, args->msg.iov, &begin, end);
 
   if( state->hlrx->udp ) {
@@ -146,7 +165,8 @@ copy_cb(struct onload_zc_recv_args *args, int flags)
     return ONLOAD_ZC_TERMINATE;
   }
   if( end != begin ) {
-    save_pending(state->hlrx, args, begin, end);
+    if( ! save_pending(state->hlrx, args, begin, end) )
+      state->rc = -ENOMEM;
     /* No need for complex refcount management here: we keep the one and only
      * ref in our 'pending' array - the data to the user was a memcpy */
     return ONLOAD_ZC_KEEP | ONLOAD_ZC_TERMINATE;
@@ -272,8 +292,6 @@ zc_cb(struct onload_zc_recv_args *args, int flags)
 
   ci_assert_gt(end, 0);
   ci_assert_equal(state->hlrx->pending_begin, state->hlrx->pending_end);
-  ci_assert_le(end,
-               sizeof(state->hlrx->pending) / sizeof(state->hlrx->pending[0]));
   zc_iovs(state, args->msg.iov, &begin, end);
 
   if( state->hlrx->udp ) {
@@ -282,16 +300,20 @@ zc_cb(struct onload_zc_recv_args *args, int flags)
     return ONLOAD_ZC_KEEP | ONLOAD_ZC_TERMINATE;
   }
   if( end != begin ) {
-    save_pending(state->hlrx, args, begin, end);
-    /* zc_iovs() gave out additional refcounts to the user for all iovs
-     * except the 0th so that if we *didn't* go down this branch then the 0th
-     * iov's refcount is effectively handed over from this function to the
-     * user's callback. Since we are in this branch then that refcount is too
-     * small by 1 (because we're saving the packet for ourselves too) and we
-     * need a refcount of our own (see comment in zc_iovs() about the odd
-     * semantics for the explanation of why all these refcounts are on
-     * iov[0]). */
-    onload_zc_buffer_incref(state->hlrx->fd, state->hlrx->pending[0].buf);
+    if( ! save_pending(state->hlrx, args, begin, end) ) {
+      state->rc = -ENOMEM;
+    }
+    else {
+      /* zc_iovs() gave out additional refcounts to the user for all iovs
+       * except the 0th so that if we *didn't* go down this branch then the 0th
+       * iov's refcount is effectively handed over from this function to the
+       * user's callback. Since we are in this branch then that refcount is too
+       * small by 1 (because we're saving the packet for ourselves too) and we
+       * need a refcount of our own (see comment in zc_iovs() about the odd
+       * semantics for the explanation of why all these refcounts are on
+       * iov[0]). */
+      onload_zc_buffer_incref(state->hlrx->fd, state->hlrx->pending[0].buf);
+    }
     return ONLOAD_ZC_KEEP | ONLOAD_ZC_TERMINATE;
   }
 
