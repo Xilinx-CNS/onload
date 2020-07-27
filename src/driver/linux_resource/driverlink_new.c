@@ -229,7 +229,7 @@ static void efrm_dl_remove(struct efx_dl_device *efrm_dev)
 		 * start. */
 		efhw_nic_flush_dl(nic);
 
-		efrm_nic_unplug(nic, efrm_dev);
+		efrm_nic_unplug(nic);
 
 		/* Absent hardware is treated as a protracted reset. */
 		efrm_nic_reset_suspend(nic);

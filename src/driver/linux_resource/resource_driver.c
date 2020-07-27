@@ -784,7 +784,7 @@ efrm_nic_rename(struct efhw_nic* nic, struct net_device *net_dev)
 
 
 int
-efrm_nic_unplug(struct efhw_nic* nic, struct efx_dl_device *dl_device)
+efrm_nic_unplug(struct efhw_nic* nic)
 {
 	struct net_device* net_dev;
 
@@ -919,7 +919,7 @@ void efrm_nic_del_device(struct net_device *net_dev)
 	EFRM_TRACE("%s:", __func__);
 	EFRM_FOR_EACH_NIC(i, nic) {
 		if( nic->net_dev == net_dev ) {
-			efrm_nic_unplug(nic, NULL);
+			efrm_nic_unplug(nic);
 			efrm_nic_shutdown(linux_efhw_nic(nic));
 			efrm_nic_del(linux_efhw_nic(nic));
 		}
