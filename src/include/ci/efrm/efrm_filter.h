@@ -96,8 +96,8 @@ extern void efrm_filter_init(void);
 extern void efrm_filter_install_proc_entries(void);
 extern void efrm_filter_remove_proc_entries(void);
 
-extern void efrm_init_resource_filter(struct device *dev, int ifindex);
-extern void efrm_shutdown_resource_filter(struct device *dev);
+extern void efrm_init_resource_filter(const struct device *dev, int ifindex);
+extern void efrm_shutdown_resource_filter(const struct device *dev);
 extern int efrm_filter_rename( struct efhw_nic *nic,
                                struct net_device *net_dev );
 

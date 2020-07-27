@@ -462,7 +462,7 @@ static char const* efrm_get_action_name( efrm_filter_action_t action )
 	return efrm_action_names[action];
 }
 
-static inline char const* efrm_get_pciname_from_device( struct device* dev )
+static inline char const* efrm_get_pciname_from_device( const struct device* dev )
 {
 	/* This returns something of the form 0000:13:00.0
 	   This matches the PHYSICAL port, but is unique */
@@ -1204,7 +1204,7 @@ static int efrm_mac_match( efrm_filter_rule_t const* rule,
 	return (matches == 6) && efrm_vlan_matches( vlan, rule );
 }
 
-static inline int efrm_filter_check (struct efx_dl_device *dl_dev,
+static inline int efrm_filter_check (const struct device* dev,
                                      struct efx_filter_spec *spec)
 {
 	/* This is the function that actually checks whether a filter spec
@@ -1218,7 +1218,7 @@ static inline int efrm_filter_check (struct efx_dl_device *dl_dev,
 	efrm_filter_action_t rc = EFRM_FR_ACTION_UNSUPPORTED;
 	efrm_filter_rule_t* rule = NULL;
 	efrm_filter_table_t* table = NULL;
-	char const* pci = efrm_get_pciname_from_device( &dl_dev->pci_dev->dev);
+	char const* pci = efrm_get_pciname_from_device(dev);
 	int unsupported = 0;
 
 	spin_lock_bh(&efrm_ft_lock);
@@ -1979,7 +1979,7 @@ void efrm_map_table( struct net* netns, char const* ifname,
 	}
 }
 
-void efrm_init_resource_filter(struct device *dev, int ifindex)
+void efrm_init_resource_filter(const struct device *dev, int ifindex)
 {
 	/* Per-Interface init */
 	char const* pciname;
@@ -2006,7 +2006,7 @@ void efrm_init_resource_filter(struct device *dev, int ifindex)
 	return;
 }
 
-void efrm_shutdown_resource_filter(struct device *dev)
+void efrm_shutdown_resource_filter(const struct device *dev)
 {
 	/* Per interface shutdown */
 	char const* pciname;
@@ -2031,7 +2031,6 @@ void efrm_shutdown_resource_filter(struct device *dev)
 /* *********************************** */
 int efrm_filter_rename( struct efhw_nic *nic, struct net_device *net_dev )
 {
-	struct efx_dl_device *dl_dev;
 	char const* ifname;
 	char const* pciname;
 
@@ -2041,13 +2040,7 @@ int efrm_filter_rename( struct efhw_nic *nic, struct net_device *net_dev )
 	}
 
 	/* efhw_nic is the device, which has the real id */
-	dl_dev = efhw_nic_acquire_dl_device(nic);
-	if ( !dl_dev ) {
-		EFRM_ERR("%s:Internal error two %p", __func__, dl_dev );
-		return -EINVAL;
-	}
-	pciname = efrm_get_pciname_from_device( &dl_dev->pci_dev->dev);
-        efhw_nic_release_dl_device(nic, dl_dev);
+	pciname = efrm_get_pciname_from_device( net_dev->dev.parent );
 	if ( !pciname ) {
 		EFRM_ERR("%s:Old device has no pciname", __func__ );
 	}
@@ -2320,6 +2313,7 @@ int efrm_filter_insert(struct efrm_client *client,
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
 	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
+	struct net_device* net_dev;
 	int rc;
 
 #ifdef EFHW_HAS_AF_XDP
@@ -2343,10 +2337,17 @@ int efrm_filter_insert(struct efrm_client *client,
 	/* This should be called every time a driver wishes to insert a
 	   filter to the NIC, to check whether the firewall rules want to
 	   block it. */
-	rc = efrm_filter_check( efx_dev, spec );
-	if ( rc >= 0 )
-		rc = efx_dl_filter_insert( efx_dev, spec, replace );
-        efhw_nic_release_dl_device(efhw_nic, efx_dev);
+	net_dev = efhw_nic_get_net_dev(efhw_nic);
+	if( net_dev ) {
+		rc = efrm_filter_check( net_dev->dev.parent, spec );
+		dev_put(net_dev);
+		if ( rc >= 0 )
+			rc = efx_dl_filter_insert( efx_dev, spec, replace );
+		efhw_nic_release_dl_device(efhw_nic, efx_dev);
+	}
+	else {
+		rc = -ENODEV;
+	}
 	return rc;
 }
 EXPORT_SYMBOL(efrm_filter_insert);
