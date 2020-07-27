@@ -799,8 +799,9 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
   }
 
   LOG_TR(log(LNTS_FMT "recvmsg len=%d flags=%x bytes_in_rxq=%d", 
-	     LNTS_PRI_ARGS(ni, ts),
-             ci_iovec_ptr_bytes_count(&rinf.piov), flags, tcp_rcv_usr(ts)));
+             LNTS_PRI_ARGS(ni, ts),
+             zc_args ? -1 : ci_iovec_ptr_bytes_count(&rinf.piov),
+             flags, tcp_rcv_usr(ts)));
 
 #ifndef __KERNEL__
   tcp_recv_spin = 
