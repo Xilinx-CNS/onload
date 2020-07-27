@@ -1057,6 +1057,9 @@ struct ci_netif_state_s {
 #define OO_ACTION_SWF_UPDATE 0x0002
 #endif
 
+#define OO_CLOSED_EPS_RING_SIZE 512
+  struct oo_ringbuffer_state closed_eps;
+
   ci_uint32  flags;
 # define CI_NETIF_FLAG_DEBUG              0x1 /* driver is debug build   */
 # define CI_NETIF_FLAG_ONLOAD_UNSUPPORTED 0x2 /* OOL unsupported on this h/w */
@@ -1185,6 +1188,9 @@ struct ci_netif_state_s {
   CI_ULCONST ci_uint32  table_ext_ofs;   /**< offset of slow s/w filter state */
 #if CI_CFG_IPV6
   CI_ULCONST ci_uint32  ip6_table_ofs;   /**< offset of IPv6 s/w filter table */
+#endif
+#if CI_CFG_UL_INTERRUPT_HELPER
+  CI_ULCONST ci_uint32  closed_eps_ofs; /**< offset of colsed eps ringbuffer */
 #endif
   CI_ULCONST ci_uint32  seq_table_ofs;   /**< offset of seq no table */
   CI_ULCONST ci_uint32  deferred_pkts_ofs; /**< offset of deferred pkts array */

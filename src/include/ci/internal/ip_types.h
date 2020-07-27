@@ -189,6 +189,10 @@ struct ci_netif_s {
 #endif
 #endif
 
+#if CI_CFG_UL_INTERRUPT_HELPER
+  struct oo_ringbuffer closed_eps;
+#endif
+
   /* This is pointer to the shared state of packet sets */
   oo_pktbuf_manager*    packets;
   /* And this is non-shared array for UL- or kernel- specific data

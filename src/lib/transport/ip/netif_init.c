@@ -1750,6 +1750,11 @@ static void netif_tcp_helper_build2(ci_netif* ni)
 #endif
   ni->packets = (oo_pktbuf_manager*) ((char*) ni->state + ni->state->buf_ofs);
   ni->dma_addrs = (ef_addr*) ((char*) ni->state + ni->state->dma_ofs);
+
+#if CI_CFG_UL_INTERRUPT_HELPER
+  oo_ringbuffer_init(&ni->closed_eps, &ni->state->closed_eps, "closed_eps",
+                     (void*)((char*) ni->state + ni->state->closed_eps_ofs));
+#endif
 }
 
 

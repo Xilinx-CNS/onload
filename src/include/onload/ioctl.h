@@ -232,8 +232,6 @@ enum {
   /* Wait for an interrupt */
   OO_OP_WAIT_FOR_INTERRUPT,
 #define OO_IOC_WAIT_FOR_INTERRUPT OO_IOC_RW(WAIT_FOR_INTERRUPT, struct oo_ulh_waiter)
-  OO_OP_GET_CLOSING_EP,
-#define OO_IOC_GET_CLOSING_EP     OO_IOC_R(GET_CLOSING_EP, oo_sp)
   OO_OP_WAKEUP_WAITERS,
 #define OO_IOC_WAKEUP_WAITERS     OO_IOC_W(WAKEUP_WAITERS, struct oo_wakeup_eps)
   OO_OP_SWF_UPDATE,

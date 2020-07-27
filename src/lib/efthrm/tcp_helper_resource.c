@@ -2083,6 +2083,11 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   sz += ip6_filter_table_size;
 #endif
 
+#if CI_CFG_UL_INTERRUPT_HELPER
+  sz = CI_ROUND_UP(sz, __alignof__(oo_sp));
+  sz += sizeof(oo_sp) * OO_CLOSED_EPS_RING_SIZE;
+#endif
+
 #if CI_CFG_PIO
   /* Allocate shmbuf for pio regions.  We haven't tried to allocate
    * PIOs yet and we don't know how many ef10s we have.  So just
@@ -2190,7 +2195,17 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 #if CI_CFG_IPV6
   ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(ci_ip6_netif_filter_table));
   ns->ip6_table_ofs = ns_ofs;
+  ns_ofs += ip6_filter_table_size;
 #endif
+
+#if CI_CFG_UL_INTERRUPT_HELPER
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(oo_sp));
+  ns->closed_eps_ofs = ns_ofs;
+  ns_ofs += sizeof(oo_sp) * OO_CLOSED_EPS_RING_SIZE;
+#endif
+
+  /* The last addition to ns_ofs is not really used */
+  (void)ns_ofs;
 
   ns->vi_state_bytes = vi_state_bytes;
 
@@ -2207,6 +2222,13 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 
 #if CI_CFG_IPV6
   ni->ip6_filter_table = (void*) ((char*) ns + ns->ip6_table_ofs);
+#endif
+
+#if CI_CFG_UL_INTERRUPT_HELPER
+  oo_ringbuffer_state_init(&ns->closed_eps, OO_CLOSED_EPS_RING_SIZE,
+                           sizeof(oo_sp));
+  oo_ringbuffer_init(&ni->closed_eps, &ns->closed_eps,
+                     (void*)((char*) ns + ns->closed_eps_ofs));
 #endif
 
   ni->packets->sets_max = ni->pkt_sets_max;
@@ -3860,8 +3882,8 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   INIT_WORK(&rs->work_item_dtor, tcp_helper_destroy_work);
   INIT_WORK(&rs->non_atomic_work, tcp_helper_do_non_atomic);
   ci_sllist_init(&rs->non_atomic_list);
-#endif
   ci_sllist_init(&rs->ep_tobe_closed);
+#endif
   ci_irqlock_ctor(&rs->lock);
   init_completion(&rs->complete);
 #if CI_CFG_HANDLE_ICMP
@@ -4899,36 +4921,6 @@ tcp_helper_close_pending_endpoints(tcp_helper_resource_t* trs)
   }
 }
 #else
-
-int oo_get_closing_ep(ci_private_t* priv, void* arg)
-{
-  oo_sp* p_id = arg;
-  ci_irqlock_state_t lock_flags;
-  tcp_helper_resource_t* trs = priv->thr;
-  tcp_helper_endpoint_t* ep;
-  ci_sllink* link;
-
-  ci_assert(ci_netif_is_locked(&trs->netif));
-
-  if( ci_sllist_is_empty(&trs->ep_tobe_closed) ) {
-    *p_id = OO_SP_NULL;
-    return 0;
-  }
-  ci_irqlock_lock(&trs->lock, &lock_flags);
-  if( ci_sllist_is_empty(&trs->ep_tobe_closed) ) {
-    ci_irqlock_unlock(&trs->lock, &lock_flags);
-    *p_id = OO_SP_NULL;
-    return 0;
-  }
-  link = ci_sllist_pop(&trs->ep_tobe_closed);
-  ci_irqlock_unlock(&trs->lock, &lock_flags);
-
-  ep = CI_CONTAINER(tcp_helper_endpoint_t, tobe_closed , link);
-  tcp_helper_close_cleanup_ep(trs, ep);
-  *p_id = ep->id;
-
-  return 0;
-}
 
 int oo_wakeup_waiters(ci_private_t* priv, void* arg)
 {
@@ -6838,6 +6830,7 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id,
     * the application exits i.e. crashes (even if its holding the netif lock)
     */
   ci_irqlock_lock(&trs->lock, &lock_flags);
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   if( ! ci_sllink_busy(&tep_p->tobe_closed) )
     ci_sllist_push(&trs->ep_tobe_closed, &tep_p->tobe_closed);
   else {
@@ -6846,6 +6839,10 @@ efab_tcp_helper_close_endpoint(tcp_helper_resource_t* trs, oo_sp ep_id,
            trs->id, OO_SP_FMT(ep_id));
     return;
   }
+#else
+  tcp_helper_close_cleanup_ep(trs, tep_p);
+  oo_ringbuffer_write(&trs->netif.closed_eps, &tep_p->id);
+#endif
   ci_irqlock_unlock(&trs->lock, &lock_flags);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER

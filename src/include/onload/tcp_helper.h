@@ -290,7 +290,7 @@ typedef struct tcp_helper_resource_s {
 # define OO_THR_AFLAG_DONT_BLOCK_SHARED   0x10
 
   /*! Spinlock.  Protects:
-   *    - ep_tobe_closed
+   *    - ep_tobe_closed / closed_eps
    *    - non_atomic_list
    *    - wakeup_list
    *    - intfs_to_reset 
@@ -424,8 +424,10 @@ struct tcp_helper_endpoint_s {
    */
   struct file* os_port_keeper;
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
   /*! link so we can be in the list of endpoints to be closed in the future */
   ci_sllink tobe_closed;
+#endif
 
   /* Link field when queued for non-atomic work. */
   ci_sllink non_atomic_link;

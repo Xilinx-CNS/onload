@@ -1615,7 +1615,6 @@ oo_operations_table_t oo_operations[] = {
 
 #if CI_CFG_UL_INTERRUPT_HELPER
   op(OO_IOC_WAIT_FOR_INTERRUPT, oo_wait_for_interrupt),
-  op(OO_IOC_GET_CLOSING_EP,     oo_get_closing_ep),
   op(OO_IOC_WAKEUP_WAITERS,     oo_wakeup_waiters),
   op(OO_IOC_SWF_UPDATE,         oo_swf_update_rsop),
 #endif
