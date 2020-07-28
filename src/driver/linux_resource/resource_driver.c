@@ -110,12 +110,6 @@ MODULE_PARM_DESC(enable_driverlink,
 				 "When disabled, it is possible to attach SFC devices "
 				 "with AF_XDP interface.");
 
-static char *af_xdp_dev = "";
-module_param(af_xdp_dev, charp, S_IRUGO);
-MODULE_PARM_DESC(af_xdp_dev,
-                 "PCI address for dev to use as AF_XDP NIC (must be SF)");
-
-
 #ifdef HAS_COMPAT_PAT_WC
 static int compat_pat_wc_inited = 0;
 #endif
@@ -625,13 +619,6 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned flags,
 		if (rc != 0)
 			goto failed;
 		resources_init = 1;
-	}
-
-	if (strcmp(af_xdp_dev, dev && pci_name(dev) ? pci_name(dev) : "?") == 0) {
-		/* TODO AF_XDP */
-		EFRM_ERR("%s: hack dev %s to be AF_XDP", __FUNCTION__,
-			 pci_name(dev));
-		dev_type.arch = EFHW_ARCH_AF_XDP;
 	}
 
 	if(dl_device) {
