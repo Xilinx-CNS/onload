@@ -545,6 +545,47 @@ static void efrm_nic_proc_intf_removed(struct linux_efhw_nic* nic)
 }
 
 
+static struct linux_efhw_nic*
+efrm_get_redisovered_nic(struct pci_dev* dev,
+			 const struct efhw_device_type* dev_type)
+{
+	struct linux_efhw_nic* lnic = NULL;
+	struct efhw_nic* old_nic;
+	int nic_index;
+
+	/* We can't detect hotplug without the pci information to compare */
+	if( !dev )
+		return NULL;
+
+	spin_lock_bh(&efrm_nic_tablep->lock);
+	EFRM_FOR_EACH_NIC(nic_index, old_nic) {
+		/* We would like to break out of this loop after rediscovering
+		 * a NIC, but the EFRM_FOR_EACH_NIC construct doesn't allow
+		 * this, so instead we check explicitly that we haven't set
+		 * [lnic] yet. */
+		if (lnic == NULL && old_nic != NULL &&
+			efrm_nic_matches_device(old_nic, dev, dev_type)) {
+			EFRM_ASSERT(old_nic->resetting);
+			if (efrm_nic_bar_is_good(old_nic, dev)) {
+				EFRM_NOTICE("%s: Rediscovered nic_index %d",
+					    __func__, nic_index);
+				lnic = linux_efhw_nic(old_nic);
+			}
+			else {
+				EFRM_WARN("%s: New device matches nic_index %d "
+					  "but has different BAR. Existing "
+					  "Onload stacks will not use the new "
+					  "device.",
+					  __func__, nic_index);
+			}
+		}
+	}
+	spin_unlock_bh(&efrm_nic_tablep->lock);
+	/* We can drop the lock now as [lnic] will not go away until the module
+	 * unloads. */
+
+	return lnic;
+}
 
 /****************************************************************************
  *
@@ -577,9 +618,7 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 	int count = 0, rc = 0, resources_init = 0;
 	int constructed = 0;
 	int registered_nic = 0;
-	int nic_index;
 	int nics_probed_delta = 0;
-	struct efhw_nic* old_nic;
 
 
 	if (dev && !enable_driverlink) {
@@ -603,34 +642,7 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 		resources_init = 1;
 	}
 
-	if(dev) {
-		spin_lock_bh(&efrm_nic_tablep->lock);
-		EFRM_FOR_EACH_NIC(nic_index, old_nic) {
-			/* We would like to break out of this loop after rediscovering
-			 * a NIC, but the EFRM_FOR_EACH_NIC construct doesn't allow
-			 * this, so instead we check explicitly that we haven't set
-			 * [lnic] yet. */
-			if (lnic == NULL && old_nic != NULL &&
-				efrm_nic_matches_device(old_nic, dev, &dev_type)) {
-				EFRM_ASSERT(old_nic->resetting);
-				if (efrm_nic_bar_is_good(old_nic, dev)) {
-					EFRM_NOTICE("%s: Rediscovered nic_index %d",
-						    __func__, nic_index);
-					lnic = linux_efhw_nic(old_nic);
-				}
-				else {
-					EFRM_WARN("%s: New device matches nic_index %d "
-						  "but has different BAR. Existing "
-						  "Onload stacks will not use the new "
-						  "device.",
-						  __func__, nic_index);
-				}
-			}
-		}
-		spin_unlock_bh(&efrm_nic_tablep->lock);
-		/* We can drop the lock now as [lnic] will not go away until the module
-		 * unloads. */
-	}
+	lnic = efrm_get_redisovered_nic(dev, &dev_type);
 	if (lnic != NULL) {
 		linux_efrm_nic_reclaim(lnic, dev, net_dev, res_dim,
 				       &dev_type);
