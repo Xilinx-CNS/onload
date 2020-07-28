@@ -46,15 +46,11 @@
 #include <ci/driver/driverlink_api.h>
 
 
-/* Convert PCI info to device type.  Returns false when device is not
+/* Initialise the device type as appropriate.  Returns false when device is not
  * recognised.
  */
 extern int efhw_device_type_init(struct efhw_device_type *dt,
-				 int vendor_id, int device_id, int revision);
-
-/* Initialise the device type as appropriate for a userspace-managed
- * device such as AF_XDP */
-extern int efhw_device_nondl_init(struct efhw_device_type *dt);
+				 struct pci_dev* dev);
 
 
 /* Initialise fields that do not involve touching hardware. */

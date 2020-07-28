@@ -64,17 +64,25 @@ static void ef100_device_type_init(struct efhw_device_type *dt,
 
 
 /* Return 0 if not a known type */
-int efhw_device_type_init(struct efhw_device_type *dt,
-			  int vendor_id, int device_id,
-			  int class_revision)
+int efhw_sfc_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
 {
+	int rc;
+	u8 class_revision;
+
+	rc = pci_read_config_byte(dev, PCI_CLASS_REVISION, &class_revision);
+	if (rc != 0) {
+		EFHW_ERR("%s: pci_read_config_byte failed (%d)",
+			 __func__, rc);
+		return 0;
+	}
+
 	/* FIXME: not sure about right way for Xilinx licensing */
-	if (vendor_id != 0x1924 && vendor_id != 0x10ee)
+	if (dev->vendor != 0x1924 && dev->vendor != 0x10ee)
 		return 0;
 
 	memset(dt, 0, sizeof(*dt));
 	
-	switch (device_id) {
+	switch (dev->device) {
 	case 0x0703:
 	case 0x6703:
 	case 0x0710:
@@ -93,21 +101,21 @@ int efhw_device_type_init(struct efhw_device_type *dt,
 	case 0x0923:
 	case 0x0903:
 	case 0x0901:
-		ef10_device_type_init(dt, 'A', device_id, class_revision);
+		ef10_device_type_init(dt, 'A', dev->device, class_revision);
 		break;
 	case 0x1913:
 	case 0x1a03:
 	case 0x0913:
 	case 0x0a03:
-		ef10_device_type_init(dt, 'B', device_id, class_revision);
+		ef10_device_type_init(dt, 'B', dev->device, class_revision);
 		break;
 	case 0x1b03:
 	case 0x0b03:
-		ef10_device_type_init(dt, 'C', device_id, class_revision);
+		ef10_device_type_init(dt, 'C', dev->device, class_revision);
 		break;
 	case 0x0100:
 		/* FIXME: add properly variants and revisions for EF100 */
-		ef100_device_type_init(dt, 'A', device_id, class_revision);
+		ef100_device_type_init(dt, 'A', dev->device, class_revision);
 		break;
 	default:
 		return 0;
@@ -118,12 +126,22 @@ int efhw_device_type_init(struct efhw_device_type *dt,
 
 
 /* Return 0 if not a known type */
-int efhw_device_nondl_init(struct efhw_device_type *dt)
+int efhw_non_pci_device_type_init(struct efhw_device_type *dt)
 {
 	memset(dt, 0, sizeof(*dt));
 	dt->arch = EFHW_ARCH_AF_XDP;
 	return 1;
 }
+
+
+int efhw_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
+{
+	if( dev )
+		return efhw_sfc_device_type_init(dt, dev);
+	else
+		return efhw_non_pci_device_type_init(dt);
+}
+
 
 /*--------------------------------------------------------------------
  *

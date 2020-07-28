@@ -410,7 +410,7 @@ static void linux_efrm_nic_dtor(struct linux_efhw_nic *lnic)
 	EFRM_ASSERT(nic->net_dev == NULL);
 }
 
-static void efrm_dev_show(struct pci_dev *dev, int revision,
+static void efrm_dev_show(struct pci_dev *dev,
 			  struct efhw_device_type *dev_type, int ifindex,
 			  const struct vi_resource_dimensions *res_dim)
 {
@@ -418,7 +418,7 @@ static void efrm_dev_show(struct pci_dev *dev, int revision,
 	EFRM_NOTICE("%s pci_dev=%04x:%04x(%d) type=%d:%c%d ifindex=%d",
 		    dev_name, (unsigned) (dev ? dev->vendor : 0),
 		    (unsigned) (dev ? dev->device : 0),
-		    revision, dev_type->arch, dev_type->variant,
+		    dev_type->revision, dev_type->arch, dev_type->variant,
 		    dev_type->revision, ifindex);
 }
 
@@ -577,7 +577,6 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 	int count = 0, rc = 0, resources_init = 0;
 	int constructed = 0;
 	int registered_nic = 0;
-	u8 class_revision;
 	int nic_index;
 	int nics_probed_delta = 0;
 	struct efhw_nic* old_nic;
@@ -589,28 +588,13 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 		return -EPERM;
 	}
 
-	if(dev) {
-		rc = pci_read_config_byte(dev, PCI_CLASS_REVISION, &class_revision);
-		if (rc != 0) {
-			EFRM_ERR("%s: pci_read_config_byte failed (%d)",
-				 __func__, rc);
-			return rc;
-		}
-		if (!efhw_device_type_init(&dev_type, dev->vendor, dev->device,
-					   class_revision)) {
-			EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x(%d)",
-				 __func__, (unsigned) dev->vendor,
-				 (unsigned) dev->device, (int) class_revision);
-			return -ENODEV;
-		}
-		efrm_dev_show(dev, class_revision, &dev_type, net_dev->ifindex, res_dim);
+	if (!efhw_device_type_init(&dev_type, dev)) {
+		EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x",
+			 __func__, (unsigned) dev->vendor,
+			 (unsigned) dev->device);
+		return -ENODEV;
 	}
-	else {
-		efhw_device_nondl_init(&dev_type);
-		EFRM_NOTICE("%s rx_chans=%d", net_dev->name, res_dim->rss_channel_count);
-	}
-
-	efrm_dev_show(dev, class_revision, &dev_type, net_dev->ifindex, res_dim);
+	efrm_dev_show(dev, &dev_type, net_dev->ifindex, res_dim);
 
 	if (n_nics_probed == 0) {
 		rc = efrm_resources_init();
