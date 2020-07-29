@@ -3891,6 +3891,8 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   rs->periodic_timer_cpu = NI_OPTS(ni).periodic_timer_cpu;
+  if( rs->periodic_timer_cpu < 0 )
+    rs->periodic_timer_cpu = WORK_CPU_UNBOUND;
 
   /* "onload-wq:pretty_name workqueue for non-atomic works */
   snprintf(rs->wq_name, sizeof(rs->wq_name), ONLOAD_WQ_NAME,
@@ -4336,15 +4338,8 @@ static inline int thr_queue_delayed_work(tcp_helper_resource_t* thr,
                                          struct delayed_work *dwork,
                                          unsigned long delay)
 {
-  /* RHEL6 fixme:
-   * We should set periodic_timer_cpu to WORK_CPU_UNBOUND, and call
-   * queue_delayed_work_on() unconditionally.
-   * It works for linux>=2.6.36. */
-  if( thr->periodic_timer_cpu > -1 )
-    return queue_delayed_work_on(thr->periodic_timer_cpu, thr->periodic_wq,
-                                 dwork, delay);
-  else
-    return queue_delayed_work(thr->periodic_wq, dwork, delay);
+  return queue_delayed_work_on(thr->periodic_timer_cpu, thr->periodic_wq,
+                               dwork, delay);
 }
 #endif
 
