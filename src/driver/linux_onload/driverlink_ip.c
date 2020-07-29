@@ -216,7 +216,7 @@ static struct nf_hook_ops oo_netfilter_ip6_hook = {
 #endif
 
 
-int oo_netdev_is_dl(const struct net_device *net_dev)
+static int oo_netdev_is_native(const struct net_device *net_dev)
 {
   struct efhw_nic* efhw_nic;
   struct oo_nic* onic;
@@ -226,11 +226,6 @@ int oo_netdev_is_dl(const struct net_device *net_dev)
   efhw_nic = efrm_client_get_nic(onic->efrm_client);
   return efhw_nic->devtype.arch == EFHW_ARCH_EF10 ||
          efhw_nic->devtype.arch == EFHW_ARCH_EF100;
-}
-
-int oo_netdev_is_non_dl(const struct net_device *net_dev)
-{
-  return ! oo_netdev_is_dl(net_dev) && oo_nic_find_dev(net_dev) != NULL;
 }
 
 /* This function will create an oo_nic if one hasn't already been created.
@@ -283,10 +278,6 @@ struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
 static int oo_nic_probe(const struct net_device* net_dev)
 {
   struct oo_nic* onic = NULL;
-  if( oo_netdev_is_non_dl(net_dev) ) {
-    ci_log("%s: net dev event %s ignoring as already non-dl", __FUNCTION__, net_dev->name);
-    return -1;
-  }
   if( ! netif_running(net_dev) ) {
     onic = oo_nic_find_dev(net_dev);
     if( onic != NULL ) {
@@ -361,10 +352,6 @@ void oo_common_remove(const struct net_device* netdev)
 
 static void oo_nic_remove(const struct net_device* netdev)
 {
-  if( ! oo_netdev_is_dl(netdev) ) {
-    ci_log("%s: net dev event %s ignoring as non-dl", __FUNCTION__, netdev->name);
-    return;
-  }
   oo_common_remove(netdev);
 }
 
@@ -431,7 +418,7 @@ static int oo_netdev_event(struct notifier_block *this,
                            unsigned long event, void *ptr)
 {
   struct net_device *netdev = netdev_notifier_info_to_dev(ptr);
-  if( ! oo_netdev_is_dl(netdev) )
+  if( ! oo_netdev_is_native(netdev) )
     return NOTIFY_DONE;
 
   switch( event ) {
