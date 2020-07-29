@@ -2578,6 +2578,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           /* ci_tcp_tx_has_room_for_zc() has already decided that we can do
            * this */
           pkt->flags |= CI_PKT_FLAG_INDIRECT;
+          pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
           oo_offbuf_set_end(&pkt->buf, CI_PTR_ALIGN_FWD(
                        CI_MIN(oo_offbuf_end(&pkt->buf),
                               oo_offbuf_ptr(&pkt->buf) + CI_TCP_MAX_OPTS_LEN),
