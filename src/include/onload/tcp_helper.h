@@ -235,11 +235,6 @@ typedef struct tcp_helper_resource_s {
   struct work_struct reset_work;
   struct delayed_work purge_txq_work;
 #endif
-
-#define ONLOAD_PERIODIC_WQ_NAME "onload-periodic-wq:%s"
-#define ONLOAD_PERIODIC_WQ_NAME_BASELEN 20
-  char periodic_wq_name[ONLOAD_PERIODIC_WQ_NAME_BASELEN + ONLOAD_PRETTY_NAME_MAXLEN];
-  struct workqueue_struct *periodic_wq;
 #endif
 
 #ifdef CONFIG_NAMESPACES

@@ -3933,33 +3933,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   }
 #endif
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
-  /* "onload-wq-periodic:pretty_name" workqueue for handling periodic polling
-   * and TXQ purging.
-   */
-  snprintf(rs->periodic_wq_name, sizeof(rs->periodic_wq_name),
-           ONLOAD_PERIODIC_WQ_NAME, ni->state->pretty_name);
-
-  /* Setting WQ_HIGHPRI and WQ_CPU_INTENSIVE ensures the work will be run
-   * as soon as the CPU is available.
-   *
-   * If no periodic timer CPU is provided, we will to leave it to the scheduler
-   * to decide where to run.
-   */
-  rs->periodic_wq = alloc_workqueue(rs->periodic_wq_name,
-                                    WQ_HIGHPRI | WQ_CPU_INTENSIVE |
-                                    (( rs->periodic_timer_cpu == -1 ) ?
-                                      (WQ_SYSFS | WQ_UNBOUND) : 0),
-                                    0);
-
-  if( rs->periodic_wq == NULL ) {
-    OO_DEBUG_ERR(ci_log("%s: [%d] Failed to allocate stack due to periodic "
-                        "workqueue allocation failure", __func__, NI_ID(ni)));
-    rc = - ENOMEM;
-    goto fail5b;
-  }
-#endif
-
   /* Ready for possible reset: after workqueue is ready, but before any hw
    * resources are allocated. */
   ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
@@ -4217,10 +4190,8 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   /* tcp_helper_stop_periodic_work() has the side-effect of flushing the
    * workqueue. */
   tcp_helper_stop_periodic_work(rs);
-
-  destroy_workqueue(rs->periodic_wq);
- fail5b:
 #endif
+
 #if CI_CFG_NIC_RESET_SUPPORT
   destroy_workqueue(rs->reset_wq);
  fail5a:
@@ -4338,7 +4309,7 @@ static inline int thr_queue_delayed_work(tcp_helper_resource_t* thr,
                                          struct delayed_work *dwork,
                                          unsigned long delay)
 {
-  return queue_delayed_work_on(thr->periodic_timer_cpu, thr->periodic_wq,
+  return queue_delayed_work_on(thr->periodic_timer_cpu, thr->wq,
                                dwork, delay);
 }
 #endif
@@ -5371,9 +5342,6 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
 #endif
 #if CI_CFG_NIC_RESET_SUPPORT
   destroy_workqueue(trs->reset_wq);
-#endif
-#if ! CI_CFG_UL_INTERRUPT_HELPER
-  destroy_workqueue(trs->periodic_wq);
 #endif
 
   while( trs->usermem ) {
@@ -6754,7 +6722,7 @@ tcp_helper_stop_periodic_work(tcp_helper_resource_t* rs)
     cancel_delayed_work(&rs->timer);
   cancel_delayed_work(&rs->purge_txq_work);
   /* wait for running timer workqitem */
-  flush_workqueue(rs->periodic_wq);
+  flush_workqueue(rs->wq);
   /* the running workitems might haved kicked off some more before the flags
    * were cleared earlier - let's cancel them. */
   if( timer_was_running )
@@ -6762,7 +6730,7 @@ tcp_helper_stop_periodic_work(tcp_helper_resource_t* rs)
   cancel_delayed_work(&rs->purge_txq_work);
   /* and flush, just in case the second workitem have started
    * before we cancelled it */
-  flush_workqueue(rs->periodic_wq);
+  flush_workqueue(rs->wq);
 }
 #endif
 
