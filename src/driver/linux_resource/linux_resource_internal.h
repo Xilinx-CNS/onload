@@ -51,6 +51,7 @@ extern void efrm_driverlink_desist(struct efrm_nic* nic,
 				   unsigned failure_generation);
 extern void efrm_driverlink_resume(struct efrm_nic* nic);
 extern unsigned efrm_driverlink_generation(struct efrm_nic* nic);
+extern int enable_driverlink;
 
 extern int
 efrm_nic_add(struct efx_dl_device *dl_device, unsigned int opts,

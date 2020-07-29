@@ -103,7 +103,7 @@ MODULE_PARM_DESC(enable_accel_by_default,
 				 "is set to zero then devices must be enabled in this way "
 				 "to allow Onload acceleration or use of ef_vi.");
 
-static int enable_driverlink = 1;
+int enable_driverlink = 1;
 module_param(enable_driverlink, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(enable_driverlink,
 				 "Attach SFC devices using driverlink interface."
@@ -619,13 +619,6 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 	int constructed = 0;
 	int registered_nic = 0;
 	int nics_probed_delta = 0;
-
-
-	if (dev && !enable_driverlink) {
-		EFRM_NOTICE("%s: Driverlink reports sfc device %s, ignoring as module "
-					"param enable_driverlink=0", __func__, net_dev->name);
-		return -EPERM;
-	}
 
 	if (!efhw_device_type_init(&dev_type, dev)) {
 		EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x",
