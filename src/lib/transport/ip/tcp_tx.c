@@ -33,6 +33,8 @@ ci_inline void check_tx_timestamping(ci_tcp_state* ts, int af,
     pkt->flags |= CI_PKT_FLAG_TX_TIMESTAMPED;
     pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
   }
+  if( pkt->flags & CI_PKT_FLAG_INDIRECT )
+    ci_assert_equal(pkt->pf.tcp_tx.sock_id, ts->s.b.bufid);
 #endif
 }
 

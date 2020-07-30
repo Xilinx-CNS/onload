@@ -67,6 +67,7 @@ void ci_tcp_tx_pkt_assert_valid(ci_netif* ni, ci_tcp_state* ts,
       verify(zcp->len <= 0x7fffffff);
     }
     verify(paylen == zclen + pkt->buf_len);
+    verify(pkt->pf.tcp_tx.sock_id == ts->s.b.bufid);
   }
   else {
     verify(pkt->n_buffers >= 1);
