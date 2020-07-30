@@ -601,7 +601,9 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
 
   /* We need to use network namespace of network device so that
    * ifindex passed in bpf syscalls makes sense
-   * AF_XDP TODO: there is a race here whit device changing netns */
+   * TODO AF_XDP: there is a race here with device changing netns
+   * TODO AF_XDP: this fails unless the user namespace has CAP_NET_RAW
+   */
   rc = __sock_create(dev_net(nic->net_dev), AF_XDP, SOCK_RAW, 0, &sock, 0);
   if( rc < 0 )
     return rc;
