@@ -11,7 +11,7 @@
 /* Every time the major driverlink version is bumped, this check forces a build
  * failure, as it's necessary to audit the net driver change for compatibility
  * with driverlink clients.  */
-#if EFX_DRIVERLINK_API_VERSION > 28
+#if EFX_DRIVERLINK_API_VERSION > 29
 #error "Driverlink API has changed.  Audit client code for compatibility."
 #endif
 

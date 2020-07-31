@@ -104,7 +104,7 @@ extern int ef10_ef100_mcdi_cmd_init_rxq(struct efhw_nic *nic, dma_addr_t *dma_ad
 					int flag_packed_stream, uint32_t instance,
 					uint32_t label, uint32_t target_evq,
 					uint32_t numentries, int ps_buf_size,
-					int flag_force_rx_merge);
+					int flag_force_rx_merge, int ef100_rx_buffer_size);
 
 extern void ef10_ef100_dmaq_tx_q_disable(struct efhw_nic *nic, uint dmaq);
 

@@ -1514,7 +1514,7 @@ ef10_ef100_mcdi_cmd_init_rxq(struct efhw_nic *nic, dma_addr_t *dma_addrs,
 			     int flag_packed_stream, uint32_t instance,
 			     uint32_t label, uint32_t target_evq,
 			     uint32_t numentries, int ps_buf_size,
-			     int flag_force_rx_merge)
+			     int flag_force_rx_merge, int ef100_rx_buffer_size)
 {
 	int rc;
 	struct efx_dl_device *efx_dev;
@@ -1532,7 +1532,8 @@ ef10_ef100_mcdi_cmd_init_rxq(struct efhw_nic *nic, dma_addr_t *dma_addrs,
 			efx_dev, dma_addrs, n_dma_addrs, port_id, stack_id, owner_id,
 			crc_mode, !!flag_timestamp, !!flag_hdr_split, !!flag_buff_mode,
 			!!flag_rx_prefix, dma_mode, instance, label, target_evq,
-			numentries, ps_buf_size_mcdi, !!flag_force_rx_merge);
+			numentries, ps_buf_size_mcdi, !!flag_force_rx_merge,
+			ef100_rx_buffer_size);
 	EFX_DL_POST(efx_dev, nic, rc)
 	return rc;
 }
@@ -1662,7 +1663,7 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 		 REAL_OWNER_ID(own_id), QUEUE_CRC_MODE_NONE, flag_timestamp,
 		 flag_hdr_split, flag_buff_mode, flag_rx_prefix,
 		 flag_packed_stream, dmaq, tag, evq_id, dmaq_size, ps_buf_size,
-		 flag_force_rx_merge);
+		 flag_force_rx_merge, 0);
 	return rc == 0 ?
 		flag_rx_prefix ? nic->rx_prefix_len : 0 :
 		rc;

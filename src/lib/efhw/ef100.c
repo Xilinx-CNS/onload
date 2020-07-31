@@ -278,7 +278,7 @@ ef100_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 		 REAL_OWNER_ID(own_id), QUEUE_CRC_MODE_NONE, flag_timestamp,
 		 flag_hdr_split, flag_buff_mode, flag_rx_prefix,
 		 flag_packed_stream, dmaq, tag, evq_id, dmaq_size, ps_buf_size,
-		 flag_force_rx_merge);
+		 flag_force_rx_merge, EF100_RX_USR_BUF_SIZE);
 
 	return nic->rx_prefix_len;
 }

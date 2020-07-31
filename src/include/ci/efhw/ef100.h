@@ -1,7 +1,12 @@
 #ifndef __CI_EFHW_EF100_H__
 #define __CI_EFHW_EF100_H__
 
+struct efhw_nic;
+
 extern struct efhw_func_ops ef100_char_functional_units;
+
+/* Size of RX user buffer for EF100 */
+#define EF100_RX_USR_BUF_SIZE 2048 - 256
 
 /* Slice plugins are so EF100-specific that there's no point in using the
  * abstraction layer for these functions. */

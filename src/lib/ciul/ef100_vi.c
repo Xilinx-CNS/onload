@@ -1,5 +1,6 @@
 #include "ef_vi_internal.h"
 #include <ci/efhw/common.h>
+#include <ci/efhw/ef100.h>
 #include "logging.h"
 #include "memcpy_to_io.h"
 
@@ -372,7 +373,7 @@ static void ef100_vi_initialise_ops(ef_vi* vi)
 
 void ef100_vi_init(ef_vi* vi)
 {
-  vi->rx_buffer_len = 2048 - 256;
+  vi->rx_buffer_len = EF100_RX_USR_BUF_SIZE;
 
   vi->rx_pkt_len_offset = 0;
   vi->rx_pkt_len_mask = (1 << ESF_GZ_RX_PREFIX_LENGTH_WIDTH) - 1;
