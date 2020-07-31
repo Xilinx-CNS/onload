@@ -282,6 +282,7 @@ void ci_tcp_state_init(ci_netif* netif, ci_tcp_state* ts, int from_cache)
   ci_sock_cmn_init(netif, &ts->s, !from_cache);
 #if CI_CFG_TIMESTAMPING
   ci_udp_recv_q_init(&ts->timestamp_q);
+  ts->timestamp_q_pending = OO_PP_NULL;
 #endif
 
   /* Initialise this level. */
@@ -306,6 +307,7 @@ void ci_tcp_state_reinit(ci_netif* netif, ci_tcp_state* ts)
   ci_sock_cmn_reinit(netif, &ts->s);
 #if CI_CFG_TIMESTAMPING
   ci_udp_recv_q_init(&ts->timestamp_q);
+  ts->timestamp_q_pending = OO_PP_NULL;
 #endif
   /* Reinitialise this level. */
   ci_tcp_state_tcb_reinit(netif, ts, 0);

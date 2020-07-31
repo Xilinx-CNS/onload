@@ -1276,6 +1276,10 @@ static void ci_tcp_rx_free_acked_bufs(ci_netif* netif, ci_tcp_state* ts,
 {
   struct ci_netif_poll_state* ps = rxp->poll_state;
   ci_ip_pkt_queue* rtq = &ts->retrans;
+#if CI_CFG_TIMESTAMPING
+  oo_pkt_p ts_q_pending = ts->timestamp_q_pending;
+  unsigned ts_q_bufs = 0;
+#endif
 
   ci_assert(ci_ip_queue_is_valid(netif, rtq));
   ts->retransmits=0;
@@ -1320,10 +1324,11 @@ static void ci_tcp_rx_free_acked_bufs(ci_netif* netif, ci_tcp_state* ts,
          ts->s.timestamping_flags & ONLOAD_SOF_TIMESTAMPING_STREAM) ||
         (p->flags & CI_PKT_FLAG_INDIRECT &&
          ci_tcp_zc_has_cookies(netif, p)) ) {
-      ci_udp_recv_q_put(netif, &ts->timestamp_q, p);
-
-      /* Tells post-poll loop to put socket on the [reap_list]. */
-      ts->s.b.sb_flags |= CI_SB_FLAG_RX_DELIVERED;
+      ci_udp_recv_q_put_pending(netif, &ts->timestamp_q, p);
+      if( p->flags & CI_PKT_FLAG_TX_PENDING)
+        ts_q_pending = OO_PKT_P(p);
+      else if( OO_PP_IS_NULL(ts_q_pending) )
+        ts_q_bufs += p->n_buffers;
     }
     else
 #endif
@@ -1343,6 +1348,16 @@ static void ci_tcp_rx_free_acked_bufs(ci_netif* netif, ci_tcp_state* ts,
       break;
     }
   }
+
+#if CI_CFG_TIMESTAMPING
+  ts->timestamp_q_pending = ts_q_pending;
+  if( ts_q_bufs ) {
+    ci_udp_recv_q_put_complete(&ts->timestamp_q, ts_q_bufs);
+
+    /* Tells post-poll loop to put socket on the [reap_list]. */
+    ts->s.b.sb_flags |= CI_SB_FLAG_RX_DELIVERED;
+  }
+#endif
 
   /* Make sure reap will happen in a timely manner if we've added
    * packets to the timestamp queue 

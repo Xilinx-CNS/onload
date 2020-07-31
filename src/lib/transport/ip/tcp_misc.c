@@ -234,6 +234,7 @@ static void __ci_tcp_state_free(ci_netif *ni, ci_tcp_state *ts)
 
 #if CI_CFG_TIMESTAMPING
   ci_udp_recv_q_drop(ni, &ts->timestamp_q);
+  ts->timestamp_q_pending = OO_PP_NULL;
 #endif
   ci_assert_equal(__ci_tcp_rx_buf_count(ni, ts), 0);
 

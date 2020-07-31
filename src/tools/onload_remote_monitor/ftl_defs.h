@@ -1053,6 +1053,7 @@ typedef struct oo_tcp_socket_stats oo_tcp_socket_stats;
     FTL_TFIELD_INT(ctx, ci_int32, dsack_block, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                  \
   ON_CI_CFG_TIMESTAMPING( \
     FTL_TFIELD_STRUCT(ctx, ci_udp_recv_q, timestamp_q, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))  \
+    FTL_TFIELD_INT(ctx, ci_int32, timestamp_q_pending, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))  \
   ) \
     FTL_TFIELD_INT(ctx, ci_uint32, snd_check, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                   \
     FTL_TFIELD_INT(ctx, ci_uint32, snd_nxt, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                     \

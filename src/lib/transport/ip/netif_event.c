@@ -1492,16 +1492,27 @@ static void ci_netif_rx_pkt_complete_tcp(ci_netif* ni,
      * removal of the TX_PENDING flag will have caused the return value of
      * ci_tcp_poll_timestamp_q_nonempty() to have changed. If so, we need to
      * wake. The above if() is technically lax, but it's a very quick way of
-     * detecting when we can avoid the relatively costly ci_udp_recv_q_get. */
+     * detecting when we can avoid the rest of this code. */
     oo_sp sp = pkt->pf.tcp_tx.sock_id;
     citp_waitable_obj* wo = SP_TO_WAITABLE_OBJ(ni, sp);
-    if( wo->waitable.state & CI_TCP_STATE_TCP ) {
+    if( wo->waitable.state & CI_TCP_STATE_TCP_CONN ) {
       ci_tcp_state* ts = &wo->tcp;
+      unsigned n_bufs = 0;
+      ci_ip_pkt_fmt* pp;
+
       /* The socket may have been closed (and even reopened) by the time we
-       * get this tx completion. That's the reason for the state checking
-       * above, and if we still get here after that then this condition must
-       * fail if the socket isn't the right one: */
-      if( pkt == ci_udp_recv_q_get(ni, &ts->timestamp_q) ) {
+       * get this tx completion - that's the reason for the state checking
+       * above. The following code, however, has no reliance at all on pkt, so
+       * it totally doesn't matter if we're looking at the wrong socket. */
+      while( OO_PP_NOT_NULL(ts->timestamp_q_pending) ) {
+        pp = PKT_CHK_NNL(ni, ts->timestamp_q_pending);
+        if( pp->flags & CI_PKT_FLAG_TX_PENDING )
+          break;
+        n_bufs += pp->n_buffers;
+        ts->timestamp_q_pending = pp->udp_rx_next;
+      }
+      if( n_bufs ) {
+        ci_udp_recv_q_put_complete(&ts->timestamp_q, n_bufs);
         ts->s.b.sb_flags |= CI_SB_FLAG_RX_DELIVERED;
         ci_netif_put_on_post_poll(ni, &ts->s.b);
         ci_tcp_wake_possibly_not_in_poll(ni, ts, CI_SB_FLAG_WAKE_RX);

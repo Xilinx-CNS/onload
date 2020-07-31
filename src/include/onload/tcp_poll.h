@@ -22,15 +22,13 @@ ci_tcp_poll_events_listen(ci_netif *ni, ci_tcp_socket_listen *tls)
   return 0;
 }
 
-/* When the first packet in the timestamp queue is TX-pending, then
- * ci_tcp_recvmsg() does not put it into control message, so we should not
- * signal poll() that there is an event. */
-ci_inline int/*bool*/
+/* The timestamp_q is subtly managed to ensure that tx_pending packets do not
+ * appear to be visible. See doc at ci_tcp_state::timestamp_q */
+ci_inline bool
 ci_tcp_poll_timestamp_q_nonempty(ci_netif *ni, ci_tcp_state *ts)
 {
 #if CI_CFG_TIMESTAMPING
-  ci_ip_pkt_fmt* pkt = ci_udp_recv_q_get(ni, &ts->timestamp_q);
-  return pkt != NULL && ! (pkt->flags & CI_PKT_FLAG_TX_PENDING);
+  return ! ci_udp_recv_q_is_empty(&ts->timestamp_q);
 #else
   return 0;
 #endif

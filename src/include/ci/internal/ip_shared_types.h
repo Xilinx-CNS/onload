@@ -2534,7 +2534,34 @@ struct ci_tcp_state_s {
                                    * CI_ILL_UNUSED when no DSACK present */
 
 #if CI_CFG_TIMESTAMPING
+  /* About timestamp_q management:
+   * This queue is for delivery to the app when it asks for the list of
+   * completed tx timestamps. The timestamp to be given is that of the last
+   * transmit, so we add to this queue when we get the ACK confirming that
+   * there aren't going to be any more retransmits.
+   *
+   * The trickiness arises because that ACK may arrive before the tx
+   * completion. In that case we split timestamp_q at timestamp_q_pending so
+   * that the non-tx-complete don't appear to be visible to the app;
+   * ci_netif_rx_pkt_complete_tcp() checks for this in poll and can make them
+   * visible.
+   *
+   * Full diagram of what's what:
+   *   ts_q.head (oldest packet) (===ts_q.pkts_reaped)
+   *      > ci_udp_recv_q_reapable()
+   *   ts_q.extract  (===ts_q.pkts_delivered)
+   *      > ci_udp_recv_q_pkts()
+   *   ts_q_pending (===ts_q.pkts_added)
+   *   ts_q.tail (newest packet)
+   *
+   * NB: the timestamp_q is used both for tx timestamping and for zc
+   * completions: they have identical needs so they share an implementation.
+   * */
   ci_udp_recv_q       timestamp_q;/**< TX timestamp queue */
+  oo_pkt_p            timestamp_q_pending; /* First non-tx-complete packet on
+                                       timestamp_q, or OO_PP_NULL if there is
+                                       no such packet. Protected by the stack
+                                       lock */
 #endif
 
   /* Next field is needed to support PathMTU discovery functionality */

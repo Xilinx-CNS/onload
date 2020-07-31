@@ -3494,9 +3494,10 @@ extern int ci_udp_timestamp_q_enqueue(ci_netif* ni, ci_udp_state* us,
                                       ci_ip_pkt_fmt* pkt);
 #endif
 
-/* Put a packet into recv_q.  Stack should be locked. */
-ci_inline void ci_udp_recv_q_put(ci_netif* ni, ci_udp_recv_q* q,
-				 ci_ip_pkt_fmt* pkt) 
+/* Put a packet into recv_q but don't mark it as visible to the consumer yet.
+ * Stack should be locked. */
+ci_inline void ci_udp_recv_q_put_pending(ci_netif* ni, ci_udp_recv_q* q,
+                                         ci_ip_pkt_fmt* pkt)
 {
   ci_assert(ci_netif_is_locked(ni));
 
@@ -3529,12 +3530,29 @@ ci_inline void ci_udp_recv_q_put(ci_netif* ni, ci_udp_recv_q* q,
     q->head = OO_PKT_P(pkt);
   }
   q->tail = OO_PKT_P(pkt);
+}
+
+
+/* Having done ci_udp_recv_q_put_pending(), now mark the packets as visible to
+ * the consumer. Stack should be locked. */
+ci_inline void ci_udp_recv_q_put_complete(ci_udp_recv_q* q, unsigned n_buffers)
+{
   ci_wmb();
 
   /* Increment pkts_added as a last step: ci_udp_recv_q_not_empty() should
    * not flag event until the packet is in the list. */
-  q->pkts_added += pkt->n_buffers;
+  q->pkts_added += n_buffers;
 }
+
+
+/* Put a packet into recv_q.  Stack should be locked. */
+ci_inline void ci_udp_recv_q_put(ci_netif* ni, ci_udp_recv_q* q,
+                                 ci_ip_pkt_fmt* pkt)
+{
+  ci_udp_recv_q_put_pending(ni, q, pkt);
+  ci_udp_recv_q_put_complete(q, pkt->n_buffers);
+}
+
 
 /* Get a packet from recv_q.  Socket should be locked. */
 ci_inline ci_ip_pkt_fmt* ci_udp_recv_q_get(ci_netif* ni,
