@@ -242,6 +242,8 @@ donet () {
     if modprobe -q mtdpart || modprobe -q mtd; then
         modprobe mtdchar
     fi
+    # sfc_ef100 requires nf_flow_table if it is configured in
+    modprobe nf_flow_table
 
     # Coverage
     for m in $LINUX_NET; do
