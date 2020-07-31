@@ -216,7 +216,7 @@ struct efx_mcdi_mon_attribute {
 	unsigned int limit_value;
 	enum efx_hwmon_attribute hwmon_attribute;
 	u8 file_index;
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_NEED_HWMON_DEVICE_REGISTER_WITH_INFO)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_HWMON_DEVICE_REGISTER_WITH_INFO)
 	char name[15];
 #endif
 };
@@ -333,7 +333,7 @@ static int efx_mcdi_mon_get_state(struct device *dev, unsigned int index,
 	return EFX_DWORD_FIELD(entry, MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_STATE);
 }
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_NEED_HWMON_DEVICE_REGISTER_WITH_INFO)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_HWMON_DEVICE_REGISTER_WITH_INFO)
 static ssize_t efx_mcdi_mon_show_name(struct device *dev,
 				      struct device_attribute *attr,
 				      char *buf)
@@ -905,10 +905,10 @@ int efx_mcdi_mon_probe(struct efx_nic *efx)
 		max2 = MCDI_ARRAY_FIELD(outbuf, SENSOR_ENTRY,
 					SENSOR_INFO_ENTRY, j, MAX2);
 
-		if (min1 != max1) {
-			efx_mcdi_mon_add_attr(efx, i, type, 0, file_index,
-					      EFX_HWMON_INPUT);
+		efx_mcdi_mon_add_attr(efx, i, type, 0, file_index,
+				      EFX_HWMON_INPUT);
 
+		if (min1 != max1) {
 			if (hwmon_type != hwmon_power) {
 				efx_mcdi_mon_add_attr(efx, i, type, min1,
 						      file_index,
@@ -917,15 +917,15 @@ int efx_mcdi_mon_probe(struct efx_nic *efx)
 
 			efx_mcdi_mon_add_attr(efx, i, type, max1, file_index,
 					      EFX_HWMON_MAX);
+		}
 
-			if (min2 != max2) {
-				/* Assume max2 is critical value.
-				 * But we have no good way to expose min2.
-				 */
-				efx_mcdi_mon_add_attr(efx, i, type, max2,
-						      file_index,
-						      EFX_HWMON_CRIT);
-			}
+		if (min2 != max2) {
+			/* Assume max2 is critical value.
+			 * But we have no good way to expose min2.
+			 */
+			efx_mcdi_mon_add_attr(efx, i, type, max2,
+					      file_index,
+					      EFX_HWMON_CRIT);
 		}
 
 		efx_mcdi_mon_add_attr(efx, i, type, 0, file_index,

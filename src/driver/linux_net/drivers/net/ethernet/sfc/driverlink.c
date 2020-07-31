@@ -147,7 +147,7 @@ static void efx_dl_try_add_device(struct efx_dl_nic *nic,
 	before = get_jiffies_64();
 
 	if (!(driver->flags & EFX_DL_DRIVER_NO_PUBLISH))
-		efx_dl_publish(efx_dev);
+		rc = efx_dl_publish(efx_dev);
 	if (rc)
 		goto fail;
 

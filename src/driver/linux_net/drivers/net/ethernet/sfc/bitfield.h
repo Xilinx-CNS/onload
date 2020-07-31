@@ -563,14 +563,6 @@ typedef union efx_oword {
 #define EFX_SET_QWORD_FIELD EFX_SET_QWORD_FIELD32
 #endif
 
-/* Used to avoid compiler warnings about shift range exceeding width
- * of the data types when dma_addr_t is only 32 bits wide.
- */
-#define DMA_ADDR_T_WIDTH	(8 * sizeof(dma_addr_t))
-#define EFX_DMA_TYPE_WIDTH(width) \
-	(((width) < DMA_ADDR_T_WIDTH) ? (width) : DMA_ADDR_T_WIDTH)
-
-
 /* Static initialiser */
 #define EFX_OWORD32(a, b, c, d)				\
 	{ .u32 = { cpu_to_le32(a), cpu_to_le32(b),	\

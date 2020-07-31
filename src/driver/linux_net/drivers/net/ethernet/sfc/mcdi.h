@@ -304,6 +304,11 @@ static inline void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
 	BUILD_BUG_ON(MC_CMD_ ## _field ## _OFST & 1);			\
 	*(__force __le16 *)MCDI_PTR(_buf, _field) = cpu_to_le16(_value);\
 	} while (0)
+#define MCDI_STRUCT_SET_WORD(_buf, _field, _value) do {			\
+	BUILD_BUG_ON(_field ## _LEN != 2);				\
+	BUILD_BUG_ON(_field ## _OFST & 1);				\
+	*(__force __le16 *)MCDI_STRUCT_PTR(_buf, _field) = cpu_to_le16(_value);\
+	} while (0)
 #define MCDI_WORD(_buf, _field)						\
 	((void)BUILD_BUG_ON_ZERO(MC_CMD_ ## _field ## _LEN != 2),	\
 	 le16_to_cpu(*(__force const __le16 *)MCDI_PTR(_buf, _field)))
@@ -334,7 +339,7 @@ static inline void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
 	 *(__force const __be32 *)MCDI_PTR(_buf, _field))
 /* Write a 32-bit field defined in the protocol as being big-endian. */
 #define MCDI_SET_DWORD_BE(_buf, _field, _value) do {			\
-	BUILD_BUG_ON(MC_CMD_ ## _field ## _LEN != 4);			\
+	BUILD_BUG_ON(MC_CMD_ ## _field ## _LEN < 4);			\
 	BUILD_BUG_ON(MC_CMD_ ## _field ## _OFST & 3);			\
 	*(__force __be32 *)MCDI_PTR(_buf, _field) = (_value);		\
 	} while (0)

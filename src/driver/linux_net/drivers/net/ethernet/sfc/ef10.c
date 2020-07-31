@@ -2849,6 +2849,9 @@ static int efx_ef10_tx_init(struct efx_tx_queue *tx_queue)
 	/* TSOv2 cannot be used with Hardware timestamping, and is never needed
 	 * for XDP tx. */
 	if (!tx_queue->timestamping && !tx_queue->xdp_tx &&
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+	    !efx_is_xsk_tx_queue(tx_queue) &&
+#endif
 	    efx_ef10_has_cap(nic_data->datapath_caps2, TX_TSO_V2)) {
 		tso_v2 = true;
 		netif_dbg(efx, hw, efx->net_dev, "Using TSOv2 for channel %u\n",

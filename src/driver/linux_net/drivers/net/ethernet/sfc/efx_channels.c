@@ -1921,7 +1921,6 @@ int efx_channel_start_xsk_queue(struct efx_channel *channel)
 		rx_queue->refill_enabled = true;
 		efx_fast_push_rx_descriptors(rx_queue, false);
 		efx_start_eventq(channel);
-
 	}
 
 	return 0;

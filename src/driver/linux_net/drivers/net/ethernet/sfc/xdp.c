@@ -531,8 +531,9 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_XDP_SOCK) && defined(EFX_HAVE_XSK_OFFSET_ADJUST)
 	if (channel->zc)
 		xdp.handle = xsk_umem_adjust_offset(rx_queue->umem, xdp.handle,
-						    0xe + xdp.data -
-						    xdp.data_hard_start);
+						    xdp.data -
+						    xdp.data_hard_start +
+						    efx->rx_prefix_size);
 #endif
 	xdp_ptr = &xdp;
 	switch (xdp_act) {

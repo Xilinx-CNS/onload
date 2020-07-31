@@ -468,6 +468,9 @@ struct efx_ptp_data {
 	struct efx_pps_data *pps_data;
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
+#if !defined(EFX_USE_KCOMPAT) || defined(PTP_PF_NONE)
+	struct ptp_pin_desc pin_config[1];
+#endif
 	bool nic_ts_enabled;
 #endif
 	_MCDI_DECLARE_BUF(txbuf, MC_CMD_PTP_IN_TRANSMIT_LENMAX);
@@ -529,8 +532,6 @@ static int efx_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 static int efx_phc_settime(struct ptp_clock_info *ptp,
 			   const struct timespec64 *e_ts);
-static int efx_phc_enable(struct ptp_clock_info *ptp,
-			  struct ptp_clock_request *request, int on);
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_64BIT_PHC)
 static int efx_phc_gettime32(struct ptp_clock_info *ptp, struct timespec *ts);
@@ -2624,12 +2625,54 @@ static void efx_ptp_destroy_pps(struct efx_ptp_data *ptp)
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
+static int efx_phc_enable(struct ptp_clock_info *ptp,
+			  struct ptp_clock_request *request,
+			  int enable)
+{
+	struct efx_ptp_data *ptp_data = container_of(ptp,
+						     struct efx_ptp_data,
+						     phc_clock_info);
+
+	switch (request->type) {
+#if !defined(EFX_USE_KCOMPAT) || defined(PTP_PF_NONE)
+	case PTP_CLK_REQ_EXTTS:
+		break;
+#endif
+	case PTP_CLK_REQ_PPS:
+		ptp_data->nic_ts_enabled = !!enable;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+	return 0;
+}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(PTP_PF_NONE)
+static int efx_phc_verify(struct ptp_clock_info *ptp, unsigned int pin,
+			  enum ptp_pin_function func, unsigned int chan)
+{
+	switch (func) {
+	case PTP_PF_NONE:
+	case PTP_PF_EXTTS:
+		break;
+	default:
+		return -1;
+	}
+	return 0;
+}
+#endif
+
 static const struct ptp_clock_info efx_phc_clock_info = {
 	.owner		= THIS_MODULE,
 	.name		= "sfc",
 	.max_adj	= MAX_PPB, /* unused, ptp_data->max_adjfreq used instead */
 	.n_alarm	= 0,
+#if !defined(EFX_USE_KCOMPAT) || defined(PTP_PF_NONE)
+	.n_ext_ts	= 1,
+	.n_pins		= 1,
+#else
 	.n_ext_ts	= 0,
+#endif
 	.n_per_out	= 0,
 	.pps		= 1,
 	.adjfreq	= efx_phc_adjfreq,
@@ -2642,6 +2685,9 @@ static const struct ptp_clock_info efx_phc_clock_info = {
 	.settime64	= efx_phc_settime,
 #endif
 	.enable		= efx_phc_enable,
+#if !defined(EFX_USE_KCOMPAT) || defined(PTP_PF_NONE)
+	.verify		= efx_phc_verify,
+#endif
 };
 #endif
 
@@ -2748,6 +2794,9 @@ static inline bool efx_phc_exposed(struct efx_nic *efx)
 int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel)
 {
 	struct efx_ptp_data *ptp;
+#if !defined(EFX_USE_KCOMPAT) || defined(PTP_PF_NONE)
+	struct ptp_pin_desc *ppd;
+#endif
 	int rc = 0;
 	unsigned int pos;
 
@@ -2834,6 +2883,13 @@ int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel)
 	if (efx_phc_exposed(efx)) {
 		ptp->phc_clock_info = efx_phc_clock_info;
 		ptp->phc_clock_info.max_adj = ptp->max_adjfreq;
+#if !defined(EFX_USE_KCOMPAT) || defined(PTP_PF_NONE)
+		ppd = &ptp->pin_config[0];
+		snprintf(ppd->name, sizeof(ppd->name), "pps0");
+		ppd->index = 0;
+		ppd->func = PTP_PF_NONE;
+		ptp->phc_clock_info.pin_config = ptp->pin_config;
+#endif
 		ptp->phc_clock = ptp_clock_register(&ptp->phc_clock_info,
 						    &efx->pci_dev->dev);
 		if (IS_ERR(ptp->phc_clock)) {
@@ -3779,8 +3835,6 @@ void efx_time_sync_event(struct efx_channel *channel, efx_qword_t *ev)
 	struct efx_nic *efx = channel->efx;
 	struct efx_ptp_data *ptp = efx->ptp_data;
 
-	// TODO test ptp null?
-
 	/* When extracting the sync timestamp minor value, we should discard
 	 * the least significant two bits. These are not required in order
 	 * to reconstruct full-range timestamps and they are optionally used
@@ -4003,20 +4057,6 @@ static int efx_phc_settime(struct ptp_clock_info *ptp,
 	if (rc != 0)
 		return rc;
 
-	return 0;
-}
-
-static int efx_phc_enable(struct ptp_clock_info *ptp,
-			  struct ptp_clock_request *request,
-			  int enable)
-{
-	struct efx_ptp_data *ptp_data = container_of(ptp,
-						     struct efx_ptp_data,
-						     phc_clock_info);
-	if (request->type != PTP_CLK_REQ_PPS)
-		return -EOPNOTSUPP;
-
-	ptp_data->nic_ts_enabled = !!enable;
 	return 0;
 }
 
