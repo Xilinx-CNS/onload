@@ -87,6 +87,7 @@ static void ci_udp_state_init(ci_netif* netif, ci_udp_state* us)
   oo_atomic_set(&us->tx_async_q_level, 0);
   us->tx_count = 0;
   us->udpflags = CI_UDPF_MCAST_LOOP;
+  us->future_intf_i = 0;
   us->ip_pktinfo_cache.intf_i = -1;
   us->stamp = 0;
   memset(&us->stats, 0, sizeof(us->stats));
