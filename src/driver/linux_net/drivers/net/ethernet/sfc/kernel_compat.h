@@ -1997,6 +1997,9 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 		({ vlan_gro_receive(_napi, _group, _tag, _skb);	\
 		   GRO_MERGED; })
 #endif
+#if defined(EFX_USE_GRO) && !defined(EFX_HAVE_NAPI_GRO_BITMASK)
+#define gro_bitmask	gro_list
+#endif
 
 #ifdef EFX_NEED_HEX_DUMP_CONST_FIX
 	#define print_hex_dump(v, s, t, r, g, b, l, a) \
@@ -2857,13 +2860,6 @@ struct EFX_HWMON_DEVICE_REGISTER_TYPE *hwmon_device_register_with_info(
 #define HWMON_T_ALARM	BIT(hwmon_temp_alarm)
 #endif
 #endif
-/* For RHEL 6 and 7 the above takes care of hwmon_device_register_with_info(),
- * but they are missing the read_string() API in struct hwmon_ops.
- */
-#if defined(HWMON_T_MIN) && (defined(EFX_HAVE_HWMON_READ_STRING) ||	\
-			     defined(EFX_HAVE_HWMON_READ_STRING_CONST))
-#define EFX_HAVE_HWMON_DEVICE_REGISTER_WITH_INFO
-#endif
 
 #if defined(EFX_HAVE_XDP_EXT)
 /* RHEL 7 adds the XDP related NDOs in the net_device_ops_extended area.
@@ -2998,10 +2994,6 @@ static inline __sum16 csum16_sub(__sum16 csum, __be16 addend)
 #ifdef EFX_HAVE_NEW_NDO_SETUP_TC
 #if defined(EFX_HAVE_TC_BLOCK_OFFLOAD) || defined(EFX_HAVE_FLOW_BLOCK_OFFLOAD)
 #define EFX_TC_OFFLOAD	yes
-/* Further features needed for conntrack offload */
-#if defined(EFX_HAVE_NF_FLOW_TABLE_OFFLOAD) && defined(EFX_HAVE_TC_ACT_CT)
-#define EFX_CONNTRACK_OFFLOAD	yes
-#endif
 #endif
 #endif
 
@@ -3049,21 +3041,6 @@ static inline void flow_rule_match_cvlan(const struct flow_rule *rule,
 
 	out->key = skb_flow_dissector_target(d, FLOW_DISSECTOR_KEY_CVLAN, m->key);
 	out->mask = skb_flow_dissector_target(d, FLOW_DISSECTOR_KEY_CVLAN, m->mask);
-}
-#endif
-#if defined(EFX_NEED_FLOW_RULE_MATCH_CT) && defined(EFX_CONNTRACK_OFFLOAD)
-#include <net/flow_offload.h>
-struct flow_match_ct {
-	struct flow_dissector_key_ct *key, *mask;
-};
-static inline void flow_rule_match_ct(const struct flow_rule *rule,
-				      struct flow_match_ct *out)
-{
-	const struct flow_match *m = &rule->match;
-	struct flow_dissector *d = m->dissector;
-
-	out->key = skb_flow_dissector_target(d, FLOW_DISSECTOR_KEY_CT, m->key);
-	out->mask = skb_flow_dissector_target(d, FLOW_DISSECTOR_KEY_CT, m->mask);
 }
 #endif
 #else /* EFX_HAVE_TC_FLOW_OFFLOAD */

@@ -663,9 +663,9 @@ static bool efx_alloc_buffer_zc(struct efx_rx_queue *rx_queue,
 				struct efx_rx_buffer *rx_buf, bool slow)
 {
 	struct xdp_umem *umem = rx_queue->umem;
-	bool alloc_failed = true;
 	u64 handle = 0;
 	u64 hr;
+	bool alloc_failed = true;
 
 	if (slow) {
 		if (!xsk_umem_peek_addr_rq(umem, &handle))
@@ -737,8 +737,8 @@ alloc_fail:
 static void efx_reuse_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 				   struct efx_rx_buffer *rx_buf_reuse)
 {
-	struct efx_nic *efx = rx_queue->efx;
 	struct efx_rx_buffer *rx_buf;
+	struct efx_nic *efx = rx_queue->efx;
 	unsigned int index;
 
 	index = rx_queue->added_count & rx_queue->ptr_mask;

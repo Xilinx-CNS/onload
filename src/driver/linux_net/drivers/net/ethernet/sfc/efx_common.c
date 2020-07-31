@@ -2037,19 +2037,15 @@ static struct efx_nic *efx_dl_device_priv(struct efx_dl_device *efx_dev)
 static int __efx_dl_publish(struct efx_dl_device *efx_dev)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
-	int rc = efx_net_alloc(efx);
 
-	if (rc)
-		efx_net_dealloc(efx);
-
-	return rc;
+	return efx->net_dev->netdev_ops->ndo_open(efx->net_dev);
 }
 
 static void __efx_dl_unpublish(struct efx_dl_device *efx_dev)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 
-	efx_net_dealloc(efx);
+	efx->net_dev->netdev_ops->ndo_stop(efx->net_dev);
 }
 
 static void __efx_dl_pause(struct efx_dl_device *efx_dev)

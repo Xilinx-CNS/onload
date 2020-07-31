@@ -233,7 +233,7 @@ static void efx_ef100_vfrep_destroy_netdev(struct efx_vfrep *efv)
 	free_netdev(efv->net_dev);
 }
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 static int efx_ef100_vfrep_tc_egdev_cb(enum tc_setup_type type, void *type_data,
 				       void *cb_priv)
 {
@@ -266,13 +266,14 @@ static int efx_ef100_configure_rep(struct efx_vfrep *efv)
 	WARN_ON(efv->vf_mport >> 16);
 	mutex_lock(&efx->tc->mutex);
 	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
-	if (!rc) {
-		rc = tc_setup_cb_egdev_register(efv->net_dev,
-						efx_ef100_vfrep_tc_egdev_cb, efv);
-		if (rc)
-			efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
-	}
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+	if (rc)
+		goto out;
+	rc = tc_setup_cb_egdev_register(efv->net_dev,
+					efx_ef100_vfrep_tc_egdev_cb, efv);
+	if (rc)
+		efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
+out:
 #endif
 	mutex_unlock(&efx->tc->mutex);
 	return rc;
@@ -283,7 +284,7 @@ static void efx_ef100_deconfigure_rep(struct efx_vfrep *efv)
 	struct efx_nic *efx = efv->parent;
 
 	mutex_lock(&efx->tc->mutex);
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	tc_setup_cb_egdev_unregister(efv->net_dev, efx_ef100_vfrep_tc_egdev_cb,
 				     efv);
 #endif

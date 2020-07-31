@@ -167,8 +167,8 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (channel->zc) {
-		data_cp_len = rx_buf->len + efx->rx_prefix_size;
-		alloc_len = data_cp_len;
+		alloc_len = rx_buf->len;
+		data_cp_len = rx_buf->len;
 	}
 #endif
 	/* Allocate an SKB to store the headers */
@@ -531,19 +531,19 @@ void __efx_rx_packet(struct efx_channel *channel)
 		/* fall through */
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_GRO)
-	if ((rx_buf->flags & EFX_RX_PKT_TCP) &&
-	    !channel->type->receive_skb
+		if ((rx_buf->flags & EFX_RX_PKT_TCP) &&
+		    !channel->type->receive_skb
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
-	    && !efx_channel_busy_polling(channel)
+		    && !efx_channel_busy_polling(channel)
 #endif
-	   ) {
-		efx_rx_packet_gro(channel, rx_buf,
-				  channel->rx_pkt_n_frags,
-				  eh, 0);
-	} else {
-		rx_deliver = true;
-		goto deliver_now;
-	}
+		   ) {
+			efx_rx_packet_gro(channel, rx_buf,
+					  channel->rx_pkt_n_frags,
+					  eh, 0);
+		} else {
+			rx_deliver = true;
+			goto deliver_now;
+		}
 #endif
 deliver_now:
 	if (rx_deliver)

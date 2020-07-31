@@ -90,7 +90,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.2.1.1032"
+#define EFX_DRIVER_VERSION	"5.2.1.1030"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -1102,7 +1102,6 @@ enum nic_state {
 	STATE_UNINIT = 0,	/* device being probed/removed */
 	STATE_PROBED,		/* hardware probed */
 	STATE_NET_DOWN,		/* netdev registered */
-	STATE_NET_ALLOCATED,	/* resources allocated but no traffic */
 	STATE_NET_UP,		/* ready for traffic */
 	STATE_DISABLED,		/* device disabled due to hardware errors */
 
@@ -1112,9 +1111,7 @@ enum nic_state {
 
 static inline bool efx_net_active(enum nic_state state)
 {
-	return state == STATE_NET_DOWN ||
-	       state == STATE_NET_UP ||
-	       state == STATE_NET_ALLOCATED;
+	return state == STATE_NET_DOWN || state == STATE_NET_UP;
 }
 
 static inline bool efx_frozen(enum nic_state state)
