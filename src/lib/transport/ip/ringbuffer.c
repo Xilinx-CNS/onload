@@ -100,7 +100,7 @@ void
 oo_ringbuffer_iterate(struct oo_ringbuffer* ring,
                       oo_ringbuffer_callback_t cb, void* arg)
 {
-  char data[1024] CI_ALIGN(8);
+  char data[512] CI_ALIGN(8);
   int data_len = sizeof(data) / ring->state->stride;
   int start = 0; /* appease gcc */
   int end;
