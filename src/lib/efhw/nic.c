@@ -230,13 +230,10 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		break;
 #ifdef EFHW_HAS_AF_XDP
 	case EFHW_ARCH_AF_XDP:
-		/* TODO AF_XDP fix these */
-		nic->q_sizes[EFHW_EVQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
-			8192 | 16384;
-		nic->q_sizes[EFHW_TXQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
-			8192 | 16384;
-		nic->q_sizes[EFHW_RXQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
-			8192 | 16384 ;
+		/* No restrictions on queue sizes */
+		nic->q_sizes[EFHW_EVQ] = ~0;
+		nic->q_sizes[EFHW_TXQ] = ~0;
+		nic->q_sizes[EFHW_RXQ] = ~0;
 		nic->num_evqs = 1;
 		nic->num_dmaqs = 1;
 		nic->num_timers = 0;
