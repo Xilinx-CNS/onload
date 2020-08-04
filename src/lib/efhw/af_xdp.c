@@ -505,6 +505,8 @@ static int xdp_create_rings(struct socket* sock,
   int rc, optlen;
   struct xdp_mmap_offsets mmap_offsets;
 
+  EFHW_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
+
   optlen = sizeof(mmap_offsets);
   rc = kernel_getsockopt(sock, SOL_XDP, XDP_MMAP_OFFSETS,
                          (char*)&mmap_offsets, &optlen);

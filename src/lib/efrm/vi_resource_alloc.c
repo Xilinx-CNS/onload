@@ -320,7 +320,7 @@ static uint32_t efrm_vi_rm_txq_bytes(struct efrm_vi *virs, int n_entries)
 	else if (nic->devtype.arch == EFHW_ARCH_EF100)
 		return n_entries * EF100_DMA_TX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
-		return n_entries * 8; /* TODO AF_XDP sizeof struct xdp_desc */
+		return n_entries * EFAB_AF_XDP_DESC_BYTES;
 	else {
 		EFRM_ASSERT(0);
 		return -EINVAL;
@@ -338,7 +338,7 @@ static uint32_t efrm_vi_rm_rxq_bytes(struct efrm_vi *virs, int n_entries)
 	else if (nic->devtype.arch == EFHW_ARCH_EF100)
 		bytes_per_desc = EF100_DMA_RX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
-		return n_entries * 8; /* TODO AF_XDP sizeof struct xdp_desc */
+		bytes_per_desc = EFAB_AF_XDP_DESC_BYTES;
 	else {
 		EFRM_ASSERT(0);	
 		return -EINVAL;
@@ -954,7 +954,7 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 	}
 
 	if (nic->devtype.arch == EFHW_ARCH_AF_XDP) {
-		/* AF_XDP interfaces have provide their own queue memory.
+		/* AF_XDP interfaces provide their own queue memory.
 		 * We will acquire it later, after initialising the packet
 		 * buffer memory.
 		 */

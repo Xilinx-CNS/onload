@@ -8,6 +8,8 @@
  * we use data structures which are shared between kernel and
  * userland. We define these here. */
 
+#define EFAB_AF_XDP_DESC_BYTES 16
+
 struct efab_af_xdp_offsets_ring
 {
   int64_t producer;
