@@ -1718,15 +1718,26 @@ error_out:
 static int deferred_vis(tcp_helper_resource_t* trs)
 {
   int rc, intf_i;
+  ci_netif* ni = &trs->netif;
 
-  if( trs->netif.flags & CI_NETIF_FLAG_AF_XDP ) {
+  if( ni->flags & CI_NETIF_FLAG_AF_XDP ) {
+    /* hugetlbfs pages are incompatible with AF_XDP */
+    if( NI_OPTS(ni).huge_pages != 0 ) {
+      NI_LOG(ni, RESOURCE_WARNINGS,
+             "[%s]: WARNING: huge pages are incompatible with AF_XDP. "
+             "Disabling hugepage support.",
+             ni->state->pretty_name);
+
+      NI_OPTS(ni).huge_pages = 0;
+    }
+
     /* All buffers need to be allocated before AF_XDP sockets are usable. */
     while( (rc = efab_tcp_helper_more_bufs(trs)) == 0 );
     if( rc != -ENOSPC )
       return rc;
   }
 
-  OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
     uint32_t mmap_bytes;
 
@@ -1743,13 +1754,13 @@ static int deferred_vis(tcp_helper_resource_t* trs)
     /* We used the info we were told - check that's consistent with what someone
      * else would get if they checked separately.
      */
-    ci_assert_equal(trs->netif.state->nic[intf_i].vi_io_mmap_bytes,
+    ci_assert_equal(ni->state->nic[intf_i].vi_io_mmap_bytes,
                     efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 0));
     ci_assert_equal(trs_nic->thn_vi_mmap_bytes,
                     efab_vi_resource_mmap_bytes(trs_nic->thn_vi_rs, 1));
   }
 
-  trs->netif.state->buf_mmap_bytes = trs->buf_mmap_bytes;
+  ni->state->buf_mmap_bytes = trs->buf_mmap_bytes;
   return 0;
 }
 

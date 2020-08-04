@@ -376,19 +376,34 @@ static int xdp_set_link(struct net_device* dev, struct bpf_prog* prog)
 }
 
 /* Fault handler to provide buffer memory pages for our user mapping */
-static vm_fault_t fault(struct vm_fault* vmf) {
+static vm_fault_t xdp_umem_fault(struct vm_fault* vmf) {
   struct umem_pages* pages = vmf->vma->vm_private_data;
-  long page = (vmf->address - vmf->vma->vm_start) >> PAGE_SHIFT;
+  struct page* page;
 
-  if( page >= pages->used_page_count )
+  if( vmf->pgoff >= pages->used_page_count )
     return VM_FAULT_SIGSEGV;
 
-  get_page(vmf->page = virt_to_page(umem_pages_get_addr(pages, page)));
+  page = virt_to_page(umem_pages_get_addr(pages, vmf->pgoff));
+
+  /* Linux page management assumes we won't provide individual pages from a
+   * hugetlbfs page, and goes wrong in bad ways if we do. Prevent that by
+   * returning an error here. Also raise a BUG() as this should never happen:
+   * onload should disable hugetlbfs support, and there is currently no other
+   * supported way to create an AF_XDP VI.
+   */
+  if( PageHuge(page) ) {
+    EFHW_ERR("%s: hubetlbfs pages are incompatible with AF_XDP", __FUNCTION__);
+    BUG();
+    return VM_FAULT_SIGSEGV;
+  }
+
+  get_page(page);
+  vmf->page = page;
   return 0;
 }
 
 static struct vm_operations_struct vm_ops = {
-  .fault = fault
+  .fault = xdp_umem_fault
 };
 
 /* Register user memory with an XDP socket */
