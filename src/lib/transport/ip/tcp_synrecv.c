@@ -942,6 +942,11 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
       ci_tcp_synrecv_free(netif, tsr);
     }
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    if( ci_tcp_is_pluginized(ts) )
+      ci_tcp_offload_get_stream_id(netif, ts, pkt->intf_i);
+#endif
+
     ci_bit_set(&ts->s.b.sb_aflags, CI_SB_AFLAG_TCP_IN_ACCEPTQ_BIT);
     ci_tcp_acceptq_put(netif, tls, &ts->s.b);
 

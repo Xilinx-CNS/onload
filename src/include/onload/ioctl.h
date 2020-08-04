@@ -231,6 +231,10 @@ enum {
   OO_OP_TCP_OFFLOAD_SET_ISN,
 #define OO_IOC_TCP_OFFLOAD_SET_ISN OO_IOC_W(TCP_OFFLOAD_SET_ISN, \
                                             ci_tcp_offload_set_isn_t)
+
+  OO_OP_TCP_OFFLOAD_GET_STREAM_ID,
+#define OO_IOC_TCP_OFFLOAD_GET_STREAM_ID OO_IOC_RW(TCP_OFFLOAD_GET_STREAM_ID, \
+                                            ci_tcp_offload_get_stream_id_t)
 #endif
 
 #if CI_CFG_UL_INTERRUPT_HELPER

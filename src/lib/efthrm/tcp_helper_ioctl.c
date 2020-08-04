@@ -1279,6 +1279,15 @@ static int efab_tcp_helper_tcp_offload_set_isn_rsop(ci_private_t* priv,
   ci_tcp_offload_set_isn_t *a = arg;
   return efab_tcp_helper_tcp_offload_set_isn(priv->thr, a->ep_id, a->isn);
 }
+
+
+static int efab_tcp_helper_tcp_offload_get_stream_id_rsop(ci_private_t* priv,
+                                                          void* arg)
+{
+  ci_tcp_offload_get_stream_id_t *a = arg;
+  return efab_tcp_helper_tcp_offload_get_stream_id(priv->thr, a->ep_id,
+                                                   a->intf_i, &a->stream_id);
+}
 #endif
 
 
@@ -1613,6 +1622,8 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_ZC_UNREGISTER_BUFFERS, efab_tcp_helper_zc_unregister_buffers_rsop),
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   op(OO_IOC_TCP_OFFLOAD_SET_ISN, efab_tcp_helper_tcp_offload_set_isn_rsop),
+  op(OO_IOC_TCP_OFFLOAD_GET_STREAM_ID,
+                               efab_tcp_helper_tcp_offload_get_stream_id_rsop),
 #endif
 
 #if CI_CFG_UL_INTERRUPT_HELPER

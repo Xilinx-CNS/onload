@@ -1517,6 +1517,9 @@ ci_tcp_sock_clear_stack_filter(ci_netif *ni, ci_tcp_state* ts);
 extern int /*bool*/ ci_tcp_is_cacheable_active_wild_sharer(ci_sock_cmn*);
 #endif
 
+extern int
+ci_tcp_offload_get_stream_id(ci_netif* ni, ci_tcp_state* ts, int intf_i);
+
 extern void ci_tcp_prev_seq_remember(ci_netif*, ci_tcp_state*);
 extern ci_uint32 ci_tcp_prev_seq_lookup(ci_netif*, const ci_tcp_state*);
 

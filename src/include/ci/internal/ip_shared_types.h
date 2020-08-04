@@ -2690,6 +2690,10 @@ struct ci_tcp_state_s {
 
   ci_uint8             incoming_tcp_hdr_len; /* expected TCP header length */
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_uint16            plugin_stream_id;
+#endif
+
   ci_uint32            congrecover; /* snd_nxt when loss detected         */
   oo_pkt_p             retrans_ptr; /* next packet to retransmit          */
   ci_uint32            retrans_seq; /* seq of next packet to retransmit   */

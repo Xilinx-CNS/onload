@@ -8278,6 +8278,24 @@ int efab_tcp_helper_tcp_offload_set_isn(tcp_helper_resource_t* trs,
 #endif
 }
 
+int efab_tcp_helper_tcp_offload_get_stream_id(tcp_helper_resource_t* trs,
+                                              oo_sp ep_id, ci_int32 intf_i,
+                                              ci_uint32* stream_id)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_netif* ni = &trs->netif;
+  tcp_helper_endpoint_t* tep_p = ci_trs_get_valid_ep(trs, ep_id);
+
+  if( intf_i < 0 || intf_i >= oo_stack_intf_max(ni) )
+    return -EINVAL;
+
+  *stream_id = tep_p->plugin_stream_id[intf_i];
+  return 0;
+#else
+  return -ENOTSUPP;
+#endif
+}
+
 static tcp_helper_resource_t*
 thr_ref2thr(oo_thr_ref_t ref)
 {

@@ -3363,6 +3363,11 @@ set_isn:
   }
 #endif
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  if( ci_tcp_is_pluginized(ts) )
+    ci_tcp_offload_get_stream_id(netif, ts, pkt->intf_i);
+#endif
+
   ci_tcp_set_established_state(netif, ts);
   CITP_STATS_NETIF(++netif->state->stats.active_opens);
 
