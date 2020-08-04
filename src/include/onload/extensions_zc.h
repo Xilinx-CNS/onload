@@ -432,17 +432,20 @@ extern int onload_recvmsg_kernel(int fd, struct msghdr *msg, int flags);
  * connection yet.
  */
 
+#define ONLOAD_MSG_DONTWAIT MSG_DONTWAIT
 #define ONLOAD_MSG_MORE MSG_MORE
 #define ONLOAD_MSG_NOSIGNAL MSG_NOSIGNAL
 
 /* Mask for supported flags */
 #define ONLOAD_ZC_SEND_FLAGS_MASK (ONLOAD_MSG_MORE | ONLOAD_MSG_NOSIGNAL | \
-                                   ONLOAD_MSG_WARM)
+                                   ONLOAD_MSG_WARM | ONLOAD_MSG_DONTWAIT)
 
 /* Subset of flags that are passed through to the kernel when
  * handling non-onloaded datagrams
  */ 
-#define ONLOAD_ZC_SEND_FLAGS_PTHRU_MASK (ONLOAD_MSG_MORE | ONLOAD_MSG_NOSIGNAL)
+#define ONLOAD_ZC_SEND_FLAGS_PTHRU_MASK (ONLOAD_MSG_MORE | \
+                                         ONLOAD_MSG_NOSIGNAL | \
+                                         ONLOAD_MSG_DONTWAIT)
 
 extern int onload_zc_send(struct onload_zc_mmsg* msgs, int mlen, int flags);
 
