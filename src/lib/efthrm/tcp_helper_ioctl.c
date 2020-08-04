@@ -600,8 +600,8 @@ efab_tcp_helper_pipe_attach(ci_private_t* priv, void *arg)
   if( rc < 0 ) {
     LOG_E(ci_log("%s: ERROR: failed to bind writer [%d:%d] to fd",
                  __func__, trs->id, ep->id));
+    tcp_helper_endpoint_set_aflags(ep, OO_THR_EP_AFLAG_PEER_CLOSED);
     efab_linux_sys_close(op->rfd);
-    efab_tcp_helper_close_endpoint(trs, ep->id, 0);
     return rc;
   }
   op->wfd = rc;
