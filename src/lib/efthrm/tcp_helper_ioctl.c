@@ -1272,12 +1272,14 @@ static int efab_tcp_helper_zc_unregister_buffers_rsop(ci_private_t* priv,
 }
 
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
 static int efab_tcp_helper_tcp_offload_set_isn_rsop(ci_private_t* priv,
                                                     void* arg)
 {
   ci_tcp_offload_set_isn_t *a = arg;
   return efab_tcp_helper_tcp_offload_set_isn(priv->thr, a->ep_id, a->isn);
 }
+#endif
 
 
 /* "Donation" shared memory ioctls. */
@@ -1609,7 +1611,9 @@ oo_operations_table_t oo_operations[] = {
 
   op(OO_IOC_ZC_REGISTER_BUFFERS, efab_tcp_helper_zc_register_buffers_rsop),
   op(OO_IOC_ZC_UNREGISTER_BUFFERS, efab_tcp_helper_zc_unregister_buffers_rsop),
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
   op(OO_IOC_TCP_OFFLOAD_SET_ISN, efab_tcp_helper_tcp_offload_set_isn_rsop),
+#endif
 
 #if CI_CFG_UL_INTERRUPT_HELPER
   op(OO_IOC_WAIT_FOR_INTERRUPT, oo_wait_for_interrupt),

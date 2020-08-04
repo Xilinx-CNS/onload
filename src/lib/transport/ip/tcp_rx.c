@@ -3338,6 +3338,7 @@ static void handle_rx_syn_sent(ci_netif* netif, ci_tcp_state* ts,
 set_isn:
   /* Snarf their initial sequence no. and window. */
   ci_tcp_rx_set_isn(ts, pkt->pf.tcp_rx.end_seq);
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
   if( ci_tcp_is_pluginized(ts) ) {
 #ifdef __KERNEL__
     if( in_atomic() ) {
@@ -3360,6 +3361,7 @@ set_isn:
                    OO_IOC_TCP_OFFLOAD_SET_ISN, &set);
 #endif
   }
+#endif
 
   ci_tcp_set_established_state(netif, ts);
   CITP_STATS_NETIF(++netif->state->stats.active_opens);
