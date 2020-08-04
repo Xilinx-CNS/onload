@@ -462,7 +462,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     goto fail1;
   }
 
-  /* TODO AF_XDP capacity might need furtling somewhere for AF_XDP */
   evq_capacity = ra.u.vi_out.evq_capacity;
   txq_capacity = ra.u.vi_out.txq_capacity;
   rxq_capacity = ra.u.vi_out.rxq_capacity;

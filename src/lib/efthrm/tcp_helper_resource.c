@@ -2817,7 +2817,6 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
         if( ~hwport_mask & cp_hwport_make_mask(hwport) )
           continue;
         onic = &oo_nics[hwport];
-        /* TODO allow non-SFC NICs with AF_XDP */
         if( onic->efrm_client != NULL &&
             /* VIs are created whether the interface is up, down or unplugged.
              * The latter results in "ghost VIs".  As a temporary workaround
