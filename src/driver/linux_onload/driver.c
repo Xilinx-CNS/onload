@@ -542,8 +542,6 @@ static int __init onload_module_init(void)
   if( rc != 0 )
     goto fail_ip_ctor;
 
-  oo_nondl_register();
-
   rc = ci_install_proc_entries();
   if( rc < 0 ) {
     ci_log("%s: ERROR: ci_install_proc_entries failed (%d)", __FUNCTION__, rc);
@@ -604,7 +602,6 @@ static int __init onload_module_init(void)
  failed_trampoline:
   ci_uninstall_proc_entries();
  fail_proc:
-  oo_nondl_unregister();
   /* Remove all NICs.
    * It is possible that efx_dl_register_driver() call was successful, so
    * we have to shut down all NICs even if oo_hooks_register() failed. */
@@ -647,7 +644,6 @@ static void onload_module_exit(void)
 
   /* Remove the rest of external interfaces to efab_tcp_driver. */
   ci_uninstall_proc_entries();
-  oo_nondl_unregister();
 
   /* Remove all NICs when hooks are gone. */
   oo_nic_shutdown();

@@ -44,7 +44,7 @@ static void efrm_nondl_try_add_device(struct efrm_nondl_device *device,
                 goto fail;
 
         if(handle->device->is_up)
-                handle->driver->start_device(handle);
+		efrm_notify_nic_probe(handle->device->netdev);
 
         list_add_tail(&handle->driver_node, &driver->handles);
         list_add_tail(&handle->device_node, &device->handles);
@@ -63,7 +63,7 @@ static void efrm_nondl_del_device(struct efrm_nondl_handle *handle)
 	ASSERT_RTNL();
 
         if(handle->device->is_up)
-                handle->driver->stop_device(handle);
+		efrm_notify_nic_remove(handle->device->netdev);
 
         handle->driver->unregister_device(handle);
 
@@ -204,7 +204,7 @@ static void efrm_nondl_device_up(struct efrm_nondl_device *device)
         BUG_ON(device->is_up);
 
 	list_for_each_entry(handle, &device->handles, device_node)
-                handle->driver->start_device(handle);
+		efrm_notify_nic_probe(handle->device->netdev);
 
         device->is_up = 1;
 }
@@ -218,7 +218,7 @@ static void efrm_nondl_device_down(struct efrm_nondl_device *device)
         BUG_ON(!device->is_up);
 
 	list_for_each_entry(handle, &device->handles, device_node)
-                handle->driver->stop_device(handle);
+		efrm_notify_nic_remove(handle->device->netdev);
 
         device->is_up = 0;
 }

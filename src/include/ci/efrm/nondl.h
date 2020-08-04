@@ -93,12 +93,6 @@ struct efrm_nondl_driver {
 
         /* A network device is being unregistered. */
         void (*unregister_device)(struct efrm_nondl_handle *);
-
-        /* A network device is starting. */
-        void (*start_device)(struct efrm_nondl_handle *);
-
-        /* A network device is stopping. */
-        void (*stop_device)(struct efrm_nondl_handle *);
 };
 
 /* Register a non-driverlink device client driver.

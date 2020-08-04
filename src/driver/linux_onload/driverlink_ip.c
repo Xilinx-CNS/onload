@@ -301,12 +301,17 @@ static int oo_nic_probe(const struct net_device* net_dev)
     onic = oo_netdev_may_add(net_dev);
     if( onic == NULL )
       return -1;
+    /* We get SFC NICs probed before the device is brought up, but for other
+     * NICs they're probed via sysfs in an arbitrary state, so might need to
+     * be notified as up now. */
+    else if( !oo_netdev_is_native(net_dev) && netif_running(net_dev) )
+      oo_netdev_up(net_dev);
   }
 
   return 0;
 }
 
-void oo_common_remove(const struct net_device* netdev)
+void oo_nic_remove(const struct net_device* netdev)
 {
   /* We need to fini all of the hardware queues immediately. The net driver
    * will tidy up its own queues and *all* VIs, so if we don't free our own
@@ -350,13 +355,8 @@ void oo_common_remove(const struct net_device* netdev)
   }
 }
 
-static void oo_nic_remove(const struct net_device* netdev)
-{
-  oo_common_remove(netdev);
-}
 
-
-static void oo_fixup_wakeup_breakage(struct net_device* dev)
+static void oo_fixup_wakeup_breakage(const struct net_device* dev)
 {
   /* This is needed after a hardware interface is brought up, and after an
    * MTU change.  When a netdev goes down, or the MTU is changed, the net
@@ -379,7 +379,7 @@ static void oo_fixup_wakeup_breakage(struct net_device* dev)
 }
 
 
-void oo_netdev_up(struct net_device* netdev)
+void oo_netdev_up(const struct net_device* netdev)
 {
   struct oo_nic *onic;
   struct efhw_nic* efhw_nic;
