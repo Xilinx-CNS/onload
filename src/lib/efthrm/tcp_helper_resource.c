@@ -2482,9 +2482,9 @@ create_plugin_app(tcp_helper_resource_t* trs)
                           trs->nic[intf_i].thn_vi_rs[CI_Q_ID_TCP_APP]->
                                   rs.rs_instance);
     bar_off += meta.mapped_csr_offset;
-    ni->nic_hw[intf_i].plugin_io = ioremap_nocache(nic->ctr_ap_dma_addr +
-                                                    (bar_off & PAGE_MASK),
-                                                    meta.mapped_csr_size);
+    ni->nic_hw[intf_i].plugin_io = ci_ioremap(nic->ctr_ap_dma_addr +
+                                              (bar_off & PAGE_MASK),
+                                              meta.mapped_csr_size);
     if( ! ni->nic_hw[intf_i].plugin_io ) {
       OO_DEBUG_ERR(ci_log("%s: Ceph app failed to map VI window (%d)",
                           __FUNCTION__, intf_i));
