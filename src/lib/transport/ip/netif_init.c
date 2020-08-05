@@ -2948,7 +2948,6 @@ static int __ci_netif_init_fill_rx_rings(ci_netif* ni)
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
     /* See ci_netif_rx_post_all_batch() for the description of what's going on
      * here */
-    ci_assert_equal(ci_netif_num_vis(ni), 3);
     ci_netif_ring_ceph_doorbell(ni, intf_i, n_posted);
 #endif
   }

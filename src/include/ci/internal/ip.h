@@ -2366,7 +2366,6 @@ ci_inline void ci_netif_rx_post_all_batch(ci_netif* netif, int nic_index)
   /* The VI owning the doorbell is always the last VI, so the loop above has
    * the effect of ignoring n_posted for all the others and only passing the
    * last one here. */
-  ci_assert_equal(num_vis, 3);
   ci_netif_ring_ceph_doorbell(netif, nic_index, n_posted);
 #endif
 }
