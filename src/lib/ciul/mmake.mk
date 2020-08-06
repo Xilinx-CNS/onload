@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: LGPL-2.1
+# SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
 ifeq ($(UNIX),1)
 # Order important for GNU make 3.82 unless MMAKE_NO_DEPS=1. SFC bug 27495.

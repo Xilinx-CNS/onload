@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 #ifndef __EFAB_INTERNAL_EVQ_RX_ITER_H__
 #define __EFAB_INTERNAL_EVQ_RX_ITER_H__

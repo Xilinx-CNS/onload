@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 #ifndef	EF10_HW_DEFS_H
 #define	EF10_HW_DEFS_H

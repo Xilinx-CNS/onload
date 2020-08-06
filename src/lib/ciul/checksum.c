@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: LGPL-2.1 */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 #ifdef __KERNEL__
 #include <linux/ip.h>
