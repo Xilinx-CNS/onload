@@ -368,6 +368,14 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
     ci_ni_dllist_link_init(alien_ni, &new_ts->epcache_fd_link, sp, "ecfd");
     ci_ni_dllist_self_link(alien_ni, &new_ts->epcache_fd_link);
 #endif
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    /* We banned pluginized sockets in efab_file_move_supported_tcp(), so only
+     * need to reinitialise here. */
+    sp = TS_OFF(alien_ni, new_ts);
+    OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, recycle_link));
+    ci_ni_dllist_link_init(alien_ni, &new_ts->recycle_link, sp, "eprc");
+    ci_ni_dllist_self_link(alien_ni, &new_ts->recycle_link);
+#endif
 
     /* free temporary mid_ts storage */
     CI_FREE_OBJ(mid_ts);

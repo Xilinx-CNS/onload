@@ -216,8 +216,12 @@ static void ci_tcp_state_tcb_reinit(ci_netif* netif, ci_tcp_state* ts,
   TS_IPX_TCP(ts)->tcp_flags = 0u;
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_ni_dllist_link_init(netif, &ts->recycle_link, TS_OFF(netif, ts), "eprc");
-  ci_ni_dllist_self_link(netif, &ts->recycle_link);
+  {
+    oo_p sp = TS_OFF(netif, ts);
+    OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, recycle_link));
+    ci_ni_dllist_link_init(netif, &ts->recycle_link, sp, "eprc");
+    ci_ni_dllist_self_link(netif, &ts->recycle_link);
+  }
 #endif
 
 #if CI_CFG_BURST_CONTROL
