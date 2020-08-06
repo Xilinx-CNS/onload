@@ -912,20 +912,26 @@ static int efrm_pd_check_pci_addr_alignment(struct efrm_pd *pd,
 					    int pci_addrs_stride, int n_pages,
 					    int *page_order)
 {
-	dma_addr_t pci_addr_or;
+	dma_addr_t prev = 0, pci_addr_or;
 	int pci_addr_ord;
 	int i;
+	dma_addr_t page_size;
 
+	page_size = PAGE_SIZE << compound_order(virt_to_page(virt_addr_0));
+	prev = *pci_addrs;
+	pci_addr_or = *pci_addrs;
+	/* Find and account for any discontinuities in the linearity: */
+   	for (i = 1; i < n_pages; i++) {
+		if (*pci_addrs != prev + page_size)
+			pci_addr_or |= (prev + page_size) | *pci_addrs;
+		prev = *pci_addrs;
+		pci_addrs = (void*)((char*)pci_addrs + pci_addrs_stride);
+	}
 	/* Additionally mix in a 'fake' end address, to account for the
 	 * possibility that the base address is over-aligned, i.e. if the base
 	 * happens to be aligned to order 42 then we still don't want to report
 	 * that the order is greater than the total memory size requested. */
-	pci_addr_or = *pci_addrs + n_pages *
-	              (PAGE_SIZE << compound_order(virt_to_page(virt_addr_0)));
-	for (i = 0; i < n_pages; i++) {
-		pci_addr_or |= *pci_addrs;
-		pci_addrs = (void*)((char*)pci_addrs + pci_addrs_stride);
-	}
+	pci_addr_or |= prev + page_size;
 	EFRM_ASSERT((pci_addr_or & (EFHW_NIC_PAGE_SIZE - 1)) == 0);
 	pci_addr_ord = __ffs(pci_addr_or >> EFHW_NIC_PAGE_SHIFT);
 	if (page_order)
