@@ -168,7 +168,7 @@ static int parse_opts(int argc, char*argv[])
 {
   int c;
 
-  while( (c = getopt(argc, argv, "n:m:s:l:c:b")) != -1 )
+  while( (c = getopt(argc, argv, "n:m:s:l:cb")) != -1 )
     switch( c ) {
     case 'n':
       cfg_iter = atoi(optarg);
