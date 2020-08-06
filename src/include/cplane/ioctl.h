@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR Solarflare-Binary */
+/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 /* This file contains description of the Onload ioctls used by the Control
  * Plane server.  Any change in this file is likely to result in

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Solarflare-Binary
+# SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
 
 # please restrict this file to [REPO]_VERSION=[VERSION] and # comments

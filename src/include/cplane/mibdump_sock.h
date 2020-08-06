@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Solarflare-Binary */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 /* This header describes the interface between the open source parts
  * of Onload and the binary-only control plane server.

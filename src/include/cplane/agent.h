@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Solarflare-Binary */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 #ifndef __ONLOAD_CPLANE_AGENT_H__
 #define __ONLOAD_CPLANE_AGENT_H__

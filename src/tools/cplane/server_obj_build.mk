@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Solarflare-Binary
+# SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
 
 # These object files are built into both the control plane server and the unit

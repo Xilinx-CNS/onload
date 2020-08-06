@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: Solarflare-Binary */
+/* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 /* Cplane state machine to dump all MIB tables from OS to internal and
  * shared states. */

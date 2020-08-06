@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0 OR Solarflare-Binary
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
 TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_extra.h
 include $(BUILD)/config.mk

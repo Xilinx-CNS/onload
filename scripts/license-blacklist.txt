@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Solarflare-Binary
+# SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
 # This is a blacklist file for use with license-validate.py
 # Currently, it is only correct for the contents of tarball output by

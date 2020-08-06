@@ -36,8 +36,6 @@ _known_licences = set((
     'GPL-2.0-or-later',
     '(LGPL-2.1 OR BSD-2-Clause)',
     'GPL-2.0 WITH Linux-syscall-note',
-    'Solarflare-Binary',
-    'GPL-2.0 OR Solarflare-Binary',
     'BSD-2-Clause',
     'BSD-3-Clause',
     'LGPL-2.1',

@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0 OR Solarflare-Binary
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
 GNU	    := 1
 MMAKE_CTUNE ?= -msse -march=core2 -mtune=native

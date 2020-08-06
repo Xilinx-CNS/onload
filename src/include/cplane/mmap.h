@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 OR Solarflare-Binary */
+/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 #ifndef __CPLANE_MMAP_H__
 #define __CPLANE_MMAP_H__

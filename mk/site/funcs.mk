@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: GPL-2.0 OR Solarflare-Binary
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
 
 # GetTransportConfigOpt is a function to return the value of a variable in
