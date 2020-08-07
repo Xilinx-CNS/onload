@@ -175,15 +175,23 @@
                (file), (line)));                                \
   } while (0)
 
+/* Make 'x' a 64-bit integer for printing it, in a way that doesn't truncate
+ * values and doesn't produce -Wpointer-to-int-cast warnings on 32-bit
+ * platforms. The mad ternary is to make it work for both void* and
+ * bitfields. */
+# define _ci_force_to_u64(x) \
+    ((ci_uint64)__builtin_choose_expr(sizeof(1 ? (x) : 0) > 4, \
+                                      (x), (ci_uintptr_t)(x)))
+
 /* NB Split one ci_fail() into ci_log+ci_log+ci_fail.  With one ci_fail
  * and long expression, we can get truncated output */
 # define _ci_assert2(e, x, y, file, line)  do {     \
     if(CI_UNLIKELY( ! (e) )) {                      \
       ci_log("ci_assert(%s)", #e);                  \
       ci_log("where [%s=%"CI_PRIx64"]",             \
-             #x, (ci_uint64)(ci_uintptr_t)(x));     \
+             #x, _ci_force_to_u64((x)));            \
       ci_log("and [%s=%"CI_PRIx64"]",               \
-             #y, (ci_uint64)(ci_uintptr_t)(y));     \
+             #y, _ci_force_to_u64((y)));            \
       ci_log("at %s:%d", __FILE__, __LINE__);       \
       ci_fail(("from %s:%d", (file), (line)));      \
     }                                               \
@@ -230,8 +238,8 @@
       ci_fail(("ci_assert_equal_msg(%s == %s) were "            \
                "(%"CI_PRIx64":%"CI_PRIx64") with msg[%c%c%c%c]" \
                _CI_ASSERT_FMT, #exp1, #exp2,                    \
-               (ci_uint64)(ci_uintptr_t)(exp1),                 \
-               (ci_uint64)(ci_uintptr_t)(exp2),                 \
+               _ci_force_to_u64((exp1)),                        \
+               _ci_force_to_u64((exp2)),                        \
                (((ci_uint32)msg) >> 24) && 0xff,                \
                (((ci_uint32)msg) >> 16) && 0xff,                \
                (((ci_uint32)msg) >> 8 ) && 0xff,                \
