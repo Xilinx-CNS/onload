@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2014-2019 Xilinx, Inc. */
 /**************************************************************************\
 *//*! \file epoll_common.c
 ** <L5_PRIVATE L5_HEADER >

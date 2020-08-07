@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019 Xilinx, Inc. */
 /* Defines the macros for ni_dllists that parameterise the idllist template.
  * Since idllist.h.tmpl undefines all of these macros when it is finished, this
  * file is written in such a way that it may be included multiple times, with

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2008-2020 Xilinx, Inc. */
 #include <ci/efrm/nic_table.h>
 #include <ci/driver/efab/hardware.h>
 #include <ci/efrm/private.h>

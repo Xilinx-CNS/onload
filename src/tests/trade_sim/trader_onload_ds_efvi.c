@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2015-2019 Xilinx, Inc. */
 /* trader_onload_ds_efvi
  *
  * Copyright 2015-2019 Solarflare Communications Inc.

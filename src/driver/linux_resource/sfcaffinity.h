@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2008-2020 Xilinx, Inc. */
 
 #ifndef LINUX_RESOURCE_SFCAFFINITY_H
 #define LINUX_RESOURCE_SFCAFFINITY_H

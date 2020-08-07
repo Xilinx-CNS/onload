@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2016-2020 Xilinx, Inc. */
 /* Cplane related functions which are part of Onload */
 #ifndef __ONLOAD_CPLANE_OPS_H__
 #define __ONLOAD_CPLANE_OPS_H__

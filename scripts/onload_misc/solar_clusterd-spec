@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2013-2019 Xilinx, Inc.
 # To build a solar_clusterd source RPM:
 # Replace version below with appropriate Onload tag
 # - onload_dev/scripts/onload_mkdist <options>

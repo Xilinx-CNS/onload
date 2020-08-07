@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2004-2020 Xilinx, Inc.
 ifndef KPATH
 $(shell echo >&2 "KPATH is not set.")
 $(error KPATH is not set.)

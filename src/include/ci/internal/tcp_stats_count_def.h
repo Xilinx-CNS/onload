@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2018-2020 Xilinx, Inc. */
 
 OO_STAT("Number of times TCP connections have made a direct "
         "transition to the SYN-SENT state from the CLOSED state.",

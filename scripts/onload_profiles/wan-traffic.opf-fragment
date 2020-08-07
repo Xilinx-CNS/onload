@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2018-2019 Xilinx, Inc.
 #
 # Tuning profile for environments involving TCP traffic travelling over
 # unreliable or high-latency networks, such as the public Internet.

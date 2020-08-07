@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2008-2020 Xilinx, Inc. */
 #ifndef __EFRM_INTERNAL_H__
 #define __EFRM_INTERNAL_H__
 

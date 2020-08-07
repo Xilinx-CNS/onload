@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017-2020 Xilinx, Inc. */
 /* In-kernel support for UL Control Plane */
 #include <ci/compat.h>
 #include <ci/tools.h>

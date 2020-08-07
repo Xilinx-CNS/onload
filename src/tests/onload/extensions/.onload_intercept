@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2015-2019 Xilinx, Inc.
 set protocol 1
 set default 1
 name T1 E1_%

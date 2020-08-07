@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc. */
 #include <ci/efrm/private.h>
 #include <ci/efrm/slice_ext.h>
 #include <ci/driver/resource/linux_efhw_nic.h>

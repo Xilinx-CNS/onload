@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
 /* worker functions for kubernetes service DNAT operations on cplane server and
  * clients.
  */

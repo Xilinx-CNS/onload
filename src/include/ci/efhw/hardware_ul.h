@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2007-2019 Xilinx, Inc. */
 
 #ifndef __CI_EFHW_HARDWARE_UL_H__
 #define __CI_EFHW_HARDWARE_UL_H__

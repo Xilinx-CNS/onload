@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2019 Xilinx, Inc.
 
 # In case of cold restart make sure previous instance (of the same name) has
 # ceased to exist

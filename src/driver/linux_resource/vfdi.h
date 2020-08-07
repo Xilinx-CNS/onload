@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2010-2019 Xilinx, Inc. */
 /****************************************************************************
  * Driver for Solarflare Solarstorm network controllers and boards
  * Copyright 2010-2011 Solarflare Communications Inc.

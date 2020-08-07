@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017-2020 Xilinx, Inc. */
 /* Cplane state machine to dump all MIB tables from OS to internal and
  * shared states. */
 

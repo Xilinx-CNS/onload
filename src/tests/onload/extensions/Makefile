@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2015-2019 Xilinx, Inc.
 TARGETS		:= libpthread_intercept.so.1.0.0.1 \
 				onload_fd_stat \
 				onload_is_present \

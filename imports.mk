@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2009-2020 Xilinx, Inc.
 
 # please restrict this file to [REPO]_VERSION=[VERSION] and # comments
 

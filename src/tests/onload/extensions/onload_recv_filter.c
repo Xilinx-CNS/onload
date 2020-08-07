@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2018-2019 Xilinx, Inc. */
 /*
  * Build the file using the following command:
  *   $ gcc -oonload_recv_filter -lonload_ext onload_recv_filter.c

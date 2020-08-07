@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc. */
 /* This file implements Onload's sysfs hierarchy.
  * Currently only for non-driverlink devices and specifically
  * AF_XDP ones */

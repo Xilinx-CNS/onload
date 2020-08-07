@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2004-2020 Xilinx, Inc.
 APPS	:= onload_stackdump \
            onload_tcpdump.bin \
            onload_fuser

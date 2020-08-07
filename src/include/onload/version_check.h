@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019 Xilinx, Inc. */
 /* Implementation of the oo_version_check_impl() function. This is not a
  * normal header - it should only be included by the files that implement the
  * wrapper of this function, namely tcp_helper_resource.c */

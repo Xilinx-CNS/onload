@@ -1,5 +1,5 @@
 .. SPDX-License-Identifier: BSD-2-Clause
-.. X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+.. X-SPDX-Copyright-Text: (c) Copyright 2016-2019 Xilinx, Inc.
 This is an example of how to gather Onload stack statistics using collectd.
 Other configurations of Onload Remote Monitor with/without collectd are
 possible.

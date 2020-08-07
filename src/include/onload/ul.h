@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2007-2020 Xilinx, Inc. */
 /*! \cidoxg_include_onload */
 
 #ifndef __ONLOAD_UL_H__

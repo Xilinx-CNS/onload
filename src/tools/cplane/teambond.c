@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017-2020 Xilinx, Inc. */
 /* This file contains bond MIB update functions.  This file does not
  * contain the code which receives such updates from OS (netlink, read from
  * /proc, etc). */

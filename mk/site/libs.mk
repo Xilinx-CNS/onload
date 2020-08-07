@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2005-2020 Xilinx, Inc.
 
 # Major: Increment when making a change that is not backwards compatible.
 ONLOAD_EXT_VERSION_MAJOR := 2

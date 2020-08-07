@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2005-2020 Xilinx, Inc. */
 /**************************************************************************\
 *//*! \file ip_driver.c OS interface to the IP module
 ** <L5_PRIVATE L5_SOURCE>

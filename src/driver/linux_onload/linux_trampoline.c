@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2005-2020 Xilinx, Inc. */
 /**************************************************************************\
 *//*! \file linux_trampoline.c System call trampolines for Linux - common to all architectures
 ** <L5_PRIVATE L5_SOURCE>

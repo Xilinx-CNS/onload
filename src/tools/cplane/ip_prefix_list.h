@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017-2020 Xilinx, Inc. */
 #ifndef __TOOLS_CPLANE_IP_PREFIX_LIST_H__
 #define __TOOLS_CPLANE_IP_PREFIX_LIST_H__
 

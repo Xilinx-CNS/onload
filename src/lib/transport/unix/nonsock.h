@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2014-2019 Xilinx, Inc. */
 #ifndef __UNIX_NONSOCK_H__
 #define __UNIX_NONSOCK_H__
 #include <ci/internal/transport_config_opt.h>

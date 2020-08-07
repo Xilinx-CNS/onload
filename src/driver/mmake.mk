@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2002-2020 Xilinx, Inc.
 # For linux_net/util
 ifeq ($(LINUX),1)
 SUBDIRS         += linux_net

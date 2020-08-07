@@ -1,7 +1,7 @@
 #! /bin/sh -e
 
 # SPDX-License-Identifier: GPL-2.0
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc.
 
 my_dir=$(cd $(dirname "$0") && pwd)
 top_dir=$(dirname "${my_dir}")

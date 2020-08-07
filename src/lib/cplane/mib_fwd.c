@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
 /* mib worker functions for fwd operations in the server.
  * i.e. these functions should not assume that the fwd_table required is in the
  * mib.

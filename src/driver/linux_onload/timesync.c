@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2015-2020 Xilinx, Inc. */
 #include <driver/linux_onload/onload_kernel_compat.h>
 
 #include <onload/debug.h>

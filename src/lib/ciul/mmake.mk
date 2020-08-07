@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2003-2020 Xilinx, Inc.
 ifeq ($(UNIX),1)
 # Order important for GNU make 3.82 unless MMAKE_NO_DEPS=1. SFC bug 27495.
 TARGETS		:= $(EFVI_LIB) $(CIUL_LIB)

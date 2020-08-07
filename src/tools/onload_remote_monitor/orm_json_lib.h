@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc. */
 
 /* flags to control which info gets output */
 #define ORM_OUTPUT_NONE 0

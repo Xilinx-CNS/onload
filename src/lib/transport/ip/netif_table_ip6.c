@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2018-2020 Xilinx, Inc. */
 #include <ci/internal/transport_config_opt.h>
 #include "ip_internal.h"
 #include <onload/hash.h>

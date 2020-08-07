@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2015-2020 Xilinx, Inc.
 GNU := 1
 
 #Following is how we optimised for PPC64 BE, which I doubt is optimal here,

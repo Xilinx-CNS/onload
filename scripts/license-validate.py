@@ -1,6 +1,6 @@
 #!/usr/bin/python2
 # SPDX-License-Identifier: Solarflare-Binary
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc.
 from __future__ import print_function
 import sys, os, os.path, re, argparse, urlparse, collections, fnmatch
 

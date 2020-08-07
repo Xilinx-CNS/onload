@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
 #ifdef __KERNEL__
   #define LOG_PRINT(...) logger(log_arg, __VA_ARGS__ )
 #else

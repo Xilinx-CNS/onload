@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2014-2019 Xilinx, Inc. */
 /* Example application to demonstrate use of wire order delivery API.
  *
  * This is an echo server where it echoes back whatever is received on

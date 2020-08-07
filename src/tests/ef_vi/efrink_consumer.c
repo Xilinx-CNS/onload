@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
 /* efrink_consumer
  *
  * Comsume packets from a shared memory ring (which is being managed via

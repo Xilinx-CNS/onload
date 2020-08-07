@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2013-2019 Xilinx, Inc. */
 /*
  * Build the file using the following command:
  *   $ gcc -oonload_is_present -lonload_ext onload_is_present.c

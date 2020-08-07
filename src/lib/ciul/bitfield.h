@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2012-2020 Xilinx, Inc. */
 
 #ifndef __CI_COMPAT_BITFIELD_H__
 #define __CI_COMPAT_BITFIELD_H__

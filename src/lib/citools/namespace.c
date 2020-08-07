@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017-2019 Xilinx, Inc. */
 #ifndef __KERNEL__
 
 #define _GNU_SOURCE

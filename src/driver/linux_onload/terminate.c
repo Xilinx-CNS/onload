@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2011-2020 Xilinx, Inc. */
 /**************************************************************************\
 *//*! \file terminate.c exit_group() syscall substitution.
 ** <L5_PRIVATE L5_SOURCE>

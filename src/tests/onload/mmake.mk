@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2002-2020 Xilinx, Inc.
 SUBDIRS	:= wire_order tproxy_preload hwtimestamping \
            sync_preload l3xudp_preload
 

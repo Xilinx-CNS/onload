@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2006-2020 Xilinx, Inc. */
 #include <internal.h>
 
 /* Trampoline support on PPC is in progress. See bug31834 for details */

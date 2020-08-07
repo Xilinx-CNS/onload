@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2016-2020 Xilinx, Inc. */
 /* efsend_timestamping
  *
  * Sample app that sends UDP packets on a specified interface.

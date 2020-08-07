@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2014-2019 Xilinx, Inc. */
 /* efsink_packed
  *
  * Receive packets using "packed stream" mode.

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2013-2019 Xilinx, Inc. */
 /*
 gcc -lonload_ext -o onload_move_fd -I /home/rad/onload_dev/src/include -L /home/rad/onload_dev/build/gnu_x86_64/lib/onload_ext/ -Wl,-E,-rpath=/home/rad/onload_dev/build/gnu_x86_64/lib/onload_ext/ onload_move_fd.c
 

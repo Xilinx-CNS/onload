@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019 Xilinx, Inc. */
 
 #ifndef __OOF_NAT_H__
 #define __OOF_NAT_H__

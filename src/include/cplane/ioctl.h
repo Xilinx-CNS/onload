@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017-2020 Xilinx, Inc. */
 /* This file contains description of the Onload ioctls used by the Control
  * Plane server.  Any change in this file is likely to result in
  * misfunctioning cplane server. */

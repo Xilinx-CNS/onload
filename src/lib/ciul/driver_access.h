@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2012-2020 Xilinx, Inc. */
 
 #ifndef __DRIVER_ACCESS_H__
 #define __DRIVER_ACCESS_H__

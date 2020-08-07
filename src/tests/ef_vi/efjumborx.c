@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017-2019 Xilinx, Inc. */
 #include <etherfabric/vi.h>
 #include <etherfabric/pd.h>
 #include <etherfabric/memreg.h>

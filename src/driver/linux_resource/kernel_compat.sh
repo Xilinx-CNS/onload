@@ -1,6 +1,6 @@
 #!/bin/bash -eu
 # SPDX-License-Identifier: GPL-2.0
-# X-SPDX-Copyright-Text: (c) Solarflare Communications Inc
+# X-SPDX-Copyright-Text: (c) Copyright 2013-2020 Xilinx, Inc.
 ######################################################################
 
 me=$(basename "$0")

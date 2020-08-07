@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2013-2019 Xilinx, Inc. */
 #include "efch.h"
 #include <ci/efch/op_types.h>
 #include <ci/efhw/efhw_types.h>

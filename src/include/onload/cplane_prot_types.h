@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017-2019 Xilinx, Inc. */
 /* Data types for cppl subsystem - driver only */
 #ifndef __CPLANE_PROT_TYPES_H__
 #define __CPLANE_PROT_TYPES_H__

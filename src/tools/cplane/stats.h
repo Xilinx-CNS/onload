@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2018-2020 Xilinx, Inc. */
 
 CP_STAT_GROUP_START("NLMSG_ERROR messsages", nlmsg_error)
 CP_STAT("Expected error (ENODEV) for RTM_GETLINK", int, link_nodev)

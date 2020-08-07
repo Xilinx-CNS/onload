@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019 Xilinx, Inc. */
 
 /* This file implements the handling for the data structure that OOF uses to
  * track NAT configuration.  The rest of OOF can query this in order to

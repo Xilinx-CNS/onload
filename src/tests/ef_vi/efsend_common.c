@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2016-2020 Xilinx, Inc. */
 /* Function definitions common to apps in the efsend suite.
  *
  * CUSTOMER NOTE: This code  is not intended to be used outside of the efsend

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2007-2019 Xilinx, Inc. */
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/efrm/efrm_nic.h>
 #include <ci/efrm/efrm_client.h>

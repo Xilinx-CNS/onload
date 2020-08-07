@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2018-2019 Xilinx, Inc. */
 OO_STAT("Number of SYN/ACKs sent with ISN chosen according to SYN "
         "cookie technique.",
         CI_IP_STATS_TYPE, syncookies_sent, count)

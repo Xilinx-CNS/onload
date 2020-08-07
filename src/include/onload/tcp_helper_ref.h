@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc. */
 #ifndef __ONLOAD_TCP_HELPER_REF_H__
 #define __ONLOAD_TCP_HELPER_REF_H__
 

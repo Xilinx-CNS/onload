@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2018-2020 Xilinx, Inc. */
 #ifndef __CI_NET_IPVX_H__
 #define __CI_NET_IPVX_H__
 

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* X-SPDX-Copyright-Text: (c) Copyright 2011-2019 Xilinx, Inc. */
 /* efrss
  *
  * Receive packets on an interface spreading load over multiple VIs/threads.
