@@ -232,7 +232,7 @@ int efx_mae_get_caps(struct efx_nic *efx, struct mae_caps *caps)
 	if (rc)
 		return rc;
 	return efx_mae_get_rule_fields(efx, MC_CMD_MAE_GET_OUTER_RULE_FIELD_CAPS,
-				       caps->encap_rule_fields);
+				       caps->outer_rule_fields);
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
@@ -335,11 +335,42 @@ static int efx_mae_match_check_cap_typ(u8 support, enum mask_type typ)
 		return rc;						       \
 	}								       \
 } while (0)
+#define UNSUPPORTED(_field)						       \
+if (classify_mask((const u8 *)&mask->_field,				       \
+		  sizeof(mask->_field)) != MASK_ZEROES) {		       \
+	netif_err(efx, drv, efx->net_dev, "No support for field %s\n", #_field);\
+	NL_SET_ERR_MSG_MOD(extack, "Unsupported match field " #_field);	       \
+	return -EOPNOTSUPP;						       \
+}
+/* Bitfield members need special handling.  For now we only have 1-bit fields */
+#define CHECK_BIT(_mcdi, _field)	do {				       \
+	enum mask_type typ = mask->_field ? MASK_ONES : MASK_ZEROES;	       \
+									       \
+	rc = efx_mae_match_check_cap_typ(supported_fields[MAE_FIELD_ ## _mcdi],\
+					 typ);				       \
+	if (rc) {							       \
+		netif_err(efx, drv, efx->net_dev,			       \
+			  "No support for %s mask in field %s\n",	       \
+			  mask_type_name(typ), #_field);		       \
+		if (typ == MASK_ONES)					       \
+			NL_SET_ERR_MSG_MOD(extack, "Unsupported match field " #_field);\
+		else							       \
+			NL_SET_ERR_MSG_MOD(extack, "Unsupported mask type for " #_field);\
+		return rc;						       \
+	}								       \
+} while (0)
+#define UNSUPPORTED_BIT(_field)						       \
+if (mask->_field) {							       \
+	netif_err(efx, drv, efx->net_dev, "No support for field %s\n", #_field);\
+	NL_SET_ERR_MSG_MOD(extack, "Unsupported match field " #_field);	       \
+	return -EOPNOTSUPP;						       \
+}
+
 int efx_mae_match_check_caps(struct efx_nic *efx,
 			     const struct efx_tc_match_fields *mask,
 			     struct netlink_ext_ack *extack)
 {
-	u8 *supported_fields = efx->tc->caps->action_rule_fields;
+	const u8 *supported_fields = efx->tc->caps->action_rule_fields;
 	__be32 ingress_port = cpu_to_be32(mask->ingress_port);
 	enum mask_type ingress_port_mask_type;
 	int rc;
@@ -390,9 +421,68 @@ int efx_mae_match_check_caps(struct efx_nic *efx,
 		NL_SET_ERR_MSG_MOD(extack, "Match on enc_keyid requires other encap fields");
 		return -EINVAL;
 	}
+	CHECK_BIT(DO_CT, ct_state_trk);
+	CHECK_BIT(CT_HIT, ct_state_est);
+	UNSUPPORTED_BIT(ct_state_new);
+	UNSUPPORTED_BIT(ct_state_rel);
+	CHECK(CT_MARK, ct_mark);
+	CHECK(RECIRC_ID, recirc_id);
+	return 0;
+}
+
+int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
+				 const struct efx_tc_match_fields *mask,
+				 struct netlink_ext_ack *extack)
+{
+	const u8 *supported_fields = efx->tc->caps->outer_rule_fields;
+	__be32 ingress_port = cpu_to_be32(mask->ingress_port);
+	enum mask_type ingress_port_mask_type;
+	int rc;
+
+	/* Check for _PREFIX assumes big-endian, so we need to convert */
+	ingress_port_mask_type = classify_mask((const u8 *)&ingress_port,
+					       sizeof(ingress_port));
+	rc = efx_mae_match_check_cap_typ(supported_fields[MAE_FIELD_INGRESS_PORT],
+					 ingress_port_mask_type);
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "No support for %s mask in field %s\n",
+			  mask_type_name(ingress_port_mask_type), "ingress_port");
+		NL_SET_ERR_MSG_MOD(extack, "Unsupported mask type for ingress_port");
+		return rc;
+	}
+	CHECK(ENC_ETHER_TYPE, eth_proto);
+	CHECK(ENC_VLAN0_TCI, vlan_tci[0]);
+	CHECK(ENC_VLAN0_PROTO, vlan_proto[0]);
+	CHECK(ENC_VLAN1_TCI, vlan_tci[1]);
+	CHECK(ENC_VLAN1_PROTO, vlan_proto[1]);
+	CHECK(ENC_ETH_SADDR, eth_saddr);
+	CHECK(ENC_ETH_DADDR, eth_daddr);
+	CHECK(ENC_IP_PROTO, ip_proto);
+	CHECK(ENC_IP_TOS, ip_tos);
+	CHECK(ENC_IP_TTL, ip_ttl);
+	CHECK(ENC_SRC_IP4, src_ip);
+	CHECK(ENC_DST_IP4, dst_ip);
+	CHECK(ENC_SRC_IP6, src_ip6);
+	CHECK(ENC_DST_IP6, dst_ip6);
+	CHECK(ENC_L4_SPORT, l4_sport);
+	CHECK(ENC_L4_DPORT, l4_dport);
+	UNSUPPORTED(tcp_flags);
+	if (efx_tc_match_is_encap(mask) || mask->enc_keyid) {
+		NL_SET_ERR_MSG_MOD(extack, "No support for encap matches in LHS rules");
+		return -EOPNOTSUPP;
+	}
+	/* Can't filter on conntrack in LHS rules */
+	UNSUPPORTED_BIT(ct_state_trk);
+	UNSUPPORTED_BIT(ct_state_est);
+	UNSUPPORTED_BIT(ct_state_new);
+	UNSUPPORTED_BIT(ct_state_rel);
+	UNSUPPORTED(ct_mark);
+	UNSUPPORTED(recirc_id);
 	return 0;
 }
 #undef CHECK
+#undef UNSUPPORTED
 
 #define CHECK(_mcdi) do {						       \
 	rc = efx_mae_match_check_cap_typ(supported_fields[MAE_FIELD_ ## _mcdi],\
@@ -408,7 +498,7 @@ int efx_mae_match_check_caps(struct efx_nic *efx,
  */
 int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv)
 {
-	u8 *supported_fields = efx->tc->caps->encap_rule_fields;
+	u8 *supported_fields = efx->tc->caps->outer_rule_fields;
 	int rc;
 
 	switch (ipv) {
@@ -479,6 +569,8 @@ int efx_mae_free_counter(struct efx_nic *efx, u32 id)
 static int efx_mae_encap_type_to_mae_type(enum efx_encap_type type)
 {
 	switch (type & EFX_ENCAP_TYPES_MASK) {
+	case EFX_ENCAP_TYPE_NONE:
+		return MAE_MCDI_ENCAP_TYPE_NONE;
 	case EFX_ENCAP_TYPE_VXLAN:
 		return MAE_MCDI_ENCAP_TYPE_VXLAN;
 	case EFX_ENCAP_TYPE_GENEVE:
@@ -604,10 +696,11 @@ int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 		break;
 	}
 
-	MCDI_POPULATE_DWORD_3(inbuf, MAE_ACTION_SET_ALLOC_IN_FLAGS,
+	MCDI_POPULATE_DWORD_4(inbuf, MAE_ACTION_SET_ALLOC_IN_FLAGS,
 			      MAE_ACTION_SET_ALLOC_IN_VLAN_PUSH, vlan_push,
 			      MAE_ACTION_SET_ALLOC_IN_VLAN_POP, vlan_pop,
-			      MAE_ACTION_SET_ALLOC_IN_DECAP, act->decap);
+			      MAE_ACTION_SET_ALLOC_IN_DECAP, act->decap,
+			      MAE_ACTION_SET_ALLOC_IN_DO_NAT, act->do_nat);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	if (act->count && !WARN_ON(!act->count->cnt))
 		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_COUNTER_ID,
@@ -835,115 +928,374 @@ int efx_mae_unregister_encap_match(struct efx_nic *efx,
 	encap->fw_id = MC_CMD_MAE_OUTER_RULE_INSERT_OUT_OUTER_RULE_ID_NULL;
 	return 0;
 }
-#endif /* EFX_TC_OFFLOAD */
 
-int efx_mae_insert_rule(struct efx_nic *efx, const struct efx_tc_match *match,
-			u32 prio, u32 acts_id, u32 *id)
+static int efx_mae_populate_lhs_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_crit),
+					   const struct efx_tc_match *match)
 {
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_ACTION_RULE_INSERT_IN_LEN(MAE_FIELD_MASK_VALUE_PAIRS_LEN));
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_ACTION_RULE_INSERT_OUT_LEN);
-	MCDI_DECLARE_STRUCT_PTR(match_crit);
-	MCDI_DECLARE_STRUCT_PTR(response);
-	size_t outlen;
-	int rc;
-
-	if (!id)
-		return -EINVAL;
-
-	match_crit = _MCDI_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_MATCH_CRITERIA);
-	response = _MCDI_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_RESPONSE);
-	MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_ASL_ID, acts_id);
-	MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_AS_ID,
-			      MC_CMD_MAE_ACTION_SET_ALLOC_OUT_ACTION_SET_ID_NULL);
-	MCDI_SET_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_PRIO, prio);
 	if (match->mask.ingress_port) {
 		if (~match->mask.ingress_port)
 			return -EOPNOTSUPP;
 		MCDI_STRUCT_SET_DWORD(match_crit,
-				      MAE_FIELD_MASK_VALUE_PAIRS_INGRESS_MPORT_SELECTOR,
+				      MAE_ENC_FIELD_MASK_VALUE_PAIRS_INGRESS_MPORT_SELECTOR,
 				      match->value.ingress_port);
 	}
-	MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_INGRESS_MPORT_SELECTOR_MASK,
+	MCDI_STRUCT_SET_DWORD(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_INGRESS_MPORT_SELECTOR_MASK,
+			      match->mask.ingress_port);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_ETHER_TYPE_BE,
+				match->value.eth_proto);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_ETHER_TYPE_BE_MASK,
+				match->mask.eth_proto);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_VLAN0_TCI_BE,
+				match->value.vlan_tci[0]);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_VLAN0_TCI_BE_MASK,
+				match->mask.vlan_tci[0]);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_VLAN0_PROTO_BE,
+				match->value.vlan_proto[0]);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_VLAN0_PROTO_BE_MASK,
+				match->mask.vlan_proto[0]);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_VLAN1_TCI_BE,
+				match->value.vlan_tci[1]);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_VLAN1_TCI_BE_MASK,
+				match->mask.vlan_tci[1]);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_VLAN1_PROTO_BE,
+				match->value.vlan_proto[1]);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_VLAN1_PROTO_BE_MASK,
+				match->mask.vlan_proto[1]);
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_ETH_SADDR_BE),
+	       match->value.eth_saddr, ETH_ALEN);
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_ETH_SADDR_BE_MASK),
+	       match->mask.eth_saddr, ETH_ALEN);
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_ETH_DADDR_BE),
+	       match->value.eth_daddr, ETH_ALEN);
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_ETH_DADDR_BE_MASK),
+	       match->mask.eth_daddr, ETH_ALEN);
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_IP_PROTO,
+			     match->value.ip_proto);
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_IP_PROTO_MASK,
+			     match->mask.ip_proto);
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_IP_TOS,
+			     match->value.ip_tos);
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_IP_TOS_MASK,
+			     match->mask.ip_tos);
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_IP_TTL,
+			     match->value.ip_ttl);
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_IP_TTL_MASK,
+			     match->mask.ip_ttl);
+	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_SRC_IP4_BE,
+				 match->value.src_ip);
+	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_SRC_IP4_BE_MASK,
+				 match->mask.src_ip);
+	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_DST_IP4_BE,
+				 match->value.dst_ip);
+	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_DST_IP4_BE_MASK,
+				 match->mask.dst_ip);
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_SRC_IP6_BE),
+			       &match->value.src_ip6, sizeof(struct in6_addr));
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_SRC_IP6_BE_MASK),
+			       &match->mask.src_ip6, sizeof(struct in6_addr));
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_DST_IP6_BE),
+			       &match->value.dst_ip6, sizeof(struct in6_addr));
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_DST_IP6_BE_MASK),
+			       &match->mask.dst_ip6, sizeof(struct in6_addr));
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_L4_SPORT_BE,
+				match->value.l4_sport);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_L4_SPORT_BE_MASK,
+				match->mask.l4_sport);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_L4_DPORT_BE,
+				match->value.l4_dport);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_MASK_VALUE_PAIRS_ENC_L4_DPORT_BE_MASK,
+				match->mask.l4_dport);
+	/* No enc-keys in LHS rules.  Caps check should have caught this */
+	if (WARN_ON_ONCE(match->encap))
+		return -EOPNOTSUPP;
+	if (WARN_ON_ONCE(match->mask.enc_src_ip))
+		return -EOPNOTSUPP;
+	if (WARN_ON_ONCE(match->mask.enc_dst_ip))
+		return -EOPNOTSUPP;
+	if (WARN_ON_ONCE(!ipv6_addr_any(&match->mask.enc_src_ip6)))
+		return -EOPNOTSUPP;
+	if (WARN_ON_ONCE(!ipv6_addr_any(&match->mask.enc_dst_ip6)))
+		return -EOPNOTSUPP;
+	if (WARN_ON_ONCE(match->mask.enc_ip_tos))
+		return -EOPNOTSUPP;
+	if (WARN_ON_ONCE(match->mask.enc_ip_ttl))
+		return -EOPNOTSUPP;
+	if (WARN_ON_ONCE(match->mask.enc_sport))
+		return -EOPNOTSUPP;
+	if (WARN_ON_ONCE(match->mask.enc_dport))
+		return -EOPNOTSUPP;
+	if (WARN_ON_ONCE(match->mask.enc_keyid))
+		return -EOPNOTSUPP;
+	return 0;
+}
+
+int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
+			    u32 prio)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_OUTER_RULE_INSERT_IN_LEN(MAE_ENC_FIELD_MASK_VALUE_PAIRS_LEN));
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_OUTER_RULE_INSERT_OUT_LEN);
+	MCDI_DECLARE_STRUCT_PTR(match_crit);
+	const struct efx_tc_lhs_action *act;
+	size_t outlen;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, MAE_OUTER_RULE_INSERT_IN_PRIO, prio);
+	/* match */
+	match_crit = _MCDI_DWORD(inbuf, MAE_OUTER_RULE_INSERT_IN_FIELD_MATCH_CRITERIA);
+	rc = efx_mae_populate_lhs_match_criteria(match_crit, &rule->match);
+	if (rc)
+		return rc;
+
+	/* action */
+	act = &rule->lhs_act;
+	rc = efx_mae_encap_type_to_mae_type(act->tun_type);
+	if (rc < 0)
+		return rc;
+	MCDI_SET_DWORD(inbuf, MAE_OUTER_RULE_INSERT_IN_ENCAP_TYPE, rc);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+	MCDI_POPULATE_DWORD_3(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
+			      MAE_OUTER_RULE_INSERT_IN_DO_CT, !!act->zone,
+			      MAE_OUTER_RULE_INSERT_IN_CT_DOMAIN,
+			      act->zone ? act->zone->zone : 0,
+			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->recirc_id);
+#else
+	MCDI_POPULATE_DWORD_1(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
+			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->recirc_id);
+#endif
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_OUTER_RULE_INSERT, inbuf,
+			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	rule->fw_id = MCDI_DWORD(outbuf, MAE_OUTER_RULE_INSERT_OUT_OR_ID);
+	return 0;
+}
+
+int efx_mae_remove_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_OUTER_RULE_REMOVE_OUT_LEN(1));
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_OUTER_RULE_REMOVE_IN_LEN(1));
+	size_t outlen;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, MAE_OUTER_RULE_REMOVE_IN_OR_ID, rule->fw_id);
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_OUTER_RULE_REMOVE, inbuf,
+			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	/* FW freed a different ID than we asked for, should also never happen.
+	 * Warn because it means we've now got a different idea to the FW of
+	 * what encap_mds exist, which could cause mayhem later.
+	 */
+	if (WARN_ON(MCDI_DWORD(outbuf, MAE_OUTER_RULE_REMOVE_OUT_REMOVED_OR_ID) != rule->fw_id))
+		return -EIO;
+	/* We're probably about to free @rule, but let's just make sure its
+	 * fw_id is blatted so that it won't look valid if it leaks out.
+	 */
+	rule->fw_id = MC_CMD_MAE_OUTER_RULE_INSERT_OUT_OUTER_RULE_ID_NULL;
+	return 0;
+}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+int efx_mae_insert_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_TRACK_CONNECTION_OUT_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_TRACK_CONNECTION_IN_LEN);
+	bool ipv6 = false, udp = false;
+	size_t outlen;
+	int rc;
+
+	switch (conn->eth_proto) {
+	case htons(ETH_P_IP):
+		break;
+	case htons(ETH_P_IPV6):
+		ipv6 = true;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+	switch (conn->ip_proto) {
+	case IPPROTO_TCP:
+		break;
+	case IPPROTO_UDP:
+		udp = true;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+	MCDI_POPULATE_DWORD_3(inbuf, MAE_TRACK_CONNECTION_IN_FLAGS,
+			      MAE_TRACK_CONNECTION_IN_IS_IPV6, ipv6,
+			      MAE_TRACK_CONNECTION_IN_IS_UDP, udp,
+			      MAE_TRACK_CONNECTION_IN_NAT_DIR_IS_DST, conn->dnat);
+	MCDI_SET_WORD(inbuf, MAE_TRACK_CONNECTION_IN_DOMAIN, conn->zone);
+	if (ipv6) {
+		memcpy(MCDI_PTR(inbuf, MAE_TRACK_CONNECTION_IN_SRC_ADDR),
+				&conn->src_ip6, sizeof(struct in6_addr));
+		memcpy(MCDI_PTR(inbuf, MAE_TRACK_CONNECTION_IN_DST_ADDR),
+				&conn->dst_ip6, sizeof(struct in6_addr));
+	} else {
+		MCDI_SET_DWORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_SRC_ADDR,
+			       conn->src_ip);
+		MCDI_SET_DWORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_DST_ADDR,
+			       conn->dst_ip);
+		MCDI_SET_DWORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_NAT_IP,
+			       conn->nat_ip);
+	}
+	MCDI_SET_WORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_SRC_PORT, conn->l4_sport);
+	MCDI_SET_WORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_DST_PORT, conn->l4_dport);
+	MCDI_SET_WORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_NAT_PORT, conn->l4_natport);
+	MCDI_SET_DWORD(inbuf, MAE_TRACK_CONNECTION_IN_CT_MARK, conn->mark);
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_TRACK_CONNECTION, inbuf, sizeof(inbuf),
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	conn->fw_id = MCDI_DWORD(outbuf, MAE_TRACK_CONNECTION_OUT_CONN_ID);
+	return 0;
+}
+
+int efx_mae_remove_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_FORGET_CONNECTION_OUT_LEN(1));
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_FORGET_CONNECTION_IN_LEN(1));
+	size_t outlen;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, MAE_FORGET_CONNECTION_IN_CONN_ID, conn->fw_id);
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_FORGET_CONNECTION, inbuf, sizeof(inbuf),
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	/* FW freed a different ID than we asked for, should also never happen.
+	 * Warn because it means we've now got a different idea to the FW of
+	 * what rules exist, which could cause mayhem later.
+	 */
+	if (WARN_ON(MCDI_DWORD(outbuf, MAE_FORGET_CONNECTION_OUT_REMOVED_CONN_ID) != conn->fw_id))
+		return -EIO;
+	/* We're probably about to free @conn, but let's just make sure its
+	 * fw_id is blatted so that it won't look valid if it leaks out.
+	 */
+	conn->fw_id = MC_CMD_MAE_TRACK_CONNECTION_OUT_CONN_ID_NULL;
+	return 0;
+}
+#endif
+#endif /* EFX_TC_OFFLOAD */
+
+static int efx_mae_populate_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_crit),
+					   const struct efx_tc_match *match)
+{
+	if (match->mask.ingress_port) {
+		if (~match->mask.ingress_port)
+			return -EOPNOTSUPP;
+		MCDI_STRUCT_SET_DWORD(match_crit,
+				      MAE_FIELD_MASK_VALUE_PAIRS_V2_INGRESS_MPORT_SELECTOR,
+				      match->value.ingress_port);
+	}
+	MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_INGRESS_MPORT_SELECTOR_MASK,
 			      match->mask.ingress_port);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_ETHER_TYPE_BE,
+	EFX_POPULATE_DWORD_2(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS),
+			     MAE_FIELD_MASK_VALUE_PAIRS_V2_DO_CT,
+			     match->value.ct_state_trk,
+			     MAE_FIELD_MASK_VALUE_PAIRS_V2_CT_HIT,
+			     match->value.ct_state_est);
+	EFX_POPULATE_DWORD_2(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS_MASK),
+			     MAE_FIELD_MASK_VALUE_PAIRS_V2_DO_CT,
+			     match->mask.ct_state_trk,
+			     MAE_FIELD_MASK_VALUE_PAIRS_V2_CT_HIT,
+			     match->mask.ct_state_est);
+	MCDI_STRUCT_SET_WORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_RECIRC_ID,
+			     match->value.recirc_id);
+	MCDI_STRUCT_SET_WORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_RECIRC_ID_MASK,
+			     match->mask.recirc_id);
+	MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_CT_MARK,
+			      match->value.ct_mark);
+	MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_CT_MARK_MASK,
+			      match->mask.ct_mark);
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_ETHER_TYPE_BE,
 				match->value.eth_proto);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_ETHER_TYPE_BE_MASK,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_ETHER_TYPE_BE_MASK,
 				match->mask.eth_proto);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_VLAN0_TCI_BE,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_VLAN0_TCI_BE,
 				match->value.vlan_tci[0]);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_VLAN0_TCI_BE_MASK,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_VLAN0_TCI_BE_MASK,
 				match->mask.vlan_tci[0]);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_VLAN0_PROTO_BE,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_VLAN0_PROTO_BE,
 				match->value.vlan_proto[0]);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_VLAN0_PROTO_BE_MASK,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_VLAN0_PROTO_BE_MASK,
 				match->mask.vlan_proto[0]);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_VLAN1_TCI_BE,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_VLAN1_TCI_BE,
 				match->value.vlan_tci[1]);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_VLAN1_TCI_BE_MASK,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_VLAN1_TCI_BE_MASK,
 				match->mask.vlan_tci[1]);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_VLAN1_PROTO_BE,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_VLAN1_PROTO_BE,
 				match->value.vlan_proto[1]);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_VLAN1_PROTO_BE_MASK,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_VLAN1_PROTO_BE_MASK,
 				match->mask.vlan_proto[1]);
-	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_ETH_SADDR_BE),
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_ETH_SADDR_BE),
 	       match->value.eth_saddr, ETH_ALEN);
-	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_ETH_SADDR_BE_MASK),
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_ETH_SADDR_BE_MASK),
 	       match->mask.eth_saddr, ETH_ALEN);
-	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_ETH_DADDR_BE),
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_ETH_DADDR_BE),
 	       match->value.eth_daddr, ETH_ALEN);
-	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_ETH_DADDR_BE_MASK),
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_ETH_DADDR_BE_MASK),
 	       match->mask.eth_daddr, ETH_ALEN);
-	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_IP_PROTO,
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_PROTO,
 			     match->value.ip_proto);
-	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_IP_PROTO_MASK,
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_PROTO_MASK,
 			     match->mask.ip_proto);
-	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_IP_TOS,
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_TOS,
 			     match->value.ip_tos);
-	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_IP_TOS_MASK,
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_TOS_MASK,
 			     match->mask.ip_tos);
-	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_IP_TTL,
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_TTL,
 			     match->value.ip_ttl);
-	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_IP_TTL_MASK,
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_TTL_MASK,
 			     match->mask.ip_ttl);
-	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_SRC_IP4_BE,
+	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_SRC_IP4_BE,
 				 match->value.src_ip);
-	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_SRC_IP4_BE_MASK,
+	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_SRC_IP4_BE_MASK,
 				 match->mask.src_ip);
-	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_DST_IP4_BE,
+	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_DST_IP4_BE,
 				 match->value.dst_ip);
-	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_DST_IP4_BE_MASK,
+	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_DST_IP4_BE_MASK,
 				 match->mask.dst_ip);
-	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_SRC_IP6_BE),
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_SRC_IP6_BE),
 			       &match->value.src_ip6, sizeof(struct in6_addr));
-	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_SRC_IP6_BE_MASK),
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_SRC_IP6_BE_MASK),
 			       &match->mask.src_ip6, sizeof(struct in6_addr));
-	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_DST_IP6_BE),
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_DST_IP6_BE),
 			       &match->value.dst_ip6, sizeof(struct in6_addr));
-	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_DST_IP6_BE_MASK),
+	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_DST_IP6_BE_MASK),
 			       &match->mask.dst_ip6, sizeof(struct in6_addr));
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_L4_SPORT_BE,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_L4_SPORT_BE,
 				match->value.l4_sport);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_L4_SPORT_BE_MASK,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_L4_SPORT_BE_MASK,
 				match->mask.l4_sport);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_L4_DPORT_BE,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_L4_DPORT_BE,
 				match->value.l4_dport);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_L4_DPORT_BE_MASK,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_L4_DPORT_BE_MASK,
 				match->mask.l4_dport);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_TCP_FLAGS_BE,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_TCP_FLAGS_BE,
 				match->value.tcp_flags);
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_TCP_FLAGS_BE_MASK,
+	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_TCP_FLAGS_BE_MASK,
 				match->mask.tcp_flags);
 	/* enc-keys are handled indirectly, through encap_match ID */
 	if (match->encap) {
-		MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_OUTER_RULE_ID,
+		MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_OUTER_RULE_ID,
 				      match->encap->fw_id);
-		MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_OUTER_RULE_ID_MASK,
+		MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_OUTER_RULE_ID_MASK,
 				      (u32)-1);
 		/* enc_keyid (VNI/VSID) is not part of the encap_match */
-		MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_ENC_VNET_ID_BE,
+		MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_ENC_VNET_ID_BE,
 					 match->value.enc_keyid);
-		MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_ENC_VNET_ID_BE_MASK,
+		MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_ENC_VNET_ID_BE_MASK,
 					 match->mask.enc_keyid);
 	} else {
 		/* No enc-keys should appear in a rule without an encap_match */
@@ -967,6 +1319,31 @@ int efx_mae_insert_rule(struct efx_nic *efx, const struct efx_tc_match *match,
 			return -EOPNOTSUPP;
 	}
 #endif /* EFX_TC_OFFLOAD */
+	return 0;
+}
+
+int efx_mae_insert_rule(struct efx_nic *efx, const struct efx_tc_match *match,
+			u32 prio, u32 acts_id, u32 *id)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_ACTION_RULE_INSERT_IN_LEN(MAE_FIELD_MASK_VALUE_PAIRS_V2_LEN));
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_ACTION_RULE_INSERT_OUT_LEN);
+	MCDI_DECLARE_STRUCT_PTR(match_crit);
+	MCDI_DECLARE_STRUCT_PTR(response);
+	size_t outlen;
+	int rc;
+
+	if (!id)
+		return -EINVAL;
+
+	match_crit = _MCDI_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_MATCH_CRITERIA);
+	response = _MCDI_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_RESPONSE);
+	MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_ASL_ID, acts_id);
+	MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_AS_ID,
+			      MC_CMD_MAE_ACTION_SET_ALLOC_OUT_ACTION_SET_ID_NULL);
+	MCDI_SET_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_PRIO, prio);
+	rc = efx_mae_populate_match_criteria(match_crit, match);
+	if (rc)
+		return rc;
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_ACTION_RULE_INSERT, inbuf, sizeof(inbuf),
 			  outbuf, sizeof(outbuf), &outlen);

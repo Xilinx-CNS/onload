@@ -372,108 +372,18 @@ int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 int efx_net_open(struct net_device *net_dev)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	unsigned loops = 2;
 	int rc;
 
 	netif_dbg(efx, ifup, efx->net_dev, "opening device on CPU %d\n",
 		  raw_smp_processor_id());
 
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	if (efx->open_count++) {
-		netif_dbg(efx, drv, efx->net_dev,
-			  "already open, now by %hu clients\n", efx->open_count);
-		/* inform the kernel about link state again */
-		efx_link_status_changed(efx);
-		return 0;
-	}
-#endif
-#endif
-
-	rc = efx_check_disabled(efx);
-	if (rc)
-		goto fail;
-	if (efx->phy_mode & PHY_MODE_SPECIAL) {
-		rc = -EBUSY;
-		goto fail;
-	}
-	if (efx_mcdi_poll_reboot(efx) && efx_reset(efx, RESET_TYPE_ALL)) {
-		rc = -EIO;
-		goto fail;
-	}
-	efx->reset_count = 0;
-
-	efx->stats_initialised = false;
-
-	do {
-		if (!efx->max_channels || !efx->max_tx_channels) {
-			netif_err(efx, drv, efx->net_dev,
-				  "Insufficient resources to allocate any channels\n");
-			rc = -ENOSPC;
-			goto fail;
-		}
-
-		/* Determine the number of channels and queues by trying to hook
-		 * in MSI-X interrupts.
-		 */
-		rc = efx_probe_interrupts(efx);
-		if (rc)
-			goto fail;
-
-		rc = efx_set_channels(efx);
-		if (rc)
-			goto fail;
-
-		/* dimension_resources can fail with EAGAIN */
-		rc = efx->type->dimension_resources(efx);
-		if (rc != 0 && rc != -EAGAIN)
-			goto fail;
-
-		if (rc == -EAGAIN) {
-			/* try again with new max_channels */
-			efx_unset_channels(efx);
-			efx_remove_interrupts(efx);
-		}
-	} while (rc == -EAGAIN && --loops);
-	/* rc should be 0 here or we would have jumped to fail: */
-	WARN_ON(rc);
-
-	rc = efx_probe_channels(efx);
-	if (rc)
-		goto fail;
-
-	rc = efx_init_napi(efx);
-	if (rc)
-		goto fail;
-
-	rc = efx_init_port(efx);
-	if (rc)
-		goto fail;
-
-	rc = efx_probe_filters(efx);
-	if (rc)
-		goto fail;
-
-	rc = efx_nic_init_interrupt(efx);
-	if (rc)
-		goto fail;
-	efx_set_interrupt_affinity(efx, true);
-#ifdef EFX_USE_IRQ_NOTIFIERS
-	efx_register_irq_notifiers(efx);
-#endif
-
-	down_write(&efx->filter_sem);
-	rc = efx->type->init(efx);
-	up_write(&efx->filter_sem);
-	if (rc)
-		goto fail;
-
-	rc = efx_enable_interrupts(efx);
+	rc = efx_net_alloc(efx);
 	if (rc)
 		goto fail;
 
 	/* Notify the kernel of the link state polled during driver load,
-	 * before the monitor starts running */
+	 * before the monitor starts running
+	 */
 	efx_link_status_changed(efx);
 
 	rc = efx_start_all(efx);
@@ -499,6 +409,110 @@ fail:
 	return rc;
 }
 
+/* Allocate resources and transition state from
+ * STATE_NET_DOWN to STATE_ALLOCATED.
+ * After calling this function, you must call efx_net_dealloc
+ * *even if it fails*.
+ */
+int efx_net_alloc(struct efx_nic *efx)
+{
+	unsigned int loops = 2;
+	int rc;
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	if (efx->open_count++) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "already open, now by %hu clients\n", efx->open_count);
+		/* inform the kernel about link state again */
+		efx_link_status_changed(efx);
+		return 0;
+	}
+#endif
+#endif
+
+	rc = efx_check_disabled(efx);
+	if (rc)
+		return rc;
+	if (efx->phy_mode & PHY_MODE_SPECIAL)
+		return -EBUSY;
+	if (efx_mcdi_poll_reboot(efx) && efx_reset(efx, RESET_TYPE_ALL))
+		return -EIO;
+	efx->reset_count = 0;
+
+	efx->stats_initialised = false;
+
+	do {
+		if (!efx->max_channels || !efx->max_tx_channels) {
+			netif_err(efx, drv, efx->net_dev,
+				  "Insufficient resources to allocate any channels\n");
+			return -ENOSPC;
+		}
+
+		/* Determine the number of channels and queues by trying to hook
+		 * in MSI-X interrupts.
+		 */
+		rc = efx_probe_interrupts(efx);
+		if (rc)
+			return rc;
+
+		rc = efx_set_channels(efx);
+		if (rc)
+			return rc;
+
+		/* dimension_resources can fail with EAGAIN */
+		rc = efx->type->dimension_resources(efx);
+		if (rc != 0 && rc != -EAGAIN)
+			return rc;
+
+		if (rc == -EAGAIN) {
+			/* try again with new max_channels */
+			efx_unset_channels(efx);
+			efx_remove_interrupts(efx);
+		}
+	} while (rc == -EAGAIN && --loops);
+	/* rc should be 0 here or we would have jumped to fail: */
+	WARN_ON(rc);
+
+	rc = efx_probe_channels(efx);
+	if (rc)
+		return rc;
+
+	rc = efx_init_napi(efx);
+	if (rc)
+		return rc;
+
+	rc = efx_init_port(efx);
+	if (rc)
+		return rc;
+
+	rc = efx_probe_filters(efx);
+	if (rc)
+		return rc;
+
+	rc = efx_nic_init_interrupt(efx);
+	if (rc)
+		return rc;
+	efx_set_interrupt_affinity(efx, true);
+#ifdef EFX_USE_IRQ_NOTIFIERS
+	efx_register_irq_notifiers(efx);
+#endif
+
+	down_write(&efx->filter_sem);
+	rc = efx->type->init(efx);
+	up_write(&efx->filter_sem);
+	if (rc)
+		return rc;
+
+	rc = efx_enable_interrupts(efx);
+	if (rc)
+		return rc;
+
+	efx->state = STATE_NET_ALLOCATED;
+
+	return 0;
+}
+
 /* Context: process, rtnl_lock() held.
  * Note that the kernel will ignore our return code; this method
  * should really be a void.
@@ -510,21 +524,30 @@ int efx_net_stop(struct net_device *net_dev)
 	netif_dbg(efx, ifdown, efx->net_dev, "closing on CPU %d\n",
 			raw_smp_processor_id());
 
+	netif_stop_queue(efx->net_dev);
+	efx_stop_all(efx);
+
+	efx->state = STATE_NET_ALLOCATED;
+
+	efx_net_dealloc(efx);
+
+	return 0;
+}
+
+void efx_net_dealloc(struct efx_nic *efx)
+{
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	if (efx->open_count && --efx->open_count) {
 		netif_dbg(efx, drv, efx->net_dev, "still open by %hu clients\n",
 			  efx->open_count);
-		return 0;
+		return;
 	}
 #endif
 #endif
 
 	if (efx->state == STATE_DISABLED)
-		return 0;
-
-	netif_stop_queue(efx->net_dev);
-	efx_stop_all(efx);
+		return;
 
 	efx_disable_interrupts(efx);
 	if (efx->type->fini)
@@ -544,8 +567,6 @@ int efx_net_stop(struct net_device *net_dev)
 	efx_remove_interrupts(efx);
 
 	efx->state = STATE_NET_DOWN;
-
-	return 0;
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO)
@@ -760,7 +781,8 @@ static int efx_netdev_event(struct notifier_block *this,
 		efx_update_name(efx);
 
 #if defined(CONFIG_SFC_MTD) && defined(EFX_WORKAROUND_87308)
-		if (atomic_xchg(&efx->mtd_struct->probed_flag, 1) == 0)
+		if (efx->mtd_struct &&
+		    (atomic_xchg(&efx->mtd_struct->probed_flag, 1) == 0))
 			(void)efx_mtd_probe(efx);
 #endif
 	}
@@ -1212,7 +1234,8 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	efx_flush_reset_workqueue(efx);
 
 #if defined(CONFIG_SFC_MTD) && defined(EFX_WORKAROUND_87308)
-	(void)cancel_delayed_work_sync(&efx->mtd_struct->creation_work);
+	if (efx->mtd_struct)
+		(void)cancel_delayed_work_sync(&efx->mtd_struct->creation_work);
 #endif
 
 	efx_virtbus_unregister(efx);
@@ -1225,7 +1248,8 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 
 #ifdef CONFIG_SFC_MTD
 #ifdef EFX_WORKAROUND_87308
-	if (atomic_read(&efx->mtd_struct->probed_flag) == 1)
+	if (efx->mtd_struct &&
+	    atomic_read(&efx->mtd_struct->probed_flag) == 1)
 		efx_mtd_remove(efx);
 #else
 	efx_mtd_remove(efx);
@@ -1369,7 +1393,8 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 
 #ifdef CONFIG_SFC_MTD
 #ifdef EFX_WORKAROUND_87308
-	schedule_delayed_work(&efx->mtd_struct->creation_work, 5 * HZ);
+	if (efx->mtd_struct)
+		schedule_delayed_work(&efx->mtd_struct->creation_work, 5 * HZ);
 #else
 	/* Try to create MTDs, but allow this to fail */
 	rtnl_lock();

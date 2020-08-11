@@ -27,7 +27,6 @@ EFX_NEED_ROOT_DEVICE_REGISTER		nsymbol root_device_register	include/linux/device
 EFX_HAVE_GRO				custom
 EFX_NEED_GRO_RESULT_T			nsymbol	gro_result_t		include/linux/netdevice.h
 EFX_HAVE_NAPI_GRO_RECEIVE_GR		symbol	napi_gro_receive_gr	include/linux/netdevice.h
-EFX_HAVE_NAPI_GRO_BITMASK		member	struct_napi_struct	gro_bitmask	include/linux/netdevice.h
 EFX_NEED_HEX_DUMP			nexport	print_hex_dump		include/linux/kernel.h include/linux/printk.h lib/hexdump.c
 EFX_NEED_HEX_DUMP_CONST_FIX 		symtype	print_hex_dump		include/linux/kernel.h void(const char *, const char *, int, int, int, void *, size_t, bool)
 EFX_NEED_VZALLOC			nsymbol	vzalloc			include/linux/vmalloc.h
@@ -358,16 +357,22 @@ EFX_HAVE_TC_BLOCK_OFFLOAD		symbol	tc_block_offload	include/net/pkt_cls.h
 EFX_HAVE_FLOW_BLOCK_OFFLOAD		symbol	flow_block_offload	include/net/flow_offload.h
 EFX_HAVE_TC_INDR_BLOCK_CB_REGISTER	symbol	__tc_indr_block_cb_register	include/net/pkt_cls.h
 EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER	symbol	__flow_indr_block_cb_register	include/net/flow_offload.h
+EFX_HAVE_FLOW_INDR_DEV_REGISTER		symbol	flow_indr_dev_register	include/net/flow_offload.h
+EFX_HAVE_FLOW_INDR_QDISC		member	struct_flow_block_indr	sch	include/net/flow_offload.h
 EFX_HAVE_TC_ACTION_COOKIE		custom
 EFX_HAVE_TC_FLOW_OFFLOAD		file	include/net/flow_offload.h
 EFX_NEED_TCF_MIRRED_DEV			nsymbol	tcf_mirred_dev	include/net/tc_act/tc_mirred.h
 EFX_HAVE_STRUCT_SIZE			symbol	struct_size	include/linux/overflow.h
 EFX_NEED_FLOW_RULE_MATCH_CVLAN		nsymbol	flow_rule_match_cvlan	include/net/flow_offload.h
+EFX_NEED_FLOW_RULE_MATCH_CT		nsymbol	flow_rule_match_ct	include/net/flow_offload.h
 EFX_HAVE_FLOW_DISSECTOR_KEY_CVLAN	symbol	FLOW_DISSECTOR_KEY_CVLAN	include/net/flow_dissector.h
 EFX_HAVE_FLOW_DISSECTOR_KEY_ENC_IP	symbol	FLOW_DISSECTOR_KEY_ENC_IP	include/net/flow_dissector.h
 EFX_HAVE_FLOW_DISSECTOR_VLAN_TPID	member	struct_flow_dissector_key_vlan	vlan_tpid	include/net/flow_dissector.h
 EFX_HAVE_OLD_TCF_ACTION_STATS_UPDATE	symtype	tcf_action_stats_update	include/net/act_api.h	void(struct tc_action *a, u64 bytes, u64 packets, u64 lastuse)
 EFX_HAVE_FLOW_STATS_TYPE		symbol	flow_action_hw_stats	include/net/flow_offload.h
+EFX_HAVE_FLOW_STATS_DROPS		member	struct_flow_stats	drops	include/net/flow_offload.h
+EFX_HAVE_NF_FLOW_TABLE_OFFLOAD		symbol	nf_flow_table_offload_add_cb	include/net/netfilter/nf_flow_table.h
+EFX_HAVE_TC_ACT_CT			file	include/net/tc_act/tc_ct.h
 EFX_HAVE_TCB_EXTACK			member	struct_tc_block_offload	extack	include/net/pkt_cls.h
 EFX_HAVE_NETIF_IS_VXLAN			symbol	netif_is_vxlan	include/net/vxlan.h
 EFX_HAVE_NETIF_IS_GENEVE		symbol	netif_is_geneve	include/net/geneve.h

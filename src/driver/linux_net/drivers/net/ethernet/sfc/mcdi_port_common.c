@@ -436,7 +436,7 @@ u32 efx_get_mcdi_phy_flags(struct efx_nic *efx)
 	if (mode & PHY_MODE_OFF)
 		flags |= (1 << MC_CMD_SET_LINK_IN_POWEROFF_LBN);
 
-	if (efx_net_active(efx->state) && !netif_running(efx->net_dev))
+	if (efx->state != STATE_UNINIT && !netif_running(efx->net_dev))
 		flags |= (1 << MC_CMD_SET_LINK_IN_LINKDOWN_LBN);
 
 	return flags;
@@ -521,15 +521,13 @@ u32 ethtool_fec_caps_to_mcdi(u32 supported_cap, u32 ethtool_cap)
 		ret |= (FEC_BIT(BASER_FEC) | FEC_BIT(25G_BASER_FEC) |
 			FEC_BIT(RS_FEC)) &
 		       supported_cap;
-	if (ethtool_cap & ETHTOOL_FEC_RS)
+	if (ethtool_cap & ETHTOOL_FEC_RS && supported_cap & FEC_BIT(RS_FEC))
 		ret |= FEC_BIT(RS_FEC) | FEC_BIT(RS_FEC_REQUESTED);
 	if (ethtool_cap & ETHTOOL_FEC_BASER) {
-		ret |= (FEC_BIT(BASER_FEC) | FEC_BIT(25G_BASER_FEC)) &
-		       supported_cap;
-		if (ret & FEC_BIT(BASER_FEC))
-			ret |= FEC_BIT(BASER_FEC_REQUESTED);
-		if (ret & FEC_BIT(25G_BASER_FEC))
-			ret |= FEC_BIT(25G_BASER_FEC_REQUESTED);
+		if (supported_cap & FEC_BIT(BASER_FEC))
+			ret |= FEC_BIT(BASER_FEC) | FEC_BIT(BASER_FEC_REQUESTED);
+		if (supported_cap & FEC_BIT(25G_BASER_FEC))
+		       ret |= FEC_BIT(25G_BASER_FEC) | FEC_BIT(25G_BASER_FEC_REQUESTED);
 	}
 	return ret;
 }
@@ -550,11 +548,7 @@ static int ethtool_fec_supported(u32 supported_cap, u32 ethtool_cap)
 	return 0;
 }
 
-/* Invert ethtool_fec_caps_to_mcdi.  There are two combinations that function
- * can never produce, (baser xor rs) and neither req; the implementation below
- * maps both of those to AUTO.  This should never matter, and it's not clear
- * what a better mapping would be anyway.
- */
+/* Invert ethtool_fec_caps_to_mcdi. */
 u32 mcdi_fec_caps_to_ethtool(u32 caps, bool is_25g)
 {
 	bool rs = caps & FEC_BIT(RS_FEC),

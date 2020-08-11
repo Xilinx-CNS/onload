@@ -17,6 +17,13 @@
 #include <net/pkt_cls.h>
 #include <net/tc_act/tc_tunnel_key.h>
 #include <net/tc_act/tc_pedit.h>
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+#if defined(EFX_USE_KCOMPAT)
+/* nf_flow_table.h should include this, but on deb10 it's missing */
+#include <linux/netfilter.h>
+#endif
+#include <net/netfilter/nf_flow_table.h>
+#endif
 #include "ef100_rep.h"
 
 struct efx_tc_counter {
@@ -81,6 +88,7 @@ struct efx_tc_action_set {
 	u16 vlan_push:2;
 	u16 vlan_pop:2;
 	u16 decap:1;
+	u16 do_nat:1;
 	u16 deliver:1;
 	__be16 vlan_tci[2]; /* TCIs for vlan_push */
 	__be16 vlan_proto[2]; /* Ethertypes for vlan_push */
@@ -121,6 +129,13 @@ struct efx_tc_match_fields {
 	u8 enc_ip_tos, enc_ip_ttl;
 	__be16 enc_sport, enc_dport;
 	__be32 enc_keyid; /* e.g. VNI, VSID */
+	/* L... I don't even know any more.  Conntrack. */
+	u16 ct_state_trk:1,
+	    ct_state_est:1,
+	    ct_state_rel:1,
+	    ct_state_new:1; /* only these bits are defined in TC uapi so far */
+	u32 ct_mark; /* For now we ignore ct_label, and don't indirect */
+	u8 recirc_id; /* mapped from (u32) TC chain_index to smaller space */
 };
 
 static inline bool efx_tc_match_is_encap(const struct efx_tc_match_fields *mask)
@@ -152,6 +167,35 @@ struct efx_tc_action_set_list {
 	u32 fw_id;
 };
 
+struct efx_tc_ctr_agg {
+	unsigned long cookie;
+	struct rhash_head linkage;
+	refcount_t ref;
+	struct efx_tc_counter count; /* stores SW totals */
+};
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+struct efx_tc_ct_zone {
+	u16 zone;
+	struct rhash_head linkage;
+	refcount_t ref;
+	struct nf_flowtable *nf_ft;
+	struct efx_nic *efx;
+};
+#endif
+
+struct efx_tc_lhs_action {
+	u16 tun_type; /* enum efx_encap_type */
+	u8 recirc_id;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+	struct efx_tc_ct_zone *zone; /* For now no filtering on VLAN or VNI (which we would do via recirc anyway), so this is a pure zone rather than a domain */
+#endif
+	struct efx_tc_ctr_agg *count; /* there's no counter fw_id, it's 1:1 */
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+	int count_action_idx;
+#endif
+};
+
 enum efx_tc_default_rules { /* named by ingress port */
 	EFX_TC_DFLT_PF,
 	EFX_TC_DFLT_WIRE,
@@ -171,6 +215,30 @@ struct efx_tc_flow_rule {
 	u32 fw_id;
 };
 
+struct efx_tc_lhs_rule {
+	unsigned long cookie;
+	struct efx_tc_match match;
+	struct efx_tc_lhs_action lhs_act;
+	struct rhash_head linkage;
+	u32 fw_id;
+};
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+struct efx_tc_ct_entry {
+	unsigned long cookie;
+	struct rhash_head linkage;
+	__be16 eth_proto;
+	u8 ip_proto;
+	bool dnat;
+	__be32 src_ip, dst_ip, nat_ip;
+	struct in6_addr src_ip6, dst_ip6;
+	__be16 l4_sport, l4_dport, l4_natport; /* Ports (UDP, TCP) */
+	u16 zone;
+	u32 mark;
+	u32 fw_id;
+};
+#endif
+
 enum efx_tc_rule_prios {
 	EFX_TC_PRIO_TC, /* Rule inserted by TC */
 	EFX_TC_PRIO_DFLT, /* Default switch rule; one of efx_tc_default_rules */
@@ -185,9 +253,13 @@ enum efx_tc_rule_prios {
  * @mutex: Used to serialise operations on TC hashtables
  * @counter_ht: Hashtable of TC counters (FW IDs and counter values)
  * @counter_id_ht: Hashtable mapping TC counter cookies to counters
+ * @ctr_agg_ht: Hashtable of TC counter aggregators (for LHS rules)
  * @encap_ht: Hashtable of TC encap actions
  * @pedit_ht: Hashtable of TC pedit actions
  * @match_action_ht: Hashtable of TC match-action rules
+ * @lhs_rule_ht: Hashtable of TC left-hand (act ct & goto chain) rules
+ * @ct_zone_ht: Hashtable of TC conntrack flowtable bindings
+ * @ct_ht: Hashtable of TC conntrack flow entries
  * @neigh_ht: Hashtable of neighbour watches (&struct efx_neigh_binder)
  * @dflt_rules: Match-action rules for default switching; at priority
  *	%EFX_TC_PRIO_DFLT, and indexed by &enum efx_tc_default_rules.
@@ -200,10 +272,16 @@ struct efx_tc_state {
 	struct mutex mutex;
 	struct rhashtable counter_ht;
 	struct rhashtable counter_id_ht;
+	struct rhashtable ctr_agg_ht;
 	struct rhashtable encap_ht;
 	struct rhashtable pedit_ht;
 	struct rhashtable encap_match_ht;
 	struct rhashtable match_action_ht;
+	struct rhashtable lhs_rule_ht;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+	struct rhashtable ct_zone_ht;
+	struct rhashtable ct_ht;
+#endif
 	struct rhashtable neigh_ht;
 	struct efx_tc_flow_rule *dflt_rules;
 	bool up;
@@ -215,6 +293,7 @@ void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
 				     enum efx_tc_default_rules dflt);
 int efx_tc_flower(struct efx_nic *efx, struct net_device *net_dev,
 		  struct flow_cls_offload *tc, struct efx_vfrep *efv);
+int efx_tc_block_cb(enum tc_setup_type type, void *type_data, void *cb_priv);
 int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
 		       struct flow_block_offload *tcb, struct efx_vfrep *efv);
 int efx_setup_tc(struct net_device *net_dev, enum tc_setup_type type,
@@ -226,6 +305,7 @@ struct efx_tc_action_set {
 	u16 vlan_push:2;
 	u16 vlan_pop:2;
 	u16 decap:1;
+	u16 do_nat:1;
 	u16 deliver:1;
 	__be16 vlan_tci[2]; /* TCIs for vlan_push */
 	__be16 vlan_proto[2]; /* Ethertypes for vlan_push */

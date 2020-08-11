@@ -146,20 +146,28 @@ static int ef100_net_stop(struct net_device *net_dev)
 	netif_dbg(efx, ifdown, efx->net_dev, "closing on CPU %d\n",
 		  raw_smp_processor_id());
 
+	ef100_stop_reps(efx);
+	netif_stop_queue(net_dev);
+	efx_stop_all(efx);
+
+	efx->state = STATE_NET_ALLOCATED;
+
+	efx_net_dealloc(efx);
+
+	return 0;
+}
+
+void efx_net_dealloc(struct efx_nic *efx)
+{
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	if (--efx->open_count) {
 		netif_dbg(efx, drv, efx->net_dev, "still open\n");
-		return 0;
+		return;
 	}
 #endif
 #endif
 
-	efx->state = STATE_NET_DOWN;
-
-	ef100_stop_reps(efx);
-	netif_stop_queue(net_dev);
-	efx_stop_all(efx);
 	efx_mcdi_mac_fini_stats(efx);
 	efx_disable_interrupts(efx);
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
@@ -178,19 +186,50 @@ static int ef100_net_stop(struct net_device *net_dev)
 	efx_unset_channels(efx);
 	efx_remove_interrupts(efx);
 
-	return 0;
+	efx->state = STATE_NET_DOWN;
 }
 
 /* Context: process, rtnl_lock() held. */
 static int ef100_net_open(struct net_device *net_dev)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	unsigned int allocated_vis;
 	int rc;
 
 	ef100_update_name(efx);
 	netif_dbg(efx, ifup, net_dev, "opening device on CPU %d\n",
 		  raw_smp_processor_id());
+
+	rc = efx_net_alloc(efx);
+	if (rc)
+		goto fail;
+
+	rc = efx_start_all(efx);
+	if (rc)
+		goto fail;
+
+	/* Link state detection is normally event-driven; we have
+	 * to poll now because we could have missed a change
+	 */
+	mutex_lock(&efx->mac_lock);
+	if (efx_mcdi_phy_poll(efx))
+		efx_link_status_changed(efx);
+	mutex_unlock(&efx->mac_lock);
+
+	efx->state = STATE_NET_UP;
+
+	ef100_start_reps(efx);
+
+	return 0;
+
+fail:
+	ef100_net_stop(net_dev);
+	return rc;
+}
+
+int efx_net_alloc(struct efx_nic *efx)
+{
+	unsigned int allocated_vis;
+	int rc;
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -205,25 +244,25 @@ static int ef100_net_open(struct net_device *net_dev)
 
 	rc = efx_check_disabled(efx);
 	if (rc)
-		goto fail;
+		return rc;
 
 	efx->stats_initialised = false;
 
 	rc = efx_probe_interrupts(efx);
 	if (rc)
-		goto fail;
+		return rc;
 
 	rc = efx_set_channels(efx);
 	if (rc)
-		goto fail;
+		return rc;
 
 	rc = efx_mcdi_free_vis(efx);
 	if (rc)
-		goto fail;
+		return rc;
 
 	rc = ef100_alloc_vis(efx, &allocated_vis);
 	if (rc)
-		goto fail;
+		return rc;
 
 	rc = efx_probe_channels(efx);
 	if (rc)
@@ -231,33 +270,33 @@ static int ef100_net_open(struct net_device *net_dev)
 
 	rc = ef100_remap_bar(efx, allocated_vis);
 	if (rc)
-		goto fail;
+		return rc;
 
 	rc = efx_init_napi(efx);
 	if (rc)
-		goto fail;
+		return rc;
 
 	rc = efx_probe_filters(efx);
 	if (rc)
-		goto fail;
+		return rc;
 
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
 	if (efx->interrupt_mode != EFX_INT_MODE_POLLED) {
 		rc = efx_nic_init_interrupt(efx);
 		if (rc)
-			goto fail;
+			return rc;
 		efx_set_interrupt_affinity(efx, true);
 	}
 #else
 	rc = efx_nic_init_interrupt(efx);
 	if (rc)
-		goto fail;
+		return rc;
 	efx_set_interrupt_affinity(efx, true);
 #endif
 
 	rc = efx_enable_interrupts(efx);
 	if (rc)
-		goto fail;
+		return rc;
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -287,29 +326,9 @@ static int ef100_net_open(struct net_device *net_dev)
 
 	rc = efx_mcdi_mac_init_stats(efx);
 	if (rc)
-		goto fail;
-
-	rc = efx_start_all(efx);
-	if (rc)
-		goto fail;
-
-	/* Link state detection is normally event-driven; we have
-	 * to poll now because we could have missed a change
-	 */
-	mutex_lock(&efx->mac_lock);
-	if (efx_mcdi_phy_poll(efx))
-		efx_link_status_changed(efx);
-	mutex_unlock(&efx->mac_lock);
-
-	efx->state = STATE_NET_UP;
-
-	ef100_start_reps(efx);
+		return rc;
 
 	return 0;
-
-fail:
-	ef100_net_stop(net_dev);
-	return rc;
 }
 
 /* Initiate a packet transmission.  We use one channel per CPU

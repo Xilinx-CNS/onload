@@ -27,7 +27,7 @@ struct efx_dl_device_info;
  * is not used for binary compatibility checking, as that is done by
  * kbuild and the module loader using symbol versions.
  */
-#define EFX_DRIVERLINK_API_VERSION 28
+#define EFX_DRIVERLINK_API_VERSION 29
 #define EFX_DRIVERLINK_API_VERSION_MINOR_MAX 0
 
 /* If the client didn't define their VERSION_MINOR, default to 0 */
@@ -429,7 +429,8 @@ struct efx_dl_ops {
 			u32 owner_id, u8 crc_mode, bool timestamp,
 			bool hdr_split, bool buff_mode, bool rx_prefix,
 			u8 dma_mode, u32 instance, u32 label, u32 target_evq,
-			u32 num_entries, u8 ps_buf_size, bool force_rx_merge);
+			u32 num_entries, u8 ps_buf_size, bool force_rx_merge,
+			int ef100_rx_buffer_size);
 	int (*set_multicast_loopback_suppression)(struct efx_dl_device *efx_dev,
 						  bool suppress, u16 vport_id,
 						  u8 stack_id);
@@ -450,7 +451,7 @@ struct efx_dl_ops {
  *
  * @pci_dev: Underlying PCI function
  * @net_dev: Underlying net device
- * @ops: Operations struct for 
+ * @ops: Operations struct for
  * @dl_info: hardware parameters
  * @msg_enable: netdev log level for netif_* messages.
  *
@@ -750,6 +751,7 @@ int efx_dl_init_txq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
  * @num_entries: size of the TX ring in entries
  * @ps_buf_size: enum as per MCDI (PACKED_STREAM_BUFF_SIZE)
  * @force_rx_merge: flag as per MCDI
+ * @ef100_rx_buffer_size: RX buffer size (in bytes) for EF100.
  *
  * Available from API version 25.1.
  */
@@ -759,14 +761,14 @@ int efx_dl_init_rxq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
 		    u8 crc_mode, bool timestamp, bool hdr_split, bool buff_mode,
 		    bool rx_prefix, u8 dma_mode, u32 instance, u32 label,
 		    u32 target_evq, u32 num_entries, u8 ps_buf_size,
-		    bool force_rx_merge)
+		    bool force_rx_merge, int ef100_rx_buffer_size)
 {
 	return efx_dev->nic->ops->init_rxq(efx_dev, dma_addrs, n_dma_addrs,
 				      vport_id, stack_id, owner_id,
 				      crc_mode, timestamp, hdr_split, buff_mode,
 				      rx_prefix, dma_mode, instance, label,
 				      target_evq, num_entries, ps_buf_size,
-				      force_rx_merge);
+				      force_rx_merge, ef100_rx_buffer_size);
 }
 
 /**

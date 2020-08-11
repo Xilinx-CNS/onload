@@ -34,7 +34,7 @@ struct mae_caps {
 	u32 encap_types;
 	u32 action_prios;
 	u8 action_rule_fields[MAE_NUM_FIELDS];
-	u8 encap_rule_fields[MAE_NUM_FIELDS];
+	u8 outer_rule_fields[MAE_NUM_FIELDS];
 };
 
 #define MAE_ENCAP_TYPE_SUPPORTED(_caps, _type)	((_caps)->encap_type & \
@@ -46,6 +46,9 @@ int efx_mae_get_caps(struct efx_nic *efx, struct mae_caps *caps);
 int efx_mae_match_check_caps(struct efx_nic *efx,
 			     const struct efx_tc_match_fields *mask,
 			     struct netlink_ext_ack *extack);
+int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
+				 const struct efx_tc_match_fields *mask,
+				 struct netlink_ext_ack *extack);
 int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv);
 
 int efx_mae_allocate_counter(struct efx_nic *efx, u32 *id);
@@ -72,6 +75,13 @@ int efx_mae_register_encap_match(struct efx_nic *efx,
 				 struct efx_tc_encap_match *encap);
 int efx_mae_unregister_encap_match(struct efx_nic *efx,
 				   struct efx_tc_encap_match *encap);
+int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
+			    u32 prio);
+int efx_mae_remove_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+int efx_mae_insert_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn);
+int efx_mae_remove_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn);
+#endif
 #endif
 
 int efx_mae_insert_rule(struct efx_nic *efx, const struct efx_tc_match *match,

@@ -2037,15 +2037,19 @@ static struct efx_nic *efx_dl_device_priv(struct efx_dl_device *efx_dev)
 static int __efx_dl_publish(struct efx_dl_device *efx_dev)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
+	int rc = efx_net_alloc(efx);
 
-	return efx->net_dev->netdev_ops->ndo_open(efx->net_dev);
+	if (rc)
+		efx_net_dealloc(efx);
+
+	return rc;
 }
 
 static void __efx_dl_unpublish(struct efx_dl_device *efx_dev)
 {
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 
-	efx->net_dev->netdev_ops->ndo_stop(efx->net_dev);
+	efx_net_dealloc(efx);
 }
 
 static void __efx_dl_pause(struct efx_dl_device *efx_dev)
@@ -2318,7 +2322,7 @@ int __efx_dl_init_rxq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
 		      u8 crc_mode, bool timestamp, bool hdr_split,
 		      bool buff_mode, bool rx_prefix, u8 dma_mode, u32 instance,
 		      u32 label, u32 target_evq, u32 num_entries,
-		      u8 ps_buf_size, bool force_rx_merge)
+		      u8 ps_buf_size, bool force_rx_merge, int ef100_rx_buffer_size)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_INIT_RXQ_V4_IN_LEN);
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
@@ -2363,9 +2367,15 @@ int __efx_dl_init_rxq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
 		MCDI_SET_ARRAY_QWORD(inbuf, INIT_RXQ_EXT_IN_DMA_ADDR, i,
 				     dma_addrs[i]);
 
-	if (efx_nic_rev(efx) == EFX_REV_EF100)
+	if (efx_nic_rev(efx) == EFX_REV_EF100) {
+		if (ef100_rx_buffer_size % L1_CACHE_BYTES) {
+			rc = -EINVAL;
+			goto out_unlock;
+		}
 		MCDI_SET_DWORD(inbuf, INIT_RXQ_V4_IN_BUFFER_SIZE_BYTES,
-				      EFX_RX_USR_BUF_SIZE);
+				      ef100_rx_buffer_size);
+	}
+
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_INIT_RXQ, inbuf, sizeof(inbuf),
 			  NULL, 0, NULL);

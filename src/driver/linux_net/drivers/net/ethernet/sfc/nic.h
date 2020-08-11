@@ -534,8 +534,21 @@ static inline ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue)
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
 struct efx_ts_get_pps;
 struct efx_ts_hw_pps;
+#ifdef CONFIG_SFC_PTP
 int efx_ptp_pps_get_event(struct efx_nic *efx, struct efx_ts_get_pps *data);
 int efx_ptp_hw_pps_enable(struct efx_nic *efx, struct efx_ts_hw_pps *data);
+#else
+static inline int efx_ptp_pps_get_event(struct efx_nic *efx,
+					struct efx_ts_get_pps *data)
+{
+	return -EOPNOTSUPP;
+}
+static inline int efx_ptp_hw_pps_enable(struct efx_nic *efx,
+					struct efx_ts_hw_pps *data)
+{
+	return -EOPNOTSUPP;
+}
+#endif
 #endif
 
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)

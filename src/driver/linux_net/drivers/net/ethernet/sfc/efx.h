@@ -20,6 +20,8 @@ int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd);
 int efx_net_open(struct net_device *net_dev);
 int efx_net_stop(struct net_device *net_dev);
 int efx_change_mtu(struct net_device *net_dev, int new_mtu);
+int efx_net_alloc(struct efx_nic *efx);
+void efx_net_dealloc(struct efx_nic *efx);
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
 void efx_vlan_rx_register(struct net_device *dev, struct vlan_group *vlan_group);
