@@ -5551,6 +5551,10 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
    * closing socket or as a reply to a network packet. */
   release_ep_tbl(trs);
 
+  /* dlfilters have been removed.  Let's process (and free) all icmp
+   * messages */
+  oo_icmp_handle(trs);
+
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   if( ~trs->netif.flags & CI_NETIF_FLAG_WEDGED )
     tcp_helper_leak_check(trs);

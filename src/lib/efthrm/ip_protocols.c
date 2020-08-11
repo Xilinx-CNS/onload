@@ -547,20 +547,23 @@ void oo_icmp_handle(tcp_helper_resource_t* thr)
   /* This list is ordered as "last first".  Let's reorder the messages
    * back. */
   n = NULL;
-  while( msg->next != NULL ) {
+  while( msg != NULL ) {
     p = msg->next;
     msg->next = n;
     n = msg;
     msg = p;
   }
+  msg = n;
 
   /* And now handle them all */
  do {
-    s = efab_ipp_icmp_for_thr(thr, &msg->addr);
-    if( s )
-      efab_ipp_icmp_qpkt(thr, s, &msg->addr, &msg->icmp.hdr);
-    else
-      CITP_STATS_NETIF(++thr->netif.state->stats.rx_icmp_dropped);
+    if( CI_LIKELY(!(thr->netif.flags & CI_NETIF_FLAG_WEDGED)) ) {
+      s = efab_ipp_icmp_for_thr(thr, &msg->addr);
+      if( s )
+        efab_ipp_icmp_qpkt(thr, s, &msg->addr, &msg->icmp.hdr);
+      else
+        CITP_STATS_NETIF(++thr->netif.state->stats.rx_icmp_dropped);
+    }
 
     n = msg->next;
     kfree(msg);
@@ -592,8 +595,10 @@ int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
   /* We are in NAPI context here.  There are limited number of NAPI
    * threads, so it is safe to verify icmp_msg_n value before kmalloc,
    * without any locks, to minimise possible error paths. */
-  if( thr->icmp_msg_n >= thr->netif.opts.icmp_msg_max )
+  if( thr->icmp_msg_n >= thr->netif.opts.icmp_msg_max ) {
+    oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
     return -ENOBUFS;
+  }
 
   msg = kmalloc(sizeof(struct oo_icmp_msg), GFP_ATOMIC);
   if( msg == NULL ) {
