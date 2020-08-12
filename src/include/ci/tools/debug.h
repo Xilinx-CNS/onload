@@ -175,6 +175,22 @@
                (file), (line)));                                \
   } while (0)
 
+#ifdef __cplusplus
+/* __builtin_choose_expr isn't allowed in C++ */
+extern "C++" {
+template<typename T>
+static inline ci_uint64 _ci_force_to_u64(T* v)
+{
+  return reinterpret_cast<ci_uintptr_t>(v);
+}
+
+template<typename T>
+static inline ci_uint64 _ci_force_to_u64(T v)
+{
+  return v;
+}
+}
+#else
 /* Make 'x' a 64-bit integer for printing it, in a way that doesn't truncate
  * values and doesn't produce -Wpointer-to-int-cast warnings on 32-bit
  * platforms. The mad ternary is to make it work for both void* and
@@ -182,6 +198,7 @@
 # define _ci_force_to_u64(x) \
     ((ci_uint64)__builtin_choose_expr(sizeof(1 ? (x) : 0) > 4, \
                                       (x), (ci_uintptr_t)(x)))
+#endif
 
 /* NB Split one ci_fail() into ci_log+ci_log+ci_fail.  With one ci_fail
  * and long expression, we can get truncated output */
