@@ -88,7 +88,7 @@ citp_epollb_postpone_syscall_pre(citp_epollb_fdi *epi,
     if( max_i_used >= 0 ) {
       CI_USER_PTR_SET(op->epoll_ctl, epi->postponed);
       op->epoll_ctl_n = max_i_used + 1;
-      return 1; /* hold the lock, to be released in _post() */
+      return 1; /* hold the lock, to be released after _post() */
     }
   }
 
@@ -104,8 +104,6 @@ static void citp_epollb_postpone_syscall_post(citp_epollb_fdi *epi, int rc)
       epi->postponed[i].fd = -1;
     epi->have_postponed = 0;
   }
-  if( epi->not_mt_safe )
-    pthread_mutex_unlock(&epi->lock_postponed);
 }
 
 static void citp_epollb_do_postponed_ctl(citp_epollb_fdi *epi,
@@ -126,6 +124,8 @@ static void citp_epollb_do_postponed_ctl(citp_epollb_fdi *epi,
   op.maxevents = 0;
   rc = ci_sys_ioctl(epi->fdinfo.fd, OO_EPOLL2_IOC_ACTION, &op);
   citp_epollb_postpone_syscall_post(epi, rc);
+  if( epi->not_mt_safe )
+    pthread_mutex_unlock(&epi->lock_postponed);
 
   if( CI_UNLIKELY( epi->kepfd == -1 && rc == 0 ) )
     citp_epollb_install_kepfd(epi, op.kepfd);
@@ -415,31 +415,22 @@ static int citp_epollb_ctl_do(citp_fdinfo* fdi, citp_fdinfo *fd_fdi,
   citp_epollb_fdi *epi = fdi_to_epollb_fdi(fdi);
   struct oo_epoll2_action_arg op;
   int rc;
-  int have_postponed = 0;
 
   op.kepfd = epi->kepfd;
   op.maxevents = 0;
-  if( epi->have_postponed )
-    have_postponed = citp_epollb_postpone_syscall_pre(epi, &op, fd_fdi);
 
-  /* If we have something postponed:
-   * - we've already got the lock;
-   * - we should add this fd to the list is possible */
-  if( have_postponed ) {
+  if( epi->have_postponed &&
+      citp_epollb_postpone_syscall_pre(epi, &op, fd_fdi) ) {
+    /* If we have something postponed:
+     * - we've already got the lock;
+     * - we should add this fd to the list is possible */
     int rc2 = citp_epollb_postpone(epi, fd_fdi, eop, fd, event, &op);
     rc = ci_sys_ioctl(fdi->fd, OO_EPOLL2_IOC_ACTION, &op);
     citp_epollb_postpone_syscall_post(epi, epi->kepfd == -1 ? rc : 0);
     if( rc2 == -ENOMEM ) {
-      if( fd_fdi ) {
-        rc2 = citp_epollb_postpone(epi, fd_fdi, eop, fd, event, NULL);
-
-        /* postponed arrray was just cleaned up,
-         * so we do not expect errors */
-        ci_assert_nequal(rc2, -ENOMEM);
-        op.rc = rc2;
-      }
-      /* This is not an onloaded fd, so we can't postpone */
-      else if( op.kepfd ) {
+      /* Postponing went awry.  We've already pushed all previouly
+       * postponed operations.  Let's push this one as well. */
+      if( op.kepfd ) {
         op.rc = ci_sys_epoll_ctl(op.kepfd, eop, fd, event);
       }
       else {
@@ -447,11 +438,12 @@ static int citp_epollb_ctl_do(citp_fdinfo* fdi, citp_fdinfo *fd_fdi,
          * we can do here.
          */
         ci_assert_le(rc, 0);
+        op.rc = -ENOENT;
       }
     }
-    else
-      op.rc = rc2;
-    goto out;
+    if( epi->not_mt_safe )
+      pthread_mutex_unlock(&epi->lock_postponed);
+    op.rc = rc2;
   }
   else {
     struct oo_epoll_item item;
@@ -464,7 +456,6 @@ static int citp_epollb_ctl_do(citp_fdinfo* fdi, citp_fdinfo *fd_fdi,
     rc = ci_sys_ioctl(fdi->fd, OO_EPOLL2_IOC_ACTION, &op);
   }
 
-out:
   if( rc < 0 )
     return rc;
 
@@ -610,8 +601,11 @@ int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
      * non-blocking. */
     op.timeout = 0;
     rc = ci_sys_ioctl(fdi->fd, OO_EPOLL2_IOC_ACTION, &op);
-    if( have_postponed )
+    if( have_postponed ) {
       citp_epollb_postpone_syscall_post(epi, epi->kepfd == -1 ? rc : 0);
+      if( epi->not_mt_safe )
+        pthread_mutex_unlock(&epi->lock_postponed);
+    }
     if( timeout == 0 || rc < 0 || op.rc != 0 )
       goto out;
     /* If timeout!=0 && op.rc==0, fall through to blocking syscall */
