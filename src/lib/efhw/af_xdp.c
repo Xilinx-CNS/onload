@@ -62,6 +62,7 @@ struct protection_domain
 struct efhw_nic_af_xdp
 {
   struct file* map;
+  struct file* shadow;
   struct efhw_af_xdp_vi* vi;
   struct protection_domain* pd;
 };
@@ -223,13 +224,28 @@ static int xdp_map_create(int max_entries)
   attr.key_size = sizeof(int);
   attr.value_size = sizeof(int);
   attr.max_entries = max_entries;
-  strncpy(attr.map_name, "onload_xsks", strlen("onload_xsks"));
+  strncpy(attr.map_name, "onload_xsks", sizeof(attr.map_name));
+  rc = sys_bpf(BPF_MAP_CREATE, &attr);
+  return rc;
+}
+
+/* Create the shadow map to support older kernels' dysfunctional redirection */
+static int xdp_map_create_shadow(int max_entries)
+{
+  int rc;
+  union bpf_attr attr = {};
+
+  attr.map_type = BPF_MAP_TYPE_ARRAY;
+  attr.key_size = sizeof(int);
+  attr.value_size = 1;
+  attr.max_entries = max_entries;
+  strncpy(attr.map_name, "onload_shadow", sizeof(attr.map_name));
   rc = sys_bpf(BPF_MAP_CREATE, &attr);
   return rc;
 }
 
 /* Load the BPF program to redirect inbound packets to AF_XDP sockets */
-static int xdp_prog_load(int map_fd)
+static int xdp_prog_load(int map_fd, int shadow_fd)
 {
   /* This is a simple program which redirects TCP and UDP packets to AF_XDP
    * sockets in the map.
@@ -249,6 +265,13 @@ struct bpf_map_def SEC("maps") xsks_map = {
         .max_entries = 256,
 };
 
+struct bpf_map_def SEC("maps") shadow_map = {
+        .type = BPF_MAP_TYPE_ARRAY,
+        .key_size = 4,
+        .value_size = 1,
+        .max_entries = 256,
+};
+
 SEC("xdp_sock")
 int xdp_sock_prog(struct xdp_md *ctx)
 {
@@ -256,6 +279,7 @@ int xdp_sock_prog(struct xdp_md *ctx)
   char* end = (char*)(long)ctx->data_end;
   if( data + 14 + 20 > end )
     return XDP_PASS;
+
   unsigned short ethertype = *(unsigned short*)(data+12);
   unsigned char proto;
   if( ethertype == 8 )
@@ -268,14 +292,27 @@ int xdp_sock_prog(struct xdp_md *ctx)
     return XDP_PASS;
 
   int index = ctx->rx_queue_index;
-  // A set entry here means that the correspnding queue_id
-  // has an active AF_XDP socket bound to it.
-  return bpf_redirect_map(&xsks_map, index, XDP_PASS);
+  int rc = bpf_redirect_map(&xsks_map, index, XDP_PASS);
+  if( rc != XDP_ABORTED )
+    return rc;
+
+  // Workaround for older kernels (pre-5.3) which do not support passing a
+  // fallback action to bpf_redirect_map. We need to check the shadow map to
+  // figure out whether the redirection should succeed, and return XDP_PASS
+  // otherwise.
+  //
+  // We need the shadow map in addition to the socket map because older kernels
+  // also don't support lookup on a socket map.
+  if( bpf_map_lookup_elem(&shadow_map, &index) == NULL )
+    return XDP_PASS;
+
+  return bpf_redirect_map(&xsks_map, index, 0);
 }
 
 char _license[] SEC("license") = "GPL";
    */
-  uint64_t fdH = (uint64_t) map_fd << 32;
+  uint64_t mfdH = (uint64_t) map_fd << 32;
+  uint64_t sfdH = (uint64_t) shadow_fd << 32;
   const uint64_t __attribute__((aligned(8))) prog[] = {
     /* Note handling of relocations below that is
      * to place the map's fd into a register for the
@@ -284,14 +321,23 @@ char _license[] SEC("license") = "GPL";
      */
     0x00000002000000b7,   0x0000000000041361,
     0x0000000000001261,   0x00000000000024bf,
-    0x0000002200000407,   0x00000000000e342d,
+    0x0000002200000407,   0x000000000020342d,
     0x00000017000003b7,   0x00000000000c2469,
-    0x0000000800020415,   0x0000dd86000a0455,
+    0x0000000800020415,   0x0000dd86001c0455,
     0x00000014000003b7,   0x000000000000320f,
     0x0000000000002271,   0x0000001100010215,
-    0x0000000600050255,   0x0000000000101261,
-      fdH | 0x00001118,   0x0000000000000000,
-    0x00000002000003b7,   0x0000003300000085,
+    0x0000000600170255,   0x0000000000101261,
+    0x00000000fffc2a63,    mfdH | 0x00001118,
+    0x0000000000000000,   0x00000002000003b7,
+    0x0000003300000085,   0x00000000000001bf,
+    0x0000002000000167,   0x0000002000000177,
+    0x00000000000d0155,   0x000000000000a2bf,
+    0xfffffffc00000207,    sfdH | 0x00001118,
+    0x0000000000000000,   0x0000000100000085,
+    0x00000000000001bf,   0x00000002000000b7,
+    0x0000000000050115,   0x00000000fffca261,
+     mfdH | 0x00001118,   0x0000000000000000,
+    0x00000000000003b7,   0x0000003300000085,
     0x0000000000000095,
   };
 
@@ -322,25 +368,71 @@ static int xdp_map_update_fd(int map_fd, int key, int sock_fd)
 }
 
 /* Update an element in the XDP socket map (using file pointers) */
-static int xdp_map_update(struct file* map, int key, struct file* sock)
+static int xdp_map_update(struct file* map, struct file* shadow, int key,
+                          struct file* sock)
 {
-  int rc, map_fd, sock_fd;
+  int rc, map_fd, shadow_fd, sock_fd;
 
-  map_fd = xdp_alloc_fd(map);
-  if( map_fd < 0 )
-    return map_fd;
+  rc = map_fd = xdp_alloc_fd(map);
+  if( rc < 0 )
+    return rc;
 
-  sock_fd = xdp_alloc_fd(sock);
-  if( sock_fd < 0 ) {
-    __close_fd(current->files, map_fd);
-    return sock_fd;
-  }
+  rc = shadow_fd = xdp_alloc_fd(shadow);
+  if( rc < 0 )
+    goto fail_shadow;
+
+  rc = sock_fd = xdp_alloc_fd(sock);
+  if( rc < 0 )
+    goto fail_sock;
 
   rc = xdp_map_update_fd(map_fd, key, sock_fd);
+  if( rc < 0 )
+    goto fail_update;
 
+  rc = xdp_map_update_fd(shadow_fd, key, 1);
+
+  /* It should be impossible for only one update to succeed, but if that does
+   * happen then we have an inconsistent state which may cause subtle problems.
+   * Assert here to make the problem more obvious.
+   */
+  BUG_ON(rc < 0);
+
+fail_update:
   __close_fd(current->files, sock_fd);
+fail_sock:
+  __close_fd(current->files, shadow_fd);
+fail_shadow:
   __close_fd(current->files, map_fd);
   return rc;
+}
+
+/* Delete an element in the XDP socket map (using fds) */
+static void xdp_map_delete_fd(int map_fd, int key)
+{
+  union bpf_attr attr = {};
+
+  attr.map_fd = map_fd;
+  attr.key = (uintptr_t)(&key);
+
+  sys_bpf(BPF_MAP_DELETE_ELEM, &attr);
+}
+
+/* Delete an element in the XDP socket map (using file pointers) */
+static void xdp_map_delete(struct file* map, struct file* shadow, int key)
+{
+  int fd;
+
+  fd = xdp_alloc_fd(map);
+  if( fd >= 0 ) {
+    xdp_map_delete_fd(fd, key);
+    __close_fd(current->files, fd);
+  }
+
+  fd = xdp_alloc_fd(shadow);
+  if( fd >= 0 ) {
+    xdp_map_delete_fd(fd, key);
+    __close_fd(current->files, fd);
+  }
 }
 
 /* Bind an AF_XDP socket to an interface */
@@ -557,8 +649,9 @@ static void xdp_release_pd(struct efhw_nic* nic, int owner)
   memset(pd, 0, sizeof(*pd));
 }
 
-static void xdp_release_vi(struct efhw_af_xdp_vi* vi)
+static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 {
+  xdp_map_delete(nic->af_xdp->map, nic->af_xdp->shadow, vi - nic->af_xdp->vi);
   efhw_page_free(&vi->user_offsets_page);
   if( vi->sock != NULL )
     fput(vi->sock);
@@ -640,7 +733,8 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     return rc;
 
-  rc = xdp_map_update(nic->af_xdp->map, instance, vi->sock);
+  rc = xdp_map_update(nic->af_xdp->map, nic->af_xdp->shadow, instance,
+                      vi->sock);
   if( rc < 0 )
     return rc;
 
@@ -725,7 +819,7 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		       struct efhw_ev_handler *ev_handlers,
 		       const uint8_t *mac_addr)
 {
-	int map_fd, rc;
+	int map_fd, shadow_fd, rc;
 	struct bpf_prog* prog;
 	struct efhw_nic_af_xdp* xdp;
 
@@ -738,13 +832,15 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	xdp->vi = (struct efhw_af_xdp_vi*) (xdp + 1);
 	xdp->pd = (struct protection_domain*) (xdp->vi + nic->vi_lim);
 
-	map_fd = xdp_map_create(nic->vi_lim);
-	if( map_fd < 0 ) {
-		kfree(xdp);
-		return map_fd;
-	}
+	rc = map_fd = xdp_map_create(nic->vi_lim);
+	if( rc < 0 )
+		goto fail_map;
 
-	rc = xdp_prog_load(map_fd);
+	rc = shadow_fd = xdp_map_create_shadow(nic->vi_lim);
+	if( rc < 0 )
+		goto fail_shadow;
+
+	rc = xdp_prog_load(map_fd, shadow_fd);
 	if( rc < 0 )
 		goto fail;
 
@@ -762,6 +858,9 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	xdp->map = fget(map_fd);
 	__close_fd(current->files, map_fd);
 
+	xdp->shadow = fget(shadow_fd);
+	__close_fd(current->files, shadow_fd);
+
 	nic->af_xdp = xdp;
 	memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
 
@@ -769,8 +868,11 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	return 0;
 
 fail:
-	kfree(xdp);
+	__close_fd(current->files, shadow_fd);
+fail_shadow:
 	__close_fd(current->files, map_fd);
+fail_map:
+	kfree(xdp);
 	return rc;
 }
 
@@ -810,7 +912,7 @@ af_xdp_nic_event_queue_disable(struct efhw_nic *nic, uint evq,
 {
 	struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq);
 	if( vi != NULL )
-		xdp_release_vi(vi);
+		xdp_release_vi(nic, vi);
 }
 
 static void
