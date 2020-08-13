@@ -284,6 +284,11 @@ extern int onload_zc_query_rx_memregs(int fd, struct onload_zc_iovec* iov,
  * Use of ONLOAD_ZC_KEEP with MSG_PEEK is forbidden, due to the
  * ambiguous packet buffer ownership that it implies.
  *
+ * The iov passed to the callback may have multiple elements. In this
+ * case they are all fragments of the same packet, so when ONLOAD_ZC_KEEP
+ * is used the application must pass only the first (iov[0].buf) to
+ * onload_zc_release_buffers().
+ *
  * As the return code is flags-based the application is free to set
  * any combination of these.  If no flags are set onload will continue
  * to process the next message and ownership of the buffer(s) remains

@@ -763,7 +763,6 @@ void ci_udp_all_fds_gone(ci_netif* netif, oo_sp sock_id, int do_free)
 
   if( OO_PP_NOT_NULL(us->zc_kernel_datagram) ) {
     ci_ip_pkt_fmt* pkt = PKT_CHK(netif, us->zc_kernel_datagram);
-    clear_pio_addr(netif, pkt);
     ci_netif_pkt_release_rx(netif, pkt);
     us->zc_kernel_datagram = OO_PP_NULL;
     us->zc_kernel_datagram_count = 0;

@@ -269,8 +269,8 @@ static void ci_udp_pkt_to_zc_msg(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   if( oo_offbuf_left(&frag->buf) == 0 && OO_PP_NOT_NULL(frag->frag_next) )
     frag = PKT_CHK_NNL(ni, frag->frag_next);
 
+  handle_frag->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
   do {
-    handle_frag->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
     zc_msg->iov[i].iov_len = CI_MIN(oo_offbuf_left(&frag->buf), 
                                     bytes_left);
     zc_msg->iov[i].iov_base = oo_offbuf_ptr(&frag->buf);
@@ -387,7 +387,7 @@ static int ci_udp_recvmsg_get(ci_udp_recv_info* rinf, ci_iovec_ptr* piov)
 
         ci_assert_equal(filterrc, ONLOAD_ZC_CONTINUE);
         (void)filterrc;
-        clear_pio_addr(ni, pkt);
+        pkt->pio_addr = -1;
       }
 # endif
 #endif
@@ -1141,7 +1141,6 @@ static int ci_udp_zc_recv_from_os(ci_netif* ni, ci_udp_state* us,
       }
       pkt->flags |= CI_PKT_FLAG_RX;
       ++ni->state->n_rx_pkts;
-      pkt->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
       pkt->frag_next = us->zc_kernel_datagram;
       us->zc_kernel_datagram = OO_PKT_P(pkt);
       ++us->zc_kernel_datagram_count;
@@ -1208,6 +1207,7 @@ static int ci_udp_zc_recv_from_os(ci_netif* ni, ci_udp_state* us,
    * them from the zc_kernel_datagram list
    */
   first_pkt_p = us->zc_kernel_datagram;
+  PKT_CHK_NNL(ni, first_pkt_p)->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
   us->zc_kernel_datagram = pkt_p;
 #ifndef NDEBUG
   ci_assert_ge(us->zc_kernel_datagram_count, i);
@@ -1250,6 +1250,7 @@ static int ci_udp_zc_recv_from_os(ci_netif* ni, ci_udp_state* us,
 #endif
 
     /* Put the buffers back on the zc_kernel_datagram list */
+    PKT_CHK_NNL(ni, first_pkt_p)->pio_addr = -1;
     pkt->frag_next = us->zc_kernel_datagram;
     us->zc_kernel_datagram = first_pkt_p;
     us->zc_kernel_datagram_count += i;
@@ -1352,7 +1353,7 @@ int ci_udp_zc_recv(ci_udp_iomsg_args* a, struct onload_zc_recv_args* args)
       if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {
         /* Remove the ref we added earlier iff the user didn't retain it */
         pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
-        clear_pio_addr(ni, pkt);
+        pkt->pio_addr = -1;
       }
 
       ci_udp_recv_q_deliver(ni, &us->recv_q, pkt);

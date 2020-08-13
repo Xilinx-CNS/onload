@@ -831,19 +831,5 @@ void oo_pkt_calc_checksums(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                            struct iovec* host_iov);
 
 
-/* Reset ci_ip_pkt_fmt::pio_addr back to the normal value. Called after a zc
- * callback *doesn't* return ONLOAD_ZC_KEEP, to restore the value after it got
- * optimistically overwritten by ci_ip_pkt_fmt::user_refcount */
-static inline void clear_pio_addr(ci_netif* ni, ci_ip_pkt_fmt* pkt)
-{
-  for( ; ; ) {
-    pkt->pio_addr = -1;
-    if( OO_PP_IS_NULL(pkt->frag_next) )
-      break;
-    pkt = PKT_CHK_NNL(ni, pkt->frag_next);
-  }
-}
-
-
 #endif /* __CI_LIB_IP_INTERNAL_H__ */
 /*! \cidoxg_end */
