@@ -231,12 +231,38 @@ if $mcdi; then
         "${sourcedir}/${importhdr}" | \
         tar xv --transform="$transformpath" | sed $transformpath)
 
-    # This applies the license tagging, split across lines to avoid it
-    # looking like a license tag itself.  If v5 is updated to contain license
-    # tags we can remove this.
-    sed -i '1s+^+DX-Copyright-Text: (c) Solarflare Communications Inc */\n+' ${destdir}/${importhdr}
-    sed -i '1s+^+DX-License-Identifier: GPL-2.0 */\n/* X-SP+' ${destdir}/${importhdr}
-    sed -i '1s+^+/* SP+' ${destdir}/${importhdr}
+    # This substitutes the appropriate licence for imported files.
+    perl -ni - ${destdir}/${importhdr} << 'EOF'
+BEGIN {
+  $state = "IDLE";
+  $pstate = "";
+}
+if ($state eq "IDLE") {
+  print "/* SP"."DX-License-Identifier: GPL-2.0 */\n";
+  print "/* X-SP"."DX-Copyright-Text: (c) Copyright Xilinx, Inc. */\n";
+  $nstate = m,^/\*, ? "COMMENT" : "ERROR";
+} elsif ($state eq "COMMENT") {
+  if (m,confidential and proprietary,) {
+    $nstate = "BOILERPLATE";
+  }
+} elsif ($state eq "BOILERPLATE") {
+  if (m,^ *\*+/,) {
+    $nstate = "BODY";
+  }
+} elsif ($state eq "BODY") {
+  print $_;
+}
+if ($nstate ne $state) {
+  $pstate = $state;
+  $state = $nstate;
+}
+END {
+  if ($state ne "BODY") {
+    print STDERR "finished processing file in non-terminal state $state (previous state $pstate)\n";
+    exit 1;
+  }
+}
+EOF
 
     git add $files
     commitif "$commitlog"
