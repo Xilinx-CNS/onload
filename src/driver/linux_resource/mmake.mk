@@ -11,7 +11,7 @@
 RESOURCE_SRCS	:= resource_driver.c \
 	iopage.c driverlink_new.c kernel_proc.c filter.c \
 	bt_stats.c compat_pat_wc.c port_sniff.c nondl_resource.c sysfs.c \
-	nondl_driver.c sfcaffinity.c nic_notifier.c
+	nondl_driver.c sfcaffinity.c nic_notifier.c ethtool_rxclass.c
 
 EFHW_SRCS	:= nic.c eventq.c ef10.c ef100.c af_xdp.c
 

@@ -2288,6 +2288,7 @@ static int efrm_ethtool_filter_insert(struct net_device* dev,
 	int rc;
 	struct ethtool_rxnfc info;
 	const struct ethtool_ops *ops = dev->ethtool_ops;
+	struct cmd_context ctx;
 
 	memset(&info, 0, sizeof(info));
 	info.cmd = ETHTOOL_SRXCLSRLINS;
@@ -2297,6 +2298,11 @@ static int efrm_ethtool_filter_insert(struct net_device* dev,
 
 	if (!ops->set_rxnfc)
 		return -EOPNOTSUPP;
+
+	ctx.netdev = dev;
+	rc = rmgr_set_location(&ctx, &info.fs);
+	if ( rc < 0 )
+		return rc;
 
 	rc = ops->set_rxnfc(dev, &info);
 	if ( rc >= 0 )

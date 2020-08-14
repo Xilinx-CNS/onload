@@ -87,5 +87,11 @@ int efrm_nondl_register_netdev(struct net_device *netdev,
 void efrm_notify_nic_probe(const struct net_device* netdev);
 void efrm_notify_nic_remove(const struct net_device* netdev);
 
+struct ethtool_rx_flow_spec;
+struct cmd_context {
+  struct net_device* netdev;
+};
+int rmgr_set_location(struct cmd_context* ctx,
+                      struct ethtool_rx_flow_spec* fsp);
 
 #endif  /* __LINUX_RESOURCE_INTERNAL__ */
