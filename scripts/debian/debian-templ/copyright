@@ -3,7 +3,8 @@ Upstream-Name: #TYPE#
 Source: http://www.solarflare.com
 
 Files: *
-Copyright: 2005-2015  Solarflare Communications Inc. 7505 Irvine Center Drive, Irvine, CA 92618, USA
+Copyright: 2019-2020 Xilinx, Inc.
+           2005-2019 Solarflare Communications Inc. 7505 Irvine Center Drive, Irvine, CA 92618, USA
            2002-2005 Level 5 Networks Inc.
 License: GPL-2
  This package is free software; you can redistribute it and/or modify

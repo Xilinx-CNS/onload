@@ -1,5 +1,8 @@
 #! /usr/bin/env python2
 #
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2009-2020 Xilinx, Inc.
+#
 # Create a linux install package (kernel or onload).  This script does not
 # affect the customer build.
 #

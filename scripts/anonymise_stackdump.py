@@ -1,4 +1,8 @@
 #! /usr/bin/env python2
+#
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2015-2020 Xilinx, Inc.
+#
 
 # This tool is intended to anonymise the output of onload_stackdump
 # so that they can be shared without giving away IP addresses

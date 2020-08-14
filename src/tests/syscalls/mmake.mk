@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2003-2014 Xilinx, Inc.
+
 read		:= $(patsubst %,$(AppPattern),read)
 write		:= $(patsubst %,$(AppPattern),write)
 writev		:= $(patsubst %,$(AppPattern),writev)

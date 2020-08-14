@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2014-2019 Xilinx, Inc.
+
 TARGETS := test_ftl
 
 SRCS := ../../../tap/tap.c

@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright 2014-2016 Xilinx, Inc. */
+
 /* splice
  *
  * Test app to benchmark performance of splice() syscall.

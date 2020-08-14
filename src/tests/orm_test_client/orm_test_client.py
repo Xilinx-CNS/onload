@@ -1,4 +1,8 @@
 #! /usr/bin/env python2
+#
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2014-2020 Xilinx, Inc.
+
 
 """
 Script to help test onload_remote_monitor.

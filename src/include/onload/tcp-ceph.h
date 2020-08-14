@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc. */
+
 #ifndef INCLUDED_XSMARTNIC_TCP_CEPH_H_
 #define INCLUDED_XSMARTNIC_TCP_CEPH_H_
 #ifdef __KERNEL__

@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017 Xilinx, Inc. */
+
 #ifndef __OOF_TEST_EFRM_H__
 #define __OOF_TEST_EFRM_H__
 

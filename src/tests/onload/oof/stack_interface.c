@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2017-2020 Xilinx, Inc.
+
 #include "stack_interface.h"
 
 int tcp_helper_rx_vi_id(tcp_helper_resource_t* trs, int hwport)

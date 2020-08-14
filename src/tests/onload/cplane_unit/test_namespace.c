@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
+
 /* This test checks interactions between control plane servers in different
  * namespaces.  Currently support for this is limited to the cases where a
  * server in one namespace pulls in state from the server for init_net. */

@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017-2018 Xilinx, Inc. */
+
 #include "stack.h"
 #include "onload_kernel_compat.h"
 #include "oof_test.h"

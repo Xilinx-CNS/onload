@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2015 Xilinx, Inc.
+
 TARGETS := tproxy_preload.so
 
 SRCS := tproxy_preload.c

@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
+
 #include <ci/driver/efab/hardware.h>
 #include <ci/efhw/debug.h>
 #include <ci/efhw/iopage.h>

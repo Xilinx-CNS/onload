@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright 2005-2006 Xilinx, Inc. */
+
 /* exec.c */
 fd_s *add_fd_s(int fd);
 void close_fd_s(fd_s *fds);

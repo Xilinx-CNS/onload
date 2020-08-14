@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright 2013-2016 Xilinx, Inc. */
+
 /**************************************************************************\
 *//*! \file
 ** <L5_PRIVATE L5_SOURCE>
