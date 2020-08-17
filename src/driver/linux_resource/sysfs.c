@@ -14,7 +14,7 @@
  *
  * A currently only afxdp devices are handled the name reflects that.
  */
-#define SYSFS_DIR_NAME "onload-afxdp"
+#define SYSFS_DIR_NAME "afxdp"
 
 /* Root directory containing our sysfs stuff. */
 static struct kobject *sysfs_dir;
@@ -229,7 +229,8 @@ void efrm_install_sysfs_entries(void)
 {
         int rc;
 
-        sysfs_dir = kobject_create_and_add(SYSFS_DIR_NAME, NULL);
+        sysfs_dir = kobject_create_and_add(SYSFS_DIR_NAME,
+                                           &(THIS_MODULE->mkobj.kobj));
         if(sysfs_dir == NULL) {
                 EFRM_ERR("%s: can't create sysfs directory", __func__);
                 return;
