@@ -635,7 +635,7 @@ void test_svc_too_many_services(void)
   ci_uint16 port = 80;
   struct cp_session s1, s2;
   struct cp_mibs *mib;
-  cicp_mac_rowid_t id, id1;
+  cicp_mac_rowid_t id, id1 = CICP_MAC_ROWID_BAD;
 
   cp_unit_init_session(&s1);
   cp_unit_init_session(&s2);
@@ -675,7 +675,7 @@ void test_svc_hash_table_full(void)
   ci_uint16 port = 80;
   struct cp_session s1, s2;
   struct cp_mibs *mib;
-  cicp_mac_rowid_t id, id1;
+  cicp_mac_rowid_t id, id1 = CICP_MAC_ROWID_BAD;
 
   cp_unit_init_session(&s1);
   cp_unit_init_session(&s2);
