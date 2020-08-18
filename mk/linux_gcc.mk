@@ -78,6 +78,15 @@ cwarnings += -Wno-ignored-attributes
 cxxwarnings += -Wno-ignored-attributes
 endif
 
+ifdef W_NO_STRINGOP_OVERFLOW
+# -Warray-bounds is enabled by default in gcc-10, and it complains on
+# Onload's variable-length arrays.
+# Both -Wstringop-overflow and -Warray-bounds are disabled in linux kernel.
+# See ON-12068 for details.
+cwarnings += -Wno-array-bounds
+cwarnings += -Wno-stringop-overflow
+endif
+
 MMAKE_CFLAGS	+= $(MMAKE_CARCH) $(cwarnings)
 MMAKE_CXXFLAGS	+= $(MMAKE_CARCH) $(cxxwarnings)
 MMAKE_CPPFLAGS	:=

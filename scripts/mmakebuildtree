@@ -94,6 +94,7 @@ do_top_level () {
 	W_NO_STRING_TRUNCATION := $W_NO_STRING_TRUNCATION
 	W_IMPLICIT_FALLTHROUGH := $W_IMPLICIT_FALLTHROUGH
 	W_NO_IGNORED_ATTRIBUTES := $W_NO_IGNORED_ATTRIBUTES
+	W_NO_STRINGOP_OVERFLOW := $W_NO_STRINGOP_OVERFLOW
 	$nt
 	$kpath
 EOF
@@ -319,6 +320,10 @@ fi
 
 if [ "$($mmaketool --gcc_major_version)" -ge 7 ] ; then
   W_IMPLICIT_FALLTHROUGH="1"
+fi
+
+if [ "$($mmaketool --gcc_major_version)" -ge 8 ] ; then
+  W_NO_STRINGOP_OVERFLOW="1"
 fi
 
 [ -z "$SRCPATH" ] && SRCPATH=$("$mmaketool" --toppath)/src
