@@ -195,60 +195,6 @@ int efrm_nondl_unregister_netdev(struct net_device *netdev)
         return 0;
 }
 
-static void efrm_nondl_device_up(struct efrm_nondl_device *device)
-{
-        struct efrm_nondl_handle *handle;
-
-	ASSERT_RTNL();
-
-        BUG_ON(device->is_up);
-
-	list_for_each_entry(handle, &device->handles, device_node)
-		efrm_notify_nic_probe(handle->device->netdev);
-
-        device->is_up = 1;
-}
-
-static void efrm_nondl_device_down(struct efrm_nondl_device *device)
-{
-        struct efrm_nondl_handle *handle;
-
-	ASSERT_RTNL();
-
-        BUG_ON(!device->is_up);
-
-	list_for_each_entry(handle, &device->handles, device_node)
-		efrm_notify_nic_remove(handle->device->netdev);
-
-        device->is_up = 0;
-}
-
-void efrm_nondl_start_all(void)
-{
-        struct efrm_nondl_device *device;
-
-        rtnl_lock();
-
-	list_for_each_entry(device, &nondl_device_list, node)
-                efrm_nondl_device_up(device);
-
-        rtnl_unlock();
-}
-EXPORT_SYMBOL(efrm_nondl_start_all);
-
-void efrm_nondl_stop_all(void)
-{
-        struct efrm_nondl_device *device;
-
-        rtnl_lock();
-
-	list_for_each_entry(device, &nondl_device_list, node)
-                efrm_nondl_device_down(device);
-
-        rtnl_unlock();
-}
-EXPORT_SYMBOL(efrm_nondl_stop_all);
-
 void efrm_nondl_init(void)
 {
         /* Nothing to do; provided for completeness */

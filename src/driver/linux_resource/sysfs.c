@@ -176,26 +176,6 @@ static ssize_t nondl_unregister_store(struct kobject *kobj,
                 return length;
 }
 
-/* TODO: these are useful for manual testing, however they should
- * probably be removed at some point */
-static ssize_t nondl_up_store(struct kobject *kobj,
-                             struct kobj_attribute *attr,
-                             const char *buffer,
-                             size_t length)
-{
-        efrm_nondl_start_all();
-        return length;
-}
-
-static ssize_t nondl_down_store(struct kobject *kobj,
-                               struct kobj_attribute *attr,
-                               const char *buffer,
-                               size_t length)
-{
-        efrm_nondl_stop_all();
-        return length;
-}
-
 static struct kobj_attribute nondl_register = __ATTR(register, 0660,
                                                     empty_show,
                                                     nondl_register_store);
@@ -204,19 +184,9 @@ static struct kobj_attribute nondl_unregister = __ATTR(unregister, 0660,
                                                       empty_show,
                                                       nondl_unregister_store);
 
-static struct kobj_attribute nondl_up = __ATTR(up, 0660,
-                                              empty_show,
-                                              nondl_up_store);
-
-static struct kobj_attribute nondl_down = __ATTR(down, 0660,
-                                                empty_show,
-                                                nondl_down_store);
-
 static struct kobj_attribute *nondl_attrs[] = {
         &nondl_register,
         &nondl_unregister,
-        &nondl_up,
-        &nondl_down,
         NULL
 };
 

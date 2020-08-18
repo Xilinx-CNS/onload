@@ -111,12 +111,4 @@ int efrm_nondl_register_driver(struct efrm_nondl_driver *driver);
 
 void efrm_nondl_unregister_driver(struct efrm_nondl_driver *driver);
 
-/* Tell the non-driverlink resource manager that
- * the devices should be brought up. */
-void efrm_nondl_start_all(void);
-
-/* Tell the non-driverlink resource manager that
- * the non-driverlink devices should be taken down. */
-void efrm_nondl_stop_all(void);
-
 #endif
