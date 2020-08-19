@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2018-2019 Xilinx, Inc. */
 #ifndef __CI_NET_IPVX_SH_H__
 #define __CI_NET_IPVX_SH_H__

@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0 */
+/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2009-2020 Xilinx, Inc. */
 /****************************************************************************
  * Copyright 2009-2009: Solarflare Communications Inc,
