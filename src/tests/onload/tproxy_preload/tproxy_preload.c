@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2015-2020 Xilinx, Inc. */
 
-##define _GNU_SOURCE
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <ci/app.h>
 #include <ci/tools/utils.h> /* for toeplitz hash */
