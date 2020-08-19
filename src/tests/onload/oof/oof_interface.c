@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2017-2018 Xilinx, Inc. */
 
-##include "onload_kernel_compat.h"
+#include "onload_kernel_compat.h"
 
 #include <stdlib.h>
 #include <ci/tools.h>
