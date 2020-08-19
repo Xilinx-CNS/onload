@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Copyright 2017 Xilinx, Inc.
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017 Xilinx, Inc. */
 
 #include <stdlib.h>
 #include <arpa/inet.h>

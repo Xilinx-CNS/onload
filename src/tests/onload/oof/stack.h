@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: GPL-2.0
-# X-SPDX-Copyright-Text: (c) Copyright 2017 Xilinx, Inc.
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Copyright 2017 Xilinx, Inc. */
 
 #ifndef __OOF_TEST_STACK_H__
 #define __OOF_TEST_STACK_H__
