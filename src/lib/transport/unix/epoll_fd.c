@@ -2881,11 +2881,10 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
 
     rc = citp_epoll_wait(fdi, ep->wait_events, &wait, n_socks,
                          0, sigmask, lib_context);
+    /* We've just called citp_epoll_wait() with timeout=0, and it may
+     * have rewritten the wait.next_timeout_hr value.  Rewrite it back. */
+    wait.next_timeout_hr = old_timeout_hr;
     if( rc == 0 && old_timeout_hr != 0 ) {
-      /* We've just called citp_epoll_wait() with timeout=0, and it may
-       * have rewritten the wait.next_timeout_hr value.  Rewrite it back. */
-      wait.next_timeout_hr = old_timeout_hr;
-
       citp_reenter_lib(lib_context);
       timeout_hr = wait.next_timeout_hr;
       Log_POLL(ci_log("%s: start over", __FUNCTION__));
