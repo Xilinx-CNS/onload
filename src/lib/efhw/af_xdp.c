@@ -827,9 +827,9 @@ af_xdp_nic_tweak_hardware(struct efhw_nic *nic)
 
 
 static int
-af_xdp_nic_init_hardware(struct efhw_nic *nic,
-		       struct efhw_ev_handler *ev_handlers,
-		       const uint8_t *mac_addr)
+__af_xdp_nic_init_hardware(struct efhw_nic *nic,
+			   struct efhw_ev_handler *ev_handlers,
+			   const uint8_t *mac_addr)
 {
 	int map_fd, shadow_fd, rc;
 	struct bpf_prog* prog;
@@ -888,6 +888,52 @@ fail_map:
 	return rc;
 }
 
+static int
+af_xdp_nic_init_hardware(struct efhw_nic *nic,
+			 struct efhw_ev_handler *ev_handlers,
+			 const uint8_t *mac_addr)
+{
+	int rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr);
+
+/* This ifdefiry is copied from sys_bpf above, because this function is
+ * useless otherwise. */
+#if defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
+	static asmlinkage long (*set)(const struct pt_regs*) = NULL;
+	struct pt_regs regs;
+	mm_segment_t oldfs;
+	struct rlimit rlim;
+
+	if (rc != -EPERM)
+		return rc;
+
+	/* EPERM probably means that we are limited by
+	 * RLIMIT_MEMLOCK.  Let's work around it. */
+	if (set == NULL) {
+		if( efrm_syscall_table == NULL ||
+		    efrm_syscall_table[__NR_setrlimit] == NULL)
+			return -ENOSYS;
+		set = efrm_syscall_table[__NR_setrlimit];
+	}
+
+	/* We need a page per a bpf call: + 3 pages */
+	rlim.rlim_cur = task_rlimit(current, RLIMIT_MEMLOCK) +
+				(3 << PAGE_SHIFT);
+	rlim.rlim_max = CI_MAX(task_rlimit_max(current, RLIMIT_MEMLOCK),
+			       rlim.rlim_cur);
+
+	regs.di = RLIMIT_MEMLOCK;
+	regs.si = (uintptr_t)&rlim;
+	oldfs = get_fs();
+	set_fs(KERNEL_DS);
+	rc = set(&regs);
+	set_fs(oldfs);
+	if (rc != 0)
+		return rc;
+
+	rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr);
+#endif
+	return rc;
+}
 static void
 af_xdp_nic_release_hardware(struct efhw_nic* nic)
 {
