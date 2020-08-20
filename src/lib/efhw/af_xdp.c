@@ -194,44 +194,6 @@ static int sys_bpf(int cmd, union bpf_attr* attr)
 #endif
 }
 
-static int xdp_memlock_allow(int pages)
-{
-  /* This ifdefiry is copied from sys_bpf above, because this function is
-   * useless otherwise. */
-#if defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
-  struct pt_regs regs;
-  mm_segment_t oldfs;
-  struct rlimit rlim;
-  int rc;
-  static asmlinkage long (*set)(const struct pt_regs*) = NULL;
-
-  if( task_rlimit(current, RLIMIT_MEMLOCK) >> PAGE_SHIFT >=
-      atomic_long_read(&get_current_user()->locked_vm) + pages )
-    return 0;
-
-  if( set == NULL ) {
-    if( efrm_syscall_table == NULL ||
-        efrm_syscall_table[__NR_setrlimit] == NULL )
-      return -ENOSYS;
-    set = efrm_syscall_table[__NR_setrlimit];
-  }
-
-  rlim.rlim_cur = atomic_long_read(&get_current_user()->locked_vm) + pages;
-  rlim.rlim_cur <<= PAGE_SHIFT;
-  rlim.rlim_max = CI_MAX(task_rlimit_max(current, RLIMIT_MEMLOCK),
-                         rlim.rlim_cur);
-  regs.di = RLIMIT_MEMLOCK;
-  regs.si = (uintptr_t)&rlim;
-  oldfs = get_fs();
-  set_fs(KERNEL_DS);
-  rc = set(&regs);
-  set_fs(oldfs);
-  return rc;
-#else
-  return 0; /* Let sys_bpf() complain. */
-#endif
-}
-
 /* Allocate an FD for a file. Some operations need them. */
 static int xdp_alloc_fd(struct file* file)
 {
@@ -851,6 +813,7 @@ af_xdp_nic_tweak_hardware(struct efhw_nic *nic)
 }
 
 
+
 static int
 af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		       struct efhw_ev_handler *ev_handlers,
@@ -868,12 +831,6 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		return -ENOMEM;
 	xdp->vi = (struct efhw_af_xdp_vi*) (xdp + 1);
 	xdp->pd = (struct protection_domain*) (xdp->vi + nic->vi_lim);
-
-	/* Ensure that RLIMIT_MEMLOCK allows at least one page per
-	 * sys_bpf() call */
-	rc = xdp_memlock_allow(3);
-	if( rc < 0 )
-		goto fail_map;
 
 	rc = map_fd = xdp_map_create(nic->vi_lim);
 	if( rc < 0 )
