@@ -740,6 +740,18 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
 
   /* TODO AF_XDP: currently instance number matches net_device channel */
   rc = xdp_bind(sock, nic->net_dev->ifindex, instance, vi->flags);
+  if( rc == -EBUSY ) {
+    /* AF_XDP resource release happens asynchronously - the socket through RCU
+     * and the associated umem through deferred work on the global workqueue.
+     * That means that even if we think we can re-use this instance, it may not
+     * actually be free yet.
+     * We stick an rcu_barrier() here in an attempt to force any outstanding
+     * socket release to have completed, and try again.
+     */
+    rcu_barrier();
+    flush_scheduled_work();
+    rc = xdp_bind(sock, nic->net_dev->ifindex, instance, vi->flags);
+  }
   if( rc < 0 )
     return rc;
 
