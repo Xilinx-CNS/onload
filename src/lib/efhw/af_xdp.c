@@ -882,6 +882,7 @@ af_xdp_nic_release_hardware(struct efhw_nic* nic)
   xdp_set_link(nic->net_dev, NULL);
   if( nic->af_xdp != NULL ) {
     fput(nic->af_xdp->map);
+    fput(nic->af_xdp->shadow);
     kfree(nic->af_xdp);
   }
 }
