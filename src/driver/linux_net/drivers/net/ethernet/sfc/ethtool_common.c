@@ -120,10 +120,7 @@ void efx_ethtool_get_drvinfo(struct net_device *net_dev,
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
-	if (efx->type->revision == EFX_REV_EF100)
-		strlcpy(info->driver, "sfc_ef100", sizeof(info->driver));
-	else
-		strlcpy(info->driver, "sfc", sizeof(info->driver));
+	strlcpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
 	strlcpy(info->version, EFX_DRIVER_VERSION, sizeof(info->version));
 	if (!in_interrupt())
 		efx_mcdi_print_fwver(efx, info->fw_version,

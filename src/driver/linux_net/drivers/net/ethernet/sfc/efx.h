@@ -12,6 +12,11 @@
 #define EFX_EFX_H
 
 #include "net_driver.h"
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_INDIRECT_CALL_WRAPPERS)
+#include <linux/indirect_call_wrapper.h>
+#endif
+#include "ef100_rx.h"
+#include "ef100_tx.h"
 #include "filter.h"
 #include "workarounds.h"
 
@@ -20,8 +25,18 @@ int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd);
 int efx_net_open(struct net_device *net_dev);
 int efx_net_stop(struct net_device *net_dev);
 int efx_change_mtu(struct net_device *net_dev, int new_mtu);
-int efx_net_alloc(struct efx_nic *efx);
-void efx_net_dealloc(struct efx_nic *efx);
+int __efx_net_alloc(struct efx_nic *efx);
+void __efx_net_dealloc(struct efx_nic *efx);
+
+static inline int efx_net_alloc(struct efx_nic *efx)
+{
+	return efx->type->net_alloc(efx);
+}
+
+static inline void efx_net_dealloc(struct efx_nic *efx)
+{
+	efx->type->net_dealloc(efx);
+}
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
 void efx_vlan_rx_register(struct net_device *dev, struct vlan_group *vlan_group);
@@ -35,13 +50,18 @@ void efx_pci_remove_post_io(struct efx_nic *efx,
 /* TX */
 netdev_tx_t efx_hard_start_xmit(struct sk_buff *skb,
 				struct net_device *net_dev);
-int efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb);
+int __efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb);
+
+static inline int efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
+{
+	return INDIRECT_CALL_2(tx_queue->efx->type->tx_enqueue,
+			       ef100_enqueue_skb, __efx_enqueue_skb,
+			       tx_queue, skb);
+}
+
 void efx_xmit_done_single(struct efx_tx_queue *tx_queue);
 extern unsigned int efx_piobuf_size;
 extern bool separate_tx_channels;
-
-bool efx_tx_cb_probe(struct efx_tx_queue *tx_queue);
-void efx_tx_cb_destroy(struct efx_tx_queue *tx_queue);
 
 /* RX */
 void efx_set_default_rx_indir_table(struct efx_nic *efx,
@@ -49,12 +69,24 @@ void efx_set_default_rx_indir_table(struct efx_nic *efx,
 void __efx_rx_packet(struct efx_channel *channel);
 void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 		   unsigned int n_frags, unsigned int len, u16 flags);
+
 static inline void efx_rx_flush_packet(struct efx_channel *channel)
 {
 	if (channel->rx_pkt_n_frags)
 		if (!channel->type->receive_raw ||
 		    !channel->type->receive_raw(channel))
-			__efx_rx_packet(channel);
+			INDIRECT_CALL_2(channel->efx->type->rx_packet,
+					__ef100_rx_packet, __efx_rx_packet,
+					channel);
+}
+
+static inline bool efx_rx_buf_hash_valid(struct efx_nic *efx, const u8 *prefix)
+{
+	if (efx->type->rx_buf_hash_valid)
+		return INDIRECT_CALL_1(efx->type->rx_buf_hash_valid,
+				       ef100_rx_buf_hash_valid,
+				       prefix);
+	return true;
 }
 
 #define EFX_MAX_DMAQ_SIZE 4096UL

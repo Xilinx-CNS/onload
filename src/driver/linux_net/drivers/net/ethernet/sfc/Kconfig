@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Solarflare device configuration
 #
@@ -6,9 +7,9 @@ config NET_VENDOR_SOLARFLARE
 	bool "Solarflare devices"
 	default y
 	select NET_DEVLINK
-	---help---
+	help
 	  If you have a network (Ethernet) card belonging to this class, say Y.
-
+	  
 	  Note that the answer to this question doesn't directly affect the
 	  kernel: saying N will just cause the configurator to skip all
 	  the questions about Solarflare devices. If you say Y, you will be asked
@@ -22,22 +23,15 @@ config SFC
 	default m
 	select MDIO
 	select CRC32
-	---help---
+	help
 	  This driver supports 10/40-gigabit Ethernet cards based on
 	  the Solarflare SFC9000-family and SFC9100-family controllers.
-
+	  
+	  It also supports 10/25/40/50/100-gigabit Ethernet cards based
+	  on the Solarflare EF100 networking IP in Xilinx FPGAs.
+	  
 	  To compile this driver as a module, choose M here.  The module
 	  will be called sfc.
-config SFC_EF100
-	tristate "Solarflare Riverhead (TODO: Rename) support"
-	depends on PCI
-	default m
-	---help---
-          This driver supports the new EF100 NIC. I need to write more here
-          to make checkpatch happy, even though it's a bit pointless.
-
-          To compile this driver as a module, choose M here. The module
-          will be called sfc_ef100.
 config SFC_SIENA
 	bool "Solarflare SFC9000-family support"
 	depends on SFC
@@ -46,7 +40,7 @@ config SFC_MTD
 	bool "Solarflare SFC9000/SFC9100-family MTD support"
 	depends on SFC && MTD && !(SFC=y && MTD=m)
 	default y
-	---help---
+	help
 	  This exposes the on-board flash and/or EEPROM as MTD devices
 	  (e.g. /dev/mtd1).  This is required to update the firmware or
 	  the boot configuration under Linux.
@@ -54,14 +48,14 @@ config SFC_MCDI_MON
 	bool "Solarflare SFC9000/SFC9100-family hwmon support"
 	depends on SFC && HWMON && !(SFC=y && HWMON=m)
 	default y
-	---help---
+	help
 	  This exposes the on-board firmware-managed sensors as a
 	  hardware monitor device.
 config SFC_SRIOV
 	bool "Solarflare SFC9000-family SR-IOV support"
 	depends on SFC && PCI_IOV
 	default y
-	---help---
+	help
 	  This enables support for the SFC9000 I/O Virtualization
 	  features, allowing accelerated network performance in
 	  virtualized environments.
@@ -70,13 +64,13 @@ config SFC_PTP
 	depends on SFC
 	default y
 	select PTP_1588_CLOCK
-	---help---
+	help
 	  This enables support for the Precision Time Protocol.
 config SFC_MCDI_LOGGING
 	bool "Solarflare SFC9000/SFC9100-family MCDI logging support"
 	depends on SFC || SFC_EF100
 	default y
-	---help---
+	help
 	  This enables support for tracing of MCDI (Management-Controller-to-
 	  Driver-Interface) commands and responses, allowing debugging of
 	  driver/firmware interaction.  The tracing is actually enabled by

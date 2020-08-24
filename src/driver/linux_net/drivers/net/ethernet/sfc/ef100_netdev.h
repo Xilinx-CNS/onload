@@ -24,5 +24,7 @@ void ef100_start_reps(struct efx_nic *efx);
 void ef100_stop_reps(struct efx_nic *efx);
 int ef100_probe_netdev(struct efx_probe_data *probe_data);
 void ef100_remove_netdev(struct efx_probe_data *probe_data);
+int ef100_net_alloc(struct efx_nic *efx);
+void ef100_net_dealloc(struct efx_nic *efx);
 
 #endif	/* EFX_EF100_NETDEV_H */

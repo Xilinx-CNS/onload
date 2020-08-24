@@ -49,9 +49,8 @@
 #define TX_CB_ORDER_MIN	4
 #define TX_CB_ORDER_MAX	min(12, PAGE_SHIFT)
 #define TX_CB_ORDER_DEF	7
-static unsigned int tx_cb_order __read_mostly = TX_CB_ORDER_DEF;
-static unsigned int
-tx_cb_size __read_mostly = (1 << TX_CB_ORDER_DEF) - NET_IP_ALIGN;
+unsigned int tx_cb_order __read_mostly = TX_CB_ORDER_DEF;
+static unsigned int tx_cb_size __read_mostly = (1 << TX_CB_ORDER_DEF) - NET_IP_ALIGN;
 
 #if defined(EFX_NOT_UPSTREAM)
 static int __init
@@ -469,7 +468,7 @@ static void efx_tx_send_pending(struct efx_channel *channel)
  * Returns 0 on success, error code otherwise.
  * You must hold netif_tx_lock() to call this function.
  */
-int efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
+int __efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 {
 	unsigned int old_insert_count = tx_queue->insert_count;
 	bool xmit_more = netdev_xmit_more();
@@ -619,7 +618,7 @@ netdev_tx_t efx_hard_start_xmit(struct sk_buff *skb,
 
 	tx_queue = efx->select_tx_queue(channel, skb);
 
-	rc = efx_enqueue_skb(tx_queue, skb);
+	rc = __efx_enqueue_skb(tx_queue, skb);
 	return NETDEV_TX_OK;
 }
 
@@ -661,30 +660,3 @@ void efx_xmit_done_single(struct efx_tx_queue *tx_queue)
 
 	efx_xmit_done_check_empty(tx_queue);
 }
-
-static unsigned int efx_tx_cb_page_count(struct efx_tx_queue *tx_queue)
-{
-        return DIV_ROUND_UP(tx_queue->ptr_mask + 1, PAGE_SIZE >> tx_cb_order);
-}
-
-bool efx_tx_cb_probe(struct efx_tx_queue *tx_queue)
-{
-        tx_queue->cb_page = kcalloc(efx_tx_cb_page_count(tx_queue),
-                                    sizeof(tx_queue->cb_page[0]), GFP_KERNEL);
-
-	return !!tx_queue->cb_page;
-}
-
-void efx_tx_cb_destroy(struct efx_tx_queue *tx_queue)
-{
-	unsigned int i;
-
-       if (tx_queue->cb_page) {
-                for (i = 0; i < efx_tx_cb_page_count(tx_queue); i++)
-                        efx_nic_free_buffer(tx_queue->efx,
-                                            &tx_queue->cb_page[i]);
-                kfree(tx_queue->cb_page);
-                tx_queue->cb_page = NULL;
-        }
-}
-

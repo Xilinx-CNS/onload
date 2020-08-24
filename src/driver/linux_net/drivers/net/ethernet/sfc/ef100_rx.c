@@ -40,7 +40,7 @@ int ef100_rx_init(struct efx_rx_queue *rx_queue)
 	return efx_mcdi_rx_init(rx_queue, false);
 }
 
-bool efx_rx_buf_hash_valid(u8 *prefix)
+bool ef100_rx_buf_hash_valid(const u8 *prefix)
 {
 	return PREFIX_FIELD(prefix, RSS_HASH_VALID);
 }
@@ -84,7 +84,7 @@ static bool check_fcs(struct efx_channel *channel, u32 *prefix)
 	return 1;
 }
 
-void __efx_rx_packet(struct efx_channel *channel)
+void __ef100_rx_packet(struct efx_channel *channel)
 {
 	struct efx_rx_buffer *rx_buf =
 		efx_rx_buffer(&channel->rx_queue, channel->rx_pkt_index);
@@ -256,18 +256,3 @@ void ef100_rx_write(struct efx_rx_queue *rx_queue)
 	if (rx_queue->grant_credits)
 		schedule_work(&rx_queue->grant_work);
 }
-
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-int efx_ssr_init(struct efx_channel *channel, struct efx_nic *efx)
-{
-	return 0;
-}
-
-void efx_ssr_fini(struct efx_channel *channel)
-{
-}
-
-void __efx_ssr_end_of_burst(struct efx_channel *channel)
-{
-}
-#endif
