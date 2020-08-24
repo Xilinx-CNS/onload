@@ -390,6 +390,19 @@ static int verify_addrspace_override(ci_netif* ni)
   return 0;
 }
 
+
+static bool have_af_xdp(ci_netif* ni)
+{
+  int nic_i;
+
+  OO_STACK_FOR_EACH_INTF_I(ni, nic_i)
+    if( ci_netif_vi(ni, nic_i)->nic_type.arch == EF_VI_ARCH_AF_XDP )
+      return true;
+
+  return false;
+}
+
+
 int onload_zc_register_buffers(int fd, ef_addrspace addr_space,
                                uint64_t base_ptr, uint64_t len, int flags,
                                onload_zc_handle* handle)
@@ -424,6 +437,11 @@ int onload_zc_register_buffers(int fd, ef_addrspace addr_space,
              (rc = verify_addrspace_override(ni)) < 0 ) {
       /* error code already set appropriately */
     }
+    else if( have_af_xdp(ni) ) {
+      /* Because AF_XDP doesn't support checksum offload, the code necessary
+       * to compute checksums on the host is gnarly and thus non-existant. */
+      rc = -ENOTSUP;
+    }
     else {
       um->addr_space = addr_space;
       um->base = base_ptr;
@@ -434,11 +452,11 @@ int onload_zc_register_buffers(int fd, ef_addrspace addr_space,
                                                num_pages, um->hw_addrs,
                                                &um->kernel_id);
 
-      if( rc )
-        free(um);
-      else
+      if( rc == 0 )
         *handle = zc_usermem_to_handle(um);
     }
+    if( rc )
+      free(um);
 
     citp_fdinfo_release_ref(fdi, 0);
   }
