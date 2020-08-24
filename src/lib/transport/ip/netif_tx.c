@@ -40,6 +40,48 @@ static inline int pkt_q_id(ci_ip_pkt_fmt* pkt)
 }
 
 
+static inline void calc_csum_if_needed(ci_netif* ni, ef_vi* vi,
+                                       ci_ip_pkt_fmt* pkt)
+{
+  /* Calculate packet checksum in case of AF_XDP */
+  if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_AF_XDP &&
+                  is_to_primary_vi(pkt)) ) {
+    struct iovec my_iov[CI_IP_PKT_SEGMENTS_MAX];
+    ci_uint8 protocol;
+
+    ci_netif_pkt_to_host_iovec(ni, pkt, my_iov,
+                               sizeof(my_iov) / sizeof(my_iov[0]));
+
+    protocol = ipx_hdr_protocol(ci_ethertype2af(oo_tx_ether_type_get(pkt)),
+                                oo_ipx_hdr(pkt));
+    if( protocol == IPPROTO_TCP || protocol == IPPROTO_UDP )
+      oo_pkt_calc_checksums(ni, pkt, my_iov);
+  }
+}
+
+
+static inline int tx_ctpio(ci_netif* ni, int intf_i, ef_vi* vi,
+                           ci_ip_pkt_fmt* pkt, const ef_iovec *iov,
+                           int iov_len)
+{
+  ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
+  struct iovec host_iov[CI_IP_PKT_SEGMENTS_MAX];
+  unsigned total_length;
+  int rc;
+
+  total_length = ci_netif_pkt_to_host_iovec(ni, pkt, host_iov,
+                                      sizeof(host_iov) / sizeof(host_iov[0]));
+  oo_pkt_calc_checksums(ni, pkt, host_iov);
+  ef_vi_transmitv_ctpio(vi, total_length, host_iov,
+                        iov_len, nsn->ctpio_ct_threshold);
+  CITP_STATS_NETIF_INC(ni, ctpio_pkts);
+  rc = ef_vi_transmitv_ctpio_fallback(vi, iov, iov_len,
+                                      OO_PKT_ID(pkt));
+  ci_assert_equal(rc, 0);
+  return rc;
+}
+
+
 /* [is_fresh] is a hint indicating that the requested TXs are latency-
  * sensitive. */
 static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
@@ -68,18 +110,8 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
     {
       ef_iovec iov[CI_IP_PKT_SEGMENTS_MAX];
       int iov_len;
-      /* Calculate packet checksum in case of AF_XDP */
-      if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_AF_XDP) ) {
-          struct iovec my_iov;
-          ci_uint8 protocol;
 
-          ci_netif_pkt_to_host_iovec(ni, pkt, &my_iov, 1);
-
-          protocol = ipx_hdr_protocol(ci_ethertype2af(oo_tx_ether_type_get(pkt)),
-                                      oo_ipx_hdr(pkt));
-          if( protocol == IPPROTO_TCP || protocol == IPPROTO_UDP )
-            oo_pkt_calc_checksums(ni, pkt, &my_iov);
-      }
+      calc_csum_if_needed(ni, vi, pkt);
       if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_EF100 &&
                       pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
         ef_remote_iovec remote_iov[CI_IP_PKT_SEGMENTS_MAX];
@@ -99,21 +131,8 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
                       pkt->flags & CI_PKT_FLAG_INDIRECT) )
           ctpio = 0;
         if( ctpio ) {
-          ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
-          struct iovec host_iov[CI_IP_PKT_SEGMENTS_MAX];
-          unsigned total_length;
-
           ci_assert(! posted_dma);
-
-          total_length = ci_netif_pkt_to_host_iovec(ni, pkt, host_iov,
-                                                    sizeof(host_iov) / sizeof(host_iov[0]));
-          oo_pkt_calc_checksums(ni, pkt, host_iov);
-          ef_vi_transmitv_ctpio(vi, total_length, host_iov, iov_len,
-                                nsn->ctpio_ct_threshold);
-          CITP_STATS_NETIF_INC(ni, ctpio_pkts);
-          rc = ef_vi_transmitv_ctpio_fallback(vi, iov, iov_len,
-                                              OO_PKT_ID(pkt));
-          ci_assert_equal(rc, 0);
+          rc = tx_ctpio(ni, intf_i, vi, pkt, iov, iov_len);
         }
         else
 #endif
@@ -268,39 +287,14 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
       }
     }
 #endif
-    /* FIXME: EF100 and AF_XDP don't have checksum offload */
-    if( CI_UNLIKELY((vi->nic_type.arch == EF_VI_ARCH_EF100 ||
-                     vi->nic_type.arch == EF_VI_ARCH_AF_XDP) &&
-                     is_to_primary_vi(pkt)) ) {
-        struct iovec my_iov[CI_IP_PKT_SEGMENTS_MAX];
-        ci_uint8 protocol;
-
-        ci_netif_pkt_to_host_iovec(netif, pkt, my_iov,
-                                   sizeof(my_iov) / sizeof(my_iov[0]));
-
-        protocol = ipx_hdr_protocol(ci_ethertype2af(oo_tx_ether_type_get(pkt)),
-                                    oo_ipx_hdr(pkt));
-        if( protocol == IPPROTO_TCP || protocol == IPPROTO_UDP )
-          oo_pkt_calc_checksums(netif, pkt, my_iov);
-    }
+    calc_csum_if_needed(netif, vi, pkt);
     iov_len = ci_netif_pkt_to_iovec(netif, pkt, iov,
                                     sizeof(iov) / sizeof(iov[0]));
 #if CI_CFG_USE_CTPIO && !defined(__KERNEL__)
     if( (iov_len > 0) && (iov_len <= CI_IP_PKT_SEGMENTS_MAX) &&
         ci_netif_may_ctpio(netif, intf_i, pkt->pay_len) &&
         is_to_primary_vi(pkt) ) {
-      ci_netif_state_nic_t* nsn = &netif->state->nic[intf_i];
-      struct iovec host_iov[CI_IP_PKT_SEGMENTS_MAX];
-      unsigned total_length;
-      total_length = ci_netif_pkt_to_host_iovec(netif, pkt, host_iov,
-                                                sizeof(host_iov) / sizeof(host_iov[0]));
-      oo_pkt_calc_checksums(netif, pkt, host_iov);
-      ef_vi_transmitv_ctpio(vi, total_length, host_iov,
-                            iov_len, nsn->ctpio_ct_threshold);
-      CITP_STATS_NETIF_INC(netif, ctpio_pkts);
-      rc = ef_vi_transmitv_ctpio_fallback(vi, iov, iov_len,
-                                          OO_PKT_ID(pkt));
-      ci_assert_equal(rc, 0);
+      rc = tx_ctpio(netif, intf_i, vi, pkt, iov, iov_len);
     }
     else
 #endif
