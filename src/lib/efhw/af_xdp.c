@@ -16,6 +16,7 @@
 #include <linux/bpf.h>
 #include <linux/mman.h>
 #include <linux/fdtable.h>
+#include <linux/sched/signal.h>
 
 #include <ci/efrm/syscall.h>
 
