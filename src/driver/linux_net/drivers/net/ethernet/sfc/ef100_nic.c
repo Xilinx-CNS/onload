@@ -584,51 +584,44 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 	return rc;
 }
 
-static void ef100_common_stat_mask(unsigned long *mask)
-{
-	__set_bit(EF100_STAT_port_rx_packets, mask);
-	__set_bit(EF100_STAT_port_tx_packets, mask);
-	__set_bit(EF100_STAT_port_rx_bytes, mask);
-	__set_bit(EF100_STAT_port_tx_bytes, mask);
-	__set_bit(EF100_STAT_port_rx_multicast, mask);
-	__set_bit(EF100_STAT_port_rx_bad, mask);
-	__set_bit(EF100_STAT_port_rx_align_error, mask);
-	__set_bit(EF100_STAT_port_rx_overflow, mask);
-}
-
-static void ef100_ethtool_stat_mask(unsigned long *mask)
-{
-	__set_bit(EF100_STAT_port_tx_pause, mask);
-	__set_bit(EF100_STAT_port_tx_unicast, mask);
-	__set_bit(EF100_STAT_port_tx_multicast, mask);
-	__set_bit(EF100_STAT_port_tx_broadcast, mask);
-	__set_bit(EF100_STAT_port_tx_lt64, mask);
-	__set_bit(EF100_STAT_port_tx_64, mask);
-	__set_bit(EF100_STAT_port_tx_65_to_127, mask);
-	__set_bit(EF100_STAT_port_tx_128_to_255, mask);
-	__set_bit(EF100_STAT_port_tx_256_to_511, mask);
-	__set_bit(EF100_STAT_port_tx_512_to_1023, mask);
-	__set_bit(EF100_STAT_port_tx_1024_to_15xx, mask);
-	__set_bit(EF100_STAT_port_tx_15xx_to_jumbo, mask);
-	__set_bit(EF100_STAT_port_rx_good, mask);
-	__set_bit(EF100_STAT_port_rx_pause, mask);
-	__set_bit(EF100_STAT_port_rx_unicast, mask);
-	__set_bit(EF100_STAT_port_rx_broadcast, mask);
-	__set_bit(EF100_STAT_port_rx_lt64, mask);
-	__set_bit(EF100_STAT_port_rx_64, mask);
-	__set_bit(EF100_STAT_port_rx_65_to_127, mask);
-	__set_bit(EF100_STAT_port_rx_128_to_255, mask);
-	__set_bit(EF100_STAT_port_rx_256_to_511, mask);
-	__set_bit(EF100_STAT_port_rx_512_to_1023, mask);
-	__set_bit(EF100_STAT_port_rx_1024_to_15xx, mask);
-	__set_bit(EF100_STAT_port_rx_15xx_to_jumbo, mask);
-	__set_bit(EF100_STAT_port_rx_gtjumbo, mask);
-	__set_bit(EF100_STAT_port_rx_bad_gtjumbo, mask);
-	__set_bit(EF100_STAT_port_rx_length_error, mask);
-	__set_bit(EF100_STAT_port_rx_nodesc_drops, mask);
-	__set_bit(GENERIC_STAT_rx_nodesc_trunc, mask);
-	__set_bit(GENERIC_STAT_rx_noskb_drops, mask);
-}
+#define EF100_COMMON_STAT_MASK ((1ULL << EF100_STAT_port_tx_bytes) |		\
+				(1ULL << EF100_STAT_port_tx_packets) |		\
+				(1ULL << EF100_STAT_port_tx_pause) |		\
+				(1ULL << EF100_STAT_port_tx_unicast) |		\
+				(1ULL << EF100_STAT_port_tx_multicast) |	\
+				(1ULL << EF100_STAT_port_tx_broadcast) |	\
+				(1ULL << EF100_STAT_port_tx_lt64) |		\
+				(1ULL << EF100_STAT_port_tx_64) |		\
+				(1ULL << EF100_STAT_port_tx_65_to_127) |	\
+				(1ULL << EF100_STAT_port_tx_128_to_255) |	\
+				(1ULL << EF100_STAT_port_tx_256_to_511) |	\
+				(1ULL << EF100_STAT_port_tx_512_to_1023) |	\
+				(1ULL << EF100_STAT_port_tx_1024_to_15xx) |	\
+				(1ULL << EF100_STAT_port_tx_15xx_to_jumbo) |	\
+				(1ULL << EF100_STAT_port_rx_bytes) |		\
+				(1ULL << EF100_STAT_port_rx_packets) |		\
+				(1ULL << EF100_STAT_port_rx_good) |		\
+				(1ULL << EF100_STAT_port_rx_bad) |		\
+				(1ULL << EF100_STAT_port_rx_pause) |		\
+				(1ULL << EF100_STAT_port_rx_unicast) |		\
+				(1ULL << EF100_STAT_port_rx_multicast) |	\
+				(1ULL << EF100_STAT_port_rx_broadcast) |	\
+				(1ULL << EF100_STAT_port_rx_lt64) |		\
+				(1ULL << EF100_STAT_port_rx_64) |		\
+				(1ULL << EF100_STAT_port_rx_65_to_127) |	\
+				(1ULL << EF100_STAT_port_rx_128_to_255) |	\
+				(1ULL << EF100_STAT_port_rx_256_to_511) |	\
+				(1ULL << EF100_STAT_port_rx_512_to_1023) |	\
+				(1ULL << EF100_STAT_port_rx_1024_to_15xx) |	\
+				(1ULL << EF100_STAT_port_rx_15xx_to_jumbo) |	\
+				(1ULL << EF100_STAT_port_rx_gtjumbo) |		\
+				(1ULL << EF100_STAT_port_rx_bad_gtjumbo) |	\
+				(1ULL << EF100_STAT_port_rx_align_error) |	\
+				(1ULL << EF100_STAT_port_rx_length_error) |	\
+				(1ULL << EF100_STAT_port_rx_overflow) |		\
+				(1ULL << EF100_STAT_port_rx_nodesc_drops) |	\
+				(1ULL << GENERIC_STAT_rx_nodesc_trunc) |	\
+				(1ULL << GENERIC_STAT_rx_noskb_drops))
 
 #define EF100_DMA_STAT(ext_name, mcdi_name)			\
 	[EF100_STAT_ ## ext_name] =				\
@@ -675,11 +668,16 @@ static const struct efx_hw_stat_desc ef100_stat_desc[EF100_STAT_COUNT] = {
 	EFX_GENERIC_SW_STAT(rx_noskb_drops),
 };
 
+static void ef100_get_stat_mask(struct efx_nic *efx, unsigned long *mask)
+{
+	*mask = EF100_COMMON_STAT_MASK;
+}
+
 static size_t ef100_describe_stats(struct efx_nic *efx, u8 *names)
 {
-	DECLARE_BITMAP(mask, EF100_STAT_COUNT) = {};
+	DECLARE_BITMAP(mask, EF100_STAT_COUNT);
 
-	ef100_ethtool_stat_mask(mask);
+	ef100_get_stat_mask(efx, mask);
 	return efx_nic_describe_stats(ef100_stat_desc, EF100_STAT_COUNT,
 				      mask, names);
 }
@@ -688,11 +686,11 @@ static size_t ef100_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 					struct rtnl_link_stats64 *core_stats)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	DECLARE_BITMAP(mask, EF100_STAT_COUNT) = {};
+	DECLARE_BITMAP(mask, EF100_STAT_COUNT);
 	size_t stats_count = 0, index;
 	u64 *stats = nic_data->stats;
 
-	ef100_ethtool_stat_mask(mask);
+	ef100_get_stat_mask(efx, mask);
 
 	if (full_stats) {
 		for_each_set_bit(index, mask, EF100_STAT_COUNT) {
@@ -733,15 +731,15 @@ static size_t ef100_update_stats(struct efx_nic *efx,
 				 struct rtnl_link_stats64 *core_stats)
 	__acquires(efx->stats_lock)
 {
-	__le64 *mc_stats = kmalloc(efx->num_mac_stats * sizeof(__le64), GFP_KERNEL);
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	DECLARE_BITMAP(mask, EF100_STAT_COUNT);
+	__le64 *mc_stats = kmalloc(efx->num_mac_stats * sizeof(__le64),
+				  GFP_KERNEL);
 	u64 *stats = nic_data->stats;
 
 	spin_lock_bh(&efx->stats_lock);
 
-	ef100_common_stat_mask(mask);
-	ef100_ethtool_stat_mask(mask);
+	ef100_get_stat_mask(efx, mask);
 
 	efx_nic_copy_stats(efx, mc_stats);
 	efx_nic_update_stats(ef100_stat_desc, EF100_STAT_COUNT, mask,
@@ -1565,8 +1563,6 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.revision = EFX_REV_EF100,
 	.is_vf = false,
 	.probe = ef100_probe_main,
-	.net_alloc = ef100_net_alloc,
-	.net_dealloc = ef100_net_dealloc,
 	.offload_features = EF100_OFFLOAD_FEATURES,
 	.mcdi_max_ver = 2,
 	.mcdi_rpc_timeout = efx_ef100_mcdi_rpc_timeout,
@@ -1606,7 +1602,6 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.tx_init = ef100_tx_init,
 	.tx_write = ef100_tx_write,
 	.tx_notify = ef100_notify_tx_desc,
-	.tx_enqueue = ef100_enqueue_skb,
 	.tx_max_skb_descs = ef100_tx_max_skb_descs,
 	.rx_set_rss_flags = efx_mcdi_set_rss_context_flags,
 	.rx_get_rss_flags = efx_mcdi_get_rss_context_flags,
@@ -1614,8 +1609,6 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_init = ef100_rx_init,
 	.rx_remove = efx_mcdi_rx_remove,
 	.rx_write = ef100_rx_write,
-	.rx_packet = __ef100_rx_packet,
-	.rx_buf_hash_valid = ef100_rx_buf_hash_valid,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
 	.filter_table_probe = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
@@ -1693,8 +1686,6 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.revision = EFX_REV_EF100,
 	.is_vf = true,
 	.probe = ef100_probe_vf,
-	.net_alloc = ef100_net_alloc,
-	.net_dealloc = ef100_net_dealloc,
 	.offload_features = EF100_OFFLOAD_FEATURES,
 	.mcdi_max_ver = 2,
 	.mcdi_rpc_timeout = efx_ef100_mcdi_rpc_timeout,
@@ -1732,7 +1723,6 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.tx_init = ef100_tx_init,
 	.tx_write = ef100_tx_write,
 	.tx_notify = ef100_notify_tx_desc,
-	.tx_enqueue = ef100_enqueue_skb,
 	.tx_max_skb_descs = ef100_tx_max_skb_descs,
 	.rx_set_rss_flags = efx_mcdi_set_rss_context_flags,
 	.rx_get_rss_flags = efx_mcdi_get_rss_context_flags,
@@ -1740,7 +1730,6 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.rx_init = ef100_rx_init,
 	.rx_remove = efx_mcdi_rx_remove,
 	.rx_write = ef100_rx_write,
-	.rx_packet = __ef100_rx_packet,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
 	.filter_table_probe = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,

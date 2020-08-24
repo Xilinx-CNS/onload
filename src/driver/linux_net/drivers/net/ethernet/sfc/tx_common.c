@@ -61,38 +61,6 @@ static struct sk_buff *efx_tx_vlan_noaccel(struct efx_tx_queue *tx_queue,
 }
 #endif
 
-static unsigned int efx_tx_cb_page_count(struct efx_tx_queue *tx_queue)
-{
-	return DIV_ROUND_UP(tx_queue->ptr_mask + 1, PAGE_SIZE >> tx_cb_order);
-}
-
-static bool efx_tx_cb_probe(struct efx_tx_queue *tx_queue)
-{
-	if (!tx_queue->efx->type->copy_break)
-		return true;
-
-	tx_queue->cb_page = kcalloc(efx_tx_cb_page_count(tx_queue),
-				    sizeof(tx_queue->cb_page[0]), GFP_KERNEL);
-
-	return !!tx_queue->cb_page;
-}
-
-static void efx_tx_cb_destroy(struct efx_tx_queue *tx_queue)
-{
-	unsigned int i;
-
-	if (!tx_queue->efx->type->copy_break)
-		return;
-
-	if (tx_queue->cb_page) {
-		for (i = 0; i < efx_tx_cb_page_count(tx_queue); i++)
-			efx_nic_free_buffer(tx_queue->efx,
-					    &tx_queue->cb_page[i]);
-		kfree(tx_queue->cb_page);
-		tx_queue->cb_page = NULL;
-	}
-}
-
 int efx_probe_tx_queue(struct efx_tx_queue *tx_queue)
 {
 	struct efx_nic *efx = tx_queue->efx;

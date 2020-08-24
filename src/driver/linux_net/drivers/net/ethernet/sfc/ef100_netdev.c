@@ -157,7 +157,7 @@ static int ef100_net_stop(struct net_device *net_dev)
 	return 0;
 }
 
-void ef100_net_dealloc(struct efx_nic *efx)
+void efx_net_dealloc(struct efx_nic *efx)
 {
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -199,7 +199,7 @@ static int ef100_net_open(struct net_device *net_dev)
 	netif_dbg(efx, ifup, net_dev, "opening device on CPU %d\n",
 		  raw_smp_processor_id());
 
-	rc = ef100_net_alloc(efx);
+	rc = efx_net_alloc(efx);
 	if (rc)
 		goto fail;
 
@@ -226,7 +226,7 @@ fail:
 	return rc;
 }
 
-int ef100_net_alloc(struct efx_nic *efx)
+int efx_net_alloc(struct efx_nic *efx)
 {
 	unsigned int allocated_vis;
 	int rc;
@@ -367,7 +367,7 @@ netdev_tx_t __ef100_hard_start_xmit(struct sk_buff *skb,
 	}
 
 	tx_queue = &channel->tx_queues[0];
-	rc = __ef100_enqueue_skb(tx_queue, skb, efv);
+	rc = __efx_enqueue_skb(tx_queue, skb, efv);
 	if (rc == 0)
 		return NETDEV_TX_OK;
 

@@ -20,7 +20,6 @@
 #include "ef100_nic.h"
 #include "ef100_netdev.h"
 #include "ef100_regs.h"
-#include "ef100.h"
 #ifdef CONFIG_SFC_TRACING
 #define CREATE_TRACE_POINTS
 #include <trace/events/sfc_ef100.h>
@@ -575,9 +574,7 @@ static int ef100_pci_sriov_configure(struct pci_dev *dev, int num_vfs)
 }
 #endif
 
-/* PCI device ID table.
- * On changes make sure to update sfc_pci_table in efx.c
- */
+/* PCI device ID table */
 static const struct pci_device_id ef100_pci_table[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x0100),  /* Riverhead PF */
 		.driver_data = (unsigned long) &ef100_pf_nic_type },
@@ -592,8 +589,8 @@ static struct pci_driver_rh ef100_pci_driver_rh = {
 };
 #endif
 
-struct pci_driver ef100_pci_driver = {
-	.name           = "sfc_ef100",
+static struct pci_driver ef100_pci_driver = {
+	.name           = KBUILD_MODNAME,
 	.id_table       = ef100_pci_table,
 	.probe          = ef100_pci_probe,
 	.remove         = ef100_pci_remove,
@@ -606,3 +603,65 @@ struct pci_driver ef100_pci_driver = {
 	.rh_reserved    = &ef100_pci_driver_rh,
 #endif
 };
+
+static int __init ef100_init_module(void)
+{
+	int rc;
+
+	printk(KERN_INFO "Solarflare EF100 NET driver v" EFX_DRIVER_VERSION "\n");
+
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_GCOV)
+	gcov_provider_init(THIS_MODULE);
+#endif
+
+	rc = efx_init_debugfs("sfc_ef100");
+	if (rc)
+		goto err_debugfs;
+
+	rc = efx_create_reset_workqueue();
+	if (rc)
+		goto err_reset;
+
+	rc = efx_channels_init_module();
+	if (rc)
+		goto err_channels_init;
+
+	rc = pci_register_driver(&ef100_pci_driver);
+	if (rc < 0) {
+		printk(KERN_ERR "pci_register_driver failed, rc=%d\n", rc);
+		goto err_pci;
+	}
+
+	return 0;
+
+err_pci:
+	efx_channels_fini_module();
+err_channels_init:
+	efx_destroy_reset_workqueue();
+err_reset:
+	efx_fini_debugfs();
+err_debugfs:
+	return rc;
+}
+
+static void __exit ef100_exit_module(void)
+{
+	printk(KERN_INFO "Solarflare EF100 NET driver unloading\n");
+
+	pci_unregister_driver(&ef100_pci_driver);
+	efx_fini_debugfs();
+
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_GCOV)
+	gcov_provider_fini(THIS_MODULE);
+#endif
+}
+
+module_init(ef100_init_module);
+module_exit(ef100_exit_module);
+
+MODULE_AUTHOR("Solarflare Communications");
+MODULE_DESCRIPTION("Solarflare EF100 network driver");
+MODULE_LICENSE("GPL");
+MODULE_DEVICE_TABLE(pci, ef100_pci_table);
+MODULE_VERSION(EFX_DRIVER_VERSION);
+

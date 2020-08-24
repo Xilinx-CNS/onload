@@ -1075,7 +1075,7 @@ efx_rx_packet_gro(struct efx_channel *channel, struct efx_rx_buffer *rx_buf,
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RXHASH_SUPPORT)
 	if (efx->net_dev->features & NETIF_F_RXHASH &&
-	    efx_rx_buf_hash_valid(efx, eh))
+	    efx_rx_buf_hash_valid(eh))
 		skb_set_hash(skb, efx_rx_buf_hash(efx, eh), PKT_HASH_TYPE_L4);
 #endif
 	if (csum) {

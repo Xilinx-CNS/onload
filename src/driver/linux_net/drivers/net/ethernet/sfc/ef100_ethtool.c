@@ -70,7 +70,14 @@ const struct ethtool_ops ef100_ethtool_ops = {
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_RESET) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
 	.reset                  = efx_ethtool_reset,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_USE_ETHTOOL_OPS_EXT)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_ETHTOOL_OPS_EXT)
+};
+
+const struct ethtool_ops_ext efx_ethtool_ops_ext = {
+	.size			= sizeof(struct ethtool_ops_ext),
+	/* Do not set ethtool_ops_ext::reset due to RH BZ 1008678 (SF bug 39031) */
+#endif
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR_SIZE)
 	.get_rxfh_indir_size	= efx_ethtool_get_rxfh_indir_size,
 #endif
@@ -106,6 +113,5 @@ const struct ethtool_ops ef100_ethtool_ops = {
 	.get_channels		= efx_ethtool_get_channels,
 	.set_channels		= efx_ethtool_set_channels,
 #endif
-#endif /* EFX_USE_ETHTOOL_OPS_EXT */
 };
 

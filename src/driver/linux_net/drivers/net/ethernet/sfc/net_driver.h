@@ -90,7 +90,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.0.1000"
+#define EFX_DRIVER_VERSION	"5.2.1.1033"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -1937,8 +1937,6 @@ struct ef100_udp_tunnel {
  * @dimension_resources: Dimension controller resources (buffer table,
  *	and VIs once the available interrupt resources are clear)
  * @free_resources: Free resources allocated by dimension_resources
- * @net_alloc: Bringup shared by netdriver and driverlink clients
- * @net_dealloc: Teardown corresponding to @net_alloc()
  * @fini: Shut down the controller
  * @monitor: Periodic function for polling link state and hardware monitor
  * @map_reset_reason: Map ethtool reset reason to a reset method
@@ -2003,7 +2001,6 @@ struct ef100_udp_tunnel {
  * @tx_init: Initialise TX queue on the NIC
  * @tx_remove: Free resources for TX queue
  * @tx_write: Write TX descriptors and doorbell
- * @tx_enqueue: Add an SKB to TX queue
  * @rx_push_rss_config: Write RSS hash key and indirection table to the NIC
  * @rx_pull_rss_config: Read RSS hash key and indirection table back from the NIC
  * @rx_push_rss_context_config: Write RSS hash key and indirection table for
@@ -2018,8 +2015,6 @@ struct ef100_udp_tunnel {
  * @rx_remove: Free resources for RX queue
  * @rx_write: Write RX descriptors and doorbell
  * @rx_defer_refill: Generate a refill reminder event
- * @rx_packet: Receive the queued RX buffer on a channel
- * @rx_buf_hash_valid: Determine whether the RX prefix contains a valid hash
  * @ev_probe: Allocate resources for event queue
  * @ev_init: Initialise event queue on the NIC
  * @ev_fini: Deinitialise event queue on the NIC
@@ -2101,7 +2096,6 @@ struct ef100_udp_tunnel {
  * @can_rx_scatter: NIC is able to scatter packets to multiple buffers
  * @always_rx_scatter: NIC will always scatter packets to multiple buffers
  * @option_descriptors: NIC supports TX option descriptors
- * @copy_break: driver datapath may perform TX copy break
  * @supported_interrupt_modes: A set of flags denoting which interrupt
  *	modes are supported, denoted by a bitshift by values in &enum
  *	efx_init_mode.
@@ -2118,8 +2112,6 @@ struct efx_nic_type {
 	int (*probe)(struct efx_nic *efx);
 	int (*dimension_resources)(struct efx_nic *efx);
 	void (*free_resources)(struct efx_nic *efx);
-	int (*net_alloc)(struct efx_nic *efx);
-	void (*net_dealloc)(struct efx_nic *efx);
 	void (*remove)(struct efx_nic *efx);
 	int (*init)(struct efx_nic *efx);
 	void (*fini)(struct efx_nic *efx);
@@ -2188,7 +2180,6 @@ struct efx_nic_type {
 	void (*tx_remove)(struct efx_tx_queue *tx_queue);
 	void (*tx_write)(struct efx_tx_queue *tx_queue);
 	void (*tx_notify)(struct efx_tx_queue *tx_queue);
-	int (*tx_enqueue)(struct efx_tx_queue *tx_queue, struct sk_buff *skb);
 	unsigned int (*tx_limit_len)(struct efx_tx_queue *tx_queue,
 				     dma_addr_t dma_addr, unsigned int len);
 	unsigned int (*tx_max_skb_descs)(struct efx_nic *efx);
@@ -2211,8 +2202,6 @@ struct efx_nic_type {
 	void (*rx_remove)(struct efx_rx_queue *rx_queue);
 	void (*rx_write)(struct efx_rx_queue *rx_queue);
 	int (*rx_defer_refill)(struct efx_rx_queue *rx_queue);
-	void (*rx_packet)(struct efx_channel *channel);
-	bool (*rx_buf_hash_valid)(const u8 *prefix);
 	int (*ev_probe)(struct efx_channel *channel);
 	int (*ev_init)(struct efx_channel *channel);
 	void (*ev_fini)(struct efx_channel *channel);
@@ -2344,7 +2333,6 @@ struct efx_nic_type {
 	bool can_rx_scatter;
 	bool always_rx_scatter;
 	bool option_descriptors;
-	bool copy_break;
 	unsigned int supported_interrupt_modes;
 	unsigned int timer_period_max;
 #ifdef EFX_NOT_UPSTREAM

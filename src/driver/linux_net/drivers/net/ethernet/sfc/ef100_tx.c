@@ -39,6 +39,13 @@ int ef100_tx_init(struct efx_tx_queue *tx_queue)
 	return efx_mcdi_tx_init(tx_queue, false);
 }
 
+bool efx_tx_cb_probe(struct efx_tx_queue *tx_queue)
+{
+	return true;
+}
+
+void efx_tx_cb_destroy(struct efx_tx_queue *tx_queue) {}
+
 unsigned int ef100_tx_max_skb_descs(struct efx_nic *efx)
 {
 	/* Header and payload descriptor for each output segment, plus
@@ -55,6 +62,13 @@ unsigned int ef100_tx_max_skb_descs(struct efx_nic *efx)
 				   DIV_ROUND_UP(GSO_MAX_SIZE, EFX_PAGE_SIZE));
 
 	return max_descs;
+}
+
+int efx_nic_tx_tso_sw(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
+		      bool *data_mapped)
+{
+	WARN_ON_ONCE(1);
+	return -ENOSYS;
 }
 
 static bool ef100_tx_can_tso(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
@@ -390,13 +404,13 @@ void ef100_ev_tx(struct efx_channel *channel, const efx_qword_t *p_event)
  * Returns 0 on success, error code otherwise. In case of an error this
  * function will free the SKB.
  */
-int ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
+int efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 {
-	return __ef100_enqueue_skb(tx_queue, skb, NULL);
+	return __efx_enqueue_skb(tx_queue, skb, NULL);
 }
 
-int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
-			struct efx_vfrep *efv)
+int __efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
+		      struct efx_vfrep *efv)
 {
 	unsigned int old_insert_count = tx_queue->insert_count;
 	struct efx_nic *efx = tx_queue->efx;

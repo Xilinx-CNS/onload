@@ -153,7 +153,7 @@ EOF
 
 
 donet () {
-  PATH=/sbin:/usr/sbin:/bin:$PATH
+  PATH=/sbin:$PATH
   if $ONLY_IP; then
     true
   elif /sbin/lsmod | grep -q "^\(${N_MODS/ /\|}\)\>"; then
@@ -217,9 +217,8 @@ donet () {
     major=90
     # wait for any device nodes to be created
     sleep 0.5
-    which udevadm > /dev/null && udevadm settle || sleep 3
     # udev may or may not create the device nodes for us
-    # so use /proc/mtd to check what nodes should be created
+    # so use /proc/mtd to check what nodes should be created 
     # and make sure they are created
     i=0
     for F in _ `cat /proc/mtd | awk -F : '/mtd/ {print $1}'`; do
