@@ -35,7 +35,7 @@
 #include <onload/mmap.h>
 #include <onload/dshm.h>
 #include <onload/linux_trampoline.h>
-#include <driver/linux_resource/kernel_compat.h>
+#include <ci/driver/kernel_compat.h>
 #include <onload/cplane_driver.h>
 #include <ci/efch/mmap.h>
 

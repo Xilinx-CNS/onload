@@ -10,7 +10,7 @@
 #include <ci/driver/efab/hardware.h>
 #include <ci/efch/mmap.h>
 #include <ci/efch/op_types.h>
-#include <driver/linux_resource/kernel_compat.h>
+#include <ci/driver/kernel_compat.h>
 #include "char_internal.h"
 #include "filter_list.h"
 #include "linux_char_internal.h"

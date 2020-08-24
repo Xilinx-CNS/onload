@@ -46,7 +46,7 @@
 
 #include <ci/tools/debug.h>
 
-#include <driver/linux_resource/kernel_compat.h>
+#include <ci/driver/kernel_compat.h>
 
 /* This must be at least long enough to store a PCI domain:bus:slot.fn address.
  * The kernel uses a hard-coded value of 32 in lots of places for this. */

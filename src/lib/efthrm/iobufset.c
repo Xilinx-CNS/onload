@@ -44,7 +44,7 @@
 #include <onload/iobufset.h>
 #include <onload/debug.h>
 #include <onload/tcp_driver.h>
-#include "driver/linux_resource/kernel_compat.h"
+#include "ci/driver/kernel_compat.h"
 
 
 /************** IO page operations ****************/

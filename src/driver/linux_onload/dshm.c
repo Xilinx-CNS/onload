@@ -26,7 +26,7 @@
 #include <onload/dshm.h>
 
 /* For get_user_pages() compat. */
-#include "driver/linux_resource/kernel_compat.h"
+#include "ci/driver/kernel_compat.h"
 
 /* Global state. */
 static struct {

@@ -7,7 +7,7 @@
 #include <ci/efrm/buffer_table.h>
 #include "char_internal.h"
 #include <ci/efrm/sysdep.h>
-#include "driver/linux_resource/kernel_compat.h"
+#include "ci/driver/kernel_compat.h"
 
 struct efch_memreg_area_params {
   struct efrm_bt_collection           bt_alloc;

@@ -45,7 +45,7 @@
 #include <ci/efrm/driver_private.h>
 #include <ci/efrm/sysdep.h>
 #include <ci/efrm/debug.h>
-#include "kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 
 
 /*! Initialize the fields in the provided resource manager memory area

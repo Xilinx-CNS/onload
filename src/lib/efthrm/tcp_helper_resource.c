@@ -15,7 +15,7 @@
 #include <onload/linux_onload_internal.h>
 #include <onload/linux_onload.h>
 #include <onload/linux_ip_protocols.h>
-#include <driver/linux_resource/kernel_compat.h>
+#include <ci/driver/kernel_compat.h>
 #include <ci/efch/mmap.h>
 #include <onload/mmap.h>
 #include <onload/tcp_helper_endpoint.h>

@@ -13,7 +13,7 @@
 #include <net/neighbour.h>
 #include <net/arp.h>
 #include <net/route.h>
-#include "../linux_resource/kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 #include "../linux_onload/onload_kernel_compat.h"
 
 /* Include transport_config_opt.h with CI_CFG_IPV6 definition first,

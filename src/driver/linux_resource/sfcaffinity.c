@@ -15,7 +15,7 @@
 #include <ci/efrm/kernel_proc.h>
 #include <linux/nsproxy.h>
 
-#include "kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 #include "sfcaffinity.h"
 
 

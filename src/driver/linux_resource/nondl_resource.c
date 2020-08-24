@@ -4,7 +4,7 @@
  * devices. */
 
 #include "linux_resource_internal.h"
-#include "kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 #include <ci/efrm/efrm_client.h>
 #include <ci/efrm/nondl.h>
 #include <linux/rtnetlink.h>

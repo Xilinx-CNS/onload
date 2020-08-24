@@ -34,7 +34,7 @@
 #include <linux/fcntl.h>
 #include <linux/net.h>
 
-#include <driver/linux_resource/kernel_compat.h>
+#include <ci/driver/kernel_compat.h>
 
 #ifndef EFRM_HAVE_MSG_ITER
 static inline void __msg_iov_init(struct msghdr *msg, struct iovec *iov,

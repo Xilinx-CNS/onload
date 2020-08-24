@@ -44,7 +44,7 @@
 #include <ci/efhw/nic.h>
 #include "efrm_internal.h"
 #include "efrm_pd.h"
-#include "kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 
 
 /* ************************************ */

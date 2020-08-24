@@ -38,7 +38,7 @@
 #include <ci/driver/driverlink_api.h>
 
 #include "efrm_internal.h"
-#include "kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 
 #include <linux/rtnetlink.h>
 #include <linux/netdevice.h>

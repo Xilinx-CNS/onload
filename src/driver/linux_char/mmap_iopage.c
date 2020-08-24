@@ -4,7 +4,7 @@
 #include <ci/driver/internal.h>
 #include "linux_char_internal.h"
 #include "char_internal.h"
-#include <driver/linux_resource/kernel_compat.h>
+#include <ci/driver/kernel_compat.h>
 
 
 /****************************************************************************

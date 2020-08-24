@@ -53,7 +53,7 @@
  */
 
 #include "linux_resource_internal.h"
-#include "kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 #include <ci/driver/driverlink_api.h>
 #include <ci/efrm/nic_table.h>
 #include <ci/efhw/eventq.h>

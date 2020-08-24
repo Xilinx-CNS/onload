@@ -42,7 +42,7 @@
 #include <ci/efrm/driver_private.h>
 #include <ci/efrm/kernel_proc.h>
 #include <linux/proc_fs.h>
-#include "kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 
 /** Top level directory for sfc specific stats **/
 static struct proc_dir_entry *efrm_proc_root = NULL;

@@ -47,7 +47,7 @@
 #include <net/udp.h>
 #include <linux/proc_fs.h>
 #include <linux/module.h>
-#include "../linux_resource/kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 
 #if 0
 #undef LOG_STATS

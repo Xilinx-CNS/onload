@@ -35,7 +35,7 @@
 #include <ci/efch/op_types.h>
 #include <ci/tools/dllist.h>
 #include "char_internal.h"
-#include <driver/linux_resource/kernel_compat.h>
+#include <ci/driver/kernel_compat.h>
 
 
 struct mm_hash {

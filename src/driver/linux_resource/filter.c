@@ -42,7 +42,7 @@
 
 #include "linux_resource_internal.h"
 #include <ci/driver/driverlink_api.h>
-#include "kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 #include <ci/driver/internal.h>
 #include <ci/tools/byteorder.h>
 #include <ci/net/ipv4.h>

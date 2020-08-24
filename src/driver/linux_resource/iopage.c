@@ -33,7 +33,7 @@
  */
 
 #include <ci/driver/resource/linux_efhw_nic.h>
-#include "kernel_compat.h"
+#include <ci/driver/kernel_compat.h>
 #include <ci/efhw/common_sysdep.h> /* for dma_addr_t */
 #include <ci/efrm/debug.h>
 
