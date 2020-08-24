@@ -71,7 +71,7 @@ endif
 
 clean:
 	@$(MakeClean)
-	rm -rf *.ko Module.symvers .*.cmd autocompat.h
+	rm -rf *.ko Module.symvers .*.cmd
 
 
 ifdef MMAKE_IN_KBUILD
@@ -79,21 +79,5 @@ ifdef MMAKE_IN_KBUILD
 obj-m := $(RESOURCE_TARGET) 
 
 sfc_resource-objs := $(RESOURCE_TARGET_SRCS:%.c=%.o) $($(ARCH)_TARGET_SRCS:%.c=%.o)
-
-ifdef KBUILD_SRC
-define filechk_autocompat.h
-	$(src)/kernel_compat.sh -k $(KBUILD_SRC) -o "$(CURDIR)" $(if $(filter 1,$(V)),-v,-q)
-endef
-else
-define filechk_autocompat.h
-	$(src)/kernel_compat.sh -k "$(CURDIR)" -o "$(CURDIR)" $(if $(filter 1,$(V)),-v,-q)
-endef
-endif
-
-$(obj)/autocompat.h: $(src)/kernel_compat.sh $(src)/kernel_compat_funcs.sh
-	+$(call filechk,autocompat.h)
-	@touch $@
-
-$(addprefix $(obj)/,$(sfc_resource-objs)): $(obj)/autocompat.h
 
 endif # MMAKE_IN_KBUILD

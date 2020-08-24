@@ -353,7 +353,7 @@ function test_compile()
 $makefile_prefix
 obj-m := test.o
 EOF
-    make -rR -C $KPATH ARCH=$ARCH M=$dir O=$KOUT ${CC:+CC="$CC"} >$dir/log 2>&1
+    make -rR -C $KPATH ${ARCH:+ARCH=$ARCH} M=$dir O=$KOUT ${CC:+CC="$CC"} >$dir/log 2>&1
     rc=$?
 
     if [ $efx_verbose = true ]; then
@@ -390,7 +390,7 @@ function read_make_variables()
 	regexp=$regexp$split$variable
 	split='|'
     done
-    make -C $KPATH $EXTRA_MAKEFLAGS ARCH=$ARCH M=$dir 2>&1 >/dev/null | sed -r "s#$dir/Makefile:.*: ($regexp)=.*$)#\1#; t; d"
+    make -C $KPATH $EXTRA_MAKEFLAGS ${ARCH:+ARCH=$ARCH} M=$dir 2>&1 >/dev/null | sed -r "s#$dir/Makefile:.*: ($regexp)=.*$)#\1#; t; d"
     rc=$?
 
     rm -rf $dir
@@ -531,7 +531,7 @@ vmsg "KPATH      := $KPATH"
 #  CONFIG_X86_{32,64}:    Work around ARCH = x86 madness
 #  CONFIG_PTP_1588_CLOCK: PTP clock support
 
-[ -n "$ARCH" ] && export ARCH
+[ -n "${ARCH:-}" ] && export ARCH
 eval $(read_make_variables KBUILD_SRC ARCH SRCARCH CONFIG_X86_32 CONFIG_X86_64 CONFIG_PTP_1588_CLOCK abs_srctree)
 
 # Define:

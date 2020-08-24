@@ -20,16 +20,20 @@ clean:    special_top_clean
 
 else
 
-all:
+AUTOCOMPAT := driver/linux_resource/autocompat.h
+all: $(AUTOCOMPAT)
+	+@$(MakeSubdirs)
+
 ifeq ($(LINUX),1)
 ifneq ($(GNU),1)
-	# Build both autocompat.h files: linux_net and linux_resource.
-	$(MAKE) -C driver/linux_net
-	$(MAKE) -C driver/linux_resource
+LINUX_RESOURCE := $(SRCPATH)/driver/linux_resource
+$(AUTOCOMPAT): $(LINUX_RESOURCE)/kernel_compat.sh $(LINUX_RESOURCE)/kernel_compat_funcs.sh
+	@mkdir -p $(@D)
+	$< -k $(KPATH) $(if $(filter 1,$(V)),-v,-q) > $@
 endif
 endif
-	+@$(MakeSubdirs)
 
 clean:
 	@$(MakeClean)
+	rm -f $(AUTOCOMPAT)
 endif
