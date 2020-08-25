@@ -24,7 +24,7 @@ NET_OPT=
 CHAR_OPT=
 LOAD_CONFIG=false
 PROBE_CP_SERVER_PATH=true
-LINUX_NET="sfc sfc_ef100"
+LINUX_NET="sfc"
 
 if [ "$DATABASE_LOG" = "" ] ; then
    DATABASE_LOG=1
@@ -242,7 +242,7 @@ donet () {
     if modprobe -q mtdpart || modprobe -q mtd; then
         modprobe mtdchar
     fi
-    # sfc_ef100 requires nf_flow_table if it is configured in
+    # ef100 support requires nf_flow_table if it is configured in
     modprobe nf_flow_table
 
     # Coverage

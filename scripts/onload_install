@@ -388,7 +388,6 @@ install_kernel_modules() {
   install_f sfc_driverlink.ko "$i_kernelmodules/sfc_driverlink.ko"
   install_f virtual_bus.ko "$i_kernelmodules/virtual_bus.ko"
   install_f sfc.ko "$i_kernelmodules/sfc.ko"
-  install_f sfc_ef100.ko "$i_kernelmodules/sfc_ef100.ko"
   install_f sfc_resource.ko "$i_kernelmodules/sfc_resource.ko"
   install_f sfc_char.ko "$i_kernelmodules/sfc_char.ko"
   install_f onload.ko "$i_kernelmodules/onload.ko"
@@ -524,7 +523,7 @@ check_whether_installed() {
     return
   fi
   local drv where
-  for drv in sfc.ko sfc_ef100.ko onload.ko; do
+  for drv in sfc.ko onload.ko; do
     for where in updates extra; do
       check_file_installed "$i_prefix/lib/modules/$KVER/$where/$drv"
     done
