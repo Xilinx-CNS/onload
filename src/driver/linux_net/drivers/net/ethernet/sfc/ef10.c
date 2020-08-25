@@ -1951,157 +1951,158 @@ static const struct efx_hw_stat_desc efx_ef10_stat_desc[EF10_STAT_COUNT] = {
 	EF10_DMA_STAT(ctpio_erase, CTPIO_ERASE),
 };
 
-#define HUNT_COMMON_STAT_MASK ((1ULL << EF10_STAT_port_tx_bytes) |	\
-			       (1ULL << EF10_STAT_port_tx_packets) |	\
-			       (1ULL << EF10_STAT_port_tx_pause) |	\
-			       (1ULL << EF10_STAT_port_tx_unicast) |	\
-			       (1ULL << EF10_STAT_port_tx_multicast) |	\
-			       (1ULL << EF10_STAT_port_tx_broadcast) |	\
-			       (1ULL << EF10_STAT_port_rx_bytes) |	\
-			       (1ULL << EF10_STAT_port_rx_bytes_minus_good_bytes) | \
-			       (1ULL << EF10_STAT_port_rx_good_bytes) |	\
-			       (1ULL << EF10_STAT_port_rx_bad_bytes) |	\
-			       (1ULL << EF10_STAT_port_rx_packets) |	\
-			       (1ULL << EF10_STAT_port_rx_good) |	\
-			       (1ULL << EF10_STAT_port_rx_bad) |	\
-			       (1ULL << EF10_STAT_port_rx_pause) |	\
-			       (1ULL << EF10_STAT_port_rx_control) |	\
-			       (1ULL << EF10_STAT_port_rx_unicast) |	\
-			       (1ULL << EF10_STAT_port_rx_multicast) |	\
-			       (1ULL << EF10_STAT_port_rx_broadcast) |	\
-			       (1ULL << EF10_STAT_port_rx_lt64) |	\
-			       (1ULL << EF10_STAT_port_rx_64) |		\
-			       (1ULL << EF10_STAT_port_rx_65_to_127) |	\
-			       (1ULL << EF10_STAT_port_rx_128_to_255) |	\
-			       (1ULL << EF10_STAT_port_rx_256_to_511) |	\
-			       (1ULL << EF10_STAT_port_rx_512_to_1023) |\
-			       (1ULL << EF10_STAT_port_rx_1024_to_15xx) |\
-			       (1ULL << EF10_STAT_port_rx_15xx_to_jumbo) |\
-			       (1ULL << EF10_STAT_port_rx_gtjumbo) |	\
-			       (1ULL << EF10_STAT_port_rx_bad_gtjumbo) |\
-			       (1ULL << EF10_STAT_port_rx_overflow) |	\
-			       (1ULL << EF10_STAT_port_rx_nodesc_drops) |\
-			       (1ULL << GENERIC_STAT_rx_nodesc_trunc) |	\
-			       (1ULL << GENERIC_STAT_rx_noskb_drops))
+static void efx_ef10_common_stat_mask(unsigned long *mask)
+{
+	__set_bit(EF10_STAT_port_tx_bytes, mask);
+	__set_bit(EF10_STAT_port_tx_packets, mask);
+	__set_bit(EF10_STAT_port_tx_pause, mask);
+	__set_bit(EF10_STAT_port_tx_unicast, mask);
+	__set_bit(EF10_STAT_port_tx_multicast, mask);
+	__set_bit(EF10_STAT_port_tx_broadcast, mask);
+	__set_bit(EF10_STAT_port_rx_bytes, mask);
+	__set_bit(EF10_STAT_port_rx_bytes_minus_good_bytes, mask);
+	__set_bit(EF10_STAT_port_rx_good_bytes, mask);
+	__set_bit(EF10_STAT_port_rx_bad_bytes, mask);
+	__set_bit(EF10_STAT_port_rx_packets, mask);
+	__set_bit(EF10_STAT_port_rx_good, mask);
+	__set_bit(EF10_STAT_port_rx_bad, mask);
+	__set_bit(EF10_STAT_port_rx_pause, mask);
+	__set_bit(EF10_STAT_port_rx_control, mask);
+	__set_bit(EF10_STAT_port_rx_unicast, mask);
+	__set_bit(EF10_STAT_port_rx_multicast, mask);
+	__set_bit(EF10_STAT_port_rx_broadcast, mask);
+	__set_bit(EF10_STAT_port_rx_lt64, mask);
+	__set_bit(EF10_STAT_port_rx_64, mask);
+	__set_bit(EF10_STAT_port_rx_65_to_127, mask);
+	__set_bit(EF10_STAT_port_rx_128_to_255, mask);
+	__set_bit(EF10_STAT_port_rx_256_to_511, mask);
+	__set_bit(EF10_STAT_port_rx_512_to_1023, mask);
+	__set_bit(EF10_STAT_port_rx_1024_to_15xx, mask);
+	__set_bit(EF10_STAT_port_rx_15xx_to_jumbo, mask);
+	__set_bit(EF10_STAT_port_rx_gtjumbo, mask);
+	__set_bit(EF10_STAT_port_rx_bad_gtjumbo, mask);
+	__set_bit(EF10_STAT_port_rx_overflow, mask);
+	__set_bit(EF10_STAT_port_rx_nodesc_drops, mask);
+	__set_bit(GENERIC_STAT_rx_nodesc_trunc, mask);
+	__set_bit(GENERIC_STAT_rx_noskb_drops, mask);
+}
 
 /* On 7000 series NICs, these statistics are only provided by the 10G MAC.
  * For a 10G/40G switchable port we do not expose these because they might
  * not include all the packets they should.
  * On 8000 series NICs these statistics are always provided.
  */
-#define HUNT_10G_ONLY_STAT_MASK ((1ULL << EF10_STAT_port_tx_control) |	\
-				 (1ULL << EF10_STAT_port_tx_lt64) |	\
-				 (1ULL << EF10_STAT_port_tx_64) |	\
-				 (1ULL << EF10_STAT_port_tx_65_to_127) |\
-				 (1ULL << EF10_STAT_port_tx_128_to_255) |\
-				 (1ULL << EF10_STAT_port_tx_256_to_511) |\
-				 (1ULL << EF10_STAT_port_tx_512_to_1023) |\
-				 (1ULL << EF10_STAT_port_tx_1024_to_15xx) |\
-				 (1ULL << EF10_STAT_port_tx_15xx_to_jumbo))
+static void efx_ef10_10g_only_stat_mask(unsigned long *mask)
+{
+	__set_bit(EF10_STAT_port_tx_control, mask);
+	__set_bit(EF10_STAT_port_tx_lt64, mask);
+	__set_bit(EF10_STAT_port_tx_64, mask);
+	__set_bit(EF10_STAT_port_tx_65_to_127, mask);
+	__set_bit(EF10_STAT_port_tx_128_to_255, mask);
+	__set_bit(EF10_STAT_port_tx_256_to_511, mask);
+	__set_bit(EF10_STAT_port_tx_512_to_1023, mask);
+	__set_bit(EF10_STAT_port_tx_1024_to_15xx, mask);
+	__set_bit(EF10_STAT_port_tx_15xx_to_jumbo, mask);
+}
 
 /* These statistics are only provided by the 40G MAC.  For a 10G/40G
  * switchable port we do expose these because the errors will otherwise
  * be silent.
  */
-#define HUNT_40G_EXTRA_STAT_MASK ((1ULL << EF10_STAT_port_rx_align_error) |\
-				  (1ULL << EF10_STAT_port_rx_length_error))
+static void efx_ef10_40g_extra_stat_mask(unsigned long *mask)
+{
+	__set_bit(EF10_STAT_port_rx_align_error, mask);
+	__set_bit(EF10_STAT_port_rx_length_error, mask);
+}
 
 /* These statistics are only provided if the firmware supports the
  * capability PM_AND_RXDP_COUNTERS.
  */
-#define HUNT_PM_AND_RXDP_STAT_MASK (					\
-	(1ULL << EF10_STAT_port_rx_pm_trunc_bb_overflow) |		\
-	(1ULL << EF10_STAT_port_rx_pm_discard_bb_overflow) |		\
-	(1ULL << EF10_STAT_port_rx_pm_trunc_vfifo_full) |		\
-	(1ULL << EF10_STAT_port_rx_pm_discard_vfifo_full) |		\
-	(1ULL << EF10_STAT_port_rx_pm_trunc_qbb) |			\
-	(1ULL << EF10_STAT_port_rx_pm_discard_qbb) |			\
-	(1ULL << EF10_STAT_port_rx_pm_discard_mapping) |		\
-	(1ULL << EF10_STAT_port_rx_dp_q_disabled_packets) |		\
-	(1ULL << EF10_STAT_port_rx_dp_di_dropped_packets) |		\
-	(1ULL << EF10_STAT_port_rx_dp_streaming_packets) |		\
-	(1ULL << EF10_STAT_port_rx_dp_hlb_fetch) |			\
-	(1ULL << EF10_STAT_port_rx_dp_hlb_wait))
+static void efx_ef10_pm_and_rxdp_stat_mask(unsigned long *mask)
+{
+	__set_bit(EF10_STAT_port_rx_pm_trunc_bb_overflow, mask);
+	__set_bit(EF10_STAT_port_rx_pm_discard_bb_overflow, mask);
+	__set_bit(EF10_STAT_port_rx_pm_trunc_vfifo_full, mask);
+	__set_bit(EF10_STAT_port_rx_pm_discard_vfifo_full, mask);
+	__set_bit(EF10_STAT_port_rx_pm_trunc_qbb, mask);
+	__set_bit(EF10_STAT_port_rx_pm_discard_qbb, mask);
+	__set_bit(EF10_STAT_port_rx_pm_discard_mapping, mask);
+	__set_bit(EF10_STAT_port_rx_dp_q_disabled_packets, mask);
+	__set_bit(EF10_STAT_port_rx_dp_di_dropped_packets, mask);
+	__set_bit(EF10_STAT_port_rx_dp_streaming_packets, mask);
+	__set_bit(EF10_STAT_port_rx_dp_hlb_fetch, mask);
+	__set_bit(EF10_STAT_port_rx_dp_hlb_wait, mask);
+}
 
 /* These statistics are only provided if the NIC supports MC_CMD_MAC_STATS_V2,
  * indicated by returning a value >= MC_CMD_MAC_NSTATS_V2 in
  * MC_CMD_GET_CAPABILITIES_V4_OUT_MAC_STATS_NUM_STATS.
- * These bits are in the second u64 of the raw mask.
  */
-#define EF10_FEC_STAT_MASK (						\
-	(1ULL << (EF10_STAT_fec_uncorrected_errors - 64)) |		\
-	(1ULL << (EF10_STAT_fec_corrected_errors - 64)) |		\
-	(1ULL << (EF10_STAT_fec_corrected_symbols_lane0 - 64)) |	\
-	(1ULL << (EF10_STAT_fec_corrected_symbols_lane1 - 64)) |	\
-	(1ULL << (EF10_STAT_fec_corrected_symbols_lane2 - 64)) |	\
-	(1ULL << (EF10_STAT_fec_corrected_symbols_lane3 - 64)))
+static void efx_ef10_fec_stat_mask(unsigned long *mask)
+{
+	__set_bit(EF10_STAT_fec_uncorrected_errors, mask);
+	__set_bit(EF10_STAT_fec_corrected_errors, mask);
+	__set_bit(EF10_STAT_fec_corrected_symbols_lane0, mask);
+	__set_bit(EF10_STAT_fec_corrected_symbols_lane1, mask);
+	__set_bit(EF10_STAT_fec_corrected_symbols_lane2, mask);
+	__set_bit(EF10_STAT_fec_corrected_symbols_lane3, mask);
+}
 
 /* These statistics are only provided if the NIC supports MC_CMD_MAC_STATS_V3,
  * indicated by returning a value >= MC_CMD_MAC_NSTATS_V3 in
  * MC_CMD_GET_CAPABILITIES_V4_OUT_MAC_STATS_NUM_STATS.
  * These bits are in the second u64 of the raw mask.
  */
-#define EF10_CTPIO_STAT_MASK (						\
-	(1ULL << (EF10_STAT_ctpio_vi_busy_fallback - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_long_write_success - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_missing_dbell_fail - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_overflow_fail - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_underflow_fail - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_timeout_fail - 64)) |			\
-	(1ULL << (EF10_STAT_ctpio_noncontig_wr_fail - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_frm_clobber_fail - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_invalid_wr_fail - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_vi_clobber_fallback - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_unqualified_fallback - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_runt_fallback - 64)) |		\
-	(1ULL << (EF10_STAT_ctpio_success - 64)) |			\
-	(1ULL << (EF10_STAT_ctpio_fallback - 64)) |			\
-	(1ULL << (EF10_STAT_ctpio_poison - 64)) |			\
-	(1ULL << (EF10_STAT_ctpio_erase - 64)))
-
-static u64 efx_ef10_raw_stat_mask(struct efx_nic *efx)
+static void efx_ef10_ctpio_stat_mask(unsigned long *mask)
 {
-	u64 raw_mask = HUNT_COMMON_STAT_MASK;
-	u32 port_caps = efx_mcdi_phy_get_caps(efx);
-	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-
-	if (!(efx->mcdi->fn_flags &
-	      1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_LINKCTRL))
-		return 0;
-
-	if (port_caps & (1 << MC_CMD_PHY_CAP_40000FDX_LBN)) {
-		raw_mask |= HUNT_40G_EXTRA_STAT_MASK;
-		/* 8000 series have everything even at 40G */
-		if (efx_ef10_has_cap(nic_data->datapath_caps2,
-				     MAC_STATS_40G_TX_SIZE_BINS))
-			raw_mask |= HUNT_10G_ONLY_STAT_MASK;
-	} else {
-		raw_mask |= HUNT_10G_ONLY_STAT_MASK;
-	}
-
-	if (efx_ef10_has_cap(nic_data->datapath_caps, PM_AND_RXDP_COUNTERS))
-		raw_mask |= HUNT_PM_AND_RXDP_STAT_MASK;
-
-	return raw_mask;
+	__set_bit(EF10_STAT_ctpio_vi_busy_fallback, mask);
+	__set_bit(EF10_STAT_ctpio_long_write_success, mask);
+	__set_bit(EF10_STAT_ctpio_missing_dbell_fail, mask);
+	__set_bit(EF10_STAT_ctpio_overflow_fail, mask);
+	__set_bit(EF10_STAT_ctpio_underflow_fail, mask);
+	__set_bit(EF10_STAT_ctpio_timeout_fail, mask);
+	__set_bit(EF10_STAT_ctpio_noncontig_wr_fail, mask);
+	__set_bit(EF10_STAT_ctpio_frm_clobber_fail, mask);
+	__set_bit(EF10_STAT_ctpio_invalid_wr_fail, mask);
+	__set_bit(EF10_STAT_ctpio_vi_clobber_fallback, mask);
+	__set_bit(EF10_STAT_ctpio_unqualified_fallback, mask);
+	__set_bit(EF10_STAT_ctpio_runt_fallback, mask);
+	__set_bit(EF10_STAT_ctpio_success, mask);
+	__set_bit(EF10_STAT_ctpio_fallback, mask);
+	__set_bit(EF10_STAT_ctpio_poison, mask);
+	__set_bit(EF10_STAT_ctpio_erase, mask);
 }
 
 static void efx_ef10_get_stat_mask(struct efx_nic *efx, unsigned long *mask)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-	u64 raw_mask[2];
+	u32 port_caps = efx_mcdi_phy_get_caps(efx);
+	unsigned int i;
 
-	raw_mask[0] = efx_ef10_raw_stat_mask(efx);
+	efx_ef10_common_stat_mask(mask);
+	if (efx->mcdi->fn_flags & (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_LINKCTRL)) {
+		if (port_caps & (1 << MC_CMD_PHY_CAP_40000FDX_LBN)) {
+			efx_ef10_40g_extra_stat_mask(mask);
+			/* 8000 series have everything even at 40G */
+			if (efx_ef10_has_cap(nic_data->datapath_caps2,
+					     MAC_STATS_40G_TX_SIZE_BINS))
+				efx_ef10_10g_only_stat_mask(mask);
+		} else {
+			efx_ef10_10g_only_stat_mask(mask);
+		}
+
+		if (efx_ef10_has_cap(nic_data->datapath_caps, PM_AND_RXDP_COUNTERS))
+			efx_ef10_pm_and_rxdp_stat_mask(mask);
+	}
 
 	/* Only show vadaptor stats when EVB capability is present */
-	if (efx_ef10_has_cap(nic_data->datapath_caps, EVB)) {
-		raw_mask[0] |= ~((1ULL << EF10_STAT_rx_unicast) - 1);
-		raw_mask[1] = (1ULL << (EF10_STAT_V1_COUNT - 64)) - 1;
-	} else {
-		raw_mask[1] = 0;
-	}
+	if (efx_ef10_has_cap(nic_data->datapath_caps, EVB))
+		for (i = EF10_STAT_port_COUNT; i < EF10_STAT_V1_COUNT; i++)
+			__set_bit(i, mask);
+
 	/* Only show FEC stats when NIC supports MC_CMD_MAC_STATS_V2 */
 	if (efx->num_mac_stats >= MC_CMD_MAC_NSTATS_V2)
-		raw_mask[1] |= EF10_FEC_STAT_MASK;
+		efx_ef10_fec_stat_mask(mask);
 
 	/* CTPIO stats appear in V3. Only show them on devices that actually
 	 * support CTPIO. Although this driver doesn't use CTPIO others might,
@@ -2109,23 +2110,12 @@ static void efx_ef10_get_stat_mask(struct efx_nic *efx, unsigned long *mask)
 	 */
 	if ((efx->num_mac_stats >= MC_CMD_MAC_NSTATS_V3) &&
 	    efx_ef10_has_cap(nic_data->datapath_caps2, CTPIO))
-		raw_mask[1] |= EF10_CTPIO_STAT_MASK;
-
-#if BITS_PER_LONG == 64
-	BUILD_BUG_ON(BITS_TO_LONGS(EF10_STAT_COUNT) != 2);
-	mask[0] = raw_mask[0];
-	mask[1] = raw_mask[1];
-#else
-	BUILD_BUG_ON(BITS_TO_LONGS(EF10_STAT_COUNT) != 3);
-	mask[0] = raw_mask[0] & 0xffffffff;
-	mask[1] = raw_mask[0] >> 32;
-	mask[2] = raw_mask[1] & 0xffffffff;
-#endif
+		efx_ef10_ctpio_stat_mask(mask);
 }
 
 static size_t efx_ef10_describe_stats(struct efx_nic *efx, u8 *names)
 {
-	DECLARE_BITMAP(mask, EF10_STAT_COUNT);
+	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 
 	efx_ef10_get_stat_mask(efx, mask);
 	return efx_nic_describe_stats(efx_ef10_stat_desc, EF10_STAT_COUNT,
@@ -2140,7 +2130,7 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 					   struct net_device_stats *core_stats)
 #endif
 {
-	DECLARE_BITMAP(mask, EF10_STAT_COUNT);
+	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	u64 *stats = nic_data->stats;
 	size_t stats_count = 0, index;
@@ -2215,7 +2205,7 @@ static size_t efx_ef10_update_stats_pf(struct efx_nic *efx, u64 *full_stats,
 	__acquires(efx->stats_lock)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-	DECLARE_BITMAP(mask, EF10_STAT_COUNT);
+	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 	u64 *stats = nic_data->stats;
 
 	spin_lock_bh(&efx->stats_lock);
@@ -2333,7 +2323,7 @@ static void efx_ef10_pull_stats_vf(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAC_STATS_IN_LEN);
-	DECLARE_BITMAP(mask, EF10_STAT_COUNT);
+	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
 	__le64 generation_start, generation_end;
 	u32 dma_len = efx->num_mac_stats * sizeof(u64);
 	struct efx_buffer stats_buf;
@@ -5766,6 +5756,8 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.probe = efx_ef10_probe_vf,
 	.remove = efx_ef10_remove_vf,
 	.dimension_resources = efx_ef10_dimension_resources,
+	.net_alloc = __efx_net_alloc,
+	.net_dealloc = __efx_net_dealloc,
 	.init = efx_ef10_init_nic,
 	.fini = efx_ef10_fini_nic,
 	.monitor = efx_ef10_monitor,
@@ -5810,6 +5802,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.tx_write = efx_ef10_tx_write,
 	.tx_notify = efx_ef10_notify_tx_desc,
 	.tx_limit_len = efx_ef10_tx_limit_len,
+	.tx_enqueue = __efx_enqueue_skb,
 	.tx_max_skb_descs = efx_ef10_tx_max_skb_descs,
 	.rx_push_rss_config = efx_mcdi_vf_rx_push_rss_config,
 	.rx_pull_rss_config = efx_mcdi_rx_pull_rss_config,
@@ -5818,6 +5811,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.rx_remove = efx_mcdi_rx_remove,
 	.rx_write = efx_ef10_rx_write,
 	.rx_defer_refill = efx_ef10_rx_defer_refill,
+	.rx_packet = __efx_rx_packet,
 	.ev_probe = efx_mcdi_ev_probe,
 	.ev_init = efx_ef10_ev_init,
 	.ev_fini = efx_mcdi_ev_fini,
@@ -5874,6 +5868,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.can_rx_scatter = true,
 	.always_rx_scatter = true,
 	.option_descriptors = true,
+	.copy_break = true,
 	.supported_interrupt_modes = BIT(EFX_INT_MODE_MSIX),
 	.timer_period_max = 1 << ERF_DD_EVQ_IND_TIMER_VAL_WIDTH,
 #ifdef EFX_NOT_UPSTREAM
@@ -5921,6 +5916,8 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.remove = efx_ef10_remove,
 	.dimension_resources = efx_ef10_dimension_resources,
 	.free_resources = efx_ef10_free_resources,
+	.net_alloc = __efx_net_alloc,
+	.net_dealloc = __efx_net_dealloc,
 	.init = efx_ef10_init_nic,
 	.fini = efx_ef10_fini_nic,
 	.monitor = efx_ef10_monitor,
@@ -5965,6 +5962,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.tx_notify = efx_ef10_notify_tx_desc,
 	.tx_limit_len = efx_ef10_tx_limit_len,
 	.tx_max_skb_descs = efx_ef10_tx_max_skb_descs,
+	.tx_enqueue = __efx_enqueue_skb,
 	.rx_push_rss_config = efx_mcdi_pf_rx_push_rss_config,
 	.rx_pull_rss_config = efx_mcdi_rx_pull_rss_config,
 	.rx_push_rss_context_config = efx_mcdi_rx_push_rss_context_config,
@@ -5978,6 +5976,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.rx_remove = efx_mcdi_rx_remove,
 	.rx_write = efx_ef10_rx_write,
 	.rx_defer_refill = efx_ef10_rx_defer_refill,
+	.rx_packet = __efx_rx_packet,
 	.ev_probe = efx_mcdi_ev_probe,
 	.ev_init = efx_ef10_ev_init,
 	.ev_fini = efx_mcdi_ev_fini,
@@ -6063,6 +6062,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.can_rx_scatter = true,
 	.always_rx_scatter = true,
 	.option_descriptors = true,
+	.copy_break = true,
 	.supported_interrupt_modes = BIT(EFX_INT_MODE_MSIX) |
 				     BIT(EFX_INT_MODE_MSI),
     .timer_period_max = 1 << ERF_DD_EVQ_IND_TIMER_VAL_WIDTH,

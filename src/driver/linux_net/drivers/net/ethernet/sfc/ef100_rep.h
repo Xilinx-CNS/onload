@@ -11,6 +11,9 @@
 #ifndef EF100_REP_H
 #define EF100_REP_H
 
+/* Forward declaration needed by nic.h for efx.h */
+struct efx_vfrep;
+
 #include "net_driver.h"
 #include "nic.h"
 

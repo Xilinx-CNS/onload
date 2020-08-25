@@ -51,7 +51,9 @@
 #include "efx.h"
 #include "efx_common.h"
 #include "efx_channels.h"
+#include "ef100.h"
 #include "nic.h"
+#include "ef100_nic.h"
 #include "io.h"
 #include "rx_common.h"
 #include "tx_common.h"
@@ -377,7 +379,7 @@ int efx_net_open(struct net_device *net_dev)
 	netif_dbg(efx, ifup, efx->net_dev, "opening device on CPU %d\n",
 		  raw_smp_processor_id());
 
-	rc = efx_net_alloc(efx);
+	rc = __efx_net_alloc(efx);
 	if (rc)
 		goto fail;
 
@@ -414,7 +416,7 @@ fail:
  * After calling this function, you must call efx_net_dealloc
  * *even if it fails*.
  */
-int efx_net_alloc(struct efx_nic *efx)
+int __efx_net_alloc(struct efx_nic *efx)
 {
 	unsigned int loops = 2;
 	int rc;
@@ -534,7 +536,7 @@ int efx_net_stop(struct net_device *net_dev)
 	return 0;
 }
 
-void efx_net_dealloc(struct efx_nic *efx)
+void __efx_net_dealloc(struct efx_nic *efx)
 {
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -1024,7 +1026,9 @@ static void efx_unregister_netdev(struct efx_nic *efx)
  *
  **************************************************************************/
 
-/* PCI device ID table */
+/* PCI device ID table.
+ * On changes make sure to update sfc_pci_table, below
+ */
 static const struct pci_device_id efx_pci_table[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0803),	/* SFC9020 */
 	 .driver_data = (unsigned long) &siena_a0_nic_type},
@@ -1046,6 +1050,35 @@ static const struct pci_device_id efx_pci_table[] = {
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1b03),  /* SFC9250 VF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
+	{0}			/* end of list */
+};
+
+/* Module device ID table - efx_pci_table + ef100_pci_table */
+static const struct pci_device_id sfc_pci_table[] = {
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0803),	/* SFC9020 */
+	 .driver_data = (unsigned long) &siena_a0_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0813),	/* SFL9021 */
+	 .driver_data = (unsigned long) &siena_a0_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0903),  /* SFC9120 PF */
+	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1903),  /* SFC9120 VF */
+	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0923),  /* SFC9140 PF */
+	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1923),  /* SFC9140 VF */
+	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0a03),  /* SFC9220 PF */
+	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1a03),  /* SFC9220 VF */
+	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0b03),  /* SFC9250 PF */
+	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1b03),  /* SFC9250 VF */
+	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
+	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x0100),  /* Riverhead PF */
+		.driver_data = (unsigned long) &ef100_pf_nic_type },
+	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x1100),  /* Riverhead VF */
+		.driver_data = (unsigned long) &ef100_vf_nic_type },
 	{0}			/* end of list */
 };
 
@@ -1907,8 +1940,16 @@ static int __init efx_init_module(void)
 		goto err_pci;
 	}
 
+	rc = pci_register_driver(&ef100_pci_driver);
+	if (rc < 0) {
+		printk(KERN_ERR "pci_register_driver (ef100) failed, rc=%d\n", rc);
+		goto err_pci_ef100;
+	}
+
 	return 0;
 
+ err_pci_ef100:
+	pci_unregister_driver(&efx_pci_driver);
  err_pci:
 	efx_channels_fini_module();
  err_channels_init:
@@ -1927,6 +1968,7 @@ static void __exit efx_exit_module(void)
 {
 	printk(KERN_INFO "Solarflare NET driver unloading\n");
 
+	pci_unregister_driver(&ef100_pci_driver);
 	pci_unregister_driver(&efx_pci_driver);
 	efx_channels_fini_module();
 	efx_destroy_reset_workqueue();
@@ -1947,5 +1989,5 @@ MODULE_AUTHOR("Solarflare Communications and "
 	      "Michael Brown <mbrown@fensystems.co.uk>");
 MODULE_DESCRIPTION("Solarflare network driver");
 MODULE_LICENSE("GPL");
-MODULE_DEVICE_TABLE(pci, efx_pci_table);
+MODULE_DEVICE_TABLE(pci, sfc_pci_table);
 MODULE_VERSION(EFX_DRIVER_VERSION);

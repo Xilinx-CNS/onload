@@ -1398,9 +1398,11 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 #endif
 	INIT_WORK(&efx->mac_work, efx_mac_work);
 	init_waitqueue_head(&efx->flush_wq);
-	rc = efx_init_struct_tc(efx);
-	if (rc)
-		return rc;
+	if (efx_nic_rev(efx) >= EFX_REV_EF100) {
+		rc = efx_init_struct_tc(efx);
+		if (rc)
+			return rc;
+	}
 
 #ifdef CONFIG_SFC_DEBUGFS
 	mutex_init(&efx->debugfs_symlink_mutex);
@@ -1746,7 +1748,7 @@ int __efx_enable_debug __attribute__((unused));
  * Stop the software path and request a slot reset.
  */
 static pci_ers_result_t efx_io_error_detected(struct pci_dev *pdev,
-					      enum pci_channel_state state)
+					      pci_channel_state_t state)
 {
 	pci_ers_result_t status = PCI_ERS_RESULT_RECOVERED;
 	struct efx_nic *efx = pci_get_drvdata(pdev);

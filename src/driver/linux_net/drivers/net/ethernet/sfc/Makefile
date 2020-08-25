@@ -25,7 +25,6 @@ ifndef EFX_UPSTREAM
 ifndef KERNELRELEASE
 export CONFIG_NET_VENDOR_SOLARFLARE := y
 export CONFIG_SFC := m
-export CONFIG_SFC_EF100 := m
 ifdef EFX_FOR_UPSTREAM
 # match UNIFDEF_DEFINES in export.sh
 export CONFIG_SFC_DEBUGFS :=
@@ -124,15 +123,6 @@ endif
 endif # export-srpm
 
 endif # !KERNELRELEASE
-#
-ifneq ($(findstring 2.6.32-573,$(KDIR)),)
-# RedHat 6.7 kbuild is missing a patch to build multiple modules
-override CONFIG_SFC_EF100 :=
-endif
-# RedHat 6.8 and later only need separate builds if dynamic debugging is enabled
-ifneq ($(findstring .el6,$(KDIR)),)
-  EFX_BUILD_SEPARATE_MODULES := y
-endif
 
 endif # !EFX_UPSTREAM
 #
@@ -140,15 +130,11 @@ sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 			   tx.o tx_common.o rx.o rx_common.o \
 			   selftest.o ethtool_common.o ethtool.o \
 			   mcdi.o mcdi_port.o mcdi_port_common.o mcdi_functions.o \
-			   mcdi_filters.o ef10_sriov.o tx_tso.o tc-stub.o \
-			   efx_devlink.o xdp.o efx_virtbus.o
-
-sfc_ef100-y             := mcdi.o ef100.o efx_common.o efx_channels.o \
-                           ef100_nic.o nic.o ef100_netdev.o ef100_ethtool.o \
-                           ef100_rx.o rx_common.o ef100_tx.o tx_common.o \
-			   ethtool_common.o mcdi_port_common.o mcdi_functions.o \
-			   mcdi_filters.o ef100_sriov.o ef100_rep.o tc.o mae.o \
-			   efx_devlink.o selftest.o xdp.o efx_virtbus.o
+			   mcdi_filters.o ef10_sriov.o tx_tso.o \
+			   efx_devlink.o xdp.o efx_virtbus.o \
+			   ef100.o ef100_nic.o ef100_netdev.o ef100_ethtool.o \
+			   ef100_rx.o ef100_tx.o ef100_sriov.o ef100_rep.o \
+			   tc.o mae.o
 
 sfc_driverlink-y	:= driverlink.o
 
@@ -156,14 +142,12 @@ sfc-$(CONFIG_SFC_SIENA)	+= farch.o siena.o
 sfc-$(CONFIG_SFC_SRIOV)	+= sriov.o
 sfc-$(CONFIG_SFC_MCDI_MON) += mcdi_mon.o
 sfc-$(CONFIG_SFC_PTP)	+= ptp.o
-sfc_ef100-$(CONFIG_SFC_PTP)	+= ptp.o
 sfc-$(CONFIG_SFC_MTD)	+= mtd.o
 ifndef EFX_NO_KCOMPAT
 ifneq ($(MAKECMDGOALS),export)
 ifndef EFX_FOR_UPSTREAM
 sfc-y			+= ioctl.o ioctl_common.o
 CFLAGS_efx.o		= -DEFX_USE_PRIVATE_IOCTL
-sfc_ef100-y		+= ioctl_common.o
 endif
 sfc-y			+= kernel_compat.o
 endif
@@ -172,24 +156,14 @@ ifndef EFX_UPSTREAM
 ifeq ($(filter export export-xen,$(MAKECMDGOALS)),)
 ifndef EFX_FOR_UPSTREAM
 sfc-y			+= linux_mdio.o sfctool.o
-sfc_ef100-y		+= sfctool.o
 sfc-$(CONFIG_SFC_AOE)	+= aoe.o
 sfc-$(CONFIG_SFC_DEBUGFS) += debugfs.o
-sfc_ef100-$(CONFIG_SFC_DEBUGFS) += debugfs.o
 endif # !EFX_FOR_UPSTREAM
 sfc-$(CONFIG_SFC_DUMP) += dump.o
-sfc_ef100-$(CONFIG_SFC_DUMP) += dump.o
 endif
 endif # !EFX_UPSTREAM
 
-ifndef EFX_NO_KCOMPAT
-ifneq ($(MAKECMDGOALS),export)
-sfc_ef100-y             += kernel_compat.o
-endif
-endif # !EFX_NO_KCOMPAT
-
 obj-$(CONFIG_SFC)	+= sfc.o
-obj-$(CONFIG_SFC_EF100) += sfc_ef100.o
 obj-$(CONFIG_SFC_DRIVERLINK) += sfc_driverlink.o
 
 #
@@ -233,7 +207,7 @@ endef
 $(obj)/config.h: $(src)/Makefile FORCE
 	$(call filechk,config.h)
 
-$(addprefix $(obj)/,$(sfc-y) $(sfc_ef100-y) $(sfc_driverlink-y)): \
+$(addprefix $(obj)/,$(sfc-y) $(sfc_driverlink-y)): \
 	$(obj)/.kpath $(obj)/autocompat.h $(obj)/config.h
 
 # Select the right warnings - complicated by working out which options work
@@ -273,17 +247,7 @@ ifdef BUILD_INKERNEL_TESTS
 endif
 
 modules :
-ifdef EFX_BUILD_SEPARATE_MODULES
-  # The kernel is too old to build multiple modules in 1 build
-  ifdef CONFIG_SFC
-	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd) CONFIG_SFC_EF100=
-  endif
-  ifdef CONFIG_SFC_EF100
-	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd) CONFIG_SFC=
-  endif
-else
 	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd)
-endif
 # strip objects
 ifdef NDEBUG
 	$(CROSS_COMPILE)strip --strip-debug $(all_sfc_ko)
@@ -343,19 +307,19 @@ endif # EFX_NOT_EXPORTED
 
 # Export into kernel tree
 export:
-	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) $(sfc_ef100-y:%.o=%.c)
+	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c)
 
 export-resolve-kcompat:
 	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c)
 
 # Export into a Xen kernel tree
 export-xen:
-	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) $(sfc_ef100-y:%.o=%.c)
+	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c)
 
 # Export for SRPM
 export-srpm:
 	mkdir -p $(KDIR)/mtd
-	$(EXPORT_CMD) -o $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) $(sfc_ef100-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh
+	$(EXPORT_CMD) -o $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh
 
 .PHONY : intranet doc clean_doc util clean_util export export-xen export-srpm
 

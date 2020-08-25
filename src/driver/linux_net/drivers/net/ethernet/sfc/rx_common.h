@@ -71,8 +71,6 @@ static inline u8 *efx_rx_buf_va(struct efx_rx_buffer *buf)
 	return page_address(buf->page) + buf->page_offset;
 }
 
-bool efx_rx_buf_hash_valid(u8 *prefix);
-
 static inline u32 efx_rx_buf_hash(struct efx_nic *efx, const u8 *eh)
 {
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)

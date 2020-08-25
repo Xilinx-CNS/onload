@@ -240,11 +240,6 @@ finalize_skb:
 	return skb;
 }
 
-bool efx_rx_buf_hash_valid(u8 *prefix __always_unused)
-{
-	return true;
-}
-
 void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 		   unsigned int n_frags, unsigned int len, u16 flags)
 {

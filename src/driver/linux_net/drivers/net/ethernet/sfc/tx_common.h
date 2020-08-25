@@ -10,6 +10,8 @@
 #ifndef EFX_TX_COMMON_H
 #define EFX_TX_COMMON_H
 
+extern unsigned int tx_cb_order __read_mostly;
+
 int efx_probe_tx_queue(struct efx_tx_queue *tx_queue);
 int efx_init_tx_queue(struct efx_tx_queue *tx_queue);
 void efx_fini_tx_queue(struct efx_tx_queue *tx_queue);
