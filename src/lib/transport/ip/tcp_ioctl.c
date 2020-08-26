@@ -18,6 +18,10 @@
 #include "ip_internal.h"
 #include <ci/net/ioctls.h>
 #include <onload/osfile.h>
+#ifndef __KERNEL__
+#include <onload/extensions_zc.h>
+#include <onload/tcp-ceph.h>
+#endif
 
 
 /* NOTE: in the kernel version [fd] is unused and, if it's a ptr, [arg] will
@@ -45,7 +49,11 @@ static int ci_tcp_ioctl_lk(citp_socket* ep, ci_fd_t fd, int request,
    */
   if( os_socket_exists && request != FIONREAD && request != SIOCATMARK &&
       request != FIOASYNC && request != TIOCOUTQ && request != SIOCOUTQNSD &&
-      request != (int) FIONBIO ) {
+      request != (int) FIONBIO
+#ifndef __KERNEL__
+      && request != ONLOAD_SIOC_CEPH_REMOTE_CONSUME
+#endif
+      ) {
     rc = oo_os_sock_ioctl(netif, s->b.bufid, request, arg, NULL);
     if( rc < 0 )
       return rc;
@@ -162,6 +170,27 @@ static int ci_tcp_ioctl_lk(citp_socket* ep, ci_fd_t fd, int request,
       CI_SET_ERROR(rc, -rc);
     }
     break;
+#endif
+
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#ifndef __KERNEL__
+  case ONLOAD_SIOC_CEPH_REMOTE_CONSUME:
+    if( ! ci_tcp_is_pluginized(ts) )
+      goto fail_inval;
+    else {
+      ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(netif, 0);
+      union ceph_control_pkt cmd = {
+        .consume_payload.cmd = XSN_CEPH_CTRL_CONSUME_PAYLOAD,
+        .consume_payload.stream_id = ts->plugin_stream_id,
+        .consume_payload.buf_tail = CI_IOCTL_GETARG(uint64_t, arg),
+      };
+      if( ! pkt )
+        return -ENOMEM;
+      ci_netif_send_plugin_app_ctrl(netif, ts->s.pkt.intf_i, pkt,
+                                    &cmd, sizeof(cmd));
+    }
+    break;
+#endif
 #endif
 
   default:

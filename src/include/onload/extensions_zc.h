@@ -767,6 +767,28 @@ extern ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
  * onload_zc_recv(). */
 #define ONLOAD_TCP_OFFLOAD  47429
 
+/* ioctl request to mark remote memory as available on this socket. Remote
+ * memory is handed to the app from onload_zc_recv() with
+ * onload_zc_iovec::addr_space != EF_ADDRSPACE_LOCAL. Once the memory is
+ * finished with (typically by completion of a mem2mem transfer), this ioctl
+ * must be called to release the memory back to the plugin.
+ *
+ * The ioctl argp is a pointer to a single uint64_t, being the pointer to the
+ * byte immediately after the region to be freed. This must be a value in the
+ * range (iov_ptr, iov_ptr+iov_len64] for some iov which has been obtained
+ * from onload_zc_recv().
+ *
+ * Plugin memory is freed in order, i.e. passing a pointer from iov[n] will
+ * cause all outstanding memory from iov[k] for all k < n to be freed as well;
+ * all iovs are included in this range, regardless of whether they came from
+ * one or multiple calls to onload_zc_recv(). If the app may cause memory
+ * regions to become available in an arbitrary order then it is the app's
+ * responsibility to sort the completions so that this ordering contraint is
+ * obeyed. This requirement exists because plugin memory operates as a ring
+ * buffer: this ioctl is directly assigning to the 'tail' pointer of the ring
+ * buffer - there is no sophisticated heap manager, */
+#define ONLOAD_SIOC_CEPH_REMOTE_CONSUME  0x654182d9
+
 #ifdef __cplusplus
 }
 #endif
