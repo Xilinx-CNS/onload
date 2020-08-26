@@ -691,7 +691,12 @@ extern int onload_zc_hlrx_alloc(int fd, int flags,
 
 /* Frees an hlrx state created by onload_zc_hlrx_alloc()
  *
- * Returns zero on success, or <0 to indicate an error
+ * Returns zero on success, or <0 to indicate an error. A notable error
+ * is -EBUSY if non-local (i.e. addr_space != EF_ADDRSPACE_LOCAL)
+ * onload_zc_iovec blocks have been given out by onload_zc_hlrx_recv_zc()
+ * but not yet freed with onload_zc_hlrx_buffer_release(); the
+ * memory referenced by those iovecs would be freed by closing the
+ * fd backing this hlrx instance, so this function fails instead.
  */
 extern int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx);
 
@@ -713,7 +718,10 @@ extern int onload_zc_hlrx_buffer_release(int fd, onload_zc_handle buf);
  * The MSG_PEEK and MSG_TRUNC flags are not supported.
  *
  * Returns the total number of bytes received on success, or <0 to
- * indicate an error
+ * indicate an error. In addition to typical errno values, the error
+ * -EREMOTEIO may be returned when the next data in the receive queue
+ * is in a remote address space; in this case onload_zc_hlrx_recv_zc()
+ * must be used to obtain the pointer.
  */
 extern ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
                                         struct msghdr* msg, int flags);

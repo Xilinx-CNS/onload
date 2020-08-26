@@ -9,6 +9,8 @@
 #include <onload/extensions_zc.h>
 
 
+struct zc_remote_data;
+
 /* Top-level state object the user owns for the whole hlrx thing */
 struct onload_zc_hlrx {
   /* fd the user gave us, i.e. where we're getting packets from */
@@ -34,7 +36,51 @@ struct onload_zc_hlrx {
    * always immediate so doesn't need buffering. */
   struct onload_zc_iovec static_pending[32];
   struct onload_zc_iovec* pending;
+
+  /* Singly-linked list of objects given out to the user which point to
+   * non-local address space data. These are in order, so we know what to
+   * post to the underlying app plugin when the app's done with them. */
+  struct zc_remote_data* remotes_head;
+  struct zc_remote_data** remotes_ptail;
+  /* Protects fd and remotes_* */
+  pthread_mutex_t mtx;
 };
+
+
+/* Pointers to these are given out to the user instead of packets as
+ * onload_zc_handles (see ZC_IS_REMOTE_FLAG) when a non-local address space is
+ * seen. The caller is expected to free them as usual with
+ * onload_zc_hlrx_buffer_release,  whereupon we can figure out the max_ptr and
+ * send the appropriate free request to the NIC plugin */
+struct zc_remote_data {
+  struct onload_zc_hlrx* owner;
+  struct zc_remote_data* next;
+  uint64_t max_ptr;
+  bool done;
+};
+
+
+/* We could have used 1 and it would have worked fine, but that's the same as
+ * is used for zc_is_usermem(), so we make things potentially a little easier
+ * to debug if we use something different. */
+#define ZC_IS_REMOTE_FLAG  2
+
+static inline onload_zc_handle zc_remote_to_handle(struct zc_remote_data* rd)
+{
+  return (onload_zc_handle)((uintptr_t)rd | ZC_IS_REMOTE_FLAG);
+}
+
+static inline bool zc_is_remote(onload_zc_handle h)
+{
+  return ((uintptr_t)h & ZC_IS_REMOTE_FLAG) != 0;
+}
+
+static inline struct zc_remote_data* zc_handle_to_remote(onload_zc_handle h)
+{
+  ci_assert(zc_is_remote(h));
+  /* -2 rather than &~2 because it allows better codegen */
+  return (struct zc_remote_data*)((uintptr_t)h - ZC_IS_REMOTE_FLAG);
+}
 
 
 int onload_zc_hlrx_alloc(int fd, int flags, struct onload_zc_hlrx** hlrx_out)
@@ -57,11 +103,13 @@ int onload_zc_hlrx_alloc(int fd, int flags, struct onload_zc_hlrx** hlrx_out)
       rc = -ENOMEM;
     }
     else {
+      pthread_mutex_init(&hlrx->mtx, NULL);
       hlrx->fd = fd;
       hlrx->udp = sock_type == SOCK_DGRAM;
       hlrx->pending = hlrx->static_pending;
       hlrx->pending_capacity = sizeof(hlrx->static_pending) /
                                sizeof(hlrx->static_pending[0]);
+      hlrx->remotes_ptail = &hlrx->remotes_head;
       *hlrx_out = hlrx;
     }
   }
@@ -76,18 +124,67 @@ int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx)
   int rc = 0;
 
   Log_CALL(ci_log("%s(%p)", __FUNCTION__, hlrx));
-  if( hlrx->pending_begin != hlrx->pending_end )
-    onload_zc_buffer_decref(hlrx->fd, hlrx->pending[0].buf);
-  if( hlrx->pending != hlrx->static_pending )
-    free(hlrx->pending);
-  free(hlrx);
+  pthread_mutex_lock(&hlrx->mtx);
+  if( hlrx->remotes_head ) {
+    Log_E(ci_log("%s: remote ZC blocks remain unfreed", __FUNCTION__));
+    rc = -EBUSY;
+  }
+  pthread_mutex_unlock(&hlrx->mtx);
+
+  if( rc == 0 ) {
+    if( hlrx->pending_begin != hlrx->pending_end )
+      onload_zc_buffer_decref(hlrx->fd, hlrx->pending[0].buf);
+    if( hlrx->pending != hlrx->static_pending )
+      free(hlrx->pending);
+    pthread_mutex_destroy(&hlrx->mtx);
+    free(hlrx);
+  }
   Log_CALL_RESULT(rc);
   return rc;
 }
 
 
+static void consume_done_remotes(struct onload_zc_hlrx* hlrx)
+{
+  struct zc_remote_data* rd;
+  uint64_t max = 0;
+  bool freed_some = false;
+
+  if( OO_ACCESS_ONCE(hlrx->remotes_head) == NULL )
+    return;
+
+  pthread_mutex_lock(&hlrx->mtx);
+  rd = OO_ACCESS_ONCE(hlrx->remotes_head);
+  while( rd && rd->done ) {
+    struct zc_remote_data* next = rd->next;
+    max = rd->max_ptr;
+    freed_some = true;
+    free(rd);
+    rd = next;
+  }
+
+  if( freed_some ) {
+    hlrx->remotes_head = rd;
+    if( ! rd )
+      hlrx->remotes_ptail = &hlrx->remotes_head;
+    ioctl(hlrx->fd, ONLOAD_SIOC_CEPH_REMOTE_CONSUME, &max);
+  }
+  pthread_mutex_unlock(&hlrx->mtx);
+}
+
+
 int onload_zc_hlrx_buffer_release(int fd, onload_zc_handle buf)
 {
+  if(CI_UNLIKELY( zc_is_remote(buf) )) {
+    struct zc_remote_data* rd = zc_handle_to_remote(buf);
+    struct onload_zc_hlrx* hlrx = OO_ACCESS_ONCE(rd->owner);
+
+    OO_ACCESS_ONCE(rd->done) = true;
+    /* Do not access rd any more: it could have been freed */
+    consume_done_remotes(hlrx);
+    /* Do not access hlrx any more: it could have been destroyed */
+    return 0;
+  }
   return onload_zc_buffer_decref(fd, buf);
 }
 
@@ -141,8 +238,14 @@ static void copy_iovs(struct zc_cb_copy_state* state,
 {
   int begin = *pbegin;
   while( begin != end ) {
-    int n = ci_copy_to_iovec(&state->dest, iovs[begin].iov_base,
-                             iovs[begin].iov_len);
+    int n;
+    if( iovs[begin].addr_space != EF_ADDRSPACE_LOCAL ) {
+      if( state->rc == 0 )
+        state->rc = -EREMOTEIO;
+      break;
+    }
+    n = ci_copy_to_iovec(&state->dest, iovs[begin].iov_base,
+                         iovs[begin].iov_len);
     iovs[begin].iov_base = (char*)iovs[begin].iov_base + n;
     iovs[begin].iov_len -= n;
     state->rc += n;
@@ -247,7 +350,24 @@ struct zc_cb_zc_state {
   ssize_t rc;
   size_t max_bytes;
   int curr_iov;      /* Index into the user's iov array msg->iov */
+  struct zc_remote_data* remotes_head;
+  struct zc_remote_data** remotes_ptail;
 };
+
+
+static void zc_buffer_addref(int fd, onload_zc_handle buf, int delta)
+{
+  /* In due course (and if benchmarks show it's needed) a built-in
+   * implementation of this function is a good idea */
+  while( delta < 0 ) {
+    onload_zc_buffer_decref(fd, buf);
+    ++delta;
+  }
+  while( delta > 0 ) {
+    onload_zc_buffer_incref(fd, buf);
+    --delta;
+  }
+}
 
 
 /* Pass buffers from 'iovs' to state->msg->iov, updating the tracking as we
@@ -255,20 +375,37 @@ struct zc_cb_zc_state {
 static void zc_iovs(struct zc_cb_zc_state* state,
                     struct onload_zc_iovec* iovs, int* pbegin, int end)
 {
+  int ref_delta = 0;
   int begin = *pbegin;
   while( begin != end && state->max_bytes &&
          state->curr_iov < state->msg->msghdr.msg_iovlen ) {
     struct onload_zc_iovec* dst = &state->msg->iov[state->curr_iov];
     *dst = iovs[begin];
-    if( begin ) {
+    if( iovs[begin].addr_space != EF_ADDRSPACE_LOCAL ) {
+      struct zc_remote_data* rd = malloc(sizeof(struct zc_remote_data));
+      if( ! rd ) {
+        if( state->rc == 0 )
+          state->rc = -ENOMEM;
+        break;
+      }
+      *rd = (struct zc_remote_data){
+        .owner = state->hlrx,
+        .next = NULL,
+        .done = false,
+        .max_ptr = iovs[begin].iov_ptr + CI_MIN(iovs[begin].iov_len64,
+                                                state->max_bytes),
+      };
+      /* Append to the linked list at state->remotes_head */
+      *state->remotes_ptail = rd;
+      state->remotes_ptail = &rd->next;
+      dst->buf = zc_remote_to_handle(rd);
+    }
+    else {
       /* The semantics of multiple buffers are a little odd: the refcount
        * holder is the 0th packet only. We hide this complexity from the
-       * caller by giving out refs for all the others too. At time of
-       * writing, multi-iov packets are used for UDP only, but this could
-       * change with jumbograms. Because this occurrence is rare, we don't
-       * worry about the inefficiency of calling incref lots of times. */
+       * caller by giving out refs for all the others too. */
       dst->buf = iovs[0].buf;
-      onload_zc_buffer_incref(state->hlrx->fd, dst->buf);
+      ++ref_delta;
     }
     if( dst->iov_len > state->max_bytes ) {
       dst->iov_len = state->max_bytes;
@@ -285,6 +422,12 @@ static void zc_iovs(struct zc_cb_zc_state* state,
     ++state->curr_iov;
   }
   *pbegin = begin;
+  if( begin == end ) {
+    /* This is the ref that hlrx owns internally, i.e. the packet's all done
+     * so we don't want that ref any more */
+    --ref_delta;
+  }
+  zc_buffer_addref(state->hlrx->fd, state->hlrx->pending[0].buf, ref_delta);
 }
 
 
@@ -308,17 +451,7 @@ zc_cb(struct onload_zc_recv_args *args, int flags)
   if( end != begin ) {
     if( ! save_pending(state->hlrx, args, begin, end) ) {
       state->rc = -ENOMEM;
-    }
-    else {
-      /* zc_iovs() gave out additional refcounts to the user for all iovs
-       * except the 0th so that if we *didn't* go down this branch then the 0th
-       * iov's refcount is effectively handed over from this function to the
-       * user's callback. Since we are in this branch then that refcount is too
-       * small by 1 (because we're saving the packet for ourselves too) and we
-       * need a refcount of our own (see comment in zc_iovs() about the odd
-       * semantics for the explanation of why all these refcounts are on
-       * iov[0]). */
-      onload_zc_buffer_incref(state->hlrx->fd, state->hlrx->pending[0].buf);
+      onload_zc_buffer_decref(state->hlrx->fd, state->hlrx->pending[0].buf);
     }
     return ONLOAD_ZC_KEEP | ONLOAD_ZC_TERMINATE;
   }
@@ -340,6 +473,7 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
     .max_bytes = max_bytes,
     .curr_iov = 0,
   };
+  state.remotes_ptail = &state.remotes_head;
 
   Log_CALL(ci_log("%s(%p, %p, %zu, %d)", __FUNCTION__, hlrx, msg, max_bytes,
                   flags));
@@ -349,20 +483,19 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
   }
   else {
     msg->msghdr.msg_flags = 0;
-    /* Consume leftovers from previous call */
-    zc_iovs(&state, hlrx->pending, &hlrx->pending_begin, hlrx->pending_end);
-    if( state.rc ) {
-      /* Set DONTWAIT because we've got some data therefore normal semantics
-       * are to return when we can */
-      flags |= MSG_DONTWAIT;
-      /* The existing refcount owned by us is considered to have been given to
-       * the caller. If we've still got some too then we need another. */
-      if( hlrx->pending_begin != hlrx->pending_end )
-        onload_zc_buffer_incref(hlrx->fd, hlrx->pending[0].buf);
+    if( hlrx->pending_begin != hlrx->pending_end ) {
+      /* Consume leftovers from previous call */
+      zc_iovs(&state, hlrx->pending, &hlrx->pending_begin, hlrx->pending_end);
+      if( state.rc > 0 ) {
+        /* Set DONTWAIT because we've got some data therefore normal semantics
+        * are to return when we can */
+        flags |= MSG_DONTWAIT;
+      }
     }
 
     /* Get new packet(s) */
-    if( state.max_bytes && state.curr_iov < msg->msghdr.msg_iovlen ) {
+    if( state.rc >= 0 && state.max_bytes &&
+        state.curr_iov < msg->msghdr.msg_iovlen ) {
       struct onload_zc_recv_args args = {
         .cb = zc_cb,
         .user_ptr = &state,
@@ -376,6 +509,13 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
     }
 
     msg->msghdr.msg_iovlen = state.curr_iov;
+  }
+
+  if( state.remotes_head ) {
+    pthread_mutex_lock(&hlrx->mtx);
+    *hlrx->remotes_ptail = state.remotes_head;
+    hlrx->remotes_ptail = state.remotes_ptail;
+    pthread_mutex_unlock(&hlrx->mtx);
   }
 
   Log_CALL_RESULT((int)state.rc);
