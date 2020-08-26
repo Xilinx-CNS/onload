@@ -86,6 +86,12 @@ int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx)
 }
 
 
+int onload_zc_hlrx_buffer_release(int fd, onload_zc_handle buf)
+{
+  return onload_zc_buffer_decref(fd, buf);
+}
+
+
 /* *********************************************************************** */
 
 /* Temporary structure we need to pass as the cookie to the callback of

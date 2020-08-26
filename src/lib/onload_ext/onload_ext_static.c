@@ -183,6 +183,9 @@ wrap(int, onload_zc_hlrx_alloc, (int fd, int flags,
 wrap(int, onload_zc_hlrx_free, (struct onload_zc_hlrx* hlrx),
      (hlrx), -ENOSYS)
 
+wrap(int, onload_zc_hlrx_buffer_release, (int fd, onload_zc_handle buf),
+     (fd, buf), -ENOSYS)
+
 wrap(ssize_t, onload_zc_hlrx_recv_copy, (struct onload_zc_hlrx* hlrx,
                                          struct msghdr* msg, int flags),
      (hlrx, msg, flags), -ENOSYS)

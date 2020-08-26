@@ -695,6 +695,17 @@ extern int onload_zc_hlrx_alloc(int fd, int flags,
  */
 extern int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx);
 
+/* Frees a zc handle which was returned by onload_zc_hlrx_recv_zc in
+ * the onload_zc_iovec::buf field.
+ *
+ * fd must be any socket on the same stack as the socket inside the
+ * hlrx instance which returned the buf. Buffers are permitted to
+ * outlive the hlrx instance which created them.
+ *
+ * Returns 0 on success, or <0 to indicate an error
+ */
+extern int onload_zc_hlrx_buffer_release(int fd, onload_zc_handle buf);
+
 /* Performs a copying receive on an hlrx state. This function operates
  * identically to recvmsg(), however it returns errors by return code
  * rather than by errno.
@@ -714,7 +725,9 @@ extern ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
  * boundaries between packets will be placed.
  *
  * The caller must release all packets returned by this function
- * using onload_zc_buffer_decref() (*not* onload_zc_release_buffers()).
+ * using onload_zc_hlrx_buffer_release(). The onload_zc_iovec::buf may
+ * refer to a metaobject instead of a real packet, so the non-hlrx
+ * functions must not be used with it.
  *
  * On input, msg->msghdr.msg_iovlen is the size of the msg->iov array. On
  * output it is the number of elements populated with buffers; this is the

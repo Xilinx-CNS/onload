@@ -170,6 +170,12 @@ int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx)
 }
 
 __attribute__((weak))
+int onload_zc_hlrx_buffer_release(int fd, onload_zc_handle buf)
+{
+  return -ENOSYS;
+}
+
+__attribute__((weak))
 ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
                                  struct msghdr* msg, int flags)
 {

@@ -116,6 +116,7 @@
     onload_set_recv_filter;
     onload_zc_hlrx_alloc;
     onload_zc_hlrx_free;
+    onload_zc_hlrx_buffer_release;
     onload_zc_hlrx_recv_copy;
     onload_zc_hlrx_recv_zc;
     onload_recvmsg_kernel;
