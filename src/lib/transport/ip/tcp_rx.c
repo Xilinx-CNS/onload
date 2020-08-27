@@ -47,6 +47,9 @@
 static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
 			   ciip_tcp_rx_pkt* rxp);
 
+static int ci_tcp_rx_enqueue_ooo(ci_netif* netif, ci_tcp_state* ts,
+                                  ciip_tcp_rx_pkt* rxp);
+
 
 static inline bool tcp_plugin_elided_payload(const ci_ip_pkt_fmt* pkt)
 {
@@ -1988,6 +1991,17 @@ ci_inline int ci_tcp_rx_deliver_to_recvq(ci_tcp_state* ts, ci_netif* netif,
   /* NB SEQ_LE rather than SEQ_EQ as may have partial duplicate */
   ci_assert(SEQ_LE(rxp->seq, tcp_rcv_nxt(ts)));
   ci_assert(pkt->pf.tcp_rx.pay_len);
+
+  if( ci_tcp_is_pluginized(ts) && pkt->pf.tcp_rx.pay_len != 0 &&
+      ! tcp_plugin_elided_payload(pkt) ) {
+    /* This packet was in-order but the plugin didn't process it for some
+     * reason (backpressure, not yet initialised, etc.). We need to treat it
+     * as out of order and recycle it */
+    ci_tcp_rx_enqueue_ooo(netif, ts, rxp);
+    if( ! ci_ip_queue_is_empty(&ts->rob) )
+      rc = ci_tcp_rx_deliver_rob(netif, ts);
+    return rc;
+  }
 
   oo_offbuf_init(&pkt->buf, CI_TCP_PAYLOAD(tcp), pkt->pf.tcp_rx.pay_len);
 
@@ -4550,7 +4564,9 @@ int ci_tcp_rx_deliver_to_conn(ci_sock_cmn* s, void* opaque_arg)
               /* fits in the IP datagram and has data? */
               (pkt->pf.tcp_rx.pay_len <= 0) |
               /* we're suffering from memory pressure */
-              (ni->state->mem_pressure & OO_MEM_PRESSURE_CRITICAL));
+              (ni->state->mem_pressure & OO_MEM_PRESSURE_CRITICAL) |
+              /* some recycling is needed */
+              (ci_tcp_is_pluginized(ts) && ! tcp_plugin_elided_payload(pkt)));
 
   /* All DSACKs should be cleared when ACK is sent;
    * dsack_block may be != CI_ILL_UNUSED only when duplicate packet is
