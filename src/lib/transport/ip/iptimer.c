@@ -294,7 +294,7 @@ static void ci_ip_timer_do_recycle(ci_netif *netif)
   ci_tcp_state* ts;
   while (ci_ni_dllist_not_empty(netif, &ns->recycle_retry_q)) {
     lnk = ci_ni_dllist_head(netif, &ns->recycle_retry_q);
-    ts = TCP_STATE_FROM_LINK(lnk);
+    ts = CI_CONTAINER(ci_tcp_state, recycle_link, lnk);
     ci_ni_dllist_remove_safe(netif, &ts->recycle_link);
     ci_tcp_timeout_recycle(netif, ts);
   }

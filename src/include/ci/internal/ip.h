@@ -3957,7 +3957,7 @@ ci_inline void ci_tcp_zwin_set(ci_netif* netif, ci_tcp_state* ts)
 ci_inline void ci_tcp_recycle_reset(ci_netif* netif, ci_tcp_state* ts) {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_assert(ci_ip_queue_not_empty(&ts->rob));
-  if( ! ci_ni_dllist_is_free(&ts->recycle_link) )
+  if( ! ci_ni_dllist_is_self_linked(netif, &ts->recycle_link) )
     return;
   ci_ni_dllist_push(netif, &netif->state->recycle_retry_q, &ts->recycle_link);
   if( ! ci_ip_timer_pending(netif, &netif->state->recycle_tid) ) {

@@ -1974,7 +1974,8 @@ static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
 
 void ci_tcp_timeout_recycle(ci_netif* netif, ci_tcp_state* ts)
 {
-  ci_tcp_rx_deliver_rob(netif, ts);
+  if( ! ci_ip_queue_is_empty(&ts->rob) )
+    ci_tcp_rx_deliver_rob(netif, ts);
 }
 
 
