@@ -2073,9 +2073,10 @@ static int netif_tcp_helper_build(ci_netif* ni)
     vi_state_bytes = 0;
     for( i = 0; i < num_vis; ++i ) {
       vi = &ni->nic_hw[nic_i].vis[i];
-      init_ef_vi(ni, nic_i, vi_state_offset, vi_io_offset, &vi_mem_ptr, vi,
-                 nsn->vi_instance[i], i ? 0 : nsn->vi_evq_bytes,
-                 nsn->vi_txq_size, &ni->state->vi_stats);
+      init_ef_vi(ni, nic_i, vi_state_offset + vi_state_bytes, vi_io_offset,
+                 &vi_mem_ptr, vi, nsn->vi_instance[i],
+                 i ? 0 : nsn->vi_evq_bytes, nsn->vi_txq_size,
+                 &ni->state->vi_stats);
       if( NI_OPTS(ni).tx_push )
         ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
 
