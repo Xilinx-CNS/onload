@@ -202,6 +202,27 @@ static void ci_tcp_rx_add_to_recvq(ci_netif *netif, ci_tcp_state *ts,
 }
 
 
+static void ci_tcp_rx_clean_plugin_rob(ci_netif *netif, ci_tcp_state *ts,
+                                       uint32_t nxt)
+{
+  /* In pluginized mode the rob doubles up as the to-recycle queue so we must
+   * clean that up now that we've guaranteed that the plugin will give us the
+   * ooo data. (the rob is conceptually in two halves, head..rcv_nxt (what's
+   * dropped here) and tcp_nxt..tail (the 'classic' rob); see commentary in
+   * ci_tcp_rx_deliver_rob()) */
+  ci_ip_pkt_fmt* p;
+
+  ci_assert(ci_tcp_is_pluginized(ts));
+  while( ci_ip_queue_not_empty(&ts->rob) &&
+         (p = PKT_CHK(netif, ts->rob.head)) != NULL &&
+         SEQ_LE(p->pf.tcp_rx.end_seq, nxt) ) {
+    remove_from_last_sack(ts, ts->rob.head);
+    ci_ip_queue_dequeue(netif, &ts->rob, p);
+    ci_netif_pkt_release_rx(netif, p);
+  }
+}
+
+
 /** Enqueue a single packet pkt on the receive queue of [ts]. */
 static void ci_tcp_rx_enqueue_packet(ci_netif *netif, ci_tcp_state *ts,
                                      ci_ip_pkt_fmt *pkt)
@@ -216,22 +237,9 @@ static void ci_tcp_rx_enqueue_packet(ci_netif *netif, ci_tcp_state *ts,
 
   if( ci_tcp_is_pluginized(ts) ) {
     /* Just bin it - we're going to get the actual payload from a different
-     * queue, and shoehorn it in to the recvq from there. In pluginized mode
-     * the rob doubles up as the to-recycle queue so we must clean that up now
-     * that we've guaranteed that the plugin will give us the ooo data. (the
-     * rob is conceptually in two halves, head..rcv_nxt (what's dropped here)
-     * and tcp_nxt..tail (the 'classic' rob); see commentary in
-     * ci_tcp_rx_deliver_rob()) */
-    ci_ip_pkt_fmt* p;
-    uint32_t nxt = tcp_rcv_nxt(ts);
-    while( ci_ip_queue_not_empty(&ts->rob) &&
-           (p = PKT_CHK(netif, ts->rob.head)) != NULL &&
-           SEQ_LE(p->pf.tcp_rx.end_seq, nxt) ) {
-      remove_from_last_sack(ts, ts->rob.head);
-      ci_ip_queue_dequeue(netif, &ts->rob, p);
-      ci_netif_pkt_release_rx(netif, p);
-    }
+     * queue, and shoehorn it in to the recvq from there. */
     ci_netif_pkt_release_rx(netif, pkt);
+    ci_tcp_rx_clean_plugin_rob(netif, ts, tcp_rcv_nxt(ts));
     return;
   }
 
@@ -1998,7 +2006,6 @@ ci_inline int ci_tcp_rx_deliver_to_recvq(ci_tcp_state* ts, ci_netif* netif,
   /* NB SEQ_LE rather than SEQ_EQ as may have partial duplicate */
   ci_assert(SEQ_LE(rxp->seq, tcp_rcv_nxt(ts)));
   ci_assert(pkt->pf.tcp_rx.pay_len);
-
   if( ci_tcp_is_pluginized(ts) && pkt->pf.tcp_rx.pay_len != 0 &&
       ! tcp_plugin_elided_payload(pkt) ) {
     /* This packet was in-order but the plugin didn't process it for some
@@ -3817,6 +3824,10 @@ static void handle_unacceptable_seq(ci_netif* netif, ci_tcp_state* ts,
     ts->dsack_block = OO_PP_INVALID;
     return;
   }
+
+  if( ci_tcp_is_pluginized(ts) && tcp_plugin_elided_payload(pkt) &&
+      SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) )
+    ci_tcp_rx_clean_plugin_rob(netif, ts, rxp->seq);
 
   /* Only consider updating the send window for unacceptable sequence
    * number packets if the received packet was recently retransmitted,
