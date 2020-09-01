@@ -64,6 +64,19 @@ static inline bool tcp_plugin_elided_payload(const ci_ip_pkt_fmt* pkt)
 }
 
 
+static inline bool tcp_plugin_pkt_was_recycled(const ci_ip_pkt_fmt* pkt)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  /* rx_sock is the user_mark from the plugin. See SF-123622 for encoding
+   * information. The top bit is set to rdp_in_net, i.e. set when this
+   * packet has already been seen by Onload at least once. */
+  return ! (pkt->pf.tcp_rx.lo.rx_sock >> 31);
+#else
+  return false;
+#endif
+}
+
+
 ci_ip_pkt_fmt* __ci_netif_pkt_rx_to_tx(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                        const char* caller)
 {
@@ -2215,6 +2228,9 @@ static int ci_tcp_rx_enqueue_ooo(ci_netif* netif, ci_tcp_state* ts,
   ci_ip_pkt_fmt* block_pkt = NULL;  /* \todo Initialize in debug build only */
   int af = ipcache_af(&ts->s.pkt);
 
+  if( tcp_plugin_pkt_was_recycled(pkt) )
+    return 0;
+
   CITP_STATS_NETIF_INC(netif, rx_out_of_order);
   CI_IP_SOCK_STATS_INC_OOO( ts );
   ++ts->stats.rx_ooo_pkts;
@@ -3825,9 +3841,13 @@ static void handle_unacceptable_seq(ci_netif* netif, ci_tcp_state* ts,
     return;
   }
 
-  if( ci_tcp_is_pluginized(ts) && tcp_plugin_elided_payload(pkt) &&
+  if( ci_tcp_is_pluginized(ts) ) {
+    if( tcp_plugin_elided_payload(pkt) &&
       SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) )
-    ci_tcp_rx_clean_plugin_rob(netif, ts, rxp->seq);
+      ci_tcp_rx_clean_plugin_rob(netif, ts, rxp->seq);
+    if( tcp_plugin_pkt_was_recycled(pkt) )
+      return;
+  }
 
   /* Only consider updating the send window for unacceptable sequence
    * number packets if the received packet was recently retransmitted,
@@ -4037,7 +4057,8 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
   ** happen is a bad ACK that will be dropped or acknowledge data too soon.
   ** So only the other end suffers, and it was their fault anyway.
   */
-  if( CI_LIKELY(ts->s.b.state & CI_TCP_STATE_SYNCHRONISED) ) {
+  if( CI_LIKELY(ts->s.b.state & CI_TCP_STATE_SYNCHRONISED) &&
+      ! tcp_plugin_pkt_was_recycled(pkt) ) {
     /* An ACK is acceptable provided it doesn't acknowledge sequence
     ** numbers we haven't sent yet.
     */
@@ -4809,7 +4830,6 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   if( pkt->q_id == CI_Q_ID_TCP_RECYCLER ) {
     int ep_id = pkt->pf.tcp_rx.lo.rx_sock & 0x7fffffff;
-    /* TODO: bool was_recycled = pkt->pf.tcp_rx.lo.rx_sock >> 31; */
     ci_sock_cmn* s = ID_TO_SOCK(netif, ep_id);
     /* We might transform this same packet and send it out as an ACK or
      * something, so prepare for that eventuality: */
