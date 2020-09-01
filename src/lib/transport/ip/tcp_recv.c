@@ -333,7 +333,7 @@ static int offloaded_copy_block(ci_iovec* iov, const void* src, size_t max,
 }
 
 static int copy_ceph_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
-                            ci_ip_pkt_fmt* pkt, int peek_off, int* rc)
+                            ci_ip_pkt_fmt* pkt, int peek_off, int* ndata)
 {
   /* This function is essentially entirely bogus, most prominently in the fact
    * that it'll emit zeros for all 'remote' data. It exists primarily so that
@@ -439,7 +439,7 @@ static int copy_ceph_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
   }
 
  out:
-  *rc += out_rc;
+  *ndata = out_rc;
   return ofs;
 
  unrecoverable:
@@ -455,14 +455,14 @@ static int copy_ceph_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
 
 
 static int copy_one_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
-                        ci_ip_pkt_fmt* pkt, int peek_off, int* rc)
+                        ci_ip_pkt_fmt* pkt, int peek_off, int* ndata)
 {
   int n;
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   if( ci_tcp_is_pluginized(rinf->a->ts) ) {
 #if CI_CFG_TCP_PLUGIN_RECV_NONZC
-    return copy_ceph_pkt(netif, rinf, pkt, peek_off, rc);
+    return copy_ceph_pkt(netif, rinf, pkt, peek_off, ndata);
 #else
     return -EOPNOTSUPP;
 #endif
@@ -481,7 +481,7 @@ static int copy_one_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
   /* NB: on failure of this function (i.e. n<0) the caller doesn't make any
    * assumptions about the validity or otherwise of the output (including the
    * 'out' parameter), so the side-effect of mangling *rc here is fine. */
-  *rc += n;
+  *ndata = n;
   return n;
 }
 
@@ -502,7 +502,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
 {
   ci_netif* netif = rinf->a->ni;
   ci_tcp_state* ts = rinf->a->ts;
-  int n, peek_off, total, rc;
+  int n, ndata, peek_off, total, rc;
   ci_ip_pkt_fmt* pkt;
   int max_bytes;
 #if CI_CFG_TIMESTAMPING && ! defined(__KERNEL__)
@@ -567,17 +567,18 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
   }
 #endif
 
-    n = rinf->copier(netif, rinf, pkt, peek_off, &rc);
+    n = rinf->copier(netif, rinf, pkt, peek_off, &ndata);
 #ifdef  __KERNEL__
     if( n < 0 )  return n;
 #endif
+    rc += ndata;
     oo_offbuf_advance(&pkt->buf, n);
 
     total += n;
     ci_assert_le(total, max_bytes);
 
     if(CI_LIKELY( ! (rinf->a->flags & (MSG_PEEK | ONLOAD_MSG_ONEPKT)) )) {
-      if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, n,
+      if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, ndata,
                                     max_bytes) != 0 )
         return rc;
     }
@@ -598,7 +599,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
         }
       }
       else {
-        if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, n,
+        if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, ndata,
                                       max_bytes) != 0 )
           return rc;
       }
@@ -1672,7 +1673,7 @@ static int ci_tcp_recvmsg_recv2(struct tcp_recv_info *rinf)
 
 
 static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
-                            ci_ip_pkt_fmt* pkt, int peek_off, int* rc)
+                            ci_ip_pkt_fmt* pkt, int peek_off, int* ndata)
 {
   int total = oo_offbuf_left(&pkt->buf);
   int n = total;
@@ -1764,7 +1765,7 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
                  LNTS_PRI_ARGS(netif, rinf->a->ts), data.lost_sync.reason,
                  data.lost_sync.subreason);
       rinf->a->msg->msg_controllen = 0;
-      *rc += out_rc;
+      *ndata = out_rc;
       /* Set the return value so that we'll keep hitting this same lost-sync
        * message on every receive, and hence block the socket from making
        * further progress */
@@ -1811,7 +1812,7 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
     pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
   }
 
-  *rc += out_rc;
+  *ndata = out_rc;
  unrecoverable:
   /* The correct thing to do with bad framing is debatable. This code throws
    * away the remainder of the packet and continues on without telling the
@@ -1827,7 +1828,7 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
 
 
 static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
-                            ci_ip_pkt_fmt* pkt, int peek_off, int* rc)
+                            ci_ip_pkt_fmt* pkt, int peek_off, int* ndata)
 {
   int n = oo_offbuf_left(&pkt->buf);
   enum onload_zc_callback_rc cb_rc;
@@ -1835,7 +1836,7 @@ static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   if( ci_tcp_is_pluginized(rinf->a->ts) )
-    return zc_ceph_callback(netif, rinf, pkt, peek_off, rc);
+    return zc_ceph_callback(netif, rinf, pkt, peek_off, ndata);
 #endif
 
   /* Add KEEP flag before calling callback, and remove it after
@@ -1879,7 +1880,7 @@ static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
 
   rinf->a->msg->msg_controllen = 0;
 
-  *rc += n;
+  *ndata = n;
   return n;
 }
 

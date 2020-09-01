@@ -32,6 +32,9 @@
 
 #include "ip_internal.h"
 #include "tcp_rx.h"
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#include <onload/tcp-ceph.h>
+#endif
 
 
 #if OO_DO_STACK_POLL
@@ -171,11 +174,10 @@ static void remove_from_last_sack(ci_tcp_state* ts, oo_pkt_p id)
 
 
 static void ci_tcp_rx_add_to_recvq(ci_netif *netif, ci_tcp_state *ts,
-                                   ci_ip_pkt_fmt *pkt)
+                                   ci_ip_pkt_fmt *pkt, int bytes)
 {
   ci_ip_pkt_queue* rxq = TS_QUEUE_RX(ts);
   oo_pkt_p prevhead = rxq->head;
-  int bytes = oo_offbuf_left(&pkt->buf);
 
   ci_assert(ci_netif_is_locked(netif));
   pkt->next = OO_PP_NULL;
@@ -233,7 +235,7 @@ static void ci_tcp_rx_enqueue_packet(ci_netif *netif, ci_tcp_state *ts,
     return;
   }
 
-  ci_tcp_rx_add_to_recvq(netif, ts, pkt);
+  ci_tcp_rx_add_to_recvq(netif, ts, pkt, oo_offbuf_left(&pkt->buf));
 }
 
 
@@ -267,6 +269,7 @@ static void ci_tcp_rx_enqueue_chain(ci_netif *netif, ci_tcp_state *ts,
   int count = 0;
 #endif
 
+  ci_assert(!ci_tcp_is_pluginized(ts));
   ci_assert(ci_netif_is_locked(netif));
 
   ci_assert(from);
@@ -4895,6 +4898,67 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
   ci_netif_pkt_release_rx_1ref(netif, pkt);
 }
 
+
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+/* Returns the number of real bytes which were actually on the wire in a Ceph
+ * packet. It's unfortunate that we need to do this (since we're going to do
+ * the same parsing again in recv()), but fortunate that it'll frequently be
+ * the case that this only touches a small number of cache lines. An
+ * alternative design would be to make the plugin pass this sum in the
+ * user_mark, but that's a bit sneaky too. We can't get away with putting the
+ * wrong value in to rcv_added because it ultimately ends up in window size
+ * calculations and suchlike. */
+static int get_actual_ceph_bytes(ci_ip_pkt_fmt* pkt)
+{
+  int n = oo_offbuf_left(&pkt->buf);
+  char* p = oo_offbuf_ptr(&pkt->buf);
+  int bytes = 0;
+
+  while( n ) {
+    const int hdr_len = CI_MEMBER_OFFSET(struct ceph_data_pkt, data);
+    struct ceph_data_pkt data;
+
+    if( n < hdr_len )
+      goto unrecoverable;
+
+    memcpy(&data, p, hdr_len);
+    n -= hdr_len;
+    p += hdr_len;
+    switch( data.msg_type ) {
+    case XSN_CEPH_DATA_INLINE:
+      if( n < data.msg_len )
+        goto unrecoverable;
+      bytes += data.msg_len;
+      break;
+
+    case XSN_CEPH_DATA_REMOTE:
+      if( n < sizeof(data.remote) || data.msg_len != sizeof(data.remote) )
+        goto unrecoverable;
+      memcpy(&data.remote, p, sizeof(data.remote));
+      bytes += data.remote.data_len;
+      break;
+
+    case XSN_CEPH_DATA_LOST_SYNC:
+      /* recv() is going to give up at this point, so we can do too */
+      break;
+
+    default:
+      goto unrecoverable;
+    }
+
+    n -= data.msg_len;
+    p += data.msg_len;
+  }
+
+  return bytes;
+
+ unrecoverable:
+  LOG_TR(log("bogus plugin metastream - see later logging from recv()"));
+  return bytes;
+}
+#endif
+
+
 void ci_tcp_rx_plugin_meta(ci_netif* netif, struct ci_netif_poll_state* ps,
                            ci_ip_pkt_fmt* pkt)
 {
@@ -4911,7 +4975,7 @@ void ci_tcp_rx_plugin_meta(ci_netif* netif, struct ci_netif_poll_state* ps,
    * recv path needs to be able to cope with that kind of thing anyway. */
 
   ci_assert(oo_offbuf_not_empty(&pkt->buf));  /* broken plugin */
-  ci_tcp_rx_add_to_recvq(netif, ts, pkt);
+  ci_tcp_rx_add_to_recvq(netif, ts, pkt, get_actual_ceph_bytes(pkt));
   ci_tcp_wake(netif, ts, CI_SB_FLAG_WAKE_RX);
 #endif
 }
