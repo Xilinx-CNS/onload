@@ -1923,9 +1923,12 @@ static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
         }
       }
     }
-    if( ci_tcp_is_pluginized(ts) && has_data ) {
+    if( ci_tcp_is_pluginized(ts) ) {
       ci_tcp_rx_plugin_recycle(netif, ts, pkt);
-      tcp_rcv_nxt(ts) = pkt->pf.tcp_rx.end_seq;
+      /* Leave the FIN itself unprocessed, so that the normal recv logic can
+       * handle all the special cases with regard to the data not having
+       * all arrived on the meta VI yet: */
+      tcp_rcv_nxt(ts) = pkt->pf.tcp_rx.end_seq - 1;
     }
     else {
       ci_tcp_rx_queue_dequeue(netif, ts, rob, pkt);
@@ -4089,7 +4092,20 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
     /* Delivering data needs to be the last thing we do, 'cos we may not
     ** have access to [pkt] after (it may have been freed already).
     */
-    if( pkt->pf.tcp_rx.pay_len ) {
+    if(CI_UNLIKELY( ci_tcp_is_pluginized(ts) &&
+                    tcp->tcp_flags & CI_TCP_FLAG_FIN &&
+                    SEQ_LT(ts->rcv_added, rxp->seq) )) {
+      /* If we get a FIN before we've received all the payload segments from
+       * the meta-VI then we send it round for recycling. To do otherwise
+       * would block our ability to receive and mark the socket as SHUT_RD,
+       * which would make is always-ready even when it's not */
+      do_update_wnd = CI_FALSE;
+      ci_tcp_rx_enqueue_ooo(netif, ts, rxp);
+      if( ! ci_ip_queue_is_empty(&ts->rob) )
+        ci_tcp_rx_deliver_rob(netif, ts);
+      TCP_FORCE_ACK(ts);
+    }
+    else if( pkt->pf.tcp_rx.pay_len ) {
       if( CI_UNLIKELY(ts->s.rx_errno) ) {
         /* If the socket will never read again then send reset See
         ** Steven's p238 or rfc1122 4.2.2.13.
