@@ -654,8 +654,7 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 {
   xdp_map_delete(nic->af_xdp->map, nic->af_xdp->shadow, vi - nic->af_xdp->vi);
   efhw_page_free(&vi->user_offsets_page);
-  if( vi->sock != NULL )
-    fput(vi->sock);
+  fput(vi->sock);
   memset(vi, 0, sizeof(*vi));
 }
 
@@ -717,27 +716,27 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
 
   rc = efhw_page_alloc_zeroed(&vi->user_offsets_page);
   if( rc < 0 )
-    return rc;
+    goto out_free_sock;
   user_offsets = (void*)efhw_page_ptr(&vi->user_offsets_page);
 
   rc = efhw_page_map_add_page(page_map, &vi->user_offsets_page);
   if( rc < 0 )
-    return rc;
+    goto out_free_user_offsets;
 
   rc = xdp_register_umem(sock, &pd->umem, chunk_size, headroom);
   if( rc < 0 )
-    return rc;
+    goto out_free_user_offsets;
 
   rc = xdp_create_rings(sock, page_map, &vi->kernel_offsets,
                         vi->rxq_capacity, vi->txq_capacity,
                         &vi->kernel_offsets.rings, &user_offsets->rings);
   if( rc < 0 )
-    return rc;
+    goto out_free_user_offsets;
 
   rc = xdp_map_update(nic->af_xdp->map, nic->af_xdp->shadow, instance,
                       vi->sock);
   if( rc < 0 )
-    return rc;
+    goto out_free_user_offsets;
 
   /* TODO AF_XDP: currently instance number matches net_device channel */
   rc = xdp_bind(sock, nic->net_dev->ifindex, instance, vi->flags);
@@ -754,11 +753,20 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
     rc = xdp_bind(sock, nic->net_dev->ifindex, instance, vi->flags);
   }
   if( rc < 0 )
-    return rc;
+    goto out_clear_map;
 
   *sock_out = sock;
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
   return 0;
+
+ out_clear_map:
+  xdp_map_delete(nic->af_xdp->map, nic->af_xdp->shadow, instance);
+ out_free_user_offsets:
+  efhw_page_free(&vi->user_offsets_page);
+ out_free_sock:
+  fput(file);
+  memset(vi, 0, sizeof(*vi));
+  return rc;
 }
 
 /*----------------------------------------------------------------------------
