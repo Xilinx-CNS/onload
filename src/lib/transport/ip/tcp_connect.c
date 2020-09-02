@@ -469,6 +469,10 @@ int ci_tcp_can_set_filter_in_ul(ci_netif *ni, ci_sock_cmn* s)
 
   ci_assert_nflags(s->s_flags, CI_SOCK_FLAG_FILTER);
   ci_assert_flags(s->b.state, CI_TCP_STATE_TCP);
+
+  if( ci_tcp_is_pluginized(SOCK_TO_TCP(s)) )
+    return 0;
+
   ci_assert_nequal(s->b.state, CI_TCP_LISTEN);
   ci_assert(!CI_IPX_ADDR_IS_ANY(sock_ipx_laddr(s)));
   ci_assert_nequal(sock_lport_be16(s), 0);
