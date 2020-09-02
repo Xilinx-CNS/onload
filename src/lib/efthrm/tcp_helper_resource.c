@@ -2416,6 +2416,9 @@ create_plugin_app(tcp_helper_resource_t* trs)
   int intf_i;
 
   ni->state->plugin_mmap_bytes = 0;
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
+    ni->nic_hw[intf_i].plugin_handle = INVALID_PLUGIN_HANDLE;
+
   if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_CEPH )
     return 0;
 
@@ -2431,7 +2434,6 @@ create_plugin_app(tcp_helper_resource_t* trs)
     struct efrm_ext_svc_meta meta;
     int rc;
 
-    ni->nic_hw[intf_i].plugin_handle = INVALID_PLUGIN_HANDLE;
     nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
     if( nic->devtype.arch != EFHW_ARCH_EF100 )
       continue;
