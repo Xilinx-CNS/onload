@@ -2287,7 +2287,7 @@ static int efrm_ethtool_filter_insert(struct net_device* dev,
 {
 	int rc;
 	struct ethtool_rxnfc info;
-	const struct ethtool_ops *ops = dev->ethtool_ops;
+	const struct ethtool_ops *ops;
 	struct cmd_context ctx;
 
 	memset(&info, 0, sizeof(info));
@@ -2296,18 +2296,25 @@ static int efrm_ethtool_filter_insert(struct net_device* dev,
 	if ( rc < 0 )
 		return rc;
 
-	if (!ops->set_rxnfc)
-		return -EOPNOTSUPP;
+	rtnl_lock();
+
+	ops = dev->ethtool_ops;
+	if (!ops->set_rxnfc) {
+		rc = -EOPNOTSUPP;
+		goto unlock_out;
+	}
 
 	ctx.netdev = dev;
 	rc = rmgr_set_location(&ctx, &info.fs);
 	if ( rc < 0 )
-		return rc;
+		goto unlock_out;
 
 	rc = ops->set_rxnfc(dev, &info);
 	if ( rc >= 0 )
 		rc = info.fs.location;
 
+unlock_out:
+	rtnl_unlock();
 	return rc;
 }
 
@@ -2363,16 +2370,21 @@ EXPORT_SYMBOL(efrm_filter_insert);
 static int efrm_ethtool_filter_remove(struct net_device* dev, int filter_id)
 {
 	struct ethtool_rxnfc info;
-	const struct ethtool_ops *ops = dev->ethtool_ops;
+	const struct ethtool_ops *ops;
+	int rc;
 
 	memset(&info, 0, sizeof(info));
 	info.cmd = ETHTOOL_SRXCLSRLDEL;
 	info.fs.location = filter_id;
 
+	rtnl_lock();
+	ops = dev->ethtool_ops;
 	if (!ops->set_rxnfc)
-		return -EOPNOTSUPP;
-
-	return ops->set_rxnfc(dev, &info);
+		rc = -EOPNOTSUPP;
+	else
+		rc = ops->set_rxnfc(dev, &info);
+	rtnl_unlock();
+	return rc;
 }
 #endif
 

@@ -12,6 +12,7 @@
 
 
 #include <linux/ethtool.h>
+#include <linux/rtnetlink.h>
 #include "linux_resource_internal.h"
 
 
@@ -217,6 +218,8 @@ int rmgr_set_location(struct cmd_context *ctx,
 {
 	struct rmgr_ctrl rmgr;
 	int err;
+
+	ASSERT_RTNL();
 
 	/* init table of available rules */
 	err = rmgr_init(ctx, &rmgr);
