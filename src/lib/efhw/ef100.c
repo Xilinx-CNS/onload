@@ -699,6 +699,11 @@ int ef100_nic_ext_destroy_rsrc(struct efhw_nic* nic, uint32_t mc_handle,
  *
  *--------------------------------------------------------------------*/
 
+static int ef100_dmaq_kick(struct efhw_nic *nic, int instance)
+{
+  return 0;
+}
+
 static void* ef100_af_xdp_mem(struct efhw_nic* nic, int instance)
 {
   return NULL;
@@ -706,7 +711,6 @@ static void* ef100_af_xdp_mem(struct efhw_nic* nic, int instance)
 
 static int ef100_af_xdp_init(struct efhw_nic* nic, int instance,
                              int chunk_size, int headroom,
-                             struct socket** sock_out,
                              struct efhw_page_map* pages_out)
 {
   return 0;
@@ -751,6 +755,7 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_get_rx_error_stats,
 	ef100_tx_alt_alloc,
 	ef100_tx_alt_free,
+	ef100_dmaq_kick,
 	ef100_af_xdp_mem,
 	ef100_af_xdp_init,
 };

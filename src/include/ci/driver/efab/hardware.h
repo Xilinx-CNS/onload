@@ -134,6 +134,10 @@
 #define efhw_nic_flush_rx_dma_channel(nic, dmaq) \
 	((nic)->efhw_func->flush_rx_dma_channel(nic, dmaq))
 
+/* xdp specific */
+#define efhw_nic_dmaq_kick(nic,instance) \
+	((nic)->efhw_func->dmaq_kick((nic), (instance)))
+
 /*-------------- MAC Low level interface ---- */
 #define efhw_gmac_get_mac_addr(nic) \
 	((nic)->gmac->get_mac_addr((nic)->gmac))

@@ -1501,6 +1501,7 @@ static int tcp_helper_nic_attach_xdp(ci_netif* ni,
                                      struct efhw_nic* nic);
 #endif
 
+/* callback from ef_vi->ops */
 static int af_xdp_kick(ef_vi* vi)
 {
   tcp_helper_resource_t* trs = vi->xdp_kick_context;

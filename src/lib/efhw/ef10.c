@@ -2242,6 +2242,11 @@ ef10_vport_free(struct efhw_nic *nic, unsigned vport_id)
  *
  *--------------------------------------------------------------------*/
 
+static int ef10_dmaq_kick(struct efhw_nic *nic, int instance)
+{
+  return 0;
+}
+
 static void* ef10_af_xdp_mem(struct efhw_nic* nic, int instance)
 {
   return NULL;
@@ -2249,7 +2254,6 @@ static void* ef10_af_xdp_mem(struct efhw_nic* nic, int instance)
 
 static int ef10_af_xdp_init(struct efhw_nic* nic, int instance,
                             int chunk_size, int headroom,
-                            struct socket** sock_out,
                             struct efhw_page_map* pages_out)
 {
   return 0;
@@ -2294,6 +2298,7 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_get_rx_error_stats,
 	ef10_tx_alt_alloc,
 	ef10_tx_alt_free,
+	ef10_dmaq_kick,
 	ef10_af_xdp_mem,
 	ef10_af_xdp_init,
 };

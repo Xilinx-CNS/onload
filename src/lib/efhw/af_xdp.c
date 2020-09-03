@@ -42,7 +42,7 @@ struct umem_pages
 /* Per-VI AF_XDP resources */
 struct efhw_af_xdp_vi
 {
-  struct file* sock;
+  struct socket* sock;
   int owner_id;
   int rxq_capacity;
   int txq_capacity;
@@ -654,7 +654,7 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 {
   xdp_map_delete(nic->af_xdp->map, nic->af_xdp->shadow, vi - nic->af_xdp->vi);
   efhw_page_free(&vi->user_offsets_page);
-  fput(vi->sock);
+  fput(vi->sock->file);
   memset(vi, 0, sizeof(*vi));
 }
 
@@ -671,7 +671,6 @@ static void* af_xdp_mem(struct efhw_nic* nic, int instance)
 
 static int af_xdp_init(struct efhw_nic* nic, int instance,
                        int chunk_size, int headroom,
-                       struct socket** sock_out,
                        struct efhw_page_map* page_map)
 {
   int rc;
@@ -712,7 +711,7 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   file = sock_alloc_file(sock, 0, NULL);
   if( IS_ERR(file) )
     return PTR_ERR(file);
-  vi->sock = file;
+  vi->sock = sock;
 
   rc = efhw_page_alloc_zeroed(&vi->user_offsets_page);
   if( rc < 0 )
@@ -733,8 +732,7 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     goto out_free_user_offsets;
 
-  rc = xdp_map_update(nic->af_xdp->map, nic->af_xdp->shadow, instance,
-                      vi->sock);
+  rc = xdp_map_update(nic->af_xdp->map, nic->af_xdp->shadow, instance, file);
   if( rc < 0 )
     goto out_free_user_offsets;
 
@@ -755,7 +753,6 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     goto out_clear_map;
 
-  *sock_out = sock;
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
   return 0;
 
@@ -767,6 +764,17 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   fput(file);
   memset(vi, 0, sizeof(*vi));
   return rc;
+}
+
+static int af_xdp_dmaq_kick(struct efhw_nic *nic, int instance)
+{
+  struct efhw_af_xdp_vi* vi;
+  struct msghdr msg = {.msg_flags = MSG_DONTWAIT};
+  vi = vi_by_instance(nic, instance);
+  if( vi == NULL )
+    return -ENODEV;
+
+  return kernel_sendmsg(vi->sock, &msg, NULL, 0, 0);
 }
 
 /*----------------------------------------------------------------------------
@@ -1316,6 +1324,7 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_get_rx_error_stats,
 	af_xdp_tx_alt_alloc,
 	af_xdp_tx_alt_free,
+	af_xdp_dmaq_kick,
 	af_xdp_mem,
 	af_xdp_init,
 };

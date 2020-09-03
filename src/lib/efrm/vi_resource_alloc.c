@@ -170,10 +170,9 @@ int efrm_vi_set_get_vi_instance(struct efrm_vi *virs)
 EXPORT_SYMBOL(efrm_vi_set_get_vi_instance);
 
 
-int efrm_vi_af_xdp_kick(struct efrm_vi *vi)
+int efrm_vi_af_xdp_kick(struct efrm_vi *virs)
 {
-  struct msghdr msg = {.msg_flags = MSG_DONTWAIT};
-  return kernel_sendmsg(vi->af_xdp_sock, &msg, NULL, 0, 0);
+	return efhw_nic_dmaq_kick(virs->rs.rs_client->nic, virs->rs.rs_instance);
 }
 EXPORT_SYMBOL(efrm_vi_af_xdp_kick);
 
@@ -1277,8 +1276,7 @@ efrm_vi_resource_deferred(struct efrm_vi *virs, int chunk_size, int headroom,
 	struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
 
 	rc = nic->efhw_func->af_xdp_init(nic, virs->allocation.instance,
-	                                 chunk_size, headroom,
-	                                 &virs->af_xdp_sock, &virs->mem_mmap);
+	                                 chunk_size, headroom, &virs->mem_mmap);
 	if (rc < 0)
 		return rc;
 

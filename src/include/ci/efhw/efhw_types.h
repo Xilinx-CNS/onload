@@ -295,6 +295,12 @@ struct efhw_func_ops {
 			   const unsigned *alt_ids);
 
   /*-------------- AF_XDP ------------------------ */
+
+	/*! Provoke device to update states
+	 * Relevant for software devices e.g. AF_XDP
+	 */
+	int (*dmaq_kick)(struct efhw_nic* nic, int instance);
+
 	/*! Get the base address of the queue memory descriptor for a VI.
 	 * This is available at any time after calling init_hardware,
 	 * although the queue memory itself will not be accessible until
@@ -303,12 +309,10 @@ struct efhw_func_ops {
 
 	/*! Initialise a VI for use with AF_XDP.
 	 * This must be called after registering all buffer memory through
-	 * the buffer table interface. The AF_XDP socket is exposed for use
-	 * to trigger transmission, pages_out is populated with the queue
+	 * the buffer table interface. pages_out is populated with the queue
 	 * memory pages, which can be mapped into user space. */
 	int (*af_xdp_init) (struct efhw_nic* nic, int instance,
 	                    int chunk_size, int headroom,
-	                    struct socket** sock_out,
 	                    struct efhw_page_map* pages_out);
 };
 
