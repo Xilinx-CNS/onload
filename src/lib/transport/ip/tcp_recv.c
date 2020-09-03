@@ -15,6 +15,7 @@
 
 #include "ip_internal.h"
 #include <ci/internal/ip_timestamp.h>
+#include <onload/sleep.h>
 #include <onload/tcp-ceph.h>
 #ifndef __KERNEL__
 #include <onload/extensions_zc.h>
@@ -1056,6 +1057,16 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
 
       ci_ip_cmsg_finish(&cmsg_state);
       rinf.msg_flags |= MSG_ERRQUEUE;
+ 
+      /* Wake up TX if necessary as a result of delivering from timestamp_q */
+      if( NI_OPTS(ni).tcp_sndbuf_mode >= 1 &&
+          ci_tcp_tx_advertise_space(ni, ts) ) {
+        if( ! rinf.stack_locked )
+          ci_netif_lock(ni);
+        ci_tcp_wake_possibly_not_in_poll(ni, ts, CI_SB_FLAG_WAKE_TX);
+        ci_netif_unlock(ni);
+        rinf.stack_locked = 0;
+      }
 
       rinf.rc = 0;
       goto unlock_out;
