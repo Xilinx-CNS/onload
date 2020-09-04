@@ -7,6 +7,7 @@
 #include <ci/driver/kernel_compat.h>
 
 #include <ci/efhw/nic.h>
+#include <ci/efhw/eventq.h>
 #include <ci/driver/efab/hardware/af_xdp.h>
 
 #include <linux/socket.h>
@@ -17,6 +18,7 @@
 #include <linux/mman.h>
 #include <linux/fdtable.h>
 #include <linux/sched/signal.h>
+#include <net/sock.h>
 
 #include <ci/efrm/syscall.h>
 
@@ -39,6 +41,17 @@ struct umem_pages
   struct umem_block** blocks;
 };
 
+/* Resources for waiting for and handling events */
+struct event_waiter
+{
+  struct wait_queue_entry wait;
+
+  struct efhw_nic* nic;
+  struct efhw_ev_handler* ev_handlers;
+  int evq;
+  int budget;
+};
+
 /* Per-VI AF_XDP resources */
 struct efhw_af_xdp_vi
 {
@@ -50,6 +63,7 @@ struct efhw_af_xdp_vi
 
   struct efab_af_xdp_offsets kernel_offsets;
   struct efhw_page user_offsets_page;
+  struct event_waiter waiter;
 };
 
 struct protection_domain
@@ -64,6 +78,7 @@ struct efhw_nic_af_xdp
 {
   struct file* map;
   struct file* shadow;
+  struct efhw_ev_handler* ev_handlers;
   struct efhw_af_xdp_vi* vi;
   struct protection_domain* pd;
 };
@@ -753,6 +768,9 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     goto out_clear_map;
 
+  if( vi->waiter.wait.func != NULL )
+    add_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
+
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
   return 0;
 
@@ -858,6 +876,8 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		      GFP_KERNEL);
 	if( xdp == NULL )
 		return -ENOMEM;
+
+	xdp->ev_handlers = ev_handlers;
 	xdp->vi = (struct efhw_af_xdp_vi*) (xdp + 1);
 	xdp->pd = (struct protection_domain*) (xdp->vi + nic->vi_lim);
 
@@ -968,18 +988,41 @@ af_xdp_nic_release_hardware(struct efhw_nic* nic)
  *
  *--------------------------------------------------------------------*/
 
+static int wait_callback(struct wait_queue_entry* wait, unsigned mode,
+                         int flags, void* key)
+{
+  struct event_waiter* w = container_of(wait, struct event_waiter, wait);
+  efhw_handle_wakeup_event(w->nic, w->ev_handlers, w->evq, w->budget);
+  return 1;
+}
 
 /* This function will enable the given event queue with the requested
  * properties.
  */
 static int
 af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint evq, uint evq_size,
-			    dma_addr_t *dma_addrs,
-			    uint n_pages, int interrupting, int enable_dos_p,
-			    int wakeup_evq, int flags, int* flags_out)
+                              dma_addr_t *dma_addrs,
+                              uint n_pages, int interrupting, int enable_dos_p,
+                              int wakeup_evq, int flags, int* flags_out)
 {
-	EFHW_ERR("%s: FIXME AF_XDP evq %d sz %d", __FUNCTION__, evq, evq_size);
-	return 0;
+  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq);
+
+  if( vi == NULL )
+    return -ENODEV;
+
+  init_waitqueue_func_entry(&vi->waiter.wait, wait_callback);
+  vi->waiter.nic = nic;
+  vi->waiter.ev_handlers = nic->af_xdp->ev_handlers;
+  vi->waiter.evq = wakeup_evq;
+  /* The budget currently has little relevance as Onload doesn't try to
+   * poll AF_XDP from an interrupt context. The value may need some thought
+   * if that changes in future. */
+  vi->waiter.budget = 64;
+
+  if( vi->sock != NULL )
+    add_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
+
+  return 0;
 }
 
 static void
