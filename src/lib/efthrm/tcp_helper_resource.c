@@ -1504,19 +1504,7 @@ static int tcp_helper_nic_attach_xdp(ci_netif* ni,
 /* callback from ef_vi->ops */
 static int af_xdp_kick(ef_vi* vi)
 {
-  tcp_helper_resource_t* trs = vi->xdp_kick_context;
-
-#if ! CI_CFG_UL_INTERRUPT_HELPER
-  if( trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
-    tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
-    return -EAGAIN;
-  }
-  else
-#endif
-  {
-    int intf_i = CI_CONTAINER(ci_netif_nic_t, vis[0], vi) - trs->netif.nic_hw;
-    return efrm_vi_af_xdp_kick(tcp_helper_vi(trs, intf_i));
-  }
+  return efrm_vi_af_xdp_kick(vi->xdp_kick_context);
 }
 
 static int allocate_vis(tcp_helper_resource_t* trs,
@@ -1655,7 +1643,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
                   &vi_out_flags, &ni->state->vi_stats);
 
     vi->xdp_kick = af_xdp_kick;
-    vi->xdp_kick_context = trs;
+    vi->xdp_kick_context = vi_rs;
 
     nsn->oo_vi_flags = alloc_info.oo_vi_flags;
     nsn->vi_io_mmap_bytes = alloc_info.vi_io_mmap_bytes;
@@ -2954,7 +2942,6 @@ static void tcp_helper_do_non_atomic(struct work_struct *data)
   int need_unlock_shared = 0;
 
   OO_DEBUG_TCPH(ci_log("%s: [%u]", __FUNCTION__, trs->id));
-
   ci_assert(! in_atomic());
 
   /* Handle endpoints that have work queued. */
@@ -6550,6 +6537,13 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
   if( ci_netif_intf_has_event(ni, intf_i) ) {
     if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
       CITP_STATS_NETIF(++ni->state->stats.interrupt_polls);
+
+      if( ni->flags & CI_NETIF_FLAG_AF_XDP ) {
+        /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
+        tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
+        return 0;
+      }
+
       ni->state->poll_did_wake = 0;
       n = ci_netif_poll_n(ni, budget);
       CITP_STATS_NETIF_ADD(ni, interrupt_evs, n);
@@ -6623,6 +6617,13 @@ static int tcp_helper_timeout(tcp_helper_resource_t* trs, int intf_i, int budget
   if( ci_netif_intf_has_event(ni, intf_i) ) {
     if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
       CITP_STATS_NETIF(++ni->state->stats.timeout_interrupt_polls);
+
+      if( ni->flags & CI_NETIF_FLAG_AF_XDP ) {
+        /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
+        tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
+        return 0;
+      }
+
       ni->state->poll_did_wake = 0;
       trs->netif.state->interrupt_numa_nodes |= 1 << numa_node_id();
       if( (n = ci_netif_poll_n(ni, budget)) ) {
@@ -6709,6 +6710,14 @@ static int oo_handle_wakeup_int_driven(void* context, int is_timeout,
       if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
         CITP_STATS_NETIF(++ni->state->stats.interrupt_polls);
         ci_assert( ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT);
+
+        if( ni->flags & CI_NETIF_FLAG_AF_XDP ) {
+          /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
+          ci_bit_set(&ni->state->evq_prime_deferred, tcph_nic->thn_intf_i);
+          tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
+          return 0;
+        }
+
         ni->state->poll_did_wake = 0;
         n = ci_netif_poll_n(ni, budget);
         CITP_STATS_NETIF_ADD(ni, interrupt_evs, n);
