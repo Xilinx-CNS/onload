@@ -1193,6 +1193,7 @@ static int ci_udp_zc_recv_from_os(ci_netif* ni, ci_udp_state* us,
     zc_iov[i].iov_len = rc > iov[i].iov_len ? iov[i].iov_len : rc;
     zc_iov[i].iov_base = iov[i].iov_base;
     zc_iov[i].buf = zc_pktbuf_to_handle(pkt);
+    zc_iov[i].addr_space = EF_ADDRSPACE_LOCAL;
 
     rc -= zc_iov[i].iov_len;
     ++i;
