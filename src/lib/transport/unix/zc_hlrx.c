@@ -373,7 +373,8 @@ static void zc_buffer_addref(int fd, onload_zc_handle buf, int delta)
 /* Pass buffers from 'iovs' to state->msg->iov, updating the tracking as we
  * go */
 static void zc_iovs(struct zc_cb_zc_state* state,
-                    struct onload_zc_iovec* iovs, int* pbegin, int end)
+                    struct onload_zc_iovec* iovs, int* pbegin, int end,
+                    enum onload_zc_callback_rc* cb_flags)
 {
   int ref_delta = 0;
   int begin = *pbegin;
@@ -427,7 +428,15 @@ static void zc_iovs(struct zc_cb_zc_state* state,
      * so we don't want that ref any more */
     --ref_delta;
   }
-  zc_buffer_addref(state->hlrx->fd, state->hlrx->pending[0].buf, ref_delta);
+  if( ref_delta == -1 && cb_flags ) {
+    /* The 'else' branch works fine too, but this is more efficient (less
+     * stack locking) and a common case with zc_remote_data. */
+    ci_assert_flags(*cb_flags, ONLOAD_ZC_KEEP);
+    *cb_flags &=~ ONLOAD_ZC_KEEP;
+  }
+  else {
+    zc_buffer_addref(state->hlrx->fd, iovs[0].buf, ref_delta);
+  }
 }
 
 
@@ -438,17 +447,19 @@ zc_cb(struct onload_zc_recv_args *args, int flags)
   struct zc_cb_zc_state* state = args->user_ptr;
   int begin = 0;
   int end = args->msg.msghdr.msg_iovlen;
+  enum onload_zc_callback_rc ret = ONLOAD_ZC_KEEP;
 
   ci_assert_gt(end, 0);
   ci_assert_equal(state->hlrx->pending_begin, state->hlrx->pending_end);
-  zc_iovs(state, args->msg.iov, &begin, end);
+  zc_iovs(state, args->msg.iov, &begin, end, &ret);
 
   if( state->hlrx->udp ) {
     if( end != begin )
       state->msg->msghdr.msg_flags |= MSG_TRUNC;
-    return ONLOAD_ZC_KEEP | ONLOAD_ZC_TERMINATE;
+    return ret | ONLOAD_ZC_TERMINATE;
   }
   if( end != begin ) {
+    ci_assert_flags(ret, ONLOAD_ZC_KEEP);
     if( ! save_pending(state->hlrx, args, begin, end) ) {
       state->rc = -ENOMEM;
       onload_zc_buffer_decref(state->hlrx->fd, state->hlrx->pending[0].buf);
@@ -457,8 +468,8 @@ zc_cb(struct onload_zc_recv_args *args, int flags)
   }
 
   if( state->max_bytes && state->curr_iov < state->msg->msghdr.msg_iovlen )
-    return ONLOAD_ZC_KEEP | ONLOAD_ZC_CONTINUE;
-  return ONLOAD_ZC_KEEP | ONLOAD_ZC_TERMINATE;
+    return ret | ONLOAD_ZC_CONTINUE;
+  return ret | ONLOAD_ZC_TERMINATE;
 }
 
 
@@ -485,7 +496,8 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
     msg->msghdr.msg_flags = 0;
     if( hlrx->pending_begin != hlrx->pending_end ) {
       /* Consume leftovers from previous call */
-      zc_iovs(&state, hlrx->pending, &hlrx->pending_begin, hlrx->pending_end);
+      zc_iovs(&state, hlrx->pending, &hlrx->pending_begin, hlrx->pending_end,
+              NULL);
       if( state.rc > 0 ) {
         /* Set DONTWAIT because we've got some data therefore normal semantics
         * are to return when we can */
