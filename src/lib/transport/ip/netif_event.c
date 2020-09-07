@@ -582,9 +582,11 @@ int ci_netif_evq_poll(ci_netif* ni, int intf_i)
       ci_assert_equal(pkt->intf_i, intf_i);
 
       /* Whole packet in a single buffer. */
-      if( len == 0 )
-        ef_vi_receive_get_bytes(evq, pkt->dma_start,
-                                (uint16_t*)&pkt->pay_len);
+      if( len == 0 ) {
+        uint16_t pay_len;
+        ef_vi_receive_get_bytes(evq, pkt->dma_start, &pay_len);
+        pkt->pay_len = pay_len;
+      }
       else
         pkt->pay_len = len - evq->rx_prefix_len;
       oo_offbuf_init(&pkt->buf, PKT_START(pkt), pkt->pay_len);
@@ -1786,8 +1788,9 @@ have_events:
           if( (ev[i].rx_multi.flags & (EF_EVENT_FLAG_SOP | EF_EVENT_FLAG_CONT))
                == EF_EVENT_FLAG_SOP ) {
             /* Whole packet in a single buffer. */
-            ef_vi_receive_get_bytes(vi, pkt->dma_start,
-                                    (uint16_t*)&pkt->pay_len);
+            uint16_t len;
+            ef_vi_receive_get_bytes(vi, pkt->dma_start, &len);
+            pkt->pay_len = len;
             oo_offbuf_init(&pkt->buf, PKT_START(pkt), pkt->pay_len);
             s.rx_pkt = pkt;
           }
