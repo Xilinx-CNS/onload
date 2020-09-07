@@ -1253,7 +1253,7 @@ static int ci_tcp_connect_ul_syn_sent(ci_netif *ni, ci_tcp_state *ts)
         ci_netif_lock(ni);
 
       if( timeout ) {
-        ci_uint32 spin_ms = (start_frc - now_frc) / IPTIMER_STATE(ni)->khz;
+        ci_uint32 spin_ms = (now_frc - start_frc) / IPTIMER_STATE(ni)->khz;
         if( spin_ms < timeout )
           timeout -= spin_ms;
         else {
