@@ -21,11 +21,13 @@ clean:    special_top_clean
 else
 
 AUTOCOMPAT := driver/linux_resource/autocompat.h
-all: $(AUTOCOMPAT)
+all:
 	+@$(MakeSubdirs)
 
 ifeq ($(LINUX),1)
 ifneq ($(GNU),1)
+all: $(AUTOCOMPAT)
+
 LINUX_RESOURCE := $(SRCPATH)/driver/linux_resource
 $(AUTOCOMPAT): $(LINUX_RESOURCE)/kernel_compat.sh $(LINUX_RESOURCE)/kernel_compat_funcs.sh
 	@mkdir -p $(@D)
