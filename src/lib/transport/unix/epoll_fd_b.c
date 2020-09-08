@@ -441,9 +441,11 @@ static int citp_epollb_ctl_do(citp_fdinfo* fdi, citp_fdinfo *fd_fdi,
         op.rc = -ENOENT;
       }
     }
+    else {
+      op.rc = rc2;
+    }
     if( epi->not_mt_safe )
       pthread_mutex_unlock(&epi->lock_postponed);
-    op.rc = rc2;
   }
   else {
     struct oo_epoll_item item;
