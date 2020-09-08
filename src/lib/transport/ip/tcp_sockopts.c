@@ -616,49 +616,64 @@ int ci_tcp_setsockopt(citp_socket* ep, ci_fd_t fd, int level,
 #endif /* !defined(__KERNEL__) */
 
 #ifdef __KERNEL__
-static void ci_tcp_sync_opt_flag(struct socket* sock, int* err,
-                                int level, int optname)
+#ifndef EFRM_HAVE_SOCK_BINDTOINDEX
+static int oo_sock_bindtoindex(struct socket *sock, int ifindex)
 {
-  int optval = 1;
+  /* ifindex is what we store when this is set, and what we use for
+   * filtering decisions.  It's possible that the device this ifindex
+   * refers to has changed since the sockopt was set.
+   */
+  char* ifname;
+  struct net_device *dev = dev_get_by_index(sock_net(sock->sk), ifindex);
   int rc;
 
-  rc = kernel_setsockopt(sock, level, optname, (char*)&optval, sizeof(optval));
-  if( rc < 0 ) {
-    ci_log("%s: ERROR (%d) failed to set socket option %d %d on kernel socket",
-           __FUNCTION__, rc, level, optname);
-    *err = rc;
-  }
+
+  if( ! dev )
+    return -EINVAL;
+
+  ifname = dev->name;
+  rc = kernel_setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, ifname,
+                          strlen(ifname));
+  dev_put(dev);
+  return rc;
+}
+#else
+static int oo_sock_bindtoindex(struct socket *sock, int ifindex)
+{
+  return sock_bindtoindex(sock->sk, ifindex, 1);
+}
+#endif
+
+static void ci_tcp_sock_set_flag(struct socket* sock, int flag)
+{
+  lock_sock(sock->sk);
+  sock_set_flag(sock->sk, flag);
+  release_sock(sock->sk);
 }
 
-
-static void ci_tcp_sync_opt_timeval(struct socket* sock, int* err,
-                                   int level, int optname, struct timeval* tv)
+/* SOL_SOCKET handler */
+static void ci_tcp_sock_setsockopt(struct socket* sock, int* err,
+                                  int optname, void *optval,
+                                  unsigned int optlen)
 {
+  mm_segment_t oldfs = get_fs();
   int rc;
 
-  rc = kernel_setsockopt(sock, level, optname, (char*)(ci_uintptr_t)tv,
-                         sizeof(struct timeval));
-  if( rc < 0 ) {
-    ci_log("%s: ERROR (%d) failed to set socket option %d %d "
-           "to val %llx:%llx on kernel socket",
-           __FUNCTION__, rc, level, optname,
-           (long long) tv->tv_sec, (long long)tv->tv_usec);
+  set_fs(KERNEL_DS);
+  rc = sock_setsockopt(sock, SOL_SOCKET, optname, optval, optlen);
+  set_fs(oldfs);
+  if( rc )
     *err = rc;
-  }
 }
 
-
-static void ci_tcp_sync_opt_unsigned(struct socket* sock, int* err,
-                                    int level, int optname, unsigned* optval)
+/* non-SOL_SOCKET handler */
+static void ci_tcp_sock_ops_setsockopt(struct socket *sock, int* err,
+                                      int level, int optname,
+                                      void *optval, unsigned int optlen)
 {
-  int rc;
-
-  rc = kernel_setsockopt(sock, level, optname, (char*)optval, sizeof(unsigned));
-  if( rc < 0 ) {
-    ci_log("%s: ERROR (%d) failed to set socket option %d %d to val %u on "
-           "kernel socket", __FUNCTION__, rc, level, optname, *optval);
+  int rc = sock_ops_setsockopt(sock, level, optname, optval, optlen);
+  if( rc )
     *err = rc;
-  }
 }
 
 
@@ -670,107 +685,67 @@ static int ci_tcp_sync_so_sockopts(ci_netif* ni, ci_tcp_state* ts,
   struct timeval tv;
   unsigned optval;
   socklen_t optlen;
-  struct linger l;
 
   if( ts->s.so.rcvtimeo_msec > 0 ) {
     optlen = sizeof(tv);
     rc = ci_get_sol_socket(ni, &ts->s, SO_RCVTIMEO, &tv, &optlen);
     ci_assert_equal(rc, 0);
     (void)rc;
-    ci_tcp_sync_opt_timeval(sock, &err, SOL_SOCKET, SO_RCVTIMEO, &tv);
+    ci_tcp_sock_setsockopt(sock, &err, SO_RCVTIMEO, &tv, sizeof(tv));
   }
   if( ts->s.so.sndtimeo_msec > 0 ) {
     optlen = sizeof(tv);
     rc = ci_get_sol_socket(ni, &ts->s, SO_SNDTIMEO, &tv, &optlen);
     ci_assert_equal(rc, 0);
     (void)rc;
-    ci_tcp_sync_opt_timeval(sock, &err, SOL_SOCKET, SO_SNDTIMEO, &tv);
+    ci_tcp_sock_setsockopt(sock, &err, SO_SNDTIMEO, &tv, sizeof(tv));
   }
-  if( ts->s.s_flags & CI_SOCK_FLAG_KALIVE ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_SOCKET, SO_KEEPALIVE);
-  }
-  if( ts->s.s_flags & CI_SOCK_FLAG_OOBINLINE ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_SOCKET, SO_OOBINLINE);
-  }
+  if( ts->s.s_flags & CI_SOCK_FLAG_OOBINLINE )
+    ci_tcp_sock_set_flag(sock, SOCK_URGINLINE);
   if( ts->s.so.rcvlowat != 1 ) {
     optlen = sizeof(optval);
     rc = ci_get_sol_socket(ni, &ts->s, SO_RCVLOWAT, &optval, &optlen);
     ci_assert_equal(err, 0);
     (void)rc;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_SOCKET, SO_RCVLOWAT, &optval);
+    ci_tcp_sock_setsockopt(sock, &err, SO_RCVLOWAT, &optval, sizeof(optval));
   }
-  if( ts->s.s_flags & CI_SOCK_FLAG_BROADCAST ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_SOCKET, SO_BROADCAST);
-  }
-  if( ts->s.s_flags & CI_SOCK_FLAG_REUSEADDR ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_SOCKET, SO_REUSEADDR);
-  }
+  if( ts->s.s_flags & CI_SOCK_FLAG_BROADCAST )
+    ci_tcp_sock_set_flag(sock, SOCK_BROADCAST);
   if( ts->s.s_flags & CI_SOCK_FLAG_SET_SNDBUF ) {
     optval = ts->s.so.sndbuf / 2;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_SOCKET, SO_SNDBUF, &optval);
+    ci_tcp_sock_setsockopt(sock, &err, SO_SNDBUF, &optval, sizeof(optval));
   }
   if( ts->s.s_flags & CI_SOCK_FLAG_SET_RCVBUF ) {
     optval = ts->s.so.rcvbuf / 2;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_SOCKET, SO_RCVBUF, &optval);
+    ci_tcp_sock_setsockopt(sock, &err, SO_RCVBUF, &optval, sizeof(optval));
   }
   if( ts->s.s_flags & CI_SOCK_FLAG_LINGER ) {
-    l.l_onoff = 1;
-    l.l_linger = ts->s.so.linger;
-    rc = kernel_setsockopt(sock, SOL_SOCKET, SO_LINGER, (char*)&l, sizeof(l));
-    if( rc < 0 ) {
-      ci_log("%s: ERROR (%d) failed to set SO_LINGER to val %d on "
-             "kernel socket", __FUNCTION__, rc, l.l_linger);
-      err = rc;
-    }
+    lock_sock(sock->sk);
+    sock->sk->sk_lingertime = ts->s.so.linger;
+    sock_set_flag(sock->sk, SOCK_LINGER);
+    release_sock(sock->sk);
   }
   /* In Linux SO_PRIORITY is derived from IP_TOS, so we do not sync the
    * SO_PRIORITY value */
   if( ts->s.cp.so_bindtodevice != CI_IFID_BAD ) {
-    /* ifindex is what we store when this is set, and what we use for
-     * filtering decisions.  It's possible that the device this ifindex
-     * refers to has changed since the sockopt was set.
-     */
-    char* ifname;
-    struct net_device *dev = dev_get_by_index(
-#ifdef EFRM_DO_NAMESPACES
-                               netif2tcp_helper_resource(ni)->net_ns,
-#else
-                               &init_net,
-#endif
-                               ts->s.cp.so_bindtodevice);
-    if( dev ) {
-      ifname = dev->name;
-      rc = kernel_setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, ifname,
-                              strlen(ifname));
-      if( rc < 0 ) {
-        ci_log("%s: ERROR (%d) failed to set SO_BINDTODEVICE to val %s on "
-               "kernel socket", __FUNCTION__, rc, ifname);
-        err = rc;
-      }
-      dev_put(dev);
-    }
-    else {
-      /* This ifindex no longer refers to a interface.  Best we can do is
-       * alert the user.
-       */
-      ci_log("%s: ERROR could not retrieve ifname for ifindex %d, not syncing"
-             "SO_BINDTODEVICE to kernel socket",
-             __FUNCTION__, ts->s.cp.so_bindtodevice);
-      err = -EINVAL;
-    }
+    int rc = oo_sock_bindtoindex(sock, ts->s.cp.so_bindtodevice);
+    if( rc != 0 )
+      err = rc;
   }
-  if( ts->s.so.so_debug & CI_SOCKOPT_FLAG_SO_DEBUG ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_SOCKET, SO_DEBUG);
-  }
-  if( ts->s.cmsg_flags & CI_IP_CMSG_TIMESTAMP ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_SOCKET, SO_TIMESTAMP);
-  }
-  if( ts->s.cmsg_flags & CI_IP_CMSG_TIMESTAMPNS ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_SOCKET, SO_TIMESTAMPNS);
-  }
-  if( ts->s.s_flags & CI_SOCK_FLAG_REUSEPORT ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_SOCKET, SO_REUSEPORT);
-  }
+
+  optval = 1;
+  if( ts->s.s_flags & CI_SOCK_FLAG_KALIVE )
+    ci_tcp_sock_setsockopt(sock, &err, SO_KEEPALIVE, &optval, sizeof(optval));
+  if( ts->s.s_flags & CI_SOCK_FLAG_REUSEADDR )
+    ci_tcp_sock_setsockopt(sock, &err, SO_REUSEADDR, &optval, sizeof(optval));
+  if( ts->s.so.so_debug & CI_SOCKOPT_FLAG_SO_DEBUG )
+    ci_tcp_sock_set_flag(sock, SOCK_DBG);
+  if( ts->s.cmsg_flags & CI_IP_CMSG_TIMESTAMP )
+    ci_tcp_sock_setsockopt(sock, &err, SO_TIMESTAMP, &optval, sizeof(optval));
+  if( ts->s.cmsg_flags & CI_IP_CMSG_TIMESTAMPNS )
+    ci_tcp_sock_setsockopt(sock, &err, SO_TIMESTAMPNS, &optval, sizeof(optval));
+  if( ts->s.s_flags & CI_SOCK_FLAG_REUSEPORT )
+    ci_tcp_sock_setsockopt(sock, &err, SO_REUSEPORT, &optval, sizeof(optval));
 
   return err;
 }
@@ -783,34 +758,39 @@ static int ci_tcp_sync_ip_sockopts(ci_netif* ni, ci_tcp_state* ts,
 
   if( ts->s.cp.ip_tos != 0 ) {
     optval = ts->s.cp.ip_tos;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_IP, IP_TOS, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IP, IP_TOS,
+                               &optval, sizeof(optval));
   }
   if( ts->s.s_flags & CI_SOCK_FLAG_SET_IP_TTL ) {
     optval = ts->s.cp.ip_ttl;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_IP, IP_TTL, &optval);
-  }
-  if( ts->s.cmsg_flags & CI_IP_CMSG_PKTINFO ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IP, IP_PKTINFO);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IP, IP_TTL,
+                               &optval, sizeof(optval));
   }
   if( ts->s.s_flags & (CI_SOCK_FLAG_ALWAYS_DF | CI_SOCK_FLAG_PMTU_DO) ) {
     optval = ci_ip_mtu_discover_from_sflags(ts->s.s_flags, AF_INET);
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_IP, IP_MTU_DISCOVER, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IP, IP_MTU_DISCOVER,
+                               &optval, sizeof(optval));
   }
-  if( ts->s.cmsg_flags & CI_IP_CMSG_TOS ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IP, IP_RECVTOS);
-  }
-  if( ts->s.so.so_debug & CI_SOCKOPT_FLAG_IP_RECVERR ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IP, IP_RECVERR);
-  }
-  if( ts->s.cmsg_flags & CI_IP_CMSG_TTL ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IP, IP_RECVTTL);
-  }
-  if( ts->s.cmsg_flags & CI_IP_CMSG_RECVOPTS ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IP, IP_RECVOPTS);
-  }
-  if( ts->s.cmsg_flags & CI_IP_CMSG_RETOPTS ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IP, IP_RETOPTS);
-  }
+
+  optval = 1;
+  if( ts->s.cmsg_flags & CI_IP_CMSG_PKTINFO )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IP, IP_PKTINFO,
+                               &optval, sizeof(optval));
+  if( ts->s.cmsg_flags & CI_IP_CMSG_TOS )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IP, IP_RECVTOS,
+                               &optval, sizeof(optval));
+  if( ts->s.so.so_debug & CI_SOCKOPT_FLAG_IP_RECVERR )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IP, IP_RECVERR,
+                               &optval, sizeof(optval));
+  if( ts->s.cmsg_flags & CI_IP_CMSG_TTL )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IP, IP_RECVTTL,
+                               &optval, sizeof(optval));
+  if( ts->s.cmsg_flags & CI_IP_CMSG_RECVOPTS )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IP, IP_RECVOPTS,
+                               &optval, sizeof(optval));
+  if( ts->s.cmsg_flags & CI_IP_CMSG_RETOPTS )
+     ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IP, IP_RETOPTS,
+                                &optval, sizeof(optval));
 
   return err;
 }
@@ -822,36 +802,42 @@ static int ci_tcp_sync_ip6_sockopts(ci_netif* ni, ci_tcp_state* ts,
   unsigned optval;
   int err = 0;
 
-  if( ts->s.s_flags & CI_SOCK_FLAG_V6ONLY )
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IPV6, IPV6_V6ONLY);
-
-  if( ts->s.cmsg_flags & CI_IPV6_CMSG_PKTINFO )
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IPV6, IPV6_RECVPKTINFO);
 
   if( ts->s.s_flags &
       (CI_SOCK_FLAG_IP6_ALWAYS_DF | CI_SOCK_FLAG_IP6_PMTU_DO) ) {
     optval = ci_ip_mtu_discover_from_sflags(ts->s.s_flags, AF_INET6);
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_IPV6, IPV6_MTU_DISCOVER, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IPV6, IPV6_MTU_DISCOVER,
+                               &optval, sizeof(optval));
   }
 
   if( ts->s.cp.tclass != 0 ) {
     optval = ts->s.cp.tclass;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_IPV6, IPV6_TCLASS, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IPV6, IPV6_TCLASS,
+                               &optval, sizeof(optval));
   }
-
-  if( ts->s.so.so_debug & CI_SOCKOPT_FLAG_IPV6_RECVERR )
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IPV6, IPV6_RECVERR);
 
   if( ts->s.s_flags & CI_SOCK_FLAG_SET_IPV6_UNICAST_HOPS ) {
     optval = ts->s.cp.hop_limit;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_IPV6, IPV6_UNICAST_HOPS, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IPV6, IPV6_UNICAST_HOPS,
+                               &optval, sizeof(optval));
   }
 
+  optval = 1;
+  if( ts->s.s_flags & CI_SOCK_FLAG_V6ONLY )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IPV6, IPV6_V6ONLY,
+                               &optval, sizeof(optval));
+  if( ts->s.cmsg_flags & CI_IPV6_CMSG_PKTINFO )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IPV6, IPV6_RECVPKTINFO,
+                               &optval, sizeof(optval));
+  if( ts->s.so.so_debug & CI_SOCKOPT_FLAG_IPV6_RECVERR )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IPV6, IPV6_RECVERR,
+                               &optval, sizeof(optval));
   if( ts->s.cmsg_flags & CI_IPV6_CMSG_HOPLIMIT )
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IPV6, CI_IPV6_CMSG_HOPLIMIT);
-
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IPV6, CI_IPV6_CMSG_HOPLIMIT,
+                               &optval, sizeof(optval));
   if( ts->s.cmsg_flags & CI_IPV6_CMSG_TCLASS )
-    ci_tcp_sync_opt_flag(sock, &err, SOL_IPV6, CI_IPV6_CMSG_TCLASS);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_IPV6, CI_IPV6_CMSG_TCLASS,
+                               &optval, sizeof(optval));
 
   return err;
 }
@@ -865,12 +851,6 @@ static int ci_tcp_sync_tcp_sockopts(ci_netif* ni, ci_tcp_state* ts,
   int err = 0;
   int rc;
 
-  if( ts->s.s_aflags & CI_SOCK_AFLAG_CORK_BIT ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_TCP, TCP_CORK);
-  }
-  if( ts->s.s_aflags & CI_SOCK_AFLAG_NODELAY_BIT ) {
-    ci_tcp_sync_opt_flag(sock, &err, SOL_TCP, TCP_NODELAY);
-  }
 #ifdef TCP_KEEPALIVE_ABORT_THRESHOLD
   if( ts->c.ka_probe_th != NI_OPTS(ni).keepalive_probes ) {
     optlen = sizeof(optval);
@@ -878,8 +858,8 @@ static int ci_tcp_sync_tcp_sockopts(ci_netif* ni, ci_tcp_state* ts,
                         &optlen);
     ci_assert_equal(rc, 0);
     (void)rc;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_TCP, TCP_KEEPALIVE_ABORT_THRESHOLD,
-                            &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_TCP, TCP_KEEPALIVE_ABORT_THRESHOLD,
+                               &optval, sizeof(optval));
   }
 #endif
   if( ts->c.user_mss != 0 ) {
@@ -887,37 +867,49 @@ static int ci_tcp_sync_tcp_sockopts(ci_netif* ni, ci_tcp_state* ts,
     rc = ci_get_sol_tcp(ni, &ts->s, TCP_MAXSEG, &optval, &optlen);
     ci_assert_equal(rc, 0);
     (void)rc;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_TCP, TCP_MAXSEG, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_TCP, TCP_MAXSEG,
+                               &optval, sizeof(optval));
   }
   if( ts->c.t_ka_time != NI_CONF(ni).tconst_keepalive_time ) {
     optlen = sizeof(optval);
     rc = ci_get_sol_tcp(ni, &ts->s, TCP_KEEPIDLE, &optval, &optlen);
     ci_assert_equal(rc, 0);
     (void)rc;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_TCP, TCP_KEEPIDLE, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_TCP, TCP_KEEPIDLE,
+                               &optval, sizeof(optval));
   }
   if( ts->c.t_ka_intvl != NI_CONF(ni).tconst_keepalive_intvl ) {
     optlen = sizeof(optval);
     rc = ci_get_sol_tcp(ni, &ts->s, TCP_KEEPINTVL, &optval, &optlen);
     ci_assert_equal(rc, 0);
     (void)rc;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_TCP, TCP_KEEPINTVL, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_TCP, TCP_KEEPINTVL,
+                               &optval, sizeof(optval));
   }
   if( ts->c.ka_probe_th != NI_CONF(ni).keepalive_probes ) {
     optlen = sizeof(optval);
     rc = ci_get_sol_tcp(ni, &ts->s, TCP_KEEPCNT, &optval, &optlen);
     ci_assert_equal(rc, 0);
     (void)rc;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_TCP, TCP_KEEPCNT, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_TCP, TCP_KEEPCNT,
+                               &optval, sizeof(optval));
   }
   if( ts->c.tcp_defer_accept != OO_TCP_DEFER_ACCEPT_OFF ) {
     optlen = sizeof(optval);
     rc = ci_get_sol_tcp(ni, &ts->s, TCP_DEFER_ACCEPT, &optval, &optlen);
     ci_assert_equal(rc, 0);
     (void)rc;
-    ci_tcp_sync_opt_unsigned(sock, &err, SOL_TCP, TCP_DEFER_ACCEPT, &optval);
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_TCP, TCP_DEFER_ACCEPT,
+                               &optval, sizeof(optval));
   }
 
+  optval = 1;
+  if( ts->s.s_aflags & CI_SOCK_AFLAG_CORK_BIT )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_TCP, TCP_CORK,
+                               &optval, sizeof(optval));
+  if( ts->s.s_aflags & CI_SOCK_AFLAG_NODELAY_BIT )
+    ci_tcp_sock_ops_setsockopt(sock, &err, SOL_TCP, TCP_NODELAY,
+                               &optval, sizeof(optval));
   return err;
 }
 
