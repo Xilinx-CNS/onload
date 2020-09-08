@@ -93,7 +93,7 @@ git-export() {
     (
 	cd $repo
 	local extant_files=$(git ls-tree -r --name-only $rev "$@" \
-                             | grep -E "$whitelist" | grep -v "$blacklist")
+                             | grep -E "$whitelist" | grep -Ev "$blacklist")
 	git archive $rev $extant_files
     )
 }
@@ -187,7 +187,7 @@ glue_makefile_pattern="mmake.mk$"
 # the top level makefile and some scripts
 whitelist="^((Makefile)|(scripts/export.sh)|(scripts/kernel_compat_funcs.sh)|(scripts/Makefile.common)|(include)|(drivers))"
 # We don't want directories in the list
-blacklist="/$"
+blacklist="(/$)|(xen/)|(load.*\.sh)|(unittest)|(systemtap)|(kscripts)|(dummycommit)|(doc/)|(Kconfig)|(export\.sh)"
 # We use || true for the grep here to allow the case where we currently
 # have no files, as the script is run with -o pipefail.
 git ls-files \
