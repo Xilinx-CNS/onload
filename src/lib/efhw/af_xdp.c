@@ -260,100 +260,32 @@ static int xdp_map_create_shadow(int max_entries)
   return rc;
 }
 
-/* Load the BPF program to redirect inbound packets to AF_XDP sockets */
+/* Load the BPF program to redirect inbound packets to AF_XDP sockets.
+ * See af_xdp_bpf.c for the program's source and compilation guidelines. */
 static int xdp_prog_load(int map_fd, int shadow_fd)
 {
-  /* This is a simple program which redirects TCP and UDP packets to AF_XDP
-   * sockets in the map.
-   *
-   * TODO: we will want to maintain this in a readable, editable form.
-   *
-   * It was compiled from the following:
-   *
-   * // clang -I../../bpf -target bpf -O2 -o xdpprog.o -c xdpprog.c
-#include <uapi/linux/bpf.h>
-#include "bpf_helpers.h"
-
-struct bpf_map_def SEC("maps") xsks_map = {
-        .type = BPF_MAP_TYPE_XSKMAP,
-        .key_size = 4,
-        .value_size = 4,
-        .max_entries = 256,
-};
-
-struct bpf_map_def SEC("maps") shadow_map = {
-        .type = BPF_MAP_TYPE_ARRAY,
-        .key_size = 4,
-        .value_size = 1,
-        .max_entries = 256,
-};
-
-SEC("xdp_sock")
-int xdp_sock_prog(struct xdp_md *ctx)
-{
-  char* data = (char*)(long)ctx->data;
-  char* end = (char*)(long)ctx->data_end;
-  if( data + 14 + 20 > end )
-    return XDP_PASS;
-
-  unsigned short ethertype = *(unsigned short*)(data+12);
-  unsigned char proto;
-  if( ethertype == 8 )
-    proto = *(unsigned char*)(data+23);
-  else if( ethertype == 0xdd86 )
-    proto = *(unsigned char*)(data+20);
-  else
-    return XDP_PASS;
-  if( proto != 6 && proto != 17 )
-    return XDP_PASS;
-
-  int index = ctx->rx_queue_index;
-  int rc = bpf_redirect_map(&xsks_map, index, XDP_PASS);
-  if( rc != XDP_ABORTED )
-    return rc;
-
-  // Workaround for older kernels (pre-5.3) which do not support passing a
-  // fallback action to bpf_redirect_map. We need to check the shadow map to
-  // figure out whether the redirection should succeed, and return XDP_PASS
-  // otherwise.
-  //
-  // We need the shadow map in addition to the socket map because older kernels
-  // also don't support lookup on a socket map.
-  if( bpf_map_lookup_elem(&shadow_map, &index) == NULL )
-    return XDP_PASS;
-
-  return bpf_redirect_map(&xsks_map, index, 0);
-}
-
-char _license[] SEC("license") = "GPL";
-   */
   uint64_t mfdH = (uint64_t) map_fd << 32;
   uint64_t sfdH = (uint64_t) shadow_fd << 32;
-  const uint64_t __attribute__((aligned(8))) prog[] = {
-    /* Note handling of relocations below that is
-     * to place the map's fd into a register for the
-     * call to bpf_redirect_map. The fd is the "immediate value" field of the
-     * instruction, which is the upper 32 bits of this representation.
-     */
-    0x00000002000000b7,   0x0000000000041361,
-    0x0000000000001261,   0x00000000000024bf,
-    0x0000002200000407,   0x000000000020342d,
-    0x00000017000003b7,   0x00000000000c2469,
-    0x0000000800020415,   0x0000dd86001c0455,
-    0x00000014000003b7,   0x000000000000320f,
-    0x0000000000002271,   0x0000001100010215,
-    0x0000000600170255,   0x0000000000101261,
-    0x00000000fffc2a63,    mfdH | 0x00001118,
-    0x0000000000000000,   0x00000002000003b7,
-    0x0000003300000085,   0x00000000000001bf,
-    0x0000002000000167,   0x0000002000000177,
-    0x00000000000d0155,   0x000000000000a2bf,
-    0xfffffffc00000207,    sfdH | 0x00001118,
-    0x0000000000000000,   0x0000000100000085,
-    0x00000000000001bf,   0x00000002000000b7,
-    0x0000000000050115,   0x00000000fffca261,
-     mfdH | 0x00001118,   0x0000000000000000,
-    0x00000000000003b7,   0x0000003300000085,
+  const uint64_t prog[] = {
+    0x00000002000000b7, 0x0000000000041361,
+    0x0000000000001261, 0x00000000000024bf,
+    0x0000002200000407, 0x000000000020342d,
+    0x00000017000003b7, 0x00000000000c2469,
+    0x0000000800020415, 0x0000dd86001c0455,
+    0x00000014000003b7, 0x000000000000320f,
+    0x0000000000002271, 0x0000001100010215,
+    0x0000000600170255, 0x0000000000101261,
+    0x00000000fffc2a63,  mfdH | 0x00001118,
+    0x0000000000000000, 0x00000002000003b7,
+    0x0000003300000085, 0x00000000000001bf,
+    0x0000002000000167, 0x0000002000000177,
+    0x00000000000d0155, 0x000000000000a2bf,
+    0xfffffffc00000207,  sfdH | 0x00001118,
+    0x0000000000000000, 0x0000000100000085,
+    0x00000000000001bf, 0x00000002000000b7,
+    0x0000000000050115, 0x00000000fffca261,
+     mfdH | 0x00001118, 0x0000000000000000,
+    0x00000000000003b7, 0x0000003300000085,
     0x0000000000000095,
   };
 
