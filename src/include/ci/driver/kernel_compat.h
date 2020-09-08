@@ -48,6 +48,8 @@
 #include <linux/pci.h>
 #include <linux/proc_fs.h>
 #include <linux/version.h>
+#include <linux/net.h>
+#include <linux/uaccess.h>
 
 #include <driver/linux_resource/autocompat.h>
 
@@ -278,5 +280,23 @@ static inline void mmap_read_unlock(struct mm_struct *mm)
   up_read(&mm->mmap_sem);
 }
 #endif
+
+/* For linux<=5.7 you can use kernel_setsockopt(),
+ * but newer versions doe not have this function. */
+static inline int sock_ops_setsockopt(struct socket *sock,
+                                      int level, int optname,
+                                      char *optval, unsigned int optlen)
+{
+  mm_segment_t oldfs = get_fs();
+  int rc;
+
+  /* You should call sock_setsockopt() for SOL_SOCKET */
+  WARN_ON(level == SOL_SOCKET);
+
+  set_fs(KERNEL_DS);
+  rc = sock->ops->setsockopt(sock, level, optname, optval, optlen);
+  set_fs(oldfs);
+  return rc;
+}
 
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

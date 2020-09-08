@@ -479,7 +479,8 @@ static int xdp_register_umem(struct socket* sock, struct umem_pages* pages,
   vma->vm_private_data = pages;
   vma->vm_ops = &vm_ops;
 
-  rc = kernel_setsockopt(sock, SOL_XDP, XDP_UMEM_REG, (char*)&mr, sizeof(mr));
+  rc = sock_ops_setsockopt(sock, SOL_XDP, XDP_UMEM_REG,
+                           (char*)&mr, sizeof(mr));
 
   vm_munmap(mr.addr, mr.len);
   return rc;
@@ -501,7 +502,8 @@ static int xdp_create_ring(struct socket* sock,
 
   user_base = page_map->n_pages << PAGE_SHIFT;
 
-  rc = kernel_setsockopt(sock, SOL_XDP, sockopt, (char*)&capacity, sizeof(int));
+  rc = sock_ops_setsockopt(sock, SOL_XDP, sockopt,
+                           (char*)&capacity, sizeof(int));
   if( rc < 0 )
     return rc;
 
@@ -551,14 +553,13 @@ static int xdp_create_rings(struct socket* sock,
                             struct efab_af_xdp_offsets_rings* kern_offsets,
                             struct efab_af_xdp_offsets_rings* user_offsets)
 {
-  int rc, optlen;
+  int rc;
   struct xdp_mmap_offsets mmap_offsets;
 
   EFHW_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
 
-  optlen = sizeof(mmap_offsets);
-  rc = kernel_getsockopt(sock, SOL_XDP, XDP_MMAP_OFFSETS,
-                         (char*)&mmap_offsets, &optlen);
+  rc = sock_ops_setsockopt(sock, SOL_XDP, XDP_MMAP_OFFSETS,
+                           (char*)&mmap_offsets, sizeof(mmap_offsets));
   if( rc < 0 )
     return rc;
 
