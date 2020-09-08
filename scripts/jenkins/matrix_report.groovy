@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc. */
+
 @Library('onload_jenkins_pipeline_lib')
 
 import groovy.transform.Field

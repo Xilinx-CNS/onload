@@ -1,3 +1,6 @@
+#!/bin/sh
+# SPDX-License-Identifier: GPL-2.0
+# X-SPDX-Copyright-Text: (c) Copyright 2003-2018 Xilinx, Inc.
 ###############################################################################
 # <L5_PRIVATE L5_SCRIPT>
 #   Copyright: (c) Level 5 Networks Limited.
