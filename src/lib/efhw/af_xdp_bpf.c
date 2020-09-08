@@ -41,6 +41,13 @@
 
 #include <linux/bpf.h>
 
+#define ETHERTYPE_VLAN 0x0081
+#define ETHERTYPE_IPv4 0x0008
+#define ETHERTYPE_IPv6 0xdd86
+
+#define PROTO_TCP 6
+#define PROTO_UDP 17
+
 extern struct bpf_map_def xsks_map;
 extern struct bpf_map_def shadow_map;
 
@@ -57,14 +64,20 @@ int xdp_sock_prog(struct xdp_md *ctx)
     return XDP_PASS;
 
   unsigned short ethertype = *(unsigned short*)(data+12);
+  if( ethertype == ETHERTYPE_VLAN ) {
+    data += 4;
+    ethertype = *(unsigned short*)(data+12);
+  }
+
   unsigned char proto;
-  if( ethertype == 8 )
+  if( ethertype == ETHERTYPE_IPv4 )
     proto = *(unsigned char*)(data+23);
-  else if( ethertype == 0xdd86 )
+  else if( ethertype == ETHERTYPE_IPv6 )
     proto = *(unsigned char*)(data+20);
   else
     return XDP_PASS;
-  if( proto != 6 && proto != 17 )
+
+  if( proto != PROTO_TCP && proto != PROTO_UDP )
     return XDP_PASS;
 
   int index = ctx->rx_queue_index;
