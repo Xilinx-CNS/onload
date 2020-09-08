@@ -63,6 +63,10 @@ int xdp_sock_prog(struct xdp_md *ctx)
   if( data + 14 + 20 > end )
     return XDP_PASS;
 
+  /* Pass broadcast packets */
+  if( (*(unsigned long*)data & 0xffffffffffff) == 0xffffffffffff )
+    return XDP_PASS;
+
   unsigned short ethertype = *(unsigned short*)(data+12);
   if( ethertype == ETHERTYPE_VLAN ) {
     data += 4;
