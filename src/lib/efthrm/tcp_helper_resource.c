@@ -5856,7 +5856,7 @@ int efab_tcp_helper_more_socks(tcp_helper_resource_t* trs)
   if( ni->ep_tbl_n >= ni->ep_tbl_max )  return -ENOSPC;
 
   page_i = oo_sockid_to_state_off(ni, ni->ep_tbl_n) >> CI_PAGE_SHIFT;
-  rc = ci_shmbuf_demand_page(&ni->pages_buf, page_i, &THR_TABLE.lock);
+  rc = ci_shmbuf_demand_page(&ni->pages_buf, page_i);
   if( rc < 0 ) {
     OO_DEBUG_ERR(ci_log("%s: demand failed (%d)", __FUNCTION__, rc));
     return rc;

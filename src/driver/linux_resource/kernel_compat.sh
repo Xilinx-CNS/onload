@@ -99,8 +99,6 @@ EFRM_ACCESS_OK_HAS_2_ARGS    custom
 
 EFRM_PUT_USER_ACCEPTS_VOLATILE custom
 
-EFRM_MAP_VM_AREA_TAKES_PAGESTARSTAR	symtype map_vm_area	include/linux/vmalloc.h	int(struct vm_struct*, pgprot_t, struct page**)
-
 EFRM_IP6_ROUTE_INPUT_LOOKUP_EXPORTED	export	ip6_route_input_lookup	include/net/ip6_route.h	net/ipv6/route.c
 
 EFRM_HAVE_DEV_GET_IF_LINK		symbol	dev_get_iflink	include/linux/netdevice.h
@@ -112,8 +110,6 @@ EFRM_HAVE_FILE_INODE			symbol file_inode include/linux/fs.h
 
 ERFM_NEIGH_USES_REFCOUNTS	memtype struct_neighbour refcnt include/net/neighbour.h refcount_t
 ERFM_NEIGH_HAS_PROTOCOL		memtype struct_neighbour protocol include/net/neighbour.h u8
-
-EFRM_HAVE_UNMAP_KERNEL_RANGE	export	unmap_kernel_range	include/linux/vmalloc.h	mm/vmalloc.c
 
 EFRM_HAS_STRUCT_TIMEVAL		member	struct_timeval	tv_sec	include/linux/time.h
 EFRM_HAS_STRUCT_TIMESPEC64	member	struct_timespec64	tv_sec	include/linux/time.h
