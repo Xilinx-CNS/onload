@@ -418,8 +418,6 @@ static int oo_netdev_event(struct notifier_block *this,
                            unsigned long event, void *ptr)
 {
   struct net_device *netdev = netdev_notifier_info_to_dev(ptr);
-  if( ! oo_netdev_is_native(netdev) )
-    return NOTIFY_DONE;
 
   switch( event ) {
   case NETDEV_UP:
@@ -431,7 +429,8 @@ static int oo_netdev_event(struct notifier_block *this,
     break;
 
   case NETDEV_CHANGEMTU:
-    oo_fixup_wakeup_breakage(netdev);
+    if( oo_netdev_is_native(netdev) )
+      oo_fixup_wakeup_breakage(netdev);
 
 #ifdef EFRM_RTMSG_IFINFO_EXPORTED
     /* The control plane has to know about the new MTU value.
