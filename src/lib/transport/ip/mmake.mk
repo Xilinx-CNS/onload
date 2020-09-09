@@ -153,9 +153,14 @@ $(objd)$(MMAKE_OBJ_PREFIX)netif_debug.o: $(objd)uk_intf_ver.h
 #
 ifdef MMAKE_USE_KBUILD
 
+lib_obj = ci_ip_lib.o
+lib_obj_path = $(BUILDPATH)/lib/transport/ip
+
+lib_obj_cmd = $(LD) -r $(LIB_SRCS:%.c=%.o) -o $(lib_obj)
 all:
-	 $(MAKE) $(MMAKE_KBUILD_ARGS) KBUILD_EXTMOD=$(BUILDPATH)/lib/transport/ip
-	 $(LD) -r $(LIB_SRCS:%.c=%.o) -o ci_ip_lib.o
+	$(MAKE) $(MMAKE_KBUILD_ARGS) KBUILD_EXTMOD=$(lib_obj_path)
+	$(lib_obj_cmd)
+	echo "cmd_$(lib_obj_path)/$(lib_obj) := $(lib_obj_cmd)" > .$(lib_obj).cmd
 clean:
 	@$(MakeClean)
 	rm -f uk_intf_ver.h ci_ip_lib.o

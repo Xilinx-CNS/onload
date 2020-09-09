@@ -80,9 +80,15 @@ endif
 # linux kbuild support
 #
 ifdef MMAKE_USE_KBUILD
+
+lib_obj = citools_lib.o
+lib_obj_path = $(BUILDPATH)/lib/citools
+
+lib_obj_cmd = $(LD) -r $(LIB_SRCS:%.c=%.o) -o $(lib_obj)
 all:
-	$(MAKE) $(MMAKE_KBUILD_ARGS) KBUILD_EXTMOD=$(BUILDPATH)/lib/citools
-	$(LD) -r $(LIB_SRCS:%.c=%.o) -o citools_lib.o
+	$(MAKE) $(MMAKE_KBUILD_ARGS) KBUILD_EXTMOD=$(lib_obj_path)
+	$(lib_obj_cmd)
+	echo "cmd_$(lib_obj_path)/$(lib_obj) := $(lib_obj_cmd)" > .$(lib_obj).cmd
 
 clean:
 	@$(MakeClean)
