@@ -232,16 +232,6 @@ ci_inline uid_t ci_getgid(void)
 }
 
 
-/* net_random was removed in Linux 3.14, and this was backported to
- * some earlier RedHat kernels (e.g. RHEL 7.4)
- */
-#ifdef EFRM_HAVE_PRANDOM_U32
-#define ci_net_random() prandom_u32()
-#else
-#define ci_net_random() net_random()
-#endif
-
-
 /* Although some support for user namespaces is present in earlier kernel
  * versions there's some variation in exactly what is supported, and no
  * supported distributions enable it with earlier kernels than 3.10.  We

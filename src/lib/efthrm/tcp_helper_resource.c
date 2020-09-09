@@ -3916,7 +3916,7 @@ int oo_wait_for_interrupt(ci_private_t* priv, void* argp)
 
     if( first ) {
       first = false;
-      timeout = periodic_poll + ci_net_random() % periodic_poll_skew;
+      timeout = periodic_poll + get_random_long() % periodic_poll_skew;
     }
   }
 
@@ -6823,7 +6823,7 @@ linux_set_periodic_timer_restart(tcp_helper_resource_t* rs,
   if( timeout < periodic_poll_skew )
     timeout = periodic_poll_skew;
   if( timeout >= periodic_poll )
-    timeout = periodic_poll + ci_net_random() % periodic_poll_skew;
+    timeout = periodic_poll + get_random_long() % periodic_poll_skew;
 
   thr_queue_delayed_work(rs, &rs->timer, timeout);
 }

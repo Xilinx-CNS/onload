@@ -50,8 +50,6 @@ EFRM_HAVE_ALLOC_FILE_PSEUDO		symbol	alloc_file_pseudo	include/linux/file.h
 EFRM_NET_HAS_PROC_INUM			member	struct_net proc_inum	include/net/net_namespace.h
 EFRM_NET_HAS_USER_NS			member	struct_net user_ns	include/net/net_namespace.h
 
-EFRM_HAVE_PRANDOM_U32			symbol  prandom_u32             include/linux/random.h
-
 EFRM_HAVE_OLD_FAULT			memtype struct_vm_operations_struct	fault	include/linux/mm.h	int (*)(struct vm_area_struct *vma, struct vm_fault *vmf)
 EFRM_HAVE_NEW_FAULT			memtype struct_vm_operations_struct	fault	include/linux/mm.h	vm_fault_t (*)(struct vm_fault *vmf)
 
@@ -85,9 +83,6 @@ EFRM_HAVE_RBTREE                        symbol rb_link_node_rcu include/linux/rb
 EFRM_HAVE_SKB_METADATA                  symbol skb_metadata_len include/linux/skbuff.h
 EFRM_HAVE_BIN2HEX                       symbol bin2hex include/linux/kernel.h
 EFRM_HAVE_ALLSYMS_SHOW_VALUE            symbol kallsyms_show_value include/linux/kallsyms.h
-EFRM_HAVE_PRANDOM_INIT_ONCE             symbol prandom_init_once include/linux/random.h
-EFRM_HAVE_PRANDOM_U32_STATE             symbol prandom_u32_state include/linux/random.h
-EFRM_PRANDOM_SEED_FULL_EXPORT           export prandom_seed_full_state include/linux/random.h lib/random32.c
 EFRM_HAVE_ARRAY_SIZE                    symbol array_size include/linux/overflow.h
 EFRM_HAVE_WRITE_ONCE                    symbol WRITE_ONCE include/linux/compiler.h
 EFRM_HAVE_INIT_LIST_HEAD_RCU            symbol INIT_LIST_HEAD_RCU include/linux/rculist.h
