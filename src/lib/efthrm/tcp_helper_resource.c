@@ -6175,9 +6175,9 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
   if( ! pages )
     return -ENOMEM;
 
-  down_read(&current->mm->mmap_sem);
+  mmap_read_lock(current->mm);
   rc = efab_get_unstraddled_user_pages(user_base, n_pages, pages);
-  up_read(&current->mm->mmap_sem);
+  mmap_read_unlock(current->mm);
   if( rc < 0 ) {
     NI_LOG(ni, RESOURCE_WARNINGS, "[%s]: get_user_pages(%d) returned %ld",
            __FUNCTION__, n_pages, rc);

@@ -135,20 +135,20 @@ static int oo_bufpage_huge_alloc(struct oo_buffer_pages *p, int *flags)
     goto fail3;
   }
 
-  down_write(&current->mm->mmap_sem);
+  mmap_write_lock(current->mm);
 
   /* Pin the pages. */
   rc = get_user_pages((unsigned long)uaddr, 1, FOLL_WRITE, &(p->pages[0]),
                       NULL);
   if (rc < 0) {
-    up_write(&current->mm->mmap_sem);
+    mmap_write_unlock(current->mm);
     goto fail2;
   }
 
   /* Before we detach the segment, take out an extra reference to it. */
   vma = find_vma(current->mm, (unsigned long) uaddr);
   if (vma == NULL) {
-    up_write(&current->mm->mmap_sem);
+    mmap_write_unlock(current->mm);
     /* This shouldn't be possible: we mapped the SHM successfully, so its vma
      * had better be where we expect it to be. */
     ci_assert(0);
@@ -164,7 +164,7 @@ static int oo_bufpage_huge_alloc(struct oo_buffer_pages *p, int *flags)
   p->shm_map_file = vma->vm_file;
   get_file(p->shm_map_file);
 
-  up_write(&current->mm->mmap_sem);
+  mmap_write_unlock(current->mm);
 
   /* Now that we've ensured that the kernel will not free the SHM segment and
    * we have pinned its pages, we have no further use for the UL mapping. */

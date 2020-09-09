@@ -259,4 +259,24 @@ static inline struct inode *file_inode(const struct file *f)
 #define ktime_get_ts64 ktime_get_ts
 #endif
 
+/* Linux < 5.8 does not have mmap_write_lock() */
+#ifndef EFRM_HAVE_MMAP_LOCK_WRAPPERS
+static inline void mmap_write_lock(struct mm_struct *mm)
+{
+  down_write(&mm->mmap_sem);
+}
+static inline void mmap_write_unlock(struct mm_struct *mm)
+{
+  up_write(&mm->mmap_sem);
+}
+static inline void mmap_read_lock(struct mm_struct *mm)
+{
+  down_read(&mm->mmap_sem);
+}
+static inline void mmap_read_unlock(struct mm_struct *mm)
+{
+  up_read(&mm->mmap_sem);
+}
+#endif
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

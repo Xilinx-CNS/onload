@@ -218,7 +218,7 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
     goto fail2;
   }
 
-  down_read(&current->mm->mmap_sem);
+  mmap_read_lock(current->mm);
   for (mr->n_pages = 0; mr->n_pages < max_pages; mr->n_pages += rc) {
     rc = get_user_pages(first_page + mr->n_pages * PAGE_SIZE,
                         max_pages - mr->n_pages, FOLL_WRITE,
@@ -229,7 +229,7 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
       break;
     }
   }
-  up_read(&current->mm->mmap_sem);
+  mmap_read_unlock(current->mm);
   if (mr->n_pages < max_pages) {
     if (rc == 0)
       rc = -EFAULT;

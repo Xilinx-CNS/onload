@@ -83,6 +83,7 @@ struct efhw_nic_af_xdp
   struct protection_domain* pd;
 };
 
+
 /*----------------------------------------------------------------------------
  *
  * User memory helper functions
@@ -467,9 +468,10 @@ static int xdp_register_umem(struct socket* sock, struct umem_pages* pages,
   if( offset_in_page(mr.addr) )
     return mr.addr;
 
-  down_write(&current->mm->mmap_sem);
+  /* linux>=5.8 uses mmap_write_lock() */
+  mmap_write_lock(current->mm);
   vma = find_vma(current->mm, mr.addr);
-  up_write(&current->mm->mmap_sem);
+  mmap_write_unlock(current->mm);
 
   BUG_ON(vma == NULL);
   BUG_ON(vma->vm_start != mr.addr);
@@ -509,7 +511,7 @@ static int xdp_create_ring(struct socket* sock,
   if( IS_ERR_VALUE(addr) )
       return addr;
 
-  down_write(&current->mm->mmap_sem);
+  mmap_write_lock(current->mm);
 
   vma = find_vma(current->mm, addr);
   if( vma == NULL ) {
@@ -519,7 +521,7 @@ static int xdp_create_ring(struct socket* sock,
     rc = follow_pfn(vma, addr, &pfn);
     pages = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
   }
-  up_write(&current->mm->mmap_sem);
+  mmap_write_unlock(current->mm);
 
   if( rc >= 0 ) {
     ring_base = phys_to_virt(pfn << PAGE_SHIFT);

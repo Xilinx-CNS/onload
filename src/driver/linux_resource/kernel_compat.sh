@@ -126,6 +126,8 @@ EFRM_NEED_SKB_FRAG_OFF	nsymbol	skb_frag_off	include/linux/skbuff.h
 
 EFRM_HAVE_NETDEV_REGISTER_RH		symbol	register_netdevice_notifier_rh	include/linux/netdevice.h
 
+EFRM_HAVE_MMAP_LOCK_WRAPPERS		file	include/linux/mmap_lock.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
