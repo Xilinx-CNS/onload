@@ -473,6 +473,9 @@ static int xdp_set_link(struct net_device* dev, struct bpf_prog* prog)
     .prog = prog
   };
 
+  if( !op )
+    EFHW_ERR("%s: %s does not support XDP", __FUNCTION__, dev->name);
+
   return op ? op(dev, &bpf) : -ENOSYS;
 }
 
