@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* (c) Copyright 2010-2011 Xilinx, Inc. */
+
 #ifndef _UTIL_REQ_H
 #define _UTIL_REQ_H
 

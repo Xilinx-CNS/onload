@@ -1,5 +1,8 @@
 #!/bin/bash -eu
 #
+# SPDX-License-Identifier: BSD-2-Clause
+# (c) Copyright 2015 Xilinx, Inc.
+#
 # This is a heavily-reduced version of kernel_compat.sh, currently
 # just handling symbol definition checks.
 ######################################################################

@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* (c) Copyright 2005-2006 Xilinx, Inc. */
+
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdio.h>

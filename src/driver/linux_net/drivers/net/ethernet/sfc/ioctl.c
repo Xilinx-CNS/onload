@@ -33,7 +33,6 @@
 #include "mcdi_port_common.h"
 #include "mcdi_pcol.h"
 #include "aoe.h"
-#include "sfctool.h"
 #include "ethtool_common.h"
 
 #include <linux/module.h>
@@ -354,23 +353,6 @@ efx_ioctl_dump(struct efx_nic *efx, union efx_ioctl_data __user *useraddr)
 }
 #endif
 
-#ifdef EFX_NOT_UPSTREAM
-static int efx_ioctl_sfctool(struct efx_nic *efx,
-			     union efx_ioctl_data __user *useraddr)
-{
-	struct efx_sfctool sfctool;
-	u32 ethcmd;
-
-	if (copy_from_user(&sfctool, useraddr, sizeof(sfctool)))
-		return -EFAULT;
-
-	if (copy_from_user(&ethcmd, sfctool.data, sizeof(ethcmd)))
-		return -EFAULT;
-
-	return efx_sfctool(efx, ethcmd, sfctool.data);
-}
-#endif
-
 /*****************************************************************************/
 
 int efx_private_ioctl(struct efx_nic *efx, u16 cmd,
@@ -449,10 +431,6 @@ int efx_private_ioctl(struct efx_nic *efx, u16 cmd,
 #ifdef CONFIG_SFC_DUMP
 	case EFX_DUMP:
 		return efx_ioctl_dump(efx, user_data);
-#endif
-#ifdef EFX_NOT_UPSTREAM
-	case EFX_SFCTOOL:
-		return efx_ioctl_sfctool(efx, user_data);
 #endif
 	default:
 		netif_err(efx, drv, efx->net_dev,

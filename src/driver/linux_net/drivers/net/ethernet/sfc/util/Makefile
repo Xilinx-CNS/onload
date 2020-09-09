@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# (c) Copyright 2006-2016 Xilinx, Inc.
+
 TARGETS := ethsend evq_ack pktgen reset_nic set_loopback mdio set_carrier phy_power
 TARGETS_RENAME := $(TARGETS:%=$(TARGETS_PREFIX)%)
 AUTO_COMPAT := user_autocompat.h

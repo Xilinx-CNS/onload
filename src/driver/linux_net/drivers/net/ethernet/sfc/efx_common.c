@@ -1486,9 +1486,9 @@ int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int 
 		rc = -ENOMEM;
 		goto fail4;
 	}
-	pci_dbg(pci_dev, "memory BAR[%d] at %llx+%x (virtual 0x%llx)\n", bar,
+	pci_dbg(pci_dev, "memory BAR[%d] at %llx+%x (virtual %p)\n", bar,
 		(unsigned long long)efx->membase_phys, mem_map_size,
-		(unsigned long long __force)efx->membase);
+		efx->membase);
 
 	return 0;
 

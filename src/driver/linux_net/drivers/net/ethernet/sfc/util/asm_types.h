@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: BSD-2-Clause */
 /**************************************************************************/
 /*!  \file  asm_types.h
 ** \author  bwh
