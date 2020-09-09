@@ -2551,6 +2551,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
     if( (ni->nic_hw[intf_i].pkt_rs = ci_alloc(sz)) == NULL ) {
       OO_DEBUG_ERR(ci_log("%s: failed to allocate iobufset tables",
                           __FUNCTION__));
+      rc = -ENOMEM;
       goto fail5;
     }
     memset(ni->nic_hw[intf_i].pkt_rs, 0, sz);
