@@ -285,8 +285,12 @@ int efrm_syscall_ctor(void)
     return -ENOENT;
 #ifdef CONFIG_COMPAT
   efrm_compat_syscall_table = find_syscall_table32();
+#if 0
+  /* We are unable to find efrm_compat_syscall_table for linux-5.8.
+   * Do not complain for now. */
   if( efrm_compat_syscall_table == NULL )
     return -ENOENT;
+#endif
 #endif
   return 0;
 }

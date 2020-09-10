@@ -1132,8 +1132,6 @@ int efab_linux_trampoline_ctor(int no_sct)
   }
 
 #ifdef CONFIG_COMPAT
-  ci_assert(efrm_compat_syscall_table);
-
   if (efrm_compat_syscall_table && !no_sct) {
     /* On pre-4.17 kernels we can do a sanity check on the
      * efrm_compat_syscall_table value: sys_close is the same for both
