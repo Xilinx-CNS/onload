@@ -1117,6 +1117,12 @@ static inline bool efx_net_active(enum nic_state state)
 	       state == STATE_NET_ALLOCATED;
 }
 
+static inline bool efx_net_allocated(enum nic_state state)
+{
+	return state ==  STATE_NET_UP ||
+	       state == STATE_NET_ALLOCATED;
+}
+
 static inline bool efx_frozen(enum nic_state state)
 {
 	return state & STATE_FROZEN;
@@ -2062,7 +2068,6 @@ struct ef100_udp_tunnel {
  * @get_phys_port_id: Get the underlying physical port id.
  * @vport_add: Add a vport with specified VLAN parameters.  Returns an MCDI id.
  * @vport_del: Destroy a vport specified by MCDI id.
- * @vports_restore: restore custom vports removed from hardware after reset
  * @sriov_init: Initialise VFs when vf-count is set via module parameter.
  * @sriov_fini: Disable sriov
  * @sriov_wanted: Check that max_vf > 0.
@@ -2290,7 +2295,6 @@ struct efx_nic_type {
 	int (*vport_add)(struct efx_nic *efx, u16 vlan, bool vlan_restrict,
 			 unsigned int *port_id_out);
 	int (*vport_del)(struct efx_nic *efx, unsigned int port_id);
-	void (*vports_restore)(struct efx_nic *efx);
 	int (*sriov_init)(struct efx_nic *efx);
 	void (*sriov_fini)(struct efx_nic *efx);
 	bool (*sriov_wanted)(struct efx_nic *efx);

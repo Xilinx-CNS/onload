@@ -802,31 +802,6 @@ int efx_ef10_vport_free(struct efx_nic *efx, unsigned int port_id)
 			    NULL, 0, NULL);
 }
 
-static void efx_ef10_restore_vports(struct efx_nic *efx)
-{
-	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-	struct efx_vport *vpx;
-	int rc;
-
-	WARN_ON(!mutex_is_locked(&efx->vport_lock));
-
-	if (!nic_data->must_restore_vports)
-		return;
-
-	list_for_each_entry(vpx, &efx->vport.list, list) {
-		/* previous NIC vport is gone */
-		vpx->vport_id = EVB_PORT_ID_NULL;
-		/* so try to allocate a new one */
-		rc = efx_ef10_vport_alloc(efx, vpx->vlan, vpx->vlan_restrict,
-					  &vpx->vport_id);
-		if (rc)
-			netif_warn(efx, probe, efx->net_dev,
-				   "failed to restore vport %u, rc=%d; vport filters may fail to be applied\n",
-				   vpx->user_id, rc);
-	}
-	nic_data->must_restore_vports = false;
-}
-
 int efx_ef10_vadaptor_query(struct efx_nic *efx, unsigned int port_id,
 			    u32 *port_flags, u32 *vadaptor_flags,
 			    unsigned int *vlan_tags)
@@ -1669,11 +1644,10 @@ static void efx_ef10_reset_mc_allocations(struct efx_nic *efx)
 #endif
 
 	/* All our allocations have been reset */
-	if (efx->state != STATE_NET_UP)
+	if (!efx_net_allocated(efx->state))
 		return;
 
 	nic_data->must_realloc_vis = true;
-	nic_data->must_restore_vports = true;
 	nic_data->must_restore_piobufs = true;
 	efx->stats_initialised = false;
 }
@@ -6029,7 +6003,6 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.udp_tnl_del_port = efx_ef10_udp_tnl_del_port,
 	.vport_add = efx_ef10_vport_alloc,
 	.vport_del = efx_ef10_vport_free,
-	.vports_restore = efx_ef10_restore_vports,
 #ifdef CONFIG_SFC_SRIOV
 	.sriov_configure = efx_ef10_sriov_configure,
 	.sriov_init = efx_ef10_sriov_init,

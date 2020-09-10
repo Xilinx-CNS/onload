@@ -2024,6 +2024,7 @@ void efx_mcdi_filter_table_down(struct efx_nic *efx)
 					"%s: filter %04x remove failed %d\n",
 					__func__, filter_idx, rc);
 		kfree(spec);
+		efx_mcdi_filter_set_entry(table, filter_idx, NULL, 0);
 	}
 }
 

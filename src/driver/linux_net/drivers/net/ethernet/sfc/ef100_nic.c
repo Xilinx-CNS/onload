@@ -473,7 +473,11 @@ int ef100_filter_table_probe(struct efx_nic *efx)
 
 static int ef100_filter_table_up(struct efx_nic *efx)
 {
+	struct ef100_nic_data *nic_data = efx->nic_data;
 	int rc;
+
+	if (nic_data->filters_up)
+		return 0;
 
 	rc = efx_mcdi_filter_add_vlan(efx, EFX_FILTER_VID_UNSPEC);
 	if (rc) {
@@ -487,14 +491,22 @@ static int ef100_filter_table_up(struct efx_nic *efx)
 		efx_mcdi_filter_table_down(efx);
 	}
 
+	nic_data->filters_up = !rc;
 	return rc;
 }
 
 static void ef100_filter_table_down(struct efx_nic *efx)
 {
+	struct ef100_nic_data *nic_data = efx->nic_data;
+
+	if (!nic_data->filters_up)
+		return;
+
 	efx_mcdi_filter_del_vlan(efx, 0);
 	efx_mcdi_filter_del_vlan(efx, EFX_FILTER_VID_UNSPEC);
 	efx_mcdi_filter_table_down(efx);
+
+	nic_data->filters_up = false;
 }
 
 /*	Other
@@ -557,9 +569,9 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 		/* A RESET_TYPE_ALL will cause filters to be removed, so we remove filters
 		 * and reprobe after reset to avoid removing filters twice
 		 */
-		down_read(&efx->filter_sem);
+		down_write(&efx->filter_sem);
 		ef100_filter_table_down(efx);
-		up_read(&efx->filter_sem);
+		up_write(&efx->filter_sem);
 		rc = efx_mcdi_reset(efx, reset_type);
 		if (rc)
 			return rc;
@@ -571,9 +583,9 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 #endif
 		netif_device_attach(efx->net_dev);
 
-		down_read(&efx->filter_sem);
+		down_write(&efx->filter_sem);
 		rc = ef100_filter_table_up(efx);
-		up_read(&efx->filter_sem);
+		up_write(&efx->filter_sem);
 		if (rc)
 			return rc;
 

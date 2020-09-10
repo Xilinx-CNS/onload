@@ -100,6 +100,7 @@ struct ef100_nic_data {
 	u32 old_base_mport; /* compat for old C-models.  XXX remove after Cmod flag day */
 	bool have_mport; /* base_mport was populated successfully */
 	bool have_old_mport; /* old_base_mport was populated successfully */
+	bool filters_up; /* filter table has been upped */
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
     !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	spinlock_t udp_tunnels_lock;

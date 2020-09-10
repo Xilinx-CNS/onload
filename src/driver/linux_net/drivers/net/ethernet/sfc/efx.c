@@ -1114,6 +1114,7 @@ void efx_pci_remove_post_io(struct efx_nic *efx,
 	if (efx->type->vswitching_remove)
 		efx->type->vswitching_remove(efx);
 	efx_fini_channels(efx);
+	efx_ptp_remove_post_io(efx);
 	efx->type->remove_port(efx);
 	nic_remove(efx);
 	efx_remove_common(efx);
@@ -1210,10 +1211,13 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 	efx_ptp_get_attributes(efx);
+	rc = 0;
 	if (efx_ptp_uses_separate_channel(efx) ||
 	    efx_ptp_use_mac_tx_timestamps(efx))
 #endif
-	efx_ptp_defer_probe_with_channel(efx);
+	rc = efx_ptp_defer_probe_with_channel(efx);
+	if (rc)
+		return rc;
 
 	rc = efx_init_channels(efx);
 	if (rc)

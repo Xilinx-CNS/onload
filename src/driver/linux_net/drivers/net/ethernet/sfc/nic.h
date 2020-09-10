@@ -457,8 +457,9 @@ int efx_ptp_ts_set_vlan_filter(struct efx_nic *efx, struct efx_ts_set_vlan_filte
 int efx_ptp_ts_set_uuid_filter(struct efx_nic *efx, struct efx_ts_set_uuid_filter *uuid_filter);
 int efx_ptp_ts_set_domain_filter(struct efx_nic *efx, struct efx_ts_set_domain_filter *domain_filter);
 #endif
+void efx_ptp_remove_post_io(struct efx_nic *efx);
 int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel);
-void efx_ptp_defer_probe_with_channel(struct efx_nic *efx);
+int efx_ptp_defer_probe_with_channel(struct efx_nic *efx);
 struct efx_channel *efx_ptp_channel(struct efx_nic *efx);
 void efx_ptp_remove(struct efx_nic *efx);
 int efx_ptp_set_ts_config(struct efx_nic *efx, struct ifreq *ifr);
@@ -492,7 +493,10 @@ ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue);
 #else
 static inline int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel)
 { return -ENODEV; }
-static inline void efx_ptp_defer_probe_with_channel(struct efx_nic *efx) {}
+static inline int efx_ptp_defer_probe_with_channel(struct efx_nic *efx)
+{
+	return 0;
+}
 static inline struct efx_channel *efx_ptp_channel(struct efx_nic *efx)
 {
 	return NULL;

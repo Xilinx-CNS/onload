@@ -1574,10 +1574,6 @@ void efx_remove_channels(struct efx_nic *efx)
 
 	efx_fini_debugfs_channels(efx);
 
-#if defined(EFX_NOT_UPSTREAM) && (!defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_WORK_SYNC))
-	cancel_work_sync(&efx->schedule_all_channels_work);
-#endif
-
 	efx_for_each_channel(channel, efx)
 		efx_remove_channel(channel);
 }
