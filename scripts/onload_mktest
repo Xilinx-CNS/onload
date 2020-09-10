@@ -185,9 +185,9 @@ netwant="$tmpdir/netwant"
 glue_makefile_pattern="mmake.mk$"
 # We need the whole of the drivers and include directories, as well as
 # the top level makefile and some scripts
-whitelist="^((Makefile)|(scripts/export.sh)|(scripts/kernel_compat_funcs.sh)|(scripts/Makefile.common)|(include)|(drivers))"
-# We don't want directories in the list
-blacklist="(/$)|(xen/)|(load.*\.sh)|(unittest)|(systemtap)|(kscripts)|(dummycommit)|(doc/)|(Kconfig)|(export\.sh)"
+whitelist="^((scripts/export.sh)|(scripts/kernel_compat_funcs.sh)|(scripts/Makefile.common)|(include)|(drivers.*mmake.mk)|(drivers/bus)|(drivers/net/ethernet/sfc(/trace/events)?/[^/]+$))|(Makefile)|(phy_power)|(reset_nic)|(set_carrier)|(user_compat.sh)|(req.h)"
+# We don't want directories to be listed or other unnecessary files
+blacklist="(/$)|(xen/)|(load.*\.sh)|(unittest)|(systemtap)|(kscripts)|(dummycommit)|(doc/)|(Kconfig)|(export\.sh)|(^tools)"
 # We use || true for the grep here to allow the case where we currently
 # have no files, as the script is run with -o pipefail.
 git ls-files \
@@ -206,6 +206,12 @@ done
 for file in $(comm -1 -3 ${netwant} ${netgot}); do
     git rm ${file}
 done
+
+# Avoid unnecessary utilities
+utils_makefile=${legacy_driver_path}/drivers/net/ethernet/sfc/util/Makefile
+sed -i 's,^TARGETS *:=.*$,TARGETS := phy_power reset_nic set_carrier,g' ${utils_makefile}
+git add ${utils_makefile}
+
 commitif $commitlog
 
 if [ -n "$fwtag" ]; then
