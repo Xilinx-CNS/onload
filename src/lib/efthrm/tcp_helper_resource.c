@@ -1884,7 +1884,7 @@ static void release_pkts(tcp_helper_resource_t* trs)
 
   for (i = 0; i < ni->pkt_sets_n; i++)
     oo_iobufset_pages_release(ni->pkt_bufs[i]);
-  ci_free(ni->pkt_bufs);
+  vfree(ni->pkt_bufs);
 }
 
 
@@ -2537,7 +2537,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
   if( rc < 0 )  goto fail1;
 
   sz = sizeof(ci_pkt_bufs) * ni->pkt_sets_max;
-  if( (ni->pkt_bufs = ci_alloc(sz)) == NULL ) {
+  if( (ni->pkt_bufs = vmalloc(sz)) == NULL ) {
     OO_DEBUG_ERR(ci_log("tcp_helper_alloc: failed to allocate iobufset table"));
     rc = -ENOMEM;
     goto fail4;
@@ -2593,7 +2593,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     if( ni->nic_hw[intf_i].pkt_rs )
       ci_free(ni->nic_hw[intf_i].pkt_rs);
-  ci_free(ni->pkt_bufs);
+  vfree(ni->pkt_bufs);
  fail4:
   release_vi(trs);
  fail1:
