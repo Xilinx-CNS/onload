@@ -606,6 +606,11 @@ static void xdp_release_pd(struct efhw_nic* nic, int owner)
 
 static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 {
+  if( !vi->sock )
+    /* We expect uninitialized vi in cases where af_xdp_init()
+     * has not been called after enabling evq.
+     * This can happen on cleanup from failure of stack allocation */
+    return;
   xdp_map_delete(nic->af_xdp->map, nic->af_xdp->shadow, vi - nic->af_xdp->vi);
   efhw_page_free(&vi->user_offsets_page);
   fput(vi->sock->file);
