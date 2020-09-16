@@ -99,6 +99,7 @@ struct alloc_vi_constraints {
 	int channel;
 	int min_vis_in_set;
 	int has_rss_context;
+	int fix_channel;
 };
 
 
@@ -107,6 +108,8 @@ static bool accept_vi_constraints(int low, unsigned order, void* arg)
 	struct alloc_vi_constraints *avc = arg;
 	int high = low + avc->min_vis_in_set;
 	int ok = 1;
+	if ( avc->fix_channel >=0 && low != avc->fix_channel )
+		return 0;
 	if ((avc->min_vis_in_set > 1) && (!avc->has_rss_context)) {
 		/* We need to ensure that if an RSS-enabled filter is
 		 * pointed at this VI-set then the queue selected will be
@@ -128,6 +131,8 @@ static int buddy_alloc_vi(struct efrm_nic *efrm_nic,
 	avc.channel = channel;
 	avc.min_vis_in_set = min_vis_in_set;
 	avc.has_rss_context = has_rss_context;
+	avc.fix_channel = (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP) ?
+			  channel : -1;
 	return efrm_buddy_alloc_special(b, order, accept_vi_constraints, &avc);
 }
 
