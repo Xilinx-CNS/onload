@@ -299,4 +299,23 @@ static inline int sock_ops_setsockopt(struct socket *sock,
   return rc;
 }
 
+/* For linux<=5.7 you can use kernel_getsockopt(),
+ * but newer versions doe not have this function. */
+static inline int sock_ops_getsockopt(struct socket *sock,
+                                      int level, int optname,
+                                      char *optval,
+                                      int optlen)
+{
+  mm_segment_t oldfs = get_fs();
+  int rc;
+
+  /* You should call sock_setsockopt() for SOL_SOCKET */
+  WARN_ON(level == SOL_SOCKET);
+
+  set_fs(KERNEL_DS);
+  rc = sock->ops->getsockopt(sock, level, optname, optval, &optlen);
+  set_fs(oldfs);
+  return rc;
+}
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

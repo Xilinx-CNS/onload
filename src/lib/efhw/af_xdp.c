@@ -558,7 +558,7 @@ static int xdp_create_rings(struct socket* sock,
 
   EFHW_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
 
-  rc = sock_ops_setsockopt(sock, SOL_XDP, XDP_MMAP_OFFSETS,
+  rc = sock_ops_getsockopt(sock, SOL_XDP, XDP_MMAP_OFFSETS,
                            (char*)&mmap_offsets, sizeof(mmap_offsets));
   if( rc < 0 )
     return rc;
