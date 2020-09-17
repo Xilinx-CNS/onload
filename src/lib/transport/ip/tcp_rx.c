@@ -64,11 +64,13 @@ static inline bool tcp_plugin_elided_payload(const ci_ip_pkt_fmt* pkt)
 }
 
 
-static inline bool tcp_plugin_pkt_was_recycled(const ci_ip_pkt_fmt* pkt)
+static inline bool tcp_plugin_pkt_was_recycled(ci_tcp_state* ts,
+                                               const ci_ip_pkt_fmt* pkt)
 {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_assert(ci_tcp_is_pluginized(ts));
   /* rx_sock is the user_mark from the plugin. See SF-123622 for encoding
-   * information. The top bit is set to rdp_in_net, i.e. set when this
+   * information. The top bit is set to rdp_in_net, i.e. cleared when this
    * packet has already been seen by Onload at least once. */
   return ! (pkt->pf.tcp_rx.lo.rx_sock >> 31);
 #else
@@ -2228,7 +2230,7 @@ static int ci_tcp_rx_enqueue_ooo(ci_netif* netif, ci_tcp_state* ts,
   ci_ip_pkt_fmt* block_pkt = NULL;  /* \todo Initialize in debug build only */
   int af = ipcache_af(&ts->s.pkt);
 
-  if( tcp_plugin_pkt_was_recycled(pkt) )
+  if( ci_tcp_is_pluginized(ts) && tcp_plugin_pkt_was_recycled(ts, pkt) )
     return 0;
 
   CITP_STATS_NETIF_INC(netif, rx_out_of_order);
@@ -3845,7 +3847,7 @@ static void handle_unacceptable_seq(ci_netif* netif, ci_tcp_state* ts,
     if( tcp_plugin_elided_payload(pkt) &&
       SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) )
       ci_tcp_rx_clean_plugin_rob(netif, ts, rxp->seq);
-    if( tcp_plugin_pkt_was_recycled(pkt) )
+    if( tcp_plugin_pkt_was_recycled(ts, pkt) )
       return;
   }
 
@@ -4058,7 +4060,7 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
   ** So only the other end suffers, and it was their fault anyway.
   */
   if( CI_LIKELY(ts->s.b.state & CI_TCP_STATE_SYNCHRONISED) &&
-      ! tcp_plugin_pkt_was_recycled(pkt) ) {
+      ! (ci_tcp_is_pluginized(ts) && tcp_plugin_pkt_was_recycled(ts, pkt)) ) {
     /* An ACK is acceptable provided it doesn't acknowledge sequence
     ** numbers we haven't sent yet.
     */
