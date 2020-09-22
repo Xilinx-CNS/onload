@@ -61,15 +61,6 @@
 /* ARM64 TODO these are stub implementations only */
 atomic_t efab_syscall_used;
 
-#ifndef NDEBUG
-
-void efab_linux_trampoline_ul_fail(void)
-{
-  return;
-}
-
-#endif
-
 /*
  * This is somewhat dubious. On the one hand, the syscall
  * number is available to the syscall routine in x8 register,

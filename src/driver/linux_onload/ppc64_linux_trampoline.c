@@ -529,50 +529,5 @@ int efab_linux_trampoline_dtor(int no_sct)
 }
 
 
-#ifndef NDEBUG
-
-/* Trampoline into userland failure - this function is never called, and
- *  would need to know whether userspace was 64 or 32 bit in order to
- *  work out how to buld the trampoline, so it does nothing for now - rrw
- *  2012-12-14
- */
-void efab_linux_trampoline_ul_fail(void)
-{
-  struct pt_regs *regs = 0;  /* don't know how to do this on this platform */
-  struct mm_hash *p;
-  ci_uintptr_t trampoline_ul_fail = 0;
-
-  ci_assert(regs);
-
-  if (current->mm) {
-    read_lock (&oo_mm_tbl_lock);
-    p = oo_mm_tbl_lookup(current->mm);
-    read_unlock (&oo_mm_tbl_lock);
-    if (p) {
-      trampoline_ul_fail = (ci_uintptr_t) CI_USER_PTR_GET (p->trampoline_ul_fail);
-    }
-    else {
-      ci_log("%s: no entry for pid %u", __FUNCTION__, current->tgid);
-      return;
-    }
-  }
-  else {
-    ci_log("%s: pid %u is dying - no mm", __FUNCTION__, current->tgid);
-    return;
-  }
-
-  ci_log("%s: syscall backtrace (pid %d)", __FUNCTION__, current->tgid);
-  ci_backtrace();
-  ci_log("%s: provoking user-level fail on syscall exit for pid %d",
-         __FUNCTION__, current->tgid);
-
-
-  ci_log("(not really, don't know how on this platform)");
-
-  return;
-}
-
-#endif /* !NDEBUG */
-
 /* End file */
 

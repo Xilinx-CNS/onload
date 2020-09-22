@@ -89,12 +89,6 @@ efab_linux_trampoline_handler_close32(unsigned long bx, unsigned long cx,
 #endif
 #endif
 
-#ifndef NDEBUG
-extern void efab_linux_trampoline_ul_fail(void);
-#else
-#define efab_linux_trampoline_ul_fail() ((void)0)
-#endif
-
 extern int safe_signals_and_exit;
 #ifdef EFRM_SYSCALL_PTREGS
 extern asmlinkage long efab_linux_trampoline_exit_group(const struct pt_regs *regs);

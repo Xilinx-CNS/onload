@@ -47,16 +47,12 @@ IP_TARGET_SRCS := $(ONLOAD_SRCS) $(EFTHRM_SRCS)
 
 TARGETS		:= $(IP_TARGET)
 
-# Need to import this here, because IMPORT is processed before we know 
-# (easily) which architecture we are actually building for.
-IMPORT         	   += linux_trampoline_asm_x86.S 
+x86_TARGET_SRCS    := x86_linux_trampoline.o
 
-x86_TARGET_SRCS    := x86_linux_trampoline.o linux_trampoline_asm_x86.o
-
-powerpc_TARGET_SRCS    := ppc64_linux_trampoline_asm.o \
+powerpc_TARGET_SRCS    := \
 			ppc64_linux_trampoline.o ppc64_linux_trampoline_internal.o
 
-arm64_TARGET_SRCS := aarch64_linux_trampoline.o aarch64_linux_trampoline_asm.o
+arm64_TARGET_SRCS := aarch64_linux_trampoline.o
 
 
 ######################################################
