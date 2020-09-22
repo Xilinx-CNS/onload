@@ -298,6 +298,7 @@ struct citp_fdinfo_s {
 # define FDI_ON_RCZ_HANDOVER	3
 # define FDI_ON_RCZ_MOVED	5
 # define FDI_ON_RCZ_DONE	6
+# define FDI_ON_RCZ_ALREADY_CLOSED	7
   volatile char        on_ref_count_zero;
 
 #if CI_CFG_FD_CACHING
@@ -441,7 +442,7 @@ extern int citp_ep_dup_fcntl_dup(int oldfd, long arg) CI_HF;
 extern int citp_ep_dup_fcntl_dup_cloexec(int oldfd, long arg) CI_HF;
 
 extern int citp_ep_dup3(unsigned oldfd, unsigned newfd, int flags) CI_HF;
-extern int citp_ep_close(unsigned fd) CI_HF;
+extern int citp_ep_close(unsigned fd, bool already_closed) CI_HF;
 
 
 /**********************************************************************

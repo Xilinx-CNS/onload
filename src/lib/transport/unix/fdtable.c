@@ -1007,8 +1007,9 @@ void __citp_fdinfo_ref_count_zero(citp_fdinfo* fdi, int fdt_locked)
       citp_fdinfo_free(fdi);
       break;
     }
-    else
 #endif
+    /* fallthrough */
+  case FDI_ON_RCZ_ALREADY_CLOSED:
     {
 #if CI_CFG_UL_INTERRUPT_HELPER
       ci_netif* netif = fdi_to_stack(fdi);
@@ -1033,7 +1034,8 @@ void __citp_fdinfo_ref_count_zero(citp_fdinfo* fdi, int fdt_locked)
       if( fdi->protocol->type == CITP_TCP_SOCKET )
         SC_TO_EPS(fdi_to_socket(fdi)->netif,fdi_to_socket(fdi)->s)->fd = CI_FD_BAD;
 
-      ci_tcp_helper_close_no_trampoline(fdi->fd);
+      if( fdi->on_ref_count_zero == FDI_ON_RCZ_CLOSE )
+        ci_tcp_helper_close_no_trampoline(fdi->fd);
 
 #if CI_CFG_UL_INTERRUPT_HELPER
       /* If it was the last fd for this socket, then we should proceed with
@@ -1715,29 +1717,23 @@ int citp_ep_dup3(unsigned fromfd, unsigned tofd, int flags)
  * citp_ep_close()
  */
 
-int citp_ep_close(unsigned fd)
+int citp_ep_close(unsigned fd, bool already_closed)
 {
   volatile citp_fdinfo_p* p_fdip;
   citp_fdinfo_p fdip;
   int rc, got_lock;
   citp_fdinfo* fdi;
 
-  /* Do not touch shared fdtable when in vfork child. */
-  if( oo_per_thread_get()->in_vfork_child )
-    return ci_tcp_helper_close_no_trampoline(fd);
+  /* Do not touch shared fdtable when in vfork child or too large value. */
+  if( oo_per_thread_get()->in_vfork_child ||
+      fd >= citp_fdtable.inited_count )
+    return already_closed ? 0 : ci_tcp_helper_close_no_trampoline(fd);
 
   /* Interlock against other closes, against the fdtable being extended,
   ** and against select and poll.
   */
   CITP_FDTABLE_LOCK();
   got_lock = 1;
-
-  __citp_fdtable_extend(fd);
-
-  if( fd >= citp_fdtable.inited_count ) {
-    rc = ci_tcp_helper_close_no_trampoline(fd);
-    goto done;
-  }
 
   p_fdip = &citp_fdtable.table[fd].fdip;
  again:
@@ -1794,7 +1790,8 @@ int citp_ep_close(unsigned fd)
     Log_V(ci_log("%s: fd=%d u/l socket", __FUNCTION__, fd));
     ci_assert_equal(fdi->fd, fd);
     ci_assert_equal(fdi->on_ref_count_zero, FDI_ON_RCZ_NONE);
-    fdi->on_ref_count_zero = FDI_ON_RCZ_CLOSE;
+    fdi->on_ref_count_zero = already_closed ?
+                             FDI_ON_RCZ_ALREADY_CLOSED : FDI_ON_RCZ_CLOSE;
 
 #if CI_CFG_EPOLL3
     if( fdi->epoll_fd >= 0 ) {

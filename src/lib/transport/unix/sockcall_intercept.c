@@ -1841,7 +1841,7 @@ OO_INTERCEPT(int, close,
   citp_enter_lib(&lib_context);
   Log_CALL(ci_log("%s(%d)", __FUNCTION__, fd));
 
-  rc = citp_ep_close(fd);
+  rc = citp_ep_close(fd, false);
 
   citp_exit_lib(&lib_context, rc == 0);
   Log_CALL_RESULT(rc);
