@@ -1419,6 +1419,20 @@ ci_tcp_is_pluginized(ci_tcp_state* ts)
 #endif
 }
 
+ci_inline bool ci_tcp_plugin_elided_payload(const ci_ip_pkt_fmt* pkt)
+{
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  return (pkt->rx_flags & CI_PKT_RX_FLAG_USER_FLAG) != 0;
+#else
+  return false;
+#endif
+}
+
+ci_inline bool ci_tcp_plugin_tcp_app_packet(const ci_ip_pkt_fmt* pkt)
+{
+  return pkt->q_id >= CI_Q_ID_TCP_APP;
+}
+
 extern ci_tcp_state* ci_tcp_get_state_buf(ci_netif*) CI_HF;
 #if ! defined(__KERNEL__) && CI_CFG_FD_CACHING
 extern ci_tcp_state* ci_tcp_get_state_buf_from_cache(ci_netif*, int pid) CI_HF;

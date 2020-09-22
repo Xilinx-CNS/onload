@@ -652,7 +652,7 @@ ci_inline void __handle_rx_pkt(ci_netif* ni, struct ci_netif_poll_state* ps,
 {
   if( *pkt ) {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
-    if( (*pkt)->q_id >= CI_Q_ID_TCP_APP ) {
+    if( ci_tcp_plugin_tcp_app_packet(*pkt) ) {
       handle_rx_plugin_data(ni, ps, *pkt);
       return;
     }

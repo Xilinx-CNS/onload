@@ -54,16 +54,6 @@ static int ci_tcp_rx_enqueue_ooo(ci_netif* netif, ci_tcp_state* ts,
                                   ciip_tcp_rx_pkt* rxp);
 
 
-static inline bool tcp_plugin_elided_payload(const ci_ip_pkt_fmt* pkt)
-{
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  return (pkt->rx_flags & CI_PKT_RX_FLAG_USER_FLAG) != 0;
-#else
-  return false;
-#endif
-}
-
-
 static inline bool tcp_plugin_pkt_was_recycled(ci_tcp_state* ts,
                                                const ci_ip_pkt_fmt* pkt)
 {
@@ -2043,7 +2033,7 @@ ci_inline int ci_tcp_rx_deliver_to_recvq(ci_tcp_state* ts, ci_netif* netif,
   ci_assert(SEQ_LE(rxp->seq, tcp_rcv_nxt(ts)));
   ci_assert(pkt->pf.tcp_rx.pay_len);
   if( ci_tcp_is_pluginized(ts) && pkt->pf.tcp_rx.pay_len != 0 &&
-      ! tcp_plugin_elided_payload(pkt) ) {
+      ! ci_tcp_plugin_elided_payload(pkt) ) {
     /* This packet was in-order but the plugin didn't process it for some
      * reason (backpressure, not yet initialised, etc.). We need to treat it
      * as out of order and recycle it */
@@ -2263,7 +2253,7 @@ static int ci_tcp_rx_enqueue_ooo(ci_netif* netif, ci_tcp_state* ts,
   /* Races between recycling and retransmits from the peer can cause duplicate
    * elided-payload packets to be received, but they'll always be of
    * present-or-past packets, never future */
-  ci_assert(! tcp_plugin_elided_payload(pkt));
+  ci_assert(! ci_tcp_plugin_elided_payload(pkt));
 
   ci_assert(OO_SP_IS_NULL(ts->local_peer));
   ci_assert(ci_ip_queue_is_valid(netif, rob));
@@ -3865,7 +3855,7 @@ static void handle_unacceptable_seq(ci_netif* netif, ci_tcp_state* ts,
   }
 
   if( ci_tcp_is_pluginized(ts) ) {
-    if( tcp_plugin_elided_payload(pkt) &&
+    if( ci_tcp_plugin_elided_payload(pkt) &&
         SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) )
       ci_tcp_rx_clean_plugin_rob(netif, ts, pkt->pf.tcp_rx.end_seq);
     if( tcp_plugin_pkt_was_recycled(ts, pkt) ) {
@@ -4643,7 +4633,8 @@ int ci_tcp_rx_deliver_to_conn(ci_sock_cmn* s, void* opaque_arg)
               /* we're suffering from memory pressure */
               (ni->state->mem_pressure & OO_MEM_PRESSURE_CRITICAL) |
               /* some recycling is needed */
-              (ci_tcp_is_pluginized(ts) && ! tcp_plugin_elided_payload(pkt)));
+              (ci_tcp_is_pluginized(ts) &&
+               ! ci_tcp_plugin_elided_payload(pkt)));
 
   /* All DSACKs should be cleared when ACK is sent;
    * dsack_block may be != CI_ILL_UNUSED only when duplicate packet is
@@ -4775,7 +4766,7 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
   rxp.poll_state = ps;
   rxp.pkt = pkt;
   rxp.tcp = tcp;
-  if( pkt->q_id != CI_Q_ID_TCP_RECYCLER || ! tcp_plugin_elided_payload(pkt) )
+  if( pkt->q_id != CI_Q_ID_TCP_RECYCLER || ! ci_tcp_plugin_elided_payload(pkt) )
     ci_assert_gt(pkt->pay_len, ip_paylen);
   pkt->pf.tcp_rx.pay_len = ip_paylen;
 
@@ -4866,7 +4857,7 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
                   sock_lport_be16(s) == tcp->tcp_dest_be16 &&
                   CI_IPX_ADDR_EQ(sock_ipx_raddr(s), saddr) &&
                   CI_IPX_ADDR_EQ(sock_ipx_laddr(s), daddr) )) {
-      if( tcp_plugin_elided_payload(pkt) ) {
+      if( ci_tcp_plugin_elided_payload(pkt) ) {
         /* Hack around with the payload size to undo the plugin's removal of
          * it. The actual payload contents we have in memory are drivel, of
          * course. */
@@ -4947,7 +4938,7 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
  scattered:
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_assert_le(pkt->q_id, CI_Q_ID_TCP_RECYCLER);
-  if( pkt->q_id != CI_Q_ID_NORMAL && tcp_plugin_elided_payload(pkt) ) {
+  if( pkt->q_id != CI_Q_ID_NORMAL && ci_tcp_plugin_elided_payload(pkt) ) {
     /* This packet isn't formatted normally, so we mustn't pass it to the
      * kernel. This essentially can't happen, because the plugin is going to
      * remove all the payload when it sets the user_flag so the only way we
