@@ -2938,6 +2938,13 @@ int ci_netif_set_rxq_limit(ci_netif* ni)
   return rc;
 }
 
+static void ci_netif_af_xdp_post_fill(ci_netif* ni)
+{
+  /* some ZC UMEM implementation can take a jiffy to schedule HW rx ring refill */
+  /* FIXME AF_XDP: fill umem rings before binding to umem */
+  if( ni->flags & CI_NETIF_FLAG_AF_XDP )
+    usleep_range(TICK_USEC * 2, TICK_USEC * 3);
+}
 
 static int __ci_netif_init_fill_rx_rings(ci_netif* ni)
 {
@@ -3030,6 +3037,9 @@ int ci_netif_init_fill_rx_rings(ci_netif* ni)
       break;
     }
   }
+
+  ci_netif_af_xdp_post_fill(ni);
+
   if( ! NI_OPTS(ni).prealloc_packets ) {
     /* Free the packets now, once rings are full, to ensure availability of
      * packets as indicated by EF_MIN_FREE_PACKETS */
