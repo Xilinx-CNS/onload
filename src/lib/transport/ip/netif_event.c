@@ -1166,6 +1166,12 @@ static void handle_rx_multi_pkts(ci_netif* ni, struct oo_rx_state* s,
      * If this ever fails then we just need to do the read-modify-write */
     ci_assert_equal(pkt->rx_flags, 0);
     pkt->rx_flags = flag * CI_PKT_RX_FLAG_USER_FLAG;
+    /* Packets from the plugin will usually arrive with invalid checksums, but
+     * this is OK, because the plugin itself verified the checksum before
+     * handling the packet, and the path from the plugin to Onload is assumed
+     * to be error-free. */
+    if( ci_tcp_plugin_elided_payload(pkt) || ci_tcp_plugin_tcp_app_packet(pkt) )
+      discard_flags = 0;
   }
 #endif
 
