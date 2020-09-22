@@ -127,6 +127,9 @@ enum {
                                                  oo_sock_attach_t)
 #endif
 
+  OO_OP_CLOSE,
+#define OO_IOC_CLOSE                OO_IOC_W(CLOSE, ci_uint32)
+
   /* OS-specific TCP helper operations */
 
   OO_OP_OS_SOCK_CREATE_AND_SET,

@@ -122,7 +122,6 @@ citp_init_trampoline(ci_fd_t fd)
   uint32_t *ptrbuf[sizeof(handler_ptr)];
 #endif
 
-  CI_USER_PTR_SET (args.trampoline_exclude, ci_tcp_helper_close_no_trampoline_retaddr);
   CI_USER_PTR_SET (args.trampoline_ul_fail, ci_trampoline_ul_fail);
 #if defined(__PPC64__) && (!defined(_CALL_ELF) || _CALL_ELF < 2)
   /* PPC64 ELFv1 - function pointers are in fact transition vectors */

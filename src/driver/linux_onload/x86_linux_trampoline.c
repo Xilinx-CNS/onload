@@ -576,8 +576,7 @@ tramp_close_passthrough(int fd)
 }
 
 static inline int /* bool */
-tramp_close_begin(int fd, ci_uintptr_t *tramp_entry_out,
-                  ci_uintptr_t *tramp_exclude_out)
+tramp_close_begin(int fd, ci_uintptr_t *tramp_entry_out)
 {
   struct file *f;
   efab_syscall_enter();
@@ -593,8 +592,6 @@ tramp_close_begin(int fd, ci_uintptr_t *tramp_entry_out,
       if (p) {
         *tramp_entry_out =
             (ci_uintptr_t)CI_USER_PTR_GET(p->trampoline_entry);
-        *tramp_exclude_out =
-            (ci_uintptr_t)CI_USER_PTR_GET(p->trampoline_exclude);
       }
       read_unlock (&oo_mm_tbl_lock);
 
@@ -661,7 +658,6 @@ efab_linux_trampoline_handler_close64(struct pt_regs *regs)
 #endif
 {
   ci_uintptr_t trampoline_entry = 0;
-  ci_uintptr_t trampoline_exclude = 0;
   unsigned long *user_sp =0;
 #ifndef EFRM_SYSCALL_PTREGS
   struct pt_regs* regs;
@@ -671,7 +667,7 @@ efab_linux_trampoline_handler_close64(struct pt_regs *regs)
   int fd = di(regs);
 #endif
 
-  if( tramp_close_begin(fd, &trampoline_entry, &trampoline_exclude) )
+  if( tramp_close_begin(fd, &trampoline_entry) )
     return tramp_close_passthrough(fd);
 
 #ifndef EFRM_SYSCALL_PTREGS
@@ -718,14 +714,8 @@ efab_linux_trampoline_handler_close64(struct pt_regs *regs)
   TRAMP_DEBUG("  flags %016lx XX", flags(regs));
   TRAMP_DEBUG("  rsp %016lx XX", sp(regs));
   TRAMP_DEBUG("  ss  %016lx XX",regs->ss);
-  TRAMP_DEBUG("trampoline_exclude %016lx", (unsigned long) trampoline_exclude);
   TRAMP_DEBUG("thread_info->flags %016lx",
               (unsigned long)current_thread_info()->flags);
-
-  if (ip(regs) == trampoline_exclude) {
-    TRAMP_DEBUG("Ignoring call from excluded address");
-    return tramp_close_passthrough(fd);
-  }
 
   /* We need to get data back to the user-mode stub handler.  Specifically
    * -- the real return address, the op-code, and the "data" field (eg.
@@ -874,13 +864,12 @@ efab_linux_trampoline_handler_close32(struct pt_regs *regs)
 #endif
 {
   ci_uintptr_t trampoline_entry = 0;
-  ci_uintptr_t trampoline_exclude = 0;
   unsigned int *user32_sp =0;
 #ifdef EFRM_SYSCALL_PTREGS
   unsigned long bx = regs->bx;
 #endif
 
-  if( tramp_close_begin(bx, &trampoline_entry, &trampoline_exclude) )
+  if( tramp_close_begin(bx, &trampoline_entry) )
     return tramp_close_passthrough(bx);
 
 
@@ -923,12 +912,7 @@ efab_linux_trampoline_handler_close32(struct pt_regs *regs)
   TRAMP_DEBUG("  flags %016lx", flags(regs)); 
   TRAMP_DEBUG("  sp %016lx", sp(regs));
   TRAMP_DEBUG("  ss  %016lx",regs->ss);
-  TRAMP_DEBUG("trampoline_exclude %016lx", (unsigned long) trampoline_exclude);
 
-  if (ip(regs) == trampoline_exclude) {
-    TRAMP_DEBUG("Ignoring call from excluded address");
-    return tramp_close_passthrough(bx);
-  }
   /* The little stub in user-mode needs the opcode and data on the user-mode
    * stack (originally we passed these in registers, ecx and edx, but this
    * doesn't work in the case of a 32-bit app on a 64-bit machine calling a

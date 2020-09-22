@@ -41,7 +41,6 @@ struct mm_hash {
   struct mm_struct *mm;
 
   ci_user_ptr_t     trampoline_entry;
-  ci_user_ptr_t     trampoline_exclude;
 
   /* Used on PPC (and others) to restore the TOC pointer; unnecessary 
    *  for x86 and x64

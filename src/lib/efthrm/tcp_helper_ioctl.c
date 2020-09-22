@@ -609,6 +609,10 @@ efab_tcp_helper_pipe_attach(ci_private_t* priv, void *arg)
   return 0;
 }
 
+static int oo_close_no_trampoline_rsop(ci_private_t *priv, void *arg)
+{
+  return efab_linux_sys_close(*(ci_uint32*)arg);
+}
 
 /*--------------------------------------------------------------------
  *!
@@ -1573,6 +1577,7 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_SOCK_DETACH,       efab_tcp_helper_sock_detach_file),
   op(OO_IOC_SOCK_ATTACH_TO_EXISTING, efab_tcp_helper_sock_attach_to_existing_file),
 #endif
+  op(OO_IOC_CLOSE,             oo_close_no_trampoline_rsop),
 
   op(OO_IOC_OS_SOCK_CREATE_AND_SET,efab_tcp_helper_os_sock_create_and_set_rsop),
   op(OO_IOC_OS_SOCK_FD_GET,        efab_tcp_helper_get_sock_fd),

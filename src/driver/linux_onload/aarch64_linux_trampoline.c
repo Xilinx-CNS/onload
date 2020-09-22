@@ -183,8 +183,7 @@ int efab_linux_sys_sigaction32(int signum,
 
 
 static inline int /* bool */
-tramp_close_begin(int fd, ci_uintptr_t *tramp_entry_out,
-                  ci_uintptr_t *tramp_exclude_out)
+tramp_close_begin(int fd, ci_uintptr_t *tramp_entry_out)
 {
   struct file *f;
   efab_syscall_enter();
@@ -199,8 +198,6 @@ tramp_close_begin(int fd, ci_uintptr_t *tramp_entry_out,
       if (p) {
         *tramp_entry_out =
             (ci_uintptr_t)CI_USER_PTR_GET(p->trampoline_entry);
-        *tramp_exclude_out =
-            (ci_uintptr_t)CI_USER_PTR_GET(p->trampoline_exclude);
       }
       read_unlock (&oo_mm_tbl_lock);
 
@@ -235,14 +232,9 @@ asmlinkage int efab_linux_trampoline_close(struct pt_regs *regs)
   int fd = regs->regs[0];
 #endif
   ci_uintptr_t trampoline_entry = 0;
-  ci_uintptr_t trampoline_exclude = 0;
 
-  if (!tramp_close_begin(fd, &trampoline_entry, &trampoline_exclude))
+  if (!tramp_close_begin(fd, &trampoline_entry))
       return tramp_close_passthrough(fd);
-
-  if (regs->pc == trampoline_exclude) {
-    return tramp_close_passthrough(fd);
-  }
 
   regs->regs[1] = fd;
   regs->regs[2] = regs->pc;

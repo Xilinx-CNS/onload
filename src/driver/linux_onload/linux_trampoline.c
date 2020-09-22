@@ -54,9 +54,8 @@ efab_linux_trampoline_register (ci_private_t *priv, void *arg)
   int rc = 0;
   struct mm_hash *p;
 
-  TRAMP_DEBUG ("Register entry-point 0x%"CI_PRIx64"(0x%"CI_PRIx64") for mm %p (pid %d)",
-               args->trampoline_entry.ptr, args->trampoline_exclude.ptr, current->mm,
-               current->pid);
+  TRAMP_DEBUG ("Register entry-point 0x%"CI_PRIx64" for mm %p (pid %d)",
+               args->trampoline_entry.ptr, current->mm, current->pid);
 
   write_lock (&oo_mm_tbl_lock);
 
@@ -76,15 +75,14 @@ efab_linux_trampoline_register (ci_private_t *priv, void *arg)
   ci_assert (p);
   ci_assert (p->mm == current->mm);
   p->trampoline_entry = args->trampoline_entry;
-  p->trampoline_exclude = args->trampoline_exclude;
   p->trampoline_toc = args->trampoline_toc;
   p->trampoline_user_fixup = args->trampoline_user_fixup;
   CI_DEBUG(p->trampoline_ul_fail = args->trampoline_ul_fail;)
 
   rc = efab_signal_mm_init(args, p);
 
-  TRAMP_DEBUG("mm %p registered trampoline entry %"CI_PRIx64" exclude %"CI_PRIx64,
-              p->mm, args->trampoline_entry.ptr, args->trampoline_exclude.ptr);
+  TRAMP_DEBUG("mm %p registered trampoline entry %"CI_PRIx64,
+              p->mm, args->trampoline_entry.ptr);
 
 exit:
   if( rc == 0 && safe_signals_and_exit )

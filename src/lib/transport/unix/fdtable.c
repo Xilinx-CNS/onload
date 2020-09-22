@@ -1938,11 +1938,19 @@ int oo_service_fd(void)
       }
     }
     else {
-      ci_tcp_helper_close_no_trampoline(fd);
+      ci_sys_ioctl(fd, OO_IOC_CLOSE, fd);
     }
   }
 
   return citp.onload_fd;
+}
+
+
+int ci_tcp_helper_close_no_trampoline(int fd)
+{
+  ci_uint32 op = fd;
+
+  return ci_sys_ioctl(oo_service_fd(), OO_IOC_CLOSE, &op);
 }
 
 /*! \cidoxg_end */

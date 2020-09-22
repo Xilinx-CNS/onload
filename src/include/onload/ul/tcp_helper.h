@@ -46,7 +46,6 @@ extern int ci_tcp_helper_clear_epcache(struct ci_netif_s*);
 
 #if ! defined(__ci_driver__)
 extern int ci_tcp_helper_close_no_trampoline(int) CI_HF;
-extern void ci_tcp_helper_close_no_trampoline_retaddr(void) CI_HF;
 
 extern ci_fd_t ci_tcp_helper_get_sock_fd(ci_fd_t fd) CI_HF;
 
