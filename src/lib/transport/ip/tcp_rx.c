@@ -3847,8 +3847,10 @@ static void handle_unacceptable_seq(ci_netif* netif, ci_tcp_state* ts,
     if( tcp_plugin_elided_payload(pkt) &&
       SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) )
       ci_tcp_rx_clean_plugin_rob(netif, ts, rxp->seq);
-    if( tcp_plugin_pkt_was_recycled(ts, pkt) )
+    if( tcp_plugin_pkt_was_recycled(ts, pkt) ) {
+      ts->dsack_block = OO_PP_INVALID;
       return;
+    }
   }
 
   /* Only consider updating the send window for unacceptable sequence
