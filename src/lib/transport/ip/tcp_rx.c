@@ -1764,6 +1764,8 @@ static bool ci_tcp_rx_plugin_recycle(ci_netif* netif, ci_tcp_state* ts,
    * FPGA DDR. This smarter logic probably belongs near the top of
    * ci_tcp_rx_deliver_rob(), not here */
 
+  ci_tcp_recycle_reset(netif, ts);
+
   /* We're quite aggressive about recycling, so a double attempt is totally
    * possible */
   if( pkt->flags & CI_PKT_FLAG_TX_PENDING )
@@ -1779,7 +1781,10 @@ static bool ci_tcp_rx_plugin_recycle(ci_netif* netif, ci_tcp_state* ts,
    * packet on the dmaq - we can't do that because we're already using
    * pkt::next for the rob. */
   rc = ci_netif_send_immediate(netif, pkt);
-  ci_tcp_recycle_reset(netif, ts);
+  if( ! rc ) {
+    pkt->flags &=~ CI_PKT_FLAG_TX_PENDING;
+    ci_netif_pkt_release(netif, pkt);
+  }
   return rc;
 }
 
