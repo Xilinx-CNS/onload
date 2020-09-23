@@ -40,16 +40,6 @@ struct mm_hash {
   ci_dllink         link;
   struct mm_struct *mm;
 
-  ci_user_ptr_t     trampoline_entry;
-
-  /* Used on PPC (and others) to restore the TOC pointer; unnecessary 
-   *  for x86 and x64
-   */
-  ci_user_ptr_t   trampoline_toc;
-  ci_user_ptr_t trampoline_user_fixup;
-
-  CI_DEBUG(ci_user_ptr_t trampoline_ul_fail;)
-
   struct mm_signal_data signal_data;
 
   unsigned          ref;

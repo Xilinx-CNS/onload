@@ -112,7 +112,6 @@ efab_create_mm_entry (struct mm_struct *mm) {
     p->magic = MM_ENTRY_MAGIC;
     p->mm = mm;
     p->ref = 0;               // Will be inc-ed by caller
-    CI_USER_PTR_SET (p->trampoline_entry, 0); // No trampoline registered yet
     CI_USER_PTR_SET (p->signal_data.user_data, 0); // No signal info
     ci_dllist_push (&mm_hash_tbl [hash_mm (mm)], &p->link);
   }

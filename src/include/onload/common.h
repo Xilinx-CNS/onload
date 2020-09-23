@@ -375,21 +375,12 @@ typedef struct {
 
 /* struct contains arguments for the trampoline register ioctl */
 typedef struct ci_tramp_reg_args {
-  ci_user_ptr_t trampoline_entry;
-  ci_user_ptr_t trampoline_ul_fail;
-
   ci_user_ptr_t signal_handler_postpone;
   ci_user_ptr_t signal_handlers[OO_SIGHANGLER_DFL_MAX+1];
   ci_user_ptr_t signal_sarestorer;
   ci_user_ptr_t signal_data;
   ci_int32 max_signum;
   ci_int32/*bool*/ sa_onstack_intercept;
-
-   /* Used by PPC64 and other architectures for TOC and
-    *  user fixup pointers.
-    */
-  ci_user_ptr_t trampoline_toc;
-  ci_user_ptr_t trampoline_user_fixup;
 } ci_tramp_reg_args_t;
 
 

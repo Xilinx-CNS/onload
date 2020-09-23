@@ -144,9 +144,6 @@ int libstack_init_signals(int fd)
 
   memset(&args, '\0', sizeof(ci_tramp_reg_args_t));
 
-  CI_USER_PTR_SET (args.trampoline_entry, NULL);
-  CI_USER_PTR_SET( args.trampoline_toc, NULL );
-  CI_USER_PTR_SET( args.trampoline_user_fixup, NULL );
   args.max_signum = NSIG;
   CI_USER_PTR_SET(args.signal_handler_postpone, citp_signal_intercept);
   for( i = 0; i <= OO_SIGHANGLER_DFL_MAX; i++ )
