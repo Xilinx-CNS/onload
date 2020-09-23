@@ -261,9 +261,9 @@ static void ci_tcp_rx_enqueue_packet(ci_netif *netif, ci_tcp_state *ts,
                   pkt)->tcp_flags & CI_TCP_FLAG_FIN) ? 1 : 0),
                   oo_offbuf_left(&pkt->buf));
 
-  tcp_rcv_nxt(ts) = pkt->pf.tcp_rx.end_seq;
-
   if( ci_tcp_is_pluginized(ts) ) {
+    if( SEQ_LT(tcp_rcv_nxt(ts), pkt->pf.tcp_rx.end_seq) )
+        tcp_rcv_nxt(ts) = pkt->pf.tcp_rx.end_seq;
     /* Just bin it - we're going to get the actual payload from a different
      * queue, and shoehorn it in to the recvq from there. */
     ci_netif_pkt_release_rx(netif, pkt);
@@ -271,6 +271,7 @@ static void ci_tcp_rx_enqueue_packet(ci_netif *netif, ci_tcp_state *ts,
     return;
   }
 
+  tcp_rcv_nxt(ts) = pkt->pf.tcp_rx.end_seq;
   ci_tcp_rx_add_to_recvq(netif, ts, pkt, oo_offbuf_left(&pkt->buf));
 }
 
@@ -1550,7 +1551,6 @@ static void ci_tcp_rx_handle_ack(ci_tcp_state* ts, ci_netif* netif,
     CI_TCP_EXT_STATS_INC_TCP_FULL_UNDO( netif );
 
   snd_max_different = ci_tcp_rx_try_snd_wnd_inflate(ts, rxp);
-
   if( SEQ_LT(tcp_snd_una(ts), rxp->ack) ) {
     /* New data acknowledged: do congestion control and rtt measurement. */
     unsigned acked = SEQ_SUB(rxp->ack, tcp_snd_una(ts));
@@ -1722,6 +1722,8 @@ static void ci_tcp_rx_process_fin(ci_netif* netif, ci_tcp_state* ts)
 
   /* Cleanup the receive queue to avoid leaving lots of junk there for
   ** (potentially) ages. */
+  if( ci_tcp_is_pluginized(ts) )
+    ci_tcp_rx_clean_plugin_rob(netif, ts, tcp_rcv_nxt(ts));
   ci_tcp_rx_reap_rxq_bufs(netif, ts);
   if( tcp_rcv_usr(ts) == 0 && ci_sock_trylock(netif, &ts->s.b) ) {
     ci_assert_equal(tcp_rcv_usr(ts), 0);
@@ -1945,7 +1947,8 @@ static int ci_tcp_rx_deliver_rob(ci_netif* netif, ci_tcp_state* ts)
        * us the equivalent elided-payload packet back, handled in
        * ci_tcp_rx_enqueue_packet()), since the plugin may have to drop
        * anything at any time due to lack of buffering. */
-      tcp_rcv_nxt(ts) = p->pf.tcp_rx.end_seq;
+      if( SEQ_LT(tcp_rcv_nxt(ts), p->pf.tcp_rx.end_seq) )
+        tcp_rcv_nxt(ts) = p->pf.tcp_rx.end_seq;
     }
     else {
       ci_tcp_rx_enqueue_chain(netif, ts, rob, end_pkt, num);
@@ -3863,8 +3866,8 @@ static void handle_unacceptable_seq(ci_netif* netif, ci_tcp_state* ts,
 
   if( ci_tcp_is_pluginized(ts) ) {
     if( tcp_plugin_elided_payload(pkt) &&
-      SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) )
-      ci_tcp_rx_clean_plugin_rob(netif, ts, rxp->seq);
+        SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) )
+      ci_tcp_rx_clean_plugin_rob(netif, ts, pkt->pf.tcp_rx.end_seq);
     if( tcp_plugin_pkt_was_recycled(ts, pkt) ) {
       ts->dsack_block = OO_PP_INVALID;
       return;
