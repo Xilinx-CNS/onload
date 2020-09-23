@@ -403,6 +403,11 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
     ci_tcp_state *new_ts = SOCK_TO_TCP(new_s);
     ci_tcp_state *old_ts = SOCK_TO_TCP(old_s);
 
+    /* Adjust netif reserved_pktbufs value because the socket is moved into
+       the new Onload stack. */
+    new_thr->netif.state->reserved_pktbufs +=
+        ci_tcp_rx_reserved_bufs(&new_thr->netif, new_ts);
+
     ci_tcp_rx_buf_account_begin(&new_thr->netif, new_ts);
     rc = efab_ip_queue_copy(alien_ni, &new_ts->recv1,
                             &old_thr->netif, &old_ts->recv1);
@@ -496,6 +501,11 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
     for( i = 0; i <= CI_TCP_SACK_MAX_BLOCKS; i++ )
       new_ts->last_sack[i] = OO_PP_NULL;
     ci_tcp_rx_queue_drop(&old_thr->netif, old_ts, &old_ts->rob);
+
+    /* Adjust netif reserved_pktbufs value because the socket is removed from
+       the old Onload stack. */
+    old_thr->netif.state->reserved_pktbufs -=
+        ci_tcp_rx_reserved_bufs(&old_thr->netif, old_ts);
   }
   else {
     /* There should not be any recv q, but drop it to be sure */
