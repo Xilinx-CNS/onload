@@ -1083,8 +1083,8 @@ int main(int argc, char** argv)
    * unpredictable for the kernel), so we must pass the RT
    * signal in use to the kernel. */
   dim.oof_req_sig = SIGRTMIN + 1;
-  dim.llap_update_sig = SIGRTMIN + 2;
-  dim.os_sync_sig = SIGRTMIN + 3;
+  dim.llap_update_sig = dim.oof_req_sig + 1;
+  dim.os_sync_sig = dim.llap_update_sig + 1;
 
   dim.server_pid = getpid();
 
