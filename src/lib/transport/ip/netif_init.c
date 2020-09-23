@@ -2081,6 +2081,8 @@ static int netif_tcp_helper_build(ci_netif* ni)
                  &vi_mem_ptr, vi, nsn->vi_instance[i],
                  i ? 0 : nsn->vi_evq_bytes, nsn->vi_txq_size,
                  &ni->state->vi_stats);
+      if( i )
+        ef_vi_add_queue(ci_netif_vi(ni, nic_i), vi);
       if( NI_OPTS(ni).tx_push )
         ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
 
