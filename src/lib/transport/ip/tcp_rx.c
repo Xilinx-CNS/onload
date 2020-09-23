@@ -227,12 +227,25 @@ static void ci_tcp_rx_clean_plugin_rob(ci_netif *netif, ci_tcp_state *ts,
    * ci_tcp_rx_deliver_rob()) */
   ci_ip_pkt_fmt* p;
 
+  if( ci_ip_queue_is_empty(&ts->rob) )
+    return;
+  ci_assert(ci_ip_queue_is_valid(netif, &ts->rob));
   ci_assert(ci_tcp_is_pluginized(ts));
-  while( ci_ip_queue_not_empty(&ts->rob) &&
-         (p = PKT_CHK(netif, ts->rob.head)) != NULL &&
+  while( (p = PKT_CHK(netif, ts->rob.head)) != NULL &&
          SEQ_LE(p->pf.tcp_rx.end_seq, nxt) ) {
     remove_from_last_sack(ts, ts->rob.head);
     ci_ip_queue_dequeue(netif, &ts->rob, p);
+    if( ci_ip_queue_is_empty(&ts->rob) ) {
+      ci_netif_pkt_release_rx(netif, p);
+      break;
+    }
+    if( PKT_TCP_RX_ROB(p)->num > 1 ) {
+      ci_ip_pkt_fmt* p2 = PKT_CHK(netif, ts->rob.head);
+      if( p2 ) {
+        *PKT_TCP_RX_ROB(p2) = *PKT_TCP_RX_ROB(p);
+        --PKT_TCP_RX_ROB(p2)->num;
+      }
+    }
     ci_netif_pkt_release_rx(netif, p);
   }
 }
