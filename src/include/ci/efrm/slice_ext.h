@@ -16,41 +16,26 @@ struct efrm_ext_svc_meta {
     uint16_t minor_ver;
     uint16_t patch_ver;
     uint32_t nmsgs;
-    uint32_t nrsrc_classes;
     uint16_t mapped_csr_offset;
     uint16_t mapped_csr_size;
     uint8_t mapped_csr_flags;
+    uint8_t admin_group;
 };
 
 extern int efrm_ext_get_meta_global(struct efrm_resource *rs,
                                     uint32_t mc_handle,
                                     struct efrm_ext_svc_meta *out);
 
-struct efrm_ext_rc_meta {
-    uint32_t max;
-    uint32_t kern_extra;
-};
-
-extern int efrm_ext_get_meta_rc(struct efrm_resource *rs,
-                                uint32_t mc_handle, uint32_t clas,
-                                struct efrm_ext_rc_meta *out);
-
 struct efrm_ext_msg_meta {
     uint32_t id;
     uint32_t ix;
     char name[32];
-    uint32_t ef_vi_param_size;
     uint32_t mcdi_param_size;
-    uint32_t ninsns;
 };
 
 extern int efrm_ext_get_meta_msg(struct efrm_resource *rs,
                                  uint32_t mc_handle, uint32_t msg_id,
                                  struct efrm_ext_msg_meta *out);
-
-extern int efrm_ext_get_meta_msg_prog(struct efrm_resource *rs,
-                                      uint32_t mc_handle, uint32_t msg_id,
-                                      void* prog, size_t prog_bytes);
 
 extern int efrm_ext_msg(struct efrm_resource *rs, uint32_t mc_handle,
                         uint32_t msg_id, void *buf, size_t len);
