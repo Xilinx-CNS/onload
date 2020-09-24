@@ -9,30 +9,6 @@
 
 #include <linux/types.h>
 
-/* Non-driverlink NIC handle.
- *
- * This structure represents an association between a net device
- * and a driver module which is interested in it. It is allocated and
- * maintained by the non-driverlink resource driver and protected by
- * the RTNL lock. */
-
-struct efrm_nondl_handle {
-  /* List of all handles belonging to the same driver. */
-  struct list_head driver_node;
-
-  /* List of all handles belonging to the same netdev. */
-  struct list_head device_node;
-
-  /* The driver which owns this handle. */
-  struct efrm_nondl_driver *driver;
-
-  /* The device that this handle refers to. */
-  struct efrm_nondl_device *device;
-
-  /* This field is available for the client driver module to use
-   * as it wishes, eg to store a pointer to per-device state. */
-  void *private;
-};
 
 /* Non-driverlink network device.
  *
@@ -58,8 +34,11 @@ struct efrm_nondl_device {
   /* List of all currently registered devices. */
   struct list_head node;
 
-  /* List of all handles referencing this device. */
-  struct list_head handles;
+  /* Driver using this device. */
+  struct efrm_nondl_driver *driver;
+
+  /* List of all devices used by this driver. */
+  struct list_head driver_node;
 
   /* Network device currently associated with this non-driverlink
    * device. */
@@ -76,23 +55,19 @@ struct efrm_nondl_device {
 
 /* Non-driverlink device driver structure.
  *
- * Each driver (sfc_resource, onload, affinity) which knows about
- * non-driverlink devices must create a static instance of this structure,
- * register it with the non-driverlink resource driver on module load, and
- * unregister it on module unload. */
+ * A driver which knows about non-driverlink devices must create a static
+ * instance of this structure, register it with the non-driverlink resource
+ * driver on module load, and unregister it on module unload. */
 
 struct efrm_nondl_driver {
-  /* List of all currently registered drivers. */
-  struct list_head node;
-
-  /* List of all handles belonging to this driver. */
-  struct list_head handles;
+  /* List of all devices belonging to this driver. */
+  struct list_head devices;
 
   /* A new network device is being registered. */
-  int (*register_device)(struct efrm_nondl_handle *);
+  int (*register_device)(struct efrm_nondl_device *);
 
   /* A network device is being unregistered. */
-  void (*unregister_device)(struct efrm_nondl_handle *);
+  void (*unregister_device)(struct efrm_nondl_device *);
 };
 
 /* Register a non-driverlink device client driver.
@@ -101,7 +76,7 @@ struct efrm_nondl_driver {
  * register_device callbacks for all the non-driverlink NICs currently known to
  * the manager. */
 
-int efrm_nondl_register_driver(struct efrm_nondl_driver *driver);
+void efrm_nondl_register_driver(struct efrm_nondl_driver *driver);
 
 /* Unregister a non-driverlink driver.
  *

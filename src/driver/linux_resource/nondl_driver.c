@@ -9,22 +9,22 @@
 #include <ci/efrm/nondl.h>
 #include <linux/rtnetlink.h>
 
-static int efrm_nondl_register_device(struct efrm_nondl_handle *handle)
+static int efrm_nondl_register_device(struct efrm_nondl_device *device)
 {
   int rc;
 
   ASSERT_RTNL();
-  EFRM_ERR("%s: register %s", __func__, handle->device->netdev->name);
-  rc = efrm_nic_add_device(handle->device->netdev, handle->device->n_vis);
+  EFRM_ERR("%s: register %s", __func__, device->netdev->name);
+  rc = efrm_nic_add_device(device->netdev, device->n_vis);
 
   return rc;
 }
 
-static void efrm_nondl_unregister_device(struct efrm_nondl_handle *handle)
+static void efrm_nondl_unregister_device(struct efrm_nondl_device *device)
 {
   ASSERT_RTNL();
-  EFRM_ERR("%s: unregister %s", __func__, handle->device->netdev->name);
-  efrm_nic_del_device(handle->device->netdev);
+  EFRM_ERR("%s: unregister %s", __func__, device->netdev->name);
+  efrm_nic_del_device(device->netdev);
 }
 
 static struct efrm_nondl_driver efrm_nondl_driver = {
@@ -34,12 +34,7 @@ static struct efrm_nondl_driver efrm_nondl_driver = {
 
 extern void efrm_nondl_register(void)
 {
-  int rc;
-
-  rc = efrm_nondl_register_driver(&efrm_nondl_driver);
-  if(rc < 0) {
-    EFRM_ERR("Couldn't register driver: %d\n", rc);
-  }
+  efrm_nondl_register_driver(&efrm_nondl_driver);
 }
 
 extern void efrm_nondl_unregister(void)

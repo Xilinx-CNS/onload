@@ -12,100 +12,91 @@
 /* Maximum number of VIs we will try to create for each device. */
 #define MAX_VIS 128
 
-/* List of all registered drivers. Protected by the RTNL lock. */
-static LIST_HEAD(nondl_driver_list);
+/* Registered driver. Protected by the RTNL lock. */
+static struct efrm_nondl_driver *nondl_driver;
 
 /* List of all registered devices. Protected by the RTNL lock. */
 static LIST_HEAD(nondl_device_list);
 
 /* Try to create a new handle associating a device with a driver. */
 static void efrm_nondl_try_add_device(struct efrm_nondl_device *device,
-                                     struct efrm_nondl_driver *driver)
+                                      struct efrm_nondl_driver *driver)
 {
-  struct efrm_nondl_handle *handle;
   int rc = 0;
 
   ASSERT_RTNL();
 
-  handle = kzalloc(sizeof *handle, GFP_KERNEL);
-  if(!handle) {
-    rc = -ENOMEM;
-    goto fail;
-  }
+  EFRM_ASSERT(!device->driver);
+  EFRM_ASSERT(driver);
 
-  INIT_LIST_HEAD(&handle->driver_node);
-  INIT_LIST_HEAD(&handle->device_node);
-
-  handle->driver = driver;
-  handle->device = device;
-
-  rc = driver->register_device(handle);
+  rc = driver->register_device(device);
   if(rc)
     goto fail;
 
-  if(handle->device->is_up)
-    efrm_notify_nic_probe(handle->device->netdev);
+  INIT_LIST_HEAD(&device->driver_node);
+  device->driver = driver;
+  list_add_tail(&device->driver_node, &driver->devices);
 
-  list_add_tail(&handle->driver_node, &driver->handles);
-  list_add_tail(&handle->device_node, &device->handles);
+  if(device->is_up)
+    efrm_notify_nic_probe(device->netdev);
 
   return;
 
 fail:
   EFRM_ERR("Couldn't register device '%s': %d", device->netdev->name, rc);
-  kfree(handle);
 }
 
 /* Destroy an existing association between a device and a driver. */
-static void efrm_nondl_del_device(struct efrm_nondl_handle *handle)
+static void efrm_nondl_del_device(struct efrm_nondl_device *device)
 {
   ASSERT_RTNL();
 
-  if(handle->device->is_up)
-    efrm_notify_nic_remove(handle->device->netdev);
+  if(device->is_up)
+    efrm_notify_nic_remove(device->netdev);
 
-  handle->driver->unregister_device(handle);
+  if( device->driver ) {
+    device->driver->unregister_device(device);
+    list_del(&device->driver_node);
+  }
 
-  list_del(&handle->driver_node);
-  list_del(&handle->device_node);
-  kfree(handle);
+  device->driver = NULL;
 }
 
 /* Register a new driver with the non-driverlink resource manager. */
-int efrm_nondl_register_driver(struct efrm_nondl_driver *driver)
+void efrm_nondl_register_driver(struct efrm_nondl_driver *driver)
 {
   struct efrm_nondl_device *device;
-
-  INIT_LIST_HEAD(&driver->node);
-  INIT_LIST_HEAD(&driver->handles);
+  INIT_LIST_HEAD(&driver->devices);
 
   rtnl_lock();
 
-  list_add_tail(&driver->node, &nondl_driver_list);
+  EFRM_ASSERT(!nondl_driver);
+
+  nondl_driver = driver;
 
   list_for_each_entry(device, &nondl_device_list, node)
     efrm_nondl_try_add_device(device, driver);
 
   rtnl_unlock();
-
-  return 0;
 }
 EXPORT_SYMBOL(efrm_nondl_register_driver);
 
 /* Unregister a driver from the non-driverlink resource manager. */
 void efrm_nondl_unregister_driver(struct efrm_nondl_driver *driver)
 {
-  struct efrm_nondl_handle *handle, *handle_n;
+  struct efrm_nondl_device *device, *device_n;
 
   rtnl_lock();
 
-  list_for_each_entry_safe_reverse(handle, handle_n, &driver->handles,
+  EFRM_ASSERT(nondl_driver == driver);
+
+  list_for_each_entry_safe_reverse(device, device_n, &driver->devices,
                                    driver_node)
-    efrm_nondl_del_device(handle);
+    efrm_nondl_del_device(device);
 
-  BUG_ON(!list_empty(&driver->handles));
+  BUG_ON(!list_empty(&driver->devices));
 
-  list_del(&driver->node);
+  nondl_driver = NULL;
 
   rtnl_unlock();
 }
@@ -113,9 +104,8 @@ EXPORT_SYMBOL(efrm_nondl_unregister_driver);
 
 /* Register a new network device with the non-driverlink resource manager. */
 int efrm_nondl_register_netdev(struct net_device *netdev,
-                              unsigned int n_vis)
+                               unsigned int n_vis)
 {
-  struct efrm_nondl_driver *driver;
   struct efrm_nondl_device *device;
 
   if((n_vis == 0) || (n_vis > MAX_VIS))
@@ -135,7 +125,6 @@ int efrm_nondl_register_netdev(struct net_device *netdev,
     return -ENOMEM;
 
   INIT_LIST_HEAD(&device->node);
-  INIT_LIST_HEAD(&device->handles);
 
   dev_hold(netdev);
   device->netdev = netdev;
@@ -144,8 +133,8 @@ int efrm_nondl_register_netdev(struct net_device *netdev,
 
   list_add_tail(&device->node, &nondl_device_list);
 
-  list_for_each_entry(driver, &nondl_driver_list, node)
-    efrm_nondl_try_add_device(device, driver);
+  if( nondl_driver )
+    efrm_nondl_try_add_device(device, nondl_driver);
 
   return 0;
 }
@@ -155,7 +144,7 @@ static void efrm_nondl_cleanup_netdev(struct efrm_nondl_device *device)
 {
   ASSERT_RTNL();
 
-  BUG_ON(!list_empty(&device->handles));
+  BUG_ON(device->driver);
 
   list_del(&device->node);
   dev_put(device->netdev);
@@ -166,7 +155,6 @@ static void efrm_nondl_cleanup_netdev(struct efrm_nondl_device *device)
 /* Unregister a network device from the non-driverlink resource manager. */
 int efrm_nondl_unregister_netdev(struct net_device *netdev)
 {
-  struct efrm_nondl_handle *handle, *handle_n;
   struct efrm_nondl_device *device;
   int found = 0;
 
@@ -184,9 +172,7 @@ int efrm_nondl_unregister_netdev(struct net_device *netdev)
   if(device->is_up)
     return -EBUSY;
 
-  list_for_each_entry_safe_reverse(handle, handle_n, &device->handles,
-                                   device_node)
-    efrm_nondl_del_device(handle);
+  efrm_nondl_del_device(device);
 
   efrm_nondl_cleanup_netdev(device);
 
@@ -211,7 +197,7 @@ void efrm_nondl_shutdown(void)
 
   rtnl_lock();
 
-  BUG_ON(!list_empty(&nondl_driver_list));
+  BUG_ON(nondl_driver);
 
   list_for_each_entry_safe_reverse(device, device_n, &nondl_device_list, node)
     efrm_nondl_cleanup_netdev(device);
