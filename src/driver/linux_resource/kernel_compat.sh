@@ -124,6 +124,8 @@ EFRM_HAVE_NETDEV_REGISTER_RH		symbol	register_netdevice_notifier_rh	include/linu
 EFRM_HAVE_MMAP_LOCK_WRAPPERS		file	include/linux/mmap_lock.h
 EFRM_HAVE_SOCK_BINDTOINDEX		symbol	sock_bindtoindex	include/net/sock.h
 
+EFRM_SYSCALL_GET_ARGUMENTS_ASSUMES_6	symtype	syscall_get_arguments	include/asm-generic/syscall.h	void(struct task_struct *, struct pt_regs *, unsigned long *)
+
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

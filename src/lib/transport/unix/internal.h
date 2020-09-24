@@ -243,7 +243,6 @@ extern void citp_fdtable_assert_valid(void) CI_HF;
 #endif
 
 #define PTHREAD_NULL    ((pthread_t)(-1L))
-#define SIGONLOAD       (__SIGRTMIN+5)
 
 
 /**********************************************************************

@@ -45,7 +45,26 @@ ci_uint64 fdtable_seq_no = 1;
 static void dup2_complete(citp_fdinfo* prev_newfdi,
 			  citp_fdinfo_p prev_newfdip, int fdt_locked);
 
-static void sighandler_do_nothing(int sig) { }
+static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
+{
+  citp_lib_context_t lib_context;
+  int fd = info->si_code;
+  int rc;
+
+  /* It the signal comes from dup(), then pthread_kill() results in
+   * tgkill() syscall, which uses SI_TKILL code. */
+  if( fd < 0 ) {
+    ci_assert_equal(fd, SI_TKILL);
+    return;
+  }
+  Log_CALL(ci_log("%s: close(%d)", __func__, info->si_code));
+
+  citp_enter_lib(&lib_context);
+  Log_CALL(ci_log("%s(%d)", __FUNCTION__, fd));
+  rc = citp_ep_close(info->si_code, true);
+  citp_exit_lib(&lib_context, false);
+  Log_CALL_RESULT(rc);
+}
 
 /*! Block until fdtable entry is neither closing nor busy, and return the
 ** new (non-closing-or-busy) fdip. */
@@ -119,8 +138,9 @@ int citp_fdtable_ctor()
   /* Install SIGONLOAD handler */
   {
     struct sigaction sa;
-    memset(&sa, 0, sizeof(sa)); /* sa_flags and sa_mask = 0 */
-    sa.sa_handler = sighandler_do_nothing;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_flags = SA_SIGINFO;
+    sa.sa_sigaction = sighandler_sigonload;
     sigaction(SIGONLOAD, &sa, NULL);
   }
 

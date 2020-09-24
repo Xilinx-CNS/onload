@@ -200,6 +200,8 @@ void efab_signal_process_init(struct mm_signal_data *tramp_data)
      * sends SIGKILL to all other threads. */
     if( sig_kernel_only(sig) )
       continue;
+    if( sig == SIGONLOAD )
+      continue;
 
     /* If this is our handler, do nothing.  This is second init from the
      * same process.  It happens in fork hooks, when second netif is

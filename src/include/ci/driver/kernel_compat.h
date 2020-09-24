@@ -50,6 +50,7 @@
 #include <linux/version.h>
 #include <linux/net.h>
 #include <linux/uaccess.h>
+#include <asm/syscall.h>
 
 #include <driver/linux_resource/autocompat.h>
 
@@ -317,5 +318,20 @@ static inline int sock_ops_getsockopt(struct socket *sock,
   set_fs(oldfs);
   return rc;
 }
+
+/* linux>=5.1 assumes that syscall_get_arguments() is called for all
+ * 6 arguments
+ */
+#ifdef EFRM_SYSCALL_GET_ARGUMENTS_ASSUMES_6
+#define oo_syscall_get_arguments syscall_get_arguments
+#else
+static inline void oo_syscall_get_arguments(struct task_struct *task,
+                                            struct pt_regs *regs,
+                                            unsigned long *args)
+{
+  syscall_get_arguments(task, regs, 0, 6, args);
+}
+#endif
+
 
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

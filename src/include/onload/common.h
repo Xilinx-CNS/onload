@@ -59,6 +59,18 @@ enum oo_device_type {
 
 #define OO_EPOLL_DEV_NAME "onload_epoll"
 
+/* In theory we should define SIGONLOAD tp something like SIGRTMIN+10.
+ * However we need it to have the same value in UL and in the kernel, while
+ * SIGRTMIN is tweaked by libc.
+ * Normally we get:
+ * - kernel defines SIGRTMIN=32;
+ * - libc uses 1-3 signals and moves SIGRTMIN appropriately;
+ * - sensible application uses SIGRTMIN+1 - SIGRTMIN+5;
+ * - SIGRTMAX = 64.
+ *
+ * So SIGRTMAX-10 looks like a safe value.
+ */
+#define SIGONLOAD (SIGRTMAX-10)
 
 /*! This data structure contains the arguments required to create a new
  *  tcp helper resource and the results that the allocation operation
