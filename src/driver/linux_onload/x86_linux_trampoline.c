@@ -87,16 +87,7 @@
 
 #ifdef CONFIG_COMPAT
 #  include <asm/ia32_unistd.h>
-
-/* Kernels >=2.6.18 do not define __NR_ia32_close after some muppet decided to
- * do some "tidying up" (quite why an enumerated list with random holes in it
- * is more tidy than a complete list I know not).  Anyway, define it here
- * (there's no way it can change).
- */
-#  define __NR_ia32_close 6
-#  define __NR_ia32_exit_group 252
-#  define __NR_ia32_rt_sigaction 174
-#endif /*CONFIG_COMPAT*/
+#endif
 
 
 #  define cs(r) (r)->cs
