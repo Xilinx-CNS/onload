@@ -90,7 +90,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.0.1001"
+#define EFX_DRIVER_VERSION	"5.3.0.1002"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)

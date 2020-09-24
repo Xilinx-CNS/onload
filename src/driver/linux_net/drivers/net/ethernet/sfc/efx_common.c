@@ -557,6 +557,12 @@ static int efx_start_datapath(struct efx_nic *efx)
 	    efx->type->filter_update_rx_scatter)
 		efx->type->filter_update_rx_scatter(efx);
 
+	if (efx->type->filter_table_restore) {
+		down_write(&efx->filter_sem);
+		efx->type->filter_table_restore(efx);
+		up_write(&efx->filter_sem);
+	}
+
 	/* We must keep at least one descriptor in a TX ring empty.
 	 * We could avoid this when the queue size does not exactly
 	 * match the hardware ring size, but it's not that important.
