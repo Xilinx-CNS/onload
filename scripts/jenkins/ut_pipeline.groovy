@@ -145,14 +145,6 @@ void doSystemTests() {
   }
 }
 
-void updateLastKnownGoodBookmark(String branch, String revision) {
-  if( env.JOB_NAME.startsWith('personal/') ) {
-    echo("Not managing bookmarks from a personal job")
-  } else {
-    return utils.updateLastKnownGoodBookmark(branch, revision)
-  }
-}
-
 void doAutosmoke(repo, branch, bookmark) {
   if( env.JOB_NAME.startsWith('personal/') ) {
     echo("Not autosmoking from a personal job")
@@ -241,7 +233,7 @@ void doUnitTestsPipeline() {
     def publisher = new ArtifactoryPublisher(this)
     publisher.publishStashedPackages(product, built_package_locations, env.BRANCH_NAME, onload_version_short)
 
-    def bookmark = updateLastKnownGoodBookmark(env.BRANCH_NAME, long_revision)
+    def bookmark = utils.updateLastKnownGoodBookmark(env.BRANCH_NAME, long_revision)
 
     if( bookmark ) { // Only run autosmoke if the bookmark moved on
       doAutosmoke(scm_source, env.BRANCH_NAME, bookmark)
