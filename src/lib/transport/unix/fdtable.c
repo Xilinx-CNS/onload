@@ -1917,4 +1917,35 @@ citp_fdinfo* citp_reprobe_moved(citp_fdinfo* fdinfo, int from_fast_lookup,
   return new_fdinfo;
 }
 
+/* Provides a non-specialised Onload fd to any user who needs it
+ * just to call ioctls.  The users must not convert it to a stack fd,
+ * socket fd and alike.
+ */
+int oo_service_fd(void)
+{
+  if( citp.onload_fd < 0 ) {
+    int fd;
+    ci_assert_equal(citp.onload_fd, -1);
+    if( ef_onload_driver_open(&fd, OO_STACK_DEV, 1) )  return -1;
+    if( ci_cas32_succeed(&citp.onload_fd, -1, fd) ) {
+      /* In theory we'd better call __citp_fdtable_reserve(),
+       * but we can't lock fdtable, because it may be already locked.
+       * Let's hope that logging happens at start of day, so our fd is
+       * small enough.
+       * __citp_fdtable_extend() will take care about our fd as well.
+       */
+      if( citp_fdtable.table ) {
+        ci_assert_lt(fd, citp_fdtable.size);
+        citp_fdtable.table[citp.onload_fd].fdip =
+                                        fdi_to_fdip(&citp_the_reserved_fd);
+      }
+    }
+    else {
+      ci_tcp_helper_close_no_trampoline(fd);
+    }
+  }
+
+  return citp.onload_fd;
+}
+
 /*! \cidoxg_end */

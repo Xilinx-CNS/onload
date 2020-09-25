@@ -64,11 +64,9 @@ void citp_log_fn_ul(const char* msg)
 void citp_log_fn_drv(const char* msg)
 {
   if( citp.log_fd < 0 ) {
-    if( ef_onload_driver_open(&citp.log_fd, OO_STACK_DEV, 1) )  return;
-    if( citp_fdtable.table )
-      citp_fdtable.table[citp.log_fd].fdip=fdi_to_fdip(&citp_the_reserved_fd);
-    /* just to be sure: */
-    ci_sys_fcntl(citp.log_fd, F_SETFD, FD_CLOEXEC);
+    /* This fd is already marked as reserved in the fdtable, so there is no
+     * need to reserve it again. */
+    citp.log_fd = oo_service_fd();
   }
 
   my_syscall3(ioctl, citp.log_fd, OO_IOC_PRINTK, (long) msg);

@@ -56,6 +56,8 @@
 
 typedef struct {
   int			log_fd;
+  int                   onload_fd;
+
   ci_uint64             spin_cycles;
   ci_uint64             poll_nonblock_fast_cycles;
   ci_uint64             poll_fast_cycles;
@@ -781,7 +783,7 @@ ci_inline void __citp_fdtable_extend(unsigned fd) {
 
   if( max > citp_fdtable.inited_count ) {
     for( i = citp_fdtable.inited_count; i < max; ++i ) {
-      if( i != citp.log_fd )
+      if( i != citp.log_fd && i != citp.onload_fd )
 	citp_fdtable.table[i].fdip = fdip_unknown;
       else
 	citp_fdtable.table[i].fdip = fdi_to_fdip(&citp_the_reserved_fd);
@@ -1189,6 +1191,8 @@ ci_inline int citp_getpid(void)
   return citp.pid;
 }
 #endif
+
+extern int oo_service_fd(void);
 
 #endif  /* __CI_TRANSPORT_INTERNAL_H__ */
 /*! \cidoxg_end */

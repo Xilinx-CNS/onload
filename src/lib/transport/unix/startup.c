@@ -25,6 +25,7 @@
 
 citp_globals_t citp = {
   /* log_fd */ -1,
+  /* onload_fd */ -1,
 
   /* And the rest default to zero. */
 };
