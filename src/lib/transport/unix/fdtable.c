@@ -1567,11 +1567,6 @@ int citp_ep_dup3(unsigned fromfd, unsigned tofd, int flags)
   /* Must be checked by callers. */
   ci_assert(fromfd != tofd);
 
-  /* Hack: if [tofd] is the fd we're using for logging, we'd better choose
-  ** a different one!
-  */
-  if( tofd == citp.log_fd )  citp_log_change_fd();
-
   ci_assert(citp.init_level >= CITP_INIT_FDTABLE);
 
   max = CI_MAX(fromfd, tofd);

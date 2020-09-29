@@ -521,7 +521,6 @@ extern void uncache_active_netifs(void);
 extern void citp_log_fn_ul(const char* msg)  CI_HF;
 extern void citp_log_fn_drv(const char* msg)  CI_HF;
 
-extern void citp_log_change_fd(void)  CI_HF;
 extern void citp_setup_logging_prefix(void) CI_HF;
 
 extern int citp_packet_interceptor_startup(void) CI_HF;

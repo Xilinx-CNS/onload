@@ -74,28 +74,5 @@ void citp_log_fn_drv(const char* msg)
   my_syscall3(ioctl, citp.log_fd, OO_IOC_PRINTK, (long) msg);
 }
 
-
-void citp_log_change_fd(void)
-{
-  int newfd, prev;
-  /* We need to change logging fd, probably because someone wants to do a
-  ** dup2() onto it.
-  **
-  ** No need to set 'close-on-exec' (FD_CLOEXEC) again for the newfd as
-  ** it will be copied by the dup().
-  */
-  CITP_FDTABLE_LOCK();
-  prev = citp.log_fd;
-  newfd = ci_sys_fcntl(prev, F_DUPFD_CLOEXEC, CITP_OPTS.fd_base);
-  if( newfd >= 0 ) {
-    __citp_fdtable_reserve(newfd, 1);
-    citp.log_fd = newfd;
-  }
-  Log_S(log("%s: old=%d new=%d", __FUNCTION__, prev, newfd));
-  __citp_fdtable_reserve(prev, 0);
-  ci_sys_close(prev);
-  CITP_FDTABLE_UNLOCK();
-}
-
 /*! \cidoxg_end */
 
