@@ -1702,7 +1702,7 @@ ci_inline int citp_epoll_os_fds(citp_epoll_fdi *efdi,
   struct citp_epoll_fd* ep = efdi->epoll;
   int rc;
 
-  ci_assert(__oo_per_thread_get()->sig.inside_lib);
+  ci_assert(__oo_per_thread_get()->sig.c.inside_lib);
 
   if( (ep->shared->flag & OO_EPOLL1_FLAG_EVENT) == 0 )
     return 0;
@@ -2039,7 +2039,7 @@ no_events:
       goto unlock_release_exit_ret;
     }
 
-    if(CI_UNLIKELY( lib_context->thread->sig.aflags &
+    if(CI_UNLIKELY( lib_context->thread->sig.c.aflags &
                     OO_SIGNAL_FLAG_HAVE_PENDING )) {
       errno = EINTR;
       rc = -1;

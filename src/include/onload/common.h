@@ -28,7 +28,6 @@
 #include <ci/efrm/nic_set.h>
 #include <ci/net/ethernet.h>
 #include <onload/dshm.h>
-#include <onload/signals.h> /* for OO_SIGHANGLER_DFL_MAX */
 #include <cplane/cplane.h>
 #include <ci/net/ipvx.h>
 #include <onload/version.h>
@@ -364,6 +363,37 @@ typedef struct {
  * Platform dependent IOCTLS
  *
  *--------------------------------------------------------------------*/
+
+struct oo_signal_common_state {
+  ci_int32  inside_lib;    /*!< >0 if inside library, so deferral needed */
+
+  ci_uint32 aflags;
+#define OO_SIGNAL_FLAG_HAVE_PENDING   0x1  /* have deferred signals pending */
+#define OO_SIGNAL_FLAG_NEED_RESTART   0x2  /* SA_RESTART flag was set */
+#ifndef NDEBUG
+#define OO_SIGNAL_FLAG_FDTABLE_LOCKED 0x4  /* this thread owns fdtable lock */
+#endif
+};
+
+/* Signal handler state: filled in kernel by OO_IOC_SIGACTION, used in UL */
+struct oo_sigaction {
+  ci_user_ptr_t handler; /*!< UL function pointer */
+  ci_int32      flags;   /*!< SA_RESTART, SA_SIGINFO and SA_ONESHOT */
+  volatile ci_int32  type;    /*!< Type of signal handler */
+  /*! SIG_DFL handlers should start from 0 */
+#define OO_SIGHANGLER_TERM 0 /*!< SIG_DFL: teminate */
+#define OO_SIGHANGLER_STOP 1 /*!< SIG_DFL: stop */
+#define OO_SIGHANGLER_CORE 2 /*!< SIG_DFL: core */
+#define OO_SIGHANGLER_DFL_MAX 2 /*!< max value for SIG_DFL handlers */
+#define OO_SIGHANGLER_BUSY 3 /*!< Locked now: wait for another value */
+#define OO_SIGHANGLER_USER 4 /*!< User-specified handler */
+#define OO_SIGHANGLER_TYPE_MASK 0x7
+/*!< Non-intercepted signal: old interception data is available */
+#define OO_SIGHANGLER_IGN_BIT  0x8
+
+#define OO_SIGHANGLER_SEQ_MASK  0xffffff0
+#define OO_SIGHANGLER_SEQ_SHIFT 4
+};
 
 /* struct contains arguments for the trampoline register ioctl */
 typedef struct ci_tramp_reg_args {

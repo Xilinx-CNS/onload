@@ -83,22 +83,22 @@ int ci_sock_sleep(ci_netif* ni, citp_waitable* w, ci_bits why,
   else
     op.timeout_ms = *timeout_ms_p;
   CI_USER_PTR_SET(op.sig_state, si);
-  ci_assert(si->inside_lib != 0);
+  ci_assert(si->c.inside_lib != 0);
  again:
   /* Danger: "again" label must immediately precede the blocking call. */
 
   rc = oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_TCP_SOCK_SLEEP,
                       &op);
   ci_assert_nequal(rc, -EINVAL);
-  ci_assert(si->inside_lib == 0);
+  ci_assert(si->c.inside_lib == 0);
   if(CI_UNLIKELY( rc == -EBUSY )) {
-    if( si->aflags & OO_SIGNAL_FLAG_HAVE_PENDING )
+    if( si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING )
       citp_signal_run_pending(si);
-    ci_assert(~si->aflags & OO_SIGNAL_FLAG_HAVE_PENDING );
+    ci_assert(~si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING );
     op.lock_flags &= ~(CI_SLEEP_NETIF_LOCKED | CI_SLEEP_SOCK_LOCKED);
     goto again;
   }
-  si->inside_lib = 1;
+  si->c.inside_lib = 1;
   if( timeout_ms_p != NULL )
     *timeout_ms_p = op.timeout_ms;
 

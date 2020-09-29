@@ -401,7 +401,7 @@ int citp_ul_do_select(int nfds, fd_set* rds, fd_set* wrs, fd_set* exs,
           polled_kfds = 1;
           if( CITP_OPTS.ul_select_fast_usec )
             poll_fast_frc = s.now_frc;
-          if(CI_UNLIKELY( lib_context->thread->sig.aflags &
+          if(CI_UNLIKELY( lib_context->thread->sig.c.aflags &
                           OO_SIGNAL_FLAG_HAVE_PENDING )) {
             errno = EINTR;
             n = -1;
@@ -724,7 +724,7 @@ int citp_ul_do_poll(struct pollfd*__restrict__ fds, nfds_t nfds,
           polled_kfds = 1;
           if( CITP_OPTS.ul_poll_fast_usec )
             poll_fast_frc = ps.this_poll_frc;
-          if(CI_UNLIKELY( lib_context->thread->sig.aflags &
+          if(CI_UNLIKELY( lib_context->thread->sig.c.aflags &
                           OO_SIGNAL_FLAG_HAVE_PENDING )) {
             errno = EINTR;
             n = -1;

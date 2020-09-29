@@ -724,10 +724,10 @@ oo_spinloop_pause_check_signals(ci_netif* ni, ci_uint64 now_frc,
                                 int have_timeout,
                                 citp_waitable* w, citp_signal_info* si)
 {
-  ci_assert_gt(si->inside_lib, 0);
-  ci_assert(~si->aflags & OO_SIGNAL_FLAG_FDTABLE_LOCKED);
+  ci_assert_gt(si->c.inside_lib, 0);
+  ci_assert(~si->c.aflags & OO_SIGNAL_FLAG_FDTABLE_LOCKED);
 
-  if(CI_LIKELY( ! (si->aflags & OO_SIGNAL_FLAG_HAVE_PENDING) ))
+  if(CI_LIKELY( ! (si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING) ))
     return 0;
   else
     return oo_spinloop_run_pending_sigs(ni, w, si, have_timeout);

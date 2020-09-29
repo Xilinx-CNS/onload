@@ -14,25 +14,7 @@
 #ifndef __ONLOAD_SIGNALS_H__
 #define __ONLOAD_SIGNALS_H__
 
-/* Signal handler state: filled in kernel by OO_IOC_SIGACTION, used in UL */
-struct oo_sigaction {
-  ci_user_ptr_t handler; /*!< UL function pointer */
-  ci_int32      flags;   /*!< SA_RESTART, SA_SIGINFO and SA_ONESHOT */
-  volatile ci_int32  type;    /*!< Type of signal handler */
-  /*! SIG_DFL handlers should start from 0 */
-#define OO_SIGHANGLER_TERM 0 /*!< SIG_DFL: teminate */
-#define OO_SIGHANGLER_STOP 1 /*!< SIG_DFL: stop */
-#define OO_SIGHANGLER_CORE 2 /*!< SIG_DFL: core */
-#define OO_SIGHANGLER_DFL_MAX 2 /*!< max value for SIG_DFL handlers */
-#define OO_SIGHANGLER_BUSY 3 /*!< Locked now: wait for another value */
-#define OO_SIGHANGLER_USER 4 /*!< User-specified handler */
-#define OO_SIGHANGLER_TYPE_MASK 0x7
-/*!< Non-intercepted signal: old interception data is available */
-#define OO_SIGHANGLER_IGN_BIT  0x8
-
-#define OO_SIGHANGLER_SEQ_MASK  0xffffff0
-#define OO_SIGHANGLER_SEQ_SHIFT 4
-};
+#include <onload/common.h> /* for oo_signal_common_state */
 
 #ifndef __KERNEL__
 #include <ucontext.h>
@@ -72,14 +54,7 @@ extern sa_sigaction_t citp_signal_handlers[OO_SIGHANGLER_DFL_MAX+1];
 #endif
 
 struct oo_sig_thread_state {
-  ci_int32  inside_lib;    /*!< >0 if inside library, so deferral needed */
-
-  ci_uint32 aflags;
-#define OO_SIGNAL_FLAG_HAVE_PENDING   0x1  /* have deferred signals pending */
-#define OO_SIGNAL_FLAG_NEED_RESTART   0x2  /* SA_RESTART flag was set */
-#ifndef NDEBUG
-#define OO_SIGNAL_FLAG_FDTABLE_LOCKED 0x4  /* this thread owns fdtable lock */
-#endif
+  struct oo_signal_common_state c;
 
 #ifndef __KERNEL__
   /*! State of currently-pending signals; pure userland data. */

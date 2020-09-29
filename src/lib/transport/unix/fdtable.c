@@ -619,7 +619,7 @@ citp_fdtable_lookup(unsigned fd)
   citp_fdinfo* fdi;
 
   /* In some cases, we'll lock fdtable.  Assert that it is possible: */
-  ci_assert(oo_per_thread_get()->sig.inside_lib);
+  ci_assert(oo_per_thread_get()->sig.c.inside_lib);
 
   if( fd < citp_fdtable.inited_count ) {
 

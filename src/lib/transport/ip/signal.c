@@ -114,9 +114,9 @@ void citp_signal_run_pending(citp_signal_info *our_info)
 
   LOG_SIG(log("%s: start", __FUNCTION__));
   ci_wmb();
-  ci_assert(our_info->aflags & OO_SIGNAL_FLAG_HAVE_PENDING);
+  ci_assert(our_info->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING);
 
-  ci_atomic32_and(&our_info->aflags, ~OO_SIGNAL_FLAG_HAVE_PENDING);
+  ci_atomic32_and(&our_info->c.aflags, ~OO_SIGNAL_FLAG_HAVE_PENDING);
   for( i = 0; i < OO_SIGNAL_MAX_PENDING; i++ ) {
     siginfo_t saved_info;
     void *saved_context;
@@ -136,15 +136,15 @@ void citp_signal_run_pending(citp_signal_info *our_info)
     /* Segfault in Onload code (such as ci_assert) violate this assertion,
      * so we check for SIGSEGV here. */
     if( signum != SIGABRT && signum != SIGSEGV )
-      ci_assert_equal(our_info->inside_lib, 0);
+      ci_assert_equal(our_info->c.inside_lib, 0);
 
     if( citp_signal_run_app_handler(
                 signum,
                 saved_context == NULL ? NULL : &saved_info,
                 saved_context) )
-      ci_atomic32_or(&our_info->aflags, OO_SIGNAL_FLAG_NEED_RESTART);
+      ci_atomic32_or(&our_info->c.aflags, OO_SIGNAL_FLAG_NEED_RESTART);
     else
-      ci_atomic32_and(&our_info->aflags, ~OO_SIGNAL_FLAG_NEED_RESTART);
+      ci_atomic32_and(&our_info->c.aflags, ~OO_SIGNAL_FLAG_NEED_RESTART);
   }
   LOG_SIG(log("%s: end", __FUNCTION__));
   errno = old_errno;
@@ -165,7 +165,7 @@ ci_inline void citp_signal_set_pending(int signum, siginfo_t *info,
 {
   int i;
 
-  ci_assert(our_info->inside_lib);
+  ci_assert(our_info->c.inside_lib);
 
   for( i = 0; i < OO_SIGNAL_MAX_PENDING; i++ ) {
     if( our_info->signals[i].signum )
@@ -184,7 +184,7 @@ ci_inline void citp_signal_set_pending(int signum, siginfo_t *info,
     if( citp_signal_data[signum-1].flags & SA_ONESHOT )
       sigaction(signum, NULL, NULL);
 
-    ci_atomic32_or(&our_info->aflags, OO_SIGNAL_FLAG_HAVE_PENDING);
+    ci_atomic32_or(&our_info->c.aflags, OO_SIGNAL_FLAG_HAVE_PENDING);
     return;
   }
 
@@ -207,7 +207,7 @@ ci_inline void citp_signal_run_now(int signum, siginfo_t *info,
 
   /* Try to keep order: old signals first, and need_restart is from the
    * last one */
-  if (our_info && (our_info->aflags & OO_SIGNAL_FLAG_HAVE_PENDING))
+  if (our_info && (our_info->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING))
     citp_signal_run_pending(our_info);
 
   need_restart = citp_signal_run_app_handler(signum, info, context);
@@ -219,9 +219,9 @@ ci_inline void citp_signal_run_now(int signum, siginfo_t *info,
     LOG_SIG(log("%s: SIGNAL %d - set need restart flag to %d", __FUNCTION__,
                 signum, need_restart));
     if( need_restart )
-      ci_atomic32_or(&our_info->aflags, OO_SIGNAL_FLAG_NEED_RESTART);
+      ci_atomic32_or(&our_info->c.aflags, OO_SIGNAL_FLAG_NEED_RESTART);
     else
-      ci_atomic32_and(&our_info->aflags, ~OO_SIGNAL_FLAG_NEED_RESTART);
+      ci_atomic32_and(&our_info->c.aflags, ~OO_SIGNAL_FLAG_NEED_RESTART);
   }
 }
 
@@ -243,7 +243,7 @@ void citp_signal_intercept(int signum, siginfo_t *info, void *context)
    * intercept handler has been installed, but before that thread uses any
    * of the interposing library functions.)
    */
-  if (our_info && our_info->inside_lib &&
+  if (our_info && our_info->c.inside_lib &&
       (CITP_OPTS.signals_no_postpone & (1 << (signum-1))) == 0)
     citp_signal_set_pending(signum, info, context, our_info);
   else
@@ -349,15 +349,15 @@ int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
     return -EINTR;
   if( w )
     ci_sock_unlock(ni, w);
-  inside_lib = si->inside_lib;
-  si->inside_lib = 0;
+  inside_lib = si->c.inside_lib;
+  si->c.inside_lib = 0;
   ci_compiler_barrier();
   citp_signal_run_pending(si);
-  si->inside_lib = inside_lib;
+  si->c.inside_lib = inside_lib;
   ci_compiler_barrier();
   if( w )
     ci_sock_lock(ni, w);
-  if( ~si->aflags & OO_SIGNAL_FLAG_NEED_RESTART )
+  if( ~si->c.aflags & OO_SIGNAL_FLAG_NEED_RESTART )
     /* handler sets need_restart, exit if no restart is necessary */
     return -EINTR;
   return 0;

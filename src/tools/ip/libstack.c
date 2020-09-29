@@ -97,16 +97,16 @@ const char*     cfg_filter = NULL;
 
 ci_inline void libstack_defer_signals(citp_signal_info* si)
 {
-  si->inside_lib = 1;
+  si->c.inside_lib = 1;
   ci_compiler_barrier();
 }
 
 
 ci_inline void libstack_process_signals(citp_signal_info* si)
 {
-  si->inside_lib = 0;
+  si->c.inside_lib = 0;
   ci_compiler_barrier();
-  if( si->aflags & OO_SIGNAL_FLAG_HAVE_PENDING )
+  if( si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING )
     citp_signal_run_pending(si);
 }
 

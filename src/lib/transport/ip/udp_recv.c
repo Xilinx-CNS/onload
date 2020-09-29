@@ -712,27 +712,27 @@ ci_udp_recvmsg_block(ci_udp_iomsg_args* a, ci_netif* ni, ci_udp_state* us,
     si = citp_signal_get_specific_inited();
   continue_to_block:
 #if !CI_CFG_CITP_INSIDE_LIB_IS_FLAG
-    inside_lib = si->inside_lib;
+    inside_lib = si->c.inside_lib;
     ci_assert_gt(inside_lib, 0);
 #endif
-    si->inside_lib = 0;
+    si->c.inside_lib = 0;
     ci_compiler_barrier();
-    if(CI_UNLIKELY( si->aflags & OO_SIGNAL_FLAG_HAVE_PENDING ))
+    if(CI_UNLIKELY( si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING ))
       citp_signal_run_pending(si);
 
     rc = ci_sys_poll(&pfd, 1, timeout);
 
 #if CI_CFG_CITP_INSIDE_LIB_IS_FLAG
-    si->inside_lib = 1;
+    si->c.inside_lib = 1;
 #else
-    si->inside_lib = inside_lib;
+    si->c.inside_lib = inside_lib;
 #endif
 
     if( rc > 0 )
       return 0;
     else if( rc == 0 )
       rc = -EAGAIN;
-    else if( errno == EINTR && (si->aflags & OO_SIGNAL_FLAG_NEED_RESTART) &&
+    else if( errno == EINTR && (si->c.aflags & OO_SIGNAL_FLAG_NEED_RESTART) &&
              timeout == -1 ) {
       /* Blocking recv() should only be restarted if there is no timeout. */
       goto continue_to_block;

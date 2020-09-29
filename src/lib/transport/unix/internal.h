@@ -390,7 +390,7 @@ ci_inline void citp_fdinfo_release_ref(citp_fdinfo* fdinfo,
 
   /* We might call ref_count_zero, which locks fdtable.  Assert that
    * it is possible: */
-  ci_assert(oo_per_thread_get()->sig.inside_lib);
+  ci_assert(oo_per_thread_get()->sig.c.inside_lib);
 
   if( oo_atomic_quick_dec_and_test(&fdinfo->ref_count) )
     __citp_fdinfo_ref_count_zero(fdinfo, fdt_locked);
@@ -684,29 +684,29 @@ extern citp_fdinfo_p citp_fdtable_busy_wait(unsigned fd, int fdt_locked) CI_HF;
 ci_inline void CITP_FDTABLE_LOCK(void)
 {
   citp_signal_info* si = &oo_per_thread_get()->sig;
-  ci_assert(si->inside_lib);
-  ci_atomic32_or(&si->aflags, OO_SIGNAL_FLAG_FDTABLE_LOCKED);
+  ci_assert(si->c.inside_lib);
+  ci_atomic32_or(&si->c.aflags, OO_SIGNAL_FLAG_FDTABLE_LOCKED);
   __CITP_LOCK(&citp_ul_lock);
 }
 ci_inline void CITP_FDTABLE_LOCK_RD(void)
 {
   citp_signal_info* si = &oo_per_thread_get()->sig;
-  ci_assert(si->inside_lib);
-  ci_atomic32_or(&si->aflags, OO_SIGNAL_FLAG_FDTABLE_LOCKED);
+  ci_assert(si->c.inside_lib);
+  ci_atomic32_or(&si->c.aflags, OO_SIGNAL_FLAG_FDTABLE_LOCKED);
   __CITP_LOCK_RD(&citp_ul_lock);
 }
 ci_inline void CITP_FDTABLE_UNLOCK(void)
 {
   citp_signal_info* si = &oo_per_thread_get()->sig;
-  ci_assert(si->inside_lib);
-  ci_atomic32_and(&si->aflags, ~OO_SIGNAL_FLAG_FDTABLE_LOCKED);
+  ci_assert(si->c.inside_lib);
+  ci_atomic32_and(&si->c.aflags, ~OO_SIGNAL_FLAG_FDTABLE_LOCKED);
   __CITP_UNLOCK(&citp_ul_lock);
 }
 ci_inline void CITP_FDTABLE_UNLOCK_RD(void)
 {
   citp_signal_info* si = &oo_per_thread_get()->sig;
-  ci_assert(si->inside_lib);
-  ci_atomic32_and(&si->aflags, ~OO_SIGNAL_FLAG_FDTABLE_LOCKED);
+  ci_assert(si->c.inside_lib);
+  ci_atomic32_and(&si->c.aflags, ~OO_SIGNAL_FLAG_FDTABLE_LOCKED);
   __CITP_UNLOCK_RD(&citp_ul_lock);
 }
 
@@ -716,8 +716,8 @@ _CITP_FDTABLE_ASSERT_LOCKED(int fdt_locked, char* file, int line)
   citp_signal_info* si = &oo_per_thread_get()->sig;
   if( ! fdt_locked )
     return;
-  _ci_assert(si->aflags & OO_SIGNAL_FLAG_FDTABLE_LOCKED, file, line);
-  _ci_assert(si->inside_lib, file, line);
+  _ci_assert(si->c.aflags & OO_SIGNAL_FLAG_FDTABLE_LOCKED, file, line);
+  _ci_assert(si->c.inside_lib, file, line);
 }
 #define CITP_FDTABLE_ASSERT_LOCKED(fdt_locked)			\
   _CITP_FDTABLE_ASSERT_LOCKED(fdt_locked, __FILE__, __LINE__)
@@ -839,11 +839,11 @@ ci_inline int __citp_checked_enter_lib(citp_lib_context_t *lib_context
 
   lib_context->saved_errno = errno;
   lib_context->thread = __oo_per_thread_get();
-  was_inside_lib = lib_context->thread->sig.inside_lib;
+  was_inside_lib = lib_context->thread->sig.c.inside_lib;
   Log_LIB(log("  citp_checked_enter_lib(%p) [was_in=%d] %s (%d)",
               lib_context->thread, was_inside_lib, fn, line));
-  lib_context->thread->sig.inside_lib = 1;
-  ci_assert(~lib_context->thread->sig.aflags &
+  lib_context->thread->sig.c.inside_lib = 1;
+  ci_assert(~lib_context->thread->sig.c.aflags &
             OO_SIGNAL_FLAG_FDTABLE_LOCKED);
   return !was_inside_lib;
 }
@@ -856,10 +856,10 @@ ci_inline void __citp_enter_lib(citp_lib_context_t *lib_context
   lib_context->saved_errno = errno;
   lib_context->thread = __oo_per_thread_get();
   Log_LIB(log("  citp_enter_lib(%p) %s (%d)", lib_context->thread, fn, line));
-  ci_assert_equal(lib_context->thread->sig.inside_lib, 0);
-  ci_assert(~lib_context->thread->sig.aflags &
+  ci_assert_equal(lib_context->thread->sig.c.inside_lib, 0);
+  ci_assert(~lib_context->thread->sig.c.aflags &
             OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  lib_context->thread->sig.inside_lib = 1;
+  lib_context->thread->sig.c.inside_lib = 1;
 }
 
 
@@ -867,10 +867,10 @@ ci_inline void __citp_reenter_lib(citp_lib_context_t *lib_context
                                   CI_DEBUG_ARG(const char *fn)
                                   CI_DEBUG_ARG(int line) ) {
   Log_LIB(log("  citp_reenter_lib(%p) %s (%d)", lib_context->thread, fn, line));
-  ci_assert_equal(lib_context->thread->sig.inside_lib, 0);
-  ci_assert(~lib_context->thread->sig.aflags &
+  ci_assert_equal(lib_context->thread->sig.c.inside_lib, 0);
+  ci_assert(~lib_context->thread->sig.c.aflags &
             OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  lib_context->thread->sig.inside_lib = 1;
+  lib_context->thread->sig.c.inside_lib = 1;
 }
 
 
@@ -878,12 +878,12 @@ ci_inline void __citp_exit_lib(citp_lib_context_t *lib_context, int do_errno
                                CI_DEBUG_ARG(const char *fn)
                                CI_DEBUG_ARG(int line) ) {
   Log_LIB(log("  citp_exit_lib(%p) %s (%d)", lib_context->thread, fn, line));
-  ci_assert_equal(lib_context->thread->sig.inside_lib, 1);
-  ci_assert(~lib_context->thread->sig.aflags &
+  ci_assert_equal(lib_context->thread->sig.c.inside_lib, 1);
+  ci_assert(~lib_context->thread->sig.c.aflags &
             OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  lib_context->thread->sig.inside_lib = 0;
+  lib_context->thread->sig.c.inside_lib = 0;
   ci_compiler_barrier();
-  if(CI_UNLIKELY( lib_context->thread->sig.aflags &
+  if(CI_UNLIKELY( lib_context->thread->sig.c.aflags &
                   OO_SIGNAL_FLAG_HAVE_PENDING ))
     citp_signal_run_pending(&lib_context->thread->sig);
   if( do_errno )
@@ -899,12 +899,12 @@ ci_inline int __citp_checked_enter_lib(citp_lib_context_t *lib_context
   lib_context->saved_errno = errno;
   lib_context->thread = __oo_per_thread_get();
   Log_LIB(log("  citp_checked_enter_lib(%p) [was_in=%d] %s (%d)",
-              lib_context->thread, lib_context->thread->sig.inside_lib > 0,
+              lib_context->thread, lib_context->thread->sig.c.inside_lib > 0,
               fn, line));
-  ci_assert(~lib_context->thread->sig.aflags &
+  ci_assert(~lib_context->thread->sig.c.aflags &
             OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  ++lib_context->thread->sig.inside_lib;    
-  return (lib_context->thread->sig.inside_lib==1);
+  ++lib_context->thread->sig.c.inside_lib;    
+  return (lib_context->thread->sig.c.inside_lib==1);
 }
 
 
@@ -915,12 +915,12 @@ ci_inline void __citp_enter_lib(citp_lib_context_t *lib_context
   lib_context->saved_errno = errno;
   lib_context->thread = __oo_per_thread_get();
   Log_LIB(log("  citp_enter_lib(%p) inside_lib=%d %s (%d)",
-              lib_context->thread, lib_context->thread->sig.inside_lib,
+              lib_context->thread, lib_context->thread->sig.c.inside_lib,
               fn, line));
-  ci_assert_ge(lib_context->thread->sig.inside_lib, 0);
-  ci_assert(~lib_context->thread->sig.aflags &
+  ci_assert_ge(lib_context->thread->sig.c.inside_lib, 0);
+  ci_assert(~lib_context->thread->sig.c.aflags &
             OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  ++lib_context->thread->sig.inside_lib;
+  ++lib_context->thread->sig.c.inside_lib;
 }
 
 
@@ -929,12 +929,12 @@ ci_inline void __citp_reenter_lib(citp_lib_context_t *lib_context
                                   CI_DEBUG_ARG(int line) ) 
 {
   Log_LIB(log("  citp_reenter_lib(%p) inside_lib=%d %s (%d)",
-              lib_context->thread, lib_context->thread->sig.inside_lib,
+              lib_context->thread, lib_context->thread->sig.c.inside_lib,
               fn, line));
-  ci_assert_ge(lib_context->thread->sig.inside_lib, 0);
-  ci_assert(~lib_context->thread->sig.aflags &
+  ci_assert_ge(lib_context->thread->sig.c.inside_lib, 0);
+  ci_assert(~lib_context->thread->sig.c.aflags &
             OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  ++lib_context->thread->sig.inside_lib;
+  ++lib_context->thread->sig.c.inside_lib;
 }
 
 
@@ -943,15 +943,15 @@ ci_inline void __citp_exit_lib(citp_lib_context_t *lib_context, int do_errno
                                CI_DEBUG_ARG(int line) ) 
 {
   Log_LIB(log("  citp_exit_lib(%p) inside_lib=%d %s (%d)",
-              lib_context->thread, lib_context->thread->sig.inside_lib,
+              lib_context->thread, lib_context->thread->sig.c.inside_lib,
               fn, line));
-  ci_assert_ge(lib_context->thread->sig.inside_lib, 1);
-  ci_assert(~lib_context->thread->sig.aflags &
+  ci_assert_ge(lib_context->thread->sig.c.inside_lib, 1);
+  ci_assert(~lib_context->thread->sig.c.aflags &
             OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  --lib_context->thread->sig.inside_lib;
+  --lib_context->thread->sig.c.inside_lib;
   ci_compiler_barrier();
-  if(CI_UNLIKELY( lib_context->thread->sig.inside_lib == 0 && 
-                  (lib_context->thread->sig.aflags &
+  if(CI_UNLIKELY( lib_context->thread->sig.c.inside_lib == 0 && 
+                  (lib_context->thread->sig.c.aflags &
                    OO_SIGNAL_FLAG_HAVE_PENDING) ))
     citp_signal_run_pending(&lib_context->thread->sig);
   if( do_errno )
@@ -1100,7 +1100,7 @@ citp_ul_pwait_spin_pre(citp_lib_context_t *lib_context,
     return 0;
 
   sigprocmask(SIG_SETMASK, sigmask, NULL);
-  if(CI_UNLIKELY( lib_context->thread->sig.aflags &
+  if(CI_UNLIKELY( lib_context->thread->sig.c.aflags &
                   OO_SIGNAL_FLAG_HAVE_PENDING )) {
     sigprocmask(SIG_SETMASK, sigsaved, NULL);
     Log_POLL(log("%s: interrupted", __func__));
@@ -1115,7 +1115,7 @@ citp_ul_pwait_spin_done(citp_lib_context_t *lib_context,
 {
   Log_POLL(log("%s(%p,%d)", __func__, sigsaved, *p_rc));
   sigprocmask(SIG_BLOCK, sigsaved, NULL);
-  if(CI_UNLIKELY( lib_context->thread->sig.aflags &
+  if(CI_UNLIKELY( lib_context->thread->sig.c.aflags &
                   OO_SIGNAL_FLAG_HAVE_PENDING )) {
     Log_POLL(log("%s: interrupted", __func__));
     errno = EINTR;

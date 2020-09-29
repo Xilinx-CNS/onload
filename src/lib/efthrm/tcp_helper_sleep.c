@@ -66,7 +66,7 @@ efab_tcp_helper_sock_sleep(tcp_helper_resource_t* trs,
 {
   tcp_helper_endpoint_t* ep;
   ci_netif* ni = &trs->netif;
-  struct oo_sig_thread_state* sts;
+  struct oo_signal_common_state* sts;
   citp_waitable* w;
   ci_waitable_timeout_t  timeout;
   ci_waiter_t waiter;

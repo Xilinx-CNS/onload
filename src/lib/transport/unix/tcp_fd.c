@@ -981,7 +981,7 @@ check_ul_accept_q:
       }
       else if( ! ni->state->is_spinner )
         ni->state->is_spinner = 1;
-      if(CI_UNLIKELY( lib_context->thread->sig.aflags &
+      if(CI_UNLIKELY( lib_context->thread->sig.c.aflags &
                       OO_SIGNAL_FLAG_HAVE_PENDING )) {
         if( listener->s.so.rcvtimeo_msec ) {
           ni->state->is_spinner = 0;
@@ -993,7 +993,7 @@ check_ul_accept_q:
         citp_exit_lib(lib_context, FALSE);
         citp_reenter_lib(lib_context);
 
-        if( ~lib_context->thread->sig.aflags & OO_SIGNAL_FLAG_NEED_RESTART ) {
+        if( ~lib_context->thread->sig.c.aflags & OO_SIGNAL_FLAG_NEED_RESTART ) {
           ni->state->is_spinner = 0;
           errno = EINTR;
           return -1;
@@ -1043,7 +1043,7 @@ check_ul_accept_q:
       rc = -1;
     }
     else if( errno == EINTR &&
-             (lib_context->thread->sig.aflags & OO_SIGNAL_FLAG_NEED_RESTART) &&
+             (lib_context->thread->sig.c.aflags & OO_SIGNAL_FLAG_NEED_RESTART) &&
              timeout == -1 ) {
       /* Before restarting because of SA_RESTART, let's check the fd was
        * not closed.  One refcount is ours - so we exit if it is the last
