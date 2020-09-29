@@ -574,7 +574,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
     rc += ndata;
     oo_offbuf_advance(&pkt->buf, n);
 
-    total += n;
+    total += ndata;
     ci_assert_le(total, max_bytes);
 
     if(CI_LIKELY( ! (rinf->a->flags & (MSG_PEEK | ONLOAD_MSG_ONEPKT)) )) {
