@@ -639,7 +639,7 @@ int main(int argc, char* argv[])
   }
 
   /* Initialization of necessary stacks only. */
-  if( libstack_init(NULL) != 0 ) {
+  if( libstack_init() != 0 ) {
     return -1;
   }
 

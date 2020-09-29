@@ -49,9 +49,7 @@ static inline void efab_syscall_exit(void)
   atomic_dec(&efab_syscall_used);
 }
 
-extern int efab_linux_trampoline_ctor(int no_sct);
-extern int efab_linux_trampoline_dtor(int no_sct);
-extern int efab_linux_trampoline_register(ci_private_t *priv, void *arg);
+extern int efab_linux_trampoline_ctor(void);
 
 #ifdef EFRM_SYSCALL_PTREGS
 extern asmlinkage int efab_linux_trampoline_close(struct pt_regs *regs);
@@ -89,61 +87,6 @@ efab_linux_trampoline_handler_close32(unsigned long bx, unsigned long cx,
 #endif
 #endif
 
-extern int safe_signals_and_exit;
-extern void efab_linux_termination_ctor(void);
-
-#ifdef EFRM_SYSCALL_PTREGS
-extern asmlinkage long
-efab_linux_trampoline_sigaction(const struct pt_regs *regs);
-#else
-extern asmlinkage long
-efab_linux_trampoline_sigaction(int sig, const struct sigaction *act,
-                                struct sigaction *oact, size_t sigsetsize);
-#endif
-
-#ifdef CONFIG_COMPAT
-/* ARM64 TODO */
-#if ! defined (__PPC__)
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0)
-# include <linux/compat.h>
-# define sigaction32 compat_sigaction
-#else
-# include <asm/ia32.h>
-#endif
-#else
-#include <linux/compat.h>
-/* sigaction32 is not public on PPC, extracted from arch/powerpc/kernel/ppc32.h */
-/* It shall not be a problem, since it's kernel-to-userspace interface which 
- * unlikely to change
- */
-struct sigaction32 {
-       compat_uptr_t  sa_handler;       /* Really a pointer, but need to deal with 32 bits */
-       unsigned int sa_flags;
-       compat_uptr_t sa_restorer;       /* Another 32 bit pointer */
-       compat_sigset_t sa_mask;         /* A 32 bit mask */
-};
-#endif
-
-#ifdef EFRM_SYSCALL_PTREGS
-extern asmlinkage int
-efab_linux_trampoline_sigaction32(const struct pt_regs *regs);
-#else
-extern asmlinkage int
-efab_linux_trampoline_sigaction32(int sig, const struct sigaction32 *act32,
-                                  struct sigaction32 *oact32,
-                                  unsigned int sigsetsize);
-#endif
-#endif
-
-
-struct mm_hash;
-struct mm_signal_data;
-extern int efab_signal_mm_init(const ci_tramp_reg_args_t *args,
-                               struct mm_hash *p);
-extern void efab_signal_process_init(struct mm_signal_data *tramp_data);
-extern void efab_signal_process_fini(struct mm_signal_data *tramp_data);
-extern int efab_signal_die(ci_private_t *priv_unused, void *arg);
-extern void efab_signal_put_tramp_data(struct mm_signal_data *tramp_data);
 
 #endif
 /*! \cidoxg_end */

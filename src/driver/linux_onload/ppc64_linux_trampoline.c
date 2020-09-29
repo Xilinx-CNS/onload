@@ -50,7 +50,6 @@ typedef struct state_struct
 {
     syscall_entry_t *replace_close;
     syscall_entry_t *replace_exit_group;
-    syscall_entry_t *replace_rt_sigaction;
     
     /* We don't actually replace these syscalls, but we do thunk them so
      * that we can call them ourselves.
@@ -399,10 +398,6 @@ int efab_linux_trampoline_ctor(int no_sct)
                 linux_trampoline_ppc64_intercept_syscall(__NR_exit_group,
                                                          efab_linux_trampoline_exit_group,
                                                          efab_linux_trampoline_exit_group);
-            state.replace_rt_sigaction =
-                linux_trampoline_ppc64_intercept_syscall(__NR_rt_sigaction,
-                                                         efab_linux_trampoline_sigaction,
-                                                         efab_linux_trampoline_sigaction32);
         }
 
         state.no_replace_epoll_create1 = 

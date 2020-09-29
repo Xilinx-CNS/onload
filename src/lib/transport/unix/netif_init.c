@@ -150,8 +150,6 @@ unlock_fork:
 /* Handles user-level netif internals post fork() in the child */
 static void citp_netif_child_fork_hook(void)
 {
-  ci_netif* ni;
-
   /* If we have not inited fork hook, how can we get here in the first
    * place? */
   if( citp.init_level < CITP_INIT_FORK_HOOKS) {
@@ -192,14 +190,6 @@ static void citp_netif_child_fork_hook(void)
 
   citp_setup_logging_prefix();
   Log_CALL(ci_log("%s()", __FUNCTION__));
-
-  ni = __citp_get_any_netif();
-
-  if( ni ) {
-    /* Register the trampoline.  FIXME: What should we do if this
-     * fails? */
-    CI_DEBUG_TRY(citp_init_trampoline(ci_netif_get_driver_handle(ni)));
-  }
 
   oo_stackname_update(&stackname_config_across_fork);
 
@@ -288,9 +278,6 @@ void  citp_netif_ctor_hook(ci_netif* ni, int realloc)
   if (!realloc)
     /* Protect the netif's FD table entry */
     __citp_fdtable_reserve(ci_netif_get_driver_handle(ni), 1);
-
-  /* Make sure the trampoline is registered. */
-  CI_DEBUG_TRY(citp_init_trampoline(ci_netif_get_driver_handle(ni)));
 
   ci_netif_check_process_config(ni);
 }

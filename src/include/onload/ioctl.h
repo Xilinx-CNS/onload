@@ -57,13 +57,6 @@ enum {
   OO_OP_KILL_SELF_SIGPIPE,      /*< Send a signal to self */
 #define OO_IOC_KILL_SELF_SIGPIPE    OO_IOC_NONE(KILL_SELF_SIGPIPE)
 
-  OO_OP_IOCTL_TRAMP_REG,       /*< Register tramp handler;
-                              ci_tramp_reg_args_t in */
-#define OO_IOC_IOCTL_TRAMP_REG  OO_IOC_W(IOCTL_TRAMP_REG, ci_tramp_reg_args_t)
-
-  OO_OP_DIE_SIGNAL,           /*< Die because unhandled signal is received */
-#define OO_IOC_DIE_SIGNAL       OO_IOC_W(DIE_SIGNAL, ci_int32)
-
   /* TCP helper operations */
   OO_OP_TCP_SOCK_SLEEP,
 #define OO_IOC_TCP_SOCK_SLEEP   OO_IOC_RW(TCP_SOCK_SLEEP, oo_tcp_sock_sleep_t)

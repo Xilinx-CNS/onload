@@ -18,29 +18,11 @@
 
 #include <ci/tools.h>
 #include <onload/tcp_helper.h>
-#include <onload/signals.h>
-
-/* Trampolining requires us to maintain per-process state for each app using us
- * -- the address of the trampoline handler that we need to return to.  We do
- * this by maintaining a hash-table for MMs that are mapped onto our resources
- * (if a process is using our stack, if must have mapped the mm)
- */
-struct mm_signal_data {
-  __sighandler_t    handler_postpone;
-  void             *sarestorer;
-  __sighandler_t    handlers[OO_SIGHANGLER_DFL_MAX+1];
-  ci_uint32/*bool*/ sa_onstack_intercept;
-  ci_user_ptr_t     user_data;
-  void             *kernel_sighand; /* used as opaque pointer only */
-  struct oo_sigaction signal_data[_NSIG];
-};
 
 
 struct mm_hash {
   ci_dllink         link;
   struct mm_struct *mm;
-
-  struct mm_signal_data signal_data;
 
   unsigned          ref;
   unsigned          magic;

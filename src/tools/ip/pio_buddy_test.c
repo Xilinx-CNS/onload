@@ -381,7 +381,7 @@ int main(int argc, char* argv[])
   if( argc != 1 )
     usage(NULL);
 
-  CI_TRY(libstack_init(NULL));
+  CI_TRY(libstack_init());
   atexit(atexit_fn);
 
   if( sscanf(argv[0], "%u", &stack_id) == 1 ) {

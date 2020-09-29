@@ -15,8 +15,6 @@
 #define __ONLOAD_SIGNALS_H__
 
 #include <onload/common.h> /* for oo_signal_common_state */
-
-#ifndef __KERNEL__
 #include <ucontext.h>
 #include <signal.h>
 
@@ -43,23 +41,12 @@ typedef struct citp_signal_state_s {
   siginfo_t         saved_info;     /*!< Saved parameter for sa_sigaction */
 } citp_signal_state_t;
 
-typedef void (*sa_sigaction_t)(int, siginfo_t *, void *);
-
-/* signal data for trampoline */
-extern struct oo_sigaction citp_signal_data[NSIG];
-void citp_signal_intercept(int signum, siginfo_t *info, void *context);
-extern void *citp_signal_sarestorer_get(void);
-extern sa_sigaction_t citp_signal_handlers[OO_SIGHANGLER_DFL_MAX+1];
-
-#endif
 
 struct oo_sig_thread_state {
   struct oo_signal_common_state c;
 
-#ifndef __KERNEL__
   /*! State of currently-pending signals; pure userland data. */
   citp_signal_state_t signals[OO_SIGNAL_MAX_PENDING];
-#endif
 };
 
 #endif  /* __ONLOAD_SIGNALS_H__ */

@@ -70,14 +70,8 @@ MODULE_PARM_DESC(inject_kernel_gid,
  */
 int ci_driver_debug_bits;
 
-static int no_ct = 0;
-
 CI_DEBUG(int no_shared_state_panic;)
 CI_DEBUG(EXPORT_SYMBOL(no_shared_state_panic);) /* used in iSCSI (?) */
-
-module_param(no_ct, int, S_IRUGO);
-MODULE_PARM_DESC(no_ct,
-                 "Turn off trampoline -- do not intercept syscall table");
 
 int oo_debug_bits = __OO_DEBUGERR__;	  /* run-time debug options */
 module_param(oo_debug_bits, int, S_IRUGO | S_IWUSR);
@@ -208,14 +202,6 @@ MODULE_PARM_DESC(phys_mode_gid,
                  "-2 (default) means \"physical buffer mode forbidden\"; "
                  "-1 means \"any user may use physical buffer mode\".  "
                  "See EF_PACKET_BUFFER_MODE environment variable.");
-
-int safe_signals_and_exit = 1;
-module_param(safe_signals_and_exit, int, S_IRUGO);
-MODULE_PARM_DESC(safe_signals_and_exit,
-                 "Intercept exit() syscall and guarantee that all "
-                 "shared stacks are properly closed.\n"
-                 "Intercept rt_sigaction() syscall and postpone signal "
-                 "handlers to avoid Onload stack deadlock.");
 
 int scalable_filter_gid = -2;
 #ifdef EFRM_DO_USER_NS
@@ -573,7 +559,7 @@ static int __init onload_module_init(void)
     goto fail_proc;
   }
 
-  rc = efab_linux_trampoline_ctor(no_ct);
+  rc = efab_linux_trampoline_ctor();
   if( rc < 0 ) {
     ci_log("%s: ERROR: efab_linux_trampoline_ctor failed (%d)",
            __FUNCTION__, rc);
@@ -619,7 +605,6 @@ static int __init onload_module_init(void)
  failed_chrdev:
   onloadfs_fini();
  failed_onloadfs:
-  efab_linux_trampoline_dtor(no_ct);
 
   /* User API was available for some time: make sure there are no Onload
    * stacks. */
@@ -648,11 +633,6 @@ static void onload_module_exit(void)
   oo_epoll_chrdev_dtor();
   destroy_chrdev_and_mknod(oo_chrdev);
   onloadfs_fini();
-
-  /* There are no User API now - so we do not need trampoline any more.
-   * Destroy trampoline early to alleviate the race condition with RT
-   * kernels - see efab_linux_trampoline_dtor() for details. */
-  efab_linux_trampoline_dtor(no_ct);
 
   /* Destroy all the stacks.
    * It should be done early, as soon as User API is not available. */

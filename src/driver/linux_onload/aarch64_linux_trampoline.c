@@ -58,9 +58,6 @@
   ((saved_##_name)(_arg1, _arg2, _arg3, _arg4, _arg5, _arg6))
 #endif
 
-/* ARM64 TODO these are stub implementations only */
-atomic_t efab_syscall_used;
-
 /*
  * This is somewhat dubious. On the one hand, the syscall
  * number is available to the syscall routine in x8 register,
@@ -153,57 +150,11 @@ int efab_linux_sys_sigaction32(int signum,
 #endif
 
 
-struct patch_item {
-    unsigned syscall;
-    void *addr;
-};
-
-static int patch_syscall_table(void **table,
-                               const struct patch_item *patches)
-{
-
-  for (; patches->addr != NULL; patches++) {
-    int rc = probe_kernel_write(table + patches->syscall, &patches->addr,
-                                sizeof(patches->addr));
-    if (rc != 0) {
-      unsigned offset = ((uintptr_t)(table + patches->syscall) &
-                         ~PAGE_MASK) / sizeof(*table);
-      struct page *page = phys_to_page(__pa_symbol(table +
-                                                   patches->syscall));
-      void **waddr;
-      BUG_ON(!page);
-
-      waddr = vmap(&page, 1, VM_MAP, PAGE_KERNEL);
-      if (waddr == NULL)
-      {
-        ci_log("cannot map sys_call_table r/w");
-        return -EFAULT;
-      }
-
-      if (waddr[offset] != table[patches->syscall])
-      {
-        ci_log("mapped table mismatch: %p != %p",
-               waddr[offset], table[patches->syscall]);
-        vunmap(waddr);
-        return -EFAULT;
-      }
-
-      waddr[offset] = patches->addr;
-
-      vunmap(waddr);
-    }
-  }
-  return 0;
-}
-
-int efab_linux_trampoline_ctor(int no_sct)
+int efab_linux_trampoline_ctor()
 {
   void *check_sys_close;
 
   ci_assert(efrm_syscall_table);
-
-  atomic_set(&efab_syscall_used, 0);
-  efab_linux_termination_ctor();
 
   saved_sys_close = efrm_syscall_table[__NR_close];
 #if defined(CONFIG_ARCH_HAS_SYSCALL_WRAPPER)
@@ -224,17 +175,6 @@ int efab_linux_trampoline_ctor(int no_sct)
   saved_sys_epoll_ctl = efrm_syscall_table[__NR_epoll_ctl];
   saved_sys_epoll_pwait = efrm_syscall_table[__NR_epoll_pwait];
 
-  if (!no_sct) {
-    struct patch_item patches[] = {
-      {__NR_rt_sigaction, efab_linux_trampoline_sigaction},
-      {0, NULL}
-    };
-    int rc = patch_syscall_table(efrm_syscall_table, patches);
-
-    if (rc != 0)
-      return rc;
-  }
-
   return 0;
 }
 
@@ -244,48 +184,3 @@ static int stop_machine_do_nothing(void *arg)
   return 0;
 }
 
-
-int efab_linux_trampoline_dtor (int no_sct)
-{
-  if (!no_sct) {
-    int waiting = 0;
-    struct patch_item patches[] = {
-      {__NR_rt_sigaction, *saved_sys_rt_sigaction},
-      {0, NULL}
-    };
-    int rc = patch_syscall_table(efrm_syscall_table, patches);
-
-    if (rc != 0)
-      return rc;
-
-    /* If anybody have already entered our syscall handlers, he should get
-     * to efab_syscall_used++ now: let's wait a bit.
-     *
-     * See wait_for_other_syscall_callers() in x86_linux_trampoline.c
-     * for further details
-     */
-    stop_machine(stop_machine_do_nothing, NULL, NULL);
-#ifdef CONFIG_PREEMPT
-    /* No guarantee, but let's try to wait */
-    schedule_timeout(msecs_to_jiffies(50));
-#endif
-    while( atomic_read(&efab_syscall_used) ) {
-      if( !waiting ) {
-        ci_log("%s: Waiting for intercepted syscalls to finish...",
-               __FUNCTION__);
-        waiting = 1;
-      }
-      schedule_timeout(msecs_to_jiffies(50));
-    }
-    if( waiting )
-      ci_log("%s: All syscalls have finished", __FUNCTION__);
-    /* And now wait for exiting from syscall after efab_syscall_used-- */
-    stop_machine(stop_machine_do_nothing, NULL, NULL);
-#ifdef CONFIG_PREEMPT
-    /* No guarantee, but let's try to wait */
-    schedule_timeout(msecs_to_jiffies(50));
-#endif
-  }
-
-  return 0;
-}

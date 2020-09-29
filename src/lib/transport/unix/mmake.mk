@@ -41,7 +41,6 @@ LIB_SRCS	:=			\
 		exec.c			\
 		environ.c		\
 		common_fcntl.c		\
-		trampoline.c		\
 		wqlock.c		\
 		poll_select.c		\
 		passthrough_fd.c	\

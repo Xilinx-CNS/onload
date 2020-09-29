@@ -70,7 +70,6 @@ struct stack_mapping {
 static struct stack_mapping* stack_mappings;
 
 
-static sa_sigaction_t*  libstack_signal_handlers;
 static int              signal_fired;
 
 static netif_t**	stacks;
@@ -133,33 +132,6 @@ netif_t *stack_attached(int id)
         return NULL;
     else
         return stacks[id];
-}
-
-int libstack_init_signals(int fd)
-{
-  /* Trampoline is not yet supported on PPC */
-#if ! defined (__PPC__)
-  ci_tramp_reg_args_t args;
-  int rc, i;
-
-  memset(&args, '\0', sizeof(ci_tramp_reg_args_t));
-
-  args.max_signum = NSIG;
-  CI_USER_PTR_SET(args.signal_handler_postpone, citp_signal_intercept);
-  for( i = 0; i <= OO_SIGHANGLER_DFL_MAX; i++ )
-    CI_USER_PTR_SET(args.signal_handlers[i], libstack_signal_handlers[i]);
-  CI_USER_PTR_SET(args.signal_data, citp_signal_data);
-  CI_USER_PTR_SET(args.signal_sarestorer, citp_signal_sarestorer_get());
-
-  rc = ci_sys_ioctl (fd, OO_IOC_IOCTL_TRAMP_REG, &args);
-
-  if(rc == -1)
-    ci_log ("Error %d registering trampoline handler", errno);
-
-  return rc;
-#else
-  return 0;
-#endif
 }
 
 
@@ -722,8 +694,6 @@ int stack_attach(unsigned id)
     int rc = ci_netif_restore_id(&n->ni, id, true);
     if( rc != 0 )
         return 0;
-    if( ci_dllist_is_empty(&stacks_list) )
-      libstack_init_signals(ci_netif_get_driver_handle(&n->ni));
   }
   stacks[id] = n;
   ci_dllist_push_tail(&stacks_list, &n->link);
@@ -2795,7 +2765,7 @@ static void signal_handler(int signum)
 }
 
 
-int libstack_init(sa_sigaction_t* signal_handlers)
+int libstack_init()
 {
   if( cfg_filter )
     if( ! sockbuf_filter_prepare(&sft, cfg_filter) )
@@ -2804,10 +2774,6 @@ int libstack_init(sa_sigaction_t* signal_handlers)
   ci_dllist_init(&stacks_list);
   if( libstack_mappings_init() )
     return -1;
-  if( signal_handlers )
-    libstack_signal_handlers = signal_handlers;
-  else
-    libstack_signal_handlers = citp_signal_handlers;
   CI_TEST(signal(SIGUSR1, signal_handler) != SIG_ERR);
   return 0;
 }

@@ -11,7 +11,6 @@
 
 #include <onload/debug.h>
 #include <onload/tcp_helper_fns.h>
-#include <onload/signals.h>
 
 
 /**********************************************************************

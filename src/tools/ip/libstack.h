@@ -151,7 +151,7 @@ extern void sockets_watch(void);
 ********************** libstack ***************************************
 **********************************************************************/
 
-extern int /*rc*/ libstack_init(sa_sigaction_t* signal_handlers);
+extern int /*rc*/ libstack_init(void);
 extern void libstack_stack_mapping_print(void);
 extern void libstack_pid_mapping_print(void);
 extern int libstack_env_print(void);

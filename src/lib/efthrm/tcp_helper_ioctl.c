@@ -1551,9 +1551,6 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_CLONE_FD,              ioctl_clone_fd),
   op(OO_IOC_KILL_SELF_SIGPIPE,     ioctl_kill_self),
 
-  op(OO_IOC_IOCTL_TRAMP_REG,       efab_linux_trampoline_register),
-  op(OO_IOC_DIE_SIGNAL,            efab_signal_die),
-
   op(OO_IOC_TCP_SOCK_SLEEP,   efab_tcp_helper_sock_sleep_rsop),
   op(OO_IOC_WAITABLE_WAKE,    efab_tcp_helper_waitable_wake_rsop),
 

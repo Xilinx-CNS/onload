@@ -533,7 +533,6 @@ extern int citp_do_init(int max_init_level) CI_HF;
 extern int citp_basic_syscall_init(void) CI_HF;
 extern int citp_syscall_init(void) CI_HF;
 
-extern int citp_init_trampoline(ci_fd_t fd) CI_HF;
 #undef socklen_t
 
 extern citp_fdinfo* citp_tcp_dup(citp_fdinfo* orig_fdi);

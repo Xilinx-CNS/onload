@@ -148,14 +148,6 @@ static SYSCALL_PTR_DEF(saved_sys_close, (int));
 static SYSCALL_PTR_DEF(saved_sys_exit_group, (int));
 static SYSCALL_PTR_DEF(saved_sys_rt_sigaction, (int, const struct sigaction *,
                                                 struct sigaction *, size_t));
-#ifdef CONFIG_COMPAT
-static SYSCALL_PTR_DEF(saved_sys_rt_sigaction32, (int,
-                                                  const struct sigaction32 *,
-                                                  struct sigaction32 *,
-                                                  unsigned int));
-#endif
-
-atomic_t efab_syscall_used;
 
 /* A way to call the original sys_close, exported to other parts of the code.
  */
@@ -280,25 +272,6 @@ asmlinkage int efab_linux_sys_sigaction(int signum,
   rc = PASS_SYSCALL4(saved_sys_rt_sigaction, signum, act, oact, sizeof(sigset_t));
   return rc;
 }
-#ifdef CONFIG_COMPAT
-asmlinkage int efab_linux_sys_sigaction32(int signum,
-                                          const struct sigaction32 *act,
-                                          struct sigaction32 *oact)
-{
-  int rc;
-
-  if( saved_sys_rt_sigaction32 == NULL ) {
-    ci_log("Unexpected rt_sigaction32() request before full init");
-    return -EFAULT;
-  }
-
-  rc = COMPAT_PASS_SYSCALL4(saved_sys_rt_sigaction32, signum, act, oact,
-                            sizeof(compat_sigset_t));
-  return rc;
-}
-
-#endif
-
 
 #ifdef OO_DO_HUGE_PAGES
 #include <linux/unistd.h>
@@ -359,52 +332,13 @@ asmlinkage int efab_linux_sys_shmctl(int shmid, int cmd, struct shmid_ds __user 
 #endif
 
 
-/* This function abstracts writing to the syscall.  Sadly some later kernels
- * map the syscall tables read-only.  Fidling with permissions is tricky, so we
- * just kmap ourselves a new mapping onto the table.
- */
-static void
-patch_syscall_table (void **table, unsigned entry, void *func,
-                     void* prev_func)
-{
-  void *mapped;
-  void **loc = table + entry;
-  ci_uintptr_t offs = ((ci_uintptr_t)loc) & (PAGE_SIZE-1);
-  struct page *pg;
-
-  pg = virt_to_page (loc);
-
-  TRAMP_DEBUG ("calling vmap (%p, 1, VM_MAP, PAGE_KERNEL)", pg);
-  mapped = vmap (&pg, 1, VM_MAP, PAGE_KERNEL);
-  TRAMP_DEBUG ("%s: mapped to %p", __FUNCTION__, mapped);
-  if (mapped == NULL) {
-    ci_log ("ERROR: could not map syscall table -- there will be no trampolining");
-    return;
-  }
-
-  loc = (void**) ((ci_uintptr_t) mapped + offs);
-  if( *loc == prev_func ) {
-    TRAMP_DEBUG ("%s: writing to %p", __FUNCTION__, loc);
-    *loc = func;
-  }
-  else
-    ci_log("ERROR: Did not patch syscall table (*loc=%p prev_func=%p)",
-           *loc, prev_func);
-
-  TRAMP_DEBUG ("%s: unmapping", __FUNCTION__);
-  vunmap (mapped);
-  TRAMP_DEBUG ("%s: all done", __FUNCTION__);
-}
-
-
 /* This function initializes the mm hash-table, and hacks the sys call table
  * so that we intercept close.
  */
-int efab_linux_trampoline_ctor(int no_sct)
+int efab_linux_trampoline_ctor()
 {
   ci_assert(efrm_syscall_table);
 
-  atomic_set(&efab_syscall_used, 0);
   if (efrm_syscall_table) {
     /* We really have to hope that efrm_syscall_table was found correctly.  There
      * is no reliable way to check it (e.g. by looking at the contents) which
@@ -415,60 +349,15 @@ int efab_linux_trampoline_ctor(int no_sct)
                 efrm_syscall_table[__NR_exit_group],
                 efrm_syscall_table[__NR_rt_sigaction]);
 
-    efab_linux_termination_ctor();
-
     saved_sys_close = efrm_syscall_table [__NR_close];
     saved_sys_exit_group = efrm_syscall_table [__NR_exit_group];
     saved_sys_rt_sigaction = efrm_syscall_table [__NR_rt_sigaction];
 
-    ci_mb();
-    if (no_sct) {
-      TRAMP_DEBUG("syscalls NOT hooked - no_sct requested");
-    } else {
-      if( safe_signals_and_exit ) {
-        patch_syscall_table (efrm_syscall_table, __NR_rt_sigaction,
-                             efab_linux_trampoline_sigaction,
-                             saved_sys_rt_sigaction);
-      }
-      TRAMP_DEBUG("syscalls hooked: rt_sigaction=%p",
-                  efrm_syscall_table[__NR_rt_sigaction]);
-    }
   } else {
     /* efrm_syscall_table wasn't found, so we may have no way to sys_close()... */
     OO_DEBUG_ERR(ci_log("ERROR: syscall table not found"));
     return -ENOEXEC;
   }
-
-#ifdef CONFIG_COMPAT
-  if (efrm_compat_syscall_table && !no_sct) {
-    /* On pre-4.17 kernels we can do a sanity check on the
-     * efrm_compat_syscall_table value: sys_close is the same for both
-     * 64-bit and 32-bit, so the current entry for sys_close
-     * in the 32-bit table should match the original value from the 64-bit
-     * table, which we've saved in saved_sys_close in the code above.
-     * For post-4.17 kernels with a new calling convention, the 32-bit entry
-     * stub will be different, so no sensible check is possible here
-     */
-#ifndef EFRM_SYSCALL_PTREGS
-#define CHECK_ENTRY(_n, _ptr) (efrm_compat_syscall_table[_n] == (_ptr))
-#else
-#define CHECK_ENTRY(_n, _ptr) 1
-#endif
-    TRAMP_DEBUG("efrm_compat_syscall_table=%p: "
-                "rt_sigaction=%p", efrm_compat_syscall_table,
-                efrm_compat_syscall_table[__NR_ia32_rt_sigaction]);
-    saved_sys_rt_sigaction32 = efrm_compat_syscall_table[__NR_ia32_rt_sigaction];
-    ci_mb();
-
-    if( safe_signals_and_exit )
-      patch_syscall_table (efrm_compat_syscall_table, __NR_ia32_rt_sigaction,
-                           efab_linux_trampoline_sigaction32,
-                           saved_sys_rt_sigaction32);
-    TRAMP_DEBUG("ia32 syscalls hooked: rt_sigaction=%p",
-                efrm_compat_syscall_table[__NR_ia32_rt_sigaction]);
-  }
-#undef CHECK_ENTRY
-#endif
 
   return 0;
 }
@@ -481,78 +370,4 @@ int stop_machine_do_nothing(void *arg)
    * And even if we can, what can we do?  Wait and try again? */
   return 0;
 }
-
-void wait_for_other_syscall_callers(void)
-{
-  /* For some older kernels, we used to call synchronize_sched()
-   * and it was a guarantee that any other CPU is not in the short chunk of
-   * code between syscall enter and efab_syscall_used++, or between
-   * efab_syscall_used-- and syscall exit.
-   *
-   * But even at that time, synchronize_sched() did not provide this
-   * guarantee for CONFIG_PREEMPT-enabled kernel, because they MAY schedule
-   * at the points described above.
-   *
-   * From linux-5.1, there is no synchronize_sched(), and it have been
-   * more-or-less equivalent to synchronize_rcu() for a long time already.
-   *
-   * We are using stop_machine() to schedule all the CPUs, but it has the
-   * same issue with CONFIG_PREEMPT-enabled kernel as the old
-   * synchronize_sched() solution.
-   */
-  stop_machine(stop_machine_do_nothing, NULL, NULL);
-#ifdef CONFIG_PREEMPT
-  /* No guarantee, but let's try to wait */
-  schedule_timeout(msecs_to_jiffies(50));
-#endif
-}
-
-int
-efab_linux_trampoline_dtor (int no_sct) {
-  if (efrm_syscall_table != NULL && !no_sct) {
-    int waiting = 0;
-
-    /* Restore the system-call table to its proper state */
-    if( safe_signals_and_exit ) {
-      patch_syscall_table (efrm_syscall_table, __NR_rt_sigaction,
-                           saved_sys_rt_sigaction,
-                           efab_linux_trampoline_sigaction);
-    }
-    TRAMP_DEBUG("syscalls restored: rt_sigaction=%p",
-                efrm_syscall_table[__NR_rt_sigaction]);
-
-    /* If anybody have already entered our syscall handlers, he should get
-     * to efab_syscall_used++ now: let's wait a bit. */
-    wait_for_other_syscall_callers();
-
-    while( atomic_read(&efab_syscall_used) ) {
-      if( !waiting ) {
-        ci_log("%s: Waiting for intercepted syscalls to finish...",
-               __FUNCTION__);
-        waiting = 1;
-      }
-      schedule_timeout(msecs_to_jiffies(50));
-    }
-    if( waiting )
-      ci_log("%s: All syscalls have finished", __FUNCTION__);
-    /* And now wait for exiting from syscall after efab_syscall_used-- */
-    wait_for_other_syscall_callers();
-  }
-
-#ifdef CONFIG_COMPAT
-  if (efrm_compat_syscall_table != NULL && !no_sct) {
-    /* Restore the ia32 system-call table to its proper state */
-    if( safe_signals_and_exit ) {
-      patch_syscall_table (efrm_compat_syscall_table, __NR_ia32_rt_sigaction,
-                           saved_sys_rt_sigaction32,
-                           efab_linux_trampoline_sigaction32);
-    }
-    TRAMP_DEBUG("ia32 syscalls restored: rt_sigaction=%p",
-                efrm_compat_syscall_table[__NR_ia32_rt_sigaction]);
-  }
-#endif
-
-  return 0;
-}
-
 

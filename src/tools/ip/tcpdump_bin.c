@@ -538,19 +538,6 @@ static void atexit_fn(void)
    * cancelled, so we are safe here. */
   fflush_unlocked(stdout);
 }
-static void sighandler_fn(int sig, siginfo_t *info, void *context)
-{
-  if( update_thread == pthread_self() ) {
-    /* We get here because master thread is blocking SIGINT.
-     * So we re-send the signal to the master thread. */
-    pthread_kill(master_thread, sig);
-    return;
-  }
-  ci_log("Exit on signal %d %s", sig, strsignal(sig));
-  exit(0);
-}
-sa_sigaction_t sighandlers[OO_SIGHANGLER_DFL_MAX+1] =
-                                {sighandler_fn, NULL,NULL};
 
 static void write_pcap_header(void)
 {
@@ -685,7 +672,7 @@ int main(int argc, char* argv[])
   ci_app_getopt(USAGE_STR, &argc, argv, cfg_opts, N_CFG_OPTS);
   --argc; ++argv;
   master_thread = pthread_self();
-  CI_TRY(libstack_init(sighandlers));
+  CI_TRY(libstack_init());
 
   if( strcmp(cfg_precision, "nano") == 0 ){
     do_nano = 1;

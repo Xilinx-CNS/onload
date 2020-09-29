@@ -11,9 +11,9 @@
 
 ONLOAD_SRCS	:= driver.c timesync.c \
 		tcp_sendpage.c driverlink_ip.c linux_stats.c \
-		linux_trampoline.c shmbuf.c compat.c \
+		shmbuf.c compat.c \
 		ossock_calls.c mmap.c \
-		epoll_device.c terminate.c sigaction_calls.c onloadfs.c \
+		epoll_device.c onloadfs.c \
 		dshm.c cplane.c cplane_prot.c
 
 # This is a kernel makefile, so gets re-called by kbuild with 'src' set

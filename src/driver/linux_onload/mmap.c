@@ -112,7 +112,6 @@ efab_create_mm_entry (struct mm_struct *mm) {
     p->magic = MM_ENTRY_MAGIC;
     p->mm = mm;
     p->ref = 0;               // Will be inc-ed by caller
-    CI_USER_PTR_SET (p->signal_data.user_data, 0); // No signal info
     ci_dllist_push (&mm_hash_tbl [hash_mm (mm)], &p->link);
   }
 
@@ -178,8 +177,6 @@ int efab_put_mm_hash_locked(struct mm_hash *p)
 void efab_free_mm_hash(struct mm_hash *p)
 {
   ci_assert_equal(p->ref, 0);
-  if( safe_signals_and_exit )
-    efab_signal_process_fini(&p->signal_data);
   kfree (p);
 }
 

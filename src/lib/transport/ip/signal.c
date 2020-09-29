@@ -24,12 +24,9 @@
 #error "Non-kernel file"
 #endif
 
-/*! Signal handlers storage.  Indexed by signum-1.
- * Read by UL, written by kernel only. */
+#if 0
+/*! Signal handlers storage.  Indexed by signum-1. */
 struct oo_sigaction citp_signal_data[NSIG];
-
-
-
 
 /*! Run a signal handler
 ** \param  signum   Signal number
@@ -101,7 +98,6 @@ citp_signal_run_app_handler(int sig, siginfo_t *info, void *context)
   return ret;
 }
 
-
 /*! Run any pending signal handlers
 ** \param  our_info  Thread-specific context for current thread
 */
@@ -149,7 +145,6 @@ void citp_signal_run_pending(citp_signal_info *our_info)
   LOG_SIG(log("%s: end", __FUNCTION__));
   errno = old_errno;
 }
-
 
 /*! Mark a signal as pending.
  * Should be called from signal handler only.
@@ -331,14 +326,9 @@ void *citp_signal_sarestorer_get(void)
 
   return NULL;
 }
-
-/*! Our signal handlers for various interception types */
-sa_sigaction_t citp_signal_handlers[OO_SIGHANGLER_DFL_MAX+1] = {
-  citp_signal_terminate  /*OO_SIGHANGLER_TERM*/,
-  NULL, /*OO_SIGHANGLER_STOP - do not break gdb! */
-  citp_signal_terminate /*OO_SIGHANGLER_CORE*/
-};
-
+#else
+void citp_signal_run_pending(citp_signal_info *our_info) { }
+#endif
 
 
 int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
