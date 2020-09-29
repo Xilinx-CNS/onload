@@ -214,7 +214,7 @@ static void fdtable_swap(unsigned fd, citp_fdinfo_p from,
  again:
   fdip = *p_fdip;
   if( fdip_is_busy(fdip) )  fdip = citp_fdtable_busy_wait(fd, fdt_locked);
-  ci_assert(fdip == from);
+  ci_assert_equal(fdip, from);
   if( fdip_cas_fail(p_fdip, from, to) )  goto again;
 }
 
@@ -1941,19 +1941,24 @@ citp_fdinfo* citp_reprobe_moved(citp_fdinfo* fdinfo, int from_fast_lookup,
   return new_fdinfo;
 }
 
-/* Provides a non-specialised Onload fd to any user who needs it
- * just to call ioctls.  The users must not convert it to a stack fd,
- * socket fd and alike.
- */
-int oo_service_fd(void)
+void __oo_service_fd(bool fdtable_locked)
 {
-  if( citp.onload_fd < 0 ) {
-    int fd;
-    ci_assert_equal(citp.onload_fd, -1);
-    if( ef_onload_driver_open(&fd, OO_STACK_DEV, 1) )  return -1;
-    if( ci_cas32_succeed(&citp.onload_fd, -1, fd) ) {
-      /* In theory we'd better call __citp_fdtable_reserve(),
-       * but we can't lock fdtable, because it may be already locked.
+  int fd;
+
+  ci_assert_equal(citp.onload_fd, -1);
+  if( ef_onload_driver_open(&fd, OO_STACK_DEV, 1) )  return;
+  if( ci_cas32_succeed(&citp.onload_fd, -1, fd) ) {
+    if( fdtable_locked ) {
+      /* __citp_fdtable_extend() handles citp.onload_fd, so there is no
+       * need to call __citp_fdtable_reserve() after it. */
+      if( fd < citp_fdtable.size )
+        __citp_fdtable_extend(fd);
+      else
+        __citp_fdtable_reserve(fd, 0);
+    }
+    else {
+      /* We do not know the current context, so we can't lock fdtable,
+       * or leverage the already-taken lock.
        * Let's hope that logging happens at start of day, so our fd is
        * small enough.
        * __citp_fdtable_extend() will take care about our fd as well.
@@ -1964,12 +1969,10 @@ int oo_service_fd(void)
                                         fdi_to_fdip(&citp_the_reserved_fd);
       }
     }
-    else {
-      ci_sys_ioctl(fd, OO_IOC_CLOSE, fd);
-    }
   }
-
-  return citp.onload_fd;
+  else {
+    ci_sys_ioctl(fd, OO_IOC_CLOSE, fd);
+  }
 }
 
 

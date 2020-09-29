@@ -1192,7 +1192,22 @@ ci_inline int citp_getpid(void)
 }
 #endif
 
-extern int oo_service_fd(void);
+/* Provides a non-specialised Onload fd to any user who needs it
+ * just to call ioctls.  The users must not convert it to a stack fd,
+ * socket fd and alike.
+ *
+ * fdtable_locked == true means that the fdtable is locked.
+ * fdtable_locked == false means that we do not know (typically from
+ * ci_log).
+ */
+extern void __oo_service_fd(bool fdtable_locked);
+ci_inline int oo_service_fd(void)
+{
+  if( citp.onload_fd < 0 )
+    __oo_service_fd(false);
+
+  return citp.onload_fd;
+}
 
 #endif  /* __CI_TRANSPORT_INTERNAL_H__ */
 /*! \cidoxg_end */
