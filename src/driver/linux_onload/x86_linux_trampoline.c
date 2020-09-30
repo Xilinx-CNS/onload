@@ -153,9 +153,6 @@ static SYSCALL_PTR_DEF(saved_sys_rt_sigaction32, (int,
                                                   const struct sigaction32 *,
                                                   struct sigaction32 *,
                                                   unsigned int));
-/* On newer kernels the 32-bit syscall stubs are different from the 64-bit ones */
-static SYSCALL_PTR_DEF(saved_sys_close32, (int));
-static SYSCALL_PTR_DEF(saved_sys_exit_group32, (int));
 #endif
 
 atomic_t efab_syscall_used;
@@ -507,15 +504,11 @@ int efab_linux_trampoline_ctor(int no_sct)
       TRAMP_DEBUG("syscalls NOT hooked - no_sct requested");
     } else {
       if( safe_signals_and_exit ) {
-        patch_syscall_table (efrm_syscall_table, __NR_exit_group,
-                             efab_linux_trampoline_exit_group,
-                             saved_sys_exit_group);
         patch_syscall_table (efrm_syscall_table, __NR_rt_sigaction,
                              efab_linux_trampoline_sigaction,
                              saved_sys_rt_sigaction);
       }
-      TRAMP_DEBUG("syscalls hooked: close=%p exit_group=%p, rt_sigaction=%p",
-                  efrm_syscall_table[__NR_close], efrm_syscall_table[__NR_exit_group],
+      TRAMP_DEBUG("syscalls hooked: rt_sigaction=%p",
                   efrm_syscall_table[__NR_rt_sigaction]);
     }
   } else {
@@ -539,38 +532,17 @@ int efab_linux_trampoline_ctor(int no_sct)
 #else
 #define CHECK_ENTRY(_n, _ptr) 1
 #endif
-    TRAMP_DEBUG("efrm_compat_syscall_table=%p: close=%p, exit_group=%p, "
+    TRAMP_DEBUG("efrm_compat_syscall_table=%p: "
                 "rt_sigaction=%p", efrm_compat_syscall_table,
-                efrm_compat_syscall_table[__NR_ia32_close],
-                efrm_compat_syscall_table[__NR_ia32_exit_group],
                 efrm_compat_syscall_table[__NR_ia32_rt_sigaction]);
     saved_sys_rt_sigaction32 = efrm_compat_syscall_table[__NR_ia32_rt_sigaction];
-    saved_sys_close32 = efrm_compat_syscall_table[__NR_ia32_close];
-    saved_sys_exit_group32 = efrm_compat_syscall_table[__NR_ia32_exit_group];
     ci_mb();
 
-    if( safe_signals_and_exit &&
-        CHECK_ENTRY(__NR_ia32_exit_group, saved_sys_exit_group)) {
-#ifndef EFRM_SYSCALL_PTREGS
-      ci_assert_equal(efrm_compat_syscall_table[__NR_ia32_exit_group],
-                      saved_sys_exit_group);
-#endif
-      patch_syscall_table (efrm_compat_syscall_table, __NR_ia32_exit_group,
-                           efab_linux_trampoline_exit_group,
-                           saved_sys_exit_group32);
+    if( safe_signals_and_exit )
       patch_syscall_table (efrm_compat_syscall_table, __NR_ia32_rt_sigaction,
                            efab_linux_trampoline_sigaction32,
                            saved_sys_rt_sigaction32);
-    } else {
-      TRAMP_DEBUG("expected ia32 sys_exit_group=%p, but got %p",
-                  saved_sys_exit_group,
-                  efrm_compat_syscall_table[__NR_ia32_exit_group]);
-      ci_log("ia32 exit_group syscall NOT hooked");
-    }
-    TRAMP_DEBUG("ia32 syscalls hooked: close=%p, exit_group=%p, "
-                "rt_sigaction=%p",
-                efrm_compat_syscall_table[__NR_ia32_close],
-                efrm_compat_syscall_table[__NR_ia32_exit_group],
+    TRAMP_DEBUG("ia32 syscalls hooked: rt_sigaction=%p",
                 efrm_compat_syscall_table[__NR_ia32_rt_sigaction]);
   }
 #undef CHECK_ENTRY
@@ -620,14 +592,11 @@ efab_linux_trampoline_dtor (int no_sct) {
 
     /* Restore the system-call table to its proper state */
     if( safe_signals_and_exit ) {
-      patch_syscall_table (efrm_syscall_table, __NR_exit_group, saved_sys_exit_group,
-                           efab_linux_trampoline_exit_group);
       patch_syscall_table (efrm_syscall_table, __NR_rt_sigaction,
                            saved_sys_rt_sigaction,
                            efab_linux_trampoline_sigaction);
     }
-    TRAMP_DEBUG("syscalls restored: close=%p, exit_group=%p, rt_sigaction=%p",
-                efrm_syscall_table[__NR_close], efrm_syscall_table[__NR_exit_group],
+    TRAMP_DEBUG("syscalls restored: rt_sigaction=%p",
                 efrm_syscall_table[__NR_rt_sigaction]);
 
     /* If anybody have already entered our syscall handlers, he should get
@@ -652,17 +621,11 @@ efab_linux_trampoline_dtor (int no_sct) {
   if (efrm_compat_syscall_table != NULL && !no_sct) {
     /* Restore the ia32 system-call table to its proper state */
     if( safe_signals_and_exit ) {
-      patch_syscall_table (efrm_compat_syscall_table, __NR_ia32_exit_group,
-                           saved_sys_exit_group32,
-                           efab_linux_trampoline_exit_group);
       patch_syscall_table (efrm_compat_syscall_table, __NR_ia32_rt_sigaction,
                            saved_sys_rt_sigaction32,
                            efab_linux_trampoline_sigaction32);
     }
-    TRAMP_DEBUG("ia32 syscalls restored: close=%p, exit_group=%p, "
-                "rt_sigaction=%p",
-                efrm_compat_syscall_table[__NR_ia32_close],
-                efrm_compat_syscall_table[__NR_ia32_exit_group],
+    TRAMP_DEBUG("ia32 syscalls restored: rt_sigaction=%p",
                 efrm_compat_syscall_table[__NR_ia32_rt_sigaction]);
   }
 #endif

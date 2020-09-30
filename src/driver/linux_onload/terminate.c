@@ -338,60 +338,6 @@ static void efab_exit_group(int *status_p)
   }
 }
 
-asmlinkage long
-#ifdef EFRM_SYSCALL_PTREGS
-efab_linux_trampoline_exit_group(const struct pt_regs *regs)
-#else
-efab_linux_trampoline_exit_group(int status)
-#endif
-{
-#ifdef EFRM_SYSCALL_PTREGS
-  int status;
-#endif
-  tcp_helper_resource_t *stacks[TERMINATE_STACKS_NUM];
-  ci_uint32 stacks_num = 0;
-
-  efab_syscall_enter();
-#ifdef EFRM_SYSCALL_PTREGS
-#if defined(__x86_64__)
-  if( current->thread_info.status & TS_COMPAT )
-    status = regs->bx;
-  else
-    status = regs->di;
-#elif defined(__aarch64__)
-  status = regs->regs[0];
-#else
-#error "Trampolines are not supported on this platform"
-#endif
-#endif
-
-  BUILD_BUG_ON(sizeof(ci_uint64) * 8 < TERMINATE_STACKS_NUM);
-  stacks_num = efab_terminate_find_all_stacks(stacks, TERMINATE_STACKS_NUM);
-
-  /* die in the most appropriate way */
-  if( stacks_num ) {
-    /* lock all the stacks */
-    efab_terminate_lock_all_stacks(stacks, stacks_num);
-    /* Kill all threads while they do not have netif locks (we have them!).
-     * Change status: see exit_group() for details. */
-    status = (status & 0xff) << 8;
-    efab_exit_group(&status);
-    /* now when everybody is dead we can release netifs */
-    efab_terminate_unlock_all_stacks(stacks, stacks_num);
-
-    /* really exit */
-    efab_syscall_exit();
-    do_exit(status);
-
-    /*UNREACHABLE*/
-    return 0;
-  }
-  else {
-    efab_syscall_exit();
-    /* XXX: PPC_HACK: doesn't handle trampoline */
-    return efab_linux_sys_exit_group(status);
-  }
-}
 
 #if defined(CONFIG_COREDUMP) && defined(ERFM_HAVE_NEW_KALLSYMS)
 #define OO_DO_COREDUMP

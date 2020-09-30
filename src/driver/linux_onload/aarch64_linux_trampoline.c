@@ -247,7 +247,6 @@ int efab_linux_trampoline_ctor(int no_sct)
 
   if (!no_sct) {
     struct patch_item patches[] = {
-      {__NR_exit_group, efab_linux_trampoline_exit_group},
       {__NR_rt_sigaction, efab_linux_trampoline_sigaction},
       {0, NULL}
     };
@@ -272,7 +271,6 @@ int efab_linux_trampoline_dtor (int no_sct)
   if (!no_sct) {
     int waiting = 0;
     struct patch_item patches[] = {
-      {__NR_exit_group, *saved_sys_exit_group},
       {__NR_rt_sigaction, *saved_sys_rt_sigaction},
       {0, NULL}
     };
