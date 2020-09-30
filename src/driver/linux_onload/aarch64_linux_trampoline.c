@@ -173,72 +173,6 @@ int efab_linux_sys_sigaction32(int signum,
 #endif
 
 
-static inline int /* bool */
-tramp_close_begin(int fd, ci_uintptr_t *tramp_entry_out)
-{
-  struct file *f;
-  efab_syscall_enter();
-
-  f = fget(fd);
-  if( f != NULL ) {
-    if( FILE_IS_ENDPOINT(f) ) {
-      struct mm_hash *p;
-
-      read_lock (&oo_mm_tbl_lock);
-      p = oo_mm_tbl_lookup(current->mm);
-      if (p) {
-        *tramp_entry_out =
-            (ci_uintptr_t)CI_USER_PTR_GET(p->trampoline_entry);
-      }
-      read_unlock (&oo_mm_tbl_lock);
-
-      if( *tramp_entry_out != 0 &&
-          efab_access_ok((const void *)*tramp_entry_out, 1)) {
-        fput(f);
-        return true;
-      }
-    }
-    fput(f);
-  }
-
-  /* Not one of our FDs -- usual close */
-  return false;
-}
-
-static inline int
-tramp_close_passthrough(int fd)
-{
-  int rc = PASS_SYSCALL1(sys_close, fd);
-  efab_syscall_exit();
-  return rc;
-}
-
-#ifndef EFRM_SYSCALL_PTREGS
-asmlinkage long efab_linux_aarch64_trampoline_close(int fd, struct pt_regs *regs)
-#else
-asmlinkage int efab_linux_trampoline_close(struct pt_regs *regs)
-#endif
-{
-#ifdef EFRM_SYSCALL_PTREGS
-  int fd = regs->regs[0];
-#endif
-  ci_uintptr_t trampoline_entry = 0;
-
-  if (!tramp_close_begin(fd, &trampoline_entry))
-      return tramp_close_passthrough(fd);
-
-  regs->regs[1] = fd;
-  regs->regs[2] = regs->pc;
-
-  /* Hack the return address on the stack to do the trampoline */
-  regs->pc = trampoline_entry;
-
-  efab_syscall_exit();
-  /* this is the return value in x0 that will become the first argument
-     of trampoline_entry */
-  return CI_TRAMP_OPCODE_CLOSE;
-}
-
 struct patch_item {
     unsigned syscall;
     void *addr;
@@ -313,7 +247,6 @@ int efab_linux_trampoline_ctor(int no_sct)
 
   if (!no_sct) {
     struct patch_item patches[] = {
-      {__NR_close, efab_linux_trampoline_close},
       {__NR_exit_group, efab_linux_trampoline_exit_group},
       {__NR_rt_sigaction, efab_linux_trampoline_sigaction},
       {0, NULL}
@@ -339,7 +272,6 @@ int efab_linux_trampoline_dtor (int no_sct)
   if (!no_sct) {
     int waiting = 0;
     struct patch_item patches[] = {
-      {__NR_close, *saved_sys_close},
       {__NR_exit_group, *saved_sys_exit_group},
       {__NR_rt_sigaction, *saved_sys_rt_sigaction},
       {0, NULL}
