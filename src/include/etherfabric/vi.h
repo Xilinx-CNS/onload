@@ -881,8 +881,9 @@ ef_filter_spec_set_ip_proto(ef_filter_spec *filter_spec, uint8_t ip_proto);
 ** value of \param user_mark will be bitwise-ORed into the mark of matching
 ** packets; otherwise, it will replace the mark.
 **
-** User marks are only supported on U26z and later adapters.  Attempts to
-** install filters with user marks on unsupported adapters will fail.
+** User marks are only supported on SN1000-series and later adapters.
+** Attempts to install filters with user marks on unsupported adapters will
+** fail.
 */
 extern int
 ef_filter_spec_set_user_mark(ef_filter_spec *filter_spec, uint32_t user_mark,
@@ -909,8 +910,9 @@ ef_filter_spec_set_user_mark(ef_filter_spec *filter_spec, uint32_t user_mark,
 ** be bitwise-ORed into the flag of matching packets; otherwise, it will
 ** replace the flag.
 **
-** User flags are only supported on U26z and later adapters.  Attempts to
-** install filters with user flags on unsupported adapters will fail.
+** User flags are only supported on SN1000-series and later adapters.
+** Attempts to install filters with user flags on unsupported adapters will
+** fail.
 */
 extern int
 ef_filter_spec_set_user_flag(ef_filter_spec *filter_spec, uint8_t user_flag,

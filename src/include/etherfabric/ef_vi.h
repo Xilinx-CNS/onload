@@ -581,9 +581,9 @@ enum ef_timestamp_format {
 enum ef_vi_arch {
   /** 5000 and 6000-series NICs */
   EF_VI_ARCH_FALCON,
-  /** 7000 and 8000-series NICs */
+  /** 7000, 8000 and X2-series NICs */
   EF_VI_ARCH_EF10,
-  /** U26z and later NICs */
+  /** SN1000-series NICs */
   EF_VI_ARCH_EF100,
   /** Arbitrary NICs using AF_XDP */
   EF_VI_ARCH_AF_XDP,
@@ -1316,9 +1316,9 @@ ef_vi_receive_get_bytes(ef_vi* vi, const void* pkt, uint16_t* bytes_out);
 ** \param user_mark On return, set to the 32-bit value assigned by the NIC
 ** \param user_flag On return, set to the 1-bit value assigned by the NIC
 **
-** These fields are available on U26z and later adapters, and only when using
-** the full rx prefix. Use of this function in other configurations will return
-** nonsense data, or assert in a debug build.
+** These fields are available on SN1000-series and later adapters, and only
+** when using the full rx prefix. Use of this function in other configurations
+** will return nonsense data, or assert in a debug build.
 **
 ** The value of the mark and flag may be set by filter rules assigned to the
 ** VI or by datapath extensions (see ef_vi_open_extension()).
