@@ -10,7 +10,7 @@ copy_distfiles() {
 
   local distfiles_d="$1"
 
-  try cp -a "$distfiles_d"/{README,*LICENSE,ChangeLog} .
+  try cp -a "$distfiles_d"/{README,*LICENSE*,ChangeLog} .
   try cp -a "$distfiles_d"/README.ef_vi .
   [ -f "$distfiles_d"/ReleaseNotes ] &&
     try cp -a "$distfiles_d"/ReleaseNotes .

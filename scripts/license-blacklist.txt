@@ -9,7 +9,7 @@
 **/*.pyc
 build
 prebuilt
-*LICENSE
+*LICENSE*
 **/*.png
 **/*.eps
 **/*.vsdx

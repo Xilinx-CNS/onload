@@ -1,18 +1,16 @@
+Except as detailed below the Onload project uses a
+GNU General Public License version 2 (GPLv2), included
+in LICENSES-ALL.
 
-The software in this package is Copyright 2019-2020 Xilinx, Inc,
-2006-2019 Solarflare Communications Inc., 2002-2005 Level 5 Networks.
-All rights reserved.
+The following components are distributed under the BSD 2-Clause License,
+shown in LICENSES-ALL.
 
-Except as noted otherwise below, OpenOnload and EnterpriseOnload are
-licensed under the GNU General Public License version 2 (GPLv2) and
-subject to the distribution agreement shown in ONLOAD_LICENSE.
+  - Etherfabric API and library (ef_vi)
+  - Onload Extensions Stub Library
+  - The Onload control plane (files under usr/lib/cplane and usr/inclued cplane)
 
-  Note that applications that use the Onload library via the LD_PRELOAD
-  linkage mechanism are not subject to the terms of the GPL because they
-  are not derived works of Onload.
+This package includes software derived from lwIP and other software as listed
+in LICENSES-ALL.
 
-The Onload Extensions Stub Library and the Etherfabric API and library
-(ef_vi) are licensed under the BSD 2-Clause Licence.
-
-This package includes software derived from lwIP.  Please see
-lwIP-LICENSE.
+Users should refer to the individual source files
+for the exact license and copyright attribution.

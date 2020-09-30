@@ -52,7 +52,7 @@ mkdir -p "$RPM_BUILD_ROOT"/usr/src/openonload-dkms-%{pkgversion}
 cp openonload-dkms-%{pkgversion}/openonload-%{pkgversion}.dkms.tar.gz \
 	"$RPM_BUILD_ROOT"/usr/src/openonload-dkms-%{pkgversion}/
 mkdir -p "$RPM_BUILD_ROOT"/usr/share/doc/openonload-dkms-%{pkgversion}
-for doc in LICENSE README; do
+for doc in LICENSE* README; do
 	cp openonload-dkms-%{pkgversion}/dkms_source_tree/$doc \
 		"$RPM_BUILD_ROOT"/usr/share/doc/openonload-dkms-%{pkgversion}/
 done
