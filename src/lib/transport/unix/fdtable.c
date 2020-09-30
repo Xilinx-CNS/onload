@@ -64,6 +64,7 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
   rc = citp_ep_close(info->si_code, true);
   citp_exit_lib(&lib_context, false);
   Log_CALL_RESULT(rc);
+  (void)rc;
 }
 
 /*! Block until fdtable entry is neither closing nor busy, and return the
