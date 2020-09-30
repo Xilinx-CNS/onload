@@ -551,6 +551,11 @@ int efab_tcp_helper_os_sock_recvmsg(ci_private_t* priv, void *arg)
   if( op->msg_controllen ) {
     msg.msg_control = CI_USER_PTR_GET(op->msg_control);
     msg.msg_controllen = op->msg_controllen;
+#ifdef EFRM_MSGHDR_HAS_MSG_CONTROL_USER
+    /* Linux kernel 5.8 has replaced msg_control field with a union. To handle
+     * it properly we should set msg_control_is_user. */
+    msg.msg_control_is_user = true;
+#endif
   }
   else {
     msg.msg_control = NULL;

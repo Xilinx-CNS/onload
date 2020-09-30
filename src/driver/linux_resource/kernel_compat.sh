@@ -126,6 +126,8 @@ EFRM_HAVE_SOCK_BINDTOINDEX		symbol	sock_bindtoindex	include/net/sock.h
 
 EFRM_SYSCALL_GET_ARGUMENTS_ASSUMES_6	symtype	syscall_get_arguments	include/asm-generic/syscall.h	void(struct task_struct *, struct pt_regs *, unsigned long *)
 
+EFRM_MSGHDR_HAS_MSG_CONTROL_USER	member	struct_msghdr	msg_control_user	include/linux/socket.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
