@@ -6427,7 +6427,14 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
   ni->packets->set[bufset_id].shm_id = -1;
 #endif
   ni->packets->set[bufset_id].dma_addr_base = ni->dma_addr_next;
-  page_order += ci_log2_ge(PAGE_SIZE / CI_CFG_PKT_BUF_SIZE, 0);
+  if( page_order > CI_CFG_PKTS_PER_SET_S ) {
+    /* page_order=INT_MAX means that there are no hardware interfaces associated
+     * with this stack. */
+    ci_assert_equal(page_order, INT_MAX);
+    page_order = CI_CFG_PKTS_PER_SET_S;
+  }
+  else
+    page_order += ci_log2_ge(PAGE_SIZE / CI_CFG_PKT_BUF_SIZE, 0);
   ni->packets->set[bufset_id].page_order = page_order;
   ni->dma_addr_next += (PKTS_PER_SET >> page_order) * CI_CFG_MAX_INTERFACES;
   ni->packets->n_free += PKTS_PER_SET;
