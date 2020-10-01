@@ -864,10 +864,19 @@ int oo_fop_flush(struct file *f, fl_owner_t id)
    */
 #if defined(__x86_64__) && defined(CONFIG_COMPAT)
   if( current_thread_info()->status & TS_COMPAT ) {
-    if( nr == __NR_ia32_close )
+    if( nr == __NR_ia32_close ) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,0,0)
+      /* RHEL7 (linux-3.10) lies in its regs structure in case of 32-bit
+       * syscall.  Linux 4.4 works properly.
+       * Tell UL that we do not know the fd. */
+      fd = SI_QUEUE;
+#else
       fd = args[0];
-    else
+#endif
+    }
+    else {
       return 0;
+    }
   }
   else
 #endif

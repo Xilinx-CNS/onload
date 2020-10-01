@@ -51,17 +51,27 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
   int fd = info->si_code;
   int rc;
 
+#ifdef __i386__
+  ucontext_t *ctx = context;
+
+  /* RHEL7 is unable to determine compat syscall parameters when inside
+   * kernel.  Let's hope we are still in the same close() call, and get the
+   * fd from the context. */
+  if( fd == SI_QUEUE ) {
+    fd = ctx->uc_mcontext.gregs[REG_EBX];
+  }
+#endif
   /* It the signal comes from dup(), then pthread_kill() results in
    * tgkill() syscall, which uses SI_TKILL code. */
   if( fd < 0 ) {
     ci_assert_equal(fd, SI_TKILL);
     return;
   }
-  Log_CALL(ci_log("%s: close(%d)", __func__, info->si_code));
+  Log_CALL(ci_log("%s: close(%d)", __func__, fd));
 
   citp_enter_lib(&lib_context);
   Log_CALL(ci_log("%s(%d)", __FUNCTION__, fd));
-  rc = citp_ep_close(info->si_code, true);
+  rc = citp_ep_close(fd, true);
   citp_exit_lib(&lib_context, false);
   Log_CALL_RESULT(rc);
   (void)rc;
