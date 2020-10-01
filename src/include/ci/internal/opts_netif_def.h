@@ -418,6 +418,27 @@ CI_CFG_OPT("EF_TCP_SNDBUF_MODE", tcp_sndbuf_mode, ci_uint32,
            "EF_TCP_RCVBUF_MODE to give automatic adjustment of RCVBUF.",
            2, , 1, 0, 2, oneof:no;yes;auto)
 
+CI_CFG_OPT("EF_TCP_COMBINE_SENDS_MODE", tcp_combine_sends_mode, ci_uint32,
+           "This option controls how Onload fills packets in the TCP send "
+           "buffer. In the default mode (set to 0) Onload will prefer to use "
+           "all the space at the end of a previous packet before allocating a "
+           "new one.  When set to 1, Onload will prefer to allocate a new "
+           "packet for each new send.  In all cases this is a hint rather than "
+           "guaranteed behaviour: there are conditions where the preference "
+           "indicated by this option will not be possible, e.g. memory "
+           "pressure may cause packets in the send queue to be combined.  "
+           "MSG_MORE and TCP_CORK can override this option when set.  The "
+           "zero-copy sends API may also use the segmentation provided by the "
+           "caller's buffers.  For full control of message segmentation the "
+           "delegated sends API can be used."
+           "Setting this option can affect the capacity of send buffers "
+           "belonging to sockets in this stack and increase packet buffer usage.  "
+           "It can also reduce efficiency as packets will be allocated for each "
+           "send call rather than being able to reuse one that is already "
+           "available.  Setting it is only recommended for those who have an "
+           "explicit need to avoid combined or split sends.",
+           1, , 0, 0, 1, yesno)
+
 CI_CFG_OPT("EF_TCP_SOCKBUF_MAX_FRACTION", tcp_sockbuf_max_fraction, ci_uint32,
            "This option controls the maximum fraction of the TX buffers "
            "that may be allocated to a single socket with EF_TCP_SNDBUF_MODE=2.  "

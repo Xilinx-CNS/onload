@@ -1008,6 +1008,8 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->rst_delayed_conn = atoi(s);
   if( (s = getenv("EF_TCP_SNDBUF_MODE")) )
     opts->tcp_sndbuf_mode = atoi(s);
+  if( (s = getenv("EF_TCP_COMBINE_SENDS_MODE")) )
+    opts->tcp_combine_sends_mode = atoi(s);
   if( (s = getenv("EF_TCP_SEND_NONBLOCK_NO_PACKETS_MODE")) )
     opts->tcp_nonblock_no_pkts_mode = atoi(s);
   if( (s = getenv("EF_TCP_RCVBUF_STRICT")) )
