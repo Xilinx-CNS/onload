@@ -39,8 +39,6 @@ typedef struct ci_private_char_s {
 } ci_private_char_t;
 
 
-extern void ci_mm_tbl_init(void);
-
 extern int ci_char_fop_mmap(struct file* file, struct vm_area_struct* vma);
 
 extern int

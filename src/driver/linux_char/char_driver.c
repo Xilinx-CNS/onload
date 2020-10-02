@@ -276,8 +276,6 @@ static int init_etherfabric_char(void)
 {
   ci_set_log_prefix("[sfc_char] ");
 
-  ci_mm_tbl_init();
-
   return create_one_chrdev_and_mknod(0, EFAB_CHAR_NAME, &ci_char_fops,
                                      &sfc_char_chrdev);
 }
