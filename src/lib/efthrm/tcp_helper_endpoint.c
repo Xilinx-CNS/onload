@@ -526,6 +526,10 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
         .tcp.in_app_id = cpu_to_le32(ni->nic_hw[intf_i].plugin_app_id),
         .tcp.in_user_mark = cpu_to_le32(ep->id),
         .tcp.in_synchronised = false,   /* passive-open not supported */
+        .tcp.in_source_ip = raddr.ip4,
+        .tcp.in_dest_ip = laddr.ip4,
+        .tcp.in_source_port = rport,
+        .tcp.in_dest_port = lport,
         .in_data_buf_capacity = NI_OPTS(ni).ceph_data_buf_bytes,
       };
       rc = efrm_ext_msg(rs, ni->nic_hw[intf_i].plugin_handle,

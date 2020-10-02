@@ -24,6 +24,10 @@ struct xsn_tcp_create_stream {
   uint8_t in_synchronised;
   uint32_t in_seq;
   uint32_t out_conn_id;
+  uint32_t in_source_ip;
+  uint32_t in_dest_ip;
+  uint16_t in_source_port;
+  uint16_t in_dest_port;
 };
 
 struct xsn_tcp_sync_stream {
