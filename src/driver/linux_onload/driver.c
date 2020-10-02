@@ -547,8 +547,6 @@ static int __init onload_module_init(void)
   if( rc < 0 )
     goto fail_sanity;
 
-  oo_mm_tbl_init();
-
   rc = efab_tcp_driver_ctor();
   if( rc != 0 )
     goto fail_ip_ctor;
