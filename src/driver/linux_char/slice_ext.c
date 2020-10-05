@@ -3,6 +3,7 @@
 #include <ci/efrm/efrm_client.h>
 #include "efch.h"
 #include <ci/efrm/slice_ext.h>
+#include <ci/efrm/pd.h>
 #include <ci/efch/op_types.h>
 #include <ci/efhw/mc_driver_pcol.h>
 #include "char_internal.h"

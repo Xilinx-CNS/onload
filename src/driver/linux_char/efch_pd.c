@@ -60,9 +60,16 @@ pd_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   }
 
   hw_loopback = (alloc->in_flags & EFCH_PD_FLAG_MCAST_LOOP) != 0;
+  /* Unconditionally using CLIENT_ID and CLIENT_ID_OPT because there are no
+   * disadvantages to allocating a client ID for ourselves, but similarly all
+   * the basics will continue working properly if we can't get one (e.g. on
+   * EF10). Functionality which does require a client ID (e.g. slice
+   * extensions) explicitly checks that we got one. */
   rc = efrm_pd_alloc(&pd_rs, client,
                      (phys_mode ? EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE : 0) |
-                     (hw_loopback ? EFRM_PD_ALLOC_FLAG_HW_LOOPBACK : 0) );
+                     (hw_loopback ? EFRM_PD_ALLOC_FLAG_HW_LOOPBACK : 0) |
+                     EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID |
+                     EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID_OPT);
   if (rc < 0)
     goto out;
 
