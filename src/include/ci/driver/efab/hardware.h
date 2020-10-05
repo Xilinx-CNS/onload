@@ -208,3 +208,13 @@
 #define efhw_nic_get_rx_error_stats(nic, instance, data, data_len, do_reset) \
 	((nic)->efhw_func->get_rx_error_stats(nic, instance, data, data_len, \
                                               do_reset))
+
+/*-------------- Dynamic clients IDs ------ */
+#define efhw_nic_client_alloc(nic, parent, id) \
+	((nic)->efhw_func->client_alloc((nic), (parent), (id)))
+
+#define efhw_nic_client_free(nic, id) \
+	((nic)->efhw_func->client_free((nic), (id)))
+
+#define efhw_nic_vi_set_user(nic, vi_instance, user) \
+	((nic)->efhw_func->vi_set_user((nic), (vi_instance), (user)))

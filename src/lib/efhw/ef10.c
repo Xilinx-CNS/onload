@@ -2240,6 +2240,33 @@ ef10_vport_free(struct efhw_nic *nic, unsigned vport_id)
 
 /*--------------------------------------------------------------------
  *
+ * Dynamic client IDs
+ *
+ *--------------------------------------------------------------------*/
+
+static int
+ef10_client_alloc(struct efhw_nic *nic, uint32_t parent, uint32_t *id)
+{
+	return -ENOSYS;
+}
+
+
+static int
+ef10_client_free(struct efhw_nic *nic, uint32_t id)
+{
+	return -ENOSYS;
+}
+
+
+static int
+ef10_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
+{
+	return -ENOSYS;
+}
+
+
+/*--------------------------------------------------------------------
+ *
  * AF_XDP
  *
  *--------------------------------------------------------------------*/
@@ -2300,6 +2327,9 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_get_rx_error_stats,
 	ef10_tx_alt_alloc,
 	ef10_tx_alt_free,
+	ef10_client_alloc,
+	ef10_client_free,
+	ef10_vi_set_user,
 	ef10_dmaq_kick,
 	ef10_af_xdp_mem,
 	ef10_af_xdp_init,

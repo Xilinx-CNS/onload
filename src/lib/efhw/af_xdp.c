@@ -1288,6 +1288,33 @@ af_xdp_get_rx_error_stats(struct efhw_nic *nic, int instance,
 	return -EOPNOTSUPP;
 }
 
+/*--------------------------------------------------------------------
+ *
+ * Dynamic client IDs
+ *
+ *--------------------------------------------------------------------*/
+
+static int
+af_xdp_client_alloc(struct efhw_nic *nic, uint32_t parent, uint32_t *id)
+{
+	return -ENOSYS;
+}
+
+
+static int
+af_xdp_client_free(struct efhw_nic *nic, uint32_t id)
+{
+	return -ENOSYS;
+}
+
+
+static int
+af_xdp_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
+{
+	return -ENOSYS;
+}
+
+
 
 /*--------------------------------------------------------------------
  *
@@ -1327,6 +1354,9 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_get_rx_error_stats,
 	af_xdp_tx_alt_alloc,
 	af_xdp_tx_alt_free,
+	af_xdp_client_alloc,
+	af_xdp_client_free,
+	af_xdp_vi_set_user,
 	af_xdp_dmaq_kick,
 	af_xdp_mem,
 	af_xdp_init,

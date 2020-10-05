@@ -294,6 +294,16 @@ struct efhw_func_ops {
 	int (*tx_alt_free)(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 			   const unsigned *alt_ids);
 
+  /*-------------- dynamic client IDs ------------ */
+
+	/* Create a new dynamic client entity; see MC_CMD_CLIENT_ALLOC */
+	int (*client_alloc)(struct efhw_nic *nic, uint32_t parent, uint32_t *id);
+	/* Destroy something from client_alloc() */
+	int (*client_free)(struct efhw_nic *nic, uint32_t id);
+	/* Change the ID of the client allowed to create queues on a VI */
+	int (*vi_set_user)(struct efhw_nic *nic, uint32_t vi_instance,
+	                   uint32_t user);
+
   /*-------------- AF_XDP ------------------------ */
 
 	/*! Provoke device to update states

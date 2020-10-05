@@ -619,6 +619,48 @@ int ef100_nic_ext_msg(struct efhw_nic* nic, uint32_t mc_handle,
 
 /*--------------------------------------------------------------------
  *
+ * Dynamic client IDs
+ *
+ *--------------------------------------------------------------------*/
+
+static int
+ef100_client_alloc(struct efhw_nic *nic, uint32_t parent, uint32_t *id)
+{
+	int rc;
+	struct efx_dl_device *efx_dev;
+	EFX_DL_PRE(efx_dev, nic, rc)
+		rc = efx_dl_client_alloc(efx_dev, parent, id);
+	EFX_DL_POST(efx_dev, nic, rc)
+	return rc;
+}
+
+
+static int
+ef100_client_free(struct efhw_nic *nic, uint32_t id)
+{
+	int rc;
+	struct efx_dl_device *efx_dev;
+	EFX_DL_PRE(efx_dev, nic, rc)
+		rc = efx_dl_client_free(efx_dev, id);
+	EFX_DL_POST(efx_dev, nic, rc)
+	return rc;
+}
+
+
+static int
+ef100_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
+{
+	int rc;
+	struct efx_dl_device *efx_dev;
+	EFX_DL_PRE(efx_dev, nic, rc)
+		rc = efx_dl_vi_set_user(efx_dev, vi_instance, user);
+	EFX_DL_POST(efx_dev, nic, rc)
+	return rc;
+}
+
+
+/*--------------------------------------------------------------------
+ *
  * AF_XDP
  *
  *--------------------------------------------------------------------*/
@@ -679,6 +721,9 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_get_rx_error_stats,
 	ef100_tx_alt_alloc,
 	ef100_tx_alt_free,
+	ef100_client_alloc,
+	ef100_client_free,
+	ef100_vi_set_user,
 	ef100_dmaq_kick,
 	ef100_af_xdp_mem,
 	ef100_af_xdp_init,
