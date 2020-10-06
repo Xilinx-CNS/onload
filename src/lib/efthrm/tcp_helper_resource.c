@@ -278,6 +278,9 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
           ci_waitable_wakeup_all(&trs->ready_list_waitqs[i]);
       }
 #endif
+
+      if( in_dl_context )
+        ni->flags |= CI_NETIF_FLAG_IN_DL_CONTEXT;
       ci_netif_unlock(&trs->netif);
     }
     else {
