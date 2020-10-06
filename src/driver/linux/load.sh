@@ -622,7 +622,8 @@ dologsetup()
 # main()
 
 if [ "`dnsdomainname`" = "uk.solarflarecom.com" ] ||
-   [ "`dnsdomainname`" = "uk.level5networks.com" ]; then
+   [ "`dnsdomainname`" = "uk.level5networks.com" ] ||
+   [ "`dnsdomainname`" = "xcblab.xilinx.com" ]; then
     NO_IP_ADDR=0
 else
     NO_IP_ADDR=1
