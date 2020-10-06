@@ -80,17 +80,18 @@
 
 /*-------------- Event support  ------------ */
 
-#define efhw_nic_event_queue_enable(nic, evq, size, dma_addrs, \
+#define efhw_nic_event_queue_enable(nic, client_id, evq, size, dma_addrs, \
 				    n_pages, interrupting, dos_p, wakeup_evq, \
                                     flags, flags_out)                   \
-  ((nic)->efhw_func->event_queue_enable((nic), (evq), (size),           \
+  ((nic)->efhw_func->event_queue_enable((nic), (client_id), (evq), (size), \
                                         (dma_addrs),        \
                                         (n_pages), (interrupting),      \
                                         (dos_p), (wakeup_evq),          \
                                         (flags), (flags_out)))
 
-#define efhw_nic_event_queue_disable(nic, evq, time_sync_events_enabled) \
-	((nic)->efhw_func->event_queue_disable(nic, evq,		\
+#define efhw_nic_event_queue_disable(nic, client_id, evq, \
+				    time_sync_events_enabled) \
+	((nic)->efhw_func->event_queue_disable(nic, client_id, evq,		\
 					       time_sync_events_enabled))
 
 #define efhw_nic_wakeup_request(nic, iopage, vi_id, rd_ptr)                   \
@@ -106,18 +107,18 @@
 	((nic)->efhw_func->handle_event((nic), (handler), (ev), (budget)))
 
 /*-------------- DMA support  ------------ */
-#define efhw_nic_dmaq_tx_q_init(nic, dmaq, evq, owner, tag,		\
+#define efhw_nic_dmaq_tx_q_init(nic, client_id, dmaq, evq, owner, tag,		\
 				dmaq_size, dma_addrs, n_dma_addrs, \
                                 vport_id, stack_id, flags)              \
-	((nic)->efhw_func->dmaq_tx_q_init(nic, dmaq, evq, owner, tag,	\
+	((nic)->efhw_func->dmaq_tx_q_init(nic, client_id, dmaq, evq, owner, tag, \
 					  dmaq_size, dma_addrs,  \
                                           n_dma_addrs, vport_id, stack_id, \
                                           flags))
 
-#define efhw_nic_dmaq_rx_q_init(nic, dmaq, evq, owner, tag,		\
+#define efhw_nic_dmaq_rx_q_init(nic, client_id, dmaq, evq, owner, tag,		\
 				dmaq_size, dma_addrs, n_dma_addrs, \
                                 vport_id, stack_id, ps_buf_size, flags) \
-	((nic)->efhw_func->dmaq_rx_q_init(nic, dmaq, evq, owner, tag,	\
+	((nic)->efhw_func->dmaq_rx_q_init(nic, client_id, dmaq, evq, owner, tag, \
 					  dmaq_size, dma_addrs,  \
                                           n_dma_addrs, vport_id, stack_id, \
                                           ps_buf_size, flags))
@@ -128,11 +129,11 @@
 #define efhw_nic_dmaq_rx_q_disable(nic, dmaq) \
 	((nic)->efhw_func->dmaq_rx_q_disable(nic, dmaq))
 
-#define efhw_nic_flush_tx_dma_channel(nic, dmaq) \
-	((nic)->efhw_func->flush_tx_dma_channel(nic, dmaq))
+#define efhw_nic_flush_tx_dma_channel(nic, client_id, dmaq) \
+	((nic)->efhw_func->flush_tx_dma_channel(nic, client_id, dmaq))
 
-#define efhw_nic_flush_rx_dma_channel(nic, dmaq) \
-	((nic)->efhw_func->flush_rx_dma_channel(nic, dmaq))
+#define efhw_nic_flush_rx_dma_channel(nic, client_id, dmaq) \
+	((nic)->efhw_func->flush_rx_dma_channel(nic, client_id, dmaq))
 
 /* xdp specific */
 #define efhw_nic_dmaq_kick(nic,instance) \

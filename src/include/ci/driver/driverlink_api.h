@@ -15,7 +15,7 @@
 #error "Driverlink API has changed.  Audit client code for compatibility."
 #endif
 
-#if EFX_DRIVERLINK_API_VERSION < 25
+#if EFX_DRIVERLINK_API_VERSION < 32
 #error "Driverlink API version too low."
 #endif
 

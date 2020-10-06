@@ -960,8 +960,8 @@ static int wait_callback(struct wait_queue_entry* wait, unsigned mode,
  * properties.
  */
 static int
-af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint evq, uint evq_size,
-                              dma_addr_t *dma_addrs,
+af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
+                              uint evq, uint evq_size, dma_addr_t *dma_addrs,
                               uint n_pages, int interrupting, int enable_dos_p,
                               int wakeup_evq, int flags, int* flags_out)
 {
@@ -986,8 +986,8 @@ af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint evq, uint evq_size,
 }
 
 static void
-af_xdp_nic_event_queue_disable(struct efhw_nic *nic, uint evq,
-			     int time_sync_events_enabled)
+af_xdp_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
+			     uint evq, int time_sync_events_enabled)
 {
 	struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq);
 	if( vi != NULL )
@@ -1054,8 +1054,8 @@ af_xdp_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 
 
 static int
-af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
-                      uint tag, uint dmaq_size,
+af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
+                      uint evq_id, uint own_id, uint tag, uint dmaq_size,
                       dma_addr_t *dma_addrs, int n_dma_addrs,
                       uint vport_id, uint stack_id, uint flags)
 {
@@ -1071,8 +1071,8 @@ af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 
 
 static int
-af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
-		    uint tag, uint dmaq_size,
+af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
+		    uint evq_id, uint own_id, uint tag, uint dmaq_size,
 		    dma_addr_t *dma_addrs, int n_dma_addrs,
 		    uint vport_id, uint stack_id, uint ps_buf_size, uint flags)
 {
@@ -1106,14 +1106,16 @@ static void af_xdp_dmaq_rx_q_disable(struct efhw_nic *nic, uint dmaq)
  *--------------------------------------------------------------------*/
 
 
-static int af_xdp_flush_tx_dma_channel(struct efhw_nic *nic, uint dmaq)
+static int af_xdp_flush_tx_dma_channel(struct efhw_nic *nic,
+		    uint32_t client_id, uint dmaq)
 {
 	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
 	return -EOPNOTSUPP;
 }
 
 
-static int af_xdp_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
+static int af_xdp_flush_rx_dma_channel(struct efhw_nic *nic,
+		    uint32_t client_id, uint dmaq)
 {
 	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
 	return -EOPNOTSUPP;

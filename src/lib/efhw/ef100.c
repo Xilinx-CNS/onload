@@ -168,7 +168,8 @@ ef100_nic_release_hardware(struct efhw_nic *nic)
  * properties.
  */
 static int
-ef100_nic_event_queue_enable(struct efhw_nic *nic, uint evq, uint evq_size,
+ef100_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
+			    uint evq, uint evq_size,
 			    dma_addr_t *dma_addrs,
 			    uint n_pages, int interrupting, int enable_dos_p,
 			    int wakeup_evq, int flags, int* flags_out)
@@ -187,8 +188,8 @@ ef100_nic_event_queue_enable(struct efhw_nic *nic, uint evq, uint evq_size,
 		return -EOPNOTSUPP;
 	}
 
-	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, evq, evq_size, dma_addrs,
-						    n_pages, interrupting,
+	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, client_id, evq, evq_size,
+						    dma_addrs, n_pages, interrupting,
 						    enable_dos_p, enable_cut_through,
 						    enable_rx_merging,
 						    wakeup_evq, enable_timer);
@@ -201,19 +202,19 @@ ef100_nic_event_queue_enable(struct efhw_nic *nic, uint evq, uint evq_size,
 
 
 static void
-ef100_nic_event_queue_disable(struct efhw_nic *nic, uint evq,
-			     int time_sync_events_enabled)
+ef100_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
+			     uint evq, int time_sync_events_enabled)
 {
 	if( time_sync_events_enabled )
 		EFHW_TRACE("%s: timestamping isn't supported on EF100",
 			   __FUNCTION__);
-	ef10_ef100_mcdi_cmd_event_queue_disable(nic, evq);
+	ef10_ef100_mcdi_cmd_event_queue_disable(nic, client_id, evq);
 }
 
 
 static int
-ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
-		    uint tag, uint dmaq_size,
+ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
+		    uint evq_id, uint own_id, uint tag, uint dmaq_size,
 		    dma_addr_t *dma_addrs, int n_dma_addrs,
 		    uint vport_id, uint stack_id, uint flags)
 {
@@ -238,7 +239,7 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 	 * if so we retry without it. */
 	for (flag_pacer_bypass = 1; 1; flag_pacer_bypass = 0) {
 		rc = ef10_ef100_mcdi_cmd_init_txq
-			(nic, dma_addrs, n_dma_addrs, vport_id, stack_id,
+			(nic, client_id, dma_addrs, n_dma_addrs, vport_id, stack_id,
 			 REAL_OWNER_ID(own_id), flag_timestamp,
 			 QUEUE_CRC_MODE_NONE, flag_tcp_udp_only,
 			 flag_tcp_csum_dis, flag_ip_csum_dis,
@@ -261,8 +262,8 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 
 
 static int
-ef100_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
-		    uint tag, uint dmaq_size,
+ef100_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
+		    uint evq_id, uint own_id, uint tag, uint dmaq_size,
 		    dma_addr_t *dma_addrs, int n_dma_addrs,
 		    uint vport_id, uint stack_id, uint ps_buf_size, uint flags)
 {
@@ -278,7 +279,7 @@ ef100_dmaq_rx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 		return -EOPNOTSUPP;
 
 	rc = ef10_ef100_mcdi_cmd_init_rxq
-		(nic, dma_addrs, n_dma_addrs, vport_id, stack_id,
+		(nic, client_id, dma_addrs, n_dma_addrs, vport_id, stack_id,
 		 REAL_OWNER_ID(own_id), QUEUE_CRC_MODE_NONE, flag_timestamp,
 		 flag_hdr_split, flag_buff_mode, flag_rx_prefix,
 		 flag_packed_stream, dmaq, tag, evq_id, dmaq_size, ps_buf_size,

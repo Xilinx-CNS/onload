@@ -268,7 +268,8 @@ efrm_vi_irq_free(struct efrm_vi *vi)
 }
 
 
-static void efrm_vi_rm_free_instance(struct efrm_vi *virs)
+static void efrm_vi_rm_free_instance(struct efrm_client *client,
+                                     struct efrm_vi *virs)
 {
 	if (virs->vi_set != NULL) {
 		struct efrm_vi_set* vi_set = virs->vi_set;
@@ -286,7 +287,7 @@ static void efrm_vi_rm_free_instance(struct efrm_vi *virs)
 			complete(&vi_set->allocation_completion);
 	}
 	else {
-		struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
+		struct efhw_nic *nic = efrm_client_get_nic(client);
 
 		if (virs->irq != 0)
 			efrm_vi_irq_free(virs);
@@ -561,7 +562,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	case EFHW_TXQ:
 		evq_instance = q->evq_ref->rs.rs_instance;
 		rc = efhw_nic_dmaq_tx_q_init
-			(nic, instance, evq_instance,
+			(nic, efrm_pd_get_nic_client_id(virs->pd), instance, evq_instance,
 			 efrm_pd_owner_id(virs->pd),
 			 virs->q[queue_type].tag, q->capacity,
 			 q->dma_addrs,
@@ -572,7 +573,8 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	case EFHW_RXQ:
 		evq_instance = q->evq_ref->rs.rs_instance;
                 rc = efhw_nic_dmaq_rx_q_init
-                       (nic, instance, evq_instance,
+                       (nic, efrm_pd_get_nic_client_id(virs->pd),
+                        instance, evq_instance,
                         efrm_pd_owner_id(virs->pd),
                         virs->q[queue_type].tag, q->capacity,
                         q->dma_addrs,
@@ -614,7 +616,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 
 		/* NB. We do not enable DOS protection because of bug12916. */
 		rc = efhw_nic_event_queue_enable
-			(nic, instance, q->capacity,
+			(nic, efrm_pd_get_nic_client_id(virs->pd), instance, q->capacity,
 			 q->dma_addrs,
 			 (1 << q->page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
 			 interrupting, 0 /* DOS protection */,
@@ -748,21 +750,22 @@ EXPORT_SYMBOL(efrm_vi_resource_mark_shut_down);
 
 
 static int
-__efrm_vi_q_flush(struct efhw_nic* nic, enum efhw_q_type queue_type,
+__efrm_vi_q_flush(struct efhw_nic* nic, uint32_t client_id,
+		  enum efhw_q_type queue_type,
 		  int instance, int time_sync_events_enabled)
 {
 	int rc;
 
 	switch (queue_type) {
 	case EFHW_RXQ:
-		rc = efhw_nic_flush_rx_dma_channel(nic, instance);
+		rc = efhw_nic_flush_rx_dma_channel(nic, client_id, instance);
 		break;
 	case EFHW_TXQ:
-		rc = efhw_nic_flush_tx_dma_channel(nic, instance);
+		rc = efhw_nic_flush_tx_dma_channel(nic, client_id, instance);
 		break;
 	case EFHW_EVQ:
 		/* flushing EVQ is as good as disabling it */
-		efhw_nic_event_queue_disable(nic, instance,
+		efhw_nic_event_queue_disable(nic, client_id, instance,
 					     time_sync_events_enabled);
 		rc = 0;
 		break;
@@ -798,7 +801,8 @@ efrm_vi_q_flush(struct efrm_vi *virs, enum efhw_q_type queue_type)
 		INIT_LIST_HEAD(&q->init_link);
 	}
 
-	rc = __efrm_vi_q_flush(nic, queue_type, instance,
+	rc = __efrm_vi_q_flush(nic, efrm_pd_get_nic_client_id(virs->pd),
+			       queue_type, instance,
 			       (virs->flags & (EFHW_VI_RX_TIMESTAMPS |
 					       EFHW_VI_TX_TIMESTAMPS)) != 0);
 	EFRM_TRACE("Flushed queue nic %d type %d 0x%x rc %d",
@@ -815,6 +819,7 @@ __efrm_vi_resource_free(struct efrm_vi *virs)
 	struct efrm_nic *efrm_nic;
 	int instance;
 	int rc;
+	uint32_t nic_client_id;
 
 	EFRM_ASSERT(efrm_vi_manager);
 	EFRM_RESOURCE_MANAGER_ASSERT_VALID(&efrm_vi_manager->rm);
@@ -855,7 +860,15 @@ __efrm_vi_resource_free(struct efrm_vi *virs)
 	efrm_vi_detach_evq(virs, EFHW_RXQ);
 	efrm_vi_detach_evq(virs, EFHW_TXQ);
 	efrm_vi_io_unmap(virs);
-	efrm_vi_rm_free_instance(virs);
+	nic_client_id = efrm_pd_get_nic_client_id(virs->pd);
+	if (nic_client_id != EFRM_NIC_CLIENT_ID_NONE) {
+		rc = efhw_nic_vi_set_user(&efrm_nic->efhw_nic, instance,
+		                          EFRM_NIC_CLIENT_ID_NONE);
+		if (rc)
+			EFRM_ERR("%s: couldn't restore user of VI %d: %d\n",
+					__FUNCTION__, instance, rc);
+	}
+	efrm_vi_rm_free_instance(virs->rs.rs_client, virs);
 	efrm_pd_release(virs->pd);
 	efrm_client_put(virs->rs.rs_client);
 	EFRM_DO_DEBUG(memset(virs, 0, sizeof(*virs)));
@@ -884,8 +897,9 @@ void efrm_nic_flush_all_queues(struct efhw_nic *nic, int dummy)
 			if (dummy)
 				continue;
 			efrm_atomic_or(efrm_vi_shut_down_flag(type), &virs->shut_down_flags);
-			rc = __efrm_vi_q_flush(virs->rs.rs_client->nic, type,
-				virs->rs.rs_instance,
+			rc = __efrm_vi_q_flush(virs->rs.rs_client->nic,
+				efrm_pd_get_nic_client_id(virs->pd),
+				type, virs->rs.rs_instance,
 				(virs->flags & EFHW_VI_RX_TIMESTAMPS) != 0);
 			(void) rc;
 			EFRM_TRACE(" nic %d type %d 0x%x rc %d",
@@ -1395,6 +1409,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	struct vi_attr *attr;
 	int rc;
 	struct efrm_pd *pd;
+	uint32_t nic_client_id;
 
 	if (o_attr == NULL) {
 		efrm_vi_attr_init(&s_attr);
@@ -1466,6 +1481,18 @@ int  efrm_vi_alloc(struct efrm_client *client,
 		goto fail_alloc_id;
 	}
        	EFRM_ASSERT(virs->allocation.instance >= 0);
+
+	nic_client_id = efrm_pd_get_nic_client_id(pd);
+	if (nic_client_id != EFRM_NIC_CLIENT_ID_NONE) {
+		rc = efhw_nic_vi_set_user(client->nic, virs->allocation.instance,
+		                          nic_client_id);
+		if (rc) {
+			EFRM_ERR("%s: failed to set VI %d user =%u (rc=%d)\n",
+			         __FUNCTION__, virs->rs.rs_instance, nic_client_id, rc);
+			goto fail_set_user;
+		}
+	}
+
 	rc = efrm_vi_io_map(virs, client->nic,
 			    virs->allocation.instance);
 	if (rc < 0) {
@@ -1512,7 +1539,11 @@ int  efrm_vi_alloc(struct efrm_client *client,
 
 
 fail_mmap:
-	efrm_vi_rm_free_instance(virs);
+	if (nic_client_id != EFRM_NIC_CLIENT_ID_NONE)
+		efhw_nic_vi_set_user(client->nic, virs->allocation.instance,
+		                     EFRM_NIC_CLIENT_ID_NONE);
+fail_set_user:
+	efrm_vi_rm_free_instance(client, virs);
 fail_alloc_id:
 	kfree(virs);
 fail_alloc:

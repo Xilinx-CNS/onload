@@ -153,7 +153,7 @@ struct efhw_func_ops {
 	   depending on the the addressing mode selected then either a q_base_addr
 	   in host memory, or a buffer base id should be provided
 	 */
-	int (*event_queue_enable) (struct efhw_nic *nic,
+	int (*event_queue_enable) (struct efhw_nic *nic, uint32_t client_id,
 				    uint evq,	/* evnt queue index */
 				    uint evq_size,	/* units of #entries */
 				    dma_addr_t* dma_addr,
@@ -165,8 +165,8 @@ struct efhw_func_ops {
 				    int* flags_out);
 
 	/*! Disable the given event queue (and any associated timer) */
-	void (*event_queue_disable) (struct efhw_nic *nic, uint evq,
-				     int time_sync_events_enabled);
+	void (*event_queue_disable) (struct efhw_nic *nic, uint32_t client_id,
+				     uint evq, int time_sync_events_enabled);
 
 	/*! request wakeup from the NIC on a given event Q */
 	void (*wakeup_request) (struct efhw_nic *nic,
@@ -183,14 +183,14 @@ struct efhw_func_ops {
   /*-------------- DMA support  ------------ */
 
 	/*! Initialise NIC state for a given TX DMAQ */
-	int (*dmaq_tx_q_init) (struct efhw_nic *nic,
+	int (*dmaq_tx_q_init) (struct efhw_nic *nic, uint32_t client_id,
 			       uint dmaq, uint evq, uint owner, uint tag,
 			       uint dmaq_size,
 			       dma_addr_t *dma_addrs, int n_dma_addrs,
 			       uint vport_id, uint stack_id, uint flags);
 
 	/*! Initialise NIC state for a given RX DMAQ */
-	int (*dmaq_rx_q_init) (struct efhw_nic *nic,
+	int (*dmaq_rx_q_init) (struct efhw_nic *nic, uint32_t client_id,
 			       uint dmaq, uint evq, uint owner, uint tag,
 			       uint dmaq_size,
 			       dma_addr_t *dma_addrs, int n_dma_addrs,
@@ -204,10 +204,12 @@ struct efhw_func_ops {
 	void (*dmaq_rx_q_disable) (struct efhw_nic *nic, uint dmaq);
 
 	/*! Flush a given TX DMA channel */
-	int (*flush_tx_dma_channel) (struct efhw_nic *nic, uint dmaq);
+	int (*flush_tx_dma_channel) (struct efhw_nic *nic, uint32_t client_id,
+			       uint dmaq);
 
 	/*! Flush a given RX DMA channel */
-	int (*flush_rx_dma_channel) (struct efhw_nic *nic, uint dmaq);
+	int (*flush_rx_dma_channel) (struct efhw_nic *nic, uint32_t client_id,
+			       uint dmaq);
 
   /*-------------- Buffer table Support ------------ */
 	/*! Find all page orders available on this NIC.
