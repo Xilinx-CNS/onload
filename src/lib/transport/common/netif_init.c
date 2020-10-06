@@ -68,14 +68,26 @@ static unsigned citp_netif_dtor_mode = CITP_NETIF_DTOR_ONLY_SHARED;
 ci_inline void __citp_add_netif( ci_netif* ni )
 {
   /* Requires that the FD table write lock has been taken */
+  ci_dllink* prev = &citp_active_netifs.l;
+  ci_dllink* next;
 
   ci_assert( ni );
   CI_MAGIC_CHECK(ni, NETIF_MAGIC);
   ci_assert( citp_netifs_inited );
   CITP_FDTABLE_ASSERT_LOCKED(1);
 
-  /* Add to the list of active netifs */
-  ci_dllist_push(&citp_active_netifs, &ni->link);
+  /* Add to the list of active netifs; keep the list sorted.
+   *
+   * It is needed when we want to lock all the stacks at exit.
+   * Ordering allows to avoid deadlock.
+   */
+  CI_DLLIST_FOR_EACH(next, &citp_active_netifs ) {
+    ci_netif* ni_next = CI_CONTAINER(ci_netif, link, next);
+    if( NI_ID(ni_next) > NI_ID(ni) )
+      break;
+    prev = next;
+  }
+  ci_dllist_insert_after(prev, &ni->link);
 }
 
 ci_inline void __citp_remove_netif(ci_netif* ni)
