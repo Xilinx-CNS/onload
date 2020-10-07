@@ -336,8 +336,8 @@ ci_tcp_state* ci_tcp_get_state_buf_from_cache(ci_netif *netif, int pid)
     ts = CI_CONTAINER(ci_tcp_state, epcache_link, link);
     ci_assert(ts);
 
-    if( S_TO_EPS(netif, ts)->fd != CI_FD_BAD ) {
-      ci_assert_nflags(ts->s.b.sb_aflags, CI_SB_AFLAG_IN_CACHE_NO_FD);
+    if( S_TO_EPS(netif, ts)->fd != CI_FD_BAD &&
+        ! (ts->s.b.sb_aflags & CI_SB_AFLAG_IN_CACHE_NO_FD) ) {
       /* We have an FD cached if the cached endpoint has been reused by
        * other process let's restore state */
       if( ts->cached_on_pid != pid ) {
@@ -362,9 +362,13 @@ ci_tcp_state* ci_tcp_get_state_buf_from_cache(ci_netif *netif, int pid)
      * The concurrent access to this list from different processes is
      * guarged by the stack lock, i.e. we guarantee a sort of correctness
      * for this unsupported use-case.
+     *
+     * Another use-case is: this process closed this fd via direct syscall,
+     * which we were unable to intercept.  We restore the fd.
      */
-    else if( ci_tcp_is_cached(ts) && ts->cached_on_pid != pid &&
-             (~ts->s.b.sb_aflags & CI_SB_AFLAG_IN_CACHE_NO_FD) ) {
+    else if( ci_tcp_is_cached(ts) &&
+             ( (ts->cached_on_pid == pid) ==
+             (ts->s.b.sb_aflags & CI_SB_AFLAG_IN_CACHE_NO_FD) ) ) {
       ci_fd_t stack_fd = ci_netif_get_driver_handle(netif);
       /* Other process put the endpoint to cache, we need to create an FD
        * for this process to use */
