@@ -172,6 +172,15 @@ static int __citp_netif_alloc(ef_driver_handle* fd, const char *name,
   return rc;
 }
 
+static void oo_exit_hook__on_exit(int status, void* arg)
+{
+  oo_exit_hook();
+}
+
+/* ***************************
+ * Interface
+ */
+
 int citp_netif_by_id(ci_uint32 stack_id, ci_netif** out_ni, int locked)
 {
   ci_netif *ni;
@@ -212,10 +221,6 @@ int citp_netif_by_id(ci_uint32 stack_id, ci_netif** out_ni, int locked)
   *out_ni = ni;
   return 0;
 }
-
-/* ***************************
- * Interface
- */
 
 /* Check the active netifs to look for one with
  * a matching ID
@@ -273,6 +278,12 @@ void citp_cmn_netif_init_ctor(unsigned netif_dtor_mode)
   ci_dllist_init(&citp_active_netifs);
 
   __CITP_UNLOCK(&citp_ul_lock);
+
+  /* Install the exit hook */
+  /* It is recommended to use atexit(), but linker complains, because
+   * atexit() resides in ld-linux.so instead of libc.so.  We can play games
+   * with linker script and libc_nonshared.a, or use on_exit(). */
+  on_exit(oo_exit_hook__on_exit, NULL);
 }
 
 
@@ -698,4 +709,23 @@ void uncache_active_netifs(void)
   citp_exit_lib(&lib_context, 1);
 }
 #endif
-/*! \cidoxg_end */
+
+
+void oo_exit_hook(void)
+{
+  citp_lib_context_t lib_context;
+
+  Log_CALL(ci_log("%s()", __func__));
+
+  if( ci_dllist_is_empty(&citp_active_netifs) )
+    return;
+
+  citp_enter_lib(&lib_context);
+  CITP_FDTABLE_LOCK();
+
+  /* Lock all the stacks of this process. */
+
+  CITP_FDTABLE_UNLOCK();
+  citp_exit_lib(&lib_context, 1);
+}
+

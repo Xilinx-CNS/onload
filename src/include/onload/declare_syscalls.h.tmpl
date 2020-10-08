@@ -148,6 +148,8 @@ CI_MK_DECL(int           , epoll_pwait, (int, struct epoll_event *, int, int, co
 CI_MK_DECL(long          , syscall    , (long, ...));
 #endif
 
+CI_MK_DECL(void           , _exit      , (int));
+
 #undef CI_MK_DECL
 
 /*! \cidoxg_end */

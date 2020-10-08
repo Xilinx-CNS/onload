@@ -93,6 +93,7 @@
     epoll_wait;
     epoll_pwait;
     syscall;
+    _exit;
 
     onload_fd_stat;
     onload_is_present;

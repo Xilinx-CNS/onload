@@ -2760,6 +2760,19 @@ OO_INTERCEPT(long, syscall,
 #endif
 
 
+OO_INTERCEPT(void, _exit, (int status))
+{
+  Log_CALL(ci_log("%s(%d)", __func__, status));
+
+  /* Internal libc call to _exit(2) is not intercepted, so we don't get here
+   * if the app calls exit(3).  In the case of gracious exit() we call
+   * oo_exit_hook() graciously, via on_exit().
+   */
+  oo_exit_hook();
+  return ci_sys__exit(status);
+}
+
+
 /*
  * vi: sw=2:ai:aw
  * vim: et:ul=0

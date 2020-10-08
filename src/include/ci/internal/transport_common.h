@@ -169,6 +169,9 @@ extern void __citp_netif_mark_all_dont_use(void) CI_HF;
 /*! Free and destruct a netif */
 extern void __citp_netif_free(ci_netif* ni) CI_HF;
 
+/*! Exit hook, to be called from any exit(),_exit() or
+ * SIGTERM-SIG_DFL handler. */
+extern void oo_exit_hook(void) CI_HF;
 
 /**********************************************************************
  ** Protocol-agnostic common
