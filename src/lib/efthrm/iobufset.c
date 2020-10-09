@@ -387,9 +387,6 @@ oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
      * break assumptions in the kernel and cause problems, for example when
      * providing them to AF_XDP sockets. We only attempt to allocate this size,
      * and fall back to individual pages if this fails.
-     *
-     * Note that OO_IOBUFSET_FLAG_COMPOUND_PAGE_LIMIT, formerly used to reduce
-     * the initial compound page size we attempt to allocate, is now obsolete.
      */
     int low_order = order;
     if( *flags & OO_IOBUFSET_FLAG_COMPOUND_PAGE_NONE ||

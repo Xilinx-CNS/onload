@@ -589,7 +589,7 @@ CI_CFG_OPT("EF_COMPOUND_PAGES_MODE", compound_pages, ci_uint32,
 "Debug option, not suitable for normal use.\n"
 "For packet buffers, allocate system pages in the following way:\n"
 "  0 - try to use compound pages if possible (default);\n"
-"  1 - do not use compound pages of high order;\n"
+"  1 - obsolete, same behaviour as 0;\n"
 "  2 - do not use compound pages at all.\n",
           2, , 0, 0, 2, oneof:always;small;never)
 
