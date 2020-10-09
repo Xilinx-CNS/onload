@@ -378,33 +378,31 @@ oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
   } else
 #endif
   {
+    /* It is better to allocate high-order pages for many reasons:
+     * - in theory, access to continious memory is faster;
+     * - with high-order pages, we get small size for dma_addrs array
+     *   and it fits into one or two pages.
+     *
+     * However, using compound pages that are smaller than huge pages can
+     * break assumptions in the kernel and cause problems, for example when
+     * providing them to AF_XDP sockets. We only attempt to allocate this size,
+     * and fall back to individual pages if this fails.
+     *
+     * Note that OO_IOBUFSET_FLAG_COMPOUND_PAGE_LIMIT, formerly used to reduce
+     * the initial compound page size we attempt to allocate, is now obsolete.
+     */
     int low_order = order;
-    if( *flags & OO_IOBUFSET_FLAG_COMPOUND_PAGE_LIMIT )
-      low_order -= 3;
-    else if( *flags & OO_IOBUFSET_FLAG_COMPOUND_PAGE_NONE )
+    if( *flags & OO_IOBUFSET_FLAG_COMPOUND_PAGE_NONE ||
+        low_order < HPAGE_SHIFT - PAGE_SHIFT )
       low_order = 0;
-    do {
-      /* It is better to allocate high-order pages for many reasons:
-       * - in theory, access to continious memory is faster;
-       * - with high-order pages, we get small size for dma_addrs array
-       *   and it fits into one or two pages.
-       *
-       * So, if one-compound-page-for-all failed, we try lower order in
-       * hope to keep both dma_addrs array and the packet buffers themselves
-       * to use not-very-high-order allocations.
-       *
-       * TODO: it may be useful to go through EF10 page orders:
-       * x86: 9(hugepage),8,4,0
-       * ppc: 4(max,=9nic),3(=8nic),0(=5nic)
-       */
-      rc = oo_bufpage_alloc(pages_out, order, low_order, min_order, flags,
-                            gfp_flag);
-      if( rc == 0 || low_order == 0 )
-        break;
-      low_order -= 3;
-      if( low_order < 0 )
-        low_order = 0;
-    } while( 1 );
+    else
+      low_order = HPAGE_SHIFT - PAGE_SHIFT;
+
+    rc = oo_bufpage_alloc(pages_out, order, low_order, min_order, flags,
+                          gfp_flag);
+
+    if( rc != 0 && low_order != 0 )
+      rc = oo_bufpage_alloc(pages_out, order, 0, min_order, flags, gfp_flag);
   }
 
   if( rc == -EMSGSIZE ) {
