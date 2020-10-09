@@ -1358,6 +1358,7 @@ struct ci_netif_state_s {
 
   char                  name[CI_CFG_STACK_NAME_LEN + 1];
   ci_int32              pid;
+  ci_int32              exiting_pid;
   /* This UID is the value in the stack's user namespace, as defined at
    * stack creation time.  It is used only for logging purposes.
    */

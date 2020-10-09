@@ -459,6 +459,28 @@ long oo_fop_unlocked_ioctl(struct file* filp, unsigned cmd, unsigned long arg)
   return rc;
 }
 
+int oo_fop_stack_flush_unlock(struct file *f, fl_owner_t id)
+{
+  ci_private_t* priv = f->private_data;
+  tcp_helper_resource_t* trs;
+
+  if( priv->fd_flags != OO_FDFLAG_STACK )
+    return 0;
+  if( current == NULL )
+    return 0;
+
+  trs = efab_priv_to_thr(priv);
+  if( trs->netif.state->exiting_pid != task_tgid_vnr(current) )
+    return 0;
+
+  /* This is an exiting task, and it closes the stack file descriptor.
+   * Unlock it.
+   * See oo_exit_hook().
+   */
+  trs->netif.state->exiting_pid = 0;
+  ci_netif_unlock(&trs->netif);
+  return 0;
+}
 
 struct file_operations oo_fops = {
   .owner   = THIS_MODULE,
@@ -471,6 +493,9 @@ struct file_operations oo_fops = {
   /* read and poll are used by the cplane server only */
   .read = cp_fop_read,
   .poll = cp_fop_poll,
+
+  /* flush is really needed for a stack fd only */
+  .flush = oo_fop_stack_flush_unlock,
 };
 
 

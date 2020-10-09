@@ -714,18 +714,39 @@ void uncache_active_netifs(void)
 void oo_exit_hook(void)
 {
   citp_lib_context_t lib_context;
+  int pid = getpid();
+  ci_netif* ni;
 
   Log_CALL(ci_log("%s()", __func__));
 
-  if( ci_dllist_is_empty(&citp_active_netifs) )
+  if( ci_dllist_is_empty(&citp_active_netifs) || ! ci_is_multithreaded() )
     return;
 
   citp_enter_lib(&lib_context);
   CITP_FDTABLE_LOCK();
 
-  /* Lock all the stacks of this process. */
+  /* Lock all the stacks of this process.
+   *
+   * For safe exit, we need to guarantee that all the threads are out of the
+   * critical code, most importantly that no thread holds any stack lock.
+   * We do it in following way: lock the stacks, kill/stop/cancel
+   * all threads, unlock the stacks.  Killing threads is the tricky part.
+   * You can send a signal, but there is no guarantee that a thread
+   * is going to handle this signal any time soon.
+   *
+   * So we cheat: let the kernel kill the threads, it knows how.
+   * Here we lock all the stacks, and it guarantees that all the threads
+   * are out of the critical code.  And then we exit.
+   *
+   * When kernel destroys a process, it kills all threads, and when
+   * a file descriptor is unused, it is closed.  We hook into fop->flush()
+   * (see oo_fop_stack_flush_unlock()) and unlock the stack from here.
+   */
+  CI_DLLIST_FOR_EACH2( ci_netif, ni, link, &citp_active_netifs ) {
+    ci_netif_lock(ni);
+    ni->state->exiting_pid = pid;
+  }
 
   CITP_FDTABLE_UNLOCK();
   citp_exit_lib(&lib_context, 1);
 }
-
