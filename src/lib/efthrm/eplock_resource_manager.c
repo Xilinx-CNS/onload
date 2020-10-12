@@ -148,7 +148,7 @@ static int efab_eplock_is_unlocked_or_request_wake(ci_eplock_t* epl)
 
 
 int
-efab_eplock_lock_wait(ci_netif* ni, int maybe_wedged)
+efab_eplock_lock_wait(ci_netif* ni, int maybe_wedged, long jiffies_timeout)
 {
   wait_queue_entry_t wait;
   int rc;
@@ -165,7 +165,11 @@ efab_eplock_lock_wait(ci_netif* ni, int maybe_wedged)
     rc = efab_eplock_is_unlocked_or_request_wake(&ni->state->lock);
     if( rc <= 0 )
       break;
-    schedule();
+    jiffies_timeout = schedule_timeout(jiffies_timeout);
+    if( jiffies_timeout == 0 ) {
+      rc = -ETIMEDOUT;
+      break;
+    }
     if(CI_UNLIKELY( signal_pending(current) )) {
       rc = -ERESTARTSYS;
       break;

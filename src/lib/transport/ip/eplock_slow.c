@@ -27,11 +27,12 @@ CI_BUILD_ASSERT( (CI_EPLOCK_LOCK_FLAGS & CI_EPLOCK_CALLBACK_FLAGS) == 0 );
 static int __ef_eplock_lock_wait(ci_netif *ni, int maybe_wedged)
 {
 #ifndef __KERNEL__
+  ci_int32 op = -1; /* wait forever */
   ci_assert_equal(maybe_wedged, 0);
   return oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_EPLOCK_LOCK_WAIT,
-                        NULL);
+                        &op);
 #else
-  return efab_eplock_lock_wait(ni, maybe_wedged);
+  return efab_eplock_lock_wait(ni, maybe_wedged, MAX_SCHEDULE_TIMEOUT);
 #endif
 }
 

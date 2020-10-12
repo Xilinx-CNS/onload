@@ -993,11 +993,15 @@ efab_eplock_wake_and_do_rsop(ci_private_t *priv, void *arg)
 }
 #endif
 static int
-efab_eplock_lock_wait_rsop(ci_private_t *priv, void *unused)
+efab_eplock_lock_wait_rsop(ci_private_t *priv, void *arg)
 {
+  ci_int32* timeout_p = arg;
+  long timeout = msecs_to_jiffies(*timeout_p);
   if (priv->thr == NULL)
     return -EINVAL;
-  return efab_eplock_lock_wait(&priv->thr->netif, 0);
+  if( timeout < 0 || timeout > MAX_SCHEDULE_TIMEOUT )
+    timeout = MAX_SCHEDULE_TIMEOUT;
+  return efab_eplock_lock_wait(&priv->thr->netif, 0, timeout);
 }
 static int
 efab_install_stack(ci_private_t *priv, void *arg)

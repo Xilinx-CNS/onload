@@ -743,8 +743,18 @@ void oo_exit_hook(void)
    * (see oo_fop_stack_flush_unlock()) and unlock the stack from here.
    */
   CI_DLLIST_FOR_EACH2( ci_netif, ni, link, &citp_active_netifs ) {
-    ci_netif_lock(ni);
-    ni->state->exiting_pid = pid;
+    int rc = 0;
+    /* It's a copy of ci_netif_lock() without spinning and with timeout */
+    if( ! ci_netif_trylock(ni) ) {
+      ci_int32 op = 1000; /* 1sec */
+      rc = oo_resource_op(ci_netif_get_driver_handle(ni),
+                          OO_IOC_EPLOCK_LOCK_WAIT, &op);
+    }
+    if( rc == 0 )
+      ni->state->exiting_pid = pid;
+    else
+      NI_LOG(ni, RESOURCE_WARNINGS, "Failed to lock the Onload stack "
+             "for gracious application exit");
   }
 
   CITP_FDTABLE_UNLOCK();
