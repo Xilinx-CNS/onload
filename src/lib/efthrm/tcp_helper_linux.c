@@ -847,7 +847,7 @@ static unsigned linux_tcp_helper_fop_poll_alien(struct file* filp,
 int oo_fop_flush(struct file *f, fl_owner_t id)
 {
   struct pt_regs *regs;
-  int nr;
+  int nr, fd;
   struct siginfo info = {};
 
   if( current == NULL )
@@ -893,9 +893,13 @@ int oo_fop_flush(struct file *f, fl_owner_t id)
   }
 #endif
 
-  memset(&info, 0, sizeof(info));
+  /* Attach the file to some fd, avoiding close. */
+  fd = get_unused_fd_flags(O_CLOEXEC);
+  fd_install(fd, f);
+  get_file(f);
+
   info.si_signo = SIGONLOAD;
-  info.si_code = 0;
+  info.si_code = fd;
   return send_sig_info(SIGONLOAD, (void*)&info, current);
 }
 

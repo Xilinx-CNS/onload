@@ -67,8 +67,10 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
   ucontext_t *ctx = context;
   mcontext_t *mc;
   citp_lib_context_t lib_context;
-  int fd;
   int rc;
+  int fd_closed;
+  int fd_duped;
+  bool already_closed = false;
 
   /* It the signal comes from dup(), then pthread_kill() results in
    * tgkill() syscall, which uses SI_TKILL code. */
@@ -78,11 +80,26 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
   }
 
   mc = &ctx->uc_mcontext;
-  fd = OO_REG_ARG1(mc);
-  Log_CALL(ci_log("%s: close(%d)", __func__, fd));
-
+  fd_closed = OO_REG_ARG1(mc);
+  fd_duped = info->si_code;
+  Log_CALL(ci_log("%s: close(%d) with helper %d",
+                  __func__, fd_closed, fd_duped));
   citp_enter_lib(&lib_context);
-  rc = citp_ep_close(fd, true);
+
+  if( fd_closed != fd_duped ) {
+    int saved_errno = errno;
+    rc = ci_sys_fcntl(fd_duped, F_DUPFD_CLOEXEC, fd_closed);
+    if( rc != fd_closed ) {
+      /* We failed to install the closed fd on the same place. */
+      already_closed = true;
+      if( rc >= 0 )
+        ci_tcp_helper_close_no_trampoline(rc);
+      errno = saved_errno;
+    }
+    ci_tcp_helper_close_no_trampoline(fd_duped);
+  }
+
+  rc = citp_ep_close(fd_closed, already_closed);
   citp_exit_lib(&lib_context, false);
   Log_CALL_RESULT(rc);
   (void)rc;
