@@ -45,32 +45,43 @@ ci_uint64 fdtable_seq_no = 1;
 static void dup2_complete(citp_fdinfo* prev_newfdi,
 			  citp_fdinfo_p prev_newfdip, int fdt_locked);
 
+#if defined(__i386__)
+#define OO_REG_ARG1(mc) mc->gregs[REG_EBX]
+#define OO_REG_RET(mc)  mc->gregs[REG_EAX]
+#elif defined(__x86_64__)
+#define OO_REG_ARG1(mc) mc->gregs[REG_RDI]
+#define OO_REG_RET(mc)  mc->gregs[REG_RAX]
+#elif defined(__aarch64__)
+/* aarch64 overwrites the first parameter by the return code.
+ * This is why we cheat: we store the 1st parameter in the 2nd register
+ * inside oo_fop_flush().  See OO_ARCH_RETURN_IN_1ST_ARG.
+ */
+#define OO_REG_ARG1(mc) mc->regs[1]
+#define OO_REG_RET(mc)  mc->regs[0]
+#else
+#error unknown architecture
+#endif
+
 static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
 {
+  ucontext_t *ctx = context;
+  mcontext_t *mc;
   citp_lib_context_t lib_context;
-  int fd = info->si_code;
+  int fd;
   int rc;
 
-#ifdef __i386__
-  ucontext_t *ctx = context;
-
-  /* RHEL7 is unable to determine compat syscall parameters when inside
-   * kernel.  Let's hope we are still in the same close() call, and get the
-   * fd from the context. */
-  if( fd == SI_QUEUE ) {
-    fd = ctx->uc_mcontext.gregs[REG_EBX];
-  }
-#endif
   /* It the signal comes from dup(), then pthread_kill() results in
    * tgkill() syscall, which uses SI_TKILL code. */
-  if( fd < 0 ) {
-    ci_assert_equal(fd, SI_TKILL);
+  if( info->si_code < 0 ) {
+    ci_assert_equal(info->si_code, SI_TKILL);
     return;
   }
+
+  mc = &ctx->uc_mcontext;
+  fd = OO_REG_ARG1(mc);
   Log_CALL(ci_log("%s: close(%d)", __func__, fd));
 
   citp_enter_lib(&lib_context);
-  Log_CALL(ci_log("%s(%d)", __FUNCTION__, fd));
   rc = citp_ep_close(fd, true);
   citp_exit_lib(&lib_context, false);
   Log_CALL_RESULT(rc);

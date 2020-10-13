@@ -836,11 +836,18 @@ static unsigned linux_tcp_helper_fop_poll_alien(struct file* filp,
   return alien_file->f_op->poll(alien_file, wait);
 }
 
+#if defined(__aarch64__) || defined(__powerpc64__)
+/* These architectures stores the return value in the 1st parameter
+ * register.  To get the parameter from the signal handler, we'll store
+ * the 1st parameter in the place of the 2nd.
+ */
+#define OO_ARCH_RETURN_IN_1ST_ARG
+#endif
+
 int oo_fop_flush(struct file *f, fl_owner_t id)
 {
   struct pt_regs *regs;
-  int nr, fd;
-  unsigned long args[6];
+  int nr;
   struct siginfo info = {};
 
   if( current == NULL )
@@ -850,7 +857,6 @@ int oo_fop_flush(struct file *f, fl_owner_t id)
 
   regs = task_pt_regs(current);
   nr = syscall_get_nr(current, regs);
-  oo_syscall_get_arguments(current, regs, args);
 
   /* We can get here via following syscalls:
    * - close(): probably a result of non-intercepted fclose() and such,
@@ -864,30 +870,32 @@ int oo_fop_flush(struct file *f, fl_owner_t id)
    */
 #if defined(__x86_64__) && defined(CONFIG_COMPAT)
   if( current_thread_info()->status & TS_COMPAT ) {
-    if( nr == __NR_ia32_close ) {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,0,0)
-      /* RHEL7 (linux-3.10) lies in its regs structure in case of 32-bit
-       * syscall.  Linux 4.4 works properly.
-       * Tell UL that we do not know the fd. */
-      fd = SI_QUEUE;
-#else
-      fd = args[0];
-#endif
-    }
-    else {
+    if( nr != __NR_ia32_close )
       return 0;
-    }
   }
   else
 #endif
-  if( nr == __NR_close )
-    fd = args[0];
-  else
+  if( nr != __NR_close )
     return 0;
+
+#ifdef OO_ARCH_RETURN_IN_1ST_ARG
+  {
+    unsigned long args[6];
+    syscall_get_arguments(current, regs, args);
+    /* Store the original X0 value into X1.  We'll use it from
+     * sighandler_sigonload().
+     */
+#ifdef __aarch64__
+    regs->regs[1] = args[0];
+#else
+#error unknown architecture
+#endif
+  }
+#endif
 
   memset(&info, 0, sizeof(info));
   info.si_signo = SIGONLOAD;
-  info.si_code = fd;
+  info.si_code = 0;
   return send_sig_info(SIGONLOAD, (void*)&info, current);
 }
 
