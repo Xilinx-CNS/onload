@@ -102,6 +102,8 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
   rc = citp_ep_close(fd_closed, already_closed);
   citp_exit_lib(&lib_context, false);
   Log_CALL_RESULT(rc);
+  if( rc < 0 )
+    OO_REG_RET(mc) = -errno;
   (void)rc;
 }
 
