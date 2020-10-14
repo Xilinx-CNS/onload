@@ -17,7 +17,6 @@
 #include <onload/linux_mmap.h>
 #include <onload/nic.h>
 #include <ci/internal/ip.h>
-#include <onload/linux_trampoline.h>
 #include <onload/linux_onload_internal.h>
 #include <ci/internal/ip_log.h>
 #include <onload/ioctl.h>
@@ -557,13 +556,6 @@ static int __init onload_module_init(void)
     goto fail_proc;
   }
 
-  rc = efab_linux_trampoline_ctor();
-  if( rc < 0 ) {
-    ci_log("%s: ERROR: efab_linux_trampoline_ctor failed (%d)",
-           __FUNCTION__, rc);
-    goto failed_trampoline;
-  }
-
   /* Onloadfs should be created before the char dev */
   rc = onloadfs_init();
   if(rc < 0 )
@@ -607,7 +599,6 @@ static int __init onload_module_init(void)
   /* User API was available for some time: make sure there are no Onload
    * stacks. */
   efab_tcp_driver_stop();
- failed_trampoline:
   ci_uninstall_proc_entries();
  fail_proc:
   /* Remove all NICs.

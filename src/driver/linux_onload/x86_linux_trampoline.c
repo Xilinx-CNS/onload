@@ -38,7 +38,6 @@
 #include "onload_kernel_compat.h"
 
 #include <onload/linux_onload_internal.h>
-#include <onload/linux_trampoline.h>
 #include <onload/linux_mmap.h>
 #include <onload/linux_onload.h>
 #include <linux/unistd.h>
@@ -55,10 +54,6 @@
 #  include <asm/percpu.h>
 
 
-
-#ifdef CONFIG_COMPAT
-#  include <asm/ia32_unistd.h>
-#endif
 
 
 
@@ -144,37 +139,26 @@
 
 /* We must save the original addresses of the routines we intercept.
  */
-static SYSCALL_PTR_DEF(saved_sys_close, (int));
-static SYSCALL_PTR_DEF(saved_sys_exit_group, (int));
-static SYSCALL_PTR_DEF(saved_sys_rt_sigaction, (int, const struct sigaction *,
-                                                struct sigaction *, size_t));
 
 /* A way to call the original sys_close, exported to other parts of the code.
  */
 asmlinkage int efab_linux_sys_close(int fd)
 {
+  SYSCALL_PTR_DEF(sys_close_fn, (int));
   int rc;
 
-  if( saved_sys_close == NULL ) {
+  if( efrm_syscall_table == NULL ) {
     ci_log("Unexpected close() request before full init");
     return -EFAULT;
   }
 
-  TRAMP_DEBUG ("close %d via saved_sys_close=%p...", fd, saved_sys_close);
-  rc = PASS_SYSCALL1(saved_sys_close, fd);
+  sys_close_fn = efrm_syscall_table[__NR_close];
+  TRAMP_DEBUG ("close %d via %p...", fd, sys_close_fn);
+  rc = PASS_SYSCALL1(sys_close_fn, fd);
   TRAMP_DEBUG ("... = %d", rc);
   return rc;
 }
 
-
-asmlinkage int efab_linux_sys_exit_group(int status)
-{
-  if( saved_sys_exit_group == NULL ) {
-    ci_log("Unexpected exit_group() request before full init");
-    return -EFAULT;
-  }
-  return PASS_SYSCALL1(saved_sys_exit_group, status);
-}
 
 asmlinkage int efab_linux_sys_epoll_create1(int flags)
 {
@@ -258,21 +242,6 @@ asmlinkage int efab_linux_sys_bpf(int cmd, union bpf_attr __user* attr,
   return rc;
 }
 
-asmlinkage int efab_linux_sys_sigaction(int signum,
-                                        const struct sigaction *act,
-                                        struct sigaction *oact)
-{
-  int rc;
-
-  if( saved_sys_rt_sigaction == NULL ) {
-    ci_log("Unexpected rt_sigaction() request before full init");
-    return -EFAULT;
-  }
-
-  rc = PASS_SYSCALL4(saved_sys_rt_sigaction, signum, act, oact, sizeof(sigset_t));
-  return rc;
-}
-
 #ifdef OO_DO_HUGE_PAGES
 #include <linux/unistd.h>
 asmlinkage int efab_linux_sys_shmget(key_t key, size_t size, int shmflg)
@@ -330,44 +299,4 @@ asmlinkage int efab_linux_sys_shmctl(int shmid, int cmd, struct shmid_ds __user 
   return rc;
 }
 #endif
-
-
-/* This function initializes the mm hash-table, and hacks the sys call table
- * so that we intercept close.
- */
-int efab_linux_trampoline_ctor()
-{
-  ci_assert(efrm_syscall_table);
-
-  if (efrm_syscall_table) {
-    /* We really have to hope that efrm_syscall_table was found correctly.  There
-     * is no reliable way to check it (e.g. by looking at the contents) which
-     * will work on all platforms...
-     */
-    TRAMP_DEBUG("efrm_syscall_table=%p: close=%p exit_group=%p, rt_sigaction=%p",
-                efrm_syscall_table, efrm_syscall_table[__NR_close],
-                efrm_syscall_table[__NR_exit_group],
-                efrm_syscall_table[__NR_rt_sigaction]);
-
-    saved_sys_close = efrm_syscall_table [__NR_close];
-    saved_sys_exit_group = efrm_syscall_table [__NR_exit_group];
-    saved_sys_rt_sigaction = efrm_syscall_table [__NR_rt_sigaction];
-
-  } else {
-    /* efrm_syscall_table wasn't found, so we may have no way to sys_close()... */
-    OO_DEBUG_ERR(ci_log("ERROR: syscall table not found"));
-    return -ENOEXEC;
-  }
-
-  return 0;
-}
-
-
-int stop_machine_do_nothing(void *arg)
-{
-  /* Can we somehow detect that we are in one of the intercepted syscalls?
-   * May be ORC unwinder?
-   * And even if we can, what can we do?  Wait and try again? */
-  return 0;
-}
 

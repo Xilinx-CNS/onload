@@ -5,7 +5,6 @@
 #include "onload_kernel_compat.h"
 
 #include <onload/linux_onload_internal.h>
-#include <onload/linux_trampoline.h>
 #include <onload/linux_mmap.h>
 #include <onload/linux_onload.h>
 #include <asm/unistd.h>
@@ -84,16 +83,6 @@ asmlinkage int efab_linux_sys_close(int fd)
   return rc;
 }
 
-static SYSCALL_PTR_DEF(sys_exit_group);
-
-asmlinkage int efab_linux_sys_exit_group(int status)
-{
-  int rc;
-  SET_SYSCALL_NO(exit_group);
-  rc = (int)PASS_SYSCALL1(sys_exit_group, status);
-  return rc;
-}
-
 static SYSCALL_PTR_DEF(sys_epoll_create1);
 
 int efab_linux_sys_epoll_create1(int flags)
@@ -128,59 +117,15 @@ int efab_linux_sys_epoll_wait(int epfd, struct epoll_event *events,
   return rc;
 }
 
-static SYSCALL_PTR_DEF(sys_rt_sigaction);
+static SYSCALL_PTR_DEF(sys_sendmsg);
 
-int efab_linux_sys_sigaction(int signum,
-                             const struct sigaction *act,
-                             struct sigaction *oact)
+int efab_linux_sys_sendmsg(int fd, struct msghdr __user* msg,
+                           unsigned long __user* socketcall_args,
+                           unsigned flags)
 {
   int rc;
-  SET_SYSCALL_NO(rt_sigaction);
-  rc = (int)PASS_SYSCALL4(sys_rt_sigaction, signum, act, oact, sizeof(sigset_t));
+  SET_SYSCALL_NO(sendmsg);
+  rc = (int)PASS_SYSCALL3(sys_sendmsg, fd, (struct user_msghdr __user *)msg, flags);
   return rc;
-}
-
-#ifdef CONFIG_COMPAT
-int efab_linux_sys_sigaction32(int signum,
-                               const struct sigaction32 *act,
-                               struct sigaction32 *oact)
-{
-  return 0;
-}
-#endif
-
-
-int efab_linux_trampoline_ctor()
-{
-  void *check_sys_close;
-
-  ci_assert(efrm_syscall_table);
-
-  saved_sys_close = efrm_syscall_table[__NR_close];
-#if defined(CONFIG_ARCH_HAS_SYSCALL_WRAPPER)
-  check_sys_close = efrm_find_ksym("__arm64_sys_close");
-#else
-  check_sys_close = efrm_find_ksym("sys_close");
-#endif
-  if (check_sys_close != NULL) {
-    if (check_sys_close != saved_sys_close) {
-      ci_log("ERROR: sys_close address does not match (%p != %p)",
-             check_sys_close, saved_sys_close);
-      return -EFAULT;
-    }
-  }
-  saved_sys_exit_group = efrm_syscall_table[__NR_exit_group];
-  saved_sys_rt_sigaction = efrm_syscall_table[__NR_rt_sigaction];
-  saved_sys_epoll_create1 = efrm_syscall_table[__NR_epoll_create1];
-  saved_sys_epoll_ctl = efrm_syscall_table[__NR_epoll_ctl];
-  saved_sys_epoll_pwait = efrm_syscall_table[__NR_epoll_pwait];
-
-  return 0;
-}
-
-/* See wait_for_other_syscall_callers() in x86_linux_trampoline.c */
-static int stop_machine_do_nothing(void *arg)
-{
-  return 0;
 }
 

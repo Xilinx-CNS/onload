@@ -109,17 +109,6 @@ extern asmlinkage int efab_linux_sys_epoll_wait(int epfd,
                                                 struct epoll_event *events,
                                                 int maxevents, int timeout);
 
-asmlinkage int efab_linux_sys_exit_group(int status);
-asmlinkage int efab_linux_sys_sigaction(int signum,
-                                        const struct sigaction *act,
-                                        struct sigaction *oact);
-#ifdef CONFIG_COMPAT
-#include <linux/compat.h>
-/* ARM64 TODO */
-asmlinkage int efab_linux_sys_sigaction32(int signum,
-                                          const struct compat_sigaction *act,
-                                          struct compat_sigaction *oact);
-#endif
 
 #if defined(CONFIG_HUGETLB_PAGE) && CI_CFG_PKTS_AS_HUGE_PAGES && \
     defined(__x86_64__)
