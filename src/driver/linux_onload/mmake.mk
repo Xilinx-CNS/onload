@@ -49,9 +49,6 @@ TARGETS		:= $(IP_TARGET)
 
 x86_TARGET_SRCS    := x86_linux_trampoline.o
 
-powerpc_TARGET_SRCS    := \
-			ppc64_linux_trampoline.o ppc64_linux_trampoline_internal.o
-
 arm64_TARGET_SRCS := aarch64_linux_trampoline.o
 
 
