@@ -255,14 +255,6 @@ typedef struct {
 
 typedef struct {
   ci_int32      sock_id;
-  ci_int32      flags;
-  ci_uint32     sizeof_ptr;
-  ci_user_ptr_t msg;
-  ci_user_ptr_t socketcall_args;
-} oo_os_sock_sendmsg_raw_t;
-
-typedef struct {
-  ci_int32      sock_id;
   ci_uint32     sizeof_ptr;
   ci_user_ptr_t msg_iov;
   ci_user_ptr_t msg_name;

@@ -143,27 +143,7 @@ int efab_linux_sys_sigaction(int signum,
   return rc;
 }
 
-static SYSCALL_PTR_DEF(sys_sendmsg);
-
-int efab_linux_sys_sendmsg(int fd, struct msghdr __user* msg,
-                           unsigned long __user* socketcall_args,
-                           unsigned flags)
-{
-  int rc;
-  SET_SYSCALL_NO(sendmsg);
-  rc = (int)PASS_SYSCALL3(sys_sendmsg, fd, (struct user_msghdr __user *)msg, flags);
-  return rc;
-}
-
 #ifdef CONFIG_COMPAT
-int
-efab_linux_sys_sendmsg32(int fd, struct compat_msghdr __user* msg,
-                         unsigned long __user* socketcall_args,
-                         unsigned flags)
-{
-  return 0;
-}
-
 int efab_linux_sys_sigaction32(int signum,
                                const struct sigaction32 *act,
                                struct sigaction32 *oact)

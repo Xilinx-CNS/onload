@@ -141,9 +141,6 @@ enum {
   OO_OP_OS_SOCK_SENDMSG,
 #define OO_IOC_OS_SOCK_SENDMSG      OO_IOC_W(OS_SOCK_SENDMSG,           \
                                              oo_os_sock_sendmsg_t)
-  OO_OP_OS_SOCK_SENDMSG_RAW,
-#define OO_IOC_OS_SOCK_SENDMSG_RAW  OO_IOC_W(OS_SOCK_SENDMSG_RAW,       \
-                                             oo_os_sock_sendmsg_raw_t)
   OO_OP_OS_SOCK_RECVMSG,
 #define OO_IOC_OS_SOCK_RECVMSG      OO_IOC_RW(OS_SOCK_RECVMSG,          \
                                               oo_os_sock_recvmsg_t)

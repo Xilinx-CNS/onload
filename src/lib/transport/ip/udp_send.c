@@ -433,18 +433,8 @@ ci_inline int ci_udp_sendmsg_os(ci_netif* ni, ci_udp_state* us,
                              const struct msghdr* msg, int flags,
                              int user_buffers, int atomic)
 {
-  int rc;
-
   ++us->stats.n_tx_os;
-
-#if defined(__i386__) || (defined(__powerpc__) && !defined(__powerpc64__))
-  /* We do not handle compat cmsg in normal oo_os_sock_sendmsg */
-  if( msg->msg_controllen != 0 )
-    rc = oo_os_sock_sendmsg_raw(ni, S_SP(us), msg, flags);
-  else
-#endif
-    rc = oo_os_sock_sendmsg(ni, S_SP(us), msg, flags);
-  return rc;
+  return oo_os_sock_sendmsg(ni, S_SP(us), msg, flags);
 }
 
 #endif

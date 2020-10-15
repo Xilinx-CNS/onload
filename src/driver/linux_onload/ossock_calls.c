@@ -450,40 +450,6 @@ int efab_tcp_helper_os_sock_sendmsg(ci_private_t* priv, void *arg)
   return rc;
 }
 
-int efab_tcp_helper_os_sock_sendmsg_raw(ci_private_t* priv, void *arg)
-{
-  oo_os_sock_sendmsg_raw_t *op = arg;
-  tcp_helper_endpoint_t *ep = ci_trs_get_valid_ep(priv->thr, op->sock_id);
-  int fd, rc;
-  unsigned flags = op->flags;
-  struct socket* sock;
-
-  ep = ci_trs_get_valid_ep(priv->thr, op->sock_id);
-  fd = get_os_fd_from_ep(ep);
-  if( fd < 0 )
-    return -EINVAL;
-
-#ifdef CONFIG_COMPAT
-  if( op->sizeof_ptr != sizeof(void*) )
-    rc = efab_linux_sys_sendmsg32(fd, CI_USER_PTR_GET(op->msg),
-                                  CI_USER_PTR_GET(op->socketcall_args),
-                                  flags);
-  else
-#endif
-  rc = efab_linux_sys_sendmsg(fd, CI_USER_PTR_GET(op->msg),
-                              CI_USER_PTR_GET(op->socketcall_args), flags);
-
-  /* Clear OS TX flag if necessary  */
-  sock = get_linux_socket(ep);
-  if( sock != NULL ) {
-    oo_os_sock_status_bit_clear_handled(ep, sock->file, OO_OS_STATUS_TX);
-    put_linux_socket(sock);
-  }
-  efab_linux_sys_close(fd);
-  return rc;
-}
-
-
 int efab_tcp_helper_os_sock_recvmsg(ci_private_t* priv, void *arg)
 {
   oo_os_sock_recvmsg_t *op = arg;

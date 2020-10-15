@@ -97,23 +97,10 @@ static inline int oo_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 extern asmlinkage int
 efab_linux_sys_close(int fd);
 
-extern asmlinkage int
-efab_linux_sys_sendmsg(int fd, struct msghdr __user* msg,
-                       unsigned long __user* socketcall_args, unsigned flags);
-
 union bpf_attr;
 
 extern asmlinkage int
 efab_linux_sys_bpf(int cmd, union bpf_attr __user* attr, int size);
-
-#ifdef CONFIG_COMPAT
-extern asmlinkage int
-efab_linux_sys_sendmsg32(int fd, struct compat_msghdr __user* msg,
-                         unsigned long __user* socketcall_args,
-                         unsigned flags);
-#endif
-
-
 
 extern asmlinkage int efab_linux_sys_epoll_create1(int flags);
 extern asmlinkage int efab_linux_sys_epoll_ctl(int epfd, int op, int fd,

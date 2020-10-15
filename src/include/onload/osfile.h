@@ -64,8 +64,6 @@ extern int  oo_os_sock_get(struct ci_netif_s*, oo_sp, oo_os_file* out) CI_HF;
 
 extern int oo_os_sock_sendmsg(struct ci_netif_s*, oo_sp,
                               const struct msghdr*, int flags) CI_HF;
-extern int oo_os_sock_sendmsg_raw(ci_netif* ni, oo_sp sock_p,
-                                  const struct msghdr* msg, int flags) CI_HF;
 extern int oo_os_sock_recvmsg(struct ci_netif_s*, oo_sp,
                               struct msghdr*, int flags) CI_HF;
 

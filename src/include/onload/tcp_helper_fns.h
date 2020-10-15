@@ -201,7 +201,6 @@ extern void efab_tcp_helper_sock_unlock_slow(tcp_helper_resource_t*, oo_sp);
 extern int efab_tcp_helper_get_sock_fd(ci_private_t*, void*);
 
 extern int efab_tcp_helper_os_sock_sendmsg(ci_private_t*, void*);
-extern int efab_tcp_helper_os_sock_sendmsg_raw(ci_private_t*, void*);
 
 extern int efab_tcp_helper_os_sock_recvmsg(ci_private_t *priv, void *arg);
 

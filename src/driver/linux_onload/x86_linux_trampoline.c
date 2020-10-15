@@ -237,48 +237,6 @@ asmlinkage int efab_linux_sys_epoll_wait(int epfd, struct epoll_event *events,
   return rc;
 }
 
-
-asmlinkage int efab_linux_sys_sendmsg(int fd, struct msghdr __user* msg,
-                                      unsigned long __user* socketcall_args,
-                                      unsigned flags)
-{
-  int rc;
-
-  if( efrm_syscall_table == NULL ) {
-    ci_log("Unexpected sendmsg() request before full init");
-    return -EFAULT;
-  }
-
-  {
-#ifdef __NR_sendmsg
-    SYSCALL_PTR_DEF(sys_sendmsg_fn, (int, struct msghdr *, unsigned));
-
-    sys_sendmsg_fn = efrm_syscall_table[__NR_sendmsg];
-    TRAMP_DEBUG ("sendmsg(%d,%p,%d) via %p...", fd, msg, flags, sys_sendmsg_fn);
-    rc = PASS_SYSCALL3(sys_sendmsg_fn, fd, msg, flags);
-#elif defined(__NR_socketcall)
-    SYSCALL_PTR_DEF(sys_socketcall_fn, (int, unsigned long *));
-    unsigned long args[3];
-
-    sys_socketcall_fn = efrm_syscall_table[__NR_socketcall];
-    TRAMP_DEBUG ("sendmsg(%d,%p,%d) via %p...", fd, msg,
-                 flags, sys_socketcall_fn);
-    memset(args, 0, sizeof(args));
-    args[0] = (unsigned long)fd;
-    args[1] = (unsigned long)msg;
-    args[2] = (unsigned long)flags;
-    rc = -EFAULT;
-    if (copy_to_user(socketcall_args, args, sizeof(args)) == 0)
-      rc = PASS_SYSCALL2(sys_socketcall_fn, SYS_SENDMSG, socketcall_args);
-#else
-#error "Can't find sendmsg syscall number"
-#endif
-  }
-
-  TRAMP_DEBUG ("... = %d", rc);
-  return rc;
-}
-
 asmlinkage int efab_linux_sys_bpf(int cmd, union bpf_attr __user* attr,
                                   int size)
 {
@@ -307,42 +265,6 @@ asmlinkage int efab_linux_sys_bpf(int cmd, union bpf_attr __user* attr,
   TRAMP_DEBUG ("... = %d", rc);
   return rc;
 }
-
-#ifdef CONFIG_COMPAT
-asmlinkage int
-efab_linux_sys_sendmsg32(int fd, struct compat_msghdr __user* msg,
-                         unsigned long __user* socketcall_args,
-                         unsigned flags)
-{
-  int rc;
-
-  if( efrm_syscall_table == NULL ) {
-    ci_log("Unexpected sendmsg() request before full init");
-    return -EFAULT;
-  }
-
-  if( efrm_compat_syscall_table != NULL ) {
-    SYSCALL_PTR_DEF(sys_socketcall_fn, (int, unsigned long *));
-    compat_ulong_t args[3];
-
-    sys_socketcall_fn = efrm_compat_syscall_table[102/*__NR_socketcall*/];
-    TRAMP_DEBUG ("sendmsg32(%d,%p,%d) via %p...", fd, msg,
-                 flags, sys_socketcall_fn);
-    memset(args, 0, sizeof(args));
-    args[0] = (unsigned long)fd;
-    args[1] = (unsigned long)msg;
-    args[2] = (unsigned long)flags;
-    rc = -EFAULT;
-    if (copy_to_user(socketcall_args, args, sizeof(args)) == 0)
-      rc = COMPAT_PASS_SYSCALL2(sys_socketcall_fn, SYS_SENDMSG, socketcall_args);
-  }
-  else
-    rc = -EOPNOTSUPP;
-
-  TRAMP_DEBUG ("... = %d", rc);
-  return rc;
-}
-#endif
 
 asmlinkage int efab_linux_sys_sigaction(int signum,
                                         const struct sigaction *act,

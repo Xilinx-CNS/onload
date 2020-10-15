@@ -1586,7 +1586,6 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_OS_SOCK_CREATE_AND_SET,efab_tcp_helper_os_sock_create_and_set_rsop),
   op(OO_IOC_OS_SOCK_FD_GET,        efab_tcp_helper_get_sock_fd),
   op(OO_IOC_OS_SOCK_SENDMSG,       efab_tcp_helper_os_sock_sendmsg),
-  op(OO_IOC_OS_SOCK_SENDMSG_RAW,   efab_tcp_helper_os_sock_sendmsg_raw),
   op(OO_IOC_OS_SOCK_RECVMSG,       efab_tcp_helper_os_sock_recvmsg),
   op(OO_IOC_OS_SOCK_ACCEPT,        efab_tcp_helper_os_sock_accept),
   op(OO_IOC_TCP_ENDPOINT_SHUTDOWN, tcp_helper_endpoint_shutdown_rsop),

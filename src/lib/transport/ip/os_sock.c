@@ -145,28 +145,6 @@ int oo_os_sock_sendmsg(ci_netif* ni, oo_sp sock_p,
                         OO_IOC_OS_SOCK_SENDMSG, &op);
 }
 
-int oo_os_sock_sendmsg_raw(ci_netif* ni, oo_sp sock_p,
-                           const struct msghdr* msg, int flags)
-{
-  unsigned long socketcall_args[8];
-  oo_os_sock_sendmsg_raw_t op;
-  int rc;
-
-  op.sock_id = OO_SP_TO_INT(sock_p);
-  op.sizeof_ptr = sizeof(void*);
-  op.flags = flags;
-  CI_USER_PTR_SET(op.msg, msg);
-  CI_USER_PTR_SET(op.socketcall_args, socketcall_args);
-
-  oo_rwlock_lock_read(&citp_dup2_lock);
-  rc = oo_resource_op(ci_netif_get_driver_handle(ni),
-                      OO_IOC_OS_SOCK_SENDMSG_RAW, &op);
-  oo_rwlock_unlock_read (&citp_dup2_lock);
-
-  return rc;
-}
-
-
 int oo_os_sock_recvmsg(ci_netif* ni, oo_sp sock_p,
                        struct msghdr* msg, int flags)
 {
