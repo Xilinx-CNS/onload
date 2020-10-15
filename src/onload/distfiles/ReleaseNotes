@@ -1,24 +1,4 @@
-Onload-8.0.0
-============
-
- This is a major feature release of Onload.
+This is an unsupported version of Onload from https://github.com/Xilinx-CNS/onload
+==================================================================================
 
 
-Linux distribution support
---------------------------
- This package is supported on:
- - Red Hat Enterprise Linux 7.6 - 7.8
- - Red Hat Enterprise Linux 8.1 - 8.2
- - SuSE Linux Enterprise Server 12 sp4 and sp5
- - SuSE Linux Enterprise Server 15 sp1 and sp2
- - Canonical Ubuntu Server LTS 18.04 and 20.04
- - Debian 9 "Stretch"
- - Debian 10 "Buster"
- - Linux kernels 4.4 - 5.7
-
-
-sfc_affinity
-------------
-
-The deprecated support for adding steering filters through the sfc_affinity
-driver and the sfcaffinity tool has been removed.

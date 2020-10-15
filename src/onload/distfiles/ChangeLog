@@ -1,36 +1,60 @@
-onload-7.1.0.x PREVIEW
-----------------------
+This is an unsupported version of Onload from https://github.com/Xilinx-CNS/onload
+----------------------------------------------------------------------------------
 
-Update sfc net driver to v4.15.6.1000
+
+onload-7.1.0.265
+----------------
+
+Update sfc net driver to v4.15.6.1004
 
 Add system-level interface blacklisting
-Allow TCPDirect applications to process incoming packet data during receipt
+Enable TCPDirect applications to process incoming packet data during receipt
 Support for TCPDirect on 'full-featured' firmware
 Use running kernel implementation of XDP for Onload XDP support
-Simplify feature activation
 Add orm_json_lib to assist the development of user tooling
 
-Support recent Linux kernel versions (up to 5.4)
-Support recent Linux distributions (RHEL 7.8, RHEL 8.1)
-Support recent Linux distributions (Ubuntu 19.10 and SLES12 sp5)
-
+Support recent Linux kernel versions (up to 5.5)
+Support recent GCC compilers (up to 9.3)
+Support recent Linux distributions:
+  RHEL 7.8, 8.1, 8.2
+  Ubuntu 20.04
+  SLES12 sp5
 Deprecate RHEL 7.4
 
-Other features:
+Known issues:
+
+SF-123478-KI/ON-6887: TCPDirect: avoid bind failure when app onload-accelerated
+
+Enhancements:
+
+ON-10663: add "--version" option to onload_cp_server
 ON-11132: improve "no response to route request" warning
+ON-11221: add cplane_use_prefsrc_as_local to accelerate preferred source IPs
 ON-11219/ON-11417: intercept __poll_chk() and fcntl64
+ON-11823: add EF_UDP_CONNECT_HANDOVER=2 option to force handover on connect
 
 Bugs fixed:
+
 ON-7482/ON-11203: do not try to use a dead cp_server
 ON-8919: Don't report EF_VI_xXQ_SIZE as unrecognised
+ON-9171: TCPDirect: use bogomips to determine CPU speed for AMD compatibility
 ON-10564: Prevent udevd modifying the permissions of our /dev files
 ON-10696: avoid segfault with zf_stackdump when specifying bad stack.
 ON-11196/ON-11199: fix memory leaks
+ON-11227: explicitly reject per-process options in onload_stack_opt_set_int()
+ON-11255: make systemd vs initscript decision at RPM installation time
 ON-11408: TCPDirect: improve handling of default attribute values
+ON-11418: fix memory mapping issue on AMD processors
+ON-11715: fix SO_REUSEPORT when onloadfs device number is big
+ON-11784: fix UDP packet drop when ARP failed avoiding possible crash
+ON-11810: onload_iptables: treat IP without netmask as /32 not /0
+ON-11825: ensure onload.ko loads at boot on RHEL6
+ON-11859: avoid race condition leading to panic on creation of a shared stack
+ON-11907: handle insufficient large pages correctly, avoiding panic
 
 
-onload-7.0.0
-------------
+onload-7.0.0.176
+----------------
 
 Update sfc net driver to v4.15.4.1003
 
