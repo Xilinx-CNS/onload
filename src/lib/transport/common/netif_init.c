@@ -749,6 +749,11 @@ void oo_exit_hook(void)
       ci_int32 op = 1000; /* 1sec */
       rc = oo_resource_op(ci_netif_get_driver_handle(ni),
                           OO_IOC_EPLOCK_LOCK_WAIT, &op);
+      /* We were woken up by timeout or by a signal.  In any case we do not
+       * want to sleep again; let's exit!
+       */
+      if( ! ci_netif_trylock(ni) )
+        rc = -EBUSY;
     }
     if( rc == 0 )
       ni->state->exiting_pid = pid;
