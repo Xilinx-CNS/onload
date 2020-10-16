@@ -1510,6 +1510,21 @@ void ci_udp_sendmsg_onload(ci_netif* ni, ci_udp_state* us,
   goto back_to_fast_path;
 }
 
+#if !defined(__KERNEL__) && defined(__i386__)
+static int ci_udp_sendmsg_control_os(ci_fd_t fd, ci_udp_state *us,
+                                     const struct msghdr* msg, int flags)
+{
+  ci_fd_t os_sock;
+  int rc;
+
+  ++us->stats.n_tx_os;
+
+  os_sock = ci_get_os_sock_fd(fd);
+  rc = ci_sys_sendmsg(os_sock, msg, flags);
+  ci_rel_os_sock_fd(os_sock);
+  return rc;
+}
+#endif
 
 int ci_udp_sendmsg(ci_udp_iomsg_args *a,
                    const ci_msghdr* msg, int flags)
@@ -1530,11 +1545,19 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
   sinf.timeout = us->s.so.sndtimeo_msec;
 
 #ifndef __KERNEL__
+#ifdef __i386__
+  /* We do not want to re-pack msg_control field or to find out sys_sendmsg32()
+   * syscall when sending from a 32-bit application. So, let the kernel to take
+   * care of it. */
+  if(CI_UNLIKELY( msg->msg_controllen != 0 ))
+    return ci_udp_sendmsg_control_os(a->fd, us, msg, flags);
+#else
   if(CI_UNLIKELY( CMSG_FIRSTHDR(msg) != NULL )) {
     void* info = NULL;
     if( ci_ip_cmsg_send(msg, &info) != 0 || info != NULL )
       goto send_via_os;
   }
+#endif
 #endif
 
   if(CI_UNLIKELY( flags & MSG_MORE )) {
