@@ -151,6 +151,9 @@ CI_MK_DECL(long          , syscall    , (long, ...));
 CI_MK_DECL(void           , _exit      , (int));
 
 CI_MK_DECL(int           , sigaction, (int, const struct sigaction *, struct sigaction *));
+CI_MK_DECL(int           , siginterrupt, (int sig, int flag));
+CI_MK_DECL(__sighandler_t, bsd_signal, (int signum, __sighandler_t handler));
+CI_MK_DECL(__sighandler_t, sysv_signal, (int signum, __sighandler_t handler));
 
 #undef CI_MK_DECL
 

@@ -40,6 +40,8 @@ extern int __poll_chk (struct pollfd *__fds, nfds_t __nfds, int __timeout,
 extern int __ppoll_chk (struct pollfd *__fds, nfds_t __nfds,
                         const struct timespec *, const sigset_t *,
                        size_t __fdslen);
+extern __sighandler_t bsd_signal(int signum, __sighandler_t handler);
+extern __sighandler_t sysv_signal(int signum, __sighandler_t handler);
 
 
 /*! Generate declarations of pointers to the system calls */

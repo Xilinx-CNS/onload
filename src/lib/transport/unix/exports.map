@@ -95,6 +95,9 @@
     syscall;
     _exit;
     sigaction;
+    siginterrupt;
+    bsd_signal;
+    sysv_signal;
 
     onload_fd_stat;
     onload_is_present;

@@ -2773,6 +2773,21 @@ OO_INTERCEPT(void, _exit, (int status))
 }
 
 
+/* Glibc uses __sigaction, and all the following signal-related functions
+ * are implemented via it:
+ * - sigwait -,
+ * - bsd_signal +, siginterrupt +, sigvec -
+ * - sysv_signal +, sigset -, sigignore -
+ * - system -, profil -
+ *
+ * Infortunately we can't intercept __sigaction(), so we have to intercept
+ * most of the functions listed above (marked by a `+` sign).  The Onload's
+ * equivalent of __sigaction() is oo_do_sigaction().
+ *
+ * There is no need to enter/exit library, in these functions, because
+ * sigaction() does not use fdtable.  Other sync methods are used here.
+ */
+
 OO_INTERCEPT(int, sigaction,
              (int signum, const struct sigaction *act,
               struct sigaction* oldact))
@@ -2789,9 +2804,6 @@ OO_INTERCEPT(int, sigaction,
     Log_CALL(ci_log("\tnew "OO_PRINT_SIGACTION_FMT,
                     OO_PRINT_SIGACTION_ARG(act)));
 
-  /* There is no need to enter library, because sigaction() does not use
-   * fdtable.  Other sync methods are used here.
-   */
   rc = oo_do_sigaction(signum, act, oldact);
 
   Log_CALL_RESULT(rc);
@@ -2799,6 +2811,92 @@ OO_INTERCEPT(int, sigaction,
     Log_CALL(ci_log("\told "OO_PRINT_SIGACTION_FMT,
                     OO_PRINT_SIGACTION_ARG(oldact)));
   return rc;
+}
+
+
+/* Communication beteen siginterrupt() and bsd_signal(). */
+static sigset_t oo_sigintr;
+
+OO_INTERCEPT(int, siginterrupt,
+             (int sig, int flag))
+{
+  int rc;
+  struct sigaction act;
+
+  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
+    citp_do_init(CITP_INIT_SYSCALLS);
+    return ci_sys_siginterrupt(sig, flag);
+  }
+
+  Log_CALL(ci_log("%s(%d, %d)", __FUNCTION__, sig, flag));
+
+  rc = oo_do_sigaction(sig, NULL, &act);
+  if( rc < 0 )
+    goto out;
+
+  if( flag ) {
+    act.sa_flags &= ~SA_RESTART;
+    sigaddset(&oo_sigintr, sig);
+  }
+  else {
+    act.sa_flags |= SA_RESTART;
+    sigdelset(&oo_sigintr, sig);
+  }
+
+  rc = oo_do_sigaction(sig, &act, NULL);
+  if( rc < 0 )
+    goto out;
+
+ out:
+  Log_CALL_RESULT(rc);
+  return rc;
+}
+
+OO_INTERCEPT(__sighandler_t, bsd_signal,
+             (int sig, __sighandler_t handler))
+{
+  struct sigaction act, oact;
+
+  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
+    citp_do_init(CITP_INIT_SYSCALLS);
+    return ci_sys_bsd_signal(sig, handler);
+  }
+
+  Log_CALL(ci_log("%s(%d, %p)", __FUNCTION__, sig, handler));
+  act.sa_handler = handler;
+  if( sigemptyset(&act.sa_mask) < 0 ||
+      sigaddset(&act.sa_mask, sig) < 0 )
+    return SIG_ERR;
+  act.sa_flags = sigismember (&oo_sigintr, sig) ? 0 : SA_RESTART;
+
+  if( oo_do_sigaction(sig, &act, &oact) < 0 )
+    return SIG_ERR;
+
+  Log_CALL_RESULT_PTR(oact.sa_handler);
+  return oact.sa_handler;
+}
+
+OO_INTERCEPT(__sighandler_t, sysv_signal,
+             (int sig, __sighandler_t handler))
+{
+  struct sigaction act, oact;
+
+  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
+    citp_do_init(CITP_INIT_SYSCALLS);
+    return ci_sys_sysv_signal(sig, handler);
+  }
+
+  Log_CALL(ci_log("%s(%d, %p)", __FUNCTION__, sig, handler));
+  act.sa_handler = handler;
+  if( sigemptyset(&act.sa_mask) < 0 )
+    return SIG_ERR;
+  act.sa_flags = SA_ONESHOT | SA_NOMASK | SA_INTERRUPT;
+
+  if( oo_do_sigaction(sig, &act, &oact) < 0 )
+    return SIG_ERR;
+
+  Log_CALL_RESULT_PTR(oact.sa_handler);
+  return oact.sa_handler;
 }
 
 /*
