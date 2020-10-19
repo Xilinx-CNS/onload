@@ -283,7 +283,7 @@ donet () {
   # Find all interfaces created by driver
   declare -a interfaces
   for d in /sys/class/net/*; do
-    driver="$(readlink "$d"/device/driver 2>/dev/null || readlink "$d"/driver)"
+    driver="$(readlink "$d"/device/driver/module)"
     for m in $LINUX_NET; do
         if [ "${driver%/"$m"}" != "$driver" ]; then
           interfaces[${#interfaces[*]}]="$(basename "$d")"
@@ -291,7 +291,7 @@ donet () {
     done
   done
   if [ ${#interfaces[*]} -eq 0 ]; then
-    if [ -z "`lspci -d 1924:`" ]; then
+    if [ -z "$(lspci -d 1924:)" ] && [ -z "$(lspci -d 10ee:)" ]; then
       fail "no Solarflare NICs detected in this machine"
     else
       fail "driver failed to create any interfaces"
