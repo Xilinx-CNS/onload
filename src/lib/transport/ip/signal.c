@@ -251,9 +251,7 @@ ci_inline void citp_signal_run_now(int signum, siginfo_t *info,
 static void citp_signal_intercept(int signum, siginfo_t *info, void *context)
 {
   citp_signal_info *our_info = citp_signal_get_specific_inited();
-  LOG_SIG(log("%s(%d, %p, %p) %smasked", __func__,
-              signum, info, context,
-              CITP_OPTS.signals_no_postpone & (1 << (signum-1)) ? "" : "not "));
+  LOG_SIG(log("%s(%d, %p, %p)", __func__, signum, info, context));
   /* Note: our thread-specific data is initialised on the way in to the our
    * library if necessary, so if our_info is NULL, we can assume that this
    * thread is not currently running inside the library.  (This can happen
@@ -261,8 +259,7 @@ static void citp_signal_intercept(int signum, siginfo_t *info, void *context)
    * intercept handler has been installed, but before that thread uses any
    * of the interposing library functions.)
    */
-  if (our_info && our_info->c.inside_lib &&
-      (CITP_OPTS.signals_no_postpone & (1 << (signum-1))) == 0)
+  if( our_info && our_info->c.inside_lib )
     citp_signal_set_pending(signum, info, context, our_info);
   else
     citp_signal_run_now(signum, info, context, our_info);
@@ -314,7 +311,15 @@ static void oo_fixup_oldact(int sig, struct sigaction *oldact)
 
 bool oo_is_signal_intercepted(int sig, void* handler)
 {
-  return handler != SIG_DFL && handler != SIG_IGN && handler != SIG_ERR;
+  if( CITP_OPTS.signals_no_postpone & (1 << (sig-1)) )
+    return false;
+  if( handler == SIG_IGN || handler == SIG_ERR )
+    return false;
+  if( handler != SIG_DFL )
+    return true;
+
+  /* We'll intercept termonating SIG_DFL in the next patches */
+  return false;
 }
 
 /*! Do all the processing for interception of signal()
