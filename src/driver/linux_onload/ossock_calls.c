@@ -1028,9 +1028,9 @@ int efab_tcp_helper_setsockopt(tcp_helper_resource_t* trs, oo_sp sock_id,
   if( sock == NULL )
     return  -EINVAL;
   if( level == SOL_SOCKET )
-    rc = sock_setsockopt(sock, level, optname, user_optval, optlen);
+    rc = sock_setsockopt(sock, level, optname, USER_SOCKPTR(user_optval), optlen);
   else
-    rc = sock->ops->setsockopt(sock, level, optname, user_optval, optlen);
+    rc = sock->ops->setsockopt(sock, level, optname, USER_SOCKPTR(user_optval), optlen);
   put_linux_socket(sock);
   LOG_SV(ci_log("%s: rc=%d", __FUNCTION__, rc));
 

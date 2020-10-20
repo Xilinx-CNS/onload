@@ -283,13 +283,14 @@ static inline void mmap_read_unlock(struct mm_struct *mm)
 #endif
 
 /* For linux<=5.7 you can use kernel_setsockopt(),
- * but newer versions doe not have this function. */
+ * but newer versions do not have this function. */
 static inline int sock_ops_setsockopt(struct socket *sock,
                                       int level, int optname,
                                       char *optval, unsigned int optlen)
 {
-  mm_segment_t oldfs = get_fs();
   int rc;
+#ifndef EFRM_HAS_SOCKPTR
+  mm_segment_t oldfs = get_fs();
 
   /* You should call sock_setsockopt() for SOL_SOCKET */
   WARN_ON(level == SOL_SOCKET);
@@ -297,8 +298,15 @@ static inline int sock_ops_setsockopt(struct socket *sock,
   set_fs(KERNEL_DS);
   rc = sock->ops->setsockopt(sock, level, optname, optval, optlen);
   set_fs(oldfs);
+#else
+  rc = sock->ops->setsockopt(sock, level, optname,
+                             KERNEL_SOCKPTR(optval), optlen);
+#endif
   return rc;
 }
+#ifndef EFRM_HAS_SOCKPTR
+#define USER_SOCKPTR(val) val
+#endif
 
 /* For linux<=5.7 you can use kernel_getsockopt(),
  * but newer versions doe not have this function. */

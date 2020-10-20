@@ -656,12 +656,17 @@ static void ci_tcp_sock_setsockopt(struct socket* sock, int* err,
                                   int optname, void *optval,
                                   unsigned int optlen)
 {
-  mm_segment_t oldfs = get_fs();
   int rc;
+#ifndef EFRM_HAS_SOCKPTR
+  mm_segment_t oldfs = get_fs();
 
   set_fs(KERNEL_DS);
   rc = sock_setsockopt(sock, SOL_SOCKET, optname, optval, optlen);
   set_fs(oldfs);
+#else
+  rc = sock_setsockopt(sock, SOL_SOCKET, optname,
+                       KERNEL_SOCKPTR(optval), optlen);
+#endif
   if( rc )
     *err = rc;
 }

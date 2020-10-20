@@ -186,7 +186,6 @@ cicp_raw_sock_send_bindtodev(struct oo_cplane_handle* cp, int ifindex,
 {
   struct cicppl_instance* cppl = &cp->cppl;
   struct net_device* dev = NULL;
-  mm_segment_t oldfs;
   int rc;
   char* ifname;
   const struct cred *orig_creds;
@@ -214,11 +213,18 @@ cicp_raw_sock_send_bindtodev(struct oo_cplane_handle* cp, int ifindex,
     }
 
     orig_creds = oo_cplane_empower_cap_net_raw(cp->cp_netns, &my_creds);
-    oldfs = get_fs();
-    set_fs(KERNEL_DS);
-    rc = sock_setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE,
+#ifndef EFRM_HAS_SOCKPTR
+    {
+      mm_segment_t oldfs = get_fs();
+      set_fs(KERNEL_DS);
+      rc = sock_setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE,
                          ifname, strlen(ifname));
-    set_fs(oldfs);
+      set_fs(oldfs);
+    }
+#else
+    rc = sock_setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE,
+                         KERNEL_SOCKPTR(ifname), strlen(ifname));
+#endif
     oo_cplane_drop_cap_net_raw(orig_creds, my_creds);
 
     if( dev != NULL )
