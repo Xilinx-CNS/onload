@@ -60,7 +60,7 @@ arm64_TARGET_SRCS := aarch64_linux_trampoline.o
 #
 
 KBUILD_EXTRA_SYMBOLS := $(BUILDPATH)/driver/linux_char/Module.symvers
-ifeq ($(shell grep efrm_syscall_table $(KBUILD_EXTRA_SYMBOLS)),)
+ifeq ($(shell grep -s efrm_syscall_table $(KBUILD_EXTRA_SYMBOLS)),)
 # Linux-5.8 does not include resource symbols into char's symvers file.
 KBUILD_EXTRA_SYMBOLS += $(BUILDPATH)/driver/linux_resource/Module.symvers
 endif
