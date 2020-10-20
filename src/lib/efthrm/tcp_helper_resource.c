@@ -8123,7 +8123,6 @@ static int tcp_helper_nic_attach_xdp(ci_netif* ni,
                                      struct efhw_nic* nic)
 {
   struct net_device* netdev = efhw_nic_get_net_dev(nic);
-  struct netdev_bpf xdp = {};
   ci_xdp_prog_id_t xdp_prog_id = 0;
   int rc = 0;
 
@@ -8142,8 +8141,17 @@ static int tcp_helper_nic_attach_xdp(ci_netif* ni,
    */
   ci_assert_nflags(ni->flags, CI_NETIF_FLAG_IN_DL_CONTEXT);
 
-  xdp.command = XDP_QUERY_PROG;
-  if( netdev ) {
+  if( netdev == NULL )
+    return 0;
+
+#ifdef EFRM_HAS_XDP_QUERY_PROG
+  /* Fixme: it does not work with linux-5.9.
+   * It is going to break even more for linux-5.10.
+   * It all should be reworked.
+   */
+  {
+    struct netdev_bpf xdp = {};
+    xdp.command = XDP_QUERY_PROG;
     if( netdev->netdev_ops->ndo_bpf ) {
       rtnl_lock();
       rc = netdev->netdev_ops->ndo_bpf(netdev, &xdp);
@@ -8151,8 +8159,10 @@ static int tcp_helper_nic_attach_xdp(ci_netif* ni,
       if( rc == 0 )
         xdp_prog_id = xdp.prog_id;
     }
-    dev_put(netdev);
   }
+#endif
+
+  dev_put(netdev);
 
   if( xdp_prog_id != 0 ) {
     struct bpf_prog* prog = NULL;

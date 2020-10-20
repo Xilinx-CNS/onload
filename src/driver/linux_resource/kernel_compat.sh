@@ -127,6 +127,8 @@ EFRM_HAVE_SOCK_BINDTOINDEX		symbol	sock_bindtoindex	include/net/sock.h
 EFRM_MSGHDR_HAS_MSG_CONTROL_USER	member	struct_msghdr	msg_control_user	include/linux/socket.h
 EFRM_HAS_SOCKPTR		symbol	KERNEL_SOCKPTR	include/linux/sockptr.h
 
+EFRM_HAS_XDP_QUERY_PROG		symbol	XDP_QUERY_PROG	include/linux/netdevice.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
