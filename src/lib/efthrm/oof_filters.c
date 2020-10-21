@@ -4901,8 +4901,7 @@ oof_tproxy_install(struct oof_manager* fm,
 #else
   if( !capable(CAP_NET_RAW) &&
 #endif
-      (scalable_filter_gid != -1) &&
-      (ci_getgid() != scalable_filter_gid) )
+      !ci_in_egroup(scalable_filter_gid) )
     return -EPERM;
 
   mutex_lock(&fm->fm_outer_lock);

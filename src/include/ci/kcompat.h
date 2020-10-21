@@ -53,7 +53,7 @@ extern int ns_capable(struct user_namespace* user_ns, int c);
 
 #define BUG_ON(x) ci_assert(!(x))
 
-extern int ci_getgid(void);
+extern int ci_getegid(void);
 
 struct work_struct;
 typedef void (*work_func_t)(struct work_struct *work);

@@ -4000,11 +4000,10 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   alloc->in_name[CI_CFG_STACK_NAME_LEN] = '\0';
 
   if( (opts->packet_buffer_mode & CITP_PKTBUF_MODE_PHYS) &&
-      (phys_mode_gid == -2 ||
-       (phys_mode_gid != -1 && ci_getgid() != phys_mode_gid)) ) {
+      !ci_in_egroup(phys_mode_gid) ) {
     OO_DEBUG_ERR(ci_log("%s: ERROR: EF_PACKET_BUFFER_MODE=%d not permitted "
-                        "(phys_mode_gid=%d gid=%d pid=%d)", __FUNCTION__,
-                        opts->packet_buffer_mode, phys_mode_gid, ci_getgid(),
+                        "(phys_mode_gid=%d egid=%d pid=%d)", __FUNCTION__,
+                        opts->packet_buffer_mode, phys_mode_gid, ci_getegid(),
                         current->tgid);
                  ci_log("%s: HINT: See the phys_mode_gid onload module "
                         "option.", __FUNCTION__));
@@ -4211,8 +4210,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   rc = allocate_netif_hw_resources(alloc, thc, rs);
   if( rc < 0 ) goto fail6;
 
-  if( inject_kernel_gid != -2 && 
-      ( inject_kernel_gid == -1 || inject_kernel_gid == ci_getgid() ) ) {
+  if( ci_in_egroup(inject_kernel_gid) ) {
     ni->flags |= CI_NETIF_FLAG_MAY_INJECT_TO_KERNEL;
     ni->state->flags |= CI_NETIF_FLAG_DO_INJECT_TO_KERNEL;
   }

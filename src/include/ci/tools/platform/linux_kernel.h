@@ -226,9 +226,15 @@ ci_inline uid_t ci_getuid(void)
   return __kuid_val(current_uid());
 }
 
-ci_inline uid_t ci_getgid(void)
+ci_inline uid_t ci_getegid(void)
 {
-  return from_kgid(&init_user_ns, current_gid());
+  return from_kgid(&init_user_ns, current_egid());
+}
+
+/* gid: -2 - none group, -1 - everyone group or actual gid */
+ci_inline int ci_in_egroup(int gid)
+{
+  return gid != -2 && (gid == -1 || in_egroup_p(KGIDT_INIT(gid)));
 }
 
 

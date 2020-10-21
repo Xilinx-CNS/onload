@@ -53,9 +53,7 @@ pd_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   }
 
   phys_mode = (alloc->in_flags & EFCH_PD_FLAG_PHYS_ADDR) != 0;
-  if (phys_mode &&
-      (phys_mode_gid == -2 || (phys_mode_gid != -1 &&
-			       ci_getgid() != phys_mode_gid))) {
+  if (phys_mode && !ci_in_egroup(phys_mode_gid)) {
     EFCH_ERR("%s: ERROR: not permitted to use phys mode", __FUNCTION__);
     rc = -EPERM;
     goto out;
