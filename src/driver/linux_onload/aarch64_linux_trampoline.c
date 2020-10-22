@@ -219,7 +219,6 @@ int efab_linux_trampoline_ctor(int no_sct)
     }
   }
   saved_sys_exit_group = efrm_syscall_table[__NR_exit_group];
-  saved_sys_sendmsg = efrm_syscall_table[__NR_sendmsg];
   saved_sys_rt_sigaction = efrm_syscall_table[__NR_rt_sigaction];
   saved_sys_epoll_create1 = efrm_syscall_table[__NR_epoll_create1];
   saved_sys_epoll_ctl = efrm_syscall_table[__NR_epoll_ctl];
