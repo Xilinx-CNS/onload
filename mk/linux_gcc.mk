@@ -87,6 +87,13 @@ cwarnings += -Wno-array-bounds
 cwarnings += -Wno-stringop-overflow
 endif
 
+ifdef W_NO_DEPRECATED_DECLARATIONS
+# signal() and sigaction() are deprecated in libc-2.32,
+# but we have to intercept them, because applications use them.
+cwarnings += -Wno-deprecated-declarations
+endif
+
+
 MMAKE_CFLAGS	+= $(MMAKE_CARCH) $(cwarnings)
 MMAKE_CXXFLAGS	+= $(MMAKE_CARCH) $(cxxwarnings)
 MMAKE_CPPFLAGS	:=

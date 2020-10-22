@@ -95,6 +95,7 @@ do_top_level () {
 	W_IMPLICIT_FALLTHROUGH := $W_IMPLICIT_FALLTHROUGH
 	W_NO_IGNORED_ATTRIBUTES := $W_NO_IGNORED_ATTRIBUTES
 	W_NO_STRINGOP_OVERFLOW := $W_NO_STRINGOP_OVERFLOW
+	W_NO_DEPRECATED_DECLARATIONS := $W_NO_DEPRECATED_DECLARATIONS
 	$nt
 	$kpath
 EOF
@@ -324,6 +325,10 @@ fi
 
 if [ "$($mmaketool --gcc_major_version)" -ge 10 ] ; then
   W_NO_STRINGOP_OVERFLOW="1"
+fi
+
+if [ "$($mmaketool --libc_minor_version)" -ge 32 ] ; then
+  W_NO_DEPRECATED_DECLARATIONS="1"
 fi
 
 [ -z "$SRCPATH" ] && SRCPATH=$("$mmaketool" --toppath)/src

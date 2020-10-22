@@ -36,12 +36,12 @@ usage () {
   err "  --userarch            - processor name for this machine"
   err "  --toolplatform        - local tool platform mmaketool is running on"
   err "  --distribution        - OS distribution name for this machine"
-  err "  --libc                - LibC version number"
+  err "  --gcc_major_version   - GNU C compiler major version number"
+  err "  --libc_minor_version  - GNU C library minor version number"
   err "  --interfaces          - list etherfabric interfaces"
   err "  --sourcever           - software version from source code"
   err
   err "Environment variables used:"
-  err "  MMAKETOOL_ADD_LIBC    - add gcc library version to build dir, if set"
   err "  MMAKETOOL_ADD_DISTRIBUTION - add linux distn to build dir, if set"
   err "  MMAKETOOL_ADD_HOST    - add host name to build dir, if set"
   err "  MMAKETOOL_ADD_DEBUG   - for debug builds append 'debug' suffix to "
@@ -123,12 +123,6 @@ add_opts() {
   if [ -n "$MMAKETOOL_ADD_DEBUG" ]; then
     if [ "$NDEBUG" != "1" ]; then
       dir="$dir""_debug"
-    fi
-  fi
-  if [ -n "$MMAKETOOL_ADD_LIBC" ]; then
-    local libc=$(libc_version)
-    if [ -n "$libc" ]; then
-      dir="$libc""_$dir"
     fi
   fi
 
@@ -263,16 +257,11 @@ fetchver () {
   echo "$maj.$min.$maint.$inc"
 }
 
-libc_version_linux() {
-  strings /lib/libc.so.* | sed -n 's/^GNU C Library \w* release version \(.*\),.*/\1/; { T end; p; :end }'
+libc_minor_version() {
+  echo '#include <errno.h>' | ${CC:-cc} -xc - -E -dM | \
+    awk '/^#define __GLIBC_MINOR__ / { print $3 }'
 }
 
-libc_version() {
-  k=$(toolplatform)
-  case "$k" in
-      linux) libc_version_linux;;
-  esac
-}
 
 transportlib() {
   suffix="lib/transport/unix/libcitransport0.so"
@@ -326,7 +315,7 @@ option="yes"
 while [ "$option" = "yes" ]; do
 option=no
 case "$1" in
---ignoreenv)    MMAKETOOL_ADD_LIBC=
+--ignoreenv)
 		MMAKETOOL_ADD_DISTRIBUTION=
 		MMAKETOOL_ADD_HOST=
 		MMAKETOOL_ADD_DEBUG=
@@ -392,7 +381,7 @@ case "$1" in
 		;;
 --gcc_major_version)	gcc_major_version
 		;;
---libc)         libc_version
+--libc_minor_version)	libc_minor_version
 		;;
 --interfaces)	sfc__list_interfaces
 		;;
