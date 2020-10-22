@@ -217,7 +217,7 @@ distrib_is_ubuntu() {
 }
 
 gcc_major_version() {
-  gcc --version |head -1 |sed "s/^gcc.*) \([1-9][0-9]*\)\..*$/\1/"
+  ${CC:-cc} --version |head -1 |sed "s/^.*(GCC) \([1-9][0-9]*\)\..*$/\1/"
 }
 
 kernelid() {
