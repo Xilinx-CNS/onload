@@ -141,19 +141,6 @@ void doSystemTests() {
           )
         }
       },
-      'netlink-without-bond': {
-        withEnv([
-          'CPLANE_SYS_ASSERT_NETLINK_BOND=Excluded'
-        ]) {
-          coverage_files['cplane-sys-netlink-without-bond'] = tm.runUnitTest(
-            'cplane-sys-netlink-without-bond',
-            'check:cplane_sys',
-            gcov_paths,
-            true,
-            ['netlink-without-bond'],
-          )
-        }
-      },
     )
   }
 }
