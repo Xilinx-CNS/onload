@@ -19,6 +19,19 @@
 #include <onload/ul/per_thread.h>
 
 
+#define OO_PRINT_SIGACTION_FMT "%p flags %x%s%s%s%s%s%s%s mask %lx"
+#define OO_PRINT_SIGACTION_ARG(sa) \
+  (sa)->sa_handler, (sa)->sa_flags, \
+  (sa)->sa_flags & SA_NOCLDSTOP ? " NOCLDSTOP" : "", \
+  (sa)->sa_flags & SA_NOCLDWAIT ? " NOCLDWAIT" : "", \
+  (sa)->sa_flags & SA_SIGINFO   ? " SIGINFO"   : "", \
+  (sa)->sa_flags & SA_ONSTACK   ? " ONSTACK"   : "", \
+  (sa)->sa_flags & SA_RESTART   ? " RESTART"   : "", \
+  (sa)->sa_flags & SA_NODEFER   ? " NODEFER"   : "", \
+  (sa)->sa_flags & SA_RESETHAND ? " RESETHAND" : "", \
+  (sa)->sa_mask.__val[0]
+
+
 typedef struct oo_sig_thread_state citp_signal_info;
 
 
@@ -30,6 +43,8 @@ ci_inline citp_signal_info *citp_signal_get_specific_inited(void)
   return &pt->sig;
 }
 
+extern int oo_do_sigaction(int sig, const struct sigaction *act,
+                           struct sigaction *oldact);
 
 #endif  /* __CI_INTERNAL_IP_SIGNAL_H__ */
 /*! \cidoxg_end */

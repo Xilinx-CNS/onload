@@ -16,7 +16,6 @@
 #include "ip_internal.h"
 #include <ci/internal/ip_signal.h>
 #include <ci/internal/ip_log.h>
-#include <linux/version.h>
 #include <ci/internal/transport_common.h>
 #include <ci/internal/efabcfg.h>
 
@@ -24,9 +23,66 @@
 #error "Non-kernel file"
 #endif
 
-#if 0
+struct oo_sigstore {
+  ci_uint32 seq;
+#define OO_SIGSTORE_BUSY        0x80000000
+  struct sigaction act[2]; /* use act[seq&1] */
+};
+
 /*! Signal handlers storage.  Indexed by signum-1. */
-struct oo_sigaction citp_signal_data[NSIG];
+struct oo_sigstore sigstore[_NSIG];
+
+static void citp_signal_intercept(int signum, siginfo_t *info, void *context);
+
+static void oo_get_sigaction(int sig, struct sigaction* sa)
+{
+  struct oo_sigstore* store = &sigstore[sig - 1];
+  ci_uint32 seq;
+  ci_uint32 seq1 = OO_ACCESS_ONCE(store->seq);
+
+  do {
+    seq = seq1;
+    memcpy(sa, &store->act[seq & 1], sizeof(*sa));
+    ci_rmb();
+  } while( (seq1 = OO_ACCESS_ONCE(store->seq)) != seq );
+}
+
+/* Get a write lock: set the OO_SIGSTORE_BUSY flag */
+static int oo_signal_write_lock(int sig, ci_uint32* seq_p)
+{
+  struct oo_sigstore* store = &sigstore[sig - 1];
+  ci_uint32 seq;
+  int i = 0;
+
+  do {
+    seq = OO_ACCESS_ONCE(store->seq);
+    if( seq & OO_SIGSTORE_BUSY ) {
+      if( i++ > 1000000 ) {
+        ci_log("ERROR: can't set a new signal handler for signal %d", sig);
+        return -EBUSY;
+      }
+      ci_spinloop_pause();
+    }
+  } while( ci_cas32u_fail(&store->seq, seq, seq | OO_SIGSTORE_BUSY) );
+
+  LOG_SIG(ci_log("%s: signal %d seq %d "OO_PRINT_SIGACTION_FMT,
+                 __func__, sig, seq,
+                 OO_PRINT_SIGACTION_ARG(&store->act[seq & 1])));
+  *seq_p = seq;
+  return 0;
+}
+
+static void oo_signal_write_unlock(int sig, ci_uint32 seq)
+{
+  struct oo_sigstore* store = &sigstore[sig - 1];
+  ci_assert_equal(seq | OO_SIGSTORE_BUSY, store->seq);
+  ci_wmb();
+  OO_ACCESS_ONCE(store->seq) = (seq + 1) & ~OO_SIGSTORE_BUSY;
+  LOG_SIG(ci_log("%s: signal %d seq %d "OO_PRINT_SIGACTION_FMT,
+                 __func__, sig, seq,
+                 OO_PRINT_SIGACTION_ARG(&store->act[(seq + 1) & 1])));
+}
+
 
 /*! Run a signal handler
 ** \param  signum   Signal number
@@ -37,64 +93,42 @@ struct oo_sigaction citp_signal_data[NSIG];
 static int
 citp_signal_run_app_handler(int sig, siginfo_t *info, void *context)
 {
-  struct oo_sigaction *p_data = &citp_signal_data[sig-1];
-  struct oo_sigaction act;
-  ci_int32 type1, type2;
+  struct sigaction act;
   int ret;
-  sa_sigaction_t handler;
 
-  do {
-    type1 = p_data->type;
-    act = *p_data;
-    type2 = p_data->type;
-  } while( type1 != type2 ||
-           (type1 & OO_SIGHANGLER_TYPE_MASK) == OO_SIGHANGLER_BUSY );
+  oo_get_sigaction(sig, &act);
 
-  /* When the signal was delivered and set pending, it was intercepted.
-   * Now it is not.
-   * It is possible if, for example, user-provided handler is replaced by
-   * SIG_DFL for SIGABORT.
-   *
-   * We just run old handler in this case, so we drop
-   * OO_SIGHANGLER_IGN_BIT.
-   */
-
-  ret = act.flags & SA_RESTART;
-  LOG_SIG(log("%s: signal %d type %d run handler %p flags %x",
-              __FUNCTION__, sig, act.type, CI_USER_PTR_GET(act.handler),
-              act.flags));
-
-  handler = CI_USER_PTR_GET(act.handler);
-  ci_assert(handler);
-  ci_assert_nequal(handler, citp_signal_intercept);
+  ret = act.sa_flags & SA_RESTART;
+  ci_assert_nequal(act.sa_sigaction, citp_signal_intercept);
   ci_assert(info);
   ci_assert(context);
 
-  /* If sighandler was reset because of SA_ONESHOT, we should properly
-   * handle termination.
-   * Also, signal flags possibly differs from the time when kernel was
-   * running the sighandler: so, we should ensure that ONESHOT shoots
-   * only once. */
-  if( (act.flags & SA_ONESHOT) &&
-      act.type == citp_signal_data[sig-1].type ) {
+  LOG_SIG(log("%s: signal %d run handler %p flags %x",
+              __FUNCTION__, sig, act.sa_handler, act.sa_flags));
+
+  if( act.sa_flags & SA_ONESHOT ) {
     struct sigaction sa;
+    int rc;
+
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = SIG_DFL;
-    sa.sa_flags = act.flags &~ SA_ONESHOT;
-    sigaction(sig, &sa, NULL);
+    sa.sa_flags = 0;
+    sa.sa_mask = act.sa_mask;
+    rc = oo_do_sigaction(sig, &sa, NULL);
     LOG_SIG(log("%s: SA_ONESHOT fixup", __func__));
+    if( rc != 0 ) {
+      ci_log("ERROR: faild to reset signal %d with SA_ONESHOT: %d", sig, rc);
+      ci_assert(0);
+    }
   }
 
-  if( (act.type & OO_SIGHANGLER_TYPE_MASK) != OO_SIGHANGLER_USER ||
-      (act.flags & SA_SIGINFO) ) {
-    (*handler)(sig, info, context);
-  } else {
-    __sighandler_t handler1 = (void *)handler;
-    (*handler1)(sig);
-  }
+  if( act.sa_flags & SA_SIGINFO )
+    (*act.sa_sigaction)(sig, info, context);
+  else
+    (*act.sa_handler)(sig);
+
   LOG_SIG(log("%s: returned from handler for signal %d: ret=%x", __FUNCTION__,
               sig, ret));
-
   return ret;
 }
 
@@ -128,11 +162,6 @@ void citp_signal_run_pending(citp_signal_info *our_info)
     signum = our_info->signals[i].signum;
     if( ci_cas32_fail(&our_info->signals[i].signum, signum, 0) )
       break;
-
-    /* Segfault in Onload code (such as ci_assert) violate this assertion,
-     * so we check for SIGSEGV here. */
-    if( signum != SIGABRT && signum != SIGSEGV )
-      ci_assert_equal(our_info->c.inside_lib, 0);
 
     if( citp_signal_run_app_handler(
                 signum,
@@ -172,12 +201,6 @@ ci_inline void citp_signal_set_pending(int signum, siginfo_t *info,
     ci_assert(context);
     memcpy(&our_info->signals[i].saved_info, info, sizeof(siginfo_t));
     our_info->signals[i].saved_context = context;
-
-    /* Hack: in case of SA_ONESHOT, make sure that we intercept
-     * the signal.  At the end of citp_signal_run_app_handler,
-     * we will reset the signal handler properly. */
-    if( citp_signal_data[signum-1].flags & SA_ONESHOT )
-      sigaction(signum, NULL, NULL);
 
     ci_atomic32_or(&our_info->c.aflags, OO_SIGNAL_FLAG_HAVE_PENDING);
     return;
@@ -225,7 +248,7 @@ ci_inline void citp_signal_run_now(int signum, siginfo_t *info,
 ** \param  info     Additional information passed in by the kernel
 ** \param  context  Context passed in by the kernel
 */
-void citp_signal_intercept(int signum, siginfo_t *info, void *context)
+static void citp_signal_intercept(int signum, siginfo_t *info, void *context)
 {
   citp_signal_info *our_info = citp_signal_get_specific_inited();
   LOG_SIG(log("%s(%d, %p, %p) %smasked", __func__,
@@ -244,92 +267,6 @@ void citp_signal_intercept(int signum, siginfo_t *info, void *context)
   else
     citp_signal_run_now(signum, info, context, our_info);
 }
-
-/* SIG_DFL simulator for signals like SIGINT, SIGTERM: it is postponed
- * properly to safe shared stacks. */
-static void citp_signal_terminate(int signum, siginfo_t *info, void *context)
-{
-  int fd;
-  int rc;
-
-  /* get any Onload fd to call ioctl */
-  rc = ef_onload_driver_open(&fd, OO_STACK_DEV, 1);
-
-  /* Die now:
-   * _exit sets incorrect status in waitpid(), so we should try to exit via
-   * signal.  Use _exit() if there is no other way. */
-  if( rc == 0 )
-    oo_resource_op(fd, OO_IOC_DIE_SIGNAL, &signum);
-  else
-    _exit(128 + signum);
-}
-
-/*! sa_restorer used by libc (SA_SIGINFO case!) */
-static void *citp_signal_sarestorer;
-static int citp_signal_sarestorer_inited = 0;
-
-#ifndef SA_RESTORER
-/* kernel+libc keep it private, but we need it */
-#define SA_RESTORER 0x04000000
-#endif
-/* Get sa_restorer which is set by libc. */
-void *citp_signal_sarestorer_get(void)
-{
-  int sig = SIGINT;
-  struct sigaction act;
-  int rc;
-
-  if( citp_signal_sarestorer_inited )
-    return citp_signal_sarestorer;
-
-  LOG_SIG(log("%s: citp_signal_intercept=%p",
-              __func__, citp_signal_intercept));
-  LOG_SIG(log("%s: citp_signal_terminate=%p", __func__, 
-              citp_signal_terminate));
-  for( sig = 1; sig < _NSIG; sig++ ) {
-    LOG_SIG(log("find sa_restorer via signal %d", sig));
-    /* If the handler was already set by libc, we get sa_restorer just now */
-    rc = sigaction(sig, NULL, &act);
-    if( rc != 0 )
-      continue;
-    if( act.sa_restorer != NULL && (act.sa_flags & SA_SIGINFO) ) {
-      citp_signal_sarestorer = act.sa_restorer;
-      LOG_SIG(ci_log("%s: initially citp_signal_sarestorer=%p", __func__,
-                     citp_signal_sarestorer));
-      citp_signal_sarestorer_inited = 1;
-      return citp_signal_sarestorer;
-    }
-
-    /* Do not set SA_SIGINFO for user handlers! */
-    if( act.sa_handler != SIG_IGN && act.sa_handler != SIG_DFL )
-      continue;
-
-    LOG_SIG(ci_log("%s: non-siginfo sa_restorer=%p", __func__,
-                   act.sa_restorer));
-    /* Let's go via libc and set sa_restorer */
-    act.sa_flags |= SA_SIGINFO;
-    rc = sigaction(sig, &act, NULL);
-    if( rc != 0 )
-      continue;
-    /* And now we get sa_restorer as it was set by libc! */
-    rc = sigaction(sig, NULL, &act);
-    if( rc == 0 ) {
-      citp_signal_sarestorer_inited = 1;
-      LOG_SIG(ci_log("%s: set/get flags %x citp_signal_sarestorer=%p",
-                     __func__, act.sa_flags, act.sa_restorer));
-      if( !(act.sa_flags & SA_RESTORER) )
-        return NULL;
-      citp_signal_sarestorer = act.sa_restorer;
-      return citp_signal_sarestorer;
-    }
-  }
-
-  return NULL;
-}
-#else
-void citp_signal_run_pending(citp_signal_info *our_info) { }
-#endif
-
 
 int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
                                  citp_signal_info* si, int have_timeout)
@@ -353,5 +290,142 @@ int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
   return 0;
 }
 
+#if defined(__x86_64__) || defined(__i386__)
+#define SA_RESTORER 0x04000000
 
-/*! \cidoxg_end */
+static void* oo_saved_restorer = NULL;
+
+/* Appease the Socket Tester, mimic glibc: report SA_RESTORER. */
+static void oo_fixup_oldact(int sig, struct sigaction *oldact)
+{
+  oldact->sa_flags |= 0x04000000;
+  if( oo_saved_restorer == NULL ) {
+    struct sigaction s;
+    ci_sys_sigaction(sig, NULL, &s);
+    oo_saved_restorer = s.sa_restorer;
+  }
+  oldact->sa_restorer = oo_saved_restorer;
+
+}
+#else
+#define oo_fixup_oldact(sig, oldact)
+#endif
+
+
+bool oo_is_signal_intercepted(int sig, void* handler)
+{
+  return handler != SIG_DFL && handler != SIG_IGN && handler != SIG_ERR;
+}
+
+/*! Do all the processing for interception of signal()
+** \param  signum   Signal number
+** \param  act      Pointer to requested action, or NULL
+** \param  oldact   Pointer to storage for previous action, or NULL
+** \return          0 for success, -1 for failure
+*/
+int oo_do_sigaction(int sig, const struct sigaction *act,
+                    struct sigaction *oldact)
+{
+  struct oo_sigstore* store = &sigstore[sig - 1];
+  struct sigaction old;
+  ci_uint32 seq;
+  int rc = 0;
+
+  if( sig < 0 || sig >= _NSIG ) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  /* Read only: fast exit */
+  if( act == NULL ) {
+    if( oldact == NULL )
+      return 0;
+    oo_get_sigaction(sig, oldact);
+    if( oo_is_signal_intercepted(sig, oldact->sa_handler) ) {
+      oo_fixup_oldact(sig, oldact);
+      return 0;
+    }
+    return ci_sys_sigaction(sig, NULL, oldact);
+  }
+
+  /* Are we going to intercept this signal? */
+  if( ! oo_is_signal_intercepted(sig, act->sa_handler) ) {
+    rc = ci_sys_sigaction(sig, act, &old);
+    LOG_SIG(ci_log("%s: rc=%d: do not intercept signal %d "
+                   OO_PRINT_SIGACTION_FMT,
+                   __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
+    if( rc != 0 )
+      return rc;
+
+    /* Was the signal not intercepted previously?
+     * Should we look up our old handler?
+     */
+    if( old.sa_sigaction != citp_signal_intercept ) {
+      LOG_SIG(ci_log("%s: rc=%d: continue passthrough for signal %d "
+                     OO_PRINT_SIGACTION_FMT,
+                     __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
+      if( oldact )
+        memcpy(oldact, &old, sizeof(old));
+      return rc;
+    }
+
+
+    /* The signal was intercepted, and now it is not.  Mark it in the
+     * store.
+     */
+    LOG_SIG(ci_log("%s: rc=%d: stop intercepting signal %d "
+                   OO_PRINT_SIGACTION_FMT,
+                   __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
+    rc = oo_signal_write_lock(sig, &seq);
+    if( rc < 0 ) {
+      ci_log("ERROR: %s(%d) failed to lock signal store when signal handler "
+             "have already been installed", __func__, sig);
+      return rc;
+    }
+    if( oldact )
+      memcpy(oldact, &store->act[seq & 1], sizeof(old));
+    store->act[! (seq & 1) ].sa_handler = SIG_ERR;
+    oo_signal_write_unlock(sig, seq);
+    if( oldact )
+      oo_fixup_oldact(sig, oldact);
+    return 0;
+  }
+
+  /* Install a new Onload-intercepted handler. */
+  rc = oo_signal_write_lock(sig, &seq);
+  if( rc != 0 ) {
+    ci_log("ERROR: %s(%d) failed to lock signal store", __func__, sig);
+    return rc;
+  }
+
+  ci_assert(act);
+  ci_assert(oo_is_signal_intercepted(sig, act->sa_handler));
+
+  memcpy(&old, &store->act[seq & 1], sizeof(old));
+  memcpy(&store->act[! (seq & 1)], act, sizeof(*act));
+  oo_signal_write_unlock(sig, seq);
+
+  /* We should call kernel's sigaction if:
+   * - the signal was not intercepted previously;
+   * - the signal was intercepted, but with different SA_* flags
+   *   (except for SA_SIGINFO);
+   * - the signal was intercepted, but with a different sa_mask.
+   */
+  if( ! oo_is_signal_intercepted(sig, old.sa_handler) ||
+      ((act->sa_flags ^ old.sa_flags) & ~SA_SIGINFO) != 0 ||
+      memcmp(&act->sa_mask, &old.sa_mask, sizeof(old.sa_mask)) != 0 ) {
+    struct sigaction new;
+    new.sa_flags = (act->sa_flags | SA_SIGINFO) & ~SA_RESETHAND;
+    new.sa_sigaction = citp_signal_intercept;
+    new.sa_mask = act->sa_mask;
+    rc = ci_sys_sigaction(sig, &new, oldact);
+    LOG_SIG(ci_log("%s: rc=%d: signal %d intercept now "OO_PRINT_SIGACTION_FMT,
+                   __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
+  }
+  else if( oldact != NULL ) {
+    memcpy(oldact, &old, sizeof(old));
+    oo_fixup_oldact(sig, oldact);
+  }
+
+  return rc;
+}

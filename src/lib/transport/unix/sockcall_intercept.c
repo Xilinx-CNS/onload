@@ -2773,6 +2773,34 @@ OO_INTERCEPT(void, _exit, (int status))
 }
 
 
+OO_INTERCEPT(int, sigaction,
+             (int signum, const struct sigaction *act,
+              struct sigaction* oldact))
+{
+  int rc;
+
+  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
+    citp_do_init(CITP_INIT_SYSCALLS);
+    return ci_sys_sigaction(signum, act, oldact);
+  }
+
+  Log_CALL(ci_log("%s(%d, %p, %p)", __FUNCTION__, signum, act, oldact));
+  if( act != NULL )
+    Log_CALL(ci_log("\tnew "OO_PRINT_SIGACTION_FMT,
+                    OO_PRINT_SIGACTION_ARG(act)));
+
+  /* There is no need to enter library, because sigaction() does not use
+   * fdtable.  Other sync methods are used here.
+   */
+  rc = oo_do_sigaction(signum, act, oldact);
+
+  Log_CALL_RESULT(rc);
+  if( rc == 0 && oldact != NULL )
+    Log_CALL(ci_log("\told "OO_PRINT_SIGACTION_FMT,
+                    OO_PRINT_SIGACTION_ARG(oldact)));
+  return rc;
+}
+
 /*
  * vi: sw=2:ai:aw
  * vim: et:ul=0

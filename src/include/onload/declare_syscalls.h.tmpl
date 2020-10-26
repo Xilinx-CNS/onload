@@ -150,6 +150,8 @@ CI_MK_DECL(long          , syscall    , (long, ...));
 
 CI_MK_DECL(void           , _exit      , (int));
 
+CI_MK_DECL(int           , sigaction, (int, const struct sigaction *, struct sigaction *));
+
 #undef CI_MK_DECL
 
 /*! \cidoxg_end */
