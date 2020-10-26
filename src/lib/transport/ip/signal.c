@@ -65,9 +65,6 @@ static int oo_signal_write_lock(int sig, ci_uint32* seq_p)
     }
   } while( ci_cas32u_fail(&store->seq, seq, seq | OO_SIGSTORE_BUSY) );
 
-  LOG_SIG(ci_log("%s: signal %d seq %d "OO_PRINT_SIGACTION_FMT,
-                 __func__, sig, seq,
-                 OO_PRINT_SIGACTION_ARG(&store->act[seq & 1])));
   *seq_p = seq;
   return 0;
 }
@@ -78,9 +75,6 @@ static void oo_signal_write_unlock(int sig, ci_uint32 seq)
   ci_assert_equal(seq | OO_SIGSTORE_BUSY, store->seq);
   ci_wmb();
   OO_ACCESS_ONCE(store->seq) = (seq + 1) & ~OO_SIGSTORE_BUSY;
-  LOG_SIG(ci_log("%s: signal %d seq %d "OO_PRINT_SIGACTION_FMT,
-                 __func__, sig, seq,
-                 OO_PRINT_SIGACTION_ARG(&store->act[(seq + 1) & 1])));
 }
 
 
@@ -322,6 +316,56 @@ bool oo_is_signal_intercepted(int sig, void* handler)
   return false;
 }
 
+static int
+oo_signal_install_to_onload(int sig, const struct sigaction *act,
+                            struct sigaction *oldact)
+{
+  struct oo_sigstore* store = &sigstore[sig - 1];
+  ci_uint32 seq;
+  int rc;
+
+  rc = oo_signal_write_lock(sig, &seq);
+  if( rc != 0 ) {
+    ci_log("ERROR: %s(%d) failed to lock signal store", __func__, sig);
+    return rc;
+  }
+  LOG_SIG(ci_log("%s(%d): new handler %p seq %x",
+                 __func__, sig, act ? act->sa_handler : (void*)-1, seq));
+
+  if( oldact != NULL )
+    memcpy(oldact, &store->act[seq & 1], sizeof(*oldact));
+  if( act != NULL )
+    memcpy(&store->act[! (seq & 1)], act, sizeof(*act));
+  else
+    store->act[! (seq & 1) ].sa_handler = SIG_ERR;
+  oo_signal_write_unlock(sig, seq);
+
+  return 0;
+}
+
+static int
+oo_signal_install_to_os(int sig, const struct sigaction *act,
+                        void* oo_handler, struct sigaction *oldact)
+{
+  int rc;
+  struct sigaction new;
+
+  ci_assert(act);
+  LOG_SIG(ci_log("%s(%d): intercept with %p", __func__, sig, oo_handler));
+
+  new.sa_flags = (act->sa_flags | SA_SIGINFO) & ~SA_RESETHAND;
+  new.sa_sigaction = oo_handler;
+  new.sa_mask = act->sa_mask;
+
+  /* We want to intercept SIGCANCEL, so can't use libc's wrapper for the
+   * syscall.
+   */
+  rc = ci_sys_sigaction(sig, &new, oldact);
+  LOG_SIG(ci_log("%s: rc=%d: signal %d intercept now "OO_PRINT_SIGACTION_FMT,
+                 __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
+  return rc;
+}
+
 /*! Do all the processing for interception of signal()
 ** \param  signum   Signal number
 ** \param  act      Pointer to requested action, or NULL
@@ -331,9 +375,7 @@ bool oo_is_signal_intercepted(int sig, void* handler)
 int oo_do_sigaction(int sig, const struct sigaction *act,
                     struct sigaction *oldact)
 {
-  struct oo_sigstore* store = &sigstore[sig - 1];
   struct sigaction old;
-  ci_uint32 seq;
   int rc = 0;
 
   if( sig < 0 || sig >= _NSIG ) {
@@ -378,37 +420,18 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
     /* The signal was intercepted, and now it is not.  Mark it in the
      * store.
      */
-    LOG_SIG(ci_log("%s: rc=%d: stop intercepting signal %d "
-                   OO_PRINT_SIGACTION_FMT,
-                   __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
-    rc = oo_signal_write_lock(sig, &seq);
-    if( rc < 0 ) {
-      ci_log("ERROR: %s(%d) failed to lock signal store when signal handler "
-             "have already been installed", __func__, sig);
+    rc = oo_signal_install_to_onload(sig, NULL, oldact);
+    if( rc < 0 )
       return rc;
-    }
-    if( oldact )
-      memcpy(oldact, &store->act[seq & 1], sizeof(old));
-    store->act[! (seq & 1) ].sa_handler = SIG_ERR;
-    oo_signal_write_unlock(sig, seq);
     if( oldact )
       oo_fixup_oldact(sig, oldact);
     return 0;
   }
 
   /* Install a new Onload-intercepted handler. */
-  rc = oo_signal_write_lock(sig, &seq);
-  if( rc != 0 ) {
-    ci_log("ERROR: %s(%d) failed to lock signal store", __func__, sig);
+  rc = oo_signal_install_to_onload(sig, act, &old);
+  if( rc < 0 )
     return rc;
-  }
-
-  ci_assert(act);
-  ci_assert(oo_is_signal_intercepted(sig, act->sa_handler));
-
-  memcpy(&old, &store->act[seq & 1], sizeof(old));
-  memcpy(&store->act[! (seq & 1)], act, sizeof(*act));
-  oo_signal_write_unlock(sig, seq);
 
   /* We should call kernel's sigaction if:
    * - the signal was not intercepted previously;
@@ -419,13 +442,7 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
   if( ! oo_is_signal_intercepted(sig, old.sa_handler) ||
       ((act->sa_flags ^ old.sa_flags) & ~SA_SIGINFO) != 0 ||
       memcmp(&act->sa_mask, &old.sa_mask, sizeof(old.sa_mask)) != 0 ) {
-    struct sigaction new;
-    new.sa_flags = (act->sa_flags | SA_SIGINFO) & ~SA_RESETHAND;
-    new.sa_sigaction = citp_signal_intercept;
-    new.sa_mask = act->sa_mask;
-    rc = ci_sys_sigaction(sig, &new, oldact);
-    LOG_SIG(ci_log("%s: rc=%d: signal %d intercept now "OO_PRINT_SIGACTION_FMT,
-                   __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
+    rc = oo_signal_install_to_os(sig, act, citp_signal_intercept, oldact);
   }
   else if( oldact != NULL ) {
     memcpy(oldact, &old, sizeof(old));
