@@ -142,7 +142,6 @@ cd "$top"
 
 [ -n "$netrepo" ] || netrepo="$top"
 [ -d "$netrepo" ] || fail "--netrepo is not valid"
-[ -d "$legacyrepo" ] || fail "--legacyrepo is not valid"
 onloadid=$(git describe --always --dirty=+)
 [ "${onloadid/\+/|/}" == "${onloadid}" ] ||
   fail "onload repo has local changes.  See git status."
@@ -161,13 +160,17 @@ if [ -n "$fwtag" ] && ! hg -R "$fwrepo" id -r "$fwtag" > /dev/null 2>&1; then
     fail "'$fwtag' does not exist in '$fwrepo'."
 fi
 
-if [ -n "$legacytag" ] && ! hg -R "$legacyrepo" id -r "$legacytag" > /dev/null 2>&1; then
-    fail "'$legacytag' does not exist in '$legacyrepo'."
-fi
+if $mcdi; then
+    [ -d "$legacyrepo" ] || fail "--legacyrepo is not valid"
 
-# Canonicalise the legacy name if it is not a valid tag
-if [ "$legacytag" == tip ] || [ "$(hg id -R "$legacyrepo" -r "$legacytag" -t)" != "$legacytag" ]; then
-    legacytag=$(hg id -R "$legacyrepo" --id -r ${legacytag})
+    if [ -n "$legacytag" ] && ! hg -R "$legacyrepo" id -r "$legacytag" > /dev/null 2>&1; then
+	fail "'$legacytag' does not exist in '$legacyrepo'."
+    fi
+
+    # Canonicalise the legacy name if it is not a valid tag
+    if [ "$legacytag" == tip ] || [ "$(hg id -R "$legacyrepo" -r "$legacytag" -t)" != "$legacytag" ]; then
+	legacytag=$(hg id -R "$legacyrepo" --id -r ${legacytag})
+    fi
 fi
 
 ###############################################################################
