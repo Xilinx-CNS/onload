@@ -30,6 +30,7 @@ struct efx_tc_counter {
 	u32 fw_id; /* index in firmware counter table */
 	struct rhash_head linkage; /* efx->tc->counter_ht */
 	spinlock_t lock; /* Serialises updates to counter values */
+	u32 gen; /* Generation count at which this counter is current */
 	u64 packets, bytes;
 	u64 old_packets, old_bytes; /* Values last time passed to userspace */
 	/* jiffies of the last time we saw packets increase */
@@ -118,6 +119,7 @@ struct efx_tc_match_fields {
 	u8 ip_proto, ip_tos, ip_ttl;
 	__be32 src_ip, dst_ip;
 	struct in6_addr src_ip6, dst_ip6;
+	bool ip_frag;
 	/* L4 */
 	__be16 l4_sport, l4_dport; /* Ports (UDP, TCP) */
 	__be16 tcp_flags;

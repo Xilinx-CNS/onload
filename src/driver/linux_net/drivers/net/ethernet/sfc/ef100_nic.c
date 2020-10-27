@@ -1516,23 +1516,30 @@ int ef100_probe_netdev_pf(struct efx_nic *efx)
 			   "Failed to probe base mport rc %d; representors will not function\n",
 			   rc);
 
-	rc = efx_init_tc(efx);
-	if (rc) {
-		/* Either we don't have an MAE at all (i.e. legacy v-switching),
-		 * or we do but we failed to probe it.  In the latter case, we
-		 * may not have set up default rules, in which case we won't be
-		 * able to pass any traffic.  However, we don't fail the probe,
-		 * because the user might need to use the netdevice to apply
-		 * configuration changes to fix whatever's wrong with the MAE.
-		 */
-		netif_warn(efx, probe, net_dev,
-			   "Failed to probe MAE rc %d; TC offload unavailable\n",
-			   rc);
-	} else {
+	/* XXX this is a hack to deal with C-model issues vaguely related to
+	 * FWRIVERHD-911, where we get two PFs on port 0 (and none on port 1).
+	 * It's not satisfactory long-term, as port 1 PFs won't have the
+	 * PRIMARY flag, so won't get any MAE setup / TC offload.
+	 */
+	if (efx->mcdi->fn_flags & BIT(MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_PRIMARY)) {
+		rc = efx_init_tc(efx);
+		if (rc) {
+			/* Either we don't have an MAE at all (i.e. legacy v-switching),
+			 * or we do but we failed to probe it.  In the latter case, we
+			 * may not have set up default rules, in which case we won't be
+			 * able to pass any traffic.  However, we don't fail the probe,
+			 * because the user might need to use the netdevice to apply
+			 * configuration changes to fix whatever's wrong with the MAE.
+			 */
+			netif_warn(efx, probe, net_dev,
+				   "Failed to probe MAE rc %d; TC offload unavailable\n",
+				   rc);
+		} else {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-		net_dev->features |= NETIF_F_HW_TC;
-		efx->fixed_features |= NETIF_F_HW_TC;
+			net_dev->features |= NETIF_F_HW_TC;
+			efx->fixed_features |= NETIF_F_HW_TC;
 #endif
+		}
 	}
 
 	return 0;

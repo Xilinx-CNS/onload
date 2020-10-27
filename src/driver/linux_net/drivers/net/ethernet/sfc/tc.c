@@ -501,7 +501,7 @@ static struct efx_tc_counter *efx_tc_flower_allocate_counter(struct efx_nic *efx
 	cnt->touched = jiffies;
 	cnt->tc = efx->tc;
 
-	rc = efx_mae_allocate_counter(efx, &cnt->fw_id);
+	rc = efx_mae_allocate_counter(efx, cnt);
 	if (rc)
 		goto fail1;
 	INIT_LIST_HEAD(&cnt->users);
@@ -539,11 +539,12 @@ static void efx_tc_flower_release_counter(struct efx_nic *efx,
 			   "Failed to free MAE counter %u, rc %d\n",
 			   cnt->fw_id, rc);
 	WARN_ON(!list_empty(&cnt->users));
-	/* There is still a race here; counter updates can come in arbitrarily
-	 * long after we deleted the counter.  The RCU just ensures that we
-	 * won't free the counter while another thread has a pointer to it; we
-	 * can still update the wrong counter if the ID gets re-used.  See
-	 * SWNETLINUX-3595, and comments on CT-8026, for further discussion.
+	/* This doesn't protect counter updates coming in arbitrarily long
+	 * after we deleted the counter.  The RCU just ensures that we won't
+	 * free the counter while another thread has a pointer to it.
+	 * Ensuring we don't update the wrong counter if the ID gets re-used
+	 * is handled by the generation count.  See SWNETLINUX-3595, and
+	 * comments on CT-8026, for further discussion.
 	 */
 	synchronize_rcu();
 	flush_work(&cnt->work);
@@ -1542,6 +1543,18 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 			default:
 				break;
 			}
+
+		if (fm.mask->flags & FLOW_DIS_IS_FRAGMENT) {
+			match->value.ip_frag = fm.key->flags & FLOW_DIS_IS_FRAGMENT;
+			match->mask.ip_frag = true;
+		}
+		if (fm.mask->flags & ~FLOW_DIS_IS_FRAGMENT) {
+			netif_err(efx, drv, efx->net_dev,
+				  "Unsupported match on control.flags %#x\n",
+				  fm.mask->flags);
+			NL_SET_ERR_MSG_MOD(extack, "Unsupported match on control.flags");
+			return -EOPNOTSUPP;
+		}
 	}
 
 	if (dissector->used_keys &
@@ -3030,7 +3043,8 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 	long rc;
 	int i;
 
-
+	if (!tc_can_offload_extack(efx->net_dev, extack))
+		return -EOPNOTSUPP;
 	if (WARN_ON(!efx->tc))
 		return -ENETDOWN;
 	if (WARN_ON(!efx->tc->up))
@@ -3882,8 +3896,6 @@ int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
 
 	switch (tcb->command) {
 	case FLOW_BLOCK_BIND:
-		if (!efx->tc->up)
-			return -ENETDOWN;
 		binding = efx_tc_create_binding(efx, efv, net_dev, tcb->block);
 		if (IS_ERR(binding))
 			return PTR_ERR(binding);
@@ -3948,8 +3960,6 @@ int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
 
 	switch (tcb->command) {
 	case TC_BLOCK_BIND:
-		if (!efx->tc->up)
-			return -ENETDOWN;
 		binding = kmalloc(sizeof(*binding), GFP_KERNEL);
 		if (!binding)
 			return -ENOMEM;
@@ -4217,6 +4227,8 @@ static void efx_tc_debugfs_dump_match(struct seq_file *file,
 	DUMP_ONE_MATCH(ip_proto);
 	DUMP_ONE_MATCH(ip_tos);
 	DUMP_ONE_MATCH(ip_ttl);
+	if (match->mask.ip_frag)
+		seq_printf(file, "\tip_frag = %d\n", match->value.ip_frag);
 	DUMP_FMT_AMP_MATCH(src_ip, "%pI4");
 	DUMP_FMT_AMP_MATCH(dst_ip, "%pI4");
 	DUMP_FMT_PTR_MATCH(src_ip6, "%pI6");
