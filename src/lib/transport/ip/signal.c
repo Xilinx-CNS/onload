@@ -337,7 +337,7 @@ oo_signal_install_to_onload(int sig, const struct sigaction *act,
   if( act != NULL )
     memcpy(&store->act[! (seq & 1)], act, sizeof(*act));
   else
-    store->act[! (seq & 1) ].sa_handler = SIG_ERR;
+    store->act[! (seq & 1) ].sa_handler = SIG_DFL;
   oo_signal_write_unlock(sig, seq);
 
   return 0;
@@ -388,7 +388,9 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
     if( oldact == NULL )
       return 0;
     oo_get_sigaction(sig, oldact);
-    if( oo_is_signal_intercepted(sig, oldact->sa_handler) ) {
+    LOG_SIG(ci_log("%s(%d) read-only sa_handler=%p",
+                   __func__, sig, oldact->sa_handler));
+    if( oldact->sa_handler != SIG_DFL ) {
       oo_fixup_oldact(sig, oldact);
       return 0;
     }
@@ -433,18 +435,22 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
   if( rc < 0 )
     return rc;
 
+  /* If we were not intercepting this signal previously, then we have to
+   * install Onload handler to OS and pass oldact from OS to user.
+   */
+  if( old.sa_handler == SIG_DFL )
+    return oo_signal_install_to_os(sig, act, citp_signal_intercept, oldact);
+
   /* We should call kernel's sigaction if:
-   * - the signal was not intercepted previously;
    * - the signal was intercepted, but with different SA_* flags
    *   (except for SA_SIGINFO);
    * - the signal was intercepted, but with a different sa_mask.
    */
-  if( ! oo_is_signal_intercepted(sig, old.sa_handler) ||
-      ((act->sa_flags ^ old.sa_flags) & ~SA_SIGINFO) != 0 ||
+  if( ((act->sa_flags ^ old.sa_flags) & ~SA_SIGINFO) != 0 ||
       memcmp(&act->sa_mask, &old.sa_mask, sizeof(old.sa_mask)) != 0 ) {
-    rc = oo_signal_install_to_os(sig, act, citp_signal_intercept, oldact);
+    rc = oo_signal_install_to_os(sig, act, citp_signal_intercept, NULL);
   }
-  else if( oldact != NULL ) {
+  if( oldact != NULL ) {
     memcpy(oldact, &old, sizeof(old));
     oo_fixup_oldact(sig, oldact);
   }
