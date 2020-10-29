@@ -217,7 +217,8 @@ distrib_is_ubuntu() {
 }
 
 gcc_major_version() {
-  ${CC:-cc} --version |head -1 |sed "s/^.*(GCC) \([1-9][0-9]*\)\..*$/\1/"
+  echo '#include <errno.h>' | ${CC:-cc} -xc - -E -dM | \
+    awk '/^#define __GNUC__ / { print $3 }'
 }
 
 kernelid() {
