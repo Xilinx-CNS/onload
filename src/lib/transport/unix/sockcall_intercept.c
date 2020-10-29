@@ -2857,7 +2857,11 @@ OO_INTERCEPT(__sighandler_t, bsd_signal,
 {
   struct sigaction act, oact;
 
-  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
+  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ||
+      handler == SIG_ERR ) {
+    /* handler == SIG_ERR should return with error; let's pass this case to
+     * libc.
+     */
     citp_do_init(CITP_INIT_SYSCALLS);
     return ci_sys_bsd_signal(sig, handler);
   }
@@ -2881,7 +2885,11 @@ OO_INTERCEPT(__sighandler_t, sysv_signal,
 {
   struct sigaction act, oact;
 
-  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
+  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ||
+      handler == SIG_ERR ) {
+    /* handler == SIG_ERR should return with error; let's pass this case to
+     * libc.
+     */
     citp_do_init(CITP_INIT_SYSCALLS);
     return ci_sys_sysv_signal(sig, handler);
   }
