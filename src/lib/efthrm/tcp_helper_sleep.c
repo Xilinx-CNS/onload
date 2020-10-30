@@ -31,7 +31,7 @@ sock_sleep__on_wakeup(ci_waiter_t* waiter, void* opaque_trs,
 
   if( rc == 0 && (op->lock_flags & CI_SLEEP_NETIF_RQ) )
     if( ! (trs->netif.state->lock.lock & CI_EPLOCK_UNLOCKED) ) {
-      rc = efab_eplock_lock_wait(&trs->netif, 0, MAX_SCHEDULE_TIMEOUT);
+      rc = efab_eplock_lock_wait(&trs->netif, 0);
       rc = CI_WAITER_CONVERT_REENTRANT(rc);
     }
 

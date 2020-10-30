@@ -58,7 +58,7 @@ extern int efab_eplock_wake_and_do(ci_netif *ni, ci_uint64 l);
 #endif
 
 /*! Comment? */
-extern int efab_eplock_lock_wait(ci_netif* ni, int maybe_wedged, long jiffies_timeout);
+extern int efab_eplock_lock_wait(ci_netif* ni, int maybe_wedged);
 
 extern int
 efab_eplock_lock_timeout(ci_netif* ni, signed long timeout_jiffies);
