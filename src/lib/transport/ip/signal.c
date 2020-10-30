@@ -351,11 +351,12 @@ oo_signal_install_to_os(int sig, const struct sigaction *act,
   struct sigaction new;
 
   ci_assert(act);
-  LOG_SIG(ci_log("%s(%d): intercept with %p", __func__, sig, oo_handler));
 
-  new.sa_flags = (act->sa_flags | SA_SIGINFO) & ~SA_RESETHAND;
+  new.sa_flags = (act->sa_flags | SA_SIGINFO) & ~(SA_RESETHAND | SA_RESTORER);
   new.sa_sigaction = oo_handler;
   new.sa_mask = act->sa_mask;
+  LOG_SIG(ci_log("%s(%d): intercept with "OO_PRINT_SIGACTION_FMT,
+                 __func__, sig, OO_PRINT_SIGACTION_ARG(&new)));
 
   /* We want to intercept SIGCANCEL, so can't use libc's wrapper for the
    * syscall.
