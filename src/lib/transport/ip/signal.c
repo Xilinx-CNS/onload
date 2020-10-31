@@ -281,7 +281,7 @@ int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
   return 0;
 }
 
-#if defined(__x86_64__) || defined(__i386__)
+#if defined(__x86_64__) || defined(__i386__) || defined(__aarch64__)
 #define SA_RESTORER 0x04000000
 
 static void* oo_saved_restorer = NULL;
@@ -300,6 +300,7 @@ static void oo_fixup_oldact(int sig, struct sigaction *oldact)
 }
 #else
 #define oo_fixup_oldact(sig, oldact)
+#define SA_RESTORER 0
 #endif
 
 
