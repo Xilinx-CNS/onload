@@ -26,7 +26,7 @@
 #include "efx_ioctl.h"
 #include "ioctl_common.h"
 #ifdef CONFIG_SFC_TRACING
-#include <trace/events/sfc_ef100.h>
+#include <trace/events/sfc.h>
 #endif
 #include "tc.h"
 #include "efx_devlink.h"
@@ -57,29 +57,30 @@ static int ef100_alloc_vis(struct efx_nic *efx, unsigned int *allocated_vis)
 	unsigned int rx_vis = efx_rx_channels(efx);
 	unsigned int tx_vis = efx_tx_channels(efx) * efx->tx_queues_per_channel;
 	unsigned int min_vis, max_vis;
+	int rc;
 
 	tx_vis += efx_xdp_channels(efx) * efx->xdp_tx_per_channel;
 
 	max_vis = max(rx_vis, tx_vis);
-	/* Currently don't handle resource starvation and only accept
-	 * our maximum needs and no less.
-	 */
-	min_vis = max_vis;
+	min_vis = efx->tx_queues_per_channel;
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	efx->ef10_resources.vi_min = min_vis;
 	max_vis += EF100_ONLOAD_VIS;
 #endif
 #endif
-
-	return efx_mcdi_alloc_vis(efx, min_vis, max_vis,
+	rc = efx_mcdi_alloc_vis(efx, min_vis, max_vis,
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_DRIVERLINK)
-				  &efx->ef10_resources.vi_base,
-				  &efx->ef10_resources.vi_shift,
+				&efx->ef10_resources.vi_base,
+				&efx->ef10_resources.vi_shift,
 #else
-				  NULL, NULL,
+				NULL, NULL,
 #endif
-				  allocated_vis);
+				allocated_vis);
+	if ((*allocated_vis >= min_vis) && (*allocated_vis < max_vis))
+		rc = -EAGAIN;
+
+	return rc;
 }
 
 static int ef100_remap_bar(struct efx_nic *efx, int max_vis)
@@ -146,8 +147,13 @@ static int ef100_net_stop(struct net_device *net_dev)
 	netif_dbg(efx, ifdown, efx->net_dev, "closing on CPU %d\n",
 		  raw_smp_processor_id());
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	if (efx->type->detach_reps)
+		efx->type->detach_reps(efx);
+#endif
 	ef100_stop_reps(efx);
 	netif_stop_queue(net_dev);
+	efx_tc_remove_rep_filters(efx);
 	efx_stop_all(efx);
 
 	efx->state = STATE_NET_ALLOCATED;
@@ -179,7 +185,7 @@ void ef100_net_dealloc(struct efx_nic *efx)
 	efx_clear_interrupt_affinity(efx);
 	efx_nic_fini_interrupt(efx);
 #endif
-	efx_remove_filters(efx);
+	efx_fini_filters(efx);
 	efx_fini_napi(efx);
 	efx_remove_channels(efx);
 	efx_mcdi_free_vis(efx);
@@ -207,6 +213,10 @@ static int ef100_net_open(struct net_device *net_dev)
 	if (rc)
 		goto fail;
 
+	rc = efx_tc_insert_rep_filters(efx);
+	if (rc)
+		goto fail;
+
 	/* Link state detection is normally event-driven; we have
 	 * to poll now because we could have missed a change
 	 */
@@ -218,12 +228,57 @@ static int ef100_net_open(struct net_device *net_dev)
 	efx->state = STATE_NET_UP;
 
 	ef100_start_reps(efx);
-
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	if (netif_running(efx->net_dev) && efx->type->attach_reps)
+		efx->type->attach_reps(efx);
+#endif
 	return 0;
 
 fail:
 	ef100_net_stop(net_dev);
 	return rc;
+}
+
+/**
+ * This function tries to distribute allocated VIs based on the channel
+ * priority from the total pool of available VIs
+ */
+static void ef100_adjust_channels(struct efx_nic *efx, unsigned int avail_vis)
+{
+	unsigned int vi_share;
+
+	/*
+	 * - vi_share is initially initialized to the total VIs required for
+	 *   the channel type.
+	 * - the below logic tries to compute the actual vi_share each channel
+	 *   type gets
+	 */
+	vi_share = min(efx->n_combined_channels * efx->tx_queues_per_channel,
+		       avail_vis);
+	vi_share -= (vi_share % efx->tx_queues_per_channel);
+	avail_vis -= vi_share;
+	/* rx_only and tx_only channels are not present in ef100,
+	 * the below logic does not have any effect
+	 */
+	efx->n_combined_channels = (vi_share / efx->tx_queues_per_channel);
+	vi_share = min(efx->n_extra_channels * efx->tx_queues_per_channel,
+		       avail_vis);
+	vi_share -= (vi_share % efx->tx_queues_per_channel);
+	avail_vis -= vi_share;
+	efx->n_extra_channels = (vi_share / efx->tx_queues_per_channel);
+	vi_share = min(efx->n_rx_only_channels, avail_vis);
+	avail_vis -= vi_share;
+	efx->n_rx_only_channels = vi_share;
+	vi_share = min(efx->n_tx_only_channels * efx->tx_queues_per_channel,
+		       avail_vis);
+	vi_share -= (vi_share % efx->tx_queues_per_channel);
+	avail_vis -= vi_share;
+	efx->n_tx_only_channels = (vi_share / efx->tx_queues_per_channel);
+	vi_share = (efx->n_xdp_channels * efx->xdp_tx_per_channel);
+	if (avail_vis < vi_share)
+		efx->n_xdp_channels = 0;
+	else
+		avail_vis -= vi_share;
 }
 
 int ef100_net_alloc(struct efx_nic *efx)
@@ -247,22 +302,32 @@ int ef100_net_alloc(struct efx_nic *efx)
 		return rc;
 
 	efx->stats_initialised = false;
+	allocated_vis = 0;
+	do {
+		rc = efx_probe_interrupts(efx);
+		if (rc)
+			return rc;
 
-	rc = efx_probe_interrupts(efx);
-	if (rc)
-		return rc;
+		rc = efx_set_channels(efx);
+		if (rc)
+			return rc;
 
-	rc = efx_set_channels(efx);
-	if (rc)
-		return rc;
+		if (!allocated_vis) {
+			rc = efx_mcdi_free_vis(efx);
+			if (rc)
+				return rc;
 
-	rc = efx_mcdi_free_vis(efx);
-	if (rc)
-		return rc;
-
-	rc = ef100_alloc_vis(efx, &allocated_vis);
-	if (rc)
-		return rc;
+			rc = ef100_alloc_vis(efx, &allocated_vis);
+			if (rc && rc != -EAGAIN)
+				return rc;
+			if (rc == -EAGAIN) {
+				efx_unset_channels(efx);
+				efx_remove_interrupts(efx);
+				ef100_adjust_channels(efx, allocated_vis);
+				efx->max_vis = allocated_vis;
+			}
+		}
+	} while (rc == -EAGAIN);
 
 	rc = efx_probe_channels(efx);
 	if (rc)
@@ -276,7 +341,7 @@ int ef100_net_alloc(struct efx_nic *efx)
 	if (rc)
 		return rc;
 
-	rc = efx_probe_filters(efx);
+	rc = efx_init_filters(efx);
 	if (rc)
 		return rc;
 
@@ -404,8 +469,7 @@ static int ef100_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 	return rc;
 }
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
-    !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
 #ifdef EFX_HAVE_NDO_UDP_TUNNEL_ADD
 #include "net/udp_tunnel.h"
 static int ef100_udp_tunnel_type_map(enum udp_parsable_tunnel_type in)
@@ -588,8 +652,7 @@ static const struct net_device_ops ef100_netdev_ops = {
 #endif
 #endif
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
-    !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
 #ifdef EFX_HAVE_NDO_UDP_TUNNEL_ADD
 	.ndo_udp_tunnel_add     = ef100_udp_tunnel_add,
 	.ndo_udp_tunnel_del     = ef100_udp_tunnel_del,
@@ -787,7 +850,6 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 
 	if (efx->mcdi->fn_flags &
 	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)) {
-		pci_info(efx->pci_dev, "No network port on this PCI function");
 		return 0;
 	}
 
@@ -833,6 +895,19 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 		goto fail;
 
 	rc = ef100_filter_table_probe(efx);
+	if (rc)
+		goto fail;
+
+	/* Add unspecified VID to support VLAN filtering being disabled */
+	rc = efx_mcdi_filter_add_vlan(efx, EFX_FILTER_VID_UNSPEC);
+	if (rc)
+		goto fail;
+
+	/* If VLAN filtering is enabled, we need VID 0 to get untagged
+	 * traffic.  It is added automatically if 8021q module is loaded,
+	 * but we can't rely on it since module may be not loaded.
+	 */
+	rc = efx_mcdi_filter_add_vlan(efx, 0);
 	if (rc)
 		goto fail;
 

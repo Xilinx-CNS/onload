@@ -682,8 +682,16 @@ int efx_probe_interrupts(struct efx_nic *efx)
 	}
 
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
-    if (efx->interrupt_mode == EFX_INT_MODE_POLLED) ;
-        /* Do nothing */
+	if (efx->interrupt_mode == EFX_INT_MODE_POLLED) {
+		efx->n_extra_channels = 0;
+		efx->n_combined_channels = 1;
+		efx->n_rx_only_channels = 0;
+		efx->n_rss_channels = 1;
+		efx->rss_spread = 1;
+		efx->n_tx_only_channels = 0;
+		efx->tx_channel_offset = 0;
+		efx->n_xdp_channels = 0;
+	}
 #endif
 
 	/* RSS on the PF might now be impossible due to interrupt allocation
@@ -1212,6 +1220,7 @@ static int efx_set_channel_tx(struct efx_nic *efx, struct efx_channel *channel)
 		tx_queue->efx = efx;
 		tx_queue->channel = channel;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(CONFIG_XDP_SOCKETS)
 		/* for xsk queue, no csum_offload is used as the onus is put on,
 		 * application for the same.
 		 */
@@ -1220,6 +1229,9 @@ static int efx_set_channel_tx(struct efx_nic *efx, struct efx_channel *channel)
 		else
 #endif
 			tx_queue->csum_offload = j;
+#else
+		tx_queue->csum_offload = j;
+#endif
 		tx_queue->label = j;
 		tx_queue->queue = queue_base + j;
 		/* When using an even number of queues, for even numbered
@@ -1323,8 +1335,10 @@ int efx_init_channels(struct efx_nic *efx)
 	unsigned int i;
 	int rc = 0;
 
-	if (WARN_ON(efx->type->supported_interrupt_modes == 0))
-		return false;
+	if (WARN_ON(efx->type->supported_interrupt_modes == 0)) {
+		netif_err(efx, drv, efx->net_dev, "no interrupt modes supported\n");
+		return -ENOTSUPP;
+	}
 
 	if (BIT(interrupt_mode) & efx->type->supported_interrupt_modes)
 		efx->interrupt_mode = interrupt_mode;
@@ -1677,6 +1691,13 @@ out:
 		if (efx->state == STATE_NET_UP)
 			efx_start_all(efx);
 		efx_device_attach_if_not_resetting(efx);
+		if (efx->state == STATE_NET_UP && !efx->reset_pending) {
+			mutex_lock(&efx->mac_lock);
+			down_read(&efx->filter_sem);
+			efx_mcdi_filter_sync_rx_mode(efx);
+			up_read(&efx->filter_sem);
+			mutex_unlock(&efx->mac_lock);
+		}
 	}
 	return rc;
 
@@ -1894,6 +1915,7 @@ void efx_disable_interrupts(struct efx_nic *efx)
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(CONFIG_XDP_SOCKETS)
 int efx_channel_start_xsk_queue(struct efx_channel *channel)
 {
 	struct efx_rx_queue *rx_queue;
@@ -1971,6 +1993,7 @@ int efx_channel_stop_xsk_queue(struct efx_channel *channel)
 
 	return 0;
 }
+#endif
 #endif
 
 int efx_start_channels(struct efx_nic *efx)

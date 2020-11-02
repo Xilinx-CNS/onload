@@ -263,6 +263,10 @@ enum efx_tc_rule_prios {
  * @ct_zone_ht: Hashtable of TC conntrack flowtable bindings
  * @ct_ht: Hashtable of TC conntrack flow entries
  * @neigh_ht: Hashtable of neighbour watches (&struct efx_neigh_binder)
+ * @reps_mport_id: MAE port allocated for representor RX
+ * @reps_filter_uc: VNIC filter for representor unicast RX (promisc)
+ * @reps_filter_mc: VNIC filter for representor multicast RX (allmulti)
+ * @reps_mport_vport_id: vport user_id for representor RX filters
  * @dflt_rules: Match-action rules for default switching; at priority
  *	%EFX_TC_PRIO_DFLT, and indexed by &enum efx_tc_default_rules.
  *	Also used for fallback actions when actual action isn't ready
@@ -285,6 +289,9 @@ struct efx_tc_state {
 	struct rhashtable ct_ht;
 #endif
 	struct rhashtable neigh_ht;
+	u32 reps_mport_id;
+	u32 reps_filter_uc, reps_filter_mc;
+	u16 reps_mport_vport_id;
 	struct efx_tc_flow_rule *dflt_rules;
 	bool up;
 };
@@ -363,6 +370,8 @@ struct efx_tc_state {
 
 #endif /* EFX_TC_OFFLOAD */
 
+int efx_tc_insert_rep_filters(struct efx_nic *efx);
+void efx_tc_remove_rep_filters(struct efx_nic *efx);
 int efx_init_tc(struct efx_nic *efx);
 void efx_fini_tc(struct efx_nic *efx);
 

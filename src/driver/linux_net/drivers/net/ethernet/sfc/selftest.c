@@ -905,14 +905,15 @@ int efx_selftest(struct efx_nic *efx, struct efx_self_tests *tests,
 	if (rc && !rc_test)
 		rc_test = rc;
 
+	efx_device_attach_if_not_resetting(efx);
+
 	/* restore the PHY to the previous state */
 	mutex_lock(&efx->mac_lock);
 	efx->phy_mode = phy_mode;
 	efx->loopback_mode = loopback_mode;
 	__efx_reconfigure_port(efx);
+	(void)efx_mac_reconfigure(efx, false);
 	mutex_unlock(&efx->mac_lock);
-
-	efx_device_attach_if_not_resetting(efx);
 
 	return rc_test;
 }

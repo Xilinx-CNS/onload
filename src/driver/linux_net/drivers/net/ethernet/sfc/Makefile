@@ -43,6 +43,7 @@ export CONFIG_SFC_SIENA := y
 export CONFIG_SFC_DRIVERLINK := m
 export CONFIG_SFC_AOE := $(subst m,y,$(CONFIG_SFC_DRIVERLINK))
 export CONFIG_SFC_BUSYPOLL := n
+export CONFIG_SFC_VDPA := y
 endif
 
 ifdef KSRCDIR
@@ -94,6 +95,14 @@ endif
 ifndef CONFIG_SFC_MCDI_LOGGING
 $(warning => MCDI tracing will not be supported)
 endif
+ifdef CONFIG_SFC_VDPA
+ifndef CONFIG_VDPA
+$(warning Kernel does not support vDPA)
+override CONFIG_SFC_VDPA :=
+$(warning => vDPA functionality will be disabled)
+endif
+endif
+
 ifndef CONFIG_VIRTUAL_BUS
 # Pick up exported symbols of our build of virtual_bus.ko
 KBUILD_EXTRA_SYMBOLS += $(KBUILD_EXTMOD)/../../../bus/Module.symvers
@@ -143,6 +152,7 @@ sfc-$(CONFIG_SFC_SRIOV)	+= sriov.o
 sfc-$(CONFIG_SFC_MCDI_MON) += mcdi_mon.o
 sfc-$(CONFIG_SFC_PTP)	+= ptp.o
 sfc-$(CONFIG_SFC_MTD)	+= mtd.o
+sfc-$(CONFIG_SFC_VDPA) += ef100_vdpa.o ef100_vdpa_ops.o mcdi_vdpa.o
 ifndef EFX_NO_KCOMPAT
 ifneq ($(MAKECMDGOALS),export)
 ifndef EFX_FOR_UPSTREAM
@@ -201,7 +211,7 @@ TOPDIR = $(src)/../../../..
 include $(TOPDIR)/scripts/Makefile.common
 
 define filechk_config.h
-	printf "$(foreach name,SFC_DEBUGFS SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PRIVATE_MDIO SFC_AOE SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL,#undef CONFIG_$(name)\n$(if $(filter y m,$(CONFIG_$(name))),#define CONFIG_$(name) $(CONFIG_$(name))\n))"
+	printf "$(foreach name,SFC_DEBUGFS SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PRIVATE_MDIO SFC_AOE SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL SFC_VDPA,#undef CONFIG_$(name)\n$(if $(filter y m,$(CONFIG_$(name))),#define CONFIG_$(name) $(CONFIG_$(name))\n))"
 endef
 
 $(obj)/config.h: $(src)/Makefile FORCE

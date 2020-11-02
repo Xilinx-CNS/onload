@@ -142,6 +142,21 @@
 	#define raw_smp_processor_id() (current_thread_info()->cpu)
 #endif
 
+#ifndef fallthrough
+#ifdef __has_attribute
+#ifndef __GCC4_has_attribute___fallthrough__
+#define __GCC4_has_attribute___fallthrough__	0
+#endif
+#if __has_attribute(__fallthrough__)
+# define fallthrough                    __attribute__((__fallthrough__))
+#else
+# define fallthrough                    do {} while (0)  /* fallthrough */
+#endif
+#else
+# define fallthrough                    do {} while (0)  /* fallthrough */
+#endif
+#endif
+
 #ifndef NETIF_F_CSUM_MASK
 #ifdef NETIF_F_IPV6_CSUM
 	#define NETIF_F_CSUM_MASK \
@@ -3052,6 +3067,19 @@ static inline __sum16 csum16_sub(__sum16 csum, __be16 addend)
 #define FLOW_CLS_DESTROY	TC_CLSFLOWER_DESTROY
 #define FLOW_CLS_STATS		TC_CLSFLOWER_STATS
 #endif
+#ifndef EFX_HAVE_TC_CAN_EXTACK
+#include <net/pkt_cls.h>
+static inline bool tc_can_offload_extack(const struct net_device *dev,
+					 struct netlink_ext_ack *extack)
+{
+	bool can = tc_can_offload(dev);
+
+	if (!can)
+		NL_SET_ERR_MSG(extack, "TC offload is disabled on net device");
+
+	return can;
+}
+#endif
 #ifdef EFX_HAVE_TC_INDR_BLOCK_CB_REGISTER
 #define __flow_indr_block_cb_register	__tc_indr_block_cb_register
 #define __flow_indr_block_cb_unregister	__tc_indr_block_cb_unregister
@@ -3359,18 +3387,29 @@ int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 #endif
 
 /* XDP_SOCK check on latest kernels */
+#if defined(EFX_HAVE_XSK_POOL)
+#define EFX_HAVE_XDP_SOCK_DRV yes
+#define EFX_HAVE_XSK_NEED_WAKEUP yes
+#endif
 #if defined(EFX_HAVE_XDP_SOCK_DRV)
 #undef EFX_HAVE_XDP_SOCK_DRV
-#define EFX_USE_XSK_BUFFER_ALLOC
+#define EFX_USE_XSK_BUFFER_ALLOC yes
 #ifndef EFX_HAVE_XDP_SOCK
 #define EFX_HAVE_XDP_SOCK
 #endif
 #ifndef EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM
-#define EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM
+#define EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM yes
 #endif
 #include <net/xdp_sock_drv.h>
 #elif defined(EFX_HAVE_XDP_SOCK)
 #include <net/xdp_sock.h>
 #endif /* EFX_HAVE_XDP_SOCK_DRV */
+
+/* Virtio feature bit number 35 is not defined in
+ * include/uapi/linux/virtio_config.h
+ */
+#ifndef EFX_HAVE_VIRTIO_F_IN_ORDER
+#define VIRTIO_F_IN_ORDER 35
+#endif
 
 #endif /* EFX_KERNEL_COMPAT_H */

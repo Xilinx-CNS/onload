@@ -12,11 +12,21 @@
 
 #include "net_driver.h"
 
-int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool mc_chaining,
-				bool rss_limited, bool additional_rss,
-				bool encap);
+/* set up basic operations required for all net devices */
+int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool rss_limited,
+				bool additional_rss);
+/* enable operations we can do once we know the number of queues we have */
+int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
+			       bool encap);
+/* opposite of init */
+void efx_mcdi_filter_table_fini(struct efx_nic *efx);
+/* opposite of probe */
 void efx_mcdi_filter_table_remove(struct efx_nic *efx);
+/* interface up */
+int efx_mcdi_filter_table_up(struct efx_nic *efx);
+/* interface down */
 void efx_mcdi_filter_table_down(struct efx_nic *efx);
+/* called post-reset while interface is up */
 void efx_mcdi_filter_table_restore(struct efx_nic *efx);
 
 void efx_mcdi_filter_table_reset_mc_allocations(struct efx_nic *efx);
@@ -71,10 +81,26 @@ s32 efx_mcdi_filter_get_rx_ids(struct efx_nic *efx,
 			       enum efx_filter_priority priority,
 			       u32 *buf, u32 size);
 
-void efx_mcdi_filter_cleanup_vlans(struct efx_nic *efx);
 int efx_mcdi_filter_add_vlan(struct efx_nic *efx, u16 vid);
-struct efx_mcdi_filter_vlan *efx_mcdi_filter_find_vlan(struct efx_nic *efx, u16 vid);
-void efx_mcdi_filter_del_vlan(struct efx_nic *efx, u16 vid);
+int efx_mcdi_filter_del_vlan(struct efx_nic *efx, u16 vid);
+
+static inline int efx_mcdi_filter_add_vid(struct efx_nic *efx,
+					  __be16 proto, u16 vid)
+{
+	if (proto != htons(ETH_P_8021Q))
+		return -EINVAL;
+
+	return efx_mcdi_filter_add_vlan(efx, vid);
+}
+
+static inline int efx_mcdi_filter_del_vid(struct efx_nic *efx,
+					  __be16 proto, u16 vid)
+{
+	if (proto != htons(ETH_P_8021Q))
+		return -EINVAL;
+
+	return efx_mcdi_filter_del_vlan(efx, vid);
+}
 
 void efx_mcdi_rx_free_indir_table(struct efx_nic *efx);
 int efx_mcdi_rx_push_rss_context_config(struct efx_nic *efx,

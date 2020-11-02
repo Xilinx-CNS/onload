@@ -374,8 +374,6 @@ enum {
  * @vf: Pointer to VF data structure
 #endif
  * @vport_mac: The MAC address on the vport, only for PFs; VFs will be zero
- * @vlan_list: List of VLANs added over the interface. Serialised by vlan_lock.
- * @vlan_lock: Lock to serialize access to vlan_list.
  * @udp_tunnel_work: workitem for pushing UDP tunnel ports to the MC
  * @udp_tunnels: UDP tunnel port numbers and types.
  * @udp_tunnels_busy: Indicates whether efx_ef10_set_udp_tnl_ports() is
@@ -421,8 +419,6 @@ struct efx_ef10_nic_data {
 	uint32_t caps;
 #endif
 	u8 vport_mac[ETH_ALEN];
-	struct list_head vlan_list;
-	struct mutex vlan_lock;
 	struct work_struct udp_tunnel_work;
 	struct efx_udp_tunnel udp_tunnels[16];
 	bool udp_tunnels_busy;
@@ -541,15 +537,14 @@ struct efx_ts_get_pps;
 struct efx_ts_hw_pps;
 #ifdef CONFIG_SFC_PTP
 int efx_ptp_pps_get_event(struct efx_nic *efx, struct efx_ts_get_pps *data);
-int efx_ptp_hw_pps_enable(struct efx_nic *efx, struct efx_ts_hw_pps *data);
+int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable);
 #else
 static inline int efx_ptp_pps_get_event(struct efx_nic *efx,
 					struct efx_ts_get_pps *data)
 {
 	return -EOPNOTSUPP;
 }
-static inline int efx_ptp_hw_pps_enable(struct efx_nic *efx,
-					struct efx_ts_hw_pps *data)
+static inline int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable)
 {
 	return -EOPNOTSUPP;
 }

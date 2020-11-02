@@ -422,7 +422,8 @@ int efx_mcdi_window_mode_to_stride(struct efx_nic *efx, u8 vi_window_mode)
 	return 0;
 }
 
-int efx_get_pf_index(struct efx_nic *efx, unsigned int *pf_index)
+int efx_get_fn_info(struct efx_nic *efx, unsigned int *pf_index,
+		    unsigned int *vf_index)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_FUNCTION_INFO_OUT_LEN);
 	size_t outlen;
@@ -435,7 +436,11 @@ int efx_get_pf_index(struct efx_nic *efx, unsigned int *pf_index)
 	if (outlen < sizeof(outbuf))
 		return -EIO;
 
-	*pf_index = MCDI_DWORD(outbuf, GET_FUNCTION_INFO_OUT_PF);
+	if (pf_index)
+		*pf_index = MCDI_DWORD(outbuf, GET_FUNCTION_INFO_OUT_PF);
+
+	if (efx->type->is_vf && vf_index)
+		*vf_index = MCDI_DWORD(outbuf, GET_FUNCTION_INFO_OUT_VF);
 	return 0;
 }
 

@@ -28,7 +28,8 @@ void efx_mcdi_rx_remove(struct efx_rx_queue *rx_queue);
 void efx_mcdi_rx_fini(struct efx_rx_queue *rx_queue);
 int efx_fini_dmaq(struct efx_nic *efx);
 int efx_mcdi_window_mode_to_stride(struct efx_nic *efx, u8 vi_window_mode);
-int efx_get_pf_index(struct efx_nic *efx, unsigned int *pf_index);
+int efx_get_fn_info(struct efx_nic *efx, unsigned int *pf_index,
+		    unsigned int *vf_index);
 
 #ifdef EFX_FLASH_FIRMWARE
 int efx_mcdi_flash_bundle(struct net_device *net_dev,

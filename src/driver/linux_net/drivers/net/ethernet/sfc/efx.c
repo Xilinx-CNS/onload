@@ -488,7 +488,7 @@ int __efx_net_alloc(struct efx_nic *efx)
 	if (rc)
 		return rc;
 
-	rc = efx_probe_filters(efx);
+	rc = efx_init_filters(efx);
 	if (rc)
 		return rc;
 
@@ -559,7 +559,7 @@ void __efx_net_dealloc(struct efx_nic *efx)
 	efx_unregister_irq_notifiers(efx);
 #endif
 	efx_nic_fini_interrupt(efx);
-	efx_remove_filters(efx);
+	efx_fini_filters(efx);
 	efx_fini_port(efx);
 	efx_fini_napi(efx);
 	efx_remove_channels(efx);
@@ -1114,7 +1114,9 @@ void efx_pci_remove_post_io(struct efx_nic *efx,
 	if (efx->type->vswitching_remove)
 		efx->type->vswitching_remove(efx);
 	efx_fini_channels(efx);
+#ifdef CONFIG_SFC_PTP
 	efx_ptp_remove_post_io(efx);
+#endif
 	efx->type->remove_port(efx);
 	nic_remove(efx);
 	efx_remove_common(efx);
@@ -1841,10 +1843,12 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_bpf		= efx_xdp,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(CONFIG_XDP_SOCKETS)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_NEED_WAKEUP)
 	.ndo_xsk_wakeup		= efx_xsk_wakeup,
 #else
 	.ndo_xsk_async_xmit	= efx_xsk_async_xmit,
+#endif
 #endif
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)

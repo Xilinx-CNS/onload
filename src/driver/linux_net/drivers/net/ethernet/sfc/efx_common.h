@@ -82,6 +82,13 @@ static inline void efx_init_mcdi_logging(struct efx_nic *efx) {}
 static inline void efx_fini_mcdi_logging(struct efx_nic *efx) {}
 #endif
 
+/* V-ports */
+struct efx_vport *efx_alloc_vport_entry(struct efx_nic *efx);
+struct efx_vport *efx_find_vport_entry(struct efx_nic *efx, u16 id);
+void efx_free_vport_entry(struct efx_vport *ctx);
+int efx_vport_add(struct efx_nic *efx, u16 vlan, bool vlan_restrict);
+int efx_vport_del(struct efx_nic *efx, u16 port_user_id);
+
 int efx_mac_reconfigure(struct efx_nic *efx, bool mtu_only);
 void efx_link_status_changed(struct efx_nic *efx);
 int efx_reconfigure_port(struct efx_nic *efx);
