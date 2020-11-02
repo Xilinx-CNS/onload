@@ -20,9 +20,7 @@ struct efx_vfrep;
 int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i);
 void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i);
 
-/* Returns the representor netdevice corresponding to a VF m-port, or NULL
- * @mport is an m-port label, *not* an m-port ID!
- */
+/* Returns the representor netdevice owning a dynamic m-port, or NULL */
 struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport);
 
 struct efx_vfrep_sw_stats {

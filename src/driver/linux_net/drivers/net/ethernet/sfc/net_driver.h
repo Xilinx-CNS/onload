@@ -48,9 +48,7 @@
 #endif
 #include <net/netevent.h>
 #if !defined(EFX_USE_KCOMPAT)
-#if defined(CONFIG_XDP_SOCKETS)
 #include <net/xdp_sock_drv.h>
-#endif
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
@@ -92,7 +90,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.2.1002"
+#define EFX_DRIVER_VERSION	"5.3.0.1002"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -313,13 +311,7 @@ struct efx_tx_buffer {
  * @piobuf_offset: Buffer offset to be specified in PIO descriptors
  * @timestamping: Is timestamping enabled for this channel?
  * @xdp_tx: Is this an XDP tx queue?
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
- * @xsk_pool: reference to xsk_buff_pool assigned to this queue
-#else
-#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XDP_SOCK)
- * @umem: umem assigned to this queue
-#endif
-#endif
+ * @umem: umem assigned to this queue.
  * @handle_vlan: VLAN insertion offload handler.
  * @handle_tso: TSO offload handler.
  * @read_count: Current read pointer.
@@ -386,13 +378,7 @@ struct efx_tx_queue {
 	bool timestamping;
 	bool xdp_tx;
 #if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
-#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XSK_POOL)
-	struct xsk_buff_pool *xsk_pool;
-#else
 	struct xdp_umem *umem;
-#endif
-#endif
 #endif
 #ifdef CONFIG_SFC_DEBUGFS
 	struct dentry *debug_dir;
@@ -461,7 +447,6 @@ struct efx_rx_buffer {
 	union {
 		struct page *page;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
 		struct xdp_buff *xsk_buf;
 #else
@@ -469,7 +454,6 @@ struct efx_rx_buffer {
 			void *addr;
 			u64 handle;
 		};
-#endif
 #endif
 #endif
 	};
@@ -493,7 +477,7 @@ struct efx_rx_buffer {
 #define EFX_RX_PKT_CSUM_LEVEL		0x0200
 #define EFX_RX_BUF_VLAN_XTAG		0x8000
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#define EFX_RX_BUF_ZC			0x0400
+#define EFX_RX_BUF_FROM_UMEM		0x0400
 #define EFX_RX_BUF_XSK_REUSE		0x0800
 #endif
 
@@ -605,25 +589,15 @@ struct efx_rx_queue {
 	struct dentry *debug_dir;
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
-#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XSK_POOL)
-	struct xsk_buff_pool *xsk_pool;
-#else
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	struct xdp_umem *umem;
-#endif
-#endif
-#endif /* EFX_HAVE_XSK_POOL */
-
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
-#if defined(CONFIG_XDP_SOCKETS)
 	struct zero_copy_allocator zca;
 #endif
-#endif /* EFX_HAVE_XDP_SOCK */
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
+#endif
 	struct xdp_rxq_info xdp_rxq_info;
-#endif /* EFX_HAVE_XDP_RXQ_INFO */
+#endif
 };
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
@@ -1131,7 +1105,6 @@ enum nic_state {
 	STATE_NET_ALLOCATED,	/* resources allocated but no traffic */
 	STATE_NET_UP,		/* ready for traffic */
 	STATE_DISABLED,		/* device disabled due to hardware errors */
-	STATE_VDPA,		/* device bar_config changed to vDPA */
 
 	STATE_RECOVERY = 0x100,/* recovering from PCI error */
 	STATE_FROZEN = 0x200,	/* frozen by power management */
@@ -1839,9 +1812,6 @@ struct efx_nic {
 #endif
 	unsigned int mem_bar;
 	u32 reg_base;
-#ifdef CONFIG_SFC_VDPA
-	struct ef100_vdpa_nic *vdpa_nic;
-#endif
 
 	/* The following fields may be written more often */
 
@@ -1953,7 +1923,8 @@ struct efx_udp_tunnel {
 #define	EFX_UDP_TUNNEL_COUNT_WARN	0x2000 /* top bit of 14-bit field */
 #define EFX_UDP_TUNNEL_COUNT_MAX	0x3fff /* saturate at this value */
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
+    !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 struct ef100_udp_tunnel {
 	enum efx_encap_type type;
 	__be16 port;
@@ -2064,8 +2035,6 @@ struct ef100_udp_tunnel {
  * @ev_read_ack: Acknowledge read events on a queue, rearming its IRQ
  * @ev_test_generate: Generate a test event
  * @filter_table_probe: Probe filter capabilities and set up filter software state
- * @filter_table_up: Insert filters due to interface up
- * @filter_table_down: Remove filters due to interface down
  * @filter_table_restore: Restore filters removed from hardware
  * @filter_table_remove: Remove filters from hardware and tear down software state
  * @filter_match_supported: Check if specified filter match supported
@@ -2259,9 +2228,7 @@ struct efx_nic_type {
 	void (*ev_test_generate)(struct efx_channel *channel);
 	unsigned int max_rx_ip_filters;
 	int (*filter_table_probe)(struct efx_nic *efx);
-	int (*filter_table_up)(struct efx_nic *efx);
 	void (*filter_table_restore)(struct efx_nic *efx);
-	void (*filter_table_down)(struct efx_nic *efx);
 	void (*filter_table_remove)(struct efx_nic *efx);
 	bool (*filter_match_supported)(struct efx_nic *efx, bool encap,
 				       unsigned int match_flags);
@@ -2354,7 +2321,8 @@ struct efx_nic_type {
 	void (*udp_tnl_add_port)(struct efx_nic *efx, struct efx_udp_tunnel tnl);
 	bool (*udp_tnl_has_port)(struct efx_nic *efx, __be16 port);
 	void (*udp_tnl_del_port)(struct efx_nic *efx, struct efx_udp_tunnel tnl);
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
+    !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	void (*udp_tnl_add_port2)(struct efx_nic *efx, struct ef100_udp_tunnel tnl);
 	enum efx_encap_type (*udp_tnl_lookup_port2)(struct efx_nic *efx, __be16 port);
 	void (*udp_tnl_del_port2)(struct efx_nic *efx, struct ef100_udp_tunnel tnl);
@@ -2457,7 +2425,6 @@ static inline bool efx_channel_has_tx_queues(struct efx_channel *channel)
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 static inline struct efx_tx_queue *
 efx_channel_get_xsk_tx_queue(struct efx_channel *channel)
 {
@@ -2472,7 +2439,6 @@ static inline bool efx_is_xsk_tx_queue(struct efx_tx_queue *tx_queue)
 {
 	return (tx_queue->label == (tx_queue->channel->tx_queue_count - 1));
 }
-#endif
 #endif
 
 static inline struct efx_tx_queue *

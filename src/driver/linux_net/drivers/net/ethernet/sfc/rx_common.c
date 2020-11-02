@@ -54,10 +54,8 @@ MODULE_PARM_DESC(rx_recycle_ring_size,
 #define EFX_RX_PREFERRED_BATCH 8U
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 static void efx_reuse_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 				   struct efx_rx_buffer *rx_buf_reuse);
-#endif
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
@@ -251,7 +249,7 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 
 	do {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-		if (rx_buf->flags & EFX_RX_BUF_ZC)
+		if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM)
 			rx_buf->flags |= EFX_RX_BUF_XSK_REUSE;
 		else
 #endif
@@ -300,7 +298,6 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
 static void efx_free_xsk_buffers(struct efx_rx_queue *rx_queue,
 			 struct efx_rx_buffer *rx_buf,
@@ -327,7 +324,6 @@ static void efx_fini_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 		efx_free_rx_buffers(rx_queue, rx_buf, 1);
 #endif
 }
-#endif /* CONFIG_XDP_SOCKETS */
 #endif
 
 static void efx_fini_rx_buffer_nzc(struct efx_rx_queue *rx_queue,
@@ -357,9 +353,7 @@ static void efx_fini_rx_buffer(struct efx_rx_queue *rx_queue,
 	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
 
 	if (channel->zc) {
-#if defined(CONFIG_XDP_SOCKETS)
 		efx_fini_rx_buffer_zc(rx_queue, rx_buf);
-#endif
 		return;
 	}
 #endif
@@ -399,7 +393,6 @@ int efx_probe_rx_queue(struct efx_rx_queue *rx_queue)
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
-#if defined(CONFIG_XDP_SOCKETS)
 static void efx_zca_free(struct zero_copy_allocator *alloc,
 			 unsigned long handle)
 {
@@ -410,14 +403,11 @@ static void efx_zca_free(struct zero_copy_allocator *alloc,
 }
 #endif
 #endif
-#endif
 
 int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
-#endif
 #endif
 	struct efx_nic *efx = rx_queue->efx;
 	unsigned int max_fill, trigger, max_trigger;
@@ -436,42 +426,23 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 	rx_queue->min_fill = -1U;
 	rx_queue->failed_flush_count = 0;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	rx_queue->xsk_pool = NULL;
-	if (channel->zc)
-		rx_queue->xsk_pool = xsk_get_pool_from_qid(efx->net_dev,
-							   rx_queue->core_index);
-#else
 	rx_queue->umem = NULL;
 	if (channel->zc)
 		rx_queue->umem = xdp_get_umem_from_qid(efx->net_dev,
 						       rx_queue->core_index);
-#endif
 	if (channel->zc &&
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	    efx->rx_dma_len > xsk_pool_get_rx_frame_size(rx_queue->xsk_pool)) {
-#else
 	    efx->rx_dma_len > xsk_umem_get_rx_frame_size(rx_queue->umem)) {
-#endif
 #else
 	    efx->rx_dma_len > (rx_queue->umem->chunk_mask + 1)) {
 #endif
 		netif_err(rx_queue->efx, drv, rx_queue->efx->net_dev,
-			  "MTU and UMEM/POOL frame size not in sync\n. Required min. UMEM frame size = %u",
+			  "MTU and UMEM frame size not in sync\n. Required min. UMEM frame size = %u",
 			  efx->rx_dma_len);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-#if defined(CONFIG_XDP_SOCKETS)
-		rx_queue->xsk_pool = NULL;
-#else
 		rx_queue->umem = NULL;
-#endif
-#endif
 		return -EINVAL;
 	}
-#endif /* CONFIG_XDP_SOCKETS */
-#endif /*EFX_HAVE_XDP_SOCK */
+#endif
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 	efx_init_rx_recycle_ring(rx_queue);
 
@@ -499,20 +470,11 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 	rx_queue->fast_fill_trigger = trigger;
 	rx_queue->refill_enabled = false;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-#if defined(CONFIG_XDP_SOCKETS)
-	if (channel->zc)
-		xsk_pool_set_rxq_info(rx_queue->xsk_pool,
-				      &rx_queue->xdp_rxq_info);
-#endif
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
 	/* Initialise XDP queue information */
 	rc = xdp_rxq_info_reg(&rx_queue->xdp_rxq_info, efx->net_dev,
 			      rx_queue->core_index);
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 	if (!rc && channel->zc) {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
 		rc = xdp_rxq_info_reg_mem_model(&rx_queue->xdp_rxq_info,
@@ -572,13 +534,7 @@ void efx_fini_rx_queue(struct efx_rx_queue *rx_queue)
 	xdp_rxq_info_unreg(&rx_queue->xdp_rxq_info);
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	rx_queue->xsk_pool = NULL;
-#else
 	rx_queue->umem = NULL;
-#endif
-#endif
 #endif
 }
 
@@ -627,8 +583,7 @@ void efx_free_rx_buffers(struct efx_rx_queue *rx_queue,
 {
 	while (num_bufs) {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-		if (rx_buf->flags & EFX_RX_BUF_ZC) {
-#if defined(CONFIG_XDP_SOCKETS)
+		if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM) {
 			if (rx_buf->flags & EFX_RX_BUF_XSK_REUSE) {
 				efx_reuse_rx_buffer_zc(rx_queue, rx_buf);
 			} else {
@@ -639,7 +594,6 @@ void efx_free_rx_buffers(struct efx_rx_queue *rx_queue,
 #endif
 				rx_buf->flags = 0;
 			}
-#endif
 		} else if (rx_buf->page) {
 #else
 		if (rx_buf->page) {
@@ -689,7 +643,6 @@ void efx_cancel_slow_fill(struct efx_rx_queue *rx_queue)
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
 static void efx_xdp_umem_discard_addr(struct xdp_umem *umem, bool slow)
 {
@@ -753,16 +706,12 @@ alloc_fail:
 static bool efx_alloc_buffer_zc(struct efx_rx_queue *rx_queue,
 				struct efx_rx_buffer *rx_buf, bool slow)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	struct xsk_buff_pool *buff_pool = rx_queue->xsk_pool;
-#else
-	struct xdp_umem *buff_pool = rx_queue->umem;
-#endif
+	struct xdp_umem *umem = rx_queue->umem;
 	bool alloc_failed = false;
 	struct xdp_buff *xsk_buf;
 	dma_addr_t dma;
 
-	xsk_buf = xsk_buff_alloc(buff_pool);
+	xsk_buf = xsk_buff_alloc(umem);
 	if (!xsk_buf) {
 		alloc_failed = true;
 		goto alloc_fail;
@@ -804,7 +753,7 @@ static void efx_reuse_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 	rx_buf_reuse->flags = 0;
 	rx_buf->page_offset = 0;
 	rx_buf->len = efx->rx_dma_len;
-	rx_buf->flags = EFX_RX_BUF_ZC;
+	rx_buf->flags = EFX_RX_BUF_FROM_UMEM;
 	rx_buf->vlan_tci = 0;
 	++rx_queue->added_count;
 }
@@ -849,7 +798,6 @@ init_buf:
 	}
 	return -ENOMEM;
 }
-#endif /* CONFIG_XDP_SOCKETS */
 #endif
 
 /**
@@ -903,34 +851,28 @@ void efx_init_rx_buffer(struct efx_rx_queue *rx_queue,
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 /**
- * efx_init_rx_buffers_zc - create xsk_pool/umem->fq based RX buffers
+ * efx_init_rx_buffers_zc - create umem->fq based RX buffers
  *
  * @rx_queue:           Efx RX queue
  *
- * This allocates a buffers from xsk_pool/umem->fq using memory model alloc calls for
+ * This allocates a buffers from umem->fq using memory model alloc calls for
  * zero-copy RX, and populates struct efx_rx_buffers for each one.
  */
 static int efx_init_rx_buffers_zc(struct efx_rx_queue *rx_queue)
 {
 	u16 flags = 0;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	if (unlikely(!rx_queue->xsk_pool))
-#else
 	if (unlikely(!rx_queue->umem))
-#endif
 		return -EINVAL;
 	if ((rx_queue->added_count - rx_queue->removed_count) <
 	       rx_queue->ptr_mask) {
-		flags = EFX_RX_BUF_ZC;
+		flags = EFX_RX_BUF_FROM_UMEM;
 		return efx_init_rx_buffer_zc(rx_queue, flags);
 	}
 
 	return 0;
 }
-#endif /* CONFIG_XDP_SOCKETS */
 #endif
 
 /**
@@ -1019,12 +961,10 @@ static int efx_init_rx_buffers_nzc(struct efx_rx_queue *rx_queue, bool atomic)
 static int efx_init_rx_buffers(struct efx_rx_queue *rx_queue, bool atomic)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
 
 	if (channel->zc)
 		return efx_init_rx_buffers_zc(rx_queue);
-#endif
 #endif
 	return efx_init_rx_buffers_nzc(rx_queue, atomic);
 }
@@ -1438,7 +1378,7 @@ void efx_rps_hash_del(struct efx_nic *efx, const struct efx_filter_spec *spec)
 }
 #endif
 
-int efx_init_filters(struct efx_nic *efx)
+int efx_probe_filters(struct efx_nic *efx)
 {
 	int rc = 0;
 
@@ -1489,7 +1429,7 @@ out_unlock:
 	return rc;
 }
 
-void efx_fini_filters(struct efx_nic *efx)
+void efx_remove_filters(struct efx_nic *efx)
 {
 #ifdef CONFIG_RFS_ACCEL
 	struct efx_channel *channel;

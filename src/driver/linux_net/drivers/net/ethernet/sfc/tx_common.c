@@ -168,18 +168,6 @@ int efx_init_tx_queue(struct efx_tx_queue *tx_queue)
 
 	tx_queue->xdp_tx = efx_channel_is_xdp_tx(tx_queue->channel);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	tx_queue->xsk_pool = NULL;
-	if (tx_queue->channel->zc &&
-	    efx_is_xsk_tx_queue(tx_queue)) {
-		tx_queue->xsk_pool =
-			xsk_get_pool_from_qid(efx->net_dev,
-					      tx_queue->channel->channel);
-		if (!tx_queue->xsk_pool)
-			return 0;
-	}
-#else
 	tx_queue->umem = NULL;
 	if (tx_queue->channel->zc &&
 	    efx_is_xsk_tx_queue(tx_queue)) {
@@ -189,8 +177,6 @@ int efx_init_tx_queue(struct efx_tx_queue *tx_queue)
 		if (!tx_queue->umem)
 			return 0;
 	}
-#endif /* EFX_HAVE_XSK_POOL */
-#endif /* CONFIG_XDP_SOCKETS */
 #endif
 
 	/* Set up default function pointers. These may get replaced by
@@ -217,16 +203,10 @@ void efx_fini_tx_queue(struct efx_tx_queue *tx_queue)
 
 	efx_purge_tx_queue(tx_queue);
 	tx_queue->xmit_pending = false;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	tx_queue->xsk_pool = NULL;
-#else
+ #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	tx_queue->umem = NULL;
-#endif
 	if (!efx_is_xsk_tx_queue(tx_queue))
-#endif
-#endif
+ #endif
 		netdev_tx_reset_queue(tx_queue->core_txq);
 }
 
@@ -318,16 +298,10 @@ void efx_dequeue_buffer(struct efx_tx_queue *tx_queue,
 		page_frag_free(buffer->buf);
 #endif
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
+ #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	} else if (buffer->flags & EFX_TX_BUF_XSK) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-		xsk_tx_completed(tx_queue->xsk_pool, 1);
-#else
 		xsk_umem_complete_tx(tx_queue->umem, 1);
-#endif
-#endif /* CONFIG_XDP_SOCKETS */
-#endif
+ #endif
 	}
 
 	buffer->len = 0;
@@ -396,15 +370,8 @@ void efx_xmit_done(struct efx_tx_queue *tx_queue, unsigned int index)
 	if (pkts_compl > 1)
 		++tx_queue->merge_events;
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && defined(EFX_HAVE_XSK_NEED_WAKEUP))
-#if defined(CONFIG_XDP_SOCKETS)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	if (tx_queue->xsk_pool && xsk_uses_need_wakeup(tx_queue->xsk_pool))
-		xsk_set_tx_need_wakeup(tx_queue->xsk_pool);
-#else
 	if (tx_queue->umem && xsk_umem_uses_need_wakeup(tx_queue->umem))
 		xsk_set_tx_need_wakeup(tx_queue->umem);
-#endif
-#endif
 #endif
 
 	efx_xmit_done_check_empty(tx_queue);

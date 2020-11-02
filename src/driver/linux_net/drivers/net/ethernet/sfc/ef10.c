@@ -112,6 +112,12 @@ enum {
 
 #define MCDI_BUF_LEN (8 + MCDI_CTL_SDU_LEN_MAX)
 
+/* VLAN list entry */
+struct efx_ef10_vlan {
+	struct list_head list;
+	u16 vid;
+};
+
 static bool efx_ef10_hw_unavailable(struct efx_nic *efx);
 static void _efx_ef10_rx_write(struct efx_rx_queue *rx_queue);
 
@@ -219,6 +225,26 @@ static bool efx_ef10_is_vf(struct efx_nic *efx)
 {
 	return efx->type->is_vf;
 }
+
+#ifdef CONFIG_SFC_SRIOV
+static int efx_ef10_get_vf_index(struct efx_nic *efx)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_FUNCTION_INFO_OUT_LEN);
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	size_t outlen;
+	int rc;
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_FUNCTION_INFO, NULL, 0, outbuf,
+			  sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+
+	nic_data->vf_index = MCDI_DWORD(outbuf, GET_FUNCTION_INFO_OUT_VF);
+	return 0;
+}
+#endif
 
 static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 {
@@ -537,6 +563,133 @@ static int efx_ef10_get_mac_address_vf(struct efx_nic *efx, u8 *mac_address)
 	return 0;
 }
 #endif
+
+static struct efx_ef10_vlan *efx_ef10_find_vlan(struct efx_nic *efx, u16 vid)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	struct efx_ef10_vlan *vlan;
+
+	WARN_ON(!mutex_is_locked(&nic_data->vlan_lock));
+
+	list_for_each_entry(vlan, &nic_data->vlan_list, list) {
+		if (vlan->vid == vid)
+			return vlan;
+	}
+
+	return NULL;
+}
+
+static int efx_ef10_add_vlan(struct efx_nic *efx, u16 vid)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	struct efx_ef10_vlan *vlan;
+	int rc;
+
+	mutex_lock(&nic_data->vlan_lock);
+
+	vlan = efx_ef10_find_vlan(efx, vid);
+	if (vlan) {
+		/* We add VID 0 on init. 8021q adds it on module init
+		 * for all interfaces with VLAN filtring feature.
+		 */
+		if (vid == 0)
+			goto done_unlock;
+		netif_warn(efx, drv, efx->net_dev,
+				"VLAN %u already added\n", vid);
+		rc = -EALREADY;
+		goto fail_exist;
+	}
+
+	rc = -ENOMEM;
+	vlan = kzalloc(sizeof(*vlan), GFP_KERNEL);
+	if (!vlan)
+		goto fail_alloc;
+
+	vlan->vid = vid;
+
+	list_add_tail(&vlan->list, &nic_data->vlan_list);
+
+	if (efx->filter_state) {
+		mutex_lock(&efx->mac_lock);
+		down_write(&efx->filter_sem);
+		rc = efx_mcdi_filter_add_vlan(efx, vlan->vid);
+		up_write(&efx->filter_sem);
+		mutex_unlock(&efx->mac_lock);
+		if (rc)
+			goto fail_filter_add_vlan;
+	}
+
+done_unlock:
+	mutex_unlock(&nic_data->vlan_lock);
+	return 0;
+
+fail_filter_add_vlan:
+	list_del(&vlan->list);
+	kfree(vlan);
+fail_alloc:
+fail_exist:
+	mutex_unlock(&nic_data->vlan_lock);
+	return rc;
+}
+
+static void efx_ef10_del_vlan_internal(struct efx_nic *efx,
+		struct efx_ef10_vlan *vlan)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	WARN_ON(!mutex_is_locked(&nic_data->vlan_lock));
+
+	if (efx->filter_state) {
+		down_write(&efx->filter_sem);
+		efx_mcdi_filter_del_vlan(efx, vlan->vid);
+		up_write(&efx->filter_sem);
+	}
+
+	list_del(&vlan->list);
+	kfree(vlan);
+}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
+static int efx_ef10_del_vlan(struct efx_nic *efx, u16 vid)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	struct efx_ef10_vlan *vlan;
+	int rc = 0;
+
+	/* 8021q removes VID 0 on module unload for all interfaces
+	 * with VLAN filtering feature. We need to keep it to receive
+	 * untagged traffic.
+	 */
+	if (vid == 0)
+		return 0;
+
+	mutex_lock(&nic_data->vlan_lock);
+
+	vlan = efx_ef10_find_vlan(efx, vid);
+	if (!vlan) {
+		netif_err(efx, drv, efx->net_dev,
+				"VLAN %u to be deleted not found\n", vid);
+		rc = -ENOENT;
+	} else {
+		efx_ef10_del_vlan_internal(efx, vlan);
+	}
+
+	mutex_unlock(&nic_data->vlan_lock);
+
+	return rc;
+}
+#endif
+
+static void efx_ef10_cleanup_vlans(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	struct efx_ef10_vlan *vlan, *next_vlan;
+
+	mutex_lock(&nic_data->vlan_lock);
+	list_for_each_entry_safe(vlan, next_vlan, &nic_data->vlan_list, list)
+		efx_ef10_del_vlan_internal(efx, vlan);
+	mutex_unlock(&nic_data->vlan_lock);
+}
 
 #ifdef CONFIG_SFC_SRIOV
 static int efx_vf_parent(struct efx_nic *efx, struct efx_nic **efx_pf)
@@ -2661,9 +2814,7 @@ static int efx_ef10_tx_init(struct efx_tx_queue *tx_queue)
 	 * for XDP tx. */
 	if (!tx_queue->timestamping && !tx_queue->xdp_tx &&
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 	    !efx_is_xsk_tx_queue(tx_queue) &&
-#endif
 #endif
 	    efx_ef10_has_cap(nic_data->datapath_caps2, TX_TSO_V2)) {
 		tso_v2 = true;
@@ -3058,21 +3209,14 @@ static int efx_ef10_filter_table_probe(struct efx_nic *efx)
 					    RX_RSS_LIMITED);
 	bool additional_rss = efx_ef10_has_cap(nic_data->datapath_caps,
 					       ADDITIONAL_RSS_MODES);
-
-	return efx_mcdi_filter_table_probe(efx, rss_limited, additional_rss);
-}
-
-static int efx_ef10_filter_table_init(struct efx_nic *efx)
-{
-	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	bool encap = efx_ef10_has_cap(nic_data->datapath_caps, VXLAN_NVGRE);
 	int rc = efx_ef10_probe_multicast_chaining(efx);
 
 	if (rc)
 		return rc;
+	rc = efx_mcdi_filter_table_probe(efx, nic_data->workaround_26807,
+					 rss_limited, additional_rss, encap);
 
-	rc = efx_mcdi_filter_table_init(efx, nic_data->workaround_26807,
-					encap);
 	if (rc)
 		return rc;
 
@@ -3086,29 +3230,43 @@ static int efx_ef10_filter_table_init(struct efx_nic *efx)
 
 static int efx_ef10_filter_table_up(struct efx_nic *efx)
 {
-	int rc;
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	struct efx_ef10_vlan *vlan;
+	int rc = 0;
 
-	down_write(&efx->filter_sem);
-	rc = efx_mcdi_filter_table_up(efx);
-	up_write(&efx->filter_sem);
+	list_for_each_entry(vlan, &nic_data->vlan_list, list) {
+		rc = efx_mcdi_filter_add_vlan(efx, vlan->vid);
+		if (rc)
+			break;
+	}
+	if (rc) {
+		efx_ef10_cleanup_vlans(efx);
+		efx_mcdi_filter_table_down(efx);
+	}
+
 	return rc;
 }
 
-static void efx_ef10_filter_table_down(struct efx_nic *efx)
-
-{
-	down_write(&efx->filter_sem);
-	efx_mcdi_filter_table_down(efx);
-	up_write(&efx->filter_sem);
-}
-
-static void efx_ef10_filter_table_fini(struct efx_nic *efx)
+static void efx_ef10_filter_table_remove(struct efx_nic *efx)
 {
 #ifdef CONFIG_SFC_DEBUGFS
 	efx_trim_debugfs_port(efx, efx_debugfs);
 	efx_trim_debugfs_port(efx, netdev_debugfs);
 #endif
-	efx_mcdi_filter_table_fini(efx);
+	efx_mcdi_filter_table_remove(efx);
+}
+
+static int efx_ef10_filter_table_probe_and_up(struct efx_nic *efx)
+{
+	int rc = efx_ef10_filter_table_probe(efx);
+
+	if (rc)
+		return rc;
+
+	rc = efx_ef10_filter_table_up(efx);
+	if (rc)
+		efx_ef10_filter_table_remove(efx);
+	return rc;
 }
 
 static int efx_ef10_rx_init(struct efx_rx_queue *rx_queue)
@@ -3921,7 +4079,7 @@ static int efx_ef10_vport_set_mac_address(struct efx_nic *efx)
 	efx_net_stop(efx->net_dev);
 	down_write(&efx->filter_sem);
 	efx_mcdi_filter_table_down(efx);
-	efx_mcdi_filter_table_fini(efx);
+	efx_mcdi_filter_table_remove(efx);
 	up_write(&efx->filter_sem);
 
 	rc = efx_ef10_vadaptor_free(efx, efx->vport.vport_id);
@@ -3954,7 +4112,7 @@ restore_vadaptor:
 restore_filters:
 	mutex_lock(&efx->mac_lock);
 	down_write(&efx->filter_sem);
-	rc2 = efx_ef10_filter_table_init(efx);
+	rc2 = efx_ef10_filter_table_probe(efx);
 	if (!rc2)
 		rc2 = efx_ef10_filter_table_up(efx);
 	up_write(&efx->filter_sem);
@@ -4010,12 +4168,12 @@ static int efx_ef10_set_mac_address(struct efx_nic *efx)
 		mutex_lock(&efx->mac_lock);
 		down_write(&efx->filter_sem);
 		efx_mcdi_filter_table_down(efx);
-		efx_ef10_filter_table_fini(efx);
+		efx_ef10_filter_table_remove(efx);
 
 		rc = efx_mcdi_rpc_quiet(efx, MC_CMD_VADAPTOR_SET_MAC, inbuf,
 					sizeof(inbuf), NULL, 0, NULL);
 
-		efx_ef10_filter_table_init(efx);
+		efx_ef10_filter_table_probe(efx);
 		efx_ef10_filter_table_up(efx);
 		up_write(&efx->filter_sem);
 		mutex_unlock(&efx->mac_lock);
@@ -4622,6 +4780,24 @@ static int efx_ef10_get_phys_port_id(struct efx_nic *efx,
 }
 #endif
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
+static int efx_ef10_vlan_rx_add_vid(struct efx_nic *efx, __be16 proto, u16 vid)
+{
+	if (proto != htons(ETH_P_8021Q))
+		return -EINVAL;
+
+	return efx_ef10_add_vlan(efx, vid);
+}
+
+static int efx_ef10_vlan_rx_kill_vid(struct efx_nic *efx, __be16 proto, u16 vid)
+{
+	if (proto != htons(ETH_P_8021Q))
+		return -EINVAL;
+
+	return efx_ef10_del_vlan(efx, vid);
+}
+#endif
+
 /* We rely on the MCDI wiping out our TX rings if it made any changes to the
  * ports table, ensuring that any TSO descriptors that were made on a now-
  * removed tunnel port will be blown away and won't break things when we try
@@ -5087,7 +5263,8 @@ static void efx_ef10_remove_post_io(struct efx_nic *efx)
 		efx_aoe_detach(efx);
 #endif
 
-	efx_mcdi_filter_table_remove(efx);
+	efx_ef10_cleanup_vlans(efx);
+	mutex_destroy(&nic_data->vlan_lock);
 
 	efx_mcdi_mon_remove(efx);
 
@@ -5119,7 +5296,7 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 	unsigned int bar_size = efx_ef10_bar_size(efx);
 	int rc;
 
-	rc = efx_get_fn_info(efx, &nic_data->pf_index, &nic_data->vf_index);
+	rc = efx_get_pf_index(efx, &nic_data->pf_index);
 	if (rc)
 		return rc;
 
@@ -5239,12 +5416,8 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 		tx_push_max_fill = 0;
 	}
 
-	rc = efx_ef10_filter_table_probe(efx);
-	if (rc)
-		return rc;
-
 	/* Add unspecified VID to support VLAN filtering being disabled */
-	rc = efx_mcdi_filter_add_vlan(efx, EFX_FILTER_VID_UNSPEC);
+	rc = efx_ef10_add_vlan(efx, EFX_FILTER_VID_UNSPEC);
 	if (rc)
 		return rc;
 
@@ -5252,7 +5425,7 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 	 * traffic.  It is added automatically if 8021q module is loaded,
 	 * but we can't rely on it since module may be not loaded.
 	 */
-	return efx_mcdi_filter_add_vlan(efx, 0);
+	return efx_ef10_add_vlan(efx, 0);
 }
 
 static int efx_ef10_probe(struct efx_nic *efx)
@@ -5309,6 +5482,9 @@ static int efx_ef10_probe(struct efx_nic *efx)
 	nic_data->udp_tunnels_busy = false;
 	INIT_WORK(&nic_data->udp_tunnel_work, efx_ef10__udp_tnl_push_ports);
 
+	INIT_LIST_HEAD(&nic_data->vlan_list);
+	mutex_init(&nic_data->vlan_lock);
+
 	/* retry probe 3 times on EF10 due to UDP tunnel ports
 	 * sometimes causing a reset during probe.
 	 */
@@ -5345,6 +5521,10 @@ static int efx_ef10_probe(struct efx_nic *efx)
 	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
 		return 0;
 #endif
+
+	rc = efx_ef10_filter_table_probe(efx);
+	if (rc)
+		return rc;
 
 #ifdef EFX_NOT_UPSTREAM
 	if (efx_rss_use_fixed_key) {
@@ -5417,6 +5597,7 @@ static void efx_ef10_remove(struct efx_nic *efx)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_link_control_flag);
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_primary_flag);
 
+	efx_ef10_filter_table_remove(efx);
 	efx_pci_remove_post_io(efx, efx_ef10_remove_post_io);
 
 	efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
@@ -5477,9 +5658,13 @@ static int efx_ef10_probe_vf(struct efx_nic *efx)
 
 	rc = efx_ef10_probe(efx);
 	if (rc)
-		goto fail;
+		return rc;
 
 	nic_data = efx->nic_data;
+
+	rc = efx_ef10_get_vf_index(efx);
+	if (rc)
+		goto fail;
 
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN))
 	if (efx->pci_dev->physfn) {
@@ -5609,11 +5794,9 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.ev_mcdi_pending = efx_ef10_ev_mcdi_pending,
 	.ev_read_ack = efx_ef10_ev_read_ack,
 	.ev_test_generate = efx_ef10_ev_test_generate,
-	.filter_table_probe = efx_ef10_filter_table_init,
-	.filter_table_up = efx_ef10_filter_table_up,
+	.filter_table_probe = efx_ef10_filter_table_probe_and_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
-	.filter_table_down = efx_ef10_filter_table_down,
-	.filter_table_remove = efx_ef10_filter_table_fini,
+	.filter_table_remove = efx_mcdi_filter_table_down,
 	.filter_match_supported = efx_mcdi_filter_match_supported,
 	.filter_insert = efx_mcdi_filter_insert,
 	.filter_remove_safe = efx_mcdi_filter_remove_safe,
@@ -5640,8 +5823,8 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
-	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
-	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
+	.vlan_rx_add_vid = efx_ef10_vlan_rx_add_vid,
+	.vlan_rx_kill_vid = efx_ef10_vlan_rx_kill_vid,
 #endif
 	.vswitching_probe = efx_ef10_vswitching_probe_vf,
 	.vswitching_restore = efx_ef10_vswitching_restore_vf,
@@ -5776,11 +5959,9 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.ev_mcdi_pending = efx_ef10_ev_mcdi_pending,
 	.ev_read_ack = efx_ef10_ev_read_ack,
 	.ev_test_generate = efx_ef10_ev_test_generate,
-	.filter_table_probe = efx_ef10_filter_table_init,
-	.filter_table_up = efx_ef10_filter_table_up,
+	.filter_table_probe = efx_ef10_filter_table_probe_and_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
-	.filter_table_down = efx_ef10_filter_table_down,
-	.filter_table_remove = efx_ef10_filter_table_fini,
+	.filter_table_remove = efx_mcdi_filter_table_down,
 	.filter_match_supported = efx_mcdi_filter_match_supported,
 	.filter_insert = efx_mcdi_filter_insert,
 	.filter_remove_safe = efx_mcdi_filter_remove_safe,
@@ -5813,8 +5994,8 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
-	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
-	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
+	.vlan_rx_add_vid = efx_ef10_vlan_rx_add_vid,
+	.vlan_rx_kill_vid = efx_ef10_vlan_rx_kill_vid,
 #endif
 	.udp_tnl_push_ports = efx_ef10_udp_tnl_push_ports_sync,
 	.udp_tnl_add_port = efx_ef10_udp_tnl_add_port,

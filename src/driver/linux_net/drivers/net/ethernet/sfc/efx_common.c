@@ -375,7 +375,7 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 /* Is Driverlink supported on this device? */
 bool efx_dl_supported(struct efx_nic *efx)
 {
-	if (!efx->mcdi || !efx->dl_nic.dl_info)
+	if (!efx->mcdi)
 		return false;
 
 	/* VI spreading will confuse driverlink clients, so prevent
@@ -557,10 +557,11 @@ static int efx_start_datapath(struct efx_nic *efx)
 	    efx->type->filter_update_rx_scatter)
 		efx->type->filter_update_rx_scatter(efx);
 
-	if (efx->type->filter_table_up)
-		rc = efx->type->filter_table_up(efx);
-	if (rc)
-		goto fail;
+	if (efx->type->filter_table_restore) {
+		down_write(&efx->filter_sem);
+		efx->type->filter_table_restore(efx);
+		up_write(&efx->filter_sem);
+	}
 
 	/* We must keep at least one descriptor in a TX ring empty.
 	 * We could avoid this when the queue size does not exactly
@@ -592,9 +593,6 @@ static int efx_start_datapath(struct efx_nic *efx)
 	goto out;
 
 fail:
-	if (efx->type->filter_table_down)
-		efx->type->filter_table_down(efx);
-
 	efx_for_each_channel(channel, efx) {
 		efx_for_each_channel_tx_queue(tx_queue, channel) {
 			if (atomic_read(&efx->active_queues) == 0)
@@ -627,9 +625,6 @@ static void efx_stop_datapath(struct efx_nic *efx)
 	efx_ptp_stop_datapath(efx);
 
 	efx_stop_channels(efx);
-
-	if (efx->type->filter_table_down)
-		efx->type->filter_table_down(efx);
 }
 
 static void efx_start_port(struct efx_nic *efx)
@@ -1196,15 +1191,6 @@ out:
 	} else {
 		netif_dbg(efx, drv, efx->net_dev, "reset complete\n");
 		efx_device_attach_if_not_resetting(efx);
-
-		/* Now reset is finished, reconfigure MAC
-		 * again to ensure filters that weren't inserted while
-		 * resetting are now.
-		 */
-		mutex_lock(&efx->mac_lock);
-		(void)efx_mac_reconfigure(efx, false);
-		mutex_unlock(&efx->mac_lock);
-
 		if (PCI_FUNC(efx->pci_dev->devfn) == 0)
 			efx_mcdi_log_puts(efx, efx_reset_type_names[method]);
 	}
@@ -1650,7 +1636,7 @@ void efx_fini_mcdi_logging(struct efx_nic *efx)
 /* V-port allocations.  Same algorithms (and justification for them) as RSS
  * contexts, above.
  */
-struct efx_vport *efx_alloc_vport_entry(struct efx_nic *efx)
+static struct efx_vport *efx_alloc_vport_entry(struct efx_nic *efx)
 {
 	struct list_head *head = &efx->vport.list;
 	struct efx_vport *ctx, *new;

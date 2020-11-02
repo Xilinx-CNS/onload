@@ -56,87 +56,6 @@ int efx_xdp_setup_prog(struct efx_nic *efx, struct bpf_prog *prog)
 
 /* Context: process, rtnl_lock() held. */
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-static int efx_xsk_pool_enable(struct efx_nic *efx, struct xsk_buff_pool *pool,
-			       u16 qid)
-{
-	bool if_running;
-	int err;
-
-	err = xsk_pool_dma_map(pool, &efx->pci_dev->dev, 0);
-	if (err)
-		return err;
-
-	if_running = (efx->state == STATE_NET_UP);
-
-	if (if_running) {
-		err = efx_channel_stop_xsk_queue(efx->channel[qid]);
-		if (err) {
-			netif_err(efx, drv, efx->net_dev,
-				  "Channel %u Stop data path failed\n",
-					qid);
-			goto xsk_q_stop_fail;
-		}
-	}
-
-	efx->channel[qid]->zc = true;
-
-	if (if_running) {
-		err = efx_channel_start_xsk_queue(efx->channel[qid]);
-		if (err) {
-			netif_err(efx, drv, efx->net_dev,
-				  "Channel %u Start data path failed\n",
-					qid);
-			goto xsk_q_start_fail;
-		}
-	}
-
-	return 0;
-xsk_q_start_fail: /* try to recover old configuration */
-	efx->channel[qid]->zc = false;
-	efx_channel_start_xsk_queue(efx->channel[qid]);
-xsk_q_stop_fail:
-	xsk_pool_dma_unmap(pool, 0);
-	return err;
-}
-
-static int efx_xsk_pool_disable(struct efx_nic *efx, u16 qid)
-{
-	struct net_device *netdev = efx->net_dev;
-	struct xsk_buff_pool *pool;
-	bool if_running;
-	int rc;
-
-	pool = xsk_get_pool_from_qid(netdev, qid);
-	if (!pool)
-		return -EINVAL;
-
-	if_running = (efx->state == STATE_NET_UP);
-
-	if (if_running) {
-		rc = efx_channel_stop_xsk_queue(efx->channel[qid]);
-		WARN_ON(rc);
-		if (rc)
-			goto xsk_q_stop_fail;
-	}
-
-	efx->channel[qid]->zc = false;
-
-	if (if_running) {
-		rc = efx_channel_start_xsk_queue(efx->channel[qid]);
-		WARN_ON(rc);
-	}
-
-	xsk_pool_dma_unmap(pool, 0);
-
-	return 0;
-xsk_q_stop_fail:
-	efx->channel[qid]->zc = false;
-	xsk_pool_dma_unmap(pool, 0);
-	return rc;
-}
-#else
 static int efx_xsk_umem_dma_map(struct pci_dev *pci_dev, struct xdp_umem *umem)
 {
 	struct device *dev = &pci_dev->dev;
@@ -183,6 +102,42 @@ static void efx_xsk_umem_dma_unmap(struct pci_dev *pci_dev,
 		umem->pages[i].dma = 0;
 	}
 #endif
+}
+
+static int efx_xsk_umem_disable(struct efx_nic *efx, u16 qid)
+{
+	struct net_device *netdev = efx->net_dev;
+	struct xdp_umem *umem;
+	bool if_running;
+	int rc;
+
+	umem = xdp_get_umem_from_qid(netdev, qid);
+	if (!umem)
+		return -EINVAL;
+
+	if_running = (efx->state == STATE_NET_UP);
+
+	if (if_running) {
+		rc = efx_channel_stop_xsk_queue(efx->channel[qid]);
+		WARN_ON(rc);
+		if (rc)
+			goto xsk_q_stop_fail;
+	}
+
+	efx->channel[qid]->zc = false;
+
+	if (if_running) {
+		rc = efx_channel_start_xsk_queue(efx->channel[qid]);
+		WARN_ON(rc);
+	}
+
+	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
+
+	return 0;
+xsk_q_stop_fail:
+	efx->channel[qid]->zc = false;
+	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
+	return rc;
 }
 
 static int efx_xsk_umem_enable(struct efx_nic *efx, struct xdp_umem *umem,
@@ -238,40 +193,17 @@ xsk_q_stop_fail:
 	return err;
 }
 
-static int efx_xsk_umem_disable(struct efx_nic *efx, u16 qid)
+static int efx_xsk_umem_setup(struct efx_nic *efx, struct xdp_umem *umem,
+			      u16 qid)
 {
 	struct net_device *netdev = efx->net_dev;
-	struct xdp_umem *umem;
-	bool if_running;
-	int rc;
 
-	umem = xdp_get_umem_from_qid(netdev, qid);
-	if (!umem)
+	if (qid >= netdev->real_num_rx_queues ||
+	    qid >= netdev->real_num_tx_queues)
 		return -EINVAL;
 
-	if_running = (efx->state == STATE_NET_UP);
-
-	if (if_running) {
-		rc = efx_channel_stop_xsk_queue(efx->channel[qid]);
-		WARN_ON(rc);
-		if (rc)
-			goto xsk_q_stop_fail;
-	}
-
-	efx->channel[qid]->zc = false;
-
-	if (if_running) {
-		rc = efx_channel_start_xsk_queue(efx->channel[qid]);
-		WARN_ON(rc);
-	}
-
-	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
-
-	return 0;
-xsk_q_stop_fail:
-	efx->channel[qid]->zc = false;
-	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
-	return rc;
+	return umem ? efx_xsk_umem_enable(efx, umem, qid) :
+		efx_xsk_umem_disable(efx, qid);
 }
 
 static inline bool efx_xsk_umem_consume_tx(struct xdp_umem *umem,
@@ -293,30 +225,6 @@ static inline bool efx_xsk_umem_consume_tx(struct xdp_umem *umem,
 #endif
 	return false;
 }
-#endif /* EFX_HAVE_XSK_POOL */
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-static int efx_xsk_pool_setup(struct efx_nic *efx, struct xsk_buff_pool *pool,
-			      u16 qid)
-#else
-static int efx_xsk_umem_setup(struct efx_nic *efx, struct xdp_umem *umem,
-			      u16 qid)
-#endif
-{
-	struct net_device *netdev = efx->net_dev;
-
-	if (qid >= netdev->real_num_rx_queues ||
-	    qid >= netdev->real_num_tx_queues)
-		return -EINVAL;
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	return pool ? efx_xsk_pool_enable(efx, pool, qid) :
-		efx_xsk_pool_disable(efx, qid);
-#else
-	return umem ? efx_xsk_umem_enable(efx, umem, qid) :
-		efx_xsk_umem_disable(efx, qid);
-#endif
-}
 
 static void efx_xmit_zc(struct efx_tx_queue *tx_queue)
 {
@@ -326,16 +234,9 @@ static void efx_xmit_zc(struct efx_tx_queue *tx_queue)
 	struct xdp_desc desc;
 	dma_addr_t dma;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	while (tx_queue->xsk_pool) {
-		if (!xsk_tx_peek_desc(tx_queue->xsk_pool, &desc))
-			break;
-		dma = xsk_buff_raw_get_dma(tx_queue->xsk_pool, desc.addr);
-#else
 	while (tx_queue->umem) {
 		if (!efx_xsk_umem_consume_tx(tx_queue->umem, &desc, &dma))
 			break;
-#endif
 		prefetchw(__efx_tx_queue_get_insert_buffer(tx_queue));
 
 		tx_buf = efx_tx_map_chunk(tx_queue, dma, desc.len);
@@ -343,12 +244,7 @@ static void efx_xmit_zc(struct efx_tx_queue *tx_queue)
 			break;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-                xsk_buff_raw_dma_sync_for_device(tx_queue->xsk_pool,
-						 dma, desc.len);
-#else
                 xsk_buff_raw_dma_sync_for_device(tx_queue->umem, dma, desc.len);
-#endif
 #else
 		dma_sync_single_for_device(&tx_queue->efx->net_dev->dev, dma,
 					   desc.len, DMA_TO_DEVICE);
@@ -358,21 +254,13 @@ static void efx_xmit_zc(struct efx_tx_queue *tx_queue)
 		pkt_cnt++;
 		total_bytes += desc.len;
 	}
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	if (tx_queue->xsk_pool && pkt_cnt) {
-#else
 	if (tx_queue->umem && pkt_cnt) {
-#endif
 		efx_nic_push_buffers(tx_queue);
 
 		tx_queue->tx_packets += pkt_cnt;
 		tx_queue->tx_bytes += total_bytes;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-		xsk_tx_release(tx_queue->xsk_pool);
-#else
 		xsk_umem_consume_tx_done(tx_queue->umem);
-#endif
 	}
 }
 
@@ -393,18 +281,13 @@ int efx_xsk_async_xmit(struct net_device *dev, u32 queue_id)
 	if (!channel || !channel->zc)
 		return -EINVAL;
 	tx_queue = efx_channel_get_xsk_tx_queue(channel);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-	if (unlikely(!tx_queue || !tx_queue->xsk_pool ||
-#else
 	if (unlikely(!tx_queue || !tx_queue->umem ||
-#endif
 		     !efx_is_xsk_tx_queue(tx_queue)))
 		return -EINVAL;
 	efx_xmit_zc(tx_queue);
 
 	return 0;
 }
-#endif
 #endif
 
 int efx_xdp(struct net_device *dev, struct netdev_bpf *xdp)
@@ -428,21 +311,11 @@ int efx_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 #endif
 		return 0;
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-#if defined(CONFIG_XDP_SOCKETS)
-	case XDP_SETUP_XSK_POOL:
-		return efx_xsk_pool_setup(efx, xdp->xsk.pool,
-					  xdp->xsk.queue_id);
-#endif
-#else
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 	case XDP_SETUP_XSK_UMEM:
 		return efx_xsk_umem_setup(efx, xdp->xsk.umem,
-					  xdp->xsk.queue_id);
+				xdp->xsk.queue_id);
 #endif
-#endif
-#endif /* EFX_HAVE_XSK_POOL*/
 	default:
 		return -EINVAL;
 	}
@@ -616,19 +489,13 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 		return XDP_DROP;
 	}
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
-	if (rx_buf->flags & EFX_RX_BUF_ZC)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_POOL)
-		xsk_buff_dma_sync_for_cpu(rx_buf->xsk_buf, rx_queue->xsk_pool);
-#else
+	if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM)
 		xsk_buff_dma_sync_for_cpu(rx_buf->xsk_buf);
-#endif
 	else
-#endif /* EFX_USE_XSK_BUFFER_ALLOC */
-#endif /* CONFIG_XDP_SOCKETS */
 		dma_sync_single_for_cpu(&efx->pci_dev->dev, rx_buf->dma_addr,
 					rx_buf->len, DMA_FROM_DEVICE);
+#endif
 #else
 	dma_sync_single_for_cpu(&efx->pci_dev->dev, rx_buf->dma_addr,
 				rx_buf->len, DMA_FROM_DEVICE);
@@ -666,13 +533,11 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 	offset = (u8 *)xdp.data - *ehp;
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_XDP_SOCK) && defined(EFX_HAVE_XSK_OFFSET_ADJUST)
-#if defined(CONFIG_XDP_SOCKETS)
 	if (channel->zc)
 		xdp.handle = xsk_umem_adjust_offset(rx_queue->umem, xdp.handle,
 						    xdp.data -
 						    xdp.data_hard_start +
 						    efx->rx_prefix_size);
-#endif
 #endif
 	xdp_ptr = &xdp;
 	switch (xdp_act) {
@@ -691,12 +556,10 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 	case XDP_TX:
 		/* Buffer ownership passes to tx on success. */
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && defined(EFX_USE_XSK_BUFFER_ALLOC))
-#if defined(CONFIG_XDP_SOCKETS)
-		if (rx_buf->flags & EFX_RX_BUF_ZC) {
+		if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM) {
 			xdp_ptr = rx_buf->xsk_buf;
 			xdp_ptr->data = xdp.data;
 		}
-#endif
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_COVERT_XDP_BUFF_FRAME_API)
 		xdpf = xdp_convert_buff_to_frame(xdp_ptr);
@@ -725,12 +588,10 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)
 	case XDP_REDIRECT:
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && defined(EFX_USE_XSK_BUFFER_ALLOC))
-#if defined(CONFIG_XDP_SOCKETS)
-		if (rx_buf->flags & EFX_RX_BUF_ZC) {
+		if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM) {
 			xdp_ptr = rx_buf->xsk_buf;
 			xdp_ptr->data = xdp.data;
 		}
-#endif
 #endif
 		rc = xdp_do_redirect(efx->net_dev, xdp_ptr, xdp_prog);
 		if (rc) {

@@ -19,7 +19,6 @@
 #include "ef100_tx.h"
 #include "filter.h"
 #include "workarounds.h"
-#include "efx_common.h"
 
 /* netdevice_ops */
 int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd);
@@ -279,6 +278,12 @@ static inline bool efx_rss_active(struct efx_rss_context *ctx)
 {
 	return ctx->context_id != EFX_MCDI_RSS_CONTEXT_INVALID;
 }
+
+/* V-ports */
+struct efx_vport *efx_find_vport_entry(struct efx_nic *efx, u16 id);
+void efx_free_vport_entry(struct efx_vport *ctx);
+int efx_vport_add(struct efx_nic *efx, u16 vlan, bool vlan_restrict);
+int efx_vport_del(struct efx_nic *efx, u16 port_user_id);
 
 /* Ethtool support */
 #ifdef EFX_USE_KCOMPAT

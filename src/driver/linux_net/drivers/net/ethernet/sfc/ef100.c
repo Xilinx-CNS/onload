@@ -22,7 +22,8 @@
 #include "ef100_regs.h"
 #include "ef100.h"
 #ifdef CONFIG_SFC_TRACING
-#include <trace/events/sfc.h>
+#define CREATE_TRACE_POINTS
+#include <trace/events/sfc_ef100.h>
 #endif
 
 #define EFX_EF100_PCI_DEFAULT_BAR	2

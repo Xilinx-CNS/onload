@@ -516,7 +516,6 @@ int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv)
 	u8 *supported_fields = efx->tc->caps->outer_rule_fields;
 	int rc;
 
-	CHECK(ENC_ETHER_TYPE);
 	switch (ipv) {
 	case 4:
 		CHECK(ENC_SRC_IP4);
@@ -890,8 +889,6 @@ int efx_mae_register_encap_match(struct efx_nic *efx,
 					 encap->dst_ip);
 		MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_DST_IP4_BE_MASK,
 					 ~(__be32)0);
-		MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_ETHER_TYPE_BE,
-					htons(ETH_P_IP));
 	} else {
 		memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_PAIRS_ENC_SRC_IP6_BE),
 		       &encap->src_ip6, sizeof(encap->src_ip6));
@@ -901,11 +898,7 @@ int efx_mae_register_encap_match(struct efx_nic *efx,
 		       &encap->dst_ip6, sizeof(encap->dst_ip6));
 		memset(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_PAIRS_ENC_DST_IP6_BE_MASK),
 		       0xff, sizeof(encap->dst_ip6));
-		MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_ETHER_TYPE_BE,
-					htons(ETH_P_IPV6));
 	}
-	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_ETHER_TYPE_BE_MASK,
-				~(__be16)0);
 	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_L4_DPORT_BE,
 				encap->udp_dport);
 	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_L4_DPORT_BE_MASK,

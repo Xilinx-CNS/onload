@@ -175,7 +175,7 @@ static int efx_debugfs_read_filter_list(struct seq_file *file, void *data)
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
-	if (!table || !table->entry) {
+	if (!table) {
 		up_read(&efx->filter_sem);
 		return -ENETDOWN;
 	}
@@ -644,7 +644,7 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 
 	WARN_ON(!rwsem_is_locked(&efx->filter_sem));
 	table = efx->filter_state;
-	if (!table || !table->entry)
+	if (!table)
 		return -ENETDOWN;
 	down_write(&table->lock);
 
@@ -904,9 +904,6 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 	struct efx_filter_spec *spec;
 	DEFINE_WAIT(wait);
 	int rc;
-
-	if (!table || !table->entry)
-		return -ENOENT;
 
 	spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 	if (!spec ||
@@ -1460,7 +1457,7 @@ int efx_mcdi_filter_redirect(struct efx_nic *efx, u32 filter_id,
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
-	if (!table || table->entry) {
+	if (!table) {
 		rc = -ENETDOWN;
 		goto out;
 	}
@@ -1671,164 +1668,6 @@ static int efx_mcdi_filter_match_flags_from_mcdi(bool encap, u32 mcdi_flags)
 	return match_flags;
 }
 
-static struct efx_mcdi_filter_vlan *
-efx_mcdi_filter_find_vlan(struct efx_nic *efx, u16 vid)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-	struct efx_mcdi_filter_vlan *vlan;
-
-	WARN_ON(!rwsem_is_locked(&efx->filter_sem));
-
-	list_for_each_entry(vlan, &table->vlan_list, list)
-		if (vlan->vid == vid)
-			return vlan;
-
-	return NULL;
-}
-
-int efx_mcdi_filter_add_vlan(struct efx_nic *efx, u16 vid)
-{
-	struct efx_mcdi_filter_table *table;
-	struct efx_mcdi_filter_vlan *vlan;
-	unsigned int i;
-	int rc = 0;
-
-	mutex_lock(&efx->mac_lock);
-	down_write(&efx->filter_sem);
-
-	table = efx->filter_state;
-	if (!table) {
-		rc = -ENETDOWN;
-		goto out;
-	}
-
-	vlan = efx_mcdi_filter_find_vlan(efx, vid);
-	if (vlan) {
-		netif_info(efx, drv, efx->net_dev,
-			   "VLAN %u already added\n", vid);
-		rc = -EALREADY;
-		goto out;
-	}
-
-	vlan = kzalloc(sizeof(*vlan), GFP_KERNEL);
-	if (!vlan) {
-		rc = -ENOMEM;
-		goto out;
-	}
-
-	vlan->vid = vid;
-
-	for (i = 0; i < ARRAY_SIZE(vlan->uc); i++)
-		vlan->uc[i] = EFX_MCDI_FILTER_ID_INVALID;
-	for (i = 0; i < ARRAY_SIZE(vlan->mc); i++)
-		vlan->mc[i] = EFX_MCDI_FILTER_ID_INVALID;
-	for (i = 0; i < EFX_MCDI_NUM_DEFAULT_FILTERS; i++)
-		vlan->default_filters[i] = EFX_MCDI_FILTER_ID_INVALID;
-
-	vlan->warn_on_zero_filters = true;
-
-	list_add_tail(&vlan->list, &table->vlan_list);
-
-	if (efx->datapath_started)
-		efx_mcdi_filter_vlan_sync_rx_mode(efx, vlan);
-
-out:
-	up_write(&efx->filter_sem);
-	mutex_unlock(&efx->mac_lock);
-	return rc;
-}
-
-static void efx_mcdi_filter_down_vlan(struct efx_nic *efx,
-				      struct efx_mcdi_filter_vlan *vlan)
-{
-	unsigned int i;
-
-	efx_rwsem_assert_write_locked(&efx->filter_sem);
-
-	for (i = 0; i < ARRAY_SIZE(vlan->uc); i++)
-		if (vlan->uc[i] != EFX_MCDI_FILTER_ID_INVALID) {
-			efx_mcdi_filter_remove_unsafe(efx, EFX_FILTER_PRI_AUTO,
-						      vlan->uc[i]);
-			vlan->uc[i] = EFX_MCDI_FILTER_ID_INVALID;
-		}
-	for (i = 0; i < ARRAY_SIZE(vlan->mc); i++)
-		if (vlan->mc[i] != EFX_MCDI_FILTER_ID_INVALID) {
-			efx_mcdi_filter_remove_unsafe(efx, EFX_FILTER_PRI_AUTO,
-						      vlan->mc[i]);
-			vlan->mc[i] = EFX_MCDI_FILTER_ID_INVALID;
-		}
-	for (i = 0; i < EFX_MCDI_NUM_DEFAULT_FILTERS; i++)
-		if (vlan->default_filters[i] != EFX_MCDI_FILTER_ID_INVALID) {
-			efx_mcdi_filter_remove_unsafe(efx, EFX_FILTER_PRI_AUTO,
-						      vlan->default_filters[i]);
-			vlan->default_filters[i] = EFX_MCDI_FILTER_ID_INVALID;
-		}
-}
-
-static void efx_mcdi_filter_del_vlan_internal(struct efx_nic *efx,
-					      struct efx_mcdi_filter_vlan *vlan)
-{
-	efx_rwsem_assert_write_locked(&efx->filter_sem);
-
-	efx_mcdi_filter_down_vlan(efx, vlan);
-
-	list_del(&vlan->list);
-
-	kfree(vlan);
-}
-
-int efx_mcdi_filter_del_vlan(struct efx_nic *efx, u16 vid)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-	struct efx_mcdi_filter_vlan *vlan;
-	int rc = 0;
-
-	mutex_lock(&efx->mac_lock);
-	down_write(&efx->filter_sem);
-
-	if (!table) {
-		rc = -ENETDOWN;
-		goto out;
-	}
-
-	vlan = efx_mcdi_filter_find_vlan(efx, vid);
-	if (!vlan) {
-		netif_err(efx, drv, efx->net_dev,
-			  "VLAN %u not found in filter state\n", vid);
-		rc = -ENOENT;
-		goto out;
-	}
-
-	efx_mcdi_filter_del_vlan_internal(efx, vlan);
-
-out:
-	up_write(&efx->filter_sem);
-	mutex_unlock(&efx->mac_lock);
-	return rc;
-}
-
-static void efx_mcdi_filter_down_vlans(struct efx_nic *efx)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-	struct efx_mcdi_filter_vlan *vlan;
-
-	efx_rwsem_assert_write_locked(&efx->filter_sem);
-
-	list_for_each_entry(vlan, &table->vlan_list, list)
-		efx_mcdi_filter_down_vlan(efx, vlan);
-}
-
-static void efx_mcdi_filter_del_vlans(struct efx_nic *efx)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-	struct efx_mcdi_filter_vlan *vlan, *next_vlan;
-
-	efx_rwsem_assert_write_locked(&efx->filter_sem);
-
-	list_for_each_entry_safe(vlan, next_vlan, &table->vlan_list, list)
-		efx_mcdi_filter_del_vlan_internal(efx, vlan);
-}
-
 bool efx_mcdi_filter_match_supported(struct efx_nic *efx,
 				     bool encap,
 				     unsigned int match_flags)
@@ -1923,10 +1762,13 @@ int efx_mcdi_filter_probe_supported_filters(struct efx_nic *efx)
 	return rc;
 }
 
-int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool rss_limited,
-				bool additional_rss_modes)
+int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool mc_chaining,
+				bool rss_limited, bool additional_rss_modes,
+				bool encap)
 {
+	struct net_device *net_dev  = efx->net_dev;
 	struct efx_mcdi_filter_table *table;
+	int rc;
 
 	if (efx->filter_state) /* already probed */
 		return 0;
@@ -1935,30 +1777,6 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool rss_limited,
 	if (!table)
 		return -ENOMEM;
 
-	efx->filter_state = table;
-
-	INIT_LIST_HEAD(&table->vlan_list);
-
-	table->rss_limited = rss_limited;
-	table->additional_rss_modes = additional_rss_modes;
-
-	table->mc_promisc_last = false;
-	INIT_LIST_HEAD(&table->vlan_list);
-	init_rwsem(&table->lock);
-
-	return 0;
-}
-
-int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
-			       bool encap)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-	struct net_device *net_dev  = efx->net_dev;
-	int rc;
-
-	table->mc_chaining = mc_chaining;
-	table->encap_supported = encap;
-
 	table->entry = vzalloc(EFX_MCDI_FILTER_TBL_ROWS *
 			       sizeof(*table->entry));
 	if (!table->entry) {
@@ -1966,26 +1784,35 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 		goto fail;
 	}
 
+	efx->filter_state = table;
+
+	INIT_LIST_HEAD(&table->vlan_list);
+
+	table->mc_chaining = mc_chaining;
+	table->encap_supported = encap;
+	table->rss_limited = rss_limited;
+	table->additional_rss_modes = additional_rss_modes;
+
 	rc = efx_mcdi_filter_probe_supported_filters(efx);
 	if (rc)
 		goto fail;
+
+	table->mc_promisc_last = false;
+	table->vlan_filter =
+		!!(efx->net_dev->features & NETIF_F_HW_VLAN_CTAG_FILTER);
+	INIT_LIST_HEAD(&table->vlan_list);
+	init_rwsem(&table->lock);
 
 #ifdef CONFIG_SFC_DEBUGFS
 	efx_extend_debugfs_port(efx, efx, 0, efx_debugfs);
 	efx_extend_debugfs_port(efx, efx->filter_state, 0, filter_debugfs);
 #endif
 
-	/* Ignore net_dev features for vDPA devices */
-	if (efx->state == STATE_VDPA)
-		return 0;
-
-	table->vlan_filter =
-		!!(efx->net_dev->features & NETIF_F_HW_VLAN_CTAG_FILTER);
 	if (!efx_mcdi_filter_match_supported(efx, false,
 					     EFX_FILTER_MATCH_FLAGS_RFS)) {
-		netif_info(efx, probe, net_dev,
+		netif_info(efx, probe, efx->net_dev,
 			   "RFS filters are not supported in this firmware variant\n");
-		net_dev->features &= ~NETIF_F_NTUPLE;
+		efx->net_dev->features &= ~NETIF_F_NTUPLE;
 	}
 
 	if ((efx_supported_features(efx) & NETIF_F_HW_VLAN_CTAG_FILTER) &&
@@ -2011,8 +1838,9 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 	return 0;
 
 fail:
+	efx->filter_state = NULL;
 	kfree(table->entry);
-	table->entry = NULL;
+	kfree(table);
 	return rc;
 }
 
@@ -2044,7 +1872,7 @@ void efx_mcdi_filter_table_reset_mc_allocations(struct efx_nic *efx)
 /* Caller must hold efx->filter_sem for read if race against
  * efx_mcdi_filter_table_down() is possible
  */
-int efx_mcdi_filter_table_up(struct efx_nic *efx)
+void efx_mcdi_filter_table_restore(struct efx_nic *efx)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 	unsigned int invalid_filters = 0;
@@ -2052,15 +1880,15 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 	struct efx_rss_context *ctx;
 	unsigned int filter_idx;
 	struct efx_vport *vpx;
-	int fail_rc = 0;
+	bool failed = false;
 	u32 mcdi_flags;
 	int match_pri;
 	int rc;
 
 	WARN_ON(!rwsem_is_locked(&efx->filter_sem));
 
-	if (!table || !table->entry)
-		return -ENETDOWN;
+	if (!table || !table->must_restore_filters)
+		return;
 
 	down_write(&table->lock);
 	mutex_lock(&efx->rss_lock);
@@ -2111,14 +1939,12 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 					netif_warn(efx, drv, efx->net_dev,
 						   "Warning: unable to restore a filter with nonexistent RSS context %u.\n",
 						   spec->rss_context);
-					rc = -EINVAL;
 					goto invalid;
 				}
 				if (ctx->context_id == EFX_MCDI_RSS_CONTEXT_INVALID) {
 					netif_warn(efx, drv, efx->net_dev,
 						   "Warning: unable to restore a filter with RSS context %u as it was not created.\n",
 						   spec->rss_context);
-					rc = -EINVAL;
 					goto invalid;
 				}
 			}
@@ -2132,14 +1958,12 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 					netif_warn(efx, drv, efx->net_dev,
 						   "Warning: unable to restore a filter with nonexistent v-port %u.\n",
 						   spec->vport_id);
-					rc = -EINVAL;
 					goto invalid;
 				}
 				if (vpx->vport_id == EVB_PORT_ID_NULL) {
 					netif_warn(efx, drv, efx->net_dev,
 						   "Warning: unable to restore a filter with v-port %u as it was not created.\n",
 						   spec->vport_id);
-					rc = -EINVAL;
 					goto invalid;
 				}
 			}
@@ -2150,32 +1974,21 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 
 			if (rc) {
 invalid:
-				fail_rc = rc;
+				failed = true;
 				kfree(spec);
 				efx_mcdi_filter_invalidate_filter_id(efx, filter_idx);
 			}
 		}
 	}
 
-	if (fail_rc)
+	if (failed)
 		netif_err(efx, hw, efx->net_dev,
-			  "unable to restore all filters, rc=%d\n",
-			  fail_rc);
+			  "unable to restore all filters\n");
 	else
 		table->must_restore_filters = false;
 	mutex_unlock(&efx->vport_lock);
 	mutex_unlock(&efx->rss_lock);
 	up_write(&table->lock);
-	return fail_rc;
-}
-
-void efx_mcdi_filter_table_restore(struct efx_nic *efx)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-
-	if (!table || !table->must_restore_filters)
-		return;
-	(void)efx_mcdi_filter_table_up(efx);
 }
 
 void efx_mcdi_filter_table_down(struct efx_nic *efx)
@@ -2186,12 +1999,12 @@ void efx_mcdi_filter_table_down(struct efx_nic *efx)
 	unsigned int filter_idx;
 	int rc;
 
-	if (!table || !table->entry)
+	if (!table)
 		return;
 
 	efx_rwsem_assert_write_locked(&efx->filter_sem);
 
-	efx_mcdi_filter_down_vlans(efx);
+	efx_mcdi_filter_cleanup_vlans(efx);
 
 	for (filter_idx = 0; filter_idx < EFX_MCDI_FILTER_TBL_ROWS; filter_idx++) {
 		spec = efx_mcdi_filter_entry_spec(table, filter_idx);
@@ -2215,7 +2028,7 @@ void efx_mcdi_filter_table_down(struct efx_nic *efx)
 	}
 }
 
-void efx_mcdi_filter_table_fini(struct efx_nic *efx)
+void efx_mcdi_filter_table_remove(struct efx_nic *efx)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 
@@ -2229,17 +2042,7 @@ void efx_mcdi_filter_table_fini(struct efx_nic *efx)
 
 	vfree(table->entry);
 	table->entry = NULL;
-}
-
-void efx_mcdi_filter_table_remove(struct efx_nic *efx)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-
-	down_write(&efx->filter_sem);
-	efx_mcdi_filter_del_vlans(efx);
-
 	efx->filter_state = NULL;
-	up_write(&efx->filter_sem);
 	kfree(table);
 }
 
@@ -2324,6 +2127,116 @@ static void efx_mcdi_filter_remove_old(struct efx_nic *efx)
 		netif_info(efx, drv, efx->net_dev,
 				"%s: failed to remove %d non-existent filters\n",
 				__func__, remove_noent);
+}
+
+int efx_mcdi_filter_add_vlan(struct efx_nic *efx, u16 vid)
+{
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+	struct efx_mcdi_filter_vlan *vlan;
+	unsigned int i;
+
+	efx_rwsem_assert_write_locked(&efx->filter_sem);
+
+	vlan = efx_mcdi_filter_find_vlan(efx, vid);
+	if (WARN_ON(vlan)) {
+		netif_err(efx, drv, efx->net_dev,
+			  "VLAN %u already added\n", vid);
+		return -EALREADY;
+	}
+
+	vlan = kzalloc(sizeof(*vlan), GFP_KERNEL);
+	if (!vlan)
+		return -ENOMEM;
+
+	vlan->vid = vid;
+
+	for (i = 0; i < ARRAY_SIZE(vlan->uc); i++)
+		vlan->uc[i] = EFX_MCDI_FILTER_ID_INVALID;
+	for (i = 0; i < ARRAY_SIZE(vlan->mc); i++)
+		vlan->mc[i] = EFX_MCDI_FILTER_ID_INVALID;
+	for (i = 0; i < EFX_MCDI_NUM_DEFAULT_FILTERS; i++)
+		vlan->default_filters[i] = EFX_MCDI_FILTER_ID_INVALID;
+
+	vlan->warn_on_zero_filters = true;
+
+	list_add_tail(&vlan->list, &table->vlan_list);
+
+	if (efx->datapath_started)
+		efx_mcdi_filter_vlan_sync_rx_mode(efx, vlan);
+
+	return 0;
+}
+
+static void efx_mcdi_filter_del_vlan_internal(struct efx_nic *efx,
+					      struct efx_mcdi_filter_vlan *vlan)
+{
+	unsigned int i;
+
+	efx_rwsem_assert_write_locked(&efx->filter_sem);
+
+	list_del(&vlan->list);
+
+	for (i = 0; i < ARRAY_SIZE(vlan->uc); i++) {
+		if (vlan->uc[i] != EFX_MCDI_FILTER_ID_INVALID)
+			efx_mcdi_filter_remove_unsafe(efx, EFX_FILTER_PRI_AUTO,
+						      vlan->uc[i]);
+	}
+	for (i = 0; i < ARRAY_SIZE(vlan->mc); i++) {
+		if (vlan->mc[i] != EFX_MCDI_FILTER_ID_INVALID)
+			efx_mcdi_filter_remove_unsafe(efx, EFX_FILTER_PRI_AUTO,
+						      vlan->mc[i]);
+	}
+	for (i = 0; i < EFX_MCDI_NUM_DEFAULT_FILTERS; i++)
+		if (vlan->default_filters[i] != EFX_MCDI_FILTER_ID_INVALID)
+			efx_mcdi_filter_remove_unsafe(efx, EFX_FILTER_PRI_AUTO,
+						      vlan->default_filters[i]);
+
+	kfree(vlan);
+}
+
+void efx_mcdi_filter_del_vlan(struct efx_nic *efx, u16 vid)
+{
+	struct efx_mcdi_filter_vlan *vlan;
+
+	efx_rwsem_assert_write_locked(&efx->filter_sem);
+
+	vlan = efx_mcdi_filter_find_vlan(efx, vid);
+	if (!vlan) {
+		netif_err(efx, drv, efx->net_dev,
+			  "VLAN %u not found in filter state\n", vid);
+		return;
+	}
+
+	efx_mcdi_filter_del_vlan_internal(efx, vlan);
+}
+
+struct efx_mcdi_filter_vlan *efx_mcdi_filter_find_vlan(struct efx_nic *efx, u16 vid)
+{
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+	struct efx_mcdi_filter_vlan *vlan;
+
+	if (!table)
+		return NULL;
+
+	WARN_ON(!rwsem_is_locked(&efx->filter_sem));
+
+	list_for_each_entry(vlan, &table->vlan_list, list) {
+		if (vlan->vid == vid)
+			return vlan;
+	}
+
+	return NULL;
+}
+
+void efx_mcdi_filter_cleanup_vlans(struct efx_nic *efx)
+{
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+	struct efx_mcdi_filter_vlan *vlan, *next_vlan;
+
+	efx_rwsem_assert_write_locked(&efx->filter_sem);
+
+	list_for_each_entry_safe(vlan, next_vlan, &table->vlan_list, list)
+		efx_mcdi_filter_del_vlan_internal(efx, vlan);
 }
 
 static void efx_mcdi_filter_uc_addr_list(struct efx_nic *efx)
@@ -2451,7 +2364,7 @@ void efx_mcdi_filter_sync_rx_mode(struct efx_nic *efx)
 	if (!netif_device_present(net_dev))
 		return;
 
-	if (!table || !table->entry)
+	if (!table)
 		return;
 
 	efx_mcdi_filter_mark_old(efx);
@@ -2563,7 +2476,7 @@ int efx_mcdi_filter_block_kernel(struct efx_nic *efx,
 	mutex_lock(&efx->mac_lock);
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
-	if (!table || !table->entry) {
+	if (!table) {
 		rc = -ENETDOWN;
 		goto out;
 	}
@@ -2589,7 +2502,7 @@ void efx_mcdi_filter_unblock_kernel(struct efx_nic *efx,
 	mutex_lock(&efx->mac_lock);
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
-	if (!table || !table->entry)
+	if (!table)
 		goto out;
 	down_write(&table->lock);
 	table->kernel_blocked[type] = false;
@@ -3113,4 +3026,3 @@ int efx_mcdi_push_default_indir_table(struct efx_nic *efx,
 	}
 	return rc;
 }
-

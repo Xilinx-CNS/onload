@@ -29,9 +29,6 @@
 #include "tc.h"
 #include "mae.h"
 #include "xdp.h"
-#ifdef CONFIG_SFC_VDPA
-#include "ef100_vdpa.h"
-#endif
 
 #define EF100_MAX_VIS 4096
 #define EF100_NUM_MCDI_BUFFERS	1
@@ -462,39 +459,39 @@ int ef100_phy_probe(struct efx_nic *efx)
 int ef100_filter_table_probe(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	bool rss_limited, additional_rss;
+	bool rss_limited, additional_rss, encap;
 
 	rss_limited = efx_ef100_has_cap(nic_data->datapath_caps,
 					RX_RSS_LIMITED);
 	additional_rss = efx_ef100_has_cap(nic_data->datapath_caps,
 					   ADDITIONAL_RSS_MODES);
+	encap = efx_ef100_has_cap(nic_data->datapath_caps, VXLAN_NVGRE);
 
-	return efx_mcdi_filter_table_probe(efx, rss_limited,
-					   additional_rss);
-}
-
-int ef100_filter_table_init(struct efx_nic *efx)
-{
-	struct ef100_nic_data *nic_data = efx->nic_data;
-	bool encap = efx_ef100_has_cap(nic_data->datapath_caps,
-				       VXLAN_NVGRE);
-
-	return efx_mcdi_filter_table_init(efx, true, encap);
+	return efx_mcdi_filter_table_probe(efx, true, rss_limited,
+					   additional_rss, encap);
 }
 
 static int ef100_filter_table_up(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	int rc = 0;
+	int rc;
 
-	down_write(&efx->filter_sem);
 	if (nic_data->filters_up)
-		goto out;
+		return 0;
 
-	rc = efx_mcdi_filter_table_up(efx);
-out:
+	rc = efx_mcdi_filter_add_vlan(efx, EFX_FILTER_VID_UNSPEC);
+	if (rc) {
+		efx_mcdi_filter_table_down(efx);
+		return rc;
+	}
+
+	rc = efx_mcdi_filter_add_vlan(efx, 0);
+	if (rc) {
+		efx_mcdi_filter_del_vlan(efx, EFX_FILTER_VID_UNSPEC);
+		efx_mcdi_filter_table_down(efx);
+	}
+
 	nic_data->filters_up = !rc;
-	up_write(&efx->filter_sem);
 	return rc;
 }
 
@@ -502,15 +499,14 @@ static void ef100_filter_table_down(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 
-	down_write(&efx->filter_sem);
 	if (!nic_data->filters_up)
-		goto out;
+		return;
 
+	efx_mcdi_filter_del_vlan(efx, 0);
+	efx_mcdi_filter_del_vlan(efx, EFX_FILTER_VID_UNSPEC);
 	efx_mcdi_filter_table_down(efx);
 
 	nic_data->filters_up = false;
-out:
-	up_write(&efx->filter_sem);
 }
 
 /*	Other
@@ -749,7 +745,7 @@ static size_t ef100_update_stats(struct efx_nic *efx,
 				 struct rtnl_link_stats64 *core_stats)
 	__acquires(efx->stats_lock)
 {
-	__le64 *mc_stats = kmalloc(efx->num_mac_stats * sizeof(__le64), GFP_ATOMIC);
+	__le64 *mc_stats = kmalloc(efx->num_mac_stats * sizeof(__le64), GFP_KERNEL);
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	DECLARE_BITMAP(mask, EF100_STAT_COUNT);
 	u64 *stats = nic_data->stats;
@@ -906,7 +902,8 @@ void __ef100_attach_reps(struct efx_nic *efx)
 }
 #endif
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
+    !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 static struct ef100_udp_tunnel *__efx_ef100_udp_tnl_find_port(
 			struct ef100_nic_data *nic_data, __be16 port)
 			__must_hold(nic_data->udp_tunnels_lock)
@@ -1093,12 +1090,10 @@ static struct {
 		.init = ef100_probe_netdev,
 		.fini = ef100_remove_netdev
 	},
-#ifdef CONFIG_SFC_VDPA
 	[EF100_BAR_CONFIG_VDPA] = {
-		.init = ef100_vdpa_init,
-		.fini = ef100_vdpa_fini
+		.init = NULL,	/* TODO: assign these */
+		.fini = NULL
 	},
-#endif
 #ifdef EFX_NOT_UPSTREAM
 	[EF100_BAR_CONFIG_NONE] = {
 		.init = NULL,
@@ -1117,11 +1112,9 @@ static ssize_t bar_config_show(struct device *dev,
 	case EF100_BAR_CONFIG_EF100:
 		sprintf(buf_out, "EF100\n");
 		break;
-#ifdef CONFIG_SFC_VDPA
 	case EF100_BAR_CONFIG_VDPA:
 		sprintf(buf_out, "vDPA\n");
 		break;
-#endif
 #ifdef EFX_NOT_UPSTREAM
 	case EF100_BAR_CONFIG_NONE:
 		sprintf(buf_out, "None\n");
@@ -1147,10 +1140,8 @@ static ssize_t bar_config_store(struct device *dev,
 
 	if (!strncasecmp(buf, "ef100", min_t(size_t, count, 5)))
 		new_config = EF100_BAR_CONFIG_EF100;
-#ifdef CONFIG_SFC_VDPA
 	else if (!strncasecmp(buf, "vdpa", min_t(size_t, count, 4)))
 		new_config = EF100_BAR_CONFIG_VDPA;
-#endif
 #ifdef EFX_NOT_UPSTREAM
 	else if (!strncasecmp(buf, "none", min_t(size_t, count, 4)))
 		new_config = EF100_BAR_CONFIG_NONE;
@@ -1417,7 +1408,8 @@ static int ef100_probe_main(struct efx_nic *efx)
 	efx->nic_data = nic_data;
 	nic_data->efx = efx;
 	spin_lock_init(&nic_data->vf_reps_lock);
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
+    !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	spin_lock_init(&nic_data->udp_tunnels_lock);
 	INIT_LIST_HEAD(&nic_data->udp_tunnels);
 #endif
@@ -1470,13 +1462,8 @@ static int ef100_probe_main(struct efx_nic *efx)
 	rc = efx_probe_common(efx);
 	if (rc)
 		goto fail;
-	if (efx->mcdi->fn_flags &
-	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)) {
-		pci_info(efx->pci_dev, "No network port on this PCI function");
-		return 0;
-	}
 
-	rc = efx_get_fn_info(efx, &nic_data->pf_index, &nic_data->vf_index);
+	rc = efx_get_pf_index(efx, &nic_data->pf_index);
 	if (rc)
 		goto fail;
 
@@ -1650,11 +1637,9 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_packet = __ef100_rx_packet,
 	.rx_buf_hash_valid = ef100_rx_buf_hash_valid,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
-	.filter_table_probe = ef100_filter_table_init,
-	.filter_table_up = ef100_filter_table_up,
+	.filter_table_probe = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
-	.filter_table_down = ef100_filter_table_down,
-	.filter_table_remove = efx_mcdi_filter_table_fini,
+	.filter_table_remove = ef100_filter_table_down,
 	.filter_insert = efx_mcdi_filter_insert,
 	.filter_remove_safe = efx_mcdi_filter_remove_safe,
 	.filter_get_safe = efx_mcdi_filter_get_safe,
@@ -1698,7 +1683,8 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.mem_bar = NULL,
 	.mem_map_size = NULL,
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
+	!defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	.udp_tnl_add_port2 = efx_ef100_udp_tnl_add_port,
 	.udp_tnl_lookup_port2 = efx_ef100_udp_tnl_lookup_port,
 	.udp_tnl_del_port2 = efx_ef100_udp_tnl_del_port,
@@ -1776,11 +1762,9 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.rx_write = ef100_rx_write,
 	.rx_packet = __ef100_rx_packet,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
-	.filter_table_probe = ef100_filter_table_init,
-	.filter_table_up = ef100_filter_table_up,
+	.filter_table_probe = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
-	.filter_table_down = efx_mcdi_filter_table_down,
-	.filter_table_remove = efx_mcdi_filter_table_fini,
+	.filter_table_remove = ef100_filter_table_down,
 	.filter_insert = efx_mcdi_filter_insert,
 	.filter_remove_safe = efx_mcdi_filter_remove_safe,
 	.filter_get_safe = efx_mcdi_filter_get_safe,

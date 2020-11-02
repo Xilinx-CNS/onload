@@ -35,14 +35,10 @@ void efx_xdp_flush(struct net_device *dev);
 #endif
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XSK_NEED_WAKEUP)
 int efx_xsk_wakeup(struct net_device *dev, u32 queue_id, u32 flags);
 #else
 int efx_xsk_async_xmit(struct net_device *dev, u32 queue_id);
-#endif
-#endif
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_TX)
 int efx_xdp_tx_buffers(struct efx_nic *efx, int n, struct xdp_frame **xdpfs,

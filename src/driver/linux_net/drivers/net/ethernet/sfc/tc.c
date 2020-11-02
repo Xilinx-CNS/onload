@@ -29,7 +29,6 @@
 #include "ef100_rep.h"
 #include "nic.h"
 #include "rx_common.h"
-#include "efx_common.h"
 #include "debugfs.h"
 
 static enum efx_encap_type efx_tc_indr_netdev_type(struct net_device *net_dev)
@@ -638,7 +637,7 @@ static void efx_gen_tun_header_eth(struct efx_tc_encap_action *encap, u16 proto)
 	eth->h_proto = htons(proto);
 }
 
-static void efx_gen_tun_header_ipv4(struct efx_tc_encap_action *encap, u8 ipproto, u8 len)
+static void efx_gen_tun_header_ipv4(struct efx_tc_encap_action *encap, u8 ipproto)
 {
 	struct efx_neigh_binder *neigh = encap->neigh;
 	struct ip_tunnel_key *key = &encap->key;
@@ -653,11 +652,13 @@ static void efx_gen_tun_header_ipv4(struct efx_tc_encap_action *encap, u8 ipprot
 	ip->protocol = ipproto;
 	ip->version = 0x4;
 	ip->ihl = 0x5;
-	ip->tot_len = cpu_to_be16(ip->ihl * 4 + len);
-	ip_send_check(ip);
+#ifdef EFX_C_MODEL
+	/* Work around Cproto IP parser bug: IPlen must be >= IHL + UDPlen */
+	ip->tot_len = cpu_to_be16(28);
+#endif
 }
 
-static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipproto, u8 len)
+static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipproto)
 {
 	struct efx_neigh_binder *neigh = encap->neigh;
 	struct ip_tunnel_key *key = &encap->key;
@@ -672,10 +673,13 @@ static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipprot
 	ip->hop_limit = neigh->ttl;
 	ip->nexthdr = IPPROTO_UDP;
 	ip->version = 0x6;
-	ip->payload_len = cpu_to_be16(len);
+#ifdef EFX_C_MODEL
+	/* Work around Cproto parser bug: IP6len must be >= UDPlen */
+	ip->payload_len = cpu_to_be16(8);
+#endif
 }
 
-static void efx_gen_tun_header_udp(struct efx_tc_encap_action *encap, u8 len)
+static void efx_gen_tun_header_udp(struct efx_tc_encap_action *encap)
 {
 	struct ip_tunnel_key *key = &encap->key;
 	struct udphdr *udp;
@@ -683,7 +687,10 @@ static void efx_gen_tun_header_udp(struct efx_tc_encap_action *encap, u8 len)
 	udp = (void *)(encap->encap_hdr + encap->encap_hdr_len);
 	encap->encap_hdr_len += sizeof(*udp);
 	udp->dest = key->tp_dst;
-	udp->len = cpu_to_be16(sizeof(*udp) + len);
+#ifdef EFX_C_MODEL
+	/* Work around Cproto UDP parser bug */
+	udp->len = cpu_to_be16(8);
+#endif
 }
 
 static void efx_gen_tun_header_vxlan(struct efx_tc_encap_action *encap)
@@ -715,45 +722,47 @@ static void efx_gen_tun_header_geneve(struct efx_tc_encap_action *encap)
 	geneve->vni[2] = vni;
 }
 
-#define vxlan_header_l4_len	(sizeof(struct udphdr) + sizeof(struct vxlanhdr))
-#define vxlan4_header_len	(sizeof(struct ethhdr) + sizeof(struct iphdr) + vxlan_header_l4_len)
+#define vxlan_header_ipv4_len	(sizeof(struct ethhdr) + sizeof(struct iphdr) + \
+				 sizeof(struct udphdr) + sizeof(struct vxlanhdr))
 static void efx_gen_vxlan_header_ipv4(struct efx_tc_encap_action *encap)
 {
-	BUILD_BUG_ON(sizeof(encap->encap_hdr) < vxlan4_header_len);
+	BUILD_BUG_ON(sizeof(encap->encap_hdr) < vxlan_header_ipv4_len);
 	efx_gen_tun_header_eth(encap, ETH_P_IP);
-	efx_gen_tun_header_ipv4(encap, IPPROTO_UDP, vxlan_header_l4_len);
-	efx_gen_tun_header_udp(encap, sizeof(struct vxlanhdr));
+	efx_gen_tun_header_ipv4(encap, IPPROTO_UDP);
+	efx_gen_tun_header_udp(encap);
 	efx_gen_tun_header_vxlan(encap);
 }
 
-#define geneve_header_l4_len	(sizeof(struct udphdr) + sizeof(struct genevehdr))
-#define geneve4_header_len	(sizeof(struct ethhdr) + sizeof(struct iphdr) + geneve_header_l4_len)
+#define geneve_header_ipv4_len	(sizeof(struct ethhdr) + sizeof(struct iphdr) + \
+				 sizeof(struct udphdr) + sizeof(struct genevehdr))
 static void efx_gen_geneve_header_ipv4(struct efx_tc_encap_action *encap)
 {
-	BUILD_BUG_ON(sizeof(encap->encap_hdr) < geneve4_header_len);
+	BUILD_BUG_ON(sizeof(encap->encap_hdr) < vxlan_header_ipv4_len);
 	efx_gen_tun_header_eth(encap, ETH_P_IP);
-	efx_gen_tun_header_ipv4(encap, IPPROTO_UDP, geneve_header_l4_len);
-	efx_gen_tun_header_udp(encap, sizeof(struct genevehdr));
+	efx_gen_tun_header_ipv4(encap, IPPROTO_UDP);
+	efx_gen_tun_header_udp(encap);
 	efx_gen_tun_header_geneve(encap);
 }
 
-#define vxlan6_header_len	(sizeof(struct ethhdr) + sizeof(struct ipv6hdr) + vxlan_header_l4_len)
+#define vxlan_header_ipv6_len	(sizeof(struct ethhdr) + sizeof(struct ipv6hdr) + \
+				 sizeof(struct udphdr) + sizeof(struct vxlanhdr))
 static void efx_gen_vxlan_header_ipv6(struct efx_tc_encap_action *encap)
 {
-	BUILD_BUG_ON(sizeof(encap->encap_hdr) < vxlan6_header_len);
+	BUILD_BUG_ON(sizeof(encap->encap_hdr) < vxlan_header_ipv6_len);
 	efx_gen_tun_header_eth(encap, ETH_P_IPV6);
-	efx_gen_tun_header_ipv6(encap, IPPROTO_UDP, vxlan_header_l4_len);
-	efx_gen_tun_header_udp(encap, sizeof(struct vxlanhdr));
+	efx_gen_tun_header_ipv6(encap, IPPROTO_UDP);
+	efx_gen_tun_header_udp(encap);
 	efx_gen_tun_header_vxlan(encap);
 }
 
-#define geneve6_header_len	(sizeof(struct ethhdr) + sizeof(struct ipv6hdr) + geneve_header_l4_len)
+#define geneve_header_ipv6_len	(sizeof(struct ethhdr) + sizeof(struct ipv6hdr) + \
+				 sizeof(struct udphdr) + sizeof(struct genevehdr))
 static void efx_gen_geneve_header_ipv6(struct efx_tc_encap_action *encap)
 {
-	BUILD_BUG_ON(sizeof(encap->encap_hdr) < geneve6_header_len);
+	BUILD_BUG_ON(sizeof(encap->encap_hdr) < geneve_header_ipv6_len);
 	efx_gen_tun_header_eth(encap, ETH_P_IPV6);
-	efx_gen_tun_header_ipv6(encap, IPPROTO_UDP, geneve_header_l4_len);
-	efx_gen_tun_header_udp(encap, sizeof(struct genevehdr));
+	efx_gen_tun_header_ipv6(encap, IPPROTO_UDP);
+	efx_gen_tun_header_udp(encap);
 	efx_gen_tun_header_geneve(encap);
 }
 
@@ -1416,8 +1425,6 @@ int efx_init_struct_tc(struct efx_nic *efx)
 	if (rc < 0)
 		goto fail10;
 #endif
-	efx->tc->reps_filter_uc = -1;
-	efx->tc->reps_filter_mc = -1;
 	/* TODO consider making this dynamically resized, rather than always
 	 * allocating space for the maximum possible # of VFs
 	 */
@@ -1459,7 +1466,6 @@ fail1:
 	kfree(efx->tc->caps);
 fail0:
 	kfree(efx->tc);
-	efx->tc = NULL;
 	return rc;
 }
 
@@ -1490,7 +1496,6 @@ void efx_fini_struct_tc(struct efx_nic *efx)
 	mutex_destroy(&efx->tc->mutex);
 	kfree(efx->tc->caps);
 	kfree(efx->tc);
-	efx->tc = NULL;
 }
 
 #define IS_ALL_ONES(v)	(!(typeof (v))~(v))
@@ -2027,7 +2032,7 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 #else
 	struct flow_rule *fr;
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD) || defined(EFX_HAVE_TCF_EXTACK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TCB_EXTACK)
 	struct netlink_ext_ack *extack = tc->common.extack;
 #else
 	struct netlink_ext_ack *extack = NULL;
@@ -2839,7 +2844,7 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 				     struct efx_tc_match *match,
 				     struct efx_vfrep *efv)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD) || defined(EFX_HAVE_TCF_EXTACK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TCB_EXTACK)
 	struct netlink_ext_ack *extack = tc->common.extack;
 #else
 	struct netlink_ext_ack *extack = NULL;
@@ -3023,7 +3028,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 #else
 	struct flow_rule *fr;
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD) || defined(EFX_HAVE_TCF_EXTACK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TCB_EXTACK)
 	struct netlink_ext_ack *extack = tc->common.extack;
 #else
 	struct netlink_ext_ack *extack = NULL;
@@ -3520,7 +3525,7 @@ static int efx_tc_flower_destroy(struct efx_nic *efx,
 				 struct net_device *net_dev,
 				 struct flow_cls_offload *tc)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD) || defined(EFX_HAVE_TCF_EXTACK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TCB_EXTACK)
 	struct netlink_ext_ack *extack = tc->common.extack;
 #else
 	struct netlink_ext_ack *extack = NULL;
@@ -3624,7 +3629,7 @@ static int efx_tc_action_stats(struct efx_nic *efx,
 static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 			       struct tc_cls_flower_offload *tc)
 {
-#ifdef EFX_HAVE_TCF_EXTACK
+#ifdef EFX_HAVE_TCB_EXTACK
 	struct netlink_ext_ack *extack = tc->common.extack;
 #else
 	struct netlink_ext_ack *extack = NULL;
@@ -4040,9 +4045,9 @@ int efx_tc_configure_default_rule(struct efx_nic *efx,
 		if (!rep_dev)
 			return -EINVAL;
 		efv = netdev_priv(rep_dev);
-		/* VF -> VF rep (PF alias m-port) */
+		/* VF -> VF rep (PF) */
 		efx_mae_mport_vf(efx, vf_idx, &ing_port);
-		efx_mae_mport_mport(efx, efx->tc->reps_mport_id, &eg_port);
+		efx_mae_mport_uplink(efx, &eg_port);
 		break;
 	}
 	match->value.ingress_port = ing_port;
@@ -4694,47 +4699,28 @@ static int efx_tc_indr_setup_cb(struct net_device *net_dev, void *cb_priv,
 
 	switch (type) {
 	case TC_SETUP_BLOCK:
-		switch (tcb->command) {
-		case FLOW_BLOCK_BIND:
-			binding = efx_tc_create_binding(efx, NULL, net_dev, tcb->block);
-			if (IS_ERR(binding))
-				return PTR_ERR(binding);
-			block_cb = flow_indr_block_cb_alloc(efx_tc_block_cb, binding,
-							    binding, efx_tc_block_unbind,
+		binding = efx_tc_create_binding(efx, NULL, net_dev, tcb->block);
+		if (IS_ERR(binding))
+			return PTR_ERR(binding);
+		block_cb = flow_indr_block_cb_alloc(efx_tc_block_cb, binding,
+						    binding, efx_tc_block_unbind,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_INDR_QDISC)
-							    tcb, net_dev, sch, data, binding,
+						    tcb, net_dev, sch, data, binding,
 #else
-							    tcb, net_dev, data, binding,
+						    tcb, net_dev, data, binding,
 #endif
-							    cleanup);
-			rc = PTR_ERR_OR_ZERO(block_cb);
-			netif_dbg(efx, drv, efx->net_dev,
-				  "bind indr block for device %s, rc %d\n",
-				  net_dev ? net_dev->name : NULL, rc);
-			if (rc) {
-				list_del(&binding->list);
-				kfree(binding);
-			} else {
-				flow_block_cb_add(block_cb, tcb);
-			}
-			return rc;
-		case FLOW_BLOCK_UNBIND:
-			binding = efx_tc_find_binding(efx, net_dev);
-			if (!binding)
-				return -ENOENT;
-			block_cb = flow_block_cb_lookup(tcb->block,
-							efx_tc_block_cb,
-							binding);
-			if (!block_cb)
-				return -ENOENT;
-			flow_indr_block_cb_remove(block_cb, tcb);
-			netif_dbg(efx, drv, efx->net_dev,
-				  "unbind indr block for device %s\n",
-				  net_dev ? net_dev->name : NULL);
-			return 0;
-		default:
-			return -EOPNOTSUPP;
+						    cleanup);
+		rc = PTR_ERR_OR_ZERO(block_cb);
+		netif_dbg(efx, drv, efx->net_dev,
+			  "bind indr block for device %s, rc %d\n",
+			  net_dev ? net_dev->name : NULL, rc);
+		if (rc) {
+			list_del(&binding->list);
+			kfree(binding);
+		} else {
+			flow_block_cb_add(block_cb, tcb);
 		}
+		return rc;
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -4752,90 +4738,6 @@ static int efx_tc_indr_setup_cb(struct net_device *net_dev, void *cb_priv,
 }
 
 #endif
-
-static int efx_tc_configure_rep_mport(struct efx_nic *efx)
-{
-	struct efx_vport *rep_vport;
-	u32 rep_mport_label;
-	int rc;
-
-	rc = efx_mae_allocate_mport(efx, &efx->tc->reps_mport_id, &rep_mport_label);
-	if (rc)
-		return rc;
-	netif_dbg(efx, drv, efx->net_dev, "created rep mport 0x%08x (0x%04x)\n",
-		  efx->tc->reps_mport_id, rep_mport_label);
-	/* Fake up a vport ID mapping for filters */
-	mutex_lock(&efx->vport_lock);
-	rep_vport = efx_alloc_vport_entry(efx);
-	if (rep_vport)
-		/* Use mport *selector* as vport ID */
-		efx_mae_mport_mport(efx, efx->tc->reps_mport_id, &rep_vport->vport_id);
-	else
-		rc = -ENOMEM;
-	mutex_unlock(&efx->vport_lock);
-	if (rc)
-		return rc;
-	efx->tc->reps_mport_vport_id = rep_vport->user_id;
-	netif_dbg(efx, drv, efx->net_dev, "allocated rep vport 0x%04x\n",
-		  efx->tc->reps_mport_vport_id);
-	return 0;
-}
-
-static void efx_tc_deconfigure_rep_mport(struct efx_nic *efx)
-{
-	struct efx_vport *rep_vport;
-
-	mutex_lock(&efx->vport_lock);
-	rep_vport = efx_find_vport_entry(efx, efx->tc->reps_mport_vport_id);
-	if (!rep_vport)
-		goto out_unlock;
-	efx_free_vport_entry(rep_vport);
-	efx->tc->reps_mport_vport_id = 0;
-out_unlock:
-	mutex_unlock(&efx->vport_lock);
-	efx_mae_free_mport(efx, efx->tc->reps_mport_id);
-	efx->tc->reps_mport_id = MAE_MPORT_SELECTOR_NULL;
-}
-
-int efx_tc_insert_rep_filters(struct efx_nic *efx)
-{
-	struct efx_filter_spec promisc, allmulti;
-	int rc;
-
-	if (efx->type->is_vf)
-		return 0;
-	if (!efx->tc)
-		return 0;
-	efx_filter_init_rx(&promisc, EFX_FILTER_PRI_REQUIRED, 0, 0);
-	efx_filter_set_uc_def(&promisc);
-	efx_filter_set_vport_id(&promisc, efx->tc->reps_mport_vport_id);
-	rc = efx_filter_insert_filter(efx, &promisc, false);
-	if (rc < 0)
-		return rc;
-	efx->tc->reps_filter_uc = rc;
-	efx_filter_init_rx(&allmulti, EFX_FILTER_PRI_REQUIRED, 0, 0);
-	efx_filter_set_mc_def(&allmulti);
-	efx_filter_set_vport_id(&allmulti, efx->tc->reps_mport_vport_id);
-	rc = efx_filter_insert_filter(efx, &allmulti, false);
-	if (rc < 0)
-		return rc;
-	efx->tc->reps_filter_mc = rc;
-	return 0;
-}
-
-void efx_tc_remove_rep_filters(struct efx_nic *efx)
-{
-	if (efx->type->is_vf)
-		return;
-	if (!efx->tc)
-		return;
-	if (efx->tc->reps_filter_mc != (u32)-1)
-		efx_filter_remove_id_safe(efx, EFX_FILTER_PRI_REQUIRED, efx->tc->reps_filter_mc);
-	efx->tc->reps_filter_mc = -1;
-	if (efx->tc->reps_filter_uc != (u32)-1)
-		efx_filter_remove_id_safe(efx, EFX_FILTER_PRI_REQUIRED, efx->tc->reps_filter_uc);
-	efx->tc->reps_filter_uc = -1;
-}
 
 int efx_init_tc(struct efx_nic *efx)
 {
@@ -4860,9 +4762,6 @@ int efx_init_tc(struct efx_nic *efx)
 		return -EIO;
 	}
 #endif
-	rc = efx_tc_configure_rep_mport(efx);
-	if (rc)
-		return rc;
 	mutex_lock(&efx->tc->mutex);
 	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_PF);
 	if (rc)
@@ -4894,14 +4793,12 @@ void efx_fini_tc(struct efx_nic *efx)
 #ifdef CONFIG_SFC_DEBUGFS
 	efx_trim_debugfs_port(efx, efx_tc_debugfs);
 #endif
-	mutex_lock(&efx->tc->mutex);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
-	if (efx->tc->up)
-		flow_indr_dev_unregister(efx_tc_indr_setup_cb, efx, efx_tc_block_unbind);
+	flow_indr_dev_unregister(efx_tc_indr_setup_cb, efx, efx_tc_block_unbind);
 #endif
+	mutex_lock(&efx->tc->mutex);
 	for (i = 0; i < EFX_TC_DFLT__MAX; i++)
 		efx_tc_deconfigure_default_rule(efx, i);
-	efx_tc_deconfigure_rep_mport(efx);
 	efx->tc->up = false;
 	mutex_unlock(&efx->tc->mutex);
 }
@@ -5059,15 +4956,6 @@ static void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
 
 	if (rule->fw_id != MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL)
 		efx_tc_delete_rule(efx, rule);
-}
-
-int efx_tc_insert_rep_filters(struct efx_nic *efx)
-{
-	return 0;
-}
-
-void efx_tc_remove_rep_filters(struct efx_nic *efx)
-{
 }
 
 int efx_init_tc(struct efx_nic *efx)
