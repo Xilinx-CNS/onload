@@ -32,13 +32,20 @@ struct oo_sigstore {
 /*! Signal handlers storage.  Indexed by signum-1. */
 struct oo_sigstore sigstore[_NSIG];
 
-#if defined(__x86_64__) || defined(__i386__) || defined(__aarch64__)
+#if defined(__x86_64__) || defined(__aarch64__)
+#define SA_RESTORER 0x04000000
+#define USE_SA_RESTORER
+static void* oo_saved_restorer = NULL;
+#elif defined(__i386__)
+/* In theory i386 has SA_RESTORER.  But it is not used
+ * for dynamically-linked binaries; DSO is used instead.
+ * However we must remove SA_RESTORER flag when reusing user's flags with
+ * a different handler, so we need to know the value.
+ */
 #define SA_RESTORER 0x04000000
 #else
-#error Do not support any arch without SA_RESTORER yet
+#error Does this architecture use SA_RESTORER?
 #endif
-
-static void* oo_saved_restorer = NULL;
 
 
 static void citp_signal_intercept(int signum, siginfo_t *info, void *context);
@@ -293,14 +300,15 @@ int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
 /* Appease the Socket Tester, mimic glibc: report SA_RESTORER. */
 static void oo_fixup_oldact(int sig, struct sigaction *oldact)
 {
-  oldact->sa_flags |= 0x04000000;
+#ifdef USE_SA_RESTORER
+  oldact->sa_flags |= SA_RESTORER;
   if( oo_saved_restorer == NULL ) {
     struct sigaction s;
     ci_sys_sigaction(sig, NULL, &s);
     oo_saved_restorer = s.sa_restorer;
   }
   oldact->sa_restorer = oo_saved_restorer;
-
+#endif
 }
 
 
