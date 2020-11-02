@@ -32,6 +32,15 @@ struct oo_sigstore {
 /*! Signal handlers storage.  Indexed by signum-1. */
 struct oo_sigstore sigstore[_NSIG];
 
+#if defined(__x86_64__) || defined(__i386__) || defined(__aarch64__)
+#define SA_RESTORER 0x04000000
+#else
+#error Do not support any arch without SA_RESTORER yet
+#endif
+
+static void* oo_saved_restorer = NULL;
+
+
 static void citp_signal_intercept(int signum, siginfo_t *info, void *context);
 
 static void oo_get_sigaction(int sig, struct sigaction* sa)
@@ -106,7 +115,7 @@ citp_signal_run_app_handler(int sig, siginfo_t *info, void *context)
 
     memset(&sa, 0, sizeof(sa));
     sa.sa_handler = SIG_DFL;
-    sa.sa_flags = 0;
+    sa.sa_flags = act.sa_flags & ~(SA_RESTORER | SA_ONESHOT);
     sa.sa_mask = act.sa_mask;
     rc = oo_do_sigaction(sig, &sa, NULL);
     LOG_SIG(log("%s: SA_ONESHOT fixup", __func__));
@@ -281,11 +290,6 @@ int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
   return 0;
 }
 
-#if defined(__x86_64__) || defined(__i386__) || defined(__aarch64__)
-#define SA_RESTORER 0x04000000
-
-static void* oo_saved_restorer = NULL;
-
 /* Appease the Socket Tester, mimic glibc: report SA_RESTORER. */
 static void oo_fixup_oldact(int sig, struct sigaction *oldact)
 {
@@ -298,10 +302,6 @@ static void oo_fixup_oldact(int sig, struct sigaction *oldact)
   oldact->sa_restorer = oo_saved_restorer;
 
 }
-#else
-#define oo_fixup_oldact(sig, oldact)
-#define SA_RESTORER 0
-#endif
 
 
 bool oo_is_signal_intercepted(int sig, void* handler)
