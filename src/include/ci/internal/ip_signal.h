@@ -45,6 +45,17 @@ ci_inline citp_signal_info *citp_signal_get_specific_inited(void)
 
 extern int oo_do_sigaction(int sig, const struct sigaction *act,
                            struct sigaction *oldact);
+
+/* Signal initialization is performed in 2 stages:
+ * - install SIGONLOAD handler and find sa_restorer
+ *   oo_sigonload_init, called from citp_fdtable_ctor
+ *   CITP_INIT_FDTABLE;
+ * - intercept all terminating SIG_DFL, all early-called signal() calls,
+ *   all libc-protected signals such as SIGCANCEL
+ *   oo_init_signals(), the last init bit
+ *   CITP_INIT_SIGNALS
+ */
+extern int oo_sigonload_init(void* handler);
 extern int oo_init_signals(void);
 
 #endif  /* __CI_INTERNAL_IP_SIGNAL_H__ */

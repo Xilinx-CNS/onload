@@ -301,7 +301,6 @@ int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
   return 0;
 }
 
-
 oo_exit_hook_fn signal_exit_hook;
 
 static void oo_signal_terminate(int signum)
@@ -323,18 +322,13 @@ static void oo_signal_terminate_siginfo(int signum,
 
 
 /* Convert the sigaction from our store to what the user expects to see */
-static void oo_fixup_oldact(int sig, struct sigaction *oldact)
+static void oo_fixup_oldact(struct sigaction *oldact)
 {
   if( oldact->sa_handler == oo_signal_terminate ||
       oldact->sa_sigaction == oo_signal_terminate_siginfo )
     oldact->sa_handler = SIG_DFL;
 #ifdef USE_SA_RESTORER
   oldact->sa_flags |= SA_RESTORER;
-  if( oo_saved_restorer == NULL ) {
-    struct sigaction s;
-    ci_sys_sigaction(sig, NULL, &s);
-    oo_saved_restorer = s.sa_restorer;
-  }
   oldact->sa_restorer = oo_saved_restorer;
 #endif
 }
@@ -464,7 +458,7 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
     LOG_SIG(ci_log("%s(%d) read-only sa_handler=%p",
                    __func__, sig, oldact->sa_handler));
     if( oldact->sa_handler != SIG_DFL ) {
-      oo_fixup_oldact(sig, oldact);
+      oo_fixup_oldact(oldact);
       return 0;
     }
     return ci_sys_sigaction(sig, NULL, oldact);
@@ -499,7 +493,7 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
     if( rc < 0 )
       return rc;
     if( oldact )
-      oo_fixup_oldact(sig, oldact);
+      oo_fixup_oldact(oldact);
     return 0;
   }
 
@@ -525,10 +519,46 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
   }
   if( oldact != NULL ) {
     memcpy(oldact, &old, sizeof(old));
-    oo_fixup_oldact(sig, oldact);
+    oo_fixup_oldact(oldact);
   }
 
   return rc;
+}
+
+int oo_sigonload_init(void* handler)
+{
+  struct sigaction sa, oldsa;
+  int rc;
+
+  memset(&sa, 0, sizeof(sa));
+  sa.sa_flags = SA_SIGINFO;
+  sa.sa_sigaction = handler;
+  rc = oo_do_sigaction(SIGONLOAD, &sa, &oldsa);
+  ci_assert_equal(rc, 0);
+  if( rc < 0 ) {
+    ci_log("%s: ERROR: failed to install SIGONLOAD handler %s",
+           __func__, strerror(errno));
+    return rc;
+  }
+
+  ci_assert_equal(oldsa.sa_handler, SIG_DFL);
+  if( oldsa.sa_handler != SIG_DFL ) {
+    ci_log("ERROR: a signal handler for signal %d has been "
+           "overwritten by Onload!  "
+           "See SIGONLOAD definition in the Onload source code", SIGONLOAD);
+    errno = EBUSY;
+    return -1;
+  }
+
+#ifdef USE_SA_RESTORER
+  /* It is a good chance to find out the libc's sa_restorer. */
+  ci_sys_sigaction(SIGONLOAD, NULL, &sa);
+  ci_assert_flags(sa.sa_flags, SA_RESTORER);
+  oo_saved_restorer = sa.sa_restorer;
+  ci_assert(oo_saved_restorer);
+#endif
+
+  return 0;
 }
 
 /* Intercept all already-installed signals.

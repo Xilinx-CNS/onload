@@ -177,20 +177,9 @@ int citp_fdtable_ctor()
   }
 
   /* Install SIGONLOAD handler */
-  {
-    struct sigaction sa, oldsa;
-    memset(&sa, 0, sizeof(sa));
-    sa.sa_flags = SA_SIGINFO;
-    sa.sa_sigaction = sighandler_sigonload;
-    sigaction(SIGONLOAD, &sa, &oldsa);
-
-    ci_assert_equal(oldsa.sa_handler, SIG_DFL);
-    if( oldsa.sa_handler != SIG_DFL ) {
-      ci_log("ERROR: a signal handler for signal %d has been "
-             "overwritten by Onload!  "
-             "See SIGONLOAD definition in the Onload source code", SIGONLOAD);
-    }
-  }
+  rc = oo_sigonload_init(sighandler_sigonload);
+  if( rc < 0 )
+    return rc;
 
   return 0;
 }
