@@ -31,6 +31,7 @@ struct oo_sigstore {
   ci_uint32 seq;
 #define OO_SIGSTORE_BUSY        0x80000000
   struct sigaction act[2]; /* use act[seq&1] */
+  bool libc_safe; /* Does libc allow user to change handler? */
 };
 
 /*! Signal handlers storage.  Indexed by signum-1. */
@@ -301,6 +302,63 @@ int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
   return 0;
 }
 
+
+/* We'd like to intercept all signals including SIGCANCEL.
+ * Libc does not allow it, so we use a direct syscall.
+ * Infortunately we have to re-pack the sigaction structure.
+ */
+#define SA_MASK_WORDS (_NSIG / 8 / sizeof(unsigned long))
+struct kernel_sigaction {
+  __sighandler_t    k_handler;
+#if defined(__x86_64__) || defined(__i386__) || defined(__aarch64__)
+  unsigned long     k_flags;
+  void*             k_restorer;
+  unsigned long     k_mask[SA_MASK_WORDS];
+#else
+#error Please define kernel_sigaction for this architecture
+#endif
+};
+
+static int oo_syscall_sigaction(int sig, const struct sigaction* user_act,
+                                struct sigaction* user_oldact)
+{
+  struct kernel_sigaction act, oldact;
+  int rc;
+
+  if( user_act ) {
+    act.k_flags = user_act->sa_flags;
+    act.k_handler = user_act->sa_handler;
+    memcpy(&act.k_mask, &user_act->sa_mask, sizeof(act.k_mask));
+#ifdef USE_SA_RESTORER
+    act.k_restorer = oo_saved_restorer;
+    act.k_flags |= SA_RESTORER;
+#endif
+  }
+  rc = ci_sys_syscall(__NR_rt_sigaction, sig, user_act ? &act : NULL,
+                      user_oldact ? &oldact : NULL, _NSIG / 8);
+  if( user_oldact ) {
+    user_oldact->sa_flags = oldact.k_flags;
+    user_oldact->sa_handler = oldact.k_handler;
+    memcpy(&user_oldact->sa_mask, &oldact.k_mask, sizeof(oldact.k_mask));
+    user_oldact->sa_restorer = oldact.k_restorer;
+  }
+
+  return rc;
+}
+
+static int oo_libc_sigaction(int sig, const struct sigaction* user_act,
+                             struct sigaction* user_oldact)
+{
+  int rc = ci_sys_sigaction(sig, user_act, user_oldact);
+  if( rc != 0 )
+    return rc;
+
+  if( ! sigstore[sig - 1].libc_safe )
+    sigstore[sig - 1].libc_safe = true;
+  return 0;
+}
+
+
 oo_exit_hook_fn signal_exit_hook;
 
 static void oo_signal_terminate(int signum)
@@ -311,7 +369,7 @@ static void oo_signal_terminate(int signum)
   signal_exit_hook();
 
   /* Set SIGDFL and trigger it */
-  ci_sys_sigaction(signum, &act, NULL);
+  oo_syscall_sigaction(signum, &act, NULL);
   ci_sys_syscall(__NR_tgkill, getpid(), ci_sys_syscall(__NR_gettid), signum);
 }
 static void oo_signal_terminate_siginfo(int signum,
@@ -411,7 +469,7 @@ oo_signal_install_to_onload(int sig, const struct sigaction *act,
 
 static int
 oo_signal_install_to_os(int sig, const struct sigaction *act,
-                        struct sigaction *oldact)
+                        struct sigaction *oldact, bool from_app)
 {
   int rc;
   struct sigaction new;
@@ -424,10 +482,10 @@ oo_signal_install_to_os(int sig, const struct sigaction *act,
   LOG_SIG(ci_log("%s(%d): intercept with "OO_PRINT_SIGACTION_FMT,
                  __func__, sig, OO_PRINT_SIGACTION_ARG(&new)));
 
-  /* We want to intercept SIGCANCEL, so can't use libc's wrapper for the
-   * syscall.
-   */
-  rc = ci_sys_sigaction(sig, &new, oldact);
+  if( from_app )
+    rc = oo_libc_sigaction(sig, &new, oldact);
+  else
+    rc = oo_syscall_sigaction(sig, &new, oldact);
   LOG_SIG(ci_log("%s: rc=%d: signal %d intercept now "OO_PRINT_SIGACTION_FMT,
                  __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
   return rc;
@@ -461,12 +519,12 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
       oo_fixup_oldact(oldact);
       return 0;
     }
-    return ci_sys_sigaction(sig, NULL, oldact);
+    return oo_libc_sigaction(sig, NULL, oldact);
   }
 
   /* Are we going to intercept this signal? */
   if( ! oo_is_signal_intercepted(sig, act->sa_handler) ) {
-    rc = ci_sys_sigaction(sig, act, &old);
+    rc = oo_libc_sigaction(sig, act, &old);
     LOG_SIG(ci_log("%s: rc=%d: do not intercept signal %d "
                    OO_PRINT_SIGACTION_FMT,
                    __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
@@ -506,7 +564,7 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
    * install Onload handler to OS and pass oldact from OS to user.
    */
   if( old.sa_handler == SIG_DFL )
-    return oo_signal_install_to_os(sig, act, oldact);
+    return oo_signal_install_to_os(sig, act, oldact, true);
 
   /* We should call kernel's sigaction if:
    * - the signal was intercepted, but with different SA_* flags
@@ -515,8 +573,16 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
    */
   if( ((act->sa_flags ^ old.sa_flags) & ~SA_SIGINFO) != 0 ||
       memcmp(&act->sa_mask, &old.sa_mask, sizeof(old.sa_mask)) != 0 ) {
-    rc = oo_signal_install_to_os(sig, act, NULL);
+    rc = oo_signal_install_to_os(sig, act, NULL, true);
   }
+  else if( ! sigstore[sig - 1].libc_safe ) {
+    /* We did not call libc's sigaction on this path so far, so we should
+     * check whether the user tries to install a handler for SIGCANCEL and
+     * such.
+     */
+    rc = oo_libc_sigaction(sig, NULL, NULL);
+  }
+
   if( oldact != NULL ) {
     memcpy(oldact, &old, sizeof(old));
     oo_fixup_oldact(oldact);
@@ -552,7 +618,7 @@ int oo_sigonload_init(void* handler)
 
 #ifdef USE_SA_RESTORER
   /* It is a good chance to find out the libc's sa_restorer. */
-  ci_sys_sigaction(SIGONLOAD, NULL, &sa);
+  oo_syscall_sigaction(SIGONLOAD, NULL, &sa);
   ci_assert_flags(sa.sa_flags, SA_RESTORER);
   oo_saved_restorer = sa.sa_restorer;
   ci_assert(oo_saved_restorer);
@@ -585,7 +651,7 @@ int oo_init_signals(void)
 
     /* We do want to intercept SIGCANCEL.  It means we should not use
      * libc's wrapper around this syscall. */
-    rc = ci_sys_sigaction(sig, NULL, &act);
+    rc = oo_syscall_sigaction(sig, NULL, &act);
     if( rc < 0 )
       continue;
     if( ! oo_is_signal_intercepted(sig, act.sa_handler) )
@@ -597,7 +663,7 @@ int oo_init_signals(void)
     if( rc != 0 )
       continue;
 
-    rc = oo_signal_install_to_os(sig, &act, &oldact);
+    rc = oo_signal_install_to_os(sig, &act, &oldact, false);
     ci_assert_equal(rc, 0);
     if( rc < 0 )
       continue;
