@@ -601,7 +601,7 @@ citp_transport_init(void)
     citp_usec_to_cycles64(CITP_OPTS.ul_select_nonblock_fast_usec);
   citp.select_fast_cycles = 
     citp_usec_to_cycles64(CITP_OPTS.ul_select_fast_usec);
-  ci_tp_init(__oo_per_thread_init_thread);
+  ci_tp_init(__oo_per_thread_init_thread, oo_exit_hook);
 
   citp_update_and_crosscheck(&ci_cfg_opts.netif_opts, &CITP_OPTS);
   return 0;

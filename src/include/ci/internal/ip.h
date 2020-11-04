@@ -925,7 +925,6 @@ extern void ci_ip_cmsg_finish(struct cmsg_state* cmsg_state) CI_HF;
 
 #ifndef __KERNEL__
 
-/* extern int ci_tp_init(void); */
 extern ci_fd_t ci_udp_ep_ctor(citp_socket* ep, ci_netif* sh,
                               int domain, int type) CI_HF;
 extern int ci_udp_bind_start(citp_socket* ep, ci_fd_t fd,
@@ -1936,7 +1935,9 @@ ci_setsockopt_os_fail_ignore(ci_netif* ni, ci_sock_cmn* s, int err,
 
 struct oo_per_thread;
 typedef void (*citp_init_thread_callback)(struct oo_per_thread*);
-extern int ci_tp_init(citp_init_thread_callback cb) CI_HF;
+typedef void (*oo_exit_hook_fn)(void);
+extern int ci_tp_init(citp_init_thread_callback cb,
+                      oo_exit_hook_fn exit_hook) CI_HF;
 extern int ci_tcp_bind(citp_socket* ep, const struct sockaddr* my_addr,
                        socklen_t addrlen, ci_fd_t fd) CI_HF;
 #if CI_CFG_ENDPOINT_MOVE

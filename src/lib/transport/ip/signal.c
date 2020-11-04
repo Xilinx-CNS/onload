@@ -23,6 +23,10 @@
 #error "Non-kernel file"
 #endif
 
+#if ! CI_CFG_USERSPACE_SYSCALL
+#define ci_sys_syscall syscall
+#endif
+
 struct oo_sigstore {
   ci_uint32 seq;
 #define OO_SIGSTORE_BUSY        0x80000000
@@ -297,9 +301,33 @@ int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
   return 0;
 }
 
-/* Appease the Socket Tester, mimic glibc: report SA_RESTORER. */
+
+oo_exit_hook_fn signal_exit_hook;
+
+static void oo_signal_terminate(int signum)
+{
+  struct sigaction act = { };
+
+  LOG_SIG(ci_log("%s(%d)", __func__, signum));
+  signal_exit_hook();
+
+  /* Set SIGDFL and trigger it */
+  ci_sys_sigaction(signum, &act, NULL);
+  ci_sys_syscall(__NR_tgkill, getpid(), ci_sys_syscall(__NR_gettid), signum);
+}
+static void oo_signal_terminate_siginfo(int signum,
+                                        siginfo_t *info, void *context)
+{
+  oo_signal_terminate(signum);
+}
+
+
+/* Convert the sigaction from our store to what the user expects to see */
 static void oo_fixup_oldact(int sig, struct sigaction *oldact)
 {
+  if( oldact->sa_handler == oo_signal_terminate ||
+      oldact->sa_sigaction == oo_signal_terminate_siginfo )
+    oldact->sa_handler = SIG_DFL;
 #ifdef USE_SA_RESTORER
   oldact->sa_flags |= SA_RESTORER;
   if( oo_saved_restorer == NULL ) {
@@ -321,7 +349,25 @@ bool oo_is_signal_intercepted(int sig, void* handler)
   if( handler != SIG_DFL )
     return true;
 
-  /* We'll intercept termonating SIG_DFL in the next patches */
+  switch( sig ) {
+    /* For deadly SIG_DFL we install our handler.
+     * "man 7 signal" provides the following list of signals which
+     * terminate a process when SIG_DFL is installed.
+     * SIGKILL is removed from the list because it can't be intercepted.
+     */
+    case SIGHUP:
+    case SIGPIPE:
+    case SIGALRM:
+    case SIGTERM:
+    case SIGUSR1:
+    case SIGUSR2:
+    case SIGPOLL:
+    case SIGPROF:
+    case SIGVTALRM:
+    case SIGSTKFLT:
+    case SIGPWR:
+      return true;
+  }
   return false;
 }
 
@@ -330,6 +376,7 @@ oo_signal_install_to_onload(int sig, const struct sigaction *act,
                             struct sigaction *oldact)
 {
   struct oo_sigstore* store = &sigstore[sig - 1];
+  struct sigaction* new_store;
   ci_uint32 seq;
   int rc;
 
@@ -340,13 +387,29 @@ oo_signal_install_to_onload(int sig, const struct sigaction *act,
   }
   LOG_SIG(ci_log("%s(%d): new handler %p seq %x",
                  __func__, sig, act ? act->sa_handler : (void*)-1, seq));
+  new_store = &store->act[! (seq & 1)];
 
   if( oldact != NULL )
     memcpy(oldact, &store->act[seq & 1], sizeof(*oldact));
-  if( act != NULL )
-    memcpy(&store->act[! (seq & 1)], act, sizeof(*act));
-  else
-    store->act[! (seq & 1) ].sa_handler = SIG_DFL;
+  if( act != NULL ) {
+    memcpy(new_store, act, sizeof(*act));
+    if( act->sa_handler == SIG_DFL ) {
+      /* We'd like to preserve SA_SIGINFO flag which user is possibly
+       * using.
+       */
+      if( new_store->sa_flags & SA_SIGINFO )
+        new_store->sa_sigaction = oo_signal_terminate_siginfo;
+      else
+        new_store->sa_handler = oo_signal_terminate;
+    }
+  }
+  else {
+    /* Non-intercepted signal */
+    new_store->sa_handler = SIG_DFL;
+  }
+
+  LOG_SIG(ci_log("%s(%d): new seq %x "OO_PRINT_SIGACTION_FMT,
+                 __func__, sig, seq + 1, OO_PRINT_SIGACTION_ARG(new_store)));
   oo_signal_write_unlock(sig, seq);
 
   return 0;
@@ -354,7 +417,7 @@ oo_signal_install_to_onload(int sig, const struct sigaction *act,
 
 static int
 oo_signal_install_to_os(int sig, const struct sigaction *act,
-                        void* oo_handler, struct sigaction *oldact)
+                        struct sigaction *oldact)
 {
   int rc;
   struct sigaction new;
@@ -362,7 +425,7 @@ oo_signal_install_to_os(int sig, const struct sigaction *act,
   ci_assert(act);
 
   new.sa_flags = (act->sa_flags | SA_SIGINFO) & ~(SA_RESETHAND | SA_RESTORER);
-  new.sa_sigaction = oo_handler;
+  new.sa_sigaction = citp_signal_intercept;
   new.sa_mask = act->sa_mask;
   LOG_SIG(ci_log("%s(%d): intercept with "OO_PRINT_SIGACTION_FMT,
                  __func__, sig, OO_PRINT_SIGACTION_ARG(&new)));
@@ -388,7 +451,7 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
   struct sigaction old;
   int rc = 0;
 
-  if( sig < 0 || sig >= _NSIG ) {
+  if( sig <= 0 || sig > _NSIG ) {
     errno = EINVAL;
     return -1;
   }
@@ -449,7 +512,7 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
    * install Onload handler to OS and pass oldact from OS to user.
    */
   if( old.sa_handler == SIG_DFL )
-    return oo_signal_install_to_os(sig, act, citp_signal_intercept, oldact);
+    return oo_signal_install_to_os(sig, act, oldact);
 
   /* We should call kernel's sigaction if:
    * - the signal was intercepted, but with different SA_* flags
@@ -458,7 +521,7 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
    */
   if( ((act->sa_flags ^ old.sa_flags) & ~SA_SIGINFO) != 0 ||
       memcmp(&act->sa_mask, &old.sa_mask, sizeof(old.sa_mask)) != 0 ) {
-    rc = oo_signal_install_to_os(sig, act, citp_signal_intercept, NULL);
+    rc = oo_signal_install_to_os(sig, act, NULL);
   }
   if( oldact != NULL ) {
     memcpy(oldact, &old, sizeof(old));

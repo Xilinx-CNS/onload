@@ -22,7 +22,7 @@ unsigned ci_tp_log = CI_TP_LOG_DEFAULT;
 unsigned ci_tp_max_dump = 80;
 
 
-int ci_tp_init(citp_init_thread_callback cb)
+int ci_tp_init(citp_init_thread_callback cb, oo_exit_hook_fn hook)
 {
   const char* s;
 
@@ -38,6 +38,8 @@ int ci_tp_init(citp_init_thread_callback cb)
 
   init_thread_callback = cb;
   oo_per_thread_init();
+
+  signal_exit_hook = hook;
 
   return 0;
 }
