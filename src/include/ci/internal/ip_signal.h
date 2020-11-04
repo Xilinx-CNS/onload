@@ -45,6 +45,7 @@ ci_inline citp_signal_info *citp_signal_get_specific_inited(void)
 
 extern int oo_do_sigaction(int sig, const struct sigaction *act,
                            struct sigaction *oldact);
+extern int oo_init_signals(void);
 
 #endif  /* __CI_INTERNAL_IP_SIGNAL_H__ */
 /*! \cidoxg_end */

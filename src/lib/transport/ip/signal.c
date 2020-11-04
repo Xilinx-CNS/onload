@@ -530,3 +530,56 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
 
   return rc;
 }
+
+/* Intercept all already-installed signals.
+ * It may be needed for:
+ * - sigaction() called before Onload reached CITP_INIT_ALL;
+ * - glibc calls __sigaction(), for example for SIGCANCEL.
+ */
+int oo_init_signals(void)
+{
+  struct sigaction act, oldact;
+  int sig;
+  int rc;
+
+  LOG_SIG(ci_log("%s()", __func__));
+  for( sig = 1; sig < NSIG; sig++) {
+    /* SIGKILL can't be intercepted;
+     * non-zero sequence number means that we've already been intercepted.
+     *
+     * Now we are interested in signals which possibly installed their
+     * handler in a stealthy way.
+     */
+    if( sig == SIGKILL || sigstore[sig - 1].seq != 0 )
+      continue;
+
+    /* We do want to intercept SIGCANCEL.  It means we should not use
+     * libc's wrapper around this syscall. */
+    rc = ci_sys_sigaction(sig, NULL, &act);
+    if( rc < 0 )
+      continue;
+    if( ! oo_is_signal_intercepted(sig, act.sa_handler) )
+      continue;
+
+    /* Intercept! */
+    rc = oo_signal_install_to_onload(sig, &act, NULL);
+    ci_assert_equal(rc, 0);
+    if( rc != 0 )
+      continue;
+
+    rc = oo_signal_install_to_os(sig, &act, &oldact);
+    ci_assert_equal(rc, 0);
+    if( rc < 0 )
+      continue;
+
+    /* Re-check that act == oldact, and install the new signal handler in
+     * case of the race.
+     */
+    if( memcmp(&act, &oldact, sizeof(act)) == 0 )
+      continue;
+
+    rc = oo_signal_install_to_onload(sig, &oldact, NULL);
+    ci_assert_equal(rc, 0);
+  }
+  return 0;
+}

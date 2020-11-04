@@ -34,3 +34,6 @@ STARTUP_ITEM(CITP_INIT_NETIF, citp_netif_init_ctor)
 /* handle TCP and UDP protocols: now we are going to properly handle all
  * the intercepted functions. */
 STARTUP_ITEM(CITP_INIT_PROTO, citp_transport_register)
+
+/* Intercept signals which may have been installed in earlier init stages */
+STARTUP_ITEM(CITP_INIT_SIGNALS, oo_init_signals)

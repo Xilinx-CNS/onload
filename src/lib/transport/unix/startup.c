@@ -74,7 +74,7 @@ static void __oo_per_thread_init_thread(struct oo_per_thread* pt)
   /* It's possible that we got here because we're not initialised at all! */
   if( citp.init_level < CITP_INIT_SYSCALLS ) {
     if( _citp_do_init_inprogress == 0 )
-      citp_do_init(CITP_INIT_ALL);
+      citp_do_init(CITP_INIT_MAX);
     else
       citp_do_init(CITP_INIT_SYSCALLS);
   }
@@ -646,7 +646,7 @@ int citp_do_init(int max_init_level)
     _citp_do_init_inprogress++;
 
     for (level = citp.init_level;
-         level < CI_MIN(max_init_level, CITP_INIT_ALL);
+         level < CI_MIN(max_init_level, CITP_INIT_MAX);
          level++) {
       rc = cipt_init_funcs[level]();
       if (rc < 0)
@@ -670,7 +670,7 @@ void _init(void)
              "but the current value is %u",
              CI_PAGE_SIZE, getpagesize()));
   /* must not do any logging yet... */
-  if( citp_do_init(CITP_INIT_ALL) < 0 )
+  if( citp_do_init(CITP_INIT_MAX) < 0 )
     ci_fail(("EtherFabric transport library: failed to initialise (%d)",
              citp.init_level));
 

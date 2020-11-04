@@ -687,7 +687,7 @@ citp_fdtable_lookup(unsigned fd)
 
   if (citp.init_level < CITP_INIT_FDTABLE) {
     if (_citp_do_init_inprogress == 0)
-      CI_TRY(citp_do_init(CITP_INIT_ALL));
+      CI_TRY(citp_do_init(CITP_INIT_MAX));
     else
       CI_TRY(citp_do_init(CITP_INIT_FDTABLE)); /* get what we need */
   }
@@ -777,7 +777,7 @@ citp_fdtable_lookup_fast(citp_lib_context_t* ctx, unsigned fd)
 
   if( citp.init_level < CITP_INIT_FDTABLE ) {
     if( _citp_do_init_inprogress == 0 )
-      CI_TRY(citp_do_init(CITP_INIT_ALL));
+      CI_TRY(citp_do_init(CITP_INIT_MAX));
     else
       CI_TRY(citp_do_init(CITP_INIT_FDTABLE)); /* get what we need */
   }
@@ -809,7 +809,7 @@ citp_fdinfo* citp_fdtable_lookup_noprobe(unsigned fd, int fdt_locked)
   */
   if( CI_UNLIKELY(citp.init_level < CITP_INIT_FDTABLE) ) {
     if (_citp_do_init_inprogress == 0)
-      CI_TRY(citp_do_init(CITP_INIT_ALL));
+      CI_TRY(citp_do_init(CITP_INIT_MAX));
     else
       CI_TRY(citp_do_init(CITP_INIT_FDTABLE)); /* get what we need */
 

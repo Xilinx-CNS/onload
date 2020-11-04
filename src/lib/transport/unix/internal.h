@@ -71,7 +71,12 @@ typedef struct {
 #include "startup_order.h"
 #undef STARTUP_ITEM
   } init_level;
+/* CITP_INIT_ALL means that Onload library os ready to serve any
+ * application request.
+ * CITP_INIT_MAX may contains some post-init actions.
+ */
 #define CITP_INIT_ALL   CITP_INIT_PROTO
+#define CITP_INIT_MAX   CITP_INIT_SIGNALS
 
   char			process_path[128];
   char*			process_name;
