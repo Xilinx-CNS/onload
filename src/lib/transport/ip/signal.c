@@ -32,15 +32,15 @@ struct oo_sigstore {
 /*! Signal handlers storage.  Indexed by signum-1. */
 struct oo_sigstore sigstore[_NSIG];
 
-#if defined(__x86_64__) || defined(__aarch64__)
+#if defined(__x86_64__)
 #define SA_RESTORER 0x04000000
 #define USE_SA_RESTORER
 static void* oo_saved_restorer = NULL;
-#elif defined(__i386__)
-/* In theory i386 has SA_RESTORER.  But it is not used
- * for dynamically-linked binaries; DSO is used instead.
- * However we must remove SA_RESTORER flag when reusing user's flags with
- * a different handler, so we need to know the value.
+#elif defined(__i386__) || defined(__aarch64__)
+/* In theory i386 & aarch64 have SA_RESTORER.  But it is not used for
+ * dynamically-linked binaries; DSO is used instead.  However we must
+ * remove SA_RESTORER flag when reusing user's flags with a different
+ * handler, so we need to know the value.
  */
 #define SA_RESTORER 0x04000000
 #else
