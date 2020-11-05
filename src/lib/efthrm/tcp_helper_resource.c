@@ -7474,7 +7474,7 @@ tcp_helper_unlock_prime(tcp_helper_resource_t* thr)
  *
  *--------------------------------------------------------------------*/
 
-unsigned
+ci_uint64
 efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
                                     int in_dl_context)
 {

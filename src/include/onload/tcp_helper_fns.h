@@ -83,9 +83,9 @@ extern void tcp_helper_rm_dump(oo_fd_flags fd_flags, oo_sp sock_id,
                      (priv)->thr, line_prefix)
 #endif
 
-extern unsigned efab_tcp_helper_netif_lock_callback(eplock_helper_t*,
-                                                    ci_uint64 lock_val,
-                                                    int in_dl_context);
+extern ci_uint64 efab_tcp_helper_netif_lock_callback(eplock_helper_t*,
+                                                     ci_uint64 lock_val,
+                                                     int in_dl_context);
 
 extern int efab_ioctl_get_ep(ci_private_t*, oo_sp,
                              tcp_helper_endpoint_t** ep_out);
