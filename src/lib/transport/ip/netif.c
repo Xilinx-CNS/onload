@@ -1006,13 +1006,6 @@ void ci_netif_merge_atomic_counters(ci_netif* ni)
 #undef merge
 }
 
-#ifdef __KERNEL__
-#define KERNEL_DL_CONTEXT_DECL , int in_dl_context
-#define KERNEL_DL_CONTEXT , in_dl_context
-#else
-#define KERNEL_DL_CONTEXT_DECL
-#define KERNEL_DL_CONTEXT
-#endif
 
 #if CI_CFG_UL_INTERRUPT_HELPER
 static
@@ -1164,9 +1157,9 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
 
 
 #ifdef __KERNEL__
-static void ci_netif_unlock_slow(ci_netif* ni, int in_dl_context)
+static void ci_netif_unlock_slow(ci_netif* ni)
 {
-  efab_eplock_unlock_and_wake(ni, in_dl_context);
+  efab_eplock_unlock_and_wake(ni, 0 /* in_dl_context */);
 }
 #else
 static void ci_netif_unlock_slow(ci_netif* ni)
@@ -1186,6 +1179,8 @@ static void ci_netif_unlock_slow(ci_netif* ni)
     all_handled_flags |= CI_EPLOCK_NETIF_NEED_PRIME;
 
   ci_assert(ci_netif_is_locked(ni));  /* double unlock? */
+
+  CITP_STATS_NETIF_INC(ni, unlock_slow);
 
   do {
     l = ni->state->lock.lock;
@@ -1250,9 +1245,7 @@ static void ci_netif_unlock_slow(ci_netif* ni)
 void ci_netif_unlock(ci_netif* ni)
 {
 #ifdef __KERNEL__
-  int in_dl_context = ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT;
-
-  ni->flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
+  ci_assert_nflags(ni->flags, CI_NETIF_FLAG_IN_DL_CONTEXT);
 #elif ! defined(NDEBUG)
   int saved_errno = errno;
 #endif
@@ -1263,8 +1256,7 @@ void ci_netif_unlock(ci_netif* ni)
                 ci_cas64u_succeed(&ni->state->lock.lock,
                                   CI_EPLOCK_LOCKED, CI_EPLOCK_UNLOCKED) ))
     return;
-  CITP_STATS_NETIF_INC(ni, unlock_slow);
-  ci_netif_unlock_slow(ni KERNEL_DL_CONTEXT);
+  ci_netif_unlock_slow(ni);
 
 #ifndef __KERNEL__
   /*  Unlock hooks must not change errno! */

@@ -239,6 +239,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
        * defer work and locks to workitem.
        */
       if( in_dl_context ) {
+        trs->netif.flags |= CI_NETIF_FLAG_IN_DL_CONTEXT;
         OO_DEBUG_TCPH(ci_log("%s: [%u] defer CLOSE_ENDPOINT to workitem",
                              __FUNCTION__, trs->id));
         tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_CLOSE_ENDPOINTS);
@@ -247,7 +248,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
       OO_DEBUG_TCPH(ci_log("%s: [%u] CLOSE_ENDPOINT now",
                            __FUNCTION__, trs->id));
       tcp_helper_close_pending_endpoints(trs);
-      ci_netif_unlock(&trs->netif);
+      efab_eplock_unlock_and_wake(ni, in_dl_context);
     }
     else {
       /* Untrusted lock holder now responsible for invoking non-atomic work. */
@@ -279,9 +280,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
       }
 #endif
 
-      if( in_dl_context )
-        ni->flags |= CI_NETIF_FLAG_IN_DL_CONTEXT;
-      ci_netif_unlock(&trs->netif);
+      efab_eplock_unlock_and_wake(ni, in_dl_context);
     }
     else {
       /* Untrusted lock holder now responsible for invoking work. */
@@ -312,9 +311,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
   ci_assert(sl_flags != 0);
   if( ci_cas32_succeed(&trs->trusted_lock, l, OO_TRUSTED_LOCK_LOCKED) &&
       ef_eplock_trylock_and_set_flags(&trs->netif.state->lock, sl_flags) ) {
-    if( in_dl_context )
-      ni->flags |= CI_NETIF_FLAG_IN_DL_CONTEXT;
-    ci_netif_unlock(&trs->netif);
+    efab_eplock_unlock_and_wake(ni, in_dl_context);
   }
   goto again;
 }
@@ -392,7 +389,9 @@ void
 efab_tcp_helper_netif_unlock(tcp_helper_resource_t* trs, int in_dl_context)
 {
   ci_assert_equiv(in_dl_context, trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT);
-  ci_netif_unlock(&trs->netif);
+  if( in_dl_context )
+    trs->netif.flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
+  efab_eplock_unlock_and_wake(&trs->netif, in_dl_context);
   oo_trusted_lock_drop(trs, in_dl_context);
 }
 
@@ -3041,7 +3040,7 @@ static void tcp_helper_do_non_atomic(struct work_struct *data)
     efab_tcp_helper_netif_unlock(trs, 0);
   }
   else if( need_unlock_shared )
-    ci_netif_unlock(&trs->netif);
+    efab_eplock_unlock_and_wake(&trs->netif, 0);
 }
 
 
@@ -5405,7 +5404,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
 #if CI_CFG_DESTROY_WEDGED
   if( ! (netif->flags & CI_NETIF_FLAG_WEDGED) )
 #endif
-    ci_netif_unlock(&trs->netif);
+    efab_eplock_unlock_and_wake(netif, 0 /* in_dl_context */);
 
 
   /* Don't need atomics here, because only we are permitted to touch

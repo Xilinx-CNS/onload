@@ -91,10 +91,12 @@ efab_eplock_unlock_and_wake(ci_netif *ni, int in_dl_context)
 {
   ci_uint64 l = ni->state->lock.lock;
 
-  /* We use in_dl_context from now on, and we should remove
-   * CI_NETIF_FLAG_IN_DL_CONTEXT under the stack lock. */
-  if( in_dl_context )
-    ni->flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
+  /* CI_NETIF_FLAG_IN_DL_CONTEXT is only set between
+   * efab_tcp_helper_netif_try_lock/unlock and within
+   * efab_tcp_helper_netif_lock_callback
+   */
+  ci_assert_nflags(ni->flags, CI_NETIF_FLAG_IN_DL_CONTEXT);
+  CITP_STATS_NETIF_INC(ni, unlock_slow);
 
  again:
 
