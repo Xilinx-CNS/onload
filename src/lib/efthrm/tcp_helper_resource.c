@@ -7603,26 +7603,16 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     }
 #endif
 
-    /* CI_EPLOCK_NETIF_CLOSE_ENDPOINT must be the last flag handled, because
-     * it can cause us to take an early exit from the function. */
-    ci_assert_nflags(flags_set & ~all_after_unlock_flags,
-                     ~CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
-
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     if( flags_set & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
       if( oo_trusted_lock_lock_or_set_flags(thr,
                                             OO_TRUSTED_LOCK_CLOSE_ENDPOINT) ) {
+        /* in dl context we always have trusted lock so
+         * the flag has just got passed to the trusted lock */
+        ci_assert(! in_dl_context);
         /* We've got both locks.  If in non-atomic context, do the work,
          * else defer work and locks to workitem.
          */
-        if( in_dl_context ) {
-          OO_DEBUG_TCPH(ci_log("%s: [%u] defer CLOSE_ENDPOINT to workitem",
-                               __FUNCTION__, thr->id));
-          if( after_unlock_flags )
-            ef_eplock_holder_set_flags(&ni->state->lock, after_unlock_flags);
-          tcp_helper_defer_dl2work(thr, OO_THR_AFLAG_CLOSE_ENDPOINTS);
-          return 0;
-        }
         OO_DEBUG_TCPH(ci_log("%s: [%u] CLOSE_ENDPOINT now",
                              __FUNCTION__, thr->id));
         tcp_helper_close_pending_endpoints(thr);
@@ -7634,8 +7624,12 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
         OO_DEBUG_TCPH(ci_log("%s: [%u] defer CLOSE_ENDPOINT to trusted lock",
                              __FUNCTION__, thr->id));
       }
+      flags_set &=~ CI_EPLOCK_NETIF_CLOSE_ENDPOINT;
     }
 #endif
+
+    /* we have handled all the flags */
+    ci_assert_equal(flags_set, all_after_unlock_flags);
 
     /* We can free some packets while closing endpoints, etc.  Check this
      * condition again, but do it only once. */
