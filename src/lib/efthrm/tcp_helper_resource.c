@@ -203,6 +203,27 @@ oo_trusted_lock_try_lock(tcp_helper_resource_t* trs)
 }
 
 
+/* Returns true if flags were set, or false if the lock was not locked.
+ * NB. We ignore flags if AWAITING_FREE.
+ */
+static int
+oo_trusted_lock_set_flags_if_locked(tcp_helper_resource_t* trs, unsigned flags)
+{
+  unsigned l;
+
+  do {
+    l = trs->trusted_lock;
+    if( ! (l & OO_TRUSTED_LOCK_LOCKED) )
+      return 0;
+    if( l & OO_TRUSTED_LOCK_AWAITING_FREE )
+      /* We must not set flags when AWAITING_FREE. */
+      return 1;
+  } while( ci_cas32_fail(&trs->trusted_lock, l, l | flags) );
+
+  return 1;
+}
+
+
 /* returns 0 if unlocked,
  *         1 if unlock has been deferred
  * If has_shared is set both locks would get deferred.
@@ -247,14 +268,19 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
     if( has_shared ||
         ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
                                    CI_EPLOCK_NETIF_CLOSE_ENDPOINT) ) {
+      /* let's reset the shared lock flag to avoid flag ping pong */
+      ef_eplock_clear_flags(&trs->netif.state->lock, CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
+
       /* We've got both locks.  If in non-dl context, do the work, else
        * defer work and locks to workitem.
        */
       if( in_dl_context ) {
+        /* the flag needs to be reinstated for atomic work to undertake the work */
+        oo_trusted_lock_set_flags_if_locked(trs, OO_TRUSTED_LOCK_CLOSE_ENDPOINT);
         trs->netif.flags |= CI_NETIF_FLAG_IN_DL_CONTEXT;
         OO_DEBUG_TCPH(ci_log("%s: [%u] defer CLOSE_ENDPOINT to workitem",
                              __FUNCTION__, trs->id));
-        tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_CLOSE_ENDPOINTS);
+        tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_UNLOCK_TRUSTED);
         return 1;
       }
       OO_DEBUG_TCPH(ci_log("%s: [%u] CLOSE_ENDPOINT now",
@@ -331,27 +357,6 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
       efab_eplock_unlock_and_wake(ni, in_dl_context);
   }
   goto again;
-}
-
-
-/* Returns true if flags were set, or false if the lock was not locked.
- * NB. We ignore flags if AWAITING_FREE.
- */
-static int
-oo_trusted_lock_set_flags_if_locked(tcp_helper_resource_t* trs, unsigned flags)
-{
-  unsigned l;
-
-  do {
-    l = trs->trusted_lock;
-    if( ! (l & OO_TRUSTED_LOCK_LOCKED) )
-      return 0;
-    if( l & OO_TRUSTED_LOCK_AWAITING_FREE )
-      /* We must not set flags when AWAITING_FREE. */
-      return 1;
-  } while( ci_cas32_fail(&trs->trusted_lock, l, l | flags) );
-
-  return 1;
 }
 
 
@@ -3052,11 +3057,6 @@ static void tcp_helper_do_non_atomic(struct work_struct *data)
         tcp_helper_request_wakeup(trs);
         CITP_STATS_NETIF_INC(&trs->netif, interrupt_primes);
       }
-    }
-    if( trs_aflags & OO_THR_AFLAG_CLOSE_ENDPOINTS ) {
-      OO_DEBUG_TCPH(ci_log("%s: [%u] deferred CLOSE_ENDPOINTS",
-                           __FUNCTION__, trs->id));
-      tcp_helper_close_pending_endpoints(trs);
     }
 
     efab_tcp_helper_netif_unlock(trs, 0);

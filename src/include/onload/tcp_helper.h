@@ -277,8 +277,6 @@ typedef struct tcp_helper_resource_s {
    * is in action, the field might be used from 2 contexts 
    * simultaneously. */
   volatile ci_uint32    trs_aflags;
-  /* We've deferred locks to non-atomic handler.  Must close endpoints. */
-# define OO_THR_AFLAG_CLOSE_ENDPOINTS     0x1
   /* We've deferred locks to non-atomic handler.  Must poll and prime. */
 # define OO_THR_AFLAG_POLL_AND_PRIME      0x2
   /* We've deferred locks to non-atomic handler.  Must unlock only. */
