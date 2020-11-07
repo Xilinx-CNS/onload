@@ -203,8 +203,13 @@ oo_trusted_lock_try_lock(tcp_helper_resource_t* trs)
 }
 
 
-static void
-oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
+/* returns 0 if unlocked,
+ *         1 if unlock has been deferred
+ * If has_shared is set both locks would get deferred.
+ */
+static int
+oo_trusted_lock_drop(tcp_helper_resource_t* trs,
+                     int in_dl_context, int has_shared)
 {
   unsigned l;
   ci_uint64 sl_flags;
@@ -217,15 +222,20 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
   if(CI_UNLIKELY( l & OO_TRUSTED_LOCK_AWAITING_FREE )) {
     /* We may be called from the stack workqueue, so postpone destruction
      * to the point where wq may be flushed */
+    /* rm_free_locked expects trusted lock only
+     * it is OK to defer shared lock to stack wq as rm free work
+     * is run from global wq and flushes stack wq */
+    if( has_shared )
+      tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_UNLOCK_UNTRUSTED);
     efab_tcp_helper_rm_schedule_free(trs);
-    return;
+    return 1;
   }
 
   if( l == OO_TRUSTED_LOCK_LOCKED ) {
     if( ci_cas32_fail(&trs->trusted_lock, l, OO_TRUSTED_LOCK_UNLOCKED) ) {
       goto again;
     }
-    return;
+    return 0;
   }
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
@@ -233,7 +243,9 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
     unsigned new_l = l & ~OO_TRUSTED_LOCK_CLOSE_ENDPOINT;
     if( ci_cas32_fail(&trs->trusted_lock, l, new_l) )
       goto again;
-    if( ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
+
+    if( has_shared ||
+        ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
                                    CI_EPLOCK_NETIF_CLOSE_ENDPOINT) ) {
       /* We've got both locks.  If in non-dl context, do the work, else
        * defer work and locks to workitem.
@@ -243,12 +255,13 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
         OO_DEBUG_TCPH(ci_log("%s: [%u] defer CLOSE_ENDPOINT to workitem",
                              __FUNCTION__, trs->id));
         tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_CLOSE_ENDPOINTS);
-        return;
+        return 1;
       }
       OO_DEBUG_TCPH(ci_log("%s: [%u] CLOSE_ENDPOINT now",
                            __FUNCTION__, trs->id));
       tcp_helper_close_pending_endpoints(trs);
-      efab_eplock_unlock_and_wake(ni, in_dl_context);
+      if( ! has_shared )
+        efab_eplock_unlock_and_wake(ni, in_dl_context);
     }
     else {
       /* Untrusted lock holder now responsible for invoking non-atomic work. */
@@ -265,7 +278,8 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
     unsigned new_l = l & ~OO_TRUSTED_LOCK_OS_READY;
     if( ci_cas32_fail(&trs->trusted_lock, l, new_l) )
       goto again;
-    if( ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
+    if( has_shared ||
+       ef_eplock_lock_or_set_flag(&trs->netif.state->lock,
                                    CI_EPLOCK_NETIF_NEED_WAKE) ) {
       /* We've got both locks, do the work now. */
       OO_DEBUG_TCPH(ci_log("%s: [%u] OS READY now",
@@ -280,7 +294,8 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
       }
 #endif
 
-      efab_eplock_unlock_and_wake(ni, in_dl_context);
+      if( ! has_shared )
+        efab_eplock_unlock_and_wake(ni, in_dl_context);
     }
     else {
       /* Untrusted lock holder now responsible for invoking work. */
@@ -309,9 +324,11 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs, int in_dl_context)
     sl_flags |= CI_EPLOCK_NETIF_HANDLE_ICMP;
 #endif
   ci_assert(sl_flags != 0);
-  if( ci_cas32_succeed(&trs->trusted_lock, l, OO_TRUSTED_LOCK_LOCKED) &&
-      ef_eplock_trylock_and_set_flags(&trs->netif.state->lock, sl_flags) ) {
-    efab_eplock_unlock_and_wake(ni, in_dl_context);
+  if( ci_cas32_succeed(&trs->trusted_lock, l, OO_TRUSTED_LOCK_LOCKED) ) {
+    if( has_shared )
+      ef_eplock_holder_set_flags(&trs->netif.state->lock, sl_flags);
+    else if ( ef_eplock_trylock_and_set_flags(&trs->netif.state->lock, sl_flags) )
+      efab_eplock_unlock_and_wake(ni, in_dl_context);
   }
   goto again;
 }
@@ -339,18 +356,18 @@ oo_trusted_lock_set_flags_if_locked(tcp_helper_resource_t* trs, unsigned flags)
 
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
-/* Returns true if the lock is obtained, or false otherwise.  In the latter
- * case the flags will be set (unless AWAITING_FREE).
+/* Returns true if the lock is obtained, or false otherwise.
+ * The flags will be set (unless AWAITING_FREE).
  */
 static int
-oo_trusted_lock_lock_or_set_flags(tcp_helper_resource_t* trs, unsigned flags)
+oo_trusted_lock_lock_and_set_flags(tcp_helper_resource_t* trs, unsigned flags)
 {
   unsigned l, new_l;
 
   do {
     l = trs->trusted_lock;
     if( l == OO_TRUSTED_LOCK_UNLOCKED )
-      new_l = OO_TRUSTED_LOCK_LOCKED;
+      new_l = OO_TRUSTED_LOCK_LOCKED | flags;
     else if( l & OO_TRUSTED_LOCK_AWAITING_FREE )
       return 0;
     else
@@ -379,7 +396,7 @@ efab_tcp_helper_netif_try_lock(tcp_helper_resource_t* trs, int in_dl_context)
         ni->flags |= CI_NETIF_FLAG_IN_DL_CONTEXT;
       return 1;
     }
-    oo_trusted_lock_drop(trs, in_dl_context);
+    oo_trusted_lock_drop(trs, in_dl_context, 0 /* has_shared */);
   }
   return 0;
 }
@@ -391,8 +408,13 @@ efab_tcp_helper_netif_unlock(tcp_helper_resource_t* trs, int in_dl_context)
   ci_assert_equiv(in_dl_context, trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT);
   if( in_dl_context )
     trs->netif.flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
-  efab_eplock_unlock_and_wake(&trs->netif, in_dl_context);
-  oo_trusted_lock_drop(trs, in_dl_context);
+  /* We drop trusted lock first as this allow to drain trusted lock work
+   * and pass flags to shared lock without lock/flag flipping
+   * also in case atomic work is inevitable - it will quickly schedule the work
+   * with both locks held.
+   */
+  if( oo_trusted_lock_drop(trs, in_dl_context, 1 /* has_shared */) == 0 )
+    efab_eplock_unlock_and_wake(&trs->netif, in_dl_context);
 }
 
 
@@ -5284,7 +5306,6 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
 
   netif = &trs->netif;
 #if ! CI_CFG_UL_INTERRUPT_HELPER
-  ci_assert_nflags(netif->flags, CI_NETIF_FLAG_IN_DL_CONTEXT);
   ci_assert(!in_atomic());
   /* Make sure all postponed actions are done and endpoints freed */
   flush_workqueue(trs->wq);
@@ -7582,18 +7603,22 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     if( flags_set & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
-      if( oo_trusted_lock_lock_or_set_flags(thr,
-                                            OO_TRUSTED_LOCK_CLOSE_ENDPOINT) ) {
-        /* in dl context we always have trusted lock so
-         * the flag has just got passed to the trusted lock */
-        ci_assert(! in_dl_context);
+      if( oo_trusted_lock_lock_and_set_flags(thr,
+                                             OO_TRUSTED_LOCK_CLOSE_ENDPOINT) ) {
         /* We've got both locks.  If in non-atomic context, do the work,
          * else defer work and locks to workitem.
          */
         OO_DEBUG_TCPH(ci_log("%s: [%u] CLOSE_ENDPOINT now",
                              __FUNCTION__, thr->id));
-        tcp_helper_close_pending_endpoints(thr);
-        oo_trusted_lock_drop(thr, 0/*in_dl_context==0*/);
+
+        /* lets keep in_dl_context as expected by oo_trusted_lock_drop */
+        if( in_dl_context )
+          ni->flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
+        /* unlock will take care of CLOSE_ENDPOINT work */
+        if( oo_trusted_lock_drop(thr, in_dl_context, 1/*has_shared=1*/) )
+          return 0; /* unlock has been deferred with both locks */
+        if( in_dl_context )
+          ni->flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
         CITP_STATS_NETIF(++ni->state->stats.unlock_slow_close);
       }
       else {
