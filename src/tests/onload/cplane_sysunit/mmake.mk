@@ -198,10 +198,10 @@ HARNESS_TIME_OUT=240
 
 .PHONY: test
 test: $(TARGETS)
-	sudo $(UNIT_TEST_ENV_VARS) /usr/bin/timeout $(HARNESS_TIME_OUT) \
+	touch $(PYTEST_JUNIT_XML_FILE) ; \
+	chmod a+rw $(PYTEST_JUNIT_XML_FILE) ; \
+	sudo /usr/bin/timeout $(HARNESS_TIME_OUT) \
+	  env $(UNIT_TEST_ENV_VARS) \
 	  python2 -B $(shell which py.test) -p no:cacheprovider \
 	    $(PYTEST_JUNIT_XML_OPT) $(PYTEST_SELECT_OPT); \
-	  sudo chmod a+rw $(PYTEST_JUNIT_XML_FILE) ; \
-	  sudo chown $(OWNER):$(OWNER_GROUP) $(PYTEST_JUNIT_XML_FILE) ; \
-	  sudo pkill -s 0 shim_cp_server || true
-
+	sudo pkill -s 0 shim_cp_server || true
