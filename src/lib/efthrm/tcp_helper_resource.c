@@ -7629,7 +7629,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
 #endif
 
     /* we have handled all the flags */
-    ci_assert_equal(flags_set, all_after_unlock_flags);
+    ci_assert_equal(flags_set, after_unlock_flags);
 
     /* We can free some packets while closing endpoints, etc.  Check this
      * condition again, but do it only once. */
