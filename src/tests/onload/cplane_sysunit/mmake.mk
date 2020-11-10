@@ -68,6 +68,7 @@ $(CP_CLIENT_LIB_OBJ_DIR):
 $(CP_CLIENT_LIB_OBJ_DIR)/%.o: $(CP_CLIENT_LIB_SRC_DIR)/%.c | $(CP_CLIENT_LIB_OBJ_DIR)
 	$(MMakeCompileC)
 
+cplane_lib.o: $(CP_INTF_VER_HDR)
 
 %.o: %.c
 	$(MMakeCompileC)
