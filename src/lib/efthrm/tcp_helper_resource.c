@@ -6339,8 +6339,8 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
     return -EBUSY;
   }
 
-  hw_addrs = ci_alloc(sizeof(uint64_t) * (1 << HW_PAGES_PER_SET_S) *
-                      CI_CFG_MAX_INTERFACES);
+  hw_addrs = ci_vmalloc(sizeof(uint64_t) * (1 << HW_PAGES_PER_SET_S) *
+                        CI_CFG_MAX_INTERFACES);
   if( hw_addrs == NULL ) {
     ci_log("%s: [%d] out of memory", __func__, trs->id);
     return -ENOMEM;
@@ -6378,7 +6378,7 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
                                   CI_EPLOCK_NETIF_NEED_PKT_SET);
       }
     }
-    ci_free(hw_addrs);
+    ci_vfree(hw_addrs);
     return rc;
   }
   /* check we get the size we are expecting */
@@ -6395,7 +6395,7 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
     OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
       oo_iobufset_resource_release(iobrs[intf_i], 0);
     oo_iobufset_pages_release(pages);
-    ci_free(hw_addrs);
+    ci_vfree(hw_addrs);
     return -ENOSPC;
   }
   bufset_id = ni->pkt_sets_n;
@@ -6464,7 +6464,7 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
     set_pkt_bufset_hwaddrs(ni, bufset_id, intf_i,
                            hw_addrs + intf_i * (1 << HW_PAGES_PER_SET_S));
   }
-  ci_free(hw_addrs);
+  ci_vfree(hw_addrs);
 
   trs->netif.state->packet_alloc_numa_nodes |= 1 << numa_node_id();
   CHECK_FREEPKTS(ni);
