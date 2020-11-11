@@ -409,6 +409,7 @@ bool oo_is_signal_intercepted(int sig, void* handler)
      * SIGKILL is removed from the list because it can't be intercepted.
      */
     case SIGHUP:
+    case SIGINT:
     case SIGPIPE:
     case SIGALRM:
     case SIGTERM:
