@@ -61,9 +61,10 @@ static void oo_get_sigaction(int sig, struct sigaction* sa)
   ci_uint32 seq;
   ci_uint32 seq1 = OO_ACCESS_ONCE(store->seq);
 
+  memset(sa, 0, sizeof(*sa));
   do {
     seq = seq1;
-    memcpy(sa, &store->act[seq & 1], sizeof(*sa));
+    *sa = store->act[seq & 1];
     ci_rmb();
   } while( (seq1 = OO_ACCESS_ONCE(store->seq)) != seq );
 }
@@ -442,9 +443,9 @@ oo_signal_install_to_onload(int sig, const struct sigaction *act,
   new_store = &store->act[! (seq & 1)];
 
   if( oldact != NULL )
-    memcpy(oldact, &store->act[seq & 1], sizeof(*oldact));
+    *oldact = store->act[seq & 1];
   if( act != NULL ) {
-    memcpy(new_store, act, sizeof(*act));
+    *new_store = *act;
     if( act->sa_handler == SIG_DFL ) {
       /* We'd like to preserve SA_SIGINFO flag which user is possibly
        * using.
@@ -539,7 +540,7 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
                      OO_PRINT_SIGACTION_FMT,
                      __func__, rc, sig, OO_PRINT_SIGACTION_ARG(act)));
       if( oldact )
-        memcpy(oldact, &old, sizeof(old));
+        *oldact = old;
       return rc;
     }
 
@@ -584,7 +585,7 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
   }
 
   if( oldact != NULL ) {
-    memcpy(oldact, &old, sizeof(old));
+    *oldact = old;
     oo_fixup_oldact(oldact);
   }
 
@@ -625,6 +626,19 @@ int oo_sigonload_init(void* handler)
 #endif
 
   return 0;
+}
+
+static bool sa_equal(struct sigaction* sa1, struct sigaction* sa2)
+{
+  /* sa_handler & sa_sigaction share the same offset and size; they differ
+   * by type only.  There is no need to check both. */
+  return sa1->sa_handler == sa2->sa_handler &&
+      sa1->sa_flags == sa2->sa_flags &&
+#ifdef SA_RESTORER
+      ( (sa1->sa_flags & SA_RESTORER) == 0 ||
+        sa1->sa_restorer == sa2->sa_restorer ) &&
+#endif
+      memcmp(&sa1->sa_mask, &sa2->sa_mask, sizeof(sa1->sa_mask)) == 0;
 }
 
 /* Intercept all already-installed signals.
@@ -671,7 +685,7 @@ int oo_init_signals(void)
     /* Re-check that act == oldact, and install the new signal handler in
      * case of the race.
      */
-    if( memcmp(&act, &oldact, sizeof(act)) == 0 )
+    if( sa_equal(&act, &oldact) )
       continue;
 
     rc = oo_signal_install_to_onload(sig, &oldact, NULL);
