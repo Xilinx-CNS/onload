@@ -2002,14 +2002,9 @@ static int af_xdp_kick(ef_vi* vi)
   ci_netif* ni = vi->xdp_kick_context;
   ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vis[0], vi);
   uint32_t intf_i = nic - ni->nic_hw;
-  int saved_errno = errno, fd = ci_netif_get_driver_handle(ni), rc;
+  int fd = ci_netif_get_driver_handle(ni);
 
-  rc = oo_resource_op(fd, OO_IOC_AF_XDP_KICK, &intf_i);
-  if( rc < 0 ) {
-    rc = -errno;
-    errno = saved_errno;
-  }
-  return rc;
+  return oo_resource_op(fd, OO_IOC_AF_XDP_KICK, &intf_i);
 }
 
 static int netif_tcp_helper_build(ci_netif* ni)
