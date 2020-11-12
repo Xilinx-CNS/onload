@@ -268,8 +268,6 @@ struct ci_netif_s {
 # define CI_NETIF_FLAGS_IS_TRUSTED       0x100
   /* Currently being used from a driverlink context */
 # define CI_NETIF_FLAG_IN_DL_CONTEXT     0x400
-  /* Should not allocate packets in atomic/driverlink context */
-# define CI_NETIF_FLAG_AVOID_ATOMIC_ALLOCATION 0x800
 #if CI_CFG_PKTS_AS_HUGE_PAGES
   /* Huge pages packet allocation have failed */
 #define CI_NETIF_FLAG_HUGE_PAGES_FAILED  0x2000

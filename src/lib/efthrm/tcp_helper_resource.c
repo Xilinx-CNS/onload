@@ -1123,8 +1123,6 @@ static int allocate_pd(ci_netif* ni, struct vi_allocate_info* info,
 
   switch( NI_OPTS(ni).packet_buffer_mode ) {
   case 0:
-    if( nic->devtype.arch == EFHW_ARCH_EF10 )
-      ni->flags |= CI_NETIF_FLAG_AVOID_ATOMIC_ALLOCATION;
     break;
 
   case CITP_PKTBUF_MODE_PHYS:
@@ -6328,10 +6326,7 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
   if( ni->pkt_sets_n == ni->pkt_sets_max )
     return -ENOSPC;
 
-  if( (ni->flags & (CI_NETIF_FLAG_IN_DL_CONTEXT |
-                    CI_NETIF_FLAG_AVOID_ATOMIC_ALLOCATION) ) ==
-       (CI_NETIF_FLAG_IN_DL_CONTEXT |
-        CI_NETIF_FLAG_AVOID_ATOMIC_ALLOCATION) ) {
+  if( ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
     ef_eplock_holder_set_flag(&ni->state->lock,
                               CI_EPLOCK_NETIF_NEED_PKT_SET);
     return -EBUSY;
@@ -6360,21 +6355,6 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
       NI_LOG(ni, RESOURCE_WARNINGS,
              FN_FMT "Failed to allocate packet buffers (%d)",
              FN_PRI_ARGS(&trs->netif), rc);
-
-      /* We've got ENOMEM.  If we are in atomic context, it is possible
-       * that memory is available in non-atomic mode.
-       * efab_tcp_helper_netif_lock_callback() will kick off packet
-       * allocation via workqueue without
-       * CI_NETIF_FLAG_AVOID_ATOMIC_ALLOCATION flag check, so we'll
-       * retry from non-atomic context immediately.
-       *
-       * For all other errors (ENOMEM & non-atomic or other rc values),
-       * there is no obvious benefit in re-trying the same operation
-       * immediately. */
-      if( rc == -ENOMEM && ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
-        ef_eplock_holder_set_flag(&ni->state->lock,
-                                  CI_EPLOCK_NETIF_NEED_PKT_SET);
-      }
     }
     ci_vfree(hw_addrs);
     return rc;
