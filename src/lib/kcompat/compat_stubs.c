@@ -85,9 +85,11 @@ int ns_capable(struct user_namespace* user_ns, int c) {
 }
 
 /* Used to compare with scalable_filters_gid for MAC filter install */
-int ci_getgid(void) {
+int ci_in_egroup(int gid)
+{
   return 1;
 }
+
 
 void kfree(void *objp)
 {
