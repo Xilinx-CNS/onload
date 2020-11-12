@@ -291,7 +291,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
     }
     else {
       /* Untrusted lock holder now responsible for invoking non-atomic work. */
-      OO_DEBUG_TCPH(ci_log("%s: [%u] defer CLOSE_ENDPOINT to trusted lock",
+      OO_DEBUG_TCPH(ci_log("%s: [%u] defer CLOSE_ENDPOINT to untrusted lock",
                            __FUNCTION__, trs->id));
     }
     goto again;
@@ -7440,10 +7440,18 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
   ci_netif* ni = &thr->netif;
   ci_uint64 flags_set;
   ci_uint64 after_unlock_flags = 0;
+  ci_uint64 defer_flags = 0;
   int/*bool*/ pkt_waiter_retried = 0;
 
   ci_assert(ci_netif_is_locked(ni));
 
+  /* from dl context we can only run a subset of work, for other work we need to defer.
+   * defer_flags contains all work items that will cause us to defer to non-atomic */
+  if( in_dl_context ) {
+    defer_flags = CI_EPLOCK_NETIF_DL_CONTEXT_DEFER_MASK;
+    if(! oo_avoid_wakeup_from_dl() )
+      defer_flags &=~ CI_EPLOCK_NETIF_NEED_WAKE;
+  }
 
   do {
     if( in_dl_context )
@@ -7452,7 +7460,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
  again:
     /* We expect this to sort out CI_EPLOCK_NETIF_UL_COMMON flags and clear
     * all_handled_flags. Note the flags might have re-emerged. */
-    lock_val = ci_netif_unlock_slow_common(ni, lock_val, all_handled_flags);
+    lock_val = ci_netif_unlock_slow_common(ni, lock_val, all_handled_flags & ~defer_flags);
 
     /* Get flags set.  NB. Its possible no flags were set
     ** e.g. we tried to unlock the eplock (bottom of loop) but found
@@ -7467,6 +7475,56 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     */
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
+    /* This work comes first as DL-context wise this job is special as it
+     * would either pass the work: to trusted lock (meaning no work now), or
+     * to atomic work item.
+     */
+    if( flags_set & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
+      /* prevent flag ping pong */
+      ef_eplock_clear_flags(&ni->state->lock, CI_EPLOCK_NETIF_CLOSE_ENDPOINT);
+      flags_set &=~ CI_EPLOCK_NETIF_CLOSE_ENDPOINT;
+      if( oo_trusted_lock_lock_and_set_flags(thr,
+                                             OO_TRUSTED_LOCK_CLOSE_ENDPOINT) ) {
+        /* We've got both locks.  If in non-atomic context, do the work,
+         * else defer work and locks to workitem.
+         */
+        OO_DEBUG_TCPH(ci_log("%s: [%u] CLOSE_ENDPOINT now",
+                             __FUNCTION__, thr->id));
+
+        /* set flags in case we get deferred */
+        ef_eplock_holder_set_flags(&ni->state->lock, flags_set);
+
+        /* lets clear IN_DL_CONTEXT flag as expected by oo_trusted_lock_drop */
+        if( in_dl_context )
+          ni->flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
+        /* unlock will take care of CLOSE_ENDPOINT work */
+        if( oo_trusted_lock_drop(thr, in_dl_context, 1/*has_shared=1*/) )
+          return 0; /* unlock has been deferred with both locks */
+        CITP_STATS_NETIF(++ni->state->stats.unlock_slow_close);
+        /* best to go around to refresh flags_set */
+        continue;
+      }
+      else {
+        /* Trusted lock holder now responsible for non-atomic work. */
+        OO_DEBUG_TCPH(ci_log("%s: [%u] defer CLOSE_ENDPOINT to trusted lock",
+                             __FUNCTION__, thr->id));
+      }
+    }
+#endif
+
+    if( flags_set & defer_flags ) {
+      ci_assert(in_dl_context);
+      /* We cannot finish this work in DL context, let's defer to work item
+       * immediately without any partial work */
+      OO_DEBUG_TCPH(ci_log("%s: [%u] defer to workitem, flags %llx",
+                           __FUNCTION__, thr->id, lock_val));
+      /* set flags so work item can pick up the work */
+      ef_eplock_holder_set_flags(&ni->state->lock, flags_set);
+      tcp_helper_defer_dl2work(thr, OO_THR_AFLAG_UNLOCK_UNTRUSTED);
+      return 0;
+    }
+
+#if ! CI_CFG_UL_INTERRUPT_HELPER
     if( flags_set & CI_EPLOCK_NETIF_SWF_UPDATE ) {
       oof_cb_sw_filter_apply(ni);
       CITP_STATS_NETIF(++ni->state->stats.unlock_slow_swf_update);
@@ -7474,15 +7532,6 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     }
 
     if( flags_set & CI_EPLOCK_NETIF_NEED_WAKE ) {
-      if( in_dl_context && oo_avoid_wakeup_from_dl() ) {
-        OO_DEBUG_TCPH(ci_log("%s: [%u] defer endpoint wakeup to workitem",
-                             __FUNCTION__, thr->id));
-        ef_eplock_holder_set_flags(&ni->state->lock,
-                                   after_unlock_flags | flags_set);
-        ci_assert(ni->state->lock.lock & CI_EPLOCK_NETIF_NEED_WAKE);
-        tcp_helper_defer_dl2work(thr, OO_THR_AFLAG_UNLOCK_UNTRUSTED);
-        return 0;
-      }
       OO_DEBUG_TCPH(ci_log("%s: [%u] wake up endpoints",
                            __FUNCTION__, thr->id));
       wakeup_post_poll_list(thr);
@@ -7496,14 +7545,6 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     */
     if( (flags_set & CI_EPLOCK_NETIF_NEED_PKT_SET) ||
         oo_want_proactive_packet_allocation(ni) ) {
-      if( in_dl_context ) {
-      OO_DEBUG_TCPH(ci_log("%s: [%u] NEED_PKT_SET to workitem",
-                           __FUNCTION__, thr->id));
-        ef_eplock_holder_set_flags(&ni->state->lock,
-                                   after_unlock_flags | flags_set);
-        tcp_helper_defer_dl2work(thr, OO_THR_AFLAG_UNLOCK_UNTRUSTED);
-        return 0;
-      }
       OO_DEBUG_TCPH(ci_log("%s: [%u] NEED_PKT_SET now",
                            __FUNCTION__, thr->id));
       efab_tcp_helper_more_bufs(thr);
@@ -7541,34 +7582,6 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     }
 #endif
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
-    if( flags_set & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
-      if( oo_trusted_lock_lock_and_set_flags(thr,
-                                             OO_TRUSTED_LOCK_CLOSE_ENDPOINT) ) {
-        /* We've got both locks.  If in non-atomic context, do the work,
-         * else defer work and locks to workitem.
-         */
-        OO_DEBUG_TCPH(ci_log("%s: [%u] CLOSE_ENDPOINT now",
-                             __FUNCTION__, thr->id));
-
-        /* lets keep in_dl_context as expected by oo_trusted_lock_drop */
-        if( in_dl_context )
-          ni->flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
-        /* unlock will take care of CLOSE_ENDPOINT work */
-        if( oo_trusted_lock_drop(thr, in_dl_context, 1/*has_shared=1*/) )
-          return 0; /* unlock has been deferred with both locks */
-        if( in_dl_context )
-          ni->flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
-        CITP_STATS_NETIF(++ni->state->stats.unlock_slow_close);
-      }
-      else {
-        /* Trusted lock holder now responsible for non-atomic work. */
-        OO_DEBUG_TCPH(ci_log("%s: [%u] defer CLOSE_ENDPOINT to trusted lock",
-                             __FUNCTION__, thr->id));
-      }
-      flags_set &=~ CI_EPLOCK_NETIF_CLOSE_ENDPOINT;
-    }
-#endif
 
     /* we have handled all the flags (that get handled before unlock) */
     ci_assert_nflags(flags_set, ~all_after_unlock_flags);
