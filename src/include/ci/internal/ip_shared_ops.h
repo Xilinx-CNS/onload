@@ -46,7 +46,8 @@ extern void ci_netif_unlock(ci_netif*) CI_HF;
 extern int oo_want_proactive_packet_allocation(ci_netif* ni);
 #endif
 extern ci_uint64
-ci_netif_unlock_slow_common(ci_netif*, ci_uint64 lock_val) CI_HF;
+ci_netif_unlock_slow_common(ci_netif*, ci_uint64 lock_val,
+                            ci_uint64 flags_to_handle) CI_HF;
 
 
 /*! Blocking calls that grab the stack lock return 0 on success.  When

@@ -7433,6 +7433,10 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
                                             netif.eplock_helper, epl);
   const ci_uint64 all_after_unlock_flags = (CI_EPLOCK_NETIF_NEED_PRIME |
                                            CI_EPLOCK_NETIF_PKT_WAKE);
+  ci_uint64 all_handled_flags =
+      CI_EPLOCK_NETIF_UNLOCK_FLAGS |
+      CI_EPLOCK_NETIF_SOCKET_LIST |
+      CI_EPLOCK_NETIF_UL_COMMON_MASK; /* adds PKT_WAITER | DEFERRED_PKTS */
   ci_netif* ni = &thr->netif;
   ci_uint64 flags_set;
   ci_uint64 after_unlock_flags = 0;
@@ -7446,14 +7450,15 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
       ni->flags |= CI_NETIF_FLAG_IN_DL_CONTEXT;
 
  again:
-    lock_val = ci_netif_unlock_slow_common(ni, lock_val);
+    /* We expect this to sort out CI_EPLOCK_NETIF_UL_COMMON flags and clear
+    * all_handled_flags. Note the flags might have re-emerged. */
+    lock_val = ci_netif_unlock_slow_common(ni, lock_val, all_handled_flags);
 
-    /* Get flags set and clear them.  NB. Its possible no flags were set
+    /* Get flags set.  NB. Its possible no flags were set
     ** e.g. we tried to unlock the eplock (bottom of loop) but found
     ** someone had tried to lock it and therefore set the "need wake" bit.
     */
-    flags_set = lock_val & CI_EPLOCK_NETIF_UNLOCK_FLAGS;
-    ef_eplock_clear_flags(&ni->state->lock, flags_set);
+    flags_set = lock_val & CI_EPLOCK_NETIF_UNLOCK_FLAGS &~ CI_EPLOCK_NETIF_UL_COMMON_MASK;
     after_unlock_flags |= flags_set & all_after_unlock_flags;
 
     /* All code between here and the bottom of the loop should use

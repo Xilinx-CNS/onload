@@ -1060,25 +1060,37 @@ int oo_want_proactive_packet_allocation(ci_netif* ni)
 }
 
 
-/* Handling for lock flags that is common to UL and kernel paths. */
-ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
+/* Handling for lock flags that is common to UL and kernel paths.
+ * flags_to_handle allows restricting work in DL context.
+ * flags_to_handle will be cleared from lock and return value
+ * unless work failed/need redoing.
+ */
+ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val,
+                                      ci_uint64 flags_to_handle)
 {
   const ci_uint64 ALL_HANDLED_FLAGS = CI_EPLOCK_NETIF_UL_MASK;
   ci_uint64 set_flags = 0;
+  ci_uint64 test_val;
 
   /* Do this first, because ci_netif_purge_deferred_socket_list() acts on the
    * lock directly. */
   if( lock_val & CI_EPLOCK_NETIF_SOCKET_LIST ) {
+    /* assume caller always asks to handle these flags */
+    ci_assert_flags(flags_to_handle, CI_EPLOCK_NETIF_SOCKET_LIST);
     CITP_STATS_NETIF_INC(ni, unlock_slow_socket_list);
     lock_val = ci_netif_purge_deferred_socket_list(ni);
   }
   ci_assert(! (lock_val & CI_EPLOCK_NETIF_SOCKET_LIST));
 
   /* Clear all flags before we handle them, to avoid racing against other
-   * threads that set those flags. */
-  lock_val = ef_eplock_clear_flags(&ni->state->lock, ALL_HANDLED_FLAGS);
+   * threads that set those flags. (note: SOCKET_LIST got handled above) */
+  lock_val = ef_eplock_clear_flags(&ni->state->lock,
+                          flags_to_handle & ~CI_EPLOCK_NETIF_SOCKET_LIST);
 
-  if( lock_val & CI_EPLOCK_NETIF_IS_PKT_WAITER ) {
+  /* Restrict work below to what has been requested */
+  test_val = lock_val & flags_to_handle;
+
+  if( test_val & CI_EPLOCK_NETIF_IS_PKT_WAITER ) {
     if( ci_netif_pkt_tx_can_alloc_now(ni) ) {
       set_flags |= CI_EPLOCK_NETIF_PKT_WAKE;
       CITP_STATS_NETIF_INC(ni, unlock_slow_pkt_waiter);
@@ -1088,17 +1100,17 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
     }
   }
 
-  if( lock_val & CI_EPLOCK_NETIF_NEED_POLL ) {
+  if( test_val & CI_EPLOCK_NETIF_NEED_POLL ) {
     CITP_STATS_NETIF(++ni->state->stats.deferred_polls);
     ci_netif_poll(ni);
   }
 
 #if CI_CFG_UL_INTERRUPT_HELPER && ! defined (__KERNEL__)
-  if( lock_val & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
+  if( test_val & CI_EPLOCK_NETIF_CLOSE_ENDPOINT ) {
     ci_netif_close_pending(ni);
   }
 
-  if( lock_val & CI_EPLOCK_NETIF_NEED_WAKE ) {
+  if( test_val & CI_EPLOCK_NETIF_NEED_WAKE ) {
     /* Tell kernel to wake up endpoints */
     ci_ni_dllist_link* lnk;
     citp_waitable* w;
@@ -1132,27 +1144,26 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val)
 
   }
 
-  if( lock_val & CI_EPLOCK_NETIF_NEED_PKT_SET ||
+  if( test_val & CI_EPLOCK_NETIF_NEED_PKT_SET ||
       oo_want_proactive_packet_allocation(ni) ) {
+    /* assume caller always asks to handle this flag */
+    ci_assert_flags(flags_to_handle, CI_EPLOCK_NETIF_NEED_PKT_SET);
     ci_tcp_helper_more_bufs(ni);
   }
 #endif
 
-  if( lock_val & CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS ) {
+  if( test_val & CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS ) {
     if( ! oo_deferred_send(ni) )
       set_flags |= CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS;
   }
 
-  if( lock_val & CI_EPLOCK_NETIF_MERGE_ATOMIC_COUNTERS )
+  if( test_val & CI_EPLOCK_NETIF_MERGE_ATOMIC_COUNTERS )
     ci_netif_merge_atomic_counters(ni);
 
   ef_eplock_holder_set_flags(&ni->state->lock, set_flags);
 
-  /* Caveat: there is nothing to stop the flags in ALL_HANDLED_FLAGS from being
-   * re-added to the lock.  As such, clearing them in the value that we return
-   * is valid, but we mustn't clear them from the lock itself. */
-  return (lock_val | set_flags) &
-         (~ALL_HANDLED_FLAGS | CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS);
+  /* Returns good reflection on current lock value. */
+  return lock_val | set_flags;
 }
 
 
@@ -1184,13 +1195,10 @@ static void ci_netif_unlock_slow(ci_netif* ni)
 
   do {
     l = ni->state->lock.lock;
-    l = ci_netif_unlock_slow_common(ni, ni->state->lock.lock);
+    l = ci_netif_unlock_slow_common(ni, l, all_handled_flags);
 
     /* If the NEED_PRIME flag was set, handle it here */
-    if( ! (ni->state->flags & CI_NETIF_FLAG_EVQ_KERNEL_PRIME_ONLY) &&
-       (l & CI_EPLOCK_NETIF_NEED_PRIME) ) {
-      l = ef_eplock_clear_flags(&ni->state->lock, CI_EPLOCK_NETIF_NEED_PRIME);
-
+    if( l & all_handled_flags & CI_EPLOCK_NETIF_NEED_PRIME ) {
       CITP_STATS_NETIF_INC(ni, unlock_slow_need_prime);
       CITP_STATS_NETIF_INC(ni, unlock_slow_prime_ul);
       ci_assert(NI_OPTS(ni).int_driven);
@@ -1204,8 +1212,7 @@ static void ci_netif_unlock_slow(ci_netif* ni)
 
     /* If some flags should be handled in kernel, then there is no point in
      * looping here.  Dive! */
-    k_flags |= l & (CI_EPLOCK_NETIF_UNLOCK_FLAGS | CI_EPLOCK_FL_NEED_WAKE) &
-        ~all_handled_flags;
+    k_flags |= l & ((CI_EPLOCK_NETIF_UNLOCK_FLAGS & ~all_handled_flags) | CI_EPLOCK_FL_NEED_WAKE);
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     if( k_flags != 0 )
       break;
