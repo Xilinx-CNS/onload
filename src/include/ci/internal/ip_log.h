@@ -195,7 +195,7 @@
 #define OOFA_IPCACHE_DETAIL(ipc) \
   (ipc)->ifindex, (ipc)->mtu, (ipc)->intf_i, \
   (ipc)->encap.vlan_id, (ipc)->encap.type, \
-  (ipc)->mac_integrity.id, (ipc)->mac_integrity.version
+  (ipc)->fwd_ver.id, (ipc)->fwd_ver.version
 
 
 /**********************************************************************
