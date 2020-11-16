@@ -145,7 +145,6 @@ install: build
 	cp -r src  debian/$(psource)/usr/src/modules/$(sname)
 	cp -r scripts  debian/$(psource)/usr/src/modules/$(sname)
 	cp -r mk  debian/$(psource)/usr/src/modules/$(sname)
-	cp -r prebuilt  debian/$(psource)/usr/src/modules/$(sname)
 	# Copy the needed debian/ pieces to the proper location
 	cp debian/*modules.in* \
 		debian/$(psource)/usr/src/modules/$(sname)/debian
