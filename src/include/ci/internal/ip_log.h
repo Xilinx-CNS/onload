@@ -190,9 +190,12 @@
 #define OOFA_IPCACHE_STATE(ni, ipc)  OOFA_IPCACHE_STATUS((ipc)->status), \
                                      OOFA_IPCACHE_VALID((ni), (ipc))
 
-#define OOF_IPCACHE_DETAIL        "if=%d mtu=%d intf_i=%d vlan=%d encap=%x"
-#define OOFA_IPCACHE_DETAIL(ipc)  (ipc)->ifindex, (ipc)->mtu, (ipc)->intf_i, \
-                                  (ipc)->encap.vlan_id, (ipc)->encap.type
+#define OOF_IPCACHE_DETAIL \
+  "if=%d mtu=%d intf_i=%d vlan=%d encap=%x verinfo %x-%x"
+#define OOFA_IPCACHE_DETAIL(ipc) \
+  (ipc)->ifindex, (ipc)->mtu, (ipc)->intf_i, \
+  (ipc)->encap.vlan_id, (ipc)->encap.type, \
+  (ipc)->mac_integrity.id, (ipc)->mac_integrity.version
 
 
 /**********************************************************************
