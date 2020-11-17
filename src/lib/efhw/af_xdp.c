@@ -181,7 +181,7 @@ static struct protection_domain* pd_by_owner(struct efhw_nic* nic, int owner_id)
  *---------------------------------------------------------------------------*/
 
 /* Invoke the bpf() syscall args is assumed to be kernel memory */
-static int sys_bpf(int cmd, union bpf_attr* attr)
+static int xdp_sys_bpf(int cmd, union bpf_attr* attr)
 {
 #if defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
   struct pt_regs regs;
@@ -242,7 +242,7 @@ static int xdp_map_create(int max_entries)
   attr.value_size = sizeof(int);
   attr.max_entries = max_entries;
   strncpy(attr.map_name, "onload_xsks", sizeof(attr.map_name));
-  rc = sys_bpf(BPF_MAP_CREATE, &attr);
+  rc = xdp_sys_bpf(BPF_MAP_CREATE, &attr);
   return rc;
 }
 
@@ -257,7 +257,7 @@ static int xdp_map_create_shadow(int max_entries)
   attr.value_size = 1;
   attr.max_entries = max_entries;
   strncpy(attr.map_name, "onload_shadow", sizeof(attr.map_name));
-  rc = sys_bpf(BPF_MAP_CREATE, &attr);
+  rc = xdp_sys_bpf(BPF_MAP_CREATE, &attr);
   return rc;
 }
 
@@ -304,7 +304,7 @@ static int xdp_prog_load(int map_fd, int shadow_fd)
   attr.license = (uintptr_t)license;
   strncpy(attr.prog_name, "xdpsock", strlen("xdpsock"));
 
-  rc = sys_bpf(BPF_PROG_LOAD, &attr);
+  rc = xdp_sys_bpf(BPF_PROG_LOAD, &attr);
   return rc;
 }
 
@@ -317,7 +317,7 @@ static int xdp_map_update_fd(int map_fd, int key, int sock_fd)
   attr.key = (uintptr_t)(&key);
   attr.value = (uintptr_t)(&sock_fd);
 
-  return sys_bpf(BPF_MAP_UPDATE_ELEM, &attr);
+  return xdp_sys_bpf(BPF_MAP_UPDATE_ELEM, &attr);
 }
 
 /* Update an element in the XDP socket map (using file pointers) */
@@ -367,7 +367,7 @@ static void xdp_map_delete_fd(int map_fd, int key)
   attr.map_fd = map_fd;
   attr.key = (uintptr_t)(&key);
 
-  sys_bpf(BPF_MAP_DELETE_ELEM, &attr);
+  xdp_sys_bpf(BPF_MAP_DELETE_ELEM, &attr);
 }
 
 /* Delete an element in the XDP socket map (using file pointers) */
@@ -879,7 +879,7 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 {
 	int rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr);
 
-/* This ifdefiry is copied from sys_bpf above, because this function is
+/* This ifdefiry is copied from xdp_sys_bpf above, because this function is
  * useless otherwise. */
 #if defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
 	static asmlinkage long (*set)(const struct pt_regs*) = NULL;
