@@ -50,6 +50,7 @@
 #include <linux/version.h>
 #include <linux/net.h>
 #include <linux/uaccess.h>
+#include <linux/syscalls.h>
 #include <asm/syscall.h>
 
 #include <driver/linux_resource/autocompat.h>
@@ -325,6 +326,16 @@ static inline int sock_ops_getsockopt(struct socket *sock,
   rc = sock->ops->getsockopt(sock, level, optname, optval, &optlen);
   set_fs(oldfs);
   return rc;
+}
+
+/* Linux<=4.16 exports sys_close. Later versions export __close_fd. */
+static inline int ci_close_fd(int fd)
+{
+#ifdef EFRM_SYS_CLOSE_EXPORTED
+  return sys_close(fd);
+#else
+  return __close_fd(current->files, fd);
+#endif
 }
 
 

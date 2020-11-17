@@ -351,11 +351,11 @@ static int xdp_map_update(struct file* map, struct file* shadow, int key,
   BUG_ON(rc < 0);
 
 fail_update:
-  __close_fd(current->files, sock_fd);
+  ci_close_fd(sock_fd);
 fail_sock:
-  __close_fd(current->files, shadow_fd);
+  ci_close_fd(shadow_fd);
 fail_shadow:
-  __close_fd(current->files, map_fd);
+  ci_close_fd(map_fd);
   return rc;
 }
 
@@ -378,13 +378,13 @@ static void xdp_map_delete(struct file* map, struct file* shadow, int key)
   fd = xdp_alloc_fd(map);
   if( fd >= 0 ) {
     xdp_map_delete_fd(fd, key);
-    __close_fd(current->files, fd);
+    ci_close_fd(fd);
   }
 
   fd = xdp_alloc_fd(shadow);
   if( fd >= 0 ) {
     xdp_map_delete_fd(fd, key);
-    __close_fd(current->files, fd);
+    ci_close_fd(fd);
   }
 }
 
@@ -841,7 +841,7 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		goto fail;
 
 	prog = bpf_prog_get_type_dev(rc, BPF_PROG_TYPE_XDP, 1);
-	__close_fd(current->files, rc);
+	ci_close_fd(rc);
 	if( IS_ERR(prog) ) {
 		rc = PTR_ERR(prog);
 		goto fail;
@@ -852,10 +852,10 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		goto fail;
 
 	xdp->map = fget(map_fd);
-	__close_fd(current->files, map_fd);
+	ci_close_fd(map_fd);
 
 	xdp->shadow = fget(shadow_fd);
-	__close_fd(current->files, shadow_fd);
+	ci_close_fd(shadow_fd);
 
 	nic->af_xdp = xdp;
 	memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
@@ -864,9 +864,9 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	return 0;
 
 fail:
-	__close_fd(current->files, shadow_fd);
+	ci_close_fd(shadow_fd);
 fail_shadow:
-	__close_fd(current->files, map_fd);
+	ci_close_fd(map_fd);
 fail_map:
 	kfree(xdp);
 	return rc;
