@@ -5,7 +5,7 @@
 
 # This refers to the version of the sfutils codebase and does not contain any
 # information about the firmware versions included in sfupdate.
-SFUTILS_VERSION=v8_1_2_1009
+SFUTILS_VERSION=v8_1_4_1000
 
 # Release collection includes different firmware family versions
 # for different products ranges and within these different selections of
