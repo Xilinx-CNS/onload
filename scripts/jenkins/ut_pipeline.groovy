@@ -231,7 +231,7 @@ void doUnitTestsPipeline() {
     }
 
     def publisher = new ArtifactoryPublisher(this)
-    publisher.publishStashedPackages(product, built_package_locations, env.BRANCH_NAME, onload_version_short)
+    // publisher.publishStashedPackages(product, built_package_locations, env.BRANCH_NAME, onload_version_short)
 
     def bookmark = utils.updateLastKnownGoodBookmark(env.BRANCH_NAME, long_revision)
 
