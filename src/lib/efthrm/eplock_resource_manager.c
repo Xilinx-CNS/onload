@@ -139,6 +139,28 @@ static int efab_eplock_is_unlocked_or_request_wake(ci_eplock_t* epl)
   return 0;
 }
 
+/* Returns 0 if lock have been taken; 1 otherwise */
+static int oo_eplock_lock_or_request_wake(ci_eplock_t* epl)
+{
+  ci_uint64 l;
+
+  do {
+    l = epl->lock;
+    if( l & CI_EPLOCK_LOCKED ) {
+      if( (l & CI_EPLOCK_FL_NEED_WAKE) ||
+          ci_cas64u_succeed(&epl->lock, l, l | CI_EPLOCK_FL_NEED_WAKE) )
+        return 1;
+    }
+    else {
+      if( ci_cas64u_succeed(&epl->lock, l, l | CI_EPLOCK_LOCKED) )
+        return 0;
+    }
+  } while(1);
+
+  /* Can't get here. */
+  ci_assert(0);
+  return -EFAULT;
+}
 
 int
 efab_eplock_lock_wait(ci_netif* ni, int maybe_wedged)
@@ -173,6 +195,44 @@ efab_eplock_lock_wait(ci_netif* ni, int maybe_wedged)
   set_current_state(TASK_RUNNING);
   return rc;
 }
+
+int oo_eplock_lock(ci_netif* ni, long* timeout_jiffies, int maybe_wedged)
+{
+  wait_queue_entry_t wait;
+  int rc;
+
+#if CI_CFG_EFAB_EPLOCK_RECORD_CONTENTIONS
+  efab_eplock_record_pid(ni);
+#endif
+
+  init_waitqueue_entry(&wait, current);
+  add_wait_queue(&ni->eplock_helper.wq, &wait);
+
+  while( 1 ) {
+    set_current_state(TASK_INTERRUPTIBLE);
+    rc = oo_eplock_lock_or_request_wake(&ni->state->lock);
+    if( rc <= 0 )
+      break;
+    *timeout_jiffies = schedule_timeout(*timeout_jiffies);
+    if( *timeout_jiffies == 0 ) {
+      rc = -ETIMEDOUT;
+      break;
+    }
+    if(CI_UNLIKELY( signal_pending(current) )) {
+      rc = -ERESTARTSYS;
+      break;
+    }
+    if(CI_UNLIKELY(maybe_wedged) ) {
+      rc = -ECANCELED;
+      break;
+    }
+  }
+
+  remove_wait_queue(&ni->eplock_helper.wq, &wait);
+  set_current_state(TASK_RUNNING);
+  return rc;
+}
+
 
 /* For in-kernel use only.  Ignores signals.
  * Tries to lock netif for the given number of jiffies.

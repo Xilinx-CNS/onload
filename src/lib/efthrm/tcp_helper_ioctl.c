@@ -998,6 +998,30 @@ efab_eplock_lock_wait_rsop(ci_private_t *priv, void *unused)
     return -EINVAL;
   return efab_eplock_lock_wait(&priv->thr->netif, 0);
 }
+
+static int
+oo_eplock_lock_rsop(ci_private_t* priv, void* arg)
+{
+  long timeout_jiffies = MAX_SCHEDULE_TIMEOUT;
+  bool has_timeout = false;
+  ci_int32* timeout_ms_p = (ci_uint32*)arg;
+  int rc;
+
+  if (priv->thr == NULL)
+    return -EINVAL;
+  if(CI_UNLIKELY( *timeout_ms_p >= 0 )) {
+    timeout_jiffies = CI_MIN(msecs_to_jiffies(*timeout_ms_p),
+                             MAX_SCHEDULE_TIMEOUT);
+    has_timeout = true;
+  }
+
+  rc = oo_eplock_lock(&priv->thr->netif, &timeout_jiffies, 0);
+
+  if( has_timeout )
+    *timeout_ms_p = jiffies_to_msecs(timeout_jiffies);
+  return rc;
+}
+
 static int
 efab_install_stack(ci_private_t *priv, void *arg)
 {
@@ -1639,6 +1663,7 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_EPLOCK_WAKE_AND_DO, efab_eplock_wake_and_do_rsop),
 #endif
   op(OO_IOC_EPLOCK_LOCK_WAIT, efab_eplock_lock_wait_rsop),
+  op(OO_IOC_EPLOCK_LOCK, oo_eplock_lock_rsop),
 
   op(OO_IOC_INSTALL_STACK,    efab_install_stack),
 #if ! CI_CFG_UL_INTERRUPT_HELPER

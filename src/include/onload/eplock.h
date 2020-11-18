@@ -32,7 +32,13 @@
 
 
 /* Internal!  Do not call. */
-extern int __ef_eplock_lock_slow(ci_netif *, int maybe_wedged) CI_HF;
+extern int
+__ef_eplock_lock_slow(ci_netif *, long tiemout, int maybe_wedged) CI_HF;
+#ifdef __KERNEL__
+#define OO_EPLOCK_TIMEOUT_INFTY MAX_SCHEDULE_TIMEOUT
+#else
+#define OO_EPLOCK_TIMEOUT_INFTY (-1L)
+#endif
 
 
 #if defined(CI_HAVE_COMPARE_AND_SWAP)
@@ -52,7 +58,7 @@ ci_inline int ef_eplock_lock(ci_netif *ni) OO_MUST_CHECK_RET_IN_KERNEL;
 ci_inline int ef_eplock_lock(ci_netif *ni) {
   int rc = 0;
   if( ci_cas64u_fail(&ni->state->lock.lock, 0, CI_EPLOCK_LOCKED) )
-    rc = __ef_eplock_lock_slow(ni, 0);
+    rc = __ef_eplock_lock_slow(ni, OO_EPLOCK_TIMEOUT_INFTY, 0);
 #ifdef __KERNEL__
   return rc;
 #else
@@ -70,7 +76,7 @@ ci_inline int ef_eplock_lock_maybe_wedged(ci_netif *ni) OO_MUST_CHECK_RET;
 ci_inline int ef_eplock_lock_maybe_wedged(ci_netif *ni) {
   int rc = 0;
   if( ci_cas64u_fail(&ni->state->lock.lock, 0, CI_EPLOCK_LOCKED) )
-    rc = __ef_eplock_lock_slow(ni, 1);
+    rc = __ef_eplock_lock_slow(ni, OO_EPLOCK_TIMEOUT_INFTY, 1);
   return rc;
 }
 #endif

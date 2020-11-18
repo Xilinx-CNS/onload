@@ -24,32 +24,32 @@
 CI_BUILD_ASSERT( (CI_EPLOCK_LOCK_FLAGS & CI_EPLOCK_CALLBACK_FLAGS) == 0 );
 
 
-static int __ef_eplock_lock_wait(ci_netif *ni, int maybe_wedged)
+static int __oo_eplock_lock(ci_netif* ni, long* timeout, int maybe_wedged)
 {
 #ifndef __KERNEL__
+  /* timeout is in long to keep jiffies in kernel, but it is int32
+   * in UL keeping msecs.
+   */
+  ci_int32 op = (long)*timeout;
   ci_assert_equal(maybe_wedged, 0);
-  return oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_EPLOCK_LOCK_WAIT,
-                        NULL);
+  return oo_resource_op(ci_netif_get_driver_handle(ni), OO_IOC_EPLOCK_LOCK,
+                        &op);
 #else
-  return efab_eplock_lock_wait(ni, maybe_wedged);
+  return oo_eplock_lock(ni, timeout, maybe_wedged);
 #endif
+
 }
 
-
-int __ef_eplock_lock_slow(ci_netif *ni, int maybe_wedged)
+int __ef_eplock_lock_slow(ci_netif *ni, long timeout, int maybe_wedged)
 {
 #ifndef __KERNEL__
   ci_uint64 start_frc, now_frc;
 #endif
   int rc;
-  ci_uint64 l, n;
 
 #ifndef __KERNEL__
   ci_assert_equal(maybe_wedged, 0);
 #endif
-
-  if( ef_eplock_trylock(&ni->state->lock) )
-    return 0;
 
 #ifndef __KERNEL__
   /* Limit to user-level for now.  Could allow spinning in kernel if we did
@@ -69,43 +69,32 @@ int __ef_eplock_lock_slow(ci_netif *ni, int maybe_wedged)
 #endif
 
   while( 1 ) {
-    if( (rc = __ef_eplock_lock_wait(ni, maybe_wedged)) < 0 ) {
-#ifndef __KERNEL__
-      if( rc == -EINTR )
-        /* Keep waiting if interrupted by a signal.  I think this is okay:
-         * If the outer call blocks, we'll handle the signal before
-         * blocking, and behave as if the signal arrived before the outer
-         * call.  If the outer call does not block, then we'll handle the
-         * signal on return, and behave as if the signal arrived after the
-         * outer call.
-         */
-        continue;
-      /* This should never happen. */
-      LOG_E(ci_log("%s: ERROR: rc=%d", __FUNCTION__, rc));
-      CI_TEST(0);
-#else
-      /* There is nothing we can do except propagate the error.  Caller
-       * must handle it.
-       */
-      if( (rc == -ERESTARTSYS) || (rc == -ECANCELED) )
-        return rc;
-      LOG_E(ci_log("%s: ERROR: rc=%d", __FUNCTION__, rc));
+    rc = __oo_eplock_lock(ni, &timeout, maybe_wedged);
+    if( rc == 0 || rc == -ETIMEDOUT )
       return rc;
-#endif
-    }
 
-    /* NB. This is better than using trylock, because we avoid the sys-call
-     * in the case that the cas fails.
+#ifndef __KERNEL__
+    if( rc == -EINTR )
+      /* Keep waiting if interrupted by a signal.  I think this is okay:
+       * If the outer call blocks, we'll handle the signal before
+       * blocking, and behave as if the signal arrived before the outer
+       * call.  If the outer call does not block, then we'll handle the
+       * signal on return, and behave as if the signal arrived after the
+       * outer call.
+       */
+      continue;
+    /* This should never happen. */
+    LOG_E(ci_log("%s: ERROR: rc=%d", __FUNCTION__, rc));
+    CI_TEST(0);
+#else
+    /* There is nothing we can do except propagate the error.  Caller
+     * must handle it.
      */
-  again:
-    l = ni->state->lock.lock;
-    if( ! (l & CI_EPLOCK_LOCKED) ) {
-      n = l | CI_EPLOCK_LOCKED;
-      if( ci_cas64u_succeed(&ni->state->lock.lock, l, n) )
-	return 0;
-      else
-	goto again;
-    }
+    if( (rc == -ERESTARTSYS) || (rc == -ECANCELED) )
+      return rc;
+    LOG_E(ci_log("%s: ERROR: rc=%d", __FUNCTION__, rc));
+    return rc;
+#endif
   }
 
   /* Can't get here. */

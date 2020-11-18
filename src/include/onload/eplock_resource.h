@@ -60,6 +60,9 @@ extern int efab_eplock_wake_and_do(ci_netif *ni, ci_uint64 l);
 /*! Comment? */
 extern int efab_eplock_lock_wait(ci_netif* ni, int maybe_wedged);
 
+/* Locks the stack.  Returns 0 in case of success. */
+extern int oo_eplock_lock(ci_netif* ni, long* timeout_jiffies, int maybe_wedged);
+
 extern int
 efab_eplock_lock_timeout(ci_netif* ni, signed long timeout_jiffies);
 
