@@ -743,8 +743,24 @@ void oo_exit_hook(void)
    * (see oo_fop_stack_flush_unlock()) and unlock the stack from here.
    */
   CI_DLLIST_FOR_EACH2( ci_netif, ni, link, &citp_active_netifs ) {
-    ci_netif_lock(ni);
-    ni->state->exiting_pid = pid;
+    /* We try to lock each stack during 5s, and then give up.
+     *
+     * We should not wait forever.  May be another process was killed by
+     * SIGKILL or SIGSEGV, and the lock is not available any more.
+     *
+     * 1s is too short, we see complains in simple tests.
+     * The net driver assumes that driverlink hook takes less than 1s (and
+     * complains otherwise), so it is OK to keep the stack locked for more
+     * than 1s in driverlink + workqueue.
+     *
+     * The ST has default timeout 10s, so we'd better use something
+     * smaller.
+     */
+    if( __ef_eplock_lock_slow(ni, 5000 /*5s*/, 0) == 0 )
+      ni->state->exiting_pid = pid;
+    else
+      NI_LOG(ni, RESOURCE_WARNINGS, "Failed to lock the Onload stack [%s] "
+             "for gracious application exit", ni->state->pretty_name);
   }
 
   CITP_FDTABLE_UNLOCK();
