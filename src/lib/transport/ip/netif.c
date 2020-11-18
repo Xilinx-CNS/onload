@@ -927,7 +927,7 @@ int ci_netif_lock_or_defer_work(ci_netif* ni, citp_waitable* w)
 
   while( 1 ) {
     ci_uint64 new_v, v = ni->state->lock.lock;
-    if( v & CI_EPLOCK_UNLOCKED ) {
+    if( ! (v & CI_EPLOCK_LOCKED) ) {
       if( ci_netif_trylock(ni) ) {
         ci_bit_clear(&w->sb_aflags, CI_SB_AFLAG_DEFERRED_BIT);
         citp_waitable_deferred_work(ni, w);
@@ -1260,7 +1260,7 @@ void ci_netif_unlock(ci_netif* ni)
   ci_assert_equal(ni->state->in_poll, 0);
   if(CI_LIKELY( ni->state->lock.lock == CI_EPLOCK_LOCKED &&
                 ci_cas64u_succeed(&ni->state->lock.lock,
-                                  CI_EPLOCK_LOCKED, CI_EPLOCK_UNLOCKED) ))
+                                  CI_EPLOCK_LOCKED, 0) ))
     return;
   ci_netif_unlock_slow(ni);
 
@@ -1283,8 +1283,7 @@ void ci_netif_unlock(ci_netif* ni)
   ci_uint64 l;
   do {
     l = ni->state->lock.lock;
-  } while( ci_cas64u_fail(&ni->state->lock.lock, l,
-                          (l & ~CI_EPLOCK_LOCKED) | CI_EPLOCK_UNLOCKED) );
+  } while( ci_cas64u_fail(&ni->state->lock.lock, l, l & ~CI_EPLOCK_LOCKED) );
 }
 #endif /* OO_DO_STACK_POLL */
 

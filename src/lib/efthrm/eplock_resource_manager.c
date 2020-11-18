@@ -100,15 +100,6 @@ efab_eplock_unlock_and_wake(ci_netif *ni, int in_dl_context)
 
  again:
 
-#ifndef NDEBUG
-  if( (~l & CI_EPLOCK_LOCKED) || (l & CI_EPLOCK_UNLOCKED) ) {
-    OO_DEBUG_ERR(ci_log("efab_eplock_unlock_and_wake:  corrupt"
-		    " (value is %x)", (unsigned) l));
-    OO_DEBUG_ERR(dump_stack());
-    return -EIO;
-  }
-#endif
-
   if( l & CI_EPLOCK_CALLBACK_FLAGS ) {
     /* Invoke the callback while we've still got the lock.  The callback
     ** is responsible for either
@@ -118,7 +109,7 @@ efab_eplock_unlock_and_wake(ci_netif *ni, int in_dl_context)
     */
     l = efab_tcp_helper_netif_lock_callback(&ni->eplock_helper, l, in_dl_context);
   }
-  else if( ci_cas64u_fail(&ni->state->lock.lock, l, CI_EPLOCK_UNLOCKED) ) {
+  else if( ci_cas64u_fail(&ni->state->lock.lock, l, 0) ) {
     /* Someone (probably) set a flag when we tried to unlock, so we'd
     ** better handle the flag(s).
     */
@@ -143,7 +134,7 @@ static int efab_eplock_is_unlocked_or_request_wake(ci_eplock_t* epl)
         ci_cas64u_succeed(&epl->lock, l, l | CI_EPLOCK_FL_NEED_WAKE) )
       return 1;
 
-  ci_assert(l & CI_EPLOCK_UNLOCKED);
+  ci_assert_nflags(l, CI_EPLOCK_LOCKED);
 
   return 0;
 }

@@ -4409,7 +4409,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     tcp_helper_request_wakeup(netif2tcp_helper_resource(ni));
   efab_tcp_helper_netif_unlock(rs, 0);
 #else
-  ni->state->lock.lock = CI_EPLOCK_UNLOCKED;
+  ni->state->lock.lock = 0;
 #endif
 
 

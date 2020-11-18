@@ -899,7 +899,6 @@ struct oo_deferred_pkt {
 typedef struct {
   volatile ci_uint64  lock;
 # define CI_EPLOCK_UNINITIALISED           0x00000000ULL
-# define CI_EPLOCK_UNLOCKED	           0x10000000ULL
 # define CI_EPLOCK_LOCKED	           0x20000000ULL
 # define CI_EPLOCK_FL_NEED_WAKE	           0x40000000ULL
 

@@ -40,9 +40,8 @@ extern int __ef_eplock_lock_slow(ci_netif *, int maybe_wedged) CI_HF;
   /*! Attempt to lock an eplock.  Returns true on success. */
 ci_inline int ef_eplock_trylock(ci_eplock_t* l) {
   ci_uint64 v = l->lock;
-  return (v & CI_EPLOCK_UNLOCKED) &&
-    ci_cas64u_succeed(&l->lock,
-                      v, (v &~ CI_EPLOCK_UNLOCKED) | CI_EPLOCK_LOCKED);
+  return !(v & CI_EPLOCK_LOCKED) &&
+    ci_cas64u_succeed(&l->lock, v, v | CI_EPLOCK_LOCKED);
 }
 
   /* Always returns 0 (success) at userland.  Returns -EINTR if interrupted
@@ -52,8 +51,7 @@ ci_inline int ef_eplock_trylock(ci_eplock_t* l) {
 ci_inline int ef_eplock_lock(ci_netif *ni) OO_MUST_CHECK_RET_IN_KERNEL;
 ci_inline int ef_eplock_lock(ci_netif *ni) {
   int rc = 0;
-  if( ci_cas64u_fail(&ni->state->lock.lock,
-                     CI_EPLOCK_UNLOCKED, CI_EPLOCK_LOCKED) )
+  if( ci_cas64u_fail(&ni->state->lock.lock, 0, CI_EPLOCK_LOCKED) )
     rc = __ef_eplock_lock_slow(ni, 0);
 #ifdef __KERNEL__
   return rc;
@@ -71,8 +69,7 @@ ci_inline int ef_eplock_lock(ci_netif *ni) {
 ci_inline int ef_eplock_lock_maybe_wedged(ci_netif *ni) OO_MUST_CHECK_RET;
 ci_inline int ef_eplock_lock_maybe_wedged(ci_netif *ni) {
   int rc = 0;
-  if( ci_cas64u_fail(&ni->state->lock.lock,
-                     CI_EPLOCK_UNLOCKED, CI_EPLOCK_LOCKED) )
+  if( ci_cas64u_fail(&ni->state->lock.lock, 0, CI_EPLOCK_LOCKED) )
     rc = __ef_eplock_lock_slow(ni, 1);
   return rc;
 }
@@ -127,7 +124,7 @@ ci_inline int ef_eplock_set_flag_if_locked(ci_eplock_t* l, ci_uint64 flag) {
   ci_assert((flag & CI_EPLOCK_LOCK_FLAGS) == 0u);
   do {
     v = l->lock;
-    if( v & CI_EPLOCK_UNLOCKED )  return 0;
+    if( ! (v & CI_EPLOCK_LOCKED) )  return 0;
     if( v & flag )  break;
   } while( ci_cas64u_fail(&l->lock, v, v | flag) );
   return 1;
@@ -142,7 +139,7 @@ ci_inline int ef_eplock_set_flags_if_locked(ci_eplock_t* l, ci_uint64 flags) {
   ci_assert((flags & CI_EPLOCK_LOCK_FLAGS) == 0u);
   do {
     v = l->lock;
-    if( v & CI_EPLOCK_UNLOCKED )  return 0;
+    if( ! (v & CI_EPLOCK_LOCKED) )  return 0;
     if( (v & flags) == flags )  break;
   } while( ci_cas64u_fail(&l->lock, v, v | flags) );
   return 1;
@@ -155,9 +152,9 @@ ci_inline int ef_eplock_trylock_and_set_flags(ci_eplock_t* l, ci_uint64 flags) {
   ci_uint64 v, new_v;
   do {
     v = l->lock;
-    new_v = (v &~ CI_EPLOCK_UNLOCKED) | CI_EPLOCK_LOCKED | flags;
+    new_v = v | CI_EPLOCK_LOCKED | flags;
   } while( ci_cas64u_fail(&l->lock, v, new_v) );
-  return v & CI_EPLOCK_UNLOCKED;
+  return ! (v & CI_EPLOCK_LOCKED);
 }
 
   /*! Either obtains the lock (returning 1) or sets the flag (returning 0).
@@ -168,9 +165,9 @@ ci_inline int ef_eplock_lock_or_set_flag(ci_eplock_t* l, ci_uint64 flag) {
   int rc;
   ci_assert((flag  & CI_EPLOCK_LOCK_FLAGS) == 0u);
   do {
-    if( (v = l->lock) & CI_EPLOCK_UNLOCKED ) {
+    if( ! ((v = l->lock) & CI_EPLOCK_LOCKED) ) {
       rc = 1;
-      new_v = (v &~ CI_EPLOCK_UNLOCKED) | CI_EPLOCK_LOCKED;
+      new_v = v | CI_EPLOCK_LOCKED;
     }
     else if( v & flag )
       return 0;
@@ -190,9 +187,9 @@ ci_inline int ef_eplock_lock_or_set_flags(ci_eplock_t* l, ci_uint64 flags) {
   int rc;
   ci_assert((flags  & CI_EPLOCK_LOCK_FLAGS) == 0u);
   do {
-    if( (v = l->lock) & CI_EPLOCK_UNLOCKED ) {
+    if( ! ((v = l->lock) & CI_EPLOCK_LOCKED) ) {
       rc = 1;
-      new_v = (v &~ CI_EPLOCK_UNLOCKED) | CI_EPLOCK_LOCKED;
+      new_v = v | CI_EPLOCK_LOCKED;
     }
     else if( (v & flags) == flags )
       return 0;
@@ -211,8 +208,7 @@ ci_inline int ef_eplock_try_unlock(ci_eplock_t* l,
 				   ci_uint64* lock_val_out,
 				   ci_uint64  flag_mask) {
   ci_uint64 lv = *lock_val_out = l->lock;
-  ci_uint64 unlock = (lv &~ (CI_EPLOCK_LOCKED | CI_EPLOCK_FL_NEED_WAKE)) |
-                    CI_EPLOCK_UNLOCKED;
+  ci_uint64 unlock = lv &~ (CI_EPLOCK_LOCKED | CI_EPLOCK_FL_NEED_WAKE);
   return (lv & flag_mask) ? 0 :
     ci_cas64u_succeed(&l->lock, lv, unlock);
 }

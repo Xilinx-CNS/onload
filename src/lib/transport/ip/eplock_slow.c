@@ -99,8 +99,8 @@ int __ef_eplock_lock_slow(ci_netif *ni, int maybe_wedged)
      */
   again:
     l = ni->state->lock.lock;
-    if( l & CI_EPLOCK_UNLOCKED ) {
-      n = (l &~ CI_EPLOCK_UNLOCKED) | CI_EPLOCK_LOCKED;
+    if( ! (l & CI_EPLOCK_LOCKED) ) {
+      n = l | CI_EPLOCK_LOCKED;
       if( ci_cas64u_succeed(&ni->state->lock.lock, l, n) )
 	return 0;
       else

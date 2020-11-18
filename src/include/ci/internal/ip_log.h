@@ -361,10 +361,9 @@ extern unsigned ci_tp_log CI_HV;
   ((flags) & CI_PKT_FLAG_TX_PSH_ON_ACK   ? "PshOnAck ":"")
 
 
-#define CI_NETIF_LOCK_FMT         "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s"
+#define CI_NETIF_LOCK_FMT         "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s"
 #define CI_NETIF_LOCK_PRI_ARG(v)                                        \
-  ((v) & CI_EPLOCK_UNLOCKED              ? "UNLOCKED ":""),             \
-  ((v) & CI_EPLOCK_LOCKED                ? "LOCKED ":""),               \
+  ((v) & CI_EPLOCK_LOCKED                ? "LOCKED ":"UNLOCKED"),       \
   ((v) & CI_EPLOCK_FL_NEED_WAKE          ? "CONTENDED ":""),            \
   ((v) & CI_EPLOCK_NETIF_NEED_POLL       ? "POLL ":""),                 \
   ((v) & CI_EPLOCK_NETIF_NEED_PRIME      ? "PRIME ":""),                \
