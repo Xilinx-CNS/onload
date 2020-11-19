@@ -107,6 +107,30 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
   (void)rc;
 }
 
+/* Hook to be called at gracious exit */
+void oo_exit_hook(void)
+{
+  citp_lib_context_t lib_context;
+
+  Log_CALL(ci_log("%s()", __func__));
+
+  if( ! have_active_netifs() )
+    return;
+
+  citp_enter_lib(&lib_context);
+  CITP_FDTABLE_LOCK_RD();
+
+#if CI_CFG_FD_CACHING
+  uncache_active_netifs();
+#endif
+
+  exit_lock_all_stacks();
+
+  CITP_FDTABLE_UNLOCK_RD();
+  citp_exit_lib(&lib_context, 1);
+}
+
+
 /*! Block until fdtable entry is neither closing nor busy, and return the
 ** new (non-closing-or-busy) fdip. */
 static citp_fdinfo_p citp_fdtable_closing_wait(unsigned fd, int fdt_locked);

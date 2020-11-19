@@ -681,9 +681,7 @@ void _init(void)
 void _fini(void)
 {
   Log_S(log("citp: finishing up"));
-#if CI_CFG_FD_CACHING
-  uncache_active_netifs();
-#endif
+  oo_exit_hook();
 }
 
 

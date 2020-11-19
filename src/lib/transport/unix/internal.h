@@ -521,6 +521,10 @@ extern void citp_uncache_fds_ul(ci_netif* netif);
 extern void uncache_active_netifs(void);
 #endif
 
+extern void exit_lock_all_stacks(void);
+extern bool have_active_netifs(void);
+
+
 /**********************************************************************
  ** Misc.
  */

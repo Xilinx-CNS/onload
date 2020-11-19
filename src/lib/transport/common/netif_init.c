@@ -172,11 +172,6 @@ static int __citp_netif_alloc(ef_driver_handle* fd, const char *name,
   return rc;
 }
 
-static void oo_exit_hook__on_exit(int status, void* arg)
-{
-  oo_exit_hook();
-}
-
 /* ***************************
  * Interface
  */
@@ -278,12 +273,6 @@ void citp_cmn_netif_init_ctor(unsigned netif_dtor_mode)
   ci_dllist_init(&citp_active_netifs);
 
   __CITP_UNLOCK(&citp_ul_lock);
-
-  /* Install the exit hook */
-  /* It is recommended to use atexit(), but linker complains, because
-   * atexit() resides in ld-linux.so instead of libc.so.  We can play games
-   * with linker script and libc_nonshared.a, or use on_exit(). */
-  on_exit(oo_exit_hook__on_exit, NULL);
 }
 
 
@@ -688,15 +677,17 @@ void __citp_netif_free(ci_netif* ni)
 }
 
 
+bool have_active_netifs(void)
+{
+  return ! ci_dllist_is_empty(&citp_active_netifs);
+}
+
 #if CI_CFG_FD_CACHING
 void uncache_active_netifs(void)
 {
   ci_netif* ni;
-  citp_lib_context_t lib_context;
-  citp_enter_lib(&lib_context);
 
   Log_V(ci_log("%s:", __FUNCTION__));
-  CITP_FDTABLE_LOCK_RD();
   CITP_FDTABLE_ASSERT_LOCKED(1);
   // citp_netif_cache_disable();
   /* Disable caching on every netif. */
@@ -705,25 +696,17 @@ void uncache_active_netifs(void)
       citp_uncache_fds_ul(ni);
     }
   }
-  CITP_FDTABLE_UNLOCK_RD();
-  citp_exit_lib(&lib_context, 1);
 }
 #endif
 
 
-void oo_exit_hook(void)
+void exit_lock_all_stacks(void)
 {
-  citp_lib_context_t lib_context;
   int pid = getpid();
   ci_netif* ni;
 
-  Log_CALL(ci_log("%s()", __func__));
-
   if( ci_dllist_is_empty(&citp_active_netifs) || ! ci_is_multithreaded() )
     return;
-
-  citp_enter_lib(&lib_context);
-  CITP_FDTABLE_LOCK();
 
   /* Lock all the stacks of this process.
    *
@@ -762,7 +745,5 @@ void oo_exit_hook(void)
       NI_LOG(ni, RESOURCE_WARNINGS, "Failed to lock the Onload stack [%s] "
              "for gracious application exit", ni->state->pretty_name);
   }
-
-  CITP_FDTABLE_UNLOCK();
-  citp_exit_lib(&lib_context, 1);
 }
+
