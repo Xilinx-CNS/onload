@@ -18,6 +18,20 @@
 #include <ci/tools/utils.h>
 #include "private.h"
 
+/* IFLA_XDP* is not present on machines we build cplane server,
+ * so we only use kernel header values when we have clarity
+ * they are present.
+ */
+#ifndef IFLA_XDP_MAX
+/* IFLA_GROUPP is the last item in 2.6.32 kernel codes */
+#define IFLA_XDP (IFLA_GROUP + 16)
+#define IFLA_XDP_PROG_ID 4
+#else
+  CI_BUILD_ASSERT(IFLA_XDP == IFLA_GROUP + 16);
+  CI_BUILD_ASSERT(IFLA_XDP_PROG_ID == 4);
+#endif
+
+
 /***** Generic NETLINK helpers *****/
 
 int cp_nl_send_dump_req(struct cp_session* s, int sock,
@@ -179,6 +193,7 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
   bool changed = false;
   struct cp_bond_netlink_state bond_state;
   cicp_rowid_t id;
+  cp_xdp_prog_id_t xdp_prog_id = 0;
 
   bool unsupported = 0;
 
@@ -230,6 +245,21 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
       case IFLA_MASTER:
         master_ifindex = *((uint32_t *)RTA_DATA(attr));
         break;
+
+      case IFLA_XDP:
+      {
+        RTA_NESTED_LOOP(attr, attr1, bytes1) {
+          switch( attr1->rta_type & NLA_TYPE_MASK ) {
+            case IFLA_XDP_PROG_ID:
+              xdp_prog_id = *(uint32_t*)RTA_DATA(attr1);
+              break;
+            default:
+              break;
+          }
+        }
+        /* TODO verify XDP mode? */
+      }
+      break;
 
       case IFLA_LINKINFO:
       {
@@ -485,7 +515,8 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
            * are imported from the main cplane */
           ((llap->flags & CP_LLAP_IMPORTED) != 0 &&
             (llap->encap.type & type) != type) ||
-          llap->encap.link_ifindex != link_ifindex ) {
+          llap->encap.link_ifindex != link_ifindex ||
+          llap->xdp_prog_id != xdp_prog_id ) {
         changed = true;
         old_rx_hwports = llap->rx_hwports;
         was_up = !!(llap->flags & CP_LLAP_UP);
@@ -518,6 +549,12 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
            * cp_llap_fix_upper_layers() to discover foreign properties. */
           populate_llap = true;
         }
+        else if( llap->rx_hwports && type == CICP_LLAP_TYPE_NONE) {
+          cp_set_hwport_xdp_prog_id(s, mib,
+                                    cp_hwport_mask_first(llap->rx_hwports),
+                                    xdp_prog_id);
+        }
+        llap->xdp_prog_id = xdp_prog_id;
         llap->ifindex = ifindex;
 
         /* If we're not going to update the hwports later, just notify OOF,

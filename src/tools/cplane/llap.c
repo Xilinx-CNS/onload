@@ -331,6 +331,15 @@ find_base_properties(struct cp_session* s, cicp_rowid_t llap_id,
 }
 
 
+void cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
+                               ci_hwport_id_t hwport,
+                               cp_xdp_prog_id_t xdp_prog_id)
+{
+  struct cp_hwport_row* hwp = &mib->hwport[hwport];
+  hwp->xdp_prog_id = xdp_prog_id;
+}
+
+
 /* Imports hwports specified in *hwports_in_out from the main namespace, and
  * inserts them into the current control plane.  The mask is updated to be
  * equal to the hwports actually imported.  The function returns one if
@@ -348,7 +357,8 @@ import_main_hwports(struct cp_session* s, cicp_hwport_mask_t* hwports_in_out)
   for( ; hwports != 0; hwports &= (hwports - 1) ) {
     ci_hwport_id_t hwport = cp_hwport_mask_first(hwports);
     int rc = oo_cp_get_hwport_properties(s->main_cp_handle, hwport,
-                                         &hwp.flags, &hwp.nic_flags);
+                                         &hwp.flags, &hwp.nic_flags,
+                                         &hwp.xdp_prog_id);
     if( rc != 0 ) {
       continue;
     }
@@ -365,10 +375,12 @@ import_main_hwports(struct cp_session* s, cicp_hwport_mask_t* hwports_in_out)
     int mib_i;
     MIB_UPDATE_LOOP(mib, s, mib_i)
       if( (hwp.flags | CP_LLAP_IMPORTED) !=
-          (mib->hwport[hwport].flags | CP_LLAP_IMPORTED) ) {
+          (mib->hwport[hwport].flags | CP_LLAP_IMPORTED) ||
+          mib->hwport[hwport].xdp_prog_id != hwp.xdp_prog_id ) {
         cp_mibs_llap_under_change(s);
         mib->hwport[hwport].flags = hwp.flags | CP_LLAP_IMPORTED;
         mib->hwport[hwport].nic_flags = hwp.nic_flags;
+        cp_set_hwport_xdp_prog_id(s, mib, hwport, hwp.xdp_prog_id);
       }
     MIB_UPDATE_LOOP_END(mib, s)
   }

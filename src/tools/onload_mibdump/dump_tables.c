@@ -24,8 +24,10 @@ void cp_dump_hwport_table(struct cp_mibs* mib)
 
   for( hwport = 0; hwport < mib->dim->hwport_max; hwport++ ) {
     if( ! cicp_hwport_row_is_free(&mib->hwport[hwport]) ) {
-      printf("hwport[%03d]: flags=%08x nic_flags=%016"CI_PRIx64"\n", hwport,
-             mib->hwport[hwport].flags, mib->hwport[hwport].nic_flags);
+      printf("hwport[%03d]: flags=%08x nic_flags=%016"CI_PRIx64
+             " xdp/id:%d\n", hwport,
+             mib->hwport[hwport].flags, mib->hwport[hwport].nic_flags,
+             mib->hwport[hwport].xdp_prog_id);
     }
   }
 }
@@ -47,10 +49,10 @@ void cp_dump_llap_table(struct cp_mibs* mib)
       return;
 
     ci_uint8 flags = mib->llap[id].flags;
-    printf("llap[%03d]: %8s (%d) %s mtu %d\n",
+    printf("llap[%03d]: %8s (%d) %s mtu %d xdp/id:%d\n",
            id, mib->llap[id].name, mib->llap[id].ifindex,
            (flags & CP_LLAP_UP) ? "UP" : "DOWN",
-           mib->llap[id].mtu);
+           mib->llap[id].mtu, mib->llap[id].xdp_prog_id);
     if( mib->llap[id].encap.type != CICP_LLAP_TYPE_NONE ) {
       printf("\t encap " CICP_ENCAP_NAME_FMT "\n",
              cicp_encap_name(mib->llap[id].encap.type));

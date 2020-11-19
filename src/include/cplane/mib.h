@@ -151,6 +151,8 @@ typedef ci_uint32 cp_hwport_flags_t;
 typedef cp_hwport_flags_t cp_llap_flags_t;
 typedef ci_uint64 cp_nic_flags_t;
 
+typedef ci_uint32 cp_xdp_prog_id_t;
+
 typedef struct cicp_llap_row_s {
   ci_ifid_t ifindex;
 
@@ -193,6 +195,9 @@ typedef struct cicp_llap_row_s {
   cicp_hwport_mask_t tx_hwports;
   cicp_hwport_mask_t rx_hwports;
 
+  /* program_id is stored in llap before it gets propagated to hwport */
+  cp_xdp_prog_id_t xdp_prog_id;
+
   /* If we make a routing request specifying this interface in RTA_IIF, use the
    * fwd table specified in this field to store the result. */
   cp_fwd_table_id iif_fwd_table_id;
@@ -203,6 +208,8 @@ struct cp_hwport_row {
 /* we reuse CP_LLAP flags here */
   cp_hwport_flags_t flags;
   cp_nic_flags_t nic_flags CI_ALIGN(8);
+
+  cp_xdp_prog_id_t xdp_prog_id;
 };
 
 
