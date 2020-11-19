@@ -375,7 +375,7 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 /* Is Driverlink supported on this device? */
 bool efx_dl_supported(struct efx_nic *efx)
 {
-	if (!efx->mcdi)
+	if (!efx->mcdi || !efx->dl_nic.ops)
 		return false;
 
 	/* VI spreading will confuse driverlink clients, so prevent
@@ -557,11 +557,10 @@ static int efx_start_datapath(struct efx_nic *efx)
 	    efx->type->filter_update_rx_scatter)
 		efx->type->filter_update_rx_scatter(efx);
 
-	if (efx->type->filter_table_restore) {
-		down_write(&efx->filter_sem);
-		efx->type->filter_table_restore(efx);
-		up_write(&efx->filter_sem);
-	}
+	if (efx->type->filter_table_up)
+		rc = efx->type->filter_table_up(efx);
+	if (rc)
+		goto fail;
 
 	/* We must keep at least one descriptor in a TX ring empty.
 	 * We could avoid this when the queue size does not exactly
@@ -593,6 +592,9 @@ static int efx_start_datapath(struct efx_nic *efx)
 	goto out;
 
 fail:
+	if (efx->type->filter_table_down)
+		efx->type->filter_table_down(efx);
+
 	efx_for_each_channel(channel, efx) {
 		efx_for_each_channel_tx_queue(tx_queue, channel) {
 			if (atomic_read(&efx->active_queues) == 0)
@@ -625,6 +627,9 @@ static void efx_stop_datapath(struct efx_nic *efx)
 	efx_ptp_stop_datapath(efx);
 
 	efx_stop_channels(efx);
+
+	if (efx->type->filter_table_down)
+		efx->type->filter_table_down(efx);
 }
 
 static void efx_start_port(struct efx_nic *efx)
@@ -1191,6 +1196,15 @@ out:
 	} else {
 		netif_dbg(efx, drv, efx->net_dev, "reset complete\n");
 		efx_device_attach_if_not_resetting(efx);
+
+		/* Now reset is finished, reconfigure MAC
+		 * again to ensure filters that weren't inserted while
+		 * resetting are now.
+		 */
+		mutex_lock(&efx->mac_lock);
+		(void)efx_mac_reconfigure(efx, false);
+		mutex_unlock(&efx->mac_lock);
+
 		if (PCI_FUNC(efx->pci_dev->devfn) == 0)
 			efx_mcdi_log_puts(efx, efx_reset_type_names[method]);
 	}
@@ -1346,6 +1360,80 @@ void efx_fini_struct(struct efx_nic *efx)
 #endif
 }
 
+bool efx_is_supported_ringsize(struct efx_nic *efx, unsigned long entries)
+{
+	if (efx->supported_bitmap)
+		return !!(efx->supported_bitmap & entries);
+
+	return true;
+}
+
+bool efx_is_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries)
+{
+	/* supported_bitmap!= 0 -- MCDI v10 ring size supported */
+	if (efx->supported_bitmap)
+		return !!(efx->guaranteed_bitmap & entries);
+
+	return true;
+}
+
+/* Tries to get nearest next available guaranteed ring size.
+ * Higher ring size is preferred of guranteed ring sizes.
+ * If nothing matches, returns the same value.
+ * param entries assmued to be pow-of-two
+ */
+unsigned long
+efx_best_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries,
+			     bool fallback_to_supported)
+{
+	unsigned long more_entries = entries << 1;
+	unsigned long less_entries = entries >> 1;
+
+	while (1) {
+		if ((more_entries & efx->supported_bitmap) &&
+		    (more_entries & efx->guaranteed_bitmap))
+			return more_entries;
+		more_entries <<= 1;
+		if ((less_entries & efx->supported_bitmap) &&
+		    (less_entries & efx->guaranteed_bitmap))
+			return less_entries;
+		less_entries >>= 1;
+		/* check if next loops are valid anymore */
+		if ((more_entries | less_entries) & efx->guaranteed_bitmap)
+			continue;
+		else if (fallback_to_supported &&
+			 (more_entries | less_entries) & efx->supported_bitmap)
+			continue;
+		else
+			break;
+	}
+
+	return entries;
+}
+
+unsigned long
+efx_next_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries,
+			     bool fallback_to_supported)
+{
+	unsigned long more_entries = entries << 1;
+
+	while (1) {
+		if ((more_entries & efx->supported_bitmap) &&
+		    (more_entries & efx->guaranteed_bitmap))
+			return more_entries;
+		more_entries <<= 1;
+		if (more_entries & efx->guaranteed_bitmap)
+			continue;
+		else if (fallback_to_supported &&
+			 (more_entries & efx->guaranteed_bitmap))
+			continue;
+		else
+			break;
+	}
+
+	return entries;
+}
+
 /* This zeroes out and then fills in the invariants in a struct
  * efx_nic (including all sub-structures).
  */
@@ -1375,6 +1463,9 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 #ifdef EFX_NOT_UPSTREAM
 	efx->phy_power_follows_link = phy_power_follows_link;
 	efx->link_down_on_reset = link_down_on_reset;
+#endif
+#ifdef DEBUG
+	efx->log_tc_errs = true;
 #endif
 	efx->rx_prefix_size = efx->type->rx_prefix_size;
 	efx->rx_ip_align =
@@ -1636,7 +1727,7 @@ void efx_fini_mcdi_logging(struct efx_nic *efx)
 /* V-port allocations.  Same algorithms (and justification for them) as RSS
  * contexts, above.
  */
-static struct efx_vport *efx_alloc_vport_entry(struct efx_nic *efx)
+struct efx_vport *efx_alloc_vport_entry(struct efx_nic *efx)
 {
 	struct list_head *head = &efx->vport.list;
 	struct efx_vport *ctx, *new;

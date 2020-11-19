@@ -80,6 +80,14 @@ enum ef100_bar_config {
 #endif
 };
 
+#ifdef CONFIG_SFC_VDPA
+enum ef100_vdpa_class {
+	EF100_VDPA_CLASS_NONE,
+	EF100_VDPA_CLASS_NET,
+	EF100_VDPA_CLASS_BLOCK,
+};
+#endif
+
 struct ef100_nic_data {
 	struct efx_nic *efx;
 	struct efx_buffer mcdi_buf;
@@ -87,9 +95,13 @@ struct ef100_nic_data {
 	u32 datapath_caps;
 	u32 datapath_caps2;
 	unsigned int pf_index;
+	unsigned int vf_index;
 	u16 warm_boot_count;
 	u8 port_id[ETH_ALEN];
 	enum ef100_bar_config bar_config;
+#ifdef CONFIG_SFC_VDPA
+	enum ef100_vdpa_class vdpa_class;
+#endif
 	u64 licensed_features;
 	DECLARE_BITMAP(evq_phases, EFX_MAX_CHANNELS);
 	u64 stats[EF100_STAT_COUNT];

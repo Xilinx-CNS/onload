@@ -41,20 +41,11 @@ int ef100_tx_init(struct efx_tx_queue *tx_queue)
 
 unsigned int ef100_tx_max_skb_descs(struct efx_nic *efx)
 {
-	/* Header and payload descriptor for each output segment, plus
-	 * one for every input fragment boundary within a segment
+	/* Option (PREFIX) descriptor, then header (TSO or SEND descriptor),
+	 * potentially one (SEG) descriptor for the rest of the linear area,
+	 * plus one (SEG) descriptor per fragment.
 	 */
-	unsigned int max_descs = EFX_TSO_MAX_SEGS * 2 + MAX_SKB_FRAGS;
-
-	/* One more per segment for option descriptors */
-	max_descs += EFX_TSO_MAX_SEGS;
-
-	/* Possibly more for PCIe page boundaries within input fragments */
-	if (PAGE_SIZE > EFX_PAGE_SIZE)
-		max_descs += max_t(unsigned int, MAX_SKB_FRAGS,
-				   DIV_ROUND_UP(GSO_MAX_SIZE, EFX_PAGE_SIZE));
-
-	return max_descs;
+	return 3 + MAX_SKB_FRAGS;
 }
 
 static bool ef100_tx_can_tso(struct efx_tx_queue *tx_queue, struct sk_buff *skb)

@@ -19,6 +19,7 @@
 #include "ef100_tx.h"
 #include "filter.h"
 #include "workarounds.h"
+#include "efx_common.h"
 
 /* netdevice_ops */
 int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd);
@@ -103,6 +104,30 @@ static inline bool efx_rx_buf_hash_valid(struct efx_nic *efx, const u8 *prefix)
 #endif
 #endif
 
+static inline unsigned long efx_min_dmaq_size(struct efx_nic *efx)
+{
+	return (efx->supported_bitmap ?
+		(1 << (ffs(efx->supported_bitmap) - 1)) : EFX_MIN_DMAQ_SIZE);
+}
+
+static inline unsigned long efx_max_dmaq_size(struct efx_nic *efx)
+{
+	return (efx->supported_bitmap ?
+		(1 << (fls(efx->supported_bitmap) - 1)) : EFX_MAX_DMAQ_SIZE);
+}
+
+static inline unsigned long efx_min_evtq_size(struct efx_nic *efx)
+{
+	return (efx->supported_bitmap ?
+		(1 << (ffs(efx->supported_bitmap) - 1)) : EFX_MIN_EVQ_SIZE);
+}
+
+static inline unsigned long efx_max_evtq_size(struct efx_nic *efx)
+{
+	return (efx->supported_bitmap ?
+		(1 << (fls(efx->supported_bitmap) - 1)) : EFX_MAX_EVQ_SIZE);
+}
+
 /* Each packet can consume up to ceil(max_frame_len / buffer_size) buffers */
 #define EFX_RX_MAX_FRAGS DIV_ROUND_UP(EFX_MAX_FRAME_LEN(EFX_MAX_MTU), \
                                       EFX_RX_USR_BUF_SIZE)
@@ -118,7 +143,8 @@ static inline bool efx_rx_buf_hash_valid(struct efx_nic *efx, const u8 *prefix)
  * other purposes when counting TxQ entries, so we halve the queue size.
  */
 #define EFX_TXQ_MAX_ENT(efx)	(EFX_WORKAROUND_EF10(efx) ? \
-				 EFX_MAX_DMAQ_SIZE / 2 : EFX_MAX_DMAQ_SIZE)
+				 efx_max_dmaq_size(efx) / 2 : \
+				 efx_max_dmaq_size(efx))
 
 #ifdef EFX_NOT_UPSTREAM
 /* PCIe link bandwidth measure:
@@ -278,12 +304,6 @@ static inline bool efx_rss_active(struct efx_rss_context *ctx)
 {
 	return ctx->context_id != EFX_MCDI_RSS_CONTEXT_INVALID;
 }
-
-/* V-ports */
-struct efx_vport *efx_find_vport_entry(struct efx_nic *efx, u16 id);
-void efx_free_vport_entry(struct efx_vport *ctx);
-int efx_vport_add(struct efx_nic *efx, u16 vlan, bool vlan_restrict);
-int efx_vport_del(struct efx_nic *efx, u16 port_user_id);
 
 /* Ethtool support */
 #ifdef EFX_USE_KCOMPAT

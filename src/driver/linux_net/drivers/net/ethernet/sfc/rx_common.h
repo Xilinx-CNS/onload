@@ -61,12 +61,14 @@ void efx_discard_rx_packet(struct efx_channel *channel,
 static inline u8 *efx_rx_buf_va(struct efx_rx_buffer *buf)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-	if (buf->flags & EFX_RX_BUF_FROM_UMEM)
+#if defined(CONFIG_XDP_SOCKETS)
+	if (buf->flags & EFX_RX_BUF_ZC)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_XSK_BUFFER_ALLOC)
 		return ((u8 *)buf->xsk_buf->data + buf->page_offset);
 #else
 		return ((u8 *)buf->addr + buf->page_offset);
 #endif
+#endif /* CONFIG_XDP_SOCKETS */
 #endif
 	return page_address(buf->page) + buf->page_offset;
 }
@@ -115,8 +117,8 @@ struct efx_arfs_rule *efx_rps_hash_add(struct efx_nic *efx,
 void efx_rps_hash_del(struct efx_nic *efx, const struct efx_filter_spec *spec);
 #endif
 
-int efx_probe_filters(struct efx_nic *efx);
-void efx_remove_filters(struct efx_nic *efx);
+int efx_init_filters(struct efx_nic *efx);
+void efx_fini_filters(struct efx_nic *efx);
 
 static inline bool efx_tx_vi_spreading(struct efx_nic *efx)
 {

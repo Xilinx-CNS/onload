@@ -325,7 +325,7 @@ static void efx_ethtool_get_ringparam(struct net_device *net_dev,
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
-	ring->rx_max_pending = EFX_MAX_DMAQ_SIZE;
+	ring->rx_max_pending = efx_max_dmaq_size(efx);
 	ring->tx_max_pending = EFX_TXQ_MAX_ENT(efx);
 	ring->rx_pending = efx->rxq_entries;
 	ring->tx_pending = efx->txq_entries;
@@ -347,11 +347,12 @@ static int efx_ethtool_set_ringparam(struct net_device *net_dev,
 
 	/* Validate range and rounding of RX queue. */
 	rc = efx_check_queue_size(efx, &ring->rx_pending,
-				  EFX_RXQ_MIN_ENT, EFX_MAX_DMAQ_SIZE, false);
+				  EFX_RXQ_MIN_ENT, efx_max_dmaq_size(efx),
+				  false);
 	if (rc == -ERANGE)
 		netif_err(efx, drv, efx->net_dev,
 			  "Rx queue length must be between %u and %lu\n",
-			  EFX_RXQ_MIN_ENT, EFX_MAX_DMAQ_SIZE);
+			  EFX_RXQ_MIN_ENT, efx_max_dmaq_size(efx));
 	else if (rc == -EINVAL)
 		netif_err(efx, drv, efx->net_dev,
 			  "Rx queue length must be power of two\n");

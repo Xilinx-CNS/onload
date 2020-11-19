@@ -29,6 +29,57 @@ static void ef100_ethtool_get_ringparam(struct net_device *net_dev,
 	ring->tx_pending = efx->txq_entries;
 }
 
+static int ef100_ethtool_set_ringparam(struct net_device *net_dev,
+				       struct ethtool_ringparam *ring)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	int rc = 0;
+
+	if (ring->rx_mini_pending || ring->rx_jumbo_pending)
+		return -EINVAL;
+
+	if ((ring->rx_pending & (ring->rx_pending - 1)) ||
+	    (ring->tx_pending & (ring->tx_pending - 1))) {
+		netif_err(efx, drv, efx->net_dev,
+			  "ring sizes that are not pow of 2, not supported");
+		return -EINVAL;
+	}
+	if (ring->rx_pending == efx->rxq_entries &&
+	    ring->tx_pending == efx->txq_entries)
+		/* Nothing to do */
+		return 0;
+
+	if (!efx->supported_bitmap) {
+		netif_err(efx, drv, efx->net_dev,
+			  "ring size changes not supported\n");
+		return -EOPNOTSUPP;
+	}
+	if (ring->rx_pending &&
+	    !(efx->guaranteed_bitmap & ring->rx_pending)) {
+		netif_err(efx, drv, efx->net_dev,
+			  "unsupported ring size for RX");
+		return -ERANGE;
+	}
+	if (ring->tx_pending &&
+	    !(efx->guaranteed_bitmap & ring->tx_pending)) {
+		netif_err(efx, drv, efx->net_dev,
+			  "unsupported ring sizes for TX");
+		return -ERANGE;
+	}
+
+	/* Apply the new settings */
+	efx->rxq_entries = ring->rx_pending;
+	efx->txq_entries = ring->tx_pending;
+
+	/* Update the datapath with the new settings if the interface is up */
+	if (!efx_check_disabled(efx) && netif_running(efx->net_dev)) {
+		dev_close(net_dev);
+		rc = dev_open(net_dev, NULL);
+	}
+
+	return rc;
+}
+
 /*	Ethtool options available
  */
 const struct ethtool_ops ef100_ethtool_ops = {
@@ -52,6 +103,7 @@ const struct ethtool_ops ef100_ethtool_ops = {
 #endif
 	.get_link		= ethtool_op_get_link,
 	.get_ringparam		= ef100_ethtool_get_ringparam,
+	.set_ringparam		= ef100_ethtool_set_ringparam,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_FECPARAM)
 	.get_fecparam		= efx_ethtool_get_fecparam,
 	.set_fecparam		= efx_ethtool_set_fecparam,

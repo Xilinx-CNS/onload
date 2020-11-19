@@ -357,7 +357,7 @@ static void efx_allocate_xdp_channels(struct efx_nic *efx,
 	 * multiple tx queues, assuming tx and ev queues are both
 	 * maximum size.
 	 */
-	int tx_per_ev = EFX_MAX_EVQ_SIZE / EFX_TXQ_MAX_ENT(efx);
+	int tx_per_ev = efx_max_evtq_size(efx) / EFX_TXQ_MAX_ENT(efx);
 	int n_xdp_tx;
 	int n_xdp_ev;
 
@@ -682,8 +682,16 @@ int efx_probe_interrupts(struct efx_nic *efx)
 	}
 
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
-    if (efx->interrupt_mode == EFX_INT_MODE_POLLED) ;
-        /* Do nothing */
+	if (efx->interrupt_mode == EFX_INT_MODE_POLLED) {
+		efx->n_extra_channels = 0;
+		efx->n_combined_channels = 1;
+		efx->n_rx_only_channels = 0;
+		efx->n_rss_channels = 1;
+		efx->rss_spread = 1;
+		efx->n_tx_only_channels = 0;
+		efx->tx_channel_offset = 0;
+		efx->n_xdp_channels = 0;
+	}
 #endif
 
 	/* RSS on the PF might now be impossible due to interrupt allocation
@@ -1085,18 +1093,26 @@ static int efx_probe_eventq(struct efx_channel *channel)
 #endif
 #endif
 
-	if (entries > EFX_MAX_EVQ_SIZE) {
+	if (entries > efx_max_evtq_size(efx)) {
 		netif_warn(efx, probe, efx->net_dev,
 			   "chan %d ev queue too large at %lu, capped at %lu\n",
-			   channel->channel, entries, EFX_MAX_EVQ_SIZE);
-		entries = EFX_MAX_EVQ_SIZE;
+			   channel->channel, entries, efx_max_evtq_size(efx));
+		entries = efx_max_evtq_size(efx);
 	} else {
 		entries = roundup_pow_of_two(entries);
-		netif_dbg(efx, probe, efx->net_dev,
-			  "chan %d ev queue created with %lu entries\n",
-			  channel->channel, entries);
 	}
-	channel->eventq_mask = max(entries, EFX_MIN_EVQ_SIZE) - 1;
+	if (!efx_is_guaranteed_ringsize(efx, entries)) {
+		unsigned int new_entries =
+			efx_next_guaranteed_ringsize(efx, entries, true);
+
+		if (new_entries == entries)
+			return -ERANGE;
+		entries = new_entries;
+	}
+	netif_dbg(efx, probe, efx->net_dev,
+		  "chan %d ev queue created with %lu entries\n",
+		  channel->channel, entries);
+	channel->eventq_mask = max(entries, efx_min_evtq_size(efx)) - 1;
 
 	return efx_nic_probe_eventq(channel);
 }
@@ -1212,6 +1228,7 @@ static int efx_set_channel_tx(struct efx_nic *efx, struct efx_channel *channel)
 		tx_queue->efx = efx;
 		tx_queue->channel = channel;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(CONFIG_XDP_SOCKETS)
 		/* for xsk queue, no csum_offload is used as the onus is put on,
 		 * application for the same.
 		 */
@@ -1220,6 +1237,9 @@ static int efx_set_channel_tx(struct efx_nic *efx, struct efx_channel *channel)
 		else
 #endif
 			tx_queue->csum_offload = j;
+#else
+		tx_queue->csum_offload = j;
+#endif
 		tx_queue->label = j;
 		tx_queue->queue = queue_base + j;
 		/* When using an even number of queues, for even numbered
@@ -1323,8 +1343,10 @@ int efx_init_channels(struct efx_nic *efx)
 	unsigned int i;
 	int rc = 0;
 
-	if (WARN_ON(efx->type->supported_interrupt_modes == 0))
-		return false;
+	if (WARN_ON(efx->type->supported_interrupt_modes == 0)) {
+		netif_err(efx, drv, efx->net_dev, "no interrupt modes supported\n");
+		return -ENOTSUPP;
+	}
 
 	if (BIT(interrupt_mode) & efx->type->supported_interrupt_modes)
 		efx->interrupt_mode = interrupt_mode;
@@ -1443,6 +1465,28 @@ efx_copy_channel(struct efx_channel *old_channel)
 	return channel;
 }
 
+static int efx_calc_queue_entries(struct efx_nic *efx)
+{
+	unsigned int entries;
+
+	entries = efx->txq_entries;
+	if (!efx_is_guaranteed_ringsize(efx, entries)) {
+		efx->txq_entries = efx_best_guaranteed_ringsize(efx, entries,
+								false);
+		if (efx->txq_entries == entries)
+			return -ERANGE;
+	}
+	entries = efx->rxq_entries;
+	if (!efx_is_guaranteed_ringsize(efx, entries)) {
+		efx->rxq_entries = efx_best_guaranteed_ringsize(efx, entries,
+								false);
+		if (efx->rxq_entries == entries)
+			return -ERANGE;
+	}
+
+	return 0;
+}
+
 static int efx_probe_channel(struct efx_channel *channel)
 {
 	struct efx_tx_queue *tx_queue;
@@ -1458,6 +1502,10 @@ static int efx_probe_channel(struct efx_channel *channel)
 	rc = channel->type->pre_probe(channel);
 	if (rc)
 		goto fail;
+
+	rc = efx_calc_queue_entries(efx);
+	if (rc)
+		return rc;
 
 	rc = efx_probe_eventq(channel);
 	if (rc)
@@ -1677,6 +1725,13 @@ out:
 		if (efx->state == STATE_NET_UP)
 			efx_start_all(efx);
 		efx_device_attach_if_not_resetting(efx);
+		if (efx->state == STATE_NET_UP && !efx->reset_pending) {
+			mutex_lock(&efx->mac_lock);
+			down_read(&efx->filter_sem);
+			efx_mcdi_filter_sync_rx_mode(efx);
+			up_read(&efx->filter_sem);
+			mutex_unlock(&efx->mac_lock);
+		}
 	}
 	return rc;
 
@@ -1894,6 +1949,7 @@ void efx_disable_interrupts(struct efx_nic *efx)
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(CONFIG_XDP_SOCKETS)
 int efx_channel_start_xsk_queue(struct efx_channel *channel)
 {
 	struct efx_rx_queue *rx_queue;
@@ -1971,6 +2027,7 @@ int efx_channel_stop_xsk_queue(struct efx_channel *channel)
 
 	return 0;
 }
+#endif
 #endif
 
 int efx_start_channels(struct efx_nic *efx)

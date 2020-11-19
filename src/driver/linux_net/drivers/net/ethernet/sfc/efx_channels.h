@@ -48,8 +48,10 @@ int efx_resume_napi(struct efx_nic *efx);
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
+#if defined(CONFIG_XDP_SOCKETS)
 int efx_channel_start_xsk_queue(struct efx_channel *channel);
 int efx_channel_stop_xsk_queue(struct efx_channel *channel);
+#endif
 #endif
 int efx_start_channels(struct efx_nic *efx);
 void efx_stop_channels(struct efx_nic *efx);

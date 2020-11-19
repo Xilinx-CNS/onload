@@ -504,7 +504,7 @@ void __efx_rx_packet(struct efx_channel *channel)
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
-	if (rx_buf->flags & EFX_RX_BUF_FROM_UMEM) {
+	if (rx_buf->flags & EFX_RX_BUF_ZC) {
 		rx_deliver = true;
 		goto deliver_now;
 	}
