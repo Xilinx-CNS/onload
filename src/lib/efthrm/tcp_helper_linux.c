@@ -895,8 +895,14 @@ int oo_fop_flush(struct file *f, fl_owner_t id)
 
   /* Attach the file to some fd, avoiding close. */
   fd = get_unused_fd_flags(O_CLOEXEC);
-  fd_install(fd, f);
-  get_file(f);
+  if( fd >= 0 ) {
+    fd_install(fd, f);
+    get_file(f);
+  }
+  else {
+    /* Give UL some distinguishable value */
+    fd = SI_ONLOAD;
+  }
 
   info.si_signo = SIGONLOAD;
   info.si_code = fd;

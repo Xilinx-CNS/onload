@@ -74,7 +74,7 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
 
   /* It the signal comes from dup(), then pthread_kill() results in
    * tgkill() syscall, which uses SI_TKILL code. */
-  if( info->si_code < 0 ) {
+  if( info->si_code < 0 && info->si_code != SI_ONLOAD ) {
     ci_assert_equal(info->si_code, SI_TKILL);
     return;
   }
@@ -86,7 +86,7 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
                   __func__, fd_closed, fd_duped));
   citp_enter_lib(&lib_context);
 
-  if( fd_closed != fd_duped ) {
+  if( fd_closed != fd_duped && fd_duped >= 0 ) {
     int saved_errno = errno;
     rc = ci_sys_fcntl(fd_duped, F_DUPFD_CLOEXEC, fd_closed);
     if( rc != fd_closed ) {
