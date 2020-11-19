@@ -1935,9 +1935,9 @@ ci_setsockopt_os_fail_ignore(ci_netif* ni, ci_sock_cmn* s, int err,
 
 struct oo_per_thread;
 typedef void (*citp_init_thread_callback)(struct oo_per_thread*);
-typedef void (*oo_exit_hook_fn)(void);
+typedef void (*oo_signal_terminate_fn)(int signum);
 extern int ci_tp_init(citp_init_thread_callback cb,
-                      oo_exit_hook_fn exit_hook) CI_HF;
+                      oo_signal_terminate_fn signal_terminate_fn) CI_HF;
 extern int ci_tcp_bind(citp_socket* ep, const struct sockaddr* my_addr,
                        socklen_t addrlen, ci_fd_t fd) CI_HF;
 #if CI_CFG_ENDPOINT_MOVE

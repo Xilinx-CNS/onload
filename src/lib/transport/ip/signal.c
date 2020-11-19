@@ -23,10 +23,6 @@
 #error "Non-kernel file"
 #endif
 
-#if ! CI_CFG_USERSPACE_SYSCALL
-#define ci_sys_syscall syscall
-#endif
-
 struct oo_sigstore {
   ci_uint32 seq;
 #define OO_SIGSTORE_BUSY        0x80000000
@@ -316,8 +312,8 @@ struct kernel_sigaction {
 #endif
 };
 
-static int oo_syscall_sigaction(int sig, const struct sigaction* user_act,
-                                struct sigaction* user_oldact)
+int oo_syscall_sigaction(int sig, const struct sigaction* user_act,
+                         struct sigaction* user_oldact)
 {
   struct kernel_sigaction act, oldact;
   int rc;
@@ -356,30 +352,19 @@ static int oo_libc_sigaction(int sig, const struct sigaction* user_act,
 }
 
 
-oo_exit_hook_fn signal_exit_hook;
+oo_signal_terminate_fn signal_terminate_fn;
 
-static void oo_signal_terminate(int signum)
-{
-  struct sigaction act = { };
-
-  LOG_SIG(ci_log("%s(%d)", __func__, signum));
-  signal_exit_hook();
-
-  /* Set SIGDFL and trigger it */
-  oo_syscall_sigaction(signum, &act, NULL);
-  ci_sys_syscall(__NR_tgkill, getpid(), ci_sys_syscall(__NR_gettid), signum);
-}
 static void oo_signal_terminate_siginfo(int signum,
                                         siginfo_t *info, void *context)
 {
-  oo_signal_terminate(signum);
+  signal_terminate_fn(signum);
 }
 
 
 /* Convert the sigaction from our store to what the user expects to see */
 static void oo_fixup_oldact(struct sigaction *oldact)
 {
-  if( oldact->sa_handler == oo_signal_terminate ||
+  if( oldact->sa_handler == signal_terminate_fn ||
       oldact->sa_sigaction == oo_signal_terminate_siginfo )
     oldact->sa_handler = SIG_DFL;
 #ifdef USE_SA_RESTORER
@@ -450,7 +435,7 @@ oo_signal_install_to_onload(int sig, const struct sigaction *act,
       if( new_store->sa_flags & SA_SIGINFO )
         new_store->sa_sigaction = oo_signal_terminate_siginfo;
       else
-        new_store->sa_handler = oo_signal_terminate;
+        new_store->sa_handler = signal_terminate_fn;
     }
   }
   else {

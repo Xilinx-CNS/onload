@@ -1163,6 +1163,7 @@ ci_inline int oo_service_fd(void)
   return citp.onload_fd;
 }
 
+extern void oo_signal_terminate(int signum);
 
 #endif  /* __CI_TRANSPORT_INTERNAL_H__ */
 /*! \cidoxg_end */

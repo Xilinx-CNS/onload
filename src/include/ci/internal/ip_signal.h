@@ -67,6 +67,8 @@ oo_exit_lib_temporary_end(citp_signal_info* si, int inside_lib_value)
 
 extern int oo_do_sigaction(int sig, const struct sigaction *act,
                            struct sigaction *oldact);
+extern int oo_syscall_sigaction(int sig, const struct sigaction* user_act,
+                                struct sigaction* user_oldact);
 
 /* Signal initialization is performed in 2 stages:
  * - install SIGONLOAD handler and find sa_restorer

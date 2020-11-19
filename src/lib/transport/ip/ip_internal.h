@@ -748,7 +748,7 @@ oo_spinloop_pause_check_signals(ci_netif* ni,
 
 #ifndef __KERNEL__
 extern citp_init_thread_callback init_thread_callback CI_HV;
-extern oo_exit_hook_fn signal_exit_hook CI_HV;
+extern oo_signal_terminate_fn signal_terminate_fn CI_HV;
 #endif
 
 

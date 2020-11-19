@@ -2768,7 +2768,7 @@ OO_INTERCEPT(void, _exit, (int status))
    * if the app calls exit(3).  In the case of gracious exit() we call
    * oo_exit_hook() graciously, via _fini().
    */
-  oo_exit_hook();
+  oo_exit_hook(status << 8);
   return ci_sys__exit(status);
 }
 

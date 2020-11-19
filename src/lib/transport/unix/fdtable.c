@@ -62,6 +62,39 @@ static void dup2_complete(citp_fdinfo* prev_newfdi,
 #error unknown architecture
 #endif
 
+
+#if ! CI_CFG_USERSPACE_SYSCALL
+#define ci_sys_syscall syscall
+#endif
+
+static void exit_with_status(int status)
+{
+  /* oo_exit_hook() takes too long, we should exit ungraciously */
+  if( WIFEXITED(status) )
+    ci_sys__exit(WEXITSTATUS(status));
+  else if( WIFSIGNALED(status) )
+    ci_sys_syscall(__NR_tgkill, getpid(), ci_sys_syscall(__NR_gettid),
+                   WTERMSIG(status));
+
+  return;
+}
+
+void oo_signal_terminate(int signum)
+{
+  struct sigaction act = { };
+
+  Log_CALL(ci_log("%s(%d)", __func__, signum));
+
+  /* Set SIGDFL for this signal, so that we do what the user expects next
+   * time
+   */
+  oo_syscall_sigaction(signum, &act, NULL);
+
+  oo_exit_hook(signum);
+
+  exit_with_status(signum);
+}
+
 static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
 {
   ucontext_t *ctx = context;
@@ -108,11 +141,40 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
 }
 
 /* Hook to be called at gracious exit */
-void oo_exit_hook(void)
+void oo_exit_hook(int status)
 {
   citp_lib_context_t lib_context;
+  /* exit status as in waitpid:
+   *   (exit_status << 8) | exit_sig
+   * combined with OO_EXIT_STATUS_SET when really exiting.
+   * _fini() exits with status=0, so we have to mark it somehow.
+   */
+#define OO_EXIT_STATUS_SET 0x10000
+  static ci_uint32 exit_status;
+  ci_uint32 old_status;
 
-  Log_CALL(ci_log("%s()", __func__));
+  Log_CALL(ci_log("%s(0x%x)", __func__, status));
+
+  do {
+    old_status = exit_status;
+  } while( ci_cas32u_fail(&exit_status, old_status,
+                          status | OO_EXIT_STATUS_SET) );
+
+  if( old_status != 0 ) {
+    if( status != 0 ) {
+      /* We have been already exiting, and now we see emergency exit via
+       * _exit() or via signal.  Do the emergency thing.
+       */
+      exit_with_status(status);
+      return;
+    }
+    else {
+      /* This hook have already been called, from either _exit() or signal.
+       * Now we are in _fini(): return.
+       */
+      return;
+    }
+  }
 
   if( ! have_active_netifs() )
     return;
