@@ -119,20 +119,9 @@ oo_efrm_reset_suspend_callback(struct efrm_client* client, void* arg)
 #endif
 }
 
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-static void
-oo_efrm_xdp_change_callback(struct efrm_client* client, void* arg)
-{
-  oo_efrm_callback_hook_generic(client, tcp_helper_xdp_change);
-}
-#endif
-
 static struct efrm_client_callbacks oo_efrm_client_callbacks = {
   oo_efrm_reset_callback,
   oo_efrm_reset_suspend_callback,
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-  oo_efrm_xdp_change_callback,
-#endif
 };
 
 

@@ -341,10 +341,6 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
     sl_flags |= CI_EPLOCK_NETIF_SWF_UPDATE;
   if( l & OO_TRUSTED_LOCK_PURGE_TXQS )
     sl_flags |= CI_EPLOCK_NETIF_PURGE_TXQS;
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-  if( l & OO_TRUSTED_LOCK_XDP_CHANGE )
-    sl_flags |= CI_EPLOCK_NETIF_XDP_CHANGE;
-#endif
 #if CI_CFG_HANDLE_ICMP
   if( l & OO_TRUSTED_LOCK_HANDLE_ICMP )
     sl_flags |= CI_EPLOCK_NETIF_HANDLE_ICMP;
@@ -1520,12 +1516,9 @@ static void initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
 }
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-typedef uint32_t ci_xdp_prog_id_t;
-static void tcp_helper_nic_detach_xdp(struct tcp_helper_nic* trs_nic,
-                                      struct efhw_nic* nic);
 static int tcp_helper_nic_attach_xdp(ci_netif* ni,
                                      struct tcp_helper_nic* trs_nic,
-                                     struct efhw_nic* nic);
+                                     cp_xdp_prog_id_t xdp_prog_id);
 #endif
 
 /* callback from ef_vi->ops */
@@ -1734,7 +1727,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
     trs_nic->thn_xdp_prog = NULL;
     if( NI_OPTS(ni).xdp_mode == EF_XDP_MODE_COMPATIBLE )
-      rc = tcp_helper_nic_attach_xdp(ni, trs_nic, nic);
+      rc = tcp_helper_nic_attach_xdp(ni, trs_nic, xdp_prog_id);
 #endif
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
@@ -1960,7 +1953,7 @@ static void release_vi(tcp_helper_resource_t* trs)
 #endif
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
     if( trs_nic->thn_xdp_prog )
-      tcp_helper_nic_detach_xdp(trs_nic, nic);
+      tcp_helper_nic_attach_xdp(&trs->netif, trs_nic, 0);
 #endif
     for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
       efrm_vi_resource_release_flushed(trs_nic->thn_vi_rs[vi_i]);
@@ -4118,9 +4111,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   rs->intfs_to_reset = 0;
   rs->intfs_suspended = 0;
 #endif
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-  rs->intfs_to_xdp_update = 0;
-#endif
 #if CI_CFG_ENDPOINT_MOVE
   rs->thc = NULL;
 #endif
@@ -4877,52 +4867,13 @@ void tcp_helper_reset_stack(ci_netif* ni, int intf_i)
 
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-/* This callback from efrm occurs with a spinlock held, so we cannot handle
- * the change directly here, but must defer it.  The actual update is handled
- * by tcp_helper_handle_xdp_change().
- */
-void tcp_helper_xdp_change(ci_netif *ni, int intf_i)
+void tcp_helper_handle_xdp_change(tcp_helper_resource_t *thr, int intf_i,
+                                  cp_xdp_prog_id_t xdp_prog_id)
 {
-  tcp_helper_resource_t *thr = CI_CONTAINER(tcp_helper_resource_t, netif, ni);
-  ci_irqlock_state_t lock_flags;
+  struct tcp_helper_nic* trs_nic = &thr->nic[intf_i];
 
-  /* Remember which interface needs the update */
-  ci_irqlock_lock(&thr->lock, &lock_flags);
-  thr->intfs_to_xdp_update |= (1 << intf_i);
-  ci_irqlock_unlock(&thr->lock, &lock_flags);
-
-  if( efab_tcp_helper_netif_lock_or_set_flags(thr, OO_TRUSTED_LOCK_XDP_CHANGE,
-                                              CI_EPLOCK_NETIF_XDP_CHANGE,
-                                              1) ) {
-    ef_eplock_holder_set_flag(&ni->state->lock, CI_EPLOCK_NETIF_XDP_CHANGE);
-    efab_tcp_helper_netif_unlock(thr, 1);
-  }
-}
-
-void tcp_helper_handle_xdp_change(tcp_helper_resource_t *thr)
-{
-  int intf_i;
-  unsigned intfs_to_update;
-  ci_irqlock_state_t lock_flags;
-
-  ci_irqlock_lock(&thr->lock, &lock_flags);
-  intfs_to_update = thr->intfs_to_xdp_update;
-  thr->intfs_to_xdp_update = 0;
-  ci_irqlock_unlock(&thr->lock, &lock_flags);
-
-  for( intf_i = 0; intf_i < CI_CFG_MAX_INTERFACES; ++intf_i ) {
-    if( intfs_to_update & (1 << intf_i) ) {
-      struct tcp_helper_nic* trs_nic = &thr->nic[intf_i];
-      struct efhw_nic* nic =
-        efrm_client_get_nic(trs_nic->thn_oo_nic->efrm_client);
-
-      if( NI_OPTS(&thr->netif).xdp_mode == EF_XDP_MODE_COMPATIBLE ) {
-        if( trs_nic->thn_xdp_prog )
-          tcp_helper_nic_detach_xdp(trs_nic, nic);
-        tcp_helper_nic_attach_xdp(&thr->netif, trs_nic, nic);
-      }
-    }
-  }
+  if( NI_OPTS(&thr->netif).xdp_mode == EF_XDP_MODE_COMPATIBLE )
+    tcp_helper_nic_attach_xdp(&thr->netif, trs_nic, xdp_prog_id);
 }
 #endif
 
@@ -7555,24 +7506,6 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     }
 #endif
 
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-    if( flags_set & CI_EPLOCK_NETIF_XDP_CHANGE ) {
-      if( in_dl_context ) {
-        OO_DEBUG_TCPH(ci_log("%s: [%u] defer XDP change handling to workitem",
-                             __FUNCTION__, thr->id));
-        ef_eplock_holder_set_flags(&ni->state->lock,
-                                   after_unlock_flags | flags_set);
-        tcp_helper_defer_dl2work(thr, OO_THR_AFLAG_UNLOCK_UNTRUSTED);
-        return 0;
-      }
-      OO_DEBUG_TCPH(ci_log("%s: [%u] handling XDP change now",
-                           __FUNCTION__, thr->id));
-      tcp_helper_handle_xdp_change(thr);
-      CITP_STATS_NETIF(++ni->state->stats.unlock_slow_xdp_change);
-      flags_set &=~ CI_EPLOCK_NETIF_XDP_CHANGE;
-    }
-#endif
-
 #if CI_CFG_NIC_RESET_SUPPORT
     if( flags_set & CI_EPLOCK_NETIF_PURGE_TXQS ) {
       tcp_helper_purge_txq_locked(thr);
@@ -8044,7 +7977,7 @@ static void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
 #include <uapi/linux/bpf.h>
 #include <linux/bpf.h>
 
-static int ci_bpf_prog_get_fd_by_id(ci_xdp_prog_id_t id)
+static int ci_bpf_prog_get_fd_by_id(cp_xdp_prog_id_t id)
 {
   int rc;
   mm_segment_t old_fs;
@@ -8090,7 +8023,7 @@ static void ci_bpf_prog_put(struct bpf_prog* prog)
 }
 
 
-static int ci_bpf_prog_get_by_id(ci_xdp_prog_id_t id, struct bpf_prog** prog_out)
+static int ci_bpf_prog_get_by_id(cp_xdp_prog_id_t id, struct bpf_prog** prog_out)
 {
   int fd = ci_bpf_prog_get_fd_by_id(id);
   struct bpf_prog* prog;
@@ -8109,69 +8042,30 @@ static int ci_bpf_prog_get_by_id(ci_xdp_prog_id_t id, struct bpf_prog** prog_out
   return 0;
 }
 
-static void tcp_helper_nic_detach_xdp(struct tcp_helper_nic* trs_nic,
-                                      struct efhw_nic* nic)
-{
-  ci_bpf_prog_put(trs_nic->thn_xdp_prog);
-  trs_nic->thn_xdp_prog = NULL;
-}
-
 static int tcp_helper_nic_attach_xdp(ci_netif* ni,
                                      struct tcp_helper_nic* trs_nic,
-                                     struct efhw_nic* nic)
+                                     cp_xdp_prog_id_t xdp_prog_id)
 {
-  struct net_device* netdev = efhw_nic_get_net_dev(nic);
-  ci_xdp_prog_id_t xdp_prog_id = 0;
   int rc = 0;
-
-  /* Caller is responsible for ensuring that any previously attached prog
-   * has been safely detached.
-   */
-  ci_assert_equal(trs_nic->thn_xdp_prog, NULL);
-
-  /* XDP prog is protected by netif lock, which is also needed to assert on
-   * CI_NETIF_FLAG_IN_DL_CONTEXT flag.
-   */
-  ci_assert( ci_netif_is_locked(ni) );
-
-  /* We need to take the rtnl lock to query the attached prog, so we better
-   * not be in dl context, where we may already hold the lock.
-   */
-  ci_assert_nflags(ni->flags, CI_NETIF_FLAG_IN_DL_CONTEXT);
-
-  if( netdev == NULL )
-    return 0;
-
-#ifdef EFRM_HAS_XDP_QUERY_PROG
-  /* Fixme: it does not work with linux-5.9.
-   * It is going to break even more for linux-5.10.
-   * It all should be reworked.
-   */
-  {
-    struct netdev_bpf xdp = {};
-    xdp.command = XDP_QUERY_PROG;
-    if( netdev->netdev_ops->ndo_bpf ) {
-      rtnl_lock();
-      rc = netdev->netdev_ops->ndo_bpf(netdev, &xdp);
-      rtnl_unlock();
-      if( rc == 0 )
-        xdp_prog_id = xdp.prog_id;
-    }
-  }
-#endif
-
-  dev_put(netdev);
+  ci_irqlock_state_t lock_flags;
+  struct bpf_prog* prog = NULL;
+  struct bpf_prog* old_prog = NULL;
 
   if( xdp_prog_id != 0 ) {
-    struct bpf_prog* prog = NULL;
     rc = ci_bpf_prog_get_by_id(xdp_prog_id, &prog);
     if( rc ) {
       NI_LOG(ni, RESOURCE_WARNINGS,
              FN_FMT "Failed obtain xdp program %d (%d)",
              FN_PRI_ARGS(ni), xdp_prog_id, rc);
     }
-    trs_nic->thn_xdp_prog = prog;
   }
+
+  ci_irqlock_lock(&netif2tcp_helper_resource(ni)->lock, &lock_flags);
+  old_prog = trs_nic->thn_xdp_prog;
+  trs_nic->thn_xdp_prog = prog;
+  ci_irqlock_unlock(&netif2tcp_helper_resource(ni)->lock, &lock_flags);
+  if( old_prog != NULL )
+    ci_bpf_prog_put(old_prog);
 
   return rc;
 }

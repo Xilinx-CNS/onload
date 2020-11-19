@@ -68,7 +68,9 @@ extern void tcp_helper_reset_stack(ci_netif* ni, int intf_i);
 #endif
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-extern void tcp_helper_xdp_change(ci_netif* ni, int intf_i);
+extern void tcp_helper_handle_xdp_change(tcp_helper_resource_t *thr,
+                                         int intf_i,
+                                         cp_xdp_prog_id_t xdp_prog_id);
 #endif
 
 extern void tcp_helper_flush_resets(ci_netif* ni);

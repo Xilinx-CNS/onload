@@ -53,9 +53,6 @@ static inline void efrm_resource_init(struct efrm_resource *rs,
 extern void efrm_nic_enable_post_reset(struct efhw_nic* nic);
 extern int efrm_nic_post_reset(struct efhw_nic *nic);
 extern int efrm_nic_reset_suspend(struct efhw_nic *nic);
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-extern int efrm_nic_xdp_change(struct efhw_nic *nic);
-#endif
 extern void efrm_nic_flush_all_queues(struct efhw_nic *nic, int nohw);
 #endif
 

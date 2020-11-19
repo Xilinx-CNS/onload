@@ -1486,6 +1486,10 @@ static int oo_cp_xdp_prog_change(ci_private_t *priv, void *arg)
   ci_hwport_id_t hwport = *(ci_hwport_id_t*)arg;
   struct oo_cplane_handle* cp;
   cp_xdp_prog_id_t xdp_prog_id;
+  ci_irqlock_state_t lock_flags;
+  ci_dllink *link;
+  int intf_i;
+  ci_netif* ni;
 
   int rc = cp_acquire_from_priv_if_server(priv, &cp);
   if( rc != 0 )
@@ -1496,7 +1500,26 @@ static int oo_cp_xdp_prog_change(ci_private_t *priv, void *arg)
   if( rc < 0 )
     return rc;
 
-  ci_log("%s: hwport=%d xdp_prog_id=%d", __func__, hwport, xdp_prog_id);
+  /* Similar to oo_efrm_callback_hook_generic() */
+  ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
+  CI_DLLIST_FOR_EACH(link, &THR_TABLE.started_stacks) {
+    tcp_helper_resource_t *thr;
+
+    thr = CI_CONTAINER(tcp_helper_resource_t, all_stacks_link, link);
+    ni = &thr->netif;
+    if( (intf_i = ni->hwport_to_intf_i[hwport]) >= 0 )
+      tcp_helper_handle_xdp_change(thr, intf_i, xdp_prog_id);
+  }
+  ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
+
+  ni = NULL;
+  while( iterate_netifs_unlocked(&ni, OO_THR_REF_BASE,
+                                 OO_THR_REF_INFTY) == 0 ) {
+    if( (intf_i = ni->hwport_to_intf_i[hwport]) >= 0 )
+      tcp_helper_handle_xdp_change(netif2tcp_helper_resource(ni),
+                                   intf_i, xdp_prog_id);
+  }
+
   return 0;
 }
 

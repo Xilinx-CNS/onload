@@ -14,10 +14,6 @@ struct efrm_client_callbacks {
 	void (*post_reset)(struct efrm_client *, void *user_data);
         /* Called when a reset has been notified. */
 	void (*reset_suspend)(struct efrm_client *, void *user_data);
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-        /* Called when a change in the attached XDP prog has been notified. */
-	void (*xdp_change)(struct efrm_client *, void *user_data);
-#endif
 };
 
 

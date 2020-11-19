@@ -200,9 +200,6 @@ typedef struct tcp_helper_resource_s {
 #define OO_TRUSTED_LOCK_HANDLE_ICMP       0x40
 #define OO_TRUSTED_LOCK_SWF_UPDATE        0x80
 #define OO_TRUSTED_LOCK_PURGE_TXQS        0x100
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-#define OO_TRUSTED_LOCK_XDP_CHANGE        0x200
-#endif
   volatile unsigned      trusted_lock;
 
   /*! this is used so we can schedule destruction at task time,
@@ -305,10 +302,6 @@ typedef struct tcp_helper_resource_s {
   unsigned              intfs_to_reset;
   /* Bit mask of intf_i that have been removed/suspended and not yet reset */
   unsigned              intfs_suspended;
-#endif
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-  /* Bit mask of intf_i that need xdp updating by the lock holder */
-  unsigned              intfs_to_xdp_update;
 #endif
 
   unsigned              mem_mmap_bytes;

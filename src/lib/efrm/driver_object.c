@@ -332,25 +332,6 @@ int efrm_nic_reset_suspend(struct efhw_nic *nic)
 }
 
 
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-int efrm_nic_xdp_change(struct efhw_nic *nic)
-{
-	struct efrm_nic *rnic = efrm_nic(nic);
-	struct efrm_client *client;
-	struct list_head *client_link;
-
-	spin_lock_bh(&efrm_nic_tablep->lock);
-	list_for_each(client_link, &rnic->clients) {
-		client = container_of(client_link, struct efrm_client, link);
-		client->callbacks->xdp_change(client, client->user_data);
-	}
-	spin_unlock_bh(&efrm_nic_tablep->lock);
-
-	return 0;
-}
-#endif
-
-
 static void efrm_client_nullcb(struct efrm_client *client, void *user_data)
 {
 }
@@ -359,9 +340,6 @@ static void efrm_client_nullcb(struct efrm_client *client, void *user_data)
 static struct efrm_client_callbacks efrm_null_callbacks = {
 	efrm_client_nullcb,
 	efrm_client_nullcb,
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-	efrm_client_nullcb,
-#endif
 };
 
 static void efrm_client_init_from_nic(struct efrm_nic *rnic,
