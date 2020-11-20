@@ -132,6 +132,9 @@ enum {
   OO_OP_CP_INIT_KERNEL_MIBS,
 #define OO_IOC_CP_INIT_KERNEL_MIBS OO_IOC_R(CP_INIT_KERNEL_MIBS, ci_uint32)
 
+  OO_OP_CP_XDP_PROG_CHANGE,
+#define OO_IOC_CP_XDP_PROG_CHANGE OO_IOC_W(CP_XDP_PROG_CHANGE, ci_hwport_id_t)
+
   OO_OP_CP_END  /* This had better be last! */
 };
 

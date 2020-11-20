@@ -1481,6 +1481,25 @@ static int oo_cp_init_kernel_mibs_rsop(ci_private_t *priv, void *arg)
   return rc;
 }
 
+static int oo_cp_xdp_prog_change(ci_private_t *priv, void *arg)
+{
+  ci_hwport_id_t hwport = *(ci_hwport_id_t*)arg;
+  struct oo_cplane_handle* cp;
+  cp_xdp_prog_id_t xdp_prog_id;
+
+  int rc = cp_acquire_from_priv_if_server(priv, &cp);
+  if( rc != 0 )
+    return rc;
+
+  rc = oo_cp_get_hwport_properties(cp, hwport, NULL, NULL, &xdp_prog_id);
+  cp_release(cp);
+  if( rc < 0 )
+    return rc;
+
+  ci_log("%s: hwport=%d xdp_prog_id=%d", __func__, hwport, xdp_prog_id);
+  return 0;
+}
+
 
 static int oo_af_xdp_kick_rsop(ci_private_t *priv, void *arg)
 {
@@ -1525,6 +1544,7 @@ oo_operations_table_t oo_operations[] = {
   op(OO_IOC_CP_CHECK_VETH_ACCELERATION, oo_cp_check_veth_acceleration_rsop),
   op(OO_IOC_CP_SELECT_INSTANCE, oo_cp_select_instance_rsop),
   op(OO_IOC_CP_INIT_KERNEL_MIBS, oo_cp_init_kernel_mibs_rsop),
+  op(OO_IOC_CP_XDP_PROG_CHANGE, oo_cp_xdp_prog_change),
 
   /* include/onload/ioctl-dshm.h: */
   op(OO_IOC_DSHM_REGISTER, oo_dshm_register_rsop),

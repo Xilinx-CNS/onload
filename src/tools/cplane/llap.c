@@ -336,7 +336,14 @@ void cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
                                cp_xdp_prog_id_t xdp_prog_id)
 {
   struct cp_hwport_row* hwp = &mib->hwport[hwport];
+
+  if( hwp->xdp_prog_id == xdp_prog_id )
+    return;
+
   hwp->xdp_prog_id = xdp_prog_id;
+  ci_wmb();
+
+  cplane_ioctl(s->oo_fd, OO_IOC_CP_XDP_PROG_CHANGE, &hwport);
 }
 
 
