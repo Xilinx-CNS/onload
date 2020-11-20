@@ -991,13 +991,6 @@ efab_eplock_wake_and_do_rsop(ci_private_t *priv, void *arg)
   return efab_eplock_wake_and_do(&priv->thr->netif, l);
 }
 #endif
-static int
-efab_eplock_lock_wait_rsop(ci_private_t *priv, void *unused)
-{
-  if (priv->thr == NULL)
-    return -EINVAL;
-  return efab_eplock_lock_wait(&priv->thr->netif, 0);
-}
 
 static int
 oo_eplock_lock_rsop(ci_private_t* priv, void* arg)
@@ -1662,7 +1655,6 @@ oo_operations_table_t oo_operations[] = {
 #else
   op(OO_IOC_EPLOCK_WAKE_AND_DO, efab_eplock_wake_and_do_rsop),
 #endif
-  op(OO_IOC_EPLOCK_LOCK_WAIT, efab_eplock_lock_wait_rsop),
   op(OO_IOC_EPLOCK_LOCK, oo_eplock_lock_rsop),
 
   op(OO_IOC_INSTALL_STACK,    efab_install_stack),
