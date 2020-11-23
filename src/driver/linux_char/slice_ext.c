@@ -101,6 +101,7 @@ ext_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 {
   struct efch_ext_alloc* alloc = &alloc_->u.ext;
   struct efrm_ext* ext;
+  struct efrm_pd* pd;
   efch_resource_t* pd_rs;
   int rc;
 
@@ -123,8 +124,15 @@ ext_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
     return -EINVAL;
   }
 
-  rc = efrm_ext_alloc_rs(efrm_pd_from_resource(pd_rs->rs_base),
-                         alloc->in_ext_id, &ext);
+  pd = efrm_pd_from_resource(pd_rs->rs_base);
+
+  if (efrm_pd_get_nic_client_id(pd) == EFRM_NIC_CLIENT_ID_NONE) {
+    EFCH_ERR("%s: ERROR: PD was not allocated with a dynamic client",
+             __FUNCTION__);
+    return -EINVAL;
+  }
+
+  rc = efrm_ext_alloc_rs(pd, alloc->in_ext_id, &ext);
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: ext_alloc failed (%d)", __FUNCTION__, rc);
     return rc;

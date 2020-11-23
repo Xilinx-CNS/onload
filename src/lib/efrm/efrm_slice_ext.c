@@ -53,8 +53,9 @@ int efrm_ext_alloc_rs(struct efrm_pd* pd, const unsigned char* ext_guid,
 		return -ENOMEM;
 
 	ext->pd = pd;
-	rc = ef100_nic_ext_alloc(pd_rs->rs_client->nic, ext_guid, false,
-	                         &mc_handle);
+	rc = ef100_nic_ext_alloc(pd_rs->rs_client->nic,
+	                         efrm_pd_get_nic_client_id(pd),
+	                         ext_guid, false, &mc_handle);
 	if (rc < 0) {
 		kfree(ext);
 		return rc;
@@ -71,7 +72,9 @@ EXPORT_SYMBOL(efrm_ext_alloc_rs);
 void efrm_ext_release(struct efrm_ext *ext)
 {
 	if (__efrm_resource_release(&ext->rs)) {
-		ef100_nic_ext_free(ext->rs.rs_client->nic, ext->rs.rs_instance);
+		ef100_nic_ext_free(ext->rs.rs_client->nic,
+		                   efrm_pd_get_nic_client_id(ext->pd),
+		                   ext->rs.rs_instance);
 		efrm_pd_release(ext->pd);
 		efrm_client_put(ext->rs.rs_client);
 		kfree(ext);
@@ -86,6 +89,7 @@ int efrm_ext_get_meta_global(struct efrm_ext *ext,
 	if (!check_ef100(&ext->rs))
 		return -EOPNOTSUPP;
 	return ef100_nic_ext_get_meta_global(ext->rs.rs_client->nic,
+	                                     efrm_pd_get_nic_client_id(ext->pd),
 	                                     ext->rs.rs_instance,
 	                                     out->uuid, &out->minor_ver,
 	                                     &out->patch_ver, &out->nmsgs,
@@ -104,6 +108,7 @@ int efrm_ext_get_meta_msg(struct efrm_ext *ext, uint32_t msg_id,
 		return -EOPNOTSUPP;
 	out->id = msg_id;
 	return ef100_nic_ext_get_meta_msg(ext->rs.rs_client->nic,
+	                                  efrm_pd_get_nic_client_id(ext->pd),
 	                                  ext->rs.rs_instance, msg_id,
 	                                  &out->ix, out->name, sizeof(out->name),
 	                                  &out->mcdi_param_size);
@@ -115,8 +120,9 @@ int efrm_ext_msg(struct efrm_ext *ext, uint32_t msg_id, void* buf, size_t len)
 {
 	if (!check_ef100(&ext->rs))
 		return -EOPNOTSUPP;
-	return ef100_nic_ext_msg(ext->rs.rs_client->nic, ext->rs.rs_instance,
-	                         msg_id, buf, len);
+	return ef100_nic_ext_msg(ext->rs.rs_client->nic,
+	                         efrm_pd_get_nic_client_id(ext->pd),
+	                         ext->rs.rs_instance, msg_id, buf, len);
 }
 EXPORT_SYMBOL(efrm_ext_msg);
 
