@@ -417,6 +417,10 @@
 #define          MC_CMD_RESOURCE_INSTANCE_ANY 0xffffffff
 #define          MC_CMD_RESOURCE_INSTANCE_NONE 0xfffffffe /* enum */
 
+/* MC_CLIENT_ID_SPECIFIER enum */
+/* enum: Equivalent to the caller's client ID */
+#define          MC_CMD_CLIENT_ID_SELF 0xffffffff
+
 /* MAE_FIELD_SUPPORT_STATUS enum */
 /* enum: The NIC does not support this field. The driver must ensure that any
  * mask associated with this field in a match rule is zeroed. The NIC may
@@ -27630,6 +27634,112 @@
 
 /* MC_CMD_VNIC_ENCAP_RULE_REMOVE_OUT msgresponse */
 #define    MC_CMD_VNIC_ENCAP_RULE_REMOVE_OUT_LEN 0
+
+/***********************************/
+/* MC_CMD_CLIENT_CMD
+ * Execute an arbitrary MCDI command on behalf of a different client. The
+ * consequences of the command (e.g. ownership of any resources created) apply
+ * to the indicated client rather than the function client which actually sent
+ * this command. All inherent permission checks are also performed on the
+ * indicated client. The given client must be a descendant of the requestor.
+ * The command to be proxied follows immediately afterward in the host buffer
+ * (or on the UART). Chaining multiple MC_CMD_CLIENT_CMD is unnecessary and not
+ * supported. New dynamic clients may be created with MC_CMD_CLIENT_ALLOC.
+ */
+#define MC_CMD_CLIENT_CMD 0x1ba
+#undef MC_CMD_0x1ba_PRIVILEGE_CTG
+
+#define MC_CMD_0x1ba_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_CLIENT_CMD_IN msgrequest */
+#define    MC_CMD_CLIENT_CMD_IN_LEN 4
+/* The client as which to execute the following command. */
+#define       MC_CMD_CLIENT_CMD_IN_CLIENT_ID_OFST 0
+#define       MC_CMD_CLIENT_CMD_IN_CLIENT_ID_LEN 4
+
+/* MC_CMD_CLIENT_CMD_OUT msgresponse */
+#define    MC_CMD_CLIENT_CMD_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_CLIENT_ALLOC
+ * Create a new client object. Clients are a system for delineating NIC
+ * resource ownership, such that groups of resources may be torn down as a
+ * unit. See also MC_CMD_CLIENT_CMD. See XN-200265-TC for background, concepts
+ * and a glossary. Clients created by this command are known as "dynamic
+ * clients". The newly-created client is a child of the client which sent this
+ * command. The caller must have the GRP_ALLOC_CLIENT privilege. The new client
+ * initially has no permission to do anything; see
+ * MC_CMD_DEVEL_CLIENT_PRIVILEGE_MODIFY.
+ */
+#define MC_CMD_CLIENT_ALLOC 0x1bb
+#undef MC_CMD_0x1bb_PRIVILEGE_CTG
+
+#define MC_CMD_0x1bb_PRIVILEGE_CTG SRIOV_CTG_ALLOC_CLIENT
+
+/* MC_CMD_CLIENT_ALLOC_IN msgrequest */
+#define    MC_CMD_CLIENT_ALLOC_IN_LEN 0
+
+/* MC_CMD_CLIENT_ALLOC_OUT msgresponse */
+#define    MC_CMD_CLIENT_ALLOC_OUT_LEN 4
+/* The ID of the new client object which has been created. */
+#define       MC_CMD_CLIENT_ALLOC_OUT_CLIENT_ID_OFST 0
+#define       MC_CMD_CLIENT_ALLOC_OUT_CLIENT_ID_LEN 4
+
+
+/***********************************/
+/* MC_CMD_CLIENT_FREE
+ * Destroy and release an existing client object. All resources owned by that
+ * client (including its child clients, and thus all resources owned by the
+ * entire family tree) are freed.
+ */
+#define MC_CMD_CLIENT_FREE 0x1bc
+#undef MC_CMD_0x1bc_PRIVILEGE_CTG
+
+#define MC_CMD_0x1bc_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_CLIENT_FREE_IN msgrequest */
+#define    MC_CMD_CLIENT_FREE_IN_LEN 4
+/* The ID of the client to be freed. This client must be a descendant of the
+ * requestor. A client cannot free itself.
+ */
+#define       MC_CMD_CLIENT_FREE_IN_CLIENT_ID_OFST 0
+#define       MC_CMD_CLIENT_FREE_IN_CLIENT_ID_LEN 4
+
+/* MC_CMD_CLIENT_FREE_OUT msgresponse */
+#define    MC_CMD_CLIENT_FREE_OUT_LEN 0
+
+
+/***********************************/
+/* MC_CMD_SET_VI_USER
+ * Assign partial rights over this VI to another client. VIs have an 'owner'
+ * and a 'user'. The owner is the client which allocated the VI
+ * (MC_CMD_ALLOC_VIS) and cannot be changed. The user is the client which has
+ * permission to create queues and other resources on that VI. Initially
+ * user==owner, but the user can be changed by this command; the resources thus
+ * created are then owned by the user-client. Only the VI owner can call this
+ * command, and the request will fail if there are any outstanding child
+ * resources (e.g. queues) currently allocated from this VI.
+ */
+#define MC_CMD_SET_VI_USER 0x1be
+#undef MC_CMD_0x1be_PRIVILEGE_CTG
+
+#define MC_CMD_0x1be_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_SET_VI_USER_IN msgrequest */
+#define    MC_CMD_SET_VI_USER_IN_LEN 8
+/* Function-relative VI number to modify. */
+#define       MC_CMD_SET_VI_USER_IN_INSTANCE_OFST 0
+#define       MC_CMD_SET_VI_USER_IN_INSTANCE_LEN 4
+/* Client ID to become the new user. This must be a descendant of the owning
+ * client, the owning client itself, or the special value MC_CMD_CLIENT_ID_SELF
+ * which is synonymous with the owning client.
+ */
+#define       MC_CMD_SET_VI_USER_IN_CLIENT_ID_OFST 4
+#define       MC_CMD_SET_VI_USER_IN_CLIENT_ID_LEN 4
+
+/* MC_CMD_SET_VI_USER_OUT msgresponse */
+#define    MC_CMD_SET_VI_USER_OUT_LEN 0
 
 /* UUID structuredef: An RFC4122 standard UUID. The values here are stored in
  * the endianness specified by the RFC; users should ignore the broken-out
