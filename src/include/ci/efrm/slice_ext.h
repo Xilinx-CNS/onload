@@ -5,20 +5,18 @@
 
 struct efrm_resource;
 struct efrm_resource_manager;
+struct efrm_pd;
+struct efrm_ext;
 
 int efrm_create_ext_resource_manager(struct efrm_resource_manager **rm_out);
 
-extern int efrm_ext_alloc(struct efrm_resource *rs,
-                          const unsigned char* ext_guid,
-                          uint32_t* out_mc_handle);
+extern struct efrm_resource* efrm_ext_to_resource(struct efrm_ext *ext);
+extern struct efrm_ext* efrm_ext_from_resource(struct efrm_resource *rs);
 
-extern int efrm_ext_alloc_rs(struct efrm_resource *pd_rs,
-                             struct efrm_resource *ext_rs,
-                            const unsigned char* ext_guid);
+extern int efrm_ext_alloc_rs(struct efrm_pd* pd, const unsigned char* ext_guid,
+                             struct efrm_ext **ext_out);
 
-extern int efrm_ext_free(struct efrm_resource *rs, uint32_t mc_handle);
-
-extern void efrm_ext_release(struct efrm_resource *rs);
+extern void efrm_ext_release(struct efrm_ext *ext);
 
 struct efrm_ext_svc_meta {
     uint8_t uuid[16];
@@ -31,8 +29,7 @@ struct efrm_ext_svc_meta {
     uint8_t admin_group;
 };
 
-extern int efrm_ext_get_meta_global(struct efrm_resource *rs,
-                                    uint32_t mc_handle,
+extern int efrm_ext_get_meta_global(struct efrm_ext *ext,
                                     struct efrm_ext_svc_meta *out);
 
 struct efrm_ext_msg_meta {
@@ -42,11 +39,10 @@ struct efrm_ext_msg_meta {
     uint32_t mcdi_param_size;
 };
 
-extern int efrm_ext_get_meta_msg(struct efrm_resource *rs,
-                                 uint32_t mc_handle, uint32_t msg_id,
+extern int efrm_ext_get_meta_msg(struct efrm_ext *ext, uint32_t msg_id,
                                  struct efrm_ext_msg_meta *out);
 
-extern int efrm_ext_msg(struct efrm_resource *rs, uint32_t mc_handle,
-                        uint32_t msg_id, void *buf, size_t len);
+extern int efrm_ext_msg(struct efrm_ext *ext, uint32_t msg_id, void *buf,
+                        size_t len);
 
 #endif

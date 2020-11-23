@@ -124,6 +124,9 @@ typedef struct efch_resource_s {
       unsigned sniff_flags;
     } vi_set;
     struct efch_memreg *memreg;
+    struct {
+      struct efch_ext_svc_metadata* metadata;
+    } ext;
   };
 } efch_resource_t;
 

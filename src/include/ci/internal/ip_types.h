@@ -51,7 +51,7 @@ typedef struct ci_netif_nic_s {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
 #ifdef __KERNEL__
 #define INVALID_PLUGIN_HANDLE              (~0u)
-  ci_uint32                  plugin_handle;
+  struct efrm_ext*           plugin;
   ci_uint32                  plugin_app_id;
 #endif
   volatile void*             plugin_io;

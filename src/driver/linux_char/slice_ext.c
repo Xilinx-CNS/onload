@@ -16,25 +16,12 @@ struct efch_ext_svc_metadata {
   struct efrm_ext_msg_meta msgs[];
 };
 
-struct efch_slice_ext {
-  struct efrm_resource rs;
-  struct efch_ext_svc_metadata* metadata;
-};
-
-
-static inline struct efch_slice_ext*
-rs_to_ext(efch_resource_t* rs)
-{
-  ci_assert_equal(rs->rs_base->rs_type, EFRM_RESOURCE_SLICE_EXT);
-  return container_of(rs->rs_base, struct efch_slice_ext, rs);
-}
-
 
 /* ************************************************************************ */
 /*                            ioctl interface                               */
 
 static int
-load_basic_metadata(struct efch_slice_ext* ext)
+load_basic_metadata(struct efrm_ext* ext, struct efch_ext_svc_metadata **out)
 {
   int rc;
   unsigned i;
@@ -45,8 +32,8 @@ load_basic_metadata(struct efch_slice_ext* ext)
    * handles, but that introduces a load of synchronisation and cache-expiry
    * complexity which doesn't seem worth it. */
 
-  ext->metadata = NULL;
-  rc = efrm_ext_get_meta_global(&ext->rs, ext->rs.rs_instance, &base);
+  *out = NULL;
+  rc = efrm_ext_get_meta_global(ext, &base);
   if (rc < 0)
     return rc;
 
@@ -63,13 +50,13 @@ load_basic_metadata(struct efch_slice_ext* ext)
   for (i = 0; i < base.nmsgs; ++i)
     m->msgs[i].ix = INVALID_MSG_IX;
 
-  ext->metadata = m;
+  *out = m;
   return 0;
 }
 
 
 static const struct efrm_ext_msg_meta*
-get_msg(struct efch_slice_ext* ext, uint32_t id)
+get_msg(efch_resource_t* rs, uint32_t id)
 {
   int rc;
   uint32_t i;
@@ -77,20 +64,20 @@ get_msg(struct efch_slice_ext* ext, uint32_t id)
 
   /* consider sorting the array to make this faster, but we never expect more
    * than a few tens of messages at most */
-  for (i = 0; i < ext->metadata->base.nmsgs; ++i) {
-    if (ext->metadata->msgs[i].id == id &&
-        ext->metadata->msgs[i].ix != INVALID_MSG_IX) {
-      return &ext->metadata->msgs[i];
+  for (i = 0; i < rs->ext.metadata->base.nmsgs; ++i) {
+    if (rs->ext.metadata->msgs[i].id == id &&
+        rs->ext.metadata->msgs[i].ix != INVALID_MSG_IX) {
+      return &rs->ext.metadata->msgs[i];
     }
   }
 
-  rc = efrm_ext_get_meta_msg(&ext->rs, ext->rs.rs_instance, id, &meta);
+  rc = efrm_ext_get_meta_msg(efrm_ext_from_resource(rs->rs_base), id, &meta);
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: bad message %u (%d)", __FUNCTION__, id, rc);
     return NULL;
   }
-  if (meta.ix >= ext->metadata->base.nmsgs ||
-      ext->metadata->msgs[meta.ix].ix != INVALID_MSG_IX) {
+  if (meta.ix >= rs->ext.metadata->base.nmsgs ||
+      rs->ext.metadata->msgs[meta.ix].ix != INVALID_MSG_IX) {
     EFCH_ERR("%s: ERROR: MC bug: msg %u (%u) already used",
              __FUNCTION__, id, meta.ix);
     return NULL;
@@ -103,8 +90,8 @@ get_msg(struct efch_slice_ext* ext, uint32_t id)
     return NULL;
   }
 
-  ext->metadata->msgs[meta.ix] = meta;
-  return &ext->metadata->msgs[meta.ix];
+  rs->ext.metadata->msgs[meta.ix] = meta;
+  return &rs->ext.metadata->msgs[meta.ix];
 }
 
 
@@ -113,7 +100,7 @@ ext_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
              efch_resource_t* rs, int intf_ver_id)
 {
   struct efch_ext_alloc* alloc = &alloc_->u.ext;
-  struct efch_slice_ext* ext;
+  struct efrm_ext* ext;
   efch_resource_t* pd_rs;
   int rc;
 
@@ -136,27 +123,19 @@ ext_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
     return -EINVAL;
   }
 
-  ext = kmalloc(sizeof(*ext), GFP_KERNEL);
-  if (!ext) {
-    EFCH_ERR("%s: ERROR: OOM allocating ext", __FUNCTION__);
-    return -ENOMEM;
-  }
-
-  rc = efrm_ext_alloc_rs(pd_rs->rs_base, &ext->rs, alloc->in_ext_id);
+  rc = efrm_ext_alloc_rs(efrm_pd_from_resource(pd_rs->rs_base),
+                         alloc->in_ext_id, &ext);
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: ext_alloc failed (%d)", __FUNCTION__, rc);
-    kfree(ext);
     return rc;
   }
 
-  rs->rs_base = &ext->rs;
+  rs->rs_base = efrm_ext_to_resource(ext);
 
-  rc = load_basic_metadata(ext);
+  rc = load_basic_metadata(ext, &rs->ext.metadata);
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: loading metadata failed (%d)", __FUNCTION__, rc);
-    efrm_ext_free(pd_rs->rs_base, ext->rs.rs_instance);
-    efrm_ext_release(&ext->rs);
-    kfree(ext);
+    efrm_ext_release(ext);
     return rc;
   }
 
@@ -167,26 +146,16 @@ ext_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 static void
 ext_rm_free(efch_resource_t* rs)
 {
-  int rc;
-  struct efch_slice_ext* ext;
-
   if (!rs->rs_base)
     return;
-  ext = rs_to_ext(rs);
-  rc = efrm_ext_free(rs->rs_base, rs->rs_base->rs_instance);
-  if (rc < 0) {
-    EFCH_ERR("%s: ERROR: ext_free failed (%d)", __FUNCTION__, rc);
-    /* Ignore the error - there's nothing the caller could do */
-  }
-  vfree(ext->metadata);
-  efrm_ext_release(&ext->rs);
-  kfree(ext);
+  vfree(rs->ext.metadata);
+  efrm_ext_release(efrm_ext_from_resource(rs->rs_base));
   rs->rs_base = NULL;
 }
 
 
 static int
-ext_do_msg(struct efch_slice_ext* ext, uint32_t msg_id,
+ext_do_msg(efch_resource_t* rs, uint32_t msg_id,
            void __user * payload_user, size_t len, unsigned flags)
 {
   const struct efrm_ext_msg_meta* msg;
@@ -197,7 +166,7 @@ ext_do_msg(struct efch_slice_ext* ext, uint32_t msg_id,
     /* No flags currently supported */
     return -EINVAL;
   }
-  msg = get_msg(ext, msg_id);
+  msg = get_msg(rs, msg_id);
   if (!msg)
     return -ENOMSG;
   /* Too-long lengths are banned here. Too-short lengths are padded with
@@ -215,7 +184,7 @@ ext_do_msg(struct efch_slice_ext* ext, uint32_t msg_id,
     goto out;
   }
 
-  rc = efrm_ext_msg(&ext->rs, ext->rs.rs_instance, msg_id, payload, len);
+  rc = efrm_ext_msg(efrm_ext_from_resource(rs->rs_base), msg_id, payload, len);
 
   if (copy_to_user(payload_user, payload, len))
     rc = -EFAULT;
@@ -239,7 +208,7 @@ ext_rm_rsops(efch_resource_t* rs, ci_resource_table_t* priv_opt,
     return 0;
 
   case CI_RSOP_EXT_MSG:
-    return ext_do_msg(rs_to_ext(rs), op->u.ext_msg.msg_id,
+    return ext_do_msg(rs, op->u.ext_msg.msg_id,
                       (void __user *)op->u.ext_msg.payload_ptr,
                       op->u.ext_msg.payload_len,
                       op->u.ext_msg.flags);

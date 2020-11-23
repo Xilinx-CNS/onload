@@ -2435,12 +2435,10 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 }
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
-static void destroy_ceph_app(struct efrm_resource* rs, ci_uint32 plugin_handle,
-                             uint32_t app_id)
+static void destroy_ceph_app(struct efrm_ext* plugin, uint32_t app_id)
 {
   struct xsn_ceph_destroy_app param = {.in_app_id = cpu_to_le32(app_id)};
-  int rc = efrm_ext_msg(rs, plugin_handle, XSN_CEPH_DESTROY_APP,
-                        &param, sizeof(param));
+  int rc = efrm_ext_msg(plugin, XSN_CEPH_DESTROY_APP, &param, sizeof(param));
   if( rc ) {
     OO_DEBUG_ERR(ci_log("%s: Destroy Ceph app failed (%d)", __FUNCTION__, rc));
     /* Nothing we can do about it */
@@ -2458,18 +2456,17 @@ create_plugin_app(tcp_helper_resource_t* trs)
 
   ni->state->plugin_mmap_bytes = 0;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-    ni->nic_hw[intf_i].plugin_handle = INVALID_PLUGIN_HANDLE;
+    ni->nic_hw[intf_i].plugin = NULL;
 
   if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_CEPH )
     return 0;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     struct efrm_pd* pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
-    struct efrm_resource* rs = efrm_pd_to_resource(pd);
     struct xsn_ceph_create_app create;
     struct ef_vi* tcp_vi;
     struct ef_vi* ceph_vi;
-    ci_uint32 mch;
+    struct efrm_ext* plugin;
     struct efhw_nic* nic;
     ci_uint32 app_id;
     struct efrm_ext_svc_meta meta;
@@ -2478,7 +2475,7 @@ create_plugin_app(tcp_helper_resource_t* trs)
     nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
     if( nic->devtype.arch != EFHW_ARCH_EF100 )
       continue;
-    rc = efrm_ext_alloc(rs, XSN_TCP_CEPH_PLUGIN, &mch);
+    rc = efrm_ext_alloc_rs(pd, XSN_TCP_CEPH_PLUGIN, &plugin);
     if( rc ) {
       /* We don't immediately fail here because we don't want to require
        * that every EF100 in the system be provisioned identically. We only
@@ -2486,7 +2483,7 @@ create_plugin_app(tcp_helper_resource_t* trs)
       continue;
     }
 
-    rc = efrm_ext_get_meta_global(rs, mch, &meta);
+    rc = efrm_ext_get_meta_global(plugin, &meta);
     if( rc ) {
       OO_DEBUG_ERR(ci_log("%s: Failed to get plugin metadata (%d, %d)",
                           __FUNCTION__, intf_i, rc));
@@ -2501,7 +2498,7 @@ create_plugin_app(tcp_helper_resource_t* trs)
       .in_meta_buflen = cpu_to_le16(ef_vi_receive_buffer_len(ceph_vi) -
                                     ef_vi_receive_prefix_len(ceph_vi)),
     };
-    rc = efrm_ext_msg(rs, mch, XSN_CEPH_CREATE_APP, &create, sizeof(create));
+    rc = efrm_ext_msg(plugin, XSN_CEPH_CREATE_APP, &create, sizeof(create));
     if( rc ) {
       OO_DEBUG_ERR(ci_log("%s: CEPH_CREATE_APP failed (%d, %d)",
                           __FUNCTION__, intf_i, rc));
@@ -2521,16 +2518,16 @@ create_plugin_app(tcp_helper_resource_t* trs)
       if( ! ni->nic_hw[intf_i].plugin_io ) {
         OO_DEBUG_ERR(ci_log("%s: Ceph app failed to map VI window (%d)",
                             __FUNCTION__, intf_i));
-        destroy_ceph_app(rs, mch, app_id);
+        destroy_ceph_app(plugin, app_id);
       fail_plugin_1:
-        efrm_ext_free(rs, mch);
+        efrm_ext_release(plugin);
         continue;
       }
       ni->state->nic[intf_i].oo_vi_flags |= OO_VI_FLAGS_PLUGIN_IO_EN;
       trs->nic[intf_i].thn_plugin_mapped_csr_offset = meta.mapped_csr_offset;
       ni->state->plugin_mmap_bytes += meta.mapped_csr_size;
     }
-    ni->nic_hw[intf_i].plugin_handle = mch;
+    ni->nic_hw[intf_i].plugin = plugin;
     ni->nic_hw[intf_i].plugin_app_id = app_id;
     got_nic = true;
   }
@@ -2551,13 +2548,12 @@ destroy_plugin_app(tcp_helper_resource_t* trs)
   ci_netif* ni = &trs->netif;
   int intf_i;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
-    struct efrm_resource* rs = efrm_pd_to_resource(pd);
-    ci_uint32 mch = ni->nic_hw[intf_i].plugin_handle;
-    if( mch == INVALID_PLUGIN_HANDLE )
+    struct efrm_ext* plugin = ni->nic_hw[intf_i].plugin;
+    if( ! plugin )
       continue;
-    destroy_ceph_app(rs, mch, ni->nic_hw[intf_i].plugin_app_id);
-    efrm_ext_free(rs, mch);
+    destroy_ceph_app(plugin, ni->nic_hw[intf_i].plugin_app_id);
+    efrm_ext_release(plugin);
+    ni->nic_hw[intf_i].plugin = NULL;
   }
 #endif
 }
@@ -8217,14 +8213,12 @@ int efab_tcp_helper_tcp_offload_set_isn(tcp_helper_resource_t* trs,
   ci_assert(! in_atomic());
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    if( ni->nic_hw[intf_i].plugin_handle != INVALID_PLUGIN_HANDLE) {
+    if( ni->nic_hw[intf_i].plugin ) {
       struct xsn_tcp_sync_stream sync = {
         .in_conn_id = tep_p->plugin_stream_id[intf_i],
         .in_seq = isn,
       };
-      struct efrm_pd* pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
-      int rc = efrm_ext_msg(efrm_pd_to_resource(pd),
-                            ni->nic_hw[intf_i].plugin_handle,
+      int rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin,
                             XSN_CEPH_SYNC_STREAM, &sync, sizeof(sync));
       if( rc < 0 )
         return rc;

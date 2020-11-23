@@ -80,7 +80,6 @@ clear_plugin_state(tcp_helper_endpoint_t * ep)
 
   ci_assert( ! in_atomic() );
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(ep->thr, intf_i));
     struct xsn_ceph_destroy_stream param = {};
     int rc;
     ci_uint32 conn_id;
@@ -92,8 +91,7 @@ clear_plugin_state(tcp_helper_endpoint_t * ep)
     if( conn_id == INVALID_PLUGIN_HANDLE )
       continue;
     param.in_conn_id = cpu_to_le32(conn_id);;
-    rc = efrm_ext_msg(efrm_pd_to_resource(pd),
-                      ni->nic_hw[intf_i].plugin_handle,
+    rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin,
                       XSN_CEPH_DESTROY_STREAM, &param, sizeof(param));
     if( rc )
       OO_DEBUG_ERR(ci_log("%s: ERROR: Destroy Ceph stream failed (%d)",
@@ -525,12 +523,10 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
     int intf_i;
     ci_assert( ! in_atomic() );
     OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-      struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(ep->thr, intf_i));
-      struct efrm_resource* rs = efrm_pd_to_resource(pd);
       struct xsn_ceph_create_stream create;
       ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
 
-      if( ni->nic_hw[intf_i].plugin_handle == INVALID_PLUGIN_HANDLE )
+      if( ! ni->nic_hw[intf_i].plugin )
         continue;
       create = (struct xsn_ceph_create_stream){
         .tcp.in_app_id = cpu_to_le32(ni->nic_hw[intf_i].plugin_app_id),
@@ -542,8 +538,8 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
         .tcp.in_dest_port = lport,
         .in_data_buf_capacity = NI_OPTS(ni).ceph_data_buf_bytes,
       };
-      rc = efrm_ext_msg(rs, ni->nic_hw[intf_i].plugin_handle,
-                        XSN_CEPH_CREATE_STREAM, &create, sizeof(create));
+      rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin, XSN_CEPH_CREATE_STREAM,
+                        &create, sizeof(create));
       if( rc ) {
         OO_DEBUG_ERR(ci_log("ERROR: Can't create Ceph stream state (%d)", rc));
         /* Current policy is to continue unaccelerated. We may add alternative
