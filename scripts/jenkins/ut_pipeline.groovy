@@ -230,8 +230,12 @@ void doUnitTestsPipeline() {
       built_package_locations = autosmoke.buildOnloadVersionedPackages(scm_source, product, short_revision, onload_version_short)
     }
 
-    def publisher = new ArtifactoryPublisher(this)
-    // publisher.publishStashedPackages(product, built_package_locations, env.BRANCH_NAME, onload_version_short)
+    utils.withArtifactoryURL() {
+      utils.withArtifactoryCreds() {
+        def publisher = new ArtifactoryPublisher(this)
+        publisher.publishStashedPackages(product, built_package_locations, autosmoke.onloadBranchName(env.BRANCH_NAME), onload_version_short)
+      }
+    }
 
     def bookmark = utils.updateLastKnownGoodBookmark(env.BRANCH_NAME, long_revision)
 
