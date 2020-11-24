@@ -1217,10 +1217,10 @@ static void ci_netif_unlock_slow(ci_netif* ni)
                        CI_EPLOCK_FL_NEED_WAKE));
     l = ef_eplock_clear_flags(&ni->state->lock, k_flags);
 #endif
-  } while( (l & all_handled_flags &
-            (CI_EPLOCK_NETIF_UNLOCK_FLAGS | CI_EPLOCK_NETIF_SOCKET_LIST)) != 0 ||
-          ci_cas64u_fail(&ni->state->lock.lock, l,
-                          (l &~ CI_EPLOCK_LOCKED) | CI_EPLOCK_UNLOCKED) );
+  } while ( !ef_eplock_try_unlock(&ni->state->lock, &l,
+                                  CI_EPLOCK_NETIF_UNLOCK_FLAGS |
+                                  CI_EPLOCK_NETIF_SOCKET_LIST |
+                                  CI_EPLOCK_FL_NEED_WAKE) );
 
   /* We've handled everything we needed to, so can return without
    * dropping to the kernel.
