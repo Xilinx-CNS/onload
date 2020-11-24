@@ -95,7 +95,7 @@ try cp -r $TOP/debian/debian-templ/source $tempfile/$onloaddir/debian/
 try cd $tempfile
 try tar xf $package.orig.tar.gz
 try cd $onloaddir/debian
-try debuild -S -i -uc -us
+try debuild -S -i -uc -us -d
 try cd $tempfile
 
 echo "Using package components:"
