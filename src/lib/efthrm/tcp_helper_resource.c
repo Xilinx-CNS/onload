@@ -5277,7 +5277,6 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
    * 2. Wedged without reset work pending
    * 3. Not wedged with reset work ongoing
    * 4. Not wedged with no reset work
-   * 5. Stack did not initialise fully
    *
    * We must ensure that the reset work is not running before we continue.
    * That means that we need to hold the lock.  We get to this state in the
@@ -5294,43 +5293,28 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
    *
    * In case 4 we can aquire the lock.
    *
-   * In case 5 the lock value is set to CI_EPLOCK_UNINITIALISED.
-   *
    * This allows us to distinguish all cases, and so appropriately set the
    * CI_NETIF_FLAG_WEDGED flag to handle the rest of the cleanup appropriately.
    */
   if( ! ci_netif_trylock(&trs->netif) ) {
-    if (CI_EPLOCK_UNINITIALISED == trs->netif.state->lock.lock) {
-      /* Case 5 */
-      OO_DEBUG_ERR(ci_log("%s [%u]: "
-                          "ERROR netif did not fully initialise (0x%llx)",
-                          __FUNCTION__, trs->id,
-                          (unsigned long long)trs->netif.state->lock.lock));
-      /* We have the trusted lock, and there is effectively no shared state.
-       * So, we do not care about taking the shared lock when modofying the
-       * flags. */
-      netif->flags |= CI_NETIF_FLAG_WEDGED;
-    }
-    else {
-      /* Cases 1, 2 and 3 */
-      efab_tcp_helper_flush_reset_wq(trs);
+    /* Cases 1, 2 and 3 */
+    efab_tcp_helper_flush_reset_wq(trs);
 
-      /* There's a potential race here.  We're still on the all stacks list
-       * at this point so additional reset work could potentially be queued
-       * and take the lock between the flush and this trylock.  This leads us
-       * to think that the stack is wedged, and perform an ungraceful
-       * stack release, but we shouldn't encounter more serious consequences.
-       * As we deem the stack wedged we won't be touching the shared state,
-       * and we'll wait for the work to complete as we flush the workqueue
-       * again on tcp_helper_stop.
-       */
-      if( !ci_netif_trylock(&trs->netif) ) {
-        /* Cases 1 and 2 */
-        OO_DEBUG_ERR(ci_log("Stack [%d] released with lock stuck (0x%llx)",
-                     trs->id,
-                     (unsigned long long)trs->netif.state->lock.lock));
-        netif->flags |= CI_NETIF_FLAG_WEDGED;
-      }
+    /* There's a potential race here.  We're still on the all stacks list
+     * at this point so additional reset work could potentially be queued
+     * and take the lock between the flush and this trylock.  This leads us
+     * to think that the stack is wedged, and perform an ungraceful
+     * stack release, but we shouldn't encounter more serious consequences.
+     * As we deem the stack wedged we won't be touching the shared state,
+     * and we'll wait for the work to complete as we flush the workqueue
+     * again on tcp_helper_stop.
+     */
+    if( !ci_netif_trylock(&trs->netif) ) {
+      /* Cases 1 and 2 */
+      OO_DEBUG_ERR(ci_log("Stack [%d] released with lock stuck (0x%llx)",
+                   trs->id,
+                   (unsigned long long)trs->netif.state->lock.lock));
+      netif->flags |= CI_NETIF_FLAG_WEDGED;
     }
   }
   /* else case 4 */

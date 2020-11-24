@@ -27,7 +27,7 @@ int
 eplock_ctor(ci_netif *ni)
 {
   init_waitqueue_head(&ni->eplock_helper.wq);
-  ni->state->lock.lock = CI_EPLOCK_UNINITIALISED;
+  ni->state->lock.lock = 0;
 
 #if CI_CFG_EFAB_EPLOCK_RECORD_CONTENTIONS
   /* if asked we keep a record of who waited on this lock */
