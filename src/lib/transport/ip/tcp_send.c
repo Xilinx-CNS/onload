@@ -1231,28 +1231,6 @@ void ci_tcp_sendmsg_enqueue_prequeue(ci_netif* ni, ci_tcp_state* ts,
     pkt->next = send_list;
   }
   sendq->tail = tail_pkt_id;
-
-  if( NI_OPTS(ni).tcp_combine_sends_mode == 0 ) {
-    /* Merge small segments if we can.  We only copy data (ie. we won't move
-    ** data here, so we won't get optimal packing.  This is a trade-off
-    ** against cpu overhead. */
-    while( OO_PP_NOT_NULL(pkt->next) ) {
-      ci_ip_pkt_fmt* next = PKT_CHK(ni, pkt->next);
-      if( oo_offbuf_left(&pkt->buf) >= PKT_TCP_TX_SEQ_SPACE(next) ) {
-        LOG_TT(ci_log("%s: coalesce %d (bytes=%d) into %d (space=%d)",
-          __FUNCTION__, OO_PKT_FMT(next), PKT_TCP_TX_SEQ_SPACE(next),
-          OO_PKT_FMT(pkt), oo_offbuf_left(&pkt->buf)));
-        ci_tcp_tx_coalesce(ni, ts, sendq, pkt, CI_TRUE);
-        if( ! OO_PP_EQ(pkt->next, OO_PKT_P(next)) )  continue;
-        if( OO_PP_IS_NULL(pkt->next) )  break;
-        /* Didn't coalesce, presumably because we ran out of segments or
-        ** something. */
-        pkt = PKT_CHK(ni, pkt->next);
-      }
-      else
-        pkt = next;
-    }
-  }
 }
 
 
