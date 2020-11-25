@@ -59,7 +59,7 @@ onload.config: preprocessor_dump
 
 # "Compile" onload.config into an object file.
 onload.config.o: onload.config
-	$(CC) $(mmake_c_compile) -r -nostdlib -Wl,--build-id=none,-b,binary $< -o $@
+	$(CC) $(mmake_c_compile) -r -nostdlib -Wl,--build-id=none,-b,binary,-z,noexecstack $< -o $@
 
 clean:
 	@$(MakeClean)
