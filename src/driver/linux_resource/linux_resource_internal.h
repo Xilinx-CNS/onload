@@ -91,5 +91,8 @@ struct cmd_context {
 };
 int rmgr_set_location(struct cmd_context* ctx,
                       struct ethtool_rx_flow_spec* fsp);
+extern int efrm_nic_set_accel_allowed(struct efhw_nic* nic,
+				      int enable);
+extern int efrm_nic_get_accel_allowed(struct efhw_nic* nic);
 
 #endif  /* __LINUX_RESOURCE_INTERNAL__ */

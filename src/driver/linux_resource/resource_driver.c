@@ -96,12 +96,13 @@ EXPORT_SYMBOL(efrm_is_pio_enabled);
 static int enable_accel_by_default = 1;
 module_param(enable_accel_by_default, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(enable_accel_by_default,
-                 "Allow Onload acceleration and use of ef_vi of all network "
-				 "devices by default. Individual devices may be enabled or "
-				 "disabled by writing to "
-				 "/proc/driver/sfc_resource/<name>/enable. If this parameter "
-				 "is set to zero then devices must be enabled in this way "
-				 "to allow Onload acceleration or use of ef_vi.");
+		 "Allow Onload acceleration and use of ef_vi of all network "
+		 "devices by default. Individual devices may be enabled or "
+		 "disabled by writing to "
+		 "/sys/class/net/<name>/device/sfc_resource/enable. "
+		 "If this parameter is set to zero then devices must be "
+		 "enabled in this way to allow Onload acceleration or "
+		 "use of ef_vi.");
 
 int enable_driverlink = 1;
 module_param(enable_driverlink, int, S_IRUGO | S_IWUSR);
@@ -487,6 +488,31 @@ efrm_get_redisovered_nic(struct pci_dev* dev,
 	 * unloads. */
 
 	return lnic;
+}
+
+
+int efrm_nic_set_accel_allowed(struct efhw_nic* nic,
+			       int enable)
+{
+	struct efrm_nic* rnic = efrm_nic(nic);
+	spin_lock_bh(&rnic->lock);
+	if (enable)
+		rnic->rnic_flags |= EFRM_NIC_FLAG_ADMIN_ENABLED;
+	else
+		rnic->rnic_flags &=~ EFRM_NIC_FLAG_ADMIN_ENABLED;
+	spin_unlock_bh(&rnic->lock);
+	return 0;
+}
+
+
+int efrm_nic_get_accel_allowed(struct efhw_nic* nic)
+{
+	struct efrm_nic* rnic = efrm_nic(nic);
+	int enabled;
+	spin_lock_bh(&rnic->lock);
+	enabled = (rnic->rnic_flags & EFRM_NIC_FLAG_ADMIN_ENABLED) != 0;
+	spin_unlock_bh(&rnic->lock);
+	return enabled;
 }
 
 /****************************************************************************
