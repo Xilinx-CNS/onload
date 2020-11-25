@@ -47,8 +47,6 @@
 #include <ci/efrm/efrm_nic.h>
 #include <linux/interrupt.h>
 #include <ci/efrm/kernel_proc.h>
-
-
 /************************************************************************
  * Per-nic structure in the resource driver                             *
  ************************************************************************/
@@ -66,9 +64,7 @@ struct linux_efhw_nic {
 	/*! Event handlers. */
 	struct efhw_ev_handler *ev_handlers;
 
-	/* procfs file /proc/driver/sfc_resource/eth0/enable */
 	efrm_pd_handle proc_dir;
-	efrm_pd_handle enable_file;
 };
 
 #define linux_efhw_nic(_efhw_nic)					\

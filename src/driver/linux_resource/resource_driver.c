@@ -447,104 +447,6 @@ efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
 /* A count of how many NICs this driver knows about. */
 static int n_nics_probed;
 
-
-/****************************************************************************
- *
- * procfs 'enable' file stuff
- *
- ****************************************************************************/
-
-
-static ssize_t efrm_nic_enable_write(struct file *file,
-                                     const char __user *ubuf,
-                                     size_t count, loff_t *ppos)
-{
-	struct linux_efhw_nic* lnic = PDE_DATA(file_inode(file));
-	struct efrm_nic* nic = &lnic->efrm_nic;
-	int enable;
-
-	/* kstrtobool would be preferable, but it's 4.6+ only (and RHEL7) */
-	int rc = kstrtoint_from_user(ubuf, count, 10, &enable);
-	if (rc) {
-		EFRM_ERR("%s: Invalid data in dev/enable write, rc=%d.",
-		         __func__, rc);
-		return rc;
-	}
-
-	spin_lock_bh(&nic->lock);
-	if (enable)
-		nic->rnic_flags |= EFRM_NIC_FLAG_ADMIN_ENABLED;
-	else
-		nic->rnic_flags &=~ EFRM_NIC_FLAG_ADMIN_ENABLED;
-	spin_unlock_bh(&nic->lock);
-
-	return count;
-}
-
-
-static int efrm_nic_enable_read_proc(struct seq_file *seq, void *s)
-{
-	struct linux_efhw_nic* lnic = seq->private;
-	struct efrm_nic* nic = &lnic->efrm_nic;
-	int enable;
-
-	spin_lock_bh(&nic->lock);
-	enable = (nic->rnic_flags & EFRM_NIC_FLAG_ADMIN_ENABLED) != 0;
-	spin_unlock_bh(&nic->lock);
-	seq_printf(seq, "%d\n", enable);
-	return 0;
-}
-
-
-static int efrm_nic_enable_open_proc(struct inode *inode, struct file *file)
-{
-	return single_open(file, efrm_nic_enable_read_proc, PDE_DATA(inode));
-}
-
-
-static const struct proc_ops efrm_nic_enable_fops_proc = {
-	PROC_OPS_SET_OWNER
-	.proc_open	= efrm_nic_enable_open_proc,
-	.proc_read	= seq_read,
-	.proc_lseek	= seq_lseek,
-	.proc_write     = efrm_nic_enable_write,
-	.proc_release	= single_release,
-};
-
-
-static void efrm_nic_proc_intf_added(const char* intf_name,
-                                     struct linux_efhw_nic* nic)
-{
-	EFRM_ASSERT(nic->proc_dir == NULL);
-	EFRM_ASSERT(nic->enable_file == NULL);
-	nic->proc_dir = efrm_proc_intf_dir_get(intf_name);
-	if (nic->proc_dir) {
-		nic->enable_file = efrm_proc_create_file("enable", 0644,
-		                                         nic->proc_dir,
-		                                         &efrm_nic_enable_fops_proc,
-												 nic);
-	}
-	efrm_affinity_interface_up(nic);
-	/* efrm_proc_* already logged warnings on error, no need to log more
-	 * here */
-}
-
-
-static void efrm_nic_proc_intf_removed(struct linux_efhw_nic* nic)
-{
-	if (nic->enable_file) {
-		EFRM_ASSERT(nic->proc_dir != NULL);
-		efrm_proc_remove_file(nic->enable_file);
-		nic->enable_file = NULL;
-	}
-	efrm_affinity_interface_down(nic);
-	if (nic->proc_dir) {
-		efrm_proc_intf_dir_put(nic->proc_dir);
-		nic->proc_dir = NULL;
-	}
-}
-
-
 static struct linux_efhw_nic*
 efrm_get_redisovered_nic(struct pci_dev* dev,
 			 const struct efhw_device_type* dev_type)
@@ -682,8 +584,6 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 		registered_nic = 1;
 
 		++nics_probed_delta;
-
-		efrm_nic_proc_intf_added(net_dev->name, lnic);
 	}
 
 	lnic->dl_device = dl_device;
@@ -868,7 +768,6 @@ static void efrm_nic_del(struct linux_efhw_nic *lnic)
 	EFRM_TRACE("%s:", __func__);
 
 	efrm_driver_unregister_nic(&lnic->efrm_nic);
-	efrm_nic_proc_intf_removed(lnic);
 
 	/* Close down hardware and free resources. */
 	if (--n_nics_probed == 0)
