@@ -406,7 +406,6 @@ static int efrm_netdev_event(struct notifier_block *this,
 		nic = efhw_nic_from_netdev(net_dev, &efrm_dl_driver);
 		if (nic) {
 			efrm_filter_rename(nic, net_dev);
-			efrm_nic_rename(nic, net_dev);
 		}
 	}
 

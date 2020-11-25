@@ -760,18 +760,6 @@ failed:
 	return rc;
 }
 
-
-void
-efrm_nic_rename(struct efhw_nic* nic, struct net_device *net_dev)
-{
-	struct linux_efhw_nic* lnic = linux_efhw_nic(nic);
-	EFRM_ASSERT(nic != NULL);
-	EFRM_ASSERT(net_dev != NULL);
-	efrm_nic_proc_intf_removed(lnic);
-	efrm_nic_proc_intf_added(net_dev->name, lnic);
-}
-
-
 int
 efrm_nic_unplug(struct efhw_nic* nic)
 {
