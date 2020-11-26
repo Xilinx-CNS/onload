@@ -719,7 +719,8 @@ extern int oo_spinloop_run_pending_sigs(ci_netif*, citp_waitable*,
                                         citp_signal_info*, int) CI_HF;
 
 ci_inline int
-oo_spinloop_pause_check_signals(ci_netif* ni, ci_uint64 now_frc,
+oo_spinloop_pause_check_signals(ci_netif* ni,
+                                ci_uint64 now_frc /*unused*/,
                                 ci_uint64* schedule_frc /*unused*/,
                                 int have_timeout,
                                 citp_waitable* w, citp_signal_info* si)

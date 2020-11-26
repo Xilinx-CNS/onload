@@ -709,16 +709,9 @@ ci_udp_recvmsg_block(ci_udp_iomsg_args* a, ci_netif* ni, ci_udp_state* us,
      * subdirectory, we copy it contents. */
     si = citp_signal_get_specific_inited();
   continue_to_block:
-    inside_lib = si->c.inside_lib;
-    ci_assert_gt(inside_lib, 0);
-    si->c.inside_lib = 0;
-    ci_compiler_barrier();
-    if(CI_UNLIKELY( si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING ))
-      citp_signal_run_pending(si);
-
+    inside_lib = oo_exit_lib_temporary_begin(si);
     rc = ci_sys_poll(&pfd, 1, timeout);
-
-    si->c.inside_lib = inside_lib;
+    oo_exit_lib_temporary_end(si, inside_lib);
 
     if( rc > 0 )
       return 0;

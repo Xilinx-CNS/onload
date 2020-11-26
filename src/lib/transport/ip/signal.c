@@ -289,12 +289,8 @@ int oo_spinloop_run_pending_sigs(ci_netif* ni, citp_waitable* w,
     return -EINTR;
   if( w )
     ci_sock_unlock(ni, w);
-  inside_lib = si->c.inside_lib;
-  si->c.inside_lib = 0;
-  ci_compiler_barrier();
-  citp_signal_run_pending(si);
-  si->c.inside_lib = inside_lib;
-  ci_compiler_barrier();
+  inside_lib = oo_exit_lib_temporary_begin(si);
+  oo_exit_lib_temporary_end(si, inside_lib);
   if( w )
     ci_sock_lock(ni, w);
   if( ~si->c.aflags & OO_SIGNAL_FLAG_NEED_RESTART )

@@ -43,6 +43,28 @@ ci_inline citp_signal_info *citp_signal_get_specific_inited(void)
   return &pt->sig;
 }
 
+ci_inline int
+oo_exit_lib_temporary_begin(citp_signal_info* si)
+{
+  int inside_lib;
+  ci_compiler_barrier();
+  inside_lib = si->c.inside_lib;
+  ci_assert_gt(inside_lib, 0);
+  si->c.inside_lib = 0;
+  ci_compiler_barrier();
+  if( si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING )
+    citp_signal_run_pending(si);
+  return inside_lib;
+}
+ci_inline void
+oo_exit_lib_temporary_end(citp_signal_info* si, int inside_lib_value)
+{
+  ci_compiler_barrier();
+  si->c.inside_lib = inside_lib_value;
+  ci_compiler_barrier();
+}
+
+
 extern int oo_do_sigaction(int sig, const struct sigaction *act,
                            struct sigaction *oldact);
 

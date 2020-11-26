@@ -990,8 +990,12 @@ check_ul_accept_q:
         }
 
         /* run any pending signals: */
-        citp_exit_lib(lib_context, FALSE);
-        citp_reenter_lib(lib_context);
+        {
+          int inside_lib =
+                oo_exit_lib_temporary_begin(&lib_context->thread->sig);
+          oo_exit_lib_temporary_end(&lib_context->thread->sig, inside_lib);
+        }
+
 
         if( ~lib_context->thread->sig.c.aflags & OO_SIGNAL_FLAG_NEED_RESTART ) {
           ni->state->is_spinner = 0;
