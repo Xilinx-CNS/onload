@@ -697,9 +697,7 @@ ci_udp_recvmsg_block(ci_udp_iomsg_args* a, ci_netif* ni, ci_udp_state* us,
   {
     citp_signal_info* si;
     struct pollfd pfd;
-#if !CI_CFG_CITP_INSIDE_LIB_IS_FLAG
     int inside_lib;
-#endif
     pfd.fd = a->fd;
     pfd.events = POLLIN;
 
@@ -711,10 +709,8 @@ ci_udp_recvmsg_block(ci_udp_iomsg_args* a, ci_netif* ni, ci_udp_state* us,
      * subdirectory, we copy it contents. */
     si = citp_signal_get_specific_inited();
   continue_to_block:
-#if !CI_CFG_CITP_INSIDE_LIB_IS_FLAG
     inside_lib = si->c.inside_lib;
     ci_assert_gt(inside_lib, 0);
-#endif
     si->c.inside_lib = 0;
     ci_compiler_barrier();
     if(CI_UNLIKELY( si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING ))
@@ -722,11 +718,7 @@ ci_udp_recvmsg_block(ci_udp_iomsg_args* a, ci_netif* ni, ci_udp_state* us,
 
     rc = ci_sys_poll(&pfd, 1, timeout);
 
-#if CI_CFG_CITP_INSIDE_LIB_IS_FLAG
-    si->c.inside_lib = 1;
-#else
     si->c.inside_lib = inside_lib;
-#endif
 
     if( rc > 0 )
       return 0;

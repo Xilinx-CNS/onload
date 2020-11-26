@@ -843,69 +843,6 @@ ci_inline struct oo_stackname_state *oo_stackname_thread_get(void)
  ** Signal deferral and errno propagation
  */
 
-#if CI_CFG_CITP_INSIDE_LIB_IS_FLAG
-
-ci_inline int __citp_checked_enter_lib(citp_lib_context_t *lib_context
-                                       CI_DEBUG_ARG(const char *fn)
-                                       CI_DEBUG_ARG(int line) ) 
-{
-  int was_inside_lib;
-
-  lib_context->saved_errno = errno;
-  lib_context->thread = __oo_per_thread_get();
-  was_inside_lib = lib_context->thread->sig.c.inside_lib;
-  Log_LIB(log("  citp_checked_enter_lib(%p) [was_in=%d] %s (%d)",
-              lib_context->thread, was_inside_lib, fn, line));
-  lib_context->thread->sig.c.inside_lib = 1;
-  ci_assert(~lib_context->thread->sig.c.aflags &
-            OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  return !was_inside_lib;
-}
-
-
-ci_inline void __citp_enter_lib(citp_lib_context_t *lib_context
-                                CI_DEBUG_ARG(const char *fn)
-                                CI_DEBUG_ARG(int line) ) 
-{
-  lib_context->saved_errno = errno;
-  lib_context->thread = __oo_per_thread_get();
-  Log_LIB(log("  citp_enter_lib(%p) %s (%d)", lib_context->thread, fn, line));
-  ci_assert_equal(lib_context->thread->sig.c.inside_lib, 0);
-  ci_assert(~lib_context->thread->sig.c.aflags &
-            OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  lib_context->thread->sig.c.inside_lib = 1;
-}
-
-
-ci_inline void __citp_reenter_lib(citp_lib_context_t *lib_context
-                                  CI_DEBUG_ARG(const char *fn)
-                                  CI_DEBUG_ARG(int line) ) {
-  Log_LIB(log("  citp_reenter_lib(%p) %s (%d)", lib_context->thread, fn, line));
-  ci_assert_equal(lib_context->thread->sig.c.inside_lib, 0);
-  ci_assert(~lib_context->thread->sig.c.aflags &
-            OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  lib_context->thread->sig.c.inside_lib = 1;
-}
-
-
-ci_inline void __citp_exit_lib(citp_lib_context_t *lib_context, int do_errno
-                               CI_DEBUG_ARG(const char *fn)
-                               CI_DEBUG_ARG(int line) ) {
-  Log_LIB(log("  citp_exit_lib(%p) %s (%d)", lib_context->thread, fn, line));
-  ci_assert_equal(lib_context->thread->sig.c.inside_lib, 1);
-  ci_assert(~lib_context->thread->sig.c.aflags &
-            OO_SIGNAL_FLAG_FDTABLE_LOCKED);
-  lib_context->thread->sig.c.inside_lib = 0;
-  ci_compiler_barrier();
-  if(CI_UNLIKELY( lib_context->thread->sig.c.aflags &
-                  OO_SIGNAL_FLAG_HAVE_PENDING ))
-    citp_signal_run_pending(&lib_context->thread->sig);
-  if( do_errno )
-    errno = lib_context->saved_errno;
-}
-
-#else /* CI_CFG_CITP_INSIDE_LIB_IS_FLAG */
-
 ci_inline int __citp_checked_enter_lib(citp_lib_context_t *lib_context
                                        CI_DEBUG_ARG(const char *fn)
                                        CI_DEBUG_ARG(int line) ) 
@@ -972,7 +909,6 @@ ci_inline void __citp_exit_lib(citp_lib_context_t *lib_context, int do_errno
     errno = lib_context->saved_errno;
 }
 
-#endif /* CI_CFG_CITP_INSIDE_LIB_IS_FLAG */
 
 #define citp_checked_enter_lib(c)				\
   __citp_checked_enter_lib((c) CI_DEBUG_ARG(__FUNCTION__)	\

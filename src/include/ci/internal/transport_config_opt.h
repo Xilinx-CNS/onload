@@ -546,11 +546,6 @@
 #endif /* CI_CFG_TCPDUMP */
 
 
-/* Set to use flag if you want stronger assertions, only zero-copy API
- * needs the re-entrancy of counting implementation 
- */
-#define CI_CFG_CITP_INSIDE_LIB_IS_FLAG 0
-
 /* Support for reducing ACK rate at high throughput to improve efficiency */
 #define CI_CFG_DYNAMIC_ACK_RATE 1
 
