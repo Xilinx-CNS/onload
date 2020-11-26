@@ -1483,6 +1483,7 @@ static int oo_cp_init_kernel_mibs_rsop(ci_private_t *priv, void *arg)
 
 static int oo_cp_xdp_prog_change(ci_private_t *priv, void *arg)
 {
+#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   ci_hwport_id_t hwport = *(ci_hwport_id_t*)arg;
   struct oo_cplane_handle* cp;
   cp_xdp_prog_id_t xdp_prog_id;
@@ -1520,6 +1521,7 @@ static int oo_cp_xdp_prog_change(ci_private_t *priv, void *arg)
                                    intf_i, xdp_prog_id);
   }
 
+#endif
   return 0;
 }
 
