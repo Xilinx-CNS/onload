@@ -850,9 +850,8 @@ int oo_fop_flush(struct file *f, fl_owner_t id)
   int nr, fd;
   struct siginfo info = {};
 
-  if( current == NULL )
-    return 0;
-  if( current->exit_state )
+  /* Are we called from some strange context, of from do_exit()? */
+  if( current == NULL || (current->flags & PF_EXITING) )
     return 0;
 
   regs = task_pt_regs(current);
