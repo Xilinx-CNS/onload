@@ -1,13 +1,12 @@
-# OpenOnload
+# OpenOnload(:registered:)
 
-Onload(R) (OpenOnload(R)) is a high performance user-level network stack, which
-accelerates TCP and UDP network I/O for applications using the BSD sockets API
-on Linux.
+Onload(:registered:) is a high performance user-level network stack,
+which accelerates TCP and UDP network I/O for applications using the BSD
+sockets on Linux.
 
 ## Features
 
-* Application-to-application latency below 1120ns.
-* Send or receive millions of messages per second per CPU core.
+* Low Application-to-application latency.
 * Binary compatible with existing applications.
 * Open Source (GPLv2.0 and BSD-2-Clause).
 
@@ -18,10 +17,19 @@ aspects that are usually problematic for user-level networking, such as fork(),
 exec(), passing sockets through Unix domain sockets, and advancing the
 protocol when the application is not scheduled.
 
-## Installation
+## Installation and Quick Start Guide
 
-Onload is distributed as source code. Instructions for building, packaging
+OpenOnload is distributed as source code. Instructions for building, packaging
 and installing may be found in [DEVELOPING.md](DEVELOPING.md)
+
+For each interface on which Onload is to use AF_XDP, execute the following:
+
+```sh
+echo ens2f0 > /sys/module/sfc_resource/afxdp/register
+```
+
+The application to be Onloaded should be launched by prefixing the command
+line with `onload`.
 
 ## Contributors
 
@@ -29,7 +37,7 @@ Please see [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## Compatible network adapters, drivers and operating systems
 
-Onload can accelerate applications on operating systems with AF_XDP support.
+OpenOnload can accelerate applications on operating systems with AF_XDP support.
 AF_XDP support needs Linux kernel version 5.3 or later. To support zero-copy,
 Onload needs AF_XDP network adapter drivers to implement the necessary AF_XDP
 primitives. Typically the latest drivers from the network adapter vendors will
@@ -51,31 +59,16 @@ Xilinx network adapters is included.
 
 ### Compatible Xilinx network adapters
 
-The following adapters at least are able to support Onload without AF_XDP:
+The following adapters at least are able to support OpenOnload without AF_XDP:
 
-* VCU1525
-* X2541, X2542
+* X2541
 * X2522, X2522-25G
 * SFN8042
-* SFN8522, SFN8522M, SFN8542, SFN8722
-* SFN7142Q
-* SFN7122F, SFN7322F, SFN7124F
-
-## Quick Start Guide
-
-On each host requiring Onload to use AF_XDP, execute the following:
-
-```sh
-echo ens2f0 > /sys/module/sfc_resource/afxdp/register
-```
-
-The application to be Onloaded should be launched by prefixing the command
-line with `onload`.
+* SFN8522, SFN8542
 
 ## Support
 
-Supported releases of Onload are available from
-https://www.xilinx.com/products/boards-and-kits/x2-series.html#onload
+The publicly-hosted repository is a community-supported project.
 
-Xilinx offers support contracts with guaranteed service level agreements.
-Please contact the Xilinx sales team for more information.
+Supported releases of OpenOnload are available from
+https://support-nic.xilinx.com/wp/onload
