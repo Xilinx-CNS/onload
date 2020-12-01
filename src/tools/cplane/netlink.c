@@ -544,15 +544,21 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
           if( lower_llap->encap.type & CICP_LLAP_TYPE_VLAN )
             llap->encap.vlan_id = lower_llap->encap.vlan_id;
         }
-        else if( type & CICP_LLAP_TYPE_CHILD ) {
-          /* It is a child of a foreign interface.  Let's call
-           * cp_llap_fix_upper_layers() to discover foreign properties. */
-          populate_llap = true;
-        }
-        else if( llap->rx_hwports && type == CICP_LLAP_TYPE_NONE) {
-          cp_set_hwport_xdp_prog_id(s, mib,
-                                    cp_hwport_mask_first(llap->rx_hwports),
-                                    xdp_prog_id);
+        else {
+          if( type & CICP_LLAP_TYPE_CHILD ) {
+            /* It is a child of a foreign interface.  Let's call
+             * cp_llap_fix_upper_layers() to discover foreign properties. */
+            populate_llap = true;
+          }
+          if( llap->rx_hwports &&
+              (type & ~CICP_LLAP_TYPE_SLAVE) == CICP_LLAP_TYPE_NONE ) {
+            /* XDP should be updated for the base interfaces only,
+             * which does not include *vlans, but includes slaves.
+             */
+            cp_set_hwport_xdp_prog_id(s, mib,
+                                      cp_hwport_mask_first(llap->rx_hwports),
+                                      xdp_prog_id);
+          }
         }
         llap->xdp_prog_id = xdp_prog_id;
         llap->ifindex = ifindex;
