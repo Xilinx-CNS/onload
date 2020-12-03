@@ -1779,7 +1779,7 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
 {
   struct citp_epoll_fd* ep = fdi_to_epoll(fdi);
   struct oo_ul_epoll_state eps;
-  ci_uint64 poll_start_frc;
+  ci_uint64 base_poll_start_frc, poll_start_frc;
   int rc = 0, rc_os = 0;
   sigset_t sigsaved;
   int pwait_was_spinning = 0;
@@ -1843,8 +1843,11 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
   }
 
   /* Set up epoll state */
-  ci_frc64(&poll_start_frc);
-  eps.this_poll_frc = poll_start_frc;
+  ci_frc64(&base_poll_start_frc);
+  /* base_poll_start_frc keeps the base timestamp of poll start and
+   * poll_start_frc keeps the updated value because we should to update it
+   * both with timeout_hr re-calculation. See citp_epoll_find_timeout().*/
+  eps.this_poll_frc = poll_start_frc = base_poll_start_frc;
   eps.ep = ep;
   eps.events = events;
   eps.events_top = events + maxevents;
@@ -2002,7 +2005,7 @@ no_events:
   }
 
   /* Blocking.  Shall we spin? */
-  if( KEEP_POLLING(eps.ul_epoll_spin, eps.this_poll_frc, poll_start_frc) ) {
+  if( KEEP_POLLING(eps.ul_epoll_spin, eps.this_poll_frc, base_poll_start_frc) ) {
     if( !pwait_was_spinning && sigmask != NULL) {
       if( ep->avoid_spin_once ) {
         eps.ul_epoll_spin = 0;
