@@ -2077,6 +2077,7 @@ no_events:
   /* Re-calculate timeout.  We should do it if we were spinning a lot. */
   if( eps.ul_epoll_spin && timeout_hr > 0 ) {
     timeout_hr -= eps.this_poll_frc - poll_start_frc;
+    poll_start_frc = eps.this_poll_frc;
     timeout_hr = CI_MAX(timeout_hr, 0);
     Log_POLL(ci_log("%s: blocking timeout reduced to %" CI_PRId64,
                     __FUNCTION__, timeout_hr));
