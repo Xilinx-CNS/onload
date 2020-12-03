@@ -18,19 +18,6 @@
 #include <ci/tools/utils.h>
 #include "private.h"
 
-/* IFLA_XDP* is not present on machines we build cplane server,
- * so we only use kernel header values when we have clarity
- * they are present.
- */
-#ifndef IFLA_XDP_MAX
-/* IFLA_GROUPP is the last item in 2.6.32 kernel codes */
-#define IFLA_XDP (IFLA_GROUP + 16)
-#define IFLA_XDP_PROG_ID 4
-#else
-  CI_BUILD_ASSERT(IFLA_XDP == IFLA_GROUP + 16);
-  CI_BUILD_ASSERT(IFLA_XDP_PROG_ID == 4);
-#endif
-
 
 /***** Generic NETLINK helpers *****/
 

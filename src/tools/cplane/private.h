@@ -1048,6 +1048,23 @@ void cp_bond_slave_update(struct cp_session* s, ci_ifid_t master_ifindex,
   CI_BUILD_ASSERT(RTM_F_LOOKUP_TABLE == 0x1000);
 #endif
 
+/* Linux<4.8 does not have IFLA_XDP & IFLA_XDP_MAX. */
+#ifndef IFLA_XDP_MAX
+/* IFLA_GROUP is the last item in 2.6.32 kernel codes */
+#define IFLA_XDP (IFLA_GROUP + 16)
+#else
+  CI_BUILD_ASSERT(IFLA_XDP == IFLA_GROUP + 16);
+#endif
+/* Linux<4.13 does not have IFLA_XDP_PROG_ID.
+ * However, it goes together with XDP_FLAGS_HW_MODE, which can be checked
+ * by #ifdef.
+ */
+#ifndef XDP_FLAGS_HW_MODE
+#define IFLA_XDP_PROG_ID 4
+#else
+  CI_BUILD_ASSERT(IFLA_XDP_PROG_ID == 4);
+#endif
+
 
 void cp_ipif_dump_start(struct cp_session* s, int af);
 void cp_rule_dump_start(struct cp_session* s, int af);
