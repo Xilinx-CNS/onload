@@ -752,9 +752,19 @@ extern citp_fdinfo*  citp_fdtable_lookup_fast(citp_lib_context_t*,
 
 extern citp_fdinfo*  citp_fdtable_lookup_noprobe(unsigned fd, int fdt_locked) CI_HF;
 
-extern citp_fdinfo* citp_reprobe_moved(citp_fdinfo* fdinfo,
-                                       int from_fast_lookup,
-                                       int fdip_is_already_busy);
+extern int
+citp_reprobe_moved_common(citp_fdinfo* fdinfo, int from_fast_lookup,
+                          int fdip_is_already_busy, citp_fdinfo** fdinfo_out);
+
+ci_inline citp_fdinfo*
+citp_reprobe_moved(citp_fdinfo* fdinfo, int from_fast_lookup,
+                   int fdip_is_already_busy)
+{
+  citp_fdinfo* new_fdinfo;
+  citp_reprobe_moved_common(fdinfo, from_fast_lookup, fdip_is_already_busy,
+                            &new_fdinfo);
+  return new_fdinfo;
+}
 
 #if CI_CFG_FD_CACHING
 extern void          citp_netif_cache_disable(void) CI_HF;

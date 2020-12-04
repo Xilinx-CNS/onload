@@ -273,13 +273,14 @@ static int fdtable_fd_move(ci_fd_t sock_fd, int op)
   return rc;
 }
 
-static citp_fdinfo_p
-citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
+static int
+citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner,
+                           citp_fdinfo_p* fdip_out)
 {
   citp_protocol_impl* proto = 0;
   citp_fdinfo* fdi = 0;
   ci_netif* ni;
-  int rc;
+  int rc = 0;
   int c_sock_fdi = 1;
 
   /* Must be holding the FD table writer lock */
@@ -338,7 +339,8 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
     citp_fdtable_busy_clear(fd, fdip_unknown, 1);
     fdi = &citp_the_closed_fd;
     citp_fdinfo_ref(fdi);
-    return fdi_to_fdip(fdi);
+    *fdip_out = fdi_to_fdip(fdi);
+    return rc;
   }
 
   if (c_sock_fdi) {
@@ -347,6 +349,7 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
     sock_fdi = CI_ALLOC_OBJ(citp_sock_fdi);
     if( ! sock_fdi ) {
       Log_E(log("%s: out of memory (sock_fdi)", __FUNCTION__));
+      rc = -ENOMEM;
       goto fail;
     }
     fdi = &sock_fdi->fdinfo;
@@ -360,12 +363,14 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
     if( ~w->sb_aflags & CI_SB_AFLAG_MOVED_AWAY_IN_EPOLL &&
         fdtable_fd_move(fd, OO_IOC_FILE_MOVED) == 0 ) {
       citp_netif_release_ref(ni, 1);
-      return fdip_passthru;
+      *fdip_out = fdip_passthru; 
+      return rc;
     }
 
     alien_fdi = CI_ALLOC_OBJ(citp_alien_fdi);
     if( ! alien_fdi ) {
       Log_E(log("%s: out of memory (alien_fdi)", __FUNCTION__));
+      rc = -ENOMEM;
       goto fail;
     }
     fdi = &alien_fdi->fdinfo;
@@ -382,6 +387,7 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
     sock_fdi = CI_ALLOC_OBJ(citp_sock_fdi);
     if( ! sock_fdi ) {
       Log_E(log("%s: out of memory (alien sock_fdi)", __FUNCTION__));
+      rc = -ENOMEM;
       goto fail;
     }
     fdi = &sock_fdi->fdinfo;
@@ -412,6 +418,7 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
     pipe_fdi = CI_ALLOC_OBJ(citp_pipe_fdi);
     if( ! pipe_fdi ) {
       Log_E(log("%s: out of memory (pipe_fdi)", __FUNCTION__));
+      rc = -ENOMEM;
       goto fail;
     }
     fdi = &pipe_fdi->fdinfo;
@@ -425,24 +432,27 @@ citp_fdtable_probe_restore(int fd, ci_ep_info_t * info, int print_banner)
   /* We're returning a reference to the caller. */
   citp_fdinfo_ref(fdi);
   citp_fdtable_insert(fdi, fd, 1);
-  return fdi_to_fdip(fdi);
+  *fdip_out = fdi_to_fdip(fdi); 
+  return rc;
  
  fail:
   if( ni  )  citp_netif_release_ref(ni, 1);
-  return fdip_unknown;
+  *fdip_out = fdip_unknown;
+  return rc;
 }
 
 
 /* Find out what sort of thing [fd] is, and if it is a user-level socket
  * then map in the user-level state.
  */
-static citp_fdinfo * citp_fdtable_probe_locked(unsigned fd, int print_banner,
-                                               int fdip_is_already_busy)
+static int
+citp_fdtable_probe_locked(unsigned fd, int print_banner,
+                          int fdip_is_already_busy, citp_fdinfo** fdi_out)
 {
   citp_fdinfo* fdi = NULL;
   struct stat64 st;
   ci_ep_info_t info;
-
+  int rc = 0;
 
   if( ! fdip_is_already_busy ) {
     volatile citp_fdinfo_p* p_fdip;
@@ -503,7 +513,7 @@ static citp_fdinfo * citp_fdtable_probe_locked(unsigned fd, int print_banner,
 
       Log_V(log("%s: fd=%d restore type "OO_FDFLAG_FMT, __FUNCTION__, fd,
                 OO_FDFLAG_ARG(info.fd_flags)));
-      fdip = citp_fdtable_probe_restore(fd, &info, print_banner);
+      rc = citp_fdtable_probe_restore(fd, &info, print_banner, &fdip);
       if( fdip_is_normal(fdip) )
         fdi = fdip_to_fdi(fdip);
       else
@@ -560,8 +570,8 @@ static citp_fdinfo * citp_fdtable_probe_locked(unsigned fd, int print_banner,
   citp_fdtable_busy_clear(fd, fdip_passthru, 1);
 
  exit:
-  return fdi;
-
+  *fdi_out = fdi;
+  return rc;
 }
 
 static citp_fdinfo *
@@ -578,7 +588,7 @@ citp_fdtable_probe(unsigned fd)
   saved_errno = errno;
   CITP_FDTABLE_LOCK();
   __citp_fdtable_extend(fd);
-   fdi = citp_fdtable_probe_locked(fd, CI_FALSE, CI_FALSE);
+  citp_fdtable_probe_locked(fd, CI_FALSE, CI_FALSE, &fdi);
   CITP_FDTABLE_UNLOCK();
   errno = saved_errno;
   return fdi;
@@ -904,7 +914,7 @@ static void citp_fdinfo_do_handover(citp_fdinfo* fdi, int fdt_locked)
   if( rc != 0 ) {
     citp_fdinfo* new_fdi;
     if( ! fdt_locked ) CITP_FDTABLE_LOCK();
-    new_fdi = citp_fdtable_probe_locked(fdi->fd, CI_TRUE, CI_TRUE);
+    citp_fdtable_probe_locked(fdi->fd, CI_TRUE, CI_TRUE, &new_fdi);
     citp_fdinfo_release_ref(new_fdi, 1);
     if( ! fdt_locked ) CITP_FDTABLE_UNLOCK();
     ci_assert_equal(citp_fdinfo_get_type(new_fdi), CITP_PASSTHROUGH_FD);
@@ -1448,7 +1458,7 @@ int citp_ep_dup(unsigned oldfd, int (*syscall)(int oldfd, long arg),
   /* Need to check in case this sucker's cached */
   if( fdip_is_unknown(oldfdip) ) {
     CITP_FDTABLE_LOCK();
-    oldfdi = citp_fdtable_probe_locked(oldfd, CI_FALSE, CI_FALSE);
+    citp_fdtable_probe_locked(oldfd, CI_FALSE, CI_FALSE, &oldfdi);
     CITP_FDTABLE_UNLOCK();
     if( oldfdi == &citp_the_closed_fd ) {
       citp_fdinfo_release_ref(oldfdi, CI_TRUE);
@@ -1542,7 +1552,7 @@ static void dup2_complete(citp_fdinfo* prev_tofdi,
   /* Need to check in case this sucker's cached */
   if( fdip_is_unknown(fromfdip) ) {
     if( !fdt_locked ) CITP_FDTABLE_LOCK();
-    fromfdi = citp_fdtable_probe_locked(fromfd, CI_FALSE, CI_FALSE);
+    citp_fdtable_probe_locked(fromfd, CI_FALSE, CI_FALSE, &fromfdi);
     if( !fdt_locked ) CITP_FDTABLE_UNLOCK();
     if( fromfdi == &citp_the_closed_fd ) {
       prev_tofdi->on_rcz.dup2_result = -EBADF;
@@ -1648,7 +1658,7 @@ int citp_ep_dup3(unsigned fromfd, unsigned tofd, int flags)
   if( fdip_is_unknown(fromfdip) ) {
     citp_fdinfo* fromfdi;
     CITP_FDTABLE_LOCK();
-    fromfdi = citp_fdtable_probe_locked(fromfd, CI_FALSE, CI_FALSE);
+    citp_fdtable_probe_locked(fromfd, CI_FALSE, CI_FALSE, &fromfdi);
     if( fromfdi )
       citp_fdinfo_release_ref(fromfdi, CI_TRUE);
     CITP_FDTABLE_UNLOCK();
@@ -1809,7 +1819,7 @@ int citp_ep_close(unsigned fd, bool already_closed)
 #if CI_CFG_FD_CACHING
   /* Need to check in case this sucker's cached */
   if( fdip_is_unknown(fdip) ) {
-    fdi = citp_fdtable_probe_locked(fd, CI_FALSE, CI_FALSE);
+    citp_fdtable_probe_locked(fd, CI_FALSE, CI_FALSE, &fdi);
     if( fdi == &citp_the_closed_fd ) {
       citp_fdinfo_release_ref(fdi, CI_TRUE);
       errno = EBADF;
@@ -1892,11 +1902,13 @@ int citp_ep_close(unsigned fd, bool already_closed)
  * The function assumes that fdinfo was obtained via citp_fdtable_lookup()
  * or from citp_fdtable_lookup_fast().  The _fast() variant is used by
  * read/write/recvmsg/sendto/... socket call interceptors. */
-citp_fdinfo* citp_reprobe_moved(citp_fdinfo* fdinfo, int from_fast_lookup,
-                                int fdip_is_already_busy)
+int citp_reprobe_moved_common(citp_fdinfo* fdinfo, int from_fast_lookup,
+                              int fdip_is_already_busy,
+                              citp_fdinfo** fdinfo_out)
 {
   int fd = fdinfo->fd;
   citp_fdinfo* new_fdinfo = NULL;
+  int rc = 0;
 
   CITP_FDTABLE_LOCK();
 
@@ -1932,7 +1944,7 @@ citp_fdinfo* citp_reprobe_moved(citp_fdinfo* fdinfo, int from_fast_lookup,
     ci_assert(fdip_is_busy(citp_fdtable.table[fd].fdip));
 
   /* re-probe new fd */
-  new_fdinfo = citp_fdtable_probe_locked(fd, CI_TRUE, CI_TRUE);
+  rc = citp_fdtable_probe_locked(fd, CI_TRUE, CI_TRUE, &new_fdinfo);
 
   if( fdinfo->epoll_fd >= 0 ) {
     citp_fdinfo* epoll_fdi = citp_epoll_fdi_from_member(fdinfo, 1);
@@ -1960,15 +1972,18 @@ citp_fdinfo* citp_reprobe_moved(citp_fdinfo* fdinfo, int from_fast_lookup,
     citp_fdinfo_release_ref(fdinfo, 1);
 
   CITP_FDTABLE_UNLOCK();
-  if( new_fdinfo == NULL )
-    return NULL;
+  if( new_fdinfo == NULL ) {
+    *fdinfo_out = NULL;
+    return rc;
+  }
 
   if( from_fast_lookup ) {
     citp_fdinfo_ref_fast(new_fdinfo);
     citp_fdinfo_release_ref(new_fdinfo, 0);
   }
 
-  return new_fdinfo;
+  *fdinfo_out = new_fdinfo;
+  return rc;
 }
 
 void __oo_service_fd(bool fdtable_locked)
