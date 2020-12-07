@@ -192,38 +192,38 @@ binary-indep: build install
 # Build architecture-dependent files here.
 binary-arch: build install
 	dh_lintian
-	dh_testdir -s
-	dh_testroot -s
-#	dh_installdebconf -s
-	dh_installdocs -s
-	dh_installexamples -s
-	dh_installmenu -s
-#	dh_installlogrotate -s
-#	dh_installemacsen -s
-#	dh_installpam -s
-#	dh_installmime -s
-#	dh_installinit -s
-	dh_installcron -s
-#	dh_installman -s
-	dh_installinfo -s
-	dh_installchangelogs ChangeLog -s
-	dh_strip -s
-	dh_link -s
-	dh_compress -s
-	dh_fixperms -s
-#	dh_makeshlibs -s
-	dh_installdeb -s
-#	dh_perl -s
-	dh_shlibdeps -s
-	dh_gencontrol -s
-	dh_md5sums -s
+	dh_testdir -a
+	dh_testroot -a
+#	dh_installdebconf -a
+	dh_installdocs -a
+	dh_installexamples -a
+	dh_installmenu -a
+#	dh_installlogrotate -a
+#	dh_installemacsen -a
+#	dh_installpam -a
+#	dh_installmime -a
+#	dh_installinit -a
+	dh_installcron -a
+#	dh_installman -a
+	dh_installinfo -a
+	dh_installchangelogs ChangeLog -a
+	dh_strip -a
+	dh_link -a
+	dh_compress -a
+	dh_fixperms -a
+	dh_makeshlibs -a
+	dh_installdeb -a
+#	dh_perl -a
+	dh_shlibdeps -a
+	dh_gencontrol -a
+	dh_md5sums -a
 	#
 	# Create the directories to install the source into
 	dh_installdirs -p$(userpackage) lib/onload
 
 	i_prefix=$(CURDIR)/debian/$(userpackage) scripts/onload_install --verbose deb_user_install
 	cp -r scripts/onload_install --verbose debian/$(userpackage)/lib/onload/
-	dh_builddeb -s
+	dh_builddeb -a
 
 binary: binary-indep binary-arch
 

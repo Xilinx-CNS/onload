@@ -33,7 +33,7 @@ onloadtype=enterprise
 onloadver=
 package=
 basename=
-outdir=`pwd`
+outdir=$(pwd)
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -58,10 +58,10 @@ fi
 basename=$(basename $tarball .tgz)
 onloadtype=$(echo $basename | try sed -e 's/\([^-]*\)\(-\)\(.*\)/\1/')
 onloadver=$(echo $basename | try sed -e 's/\([^-]*\)\(-\)\(.*\)/\3/')
+soversion=$(awk '/^ONLOAD_EXT_VERSION_MAJOR/{print $3}' $TOP/../mk/site/libs.mk)
 package=$onloadtype\_$onloadver
 onloaddir=$onloadtype-$onloadver
-tempfile=`mktemp -d`
-tempfile2=`mktemp -d`
+tempfile=$(mktemp -d)
 
 if [ $onloadtype != "enterpriseonload" -a \
      $onloadtype != "openonload" -a \
@@ -80,13 +80,10 @@ try mkdir -p $tempfile/$onloaddir/debian
 
 # Make any necessary replacements for the onload release we're doing in the
 # control files
-for i in `find $TOP/debian/debian-templ/* -type f`; do
-  try sed "s/#VERSION#/$onloadver/" < $i > $tempfile2/$(basename $i);
+for i in $(find $TOP/debian/debian-templ/* -type f); do
+  try sed -e "s/#VERSION#/$onloadver/" -e "s/#TYPE#/$onloadtype/" -e "s/#SOVERSION/${soversion}/" < $i > "${tempfile}/${onloaddir}/debian/$(basename $i)";
 done
-for i in $tempfile2/*; do
-  try sed "s/#TYPE#/$onloadtype/" < $i > $tempfile/$onloaddir/debian/$(basename $i);
-done
-try rm -rf $tempfile2
+try mv "${tempfile}/${onloaddir}/debian/type-user.shlibs" "${tempfile}/${onloaddir}/debian/${onloadtype}-user.shlibs"
 
 # Format is in a separate directory and can't have replacements, just copy it
 # separately
