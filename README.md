@@ -1,6 +1,6 @@
-# OpenOnload(:registered:)
+# OpenOnload®️
 
-Onload(:registered:) is a high performance user-level network stack,
+Onload®️ is a high performance user-level network stack,
 which accelerates TCP and UDP network I/O for applications using the BSD
 sockets on Linux.
 
