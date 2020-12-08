@@ -48,6 +48,8 @@
 #include <ci/efhw/nic.h>
 #include <ci/tools/sysdep.h>
 #include <ci/internal/transport_config_opt.h>
+#include "sfcaffinity.h"
+#include <ci/driver/resource/linux_efhw_nic.h>
 
 /* The DL driver and associated calls */
 static int efrm_dl_probe(struct efx_dl_device *efrm_dev,
@@ -176,10 +178,37 @@ static ssize_t enable_show(struct device *dev,
 	return scnprintf(buf_out, PAGE_SIZE, "%d\n", enabled);
 }
 
+
+static ssize_t cpu2rxq_store(struct device *dev,
+			    struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct efhw_nic* nic;
+	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	if (!nic)
+		return -ENOENT;
+	return efrm_affinity_store_cpu2rxq(linux_efhw_nic(nic), buf, count);
+}
+
+
+static ssize_t cpu2rxq_show(struct device *dev,
+			   struct device_attribute *attr,
+			   char *buf_out)
+{
+	struct efhw_nic* nic;
+	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	if (!nic)
+		return -ENOENT;
+	return efrm_affinity_show_cpu2rxq(linux_efhw_nic(nic), buf_out);
+}
+
+
 static DEVICE_ATTR_RW(enable);
+static DEVICE_ATTR_RW(cpu2rxq);
 
 static struct attribute *sfc_resource_attrs[] = {
 	&dev_attr_enable.attr,
+	&dev_attr_cpu2rxq.attr,
 	NULL,
 };
 static const struct attribute_group sfc_resource_group = {

@@ -67,6 +67,7 @@
 #include <ci/driver/internal.h>
 #include "efrm_internal.h"
 #include "sfcaffinity.h"
+#include <ci/driver/resource/linux_efhw_nic.h>
 
 MODULE_AUTHOR("Solarflare Communications");
 MODULE_LICENSE("GPL");
@@ -316,6 +317,9 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 		rc = linux_efhw_nic_map_ctr_ap(lnic);
 		if (rc < 0)
 			goto fail;
+		rc = efrm_affinity_interface_probe(lnic);
+		if (rc < 0)
+			goto fail;
 	}
 
 	rc = efrm_nic_ctor(&lnic->efrm_nic, res_dim);
@@ -329,7 +333,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 			iounmap(nic->bar_ioaddr);
 		}
 		nic->bar_ioaddr = 0;
-		goto fail;
+		goto fail2;
 	}
 
 	if (enable_accel_by_default)
@@ -338,7 +342,8 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 	efrm_init_resource_filter(dev ? &dev->dev : &net_dev->dev, net_dev->ifindex);
 
 	return 0;
-
+fail2:
+	efrm_affinity_interface_remove(lnic);
 fail:
 	if( dev )
 		pci_dev_put(dev);
@@ -398,6 +403,8 @@ static void linux_efrm_nic_dtor(struct linux_efhw_nic *lnic)
 
 	efrm_nic_dtor(&lnic->efrm_nic);
 	efhw_nic_dtor(nic);
+
+	efrm_affinity_interface_remove(lnic);
 
 	if (nic->bar_ioaddr && (nic->pci_dev != NULL)) {
 		iounmap(nic->bar_ioaddr);
@@ -889,7 +896,6 @@ static int init_sfc_resource(void)
 			  __func__);
 	}
 	efrm_filter_install_proc_entries();
-	efrm_affinity_install_proc_entries();
 
 	/* Register the driver so that our 'probe' function is called for
 	 * each EtherFabric device in the system.
@@ -914,7 +920,6 @@ static int init_sfc_resource(void)
 	return 0;
 
 failed_driverlink:
-	efrm_affinity_remove_proc_entries();
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();
 	efrm_driver_stop();
@@ -946,7 +951,6 @@ static void cleanup_sfc_resource(void)
 	efrm_nic_shutdown_all();
 	efrm_nic_del_all();
 
-	efrm_affinity_remove_proc_entries();
 	efrm_filter_shutdown();
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();

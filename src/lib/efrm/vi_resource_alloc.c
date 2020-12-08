@@ -60,6 +60,7 @@
 #include "efrm_pd.h"
 #include "bt_manager.h"
 #include "sfcaffinity.h"
+#include <ci/driver/resource/linux_efhw_nic.h>
 
 
 struct vi_attr {
@@ -233,7 +234,7 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 		}
 		else {
 			int ifindex = dev->ifindex;
-			channel = efrm_affinity_cpu_to_channel_dev(dev,
+			channel = efrm_affinity_cpu_to_channel_dev(linux_efhw_nic(efhw_nic),
 			                                          vi_attr->interrupt_core);
 			dev_put(dev);
 			if (channel < 0 && print_resource_warnings) {
