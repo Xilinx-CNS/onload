@@ -43,6 +43,9 @@ Onload needs AF_XDP network adapter drivers to implement the necessary AF_XDP
 primitives. Typically the latest drivers from the network adapter vendors will
 support these primitives.
 
+The AF_XDP support is currently under development and is not yet at final
+release quality.
+
 The following operating system distributions are known to provide an adequate
 level of AF_XDP support for Onload:
 
