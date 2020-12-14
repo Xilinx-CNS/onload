@@ -1068,7 +1068,6 @@ int oo_want_proactive_packet_allocation(ci_netif* ni)
 ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val,
                                       ci_uint64 flags_to_handle)
 {
-  const ci_uint64 ALL_HANDLED_FLAGS = CI_EPLOCK_NETIF_UL_MASK;
   ci_uint64 set_flags = 0;
   ci_uint64 test_val;
 
