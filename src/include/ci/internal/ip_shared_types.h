@@ -966,14 +966,11 @@ typedef struct {
    CI_EPLOCK_NETIF_NEED_PKT_SET)
 #endif
 
-/* All jobs that cause unlock deferral in DL context.
- * Notably polling in DL context on unlock undermines
- * NAPI budget and breaks AF_XDP */
+/* All jobs that cause unlock deferral in DL context. */
 # define CI_EPLOCK_NETIF_DL_CONTEXT_DEFER_MASK \
    (CI_EPLOCK_NETIF_NEED_WAKE | \
    CI_EPLOCK_NETIF_NEED_PKT_SET | \
-   CI_EPLOCK_NETIF_CLOSE_ENDPOINT | \
-   CI_EPLOCK_NETIF_NEED_POLL)
+   CI_EPLOCK_NETIF_CLOSE_ENDPOINT)
 } ci_eplock_t;
 
 
