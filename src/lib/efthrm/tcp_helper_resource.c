@@ -7512,7 +7512,11 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     }
 #endif
 
-    if( flags_set & defer_flags ) {
+    /* we test lock_val to include into consideration COMMON_MASK
+     * flags. Canonically, it would suit to run this check before
+     * ci_netif_unlock_slow_common. However, we consider doing some
+     * of its work early (in DL context) a good thing. */
+    if( lock_val & defer_flags ) {
       ci_assert(in_dl_context);
       /* We cannot finish this work in DL context, let's defer to work item
        * immediately without any partial work */
