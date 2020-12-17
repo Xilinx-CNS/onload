@@ -9,6 +9,7 @@
  * libonload.so to work.  It uses low-level Onload primitives.
  */
 
+#define _GNU_SOURCE
 #include <sys/resource.h>
 #include <string.h>
 #include <dirent.h>
@@ -42,19 +43,11 @@ static ci_cfg_desc cfg_opts[] = {
 
 static void set_log_prefix(const char* stack_name)
 {
-#define CI_LOG_PREFIX_FMT1 "onload_helper[%d]: "
-#define CI_LOG_PREFIX_FMT2 "[%s] "
-  char pref[strlen(CI_LOG_PREFIX_FMT1 CI_LOG_PREFIX_FMT2
-                   OO_STRINGIFY(INT_MAX)) +
-            ONLOAD_PRETTY_NAME_MAXLEN + 1];
   if( ci_cfg_log_to_kern )
-    sprintf(pref, CI_LOG_PREFIX_FMT1 CI_LOG_PREFIX_FMT2,
-            getpid(), stack_name);
+    asprintf(&log_prefix, "onload_helper[%d]: [%s] ", getpid(), stack_name);
   else
-    sprintf(pref, CI_LOG_PREFIX_FMT2, stack_name);
-  log_prefix = strdup(pref);
+    asprintf(&log_prefix, "[%s] ", stack_name);
   ci_set_log_prefix(log_prefix);
-#undef CI_LOG_PREFIX_FMT
 }
 
 /* Fixme: log via ioctl, always.  We need to implement log-via-syslog. */

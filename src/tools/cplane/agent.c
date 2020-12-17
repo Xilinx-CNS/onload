@@ -342,7 +342,7 @@ static inline char* hexdump_buffer(char* buf, unsigned buf_len)
   ci_assert( buf_len * 3 < sizeof(str) );
   memset(str, 0, sizeof(str));
   for(i = 0; i < buf_len; ++i) {
-    sprintf(str + i * 3, "%02x ", (uint8_t)buf[i]);
+    snprintf(str + i * 3, sizeof(str) - i * 3, "%02x ", (uint8_t)buf[i]);
   }
   return str;
 }

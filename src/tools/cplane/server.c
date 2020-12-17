@@ -748,12 +748,8 @@ static int init_main_cplane(struct cp_session* s)
 
 static void set_log_prefix(void)
 {
-#define CI_LOG_PREFIX_FMT "onload_cp_server[%d]: "
-  char pref[strlen(CI_LOG_PREFIX_FMT) + strlen(OO_STRINGIFY(INT_MAX)) + 1];
-  sprintf(pref, CI_LOG_PREFIX_FMT, getpid());
-  cp_log_prefix = strdup(pref);
+  asprintf(&cp_log_prefix, "onload_cp_server[%d]: ", getpid());
   ci_set_log_prefix(cp_log_prefix);
-#undef CI_LOG_PREFIX_FMT
 }
 
 /* Fork off a daemon process according to the recipe in "man 7 daemon".  This

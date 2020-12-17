@@ -941,7 +941,7 @@ static void watch_stats(const stat_desc_t* stats_fields, int n_stats_fields,
     if( ! cfg_notable ) {
       if( (line_i & 0xf) == 0 )
         print_stats_header_line(stats_fields, n_stats_fields);
-      lo = sprintf(line, "\t%.02f", (double) time_msec / 1000);
+      lo = ci_scnprintf(line, line_len, "\t%.02f", (double) time_msec / 1000);
     }
     else
       ci_log("=====================================================");
@@ -962,8 +962,7 @@ static void watch_stats(const stat_desc_t* stats_fields, int n_stats_fields,
           assert(0);
       }
       if( ! cfg_notable ) {
-        lo += sprintf(line+lo, "\t %llu", v);
-        CI_TEST(lo < line_len * 3 / 4);
+        lo += ci_scnprintf(line+lo, line_len-lo, "\t %llu", v);
       }
       else
         ci_log("%30s: %llu", s->name, v);
@@ -973,6 +972,9 @@ static void watch_stats(const stat_desc_t* stats_fields, int n_stats_fields,
       fflush(stdout);
     }
   }
+  free(line);
+  free(p);
+  free(c);
 }
 
 /**********************************************************************
@@ -2557,7 +2559,7 @@ void sockets_watch_bw(void)
   unsigned* times;
   citp_waitable_obj* wo;
   socket_t* s;
-  unsigned i, boff;
+  unsigned i, boff, blen;
   char* b;
 
   for( s = sockets; s < sockets + sockets_n; ++s )
@@ -2583,18 +2585,21 @@ void sockets_watch_bw(void)
     printf(" "CI_IP_PRINTF_FORMAT,CI_IP_PRINTF_ARGS(&be32));
   }
   printf("\n");
-  CI_TEST(b = (char*) malloc(sockets_n * 2 * 10 + 20));
+  blen = sockets_n * 2 * 10 + 20;
+  CI_TEST(b = (char*) malloc(blen));
 
   for( i = 1; i < cfg_samples; ++i ) {
-    boff = sprintf(b, "%u %u", times[i] - times[0], times[i] - times[i-1]);
+    boff = ci_scnprintf(b, blen, "%u %u",
+                        times[i] - times[0], times[i] - times[i-1]);
     for( s = sockets; s < sockets + sockets_n; ++s ) {
       netif_t* n = stacks[s->stack];
       if( s->id >= (int)n->ni.state->n_ep_bufs )  continue;
       wo = SP_TO_WAITABLE_OBJ(&n->ni, s->id);
       if( ! is_tcp_stream(wo) )  continue;
       sam = (sockets_bw_sample_t*) s->s;
-      boff += sprintf(b+boff, " %u %u", SEQ_SUB(sam[i].rx, sam[i-1].rx),
-                      SEQ_SUB(sam[i].tx, sam[i-1].tx));
+      boff += ci_scnprintf(b+boff, blen-boff, " %u %u",
+                           SEQ_SUB(sam[i].rx, sam[i-1].rx),
+                           SEQ_SUB(sam[i].tx, sam[i-1].tx));
     }
     printf("%s\n", b);
   }

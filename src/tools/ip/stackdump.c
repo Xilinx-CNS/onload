@@ -560,13 +560,14 @@ static void debug_print_stacks(void)
 {
   int i = 0;
   char buffer[1024];
-  int next_buffer = 0;
-  next_buffer += sprintf(buffer, "stacks [");
+  int next_buffer = 0, len = sizeof(buffer);
+  next_buffer += ci_scnprintf(buffer, len, "stacks [");
   while( i < s_stack_idx_count + 1 ) {
-    next_buffer += sprintf(buffer + next_buffer, " %d", s_stack_idx_col[i]);
+    next_buffer += ci_scnprintf(buffer + next_buffer, len - next_buffer, " %d",
+                                s_stack_idx_col[i]);
     ++i;
   }
-  next_buffer += sprintf(buffer + next_buffer, " ]");
+  snprintf(buffer + next_buffer, len - next_buffer, " ]");
   STACK_LOG_DUMP(ci_log(" [%s %d] %s", __func__, __LINE__, buffer));
 }
 
