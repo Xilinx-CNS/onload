@@ -55,7 +55,7 @@ static void citp_setup_logging_change(void *new_log_fn)
 void citp_setup_logging_prefix(void)
 {
   static char s0[64];
-  sprintf(s0, "oo:%.16s[%d]: ", citp.process_name, (int) getpid());
+  snprintf(s0, sizeof(s0), "oo:%.16s[%d]: ", citp.process_name, (int) getpid());
   ci_set_log_prefix(s0);
 }
 
@@ -231,7 +231,7 @@ static void citp_get_process_name(void)
   citp.pid = getpid();
 #endif
 
-  ci_sprintf(citp.process_path, "<unknown-proc>");
+  ci_snprintf(citp.process_path, sizeof(citp.process_path), "<unknown-proc>");
 
   n = readlink("/proc/self/exe", citp.process_path,
                sizeof(citp.process_path));

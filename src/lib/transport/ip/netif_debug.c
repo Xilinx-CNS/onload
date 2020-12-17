@@ -588,9 +588,11 @@ void ci_netif_dump_extra_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   int i, off;
 
   for( i = 0, off = 0; i < CI_CFG_MAX_HWPORTS; ++i )
-    off += sprintf(hp2i+off, "%s%d", i?",":"", (int) ns->hwport_to_intf_i[i]);
+    off += ci_scnprintf(hp2i+off, sizeof(hp2i)-off,
+                        "%s%d", i?",":"", (int) ns->hwport_to_intf_i[i]);
   for( i = 0, off = 0; i < CI_CFG_MAX_INTERFACES; ++i )
-    off += sprintf(i2hp+off, "%s%d", i?",":"", (int) ns->intf_i_to_hwport[i]);
+    off += ci_scnprintf(i2hp+off, sizeof(i2hp)-off,
+                        "%s%d", i?",":"", (int) ns->intf_i_to_hwport[i]);
 
   logger(log_arg, "%s: stack=%d", __FUNCTION__, NI_ID(ni));
   logger(log_arg, "  in_poll=%d post_poll_list_empty=%d poll_did_wake=%d",

@@ -84,7 +84,7 @@ static void citp_log_socket_user(int domain, int type, int protocol)
   t = time(0);
   ts = ctime(&t);
   ts[strlen(ts)-1] = '\0';  /* strip '\n' */
-  n = sprintf(buf, "%-20s %-6s %5d %5d %38s\n", citp.process_name,
+  n = snprintf(buf, sizeof(buf), "%-20s %-6s %5d %5d %38s\n", citp.process_name,
 	      type == SOCK_STREAM ? "stream" : "dgram",
 	      (int) getuid(), (int) getpid(), ts);
   fd = ci_sys_open(PM_CFG_LOG_FILE, O_WRONLY | O_APPEND);

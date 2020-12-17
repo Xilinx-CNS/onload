@@ -35,7 +35,7 @@ static char * ci_udp_addr_str( ci_udp_state* us )
   static char buf[128];
 
   ci_assert(us);
-  sprintf( buf, "L[" IPX_PORT_FMT "] R[" IPX_PORT_FMT "]",
+  snprintf( buf, sizeof(buf), "L[" IPX_PORT_FMT "] R[" IPX_PORT_FMT "]",
 	   IPX_ARG(AF_IP(udp_ipx_laddr(us))),
 	   CI_BSWAP_BE16(udp_lport_be16(us)),
 	   IPX_ARG(AF_IP(udp_ipx_raddr(us))),

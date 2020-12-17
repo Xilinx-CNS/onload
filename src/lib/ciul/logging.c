@@ -86,9 +86,9 @@ void ef_vlog(const char* fmt, va_list args)
   if( ef_log_options ) {
 #ifndef __KERNEL__
     if( ef_log_options & EF_LOG_PID )
-      n += sprintf(line + n, "%d ", (int) getpid());
+      n += snprintf(line + n, EF_LOG_MAX_LINE - n, "%d ", (int) getpid());
     //??if( ef_log_options & EF_LOG_TID )
-    //??  n += sprintf(line + n, "%d ", (int) gettid());
+    //??  n += snprintf(line + n, EF_LOG_MAX_LINE - n, "%d ", (int) gettid());
 #endif
   }
 

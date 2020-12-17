@@ -100,12 +100,12 @@ static int ci_format_select(char* s, int len_s, int nfds,
   n += ci_format_select_set(s + n, len_s - n, nfds, rds);
   if( len_s - n < 3 )  return n;
 
-  n += sprintf(s + n, ", ");
+  n += snprintf(s + n, 3, ", ");
 
   n += ci_format_select_set(s + n, len_s - n, nfds, wrs);
   if( len_s - n < 3 )  return n;
 
-  n += sprintf(s + n, ", ");
+  n += snprintf(s + n, 3, ", ");
 
   n += ci_format_select_set(s + n, len_s - n, nfds, exs);
   if( len_s - n < 3 )  return n;
