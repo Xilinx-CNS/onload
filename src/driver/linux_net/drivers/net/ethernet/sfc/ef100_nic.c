@@ -1190,24 +1190,19 @@ static ssize_t bar_config_show(struct device *dev,
 
 	switch (nic_data->bar_config) {
 	case EF100_BAR_CONFIG_EF100:
-		sprintf(buf_out, "EF100\n");
-		break;
+		return scnprintf(buf_out, PAGE_SIZE, "EF100\n");
 #ifdef CONFIG_SFC_VDPA
 	case EF100_BAR_CONFIG_VDPA:
-		sprintf(buf_out, "vDPA\n");
-		break;
+		return scnprintf(buf_out, PAGE_SIZE, "vDPA\n");
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	case EF100_BAR_CONFIG_NONE:
-		sprintf(buf_out, "None\n");
-		break;
+		return scnprintf(buf_out, PAGE_SIZE, "None\n");
 #endif
 	default: /* this should not happen */
 		WARN_ON_ONCE(1);
 		return 0;
 	}
-
-	return strlen(buf_out);
 }
 
 static ssize_t bar_config_store(struct device *dev,

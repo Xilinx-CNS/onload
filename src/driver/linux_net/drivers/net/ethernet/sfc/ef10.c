@@ -5062,7 +5062,7 @@ static ssize_t physical_port_show(struct device *dev,
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 
-	return sprintf(buf, "%d\n", efx->port_num);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", efx->port_num);
 }
 static DEVICE_ATTR_RO(physical_port);
 #endif
@@ -5072,7 +5072,7 @@ static ssize_t link_control_flag_show(struct device *dev,
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 
-	return sprintf(buf, "%d\n",
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
 		       ((efx->mcdi->fn_flags) &
 			(1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_LINKCTRL))
 		       ? 1 : 0);
@@ -5084,7 +5084,7 @@ static ssize_t primary_flag_show(struct device *dev,
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 
-	return sprintf(buf, "%d\n",
+	return scnprintf(buf, PAGE_SIZE, "%d\n",
 		       ((efx->mcdi->fn_flags) &
 			(1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_PRIMARY))
 		       ? 1 : 0);

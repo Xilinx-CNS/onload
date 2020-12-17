@@ -162,11 +162,11 @@ static ssize_t versions_show(struct device *dev,
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 
 	if (efx_nic_rev(efx) == EFX_REV_EF100)
-		sprintf(buf_out, "driver: sfc_ef100\n");
+		snprintf(buf_out, PAGE_SIZE, "driver: sfc_ef100\n");
 	else
-		sprintf(buf_out, "driver: sfc\n");
+		snprintf(buf_out, PAGE_SIZE, "driver: sfc\n");
 
-	efx_mcdi_dump_versions(efx, buf_out);
+	efx_mcdi_dump_versions(efx, buf_out); /* FIXME prevent buffer overrun */
 	return strlen(buf_out);
 }
 

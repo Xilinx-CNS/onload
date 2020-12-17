@@ -760,7 +760,7 @@ static ssize_t efx_pps_stats_int(struct efx_pps_data *pps, u8 pos, char *data)
 
 	ptp_read_stat(pps->ptp, pos, &value);
 
-	return sprintf(data, "%d\n", EFX_DWORD_FIELD(value, EFX_DWORD_0));
+	return scnprintf(data, PAGE_SIZE, "%d\n", EFX_DWORD_FIELD(value, EFX_DWORD_0));
 }
 
 static ssize_t efx_pps_stats_show(struct kobject *kobj,
@@ -826,7 +826,7 @@ static ssize_t show_max_adjfreq(struct device *dev,
 	if (ptp)
 	        max_adjfreq = ptp->max_adjfreq;
 
-	return sprintf(buff, "%d\n", max_adjfreq);
+	return scnprintf(buff, PAGE_SIZE, "%d\n", max_adjfreq);
 }
 
 static DEVICE_ATTR(max_adjfreq, S_IRUGO, show_max_adjfreq, NULL);
@@ -2612,7 +2612,7 @@ static ssize_t siena_show_ptp(struct device *dev,
 			      struct device_attribute *attr,
 			      char *buff)
 {
-	return sprintf(buff, "HW clock\nPTP TS\n");
+	return scnprintf(buff, PAGE_SIZE, "HW clock\nPTP TS\n");
 }
 
 static DEVICE_ATTR(ptp_caps, S_IRUGO, siena_show_ptp, NULL);

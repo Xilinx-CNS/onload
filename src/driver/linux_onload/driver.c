@@ -181,7 +181,7 @@ static int param_gid_get(char* buffer,
   /* The buffer provided by the kernel is 4K, so we know that any int value
    * can safely be printed into it.
    */
-  return sprintf(buffer, "%d", gid_ns);
+  return scnprintf(buffer, PAGE_SIZE, "%d", gid_ns);
 }
 #endif
 

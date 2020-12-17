@@ -797,7 +797,7 @@ static ssize_t show_lro(struct device *dev, struct device_attribute *attr,
 			char *buf)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-	return sprintf(buf, "%d\n", efx_ssr_enabled(efx));
+	return scnprintf(buf, PAGE_SIZE, "%d\n", efx_ssr_enabled(efx));
 }
 static ssize_t set_lro(struct device *dev, struct device_attribute *attr,
 		       const char *buf, size_t count)
@@ -831,7 +831,7 @@ static ssize_t
 show_phy_type(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-	return sprintf(buf, "%d\n", efx->phy_type);
+	return scnprintf(buf, PAGE_SIZE, "%d\n", efx->phy_type);
 }
 static DEVICE_ATTR(phy_type, 0444, show_phy_type, NULL);
 
