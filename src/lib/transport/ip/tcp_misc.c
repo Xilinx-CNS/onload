@@ -128,7 +128,7 @@ const char* ip_addr_str(ci_uint32 addr_be32)
   static int buf_i;
   int i = ++buf_i & 3;
 
-  ci_format_ip4_addr(buf[i], addr_be32);
+  ci_format_ip4_addr(buf[i], sizeof(buf[i]), addr_be32);
   return buf[i];
 }
 #endif /* OO_DO_STACK_POLL */

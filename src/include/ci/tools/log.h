@@ -157,7 +157,7 @@ extern int  ci_hex_dump_to_raw(const char* src_hex, void* buf,
   ** cope with missing bytes at the start of a line.
   */
 
-extern int ci_format_eth_addr(char* buf, const void* eth_mac_addr,
+extern int ci_format_eth_addr(char* buf, int len, const void* eth_mac_addr,
 			      char sep)  CI_HF;
   /*!< This will write 18 characters to <buf> including terminating null.
   ** Returns number of bytes written excluding null.  If [sep] is zero, ':'
@@ -170,7 +170,7 @@ extern int ci_parse_eth_addr(void* eth_mac_addr,
   ** inconsistent separators).  Returns 0 on success, -1 on error.
   */
 
-extern int ci_format_ip4_addr(char* buf, unsigned addr_be32) CI_HF;
+extern int ci_format_ip4_addr(char* buf, int len, unsigned addr_be32) CI_HF;
   /*!< Formats the IP address (in network endian) in dotted-quad.  Returns
   ** the number of bytes written (up to 15), excluding the null.  [buf]
   ** must be at least 16 bytes long.

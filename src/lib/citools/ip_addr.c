@@ -17,14 +17,14 @@
 #include "citools_internal.h"
 
 
-int ci_format_ip4_addr(char* buf, unsigned addr_be32)
+int ci_format_ip4_addr(char* buf, int len, unsigned addr_be32)
 {
   const unsigned char* p;
   p = (const unsigned char*) &addr_be32;
 
   ci_assert(buf);
 
-  return ci_sprintf(buf, "%u.%u.%u.%u",
+  return ci_scnprintf(buf, len, "%u.%u.%u.%u",
 		 (unsigned) p[0], (unsigned) p[1],
 		 (unsigned) p[2], (unsigned) p[3]);
 }

@@ -16,7 +16,7 @@
 #include "citools_internal.h"
 
 
-int ci_format_eth_addr(char* buf, const void* eth_mac_addr, char sep)
+int ci_format_eth_addr(char* buf, int len, const void* eth_mac_addr, char sep)
 {
   const unsigned char* p;
   p = (const unsigned char*) eth_mac_addr;
@@ -26,7 +26,7 @@ int ci_format_eth_addr(char* buf, const void* eth_mac_addr, char sep)
 
   if( sep == 0 )  sep = ':';
 
-  return ci_sprintf(buf, "%02X%c%02X%c%02X%c%02X%c%02X%c%02X",
+  return ci_scnprintf(buf, len, "%02X%c%02X%c%02X%c%02X%c%02X%c%02X",
 		 (unsigned) p[0], sep, (unsigned) p[1], sep, 
 		 (unsigned) p[2], sep, (unsigned) p[3], sep,
 		 (unsigned) p[4], sep, (unsigned) p[5]);

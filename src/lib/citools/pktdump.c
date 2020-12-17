@@ -65,9 +65,9 @@ int ci_pprint_ether_hdr(const ci_ether_hdr* eth, int bytes)
   int size = ETH_HLEN;
 
   si += ci_sprintf(s+si, "ETH len=%d ", bytes);
-  si += ci_format_eth_addr(s+si, eth->ether_shost, 0);
+  si += ci_format_eth_addr(s+si, sizeof(s)-si, eth->ether_shost, 0);
   si += ci_sprintf(s+si, "=>");
-  si += ci_format_eth_addr(s+si, eth->ether_dhost, 0);
+  si += ci_format_eth_addr(s+si, sizeof(s)-si, eth->ether_dhost, 0);
   si += ci_sprintf(s+si, " type=0x%04x %s", CI_BSWAP_BE16(eth->ether_type),
 		ci_ether_type_str(eth->ether_type));
   if (eth->ether_type == CI_ETHERTYPE_8021Q) {
@@ -90,9 +90,9 @@ void ci_pprint_ip4_hdr(const ci_ip4_hdr* ip)
 
   si += ci_sprintf(s+si, "IP4 v%u %s ", CI_IP4_VERSION(ip),
 		ci_ipproto_str(ip->ip_protocol));
-  si += ci_format_ip4_addr(s+si, ip->ip_saddr_be32);
+  si += ci_format_ip4_addr(s+si, sizeof(s)-si, ip->ip_saddr_be32);
   si += ci_sprintf(s+si, "=>");
-  si += ci_format_ip4_addr(s+si, ip->ip_daddr_be32);
+  si += ci_format_ip4_addr(s+si, sizeof(s)-si, ip->ip_daddr_be32);
   si += ci_sprintf(s+si, " hlen=%u totlen=%d tos=%d",
 		CI_IP4_IHL(ip), (int) CI_BSWAP_BE16(ip->ip_tot_len_be16),
 		(int) ip->ip_tos);
@@ -302,15 +302,15 @@ void ci_pprint_ether_arp(const ci_ether_arp* arp)
   ci_uint32 ip;
 
   si += ci_sprintf(s+si, "ARP src=");
-  si += ci_format_eth_addr(s+si, arp->arp_src_mac, 0);
+  si += ci_format_eth_addr(s+si, sizeof(s)-si, arp->arp_src_mac, 0);
   si += ci_sprintf(s+si, " ");
   memcpy(&ip, arp->arp_src_ip, 4);
-  si += ci_format_ip4_addr(s+si, ip);
+  si += ci_format_ip4_addr(s+si, sizeof(s)-si, ip);
   si += ci_sprintf(s+si, "  target=");
-  si += ci_format_eth_addr(s+si, arp->arp_tgt_mac, 0);
+  si += ci_format_eth_addr(s+si, sizeof(s)-si, arp->arp_tgt_mac, 0);
   si += ci_sprintf(s+si, " ");
   memcpy(&ip, arp->arp_tgt_ip, 4);
-  si += ci_format_ip4_addr(s+si, ip);
+  si += ci_format_ip4_addr(s+si, sizeof(s)-si, ip);
 
   ci_log("%s", s);
 }
