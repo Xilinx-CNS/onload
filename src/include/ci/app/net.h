@@ -127,12 +127,6 @@ extern int ci_hostport_to_sockaddr_in(const char* hp,
 extern int ci_host_port_to_sockaddr_in(const char* host, int port,
 				    struct sockaddr_in* addr_out);
 
-  /*! Like inet_ntoa(), but puts the result in the given buffer (which
-  ** should be at least 16 bytes long).  Returns the number of bytes
-  ** written.
-  */
-extern int ci_ntoa(struct in_addr in, char* buf);
-
   /*! Set blocking mode for [fd]. */
 extern int ci_setfdblocking(int fd, int blocking);
 

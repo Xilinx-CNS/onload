@@ -276,16 +276,6 @@ int ci_hostport_to_sockaddr(int hint_af, const char* hp,
 }
 
 
-int ci_ntoa(struct in_addr in, char* buf)
-{
-  ci_uint32 b;
-  unsigned char *a = (unsigned char *)&b;
-  b = CI_BSWAP_BE32(in.s_addr);
-  return sprintf(buf, "%d.%d.%d.%d",
-		 (int) a[3], (int) a[2], (int) a[1], (int) a[0]);
-}
-
-
 int ci_setfdblocking(int s, int blocking)
 {
   int nonb = !blocking;
