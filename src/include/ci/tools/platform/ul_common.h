@@ -35,6 +35,24 @@
 #define ci_vsnprintf                       vsnprintf
 #define ci_sscanf                          sscanf
 
+ci_inline int
+ci_vscnprintf(char* buf, size_t size, const char* fmt, va_list args)
+{
+  int n = ci_vsnprintf(buf, size, fmt, args);
+  return n < size ? n : size - 1;
+}
+
+ci_inline int
+ci_scnprintf(char* buf, size_t size, const char* fmt, ...)
+{
+  int n;
+  va_list args;
+  va_start(args, fmt);
+  n = ci_vscnprintf(buf, size, fmt, args);
+  va_end(args);
+  return n;
+}
+
 /* ensure ci_alloc_fn and ci_free have the correct definitions so we can safely 
 ** pass around as function pointers. Without this, Windows user-level driver
 ** gets clashes of calling convention 

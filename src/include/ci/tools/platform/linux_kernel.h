@@ -109,6 +109,8 @@ ci_inline void  __ci_vfree(void* p)    { return vfree(p);   }
 #define ci_vsprintf       vsprintf
 #define ci_snprintf       snprintf
 #define ci_vsnprintf      vsnprintf
+#define ci_scnprintf      scnprintf
+#define ci_vscnprintf     vscnprintf
 #define ci_sscanf         sscanf
 
 
