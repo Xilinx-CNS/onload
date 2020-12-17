@@ -389,45 +389,6 @@ ktime_t ktime_sub_ns(const ktime_t kt, u64 nsec)
 }
 #endif
 
-#ifdef EFX_HAVE_PARAM_BOOL_INT
-
-int efx_param_set_bool(const char *val, struct kernel_param *kp)
-{
-	bool v;
-
-	if (!val) {
-		/* No equals means "set"... */
-		v = true;
-	} else {
-		/* One of =[yYnN01] */
-		switch (val[0]) {
-		case 'y':
-		case 'Y':
-		case '1':
-			v = true;
-			break;
-		case 'n':
-		case 'N':
-		case '0':
-			v = false;
-			break;
-		default:
-			return -EINVAL;
-		}
-	}
-
-	*(bool *)kp->arg = v;
-	return 0;
-}
-
-int efx_param_get_bool(char *buffer, struct kernel_param *kp)
-{
-	/* Y and N chosen as being relatively non-coder friendly */
-	return sprintf(buffer, "%c", *(bool *)kp->arg ? 'Y' : 'N');
-}
-
-#endif /* EFX_HAVE_PARAM_BOOL_INT */
-
 #ifdef EFX_NEED_KOBJECT_SET_NAME_VARGS
 int efx_kobject_set_name_vargs(struct kobject *kobj, const char *fmt, va_list vargs)
 {
