@@ -48,31 +48,35 @@ void ci_vlog(const char* fmt, va_list args)
   if( ci_log_options ) {
 #ifdef __KERNEL__
     if( ci_log_options & CI_LOG_CPU )
-      n += ci_sprintf(line + n, "%d ", (int) smp_processor_id());
+      n += ci_scnprintf(line + n, CI_LOG_MAX_LINE - n, "%d ",
+                        (int) smp_processor_id());
     if( ci_log_options & CI_LOG_PID )
-      n += ci_sprintf(line + n, "%d ",
-                      in_interrupt() ? 0 : (int) current->tgid);
+      n += ci_scnprintf(line + n, CI_LOG_MAX_LINE - n, "%d ",
+                        in_interrupt() ? 0 : (int) current->tgid);
     if( ci_log_options & CI_LOG_TID )
-      n += ci_sprintf(line + n, "%d ",
-                      in_interrupt() ? 0: (int) current->pid);
+      n += ci_scnprintf(line + n, CI_LOG_MAX_LINE - n, "%d ",
+                        in_interrupt() ? 0: (int) current->pid);
 #else
     if( ci_log_options & CI_LOG_PID )
-      n += ci_sprintf(line + n, "%d ", (int) getpid());
+      n += ci_scnprintf(line + n, CI_LOG_MAX_LINE - n, "%d ", (int) getpid());
     if( ci_log_options & CI_LOG_TID )
-      n += ci_sprintf(line + n, "%lx ", (long) pthread_self());
+      n += ci_scnprintf(line + n, CI_LOG_MAX_LINE - n, "%lx ",
+                        (long) pthread_self());
 #endif
 #ifdef CI_HAVE_FRC64
     if( ci_log_options & CI_LOG_TIME )
-      n += ci_sprintf(line + n, "%010"CI_PRIu64" ",
-		   (ci_uint64) (ci_frc64_get() & 0xffffffffffull));
+      n += ci_scnprintf(line + n, CI_LOG_MAX_LINE - n, "%010"CI_PRIu64" ",
+                        (ci_uint64) (ci_frc64_get() & 0xffffffffffull));
 #elif defined(CI_HAVE_FRC32)
     if( ci_log_options & CI_LOG_TIME )
-      n += ci_sprintf(line + n, "%010u ", (unsigned) ci_frc32_get());
+      n += ci_scnprintf(line + n, CI_LOG_MAX_LINE - n, "%010u ",
+                        (unsigned) ci_frc32_get());
 #endif
     if( ci_log_options & CI_LOG_DELTA ) {
       static ci_uint32 prev = 0;
       ci_uint32 now = ci_frc32_get();
-      n += ci_sprintf(line + n, "%06u ", (unsigned) now - prev);
+      n += ci_scnprintf(line + n, CI_LOG_MAX_LINE - n, "%06u ",
+                        (unsigned) now - prev);
       prev = now;
     }
   }

@@ -64,15 +64,16 @@ int ci_pprint_ether_hdr(const ci_ether_hdr* eth, int bytes)
   int si = 0;
   int size = ETH_HLEN;
 
-  si += ci_sprintf(s+si, "ETH len=%d ", bytes);
+  si += ci_scnprintf(s+si, sizeof(s)-si, "ETH len=%d ", bytes);
   si += ci_format_eth_addr(s+si, sizeof(s)-si, eth->ether_shost, 0);
-  si += ci_sprintf(s+si, "=>");
+  si += ci_scnprintf(s+si, sizeof(s)-si, "=>");
   si += ci_format_eth_addr(s+si, sizeof(s)-si, eth->ether_dhost, 0);
-  si += ci_sprintf(s+si, " type=0x%04x %s", CI_BSWAP_BE16(eth->ether_type),
+  si += ci_scnprintf(s+si, sizeof(s)-si, " type=0x%04x %s",
+		CI_BSWAP_BE16(eth->ether_type),
 		ci_ether_type_str(eth->ether_type));
   if (eth->ether_type == CI_ETHERTYPE_8021Q) {
     ci_uint16 *vlan_tag = (ci_uint16 *)(eth + 1);
-    si += ci_sprintf(s+si, " type=0x%04x %s %04hx",
+    si += ci_scnprintf(s+si, sizeof(s)-si, " type=0x%04x %s %04hx",
                      CI_BSWAP_BE16(vlan_tag[0]),
                      ci_ether_type_str(vlan_tag[0]), vlan_tag[1]);
     size += ETH_VLAN_HLEN;
@@ -88,17 +89,18 @@ void ci_pprint_ip4_hdr(const ci_ip4_hdr* ip)
   char s[80];
   int si = 0;
 
-  si += ci_sprintf(s+si, "IP4 v%u %s ", CI_IP4_VERSION(ip),
+  si += ci_scnprintf(s+si, sizeof(s)-si, "IP4 v%u %s ", CI_IP4_VERSION(ip),
 		ci_ipproto_str(ip->ip_protocol));
   si += ci_format_ip4_addr(s+si, sizeof(s)-si, ip->ip_saddr_be32);
-  si += ci_sprintf(s+si, "=>");
+  si += ci_scnprintf(s+si, sizeof(s)-si, "=>");
   si += ci_format_ip4_addr(s+si, sizeof(s)-si, ip->ip_daddr_be32);
-  si += ci_sprintf(s+si, " hlen=%u totlen=%d tos=%d",
+  si += ci_scnprintf(s+si, sizeof(s)-si, " hlen=%u totlen=%d tos=%d",
 		CI_IP4_IHL(ip), (int) CI_BSWAP_BE16(ip->ip_tot_len_be16),
 		(int) ip->ip_tos);
   ci_log("%s", s);
 
-  ci_sprintf(s, "IP%u id=0x%04x frag=(%s%s 0x%x) ttl=%d check=0x%04x",
+  ci_scnprintf(s, sizeof(s),
+	  "IP%u id=0x%04x frag=(%s%s 0x%x) ttl=%d check=0x%04x",
 	  CI_IP4_VERSION(ip), (unsigned) CI_BSWAP_BE16(ip->ip_id_be16),
 	  (ip->ip_frag_off_be16 & CI_IP4_FRAG_DONT) ? "DONT" : "",
 	  (ip->ip_frag_off_be16 & CI_IP4_FRAG_MORE) ? " MORE" : "",
@@ -113,7 +115,7 @@ void ci_pprint_ip4_hdr(const ci_ip4_hdr* ip)
 
 
 static int ci_pprint_tcp_hdr_options(const volatile void* p,
-				     int bytes, char* s)
+				     int bytes, char* s, int len)
 {
   const ci_uint8* opts = (const ci_uint8*) p;
   int n = 0;
@@ -124,95 +126,96 @@ static int ci_pprint_tcp_hdr_options(const volatile void* p,
       ++opts;  --bytes;
       break;
     case CI_TCP_OPT_NOP:
-      n += ci_sprintf(s + n, " nop");
+      n += ci_scnprintf(s + n, len - n, " nop");
       ++opts;  --bytes;
       break;
     case CI_TCP_OPT_MSS:
       if( bytes < 4 ) {
-	n += ci_sprintf(s + n, " mss(truncated)");
+	n += ci_scnprintf(s + n, len - n, " mss(truncated)");
 	return -1;
       }
       if( opts[1] != 0x4 ) {
-	n += ci_sprintf(s + n, " mss(bad length %d)", (int) opts[1]);
+	n += ci_scnprintf(s + n, len - n, " mss(bad length %d)", (int) opts[1]);
 	return -1;
       }
       {
 	ci_uint16 mss;
 	memcpy(&mss, opts + 2, 2);
 	mss = CI_BSWAP_BE16(mss);
-	n += ci_sprintf(s + n, " mss(%u)", (unsigned) mss);
+	n += ci_scnprintf(s + n, len - n, " mss(%u)", (unsigned) mss);
 	opts += 4; bytes -= 4;
       }
       break;
     case CI_TCP_OPT_WINSCALE:
       if( bytes < 3 ) {
-	n += ci_sprintf(s + n, " winscale(truncated)");
+	n += ci_scnprintf(s + n, len - n, " winscale(truncated)");
 	return -1;
       }
       if( opts[1] != 0x3 ) {
-	n += ci_sprintf(s + n, " winscale(bad length %d)", (int) opts[1]);
+	n += ci_scnprintf(s + n, len - n, " winscale(bad length %d)", (int) opts[1]);
 	return -1;
       }
-      n += ci_sprintf(s + n, " winscale(%u)", 1u << opts[2]);
+      n += ci_scnprintf(s + n, len - n, " winscale(%u)", 1u << opts[2]);
       opts += 3; bytes -= 3;
       break;
     case CI_TCP_OPT_SACK_PERM:
       if( bytes < 2 ) {
-	n += ci_sprintf(s + n, " sackperm(truncated %d)", bytes);
+	n += ci_scnprintf(s + n, len - n, " sackperm(truncated %d)", bytes);
 	return -1;
       }
       if( opts[1] != 0x2 ) {
-	n += ci_sprintf(s + n, " sackperm(bad length %d)", (int) opts[1]);
+	n += ci_scnprintf(s + n, len - n, " sackperm(bad length %d)", (int) opts[1]);
 	return -1;
       }
-      n += ci_sprintf(s + n, " sackperm");
+      n += ci_scnprintf(s + n, len - n, " sackperm");
       opts += 2; bytes -= 2;
       break;
     case CI_TCP_OPT_SACK:
       if( bytes < opts[1] ) {
-	n += ci_sprintf(s + n, " sack(truncated %d,%d)", bytes, (int) opts[1]);
+	n += ci_scnprintf(s + n, len - n, " sack(truncated %d,%d)", bytes, (int) opts[1]);
 	return -1;
       }
       if( opts[1] <= 2 || CI_OFFSET(opts[1] - 2, 8) ) {
-	n += ci_sprintf(s + n, " sack(bad length %d)", (int) opts[1]);
+	n += ci_scnprintf(s + n, len - n, " sack(bad length %d)", (int) opts[1]);
 	return -1;
       }
       {
 	int num = (opts[1] - 2) / 8;
 	bytes -= opts[1];
 	opts += 2;
-	n += ci_sprintf(s + n, " sack(");
+	n += ci_scnprintf(s + n, len - n, " sack(");
 	while( num-- ) {
 	  ci_uint32 sack[2];
 	  memcpy(sack, opts, 8);
 	  opts += 8;
-	  n += ci_sprintf(s + n, "%x-%x%s", (unsigned) CI_BSWAP_BE32(sack[0]),
+	  n += ci_scnprintf(s + n, len - n, "%x-%x%s",
+		       (unsigned) CI_BSWAP_BE32(sack[0]),
 		       (unsigned) CI_BSWAP_BE32(sack[1]), num ? "," : "");
 	}
-	n += ci_sprintf(s + n, ")");
+	n += ci_scnprintf(s + n, len - n, ")");
       }
       break;
     case CI_TCP_OPT_TIMESTAMP:
       if( bytes < 10 ) {
-	n += ci_sprintf(s + n, " timestamp(truncated)");
+	n += ci_scnprintf(s + n, len - n, " timestamp(truncated)");
 	return -1;
       }
       if( opts[1] != 0xa ) {
-	n += ci_sprintf(s + n, " timestamp(bad length %d)", (int) opts[1]);
+	n += ci_scnprintf(s + n, len - n, " timestamp(bad length %d)", (int) opts[1]);
 	return -1;
       }
       {
 	ci_uint32 t1, t2;
 	memcpy(&t1, opts + 2, 4);
 	memcpy(&t2, opts + 6, 4);
-	n += ci_sprintf(s + n, " timestamp(0x%x,0x%x)",
+	n += ci_scnprintf(s + n, len - n, " timestamp(0x%x,0x%x)",
 		     (unsigned) CI_BSWAP_BE32(t1), 
 		     (unsigned) CI_BSWAP_BE32(t2));
 	opts += 10; bytes -= 10;
       }
       break;
     default:
-      n += ci_sprintf(s + n, " UNKNOWN(%d,%s%d)", (int) opts[0],
+      n += ci_scnprintf(s + n, len - n, " UNKNOWN(%d,%s%d)", (int) opts[0],
 		   (bytes < opts[1] || opts[1] == 0) ? "bad length " : "",
 		   (int) opts[1]);
       if( bytes < opts[1] || opts[1] == 0 )  return -1;
@@ -230,8 +233,8 @@ void ci_pprint_tcp_hdr(const ci_tcp_hdr* tcp)
 {
   char s[200];
 
-  ci_sprintf(s, "TCP %d=>%d "CI_TCP_FLAGS_FMT" s=%08x a=%08x w=%d hlen=%d "
-	  "ck=%x urg=%d",
+  ci_snprintf(s, sizeof(s),
+	  "TCP %d=>%d "CI_TCP_FLAGS_FMT" s=%08x a=%08x w=%d hlen=%d ck=%x urg=%d",
 	  (int) CI_BSWAP_BE16(tcp->tcp_source_be16),
 	  (int) CI_BSWAP_BE16(tcp->tcp_dest_be16),
 	  CI_TCP_HDR_FLAGS_PRI_ARG(tcp),
@@ -244,9 +247,10 @@ void ci_pprint_tcp_hdr(const ci_tcp_hdr* tcp)
   ci_log("%s", s);
 
   if( CI_TCP_HDR_LEN(tcp) > sizeof(*tcp) ) {
-    int si = ci_sprintf(s, "TCP");
+    int si = ci_scnprintf(s, sizeof(s), "TCP");
     ci_pprint_tcp_hdr_options(tcp + 1,
-			      CI_TCP_HDR_LEN(tcp) - sizeof(*tcp), s+si);
+			      CI_TCP_HDR_LEN(tcp) - sizeof(*tcp),
+			      s+si, sizeof(s)-si);
     ci_log("%s", s);
   }
 }
@@ -256,7 +260,7 @@ void ci_pprint_udp_hdr(const ci_udp_hdr* udp)
 {
   char s[80];
 
-  ci_sprintf(s, "UDP %d=>%d len=%d paylen=%d check=0x%x",
+  ci_snprintf(s, sizeof(s), "UDP %d=>%d len=%d paylen=%d check=0x%x",
 	  (int) CI_BSWAP_BE16(udp->udp_source_be16),
 	  (int) CI_BSWAP_BE16(udp->udp_dest_be16),
 	  (int) CI_BSWAP_BE16(udp->udp_len_be16),
@@ -270,7 +274,8 @@ void ci_pprint_icmp_hdr(const ci_icmp_hdr* icmp)
 {
   char s[80];
 
-  ci_sprintf(s, "ICMP type=%d code=%d check=%#x bytes 4->7=%#x %#x %#x %#x",
+  ci_snprintf(s, sizeof(s),
+	  "ICMP type=%d code=%d check=%#x bytes 4->7=%#x %#x %#x %#x",
 	  (int)icmp->type, (int)icmp->code,
 	  (unsigned)CI_BSWAP_BE16(icmp->check),
 	  (unsigned)((char*)icmp)[4],
@@ -285,7 +290,7 @@ void ci_pprint_arp_hdr(const ci_arp_hdr* arp)
 {
   char s[80];
 
-  ci_sprintf(s, "ARP op=%d %s hw=%d (len %d) prot=%04x (len %d)",
+  ci_snprintf(s, sizeof(s), "ARP op=%d %s hw=%d (len %d) prot=%04x (len %d)",
 	  (int) CI_BSWAP_BE16(arp->arp_op_be16),
 	  ci_arp_op_str(arp->arp_op_be16),
 	  (int) CI_BSWAP_BE16(arp->arp_hw_type_be16), (int) arp->arp_hw_len,
@@ -301,14 +306,14 @@ void ci_pprint_ether_arp(const ci_ether_arp* arp)
   int si = 0;
   ci_uint32 ip;
 
-  si += ci_sprintf(s+si, "ARP src=");
+  si += ci_scnprintf(s+si, sizeof(s)-si, "ARP src=");
   si += ci_format_eth_addr(s+si, sizeof(s)-si, arp->arp_src_mac, 0);
-  si += ci_sprintf(s+si, " ");
+  si += ci_scnprintf(s+si, sizeof(s)-si, " ");
   memcpy(&ip, arp->arp_src_ip, 4);
   si += ci_format_ip4_addr(s+si, sizeof(s)-si, ip);
-  si += ci_sprintf(s+si, "  target=");
+  si += ci_scnprintf(s+si, sizeof(s)-si, "  target=");
   si += ci_format_eth_addr(s+si, sizeof(s)-si, arp->arp_tgt_mac, 0);
-  si += ci_sprintf(s+si, " ");
+  si += ci_scnprintf(s+si, sizeof(s)-si, " ");
   memcpy(&ip, arp->arp_tgt_ip, 4);
   si += ci_format_ip4_addr(s+si, sizeof(s)-si, ip);
 
@@ -448,7 +453,6 @@ int ci_analyse_ip4(const ci_ip4_hdr* ip, int bytes, int descend)
 {
   void* payload;
   unsigned csum;
-  char s[256];
   int rc = 0;
   
   if ((rc = ci_analyse_check_ge(bytes, CI_IP4_IHL(ip),
@@ -492,9 +496,8 @@ int ci_analyse_ip4(const ci_ip4_hdr* ip, int bytes, int descend)
   payload = ((char*) ip + CI_IP4_IHL(ip));
 
   if( CI_IP4_FRAG_OFFSET(ip) | (ip->ip_frag_off_be16 & CI_IP4_FRAG_MORE) ) {
-    ci_sprintf(s, "IP4 ***** fragment: %u bytes at offset %u *****", 
+    ci_log("IP4 ***** fragment: %u bytes at offset %u *****", 
 	    bytes, CI_IP4_FRAG_OFFSET(ip) << 3);
-    ci_log("%s", s);
     if( CI_IP4_FRAG_OFFSET(ip))
       return 0;
   }

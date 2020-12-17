@@ -73,7 +73,8 @@ void __ci_log_unique(const char* msg)
       if( --loop_i == 0 ) {
 	state = STATE_LOOP;
 	rbuf_i = (rbuf_i + 1 + RBUF_SIZE - loop_size) % RBUF_SIZE;
-	sprintf(tmps, "%sLOOP DETECTED (%d)", ci_log_prefix, loop_size);
+	snprintf(tmps, sizeof(tmps), "%sLOOP DETECTED (%d)",
+                 ci_log_prefix, loop_size);
 	__ci_log_unique_fn(tmps);
 	return;
       }
@@ -89,7 +90,7 @@ void __ci_log_unique(const char* msg)
 	loop_i = loop_size - 1;
 	if( loop_size == 1 ) {
 	  state = STATE_LOOP;
-	  sprintf(tmps, "%sLOOP DETECTED (1)", ci_log_prefix);
+	  snprintf(tmps, sizeof(tmps), "%sLOOP DETECTED (1)", ci_log_prefix);
 	  __ci_log_unique_fn(tmps);
 	  return;
 	}
@@ -117,7 +118,7 @@ void __ci_log_unique(const char* msg)
     if( loop_i == 0 ) {
       ++loop_iter;
       if( loop_iter >= loop_iter_print ) {
-	sprintf(tmps, "%sLOOP: %d", ci_log_prefix, loop_iter);
+	snprintf(tmps, sizeof(tmps), "%sLOOP: %d", ci_log_prefix, loop_iter);
 	__ci_log_unique_fn(tmps);
 	loop_iter_print *= 2;
       }
