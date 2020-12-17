@@ -102,7 +102,7 @@ int parse_opts(int argc, char* argv[], app_state_t* as)
 
   /* Init and set default option values */
   memset(as,0,sizeof(as));
-  sprintf(as->remote_ip,MCAST_IP);
+  snprintf(as->remote_ip, sizeof(as->remote_ip), MCAST_IP);
   as->host_port = MCAST_PORT;
   as->remote_port = MCAST_PORT;
   as->verbose = 0;
@@ -117,7 +117,7 @@ int parse_opts(int argc, char* argv[], app_state_t* as)
 	as->host_port = atoi(optarg);
 	break;
       case 'm':
-        sprintf(as->remote_ip, optarg);
+        snprintf(as->remote_ip, sizeof(as->remote_ip), "%s", optarg);
 	break;
       case 'p':
 	as->remote_port = atoi(optarg);
@@ -134,14 +134,14 @@ int parse_opts(int argc, char* argv[], app_state_t* as)
   argv += optind;
   if( argc < 1)
     usage();
-  sprintf(as->iface, argv[0]);
-  ip_from_ifname(as->iface, as->host_ip);
+  snprintf(as->iface, sizeof(as->iface), "%s", argv[0]);
+  ip_from_ifname(as->iface, as->host_ip, sizeof(as->host_ip));
   ++argv; --argc;
 
   return rc;
 }
 
-int ip_from_ifname(char* ifname, char* ifip)
+int ip_from_ifname(char* ifname, char* ifip, int len)
 {
   int fd, rc = 0;
   struct ifreq ifr;
@@ -151,7 +151,7 @@ int ip_from_ifname(char* ifname, char* ifip)
   strncpy(ifr.ifr_name, ifname, IFNAMSIZ-1);
   rc = ioctl(fd, SIOCGIFADDR, &ifr);
   close(fd);
-  sprintf(ifip, "%s",
+  snprintf(ifip, len, "%s",
           inet_ntoa(((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr));
   return rc;
 }

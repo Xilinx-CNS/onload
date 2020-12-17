@@ -276,7 +276,7 @@ static void client(int argc, char* argv[])
 
   char* buf = calloc(msg_size, sizeof(*buf));
   TEST(buf);
-  sprintf(buf, "deadbeef");
+  snprintf(buf, msg_size, "deadbeef");
 
   for( i = 0; i < warmup; ++i )
     client_iteration(sock, buf, msg_size);

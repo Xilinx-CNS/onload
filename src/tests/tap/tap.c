@@ -31,7 +31,7 @@ vstrdupf (const char *fmt, va_list args) {
         perror("malloc error");
         exit(1);
     }
-    vsprintf(str, fmt, args);
+    vsnprintf(str, size, fmt, args);
     va_end(args2);
     return str;
 }

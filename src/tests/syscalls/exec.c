@@ -133,7 +133,7 @@ char *create_socket_order() {
   fd_s *fds;
   so_pos = socket_order;
 
-  so_pos += sprintf(so_pos,"-o");
+  so_pos += snprintf(so_pos, MAX_SOCKET_ORDER_LEN, "-o");
   CI_DLLIST_FOR_EACH2(fd_s, fds, dllink, &fds_list) {
     sanity_check_fd_s(fds);
     if (!fds->close_on_exec) {
@@ -1776,14 +1776,14 @@ void do_exec2(ci_uint32 pos) {
       ci_assert(real_prog_name);
       ci_assert(server_name);
       socket_order = create_socket_order();
-      sprintf(arg1,"-r%d",pos+1); //cannot call adv_pos() as PLAY_LOG uses it
-      sprintf(arg2,"-e%d",exec_pos);
-      sprintf(arg3,"-i%d",cur_id);
-      sprintf(arg4,"-p%d",supervisor_fd);
-      sprintf(arg5,"-z%d",randr_sync_orig);
-      sprintf(arg6,"-a%s",inet_ntoa(other_side_sock.sin_addr));
-      sprintf(arg7,"-b%s",inet_ntoa(other_side_kern.sin_addr));
-      sprintf(arg9,"-x%"CI_PRIu64,end_frc);
+      snprintf(arg1,32,"-r%d",pos+1); //cannot call adv_pos() as PLAY_LOG uses it
+      snprintf(arg2,32,"-e%d",exec_pos);
+      snprintf(arg3,32,"-i%d",cur_id);
+      snprintf(arg4,32,"-p%d",supervisor_fd);
+      snprintf(arg5,32,"-z%d",randr_sync_orig);
+      snprintf(arg6,32,"-a%s",inet_ntoa(other_side_sock.sin_addr));
+      snprintf(arg7,32,"-b%s",inet_ntoa(other_side_kern.sin_addr));
+      snprintf(arg9,32,"-x%"CI_PRIu64,end_frc);
 
       /* Ensure that args printed to the log are the same as those exec'ed */
       PLAY_LOG("execlp'ing %s args %s %s %s %s %s %s %s %s %s -olength=%zu\n",real_prog_name,
@@ -2010,8 +2010,8 @@ void do_setup(int argc,char *argv[]) {
   set_next_port(cur_id);
 
   // Protect against printf printing "(null)"
-  if (fork_order_opt) sprintf(fork_order,"-g%s",fork_order_opt);
-  else                sprintf(fork_order,"-g");
+  if (fork_order_opt) snprintf(fork_order,sizeof(fork_order),"-g%s",fork_order_opt);
+  else                snprintf(fork_order,sizeof(fork_order),"-g");
 
   //Resolve the supplied hostname for L5 socket
   if (l5_addr_opt) { 
@@ -2242,7 +2242,7 @@ void wait_for_client() {
       randr_sync = randr_sync_orig;
       ci_log("random seed is %u",randr_sync);
       ci_log("recreate this using -z=%u",randr_sync);
-      sprintf(arg1,"%u",randr_sync);
+      snprintf(arg1,sizeof(arg1),"%u",randr_sync);
       EXEC_TEST_TRY(write(fds->fd,arg1,strlen(arg1)+1));
     }
     gettimeofday(&tv, NULL);
@@ -2339,7 +2339,7 @@ void print_compare(int size, char* data1,char* data2) {
 /*! Create a log file with a unique name */
 void create_log_file(int lid,int lpos) {
   char fname[128];
-  sprintf(fname,"%c%3.3d.%6.6d.log",is_server?'s':'c',lid,lpos);
+  snprintf(fname,sizeof(fname),"%c%3.3d.%6.6d.log",is_server?'s':'c',lid,lpos);
   logfd=fopen(fname,"w+");
   EXEC_TEST_TRY(logfd?0:-1);
 }

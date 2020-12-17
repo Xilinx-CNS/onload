@@ -815,7 +815,8 @@ despatch_netlink_message(struct cp_session* s, struct test_state* state)
   char mac[] = {0x00, 0x0f, 0x53, (spec->ifindex >> 16) & 0xff,
                 (spec->ifindex >> 8) & 0xff, spec->ifindex & 0xff};
   char ifname[IFNAMSIZ];
-  sprintf(ifname, "%s%d", is_master ? "team" : "eth", spec->ifindex);
+  snprintf(ifname, sizeof(ifname), "%s%d",
+           is_master ? "team" : "eth", spec->ifindex);
   if( is_master ) {
     cp_unit_nl_handle_team_link_msg(s, spec->nlmsg_type, spec->ifindex, ifname,
                                     mac);

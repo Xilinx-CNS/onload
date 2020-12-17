@@ -256,7 +256,7 @@ static int set_defaults(app_state_t* as)
 
   cfg->dump_pkt = 0;
   cfg->verbose = 0;
-  sprintf(cfg->ip, "%s", DEST_IPADDR);
+  snprintf(cfg->ip, sizeof(cfg->ip), "%s", DEST_IPADDR);
   cfg->port = DEST_PORT;
 
   return 0;
@@ -282,7 +282,7 @@ static int parse_opts(int argc, char* argv[], app_state_t* as)
         cfg->dump_hex = 1;
         break;
       case 'i':
-        sprintf(cfg->ip, "%s", optarg);
+        snprintf(cfg->ip, sizeof(cfg->ip), "%s", optarg);
         break;
       case 'p':
         cfg->port = atoi(optarg);
@@ -313,7 +313,7 @@ static int parse_opts(int argc, char* argv[], app_state_t* as)
     exit(-1);
   }
 
-  sprintf(cfg->iface, "%s", argv[0]);
+  snprintf(cfg->iface, sizeof(cfg->iface), "%s", argv[0]);
   ++argv; --argc;
 
   return rc;
