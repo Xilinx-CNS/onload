@@ -156,15 +156,15 @@ void ci_app_startup(int argc, char* argv[])
 
   if( argc > 0 ) {
     int i, n = 0;
-    char* p;
     for( i = 0; i < argc; ++i )
       n += strlen(argv[i]) + 1;
     ci_cmdline = malloc(n);
     if( ci_cmdline ) {
-      p = ci_cmdline;
-      for( i = 0; i < argc; ++i )
-        p += sprintf(p, "%s%s", i == 0 ? "":" ", argv[i]);
-      CI_TEST(p == ci_cmdline + n - 1);
+      int o = 0;
+      for( i = 0; i < argc; ++i ) {
+        o += snprintf(ci_cmdline+o, n-o, "%s%s", i == 0 ? "":" ", argv[i]);
+        CI_TEST(o < n);
+      }
     }
 
     if( argc >= 1 && argv && argv[0] ) {
@@ -251,7 +251,7 @@ void ci_app_getopt(const char* usage, int* argc, char* argv[],
     char hostname[80];
     char logpf[100];
     gethostname(hostname, 80);
-    sprintf(logpf, "[%s] ", hostname);
+    snprintf(logpf, sizeof(logpf), "[%s] ", hostname);
     ci_set_log_prefix(strdup(logpf));
   }
   if( ci_cfg_dump_format ) {

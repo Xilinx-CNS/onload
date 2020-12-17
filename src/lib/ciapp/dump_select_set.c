@@ -20,9 +20,9 @@
 
 void ci_dump_select_set(ci_log_fn_t log_fn, const fd_set* fds)
 {
-  char stack_s[256];
+  char stack_s[INLINE_BUF_SIZE];
   char* s = stack_s;
-  int i, n = 0, si;
+  int i, n = 0, si, buf_size;
 
   /* We assume the caller ain't too worried about performance.  So we find
   ** out in advance whether we can format the string into [stack_s], or
@@ -31,16 +31,17 @@ void ci_dump_select_set(ci_log_fn_t log_fn, const fd_set* fds)
   for( i = 0; i < FD_SETSIZE; ++i )
     if( FD_ISSET(i, fds) )  ++n;
 
-  if( n * 4 + 3 >= INLINE_BUF_SIZE )
+  buf_size = n * 4 + 3;
+  if( buf_size > INLINE_BUF_SIZE )
     /* Hope this doesn't fail... */
-    CI_TEST(s = (char*) malloc(n * 4 + 3));
+    CI_TEST(s = (char*) malloc(buf_size));
 
-  si = sprintf(s, "[");
-  for( i = 0; i < FD_SETSIZE; ++i )
+  si = snprintf(s, buf_size, "[");
+  for( i = 0; i < FD_SETSIZE && si < buf_size; ++i )
     if( FD_ISSET(i, fds) )
-      si += sprintf(s + si, i ? " %d":"%d", i);
+      si += snprintf(s + si, buf_size - si, i ? " %d":"%d", i);
 
-  ci_assert(s != stack_s || si < n * 4 + 3);
+  ci_assert(si < buf_size);
   log_fn(s);
 
   if( s != stack_s )  free(s);

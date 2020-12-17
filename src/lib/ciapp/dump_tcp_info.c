@@ -24,9 +24,9 @@ void ci_dump_tcp_info(ci_log_fn_t l, const struct ci_tcp_info* i)
 {
   char s[80];
 
-#define dump(x)  do {				\
-    sprintf(s, "%20s: %d", #x, (int) i->x);	\
-    l(s);					\
+#define dump(x)  do {                                   \
+    snprintf(s, sizeof(s), "%20s: %d", #x, (int) i->x); \
+    l(s);                                               \
   } while(0)
 
   dump(tcpi_state);
