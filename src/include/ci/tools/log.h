@@ -130,17 +130,17 @@ extern int  ci_log_options  CI_HV;
 
 extern char ci_printable_char(char c) CI_HF;
 
-extern void (*ci_hex_dump_formatter)(char* buf, const ci_octet* s,
+extern void (*ci_hex_dump_formatter)(char* buf, int buf_len, const ci_octet* s,
 				     int i, int off, int len) CI_HV;
-extern void ci_hex_dump_format_octets(char*,const ci_octet*,int,int,int) CI_HF;
-extern void ci_hex_dump_format_single_octets(char*,const ci_octet*,int,int,int) CI_HF;
-extern void ci_hex_dump_format_dwords(char*,const ci_octet*,int,int,int) CI_HF;
+extern void ci_hex_dump_format_octets(char*,int,const ci_octet*,int,int,int) CI_HF;
+extern void ci_hex_dump_format_single_octets(char*,int,const ci_octet*,int,int,int) CI_HF;
+extern void ci_hex_dump_format_dwords(char*,int,const ci_octet*,int,int,int) CI_HF;
 
-extern void (*ci_hex_dump_stringifier)(char* buf, const ci_octet* s,
+extern void (*ci_hex_dump_stringifier)(char* buf, int buf_len, const ci_octet* s,
 				       int offset, int len) CI_HV;
-extern void ci_hex_dump_format_stringify(char*,const ci_octet*,int,int) CI_HF;
+extern void ci_hex_dump_format_stringify(char*,int, const ci_octet*,int,int) CI_HF;
 
-extern void ci_hex_dump_row(char* buf, volatile const void* s, int len,
+extern void ci_hex_dump_row(char* buf, int buf_len, volatile const void* s, int len,
 			    ci_ptr_arith_t address) CI_HF;
   /*!< A row contains up to 16 bytes.  Row starts at [address & 15u], so
   ** therefore [len + (address & 15u)] must be <= 16.

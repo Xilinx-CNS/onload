@@ -37,33 +37,33 @@ char ci_printable_char(char c)
 #endif
 }
 
-void ci_hex_dump_format_single_octets(char* buf, const ci_octet* s, int i,
-			       int offset, int len)
+void ci_hex_dump_format_single_octets(char* buf, int buf_len, const ci_octet* s,
+                                      int i, int offset, int len)
 {
   static const char*const fmt[] = { "%02x ", "%02x ", "%02x ", "%02x " };
   static const char*const xx[] =  { "xx "  , "xx "  , "xx "  , "xx "   };
 
   if( i >= offset && i < offset + len )
-    sprintf(buf, fmt[i & 3], (unsigned) POCTET(s)[i - offset]);
+    snprintf(buf, buf_len, fmt[i & 3], (unsigned) POCTET(s)[i - offset]);
   else
-    strcpy(buf, xx[i & 3]);
+    snprintf(buf, buf_len, "%s", xx[i & 3]);
 }
 
 
-void ci_hex_dump_format_octets(char* buf, const ci_octet* s, int i,
+void ci_hex_dump_format_octets(char* buf, int buf_len, const ci_octet* s, int i,
 			       int offset, int len)
 {
   static const char*const fmt[] = { "%02x", "%02x ", "%02x", "%02x  " };
   static const char*const xx[] =  { "xx"  , "xx "  , "xx"  , "xx  "   };
 
   if( i >= offset && i < offset + len )
-    sprintf(buf, fmt[i & 3], (unsigned) POCTET(s)[i - offset]);
+    snprintf(buf, buf_len, fmt[i & 3], (unsigned) POCTET(s)[i - offset]);
   else
-    strcpy(buf, xx[i & 3]);
+    snprintf(buf, buf_len, "%s", xx[i & 3]);
 }
 
 
-void ci_hex_dump_format_dwords(char* buf, const ci_octet* s, int i,
+void ci_hex_dump_format_dwords(char* buf, int buf_len, const ci_octet* s, int i,
 			       int offset, int len)
 {
   static const char*const fmt[] = { "%02x   ", "%02x", "%02x ", "%02x" };
@@ -72,55 +72,56 @@ void ci_hex_dump_format_dwords(char* buf, const ci_octet* s, int i,
   i = (i & 0xc) | (3 - (i & 3));
 
   if( i >= offset && i < offset + len )
-    sprintf(buf, fmt[i & 3], (unsigned) POCTET(s)[i - offset]);
+    snprintf(buf, buf_len, fmt[i & 3], (unsigned) POCTET(s)[i - offset]);
   else
-    strcpy(buf, xx[i & 3]);
+    snprintf(buf, buf_len, "%s", xx[i & 3]);
 }
 
 
-void (*ci_hex_dump_formatter)(char* buf, const ci_octet* s,
+void (*ci_hex_dump_formatter)(char* buf, int buf_len, const ci_octet* s,
 			      int i, int off, int len)
      = ci_hex_dump_format_octets;
 
 
 /* Must add a zero byte at the end */
-void ci_hex_dump_format_stringify(char* buf, const ci_octet* s, int offset,
-				  int len)
+void ci_hex_dump_format_stringify(char* buf, int buf_len, const ci_octet* s,
+                                  int offset, int len)
 {
-  int i;
+  int i,o=0;
 
-  for( i = 0; i < offset; i++ )
-    buf += ci_sprintf(buf, "_");
-  for( i = 0; i < len; i ++ )
-    *buf++ = ci_printable_char(POCTET(s)[i]);
-  *buf = '\0';
+  for( i = 0; i < offset && o < buf_len; i++ )
+    o += snprintf(buf+o, buf_len-o, "_");
+  for( i = 0; i < len && o < buf_len; i++, o++ )
+    buf[o] = ci_printable_char(POCTET(s)[i]);
+  buf[o < buf_len ? o : buf_len-1] = '\0';
 }
 
 
-void (*ci_hex_dump_stringifier)(char* buf, const ci_octet* s, int off, int len)
+void (*ci_hex_dump_stringifier)(char* buf, int buf_len, const ci_octet* s,
+                                int off, int len)
      = ci_hex_dump_format_stringify;
 
 
-void ci_hex_dump_row(char* buf, volatile const void* sv, int len,
+void ci_hex_dump_row(char* buf, int buf_len, volatile const void* sv, int len,
 		      ci_ptr_arith_t address)
 {
   const ci_octet* s = (const ci_octet*) sv;
-  int i, offset;
+  int i, o, offset;
   offset = (int)(address & 15u);
 
   ci_assert(buf);  ci_assert(s || !len);  ci_assert(len >= 0);
   ci_assert(len + offset <= 16);
 
-  buf += ci_sprintf(buf, "%08lx   ", (unsigned long) CI_ALIGN_BACK(address, 16));
+  o = snprintf(buf, buf_len, "%08lx   ", (unsigned long) CI_ALIGN_BACK(address, 16));
 
-  for( i = 0; i < 16; ++i ) {
-    ci_hex_dump_formatter(buf, s, i, offset, len);
-    buf += strlen(buf);
+  for( i = 0; i < 16 && o < buf_len; ++i ) {
+    ci_hex_dump_formatter(buf+o, buf_len-o, s, i, offset, len);
+    o += strlen(buf+o);
   }
 
-  *buf++ = ' ';
-  ci_hex_dump_stringifier(buf, s, offset, len);
-  buf += strlen(buf);
+  if( o < buf_len )
+    buf[o++] = ' ';
+  ci_hex_dump_stringifier(buf+o, buf_len-o, s, offset, len);
 }
 
 
@@ -136,7 +137,7 @@ void ci_hex_dump(void (*log_fn)(const char* msg), volatile const void* s,
     n = len;
     if( n > 16 )  n = 16;
     if( n + (int)(address & 15u) > 16 )  n = 16 - (int)(address & 15u);
-    ci_hex_dump_row(buf, s, n, address);
+    ci_hex_dump_row(buf, sizeof(buf), s, n, address);
     len -= n;
     address += n;
     s = (ci_octet*) s + n;
