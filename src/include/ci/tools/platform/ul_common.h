@@ -29,9 +29,7 @@
 #define ci_vmalloc_fn                      malloc     
 #define ci_vfree                           free
 
-#define ci_sprintf                         sprintf
 #define ci_snprintf                        snprintf
-#define ci_vsprintf                        vsprintf
 #define ci_vsnprintf                       vsnprintf
 #define ci_sscanf                          sscanf
 
