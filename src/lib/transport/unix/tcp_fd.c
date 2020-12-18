@@ -1099,12 +1099,13 @@ static int citp_tcp_connect(citp_fdinfo* fdinfo,
 
   if( moved ) {
     citp_fdinfo* new_fdinfo;
-    rc = citp_reprobe_moved_common(fdinfo, CI_FALSE, CI_FALSE, &new_fdinfo);
+    int reprobe_rc = citp_reprobe_moved_common(fdinfo, CI_FALSE, CI_FALSE,
+                                               &new_fdinfo);
     fdinfo = new_fdinfo;
     if( fdinfo == NULL ) {
       /* Most probably, it is EMFILE, but we can't know for sure.
        * And we can't handover since there is no fdinfo now. */
-      errno = (rc == -ENOMEM) ? ENOMEM : EMFILE;
+      errno = (reprobe_rc == -ENOMEM) ? ENOMEM : EMFILE;
       return -1;
     }
 
