@@ -2563,6 +2563,8 @@ fwd_row_refresh(struct cp_session* s, struct cp_fwd_state* fwd_state,
                        s->frc_fwd_cache_ttl / 2,
                      now) ) {
     if( ! (fwd->flags & CICP_FWD_FLAG_STALE) ) {
+      ci_frc64(&fwd->frc_stale);
+      ci_wmb();
       fwd->flags |= CICP_FWD_FLAG_STALE;
       ci_wmb();
       /* Bump the version: user will notice it, check that nothing changed,
@@ -2827,13 +2829,14 @@ print_fwd_extras(struct cp_session* s, struct cp_fwd_table* fwd_table,
                  cicp_mac_rowid_t id, ci_uint64 now, ci_uint32 khz)
 {
   struct cp_fwd_rw_row* fwd_rw = &fwd_table->rw_rows[id];
-  ci_uint64 frc = (now - fwd_rw->frc_used) / khz;
   struct cp_fwd_row* fwd = cp_get_fwd_by_id(fwd_table, id);
-  cp_print(s, "\tlast used: %"PRIu64" ms ago", frc);
+  cp_print(s, "\tlast used %"PRIu64" ms ago\n", (now - fwd_rw->frc_used) / khz);
+  if( fwd->flags & CICP_FWD_FLAG_STALE ) {
+    cp_print(s, "\tmarked as STALE %"PRIu64" ms ago\n",
+           (now - fwd->frc_stale) / khz);
+  }
   if( fwd->flags & CICP_FWD_FLAG_ERROR )
     cp_print(s, "\tnon-existent route");
-  if( fwd->flags & CICP_FWD_FLAG_STALE )
-    cp_print(s, "\twill be removed from fwd cache soon");
   if( fwd_rw->flags & CICP_FWD_RW_FLAG_ARP_NEED_REFRESH )
     cp_print(s, "\tARP entry need confirmation if possible");
   cp_print(s, "\tin use: %d \tverinfo: %x-%x", fwd->use, id, fwd->version);

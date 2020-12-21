@@ -467,6 +467,17 @@ struct cp_fwd_row {
   struct cp_fwd_key_ext key_ext;
   struct cp_fwd_data    data[2]; /* two snapshots of data */
 
+  uint32_t use; /* in how many probe sequences record is used */
+
+
+  /* Following data is accessed from fast path:
+   * - check version;
+   * - check CICP_FWD_FLAG_STALE;
+   * - check frc_stale value in the STALE case.
+   * It is aligned to 16, which is the size of these fields.  It guarantees
+   * that all this fast-path data belong to one cache line.
+   */
+
   /* Version is the "data" version. Even version means that snapshot of data
    * at index 0 is to be read by clients, odd that the data under index 1.
    *
@@ -474,9 +485,8 @@ struct cp_fwd_row {
    * The version may be updated without any data change, for example for
    * CICP_FWD_FLAG_STALE flag.
    */
-  cp_version_t version;
-  uint32_t use; /* in how many probe sequences record is used */
-  uint8_t flags;
+  cp_version_t version CI_ALIGN(16);
+  uint32_t flags;
 
 /* flags used by server */
 /* fwd row is at least half ttl old and frc_used needs refreshing */
@@ -499,6 +509,7 @@ struct cp_fwd_row {
 #define CICP_FWD_FLAG_OCCUPIED        0x80
 /* data field has been filled once */
 #define CICP_FWD_FLAG_DATA_VALID      0x40
+  ci_uint64 frc_stale;
 };
 
 static inline int/*bool*/
