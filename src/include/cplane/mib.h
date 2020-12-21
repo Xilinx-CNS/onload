@@ -849,6 +849,12 @@ cp_fwd_version_matches(struct cp_fwd_table* fwd_table, cicp_verinfo_t* ver)
     if( fwd->flags & CICP_FWD_FLAG_STALE ) {
       struct cp_fwd_rw_row* fwd_rw = cp_get_fwd_rw(fwd_table, ver);
 
+      /* See cp_server:fwd_row_refresh() for the writing counterpart of
+       * this "stale" machinery.
+       *
+       * We do not use rmb() here because mistakes are allowed.
+       */
+
       /* If frc_used < frc_stale then update frc_used: */
       if( (ci_int64)(fwd_rw->frc_used - fwd->frc_stale) < 0 )
         ci_frc64(&fwd_rw->frc_used);

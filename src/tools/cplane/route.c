@@ -2564,7 +2564,12 @@ fwd_row_refresh(struct cp_session* s, struct cp_fwd_state* fwd_state,
                      now) ) {
     if( ! (fwd->flags & CICP_FWD_FLAG_STALE) ) {
       ci_frc64(&fwd->frc_stale);
-      ci_wmb();
+      /* There is some reason to call wmb() between frc_stale update
+       * and CICP_FWD_FLAG_STALE.  However all the "stale" thingy is sloppy,
+       * and there is no harm in case of mistake.
+       *
+       * See also cp_fwd_version_matches() where these values are read.
+       */
       fwd->flags |= CICP_FWD_FLAG_STALE;
     }
   }
