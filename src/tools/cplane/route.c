@@ -2566,10 +2566,6 @@ fwd_row_refresh(struct cp_session* s, struct cp_fwd_state* fwd_state,
       ci_frc64(&fwd->frc_stale);
       ci_wmb();
       fwd->flags |= CICP_FWD_FLAG_STALE;
-      ci_wmb();
-      /* Bump the version: user will notice it, check that nothing changed,
-       * and bump fwd_rw->frc_used. */
-      fwd->version++;
     }
   }
   else if( fwd->flags & CICP_FWD_FLAG_STALE ) {

@@ -828,23 +828,36 @@ cp_get_fwd_data_current(struct cp_fwd_row* r)
   return &r->data[*cp_fwd_version(r) & 1];
 }
 
-static inline int
-cp_fwd_version_matches(struct cp_fwd_table* fwd_table, cicp_verinfo_t* ver)
-{
-  ci_assert_nequal(ver->id, CICP_ROWID_BAD);
-  ci_assert(CICP_ROWID_IS_VALID(ver->id));
-  return ver->version == *cp_fwd_version(cp_get_fwd(fwd_table, ver));
-}
-
-
 static inline struct cp_fwd_rw_row*
 cp_get_fwd_rw(struct cp_fwd_table* fwd_table, cicp_verinfo_t* ver)
 {
+  ci_assert_nequal(ver->id, CICP_ROWID_BAD);
+  ci_assert(CICP_ROWID_IS_VALID(ver->id));
+  return &fwd_table->rw_rows[ver->id];
+}
+
+static inline int
+cp_fwd_version_matches(struct cp_fwd_table* fwd_table, cicp_verinfo_t* ver)
+{
+  struct cp_fwd_row* fwd;
   ci_assert_nequal(fwd_table, NULL);
   ci_assert_nequal(ver->id, CICP_ROWID_BAD);
   ci_assert(CICP_ROWID_IS_VALID(ver->id));
-  ci_assert_le(ver->id, fwd_table->mask);
-  return &fwd_table->rw_rows[ver->id];
+  fwd = cp_get_fwd(fwd_table, ver);
+
+  if( ver->version == *cp_fwd_version(fwd) ) {
+    if( fwd->flags & CICP_FWD_FLAG_STALE ) {
+      struct cp_fwd_rw_row* fwd_rw = cp_get_fwd_rw(fwd_table, ver);
+
+      /* If frc_used < frc_stale then update frc_used: */
+      if( (ci_int64)(fwd_rw->frc_used - fwd->frc_stale) < 0 )
+        ci_frc64(&fwd_rw->frc_used);
+    }
+    return 1;
+  }
+  else {
+    return 0;
+  }
 }
 
 static inline int /*bool*/
