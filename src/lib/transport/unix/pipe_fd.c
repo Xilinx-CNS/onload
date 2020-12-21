@@ -146,27 +146,23 @@ int citp_pipe_splice_write(citp_fdinfo* fdi, int alien_fd, loff_t* alien_off,
   }
 
   {
-    /* Fixme
-     * Should not use this code if alien_fd is not Onload fd.  For Onload fd,
-     * we can replace poll(), fcntl() and ioctl() by non-syscall code.
-     */
     struct pollfd pfd;
 
     pfd.fd = alien_fd;
     pfd.events = POLLIN;
 
-    if( fcntl(alien_fd, F_GETFL) & O_NONBLOCK ) {
+    if( onload_fcntl(alien_fd, F_GETFL) & O_NONBLOCK ) {
       /* alien_fd is non-blocking.  Do we have any data? */
-      if( poll(&pfd, 1, 0) == 0 ) {
+      if( onload_poll(&pfd, 1, 0) == 0 ) {
         errno = EAGAIN;
         return -1;
       }
     }
     else {
       /* alien_fd could block.  Do it before allocating pipe buffers. */
-      citp_exit_lib_if(lib_context, TRUE);
-      onload_poll(&pfd, 1, -1);
-      citp_reenter_lib(lib_context);
+      rc = onload_poll(&pfd, 1, -1);
+      if( rc < 0 )
+        return rc;
     }
   }
 
