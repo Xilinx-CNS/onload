@@ -16,7 +16,6 @@
 #include "ef100_nic.h"
 
 #if defined(CONFIG_SFC_VDPA)
-#if !defined(EFX_USE_KCOMPAT) && !defined(EFX_DISABLE_SFC_VDPA)
 
 /* Device ID of a virtio net device */
 #define EF100_VDPA_VIRTIO_NET_DEVICE_ID VIRTIO_ID_NET
@@ -184,8 +183,6 @@ int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic);
 int ef100_vdpa_filter_remove(struct ef100_vdpa_nic *vdpa_nic);
 int ef100_vdpa_irq_vectors_alloc(struct pci_dev *pci_dev, u16 min, u16 max);
 void ef100_vdpa_irq_vectors_free(void *data);
-
-#endif
 #endif
 
 #endif

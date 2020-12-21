@@ -297,6 +297,7 @@ EFX_HAVE_NET_DEVICE_OPS_EXT_SET_VF_SPOOFCHK	member struct_net_device_ops_ext	ndo
 EFX_HAVE_NET_DEVICE_OPS_EXT_SET_VF_LINK_STATE	member struct_net_device_ops_ext	ndo_set_vf_link_state	include/linux/netdevice.h
 EFX_NEED_SKB_GSO_TCPV6			nsymbol	SKB_GSO_TCPV6		include/linux/skbuff.h
 EFX_HAVE_GSO_PARTIAL			symbol	SKB_GSO_PARTIAL		include/linux/skbuff.h
+EFX_HAVE_GSO_UDP_TUNNEL			symbol	SKB_GSO_UDP_TUNNEL	include/linux/skbuff.h
 EFX_HAVE_GSO_UDP_TUNNEL_CSUM		symbol	SKB_GSO_UDP_TUNNEL_CSUM	include/linux/skbuff.h
 EFX_NEED_SKB_IS_GSO_TCP		nsymbol	skb_is_gso_tcp	include/linux/skbuff.h
 EFX_NEED_IS_ERR_OR_NULL		nsymbol IS_ERR_OR_NULL	include/linux/err.h
@@ -330,6 +331,7 @@ EFX_HAVE_XDP_TX		symbol	XDP_TX		include/uapi/linux/bpf.h
 EFX_HAVE_XDP_TX_FLAGS	memtype	struct_net_device_ops	ndo_xdp_xmit	include/linux/netdevice.h	int (*)(struct net_device *, int, struct xdp_frame **, u32)
 EFX_HAVE_XDP_REDIR	symbol	XDP_REDIRECT	include/uapi/linux/bpf.h
 EFX_HAVE_XDP_RXQ_INFO	symbol	xdp_rxq_info	include/net/xdp.h
+EFX_HAVE_XDP_RXQ_INFO_NAPI_ID	symtype	xdp_rxq_info	include/net/xdp.h	int(struct xdp_rxq_info *, struct net_device *, u32, unsigned int)
 EFX_HAVE_XDP_EXT	member	struct_net_device_ops_extended	ndo_xdp	include/linux/netdevice.h
 EFX_NEED_XDP_FLUSH	member	struct_net_device_ops	ndo_xdp_flush	include/linux/netdevice.h
 EFX_HAVE_XDP_PROG_ATTACHED	member	struct_netdev_bpf	prog_attached	include/linux/netdevice.h
@@ -355,11 +357,13 @@ EFX_HAVE_XDP_DATA_META		member	struct_xdp_buff	data_meta	include/linux/filter.h
 EFX_HAVE_OLD_DEV_OPEN	symtype	dev_open	include/linux/netdevice.h	int (struct net_device *)
 EFX_NEED_CONSUME_SKB_ANY	nsymbol	dev_consume_skb_any	include/linux/netdevice.h
 EFX_NEED_CSUM16_SUB	nsymbol	csum16_sub	include/net/checksum.h
+EFX_NEED_CSUM_REPLACE_BY_DIFF	nsymbol	csum_replace_by_diff	include/net/checksum.h
 EFX_HAVE_NEW_NDO_SETUP_TC		memtype	struct_net_device_ops	ndo_setup_tc	include/linux/netdevice.h	int (*)(struct net_device *, enum tc_setup_type, void *)
 EFX_HAVE_TC_BLOCK_OFFLOAD		symbol	tc_block_offload	include/net/pkt_cls.h
 EFX_HAVE_FLOW_BLOCK_OFFLOAD		symbol	flow_block_offload	include/net/flow_offload.h
 EFX_HAVE_TC_INDR_BLOCK_CB_REGISTER	symbol	__tc_indr_block_cb_register	include/net/pkt_cls.h
 EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER	symbol	__flow_indr_block_cb_register	include/net/flow_offload.h
+EFX_HAVE_FLOW_INDR_BLOCK_CB_ALLOC	symbol	flow_indr_block_cb_alloc	include/net/flow_offload.h
 EFX_HAVE_FLOW_INDR_DEV_REGISTER		symbol	flow_indr_dev_register	include/net/flow_offload.h
 EFX_HAVE_FLOW_INDR_QDISC		member	struct_flow_block_indr	sch	include/net/flow_offload.h
 EFX_HAVE_TC_ACTION_COOKIE		custom
@@ -381,6 +385,7 @@ EFX_HAVE_TCF_EXTACK			member	struct_tc_cls_common_offload	extack	include/net/pkt
 EFX_HAVE_TC_CAN_EXTACK			symbol	tc_can_offload_extack	include/net/pkt_cls.h
 EFX_HAVE_NETIF_IS_VXLAN			symbol	netif_is_vxlan	include/net/vxlan.h
 EFX_HAVE_NETIF_IS_GENEVE		symbol	netif_is_geneve	include/net/geneve.h
+EFX_NEED_IDA_ALLOC_RANGE		nsymbol	ida_alloc_range		include/linux/idr.h
 EFX_HAVE_IPV6_STUBS_DST_LOOKUP_FLOW	member	struct_ipv6_stub	ipv6_dst_lookup_flow	include/net/ipv6_stubs.h
 EFX_HAVE_IPV6_STUBS_DST_LOOKUP_FLOW	member	struct_ipv6_stub	ipv6_dst_lookup_flow	include/net/addrconf.h
 EFX_HAVE_SKB__LIST			member	struct_sk_buff	list	include/linux/skbuff.h
@@ -401,7 +406,9 @@ EFX_HAVE_XSK_NEED_WAKEUP		symbol	xsk_umem_uses_need_wakeup	include/net/xdp_sock.
 EFX_HAVE_COALESCE_PARAMS		member struct_ethtool_ops supported_coalesce_params include/linux/ethtool.h
 EFX_HAVE_XDP_QUERY_PROG			symbol XDP_QUERY_PROG	include/linux/netdevice.h
 EFX_HAVE_VIRTIO_F_IN_ORDER		symbol VIRTIO_F_IN_ORDER	include/uapi/linux/virtio_config.h
+EFX_HAVE_VDPA_VQ_STATE			symbol vdpa_vq_state		include/linux/vdpa.h
 EFX_HAVE_GET_VQ_IRQ			member struct_vdpa_config_ops get_vq_irq include/linux/vdpa.h
+EFX_HAVE_GET_VQ_NOTIFY			member struct_vdpa_config_ops get_vq_notification include/linux/vdpa.h
 EFX_HAVE_VDPA_ALLOC_NVQS_PARAM		symtype __vdpa_alloc_device	include/linux/vdpa.h struct vdpa_device *(struct device *, const struct vdpa_config_ops *, int, size_t)
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

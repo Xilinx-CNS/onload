@@ -4725,6 +4725,16 @@ again:
 		}
 		nic_data->udp_tunnels_busy = false;
 		spin_unlock_bh(&nic_data->udp_tunnels_lock);
+		/* We detached earlier, expecting an MC reset to trigger a
+	         * re-attach. If we haven't allocated event queues, we won't
+		 * see the notification. In this case we're not using any
+		 * resources, so we don't actually need to do any reset
+		 * handling except to forget some resources and reattach.
+		 */
+		if (!unloading && !efx_net_allocated(efx->state)) {
+			efx_device_attach_if_not_resetting(efx);
+			efx_ef10_mcdi_reboot_detected(efx);
+		}
 		return 0;
 	}
 
@@ -4739,12 +4749,21 @@ again:
 			   "Rebooting MC due to UDP tunnel port list change\n");
 		will_reset = true;
 	}
-	if (!will_reset && !unloading) {
-		/* We detached earlier, relying on the MC reset to trigger a
-		 * re-attach.  Since there won't be an MC reset, we have to
-		 * do the attach ourselves.
-		 */
-		efx_device_attach_if_not_resetting(efx);
+	/* We detached earlier, expecting an MC reset to trigger a
+	 * re-attach.
+	 * But, there are two cases this won't happen: If the MC tells
+	 * us it's not going to reset, just reattach and carry on.
+	 * Alternatively, if the MC tells us it will reset but we haven't
+	 * allocated event queues, we won't see the notification. In this
+	 * case we're not using any resources, so we don't actually
+	 * need to do any reset handling except to forget some
+	 * resources and reattach.
+	 */
+	if (!unloading) {
+		if (will_reset && !efx_net_allocated(efx->state))
+			efx_ef10_mcdi_reboot_detected(efx);
+		if (!will_reset || !efx_net_allocated(efx->state))
+			efx_device_attach_if_not_resetting(efx);
 	}
 	spin_lock_bh(&nic_data->udp_tunnels_lock);
 	if (!rc) {

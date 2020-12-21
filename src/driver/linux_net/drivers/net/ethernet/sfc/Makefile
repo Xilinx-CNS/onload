@@ -56,6 +56,11 @@ ifdef KERNELRELEASE
 # .config has actually been included (it isn't when cleaning), so test
 # for a config symbol that should always be defined.
 ifdef CONFIG_NET
+ifndef CONFIG_X86
+ifndef CONFIG_ARCH_DMA_ADDR_T_64BIT
+$(error Unsupported architecture)
+endif
+endif
 ifndef CONFIG_MTD
 ifdef CONFIG_SFC_MTD
 override CONFIG_SFC_MTD :=

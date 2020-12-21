@@ -65,7 +65,11 @@ static int ef100_alloc_vis(struct efx_nic *efx, unsigned int *allocated_vis)
 	min_vis = efx->tx_queues_per_channel;
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
-	efx->ef10_resources.vi_min = min_vis;
+	/* We will consume all VIs with IDs less than the current value of
+	 * max_vis, so report that as the ID of the first VI available to the
+	 * driverlink client, and then bump the requested number of VIs by the
+	 * number that the client would like. */
+	efx->ef10_resources.vi_min = max_vis;
 	max_vis += EF100_ONLOAD_VIS;
 #endif
 #endif
@@ -597,9 +601,6 @@ static const struct net_device_ops ef100_netdev_ops = {
 #endif
 	.ndo_set_features       = efx_set_features,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
-	.ndo_features_check     = efx_features_check,
-#endif
 #if 0
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.ndo_vlan_rx_add_vid    = efx_vlan_rx_add_vid,
@@ -867,6 +868,9 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_VLAN_FEATURES)
 	net_dev->vlan_features |= (NETIF_F_HW_CSUM | NETIF_F_SG |
 				   NETIF_F_HIGHDMA | NETIF_F_ALL_TSO);
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_ENC_FEATURES)
+	net_dev->hw_enc_features |= efx->type->offload_features;
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
 	if (!net_dev->gso_max_segs)

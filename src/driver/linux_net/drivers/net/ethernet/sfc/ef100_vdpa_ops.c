@@ -20,7 +20,6 @@
 #include "mcdi_vdpa.h"
 
 #if defined(CONFIG_SFC_VDPA)
-#if !defined(EFX_USE_KCOMPAT) && !defined(EFX_DISABLE_SFC_VDPA)
 
 /* Get the queue's function-local index of the associated VI
  * virtqueue number queue 0 is reserved for MCDI
@@ -595,7 +594,11 @@ static bool ef100_vdpa_get_vq_ready(struct vdpa_device *vdev, u16 idx)
 }
 
 static int ef100_vdpa_set_vq_state(struct vdpa_device *vdev, u16 idx,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE)
 				   const struct vdpa_vq_state *state)
+#else
+				   u64 state)
+#endif
 {
 	struct ef100_vdpa_nic *vdpa_nic;
 
@@ -604,16 +607,27 @@ static int ef100_vdpa_set_vq_state(struct vdpa_device *vdev, u16 idx,
 		dev_err(&vdev->dev, "%s: Invalid queue Id %u\n", __func__, idx);
 		return -EINVAL;
 	}
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE)
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Queue:%u State:0x%x", __func__, idx,
 		 state->avail_index);
 #endif
 	vdpa_nic->vring[idx].last_avail_idx = state->avail_index;
+#else
+#ifdef EFX_NOT_UPSTREAM
+	dev_info(&vdev->dev, "%s: Queue:%u State:0x%llx", __func__, idx, state);
+#endif
+	vdpa_nic->vring[idx].last_avail_idx = state;
+#endif
 	return 0;
 }
 
-static int ef100_vdpa_get_vq_state(struct vdpa_device *vdev, u16 idx,
-				   struct vdpa_vq_state *state)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE)
+static int ef100_vdpa_get_vq_state(struct vdpa_device *vdev,
+				   u16 idx, struct vdpa_vq_state *state)
+#else
+static u64 ef100_vdpa_get_vq_state(struct vdpa_device *vdev, u16 idx)
+#endif
 {
 	struct ef100_vdpa_nic *vdpa_nic;
 
@@ -626,10 +640,15 @@ static int ef100_vdpa_get_vq_state(struct vdpa_device *vdev, u16 idx,
 	dev_info(&vdev->dev, "%s: Queue:%u State:0x%x", __func__, idx,
 		 vdpa_nic->vring[idx].last_avail_idx);
 #endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE)
 	state->avail_index = (u16)vdpa_nic->vring[idx].last_avail_idx;
 	return 0;
+#else
+	return  vdpa_nic->vring[idx].last_avail_idx;
+#endif
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_VQ_NOTIFY)
 static struct vdpa_notification_area
 		ef100_vdpa_get_vq_notification(struct vdpa_device *vdev, u16 idx)
 {
@@ -662,7 +681,9 @@ static struct vdpa_notification_area
 
 	return notify_area;
 }
+#endif
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_VQ_IRQ)
 static int ef100_get_vq_irq(struct vdpa_device *vdev, u16 idx)
 {
 	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
@@ -676,6 +697,7 @@ static int ef100_get_vq_irq(struct vdpa_device *vdev, u16 idx)
 
 	return vdpa_nic->vring[idx].irq;
 }
+#endif
 
 static u32 ef100_vdpa_get_vq_align(struct vdpa_device *vdev)
 {
@@ -902,8 +924,12 @@ const struct vdpa_config_ops ef100_vdpa_config_ops = {
 	.get_vq_ready	     = ef100_vdpa_get_vq_ready,
 	.set_vq_state	     = ef100_vdpa_set_vq_state,
 	.get_vq_state	     = ef100_vdpa_get_vq_state,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_VQ_NOTIFY)
 	.get_vq_notification = ef100_vdpa_get_vq_notification,
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_VQ_IRQ)
 	.get_vq_irq          = ef100_get_vq_irq,
+#endif
 	.get_vq_align	     = ef100_vdpa_get_vq_align,
 	.get_features	     = ef100_vdpa_get_features,
 	.set_features	     = ef100_vdpa_set_features,
@@ -921,5 +947,4 @@ const struct vdpa_config_ops ef100_vdpa_config_ops = {
 	.dma_unmap           = NULL,
 	.free	             = ef100_vdpa_free,
 };
-#endif
 #endif

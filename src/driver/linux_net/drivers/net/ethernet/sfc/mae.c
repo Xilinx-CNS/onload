@@ -536,6 +536,28 @@ int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv)
 }
 #undef CHECK
 
+int efx_mae_check_encap_type_supported(struct efx_nic *efx, enum efx_encap_type typ)
+{
+	unsigned int bit;
+
+	switch (typ & EFX_ENCAP_TYPES_MASK) {
+	case EFX_ENCAP_TYPE_VXLAN:
+		bit = MC_CMD_MAE_GET_CAPS_OUT_ENCAP_TYPE_VXLAN_LBN;
+		break;
+	case EFX_ENCAP_TYPE_NVGRE:
+		bit = MC_CMD_MAE_GET_CAPS_OUT_ENCAP_TYPE_NVGRE_LBN;
+		break;
+	case EFX_ENCAP_TYPE_GENEVE:
+		bit = MC_CMD_MAE_GET_CAPS_OUT_ENCAP_TYPE_GENEVE_LBN;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+	if (efx->tc->caps->encap_types & BIT(bit))
+		return 0;
+	return -EOPNOTSUPP;
+}
+
 int efx_mae_allocate_counter(struct efx_nic *efx, struct efx_tc_counter *cnt)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_COUNTER_ALLOC_OUT_LEN(1));
@@ -1078,10 +1100,10 @@ int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
 			      MAE_OUTER_RULE_INSERT_IN_DO_CT, !!act->zone,
 			      MAE_OUTER_RULE_INSERT_IN_CT_DOMAIN,
 			      act->zone ? act->zone->zone : 0,
-			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->recirc_id);
+			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->rid ? act->rid->fw_id : 0);
 #else
 	MCDI_POPULATE_DWORD_1(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
-			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->recirc_id);
+			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->rid ? act->rid->fw_id : 0);
 #endif
 	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_OUTER_RULE_INSERT, inbuf,
 			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);

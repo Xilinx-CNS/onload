@@ -149,7 +149,7 @@ static int efx_ioctl_do_mcdi(struct efx_nic *efx,
 			     struct efx_mcdi_request2 __user *user_req)
 {
 	struct efx_mcdi_request2 *req;
-	size_t inbuf_len, outlen_actual;
+	size_t inbuf_len, req_outlen, outlen_actual;
 	efx_dword_t *inbuf = NULL;
 	efx_dword_t *outbuf = NULL;
 	int rc;
@@ -217,10 +217,12 @@ static int efx_ioctl_do_mcdi(struct efx_nic *efx,
 			goto out_free;
 		}
 	}
+	req_outlen = req->outlen;
 	req->outlen = outlen_actual;
 
 	if (copy_to_user(user_req, req, sizeof(*req)) ||
-	    copy_to_user(&user_req->payload, outbuf, outlen_actual))
+	    copy_to_user(&user_req->payload, outbuf,
+		             min(outlen_actual, req_outlen)))
 		rc = -EFAULT;
 
 out_free:

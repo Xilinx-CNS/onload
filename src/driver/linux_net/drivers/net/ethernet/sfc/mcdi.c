@@ -169,7 +169,7 @@ int efx_mcdi_init(struct efx_nic *efx)
 	mcdi->efx = efx;
 
 #ifdef CONFIG_SFC_MCDI_LOGGING
-	mcdi->logging_buffer = kmalloc(LOG_LINE_MAX, GFP_ATOMIC);
+	mcdi->logging_buffer = kmalloc(LOG_LINE_MAX, GFP_KERNEL);
 	if (!mcdi->logging_buffer)
 		goto fail2;
 	mcdi->logging_enabled = mcdi_logging_default;
@@ -1385,10 +1385,15 @@ int efx_mcdi_rpc_async_quiet(struct efx_nic *efx, unsigned int cmd,
 static void _efx_mcdi_display_error(struct efx_nic *efx, unsigned int cmd,
 				    size_t inlen, int raw, int arg, int rc)
 {
-	netif_cond_dbg(efx, hw, efx->net_dev,
-		       rc == -EPERM || efx_nic_hw_unavailable(efx), err,
-		       "MC command 0x%x inlen %d failed rc=%d (raw=%d) arg=%d\n",
-		       cmd, (int)inlen, rc, raw, arg);
+	if (efx->net_dev)
+		netif_cond_dbg(efx, hw, efx->net_dev,
+			       rc == -EPERM || efx_nic_hw_unavailable(efx), err,
+			       "MC command 0x%x inlen %d failed rc=%d (raw=%d) arg=%d\n",
+			       cmd, (int)inlen, rc, raw, arg);
+	else
+		pci_dbg(efx->pci_dev,
+			"MC command 0x%x inlen %d failed rc=%d (raw=%d) arg=%d\n",
+			cmd, (int)inlen, rc, raw, arg);
 }
 
 void efx_mcdi_display_error(struct efx_nic *efx, unsigned int cmd,

@@ -221,9 +221,34 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 
 	if (efx_ef100_has_cap(nic_data->datapath_caps2, TX_TSO_V3)) {
 		struct net_device *net_dev = efx->net_dev;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_ENC_FEATURES)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_PARTIAL)
+		netdev_features_t tso = NETIF_F_TSO | NETIF_F_TSO6 | NETIF_F_GSO_PARTIAL |
+					NETIF_F_GSO_UDP_TUNNEL | NETIF_F_GSO_UDP_TUNNEL_CSUM |
+					NETIF_F_GSO_GRE | NETIF_F_GSO_GRE_CSUM;
 
-		net_dev->features |= NETIF_F_TSO | NETIF_F_TSO6;
-		efx_add_hw_features(efx, NETIF_F_TSO);
+		net_dev->features |= tso;
+		efx_add_hw_features(efx, tso);
+		net_dev->hw_enc_features |= tso;
+		/* EF100 HW can only offload outer checksums if they are UDP,
+		 * so for GRE_CSUM we have to use GSO_PARTIAL.
+		 */
+		net_dev->gso_partial_features |= NETIF_F_GSO_GRE_CSUM;
+#else
+		netdev_features_t tso = NETIF_F_TSO | NETIF_F_TSO6 |
+					NETIF_F_GSO_UDP_TUNNEL | NETIF_F_GSO_UDP_TUNNEL_CSUM |
+					NETIF_F_GSO_GRE;
+
+		net_dev->features |= tso;
+		efx_add_hw_features(efx, tso);
+		net_dev->hw_enc_features |= tso;
+#endif
+#else
+		netdev_features_t tso = NETIF_F_TSO | NETIF_F_TSO6;
+
+		net_dev->features |= tso;
+		efx_add_hw_features(efx, tso);
+#endif
 	}
 	efx->num_mac_stats = MCDI_WORD(outbuf,
 				   GET_CAPABILITIES_V4_OUT_MAC_STATS_NUM_STATS);
@@ -1102,12 +1127,10 @@ static struct {
 		.fini = ef100_remove_netdev
 	},
 #ifdef CONFIG_SFC_VDPA
-#if !defined(EFX_USE_KCOMPAT) && !defined(EFX_DISABLE_SFC_VDPA)
 	[EF100_BAR_CONFIG_VDPA] = {
 		.init = ef100_vdpa_init,
 		.fini = ef100_vdpa_fini
 	},
-#endif
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	[EF100_BAR_CONFIG_NONE] = {
@@ -1128,11 +1151,9 @@ static ssize_t bar_config_show(struct device *dev,
 		sprintf(buf_out, "EF100\n");
 		break;
 #ifdef CONFIG_SFC_VDPA
-#if !defined(EFX_USE_KCOMPAT) && !defined(EFX_DISABLE_SFC_VDPA)
 	case EF100_BAR_CONFIG_VDPA:
 		sprintf(buf_out, "vDPA\n");
 		break;
-#endif
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	case EF100_BAR_CONFIG_NONE:
@@ -1160,10 +1181,8 @@ static ssize_t bar_config_store(struct device *dev,
 	if (!strncasecmp(buf, "ef100", min_t(size_t, count, 5)))
 		new_config = EF100_BAR_CONFIG_EF100;
 #ifdef CONFIG_SFC_VDPA
-#if !defined(EFX_USE_KCOMPAT) && !defined(EFX_DISABLE_SFC_VDPA)
 	else if (!strncasecmp(buf, "vdpa", min_t(size_t, count, 4)))
 		new_config = EF100_BAR_CONFIG_VDPA;
-#endif
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	else if (!strncasecmp(buf, "none", min_t(size_t, count, 4)))
@@ -1600,12 +1619,12 @@ void ef100_remove(struct efx_nic *efx)
 #define EF100_OFFLOAD_FEATURES	(NETIF_F_HW_CSUM | NETIF_F_RXCSUM |	\
 	NETIF_F_HIGHDMA | NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_NTUPLE | \
 	NETIF_F_RXHASH | NETIF_F_RXFCS | NETIF_F_TSO_ECN | NETIF_F_RXALL | \
-	NETIF_F_TSO_MANGLEID | NETIF_F_HW_VLAN_CTAG_TX)
+	NETIF_F_HW_VLAN_CTAG_TX)
 #else
 #define EF100_OFFLOAD_FEATURES	(NETIF_F_HW_CSUM | NETIF_F_RXCSUM |	\
 	NETIF_F_HIGHDMA | NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_NTUPLE | \
 	NETIF_F_RXHASH | NETIF_F_RXFCS | NETIF_F_TSO_ECN | NETIF_F_RXALL | \
-	NETIF_F_TSO_MANGLEID | NETIF_F_HW_VLAN_CTAG_TX)
+	NETIF_F_HW_VLAN_CTAG_TX)
 #endif
 
 const struct efx_nic_type ef100_pf_nic_type = {

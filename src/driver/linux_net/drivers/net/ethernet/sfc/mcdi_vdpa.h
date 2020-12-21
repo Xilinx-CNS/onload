@@ -11,7 +11,6 @@
 #define EFX_MCDI_VDPA_H
 
 #if defined(CONFIG_SFC_VDPA)
-#if !defined(EFX_USE_KCOMPAT) && !defined(EFX_DISABLE_SFC_VDPA)
 
 /* MAE Port selector value*/
 #define MAE_MPORT_SELECTOR_ASSIGNED 0x1000000
@@ -83,7 +82,6 @@ int efx_vdpa_get_mac_address(struct efx_nic *efx, u8 *mac_address);
 int efx_vdpa_get_link_details(struct efx_nic *efx, u16 *link_up,
 			      u32 *link_speed, u8 *duplex);
 int efx_vdpa_get_mtu(struct efx_nic *efx, u16 *mtu);
-#endif
 #endif
 
 #endif

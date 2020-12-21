@@ -206,11 +206,23 @@
 	#define NETIF_F_ALL_TSO (NETIF_F_TSO | NETIF_F_TSO6 | NETIF_F_TSO_ECN)
 #endif
 
+#ifndef NETIF_F_GSO_GRE
+	#define NETIF_F_GSO_GRE 0
+#endif
 #ifndef NETIF_F_GSO_GRE_CSUM
 	#define NETIF_F_GSO_GRE_CSUM 0
 #endif
+#ifndef NETIF_F_GSO_UDP_TUNNEL
+	#define NETIF_F_GSO_UDP_TUNNEL 0
+#endif
 #ifndef NETIF_F_GSO_UDP_TUNNEL_CSUM
 	#define NETIF_F_GSO_UDP_TUNNEL_CSUM 0
+#endif
+#ifndef EFX_HAVE_GSO_UDP_TUNNEL
+	#define SKB_GSO_UDP_TUNNEL	0
+#endif
+#ifndef EFX_HAVE_GSO_UDP_TUNNEL_CSUM
+	#define SKB_GSO_UDP_TUNNEL_CSUM	0
 #endif
 
 #ifndef NETIF_F_RXFCS
@@ -2949,6 +2961,10 @@ struct EFX_HWMON_DEVICE_REGISTER_TYPE *hwmon_device_register_with_info(
 #define XDP_PACKET_HEADROOM 0
 #endif
 
+#ifndef EFX_HAVE_XDP_RXQ_INFO_NAPI_ID
+#define xdp_rxq_info_reg(_i,_d,_q,_n)	xdp_rxq_info_reg(_i,_d,_q)
+#endif
+
 #ifdef EFX_NEED_VOID_SKB_PUT
 static inline void *efx_skb_put(struct sk_buff *skb, unsigned int len)
 {
@@ -3033,6 +3049,13 @@ static inline __sum16 csum16_sub(__sum16 csum, __be16 addend)
 }
 #endif
 
+#ifdef EFX_NEED_CSUM_REPLACE_BY_DIFF
+static inline void csum_replace_by_diff(__sum16 *sum, __wsum diff)
+{
+	*sum = csum_fold(csum_add(diff, ~csum_unfold(*sum)));
+}
+#endif
+
 #ifndef EFX_HAVE_STRUCT_SIZE
 /* upstream version of this checks for overflow, but that's too much machinery
  * to replicate for older kernels.
@@ -3045,10 +3068,12 @@ static inline __sum16 csum16_sub(__sum16 csum, __be16 addend)
  */
 #ifdef EFX_HAVE_NEW_NDO_SETUP_TC
 #if defined(EFX_HAVE_TC_BLOCK_OFFLOAD) || defined(EFX_HAVE_FLOW_BLOCK_OFFLOAD)
+#if !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) || defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_ALLOC)
 #define EFX_TC_OFFLOAD	yes
 /* Further features needed for conntrack offload */
 #if defined(EFX_HAVE_NF_FLOW_TABLE_OFFLOAD) && defined(EFX_HAVE_TC_ACT_CT)
 #define EFX_CONNTRACK_OFFLOAD	yes
+#endif
 #endif
 #endif
 #endif
@@ -3098,6 +3123,10 @@ static inline bool netif_is_geneve(const struct net_device *dev)
 	return dev->rtnl_link_ops &&
 	       !strcmp(dev->rtnl_link_ops->kind, "geneve");
 }
+#endif
+#ifdef EFX_NEED_IDA_ALLOC_RANGE
+#define ida_alloc_range	ida_simple_get
+#define ida_free	ida_simple_remove
 #endif
 #ifdef EFX_HAVE_TC_FLOW_OFFLOAD
 #ifdef EFX_NEED_FLOW_RULE_MATCH_CVLAN
@@ -3412,8 +3441,20 @@ int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 #define VIRTIO_F_IN_ORDER 35
 #endif
 
-#if !defined(EFX_HAVE_GET_VQ_IRQ) || !defined(EFX_HAVE_VDPA_ALLOC_NVQS_PARAM)
-#define EFX_DISABLE_SFC_VDPA
+#if defined(VIRTIO_F_IOMMU_PLATFORM) && !defined(VIRTIO_F_ACCESS_PLATFORM)
+#define VIRTIO_F_ACCESS_PLATFORM VIRTIO_F_IOMMU_PLATFORM
+#endif
+
+#ifndef VIRTIO_NET_F_HASH_REPORT
+#define VIRTIO_NET_F_HASH_REPORT 57
+#endif
+
+#ifndef VIRTIO_NET_F_RSS
+#define VIRTIO_NET_F_RSS 60
+#endif
+
+#ifndef VIRTIO_NET_F_RSC_EXT
+#define VIRTIO_NET_F_RSC_EXT 61
 #endif
 
 #endif /* EFX_KERNEL_COMPAT_H */

@@ -510,7 +510,7 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
 	/* Initialise XDP queue information */
 	rc = xdp_rxq_info_reg(&rx_queue->xdp_rxq_info, efx->net_dev,
-			      rx_queue->core_index);
+			      rx_queue->core_index, 0);
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 #if defined(CONFIG_XDP_SOCKETS)

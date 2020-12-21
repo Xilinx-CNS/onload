@@ -49,8 +49,10 @@
 /* Used when error message is not constant; caller should also supply a
  * constant extack message with NL_SET_ERR_MSG_MOD().
  */
-#define efx_tc_err(efx, fmt, args...)	if (efx->log_tc_errs)	\
-	netif_info(efx, drv, efx->net_dev, fmt, ##args)
+#define efx_tc_err(efx, fmt, args...)	do {		\
+if (efx->log_tc_errs)					\
+	netif_info(efx, drv, efx->net_dev, fmt, ##args);\
+} while (0)
 
 static enum efx_encap_type efx_tc_indr_netdev_type(struct net_device *net_dev)
 {
@@ -217,6 +219,12 @@ const static struct rhashtable_params efx_tc_ct_ht_params = {
 	.head_offset	= offsetof(struct efx_tc_ct_entry, linkage),
 };
 #endif
+
+const static struct rhashtable_params efx_tc_recirc_ht_params = {
+	.key_len	= sizeof(u32),
+	.key_offset	= offsetof(struct efx_tc_recirc_id, chain_index),
+	.head_offset	= offsetof(struct efx_tc_recirc_id, linkage),
+};
 
 static void efx_tc_update_encap(struct efx_nic *efx,
 				struct efx_tc_encap_action *encap);
@@ -889,6 +897,11 @@ static struct efx_tc_encap_action *efx_tc_flower_create_encap_md(
 		EFX_TC_ERR_MSG(efx, extack, "Not a (supported) tunnel device but tunnel_key is set");
 		return ERR_PTR(-EOPNOTSUPP);
 	}
+	rc = efx_mae_check_encap_type_supported(efx, type);
+	if (rc < 0) {
+		EFX_TC_ERR_MSG(efx, extack, "Firmware reports no support for this tunnel type");
+		return ERR_PTR(rc);
+	}
 	encap = kzalloc(sizeof(*encap), GFP_USER);
 	if (!encap)
 		return ERR_PTR(-ENOMEM);
@@ -1193,6 +1206,60 @@ static void efx_tc_ctr_agg_free(void *ptr, void *__unused)
 	WARN_ON(refcount_read(&agg->ref));
 	WARN_ON(!list_empty(&agg->count.users)); /* shouldn't be used */
 	kfree(agg);
+}
+
+static struct efx_tc_recirc_id *efx_tc_get_recirc_id(struct efx_nic *efx, u32 chain_index)
+{
+	struct efx_tc_recirc_id *rid, *old;
+	int rc;
+
+	rid = kzalloc(sizeof(*rid), GFP_USER);
+	if (!rid)
+		return ERR_PTR(-ENOMEM);
+	rid->chain_index = chain_index;
+	old = rhashtable_lookup_get_insert_fast(&efx->tc->recirc_ht,
+						&rid->linkage,
+						efx_tc_recirc_ht_params);
+	if (old) {
+		/* don't need our new entry */
+		kfree(rid);
+		if (!refcount_inc_not_zero(&old->ref))
+			return ERR_PTR(-EAGAIN);
+		/* existing entry found */
+		rid = old;
+	} else {
+		rc = ida_alloc_range(&efx->tc->recirc_ida, 1, U8_MAX, GFP_USER);
+		if (rc < 0) {
+			rhashtable_remove_fast(&efx->tc->recirc_ht,
+					       &rid->linkage,
+					       efx_tc_recirc_ht_params);
+			kfree(rid);
+			return ERR_PTR(rc);
+		}
+		rid->fw_id = rc;
+		refcount_set(&rid->ref, 1);
+	}
+	return rid;
+}
+
+static void efx_tc_put_recirc_id(struct efx_nic *efx, struct efx_tc_recirc_id *rid)
+{
+	if (!refcount_dec_and_test(&rid->ref))
+		return; /* still in use */
+	rhashtable_remove_fast(&efx->tc->recirc_ht, &rid->linkage,
+			       efx_tc_recirc_ht_params);
+	ida_free(&efx->tc->recirc_ida, rid->fw_id);
+	kfree(rid);
+}
+
+static void efx_tc_recirc_free(void *ptr, void *arg)
+{
+	struct efx_tc_recirc_id *rid = ptr;
+	struct efx_nic *efx = arg;
+
+	WARN_ON(refcount_read(&rid->ref));
+	ida_free(&efx->tc->recirc_ida, rid->fw_id);
+	kfree(rid);
 }
 
 static void efx_tc_handle_no_channel(struct efx_nic *efx)
@@ -1527,6 +1594,10 @@ int efx_init_struct_tc(struct efx_nic *efx)
 	if (rc < 0)
 		goto fail10;
 #endif
+	rc = rhashtable_init(&efx->tc->recirc_ht, &efx_tc_recirc_ht_params);
+	if (rc < 0)
+		goto fail11;
+	ida_init(&efx->tc->recirc_ida);
 	efx->tc->reps_filter_uc = -1;
 	efx->tc->reps_filter_mc = -1;
 	/* TODO consider making this dynamically resized, rather than always
@@ -1537,13 +1608,16 @@ int efx_init_struct_tc(struct efx_nic *efx)
 					 GFP_KERNEL);
 	rc = -ENOMEM;
 	if (!efx->tc->dflt_rules)
-		goto fail11;
+		goto fail12;
 	for (i = 0; i < EFX_TC_DFLT__MAX; i++) {
 		efx->tc->dflt_rules[i].fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
 		efx->tc->dflt_rules[i].cookie = i;
 	}
 	efx->extra_channel_type[EFX_EXTRA_CHANNEL_TC] = &efx_tc_channel_type;
 	return 0;
+fail12:
+	ida_destroy(&efx->tc->recirc_ida);
+	rhashtable_destroy(&efx->tc->recirc_ht);
 fail11:
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	rhashtable_destroy(&efx->tc->ct_ht);
@@ -1584,6 +1658,9 @@ void efx_fini_struct_tc(struct efx_nic *efx)
 
 	mutex_lock(&efx->tc->mutex);
 	kfree(efx->tc->dflt_rules);
+	rhashtable_free_and_destroy(&efx->tc->recirc_ht, efx_tc_recirc_free, efx);
+	WARN_ON(!ida_is_empty(&efx->tc->recirc_ida));
+	ida_destroy(&efx->tc->recirc_ida);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	rhashtable_free_and_destroy(&efx->tc->ct_ht, efx_tc_ct_free, efx);
 	rhashtable_free_and_destroy(&efx->tc->ct_zone_ht, efx_tc_ct_zone_free, NULL);
@@ -2049,6 +2126,13 @@ static enum efx_encap_type efx_tc_egdev_udp_type(struct efx_nic *efx,
 }
 #endif
 
+static const char *efx_tc_encap_type_names[] = {
+	[EFX_ENCAP_TYPE_NONE] = "none",
+	[EFX_ENCAP_TYPE_VXLAN] = "vxlan",
+	[EFX_ENCAP_TYPE_NVGRE] = "nvgre",
+	[EFX_ENCAP_TYPE_GENEVE] = "geneve",
+};
+
 enum efx_tc_action_order {
 	EFX_TC_AO_DECAP,
 	EFX_TC_AO_VLAN1_POP,
@@ -2194,11 +2278,25 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 		type = efx_tc_egdev_udp_type(efx, &match);
 #endif
 		if (type == EFX_ENCAP_TYPE_NONE) {
-			netif_info(efx, drv, efx->net_dev, "Egress encap match on unsupported tunnel device\n");
+			efx_tc_err(efx, "Egress encap match on unsupported tunnel device\n");
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 			kfree(fr);
 #endif
 			return -EOPNOTSUPP;
+		}
+
+		rc = efx_mae_check_encap_type_supported(efx, type);
+		if (rc) {
+			if (type < ARRAY_SIZE(efx_tc_encap_type_names))
+				efx_tc_err(efx, "Firmware reports no support for %s encap match\n",
+					   efx_tc_encap_type_names[type]);
+			else
+				efx_tc_err(efx, "Firmware reports no support for type %u encap match\n",
+					   type);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+			kfree(fr);
+#endif
+			return rc;
 		}
 
 		rc = efx_tc_flower_record_encap_match(efx, &match, type);
@@ -2951,6 +3049,7 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 		struct efx_tc_ct_zone *ct_zone;
 #endif
+		struct efx_tc_recirc_id *rid;
 		struct efx_tc_ctr_agg *agg;
 
 		if (!pipe) {
@@ -2966,15 +3065,13 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 				rc = -EOPNOTSUPP;
 				goto release;
 			}
-			if (fa->chain_index > 0xff) {
-				/* TODO use indirection so that this is ok as
-				 * long as only 255 distinct values are used
-				 */
-				EFX_TC_ERR_MSG(efx, extack, "chain index too big, max is 255");
-				rc = -EOPNOTSUPP;
+			rid = efx_tc_get_recirc_id(efx, fa->chain_index);
+			if (IS_ERR(rid)) {
+				EFX_TC_ERR_MSG(efx, extack, "Failed to allocate a hardware recirculation ID for this chain_index");
+				rc = PTR_ERR(rid);
 				goto release;
 			}
-			rule->lhs_act.recirc_id = fa->chain_index;
+			rule->lhs_act.rid = rid;
 			/* TODO check fa->hw_stats */
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
 			agg = efx_tc_get_ctr_agg(efx, fa->cookie);
@@ -3065,6 +3162,8 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 	return 0;
 
 release:
+	if (rule->lhs_act.rid)
+		efx_tc_put_recirc_id(efx, rule->lhs_act.rid);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	if (rule->lhs_act.zone)
 		efx_tc_ct_unregister_zone(efx, rule->lhs_act.zone);
@@ -3097,6 +3196,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 	struct efx_tc_flow_rule *rule = NULL, *old;
 	struct efx_tc_action_set *act = NULL;
 	const struct flow_action_entry *fa;
+	struct efx_tc_recirc_id *rid;
 	struct efx_tc_match match;
 	int vport_id;
 	u32 acts_id;
@@ -3171,16 +3271,21 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 		return 0;
 	}
 
-	if (tc->common.chain_index > 0xff) {
-		/* TODO use indirection so that this is ok as
-		 * long as only 255 distinct values are used
-		 */
-		EFX_TC_ERR_MSG(efx, extack, "chain index match too big, max is 255");
-		rc = -EOPNOTSUPP;
-		goto release;
+	/* chain_index 0 is always recirc_id 0 (and does not appear in recirc_ht).
+	 * Conveniently, match.rid == NULL and match.value.recirc_id == 0 owing
+	 * to the initial memset(), so we don't need to do anything in that case.
+	 */
+	if (tc->common.chain_index) {
+		rid = efx_tc_get_recirc_id(efx, tc->common.chain_index);
+		if (IS_ERR(rid)) {
+			EFX_TC_ERR_MSG(efx, extack, "Failed to allocate a hardware recirculation ID for this chain_index");
+			rc = PTR_ERR(rid);
+			goto release;
+		}
+		match.rid = rid;
+		match.value.recirc_id = rid->fw_id;
 	}
 	match.mask.recirc_id = 0xff;
-	match.value.recirc_id = tc->common.chain_index;
 
 	/* AR table can't match on DO_CT (+trk).  But a commonly used pattern is
 	 * +trk+est, which is strictly implied by +est, so rewrite it to that.
@@ -3555,6 +3660,8 @@ release:
 	/* We failed to insert the rule, so free up any entries we created in
 	 * subsidiary tables.
 	 */
+	if (match.rid)
+		efx_tc_put_recirc_id(efx, match.rid);
 	if (act)
 		efx_tc_free_action_set(efx, act, false);
 	if (rule) {
@@ -3576,6 +3683,8 @@ static void efx_tc_delete_rule(struct efx_nic *efx, struct efx_tc_flow_rule *rul
 
 	/* Release entries in subsidiary tables */
 	efx_tc_free_action_set_list(efx, &rule->acts, true);
+	if (rule->match.rid)
+		efx_tc_put_recirc_id(efx, rule->match.rid);
 	if (rule->match.encap)
 		efx_tc_flower_release_encap_match(efx, rule->match.encap);
 	rule->fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
@@ -3601,6 +3710,8 @@ static int efx_tc_flower_destroy(struct efx_nic *efx,
 			efx_tc_put_ctr_agg(efx, lhs_rule->lhs_act.count);
 		efx_mae_remove_lhs_rule(efx, lhs_rule);
 		/* Delete it from SW */
+		if (lhs_rule->lhs_act.rid)
+			efx_tc_put_recirc_id(efx, lhs_rule->lhs_act.rid);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 		if (lhs_rule->lhs_act.zone)
 			efx_tc_ct_unregister_zone(efx, lhs_rule->lhs_act.zone);
@@ -4150,12 +4261,6 @@ void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
 }
 
 #ifdef CONFIG_SFC_DEBUGFS
-static const char *efx_tc_debugfs_encap_types[] = {
-	[EFX_ENCAP_TYPE_NONE] = "none",
-	[EFX_ENCAP_TYPE_VXLAN] = "vxlan",
-	[EFX_ENCAP_TYPE_GENEVE] = "geneve",
-};
-
 static void efx_tc_debugfs_dump_encap_match(struct seq_file *file,
 					    struct efx_tc_encap_match *encap)
 {
@@ -4168,9 +4273,9 @@ static void efx_tc_debugfs_dump_encap_match(struct seq_file *file,
 		seq_printf(file, "\t\tdst_ip6 = %pI6c\n", &encap->dst_ip6);
 	}
 	seq_printf(file, "\t\tudp_dport = %u\n", be16_to_cpu(encap->udp_dport));
-	if (encap->tun_type < ARRAY_SIZE(efx_tc_debugfs_encap_types))
+	if (encap->tun_type < ARRAY_SIZE(efx_tc_encap_type_names))
 		seq_printf(file, "\t\ttun_type = %s\n",
-			   efx_tc_debugfs_encap_types[encap->tun_type]);
+			   efx_tc_encap_type_names[encap->tun_type]);
 	else
 		seq_printf(file, "\t\ttun_type = %u\n", encap->tun_type);
 }
@@ -4367,9 +4472,9 @@ static void efx_tc_debugfs_dump_one_rule(struct seq_file *file,
 			bool v6 = act->encap_md->type & EFX_ENCAP_FLAG_IPV6;
 
 			seq_printf(file, "\t\t\tencap (%#x)\n", act->encap_md->fw_id);
-			if (type < ARRAY_SIZE(efx_tc_debugfs_encap_types))
+			if (type < ARRAY_SIZE(efx_tc_encap_type_names))
 				seq_printf(file, "\t\t\t\ttype = %s IPv%d\n",
-					   efx_tc_debugfs_encap_types[type],
+					   efx_tc_encap_type_names[type],
 					   v6 ? 6 : 4);
 			else
 				seq_printf(file, "\t\t\t\ttype = %u\n", act->encap_md->type);
@@ -4490,6 +4595,31 @@ static int efx_tc_debugfs_dump_mae_counters(struct seq_file *file, void *data)
 	return 0;
 }
 
+static int efx_tc_debugfs_dump_recirc_ids(struct seq_file *file, void *data)
+{
+	struct efx_tc_recirc_id *rid;
+	struct rhashtable_iter walk;
+	struct efx_nic *efx = data;
+
+	mutex_lock(&efx->tc->mutex);
+	if (efx->tc->up) {
+		rhashtable_walk_enter(&efx->tc->recirc_ht, &walk);
+		rhashtable_walk_start(&walk);
+		while ((rid = rhashtable_walk_next(&walk)) != NULL) {
+			if (IS_ERR(rid))
+				continue;
+			seq_printf(file, "%#x: %u\n", rid->fw_id, rid->chain_index);
+		}
+		rhashtable_walk_stop(&walk);
+		rhashtable_walk_exit(&walk);
+	} else {
+		seq_printf(file, "tc is down\n");
+	}
+	mutex_unlock(&efx->tc->mutex);
+
+	return 0;
+}
+
 static void efx_tc_debugfs_dump_lhs_rule(struct seq_file *file,
 					 struct efx_tc_lhs_rule *rule)
 {
@@ -4500,7 +4630,7 @@ static void efx_tc_debugfs_dump_lhs_rule(struct seq_file *file,
 	efx_tc_debugfs_dump_match(file, &rule->match);
 
 	seq_printf(file, "\tlhs_action\n");
-	seq_printf(file, "\t\trecirc_id %#02x\n", act->recirc_id);
+	seq_printf(file, "\t\trecirc_id %#02x\n", act->rid ? act->rid->fw_id : 0);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	if (act->zone)
 		seq_printf(file, "\t\tct zone %u\n", act->zone->zone);
@@ -4698,6 +4828,24 @@ static int efx_tc_debugfs_dump_mae_or_caps(struct seq_file *file, void *data)
 	return efx_tc_debugfs_dump_mae_caps(file, efx->tc->caps->outer_rule_fields);
 }
 
+static void efx_tc_debugfs_dump_mae_tunnel_cap(struct seq_file *file,
+					      struct efx_nic *efx,
+					      enum efx_encap_type encap)
+{
+	if (!efx_mae_check_encap_type_supported(efx, encap))
+		seq_printf(file, "%s\n", efx_tc_encap_type_names[encap]);
+}
+
+static int efx_tc_debugfs_dump_mae_tunnel_caps(struct seq_file *file, void *data)
+{
+	struct efx_nic *efx = data;
+
+	efx_tc_debugfs_dump_mae_tunnel_cap(file, efx, EFX_ENCAP_TYPE_VXLAN);
+	efx_tc_debugfs_dump_mae_tunnel_cap(file, efx, EFX_ENCAP_TYPE_NVGRE);
+	efx_tc_debugfs_dump_mae_tunnel_cap(file, efx, EFX_ENCAP_TYPE_GENEVE);
+	return 0;
+}
+
 static int efx_tc_debugfs_dump_action_prios(struct seq_file *file, void *data)
 {
 	struct efx_nic *efx = data;
@@ -4740,8 +4888,10 @@ static struct efx_debugfs_parameter efx_tc_debugfs[] = {
 	_EFX_RAW_PARAMETER(lhs_rules, efx_tc_debugfs_dump_lhs_rules),
 	_EFX_RAW_PARAMETER(mae_default_rules, efx_tc_debugfs_dump_default_rules),
 	_EFX_RAW_PARAMETER(mae_counters, efx_tc_debugfs_dump_mae_counters),
+	_EFX_RAW_PARAMETER(mae_recirc_ids, efx_tc_debugfs_dump_recirc_ids),
 	_EFX_RAW_PARAMETER(mae_action_rule_caps, efx_tc_debugfs_dump_mae_ar_caps),
 	_EFX_RAW_PARAMETER(mae_outer_rule_caps, efx_tc_debugfs_dump_mae_or_caps),
+	_EFX_RAW_PARAMETER(mae_tunnel_caps, efx_tc_debugfs_dump_mae_tunnel_caps),
 	_EFX_RAW_PARAMETER(mae_prios, efx_tc_debugfs_dump_action_prios),
 	_EFX_RAW_PARAMETER(mae_neighs, efx_tc_debugfs_dump_mae_neighs),
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)

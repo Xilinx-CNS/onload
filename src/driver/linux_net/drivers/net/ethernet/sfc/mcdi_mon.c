@@ -672,6 +672,7 @@ static const u32 efx_in_config[] = {
 	EFX_HWMON_IN_CONFIG,
 	EFX_HWMON_IN_CONFIG,
 	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
 	0
 };
 
@@ -681,6 +682,9 @@ static const struct hwmon_channel_info efx_in = {
 };
 
 static const u32 efx_curr_config[] = {
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
 	EFX_HWMON_CURR_CONFIG,
 	EFX_HWMON_CURR_CONFIG,
 	EFX_HWMON_CURR_CONFIG,

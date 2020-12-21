@@ -92,7 +92,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.3.1001"
+#define EFX_DRIVER_VERSION	"5.3.4.1000"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -1532,7 +1532,7 @@ struct efx_mtd {
  * @vf_init_count: Number of VFs that have been fully initialised.
  * @vi_scale: log2 number of vnics per VF.
  * @ptp_data: PTP state data
- * @phc_efx: The adapter exposing the PHC clock.
+ * @phc_ptp_data: PTP state data of the adapter exposing the PHC clock.
  * @node_ptp_all_funcs: List node for maintaining list of all functions.
  *	Serialised by ptp_all_funcs_list_lock
  * @netdev_notifier: Netdevice notifier.
@@ -1820,7 +1820,7 @@ struct efx_nic {
 
 #ifdef CONFIG_SFC_PTP
 	struct efx_ptp_data *ptp_data;
-	struct efx_nic *phc_efx;
+	struct efx_ptp_data *phc_ptp_data;
 	struct list_head node_ptp_all_funcs;
 	bool ptp_unavailable_warned;
 #endif

@@ -25,7 +25,7 @@
 #include <trace/events/sfc.h>
 #endif
 
-#define EFX_EF100_PCI_DEFAULT_BAR	2
+#define EFX_EF100_PCI_DEFAULT_BAR	0
 
 /* Number of bytes at start of vendor specified extended capability that indicate
  * that the capability is vendor specified. i.e. offset from value returned by

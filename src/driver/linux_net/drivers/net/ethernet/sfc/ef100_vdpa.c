@@ -16,7 +16,6 @@
 #include "mcdi_filters.h"
 
 #if defined(CONFIG_SFC_VDPA)
-#if !defined(EFX_USE_KCOMPAT) && !defined(EFX_DISABLE_SFC_VDPA)
 extern struct vdpa_config_ops ef100_vdpa_config_ops;
 
 static int
@@ -474,8 +473,11 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 
 	vdpa_nic = vdpa_alloc_device(struct ef100_vdpa_nic,
 				     vdpa_dev, &efx->pci_dev->dev,
-				     &ef100_vdpa_config_ops,
-				     allocated_vis - 1);
+				     &ef100_vdpa_config_ops
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NVQS_PARAM)
+				     , allocated_vis - 1
+#endif
+				     );
 	if (!vdpa_nic) {
 		pci_err(efx->pci_dev,
 			"vDPA device allocation failed for vf: %u\n",
@@ -558,6 +560,5 @@ void ef100_vdpa_delete(struct efx_nic *efx)
 	}
 }
 
-#endif
 #endif
 

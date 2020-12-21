@@ -24,6 +24,7 @@
 #endif
 #include <net/netfilter/nf_flow_table.h>
 #endif
+#include <linux/idr.h>
 #include "ef100_rep.h"
 
 struct efx_tc_counter {
@@ -158,10 +159,18 @@ struct efx_tc_encap_match {
 	u32 fw_id; /* index of this entry in firmware encap match table */
 };
 
+struct efx_tc_recirc_id {
+	u32 chain_index;
+	struct rhash_head linkage;
+	refcount_t ref;
+	u8 fw_id; /* index allocated for use in the MAE */
+};
+
 struct efx_tc_match {
 	struct efx_tc_match_fields value;
 	struct efx_tc_match_fields mask;
 	struct efx_tc_encap_match *encap;
+	struct efx_tc_recirc_id *rid;
 };
 
 struct efx_tc_action_set_list {
@@ -188,7 +197,7 @@ struct efx_tc_ct_zone {
 
 struct efx_tc_lhs_action {
 	u16 tun_type; /* enum efx_encap_type */
-	u8 recirc_id;
+	struct efx_tc_recirc_id *rid;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	struct efx_tc_ct_zone *zone; /* For now no filtering on VLAN or VNI (which we would do via recirc anyway), so this is a pure zone rather than a domain */
 #endif
@@ -263,6 +272,8 @@ enum efx_tc_rule_prios {
  * @ct_zone_ht: Hashtable of TC conntrack flowtable bindings
  * @ct_ht: Hashtable of TC conntrack flow entries
  * @neigh_ht: Hashtable of neighbour watches (&struct efx_neigh_binder)
+ * @recirc_ht: Hashtable of recirculation ID mappings (&struct efx_tc_recirc_id)
+ * @recirc_ida: Recirculation ID allocator
  * @reps_mport_id: MAE port allocated for representor RX
  * @reps_filter_uc: VNIC filter for representor unicast RX (promisc)
  * @reps_filter_mc: VNIC filter for representor multicast RX (allmulti)
@@ -289,6 +300,8 @@ struct efx_tc_state {
 	struct rhashtable ct_ht;
 #endif
 	struct rhashtable neigh_ht;
+	struct rhashtable recirc_ht;
+	struct ida recirc_ida;
 	u32 reps_mport_id;
 	u32 reps_filter_uc, reps_filter_mc;
 	u16 reps_mport_vport_id;

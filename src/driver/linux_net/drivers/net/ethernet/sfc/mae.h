@@ -50,6 +50,7 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 				 const struct efx_tc_match_fields *mask,
 				 struct netlink_ext_ack *extack);
 int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv);
+int efx_mae_check_encap_type_supported(struct efx_nic *efx, enum efx_encap_type typ);
 
 int efx_mae_allocate_counter(struct efx_nic *efx, struct efx_tc_counter *cnt);
 int efx_mae_free_counter(struct efx_nic *efx, u32 id);

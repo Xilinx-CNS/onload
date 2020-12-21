@@ -15,7 +15,6 @@
 #include "mcdi_pcol.h"
 
 #if defined(CONFIG_SFC_VDPA)
-#if !defined(EFX_USE_KCOMPAT) && !defined(EFX_DISABLE_SFC_VDPA)
 
 #ifdef VDPA_TEST
 #include <uapi/linux/virtio_config.h>
@@ -369,5 +368,4 @@ int efx_vdpa_get_link_details(struct efx_nic *efx, u16 *link_up,
 #endif
 	return 0;
 }
-#endif
 #endif
