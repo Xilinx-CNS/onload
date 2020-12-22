@@ -7,6 +7,7 @@
 
 struct efrm_client;
 struct net_device;
+struct pci_dev;
 
 
 struct efrm_client_callbacks {
@@ -49,6 +50,7 @@ extern int efrm_client_get_ifindex(struct efrm_client *);
 extern int efrm_client_accel_allowed(struct efrm_client *client);
 
 extern struct efhw_nic* efhw_nic_find(const struct net_device *);
+struct efhw_nic* efhw_nic_find_by_pci_dev(const struct pci_dev *);
 
 /* Functions to explicitly register/unregister a network device as
  * being "acceleratable" by Onload. This is used for devices detected

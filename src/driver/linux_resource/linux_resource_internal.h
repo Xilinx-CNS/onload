@@ -61,8 +61,6 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned int opts,
 	     unsigned timer_quantum_ns);
 extern int
 efrm_nic_unplug(struct efhw_nic* nic);
-extern void
-efrm_nic_rename(struct efhw_nic* nic, struct net_device *net_dev);
 
 extern int efrm_install_proc_entries(void);
 extern void efrm_uninstall_proc_entries(void);
@@ -93,5 +91,8 @@ struct cmd_context {
 };
 int rmgr_set_location(struct cmd_context* ctx,
                       struct ethtool_rx_flow_spec* fsp);
+extern int efrm_nic_set_accel_allowed(struct efhw_nic* nic,
+				      int enable);
+extern int efrm_nic_get_accel_allowed(struct efhw_nic* nic);
 
 #endif  /* __LINUX_RESOURCE_INTERNAL__ */

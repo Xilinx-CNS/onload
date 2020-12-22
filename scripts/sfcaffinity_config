@@ -376,7 +376,7 @@ def sfc_affinity_check():
         err("sfc_resource driver is not loaded")
         return False
     info("sfc_resource driver is loaded")
-    path = '/proc/driver/sfc_resource/new_interface'
+    path = '/sys/module/sfc_resource'
     try:
         os.stat(path)
         info("%s is present" % path)
@@ -393,9 +393,8 @@ def sfc_affinity_new_interface(ethx, cpu_to_q):
         if do_system("/sbin/modprobe sfc_resource") != 0:
             err("Failed to load sfc_resource driver")
             return
-    s = "%d %d %s" % (ethx.ifindex(), ethx.n_rxqs(),
-                      ' '.join([str(i) for i in cpu_to_q]))
-    cmd = "echo %s >/proc/driver/sfc_resource/new_interface" % s
+    s = ' '.join([str(i) for i in cpu_to_q])
+    cmd = "echo %s >/sys/class/net/%s/device/sfc_resource/cpu2rxq" % (s, ethx)
     if do_system(cmd) != 0:
         err("Failed to register interface %s" % ethx)
         err("Command was:")
@@ -404,12 +403,12 @@ def sfc_affinity_new_interface(ethx, cpu_to_q):
 
 
 def sfc_affinity_get_cpu2rxq(ethx):
-    return file_get_int_list('/proc/driver/sfc_resource/%s/cpu2rxq' % ethx)
+    return file_get_int_list('/sys/class/net/%s/device/sfc_resource/cpu2rxq' % ethx)
 
 
 def sfc_affinity_intf_is_registered(ethx):
     try:
-        os.stat('/proc/driver/sfc_resource/%s' % ethx)
+        os.stat('/sys/class/net/%s/device/sfc_resource/cpu2rxq' % ethx)
         return True
     except:
         return False

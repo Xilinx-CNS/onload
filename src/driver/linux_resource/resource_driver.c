@@ -67,6 +67,7 @@
 #include <ci/driver/internal.h>
 #include "efrm_internal.h"
 #include "sfcaffinity.h"
+#include <ci/driver/resource/linux_efhw_nic.h>
 
 MODULE_AUTHOR("Solarflare Communications");
 MODULE_LICENSE("GPL");
@@ -96,12 +97,13 @@ EXPORT_SYMBOL(efrm_is_pio_enabled);
 static int enable_accel_by_default = 1;
 module_param(enable_accel_by_default, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(enable_accel_by_default,
-                 "Allow Onload acceleration and use of ef_vi of all network "
-				 "devices by default. Individual devices may be enabled or "
-				 "disabled by writing to "
-				 "/proc/driver/sfc_resource/<name>/enable. If this parameter "
-				 "is set to zero then devices must be enabled in this way "
-				 "to allow Onload acceleration or use of ef_vi.");
+		 "Allow Onload acceleration and use of ef_vi of all network "
+		 "devices by default. Individual devices may be enabled or "
+		 "disabled by writing to "
+		 "/sys/class/net/<name>/device/sfc_resource/enable. "
+		 "If this parameter is set to zero then devices must be "
+		 "enabled in this way to allow Onload acceleration or "
+		 "use of ef_vi.");
 
 int enable_driverlink = 1;
 module_param(enable_driverlink, int, S_IRUGO | S_IWUSR);
@@ -315,6 +317,9 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 		rc = linux_efhw_nic_map_ctr_ap(lnic);
 		if (rc < 0)
 			goto fail;
+		rc = efrm_affinity_interface_probe(lnic);
+		if (rc < 0)
+			goto fail;
 	}
 
 	rc = efrm_nic_ctor(&lnic->efrm_nic, res_dim);
@@ -328,7 +333,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 			iounmap(nic->bar_ioaddr);
 		}
 		nic->bar_ioaddr = 0;
-		goto fail;
+		goto fail2;
 	}
 
 	if (enable_accel_by_default)
@@ -337,7 +342,8 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 	efrm_init_resource_filter(dev ? &dev->dev : &net_dev->dev, net_dev->ifindex);
 
 	return 0;
-
+fail2:
+	efrm_affinity_interface_remove(lnic);
 fail:
 	if( dev )
 		pci_dev_put(dev);
@@ -398,6 +404,8 @@ static void linux_efrm_nic_dtor(struct linux_efhw_nic *lnic)
 	efrm_nic_dtor(&lnic->efrm_nic);
 	efhw_nic_dtor(nic);
 
+	efrm_affinity_interface_remove(lnic);
+
 	if (nic->bar_ioaddr && (nic->pci_dev != NULL)) {
 		iounmap(nic->bar_ioaddr);
 		nic->bar_ioaddr = 0;
@@ -447,104 +455,6 @@ efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
 /* A count of how many NICs this driver knows about. */
 static int n_nics_probed;
 
-
-/****************************************************************************
- *
- * procfs 'enable' file stuff
- *
- ****************************************************************************/
-
-
-static ssize_t efrm_nic_enable_write(struct file *file,
-                                     const char __user *ubuf,
-                                     size_t count, loff_t *ppos)
-{
-	struct linux_efhw_nic* lnic = PDE_DATA(file_inode(file));
-	struct efrm_nic* nic = &lnic->efrm_nic;
-	int enable;
-
-	/* kstrtobool would be preferable, but it's 4.6+ only (and RHEL7) */
-	int rc = kstrtoint_from_user(ubuf, count, 10, &enable);
-	if (rc) {
-		EFRM_ERR("%s: Invalid data in dev/enable write, rc=%d.",
-		         __func__, rc);
-		return rc;
-	}
-
-	spin_lock_bh(&nic->lock);
-	if (enable)
-		nic->rnic_flags |= EFRM_NIC_FLAG_ADMIN_ENABLED;
-	else
-		nic->rnic_flags &=~ EFRM_NIC_FLAG_ADMIN_ENABLED;
-	spin_unlock_bh(&nic->lock);
-
-	return count;
-}
-
-
-static int efrm_nic_enable_read_proc(struct seq_file *seq, void *s)
-{
-	struct linux_efhw_nic* lnic = seq->private;
-	struct efrm_nic* nic = &lnic->efrm_nic;
-	int enable;
-
-	spin_lock_bh(&nic->lock);
-	enable = (nic->rnic_flags & EFRM_NIC_FLAG_ADMIN_ENABLED) != 0;
-	spin_unlock_bh(&nic->lock);
-	seq_printf(seq, "%d\n", enable);
-	return 0;
-}
-
-
-static int efrm_nic_enable_open_proc(struct inode *inode, struct file *file)
-{
-	return single_open(file, efrm_nic_enable_read_proc, PDE_DATA(inode));
-}
-
-
-static const struct proc_ops efrm_nic_enable_fops_proc = {
-	PROC_OPS_SET_OWNER
-	.proc_open	= efrm_nic_enable_open_proc,
-	.proc_read	= seq_read,
-	.proc_lseek	= seq_lseek,
-	.proc_write     = efrm_nic_enable_write,
-	.proc_release	= single_release,
-};
-
-
-static void efrm_nic_proc_intf_added(const char* intf_name,
-                                     struct linux_efhw_nic* nic)
-{
-	EFRM_ASSERT(nic->proc_dir == NULL);
-	EFRM_ASSERT(nic->enable_file == NULL);
-	nic->proc_dir = efrm_proc_intf_dir_get(intf_name);
-	if (nic->proc_dir) {
-		nic->enable_file = efrm_proc_create_file("enable", 0644,
-		                                         nic->proc_dir,
-		                                         &efrm_nic_enable_fops_proc,
-												 nic);
-	}
-	efrm_affinity_interface_up(nic);
-	/* efrm_proc_* already logged warnings on error, no need to log more
-	 * here */
-}
-
-
-static void efrm_nic_proc_intf_removed(struct linux_efhw_nic* nic)
-{
-	if (nic->enable_file) {
-		EFRM_ASSERT(nic->proc_dir != NULL);
-		efrm_proc_remove_file(nic->enable_file);
-		nic->enable_file = NULL;
-	}
-	efrm_affinity_interface_down(nic);
-	if (nic->proc_dir) {
-		efrm_proc_intf_dir_put(nic->proc_dir);
-		nic->proc_dir = NULL;
-	}
-}
-
-
 static struct linux_efhw_nic*
 efrm_get_redisovered_nic(struct pci_dev* dev,
 			 const struct efhw_device_type* dev_type)
@@ -585,6 +495,31 @@ efrm_get_redisovered_nic(struct pci_dev* dev,
 	 * unloads. */
 
 	return lnic;
+}
+
+
+int efrm_nic_set_accel_allowed(struct efhw_nic* nic,
+			       int enable)
+{
+	struct efrm_nic* rnic = efrm_nic(nic);
+	spin_lock_bh(&rnic->lock);
+	if (enable)
+		rnic->rnic_flags |= EFRM_NIC_FLAG_ADMIN_ENABLED;
+	else
+		rnic->rnic_flags &=~ EFRM_NIC_FLAG_ADMIN_ENABLED;
+	spin_unlock_bh(&rnic->lock);
+	return 0;
+}
+
+
+int efrm_nic_get_accel_allowed(struct efhw_nic* nic)
+{
+	struct efrm_nic* rnic = efrm_nic(nic);
+	int enabled;
+	spin_lock_bh(&rnic->lock);
+	enabled = (rnic->rnic_flags & EFRM_NIC_FLAG_ADMIN_ENABLED) != 0;
+	spin_unlock_bh(&rnic->lock);
+	return enabled;
 }
 
 /****************************************************************************
@@ -682,8 +617,6 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 		registered_nic = 1;
 
 		++nics_probed_delta;
-
-		efrm_nic_proc_intf_added(net_dev->name, lnic);
 	}
 
 	lnic->dl_device = dl_device;
@@ -759,18 +692,6 @@ failed:
 		efrm_resources_fini();
 	return rc;
 }
-
-
-void
-efrm_nic_rename(struct efhw_nic* nic, struct net_device *net_dev)
-{
-	struct linux_efhw_nic* lnic = linux_efhw_nic(nic);
-	EFRM_ASSERT(nic != NULL);
-	EFRM_ASSERT(net_dev != NULL);
-	efrm_nic_proc_intf_removed(lnic);
-	efrm_nic_proc_intf_added(net_dev->name, lnic);
-}
-
 
 int
 efrm_nic_unplug(struct efhw_nic* nic)
@@ -880,7 +801,6 @@ static void efrm_nic_del(struct linux_efhw_nic *lnic)
 	EFRM_TRACE("%s:", __func__);
 
 	efrm_driver_unregister_nic(&lnic->efrm_nic);
-	efrm_nic_proc_intf_removed(lnic);
 
 	/* Close down hardware and free resources. */
 	if (--n_nics_probed == 0)
@@ -976,7 +896,6 @@ static int init_sfc_resource(void)
 			  __func__);
 	}
 	efrm_filter_install_proc_entries();
-	efrm_affinity_install_proc_entries();
 
 	/* Register the driver so that our 'probe' function is called for
 	 * each EtherFabric device in the system.
@@ -1001,7 +920,6 @@ static int init_sfc_resource(void)
 	return 0;
 
 failed_driverlink:
-	efrm_affinity_remove_proc_entries();
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();
 	efrm_driver_stop();
@@ -1033,7 +951,6 @@ static void cleanup_sfc_resource(void)
 	efrm_nic_shutdown_all();
 	efrm_nic_del_all();
 
-	efrm_affinity_remove_proc_entries();
 	efrm_filter_shutdown();
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();

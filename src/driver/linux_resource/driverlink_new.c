@@ -48,6 +48,8 @@
 #include <ci/efhw/nic.h>
 #include <ci/tools/sysdep.h>
 #include <ci/internal/transport_config_opt.h>
+#include "sfcaffinity.h"
+#include <ci/driver/resource/linux_efhw_nic.h>
 
 /* The DL driver and associated calls */
 static int efrm_dl_probe(struct efx_dl_device *efrm_dev,
@@ -144,6 +146,91 @@ init_vi_resource_dimensions(struct vi_resource_dimensions *rd,
 }
 
 
+static ssize_t enable_store(struct device *dev,
+			    struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct efhw_nic* nic;
+	bool enable;
+	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	if (!nic)
+		return -ENOENT;
+	if (strtobool(buf, &enable) < 0) {
+		EFRM_ERR("%s: Cannot parse data written to %s/onload_enable.",
+		         __func__, to_net_dev(dev)->name);
+		return -EINVAL;
+	}
+	efrm_nic_set_accel_allowed(nic, enable);
+	return count;
+}
+
+
+static ssize_t enable_show(struct device *dev,
+			   struct device_attribute *attr,
+			   char *buf_out)
+{
+	struct efhw_nic* nic;
+	int enabled;
+	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	if (!nic)
+		return -ENOENT;
+	enabled = efrm_nic_get_accel_allowed(nic);
+	return scnprintf(buf_out, PAGE_SIZE, "%d\n", enabled);
+}
+
+
+static ssize_t cpu2rxq_store(struct device *dev,
+			    struct device_attribute *attr,
+			    const char *buf, size_t count)
+{
+	struct efhw_nic* nic;
+	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	if (!nic)
+		return -ENOENT;
+	return efrm_affinity_store_cpu2rxq(linux_efhw_nic(nic), buf, count);
+}
+
+
+static ssize_t cpu2rxq_show(struct device *dev,
+			   struct device_attribute *attr,
+			   char *buf_out)
+{
+	struct efhw_nic* nic;
+	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	if (!nic)
+		return -ENOENT;
+	return efrm_affinity_show_cpu2rxq(linux_efhw_nic(nic), buf_out);
+}
+
+
+static DEVICE_ATTR_RW(enable);
+static DEVICE_ATTR_RW(cpu2rxq);
+
+static struct attribute *sfc_resource_attrs[] = {
+	&dev_attr_enable.attr,
+	&dev_attr_cpu2rxq.attr,
+	NULL,
+};
+static const struct attribute_group sfc_resource_group = {
+	.name = "sfc_resource",
+	.attrs = sfc_resource_attrs,
+};
+
+static void efrm_nic_add_sysfs(const struct net_device* net_dev, struct pci_dev *dev)
+{
+	int rc = sysfs_create_group(&dev->dev.kobj, &sfc_resource_group);
+	if (!rc)
+		return;
+	EFRM_WARN("%s: Sysfs group `sfc_resource` creation failed intf=%s, rc=%d.",
+		  __func__, net_dev->name, rc);
+}
+
+static void efrm_nic_del_sysfs(struct pci_dev *dev)
+{
+	sysfs_remove_group(&dev->dev.kobj, &sfc_resource_group);
+}
+
+
 static int
 efrm_dl_probe(struct efx_dl_device *efrm_dev,
 	      const struct net_device *net_dev,
@@ -195,6 +282,7 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 	if (rc != 0)
 		return rc;
 
+	efrm_nic_add_sysfs(net_dev, efrm_dev->pci_dev);
 	/* Store pointer to net driver's driverlink device info.  It
 	 * is guaranteed not to move, and we can use it to update our
 	 * state in a reset_resume callback
@@ -217,6 +305,7 @@ static void efrm_dl_remove(struct efx_dl_device *efrm_dev)
 {
 	struct efhw_nic *nic = efrm_dev->priv;
 	EFRM_TRACE("%s called", __func__);
+	efrm_nic_del_sysfs(efrm_dev->pci_dev);
 	if (nic) {
 		struct net_device* net_dev = efhw_nic_get_net_dev(nic);
 		struct linux_efhw_nic *lnic = linux_efhw_nic(nic);
@@ -406,7 +495,6 @@ static int efrm_netdev_event(struct notifier_block *this,
 		nic = efhw_nic_from_netdev(net_dev, &efrm_dl_driver);
 		if (nic) {
 			efrm_filter_rename(nic, net_dev);
-			efrm_nic_rename(nic, net_dev);
 		}
 	}
 
