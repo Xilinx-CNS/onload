@@ -537,5 +537,6 @@ void cp_populate_llap_hwports(struct cp_session* s, ci_ifid_t ifindex,
     }
     cp_llap_set_hwports(s, mib, llap_id, hwports, hwports,
                         mib->llap[llap_id].encap.type, ! mib_i);
+    cp_set_hwport_xdp_prog_id(s, mib, hwport, mib->llap[llap_id].xdp_prog_id);
   MIB_UPDATE_LOOP_END(mib, s)
 }
