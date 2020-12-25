@@ -204,7 +204,6 @@ static struct protection_domain* pd_by_owner(struct efhw_nic* nic, int owner_id)
 /* Invoke the bpf() syscall args is assumed to be kernel memory */
 static int xdp_sys_bpf(int cmd, union bpf_attr* attr)
 {
-#if defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
   struct pt_regs regs;
   static asmlinkage long (*sys_call)(const struct pt_regs*) = NULL;
 
@@ -227,9 +226,6 @@ static int xdp_sys_bpf(int cmd, union bpf_attr* attr)
     set_fs(oldfs);
     return rc;
   }
-#else
-  return -ENOSYS;
-#endif
 }
 
 /* Allocate an FD for a file. Some operations need them. */
@@ -900,9 +896,6 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 {
 	int rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr);
 
-/* This ifdefiry is copied from xdp_sys_bpf above, because this function is
- * useless otherwise. */
-#if defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
 	static asmlinkage long (*set)(const struct pt_regs*) = NULL;
 	struct pt_regs regs;
 	mm_segment_t oldfs;
@@ -936,7 +929,6 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		return rc;
 
 	rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr);
-#endif
 	return rc;
 }
 static void

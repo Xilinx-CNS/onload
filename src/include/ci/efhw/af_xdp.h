@@ -4,7 +4,19 @@
 #ifndef CI_EFHW_AF_XDP_H
 #define CI_EFHW_AF_XDP_H
 
-#ifdef CONFIG_XDP_SOCKETS
+#include <linux/unistd.h>
+#include <ci/efrm/syscall.h>
+
+/* For Onload over AF_XDP we need:
+ * - CONFIG_XDP_SOCKETS
+ * - __NR_bpf
+ * - EFRM_SYSCALL_PTREGS
+ *
+ * x86 is probably unnecessary limitation, but we do not use it on ARM64.
+ *
+ * linux-5.10 is temporary disabled (ON-12686)
+ */
+#if defined(CONFIG_XDP_SOCKETS) && defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64) && LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 #define EFHW_HAS_AF_XDP
 #endif
 
