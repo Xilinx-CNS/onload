@@ -63,10 +63,6 @@ static void dup2_complete(citp_fdinfo* prev_newfdi,
 #endif
 
 
-#if ! CI_CFG_USERSPACE_SYSCALL
-#define ci_sys_syscall syscall
-#endif
-
 static void exit_with_status(int status)
 {
   /* oo_exit_hook() takes too long, we should exit ungraciously */

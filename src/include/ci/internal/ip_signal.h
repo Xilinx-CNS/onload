@@ -31,6 +31,10 @@
   (sa)->sa_flags & SA_RESETHAND ? " RESETHAND" : "", \
   (sa)->sa_mask.__val[0]
 
+#if ! CI_CFG_USERSPACE_SYSCALL
+#define ci_sys_syscall syscall
+#endif
+
 
 typedef struct oo_sig_thread_state citp_signal_info;
 
