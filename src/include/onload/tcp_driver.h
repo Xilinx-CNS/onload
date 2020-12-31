@@ -85,7 +85,7 @@ typedef struct efab_tcp_driver_s {
   ci_uint32         load_numa_node;
 
   /* Timesync object to be mmaped to UL with each netif */
-  ci_shmbuf_t         shmbuf;
+  struct page        *timesync_page;
   struct oo_timesync *timesync;
 
 } efab_tcp_driver_t;

@@ -1493,6 +1493,9 @@ struct oo_timesync {
   ci_uint32 generation_count;       /* to synchronise with local copy */
 };
 
+/* This structure is mmaped to UL as a single page: */
+CI_BUILD_ASSERT(sizeof(struct oo_timesync) <= CI_PAGE_SIZE);
+
 
 
 /*********************************************************************

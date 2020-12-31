@@ -76,7 +76,7 @@ tcp_helper_rm_nopage_timesync(tcp_helper_resource_t* trs,
 {
   OO_DEBUG_SHM(ci_log("%s: %u", __FUNCTION__, trs->id));
 
-  return ci_shmbuf_page(&efab_tcp_driver.shmbuf, offset);
+  return efab_tcp_driver.timesync_page;
 }
 
 
@@ -255,21 +255,15 @@ static int tcp_helper_rm_mmap_timesync(tcp_helper_resource_t* trs,
                                        unsigned long bytes,
                                        struct vm_area_struct* vma, int is_writable)
 {
-  int rc = 0;
-  int map_num = 0;
-  unsigned long offset = 0;
-
   OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
 
   if( is_writable )
     return -EPERM;
 
-  rc = ci_shmbuf_mmap(&efab_tcp_driver.shmbuf, offset, &bytes, vma,
-                      &map_num, &offset);
-  if( rc < 0 )  return rc;
+  bytes -= PAGE_SIZE;
   ci_assert_equal(bytes, 0);
 
-  return rc;
+  return 0;
 }
 
 

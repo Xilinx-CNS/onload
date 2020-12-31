@@ -2591,7 +2591,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
 #if CI_CFG_CTPIO && CI_CFG_USE_CTPIO
   ns->ctpio_mmap_bytes = trs->ctpio_mmap_bytes;
 #endif
-  ns->timesync_bytes = ci_shmbuf_size(&efab_tcp_driver.shmbuf);
+  ns->timesync_bytes = PAGE_SIZE;
 
   OO_DEBUG_MEMSIZE(ci_log("helper=%u map_bytes=%u (0x%x)",
                           trs->id,
@@ -5593,17 +5593,6 @@ static int efab_is_onloaded(void* ctx, struct net* netns, ci_ifid_t ifindex)
 #endif
 
 
-/* Allocates a shmbuf and faults in all of its pages.  Historically,
- * ci_contig_shmbuf_t was a different type from ci_shmbuf_t with a completely
- * different implementation, but improvements to the latter made the former
- * redundant. */
-static int ci_contig_shmbuf_alloc(ci_shmbuf_t* shmbuf, unsigned bytes)
-{
-  int n_pages = CI_ROUND_UP(bytes, CI_PAGE_SIZE) / CI_PAGE_SIZE;
-  return ci_shmbuf_alloc(shmbuf, n_pages, n_pages);
-}
-
-
 int
 efab_tcp_driver_ctor()
 {
@@ -5648,11 +5637,12 @@ efab_tcp_driver_ctor()
   }
 #endif
 
-  if( (rc = ci_contig_shmbuf_alloc(&efab_tcp_driver.shmbuf,
-                                   sizeof(struct oo_timesync))) < 0 )
-    goto fail_shmbuf;
+  efab_tcp_driver.timesync_page = alloc_page(GFP_KERNEL);
+  if( efab_tcp_driver.timesync_page == NULL )
+    goto fail_timesync_alloc;
 
-  efab_tcp_driver.timesync = (void*) ci_shmbuf_ptr(&efab_tcp_driver.shmbuf, 0);
+  efab_tcp_driver.timesync = vmap(&efab_tcp_driver.timesync_page, 1,
+                                  VM_USERMAP, PAGE_KERNEL);
 
   if( (rc = oo_timesync_ctor(efab_tcp_driver.timesync)) < 0 )
     goto fail_timesync;
@@ -5676,8 +5666,8 @@ efab_tcp_driver_ctor()
   return 0;
 
 fail_timesync:
-  ci_shmbuf_free(&efab_tcp_driver.shmbuf);
-fail_shmbuf:
+  __free_page(efab_tcp_driver.timesync_page);
+fail_timesync_alloc:
 #if CI_CFG_HANDLE_ICMP
   efx_dlfilter_dtor(efab_tcp_driver.dlfilter);
 fail_dlf:
@@ -5723,7 +5713,7 @@ efab_tcp_driver_dtor(void)
 
   oo_timesync_dtor(efab_tcp_driver.timesync);
   efab_tcp_driver.timesync = NULL;
-  ci_shmbuf_free(&efab_tcp_driver.shmbuf);
+  __free_page(efab_tcp_driver.timesync_page);
 
   destroy_workqueue(CI_GLOBAL_WORKQUEUE);
 #if CI_CFG_HANDLE_ICMP
