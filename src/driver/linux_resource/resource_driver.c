@@ -317,10 +317,11 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 		rc = linux_efhw_nic_map_ctr_ap(lnic);
 		if (rc < 0)
 			goto fail;
-		rc = efrm_affinity_interface_probe(lnic);
-		if (rc < 0)
-			goto fail;
 	}
+
+	rc = efrm_affinity_interface_probe(lnic);
+	if (rc < 0)
+		goto fail;
 
 	rc = efrm_nic_ctor(&lnic->efrm_nic, res_dim);
 	if (rc < 0) {

@@ -133,6 +133,7 @@ int efrm_affinity_cpu_to_channel_dev(const struct linux_efhw_nic* nic, int cpu)
 {
 	int rc = -1;
 	mutex_lock(&lock);
+	EFRM_ASSERT(nic->cpu_to_q);
 	if (cpu >= 0 && cpu < num_possible_cpus())
 		rc = nic->cpu_to_q[cpu];
 	mutex_unlock(&lock);
