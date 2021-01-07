@@ -133,7 +133,18 @@ install_dlib() {
   local linkname=$(echo "$realname" | sed 's/\.so\..*/.so/')
   install_x "$libf" "$destdir/$realname"
   if [ "$realname" != "$linkname" ]; then
-    install_link "$destdir/$realname" "$destdir/$linkname"
+    # For a library named libfoo.so.x.y.z, we install two symlinks:
+    # libfoo.so.x -> libfoo.so.x.y.z
+    # libfoo.so -> libfoo.so.x
+    suffix=${realname#"$linkname"} # ".x.y.z"
+    minorver=$(echo "$suffix" | sed -E 's/^[.][0-9]+//') # ".y.z"
+    if [ "$minorver" != "" ]; then
+        majorname=${realname%"$minorver"} # "libfoo.so.x"
+        install_link "$destdir/$realname" "$destdir/$majorname"
+        install_link "$destdir/$majorname" "$destdir/$linkname"
+    else
+      install_link "$destdir/$realname" "$destdir/$linkname"
+    fi
   fi
 }
 
