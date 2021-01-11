@@ -48,6 +48,7 @@
 
 #ifdef __KERNEL__
 # include <onload/shmbuf.h>
+# include <onload/oo_shmbuf.h>
 # include <onload/iobufset.h>
 # include <onload/eplock_resource.h>
 #endif

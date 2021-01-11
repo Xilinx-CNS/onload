@@ -11,7 +11,7 @@
 
 ONLOAD_SRCS	:= driver.c timesync.c \
 		tcp_sendpage.c driverlink_ip.c linux_stats.c \
-		shmbuf.c compat.c \
+		shmbuf.c oo_shmbuf.c compat.c \
 		ossock_calls.c mmap.c \
 		epoll_device.c onloadfs.c \
 		dshm.c cplane.c cplane_prot.c
