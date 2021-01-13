@@ -367,6 +367,16 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 	if (efx->state == STATE_NET_UP)
 		efx_start_all(efx);
 	efx_device_attach_if_not_resetting(efx);
+
+	/*
+	 * Reinsert filters as the previous call to efx_mac_reconfigure, being
+	 * called on a detached device, will not have done so.
+	 */
+	if (!rc && (efx->state != STATE_DISABLED) && !efx->reset_pending) {
+		mutex_lock(&efx->mac_lock);
+		rc = efx_mac_reconfigure(efx, false);
+		mutex_unlock(&efx->mac_lock);
+	}
 	return rc;
 }
 
@@ -1439,8 +1449,6 @@ efx_next_guaranteed_ringsize(struct efx_nic *efx, unsigned long entries,
  */
 int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 {
-	int rc;
-
 	/* Initialise common structures */
 	spin_lock_init(&efx->biu_lock);
 	INIT_WORK(&efx->reset_work, efx_reset_work);
@@ -1495,11 +1503,6 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 #endif
 	INIT_WORK(&efx->mac_work, efx_mac_work);
 	init_waitqueue_head(&efx->flush_wq);
-	if (efx_nic_rev(efx) >= EFX_REV_EF100) {
-		rc = efx_init_struct_tc(efx);
-		if (rc)
-			return rc;
-	}
 
 #ifdef CONFIG_SFC_DEBUGFS
 	mutex_init(&efx->debugfs_symlink_mutex);

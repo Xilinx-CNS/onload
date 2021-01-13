@@ -69,20 +69,41 @@ static enum efx_encap_type efx_tc_indr_netdev_type(struct net_device *net_dev)
  */
 static int efx_tc_flower_lookup_dev(struct efx_nic *efx, struct net_device *dev)
 {
-	struct efx_vfrep *efv;
+	struct efx_rep *efv;
 
 	if (!dev)
 		return -EOPNOTSUPP;
 	if (dev == efx->net_dev)
 		return EFX_VPORT_PF;
 	/* Is it an efx vfrep at all? */
-	if (dev->netdev_ops != &efx_ef100_vfrep_netdev_ops)
+	if (dev->netdev_ops != &efx_ef100_rep_netdev_ops)
 		return -EOPNOTSUPP;
 	/* Is it ours? */
 	efv = netdev_priv(dev);
 	if (efv->parent != efx)
 		return -EOPNOTSUPP;
-	return EFX_VPORT_VF_OFFSET + efv->vf_idx;
+	if (!efv->remote)
+		return EFX_VPORT_VF_OFFSET + efv->idx;
+	return EFX_VPORT_REMOTE_OFFSET + efv->idx;
+}
+
+static long efx_tc_flower_rep_mport(struct efx_nic *efx, int vport_id)
+{
+	struct net_device *rep_dev;
+	struct efx_rep *efv;
+	u32 mport;
+
+	if (vport_id < EFX_VPORT_VF_OFFSET) /* only repr vport_id allowed */
+		return vport_id;
+	if (vport_id >= EFX_VPORT_REMOTE_OFFSET)
+		rep_dev = efx_get_remote_rep(efx, vport_id);
+	else
+		rep_dev = efx_get_vf_rep(efx, vport_id);
+
+	efv = netdev_priv(rep_dev);
+	efx_mae_mport_mport(efx, efv->mport, &mport);
+
+	return mport;
 }
 
 /* Convert a driver-internal vport ID into an internal device (PF or VF) */
@@ -92,8 +113,8 @@ static long efx_tc_flower_internal_mport(struct efx_nic *efx, int vport_id)
 
 	if (vport_id < 0) /* device isn't ours */
 		return vport_id;
-	if (vport_id) /* device is VF repr */
-		efx_mae_mport_vf(efx, vport_id - EFX_VPORT_VF_OFFSET, &mport);
+	if (vport_id) /* device is repr */
+		mport = efx_tc_flower_rep_mport(efx, vport_id);
 	else /* device is PF (us) */
 		efx_mae_mport_uplink(efx, &mport);
 	return mport;
@@ -106,8 +127,8 @@ static long efx_tc_flower_external_mport(struct efx_nic *efx, int vport_id)
 
 	if (vport_id < 0) /* device isn't ours */
 		return vport_id;
-	if (vport_id >= EFX_VPORT_VF_OFFSET) /* device is VF repr */
-		efx_mae_mport_vf(efx, vport_id - EFX_VPORT_VF_OFFSET, &mport);
+	if (vport_id) /* device is repr */
+		mport = efx_tc_flower_rep_mport(efx, vport_id);
 	else /* device is PF (us) */
 		efx_mae_mport_wire(efx, &mport);
 	return mport;
@@ -417,10 +438,10 @@ static void efx_release_neigh(struct efx_nic *efx,
 	if (!neigh)
 		return;
 	list_del(&encap->list);
+	encap->neigh = NULL;
 	if (!refcount_dec_and_test(&neigh->ref))
 		return; /* still in use */
 	efx_free_neigh(neigh);
-	encap->neigh = NULL; /* paranoia; encap should be about to be freed */
 }
 
 static void efx_tc_flower_release_encap_md(struct efx_nic *efx,
@@ -1547,7 +1568,7 @@ int efx_init_struct_tc(struct efx_nic *efx)
 {
 	int rc, i;
 
-	if (efx->type->is_vf)
+	if (efx->type->is_vf || efx->tc)
 		return 0;
 
 	efx->tc = kzalloc(sizeof(*efx->tc), GFP_KERNEL);
@@ -3000,7 +3021,7 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 				     struct flow_cls_offload *tc,
 				     struct flow_rule *fr,
 				     struct efx_tc_match *match,
-				     struct efx_vfrep *efv)
+				     struct efx_rep *efv)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD) || defined(EFX_HAVE_TCF_EXTACK)
 	struct netlink_ext_ack *extack = tc->common.extack;
@@ -3180,7 +3201,7 @@ release:
 static int efx_tc_flower_replace(struct efx_nic *efx,
 				 struct net_device *net_dev,
 				 struct flow_cls_offload *tc,
-				 struct efx_vfrep *efv)
+				 struct efx_rep *efv)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 	struct flow_rule *fr = flow_cls_offload_flow_rule(tc);
@@ -3632,8 +3653,14 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 		rule->fallback = EFX_TC_DFLT_WIRE;
 		break;
 	default:
-		/* VFrep, so rule applies to traffic from VF */
-		rule->fallback = EFX_TC_DFLT_VF(vport_id - EFX_VPORT_VF_OFFSET);
+		/* rep, so rule applies to traffic from representee */
+		if (efv->remote)
+			rule->fallback =
+				EFX_TC_DFLT_REM(vport_id -
+						EFX_VPORT_REMOTE_OFFSET);
+		else
+			rule->fallback = EFX_TC_DFLT_VF(vport_id -
+							EFX_VPORT_VF_OFFSET);
 		break;
 	}
 	if (!efx_tc_check_ready(efx, rule)) {
@@ -3942,7 +3969,7 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 #endif
 
 int efx_tc_flower(struct efx_nic *efx, struct net_device *net_dev,
-		  struct flow_cls_offload *tc, struct efx_vfrep *efv)
+		  struct flow_cls_offload *tc, struct efx_rep *efv)
 {
 	int rc;
 
@@ -3989,7 +4016,7 @@ int efx_tc_setup_action(struct efx_nic *efx, struct tc_action_offload *tca)
 struct efx_tc_block_binding {
 	struct list_head list;
 	struct efx_nic *efx;
-	struct efx_vfrep *efv;
+	struct efx_rep *efv;
 	struct net_device *otherdev; /* may actually be us */
 	struct flow_block *block;
 };
@@ -4037,7 +4064,7 @@ static void efx_tc_block_unbind(void *cb_priv)
 }
 
 static struct efx_tc_block_binding *efx_tc_create_binding(
-			struct efx_nic *efx, struct efx_vfrep *efv,
+			struct efx_nic *efx, struct efx_rep *efv,
 			struct net_device *otherdev, struct flow_block *block)
 {
 	struct efx_tc_block_binding *binding = kmalloc(sizeof(*binding), GFP_KERNEL);
@@ -4053,7 +4080,7 @@ static struct efx_tc_block_binding *efx_tc_create_binding(
 }
 
 int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
-		       struct flow_block_offload *tcb, struct efx_vfrep *efv)
+		       struct flow_block_offload *tcb, struct efx_rep *efv)
 {
 	struct efx_tc_block_binding *binding;
 	struct flow_block_cb *block_cb;
@@ -4118,7 +4145,7 @@ int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
 }
 #else
 int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
-		       struct flow_block_offload *tcb, struct efx_vfrep *efv)
+		       struct flow_block_offload *tcb, struct efx_rep *efv)
 {
 	struct efx_tc_block_binding *binding;
 	int rc;
@@ -4194,9 +4221,9 @@ int efx_tc_configure_default_rule(struct efx_nic *efx,
 	struct efx_tc_match *match = &rule->match;
 	struct efx_tc_action_set *act;
 	struct net_device *rep_dev;
-	struct efx_vfrep *efv;
+	struct efx_rep *efv;
 	u32 ing_port, eg_port;
-	int rc, vf_idx;
+	int rc, idx;
 
 	INIT_LIST_HEAD(&acts->list);
 	switch (dflt) {
@@ -4209,15 +4236,19 @@ int efx_tc_configure_default_rule(struct efx_nic *efx,
 		efx_mae_mport_uplink(efx, &eg_port);
 		break;
 	default:
-		vf_idx = dflt - EFX_TC_DFLT_VF_BASE;
-		rep_dev = efx_get_rep(efx, vf_idx);
+		if (dflt >= EFX_TC_DFLT_REMOTE_BASE) {
+			idx = dflt - EFX_TC_DFLT_REMOTE_BASE;
+			rep_dev = efx_get_remote_rep(efx, idx);
+		} else {
+			idx = dflt - EFX_TC_DFLT_VF_BASE;
+			rep_dev = efx_get_vf_rep(efx, idx);
+		}
 		if (IS_ERR(rep_dev))
 			return PTR_ERR(rep_dev);
 		if (!rep_dev)
 			return -EINVAL;
 		efv = netdev_priv(rep_dev);
-		/* VF -> VF rep (PF alias m-port) */
-		efx_mae_mport_vf(efx, vf_idx, &ing_port);
+		efx_mae_mport_mport(efx, efv->mport, &ing_port);
 		efx_mae_mport_mport(efx, efx->tc->reps_mport_id, &eg_port);
 		break;
 	}
@@ -4259,6 +4290,42 @@ void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
 		efx_tc_delete_rule(efx, rule);
 	rule->fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
 }
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+static int efx_tc_enumerate_mports(struct efx_nic *efx)
+{
+	int rc;
+
+	rc = efx_mae_enumerate_mports(efx, 0, NULL);
+	if (rc < 0)
+		return rc;
+	efx->tc->n_mports = rc;
+	efx->tc->mports = kcalloc(efx->tc->n_mports,
+				  sizeof(struct mae_mport_desc), GFP_KERNEL);
+	if (!efx->tc->mports) {
+		rc = -ENOMEM;
+		goto fail1;
+	}
+	rc = efx_mae_enumerate_mports(efx, efx->tc->n_mports, efx->tc->mports);
+	if (rc < 0)
+		goto fail2;
+	if (rc != efx->tc->n_mports) {
+		/* m-port count changed, we're confused.
+		 * bail out for now, TODO fix this later
+		 */
+		rc = -EIO;
+		goto fail2;
+
+	}
+	return 0;
+fail2:
+	kfree(efx->tc->mports);
+fail1:
+	efx->tc->n_mports = 0;
+	return rc;
+
+}
+#endif
 
 #ifdef CONFIG_SFC_DEBUGFS
 static void efx_tc_debugfs_dump_encap_match(struct seq_file *file,
@@ -4883,6 +4950,74 @@ static int efx_tc_debugfs_dump_mae_neighs(struct seq_file *file, void *data)
 	return 0;
 }
 
+static int efx_tc_debugfs_dump_mports(struct seq_file *file, void *data)
+{
+	struct efx_nic *efx = data;
+	unsigned int i;
+
+	for (i = 0; i < efx->tc->n_mports; i++) {
+		const struct mae_mport_desc *m = efx->tc->mports + i;
+		char buf[100];
+		size_t n;
+
+		n = scnprintf(buf, sizeof(buf), "id %08x flags %02x cf %02x",
+			      m->mport_id, m->flags, m->caller_flags);
+		if (m->caller_flags & MAE_MPORT_DESC_FLAG__MASK)
+			/* R = receive, T = transmit (deliver), X = delete.
+			 * Avoided using 'D' for either, as that's ambiguous
+			 */
+			n += scnprintf(buf + n, sizeof(buf) - n,
+				       " (%c%c%c)",
+				       (m->caller_flags & MAE_MPORT_DESC_FLAG_CAN_RECEIVE_ON) ? 'R' : 'r',
+				       (m->caller_flags & MAE_MPORT_DESC_FLAG_CAN_DELIVER_TO) ? 'T' : 't',
+				       (m->caller_flags & MAE_MPORT_DESC_FLAG_CAN_DELETE) ? 'X' : 'x');
+		switch (m->mport_type) {
+		case MAE_MPORT_DESC_MPORT_TYPE_NET_PORT:
+			n += scnprintf(buf + n, sizeof(buf) - n,
+				       " type net_port idx %u", m->port_idx);
+			break;
+		case MAE_MPORT_DESC_MPORT_TYPE_ALIAS:
+			n += scnprintf(buf + n, sizeof(buf) - n,
+				       " type alias mport %u", m->alias_mport_id);
+			break;
+		case MAE_MPORT_DESC_MPORT_TYPE_VNIC:
+			n += scnprintf(buf + n, sizeof(buf) - n, " type vnic");
+			switch (m->vnic_client_type) {
+			case MAE_MPORT_DESC_VNIC_CLIENT_TYPE_FUNCTION:
+				n += scnprintf(buf + n, sizeof(buf) - n,
+					       " ct fn if %u pf %u",
+					       m->interface_idx, m->pf_idx);
+				if (m->vf_idx != MAE_MPORT_DESC_VF_IDX_NULL)
+					n += scnprintf(buf + n, sizeof(buf) - n,
+						       " vf %u", m->vf_idx);
+				break;
+			case MAE_MPORT_DESC_VNIC_CLIENT_TYPE_PLUGIN:
+				n += scnprintf(buf + n, sizeof(buf) - n,
+					       " ct plugin");
+				break;
+			default:
+				n += scnprintf(buf + n, sizeof(buf) - n,
+					       " ct %u\n", m->vnic_client_type);
+				break;
+
+			}
+			break;
+		default:
+			n += scnprintf(buf + n, sizeof(buf) - n,
+				       " type %u", m->mport_type);
+			break;
+
+		}
+		/* Trailing
+		 * '.' will be absent if line truncated to fit buf */
+		snprintf(buf + n, sizeof(buf) - n, ".");
+		seq_printf(file, "%s\n", buf);
+
+	}
+
+	return 0;
+}
+
 static struct efx_debugfs_parameter efx_tc_debugfs[] = {
 	_EFX_RAW_PARAMETER(mae_rules, efx_tc_debugfs_dump_rules),
 	_EFX_RAW_PARAMETER(lhs_rules, efx_tc_debugfs_dump_lhs_rules),
@@ -4897,6 +5032,7 @@ static struct efx_debugfs_parameter efx_tc_debugfs[] = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	_EFX_RAW_PARAMETER(tracked_conns, efx_tc_debugfs_dump_cts),
 #endif
+	_EFX_RAW_PARAMETER(mae_mport_map, efx_tc_debugfs_dump_mports),
 	{NULL}
 };
 #endif /* CONFIG_SFC_DEBUGFS */
@@ -5085,6 +5221,11 @@ int efx_init_tc(struct efx_nic *efx)
 	rc = efx_tc_configure_rep_mport(efx);
 	if (rc)
 		return rc;
+	rc = efx_tc_enumerate_mports(efx);
+	if (rc) /* Not fatal, but means we can't create PF reps for other IFs */
+		netif_warn(efx, probe, efx->net_dev,
+			   "Could not enumerate mports (rc=%d), are we admin?",
+			   rc);
 	mutex_lock(&efx->tc->mutex);
 	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_PF);
 	if (rc)
@@ -5125,6 +5266,9 @@ void efx_fini_tc(struct efx_nic *efx)
 		efx_tc_deconfigure_default_rule(efx, i);
 	efx_tc_deconfigure_rep_mport(efx);
 	efx->tc->up = false;
+	kfree(efx->tc->mports);
+	efx->tc->mports = NULL;
+	efx->tc->n_mports = 0;
 	mutex_unlock(&efx->tc->mutex);
 }
 

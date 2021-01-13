@@ -15,17 +15,17 @@
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 
-#define EFX_EF100_VFREP_DRIVER	"efx_ef100_vfrep"
-#define EFX_EF100_VFREP_VERSION	"0.0.1"
+#define EFX_EF100_REP_DRIVER	"efx_ef100_rep"
+#define EFX_EF100_REP_VERSION	"0.0.1"
 
-static int efx_ef100_vfrep_poll(struct napi_struct *napi, int weight);
+static int efx_ef100_rep_poll(struct napi_struct *napi, int weight);
 
-static int efx_ef100_vfrep_init_struct(struct efx_nic *efx,
-				       struct efx_vfrep *efv, unsigned int i)
+static int efx_ef100_rep_init_struct(struct efx_nic *efx,
+				     struct efx_rep *efv, unsigned int i)
 {
 	efv->parent = efx;
 	BUILD_BUG_ON(MAE_MPORT_SELECTOR_NULL);
-	efv->vf_idx = i;
+	efv->idx = i;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	INIT_LIST_HEAD(&efv->rx_list);
 #else
@@ -39,28 +39,29 @@ static int efx_ef100_vfrep_init_struct(struct efx_nic *efx,
 	return 0;
 }
 
-static int efx_ef100_vfrep_open(struct net_device *net_dev)
+static int efx_ef100_rep_open(struct net_device *net_dev)
 {
-	struct efx_vfrep *efv = netdev_priv(net_dev);
+	struct efx_rep *efv = netdev_priv(net_dev);
 
-	netif_napi_add(net_dev, &efv->napi, efx_ef100_vfrep_poll, NAPI_POLL_WEIGHT);
+	netif_napi_add(net_dev, &efv->napi, efx_ef100_rep_poll,
+		       NAPI_POLL_WEIGHT);
 	napi_enable(&efv->napi);
 	return 0;
 }
 
-static int efx_ef100_vfrep_close(struct net_device *net_dev)
+static int efx_ef100_rep_close(struct net_device *net_dev)
 {
-	struct efx_vfrep *efv = netdev_priv(net_dev);
+	struct efx_rep *efv = netdev_priv(net_dev);
 
 	napi_disable(&efv->napi);
 	netif_napi_del(&efv->napi);
 	return 0;
 }
 
-static netdev_tx_t efx_ef100_vfrep_xmit(struct sk_buff *skb,
+static netdev_tx_t efx_ef100_rep_xmit(struct sk_buff *skb,
 					struct net_device *dev)
 {
-	struct efx_vfrep *efv = netdev_priv(dev);
+	struct efx_rep *efv = netdev_priv(dev);
 	struct efx_nic *efx = efv->parent;
 	netdev_tx_t rc;
 
@@ -77,10 +78,10 @@ static netdev_tx_t efx_ef100_vfrep_xmit(struct sk_buff *skb,
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PORT_PARENT_ID)
-static int efx_ef100_vfrep_get_port_parent_id(struct net_device *dev,
-					      struct netdev_phys_item_id *ppid)
+static int efx_ef100_rep_get_port_parent_id(struct net_device *dev,
+					    struct netdev_phys_item_id *ppid)
 {
-	struct efx_vfrep *efv = netdev_priv(dev);
+	struct efx_rep *efv = netdev_priv(dev);
 	struct efx_nic *efx = efv->parent;
 	struct ef100_nic_data *nic_data;
 
@@ -93,17 +94,28 @@ static int efx_ef100_vfrep_get_port_parent_id(struct net_device *dev,
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
-static int efx_ef100_vfrep_get_phys_port_name(struct net_device *dev,
-					      char *buf, size_t len)
+static int efx_ef100_rep_get_phys_port_name(struct net_device *dev,
+					    char *buf, size_t len)
 {
-	struct efx_vfrep *efv = netdev_priv(dev);
+	struct efx_rep *efv = netdev_priv(dev);
 	struct efx_nic *efx = efv->parent;
 	struct ef100_nic_data *nic_data;
 	int ret;
 
 	nic_data = efx->nic_data;
-	ret = snprintf(buf, len, "p%upf%uvf%u", efx->port_num,
-		       nic_data->pf_index, efv->vf_idx);
+	if (efv->remote) {
+		struct mae_mport_desc *mport_desc =
+			&efx->tc->mports[efv->mport_desc_idx];
+
+		ret = snprintf(buf, len, "p%uif%upf%u", efx->port_num,
+			       mport_desc->interface_idx, mport_desc->pf_idx);
+		if (ret > 0 && mport_desc->vf_idx != 0xFFFF)
+			ret = snprintf(buf + ret, len - ret,
+				       "vf%u", mport_desc->vf_idx);
+	} else {
+		ret = snprintf(buf, len, "p%upf%uvf%u", efx->port_num,
+			       nic_data->pf_index, efv->idx);
+	}
 	if (ret >= len)
 		return -EOPNOTSUPP;
 
@@ -112,8 +124,7 @@ static int efx_ef100_vfrep_get_phys_port_name(struct net_device *dev,
 #endif
 
 /* Nothing to configure hw-wise, just set sw state */
-static int efx_ef100_vfrep_set_mac_address(struct net_device *net_dev,
-					   void *data)
+static int efx_ef100_rep_set_mac_address(struct net_device *net_dev, void *data)
 {
 	struct sockaddr *addr = data;
 	u8 *new_addr = addr->sa_data;
@@ -123,10 +134,10 @@ static int efx_ef100_vfrep_set_mac_address(struct net_device *net_dev,
 	return 0;
 }
 
-static int efx_ef100_vfrep_setup_tc(struct net_device *net_dev,
-				    enum tc_setup_type type, void *type_data)
+static int efx_ef100_rep_setup_tc(struct net_device *net_dev,
+				  enum tc_setup_type type, void *type_data)
 {
-	struct efx_vfrep *efv = netdev_priv(net_dev);
+	struct efx_rep *efv = netdev_priv(net_dev);
 	struct efx_nic *efx = efv->parent;
 
 	if (type == TC_SETUP_CLSFLOWER)
@@ -137,10 +148,10 @@ static int efx_ef100_vfrep_setup_tc(struct net_device *net_dev,
 	return -EOPNOTSUPP;
 }
 
-static void efx_ef100_vfrep_get_stats64(struct net_device *dev,
-					struct rtnl_link_stats64 *stats)
+static void efx_ef100_rep_get_stats64(struct net_device *dev,
+				      struct rtnl_link_stats64 *stats)
 {
-	struct efx_vfrep *efv = netdev_priv(dev);
+	struct efx_rep *efv = netdev_priv(dev);
 
 	stats->rx_packets = atomic_read(&efv->stats.rx_packets);
 	stats->tx_packets = atomic_read(&efv->stats.tx_packets);
@@ -150,52 +161,52 @@ static void efx_ef100_vfrep_get_stats64(struct net_device *dev,
 	stats->tx_errors = atomic_read(&efv->stats.tx_errors);
 }
 
-const struct net_device_ops efx_ef100_vfrep_netdev_ops = {
-	.ndo_open		= efx_ef100_vfrep_open,
-	.ndo_stop		= efx_ef100_vfrep_close,
-	.ndo_start_xmit		= efx_ef100_vfrep_xmit,
+const struct net_device_ops efx_ef100_rep_netdev_ops = {
+	.ndo_open		= efx_ef100_rep_open,
+	.ndo_stop		= efx_ef100_rep_close,
+	.ndo_start_xmit		= efx_ef100_rep_xmit,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PORT_PARENT_ID)
-	.ndo_get_port_parent_id	= efx_ef100_vfrep_get_port_parent_id,
+	.ndo_get_port_parent_id	= efx_ef100_rep_get_port_parent_id,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
-	.ndo_get_phys_port_name	= efx_ef100_vfrep_get_phys_port_name,
+	.ndo_get_phys_port_name	= efx_ef100_rep_get_phys_port_name,
 #endif
-	.ndo_set_mac_address    = efx_ef100_vfrep_set_mac_address,
-	.ndo_get_stats64	= efx_ef100_vfrep_get_stats64,
-	.ndo_setup_tc		= efx_ef100_vfrep_setup_tc,
+	.ndo_set_mac_address    = efx_ef100_rep_set_mac_address,
+	.ndo_get_stats64	= efx_ef100_rep_get_stats64,
+	.ndo_setup_tc		= efx_ef100_rep_setup_tc,
 };
 
-static void efx_ef100_vfrep_get_drvinfo(struct net_device *dev,
-					struct ethtool_drvinfo *drvinfo)
+static void efx_ef100_rep_get_drvinfo(struct net_device *dev,
+				      struct ethtool_drvinfo *drvinfo)
 {
-	strlcpy(drvinfo->driver, EFX_EF100_VFREP_DRIVER, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, EFX_EF100_VFREP_VERSION, sizeof(drvinfo->version));
+	strlcpy(drvinfo->driver, EFX_EF100_REP_DRIVER, sizeof(drvinfo->driver));
+	strlcpy(drvinfo->version, EFX_EF100_REP_VERSION, sizeof(drvinfo->version));
 }
 
-static u32 efx_ef100_vfrep_ethtool_get_msglevel(struct net_device *net_dev)
+static u32 efx_ef100_rep_ethtool_get_msglevel(struct net_device *net_dev)
 {
-	struct efx_vfrep *efv = netdev_priv(net_dev);
+	struct efx_rep *efv = netdev_priv(net_dev);
 	return efv->msg_enable;
 }
 
-static void efx_ef100_vfrep_ethtool_set_msglevel(struct net_device *net_dev,
-						 u32 msg_enable)
+static void efx_ef100_rep_ethtool_set_msglevel(struct net_device *net_dev,
+					       u32 msg_enable)
 {
-	struct efx_vfrep *efv = netdev_priv(net_dev);
+	struct efx_rep *efv = netdev_priv(net_dev);
 	efv->msg_enable = msg_enable;
 }
 
-const static struct ethtool_ops efx_ef100_vfrep_ethtool_ops = {
-	.get_drvinfo		= efx_ef100_vfrep_get_drvinfo,
-	.get_msglevel		= efx_ef100_vfrep_ethtool_get_msglevel,
-	.set_msglevel		= efx_ef100_vfrep_ethtool_set_msglevel,
+const static struct ethtool_ops efx_ef100_rep_ethtool_ops = {
+	.get_drvinfo		= efx_ef100_rep_get_drvinfo,
+	.get_msglevel		= efx_ef100_rep_ethtool_get_msglevel,
+	.set_msglevel		= efx_ef100_rep_ethtool_set_msglevel,
 };
 
-static struct efx_vfrep *efx_ef100_vfrep_create_netdev(struct efx_nic *efx,
-						       unsigned int i)
+static struct efx_rep *efx_ef100_rep_create_netdev(struct efx_nic *efx,
+						   unsigned int i, bool remote)
 {
 	struct net_device *net_dev;
-	struct efx_vfrep *efv;
+	struct efx_rep *efv;
 	int rc;
 
 	net_dev = alloc_etherdev_mq(sizeof(*efv), 1);
@@ -203,10 +214,11 @@ static struct efx_vfrep *efx_ef100_vfrep_create_netdev(struct efx_nic *efx,
 		return ERR_PTR(-ENOMEM);
 
 	efv = netdev_priv(net_dev);
-	rc = efx_ef100_vfrep_init_struct(efx, efv, i);
+	rc = efx_ef100_rep_init_struct(efx, efv, i);
 	if (rc)
 		goto fail1;
 	efv->net_dev = net_dev;
+	efv->remote = remote;
 
 	/* Ensure we don't race with ef100_{start,stop}_reps() and the setting
 	 * of efx->port_enabled under ef100_net_{start,stop}().
@@ -218,8 +230,8 @@ static struct efx_vfrep *efx_ef100_vfrep_create_netdev(struct efx_nic *efx,
 		netif_carrier_off(net_dev);
 	rtnl_unlock();
 
-	net_dev->netdev_ops = &efx_ef100_vfrep_netdev_ops;
-	net_dev->ethtool_ops = &efx_ef100_vfrep_ethtool_ops;
+	net_dev->netdev_ops = &efx_ef100_rep_netdev_ops;
+	net_dev->ethtool_ops = &efx_ef100_rep_ethtool_ops;
 	net_dev->features |= NETIF_F_HW_TC | NETIF_F_LLTX;
 	net_dev->hw_features |= NETIF_F_HW_TC | NETIF_F_LLTX;
 	return efv;
@@ -228,16 +240,16 @@ fail1:
 	return ERR_PTR(rc);
 }
 
-static void efx_ef100_vfrep_destroy_netdev(struct efx_vfrep *efv)
+static void efx_ef100_rep_destroy_netdev(struct efx_rep *efv)
 {
 	free_netdev(efv->net_dev);
 }
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
-static int efx_ef100_vfrep_tc_egdev_cb(enum tc_setup_type type, void *type_data,
+static int efx_ef100_rep_tc_egdev_cb(enum tc_setup_type type, void *type_data,
 				       void *cb_priv)
 {
-	struct efx_vfrep *efv = cb_priv;
+	struct efx_rep *efv = cb_priv;
 
 	switch (type) {
 	case TC_SETUP_CLSFLOWER:
@@ -248,56 +260,91 @@ static int efx_ef100_vfrep_tc_egdev_cb(enum tc_setup_type type, void *type_data,
 }
 #endif
 
-static int efx_ef100_configure_rep(struct efx_vfrep *efv)
+static int efx_ef100_configure_rep(struct efx_rep *efv)
 {
 	struct efx_nic *efx = efv->parent;
 	u32 selector;
 	int rc;
 
 	/* Construct mport selector for corresponding VF */
-	efx_mae_mport_vf(efx, efv->vf_idx, &selector);
+	efx_mae_mport_vf(efx, efv->idx, &selector);
 	/* Look up actual mport ID */
-	rc = efx_mae_lookup_mport(efx, selector, &efv->vf_mport);
+	rc = efx_mae_lookup_mport(efx, selector, &efv->mport);
 	if (rc)
 		return rc;
 	netif_dbg(efv->parent, probe, efv->net_dev,
-		  "Representor mport ID %#x\n", efv->vf_mport);
+		  "VF representor mport ID %#x\n",
+		  efv->mport);
 	/* mport label should fit in 16 bits */
-	WARN_ON(efv->vf_mport >> 16);
+	WARN_ON(efv->mport >> 16);
 	mutex_lock(&efx->tc->mutex);
-	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
+	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF(efv->idx));
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	if (!rc) {
 		rc = tc_setup_cb_egdev_register(efv->net_dev,
-						efx_ef100_vfrep_tc_egdev_cb, efv);
+						efx_ef100_rep_tc_egdev_cb, efv);
 		if (rc)
-			efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
+			efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->idx));
 	}
 #endif
 	mutex_unlock(&efx->tc->mutex);
 	return rc;
 }
 
-static void efx_ef100_deconfigure_rep(struct efx_vfrep *efv)
+static int efx_ef100_configure_remote_rep(struct efx_rep *efv,
+					  struct mae_mport_desc *mport_desc)
+{
+	struct efx_nic *efx = efv->parent;
+	struct ef100_nic_data *nic_data;
+	int rc;
+
+	nic_data = efx->nic_data;
+	efv->mport = mport_desc->mport_id;
+	netif_dbg(efv->parent, probe, efv->net_dev,
+		  "Remote representor mport ID %#x\n",
+		  efv->mport);
+	/* mport label should fit in 16 bits */
+	WARN_ON(efv->mport >> 16);
+	mutex_lock(&efx->tc->mutex);
+	rc = efx_tc_configure_default_rule(efx,
+					   EFX_TC_DFLT_REM(efv->idx));
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
+	if (!rc) {
+		rc = tc_setup_cb_egdev_register(efv->net_dev,
+						efx_ef100_rep_tc_egdev_cb, efv);
+		if (rc) {
+			efx_tc_deconfigure_default_rule(efx,
+							EFX_TC_DFLT_REM(efv->idx));
+		}
+	}
+#endif
+	mutex_unlock(&efx->tc->mutex);
+	return rc;
+}
+
+static void efx_ef100_deconfigure_rep(struct efx_rep *efv)
 {
 	struct efx_nic *efx = efv->parent;
 
 	mutex_lock(&efx->tc->mutex);
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
-	tc_setup_cb_egdev_unregister(efv->net_dev, efx_ef100_vfrep_tc_egdev_cb,
+	tc_setup_cb_egdev_unregister(efv->net_dev, efx_ef100_rep_tc_egdev_cb,
 				     efv);
 #endif
-	efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->vf_idx));
+	if (efv->remote)
+		efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_REM(efv->idx));
+	else
+		efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->idx));
 	mutex_unlock(&efx->tc->mutex);
 }
 
 int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	struct efx_vfrep *efv;
+	struct efx_rep *efv;
 	int rc;
 
-	efv = efx_ef100_vfrep_create_netdev(efx, i);
+	efv = efx_ef100_rep_create_netdev(efx, i, false);
 	if (IS_ERR(efv)) {
 		rc = PTR_ERR(efv);
 		netif_err(efx, drv, efx->net_dev,
@@ -327,7 +374,56 @@ fail2:
 	efx_ef100_deconfigure_rep(efv);
 fail1:
 	nic_data->vf_rep[i] = NULL;
-	efx_ef100_vfrep_destroy_netdev(efv);
+	efx_ef100_rep_destroy_netdev(efv);
+	return rc;
+}
+
+int efx_ef100_remote_rep_create(struct efx_nic *efx, unsigned int i,
+				unsigned int mport_desc_idx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct mae_mport_desc *mport_desc = &efx->tc->mports[mport_desc_idx];
+	struct efx_rep *efv;
+	int rc;
+
+	efv = efx_ef100_rep_create_netdev(efx, i, true);
+	if (IS_ERR(efv)) {
+		rc = PTR_ERR(efv);
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to create representor for IF %u PF %u VF %u, rc %d\n",
+			  mport_desc->interface_idx, mport_desc->pf_idx,
+			  mport_desc->vf_idx, rc);
+		return rc;
+	}
+	efv->mport_desc_idx = mport_desc_idx;
+	nic_data->rem_rep[i] = efv->net_dev;
+	rc = efx_ef100_configure_remote_rep(efv, mport_desc);
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to configure representor for IF %u PF %u VF %u, rc %d\n",
+			  mport_desc->interface_idx, mport_desc->pf_idx,
+			  mport_desc->vf_idx, rc);
+		goto fail1;
+	}
+	nic_data->rem_rep[i] = efv->net_dev;
+	rc = register_netdev(efv->net_dev);
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to register representor for IF %u PF %u VF %u, rc %d\n",
+			  mport_desc->interface_idx, mport_desc->pf_idx,
+			  mport_desc->vf_idx, rc);
+		goto fail2;
+	}
+	netif_dbg(efx, drv, efx->net_dev,
+		  "Representor for IF %u PF %u VF %u is %s\n",
+		  mport_desc->interface_idx, mport_desc->pf_idx,
+		  mport_desc->vf_idx, efv->net_dev->name);
+	return 0;
+fail2:
+	efx_ef100_deconfigure_rep(efv);
+fail1:
+	nic_data->rem_rep[i] = NULL;
+	efx_ef100_rep_destroy_netdev(efv);
 	return rc;
 }
 
@@ -335,7 +431,7 @@ void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct net_device *rep_dev;
-	struct efx_vfrep *efv;
+	struct efx_rep *efv;
 
 	rep_dev = nic_data->vf_rep[i];
 	if (!rep_dev)
@@ -344,12 +440,28 @@ void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i)
 	efx_ef100_deconfigure_rep(efv);
 	nic_data->vf_rep[i] = NULL;
 	unregister_netdev(rep_dev);
-	efx_ef100_vfrep_destroy_netdev(efv);
+	efx_ef100_rep_destroy_netdev(efv);
 }
 
-static int efx_ef100_vfrep_poll(struct napi_struct *napi, int weight)
+void efx_ef100_remote_rep_destroy(struct efx_nic *efx, unsigned int i)
 {
-	struct efx_vfrep *efv = container_of(napi, struct efx_vfrep, napi);
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct net_device *rep_dev;
+	struct efx_rep *efv;
+
+	rep_dev = nic_data->rem_rep[i];
+	if (!rep_dev)
+		return;
+	efv = netdev_priv(rep_dev);
+	efx_ef100_deconfigure_rep(efv);
+	nic_data->rem_rep[i] = NULL;
+	unregister_netdev(rep_dev);
+	efx_ef100_rep_destroy_netdev(efv);
+}
+
+static int efx_ef100_rep_poll(struct napi_struct *napi, int weight)
+{
+	struct efx_rep *efv = container_of(napi, struct efx_rep, napi);
 	unsigned int read_index;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	struct list_head head;
@@ -390,7 +502,7 @@ static int efx_ef100_vfrep_poll(struct napi_struct *napi, int weight)
 	return spent;
 }
 
-void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_buf)
+void efx_ef100_rep_rx_packet(struct efx_rep *efv, struct efx_rx_buffer *rx_buf)
 {
 	u8 *eh = efx_rx_buf_va(rx_buf);
 	struct sk_buff *skb;
@@ -406,7 +518,7 @@ void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_b
 	memcpy(skb->data, eh, rx_buf->len);
 	__skb_put(skb, rx_buf->len);
 
-	skb_record_rx_queue(skb, 0); /* vfrep is single-queue */
+	skb_record_rx_queue(skb, 0); /* rep is single-queue */
 
 	/* Move past the ethernet header */
 	skb->protocol = eth_type_trans(skb, efv->net_dev);
@@ -431,19 +543,24 @@ void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_b
 		napi_schedule(&efv->napi);
 }
 
-struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport)
+struct net_device *efx_ef100_find_rep_by_mport(struct efx_nic *efx, u16 mport)
 {
-#if defined(CONFIG_SFC_SRIOV)
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	struct efx_vfrep *efv;
+	struct efx_rep *efv;
 	unsigned int i;
 
+	for (i = 0; i < nic_data->rem_rep_count; i++) {
+		efv = netdev_priv(nic_data->rem_rep[i]);
+		if (efv->mport == mport)
+			return nic_data->rem_rep[i];
+	}
+#if defined(CONFIG_SFC_SRIOV)
 	if (nic_data->vf_rep)
-		for (i = 0; i < efx->vf_count; i++) {
+		for (i = 0; i < nic_data->vf_rep_count; i++) {
 			if (!nic_data->vf_rep[i])
 				continue;
 			efv = netdev_priv(nic_data->vf_rep[i]);
-			if (efv->vf_mport == mport)
+			if (efv->mport == mport)
 				return nic_data->vf_rep[i];
 		}
 #endif
@@ -464,18 +581,31 @@ int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i)
 	return -EOPNOTSUPP;
 }
 
+int efx_ef100_remote_rep_create(struct efx_nic *efx, unsigned int i,
+				unsigned int mport_desc_idx)
+{
+	/* Without all the various bits we need to make TC flower offload work,
+	 * there's not much use in VFs or their representors, even if we
+	 * technically could create them - they'd never be connected to the
+	 * outside world.
+	 */
+	if (net_ratelimit())
+		netif_info(efx, drv, efx->net_dev, "Representors not supported on this kernel version\n");
+	return -EOPNOTSUPP;
+}
+
 void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i)
 {
 }
 
-const struct net_device_ops efx_ef100_vfrep_netdev_ops = {};
+const struct net_device_ops efx_ef100_rep_netdev_ops = {};
 
-void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_buf)
+void efx_ef100_rep_rx_packet(struct efx_rep *efv, struct efx_rx_buffer *rx_buf)
 {
 	WARN_ON_ONCE(1);
 }
 
-struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport)
+struct net_device *efx_ef100_find_rep_by_mport(struct efx_nic *efx, u16 mport)
 {
 	return NULL;
 }

@@ -19,7 +19,7 @@ int ef100_netevent_event(struct notifier_block *this,
 			 unsigned long event, void *ptr);
 netdev_tx_t __ef100_hard_start_xmit(struct sk_buff *skb,
 				    struct net_device *net_dev,
-				    struct efx_vfrep *efv);
+				    struct efx_rep *efv);
 void ef100_start_reps(struct efx_nic *efx);
 void ef100_stop_reps(struct efx_nic *efx);
 int ef100_probe_netdev(struct efx_probe_data *probe_data);

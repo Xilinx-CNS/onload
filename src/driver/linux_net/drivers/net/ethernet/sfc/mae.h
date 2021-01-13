@@ -7,6 +7,8 @@
  * by the Free Software Foundation, incorporated herein by reference.
  */
 
+#ifndef EF100_MAE_H
+#define EF100_MAE_H
 /* MCDI interface for the ef100 Match-Action Engine */
 
 #include "net_driver.h"
@@ -26,6 +28,37 @@ int efx_mae_lookup_mport(struct efx_nic *efx, u32 selector, u32 *id);
 int efx_mae_start_counters(struct efx_nic *efx, struct efx_channel *channel);
 int efx_mae_stop_counters(struct efx_nic *efx, struct efx_channel *channel);
 void efx_mae_counters_grant_credits(struct work_struct *work);
+
+enum mae_mport_desc_caller_flags {
+	MAE_MPORT_DESC_FLAG_CAN_RECEIVE_ON = BIT(MAE_MPORT_DESC_CAN_RECEIVE_ON_LBN),
+	MAE_MPORT_DESC_FLAG_CAN_DELIVER_TO = BIT(MAE_MPORT_DESC_CAN_DELIVER_TO_LBN),
+	MAE_MPORT_DESC_FLAG_CAN_DELETE = BIT(MAE_MPORT_DESC_CAN_DELETE_LBN),
+	MAE_MPORT_DESC_FLAG__MASK = MAE_MPORT_DESC_FLAG_CAN_RECEIVE_ON |
+		MAE_MPORT_DESC_FLAG_CAN_DELIVER_TO |
+		MAE_MPORT_DESC_FLAG_CAN_DELETE
+
+};
+
+struct mae_mport_desc {
+	u32 mport_id;
+	u32 flags;
+	u32 caller_flags; /* enum mae_mport_desc_caller_flags */
+	u32 mport_type; /* MAE_MPORT_DESC_MPORT_TYPE_* */
+	union {
+		u32 port_idx; /* for mport_type == NET_PORT */
+		u32 alias_mport_id; /* for mport_type == ALIAS */
+		struct { /* for mport_type == VNIC */
+			u32 vnic_client_type; /* MAE_MPORT_DESC_VNIC_CLIENT_TYPE_* */
+			u32 interface_idx;
+			u16 pf_idx;
+			u16 vf_idx;
+		};
+	};
+};
+
+/* Returns number of mports reported by fw or negative error */
+int efx_mae_enumerate_mports(struct efx_nic *efx, int outlen,
+			     struct mae_mport_desc *out);
 
 #define MAE_NUM_FIELDS	(MAE_FIELD_ENC_VNET_ID + 1)
 
@@ -89,3 +122,5 @@ int efx_mae_insert_rule(struct efx_nic *efx, const struct efx_tc_match *match,
 			u32 prio, u32 acts_id, u32 *id);
 int efx_mae_update_rule(struct efx_nic *efx, u32 acts_id, u32 id);
 int efx_mae_delete_rule(struct efx_nic *efx, u32 id);
+
+#endif /* EF100_MAE_H */

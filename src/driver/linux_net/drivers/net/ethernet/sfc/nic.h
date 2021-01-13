@@ -570,11 +570,19 @@ extern const struct efx_nic_type efx_hunt_a0_nic_type;
 extern const struct efx_nic_type efx_hunt_a0_vf_nic_type __attribute__((weak));
 
 /* Only safe to call if protected against rep create/destroy */
-static inline struct net_device *efx_get_rep(struct efx_nic *efx, unsigned int vf)
+static inline struct net_device *efx_get_vf_rep(struct efx_nic *efx, unsigned int vf)
 {
 	if (efx->type->get_vf_rep == NULL)
 		return ERR_PTR(-EOPNOTSUPP);
 	return efx->type->get_vf_rep(efx, vf);
+}
+
+static inline struct net_device *efx_get_remote_rep(struct efx_nic *efx,
+						    unsigned int idx)
+{
+	if (efx->type->get_remote_rep == NULL)
+		return ERR_PTR(-EOPNOTSUPP);
+	return efx->type->get_remote_rep(efx, idx);
 }
 
 /**************************************************************************

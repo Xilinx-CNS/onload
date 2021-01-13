@@ -92,7 +92,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.4.1000"
+#define EFX_DRIVER_VERSION	"5.3.4.1001"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -2363,6 +2363,7 @@ struct efx_nic_type {
 	void (*udp_tnl_del_port2)(struct efx_nic *efx, struct ef100_udp_tunnel tnl);
 #endif
 	struct net_device *(*get_vf_rep)(struct efx_nic *efx, unsigned int vf);
+	struct net_device *(*get_remote_rep)(struct efx_nic *efx, unsigned int idx);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	void (*detach_reps)(struct efx_nic *efx);
 	void (*attach_reps)(struct efx_nic *efx);

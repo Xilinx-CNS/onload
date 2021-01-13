@@ -123,13 +123,13 @@ void __ef100_rx_packet(struct efx_channel *channel)
 	if (nic_data->have_mport && ing_port != nic_data->base_mport &&
 	    /* XXX oldbase compat; remove after C-model flag day */
 	    nic_data->have_old_mport && ing_port != nic_data->old_base_mport) {
-		struct net_device *rep_dev = efx_ef100_find_vfrep_by_mport(efx,
-							ing_port);
+		struct net_device *rep_dev = efx_ef100_find_rep_by_mport(efx,
+									 ing_port);
 
 		if (rep_dev) {
 			if (rep_dev->flags & IFF_UP)
-				efx_ef100_vfrep_rx_packet(netdev_priv(rep_dev),
-							  rx_buf);
+				efx_ef100_rep_rx_packet(netdev_priv(rep_dev),
+							rx_buf);
 			else
 				efx_free_rx_buffers(efx_channel_get_rx_queue(channel),
 						    rx_buf, 1);

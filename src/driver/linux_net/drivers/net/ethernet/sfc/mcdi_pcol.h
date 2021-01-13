@@ -20191,6 +20191,8 @@
  * SF-117064-DG for background).
  */
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_ADMIN_TSA_UNBOUND 0x8000
+/* enum:  Control the Match-Action Engine if present. */
+#define		 MC_CMD_PRIVILEGE_MASK_IN_GRP_MAE 0x00010000
 /* enum: Set this bit to indicate that a new privilege mask is to be set,
  * otherwise the command will only read the existing mask.
  */

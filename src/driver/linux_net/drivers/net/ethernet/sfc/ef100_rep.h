@@ -12,33 +12,38 @@
 #define EF100_REP_H
 
 /* Forward declaration needed by nic.h for efx.h */
-struct efx_vfrep;
+struct efx_rep;
 
 #include "net_driver.h"
 #include "nic.h"
 
 int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i);
+int efx_ef100_remote_rep_create(struct efx_nic *efx, unsigned int i,
+				unsigned int mport_desc_idx);
 void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i);
+void efx_ef100_remote_rep_destroy(struct efx_nic *efx, unsigned int i);
 
 /* Returns the representor netdevice corresponding to a VF m-port, or NULL
  * @mport is an m-port label, *not* an m-port ID!
  */
-struct net_device *efx_ef100_find_vfrep_by_mport(struct efx_nic *efx, u16 mport);
+struct net_device *efx_ef100_find_rep_by_mport(struct efx_nic *efx, u16 mport);
 
-struct efx_vfrep_sw_stats {
+struct efx_rep_sw_stats {
 	atomic_t rx_packets, tx_packets;
 	atomic_t rx_bytes, tx_bytes;
 	atomic_t rx_dropped, tx_errors;
 };
 
 /* Private data for an Efx representor */
-struct efx_vfrep {
+struct efx_rep {
 	struct efx_nic *parent;
 	struct net_device *net_dev;
+	bool remote; /* flag to indicate remote rep */
 	u32 msg_enable;
-	u32 vf_mport; /* m-port ID of corresponding VF */
-	unsigned int vf_idx;
+	u32 mport; /* m-port ID of corresponding PF/VF */
+	unsigned int idx; /* rep index  */
 	unsigned int write_index, read_index;
+	unsigned int mport_desc_idx;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	struct list_head rx_list;
 #else
@@ -46,10 +51,10 @@ struct efx_vfrep {
 #endif
 	spinlock_t rx_lock;
 	struct napi_struct napi;
-	struct efx_vfrep_sw_stats stats;
+	struct efx_rep_sw_stats stats;
 };
 
-void efx_ef100_vfrep_rx_packet(struct efx_vfrep *efv, struct efx_rx_buffer *rx_buf);
+void efx_ef100_rep_rx_packet(struct efx_rep *efv, struct efx_rx_buffer *rx_buf);
 
-extern const struct net_device_ops efx_ef100_vfrep_netdev_ops;
+extern const struct net_device_ops efx_ef100_rep_netdev_ops;
 #endif /* EF10_REP_H */

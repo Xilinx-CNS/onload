@@ -293,7 +293,7 @@ static void ef100_make_tso_desc(struct efx_nic *efx,
 static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 				      const struct sk_buff *skb,
 				      unsigned int segment_count,
-				      struct efx_vfrep *efv)
+				      struct efx_rep *efv)
 {
 	unsigned int old_write_count = tx_queue->write_count;
 	unsigned int new_write_count = old_write_count;
@@ -327,7 +327,7 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 		tx_queue->packet_write_count = new_write_count;
 		EFX_POPULATE_OWORD_3(*txd,
 				     ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_PREFIX,
-				     ESF_GZ_TX_PREFIX_EGRESS_MPORT, efv->vf_mport,
+				     ESF_GZ_TX_PREFIX_EGRESS_MPORT, efv->mport,
 				     ESF_GZ_TX_PREFIX_EGRESS_MPORT_EN, 1);
 		nr_descs--;
 	}
@@ -422,7 +422,7 @@ int ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 }
 
 int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
-			struct efx_vfrep *efv)
+			struct efx_rep *efv)
 {
 	unsigned int old_insert_count = tx_queue->insert_count;
 	struct efx_nic *efx = tx_queue->efx;

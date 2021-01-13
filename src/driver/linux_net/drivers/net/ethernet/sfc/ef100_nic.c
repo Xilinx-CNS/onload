@@ -606,9 +606,7 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 		/* A RESET_TYPE_ALL will cause filters to be removed, so we remove filters
 		 * and reprobe after reset to avoid removing filters twice
 		 */
-		down_write(&efx->filter_sem);
 		ef100_filter_table_down(efx);
-		up_write(&efx->filter_sem);
 		rc = efx_mcdi_reset(efx, reset_type);
 		if (rc)
 			return rc;
@@ -620,9 +618,7 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 #endif
 		netif_device_attach(efx->net_dev);
 
-		down_write(&efx->filter_sem);
 		rc = ef100_filter_table_up(efx);
-		up_write(&efx->filter_sem);
 		if (rc)
 			return rc;
 
@@ -867,6 +863,46 @@ static struct net_device *ef100_get_vf_rep(struct efx_nic *efx, unsigned int vf)
 	return NULL;
 }
 
+static struct net_device *ef100_get_remote_rep(struct efx_nic *efx,
+					       unsigned int i)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+
+	if (i < nic_data->rem_rep_count)
+		return nic_data->rem_rep[i];
+	return NULL;
+}
+
+static void ef100_detach_remote_reps(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct net_device *rep_dev;
+	unsigned int i;
+
+	netif_dbg(efx, drv, efx->net_dev, "Detaching %d remote reps\n",
+		  nic_data->rem_rep_count);
+	assert_spin_locked(&nic_data->rem_reps_lock);
+	for (i = 0; i < nic_data->rem_rep_count; i++) {
+		rep_dev = nic_data->rem_rep[i];
+		/* See efx_device_detach_sync() */
+		netif_tx_lock_bh(rep_dev);
+		netif_device_detach(rep_dev);
+		netif_tx_unlock_bh(rep_dev);
+	}
+}
+
+static void ef100_attach_remote_reps(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	unsigned int i;
+
+	netif_dbg(efx, drv, efx->net_dev, "Attaching %d remote reps\n",
+		  nic_data->rem_rep_count);
+	assert_spin_locked(&nic_data->rem_reps_lock);
+	for (i = 0; i < nic_data->rem_rep_count; i++)
+		netif_device_attach(nic_data->rem_rep[i]);
+}
+
 void __ef100_detach_reps(struct efx_nic *efx)
 {
 #if defined(CONFIG_SFC_SRIOV)
@@ -875,8 +911,8 @@ void __ef100_detach_reps(struct efx_nic *efx)
 	unsigned int vf;
 
 	netif_dbg(efx, drv, efx->net_dev, "Detaching %d vfreps\n",
-		  nic_data->rep_count);
-	for (vf = 0; vf < nic_data->rep_count; vf++) {
+		  nic_data->vf_rep_count);
+	for (vf = 0; vf < nic_data->vf_rep_count; vf++) {
 		rep_dev = nic_data->vf_rep[vf];
 		/* See efx_device_detach_sync() */
 		netif_tx_lock_bh(rep_dev);
@@ -893,6 +929,9 @@ static void ef100_detach_reps(struct efx_nic *efx)
 	spin_lock_bh(&nic_data->vf_reps_lock);
 	__ef100_detach_reps(efx);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
+	spin_lock_bh(&nic_data->rem_reps_lock);
+	ef100_detach_remote_reps(efx);
+	spin_unlock_bh(&nic_data->rem_reps_lock);
 }
 
 void __ef100_attach_reps(struct efx_nic *efx)
@@ -902,8 +941,8 @@ void __ef100_attach_reps(struct efx_nic *efx)
 	unsigned int vf;
 
 	netif_dbg(efx, drv, efx->net_dev, "Attaching %d vfreps\n",
-		  nic_data->rep_count);
-	for (vf = 0; vf < nic_data->rep_count; vf++)
+		  nic_data->vf_rep_count);
+	for (vf = 0; vf < nic_data->vf_rep_count; vf++)
 		netif_device_attach(nic_data->vf_rep[vf]);
 #endif
 }
@@ -915,6 +954,9 @@ static void ef100_attach_reps(struct efx_nic *efx)
 	spin_lock_bh(&nic_data->vf_reps_lock);
 	__ef100_attach_reps(efx);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
+	spin_lock_bh(&nic_data->rem_reps_lock);
+	ef100_attach_remote_reps(efx);
+	spin_unlock_bh(&nic_data->rem_reps_lock);
 }
 
 static void ef100_link_state_change(struct efx_nic *efx)
@@ -1439,6 +1481,7 @@ static int ef100_probe_main(struct efx_nic *efx)
 	char fw_version[32];
 	unsigned int bar_size =
 		resource_size(&efx->pci_dev->resource[efx->mem_bar]);
+	u32 privlege_mask = 0;
 	int i, rc;
 
 	if (WARN_ON(bar_size == 0))
@@ -1518,6 +1561,9 @@ static int ef100_probe_main(struct efx_nic *efx)
 		goto fail;
 	efx->port_num = rc;
 
+	efx_mcdi_get_privilege_mask(efx, &privlege_mask);
+	nic_data->grp_mae = !!(privlege_mask &
+			       MC_CMD_PRIVILEGE_MASK_IN_GRP_MAE);
 	efx_mcdi_print_fwver(efx, fw_version, sizeof(fw_version));
 	pci_dbg(efx->pci_dev, "Firmware version %s\n", fw_version);
 
@@ -1534,10 +1580,27 @@ fail:
 	return rc;
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+static bool ef100_mport_needs_rep(struct efx_nic *efx,
+				  struct mae_mport_desc *mport_desc)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+
+	/* even VNIC_PLUGIN require rep */
+	return ((mport_desc->mport_id != nic_data->old_base_mport) &&
+		(mport_desc->mport_type == MAE_MPORT_DESC_MPORT_TYPE_VNIC));
+}
+#endif
+
 int ef100_probe_netdev_pf(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct net_device *net_dev = efx->net_dev;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	unsigned int nreps = 0;
+	unsigned int rep_idx;
+	unsigned int i;
+#endif
 	int rc;
 
 	rc = ef100_get_mac_address(efx, net_dev->perm_addr);
@@ -1547,14 +1610,8 @@ int ef100_probe_netdev_pf(struct efx_nic *efx)
 	memcpy(net_dev->dev_addr, net_dev->perm_addr, ETH_ALEN);
 	memcpy(nic_data->port_id, net_dev->perm_addr, ETH_ALEN);
 
-	/* TODO make this dynamically resize, instead of allocating for the
-	 * maximum possible num_vfs
-	 */
-	nic_data->vf_rep = kcalloc(255, sizeof(struct net_device *), GFP_KERNEL);
-	if (!nic_data->vf_rep) {
-		rc = -ENOMEM;
-		goto fail;
-	}
+	if (!nic_data->grp_mae)
+		return 0;
 
 	rc = efx_ef100_get_base_mport(efx);
 	if (rc)
@@ -1562,31 +1619,56 @@ int ef100_probe_netdev_pf(struct efx_nic *efx)
 			   "Failed to probe base mport rc %d; representors will not function\n",
 			   rc);
 
-	/* XXX this is a hack to deal with C-model issues vaguely related to
-	 * FWRIVERHD-911, where we get two PFs on port 0 (and none on port 1).
-	 * It's not satisfactory long-term, as port 1 PFs won't have the
-	 * PRIMARY flag, so won't get any MAE setup / TC offload.
-	 */
-	if (efx->mcdi->fn_flags & BIT(MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_PRIMARY)) {
-		rc = efx_init_tc(efx);
-		if (rc) {
-			/* Either we don't have an MAE at all (i.e. legacy v-switching),
-			 * or we do but we failed to probe it.  In the latter case, we
-			 * may not have set up default rules, in which case we won't be
-			 * able to pass any traffic.  However, we don't fail the probe,
-			 * because the user might need to use the netdevice to apply
-			 * configuration changes to fix whatever's wrong with the MAE.
-			 */
-			netif_warn(efx, probe, net_dev,
-				   "Failed to probe MAE rc %d; TC offload unavailable\n",
-				   rc);
-		} else {
+	rc = efx_init_tc(efx);
+	if (rc) {
+		/* Either we don't have an MAE at all (i.e. legacy v-switching),
+		 * or we do but we failed to probe it.  In the latter case, we
+		 * may not have set up default rules, in which case we won't be
+		 * able to pass any traffic.  However, we don't fail the probe,
+		 * because the user might need to use the netdevice to apply
+		 * configuration changes to fix whatever's wrong with the MAE.
+		 */
+		netif_warn(efx, probe, net_dev,
+			   "Failed to probe MAE rc %d; TC offload unavailable\n",
+			   rc);
+	} else {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-			net_dev->features |= NETIF_F_HW_TC;
-			efx->fixed_features |= NETIF_F_HW_TC;
+		net_dev->features |= NETIF_F_HW_TC;
+		efx->fixed_features |= NETIF_F_HW_TC;
 #endif
+	}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	for (i = 0; i < efx->tc->n_mports; i++) {
+		if (ef100_mport_needs_rep(efx, &efx->tc->mports[i]))
+			nreps++;
+	}
+	if (!nreps)
+		return 0;
+	nic_data->rem_rep = kcalloc(nreps,
+				    sizeof(struct net_device *),
+				    GFP_KERNEL);
+	if (!nic_data->rem_rep) {
+		rc = -ENOMEM;
+		goto fail;
+	}
+
+	for (i = 0; i < efx->tc->n_mports; i++) {
+		if (!ef100_mport_needs_rep(efx, &efx->tc->mports[i]))
+			continue;
+		if (WARN_ON(nic_data->rem_rep_count >= nreps))
+			goto fail;
+		/* increment rem_rep_count early, as it is used in
+		 * ef100_get_remote_rep called in the stack of
+		 * efx_ef100_remote_rep_create */
+		rep_idx = nic_data->rem_rep_count++;
+		rc = efx_ef100_remote_rep_create(efx, rep_idx, i);
+		if (rc) {
+			nic_data->rem_rep_count--;
+			goto fail;
 		}
 	}
+#endif
 
 	return 0;
 
@@ -1742,6 +1824,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	.get_vf_rep = ef100_get_vf_rep,
+	.get_remote_rep = ef100_get_remote_rep,
 	.detach_reps = ef100_detach_reps,
 	.attach_reps = ef100_attach_reps,
 	.link_state_change = ef100_link_state_change,
@@ -1812,7 +1895,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.filter_table_probe = ef100_filter_table_init,
 	.filter_table_up = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
-	.filter_table_down = efx_mcdi_filter_table_down,
+	.filter_table_down = ef100_filter_table_down,
 	.filter_table_remove = efx_mcdi_filter_table_fini,
 	.filter_insert = efx_mcdi_filter_insert,
 	.filter_remove_safe = efx_mcdi_filter_remove_safe,

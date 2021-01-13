@@ -121,7 +121,7 @@ void ef100_start_reps(struct efx_nic *efx)
 	WARN_ON(efx->state != STATE_NET_UP);
 
 	spin_lock_bh(&nic_data->vf_reps_lock);
-	for (i = 0; i < nic_data->rep_count; i++)
+	for (i = 0; i < nic_data->vf_rep_count; i++)
 		netif_carrier_on(nic_data->vf_rep[i]);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
 #endif
@@ -134,7 +134,7 @@ void ef100_stop_reps(struct efx_nic *efx)
 	int i;
 
 	spin_lock_bh(&nic_data->vf_reps_lock);
-	for (i = 0; i < nic_data->rep_count; i++)
+	for (i = 0; i < nic_data->vf_rep_count; i++)
 		netif_carrier_off(nic_data->vf_rep[i]);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
 #endif
@@ -415,7 +415,7 @@ static netdev_tx_t ef100_hard_start_xmit(struct sk_buff *skb,
 
 netdev_tx_t __ef100_hard_start_xmit(struct sk_buff *skb,
 				    struct net_device *net_dev,
-				    struct efx_vfrep *efv)
+				    struct efx_rep *efv)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct efx_tx_queue *tx_queue;
@@ -701,12 +701,15 @@ int ef100_netdev_event(struct notifier_block *this,
 {
 	struct efx_nic *efx = container_of(this, struct efx_nic, netdev_notifier);
 	struct net_device *net_dev = netdev_notifier_info_to_dev(ptr);
+	struct ef100_nic_data *nic_data = efx->nic_data;
 	int err;
 
 	if (efx->net_dev == net_dev &&
 	    (event == NETDEV_CHANGENAME || event == NETDEV_REGISTER))
 		ef100_update_name(efx);
 
+	if (!nic_data->grp_mae)
+		return NOTIFY_DONE;
 	err = efx_tc_netdev_event(efx, event, net_dev);
 	if (err & NOTIFY_STOP_MASK)
 		return err;
@@ -718,8 +721,11 @@ int ef100_netevent_event(struct notifier_block *this, unsigned long event,
 			 void *ptr)
 {
 	struct efx_nic *efx = container_of(this, struct efx_nic, netevent_notifier);
+	struct ef100_nic_data *nic_data = efx->nic_data;
 	int err;
 
+	if (!nic_data->grp_mae)
+		return NOTIFY_DONE;
 	err = efx_tc_netevent_event(efx, event, ptr);
 	if (err & NOTIFY_STOP_MASK)
 		return err;
@@ -784,9 +790,16 @@ static void ef100_unregister_netdev(struct efx_nic *efx)
 void ef100_remove_netdev(struct efx_probe_data *probe_data)
 {
 	struct efx_nic *efx = &probe_data->efx;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	struct ef100_nic_data *nic_data;
+	int i;
+#endif
 
 	if (!efx->net_dev)
 		return;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	nic_data = efx->nic_data;
+#endif
 
 	rtnl_lock();
 #ifdef EFX_NOT_UPSTREAM
@@ -812,18 +825,19 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 	rtnl_unlock();
 #endif
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	for (i = 0; i < nic_data->rem_rep_count; i++)
+		efx_ef100_remote_rep_destroy(efx, i);
+	kfree(nic_data->rem_rep);
+	nic_data->rem_rep = NULL;
+	nic_data->rem_rep_count = 0;
+#endif
 	if (!efx->type->is_vf) {
-		struct ef100_nic_data *nic_data = efx->nic_data;
-
 #if defined(CONFIG_SFC_SRIOV)
 		if (efx->vf_count) /* Disable any VFs */
 			efx_ef100_pci_sriov_disable(efx, true);
 #endif
 		efx_fini_tc(efx);
-		if (nic_data) {
-			kfree(nic_data->vf_rep);
-			nic_data->vf_rep = NULL;
-		}
 	}
 
 #ifdef CONFIG_SFC_DEBUGFS
@@ -845,6 +859,7 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 int ef100_probe_netdev(struct efx_probe_data *probe_data)
 {
 	struct efx_nic *efx = &probe_data->efx;
+	struct ef100_nic_data *nic_data;
 	struct efx_probe_data **probe_ptr;
 	struct net_device *net_dev;
 	int rc;
@@ -921,9 +936,12 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	/* Don't fail init if RSS setup doesn't work. */
 	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
 
-	rc = efx_init_struct_tc(efx);
-	if (rc)
-		goto fail;
+	nic_data = efx->nic_data;
+	if (nic_data->grp_mae) {
+		rc = efx_init_struct_tc(efx);
+		if (rc)
+			goto fail;
+	}
 
 	rc = ef100_register_netdev(efx);
 	if (rc)

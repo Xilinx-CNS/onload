@@ -179,6 +179,89 @@ void efx_mae_counters_grant_credits(struct work_struct *work)
 		rx_queue->granted_count += credits;
 }
 
+int efx_mae_enumerate_mports(struct efx_nic *efx, int outbuflen,
+			     struct mae_mport_desc *out)
+{
+#define MC_CMD_MAEM_PORT_OUTBUF_LEN \
+	(DIV_ROUND_UP(MC_CMD_MAE_MPORT_ENUMERATE_OUT_LENMAX_MCDI2, 4) * sizeof(efx_dword_t))
+	efx_dword_t *outbuf = kzalloc(MC_CMD_MAEM_PORT_OUTBUF_LEN, GFP_KERNEL);
+	size_t outlen, stride, count;
+	int rc, i;
+
+	BUILD_BUG_ON(MC_CMD_MAE_MPORT_ENUMERATE_IN_LEN);
+	if (!outbuf)
+		return -ENOMEM;
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_MPORT_ENUMERATE, NULL, 0, outbuf,
+			  MC_CMD_MAEM_PORT_OUTBUF_LEN, &outlen);
+	if (rc) {
+		rc = (rc < 0) ? rc : -EIO;
+		goto fail;
+	}
+	if (outlen < MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_OFST) {
+		rc = -EIO;
+		goto fail;
+	}
+	count = MCDI_DWORD(outbuf, MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_COUNT);
+	stride = MCDI_DWORD(outbuf, MAE_MPORT_ENUMERATE_OUT_SIZEOF_MPORT_DESC);
+	if (stride < MAE_MPORT_DESC_LEN) {
+		rc = -EIO;
+		goto fail;
+	}
+	if (outlen < (count * stride) +
+	    MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_OFST) {
+		rc = -EIO;
+		goto fail;
+	}
+	if (MC_CMD_MAEM_PORT_OUTBUF_LEN < outlen) {
+		rc = -ENOBUFS;
+		goto fail;
+	}
+	for (i = 0; i < count && i < outbuflen; i++) {
+		MCDI_DECLARE_STRUCT_PTR(desc) =
+			(efx_dword_t *)_MCDI_PTR(outbuf,
+						 MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_OFST +
+						 i * stride);
+		struct mae_mport_desc *d = out + i;
+
+		memset(d, 0, sizeof(*d));
+		d->mport_id = MCDI_STRUCT_DWORD(desc, MAE_MPORT_DESC_MPORT_ID);
+		d->flags = MCDI_STRUCT_DWORD(desc, MAE_MPORT_DESC_FLAGS);
+		d->caller_flags = MCDI_STRUCT_DWORD(desc,
+						    MAE_MPORT_DESC_CALLER_FLAGS);
+		d->mport_type = MCDI_STRUCT_DWORD(desc,
+						  MAE_MPORT_DESC_MPORT_TYPE);
+		switch (d->mport_type) {
+		case MAE_MPORT_DESC_MPORT_TYPE_NET_PORT:
+			d->port_idx = MCDI_STRUCT_DWORD(desc,
+							MAE_MPORT_DESC_NET_PORT_IDX);
+			break;
+		case MAE_MPORT_DESC_MPORT_TYPE_ALIAS:
+			d->alias_mport_id = MCDI_STRUCT_DWORD(desc,
+							      MAE_MPORT_DESC_ALIAS_DELIVER_MPORT_ID);
+			break;
+		case MAE_MPORT_DESC_MPORT_TYPE_VNIC:
+			d->vnic_client_type = MCDI_STRUCT_DWORD(desc,
+								MAE_MPORT_DESC_VNIC_CLIENT_TYPE);
+			d->interface_idx = MCDI_STRUCT_DWORD(desc,
+							     MAE_MPORT_DESC_VNIC_FUNCTION_INTERFACE);
+			d->pf_idx = MCDI_STRUCT_WORD(desc,
+						     MAE_MPORT_DESC_VNIC_FUNCTION_PF_IDX);
+			d->vf_idx = MCDI_STRUCT_WORD(desc,
+						     MAE_MPORT_DESC_VNIC_FUNCTION_VF_IDX);
+			break;
+		default:
+			/* Unknown mport_type, just accept it */
+			break;
+
+		}
+
+	}
+
+fail:
+	kfree(outbuf);
+	return rc ? rc : count;
+}
+
 static int efx_mae_get_basic_caps(struct efx_nic *efx, struct mae_caps *caps)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_GET_CAPS_OUT_LEN);

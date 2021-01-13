@@ -24,13 +24,23 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 	if (rc)
 		goto fail1;
 
+	if (!nic_data->grp_mae)
+		return 0;
+
+	nic_data->vf_rep = kcalloc(num_vfs, sizeof(struct net_device *),
+				GFP_KERNEL);
+	if (!nic_data->vf_rep) {
+		rc = -ENOMEM;
+		goto fail1;
+	}
+
 	for (i = 0; i < num_vfs; i++) {
 		rc = efx_ef100_vfrep_create(efx, i);
 		if (rc)
 			goto fail2;
 	}
 	spin_lock_bh(&nic_data->vf_reps_lock);
-	nic_data->rep_count = num_vfs;
+	nic_data->vf_rep_count = num_vfs;
 	if (netif_running(efx->net_dev) &&
 	    (efx->state == STATE_NET_UP))
 		__ef100_attach_reps(efx);
@@ -44,6 +54,8 @@ fail2:
 	for (; i--;)
 		efx_ef100_vfrep_destroy(efx, i);
 	pci_disable_sriov(dev);
+	kfree(nic_data->vf_rep);
+	nic_data->vf_rep = NULL;
 fail1:
 	efx->vf_count = 0;
 	netif_err(efx, probe, efx->net_dev, "Failed to enable SRIOV VFs\n");
@@ -70,16 +82,20 @@ int efx_ef100_pci_sriov_disable(struct efx_nic *efx, bool force)
 	/* We take the lock as a barrier to ensure no-one holding the lock
 	 * still sees nonzero rep_count when we start destroying reps
 	 */
-	spin_lock_bh(&nic_data->vf_reps_lock);
-	nic_data->rep_count = 0;
-	spin_unlock_bh(&nic_data->vf_reps_lock);
+	if (nic_data->grp_mae) {
+		spin_lock_bh(&nic_data->vf_reps_lock);
+		nic_data->vf_rep_count = 0;
+		spin_unlock_bh(&nic_data->vf_reps_lock);
 
-	for (i = 0; i < efx->vf_count; i++)
-		efx_ef100_vfrep_destroy(efx, i);
+		for (i = 0; i < efx->vf_count; i++)
+			efx_ef100_vfrep_destroy(efx, i);
+	}
 
 	if (!vfs_assigned)
 		pci_disable_sriov(dev);
 
+	kfree(nic_data->vf_rep);
+	nic_data->vf_rep = NULL;
 	efx->vf_count = 0;
 	return 0;
 }

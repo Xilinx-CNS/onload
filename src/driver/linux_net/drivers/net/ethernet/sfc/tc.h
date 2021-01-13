@@ -82,9 +82,14 @@ struct efx_tc_counter_index {
 	struct efx_tc_counter *cnt;
 };
 
+/* In principle up to 255 VFs are possible; the last one is #254 */
+#define EFX_TC_VF_MAX           (255)
+/* TODO correct this after finding max */
+#define EFX_TC_REMOTE_MAX       (16) /* including for VNIC_TYPE_PLUGIN */
 /* Driver-internal numbering scheme for vports.  See efx_tc_flower_lookup_dev() */
 #define EFX_VPORT_PF		0
 #define EFX_VPORT_VF_OFFSET	1
+#define EFX_VPORT_REMOTE_OFFSET	(EFX_VPORT_VF_OFFSET + EFX_TC_VF_MAX)
 
 struct efx_tc_action_set {
 	u16 vlan_push:2;
@@ -210,12 +215,13 @@ struct efx_tc_lhs_action {
 enum efx_tc_default_rules { /* named by ingress port */
 	EFX_TC_DFLT_PF,
 	EFX_TC_DFLT_WIRE,
-	EFX_TC_DFLT_VF_BASE
+	EFX_TC_DFLT_VF_BASE,
+	EFX_TC_DFLT_REMOTE_BASE = EFX_TC_DFLT_VF_BASE + EFX_TC_VF_MAX
 };
 
 #define	EFX_TC_DFLT_VF(_vf)	(EFX_TC_DFLT_VF_BASE + (_vf))
-/* In principle up to 255 VFs are possible; the last one is #254 */
-#define EFX_TC_DFLT__MAX	EFX_TC_DFLT_VF(255)
+#define	EFX_TC_DFLT_REM(i)	(EFX_TC_DFLT_VF(EFX_TC_VF_MAX) + (i))
+#define EFX_TC_DFLT__MAX	EFX_TC_DFLT_REM(EFX_TC_REMOTE_MAX)
 
 struct efx_tc_flow_rule {
 	unsigned long cookie;
@@ -260,6 +266,8 @@ enum efx_tc_rule_prios {
  * struct efx_tc_state - control plane data for TC offload
  *
  * @caps: MAE capabilities reported by MCDI
+ * @n_mports: length of @mports array
+ * @mports: m-port descriptions from MC_CMD_MAE_MPORT_ENUMERATE
  * @block_list: List of &struct efx_tc_block_binding
  * @mutex: Used to serialise operations on TC hashtables
  * @counter_ht: Hashtable of TC counters (FW IDs and counter values)
@@ -285,6 +293,8 @@ enum efx_tc_rule_prios {
  */
 struct efx_tc_state {
 	struct mae_caps *caps;
+	unsigned int n_mports;
+	struct mae_mport_desc *mports;
 	struct list_head block_list;
 	struct mutex mutex;
 	struct rhashtable counter_ht;
@@ -314,10 +324,10 @@ int efx_tc_configure_default_rule(struct efx_nic *efx,
 void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
 				     enum efx_tc_default_rules dflt);
 int efx_tc_flower(struct efx_nic *efx, struct net_device *net_dev,
-		  struct flow_cls_offload *tc, struct efx_vfrep *efv);
+		  struct flow_cls_offload *tc, struct efx_rep *efv);
 int efx_tc_block_cb(enum tc_setup_type type, void *type_data, void *cb_priv);
 int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
-		       struct flow_block_offload *tcb, struct efx_vfrep *efv);
+		       struct flow_block_offload *tcb, struct efx_rep *efv);
 int efx_setup_tc(struct net_device *net_dev, enum tc_setup_type type,
 		 void *type_data);
 
