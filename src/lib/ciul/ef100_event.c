@@ -278,7 +278,7 @@ void ef100_ef_eventq_timer_run(ef_vi* q, unsigned v)
 
 void ef100_ef_eventq_timer_clear(ef_vi* q)
 {
-  ef100_unsupported_msg(__FUNCTION__);
+  /* FIXME: it is used by Onload */
 }
 
 
