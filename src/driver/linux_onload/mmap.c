@@ -46,11 +46,12 @@
  ****************************************************************************/
 
 /*! map offset in shared data to physical page frame number */
-static struct page*
+static vm_fault_t
 tcp_helper_rm_nopage_mem(tcp_helper_resource_t* trs,
                          struct vm_area_struct *vma, unsigned long offset)
 {
   ci_netif* ni = &trs->netif;
+  int rc;
 
   OO_DEBUG_SHM(ci_log("%s: %u", __FUNCTION__, trs->id));
 
@@ -60,12 +61,13 @@ tcp_helper_rm_nopage_mem(tcp_helper_resource_t* trs,
          region.
   */
 
-  if( offset < ci_shmbuf_size(&ni->pages_buf) )
-    return ci_shmbuf_page(&ni->pages_buf, offset);
+  rc = oo_shmbuf_fault(&ni->shmbuf, vma, offset);
+  if( rc == 0 )
+    return VM_FAULT_NOPAGE;
 
   OO_DEBUG_SHM(ci_log("%s: offset %lx out of range", __FUNCTION__, offset));
   ci_assert(0);
-  return NULL;
+  return VM_FAULT_SIGBUS;
 }
 
 
@@ -135,8 +137,7 @@ tcp_helper_rm_nopage(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
 
   switch( map_id ) {
     case CI_NETIF_MMAP_ID_STATE:
-      *page_out = tcp_helper_rm_nopage_mem(trs, vma, offset);
-      return *page_out == NULL ? VM_FAULT_SIGBUS : 0;
+      return tcp_helper_rm_nopage_mem(trs, vma, offset);
     case CI_NETIF_MMAP_ID_TIMESYNC:
       *page_out = tcp_helper_rm_nopage_timesync(trs, vma, offset);
       return *page_out == NULL ? VM_FAULT_SIGBUS : 0;
@@ -239,21 +240,15 @@ static int tcp_helper_rm_mmap_mem(tcp_helper_resource_t* trs,
                                   unsigned long bytes,
                                   struct vm_area_struct* vma)
 {
-  int rc = 0;
-  int map_num = 0;
-  unsigned long offset = 0;
-
   OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
 
-  rc = ci_shmbuf_mmap(&trs->netif.pages_buf, 0, &bytes, vma,
-                           &map_num, &offset);
-  if( rc < 0 )  goto out;
-  OO_DEBUG_MEMSIZE(ci_log("after mapping page buf have %ld", bytes));
-
-  ci_assert_equal(bytes, 0);
-
- out:
-  return rc;
+  /* Let's fault in the first chunk right now, and defer the socket states
+   * to the fault handler.
+   */
+  if( bytes == oo_shmbuf_size(&trs->netif.shmbuf) )
+    return oo_shmbuf_fault(&trs->netif.shmbuf, vma, 0);
+  else
+    return -EFAULT;
 }
 
 

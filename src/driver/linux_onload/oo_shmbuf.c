@@ -63,8 +63,9 @@ unsigned long oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr)
 {
   int i;
 
-  ci_assert_lt(sh->num, 10);
-  /* Fixme implement hash table */
+  /* Fixme implement hash table, it is really necessary with 2^21 sockets
+   * => 2^11=2048 chunks.  See the comment at OO_SHARED_BUFFER_CHUNK_SIZE.
+   */
 
   for(i = 0; i < sh->num; i++) {
     unsigned long off = ptr - oo_shmbuf_idx2ptr(sh, i);

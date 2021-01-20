@@ -147,7 +147,14 @@ struct ci_netif_s {
   /* These uid_t are in the kernel init namespace */
   uid_t                kuid;
   uid_t                keuid;
-  ci_shmbuf_t          pages_buf;
+
+  struct oo_shmbuf     shmbuf; /* shared state storage */
+  /* Size of continuous chunks: */
+#define OO_SHARED_BUFFER_CHUNK_ORDER (PMD_SHIFT - PAGE_SHIFT)
+#define OO_SHARED_BUFFER_CHUNK_SIZE  (1ULL << PMD_SHIFT)
+  /* With CI_CFG_NETIF_MAX_ENDPOINTS_MAX = 2^21,
+   * there can't be more than 2^11 chunks of socket buffers
+   * (+ a few chunks for the stack state itsefl). */
 #endif
 
   struct oo_cplane_handle *cplane;

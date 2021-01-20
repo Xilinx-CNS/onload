@@ -2224,29 +2224,32 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   }
 #endif
 
-  sz = CI_ROUND_UP(sz, CI_PAGE_SIZE);
+  sz = CI_ROUND_UP(sz, OO_SHARED_BUFFER_CHUNK_SIZE);
 
-  /* [pages_buf] backs the shared stack state and the socket buffers.  First,
+  /* [shmbuf] backs the shared stack state and the socket buffers.  First,
    * count the pages required for the latter. */
-  i = (NI_OPTS(ni).max_ep_bufs + EP_BUF_PER_PAGE - 1) / EP_BUF_PER_PAGE;
+  i = (NI_OPTS(ni).max_ep_bufs +
+       (EP_BUF_PER_PAGE << OO_SHARED_BUFFER_CHUNK_ORDER) - 1) /
+      (EP_BUF_PER_PAGE << OO_SHARED_BUFFER_CHUNK_ORDER);
   /* Now add in the pages for the shared state. */
-  i += sz / CI_PAGE_SIZE;
+  i += sz / OO_SHARED_BUFFER_CHUNK_SIZE;
 
   /* Allocate the shmbuf, and fault in the pages for the shared state (but not
    * for the sockets).  These pages get zeroed, so all fields in the shared
    * state can be assumed to have been zero-initialised. */
-  rc = ci_shmbuf_alloc(&ni->pages_buf, i, sz / CI_PAGE_SIZE);
+  rc = oo_shmbuf_alloc(&ni->shmbuf, OO_SHARED_BUFFER_CHUNK_ORDER, i,
+                       sz / OO_SHARED_BUFFER_CHUNK_SIZE);
   if( rc < 0 ) {
     OO_DEBUG_ERR(ci_log("%s: failed to alloc shmbuf for shared state and "
                         "socket buffers (%d)", __FUNCTION__, rc));
     goto fail1;
   }
 
-  ns = ni->state = (ci_netif_state*) ci_shmbuf_ptr(&ni->pages_buf, 0);
+  ns = ni->state = (ci_netif_state*) oo_shmbuf_off2ptr(&ni->shmbuf, 0);
 
   CI_DEBUG(ns->flags |= CI_NETIF_FLAG_DEBUG);
 
-  ns->netif_mmap_bytes = ci_shmbuf_size(&ni->pages_buf);
+  ns->netif_mmap_bytes = oo_shmbuf_size(&ni->shmbuf);
 
   ns->stack_id = trs->id;
   ns->ep_ofs = ni->ep_ofs = sz;
@@ -2422,7 +2425,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   return 0;
 
  fail2:
-  ci_shmbuf_free(&ni->pages_buf);
+  oo_shmbuf_free(&ni->shmbuf);
  fail1:
   LOG_NC(ci_log("failed to allocate tcp_helper resources (%d)", rc));
   return rc;
@@ -2678,7 +2681,7 @@ release_netif_resources(tcp_helper_resource_t* trs)
   for( i = 0; i < CI_CFG_N_READY_LISTS; i++ )
     ci_waitable_dtor(&trs->ready_list_waitqs[i]);
 
-  ci_shmbuf_free(&ni->pages_buf);
+  oo_shmbuf_free(&ni->shmbuf);
 }
 static void
 release_netif_hw_resources(tcp_helper_resource_t* trs)
@@ -5763,11 +5766,13 @@ add_ep(tcp_helper_resource_t* trs, unsigned id, tcp_helper_endpoint_t* ep)
 static int
 install_socks(tcp_helper_resource_t* trs, unsigned id, int num)
 {
-  tcp_helper_endpoint_t* eps[EP_BUF_PER_PAGE];
+  tcp_helper_endpoint_t** eps;
   ci_irqlock_state_t lock_flags;
   int i;
 
-  ci_assert_equal(num, EP_BUF_PER_PAGE);
+  eps = vmalloc(sizeof(void*) * num);
+  if( eps == NULL )
+    return -ENOMEM;
 
   /* Allocate the kernel state for each socket. */
   for( i = 0; i < num; ++i ) {
@@ -5775,12 +5780,13 @@ install_socks(tcp_helper_resource_t* trs, unsigned id, int num)
     if( ! eps[i] ) {
       OO_DEBUG_ERR(ci_log("%s: allocation failed", __FUNCTION__));
       while( i-- )  ci_free(eps[i]);
+      vfree(eps);
       return -ENOMEM;
     }
   }
 
   ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
-  for( i = 0; i < EP_BUF_PER_PAGE; ++i, ++id ){
+  for( i = 0; i < num; ++i, ++id ){
     OO_DEBUG_SHM(ci_log("%s: add ep %d", __FUNCTION__, id));
     if( add_ep(trs, id, eps[i]) == 0 )
       eps[i] = NULL;
@@ -5788,9 +5794,10 @@ install_socks(tcp_helper_resource_t* trs, unsigned id, int num)
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
   /* Prevents leaks! */
-  for( i = 0; i < EP_BUF_PER_PAGE; ++i )
+  for( i = 0; i < num; ++i )
     if( eps[i] )
       ci_free(eps[i]);
+  vfree(eps);
 
   trs->netif.state->sock_alloc_numa_nodes |= 1 << numa_node_id();
   return 0;
@@ -5801,18 +5808,17 @@ int efab_tcp_helper_more_socks(tcp_helper_resource_t* trs)
 {
   ci_netif* ni = &trs->netif;
   int rc;
-  unsigned page_i;
 
   if( ni->ep_tbl_n >= ni->ep_tbl_max )  return -ENOSPC;
 
-  page_i = oo_sockid_to_state_off(ni, ni->ep_tbl_n) >> CI_PAGE_SHIFT;
-  rc = ci_shmbuf_demand_page(&ni->pages_buf, page_i);
+  rc = oo_shmbuf_add(&ni->shmbuf);
   if( rc < 0 ) {
     OO_DEBUG_ERR(ci_log("%s: demand failed (%d)", __FUNCTION__, rc));
     return rc;
   }
 
-  return install_socks(trs, ni->ep_tbl_n, EP_BUF_PER_PAGE);
+  return install_socks(trs, ni->ep_tbl_n,
+                       EP_BUF_PER_PAGE << OO_SHARED_BUFFER_CHUNK_ORDER);
 }
 
 

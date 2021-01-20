@@ -182,7 +182,11 @@ extern int no_shared_state_panic;
 */
 ci_inline oo_p oo_ptr_to_statep(const ci_netif* ni, void* ptr) {
   oo_p sp;
+#ifdef __KERNEL__
+  OO_P_INIT(sp, ni, (ci_uint32) oo_shmbuf_ptr2off(&ni->shmbuf, ptr));
+#else
   OO_P_INIT(sp, ni, (ci_uint32) ((char*) ptr - (char*) ni->state));
+#endif
   return sp;
 }
 
@@ -200,11 +204,11 @@ ci_inline oo_p oo_ptr_to_statep(const ci_netif* ni, void* ptr) {
  * state. */
 ci_inline char* oo_state_off_to_ptr(ci_netif* ni, unsigned off)
 {
-  char* ptr = (char*) ni->state + off;
-#ifdef __ci_driver__
-  ci_assert_equal(ptr, ci_shmbuf_ptr(&ni->pages_buf, off));
+#ifndef __KERNEL__
+  return (char*) ni->state + off;;
+#else
+  return oo_shmbuf_off2ptr(&ni->shmbuf, off);
 #endif
-  return ptr;
 }
 
 
