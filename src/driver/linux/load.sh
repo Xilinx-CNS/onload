@@ -242,6 +242,7 @@ donet () {
     if modprobe -q mtdpart || modprobe -q mtd; then
         modprobe mtdchar
     fi
+    modprobe -q vdpa
     # ef100 support requires nf_flow_table if it is configured in
     modprobe nf_flow_table
 
