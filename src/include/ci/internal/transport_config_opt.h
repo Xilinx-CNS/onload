@@ -670,8 +670,10 @@
  *       BPF_PROG_GET_FD_BY_ID 4.13+
  *       IFLA_XDP_PROG_ID      4.13+
  *  * testing done on 4.18 (Ubuntu 18.10 and RHEL8)
+ *
+ *  * temporary disabled for linux-5.10 (ON-12686)
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0) && LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
 #define CI_HAVE_BPF_NATIVE 1
 #else
 #define CI_HAVE_BPF_NATIVE 0
