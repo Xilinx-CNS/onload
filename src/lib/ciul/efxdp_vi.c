@@ -93,12 +93,12 @@ static void efxdp_ef_vi_transmit_push(ef_vi* vi)
    *    - as we cannot rely on interrupt to pick TX up
    *    - we kick after 1st and 2nd packet to make sure latency is low
    *      for typical ping-pong usecases even if interrupts are moderated.
-   *  * at least every packets if queue is half stuffed.
+   *  * at least every packets if queue is quarter stuffed.
    */
   EF_VI_BUG_ON(vi->ep_state->txq.added == vi->ep_state->txq.previous);
   if( vi->ep_state->txq.added - vi->ep_state->txq.removed < 3 ||
       (vi->ep_state->txq.added ^ vi->ep_state->txq.previous) /
-      (AF_XDP_TX_BATCH_MAX >> 1) )
+      (AF_XDP_TX_BATCH_MAX >> 2) )
     efxdp_tx_kick(vi);
 }
 
