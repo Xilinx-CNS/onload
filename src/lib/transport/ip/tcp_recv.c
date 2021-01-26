@@ -254,9 +254,6 @@ ci_tcp_recvmsg_get_nopeek(int peek_off, ci_tcp_state *ts, ci_netif *netif,
     /* for now run every time we update rcv_delivered */
     ci_tcp_rcvbuf_drs(netif, ts);
   if( oo_offbuf_left(&(*pkt)->buf) == 0 ) {
-    /* We've emptied the current packet. */
-    if( CI_UNLIKELY(SEQ_LE(ts->ack_trigger, ts->rcv_delivered)) )
-      ci_tcp_recvmsg_send_wnd_update(netif, ts);
     if( total == max_bytes || OO_PP_IS_NULL((*pkt)->next) )
       /* We've emptied the receive queue. Return non-zero to report this
        * to the calling function, so that it can return appropriately. */
@@ -508,6 +505,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
 #if CI_CFG_TIMESTAMPING && ! defined(__KERNEL__)
   int fill_tstamp;
 #endif
+  oo_pkt_p initial_recv1_extract;
 
   ci_assert(netif);
   ci_assert(ts);
@@ -536,6 +534,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
     pkt = PKT_CHK_NNL(netif, ts->recv1_extract);
     ci_assert(oo_offbuf_not_empty(&pkt->buf));
   }
+  initial_recv1_extract = ts->recv1_extract;
 
   /* If we carry on here when in error then we'd be ignoring them. */
   ci_assert_ge(rinf->rc, 0);
@@ -569,7 +568,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
 
     n = rinf->copier(netif, rinf, pkt, peek_off, &ndata);
 #ifdef  __KERNEL__
-    if( n < 0 )  return n;
+    if( n < 0 )  break;
 #endif
     rc += ndata;
     oo_offbuf_advance(&pkt->buf, n);
@@ -580,7 +579,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
     if(CI_LIKELY( ! (rinf->a->flags & (MSG_PEEK | ONLOAD_MSG_ONEPKT)) )) {
       if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, ndata,
                                     max_bytes) != 0 )
-        return rc;
+        break;
     }
     else {
       if( rinf->a->flags & MSG_PEEK ) {
@@ -601,16 +600,16 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
       else {
         if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, ndata,
                                       max_bytes) != 0 )
-          return rc;
+          break;
       }
 
       if( rinf->a->flags & ONLOAD_MSG_ONEPKT )
-        return rc;
+        break;
     }
 
     /* Exit here if we've filled the app's buffer. */
     if( ! iovec_roll_over(&rinf->piov) )
-      return rc;
+      break;
     /* Yes, [piov->io.iov_len] could be zero here.  Just means we'll waste
     ** time going round the loop an extra time and not copy an data.  This
     ** is harmless.  Doing it this way makes the common case faster, and
@@ -618,6 +617,13 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
     ** comment; darn.
     */
   }
+  /* we do this here as the last thing to avoid sending many small window updates
+   * in cases with small recv window and small segments */
+  if( initial_recv1_extract != ts->recv1_extract &&
+      CI_UNLIKELY(SEQ_LE(ts->ack_trigger, ts->rcv_delivered)) ) {
+    ci_tcp_recvmsg_send_wnd_update(netif, ts);
+  }
+  return total;
 }
 
 
