@@ -120,6 +120,8 @@ function do_member() { shift 2; defer_test_memtype pos "$@" void; }
 function do_nmember() { shift 2; defer_test_memtype neg "$@" void; }
 function do_memtype() { shift 2; defer_test_memtype pos "$@"; }
 function do_nmemtype() { shift 2; defer_test_memtype neg "$@"; }
+function do_typedef() { shift 2; defer_test_typedef pos "$@"; }
+function do_ntypedef() { shift 2; defer_test_typedef neg "$@"; }
 function do_bitfield() { shift 2; defer_test_bitfield pos "$@"; }
 function do_nbitfield() { shift 2; defer_test_bitfield neg "$@"; }
 function do_export()
@@ -254,6 +256,25 @@ function defer_test_memtype()
 #include <${file:8}>
 $aggtype kernel_compat_dummy_1;
 __typeof($memtype) *kernel_compat_dummy_2 = &kernel_compat_dummy_1.$memname;
+"
+}
+
+function defer_test_typedef()
+{
+    local sense=$1
+    local typename="$2"
+    local file=$3
+    shift 3
+    local type="$*"
+
+    if [ ${file:0:8} != "include/" ]; then
+	fail "defer_test_symtype() can work in include/ - request was '$file'"
+    fi
+
+    defer_test_compile $sense "
+#include <${file:8}>
+$typename kernel_compat_dummy_1;
+__typeof($type)* kernel_compat_dummy_2 = &kernel_compat_dummy_1;
 "
 }
 
