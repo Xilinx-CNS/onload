@@ -59,7 +59,6 @@
 #include <linux/uio.h>
 #include <asm/current.h>
 #include <asm/errno.h>
-#include <asm/kmap_types.h>
 #include <linux/semaphore.h>
 #include <linux/workqueue.h>
 #include <linux/user_namespace.h>
