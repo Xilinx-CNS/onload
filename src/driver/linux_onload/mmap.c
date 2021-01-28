@@ -124,22 +124,25 @@ tcp_helper_rm_nopage_pkts(tcp_helper_resource_t* trs, struct vm_area_struct *vma
   return pfn_to_page(oo_iobufset_pfn(ni->pkt_bufs[bufset_id], offset));
 }
 
-static struct page*
+static vm_fault_t
 tcp_helper_rm_nopage(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
-                     int map_id, unsigned long offset)
+                     int map_id, unsigned long offset,
+                     struct page** page_out)
 {
-
   TCP_HELPER_RESOURCE_ASSERT_VALID(trs, 0);
 
   OO_DEBUG_SHM(ci_log("%s: %u", __FUNCTION__, trs->id));
 
   switch( map_id ) {
     case CI_NETIF_MMAP_ID_STATE:
-      return tcp_helper_rm_nopage_mem(trs, vma, offset);
+      *page_out = tcp_helper_rm_nopage_mem(trs, vma, offset);
+      return *page_out == NULL ? VM_FAULT_SIGBUS : 0;
     case CI_NETIF_MMAP_ID_TIMESYNC:
-      return tcp_helper_rm_nopage_timesync(trs, vma, offset);
+      *page_out = tcp_helper_rm_nopage_timesync(trs, vma, offset);
+      return *page_out == NULL ? VM_FAULT_SIGBUS : 0;
     case CI_NETIF_MMAP_ID_IOBUFS:
-      return tcp_helper_rm_nopage_iobuf(trs, vma, offset);
+      *page_out = tcp_helper_rm_nopage_iobuf(trs, vma, offset);
+      return *page_out == NULL ? VM_FAULT_SIGBUS : 0;
     case CI_NETIF_MMAP_ID_IO:
 #if CI_CFG_PIO
     case CI_NETIF_MMAP_ID_PIO:
@@ -150,37 +153,39 @@ tcp_helper_rm_nopage(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
       OO_DEBUG_SHM(ci_log("%s: map_id=%d. Debugger?", __FUNCTION__, map_id));
       /* IO mappings are always present, and so a page fault should never come
        * down this path, but ptrace() can get us here. */
-      return NULL;
+      return VM_FAULT_SIGBUS;
     default:
       ci_assert_ge(map_id, CI_NETIF_MMAP_ID_PKTS);
-      return tcp_helper_rm_nopage_pkts(trs, vma,
+      *page_out = tcp_helper_rm_nopage_pkts(trs, vma,
                                        offset +
                                        (map_id - CI_NETIF_MMAP_ID_PKTS) *
                                        CI_CFG_PKT_BUF_SIZE * PKTS_PER_SET);
+      return *page_out == NULL ? VM_FAULT_SIGBUS : 0;
   }
 
 }
 
 
-static struct page*
+static vm_fault_t
 __vm_op_nopage(tcp_helper_resource_t* trs, struct vm_area_struct* vma,
-               unsigned long address, int* type)
+               unsigned long address, struct page** page_out)
 {
   int map_id = OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma));
-  struct page* pg = tcp_helper_rm_nopage(trs, vma, map_id,
-                                           address - vma->vm_start);
+  vm_fault_t rc = tcp_helper_rm_nopage(trs, vma, map_id,
+                                       address - vma->vm_start,
+                                       page_out);
 
-  if( pg == NULL )
-    return NULL;
+  if( *page_out == NULL )
+    return rc;
 
-  get_page(pg);
+  get_page(*page_out);
 
   OO_DEBUG_TRAMP(ci_log("%s: %u vma=%p sz=%lx pageoff=%lx id=%"CI_PRIx64,
                  __FUNCTION__, trs->id, vma, vma->vm_end - vma->vm_start,
                  (address - vma->vm_start) >> CI_PAGE_SHIFT,
                  OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma))));
 
-  return pg;
+  return rc;
 }
 
 
@@ -194,12 +199,13 @@ static vm_fault_t vm_op_fault(
 #endif
   tcp_helper_resource_t* trs = (tcp_helper_resource_t*) vma->vm_private_data;
   unsigned long address = VM_FAULT_ADDRESS(vmf);
+  vm_fault_t rc = 0;
 
   TCP_HELPER_RESOURCE_ASSERT_VALID(trs, 0);
 
-  vmf->page = __vm_op_nopage(trs, vma, address, NULL);
+  rc = __vm_op_nopage(trs, vma, address, &vmf->page);
 
-  if( vmf->page == NULL && ~current->flags & PF_DUMPCORE ) {
+  if( rc == VM_FAULT_SIGBUS && ~current->flags & PF_DUMPCORE ) {
     /* We don't generally expect to fail to map, but there are legitimate
      * cases where this occurs, such as the application using
      * mlockall(MCL_FUTURE) resulting in the kernel trying to fault in pages
@@ -214,7 +220,7 @@ static vm_fault_t vm_op_fault(
                           OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma))));
   }
 
-  return ( vmf->page == NULL ) ? VM_FAULT_SIGBUS : 0;
+  return rc;
 }
 
 
