@@ -95,35 +95,6 @@ ci_tcp_recv_fill_msgname(ci_tcp_state* ts, struct sockaddr *name,
 }
 
 
-int ci_tcp_send_wnd_update(ci_netif* ni, ci_tcp_state* ts, int sock_locked)
-{
-  ci_assert(ci_netif_is_locked(ni));
-
-  if(CI_UNLIKELY( ! (ts->s.b.state & CI_TCP_STATE_ACCEPT_DATA) ))
-    return 0;
-
-  ci_assert_lt(ci_tcp_ack_trigger_delta(ts), ci_tcp_max_rcv_window(ts));
-
-  if( SEQ_SUB(ts->rcv_delivered + ci_tcp_max_rcv_window(ts),
-              tcp_rcv_wnd_right_edge_sent(ts))
-      >= ci_tcp_ack_trigger_delta(ts) ) {
-    ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(ni, 0);
-    if( pkt ) {
-      LOG_TR(log(LNTS_FMT "window update advertised=%d",
-                 LNTS_PRI_ARGS(ni, ts), tcp_rcv_wnd_advertised(ts)));
-      CITP_STATS_NETIF_INC(ni, wnd_updates_sent);
-      ci_tcp_send_ack_rx(ni, ts, pkt, sock_locked, CI_TRUE);
-      /* Update the ack trigger so we won't attempt to send another windows
-      ** update for a while.
-      */
-      ts->ack_trigger += ci_tcp_ack_trigger_delta(ts);
-      return 1;
-    }
-  }
-  return 0;
-}
-
-
 /* This is called after we've pulled a certain amount of data from the
 ** receive queue, and sends a window update if appropriate.
 */
