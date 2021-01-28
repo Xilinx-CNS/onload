@@ -129,7 +129,6 @@ EFRM_HAS_SOCKPTR		symbol	KERNEL_SOCKPTR	include/linux/sockptr.h
 
 EFRM_SYS_CLOSE_EXPORTED 	export	sys_close	include/linux/syscalls.h	fs/open.c
 
-EFRM_PTE_FN_T_USES_PGTABLE	typedef	pte_fn_t	include/linux/mm.h	int (*)(pte_t *pte, pgtable_t pgtable, unsigned long addr, void *data)
 
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'

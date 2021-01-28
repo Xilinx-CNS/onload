@@ -20,8 +20,7 @@
 
 
 static int apply_pte(pte_t *pte,
-/* pgtable_t parameter exists in linux<=4.19 */
-#ifdef EFRM_PTE_FN_T_USES_PGTABLE
+#if 0 /* linux<=4.19 */
                      pgtable_t token,
 #endif
                      unsigned long addr, void* data)
