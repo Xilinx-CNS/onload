@@ -1193,15 +1193,21 @@ static short efab_os_wakup_fix_mask(tcp_helper_endpoint_t *ep, short mask,
     else
       mask = file->f_op->poll(file, NULL);
   }
-  else if( *so_error_out || ((mask & POLLIN) && sock->type == SOCK_DGRAM) ) {
+  else if( *so_error_out ) {
     /* In some cases, we should drop the flagged event.
      * - If so_error was non-zero, we've just zeroed it.  POLLERR event was
      *   flagged, but we've "handled" it - and is not shown by the OS
      *   socket any more.
-     * - Some kernels (2.6.32) send POLLIN wakeup to UDP socket when ICMP
-     *   error is received, but poll() does not show this event.
      */
     mask &= datagram_poll(file, sock, NULL);
+  }
+  else if( (mask & POLLIN) && sock->type == SOCK_DGRAM ) {
+    /* - Some kernels send POLLIN wakeup to UDP socket when ICMP error is
+     *   received, but poll() does not show this event.
+     * - UDP checksum error results into false positive EPOLLIN + EPOLLRDNORM.
+     *   udp_poll() function contains a condition to check this.
+     */
+    mask &= file->f_op->poll(file, NULL);
   }
 
   fput(file);
