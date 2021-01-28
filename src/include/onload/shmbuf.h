@@ -31,9 +31,9 @@
 
 typedef struct {
   size_t        n_pages;
+  struct vm_struct *vm;
   struct page** pages;
   pte_t**       ptes;
-  void*         addr;
 } ci_shmbuf_t;
 
 
@@ -45,7 +45,7 @@ ci_inline unsigned ci_shmbuf_size(ci_shmbuf_t* b)
 { return b->n_pages << CI_PAGE_SHIFT; }
 
 ci_inline void* __ci_shmbuf_ptr(ci_shmbuf_t* b, unsigned off) {
-  return (char*)b->addr + off;
+  return (char*)b->vm->addr + off;
 }
 
 /* Asserts that accessing the shmbuf at the given offset (using
