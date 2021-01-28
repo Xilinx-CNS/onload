@@ -5738,25 +5738,20 @@ efab_tcp_driver_dtor(void)
 
 
 static int
-add_ep(tcp_helper_resource_t* trs, unsigned id, tcp_helper_endpoint_t* ep,
-       int do_inc)
+add_ep(tcp_helper_resource_t* trs, unsigned id, tcp_helper_endpoint_t* ep)
 {
   ci_netif* ni = &trs->netif;
   citp_waitable_obj* wo;
 
-  if( do_inc ) {
-    if( id < ni->ep_tbl_n )  return -1;
-    ci_assert_equal(id, ni->ep_tbl_n);
-  }
+  if( id < ni->ep_tbl_n )  return -1;
+  ci_assert_equal(id, ni->ep_tbl_n);
 
   tcp_helper_endpoint_ctor(ep, trs, id);
   ni->ep_tbl[id] = ep;
 
-  if( do_inc ) {
-    /* Only update [ep_tbl_n] once ep is installed. */
-    ci_wmb();
-    ni->state->n_ep_bufs = ++ni->ep_tbl_n;
-  }
+  /* Only update [ep_tbl_n] once ep is installed. */
+  ci_wmb();
+  ni->state->n_ep_bufs = ++ni->ep_tbl_n;
 
   wo = SP_TO_WAITABLE_OBJ(ni, ep->id);
   CI_ZERO(wo);  /* ??fixme */
@@ -5766,16 +5761,13 @@ add_ep(tcp_helper_resource_t* trs, unsigned id, tcp_helper_endpoint_t* ep,
 }
 
 static int
-install_socks(tcp_helper_resource_t* trs, unsigned id, int num, int are_new)
+install_socks(tcp_helper_resource_t* trs, unsigned id, int num)
 {
   tcp_helper_endpoint_t* eps[EP_BUF_PER_PAGE];
   ci_irqlock_state_t lock_flags;
   int i;
 
-  if( are_new )
-    ci_assert_equal(num, EP_BUF_PER_PAGE);
-  else
-    ci_assert_le(num, EP_BUF_PER_PAGE);
+  ci_assert_equal(num, EP_BUF_PER_PAGE);
 
   /* Allocate the kernel state for each socket. */
   for( i = 0; i < num; ++i ) {
@@ -5790,7 +5782,7 @@ install_socks(tcp_helper_resource_t* trs, unsigned id, int num, int are_new)
   ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
   for( i = 0; i < EP_BUF_PER_PAGE; ++i, ++id ){
     OO_DEBUG_SHM(ci_log("%s: add ep %d", __FUNCTION__, id));
-    if( add_ep(trs, id, eps[i], are_new) == 0 )
+    if( add_ep(trs, id, eps[i]) == 0 )
       eps[i] = NULL;
   }
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
@@ -5820,7 +5812,7 @@ int efab_tcp_helper_more_socks(tcp_helper_resource_t* trs)
     return rc;
   }
 
-  return install_socks(trs, ni->ep_tbl_n, EP_BUF_PER_PAGE, CI_TRUE);
+  return install_socks(trs, ni->ep_tbl_n, EP_BUF_PER_PAGE);
 }
 
 
