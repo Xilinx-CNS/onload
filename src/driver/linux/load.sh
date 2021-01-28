@@ -291,13 +291,6 @@ donet () {
         fi
     done
   done
-  if [ ${#interfaces[*]} -eq 0 ]; then
-    if [ -z "$(lspci -d 1924:)" ] && [ -z "$(lspci -d 10ee:)" ]; then
-      fail "no Solarflare NICs detected in this machine"
-    else
-      fail "driver failed to create any interfaces"
-    fi
-  fi
 
   # Find driver debug dir
   if grep -q debugfs /proc/filesystems; then
