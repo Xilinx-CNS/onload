@@ -2092,7 +2092,8 @@ int ci_tcp_send_wnd_update(ci_netif* ni, ci_tcp_state* ts, int sock_locked)
 
   if( SEQ_SUB(ts->rcv_delivered + ci_tcp_max_rcv_window(ts),
               tcp_rcv_wnd_right_edge_sent(ts))
-      >= ci_tcp_ack_trigger_delta(ts) ) {
+      >= ci_tcp_ack_trigger_delta(ts) &&
+      ci_tcp_probe_rcv_wnd_update(ts) ) {
     ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(ni, 0);
     if( pkt ) {
       LOG_TR(log(LNTS_FMT "window update advertised=%d",
@@ -2102,7 +2103,7 @@ int ci_tcp_send_wnd_update(ci_netif* ni, ci_tcp_state* ts, int sock_locked)
       /* Update the ack trigger so we won't attempt to send another windows
       ** update for a while.
       */
-      ts->ack_trigger += ci_tcp_ack_trigger_delta(ts);
+      ts->ack_trigger = ts->rcv_delivered + ci_tcp_ack_trigger_delta(ts);
       return 1;
     }
   }

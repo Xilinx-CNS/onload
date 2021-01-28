@@ -88,7 +88,8 @@ ci_inline void ci_tcp_ipx_hdr_init(int af, ci_ipx_hdr_t* hdr, unsigned len)
   }
 }
 
-ci_inline void __ci_tcp_calc_rcv_wnd(ci_tcp_state* ts, int advance)
+/* with `probe` set: only probe whether window advance is expected */
+ci_inline int __ci_tcp_calc_rcv_wnd(ci_tcp_state* ts, int advance, int probe)
 {
   /* Calculate receive window, avoiding silly windows and snap-back.
    * Fill-in tcp header window field. */
@@ -116,10 +117,14 @@ ci_inline void __ci_tcp_calc_rcv_wnd(ci_tcp_state* ts, int advance)
   if( advance &&
       CI_LIKELY( SEQ_GE(new_rhs, ts->rcv_wnd_right_edge_sent + delta) ) ) {
     /* We are ready to move on the window right edge. */
+    if( probe )
+      return tcp_rcv_wnd_right_edge_sent(ts) != new_rhs;
     ts->rcv_wnd_advertised = new_window;
     tcp_rcv_wnd_right_edge_sent(ts) = new_rhs;
   }
   else {
+    if( probe )
+      return 0;
     /* Snapback and silly window avoidance mode: Work out a new window
      * value that keeps the right hand edge constant given the current
      * value of tcp_rcv_nxt.
@@ -132,12 +137,15 @@ ci_inline void __ci_tcp_calc_rcv_wnd(ci_tcp_state* ts, int advance)
   tmp = ts->rcv_wnd_advertised >> ts->rcv_wscl;
   TS_IPX_TCP(ts)->tcp_window_be16 = CI_BSWAP_BE16(tmp);
   CI_IP_SOCK_STATS_VAL_RXWIN(ts, ts->rcv_wnd_advertised);
+  return 1;
 }
 
 
-#define ci_tcp_calc_rcv_wnd(ts, caller)  __ci_tcp_calc_rcv_wnd(ts, CI_TRUE)
+#define ci_tcp_calc_rcv_wnd(ts, caller)  __ci_tcp_calc_rcv_wnd(ts, CI_TRUE, CI_FALSE)
 #define ci_tcp_calc_rcv_wnd_rx(ts, advance, caller) \
-                                     __ci_tcp_calc_rcv_wnd((ts), (advance))
+                                     __ci_tcp_calc_rcv_wnd((ts), (advance), CI_FALSE)
+#define ci_tcp_probe_rcv_wnd_update(ts) \
+                                     __ci_tcp_calc_rcv_wnd((ts), 1, 1)
 
 ci_inline void ci_tcp_tx_maybe_do_striping(ci_ip_pkt_fmt* pkt,
                                            ci_tcp_state* ts) {
