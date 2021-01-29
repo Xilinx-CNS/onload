@@ -50,6 +50,12 @@ ci_netif_unlock_slow_common(ci_netif*, ci_uint64 lock_val,
                             ci_uint64 flags_to_handle) CI_HF;
 
 
+static inline int
+oo_want_proactive_socket_allocation(ci_netif* ni)
+{
+  return 0;
+}
+
 /*! Blocking calls that grab the stack lock return 0 on success.  When
  * called at userlevel, this is the only possible outcome.  In the kernel,
  * they return -EINTR if interrupted by a signal.

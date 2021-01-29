@@ -5811,6 +5811,12 @@ int efab_tcp_helper_more_socks(tcp_helper_resource_t* trs)
 
   if( ni->ep_tbl_n >= ni->ep_tbl_max )  return -ENOSPC;
 
+  if( ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT ) {
+    ef_eplock_holder_set_flag(&ni->state->lock,
+                              CI_EPLOCK_NETIF_NEED_SOCK_BUFS);
+    return -EBUSY;
+  }
+
   rc = oo_shmbuf_add(&ni->shmbuf);
   if( rc < 0 ) {
     OO_DEBUG_ERR(ci_log("%s: demand failed (%d)", __FUNCTION__, rc));
@@ -7537,6 +7543,17 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
                            __FUNCTION__, thr->id));
       efab_tcp_helper_more_bufs(thr);
       flags_set &=~ CI_EPLOCK_NETIF_NEED_PKT_SET;
+    }
+
+    /* Monitor the number of socket buffers.
+     */
+    if( (flags_set & CI_EPLOCK_NETIF_NEED_SOCK_BUFS) ||
+        oo_want_proactive_socket_allocation(ni) ) {
+      OO_DEBUG_TCPH(ci_log("%s: [%u] NEED_SOCK_BUFS now",
+                           __FUNCTION__, thr->id));
+      efab_tcp_helper_more_socks(thr);
+      flags_set &=~ CI_EPLOCK_NETIF_NEED_SOCK_BUFS;
+
     }
 #endif
 

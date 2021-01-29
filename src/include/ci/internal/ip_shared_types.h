@@ -945,9 +945,11 @@ typedef struct {
 #define CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS  0x0004000000000000ULL
   /* Have ICMP message to handle */
 #define CI_EPLOCK_NETIF_HANDLE_ICMP        0x0001000000000000ULL
+  /* have to allocate more socket buffers */
+#define CI_EPLOCK_NETIF_NEED_SOCK_BUFS     0x0002000000000000ULL
 
   /* mask for the above flags that must be handled before dropping lock */
-# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff39000000000000ULL
+# define CI_EPLOCK_NETIF_UNLOCK_FLAGS      0xff3b000000000000ULL
 
   /* these flags can be handled in UL */
 #define CI_EPLOCK_NETIF_UL_COMMON_MASK \
@@ -961,7 +963,8 @@ typedef struct {
   (CI_EPLOCK_NETIF_UL_COMMON_MASK | \
    CI_EPLOCK_NETIF_CLOSE_ENDPOINT | \
    CI_EPLOCK_NETIF_NEED_WAKE | \
-   CI_EPLOCK_NETIF_NEED_PKT_SET)
+   CI_EPLOCK_NETIF_NEED_PKT_SET | \
+   CI_EPLOCK_NETIF_NEED_SOCK_BUFS)
 #endif
 
 /* All jobs that cause unlock deferral in DL context.
@@ -970,6 +973,7 @@ typedef struct {
 # define CI_EPLOCK_NETIF_DL_CONTEXT_DEFER_MASK \
    (CI_EPLOCK_NETIF_NEED_WAKE | \
    CI_EPLOCK_NETIF_NEED_PKT_SET | \
+   CI_EPLOCK_NETIF_NEED_SOCK_BUFS | \
    CI_EPLOCK_NETIF_CLOSE_ENDPOINT | \
    CI_EPLOCK_NETIF_NEED_POLL)
 } ci_eplock_t;
