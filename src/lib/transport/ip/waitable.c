@@ -73,6 +73,7 @@ citp_waitable_obj* citp_waitable_obj_alloc(ci_netif* netif)
       ci_assert(OO_SP_IS_NULL(w->wt_next));
       w->wt_next = netif->state->free_eps_head;
       netif->state->free_eps_head = W_SP(w);
+      netif->state->free_eps_num++;
     }
   }
 
@@ -100,6 +101,7 @@ citp_waitable_obj* citp_waitable_obj_alloc(ci_netif* netif)
   ci_assert_equal(wo->waitable.lock.wl_val, 0);
 
   netif->state->free_eps_head = wo->waitable.wt_next;
+  netif->state->free_eps_num--;
   CI_DEBUG(wo->waitable.wt_next = OO_SP_NULL);
   ci_assert_equal(wo->waitable.state, CI_TCP_STATE_FREE);
 
@@ -210,6 +212,7 @@ void citp_waitable_obj_free(ci_netif* ni, citp_waitable* w)
 
   w->wt_next = ni->state->free_eps_head;
   ni->state->free_eps_head = W_SP(w);
+  ni->state->free_eps_num++;
   /* Must be last, as may result in stack going away. */
   ci_drop_orphan(ni);
 }

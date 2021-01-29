@@ -145,6 +145,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
                     "reap");
 
   nis->free_eps_head = OO_SP_NULL;
+  nis->free_eps_num = 0;
   nis->deferred_free_eps_head = CI_ILL_END;
   assert_zero(nis->n_ep_bufs);
   nis->max_ep_bufs = NI_OPTS(ni).max_ep_bufs;

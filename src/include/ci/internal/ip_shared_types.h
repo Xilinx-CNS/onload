@@ -1274,6 +1274,7 @@ struct ci_netif_state_s {
 
 
   oo_sp                 free_eps_head;   /**< Endpoints free list */
+  ci_uint32             free_eps_num;    /**< Length of free_eps_head list */
   ci_int32              deferred_free_eps_head; /**< Endpoints that could be 
                                                    freed (atomic) */
 

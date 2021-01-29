@@ -970,8 +970,8 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   }
 #endif
 
-  logger(log_arg, "  sock_bufs: max=%u n_allocated=%u",
-         NI_OPTS(ni).max_ep_bufs, ns->n_ep_bufs);
+  logger(log_arg, "  sock_bufs: max=%u n_allocated=%u free=%u",
+         NI_OPTS(ni).max_ep_bufs, ns->n_ep_bufs, ns->free_eps_num);
   /* aux buffers number is limited by tcp_synrecv_max*2 */
   logger(log_arg, "  aux_bufs: free=%u",
          ns->n_free_aux_bufs);

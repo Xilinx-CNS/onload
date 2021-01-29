@@ -50,10 +50,29 @@ ci_netif_unlock_slow_common(ci_netif*, ci_uint64 lock_val,
                             ci_uint64 flags_to_handle) CI_HF;
 
 
+/* Threshhold for proactive socket allocation is half of the shmbuf chunk
+ * capability: 2^21 / 2^10 / 2 = 1024.  It can't guarantee that one driverlink
+ * poll does not exhaust all the spare socket buffers, but probably gives
+ * a good chance that a listener can accept all incoming connections and
+ * create new sockets.
+ *
+ * Driverlink budget is usually 64, but with RX event merging one poll can
+ * accept some hundreds of packets.
+ */
+#define __OO_SOCK_ALLOC_PROACTIVE_THRESH 1024
+#ifdef __KERNEL__
+#define OO_SOCK_ALLOC_PROACTIVE_THRESH \
+  (OO_SHARED_BUFFER_CHUNK_SIZE / CI_CFG_EP_BUF_SIZE / 2)
+#if OO_SOCK_ALLOC_PROACTIVE_THRESH != __OO_SOCK_ALLOC_PROACTIVE_THRESH
+#error Please fix __OO_SOCK_ALLOC_PROACTIVE_THRESH value
+#endif
+#else
+#define OO_SOCK_ALLOC_PROACTIVE_THRESH __OO_SOCK_ALLOC_PROACTIVE_THRESH
+#endif
 static inline int
 oo_want_proactive_socket_allocation(ci_netif* ni)
 {
-  return 0;
+  return ni->state->free_eps_num < OO_SOCK_ALLOC_PROACTIVE_THRESH;
 }
 
 /*! Blocking calls that grab the stack lock return 0 on success.  When
