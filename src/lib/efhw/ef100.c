@@ -225,6 +225,7 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 	int flag_buff_mode = (flags & EFHW_VI_TX_PHYS_ADDR_EN) == 0;
 	int flag_ctpio = (flags & EFHW_VI_TX_CTPIO) != 0;
 	int flag_ctpio_uthresh = (flags & EFHW_VI_TX_CTPIO_NO_POISON) == 0;
+	int flag_m2m_d2c = (flags & EFHW_VI_TX_M2M_D2C) != 0;
 	int flag_pacer_bypass;
 
 	if (nic->flags & NIC_FLAG_MCAST_LOOP_HW) {
@@ -242,7 +243,7 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 			 QUEUE_CRC_MODE_NONE, flag_tcp_udp_only,
 			 flag_tcp_csum_dis, flag_ip_csum_dis,
 			 flag_buff_mode, flag_pacer_bypass, flag_ctpio,
-			 flag_ctpio_uthresh, dmaq, tag, evq_id, dmaq_size);
+			 flag_ctpio_uthresh, flag_m2m_d2c, dmaq, tag, evq_id, dmaq_size);
 		if ((rc != -EPERM) || (!flag_pacer_bypass))
 			break;
 	}

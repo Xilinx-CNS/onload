@@ -112,6 +112,8 @@ enum efrm_vi_q_flags {
 	EFRM_VI_TX_CTPIO              = 0x40000,
 	/** TXQ: CTPIO: Require store-and-forward. */
 	EFRM_VI_TX_CTPIO_NO_POISON    = 0x80000,
+	/** TXQ: mem2mem and desc2cmpt descriptors. */
+	EFRM_VI_TX_M2M_D2C            = 0x100000,
 };
 
 

@@ -424,6 +424,8 @@ static unsigned q_flags_to_vi_flags(unsigned q_flags, enum efhw_q_type q_type)
 			vi_flags |= EFHW_VI_TX_CTPIO;
 		if (q_flags & EFRM_VI_TX_CTPIO_NO_POISON)
 			vi_flags |= EFHW_VI_TX_CTPIO_NO_POISON;
+		if (q_flags & EFRM_VI_TX_M2M_D2C)
+			vi_flags |= EFHW_VI_TX_M2M_D2C;
 		break;
 	case EFHW_RXQ:
 		if (!(q_flags & EFRM_VI_CONTIGUOUS))
@@ -485,6 +487,8 @@ static unsigned vi_flags_to_q_flags(unsigned vi_flags, enum efhw_q_type q_type)
 			q_flags |= EFRM_VI_TX_CTPIO;
 		if (vi_flags & EFHW_VI_TX_CTPIO_NO_POISON)
 			q_flags |= EFRM_VI_TX_CTPIO_NO_POISON;
+		if (vi_flags & EFHW_VI_TX_M2M_D2C)
+			q_flags |= EFRM_VI_TX_M2M_D2C;
 		break;
 	case EFHW_RXQ:
 		if (!(vi_flags & EFHW_VI_JUMBO_EN))

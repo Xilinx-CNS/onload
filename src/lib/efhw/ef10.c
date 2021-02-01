@@ -1448,7 +1448,7 @@ ef10_ef100_mcdi_cmd_init_txq(struct efhw_nic *nic, dma_addr_t *dma_addrs,
 			     int flag_timestamp, int crc_mode, int flag_tcp_udp_only,
 			     int flag_tcp_csum_dis, int flag_ip_csum_dis,
 			     int flag_buff_mode, int flag_pacer_bypass,
-			     int flag_ctpio, int flag_ctpio_uthresh,
+			     int flag_ctpio, int flag_ctpio_uthresh, int flag_m2m_d2c,
 			     uint32_t instance, uint32_t label,
 			     uint32_t target_evq, uint32_t numentries)
 {
@@ -1461,7 +1461,8 @@ ef10_ef100_mcdi_cmd_init_txq(struct efhw_nic *nic, dma_addr_t *dma_addrs,
 			efx_dev, dma_addrs, n_dma_addrs, port_id, stack_id, owner_id,
 			!!flag_timestamp, crc_mode, !!flag_tcp_udp_only, !!flag_tcp_csum_dis,
 			!!flag_ip_csum_dis, inner, inner, !!flag_buff_mode, !!flag_pacer_bypass,
-			!!flag_ctpio, !!flag_ctpio_uthresh, instance, label, target_evq,
+			!!flag_ctpio, !!flag_ctpio_uthresh, !!flag_m2m_d2c, instance,
+			label, target_evq,
 			numentries);
 	EFX_DL_POST(efx_dev, nic, rc)
 	return rc;
@@ -1561,6 +1562,7 @@ ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 	int flag_loopback = (flags & EFHW_VI_TX_LOOPBACK) != 0;
 	int flag_ctpio = (flags & EFHW_VI_TX_CTPIO) != 0;
 	int flag_ctpio_uthresh = (flags & EFHW_VI_TX_CTPIO_NO_POISON) == 0;
+	int flag_m2m_d2c = (flags & EFHW_VI_TX_M2M_D2C) != 0;
 	int flag_pacer_bypass;
 
 	if (nic->flags & NIC_FLAG_MCAST_LOOP_HW) {
@@ -1619,7 +1621,7 @@ ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint dmaq, uint evq_id, uint own_id,
 			 QUEUE_CRC_MODE_NONE, flag_tcp_udp_only,
 			 flag_tcp_csum_dis, flag_ip_csum_dis,
 			 flag_buff_mode, flag_pacer_bypass, flag_ctpio,
-			 flag_ctpio_uthresh, dmaq, tag, evq_id, dmaq_size);
+			 flag_ctpio_uthresh, flag_m2m_d2c, dmaq, tag, evq_id, dmaq_size);
 		if ((rc != -EPERM) || (!flag_pacer_bypass))
 			break;
 	}

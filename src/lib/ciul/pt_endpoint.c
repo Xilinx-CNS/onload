@@ -58,6 +58,7 @@ static unsigned vi_flags_to_efab_flags(unsigned vi_flags)
   if( vi_flags & EF_VI_TX_CTPIO_NO_POISON ) efab_flags |=
                                                     EFHW_VI_TX_CTPIO_NO_POISON;
   if( vi_flags & EF_VI_RX_ZEROCOPY ) efab_flags |= EFHW_VI_RX_ZEROCOPY;
+  if( vi_flags & EF_VI_ALLOW_MEMCPY      ) efab_flags |= EFHW_VI_TX_M2M_D2C;
   return efab_flags;
 }
 

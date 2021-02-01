@@ -92,7 +92,7 @@ extern int ef10_ef100_mcdi_cmd_init_txq(struct efhw_nic *nic, dma_addr_t *dma_ad
 					int flag_timestamp, int crc_mode, int flag_tcp_udp_only,
 					int flag_tcp_csum_dis, int flag_ip_csum_dis,
 					int flag_buff_mode, int flag_pacer_bypass,
-					int flag_ctpio, int flag_ctpio_uthresh,
+					int flag_ctpio, int flag_ctpio_uthresh, int flag_m2m_d2c,
 					uint32_t instance, uint32_t label,
 					uint32_t target_evq, uint32_t numentries);
 
