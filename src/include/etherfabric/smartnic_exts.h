@@ -1,5 +1,5 @@
-/* SPDX-License-Identifier: LGPL-2.1 */
-/* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright 2007-2020 Xilinx, Inc. */
 
 #ifndef __EFAB_SMARTNIC_EXTS_H__
 #define __EFAB_SMARTNIC_EXTS_H__
