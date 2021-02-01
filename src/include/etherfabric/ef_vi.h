@@ -1321,7 +1321,7 @@ ef_vi_receive_get_bytes(ef_vi* vi, const void* pkt, uint16_t* bytes_out);
 ** will return nonsense data, or assert in a debug build.
 **
 ** The value of the mark and flag may be set by filter rules assigned to the
-** VI or by datapath extensions (see ef_vi_open_extension()).
+** VI or by datapath extensions (see ef_extension_open()).
 **
 ** \return 0 on success, or a negative error code
 */

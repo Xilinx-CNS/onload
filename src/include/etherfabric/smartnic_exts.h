@@ -11,17 +11,17 @@ extern "C" {
 #endif
 
 struct ef_pd;
-/* A handle to an extension, as opened by ef_vi_open_extension() */
-typedef struct ef_vi_extension_s ef_vi_extension;  /* opaque */
+/* A handle to an extension, as opened by ef_extension_open() */
+typedef struct ef_extension_s ef_extension;  /* opaque */
 /* This type is identical to libuuid's uuid_t, but without forcing us to add
  * that as a dependency */
-typedef unsigned char ef_vi_uuid_t[16];
+typedef unsigned char ef_uuid_t[16];
 
-struct ef_vi_extension_info {
+struct ef_extension_info {
   /* Identifier of the extension. This value is passed to
-   * ef_vi_open_extension() to interface with the extension or just to
+   * ef_extension_open() to interface with the extension or just to
    * query further information. */
-  ef_vi_uuid_t id;
+  ef_uuid_t id;
   /* Extensions are grouped in to administrative buckets, where each
    * extension with the same admin_group is in the same bucket. Extensions
    * sharing an admin_group are loaded/unloaded/upgraded/etc. as a unit
@@ -31,7 +31,7 @@ struct ef_vi_extension_info {
 };
 
 /* Returns the list of facilities which are currently loaded in to the FPGA
- * dynamic region and which can be applied with ef_vi_open_extension().
+ * dynamic region and which can be applied with ef_extension_open().
  *
  * exts is an array of size num_exts which is populated with the list of
  * loaded extensions. The number of elements actually present is the
@@ -51,14 +51,15 @@ struct ef_vi_extension_info {
  *  -EINVAL: invalid parameter
  *  <0: any other error
  */
-int ef_vi_query_extensions(struct ef_pd* pd, ef_driver_handle pd_dh,
-                           struct ef_vi_extension_info* exts, size_t num_exts,
-                           unsigned flags);
+int ef_query_extensions(struct ef_pd* pd, ef_driver_handle pd_dh,
+                        struct ef_extension_info* exts, size_t num_exts,
+                        unsigned flags);
 
 
 enum ef_ext_flags {
+  EF_EXT_DEFAULT = 0,
   /* Create a handle for metadata querying purposes only. The
-   * ef_vi_extension_send_message() function will not be available.
+   * ef_extension_send_message() function will not be available.
    * Query-only handles require fewer privileges. */
   EF_EXT_QUERY_ONLY = 0x01,
 };
@@ -71,7 +72,7 @@ enum ef_ext_flags {
  * open. The flags parameter must be a bitwise OR of the ef_ext_flags
  * enumerators.
  *
- * Use ef_vi_close_extension() to close the returned handle.
+ * Use ef_extension_close() to close the returned handle.
  *
  * Return values:
  *  0: success
@@ -79,28 +80,28 @@ enum ef_ext_flags {
  *  -ENOENT: id parameter is not found/not currently loaded on the FPGA.
  *  <0: any other error
  */
-int ef_vi_open_extension(struct ef_pd* pd, ef_driver_handle dh,
-                         const ef_vi_uuid_t id, enum ef_ext_flags flags,
-                         ef_vi_extension** ext_out);
+int ef_extension_open(struct ef_pd* pd, ef_driver_handle dh,
+                      const ef_uuid_t id, enum ef_ext_flags flags,
+                      ef_extension** ext_out);
 
 
-/* Closes a handle previously opened by ef_vi_open_extension().
+/* Closes a handle previously opened by ef_extension_open().
  *
  * Return values:
  *  0: success
  *  -EINVAL: invalid parameter
  *  <0: any other error
  */
-int ef_vi_close_extension(ef_vi_extension* ext);
+int ef_extension_close(ef_extension* ext);
 
 
-struct ef_vi_key_value {
+struct ef_key_value {
   const char* key;
   const char* value;
 };
 
 /* Information about the current extension. */
-struct ef_vi_ext_metadata {
+struct ef_extension_metadata {
   /* Number of bytes in this struct. Callers should check this value before
    * reading fields which were added in later versions, to ensure that they
    * are accessing memory which has been correctly populated by the library
@@ -115,10 +116,10 @@ struct ef_vi_ext_metadata {
    * -# When you make backwards compatible bug fixes, increment patch_version.
    *
    * These rules mean that if a handle is successfully opened with a UUID with
-   * ef_vi_open_extension() then it will have the basic functionality that the
+   * ef_extension_open() then it will have the basic functionality that the
    * application needs, without having to check the minor_version or
    * patch_version here. */
-  ef_vi_uuid_t id;
+  ef_uuid_t id;
   uint16_t minor_version;
   uint16_t patch_version;
   /* Array (of size num_about) of fields containing basic human-readable
@@ -127,14 +128,14 @@ struct ef_vi_ext_metadata {
    * permitted. Note that all this information is provided directly by the
    * plugin author so care must be taken when interpreting or displaying it;
    * in particular, the UTF-8 encoding cannot be assumed to be valid. */
-  const struct ef_vi_key_value *about;
+  const struct ef_key_value *about;
   size_t num_about;
 };
 
 /* Returns (in *metadata) basic information about this extension.
  *
- * The memory of *metadata is owned by the ef_vi_extension handle; it is
- * freed when ef_vi_close_extension() is called.
+ * The memory of *metadata is owned by the ef_extension handle; it is
+ * freed when ef_extension_close() is called.
  *
  * The flags parameter is currently unused and must be 0.
  *
@@ -142,9 +143,9 @@ struct ef_vi_ext_metadata {
  *  0: success
  *  <0: any other error
  */
-int ef_vi_extension_get_metadata(ef_vi_extension* ext,
-                                 const struct ef_vi_ext_metadata **metadata,
-                                 unsigned flags);
+int ef_extension_get_metadata(ef_extension* ext,
+                              const struct ef_extension_metadata **metadata,
+                              unsigned flags);
 
 /* Sends a request to a FPGA plugin.
  *
@@ -171,9 +172,9 @@ int ef_vi_extension_get_metadata(ef_vi_extension* ext,
  *  -EPERM: the extension was opened with EF_EXT_QUERY_ONLY
  *  <0: any other plugin-specified error
  */
-int ef_vi_extension_send_message(ef_vi_extension* ext, uint32_t message,
-                                 void* payload, size_t payload_size,
-                                 unsigned flags);
+int ef_extension_send_message(ef_extension* ext, uint32_t message,
+                              void* payload, size_t payload_size,
+                              unsigned flags);
 
 #ifdef __cplusplus
 }

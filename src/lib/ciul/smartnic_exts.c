@@ -12,18 +12,18 @@
 #include <unistd.h>
 
 
-struct ef_vi_extension_s {
+struct ef_extension_s {
   int dh;
   efch_resource_id_t id;
 };
 
-int ef_vi_open_extension(struct ef_pd* pd, ef_driver_handle dh,
-                         const ef_vi_uuid_t id, enum ef_ext_flags flags,
-                         ef_vi_extension** ext_out)
+int ef_extension_open(struct ef_pd* pd, ef_driver_handle dh,
+                      const ef_uuid_t id, enum ef_ext_flags flags,
+                      ef_extension** ext_out)
 {
   int rc;
   ci_resource_alloc_t ra;
-  ef_vi_extension* out;
+  ef_extension* out;
 
   out = calloc(1, sizeof(*out));
   out->dh = pd->pd_cluster_sock != -1 ? pd->pd_cluster_dh : dh;
@@ -49,7 +49,7 @@ int ef_vi_open_extension(struct ef_pd* pd, ef_driver_handle dh,
 }
 
 
-int ef_vi_close_extension(ef_vi_extension* ext)
+int ef_extension_close(ef_extension* ext)
 {
   int rc;
   ci_resource_op_t op;
@@ -65,9 +65,9 @@ int ef_vi_close_extension(ef_vi_extension* ext)
 }
 
 
-int ef_vi_extension_send_message(ef_vi_extension* ext, uint32_t message,
-                                 void* payload, size_t payload_size,
-                                 unsigned flags)
+int ef_extension_send_message(ef_extension* ext, uint32_t message,
+                              void* payload, size_t payload_size,
+                              unsigned flags)
 {
   ci_resource_op_t op;
 
