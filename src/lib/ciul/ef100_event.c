@@ -143,7 +143,7 @@ static inline void ef100_tx_event_completion(ef_vi* evq, const ef_vi_event* ev,
 
   ev_out->tx.type = EF_EVENT_TYPE_TX;
   ev_out->tx.q_id = q_label;
-  desc_id[q_label] += QWORD_GET_U(ESF_GZ_EV_TXCMPL_NUM_DSC, *ev);
+  desc_id[q_label] += QWORD_GET_U(ESF_GZ_EV_TXCMPL_NUM_DESC, *ev);
   ev_out->tx.desc_id = desc_id[q_label];
 }
 

@@ -54,7 +54,7 @@ ef100_tx_segment_desc_fill(uint64_t src_dma_addr, unsigned bytes,
   CI_POPULATE_OWORD_6(*dp,
                       ESF_GZ_TX_SEG_LEN, bytes,
                       ESF_GZ_TX_SEG_ADDR, src_dma_addr,
-                      ESF_GZ_TX_SEG_ADDR_SPC, as_override ? addr_space : 0,
+                      ESF_GZ_TX_SEG_ADDR_SPC_ID, as_override ? addr_space : 0,
                       ESF_GZ_TX_SEG_ADDR_SPC_EN, as_override,
                       ESF_GZ_TX_SEG_TRANSLATE_ADDR, translate_addr,
                       ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_SEG);
