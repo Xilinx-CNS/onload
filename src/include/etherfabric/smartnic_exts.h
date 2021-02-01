@@ -175,32 +175,6 @@ int ef_vi_extension_send_message(ef_vi_extension* ext, uint32_t message,
                                  void* payload, size_t payload_size,
                                  unsigned flags);
 
-
-/*   ===== DEPRECATED =====
- *   This function is going to go away as soon as the mcfw has enough stuff
- *   to be able to implement normal messages which can destroy resources.
- *
- * Terminate the use of a resource by the plugin
- *
- * 'Resources' are a general concept provided to plugins to manage the
- * lifetime of FPGA entities. See the documentation for the specific plugin
- * being used to determine what values to use for resource_class. resource_id
- * will come from an output parameter of an earlier
- * ef_vi_extension_send_message().
- *
- * The flags parameter is currently unused and must be 0.
- *
- * Return values:
- *  0: success
- *  -EINVAL: unknown resource_class
- *  -ENOENT: unknown resource_id
- *  -EPERM: the extension was opened with EF_EXT_QUERY_ONLY
- *  <0: any other error
- */
-int ef_vi_extension_destroy_resource(ef_vi_extension* ext,
-                                     uint32_t resource_class,
-                                     uint32_t resource_id, unsigned flags);
-
 #ifdef __cplusplus
 }
 #endif

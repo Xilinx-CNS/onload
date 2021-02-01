@@ -226,18 +226,6 @@ out:
 
 
 static int
-ext_do_destroy_rsrc(struct efch_slice_ext* ext, uint32_t clas,
-                    uint32_t id, unsigned flags)
-{
-  if (flags) {
-    /* No flags currently supported */
-    return -EINVAL;
-  }
-  return efrm_ext_destroy_rsrc(&ext->rs, ext->rs.rs_instance, clas, id);
-}
-
-
-static int
 ext_rm_rsops(efch_resource_t* rs, ci_resource_table_t* priv_opt,
              ci_resource_op_t* op, int* copy_out)
 {
@@ -254,11 +242,6 @@ ext_rm_rsops(efch_resource_t* rs, ci_resource_table_t* priv_opt,
                       (void __user *)op->u.ext_msg.payload_ptr,
                       op->u.ext_msg.payload_len,
                       op->u.ext_msg.flags);
-
-  case CI_RSOP_EXT_DESTROY_RSRC:
-    return ext_do_destroy_rsrc(rs_to_ext(rs), op->u.ext_destroy_rsrc.clas,
-                               op->u.ext_destroy_rsrc.id,
-                               op->u.ext_destroy_rsrc.flags);
 
   default:
     EFCH_ERR("%s: Invalid op, expected CI_RSOP_EXT_*", __FUNCTION__);

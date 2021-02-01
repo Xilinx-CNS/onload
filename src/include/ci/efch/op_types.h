@@ -198,7 +198,6 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_VI_GET_TS_FORMAT        0x88
 # define                CI_RSOP_EXT_FREE                0x89
 # define                CI_RSOP_EXT_MSG                 0x8A
-# define                CI_RSOP_EXT_DESTROY_RSRC        0x8B
 
   union {
     struct {
@@ -298,11 +297,6 @@ typedef struct ci_resource_op_s {
       uint64_t          payload_len;
       uint32_t          flags;
     } ext_msg;
-    struct {
-      uint32_t          clas;
-      uint64_t          id;
-      uint32_t          flags;
-    } ext_destroy_rsrc;
   } u CI_ALIGN(8);
 } ci_resource_op_t;
 

@@ -80,19 +80,4 @@ int ef_vi_extension_send_message(ef_vi_extension* ext, uint32_t message,
   return ci_resource_op(ext->dh, &op);
 }
 
-
-int ef_vi_extension_destroy_resource(ef_vi_extension* ext,
-                                     uint32_t resource_class,
-                                     uint32_t resource_id, unsigned flags)
-{
-  ci_resource_op_t op;
-
-  op.op = CI_RSOP_EXT_DESTROY_RSRC;
-  op.id = ext->id;
-  op.u.ext_destroy_rsrc.clas = resource_class;
-  op.u.ext_destroy_rsrc.id = resource_id;
-  op.u.ext_destroy_rsrc.flags = flags;
-  return ci_resource_op(ext->dh, &op);
-}
-
 /*! \cidoxg_end */
