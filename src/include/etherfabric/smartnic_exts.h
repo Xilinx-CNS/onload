@@ -1,8 +1,8 @@
 /* SPDX-License-Identifier: LGPL-2.1 */
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 
-#ifndef __EFAB_SLICE_EXTS_H__
-#define __EFAB_SLICE_EXTS_H__
+#ifndef __EFAB_SMARTNIC_EXTS_H__
+#define __EFAB_SMARTNIC_EXTS_H__
 
 #include <etherfabric/base.h>
 

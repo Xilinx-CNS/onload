@@ -2,7 +2,7 @@
 /* X-SPDX-Copyright-Text: (c) Solarflare Communications Inc */
 
 /*! \cidoxg_lib_ef */
-#include <etherfabric/slice_exts.h>
+#include <etherfabric/smartnic_exts.h>
 #include "ef_vi_internal.h"
 #include <ci/efch/op_types.h>
 #include <ci/efrm/resource_id.h>
