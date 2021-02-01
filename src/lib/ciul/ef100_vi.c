@@ -79,6 +79,24 @@ ef100_tx_mem2mem_desc_fill(const ef_remote_iovec *iov, unsigned bytes,
                       ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_MEM2MEM);
 }
 
+ef_vi_inline void
+ef100_tx_desc2cmpt_desc_fill(uint64_t data, bool ordered, uint16_t abs_vi_id,
+                             ef_vi_ef100_dma_tx_desc* __restrict__ dp)
+{
+  LWCHK(ESF_GZ_D2C_COMPLETION_LBN, ESF_GZ_D2C_COMPLETION_WIDTH);
+
+  /* When 'ordered'=1, this descriptor acts as a fence for mem2mems. The 64
+   * bits of 'data' are written as-is to the evq when it's done (thus 'data'
+   * should be carefully constructed so that it's actually parseable by
+   * ef100_event.c). */
+  CI_POPULATE_OWORD_5(*dp,
+                      ESF_GZ_D2C_COMPLETION, data,
+                      ESF_GZ_D2C_ORDERED, ordered,
+                      ESF_GZ_D2C_ABS_VI_ID, 1,  /* 0 not supported on SN1000 */
+                      ESF_GZ_D2C_TGT_VI_ID, abs_vi_id,
+                      ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_DESC2CMPT);
+}
+
 static int ef100_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
 				     int iov_len, ef_request_id dma_id)
 {
@@ -464,7 +482,28 @@ static ssize_t ef100_ef_vi_transmit_memcpy(struct ef_vi* vi,
 static int ef100_ef_vi_transmit_memcpy_sync(struct ef_vi* vi,
                                             ef_request_id dma_id)
 {
-  return -EOPNOTSUPP;
+  ef_vi_txq* q = &vi->vi_txq;
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  ef_vi_ef100_dma_tx_desc* dp;
+  unsigned di;
+  ci_qword_t data;
+
+  /* Check for enough space in the queue */
+  if( qs->added + 1 - qs->removed >= q->mask )
+    return -EAGAIN;
+
+  di = qs->added++ & q->mask;
+  dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
+
+  CI_POPULATE_QWORD_3(data,
+                      EF_VI_EV_DRIVER_MEMCPY_SYNC_DMA_ID, (uint32_t)dma_id,
+                      EF_VI_EV_DRIVER_SUBTYPE,
+                                          EF_VI_EV_DRIVER_SUBTYPE_MEMCPY_SYNC,
+                      ESF_GZ_E_TYPE, ESE_GZ_EF100_EV_DRIVER);
+  ef100_tx_desc2cmpt_desc_fill(data.u64[0], true, vi->abs_idx, dp);
+  q->ids[di] = EF_REQUEST_ID_MASK;
+
+  return 0;
 }
 
 

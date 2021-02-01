@@ -202,6 +202,17 @@
 #define EF_VI_PS_SPACE_PER_CREDIT        0x10000
 
 
+/**********************************************************************
+ * Custom descriptor for ef_vi_transmit_memcpy_sync() (of type EV_DRIVER)
+ */
+
+#define EF_VI_EV_DRIVER_MEMCPY_SYNC_DMA_ID_LBN    0
+#define EF_VI_EV_DRIVER_MEMCPY_SYNC_DMA_ID_WIDTH  32
+#define EF_VI_EV_DRIVER_SUBTYPE_LBN               55
+#define EF_VI_EV_DRIVER_SUBTYPE_WIDTH             4
+#define EF_VI_EV_DRIVER_SUBTYPE_MEMCPY_SYNC       15
+
+
 /* ******************************************************************** 
  */
 

@@ -106,6 +106,28 @@ static void ef100_mcdi_event(ef_vi* evq, const ef_vi_event* ev,
 }
 
 
+static void ef100_driver_event(ef_vi* evq, const ef_vi_event* ev,
+			    ef_event** evs, int* evs_len)
+{
+  int subtype = QWORD_GET_U(EF_VI_EV_DRIVER_SUBTYPE, *ev);
+
+  switch( subtype ) {
+  case EF_VI_EV_DRIVER_SUBTYPE_MEMCPY_SYNC: {
+    ef_event* ev_out = (*evs)++;
+    --(*evs_len);
+    ev_out->memcpy.type = EF_EVENT_TYPE_MEMCPY;
+    ev_out->memcpy.dma_id =
+                      QWORD_GET_U(EF_VI_EV_DRIVER_MEMCPY_SYNC_DMA_ID, *ev);
+    break;
+  }
+  default:
+    ef_log("%s: ERROR: Unhandled driver event code=%u", __FUNCTION__,
+           subtype);
+    break;
+  }
+}
+
+
 ef_vi_inline void ef100_rx_event(ef_vi* evq_vi, const ef_vi_event* ev,
 				ef_event** evs, int* evs_len)
 {
@@ -203,6 +225,10 @@ int ef100_ef_eventq_poll(ef_vi* evq, ef_event* evs, int evs_len)
       if (evs_len != evs_len_orig)
         goto out;
       ef100_mcdi_event(evq, &ev, &evs, &evs_len);
+      break;
+
+    case ESE_GZ_EF100_EV_DRIVER:
+      ef100_driver_event(evq, &ev, &evs, &evs_len);
       break;
 
     case ESE_GZ_EF100_EV_CONTROL:
