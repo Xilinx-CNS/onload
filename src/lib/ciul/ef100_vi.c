@@ -60,6 +60,25 @@ ef100_tx_segment_desc_fill(uint64_t src_dma_addr, unsigned bytes,
                       ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_SEG);
 }
 
+ef_vi_inline void
+ef100_tx_mem2mem_desc_fill(const ef_remote_iovec *iov, unsigned bytes,
+                           ef_vi_ef100_dma_tx_desc* __restrict__ dp)
+{
+  int translate_addr = (iov->flags & EF_RIOV_FLAG_TRANSLATE_ADDR) != 0;
+  int as_override = iov->addrspace != EF_ADDRSPACE_LOCAL;
+  LWCHK(ESF_GZ_M2M_ADDR_LBN, ESF_GZ_M2M_ADDR_WIDTH);
+  RANGECHCK(bytes - 1, ESF_GZ_M2M_LEN_MINUS_1_WIDTH);
+  EF_VI_BUG_ON(bytes == 0);
+
+  CI_POPULATE_OWORD_6(*dp,
+                      ESF_GZ_M2M_ADDR, iov->iov_base,
+                      ESF_GZ_M2M_LEN_MINUS_1, bytes - 1,
+                      ESF_GZ_M2M_ADDR_SPC_ID, as_override ? iov->addrspace : 0,
+                      ESF_GZ_M2M_TRANSLATE_ADDR, translate_addr,
+                      ESF_GZ_M2M_ADDR_SPC_EN, as_override,
+                      ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_MEM2MEM);
+}
+
 static int ef100_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
 				     int iov_len, ef_request_id dma_id)
 {
@@ -364,6 +383,91 @@ static int ef100_ef_vi_transmit_memcpy_sync_disabled(struct ef_vi* vi,
 }
 
 
+struct riov_iter {
+  int iov_len;
+  const ef_remote_iovec* iov;
+  ef_addr ptr;
+  unsigned len;
+};
+
+static inline struct riov_iter riov_init(const ef_remote_iovec* iov,
+                                         int iov_len)
+{
+  EF_VI_BUG_ON(iov_len <= 0);
+  EF_VI_BUG_ON(iov == NULL);
+    /* Don't check iov->iov_base for NULL: that's a valid pointer */
+  return (struct riov_iter){
+    .iov_len = iov_len,
+    .iov = iov,
+    .ptr = iov->iov_base,
+    .len = iov->iov_len,
+  };
+}
+
+static inline bool riov_add(struct riov_iter* iter, unsigned n)
+{
+  EF_VI_BUG_ON(n > iter->len);
+  iter->len -= n;
+  iter->ptr += n;
+  if( iter->len == 0 ) {
+    ++iter->iov;
+    if( --iter->iov_len == 0 )
+      return false;
+    iter->len = iter->iov->iov_len;
+    iter->ptr = iter->iov->iov_base;
+  }
+  return true;
+}
+
+static ssize_t ef100_ef_vi_transmit_memcpy(struct ef_vi* vi,
+                                           const ef_remote_iovec* dst_iov,
+                                           int dst_iov_len,
+                                           const ef_remote_iovec* src_iov,
+                                           int src_iov_len)
+{
+  ef_vi_txq* q = &vi->vi_txq;
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  ef_vi_ef100_dma_tx_desc* __restrict__ descriptors = q->descriptors;
+  uint32_t* __restrict__ ids = q->ids;
+  ssize_t done_bytes = 0;
+  unsigned di1;
+  unsigned di2;
+  unsigned this_n;
+  struct riov_iter src = riov_init(src_iov, src_iov_len);
+  struct riov_iter dst = riov_init(dst_iov, dst_iov_len);
+
+  for( ; ; ) {
+    di1 = qs->added++ & q->mask;
+    di2 = qs->added++ & q->mask;
+
+    /* Check for enough space in the queue */
+    if( CI_UNLIKELY(qs->added - qs->removed >= q->mask) ) {
+      qs->added -= 2;
+      return done_bytes ? done_bytes : -EAGAIN;
+    }
+    this_n = CI_MIN(src.len, dst.len);
+    this_n = CI_MIN(ESE_EF100_DP_GZ_MEM2MEM_MAX_LEN_DEFAULT, this_n);
+
+    ef100_tx_mem2mem_desc_fill(src_iov, this_n, &descriptors[di1]);
+    ef100_tx_mem2mem_desc_fill(dst_iov, this_n, &descriptors[di2]);
+    ids[di1] = EF_REQUEST_ID_MASK;
+    ids[di2] = EF_REQUEST_ID_MASK;
+
+    done_bytes += this_n;
+    if( ! riov_add(&src, this_n) || ! riov_add(&dst, this_n) )
+      break;
+  }
+
+  return done_bytes;
+}
+
+static int ef100_ef_vi_transmit_memcpy_sync(struct ef_vi* vi,
+                                            ef_request_id dma_id)
+{
+  return -EOPNOTSUPP;
+}
+
+
 static void ef100_vi_initialise_ops(ef_vi* vi)
 {
   vi->ops.transmit               = ef100_ef_vi_transmit;
@@ -389,8 +493,14 @@ static void ef100_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_clear     = ef100_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = ef100_ef_eventq_timer_zero;
   vi->ops.transmitv_init_extra   = ef100_ef_vi_transmitv_init_extra;
-  vi->ops.transmit_memcpy        = ef100_ef_vi_transmit_memcpy_disabled;
-  vi->ops.transmit_memcpy_sync   = ef100_ef_vi_transmit_memcpy_sync_disabled;
+  if( vi->vi_flags & EF_VI_ALLOW_MEMCPY ) {
+    vi->ops.transmit_memcpy        = ef100_ef_vi_transmit_memcpy;
+    vi->ops.transmit_memcpy_sync   = ef100_ef_vi_transmit_memcpy_sync;
+  }
+  else {
+    vi->ops.transmit_memcpy        = ef100_ef_vi_transmit_memcpy_disabled;
+    vi->ops.transmit_memcpy_sync   = ef100_ef_vi_transmit_memcpy_sync_disabled;
+  }
 }
 
 void ef100_vi_init(ef_vi* vi)
