@@ -59,16 +59,22 @@ int oo_shmbuf_add(struct oo_shmbuf* sh)
   return i;
 }
 
-unsigned long oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr)
+unsigned long __oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr)
 {
   int i;
+  unsigned long off;
 
-  /* Fixme implement hash table, it is really necessary with 2^21 sockets
-   * => 2^11=2048 chunks.  See the comment at OO_SHARED_BUFFER_CHUNK_SIZE.
+  /* Fast path is handled at oo_shmbuf_ptr2off().
+   * This function is for slow path only.
    */
+  off = ptr - oo_shmbuf_idx2ptr(sh, 0);
+  ci_assert(off < 0 || off >= oo_shmbuf_chunk_size(sh) * sh->init_num);
 
-  for(i = 0; i < sh->num; i++) {
-    unsigned long off = ptr - oo_shmbuf_idx2ptr(sh, i);
+  /* We'd better never hit this path! */
+  //WARN_ON(1);
+
+  for(i = sh->init_num; i < sh->num; i++) {
+    off = ptr - oo_shmbuf_idx2ptr(sh, i);
 
     if( off >= 0 && off < oo_shmbuf_chunk_size(sh) )
       return (i << sh->order << PAGE_SHIFT) + off;

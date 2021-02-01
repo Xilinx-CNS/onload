@@ -47,6 +47,21 @@ oo_shmbuf_off2ptr(const struct oo_shmbuf* sh, unsigned long off)
          (off & ((1UL << sh->order << PAGE_SHIFT) - 1));
 }
 
+extern unsigned long __oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr);
+static inline unsigned long
+oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr)
+{
+  unsigned long off;
+
+  /* Fast path: is it in the initial chunk? */
+  off = ptr - oo_shmbuf_idx2ptr(sh, 0);
+  if( off >= 0 && off < oo_shmbuf_chunk_size(sh) * sh->init_num )
+    return off;
+
+  /* Slow path: find the pointer in non-continuous chunks */
+  return __oo_shmbuf_ptr2off(sh, ptr);
+}
+
 static inline long oo_shmbuf_size(struct oo_shmbuf* sh)
 {
   return sh->max * oo_shmbuf_chunk_size(sh);
@@ -56,7 +71,6 @@ extern int oo_shmbuf_alloc(struct oo_shmbuf* sh, int order,
                            int max, int init_num);
 extern void oo_shmbuf_free(struct oo_shmbuf* sh);
 extern int oo_shmbuf_add(struct oo_shmbuf* sh);
-extern unsigned long oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr);
 extern int oo_shmbuf_fault(struct oo_shmbuf* sh, struct vm_area_struct* vma,
                            unsigned long off);
 
