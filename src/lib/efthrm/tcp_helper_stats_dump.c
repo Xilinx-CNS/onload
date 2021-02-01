@@ -85,7 +85,7 @@ static void ci_netif_dump_vi_info_stats(ci_netif* ni, int intf_i,
          nic->vi_variant, (int) nic->vi_revision);
   logger(log_arg, "  vi=%d  gvi=0x%x  pd_owner=%d channel=%d tcpdump=%s"
          " vi_flags=%x oo_vi_flags=%x", ef_vi_instance(vi),
-         (ef_vi_instance(vi) << efhw_nic->vi_shift) + efhw_nic->vi_base,
+         efhw_nic_rel_to_abs_idx(efhw_nic, ef_vi_instance(vi)),
          nic->pd_owner, (int) nic->vi_channel,
          ni->state->dump_intf[intf_i] == OO_INTF_I_DUMP_ALL ? "all" :
          (ni->state->dump_intf[intf_i] == OO_INTF_I_DUMP_NO_MATCH ?

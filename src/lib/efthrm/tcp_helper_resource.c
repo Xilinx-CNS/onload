@@ -1683,6 +1683,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     nsn->pci_dev[sizeof(nsn->pci_dev) - 1] = '\0';
     nsn->vi_instance[0] =
         (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(vi_rs);
+    nsn->vi_abs_idx[0] = efhw_nic_rel_to_abs_idx(nic, nsn->vi_instance[0]);
     nsn->vi_arch = (ci_uint8) nic->devtype.arch;
     nsn->vi_variant = (ci_uint8) nic->devtype.variant;
     nsn->vi_revision = (ci_uint8) nic->devtype.revision;
@@ -1778,6 +1779,8 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
         nsn->vi_instance[vi_i] =
                   (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(vi_rs);
+        nsn->vi_abs_idx[vi_i] =
+                  efhw_nic_rel_to_abs_idx(nic, nsn->vi_instance[vi_i]);
         trs->io_mmap_bytes += alloc_info.vi_io_mmap_bytes;
         vi_state = (char*) vi_state +
                    ef_vi_calc_state_bytes(vm->rxq_size, vm->txq_size);

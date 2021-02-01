@@ -789,6 +789,8 @@ typedef struct ef_vi {
   unsigned                      vi_resource_id;
   /** The instance ID of the virtual interface */
   unsigned                      vi_i;
+  /** NIC-global ID of this virtual interface */
+  unsigned                      abs_idx;
 
   /** The length of a receive buffer */
   unsigned                      rx_buffer_len;

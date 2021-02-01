@@ -81,4 +81,10 @@ static inline uint8_t efhw_vi_nic_flags(const struct efhw_nic* nic)
 	       EFHW_VI_NIC_BUG35388_WORKAROUND : 0;
 }
 
+static inline unsigned efhw_nic_rel_to_abs_idx(const struct efhw_nic* nic,
+                                               unsigned rel_idx)
+{
+	return (rel_idx << nic->vi_shift) + nic->vi_base;
+}
+
 #endif /* __CI_EFHW_NIC_H__ */

@@ -304,6 +304,7 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
 
   nic = efrm_client_get_nic(virs->rs.rs_client);
   alloc_out->instance = virs->rs.rs_instance;
+  alloc_out->abs_idx = efhw_nic_rel_to_abs_idx(nic, alloc_out->instance);
   alloc_out->evq_capacity = virs->q[EFHW_EVQ].capacity;
   alloc_out->rxq_capacity = virs->q[EFHW_RXQ].capacity;
   alloc_out->txq_capacity = virs->q[EFHW_TXQ].capacity;

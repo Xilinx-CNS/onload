@@ -1026,6 +1026,7 @@ typedef struct {
   CI_ULCONST ci_uint32  vi_io_mmap_bytes;
   CI_ULCONST ci_uint32  vi_evq_bytes;
   CI_ULCONST ci_uint16  vi_instance[CI_MAX_VIS_PER_INTF];
+  CI_ULCONST ci_uint16  vi_abs_idx[CI_MAX_VIS_PER_INTF];
   CI_ULCONST ci_uint16  vi_rxq_size;
   CI_ULCONST ci_uint16  vi_txq_size;
   CI_ULCONST ci_uint8   vi_arch;

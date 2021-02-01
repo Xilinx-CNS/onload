@@ -1943,8 +1943,8 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
 
 static void init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
                        int vi_io_offset, char** vi_mem_ptr,
-                       ef_vi* vi, unsigned vi_instance, int evq_bytes,
-                       int txq_size, ef_vi_stats* vi_stats)
+                       ef_vi* vi, unsigned vi_instance, unsigned abs_idx,
+                       int evq_bytes, int txq_size, ef_vi_stats* vi_stats)
 {
   ef_vi_state* state = (void*) ((char*) ni->state + vi_state_offset);
   ci_netif_state_nic_t* nsn = &(ni->state->nic[nic_i]);
@@ -1958,6 +1958,7 @@ static void init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   ef_vi_init_io(vi, ni->io_ptr + vi_io_offset);
   ef_vi_init_timer(vi, nsn->timer_quantum_ns);
   vi->vi_i = vi_instance;
+  vi->abs_idx = abs_idx;
   *vi_mem_ptr = ef_vi_init_qs(vi, *vi_mem_ptr, ids, evq_bytes / 8,
                               nsn->vi_rxq_size, nsn->rx_prefix_len, txq_size);
   ef_vi_set_ts_format(vi, nsn->ts_format);
@@ -2070,7 +2071,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
     for( i = 0; i < num_vis; ++i ) {
       vi = &ni->nic_hw[nic_i].vis[i];
       init_ef_vi(ni, nic_i, vi_state_offset + vi_state_bytes, vi_io_offset,
-                 &vi_mem_ptr, vi, nsn->vi_instance[i],
+                 &vi_mem_ptr, vi, nsn->vi_instance[i], nsn->vi_abs_idx[i],
                  i ? 0 : nsn->vi_evq_bytes, nsn->vi_txq_size,
                  &ni->state->vi_stats);
       if( i )

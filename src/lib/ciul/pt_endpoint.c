@@ -530,6 +530,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
                        EF_VI_OUT_CLOCK_SYNC_STATUS : 0);
   ef_vi_init_io(vi, io_mmap_ptr);
   vi->vi_i = ra.u.vi_out.instance;
+  vi->abs_idx = ra.u.vi_out.abs_idx;
   ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
 
