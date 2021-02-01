@@ -347,6 +347,23 @@ static int ef100_ef_vi_transmit_alt_go(ef_vi* vi, unsigned alt_id)
 }
 
 
+static ssize_t ef100_ef_vi_transmit_memcpy_disabled(struct ef_vi* vi,
+                                          const ef_remote_iovec* dst_iov,
+                                          int dst_iov_len,
+                                          const ef_remote_iovec* src_iov,
+                                          int src_iov_len)
+{
+  return -EOPNOTSUPP;
+}
+
+
+static int ef100_ef_vi_transmit_memcpy_sync_disabled(struct ef_vi* vi,
+                                                     ef_request_id dma_id)
+{
+  return -EOPNOTSUPP;
+}
+
+
 static void ef100_vi_initialise_ops(ef_vi* vi)
 {
   vi->ops.transmit               = ef100_ef_vi_transmit;
@@ -372,6 +389,8 @@ static void ef100_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_clear     = ef100_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = ef100_ef_eventq_timer_zero;
   vi->ops.transmitv_init_extra   = ef100_ef_vi_transmitv_init_extra;
+  vi->ops.transmit_memcpy        = ef100_ef_vi_transmit_memcpy_disabled;
+  vi->ops.transmit_memcpy_sync   = ef100_ef_vi_transmit_memcpy_sync_disabled;
 }
 
 void ef100_vi_init(ef_vi* vi)

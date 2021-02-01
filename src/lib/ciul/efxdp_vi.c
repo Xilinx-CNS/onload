@@ -188,6 +188,21 @@ static int efxdp_ef_vi_transmit_alt_go(ef_vi* vi, unsigned alt_id)
   return -EOPNOTSUPP;
 }
 
+static ssize_t efxdp_ef_vi_transmit_memcpy(struct ef_vi* vi,
+                                           const ef_remote_iovec* dst_iov,
+                                           int dst_iov_len,
+                                           const ef_remote_iovec* src_iov,
+                                           int src_iov_len)
+{
+  return -EOPNOTSUPP;
+}
+
+static int efxdp_ef_vi_transmit_memcpy_sync(struct ef_vi* vi,
+                                            ef_request_id dma_id)
+{
+  return -EOPNOTSUPP;
+}
+
 /* Note: for AF_XDP devices dma_id is disregarded */
 static int efxdp_ef_vi_receive_init(ef_vi* vi, ef_addr addr,
                                     ef_request_id dma_id)
@@ -358,6 +373,8 @@ void efxdp_vi_init(ef_vi* vi)
   vi->ops.eventq_timer_run       = efxdp_ef_eventq_timer_run;
   vi->ops.eventq_timer_clear     = efxdp_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = efxdp_ef_eventq_timer_zero;
+  vi->ops.transmit_memcpy        = efxdp_ef_vi_transmit_memcpy;
+  vi->ops.transmit_memcpy_sync   = efxdp_ef_vi_transmit_memcpy_sync;
 
   vi->rx_buffer_len = 2048;
   vi->rx_prefix_len = 0;
