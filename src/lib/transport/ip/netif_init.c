@@ -2518,8 +2518,10 @@ void ci_netif_send_plugin_app_ctrl(ci_netif* ni, int nic_index,
 void __ci_netif_ring_plugin_app_doorbell(ci_netif* ni, int nic_index)
 {
   union ceph_control_pkt cmd = {
-    .cmd = XSN_CEPH_CTRL_ADD_CREDIT,
-    .add_credit.credit = ni->state->nic[nic_index].plugin_app_credit,
+    .add_credit = {
+      .cmd = XSN_CEPH_CTRL_ADD_CREDIT,
+      .credit = ni->state->nic[nic_index].plugin_app_credit,
+    },
   };
   ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(ni, 0);
   if( ! pkt ) {
