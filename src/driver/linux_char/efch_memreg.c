@@ -22,43 +22,22 @@ struct efch_memreg {
   struct page                       **pages;
   int                                 nic_order;
 
-  struct efch_memreg_area_params      middle;
-
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  struct efch_memreg_area_params      head;
-  struct efch_memreg_area_params      tail;
-#endif
+  struct efch_memreg_area_params      area;
 };
 
+
+CI_BUILD_ASSERT(PAGE_SIZE == EFHW_NIC_PAGE_SIZE);
 
 static void efch_memreg_free(struct efch_memreg *mr)
 {
   int i;
 
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  if (mr->head.mapped) {
-    efrm_pd_dma_unmap(mr->pd, mr->head.n_addrs, 0,
-                      mr->head.dma_addrs,
-                      &mr->head.bt_alloc, 0);
-    vfree(mr->head.dma_addrs);
+  if (mr->area.mapped) {
+    efrm_pd_dma_unmap(mr->pd, mr->area.n_addrs, mr->nic_order,
+                      mr->area.dma_addrs, &mr->area.bt_alloc, 0);
+    vfree(mr->area.dma_addrs);
+    mr->area.mapped = false;
   }
-#endif
-
-  if (mr->middle.mapped) {
-    efrm_pd_dma_unmap(mr->pd, mr->middle.n_addrs, mr->nic_order,
-                      mr->middle.dma_addrs,
-                      &mr->middle.bt_alloc, 0);
-    vfree(mr->middle.dma_addrs);
-  }
-
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  if (mr->tail.mapped) {
-    efrm_pd_dma_unmap(mr->pd, mr->tail.n_addrs, 0,
-                      mr->tail.dma_addrs,
-                      &mr->tail.bt_alloc, 0);
-    vfree(mr->tail.dma_addrs);
-  }
-#endif
 
   for (i = 0; i < mr->n_pages; ++i)
     put_page(mr->pages[i]);
@@ -150,15 +129,8 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
   unsigned comp_order;
   int this_comp_order;
   int comp_shift;
-  unsigned long comp_size;
-  unsigned long comp_mask;
-  uint64_t head_begin;
-  uint64_t head_end;
-  uint64_t tail_begin;
-  uint64_t tail_end;
   void *user_addrs;
   int user_addrs_stride;
-  int max_addrs;
   unsigned int i;
   void **addrs;
   struct page **cur_page;
@@ -250,70 +222,27 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
   ci_assert_lt(comp_order, UINT_MAX);
 
   /* The API requires that the end of the allocation be NIC-page-aligned, and
-   * we checked this earlier.  There are two further complications:
-   *   1. On systems where PAGE_SIZE != EFHW_NIC_PAGE_SIZE, we have no
-   *      guarantee that the end of the allocation is PAGE_SIZE-aligned.  We
-   *      handle this later using mr->head and mr->tail.
-   *   2. On all systems, there is no guarantee that the end of the allocation
-   *      is comp_order-aligned.  For example, the caller could memreg a buffer
-   *      backed by a huge page that is aligned to the huge page at the start
-   *      but not at the end.  This appears to us here as a compound page of
-   *      huge-page order, but that doesn't imply alignment of the end of the
-   *      allocation.  We fix this case up now, by clamping comp_order to the
-   *      effective order induced by the final full PAGE_SIZE-sized page in the
-   *      allocation.  Any misalignment beyond that point is an instance of
-   *      case 1 above.
+   * we checked this earlier.  There is a further complication, however:
+   * There is no guarantee that either the start or the end of the allocation
+   * is comp_order-aligned.  For example, the caller could memreg a buffer
+   * backed by a huge page that is aligned to the huge page at the start but
+   * not at the end.  This appears to us here as a compound page of huge-page
+   * order, but that doesn't imply alignment of the end of the allocation.  We
+   * fix this case up now, by clamping comp_order to the effective order
+   * induced by the bounding full PAGE_SIZE-sized pages in the allocation.
    */
+  comp_order = CI_MIN(comp_order, addr_page_align_order(alloc->in_mem_ptr));
   comp_order = CI_MIN(comp_order, addr_page_align_order(in_mem_end));
 
   comp_shift = PAGE_SHIFT + comp_order;
-  comp_size = 1UL << comp_shift;
-  comp_mask = ~(comp_size - 1);
   mr->nic_order = EFHW_GFP_ORDER_TO_NIC_ORDER(comp_order);
-
-  head_begin = alloc->in_mem_ptr;
-  head_end = (alloc->in_mem_ptr + comp_size - 1) & comp_mask;
-  tail_begin = in_mem_end & comp_mask;
-  tail_end = in_mem_end;
 
   user_addrs = (void *)(ci_uintptr_t)alloc->in_addrs_out_ptr;
   user_addrs_stride = alloc->in_addrs_out_stride;
 
-  if (tail_begin < head_end) {
-    head_end = tail_end;
-    tail_begin = 0;
-    tail_end = 0;
-  }
+  mr->area.n_addrs = (in_mem_end - alloc->in_mem_ptr) >> comp_shift;
 
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  if (head_begin != head_end)
-    mr->head.n_addrs = (head_end - head_begin) >> EFHW_NIC_PAGE_SHIFT;
-  else
-    mr->head.n_addrs = 0;
-#endif
-
-  if (head_end != tail_begin)
-    mr->middle.n_addrs = (tail_begin - head_end) >> comp_shift;
-  else
-    mr->middle.n_addrs = 0;
-
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  if (tail_begin != tail_end)
-    mr->tail.n_addrs = (tail_end - tail_begin) >> EFHW_NIC_PAGE_SHIFT;
-  else
-    mr->tail.n_addrs = 0;
-#endif
-
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  max_addrs = (mr->head.n_addrs > mr->middle.n_addrs) ?
-                  mr->head.n_addrs : mr->middle.n_addrs;
-  max_addrs = (mr->tail.n_addrs > max_addrs) ?
-                  mr->tail.n_addrs : max_addrs;
-#else
-  max_addrs = mr->middle.n_addrs;
-#endif
-
-  addrs = vmalloc(max_addrs * sizeof(*addrs));
+  addrs = vmalloc(mr->area.n_addrs * sizeof(*addrs));
   if (addrs == NULL) {
     rc = -ENOMEM;
     goto fail3;
@@ -322,58 +251,20 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
   cur_page = mr->pages;
   page_stride = sizeof(mr->pages[0]) << comp_order;
 
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  if (mr->head.n_addrs != 0) {
-    void *ptr;
+  if (mr->area.n_addrs != 0) {
 
-    ptr = page_address(*cur_page) + comp_size - (head_end - head_begin);
-    cur_page = (struct page **)((char *)cur_page + page_stride);
-
-    for (i = 0; i < mr->head.n_addrs; i++) {
-      addrs[i] = ptr + i * EFHW_NIC_PAGE_SIZE;
-    }
-
-    rc = efch_dma_map(pd, &mr->head, 0, addrs,
-                      &user_addrs, user_addrs_stride,
-                      put_user_64);
-    if (rc < 0)
-      goto fail4;
-  }
-#endif
-
-  if (mr->middle.n_addrs != 0) {
-
-    for (i = 0; i < mr->middle.n_addrs; i++) {
+    for (i = 0; i < mr->area.n_addrs; i++) {
       addrs[i] = page_address(*cur_page);
       cur_page = (struct page **)((char *)cur_page + page_stride);
     }
 
-    rc = efch_dma_map(pd, &mr->middle, mr->nic_order, addrs,
+    rc = efch_dma_map(pd, &mr->area, mr->nic_order, addrs,
                       &user_addrs, user_addrs_stride,
                       put_user_64);
     if (rc < 0)
       goto fail4;
 
   }
-
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  if (mr->tail.n_addrs != 0) {
-    void *ptr;
-
-    ptr = page_address(*cur_page);
-    cur_page = (struct page **)((char *)cur_page + page_stride);
-
-    for (i = 0; i < mr->tail.n_addrs; i++) {
-      addrs[i] = ptr + i * EFHW_NIC_PAGE_SIZE;
-    }
-
-    rc = efch_dma_map(pd, &mr->tail, 0, addrs,
-                      &user_addrs, user_addrs_stride,
-                      put_user_64);
-    if (rc < 0)
-      goto fail4;
-  }
-#endif
 
   vfree(addrs);
 
@@ -386,29 +277,6 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
 
  fail4:
   vfree(addrs);
-
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  if (mr->head.mapped) {
-    efrm_pd_dma_unmap(pd, mr->head.n_addrs, 0,
-                      mr->head.dma_addrs,
-                      &mr->head.bt_alloc, 0);
-  }
-#endif
-
-  if (mr->middle.mapped) {
-    efrm_pd_dma_unmap(pd, mr->middle.n_addrs, mr->nic_order,
-                      mr->middle.dma_addrs,
-                      &mr->middle.bt_alloc, 0);
-  }
-
-#if (PAGE_SIZE != EFHW_NIC_PAGE_SIZE)
-  if (mr->tail.mapped) {
-    efrm_pd_dma_unmap(pd, mr->tail.n_addrs, 0,
-                      mr->tail.dma_addrs,
-                      &mr->tail.bt_alloc, 0);
-  }
-#endif
-
  fail3:
   efch_memreg_free(mr);
  fail2:
