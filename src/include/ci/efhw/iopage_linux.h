@@ -116,6 +116,7 @@ struct efhw_iopages {
 	void *ptr;
 	unsigned n_pages;
 	unsigned phys_cont;
+	dma_addr_t *free_addrs;
 	dma_addr_t *dma_addrs;
 };
 

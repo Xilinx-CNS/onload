@@ -440,7 +440,6 @@ EXPORT_SYMBOL(efrm_pd_vport_alloc);
 
 /**********************************************************************/
 
-
 #define NIC_ORDER_TO_BYTES(nic_order) \
   ((size_t)EFHW_NIC_PAGE_SIZE << (size_t)(nic_order))
 
@@ -506,19 +505,24 @@ static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 
 static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 			       int n_pages, int nic_order,
-			       void **addrs, dma_addr_t *pci_addrs)
+			       void **addrs, dma_addr_t *pci_addrs,
+			       dma_addr_t *free_addrs)
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
 	struct pci_dev* dev = efhw_nic_get_pci_dev(nic);
 	int rc;
 	if (dev) {
 		rc = efrm_pd_dma_map_pci(dev, n_pages, nic_order, addrs,
-					 pci_addrs);
+					 free_addrs);
 		pci_dev_put(dev);
+		if (rc == 0)
+			rc = efhw_nic_translate_dma_addrs(nic, free_addrs,
+			                                  pci_addrs, n_pages);
 	}
 	else {
 		rc = efrm_pd_dma_map_nonpci(n_pages, nic_order, addrs,
 					    pci_addrs);
+		memcpy(free_addrs, pci_addrs, n_pages * sizeof(pci_addrs[0]));
 	}
 
 	return rc;
@@ -948,16 +952,21 @@ static void efrm_pd_copy_user_addrs(struct efrm_pd *pd,
 
 
 int efrm_pd_dma_remap_bt(struct efrm_pd *pd, int n_pages, int nic_order,
-			 dma_addr_t *pci_addrs,
+			 dma_addr_t *pci_addrs, dma_addr_t *free_addrs,
 			 uint64_t *user_addrs, int user_addrs_stride,
 			 void (*user_addr_put)(uint64_t, uint64_t *),
 			 struct efrm_bt_collection *bt_alloc)
 {
+	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
 	int rc, rc1 = 0;
 	int bt_num;
 
 	if (pd->owner_id == OWNER_ID_PHYS_MODE)
 		return -ENOSYS;
+
+	rc = efhw_nic_translate_dma_addrs(nic, free_addrs, pci_addrs, n_pages);
+	if (rc)
+		return rc;
 
 	mutex_lock(&pd->remap_lock);
 
@@ -987,6 +996,7 @@ EXPORT_SYMBOL(efrm_pd_dma_remap_bt);
 
 int efrm_pd_dma_map(struct efrm_pd *pd, int n_pages, int nic_order,
 		    void **addrs, dma_addr_t *pci_addrs,
+		    dma_addr_t *free_addrs,
 		    uint64_t *user_addrs, int user_addrs_stride,
 		    void (*user_addr_put)(uint64_t, uint64_t *),
 		    struct efrm_bt_collection *bt_alloc, int reset_pending,
@@ -1006,7 +1016,7 @@ int efrm_pd_dma_map(struct efrm_pd *pd, int n_pages, int nic_order,
 	}
 
 	rc = efrm_pd_dma_map_nic(pd, n_pages, nic_order,
-				 addrs, pci_addrs);
+				 addrs, pci_addrs, free_addrs);
 	if (rc < 0)
 		goto fail1;
 
@@ -1030,7 +1040,7 @@ int efrm_pd_dma_map(struct efrm_pd *pd, int n_pages, int nic_order,
 
 
 fail2:
-		efrm_pd_dma_unmap_nic(pd, n_pages, nic_order, pci_addrs);
+		efrm_pd_dma_unmap_nic(pd, n_pages, nic_order, free_addrs);
 fail1:
 	return rc;
 }
@@ -1038,14 +1048,14 @@ EXPORT_SYMBOL(efrm_pd_dma_map);
 
 
 void efrm_pd_dma_unmap(struct efrm_pd *pd, int n_pages, int nic_order,
-		       dma_addr_t *pci_addrs,
+		       dma_addr_t *free_addrs,
 		       struct efrm_bt_collection *bt_alloc, int reset_pending)
 {
 	if (pd->owner_id != OWNER_ID_PHYS_MODE)
 		efrm_pd_dma_unmap_bt(pd, bt_alloc, reset_pending);
 
 	efrm_pd_dma_unmap_nic(pd, n_pages, nic_order,
-			      pci_addrs);
+			      free_addrs);
 }
 EXPORT_SYMBOL(efrm_pd_dma_unmap);
 

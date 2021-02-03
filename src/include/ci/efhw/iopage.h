@@ -57,13 +57,13 @@
  * caller must release the pages using efhw_iopages_free when they is
  * no longer needed.  Returns zero on success or a negative error
  * number on failure. */
-extern int efhw_iopages_alloc(struct pci_dev *pci_dev, struct efhw_iopages *p,
+extern int efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 			      unsigned order, int phys_cont_only,
 			      unsigned long iova_base);
 
 /* Free IO pages allocated using efhw_iopages_alloc.  This reverses
  * the effects of efhw_iopages_alloc.  The same values must be
  * supplied to the nic and p arguments to the two functions. */
-extern void efhw_iopages_free(struct pci_dev *pci_dev, struct efhw_iopages *p);
+extern void efhw_iopages_free(struct efhw_nic *nic, struct efhw_iopages *p);
 
 #endif /* __CI_DRIVER_RESOURCE_IOPAGE_H__ */

@@ -669,10 +669,8 @@ efrm_vi_rm_fini_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type)
 	 * anyway.
 	 */
 	if (efhw_iopages_n_pages(&q->pages)) {
-		struct pci_dev* dev = efrm_vi_get_pci_dev(virs);
-		efhw_iopages_free(dev, &q->pages);
-		if (dev)
-			pci_dev_put(dev);
+		struct efhw_nic* nic = virs->rs.rs_client->nic;
+		efhw_iopages_free(nic, &q->pages);
 	}
 }
 
@@ -929,7 +927,6 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 	struct efrm_vi_q_size qsize;
 	int i, rc, q_flags;
 	unsigned long iova_base = 0;
-	struct pci_dev* dev;
 	struct efhw_nic* nic = virs->rs.rs_client->nic;
 
 	if (n_q_entries == 0)
@@ -962,11 +959,8 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 		dma_addrs_size = 0;
 	}
 	else {
-		dev = efrm_vi_get_pci_dev(virs);
-		rc = efhw_iopages_alloc(dev, &q->pages, qsize.q_len_page_order,
+		rc = efhw_iopages_alloc(nic, &q->pages, qsize.q_len_page_order,
 		                        nic->devtype.arch == EFHW_ARCH_EF100, iova_base);
-		if (dev)
-			pci_dev_put(dev);
 		if (rc < 0) {
 			EFRM_ERR("%s: Failed to allocate %s DMA buffer",
 				 __FUNCTION__, q_names[q_type]);
@@ -1014,10 +1008,7 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 	return rc;
 
 fail:
-	dev = efrm_vi_get_pci_dev(virs);
-	efhw_iopages_free(dev, &q->pages);
-	if (dev)
-		pci_dev_put(dev);
+	efhw_iopages_free(nic, &q->pages);
 	return rc;
 }
 EXPORT_SYMBOL(efrm_vi_q_alloc);

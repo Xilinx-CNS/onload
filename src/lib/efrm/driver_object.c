@@ -577,5 +577,32 @@ void efhw_nic_flush_dl(struct efhw_nic* efhw_nic)
 	up_write(&lnic->dl_sem);
 }
 
+int efhw_nic_translate_dma_addrs(struct efhw_nic* nic,
+                                 const dma_addr_t *src,
+                                 dma_addr_t *dst, int n)
+{
+	struct efx_dl_device *efx_dev;
+	int rc;
+
+	efx_dev = efhw_nic_acquire_dl_device(nic);
+	if (!efx_dev)
+		return -ENETDOWN;
+	rc = efx_dl_dma_xlate(efx_dev, src, dst, n);
+	if (rc < 0) {
+		EFRM_ERR("%s: ERROR: DMA address translation failed (%d)",
+		         __FUNCTION__, rc);
+	}
+	else if (rc < n) {
+		EFRM_ERR("%s: ERROR: DMA address translation failed on "
+		         "%d/%d (%llx)", __FUNCTION__, rc, n, src[rc]);
+		rc = -EIO;
+	}
+	else {
+		rc = 0;
+	}
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
 
 #endif  /* __KERNEL__ */

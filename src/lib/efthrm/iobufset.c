@@ -440,7 +440,7 @@ oo_iobufset_resource_free(struct oo_iobufset *rs, int reset_pending)
   efrm_pd_dma_unmap(rs->pd, rs->pages->n_bufs,
                     EFHW_GFP_ORDER_TO_NIC_ORDER(
                                     compound_order(rs->pages->pages[0])),
-                    &rs->dma_addrs[0],
+                    rs->free_addrs,
                     &rs->buf_tbl_alloc, reset_pending);
 
   if (rs->pd != NULL)
@@ -478,11 +478,15 @@ oo_iobufset_resource_alloc(struct oo_buffer_pages * pages, struct efrm_pd *pd,
   ci_assert(iobrs_out);
   ci_assert(pd);
 
+  /* Request space for two arrays of n_bufs, then treat the first as
+   * iobrs->dma_addrs and the second as iobrs->free_addrs. */
   iobrs = alloc_array_and_header(sizeof(struct oo_iobufset),
-                                 pages->n_bufs * sizeof(dma_addr_t), gfp_flag,
+                                 2 * pages->n_bufs * sizeof(dma_addr_t),
+                                 gfp_flag,
                                  offsetof(struct oo_iobufset, dma_addrs));
   if( ! iobrs )
     return -ENOMEM;
+  iobrs->free_addrs = iobrs->dma_addrs + pages->n_bufs;
 
   oo_atomic_set(&iobrs->ref_count, 1);
   iobrs->pd = pd;
@@ -503,7 +507,7 @@ oo_iobufset_resource_alloc(struct oo_buffer_pages * pages, struct efrm_pd *pd,
 
   rc = efrm_pd_dma_map(iobrs->pd, pages->n_bufs,
 		       nic_order,
-		       addrs, &iobrs->dma_addrs[0],
+		       addrs, iobrs->dma_addrs, iobrs->free_addrs,
 		       hw_addrs, sizeof(hw_addrs[0]),
 		       put_user_fake, &iobrs->buf_tbl_alloc, reset_pending, page_order);
   kfree(addrs);
@@ -529,7 +533,7 @@ int oo_iobufset_resource_remap_bt(struct oo_iobufset *iobrs, uint64_t *hw_addrs)
 {
   return efrm_pd_dma_remap_bt(iobrs->pd, iobrs->pages->n_bufs,
                               compound_order(iobrs->pages->pages[0]),
-                              &iobrs->dma_addrs[0],
+                              iobrs->dma_addrs, iobrs->free_addrs,
                               hw_addrs, sizeof(hw_addrs[0]),
                               put_user_fake,
                               &iobrs->buf_tbl_alloc);

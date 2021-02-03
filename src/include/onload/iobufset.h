@@ -82,6 +82,7 @@ struct oo_iobufset {
   struct efrm_bt_collection buf_tbl_alloc;
   struct oo_buffer_pages *pages;   /*!< allocated memory */
   dma_addr_t *dma_addrs;            /*!< array of pages->n_buf entries */
+  dma_addr_t *free_addrs;            /*!< array of pages->n_buf entries */
 };
 
 
