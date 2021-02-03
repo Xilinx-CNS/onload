@@ -30,7 +30,6 @@ static void ci_tcp_state_setup_timers(ci_netif* ni, ci_tcp_state* ts)
   do {                                                          \
     ci_ip_timer* t = &ts->name##_tid;                           \
     oo_p sp;                                                    \
-    t->param1 = S_SP(ts);                                       \
     t->fn = callback;                                           \
     sp = TS_OFF(ni, ts);                                        \
     OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, name##_tid));   \

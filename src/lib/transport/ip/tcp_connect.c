@@ -1585,7 +1585,6 @@ int ci_tcp_listen_init(ci_netif *ni, ci_tcp_socket_listen *tls)
   sp = TS_OFF(ni, tls);
   OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_socket_listen, listenq_tid));
   ci_ip_timer_init(ni, &tls->listenq_tid, sp, "lstq");
-  tls->listenq_tid.param1 = S_SP(tls);
   tls->listenq_tid.fn = CI_IP_TIMER_TCP_LISTEN;
 
   tls->acceptq_n_in = tls->acceptq_n_out = 0;

@@ -28,7 +28,6 @@ ci_pmtu_state_init(ci_netif* ni, ci_sock_cmn *s,
                    oo_p pmtu_sp, ci_pmtu_state_t* pmtus,
                    int func_code)
 {
-  pmtus->tid.param1 = SC_SP(s);
   pmtus->tid.fn = (ci_iptime_callback_fn_t)func_code;
 
   OO_P_ADD(pmtu_sp, CI_MEMBER_OFFSET(ci_ni_aux_mem, u.pmtus));

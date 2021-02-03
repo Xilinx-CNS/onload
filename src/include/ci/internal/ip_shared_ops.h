@@ -321,6 +321,11 @@ ci_inline oo_p oo_sockp_to_statep(ci_netif* ni, oo_sp sockp) {
   return sp;
 }
 
+/* Get the socket id by a state pointer in the middle of this socket. */
+ci_inline oo_sp oo_statep_to_sockp(const ci_netif* ni, oo_p p)
+{
+  return (p - ci_netif_ep_ofs(ni)) / EP_BUF_SIZE;
+}
 
 
 /* oo_sockp_to_ptr(ni, sockp)

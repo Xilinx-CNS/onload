@@ -800,7 +800,7 @@ typedef ci_uint32  ci_iptime_callback_param_t;
 typedef struct {
   ci_ni_dllist_link           link;
   ci_iptime_t                 time;          /* absolute time to expire  */
-  oo_sp                       param1;        /* first parameter for fn   */
+  oo_p                        statep;        /* state offset of the timer */
   ci_iptime_callback_fn_t     fn;            /* function code for demux  */
 # define CI_IP_TIMER_TCP_RTO            0x1  /* TCP RTO callback         */
 # define CI_IP_TIMER_TCP_DELACK         0x2  /* TCP delack callback      */

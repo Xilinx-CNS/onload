@@ -112,14 +112,12 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
                    oo_ptr_to_statep(ni, &nis->timeout_tid),
                    "ttid");
 
-  nis->timeout_tid.param1 = OO_SP_NULL;
   nis->timeout_tid.fn = CI_IP_TIMER_NETIF_TIMEOUT;
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_ip_timer_init(ni, &nis->recycle_tid,
                    oo_ptr_to_statep(ni, &nis->recycle_tid),
                    "rctq");
-  nis->recycle_tid.param1 = OO_SP_NULL;
   nis->recycle_tid.fn = CI_IP_TIMER_NETIF_TCP_RECYCLE;
 
   ci_ni_dllist_init(ni, &nis->recycle_retry_q,
@@ -131,7 +129,6 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   ci_ip_timer_init(ni, &nis->stats_tid,
                    oo_ptr_to_statep(ni, &nis->stats_tid),
                    "stat");
-  nis->stats_tid.param1 = OO_SP_NULL;
   nis->stats_tid.fn = CI_IP_TIMER_NETIF_STATS;
 
   ci_ip_stats_clear(&nis->stats_snapshot);

@@ -312,31 +312,39 @@ static void ci_ip_timer_do_recycle(ci_netif *netif)
 /* unpick the ci_ip_timer structure to actually do the callback */ 
 static void ci_ip_timer_docallback(ci_netif *netif, ci_ip_timer* ts)
 {
+  oo_sp sp;
+
   ci_assert( TIME_LE(ts->time, ci_ip_time_now(netif)) );
   ci_assert( ts->time == IPTIMER_STATE(netif)->sched_ticks );
 
   switch(ts->fn){
   case CI_IP_TIMER_TCP_RTO:
-    CHECK_TS(netif, SP_TO_TCP(netif, ts->param1));
-    ci_tcp_timeout_rto(netif, SP_TO_TCP(netif, ts->param1));
+    sp = oo_statep_to_sockp(netif, ts->statep);
+    CHECK_TS(netif, SP_TO_TCP(netif, sp));
+    ci_tcp_timeout_rto(netif, SP_TO_TCP(netif, sp));
     break;
   case CI_IP_TIMER_TCP_DELACK:
-    CHECK_TS(netif, SP_TO_TCP(netif, ts->param1));
-    ci_tcp_timeout_delack(netif, SP_TO_TCP(netif, ts->param1));
+    sp = oo_statep_to_sockp(netif, ts->statep);
+    CHECK_TS(netif, SP_TO_TCP(netif, sp));
+    ci_tcp_timeout_delack(netif, SP_TO_TCP(netif, sp));
     break;
   case CI_IP_TIMER_TCP_ZWIN:
-    CHECK_TS(netif, SP_TO_TCP(netif, ts->param1));
-    ci_tcp_timeout_zwin(netif, SP_TO_TCP(netif, ts->param1));
+    sp = oo_statep_to_sockp(netif, ts->statep);
+    CHECK_TS(netif, SP_TO_TCP(netif, sp));
+    ci_tcp_timeout_zwin(netif, SP_TO_TCP(netif, sp));
     break;
   case CI_IP_TIMER_TCP_KALIVE:
-    CHECK_TS(netif, SP_TO_TCP(netif, ts->param1));
-    ci_tcp_timeout_kalive(netif, SP_TO_TCP(netif, ts->param1));
+    sp = oo_statep_to_sockp(netif, ts->statep);
+    CHECK_TS(netif, SP_TO_TCP(netif, sp));
+    ci_tcp_timeout_kalive(netif, SP_TO_TCP(netif, sp));
     break;
   case CI_IP_TIMER_TCP_LISTEN:
-    ci_tcp_timeout_listen(netif, SP_TO_TCP_LISTEN(netif, ts->param1));    
+    sp = oo_statep_to_sockp(netif, ts->statep);
+    ci_tcp_timeout_listen(netif, SP_TO_TCP_LISTEN(netif, sp));    
     break;
   case CI_IP_TIMER_TCP_CORK:
-    ci_tcp_timeout_cork(netif, SP_TO_TCP(netif, ts->param1));
+    sp = oo_statep_to_sockp(netif, ts->statep);
+    ci_tcp_timeout_cork(netif, SP_TO_TCP(netif, sp));
     break;
   case CI_IP_TIMER_NETIF_TCP_RECYCLE:
     ci_ip_timer_do_recycle(netif);
@@ -345,11 +353,13 @@ static void ci_ip_timer_docallback(ci_netif *netif, ci_ip_timer* ts)
     ci_netif_timeout_state(netif);
     break;
   case CI_IP_TIMER_PMTU_DISCOVER:
-    ci_pmtu_timeout_pmtu(netif, SP_TO_TCP(netif, ts->param1));
+    sp = oo_statep_to_sockp(netif, ts->statep);
+    ci_pmtu_timeout_pmtu(netif, SP_TO_TCP(netif, sp));
     break;
 #if CI_CFG_TCP_SOCK_STATS
   case CI_IP_TIMER_TCP_STATS:
-	ci_tcp_stats_action(netif, SP_TO_TCP(netif, ts->param1), 
+    sp = oo_statep_to_sockp(netif, ts->statep);
+	ci_tcp_stats_action(netif, SP_TO_TCP(netif, sp), 
                         CI_IP_STATS_FLUSH, 
                         CI_IP_STATS_OUTPUT_NONE, NULL, NULL );
     break;
@@ -362,12 +372,13 @@ static void ci_ip_timer_docallback(ci_netif *netif, ci_ip_timer* ts)
 #endif
 #if CI_CFG_IP_TIMER_DEBUG
   case CI_IP_TIMER_DEBUG_HOOK:
-    ci_ip_timer_debug_fn(netif, ts->link.addr, ts->param1);
+    sp = oo_statep_to_sockp(netif, ts->statep);
+    ci_ip_timer_debug_fn(netif, ts->link.addr, sp);
     break;
 #endif
   default:
-    LOG_U(log( LPF "unknown timer callback code:%x param1:%d",
-	       ts->fn, OO_SP_FMT(ts->param1)));    
+    LOG_U(log( LPF "unknown timer callback code:%x statep:%d",
+	       ts->fn, OO_P_FMT(ts->statep)));    
     CI_DEBUG(ci_fail_stop_fn());
   }  
 }

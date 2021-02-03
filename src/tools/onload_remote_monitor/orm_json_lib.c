@@ -566,10 +566,13 @@ static void dump_buf_quoted_uint_comma(uint64_t value)
   __dump_buf_cat0("\"", 1);
 }
 
+#if 0
+/* Unused for now, but looks potentially useful */
 static void dump_buf_int_comma_oo_sp(oo_sp value)
 {
   dump_buf_cat_comma("\"%p\"", value);
 }
+#endif
 
 #define REDISPATCH_INT_DUMP(from, to, member) \
   static void dump_buf_int_comma_##from(from value)         \

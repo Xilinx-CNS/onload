@@ -368,7 +368,7 @@ typedef struct oo_p_dllink oo_p_dllink_t;
     FTL_TSTRUCT_BEGIN(ctx, ci_ip_timer, )                                     \
     FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_link, link, ORM_OUTPUT_EXTRA)	      \
     FTL_TFIELD_INT(ctx, ci_iptime_t, time, ORM_OUTPUT_STACK)                       \
-    FTL_TFIELD_INT(ctx, oo_sp, param1, ORM_OUTPUT_EXTRA)                     \
+    FTL_TFIELD_INT(ctx, oo_p, statep, ORM_OUTPUT_EXTRA)                     \
     FTL_TFIELD_INT(ctx, ci_iptime_callback_fn_t, fn, ORM_OUTPUT_EXTRA)             \
     FTL_TSTRUCT_END(ctx)                                                 
 

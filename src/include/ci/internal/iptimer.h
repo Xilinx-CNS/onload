@@ -140,6 +140,7 @@ ci_inline void ci_ip_timer_modify(ci_netif* ni, ci_ip_timer* ts, ci_iptime_t t)
 ci_inline void ci_ip_timer_init(ci_netif* netif, ci_ip_timer* t,
                                 oo_p t_sp, const char* name) {
   OO_P_ADD(t_sp, CI_MEMBER_OFFSET(ci_ip_timer, link));
+  t->statep = t_sp;
   ci_assert_equal(CI_NETIF_PTR(netif, t_sp), (char*) &t->link);
   ci_ni_dllist_link_init(netif, &t->link, t_sp, name);
   ci_ni_dllist_self_link(netif, &t->link);
