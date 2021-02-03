@@ -175,8 +175,7 @@ efrm_pd_vport_alloc(struct efrm_pd *, int vlan_id);
  * In: pd, n_pages, nic_order, addrs.
  * Out: dma_addrs, user_addrs. */
 extern int efrm_pd_dma_map(struct efrm_pd *, int n_pages, int nic_order,
-			   void **addrs, int addrs_stride,
-			   void *dma_addrs, int dma_addrs_stride,
+			   void **addrs, dma_addr_t *dma_addrs,
 			   uint64_t *user_addrs, int user_addrs_stride,
 			   void (*user_addr_put)(uint64_t, uint64_t *),
 			   struct efrm_bt_collection *, int reset_pending,
@@ -184,7 +183,7 @@ extern int efrm_pd_dma_map(struct efrm_pd *, int n_pages, int nic_order,
 
 /* Unmap pages previously mapped by efrm_pd_dma_map(). */
 extern void efrm_pd_dma_unmap(struct efrm_pd *, int n_pages, int nic_order,
-			      void *dma_addrs, int dma_addrs_stride,
+			      dma_addr_t *dma_addrs,
 			      struct efrm_bt_collection *, int reset_pending);
 
 /* Re-map pages already mapped by efrm_pd_dma_map() after NIC reset.
@@ -200,7 +199,7 @@ extern void efrm_pd_dma_unmap(struct efrm_pd *, int n_pages, int nic_order,
  * -errno - error; the mapping is invalidated; user should kill himself.
  */
 extern int efrm_pd_dma_remap_bt(struct efrm_pd *pd, int n_pages, int nic_order,
-				dma_addr_t *pci_addrs, int pci_addrs_stride,
+				dma_addr_t *pci_addrs,
 				uint64_t *user_addrs, int user_addrs_stride,
 				void (*user_addr_put)(uint64_t, uint64_t *),
                                 struct efrm_bt_collection *bt_alloc);

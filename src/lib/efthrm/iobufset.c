@@ -440,7 +440,7 @@ oo_iobufset_resource_free(struct oo_iobufset *rs, int reset_pending)
   efrm_pd_dma_unmap(rs->pd, rs->pages->n_bufs,
                     EFHW_GFP_ORDER_TO_NIC_ORDER(
                                     compound_order(rs->pages->pages[0])),
-                    &rs->dma_addrs[0], sizeof(rs->dma_addrs[0]),
+                    &rs->dma_addrs[0],
                     &rs->buf_tbl_alloc, reset_pending);
 
   if (rs->pd != NULL)
@@ -503,8 +503,7 @@ oo_iobufset_resource_alloc(struct oo_buffer_pages * pages, struct efrm_pd *pd,
 
   rc = efrm_pd_dma_map(iobrs->pd, pages->n_bufs,
 		       nic_order,
-		       addrs, sizeof(addrs[0]),
-		       &iobrs->dma_addrs[0], sizeof(iobrs->dma_addrs[0]),
+		       addrs, &iobrs->dma_addrs[0],
 		       hw_addrs, sizeof(hw_addrs[0]),
 		       put_user_fake, &iobrs->buf_tbl_alloc, reset_pending, page_order);
   kfree(addrs);
@@ -530,7 +529,7 @@ int oo_iobufset_resource_remap_bt(struct oo_iobufset *iobrs, uint64_t *hw_addrs)
 {
   return efrm_pd_dma_remap_bt(iobrs->pd, iobrs->pages->n_bufs,
                               compound_order(iobrs->pages->pages[0]),
-                              &iobrs->dma_addrs[0], sizeof(iobrs->dma_addrs[0]),
+                              &iobrs->dma_addrs[0],
                               hw_addrs, sizeof(hw_addrs[0]),
                               put_user_fake,
                               &iobrs->buf_tbl_alloc);

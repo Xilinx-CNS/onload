@@ -39,7 +39,6 @@ static void efch_memreg_free(struct efch_memreg *mr)
   if (mr->head.mapped) {
     efrm_pd_dma_unmap(mr->pd, mr->head.n_addrs, 0,
                       mr->head.dma_addrs,
-                      sizeof(mr->head.dma_addrs[0]),
                       &mr->head.bt_alloc, 0);
     vfree(mr->head.dma_addrs);
   }
@@ -48,7 +47,6 @@ static void efch_memreg_free(struct efch_memreg *mr)
   if (mr->middle.mapped) {
     efrm_pd_dma_unmap(mr->pd, mr->middle.n_addrs, mr->nic_order,
                       mr->middle.dma_addrs,
-                      sizeof(mr->middle.dma_addrs[0]),
                       &mr->middle.bt_alloc, 0);
     vfree(mr->middle.dma_addrs);
   }
@@ -57,7 +55,6 @@ static void efch_memreg_free(struct efch_memreg *mr)
   if (mr->tail.mapped) {
     efrm_pd_dma_unmap(mr->pd, mr->tail.n_addrs, 0,
                       mr->tail.dma_addrs,
-                      sizeof(mr->tail.dma_addrs[0]),
                       &mr->tail.bt_alloc, 0);
     vfree(mr->tail.dma_addrs);
   }
@@ -113,9 +110,7 @@ static int efch_dma_map(struct efrm_pd *pd,
     return -ENOMEM;
 
   rc = efrm_pd_dma_map(pd, ar->n_addrs, nic_order,
-                       addrs, sizeof(addrs[0]),
-                       ar->dma_addrs,
-                       sizeof(ar->dma_addrs[0]),
+                       addrs, ar->dma_addrs,
                        *user_addrs, user_addrs_stride,
                        user_addr_put, &ar->bt_alloc, 0, NULL);
   if (rc < 0) {
@@ -396,7 +391,6 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
   if (mr->head.mapped) {
     efrm_pd_dma_unmap(pd, mr->head.n_addrs, 0,
                       mr->head.dma_addrs,
-                      sizeof(mr->head.dma_addrs[0]),
                       &mr->head.bt_alloc, 0);
   }
 #endif
@@ -404,7 +398,6 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
   if (mr->middle.mapped) {
     efrm_pd_dma_unmap(pd, mr->middle.n_addrs, mr->nic_order,
                       mr->middle.dma_addrs,
-                      sizeof(mr->middle.dma_addrs[0]),
                       &mr->middle.bt_alloc, 0);
   }
 
@@ -412,7 +405,6 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
   if (mr->tail.mapped) {
     efrm_pd_dma_unmap(pd, mr->tail.n_addrs, 0,
                       mr->tail.dma_addrs,
-                      sizeof(mr->tail.dma_addrs[0]),
                       &mr->tail.bt_alloc, 0);
   }
 #endif
