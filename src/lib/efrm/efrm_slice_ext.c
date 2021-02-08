@@ -100,16 +100,6 @@ int efrm_ext_msg(struct efrm_resource *rs, uint32_t mc_handle,
 EXPORT_SYMBOL(efrm_ext_msg);
 
 
-int efrm_ext_destroy_rsrc(struct efrm_resource *rs, uint32_t mc_handle,
-                          uint32_t clas, uint32_t id)
-{
-	if (!check_ef100(rs))
-		return -EOPNOTSUPP;
-	return ef100_nic_ext_destroy_rsrc(rs->rs_client->nic, mc_handle, clas, id);
-}
-EXPORT_SYMBOL(efrm_ext_destroy_rsrc);
-
-
 static void efrm_ext_rm_dtor(struct efrm_resource_manager *rm)
 {
 	/* NOP */

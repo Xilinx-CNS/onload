@@ -81,13 +81,23 @@ clear_plugin_state(tcp_helper_endpoint_t * ep)
   ci_assert( ! in_atomic() );
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(ep->thr, intf_i));
-    if( ep->plugin_stream_id[intf_i] == INVALID_PLUGIN_HANDLE )
+    struct xsn_ceph_destroy_stream param = {};
+    int rc;
+    ci_uint32 conn_id;
+
+    /* This function can be called from tcp_helper_endpoint_clear_filters()
+     * without the stack lock */
+    conn_id = ci_xchg32(&ep->plugin_stream_id[intf_i],
+                        INVALID_PLUGIN_HANDLE);
+    if( conn_id == INVALID_PLUGIN_HANDLE )
       continue;
-    efrm_ext_destroy_rsrc(efrm_pd_to_resource(pd),
-                          ni->nic_hw[intf_i].plugin_handle,
-                          XSN_CEPH_RSRC_CLASS_STREAM,
-                          ep->plugin_stream_id[intf_i]);
-    ep->plugin_stream_id[intf_i] = INVALID_PLUGIN_HANDLE;
+    param.in_conn_id = cpu_to_le32(conn_id);;
+    rc = efrm_ext_msg(efrm_pd_to_resource(pd),
+                      ni->nic_hw[intf_i].plugin_handle,
+                      XSN_CEPH_DESTROY_STREAM, &param, sizeof(param));
+    if( rc )
+      OO_DEBUG_ERR(ci_log("%s: ERROR: Destroy Ceph stream failed (%d)",
+                          __FUNCTION__, rc));
   }
 #endif
 }

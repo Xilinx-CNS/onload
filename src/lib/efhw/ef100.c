@@ -616,27 +616,6 @@ int ef100_nic_ext_msg(struct efhw_nic* nic, uint32_t mc_handle,
 }
 
 
-int ef100_nic_ext_destroy_rsrc(struct efhw_nic* nic, uint32_t mc_handle,
-                               uint32_t clas, uint32_t id)
-{
-	int rc;
-	size_t out_size;
-	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_DESTROY_RSRC_IN_LEN);
-	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_DESTROY_RSRC_OUT_LEN);
-
-	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
-	EFHW_MCDI_INITIALISE_BUF(in);
-	EFHW_MCDI_INITIALISE_BUF(out);
-
-	EFHW_MCDI_SET_DWORD(in, PLUGIN_DESTROY_RSRC_IN_HANDLE, mc_handle);
-	EFHW_MCDI_SET_DWORD(in, PLUGIN_DESTROY_RSRC_IN_CLASS, clas);
-	EFHW_MCDI_SET_DWORD(in, PLUGIN_DESTROY_RSRC_IN_ID, id);
-	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_DESTROY_RSRC,
-	                         sizeof(in), sizeof(out), &out_size, in, out);
-	MCDI_CHECK(MC_CMD_PLUGIN_DESTROY_RSRC, rc, out_size, 0);
-	return rc;
-}
-
 /*--------------------------------------------------------------------
  *
  * AF_XDP

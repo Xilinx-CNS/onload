@@ -1,6 +1,5 @@
-/* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc. */
-
+/* SPDX-License-Identifier: BSD-2-Clause */
+/* X-SPDX-Copyright-Text: (c) Copyright Xilinx, Inc. */
 #ifndef INCLUDED_XSMARTNIC_TCP_CEPH_H_
 #define INCLUDED_XSMARTNIC_TCP_CEPH_H_
 #ifdef __KERNEL__
@@ -50,9 +49,19 @@ struct xsn_ceph_create_stream {
   uint64_t out_data_buf_capacity;
 };
 
+struct xsn_ceph_destroy_app {
+  uint32_t in_app_id;
+};
+
+struct xsn_ceph_destroy_stream {
+  uint32_t in_conn_id;
+};
+
 #define XSN_CEPH_CREATE_APP 0
 #define XSN_CEPH_CREATE_STREAM 1
 #define XSN_CEPH_SYNC_STREAM 2
+#define XSN_CEPH_DESTROY_APP 3
+#define XSN_CEPH_DESTROY_STREAM 4
 
 #define XSN_CEPH_RSRC_CLASS_APP     0
 #define XSN_CEPH_RSRC_CLASS_STREAM  1

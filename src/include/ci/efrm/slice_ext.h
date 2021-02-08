@@ -49,7 +49,4 @@ extern int efrm_ext_get_meta_msg(struct efrm_resource *rs,
 extern int efrm_ext_msg(struct efrm_resource *rs, uint32_t mc_handle,
                         uint32_t msg_id, void *buf, size_t len);
 
-extern int efrm_ext_destroy_rsrc(struct efrm_resource *rs, uint32_t mc_handle,
-                                 uint32_t clas, uint32_t id);
-
 #endif

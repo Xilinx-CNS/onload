@@ -38,7 +38,4 @@ extern int ef100_nic_ext_get_meta_msg(struct efhw_nic* nic, uint32_t mc_handle,
 extern int ef100_nic_ext_msg(struct efhw_nic* nic, uint32_t mc_handle,
                              uint32_t msg_id, void* payload, size_t len);
 
-extern int ef100_nic_ext_destroy_rsrc(struct efhw_nic* nic, uint32_t mc_handle,
-                                      uint32_t clas, uint32_t id);
-
 #endif /* __CI_EFHW_EF100_H__ */

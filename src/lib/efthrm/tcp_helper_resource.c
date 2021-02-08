@@ -2428,6 +2428,19 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   return rc;
 }
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+static void destroy_ceph_app(struct efrm_resource* rs, ci_uint32 plugin_handle,
+                             uint32_t app_id)
+{
+  struct xsn_ceph_destroy_app param = {.in_app_id = cpu_to_le32(app_id)};
+  int rc = efrm_ext_msg(rs, plugin_handle, XSN_CEPH_DESTROY_APP,
+                        &param, sizeof(param));
+  if( rc ) {
+    OO_DEBUG_ERR(ci_log("%s: Destroy Ceph app failed (%d)", __FUNCTION__, rc));
+    /* Nothing we can do about it */
+  }
+}
+#endif
 
 static int
 create_plugin_app(tcp_helper_resource_t* trs)
@@ -2502,7 +2515,7 @@ create_plugin_app(tcp_helper_resource_t* trs)
       if( ! ni->nic_hw[intf_i].plugin_io ) {
         OO_DEBUG_ERR(ci_log("%s: Ceph app failed to map VI window (%d)",
                             __FUNCTION__, intf_i));
-        efrm_ext_destroy_rsrc(rs, mch, XSN_CEPH_RSRC_CLASS_APP, app_id);
+        destroy_ceph_app(rs, mch, app_id);
       fail_plugin_1:
         efrm_ext_free(rs, mch);
         continue;
@@ -2537,8 +2550,7 @@ destroy_plugin_app(tcp_helper_resource_t* trs)
     ci_uint32 mch = ni->nic_hw[intf_i].plugin_handle;
     if( mch == INVALID_PLUGIN_HANDLE )
       continue;
-    efrm_ext_destroy_rsrc(rs, mch, XSN_CEPH_RSRC_CLASS_APP,
-                          ni->nic_hw[intf_i].plugin_app_id);
+    destroy_ceph_app(rs, mch, ni->nic_hw[intf_i].plugin_app_id);
     efrm_ext_free(rs, mch);
   }
 #endif
