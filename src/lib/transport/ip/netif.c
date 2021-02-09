@@ -1111,7 +1111,9 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val,
 
   if( test_val & CI_EPLOCK_NETIF_NEED_WAKE ) {
     /* Tell kernel to wake up endpoints */
-    ci_ni_dllist_link* lnk;
+    struct oo_p_dllink_state post_poll_list =
+                             oo_p_dllink_ptr(ni, &ni->state->post_poll_list);
+    struct oo_p_dllink_state lnk, tmp_lnk;
     citp_waitable* w;
     struct oo_wakeup_eps op;
     oo_sp eps[64];
@@ -1119,10 +1121,10 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val,
     op.eps_num = 0;
     CI_USER_PTR_SET(op.eps, eps);
 
-    while( ci_ni_dllist_not_empty(ni, &ni->state->post_poll_list) ) {
-      lnk = ci_ni_dllist_head(ni, &ni->state->post_poll_list);
+    oo_p_dllink_for_each_safe(ni, lnk, tmp_lnk, post_poll_list) {
+      oo_p_dllink_del_init(ni, lnk);
+
       w = CI_CONTAINER(citp_waitable, post_poll_link, lnk);
-      ci_ni_dllist_remove_safe(ni, &w->post_poll_link);
       eps[op.eps_num++] = w->bufid;
 
       /* Todo: we'd better allocate larger eps and wake up all

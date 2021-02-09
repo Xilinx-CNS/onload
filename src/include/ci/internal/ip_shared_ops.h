@@ -295,6 +295,20 @@ ci_inline unsigned __TRUSTED_SOCK_ID(ci_netif* ni, unsigned id,
 ci_inline unsigned oo_sockid_to_state_off(ci_netif* ni, unsigned sock_id)
 { return ci_netif_ep_ofs(ni) + sock_id * EP_BUF_SIZE; }
 
+/* Convert pointer to oo_p.
+ * When in-kernel, it works for for the main state area only;
+ * it should not be used for socket buffer area in kernel mode.
+ */
+ci_inline oo_p oo_state_ptr_to_statep(const ci_netif* ni, const void* ptr)
+{
+  uintptr_t off = (uintptr_t)ptr - (uintptr_t)ni->state;
+  oo_p sp;
+#ifdef __KERNEL__
+  ci_assert_lt(off, ci_netif_ep_ofs(ni));
+#endif
+  OO_P_INIT(sp, ni, off);
+  return sp;
+}
 
 /* oo_sockp_to_statep(ni, oo_sp)
 **

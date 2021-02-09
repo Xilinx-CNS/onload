@@ -129,6 +129,10 @@
 #define CI_ILL_NO_CODE
 #include <ci/internal/ni_dllist_tmpl_instantiate.h>
 
+#define OO_P_DLLIST_NO_CODE
+#include <onload/oo_p_dllist.h>
+
+
 
 
 /*********************************************************************
@@ -1359,7 +1363,7 @@ struct ci_netif_state_s {
 
   /* are we in the poll loop? */
   ci_int32              in_poll;
-  ci_ni_dllist_t        post_poll_list;
+  struct oo_p_dllink    post_poll_list;
 
   oo_pkt_p              rx_defrag_head;       /*  rx buffers re-assembly */
   oo_pkt_p              rx_defrag_tail;
@@ -1649,7 +1653,7 @@ typedef struct {
 #endif
 
   /* Link field for [ci_netif_state::post_poll_list]. */
-  ci_ni_dllist_link     post_poll_link;
+  struct oo_p_dllink      post_poll_link;
 
   /* Per-socket lock. */
   struct oo_waitable_lock lock;

@@ -1178,6 +1178,7 @@ static void citp_tcp_close_cached(citp_fdinfo* fdinfo,
   ci_sock_cmn* s = epi->sock.s;
   ci_netif* netif = epi->sock.netif;
   ci_tcp_state* ts = SOCK_TO_TCP(s);
+  struct oo_p_dllink_state link;
 
   ci_assert(!ci_tcp_is_cached(ts));
 
@@ -1251,7 +1252,8 @@ static void citp_tcp_close_cached(citp_fdinfo* fdinfo,
   /* We also need to remove the socket from the post-poll list.  It may
    * have been left there because the stack believes a wakeup is needed.
    */
-  ci_ni_dllist_remove_safe(netif, &s->b.post_poll_link);
+  link = oo_p_dllink_sb(netif, &s->b, &s->b.post_poll_link);
+  oo_p_dllink_del_init(netif, link);
   citp_waitable_remove_from_epoll(netif, &s->b, 0);
 
   ci_tcp_all_fds_gone_common(netif, ts);

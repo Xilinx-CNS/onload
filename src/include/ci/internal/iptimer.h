@@ -7,6 +7,7 @@
 #include <ci/internal/ip_shared_types.h>
 #include <ci/internal/ip_types.h>
 #include <ci/internal/ni_dllist.h>
+#include <onload/oo_p_dllist.h>
 
 /*********************************************************************
 ********************** Timers and management *************************

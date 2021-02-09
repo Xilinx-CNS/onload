@@ -44,7 +44,6 @@ static void ci_netif_state_assert_valid(ci_netif* ni,
   citp_waitable* w;
   ci_tcp_state* ts;
   int intf_i, n;
-  ci_ni_dllist_link* lnk;
   ci_iptime_t last_time;
   oo_pkt_p pp, last_pp;
   oo_sp sockp;
@@ -121,30 +120,6 @@ static void ci_netif_state_assert_valid(ci_netif* ni,
     verify(OO_SP_EQ(W_SP(w), sockp));
     verify(w->state == CI_TCP_STATE_FREE);
     sockp = w->wt_next;
-  }
-
-  for( lnk = ci_ni_dllist_start(ni, &ni->state->post_poll_list);
-       lnk != ci_ni_dllist_end(ni, &ni->state->post_poll_list); ) {
-    w = CI_CONTAINER(citp_waitable, post_poll_link, lnk);
-
-    if( w == CI_CONTAINER(citp_waitable, post_poll_link,
-			  (ci_ni_dllist_link*) CI_NETIF_PTR(ni, lnk->next)) ) {
-      ci_log("**** POST POLL LOOP DETECTED ****" );
-      ci_log(" ni:%p lnk:%p .next:%x ptr:%p",
-	     ni, lnk, OO_P_FMT(lnk->next), CI_NETIF_PTR(ni, lnk->next));
-
-      ci_log(" list_start:%p _end:%p",
-	     ci_ni_dllist_start(ni, &ni->state->post_poll_list),
-	     ci_ni_dllist_end(ni, &ni->state->post_poll_list));
-
-      ci_log(" %d state=%#x", W_FMT(w), w->state);
-
-      ci_log(" .wk_nd:%x post_poll_link.prev:%x .next:%x",
-	     (unsigned) w->wake_request, OO_P_FMT(w->post_poll_link.prev),
-             OO_P_FMT(w->post_poll_link.next));
-      ci_assert(0);
-    }
-    lnk = (ci_ni_dllist_link*) CI_NETIF_PTR(ni, lnk->next);
   }
 
   ci_ip_timer_state_assert_valid(ni, file, line);
@@ -596,7 +571,8 @@ void ci_netif_dump_extra_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
 
   logger(log_arg, "%s: stack=%d", __FUNCTION__, NI_ID(ni));
   logger(log_arg, "  in_poll=%d post_poll_list_empty=%d poll_did_wake=%d",
-         ns->in_poll, ci_ni_dllist_is_empty(ni, &ns->post_poll_list),
+         ns->in_poll,
+         oo_p_dllink_is_empty(ni, oo_p_dllink_ptr(ni, &ns->post_poll_list)),
          ns->poll_did_wake);
   logger(log_arg, "  rx_defrag_head=%d rx_defrag_tail=%d",
          OO_PP_FMT(ns->rx_defrag_head), OO_PP_FMT(ns->rx_defrag_tail));

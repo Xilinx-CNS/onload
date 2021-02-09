@@ -24,7 +24,7 @@ void ci_udp_state_free(ci_netif* ni, ci_udp_state* us)
 {
   ci_assert(ci_netif_is_locked(ni));
   ci_assert(us->s.b.state == CI_TCP_STATE_UDP);
-  ci_assert(ci_ni_dllist_is_self_linked(ni, &us->s.b.post_poll_link));
+  OO_P_DLLINK_ASSERT_EMPTY_SB(ni, &us->s.b, &us->s.b.post_poll_link);
 
 #if CI_CFG_TIMESTAMPING
   ci_udp_recv_q_drop(ni, &us->timestamp_q);

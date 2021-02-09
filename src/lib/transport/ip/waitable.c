@@ -31,18 +31,13 @@ void citp_waitable_init(ci_netif* ni, citp_waitable* w, int id)
 {
   /* NB. Some members initialised in citp_waitable_obj_free(). */
 
-  oo_p sp;
-
   w->bufid = OO_SP_FROM_INT(ni, id);
   w->sb_flags = 0;
   w->sb_aflags = CI_SB_AFLAG_ORPHAN | CI_SB_AFLAG_NOT_READY;
   w->epoll = OO_PP_NULL;
   w->ready_lists_in_use = 0;
 
-  sp = oo_sockp_to_statep(ni, W_SP(w));
-  OO_P_ADD(sp, CI_MEMBER_OFFSET(citp_waitable, post_poll_link));
-  ci_ni_dllist_link_init(ni, &w->post_poll_link, sp, "ppll");
-  ci_ni_dllist_self_link(ni, &w->post_poll_link);
+  oo_p_dllink_init(ni, oo_p_dllink_sb(ni, w, &w->post_poll_link));
 
   w->lock.wl_val = 0;
   CI_DEBUG(w->wt_next = OO_SP_NULL);
@@ -149,7 +144,7 @@ void citp_waitable_obj_free_to_cache(ci_netif* ni, citp_waitable* w)
   ci_assert(w->sb_aflags & CI_SB_AFLAG_NOT_READY);
   ci_assert(w->sb_aflags & CI_SB_AFLAG_IN_CACHE);
   ci_assert(w->state == CI_TCP_CLOSED);
-  ci_assert(ci_ni_dllist_is_self_linked(ni, &w->post_poll_link));
+  OO_P_DLLINK_ASSERT_EMPTY_SB(ni, w, &w->post_poll_link);
   ci_assert(OO_SP_IS_NULL(w->wt_next));
 
   /* This resets a subset of the state done by __citp_waitable_obj_free.
@@ -175,7 +170,7 @@ static void __citp_waitable_obj_free(ci_netif* ni, citp_waitable* w)
 {
   ci_assert(w->sb_aflags & CI_SB_AFLAG_ORPHAN);
   ci_assert(w->state != CI_TCP_STATE_FREE);
-  ci_assert(ci_ni_dllist_is_self_linked(ni, &w->post_poll_link));
+  OO_P_DLLINK_ASSERT_EMPTY_SB(ni, w, &w->post_poll_link);
   ci_assert(OO_SP_IS_NULL(w->wt_next));
 
   w->wake_request = 0;
@@ -304,7 +299,8 @@ void citp_waitable_all_fds_gone(ci_netif* ni, oo_sp w_id)
   /* We also need to remove the socket from the post-poll list.  It may
    * have been left there because the stack believes a wakeup is needed.
    */
-  ci_ni_dllist_remove_safe(ni, &wo->waitable.post_poll_link);
+  oo_p_dllink_del_init(ni, oo_p_dllink_sb(ni, &wo->waitable,
+                                          &wo->waitable.post_poll_link));
   citp_waitable_remove_from_epoll(ni, &wo->waitable, 1);
 
   citp_waitable_cleanup(ni, wo, 1);

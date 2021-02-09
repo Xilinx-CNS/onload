@@ -40,7 +40,9 @@ void __ci_tcp_listen_to_normal(ci_netif* netif, ci_tcp_socket_listen* tls)
   ci_assert_equal(ci_tcp_acceptq_not_empty(tls), 0);
 
   ci_ip_timer_clear(netif, &tls->listenq_tid);
-  ci_ni_dllist_remove_safe(netif, &tls->s.b.post_poll_link);
+
+  oo_p_dllink_del_init(netif, oo_p_dllink_sb(netif, &tls->s.b,
+                                             &tls->s.b.post_poll_link));
 
 #if CI_CFG_IPV6
   ts->s.cp.laddr = ip4_addr_any;

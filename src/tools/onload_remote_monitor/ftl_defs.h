@@ -225,6 +225,14 @@
     FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_link, l, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))              \
     FTL_TSTRUCT_END(ctx)                                                 
 
+typedef struct oo_p_dllink oo_p_dllink_t;
+
+#define STRUCT_OO_P_DLLIST(ctx) \
+    FTL_TSTRUCT_BEGIN(ctx, oo_p_dllink_t, )                                 \
+    FTL_TFIELD_INT(ctx, oo_p, next, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))\
+    FTL_TFIELD_INT(ctx, oo_p, prev, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))\
+    FTL_TSTRUCT_END(ctx)
+
 #define STRUCT_PIO_BUDDY_ALLOCATOR(ctx)         \
   FTL_TSTRUCT_BEGIN(ctx, ci_pio_buddy_allocator, )                        \
   FTL_TFIELD_ARRAYOFSTRUCT(ctx, ci_ni_dllist_t, \
@@ -578,7 +586,7 @@
   )                                                                       \
   FTL_TFIELD_INT(ctx, ci_int32, poll_did_wake, ORM_OUTPUT_STACK)          \
   FTL_TFIELD_INT(ctx, ci_int32, in_poll, ORM_OUTPUT_STACK)               \
-  FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_t, post_poll_list, ORM_OUTPUT_EXTRA) \
+  FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, post_poll_list, ORM_OUTPUT_EXTRA) \
   FTL_TFIELD_INT(ctx, ci_int32, rx_defrag_head, ORM_OUTPUT_STACK)         \
   FTL_TFIELD_INT(ctx, ci_int32, rx_defrag_tail, ORM_OUTPUT_STACK)         \
   FTL_TFIELD_INT(ctx, ci_int32, send_may_poll, ORM_OUTPUT_STACK)          \
@@ -660,7 +668,7 @@
     FTL_TFIELD_INT(ctx, ci_uint32, wake_request, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))         \
     FTL_TFIELD_INT(ctx, ci_uint32, sb_flags, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                   \
     FTL_TFIELD_INT(ctx, ci_uint32, sb_aflags, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                  \
-    FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_link, post_poll_link, ORM_OUTPUT_EXTRA)  \
+    FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, post_poll_link, ORM_OUTPUT_EXTRA)  \
     FTL_TFIELD_INT(ctx, oo_waitable_lock, lock, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))          \
     FTL_TFIELD_INT(ctx, ci_int32, wt_next, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))               \
     FTL_TFIELD_INT(ctx, ci_int32, next_id, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))               \

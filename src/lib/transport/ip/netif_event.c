@@ -1365,27 +1365,29 @@ static void ci_sock_put_on_reap_list(ci_netif* ni, ci_sock_cmn* s)
 
 static void process_post_poll_list(ci_netif* ni)
 {
-  ci_ni_dllist_link* lnk;
-  int i, need_wake = 0;
+  struct oo_p_dllink_state lnk;
+  struct oo_p_dllink_state tmp_lnk;
+  struct oo_p_dllink_state post_poll_list =
+                           oo_p_dllink_ptr(ni, &ni->state->post_poll_list);
+  int need_wake = 0;
   citp_waitable* sb;
 #if CI_CFG_EPOLL3
   int lists_need_wake = 0;
 #endif
+#if CI_CFG_EPOLL3 || defined(__KERNEL__)
+  int i = 0;
+#endif
 
-  (void) i;  /* prevent warning; effectively unused at userlevel */
-
-  for( i = 0, lnk = ci_ni_dllist_start(ni, &ni->state->post_poll_list);
-       lnk != ci_ni_dllist_end(ni, &ni->state->post_poll_list); ) {
-
+  oo_p_dllink_for_each_safe(ni, lnk, tmp_lnk, post_poll_list) {
 #ifdef __KERNEL__
     if(CI_UNLIKELY( i++ > ni->ep_tbl_n )) {
       ci_netif_error_detected(ni, CI_NETIF_ERROR_POST_POLL_LIST, __FUNCTION__);
       return;
     }
 #endif
+    oo_p_dllink_del_init(ni, lnk);
 
-    sb = CI_CONTAINER(citp_waitable, post_poll_link, lnk);
-    lnk = (ci_ni_dllist_link*) CI_NETIF_PTR(ni, lnk->next);
+    sb = CI_CONTAINER(citp_waitable, post_poll_link, lnk.l);
 
     if( sb->sb_flags & CI_SB_FLAG_TCP_POST_POLL )
       ci_tcp_rx_post_poll(ni, CI_CONTAINER(ci_tcp_state, s.b, sb));
@@ -1431,7 +1433,6 @@ static void process_post_poll_list(ci_netif* ni)
         }
       }
     }
-    ci_ni_dllist_remove_safe(ni, &sb->post_poll_link);
   }
 
   CHECK_NI(ni);
@@ -1514,7 +1515,8 @@ static void ci_netif_tx_pkt_complete_udp(ci_netif* netif,
       ci_netif_put_on_post_poll(netif, &us->s.b);
     }
     else if( UDP_CAN_FREE(us) ) {
-      ci_ni_dllist_remove_safe(netif, &us->s.b.post_poll_link);
+      oo_p_dllink_del_init(netif, oo_p_dllink_sb(netif, &us->s.b,
+                                                 &us->s.b.post_poll_link));
       ci_udp_state_free(netif, us);
     }
   }

@@ -216,7 +216,8 @@ static void __ci_tcp_state_free(ci_netif *ni, ci_tcp_state *ts)
 #endif
 
   /* Remove from any lists we're in. */
-  ci_ni_dllist_remove_safe(ni, &ts->s.b.post_poll_link);
+  oo_p_dllink_del_init(ni, oo_p_dllink_sb(ni, &ts->s.b,
+                                          &ts->s.b.post_poll_link));
   ci_ni_dllist_remove_safe(ni, &ts->s.reap_link);
 
   citp_waitable_remove_from_epoll(ni, &ts->s.b, 1);

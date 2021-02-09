@@ -7347,22 +7347,25 @@ wakeup_post_poll_list(tcp_helper_resource_t* thr)
   ci_netif* ni = &thr->netif;
   tcp_helper_endpoint_t* ep;
   int n = ni->ep_tbl_n;
-  ci_ni_dllist_link* lnk;
+  struct oo_p_dllink_state post_poll_list =
+                           oo_p_dllink_ptr(ni, &ni->state->post_poll_list);
   citp_waitable* w;
 #if CI_CFG_EPOLL3
   int tmp;
 #endif
 
-  LOG_TV(if( ci_ni_dllist_is_empty(ni, &ni->state->post_poll_list) )
+  LOG_TV(if( oo_p_dllink_is_empty(ni, post_poll_list) )
            ci_log("netif_lock_callback: need_wake but empty"));
 
   /* [n] ensures the loop will terminate in reasonable time no matter how
   ** badly u/l behaves.
   */
-  while( n-- > 0 && ci_ni_dllist_not_empty(ni, &ni->state->post_poll_list) ) {
-    lnk = ci_ni_dllist_head(ni, &ni->state->post_poll_list);
-    w = CI_CONTAINER(citp_waitable, post_poll_link, lnk);
-    ci_ni_dllist_remove_safe(ni, &w->post_poll_link);
+  while( n-- > 0 && ! oo_p_dllink_is_empty(ni, post_poll_list) ) {
+    struct oo_p_dllink_state lnk =
+                            oo_p_dllink_statep(ni, post_poll_list.l->next);
+    oo_p_dllink_del_init(ni, lnk);
+    w = CI_CONTAINER(citp_waitable, post_poll_link, lnk.l);
+
     ep = ci_netif_get_valid_ep(ni, W_SP(w));
     tcp_helper_endpoint_wakeup(thr, ep);
   }

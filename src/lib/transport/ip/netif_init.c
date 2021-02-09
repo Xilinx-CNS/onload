@@ -163,9 +163,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   nis->name[CI_CFG_STACK_NAME_LEN] = '\0';
 
   assert_zero(nis->in_poll);
-  ci_ni_dllist_init(ni, &nis->post_poll_list,
-                    oo_ptr_to_statep(ni, &nis->post_poll_list),
-                    "pstp");
+  oo_p_dllink_init(ni, oo_p_dllink_ptr(ni, &nis->post_poll_list));
 
   nis->sock_spin_cycles =
             __oo_usec_to_cycles64(cpu_khz, NI_OPTS(ni).spin_usec);

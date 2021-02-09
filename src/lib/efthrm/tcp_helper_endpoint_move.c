@@ -241,6 +241,7 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
 #if CI_CFG_FD_CACHING
   oo_p sp;
 #endif
+  struct oo_p_dllink_state link;
 
   OO_DEBUG_TCPH(ci_log("%s: move %d:%d to %d", __func__,
                        old_thr->id, priv->sock_id, new_thr->id));
@@ -520,7 +521,9 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
    * we update all file descriptors which reference it. */
   old_s->b.sb_flags |= CI_SB_FLAG_MOVED;
   ci_ni_dllist_remove(&old_thr->netif, &old_s->reap_link);
-  ci_ni_dllist_remove_safe(&old_thr->netif, &old_s->b.post_poll_link);
+
+  link = oo_p_dllink_sb(&old_thr->netif, &old_s->b, &old_s->b.post_poll_link);
+  oo_p_dllink_del_init(&old_thr->netif, link);
 
   /* Old stack can be unlocked */
   ci_netif_unlock(&old_thr->netif);
