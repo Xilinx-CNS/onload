@@ -235,6 +235,25 @@ static void handle_batched_rx(struct resources* res, int pkt_buf_i)
 }
 
 
+static void handle_rx_multi_pkts(struct resources* res)
+{
+  int pkt_buf_i = ef_vi_rxq_next_desc_id(&res->vi);
+  struct pkt_buf* pkt_buf = pkt_buf_from_id(res, pkt_buf_i);
+  void* dma_ptr = (char*) pkt_buf + RX_DMA_OFF;
+  unsigned discard_flags;
+  uint16_t len;
+
+  ef_vi_receive_get_bytes(&res->vi, dma_ptr, &len);
+  /* This code does not support jumbos: */
+  TEST( len + res->rx_prefix_len < ef_vi_receive_buffer_len(&res->vi) );
+  ef_vi_receive_get_discard_flags(&res->vi, dma_ptr, &discard_flags);
+  if( discard_flags )
+    handle_rx_discard(res, pkt_buf_i, len, discard_flags);
+  else
+    handle_rx(res, pkt_buf_i, len);
+}
+
+
 static bool refill_rx_ring(struct resources* res)
 {
   struct pkt_buf* pkt_buf;
@@ -289,6 +308,11 @@ static int poll_evq(struct resources* res)
       handle_rx_discard(res, EF_EVENT_RX_DISCARD_RQ_ID(evs[i]),
                         EF_EVENT_RX_DISCARD_BYTES(evs[i]) - res->rx_prefix_len,
                         EF_EVENT_RX_DISCARD_TYPE(evs[i]));
+      break;
+    case EF_EVENT_TYPE_RX_MULTI_PKTS:
+      for( j = 0; j < evs[i].rx_multi_pkts.n_pkts; ++j )
+        handle_rx_multi_pkts(res);
+      res->n_ht_events += 1;
       break;
     default:
       LOGE("ERROR: unexpected event type=%d\n", (int) EF_EVENT_TYPE(evs[i]));
