@@ -47,7 +47,6 @@ static void ci_netif_state_assert_valid(ci_netif* ni,
   ci_iptime_t last_time;
   oo_pkt_p pp, last_pp;
   oo_sp sockp;
-  oo_p a;
 
   verify(nis);
 
@@ -83,12 +82,13 @@ static void ci_netif_state_assert_valid(ci_netif* ni,
   **    - the timer is pending if the queue is not empty.
   */
   for( n = 0; n < OO_TIMEOUT_Q_MAX; n++ ) {
+    struct oo_p_dllink_state list =
+                             oo_p_dllink_ptr(ni, &ni->state->timeout_q[n]);
+    struct oo_p_dllink_state l;
     last_time = 0; /* fixme: 0 is a valid time */
 
-    for( a = nis->timeout_q[n].l.next;
-         ! OO_P_EQ(a, ci_ni_dllist_link_addr(ni,
-                              &nis->timeout_q[n].l)); ) {
-      ts = TCP_STATE_FROM_LINK((ci_ni_dllist_link*) CI_NETIF_PTR(ni, a));
+    oo_p_dllink_for_each(ni, l, list) {
+      ts = TCP_STATE_FROM_LINK(l.l);
       verify(IS_VALID_SOCK_P(ni, S_SP(ts)));
       if( n == OO_TIMEOUT_Q_TIMEWAIT )
         verify( (ts->s.b.state == CI_TCP_TIME_WAIT) );
@@ -98,7 +98,6 @@ static void ci_netif_state_assert_valid(ci_netif* ni,
       verify( TIME_LE(last_time, ts->t_last_sent) );
       last_time = ts->t_last_sent;
       verify(ci_ip_timer_pending(ni, &nis->timeout_tid));
-      a = ts->timeout_q_link.next;
     }
   }
 
@@ -504,7 +503,6 @@ void ci_netif_dump_timeoutq(ci_netif* ni)
 {
   ci_netif_state* nis = ni->state;
   ci_tcp_state * ts;
-  oo_p a;
   int i;
 
   if( ci_ip_timer_pending(ni, &nis->timeout_tid) ) {
@@ -513,18 +511,20 @@ void ci_netif_dump_timeoutq(ci_netif* ni)
           ci_ip_time_ticks2ms(ni, diff));
   }
   for( i = 0; i < OO_TIMEOUT_Q_MAX; i++ ) {
+    struct oo_p_dllink_state list =
+                             oo_p_dllink_ptr(ni, &ni->state->timeout_q[i]);
+    struct oo_p_dllink_state l;
+
     if( i == OO_TIMEOUT_Q_TIMEWAIT )
       log("TIME-WAIT queue");
     else
       log("FIN-WAIT queue");
-    for( a = nis->timeout_q[i].l.next;
-         ! OO_P_EQ(a, ci_ni_dllist_link_addr(ni, &nis->timeout_q[i].l)); ) {
-      ts = TCP_STATE_FROM_LINK((ci_ni_dllist_link*) CI_NETIF_PTR(ni, a));
+    oo_p_dllink_for_each(ni, l, list) {
+      ts = TCP_STATE_FROM_LINK(l.l);
       if( i == OO_TIMEOUT_Q_TIMEWAIT )
         log("   %d: t=0x%08x", S_FMT(ts), ts->t_last_sent);
       else
         log("   %d: t=0x%08x %s", S_FMT(ts), ts->t_last_sent, state_str(ts));
-      a = ts->timeout_q_link.next;
     }
   }
 }

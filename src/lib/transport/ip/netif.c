@@ -40,9 +40,12 @@ ci_inline void ci_netif_timeout_set_timer(ci_netif* ni, ci_iptime_t prev_time)
 
   for( i = 0; i < OO_TIMEOUT_Q_MAX; i++ ) {
     ci_tcp_state* ts;
-    if( ci_ni_dllist_is_empty(ni, &ni->state->timeout_q[i]) )
+    struct oo_p_dllink_state timeout_q =
+                             oo_p_dllink_ptr(ni, &ni->state->timeout_q[i]);
+
+    if( oo_p_dllink_is_empty(ni, timeout_q) )
       continue;
-    ts = TCP_STATE_FROM_LINK(ci_ni_dllist_head(ni, &ni->state->timeout_q[i]));
+    ts = TCP_STATE_FROM_LINK(oo_p_dllink_statep(ni, timeout_q.l->next).l);
     if( TIME_LE(ts->t_last_sent, prev_time) )
       return;
     if( !found || TIME_LT(ts->t_last_sent, time) ) {
@@ -66,26 +69,29 @@ ci_inline void ci_netif_timeout_set_timer(ci_netif* ni, ci_iptime_t prev_time)
 ci_inline void ci_netif_timeout_add(ci_netif* ni, ci_tcp_state* ts, int idx)
 {
   int is_first;
-  ci_ni_dllist_t* my_list = &ni->state->timeout_q[idx];
-  ci_ni_dllist_t* other_list;
+  struct oo_p_dllink_state my_list =
+                           oo_p_dllink_ptr(ni, &ni->state->timeout_q[idx]);
+  struct oo_p_dllink_state other_list =
+                           oo_p_dllink_ptr(ni, &ni->state->timeout_q[1-idx]);
+  struct oo_p_dllink_state link =
+                           oo_p_dllink_sb(ni, &ts->s.b, &ts->timeout_q_link);
   ci_tcp_state* other_ts;
 
-  ci_assert( ci_ni_dllist_is_free(&ts->timeout_q_link) );
+  OO_P_DLLINK_ASSERT_EMPTY(ni, link);
 
-  is_first = ci_ni_dllist_is_empty(ni, my_list);
-  ci_ni_dllist_push_tail(ni, my_list, &ts->timeout_q_link);
+  is_first = oo_p_dllink_is_empty(ni, my_list);
+  oo_p_dllink_add_tail(ni, my_list, link);
 
   /* Set up the timer */
   if( ! is_first )
     return;
 
-  other_list = &ni->state->timeout_q[1-idx];
-  if( ci_ni_dllist_is_empty(ni, other_list) ) {
+  if( oo_p_dllink_is_empty(ni, other_list) ) {
     ci_ip_timer_set(ni, &ni->state->timeout_tid, ts->t_last_sent);
     return;
   }
 
-  other_ts = TCP_STATE_FROM_LINK(ci_ni_dllist_head(ni, other_list));
+  other_ts = TCP_STATE_FROM_LINK(oo_p_dllink_statep(ni, other_list.l->next).l);
   if( TIME_LT(ts->t_last_sent, other_ts->t_last_sent) )
     ci_ip_timer_modify(ni, &ni->state->timeout_tid, ts->t_last_sent);
   else
@@ -96,22 +102,21 @@ ci_inline void ci_netif_timeout_add(ci_netif* ni, ci_tcp_state* ts, int idx)
 void ci_netif_timeout_remove(ci_netif* ni, ci_tcp_state* ts)
 {
   int is_first, idx;
+  struct oo_p_dllink_state link =
+                           oo_p_dllink_sb(ni, &ts->s.b, &ts->timeout_q_link);
 
   ci_assert( (ts->s.b.state == CI_TCP_TIME_WAIT) ||
               ci_tcp_is_timeout_orphan(ts));
-  ci_assert( !ci_ni_dllist_is_free(&ts->timeout_q_link) );
+  ci_assert( !oo_p_dllink_is_empty(ni, link) );
 
   if( ts->s.b.state == CI_TCP_TIME_WAIT )
     idx = OO_TIMEOUT_Q_TIMEWAIT;
   else
     idx = OO_TIMEOUT_Q_FINWAIT;
-  is_first = OO_P_EQ( ci_ni_dllist_link_addr(ni, &ts->timeout_q_link),
-               ci_ni_dllist_link_addr(ni, ci_ni_dllist_head(ni,
-                                                &ni->state->timeout_q[idx])) );
+  is_first = OO_P_EQ(ni->state->timeout_q[idx].next, link.p);
 
   /* remove from the list */
-  ci_ni_dllist_remove(ni, &ts->timeout_q_link);
-  ci_ni_dllist_mark_free(&ts->timeout_q_link);
+  oo_p_dllink_del_init(ni, link);
 
   /* if needed re-set or clear timer */
   if( ! is_first )
@@ -154,14 +159,12 @@ void ci_netif_timeout_reap(ci_netif* ni)
   ci_assert(OO_SP_IS_NULL(ni->state->free_eps_head));
 
   for( i = 0; i < OO_TIMEOUT_Q_MAX; i++ ) {
-    ci_ni_dllist_t* list = &ni->state->timeout_q[i];
-    ci_ni_dllist_link* l;
-    oo_p next;
+    struct oo_p_dllink_state list =
+                             oo_p_dllink_ptr(ni, &ni->state->timeout_q[i]);
+    struct oo_p_dllink_state l, tmp;
 
-    for( l = ci_ni_dllist_start(ni, list); l != ci_ni_dllist_end(ni, list);
-         l = (void*) CI_NETIF_PTR(ni, next) ) {
-      ci_tcp_state* ts = TCP_STATE_FROM_LINK(l);
-      next = l->next;
+    oo_p_dllink_for_each_safe(ni, l, tmp, list) {
+      ci_tcp_state* ts = TCP_STATE_FROM_LINK(l.l);
 
 #if CI_CFG_FD_CACHING
       if( ts->s.b.sb_aflags & (CI_SB_AFLAG_ORPHAN | CI_SB_AFLAG_IN_CACHE) ) {
@@ -196,13 +199,12 @@ ci_netif_timeout_state(ci_netif* ni)
   /* check last active state of each connection in TIME_WAIT */
 
   for( i = 0; i < OO_TIMEOUT_Q_MAX; i++ ) {
-    ci_ni_dllist_link* lnk;
     ci_tcp_state* ts;
-    ci_ni_dllist_t* list = &ni->state->timeout_q[i];
+    struct oo_p_dllink_state list =
+                             oo_p_dllink_ptr(ni, &ni->state->timeout_q[i]);
 
-    while( ci_ni_dllist_not_empty(ni, list) ) {
-      lnk = ci_ni_dllist_head(ni, list);
-      ts = TCP_STATE_FROM_LINK(lnk);
+    while( ! oo_p_dllink_is_empty(ni, list) ) {
+      ts = TCP_STATE_FROM_LINK(oo_p_dllink_statep(ni, list.l->next).l);
       ci_assert( (ts->s.b.state == CI_TCP_TIME_WAIT) ||
                   ci_tcp_is_timeout_orphan(ts) );
 
@@ -270,7 +272,7 @@ void ci_netif_timewait_enter(ci_netif* ni, ci_tcp_state* ts)
   if ( ci_tcp_is_timeout_orphan(ts) ) {
     ci_netif_timeout_remove(ni, ts);
   }
-  ci_assert( ci_ni_dllist_is_free(&ts->timeout_q_link) );
+  OO_P_DLLINK_ASSERT_EMPTY_SB(ni, &ts->s.b, &ts->timeout_q_link);
 
   ci_tcp_stop_timers(ni, ts);
 
@@ -289,14 +291,11 @@ int ci_netif_timewait_try_to_free_filter(ci_netif* ni)
   ci_assert(ci_netif_is_locked(ni));
 
   for( i = 0; i < OO_TIMEOUT_Q_MAX; i++ ) {
-    ci_ni_dllist_t* list = &ni->state->timeout_q[i];
-    ci_ni_dllist_link* l;
-    oo_p next;
+    struct oo_p_dllink_state list = oo_p_dllink_ptr(ni, &ni->state->timeout_q[i]);
+    struct oo_p_dllink_state l, tmp;
 
-    for( l = ci_ni_dllist_start(ni, list); l != ci_ni_dllist_end(ni, list);
-         l = (void*) CI_NETIF_PTR(ni, next) ) {
-      ci_tcp_state* ts = TCP_STATE_FROM_LINK(l);
-      next = l->next;
+    oo_p_dllink_for_each_safe(ni, l, tmp, list) {
+      ci_tcp_state* ts = TCP_STATE_FROM_LINK(l.l);
 
       if( ts->s.s_flags & CI_SOCK_FLAG_FILTER ) {
         /* No cached sockets here: orphaned or timewait only.
@@ -334,6 +333,9 @@ int ci_netif_timewait_try_to_free_filter(ci_netif* ni)
 /*! add a state to the fin timeout list */
 void ci_netif_fin_timeout_enter(ci_netif* ni, ci_tcp_state* ts)
 {
+  struct oo_p_dllink_state link =
+                           oo_p_dllink_sb(ni, &ts->s.b, &ts->timeout_q_link);
+
   /* check endpoint is an orphan */
 #if CI_CFG_FD_CACHING
   ci_assert(ts->s.b.sb_aflags & (CI_SB_AFLAG_ORPHAN|CI_SB_AFLAG_IN_CACHE));
@@ -351,18 +353,17 @@ void ci_netif_fin_timeout_enter(ci_netif* ni, ci_tcp_state* ts)
    * queue on listener shutdown), so we've lost it's history, so can't check
    * unfortunately.
    */
-#if CI_CFG_FD_CACHING
-  if( ci_ni_dllist_is_free(&ts->timeout_q_link) ) {
+#if ! CI_CFG_FD_CACHING
+  OO_P_DLLINK_ASSERT_EMPTY(ni, link);
 #else
-  ci_assert(ci_ni_dllist_is_free(&ts->timeout_q_link));
+  if( oo_p_dllink_is_empty(ni, link) )
 #endif
+  {
     LOG_TC(log(LPF "%s: %d %s", __FUNCTION__, S_FMT(ts), state_str(ts)));
     /* store time to leave FIN_WAIT2 state */
     ts->t_last_sent = ci_ip_time_now(ni) + NI_CONF(ni).tconst_fin_timeout;
     ci_netif_timeout_add(ni, ts, OO_TIMEOUT_Q_FINWAIT);
-#if CI_CFG_FD_CACHING
   }
-#endif
 }
 
 

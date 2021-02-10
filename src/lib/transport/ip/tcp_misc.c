@@ -400,7 +400,7 @@ void ci_tcp_set_slow_state(ci_netif *ni, ci_tcp_state* ts, int state)
     /* basic sanity */
     ci_assert(state != CI_TCP_TIME_WAIT);
     /* make sure it's not still in the list */
-    ci_assert(ci_ni_dllist_is_free(&ts->timeout_q_link));
+    OO_P_DLLINK_ASSERT_EMPTY_SB(ni, &ts->s.b, &ts->timeout_q_link);
   }
 #endif
   ci_tcp_estabs_handle(ni, ts, state);

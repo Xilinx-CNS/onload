@@ -105,9 +105,10 @@ static int efab_file_move_supported_tcp(ci_netif *ni, ci_tcp_state *ts,
   /* Sockets in time-wait linked lists are not supported.
    * It is easy to unlink the old and link up the new socket, but this have
    * not been done. */
-  if( ! ci_ni_dllist_is_free(&ts->timeout_q_link) ) {
+  if( ! oo_p_dllink_is_empty(ni, oo_p_dllink_sb(ni, &ts->s.b,
+                                                &ts->timeout_q_link)) ) {
     if( do_assert )
-      ci_assert( ci_ni_dllist_is_free(&ts->timeout_q_link) );
+      OO_P_DLLINK_ASSERT_EMPTY_SB(ni, &ts->s.b, &ts->timeout_q_link);
     return false;
   }
 

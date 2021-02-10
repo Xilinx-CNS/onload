@@ -533,7 +533,7 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TFIELD_INT(ctx, ci_uint32, buf_ofs, ORM_OUTPUT_STACK)               \
   FTL_TFIELD_STRUCT(ctx, ci_ip_timer_state, iptimer_state, ORM_OUTPUT_STACK) \
   FTL_TFIELD_STRUCT(ctx, ci_ip_timer, timeout_tid, ORM_OUTPUT_STACK)      \
-  FTL_TFIELD_ARRAYOFSTRUCT(ctx, ci_ni_dllist_t, timeout_q, \
+  FTL_TFIELD_ARRAYOFSTRUCT(ctx, oo_p_dllink_t, timeout_q, \
                            OO_TIMEOUT_Q_MAX, ORM_OUTPUT_STACK, 1)         \
   FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_t, reap_list, ORM_OUTPUT_EXTRA)     \
   FTL_TFIELD_INT(ctx, ci_uint32, challenge_ack_num, ORM_OUTPUT_STACK)     \
@@ -1151,7 +1151,7 @@ typedef struct oo_tcp_socket_stats oo_tcp_socket_stats;
     )                                                                         \
     FTL_TFIELD_INT(ctx, ci_int32, send_prequeue, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                \
     FTL_TFIELD_INT(ctx, oo_atomic_t, send_prequeue_in, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))    \
-    FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_link, timeout_q_link, ORM_OUTPUT_EXTRA)   \
+    FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, timeout_q_link, ORM_OUTPUT_EXTRA)   \
     FTL_TFIELD_STRUCT(ctx, oo_tcp_socket_stats, stats, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))          \
     FTL_TFIELD_ANON_STRUCT_BEGIN(ctx, rcvbuf_drs, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))               \
     FTL_TFIELD_ANON_STRUCT(ctx, ci_uint32, rcvbuf_drs, bytes)                                            \

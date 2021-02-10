@@ -104,12 +104,10 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
                            ci_log2_le(NI_OPTS(ni).max_ep_bufs) + 1);
 #endif
 
-  ci_ni_dllist_init(ni, &nis->timeout_q[OO_TIMEOUT_Q_TIMEWAIT], 
-                    oo_ptr_to_statep(ni, &nis->timeout_q[OO_TIMEOUT_Q_TIMEWAIT]),
-                    "twtq");
-  ci_ni_dllist_init(ni, &nis->timeout_q[OO_TIMEOUT_Q_FINWAIT], 
-                    oo_ptr_to_statep(ni, &nis->timeout_q[OO_TIMEOUT_Q_FINWAIT]),
-                    "fwtq");
+  oo_p_dllink_init(ni, oo_p_dllink_ptr(ni,
+                   &nis->timeout_q[OO_TIMEOUT_Q_TIMEWAIT]));
+  oo_p_dllink_init(ni, oo_p_dllink_ptr(ni,
+                   &nis->timeout_q[OO_TIMEOUT_Q_FINWAIT]));
   ci_ip_timer_init(ni, &nis->timeout_tid,
                    oo_ptr_to_statep(ni, &nis->timeout_tid),
                    "ttid");

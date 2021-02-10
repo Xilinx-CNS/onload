@@ -1252,7 +1252,7 @@ struct ci_netif_state_s {
 #define OO_TIMEOUT_Q_TIMEWAIT 0
 #define OO_TIMEOUT_Q_FINWAIT  1
 #define OO_TIMEOUT_Q_MAX      2
-  ci_ni_dllist_t        timeout_q[OO_TIMEOUT_Q_MAX]; /**< time-out queues */
+  struct oo_p_dllink    timeout_q[OO_TIMEOUT_Q_MAX]; /**< time-out queues */
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_ip_timer           recycle_tid;
@@ -2850,7 +2850,7 @@ struct ci_tcp_state_s {
   ci_int32             send_prequeue;
   oo_atomic_t          send_prequeue_in;
 
-  ci_ni_dllist_link    timeout_q_link;
+  struct oo_p_dllink   timeout_q_link;
 
   /* Additional stats for Dynamic Right Sizing */
   struct {

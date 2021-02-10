@@ -52,7 +52,6 @@ static void ci_tcp_state_setup_timers(ci_netif* ni, ci_tcp_state* ts)
 
 static void ci_tcp_state_connected_opts_init(ci_netif* netif, ci_tcp_state* ts)
 {
-  oo_p sp;
   int i;
 
   ts->send_prequeue = CI_ILL_END;
@@ -78,10 +77,8 @@ static void ci_tcp_state_connected_opts_init(ci_netif* netif, ci_tcp_state* ts)
       ts->last_sack[i] = OO_PP_NULL;
   ts->dsack_block = OO_PP_INVALID;
 
-  sp = oo_sockp_to_statep(netif, S_SP(ts));
-  OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, timeout_q_link));
-  ci_ni_dllist_link_init(netif, &ts->timeout_q_link, sp, "tmoq");
-  ci_ni_dllist_mark_free(&ts->timeout_q_link);
+  oo_p_dllink_init(netif,
+                   oo_p_dllink_sb(netif, &ts->s.b, &ts->timeout_q_link));
 }
 
 
