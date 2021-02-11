@@ -314,8 +314,9 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
 #if CI_CFG_EPOLL3
       CI_READY_LIST_EACH(trs->netif.state->ready_lists_in_use, tmp, i) {
         get_os_ready_list(trs, i);
-        if( ci_ni_dllist_not_empty(&trs->netif,
-                                   &trs->netif.state->ready_lists[i]))
+        if( ! oo_p_dllink_is_empty(&trs->netif,
+                oo_p_dllink_ptr(&trs->netif,
+                                &trs->netif.state->ready_lists[i])) )
           ci_waitable_wakeup_all(&trs->ready_list_waitqs[i]);
       }
 #endif
@@ -7318,6 +7319,8 @@ get_os_ready_list(tcp_helper_resource_t* thr, int ready_list)
 
   spin_lock_irqsave(&thr->os_ready_list_lock, lock_flags);
   while( ci_dllist_not_empty(&thr->os_ready_lists[ready_list]) ) {
+    struct oo_p_dllink_state ready_link;
+
     lnk = ci_dllist_head(&thr->os_ready_lists[ready_list]);
     ep = CI_CONTAINER(tcp_helper_endpoint_t,
                       epoll[ready_list].os_ready_link, lnk);
@@ -7331,9 +7334,11 @@ get_os_ready_list(tcp_helper_resource_t* thr, int ready_list)
       continue;
 
     epoll = ci_ni_aux_p2epoll(ni, w->epoll);
-    ci_ni_dllist_remove(ni, &epoll->e[ready_list].ready_link);
-    ci_ni_dllist_put(ni, &ni->state->ready_lists[ready_list],
-                     &epoll->e[ready_list].ready_link);
+    ready_link = oo_p_dllink_sb(ni, w, &epoll->e[ready_list].ready_link);
+    oo_p_dllink_del(ni, ready_link);
+    oo_p_dllink_add_tail(ni,
+                oo_p_dllink_ptr(ni, &ni->state->ready_lists[ready_list]),
+                ready_link);
   }
   spin_unlock_irqrestore(&thr->os_ready_list_lock, lock_flags);
 }
@@ -7373,7 +7378,8 @@ wakeup_post_poll_list(tcp_helper_resource_t* thr)
 #if CI_CFG_EPOLL3
   CI_READY_LIST_EACH(ni->state->ready_lists_in_use, tmp, n) {
     get_os_ready_list(thr, n);
-    if( ci_ni_dllist_not_empty(ni, &ni->state->ready_lists[n]))
+    if( ! oo_p_dllink_is_empty(ni, oo_p_dllink_ptr(ni,
+                                        &ni->state->ready_lists[n])) )
       efab_tcp_helper_ready_list_wakeup(thr, n);
   }
 #endif

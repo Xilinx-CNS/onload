@@ -1336,22 +1336,26 @@ int ci_netif_get_ready_list(ci_netif* ni)
 #endif
 
 static inline void
-ci_netif_put_ready_list_one(ci_netif* ni, ci_ni_dllist_t* list, int id)
+ci_netif_put_ready_list_one(ci_netif* ni, struct oo_p_dllink_state list,
+                            int id)
 {
-  while( ci_ni_dllist_not_empty(ni, list) ) {
-    ci_ni_dllist_link* lnk = ci_ni_dllist_pop(ni, list);
+  while( ! oo_p_dllink_is_empty(ni, list) ) {
+    struct oo_p_dllink_state lnk = oo_p_dllink_statep(ni, list.l->next);
     ci_sb_epoll_state* epoll = CI_CONTAINER(ci_sb_epoll_state,
-                                            e[id].ready_link, lnk);
+                                            e[id].ready_link, lnk.l);
 
-    ci_ni_dllist_self_link(ni, lnk);
+    oo_p_dllink_del(ni, lnk);
+    oo_p_dllink_init(ni, lnk);
     SP_TO_WAITABLE(ni, epoll->sock_id)->ready_lists_in_use &=~ (1 << id);
   }
 }
 
 static void ci_netif_put_ready_list_locked(ci_netif* ni, int id)
 {
-  ci_netif_put_ready_list_one(ni, &ni->state->ready_lists[id], id);
-  ci_netif_put_ready_list_one(ni, &ni->state->unready_lists[id], id);
+  ci_netif_put_ready_list_one(ni, oo_p_dllink_ptr(ni,
+                                        &ni->state->ready_lists[id]), id);
+  ci_netif_put_ready_list_one(ni, oo_p_dllink_ptr(ni,
+                                        &ni->state->unready_lists[id]), id);
   ni->state->ready_lists_in_use &= ~(1 << id);
   ni->state->ready_list_pid[id] = 0;
 }

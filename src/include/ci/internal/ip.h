@@ -4753,8 +4753,12 @@ ci_netif_put_on_post_poll_epoll(ci_netif* ni, citp_waitable* sb)
   ci_sb_epoll_state* epoll = ci_ni_aux_p2epoll(ni, sb->epoll);
   ci_uint32 tmp, i;
   CI_READY_LIST_EACH(sb->ready_lists_in_use, tmp, i) {
-    ci_ni_dllist_remove(ni, &epoll->e[i].ready_link);
-    ci_ni_dllist_put(ni, &ni->state->ready_lists[i], &epoll->e[i].ready_link);
+    struct oo_p_dllink_state link =
+                             oo_p_dllink_sb(ni, sb, &epoll->e[i].ready_link);
+    oo_p_dllink_del(ni, link);
+    oo_p_dllink_add_tail(ni,
+                         oo_p_dllink_ptr(ni, &ni->state->ready_lists[i]),
+                         link);
   }
 #endif
 }
@@ -4773,8 +4777,12 @@ citp_waitable_remove_from_epoll(ci_netif* ni, citp_waitable* w, int do_free)
 
   epoll = ci_ni_aux_p2epoll(ni, w->epoll);
   ci_assert_equal(epoll->sock_id, w->bufid);
-  CI_READY_LIST_EACH(w->ready_lists_in_use, tmp, i)
-    ci_ni_dllist_remove_safe(ni, &epoll->e[i].ready_link);
+  CI_READY_LIST_EACH(w->ready_lists_in_use, tmp, i) {
+    struct oo_p_dllink_state link =
+                             oo_p_dllink_sb(ni, w, &epoll->e[i].ready_link);
+    oo_p_dllink_del(ni, link);
+    oo_p_dllink_init(ni, link);
+  }
   w->ready_lists_in_use = 0;
   if( do_free ) {
     ci_ni_aux_free(ni, CI_CONTAINER(ci_ni_aux_mem, u.epoll, epoll));

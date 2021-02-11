@@ -406,8 +406,9 @@ efab_tcp_helper_ready_list_events(tcp_helper_resource_t* trs,
                                   int ready_list)
 {
 #if CI_CFG_EPOLL3
-  return ci_ni_dllist_is_empty(&trs->netif,
-                               &trs->netif.state->ready_lists[ready_list])
+  ci_netif* ni = &trs->netif;
+  return oo_p_dllink_is_empty(ni,
+                oo_p_dllink_ptr(ni, &ni->state->ready_lists[ready_list]))
          ?  0 : POLLIN;
 #else
   return 0;

@@ -468,9 +468,12 @@ citp_waitable_wake_epoll3_not_in_poll(ci_netif* ni, citp_waitable* sb)
     ci_uint32 tmp, i;
 
     CI_READY_LIST_EACH(sb->ready_lists_in_use, tmp, i) {
-      ci_ni_dllist_remove(ni, &epoll->e[i].ready_link);
-      ci_ni_dllist_put(ni, &ni->state->ready_lists[i],
-                       &epoll->e[i].ready_link);
+      struct oo_p_dllink_state link =
+                        oo_p_dllink_sb(ni, sb, &epoll->e[i].ready_link);
+      oo_p_dllink_del(ni, link);
+      oo_p_dllink_add_tail(ni,
+                           oo_p_dllink_ptr(ni, &ni->state->ready_lists[i]),
+                           link);
 
       /* Wake the ready list too, if that's requested it. */
       if( ni->state->ready_list_flags[i] & CI_NI_READY_LIST_FLAG_WAKE )

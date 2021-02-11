@@ -1297,8 +1297,8 @@ struct ci_netif_state_s {
 
 #if CI_CFG_EPOLL3
   ci_int32              ready_list_pid[CI_CFG_N_READY_LISTS];
-  ci_ni_dllist_t        ready_lists[CI_CFG_N_READY_LISTS];
-  ci_ni_dllist_t        unready_lists[CI_CFG_N_READY_LISTS];
+  struct oo_p_dllink    ready_lists[CI_CFG_N_READY_LISTS];
+  struct oo_p_dllink    unready_lists[CI_CFG_N_READY_LISTS];
 #define CI_NI_READY_LIST_FLAG_WAKE   1 /* Requiest wakeup when something happens */
 #define CI_NI_READY_LIST_FLAG_PENDING_FREE   2 /* Pending free at netif unlock */
   ci_uint32             ready_list_flags[CI_CFG_N_READY_LISTS];
@@ -2429,7 +2429,7 @@ typedef struct {
  *   ready list.  It is protected by the UL epoll lock.
  */
 typedef struct oo_sb_epoll_s {
-  ci_ni_dllist_link     ready_link;
+  struct oo_p_dllink    ready_link;
   ci_user_ptr_t         eitem;
 } oo_sb_epoll;
 typedef struct ci_sb_epoll_state_s {

@@ -208,12 +208,8 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
 #if CI_CFG_EPOLL3
   nis->ready_lists_in_use = 0;
   for( i = 0; i < CI_CFG_N_READY_LISTS; i++ ) {
-    ci_ni_dllist_init(ni, &nis->ready_lists[i],
-                      oo_ptr_to_statep(ni, &nis->ready_lists[i]),
-                      "ready_list");
-    ci_ni_dllist_init(ni, &nis->unready_lists[i],
-                      oo_ptr_to_statep(ni, &nis->unready_lists[i]),
-                      "unready_list");
+    oo_p_dllink_init(ni, oo_p_dllink_ptr(ni, &nis->ready_lists[i]));
+    oo_p_dllink_init(ni, oo_p_dllink_ptr(ni, &nis->unready_lists[i]));
     nis->ready_list_flags[i] = 0;
   }
 #endif

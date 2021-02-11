@@ -994,8 +994,10 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
     CI_READY_LIST_EACH(ns->ready_lists_in_use, tmp, i)
       logger(log_arg, "  readylist: id=%d pid=%d ready=%s unready=%s flags=%x", i,
            ns->ready_list_pid[i],
-           ci_ni_dllist_is_empty(ni, &ns->ready_lists[i]) ? "EMPTY":"yes",
-           ci_ni_dllist_is_empty(ni, &ns->unready_lists[i]) ? "EMPTY":"yes",
+           oo_p_dllink_is_empty(ni, oo_p_dllink_ptr(ni, &ns->ready_lists[i]))
+                                                ? "EMPTY":"yes",
+           oo_p_dllink_is_empty(ni, oo_p_dllink_ptr(ni, &ns->unready_lists[i]))
+                                                ? "EMPTY":"yes",
            ns->ready_list_flags[i]);
   }
 #endif

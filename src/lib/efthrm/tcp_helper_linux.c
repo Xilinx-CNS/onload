@@ -1217,14 +1217,17 @@ efab_os_wakeup_epoll3_locked(tcp_helper_resource_t* trs,
 {
   ci_sb_epoll_state* epoll;
   ci_uint8 i, tmp;
+  ci_netif* ni = &trs->netif;
 
   ci_assert(OO_PP_NOT_NULL(sb->epoll));
-  epoll = ci_ni_aux_p2epoll(&trs->netif, sb->epoll);
+  epoll = ci_ni_aux_p2epoll(ni, sb->epoll);
 
   CI_READY_LIST_EACH(sb->ready_lists_in_use, tmp, i) {
-    ci_ni_dllist_remove(&trs->netif, &epoll->e[i].ready_link);
-    ci_ni_dllist_put(&trs->netif, &trs->netif.state->ready_lists[i],
-                   &epoll->e[i].ready_link);
+    struct oo_p_dllink_state link = oo_p_dllink_sb(ni, sb,
+                                                   &epoll->e[i].ready_link);
+    oo_p_dllink_del(ni, link);
+    oo_p_dllink_add_tail(ni, oo_p_dllink_ptr(ni, &ni->state->ready_lists[i]),
+                         link);
     ci_waitable_wakeup_all(&trs->ready_list_waitqs[i]);
   }
 

@@ -224,11 +224,10 @@ static int citp_epoll_sb_state_alloc(citp_socket* sock)
     sock->s->b.epoll = sp;
     epoll = ci_ni_aux_p2epoll(sock->netif, sp);
     epoll->sock_id = sock->s->b.bufid;
-    OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_ni_aux_mem, u.epoll));
     for( i = 0; i < CI_EPOLL_SETS_PER_AUX_BUF; i++ ) {
-      ci_ni_dllist_link_init(sock->netif, &epoll->e[i].ready_link, sp, "rll");
-      ci_ni_dllist_self_link(sock->netif, &epoll->e[i].ready_link);
-      OO_P_ADD(sp, sizeof(oo_sb_epoll));
+      oo_p_dllink_init(sock->netif,
+                       oo_p_dllink_sb(sock->netif, &sock->s->b,
+                                      &epoll->e[i].ready_link));
     }
   }
   ci_netif_unlock(sock->netif);
@@ -246,24 +245,29 @@ static void citp_epoll_sb_state_set(struct citp_epoll_member* eitem,
                                     citp_socket* sock)
 {
   ci_sb_epoll_state* epoll;
+  struct oo_p_dllink_state link;
+
   ci_assert(OO_PP_NOT_NULL(sock->s->b.epoll));
 
   epoll = ci_ni_aux_p2epoll(sock->netif, sock->s->b.epoll);
+  link = oo_p_dllink_sb(ep->home_stack,  &sock->s->b,
+                        &epoll->e[ep->ready_list].ready_link);
+
   /* This epoll set owns the ready list id, so it must be free in the
    * socket */
   ci_assert_nflags(sock->s->b.ready_lists_in_use, 1 << ep->ready_list);
-  ci_assert(
-    ci_ni_dllist_is_self_linked(ep->home_stack,
-                                &epoll->e[ep->ready_list].ready_link));
+  OO_P_DLLINK_ASSERT_EMPTY(ep->home_stack, link);
 
   CI_USER_PTR_SET(epoll->e[ep->ready_list].eitem, eitem);
 
   /* Tell others that we are in the list */
   ci_netif_lock(ep->home_stack);
   sock->s->b.ready_lists_in_use |= 1 << ep->ready_list;
-  ci_ni_dllist_put(ep->home_stack,
-                   &ep->home_stack->state->unready_lists[ep->ready_list],
-                   &epoll->e[ep->ready_list].ready_link);
+  oo_p_dllink_add_tail(ep->home_stack,
+                       oo_p_dllink_ptr(ep->home_stack,
+                                       &ep->home_stack->state->
+                                            unready_lists[ep->ready_list]),
+                       link);
   ci_netif_unlock(ep->home_stack);
 }
 
@@ -369,8 +373,13 @@ static void citp_remove_home_member(struct citp_epoll_fd* epoll_fd,
     ci_netif_lock(ni);
     if( sock->s->b.ready_lists_in_use & (1 << eitem->ready_list_id) ) {
       ci_sb_epoll_state* epoll = ci_ni_aux_p2epoll(ni, sock->s->b.epoll);
+      struct oo_p_dllink_state link =
+              oo_p_dllink_sb(ni, &sock->s->b,
+                             &epoll->e[eitem->ready_list_id].ready_link);
+
       sock->s->b.ready_lists_in_use &=~ (1 << eitem->ready_list_id);
-      ci_ni_dllist_remove_safe(ni, &epoll->e[eitem->ready_list_id].ready_link);
+      oo_p_dllink_del(ni, link);
+      oo_p_dllink_init(ni, link);
     }
     ci_netif_unlock(ni);
   }
@@ -1529,10 +1538,10 @@ static int citp_ul_epoll_one(struct oo_ul_epoll_state*__restrict__ eps,
 static void citp_epoll_get_ready_list(struct oo_ul_epoll_state*
                                       __restrict__ eps)
 {
-  ci_ni_dllist_link* lnk;
   ci_netif* ni = eps->ep->home_stack;
-  ci_ni_dllist_t* ready_list =
-                         &ni->state->ready_lists[eps->ep->ready_list];
+  struct oo_p_dllink_state ready_list =
+      oo_p_dllink_ptr(ni, &ni->state->ready_lists[eps->ep->ready_list]);
+  struct oo_p_dllink_state lnk, tmp;
   struct citp_epoll_member* eitem = NULL;
   int stack_locked = 0;
 
@@ -1545,17 +1554,14 @@ static void citp_epoll_get_ready_list(struct oo_ul_epoll_state*
 
   if( ! stack_locked )
     ci_netif_lock(ni);
-  lnk = ci_ni_dllist_start(ni, ready_list);
-  while (lnk != ci_ni_dllist_end(ni, ready_list)) {
+  oo_p_dllink_for_each_safe(ni, lnk, tmp, ready_list) {
     ci_sb_epoll_state* epoll;
     epoll = CI_CONTAINER(ci_sb_epoll_state,
-                         e[eps->ep->ready_list].ready_link, lnk);
+                         e[eps->ep->ready_list].ready_link, lnk.l);
 
     eitem = CI_USER_PTR_GET(epoll->e[eps->ep->ready_list].eitem);
-    ci_ni_dllist_iter(ni, lnk);
-    ci_ni_dllist_remove(ni, &epoll->e[eps->ep->ready_list].ready_link);
-    ci_ni_dllist_put(ni, &ni->state->unready_lists[eps->ep->ready_list],
-                     &epoll->e[eps->ep->ready_list].ready_link);
+    oo_p_dllink_del(ni, lnk);
+    oo_p_dllink_add_tail(ni, ready_list, lnk);
     ci_assert(eitem);
     ci_dllist_remove(&((struct citp_epoll_member*)eitem)->dllink);
     /* This means that we'll be processing sockets in the order that they got
@@ -2471,6 +2477,9 @@ void citp_epoll_on_close(citp_fdinfo* epoll_fdi, citp_fdinfo* fd_fdi,
    * set we've been added to.
    */
   if( eitem && (eitem->ready_list_id == ep->ready_list) ) {
+    struct oo_p_dllink_state link =
+                    oo_p_dllink_sb(ni, &sock->s->b,
+                                   &epoll->e[ep->ready_list].ready_link);
     Log_POLL(ci_log("%s: epoll_fd=%d fd=%d",
                     __FUNCTION__, fd_fdi->epoll_fd, fd_fdi->fd));
     /* At this point any of the eitem, sock buf, or fdinfo may still be in
@@ -2483,7 +2492,8 @@ void citp_epoll_on_close(citp_fdinfo* epoll_fdi, citp_fdinfo* fd_fdi,
 
     ci_netif_lock(ni);
     sock->s->b.ready_lists_in_use &=~ (1 << ep->ready_list);
-    ci_ni_dllist_remove_safe(ni, &epoll->e[ep->ready_list].ready_link);
+    oo_p_dllink_del(ni, link);
+    oo_p_dllink_init(ni, link);
     ci_netif_unlock(ni);
 
     ci_dllist_push(&ep->dead_stack_sockets, &eitem->dead_stack_link);

@@ -551,7 +551,7 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   ON_CI_CFG_EPOLL3(                                                       \
   FTL_TFIELD_ARRAYOFINT(ctx, ci_int32,                 \
                         ready_list_pid, CI_CFG_N_READY_LISTS, ORM_OUTPUT_STACK)  \
-  FTL_TFIELD_ARRAYOFSTRUCT(ctx, ci_ni_dllist_t,         \
+  FTL_TFIELD_ARRAYOFSTRUCT(ctx, oo_p_dllink_t,         \
                            ready_lists, CI_CFG_N_READY_LISTS, ORM_OUTPUT_EXTRA, 1) \
   FTL_TFIELD_ARRAYOFINT(ctx, ci_uint32,                 \
                         ready_list_flags, CI_CFG_N_READY_LISTS, ORM_OUTPUT_EXTRA)         \
