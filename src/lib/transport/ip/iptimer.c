@@ -35,9 +35,6 @@
 #define LINK2TIMER(lnk)				\
   CI_CONTAINER(ci_ip_timer, link, (lnk))
 
-#define ADDR2TIMER(ni, id)					\
-  LINK2TIMER((ci_ni_dllist_link*) CI_NETIF_PTR((ni), (id)))
-
 
 #if CI_CFG_IP_TIMER_DEBUG
 
@@ -142,15 +139,11 @@ void ci_ip_timer_state_init(ci_netif* netif, unsigned cpu_khz)
   /* set module specific time constants dependent on frc2tick */
   ci_tcp_timer_init(netif);
 
-  ci_ni_dllist_init(netif, &ipts->fire_list,
-		    oo_ptr_to_statep(netif, &ipts->fire_list),
-                    "fire");
-  
+  oo_p_dllink_init(netif, oo_p_dllink_ptr(netif, &ipts->fire_list));
+
   /* Initialise the wheel lists. */
   for( i=0; i < CI_IPTIME_WHEELSIZE; i++)
-    ci_ni_dllist_init(netif, &ipts->warray[i],
-		      oo_ptr_to_statep(netif, &ipts->warray[i]),
-                      "timw");
+    oo_p_dllink_init(netif, oo_p_dllink_ptr(netif, &ipts->warray[i]));
 }
 #endif /* __KERNEL */
 
@@ -159,7 +152,7 @@ void ci_ip_timer_state_init(ci_netif* netif, unsigned cpu_khz)
 /* insert a non-pending timer into the scheduler */
 void __ci_ip_timer_set(ci_netif *netif, ci_ip_timer *ts, ci_iptime_t t)
 {
-  ci_ni_dllist_t* bucket;
+  struct oo_p_dllink_state bucket;
   int w;
   ci_iptime_t stime = IPTIMER_STATE(netif)->sched_ticks;
 
@@ -205,9 +198,8 @@ void __ci_ip_timer_set(ci_netif *netif, ci_ip_timer *ts, ci_iptime_t t)
   ** smaller relative time will be before an earlier insert with a
   ** larger relative time. Oh well doesn't really matter
   */
-  ci_ni_dllist_push_tail(netif, bucket, &ts->link);
+  oo_p_dllink_add_tail(netif, bucket, oo_p_dllink_statep(netif, ts->statep));
 
-  ci_assert(ci_ip_timer_is_link_valid(netif, ts));
   DETAILED_CHECK_TIMERS(netif);
 }
 
@@ -219,8 +211,9 @@ static int ci_ip_timer_cascadewheel(ci_netif* netif, int wheelno,
 				     ci_iptime_t stime)
 {
   ci_ip_timer* ts;
-  ci_ni_dllist_t* bucket;
-  oo_p curid, buckid;
+  struct oo_p_dllink_state bucket;
+  struct oo_p_dllink_state cur;
+  oo_p lastp;
   int changed = 0;
 
   ci_assert(wheelno > 0 && wheelno < CI_IPTIME_WHEELS);
@@ -229,21 +222,20 @@ static int ci_ip_timer_cascadewheel(ci_netif* netif, int wheelno,
 
   /* bucket to empty */
   bucket = IPTIMER_BUCKET(netif, wheelno, stime);
-  buckid = ci_ni_dllist_link_addr(netif, &bucket->l);
-  curid = bucket->l.next;
 
   LOG_ITV(log(LN_FMT "cascading wheel=%u sched_ticks=0x%x bucket=%i",
 	      LN_PRI_ARGS(netif), wheelno, stime, IPTIMER_BUCKETNO(wheelno, stime)));
 
-  /* ditch the timers in this dll, pointers held in curid and buckid */
-  ci_ni_dllist_init(netif, bucket,
-                    ci_ni_dllist_link_addr(netif, &bucket->l), "timw");
+  /* ditch the timers in this dll, pointers held in cur & lastp */
+  cur = oo_p_dllink_statep(netif, bucket.l->next);
+  lastp = bucket.p;
+  oo_p_dllink_init(netif, bucket);
 
-  while( ! OO_P_EQ(curid, buckid) ) {
-    ts = ADDR2TIMER(netif, curid);
-    
+  while( ! OO_P_EQ(cur.p, lastp) ) {
+    ts = LINK2TIMER(cur.l);
+
     /* get next in linked list */
-    curid = ts->link.next;
+    cur = oo_p_dllink_statep(netif, cur.l->next);
 
 #ifndef NDEBUG
     {
@@ -276,8 +268,7 @@ static int ci_ip_timer_cascadewheel(ci_netif* netif, int wheelno,
     ** smaller relative time will be before an earlier insert with a
     ** larger relative time. Oh well doesn't really matter
     */
-    ci_ni_dllist_push_tail(netif, bucket, &ts->link);
-    ci_assert(ci_ip_timer_is_link_valid(netif, ts));
+    oo_p_dllink_add_tail(netif, bucket, oo_p_dllink_statep(netif, ts->statep));
 
     if( wheelno == 1 )
       __ci_timer_busy_set(netif, ts->time);
@@ -389,8 +380,11 @@ void ci_ip_timer_poll(ci_netif *netif) {
   ci_iptime_t* stime = &ipts->sched_ticks;
   ci_ip_timer* ts;
   ci_iptime_t rtime;
-  ci_ni_dllist_link* link;
   int changed = 0;
+  struct oo_p_dllink_state fire_list = oo_p_dllink_ptr(netif,
+                                                       &ipts->fire_list);
+  struct oo_p_dllink_state bucket;
+  struct oo_p_dllink_state link;
 
   /* The caller is expected to ensure that the current time is sufficiently
   ** up-to-date.
@@ -399,9 +393,8 @@ void ci_ip_timer_poll(ci_netif *netif) {
   /* check for sanity i.e. time always goes forwards */
   ci_assert( TIME_GE(rtime, *stime) );
 
-  /* bug chasing Bug 2855 - check the temp list used is OK before we start */
-  ci_assert( ci_ni_dllist_is_valid(netif, &ipts->fire_list.l) );
-  ci_assert( ci_ni_dllist_is_empty(netif, &ipts->fire_list));
+  /* check the temp list used is OK before we start */
+  OO_P_DLLINK_ASSERT_EMPTY(netif, fire_list);
 
   while( TIME_LT(*stime, rtime) ) {
 
@@ -422,43 +415,41 @@ void ci_ip_timer_poll(ci_netif *netif) {
     }
 
 
-    /* Bug 1828: We need to be creaful here ... because:
+    /* We need to be careful here ... because:
         - ci_ip_timer_docallback can set/clear timers
         - the timers being set/cleared may not necessarily be the ones firing
         - however, they could be in this bucket
-       In summary, need to ensure the ni_dllist stays valid at all times so 
+       In summary, need to ensure the dllist stays valid at all times so 
        safe to call. Slightly complicated by the case that its not possible to
        hold indirected linked lists on the stack */
-    ci_assert( ci_ni_dllist_is_valid(netif, &ipts->fire_list.l));
-    ci_assert( ci_ni_dllist_is_empty(netif, &ipts->fire_list));
+    OO_P_DLLINK_ASSERT_EMPTY(netif, fire_list);
 
     /* run timers in the current bucket */
-    ci_ni_dllist_rehome( netif,
-                         &ipts->fire_list,
-                         &ipts->warray[IPTIMER_BUCKETNO(0, *stime)] );
+    bucket = oo_p_dllink_ptr(netif,
+                             &ipts->warray[IPTIMER_BUCKETNO(0, *stime)]),
+    oo_p_dllink_splice(netif, bucket, fire_list);
+    oo_p_dllink_init(netif, bucket);
+
     __ci_timer_busy_unset(netif, *stime);
     DETAILED_CHECK_TIMERS(netif);
 
-    while( (link = ci_ni_dllist_try_pop(netif, &ipts->fire_list)) ) {
+    while( ! oo_p_dllink_is_empty(netif, fire_list) ) {
+      link = oo_p_dllink_statep(netif, fire_list.l->next);
+      oo_p_dllink_del_init(netif, link);
 
-      ts = LINK2TIMER(link);
+      ts = LINK2TIMER(link.l);
 
       ci_assert_equal(ts->time, *stime);
-
-      /* ensure time marked as NOT pending */
-      ci_ni_dllist_self_link(netif, &ts->link);
 
       /* callback safe to set/clear this or other timers */
       ci_ip_timer_docallback(netif, ts);
     }
-    ci_assert( ci_ni_dllist_is_valid(netif, &ipts->fire_list.l) );
-    ci_assert( ci_ni_dllist_is_empty(netif, &ipts->fire_list));
+    OO_P_DLLINK_ASSERT_EMPTY(netif, fire_list);
 
     DETAILED_CHECK_TIMERS(netif);
   }
-  
-  ci_assert( ci_ni_dllist_is_valid(netif, &ipts->fire_list.l) );
-  ci_assert( ci_ni_dllist_is_empty(netif, &ipts->fire_list));
+
+  OO_P_DLLINK_ASSERT_EMPTY(netif, fire_list);
 
   /* What is our next timer?
    * Let's update if our previous "closest" timer have already been
@@ -489,9 +480,9 @@ void ci_ip_timer_poll(ci_netif *netif) {
      * once during this time frame, so we'll get better estimation when
      * this value becomes limiting (we call linux_tcp_timer_do() every
      * 90ms, which is smaller than CI_IPTIME_BUCKETS=250 ticks. */
-    if( ci_ni_dllist_is_empty(netif,
-                              IPTIMER_BUCKET(netif, 1,
-                                             base + CI_IPTIME_BUCKETS) ) ) {
+    if( oo_p_dllink_is_empty(netif,
+                             IPTIMER_BUCKET(netif, 1,
+                                            base + CI_IPTIME_BUCKETS) ) ) {
       ipts->closest_timer += CI_IPTIME_BUCKETS;
     }
   }
@@ -505,8 +496,8 @@ void ci_ip_timer_state_assert_valid(ci_netif* ni, const char* file, int line)
 {
   ci_ip_timer_state* ipts;
   ci_ip_timer* ts;
-  ci_ni_dllist_t* bucket;
-  ci_ni_dllist_link* l;
+  struct oo_p_dllink_state bucket;
+  struct oo_p_dllink_state l;
   ci_iptime_t stime, wheel_base, max_time, min_time;
   int a1, a2, a3, w, b, bit_shift;
 
@@ -534,30 +525,24 @@ void ci_ip_timer_state_assert_valid(ci_netif* ni, const char* file, int line)
       min_time = wheel_base + (b << bit_shift);
       max_time = min_time   + (1 << bit_shift);
 
-      bucket = &ipts->warray[w*CI_IPTIME_BUCKETS + b];
+      bucket = oo_p_dllink_ptr(ni, &ipts->warray[w*CI_IPTIME_BUCKETS + b]);
 
       /* check list looks valid */
-      if ( ci_ni_dllist_start(ni, bucket) == ci_ni_dllist_end(ni, bucket) ) {
-        ci_assert( ci_ni_dllist_is_empty(ni, bucket) );
-        if( w == 0 )
+      if( w == 0 ) {
+        if ( oo_p_dllink_is_empty(ni, bucket) )
           ci_assert_nflags(ipts->busy_mask[b/64], (1ULL << (b%64)));
+        else
+          ci_assert_flags(ipts->busy_mask[b/64], (1ULL << (b%64)));
       }
-      else if( w == 0 )
-        ci_assert_flags(ipts->busy_mask[b/64], (1ULL << (b%64)));
 
 
       /* check buckets that should be empty are! */
-      a3 = TIME_GT(min_time, stime) || ci_ni_dllist_is_empty(ni, bucket);
+      a3 = TIME_GT(min_time, stime) || oo_p_dllink_is_empty(ni, bucket);
 
       /* run through timers in bucket */
-      for (l = ci_ni_dllist_start(ni, bucket);
-           l != ci_ni_dllist_end(ni, bucket);
-           ci_ni_dllist_iter(ni, l) ) {
-
-        ci_ni_dllist_link_assert_valid(ni, l);
-
+      oo_p_dllink_for_each(ni, l, bucket) {
         /* get timer */  
-        ts = LINK2TIMER(l);
+        ts = LINK2TIMER(l.l);
 
         /* must be in the future */
         a1 = TIME_GT(ts->time, stime);
@@ -617,8 +602,8 @@ void ci_ip_timer_state_dump(ci_netif* ni)
 {
   ci_ip_timer_state* ipts;
   ci_ip_timer* ts;
-  ci_ni_dllist_t* bucket;
-  ci_ni_dllist_link* l;
+  struct oo_p_dllink_state bucket;
+  struct oo_p_dllink_state l;
   ci_iptime_t stime, wheel_base, max_time, min_time;
   int w, b, bit_shift;
 
@@ -647,20 +632,17 @@ void ci_ip_timer_state_dump(ci_netif* ni)
       min_time = wheel_base + (b << bit_shift);
       max_time = min_time   + (1 << bit_shift);
 
-      bucket = &ipts->warray[w*CI_IPTIME_BUCKETS + b];
+      bucket = oo_p_dllink_ptr(ni, &ipts->warray[w*CI_IPTIME_BUCKETS + b]);
 
       /* check buckets that should be empty are! */
-      if ( TIME_LE(min_time, stime) && !ci_ni_dllist_is_empty(ni, bucket) )
+      if ( TIME_LE(min_time, stime) && !oo_p_dllink_is_empty(ni, bucket) )
         ci_log("w:%d, b:%d, [0x%x->0x%x] - bucket should be empty",  
                 w, b, min_time, max_time);
 
       /* run through timers in bucket */
-      for (l = ci_ni_dllist_start(ni, bucket);
-           l != ci_ni_dllist_end(ni, bucket);
-           ci_ni_dllist_iter(ni, l) ) {
-
-        /* get timer */  
-        ts = LINK2TIMER(l);
+      oo_p_dllink_for_each(ni, l, bucket) {
+        /* get timer */
+        ts = LINK2TIMER(l.l);
 
         ci_log(" ts = 0x%x %s  w:%d, b:%d, [0x%x->0x%x]",
                ts->time, ci_ip_timer_dump(ts), w, b, min_time, max_time);

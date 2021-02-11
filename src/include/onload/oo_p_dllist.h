@@ -175,4 +175,40 @@ oo_p_dllink_assert_empty(ci_netif* ni, struct oo_p_dllink_state l,
        link.l != list.l;                            \
        link = n, n = oo_p_dllink_statep(ni, link.l->next) )
 
+/* Insert the `list` between `prev` and `next` */
+static inline void
+__oo_p_dllink_splice(ci_netif* ni, struct oo_p_dllink_state list,
+                     struct oo_p_dllink_state prev,
+                     struct oo_p_dllink_state next)
+{
+  struct oo_p_dllink_state first = oo_p_dllink_statep(ni, list.l->next);
+  struct oo_p_dllink_state last = oo_p_dllink_statep(ni, list.l->prev);
+
+  first.l->prev = prev.p;
+  prev.l->next = first.p;
+
+  last.l->next = next.p;
+  next.l->prev = last.p;
+}
+
+static inline void
+oo_p_dllink_splice(ci_netif* ni, struct oo_p_dllink_state list,
+                   struct oo_p_dllink_state into)
+{
+  if( ! oo_p_dllink_is_empty(ni, list) ) {
+    __oo_p_dllink_splice(ni, list, into,
+                         oo_p_dllink_statep(ni, into.l->next));
+  }
+}
+
+static inline void
+oo_p_dllink_splice_tail(ci_netif* ni, struct oo_p_dllink_state list,
+                        struct oo_p_dllink_state into)
+{
+  if( ! oo_p_dllink_is_empty(ni, list) ) {
+    __oo_p_dllink_splice(ni, list, oo_p_dllink_statep(ni, into.l->prev),
+                         into);
+  }
+}
+
 #endif /* OO_P_DLLIST_NO_CODE */

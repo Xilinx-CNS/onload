@@ -359,14 +359,14 @@ typedef struct oo_p_dllink oo_p_dllink_t;
     FTL_TFIELD_INT(ctx, ci_uint32, ci_ip_time_frc2us, ORM_OUTPUT_STACK)      \
     FTL_TFIELD_INT(ctx, ci_uint32, ci_ip_time_frc2isn, ORM_OUTPUT_STACK)     \
     FTL_TFIELD_INT(ctx, ci_uint32, khz, ORM_OUTPUT_STACK)                    \
-    FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_t, fire_list, ORM_OUTPUT_EXTRA)      \
+    FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, fire_list, ORM_OUTPUT_EXTRA)      \
     FTL_TFIELD_ARRAYOFSTRUCT(ctx, \
-                             ci_ni_dllist_t, warray, CI_IPTIME_WHEELSIZE, ORM_OUTPUT_EXTRA, 1)   \
+                             oo_p_dllink_t, warray, CI_IPTIME_WHEELSIZE, ORM_OUTPUT_EXTRA, 1)   \
     FTL_TSTRUCT_END(ctx)                                                 
 
 #define STRUCT_IP_TIMER(ctx) \
     FTL_TSTRUCT_BEGIN(ctx, ci_ip_timer, )                                     \
-    FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_link, link, ORM_OUTPUT_EXTRA)	      \
+    FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, link, ORM_OUTPUT_EXTRA)	      \
     FTL_TFIELD_INT(ctx, ci_iptime_t, time, ORM_OUTPUT_STACK)                       \
     FTL_TFIELD_INT(ctx, oo_p, statep, ORM_OUTPUT_EXTRA)                     \
     FTL_TFIELD_INT(ctx, ci_iptime_callback_fn_t, fn, ORM_OUTPUT_EXTRA)             \

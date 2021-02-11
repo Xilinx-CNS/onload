@@ -781,9 +781,9 @@ typedef struct {
                                        /* ticks expressed in 1/(2^32) of ms */
   ci_uint64   ci_ip_time_ms2tick_fxp CI_ALIGN(8);
   /* list of timers currently firing */
-  ci_ni_dllist_t  fire_list;
+  struct oo_p_dllink fire_list;
   /* holds the timer wheels in a flat array */
-  ci_ni_dllist_t  warray[CI_IPTIME_WHEELSIZE];  
+  struct oo_p_dllink warray[CI_IPTIME_WHEELSIZE];  
 
   /* bitmask of non-empty buckets in the lowest weel */
   ci_uint64 busy_mask[4] CI_ALIGN(8);
@@ -798,7 +798,7 @@ typedef ci_uint32  ci_iptime_callback_param_t;
 ** ci_ip_timer: An individual timer.
 */
 typedef struct {
-  ci_ni_dllist_link           link;
+  struct oo_p_dllink          link;
   ci_iptime_t                 time;          /* absolute time to expire  */
   oo_p                        statep;        /* state offset of the timer */
   ci_iptime_callback_fn_t     fn;            /* function code for demux  */
