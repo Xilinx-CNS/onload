@@ -385,15 +385,16 @@ void ci_netif_try_to_reap(ci_netif* ni, int stop_once_freed_n)
 {
   /* Look for packet buffers that can be reaped. */
 
-  ci_ni_dllist_link* lnk;
-  ci_ni_dllist_link* last;
+  struct oo_p_dllink_state reap_list =
+                           oo_p_dllink_ptr(ni, &ni->state->reap_list);
+  struct oo_p_dllink_state lnk, tmp;
   citp_waitable_obj* wo;
   int freed_n = 0;
   int add_to_reap_list;
   int reap_harder = ni->packets->sets_n == ni->packets->sets_max
       || ni->state->mem_pressure;
 
-  if( ci_ni_dllist_is_empty(ni, &ni->state->reap_list) )
+  if( oo_p_dllink_is_empty(ni, reap_list) )
     return;
 
   /* Caller has told us how many packet buffers it needs.  But really we
@@ -402,15 +403,12 @@ void ci_netif_try_to_reap(ci_netif* ni, int stop_once_freed_n)
    */
   stop_once_freed_n <<= 1u;
 
-  lnk = ci_ni_dllist_start(ni, &ni->state->reap_list);
-  last = ci_ni_dllist_start_last(ni, &ni->state->reap_list);
-
-  do {
+  oo_p_dllink_for_each_safe(ni, lnk, tmp, reap_list) {
     add_to_reap_list = 0;
 
-    wo = CI_CONTAINER(citp_waitable_obj, sock.reap_link, lnk);
-    lnk = (ci_ni_dllist_link*) CI_NETIF_PTR(ni, lnk->next);
-    ci_ni_dllist_remove_safe(ni, &wo->sock.reap_link);
+    oo_p_dllink_del(ni, lnk);
+    oo_p_dllink_init(ni, lnk);
+    wo = CI_CONTAINER(citp_waitable_obj, sock.reap_link, lnk.l);
 
     if( wo->waitable.state & CI_TCP_STATE_TCP_CONN ) {
       ci_tcp_state* ts = &wo->tcp;
@@ -432,7 +430,7 @@ void ci_netif_try_to_reap(ci_netif* ni, int stop_once_freed_n)
         ci_sock_unlock(ni, &ts->s.b);
       }
       if( ts->recv1.num > 1 || add_to_reap_list)
-        ci_ni_dllist_put(ni, &ni->state->reap_list, &ts->s.reap_link);
+        oo_p_dllink_add_tail(ni, reap_list, lnk);
     }
     else if( wo->waitable.state == CI_TCP_STATE_UDP ) {
       ci_udp_state* us = &wo->udp;
@@ -444,9 +442,12 @@ void ci_netif_try_to_reap(ci_netif* ni, int stop_once_freed_n)
 #endif
 
       if( add_to_reap_list )
-        ci_ni_dllist_put(ni, &ni->state->reap_list, &us->s.reap_link);
+        oo_p_dllink_add_tail(ni, reap_list, lnk);
     }
-  } while( freed_n < stop_once_freed_n && &wo->sock.reap_link != last );
+
+    if( freed_n >= stop_once_freed_n )
+      break;
+  }
 
   if( freed_n < (stop_once_freed_n >> 1) ) {
     /* We do not get here from ci_netif_pkt_alloc_slow,

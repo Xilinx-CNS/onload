@@ -759,7 +759,7 @@ void ci_udp_all_fds_gone(ci_netif* netif, oo_sp sock_id, int do_free)
                   oofilter.sf_local_port, NULL);
 #endif
   ci_udp_recv_q_drop(netif, &us->recv_q);
-  ci_ni_dllist_remove(netif, &us->s.reap_link);
+  oo_p_dllink_del(netif, oo_p_dllink_sb(netif, &us->s.b, &us->s.reap_link));
 
   if( OO_PP_NOT_NULL(us->zc_kernel_datagram) ) {
     ci_ip_pkt_fmt* pkt = PKT_CHK(netif, us->zc_kernel_datagram);

@@ -521,7 +521,9 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
   /* Old ep: get out from any lists; the ep will be dropped as soon as
    * we update all file descriptors which reference it. */
   old_s->b.sb_flags |= CI_SB_FLAG_MOVED;
-  ci_ni_dllist_remove(&old_thr->netif, &old_s->reap_link);
+
+  link = oo_p_dllink_sb(&old_thr->netif, &old_s->b, &old_s->reap_link);
+  oo_p_dllink_del(&old_thr->netif, link);
 
   link = oo_p_dllink_sb(&old_thr->netif, &old_s->b, &old_s->b.post_poll_link);
   oo_p_dllink_del_init(&old_thr->netif, link);

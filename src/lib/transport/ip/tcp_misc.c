@@ -199,6 +199,8 @@ void ci_tcp_state_verify_no_timers(ci_netif *ni, ci_tcp_state *ts)
 
 static void __ci_tcp_state_free(ci_netif *ni, ci_tcp_state *ts)
 {
+  struct oo_p_dllink_state link;
+
   VERB(ci_log("%s("NTS_FMT")", __FUNCTION__, NTS_PRI_ARGS(ni,ts)));
   ci_assert(ni);
   ci_assert(ts);
@@ -216,9 +218,10 @@ static void __ci_tcp_state_free(ci_netif *ni, ci_tcp_state *ts)
 #endif
 
   /* Remove from any lists we're in. */
-  oo_p_dllink_del_init(ni, oo_p_dllink_sb(ni, &ts->s.b,
-                                          &ts->s.b.post_poll_link));
-  ci_ni_dllist_remove_safe(ni, &ts->s.reap_link);
+  link = oo_p_dllink_sb(ni, &ts->s.b, &ts->s.b.post_poll_link);
+  oo_p_dllink_del_init(ni, link);
+  link = oo_p_dllink_sb(ni, &ts->s.b, &ts->s.reap_link);
+  oo_p_dllink_del_init(ni, link);
 
   citp_waitable_remove_from_epoll(ni, &ts->s.b, 1);
 

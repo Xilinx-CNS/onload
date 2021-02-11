@@ -1357,8 +1357,9 @@ static void handle_rx_multi_discard(ci_netif* ni,
 
 static void ci_sock_put_on_reap_list(ci_netif* ni, ci_sock_cmn* s)
 {
-  ci_ni_dllist_remove(ni, &s->reap_link);
-  ci_ni_dllist_put(ni, &ni->state->reap_list, &s->reap_link);
+  struct oo_p_dllink_state link = oo_p_dllink_sb(ni, &s->b, &s->reap_link);
+  oo_p_dllink_del(ni, link);
+  oo_p_dllink_add_tail(ni, oo_p_dllink_ptr(ni, &ni->state->reap_list), link);
   s->b.sb_flags &= ~CI_SB_FLAG_RX_DELIVERED;
 }
 

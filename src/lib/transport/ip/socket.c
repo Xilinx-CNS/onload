@@ -48,8 +48,6 @@ void oo_sock_cplane_init(struct oo_sock_cplane* cp)
 
 void ci_sock_cmn_init(ci_netif* ni, ci_sock_cmn* s, int can_poison)
 {
-  oo_p sp;
-
   /* Poison. */
   CI_DEBUG(
   if( can_poison )
@@ -106,10 +104,7 @@ void ci_sock_cmn_init(ci_netif* ni, ci_sock_cmn* s, int can_poison)
 
   ci_sock_cmn_reinit(ni, s);
 
-  sp = oo_sockp_to_statep(ni, SC_SP(s));
-  OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_sock_cmn, reap_link));
-  ci_ni_dllist_link_init(ni, &s->reap_link, sp, "reap");
-  ci_ni_dllist_self_link(ni, &s->reap_link);
+  oo_p_dllink_init(ni, oo_p_dllink_sb(ni, &s->b, &s->reap_link));
 
   /* Not functionally necessary, but avoids garbage addresses in stackdump. */
   sock_laddr_be32(s) = sock_raddr_be32(s) = 0;

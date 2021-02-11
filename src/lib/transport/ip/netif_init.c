@@ -138,9 +138,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   ci_ip_stats_clear(&nis->stats_cumulative);
 #endif
 
-  ci_ni_dllist_init(ni, &nis->reap_list, 
-                    oo_ptr_to_statep(ni, &nis->reap_list),
-                    "reap");
+  oo_p_dllink_init(ni, oo_p_dllink_ptr(ni, &nis->reap_list));
 
   nis->free_eps_head = OO_SP_NULL;
   nis->free_eps_num = 0;

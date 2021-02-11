@@ -535,7 +535,7 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TFIELD_STRUCT(ctx, ci_ip_timer, timeout_tid, ORM_OUTPUT_STACK)      \
   FTL_TFIELD_ARRAYOFSTRUCT(ctx, oo_p_dllink_t, timeout_q, \
                            OO_TIMEOUT_Q_MAX, ORM_OUTPUT_STACK, 1)         \
-  FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_t, reap_list, ORM_OUTPUT_EXTRA)     \
+  FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, reap_list, ORM_OUTPUT_EXTRA)     \
   FTL_TFIELD_INT(ctx, ci_uint32, challenge_ack_num, ORM_OUTPUT_STACK)     \
   FTL_TFIELD_INT(ctx, ci_iptime_t, challenge_ack_time, ORM_OUTPUT_STACK)  \
   ON_CI_CFG_SUPPORT_STATS_COLLECTION(                                   \
@@ -849,7 +849,7 @@ typedef struct oo_sock_cplane oo_sock_cplane_t;
   FTL_TFIELD_INT(ctx, ci_uint32, uuid, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                      \
   FTL_TFIELD_INT(ctx, ci_int32, pid, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                       \
   FTL_TFIELD_INT(ctx, ci_uint8, domain, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                    \
-  FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_link, reap_link, ORM_OUTPUT_EXTRA)     \
+  FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, reap_link, ORM_OUTPUT_EXTRA)     \
   FTL_TSTRUCT_END(ctx)
     
 #define STRUCT_IP_PKT_QUEUE(ctx)                                              \

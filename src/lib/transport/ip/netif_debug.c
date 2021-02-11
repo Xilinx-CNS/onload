@@ -532,14 +532,14 @@ void ci_netif_dump_timeoutq(ci_netif* ni)
 
 void ci_netif_dump_reap_list(ci_netif* ni, int verbose)
 {
-  ci_ni_dllist_link* lnk;
+  struct oo_p_dllink_state reap_list =
+                           oo_p_dllink_ptr(ni, &ni->state->reap_list);
+  struct oo_p_dllink_state lnk;
   ci_sock_cmn* s;
 
   ci_log("%s: stack=%d", __FUNCTION__, NI_ID(ni));
-  for( lnk = ci_ni_dllist_start(ni, &ni->state->reap_list);
-       lnk != ci_ni_dllist_end(ni, &ni->state->reap_list);
-       lnk = (ci_ni_dllist_link*) CI_NETIF_PTR(ni, lnk->next) ) {
-    s = CI_CONTAINER(ci_sock_cmn, reap_link, lnk);
+  oo_p_dllink_for_each(ni, lnk, reap_list) {
+    s = CI_CONTAINER(ci_sock_cmn, reap_link, lnk.l);
     if( verbose )
       citp_waitable_dump(ni, &s->b, "");
     else

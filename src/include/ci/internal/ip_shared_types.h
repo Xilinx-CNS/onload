@@ -1261,7 +1261,7 @@ struct ci_netif_state_s {
 #endif
 
   /* List of sockets that may have reapable buffers. */
-  ci_ni_dllist_t        reap_list;
+  struct oo_p_dllink        reap_list;
 
   /* RFC 5961: limit the number of challenge ACKs */
   ci_uint32     challenge_ack_num;
@@ -2057,7 +2057,7 @@ struct ci_sock_cmn_s {
   ci_int32		pid;
 
 
-  ci_ni_dllist_link     reap_link;
+  struct oo_p_dllink    reap_link;
 
   /* Size of 'ci_sock_cmn_s' structure may be improved by making 'domain'
    * as a flag. Also 'so_debug' field of 'so' structure has 2 flags and size
