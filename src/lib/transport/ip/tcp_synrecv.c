@@ -110,7 +110,7 @@ ci_tcp_listenq_synrecv_drop(ci_netif* ni, ci_tcp_state_synrecv* tsr,
   int* ret = arg;
 
   if( OO_SP_IS_NULL(tsr->local_peer) )
-    ci_ni_dllist_remove(ni, ci_tcp_synrecv2link(tsr));
+    oo_p_dllink_del(ni, ci_tcp_synrecv2link(ni, tsr));
   /* RFC 793 tells us to send FIN and move to FIN-WAIT1 state.
    * However, Linux (and probably everybody else) does not do it. */
   ci_tcp_synrecv_free(ni, tsr);
@@ -367,8 +367,11 @@ ci_tcp_listen_timer_set(ci_netif* ni, ci_tcp_socket_listen* tls,
   }
 
   for( i = 0; i <= CI_CFG_TCP_SYNACK_RETRANS_MAX; i++ ) {
-    ci_tcp_state_synrecv* tsr =
-        ci_tcp_link2synrecv(ci_ni_dllist_start(ni, &tls->listenq[i]));
+    struct oo_p_dllink_state listenq = oo_p_dllink_sb(ni, &tls->s.b,
+                                                      &tls->listenq[i]);
+    struct oo_p_dllink_state link = oo_p_dllink_statep(ni, listenq.l->next);
+
+    ci_tcp_state_synrecv* tsr = ci_tcp_link2synrecv(link.l);
     if( TIME_LT(tsr->timeout, timeout) )
       return;
   }
@@ -390,6 +393,8 @@ void ci_tcp_listenq_insert(ci_netif* ni, ci_tcp_socket_listen* tls,
                            ci_tcp_state_synrecv* tsr)
 {
   int is_first;
+  struct oo_p_dllink_state listenq = oo_p_dllink_sb(ni, &tls->s.b,
+                                                    &tls->listenq[0]);
 
   tls->n_listenq++;
 
@@ -400,8 +405,8 @@ void ci_tcp_listenq_insert(ci_netif* ni, ci_tcp_socket_listen* tls,
   if( OO_SP_NOT_NULL(tsr->local_peer) )
     return;
 
-  is_first = ci_ni_dllist_is_empty(ni, &tls->listenq[0]);
-  ci_ni_dllist_push_tail(ni, &tls->listenq[0], ci_tcp_synrecv2link(tsr));
+  is_first = oo_p_dllink_is_empty(ni, listenq);
+  oo_p_dllink_add_tail(ni, listenq, ci_tcp_synrecv2link(ni, tsr));
   tsr->retries = 0;
   tsr->timeout = ci_tcp_time_now(ni) + NI_CONF(ni).tconst_rto_initial;
 
@@ -422,7 +427,7 @@ void ci_tcp_listenq_remove(ci_netif* ni, ci_tcp_socket_listen* tls,
                                ci_ni_aux_p2bucket(ni, tls->bucket),
                                tsr, 0);
   if( OO_SP_IS_NULL(tsr->local_peer) ) {
-    ci_ni_dllist_remove(ni, ci_tcp_synrecv2link(tsr));
+    oo_p_dllink_del(ni, ci_tcp_synrecv2link(ni, tsr));
 
     if( (tsr->retries & CI_FLAG_TSR_RETRIES_MASK) == 0 )
       --tls->n_listenq_new;
@@ -476,11 +481,13 @@ void ci_tcp_listenq_drop_oldest(ci_netif* ni, ci_tcp_socket_listen* tls)
 {
   ci_tcp_state_synrecv* tsr;
   int i;
+  struct oo_p_dllink_state listenq;
 
   ci_assert_gt(tls->n_listenq, 0);
 
   for( i = CI_CFG_TCP_SYNACK_RETRANS_MAX; i >= 0; --i ) {
-    if( ci_ni_dllist_not_empty(ni, &tls->listenq[i]) )
+    listenq = oo_p_dllink_sb(ni, &tls->s.b, &tls->listenq[i]);
+    if( ! oo_p_dllink_is_empty(ni, listenq) )
       break;
   }
 
@@ -491,8 +498,8 @@ void ci_tcp_listenq_drop_oldest(ci_netif* ni, ci_tcp_socket_listen* tls)
   if( i < 0 )
     return;
 
-  ci_assert(ci_ni_dllist_not_empty(ni, &tls->listenq[i]));
-  tsr = ci_tcp_link2synrecv(ci_ni_dllist_head(ni, &tls->listenq[i]));
+  ci_assert(! oo_p_dllink_is_empty(ni, listenq));
+  tsr = ci_tcp_link2synrecv(oo_p_dllink_statep(ni, listenq.l->next).l);
   ci_tcp_listenq_drop(ni, tls, tsr);
   ci_tcp_synrecv_free(ni, tsr);
   CITP_STATS_NETIF(++ni->state->stats.synrecv_purge);

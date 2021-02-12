@@ -2371,7 +2371,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   ni->packets->n_pkts_allocated = 0;
 
   /* Initialize the free list of synrecv/aux bufs */
-  ni->state->free_aux_mem = OO_P_NULL;
+  oo_p_dllink_init(ni, oo_p_dllink_ptr(ni, &ni->state->free_aux_mem));
   ni->state->n_free_aux_bufs = 0;
   memset(ni->state->n_aux_bufs, 0, sizeof(ni->state->n_aux_bufs));
   ns->max_aux_bufs[CI_TCP_AUX_TYPE_SYNRECV] = ni->opts.tcp_synrecv_max;

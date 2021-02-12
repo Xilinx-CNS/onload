@@ -96,7 +96,8 @@ static void ci_tcp_timeout_taildrop(ci_netif* netif, ci_tcp_state* ts);
 /* Called as action on a listen timeout */
 void ci_tcp_timeout_listen(ci_netif* netif, ci_tcp_socket_listen* tls)
 {
-  ci_ni_dllist_link* l;
+  struct oo_p_dllink_state list;
+  struct oo_p_dllink_state l;
   int max_retries, retries, synrecv_timeout = 0;
   int out_of_packets = 0;
   ci_iptime_t next_timeout = ci_tcp_time_now(netif);
@@ -116,13 +117,14 @@ void ci_tcp_timeout_listen(ci_netif* netif, ci_tcp_socket_listen* tls)
   **  - send any pending SYNACK retranmsits 
   */
   for( retries = 0; retries < max_retries && ! out_of_packets; ++retries ) {
-    ci_ni_dllist_t* list = &tls->listenq[retries];
-    ci_ni_dllist_link* last_l = NULL;
+    struct oo_p_dllink_state last_l;
 
-    for( l = ci_ni_dllist_start(netif, list);
-         l != ci_ni_dllist_end(netif, list);
-         ci_ni_dllist_iter(netif, l) ) {
-      ci_tcp_state_synrecv* tsr =  ci_tcp_link2synrecv(l);
+    list = oo_p_dllink_sb(netif, &tls->s.b, &tls->listenq[retries]);
+    last_l.p = OO_P_NULL;
+    last_l.l = NULL;
+
+    oo_p_dllink_for_each(netif, l, list) {
+      ci_tcp_state_synrecv* tsr =  ci_tcp_link2synrecv(l.l);
 
       ci_assert( OO_SP_IS_NULL(tsr->local_peer) );
 
@@ -195,23 +197,26 @@ void ci_tcp_timeout_listen(ci_netif* netif, ci_tcp_socket_listen* tls)
 
     /* Move the beginning of the processed listenq[retries] list
      * to the end of listenq[retries + 1] list. */
-    if( last_l != NULL ) {
-      ci_ni_dllist_t* next_list = &tls->listenq[retries + 1];
-      ci_ni_dllist_link* start_l = ci_ni_dllist_start(netif, list);
-      ci_ni_dllist_link* link_to_l = ci_ni_dllist_start_last(netif, next_list);
-      ci_ni_dllist_link* unlink_from_l =
-                (ci_ni_dllist_link*) CI_NETIF_PTR(netif, last_l->next);
+    if( last_l.p != OO_P_NULL ) {
+      struct oo_p_dllink_state next_list =
+                oo_p_dllink_sb(netif, &tls->s.b, &tls->listenq[retries + 1]);
+      struct oo_p_dllink_state start_l =
+                oo_p_dllink_statep(netif, list.l->next);
+      struct oo_p_dllink_state link_to_l =
+               oo_p_dllink_statep(netif, next_list.l->prev);
+      struct oo_p_dllink_state unlink_from_l =
+               oo_p_dllink_statep(netif, last_l.l->next);
 
       /* cut the beginning off the list: */
-      list->l.next = ci_ni_dllist_link_addr(netif, unlink_from_l);
-      unlink_from_l->prev = ci_ni_dllist_link_addr(netif, &list->l);
+      list.l->next = unlink_from_l.p;
+      unlink_from_l.l->prev = list.p;
 
       /* append the processed part of the old "list"
        * to the end of the "next_list" */
-      start_l->prev = ci_ni_dllist_link_addr(netif, link_to_l);
-      link_to_l->next = ci_ni_dllist_link_addr(netif, start_l);
-      last_l->next = ci_ni_dllist_link_addr(netif, &next_list->l);
-      next_list->l.prev = ci_ni_dllist_link_addr(netif, last_l);
+      start_l.l->prev = link_to_l.p;
+      link_to_l.l->next = start_l.p;
+      last_l.l->next = next_list.p;
+      next_list.l->prev = last_l.p;
     }
   }
 
@@ -221,12 +226,11 @@ void ci_tcp_timeout_listen(ci_netif* netif, ci_tcp_socket_listen* tls)
   for( retries = max_retries;
        retries <= CI_CFG_TCP_SYNACK_RETRANS_MAX;
        ++retries ) {
-    l = ci_ni_dllist_start(netif, &tls->listenq[retries]);
-    while ( l != ci_ni_dllist_end(netif, &tls->listenq[retries]) ) {
-      ci_tcp_state_synrecv* tsr =  ci_tcp_link2synrecv(l);
+    struct oo_p_dllink_state tmp;
 
-      /* move to next link as code below can remove this link from the list */
-      ci_ni_dllist_iter(netif, l);
+    list = oo_p_dllink_sb(netif, &tls->s.b, &tls->listenq[retries]);
+    oo_p_dllink_for_each_safe(netif, l, tmp, list) {
+      ci_tcp_state_synrecv* tsr =  ci_tcp_link2synrecv(l.l);
 
       ci_assert( OO_SP_IS_NULL(tsr->local_peer) );
 

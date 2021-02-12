@@ -431,6 +431,8 @@ void ci_ni_aux_more_bufs(ci_netif* ni)
   ci_ni_aux_mem* aux;
   oo_p sp;
   int i;
+  struct oo_p_dllink_state free_aux_mem =
+                           oo_p_dllink_ptr(ni, &ni->state->free_aux_mem);
 
   if( wo == NULL )
     return;
@@ -443,11 +445,9 @@ void ci_ni_aux_more_bufs(ci_netif* ni)
   for( aux = (void *)((ci_uintptr_t)wo + CI_AUX_HEADER_SIZE), i = 1;
        (ci_uintptr_t)(wo+1) >= (ci_uintptr_t)(aux+1);
        aux++, i++ ) {
-    ci_ni_dllist_link_init(ni, &aux->link, sp, "faux");
+    oo_p_dllink_add(ni, free_aux_mem, oo_p_dllink_statep(ni, sp));
     /* We could call ci_ni_aux_free() here, but we already have correct sp
      * to use. */
-    aux->link.next = ni->state->free_aux_mem;
-    ni->state->free_aux_mem = sp;
     ni->state->n_free_aux_bufs++;
     OO_P_ADD(sp, CI_AUX_MEM_SIZE);
   }

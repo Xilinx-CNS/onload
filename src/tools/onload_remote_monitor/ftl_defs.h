@@ -561,7 +561,7 @@ typedef struct oo_p_dllink oo_p_dllink_t;
     FTL_TFIELD_INT(ctx, ci_uint32, pio_bufs_ofs, ORM_OUTPUT_STACK)        \
   ) \
   FTL_TFIELD_INT(ctx, ci_uint32, ep_ofs, ORM_OUTPUT_STACK)                \
-  FTL_TFIELD_INT(ctx, ci_int32, free_aux_mem, ORM_OUTPUT_STACK)           \
+  FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, free_aux_mem, ORM_OUTPUT_STACK)           \
   FTL_TFIELD_INT(ctx, ci_uint32, n_free_aux_bufs, ORM_OUTPUT_STACK)       \
   FTL_TFIELD_ARRAYOFINT(ctx, ci_uint32, n_aux_bufs, CI_TCP_AUX_TYPE_NUM,  \
                                                              ORM_OUTPUT_STACK)            \
@@ -1209,7 +1209,7 @@ typedef struct oo_tcp_socket_stats oo_tcp_socket_stats;
     FTL_TFIELD_INT(ctx, ci_uint32, acceptq_n_out, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))       \
     FTL_TFIELD_INT(ctx, ci_int32, n_listenq, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))            \
     FTL_TFIELD_INT(ctx, ci_int32, n_listenq_new, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))        \
-    FTL_TFIELD_ARRAYOFSTRUCT(ctx, ci_ni_dllist_t,       \
+    FTL_TFIELD_ARRAYOFSTRUCT(ctx, oo_p_dllink_t,       \
 			     listenq, CI_CFG_TCP_SYNACK_RETRANS_MAX + 1, ORM_OUTPUT_EXTRA, 1)    \
     FTL_TFIELD_INT(ctx, ci_int32, bucket, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))               \
     FTL_TFIELD_INT(ctx, ci_uint32, n_buckets, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))           \

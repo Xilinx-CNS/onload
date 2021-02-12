@@ -1600,11 +1600,8 @@ int ci_tcp_listen_init(ci_netif *ni, ci_tcp_socket_listen *tls)
   tls->n_buckets = 1;
 
   /* Initialise the listenQ. */
-  for( i = 0; i <= CI_CFG_TCP_SYNACK_RETRANS_MAX; ++i ) {
-    sp = TS_OFF(ni, tls);
-    OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_socket_listen, listenq[i]));
-    ci_ni_dllist_init(ni, &tls->listenq[i], sp, "lstq");
-  }
+  for( i = 0; i <= CI_CFG_TCP_SYNACK_RETRANS_MAX; ++i )
+    oo_p_dllink_init(ni, oo_p_dllink_sb(ni, &tls->s.b, &tls->listenq[i]));
 
   /* Initialize the cache and pending lists for the EP-cache.
    * See comment at definition for details

@@ -1315,7 +1315,7 @@ struct ci_netif_state_s {
 #define CI_TCP_AUX_TYPE_EPOLL   2
 #define CI_TCP_AUX_TYPE_PMTUS   3
 #define CI_TCP_AUX_TYPE_NUM     4
-  oo_p                  free_aux_mem;    /**< Free list of synrecv bufs. */
+  struct oo_p_dllink    free_aux_mem;    /**< Free list of synrecv bufs. */
   ci_uint32             n_free_aux_bufs; /**< Number of free aux bufs */
   ci_uint32             n_aux_bufs[CI_TCP_AUX_TYPE_NUM];
                         /**< Number of aux bufs allocated */
@@ -2450,7 +2450,7 @@ typedef struct {
 #define CI_AUX_MEM_SIZE 128
 #define CI_AUX_HEADER_SIZE CI_CACHE_LINE_SIZE
 typedef struct {
-  ci_ni_dllist_link    link; /* Link into free_aux_mem or into other lists */
+  struct oo_p_dllink  link; /* Link into free_aux_mem or into other lists */
   ci_uint8            type; /* Type of the union */
 
   union {
@@ -2912,7 +2912,7 @@ struct ci_tcp_socket_listen_s {
    */
   ci_int32             n_listenq;
   ci_int32             n_listenq_new; /* length of listenq[0] */
-  ci_ni_dllist_t       listenq[CI_CFG_TCP_SYNACK_RETRANS_MAX + 1];
+  struct oo_p_dllink   listenq[CI_CFG_TCP_SYNACK_RETRANS_MAX + 1];
   /* index is the number of retransmit. */
 
   oo_p                 bucket;      /* Hash table for listenq lookup */

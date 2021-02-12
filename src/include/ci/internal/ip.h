@@ -4615,24 +4615,33 @@ ci_inline ci_pmtu_state_t* ci_ni_aux_p2pmtus(ci_netif* ni, oo_p oop)
   return &aux->u.pmtus;
 }
 
+ci_inline citp_waitable*
+ci_ni_aux2container_w(ci_ni_aux_mem* aux)
+{
+  return (void *)((ci_uintptr_t)aux &~ (CI_CFG_EP_BUF_SIZE - 1));
+}
+
 ci_inline oo_p ci_ni_aux2p(ci_netif* ni, ci_ni_aux_mem* aux)
 {
   CI_BUILD_ASSERT(CI_IS_POW2(CI_CFG_EP_BUF_SIZE));
-  ci_uintptr_t ep_buf_mask = CI_CFG_EP_BUF_SIZE - 1;
-  citp_waitable* w = (void *)((ci_uintptr_t)aux &~ ep_buf_mask);
+  citp_waitable* w = ci_ni_aux2container_w(aux);
   oo_p sp = oo_sockp_to_statep(ni, W_SP(w));
-  OO_P_ADD(sp, (ci_uintptr_t)aux & ep_buf_mask);
+  OO_P_ADD(sp, (ci_uintptr_t)aux & (CI_CFG_EP_BUF_SIZE - 1));
   return sp;
+}
+
+ci_inline struct oo_p_dllink_state
+ci_ni_aux2link(ci_netif* ni, ci_ni_aux_mem* aux)
+{
+  return oo_p_dllink_statep(ni, ci_ni_aux2p(ni, aux));
 }
 
 ci_inline void ci_ni_aux_free(ci_netif* ni, ci_ni_aux_mem* aux)
 {
-  oo_p sp = ci_ni_aux2p(ni, aux);
-
   ci_assert( ci_netif_is_locked(ni) );
   ni->state->n_aux_bufs[aux->type]--;
-  aux->link.next = ni->state->free_aux_mem;
-  ni->state->free_aux_mem = sp;
+  oo_p_dllink_add(ni, oo_p_dllink_ptr(ni, &ni->state->free_aux_mem),
+                  ci_ni_aux2link(ni, aux));
   ni->state->n_free_aux_bufs++;
 }
 ci_inline void ci_tcp_synrecv_free(ci_netif* ni, ci_tcp_state_synrecv* tsr) {
@@ -4648,31 +4657,36 @@ ci_inline void ci_pmtu_state_free(ci_netif* ni, ci_pmtu_state_t* pmtus) {
 extern void ci_ni_aux_more_bufs(ci_netif* ni);
 ci_inline int/*bool*/ ci_ni_aux_can_alloc(ci_netif* ni, int type)
 {
+  struct oo_p_dllink_state free_aux_mem =
+                           oo_p_dllink_ptr(ni, &ni->state->free_aux_mem);
   if( ni->state->n_aux_bufs[type] >= ni->state->max_aux_bufs[type] )
     return CI_FALSE;
-  if( ! OO_P_IS_NULL(ni->state->free_aux_mem) )
+  if( !  oo_p_dllink_is_empty(ni, free_aux_mem) )
     return CI_TRUE;
   ci_ni_aux_more_bufs(ni);
-  return ! OO_P_IS_NULL(ni->state->free_aux_mem);
+  return ! oo_p_dllink_is_empty(ni, free_aux_mem);
 }
 ci_inline oo_p ci_ni_aux_alloc(ci_netif* ni, int type)
 {
+  struct oo_p_dllink_state free_aux_mem =
+                           oo_p_dllink_ptr(ni, &ni->state->free_aux_mem);
+  struct oo_p_dllink_state link;
   ci_ni_aux_mem* aux;
-  oo_p ret;
 
   ci_assert( ci_netif_is_locked(ni) );
   if( !ci_ni_aux_can_alloc(ni, type) ) {
     CITP_STATS_NETIF(++ni->state->stats.aux_alloc_fails);
     return OO_P_NULL;
   }
-  ret = ni->state->free_aux_mem;
-  ci_assert( OO_P_NOT_NULL(ret) );
-  aux = ci_ni_aux_p2aux(ni, ret);
+
+  link = oo_p_dllink_statep(ni, free_aux_mem.l->next);
+  oo_p_dllink_del(ni, link);
+
+  aux = ci_ni_aux_p2aux(ni, link.p);
   aux->type = type;
-  ni->state->free_aux_mem = aux->link.next;
   ni->state->n_free_aux_bufs--;
   ni->state->n_aux_bufs[type]++;
-  return ret;
+  return link.p;
 }
 
 ci_inline oo_p ci_ni_aux_alloc_bucket(ci_netif* ni)
@@ -4695,10 +4709,12 @@ ci_inline oo_p ci_tcp_synrecv2p(ci_netif* ni, ci_tcp_state_synrecv* tsr)
 {
   return ci_ni_aux2p(ni, CI_CONTAINER(ci_ni_aux_mem, u.synrecv, tsr));
 }
-ci_inline ci_ni_dllist_link* ci_tcp_synrecv2link(ci_tcp_state_synrecv* tsr) {
-  return &CI_CONTAINER(ci_ni_aux_mem, u.synrecv, tsr)->link;
+ci_inline struct oo_p_dllink_state
+ci_tcp_synrecv2link(ci_netif* ni, ci_tcp_state_synrecv* tsr) {
+   ci_ni_aux_mem* aux = CI_CONTAINER(ci_ni_aux_mem, u.synrecv, tsr);
+  return oo_p_dllink_sb(ni, ci_ni_aux2container_w(aux), &aux->link);
 }
-ci_inline ci_tcp_state_synrecv* ci_tcp_link2synrecv(ci_ni_dllist_link* link) {
+ci_inline ci_tcp_state_synrecv* ci_tcp_link2synrecv(struct oo_p_dllink* link) {
   return &CI_CONTAINER(ci_ni_aux_mem, link, link)->u.synrecv;
 }
 
