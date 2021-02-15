@@ -1613,10 +1613,7 @@ int ci_tcp_listen_init(ci_netif *ni, ci_tcp_socket_listen *tls)
   oo_p_dllink_init(ni, oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache.cache));
   oo_p_dllink_init(ni, oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache.pending));
   oo_p_dllink_init(ni, oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache_connected));
-
-  sp = TS_OFF(ni, tls);
-  OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_socket_listen, epcache.fd_states));
-  ci_ni_dllist_init(ni, &tls->epcache.fd_states, sp, "ecfd");
+  oo_p_dllink_init(ni, oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache.fd_states));
 
   tls->epcache.avail_stack = oo_ptr_to_statep
     (ni, &ni->state->passive_cache_avail_stack);

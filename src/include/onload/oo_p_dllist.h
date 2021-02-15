@@ -211,4 +211,34 @@ oo_p_dllink_splice_tail(ci_netif* ni, struct oo_p_dllink_state list,
   }
 }
 
+
+/* As _add(), except that it is safe with concurrent traversal of the list
+ * obtained by ci_xchg32(). Multiple writers still require synchronisation.
+ * Returns non-zero on success and zero on failure. In case of failure,
+ * [list] will not be modified and [link] will be restored to its original
+ * state. */
+static inline bool
+oo_p_dllink_concurrent_add(ci_netif* ni, struct oo_p_dllink_state list,
+                           struct oo_p_dllink_state link)
+{
+  oo_p next = OO_ACCESS_ONCE(list.l->next);
+  oo_p next_orig = link.l->next;
+  oo_p prev_orig = link.l->prev;
+
+  link.l->next = next;
+  link.l->prev = list.p;
+  ci_wmb();
+
+  /* If the list changes underneath us, the final traversal is underway, so
+   * don't change anything. */
+  if( ci_cas32u_fail((ci_uint32*)&list.l->next, next, link.p) ) {
+    link.l->next = next_orig;
+    link.l->prev = prev_orig;
+    return false;
+  }
+
+  oo_p_dllink_statep(ni, next).l->prev = list.l->next;
+  return true;
+}
+
 #endif /* OO_P_DLLIST_NO_CODE */

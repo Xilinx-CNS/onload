@@ -362,12 +362,13 @@ static void citp_tcp_close(citp_fdinfo* fdinfo)
     ci_tcp_socket_listen* tls = SOCK_TO_TCP_LISTEN(epi->sock.s);
 
     if( ! (tls->s.s_flags & CI_SOCK_FLAG_SCALPASSIVE) ) {
-      ci_ni_dllist_link* l;
+      struct oo_p_dllink_state fd_list =
+                    oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache.fd_states);
+      struct oo_p_dllink_state l;
+
       ci_netif_lock(ni);
-      l = ci_ni_dllist_start(ni, &tls->epcache.fd_states);
-      while( l != ci_ni_dllist_end(ni, &tls->epcache.fd_states) ) {
-        ci_tcp_state* ts = CI_CONTAINER(ci_tcp_state, epcache_fd_link, l);
-        ci_ni_dllist_iter(ni, l);
+      oo_p_dllink_for_each(ni, l, fd_list) {
+        ci_tcp_state* ts = CI_CONTAINER(ci_tcp_state, epcache_fd_link, l.l);
         if( ts->cached_on_pid == citp_getpid() &&
             S_TO_EPS(epi->sock.netif, ts)->fd != CI_FD_BAD) {
           /* Fixme: should we move all the content of
@@ -795,7 +796,8 @@ redo:
      * But faked-up loopback connection can't be cached, so we are safe
      * here. */
     ci_assert(! unlocked);
-    ci_ni_dllist_remove_safe(ni, &ts->epcache_fd_link);
+    oo_p_dllink_del_init(ni, oo_p_dllink_sb(ni, &ts->s.b,
+                                            &ts->epcache_fd_link));
   }
 #endif
   if( ! unlocked )
@@ -1230,9 +1232,15 @@ static void citp_tcp_close_cached(citp_fdinfo* fdinfo,
    * In that case, we'll just call close the fd now, and all the previous stat:
    * will be tidied up eventually by uncache_ep().
    */
-  ci_assert(ci_ni_dllist_is_self_linked(netif, &ts->epcache_fd_link));
-  if( ! ci_ni_dllist_concurrent_push(netif, &cache->fd_states,
-                                     &ts->epcache_fd_link) ) {
+  link = oo_p_dllink_sb(netif, &ts->s.b, &ts->epcache_fd_link);
+  OO_P_DLLINK_ASSERT_EMPTY(netif, link);
+
+  /* We calculate cache->fd_states state pointer from cache_pending
+   * and offest between these 2 lists in the cache structure. */
+  if( ! oo_p_dllink_concurrent_add(netif,
+             oo_p_dllink_statep(netif, cache_pending.p +
+                ((uintptr_t)&cache->fd_states - (uintptr_t)&cache->pending)),
+             link) ) {
     /* When cache is shared sys_close will only release FD and
      * decrease reference on system file.  However, we need this
      * endpoint to be really closed */

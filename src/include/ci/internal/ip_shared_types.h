@@ -177,10 +177,10 @@ typedef struct {
 
   /* List of all sockets having a cached fd, including any on acceptqs. Its
    * locking requirements are different from the other lists: pushing requires
-   * the stack lock and ci_ni_dllist_concurrent_push(), and popping and
+   * the stack lock and oo_p_dllink_concurrent_add(), and popping and
    * traversing require the listening socket lock.
    */
-  ci_ni_dllist_t       fd_states;
+  struct oo_p_dllink   fd_states;
 
   /* Number of available spaces for caching in this stack. */
   oo_p                 avail_stack;
@@ -2841,7 +2841,7 @@ struct ci_tcp_state_s {
    */
   struct oo_p_dllink   epcache_link;
   /* Link into epcache.fd_states.  */
-  ci_ni_dllist_link    epcache_fd_link;
+  struct oo_p_dllink   epcache_fd_link;
 #endif
 
   /* An extension of the send queue.  Packets are put here when the netif

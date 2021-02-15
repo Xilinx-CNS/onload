@@ -477,7 +477,7 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TSTRUCT_BEGIN(ctx, ci_socket_cache_t, )                           \
   FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, cache, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))      \
   FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, pending, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))    \
-  FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_t, fd_states, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))  \
+  FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, fd_states, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))  \
   FTL_TFIELD_INT(ctx, ci_int32, avail_stack, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))         \
   FTL_TSTRUCT_END(ctx)
 
@@ -1147,7 +1147,7 @@ typedef struct oo_tcp_socket_stats oo_tcp_socket_stats;
       FTL_TFIELD_INT(ctx, ci_int32, cached_on_fd, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))               \
       FTL_TFIELD_INT(ctx, ci_int32, cached_on_pid, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))              \
       FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, epcache_link, ORM_OUTPUT_EXTRA)   \
-      FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_link, epcache_fd_link, ORM_OUTPUT_EXTRA)\
+      FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, epcache_fd_link, ORM_OUTPUT_EXTRA)\
     )                                                                         \
     FTL_TFIELD_INT(ctx, ci_int32, send_prequeue, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                \
     FTL_TFIELD_INT(ctx, oo_atomic_t, send_prequeue_in, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))    \

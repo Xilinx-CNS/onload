@@ -870,10 +870,15 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
        * fd_states list in scalable case.
        */
       if( scalable ) {
+        struct oo_p_dllink_state fd_link =
+                    oo_p_dllink_sb(netif, &ts->s.b, &ts->epcache_fd_link);
         ci_assert(ci_netif_is_locked(netif));
-        ci_ni_dllist_remove_safe(netif, &ts->epcache_fd_link);
-        ci_ni_dllist_concurrent_push(netif, &tls->epcache.fd_states,
-                                     &ts->epcache_fd_link);
+        oo_p_dllink_del_init(netif, fd_link);
+
+        oo_p_dllink_concurrent_add(netif,
+                                   oo_p_dllink_sb(netif, &tls->s.b,
+                                                  &tls->epcache.fd_states),
+                                   fd_link);
 
         LOG_EP(ci_log(LPF LNT_FMT" acceptq: move fd %d from global fd_states"
                       " list to listen-socket's list", LNT_PRI_ARGS(netif, tls),

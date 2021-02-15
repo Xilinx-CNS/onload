@@ -396,14 +396,18 @@ uncache_ep_list(ci_netif *netif, ci_tcp_socket_listen* tls,
 void ci_tcp_listen_uncache_fds(ci_netif* netif, ci_tcp_socket_listen* tls)
 {
   /* For scalable passive there will be nothing to do here */
-  ci_ni_dllist_link* l = ci_ni_dllist_concurrent_start(netif,
-                                                       &tls->epcache.fd_states);
+  struct oo_p_dllink_state fd_states = oo_p_dllink_sb(netif, &tls->s.b,
+                                                      &tls->epcache.fd_states);
+  struct oo_p_dllink_state l;
+
+  l = oo_p_dllink_statep(netif, ci_xchg32(&fd_states.l->next, OO_P_NULL));
 
   if( tls->s.s_flags & CI_SOCK_FLAG_SCALPASSIVE )
     return;
-  while( l != ci_ni_dllist_end(netif, &tls->epcache.fd_states) ) {
-    ci_tcp_state* cached_state = CI_CONTAINER(ci_tcp_state, epcache_fd_link, l);
-    ci_ni_dllist_iter(netif, l);
+  while( l.p != fd_states.p ) {
+    ci_tcp_state* cached_state = CI_CONTAINER(ci_tcp_state,
+                                              epcache_fd_link, l.l);
+    l = oo_p_dllink_statep(netif, l.l->next);
 
     /* We don't free up cached state directly.  We call uncache_fd(), which
      * will close the fd, resulting in all_fds_gone being called, and we'll

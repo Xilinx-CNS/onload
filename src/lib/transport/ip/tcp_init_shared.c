@@ -163,15 +163,12 @@ static void ci_tcp_state_tcb_reinit(ci_netif* netif, ci_tcp_state* ts,
 
 #if CI_CFG_FD_CACHING
   if( !from_cache ) {
-    oo_p sp;
     ts->cached_on_fd = -1;
     ts->cached_on_pid = -1;
     oo_p_dllink_init(netif,
                      oo_p_dllink_sb(netif, &ts->s.b, &ts->epcache_link));
-    sp = TS_OFF(netif, ts);
-    OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, epcache_fd_link));
-    ci_ni_dllist_link_init(netif, &ts->epcache_fd_link, sp, "ecfd");
-    ci_ni_dllist_self_link(netif, &ts->epcache_fd_link);
+    oo_p_dllink_init(netif,
+                     oo_p_dllink_sb(netif, &ts->s.b, &ts->epcache_fd_link));
   }
 #endif
 
@@ -384,7 +381,8 @@ ci_tcp_state* ci_tcp_get_state_buf_from_cache(ci_netif *netif, int pid)
      * process. */
 
     oo_p_dllink_del_init(netif, link);
-    ci_ni_dllist_remove_safe(netif, &ts->epcache_fd_link);
+    oo_p_dllink_del_init(netif, oo_p_dllink_sb(netif, &ts->s.b,
+                                               &ts->epcache_fd_link));
     CITP_STATS_NETIF(++netif->state->stats.activecache_hit);
     ci_atomic32_inc((volatile ci_uint32*)CI_NETIF_PTR(netif,
                     netif->state->active_cache.avail_stack));

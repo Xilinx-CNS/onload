@@ -237,8 +237,9 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   oo_p_dllink_init(ni, list);
   list = oo_p_dllink_ptr(ni, &nis->active_cache.pending);
   oo_p_dllink_init(ni, list);
-  ci_ni_dllist_init(ni, &nis->active_cache.fd_states,
-                    oo_ptr_to_statep(ni, &nis->active_cache.fd_states), "afd");
+  list = oo_p_dllink_ptr(ni, &nis->active_cache.fd_states);
+  oo_p_dllink_init(ni, list);
+
   nis->active_cache.avail_stack = oo_ptr_to_statep(ni,
                                               &nis->active_cache_avail_stack);
   nis->active_cache_avail_stack = nis->opts.sock_cache_max;
@@ -247,8 +248,9 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   oo_p_dllink_init(ni, list);
   list = oo_p_dllink_ptr(ni, &nis->passive_scalable_cache.pending);
   oo_p_dllink_init(ni, list);
-  ci_ni_dllist_init(ni, &nis->passive_scalable_cache.fd_states,
-                    oo_ptr_to_statep(ni, &nis->passive_scalable_cache.fd_states), "psfd");
+  list = oo_p_dllink_ptr(ni, &nis->passive_scalable_cache.fd_states);
+  oo_p_dllink_init(ni, list);
+
   nis->passive_scalable_cache.avail_stack = oo_ptr_to_statep
     (ni, &ni->state->passive_cache_avail_stack);
 #endif
