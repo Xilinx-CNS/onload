@@ -1051,7 +1051,7 @@ static int uncache_fd_ul(ci_netif* ni, ci_tcp_state* ts, int cur_tgid, int quiet
 
 
 static void
-__citp_uncache_fds_ul(ci_netif* netif, ci_ni_dllist_t* list)
+__citp_uncache_fds_ul(ci_netif* netif, struct oo_p_dllink_state list)
 {
   int cur_tgid = getpid();
   ci_tcp_state** eps;
@@ -1061,15 +1061,15 @@ __citp_uncache_fds_ul(ci_netif* netif, ci_ni_dllist_t* list)
   ci_netif_lock(netif);
   {
     int n_ep_bufs = netif->state->n_ep_bufs;
+    struct oo_p_dllink_state l;
+
     eps = malloc(sizeof(ci_tcp_state*) * n_ep_bufs);
-    ci_ni_dllist_link* l = ci_ni_dllist_start(netif, list);
-    while( l != ci_ni_dllist_end(netif, list) ) {
+    oo_p_dllink_for_each(netif, l, list) {
       if( n >= n_ep_bufs ) {
         ci_log("%s: ep %d with n_ep_bufs %d", __FUNCTION__, n, n_ep_bufs);
         break;
       }
-      ci_tcp_state* ts = CI_CONTAINER(ci_tcp_state, epcache_link, l);
-      ci_ni_dllist_iter(netif, l);
+      ci_tcp_state* ts = CI_CONTAINER(ci_tcp_state, epcache_link, l.l);
       ci_assert(ts);
       ci_assert(ci_tcp_is_cached(ts));
       if( ts->s.b.sb_aflags & CI_SB_AFLAG_IN_CACHE &&
@@ -1105,10 +1105,14 @@ citp_uncache_fds_ul(ci_netif* netif)
   Log_V(ci_log("%s: %d: %s: cached_count %d", __func__,
                getpid(), netif->state->pretty_name, netif->cached_count));
   /* Remove all fds from the cache that belong to the current process */
-  __citp_uncache_fds_ul(netif, &netif->state->passive_scalable_cache.cache);
-  __citp_uncache_fds_ul(netif, &netif->state->passive_scalable_cache.pending);
-  __citp_uncache_fds_ul(netif, &netif->state->active_cache.cache);
-  __citp_uncache_fds_ul(netif, &netif->state->active_cache.pending);
+  __citp_uncache_fds_ul(netif, oo_p_dllink_ptr(netif,
+                                &netif->state->passive_scalable_cache.cache));
+  __citp_uncache_fds_ul(netif, oo_p_dllink_ptr(netif,
+                                &netif->state->passive_scalable_cache.pending));
+  __citp_uncache_fds_ul(netif, oo_p_dllink_ptr(netif,
+                                &netif->state->active_cache.cache));
+  __citp_uncache_fds_ul(netif, oo_p_dllink_ptr(netif,
+                                &netif->state->active_cache.pending));
 }
 #endif
 

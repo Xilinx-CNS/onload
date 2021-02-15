@@ -157,7 +157,7 @@ typedef struct {
   /* We cache EPs between close and accept to speed up passive opens.  See
    * comment in defintion of ci_netif_state_s::epcache_free for details.
    */
-  ci_ni_dllist_t       cache;   /**< List of cache entries in use */
+  struct oo_p_dllink   cache;   /**< List of cache entries in use */
 
   /* Actually, cached EPs go through an intermediate state - cache pending.
    * This is needed to cope with close-wait.  If the EP is in close-wait and
@@ -173,7 +173,7 @@ typedef struct {
    * accept finding one not in close-wait, and the whole point of this is to
    * make accept nice and quick.
    */
-  ci_ni_dllist_t       pending;
+  struct oo_p_dllink   pending;
 
   /* List of all sockets having a cached fd, including any on acceptqs. Its
    * locking requirements are different from the other lists: pushing requires
@@ -2839,7 +2839,7 @@ struct ci_tcp_state_s {
   /* Link into either the *cache.pending, the *cache.cache, epcache_connected,
    * or none 
    */
-  ci_ni_dllist_link    epcache_link;
+  struct oo_p_dllink   epcache_link;
   /* Link into epcache.fd_states.  */
   ci_ni_dllist_link    epcache_fd_link;
 #endif
@@ -2925,7 +2925,7 @@ struct ci_tcp_socket_listen_s {
    * socket.  We can't update the hw filter information on connection
    * establishment as we need to avoid entering the kernel.
    */
-  ci_ni_dllist_t       epcache_connected;
+  struct oo_p_dllink   epcache_connected;
 
   /* Number of available cache entries for this socket. */
   ci_uint32            cache_avail_sock;

@@ -54,6 +54,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
 {
   ci_netif_state_nic_t* nn;
   ci_netif_state* nis = ni->state;
+  struct oo_p_dllink_state list;
   int nic_i;
   int i;
 
@@ -232,20 +233,20 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   nis->load_numa_node = efab_tcp_driver.load_numa_node;
 
 #if CI_CFG_FD_CACHING
-  ci_ni_dllist_init(ni, &nis->active_cache.cache,
-                    oo_ptr_to_statep(ni, &nis->active_cache.cache), "ach");
-  ci_ni_dllist_init(ni, &nis->active_cache.pending,
-                    oo_ptr_to_statep(ni, &nis->active_cache.pending), "apd");
+  list = oo_p_dllink_ptr(ni, &nis->active_cache.cache);
+  oo_p_dllink_init(ni, list);
+  list = oo_p_dllink_ptr(ni, &nis->active_cache.pending);
+  oo_p_dllink_init(ni, list);
   ci_ni_dllist_init(ni, &nis->active_cache.fd_states,
                     oo_ptr_to_statep(ni, &nis->active_cache.fd_states), "afd");
   nis->active_cache.avail_stack = oo_ptr_to_statep(ni,
                                               &nis->active_cache_avail_stack);
   nis->active_cache_avail_stack = nis->opts.sock_cache_max;
 
-  ci_ni_dllist_init(ni, &nis->passive_scalable_cache.cache,
-                    oo_ptr_to_statep(ni, &nis->passive_scalable_cache.cache), "psch");
-  ci_ni_dllist_init(ni, &nis->passive_scalable_cache.pending,
-                    oo_ptr_to_statep(ni, &nis->passive_scalable_cache.pending), "pspd");
+  list = oo_p_dllink_ptr(ni, &nis->passive_scalable_cache.cache);
+  oo_p_dllink_init(ni, list);
+  list = oo_p_dllink_ptr(ni, &nis->passive_scalable_cache.pending);
+  oo_p_dllink_init(ni, list);
   ci_ni_dllist_init(ni, &nis->passive_scalable_cache.fd_states,
                     oo_ptr_to_statep(ni, &nis->passive_scalable_cache.fd_states), "psfd");
   nis->passive_scalable_cache.avail_stack = oo_ptr_to_statep

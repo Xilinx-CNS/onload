@@ -252,7 +252,7 @@ static void __ci_tcp_state_free(ci_netif *ni, ci_tcp_state *ts)
    * state changes don't require the filters to be in place.  By doing it
    * here we have a single point responsible for the removal.
    */
-  ci_ni_dllist_remove_safe(ni, &ts->epcache_link);
+  oo_p_dllink_del(ni, oo_p_dllink_sb(ni, &ts->s.b, &ts->epcache_link));
 #endif
 
   ci_tcp_state_verify_no_timers(ni, ts);
@@ -641,11 +641,14 @@ void ci_tcp_state_free_to_cache(ci_netif* netif, ci_tcp_state* ts)
   oo_sp sock;
   ci_tcp_socket_listen* tls;
   ci_socket_cache_t* cache;
+  struct oo_p_dllink_state cache_list;
+  struct oo_p_dllink_state epcache_link;
 
   ci_assert(ci_tcp_is_cached(ts));
 
   if( ts->s.s_flags & CI_SOCK_FLAG_SCALPASSIVE ) {
     cache = &netif->state->passive_scalable_cache;
+    cache_list = oo_p_dllink_ptr(netif, &cache->cache);
   }
   else if( ts->s.b.sb_aflags & CI_SB_AFLAG_IN_PASSIVE_CACHE ) {
     /* We can only cache passively accepted sockets if they have filters,
@@ -662,6 +665,7 @@ void ci_tcp_state_free_to_cache(ci_netif* netif, ci_tcp_state* ts)
       ci_assert_equal(tls->s.b.state, CI_TCP_LISTEN);
       ci_assert_nflags(tls->s.s_flags, CI_SOCK_FLAG_SCALPASSIVE);
       cache = &tls->epcache;
+      cache_list = oo_p_dllink_sb(netif, &tls->s.b, &cache->cache);
     }
     else {
       /* The listening socket clears its cache (including the epcache_pending
@@ -689,6 +693,7 @@ void ci_tcp_state_free_to_cache(ci_netif* netif, ci_tcp_state* ts)
   }
   else {
     cache = &netif->state->active_cache;
+    cache_list = oo_p_dllink_ptr(netif, &cache->cache);
   }
 
   /* Pop off the pending list, push on the cached list. Means that next
@@ -711,8 +716,9 @@ void ci_tcp_state_free_to_cache(ci_netif* netif, ci_tcp_state* ts)
   /* Switch lists */
   LOG_EP(ci_log("Cached socket "NSS_FMT" fd %d from pending to cached",
                 NSS_PRI_ARGS(netif,&ts->s), ts->cached_on_fd));
-  ci_ni_dllist_link_assert_is_in_list(netif, &ts->epcache_link);
-  ci_ni_dllist_remove_safe(netif, &ts->epcache_link);
+  epcache_link = oo_p_dllink_sb(netif, &ts->s.b, &ts->epcache_link);
+  ci_assert(! oo_p_dllink_is_empty(netif, epcache_link));
+  oo_p_dllink_del_init(netif, epcache_link);
 
   /* When we push this onto the epcache_cache link it needs to be treatable
    * as similarly as possible to a shiny fresh tcp state.  Tidy that up now,
@@ -727,7 +733,7 @@ void ci_tcp_state_free_to_cache(ci_netif* netif, ci_tcp_state* ts)
   citp_waitable_obj_free_to_cache(netif, &ts->s.b);
 
   if( cache != NULL )
-    ci_ni_dllist_push(netif, &cache->cache, &ts->epcache_link);
+    oo_p_dllink_add(netif, cache_list, epcache_link);
 }
 #endif
 
@@ -805,8 +811,10 @@ void ci_tcp_drop(ci_netif* netif, ci_tcp_state* ts, int so_error)
     ts->s.s_flags &= ~CI_SOCK_FLAG_SCALACTIVE;
   }
   else if( !ci_tcp_is_cached(ts) ) {
-    if( !ci_ni_dllist_is_self_linked(netif, &ts->epcache_link) ) {
-      ci_ni_dllist_remove_safe(netif, &ts->epcache_link);
+    struct oo_p_dllink_state link = oo_p_dllink_sb(netif, &ts->s.b,
+                                                   &ts->epcache_link);
+    if( !oo_p_dllink_is_empty(netif, link) ) {
+      oo_p_dllink_del_init(netif, link);
       rc = ci_tcp_ep_clear_filters(netif, S_SP(ts), 1);
     }
     else {

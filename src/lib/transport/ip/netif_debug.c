@@ -982,11 +982,19 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   logger(log_arg, "  active cache: hit=%d avail=%d cache=%s pending=%s",
          ns->stats.activecache_hit,
          *(ci_uint32*)CI_NETIF_PTR(ni, ns->active_cache.avail_stack),
-         ci_ni_dllist_is_empty(ni, &ns->active_cache.cache) ? "EMPTY":"yes",
-         ci_ni_dllist_is_empty(ni, &ns->active_cache.pending) ? "EMPTY":"yes");
+         oo_p_dllink_is_empty(ni, oo_p_dllink_ptr(ni,
+                                                  &ns->active_cache.cache))
+            ? "EMPTY":"yes",
+         oo_p_dllink_is_empty(ni, oo_p_dllink_ptr(ni,
+                                                  &ns->active_cache.pending))
+            ? "EMPTY":"yes");
   logger(log_arg, "  passive scalable cache: cache=%s pending=%s",
-         ci_ni_dllist_is_empty(ni, &ns->passive_scalable_cache.cache) ? "EMPTY":"yes",
-         ci_ni_dllist_is_empty(ni, &ns->passive_scalable_cache.pending) ? "EMPTY":"yes");
+         oo_p_dllink_is_empty(ni, oo_p_dllink_ptr(ni,
+                                        &ns->passive_scalable_cache.cache))
+            ? "EMPTY":"yes",
+         oo_p_dllink_is_empty(ni, oo_p_dllink_ptr(ni,
+                                        &ns->passive_scalable_cache.pending))
+            ? "EMPTY":"yes");
 #endif
 #if CI_CFG_EPOLL3
   {

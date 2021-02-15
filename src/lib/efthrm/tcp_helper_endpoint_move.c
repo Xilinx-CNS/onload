@@ -24,10 +24,11 @@ static int efab_file_move_supported_tcp(ci_netif *ni, ci_tcp_state *ts,
 #if CI_CFG_FD_CACHING
   /* Don't support moving cached sockets for now */
   if( ci_tcp_is_cached(ts) ||
-      !ci_ni_dllist_is_self_linked(ni, &ts->epcache_link) ) {
+      !oo_p_dllink_is_empty(ni, oo_p_dllink_sb(ni, &ts->s.b,
+                                               &ts->epcache_link)) ) {
     if( do_assert ) {
       ci_assert( ! ci_tcp_is_cached(ts) );
-      ci_assert( ci_ni_dllist_is_self_linked(ni, &ts->epcache_link) );
+      OO_P_DLLINK_ASSERT_EMPTY_SB(ni, &ts->s.b, &ts->epcache_link);
     }
     return false;
   }
@@ -361,10 +362,8 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
 
     *new_ts = *mid_ts;
 #if CI_CFG_FD_CACHING
-    sp = TS_OFF(alien_ni, new_ts);
-    OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, epcache_link));
-    ci_ni_dllist_link_init(alien_ni, &new_ts->epcache_link, sp, "epch");
-    ci_ni_dllist_self_link(alien_ni, &new_ts->epcache_link);
+    link = oo_p_dllink_sb(alien_ni, &new_ts->s.b, &new_ts->epcache_link);
+    oo_p_dllink_init(alien_ni, link);
     sp = TS_OFF(alien_ni, new_ts);
     OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, epcache_fd_link));
     ci_ni_dllist_link_init(alien_ni, &new_ts->epcache_fd_link, sp, "ecfd");

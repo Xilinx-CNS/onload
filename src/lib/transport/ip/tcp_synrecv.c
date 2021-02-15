@@ -515,17 +515,24 @@ get_ts_from_cache(ci_netif *netif,
 #if CI_CFG_FD_CACHING
   /* scalable passive sockets have common cache */
   ci_socket_cache_t* cache;
-  if( (tls->s.s_flags & CI_SOCK_FLAG_SCALPASSIVE) == 0 )
-    cache = &tls->epcache;
-  else
-    cache = &netif->state->passive_scalable_cache;
+  struct oo_p_dllink_state cache_list;
 
-  if( ci_ni_dllist_not_empty(netif, &cache->cache) ) {
+  if( (tls->s.s_flags & CI_SOCK_FLAG_SCALPASSIVE) == 0 ) {
+    cache = &tls->epcache;
+    cache_list = oo_p_dllink_sb(netif, &tls->s.b, &cache->cache);
+  }
+  else {
+    cache = &netif->state->passive_scalable_cache;
+    cache_list = oo_p_dllink_ptr(netif, &cache->cache);
+  }
+
+  if( ! oo_p_dllink_is_empty(netif, cache_list) ) {
     /* Take the entry from the cache */
-    ci_ni_dllist_link *link = ci_ni_dllist_pop(netif, &cache->cache);
-    ts = CI_CONTAINER (ci_tcp_state, epcache_link, link);
+    struct oo_p_dllink_state link = oo_p_dllink_statep(netif,
+                                                       cache_list.l->next);
+    ts = CI_CONTAINER (ci_tcp_state, epcache_link, link.l);
     ci_assert (ts);
-    ci_ni_dllist_self_link(netif, &ts->epcache_link);
+    oo_p_dllink_del_init(netif, link);
 
     LOG_EP(ci_log("Taking cached fd %d off cached list, (onto acceptq)",
            ts->cached_on_fd));
@@ -549,7 +556,7 @@ get_ts_from_cache(ci_netif *netif,
        * back on the list.
        */
       LOG_EP(ci_log("changed interface of cached EP, re-queueing"));
-      ci_ni_dllist_push_tail(netif, &cache->cache, &ts->epcache_link);
+      oo_p_dllink_add(netif, cache_list, link);
       ts = NULL;
       CITP_STATS_NETIF(++netif->state->stats.sockcache_miss_intmismatch);
     }
@@ -735,12 +742,17 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
     int scalable = (tls->s.s_flags & CI_SOCK_FLAG_SCALPASSIVE) != 0;
 #if CI_CFG_FD_CACHING
     ci_socket_cache_t* cache;
+    struct oo_p_dllink_state cache_list;
 
     /* chose cache according to scalability of listen socket */
-    if( ! scalable )
+    if( ! scalable ) {
       cache = &tls->epcache;
-    else
+      cache_list = oo_p_dllink_sb(netif, &tls->s.b, &cache->cache);
+    }
+    else {
       cache = &netif->state->passive_scalable_cache;
+      cache_list = oo_p_dllink_ptr(netif, &cache->cache);
+    }
 #endif
     /* suppress scalability of accepted socket if it is local loopback */
     scalable &= OO_SP_IS_NULL(tsr->local_peer);
@@ -797,7 +809,8 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
         (ts->s.cp.so_bindtodevice = ci_rx_pkt_ifindex(netif, pkt)) == 0 ) {
 #if CI_CFG_FD_CACHING
       if( ci_tcp_is_cached(ts) )
-        ci_ni_dllist_push(netif, &cache->cache, &ts->epcache_link);
+        oo_p_dllink_add(netif, cache_list,
+                        oo_p_dllink_sb(netif, &ts->s.b, &ts->epcache_link));
       else
 #endif
         ci_tcp_state_free(netif, ts);
@@ -848,7 +861,8 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
       if (rc < 0) {
         /* Bung it back on the cache list */
         LOG_EP(ci_log("Unable to create s/w filter!"));
-        ci_ni_dllist_push(netif, &cache->cache, &ts->epcache_link);
+        oo_p_dllink_add(netif, cache_list,
+                        oo_p_dllink_sb(netif, &ts->s.b, &ts->epcache_link));
         return rc;
       }
 
@@ -867,7 +881,11 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
       }
 
       LOG_EP(ci_log("Cached fd %d from cached to connected", ts->cached_on_fd));
-      ci_ni_dllist_push(netif, &tls->epcache_connected, &ts->epcache_link);
+      oo_p_dllink_add(netif,
+                      oo_p_dllink_sb(netif, &tls->s.b,
+                                     &tls->epcache_connected),
+                      oo_p_dllink_sb(netif, &ts->s.b,
+                                     &ts->epcache_link));
     }
 #endif
 

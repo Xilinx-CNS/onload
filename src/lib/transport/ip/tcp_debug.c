@@ -693,9 +693,15 @@ void ci_tcp_socket_listen_dump(ci_netif* ni, ci_tcp_socket_listen* tls,
 #if CI_CFG_FD_CACHING
   logger(log_arg, "%s  sockcache: n=%d sock_n=%d cache=%s pending=%s connected=%s",
          pf, ni->state->passive_cache_avail_stack, tls->cache_avail_sock,
-         ci_ni_dllist_is_empty(ni, &tls->epcache.cache) ? "EMPTY":"yes",
-         ci_ni_dllist_is_empty(ni, &tls->epcache.pending) ? "EMPTY":"yes",
-         ci_ni_dllist_is_empty(ni, &tls->epcache_connected) ? "EMPTY":"yes");
+         oo_p_dllink_is_empty(ni, oo_p_dllink_sb(ni, &tls->s.b,
+                                                 &tls->epcache.cache))
+            ? "EMPTY":"yes",
+         oo_p_dllink_is_empty(ni, oo_p_dllink_sb(ni, &tls->s.b,
+                                                 &tls->epcache.pending))
+            ? "EMPTY":"yes",
+         oo_p_dllink_is_empty(ni, oo_p_dllink_sb(ni, &tls->s.b,
+                                                 &tls->epcache_connected))
+            ? "EMPTY":"yes");
 #endif
 #if CI_CFG_STATS_TCP_LISTEN
   {

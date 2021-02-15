@@ -166,10 +166,8 @@ static void ci_tcp_state_tcb_reinit(ci_netif* netif, ci_tcp_state* ts,
     oo_p sp;
     ts->cached_on_fd = -1;
     ts->cached_on_pid = -1;
-    sp = TS_OFF(netif, ts);
-    OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, epcache_link));
-    ci_ni_dllist_link_init(netif, &ts->epcache_link, sp, "epch");
-    ci_ni_dllist_self_link(netif, &ts->epcache_link);
+    oo_p_dllink_init(netif,
+                     oo_p_dllink_sb(netif, &ts->s.b, &ts->epcache_link));
     sp = TS_OFF(netif, ts);
     OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, epcache_fd_link));
     ci_ni_dllist_link_init(netif, &ts->epcache_fd_link, sp, "ecfd");
@@ -321,15 +319,16 @@ void ci_tcp_state_reinit(ci_netif* netif, ci_tcp_state* ts)
 #if ! defined(__KERNEL__) && CI_CFG_FD_CACHING
 ci_tcp_state* ci_tcp_get_state_buf_from_cache(ci_netif *netif, int pid)
 {
+  struct oo_p_dllink_state list =
+                oo_p_dllink_ptr(netif, &netif->state->active_cache.cache);
   ci_tcp_state *ts = NULL;
 
-  if( ci_ni_dllist_not_empty(netif, &netif->state->active_cache.cache) ) {
+  if( ! oo_p_dllink_is_empty(netif, list) ) {
     /* Take the first entry from the cache.  However, do not take it
      * if the ep's pid does not match current pid which may happen if
      * we are doing stack sharing. */
-    ci_ni_dllist_link *link =
-      ci_ni_dllist_head(netif, &netif->state->active_cache.cache);
-    ts = CI_CONTAINER(ci_tcp_state, epcache_link, link);
+    struct oo_p_dllink_state link = oo_p_dllink_statep(netif, list.l->next);
+    ts = CI_CONTAINER(ci_tcp_state, epcache_link, link.l);
     ci_assert(ts);
 
     if( S_TO_EPS(netif, ts)->fd != CI_FD_BAD &&
@@ -384,8 +383,7 @@ ci_tcp_state* ci_tcp_get_state_buf_from_cache(ci_netif *netif, int pid)
      * we can leave it as-is even if we steal a NO_FD endpoint from another
      * process. */
 
-    ci_ni_dllist_pop(netif, &netif->state->active_cache.cache);
-    ci_ni_dllist_self_link(netif, &ts->epcache_link);
+    oo_p_dllink_del_init(netif, link);
     ci_ni_dllist_remove_safe(netif, &ts->epcache_fd_link);
     CITP_STATS_NETIF(++netif->state->stats.activecache_hit);
     ci_atomic32_inc((volatile ci_uint32*)CI_NETIF_PTR(netif,

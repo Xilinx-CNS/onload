@@ -1610,17 +1610,9 @@ int ci_tcp_listen_init(ci_netif *ni, ci_tcp_socket_listen *tls)
 	       S_FMT(tls)));
 
 #if CI_CFG_FD_CACHING
-  sp = TS_OFF(ni, tls);
-  OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_socket_listen, epcache.cache));
-  ci_ni_dllist_init(ni, &tls->epcache.cache, sp, "epch");
-
-  sp = TS_OFF(ni, tls);
-  OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_socket_listen, epcache.pending));
-  ci_ni_dllist_init(ni, &tls->epcache.pending, sp, "eppd");
-
-  sp = TS_OFF(ni, tls);
-  OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_socket_listen, epcache_connected));
-  ci_ni_dllist_init(ni, &tls->epcache_connected, sp, "epco");
+  oo_p_dllink_init(ni, oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache.cache));
+  oo_p_dllink_init(ni, oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache.pending));
+  oo_p_dllink_init(ni, oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache_connected));
 
   sp = TS_OFF(ni, tls);
   OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_socket_listen, epcache.fd_states));

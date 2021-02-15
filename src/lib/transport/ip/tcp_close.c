@@ -307,9 +307,9 @@ static void uncache_ep(ci_netif *netif, ci_tcp_socket_listen* tls,
   LOG_EP(ci_log("Uncaching ep %d", S_FMT(ts)));
   ci_assert( ci_tcp_is_cached(ts) );
 
-  ci_ni_dllist_link_assert_valid(netif, &ts->epcache_link);
-  ci_ni_dllist_remove_safe(netif, &ts->epcache_link);
-  
+  oo_p_dllink_del_init(netif, oo_p_dllink_sb(netif, &ts->s.b,
+                                             &ts->epcache_link));
+
   /* EPs on the cached list have hw filters present, even though notionally
    * they are 'freed'.  So we clear filters here.  Note that we leave the
    * filters in place for cached EPs on the acceptq or pending lists because
@@ -373,16 +373,14 @@ static void uncache_ep(ci_netif *netif, ci_tcp_socket_listen* tls,
  */
 static void
 uncache_ep_list(ci_netif *netif, ci_tcp_socket_listen* tls,
-                ci_ni_dllist_t *thelist)
+                struct oo_p_dllink_state thelist)
 {
-  ci_ni_dllist_link* l = ci_ni_dllist_start(netif, thelist);
+  struct oo_p_dllink_state l, tmp;
   ci_assert(ci_netif_is_locked(netif));
-  while( l != ci_ni_dllist_end(netif, thelist) ) {
-    ci_tcp_state* cached_state = CI_CONTAINER(ci_tcp_state, epcache_link, l);
-    ci_ni_dllist_iter(netif, l);
+  oo_p_dllink_for_each_safe(netif, l, tmp, thelist) {
+    ci_tcp_state* cached_state = CI_CONTAINER(ci_tcp_state, epcache_link, l.l);
     ci_assert(cached_state);
     ci_assert(ci_tcp_is_cached(cached_state));
-    ci_ni_dllist_link_assert_valid(netif, &cached_state->epcache_link);
     uncache_ep(netif, tls, cached_state);
   }
 }
@@ -433,8 +431,10 @@ void ci_tcp_epcache_drop_cache(ci_netif* ni)
       ci_sock_cmn* s = CI_CONTAINER(ci_sock_cmn, b, w);
       ci_tcp_socket_listen* tls = SOCK_TO_TCP_LISTEN(s);
       ci_tcp_listen_uncache_fds(ni, tls);
-      uncache_ep_list(ni, tls, &tls->epcache.pending);
-      uncache_ep_list(ni, tls, &tls->epcache.cache);
+      uncache_ep_list(ni, tls,
+                      oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache.pending));
+      uncache_ep_list(ni, tls,
+                      oo_p_dllink_sb(ni, &tls->s.b, &tls->epcache.cache));
     }
   }
 }
@@ -444,8 +444,10 @@ void ci_tcp_active_cache_drop_cache(ci_netif* ni)
 {
   ci_netif_state* ns = ni->state;
   ci_assert(ci_netif_is_locked(ni));
-  uncache_ep_list(ni, NULL, &ns->active_cache.pending);
-  uncache_ep_list(ni, NULL, &ns->active_cache.cache);
+  uncache_ep_list(ni, NULL,
+                  oo_p_dllink_ptr(ni, &ns->active_cache.pending));
+  uncache_ep_list(ni, NULL,
+                  oo_p_dllink_ptr(ni, &ns->active_cache.cache));
 }
 
 
@@ -453,8 +455,10 @@ void ci_tcp_passive_scalable_cache_drop_cache(ci_netif* ni)
 {
   ci_netif_state* ns = ni->state;
   ci_assert(ci_netif_is_locked(ni));
-  uncache_ep_list(ni, NULL, &ns->passive_scalable_cache.pending);
-  uncache_ep_list(ni, NULL, &ns->passive_scalable_cache.cache);
+  uncache_ep_list(ni, NULL,
+                  oo_p_dllink_ptr(ni, &ns->passive_scalable_cache.pending));
+  uncache_ep_list(ni, NULL,
+                  oo_p_dllink_ptr(ni, &ns->passive_scalable_cache.cache));
 }
 
 #endif
@@ -764,9 +768,11 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
    */
   /* There will be nothing to do here for scalable passive */
   LOG_EP(ci_log("listen_shutdown - uncache all on cache list"));
-  uncache_ep_list(netif, tls, &tls->epcache.cache);
+  uncache_ep_list(netif, tls,
+                  oo_p_dllink_sb(netif, &tls->s.b, &tls->epcache.cache));
   LOG_EP(ci_log("listen_shutdown - uncache all on pending list"));
-  uncache_ep_list(netif, tls, &tls->epcache.pending);
+  uncache_ep_list(netif, tls,
+                  oo_p_dllink_sb(netif, &tls->s.b, &tls->epcache.pending));
 #endif
 }
 #endif
@@ -775,7 +781,7 @@ void ci_tcp_listen_shutdown_queues(ci_netif* netif, ci_tcp_socket_listen* tls)
 void ci_tcp_listen_update_cached(ci_netif* netif, ci_tcp_socket_listen* tls)
 {
   tcp_helper_endpoint_t * cached_ep;
-  ci_ni_dllist_link *l;
+  struct oo_p_dllink_state list, link, tmp;
   ci_tcp_state *cached_state;
 
   /* Before we clear our filters we must update the filters for any connected
@@ -786,17 +792,17 @@ void ci_tcp_listen_update_cached(ci_netif* netif, ci_tcp_socket_listen* tls)
    * before they get their own full match filter.
    */
 
-  while( (l = ci_ni_dllist_try_pop(netif, &tls->epcache_connected)) ) {
-    cached_state = CI_CONTAINER(ci_tcp_state, epcache_link, l);
-    ci_ni_dllist_self_link(netif, &cached_state->epcache_link);
+  list = oo_p_dllink_sb(netif, &tls->s.b, &tls->epcache_connected);
+  oo_p_dllink_for_each_safe(netif, link, tmp, list) {
+    cached_state = CI_CONTAINER(ci_tcp_state, epcache_link, link.l);
+    oo_p_dllink_del_init(netif, link);
 
     if( tls->s.s_flags & CI_SOCK_FLAG_SCALPASSIVE )
       continue;
     cached_ep = ci_netif_ep_get(netif, cached_state->s.b.bufid);
     tcp_helper_endpoint_update_filter_details(cached_ep);
   }
-  ci_assert(ci_ni_dllist_is_valid(netif, &tls->epcache_connected.l));
-  ci_assert(ci_ni_dllist_is_empty(netif, &tls->epcache_connected));
+  OO_P_DLLINK_ASSERT_EMPTY(netif, list);
 
   if( tls->s.s_flags & CI_SOCK_FLAG_SCALPASSIVE )
     return;
@@ -804,15 +810,13 @@ void ci_tcp_listen_update_cached(ci_netif* netif, ci_tcp_socket_listen* tls)
   /* We also need to update the filters for the pending list, so they can be
    * shutdown cleanly.
    */
-  l = ci_ni_dllist_start(netif, &tls->epcache.pending);
-  while( l != ci_ni_dllist_end(netif, &tls->epcache.pending) ) {
-    cached_state = CI_CONTAINER(ci_tcp_state, epcache_link, l);
+  list = oo_p_dllink_sb(netif, &tls->s.b, &tls->epcache.pending);
+  oo_p_dllink_for_each(netif, link, list) {
+    cached_state = CI_CONTAINER(ci_tcp_state, epcache_link, link.l);
     cached_ep = ci_netif_ep_get(netif, cached_state->s.b.bufid);
 
     tcp_helper_endpoint_update_filter_details(cached_ep);
-    ci_ni_dllist_iter(netif, l);
   }
-  ci_assert(ci_ni_dllist_is_valid(netif, &tls->epcache.pending.l));
 }
 
 #endif

@@ -1172,8 +1172,11 @@ static int citp_tcp_connect(citp_fdinfo* fdinfo,
 
 #if CI_CFG_FD_CACHING
 static void citp_tcp_close_cached(citp_fdinfo* fdinfo,
-                                  ci_socket_cache_t* cache, int active)
+                                  struct oo_p_dllink_state cache_pending,
+                                  int active)
 {
+  ci_socket_cache_t* cache = CI_CONTAINER(ci_socket_cache_t, pending,
+                                          cache_pending.l);
   citp_sock_fdi* epi = fdi_to_sock_fdi(fdinfo);
   ci_sock_cmn* s = epi->sock.s;
   ci_netif* netif = epi->sock.netif;
@@ -1218,8 +1221,9 @@ static void citp_tcp_close_cached(citp_fdinfo* fdinfo,
    * the connected list, so it needs removing before pushing to the pending
    * list.
    */
-  ci_ni_dllist_remove_safe(netif, &ts->epcache_link);
-  ci_ni_dllist_push(netif, &cache->pending, &ts->epcache_link);
+  link = oo_p_dllink_sb(netif, &ts->s.b, &ts->epcache_link);
+  oo_p_dllink_del_init(netif, link);
+  oo_p_dllink_add(netif, cache_pending, link);
 
   /* If the listening socket is going away we might not be able to push it on
    * to the list of fd-owning-states (and there's no point in doing so anyway).
@@ -1282,23 +1286,27 @@ static void citp_tcp_close_cached(citp_fdinfo* fdinfo,
 static void citp_tcp_close_passive_cached(ci_netif* netif, citp_fdinfo* fdinfo,
                                           ci_tcp_socket_listen* tls)
 {
-  ci_socket_cache_t* cache;
+  struct oo_p_dllink_state cache_pending;
   ci_atomic32_dec(&tls->cache_avail_sock);
   ci_assert_ge(tls->cache_avail_sock, 0);
   if( ~NI_OPTS(netif).scalable_filter_mode & CITP_SCALABLE_MODE_PASSIVE )
     ci_assert_lt(tls->cache_avail_sock, netif->state->opts.per_sock_cache_max);
 
   if( (tls->s.s_flags & CI_SOCK_FLAG_SCALPASSIVE) == 0 )
-    cache = &tls->epcache;
+    cache_pending = oo_p_dllink_sb(netif, &tls->s.b, &tls->epcache.pending);
   else
-    cache = &netif->state->passive_scalable_cache;
-  citp_tcp_close_cached(fdinfo, cache, 0);
+    cache_pending = oo_p_dllink_ptr(netif,
+                            &netif->state->passive_scalable_cache.pending);
+  citp_tcp_close_cached(fdinfo, cache_pending, 0);
 }
 
 
 static void citp_tcp_close_active_cached(ci_netif* netif, citp_fdinfo* fdinfo)
 {
-  citp_tcp_close_cached(fdinfo, &netif->state->active_cache, 1);
+  citp_tcp_close_cached(fdinfo,
+                        oo_p_dllink_ptr(netif,
+                                        &netif->state->active_cache.pending),
+                        1);
 }
 
 
