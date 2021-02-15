@@ -36,7 +36,7 @@
 ci_inline int
 ci_vscnprintf(char* buf, size_t size, const char* fmt, va_list args)
 {
-  int n = ci_vsnprintf(buf, size, fmt, args);
+  size_t n = ci_vsnprintf(buf, size, fmt, args);
   return n < size ? n : size - 1;
 }
 
