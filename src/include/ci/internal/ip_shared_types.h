@@ -890,7 +890,7 @@ struct oo_deferred_pkt {
 #define OO_DEFERRED_FLAG_FIRST        2
 
   ci_iptime_t ts;    /* Timestamp when added to the queue */
-  ci_ni_dllist_link link; /* Link */
+  struct oo_p_dllink link; /* Link */
 };
 
 
@@ -1476,8 +1476,8 @@ struct ci_netif_state_s {
   ci_int32              reserved_pktbufs;
 
   /* Deferred packets, because of nomac. */
-  ci_ni_dllist_t deferred_list;
-  ci_ni_dllist_t deferred_list_free;
+  struct oo_p_dllink deferred_list;
+  struct oo_p_dllink deferred_list_free;
 
 
   /* events are in shared state for poll_in_kernel mode,

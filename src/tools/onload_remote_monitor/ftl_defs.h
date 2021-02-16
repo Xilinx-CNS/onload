@@ -519,8 +519,8 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TFIELD_INT(ctx, ci_int32, mem_pressure_pkt_pool_n, ORM_OUTPUT_STACK) \
   FTL_TFIELD_INT(ctx, ci_int32, n_async_pkts, ORM_OUTPUT_STACK)           \
   FTL_TFIELD_INT(ctx, ci_int32, reserved_pktbufs, ORM_OUTPUT_STACK)       \
-  FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_t, deferred_list, ORM_OUTPUT_EXTRA) \
-  FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_t, deferred_list_free, ORM_OUTPUT_EXTRA) \
+  FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, deferred_list, ORM_OUTPUT_EXTRA) \
+  FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, deferred_list_free, ORM_OUTPUT_EXTRA) \
   FTL_TFIELD_INT(ctx, ci_uint64, nonb_pkt_pool, ORM_OUTPUT_STACK)         \
   FTL_TFIELD_STRUCT(ctx, ci_netif_ipid_cb_t, ipid, ORM_OUTPUT_EXTRA) \
   ON_CI_CFG_TCP_SHARED_LOCAL_PORTS(                                       \

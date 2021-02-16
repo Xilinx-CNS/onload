@@ -60,7 +60,9 @@ void ci_ip_send_pkt_defer(ci_netif* ni, const struct oo_sock_cplane* sock_cp,
                           const ci_ip_cached_hdrs *ipcache)
 {
   struct oo_deferred_pkt* dpkt;
-  ci_ni_dllist_link* lnk;
+  struct oo_p_dllink_state free_list =
+                oo_p_dllink_ptr(ni, &ni->state->deferred_list_free);
+  struct oo_p_dllink_state lnk;
   ci_assert_equal(retrieve_rc, retrrc_nomac);
 
   /* The upper layers think that the packet is in-flight and the NIC owns
@@ -71,18 +73,19 @@ void ci_ip_send_pkt_defer(ci_netif* ni, const struct oo_sock_cplane* sock_cp,
    * for TCP code which tries to retransmit packets. */
   pkt->flags |= CI_PKT_FLAG_TX_PENDING;
 
-  if( ci_ni_dllist_is_empty(ni, &ni->state->deferred_list_free) ) {
+  if( oo_p_dllink_is_empty(ni, free_list) ) {
     CITP_STATS_NETIF_INC(ni, tx_defer_pkt_drop_limited);
     cicp_pkt_complete_fake(ni, pkt);
     return;
   }
-  lnk = ci_ni_dllist_pop(ni, &ni->state->deferred_list_free);
+  lnk = oo_p_dllink_statep(ni, free_list.l->next);
+  oo_p_dllink_del(ni, lnk);
 
   /* Ensure the pkt is ready to send */
   ci_assert_equal(pkt->intf_i, ipcache->intf_i);
 
   /* Store all the data in the deferred packets queue */
-  dpkt = CI_CONTAINER(struct oo_deferred_pkt, link, lnk);
+  dpkt = CI_CONTAINER(struct oo_deferred_pkt, link, lnk.l);
   dpkt->pkt_id = pkt->pp;
   dpkt->src = ipcache_laddr(ipcache);
   if( ni->cplane_init_net != NULL && sock_cp != NULL &&
@@ -114,12 +117,12 @@ void ci_ip_send_pkt_defer(ci_netif* ni, const struct oo_sock_cplane* sock_cp,
   /* We do not have the MAC table available for Onload, so we use the FWD
    * cache instead.  Kick off next hop resolution. */
   if( oo_deferred_send_one(ni, dpkt) ) {
-    ci_ni_dllist_put(ni, &ni->state->deferred_list_free, &dpkt->link);
+    oo_p_dllink_add(ni, free_list, lnk);
     CITP_STATS_NETIF_INC(ni, tx_defer_pkt_fast);
     return;
   }
 
-  ci_ni_dllist_put(ni, &ni->state->deferred_list, &dpkt->link);
+  oo_p_dllink_add(ni, oo_p_dllink_ptr(ni, &ni->state->deferred_list), lnk);
   ef_eplock_holder_set_flag(&ni->state->lock,
                             CI_EPLOCK_NETIF_HAS_DEFERRED_PKTS);
   CITP_STATS_NETIF_INC(ni, tx_defer_pkt);

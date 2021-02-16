@@ -609,15 +609,16 @@ int oo_deferred_send_one(ci_netif *ni, struct oo_deferred_pkt* dpkt)
 int oo_deferred_send(ci_netif *ni)
 {
   int ret = 1;
-  ci_ni_dllist_link* l = ci_ni_dllist_start(ni, &ni->state->deferred_list);
+  struct oo_p_dllink_state deferred_list =
+                    oo_p_dllink_ptr(ni, &ni->state->deferred_list);
+  struct oo_p_dllink_state l, tmp;
 
   ci_assert(ci_netif_is_locked(ni));
 
-  while( l != ci_ni_dllist_end(ni, &ni->state->deferred_list) ) {
+  oo_p_dllink_for_each_safe(ni, l, tmp, deferred_list) {
     struct oo_deferred_pkt* dpkt = CI_CONTAINER(struct oo_deferred_pkt,
-                                                link, l);
+                                                link, l.l);
     int handled = oo_deferred_send_one(ni, dpkt);
-    ci_ni_dllist_iter(ni, l);
 
     if( handled ||
         TIME_GT(ci_ip_time_now(ni),
@@ -627,8 +628,9 @@ int oo_deferred_send(ci_netif *ni)
         CITP_STATS_NETIF_INC(ni, tx_defer_pkt_drop_timeout);
         cicp_pkt_complete_fake(ni, PKT_CHK(ni, dpkt->pkt_id));
       }
-      ci_ni_dllist_remove(ni, &dpkt->link);
-      ci_ni_dllist_put(ni, &ni->state->deferred_list_free, &dpkt->link);
+      oo_p_dllink_del(ni, l);
+      oo_p_dllink_add(ni, oo_p_dllink_ptr(ni,
+                                &ni->state->deferred_list_free), l);
     }
     else {
       ret = 0;

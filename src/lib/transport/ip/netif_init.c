@@ -88,15 +88,15 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   nis->nonb_pkt_pool = CI_ILL_END;
 
   /* Deferred packets */
-  ci_ni_dllist_init(ni, &nis->deferred_list,
-                    oo_ptr_to_statep(ni, &nis->deferred_list), "dfp");
-  ci_ni_dllist_init(ni, &nis->deferred_list_free,
-                    oo_ptr_to_statep(ni, &nis->deferred_list_free), "dfp");
+  list = oo_p_dllink_ptr(ni, &nis->deferred_list);
+  oo_p_dllink_init(ni, list);
+  list = oo_p_dllink_ptr(ni, &nis->deferred_list_free);
+  oo_p_dllink_init(ni, list);
   for( i = 0; i < NI_OPTS(ni).defer_arp_pkts; i++ ) {
-    ci_ni_dllist_link_init(ni, &ni->deferred_pkts[i].link,
-                           oo_ptr_to_statep(ni, &ni->deferred_pkts[i].link),
-                           "dfp");
-    ci_ni_dllist_put(ni, &nis->deferred_list_free, &ni->deferred_pkts[i].link);
+    struct oo_p_dllink_state link =
+                oo_p_dllink_ptr(ni, &ni->deferred_pkts[i].link);
+    oo_p_dllink_init(ni, link);
+    oo_p_dllink_add(ni, list, link);
   }
 
   ci_netif_filter_init(ni, ci_log2_le(ci_netif_filter_table_size(ni)));

@@ -9,12 +9,12 @@
 void oo_deferred_free(ci_netif *ni)
 {
   CI_DEBUG(int n = 0;)
-  ci_ni_dllist_link* l = ci_ni_dllist_start(ni, &ni->state->deferred_list);
+  struct oo_p_dllink_state l;
 
-  while( l != ci_ni_dllist_end(ni, &ni->state->deferred_list) ) {
+  oo_p_dllink_for_each(ni, l,
+                       oo_p_dllink_ptr(ni, &ni->state->deferred_list)) {
     struct oo_deferred_pkt* dpkt = CI_CONTAINER(struct oo_deferred_pkt,
-                                                link, l);
-    ci_ni_dllist_iter(ni, l);
+                                                link, l.l);
 
     cicp_pkt_complete_fake(ni, PKT_CHK(ni, dpkt->pkt_id));
     CI_DEBUG(n++;)
