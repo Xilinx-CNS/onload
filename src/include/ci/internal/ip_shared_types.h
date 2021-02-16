@@ -829,8 +829,8 @@ typedef struct {
 
 
 typedef struct {
-  ci_ni_dllist_t        free_lists[CI_PIO_BUDDY_MAX_ORDER+1];
-  ci_ni_dllist_link     links[1ul<<CI_PIO_BUDDY_MAX_ORDER];
+  struct oo_p_dllink    free_lists[CI_PIO_BUDDY_MAX_ORDER+1];
+  struct oo_p_dllink    links[1ul<<CI_PIO_BUDDY_MAX_ORDER];
   ci_uint8              orders[1ul<<CI_PIO_BUDDY_MAX_ORDER];
   ci_int32              initialised;
 } ci_pio_buddy_allocator;

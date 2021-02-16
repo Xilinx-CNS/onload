@@ -25,18 +25,18 @@
 
 /* Macros for accessing buddy allocator state, for buddy allocator b. */
 /* Get free list for order o. */
-#define FREE_LIST(b,o)     ((b)->free_lists + (o))
+#define FREE_LIST(ni,b,o)     oo_p_dllink_ptr(ni,(b)->free_lists + (o))
 /* Get buddy block addr associated with a link l. */
 #define LINK_TO_ADDR(b,l)  ((ci_uint32)((l) - (b)->links))
 /* Get link for buddy block addr a. */
-#define ADDR_TO_LINK(b,a)  ((b)->links + (a))
+#define ADDR_TO_LINK(ni,b,a)  oo_p_dllink_ptr(ni,(b)->links + (a))
 
 
 static inline int
 ci_pio_buddy_free_list_empty(ci_netif* ni, ci_pio_buddy_allocator* b,
                              ci_uint8 order)
 {
-  return ci_ni_dllist_is_empty(ni, FREE_LIST(b, order));
+  return oo_p_dllink_is_empty(ni, FREE_LIST(ni, b, order));
 }
 
 
@@ -45,7 +45,7 @@ ci_pio_buddy_addr_in_free_list(ci_netif* ni, ci_pio_buddy_allocator* b,
                                ci_int32 addr)
 {
   /* Links should always have been marked as free when not on a free list. */
-  return !ci_ni_dllist_is_free(ADDR_TO_LINK(b, addr));
+  return !oo_p_dllink_is_empty(ni, ADDR_TO_LINK(ni, b, addr));
 }
 
 
@@ -56,7 +56,7 @@ ci_pio_buddy_free_list_add(ci_netif* ni, ci_pio_buddy_allocator* b,
   /* If we're putting this on a free list it shouldn't already be on one. */
   ci_assert(!ci_pio_buddy_addr_in_free_list(ni, b, addr));
 
-  ci_ni_dllist_push(ni, FREE_LIST(b, order), ADDR_TO_LINK(b, addr));
+  oo_p_dllink_add(ni, FREE_LIST(ni, b, order), ADDR_TO_LINK(ni, b, addr));
   b->orders[addr] = order;
 }
 
@@ -68,8 +68,7 @@ ci_pio_buddy_free_list_remove(ci_netif* ni, ci_pio_buddy_allocator* b,
   /* If we're removing this from a free list it should be linked. */
   ci_assert(ci_pio_buddy_addr_in_free_list(ni, b, addr));
 
-  ci_ni_dllist_remove(ni, ADDR_TO_LINK(b, addr));
-  ci_ni_dllist_mark_free(ADDR_TO_LINK(b, addr));
+  oo_p_dllink_del_init(ni, ADDR_TO_LINK(ni, b, addr));
 }
 
 
@@ -77,14 +76,14 @@ static inline ci_uint32
 ci_pio_buddy_free_list_pop(ci_netif* ni, ci_pio_buddy_allocator* b,
                            ci_uint8 order)
 {
-  ci_ni_dllist_link* l;
+  struct oo_p_dllink_state l;
 
   /* Should have ensured there was something on this list before now. */
   ci_assert(!ci_pio_buddy_free_list_empty(ni, b, order));
 
-  l = ci_ni_dllist_pop(ni, FREE_LIST(b, order));
-  ci_ni_dllist_mark_free(l);
-  return LINK_TO_ADDR(b, l);
+  l = oo_p_dllink_statep(ni, FREE_LIST(ni, b, order).l->next);
+  oo_p_dllink_del_init(ni, l);
+  return LINK_TO_ADDR(b, l.l);
 }
 
 
@@ -108,16 +107,11 @@ ci_pio_buddy_ctor(ci_netif* ni, ci_pio_buddy_allocator* b, unsigned pio_len)
 
   /* Initialise the free list for each order. */
   for( o = 0; o <= CI_PIO_BUDDY_MAX_ORDER; ++o )
-    ci_ni_dllist_init(ni, FREE_LIST(b, o),
-                      oo_ptr_to_statep(ni, FREE_LIST(b, o)), "pio_buddy");
+    oo_p_dllink_init(ni, FREE_LIST(ni, b, o));
 
   /* Initialise the links for each block. */
-  for( o = 0; o < (1u << CI_PIO_BUDDY_MAX_ORDER); ++o ) {
-    ci_ni_dllist_link_init(ni, ADDR_TO_LINK(b, o),
-                           oo_ptr_to_statep(ni, ADDR_TO_LINK(b, o)),
-                           "pio_buddy");
-    ci_ni_dllist_mark_free(ADDR_TO_LINK(b, o));
-  }
+  for( o = 0; o < (1u << CI_PIO_BUDDY_MAX_ORDER); ++o )
+    oo_p_dllink_init(ni, ADDR_TO_LINK(ni, b, o));
 
   /* At initialisation we have one free block containing the whole space. */
   ci_pio_buddy_free_list_add(ni, b, pio_order - CI_CFG_MIN_PIO_BLOCK_ORDER, 0);

@@ -235,9 +235,9 @@ typedef struct oo_p_dllink oo_p_dllink_t;
 
 #define STRUCT_PIO_BUDDY_ALLOCATOR(ctx)         \
   FTL_TSTRUCT_BEGIN(ctx, ci_pio_buddy_allocator, )                        \
-  FTL_TFIELD_ARRAYOFSTRUCT(ctx, ci_ni_dllist_t, \
+  FTL_TFIELD_ARRAYOFSTRUCT(ctx, oo_p_dllink_t, \
                            free_lists, CI_PIO_BUDDY_MAX_ORDER + 1, ORM_OUTPUT_EXTRA, 1)   \
-  FTL_TFIELD_ARRAYOFSTRUCT(ctx, ci_ni_dllist_link, \
+  FTL_TFIELD_ARRAYOFSTRUCT(ctx, oo_p_dllink_t, \
                            links, 1ul << CI_PIO_BUDDY_MAX_ORDER, ORM_OUTPUT_EXTRA, 1)     \
   FTL_TFIELD_ARRAYOFINT(ctx, ci_uint8, orders,  \
                         1ul << CI_PIO_BUDDY_MAX_ORDER, ORM_OUTPUT_STACK)                  \
