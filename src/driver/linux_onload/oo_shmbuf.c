@@ -53,9 +53,6 @@ int oo_shmbuf_add(struct oo_shmbuf* sh)
     return -ENOMEM;
   }
 
-
-  /* Fixme add to hash table */
-
   return i;
 }
 
@@ -71,7 +68,7 @@ unsigned long __oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr)
   ci_assert(off < 0 || off >= oo_shmbuf_chunk_size(sh) * sh->init_num);
 
   /* We'd better never hit this path! */
-  //WARN_ON(1);
+  ci_assert(0);
 
   for(i = sh->init_num; i < sh->num; i++) {
     off = ptr - oo_shmbuf_idx2ptr(sh, i);

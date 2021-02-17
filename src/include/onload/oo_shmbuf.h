@@ -22,7 +22,6 @@ struct oo_shmbuf {
 
   /* lock */
 
-  /* Hash table to map from pointer to a particular buf index */
 };
 
 
