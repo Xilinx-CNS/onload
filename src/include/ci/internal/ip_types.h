@@ -181,7 +181,7 @@ struct ci_netif_s {
   ci_ip6_netif_filter_table* ip6_filter_table;
 #endif
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
-  ci_ni_dllist_t*      active_wild_table;
+  struct oo_p_dllink* active_wild_table;
 #endif
   ci_tcp_prev_seq_t*   seq_table;
 

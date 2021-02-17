@@ -2363,7 +2363,7 @@ struct ci_active_wild_s {
   ci_sock_cmn           s;
   ci_addr_t             last_laddr;
   ci_addr_t             last_raddr;
-  ci_ni_dllist_link     pool_link;
+  struct oo_p_dllink    pool_link;
   ci_iptime_t           expiry;
   ci_uint32             last_rport;
 };

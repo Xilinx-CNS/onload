@@ -2185,9 +2185,9 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
                     PKTS_PER_SET / (PAGE_SIZE / CI_CFG_PKT_BUF_SIZE) *
                     sizeof(ef_addr);
   sz += dma_addrs_bytes;
-  sz = CI_ROUND_UP(sz, __alignof__(ci_ni_dllist_t));
+  sz = CI_ROUND_UP(sz, __alignof__(struct oo_p_dllink));
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
-  sz += sizeof(ci_ni_dllist_t) * no_active_wild_table_entries *
+  sz += sizeof(struct oo_p_dllink) * no_active_wild_table_entries *
         no_active_wild_pools;
 #endif
   sz = CI_ROUND_UP(sz, __alignof__(ci_tcp_prev_seq_t));
@@ -2292,12 +2292,12 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   ns_ofs += dma_addrs_bytes;
 
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
-  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(ci_ni_dllist_t));
+  ns_ofs = CI_ROUND_UP(ns_ofs, __alignof__(struct oo_p_dllink));
   ns->active_wild_ofs = ns_ofs;
   ns->active_wild_table_entries_n = no_active_wild_table_entries;
   ns->active_wild_pools_n = no_active_wild_pools;
 
-  ns_ofs += (sizeof(ci_ni_dllist_t) * ns->active_wild_table_entries_n *
+  ns_ofs += (sizeof(struct oo_p_dllink) * ns->active_wild_table_entries_n *
             ns->active_wild_pools_n);
 #endif
 
@@ -3442,11 +3442,10 @@ tcp_helper_alloc_to_aw_pool(tcp_helper_resource_t* rs,
                             ci_addr_t laddr,
                             struct efab_ephemeral_port_keeper* port)
 {
-  int rc;
   ci_netif* ni = &rs->netif;
   int idx;
   ci_active_wild* aw = tcp_helper_alloc_active_wild(rs, port);
-  ci_ni_dllist_t* list;
+  struct oo_p_dllink_state list;
 
   OO_DEBUG_TCPH(ci_log("%s [%u]", __FUNCTION__, rs->id));
 
@@ -3471,15 +3470,15 @@ tcp_helper_alloc_to_aw_pool(tcp_helper_resource_t* rs,
                                       addr_any, 0) : 0;
   idx &= ni->state->active_wild_pools_n - 1;
 
-  rc = ci_netif_get_active_wild_list(ni, idx, laddr, &list);
-  if( rc < 0 ) {
+  list = ci_netif_get_active_wild_list(ni, idx, laddr);
+  if( list.p == OO_P_NULL ) {
     aw->s.b.sb_aflags |= CI_SB_AFLAG_ORPHAN;
     efab_tcp_helper_drop_os_socket(rs, ci_netif_ep_get(ni, W_SP(&aw->s.b)));
     citp_waitable_obj_free(ni, &aw->s.b);
-    return rc;
+    return 0;
   }
 
-  ci_ni_dllist_push(ni, list, &aw->pool_link);
+  oo_p_dllink_add(ni, list, oo_p_dllink_sb(ni, &aw->s.b, &aw->pool_link));
   ni->state->active_wild_n++;
 
   return 0;
@@ -3531,9 +3530,9 @@ tcp_helper_alloc_list_to_aw_pool(tcp_helper_resource_t* rs,
 
   if( ! NI_OPTS(ni).tcp_shared_local_ports_per_ip )
     for( i = 0; i < ni->state->active_wild_pools_n; i++ ) {
-      ci_ni_dllist_t* list;
-      if( ci_netif_get_active_wild_list(ni, i, addr_any, &list) >= 0 &&
-          ci_ni_dllist_is_empty(ni, list) ) {
+      struct oo_p_dllink_state list =
+                    ci_netif_get_active_wild_list(ni, i, addr_any);
+      if( list.p != OO_P_NULL && oo_p_dllink_is_empty(ni, list) ) {
         NI_LOG(&rs->netif, RESOURCE_WARNINGS, "%s: Current shared local ports "
                "don't provide coverage of all possible connections.  Allocate "
                "more to improve coverage.", __FUNCTION__);

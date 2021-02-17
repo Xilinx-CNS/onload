@@ -216,9 +216,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   for( i = 0;
        i < nis->active_wild_table_entries_n * nis->active_wild_pools_n;
        ++i ) {
-    ci_ni_dllist_init(ni, &ni->active_wild_table[i],
-                      oo_ptr_to_statep(ni, &ni->active_wild_table[i]),
-                      "active_wild");
+    oo_p_dllink_init(ni, oo_p_dllink_ptr(ni, &ni->active_wild_table[i]));
   }
   nis->active_wild_n = 0;
 #endif
@@ -1698,7 +1696,7 @@ static void netif_tcp_helper_build2(ci_netif* ni)
 {
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
   ni->active_wild_table =
-    (ci_ni_dllist_t*) ((char*) ni->state + ni->state->active_wild_ofs);
+    (struct oo_p_dllink*) ((char*) ni->state + ni->state->active_wild_ofs);
 #endif
   ni->seq_table =
     (ci_tcp_prev_seq_t*) ((char*) ni->state + ni->state->seq_table_ofs);

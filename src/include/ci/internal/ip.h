@@ -1853,9 +1853,8 @@ extern int ci_netif_active_wild_nic_hash(ci_netif *ni,
                                          ci_addr_t laddr, ci_uint16 lport,
                                          ci_addr_t raddr, ci_uint16 rport);
 
-extern int
-ci_netif_get_active_wild_list(ci_netif* ni, int aw_pool,
-                              ci_addr_t laddr, ci_ni_dllist_t** list_out);
+extern struct oo_p_dllink_state
+ci_netif_get_active_wild_list(ci_netif* ni, int aw_pool, ci_addr_t laddr);
 #endif
 
 /* Bind RX of socket to given interface.  Used by implementation of

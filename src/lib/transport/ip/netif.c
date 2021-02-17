@@ -1537,7 +1537,7 @@ int ci_netif_active_wild_nic_hash(ci_netif *ni,
 
 
 /* Returns the hash table of active wilds for the specified pool. */
-ci_inline ci_ni_dllist_t*
+ci_inline struct oo_p_dllink*
 ci_netif_active_wild_pool_table(ci_netif* ni, int aw_pool)
 {
   ci_assert(ci_netif_is_locked(ni));
@@ -1554,11 +1554,13 @@ ci_netif_active_wild_pool_table(ci_netif* ni, int aw_pool)
  * not become 'owned' by that address until it becomes non-empty.  This means
  * that the stack lock must not be dropped between retrieving the address of a
  * list using this function and ceasing to use the returned pointer to that
- * list. */
-int ci_netif_get_active_wild_list(ci_netif* ni, int aw_pool, ci_addr_t laddr,
-                                  ci_ni_dllist_t** list_out)
+ * list.
+ * Returns link state with .p==OO_P_NULL in case of failure. */
+struct oo_p_dllink_state
+ci_netif_get_active_wild_list(ci_netif* ni, int aw_pool, ci_addr_t laddr)
 {
-  ci_ni_dllist_t* table = ci_netif_active_wild_pool_table(ni, aw_pool);
+  struct oo_p_dllink* table = ci_netif_active_wild_pool_table(ni, aw_pool);
+  struct oo_p_dllink_state list;
   ci_uint32 bucket, hash1, hash2;
 
   ci_assert(ci_netif_is_locked(ni));
@@ -1566,26 +1568,27 @@ int ci_netif_get_active_wild_list(ci_netif* ni, int aw_pool, ci_addr_t laddr,
   ci_addr_simple_hash(laddr, ni->state->active_wild_table_entries_n,
                       &hash1, &hash2);
   bucket = hash1;
+  list.p = OO_P_NULL;
 
   do {
     ci_active_wild* aw;
-    ci_ni_dllist_link* link;
+    struct oo_p_dllink_state link;
 
-    *list_out = &table[bucket];
+    list = oo_p_dllink_ptr(ni, &table[bucket]);
 
     /* If we've found an empty list, it means there's no entry in the table for
      * the specified IP address.  This empty list is also at the correct
      * location for the insertion of a new list for that IP address, and so we
      * return it. */
-    if( ci_ni_dllist_is_empty(ni, *list_out) )
-      return 0;
+    if( oo_p_dllink_is_empty(ni, list) )
+      return list;
 
     /* The list is non-empty, so look at one of the active wilds contained in
      * it in order to determine and check the local address. */
-    link = ci_ni_dllist_head(ni, *list_out);
-    aw = CI_CONTAINER(ci_active_wild, pool_link, link);
+    link = oo_p_dllink_statep(ni, list.l->next);
+    aw = CI_CONTAINER(ci_active_wild, pool_link, link.l);
     if( CI_IPX_ADDR_EQ(sock_ipx_laddr(&aw->s), laddr) )
-      return 0;
+      return list;
 
     /* This list is for the wrong IP address, so advance to the next bucket. */
     bucket = (bucket + hash2) & (ni->state->active_wild_table_entries_n - 1);
@@ -1595,7 +1598,7 @@ int ci_netif_get_active_wild_list(ci_netif* ni, int aw_pool, ci_addr_t laddr,
               "No space in active wild table %d for local address "
               IPX_FMT, aw_pool, IPX_ARG(AF_IP_L3(laddr)));
 
-  return -ENOSPC;
+  return list;
 }
 
 
@@ -1689,12 +1692,10 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
   ci_uint16 lport;
   ci_addr_t laddr_aw =
             NI_OPTS(ni).tcp_shared_local_ports_per_ip ? laddr : addr_any;
-  int rc;
   int af_space = AF_SPACE_FLAG_IP4;
   oo_sp sp;
-  ci_ni_dllist_t* list;
-  ci_ni_dllist_link* link = NULL;
-  ci_ni_dllist_link* tail;
+  struct oo_p_dllink_state list;
+  struct oo_p_dllink_state link, tmp;
 
   ci_assert(ci_netif_is_locked(ni));
 
@@ -1707,23 +1708,22 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
 
   *prev_seq_out = 0;
 
-  rc = ci_netif_get_active_wild_list(ni, aw_pool, laddr_aw, &list);
-  if( rc < 0 )
+  list = ci_netif_get_active_wild_list(ni, aw_pool, laddr_aw);
+  if( list.p == OO_P_NULL )
     return OO_SP_NULL;
 
   /* This can happen if active wilds are configured, but we failed to allocate
    * any at stack creation time, for example because there were no filters
    * available, or if none of them give a valid hash for this 4-tuple.
    */
-  if( ci_ni_dllist_is_empty(ni, list) )
+  if( oo_p_dllink_is_empty(ni, list) )
     return OO_SP_NULL;
 
-  tail = ci_ni_dllist_tail(ni, list);
-  while( link != tail ) {
-    link = ci_ni_dllist_pop(ni, list);
-    ci_ni_dllist_push_tail(ni, list, link);
+  oo_p_dllink_for_each_safe(ni, link, tmp, list) {
+    oo_p_dllink_del(ni, link);
+    oo_p_dllink_add(ni, list, link);
 
-    aw = CI_CONTAINER(ci_active_wild, pool_link, link);
+    aw = CI_CONTAINER(ci_active_wild, pool_link, link.l);
 
     lport = sock_lport_be16(&aw->s);
 

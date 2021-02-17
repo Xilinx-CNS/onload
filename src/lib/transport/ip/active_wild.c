@@ -8,8 +8,6 @@
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
 static void ci_active_wild_state_init(ci_netif* netif, ci_active_wild* aw)
 {
-  oo_p p;
-
   ci_sock_cmn_init(netif, &aw->s, 1);
   aw->s.b.state = CI_TCP_STATE_ACTIVE_WILD;
   aw->s.b.sb_aflags = 0;
@@ -21,10 +19,7 @@ static void ci_active_wild_state_init(ci_netif* netif, ci_active_wild* aw)
   ci_sock_set_laddr_port(&aw->s, addr_any, 0);
   ci_sock_set_raddr_port(&aw->s, addr_any, 0);
 
-  p = TS_OFF(netif, aw);
-  OO_P_ADD(p, CI_MEMBER_OFFSET(ci_active_wild, pool_link));
-  ci_ni_dllist_link_init(netif, &aw->pool_link, p, "pool");
-  ci_ni_dllist_self_link(netif, &aw->pool_link);
+  oo_p_dllink_init(netif, oo_p_dllink_sb(netif, &aw->s.b, &aw->pool_link));
 
   aw->expiry = ci_ip_time_now(netif);
   aw->last_laddr = addr_any;
