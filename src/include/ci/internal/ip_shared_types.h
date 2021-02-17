@@ -126,13 +126,12 @@
 
 
 /* A linked list for things in the netif state. */
-#define CI_ILL_NO_CODE
-#include <ci/internal/ni_dllist_tmpl_instantiate.h>
-
 #define OO_P_DLLIST_NO_CODE
 #include <onload/oo_p_dllist.h>
 
 
+
+#define CI_ILL_END              -1
 
 
 /*********************************************************************

@@ -64,7 +64,6 @@
 #include <onload/atomics.h>
 #include <onload/drv/dump_to_user.h>
 #include <onload/hash.h>
-#include <ci/internal/ni_dllist.h>
 #include <ci/internal/iptimer.h>
 #include <onload/ringbuffer.h>
 

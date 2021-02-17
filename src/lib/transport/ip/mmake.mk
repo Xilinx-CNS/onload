@@ -118,8 +118,7 @@ _UK_INTF_HDRS	:= ci/internal/ip_shared_types.h	\
 		ci/internal/opts_netif_def.h		\
 		ci/internal/tcp_stats_count_def.h	\
 		ci/internal/tcp_ext_stats_count_def.h	\
-		ci/internal/ni_dllist.h                 \
-		ci/internal/ni_dllist_tmpl_instantiate.h \
+		onload/oo_p_dllist.h			\
 		onload/common.h				\
 		onload/primitive_types.h		\
 		onload/ioctl.h				\

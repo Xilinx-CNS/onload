@@ -214,17 +214,6 @@
   FTL_TFIELD_INT(ctx, unsigned, sync_flags, (ORM_OUTPUT_STACK | ORM_OUTPUT_VIS)) \
   FTL_TSTRUCT_END(ctx)
 
-#define STRUCT_CI_NI_DLLINK(ctx) \
-    FTL_TSTRUCT_BEGIN(ctx, ci_ni_dllist_link, )                               \
-    FTL_TFIELD_INT(ctx, oo_p, prev, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                   \
-    FTL_TFIELD_INT(ctx, oo_p, next, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))                   \
-    FTL_TSTRUCT_END(ctx)                                                 
-
-#define STRUCT_CI_NI_DLLIST(ctx) \
-    FTL_TSTRUCT_BEGIN(ctx, ci_ni_dllist_t, )                                  \
-    FTL_TFIELD_STRUCT(ctx, ci_ni_dllist_link, l, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))              \
-    FTL_TSTRUCT_END(ctx)                                                 
-
 typedef struct oo_p_dllink oo_p_dllink_t;
 
 #define STRUCT_OO_P_DLLIST(ctx) \
