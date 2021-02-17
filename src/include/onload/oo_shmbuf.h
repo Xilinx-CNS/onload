@@ -20,8 +20,8 @@ struct oo_shmbuf {
   void** addrs;
 #define OO_SHMBUF_INIT_CHUNK ((void*)1UL)
 
-  /* lock */
-
+  /* Lock for the num field above */
+  struct mutex lock;
 };
 
 

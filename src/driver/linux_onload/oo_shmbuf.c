@@ -10,6 +10,7 @@ int oo_shmbuf_alloc(struct oo_shmbuf* sh, int order, int max, int init_num)
   sh->order = order;
   sh->num = init_num;
   sh->init_num = init_num;
+  mutex_init(&sh->lock);
 
   sh->addrs = kzalloc(sizeof(sh->addrs[0]) * max, GFP_KERNEL);
   if( sh->addrs == NULL )
@@ -40,18 +41,28 @@ void oo_shmbuf_free(struct oo_shmbuf* sh)
   kfree(sh->addrs);
 }
 
+/* Allocates a new chunk.
+ *
+ * Must not be called from any atomic/softirq/etc context, because it is
+ * uses vmalloc().
+ */
 int oo_shmbuf_add(struct oo_shmbuf* sh)
 {
   int i;
 
-  i = sh->num++;
+  mutex_lock(&sh->lock);
+
+  i = sh->num;
   /* Fixme implement locking */
 
   sh->addrs[i] = vmalloc_user(PAGE_SIZE << sh->order);
   if( sh->addrs[i] == 0 ) {
-    sh->num--;
+    mutex_unlock(&sh->lock);
     return -ENOMEM;
   }
+
+  sh->num++;
+  mutex_unlock(&sh->lock);
 
   return i;
 }
