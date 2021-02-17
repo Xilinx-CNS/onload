@@ -281,21 +281,20 @@ static void ci_ip_timer_do_recycle(ci_netif *netif)
 {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_netif_state *ns = netif->state;
-  ci_ni_dllist_link* lnk;
-  ci_ni_dllist_link* head;
+  struct oo_p_dllink_state list = oo_p_dllink_ptr(netif,
+                                                  &ns->recycle_retry_q);
+  struct oo_p_dllink_state lnk, tmp;
   ci_tcp_state* ts;
 
   /* ci_tcp_timeout_recycle() may add stuff back to the q, so we have to be
    * careful to iterate once */
-  if( ci_ni_dllist_is_empty(netif, &ns->recycle_retry_q) )
+  if( oo_p_dllink_is_empty(netif, list) )
     return;
-  head = ci_ni_dllist_head(netif, &ns->recycle_retry_q);
-  do {
-    lnk = ci_ni_dllist_tail(netif, &ns->recycle_retry_q);
-    ts = CI_CONTAINER(ci_tcp_state, recycle_link, lnk);
-    ci_ni_dllist_remove_safe(netif, &ts->recycle_link);
+  oo_p_dllink_for_each_safe(netif, lnk, tmp, list) {
+    ts = CI_CONTAINER(ci_tcp_state, recycle_link, lnk.l);
+    oo_p_dllink_del_init(netif, lnk);
     ci_tcp_timeout_recycle(netif, ts);
-  } while (lnk != head);
+  }
 #endif
 }
 

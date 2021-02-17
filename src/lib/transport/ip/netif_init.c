@@ -121,9 +121,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
                    "rctq");
   nis->recycle_tid.fn = CI_IP_TIMER_NETIF_TCP_RECYCLE;
 
-  ci_ni_dllist_init(ni, &nis->recycle_retry_q,
-                    oo_ptr_to_statep(ni, &nis->recycle_retry_q),
-                    "cycq");
+  oo_p_dllink_init(ni, oo_p_dllink_ptr(ni, &nis->recycle_retry_q));
 #endif
 
 #if CI_CFG_SUPPORT_STATS_COLLECTION

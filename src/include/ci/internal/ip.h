@@ -3970,10 +3970,14 @@ ci_inline void ci_tcp_zwin_set(ci_netif* netif, ci_tcp_state* ts)
  * queue, starting the timer if needed. */
 ci_inline void ci_tcp_recycle_reset(ci_netif* netif, ci_tcp_state* ts) {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
+  struct oo_p_dllink_state link = oo_p_dllink_sb(netif, &ts->s.b,
+                                                 &ts->recycle_link);
   ci_assert(ci_ip_queue_not_empty(&ts->rob));
-  if( ! ci_ni_dllist_is_self_linked(netif, &ts->recycle_link) )
+  if( ! oo_p_dllink_is_empty(netif, link) )
     return;
-  ci_ni_dllist_push(netif, &netif->state->recycle_retry_q, &ts->recycle_link);
+  oo_p_dllink_add(netif,
+                  oo_p_dllink_ptr(netif, &netif->state->recycle_retry_q),
+                  link);
   if( ! ci_ip_timer_pending(netif, &netif->state->recycle_tid) ) {
     /* This recycle timer exists to deal with the possibility of drops
      * and/or queue overflows in the link between plugin and host. Since

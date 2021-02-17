@@ -240,9 +240,6 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
   int rc, i;
   struct file *old_os_file, *new_os_file;
   unsigned long lock_flags;
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  oo_p sp;
-#endif
   struct oo_p_dllink_state link;
 
   OO_DEBUG_TCPH(ci_log("%s: move %d:%d to %d", __func__,
@@ -370,10 +367,8 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
     /* We banned pluginized sockets in efab_file_move_supported_tcp(), so only
      * need to reinitialise here. */
-    sp = TS_OFF(alien_ni, new_ts);
-    OO_P_ADD(sp, CI_MEMBER_OFFSET(ci_tcp_state, recycle_link));
-    ci_ni_dllist_link_init(alien_ni, &new_ts->recycle_link, sp, "eprc");
-    ci_ni_dllist_self_link(alien_ni, &new_ts->recycle_link);
+    link = oo_p_dllink_sb(alien_ni, &new_ts->s.b, &new_ts->recycle_link);
+    oo_p_dllink_init(alien_ni, link);
 #endif
 
     /* free temporary mid_ts storage */

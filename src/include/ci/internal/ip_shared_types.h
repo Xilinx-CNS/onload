@@ -1256,7 +1256,7 @@ struct ci_netif_state_s {
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_ip_timer           recycle_tid;
-  ci_ni_dllist_t        recycle_retry_q;  /**< linked
+  struct oo_p_dllink    recycle_retry_q;  /**< linked
                                                ci_tcp_state_t::recycle_link */
 #endif
 
@@ -2823,7 +2823,7 @@ struct ci_tcp_state_s {
   /* Technically a timer, but it always has a single-tick expiry so we save
    * space by just having the linked list part and using ns->recycle_tid to
    * trigger it. */
-  ci_ni_dllist_link    recycle_link;
+  struct oo_p_dllink   recycle_link;
 #endif
 
 #if CI_CFG_TCP_SOCK_STATS

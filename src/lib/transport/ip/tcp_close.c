@@ -539,7 +539,8 @@ int ci_tcp_close(ci_netif* netif, ci_tcp_state* ts)
     goto drop;
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_ni_dllist_remove_safe(netif, &ts->recycle_link);
+  oo_p_dllink_del_init(netif, oo_p_dllink_sb(netif, &ts->s.b,
+                                             &ts->recycle_link));
 #endif
 
   if( tcp_rcv_usr(ts) != 0 ) {
