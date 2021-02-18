@@ -2907,6 +2907,12 @@ OO_INTERCEPT(__sighandler_t, sysv_signal,
   return oact.sa_handler;
 }
 
+OO_INTERCEPT(__sighandler_t, signal,
+             (int sig, __sighandler_t handler))
+{
+  return onload_sysv_signal(sig, handler);
+}
+
 /*
  * vi: sw=2:ai:aw
  * vim: et:ul=0

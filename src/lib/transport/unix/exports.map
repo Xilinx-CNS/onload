@@ -98,6 +98,7 @@
     siginterrupt;
     bsd_signal;
     sysv_signal;
+    signal;
 
     onload_fd_stat;
     onload_is_present;
