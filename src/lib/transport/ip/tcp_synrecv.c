@@ -866,8 +866,8 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
         return rc;
       }
 
-      /* Remove fd from global fd_states list and push it to listen-socket's
-       * fd_states list in scalable case.
+      /* Remove fd from global fd_states list in scalable case to avoid
+       * possible stack lock.
        */
       if( scalable ) {
         struct oo_p_dllink_state fd_link =
@@ -875,13 +875,8 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
         ci_assert(ci_netif_is_locked(netif));
         oo_p_dllink_del_init(netif, fd_link);
 
-        oo_p_dllink_concurrent_add(netif,
-                                   oo_p_dllink_sb(netif, &tls->s.b,
-                                                  &tls->epcache.fd_states),
-                                   fd_link);
-
-        LOG_EP(ci_log(LPF LNT_FMT" acceptq: move fd %d from global fd_states"
-                      " list to listen-socket's list", LNT_PRI_ARGS(netif, tls),
+        LOG_EP(ci_log(LPF LNT_FMT" acceptq: remove fd %d from global"
+                      " fd_states list", LNT_PRI_ARGS(netif, tls),
                       ts->cached_on_fd));
       }
 
