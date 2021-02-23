@@ -4118,6 +4118,7 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
   }
 
   if( CI_LIKELY(ts->s.b.state & CI_TCP_STATE_ACCEPT_DATA) ) {
+    bool is_plugin_ooo_fin;
 
     /* If it's windows don't process URG until reordering done */
     if( CI_UNLIKELY((tcp->tcp_flags & CI_TCP_FLAG_URG) ||
@@ -4139,9 +4140,11 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
     /* Delivering data needs to be the last thing we do, 'cos we may not
     ** have access to [pkt] after (it may have been freed already).
     */
-    if(CI_UNLIKELY( ci_tcp_is_pluginized(ts) &&
-                    tcp->tcp_flags & CI_TCP_FLAG_FIN &&
-                    SEQ_LT(ts->rcv_added, rxp->seq) )) {
+    is_plugin_ooo_fin = ci_tcp_is_pluginized(ts) &&
+                        tcp->tcp_flags & CI_TCP_FLAG_FIN &&
+                        SEQ_LT(ts->rcv_added, rxp->seq);
+    if( CI_UNLIKELY(is_plugin_ooo_fin &&
+                    ! ci_tcp_plugin_elided_payload(pkt)) ) {
       /* If we get a FIN before we've received all the payload segments from
        * the meta-VI then we send it round for recycling. To do otherwise
        * would block our ability to receive and mark the socket as SHUT_RD,
@@ -4153,6 +4156,14 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
       TCP_FORCE_ACK(ts);
     }
     else if( pkt->pf.tcp_rx.pay_len ) {
+      if( CI_UNLIKELY(is_plugin_ooo_fin) ) {
+        /* Further to the comment just above, however, if the FIN had some
+         * in-order payload too then we can't recycle it and we can't drop it
+         * entirely. The easiest option is to remove the FIN flag and wait for
+         * the retransmit. It's suboptimal, but it's only the FIN. */
+        tcp->tcp_flags &=~ CI_TCP_FLAG_FIN;
+        pkt->pf.tcp_rx.end_seq--;
+      }
       if( CI_UNLIKELY(ts->s.rx_errno) ) {
         /* If the socket will never read again then send reset See
         ** Steven's p238 or rfc1122 4.2.2.13.
