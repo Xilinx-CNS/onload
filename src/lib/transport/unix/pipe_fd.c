@@ -160,9 +160,24 @@ int citp_pipe_splice_write(citp_fdinfo* fdi, int alien_fd, loff_t* alien_off,
     }
     else {
       /* alien_fd could block.  Do it before allocating pipe buffers. */
+    restart_poll:
       rc = onload_poll(&pfd, 1, -1);
-      if( rc < 0 )
+
+      /* Run pending signals. */
+      {
+        int inside_lib =
+              oo_exit_lib_temporary_begin(&lib_context->thread->sig);
+        oo_exit_lib_temporary_end(&lib_context->thread->sig, inside_lib);
+      }
+
+      if( rc < 0 ) {
+        /* When poll() is interrupted by a signal with the SA_RESTART flag set,
+         * it returns EINTR errno. We should to restart it manually. */
+        if( errno == EINTR &&
+            (lib_context->thread->sig.c.aflags & OO_SIGNAL_FLAG_NEED_RESTART) )
+          goto restart_poll;
         return rc;
+      }
     }
   }
 
