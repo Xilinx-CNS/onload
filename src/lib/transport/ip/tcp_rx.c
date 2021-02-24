@@ -4873,7 +4873,7 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
          * it. The actual payload contents we have in memory are drivel, of
          * course. */
         char *payload = (char*)tcp + CI_TCP_HDR_LEN(tcp);
-        uint16_t pay_len = ntohs(*(uint16_t*)payload);
+        uint16_t pay_len = *(uint16_t*)payload;
         pkt->pf.tcp_rx.pay_len = CI_TCP_HDR_LEN(tcp) + pay_len;
       }
       ci_tcp_rx_deliver_to_conn(s, &rxp);
