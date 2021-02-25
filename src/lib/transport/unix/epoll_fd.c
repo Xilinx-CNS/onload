@@ -1893,7 +1893,6 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
       citp_epoll_poll_ul_other(&eps);
       rc = eps.events - events;
       if( rc == maxevents ) {
-        ci_assert_impl(eps.phase, eps.phase == EPOLL_PHASE_DONE_ACCELERATED);
         ep->phase = eps.phase;
         goto unlock_release_exit_ret;
       }
