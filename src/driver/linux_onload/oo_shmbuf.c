@@ -93,5 +93,10 @@ int oo_shmbuf_fault(struct oo_shmbuf* sh, struct vm_area_struct* vma,
   }
 
   return remap_vmalloc_range_partial(vma, vma->vm_start + start_off,
-                                     (void*)sh->addrs[i], 0, size);
+                                     (void*)sh->addrs[i],
+#ifdef EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW
+                                     /* for linux>=5.7 */
+                                     0,
+#endif
+                                     size);
 }

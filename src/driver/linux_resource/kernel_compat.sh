@@ -129,6 +129,7 @@ EFRM_HAS_SOCKPTR		symbol	KERNEL_SOCKPTR	include/linux/sockptr.h
 
 EFRM_SYS_CLOSE_EXPORTED 	export	sys_close	include/linux/syscalls.h	fs/open.c
 
+EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW	symtype	remap_vmalloc_range_partial	include/linux/vmalloc.h int(struct vm_area_struct *vma, unsigned long uaddr, void *kaddr, unsigned long pgoff, unsigned long size)
 
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
