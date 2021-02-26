@@ -939,7 +939,8 @@ cp_set_hwport_flags(struct cp_session* s, struct cp_mibs* mib,
                     ci_hwport_id_t hwport, int flags);
 extern void
 cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
-                          ci_hwport_id_t hwport, cp_xdp_prog_id_t id);
+                          ci_hwport_id_t hwport, ci_ifid_t ifindex,
+                          cp_xdp_prog_id_t id);
 
 /* teaming & bonding primitives */
 

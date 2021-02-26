@@ -1519,7 +1519,7 @@ static void initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
 static int tcp_helper_nic_attach_xdp(ci_netif* ni,
                                      struct tcp_helper_nic* trs_nic,
-                                     cp_xdp_prog_id_t xdp_prog_id);
+                                     int xdp_prog_fd);
 #endif
 
 /* callback from ef_vi->ops */
@@ -1729,7 +1729,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
     trs_nic->thn_xdp_prog = NULL;
     if( NI_OPTS(ni).xdp_mode == EF_XDP_MODE_COMPATIBLE )
-      rc = tcp_helper_nic_attach_xdp(ni, trs_nic, xdp_prog_id);
+      rc = tcp_helper_nic_attach_xdp(ni, trs_nic, -1/*fixme*/);
 #endif
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
@@ -1957,7 +1957,7 @@ static void release_vi(tcp_helper_resource_t* trs)
 #endif
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
     if( trs_nic->thn_xdp_prog )
-      tcp_helper_nic_attach_xdp(&trs->netif, trs_nic, 0);
+      tcp_helper_nic_attach_xdp(&trs->netif, trs_nic, -1);
 #endif
     for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
       efrm_vi_resource_release_flushed(trs_nic->thn_vi_rs[vi_i]);
@@ -4881,12 +4881,12 @@ void tcp_helper_reset_stack(ci_netif* ni, int intf_i)
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
 void tcp_helper_handle_xdp_change(tcp_helper_resource_t *thr, int intf_i,
-                                  cp_xdp_prog_id_t xdp_prog_id)
+                                  int xdp_prog_fd)
 {
   struct tcp_helper_nic* trs_nic = &thr->nic[intf_i];
 
   if( NI_OPTS(&thr->netif).xdp_mode == EF_XDP_MODE_COMPATIBLE )
-    tcp_helper_nic_attach_xdp(&thr->netif, trs_nic, xdp_prog_id);
+    tcp_helper_nic_attach_xdp(&thr->netif, trs_nic, xdp_prog_fd);
 }
 #endif
 
@@ -8006,39 +8006,6 @@ static void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
 #include <uapi/linux/bpf.h>
 #include <linux/bpf.h>
 
-static int ci_bpf_prog_get_fd_by_id(cp_xdp_prog_id_t id)
-{
-  int rc;
-  mm_segment_t old_fs;
-  union bpf_attr attr = {};
-  const struct cred *orig_creds = NULL;
-  attr.prog_id = id;
-
-  if( ! capable(CAP_SYS_ADMIN) ) {
-    /* we need CAP_SYS_ADMIN to call sys_bpf and obtain program */
-    struct cred *creds = prepare_creds();
-    if( creds == NULL )
-      goto fail_enomem;
-    creds->cap_effective.cap[0] |= 1 << CAP_SYS_ADMIN;
-    orig_creds = override_creds(creds);
-  }
-
-  old_fs = get_fs();
-  set_fs(KERNEL_DS);
-
-  rc = efab_linux_sys_bpf(BPF_PROG_GET_FD_BY_ID, &attr, sizeof(attr));
-
-  set_fs(old_fs);
-
-  if( orig_creds != NULL )
-    revert_creds(orig_creds);
-
-  return rc;
-
-fail_enomem:
-  return -ENOMEM;
-}
-
 
 static struct bpf_prog* ci_bpf_prog_get(int fd)
 {
@@ -8052,40 +8019,33 @@ static void ci_bpf_prog_put(struct bpf_prog* prog)
 }
 
 
-static int ci_bpf_prog_get_by_id(cp_xdp_prog_id_t id, struct bpf_prog** prog_out)
+static int ci_bpf_prog_get_by_fd(int fd, struct bpf_prog** prog_out)
 {
-  int fd = ci_bpf_prog_get_fd_by_id(id);
   struct bpf_prog* prog;
   if( fd < 0 )
     return fd;
   prog = ci_bpf_prog_get(fd);
-  efab_linux_sys_close(fd);
   if( IS_ERR_OR_NULL(prog) )
     return -ENOENT;
-  if( prog->aux->id != id ) {
-    /* fd was overwritten in the meantime with some other program */
-    ci_bpf_prog_put(prog);
-    return -ENOENT;
-  }
   *prog_out = prog;
   return 0;
 }
 
 static int tcp_helper_nic_attach_xdp(ci_netif* ni,
                                      struct tcp_helper_nic* trs_nic,
-                                     cp_xdp_prog_id_t xdp_prog_id)
+                                     int xdp_prog_fd)
 {
   int rc = 0;
   ci_irqlock_state_t lock_flags;
   struct bpf_prog* prog = NULL;
   struct bpf_prog* old_prog = NULL;
 
-  if( xdp_prog_id != 0 ) {
-    rc = ci_bpf_prog_get_by_id(xdp_prog_id, &prog);
+  if( xdp_prog_fd > 0 ) {
+    rc = ci_bpf_prog_get_by_fd(xdp_prog_fd, &prog);
     if( rc ) {
       NI_LOG(ni, RESOURCE_WARNINGS,
-             FN_FMT "Failed obtain xdp program %d (%d)",
-             FN_PRI_ARGS(ni), xdp_prog_id, rc);
+             FN_FMT "Failed obtain xdp program (%d)",
+             FN_PRI_ARGS(ni), rc);
     }
   }
 

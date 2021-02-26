@@ -882,7 +882,7 @@ static void bring_up_kernel_state(void)
 #ifndef CP_ANYUNIT
 /* Drop all capabilities except CAP_NET_ADMIN; switch uid/gid. */
 static void
-drop_privileges(struct cp_session* s)
+drop_privileges(struct cp_session* s, bool in_main_netns)
 {
   int rc;
 
@@ -907,6 +907,10 @@ drop_privileges(struct cp_session* s)
       init_failed("Failed to drop UID to %d: %s", cfg_uid, strerror(errno));
   }
 
+  cap_t cap = cap_init();
+  if( cap == NULL )
+    init_failed("Failed to allocate capabilities: %s", strerror(errno));
+
   /* We really need CAP_NET_ADMIN, otherwise we won't see teaming.
    * We do not need any other capabilities.
    *
@@ -914,9 +918,6 @@ drop_privileges(struct cp_session* s)
    * permissions break dump state machine, so we keep CAP_NET_ADMIN in all
    * the cases.
    */
-  cap_t cap = cap_init();
-  if( cap == NULL )
-    init_failed("Failed to allocate capabilities: %s", strerror(errno));
   cap_value_t cap_val = CAP_NET_ADMIN;
   rc = cap_set_flag(cap, CAP_EFFECTIVE, 1, &cap_val, CAP_SET);
   if( rc == -1 )
@@ -926,9 +927,29 @@ drop_privileges(struct cp_session* s)
   if( rc == -1 )
     init_failed("Failed to set CAP_NET_ADMIN flag to CAP_PERMITTED: %s",
                 strerror(errno));
+
+  if( in_main_netns ) {
+    /* We have to obtain a bpf file descriptor to pass it to kernel.
+     * It is stupid, bpf_prog_by_id() is not exported, so can't be used by
+     * the Onload module.
+     *
+     * Unfortunately BPF_PROG_GET_FD_BY_ID requires CAP_SYS_ADMIN
+     */
+    cap_val = CAP_SYS_ADMIN;
+    rc = cap_set_flag(cap, CAP_EFFECTIVE, 1, &cap_val, CAP_SET);
+    if( rc == -1 )
+      init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_EFFECTIVE: %s",
+                  strerror(errno));
+    rc = cap_set_flag(cap, CAP_PERMITTED, 1, &cap_val, CAP_SET);
+    if( rc == -1 )
+      init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_PERMITTED: %s",
+                  strerror(errno));
+  }
+
+  /* Set the capabilities: */
   rc = cap_set_proc(cap);
   if( rc == -1 )
-    init_failed("Failed to set CAP_NET_ADMIN to the process: %s",
+    init_failed("Failed to set CAP_NET_ADMIN and CAP_SYS_ADMIN to the process: %s",
                 strerror(errno));
   rc = cap_free(cap);
   if( rc == -1 )
@@ -1107,7 +1128,7 @@ int main(int argc, char** argv)
 
 #ifndef NO_CAPS
   /* Drop all the privileges except CAP_NET_ADMIN in this namespace. */
-  drop_privileges(s);
+  drop_privileges(s, cfg_ns_file == NULL);
 #endif
 #endif
 

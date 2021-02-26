@@ -1501,22 +1501,11 @@ static int oo_cp_init_kernel_mibs_rsop(ci_private_t *priv, void *arg)
 static int oo_cp_xdp_prog_change(ci_private_t *priv, void *arg)
 {
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-  ci_hwport_id_t hwport = *(ci_hwport_id_t*)arg;
-  struct oo_cplane_handle* cp;
-  cp_xdp_prog_id_t xdp_prog_id;
+  struct oo_cp_xdp_change* param = arg;
   ci_irqlock_state_t lock_flags;
   ci_dllink *link;
   int intf_i;
   ci_netif* ni;
-
-  int rc = cp_acquire_from_priv_if_server(priv, &cp);
-  if( rc != 0 )
-    return rc;
-
-  rc = oo_cp_get_hwport_properties(cp, hwport, NULL, NULL, &xdp_prog_id);
-  cp_release(cp);
-  if( rc < 0 )
-    return rc;
 
   /* Similar to oo_efrm_callback_hook_generic() */
   ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
@@ -1525,17 +1514,17 @@ static int oo_cp_xdp_prog_change(ci_private_t *priv, void *arg)
 
     thr = CI_CONTAINER(tcp_helper_resource_t, all_stacks_link, link);
     ni = &thr->netif;
-    if( (intf_i = ni->hwport_to_intf_i[hwport]) >= 0 )
-      tcp_helper_handle_xdp_change(thr, intf_i, xdp_prog_id);
+    if( (intf_i = ni->hwport_to_intf_i[param->hwport]) >= 0 )
+      tcp_helper_handle_xdp_change(thr, intf_i, param->fd);
   }
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
   ni = NULL;
   while( iterate_netifs_unlocked(&ni, OO_THR_REF_BASE,
                                  OO_THR_REF_INFTY) == 0 ) {
-    if( (intf_i = ni->hwport_to_intf_i[hwport]) >= 0 )
+    if( (intf_i = ni->hwport_to_intf_i[param->hwport]) >= 0 )
       tcp_helper_handle_xdp_change(netif2tcp_helper_resource(ni),
-                                   intf_i, xdp_prog_id);
+                                   intf_i, param->fd);
   }
 
 #endif

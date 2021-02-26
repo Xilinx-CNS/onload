@@ -48,6 +48,11 @@ struct oo_op_cplane_dnat_del {
   ci_uint16    orig_port;
 };
 
+struct oo_cp_xdp_change {
+  ci_hwport_id_t hwport;
+  ci_int32 fd;
+};
+
 #include <onload/ioctl_base.h>
 
 /* This is the first part of a large enum defined in
@@ -133,7 +138,8 @@ enum {
 #define OO_IOC_CP_INIT_KERNEL_MIBS OO_IOC_R(CP_INIT_KERNEL_MIBS, ci_uint32)
 
   OO_OP_CP_XDP_PROG_CHANGE,
-#define OO_IOC_CP_XDP_PROG_CHANGE OO_IOC_W(CP_XDP_PROG_CHANGE, ci_hwport_id_t)
+#define OO_IOC_CP_XDP_PROG_CHANGE OO_IOC_W(CP_XDP_PROG_CHANGE, \
+                                           struct oo_cp_xdp_change)
 
   OO_OP_CP_END  /* This had better be last! */
 };

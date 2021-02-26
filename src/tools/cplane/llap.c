@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2017-2020 Xilinx, Inc. */
 
+#include <sys/syscall.h>
+#include <linux/bpf.h>
 #include <ci/efhw/common.h>
 
 #include "private.h"
@@ -332,10 +334,12 @@ find_base_properties(struct cp_session* s, cicp_rowid_t llap_id,
 
 
 void cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
-                               ci_hwport_id_t hwport,
+                               ci_hwport_id_t hwport, ci_ifid_t ifindex,
                                cp_xdp_prog_id_t xdp_prog_id)
 {
   struct cp_hwport_row* hwp = &mib->hwport[hwport];
+  union bpf_attr attr = {};
+  struct oo_cp_xdp_change op;
 
   if( hwp->xdp_prog_id == xdp_prog_id )
     return;
@@ -343,7 +347,20 @@ void cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
   hwp->xdp_prog_id = xdp_prog_id;
   ci_wmb();
 
-  cplane_ioctl(s->oo_fd, OO_IOC_CP_XDP_PROG_CHANGE, &hwport);
+#ifdef SYS_bpf
+  op.hwport = hwport;
+  op.fd = -1;
+  attr.prog_id = xdp_prog_id;
+  if( xdp_prog_id != 0 ) {
+    op.fd = syscall(SYS_bpf, BPF_PROG_GET_FD_BY_ID, &attr, sizeof(attr));
+    if( op.fd < 0 )
+      ci_log("%s: failed to notify about XDP program change, "
+             "ifindex=%d rc=%d", __func__, ifindex, op.fd);
+  }
+  cplane_ioctl(s->oo_fd, OO_IOC_CP_XDP_PROG_CHANGE, &op);
+  if( op.fd >= 0 )
+    close(op.fd);
+#endif
 }
 
 
@@ -387,7 +404,6 @@ import_main_hwports(struct cp_session* s, cicp_hwport_mask_t* hwports_in_out)
         cp_mibs_llap_under_change(s);
         mib->hwport[hwport].flags = hwp.flags | CP_LLAP_IMPORTED;
         mib->hwport[hwport].nic_flags = hwp.nic_flags;
-        cp_set_hwport_xdp_prog_id(s, mib, hwport, hwp.xdp_prog_id);
       }
     MIB_UPDATE_LOOP_END(mib, s)
   }
@@ -537,6 +553,7 @@ void cp_populate_llap_hwports(struct cp_session* s, ci_ifid_t ifindex,
     }
     cp_llap_set_hwports(s, mib, llap_id, hwports, hwports,
                         mib->llap[llap_id].encap.type, ! mib_i);
-    cp_set_hwport_xdp_prog_id(s, mib, hwport, mib->llap[llap_id].xdp_prog_id);
+    cp_set_hwport_xdp_prog_id(s, mib, hwport, mib->llap[llap_id].ifindex,
+                              mib->llap[llap_id].xdp_prog_id);
   MIB_UPDATE_LOOP_END(mib, s)
 }

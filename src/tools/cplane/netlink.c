@@ -544,7 +544,7 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
              */
             cp_set_hwport_xdp_prog_id(s, mib,
                                       cp_hwport_mask_first(llap->rx_hwports),
-                                      xdp_prog_id);
+                                      llap->ifindex, xdp_prog_id);
           }
         }
         llap->xdp_prog_id = xdp_prog_id;
