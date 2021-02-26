@@ -381,8 +381,7 @@ import_main_hwports(struct cp_session* s, cicp_hwport_mask_t* hwports_in_out)
   for( ; hwports != 0; hwports &= (hwports - 1) ) {
     ci_hwport_id_t hwport = cp_hwport_mask_first(hwports);
     int rc = oo_cp_get_hwport_properties(s->main_cp_handle, hwport,
-                                         &hwp.flags, &hwp.nic_flags,
-                                         &hwp.xdp_prog_id);
+                                         &hwp.flags, &hwp.nic_flags);
     if( rc != 0 ) {
       continue;
     }
@@ -399,8 +398,7 @@ import_main_hwports(struct cp_session* s, cicp_hwport_mask_t* hwports_in_out)
     int mib_i;
     MIB_UPDATE_LOOP(mib, s, mib_i)
       if( (hwp.flags | CP_LLAP_IMPORTED) !=
-          (mib->hwport[hwport].flags | CP_LLAP_IMPORTED) ||
-          mib->hwport[hwport].xdp_prog_id != hwp.xdp_prog_id ) {
+          (mib->hwport[hwport].flags | CP_LLAP_IMPORTED) ) {
         cp_mibs_llap_under_change(s);
         mib->hwport[hwport].flags = hwp.flags | CP_LLAP_IMPORTED;
         mib->hwport[hwport].nic_flags = hwp.nic_flags;

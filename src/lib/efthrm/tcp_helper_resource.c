@@ -1604,7 +1604,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     struct pci_dev* dev;
     struct efrm_vi* vi_rs;
     ef_vi* vi;
-    cp_xdp_prog_id_t xdp_prog_id = 0;
 
     BUILD_BUG_ON(sizeof(ni->vi_data) < sizeof(struct efrm_vi_mappings));
 
@@ -1612,8 +1611,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
     /* Get interface properties. */
     rc = oo_cp_get_hwport_properties(ni->cplane, ns->intf_i_to_hwport[intf_i],
-                                     &alloc_info.hwport_flags, NULL,
-                                     &xdp_prog_id);
+                                     &alloc_info.hwport_flags, NULL);
     if( rc < 0 )
       goto error_out;
 

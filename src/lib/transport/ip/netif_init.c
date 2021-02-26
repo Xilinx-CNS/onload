@@ -2054,7 +2054,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
 
     /* Get interface properties. */
     rc = oo_cp_get_hwport_properties(ni->cplane, ns->intf_i_to_hwport[nic_i],
-                                     NULL, NULL, NULL);
+                                     NULL, NULL);
     if( rc < 0 )
       goto fail1;
 
