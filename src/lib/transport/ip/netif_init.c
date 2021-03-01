@@ -654,6 +654,14 @@ void ci_netif_config_opts_rangecheck(ci_netif_config_opts* opts)
 }                                               
 
 # include <ci/internal/opts_netif_def.h>
+
+  /* EF_MAX_ENDPOINTS should must be divisible by 2048 */
+  if( opts->max_ep_bufs % EP_BUF_PER_CHUNK != 0 ) {
+    unsigned new_max = opts->max_ep_bufs;
+    new_max = CI_ROUND_UP(new_max, EP_BUF_PER_CHUNK);
+    ci_log("config: EF_MAX_ENDPOINTS is rounded up from %d to %d", opts->max_ep_bufs, new_max);
+    opts->max_ep_bufs = new_max;
+  }
 }
 
 

@@ -2229,9 +2229,8 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
 
   /* [shmbuf] backs the shared stack state and the socket buffers.  First,
    * count the pages required for the latter. */
-  i = (NI_OPTS(ni).max_ep_bufs +
-       (EP_BUF_PER_PAGE << OO_SHARED_BUFFER_CHUNK_ORDER) - 1) /
-      (EP_BUF_PER_PAGE << OO_SHARED_BUFFER_CHUNK_ORDER);
+  i = (NI_OPTS(ni).max_ep_bufs / EP_BUF_PER_PAGE) >>
+                                    OO_SHARED_BUFFER_CHUNK_ORDER;
   /* Now add in the pages for the shared state. */
   i += sz / OO_SHARED_BUFFER_CHUNK_SIZE;
 
