@@ -1386,7 +1386,6 @@ static void process_post_poll_list(ci_netif* ni)
       return;
     }
 #endif
-    oo_p_dllink_del_init(ni, lnk);
 
     sb = CI_CONTAINER(citp_waitable, post_poll_link, lnk.l);
 
@@ -1434,6 +1433,11 @@ static void process_post_poll_list(ci_netif* ni)
         }
       }
     }
+
+    /* If there is no reason to keep the socket in the list (see above),
+     * then we can remove it now.
+     */
+    oo_p_dllink_del_init(ni, lnk);
   }
 
   CHECK_NI(ni);
