@@ -154,7 +154,7 @@ ci_pmtu_state_init(ci_netif* ni, ci_sock_cmn *s, oo_p pmtu_sp,
 extern void ci_pmtu_set(ci_netif *ni, ci_pmtu_state_t *pmtus, unsigned pmtu);
 
 /*! IP timer callback for Path MTU discovery process */
-extern void ci_pmtu_timeout_pmtu(ci_netif* ni, ci_tcp_state* tso) CI_HF;
+extern void ci_pmtu_timeout_pmtu(ci_netif* ni, ci_pmtu_state_t* pmtu) CI_HF;
 
 extern void ci_pmtu_update_fast(ci_netif *ni, ci_pmtu_state_t *pmtus,
                                 ci_ip_cached_hdrs *ipcache,

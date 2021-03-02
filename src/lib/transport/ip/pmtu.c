@@ -29,8 +29,9 @@ ci_pmtu_state_init(ci_netif* ni, ci_sock_cmn *s,
                    int func_code)
 {
   pmtus->tid.fn = (ci_iptime_callback_fn_t)func_code;
+  pmtus->sp = SC_SP(s);
 
-  OO_P_ADD(pmtu_sp, CI_MEMBER_OFFSET(ci_ni_aux_mem, u.pmtus));
+  OO_P_ADD(pmtu_sp, CI_MEMBER_OFFSET(ci_ni_aux_mem, u.pmtus.tid));
   ci_ip_timer_init(ni, &pmtus->tid, pmtu_sp, "pmtu");
 }
 
@@ -87,10 +88,11 @@ ci_inline void __ci_pmtu_timeout_handler(ci_netif* ni, ci_pmtu_state_t *pmtus,
 
 /* Called at timeout on a Path MTU (re-)discovery timeout.
  * TCP sockets only. */
-void ci_pmtu_timeout_pmtu(ci_netif* ni, ci_tcp_state *ts)
+void ci_pmtu_timeout_pmtu(ci_netif* ni, ci_pmtu_state_t* pmtus)
 {
-  __ci_pmtu_timeout_handler(ni, ci_ni_aux_p2pmtus(ni, ts->pmtus),
-                            &ts->s.pkt);
+  ci_tcp_state* ts;
+  ts = SP_TO_TCP(ni, pmtus->sp);
+  __ci_pmtu_timeout_handler(ni, pmtus, &ts->s.pkt);
   ci_tcp_tx_change_mss(ni, ts);
 }
 

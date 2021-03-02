@@ -1706,6 +1706,7 @@ typedef struct {
   ci_ip_timer           tid;            /* adjustment timer */
   ci_uint16             pmtu;           /* current PMTU */
   ci_uint8              plateau_id;     /* index in plateau table */
+  oo_sp                 sp;             /* socket pointer */
 } ci_pmtu_state_t;
 
 /*! Possible return codes between cicp_user_retrieve and cicp_user_defer

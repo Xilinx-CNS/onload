@@ -343,9 +343,12 @@ static void ci_ip_timer_docallback(ci_netif *netif, ci_ip_timer* ts)
     ci_netif_timeout_state(netif);
     break;
   case CI_IP_TIMER_PMTU_DISCOVER:
-    sp = oo_statep_to_sockp(netif, ts->statep);
-    ci_pmtu_timeout_pmtu(netif, SP_TO_TCP(netif, sp));
+  {
+    oo_p pmtu_p = ts->statep;
+    OO_P_ADD(pmtu_p, -CI_MEMBER_OFFSET(ci_ni_aux_mem, u.pmtus.tid));
+    ci_pmtu_timeout_pmtu(netif, &ci_ni_aux_p2aux(netif, pmtu_p)->u.pmtus);
     break;
+  }
 #if CI_CFG_TCP_SOCK_STATS
   case CI_IP_TIMER_TCP_STATS:
     sp = oo_statep_to_sockp(netif, ts->statep);
