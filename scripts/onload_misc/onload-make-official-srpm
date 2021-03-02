@@ -55,10 +55,6 @@ tarball="$1"
 try egrep -q "Red Hat Enterprise Linux.*release 6|CentOS (Linux )*release 6" \
   /etc/redhat-release
 
-# We must be root, else get problems at install time.
-try [ "$UID" = 0 ]
-try [ "$USER" = root ]
-
 tmpd=
 trap cleanup EXIT
 tmpd=$(mktemp -d /tmp/$me.XXXXXXXX)
