@@ -51,9 +51,8 @@ done
 [ $# = 1 ] || usage
 tarball="$1"
 
-# We build Onload source rpm on RHEL5 or RHEL6, as the srpm then seems to work
-# fine on other supported distros.
-try egrep -q "Red Hat Enterprise Linux.*release [56]|CentOS release [56]" \
+# We build Onload source rpm on RHEL6 as the earliest supported distro
+try egrep -q "Red Hat Enterprise Linux.*release 6|CentOS (Linux )*release 6" \
   /etc/redhat-release
 
 # We must be root, else get problems at install time.
