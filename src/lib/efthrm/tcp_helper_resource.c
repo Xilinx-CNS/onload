@@ -1516,12 +1516,6 @@ static void initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
   ef_vi_init_tx_timestamping(vi, vm->tx_ts_correction);
 }
 
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-static int tcp_helper_nic_attach_xdp(ci_netif* ni,
-                                     struct tcp_helper_nic* trs_nic,
-                                     int xdp_prog_fd);
-#endif
-
 /* callback from ef_vi->ops */
 static int af_xdp_kick(ef_vi* vi)
 {
@@ -1722,12 +1716,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
         goto error_out;
       }
     }
-#endif
-
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-    trs_nic->thn_xdp_prog = NULL;
-    if( NI_OPTS(ni).xdp_mode == EF_XDP_MODE_COMPATIBLE )
-      rc = tcp_helper_nic_attach_xdp(ni, trs_nic, -1/*fixme*/);
 #endif
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
@@ -1952,10 +1940,6 @@ static void release_vi(tcp_helper_resource_t* trs)
     if( trs_nic->thn_ctpio_io_mmap != NULL )
       efrm_ctpio_unmap_kernel(tcp_helper_vi(trs, intf_i),
                               trs_nic->thn_ctpio_io_mmap);
-#endif
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-    if( trs_nic->thn_xdp_prog )
-      tcp_helper_nic_attach_xdp(&trs->netif, trs_nic, -1);
 #endif
     for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
       efrm_vi_resource_release_flushed(trs_nic->thn_vi_rs[vi_i]);
@@ -4873,18 +4857,6 @@ void tcp_helper_reset_stack(ci_netif* ni, int intf_i)
   /* Call tcp_helper_reset_stack_locked from non-dl context only.
    * todo: net driver should tell us if it is dl context */
   queue_work(thr->reset_wq, &thr->reset_work);
-}
-#endif
-
-
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-void tcp_helper_handle_xdp_change(tcp_helper_resource_t *thr, int intf_i,
-                                  int xdp_prog_fd)
-{
-  struct tcp_helper_nic* trs_nic = &thr->nic[intf_i];
-
-  if( NI_OPTS(&thr->netif).xdp_mode == EF_XDP_MODE_COMPATIBLE )
-    tcp_helper_nic_attach_xdp(&thr->netif, trs_nic, xdp_prog_fd);
 }
 #endif
 
@@ -8005,67 +7977,16 @@ static void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
 #include <linux/bpf.h>
 
 
-static struct bpf_prog* ci_bpf_prog_get(int fd)
-{
-  return bpf_prog_get_type_dev(fd, BPF_PROG_TYPE_XDP, 1);
-}
-
-
-static void ci_bpf_prog_put(struct bpf_prog* prog)
-{
-  bpf_prog_put(prog);
-}
-
-
-static int ci_bpf_prog_get_by_fd(int fd, struct bpf_prog** prog_out)
-{
-  struct bpf_prog* prog;
-  if( fd < 0 )
-    return fd;
-  prog = ci_bpf_prog_get(fd);
-  if( IS_ERR_OR_NULL(prog) )
-    return -ENOENT;
-  *prog_out = prog;
-  return 0;
-}
-
-static int tcp_helper_nic_attach_xdp(ci_netif* ni,
-                                     struct tcp_helper_nic* trs_nic,
-                                     int xdp_prog_fd)
-{
-  int rc = 0;
-  ci_irqlock_state_t lock_flags;
-  struct bpf_prog* prog = NULL;
-  struct bpf_prog* old_prog = NULL;
-
-  if( xdp_prog_fd > 0 ) {
-    rc = ci_bpf_prog_get_by_fd(xdp_prog_fd, &prog);
-    if( rc ) {
-      NI_LOG(ni, RESOURCE_WARNINGS,
-             FN_FMT "Failed obtain xdp program (%d)",
-             FN_PRI_ARGS(ni), rc);
-    }
-  }
-
-  ci_irqlock_lock(&netif2tcp_helper_resource(ni)->lock, &lock_flags);
-  old_prog = trs_nic->thn_xdp_prog;
-  trs_nic->thn_xdp_prog = prog;
-  ci_irqlock_unlock(&netif2tcp_helper_resource(ni)->lock, &lock_flags);
-  if( old_prog != NULL )
-    ci_bpf_prog_put(old_prog);
-
-  return rc;
-}
-
 ci_inline int oo_xdp_rx_pkt_locked(ci_netif* ni,
                                    struct net_device* dev,
-                                   struct bpf_prog* xdp_prog,
                                    ci_ip_pkt_fmt* pkt)
 {
   /* TODO: ensure that packet:
    *  * is linear
    *  * has enough headroom (256 bytes)
    *  see netif_receive_generic_xdp in kernel */
+  struct bpf_prog* xdp_prog = rcu_dereference(
+                    oo_nics[ni->intf_i_to_hwport[pkt->intf_i] ].prog);
   struct xdp_buff _xdp;
   struct xdp_buff* xdp = &_xdp;
   void *orig_data, *orig_data_end;
@@ -8073,6 +7994,9 @@ ci_inline int oo_xdp_rx_pkt_locked(ci_netif* ni,
     .dev = dev,
   };
   int act;
+
+  if( xdp_prog == NULL )
+      return XDP_PASS;
 
   /* The XDP program wants to see the packet starting at the MAC
    * header.
@@ -8104,15 +8028,14 @@ ci_inline int oo_xdp_rx_pkt_locked(ci_netif* ni,
 /* bool */ int
 efab_tcp_helper_xdp_rx_pkt(tcp_helper_resource_t* trs, ci_ip_pkt_fmt* pkt)
 {
-  struct bpf_prog* xdp_prog;
   int ret = XDP_PASS;
   struct tcp_helper_nic* trs_nic = &trs->nic[pkt->intf_i];
   struct efhw_nic* nic;
   struct net_device* dev;
   ci_netif* ni = &trs->netif;
 
-  xdp_prog = trs_nic->thn_xdp_prog;
-  if( xdp_prog == NULL )
+  /* Early exit if nothing to do.  We'll re-read it after RCU lock later. */
+  if( oo_nics[ni->intf_i_to_hwport[pkt->intf_i]].prog == NULL )
     return 1;
 
   nic = efrm_client_get_nic(trs_nic->thn_oo_nic->efrm_client);
@@ -8129,7 +8052,7 @@ efab_tcp_helper_xdp_rx_pkt(tcp_helper_resource_t* trs, ci_ip_pkt_fmt* pkt)
    * seperately for each pkt */
   preempt_disable();
   rcu_read_lock();
-  ret = oo_xdp_rx_pkt_locked(ni, dev, xdp_prog, pkt);
+  ret = oo_xdp_rx_pkt_locked(ni, dev, pkt);
   rcu_read_unlock();
   preempt_enable();
 

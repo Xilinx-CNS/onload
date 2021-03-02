@@ -67,11 +67,6 @@ extern void tcp_helper_suspend_interface(ci_netif* ni, int intf_i);
 extern void tcp_helper_reset_stack(ci_netif* ni, int intf_i);
 #endif
 
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-extern void tcp_helper_handle_xdp_change(tcp_helper_resource_t *thr,
-                                         int intf_i, int xdp_prog_fd);
-#endif
-
 extern void tcp_helper_flush_resets(ci_netif* ni);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER

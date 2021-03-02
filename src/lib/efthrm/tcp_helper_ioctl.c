@@ -28,6 +28,10 @@
 #include "tcp_helper_resource.h"
 #include "tcp_helper_stats_dump.h"
 
+#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
+#include <linux/bpf.h>
+#endif
+
 int
 efab_ioctl_get_ep(ci_private_t* priv, oo_sp sockp,
                   tcp_helper_endpoint_t** ep_out)
@@ -1502,31 +1506,30 @@ static int oo_cp_xdp_prog_change(ci_private_t *priv, void *arg)
 {
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   struct oo_cp_xdp_change* param = arg;
-  ci_irqlock_state_t lock_flags;
-  ci_dllink *link;
-  int intf_i;
-  ci_netif* ni;
+  struct oo_nic* nic;
+  struct bpf_prog* new_prog = NULL;
+  struct bpf_prog* old_prog;
 
-  /* Similar to oo_efrm_callback_hook_generic() */
-  ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
-  CI_DLLIST_FOR_EACH(link, &THR_TABLE.started_stacks) {
-    tcp_helper_resource_t *thr;
+  if( param->hwport < 0 || param->hwport >= CI_CFG_MAX_HWPORTS )
+    return -EINVAL;
+  nic = &oo_nics[param->hwport];
 
-    thr = CI_CONTAINER(tcp_helper_resource_t, all_stacks_link, link);
-    ni = &thr->netif;
-    if( (intf_i = ni->hwport_to_intf_i[param->hwport]) >= 0 )
-      tcp_helper_handle_xdp_change(thr, intf_i, param->fd);
+  if( param->fd > 0 ) {
+    new_prog = bpf_prog_get_type_dev(param->fd, BPF_PROG_TYPE_XDP, 1);
+    if( IS_ERR(new_prog) )
+      new_prog = NULL;
   }
-  ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
+  do {
+    old_prog = nic->prog;
+  } while( ci_cas_uintptr_fail(&nic->prog, (ci_uintptr_t)old_prog,
+                               (ci_uintptr_t)new_prog) );
 
-  ni = NULL;
-  while( iterate_netifs_unlocked(&ni, OO_THR_REF_BASE,
-                                 OO_THR_REF_INFTY) == 0 ) {
-    if( (intf_i = ni->hwport_to_intf_i[param->hwport]) >= 0 )
-      tcp_helper_handle_xdp_change(netif2tcp_helper_resource(ni),
-                                   intf_i, param->fd);
+  if( old_prog != NULL ) {
+    /* Release the bpf prog after RCU is not using it.
+     * __bpf_prog_put() cares about RCU, so we don't need to.
+     */
+    bpf_prog_put(old_prog);
   }
-
 #endif
   return 0;
 }

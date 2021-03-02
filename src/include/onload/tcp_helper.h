@@ -44,9 +44,6 @@ struct tcp_helper_nic {
   unsigned             thn_ctpio_io_mmap_bytes;
   void*                thn_ctpio_io_mmap;
 #endif
-#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
-  struct bpf_prog*     thn_xdp_prog;
-#endif
 };
 
 

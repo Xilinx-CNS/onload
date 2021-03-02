@@ -13,6 +13,11 @@ struct oo_nic {
 #define OO_NIC_UP         0x00000001u  /* Interface is currently IFF_UP. */
 #define OO_NIC_UNPLUGGED  0x00000002u  /* Interface has been hot-unplugged. */
   unsigned            oo_nic_flags;
+#ifdef __KERNEL__
+#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
+  struct bpf_prog*    prog;
+#endif
+#endif
 };
 
 
