@@ -1541,6 +1541,8 @@ static void citp_epoll_get_ready_list(struct oo_ul_epoll_state*
   ci_netif* ni = eps->ep->home_stack;
   struct oo_p_dllink_state ready_list =
       oo_p_dllink_ptr(ni, &ni->state->ready_lists[eps->ep->ready_list]);
+  struct oo_p_dllink_state unready_list =
+      oo_p_dllink_ptr(ni, &ni->state->unready_lists[eps->ep->ready_list]);
   struct oo_p_dllink_state lnk, tmp;
   struct citp_epoll_member* eitem = NULL;
   int stack_locked = 0;
@@ -1561,7 +1563,7 @@ static void citp_epoll_get_ready_list(struct oo_ul_epoll_state*
 
     eitem = CI_USER_PTR_GET(epoll->e[eps->ep->ready_list].eitem);
     oo_p_dllink_del(ni, lnk);
-    oo_p_dllink_add_tail(ni, ready_list, lnk);
+    oo_p_dllink_add_tail(ni, unready_list, lnk);
     ci_assert(eitem);
     ci_dllist_remove(&((struct citp_epoll_member*)eitem)->dllink);
     /* This means that we'll be processing sockets in the order that they got
