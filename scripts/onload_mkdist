@@ -72,6 +72,7 @@ cloud=false
 enterprise=false
 force=false
 testciul=false
+git=${GIT_PATH:-"git"}
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -102,7 +103,7 @@ if [ -z "$version" ]; then
   if $release; then
     version=$(date '+%Y%m%d')
   else
-    version=$(cd "$TOP" && git rev-parse HEAD)
+    version=$(cd "$TOP" && "$git" rev-parse HEAD)
     [ -z "$version" ] && fail "ERROR: Could not find HEAD revision"
   fi
 fi

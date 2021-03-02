@@ -25,6 +25,7 @@ netrepo="/project/ci/git/linux-net"
 fwrepo="/project/hg/incoming/sfutils_config"
 fwtag=""
 legacytag="default"
+git=${GIT_PATH:-"git"}
 
 usage() {
   err
@@ -50,8 +51,8 @@ newpatch() {
 
 # Commit a patch if there's something to commit
 commitif() {
-    git status -s -uno
-    if [ -n "$(git status --porcelain -uno)" ]; then
+    "$git" status -s -uno
+    if [ -n "$( $git status --porcelain -uno)" ]; then
       git commit -m "$*"
     else
         echo "nothing to commit: omitting patch"
@@ -65,7 +66,7 @@ git-in() {
     shift
     # This is preferable to using --git-dir because then the user does
     # not have to specify the .git directory for non-bare repos.
-    ( cd "$repo" && git "$@" )
+    ( cd "$repo" && "$git" "$@" )
 }
 
 
@@ -94,7 +95,7 @@ git-export() {
 	cd $repo
 	local extant_files=$(git ls-tree -r --name-only $rev "$@" \
                              | grep -E "$whitelist" | grep -Ev "$blacklist")
-	git archive $rev $extant_files
+	"$git" archive $rev $extant_files
     )
 }
 
@@ -142,10 +143,10 @@ cd "$top"
 
 [ -n "$netrepo" ] || netrepo="$top"
 [ -d "$netrepo" ] || fail "--netrepo is not valid"
-onloadid=$(git describe --always --dirty=+)
+onloadid=$("$git" describe --always --dirty=+)
 [ "${onloadid/\+/|/}" == "${onloadid}" ] ||
   fail "onload repo has local changes.  See git status."
-git checkout -b "$staging_branch" || \
+"$git" checkout -b "$staging_branch" || \
     fail "$staging_branch branch already exists; clean up before re-running"
 
 # Validate the supplied net revision spec
@@ -193,7 +194,7 @@ whitelist="^((scripts/export.sh)|(scripts/kernel_compat_funcs.sh)|(scripts/Makef
 blacklist="(/$)|(xen/)|(load.*\.sh)|(unittest)|(systemtap)|(kscripts)|(dummycommit)|(doc/)|(Kconfig)|(export\.sh)|(^tools)"
 # We use || true for the grep here to allow the case where we currently
 # have no files, as the script is run with -o pipefail.
-git ls-files \
+"$git" ls-files \
   src/driver/linux_net \
     | (grep -v ${glue_makefile_pattern} || true) | sort > ${netgot}
 git-export "$netrepo" "$netrev" "$whitelist" "$blacklist" \
@@ -204,10 +205,10 @@ grep -q "$glue_makefile_pattern" "$netwant" && \
     fail "mmake.mk found in non v5-style driver source would overwrite static glue."
 
 for file in $(comm -1 ${netgot} ${netwant}); do
-    git add ${file}
+    "$git" add ${file}
 done
 for file in $(comm -1 -3 ${netwant} ${netgot}); do
-    git rm ${file}
+    "$git" rm ${file}
 done
 
 # Avoid unnecessary utilities
@@ -222,7 +223,7 @@ if [ -n "$fwtag" ]; then
     commitlog=$(newpatch firmware "$me: Change to import firmware ${netrev}")
     sed -i -n '/FIRMWARE_VERSION/!p' imports.mk
     echo "FIRMWARE_VERSION=${fwtag}" >> imports.mk
-    git add imports.mk
+    "$git" add imports.mk
     commitif "$commitlog"
 fi
 
@@ -273,7 +274,7 @@ END {
 }
 EOF
 
-    git add $files
+    "$git" add $files
     commitif "$commitlog"
 fi
 
