@@ -636,7 +636,7 @@ efab_eplock_wake(ci_netif *ni)
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
 /* returns 1 iff packet is to be kept on rx path */
 extern /* bool */ int
-efab_tcp_helper_xdp_rx_pkt(tcp_helper_resource_t* trs, int intf_i, ci_ip_pkt_fmt* pkt);
+efab_tcp_helper_xdp_rx_pkt(tcp_helper_resource_t* trs, ci_ip_pkt_fmt* pkt);
 #endif
 #endif /* __CI_DRIVER_EFAB_TCP_HELPER_FNS_H__ */
 /*! \cidoxg_end */

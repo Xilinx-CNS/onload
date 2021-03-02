@@ -591,7 +591,7 @@ int ci_netif_evq_poll(ci_netif* ni, int intf_i)
         pkt->pay_len = len - evq->rx_prefix_len;
       oo_offbuf_init(&pkt->buf, PKT_START(pkt), pkt->pay_len);
       ci_parse_rx_vlan(pkt);
-      if( !efab_tcp_helper_xdp_rx_pkt(netif2tcp_helper_resource(ni), intf_i, pkt) )
+      if( !efab_tcp_helper_xdp_rx_pkt(netif2tcp_helper_resource(ni), pkt) )
         pkt->flags |= CI_PKT_FLAG_XDP_DROP; /* schedule drop */
       /* We called ci_parse_rx_vlan() above, which initialised
        * pkt_eth_payload_off.  However, the main RX loop will call that
@@ -608,10 +608,10 @@ int ci_netif_evq_poll(ci_netif* ni, int intf_i)
 
 #if defined(__KERNEL__) && CI_CFG_WANT_BPF_NATIVE
 #if CI_HAVE_BPF_NATIVE
-ci_inline int oo_xdp_check_pkt(ci_netif* ni, int intf_i, ci_ip_pkt_fmt** pkt)
+ci_inline int oo_xdp_check_pkt(ci_netif* ni, ci_ip_pkt_fmt** pkt)
 {
   if( NI_OPTS(ni).xdp_mode != 0 &&
-      ! efab_tcp_helper_xdp_rx_pkt(netif2tcp_helper_resource(ni), intf_i, *pkt) ) {
+      ! efab_tcp_helper_xdp_rx_pkt(netif2tcp_helper_resource(ni), *pkt) ) {
     /* just drop */
     (*pkt)->flags &= ~CI_PKT_FLAG_XDP_DROP;
     ci_netif_pkt_release_rx_1ref(ni, *pkt);
@@ -626,7 +626,7 @@ ci_inline int oo_xdp_check_pkt(ci_netif* ni, int intf_i, ci_ip_pkt_fmt** pkt)
 
 #ifndef oo_xdp_check_pkt
 #if ! defined(__KERNEL__) && CI_CFG_WANT_BPF_NATIVE
-ci_inline int oo_xdp_check_pkt(ci_netif* ni, int intf_i, ci_ip_pkt_fmt** pkt)
+ci_inline int oo_xdp_check_pkt(ci_netif* ni, ci_ip_pkt_fmt** pkt)
 {
   if( NI_OPTS(ni).xdp_mode != 0 &&
       ((*pkt)->flags & CI_PKT_FLAG_XDP_DROP) ) {
@@ -639,7 +639,7 @@ ci_inline int oo_xdp_check_pkt(ci_netif* ni, int intf_i, ci_ip_pkt_fmt** pkt)
   return 1;
 }
 #else
-ci_inline int oo_xdp_check_pkt(ci_netif* ni, int intf_i, ci_ip_pkt_fmt** pkt)
+ci_inline int oo_xdp_check_pkt(ci_netif* ni, ci_ip_pkt_fmt** pkt)
 {
   return 1;
 }
@@ -648,7 +648,7 @@ ci_inline int oo_xdp_check_pkt(ci_netif* ni, int intf_i, ci_ip_pkt_fmt** pkt)
 
 
 ci_inline void __handle_rx_pkt(ci_netif* ni, struct ci_netif_poll_state* ps,
-                              int intf_i, ci_ip_pkt_fmt** pkt)
+                               ci_ip_pkt_fmt** pkt)
 {
   if( *pkt ) {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
@@ -657,7 +657,7 @@ ci_inline void __handle_rx_pkt(ci_netif* ni, struct ci_netif_poll_state* ps,
       return;
     }
 #endif
-    if( oo_xdp_check_pkt(ni, intf_i, pkt) ) {
+    if( oo_xdp_check_pkt(ni, pkt) ) {
       ci_parse_rx_vlan(*pkt);
       handle_rx_pkt(ni, ps, *pkt);
     }
@@ -972,7 +972,7 @@ static void handle_rx_scatter_merge(ci_netif* ni, struct oo_rx_state* s,
 
 
 static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
-                              int intf_i, ci_ip_pkt_fmt* pkt, int frame_len)
+                              ci_ip_pkt_fmt* pkt, int frame_len)
 {
   int ip_paylen;
   int ip_proto;
@@ -1045,7 +1045,7 @@ static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
       goto drop;
     }
     else if( ci_tcp_csum_correct(pkt, ip_paylen) ) {
-      __handle_rx_pkt(ni, ps, intf_i, &pkt);
+      __handle_rx_pkt(ni, ps, &pkt);
       return 1;
     }
     else {
@@ -1063,7 +1063,7 @@ static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
       goto drop;
     }
     else if( ci_udp_csum_correct(pkt, udp) ) {
-      __handle_rx_pkt(ni, ps, intf_i, &pkt);
+      __handle_rx_pkt(ni, ps, &pkt);
       return 1;
     }
     else {
@@ -1105,7 +1105,7 @@ static void discard_rx_multi_pkts(ci_netif* ni, struct ci_netif_poll_state* ps,
   if( (discard_flags & (EF_VI_DISCARD_RX_L3_CSUM_ERR |
                         EF_VI_DISCARD_RX_L4_CSUM_ERR)) &&
       !is_frag )
-    handled = handle_rx_csum_bad(ni, ps, intf_i, pkt, frame_len);
+    handled = handle_rx_csum_bad(ni, ps, pkt, frame_len);
 
   if( discard_flags & EF_VI_DISCARD_RX_ETH_LEN_ERR )
     CITP_STATS_NETIF_INC(ni, rx_discard_len_err);
@@ -1239,7 +1239,7 @@ static void handle_rx_no_desc_trunc(ci_netif* ni,
   LOG_U(log(LPF "[%d] intf %d RX_NO_DESC_TRUNC "EF_EVENT_FMT,
             NI_ID(ni), intf_i, EF_EVENT_PRI_ARG(ev)));
 
-  __handle_rx_pkt(ni, ps, intf_i, &s->rx_pkt);
+  __handle_rx_pkt(ni, ps, &s->rx_pkt);
   s->rx_pkt = NULL;
   ci_assert(s->frag_pkt != NULL);
   if( s->frag_pkt != NULL ) {  /* belt and braces! */
@@ -1261,7 +1261,7 @@ static void __handle_rx_discard(ci_netif* ni, struct ci_netif_poll_state* ps,
             NI_ID(ni), intf_i,
             (int) discard_type, EF_EVENT_PRI_ARG(ev)));
 
-  __handle_rx_pkt(ni, ps, intf_i, &s->rx_pkt);
+  __handle_rx_pkt(ni, ps, &s->rx_pkt);
   s->rx_pkt = NULL;
 
   /* For now bin any fragments as (i) they would only be useful in the
@@ -1281,7 +1281,7 @@ static void __handle_rx_discard(ci_netif* ni, struct ci_netif_poll_state* ps,
   pkt = PKT_CHK(ni, pp);
 
   if( discard_type == EF_EVENT_RX_DISCARD_CSUM_BAD && !is_frag )
-    handled = handle_rx_csum_bad(ni, ps, intf_i, pkt, frame_len);
+    handled = handle_rx_csum_bad(ni, ps, pkt, frame_len);
   
   switch( discard_type ) {
   case EF_EVENT_RX_DISCARD_CSUM_BAD:
@@ -1750,7 +1750,7 @@ have_events:
                                CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start);
         }
         ci_assert_equal(pkt->intf_i, intf_i);
-        __handle_rx_pkt(ni, ps, intf_i, &s.rx_pkt);
+        __handle_rx_pkt(ni, ps, &s.rx_pkt);
         if( (ev[i].rx.flags & (EF_EVENT_FLAG_SOP | EF_EVENT_FLAG_CONT))
                                                        == EF_EVENT_FLAG_SOP ) {
           /* Whole packet in a single buffer. */
@@ -1797,7 +1797,7 @@ have_events:
           ci_prefetch_ppc(pkt->dma_start);
           ci_prefetch_ppc(pkt);
           ci_assert_equal(pkt->intf_i, intf_i);
-          __handle_rx_pkt(ni, ps, intf_i, &s.rx_pkt);
+          __handle_rx_pkt(ni, ps, &s.rx_pkt);
           if( (ev[i].rx_multi.flags & (EF_EVENT_FLAG_SOP | EF_EVENT_FLAG_CONT))
                == EF_EVENT_FLAG_SOP ) {
             /* Whole packet in a single buffer. */
@@ -1821,7 +1821,7 @@ have_events:
         CITP_STATS_NETIF_INC(ni, rx_evs);
         n_pkts = ev[i].rx_multi_pkts.n_pkts;
         for( j = 0; j < n_pkts; ++j ) {
-          __handle_rx_pkt(ni, ps, intf_i, &s.rx_pkt);
+          __handle_rx_pkt(ni, ps, &s.rx_pkt);
           handle_rx_multi_pkts(ni, &s, evq->rx_prefix_len, vi, intf_i, ps,
                                q_id);
         }
@@ -1893,7 +1893,7 @@ have_events:
     }
 #endif
 
-    __handle_rx_pkt(ni, ps, intf_i, &s.rx_pkt);
+    __handle_rx_pkt(ni, ps, &s.rx_pkt);
 
     total_evs += n_evs;
   } while( total_evs < NI_OPTS(ni).evs_per_poll );

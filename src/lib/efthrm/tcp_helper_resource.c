@@ -8102,11 +8102,11 @@ ci_inline int oo_xdp_rx_pkt_locked(ci_netif* ni,
 
 
 /* bool */ int
-efab_tcp_helper_xdp_rx_pkt(tcp_helper_resource_t* trs, int intf_i, ci_ip_pkt_fmt* pkt)
+efab_tcp_helper_xdp_rx_pkt(tcp_helper_resource_t* trs, ci_ip_pkt_fmt* pkt)
 {
   struct bpf_prog* xdp_prog;
   int ret = XDP_PASS;
-  struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
+  struct tcp_helper_nic* trs_nic = &trs->nic[pkt->intf_i];
   struct efhw_nic* nic;
   struct net_device* dev;
   ci_netif* ni = &trs->netif;
