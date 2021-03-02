@@ -1682,7 +1682,12 @@ OO_INTERCEPT(ssize_t, readv,
   Log_CALL(ci_log("%s(%d, %p, %d)", __FUNCTION__, fd, vector, count));
 
   if( (fdi = citp_fdtable_lookup_fast(&lib_context, fd)) ) {
-    {
+    /* Handle (vector = NULL, count != 0) case here.
+     * For (vector = NULL, count = 0) rc = 0 should be returned.
+     * len_is_zero variable is responsible for that case. */
+    if( CI_UNLIKELY(vector == NULL && count != 0) )
+      CI_SET_ERROR(rc, EFAULT);
+    else {
       int len_is_zero = 1;
       int i;
       for( i = 0; i < count; i++ ) {
