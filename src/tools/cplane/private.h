@@ -577,7 +577,6 @@ struct cp_session {
   struct cp_epoll_state* ep_net;
   struct cp_epoll_state* ep_gen_ctrl;
   struct cp_epoll_state* ep_gen_team;
-  struct cp_epoll_state* ep_pipe;
   struct cp_epoll_state* ep_mibdump;
   struct cp_epoll_state* ep_agent;
   struct cp_epoll_state* ep_oo;

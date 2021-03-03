@@ -425,7 +425,6 @@ static void free_session(struct cp_session* s)
   cp_epoll_unregister(s, s->ep_net);
   cp_epoll_unregister(s, s->ep_gen_ctrl);
   cp_epoll_unregister(s, s->ep_gen_team);
-  cp_epoll_unregister(s, s->ep_pipe);
   cp_epoll_unregister(s, s->ep_mibdump);
   cp_epoll_unregister(s, s->ep_agent);
   cp_epoll_unregister(s, s->ep_oo);
