@@ -1721,7 +1721,7 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
 
   oo_p_dllink_for_each_safe(ni, link, tmp, list) {
     oo_p_dllink_del(ni, link);
-    oo_p_dllink_add(ni, list, link);
+    oo_p_dllink_add_tail(ni, list, link);
 
     aw = CI_CONTAINER(ci_active_wild, pool_link, link.l);
 
