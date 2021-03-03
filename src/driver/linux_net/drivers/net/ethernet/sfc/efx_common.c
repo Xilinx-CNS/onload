@@ -27,7 +27,7 @@
 #include "mcdi_pcol.h"
 #include "tc.h"
 #include "xdp.h"
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 #include <net/gre.h>
 #endif
 
@@ -1964,7 +1964,7 @@ struct pci_error_handlers efx_err_handlers = {
  */
 static bool efx_can_encap_offloads(struct efx_nic *efx, struct sk_buff *skb)
 {
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) && !defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) && !defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD) && !defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 	return false;
 #else
 	struct gre_base_hdr *greh;
@@ -2357,15 +2357,16 @@ static int __efx_dl_vport_free(struct efx_dl_device *efx_dev, u16 port_id)
 }
 
 static
-int __efx_dl_init_txq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
+int __efx_dl_init_txq(struct efx_dl_device *efx_dev, u32 client_id,
+		      dma_addr_t *dma_addrs,
 		      int n_dma_addrs, u16 vport_id, u8 stack_id, u32 owner_id,
 		      bool timestamp, u8 crc_mode, bool tcp_udp_only,
 		      bool tcp_csum_dis, bool ip_csum_dis, bool inner_tcp_csum,
 		      bool inner_ip_csum, bool buff_mode, bool pacer_bypass,
-		      bool ctpio, bool ctpio_uthresh, u32 instance, u32 label,
-		      u32 target_evq, u32 num_entries)
+		      bool ctpio, bool ctpio_uthresh, bool m2m_d2c, u32 instance,
+		      u32 label, u32 target_evq, u32 num_entries)
 {
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_INIT_TXQ_EXT_IN_LEN);
+	MCDI_DECLARE_PROXYABLE_BUF(inbuf, MC_CMD_INIT_TXQ_EXT_IN_LEN);
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 	struct efx_vport *vpx;
 	u32 port_id;
@@ -2394,7 +2395,7 @@ int __efx_dl_init_txq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
 	MCDI_SET_DWORD(inbuf, INIT_TXQ_EXT_IN_OWNER_ID, owner_id);
 	MCDI_SET_DWORD(inbuf, INIT_TXQ_EXT_IN_PORT_ID, port_id);
 
-	MCDI_POPULATE_DWORD_11(inbuf, INIT_TXQ_EXT_IN_FLAGS,
+	MCDI_POPULATE_DWORD_12(inbuf, INIT_TXQ_EXT_IN_FLAGS,
 		INIT_TXQ_EXT_IN_FLAG_BUFF_MODE, !!buff_mode,
 		INIT_TXQ_EXT_IN_FLAG_IP_CSUM_DIS, !!ip_csum_dis,
 		INIT_TXQ_EXT_IN_FLAG_TCP_CSUM_DIS, !!tcp_csum_dis,
@@ -2405,28 +2406,30 @@ int __efx_dl_init_txq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
 		INIT_TXQ_EXT_IN_FLAG_TIMESTAMP, !!timestamp,
 		INIT_TXQ_EXT_IN_FLAG_CTPIO, !!ctpio,
 		INIT_TXQ_EXT_IN_FLAG_CTPIO_UTHRESH, !!ctpio_uthresh,
-		INIT_TXQ_EXT_IN_FLAG_PACER_BYPASS, !!pacer_bypass);
+		INIT_TXQ_EXT_IN_FLAG_PACER_BYPASS, !!pacer_bypass,
+		INIT_TXQ_EXT_IN_FLAG_M2M_D2C, !!m2m_d2c);
 
 	for (i = 0; i < n_dma_addrs; ++i)
 		MCDI_SET_ARRAY_QWORD(inbuf, INIT_TXQ_EXT_IN_DMA_ADDR, i,
 				     dma_addrs[i]);
 
-	rc = efx_mcdi_rpc(efx, MC_CMD_INIT_TXQ, inbuf, sizeof(inbuf),
-			  NULL, 0, NULL);
+	rc = efx_mcdi_rpc_client(efx, client_id, MC_CMD_INIT_TXQ, inbuf,
+	                         MC_CMD_INIT_TXQ_EXT_IN_LEN, NULL, 0, NULL);
 out_unlock:
 	mutex_unlock(&efx->vport_lock);
 	return rc;
 }
 
 static
-int __efx_dl_init_rxq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
+int __efx_dl_init_rxq(struct efx_dl_device *efx_dev, u32 client_id,
+		      dma_addr_t *dma_addrs,
 		      int n_dma_addrs, u16 vport_id, u8 stack_id, u32 owner_id,
 		      u8 crc_mode, bool timestamp, bool hdr_split,
 		      bool buff_mode, bool rx_prefix, u8 dma_mode, u32 instance,
 		      u32 label, u32 target_evq, u32 num_entries,
 		      u8 ps_buf_size, bool force_rx_merge, int ef100_rx_buffer_size)
 {
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_INIT_RXQ_V4_IN_LEN);
+	MCDI_DECLARE_PROXYABLE_BUF(inbuf, MC_CMD_INIT_RXQ_V4_IN_LEN);
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 	struct efx_vport *vpx;
 	u32 port_id;
@@ -2479,8 +2482,8 @@ int __efx_dl_init_rxq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
 	}
 
 
-	rc = efx_mcdi_rpc(efx, MC_CMD_INIT_RXQ, inbuf, sizeof(inbuf),
-			  NULL, 0, NULL);
+	rc = efx_mcdi_rpc_client(efx, client_id, MC_CMD_INIT_RXQ, inbuf,
+	                         MC_CMD_INIT_RXQ_V4_IN_LEN, NULL, 0, NULL);
 out_unlock:
 	mutex_unlock(&efx->vport_lock);
 	return rc;
@@ -2576,6 +2579,84 @@ static void __efx_dl_filter_unblock_kernel(struct efx_dl_device *efx_dev,
 	mutex_unlock(&efx->dl_block_kernel_mutex);
 }
 
+static long __efx_dl_dma_xlate(struct efx_dl_device *efx_dev,
+			       const dma_addr_t *src,
+			       dma_addr_t *dst, unsigned int n)
+{
+	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
+	unsigned i;
+	long rc = -1;
+
+	if (!efx->type->regionmap_buffer) {
+		/* This NIC has 1:1 mappings */
+		memmove(dst, src, n * sizeof(src[0]));
+		return n;
+	}
+
+	for (i = 0; i < n; ++i) {
+		dma_addr_t addr = src[i];
+		if (efx->type->regionmap_buffer(efx, &addr)) {
+			if (rc < 0)
+				rc = i;
+			addr = (dma_addr_t)-1;
+		}
+		dst[i] = addr;
+	}
+	return rc >= 0 ? rc : n;
+}
+
+static int __efx_dl_mcdi_rpc_client(struct efx_dl_device *efx_dev,
+                                    u32 client_id, unsigned int cmd,
+                                    size_t inlen, size_t outlen,
+                                    size_t *outlen_actual,
+                                    u32 *inbuf, u32 *outbuf)
+{
+	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
+
+	return efx_mcdi_rpc_client(efx, client_id, cmd, (efx_dword_t *)inbuf,
+	                           inlen, (efx_dword_t *)outbuf, outlen,
+	                           outlen_actual);
+}
+
+static int __efx_dl_client_alloc(struct efx_dl_device *efx_dev, u32 parent,
+                                 u32 *id)
+{
+	int rc;
+	MCDI_DECLARE_PROXYABLE_BUF(inbuf, MC_CMD_CLIENT_ALLOC_IN_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_CLIENT_ALLOC_OUT_LEN);
+	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
+
+	rc = efx_mcdi_rpc_client(efx, parent, MC_CMD_CLIENT_ALLOC,
+	                         inbuf, MC_CMD_CLIENT_ALLOC_IN_LEN,
+	                         outbuf, sizeof(outbuf), NULL);
+	if (rc)
+		return rc;
+	*id = MCDI_DWORD(outbuf, CLIENT_ALLOC_OUT_CLIENT_ID);
+	return 0;
+}
+
+static int __efx_dl_client_free(struct efx_dl_device *efx_dev, u32 id)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_CLIENT_FREE_IN_LEN);
+	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
+
+	MCDI_SET_DWORD(inbuf, CLIENT_FREE_IN_CLIENT_ID, id);
+	return efx_mcdi_rpc(efx, MC_CMD_CLIENT_FREE,
+	                    inbuf, sizeof(inbuf), NULL, 0, NULL);
+}
+
+static int __efx_dl_vi_set_user(struct efx_dl_device *efx_dev,
+                                u32 vi_instance, u32 user)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_VI_USER_IN_LEN);
+	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
+
+	MCDI_SET_DWORD(inbuf, SET_VI_USER_IN_INSTANCE, vi_instance);
+	MCDI_SET_DWORD(inbuf, SET_VI_USER_IN_CLIENT_ID, user);
+	return efx_mcdi_rpc(efx, MC_CMD_SET_VI_USER,
+	                    inbuf, sizeof(inbuf), NULL, 0, NULL);
+}
+
 static bool efx_dl_hw_unavailable(struct efx_dl_device *efx_dev)
 {
 	return efx_nic_hw_unavailable(efx_dl_device_priv(efx_dev));
@@ -2604,6 +2685,11 @@ static struct efx_dl_ops efx_driverlink_ops = {
 	.mcdi_rpc = __efx_dl_mcdi_rpc,
 	.publish = __efx_dl_publish,
 	.unpublish = __efx_dl_unpublish,
+	.dma_xlate = __efx_dl_dma_xlate,
+	.mcdi_rpc_client = __efx_dl_mcdi_rpc_client,
+	.client_alloc = __efx_dl_client_alloc,
+	.client_free = __efx_dl_client_free,
+	.vi_set_user = __efx_dl_vi_set_user,
 };
 
 void efx_dl_probe(struct efx_nic *efx)

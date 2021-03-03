@@ -416,6 +416,7 @@ static void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 {
 	int i;
 
+	WARN_ON(!mutex_is_locked(&vdpa_nic->lock));
 	vdpa_nic->vdpa_state = EF100_VDPA_STATE_INITIALIZED;
 	vdpa_nic->status = 0;
 	vdpa_nic->features = 0;
@@ -460,10 +461,12 @@ static int ef100_vdpa_set_vq_address(struct vdpa_device *vdev,
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Invoked for index %u\n", __func__, idx);
 #endif
+	mutex_lock(&vdpa_nic->lock);
 	vdpa_nic->vring[idx].desc = desc_area;
 	vdpa_nic->vring[idx].avail = driver_area;
 	vdpa_nic->vring[idx].used = device_area;
 	vdpa_nic->vring[idx].vring_state |= EF100_VRING_ADDRESS_CONFIGURED;
+	mutex_unlock(&vdpa_nic->lock);
 	return rc;
 }
 
@@ -490,8 +493,10 @@ static void ef100_vdpa_set_vq_num(struct vdpa_device *vdev, u16 idx, u32 num)
 			__func__, idx, num, EF100_VDPA_VQ_NUM_MAX_SIZE);
 		return;
 	}
+	mutex_lock(&vdpa_nic->lock);
 	vdpa_nic->vring[idx].size  = num;
 	vdpa_nic->vring[idx].vring_state |= EF100_VRING_SIZE_CONFIGURED;
+	mutex_unlock(&vdpa_nic->lock);
 }
 
 static void ef100_vdpa_kick_vq(struct vdpa_device *vdev, u16 idx)
@@ -505,7 +510,13 @@ static void ef100_vdpa_kick_vq(struct vdpa_device *vdev, u16 idx)
 		dev_err(&vdev->dev, "%s: Invalid queue Id %u\n", __func__, idx);
 		return;
 	}
-	efx = vdpa_nic->vring[idx].vring_ctx->nic;
+
+        if (!vdpa_nic->vring[idx].vring_created) {
+                dev_err(&vdev->dev, "%s: Invalid vring%u\n", __func__, idx);
+                return;
+        }
+
+	efx = vdpa_nic->efx;
 	if (!efx) {
 		dev_err(&vdev->dev, "%s: Invalid efx pointer %u\n", __func__,
 			idx);
@@ -554,6 +565,7 @@ static void ef100_vdpa_set_vq_ready(struct vdpa_device *vdev, u16 idx,
 	dev_info(&vdev->dev, "%s: Queue Id: %u Ready :%u\n", __func__,
 		 idx, ready);
 #endif
+	mutex_lock(&vdpa_nic->lock);
 	if (ready) {
 		vdpa_nic->vring[idx].vring_state |=
 					EF100_VRING_READY_CONFIGURED;
@@ -574,23 +586,28 @@ static void ef100_vdpa_set_vq_ready(struct vdpa_device *vdev, u16 idx,
 		if (vdpa_nic->vring[idx].vring_created)
 			delete_vring(vdpa_nic, idx);
 	}
+	mutex_unlock(&vdpa_nic->lock);
 }
 
 static bool ef100_vdpa_get_vq_ready(struct vdpa_device *vdev, u16 idx)
 {
 	struct ef100_vdpa_nic *vdpa_nic;
+	bool ready;
 
 	vdpa_nic = get_vdpa_nic(vdev);
 	if (idx >= (vdpa_nic->max_queue_pairs * 2)) {
 		dev_err(&vdev->dev, "%s: Invalid queue Id %u\n", __func__, idx);
 		return false;
 	}
+	mutex_lock(&vdpa_nic->lock);
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Index:%u Value returned: %u\n", __func__,
 		 idx, vdpa_nic->vring[idx].vring_state &
 		 EF100_VRING_READY_CONFIGURED);
 #endif
-	return vdpa_nic->vring[idx].vring_state & EF100_VRING_READY_CONFIGURED;
+	ready = vdpa_nic->vring[idx].vring_state & EF100_VRING_READY_CONFIGURED;
+	mutex_unlock(&vdpa_nic->lock);
+	return ready;
 }
 
 static int ef100_vdpa_set_vq_state(struct vdpa_device *vdev, u16 idx,
@@ -607,6 +624,7 @@ static int ef100_vdpa_set_vq_state(struct vdpa_device *vdev, u16 idx,
 		dev_err(&vdev->dev, "%s: Invalid queue Id %u\n", __func__, idx);
 		return -EINVAL;
 	}
+	mutex_lock(&vdpa_nic->lock);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE)
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Queue:%u State:0x%x", __func__, idx,
@@ -619,6 +637,7 @@ static int ef100_vdpa_set_vq_state(struct vdpa_device *vdev, u16 idx,
 #endif
 	vdpa_nic->vring[idx].last_avail_idx = state;
 #endif
+	mutex_unlock(&vdpa_nic->lock);
 	return 0;
 }
 
@@ -630,6 +649,7 @@ static u64 ef100_vdpa_get_vq_state(struct vdpa_device *vdev, u16 idx)
 #endif
 {
 	struct ef100_vdpa_nic *vdpa_nic;
+	u32 last_avail_index = 0;
 
 	vdpa_nic = get_vdpa_nic(vdev);
 	if (idx >= (vdpa_nic->max_queue_pairs * 2)) {
@@ -640,12 +660,16 @@ static u64 ef100_vdpa_get_vq_state(struct vdpa_device *vdev, u16 idx)
 	dev_info(&vdev->dev, "%s: Queue:%u State:0x%x", __func__, idx,
 		 vdpa_nic->vring[idx].last_avail_idx);
 #endif
+
+	mutex_lock(&vdpa_nic->lock);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE)
 	state->avail_index = (u16)vdpa_nic->vring[idx].last_avail_idx;
-	return 0;
 #else
-	return  vdpa_nic->vring[idx].last_avail_idx;
+	last_avail_index = vdpa_nic->vring[idx].last_avail_idx;
 #endif
+	mutex_unlock(&vdpa_nic->lock);
+
+	return last_avail_index;
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_VQ_NOTIFY)
@@ -659,11 +683,12 @@ static struct vdpa_notification_area
 	vdpa_nic = get_vdpa_nic(vdev);
 	if (idx >= (vdpa_nic->max_queue_pairs * 2)) {
 		dev_err(&vdev->dev, "%s: Invalid queue Id %u\n", __func__, idx);
-		return notify_area;
+		goto end;
 	}
+	mutex_lock(&vdpa_nic->lock);
 	if (!vdpa_nic->vring[idx].vring_created) {
 		dev_err(&vdev->dev, "%s: Queue Id %u not created\n", __func__, idx);
-		return notify_area;
+		goto unlock_end;
 	}
 	efx = vdpa_nic->efx;
 	notify_area.addr = (resource_size_t)efx_mem(efx,
@@ -678,7 +703,9 @@ static struct vdpa_notification_area
 	dev_info(&vdev->dev, "%s: Queue Id:%u Notification addr:0x%x size:0x%x",
 		 __func__, idx, (u32)notify_area.addr, (u32)notify_area.size);
 #endif
-
+unlock_end:
+	mutex_unlock(&vdpa_nic->lock);
+end:
 	return notify_area;
 }
 #endif
@@ -687,15 +714,20 @@ static struct vdpa_notification_area
 static int ef100_get_vq_irq(struct vdpa_device *vdev, u16 idx)
 {
 	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
+	u32 irq;
 
 	if (idx >= (vdpa_nic->max_queue_pairs * 2)) {
 		dev_err(&vdev->dev, "%s: Invalid queue Id %u\n", __func__, idx);
 		return -EINVAL;
 	}
-	dev_info(&vdev->dev, "%s: Queue Id %u, irq: %d\n",
-		 __func__, idx, vdpa_nic->vring[idx].irq);
 
-	return vdpa_nic->vring[idx].irq;
+	mutex_lock(&vdpa_nic->lock);
+	irq = vdpa_nic->vring[idx].irq;
+	mutex_unlock(&vdpa_nic->lock);
+
+	dev_info(&vdev->dev, "%s: Queue Id %u, irq: %d\n", __func__, idx, irq);
+
+	return irq;
 }
 #endif
 
@@ -742,11 +774,13 @@ static int ef100_vdpa_set_features(struct vdpa_device *vdev, u64 features)
 	print_features_str(features, vdev);
 #endif
 	vdpa_nic = get_vdpa_nic(vdev);
+	mutex_lock(&vdpa_nic->lock);
 	if (vdpa_nic->vdpa_state != EF100_VDPA_STATE_INITIALIZED) {
 		dev_err(&vdev->dev, "%s: Invalid current state %s\n",
 			__func__,
 			get_vdpa_state_str(vdpa_nic->vdpa_state));
-		return -EINVAL;
+		rc = -EINVAL;
+		goto err;
 	}
 	rc = efx_vdpa_verify_features(vdpa_nic->efx,
 				      EF100_VDPA_DEVICE_TYPE_NET, features);
@@ -754,10 +788,12 @@ static int ef100_vdpa_set_features(struct vdpa_device *vdev, u64 features)
 	if (rc != 0) {
 		dev_err(&vdev->dev, "%s: MCDI verify features error:%d\n",
 			__func__, rc);
-		return rc;
+		goto err;
 	}
 
 	vdpa_nic->features = features;
+err:
+	mutex_unlock(&vdpa_nic->lock);
 	return rc;
 }
 
@@ -804,13 +840,17 @@ static u32 ef100_vdpa_get_vendor_id(struct vdpa_device *vdev)
 static u8 ef100_vdpa_get_status(struct vdpa_device *vdev)
 {
 	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
+	u8 status;
 
+	mutex_lock(&vdpa_nic->lock);
+	status = vdpa_nic->status;
+	mutex_unlock(&vdpa_nic->lock);
 #ifdef EFX_NOT_UPSTREAM
 		dev_info(&vdev->dev, "%s: Returning current status bit(s):\n",
 			 __func__);
-		print_status_str(vdpa_nic->status, vdev);
+		print_status_str(status, vdev);
 #endif
-	return vdpa_nic->status;
+	return status;
 }
 
 static void ef100_vdpa_set_status(struct vdpa_device *vdev, u8 status)
@@ -819,12 +859,13 @@ static void ef100_vdpa_set_status(struct vdpa_device *vdev, u8 status)
 	u8 new_status;
 	int rc = 0;
 
+	mutex_lock(&vdpa_nic->lock);
 	if (!status) {
 		dev_info(&vdev->dev,
 			 "%s: Status received is 0. Device reset being done\n",
 			 __func__);
 		reset_vdpa_device(vdpa_nic);
-		return;
+		goto unlock_return;
 	}
 	new_status = status & ~vdpa_nic->status;
 	if (new_status == 0) {
@@ -835,11 +876,11 @@ static void ef100_vdpa_set_status(struct vdpa_device *vdev, u8 status)
 		print_status_str(status, vdev);
 		dev_info(&vdev->dev, "%s: Existing status bits:\n", __func__);
 		print_status_str(vdpa_nic->status, vdev);
-		return;
+		goto unlock_return;
 	}
 	if (new_status & VIRTIO_CONFIG_S_FAILED) {
 		reset_vdpa_device(vdpa_nic);
-		return;
+		goto unlock_return;
 	}
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: New status:\n", __func__);
@@ -872,7 +913,7 @@ static void ef100_vdpa_set_status(struct vdpa_device *vdev, u8 status)
 					__func__, rc);
 				vdpa_nic->status &=
 					~VIRTIO_CONFIG_S_DRIVER_OK;
-				return;
+				goto unlock_return;
 			}
 			new_status = new_status & ~VIRTIO_CONFIG_S_DRIVER_OK;
 		} else {
@@ -886,6 +927,9 @@ static void ef100_vdpa_set_status(struct vdpa_device *vdev, u8 status)
 			break;
 		}
 	}
+unlock_return:
+	mutex_unlock(&vdpa_nic->lock);
+	return;
 }
 
 static void ef100_vdpa_get_config(struct vdpa_device *vdev, unsigned int offset,
@@ -908,6 +952,42 @@ static void ef100_vdpa_set_config(struct vdpa_device *vdev, unsigned int offset,
 				  const void *buf, unsigned int len)
 {
 	dev_info(&vdev->dev, "%s: This callback is not supported\n", __func__);
+}
+
+static int ef100_vdpa_dma_map(struct vdpa_device *vdev,
+			      u64 iova, u64 size,
+			      u64 pa, u32 perm)
+{
+	struct ef100_vdpa_nic *vdpa_nic = NULL;
+	int rc;
+
+	vdpa_nic = get_vdpa_nic(vdev);
+	rc = iommu_map(vdpa_nic->domain, iova, pa, size, perm);
+
+#ifdef EFX_NOT_UPSTREAM
+	if (rc)
+		dev_err(&vdev->dev,
+			"%s: iommu_map iova: %llx size: %llx rc: %d\n",
+			__func__, iova, size, rc);
+#endif
+        return rc;
+}
+
+static int ef100_vdpa_dma_unmap(struct vdpa_device *vdev, u64 iova, u64 size)
+{
+	struct ef100_vdpa_nic *vdpa_nic = NULL;
+	int rc;
+
+	vdpa_nic = get_vdpa_nic(vdev);
+	rc = iommu_unmap(vdpa_nic->domain, iova, size);
+
+#ifdef EFX_NOT_UPSTREAM
+	if (rc < 0)
+		dev_err(&vdev->dev,
+			"%s: iommu_unmap iova: %llx size: %llx rc: %d\n",
+			__func__, iova, size, rc);
+#endif
+        return rc;
 }
 
 static void ef100_vdpa_free(struct vdpa_device *vdev)
@@ -943,8 +1023,8 @@ const struct vdpa_config_ops ef100_vdpa_config_ops = {
 	.set_config	     = ef100_vdpa_set_config,
 	.get_generation      = NULL,
 	.set_map             = NULL,
-	.dma_map	     = NULL,
-	.dma_unmap           = NULL,
+	.dma_map	     = ef100_vdpa_dma_map,
+	.dma_unmap           = ef100_vdpa_dma_unmap,
 	.free	             = ef100_vdpa_free,
 };
 #endif

@@ -418,6 +418,8 @@ static struct efx_debugfs_parameter efx_debugfs_port_parameters[] = {
 	EFX_NAMED_PARAMETER(phy_id, struct efx_nic, mdio.prtad,
 			    int, efx_debugfs_read_int),
 	EFX_UINT_PARAMETER(struct efx_nic, n_link_state_changes),
+	EFX_ULONG_PARAMETER(struct efx_nic, supported_bitmap),
+	EFX_ULONG_PARAMETER(struct efx_nic, guaranteed_bitmap),
 	{NULL},
 };
 

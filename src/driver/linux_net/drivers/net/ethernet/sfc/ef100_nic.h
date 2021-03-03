@@ -11,6 +11,7 @@
 
 #include "net_driver.h"
 #include "nic.h"
+#include "mcdi_pcol.h"
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -24,6 +25,7 @@
 #define EF100_ONLOAD_IRQS 8
 #endif
 #endif
+#define EF100_QDMA_ADDR_REGIONS_MAX	MC_CMD_GET_DESC_ADDR_REGIONS_OUT_REGIONS_MAXNUM
 
 extern const struct efx_nic_type ef100_pf_nic_type;
 extern const struct efx_nic_type ef100_vf_nic_type;
@@ -51,6 +53,7 @@ enum {
 	EF100_STAT_port_rx_packets,
 	EF100_STAT_port_rx_good,
 	EF100_STAT_port_rx_bad,
+	EF100_STAT_port_rx_bad_bytes,
 	EF100_STAT_port_rx_pause,
 	EF100_STAT_port_rx_unicast,
 	EF100_STAT_port_rx_multicast,
@@ -88,6 +91,22 @@ enum ef100_vdpa_class {
 };
 #endif
 
+enum {
+	EFX_EF100_TEST = 1,
+	EFX_EF100_REFILL,
+};
+
+/** QDMA address region
+ * This is the driver equivalent of DEVEL_NIC_ADDR_REGION structuredef
+ * in YAML.
+ */
+struct ef100_addr_region {
+	dma_addr_t qdma_addr;
+	dma_addr_t trgt_addr;
+	u32 size_log2;
+	u32 trgt_alignment_log2;
+};
+
 struct ef100_nic_data {
 	struct efx_nic *efx;
 	struct efx_buffer mcdi_buf;
@@ -113,8 +132,10 @@ struct ef100_nic_data {
 	struct net_device **rem_rep; /* remote reps */
 	u32 base_mport;
 	u32 old_base_mport; /* compat for old C-models.  XXX remove after Cmod flag day */
+	u32 local_mae_intf; /* interface_idx that corresponds to us, in mport enumerate */
 	bool have_mport; /* base_mport was populated successfully */
 	bool have_old_mport; /* old_base_mport was populated successfully */
+	bool have_local_intf; /* local_mae_intf was populated successfully */
 	bool filters_up; /* filter table has been upped */
 	bool grp_mae; /* MAE Privilege */
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
@@ -126,6 +147,8 @@ struct ef100_nic_data {
 	u16 tso_max_payload_num_segs;
 	u16 tso_max_frames;
 	unsigned int tso_max_payload_len;
+	unsigned int addr_mapping_type;
+	struct ef100_addr_region addr_region[EF100_QDMA_ADDR_REGIONS_MAX];
 };
 
 void __ef100_detach_reps(struct efx_nic *efx);
@@ -137,5 +160,12 @@ void __ef100_attach_reps(struct efx_nic *efx);
 int efx_ef100_init_datapath_caps(struct efx_nic *efx);
 int ef100_phy_probe(struct efx_nic *efx);
 int ef100_filter_table_probe(struct efx_nic *efx);
+int ef100_alloc_qdma_buffer(struct efx_nic *efx, struct efx_buffer *buffer,
+			    unsigned int len);
 
+static inline bool
+ef100_region_addr_is_populated(struct ef100_addr_region *region)
+{
+	return region->size_log2 != 0;
+}
 #endif	/* EFX_EF100_NIC_H */

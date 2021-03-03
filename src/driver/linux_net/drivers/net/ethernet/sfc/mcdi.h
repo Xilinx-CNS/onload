@@ -12,6 +12,7 @@
 
 #include <linux/mutex.h>
 #include <linux/kref.h>
+#include "mcdi_pcol.h"
 
 /**
  * enum efx_mcdi_mode - MCDI transaction mode
@@ -48,6 +49,9 @@ enum efx_mcdi_mode {
  * @MCDI_STATE_ABORT: Command has been completed or aborted. Used to resolve
  *		      race between completion in another threads and the worker.
  */
+
+#define MCDI_BUF_LEN (8 + MCDI_CTL_SDU_LEN_MAX)
+
 enum efx_mcdi_cmd_state {
 	/* waiting to run */
 	MCDI_STATE_QUEUED,
@@ -226,6 +230,9 @@ int efx_mcdi_rpc_async_ext(struct efx_nic *efx, unsigned int cmd,
 			   efx_mcdi_async_completer *completer,
 			   unsigned long cookie, bool quiet,
 			   bool immediate_only, unsigned int *handle);
+int efx_mcdi_rpc_client(struct efx_nic *efx, u32 client_id, unsigned int cmd,
+			efx_dword_t *inbuf, size_t inlen, efx_dword_t *outbuf,
+			size_t outlen, size_t *outlen_actual);
 
 /* Attempt to cancel an outstanding command.
  * This function guarantees that the completion function will never be called
@@ -270,6 +277,9 @@ static inline void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
 	_MCDI_DECLARE_BUF(_name, _len) = {{{0}}}
 #define MCDI_DECLARE_BUF_ERR(_name)					\
 	MCDI_DECLARE_BUF(_name, 8)
+/* See efx_mcdi_rpc_client() for the purpose of this macro: */
+#define MCDI_DECLARE_PROXYABLE_BUF(_name, _len)				\
+	MCDI_DECLARE_BUF(_name, (_len) + 8 + MC_CMD_CLIENT_CMD_IN_LEN)
 #define _MCDI_PTR(_buf, _offset)					\
 	((u8 *)(_buf) + (_offset))
 #define MCDI_PTR(_buf, _field)						\
@@ -471,6 +481,26 @@ static inline void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
 			      MC_CMD_ ## _name9, _value9,		\
 			      MC_CMD_ ## _name10, _value10,		\
 			      MC_CMD_ ## _name11, _value11)
+#define MCDI_POPULATE_DWORD_12(_buf, _field, _name1, _value1,		\
+			       _name2, _value2, _name3, _value3,	\
+			       _name4, _value4, _name5, _value5,	\
+			       _name6, _value6, _name7, _value7,	\
+			       _name8, _value8, _name9, _value9,	\
+			       _name10, _value10, _name11, _value11,	\
+			       _name12, _value12)			\
+	EFX_POPULATE_DWORD_12(*_MCDI_DWORD(_buf, _field),		\
+			      MC_CMD_ ## _name1, _value1,		\
+			      MC_CMD_ ## _name2, _value2,		\
+			      MC_CMD_ ## _name3, _value3,		\
+			      MC_CMD_ ## _name4, _value4,		\
+			      MC_CMD_ ## _name5, _value5,		\
+			      MC_CMD_ ## _name6, _value6,		\
+			      MC_CMD_ ## _name7, _value7,		\
+			      MC_CMD_ ## _name8, _value8,		\
+			      MC_CMD_ ## _name9, _value9,		\
+			      MC_CMD_ ## _name10, _value10,		\
+			      MC_CMD_ ## _name11, _value11,		\
+			      MC_CMD_ ## _name12, _value12)
 #define MCDI_SET_QWORD(_buf, _field, _value)				\
 	do {								\
 		EFX_POPULATE_DWORD_1(_MCDI_DWORD(_buf, _field)[0],	\

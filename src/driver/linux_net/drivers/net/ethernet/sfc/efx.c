@@ -38,10 +38,10 @@
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_AER)
 #include <linux/aer.h>
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD)
+#if defined(EFX_USE_KCOMPAT) && (defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD))
 #include <net/gre.h>
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD)
 #include <net/udp_tunnel.h>
 #endif
 #include "debugfs.h"
@@ -653,7 +653,8 @@ void efx_vlan_rx_register(struct net_device *dev, struct vlan_group *vlan_group)
 
 #endif /* EFX_NOT_UPSTREAM */
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD)
+#if defined(EFX_USE_KCOMPAT)
+#if defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD) && !defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 static int efx_udp_tunnel_type_map(enum udp_parsable_tunnel_type in)
 {
 	switch (in) {
@@ -747,6 +748,7 @@ void efx_geneve_del_port(struct net_device *dev, sa_family_t sa_family,
 }
 #endif
 #endif
+#endif
 
 extern const struct net_device_ops efx_netdev_ops;
 
@@ -797,7 +799,7 @@ static ssize_t show_lro(struct device *dev, struct device_attribute *attr,
 			char *buf)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-	return scnprintf(buf, PAGE_SIZE, "%d\n", efx_ssr_enabled(efx));
+	return sprintf(buf, "%d\n", efx_ssr_enabled(efx));
 }
 static ssize_t set_lro(struct device *dev, struct device_attribute *attr,
 		       const char *buf, size_t count)
@@ -831,7 +833,7 @@ static ssize_t
 show_phy_type(struct device *dev, struct device_attribute *attr, char *buf)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
-	return scnprintf(buf, PAGE_SIZE, "%d\n", efx->phy_type);
+	return sprintf(buf, "%d\n", efx->phy_type);
 }
 static DEVICE_ATTR(phy_type, 0444, show_phy_type, NULL);
 
@@ -1827,9 +1829,15 @@ const struct net_device_ops efx_netdev_ops = {
 #endif
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD)
+#if defined(EFX_USE_KCOMPAT)
+#if defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD)
+#if defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
+	.ndo_udp_tunnel_add	= udp_tunnel_nic_add_port,
+	.ndo_udp_tunnel_del	= udp_tunnel_nic_del_port,
+#else
 	.ndo_udp_tunnel_add	= efx_udp_tunnel_add,
 	.ndo_udp_tunnel_del	= efx_udp_tunnel_del,
+#endif
 #else
 #if defined(EFX_HAVE_NDO_ADD_VXLAN_PORT)
 	.ndo_add_vxlan_port	= efx_vxlan_add_port,
@@ -1838,6 +1846,7 @@ const struct net_device_ops efx_netdev_ops = {
 #if defined(EFX_HAVE_NDO_ADD_GENEVE_PORT)
 	.ndo_add_geneve_port	= efx_geneve_add_port,
 	.ndo_del_geneve_port	= efx_geneve_del_port,
+#endif
 #endif
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)

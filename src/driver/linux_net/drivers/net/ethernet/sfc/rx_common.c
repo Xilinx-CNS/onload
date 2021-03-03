@@ -231,7 +231,7 @@ static void efx_recycle_rx_buf(struct efx_rx_queue *rx_queue,
 
 	/* Since removed_count is updated after packet processing the
 	 * following can happen here:
-	 *   added_count > removed_count + efx->rxq_entries
+	 *   added_count > removed_count + rx_queue->ptr_mask + 1
 	 * efx_fast_push_rx_descriptors() asserts this is not true.
 	 * efx_fast_push_rx_descriptors() is only called at the end of
 	 * a NAPI poll cycle, at which point removed_count has been updated.
@@ -485,7 +485,7 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 #endif
 
 	/* Initialise limit fields */
-	max_fill = efx->rxq_entries - EFX_RXD_HEAD_ROOM;
+	max_fill = rx_queue->ptr_mask + 1 - EFX_RXD_HEAD_ROOM;
 	max_trigger =
 		max_fill - efx->rx_pages_per_batch * efx->rx_bufs_per_page;
 	if (rx_refill_threshold != 0) {
@@ -1069,7 +1069,7 @@ void efx_fast_push_rx_descriptors(struct efx_rx_queue *rx_queue, bool atomic)
 
 	/* Calculate current fill level, and exit if we don't need to fill */
 	fill_level = (rx_queue->added_count - rx_queue->removed_count);
-	EFX_WARN_ON_ONCE_PARANOID(fill_level > rx_queue->efx->rxq_entries);
+	EFX_WARN_ON_ONCE_PARANOID(fill_level > rx_queue->ptr_mask + 1);
 	if (fill_level >= rx_queue->fast_fill_trigger)
 		goto out;
 
@@ -1121,7 +1121,6 @@ efx_rx_packet_gro(struct efx_channel *channel, struct efx_rx_buffer *rx_buf,
 	struct efx_rx_buffer *head_buf = rx_buf;
 #endif
 	struct napi_struct *napi = &channel->napi_str;
-	gro_result_t gro_result;
 	struct efx_nic *efx = channel->efx;
 	struct sk_buff *skb;
 
@@ -1186,16 +1185,13 @@ efx_rx_packet_gro(struct efx_channel *channel, struct efx_rx_buffer *rx_buf,
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_VLAN_RX_PATH)
 	if (head_buf->flags & EFX_RX_BUF_VLAN_XTAG)
-		gro_result = vlan_gro_frags(napi, efx->vlan_group,
+		vlan_gro_frags(napi, efx->vlan_group,
 					    head_buf->vlan_tci);
 	else
 		/* fall through */
 #endif
 #endif
-		gro_result = napi_gro_frags(napi);
-
-	if (gro_result != GRO_DROP)
-		channel->irq_mod_score += 2;
+		napi_gro_frags(napi);
 }
 
 #endif /* EFX_USE_GRO */

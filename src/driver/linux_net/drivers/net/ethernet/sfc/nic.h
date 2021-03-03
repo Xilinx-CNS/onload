@@ -376,9 +376,9 @@ enum {
  * @vport_mac: The MAC address on the vport, only for PFs; VFs will be zero
  * @udp_tunnel_work: workitem for pushing UDP tunnel ports to the MC
  * @udp_tunnels: UDP tunnel port numbers and types.
- * @udp_tunnels_busy: Indicates whether efx_ef10_set_udp_tnl_ports() is
- *	currently running.
- * @udp_tunnels_lock: Serialises writes to @udp_tunnels and @udp_tunnels_busy.
+ * @udp_tunnels_dirty: flag indicating a reboot occurred while pushing
+ *	@udp_tunnels to hardware and thus the push must be re-done.
+ * @udp_tunnels_lock: Serialises writes to @udp_tunnels and @udp_tunnels_dirty.
  */
 struct efx_ef10_nic_data {
 	struct efx_nic *efx;
@@ -419,10 +419,16 @@ struct efx_ef10_nic_data {
 	uint32_t caps;
 #endif
 	u8 vport_mac[ETH_ALEN];
-	struct work_struct udp_tunnel_work;
 	struct efx_udp_tunnel udp_tunnels[16];
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
+	bool udp_tunnels_dirty;
+	struct mutex udp_tunnels_lock;
+#else
+	/* Indicates whether efx_ef10_set_udp_tnl_ports() is currently running.	*/
 	bool udp_tunnels_busy;
 	spinlock_t udp_tunnels_lock;
+	struct work_struct udp_tunnel_work;
+#endif
 	u64 licensed_features;
 };
 

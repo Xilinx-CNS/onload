@@ -11,6 +11,7 @@
 #define __EF100_VDPA_H__
 
 #include <linux/vdpa.h>
+#include <linux/iommu.h>
 #include <uapi/linux/virtio_net.h>
 #include "net_driver.h"
 #include "ef100_nic.h"
@@ -51,6 +52,9 @@
 
 /* Maximum size of msix name */
 #define EF100_VDPA_MAX_MSIX_NAME_SIZE 256
+
+/* Default high IOVA for MCDI buffer */
+#define EF100_VDPA_IOVA_BASE_ADDR 0x200000000
 
 /* Following are the states for a vDPA NIC
  * @EF100_VDPA_STATE_INITIALIZED: State after vDPA NIC created
@@ -146,6 +150,7 @@ struct ef100_vdpa_filter {
  * @vdpa_dev: vdpa_device object which registers on the vDPA bus.
  * @vdpa_state: NIC state machine governed by ef100_vdpa_nic_state
  * @efx: pointer to the VF's efx_nic object
+ * @lock: Managing access to vdpa config operations
  * @pf_index: PF index of the vDPA VF
  * @vf_index: VF index of the vDPA VF
  * @status: device status as per VIRTIO spec
@@ -156,11 +161,13 @@ struct ef100_vdpa_filter {
  * @filter_cnt: total number of filters created on this vdpa device
  * @filters: details of all filters created on this vdpa device
  * @cfg_cb: callback for config change
+ * @domain: IOMMU domain
  */
 struct ef100_vdpa_nic {
 	struct vdpa_device vdpa_dev;
 	enum ef100_vdpa_nic_state vdpa_state;
 	struct efx_nic *efx;
+	struct mutex lock;
 	u32 pf_index;
 	u32 vf_index;
 	u8 status;
@@ -173,6 +180,7 @@ struct ef100_vdpa_nic {
 	bool mac_configured;
 	struct ef100_vdpa_filter filters[EF100_VDPA_MAX_SUPPORTED_FILTERS];
 	struct vdpa_callback cfg_cb;
+	struct iommu_domain *domain;
 };
 
 int ef100_vdpa_init(struct efx_probe_data *probe_data);
@@ -183,6 +191,7 @@ int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic);
 int ef100_vdpa_filter_remove(struct ef100_vdpa_nic *vdpa_nic);
 int ef100_vdpa_irq_vectors_alloc(struct pci_dev *pci_dev, u16 min, u16 max);
 void ef100_vdpa_irq_vectors_free(void *data);
+int ef100_vdpa_free_buffer(struct efx_nic *efx, struct efx_buffer *buf);
 #endif
 
 #endif

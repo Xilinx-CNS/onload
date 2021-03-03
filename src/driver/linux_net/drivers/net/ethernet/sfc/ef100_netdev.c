@@ -112,34 +112,6 @@ static int ef100_remap_bar(struct efx_nic *efx, int max_vis)
 	return 0;
 }
 
-void ef100_start_reps(struct efx_nic *efx)
-{
-#if defined(CONFIG_SFC_SRIOV)
-	struct ef100_nic_data *nic_data = efx->nic_data;
-	int i;
-
-	WARN_ON(efx->state != STATE_NET_UP);
-
-	spin_lock_bh(&nic_data->vf_reps_lock);
-	for (i = 0; i < nic_data->vf_rep_count; i++)
-		netif_carrier_on(nic_data->vf_rep[i]);
-	spin_unlock_bh(&nic_data->vf_reps_lock);
-#endif
-}
-
-void ef100_stop_reps(struct efx_nic *efx)
-{
-#if defined(CONFIG_SFC_SRIOV)
-	struct ef100_nic_data *nic_data = efx->nic_data;
-	int i;
-
-	spin_lock_bh(&nic_data->vf_reps_lock);
-	for (i = 0; i < nic_data->vf_rep_count; i++)
-		netif_carrier_off(nic_data->vf_rep[i]);
-	spin_unlock_bh(&nic_data->vf_reps_lock);
-#endif
-}
-
 /* Context: process, rtnl_lock() held.
  * Note that the kernel will ignore our return code; this method
  * should really be a void.
@@ -155,7 +127,6 @@ static int ef100_net_stop(struct net_device *net_dev)
 	if (efx->type->detach_reps)
 		efx->type->detach_reps(efx);
 #endif
-	ef100_stop_reps(efx);
 	netif_stop_queue(net_dev);
 	efx_tc_remove_rep_filters(efx);
 	efx_stop_all(efx);
@@ -231,7 +202,6 @@ static int ef100_net_open(struct net_device *net_dev)
 
 	efx->state = STATE_NET_UP;
 
-	ef100_start_reps(efx);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	if (netif_running(efx->net_dev) && efx->type->attach_reps)
 		efx->type->attach_reps(efx);
@@ -283,6 +253,8 @@ static void ef100_adjust_channels(struct efx_nic *efx, unsigned int avail_vis)
 		efx->n_xdp_channels = 0;
 	else
 		avail_vis -= vi_share;
+	/* Recalculate RSS spread based on available RX channels */
+	efx->n_rss_channels = efx_rx_channels(efx) - efx->n_extra_channels;
 }
 
 int ef100_net_alloc(struct efx_nic *efx)
@@ -332,6 +304,10 @@ int ef100_net_alloc(struct efx_nic *efx)
 			}
 		}
 	} while (rc == -EAGAIN);
+
+	rc = efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
+	if (rc)
+		return rc;
 
 	rc = efx_probe_channels(efx);
 	if (rc)
@@ -878,7 +854,9 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	efx->net_dev = net_dev;
 	SET_NETDEV_DEV(net_dev, &efx->pci_dev->dev);
 
-	net_dev->features |= efx->type->offload_features;
+	/* enable all supported features except rx-fcs and rx-all */
+	net_dev->features |= efx->type->offload_features &
+			     ~(NETIF_F_RXFCS | NETIF_F_RXALL);
 	efx_add_hw_features(efx, efx->type->offload_features);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_VLAN_FEATURES)
 	net_dev->vlan_features |= (NETIF_F_HW_CSUM | NETIF_F_SG |
@@ -909,6 +887,13 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	if (rc)
 		goto fail;
 
+	nic_data = efx->nic_data;
+	if (nic_data->grp_mae) {
+		rc = efx_init_struct_tc(efx);
+		if (rc)
+			goto fail;
+	}
+
 	rc = efx_init_channels(efx);
 	if (rc)
 		goto fail;
@@ -935,13 +920,6 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 
 	/* Don't fail init if RSS setup doesn't work. */
 	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
-
-	nic_data = efx->nic_data;
-	if (nic_data->grp_mae) {
-		rc = efx_init_struct_tc(efx);
-		if (rc)
-			goto fail;
-	}
 
 	rc = ef100_register_netdev(efx);
 	if (rc)

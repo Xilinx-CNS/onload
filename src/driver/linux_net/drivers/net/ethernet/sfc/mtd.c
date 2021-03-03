@@ -93,11 +93,6 @@ static void efx_mtd_free_parts(struct kref *kref)
 
 	kfree(mtd_struct->parts);
 	mtd_struct->parts = NULL;
-
-	if (mtd_struct->efx)
-		mtd_struct->efx->mtd_struct = NULL;
-
-	kfree(mtd_struct);
 }
 
 static void efx_mtd_scrub(struct efx_mtd_partition *part)
@@ -251,6 +246,8 @@ int efx_mtd_add(struct efx_nic *efx, struct efx_mtd_partition *parts,
 	return 0;
 
 fail:
+	netif_err(mtd_struct->efx, hw, mtd_struct->efx->net_dev,
+		  "MTD device creation for %s FAILED\n", part->name);
 	while (i--)
 		efx_mtd_remove_partition(mtd_struct, &parts[i]);
 	kref_put(&mtd_struct->parts_kref, efx_mtd_free_parts);
@@ -283,6 +280,7 @@ void efx_mtd_remove(struct efx_nic *efx)
 	list_for_each_entry_safe(part, next, &mtd_struct->list, node)
 		efx_mtd_remove_partition(mtd_struct, part);
 	kref_put(&mtd_struct->parts_kref, efx_mtd_free_parts);
+	kfree(efx->mtd_struct);
 }
 
 void efx_mtd_rename(struct efx_nic *efx)

@@ -1382,6 +1382,48 @@ int efx_mcdi_rpc_async_quiet(struct efx_nic *efx, unsigned int cmd,
 				      complete, cookie, true, false, NULL);
 }
 
+/**
+ * efx_mcdi_rpc_client - issue an MCDI command on a non-base client
+ * This is a superset of the functionality of efx_mcdi_rpc(), adding:
+ * @client_id: A dynamic client ID on which to send this MCDI command, or
+ *	MC_CMD_CLIENT_ID_SELF to send the command to the base client (which
+ *	makes this function identical to efx_mcdi_rpc()).
+ *
+ * The caller must provide space for 12 additional bytes (beyond inlen) in the
+ * memory at inbuf since inbuf may be modified in-situ.
+ * MCDI_DECLARE_PROXYABLE_BUF should be used for this. This function may sleep
+ * and therefore must be called in process context.
+ */
+int efx_mcdi_rpc_client(struct efx_nic *efx, u32 client_id, unsigned int cmd,
+			efx_dword_t *inbuf, size_t inlen, efx_dword_t *outbuf,
+			size_t outlen, size_t *outlen_actual)
+{
+	MCDI_DECLARE_BUF(client_cmd, MC_CMD_CLIENT_CMD_IN_LEN);
+	efx_dword_t inner_mcdi[2];
+
+	if (client_id == MC_CMD_CLIENT_ID_SELF)
+		return efx_mcdi_rpc(efx, cmd, inbuf, inlen, outbuf, outlen,
+		                    outlen_actual);
+
+	MCDI_SET_DWORD(client_cmd, CLIENT_CMD_IN_CLIENT_ID, client_id);
+	/* There's lots of other fields in the MCDI header, but
+	 * they're all ignored for proxied commands */
+	EFX_POPULATE_DWORD_2(inner_mcdi[0],
+		MCDI_HEADER_CODE, MC_CMD_V2_EXTN,
+		MCDI_HEADER_DATALEN, 0);
+	EFX_POPULATE_DWORD_2(inner_mcdi[1],
+		MC_CMD_V2_EXTN_IN_EXTENDED_CMD, cmd,
+		MC_CMD_V2_EXTN_IN_ACTUAL_LEN, inlen);
+	memmove((char*)inbuf + sizeof(client_cmd) + sizeof(inner_mcdi),
+	         inbuf, inlen);
+	memcpy(inbuf, client_cmd, sizeof(client_cmd));
+	memcpy((char*)inbuf + sizeof(client_cmd),
+	       inner_mcdi, sizeof(inner_mcdi));
+	inlen += sizeof(client_cmd) + sizeof(inner_mcdi);
+	return efx_mcdi_rpc(efx, MC_CMD_CLIENT_CMD, inbuf, inlen,
+	                    outbuf, outlen, outlen_actual);
+}
+
 static void _efx_mcdi_display_error(struct efx_nic *efx, unsigned int cmd,
 				    size_t inlen, int raw, int arg, int rc)
 {

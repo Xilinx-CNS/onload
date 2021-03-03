@@ -14,11 +14,11 @@
 #include "rx_common.h"
 #include "xdp.h"
 #include "mcdi_functions.h"
+#include "ef100.h"
 #include "ef100_regs.h"
 #include "ef100_nic.h"
 #include "ef100_rep.h"
 #include "io.h"
-#include "mcdi_pcol_mae.h"
 
 /* Do the frame checksum on the whole frame. */
 #undef BUG85159_CSUM_FRAME
@@ -34,6 +34,14 @@
 #define ESF_GZ_RX_PREFIX_NT_OR_INNER_L3_CLASS_LBN	\
 		(ESF_GZ_RX_PREFIX_CLASS_LBN + 8)
 #define ESF_GZ_RX_PREFIX_NT_OR_INNER_L3_CLASS_WIDTH	2
+
+
+int ef100_rx_probe(struct efx_rx_queue *rx_queue)
+{
+	return ef100_alloc_qdma_buffer(rx_queue->efx, &rx_queue->rxd.buf,
+				       (rx_queue->ptr_mask + 1) *
+				       sizeof(efx_qword_t));
+}
 
 int ef100_rx_init(struct efx_rx_queue *rx_queue)
 {
@@ -118,7 +126,7 @@ void __ef100_rx_packet(struct efx_channel *channel)
 
 	nic_data = efx->nic_data;
 
-	ing_port = le16_to_cpu((__force __le16) PREFIX_FIELD(prefix, INGRESS_VPORT));
+	ing_port = le16_to_cpu((__force __le16) PREFIX_FIELD(prefix, INGRESS_MPORT));
 
 	if (nic_data->have_mport && ing_port != nic_data->base_mport &&
 	    /* XXX oldbase compat; remove after C-model flag day */
@@ -130,9 +138,13 @@ void __ef100_rx_packet(struct efx_channel *channel)
 			if (rep_dev->flags & IFF_UP)
 				efx_ef100_rep_rx_packet(netdev_priv(rep_dev),
 							rx_buf);
-			else
-				efx_free_rx_buffers(efx_channel_get_rx_queue(channel),
-						    rx_buf, 1);
+			/* Representor Rx doesn't care about PF Rx buffer
+			 * ownership, it just makes a copy. So, we are done
+			 * with the Rx buffer from PF point of view and should
+			 * free it.
+			 */
+			efx_free_rx_buffers(efx_channel_get_rx_queue(channel),
+					    rx_buf, 1);
 			goto out;
 		}
 		if (net_ratelimit())
@@ -230,20 +242,31 @@ void efx_ef100_ev_rx(struct efx_channel *channel, const efx_qword_t *p_event)
 void ef100_rx_write(struct efx_rx_queue *rx_queue)
 {
 	unsigned int notified_count = rx_queue->notified_count;
+	struct efx_nic *efx = rx_queue->efx;
 	struct efx_rx_buffer *rx_buf;
+	dma_addr_t dma_addr;
 	unsigned int idx;
 	efx_qword_t *rxd;
 	efx_dword_t rxdb;
+	int rc;
 
 	while (notified_count != rx_queue->added_count) {
 		idx = notified_count & rx_queue->ptr_mask;
 		rx_buf = efx_rx_buffer(rx_queue, idx);
 		rxd = efx_rx_desc(rx_queue, idx);
+		dma_addr = rx_buf->dma_addr;
+		rc = ef100_regionmap_buffer(efx, &dma_addr);
 
-		EFX_POPULATE_QWORD_1(*rxd, ESF_GZ_RX_BUF_ADDR, rx_buf->dma_addr);
+		/* TODO: Deal with failure. */
+		if (rc)
+			break;
+
+		EFX_POPULATE_QWORD_1(*rxd, ESF_GZ_RX_BUF_ADDR, dma_addr);
 
 		++notified_count;
 	}
+	if (notified_count == rx_queue->notified_count)
+		return;
 
 	wmb();
 	EFX_POPULATE_DWORD_1(rxdb, ERF_GZ_RX_RING_PIDX,
@@ -255,4 +278,21 @@ void ef100_rx_write(struct efx_rx_queue *rx_queue)
 	rx_queue->notified_count = notified_count;
 	if (rx_queue->grant_credits)
 		schedule_work(&rx_queue->grant_work);
+}
+
+int efx_ef100_rx_defer_refill(struct efx_rx_queue *rx_queue)
+{
+	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_DRIVER_EVENT_IN_LEN);
+	efx_qword_t *event = (efx_qword_t *)MCDI_PTR(inbuf, DRIVER_EVENT_IN_DATA);
+	size_t outlen;
+
+	EFX_POPULATE_QWORD_2(*event,
+			     ESF_GZ_E_TYPE, ESE_GZ_EF100_EV_DRIVER,
+			     ESF_GZ_DRIVER_DATA, EFX_EF100_REFILL);
+
+	MCDI_SET_DWORD(inbuf, DRIVER_EVENT_IN_EVQ, channel->channel);
+
+	return efx_mcdi_rpc(channel->efx, MC_CMD_DRIVER_EVENT,
+			    inbuf, sizeof(inbuf), NULL, 0, &outlen);
 }

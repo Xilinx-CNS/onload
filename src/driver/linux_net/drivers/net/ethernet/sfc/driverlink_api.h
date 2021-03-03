@@ -27,7 +27,7 @@ struct efx_dl_device_info;
  * is not used for binary compatibility checking, as that is done by
  * kbuild and the module loader using symbol versions.
  */
-#define EFX_DRIVERLINK_API_VERSION 29
+#define EFX_DRIVERLINK_API_VERSION 32
 #define EFX_DRIVERLINK_API_VERSION_MINOR_MAX 0
 
 /* If the client didn't define their VERSION_MINOR, default to 0 */
@@ -417,14 +417,16 @@ struct efx_dl_ops {
 	int (*vport_new)(struct efx_dl_device *efx_dev, u16 vlan,
 			 bool vlan_restrict);
 	int (*vport_free)(struct efx_dl_device *efx_dev, u16 port_id);
-	int (*init_txq)(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
+	int (*init_txq)(struct efx_dl_device *efx_dev, u32 client_id,
+			dma_addr_t *dma_addrs,
 			int n_dma_addrs, u16 vport_id, u8 stack_id, u32 owner_id,
 			bool timestamp, u8 crc_mode, bool tcp_udp_only,
 			bool tcp_csum_dis, bool ip_csum_dis, bool inner_tcp_csum,
 			bool inner_ip_csum, bool buff_mode, bool pacer_bypass,
-			bool ctpio, bool ctpio_uthresh, u32 instance, u32 label,
-			u32 target_evq, u32 num_entries);
-	int (*init_rxq)(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
+			bool ctpio, bool ctpio_uthresh, bool m2m_d2c, u32 instance,
+			u32 label, u32 target_evq, u32 num_entries);
+	int (*init_rxq)(struct efx_dl_device *efx_dev, u32 client_id,
+			dma_addr_t *dma_addrs,
 			int n_dma_addrs, u16 vport_id, u8 stack_id,
 			u32 owner_id, u8 crc_mode, bool timestamp,
 			bool hdr_split, bool buff_mode, bool rx_prefix,
@@ -444,6 +446,16 @@ struct efx_dl_ops {
 			const u8 *inbuf, u8 *outbuf);
 	int (*publish)(struct efx_dl_device *dl_dev);
 	void (*unpublish)(struct efx_dl_device *dl_dev);
+	long (*dma_xlate)(struct efx_dl_device *dl_dev, const dma_addr_t *src,
+	                  dma_addr_t *dst, unsigned int n);
+	int (*mcdi_rpc_client)(struct efx_dl_device *dl_dev, u32 client_id,
+			       unsigned int cmd, size_t inlen, size_t outlen,
+			       size_t *outlen_actual,
+			       u32 *inbuf, u32 *outbuf);
+	int (*client_alloc)(struct efx_dl_device *dl_dev, u32 parent, u32 *id);
+	int (*client_free)(struct efx_dl_device *dl_dev, u32 id);
+	int (*vi_set_user)(struct efx_dl_device *dl_dev, u32 vi_instance,
+			u32 client_id);
 };
 
 /**
@@ -705,6 +717,7 @@ static inline int efx_dl_vport_free(struct efx_dl_device *efx_dev, u16 port_id)
  * @pacer_bypass: flag as per MCDI
  * @ctpio: flag as per MCDI
  * @ctpio_uthresh: flag as per MCDI
+ * @m2m_d2c: flag as per MCDI
  * @instance: as per MCDI
  * @label: queue label to put in events
  * @target_evq: the EVQ to send events to
@@ -713,21 +726,23 @@ static inline int efx_dl_vport_free(struct efx_dl_device *efx_dev, u16 port_id)
  * Available from API version 25.1.
  */
 static inline
-int efx_dl_init_txq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
+int efx_dl_init_txq(struct efx_dl_device *efx_dev, u32 client_id,
+		    dma_addr_t *dma_addrs,
 		    int n_dma_addrs, u16 vport_id, u8 stack_id, u32 owner_id,
 		    bool timestamp, u8 crc_mode, bool tcp_udp_only,
 		    bool tcp_csum_dis, bool ip_csum_dis, bool inner_tcp_csum,
 		    bool inner_ip_csum, bool buff_mode, bool pacer_bypass,
-		    bool ctpio, bool ctpio_uthresh, u32 instance, u32 label,
-		    u32 target_evq, u32 num_entries)
+		    bool ctpio, bool ctpio_uthresh, bool m2m_d2c, u32 instance,
+		    u32 label, u32 target_evq, u32 num_entries)
 {
-	return efx_dev->nic->ops->init_txq(efx_dev, dma_addrs, n_dma_addrs,
+	return efx_dev->nic->ops->init_txq(efx_dev, client_id,
+				      dma_addrs, n_dma_addrs,
 				      vport_id, stack_id, owner_id,
 				      timestamp, crc_mode, tcp_udp_only,
 				      tcp_csum_dis, ip_csum_dis,
 				      inner_tcp_csum, inner_ip_csum,
 				      buff_mode, pacer_bypass, ctpio,
-				      ctpio_uthresh, instance, label,
+				      ctpio_uthresh, m2m_d2c, instance, label,
 				      target_evq, num_entries);
 }
 
@@ -756,14 +771,16 @@ int efx_dl_init_txq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
  * Available from API version 25.1.
  */
 static inline
-int efx_dl_init_rxq(struct efx_dl_device *efx_dev, dma_addr_t *dma_addrs,
+int efx_dl_init_rxq(struct efx_dl_device *efx_dev, u32 client_id,
+		    dma_addr_t *dma_addrs,
 		    int n_dma_addrs, u16 vport_id, u8 stack_id, u32 owner_id,
 		    u8 crc_mode, bool timestamp, bool hdr_split, bool buff_mode,
 		    bool rx_prefix, u8 dma_mode, u32 instance, u32 label,
 		    u32 target_evq, u32 num_entries, u8 ps_buf_size,
 		    bool force_rx_merge, int ef100_rx_buffer_size)
 {
-	return efx_dev->nic->ops->init_rxq(efx_dev, dma_addrs, n_dma_addrs,
+	return efx_dev->nic->ops->init_rxq(efx_dev, client_id,
+				      dma_addrs, n_dma_addrs,
 				      vport_id, stack_id, owner_id,
 				      crc_mode, timestamp, hdr_split, buff_mode,
 				      rx_prefix, dma_mode, instance, label,
@@ -839,6 +856,94 @@ static inline int efx_dl_mcdi_rpc(struct efx_dl_device *dl_dev,
 	return dl_dev->nic->ops->mcdi_rpc(dl_dev, cmd, inlen,
 					  outlen, outlen_actual,
 					  inbuf, outbuf);
+}
+
+/**
+ * efx_dl_dma_xlate - Translate local DMA addresses to QDMA addresses
+ * @dl_dev: Driverlink client device context
+ * @src: Input array of local DMA addresses to translate, e.g. from
+ *	dma_map_single
+ * @dst: Output array of translated DMA addresses, for use in descriptors.
+ *	src and dst may be the same pointer (but no other overlaps are
+ *	permitted).
+ * @n: Number of elements in src and dst arrays.
+ *
+ * The return value is the number of initial array elements which were
+ * successfully translated, i.e. if it is less than n then src[rc] is an
+ * address which the NIC cannot access via DMA. Translation will still
+ * continue after an error is encountered; all untranslatable addresses will
+ * have their dst value set to (dma_addr_t)-1.  Defined from API version 30.
+ */
+static inline long efx_dl_dma_xlate(struct efx_dl_device *dl_dev,
+				    const dma_addr_t *src,
+				    dma_addr_t *dst, unsigned int n)
+{
+	return dl_dev->nic->ops->dma_xlate(dl_dev, src, dst, n);
+}
+
+/**
+ * efx_dl_mcdi_rpc_client - issue an MCDI command on a non-base client
+ * This is a superset of efx_dl_mcdi_rpc, adding:
+ * @client_id: A dynamic client ID created by efx_dl_client_alloc() on which
+ *	to send this MCDI command
+ *
+ * The caller must provide space for 12 additional bytes (beyond inlen) in the
+ * memory at inbuf; inbuf may be modified in-situ. This function may sleep and
+ * therefore must be called in process context. Defined from API version 30.
+ */
+static inline int efx_dl_mcdi_rpc_client(struct efx_dl_device *dl_dev,
+					 u32 client_id, unsigned int cmd,
+					 size_t inlen, size_t outlen,
+					 size_t *outlen_actual,
+					 u32 *inbuf, u32 *outbuf)
+{
+	return dl_dev->nic->ops->mcdi_rpc_client(dl_dev, client_id, cmd,
+						 inlen, outlen, outlen_actual,
+						 inbuf, outbuf);
+}
+
+/**
+ * efx_dl_client_alloc - create a new dynamic client
+ * @dl_dev: Driverlink client device context
+ * @parent: Client ID of the owner of the new client. MC_CMD_CLIENT_ID_SELF
+ *	to make the base function the owner.
+ * @id: Out. The allocated client ID.
+ *
+ * Use efx_dl_client_free to release the client. Available from API version 30.
+ */
+static inline int efx_dl_client_alloc(struct efx_dl_device *dl_dev,
+				      u32 parent, u32 *id)
+{
+	return dl_dev->nic->ops->client_alloc(dl_dev, parent, id);
+}
+
+/**
+ * efx_dl_client_free - destroy a dynamic client object
+ * @dl_dev: Driverlink client device context
+ * @id: The dynamic client ID to destroy
+ *
+ * See efx_dl_client_alloc. Available from API version 30.
+ */
+static inline int efx_dl_client_free(struct efx_dl_device *dl_dev, u32 id)
+{
+	return dl_dev->nic->ops->client_free(dl_dev, id);
+}
+
+/**
+ * efx_dl_vi_set_user - reassign a VI to a dynamic client
+ * @dl_dev: Driverlink client device context
+ * @vi_instances: The (relative) VI number to reassign
+ * @client_id: Dynamic client ID to be the new user. MC_CMD_CLIENT_ID_SELF to
+ *	assign back to the base function.
+ *
+ * See efx_dl_client_alloc. VIs may only be moved to/from the base function
+ * and a dynamic client; to reassign from one dynamic client to another they
+ * must go via the base function first. Available from API version 30.
+ */
+static inline int efx_dl_vi_set_user(struct efx_dl_device *dl_dev,
+				     u32 vi_instance, u32 client_id)
+{
+	return dl_dev->nic->ops->vi_set_user(dl_dev, vi_instance, client_id);
 }
 
 /**

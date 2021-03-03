@@ -377,7 +377,7 @@ static ssize_t siena_show_turbo(struct device *dev,
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 
-	return scnprintf(buff, PAGE_SIZE, "%u\n", maranello_enabled(efx->nic_data));
+	return sprintf(buff, "%u\n", maranello_enabled(efx->nic_data));
 }
 
 static DEVICE_ATTR(turbo_mode, S_IRUGO, siena_show_turbo, NULL);

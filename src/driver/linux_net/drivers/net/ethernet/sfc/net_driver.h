@@ -92,7 +92,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.4.1001"
+#define EFX_DRIVER_VERSION	"5.3.6.1004"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -1390,6 +1390,18 @@ struct efx_mtd {
 #endif
 #endif
 
+
+/**
+ * enum efx_buf_alloc_mode - buffer allocation mode
+ * @BUF_MODE_EF100: buffer setup in ef100 mode
+ * @BUF_MODE_VDPA: buffer setup in vdpa mode
+ */
+
+enum efx_buf_alloc_mode {
+       EFX_BUF_MODE_EF100,
+       EFX_BUF_MODE_VDPA
+};
+
 /**
  * struct efx_nic - an Efx NIC
  * @name: Device name (net device name or bus id before net device registered)
@@ -1540,6 +1552,7 @@ struct efx_mtd {
  * @tc: state for TC offload (EF100).
  * @mem_bar: The BAR that is mapped into membase.
  * @reg_base: Offset from the start of the bar to the function control window.
+ * @mcdi_buf_mode: mcdi buffer allocation mode
  * @monitor_work: Hardware monitor workitem
  * @biu_lock: BIU (bus interface unit) lock
  * @last_irq_cpu: Last CPU to handle a possible test interrupt.  This
@@ -1842,6 +1855,7 @@ struct efx_nic {
 #endif
 	unsigned int mem_bar;
 	u32 reg_base;
+	enum efx_buf_alloc_mode mcdi_buf_mode;
 #ifdef CONFIG_SFC_VDPA
 	struct ef100_vdpa_nic *vdpa_nic;
 #endif
@@ -1946,12 +1960,17 @@ struct efx_mtd_partition {
 #endif
 
 struct efx_udp_tunnel {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
+#define TUNNEL_ENCAP_UDP_PORT_ENTRY_INVALID	0xffff
+#endif
 	u16 type; /* TUNNEL_ENCAP_UDP_PORT_ENTRY_foo, see mcdi_pcol.h */
 	__be16 port;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 	/* Current state of slot.  Used only inside the list, not in request
 	 * arguments.
 	 */
 	u16 adding:1, removing:1, count:14;
+#endif
 };
 #define	EFX_UDP_TUNNEL_COUNT_WARN	0x2000 /* top bit of 14-bit field */
 #define EFX_UDP_TUNNEL_COUNT_MAX	0x3fff /* saturate at this value */
@@ -2119,9 +2138,9 @@ struct ef100_udp_tunnel {
  * @vswitching_remove: Free the vports and vswitches.
  * @get_mac_address: Get mac address from underlying vport/pport.
  * @set_mac_address: Set the MAC address of the device
+ * @udp_tnl_has_port: Check if a port has been added as UDP tunnel
  * @udp_tnl_push_ports: Push the list of UDP tunnel ports to the NIC if required.
  * @udp_tnl_add_port: Add a UDP tunnel port
- * @udp_tnl_has_port: Check if a port has been added as UDP tunnel
  * @udp_tnl_del_port: Remove a UDP tunnel port
  * @get_vf_rep: get the VF representor netdevice for given VF index
  * @detach_reps: detach (stop TX on) all representors
@@ -2302,6 +2321,7 @@ struct efx_nic_type {
 /* Unblock kernel, i.e. enable automatic and hint filters */
 	void (*filter_unblock_kernel)(struct efx_nic *efx, enum
 				      efx_dl_filter_block_kernel_type type);
+	int (*regionmap_buffer)(struct efx_nic *efx, dma_addr_t *dma_addr);
 #endif
 #endif
 #ifdef CONFIG_SFC_MTD
@@ -2353,10 +2373,14 @@ struct efx_nic_type {
 	int (*get_mac_address)(struct efx_nic *efx, unsigned char *perm_addr);
 	int (*set_mac_address)(struct efx_nic *efx);
 	unsigned int (*mcdi_rpc_timeout)(struct efx_nic *efx, unsigned int cmd);
+	bool (*udp_tnl_has_port)(struct efx_nic *efx, __be16 port);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
+	int (*udp_tnl_push_ports)(struct efx_nic *efx);
+#else
 	void (*udp_tnl_push_ports)(struct efx_nic *efx);
 	void (*udp_tnl_add_port)(struct efx_nic *efx, struct efx_udp_tunnel tnl);
-	bool (*udp_tnl_has_port)(struct efx_nic *efx, __be16 port);
 	void (*udp_tnl_del_port)(struct efx_nic *efx, struct efx_udp_tunnel tnl);
+#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
 	void (*udp_tnl_add_port2)(struct efx_nic *efx, struct ef100_udp_tunnel tnl);
 	enum efx_encap_type (*udp_tnl_lookup_port2)(struct efx_nic *efx, __be16 port);

@@ -37,7 +37,6 @@ struct efx_tc_counter {
 	/* jiffies of the last time we saw packets increase */
 	unsigned long touched;
 	struct work_struct work; /* For notifying encap actions */
-	struct efx_tc_state *tc; /* Allows workitem to access tc->mutex */
 	/* owners of corresponding count actions */
 	struct list_head users;
 };

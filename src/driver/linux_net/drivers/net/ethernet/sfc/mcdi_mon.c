@@ -338,7 +338,7 @@ static ssize_t efx_mcdi_mon_show_name(struct device *dev,
 				      struct device_attribute *attr,
 				      char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%s\n", KBUILD_MODNAME);
+	return sprintf(buf, "%s\n", KBUILD_MODNAME);
 }
 
 static ssize_t efx_mcdi_mon_show_value(struct device *dev,
@@ -353,7 +353,7 @@ static ssize_t efx_mcdi_mon_show_value(struct device *dev,
 
 	if (rc)
 		return rc;
-	return scnprintf(buf, PAGE_SIZE, "%u\n", value);
+	return sprintf(buf, "%u\n", value);
 }
 
 static ssize_t efx_mcdi_mon_show_limit(struct device *dev,
@@ -364,7 +364,7 @@ static ssize_t efx_mcdi_mon_show_limit(struct device *dev,
 		container_of(attr, struct efx_mcdi_mon_attribute, dev_attr);
 	unsigned int value = efx_mcdi_mon_get_limit(mon_attr);
 
-	return scnprintf(buf, PAGE_SIZE, "%u\n", value);
+	return sprintf(buf, "%u\n", value);
 }
 
 static ssize_t efx_mcdi_mon_show_alarm(struct device *dev,
@@ -380,7 +380,7 @@ static ssize_t efx_mcdi_mon_show_alarm(struct device *dev,
 	if (rc)
 		return rc;
 
-	return scnprintf(buf, PAGE_SIZE, "%d\n", state != MC_CMD_SENSOR_STATE_OK);
+	return sprintf(buf, "%d\n", state != MC_CMD_SENSOR_STATE_OK);
 }
 
 static ssize_t efx_mcdi_mon_show_label(struct device *dev,
@@ -389,8 +389,8 @@ static ssize_t efx_mcdi_mon_show_label(struct device *dev,
 {
 	struct efx_mcdi_mon_attribute *mon_attr =
 		container_of(attr, struct efx_mcdi_mon_attribute, dev_attr);
-	return scnprintf(buf, PAGE_SIZE, "%s\n",
-		         efx_mcdi_sensor_type[mon_attr->type].label);
+	return sprintf(buf, "%s\n",
+		       efx_mcdi_sensor_type[mon_attr->type].label);
 }
 
 static int efx_mcdi_mon_create_files(struct device *dev,

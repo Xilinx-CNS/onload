@@ -13,7 +13,7 @@
 
 #include "net_driver.h"
 #include "tc.h"
-#include "mcdi_pcol_mae.h" /* needed for various MC_CMD_MAE_*_NULL defines */
+#include "mcdi_pcol.h" /* needed for various MC_CMD_MAE_*_NULL defines */
 
 int efx_mae_allocate_mport(struct efx_nic *efx, u32 *id, u32 *label);
 int efx_mae_free_mport(struct efx_nic *efx, u32 id);

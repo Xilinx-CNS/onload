@@ -16,6 +16,7 @@
 #include "tx_common.h"
 #include "ef100_regs.h"
 #include "io.h"
+#include "ef100.h"
 #include "ef100_tx.h"
 #include "ef100_nic.h"
 
@@ -26,11 +27,9 @@
 int ef100_tx_probe(struct efx_tx_queue *tx_queue)
 {
 	/* Allocate an extra descriptor for the QMDA status completion entry */
-	return efx_nic_alloc_buffer(tx_queue->efx, &tx_queue->txd.buf,
-				    (tx_queue->ptr_mask + 2) *
-				    sizeof(efx_oword_t),
-				    GFP_KERNEL);
-	return 0;
+	return ef100_alloc_qdma_buffer(tx_queue->efx, &tx_queue->txd.buf,
+				       (tx_queue->ptr_mask + 2) *
+				       sizeof(efx_oword_t));
 }
 
 int ef100_tx_init(struct efx_tx_queue *tx_queue)
@@ -193,11 +192,17 @@ static void ef100_make_send_desc(struct efx_nic *efx,
 				 struct efx_tx_buffer *buffer, efx_oword_t *txd,
 				 unsigned int segment_count)
 {
+	dma_addr_t dma_addr = buffer->dma_addr;
+
+	/* TODO: Deal with failure. */
+	if (ef100_regionmap_buffer(efx, &dma_addr))
+		return;
+
 	/* TX send descriptor */
 	EFX_POPULATE_OWORD_3(*txd,
 			     ESF_GZ_TX_SEND_NUM_SEGS, segment_count,
 			     ESF_GZ_TX_SEND_LEN, buffer->len,
-			     ESF_GZ_TX_SEND_ADDR, buffer->dma_addr);
+			     ESF_GZ_TX_SEND_ADDR, dma_addr);
 
 	if (likely(efx->net_dev->features & NETIF_F_HW_CSUM))
 		ef100_set_tx_csum_partial(skb, buffer, txd);
@@ -290,6 +295,22 @@ static void ef100_make_tso_desc(struct efx_nic *efx,
 		);
 }
 
+static void ef100_make_seg_desc(struct efx_nic *efx,
+				struct efx_tx_buffer *buffer, efx_oword_t *txd)
+{
+	dma_addr_t dma_addr = buffer->dma_addr;
+
+	/* TODO: Deal with failure. */
+	if (ef100_regionmap_buffer(efx, &dma_addr))
+		return;
+
+	/* TX segment descriptor */
+	EFX_POPULATE_OWORD_3(*txd,
+			     ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_SEG,
+			     ESF_GZ_TX_SEG_LEN, buffer->len,
+			     ESF_GZ_TX_SEG_ADDR, dma_addr);
+}
+
 static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 				      const struct sk_buff *skb,
 				      unsigned int segment_count,
@@ -297,6 +318,7 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 {
 	unsigned int old_write_count = tx_queue->write_count;
 	unsigned int new_write_count = old_write_count;
+	struct efx_nic *efx = tx_queue->efx;
 	struct efx_tx_buffer *buffer;
 	unsigned int next_desc_type;
 	unsigned int write_ptr;
@@ -339,36 +361,30 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 	do {
 		write_ptr = new_write_count & tx_queue->ptr_mask;
 		buffer = &tx_queue->buffer[write_ptr];
+
 		txd = ef100_tx_desc(tx_queue, write_ptr);
 		++new_write_count;
-
 		/* Create TX descriptor ring entry */
 		tx_queue->packet_write_count = new_write_count;
 
 		switch (next_desc_type) {
 		case ESE_GZ_TX_DESC_TYPE_SEND:
-			ef100_make_send_desc(tx_queue->efx, skb,
-					     buffer, txd, nr_descs);
+			ef100_make_send_desc(efx, skb, buffer, txd, nr_descs);
 			break;
 		case ESE_GZ_TX_DESC_TYPE_TSO:
 			/* TX TSO descriptor */
 			WARN_ON_ONCE(!(buffer->flags & EFX_TX_BUF_TSO_V3));
-			ef100_make_tso_desc(tx_queue->efx, skb,
-					    buffer, txd, nr_descs);
+			ef100_make_tso_desc(efx, skb, buffer, txd, nr_descs);
 			break;
 		default:
-			/* TX segment descriptor */
-			EFX_POPULATE_OWORD_3(*txd,
-					ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_SEG,
-					ESF_GZ_TX_SEG_LEN, buffer->len,
-					ESF_GZ_TX_SEG_ADDR, buffer->dma_addr);
+			ef100_make_seg_desc(efx, buffer, txd);
 		}
 		/* if it's a raw write (such as XDP) then always SEND */
 		next_desc_type = skb ? ESE_GZ_TX_DESC_TYPE_SEG :
 				       ESE_GZ_TX_DESC_TYPE_SEND;
 
 #if 0		/* Dump the TX descriptor */
-		netif_dbg(tx_queue->efx, tx_queued, tx_queue->efx->net_dev,
+		netif_dbg(efx, tx_queued, efx->net_dev,
 			  "TX desc %d: " EFX_OWORD_FMT " len %d flags 0x%x\n",
 			  write_ptr, EFX_OWORD_VAL(*txd), buffer->len,
 			  buffer->flags);

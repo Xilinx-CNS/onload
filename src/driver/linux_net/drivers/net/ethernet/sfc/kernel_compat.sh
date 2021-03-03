@@ -199,6 +199,7 @@ EFX_HAVE_ETHTOOL_SET_RXFH_NOCONST	custom
 EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR		custom
 EFX_NEED_ETHTOOL_RXFH_INDIR_DEFAULT	nsymbol	ethtool_rxfh_indir_default	include/linux/ethtool.h
 EFX_NEED_IS_COMPAT_TASK			custom
+EFX_HAVE_TIF_ADDR32			symbol	TIF_ADDR32		arch/x86/include/asm/thread_info.h
 EFX_NEED_COMPAT_U64			nsymbol	compat_u64		include/asm/compat.h arch/$SRCARCH/include/asm/compat.h include/asm-$SRCARCH/compat.h
 EFX_HAVE_IRQ_NOTIFIERS			symbol  irq_affinity_notify	include/linux/interrupt.h
 EFX_HAVE_GSO_MAX_SEGS			member	struct_net_device	gso_max_segs		include/linux/netdevice.h
@@ -318,6 +319,7 @@ EFX_NEED_D_HASH_AND_LOOKUP	nexport	d_hash_and_lookup	include/linux/dcache.h fs/d
 EFX_HAVE_KTIME_UNION		custom
 EFX_NEED_HWMON_DEVICE_REGISTER_WITH_INFO	nsymbol	hwmon_device_register_with_info	include/linux/hwmon.h
 EFX_HAVE_NDO_UDP_TUNNEL_ADD	member	struct_net_device_ops	ndo_udp_tunnel_add	include/linux/netdevice.h
+EFX_HAVE_UDP_TUNNEL_NIC_INFO	symbol	udp_tunnel_nic_info	include/net/udp_tunnel.h
 EFX_HAVE_NEW_FLOW_KEYS		member	struct_flow_keys	basic		include/net/flow_dissector.h
 EFX_HAVE_SKB_ENCAPSULATION	bitfield	struct_sk_buff	encapsulation	include/linux/skbuff.h
 EFX_HAVE_NDO_ADD_GENEVE_PORT	member	struct_net_device_ops	ndo_add_geneve_port	include/linux/netdevice.h
@@ -331,7 +333,7 @@ EFX_HAVE_XDP_TX		symbol	XDP_TX		include/uapi/linux/bpf.h
 EFX_HAVE_XDP_TX_FLAGS	memtype	struct_net_device_ops	ndo_xdp_xmit	include/linux/netdevice.h	int (*)(struct net_device *, int, struct xdp_frame **, u32)
 EFX_HAVE_XDP_REDIR	symbol	XDP_REDIRECT	include/uapi/linux/bpf.h
 EFX_HAVE_XDP_RXQ_INFO	symbol	xdp_rxq_info	include/net/xdp.h
-EFX_HAVE_XDP_RXQ_INFO_NAPI_ID	symtype	xdp_rxq_info	include/net/xdp.h	int(struct xdp_rxq_info *, struct net_device *, u32, unsigned int)
+EFX_HAVE_XDP_RXQ_INFO_NAPI_ID	symtype	xdp_rxq_info_reg	include/net/xdp.h	int(struct xdp_rxq_info *, struct net_device *, u32, unsigned int)
 EFX_HAVE_XDP_EXT	member	struct_net_device_ops_extended	ndo_xdp	include/linux/netdevice.h
 EFX_NEED_XDP_FLUSH	member	struct_net_device_ops	ndo_xdp_flush	include/linux/netdevice.h
 EFX_HAVE_XDP_PROG_ATTACHED	member	struct_netdev_bpf	prog_attached	include/linux/netdevice.h

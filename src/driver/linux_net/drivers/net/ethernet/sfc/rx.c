@@ -608,7 +608,7 @@ static int rx_copybreak_get(char *buffer, struct kernel_param *kp)
 	int rc = param_get_uint(buffer, kp);
 
 	if (!strcmp(buffer, "14"))
-		rc = scnprintf(buffer, PAGE_SIZE, "0");
+		rc = sprintf(buffer, "0");
 
 	return rc;
 }

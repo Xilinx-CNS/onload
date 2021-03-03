@@ -13,6 +13,11 @@
 #
 # Note: you MUST set TOPDIR before including this file.
 
+# dkms may set ${arch} to aarch64
+ifeq ($(ARCH),aarch64)
+ARCH:=arm64
+endif
+
 ifdef KERNELRELEASE
 # kbuild part of makefile
 #

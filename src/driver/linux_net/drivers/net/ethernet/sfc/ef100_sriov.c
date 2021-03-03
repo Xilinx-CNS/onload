@@ -27,6 +27,13 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 	if (!nic_data->grp_mae)
 		return 0;
 
+	if (!nic_data->have_local_intf)
+		/* We weren't able to identify our local interface, so we will
+		 * have created remote_reps for these VFs.  Thus, don't create
+		 * local vf_reps for them too.
+		 */
+		return 0;
+
 	nic_data->vf_rep = kcalloc(num_vfs, sizeof(struct net_device *),
 				GFP_KERNEL);
 	if (!nic_data->vf_rep) {

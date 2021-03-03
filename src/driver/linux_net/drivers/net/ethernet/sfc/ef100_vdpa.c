@@ -159,7 +159,7 @@ static ssize_t vdpa_mac_store(struct device *dev,
 	struct ef100_vdpa_nic *vdpa_nic;
 	struct vdpa_device *vdev;
 	u8 mac_address[ETH_ALEN];
-	int rc;
+	int rc = 0;
 
 	vdpa_nic = efx->vdpa_nic;
 	if (vdpa_nic == NULL) {
@@ -168,11 +168,13 @@ static ssize_t vdpa_mac_store(struct device *dev,
 		return -ENOENT;
 	}
 
+	mutex_lock(&vdpa_nic->lock);
 	vdev = &vdpa_nic->vdpa_dev;
 	if (nic_data->vdpa_class != EF100_VDPA_CLASS_NET) {
 		dev_err(&vdev->dev,
 			"Invalid vDPA device class: %u\n", nic_data->vdpa_class);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto err;
 	}
 
 	rc = sscanf(buf, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
@@ -182,7 +184,8 @@ static ssize_t vdpa_mac_store(struct device *dev,
 	if (rc != ETH_ALEN) {
 		dev_err(&vdev->dev,
 			"Invalid MAC address %s\n", buf);
-		return -EINVAL;
+		rc = -EINVAL;
+		goto err;
 	}
 
 	ether_addr_copy(vdpa_nic->mac_address, (const u8 *)&mac_address);
@@ -191,6 +194,10 @@ static ssize_t vdpa_mac_store(struct device *dev,
 	if (vdpa_nic->vring[0].vring_created)
 		ef100_vdpa_filter_configure(vdpa_nic);
 
+err:
+	mutex_unlock(&vdpa_nic->lock);
+	if (rc < 0)
+		return rc;
 	return count;
 }
 
@@ -333,6 +340,26 @@ static void vdpa_remove_files(struct efx_nic *efx)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_vdpa_class);
 }
 
+static int vdpa_update_domain(struct ef100_vdpa_nic *vdpa_nic)
+{
+	struct vdpa_device *vdpa = &vdpa_nic->vdpa_dev;
+	struct device *dma_dev = vdpa_get_dma_dev(vdpa);
+	struct bus_type *bus;
+
+	bus = dma_dev->bus;
+	if (!bus)
+		return -EFAULT;
+
+	if (!iommu_capable(bus, IOMMU_CAP_CACHE_COHERENCY))
+		return -ENOTSUPP;
+
+	vdpa_nic->domain = iommu_get_domain_for_dev(dma_dev);
+	if (!vdpa_nic->domain)
+		return -ENODEV;
+
+	return 0;
+}
+
 int ef100_vdpa_init(struct efx_probe_data *probe_data)
 {
 	struct efx_nic *efx = &probe_data->efx;
@@ -355,6 +382,9 @@ int ef100_vdpa_init(struct efx_probe_data *probe_data)
 		return rc;
 	}
 
+	if (efx->type->filter_table_probe)
+		rc = efx->type->filter_table_probe(efx);
+
 	return 0;
 }
 
@@ -375,6 +405,9 @@ void ef100_vdpa_fini(struct efx_probe_data *probe_data)
 	vdpa_remove_files(efx);
 
 	efx->state = STATE_PROBED;
+
+	if (efx->type->filter_table_remove)
+		efx->type->filter_table_remove(efx);
 	efx_mcdi_filter_table_remove(efx);
 }
 
@@ -454,6 +487,111 @@ static void vdpa_free_vis(struct efx_nic *efx)
 			nic_data->vf_index);
 }
 
+static int ef100_vdpa_alloc_buffer(struct efx_nic *efx, struct efx_buffer *buf)
+{
+       struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+       struct device *dev;
+       int rc = 0;
+
+       dev = &vdpa_nic->vdpa_dev.dev;
+
+       buf->addr = kzalloc(buf->len, GFP_KERNEL);
+       if (!buf->addr) {
+               dev_err(dev, "vdpa buf alloc failed\n");
+               return -ENOMEM;
+       }
+
+       rc = iommu_map(vdpa_nic->domain, buf->dma_addr,
+                      virt_to_phys(buf->addr), buf->len,
+                      IOMMU_READ|IOMMU_WRITE|IOMMU_CACHE);
+       if (rc)
+               dev_err(dev, "iommu_map failed, rc: %d\n", rc);
+
+       return rc;
+}
+
+int ef100_vdpa_free_buffer(struct efx_nic *efx, struct efx_buffer *buf)
+{
+       struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+       struct device *dev;
+       int rc = 0;
+
+       dev = &vdpa_nic->vdpa_dev.dev;
+       rc = iommu_unmap(vdpa_nic->domain, buf->dma_addr, buf->len);
+       if (rc < 0)
+               dev_err(dev, "iommu_unmap failed, rc: %d\n", rc);
+
+       kfree(buf->addr);
+       return rc;
+}
+
+static int setup_ef100_mcdi_buffer(struct efx_nic *efx)
+{
+       struct ef100_nic_data *nic_data = efx->nic_data;
+       struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+       struct efx_mcdi_iface *mcdi;
+       struct efx_buffer mcdi_buf;
+       struct device *dev;
+       int rc;
+
+       mcdi = efx_mcdi(efx);
+       dev = &vdpa_nic->vdpa_dev.dev;
+       spin_lock_bh(&mcdi->iface_lock);
+
+       /* First, allocate the MCDI buffer for EF100 mode */
+       rc = efx_nic_alloc_buffer(efx, &mcdi_buf,
+                                 MCDI_BUF_LEN, GFP_KERNEL);
+       if (rc) {
+               dev_err(dev, "nic alloc buf failed, rc: %d\n", rc);
+               goto fail_alloc;
+       }
+
+       /* unmap and free the vDPA MCDI buffer now */
+       ef100_vdpa_free_buffer(efx, &nic_data->mcdi_buf);
+       memcpy(&nic_data->mcdi_buf, &mcdi_buf, sizeof(struct efx_buffer));
+       efx->mcdi_buf_mode = EFX_BUF_MODE_EF100;
+       spin_unlock_bh(&mcdi->iface_lock);
+
+       return 0;
+
+fail_alloc:
+       spin_unlock_bh(&mcdi->iface_lock);
+       return rc;
+}
+
+static int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
+{
+       struct ef100_nic_data *nic_data = efx->nic_data;
+       struct efx_mcdi_iface *mcdi;
+       struct efx_buffer mcdi_buf;
+       int rc;
+
+       mcdi = efx_mcdi(efx);
+       spin_lock_bh(&mcdi->iface_lock);
+
+       /* First, prepare the MCDI buffer for vDPA mode */
+       mcdi_buf.dma_addr = mcdi_iova;
+       /* iommu_map requires page aligned memory */
+       mcdi_buf.len = PAGE_ALIGN(MCDI_BUF_LEN);
+       rc = ef100_vdpa_alloc_buffer(efx, &mcdi_buf);
+       if (rc) {
+               pci_err(efx->pci_dev, "alloc vdpa buf failed, rc: %d\n", rc);
+               goto fail;
+       }
+
+       /* All set-up, free the EF100 MCDI buffer now */
+       efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
+       memcpy(&nic_data->mcdi_buf, &mcdi_buf, sizeof(struct efx_buffer));
+       efx->mcdi_buf_mode = EFX_BUF_MODE_VDPA;
+       spin_unlock_bh(&mcdi->iface_lock);
+
+       return 0;
+
+fail:
+       spin_unlock_bh(&mcdi->iface_lock);
+       return rc;
+}
+
 struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
@@ -475,7 +613,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 				     vdpa_dev, &efx->pci_dev->dev,
 				     &ef100_vdpa_config_ops
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NVQS_PARAM)
-				     , allocated_vis - 1
+				     , (allocated_vis - 1) * 2
 #endif
 				     );
 	if (!vdpa_nic) {
@@ -486,6 +624,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 		goto err_alloc_vis_free;
 	}
 
+	mutex_init(&vdpa_nic->lock);
 	vdpa_nic->vdpa_dev.dma_dev = &efx->pci_dev->dev;
 	efx->vdpa_nic = vdpa_nic;
 	vdpa_nic->efx = efx;
@@ -514,6 +653,18 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 		goto err_put_device;
 	}
 
+	rc = vdpa_update_domain(vdpa_nic);
+	if (rc) {
+		pci_err(efx->pci_dev, "update_domain failed, err: %d\n", rc);
+		goto err_irq_vectors_free;
+	}
+
+	rc = setup_vdpa_mcdi_buffer(efx, EF100_VDPA_IOVA_BASE_ADDR);
+	if (rc) {
+		 pci_err(efx->pci_dev, "realloc mcdi failed, err: %d\n", rc);
+		 goto err_irq_vectors_free;
+	}
+
 	rc = vdpa_register_device(&vdpa_nic->vdpa_dev);
 	if (rc) {
 		pci_err(efx->pci_dev,
@@ -539,6 +690,7 @@ err_irq_vectors_free:
 	ef100_vdpa_irq_vectors_free(efx->pci_dev);
 
 err_put_device:
+	mutex_destroy(&vdpa_nic->lock);
 	put_device(&vdpa_nic->vdpa_dev.dev);
 
 err_alloc_vis_free:
@@ -550,11 +702,18 @@ err_alloc_vis_free:
 void ef100_vdpa_delete(struct efx_nic *efx)
 {
 	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+	int rc;
 
 	if (vdpa_nic) {
 		ef100_vdpa_filter_remove(vdpa_nic);
 		vdpa_unregister_device(&vdpa_nic->vdpa_dev);
+	        rc = setup_ef100_mcdi_buffer(efx);
+	        if (rc) {
+	                pci_err(efx->pci_dev,
+	                        "setup_ef100_mcdi failed, err: %d\n", rc);
+	        }
 		ef100_vdpa_irq_vectors_free(efx->pci_dev);
+		mutex_destroy(&vdpa_nic->lock);
 		vdpa_free_vis(efx);
 		efx->vdpa_nic = NULL;
 	}

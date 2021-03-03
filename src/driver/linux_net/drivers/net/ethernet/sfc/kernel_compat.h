@@ -1451,7 +1451,11 @@ static inline bool __netdev_tx_sent_queue(struct netdev_queue *dev_queue,
 	#if !defined(CONFIG_COMPAT)
 		return 0;
 	#elif defined(CONFIG_X86_64)
+		#if defined(EFX_HAVE_TIF_ADDR32)
+		return test_thread_flag(TIF_ADDR32);
+		#else
 		return test_thread_flag(TIF_IA32);
+		#endif
 	#elif defined(CONFIG_PPC64)
 		return test_thread_flag(TIF_32BIT);
 	#else

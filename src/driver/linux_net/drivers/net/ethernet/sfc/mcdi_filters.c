@@ -1460,7 +1460,7 @@ int efx_mcdi_filter_redirect(struct efx_nic *efx, u32 filter_id,
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
-	if (!table || table->entry) {
+	if (!table || !table->entry) {
 		rc = -ENETDOWN;
 		goto out;
 	}

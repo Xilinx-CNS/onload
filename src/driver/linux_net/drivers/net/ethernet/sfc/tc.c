@@ -87,18 +87,22 @@ static int efx_tc_flower_lookup_dev(struct efx_nic *efx, struct net_device *dev)
 	return EFX_VPORT_REMOTE_OFFSET + efv->idx;
 }
 
-static long efx_tc_flower_rep_mport(struct efx_nic *efx, int vport_id)
+static s64 efx_tc_flower_rep_mport(struct efx_nic *efx, int vport_id)
 {
 	struct net_device *rep_dev;
 	struct efx_rep *efv;
 	u32 mport;
 
 	if (vport_id < EFX_VPORT_VF_OFFSET) /* only repr vport_id allowed */
-		return vport_id;
+		return -EOPNOTSUPP;
 	if (vport_id >= EFX_VPORT_REMOTE_OFFSET)
-		rep_dev = efx_get_remote_rep(efx, vport_id);
+		rep_dev = efx_get_remote_rep(efx, vport_id - EFX_VPORT_REMOTE_OFFSET);
 	else
-		rep_dev = efx_get_vf_rep(efx, vport_id);
+		rep_dev = efx_get_vf_rep(efx, vport_id - EFX_VPORT_VF_OFFSET);
+	if (IS_ERR(rep_dev))
+		return PTR_ERR(rep_dev);
+	if (!rep_dev)
+		return -ENOENT;
 
 	efv = netdev_priv(rep_dev);
 	efx_mae_mport_mport(efx, efv->mport, &mport);
@@ -107,7 +111,7 @@ static long efx_tc_flower_rep_mport(struct efx_nic *efx, int vport_id)
 }
 
 /* Convert a driver-internal vport ID into an internal device (PF or VF) */
-static long efx_tc_flower_internal_mport(struct efx_nic *efx, int vport_id)
+static s64 efx_tc_flower_internal_mport(struct efx_nic *efx, int vport_id)
 {
 	u32 mport;
 
@@ -121,7 +125,7 @@ static long efx_tc_flower_internal_mport(struct efx_nic *efx, int vport_id)
 }
 
 /* Convert a driver-internal vport ID into an external device (wire or VF) */
-static long efx_tc_flower_external_mport(struct efx_nic *efx, int vport_id)
+static s64 efx_tc_flower_external_mport(struct efx_nic *efx, int vport_id)
 {
 	u32 mport;
 
@@ -549,7 +553,6 @@ static struct efx_tc_counter *efx_tc_flower_allocate_counter(struct efx_nic *efx
 	spin_lock_init(&cnt->lock);
 	INIT_WORK(&cnt->work, efx_tc_counter_work);
 	cnt->touched = jiffies;
-	cnt->tc = efx->tc;
 
 	rc = efx_mae_allocate_counter(efx, cnt);
 	if (rc)
@@ -911,7 +914,7 @@ static struct efx_tc_encap_action *efx_tc_flower_create_encap_md(
 {
 	enum efx_encap_type type = efx_tc_indr_netdev_type(egdev);
 	struct efx_tc_encap_action *encap, *old;
-	long rc;
+	s64 rc;
 
 	if (type == EFX_ENCAP_TYPE_NONE) {
 		/* dest is not an encap device */
@@ -1013,8 +1016,10 @@ static void efx_tc_free_action_set(struct efx_nic *efx,
 				   struct efx_tc_action_set *act, bool in_hw)
 {
 	if (act->count) {
+		spin_lock_bh(&act->count->cnt->lock);
 		if (!list_empty(&act->count_user))
 			list_del(&act->count_user);
+		spin_unlock_bh(&act->count->cnt->lock);
 		efx_tc_flower_put_counter_index(efx, act->count);
 	}
 	if (act->encap_md) {
@@ -1339,9 +1344,9 @@ static void efx_tc_counter_work(struct work_struct *work)
 	unsigned long touched;
 	struct neighbour *n;
 
+	spin_lock_bh(&cnt->lock);
 	touched = READ_ONCE(cnt->touched);
 
-	mutex_lock(&cnt->tc->mutex);
 	list_for_each_entry(act, &cnt->users, count_user) {
 		encap = act->encap_md;
 		if (!encap)
@@ -1363,7 +1368,7 @@ static void efx_tc_counter_work(struct work_struct *work)
 		neigh_event_send(n, NULL);
 		neigh_release(n);
 	}
-	mutex_unlock(&cnt->tc->mutex);
+	spin_unlock_bh(&cnt->lock);
 }
 
 static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
@@ -1455,7 +1460,7 @@ static u64 efx_tc_read48(const __le16 *field)
 	int i;
 
 	for (i = 0; i < 3; i++)
-		out |= le16_to_cpu(field[i]) << (i * 16);
+		out |= (u64)le16_to_cpu(field[i]) << (i * 16);
 	return out;
 }
 
@@ -2015,8 +2020,10 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 		return -EOPNOTSUPP;
 	}
 	if (match->mask.enc_ip_tos) {
-		efx_tc_err(efx, "Egress encap match on IP ToS not supported\n");
-		return -EOPNOTSUPP;
+		// efx_tc_err(efx, "Egress encap match on IP ToS not supported\n");
+		// return -EOPNOTSUPP;
+		match->mask.enc_ip_tos = 0;
+		// TODO Remove workaround once this is supported.
 	}
 	if (match->mask.enc_ip_ttl) {
 		efx_tc_err(efx, "Egress encap match on IP TTL not supported\n");
@@ -2225,7 +2232,7 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 	bool found = false, uplinked = false;
 	const struct flow_action_entry *fa;
 	struct efx_tc_match match;
-	long rc;
+	s64 rc;
 	int i;
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
@@ -3221,7 +3228,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 	struct efx_tc_match match;
 	int vport_id;
 	u32 acts_id;
-	long rc;
+	s64 rc;
 	int i;
 
 	if (!tc_can_offload_extack(efx->net_dev, extack))
@@ -3451,14 +3458,17 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 				list_add_tail(&act->encap_user, &encap->users);
 				act->dest_mport = encap->dest_mport;
 				act->deliver = 1;
-				if (act->count && !WARN_ON(!act->count->cnt))
+				if (act->count && !WARN_ON(!act->count->cnt)) {
 					/* This counter is used by an encap
 					 * action, which needs a reference back
 					 * so it can prod neighbouring whenever
 					 * traffic is seen.
 					 */
+					spin_lock_bh(&act->count->cnt->lock);
 					list_add_tail(&act->count_user,
 						      &act->count->cnt->users);
+					spin_unlock_bh(&act->count->cnt->lock);
+				}
 				rc = efx_mae_alloc_action_set(efx, act);
 				if (rc) {
 					EFX_TC_ERR_MSG(efx, extack, "Failed to write action set to hw (encap)");
@@ -5278,6 +5288,8 @@ int efx_setup_tc(struct net_device *net_dev, enum tc_setup_type type,
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->type->is_vf)
+		return -EOPNOTSUPP;
+	if (!efx->tc)
 		return -EOPNOTSUPP;
 
 	if (type == TC_SETUP_CLSFLOWER)

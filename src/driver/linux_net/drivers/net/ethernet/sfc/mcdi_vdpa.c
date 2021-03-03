@@ -360,12 +360,10 @@ int efx_vdpa_get_link_details(struct efx_nic *efx, u16 *link_up,
 			      u32 *link_speed, u8 *duplex)
 {
 	/* TODO:MCDI invocation for getting Link details.*/
-#ifdef VDPA_TEST
-	*link_up = 1;
+	*link_up = VIRTIO_NET_S_LINK_UP;
 	/* Setting Dummy link speed to 100Mpbs*/
 	*link_speed = 100;
 	*duplex = DUPLEX_FULL;
-#endif
 	return 0;
 }
 #endif

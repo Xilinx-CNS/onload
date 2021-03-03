@@ -20,10 +20,12 @@
 #include "ef100_nic.h"
 #include "ef100_netdev.h"
 #include "ef100_regs.h"
+#include "ef100_bsp.h"
 #include "ef100.h"
 #ifdef CONFIG_SFC_TRACING
 #include <trace/events/sfc.h>
 #endif
+#include "mcdi_pcol.h"
 
 #define EFX_EF100_PCI_DEFAULT_BAR	0
 
@@ -147,8 +149,7 @@ static int ef100_pci_parse_continue_entry(struct efx_nic *efx, int entry_locatio
 		}
 
 		/* Temporarily map new BAR. */
-		rc = efx_init_io(efx, bar,
-				 (dma_addr_t)DMA_BIT_MASK(ESF_GZ_TX_SEND_ADDR_WIDTH),
+		rc = efx_init_io(efx, bar, efx->type->max_dma_mask,
 				 pci_resource_len(efx->pci_dev, bar));
 		if (rc) {
 			netif_err(efx, probe, efx->net_dev,
@@ -165,8 +166,7 @@ static int ef100_pci_parse_continue_entry(struct efx_nic *efx, int entry_locatio
 		efx_fini_io(efx);
 
 		/* Put old BAR back. */
-		rc = efx_init_io(efx, previous_bar,
-				 (dma_addr_t)DMA_BIT_MASK(ESF_GZ_TX_SEND_ADDR_WIDTH),
+		rc = efx_init_io(efx, previous_bar, efx->type->max_dma_mask,
 				 pci_resource_len(efx->pci_dev, previous_bar));
 		if (rc) {
 			netif_err(efx, probe, efx->net_dev,
@@ -342,8 +342,7 @@ static int ef100_pci_parse_xilinx_cap(struct efx_nic *efx, int vndr_cap,
 	}
 
 	/* Temporarily map BAR. */
-	rc = efx_init_io(efx, bar,
-			 (dma_addr_t)DMA_BIT_MASK(ESF_GZ_TX_SEND_ADDR_WIDTH),
+	rc = efx_init_io(efx, bar, efx->type->max_dma_mask,
 			 pci_resource_len(efx->pci_dev, bar));
 	if (rc) {
 		netif_err(efx, probe, efx->net_dev,
@@ -427,6 +426,39 @@ static int ef100_pci_find_func_ctrl_window(struct efx_nic *efx,
 	}
 
 	return 0;
+}
+
+/* Support for address regions */
+static bool ef100_addr_in(dma_addr_t addr, dma_addr_t base, ssize_t size)
+{
+	return (addr >= base && addr < (base + size));
+}
+
+int ef100_regionmap_buffer(struct efx_nic *efx, dma_addr_t *addr)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct ef100_addr_region *region;
+	int i;
+
+	if (likely(nic_data->addr_mapping_type ==
+		   MC_CMD_GET_DESC_ADDR_INFO_OUT_MAPPING_FLAT))
+		return 0;
+
+	for (i = 0; i < EF100_QDMA_ADDR_REGIONS_MAX; i++) {
+		region = &nic_data->addr_region[i];
+		if (!ef100_region_addr_is_populated(region))
+			break;
+
+		if (ef100_addr_in(*addr, region->trgt_addr,
+				  1UL << region->size_log2)) {
+			*addr |= region->qdma_addr;
+			return 0;
+		}
+	}
+	if (net_ratelimit())
+		netif_err(efx, tx_err, efx->net_dev,
+			  "Cannot map %pad to QDMA\n", addr);
+	return -ENOMEM;
 }
 
 /* Final NIC shutdown
@@ -515,8 +547,7 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	}
 
 	/* Set up basic I/O (BAR mappings etc) */
-	rc = efx_init_io(efx, fcw.bar,
-			 (dma_addr_t)DMA_BIT_MASK(ESF_GZ_TX_SEND_ADDR_WIDTH),
+	rc = efx_init_io(efx, fcw.bar, efx->type->max_dma_mask,
 			 pci_resource_len(efx->pci_dev, fcw.bar));
 	if (rc)
 		goto fail;
@@ -535,6 +566,9 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	if (rc)
 		goto fail;
 
+	rc = ef100_bsp_init(efx);
+	if (rc)
+		goto fail;
 	rc = efx_virtbus_register(efx);
 	if (rc)
 		pci_warn(pci_dev,
