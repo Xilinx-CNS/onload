@@ -1126,7 +1126,7 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val,
     oo_p_dllink_for_each_safe(ni, lnk, tmp_lnk, post_poll_list) {
       oo_p_dllink_del_init(ni, lnk);
 
-      w = CI_CONTAINER(citp_waitable, post_poll_link, lnk);
+      w = CI_CONTAINER(citp_waitable, post_poll_link, lnk.l);
       eps[op.eps_num++] = w->bufid;
 
       /* Todo: we'd better allocate larger eps and wake up all
