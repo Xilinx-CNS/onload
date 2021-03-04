@@ -66,7 +66,6 @@ tcp_helper_rm_nopage_mem(tcp_helper_resource_t* trs,
     return VM_FAULT_NOPAGE;
 
   OO_DEBUG_SHM(ci_log("%s: offset %lx out of range", __FUNCTION__, offset));
-  ci_assert(0);
   return VM_FAULT_SIGBUS;
 }
 

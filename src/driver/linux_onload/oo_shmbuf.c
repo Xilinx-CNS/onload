@@ -98,6 +98,7 @@ int oo_shmbuf_fault(struct oo_shmbuf* sh, struct vm_area_struct* vma,
   unsigned long start_off = (unsigned long)i << sh->order << PAGE_SHIFT;
   unsigned long size = oo_shmbuf_chunk_size(sh);
 
+  ci_assert_lt(i, sh->max);
   if( sh->addrs[i] == 0 )
     return -EFAULT;
 
