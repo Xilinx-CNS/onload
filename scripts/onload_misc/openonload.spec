@@ -112,7 +112,7 @@ Source0		: openonload-%{pkgversion}.tgz
 BuildRoot   	: %{_builddir}/%{name}-root
 AutoReqProv	: no
 ExclusiveArch	: i386 i586 i686 x86_64 ppc64
-BuildRequires	: gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf
+BuildRequires	: gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
 # The glibc, python-devel, and libcap packages we need depend on distro and platform
 %if %{redhat}
 BuildRequires	: glibc-common python2-devel libcap
