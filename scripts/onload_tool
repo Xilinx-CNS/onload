@@ -15,8 +15,8 @@ trylog() { echo "$me: $*"; "$@" || fail "FAILED: $*"; }
 usage() {
   err
   err "usage:"
-  err "  $me unload                       - unload sfc/onload drivers"
-  err "  $me reload                       - reload sfc/onload drivers"
+  err "  $me unload [--onload-only]       - unload onload and (if not --onload-only) sfc drivers"
+  err "  $me reload [--onload-only]       - reload onload and (if not --onload-only) sfc drivers"
   err "  $me mknod <driver-name>          - make /dev/<driver-name>"
   err "  $me mod_params <driver-name>     - return module parameters"
   err "  $me configure_container <name>   - configure devices in container"
@@ -249,6 +249,7 @@ kill_cplane() {
 }
 
 do_unload() {
+  onload_only=$1
   rc=0
   # onload_cp_server can take a while to die, let's do it first if no stacks present
   have_stacks || kill_cplane
@@ -265,19 +266,23 @@ do_unload() {
   tryunload sfc_mtd
   tryunload sfc_control    # Present in historical Onload versions.
   tryunload sfc_aoe        # Present in historical Onload versions.
-  tryunload sfc
-  tryunload sfc_ef100      # Present in historical Onload versions.
-  tryunload sfc_driverlink
-  tryunload virtual_bus
-  grep -q sfc/sfc.ko /lib/modules/$(uname -r)/modules.dep && \
-      log "WARNING: sfc driver may reload due to an in-distro driver"
+  if [ ${onload_only} != "1" ]; then
+    tryunload sfc
+    tryunload sfc_ef100      # Present in historical Onload versions.
+    tryunload sfc_driverlink
+    tryunload virtual_bus
+    grep -q sfc/sfc.ko /lib/modules/$(uname -r)/modules.dep && \
+        log "WARNING: sfc driver may reload due to an in-distro driver"
+  fi
   return $rc
 }
 
 
 cmd_unload() {
+  onload_only=0
+  [ "$1" = "--onload-only" ] && onload_only=1 && shift
   [ $# = 0 ] || usage
-  do_unload
+  do_unload ${onload_only}
   exit
 }
 
@@ -299,12 +304,16 @@ cmd_post_install() {
 ######################################################################
 
 cmd_reload() {
+  onload_only="0"
+  [ "$1" = "--onload-only" ] && onload_only="1" && shift
   [ $# = 0 ] || usage
-  do_unload || fail "ERROR: could not unload all drivers"
-  # After v5_2_1_1003 net driver version, Onload module doesn't depend on sfc
-  # module (only on sfc_driverlink), so need to load sfc driver separately
-  trylog /sbin/modprobe sfc
-  isloaded sfc || fail "ERROR: sfc driver did not load"
+  do_unload ${onload_only} || fail "ERROR: could not unload all drivers"
+  if [ ${onload_only} != "1" ]; then
+    # After v5_2_1_1003 net driver version, Onload module doesn't depend on sfc
+      # module (only on sfc_driverlink), so need to load sfc driver separately
+      trylog /sbin/modprobe sfc
+      isloaded sfc || fail "ERROR: sfc driver did not load"
+  fi
   trylog /sbin/modprobe onload
   isloaded onload || fail "ERROR: onload module did not load"
   # NB. sfc_aoe not always installed; don't want to moan...
