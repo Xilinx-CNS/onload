@@ -1720,9 +1720,6 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
     return OO_SP_NULL;
 
   oo_p_dllink_for_each_safe(ni, link, tmp, list) {
-    oo_p_dllink_del(ni, link);
-    oo_p_dllink_add_tail(ni, list, link);
-
     aw = CI_CONTAINER(ci_active_wild, pool_link, link.l);
 
     lport = sock_lport_be16(&aw->s);
@@ -1770,6 +1767,7 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
             ci_assert_equal(seq, table_seq);
         }
 
+        oo_p_dllink_del(ni, link);
         *prev_seq_out = seq;
         ci_netif_timeout_leave(ni, ts);
         *port_out = lport;
@@ -1783,6 +1781,7 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
       /* If no-one's using this 4-tuple we can let the caller share this
        * active wild.
        */
+      oo_p_dllink_del(ni, link);
       *port_out = lport;
       return SC_SP(&aw->s);
     }
