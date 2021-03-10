@@ -98,7 +98,7 @@ try cd $tempfile
 echo "Using package components:"
 ls *.[gx]z *.dsc
 
-try tar zcf $package-debiansource.tgz *.[gx]z *.dsc
+try tar zcf $package-debiansource.tgz --owner=root --group=root *.[gx]z *.dsc
 try mv $package-debiansource.tgz $outdir/
 try rm -rf $tempfile
 
