@@ -333,13 +333,22 @@ find_base_properties(struct cp_session* s, cicp_rowid_t llap_id,
 }
 
 
+/* We'd better type `#ifdef BPF_PROG_GET_FD_BY_ID`, but it is a enum, not
+ * a macro.  So we check the kernel version  we are compiling with.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0)
+#define DO_XDP 1
+#endif
+
 void cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
                                ci_hwport_id_t hwport, ci_ifid_t ifindex,
                                cp_xdp_prog_id_t xdp_prog_id)
 {
   struct cp_hwport_row* hwp = &mib->hwport[hwport];
+#ifdef DO_XDP
   union bpf_attr attr = {};
   struct oo_cp_xdp_change op;
+#endif
 
   if( hwp->xdp_prog_id == xdp_prog_id )
     return;
@@ -347,7 +356,7 @@ void cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
   hwp->xdp_prog_id = xdp_prog_id;
   ci_wmb();
 
-#ifdef SYS_bpf
+#ifdef DO_XDP
   op.hwport = hwport;
   op.fd = -1;
   attr.prog_id = xdp_prog_id;
