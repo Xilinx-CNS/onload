@@ -77,7 +77,7 @@ try sed -i \
   -e "/^#Packager\s*:/ cPackager$tab: Solarflare Communications, Inc." \
   "$distd/scripts/onload_misc/openonload.spec"
 tarball=$(basename "$tarball")
-try tar czf "$tarball" "$distd"
+try tar czf "$tarball" --owner=root --group=root "$distd"
 
 # Build source rpm.
 try mkdir -p rpmbuild/{BUILD,BUILDROOT,RPMS,SOURCES,SPECS,SRPMS}
