@@ -2525,13 +2525,14 @@ static void* cp_server_pids_next(struct seq_file* s, void* state_,
     state->cp = ci_dllist_head(&cp_hash_table[state->bucket]);
   }
 
+  *pos = state->offset;
+
   if( state->bucket == CP_INSTANCE_HASH_SIZE ) {
     /* End of file. */
     kfree(state);
     return NULL;
   }
 
-  *pos = state->offset;
   return state;
 }
 
