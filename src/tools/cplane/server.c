@@ -927,23 +927,21 @@ drop_privileges(struct cp_session* s, bool in_main_netns)
     init_failed("Failed to set CAP_NET_ADMIN flag to CAP_PERMITTED: %s",
                 strerror(errno));
 
-  if( in_main_netns ) {
-    /* We have to obtain a bpf file descriptor to pass it to kernel.
-     * It is stupid, bpf_prog_by_id() is not exported, so can't be used by
-     * the Onload module.
-     *
-     * Unfortunately BPF_PROG_GET_FD_BY_ID requires CAP_SYS_ADMIN
-     */
-    cap_val = CAP_SYS_ADMIN;
-    rc = cap_set_flag(cap, CAP_EFFECTIVE, 1, &cap_val, CAP_SET);
-    if( rc == -1 )
-      init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_EFFECTIVE: %s",
-                  strerror(errno));
-    rc = cap_set_flag(cap, CAP_PERMITTED, 1, &cap_val, CAP_SET);
-    if( rc == -1 )
-      init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_PERMITTED: %s",
-                  strerror(errno));
-  }
+  /* We have to obtain a bpf file descriptor to pass it to kernel.
+   * It is stupid, bpf_prog_by_id() is not exported, so can't be used by
+   * the Onload module.
+   *
+   * Unfortunately BPF_PROG_GET_FD_BY_ID requires CAP_SYS_ADMIN
+   */
+  cap_val = CAP_SYS_ADMIN;
+  rc = cap_set_flag(cap, CAP_EFFECTIVE, 1, &cap_val, CAP_SET);
+  if( rc == -1 )
+    init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_EFFECTIVE: %s",
+                strerror(errno));
+  rc = cap_set_flag(cap, CAP_PERMITTED, 1, &cap_val, CAP_SET);
+  if( rc == -1 )
+    init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_PERMITTED: %s",
+                strerror(errno));
 
   /* Set the capabilities: */
   rc = cap_set_proc(cap);
