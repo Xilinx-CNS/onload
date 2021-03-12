@@ -1,3 +1,5 @@
+#!/bin/bash
+
 ######################################################################
 #
 # Driver for Solarflare network controllers and boards
