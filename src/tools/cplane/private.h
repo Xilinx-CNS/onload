@@ -468,7 +468,9 @@ struct cp_session {
 #define CP_SESSION_LADDR_REFRESH_NEEDED 0x80000
 /* Account preferred source addresses in laddr */
 #define CP_SESSION_LADDR_USE_PREF_SRC  0x100000
-  
+/* Track XDP programs and tell Onload about them */
+#define CP_SESSION_TRACK_XDP           0x200000
+
   /* Netlink is dumping a table: */
   enum cp_dump_state state;
   enum cp_dump_state prev_state;

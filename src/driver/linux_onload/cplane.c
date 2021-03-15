@@ -184,6 +184,17 @@ MODULE_PARM_DESC(cplane_use_prefsrc_as_local,
                  "See also oof_use_all_local_ip_addresses module parameter.");
 
 
+#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
+bool cplane_track_xdp = false;
+module_param_cb(cplane_track_xdp, &cplane_server_param_bool_ops,
+                &cplane_track_xdp, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(cplane_track_xdp,
+                 "If true, the Control Plane Server tracks XDP programs "
+                 "linked to network interfaces.  It is needed for "
+                 "EF_XDP_MODE=compatible mode to function properly.");
+#endif
+
+
 /*
  * Parsed cplane parameters, from cplane_server_params module option.
  */
@@ -2028,12 +2039,10 @@ static int cp_spawn_server(ci_uint32 flags)
    * The value can be decremented by 1, because CP_SPAWN_SERVER_SWITCH_NS
    * and CP_SPAWN_SERVER_BOOTSTRAP can't be used together, but let's be
    * safe.
+   *
+   * We also can use smaller value if !NDEBUG, etc etc.
    */
-#ifdef NDEBUG
-  const int DIRECT_PARAM_MAX = 9;
-#else
-  const int DIRECT_PARAM_MAX = 11;
-#endif
+  const int DIRECT_PARAM_MAX = 12;
 
   char* ns_file_path = NULL;
   char* path = cp_get_server_path();
@@ -2144,6 +2153,11 @@ static int cp_spawn_server(ci_uint32 flags)
 
   if( cplane_use_prefsrc_as_local )
     argv[direct_param_base + direct_param++] = "--"CPLANE_SERVER_PREFSRC_AS_LOCAL;
+
+#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
+  if( cplane_track_xdp )
+    argv[direct_param_base + direct_param++] = "--"CPLANE_SERVER_TRACK_XDP;
+#endif
 
 #ifndef NDEBUG
   if( cplane_server_core_size ) {

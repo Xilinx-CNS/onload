@@ -30,6 +30,7 @@
 #define CPLANE_SERVER_UID "uid"
 #define CPLANE_SERVER_GID "gid"
 #define CPLANE_SERVER_PREFSRC_AS_LOCAL "preferred-source-as-local"
+#define CPLANE_SERVER_TRACK_XDP "track-xdp"
 #ifndef NDEBUG
 #define CPLANE_SERVER_CORE_SIZE "core_size"
 #endif

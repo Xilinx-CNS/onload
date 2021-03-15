@@ -189,6 +189,9 @@ extern int cicp_raw_ip_send(struct oo_cplane_handle* cp, int af,
 #ifdef __KERNEL__
 /* Tell Onload what kind of addresses are considered to be "local" */
 extern bool cplane_use_prefsrc_as_local;
+
+/* Do we track XDP programs? */
+extern bool cplane_track_xdp;
 #endif
 
 #endif /* __ONLOAD_CPLANE_OPS_H__ */

@@ -196,6 +196,7 @@ doonload () {
   echo "ONLOAD_OPT is $ONLOAD_OPT"
   $PROBE_CP_SERVER_PATH && \
     O_MOD_ARGS="cplane_server_path=$(get_cp_server_path) ${O_MOD_ARGS}"
+  O_MOD_ARGS="cplane_track_xdp=yes ${O_MOD_ARGS}"
   loadmod onload $O_MOD_ARGS
   $LOAD_CONFIG && doonloadconfig
 }

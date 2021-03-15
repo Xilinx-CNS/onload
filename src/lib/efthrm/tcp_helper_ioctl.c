@@ -1514,7 +1514,7 @@ static int oo_cp_xdp_prog_change(ci_private_t *priv, void *arg)
     return -EINVAL;
   nic = &oo_nics[param->hwport];
 
-  if( param->fd > 0 ) {
+  if( param->fd >= 0 ) {
     new_prog = bpf_prog_get_type_dev(param->fd, BPF_PROG_TYPE_XDP, 1);
     if( IS_ERR(new_prog) )
       new_prog = NULL;

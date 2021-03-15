@@ -64,6 +64,7 @@ static int /*bool*/ ci_cfg_no_ipv6 = false;
 static int /*bool*/ ci_cfg_ipv6_no_source = false;
 static uint64_t cfg_affinity = -1;
 static int /*bool*/ ci_cfg_verify_routes = 0;
+static int /*bool*/ cfg_track_xdp = false;
 
 static int cfg_uid = 0;
 static int cfg_gid = 0;
@@ -171,6 +172,10 @@ static ci_cfg_desc cfg_opts[] = {
     "Tell oof that a preferred source of any accelerated route is a local "
     "address for the network interface the route goes via.  This setting "
     "allows to accelerate unbound connections via such routes." },
+  { 0, CPLANE_SERVER_TRACK_XDP, CI_CFG_FLAG, &cfg_track_xdp,
+    "Track XDP programs linked to network interfaces.  Such tracking "
+    "is needed for EF_XDP_MODE=compatible, and prevents dropping "
+    "CAP_SYS_ADMIN capability of the server." },
 };
 #define N_CFG_OPTS (sizeof(cfg_opts) / sizeof(cfg_opts[0]))
 
@@ -933,15 +938,17 @@ drop_privileges(struct cp_session* s, bool in_main_netns)
    *
    * Unfortunately BPF_PROG_GET_FD_BY_ID requires CAP_SYS_ADMIN
    */
-  cap_val = CAP_SYS_ADMIN;
-  rc = cap_set_flag(cap, CAP_EFFECTIVE, 1, &cap_val, CAP_SET);
-  if( rc == -1 )
-    init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_EFFECTIVE: %s",
-                strerror(errno));
-  rc = cap_set_flag(cap, CAP_PERMITTED, 1, &cap_val, CAP_SET);
-  if( rc == -1 )
-    init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_PERMITTED: %s",
-                strerror(errno));
+  if( cfg_track_xdp ) {
+    cap_val = CAP_SYS_ADMIN;
+    rc = cap_set_flag(cap, CAP_EFFECTIVE, 1, &cap_val, CAP_SET);
+    if( rc == -1 )
+      init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_EFFECTIVE: %s",
+                  strerror(errno));
+    rc = cap_set_flag(cap, CAP_PERMITTED, 1, &cap_val, CAP_SET);
+    if( rc == -1 )
+      init_failed("Failed to set CAP_SYS_ADMIN flag to CAP_PERMITTED: %s",
+                  strerror(errno));
+  }
 
   /* Set the capabilities: */
   rc = cap_set_proc(cap);
@@ -1061,6 +1068,8 @@ int main(int argc, char** argv)
     s->flags |= CP_SESSION_VERIFY_ROUTES;
   if( ci_cfg_pref_src_as_local )
     s->flags |= CP_SESSION_LADDR_USE_PREF_SRC;
+  if( cfg_track_xdp )
+    s->flags |= CP_SESSION_TRACK_XDP;
 
   if( ci_cfg_bootstrap )
     bring_up_kernel_state();

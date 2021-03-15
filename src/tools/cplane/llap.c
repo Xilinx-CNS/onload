@@ -357,18 +357,20 @@ void cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
   ci_wmb();
 
 #ifdef DO_XDP
-  op.hwport = hwport;
-  op.fd = -1;
-  attr.prog_id = xdp_prog_id;
-  if( xdp_prog_id != 0 ) {
-    op.fd = syscall(SYS_bpf, BPF_PROG_GET_FD_BY_ID, &attr, sizeof(attr));
-    if( op.fd < 0 )
-      ci_log("%s: failed to notify about XDP program change, "
+  if( s->flags & CP_SESSION_TRACK_XDP ) {
+    op.hwport = hwport;
+    op.fd = -1;
+    attr.prog_id = xdp_prog_id;
+    if( xdp_prog_id != 0 ) {
+      op.fd = syscall(SYS_bpf, BPF_PROG_GET_FD_BY_ID, &attr, sizeof(attr));
+      if( op.fd < 0 )
+        ci_log("%s: failed to notify about XDP program change, "
              "ifindex=%d rc=%d", __func__, ifindex, op.fd);
+    }
+    cplane_ioctl(s->oo_fd, OO_IOC_CP_XDP_PROG_CHANGE, &op);
+    if( op.fd >= 0 )
+      close(op.fd);
   }
-  cplane_ioctl(s->oo_fd, OO_IOC_CP_XDP_PROG_CHANGE, &op);
-  if( op.fd >= 0 )
-    close(op.fd);
 #endif
 }
 

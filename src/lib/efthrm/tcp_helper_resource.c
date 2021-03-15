@@ -4030,6 +4030,18 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     goto fail1;
   }
 
+#if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
+  if( opts->xdp_mode == EF_XDP_MODE_COMPATIBLE && ! cplane_track_xdp ) {
+    OO_DEBUG_ERR(ci_log("%s: ERROR: EF_XDP_MODE=compatible but "
+                        "cplane_track_xdp module parameter is off.",
+                        __func__);
+                 ci_log("%s: HINT: enable cplane_track_xdp module "
+                        "parameter.", __func__));
+    rc = -ENOTSUPP;
+    goto fail1;
+  }
+#endif
+
   rs = CI_ALLOC_OBJ(tcp_helper_resource_t);
   if( !rs ) {
     rc = -ENOMEM;
