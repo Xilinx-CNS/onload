@@ -18,7 +18,8 @@ EFVI_SRCS	:=		\
 		ef10_vi.c	\
 		ef100_event.c	\
 		ef100_vi.c      \
-		efxdp_vi.c
+		efxdp_vi.c      \
+		efct_vi.c
 
 LIB_SRCS	:=		\
 		$(EFVI_SRCS)	\
