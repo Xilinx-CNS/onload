@@ -752,6 +752,8 @@ int ef_vi_arch_from_efhw_arch(int efhw_arch)
     return EF_VI_ARCH_EF10;
   case EFHW_ARCH_EF100:
     return EF_VI_ARCH_EF100;
+  case EFHW_ARCH_EFCT:
+    return EF_VI_ARCH_EFCT;
   case EFHW_ARCH_AF_XDP:
     return EF_VI_ARCH_AF_XDP;
   default:

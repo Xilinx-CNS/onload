@@ -595,6 +595,8 @@ enum ef_vi_arch {
   EF_VI_ARCH_EF10,
   /** SN1000-series NICs */
   EF_VI_ARCH_EF100,
+  /** X3-series NICs (low latency persona) */
+  EF_VI_ARCH_EFCT,
   /** Arbitrary NICs using AF_XDP */
   EF_VI_ARCH_AF_XDP,
 };
