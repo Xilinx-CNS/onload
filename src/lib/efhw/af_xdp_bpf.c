@@ -10,6 +10,7 @@
  *
  * 2. Compile this file:
  *     $ clang -target bpf -O2 -c af_xdp_bpf.c
+ *   (use -DUSE_SHADOW_MAP=1 to compile for older kernels)
  *
  * 3. Extract the bytecode from the compiled object. Objdump gives a reasonable
  *    starting point:
@@ -43,13 +44,18 @@
 
 #define ETHERTYPE_VLAN 0x0081
 #define ETHERTYPE_IPv4 0x0008
+
+/* We do not handle IPv6 yet, see ON-12563 */
 #define ETHERTYPE_IPv6 0xdd86
 
 #define PROTO_TCP 6
 #define PROTO_UDP 17
 
 extern struct bpf_map_def xsks_map;
+
+#ifdef USE_SHADOW_MAP
 extern struct bpf_map_def shadow_map;
+#endif
 
 static void *(*bpf_map_lookup_elem)(void *map, const void *key) =
         (void *) BPF_FUNC_map_lookup_elem;
@@ -60,7 +66,10 @@ int xdp_sock_prog(struct xdp_md *ctx)
 {
   char* data = (char*)(long)ctx->data;
   char* end = (char*)(long)ctx->data_end;
-  if( data + 14 + 20 > end )
+
+  /* Guarantee that any offsets below are within limits:
+   * Ethernet header + vlan header + IP header. */
+  if( data + 14 + 4 + 20 > end )
     return XDP_PASS;
 
   /* Pass broadcast packets */
@@ -76,19 +85,19 @@ int xdp_sock_prog(struct xdp_md *ctx)
   unsigned char proto;
   if( ethertype == ETHERTYPE_IPv4 )
     proto = *(unsigned char*)(data+23);
-  else if( ethertype == ETHERTYPE_IPv6 )
-    proto = *(unsigned char*)(data+20);
   else
+    /* Todo: add IPv6 support when we can do IPv6 filters.
+     * It should be present in cloud build only.
+     */
     return XDP_PASS;
 
   if( proto != PROTO_TCP && proto != PROTO_UDP )
     return XDP_PASS;
 
   int index = ctx->rx_queue_index;
-  int rc = bpf_redirect_map(&xsks_map, index, XDP_PASS);
-  if( rc != XDP_ABORTED )
-    return rc;
-
+#ifndef USE_SHADOW_MAP
+  return bpf_redirect_map(&xsks_map, index, XDP_PASS);
+#else
   /* Workaround for older kernels (pre-5.3) which do not support passing a
    * fallback action to bpf_redirect_map. We need to check the shadow map to
    * figure out whether the redirection should succeed, and return XDP_PASS
@@ -97,9 +106,11 @@ int xdp_sock_prog(struct xdp_md *ctx)
    * We need the shadow map in addition to the socket map because older kernels
    * also don't support lookup on a socket map.
    */
-  if( ! bpf_map_lookup_elem(&shadow_map, &index) )
+  void* ret = bpf_map_lookup_elem(&shadow_map, &index);
+  if( ret == 0 || *((char*)ret) == 0 )
     return XDP_PASS;
 
   return bpf_redirect_map(&xsks_map, index, 0);
+#endif
 }
 
