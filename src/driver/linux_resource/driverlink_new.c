@@ -152,7 +152,7 @@ static ssize_t enable_store(struct device *dev,
 {
 	struct efhw_nic* nic;
 	bool enable;
-	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	nic = efhw_nic_find_by_dev(dev);
 	if (!nic)
 		return -ENOENT;
 	if (strtobool(buf, &enable) < 0) {
@@ -171,7 +171,7 @@ static ssize_t enable_show(struct device *dev,
 {
 	struct efhw_nic* nic;
 	int enabled;
-	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	nic = efhw_nic_find_by_dev(dev);
 	if (!nic)
 		return -ENOENT;
 	enabled = efrm_nic_get_accel_allowed(nic);
@@ -184,7 +184,7 @@ static ssize_t cpu2rxq_store(struct device *dev,
 			    const char *buf, size_t count)
 {
 	struct efhw_nic* nic;
-	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	nic = efhw_nic_find_by_dev(dev);
 	if (!nic)
 		return -ENOENT;
 	return efrm_affinity_store_cpu2rxq(linux_efhw_nic(nic), buf, count);
@@ -196,7 +196,7 @@ static ssize_t cpu2rxq_show(struct device *dev,
 			   char *buf_out)
 {
 	struct efhw_nic* nic;
-	nic = efhw_nic_find_by_pci_dev(to_pci_dev(dev));
+	nic = efhw_nic_find_by_dev(dev);
 	if (!nic)
 		return -ENOENT;
 	return efrm_affinity_show_cpu2rxq(linux_efhw_nic(nic), buf_out);

@@ -270,6 +270,21 @@ struct pci_dev* efhw_nic_get_pci_dev(struct efhw_nic* nic)
 	return dev;
 }
 
+
+/* Returns the struct device for the NIC, taking out a reference to it.
+ * Callers should call put_device() on the returned pointer to release that
+ * reference when they're finished. */
+struct device* efhw_nic_get_dev(struct efhw_nic* nic)
+{
+	struct device* dev = NULL;
+	spin_lock_bh(&nic->pci_dev_lock);
+	if( nic->pci_dev )
+		dev = get_device(&nic->pci_dev->dev);
+	spin_unlock_bh(&nic->pci_dev_lock);
+	return dev;
+}
+
+
 /* Returns the struct net_device for the NIC, taking out a reference to it.
  * Callers should call dev_put() on the returned pointer to release that
  * reference when they're finished. */

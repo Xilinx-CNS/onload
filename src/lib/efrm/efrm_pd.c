@@ -482,12 +482,12 @@ EXPORT_SYMBOL(efrm_pd_vport_alloc);
 #define NIC_ORDER_TO_BYTES(nic_order) \
   ((size_t)EFHW_NIC_PAGE_SIZE << (size_t)(nic_order))
 
-static void efrm_pd_dma_unmap_pci(struct pci_dev *pci_dev,
+static void efrm_pd_dma_unmap_pci(struct device *dev,
 				  int n_pages, int nic_order,
 				  dma_addr_t *pci_addrs)
 {
 	while (--n_pages >= 0) {
-		dma_unmap_single(&pci_dev->dev, *pci_addrs,
+		dma_unmap_single(dev, *pci_addrs,
 				 NIC_ORDER_TO_BYTES(nic_order),
 				 DMA_BIDIRECTIONAL);
 		++pci_addrs;
@@ -495,17 +495,17 @@ static void efrm_pd_dma_unmap_pci(struct pci_dev *pci_dev,
 }
 
 
-static int efrm_pd_dma_map_pci(struct pci_dev *pci_dev,
+static int efrm_pd_dma_map_pci(struct device *dev,
 			       int n_pages, int nic_order,
 			       void **addrs, dma_addr_t *pci_addrs)
 {
 	int i;
 
 	for (i = 0; i < n_pages; ++i) {
-		pci_addrs[i] = dma_map_single(&pci_dev->dev, addrs[i],
+		pci_addrs[i] = dma_map_single(dev, addrs[i],
 					      NIC_ORDER_TO_BYTES(nic_order),
 					      DMA_BIDIRECTIONAL);
-		if (dma_mapping_error(&pci_dev->dev, pci_addrs[i])) {
+		if (dma_mapping_error(dev, pci_addrs[i])) {
 			EFRM_ERR("%s: ERROR: dma_map_single failed",
 				 __FUNCTION__);
 			goto fail;
@@ -514,7 +514,7 @@ static int efrm_pd_dma_map_pci(struct pci_dev *pci_dev,
 	return 0;
 
 fail:
-	efrm_pd_dma_unmap_pci(pci_dev, i, nic_order,
+	efrm_pd_dma_unmap_pci(dev, i, nic_order,
 			      pci_addrs);
 	return -ENOMEM;
 }
@@ -534,10 +534,10 @@ static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 				  dma_addr_t *pci_addrs)
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
-	struct pci_dev* dev = efhw_nic_get_pci_dev(nic);
+	struct device* dev = efhw_nic_get_dev(nic);
 	if (dev) {
 		efrm_pd_dma_unmap_pci(dev, n_pages, nic_order, pci_addrs);
-		pci_dev_put(dev);
+		put_device(dev);
 	}
 }
 
@@ -548,12 +548,12 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 			       dma_addr_t *free_addrs)
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
-	struct pci_dev* dev = efhw_nic_get_pci_dev(nic);
+	struct device* dev = efhw_nic_get_dev(nic);
 	int rc;
 	if (dev) {
 		rc = efrm_pd_dma_map_pci(dev, n_pages, nic_order, addrs,
 					 free_addrs);
-		pci_dev_put(dev);
+		put_device(dev);
 		if (rc == 0)
 			rc = efhw_nic_translate_dma_addrs(nic, free_addrs,
 			                                  pci_addrs, n_pages);

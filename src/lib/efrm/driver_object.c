@@ -506,6 +506,24 @@ struct efhw_nic* efhw_nic_find_by_pci_dev(const struct pci_dev *dev)
 	return result;
 }
 
+struct efhw_nic* efhw_nic_find_by_dev(const struct device *dev)
+{
+	struct efhw_nic *result = NULL;
+	struct efrm_nic *nic;
+
+	spin_lock_bh(&efrm_nic_tablep->lock);
+	list_for_each_entry(nic, &efrm_nics, link) {
+		if (nic->efhw_nic.pci_dev &&
+		    &nic->efhw_nic.pci_dev->dev == dev) {
+			result = &nic->efhw_nic;
+			break;
+		}
+	}
+	spin_unlock_bh(&efrm_nic_tablep->lock);
+
+	return result;
+}
+
 /* Arguably this should be in lib/efhw.  However, right now this function
  * is a layer violation because it assumes that the efhw_nic is embedded in
  * a linux_efhw_nic.  That is only necessarily true in the resource driver.

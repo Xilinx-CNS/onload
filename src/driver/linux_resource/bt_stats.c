@@ -103,7 +103,7 @@ efrm_pd_os_stats_ctor(struct efrm_pd *pd)
 	struct efrm_pd_proc *ret;
 	char name[EFRM_PROC_NAME_LEN];
 	int owner = efrm_pd_owner_id(pd);
-	struct pci_dev* dev;
+	struct device* dev;
 	struct efhw_nic* nic;
 
 	/* Phys mode: no buffer table */
@@ -116,12 +116,12 @@ efrm_pd_os_stats_ctor(struct efrm_pd *pd)
 
 	nic = efrm_pd_to_resource(pd)->rs_client->nic;
 
-	dev = efhw_nic_get_pci_dev(efrm_pd_to_resource(pd)->rs_client->nic);
+	dev = efhw_nic_get_dev(efrm_pd_to_resource(pd)->rs_client->nic);
 	if (dev == NULL)
 		return NULL;
 
-	ret->parent = efrm_proc_device_dir_get(pci_name(dev));
-	pci_dev_put(dev);
+	ret->parent = efrm_proc_device_dir_get(dev_name(dev));
+	put_device(dev);
 	if (ret->parent == NULL)
 		goto fail1;
 

@@ -123,8 +123,7 @@ efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 	 * memory.
 	 * But we try to allocate contiguous physical memory first.
 	 */
-	struct pci_dev *pci_dev = efhw_nic_get_pci_dev(nic);
-	struct device *dev = pci_dev ? &pci_dev->dev : NULL;
+	struct device *dev = efhw_nic_get_dev(nic);
 	int rc = 0;
 	int gfp_flag = __GFP_COMP;
 
@@ -175,27 +174,25 @@ fail3:
 fail2:
 	kfree(p->free_addrs);
 fail1:
-	if (pci_dev)
-		pci_dev_put(pci_dev);
+	if (dev)
+		put_device(dev);
 	return rc;
 }
 
 void efhw_iopages_free(struct efhw_nic *nic, struct efhw_iopages *p)
 {
-	struct pci_dev *pci_dev = efhw_nic_get_pci_dev(nic);
+	struct device *dev = efhw_nic_get_dev(nic);
 
-	if( pci_dev == NULL) {
+	if( dev == NULL) {
 		vfree(p->ptr);
 	}
 	else if (p->phys_cont) {
-		struct device *dev = &pci_dev->dev;
 		unsigned order = __ffs64(p->n_pages);
 		dma_unmap_page(dev, p->free_addrs[0], PAGE_SIZE << order,
 			DMA_BIDIRECTIONAL);
 
 		free_pages((unsigned long)p->ptr, order);
 	} else {
-		struct device *dev = &pci_dev->dev;
 		int i;
 		for (i = 0; i < p->n_pages; ++i)
 			dma_unmap_page(dev, p->free_addrs[i],
@@ -208,6 +205,6 @@ void efhw_iopages_free(struct efhw_nic *nic, struct efhw_iopages *p)
 	}
 	kfree(p->dma_addrs);
 	kfree(p->free_addrs);
-	if (pci_dev)
-		pci_dev_put(pci_dev);
+	if (dev)
+		put_device(dev);
 }

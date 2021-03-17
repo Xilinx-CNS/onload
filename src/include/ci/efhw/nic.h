@@ -64,6 +64,7 @@ extern void efhw_nic_init(struct efhw_nic *nic, unsigned flags,
 extern void efhw_nic_dtor(struct efhw_nic *nic);
 
 extern struct pci_dev* efhw_nic_get_pci_dev(struct efhw_nic* nic);
+extern struct device* efhw_nic_get_dev(struct efhw_nic* nic);
 extern struct net_device* efhw_nic_get_net_dev(struct efhw_nic* nic);
 
 /* Driverlink-handle management. */
