@@ -42,6 +42,13 @@
 #define EF100_RESET_PORT ((ETH_RESET_MAC | ETH_RESET_PHY) << ETH_RESET_SHARED_SHIFT)
 #endif
 
+bool ef100_has_dynamic_sensors(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+
+	return efx_ef100_has_cap(nic_data->datapath_caps2, DYNAMIC_SENSORS);
+}
+
 /*	MCDI
  */
 static u8 *ef100_mcdi_buf(struct efx_nic *efx, u8 bufid,
@@ -351,7 +358,11 @@ static int ef100_ev_mcdi(struct efx_channel *channel,
 		int code = EFX_QWORD_FIELD(*p_event, MCDI_EVENT_CODE);
 		struct efx_nic *efx = channel->efx;
 
-		netif_info(efx, drv, efx->net_dev,
+		if (code == MCDI_EVENT_CODE_DYNAMIC_SENSORS_STATE_CHANGE ||
+		    code == MCDI_EVENT_CODE_DYNAMIC_SENSORS_CHANGE)
+			efx_mcdi_dynamic_sensor_event(efx, p_event);
+		else
+			netif_info(efx, drv, efx->net_dev,
 			   "Unhandled MCDI event " EFX_QWORD_FMT " code %d\n",
 			   EFX_QWORD_VAL(*p_event), code);
 	}
@@ -1247,6 +1258,9 @@ static ssize_t bar_config_store(struct device *dev,
 	struct efx_probe_data *probe_data;
 	int rc;
 
+#ifdef CONFIG_SFC_VDPA
+	mutex_lock(&nic_data->bar_config_lock);
+#endif
 	if (!strncasecmp(buf, "ef100", min_t(size_t, count, 5)))
 		new_config = EF100_BAR_CONFIG_EF100;
 #ifdef CONFIG_SFC_VDPA
@@ -1257,12 +1271,19 @@ static ssize_t bar_config_store(struct device *dev,
 	else if (!strncasecmp(buf, "none", min_t(size_t, count, 4)))
 		new_config = EF100_BAR_CONFIG_NONE;
 #endif
-	else
+	else {
+#ifdef CONFIG_SFC_VDPA
+		mutex_unlock(&nic_data->bar_config_lock);
+#endif
 		return -EIO;
-
+	}
 	old_config = nic_data->bar_config;
-	if (new_config == old_config)
+	if (new_config == old_config) {
+#ifdef CONFIG_SFC_VDPA
+		mutex_unlock(&nic_data->bar_config_lock);
+#endif
 		return count;
+	}
 
 	probe_data = container_of(efx, struct efx_probe_data, efx);
 	if (bar_config_std[old_config].fini)
@@ -1271,9 +1292,17 @@ static ssize_t bar_config_store(struct device *dev,
 	nic_data->bar_config = new_config;
 	if (bar_config_std[new_config].init) {
 		rc = bar_config_std[new_config].init(probe_data);
-		if (rc)
+		if (rc) {
+#ifdef CONFIG_SFC_VDPA
+			mutex_unlock(&nic_data->bar_config_lock);
+#endif
 			return rc;
+		}
 	}
+
+#ifdef CONFIG_SFC_VDPA
+	mutex_unlock(&nic_data->bar_config_lock);
+#endif
 
 	pci_info(efx->pci_dev, "BAR configuration changed to %s", buf);
 	return count;
@@ -1564,7 +1593,12 @@ static int ef100_probe_main(struct efx_nic *efx)
 	nic_data->grp_mae = !!(privlege_mask &
 			       MC_CMD_PRIVILEGE_MASK_IN_GRP_MAE);
 
+#ifdef CONFIG_SFC_VDPA
+	mutex_init(&nic_data->bar_config_lock);
+#endif
+
 	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_bar_config);
+
 	return 0;
 fail:
 	return rc;
@@ -1707,6 +1741,14 @@ int ef100_probe_vf(struct efx_nic *efx)
 void ef100_remove(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
+#if defined(CONFIG_SFC_VDPA)
+	struct efx_probe_data *probe_data;
+
+	if (nic_data && (nic_data->bar_config == EF100_BAR_CONFIG_VDPA)) {
+		probe_data = container_of(efx, struct efx_probe_data, efx);
+		ef100_vdpa_fini(probe_data);
+	}
+#endif
 
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_bar_config);
 	efx_remove_common(efx);
@@ -1716,6 +1758,7 @@ void ef100_remove(struct efx_nic *efx)
 #if defined(CONFIG_SFC_VDPA)
 		else
 			ef100_vdpa_free_buffer(efx, &nic_data->mcdi_buf);
+		mutex_destroy(&nic_data->bar_config_lock);
 #endif
 	}
 
@@ -1836,6 +1879,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.describe_stats = ef100_describe_stats,
 	.update_stats = ef100_update_stats,
 	.pull_stats = ef100_pull_stats,
+	.has_dynamic_sensors = ef100_has_dynamic_sensors,
 
 	/* Per-type bar/size configuration not used on ef100. Location of
 	 * registers is defined by extended capabilities.

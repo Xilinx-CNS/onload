@@ -835,6 +835,13 @@ void efx_reset_sw_stats(struct efx_nic *efx)
 	}
 }
 
+static int efx_msecs_since(unsigned long event_jiffies)
+{
+	if (!event_jiffies)
+		return -1;
+	return jiffies_to_msecs(jiffies - event_jiffies);
+}
+
 void efx_print_stopped_queues(struct efx_nic *efx)
 {
 	struct efx_channel *channel;
@@ -843,8 +850,9 @@ void efx_print_stopped_queues(struct efx_nic *efx)
 		   "TX queue timeout: printing stopped queue data\n");
 
 	efx_for_each_channel(channel, efx) {
-		struct efx_tx_queue *tx_queue;
+		struct netdev_queue *core_txq = channel->tx_queues[0].core_txq;
 		long unsigned int busy_poll_state = 0xffff;
+		struct efx_tx_queue *tx_queue;
 
 		if (!efx_channel_has_tx_queues(channel))
 			continue;
@@ -852,7 +860,7 @@ void efx_print_stopped_queues(struct efx_nic *efx)
 		/* The netdev watchdog must have triggered on a queue that had
 		 * stopped transmitting, so ignore other queues.
 		 */
-		if (!netif_xmit_stopped(channel->tx_queues[0].core_txq))
+		if (!netif_xmit_stopped(core_txq))
 			continue;
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
@@ -861,16 +869,20 @@ void efx_print_stopped_queues(struct efx_nic *efx)
 #endif
 #endif
 		netif_info(efx, tx_err, efx->net_dev,
-			   "Channel %u: %senabled Busy poll %#lx NAPI state %#lx Doorbell %sheld %scoalescing\n",
+			   "Channel %u: %senabled Busy poll %#lx NAPI state %#lx Doorbell %sheld %scoalescing Xmit state %#lx\n",
 			   channel->channel, (channel->enabled ? "" : "NOT "),
 			   busy_poll_state, channel->napi_str.state,
 			   (channel->holdoff_doorbell ? "" : "not "),
-			   (channel->tx_coalesce_doorbell ? "" : "not "));
+			   (channel->tx_coalesce_doorbell ? "" : "not "),
+			   core_txq->state);
 		efx_for_each_channel_tx_queue(tx_queue, channel)
 			netif_info(efx, tx_err, efx->net_dev,
-				   "Tx queue: insert %u, write %u, read %u\n",
+				   "Tx queue: insert %u, write %u (%dms), read %u (%dms)\n",
 				   tx_queue->insert_count,
-				   tx_queue->write_count, tx_queue->read_count);
+				   tx_queue->write_count,
+				   efx_msecs_since(tx_queue->notify_jiffies),
+				   tx_queue->read_count,
+				   efx_msecs_since(tx_queue->read_jiffies));
 	}
 }
 
@@ -1361,12 +1373,6 @@ void efx_fini_struct(struct efx_nic *efx)
 
 #ifdef CONFIG_SFC_DEBUGFS
 	mutex_destroy(&efx->debugfs_symlink_mutex);
-#endif
-#ifdef CONFIG_SFC_MTD
-	if (efx->mtd_struct) {
-		efx->mtd_struct->efx = NULL;
-		efx->mtd_struct = NULL;
-	}
 #endif
 }
 

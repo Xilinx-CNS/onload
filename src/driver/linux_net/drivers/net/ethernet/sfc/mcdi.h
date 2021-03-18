@@ -12,6 +12,9 @@
 
 #include <linux/mutex.h>
 #include <linux/kref.h>
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+#include <linux/rhashtable.h>
+#endif
 #include "mcdi_pcol.h"
 
 /**
@@ -166,6 +169,7 @@ struct efx_mcdi_iface {
 };
 
 struct efx_mcdi_mon {
+	struct efx_nic *efx;
 	struct efx_buffer dma_buf;
 	struct mutex update_lock;
 	unsigned long last_update;
@@ -176,6 +180,13 @@ struct efx_mcdi_mon {
 #endif
 	struct efx_mcdi_mon_attribute *attrs;
 	unsigned int n_attrs;
+	void *sensor_list;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+	struct rhashtable sensor_table;
+#endif
+	unsigned int generation_count;
+	unsigned int n_dynamic_sensors;
+	int pend_sensor_state_handle;
 };
 
 /**
@@ -260,8 +271,12 @@ void efx_mcdi_post_reset(struct efx_nic *efx);
 bool efx_mcdi_process_event(struct efx_channel *channel, efx_qword_t *event);
 #ifdef CONFIG_SFC_MCDI_MON
 void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev);
+void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_t *ev);
 #else
 static inline void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
+{
+}
+static inline void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
 {
 }
 #endif

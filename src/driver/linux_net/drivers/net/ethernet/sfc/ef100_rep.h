@@ -43,6 +43,7 @@ struct efx_rep {
 	u32 mport; /* m-port ID of corresponding PF/VF */
 	unsigned int idx; /* rep index  */
 	unsigned int write_index, read_index;
+	unsigned int rx_pring_size; /* max length of RX list */
 	unsigned int mport_desc_idx;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	struct list_head rx_list;

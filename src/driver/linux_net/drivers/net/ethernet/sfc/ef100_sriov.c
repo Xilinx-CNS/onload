@@ -90,11 +90,14 @@ int efx_ef100_pci_sriov_disable(struct efx_nic *efx, bool force)
 	 * still sees nonzero rep_count when we start destroying reps
 	 */
 	if (nic_data->grp_mae) {
+		unsigned int vf_rep_count;
+
 		spin_lock_bh(&nic_data->vf_reps_lock);
+		vf_rep_count = nic_data->vf_rep_count;
 		nic_data->vf_rep_count = 0;
 		spin_unlock_bh(&nic_data->vf_reps_lock);
 
-		for (i = 0; i < efx->vf_count; i++)
+		for (i = 0; i < vf_rep_count; i++)
 			efx_ef100_vfrep_destroy(efx, i);
 	}
 

@@ -19,6 +19,22 @@
 
 #define EFX_HWMON_TYPES_COUNT	hwmon_pwm
 
+#define EFX_DYNAMIC_SENSOR_READING_UPDATE_MAX_HANDLES 32
+#define EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES 4
+
+#define       MC_CMD_DYN_SENSOR_LIMIT_LO_WARNING_OFST \
+		(MC_CMD_DYNAMIC_SENSORS_DESCRIPTION_LIMITS_OFST + 0)
+#define       MC_CMD_DYN_SENSOR_LIMIT_LO_CRITICAL_OFST \
+		(MC_CMD_DYNAMIC_SENSORS_DESCRIPTION_LIMITS_OFST + 4)
+#define       MC_CMD_DYN_SENSOR_LIMIT_LO_FATAL_OFST \
+		(MC_CMD_DYNAMIC_SENSORS_DESCRIPTION_LIMITS_OFST + 8)
+#define       MC_CMD_DYN_SENSOR_LIMIT_HI_WARNING_OFST \
+		(MC_CMD_DYNAMIC_SENSORS_DESCRIPTION_LIMITS_OFST + 12)
+#define       MC_CMD_DYN_SENSOR_LIMIT_HI_CRITICAL_OFST \
+		(MC_CMD_DYNAMIC_SENSORS_DESCRIPTION_LIMITS_OFST + 16)
+#define       MC_CMD_DYN_SENSOR_LIMIT_HI_FATAL_OFST \
+		(MC_CMD_DYNAMIC_SENSORS_DESCRIPTION_LIMITS_OFST + 20)
+
 static const char *const efx_hwmon_unit[EFX_HWMON_TYPES_COUNT] = {
 	[hwmon_temp]  = " degC",
 	[hwmon_fan]   = " rpm", /* though nonsense for a heatsink */
@@ -39,11 +55,13 @@ enum efx_hwmon_attribute {
 
 #define EFX_HWMON_ATTRIBUTE_COUNT	(EFX_HWMON_NAME + 1)
 
-static const struct {
+struct efx_mcdi_hwmon_info {
 	const char *label;
 	enum hwmon_sensor_types hwmon_type;
 	int port;
-} efx_mcdi_sensor_type[] = {
+};
+
+static const struct efx_mcdi_hwmon_info efx_mcdi_sensor_type[] = {
 #define SENSOR(name, label, hwmon_type, port)				\
 	[MC_CMD_SENSOR_##name] = { label, hwmon_ ## hwmon_type, port }
 	SENSOR(CONTROLLER_TEMP,		"Controller board temp.",   temp, -1),
@@ -158,13 +176,29 @@ static const char *const sensor_status_names[] = {
 	[MC_CMD_SENSOR_STATE_NO_READING] = "No reading",
 };
 
+struct efx_mcdi_mon_attribute {
+	struct device_attribute dev_attr;
+	unsigned int index;
+	unsigned int type;
+	enum hwmon_sensor_types hwmon_type;
+	unsigned int limit_value;
+	enum efx_hwmon_attribute hwmon_attribute;
+	u8 file_index;
+	bool is_dynamic;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_HWMON_DEVICE_REGISTER_WITH_INFO)
+	char name[15];
+#endif
+};
+
+#ifdef CONFIG_SFC_MCDI_MON
+
 void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
 {
-	unsigned int type, state, value;
-	enum hwmon_sensor_types hwmon_type = hwmon_chip;
-	const char *name = NULL, *state_txt, *unit;
 	static DEFINE_RATELIMIT_STATE(rs, DEFAULT_RATELIMIT_INTERVAL,
 				      DEFAULT_RATELIMIT_BURST);
+	enum hwmon_sensor_types hwmon_type = hwmon_chip;
+	const char *name = NULL, *state_txt, *unit;
+	unsigned int type, state, value;
 
 	type = EFX_QWORD_FIELD(*ev, MCDI_EVENT_SENSOREVT_MONITOR);
 	state = EFX_QWORD_FIELD(*ev, MCDI_EVENT_SENSOREVT_STATE);
@@ -206,20 +240,642 @@ void efx_mcdi_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
 	}
 }
 
-#ifdef CONFIG_SFC_MCDI_MON
+enum efx_sensor_limits {
+	EFX_SENSOR_LIMIT_WARNING_LO,
+	EFX_SENSOR_LIMIT_CRITICAL_LO,
+	EFX_SENSOR_LIMIT_FATAL_LO,
+	EFX_SENSOR_LIMIT_WARNING_HI,
+	EFX_SENSOR_LIMIT_CRITICAL_HI,
+	EFX_SENSOR_LIMIT_FATAL_HI,
+	EFX_SENSOR_LIMITS
+};
 
-struct efx_mcdi_mon_attribute {
-	struct device_attribute dev_attr;
-	unsigned int index;
+/*
+ * struct efx_dynamic_sensor_description - dynamic sensor description
+ * @name: name of the sensor
+ * @idx: sensor index in the host driver maintained list
+ * @handle: handle to the sensor
+ * @type: type of sensor
+ * @limits: limits for the sensor reading
+ * @gen_count: generation count corresponding to the description
+ * @entry: an entry in rhashtable of dynamic sensors
+ */
+struct efx_dynamic_sensor_description {
+	char name[MC_CMD_DYNAMIC_SENSORS_DESCRIPTION_NAME_LEN];
+	unsigned int idx;
+	unsigned int handle;
 	unsigned int type;
-	enum hwmon_sensor_types hwmon_type;
-	unsigned int limit_value;
-	enum efx_hwmon_attribute hwmon_attribute;
-	u8 file_index;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_HWMON_DEVICE_REGISTER_WITH_INFO)
-	char name[15];
+	int limits[EFX_SENSOR_LIMITS];
+	unsigned int gen_count;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+	struct rhash_head entry;
 #endif
 };
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+const static struct rhashtable_params sensor_entry_params = {
+	.key_len     = sizeof(unsigned int),
+	.key_offset  = offsetof(struct efx_dynamic_sensor_description, handle),
+	.head_offset = offsetof(struct efx_dynamic_sensor_description, entry),
+};
+#endif
+
+static struct efx_dynamic_sensor_description *
+efx_mcdi_get_dynamic_sensor(struct efx_nic *efx, unsigned int handle)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+
+	return rhashtable_lookup_fast(&hwmon->sensor_table, &handle,
+				      sensor_entry_params);
+#else
+	return NULL;
+#endif
+}
+
+static void efx_mcdi_handle_dynamic_sensor_state_change(struct efx_nic *efx,
+						 efx_qword_t *ev)
+{
+	int count = EFX_QWORD_FIELD(*ev, MCDI_EVENT_CONT);
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	struct efx_dynamic_sensor_description *sensor;
+	efx_dword_t *sensor_reading_entry;
+	const char *state_txt;
+	unsigned int handle;
+	int state, value;
+
+	mutex_lock(&hwmon->update_lock);
+	/* Need to receive event with count = 1 first */
+	if (count) {
+		handle = EFX_QWORD_FIELD(*ev, MCDI_EVENT_DATA);
+		sensor = efx_mcdi_get_dynamic_sensor(efx, handle);
+		if (!sensor)
+			return;
+		sensor_reading_entry =
+			MCDI_ARRAY_STRUCT_PTR(((efx_dword_t *)hwmon->dma_buf.addr),
+					      DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES,
+					      sensor->idx);
+		/* save sensor index to handle 2nd event of
+		 * DYNAMIC_SENSOR_STATE_CHANGE */
+		hwmon->pend_sensor_state_handle = handle;
+		state = EFX_QWORD_FIELD(*ev, MCDI_EVENT_SRC);
+		EFX_WARN_ON_PARANOID(state >= ARRAY_SIZE(sensor_status_names));
+		state_txt = sensor_status_names[state];
+		WARN(1, "%s: sensor %s state changed to %s\n", efx->name,
+			sensor->name, state_txt);
+
+		MCDI_SET_DWORD(sensor_reading_entry,
+			       DYNAMIC_SENSORS_READING_HANDLE,
+			       handle);
+		MCDI_SET_DWORD(sensor_reading_entry,
+			       DYNAMIC_SENSORS_READING_STATE, state);
+	} else {
+		EFX_WARN_ON_PARANOID(hwmon->pend_sensor_state_handle < 0);
+		handle = hwmon->pend_sensor_state_handle;
+		sensor = efx_mcdi_get_dynamic_sensor(efx, handle);
+		hwmon->pend_sensor_state_handle = -1;
+		if (!sensor)
+			return;
+		sensor_reading_entry =
+			MCDI_ARRAY_STRUCT_PTR(((efx_dword_t *)hwmon->dma_buf.addr),
+					      DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES,
+					      sensor->idx);
+		value = EFX_QWORD_FIELD(*ev, MCDI_EVENT_DATA);
+		MCDI_SET_DWORD(sensor_reading_entry,
+			       DYNAMIC_SENSORS_READING_VALUE, value);
+	}
+	mutex_unlock(&hwmon->update_lock);
+}
+
+void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_t *ev)
+{
+	int code = EFX_QWORD_FIELD(*ev, MCDI_EVENT_CODE);
+
+	switch(code) {
+	case MCDI_EVENT_CODE_DYNAMIC_SENSORS_STATE_CHANGE:
+		efx_mcdi_handle_dynamic_sensor_state_change(efx, ev);
+		return;
+	case MCDI_EVENT_CODE_DYNAMIC_SENSORS_CHANGE:
+		netif_info(efx, drv, efx->net_dev,
+			   "CODE_DYNAMIC_SENSORS_CHANGE even unsupported\n");
+	}
+}
+
+static int
+efx_mcdi_dynamic_sensor_list_reading_update(struct efx_nic *efx,
+					    unsigned int *handle_list,
+					    unsigned int num_handles)
+{
+	MCDI_DECLARE_BUF(outbuf,
+			 MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_LEN(EFX_DYNAMIC_SENSOR_READING_UPDATE_MAX_HANDLES));
+	MCDI_DECLARE_BUF(inbuf,
+			 MC_CMD_DYNAMIC_SENSORS_GET_READINGS_IN_LEN(EFX_DYNAMIC_SENSOR_READING_UPDATE_MAX_HANDLES));
+	struct efx_dynamic_sensor_description *sensor = NULL;
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	efx_dword_t *sensor_reading_entry;
+	efx_dword_t *sensor_out_entry;
+	unsigned int handle;
+	size_t outlen;
+	int i, rc = 0;
+
+	for (i = 0; i < num_handles; i++)
+		MCDI_SET_ARRAY_DWORD(inbuf,
+				     DYNAMIC_SENSORS_GET_READINGS_IN_HANDLES, i,
+				     handle_list[i]);
+	rc = efx_mcdi_rpc(efx, MC_CMD_DYNAMIC_SENSORS_GET_READINGS, inbuf,
+			  MC_CMD_DYNAMIC_SENSORS_GET_READINGS_IN_LEN(i),
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	/* outlen determins the number of handles returned if any handles
+	 * are dropped by FW */
+	if (outlen % MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES_LEN) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
+	i = 0;
+	while (outlen) {
+		sensor_out_entry =
+			MCDI_ARRAY_STRUCT_PTR(outbuf,
+					      DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES,
+					      i);
+		handle = MCDI_DWORD(sensor_out_entry,
+				    DYNAMIC_SENSORS_READING_HANDLE);
+		sensor = efx_mcdi_get_dynamic_sensor(efx, handle);
+		/* check if sensor was dropped */
+		if (IS_ERR(sensor)) {
+			i++;
+			outlen -= MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES_LEN;
+			continue;
+		}
+		sensor_reading_entry =
+			MCDI_ARRAY_STRUCT_PTR(((efx_dword_t *)hwmon->dma_buf.addr),
+					      DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES,
+					      sensor->idx);
+		MCDI_SET_DWORD(sensor_reading_entry,
+			       DYNAMIC_SENSORS_READING_HANDLE, handle);
+		MCDI_SET_DWORD(sensor_reading_entry,
+			       DYNAMIC_SENSORS_READING_VALUE,
+			       (MCDI_DWORD(sensor_out_entry,
+					  DYNAMIC_SENSORS_READING_VALUE)));
+		MCDI_SET_DWORD(sensor_reading_entry,
+			       DYNAMIC_SENSORS_READING_STATE,
+			       (MCDI_DWORD(sensor_out_entry,
+					  DYNAMIC_SENSORS_READING_STATE)));
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Reading sensor, handle %u, value %u state: %u\n",
+			  handle,
+			  MCDI_DWORD(sensor_out_entry,
+				     DYNAMIC_SENSORS_READING_VALUE),
+			  MCDI_DWORD(sensor_out_entry,
+				     DYNAMIC_SENSORS_READING_STATE));
+
+
+		i++;
+		outlen -= MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES_LEN;
+	}
+	if (rc == 0)
+		hwmon->last_update = jiffies;
+
+	return rc;
+
+}
+
+static int efx_mcdi_dynamic_sensor_reading_update(struct efx_nic *efx)
+{
+	struct efx_dynamic_sensor_description *sensor;
+	/* limiting maximum sensors per read to 4 to avoid
+	 * -Werror=frame-larger-than=]
+	 */
+	unsigned int handles[EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES];
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	unsigned int j, i = 0;
+	int rc = 0;
+
+	sensor = (struct efx_dynamic_sensor_description *)hwmon->sensor_list;
+	for (j = 0; j < hwmon->n_dynamic_sensors; j++) {
+		handles[i] = sensor[j].handle;
+		i++;
+		if ((i == EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES) ||
+		    (j == (hwmon->n_dynamic_sensors - 1))) {
+			rc = efx_mcdi_dynamic_sensor_list_reading_update(efx,
+									 handles,
+									 i);
+			if (!rc)
+				i = 0;
+			else
+				break;
+		}
+	}
+
+	return rc;
+}
+
+static void
+efx_mcdi_mon_add_attr(struct efx_nic *efx,
+		      unsigned int index, unsigned int type,
+		      unsigned int limit_value, u8 file_index,
+		      enum efx_hwmon_attribute attribute,
+		      bool is_dynamic)
+{
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	struct efx_mcdi_mon_attribute *attr = &hwmon->attrs[hwmon->n_attrs];
+
+	attr->index = index;
+	attr->type = type;
+
+	if (is_dynamic) {
+		/* Conversion between FW types and kernel types */
+		if (type == 0)
+			attr->hwmon_type = hwmon_in;
+		if (type == 1)
+			attr->hwmon_type = hwmon_curr;
+		if (type == 2)
+			attr->hwmon_type = hwmon_power;
+		if (type == 3)
+			attr->hwmon_type = hwmon_temp;
+		if (type == 4)
+			attr->hwmon_type = hwmon_fan;
+	} else {
+		if (type < ARRAY_SIZE(efx_mcdi_sensor_type))
+			attr->hwmon_type =
+				efx_mcdi_sensor_type[type].hwmon_type;
+		else
+			attr->hwmon_type = hwmon_chip;
+	}
+
+	attr->limit_value = limit_value;
+	attr->file_index = file_index;
+	attr->hwmon_attribute = attribute;
+	attr->is_dynamic = is_dynamic;
+	++hwmon->n_attrs;
+}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+static void efx_mcdi_add_dynamic_sensor(struct efx_nic *efx,
+					unsigned int handle,
+					unsigned int idx)
+{
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	struct efx_dynamic_sensor_description *sensor;
+
+	sensor = (struct efx_dynamic_sensor_description *)hwmon->sensor_list;
+	sensor += idx;
+	/* sensor->idx need to stored as this is needed to access sensor
+	 * reading data saved
+	 */
+	sensor->idx = idx;
+	sensor->handle = handle;
+	rhashtable_lookup_insert_fast(&hwmon->sensor_table,
+				      &sensor->entry,
+				      sensor_entry_params);
+}
+
+static void efx_mcdi_remove_dynamic_sensors(struct efx_nic *efx)
+{
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	struct efx_dynamic_sensor_description *sensor;
+	int i = 0;
+
+	sensor = (struct efx_dynamic_sensor_description *)hwmon->sensor_list;
+	for(i = 0; i < hwmon->n_dynamic_sensors; i++) {
+		rhashtable_remove_fast(&hwmon->sensor_table,
+				       &sensor[i].entry,
+				       sensor_entry_params);
+	}
+}
+
+/* This function is assumed to be called only after @has_dynamic_sensors
+ * has returned true or DYNAMIC_SENSOR_LIST event received
+ */
+static int efx_mcdi_read_dynamic_sensor_list(struct efx_nic *efx)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_DYNAMIC_SENSORS_LIST_OUT_LENMAX);
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	unsigned int n_sensors;
+	unsigned int gen_count;
+	size_t outlen;
+	int rc, i;
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_DYNAMIC_SENSORS_LIST, NULL, 0, outbuf,
+			  sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+
+	gen_count = MCDI_DWORD(outbuf, DYNAMIC_SENSORS_LIST_OUT_GENERATION);
+	/* check if generation count changed */
+	if (gen_count == hwmon->generation_count)
+		return 0;
+	hwmon->generation_count = gen_count;
+
+	n_sensors = MCDI_DWORD(outbuf, DYNAMIC_SENSORS_LIST_OUT_COUNT);
+	if (outlen < MC_CMD_DYNAMIC_SENSORS_LIST_OUT_LEN(n_sensors)) {
+		WARN_ON(1);
+		return -EINVAL;
+	}
+	mutex_lock(&hwmon->update_lock);
+	efx_mcdi_remove_dynamic_sensors(efx);
+	hwmon->n_dynamic_sensors = n_sensors;
+	hwmon->sensor_list = krealloc(hwmon->sensor_list,
+				      (n_sensors *
+				      sizeof(struct efx_dynamic_sensor_description)),
+				      GFP_KERNEL);
+	if (!hwmon->sensor_list) {
+		mutex_unlock(&hwmon->update_lock);
+		return -ENOMEM;
+	}
+
+	for (i = 0; i < n_sensors; i++) {
+		unsigned int handle;
+
+		handle = MCDI_ARRAY_DWORD(outbuf,
+					  DYNAMIC_SENSORS_LIST_OUT_HANDLES, i);
+		efx_mcdi_add_dynamic_sensor(efx, handle, i);
+	}
+
+	mutex_unlock(&hwmon->update_lock);
+
+	return 0;
+}
+#endif
+
+static int efx_mcdi_read_dynamic_sensor_list_info(struct efx_nic *efx,
+						  unsigned int *handle_list,
+						  unsigned int num_handles)
+{
+	MCDI_DECLARE_BUF(outbuf,
+			 MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS_OUT_LEN(EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES));
+	MCDI_DECLARE_BUF(inbuf,
+			 MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS_IN_LEN(EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES));
+	struct efx_dynamic_sensor_description *sensor = NULL;
+	static int type_idx[EFX_HWMON_TYPES_COUNT] = {0};
+	unsigned int handle;
+	int i, rc = 0;
+	size_t outlen;
+
+	for (i = 0; i < num_handles; i++) {
+		MCDI_SET_ARRAY_DWORD(inbuf,
+			       DYNAMIC_SENSORS_GET_DESCRIPTIONS_IN_HANDLES, i,
+			       handle_list[i]);
+	}
+	rc = efx_mcdi_rpc(efx, MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS, inbuf,
+			  MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS_IN_LEN(i),
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	i = 0;
+	/*
+	 * outlen determins the number of handles returned if any handles
+	 * are dropped by FW
+	 */
+	if (outlen % MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS_OUT_SENSORS_LEN){
+		WARN_ON(1);
+		return -EINVAL;
+	}
+	while (outlen) {
+		efx_dword_t *str_ptr = MCDI_ARRAY_STRUCT_PTR(outbuf,
+							     DYNAMIC_SENSORS_GET_DESCRIPTIONS_OUT_SENSORS,
+							     i);
+
+		handle = MCDI_DWORD(str_ptr, DYNAMIC_SENSORS_DESCRIPTION_HANDLE);
+		sensor = efx_mcdi_get_dynamic_sensor(efx, handle);
+		/* check if sensor was dropped */
+		if (IS_ERR(sensor)) {
+			i++;
+			outlen -= MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS_OUT_SENSORS_LEN;
+			continue;
+		}
+		memcpy(sensor->name,
+		       MCDI_PTR(str_ptr, DYNAMIC_SENSORS_DESCRIPTION_NAME),
+		       MC_CMD_DYNAMIC_SENSORS_DESCRIPTION_NAME_LEN);
+		sensor->type = MCDI_DWORD(str_ptr, DYNAMIC_SENSORS_DESCRIPTION_TYPE);
+
+		sensor->limits[EFX_SENSOR_LIMIT_WARNING_LO] =
+			MCDI_DWORD(str_ptr, DYN_SENSOR_LIMIT_LO_WARNING);
+		efx_mcdi_mon_add_attr(efx, sensor->idx,
+				      sensor->type,
+				      sensor->limits[EFX_SENSOR_LIMIT_WARNING_LO],
+				      type_idx[sensor->type],
+				      EFX_HWMON_MIN, true);
+
+		sensor->limits[EFX_SENSOR_LIMIT_WARNING_HI] =
+			MCDI_DWORD(str_ptr, DYN_SENSOR_LIMIT_HI_WARNING);
+		efx_mcdi_mon_add_attr(efx, sensor->idx,
+				      sensor->type,
+				      sensor->limits[EFX_SENSOR_LIMIT_WARNING_HI],
+				      type_idx[sensor->type],
+				      EFX_HWMON_MAX, true);
+
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Adding sensor %s, type %d, limits(%u, %u)\n",
+			  sensor->name, sensor->type,
+			  sensor->limits[EFX_SENSOR_LIMIT_WARNING_LO],
+			  sensor->limits[EFX_SENSOR_LIMIT_WARNING_HI]);
+
+		efx_mcdi_mon_add_attr(efx, sensor->idx, sensor->type, 0,
+				      type_idx[sensor->type], EFX_HWMON_LABEL,
+				      true);
+		efx_mcdi_mon_add_attr(efx, sensor->idx, sensor->type, 0,
+				      type_idx[sensor->type], EFX_HWMON_INPUT,
+				      true);
+		type_idx[sensor->type]++;
+		i++;
+		outlen -= MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS_OUT_SENSORS_LEN;
+	}
+
+	return 0;
+}
+
+/*
+ * This function is assumed to be called only after @has_dynamic_sensors
+ * has returned true or DYNAMIC_SENSOR_LIST event received
+ */
+static int efx_mcdi_read_dynamic_sensor_info(struct efx_nic *efx)
+{
+	/*
+	 * limiting maximum sensors per read to 4 to avoid
+	 * -Werror=frame-larger-than=]
+	 */
+	unsigned int handles[EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES];
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	struct efx_dynamic_sensor_description *sensor;
+	unsigned int j, i = 0;
+	int rc = 0;
+
+	sensor = (struct efx_dynamic_sensor_description *)hwmon->sensor_list;
+	mutex_lock(&hwmon->update_lock);
+	for (j = 0; j < hwmon->n_dynamic_sensors; j++) {
+		handles[i] = sensor[j].handle;
+		i++;
+		if ((i == EFX_DYNAMIC_SENSOR_INFO_READ_MAX_HANDLES) ||
+		    (j == (hwmon->n_dynamic_sensors - 1))) {
+			rc = efx_mcdi_read_dynamic_sensor_list_info(efx,
+								    handles, i);
+			if (!rc)
+				i = 0;
+			else
+				break;
+		}
+	}
+	mutex_unlock(&hwmon->update_lock);
+
+	return rc;
+}
+
+static int efx_mcdi_read_sensor_info(struct efx_nic *efx, unsigned int n_pages)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_SENSOR_INFO_OUT_LENMAX);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_SENSOR_INFO_EXT_IN_LEN);
+	u8 n_temp, n_cool, n_in, n_curr, n_power;
+	u32 type, mask = 0, page = 0;
+	size_t outlen;
+	int i, j, rc;
+
+	n_temp = n_curr = n_cool = n_in = n_power = 0;
+	for (i = 0, j = -1, type = -1; ; i++) {
+		enum hwmon_sensor_types hwmon_type;
+		u16 min1, max1, min2, max2;
+		u8 file_index = 0;
+
+		/* Find next sensor type or exit if there is none */
+		do {
+			type++;
+
+			if ((type % 32) == 0) {
+				page = type / 32;
+				j = -1;
+				if (page == n_pages)
+					return 0;
+
+				MCDI_SET_DWORD(inbuf, SENSOR_INFO_EXT_IN_PAGE,
+					       page);
+				rc = efx_mcdi_rpc(efx, MC_CMD_SENSOR_INFO,
+						  inbuf, sizeof(inbuf),
+						  outbuf, sizeof(outbuf),
+						  &outlen);
+				if (rc)
+					return rc;
+				if (outlen < MC_CMD_SENSOR_INFO_OUT_LENMIN)
+					return -EIO;
+
+				mask = (MCDI_DWORD(outbuf,
+						   SENSOR_INFO_OUT_MASK) &
+					~(1 << MC_CMD_SENSOR_PAGE0_NEXT));
+
+				/* Check again for short response */
+				if (outlen <
+				    MC_CMD_SENSOR_INFO_OUT_LEN(hweight32(mask)))
+					return -EIO;
+			}
+		} while (!(mask & (1 << type % 32)));
+		j++;
+
+		if (type < ARRAY_SIZE(efx_mcdi_sensor_type)) {
+			hwmon_type = efx_mcdi_sensor_type[type].hwmon_type;
+
+			/* Skip sensors specific to a different port */
+			if (hwmon_type != hwmon_chip &&
+			    efx_mcdi_sensor_type[type].port >= 0 &&
+			    efx_mcdi_sensor_type[type].port !=
+			    efx_port_num(efx))
+				continue;
+		} else {
+			hwmon_type = hwmon_chip;
+		}
+
+		switch (hwmon_type) {
+		case hwmon_temp:
+			file_index = ++n_temp; /* 1-based */
+			break;
+		case hwmon_fan:
+			file_index = ++n_cool; /* 1-based */
+			break;
+		default:
+			file_index = n_in++; /* 0-based */
+			break;
+		case hwmon_curr:
+			file_index = ++n_curr; /* 1-based */
+			break;
+		case hwmon_power:
+			file_index = ++n_power; /* 1-based */
+			break;
+		}
+
+		min1 = MCDI_ARRAY_FIELD(outbuf, SENSOR_ENTRY,
+					SENSOR_INFO_ENTRY, j, MIN1);
+		max1 = MCDI_ARRAY_FIELD(outbuf, SENSOR_ENTRY,
+					SENSOR_INFO_ENTRY, j, MAX1);
+		min2 = MCDI_ARRAY_FIELD(outbuf, SENSOR_ENTRY,
+					SENSOR_INFO_ENTRY, j, MIN2);
+		max2 = MCDI_ARRAY_FIELD(outbuf, SENSOR_ENTRY,
+					SENSOR_INFO_ENTRY, j, MAX2);
+
+		efx_mcdi_mon_add_attr(efx, i, type, 0, file_index,
+				      EFX_HWMON_INPUT, false);
+		if (min1 != max1) {
+
+			if (hwmon_type != hwmon_power) {
+				efx_mcdi_mon_add_attr(efx, i, type, min1,
+						      file_index,
+						      EFX_HWMON_MIN, false);
+			}
+
+			efx_mcdi_mon_add_attr(efx, i, type, max1, file_index,
+					      EFX_HWMON_MAX, false);
+
+		}
+		if (min2 != max2) {
+			/* Assume max2 is critical value.
+			 * But we have no good way to expose min2.
+			 */
+			efx_mcdi_mon_add_attr(efx, i, type, max2,
+					      file_index,
+					      EFX_HWMON_CRIT, false);
+		}
+
+		efx_mcdi_mon_add_attr(efx, i, type, 0, file_index,
+				      EFX_HWMON_ALARM, false);
+
+		if (type < ARRAY_SIZE(efx_mcdi_sensor_type) &&
+		    efx_mcdi_sensor_type[type].label) {
+			efx_mcdi_mon_add_attr(efx, i, type, 0, file_index,
+					      EFX_HWMON_LABEL, false);
+		}
+	}
+
+	return 0;
+}
+
+static int efx_mcdi_get_num_sensors(struct efx_nic *efx,
+				     unsigned int *n_sensors,
+				     unsigned int *n_pages)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_SENSOR_INFO_OUT_LENMAX);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_SENSOR_INFO_EXT_IN_LEN);
+	unsigned int page = 0;
+	size_t outlen;
+	u32 mask = 0;
+	int rc;
+
+	do {
+		MCDI_SET_DWORD(inbuf, SENSOR_INFO_EXT_IN_PAGE, page);
+
+		rc = efx_mcdi_rpc(efx, MC_CMD_SENSOR_INFO, inbuf, sizeof(inbuf),
+				  outbuf, sizeof(outbuf), &outlen);
+		if (rc)
+			return rc;
+		if (outlen < MC_CMD_SENSOR_INFO_OUT_LENMIN)
+			return -EIO;
+
+		mask = MCDI_DWORD(outbuf, SENSOR_INFO_OUT_MASK);
+		*n_sensors += hweight32(mask &
+					~(1 << MC_CMD_SENSOR_PAGE0_NEXT));
+		++page;
+	} while (mask & (1 << MC_CMD_SENSOR_PAGE0_NEXT));
+	*n_pages = page;
+
+	return 0;
+}
 
 static int efx_mcdi_mon_update(struct efx_nic *efx)
 {
@@ -263,23 +919,66 @@ static int efx_mcdi_mon_get_entry(struct device *dev, unsigned int index,
 	return rc;
 }
 
+static int efx_mcdi_mon_get_dynamic_entry(struct device *dev,
+					  unsigned int index,
+					  efx_dword_t **entry)
+{
+	struct efx_nic *efx = dev_get_drvdata(dev);
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	int rc;
+
+	BUILD_BUG_ON(MC_CMD_READ_SENSORS_OUT_LEN != 0);
+
+	mutex_lock(&hwmon->update_lock);
+
+	/* Use cached value if last update was < 1 s ago */
+	if (time_before(jiffies, hwmon->last_update + HZ))
+		rc = 0;
+	else
+		rc = efx_mcdi_dynamic_sensor_reading_update(efx);
+
+	/*
+	 * Copy out the requested entry. Entries for dynamic sensors are
+	 * commposed by three efx_dword_t values: handle, value, state.
+	 */
+	*entry = &((efx_dword_t *)hwmon->dma_buf.addr)[index * 3];
+
+	mutex_unlock(&hwmon->update_lock);
+
+	return rc;
+}
+
 static int efx_mcdi_mon_get_value(struct device *dev, unsigned int index,
 				  enum hwmon_sensor_types hwmon_type,
 				  unsigned int *value)
 {
-	efx_dword_t entry;
+	struct efx_nic *efx = dev_get_drvdata(dev);
+	efx_dword_t *dyn_entry;
 	unsigned int state;
+	efx_dword_t entry;
 	int rc;
 
-	rc = efx_mcdi_mon_get_entry(dev, index, &entry);
-	if (rc)
-		return rc;
+	if (efx_nic_has_dynamic_sensors(efx)) {
+		rc = efx_mcdi_mon_get_dynamic_entry(dev, index, &dyn_entry);
+		if (rc)
+			return rc;
 
-	state = EFX_DWORD_FIELD(entry, MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_STATE);
-	if (state == MC_CMD_SENSOR_STATE_NO_READING)
-		return -EBUSY;
+		state = MCDI_DWORD(dyn_entry, DYNAMIC_SENSORS_READING_STATE);
+		if (state == MC_CMD_SENSOR_STATE_NO_READING)
+			return -EBUSY;
 
-	*value = EFX_DWORD_FIELD(entry, MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_VALUE);
+		*value = MCDI_DWORD(dyn_entry, DYNAMIC_SENSORS_READING_VALUE);
+	} else {
+		rc = efx_mcdi_mon_get_entry(dev, index, &entry);
+		if (rc)
+			return rc;
+		state = EFX_DWORD_FIELD(entry,
+					MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_STATE);
+		if (state == MC_CMD_SENSOR_STATE_NO_READING)
+			return -EBUSY;
+		*value = EFX_DWORD_FIELD(entry,
+					 MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_VALUE);
+	}
 
 	switch (hwmon_type) {
 	case hwmon_temp:
@@ -323,14 +1022,23 @@ efx_mcdi_mon_get_limit(struct efx_mcdi_mon_attribute *mon_attr)
 static int efx_mcdi_mon_get_state(struct device *dev, unsigned int index,
 				  unsigned int *value)
 {
-	efx_dword_t entry;
+	struct efx_nic *efx = dev_get_drvdata(dev);
+	efx_dword_t entry, *dyn_entry;
 	int rc;
 
-	rc = efx_mcdi_mon_get_entry(dev, index, &entry);
-	if (rc)
-		return rc;
-
-	return EFX_DWORD_FIELD(entry, MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_STATE);
+	if (efx_nic_has_dynamic_sensors(efx)) {
+		rc = efx_mcdi_mon_get_dynamic_entry(dev, index, &dyn_entry);
+		if (rc)
+			return rc;
+		rc = MCDI_DWORD(dyn_entry, DYNAMIC_SENSORS_READING_STATE);
+	} else {
+		rc = efx_mcdi_mon_get_entry(dev, index, &entry);
+		if (rc)
+			return rc;
+		rc = EFX_DWORD_FIELD(entry,
+				     MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_STATE);
+	}
+	return rc;
 }
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_HWMON_DEVICE_REGISTER_WITH_INFO)
@@ -614,12 +1322,26 @@ static int efx_hwmon_read_string(struct device *dev,
 				)
 {
 	const struct efx_nic *efx = dev_get_drvdata(dev);
+	struct efx_nic *efx_temp = dev_get_drvdata(dev);
+	struct efx_dynamic_sensor_description *sensor;
 	struct efx_mcdi_mon_attribute *mon_attr =
 		efx_hwmon_get_attribute(efx, type, attr, channel);
 
-	if (mon_attr)
+	if (!mon_attr)
+		return 1;
+
+	if (mon_attr->is_dynamic) {
+		sensor = efx_mcdi_get_dynamic_sensor(efx_temp, mon_attr->index + 1);
+		if (!sensor) {
+			WARN(1, "%s: sensor not found\n", __func__);
+			*str = NULL;
+		} else {
+			*str = sensor->name;
+		}
+	} else {
 		*str = (char *) efx_mcdi_sensor_type[mon_attr->type].label;
-	return(!mon_attr);
+	}
+	return 0;
 }
 #endif
 
@@ -655,6 +1377,9 @@ static const u32 efx_temp_config[] = {
 	EFX_HWMON_TEMP_CONFIG,
 	EFX_HWMON_TEMP_CONFIG,
 	EFX_HWMON_TEMP_CONFIG,
+	EFX_HWMON_TEMP_CONFIG,
+	EFX_HWMON_TEMP_CONFIG,
+	EFX_HWMON_TEMP_CONFIG,
 	0
 };
 
@@ -664,6 +1389,17 @@ static const struct hwmon_channel_info efx_temp = {
 };
 
 static const u32 efx_in_config[] = {
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
+	EFX_HWMON_IN_CONFIG,
 	EFX_HWMON_IN_CONFIG,
 	EFX_HWMON_IN_CONFIG,
 	EFX_HWMON_IN_CONFIG,
@@ -689,6 +1425,19 @@ static const u32 efx_curr_config[] = {
 	EFX_HWMON_CURR_CONFIG,
 	EFX_HWMON_CURR_CONFIG,
 	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
+	EFX_HWMON_CURR_CONFIG,
 	0
 };
 
@@ -699,6 +1448,25 @@ static const struct hwmon_channel_info efx_curr = {
 
 static const u32 efx_power_config[] = {
 	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
+	EFX_HWMON_POWER_CONFIG,
 	0
 };
 
@@ -708,6 +1476,7 @@ static const struct hwmon_channel_info efx_power = {
 };
 
 static const u32 efx_fan_config[] = {
+	EFX_HWMON_FAN_CONFIG,
 	EFX_HWMON_FAN_CONFIG,
 	EFX_HWMON_FAN_CONFIG,
 	EFX_HWMON_FAN_CONFIG,
@@ -745,74 +1514,22 @@ static const struct hwmon_chip_info efx_hwmon_chip_info = {
 #define efx_hwmon_chip_info_p	&efx_hwmon_chip_info
 #endif
 
-static void
-efx_mcdi_mon_add_attr(struct efx_nic *efx,
-		      unsigned int index, unsigned int type,
-		      unsigned int limit_value, u8 file_index,
-		      enum efx_hwmon_attribute attribute)
+static int efx_mcdi_hwmon_probe(struct efx_nic *efx, unsigned int n_sensors,
+				unsigned int n_pages, bool has_dynamic_sensors)
 {
+	unsigned int sensor_entry_len = MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_LEN;
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
-	struct efx_mcdi_mon_attribute *attr = &hwmon->attrs[hwmon->n_attrs];
+	unsigned int n_attrs;
+	int rc;
 
-	attr->index = index;
-	attr->type = type;
-	if (type < ARRAY_SIZE(efx_mcdi_sensor_type))
-		attr->hwmon_type = efx_mcdi_sensor_type[type].hwmon_type;
-	else
-		attr->hwmon_type = hwmon_chip;
-	attr->limit_value = limit_value;
-	attr->file_index = file_index;
-	attr->hwmon_attribute = attribute;
-	++hwmon->n_attrs;
-}
+	if (has_dynamic_sensors)
+		sensor_entry_len = MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES_LEN;
 
-int efx_mcdi_mon_probe(struct efx_nic *efx)
-{
-	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
-	u8 n_temp = 0, n_cool = 0, n_in = 0, n_curr = 0, n_power = 0;
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_SENSOR_INFO_EXT_IN_LEN);
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_SENSOR_INFO_OUT_LENMAX);
-	unsigned int n_pages, n_sensors, n_attrs, page;
-	size_t outlen;
-	u32 mask;
-	int rc, i, j, type;
-
-	/* Do not probe twice */
-	if (hwmon->dma_buf.addr)
-		return 0;
-
-	/* Find out how many sensors are present */
-	n_sensors = 0;
-	page = 0;
-	do {
-		MCDI_SET_DWORD(inbuf, SENSOR_INFO_EXT_IN_PAGE, page);
-
-		rc = efx_mcdi_rpc(efx, MC_CMD_SENSOR_INFO, inbuf, sizeof(inbuf),
-				  outbuf, sizeof(outbuf), &outlen);
-		if (rc)
-			return rc;
-		if (outlen < MC_CMD_SENSOR_INFO_OUT_LENMIN)
-			return -EIO;
-
-		mask = MCDI_DWORD(outbuf, SENSOR_INFO_OUT_MASK);
-		n_sensors += hweight32(mask & ~(1 << MC_CMD_SENSOR_PAGE0_NEXT));
-		++page;
-	} while (mask & (1 << MC_CMD_SENSOR_PAGE0_NEXT));
-	n_pages = page;
-
-	/* Don't create a device if there are none */
-	if (n_sensors == 0)
-		return 0;
-
-	rc = efx_nic_alloc_buffer(
-		efx, &hwmon->dma_buf,
-		n_sensors * MC_CMD_SENSOR_VALUE_ENTRY_TYPEDEF_LEN,
-		GFP_KERNEL);
+	rc = efx_nic_alloc_buffer(efx, &hwmon->dma_buf,
+				  n_sensors * sensor_entry_len, GFP_KERNEL);
 	if (rc)
 		return rc;
 
-	mutex_init(&hwmon->update_lock);
-	efx_mcdi_mon_update(efx);
 
 	/* Allocate space for the maximum possible number of
 	 * attributes for this set of sensors: name of the driver plus
@@ -820,153 +1537,94 @@ int efx_mcdi_mon_probe(struct efx_nic *efx)
 	 */
 	n_attrs = 1 + 6 * n_sensors;
 	hwmon->attrs = kcalloc(n_attrs, sizeof(*hwmon->attrs), GFP_KERNEL);
-	if (!hwmon->attrs) {
-		rc = -ENOMEM;
-		goto fail;
-	}
+	if (!hwmon->attrs)
+		return -ENOMEM;
 
-	efx_mcdi_mon_add_attr(efx, 0, 0, 0, 0, EFX_HWMON_NAME);
+	efx_mcdi_mon_add_attr(efx, 0, 0, 0, 0, EFX_HWMON_NAME, false);
 
-	for (i = 0, j = -1, type = -1; ; i++) {
-		enum hwmon_sensor_types hwmon_type;
-		u16 min1, max1, min2, max2;
-		u8 file_index = 0;
+	if (has_dynamic_sensors)
+		rc = efx_mcdi_read_dynamic_sensor_info(efx);
+	else
+		rc = efx_mcdi_read_sensor_info(efx, n_pages);
 
-		/* Find next sensor type or exit if there is none */
-		do {
-			type++;
+	if (rc)
+		return rc;
 
-			if ((type % 32) == 0) {
-				page = type / 32;
-				j = -1;
-				if (page == n_pages)
-					goto do_register;
-
-				MCDI_SET_DWORD(inbuf, SENSOR_INFO_EXT_IN_PAGE,
-					       page);
-				rc = efx_mcdi_rpc(efx, MC_CMD_SENSOR_INFO,
-						  inbuf, sizeof(inbuf),
-						  outbuf, sizeof(outbuf),
-						  &outlen);
-				if (rc)
-					goto fail;
-				if (outlen < MC_CMD_SENSOR_INFO_OUT_LENMIN) {
-					rc = -EIO;
-					goto fail;
-				}
-
-				mask = (MCDI_DWORD(outbuf,
-						   SENSOR_INFO_OUT_MASK) &
-					~(1 << MC_CMD_SENSOR_PAGE0_NEXT));
-
-				/* Check again for short response */
-				if (outlen <
-				    MC_CMD_SENSOR_INFO_OUT_LEN(hweight32(mask))) {
-					rc = -EIO;
-					goto fail;
-				}
-			}
-		} while (!(mask & (1 << type % 32)));
-		j++;
-
-		if (type < ARRAY_SIZE(efx_mcdi_sensor_type)) {
-			hwmon_type = efx_mcdi_sensor_type[type].hwmon_type;
-
-			/* Skip sensors specific to a different port */
-			if (hwmon_type != hwmon_chip &&
-			    efx_mcdi_sensor_type[type].port >= 0 &&
-			    efx_mcdi_sensor_type[type].port !=
-			    efx_port_num(efx))
-				continue;
-		} else {
-			hwmon_type = hwmon_chip;
-		}
-
-		switch (hwmon_type) {
-		case hwmon_temp:
-			file_index = ++n_temp; /* 1-based */
-			break;
-		case hwmon_fan:
-			file_index = ++n_cool; /* 1-based */
-			break;
-		default:
-			file_index = n_in++; /* 0-based */
-			break;
-		case hwmon_curr:
-			file_index = ++n_curr; /* 1-based */
-			break;
-		case hwmon_power:
-			file_index = ++n_power; /* 1-based */
-			break;
-		}
-
-		min1 = MCDI_ARRAY_FIELD(outbuf, SENSOR_ENTRY,
-					SENSOR_INFO_ENTRY, j, MIN1);
-		max1 = MCDI_ARRAY_FIELD(outbuf, SENSOR_ENTRY,
-					SENSOR_INFO_ENTRY, j, MAX1);
-		min2 = MCDI_ARRAY_FIELD(outbuf, SENSOR_ENTRY,
-					SENSOR_INFO_ENTRY, j, MIN2);
-		max2 = MCDI_ARRAY_FIELD(outbuf, SENSOR_ENTRY,
-					SENSOR_INFO_ENTRY, j, MAX2);
-
-		efx_mcdi_mon_add_attr(efx, i, type, 0, file_index,
-				      EFX_HWMON_INPUT);
-
-		if (min1 != max1) {
-			if (hwmon_type != hwmon_power) {
-				efx_mcdi_mon_add_attr(efx, i, type, min1,
-						      file_index,
-						      EFX_HWMON_MIN);
-			}
-
-			efx_mcdi_mon_add_attr(efx, i, type, max1, file_index,
-					      EFX_HWMON_MAX);
-		}
-
-		if (min2 != max2) {
-			/* Assume max2 is critical value.
-			 * But we have no good way to expose min2.
-			 */
-			efx_mcdi_mon_add_attr(efx, i, type, max2,
-					      file_index,
-					      EFX_HWMON_CRIT);
-		}
-
-		efx_mcdi_mon_add_attr(efx, i, type, 0, file_index,
-				      EFX_HWMON_ALARM);
-
-		if (type < ARRAY_SIZE(efx_mcdi_sensor_type) &&
-		    efx_mcdi_sensor_type[type].label) {
-			efx_mcdi_mon_add_attr(efx, i, type, 0, file_index,
-					      EFX_HWMON_LABEL);
-		}
-	}
-
-do_register:
 	hwmon->device = hwmon_device_register_with_info(&efx->pci_dev->dev,
 							efx->name, efx,
 							efx_hwmon_chip_info_p,
 							NULL);
-	if (IS_ERR(hwmon->device)) {
-		rc = PTR_ERR(hwmon->device);
-		goto fail;
-	}
-
+	if (IS_ERR(hwmon->device))
+		return PTR_ERR(hwmon->device);
 	rc = efx_mcdi_mon_create_files(&efx->pci_dev->dev, hwmon);
-	if (!rc)
-		return 0;
 
-fail:
-	efx_mcdi_mon_remove(efx);
 	return rc;
 }
 
-void efx_mcdi_mon_remove(struct efx_nic *efx)
+int efx_mcdi_mon_probe(struct efx_nic *efx)
+{
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+	unsigned int n_pages, n_sensors, page;
+	bool has_dynamic_sensors = efx_nic_has_dynamic_sensors(efx);
+	int rc;
+
+	/* Do not probe twice */
+	if (hwmon->dma_buf.addr)
+		return 0;
+
+	if (!has_dynamic_sensors && efx->type->has_dynamic_sensors) {
+		netif_err(efx, hw, efx->net_dev,
+			  "Expected dynamic sensor feature not supported by FW\n");
+		return 0;
+	}
+
+	/* Find out how many sensors are present */
+	n_sensors = 0;
+	page = 0;
+
+	if (has_dynamic_sensors) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+		rhashtable_init(&hwmon->sensor_table, &sensor_entry_params);
+		rc = efx_mcdi_read_dynamic_sensor_list(efx);
+		n_sensors = hwmon->n_dynamic_sensors;
+#else
+		netif_err(efx, hw, efx->net_dev,
+			  "Kernel is too old to support dynamic sensors\n");
+		rc = -ENOTSUPP;
+#endif
+	} else {
+		rc = efx_mcdi_get_num_sensors(efx, &n_sensors, &n_pages);
+	}
+
+	if (rc)
+		return rc;
+
+	if (!n_sensors)
+		return 0;
+
+	mutex_init(&hwmon->update_lock);
+
+	rc  = efx_mcdi_hwmon_probe(efx, n_sensors, n_pages,
+				   has_dynamic_sensors);
+	if (rc) {
+		efx_mcdi_mon_remove(efx);
+	} else {
+		mutex_lock(&hwmon->update_lock);
+		if (has_dynamic_sensors)
+			efx_mcdi_dynamic_sensor_reading_update(efx);
+		else
+			efx_mcdi_mon_update(efx);
+		mutex_unlock(&hwmon->update_lock);
+	}
+
+	return rc;
+}
+
+static void efx_mcdi_hwmon_remove(struct efx_nic *efx)
 {
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
 
-	if (!hwmon)
-		return;
+	mutex_lock(&hwmon->update_lock);
 
 	efx_mcdi_mon_remove_files(&efx->pci_dev->dev, hwmon);
 	if (!IS_ERR_OR_NULL(hwmon->device))
@@ -974,8 +1632,24 @@ void efx_mcdi_mon_remove(struct efx_nic *efx)
 	if (hwmon->attrs)
 		kfree(hwmon->attrs);
 	hwmon->attrs = NULL;
-	efx_nic_free_buffer(efx, &hwmon->dma_buf);
 	hwmon->n_attrs = 0;
+	efx_nic_free_buffer(efx, &hwmon->dma_buf);
+	mutex_unlock(&hwmon->update_lock);
+}
+
+void efx_mcdi_mon_remove(struct efx_nic *efx)
+{
+	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
+
+	if (!hwmon || !hwmon->dma_buf.addr)
+		return;
+	efx_mcdi_hwmon_remove(efx);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+	if (efx_nic_has_dynamic_sensors(efx))
+		rhashtable_free_and_destroy(&hwmon->sensor_table,
+					    NULL,
+					    NULL);
+#endif
 }
 
 #endif /* CONFIG_SFC_MCDI_MON */

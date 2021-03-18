@@ -151,10 +151,12 @@ int efx_init_tx_queue(struct efx_tx_queue *tx_queue)
 
 	tx_queue->insert_count = 0;
 	tx_queue->notify_count = 0;
+	tx_queue->notify_jiffies = 0;
 	tx_queue->write_count = 0;
 	tx_queue->packet_write_count = 0;
 	tx_queue->old_write_count = 0;
 	tx_queue->read_count = 0;
+	tx_queue->read_jiffies = 0;
 	tx_queue->old_read_count = 0;
 	tx_queue->empty_read_count = 0 | EFX_EMPTY_COUNT_VALID;
 	tx_queue->xmit_pending = false;
@@ -368,6 +370,7 @@ static void efx_dequeue_buffers(struct efx_tx_queue *tx_queue,
 		efx_dequeue_buffer(tx_queue, buffer, pkts_compl, bytes_compl);
 
 		++tx_queue->read_count;
+		tx_queue->read_jiffies = jiffies;
 		read_ptr = tx_queue->read_count & tx_queue->ptr_mask;
 	}
 }

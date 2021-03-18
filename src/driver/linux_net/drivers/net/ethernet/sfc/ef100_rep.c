@@ -18,6 +18,8 @@
 #define EFX_EF100_REP_DRIVER	"efx_ef100_rep"
 #define EFX_EF100_REP_VERSION	"0.0.1"
 
+#define EFX_REP_DEFAULT_PSEUDO_RING_SIZE	64
+
 static int efx_ef100_rep_poll(struct napi_struct *napi, int weight);
 
 static int efx_ef100_rep_init_struct(struct efx_nic *efx,
@@ -196,10 +198,33 @@ static void efx_ef100_rep_ethtool_set_msglevel(struct net_device *net_dev,
 	efv->msg_enable = msg_enable;
 }
 
+static void efx_ef100_rep_ethtool_get_ringparam(struct net_device *net_dev,
+						struct ethtool_ringparam *ring)
+{
+	struct efx_rep *efv = netdev_priv(net_dev);
+
+	ring->rx_max_pending = U32_MAX;
+	ring->rx_pending = efv->rx_pring_size;
+}
+
+static int efx_ef100_rep_ethtool_set_ringparam(struct net_device *net_dev,
+					       struct ethtool_ringparam *ring)
+{
+	struct efx_rep *efv = netdev_priv(net_dev);
+
+	if (ring->rx_mini_pending || ring->rx_jumbo_pending || ring->tx_pending)
+		return -EINVAL;
+
+	efv->rx_pring_size = ring->rx_pending;
+	return 0;
+}
+
 const static struct ethtool_ops efx_ef100_rep_ethtool_ops = {
 	.get_drvinfo		= efx_ef100_rep_get_drvinfo,
 	.get_msglevel		= efx_ef100_rep_ethtool_get_msglevel,
 	.set_msglevel		= efx_ef100_rep_ethtool_set_msglevel,
+	.get_ringparam		= efx_ef100_rep_ethtool_get_ringparam,
+	.set_ringparam		= efx_ef100_rep_ethtool_set_ringparam,
 };
 
 static struct efx_rep *efx_ef100_rep_create_netdev(struct efx_nic *efx,
@@ -290,6 +315,7 @@ static int efx_ef100_configure_remote_rep(struct efx_rep *efv,
 	int rc;
 
 	nic_data = efx->nic_data;
+	efv->rx_pring_size = EFX_REP_DEFAULT_PSEUDO_RING_SIZE;
 	efv->mport = mport_desc->mport_id;
 	netif_dbg(efv->parent, probe, efv->net_dev,
 		  "Remote representor mport ID %#x\n",
@@ -498,6 +524,16 @@ void efx_ef100_rep_rx_packet(struct efx_rep *efv, struct efx_rx_buffer *rx_buf)
 	u8 *eh = efx_rx_buf_va(rx_buf);
 	struct sk_buff *skb;
 	bool primed;
+
+	/* Don't allow too many queued SKBs to build up, as they consume
+	 * GFP_ATOMIC memory.  If we overrun, just start dropping.
+	 */
+	if (efv->write_index - READ_ONCE(efv->read_index) > efv->rx_pring_size) {
+		atomic_inc(&efv->stats.rx_dropped);
+		netif_dbg(efv->parent, rx_err, efv->net_dev,
+			  "nodesc-dropped packet of length %u\n", rx_buf->len);
+		return;
+	}
 
 	skb = netdev_alloc_skb(efv->net_dev, rx_buf->len);
 	if (!skb) {

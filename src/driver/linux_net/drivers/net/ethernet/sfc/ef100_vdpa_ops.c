@@ -18,6 +18,9 @@
 #include "io.h"
 #include "ef100_vdpa.h"
 #include "mcdi_vdpa.h"
+#ifdef CONFIG_SFC_DEBUGFS
+#include "debugfs.h"
+#endif
 
 #if defined(CONFIG_SFC_VDPA)
 
@@ -282,6 +285,11 @@ static int delete_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 	struct efx_vring_dyn_cfg vring_dyn_cfg;
 	int rc = 0;
 
+#ifdef CONFIG_SFC_DEBUGFS
+	/* delete vring debugfs directory */
+	if (vdpa_nic->vring[idx].debug_dir)
+		efx_fini_debugfs_vdpa_vring(&vdpa_nic->vring[idx]);
+#endif
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdpa_nic->vdpa_dev.dev,
 		 "%s: Called for %u\n", __func__, idx);
@@ -388,6 +396,12 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 			goto fail;
 		}
 	}
+
+#ifdef CONFIG_SFC_DEBUGFS
+	rc = efx_init_debugfs_vdpa_vring(vdpa_nic, &vdpa_nic->vring[idx], idx);
+	if (rc)
+		goto fail;
+#endif
 
 	return rc;
 fail:

@@ -22,9 +22,16 @@ static void ef100_ethtool_get_ringparam(struct net_device *net_dev,
 					struct ethtool_ringparam *ring)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	unsigned long driver_bitmap;
+	unsigned long max_size = 0;
 
-	ring->rx_max_pending = EFX_EF100_MAX_DMAQ_SIZE;
-	ring->tx_max_pending = EFX_EF100_MAX_DMAQ_SIZE;
+	driver_bitmap = EFX_EF100_MAX_DMAQ_SIZE | (EFX_EF100_MAX_DMAQ_SIZE - 1);
+	driver_bitmap &= efx->guaranteed_bitmap;
+	if (driver_bitmap)
+		max_size = rounddown_pow_of_two(driver_bitmap);
+
+	ring->rx_max_pending = max_size;
+	ring->tx_max_pending = max_size;
 	ring->rx_pending = efx->rxq_entries;
 	ring->tx_pending = efx->txq_entries;
 }

@@ -56,6 +56,9 @@
 /* Default high IOVA for MCDI buffer */
 #define EF100_VDPA_IOVA_BASE_ADDR 0x200000000
 
+#define EFX_VDPA_NAME(_vdpa) "vdpa_%d_%d", (_vdpa)->pf_index, (_vdpa)->vf_index
+#define EFX_VDPA_VRING_NAME(_idx) "vring_%d", _idx
+
 /* Following are the states for a vDPA NIC
  * @EF100_VDPA_STATE_INITIALIZED: State after vDPA NIC created
  * @EF100_VDPA_STATE_NEGOTIATED: State after feature negotiation
@@ -119,6 +122,7 @@ enum ef100_vdpa_mac_filter_type {
  * @msix_name: device name for vring irq handler
  * @irq: irq number for vring irq handler
  * @cb: callback for vring interrupts
+ * @debug_dir: vDPA vring debugfs directory
  */
 struct ef100_vdpa_vring_info {
 	dma_addr_t desc;
@@ -135,6 +139,9 @@ struct ef100_vdpa_vring_info {
 	char msix_name[EF100_VDPA_MAX_MSIX_NAME_SIZE];
 	u32 irq;
 	struct vdpa_callback cb;
+#ifdef CONFIG_SFC_DEBUGFS
+	struct dentry *debug_dir;
+#endif
 };
 
 /* struct ef100_vdpa_filter - vDPA filter data structure
@@ -162,6 +169,7 @@ struct ef100_vdpa_filter {
  * @filters: details of all filters created on this vdpa device
  * @cfg_cb: callback for config change
  * @domain: IOMMU domain
+ * @debug_dir: vDPA debugfs directory
  */
 struct ef100_vdpa_nic {
 	struct vdpa_device vdpa_dev;
@@ -181,6 +189,10 @@ struct ef100_vdpa_nic {
 	struct ef100_vdpa_filter filters[EF100_VDPA_MAX_SUPPORTED_FILTERS];
 	struct vdpa_callback cfg_cb;
 	struct iommu_domain *domain;
+#ifdef CONFIG_SFC_DEBUGFS
+
+	struct dentry *debug_dir;
+#endif
 };
 
 int ef100_vdpa_init(struct efx_probe_data *probe_data);

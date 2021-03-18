@@ -676,6 +676,13 @@ static inline bool efx_nic_hw_unavailable(struct efx_nic *efx)
 		return efx->type->hw_unavailable(efx);
 	return false;
 }
+static inline bool efx_nic_has_dynamic_sensors(struct efx_nic *efx)
+{
+	if (efx->type->has_dynamic_sensors)
+		return efx->type->has_dynamic_sensors(efx);
+
+	return false;
+}
 void efx_nic_event_test_start(struct efx_channel *channel);
 
 /* Falcon/Siena queue operations */

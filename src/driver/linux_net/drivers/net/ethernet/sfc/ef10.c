@@ -1973,7 +1973,8 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 	if (!core_stats)
 		return stats_count;
 
-	if (efx_ef10_has_cap(nic_data->datapath_caps, EVB)) {
+#ifdef CONFIG_SFC_SRIOV
+	if (efx->vf_count) {
 		/* Use vadaptor stats. */
 		core_stats->rx_packets = stats[EF10_STAT_rx_unicast] +
 					 stats[EF10_STAT_rx_multicast] +
@@ -1995,6 +1996,7 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 		core_stats->rx_errors = core_stats->rx_crc_errors;
 		core_stats->tx_errors = stats[EF10_STAT_tx_bad];
 	} else {
+#endif
 		/* Use port stats. */
 		core_stats->rx_packets = stats[EF10_STAT_port_rx_packets];
 		core_stats->tx_packets = stats[EF10_STAT_port_tx_packets];
@@ -2014,8 +2016,9 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 		core_stats->rx_errors = (core_stats->rx_length_errors +
 					 core_stats->rx_crc_errors +
 					 core_stats->rx_frame_errors);
+#ifdef CONFIG_SFC_SRIOV
 	}
-
+#endif
 	return stats_count;
 }
 
@@ -2738,6 +2741,7 @@ static void efx_ef10_notify_tx_desc(struct efx_tx_queue *tx_queue)
 	efx_writed_page(tx_queue->efx, &reg,
 			ER_DZ_TX_DESC_UPD_DWORD, tx_queue->queue);
 	tx_queue->notify_count = tx_queue->write_count;
+	tx_queue->notify_jiffies = jiffies;
 }
 
 #define EFX_EF10_MAX_TX_DESCRIPTOR_LEN 0x3fff

@@ -1842,7 +1842,25 @@ static void efx_ptp_xmit_skb_queue(struct efx_nic *efx, struct sk_buff *skb)
 
 	tx_queue = efx->select_tx_queue(ptp_data->channel, skb);
 	if (tx_queue && tx_queue->timestamping) {
+
+/*
+ * Some RH RT kernels are shipped with CONFIG_PREEMPT_RT_BASE instead of
+ * CONFIG_PREEMPT_RT
+ */
+#if defined(CONFIG_PREEMPT) || defined(CONFIG_PREEMPT_RT) || defined(CONFIG_PREEMPT_RT_BASE)
+		/*
+		 * Kernels using xmit_more() based on per-cpu data warn if
+		 * preemption is enabled when invoked. Disabling preemption
+		 * here before calling tx driver code which invokes xmit_more.
+		 * This is only needed in kernels with preemption enabled or
+		 * RT kernels.
+		 */
+		preempt_disable();
+#endif
 		efx_enqueue_skb(tx_queue, skb);
+#if defined(CONFIG_PREEMPT) || defined(CONFIG_PREEMPT_RT) || defined(CONFIG_PREEMPT_RT_BASE)
+		preempt_enable();
+#endif
 		/* If netdev_xmit_more() was true in enqueue_skb() then our
 		 * queue will be waiting for the next packet to push the
 		 * doorbell. Since the next packet might not be coming this

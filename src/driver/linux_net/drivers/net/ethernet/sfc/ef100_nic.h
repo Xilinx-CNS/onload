@@ -120,6 +120,7 @@ struct ef100_nic_data {
 	enum ef100_bar_config bar_config;
 #ifdef CONFIG_SFC_VDPA
 	enum ef100_vdpa_class vdpa_class;
+	struct mutex bar_config_lock; /* lock to control access to bar config */
 #endif
 	u64 licensed_features;
 	DECLARE_BITMAP(evq_phases, EFX_MAX_CHANNELS);

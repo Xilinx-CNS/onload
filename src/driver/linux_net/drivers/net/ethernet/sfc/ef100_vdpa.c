@@ -14,6 +14,9 @@
 #include "filter.h"
 #include "mcdi_functions.h"
 #include "mcdi_filters.h"
+#ifdef CONFIG_SFC_DEBUGFS
+#include "debugfs.h"
+#endif
 
 #if defined(CONFIG_SFC_VDPA)
 extern struct vdpa_config_ops ef100_vdpa_config_ops;
@@ -212,6 +215,7 @@ static ssize_t vdpa_class_show(struct device *dev,
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	int len = 0;
 
+	mutex_lock(&nic_data->bar_config_lock);
 	switch (nic_data->vdpa_class) {
 	case EF100_VDPA_CLASS_NONE:
 		len = scnprintf(buf_out, PAGE_SIZE,
@@ -230,6 +234,7 @@ static ssize_t vdpa_class_show(struct device *dev,
 				"VDPA_CLASS_INVALID\n");
 	}
 
+	mutex_unlock(&nic_data->bar_config_lock);
 	return len;
 }
 
@@ -241,15 +246,19 @@ static ssize_t vdpa_class_store(struct device *dev,
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	enum ef100_vdpa_class vdpa_class;
 	struct ef100_vdpa_nic *vdpa_nic;
+	int rc = 0;
 
-	if (sysfs_streq(buf, "net"))
+	mutex_lock(&nic_data->bar_config_lock);
+	if (sysfs_streq(buf, "net")) {
 		vdpa_class = EF100_VDPA_CLASS_NET;
-	else if (sysfs_streq(buf, "block"))
+	} else if (sysfs_streq(buf, "block")) {
 		vdpa_class = EF100_VDPA_CLASS_BLOCK;
-	else if (sysfs_streq(buf, "none"))
+	} else if (sysfs_streq(buf, "none")) {
 		vdpa_class = EF100_VDPA_CLASS_NONE;
-	else
-		return -EINVAL;
+	} else {
+		rc = -EINVAL;
+		goto fail;
+	}
 
 	switch (nic_data->vdpa_class) {
 	case EF100_VDPA_CLASS_NONE:
@@ -259,7 +268,8 @@ static ssize_t vdpa_class_store(struct device *dev,
 				pci_err(efx->pci_dev,
 					"vDPA device creation failed, err: %ld",
 					PTR_ERR(vdpa_nic));
-				return PTR_ERR(vdpa_nic);
+				rc = PTR_ERR(vdpa_nic);
+				goto fail;
 			}
 
 			nic_data->vdpa_class = EF100_VDPA_CLASS_NET;
@@ -270,12 +280,14 @@ static ssize_t vdpa_class_store(struct device *dev,
 			/* TODO: handle block vdpa device creation */
 			pci_info(efx->pci_dev,
 				 "vDPA block device not supported\n");
-			return -EINVAL;
+			rc = -EINVAL;
+			goto fail;
 		} else {
 			pci_err(efx->pci_dev,
 				"Invalid vdpa class transition %u->%u",
 				EF100_VDPA_CLASS_NONE, vdpa_class);
-			return -EINVAL;
+			rc = -EINVAL;
+			goto fail;
 		}
 		break;
 
@@ -290,7 +302,8 @@ static ssize_t vdpa_class_store(struct device *dev,
 			pci_err(efx->pci_dev,
 				"Invalid vdpa class transition %u->%u",
 				EF100_VDPA_CLASS_NET, vdpa_class);
-			return -EINVAL;
+			rc = -EINVAL;
+			goto fail;
 		}
 		break;
 
@@ -298,12 +311,17 @@ static ssize_t vdpa_class_store(struct device *dev,
 		/* TODO: delete vdpa block device */
 		pci_info(efx->pci_dev,
 			 "vDPA block device not implemented\n");
-		return -EINVAL;
+		rc = -EINVAL;
+		goto fail;
 
 	default:
 		break;
 	}
 
+fail:
+	mutex_unlock(&nic_data->bar_config_lock);
+	if (rc)
+		return rc;
 	return count;
 }
 
@@ -665,26 +683,35 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 		 goto err_irq_vectors_free;
 	}
 
+#ifdef CONFIG_SFC_DEBUGFS
+	rc = efx_init_debugfs_vdpa(vdpa_nic);
+	if (rc)
+		goto err_irq_vectors_free;
+#endif
+
 	rc = vdpa_register_device(&vdpa_nic->vdpa_dev);
 	if (rc) {
 		pci_err(efx->pci_dev,
 			"vDPA device registration failed for vf: %u\n",
 			nic_data->vf_index);
-		goto err_irq_vectors_free;
+		goto err_fini_debugfs;
 	}
 
 	rc = devm_add_action_or_reset(dev, ef100_vdpa_irq_vectors_free, efx->pci_dev);
 	if (rc) {
 		pci_err(efx->pci_dev,
 			"Failed adding devres for freeing irq vectors\n");
-		goto err_irq_vectors_free;
+		goto err_fini_debugfs;
 	}
 
 	rc = get_net_config(vdpa_nic);
 	if (rc)
-		goto err_irq_vectors_free;
+		goto err_fini_debugfs;
 
 	return vdpa_nic;
+
+err_fini_debugfs:
+	efx_fini_debugfs_vdpa(vdpa_nic);
 
 err_irq_vectors_free:
 	ef100_vdpa_irq_vectors_free(efx->pci_dev);
@@ -705,6 +732,9 @@ void ef100_vdpa_delete(struct efx_nic *efx)
 	int rc;
 
 	if (vdpa_nic) {
+#ifdef CONFIG_SFC_DEBUGFS
+		efx_fini_debugfs_vdpa(vdpa_nic);
+#endif
 		ef100_vdpa_filter_remove(vdpa_nic);
 		vdpa_unregister_device(&vdpa_nic->vdpa_dev);
 	        rc = setup_ef100_mcdi_buffer(efx);

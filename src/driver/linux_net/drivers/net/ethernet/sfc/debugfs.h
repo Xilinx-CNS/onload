@@ -12,6 +12,9 @@
 #define EFX_DEBUGFS_H
 
 #ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_SFC_VDPA
+#include "ef100_vdpa.h"
+#endif
 
 struct seq_file;
 
@@ -35,8 +38,17 @@ int efx_extend_debugfs_port(struct efx_nic *efx,
 			    struct efx_debugfs_parameter *params);
 void efx_trim_debugfs_port(struct efx_nic *efx,
 			   struct efx_debugfs_parameter *params);
+#ifdef CONFIG_SFC_VDPA
+int efx_init_debugfs_vdpa(struct ef100_vdpa_nic *vdpa);
+void efx_fini_debugfs_vdpa(struct ef100_vdpa_nic *vdpa);
+int efx_init_debugfs_vdpa_vring(struct ef100_vdpa_nic *vdpa,
+				struct ef100_vdpa_vring_info *vdpa_vring,
+				u16 idx);
+void efx_fini_debugfs_vdpa_vring(struct ef100_vdpa_vring_info *vdpa_vring);
+#endif
 
 /* Helpers for handling debugfs entry reads */
+int efx_debugfs_read_ushort(struct seq_file *file, void *data);
 int efx_debugfs_read_uint(struct seq_file *, void *);
 int efx_debugfs_read_ulong(struct seq_file *, void *);
 int efx_debugfs_read_string(struct seq_file *, void *);
@@ -116,6 +128,11 @@ int efx_debugfs_read_bool(struct seq_file *, void *);
 		   offsetof(container_type, parameter)),	\
 	.reader = efx_debugfs_read_string,			\
 }
+
+/* An unsigned short parameter */
+#define EFX_USHORT_PARAMETER(container_type, parameter)		\
+	EFX_PARAMETER(container_type, parameter,		\
+		      unsigned short, efx_debugfs_read_ushort)
 
 /* An unsigned integer parameter */
 #define EFX_UINT_PARAMETER(container_type, parameter)		\

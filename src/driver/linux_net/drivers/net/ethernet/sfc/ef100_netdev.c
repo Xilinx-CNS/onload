@@ -404,9 +404,13 @@ netdev_tx_t __ef100_hard_start_xmit(struct sk_buff *skb,
 	channel = efx_get_tx_channel(efx, skb_get_queue_mapping(skb));
 	netif_vdbg(efx, tx_queued, efx->net_dev,
 		   "%s len %d data %d channel %d\n", __FUNCTION__,
-		   skb->len, skb->data_len, channel->channel);
+		   skb->len, skb->data_len, channel ? channel->channel : -1);
 	if (!efx_channels(efx) || !efx_tx_channels(efx) || !channel ||
 	    !channel->tx_queue_count) {
+		netif_err(efx, tx_err, efx->net_dev,
+			  "Bad TX channel (%u; %u; %d), stopping queue\n",
+			  efx_channels(efx), efx_tx_channels(efx),
+			  channel ? channel->tx_queue_count : -1);
 		netif_stop_queue(net_dev);
 		goto err;
 	}
@@ -827,6 +831,8 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 	kfree(efx->phy_data);
 	efx->phy_data = NULL;
 
+	efx_mcdi_mon_remove(efx);
+
 	free_netdev(efx->net_dev);
 	efx->net_dev = NULL;
 	efx->state = STATE_PROBED;
@@ -883,6 +889,10 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	if (rc < 0)
 		goto fail;
 
+	rc = efx_mcdi_mon_probe(efx);
+	if (rc && rc != -EPERM)
+		netif_warn(efx, drv, efx->net_dev, "could not init sensors\n");
+
 	rc = ef100_phy_probe(efx);
 	if (rc)
 		goto fail;
@@ -921,15 +931,15 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	/* Don't fail init if RSS setup doesn't work. */
 	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
 
-	rc = ef100_register_netdev(efx);
-	if (rc)
-		goto fail;
-
 	if (!efx->type->is_vf) {
 		rc = ef100_probe_netdev_pf(efx);
 		if (rc)
 			goto fail;
 	}
+
+	rc = ef100_register_netdev(efx);
+	if (rc)
+		goto fail;
 
 	efx->netdev_notifier.notifier_call = ef100_netdev_event;
 	rc = register_netdevice_notifier(&efx->netdev_notifier);

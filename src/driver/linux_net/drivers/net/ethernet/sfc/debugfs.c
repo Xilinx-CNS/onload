@@ -18,6 +18,9 @@
 #include "efx.h"
 #include "debugfs.h"
 #include "nic.h"
+#ifdef CONFIG_SFC_VDPA
+#include "ef100_vdpa.h"
+#endif
 
 
 /* Parameter definition bound to a structure - each file has one of these */
@@ -75,7 +78,6 @@ static struct dentry *efx_debug_root;
 
 /* "cards" directory ([/sys/kernel]/debug/sfc/cards) */
 static struct dentry *efx_debug_cards;
-
 
 /* Sequential file interface to bound parameters */
 
@@ -159,6 +161,12 @@ static void efx_fini_debugfs_dir(struct dentry *dir,
 }
 
 /* Functions for printing various types of parameter. */
+
+int efx_debugfs_read_ushort(struct seq_file *file, void *data)
+{
+	seq_printf(file, "%u\n", *(unsigned short int *)data);
+	return 0;
+}
 
 int efx_debugfs_read_uint(struct seq_file *file, void *data)
 {
@@ -470,6 +478,154 @@ void efx_trim_debugfs_port(struct efx_nic *efx,
 			efx_fini_debugfs_child(dir, field->name);
 	}
 }
+
+#ifdef CONFIG_SFC_VDPA
+
+/* Per vdpa parameters */
+static struct efx_debugfs_parameter efx_debugfs_vdpa_parameters[] = {
+	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, vdpa_state),
+	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, pf_index),
+	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, vf_index),
+	EFX_U64_PARAMETER(struct ef100_vdpa_nic, features),
+	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, max_queue_pairs),
+	EFX_BOOL_PARAMETER(struct ef100_vdpa_nic, mac_configured),
+	{NULL},
+};
+
+/**
+ * efx_init_debugfs_vdpa - create debugfs directories for vdpa device
+ * @vdpa:		ef100_vdpa_nic
+ *
+ * Create subdirectories of @vdpa debugfs directory for the
+ * corresponding vDPA device.  Return a negative error code or 0 on
+ * success.  The sym-links must be cleaned up using
+ * efx_fini_debugfs_vdpa().
+ */
+int efx_init_debugfs_vdpa(struct ef100_vdpa_nic *vdpa)
+{
+	char name[EFX_DEBUGFS_NAME_LEN];
+	int rc = 0;
+
+	if (snprintf(name, sizeof(name), EFX_VDPA_NAME(vdpa)) >= sizeof(name))
+		goto err_len;
+	vdpa->debug_dir = debugfs_create_dir(name, efx_debug_root);
+	if (IS_ERR(vdpa->debug_dir)) {
+		rc = PTR_ERR(vdpa->debug_dir);
+		vdpa->debug_dir = NULL;
+		goto err;
+	}
+	if (!vdpa->debug_dir)
+		goto err_mem;
+
+	/* Create files */
+	rc = efx_init_debugfs_files(vdpa->debug_dir,
+				    efx_debugfs_vdpa_parameters, 0,
+				    efx_debugfs_get_same, vdpa, 0);
+	if (rc)
+		goto err;
+
+	return 0;
+
+ err_len:
+	rc = -ENAMETOOLONG;
+	goto err;
+err_mem:
+	rc = -ENOMEM;
+ err:
+	efx_fini_debugfs_vdpa(vdpa);
+	return rc;
+}
+
+/**
+ * efx_fini_debugfs_vdpa - remove debugfs directory for vDPA
+ * @vdpa:		ef100_vdpa_nic device
+ *
+ * Remove debugfs directory created for @vdpa by efx_init_debugfs_vdpa().
+ */
+void efx_fini_debugfs_vdpa(struct ef100_vdpa_nic *vdpa)
+{
+	efx_fini_debugfs_dir(vdpa->debug_dir,
+			     efx_debugfs_vdpa_parameters, NULL);
+	debugfs_remove(vdpa->debug_dir);
+	vdpa->debug_dir = NULL;
+}
+
+/* Per vring parameters */
+static struct efx_debugfs_parameter efx_debugfs_vdpa_vring_parameters[] = {
+	EFX_UINT_PARAMETER(struct ef100_vdpa_vring_info, size),
+	EFX_USHORT_PARAMETER(struct ef100_vdpa_vring_info, vring_state),
+	EFX_UINT_PARAMETER(struct ef100_vdpa_vring_info, last_avail_idx),
+	EFX_UINT_PARAMETER(struct ef100_vdpa_vring_info, last_used_idx),
+	EFX_UINT_PARAMETER(struct ef100_vdpa_vring_info, doorbell_offset),
+	EFX_STRING_PARAMETER(struct ef100_vdpa_vring_info, msix_name),
+	{NULL},
+};
+
+/**
+ * efx_init_debugfs_vdpa_vring - create debugfs directories for vdpa vring
+ * @vdpa:		ef100_vdpa_nic
+ * @vdpa_vring:		ef100_vdpa_vring_info
+ * @idx:		index of the vring
+ *
+ * Create subdirectories of @vdpa_vring debugfs directory for the
+ * corresponding vDPA device, vring with index idx.
+ * Return a negative error code or 0 on
+ * success.  The debugfs must be cleaned up using
+ * efx_fini_debugfs_vdpa_vring().
+ */
+int efx_init_debugfs_vdpa_vring(struct ef100_vdpa_nic *vdpa,
+				struct ef100_vdpa_vring_info *vdpa_vring,
+				u16 idx)
+{
+	char name[EFX_DEBUGFS_NAME_LEN];
+	int rc = 0;
+
+	if (snprintf(name, sizeof(name), EFX_VDPA_VRING_NAME(idx))
+	    >= sizeof(name))
+		goto err_len;
+	dev_info(&vdpa->vdpa_dev.dev, "vdpa vring Device Name:%s", name);
+	vdpa_vring->debug_dir = debugfs_create_dir(name, vdpa->debug_dir);
+	if (IS_ERR(vdpa_vring->debug_dir)) {
+		rc = PTR_ERR(vdpa_vring->debug_dir);
+		vdpa_vring->debug_dir = NULL;
+		goto err;
+	}
+	if (!vdpa_vring->debug_dir)
+		goto err_mem;
+
+	/* Create files */
+	rc = efx_init_debugfs_files(vdpa_vring->debug_dir,
+				    efx_debugfs_vdpa_vring_parameters, 0,
+				    efx_debugfs_get_same, vdpa_vring, 0);
+	if (rc)
+		goto err;
+
+	return 0;
+
+ err_len:
+	rc = -ENAMETOOLONG;
+	goto err;
+err_mem:
+	rc = -ENOMEM;
+ err:
+	efx_fini_debugfs_vdpa(vdpa);
+	return rc;
+}
+
+/**
+ * efx_fini_debugfs_vdpa_vring - remove debugfs directory for vring
+ * @vdpa_vring:		ef100_vdpa_vring_info
+ *
+ * Remove debug fs created for @vdpa_vring by efx_init_debugfs_vdpa_vring().
+ */
+void efx_fini_debugfs_vdpa_vring(struct ef100_vdpa_vring_info *vdpa_vring)
+{
+	efx_fini_debugfs_dir(vdpa_vring->debug_dir,
+			     efx_debugfs_vdpa_vring_parameters, NULL);
+	debugfs_remove(vdpa_vring->debug_dir);
+	vdpa_vring->debug_dir = NULL;
+}
+#endif
 
 /* Per-TX-queue parameters */
 static struct efx_debugfs_parameter efx_debugfs_tx_queue_parameters[] = {

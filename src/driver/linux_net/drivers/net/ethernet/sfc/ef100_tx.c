@@ -137,6 +137,7 @@ void ef100_notify_tx_desc(struct efx_tx_queue *tx_queue)
 	efx_writed_page(tx_queue->efx, &reg,
 			ER_GZ_TX_RING_DOORBELL, tx_queue->queue);
 	tx_queue->notify_count = tx_queue->write_count;
+	tx_queue->notify_jiffies = jiffies;
 	++tx_queue->doorbell_notify_tx;
 	tx_queue->xmit_pending = false;
 }
@@ -448,6 +449,9 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 	int rc;
 
 	if (!tx_queue->buffer || !tx_queue->ptr_mask) {
+		netif_err(efx, tx_err, efx->net_dev,
+			  "Bad TX %s, stopping queue\n",
+			  tx_queue->buffer ? "ring mask" : "buffer array");
 		netif_stop_queue(efx->net_dev);
 		dev_kfree_skb_any(skb);
 		return -ENODEV;

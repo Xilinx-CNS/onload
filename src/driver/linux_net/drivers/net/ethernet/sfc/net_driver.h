@@ -92,7 +92,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.6.1004"
+#define EFX_DRIVER_VERSION	"5.3.7.1001"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -404,6 +404,7 @@ struct efx_tx_queue {
 
 	/* Members used mainly on the completion path */
 	unsigned int read_count ____cacheline_aligned_in_smp;
+	unsigned long read_jiffies;
 	unsigned int old_write_count;
 	unsigned int merge_events;
 	unsigned int doorbell_notify_comp;
@@ -427,6 +428,7 @@ struct efx_tx_queue {
 	unsigned int cb_packets;
 	unsigned int doorbell_notify_tx;
 	unsigned int notify_count;
+	unsigned long notify_jiffies;
 	/* Statistics to supplement MAC stats */
 	u64 tx_bytes;
 	unsigned long tx_packets;
@@ -2146,6 +2148,7 @@ struct ef100_udp_tunnel {
  * @detach_reps: detach (stop TX on) all representors
  * @attach_reps: attach (restart TX on) all representors
  * @revision: Hardware architecture revision
+ * @has_dynamic_sensors: check if dynamic sensor capability is set
  * @txd_ptr_tbl_base: TX descriptor ring base address
  * @rxd_ptr_tbl_base: RX descriptor ring base address
  * @buf_tbl_base: Buffer table base address
@@ -2393,6 +2396,7 @@ struct efx_nic_type {
 	void (*attach_reps)(struct efx_nic *efx);
 #endif
 	void (*link_state_change)(struct efx_nic *efx);
+	bool (*has_dynamic_sensors)(struct efx_nic *efx);
 
 	int revision;
 	unsigned int txd_ptr_tbl_base;
