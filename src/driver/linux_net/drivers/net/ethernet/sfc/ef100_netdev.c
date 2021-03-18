@@ -581,11 +581,11 @@ static const struct net_device_ops ef100_netdev_ops = {
 #endif
 	.ndo_set_features       = efx_set_features,
 #endif
-#if 0
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.ndo_vlan_rx_add_vid    = efx_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid   = efx_vlan_rx_kill_vid,
 #endif
+#if 0
 #ifdef CONFIG_SFC_SRIOV
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	.ndo_set_vf_mac         = efx_sriov_set_vf_mac,
@@ -846,10 +846,12 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	struct net_device *net_dev;
 	int rc;
 
+#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_TC_OFFLOAD)
 	if (efx->mcdi->fn_flags &
 	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)) {
 		return 0;
 	}
+#endif
 
 	/* Allocate and initialise a struct net_device */
 	net_dev = alloc_etherdev_mq(sizeof(probe_data), EFX_MAX_CORE_TX_QUEUES);

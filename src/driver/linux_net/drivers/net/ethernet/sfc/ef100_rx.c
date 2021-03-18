@@ -106,7 +106,8 @@ void __ef100_rx_packet(struct efx_channel *channel)
 	prefix = (u32 *)(eh - ESE_GZ_RX_PKT_PREFIX_LEN);
 #if 0	// Dump the RX prefix
 	{
-		netif_dbg(efx, drv, efx->net_dev, "rx prefix data: %*ph\n",
+		netif_dbg(efx, drv, efx->net_dev, "rx prefix data@%d: %*ph\n",
+			  channel->rx_pkt_index,
 			  ESE_GZ_RX_PKT_PREFIX_LEN, prefix);
 	}
 #endif

@@ -1582,6 +1582,8 @@ int efx_mcdi_mon_probe(struct efx_nic *efx)
 	n_sensors = 0;
 	page = 0;
 
+	mutex_init(&hwmon->update_lock);
+
 	if (has_dynamic_sensors) {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
 		rhashtable_init(&hwmon->sensor_table, &sensor_entry_params);
@@ -1601,8 +1603,6 @@ int efx_mcdi_mon_probe(struct efx_nic *efx)
 
 	if (!n_sensors)
 		return 0;
-
-	mutex_init(&hwmon->update_lock);
 
 	rc  = efx_mcdi_hwmon_probe(efx, n_sensors, n_pages,
 				   has_dynamic_sensors);

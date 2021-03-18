@@ -3050,9 +3050,8 @@ fail5:
 #endif
 #endif /* EFX_NOT_UPSTREAM */
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
-#ifdef EFX_NOT_UPSTREAM
-	kref_put(&ptp->kref, efx_ptp_delete_data);
-#endif
+	if (efx_phc_exposed(efx))
+		kref_put(&ptp->kref, efx_ptp_delete_data);
 	if (ptp->phc_clock)
 		ptp_clock_unregister(ptp->phc_clock);
 #endif
@@ -3066,13 +3065,6 @@ fail3:
 #endif
 fail2:
 	efx_dissociate_phc(efx);
-	efx->ptp_data = NULL;
-#ifdef EFX_NOT_UPSTREAM
-	kref_put(&ptp->kref, efx_ptp_delete_data);
-#endif
-
-	return rc;
-
 fail1:
 	efx->ptp_data = NULL;
 	kfree(ptp);
@@ -3175,12 +3167,8 @@ void efx_ptp_remove_post_io(struct efx_nic *efx)
 #endif
 	efx_ptp_remove_pps_workqueue(ptp_data);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
-	if (ptp_data->phc_clock) {
+	if (ptp_data->phc_clock)
 		ptp_clock_unregister(ptp_data->phc_clock);
-#ifdef EFX_NOT_UPSTREAM
-		kref_put(&ptp_data->kref, efx_ptp_delete_data);
-#endif
-	}
 #endif
 
 	efx_dissociate_phc(efx);
@@ -3190,11 +3178,7 @@ void efx_ptp_remove_post_io(struct efx_nic *efx)
 #endif
 
 	efx->ptp_data = NULL;
-#ifdef EFX_NOT_UPSTREAM
-	kref_put(&ptp_data->kref, efx_ptp_delete_data);
-#else
 	ptp_data->efx = NULL;
-#endif
 }
 
 void efx_ptp_remove(struct efx_nic *efx)

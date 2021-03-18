@@ -1637,7 +1637,11 @@ int efx_probe_common(struct efx_nic *efx)
 	if (rc)
 		return rc;
 	if (efx->mcdi->fn_flags &
-	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT))
+	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD)
+	    && efx_nic_rev(efx) != EFX_REV_EF100
+#endif
+	    )
 		return 0;
 
 	/* Reset (most) configuration for this function */
@@ -1730,6 +1734,66 @@ void efx_init_mcdi_logging(struct efx_nic *efx)
 void efx_fini_mcdi_logging(struct efx_nic *efx)
 {
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_mcdi_logging);
+}
+#endif
+
+/* VLAN acceleration */
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO)
+int efx_vlan_rx_add_vid(struct net_device *net_dev, __be16 proto, u16 vid)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx->type->vlan_rx_add_vid)
+		return efx->type->vlan_rx_add_vid(efx, proto, vid);
+	else
+		return -EOPNOTSUPP;
+}
+
+int efx_vlan_rx_kill_vid(struct net_device *net_dev, __be16 proto, u16 vid)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx->type->vlan_rx_kill_vid)
+		return efx->type->vlan_rx_kill_vid(efx, proto, vid);
+	else
+		return -EOPNOTSUPP;
+}
+#elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_RC)
+int efx_vlan_rx_add_vid(struct net_device *net_dev, u16 vid)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx->type->vlan_rx_add_vid)
+		return efx->type->vlan_rx_add_vid(efx, htons(ETH_P_8021Q), vid);
+	else
+		return -EOPNOTSUPP;
+}
+
+int efx_vlan_rx_kill_vid(struct net_device *net_dev, u16 vid)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx->type->vlan_rx_kill_vid)
+		return efx->type->vlan_rx_kill_vid(efx, htons(ETH_P_8021Q),
+						   vid);
+	else
+		return -EOPNOTSUPP;
+}
+#elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
+void efx_vlan_rx_add_vid(struct net_device *net_dev, unsigned short vid)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx->type->vlan_rx_add_vid)
+		efx->type->vlan_rx_add_vid(efx, htons(ETH_P_8021Q), vid);
+}
+
+void efx_vlan_rx_kill_vid(struct net_device *net_dev, unsigned short vid)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx->type->vlan_rx_kill_vid)
+		efx->type->vlan_rx_kill_vid(efx, htons(ETH_P_8021Q), vid);
 }
 #endif
 

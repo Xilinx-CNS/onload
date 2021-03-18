@@ -9,6 +9,7 @@
  */
 #include "net_driver.h"
 #include "ef100_nic.h"
+#include "ef100_bsp.h"
 #ifdef CONFIG_OF
 #include <linux/of.h>
 #endif
@@ -86,7 +87,7 @@ static bool try_bank_region(const struct bank_info *bank,
 	return false;
 }
 
-int ef100_set_address_mapping(struct efx_nic *efx)
+static int ef100_set_address_mapping(struct efx_nic *efx)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_DESC_ADDR_REGIONS_IN_LENMAX);
 	struct ef100_nic_data *nic_data = efx->nic_data;

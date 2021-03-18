@@ -282,6 +282,7 @@ static int efx_ef100_configure_rep(struct efx_rep *efv)
 	u32 selector;
 	int rc;
 
+	efv->rx_pring_size = EFX_REP_DEFAULT_PSEUDO_RING_SIZE;
 	/* Construct mport selector for corresponding VF */
 	efx_mae_mport_vf(efx, efv->idx, &selector);
 	/* Look up actual mport ID */

@@ -571,64 +571,6 @@ void __efx_net_dealloc(struct efx_nic *efx)
 	efx->state = STATE_NET_DOWN;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO)
-static int efx_vlan_rx_add_vid(struct net_device *net_dev, __be16 proto, u16 vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_add_vid)
-		return efx->type->vlan_rx_add_vid(efx, proto, vid);
-	else
-		return -EOPNOTSUPP;
-}
-
-static int efx_vlan_rx_kill_vid(struct net_device *net_dev, __be16 proto, u16 vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_kill_vid)
-		return efx->type->vlan_rx_kill_vid(efx, proto, vid);
-	else
-		return -EOPNOTSUPP;
-}
-#elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_RC)
-static int efx_vlan_rx_add_vid(struct net_device *net_dev, u16 vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_add_vid)
-		return efx->type->vlan_rx_add_vid(efx, htons(ETH_P_8021Q), vid);
-	else
-		return -EOPNOTSUPP;
-}
-
-static int efx_vlan_rx_kill_vid(struct net_device *net_dev, u16 vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_kill_vid)
-		return efx->type->vlan_rx_kill_vid(efx, htons(ETH_P_8021Q), vid);
-	else
-		return -EOPNOTSUPP;
-}
-#elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
-static void efx_vlan_rx_add_vid(struct net_device *net_dev, unsigned short vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_add_vid)
-		efx->type->vlan_rx_add_vid(efx, htons(ETH_P_8021Q), vid);
-}
-
-static void efx_vlan_rx_kill_vid(struct net_device *net_dev, unsigned short vid)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	if (efx->type->vlan_rx_kill_vid)
-		efx->type->vlan_rx_kill_vid(efx, htons(ETH_P_8021Q), vid);
-}
-#endif
-
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
 void efx_vlan_rx_register(struct net_device *dev, struct vlan_group *vlan_group)
 {

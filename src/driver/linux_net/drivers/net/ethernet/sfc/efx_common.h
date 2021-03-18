@@ -149,5 +149,16 @@ int efx_set_features(struct net_device *net_dev, u32 data);
 #endif
 #endif
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_PROTO)
+int efx_vlan_rx_add_vid(struct net_device *net_dev, __be16 proto, u16 vid);
+int efx_vlan_rx_kill_vid(struct net_device *net_dev, __be16 proto, u16 vid);
+#elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID_RC)
+int efx_vlan_rx_add_vid(struct net_device *net_dev, u16 vid);
+int efx_vlan_rx_kill_vid(struct net_device *net_dev, u16 vid);
+#elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
+void efx_vlan_rx_add_vid(struct net_device *net_dev, unsigned short vid);
+void efx_vlan_rx_kill_vid(struct net_device *net_dev, unsigned short vid);
+#endif
+
 #endif
 

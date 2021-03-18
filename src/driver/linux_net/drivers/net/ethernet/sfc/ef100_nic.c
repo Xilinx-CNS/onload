@@ -42,7 +42,7 @@
 #define EF100_RESET_PORT ((ETH_RESET_MAC | ETH_RESET_PHY) << ETH_RESET_SHARED_SHIFT)
 #endif
 
-bool ef100_has_dynamic_sensors(struct efx_nic *efx)
+static bool ef100_has_dynamic_sensors(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 
@@ -557,7 +557,7 @@ int ef100_filter_table_probe(struct efx_nic *efx)
 					   additional_rss);
 }
 
-int ef100_filter_table_init(struct efx_nic *efx)
+static int ef100_filter_table_init(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	bool encap = efx_ef100_has_cap(nic_data->datapath_caps,
@@ -1577,17 +1577,22 @@ static int ef100_probe_main(struct efx_nic *efx)
 	if (efx->mcdi->fn_flags &
 	    (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_NO_ACTIVE_PORT)) {
 		pci_info(efx->pci_dev, "No network port on this PCI function");
+#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_TC_OFFLOAD)
 		return 0;
+#else
+		/* N.B. Interfaces with no network port will have port_num set
+		 * implicitly to zero.  This will affect the MAC stats. */
+#endif
+	} else {
+		rc = efx_mcdi_port_get_number(efx);
+		if (rc < 0)
+			goto fail;
+		efx->port_num = rc;
 	}
 
 	rc = efx_get_fn_info(efx, &nic_data->pf_index, &nic_data->vf_index);
 	if (rc)
 		goto fail;
-
-	rc = efx_mcdi_port_get_number(efx);
-	if (rc < 0)
-		goto fail;
-	efx->port_num = rc;
 
 	efx_mcdi_get_privilege_mask(efx, &privlege_mask);
 	nic_data->grp_mae = !!(privlege_mask &
@@ -1777,7 +1782,7 @@ void ef100_remove(struct efx_nic *efx)
 #define EF100_OFFLOAD_FEATURES	(NETIF_F_HW_CSUM | NETIF_F_RXCSUM |	\
 	NETIF_F_HIGHDMA | NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_NTUPLE | \
 	NETIF_F_RXHASH | NETIF_F_RXFCS | NETIF_F_TSO_ECN | NETIF_F_RXALL | \
-	NETIF_F_HW_VLAN_CTAG_TX)
+	NETIF_F_HW_VLAN_CTAG_TX | NETIF_F_HW_VLAN_CTAG_FILTER)
 #endif
 
 const struct efx_nic_type ef100_pf_nic_type = {
@@ -1858,6 +1863,11 @@ const struct efx_nic_type ef100_pf_nic_type = {
 #endif
 #endif
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
+	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
+	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
+#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
 	.get_phys_port_id = efx_ef100_get_phys_port_id,
@@ -1988,6 +1998,11 @@ const struct efx_nic_type ef100_vf_nic_type = {
 #endif
 #endif
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
+	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
+	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
+#endif
 
 	.rx_prefix_size = ESE_GZ_RX_PKT_PREFIX_LEN,
 	.rx_hash_offset = ESF_GZ_RX_PREFIX_RSS_HASH_LBN / 8,

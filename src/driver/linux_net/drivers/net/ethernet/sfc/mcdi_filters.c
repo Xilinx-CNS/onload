@@ -229,6 +229,28 @@ static struct efx_debugfs_parameter filter_debugfs[] = {
 };
 #endif
 
+static bool efx_mcdi_filter_vlan_filter(struct efx_nic *efx)
+{
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	if (WARN_ON(!table))
+		return false;
+
+	if (!(efx->net_dev->features & NETIF_F_HW_VLAN_CTAG_FILTER))
+		return false;
+
+	/* If we don't support VLAN+mismatch filters then if we
+	 * want promiscuous or allmulti mode we'll need
+	 * to do it without vlan filter
+	 */
+	if ((table->uc_promisc || table->mc_promisc) &&
+	    !efx_mcdi_filter_match_supported(efx, false,
+		(EFX_FILTER_MATCH_OUTER_VID | EFX_FILTER_MATCH_LOC_MAC_IG)))
+		return false;
+
+	return true;
+}
+
 /* Decide whether a filter should be exclusive or else should allow
  * delivery to additional recipients.  Currently we decide that
  * filters for specific local unicast MAC and IP addresses are
@@ -1979,8 +2001,6 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 	if (efx->state == STATE_VDPA)
 		return 0;
 
-	table->vlan_filter =
-		!!(efx->net_dev->features & NETIF_F_HW_VLAN_CTAG_FILTER);
 	if (!efx_mcdi_filter_match_supported(efx, false,
 					     EFX_FILTER_MATCH_FLAGS_RFS)) {
 		netif_info(efx, probe, net_dev,
@@ -1990,9 +2010,7 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 
 	if ((efx_supported_features(efx) & NETIF_F_HW_VLAN_CTAG_FILTER) &&
 	    !(efx_mcdi_filter_match_supported(efx, false,
-		(EFX_FILTER_MATCH_OUTER_VID | EFX_FILTER_MATCH_LOC_MAC)) &&
-	      efx_mcdi_filter_match_supported(efx, false,
-		(EFX_FILTER_MATCH_OUTER_VID | EFX_FILTER_MATCH_LOC_MAC_IG)))) {
+		(EFX_FILTER_MATCH_OUTER_VID | EFX_FILTER_MATCH_LOC_MAC)))) {
 
 		netif_info(efx, probe, net_dev,
 			   "VLAN filters are not supported in this firmware variant\n");
@@ -2007,6 +2025,7 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 		efx->hw_features &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
 #endif
 	}
+	table->vlan_filter = efx_mcdi_filter_vlan_filter(efx);
 
 	return 0;
 
@@ -2097,6 +2116,12 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 			spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 			if (!spec)
 				continue;
+
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_DRIVERLINK)
+			/* Do not restore Onload filters: we did not remove them. */
+			if (spec->flags & EFX_FILTER_FLAG_STACK_ID)
+				continue;
+#endif
 
 			mcdi_flags = efx_mcdi_filter_mcdi_flags_from_spec(spec);
 			if (mcdi_flags != table->rx_match_mcdi_flags[match_pri])
@@ -2197,6 +2222,12 @@ void efx_mcdi_filter_table_down(struct efx_nic *efx)
 		spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 		if (!spec)
 			continue;
+
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_DRIVERLINK)
+		/* Do not remove Onload filters. */
+		if (spec->flags & EFX_FILTER_FLAG_STACK_ID)
+			continue;
+#endif
 
 		MCDI_SET_DWORD(inbuf, FILTER_OP_IN_OP,
 			       efx_mcdi_filter_is_exclusive(spec) ?
@@ -2468,7 +2499,7 @@ void efx_mcdi_filter_sync_rx_mode(struct efx_nic *efx)
 	 * Do it in advance to avoid conflicts for unicast untagged and
 	 * VLAN 0 tagged filters.
 	 */
-	vlan_filter = !!(net_dev->features & NETIF_F_HW_VLAN_CTAG_FILTER);
+	vlan_filter = efx_mcdi_filter_vlan_filter(efx);
 	if (table->vlan_filter != vlan_filter) {
 		table->vlan_filter = vlan_filter;
 		efx_mcdi_filter_remove_old(efx);

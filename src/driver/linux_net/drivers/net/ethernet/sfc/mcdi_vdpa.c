@@ -349,10 +349,20 @@ int efx_vdpa_get_mac_address(struct efx_nic *efx, u8 *mac_address)
 
 int efx_vdpa_get_mtu(struct efx_nic *efx, u16 *mtu)
 {
-	/* TODO: MCDI invocation for getting MTU.*/
-#ifdef VDPA_TEST
-	*mtu = 1024;
-#endif
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_MAC_EXT_IN_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_SET_MAC_V2_OUT_LEN);
+	ssize_t outlen;
+	int rc = 0;
+
+	MCDI_SET_DWORD(inbuf, SET_MAC_EXT_IN_CONTROL, 0);
+	rc =  efx_mcdi_rpc(efx, MC_CMD_SET_MAC, inbuf, sizeof(inbuf),
+			   outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < MC_CMD_SET_MAC_V2_OUT_LEN)
+		return -EIO;
+
+	*mtu = MCDI_DWORD(outbuf, SET_MAC_V2_OUT_MTU);
 	return 0;
 }
 
