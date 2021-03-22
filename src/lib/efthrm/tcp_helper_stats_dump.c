@@ -81,7 +81,7 @@ static void ci_netif_dump_vi_info_stats(ci_netif* ni, int intf_i,
   efhw_nic = efrm_client_get_nic(thr->nic[intf_i].thn_oo_nic->efrm_client);
 
   logger(log_arg, "%s: stack=%d intf=%d dev=%s hw=%d%c%d", __FUNCTION__,
-         NI_ID(ni), intf_i, nic->pci_dev, (int) nic->vi_arch,
+         NI_ID(ni), intf_i, nic->dev_name, (int) nic->vi_arch,
          nic->vi_variant, (int) nic->vi_revision);
   logger(log_arg, "  vi=%d  gvi=0x%x  pd_owner=%d channel=%d tcpdump=%s"
          " vi_flags=%x oo_vi_flags=%x", ef_vi_instance(vi),

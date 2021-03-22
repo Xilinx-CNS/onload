@@ -1595,7 +1595,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       efrm_client_get_nic(trs_nic->thn_oo_nic->efrm_client);
     struct efrm_vi_mappings* vm = (void*) ni->vi_data;
     unsigned vi_out_flags = 0;
-    struct pci_dev* dev;
+    struct device* dev;
     struct efrm_vi* vi_rs;
     ef_vi* vi;
 
@@ -1668,11 +1668,11 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       nsn->oo_vi_flags & OO_VI_FLAGS_CTPIO_EN ?
       NI_OPTS(ni).ctpio_max_frame_len : 0;
 #endif
-    dev = efrm_vi_get_pci_dev(vi_rs);
-    strncpy(nsn->pci_dev, dev ? pci_name(dev) : "?", sizeof(nsn->pci_dev));
+    dev = efrm_vi_get_dev(vi_rs);
+    strncpy(nsn->dev_name, dev ? dev_name(dev) : "?", sizeof(nsn->dev_name));
     if( dev )
-      pci_dev_put(dev);
-    nsn->pci_dev[sizeof(nsn->pci_dev) - 1] = '\0';
+      put_device(dev);
+    nsn->dev_name[sizeof(nsn->dev_name) - 1] = '\0';
     nsn->vi_instance[0] =
         (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(vi_rs);
     nsn->vi_abs_idx[0] = efhw_nic_rel_to_abs_idx(nic, nsn->vi_instance[0]);

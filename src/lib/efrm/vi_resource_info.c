@@ -88,18 +88,18 @@ struct efrm_pd *efrm_vi_get_pd(struct efrm_vi *virs)
 EXPORT_SYMBOL(efrm_vi_get_pd);
 
 
-/* Returns the struct pci_dev for the VI, taking out a reference to it.
- * Callers should call pci_dev_put() on the returned pointer to release that
+/* Returns the struct dev for the VI, taking out a reference to it.
+ * Callers should call put_device() on the returned pointer to release that
  * reference when they're finished. */
-struct pci_dev *efrm_vi_get_pci_dev(struct efrm_vi *virs)
+struct device *efrm_vi_get_dev(struct efrm_vi *virs)
 {
-	struct pci_dev* dev;
+	struct device* dev;
 
-		dev = efhw_nic_get_pci_dev(virs->rs.rs_client->nic);
+	dev = efhw_nic_get_dev(virs->rs.rs_client->nic);
 
 	return dev;
 }
-EXPORT_SYMBOL(efrm_vi_get_pci_dev);
+EXPORT_SYMBOL(efrm_vi_get_dev);
 
 int efrm_vi_get_channel(struct efrm_vi *virs)
 {

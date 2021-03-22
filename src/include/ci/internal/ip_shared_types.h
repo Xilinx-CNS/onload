@@ -1034,7 +1034,7 @@ typedef struct {
   CI_ULCONST ci_uint8   vi_revision;
   CI_ULCONST ci_uint8   vi_nic_flags;
   CI_ULCONST ci_uint8   vi_channel;
-  CI_ULCONST char       pci_dev[20];
+  CI_ULCONST char       dev_name[20];
   /* Transmit overflow queue.  Packets here are ready to send. */
   oo_pktq               dmaq[CI_MAX_VIS_PER_INTF];
   /* Counts bytes of packet payload into and out of the TX descriptor ring. */

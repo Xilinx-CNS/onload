@@ -275,8 +275,8 @@ extern int
 efrm_vi_q_alloc_sanitize_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 			      int n_q_entries);
 
-struct pci_dev;
-extern struct pci_dev *efrm_vi_get_pci_dev(struct efrm_vi *);
+struct device;
+extern struct device *efrm_vi_get_dev(struct efrm_vi *);
 extern void efrm_vi_get_dev_name(struct efrm_vi *virs, char* name);
 
 extern int efrm_vi_get_channel(struct efrm_vi *);

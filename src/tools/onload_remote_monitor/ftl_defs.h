@@ -268,7 +268,7 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TFIELD_CONSTINT(ctx, ci_uint8, vi_variant, ORM_OUTPUT_STACK)  \
   FTL_TFIELD_CONSTINT(ctx, ci_uint8, vi_revision, ORM_OUTPUT_STACK) \
   FTL_TFIELD_CONSTINT(ctx, ci_uint8, vi_channel, ORM_OUTPUT_STACK) \
-  FTL_TFIELD_SSTR(ctx, pci_dev, ORM_OUTPUT_STACK) \
+  FTL_TFIELD_SSTR(ctx, dev_name, ORM_OUTPUT_STACK) \
   FTL_TFIELD_ARRAYOFSTRUCT(ctx, oo_pktq, dmaq, CI_MAX_VIS_PER_INTF, \
                            ORM_OUTPUT_STACK, 1) \
   FTL_TFIELD_INT(ctx, ci_uint32, tx_bytes_added, ORM_OUTPUT_STACK)  \

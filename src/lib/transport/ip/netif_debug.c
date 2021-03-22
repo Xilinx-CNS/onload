@@ -720,7 +720,7 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   }
 
   logger(log_arg, "%s: stack=%d intf=%d dev=%s hw=%d%c%d", __FUNCTION__,
-         NI_ID(ni), intf_i, nic->pci_dev, (int) nic->vi_arch,
+         NI_ID(ni), intf_i, nic->dev_name, (int) nic->vi_arch,
          nic->vi_variant, (int) nic->vi_revision);
   logger(log_arg, "  vi=%d pd_owner=%d channel=%d tcpdump=%s vi_flags=%x oo_vi_flags=%x",
          ef_vi_instance(vi), nic->pd_owner, (int) nic->vi_channel,
@@ -805,7 +805,7 @@ static void ci_netif_dump_vi_stats_vi(ci_netif* ni, int intf_i,
   ci_netif_state_nic_t* nic = &ni->state->nic[intf_i];
 
   logger(log_arg, "%s: stack=%d intf=%d dev=%s hw=%d%c%d", __FUNCTION__,
-         NI_ID(ni), intf_i, nic->pci_dev, (int) nic->vi_arch,
+         NI_ID(ni), intf_i, nic->dev_name, (int) nic->vi_arch,
          nic->vi_variant, (int) nic->vi_revision);
 
   rc = ef_vi_stats_query_layout(vi, &vi_stats_layout);
