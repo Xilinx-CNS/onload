@@ -4163,6 +4163,14 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
          * the retransmit. It's suboptimal, but it's only the FIN. */
         tcp->tcp_flags &=~ CI_TCP_FLAG_FIN;
         pkt->pf.tcp_rx.end_seq--;
+        if( pkt->pf.tcp_rx.end_seq == tcp_rcv_nxt(ts) ) {
+          /* That FIN removal has made it so there's no useful payload any
+           * more: give up now */
+          ci_netif_pkt_release_rx(netif, pkt);
+          ts->s.b.sb_flags |= CI_SB_FLAG_TCP_POST_POLL;
+          TCP_NEED_ACK(ts);
+          return;
+        }
       }
       if( CI_UNLIKELY(ts->s.rx_errno) ) {
         /* If the socket will never read again then send reset See
