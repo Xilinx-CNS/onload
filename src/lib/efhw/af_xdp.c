@@ -260,18 +260,27 @@ static struct protection_domain* pd_by_owner(struct efhw_nic* nic, int owner_id)
  *
  *---------------------------------------------------------------------------*/
 
+
+static asmlinkage long (*sys_call_bpf)(const struct pt_regs*) = NULL;
+
+static int init_sys_call_bpf(void)
+{
+  if( sys_call_bpf != NULL )
+    return 0;
+
+  if( efrm_syscall_table == NULL || efrm_syscall_table[__NR_bpf] == NULL )
+    return -ENOSYS;
+  sys_call_bpf = efrm_syscall_table[__NR_bpf];
+  EFHW_ASSERT(sys_call_bpf);
+  return 0;
+}
+
 /* Invoke the bpf() syscall args is assumed to be kernel memory */
 static int xdp_sys_bpf(int cmd, union bpf_attr* attr)
 {
   struct pt_regs regs;
-  static asmlinkage long (*sys_call)(const struct pt_regs*) = NULL;
 
-  if( sys_call == NULL ) {
-    if( efrm_syscall_table == NULL || efrm_syscall_table[__NR_bpf] == NULL )
-      return -ENOSYS;
-
-    sys_call = efrm_syscall_table[__NR_bpf];
-  }
+  EFHW_ASSERT(sys_call_bpf);
 
   regs.di = cmd;
   regs.si = (uintptr_t)(attr);
@@ -281,7 +290,7 @@ static int xdp_sys_bpf(int cmd, union bpf_attr* attr)
     mm_segment_t oldfs = get_fs();
 
     set_fs(KERNEL_DS);
-    rc = sys_call(&regs);
+    rc = sys_call_bpf(&regs);
     set_fs(oldfs);
     return rc;
   }
@@ -856,6 +865,10 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	int map_fd, rc;
 	struct bpf_prog* prog;
 	struct efhw_nic_af_xdp* xdp;
+
+	rc = init_sys_call_bpf();
+	if( rc != 0 )
+		return rc;
 
 	xdp = kzalloc(sizeof(*xdp) +
 		      nic->vi_lim * sizeof(struct efhw_af_xdp_vi) +
