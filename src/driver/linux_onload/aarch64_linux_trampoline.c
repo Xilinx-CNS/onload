@@ -124,3 +124,43 @@ int efab_linux_sys_sendmsg(int fd, struct msghdr __user* msg,
   return rc;
 }
 
+
+#ifdef OO_DO_HUGE_PAGES
+
+int efab_linux_sys_shmget(key_t key, size_t size, int shmflg)
+{
+  int rc;
+  SYSCALL_PTR_DEF(shmget);
+  SET_SYSCALL_NO(shmget);
+  rc = (int)PASS_SYSCALL3(key, size, shmflg);
+  return rc;
+}
+
+long efab_linux_sys_shmat(int shmid, char __user *addr, int shmflg)
+{
+  long rc;
+  SYSCALL_PTR_DEF(shmat);
+  SET_SYSCALL_NO(shmat);
+  rc = (long)PASS_SYSCALL3(shmid, addr, shmflg);
+  return rc;
+}
+
+int efab_linux_sys_shmdt(char __user *addr)
+{
+  int rc;
+  SYSCALL_PTR_DEF(shmdt);
+  SET_SYSCALL_NO(shmdt);
+  rc = (int)PASS_SYSCALL1(addr);
+  return rc;
+}
+
+int efab_linux_sys_shmctl(int shmid, int cmd, struct shmid_ds __user *buf)
+{
+  int rc;
+  SYSCALL_PTR_DEF(shmctl);
+  SET_SYSCALL_NO(shmctl);
+  rc = (int)PASS_SYSCALL3(shmid, cmd, buf);
+  return rc;
+}
+#endif
+

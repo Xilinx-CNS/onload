@@ -111,7 +111,7 @@ extern asmlinkage int efab_linux_sys_epoll_wait(int epfd,
 
 
 #if defined(CONFIG_HUGETLB_PAGE) && CI_CFG_PKTS_AS_HUGE_PAGES && \
-    defined(__x86_64__)
+   (defined(__x86_64__) || defined(__aarch64__))
 #define OO_DO_HUGE_PAGES
 #include <linux/mm.h>
 #include <linux/hugetlb.h>
