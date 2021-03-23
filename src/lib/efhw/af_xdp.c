@@ -23,23 +23,86 @@
 #include <ci/efrm/syscall.h>
 
 
-/* For linux<=5.7 you can use kernel_getsockopt(),
- * but newer versions doe not have this function. */
-static inline int sock_ops_getsockopt(struct socket *sock,
-                                      int level, int optname,
-                                      char *optval,
-                                      int optlen)
+/* sys_call_area: a process-mapped area which can be used to perform
+ * system calls from a module.
+ *
+ * There is no attempt to prevent the process from tampering this data.
+ * This is why sys_call_area MUST NOT be used when executing a system call
+ * with escalated privileges.  I.e. any system call which reads from or
+ * writes to this area MUST be subject to normal security checks by kernel.
+ *
+ * The area is always mapped read-write, because in both cases the data is
+ * written to the area (written by module and read by syscall or
+ * vise-versa).  See also some comments about FOLL_WRITE in linux/mm/gup.c.
+ */
+
+struct sys_call_area {
+  struct page* page;
+  unsigned long user_addr;
+  /* We may want to mmap more than one page in future.
+   * Then we'll need a "size" field here.
+   */
+};
+
+static void sys_call_area_unmap(struct sys_call_area* area)
 {
-  mm_segment_t oldfs = get_fs();
+  vm_munmap(area->user_addr, PAGE_SIZE);
+}
+
+static void sys_call_area_unpin(struct sys_call_area* area)
+{
+  unpin_user_page(area->page);
+}
+
+#if 0
+/* For read-only syscalls we probably want this */
+static void sys_call_area_free(struct sys_call_area* area)
+{
+  sys_call_area_unpin(area);
+  sys_call_area_unmap(area);
+}
+#endif
+
+static int __sys_call_area_alloc(struct sys_call_area* area, const char* func)
+{
   int rc;
 
-  /* You should call sock_setsockopt() for SOL_SOCKET */
-  WARN_ON(level == SOL_SOCKET);
+  /* It must be a normal user process.  Not a sofirq, kthread, workqueue,
+   * etc.
+   */
+  EFHW_ASSERT(current);
+  EFHW_ASSERT( ! (current->flags & PF_WQ_WORKER) );
+  EFHW_ASSERT( ! (current->flags & PF_KTHREAD) );
 
-  set_fs(KERNEL_DS);
-  rc = sock->ops->getsockopt(sock, level, optname, optval, &optlen);
-  set_fs(oldfs);
-  return rc;
+
+  area->user_addr = vm_mmap(NULL, 0, PAGE_SIZE, PROT_READ | PROT_WRITE,
+                            MAP_ANONYMOUS | MAP_PRIVATE, 0);
+  if( area->user_addr == 0 ) {
+    EFHW_ERR("%s: ERROR: failed to allocate a page via vm_mmap()", func);
+    return -ENOMEM;
+  }
+
+  rc = pin_user_pages(area->user_addr, 1, FOLL_WRITE, &area->page, NULL);
+  if( rc != 1 ) {
+    EFHW_ERR("%s: ERROR: failed to get a page: rc=%d:", func, rc);
+    sys_call_area_unmap(area);
+    return rc < 0 ? rc : -EFAULT;
+  }
+
+  return 0;
+}
+#define sys_call_area_alloc(area) __sys_call_area_alloc(area, __func__)
+
+static void* sys_call_area_ptr(struct sys_call_area* area)
+{
+  return page_address(area->page);
+}
+
+static unsigned long
+sys_call_area_user_addr(struct sys_call_area* area, void* ptr)
+{
+  return area->user_addr +
+         ((uintptr_t)ptr - (uintptr_t)sys_call_area_ptr(area));
 }
 
 
@@ -503,44 +566,76 @@ static int xdp_create_rings(struct socket* sock,
                             struct efab_af_xdp_offsets_rings* user_offsets)
 {
   int rc;
-  struct xdp_mmap_offsets mmap_offsets;
+  struct sys_call_area rw_area;
+  struct xdp_mmap_offsets* mmap_offsets;
+  int* optlen;
 
   EFHW_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
 
-  rc = sock_ops_getsockopt(sock, SOL_XDP, XDP_MMAP_OFFSETS,
-                           (char*)&mmap_offsets, sizeof(mmap_offsets));
+  /* We need a read-write area to call getsockopt().  We unmap it from UL
+   * as soon as possible. */
+  rc = sys_call_area_alloc(&rw_area);
   if( rc < 0 )
     return rc;
+
+  mmap_offsets = sys_call_area_ptr(&rw_area);
+  optlen = (void*)(mmap_offsets + 1);
+  *optlen = sizeof(*mmap_offsets);
+
+  /* For linux<=5.7 you can use kernel_getsockopt(),
+   * but newer versions does not have this function, so we have all that
+   * sys_call_area_*() calls. */
+  rc = sock->ops->getsockopt(sock, SOL_XDP, XDP_MMAP_OFFSETS,
+                             (void*)sys_call_area_user_addr(&rw_area,
+                                                            mmap_offsets),
+                             (void*)sys_call_area_user_addr(&rw_area, optlen));
+
+  /* Security consideration: mmap_offsets is located in untrusted user
+   * memory.  I.e. the process can overwrite all this data.
+   * However this is the process which can create an AF_XDP Onload stack,
+   * so it runs with the root account, and it already can do
+   * anything bad: reboot, execute arbitrary code, etc.
+   *
+   * However we do our best: unmap the area from UL ASAP, before use.
+   */
+  sys_call_area_unmap(&rw_area);
+  if( rc < 0 ) {
+    EFHW_ERR("%s: getsockopt(XDP_MMAP_OFFSETS) rc=%d", __func__, rc);
+    goto out;
+  }
+  EFHW_ASSERT(*optlen == sizeof(*mmap_offsets));
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        rxq_capacity, sizeof(struct xdp_desc),
                        XDP_RX_RING, XDP_PGOFF_RX_RING,
-                       &mmap_offsets.rx, &kern_offsets->rx, &user_offsets->rx);
+                       &mmap_offsets->rx, &kern_offsets->rx, &user_offsets->rx);
   if( rc < 0 )
-    return rc;
+    goto out;
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        txq_capacity, sizeof(struct xdp_desc),
                        XDP_TX_RING, XDP_PGOFF_TX_RING,
-                       &mmap_offsets.tx, &kern_offsets->tx, &user_offsets->tx);
+                       &mmap_offsets->tx, &kern_offsets->tx, &user_offsets->tx);
   if( rc < 0 )
-    return rc;
+    goto out;
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        rxq_capacity, sizeof(uint64_t),
                        XDP_UMEM_FILL_RING, XDP_UMEM_PGOFF_FILL_RING,
-                       &mmap_offsets.fr, &kern_offsets->fr, &user_offsets->fr);
+                       &mmap_offsets->fr, &kern_offsets->fr, &user_offsets->fr);
   if( rc < 0 )
-    return rc;
+    goto out;
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        txq_capacity, sizeof(uint64_t),
                        XDP_UMEM_COMPLETION_RING, XDP_UMEM_PGOFF_COMPLETION_RING,
-                       &mmap_offsets.cr, &kern_offsets->cr, &user_offsets->cr);
+                       &mmap_offsets->cr, &kern_offsets->cr, &user_offsets->cr);
   if( rc < 0 )
-    return rc;
+    goto out;
 
-  return 0;
+ out:
+  sys_call_area_unpin(&rw_area);
+  return rc;
 }
 
 static void xdp_release_pd(struct efhw_nic* nic, int owner)
