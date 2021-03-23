@@ -1508,7 +1508,8 @@ int ci_tcp_offload_get_stream_id(ci_netif* ni, ci_tcp_state* ts, int intf_i)
 #ifdef __KERNEL__
   rc = efab_tcp_helper_tcp_offload_get_stream_id(netif2tcp_helper_resource(ni),
                                                  get.ep_id, get.intf_i,
-                                                 &get.stream_id);
+                                                 &get.stream_id, &get.ddr_base,
+                                                 &get.ddr_size);
 #else
   rc = oo_resource_op(ci_netif_get_driver_handle(ni),
                       OO_IOC_TCP_OFFLOAD_GET_STREAM_ID, &get);
@@ -1517,6 +1518,8 @@ int ci_tcp_offload_get_stream_id(ci_netif* ni, ci_tcp_state* ts, int intf_i)
     return rc;
   ci_assert_le(get.stream_id, (__typeof__(ts->plugin_stream_id))~0);
   ts->plugin_stream_id = get.stream_id;
+  ts->plugin_ddr_base = get.ddr_base;
+  ts->plugin_ddr_size = get.ddr_size;
   return 0;
 }
 #endif

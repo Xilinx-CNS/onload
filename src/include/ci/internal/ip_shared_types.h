@@ -2867,6 +2867,11 @@ struct ci_tcp_state_s {
   } pre_nat;
 
   struct oo_tcp_socket_stats    stats;
+
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ci_uint64             plugin_ddr_base;
+  ci_uint64             plugin_ddr_size;
+#endif
 };
 
 
