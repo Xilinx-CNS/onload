@@ -200,7 +200,7 @@ doonload () {
   # For developers we'd like to set cplane_track_xdp on all the kernels
   # which support it.  Unfortunately RHEL7 (linux-3.10) is unable to ignore
   # an unknown parameter.
-  if nm onload.ko |grep -q -w cplane_track_xdp; then
+  if nm $DIR/onload.ko |grep -q -w cplane_track_xdp; then
     O_MOD_ARGS="cplane_track_xdp=yes ${O_MOD_ARGS}"
   fi
   loadmod onload $O_MOD_ARGS
