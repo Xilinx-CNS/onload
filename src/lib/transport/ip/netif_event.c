@@ -340,8 +340,11 @@ static void handle_rx_plugin_data(ci_netif* netif,
                                   struct ci_netif_poll_state* ps,
                                   ci_ip_pkt_fmt* pkt)
 {
+  /* Since we don't know anything about this packet, we can't use the
+   * ip_pkt_dump_len function (which adds ETH_HLEN) to calculate length to
+   * dump.*/
   LOG_DR(ci_hex_dump(ci_log_fn, PKT_START(pkt),
-                     ip_pkt_dump_len(oo_offbuf_left(&pkt->buf)), 0));
+                     raw_pkt_dump_len(oo_offbuf_left(&pkt->buf)), 0));
 
   /* Writing these things to the pcap will confuse Wireshark, but it's an
    * important debugging feature so let's do it anyway */

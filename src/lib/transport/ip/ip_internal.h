@@ -67,10 +67,7 @@ extern unsigned ci_tp_max_dump CI_HV;
 
 #define log  ci_log
 
-
-ci_inline unsigned ip_pkt_dump_len(unsigned len) {
-  len += ETH_HLEN; /* ?? Cout VLAN tag as well ?? */
-  if( len > ETH_FRAME_LEN )   len = 80;
+ci_inline unsigned raw_pkt_dump_len(unsigned len) {
 #if defined(__ci_driver__)
   if( len > 80 ) len = 80;
 #else
@@ -79,6 +76,11 @@ ci_inline unsigned ip_pkt_dump_len(unsigned len) {
   return len;
 }
 
+ci_inline unsigned ip_pkt_dump_len(unsigned len) {
+  len += ETH_HLEN; /* ?? Cout VLAN tag as well ?? */
+  if( len > ETH_FRAME_LEN )   len = 80;
+  return raw_pkt_dump_len(len);
+}
 
 #ifdef __ci_driver__
 /* definitions for installing/removing IP filters */
