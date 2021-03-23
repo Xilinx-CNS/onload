@@ -42,7 +42,7 @@ static void efch_memreg_free(struct efch_memreg *mr)
   }
 
   for (i = 0; i < mr->n_pages; ++i)
-    put_page(mr->pages[i]);
+    unpin_user_page(mr->pages[i]);
   if (mr->pd != NULL)
     efrm_pd_release(mr->pd);
   vfree(mr->pages);
@@ -198,11 +198,11 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
 
   mmap_read_lock(current->mm);
   for (mr->n_pages = 0; mr->n_pages < max_pages; mr->n_pages += rc) {
-    rc = get_user_pages(first_page + mr->n_pages * PAGE_SIZE,
+    rc = pin_user_pages(first_page + mr->n_pages * PAGE_SIZE,
                         max_pages - mr->n_pages, FOLL_WRITE,
                         mr->pages + mr->n_pages, NULL);
     if (rc <= 0) {
-      EFCH_ERR("%s: ERROR: get_user_pages(%d) returned %d",
+      EFCH_ERR("%s: ERROR: pin_user_pages(%d) returned %d",
                __FUNCTION__, max_pages - mr->n_pages, rc);
       break;
     }

@@ -110,7 +110,7 @@ oo_dshm_register_impl(ci_int32 shm_class, ci_user_ptr_t user_addr,
 
   /* Take references to the pages from the user's buffer. */
   mmap_read_lock(current->mm);
-  rc = get_user_pages((unsigned long) CI_USER_PTR_GET(user_addr),
+  rc = pin_user_pages((unsigned long) CI_USER_PTR_GET(user_addr),
                       buffer->num_pages, 0 /* read-only, no force */,
                       buffer->pages, NULL);
   mmap_read_unlock(current->mm);
@@ -120,7 +120,7 @@ oo_dshm_register_impl(ci_int32 shm_class, ci_user_ptr_t user_addr,
      * treat it as fatal. */
     int i;
     for( i = 0; i < rc; ++i )
-      put_page(buffer->pages[i]);
+      unpin_user_page(buffer->pages[i]);
     rc = -EIO;
     goto fail3;
   }
@@ -226,7 +226,7 @@ oo_dshm_free_handle_list(ci_dllist* list)
     ci_irqlock_unlock(&oo_dshm_state.lock, &lock_flags);
 
     for( i = 0; i < buffer->num_pages; ++i )
-      put_page(buffer->pages[i]);
+      unpin_user_page(buffer->pages[i]);
 
     ci_id_pool_free(&oo_dshm_state.ids[buffer->shm_class], buffer->buffer_id,
                     &oo_dshm_state.lock);

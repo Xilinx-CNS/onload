@@ -6002,7 +6002,7 @@ static void efab_put_pages(struct page** pages, size_t n)
 {
   size_t i;
   for( i = 0; i < n; ++i )
-    put_page(pages[i]);
+    unpin_user_page(pages[i]);
 }
 
 
@@ -6012,7 +6012,7 @@ static long efab_get_all_user_pages(unsigned long base, long max_pages,
   long n;
   long rc;
   for( n = 0; n < max_pages; n += rc ) {
-    rc = get_user_pages(base + n * PAGE_SIZE, max_pages - n, gup_flags,
+    rc = pin_user_pages(base + n * PAGE_SIZE, max_pages - n, gup_flags,
                         pages + n, NULL);
     if (rc <= 0) {
       efab_put_pages(pages, n);
@@ -6121,7 +6121,7 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
   rc = efab_get_unstraddled_user_pages(user_base, n_pages, pages);
   mmap_read_unlock(current->mm);
   if( rc < 0 ) {
-    NI_LOG(ni, RESOURCE_WARNINGS, "[%s]: get_user_pages(%d) returned %ld",
+    NI_LOG(ni, RESOURCE_WARNINGS, "[%s]: pin_user_pages(%d) returned %ld",
            __FUNCTION__, n_pages, rc);
     goto fail1;
   }

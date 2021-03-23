@@ -96,10 +96,12 @@
 #define FOLL_FORCE	0x10
 #endif
 
+/* linux-5.6 have got pin_user_pages() */
+#ifndef EFRM_GUP_HAS_PIN
 static inline long
-get_user_pages_onload_compat(unsigned long start, unsigned long nr_pages,
-			     unsigned int gup_flags, struct page **pages,
-			     struct vm_area_struct **vmas)
+pin_user_pages(unsigned long start, unsigned long nr_pages,
+	       unsigned int gup_flags, struct page **pages,
+	       struct vm_area_struct **vmas)
 {
   /* We support four get_user_pages() function prototypes here,
    * including an intermediate one that has one of the changes but not
@@ -158,7 +160,12 @@ get_user_pages_onload_compat(unsigned long start, unsigned long nr_pages,
 #endif
                                          pages, vmas);
 }
-#define get_user_pages get_user_pages_onload_compat
+
+static inline void unpin_user_page(struct page *page)
+{
+  put_page(page);
+}
+#endif
 
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)

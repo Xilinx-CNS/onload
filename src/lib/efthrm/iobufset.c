@@ -138,7 +138,7 @@ static int oo_bufpage_huge_alloc(struct oo_buffer_pages *p, int *flags)
   mmap_write_lock(current->mm);
 
   /* Pin the pages. */
-  rc = get_user_pages((unsigned long)uaddr, 1, FOLL_WRITE, &(p->pages[0]),
+  rc = pin_user_pages((unsigned long)uaddr, 1, FOLL_WRITE, &(p->pages[0]),
                       NULL);
   if (rc < 0) {
     mmap_write_unlock(current->mm);
@@ -181,7 +181,7 @@ static int oo_bufpage_huge_alloc(struct oo_buffer_pages *p, int *flags)
   goto out;
 
 fail1:
-  put_page(p->pages[0]);
+  unpin_user_page(p->pages[0]);
 fail2:
   efab_linux_sys_shmdt((char __user *)uaddr);
 fail3:
@@ -211,7 +211,7 @@ static void oo_bufpage_huge_free(struct oo_buffer_pages *p)
   p->close(&vma);
   fput(p->shm_map_file);
 
-  put_page(p->pages[0]);
+  unpin_user_page(p->pages[0]);
   oo_iobufset_kfree(p);
 }
 #endif
