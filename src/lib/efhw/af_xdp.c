@@ -54,14 +54,11 @@ static void sys_call_area_unpin(struct sys_call_area* area)
   unpin_user_page(area->page);
 }
 
-#if 0
-/* For read-only syscalls we probably want this */
 static void sys_call_area_free(struct sys_call_area* area)
 {
   sys_call_area_unpin(area);
   sys_call_area_unmap(area);
 }
-#endif
 
 static int __sys_call_area_alloc(struct sys_call_area* area, const char* func)
 {
@@ -853,7 +850,8 @@ af_xdp_nic_tweak_hardware(struct efhw_nic *nic)
 static int
 __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 			   struct efhw_ev_handler *ev_handlers,
-			   const uint8_t *mac_addr)
+			   const uint8_t *mac_addr,
+			   struct sys_call_area* sys_call_area)
 {
 	int map_fd, rc;
 	struct bpf_prog* prog;
@@ -910,12 +908,19 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 			 struct efhw_ev_handler *ev_handlers,
 			 const uint8_t *mac_addr)
 {
-	int rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr);
-
 	static asmlinkage long (*set)(const struct pt_regs*) = NULL;
 	struct pt_regs regs;
-	mm_segment_t oldfs;
-	struct rlimit rlim;
+	struct rlimit* rlim;
+
+	int rc;
+	struct sys_call_area area;
+
+	rc = sys_call_area_alloc(&area);
+	if( rc < 0 )
+		return rc;
+
+	rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr, &area);
+
 
 	if (rc != -EPERM)
 		return rc;
@@ -929,22 +934,24 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		set = efrm_syscall_table[__NR_setrlimit];
 	}
 
+	rlim = sys_call_area_ptr(&area);
+
 	/* We need a page per a bpf call: + 3 pages */
-	rlim.rlim_cur = task_rlimit(current, RLIMIT_MEMLOCK) +
+	rlim->rlim_cur = task_rlimit(current, RLIMIT_MEMLOCK) +
 				(3 << PAGE_SHIFT);
-	rlim.rlim_max = CI_MAX(task_rlimit_max(current, RLIMIT_MEMLOCK),
-			       rlim.rlim_cur);
+	rlim->rlim_max = CI_MAX(task_rlimit_max(current, RLIMIT_MEMLOCK),
+			       rlim->rlim_cur);
 
 	regs.di = RLIMIT_MEMLOCK;
-	regs.si = (uintptr_t)&rlim;
-	oldfs = get_fs();
-	set_fs(KERNEL_DS);
+	regs.si = sys_call_area_user_addr(&area, rlim);
 	rc = set(&regs);
-	set_fs(oldfs);
 	if (rc != 0)
 		return rc;
 
-	rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr);
+	rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr, &area);
+
+	sys_call_area_free(&area);
+
 	return rc;
 }
 static void
