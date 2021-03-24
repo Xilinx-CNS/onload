@@ -611,7 +611,14 @@ static int ef100_reconfigure_mac(struct efx_nic *efx, bool mtu_only)
 	rc = efx_mcdi_set_mac(efx);
 	if (rc == -EPERM && mtu_only &&
 	    efx_ef100_has_cap(nic_data->datapath_caps, SET_MAC_ENHANCED))
-		return efx_mcdi_set_mtu(efx);
+		rc = efx_mcdi_set_mtu(efx);
+#ifdef EFX_NOT_UPSTREAM
+	/* XXX temporary hack to allow VFs to set a software MTU
+	 * See SWNETLINUX-4196, FWRIVERHD-1507.
+	 */
+	if (rc == -EPERM && efx->type->is_vf)
+		return 0;
+#endif
 	return rc;
 }
 
@@ -1228,16 +1235,16 @@ static ssize_t bar_config_show(struct device *dev,
 
 	switch (nic_data->bar_config) {
 	case EF100_BAR_CONFIG_EF100:
-		sprintf(buf_out, "EF100\n");
+		scnprintf(buf_out, PAGE_SIZE, "EF100\n");
 		break;
 #ifdef CONFIG_SFC_VDPA
 	case EF100_BAR_CONFIG_VDPA:
-		sprintf(buf_out, "vDPA\n");
+		scnprintf(buf_out, PAGE_SIZE, "vDPA\n");
 		break;
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	case EF100_BAR_CONFIG_NONE:
-		sprintf(buf_out, "None\n");
+		scnprintf(buf_out, PAGE_SIZE, "None\n");
 		break;
 #endif
 	default: /* this should not happen */

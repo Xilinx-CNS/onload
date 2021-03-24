@@ -2008,9 +2008,12 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 		net_dev->features &= ~NETIF_F_NTUPLE;
 	}
 
+	efx->vlan_filter_available =
+		efx_mcdi_filter_match_supported(efx, false,
+                (EFX_FILTER_MATCH_OUTER_VID | EFX_FILTER_MATCH_LOC_MAC));
+
 	if ((efx_supported_features(efx) & NETIF_F_HW_VLAN_CTAG_FILTER) &&
-	    !(efx_mcdi_filter_match_supported(efx, false,
-		(EFX_FILTER_MATCH_OUTER_VID | EFX_FILTER_MATCH_LOC_MAC)))) {
+	    !efx->vlan_filter_available) {
 
 		netif_info(efx, probe, net_dev,
 			   "VLAN filters are not supported in this firmware variant\n");

@@ -2164,6 +2164,9 @@ u32 efx_fix_features(struct net_device *net_dev, u32 data)
 	if (!efx->lro_available)
 		data &= ~NETIF_F_LRO;
 
+	if (!efx->vlan_filter_available)
+		data &= ~NETIF_F_HW_VLAN_CTAG_FILTER;
+
 	return data;
 }
 #endif

@@ -77,7 +77,7 @@ int efx_mcdi_ev_init(struct efx_channel *channel, bool v1_cut_thru, bool v2)
 {
 	efx_dword_t *inbuf = kzalloc(MC_CMD_INIT_EVQ_V2_IN_LENMAX, GFP_KERNEL);
         MCDI_DECLARE_BUF(outbuf, MC_CMD_INIT_EVQ_V2_OUT_LEN);
-	size_t entries = channel->eventq.buf.len / EFX_BUF_SIZE;
+	size_t entries = DIV_ROUND_UP(channel->eventq.buf.len, EFX_BUF_SIZE);
 	struct efx_nic *efx = channel->efx;
 
 	size_t inlen, outlen;
@@ -295,7 +295,7 @@ int efx_mcdi_rx_init(struct efx_rx_queue *rx_queue, bool want_outer_classes)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_INIT_RXQ_V4_IN_LEN);
 	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
-	size_t entries = rx_queue->rxd.buf.len / EFX_BUF_SIZE;
+	size_t entries = DIV_ROUND_UP(rx_queue->rxd.buf.len, EFX_BUF_SIZE);
 	struct efx_nic *efx = rx_queue->efx;
 	unsigned int buffer_size;
 	dma_addr_t dma_addr;

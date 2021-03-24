@@ -92,7 +92,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.7.1002"
+#define EFX_DRIVER_VERSION	"5.3.7.1003"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -1735,6 +1735,7 @@ struct efx_nic {
 	bool lro_enabled;
 #endif
 #endif
+	bool vlan_filter_available;
 
 	netdev_features_t fixed_features;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NETDEV_HW_FEATURES) && !defined(EFX_HAVE_NETDEV_EXTENDED_HW_FEATURES)
