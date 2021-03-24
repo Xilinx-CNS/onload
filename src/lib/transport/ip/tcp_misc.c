@@ -1114,6 +1114,13 @@ static int ci_tcp_rx_coalesce_recv(ci_netif* ni, ci_tcp_state* ts,
   if( OO_PP_IS_NULL(q->head) )
     return 0;
 
+  if( ci_tcp_is_pluginized(ts) ) {
+    /* Not currently supported, but not particularly hard to support:
+     * ci_tcp_rx_pkt_coalesce() just needs rewriting to do plain
+     * packet-concatenating, with none of the TCP header stuff */
+    return 0;
+  }
+
   pkt = PKT_CHK(ni, q->head);
   if( pkt->refcount != 1 )
     return freed;
