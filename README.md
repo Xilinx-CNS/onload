@@ -51,8 +51,8 @@ level of AF_XDP support for Onload:
 
 * Ubuntu LTS 20.04
 * Ubuntu 20.10
-* Debian 10 with Linux kernel 5.8
-* Redhat Enterprise Linux 8.2
+* Debian 10 with Linux kernel 5.9
+* Redhat Enterprise Linux 8.3
 
 Onload also works with the native ef_vi hardware interface, supported by Xilinx
 network adapters. In this mode of operation, AF_XDP kernel and driver support

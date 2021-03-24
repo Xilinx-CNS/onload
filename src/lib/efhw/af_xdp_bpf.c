@@ -53,12 +53,6 @@
 
 extern struct bpf_map_def xsks_map;
 
-#ifdef USE_SHADOW_MAP
-extern struct bpf_map_def shadow_map;
-#endif
-
-static void *(*bpf_map_lookup_elem)(void *map, const void *key) =
-        (void *) BPF_FUNC_map_lookup_elem;
 static int (*bpf_redirect_map)(void *map, int key, int flags) =
         (void *) BPF_FUNC_redirect_map;
 
@@ -95,22 +89,6 @@ int xdp_sock_prog(struct xdp_md *ctx)
     return XDP_PASS;
 
   int index = ctx->rx_queue_index;
-#ifndef USE_SHADOW_MAP
   return bpf_redirect_map(&xsks_map, index, XDP_PASS);
-#else
-  /* Workaround for older kernels (pre-5.3) which do not support passing a
-   * fallback action to bpf_redirect_map. We need to check the shadow map to
-   * figure out whether the redirection should succeed, and return XDP_PASS
-   * otherwise.
-   *
-   * We need the shadow map in addition to the socket map because older kernels
-   * also don't support lookup on a socket map.
-   */
-  void* ret = bpf_map_lookup_elem(&shadow_map, &index);
-  if( ret == 0 || *((char*)ret) == 0 )
-    return XDP_PASS;
-
-  return bpf_redirect_map(&xsks_map, index, 0);
-#endif
 }
 

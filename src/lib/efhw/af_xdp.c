@@ -23,14 +23,6 @@
 #include <ci/efrm/syscall.h>
 
 
-/* From linux-5.3 bpf_xdp_redirect_map() performs map lookup.
- * We generally use kernel_compat.sh, but it is not easy to detect this
- * thing from the script.
- */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5,3,0)
-#define USE_SHADOW_MAP 1
-#endif
-
 /* For linux<=5.7 you can use kernel_getsockopt(),
  * but newer versions doe not have this function. */
 static inline int sock_ops_getsockopt(struct socket *sock,
@@ -106,9 +98,6 @@ struct protection_domain
 struct efhw_nic_af_xdp
 {
   struct file* map;
-#ifdef USE_SHADOW_MAP
-  struct file* shadow;
-#endif
   struct efhw_ev_handler* ev_handlers;
   struct efhw_af_xdp_vi* vi;
   struct protection_domain* pd;
@@ -243,11 +232,10 @@ static int xdp_alloc_fd(struct file* file)
 {
   int rc;
 
-  /* TODO AF_XDP:
-   * In weird context or when exiting process (that is current->files == NULL)
-   * we cannot do much (for now this is a stack teardown) */
-  if( !current || !current->files )
-    return -EAGAIN;
+  /* We never run this function from any context except normal userland
+   * process (i.e. no workqueue, kthread, etc). */
+  EFHW_ASSERT(current);
+  EFHW_ASSERT(current->files);
 
   rc = get_unused_fd_flags(0);
   if( rc < 0 )
@@ -273,50 +261,6 @@ static int xdp_map_create(int max_entries)
   return rc;
 }
 
-#ifdef USE_SHADOW_MAP
-/* Create the shadow map to support older kernels' dysfunctional redirection */
-static int xdp_map_create_shadow(int max_entries)
-{
-  int rc;
-  union bpf_attr attr = {};
-
-  attr.map_type = BPF_MAP_TYPE_ARRAY;
-  attr.key_size = sizeof(int);
-  attr.value_size = 1;
-  attr.max_entries = max_entries;
-  strncpy(attr.map_name, "onload_shadow", sizeof(attr.map_name));
-  rc = xdp_sys_bpf(BPF_MAP_CREATE, &attr);
-  return rc;
-}
-
-/* Load the BPF program to redirect inbound packets to AF_XDP sockets.
- * See af_xdp_bpf.c for the program's source and compilation guidelines. */
-static int xdp_prog_load(int map_fd, int shadow_fd)
-{
-  uint64_t mfdH = (uint64_t) map_fd << 32;
-  uint64_t sfdH = (uint64_t) shadow_fd << 32;
-  const uint64_t prog[] = {
-    0x00000002000000b7, 0x0000000000041361,
-    0x0000000000001261, 0x00000000000024bf,
-    0x0000002600000407, 0x00000000001e342d,
-    0x0000000000002379, 0xffffffff00000418,
-    0x0000ffff00000000, 0x000000000000435f,
-    0x000000000019431d, 0x00000000000c2369,
-    0x0000008100020355, 0x0000000000102369,
-    0x0000000400000207, 0x0000000800140355,
-    0x0000000000172271, 0x0000001100010215,
-    0x0000000600110255, 0x0000000000101161,
-    0x00000000fffc1a63, 0x000000000000a2bf,
-    0xfffffffc00000207,  sfdH | 0x00001118,
-    0x0000000000000000, 0x0000000100000085,
-    0x00000000000001bf, 0x00000002000000b7,
-    0x0000000000070115, 0x0000000000001171,
-    0x0000000000050115, 0x00000000fffca261,
-     mfdH | 0x00001118, 0x0000000000000000,
-    0x00000000000003b7, 0x0000003300000085,
-    0x0000000000000095,
-  };
-#else
 /* Load the BPF program to redirect inbound packets to AF_XDP sockets.
  * See af_xdp_bpf.c for the program's source and compilation guidelines. */
 static int xdp_prog_load(int map_fd)
@@ -337,7 +281,6 @@ static int xdp_prog_load(int map_fd)
     0x00000002000003b7, 0x0000003300000085,
     0x0000000000000095,
   };
-#endif
 
   char license[] = "GPL";
   union bpf_attr attr = {};
@@ -370,18 +313,10 @@ static int xdp_map_update(struct efhw_nic_af_xdp* af_xdp, int key,
                           struct file* sock)
 {
   int rc, map_fd, sock_fd;
-#ifdef USE_SHADOW_MAP
-  int shadow_fd;
-#endif
 
   rc = map_fd = xdp_alloc_fd(af_xdp->map);
   if( rc < 0 )
     return rc;
-#ifdef USE_SHADOW_MAP
-  rc = shadow_fd = xdp_alloc_fd(af_xdp->shadow);
-  if( rc < 0 )
-    goto fail_shadow;
-#endif
 
   rc = sock_fd = xdp_alloc_fd(sock);
   if( rc < 0 )
@@ -391,71 +326,16 @@ static int xdp_map_update(struct efhw_nic_af_xdp* af_xdp, int key,
   if( rc < 0 )
     goto fail_update_map;
 
-#ifdef USE_SHADOW_MAP
-  rc = xdp_map_update_fd(shadow_fd, key, 1);
-
-  /* It should be impossible for only one update to succeed, but if that does
-   * happen then we have an inconsistent state which may cause subtle problems.
-   * Assert here to make the problem more obvious.
-   */
-  BUG_ON(rc < 0);
-#endif
 
   /* We do not need to roll back xdp_map_update_fd(map_fd) in case of
-   * failure:
-   * - if USE_SHADOW_MAP, then we did not update the shadow, so we are
-   *   good;
-   * - if ! USE_SHADOW_MAP, then it rolls back automagically when the
-   *   socket closes.
+   * failure, because it rolls back automagically when the socket closes.
    */
 fail_update_map:
   ci_close_fd(sock_fd);
 fail_sock:
-#ifdef USE_SHADOW_MAP
-  ci_close_fd(shadow_fd);
-fail_shadow:
-#endif
   ci_close_fd(map_fd);
   return rc;
 }
-
-#ifdef USE_SHADOW_MAP
-/* Delete an element in the XDP socket map (using fds) */
-static void xdp_map_delete_fd(int map_fd, int key)
-{
-  union bpf_attr attr = {};
-
-  attr.map_fd = map_fd;
-  attr.key = (uintptr_t)(&key);
-
-  xdp_sys_bpf(BPF_MAP_DELETE_ELEM, &attr);
-}
-
-/* Delete an element in the XDP socket map (using file pointers)
- * It is not needed for recent kernels because BPF_MAP_TYPE_XSKMAP maps
- * are updated automagically when the socket is closed. */
-static void xdp_map_delete(struct file* map, struct file* shadow, int key)
-{
-  int fd;
-
-  fd = xdp_alloc_fd(map);
-  if( fd >= 0 ) {
-    xdp_map_delete_fd(fd, key);
-    ci_close_fd(fd);
-  }
-  else {
-    EFHW_ERR("ERROR: Failed to destroy AF_XDP EF_VI instance %d "
-             "properly: rc=%d",
-             key, fd);
-  }
-
-  fd = xdp_alloc_fd(shadow);
-  if( fd >= 0 ) {
-    xdp_map_update_fd(fd, key, 0);
-    ci_close_fd(fd);
-  }
-}
-#endif
 
 /* Bind an AF_XDP socket to an interface */
 static int xdp_bind(struct socket* sock, int ifindex, unsigned queue, unsigned flags)
@@ -683,9 +563,6 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
      * has not been called after enabling evq.
      * This can happen on cleanup from failure of stack allocation */
     return;
-#ifdef USE_SHADOW_MAP
-  xdp_map_delete(nic->af_xdp->map, nic->af_xdp->shadow, vi - nic->af_xdp->vi);
-#endif
   efhw_page_free(&vi->user_offsets_page);
   fput(vi->sock->file);
   memset(vi, 0, sizeof(*vi));
@@ -793,9 +670,6 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   return 0;
 
  xdp_bind_failed:
-#ifdef USE_SHADOW_MAP
-  xdp_map_delete(nic->af_xdp->map, nic->af_xdp->shadow, instance);
-#endif
  out_free_user_offsets:
   efhw_page_free(&vi->user_offsets_page);
  out_free_sock:
@@ -887,9 +761,6 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 			   const uint8_t *mac_addr)
 {
 	int map_fd, rc;
-#ifdef USE_SHADOW_MAP
-	int shadow_fd;
-#endif
 	struct bpf_prog* prog;
 	struct efhw_nic_af_xdp* xdp;
 
@@ -908,15 +779,7 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	if( rc < 0 )
 		goto fail_map;
 
-#ifdef USE_SHADOW_MAP
-	rc = shadow_fd = xdp_map_create_shadow(nic->vi_lim);
-	if( rc < 0 )
-		goto fail_shadow;
-
-	rc = xdp_prog_load(map_fd, shadow_fd);
-#else
 	rc = xdp_prog_load(map_fd);
-#endif
 	if( rc < 0 )
 		goto fail;
 
@@ -934,11 +797,6 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	xdp->map = fget(map_fd);
 	ci_close_fd(map_fd);
 
-#ifdef USE_SHADOW_MAP
-	xdp->shadow = fget(shadow_fd);
-	ci_close_fd(shadow_fd);
-#endif
-
 	nic->af_xdp = xdp;
 	memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
 
@@ -946,10 +804,6 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	return 0;
 
 fail:
-#ifdef USE_SHADOW_MAP
-	ci_close_fd(shadow_fd);
-fail_shadow:
-#endif
 	ci_close_fd(map_fd);
 fail_map:
 	kfree(xdp);
@@ -1004,9 +858,6 @@ af_xdp_nic_release_hardware(struct efhw_nic* nic)
   xdp_set_link(nic->net_dev, NULL);
   if( nic->af_xdp != NULL ) {
     fput(nic->af_xdp->map);
-#ifdef USE_SHADOW_MAP
-    fput(nic->af_xdp->shadow);
-#endif
     kfree(nic->af_xdp);
   }
 }
