@@ -276,24 +276,20 @@ static int init_sys_call_bpf(void)
 }
 
 /* Invoke the bpf() syscall args is assumed to be kernel memory */
-static int xdp_sys_bpf(int cmd, union bpf_attr* attr)
+static int xdp_sys_bpf(int cmd, unsigned long user_addr)
 {
+  int rc;
   struct pt_regs regs;
 
   EFHW_ASSERT(sys_call_bpf);
 
   regs.di = cmd;
-  regs.si = (uintptr_t)(attr);
-  regs.dx = sizeof(*attr);
-  {
-    int rc;
-    mm_segment_t oldfs = get_fs();
-
-    set_fs(KERNEL_DS);
-    rc = sys_call_bpf(&regs);
-    set_fs(oldfs);
-    return rc;
-  }
+  regs.si = user_addr;
+  regs.dx = sizeof(union bpf_attr);
+  rc = sys_call_bpf(&regs);
+  if( rc < 0 )
+    EFHW_ERR("%s: sys_bpf(%d) failed: %d", __func__, cmd, rc);
+  return rc;
 }
 
 /* Allocate an FD for a file. Some operations need them. */
@@ -316,26 +312,24 @@ static int xdp_alloc_fd(struct file* file)
 }
 
 /* Create the xdp socket map to share with the BPF program */
-static int xdp_map_create(int max_entries)
+static int xdp_map_create(struct sys_call_area* area, int max_entries)
 {
-  int rc;
-  union bpf_attr attr = {};
+  union bpf_attr* attr = sys_call_area_ptr(area);
+  memset(attr, 0, sizeof(*attr));
 
-  attr.map_type = BPF_MAP_TYPE_XSKMAP;
-  attr.key_size = sizeof(int);
-  attr.value_size = sizeof(int);
-  attr.max_entries = max_entries;
-  strncpy(attr.map_name, "onload_xsks", sizeof(attr.map_name));
-  rc = xdp_sys_bpf(BPF_MAP_CREATE, &attr);
-  return rc;
+  attr->map_type = BPF_MAP_TYPE_XSKMAP;
+  attr->key_size = sizeof(int);
+  attr->value_size = sizeof(int);
+  attr->max_entries = max_entries;
+  strncpy(attr->map_name, "onload_xsks", sizeof(attr->map_name));
+  return xdp_sys_bpf(BPF_MAP_CREATE, sys_call_area_user_addr(area, attr));
 }
 
 /* Load the BPF program to redirect inbound packets to AF_XDP sockets.
  * See af_xdp_bpf.c for the program's source and compilation guidelines. */
-static int xdp_prog_load(int map_fd)
+static int xdp_prog_load(struct sys_call_area* area, int map_fd)
 {
-  uint64_t mfdH = (uint64_t) map_fd << 32;
-  const uint64_t prog[] = {
+  const uint64_t const_prog[] = {
     0x00000002000000b7, 0x0000000000041361,
     0x0000000000001261, 0x00000000000024bf,
     0x0000002600000407, 0x000000000012342d,
@@ -346,35 +340,66 @@ static int xdp_prog_load(int map_fd)
     0x0000000400000207, 0x0000000800080355,
     0x0000000000172271, 0x0000001100010215,
     0x0000000600050255, 0x0000000000101261,
-     mfdH | 0x00001118, 0x0000000000000000,
+    0x0000000000000118, /* <-- insert map_fd here */
+                        0x0000000000000000,
     0x00000002000003b7, 0x0000003300000085,
     0x0000000000000095,
   };
 
-  char license[] = "GPL";
-  union bpf_attr attr = {};
-  int rc;
+  uint64_t* prog;
+  char* license;
+  union bpf_attr* attr;
 
-  attr.prog_type = BPF_PROG_TYPE_XDP;
-  attr.insn_cnt = sizeof(prog) / sizeof(struct bpf_insn);
-  attr.insns = (uintptr_t)prog;
-  attr.license = (uintptr_t)license;
-  strncpy(attr.prog_name, "xdpsock", strlen("xdpsock"));
+  attr = sys_call_area_ptr(area);
+  memset(attr, 0, sizeof(*attr));
 
-  rc = xdp_sys_bpf(BPF_PROG_LOAD, &attr);
-  return rc;
+  license = (void*)(attr + 1);
+#define LICENSE "GPL"
+  strncpy(license, LICENSE, strlen(LICENSE) + 1);
+
+  prog = (void*)(license + strlen(LICENSE) + 1);
+#undef LICENSE
+  memcpy(prog, const_prog, sizeof(const_prog));
+  prog[20] |= 0x1000; /* "immediate" flag */
+  prog[20] |= (uint64_t) map_fd << 32; /* immediate value */
+
+  attr->prog_type = BPF_PROG_TYPE_XDP;
+  attr->insn_cnt = sizeof(const_prog) / sizeof(struct bpf_insn);
+  attr->insns = sys_call_area_user_addr(area, prog);
+  attr->license = sys_call_area_user_addr(area, license);
+  strncpy(attr->prog_name, "xdpsock", strlen("xdpsock"));
+
+  return xdp_sys_bpf(BPF_PROG_LOAD, sys_call_area_user_addr(area, attr));
 }
 
 /* Update an element in the XDP socket map (using fds) */
 static int xdp_map_update_fd(int map_fd, int key, int sock_fd)
 {
-  union bpf_attr attr = {};
+  int rc;
+  union bpf_attr* attr;
+  struct sys_call_area area;
+  int* key_user;
+  int* sock_user;
 
-  attr.map_fd = map_fd;
-  attr.key = (uintptr_t)(&key);
-  attr.value = (uintptr_t)(&sock_fd);
+  rc = sys_call_area_alloc(&area);
+  if( rc < 0 )
+    return rc;
 
-  return xdp_sys_bpf(BPF_MAP_UPDATE_ELEM, &attr);
+  attr = sys_call_area_ptr(&area);
+  memset(attr, 0, sizeof(*attr));
+  key_user = (void*)(attr + 1);
+  sock_user = (void*)(key_user + 1);
+
+  *key_user = key;
+  *sock_user = sock_fd;
+  attr->map_fd = map_fd;
+  attr->key = sys_call_area_user_addr(&area, key_user);
+  attr->value = sys_call_area_user_addr(&area, sock_user);
+
+  rc = xdp_sys_bpf(BPF_MAP_UPDATE_ELEM, sys_call_area_user_addr(&area, attr));
+
+  sys_call_area_free(&area);
+  return rc;
 }
 
 /* Update an element in the XDP socket map (using file pointers) */
@@ -881,11 +906,11 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	xdp->vi = (struct efhw_af_xdp_vi*) (xdp + 1);
 	xdp->pd = (struct protection_domain*) (xdp->vi + nic->vi_lim);
 
-	rc = map_fd = xdp_map_create(nic->vi_lim);
+	rc = map_fd = xdp_map_create(sys_call_area, nic->vi_lim);
 	if( rc < 0 )
 		goto fail_map;
 
-	rc = xdp_prog_load(map_fd);
+	rc = xdp_prog_load(sys_call_area, map_fd);
 	if( rc < 0 )
 		goto fail;
 
