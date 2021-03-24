@@ -1337,11 +1337,7 @@ int ci_udp_zc_recv(ci_udp_iomsg_args* a, struct onload_zc_recv_args* args)
 
       cb_rc = (*args->cb)(args, cb_flags);
 
-      if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {
-        /* Remove the ref we added earlier iff the user didn't retain it */
-        pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
-        pkt->pio_addr = -1;
-      }
+      ci_pkt_zc_free_clean(pkt, cb_rc);
 
       ci_udp_recv_q_deliver(ni, &us->recv_q, pkt);
 

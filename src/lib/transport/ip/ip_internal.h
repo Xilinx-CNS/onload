@@ -24,6 +24,8 @@
 #ifdef __KERNEL__
 # include <onload/oof_interface.h>
 # include <onload/oof_onload.h>
+#else
+# include <onload/extensions_zc.h>
 #endif
 #include <onload/cplane_ops.h>
 
@@ -834,6 +836,18 @@ extern void ci_netif_set_merge_atomic_flag(ci_netif* ni);
 void oo_pkt_calc_checksums(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                            struct iovec* host_iov);
 
+
+#ifndef __KERNEL__
+ci_inline void ci_pkt_zc_free_clean(ci_ip_pkt_fmt* pkt,
+                                    enum onload_zc_callback_rc cb_rc)
+{
+  if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {
+    /* Remove the ref we added earlier iff the user didn't retain it */
+    pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
+    pkt->pio_addr = -1;  /* Reset to normal after user_refcount overwrote it */
+  }
+}
+#endif
 
 #endif /* __CI_LIB_IP_INTERNAL_H__ */
 /*! \cidoxg_end */

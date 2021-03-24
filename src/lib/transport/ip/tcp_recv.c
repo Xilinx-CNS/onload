@@ -1784,11 +1784,7 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
     rinf->piov.io.iov_len = 0;
     rinf->piov.iovlen = 0;
   }
-  if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {
-    /* Remove the ref we added earlier iff the user didn't retain it */
-    pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
-    pkt->pio_addr = -1;  /* Reset to normal after user_refcount overwrote it */
-  }
+  ci_pkt_zc_free_clean(pkt, cb_rc);
 
   *ndata = out_rc;
  unrecoverable:
@@ -1839,12 +1835,8 @@ static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
   pkt->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
   cb_rc = rinf->zc_args->cb(rinf->zc_args, 0);
 
-  if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {
-    /* Remove the ref we added earlier iff the user didn't retain it */
-    pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
-    pkt->pio_addr = -1;  /* Reset to normal after user_refcount overwrote it */
-  }
-  else {
+  ci_pkt_zc_free_clean(pkt, cb_rc);
+  if( cb_rc & ONLOAD_ZC_KEEP ) {
     /* The refcount ownership semantics when both peeking and keeping are too
      * horrifying to think about, so just ban it (as stated in the docs). */
     ci_assert_nflags(rinf->msg_flags, MSG_PEEK);
