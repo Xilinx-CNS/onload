@@ -1787,6 +1787,7 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
   if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {
     /* Remove the ref we added earlier iff the user didn't retain it */
     pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
+    pkt->pio_addr = -1;  /* Reset to normal after user_refcount overwrote it */
   }
 
   *ndata = out_rc;
