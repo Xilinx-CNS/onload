@@ -10,6 +10,8 @@
 #include <ci/efrm/nondl.h>
 #include <linux/rtnetlink.h>
 
+#ifdef EFHW_HAS_AF_XDP
+
 /* Name of our sysfs directory. 
  *
  * A currently only afxdp devices are handled the name reflects that.
@@ -225,3 +227,4 @@ void efrm_remove_sysfs_entries(void)
                 sysfs_dir = NULL;
         }
 }
+#endif

@@ -44,6 +44,7 @@
 #include <ci/efrm/debug.h>
 #include <ci/efrm/driver_private.h>
 #include <ci/driver/efab/hardware.h>
+#include <ci/efhw/af_xdp.h>
 
 extern int  efrm_driverlink_register(void);
 extern void efrm_driverlink_unregister(void);
@@ -65,8 +66,13 @@ efrm_nic_unplug(struct efhw_nic* nic);
 extern int efrm_install_proc_entries(void);
 extern void efrm_uninstall_proc_entries(void);
 
+#ifdef EFHW_HAS_AF_XDP
 extern void efrm_install_sysfs_entries(void);
 extern void efrm_remove_sysfs_entries(void);
+#else
+static inline void efrm_install_sysfs_entries(void) {}
+static inline void efrm_remove_sysfs_entries(void) {}
+#endif
 
 extern void efrm_nondl_register(void);
 extern void efrm_nondl_unregister(void);
