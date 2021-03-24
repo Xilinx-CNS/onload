@@ -3859,6 +3859,7 @@ static void handle_unacceptable_seq(ci_netif* netif, ci_tcp_state* ts,
         SEQ_LE(pkt->pf.tcp_rx.end_seq, tcp_rcv_nxt(ts)) )
       ci_tcp_rx_clean_plugin_rob(netif, ts, pkt->pf.tcp_rx.end_seq);
     if( tcp_plugin_pkt_was_recycled(ts, pkt) ) {
+      ci_netif_pkt_release_rx(netif, pkt);
       ts->dsack_block = OO_PP_INVALID;
       return;
     }
