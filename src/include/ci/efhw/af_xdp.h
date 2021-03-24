@@ -13,10 +13,8 @@
  * - EFRM_SYSCALL_PTREGS
  *
  * x86 is probably unnecessary limitation, but we do not use it on ARM64.
- *
- * linux-5.10 is temporary disabled (ON-12686)
  */
-#if defined(CONFIG_XDP_SOCKETS) && defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64) && LINUX_VERSION_CODE < KERNEL_VERSION(5,10,0)
+#if defined(CONFIG_XDP_SOCKETS) && defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
 #define EFHW_HAS_AF_XDP
 #endif
 
