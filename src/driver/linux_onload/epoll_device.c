@@ -643,6 +643,7 @@ static int oo_epoll1_mmap(struct oo_epoll1_private* priv,
     return -EINVAL;
   if (vma->vm_flags & VM_WRITE)
     return -EPERM;
+  vma->vm_flags &= ~VM_MAYWRITE;
 
   /* Map memory to user */
   if( priv->page == NULL ||
