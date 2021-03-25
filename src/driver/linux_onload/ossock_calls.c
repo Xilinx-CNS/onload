@@ -111,7 +111,7 @@ oo_fd_replace_file(struct file* old_filp, struct file* new_filp,
   }
 
   rcu_read_lock();
-  if( fcheck(old_fd) != old_filp ) {
+  if( lookup_fd_rcu(old_fd) != old_filp ) {
     rcu_read_unlock();
     spin_unlock(&current->files->file_lock);
     return -EINVAL;

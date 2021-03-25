@@ -135,6 +135,7 @@ EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW	symtype	remap_vmalloc_range_partial	include
 
 EFRM_HAS_KTIME_GET_REAL_SECONDS	export	ktime_get_real_seconds	include/linux/timekeeping.h	kernel/time/timekeeping.c
 EFRM_FILE_HAS_F_EP	member	struct_file	f_ep	include/linux/fs.h
+EFRM_HAS_LOOKUP_FD_RCU	symbol	lookup_fd_rcu	include/linux/fdtable.h
 
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'

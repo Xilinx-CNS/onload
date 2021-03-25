@@ -11,6 +11,7 @@
 #include <linux/seq_file.h>
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
+#include <linux/fdtable.h>
 
 #if defined(CONFIG_COMPAT) && defined(CONFIG_X86_64) && !defined(TIF_IA32)
 /* linux>=5.11: user_64bit_mode() requires this */
@@ -112,6 +113,16 @@ static inline int efrm_unregister_netdevice_notifier(struct notifier_block *b)
 
 #define register_netdevice_notifier efrm_register_netdevice_notifier
 #define unregister_netdevice_notifier efrm_unregister_netdevice_notifier
+#endif
+
+/* Linux-5.11 introduces lookup_fd_rcu().
+ * It was called fcheck() before.
+ */
+#ifndef EFRM_HAS_LOOKUP_FD_RCU
+static inline struct file *lookup_fd_rcu(unsigned int fd)
+{
+  return fcheck(fd);
+}
 #endif
 
 #endif /* __ONLOAD_KERNEL_COMPAT_H__ */
