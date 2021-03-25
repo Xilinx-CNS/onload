@@ -129,6 +129,7 @@ EFRM_MSGHDR_HAS_MSG_CONTROL_USER	member	struct_msghdr	msg_control_user	include/l
 EFRM_HAS_SOCKPTR		symbol	KERNEL_SOCKPTR	include/linux/sockptr.h
 
 EFRM_SYS_CLOSE_EXPORTED 	export	sys_close	include/linux/syscalls.h	fs/open.c
+EFRM_CLOSE_FD_EXPORTED		export	close_fd	include/linux/fdtable.h	fs/file.c
 
 EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW	symtype	remap_vmalloc_range_partial	include/linux/vmalloc.h int(struct vm_area_struct *vma, unsigned long uaddr, void *kaddr, unsigned long pgoff, unsigned long size)
 
