@@ -924,7 +924,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
 
 #ifdef __KERNEL__
   logger(log_arg, "  creation_time=%u (delta=%usecs)", ns->creation_time_sec,
-         (ci_uint32) get_seconds() - ns->creation_time_sec);
+         (ci_uint32) ktime_get_real_seconds() - ns->creation_time_sec);
 #else
   nowt = ns->creation_time_sec;
   strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&nowt));

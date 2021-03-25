@@ -190,7 +190,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   nis->pid = task_pid_vnr(current);
 #endif
 
-  nis->creation_time_sec = get_seconds();
+  nis->creation_time_sec = ktime_get_real_seconds();
 #if CI_CFG_FD_CACHING
   nis->passive_cache_avail_stack = nis->opts.sock_cache_max;
 #endif

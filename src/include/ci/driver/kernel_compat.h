@@ -332,4 +332,13 @@ static inline int ci_close_fd(int fd)
 }
 
 
+/* linux>=4.4 has ktime_get_real_seconds(), but linux-3.10 does not */
+#ifndef EFRM_HAS_KTIME_GET_REAL_SECONDS
+static inline time64_t ktime_get_real_seconds(void)
+{
+  return get_seconds();
+}
+#endif
+
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */
