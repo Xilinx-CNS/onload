@@ -176,11 +176,11 @@ static ssize_t nondl_unregister_store(struct kobject *kobj,
                 return length;
 }
 
-static struct kobj_attribute nondl_register = __ATTR(register, 0660,
+static struct kobj_attribute nondl_register = __ATTR(register, 0600,
                                                     empty_show,
                                                     nondl_register_store);
 
-static struct kobj_attribute nondl_unregister = __ATTR(unregister, 0660,
+static struct kobj_attribute nondl_unregister = __ATTR(unregister, 0600,
                                                       empty_show,
                                                       nondl_unregister_store);
 
