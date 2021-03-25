@@ -9,6 +9,7 @@
 #include <ci/efrm/efrm_client.h>
 #include <ci/efrm/nondl.h>
 #include <linux/rtnetlink.h>
+#include <linux/ethtool.h>
 
 #ifdef EFHW_HAS_AF_XDP
 
