@@ -12,6 +12,11 @@
 #include <linux/skbuff.h>
 #include <linux/netdevice.h>
 
+#if defined(CONFIG_COMPAT) && defined(CONFIG_X86_64) && !defined(TIF_IA32)
+/* linux>=5.11: user_64bit_mode() requires this */
+#include <linux/sched/task_stack.h>
+#endif
+
 
 #ifndef __NFDBITS
 # define __NFDBITS BITS_PER_LONG
@@ -61,7 +66,11 @@ static inline int is_compat_task(void)
 #if !defined(CONFIG_COMPAT)
   return 0;
 #elif defined(CONFIG_X86_64)
-  return test_thread_flag(TIF_IA32);
+  #ifdef TIF_IA32
+    return test_thread_flag(TIF_IA32);
+  #else
+    return !user_64bit_mode(task_pt_regs(current));
+  #endif
 #elif defined(CONFIG_PPC64)
   return test_thread_flag(TIF_32BIT);
 #else
