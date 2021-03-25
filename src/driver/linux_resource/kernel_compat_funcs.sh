@@ -508,7 +508,8 @@ EXTRA_CFLAGS = -Werror $(call cc-disable-warning, unused-but-set-variable)
 # Ensure it looks like a build tree and we can build a module
 [ -d "$KPATH" ] || fail "$KPATH is not a directory"
 [ -f "$KPATH/Makefile" ] || fail "$KPATH/Makefile is not present"
-test_compile "#include <linux/module.h>" || \
+test_compile "#include <linux/module.h>
+MODULE_LICENSE(\"GPL\");" || \
     fail "Kernel build tree is unable to build modules"
 
 # strip the KVER out of UTS_RELEASE, and compare to the specified KVER

@@ -151,6 +151,7 @@ function do_EFRM_ACCESS_OK_HAS_2_ARGS
 {
     test_compile "
 #include <linux/uaccess.h>
+MODULE_LICENSE(\"GPL\");
 
 int func(unsigned long size)
 {
@@ -163,6 +164,7 @@ function do_EFRM_PUT_USER_ACCEPTS_VOLATILE
 {
     test_compile "
 #include <linux/uaccess.h>
+MODULE_LICENSE(\"GPL\");
 
 int func(unsigned long v, volatile unsigned long *ptr)
 {
