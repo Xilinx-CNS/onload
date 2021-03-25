@@ -281,7 +281,7 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
 
   /* Endpoints in epoll list should not be moved, because waitq is already
    * in the epoll internal structures (bug 41152). */
-  if( !list_empty(&priv->_filp->f_ep_links) ) {
+  if( oo_file_is_in_epoll(priv->_filp) ) {
     rc = -EBUSY;
     goto fail1;
   }
@@ -542,7 +542,7 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
   old_s->b.moved_to_stack_id = alien_ni->state->stack_id;
   old_s->b.moved_to_sock_id = new_s->b.bufid;
   *new_sock_id = new_s->b.bufid;
-  if( ! list_empty(&priv->_filp->f_ep_links) )
+  if( oo_file_is_in_epoll(priv->_filp) )
     ci_bit_set(&old_s->b.sb_aflags, CI_SB_AFLAG_MOVED_AWAY_IN_EPOLL_BIT);
 
   ci_sock_unlock(&old_thr->netif, &old_s->b);

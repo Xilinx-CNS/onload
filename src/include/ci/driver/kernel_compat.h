@@ -341,4 +341,15 @@ static inline time64_t ktime_get_real_seconds(void)
 #endif
 
 
+static inline int oo_file_is_in_epoll(struct file* file)
+{
+#ifdef EFRM_FILE_HAS_F_EP
+  /* linux>= 5.11 */
+  return file->f_ep != NULL && ! hlist_empty(file->f_ep);
+#else
+  return ! list_empty(&file->f_ep_links);
+#endif
+}
+
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

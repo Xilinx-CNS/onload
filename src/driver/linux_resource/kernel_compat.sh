@@ -134,6 +134,7 @@ EFRM_CLOSE_FD_EXPORTED		export	close_fd	include/linux/fdtable.h	fs/file.c
 EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW	symtype	remap_vmalloc_range_partial	include/linux/vmalloc.h int(struct vm_area_struct *vma, unsigned long uaddr, void *kaddr, unsigned long pgoff, unsigned long size)
 
 EFRM_HAS_KTIME_GET_REAL_SECONDS	export	ktime_get_real_seconds	include/linux/timekeeping.h	kernel/time/timekeeping.c
+EFRM_FILE_HAS_F_EP	member	struct_file	f_ep	include/linux/fs.h
 
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'

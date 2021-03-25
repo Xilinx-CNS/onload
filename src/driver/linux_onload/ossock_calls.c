@@ -68,7 +68,7 @@ static void efab_ep_handover_setup(ci_private_t* priv, int* in_epoll_p)
 #endif
 
   *in_epoll_p = 0;
-  if( ! list_empty(&priv->_filp->f_ep_links) ) {
+  if( oo_file_is_in_epoll(priv->_filp) ) {
     ci_bit_set(&w->waitable.sb_aflags, CI_SB_AFLAG_MOVED_AWAY_IN_EPOLL_BIT);
     *in_epoll_p = 1;
   }
