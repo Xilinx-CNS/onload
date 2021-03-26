@@ -92,7 +92,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.7.1003"
+#define EFX_DRIVER_VERSION	"5.3.7.1005"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -1853,7 +1853,7 @@ struct efx_nic {
 	struct notifier_block netdev_notifier;
 	struct notifier_block netevent_notifier;
 	struct efx_tc_state *tc;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
 	void *devlink;
 #endif
 	unsigned int mem_bar;
@@ -1957,8 +1957,8 @@ struct efx_mtd_partition {
 	char name[IFNAMSIZ + 20];
 	/* MCDI related attributes */
 	bool updating;
-	u16 nvram_type;
-	u16 fw_subtype;
+	u32 nvram_type;
+	u32 fw_subtype;
 };
 #endif
 

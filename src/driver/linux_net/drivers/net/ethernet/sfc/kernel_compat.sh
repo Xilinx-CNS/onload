@@ -22,7 +22,6 @@ EFX_HAVE_MTD_TABLE			kver	<	2.6.35
 EFX_HAVE_VMALLOC_REG_DUMP_BUF		kver	>=	2.6.37
 EFX_USE_ETHTOOL_OP_GET_LINK		kver	>=	2.6.38
 EFX_WANT_NDO_POLL_CONTROLLER		kver	<	4.19
-EFX_FLASH_FIRMWARE		symbol request_firmware_direct	include/linux/firmware.h
 EFX_NEED_ROOT_DEVICE_REGISTER		nsymbol root_device_register	include/linux/device.h
 EFX_HAVE_GRO				custom
 EFX_NEED_GRO_RESULT_T			nsymbol	gro_result_t		include/linux/netdevice.h
@@ -395,8 +394,17 @@ EFX_HAVE_RECEIVE_SKB_LIST		symbol	netif_receive_skb_list	include/linux/netdevice
 EFX_NEED_SKB_LIST_DEL_INIT		nsymbol	skb_list_del_init	include/linux/skbuff.h
 EFX_NEED_SKB_MARK_NOT_ON_LIST		nsymbol	skb_mark_not_on_list	include/linux/skbuff.h
 EFX_HAVE_MMIOWB				symbol	mmiowb	include/asm-generic/io.h
+EFX_HAVE_NET_DEVLINK_H			file				include/net/devlink.h
 EFX_HAVE_NDO_GET_DEVLINK	member	struct_net_device_ops	ndo_get_devlink_port	include/linux/netdevice.h
 EFX_HAVE_DEVLINK_INFO		symbol	devlink_info_version_running_put	include/net/devlink.h
+EFX_NEED_DEVLINK_INFO_BOARD_SERIAL_NUMBER_PUT	nsymbol	devlink_info_board_serial_number_put	include/net/devlink.h
+EFX_HAVE_DEVLINK_OPS_SUPPORTED_FLASH_UPDATE_PARAMS	member	devlink_ops	supported_flash_update_params	include/net/devlink.h
+EFX_HAVE_DEVLINK_FLASH_UPDATE_PARAMS	symbol devlink_flash_update_params	include/net/devlink.h
+EFX_HAVE_DEVLINK_FLASH_UPDATE_PARAMS_FW	member	struct_devlink_flash_update_params	fw	include/net/devlink.h
+EFX_HAVE_DEVLINK_FLASH_UPDATE_BEGIN_NOTIFY	symbol	devlink_flash_update_begin_notify	include/net/devlink.h
+EFX_NEED_DEVLINK_FLASH_UPDATE_TIMEOUT_NOTIFY	nsymbol	devlink_flash_update_timeout_notify	include/net/devlink.h
+EFX_NEED_ETHTOOL_FLASH_DEVICE		nsymbol devlink_compat_flash_update	include/net/devlink.h
+
 EFX_HAVE_PCI_FIND_NEXT_EXT_CAPABILITY	symbol	pci_find_next_ext_capability	include/linux/pci.h
 EFX_HAVE_XDP_SOCK			export	xdp_get_umem_from_qid	include/net/xdp_sock.h
 EFX_HAVE_XDP_SOCK_DRV			export	xdp_get_umem_from_qid	include/net/xdp_sock_drv.h

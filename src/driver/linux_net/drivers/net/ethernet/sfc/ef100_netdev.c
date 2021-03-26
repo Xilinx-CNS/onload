@@ -660,7 +660,7 @@ static const struct net_device_ops ef100_netdev_ops = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	.ndo_setup_tc		= efx_setup_tc,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
 #ifdef CONFIG_NET_DEVLINK
 	.ndo_get_devlink_port	= efx_get_devlink_port,
 #endif

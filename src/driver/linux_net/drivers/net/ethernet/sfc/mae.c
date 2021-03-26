@@ -179,87 +179,103 @@ void efx_mae_counters_grant_credits(struct work_struct *work)
 		rx_queue->granted_count += credits;
 }
 
-int efx_mae_enumerate_mports(struct efx_nic *efx, int outbuflen,
-			     struct mae_mport_desc *out)
+struct mae_mport_desc *efx_mae_enumerate_mports(struct efx_nic *efx,
+						unsigned int *n_mports)
 {
-#define MC_CMD_MAEM_PORT_OUTBUF_LEN \
-	(DIV_ROUND_UP(MC_CMD_MAE_MPORT_ENUMERATE_OUT_LENMAX_MCDI2, 4) * sizeof(efx_dword_t))
-	efx_dword_t *outbuf = kzalloc(MC_CMD_MAEM_PORT_OUTBUF_LEN, GFP_KERNEL);
+#define MCDI_MPORT_JOURNAL_LEN \
+	sizeof(efx_dword_t[DIV_ROUND_UP(MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_LENMAX_MCDI2, 4)])
+	efx_dword_t *outbuf = kzalloc(MCDI_MPORT_JOURNAL_LEN, GFP_KERNEL);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_MPORT_READ_JOURNAL_IN_LEN);
+	struct mae_mport_desc *mports = NULL;
+	MCDI_DECLARE_STRUCT_PTR(desc);
 	size_t outlen, stride, count;
-	int rc, i;
+	int rc, i, j = 0;
 
-	BUILD_BUG_ON(MC_CMD_MAE_MPORT_ENUMERATE_IN_LEN);
 	if (!outbuf)
-		return -ENOMEM;
-	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_MPORT_ENUMERATE, NULL, 0, outbuf,
-			  MC_CMD_MAEM_PORT_OUTBUF_LEN, &outlen);
-	if (rc) {
-		rc = (rc < 0) ? rc : -EIO;
-		goto fail;
-	}
-	if (outlen < MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_OFST) {
-		rc = -EIO;
-		goto fail;
-	}
-	count = MCDI_DWORD(outbuf, MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_COUNT);
-	stride = MCDI_DWORD(outbuf, MAE_MPORT_ENUMERATE_OUT_SIZEOF_MPORT_DESC);
-	if (stride < MAE_MPORT_DESC_LEN) {
-		rc = -EIO;
-		goto fail;
-	}
-	if (outlen < (count * stride) +
-	    MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_OFST) {
-		rc = -EIO;
-		goto fail;
-	}
-	if (MC_CMD_MAEM_PORT_OUTBUF_LEN < outlen) {
-		rc = -ENOBUFS;
-		goto fail;
-	}
-	for (i = 0; i < count && i < outbuflen; i++) {
-		MCDI_DECLARE_STRUCT_PTR(desc) =
-			(efx_dword_t *)_MCDI_PTR(outbuf,
-						 MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_OFST +
-						 i * stride);
-		struct mae_mport_desc *d = out + i;
+		return ERR_PTR(-ENOMEM);
+	do {
+		struct mae_mport_desc *r_mports; /* realloc of mports */
 
-		memset(d, 0, sizeof(*d));
-		d->mport_id = MCDI_STRUCT_DWORD(desc, MAE_MPORT_DESC_MPORT_ID);
-		d->flags = MCDI_STRUCT_DWORD(desc, MAE_MPORT_DESC_FLAGS);
-		d->caller_flags = MCDI_STRUCT_DWORD(desc,
-						    MAE_MPORT_DESC_CALLER_FLAGS);
-		d->mport_type = MCDI_STRUCT_DWORD(desc,
-						  MAE_MPORT_DESC_MPORT_TYPE);
-		switch (d->mport_type) {
-		case MAE_MPORT_DESC_MPORT_TYPE_NET_PORT:
-			d->port_idx = MCDI_STRUCT_DWORD(desc,
-							MAE_MPORT_DESC_NET_PORT_IDX);
-			break;
-		case MAE_MPORT_DESC_MPORT_TYPE_ALIAS:
-			d->alias_mport_id = MCDI_STRUCT_DWORD(desc,
-							      MAE_MPORT_DESC_ALIAS_DELIVER_MPORT_ID);
-			break;
-		case MAE_MPORT_DESC_MPORT_TYPE_VNIC:
-			d->vnic_client_type = MCDI_STRUCT_DWORD(desc,
-								MAE_MPORT_DESC_VNIC_CLIENT_TYPE);
-			d->interface_idx = MCDI_STRUCT_DWORD(desc,
-							     MAE_MPORT_DESC_VNIC_FUNCTION_INTERFACE);
-			d->pf_idx = MCDI_STRUCT_WORD(desc,
-						     MAE_MPORT_DESC_VNIC_FUNCTION_PF_IDX);
-			d->vf_idx = MCDI_STRUCT_WORD(desc,
-						     MAE_MPORT_DESC_VNIC_FUNCTION_VF_IDX);
-			break;
-		default:
-			/* Unknown mport_type, just accept it */
-			break;
-
+		rc = efx_mcdi_rpc(efx, MC_CMD_MAE_MPORT_READ_JOURNAL, inbuf, sizeof(inbuf),
+				  outbuf, MCDI_MPORT_JOURNAL_LEN, &outlen);
+		if (rc)
+			goto fail;
+		if (outlen < MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_DATA_OFST) {
+			rc = -EIO;
+			goto fail;
 		}
+		count = MCDI_DWORD(outbuf, MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_COUNT);
+		if (!count)
+			continue; /* not break; we want to look at MORE flag */
+		stride = MCDI_DWORD(outbuf, MAE_MPORT_READ_JOURNAL_OUT_SIZEOF_MPORT_DESC);
+		if (stride < MAE_MPORT_DESC_LEN) {
+			rc = -EIO;
+			goto fail;
+		}
+		if (outlen < MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_LEN(count * stride)) {
+			rc = -EIO;
+			goto fail;
+		}
+		r_mports = krealloc(mports, array_size(j + count, sizeof(*mports)), GFP_KERNEL);
+		if (!r_mports) {
+			rc = -ENOMEM;
+			goto fail;
+		}
+		mports = r_mports;
+		for (i = 0; i < count; i++) {
+			struct mae_mport_desc *d = mports + j;
 
-	}
-
-fail:
+			desc = (efx_dword_t *)_MCDI_PTR(outbuf, MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_DATA_OFST + i * stride);
+			memset(d, 0, sizeof(*d));
+			d->mport_id = MCDI_STRUCT_DWORD(desc, MAE_MPORT_DESC_MPORT_ID);
+			d->flags = MCDI_STRUCT_DWORD(desc, MAE_MPORT_DESC_FLAGS);
+			d->caller_flags = MCDI_STRUCT_DWORD(desc,
+							    MAE_MPORT_DESC_CALLER_FLAGS);
+			if (d->caller_flags & MAE_MPORT_DESC_FLAG_IS_ZOMBIE) {
+				/* Zombie flag implies that an existing mport was
+				 * destroyed.  We don't currently support finding the
+				 * existing entry in *mports and removing it, but we
+				 * can at least not add a duplicate.
+				 */
+				netif_warn(efx, drv, efx->net_dev, "unsupported Z flag on mport journal\n");
+				continue;
+			}
+			d->mport_type = MCDI_STRUCT_DWORD(desc,
+							  MAE_MPORT_DESC_MPORT_TYPE);
+			switch (d->mport_type) {
+			case MAE_MPORT_DESC_MPORT_TYPE_NET_PORT:
+				d->port_idx = MCDI_STRUCT_DWORD(desc,
+								MAE_MPORT_DESC_NET_PORT_IDX);
+				break;
+			case MAE_MPORT_DESC_MPORT_TYPE_ALIAS:
+				d->alias_mport_id = MCDI_STRUCT_DWORD(desc,
+								      MAE_MPORT_DESC_ALIAS_DELIVER_MPORT_ID);
+				break;
+			case MAE_MPORT_DESC_MPORT_TYPE_VNIC:
+				d->vnic_client_type = MCDI_STRUCT_DWORD(desc,
+									MAE_MPORT_DESC_VNIC_CLIENT_TYPE);
+				d->interface_idx = MCDI_STRUCT_DWORD(desc,
+								     MAE_MPORT_DESC_VNIC_FUNCTION_INTERFACE);
+				d->pf_idx = MCDI_STRUCT_WORD(desc,
+							     MAE_MPORT_DESC_VNIC_FUNCTION_PF_IDX);
+				d->vf_idx = MCDI_STRUCT_WORD(desc,
+							     MAE_MPORT_DESC_VNIC_FUNCTION_VF_IDX);
+				break;
+			default:
+				/* Unknown mport_type, just accept it */
+				break;
+			}
+			j++;
+		}
+	} while (MCDI_FIELD(outbuf, MAE_MPORT_READ_JOURNAL_OUT, MORE) &&
+		 !WARN_ON(!count));
 	kfree(outbuf);
-	return rc ? rc : count;
+	*n_mports = j;
+	return mports;
+fail:
+	kfree(mports);
+	kfree(outbuf);
+	return ERR_PTR(rc);
 }
 
 static int efx_mae_get_basic_caps(struct efx_nic *efx, struct mae_caps *caps)
@@ -785,6 +801,11 @@ int efx_mae_free_encap_md(struct efx_nic *efx,
 }
 #endif /* EFX_TC_OFFLOAD */
 
+static bool efx_mae_asl_id(u32 id)
+{
+	return !!(id & BIT(31));
+}
+
 int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_ACTION_SET_ALLOC_OUT_LEN);
@@ -869,6 +890,13 @@ int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 	if (outlen < sizeof(outbuf))
 		return -EIO;
 	act->fw_id = MCDI_DWORD(outbuf, MAE_ACTION_SET_ALLOC_OUT_AS_ID);
+	/* We rely on the high bit of AS IDs always being clear.
+	 * The firmware API guarantees this, but let's check it ourselves.
+	 */
+	if (WARN_ON_ONCE(efx_mae_asl_id(act->fw_id))) {
+		efx_mae_free_action_set(efx, act);
+		return -EIO;
+	}
 	return 0;
 }
 
@@ -910,6 +938,16 @@ int efx_mae_alloc_action_set_list(struct efx_nic *efx,
 
 	list_for_each_entry(act, &acts->list, list)
 		i++;
+	if (i == 0)
+		return -EINVAL;
+	if (i == 1) {
+		/* Don't wrap an ASL around a single AS, just use the AS_ID
+		 * directly.  ASLs are a more limited resource.
+		 */
+		act = list_first_entry(&acts->list, struct efx_tc_action_set, list);
+		acts->fw_id = act->fw_id;
+		return 0;
+	}
 	if (i > MC_CMD_MAE_ACTION_SET_LIST_ALLOC_IN_AS_IDS_MAXNUM_MCDI2)
 		return -EOPNOTSUPP; /* Too many actions */
 	inlen = MC_CMD_MAE_ACTION_SET_LIST_ALLOC_IN_LEN(i);
@@ -932,7 +970,13 @@ int efx_mae_alloc_action_set_list(struct efx_nic *efx,
 		goto out_free;
 	}
 	acts->fw_id = MCDI_DWORD(outbuf, MAE_ACTION_SET_LIST_ALLOC_OUT_ASL_ID);
-	rc = 0;
+	/* We rely on the high bit of ASL IDs always being set.
+	 * The firmware API guarantees this, but let's check it ourselves.
+	 */
+	if (WARN_ON_ONCE(!efx_mae_asl_id(acts->fw_id))) {
+		efx_mae_free_action_set_list(efx, acts);
+		rc = -EIO;
+	}
 out_free:
 	kfree(inbuf);
 	return rc;
@@ -946,20 +990,25 @@ int efx_mae_free_action_set_list(struct efx_nic *efx,
 	size_t outlen;
 	int rc;
 
-	MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_LIST_FREE_IN_ASL_ID,
-		       acts->fw_id);
-	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_ACTION_SET_LIST_FREE, inbuf,
-			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
-	if (rc)
-		return rc;
-	if (outlen < sizeof(outbuf))
-		return -EIO;
-	/* FW freed a different ID than we asked for, should never happen.
-	 * Warn because it means we've now got a different idea to the FW of
-	 * what encap_mds exist, which could cause mayhem later.
+	/* If this is just an AS_ID with no ASL wrapper, then there is
+	 * nothing for us to free.  (The AS will be freed later.)
 	 */
-	if (WARN_ON(MCDI_DWORD(outbuf, MAE_ACTION_SET_LIST_FREE_OUT_FREED_ASL_ID) != acts->fw_id))
-		return -EIO;
+	if (efx_mae_asl_id(acts->fw_id)) {
+		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_LIST_FREE_IN_ASL_ID,
+			       acts->fw_id);
+		rc = efx_mcdi_rpc(efx, MC_CMD_MAE_ACTION_SET_LIST_FREE, inbuf,
+				  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
+		if (rc)
+			return rc;
+		if (outlen < sizeof(outbuf))
+			return -EIO;
+		/* FW freed a different ID than we asked for, should never happen.
+		 * Warn because it means we've now got a different idea to the FW of
+		 * what encap_mds exist, which could cause mayhem later.
+		 */
+		if (WARN_ON(MCDI_DWORD(outbuf, MAE_ACTION_SET_LIST_FREE_OUT_FREED_ASL_ID) != acts->fw_id))
+			return -EIO;
+	}
 	/* We're probably about to free @acts, but let's just make sure its
 	 * fw_id is blatted so that it won't look valid if it leaks out.
 	 */
@@ -1467,9 +1516,16 @@ int efx_mae_insert_rule(struct efx_nic *efx, const struct efx_tc_match *match,
 
 	match_crit = _MCDI_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_MATCH_CRITERIA);
 	response = _MCDI_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_RESPONSE);
-	MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_ASL_ID, acts_id);
-	MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_AS_ID,
-			      MC_CMD_MAE_ACTION_SET_ALLOC_OUT_ACTION_SET_ID_NULL);
+	if (efx_mae_asl_id(acts_id)) {
+		MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_ASL_ID, acts_id);
+		MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_AS_ID,
+				      MC_CMD_MAE_ACTION_SET_ALLOC_OUT_ACTION_SET_ID_NULL);
+	} else {
+		/* We only had one AS, so we didn't wrap it in an ASL */
+		MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_ASL_ID,
+				      MC_CMD_MAE_ACTION_SET_LIST_ALLOC_OUT_ACTION_SET_LIST_ID_NULL);
+		MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_AS_ID, acts_id);
+	}
 	MCDI_SET_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_PRIO, prio);
 	rc = efx_mae_populate_match_criteria(match_crit, match);
 	if (rc)

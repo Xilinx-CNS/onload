@@ -148,7 +148,7 @@ sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 			   efx_devlink.o xdp.o efx_virtbus.o \
 			   ef100.o ef100_nic.o ef100_netdev.o ef100_ethtool.o \
 			   ef100_rx.o ef100_tx.o ef100_sriov.o ef100_rep.o \
-			   tc.o mae.o ef100_bsp.o
+			   tc.o mae.o ef100_bsp.o efx_reflash.o
 
 sfc_driverlink-y	:= driverlink.o
 

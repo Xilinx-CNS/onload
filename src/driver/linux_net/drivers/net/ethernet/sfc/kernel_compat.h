@@ -3411,10 +3411,6 @@ static inline void skb_mark_not_on_list(struct sk_buff *skb)
 	     (skb) = (next_skb), (next_skb) = (skb) ? (skb)->next : NULL)
 #endif
 
-#if defined(EFX_HAVE_NDO_GET_DEVLINK) && defined(EFX_HAVE_DEVLINK_INFO)
-#define EFX_HAVE_DEVLINK
-#endif
-
 #if !defined(EFX_HAVE_PCI_FIND_NEXT_EXT_CAPABILITY)
 int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 #endif
@@ -3459,6 +3455,125 @@ int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 
 #ifndef VIRTIO_NET_F_RSC_EXT
 #define VIRTIO_NET_F_RSC_EXT 61
+#endif
+
+#if defined(EFX_HAVE_NET_DEVLINK_H) && defined(EFX_HAVE_NDO_GET_DEVLINK) && defined(EFX_HAVE_DEVLINK_INFO) && defined(CONFIG_NET_DEVLINK)
+/* Minimum requirements met to use the kernel's devlink suppport */
+#include <net/devlink.h>
+
+/* devlink is available, augment the provided support with wrappers and stubs
+ * for newer APIs as appropriate.
+ */
+#define EFX_USE_DEVLINK
+
+#ifdef EFX_NEED_DEVLINK_INFO_BOARD_SERIAL_NUMBER_PUT
+static inline int devlink_info_board_serial_number_put(struct devlink_info_req *req,
+						       const char *bsn)
+{
+	/* Do nothing */
+	return 0;
+}
+#endif
+#ifdef EFX_NEED_DEVLINK_FLASH_UPDATE_TIMEOUT_NOTIFY
+void devlink_flash_update_timeout_notify(struct devlink *devlink,
+					 const char *status_msg,
+					 const char *component,
+					 unsigned long timeout);
+#endif
+
+#else
+
+/* devlink is not available, provide a 'fake' devlink info request structure
+ * and functions to expose the version information via a file in sysfs.
+ */
+
+struct devlink_info_req {
+	char *buf;
+	size_t bufsize;
+};
+
+int devlink_info_serial_number_put(struct devlink_info_req *req, const char *sn);
+int devlink_info_driver_name_put(struct devlink_info_req *req, const char *name);
+int devlink_info_board_serial_number_put(struct devlink_info_req *req,
+					 const char *bsn);
+int devlink_info_version_fixed_put(struct devlink_info_req *req,
+				   const char *version_name,
+				   const char *version_value);
+int devlink_info_version_stored_put(struct devlink_info_req *req,
+				    const char *version_name,
+				    const char *version_value);
+int devlink_info_version_running_put(struct devlink_info_req *req,
+				     const char *version_name,
+				     const char *version_value);
+
+/* Provide a do-nothing stubs for the flash update status notifications */
+
+struct devlink;
+
+static inline void devlink_flash_update_status_notify(struct devlink *devlink,
+						      const char *status_msg,
+						      const char *component,
+						      unsigned long done,
+						      unsigned long total)
+{
+	/* Do nothing */
+}
+
+static inline void devlink_flash_update_timeout_notify(struct devlink *devlink,
+						       const char *status_msg,
+						       const char *component,
+						       unsigned long timeout)
+{
+	/* Do nothing */
+}
+
+#endif	/* EFX_HAVE_NET_DEVLINK_H && EFX_HAVE_NDO_GET_DEVLINK && EFX_HAVE_DEVLINK_INFO && CONFIG_NET_DEVLINK */
+
+/* Irrespective of whether devlink is available, use the generic devlink info
+ * version object names where possible.  Many of these definitions were added
+ * to net/devlink.h over time so augment whatever is provided.
+ */
+#ifndef DEVLINK_INFO_VERSION_GENERIC_BOARD_ID
+#define DEVLINK_INFO_VERSION_GENERIC_BOARD_ID		"board.id"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_BOARD_REV
+#define DEVLINK_INFO_VERSION_GENERIC_BOARD_REV		"board.rev"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_BOARD_MANUFACTURE
+#define DEVLINK_INFO_VERSION_GENERIC_BOARD_MANUFACTURE	"board.manufacture"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_ASIC_ID
+#define DEVLINK_INFO_VERSION_GENERIC_ASIC_ID		"asic.id"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_ASIC_REV
+#define DEVLINK_INFO_VERSION_GENERIC_ASIC_REV		"asic.rev"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW
+#define DEVLINK_INFO_VERSION_GENERIC_FW			"fw"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_MGMT
+#define DEVLINK_INFO_VERSION_GENERIC_FW_MGMT		"fw.mgmt"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_MGMT_API
+#define DEVLINK_INFO_VERSION_GENERIC_FW_MGMT_API	"fw.mgmt.api"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_APP
+#define DEVLINK_INFO_VERSION_GENERIC_FW_APP		"fw.app"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_UNDI
+#define DEVLINK_INFO_VERSION_GENERIC_FW_UNDI		"fw.undi"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_NCSI
+#define DEVLINK_INFO_VERSION_GENERIC_FW_NCSI		"fw.ncsi"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_PSID
+#define DEVLINK_INFO_VERSION_GENERIC_FW_PSID		"fw.psid"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_ROCE
+#define DEVLINK_INFO_VERSION_GENERIC_FW_ROCE		"fw.roce"
+#endif
+#ifndef DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID
+#define DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID	"fw.bundle_id"
 #endif
 
 #endif /* EFX_KERNEL_COMPAT_H */

@@ -998,3 +998,70 @@ int pci_find_next_ext_capability(struct pci_dev *dev, int start, int cap)
 }
 
 #endif
+
+#ifdef EFX_USE_DEVLINK
+
+#ifdef EFX_NEED_DEVLINK_FLASH_UPDATE_TIMEOUT_NOTIFY
+void devlink_flash_update_timeout_notify(struct devlink *devlink,
+					 const char *status_msg,
+					 const char *component,
+					 unsigned long timeout)
+{
+	/* Treat as a status notifcation with no timeout indicated */
+	devlink_flash_update_status_notify(devlink, status_msg, component, 0, 0);
+}
+#endif
+
+#else
+
+static int efx_devlink_info_add(struct devlink_info_req *req,
+				const char *prefix, const char *name,
+				const char *value)
+{
+	int offset = strlen(req->buf);
+
+	scnprintf(&req->buf[offset], req->bufsize - offset, "%s%s: %s\n",
+		  prefix, name, value);
+	return 0;
+}
+
+int devlink_info_serial_number_put(struct devlink_info_req *req, const char *sn)
+{
+	return efx_devlink_info_add(req, "", "serial_number", sn);
+}
+
+int devlink_info_driver_name_put(struct devlink_info_req *req, const char *name)
+{
+	return efx_devlink_info_add(req, "", "driver", name);
+}
+
+int devlink_info_board_serial_number_put(struct devlink_info_req *req,
+					 const char *bsn)
+{
+	return efx_devlink_info_add(req, "board.", "serial_number", bsn);
+}
+
+int devlink_info_version_fixed_put(struct devlink_info_req *req,
+				   const char *version_name,
+				   const char *version_value)
+{
+	return efx_devlink_info_add(req, "fixed.", version_name, version_value);
+}
+
+int devlink_info_version_stored_put(struct devlink_info_req *req,
+				    const char *version_name,
+				    const char *version_value)
+{
+	return efx_devlink_info_add(req, "stored.", version_name,
+				    version_value);
+}
+
+int devlink_info_version_running_put(struct devlink_info_req *req,
+				     const char *version_name,
+				     const char *version_value)
+{
+	return efx_devlink_info_add(req, "running.", version_name,
+				    version_value);
+}
+
+#endif	/* !EFX_USE_DEVLINK */

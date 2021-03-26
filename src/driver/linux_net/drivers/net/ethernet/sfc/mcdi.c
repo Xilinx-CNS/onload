@@ -8,7 +8,6 @@
  */
 #include <linux/delay.h>
 #include <linux/moduleparam.h>
-#include <linux/rtc.h>
 #include "net_driver.h"
 #include "nic.h"
 #include "efx_common.h"
@@ -1658,153 +1657,6 @@ fail:
 	buf[0] = 0;
 }
 
-#define EFX_MAX_VERSION_INFO_LEN	64
-#define EFX_V2_FLAG(_f)	\
-	(MC_CMD_GET_VERSION_V2_OUT_ ## _f ## _EXT_INFO_PRESENT_LBN)
-
-void efx_mcdi_dump_versions(struct efx_nic *efx, void *print_info)
-{
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_VERSION_EXT_IN_LEN);
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_VERSION_V2_OUT_LEN);
-	union {
-		const __le16 *words;
-		const __le32 *dwords;
-		const char *str;
-	} ver;
-	struct rtc_time build_date;
-	unsigned int flags, build_id;
-	size_t outlength, offset;
-	char buf[EFX_MAX_VERSION_INFO_LEN] = EFX_DRIVER_VERSION;
-	u64 tstamp;
-	int rc;
-
-	efx_devlink_dump_version(print_info, EFX_INFO_TYPE_DRIVER, buf);
-
-	rc = efx_mcdi_rpc(efx, MC_CMD_GET_VERSION, inbuf, sizeof(inbuf),
-			  outbuf, sizeof(outbuf), &outlength);
-	if (rc || outlength < MC_CMD_GET_VERSION_OUT_LEN)
-		return;
-
-	/* Handle previous output */
-	if (outlength < MC_CMD_GET_VERSION_V2_OUT_LEN) {
-		ver.words = (__le16 *) MCDI_PTR(outbuf,
-						GET_VERSION_V2_OUT_VERSION);
-		offset = snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%u.%u.%u.%u",
-				  le16_to_cpu(ver.words[0]),
-				  le16_to_cpu(ver.words[1]),
-				  le16_to_cpu(ver.words[2]),
-				  le16_to_cpu(ver.words[3]));
-
-		if (efx_nic_rev(efx) == EFX_REV_EF100)
-			efx_devlink_dump_version(print_info,
-						 EFX_INFO_TYPE_NMCFW, buf);
-		else
-			efx_devlink_dump_version(print_info,
-						 EFX_INFO_TYPE_MCFW, buf);
-		return;
-	}
-
-	/* Handle V2 additions */
-	flags = MCDI_DWORD(outbuf, GET_VERSION_V2_OUT_FLAGS);
-	if (flags & BIT(EFX_V2_FLAG(BOARD))) {
-
-		snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%s",
-			 MCDI_PTR(outbuf, GET_VERSION_V2_OUT_BOARD_NAME));
-		efx_devlink_dump_version(print_info, EFX_INFO_TYPE_BOARD_ID,
-					 buf);
-
-		snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%d",
-			 MCDI_DWORD(outbuf, GET_VERSION_V2_OUT_BOARD_REVISION));
-		efx_devlink_dump_version(print_info, EFX_INFO_TYPE_BOARD_REV,
-					 buf);
-
-		ver.str = MCDI_PTR(outbuf, GET_VERSION_V2_OUT_BOARD_SERIAL);
-		if (ver.str[0])
-			efx_devlink_dump_version(print_info,
-						 EFX_INFO_TYPE_SERIAL, ver.str);
-	}
-
-	if (flags & BIT(EFX_V2_FLAG(FPGA))) {
-
-		ver.dwords = (__le32 *) MCDI_PTR(outbuf,
-					     GET_VERSION_V2_OUT_FPGA_VERSION);
-		offset = snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%d_%c%d",
-				  le32_to_cpu(ver.dwords[0]),
-				  'A' + le32_to_cpu(ver.dwords[1]),
-				  le32_to_cpu(ver.dwords[2]));
-
-		ver.str = MCDI_PTR(outbuf, GET_VERSION_V2_OUT_FPGA_EXTRA);
-		if (ver.str[0])
-			snprintf(&buf[offset], EFX_MAX_VERSION_INFO_LEN-offset,
-				 " (%s)", ver.str);
-
-		efx_devlink_dump_version(print_info, EFX_INFO_TYPE_FPGA, buf);
-	}
-
-	if (flags & BIT(EFX_V2_FLAG(CMC))) {
-
-		ver.dwords = (__le32 *) MCDI_PTR(outbuf,
-					     GET_VERSION_V2_OUT_CMCFW_VERSION);
-		offset = snprintf(buf, EFX_MAX_VERSION_INFO_LEN, "%d.%d.%d.%d",
-				  le32_to_cpu(ver.dwords[0]),
-				  le32_to_cpu(ver.dwords[1]),
-				  le32_to_cpu(ver.dwords[2]),
-				  le32_to_cpu(ver.dwords[3]));
-
-		tstamp = MCDI_QWORD(outbuf,
-				    GET_VERSION_V2_OUT_CMCFW_BUILD_DATE);
-		if (tstamp) {
-			rtc_time64_to_tm(tstamp, &build_date);
-			snprintf(&buf[offset], EFX_MAX_VERSION_INFO_LEN-offset,
-				 " (%ptRd)", &build_date);
-		}
-
-		efx_devlink_dump_version(print_info, EFX_INFO_TYPE_CMCFW, buf);
-	}
-
-	if (flags & BIT(EFX_V2_FLAG(MCFW))) {
-
-		ver.words = (__le16 *) MCDI_PTR(outbuf,
-						GET_VERSION_V2_OUT_VERSION);
-		build_id = MCDI_DWORD(outbuf, GET_VERSION_V2_OUT_MCFW_BUILD_ID);
-		offset = snprintf(buf, EFX_MAX_VERSION_INFO_LEN,
-				  "%u.%u.%u.%u (%x) %s",
-				  le16_to_cpu(ver.words[0]),
-				  le16_to_cpu(ver.words[1]),
-				  le16_to_cpu(ver.words[2]),
-				  le16_to_cpu(ver.words[3]), build_id,
-				  MCDI_PTR(outbuf,
-					   GET_VERSION_V2_OUT_MCFW_BUILD_NAME));
-
-		if (efx_nic_rev(efx) == EFX_REV_EF100)
-			efx_devlink_dump_version(print_info,
-						 EFX_INFO_TYPE_NMCFW, buf);
-		else
-			efx_devlink_dump_version(print_info,
-						 EFX_INFO_TYPE_MCFW, buf);
-	}
-
-	if (flags & BIT(EFX_V2_FLAG(SUCFW))) {
-
-		ver.dwords = (__le32 *) MCDI_PTR(outbuf,
-					     GET_VERSION_V2_OUT_SUCFW_VERSION);
-		tstamp = MCDI_QWORD(outbuf,
-				    GET_VERSION_V2_OUT_SUCFW_BUILD_DATE);
-		rtc_time64_to_tm(tstamp, &build_date);
-		build_id = MCDI_DWORD(outbuf, GET_VERSION_V2_OUT_SUCFW_CHIP_ID);
-
-		snprintf(buf, EFX_MAX_VERSION_INFO_LEN,
-			 "%d.%d.%d.%d type %x (%ptRd)",
-			 le32_to_cpu(ver.dwords[0]), le32_to_cpu(ver.dwords[1]),
-			 le32_to_cpu(ver.dwords[2]), le32_to_cpu(ver.dwords[3]),
-			 build_id, &build_date);
-
-		efx_devlink_dump_version(print_info, EFX_INFO_TYPE_SUCFW, buf);
-	}
-}
-
-#undef EFX_V2_FLAG
-
 static int efx_mcdi_drv_attach_attempt(struct efx_nic *efx,
 				       u32 fw_variant, u32 new_state,
 				       u32 *flags, bool reattach)
@@ -2122,9 +1974,7 @@ int efx_mcdi_nvram_info(struct efx_nic *efx, unsigned int type,
 
 	if (outlen >= MC_CMD_NVRAM_INFO_V2_OUT_LEN)
 		write_size = MCDI_DWORD(outbuf, NVRAM_INFO_V2_OUT_WRITESIZE);
-
-	if (write_size == 0)
-		/* Not provided by MCDI, or not set for this partition. */
+	else
 		write_size = EFX_MCDI_NVRAM_DEFAULT_WRITE_LEN;
 
 	*write_size_out = write_size;
@@ -2798,7 +2648,8 @@ int efx_mcdi_nvram_erase(struct efx_nic *efx, unsigned int type,
 	return rc;
 }
 
-int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type)
+int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,
+				 enum efx_update_finish_mode mode)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_NVRAM_UPDATE_FINISH_V2_IN_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_NVRAM_UPDATE_FINISH_V2_OUT_LEN);
@@ -2813,21 +2664,35 @@ int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type)
 		  type == MC_CMD_NVRAM_TYPE_DISABLED_CALLISTO);
 	MCDI_SET_DWORD(inbuf, NVRAM_UPDATE_FINISH_IN_TYPE, type);
 	MCDI_SET_DWORD(inbuf, NVRAM_UPDATE_FINISH_IN_REBOOT, reboot);
-	/* Always set this flag. Old firmware ignores it */
-	MCDI_POPULATE_DWORD_1(inbuf, NVRAM_UPDATE_FINISH_V2_IN_FLAGS,
-			      NVRAM_UPDATE_FINISH_V2_IN_FLAG_REPORT_VERIFY_RESULT,
-				1);
+
+	/* Old firmware doesn't support background update finish operations.
+	 * A request to run the operation in the background will wait instead.
+	 */
+	if (!efx_has_cap(efx, NVRAM_UPDATE_POLL_VERIFY_RESULT))
+		mode = EFX_UPDATE_FINISH_WAIT;
+
+	/* Always set the REPORT_VERIFY_RESULT flag. Old firmware ignores it */
+	MCDI_POPULATE_DWORD_3(inbuf, NVRAM_UPDATE_FINISH_V2_IN_FLAGS,
+			      NVRAM_UPDATE_FINISH_V2_IN_FLAG_REPORT_VERIFY_RESULT, 1,
+			      NVRAM_UPDATE_FINISH_V2_IN_FLAG_RUN_IN_BACKGROUND,
+			      (mode == EFX_UPDATE_FINISH_BACKGROUND),
+			      NVRAM_UPDATE_FINISH_V2_IN_FLAG_POLL_VERIFY_RESULT,
+			      (mode == EFX_UPDATE_FINISH_POLL));
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_NVRAM_UPDATE_FINISH, inbuf, sizeof(inbuf),
 			  outbuf, sizeof(outbuf), &outlen);
 	if (!rc && outlen >= MC_CMD_NVRAM_UPDATE_FINISH_V2_OUT_LEN) {
 		rc2 = MCDI_DWORD(outbuf, NVRAM_UPDATE_FINISH_V2_OUT_RESULT_CODE);
-		if (rc2 != MC_CMD_NVRAM_VERIFY_RC_SUCCESS)
+		if (rc2 != MC_CMD_NVRAM_VERIFY_RC_SUCCESS &&
+		    rc2 != MC_CMD_NVRAM_VERIFY_RC_PENDING)
 			netif_err(efx, drv, efx->net_dev,
 				  "NVRAM update failed verification with code 0x%x\n",
 				  rc2);
 		switch (rc2) {
 		case MC_CMD_NVRAM_VERIFY_RC_SUCCESS:
+			break;
+		case MC_CMD_NVRAM_VERIFY_RC_PENDING:
+			rc = -EAGAIN;
 			break;
 		case MC_CMD_NVRAM_VERIFY_RC_CMS_CHECK_FAILED:
 		case MC_CMD_NVRAM_VERIFY_RC_MESSAGE_DIGEST_CHECK_FAILED:
@@ -2844,6 +2709,7 @@ int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type)
 		case MC_CMD_NVRAM_VERIFY_RC_NO_TRUSTED_APPROVERS:
 		case MC_CMD_NVRAM_VERIFY_RC_NO_SIGNATURE_MATCH:
 		case MC_CMD_NVRAM_VERIFY_RC_REJECT_TEST_SIGNED:
+		case MC_CMD_NVRAM_VERIFY_RC_SECURITY_LEVEL_DOWNGRADE:
 			rc = -EPERM;
 			break;
 		default:
@@ -2852,6 +2718,112 @@ int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type)
 			rc = -EIO;
 		}
 	}
+	return rc;
+}
+
+#define	EFX_MCDI_NVRAM_UPDATE_FINISH_INITIAL_POLL_DELAY_MS 5
+#define	EFX_MCDI_NVRAM_UPDATE_FINISH_MAX_POLL_DELAY_MS 5000
+#define	EFX_MCDI_NVRAM_UPDATE_FINISH_RETRIES 185
+
+int efx_mcdi_nvram_update_finish_polled(struct efx_nic *efx, unsigned int type)
+{
+	unsigned int delay = EFX_MCDI_NVRAM_UPDATE_FINISH_INITIAL_POLL_DELAY_MS;
+	unsigned int retry = 0;
+	int rc;
+
+	/* NVRAM updates can take a long time (e.g. up to 1 minute for bundle
+	 * images). Polling for NVRAM update completion ensures that other MCDI
+	 * commands can be issued before the background NVRAM update completes.
+	 *
+	 * The initial call either completes the update synchronously, or
+	 * returns -EAGAIN to indicate processing is continuing. In the latter
+	 * case, we poll for at least 900 seconds, at increasing intervals
+	 * (5ms, 50ms, 500ms, 5s).
+	 */
+	rc = efx_mcdi_nvram_update_finish(efx, type, EFX_UPDATE_FINISH_BACKGROUND);
+	while (rc == -EAGAIN) {
+		if (retry > EFX_MCDI_NVRAM_UPDATE_FINISH_RETRIES)
+			return -ETIMEDOUT;
+		retry++;
+
+		msleep(delay);
+		if (delay < EFX_MCDI_NVRAM_UPDATE_FINISH_MAX_POLL_DELAY_MS)
+			delay *= 10;
+
+		rc = efx_mcdi_nvram_update_finish(efx, type, EFX_UPDATE_FINISH_POLL);
+	}
+	return rc;
+}
+
+int efx_mcdi_nvram_metadata(struct efx_nic *efx, unsigned int type,
+			    u32 *subtype, u16 version[4], char *desc,
+			    size_t descsize)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_NVRAM_METADATA_IN_LEN);
+	efx_dword_t *outbuf;
+	size_t outlen;
+	u32 flags;
+	int rc;
+
+	outbuf = kzalloc(MC_CMD_NVRAM_METADATA_OUT_LENMAX_MCDI2, GFP_KERNEL);
+	if (!outbuf)
+		return -ENOMEM;
+
+	MCDI_SET_DWORD(inbuf, NVRAM_METADATA_IN_TYPE, type);
+
+	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_NVRAM_METADATA, inbuf,
+				sizeof(inbuf), outbuf,
+				MC_CMD_NVRAM_METADATA_OUT_LENMAX_MCDI2,
+				&outlen);
+	if (rc)
+		goto out_free;
+	if (outlen < MC_CMD_NVRAM_METADATA_OUT_LENMIN) {
+		rc = -EIO;
+		goto out_free;
+	}
+
+	flags = MCDI_DWORD(outbuf, NVRAM_METADATA_OUT_FLAGS);
+
+	if (desc && descsize > 0) {
+		if (flags & BIT(MC_CMD_NVRAM_METADATA_OUT_DESCRIPTION_VALID_LBN)) {
+			if (descsize <=
+			    MC_CMD_NVRAM_METADATA_OUT_DESCRIPTION_NUM(outlen)) {
+				rc = -E2BIG;
+				goto out_free;
+			}
+
+			strncpy(desc,
+				MCDI_PTR(outbuf, NVRAM_METADATA_OUT_DESCRIPTION),
+				MC_CMD_NVRAM_METADATA_OUT_DESCRIPTION_NUM(outlen));
+			desc[MC_CMD_NVRAM_METADATA_OUT_DESCRIPTION_NUM(outlen)] = '\0';
+		} else {
+			desc[0] = '\0';
+		}
+	}
+
+	if (subtype) {
+		if (flags & BIT(MC_CMD_NVRAM_METADATA_OUT_SUBTYPE_VALID_LBN))
+			*subtype = MCDI_DWORD(outbuf, NVRAM_METADATA_OUT_SUBTYPE);
+		else
+			*subtype = 0;
+	}
+
+	if (version) {
+		if (flags & BIT(MC_CMD_NVRAM_METADATA_OUT_VERSION_VALID_LBN)) {
+			version[0] = MCDI_WORD(outbuf, NVRAM_METADATA_OUT_VERSION_W);
+			version[1] = MCDI_WORD(outbuf, NVRAM_METADATA_OUT_VERSION_X);
+			version[2] = MCDI_WORD(outbuf, NVRAM_METADATA_OUT_VERSION_Y);
+			version[3] = MCDI_WORD(outbuf, NVRAM_METADATA_OUT_VERSION_Z);
+		} else {
+			version[0] = 0;
+			version[1] = 0;
+			version[2] = 0;
+			version[3] = 0;
+		}
+	}
+
+out_free:
+	kfree(outbuf);
 	return rc;
 }
 
@@ -2954,7 +2926,8 @@ int efx_mcdi_mtd_sync(struct mtd_info *mtd)
 	if (part->updating) {
 		part->updating = false;
 		rc = efx_mcdi_nvram_update_finish(part->mtd_struct->efx,
-						  part->nvram_type);
+						  part->nvram_type,
+						  EFX_UPDATE_FINISH_WAIT);
 	}
 
 	return rc;

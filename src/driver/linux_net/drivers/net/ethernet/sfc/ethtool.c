@@ -24,7 +24,7 @@
 #include "efx_channels.h"
 #include "tx_common.h"
 #include "ethtool_common.h"
-#include "mcdi_functions.h"
+#include "efx_reflash.h"
 #ifdef CONFIG_SFC_DUMP
 #include "dump.h"
 #endif
@@ -438,6 +438,31 @@ int efx_ethtool_get_ts_info(struct net_device *net_dev,
 	return 0;
 }
 
+#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_DEVLINK) || defined(EFX_NEED_ETHTOOL_FLASH_DEVICE))
+int efx_ethtool_flash_device(struct net_device *net_dev,
+			     struct ethtool_flash *flash)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	const struct firmware *fw;
+	int rc;
+
+	if (flash->region != ETHTOOL_FLASH_ALL_REGIONS) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Updates to NVRAM region %u are not supported\n",
+			  flash->region);
+		return -EINVAL;
+	}
+
+	rc = request_firmware(&fw, flash->data, &efx->pci_dev->dev);
+	if (rc)
+		return rc;
+	rc = efx_reflash_flash_firmware(efx, fw);
+
+	release_firmware(fw);
+	return rc;
+}
+#endif
+
 const struct ethtool_ops efx_ethtool_ops = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_COALESCE_PARAMS)
 	.supported_coalesce_params = (ETHTOOL_COALESCE_USECS |
@@ -488,8 +513,8 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.self_test_count	= efx_ethtool_self_test_count,
 	.get_stats_count	= efx_ethtool_get_stats_count,
 #endif
-#ifdef EFX_FLASH_FIRMWARE
-	.flash_device		= efx_mcdi_flash_bundle,
+#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_DEVLINK) || defined(EFX_NEED_ETHTOOL_FLASH_DEVICE))
+	.flash_device		= efx_ethtool_flash_device,
 #endif
 	.get_priv_flags		= efx_ethtool_get_priv_flags,
 	.set_priv_flags		= efx_ethtool_set_priv_flags,

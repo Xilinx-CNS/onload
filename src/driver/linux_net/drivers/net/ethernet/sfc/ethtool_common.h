@@ -156,3 +156,8 @@ int efx_ethtool_get_module_eeprom(struct net_device *net_dev,
 				  u8 *data);
 int efx_ethtool_get_module_info(struct net_device *net_dev,
 				struct ethtool_modinfo *modinfo);
+
+#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_DEVLINK) || defined(EFX_NEED_ETHTOOL_FLASH_DEVICE))
+int efx_ethtool_flash_device(struct net_device *net_dev,
+			     struct ethtool_flash *flash);
+#endif

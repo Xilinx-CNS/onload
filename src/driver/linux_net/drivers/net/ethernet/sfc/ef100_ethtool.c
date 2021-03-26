@@ -123,8 +123,8 @@ const struct ethtool_ops ef100_ethtool_ops = {
 	.get_rxnfc              = efx_ethtool_get_rxnfc_wrapper,
 	.set_rxnfc              = efx_ethtool_set_rxnfc_wrapper,
 #endif
-#ifdef EFX_FLASH_FIRMWARE
-	.flash_device		= efx_mcdi_flash_bundle,
+#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_DEVLINK) || defined(EFX_NEED_ETHTOOL_FLASH_DEVICE))
+	.flash_device		= efx_ethtool_flash_device,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_RESET) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
 	.reset                  = efx_ethtool_reset,

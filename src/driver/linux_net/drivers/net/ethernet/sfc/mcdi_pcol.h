@@ -497,6 +497,8 @@
  * when encap
  */
 #define          MAE_FIELD_ENC_HAS_IVLAN 0xd
+/* enum: Packet is IP fragment */
+#define          MAE_FIELD_ENC_IP_FRAG 0xe
 #define          MAE_FIELD_ETHER_TYPE 0x21 /* enum */
 #define          MAE_FIELD_VLAN0_TCI 0x22 /* enum */
 #define          MAE_FIELD_VLAN0_PROTO 0x23 /* enum */
@@ -535,6 +537,10 @@
 #define          MAE_FIELD_L4_DPORT 0x33
 /* enum: Inner when encap */
 #define          MAE_FIELD_TCP_FLAGS 0x34
+/* enum: TCP packet with any of SYN, FIN or RST flag set */
+#define          MAE_FIELD_TCP_SYN_FIN_RST 0x35
+/* enum: Packet is IP fragment with fragment offset 0 */
+#define          MAE_FIELD_IP_FIRST_FRAG 0x36
 /* enum: The type of encapsulated used for this packet. Value as per
  * ENCAP_TYPE_*.
  */
@@ -674,17 +680,21 @@
 #define        MCDI_EVENT_TX_ERR_TYPE_OFST 0
 #define        MCDI_EVENT_TX_ERR_TYPE_LBN 12
 #define        MCDI_EVENT_TX_ERR_TYPE_WIDTH 4
-/* enum: Descriptor loader reported failure */
+/* enum: Descriptor loader reported failure. Specific to EF10-family NICs. */
 #define          MCDI_EVENT_TX_ERR_DL_FAIL 0x1
-/* enum: Descriptor ring empty and no EOP seen for packet */
+/* enum: Descriptor ring empty and no EOP seen for packet. Specific to
+ * EF10-family NICs
+ */
 #define          MCDI_EVENT_TX_ERR_NO_EOP 0x2
-/* enum: Overlength packet */
+/* enum: Overlength packet. Specific to EF10-family NICs. */
 #define          MCDI_EVENT_TX_ERR_2BIG 0x3
-/* enum: Malformed option descriptor */
+/* enum: Malformed option descriptor. Specific to EF10-family NICs. */
 #define          MCDI_EVENT_TX_BAD_OPTDESC 0x5
-/* enum: Option descriptor part way through a packet */
+/* enum: Option descriptor part way through a packet. Specific to EF10-family
+ * NICs.
+ */
 #define          MCDI_EVENT_TX_OPT_IN_PKT 0x8
-/* enum: DMA or PIO data access error */
+/* enum: DMA or PIO data access error. Specific to EF10-family NICs */
 #define          MCDI_EVENT_TX_ERR_BAD_DMA_OR_PIO 0x9
 #define        MCDI_EVENT_TX_ERR_INFO_OFST 0
 #define        MCDI_EVENT_TX_ERR_INFO_LBN 16
@@ -1881,6 +1891,12 @@
 #define        MC_CMD_GET_VERSION_V2_OUT_SUCFW_VERSION_PRESENT_OFST 48
 #define        MC_CMD_GET_VERSION_V2_OUT_SUCFW_VERSION_PRESENT_LBN 11
 #define        MC_CMD_GET_VERSION_V2_OUT_SUCFW_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V2_OUT_BOARD_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V2_OUT_BOARD_VERSION_PRESENT_LBN 12
+#define        MC_CMD_GET_VERSION_V2_OUT_BOARD_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V2_OUT_BUNDLE_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V2_OUT_BUNDLE_VERSION_PRESENT_LBN 13
+#define        MC_CMD_GET_VERSION_V2_OUT_BUNDLE_VERSION_PRESENT_WIDTH 1
 /* MC firmware unique build ID (as binary SHA-1 value) */
 #define       MC_CMD_GET_VERSION_V2_OUT_MCFW_BUILD_ID_OFST 52
 #define       MC_CMD_GET_VERSION_V2_OUT_MCFW_BUILD_ID_LEN 20
@@ -1996,6 +2012,12 @@
 #define        MC_CMD_GET_VERSION_V3_OUT_SUCFW_VERSION_PRESENT_OFST 48
 #define        MC_CMD_GET_VERSION_V3_OUT_SUCFW_VERSION_PRESENT_LBN 11
 #define        MC_CMD_GET_VERSION_V3_OUT_SUCFW_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V3_OUT_BOARD_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V3_OUT_BOARD_VERSION_PRESENT_LBN 12
+#define        MC_CMD_GET_VERSION_V3_OUT_BOARD_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V3_OUT_BUNDLE_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V3_OUT_BUNDLE_VERSION_PRESENT_LBN 13
+#define        MC_CMD_GET_VERSION_V3_OUT_BUNDLE_VERSION_PRESENT_WIDTH 1
 /* MC firmware unique build ID (as binary SHA-1 value) */
 #define       MC_CMD_GET_VERSION_V3_OUT_MCFW_BUILD_ID_OFST 52
 #define       MC_CMD_GET_VERSION_V3_OUT_MCFW_BUILD_ID_LEN 20
@@ -2118,6 +2140,12 @@
 #define        MC_CMD_GET_VERSION_V4_OUT_SUCFW_VERSION_PRESENT_OFST 48
 #define        MC_CMD_GET_VERSION_V4_OUT_SUCFW_VERSION_PRESENT_LBN 11
 #define        MC_CMD_GET_VERSION_V4_OUT_SUCFW_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V4_OUT_BOARD_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V4_OUT_BOARD_VERSION_PRESENT_LBN 12
+#define        MC_CMD_GET_VERSION_V4_OUT_BOARD_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V4_OUT_BUNDLE_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V4_OUT_BUNDLE_VERSION_PRESENT_LBN 13
+#define        MC_CMD_GET_VERSION_V4_OUT_BUNDLE_VERSION_PRESENT_WIDTH 1
 /* MC firmware unique build ID (as binary SHA-1 value) */
 #define       MC_CMD_GET_VERSION_V4_OUT_MCFW_BUILD_ID_OFST 52
 #define       MC_CMD_GET_VERSION_V4_OUT_MCFW_BUILD_ID_LEN 20
@@ -2196,6 +2224,160 @@
 #define       MC_CMD_GET_VERSION_V4_OUT_SOC_RECOVERY_BUILDROOT_VERSION_OFST 376
 #define       MC_CMD_GET_VERSION_V4_OUT_SOC_RECOVERY_BUILDROOT_VERSION_LEN 4
 #define       MC_CMD_GET_VERSION_V4_OUT_SOC_RECOVERY_BUILDROOT_VERSION_NUM 4
+
+/* MC_CMD_GET_VERSION_V5_OUT msgresponse: Extended response providing bundle
+ * and board version information
+ */
+#define    MC_CMD_GET_VERSION_V5_OUT_LEN 424
+/*            MC_CMD_GET_VERSION_OUT_FIRMWARE_OFST 0 */
+/*            MC_CMD_GET_VERSION_OUT_FIRMWARE_LEN 4 */
+/*            Enum values, see field(s): */
+/*               MC_CMD_GET_VERSION_V0_OUT/MC_CMD_GET_VERSION_OUT_FIRMWARE */
+#define       MC_CMD_GET_VERSION_V5_OUT_PCOL_OFST 4
+#define       MC_CMD_GET_VERSION_V5_OUT_PCOL_LEN 4
+/* 128bit mask of functions supported by the current firmware */
+#define       MC_CMD_GET_VERSION_V5_OUT_SUPPORTED_FUNCS_OFST 8
+#define       MC_CMD_GET_VERSION_V5_OUT_SUPPORTED_FUNCS_LEN 16
+#define       MC_CMD_GET_VERSION_V5_OUT_VERSION_OFST 24
+#define       MC_CMD_GET_VERSION_V5_OUT_VERSION_LEN 8
+#define       MC_CMD_GET_VERSION_V5_OUT_VERSION_LO_OFST 24
+#define       MC_CMD_GET_VERSION_V5_OUT_VERSION_HI_OFST 28
+/* extra info */
+#define       MC_CMD_GET_VERSION_V5_OUT_EXTRA_OFST 32
+#define       MC_CMD_GET_VERSION_V5_OUT_EXTRA_LEN 16
+/* Flags indicating which extended fields are valid */
+#define       MC_CMD_GET_VERSION_V5_OUT_FLAGS_OFST 48
+#define       MC_CMD_GET_VERSION_V5_OUT_FLAGS_LEN 4
+#define        MC_CMD_GET_VERSION_V5_OUT_MCFW_EXT_INFO_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_MCFW_EXT_INFO_PRESENT_LBN 0
+#define        MC_CMD_GET_VERSION_V5_OUT_MCFW_EXT_INFO_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_SUCFW_EXT_INFO_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_SUCFW_EXT_INFO_PRESENT_LBN 1
+#define        MC_CMD_GET_VERSION_V5_OUT_SUCFW_EXT_INFO_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_CMC_EXT_INFO_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_CMC_EXT_INFO_PRESENT_LBN 2
+#define        MC_CMD_GET_VERSION_V5_OUT_CMC_EXT_INFO_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_FPGA_EXT_INFO_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_FPGA_EXT_INFO_PRESENT_LBN 3
+#define        MC_CMD_GET_VERSION_V5_OUT_FPGA_EXT_INFO_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_BOARD_EXT_INFO_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_BOARD_EXT_INFO_PRESENT_LBN 4
+#define        MC_CMD_GET_VERSION_V5_OUT_BOARD_EXT_INFO_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_DATAPATH_HW_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_DATAPATH_HW_VERSION_PRESENT_LBN 5
+#define        MC_CMD_GET_VERSION_V5_OUT_DATAPATH_HW_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_DATAPATH_FW_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_DATAPATH_FW_VERSION_PRESENT_LBN 6
+#define        MC_CMD_GET_VERSION_V5_OUT_DATAPATH_FW_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_BOOT_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_BOOT_VERSION_PRESENT_LBN 7
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_BOOT_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_UBOOT_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_UBOOT_VERSION_PRESENT_LBN 8
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_UBOOT_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_MAIN_ROOTFS_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_MAIN_ROOTFS_VERSION_PRESENT_LBN 9
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_MAIN_ROOTFS_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_RECOVERY_BUILDROOT_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_RECOVERY_BUILDROOT_VERSION_PRESENT_LBN 10
+#define        MC_CMD_GET_VERSION_V5_OUT_SOC_RECOVERY_BUILDROOT_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_SUCFW_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_SUCFW_VERSION_PRESENT_LBN 11
+#define        MC_CMD_GET_VERSION_V5_OUT_SUCFW_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_BOARD_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_BOARD_VERSION_PRESENT_LBN 12
+#define        MC_CMD_GET_VERSION_V5_OUT_BOARD_VERSION_PRESENT_WIDTH 1
+#define        MC_CMD_GET_VERSION_V5_OUT_BUNDLE_VERSION_PRESENT_OFST 48
+#define        MC_CMD_GET_VERSION_V5_OUT_BUNDLE_VERSION_PRESENT_LBN 13
+#define        MC_CMD_GET_VERSION_V5_OUT_BUNDLE_VERSION_PRESENT_WIDTH 1
+/* MC firmware unique build ID (as binary SHA-1 value) */
+#define       MC_CMD_GET_VERSION_V5_OUT_MCFW_BUILD_ID_OFST 52
+#define       MC_CMD_GET_VERSION_V5_OUT_MCFW_BUILD_ID_LEN 20
+/* MC firmware security level */
+#define       MC_CMD_GET_VERSION_V5_OUT_MCFW_SECURITY_LEVEL_OFST 72
+#define       MC_CMD_GET_VERSION_V5_OUT_MCFW_SECURITY_LEVEL_LEN 4
+/* MC firmware build name (as null-terminated US-ASCII string) */
+#define       MC_CMD_GET_VERSION_V5_OUT_MCFW_BUILD_NAME_OFST 76
+#define       MC_CMD_GET_VERSION_V5_OUT_MCFW_BUILD_NAME_LEN 64
+/* The SUC firmware version as four numbers - a.b.c.d */
+#define       MC_CMD_GET_VERSION_V5_OUT_SUCFW_VERSION_OFST 140
+#define       MC_CMD_GET_VERSION_V5_OUT_SUCFW_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_SUCFW_VERSION_NUM 4
+/* SUC firmware build date (as 64-bit Unix timestamp) */
+#define       MC_CMD_GET_VERSION_V5_OUT_SUCFW_BUILD_DATE_OFST 156
+#define       MC_CMD_GET_VERSION_V5_OUT_SUCFW_BUILD_DATE_LEN 8
+#define       MC_CMD_GET_VERSION_V5_OUT_SUCFW_BUILD_DATE_LO_OFST 156
+#define       MC_CMD_GET_VERSION_V5_OUT_SUCFW_BUILD_DATE_HI_OFST 160
+/* The ID of the SUC chip. This is specific to the platform but typically
+ * indicates family, memory sizes etc. See SF-116728-SW for further details.
+ */
+#define       MC_CMD_GET_VERSION_V5_OUT_SUCFW_CHIP_ID_OFST 164
+#define       MC_CMD_GET_VERSION_V5_OUT_SUCFW_CHIP_ID_LEN 4
+/* The CMC firmware version as four numbers - a.b.c.d */
+#define       MC_CMD_GET_VERSION_V5_OUT_CMCFW_VERSION_OFST 168
+#define       MC_CMD_GET_VERSION_V5_OUT_CMCFW_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_CMCFW_VERSION_NUM 4
+/* CMC firmware build date (as 64-bit Unix timestamp) */
+#define       MC_CMD_GET_VERSION_V5_OUT_CMCFW_BUILD_DATE_OFST 184
+#define       MC_CMD_GET_VERSION_V5_OUT_CMCFW_BUILD_DATE_LEN 8
+#define       MC_CMD_GET_VERSION_V5_OUT_CMCFW_BUILD_DATE_LO_OFST 184
+#define       MC_CMD_GET_VERSION_V5_OUT_CMCFW_BUILD_DATE_HI_OFST 188
+/* FPGA version as three numbers. On Riverhead based systems this field uses
+ * the same encoding as hardware version ID registers (MC_FPGA_BUILD_HWRD_REG):
+ * FPGA_VERSION[0]: x => Image H{x} FPGA_VERSION[1]: Revision letter (0 => A, 1
+ * => B, ...) FPGA_VERSION[2]: Sub-revision number
+ */
+#define       MC_CMD_GET_VERSION_V5_OUT_FPGA_VERSION_OFST 192
+#define       MC_CMD_GET_VERSION_V5_OUT_FPGA_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_FPGA_VERSION_NUM 3
+/* Extra FPGA revision information (as null-terminated US-ASCII string) */
+#define       MC_CMD_GET_VERSION_V5_OUT_FPGA_EXTRA_OFST 204
+#define       MC_CMD_GET_VERSION_V5_OUT_FPGA_EXTRA_LEN 16
+/* Board name / adapter model (as null-terminated US-ASCII string) */
+#define       MC_CMD_GET_VERSION_V5_OUT_BOARD_NAME_OFST 220
+#define       MC_CMD_GET_VERSION_V5_OUT_BOARD_NAME_LEN 16
+/* Board revision number */
+#define       MC_CMD_GET_VERSION_V5_OUT_BOARD_REVISION_OFST 236
+#define       MC_CMD_GET_VERSION_V5_OUT_BOARD_REVISION_LEN 4
+/* Board serial number (as null-terminated US-ASCII string) */
+#define       MC_CMD_GET_VERSION_V5_OUT_BOARD_SERIAL_OFST 240
+#define       MC_CMD_GET_VERSION_V5_OUT_BOARD_SERIAL_LEN 64
+/* The version of the datapath hardware design as three number - a.b.c */
+#define       MC_CMD_GET_VERSION_V5_OUT_DATAPATH_HW_VERSION_OFST 304
+#define       MC_CMD_GET_VERSION_V5_OUT_DATAPATH_HW_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_DATAPATH_HW_VERSION_NUM 3
+/* The version of the firmware library used to control the datapath as three
+ * number - a.b.c
+ */
+#define       MC_CMD_GET_VERSION_V5_OUT_DATAPATH_FW_VERSION_OFST 316
+#define       MC_CMD_GET_VERSION_V5_OUT_DATAPATH_FW_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_DATAPATH_FW_VERSION_NUM 3
+/* The SOC boot version as four numbers - a.b.c.d */
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_BOOT_VERSION_OFST 328
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_BOOT_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_BOOT_VERSION_NUM 4
+/* The SOC uboot version as four numbers - a.b.c.d */
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_UBOOT_VERSION_OFST 344
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_UBOOT_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_UBOOT_VERSION_NUM 4
+/* The SOC main rootfs version as four numbers - a.b.c.d */
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_MAIN_ROOTFS_VERSION_OFST 360
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_MAIN_ROOTFS_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_MAIN_ROOTFS_VERSION_NUM 4
+/* The SOC recovery buildroot version as four numbers - a.b.c.d */
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_RECOVERY_BUILDROOT_VERSION_OFST 376
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_RECOVERY_BUILDROOT_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_SOC_RECOVERY_BUILDROOT_VERSION_NUM 4
+/* Board version as four numbers - a.b.c.d. BOARD_VERSION[0] duplicates the
+ * BOARD_REVISION field
+ */
+#define       MC_CMD_GET_VERSION_V5_OUT_BOARD_VERSION_OFST 392
+#define       MC_CMD_GET_VERSION_V5_OUT_BOARD_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_BOARD_VERSION_NUM 4
+/* Bundle version as four numbers - a.b.c.d */
+#define       MC_CMD_GET_VERSION_V5_OUT_BUNDLE_VERSION_OFST 408
+#define       MC_CMD_GET_VERSION_V5_OUT_BUNDLE_VERSION_LEN 4
+#define       MC_CMD_GET_VERSION_V5_OUT_BUNDLE_VERSION_NUM 4
 
 
 /***********************************/
@@ -6217,6 +6399,9 @@
 #define        MC_CMD_NVRAM_UPDATE_FINISH_V2_IN_FLAG_POLL_VERIFY_RESULT_OFST 8
 #define        MC_CMD_NVRAM_UPDATE_FINISH_V2_IN_FLAG_POLL_VERIFY_RESULT_LBN 2
 #define        MC_CMD_NVRAM_UPDATE_FINISH_V2_IN_FLAG_POLL_VERIFY_RESULT_WIDTH 1
+#define        MC_CMD_NVRAM_UPDATE_FINISH_V2_IN_FLAG_ABORT_OFST 8
+#define        MC_CMD_NVRAM_UPDATE_FINISH_V2_IN_FLAG_ABORT_LBN 3
+#define        MC_CMD_NVRAM_UPDATE_FINISH_V2_IN_FLAG_ABORT_WIDTH 1
 
 /* MC_CMD_NVRAM_UPDATE_FINISH_OUT msgresponse: Legacy NVRAM_UPDATE_FINISH
  * response. Use NVRAM_UPDATE_FINISH_V2_OUT in new code
@@ -8527,8 +8712,16 @@
 #define          NVRAM_PARTITION_TYPE_EXPANSION_ROM 0x300
 /* enum: Static configuration TLV partition */
 #define          NVRAM_PARTITION_TYPE_STATIC_CONFIG 0x400
+/* enum: Factory configuration TLV partition (this is intentionally an alias of
+ * STATIC_CONFIG)
+ */
+#define          NVRAM_PARTITION_TYPE_FACTORY_CONFIG 0x400
 /* enum: Dynamic configuration TLV partition */
 #define          NVRAM_PARTITION_TYPE_DYNAMIC_CONFIG 0x500
+/* enum: User configuration TLV partition (this is intentionally an alias of
+ * DYNAMIC_CONFIG)
+ */
+#define          NVRAM_PARTITION_TYPE_USER_CONFIG 0x500
 /* enum: Expansion ROM configuration data for port 0 */
 #define          NVRAM_PARTITION_TYPE_EXPROM_CONFIG_PORT0 0x600
 /* enum: Synonym for EXPROM_CONFIG_PORT0 as used in pmap files */
@@ -8615,6 +8808,10 @@
  * between XJTAG and Manftest.
  */
 #define          NVRAM_PARTITION_TYPE_MANUFACTURING 0x1300
+/* enum: Deployment configuration TLV partition (this is intentionally an alias
+ * of MANUFACTURING)
+ */
+#define          NVRAM_PARTITION_TYPE_DEPLOYMENT_CONFIG 0x1300
 /* enum: Spare partition 4 */
 #define          NVRAM_PARTITION_TYPE_SPARE_4 0x1400
 /* enum: Spare partition 5 */
@@ -8667,6 +8864,10 @@
  * down).
  */
 #define          NVRAM_PARTITION_TYPE_SUC_FAILURE_LOG 0x1f05
+/* enum: System-on-Chip configuration information (see XN-200467-PS). */
+#define          NVRAM_PARTITION_TYPE_SUC_SOC_CONFIG 0x1f07
+/* enum: System-on-Chip update information. */
+#define          NVRAM_PARTITION_TYPE_SOC_UPDATE 0x2003
 /* enum: Start of reserved value range (firmware may use for any purpose) */
 #define          NVRAM_PARTITION_TYPE_RESERVED_VALUES_MIN 0xff00
 /* enum: End of reserved value range (firmware may use for any purpose) */
@@ -11151,15 +11352,15 @@
  */
 #define       MC_CMD_FILTER_OP_V3_IN_IFRM_DST_IP_OFST 156
 #define       MC_CMD_FILTER_OP_V3_IN_IFRM_DST_IP_LEN 16
-/* Flags controlling mutations of the user_mark and user_flag fields of
- * matching packets, with logic as follows: if (req.MATCH_BITOR_FLAG == 1)
- * user_flag = req.MATCH_SET_FLAG bit_or user_flag; else user_flag =
- * req.MATCH_SET_FLAG; if (req.MATCH_SET_MARK == 0) user_mark = 0; else if
- * (req.MATCH_BITOR_MARK == 1) user_mark = req.MATCH_SET_MARK bit_or user_mark;
- * else user_mark = req.MATCH_SET_MARK; N.B. These flags overlap with the
- * MATCH_ACTION field, which is deprecated in favour of this field. For the
- * cases where these flags induce a valid encoding of the MATCH_ACTION field,
- * the semantics agree.
+/* Flags controlling mutations of the packet and/or metadata when the filter is
+ * matched. The user_mark and user_flag fields' logic is as follows: if
+ * (req.MATCH_BITOR_FLAG == 1) user_flag = req.MATCH_SET_FLAG bit_or user_flag;
+ * else user_flag = req.MATCH_SET_FLAG; if (req.MATCH_SET_MARK == 0) user_mark
+ * = 0; else if (req.MATCH_BITOR_MARK == 1) user_mark = req.MATCH_SET_MARK
+ * bit_or user_mark; else user_mark = req.MATCH_SET_MARK; N.B. These flags
+ * overlap with the MATCH_ACTION field, which is deprecated in favour of this
+ * field. For the cases where these flags induce a valid encoding of the
+ * MATCH_ACTION field, the semantics agree.
  */
 #define       MC_CMD_FILTER_OP_V3_IN_MATCH_ACTION_FLAGS_OFST 172
 #define       MC_CMD_FILTER_OP_V3_IN_MATCH_ACTION_FLAGS_LEN 4
@@ -11175,6 +11376,9 @@
 #define        MC_CMD_FILTER_OP_V3_IN_MATCH_BITOR_MARK_OFST 172
 #define        MC_CMD_FILTER_OP_V3_IN_MATCH_BITOR_MARK_LBN 3
 #define        MC_CMD_FILTER_OP_V3_IN_MATCH_BITOR_MARK_WIDTH 1
+#define        MC_CMD_FILTER_OP_V3_IN_MATCH_STRIP_VLAN_OFST 172
+#define        MC_CMD_FILTER_OP_V3_IN_MATCH_STRIP_VLAN_LBN 4
+#define        MC_CMD_FILTER_OP_V3_IN_MATCH_STRIP_VLAN_WIDTH 1
 /* Deprecated: the overlapping MATCH_ACTION_FLAGS field exposes all of the
  * functionality of this field in an ABI-backwards-compatible manner, and
  * should be used instead. Any future extensions should be made to the
@@ -15201,6 +15405,12 @@
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_EXTERNAL_MAE_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_EXTERNAL_MAE_SUPPORTED_LBN 9
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_EXTERNAL_MAE_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_LBN 10
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_LBN 11
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_WIDTH 1
 
 /* MC_CMD_GET_CAPABILITIES_V8_OUT msgresponse */
 #define    MC_CMD_GET_CAPABILITIES_V8_OUT_LEN 160
@@ -15693,6 +15903,12 @@
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_EXTERNAL_MAE_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_EXTERNAL_MAE_SUPPORTED_LBN 9
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_EXTERNAL_MAE_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_LBN 10
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_LBN 11
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -16193,6 +16409,12 @@
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_EXTERNAL_MAE_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_EXTERNAL_MAE_SUPPORTED_LBN 9
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_EXTERNAL_MAE_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_LBN 10
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_LBN 11
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -16728,6 +16950,12 @@
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_EXTERNAL_MAE_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_EXTERNAL_MAE_SUPPORTED_LBN 9
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_EXTERNAL_MAE_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_LBN 10
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_NVRAM_UPDATE_ABORT_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_LBN 11
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_MAE_ACTION_SET_ALLOC_V2_SUPPORTED_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -20765,6 +20993,12 @@
  * operations as the function client from which it is descended.
  */
 #define          MC_CMD_PRIVILEGE_MASK_IN_GRP_FUNC_DMA 0x40000
+/* enum: A client with this privilege may perform DMA as any PCIe function on
+ * the device and to on-device DDR. It allows clients to use TX-DESC2CMPT-DESC
+ * descriptors, and to use TX-SEG-DESC and TX-MEM2MEM-DESC with an address
+ * space override (i.e. with the ADDR_SPC_EN bit set).
+ */
+#define          MC_CMD_PRIVILEGE_MASK_IN_GRP_ARBITRARY_DMA 0x80000
 /* enum: Set this bit to indicate that a new privilege mask is to be set,
  * otherwise the command will only read the existing mask.
  */
@@ -25463,6 +25697,122 @@
 /* MC_CMD_SET_CLIENT_MAC_ADDRESSES_OUT msgresponse */
 #define    MC_CMD_SET_CLIENT_MAC_ADDRESSES_OUT_LEN 0
 
+
+/***********************************/
+/* MC_CMD_GET_BOARD_ATTR
+ * Retrieve physical build-level board attributes as configured at
+ * manufacturing stage. Fields originate from EEPROM and per-platform constants
+ * in firmware. Fields are used in development to identify/ differentiate
+ * boards based on build levels/parameters, and also in manufacturing to cross
+ * check "what was programmed in manufacturing" is same as "what firmware
+ * thinks has been programmed" as there are two layers to translation within
+ * firmware before the attributes reach this MCDI handler. Some parameters are
+ * retrieved as part of other commands and therefore not replicated here. See
+ * GET_VERSION_OUT.
+ */
+#define MC_CMD_GET_BOARD_ATTR 0x1c6
+#undef MC_CMD_0x1c6_PRIVILEGE_CTG
+
+#define MC_CMD_0x1c6_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_GET_BOARD_ATTR_IN msgrequest */
+#define    MC_CMD_GET_BOARD_ATTR_IN_LEN 0
+
+/* MC_CMD_GET_BOARD_ATTR_OUT msgresponse */
+#define    MC_CMD_GET_BOARD_ATTR_OUT_LEN 16
+/* Defines board capabilities and validity of attributes returned in this
+ * response-message.
+ */
+#define       MC_CMD_GET_BOARD_ATTR_OUT_FLAGS_OFST 0
+#define       MC_CMD_GET_BOARD_ATTR_OUT_FLAGS_LEN 4
+#define        MC_CMD_GET_BOARD_ATTR_OUT_HAS_FAN_OFST 0
+#define        MC_CMD_GET_BOARD_ATTR_OUT_HAS_FAN_LBN 0
+#define        MC_CMD_GET_BOARD_ATTR_OUT_HAS_FAN_WIDTH 1
+#define        MC_CMD_GET_BOARD_ATTR_OUT_HAS_SOC_OFST 0
+#define        MC_CMD_GET_BOARD_ATTR_OUT_HAS_SOC_LBN 1
+#define        MC_CMD_GET_BOARD_ATTR_OUT_HAS_SOC_WIDTH 1
+#define        MC_CMD_GET_BOARD_ATTR_OUT_HAS_AUX_POWER_OFST 0
+#define        MC_CMD_GET_BOARD_ATTR_OUT_HAS_AUX_POWER_LBN 2
+#define        MC_CMD_GET_BOARD_ATTR_OUT_HAS_AUX_POWER_WIDTH 1
+#define       MC_CMD_GET_BOARD_ATTR_OUT_ATTRIBUTES_OFST 4
+#define       MC_CMD_GET_BOARD_ATTR_OUT_ATTRIBUTES_LEN 4
+#define        MC_CMD_GET_BOARD_ATTR_OUT_SOC_EE_OFST 4
+#define        MC_CMD_GET_BOARD_ATTR_OUT_SOC_EE_LBN 0
+#define        MC_CMD_GET_BOARD_ATTR_OUT_SOC_EE_WIDTH 1
+#define        MC_CMD_GET_BOARD_ATTR_OUT_SUC_EE_OFST 4
+#define        MC_CMD_GET_BOARD_ATTR_OUT_SUC_EE_LBN 1
+#define        MC_CMD_GET_BOARD_ATTR_OUT_SUC_EE_WIDTH 1
+#define        MC_CMD_GET_BOARD_ATTR_OUT_FPGA_VOLTAGES_SUPPORTED_OFST 4
+#define        MC_CMD_GET_BOARD_ATTR_OUT_FPGA_VOLTAGES_SUPPORTED_LBN 16
+#define        MC_CMD_GET_BOARD_ATTR_OUT_FPGA_VOLTAGES_SUPPORTED_WIDTH 8
+/* enum: The FPGA voltage on the adapter can be set to low */
+#define          MC_CMD_FPGA_VOLTAGE_LOW 0x0
+/* enum: The FPGA voltage on the adapter can be set to regular */
+#define          MC_CMD_FPGA_VOLTAGE_REG 0x1
+/* enum: The FPGA voltage on the adapter can be set to high */
+#define          MC_CMD_FPGA_VOLTAGE_HIGH 0x2
+#define        MC_CMD_GET_BOARD_ATTR_OUT_CAGE_COUNT_OFST 4
+#define        MC_CMD_GET_BOARD_ATTR_OUT_CAGE_COUNT_LBN 24
+#define        MC_CMD_GET_BOARD_ATTR_OUT_CAGE_COUNT_WIDTH 8
+/* An array of cage types on the board */
+#define       MC_CMD_GET_BOARD_ATTR_OUT_CAGE_TYPE_OFST 8
+#define       MC_CMD_GET_BOARD_ATTR_OUT_CAGE_TYPE_LEN 1
+#define       MC_CMD_GET_BOARD_ATTR_OUT_CAGE_TYPE_NUM 8
+/* enum: The cages are not known */
+#define          MC_CMD_GET_BOARD_ATTR_OUT_CAGE_TYPE_UNKNOWN 0x0
+/* enum: The cages are SFP/SFP+ */
+#define          MC_CMD_GET_BOARD_ATTR_OUT_CAGE_TYPE_SFP 0x1
+/* enum: The cages are QSFP/QSFP+ */
+#define          MC_CMD_GET_BOARD_ATTR_OUT_CAGE_TYPE_QSFP 0x2
+
+
+/***********************************/
+/* MC_CMD_GET_SOC_STATE
+ * Retrieve current state of the System-on-Chip. This command is valid when
+ * MC_CMD_GET_BOARD_ATTR:HAS_SOC is set.
+ */
+#define MC_CMD_GET_SOC_STATE 0x1c7
+#undef MC_CMD_0x1c7_PRIVILEGE_CTG
+
+#define MC_CMD_0x1c7_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_GET_SOC_STATE_IN msgrequest */
+#define    MC_CMD_GET_SOC_STATE_IN_LEN 0
+
+/* MC_CMD_GET_SOC_STATE_OUT msgresponse */
+#define    MC_CMD_GET_SOC_STATE_OUT_LEN 12
+/* Status flags for the SoC */
+#define       MC_CMD_GET_SOC_STATE_OUT_FLAGS_OFST 0
+#define       MC_CMD_GET_SOC_STATE_OUT_FLAGS_LEN 4
+#define        MC_CMD_GET_SOC_STATE_OUT_SHOULD_THROTTLE_OFST 0
+#define        MC_CMD_GET_SOC_STATE_OUT_SHOULD_THROTTLE_LBN 0
+#define        MC_CMD_GET_SOC_STATE_OUT_SHOULD_THROTTLE_WIDTH 1
+#define        MC_CMD_GET_SOC_STATE_OUT_OS_RECOVERY_REQUIRED_OFST 0
+#define        MC_CMD_GET_SOC_STATE_OUT_OS_RECOVERY_REQUIRED_LBN 1
+#define        MC_CMD_GET_SOC_STATE_OUT_OS_RECOVERY_REQUIRED_WIDTH 1
+#define        MC_CMD_GET_SOC_STATE_OUT_WDT_FIRED_OFST 0
+#define        MC_CMD_GET_SOC_STATE_OUT_WDT_FIRED_LBN 2
+#define        MC_CMD_GET_SOC_STATE_OUT_WDT_FIRED_WIDTH 1
+/* Status fields for the SoC */
+#define       MC_CMD_GET_SOC_STATE_OUT_ATTRIBUTES_OFST 4
+#define       MC_CMD_GET_SOC_STATE_OUT_ATTRIBUTES_LEN 4
+#define        MC_CMD_GET_SOC_STATE_OUT_RUN_STATE_OFST 4
+#define        MC_CMD_GET_SOC_STATE_OUT_RUN_STATE_LBN 0
+#define        MC_CMD_GET_SOC_STATE_OUT_RUN_STATE_WIDTH 8
+/* enum: Power on (set by SUC on power up) */
+#define          MC_CMD_GET_SOC_STATE_OUT_SOC_BOOT 0x0
+/* enum: Running bootloader */
+#define          MC_CMD_GET_SOC_STATE_OUT_SOC_BOOTLOADER 0x1
+/* enum: Bootloader has started OS. OS is booting */
+#define          MC_CMD_GET_SOC_STATE_OUT_SOC_OS_START 0x2
+/* enum: OS is running */
+#define          MC_CMD_GET_SOC_STATE_OUT_SOC_OS_RUNNING 0x3
+/* enum: Maintenance OS is running */
+#define          MC_CMD_GET_SOC_STATE_OUT_SOC_OS_MAINTENANCE 0x4
+/* Number of SoC resets since power on */
+#define       MC_CMD_GET_SOC_STATE_OUT_RESET_COUNT_OFST 8
+#define       MC_CMD_GET_SOC_STATE_OUT_RESET_COUNT_LEN 4
+
 /* FUNCTION_PERSONALITY structuredef: The meanings of the personalities are
  * defined in SF-120734-TC with more information in SF-122717-TC.
  */
@@ -26638,8 +26988,15 @@
 #define        MAE_ENC_FIELD_PAIRS_ENC_HAS_IVLAN_OFST 138
 #define        MAE_ENC_FIELD_PAIRS_ENC_HAS_IVLAN_LBN 1
 #define        MAE_ENC_FIELD_PAIRS_ENC_HAS_IVLAN_WIDTH 1
+#define        MAE_ENC_FIELD_PAIRS_ENC_IP_FRAG_OFST 138
+#define        MAE_ENC_FIELD_PAIRS_ENC_IP_FRAG_LBN 2
+#define        MAE_ENC_FIELD_PAIRS_ENC_IP_FRAG_WIDTH 1
 #define       MAE_ENC_FIELD_PAIRS_ENC_VLAN_FLAGS_LBN 1104
 #define       MAE_ENC_FIELD_PAIRS_ENC_VLAN_FLAGS_WIDTH 8
+#define       MAE_ENC_FIELD_PAIRS_ENC_FLAGS_OFST 138
+#define       MAE_ENC_FIELD_PAIRS_ENC_FLAGS_LEN 1
+#define       MAE_ENC_FIELD_PAIRS_ENC_FLAGS_LBN 1104
+#define       MAE_ENC_FIELD_PAIRS_ENC_FLAGS_WIDTH 8
 #define       MAE_ENC_FIELD_PAIRS_ENC_VLAN_FLAGS_MASK_OFST 139
 #define       MAE_ENC_FIELD_PAIRS_ENC_VLAN_FLAGS_MASK_LEN 1
 #define        MAE_ENC_FIELD_PAIRS_ENC_HAS_OVLAN_MASK_OFST 139
@@ -26648,8 +27005,15 @@
 #define        MAE_ENC_FIELD_PAIRS_ENC_HAS_IVLAN_MASK_OFST 139
 #define        MAE_ENC_FIELD_PAIRS_ENC_HAS_IVLAN_MASK_LBN 1
 #define        MAE_ENC_FIELD_PAIRS_ENC_HAS_IVLAN_MASK_WIDTH 1
+#define        MAE_ENC_FIELD_PAIRS_ENC_IP_FRAG_MASK_OFST 139
+#define        MAE_ENC_FIELD_PAIRS_ENC_IP_FRAG_MASK_LBN 2
+#define        MAE_ENC_FIELD_PAIRS_ENC_IP_FRAG_MASK_WIDTH 1
 #define       MAE_ENC_FIELD_PAIRS_ENC_VLAN_FLAGS_MASK_LBN 1112
 #define       MAE_ENC_FIELD_PAIRS_ENC_VLAN_FLAGS_MASK_WIDTH 8
+#define       MAE_ENC_FIELD_PAIRS_ENC_FLAGS_MASK_OFST 139
+#define       MAE_ENC_FIELD_PAIRS_ENC_FLAGS_MASK_LEN 1
+#define       MAE_ENC_FIELD_PAIRS_ENC_FLAGS_MASK_LBN 1112
+#define       MAE_ENC_FIELD_PAIRS_ENC_FLAGS_MASK_WIDTH 8
 #define       MAE_ENC_FIELD_PAIRS_ENC_IP_FLAGS_BE_OFST 140
 #define       MAE_ENC_FIELD_PAIRS_ENC_IP_FLAGS_BE_LEN 4
 #define       MAE_ENC_FIELD_PAIRS_ENC_IP_FLAGS_BE_LBN 1120
@@ -27348,9 +27712,12 @@
 #define        MAE_FIELD_MASK_VALUE_PAIRS_V2_ENC_HAS_IVLAN_OFST 344
 #define        MAE_FIELD_MASK_VALUE_PAIRS_V2_ENC_HAS_IVLAN_LBN 7
 #define        MAE_FIELD_MASK_VALUE_PAIRS_V2_ENC_HAS_IVLAN_WIDTH 1
-#define        MAE_FIELD_MASK_VALUE_PAIRS_V2_RSVD_OFST 344
-#define        MAE_FIELD_MASK_VALUE_PAIRS_V2_RSVD_LBN 8
-#define        MAE_FIELD_MASK_VALUE_PAIRS_V2_RSVD_WIDTH 24
+#define        MAE_FIELD_MASK_VALUE_PAIRS_V2_TCP_SYN_FIN_RST_OFST 344
+#define        MAE_FIELD_MASK_VALUE_PAIRS_V2_TCP_SYN_FIN_RST_LBN 8
+#define        MAE_FIELD_MASK_VALUE_PAIRS_V2_TCP_SYN_FIN_RST_WIDTH 1
+#define        MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_FIRST_FRAG_OFST 344
+#define        MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_FIRST_FRAG_LBN 9
+#define        MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_FIRST_FRAG_WIDTH 1
 #define       MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS_LBN 2752
 #define       MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS_WIDTH 32
 #define       MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS_MASK_OFST 348
@@ -28019,6 +28386,15 @@
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_NAT_OFST 0
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_NAT_LBN 11
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_NAT_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_DECR_IP_TTL_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_DECR_IP_TTL_LBN 12
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_DECR_IP_TTL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_SET_SRC_MPORT_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_SET_SRC_MPORT_LBN 13
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_SET_SRC_MPORT_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_SUPPRESS_SELF_DELIVERY_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_SUPPRESS_SELF_DELIVERY_LBN 14
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_SUPPRESS_SELF_DELIVERY_WIDTH 1
 /* If VLAN_PUSH >= 1, TCI value to be inserted as outermost VLAN. */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_VLAN0_TCI_BE_OFST 4
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_VLAN0_TCI_BE_LEN 2
@@ -28064,6 +28440,129 @@
 /* Set to MAC_ID_NULL to request no destination MAC replacement. */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_DST_MAC_ID_OFST 40
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_DST_MAC_ID_LEN 4
+
+/* MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN msgrequest: Only supported if
+ * MAE_ACTION_SET_ALLOC_V2_SUPPORTED is advertised in
+ * MC_CMD_GET_CAPABILITIES_V7_OUT.
+ */
+#define    MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_LEN 51
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_FLAGS_OFST 0
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_FLAGS_LEN 4
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN_PUSH_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN_PUSH_LBN 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN_PUSH_WIDTH 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN_POP_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN_POP_LBN 4
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN_POP_WIDTH 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DECAP_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DECAP_LBN 8
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DECAP_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_MARK_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_MARK_LBN 9
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_MARK_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_FLAG_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_FLAG_LBN 10
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_FLAG_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_NAT_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_NAT_LBN 11
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_NAT_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_DECR_IP_TTL_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_DECR_IP_TTL_LBN 12
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_DECR_IP_TTL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_SET_SRC_MPORT_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_SET_SRC_MPORT_LBN 13
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_SET_SRC_MPORT_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_SUPPRESS_SELF_DELIVERY_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_SUPPRESS_SELF_DELIVERY_LBN 14
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_SUPPRESS_SELF_DELIVERY_WIDTH 1
+/* If VLAN_PUSH >= 1, TCI value to be inserted as outermost VLAN. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN0_TCI_BE_OFST 4
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN0_TCI_BE_LEN 2
+/* If VLAN_PUSH >= 1, TPID value to be inserted as outermost VLAN. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN0_PROTO_BE_OFST 6
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN0_PROTO_BE_LEN 2
+/* If VLAN_PUSH == 2, inner TCI value to be inserted. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN1_TCI_BE_OFST 8
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN1_TCI_BE_LEN 2
+/* If VLAN_PUSH == 2, inner TPID value to be inserted. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN1_PROTO_BE_OFST 10
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN1_PROTO_BE_LEN 2
+/* Reserved. Ignored by firmware. Should be set to zero or 0xffffffff. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_RSVD_OFST 12
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_RSVD_LEN 4
+/* Set to ENCAP_HEADER_ID_NULL to request no encap action */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ENCAP_HEADER_ID_OFST 16
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ENCAP_HEADER_ID_LEN 4
+/* An m-port selector identifying the m-port that the modified packet should be
+ * delivered to. Set to MPORT_SELECTOR_NULL to request no delivery of the
+ * packet.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DELIVER_OFST 20
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DELIVER_LEN 4
+/* Allows an action set to trigger several counter updates. Set to
+ * COUNTER_LIST_ID_NULL to request no counter action.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_COUNTER_LIST_ID_OFST 24
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_COUNTER_LIST_ID_LEN 4
+/* If a driver only wished to update one counter within this action set, then
+ * it can supply a COUNTER_ID instead of allocating a single-element counter
+ * list. This field should be set to COUNTER_ID_NULL if this behaviour is not
+ * required. It is not valid to supply a non-NULL value for both
+ * COUNTER_LIST_ID and COUNTER_ID.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_COUNTER_ID_OFST 28
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_COUNTER_ID_LEN 4
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_MARK_VALUE_OFST 32
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_MARK_VALUE_LEN 4
+/* Set to MAC_ID_NULL to request no source MAC replacement. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_SRC_MAC_ID_OFST 36
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_SRC_MAC_ID_LEN 4
+/* Set to MAC_ID_NULL to request no destination MAC replacement. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DST_MAC_ID_OFST 40
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DST_MAC_ID_LEN 4
+/* Source m-port ID to be reported for DO_SET_SRC_MPORT action. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_REPORTED_SRC_MPORT_OFST 44
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_REPORTED_SRC_MPORT_LEN 4
+/* Actions for modifying the Differentiated Services Code-Point (DSCP) bits
+ * within IPv4 and IPv6 headers.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DSCP_CONTROL_OFST 48
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DSCP_CONTROL_LEN 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_DSCP_ENCAP_COPY_OFST 48
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_DSCP_ENCAP_COPY_LBN 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_DSCP_ENCAP_COPY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_DSCP_DECAP_COPY_OFST 48
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_DSCP_DECAP_COPY_LBN 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_DSCP_DECAP_COPY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_DSCP_OFST 48
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_DSCP_LBN 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_DSCP_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DSCP_VALUE_OFST 48
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DSCP_VALUE_LBN 3
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DSCP_VALUE_WIDTH 6
+/* Actions for modifying the Explicit Congestion Notification (ECN) bits within
+ * IPv4 and IPv6 headers.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_CONTROL_OFST 50
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_CONTROL_LEN 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_ECN_ENCAP_COPY_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_ECN_ENCAP_COPY_LBN 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_ECN_ENCAP_COPY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_ECN_DECAP_COPY_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_ECN_DECAP_COPY_LBN 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_ECN_DECAP_COPY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_ECN_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_ECN_LBN 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_ECN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_VALUE_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_VALUE_LBN 3
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_VALUE_WIDTH 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_ECT_0_TO_CE_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_ECT_0_TO_CE_LBN 5
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_ECT_0_TO_CE_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_ECT_1_TO_CE_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_ECT_1_TO_CE_LBN 6
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_ECT_1_TO_CE_WIDTH 1
 
 /* MC_CMD_MAE_ACTION_SET_ALLOC_OUT msgresponse */
 #define    MC_CMD_MAE_ACTION_SET_ALLOC_OUT_LEN 4
@@ -28599,6 +29098,9 @@
 #define        MAE_MPORT_DESC_CAN_DELETE_OFST 8
 #define        MAE_MPORT_DESC_CAN_DELETE_LBN 2
 #define        MAE_MPORT_DESC_CAN_DELETE_WIDTH 1
+#define        MAE_MPORT_DESC_IS_ZOMBIE_OFST 8
+#define        MAE_MPORT_DESC_IS_ZOMBIE_LBN 3
+#define        MAE_MPORT_DESC_IS_ZOMBIE_WIDTH 1
 #define       MAE_MPORT_DESC_CALLER_FLAGS_LBN 64
 #define       MAE_MPORT_DESC_CALLER_FLAGS_WIDTH 32
 /* Not the ideal name; it's really the type of thing connected to the m-port */
@@ -28668,6 +29170,8 @@
 
 /***********************************/
 /* MC_CMD_MAE_MPORT_ENUMERATE
+ * Deprecated in favour of MAE_MPORT_READ_JOURNAL. Support for this command
+ * will be removed at some future point.
  */
 #define MC_CMD_MAE_MPORT_ENUMERATE 0x17c
 #undef MC_CMD_0x17c_PRIVILEGE_CTG
@@ -28696,6 +29200,51 @@
 #define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_MINNUM 0
 #define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_MAXNUM 244
 #define       MC_CMD_MAE_MPORT_ENUMERATE_OUT_MPORT_DESC_DATA_MAXNUM_MCDI2 1012
+
+
+/***********************************/
+/* MC_CMD_MAE_MPORT_READ_JOURNAL
+ * Firmware maintains a per-client journal of mport creations and deletions.
+ * This journal is clear-on-read, i.e. repeated calls of this command will
+ * drain the buffer. Whenever the caller resets its function via FLR or
+ * MC_CMD_ENTITY_RESET, the journal is regenerated from a blank start.
+ */
+#define MC_CMD_MAE_MPORT_READ_JOURNAL 0x147
+#undef MC_CMD_0x147_PRIVILEGE_CTG
+
+#define MC_CMD_0x147_PRIVILEGE_CTG SRIOV_CTG_MAE
+
+/* MC_CMD_MAE_MPORT_READ_JOURNAL_IN msgrequest */
+#define    MC_CMD_MAE_MPORT_READ_JOURNAL_IN_LEN 4
+/* Any unused flags are reserved and must be set to zero. */
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_IN_FLAGS_OFST 0
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_IN_FLAGS_LEN 4
+
+/* MC_CMD_MAE_MPORT_READ_JOURNAL_OUT msgresponse */
+#define    MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_LENMIN 12
+#define    MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_LENMAX 252
+#define    MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_LENMAX_MCDI2 1020
+#define    MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_LEN(num) (12+1*(num))
+#define    MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_DATA_NUM(len) (((len)-12)/1)
+/* Any unused flags are reserved and must be ignored. */
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_FLAGS_OFST 0
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_FLAGS_LEN 4
+#define        MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MORE_OFST 0
+#define        MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MORE_LBN 0
+#define        MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MORE_WIDTH 1
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_COUNT_OFST 4
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_COUNT_LEN 4
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_SIZEOF_MPORT_DESC_OFST 8
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_SIZEOF_MPORT_DESC_LEN 4
+/* Any array of MAE_MPORT_DESC structures. The MAE_MPORT_DESC structure may
+ * grow in future version of this command. Drivers should use a stride of
+ * SIZEOF_MPORT_DESC. Fields beyond SIZEOF_MPORT_DESC are not present.
+ */
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_DATA_OFST 12
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_DATA_LEN 1
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_DATA_MINNUM 0
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_DATA_MAXNUM 240
+#define       MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_DATA_MAXNUM_MCDI2 1008
 
 
 #endif /* MCDI_PCOL_H */

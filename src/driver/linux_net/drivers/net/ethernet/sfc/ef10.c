@@ -4268,10 +4268,8 @@ static int efx_ef10_mtd_probe_partition(struct efx_nic *efx,
 					unsigned int type,
 					unsigned long *found)
 {
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_NVRAM_METADATA_IN_LEN);
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_NVRAM_METADATA_OUT_LENMAX);
 	const struct efx_ef10_nvram_type_info *info;
-	size_t size, erase_size, write_size, outlen;
+	size_t size, erase_size, write_size;
 	int type_idx = 0;
 	bool protected;
 	int rc;
@@ -4306,25 +4304,17 @@ static int efx_ef10_mtd_probe_partition(struct efx_nic *efx,
 
 	part->nvram_type = type;
 
-	/* The metadata command fails if the dynamic config is empty. In this
-	 * situation we want to block a firmware upgrade until the problem has
-	 * been fixed.
-	 */
-	if (type == NVRAM_PARTITION_TYPE_MC_FIRMWARE)
-		part->fw_subtype = 0xff;
-	else
-		part->fw_subtype = 0;
-
-	MCDI_SET_DWORD(inbuf, NVRAM_METADATA_IN_TYPE, type);
-	rc = efx_mcdi_rpc(efx, MC_CMD_NVRAM_METADATA, inbuf, sizeof(inbuf),
-			  outbuf, sizeof(outbuf), &outlen);
-	if (rc == 0) {
-		if (outlen < MC_CMD_NVRAM_METADATA_OUT_LENMIN)
-			return -EIO;
-		if (MCDI_DWORD(outbuf, NVRAM_METADATA_OUT_FLAGS) &
-		    (1 << MC_CMD_NVRAM_METADATA_OUT_SUBTYPE_VALID_LBN))
-			part->fw_subtype = MCDI_DWORD(outbuf,
-						   NVRAM_METADATA_OUT_SUBTYPE);
+	rc = efx_mcdi_nvram_metadata(efx, type, &part->fw_subtype, NULL, NULL,
+				     0);
+	if (rc) {
+		/* The metadata command fails if the dynamic config is empty.
+		 * In this situation we want to block a firmware upgrade until
+		 * the problem has been fixed.
+		 */
+		if (type == NVRAM_PARTITION_TYPE_MC_FIRMWARE)
+			part->fw_subtype = 0xff;
+		else
+			part->fw_subtype = 0;
 	}
 
 	part->dev_type_name = "EF10 NVRAM manager";

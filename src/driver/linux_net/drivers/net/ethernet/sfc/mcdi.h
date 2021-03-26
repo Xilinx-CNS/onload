@@ -585,7 +585,6 @@ static inline void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_
 			      MCDI_CAPABILITY_OFST(field))
 
 void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len);
-void efx_mcdi_dump_versions(struct efx_nic *efx, void *print_info);
 int efx_mcdi_drv_attach(struct efx_nic *efx, u32 fw_variant, u32 *out_flags,
 			bool reattach);
 int efx_mcdi_drv_detach(struct efx_nic *efx);
@@ -638,7 +637,19 @@ int efx_mcdi_nvram_write(struct efx_nic *efx, unsigned int type,
 			 loff_t offset, const u8 *buffer, size_t length);
 int efx_mcdi_nvram_erase(struct efx_nic *efx, unsigned int type,
 			 loff_t offset, size_t length);
-int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type);
+int efx_mcdi_nvram_metadata(struct efx_nic *efx, unsigned int type,
+			    u32 *subtype, u16 version[4], char *desc,
+			    size_t descsize);
+
+enum efx_update_finish_mode {
+	EFX_UPDATE_FINISH_WAIT,
+	EFX_UPDATE_FINISH_BACKGROUND,
+	EFX_UPDATE_FINISH_POLL,
+};
+
+int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,
+				 enum efx_update_finish_mode mode);
+int efx_mcdi_nvram_update_finish_polled(struct efx_nic *efx, unsigned int type);
 
 #ifdef CONFIG_SFC_MTD
 int efx_mcdi_mtd_read(struct mtd_info *mtd, loff_t start, size_t len,

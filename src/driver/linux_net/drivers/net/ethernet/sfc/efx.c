@@ -1809,7 +1809,7 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_xdp_flush		= efx_xdp_flush,
 #endif
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
 #ifdef CONFIG_NET_DEVLINK
 	.ndo_get_devlink_port	= efx_get_devlink_port,
 #endif

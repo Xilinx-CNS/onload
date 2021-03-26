@@ -33,10 +33,12 @@ enum mae_mport_desc_caller_flags {
 	MAE_MPORT_DESC_FLAG_CAN_RECEIVE_ON = BIT(MAE_MPORT_DESC_CAN_RECEIVE_ON_LBN),
 	MAE_MPORT_DESC_FLAG_CAN_DELIVER_TO = BIT(MAE_MPORT_DESC_CAN_DELIVER_TO_LBN),
 	MAE_MPORT_DESC_FLAG_CAN_DELETE = BIT(MAE_MPORT_DESC_CAN_DELETE_LBN),
+	MAE_MPORT_DESC_FLAG_IS_ZOMBIE = BIT(MAE_MPORT_DESC_IS_ZOMBIE_LBN),
+
 	MAE_MPORT_DESC_FLAG__MASK = MAE_MPORT_DESC_FLAG_CAN_RECEIVE_ON |
 		MAE_MPORT_DESC_FLAG_CAN_DELIVER_TO |
-		MAE_MPORT_DESC_FLAG_CAN_DELETE
-
+		MAE_MPORT_DESC_FLAG_CAN_DELETE |
+		MAE_MPORT_DESC_FLAG_IS_ZOMBIE
 };
 
 struct mae_mport_desc {
@@ -56,9 +58,9 @@ struct mae_mport_desc {
 	};
 };
 
-/* Returns number of mports reported by fw or negative error */
-int efx_mae_enumerate_mports(struct efx_nic *efx, int outlen,
-			     struct mae_mport_desc *out);
+/* Returns array of mports reported by fw, or error pointer */
+struct mae_mport_desc *efx_mae_enumerate_mports(struct efx_nic *efx,
+						unsigned int *n_mports);
 
 #define MAE_NUM_FIELDS	(MAE_FIELD_ENC_VNET_ID + 1)
 

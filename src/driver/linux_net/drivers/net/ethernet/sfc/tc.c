@@ -4304,36 +4304,15 @@ void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 static int efx_tc_enumerate_mports(struct efx_nic *efx)
 {
-	int rc;
+	struct mae_mport_desc *mports;
+	unsigned int n_mports;
 
-	rc = efx_mae_enumerate_mports(efx, 0, NULL);
-	if (rc < 0)
-		return rc;
-	efx->tc->n_mports = rc;
-	efx->tc->mports = kcalloc(efx->tc->n_mports,
-				  sizeof(struct mae_mport_desc), GFP_KERNEL);
-	if (!efx->tc->mports) {
-		rc = -ENOMEM;
-		goto fail1;
-	}
-	rc = efx_mae_enumerate_mports(efx, efx->tc->n_mports, efx->tc->mports);
-	if (rc < 0)
-		goto fail2;
-	if (rc != efx->tc->n_mports) {
-		/* m-port count changed, we're confused.
-		 * bail out for now, TODO fix this later
-		 */
-		rc = -EIO;
-		goto fail2;
-
-	}
+	mports = efx_mae_enumerate_mports(efx, &n_mports);
+	if (IS_ERR_OR_NULL(mports))
+		return PTR_ERR_OR_ZERO(mports) ?: -EIO;
+	efx->tc->mports = mports;
+	efx->tc->n_mports = n_mports;
 	return 0;
-fail2:
-	kfree(efx->tc->mports);
-fail1:
-	efx->tc->n_mports = 0;
-	return rc;
-
 }
 #endif
 
