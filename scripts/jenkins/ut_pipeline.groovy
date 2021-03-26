@@ -145,8 +145,8 @@ void doSystemTests() {
   }
 }
 
-void doAutosmoke(repo, branch, bookmark) {
-  boolean pretend = env.JOB_NAME.startsWith('personal/')
+void doAutosmoke(repo, branch, bookmark, pretend=false) {
+  pretend = pretend || env.JOB_NAME.startsWith('personal/')
   autosmoke.doAutosmoke(repo, branch, bookmark, pretend)
 }
 
@@ -238,6 +238,9 @@ void doUnitTestsPipeline() {
 
     if( bookmark ) { // Only run autosmoke if the bookmark moved on
       doAutosmoke(scm_source, env.BRANCH_NAME, bookmark)
+    } else {
+      // ... otherwise just show what those commands would be
+      doAutosmoke(scm_source, env.BRANCH_NAME, long_revision, true)
     }
   }
 }
