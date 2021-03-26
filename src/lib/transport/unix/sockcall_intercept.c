@@ -2386,15 +2386,41 @@ OO_INTERCEPT(int, setuid, (uid_t uid))
 
 
 
-/* On linux, this interception is necessary:
+/* Intecept fstat().
+ *
+ * On linux, this interception is necessary:
  * - since onloadfs files cannot have S_IFSOCK set in i_mode;
  * - for epoll, since it is a char device. */
+static void oo_update_fstat_mode(int fd, __mode_t* st_mode_p)
+{
+  citp_fdinfo* fdi;
+  citp_lib_context_t lib_context;
+
+  citp_enter_lib(&lib_context);
+  if( (fdi = citp_fdtable_lookup(fd))) {
+    if( fdi != &citp_the_closed_fd ) {
+      *st_mode_p &= ~S_IFMT;
+      if( fdi->protocol->type == CITP_PIPE_FD ) {
+        *st_mode_p |= S_IFIFO;
+        *st_mode_p &= ~0177;
+      }
+      else
+      if( fdi->protocol->type == CITP_EPOLLB_FD ||
+          fdi->protocol->type == CITP_EPOLL_FD )
+        *st_mode_p = 0600;
+      else
+        *st_mode_p |= S_IFSOCK;
+    }
+    citp_fdinfo_release_ref(fdi, 0);
+  }
+  citp_exit_lib(&lib_context, true);
+}
+
+#ifdef _STAT_VER
 OO_INTERCEPT(int, __fxstat,
              (int ver, int fd, struct stat *stat_buf))
 {
-  citp_fdinfo* fdi;
   int rc;
-  citp_lib_context_t lib_context;
 
   if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
     citp_do_init(CITP_INIT_SYSCALLS);
@@ -2404,24 +2430,8 @@ OO_INTERCEPT(int, __fxstat,
   Log_CALL(ci_log("%s(%d, %d, %p)", __FUNCTION__, ver, fd, stat_buf));
 
   rc = ci_sys___fxstat(ver, fd, stat_buf);
-  citp_enter_lib(&lib_context);
-  if( rc == 0 && (fdi = citp_fdtable_lookup(fd))) {
-    if( fdi != &citp_the_closed_fd ) {
-      stat_buf->st_mode &= ~S_IFMT;
-      if( fdi->protocol->type == CITP_PIPE_FD ) {
-        stat_buf->st_mode |= S_IFIFO;
-        stat_buf->st_mode &= ~0177;
-      }
-      else
-      if( fdi->protocol->type == CITP_EPOLLB_FD ||
-          fdi->protocol->type == CITP_EPOLL_FD )
-        stat_buf->st_mode = 0600;
-      else
-        stat_buf->st_mode |= S_IFSOCK;
-    }
-    citp_fdinfo_release_ref(fdi, 0);
-  }
-  citp_exit_lib(&lib_context, rc == 0);
+  if( rc == 0 )
+    oo_update_fstat_mode(fd, &stat_buf->st_mode);
   Log_CALL_RESULT(rc);
   return rc;
 }
@@ -2431,9 +2441,7 @@ OO_INTERCEPT(int, __fxstat,
 OO_INTERCEPT(int, __fxstat64,
              (int ver, int fd, struct stat64 *stat_buf))
 {
-  citp_fdinfo* fdi;
   int rc;
-  citp_lib_context_t lib_context;
 
   if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
     citp_do_init(CITP_INIT_SYSCALLS);
@@ -2443,28 +2451,57 @@ OO_INTERCEPT(int, __fxstat64,
   Log_CALL(ci_log("%s(%d, %d, %p)", __FUNCTION__, ver, fd, stat_buf));
 
   rc = ci_sys___fxstat64(ver, fd, stat_buf);
-  citp_enter_lib(&lib_context);
-  if( rc == 0 && (fdi = citp_fdtable_lookup(fd)) ) {
-    if( fdi != &citp_the_closed_fd ) {
-      stat_buf->st_mode &= ~S_IFMT;
-      if( fdi->protocol->type == CITP_PIPE_FD ) {
-        stat_buf->st_mode |= S_IFIFO;
-        stat_buf->st_mode &= ~0177;
-      }
-      else
-      if( fdi->protocol->type == CITP_EPOLLB_FD ||
-          fdi->protocol->type == CITP_EPOLL_FD )
-        stat_buf->st_mode = 0600;
-      else
-        stat_buf->st_mode |= S_IFSOCK;
-    }
-    citp_fdinfo_release_ref(fdi, 0);
-  }
-  citp_exit_lib(&lib_context, rc == 0);
+  if( rc == 0 )
+    oo_update_fstat_mode(fd, &stat_buf->st_mode);
   Log_CALL_RESULT(rc);
   return rc;
 }
-#endif
+#endif /* __USE_LARGEFILE64 */
+
+#else /* _STAT_VER */
+
+OO_INTERCEPT(int, fstat,
+             (int fd, struct stat *stat_buf))
+{
+  int rc;
+
+  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
+    citp_do_init(CITP_INIT_SYSCALLS);
+    return ci_sys_fstat(fd, stat_buf);
+  }
+
+  Log_CALL(ci_log("%s(%d, %p)", __FUNCTION__, fd, stat_buf));
+
+  rc = ci_sys_fstat(fd, stat_buf);
+  if( rc == 0 )
+    oo_update_fstat_mode(fd, &stat_buf->st_mode);
+  Log_CALL_RESULT(rc);
+  return rc;
+}
+
+
+#ifdef __USE_LARGEFILE64
+OO_INTERCEPT(int, fstat64,
+             (int fd, struct stat64 *stat_buf))
+{
+  int rc;
+
+  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
+    citp_do_init(CITP_INIT_SYSCALLS);
+    return ci_sys_fstat64(fd, stat_buf);
+  }
+
+  Log_CALL(ci_log("%s(%d, %p)", __FUNCTION__, fd, stat_buf));
+
+  rc = ci_sys_fstat64(fd, stat_buf);
+  if( rc == 0 )
+    oo_update_fstat_mode(fd, &stat_buf->st_mode);
+  Log_CALL_RESULT(rc);
+  return rc;
+}
+#endif /* __USE_LARGEFILE64 */
+
+#endif /* _STAT_VER */
 
 
 OO_INTERCEPT(int, chroot,

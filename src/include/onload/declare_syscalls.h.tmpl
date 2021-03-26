@@ -19,6 +19,7 @@
 
 #include <sys/resource.h>
 #include <sys/syscall.h>
+#include <sys/stat.h>
 
 /*
 ** This template helps generate declarations, definitions or code for the
@@ -112,15 +113,26 @@ CI_MK_DECL(int           , creat      , (const char*, mode_t));
 
 CI_MK_DECL(int           , setrlimit  , (__rlimit_resource_t, const struct rlimit *));
 
+#ifdef _STAT_VER
 CI_MK_DECL(int           , __fxstat   , (int, int, struct stat *));
+#endif
 #ifdef __USE_LARGEFILE64
 CI_MK_DECL(int           , open64     , (const char*, int, ...));
 CI_MK_DECL(int           , creat64    , (const char*, mode_t));
 CI_MK_DECL(int           , setrlimit64, (__rlimit_resource_t, const struct rlimit64 *));
+#ifdef _STAT_VER
 CI_MK_DECL(int           , __fxstat64 , (int, int, struct stat64 *));
+#endif
 # if CI_LIBC_HAS_fcntl64
 CI_MK_DECL(int           , fcntl64    , (int, int, ...));
 # endif
+#endif
+
+#ifndef _STAT_VER
+#ifdef __USE_LARGEFILE64
+CI_MK_DECL(int           , fstat64 , (int, struct stat64 *));
+#endif
+CI_MK_DECL(int           , fstat , (int, struct stat *));
 #endif
 
 CI_MK_DECL(int           , socketpair , (int, int, int, int sv[2]));

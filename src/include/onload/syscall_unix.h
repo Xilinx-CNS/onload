@@ -49,11 +49,13 @@ extern __sighandler_t sysv_signal(int signum, __sighandler_t handler);
 # include <onload/declare_syscalls.h.tmpl>
 
 
+#ifdef _STAT_VER
 #define ci_sys_fstat(__fd, __statbuf)                          \
          ci_sys___fxstat(_STAT_VER, (__fd), (__statbuf))
 #ifdef __USE_LARGEFILE64
 # define ci_sys_fstat64(__fd, __statbuf)                       \
           ci_sys___fxstat64(_STAT_VER, (__fd), (__statbuf))
+#endif
 #endif
 
 
