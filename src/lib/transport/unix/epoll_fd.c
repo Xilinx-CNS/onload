@@ -226,8 +226,7 @@ static int citp_epoll_sb_state_alloc(citp_socket* sock)
     epoll->sock_id = sock->s->b.bufid;
     for( i = 0; i < CI_EPOLL_SETS_PER_AUX_BUF; i++ ) {
       oo_p_dllink_init(sock->netif,
-                       oo_p_dllink_sb(sock->netif, &sock->s->b,
-                                      &epoll->e[i].ready_link));
+                       ci_sb_epoll_ready_link(sock->netif, epoll, i));
     }
   }
   ci_netif_unlock(sock->netif);
@@ -250,8 +249,7 @@ static void citp_epoll_sb_state_set(struct citp_epoll_member* eitem,
   ci_assert(OO_PP_NOT_NULL(sock->s->b.epoll));
 
   epoll = ci_ni_aux_p2epoll(sock->netif, sock->s->b.epoll);
-  link = oo_p_dllink_sb(ep->home_stack,  &sock->s->b,
-                        &epoll->e[ep->ready_list].ready_link);
+  link = ci_sb_epoll_ready_link(ep->home_stack, epoll, ep->ready_list);
 
   /* This epoll set owns the ready list id, so it must be free in the
    * socket */
@@ -374,8 +372,7 @@ static void citp_remove_home_member(struct citp_epoll_fd* epoll_fd,
     if( sock->s->b.ready_lists_in_use & (1 << eitem->ready_list_id) ) {
       ci_sb_epoll_state* epoll = ci_ni_aux_p2epoll(ni, sock->s->b.epoll);
       struct oo_p_dllink_state link =
-              oo_p_dllink_sb(ni, &sock->s->b,
-                             &epoll->e[eitem->ready_list_id].ready_link);
+              ci_sb_epoll_ready_link(ni, epoll, eitem->ready_list_id);
 
       sock->s->b.ready_lists_in_use &=~ (1 << eitem->ready_list_id);
       oo_p_dllink_del(ni, link);
@@ -2478,9 +2475,8 @@ void citp_epoll_on_close(citp_fdinfo* epoll_fdi, citp_fdinfo* fd_fdi,
    * set we've been added to.
    */
   if( eitem && (eitem->ready_list_id == ep->ready_list) ) {
-    struct oo_p_dllink_state link =
-                    oo_p_dllink_sb(ni, &sock->s->b,
-                                   &epoll->e[ep->ready_list].ready_link);
+    struct oo_p_dllink_state link = ci_sb_epoll_ready_link(ni, epoll,
+                                                           ep->ready_list);
     Log_POLL(ci_log("%s: epoll_fd=%d fd=%d",
                     __FUNCTION__, fd_fdi->epoll_fd, fd_fdi->fd));
     /* At this point any of the eitem, sock buf, or fdinfo may still be in

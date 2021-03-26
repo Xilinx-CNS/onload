@@ -4760,6 +4760,15 @@ ci_inline void ci_tcp_set_eff_mss(ci_netif* netif, ci_tcp_state* ts) {
 }
 
 
+ci_inline struct oo_p_dllink_state
+ci_sb_epoll_ready_link(ci_netif* ni, ci_sb_epoll_state* epoll, int i)
+{
+  return oo_p_dllink_sb(ni,
+                        ci_ni_aux2container_w(CI_CONTAINER(ci_ni_aux_mem,
+                                                           u.epoll, epoll)),
+                        &epoll->e[i].ready_link);
+}
+
 #define CI_READY_LIST_EACH(bitmask, tmp, i)            \
   ci_assert_lt((bitmask), 1u << CI_CFG_N_READY_LISTS); \
   OO_FOR_EACH_BIT(bitmask, tmp, i)
@@ -4771,8 +4780,7 @@ ci_netif_put_on_post_poll_epoll(ci_netif* ni, citp_waitable* sb)
   ci_sb_epoll_state* epoll = ci_ni_aux_p2epoll(ni, sb->epoll);
   ci_uint32 tmp, i;
   CI_READY_LIST_EACH(sb->ready_lists_in_use, tmp, i) {
-    struct oo_p_dllink_state link =
-                             oo_p_dllink_sb(ni, sb, &epoll->e[i].ready_link);
+    struct oo_p_dllink_state link = ci_sb_epoll_ready_link(ni, epoll, i);
     oo_p_dllink_del(ni, link);
     oo_p_dllink_add_tail(ni,
                          oo_p_dllink_ptr(ni, &ni->state->ready_lists[i]),
@@ -4796,8 +4804,7 @@ citp_waitable_remove_from_epoll(ci_netif* ni, citp_waitable* w, int do_free)
   epoll = ci_ni_aux_p2epoll(ni, w->epoll);
   ci_assert_equal(epoll->sock_id, w->bufid);
   CI_READY_LIST_EACH(w->ready_lists_in_use, tmp, i) {
-    struct oo_p_dllink_state link =
-                             oo_p_dllink_sb(ni, w, &epoll->e[i].ready_link);
+    struct oo_p_dllink_state link = ci_sb_epoll_ready_link(ni, epoll, i);
     oo_p_dllink_del(ni, link);
     oo_p_dllink_init(ni, link);
   }

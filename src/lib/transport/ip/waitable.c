@@ -468,8 +468,7 @@ citp_waitable_wake_epoll3_not_in_poll(ci_netif* ni, citp_waitable* sb)
     ci_uint32 tmp, i;
 
     CI_READY_LIST_EACH(sb->ready_lists_in_use, tmp, i) {
-      struct oo_p_dllink_state link =
-                        oo_p_dllink_sb(ni, sb, &epoll->e[i].ready_link);
+      struct oo_p_dllink_state link = ci_sb_epoll_ready_link(ni, epoll, i);
       oo_p_dllink_del(ni, link);
       oo_p_dllink_add_tail(ni,
                            oo_p_dllink_ptr(ni, &ni->state->ready_lists[i]),

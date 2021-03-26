@@ -1223,8 +1223,7 @@ efab_os_wakeup_epoll3_locked(tcp_helper_resource_t* trs,
   epoll = ci_ni_aux_p2epoll(ni, sb->epoll);
 
   CI_READY_LIST_EACH(sb->ready_lists_in_use, tmp, i) {
-    struct oo_p_dllink_state link = oo_p_dllink_sb(ni, sb,
-                                                   &epoll->e[i].ready_link);
+    struct oo_p_dllink_state link = ci_sb_epoll_ready_link(ni, epoll, i);
     oo_p_dllink_del(ni, link);
     oo_p_dllink_add_tail(ni, oo_p_dllink_ptr(ni, &ni->state->ready_lists[i]),
                          link);

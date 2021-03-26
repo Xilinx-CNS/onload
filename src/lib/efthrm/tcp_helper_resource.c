@@ -7293,12 +7293,12 @@ get_os_ready_list(tcp_helper_resource_t* thr, int ready_list)
   tcp_helper_endpoint_t* ep;
   ci_dllink* lnk;
   citp_waitable* w;
-  ci_sb_epoll_state* epoll;
   unsigned long lock_flags;
 
   spin_lock_irqsave(&thr->os_ready_list_lock, lock_flags);
   while( ci_dllist_not_empty(&thr->os_ready_lists[ready_list]) ) {
     struct oo_p_dllink_state ready_link;
+    ci_sb_epoll_state* epoll;
 
     lnk = ci_dllist_head(&thr->os_ready_lists[ready_list]);
     ep = CI_CONTAINER(tcp_helper_endpoint_t,
@@ -7313,7 +7313,7 @@ get_os_ready_list(tcp_helper_resource_t* thr, int ready_list)
       continue;
 
     epoll = ci_ni_aux_p2epoll(ni, w->epoll);
-    ready_link = oo_p_dllink_sb(ni, w, &epoll->e[ready_list].ready_link);
+    ready_link = ci_sb_epoll_ready_link(ni, epoll, ready_list);
     oo_p_dllink_del(ni, ready_link);
     oo_p_dllink_add_tail(ni,
                 oo_p_dllink_ptr(ni, &ni->state->ready_lists[ready_list]),
