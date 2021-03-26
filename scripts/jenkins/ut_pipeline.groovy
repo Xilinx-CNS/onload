@@ -146,11 +146,8 @@ void doSystemTests() {
 }
 
 void doAutosmoke(repo, branch, bookmark) {
-  if( env.JOB_NAME.startsWith('personal/') ) {
-    echo("Not autosmoking from a personal job")
-  } else {
-    autosmoke.doAutosmoke(repo, branch, bookmark)
-  }
+  boolean pretend = env.JOB_NAME.startsWith('personal/')
+  autosmoke.doAutosmoke(repo, branch, bookmark, pretend)
 }
 
 String[] list_build_profiles() {
