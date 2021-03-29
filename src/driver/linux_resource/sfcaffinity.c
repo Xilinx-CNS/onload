@@ -91,7 +91,7 @@ ssize_t efrm_affinity_store_cpu2rxq(struct linux_efhw_nic* nic,
 
 	if (count > max_cpus * 8 + 20)
 		return -E2BIG;
-	cpu_to_q = kmalloc(max_cpus * sizeof(int), GFP_KERNEL);
+	cpu_to_q = kzalloc(max_cpus * sizeof(int), GFP_KERNEL);
 	if (cpu_to_q == NULL)
 		return -ENOMEM;
 
@@ -100,7 +100,7 @@ ssize_t efrm_affinity_store_cpu2rxq(struct linux_efhw_nic* nic,
 		int rc2;
 		for(;;) {
 			if (s >= buf + count)
-				goto fail;
+				goto parsed;
 			if (!isspace(*s))
 				break;
 			++s;
@@ -117,6 +117,8 @@ ssize_t efrm_affinity_store_cpu2rxq(struct linux_efhw_nic* nic,
 			++s;
 		}
 	}
+
+parsed:
 	while (s < buf + count && isspace(*s))
 		++s;
 
