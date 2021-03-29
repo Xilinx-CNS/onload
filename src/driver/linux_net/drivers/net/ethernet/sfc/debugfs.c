@@ -546,7 +546,6 @@ void efx_fini_debugfs_vdpa(struct ef100_vdpa_nic *vdpa)
 {
 	efx_fini_debugfs_dir(vdpa->debug_dir,
 			     efx_debugfs_vdpa_parameters, NULL);
-	debugfs_remove(vdpa->debug_dir);
 	vdpa->debug_dir = NULL;
 }
 
@@ -622,7 +621,6 @@ void efx_fini_debugfs_vdpa_vring(struct ef100_vdpa_vring_info *vdpa_vring)
 {
 	efx_fini_debugfs_dir(vdpa_vring->debug_dir,
 			     efx_debugfs_vdpa_vring_parameters, NULL);
-	debugfs_remove(vdpa_vring->debug_dir);
 	vdpa_vring->debug_dir = NULL;
 }
 #endif

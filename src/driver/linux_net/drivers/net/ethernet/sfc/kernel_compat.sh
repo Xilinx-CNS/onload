@@ -371,6 +371,7 @@ EFX_HAVE_TC_ACTION_COOKIE		custom
 EFX_HAVE_TC_FLOW_OFFLOAD		file	include/net/flow_offload.h
 EFX_NEED_TCF_MIRRED_DEV			nsymbol	tcf_mirred_dev	include/net/tc_act/tc_mirred.h
 EFX_HAVE_STRUCT_SIZE			symbol	struct_size	include/linux/overflow.h
+EFX_NEED_ARRAY_SIZE			nsymbol	array_size	include/linux/overflow.h
 EFX_NEED_FLOW_RULE_MATCH_CVLAN		nsymbol	flow_rule_match_cvlan	include/net/flow_offload.h
 EFX_NEED_FLOW_RULE_MATCH_CT		nsymbol	flow_rule_match_ct	include/net/flow_offload.h
 EFX_HAVE_FLOW_DISSECTOR_KEY_CVLAN	symbol	FLOW_DISSECTOR_KEY_CVLAN	include/net/flow_dissector.h

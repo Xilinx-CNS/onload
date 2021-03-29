@@ -723,10 +723,10 @@ static int ef100_register_netdev(struct efx_nic *efx)
 	net_dev->netdev_ops = &ef100_netdev_ops;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_MTU_LIMITS)
 	net_dev->min_mtu = EFX_MIN_MTU;
-	net_dev->max_mtu = EFX_MAX_MTU;
+	net_dev->max_mtu = EFX_100_MAX_MTU;
 #elif defined(EFX_HAVE_NETDEV_EXT_MTU_LIMITS)
 	net_dev->extended->min_mtu = EFX_MIN_MTU;
-	net_dev->extended->max_mtu = EFX_MAX_MTU;
+	net_dev->extended->max_mtu = EFX_100_MAX_MTU;
 #endif
 	net_dev->ethtool_ops = &ef100_ethtool_ops;
 

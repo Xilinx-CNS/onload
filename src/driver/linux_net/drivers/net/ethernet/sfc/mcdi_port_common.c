@@ -1373,6 +1373,18 @@ bool efx_mcdi_port_process_event_common(struct efx_channel *channel,
 		else
 			efx_mcdi_sensor_event(efx, event);
 		return true;
+	case MCDI_EVENT_CODE_TX_ERR:
+	case MCDI_EVENT_CODE_RX_ERR:
+		/* Driver handles ef10 with specific code */
+	        if (efx_nic_rev(efx) != EFX_REV_EF100)
+			return false;
+
+		netif_err(efx, hw, efx->net_dev,
+			  "%s DMA error (event: "EFX_QWORD_FMT")\n",
+			  code == MCDI_EVENT_CODE_TX_ERR ? "TX" : "RX",
+			  EFX_QWORD_VAL(*event));
+		efx_schedule_reset(efx, RESET_TYPE_DATAPATH);
+		return true;
 	}
 
 	return false;

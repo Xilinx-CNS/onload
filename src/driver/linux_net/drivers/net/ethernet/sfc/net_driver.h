@@ -92,7 +92,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.7.1005"
+#define EFX_DRIVER_VERSION	"5.3.7.1007"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -145,6 +145,7 @@
 
 /* Maximum possible MTU the driver supports */
 #define EFX_MAX_MTU (9 * 1024)
+#define EFX_100_MAX_MTU 9600
 
 /* Minimum MTU, from RFC791 (IP) */
 #define EFX_MIN_MTU 68

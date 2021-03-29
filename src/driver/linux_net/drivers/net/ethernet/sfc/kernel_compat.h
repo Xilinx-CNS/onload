@@ -3576,4 +3576,24 @@ static inline void devlink_flash_update_timeout_notify(struct devlink *devlink,
 #define DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID	"fw.bundle_id"
 #endif
 
+#ifdef EFX_NEED_ARRAY_SIZE
+/**
+* array_size() - Calculate size of 2-dimensional array.
+*
+* @a: dimension one
+* @b: dimension two
+*
+* Calculates size of 2-dimensional array: @a * @b.
+*
+* Returns: number of bytes needed to represent the array.
+*/
+static inline __must_check size_t array_size(size_t a, size_t b)
+{
+	return(a * b);
+}
+#else
+/* On RHEL7.6 nothing includes this yet */
+#include <linux/overflow.h>
+#endif
+
 #endif /* EFX_KERNEL_COMPAT_H */
