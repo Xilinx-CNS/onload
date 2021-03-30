@@ -220,6 +220,7 @@ cicp_user_build_fwd_key(ci_netif* ni, const ci_ip_cached_hdrs* ipcache,
   key->flag = 0;
 
   key->ifindex = sock_cp->so_bindtodevice;
+  key->src = CI_ADDR_SH_FROM_ADDR(sock_cp->laddr);
   if( CI_IPX_IS_MULTICAST(daddr) ) {
     if( IS_AF_INET6(af) || sock_cp->sock_cp_flags & OO_SCP_NO_MULTICAST )
       return -EHOSTUNREACH;
@@ -227,12 +228,10 @@ cicp_user_build_fwd_key(ci_netif* ni, const ci_ip_cached_hdrs* ipcache,
     /* In linux, SO_BINDTODEVICE has the priority over IP_MULTICAST_IF */
     if( key->ifindex == 0 )
       key->ifindex = sock_cp->ip_multicast_if;
-    key->src = CI_ADDR_SH_FROM_IP4(sock_cp->ip_multicast_if_laddr_be32);
-    if( CI_IPX_ADDR_IS_ANY(key->src) && !CI_IPX_ADDR_IS_ANY(sock_cp->laddr) )
-      key->src = CI_ADDR_SH_FROM_ADDR(sock_cp->laddr);
+    if( CI_IPX_ADDR_IS_ANY(key->src) )
+       key->src = CI_ADDR_SH_FROM_IP4(sock_cp->ip_multicast_if_laddr_be32);
   }
   else {
-    key->src = CI_ADDR_SH_FROM_ADDR(sock_cp->laddr);
 #if CI_CFG_IPV6
     if( ! IS_AF_INET6(af) && CI_IPX_ADDR_EQ(key->src, addr_sh_any) )
       key->src = ip4_addr_sh_any;
