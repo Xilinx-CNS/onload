@@ -781,8 +781,20 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
         LOG_U(ci_log("%s: [%d] out of socket buffers",
                       __FUNCTION__, NI_ID(netif)));
         CITP_STATS_TCP_LISTEN(++tls->stats.n_acceptq_no_sock);
-        CI_SET_SO_ERROR(&tls->s, EMFILE);
-        citp_waitable_wake(netif, &tls->s.b, CI_SB_FLAG_WAKE_RX);
+#ifdef __KERNEL__
+        /* In-kernel we can fail because we can't allocate more buffers in
+         * non-appropriate context.  Do not set SO_ERROR in such a case.
+         *
+         * This is temporary condition, and when socket buffers are
+         * allocated, we'll promote this synrecv state after receiving
+         * another ACK from the peer.
+         */
+        if( netif->ep_tbl_n >= netif->ep_tbl_max )
+#endif
+        {
+          CI_SET_SO_ERROR(&tls->s, EMFILE);
+          citp_waitable_wake(netif, &tls->s.b, CI_SB_FLAG_WAKE_RX);
+        }
         return -EMFILE;
       }
 
