@@ -263,7 +263,10 @@ int main(int argc, char** argv)
     ci_log("no Onload stack [%d]", cfg_ni_id);
     return 1;
   }
-  set_log_prefix(ni->state->pretty_name);
+
+  /* Now we can print the stack name to the log.  */
+  if( ! ci_cfg_log_to_kern )
+    set_log_prefix(ni->state->pretty_name);
 
   /* Fork() for the last time, to tell caller that
    * we have successully started
@@ -276,6 +279,10 @@ int main(int argc, char** argv)
     return 1;
   }
 
+  /* When logging to the kernel, we know the right pid now.  */
+  if( ci_cfg_log_to_kern )
+    set_log_prefix(ni->state->pretty_name);
+
   /* Set up logging via ioctl */
   if( ci_cfg_log_to_kern ) {
     close(log_fd);
@@ -287,7 +294,7 @@ int main(int argc, char** argv)
   act.sa_sigaction = sigalarm_exit;
   sigaction(SIGALRM, &act, NULL);
 
-  ci_log("Starting helper pid %d "ONLOAD_VERSION, rc);
+  ci_log("Starting helper "ONLOAD_VERSION);
   main_loop(ni);
   return 0;
 }
