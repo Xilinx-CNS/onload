@@ -118,7 +118,7 @@ static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
 
   /* TODO timestamp flag */
   efct_tx_word(&tx, efct_tx_pkt_header(len, EFCT_TX_CT_DISABLE, 0));
-  efct_tx_block(&tx, (void*)base, len);
+  efct_tx_block(&tx, (void*)(uintptr_t)base, len);
   efct_tx_complete(vi, &tx);
 
   return 0;
@@ -139,7 +139,7 @@ static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
   efct_tx_word(&tx, efct_tx_pkt_header(len, EFCT_TX_CT_DISABLE, 0));
 
   for( i = 0; i < iov_len; ++i )
-    efct_tx_block(&tx, (void*)iov[i].iov_base, iov[i].iov_len);
+    efct_tx_block(&tx, (void*)(uintptr_t)iov[i].iov_base, iov[i].iov_len);
 
   efct_tx_complete(vi, &tx);
 
