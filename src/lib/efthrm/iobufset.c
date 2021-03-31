@@ -97,9 +97,11 @@ static int oo_bufpage_huge_alloc(struct oo_buffer_pages *p, int *flags)
   for (id = OO_SHM_NEXT_ID(start_key_id);
        id != start_key_id;
        id = OO_SHM_NEXT_ID(id)) {
+    /* NOTE: The flag SHM_HUGE_2MB was added in kernel 3.8. All supported
+     * kernels are newer than this so we don't need any kernel compat here. */
     shmid = efab_linux_sys_shmget(OO_SHM_KEY(id), HPAGE_SIZE,
                                   SHM_HUGETLB | IPC_CREAT | IPC_EXCL |
-                                  SHM_R | SHM_W);
+                                  SHM_HUGE_2MB | SHM_R | SHM_W);
     if (shmid == -EEXIST)
       continue; /* try another id */
     if (shmid < 0) {

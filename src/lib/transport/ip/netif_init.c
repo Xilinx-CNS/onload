@@ -298,60 +298,6 @@ static ci_uint32 citp_auto_flowlabels = CI_AUTO_FLOWLABELS_DEFAULT;
 #endif
 
 #ifndef __KERNEL__
-static int try_get_hp_sz(const char* line, unsigned* hp_sz)
-{
-  /* attempt to determine size of hugepages on system.
-   * scans lines presented from /proc/meminfo, extracts
-   * size if format is
-   * Hugepagesize:     <N> kB
-   * where <N> is an integer*/
-  unsigned n;
-  if( sscanf(line, "Hugepagesize:     %u kB", &n) != 1)
-    return 0;
-  *hp_sz = n;
-  return 1;
-}
-
-static int check_hp(ci_netif_config_opts* opts){
-  FILE* f;
-  char buf[80];
-  unsigned hp_sz;
-
-  hp_sz=0;
-  f=fopen("/proc/meminfo", "r");
-  if( !f ) {
-    CONFIG_LOG(opts, CONFIG_WARNINGS, "%s failed to open /proc/meminfo with "
-               "error %d. Disabling hugepage support", __FUNCTION__, errno);
-    return -1;
-  }
-
-  while( 1 ) {
-    if( !fgets(buf, sizeof(buf), f) )  {
-      fclose(f);
-      CONFIG_LOG(opts, CONFIG_WARNINGS, "EIO Error: %s failed to "
-                 "read line from proc/meminfo. Disabling hugepage "
-                 "support",__FUNCTION__);
-      return -1;
-    }
-    if( try_get_hp_sz(buf, &hp_sz) ) break;
-  }
-
-  fclose(f);
-
-  if( (hp_sz != 2048) && (hp_sz != 4096) ){
-    CONFIG_LOG(opts, CONFIG_WARNINGS, "Kernel hugepage size %u kB"
-               "is not supported. Disabling hugepage support", hp_sz);
-    opts->huge_pages=0;
-    return -1;
-  }
-
-  return 0;
-}
-#endif
-
-
-
-#ifndef __KERNEL__
 /* Interface for sysctl. */
 ci_inline int ci_sysctl_get_values(char *path, ci_uint32 *ret, int n)
 {
@@ -914,9 +860,6 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 #if CI_CFG_PKTS_AS_HUGE_PAGES
   if( (s = getenv("EF_USE_HUGE_PAGES")) )
     opts->huge_pages = atoi(s);
-
-  if( opts->huge_pages && check_hp(opts) )
-    opts->huge_pages = 0;
   if( opts->huge_pages != 0 && opts->share_with != 0 ) {
     CONFIG_LOG(opts, CONFIG_WARNINGS, "Turning huge pages off because the "
                "stack is going to be used by multiple users");
