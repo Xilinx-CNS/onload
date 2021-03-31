@@ -2725,7 +2725,7 @@ static void ci_netif_start_helper2(ci_netif* ni)
   (void)rc; /* appease gcc in NDEBUG build */
   ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: execve() failed: %s",
          ni->state->pretty_name, strerror(errno));
-  exit(4);
+  _exit(4);
 }
 
 /* Run this in the first-level cloned process: fork and exit.
@@ -2753,7 +2753,7 @@ static void ci_netif_start_helper1(ci_netif* ni)
   if( rc == -1 ) {
     ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: setsid() failed: %s",
            ni->state->pretty_name, strerror(errno));
-    exit(1);
+    _exit(1);
   }
 
   umask(0);
@@ -2761,7 +2761,7 @@ static void ci_netif_start_helper1(ci_netif* ni)
   if( rc == -1 ) {
     ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: chdir(/) failed: %s",
            ni->state->pretty_name, strerror(errno));
-    exit(1);
+    _exit(1);
   }
   /* The second part of "man 7 daemon" is in onload_helper itself. */
 
@@ -2782,16 +2782,16 @@ static void ci_netif_start_helper1(ci_netif* ni)
     ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: "
            "second clone() failed %s",
            ni->state->pretty_name, strerror(errno));
-    exit(2);
+    _exit(2);
   }
 
   ci_assert_nequal(rc, 0);
   waitpid(rc, &wstatus, 0);
   if( WIFEXITED(wstatus) && WEXITSTATUS(wstatus) == 0 )
-    exit(0);
+    _exit(0);
 
   /* Error message was printed by the child process */
-  exit(3);
+  _exit(3);
 }
 
 static int ci_netif_start_helper(ci_netif* ni)
@@ -2811,7 +2811,7 @@ static int ci_netif_start_helper(ci_netif* ni)
     ci_log("spawning "ONLOAD_HELPER_NAME" for [%s]: "
            "first clone() failed %s",
            ni->state->pretty_name, strerror(errno));
-    exit(1);
+    _exit(1);
   }
 
   rc = waitpid(rc, &wstatus, __WCLONE);
