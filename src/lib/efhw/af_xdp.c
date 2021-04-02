@@ -689,8 +689,15 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
      * has not been called after enabling evq.
      * This can happen on cleanup from failure of stack allocation */
     return;
-  efhw_page_free(&vi->user_offsets_page);
+
+  /* Stop from using this socket */
+  if( vi->waiter.wait.func != NULL )
+    remove_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
   fput(vi->sock->file);
+  flush_delayed_fput();
+
+  /* Release the resources attached to the socket */
+  efhw_page_free(&vi->user_offsets_page);
   memset(vi, 0, sizeof(*vi));
 }
 
