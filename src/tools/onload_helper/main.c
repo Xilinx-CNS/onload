@@ -232,7 +232,6 @@ int main(int argc, char** argv)
   else {
     while( (ent = readdir(dir)) != NULL ) {
       int fd = atoi(ent->d_name);
-      ci_log("%s: fd=%d log_fd=%d", __func__, fd, log_fd);
       if( fd != log_fd )
         close(fd);
     }
