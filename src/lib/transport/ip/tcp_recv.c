@@ -1723,7 +1723,7 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
         goto unrecoverable;
       }
       memcpy(&data.remote, p, sizeof(data.remote));
-      iov[iovlen].iov_ptr = data.remote.start_ptr;
+      iov[iovlen].iov_ptr = (data.remote.start_ptr % rinf->a->ts->plugin_ddr_size) + rinf->a->ts->plugin_ddr_base;
       iov[iovlen].iov_len = data.remote.data_len;
       iov[iovlen].rx_memreg_idx = 0;
       iov[iovlen].addr_space = netif->state->nic[pkt->intf_i].plugin_addr_space;

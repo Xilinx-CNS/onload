@@ -482,6 +482,8 @@ struct tcp_helper_endpoint_s {
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_uint32 plugin_stream_id[CI_CFG_MAX_INTERFACES];
+  ci_uint64 plugin_ddr_base[CI_CFG_MAX_INTERFACES];
+  ci_uint64 plugin_ddr_size[CI_CFG_MAX_INTERFACES];
 #endif
 };
 

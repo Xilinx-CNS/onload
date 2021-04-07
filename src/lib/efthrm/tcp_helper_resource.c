@@ -8125,7 +8125,9 @@ int efab_tcp_helper_tcp_offload_set_isn(tcp_helper_resource_t* trs,
 
 int efab_tcp_helper_tcp_offload_get_stream_id(tcp_helper_resource_t* trs,
                                               oo_sp ep_id, ci_int32 intf_i,
-                                              ci_uint32* stream_id)
+                                              ci_uint32* stream_id,
+                                              ci_uint64* ddr_base,
+                                              ci_uint64* ddr_size)
 {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_netif* ni = &trs->netif;
@@ -8134,7 +8136,12 @@ int efab_tcp_helper_tcp_offload_get_stream_id(tcp_helper_resource_t* trs,
   if( intf_i < 0 || intf_i >= oo_stack_intf_max(ni) )
     return -EINVAL;
 
-  *stream_id = tep_p->plugin_stream_id[intf_i];
+  if( stream_id )
+    *stream_id = tep_p->plugin_stream_id[intf_i];
+  if( ddr_base )
+    *ddr_base = tep_p->plugin_ddr_base[intf_i];
+  if( ddr_size )
+    *ddr_size = tep_p->plugin_ddr_size[intf_i];
   return 0;
 #else
   return -ENOTSUPP;

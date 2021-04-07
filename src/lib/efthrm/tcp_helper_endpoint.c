@@ -64,8 +64,11 @@ tcp_helper_endpoint_ctor(tcp_helper_endpoint_t *ep,
   oof_socket_ctor(&ep->oofilter);
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
-  for( i = 0; i < CI_CFG_MAX_INTERFACES; ++i )
+  for( i = 0; i < CI_CFG_MAX_INTERFACES; ++i ) {
     ep->plugin_stream_id[i] = INVALID_PLUGIN_HANDLE;
+    ep->plugin_ddr_base[i] = 0;
+    ep->plugin_ddr_size[i] = 0;
+  }
 #endif
 }
 
@@ -551,6 +554,8 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
       ci_assert(nsn->plugin_addr_space == 0 ||
                 nsn->plugin_addr_space == create.out_addr_spc_id);
       nsn->plugin_addr_space = create.out_addr_spc_id;
+      ep->plugin_ddr_base[intf_i] = create.out_data_buf_base;
+      ep->plugin_ddr_size[intf_i] = create.out_data_buf_capacity;
     }
   }
 #endif

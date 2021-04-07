@@ -1310,7 +1310,8 @@ static int efab_tcp_helper_tcp_offload_get_stream_id_rsop(ci_private_t* priv,
 {
   ci_tcp_offload_get_stream_id_t *a = arg;
   return efab_tcp_helper_tcp_offload_get_stream_id(priv->thr, a->ep_id,
-                                                   a->intf_i, &a->stream_id);
+                                                   a->intf_i, &a->stream_id,
+                                                   &a->ddr_base, &a->ddr_size);
 }
 #endif
 
