@@ -72,6 +72,8 @@ typedef ci_uint8 cicp_prefixlen_t;
 typedef ci_uint8 ci_mac_addr_t[6];
 typedef ci_uint16 ci_mtu_t;
 
+#define IPTOS_TOS_MASK         0x1E
+#define IPTOS_RT_MASK  (IPTOS_TOS_MASK & ~3)
 
 /*! flags for types of encapsulation supported by the NIC */
 enum {
@@ -517,13 +519,15 @@ cp_fwd_key_match(const struct cp_fwd_row* fwd,
                  const struct cp_fwd_key* key)
 {
   int addr_match;
+  int real_fwd_tos = fwd->key.tos & IPTOS_RT_MASK;
+  int real_key_tos = key->tos & IPTOS_RT_MASK;
   ci_addr_sh_t src_mask = cp_ip6_pfx2mask(fwd->key_ext.src_prefix);
   ci_addr_sh_t dst_mask = cp_ip6_pfx2mask(fwd->key_ext.dst_prefix);
   addr_match =
       (ci_ipx_addr_sh_masked_eq(&fwd->key.src, &key->src, &src_mask) &&
        ci_ipx_addr_sh_masked_eq(&fwd->key.dst, &key->dst, &dst_mask));
   return (fwd->flags & CICP_FWD_FLAG_OCCUPIED) != 0 && addr_match &&
-         fwd->key.ifindex == key->ifindex && fwd->key.tos == key->tos &&
+         fwd->key.ifindex == key->ifindex && real_fwd_tos == real_key_tos &&
          fwd->key.iif_ifindex == key->iif_ifindex &&
          ((fwd->key.flag ^ key->flag) & CP_FWD_KEY_TRANSPARENT) == 0;
 }

@@ -13,11 +13,13 @@ cp_calc_hash(unsigned size_mask, ci_addr_t const *laddr,
              unsigned iif_ifindex, cicp_mac_rowid_t* hash1,
              cicp_mac_rowid_t* hash2)
 {
+  int real_tos = tos & IPTOS_RT_MASK;
+
   if( hash1 != NULL )
-    *hash1 = onload_hash1(size_mask, *laddr, ifindex, *raddr, tos,
+    *hash1 = onload_hash1(size_mask, *laddr, ifindex, *raddr, real_tos,
                           iif_ifindex);
   if( hash2 != NULL )
-    *hash2 = cplane_hash2(*laddr, ifindex, *raddr, tos, iif_ifindex);
+    *hash2 = cplane_hash2(*laddr, ifindex, *raddr, real_tos, iif_ifindex);
 }
 
 /* Calculate primary and secondary hash values for a fwd key.  If only one or
