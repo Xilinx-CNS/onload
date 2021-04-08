@@ -694,7 +694,19 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
   if( vi->waiter.wait.func != NULL )
     remove_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
   fput(vi->sock->file);
+
+#ifdef EFRM_HAS_FLUSH_DELAYED_FPUT
+  /* This symbol is exported in linux>=5.4.
+   *
+   * Practically, as AF_XDP requires linux>=5.3 or RHEL8, it means that on
+   * RHEL8 we can't guarantee that the socket is really destroyed (and more
+   * importantly, map is updated) before we release the following
+   * resources.
+   *
+   * However we have never seen any issues because of this.
+   */
   flush_delayed_fput();
+#endif
 
   /* Release the resources attached to the socket */
   efhw_page_free(&vi->user_offsets_page);

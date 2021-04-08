@@ -137,6 +137,7 @@ EFRM_HAS_KTIME_GET_REAL_SECONDS	export	ktime_get_real_seconds	include/linux/time
 EFRM_FILE_HAS_F_EP	member	struct_file	f_ep	include/linux/fs.h
 EFRM_HAS_LOOKUP_FD_RCU	symbol	lookup_fd_rcu	include/linux/fdtable.h
 
+EFRM_HAS_FLUSH_DELAYED_FPUT	export	flush_delayed_fput	include/linux/file.h	fs/file_table.c
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
