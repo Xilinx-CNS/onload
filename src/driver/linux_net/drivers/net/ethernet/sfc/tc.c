@@ -1015,6 +1015,12 @@ static void efx_tc_flower_release_encap_md(struct efx_nic *efx,
 static void efx_tc_free_action_set(struct efx_nic *efx,
 				   struct efx_tc_action_set *act, bool in_hw)
 {
+	/* Failure paths calling this on the 'running action' set in_hw=false,
+	 * because if the alloc had succeeded we'd've put it in acts.list and
+	 * not still have it in act.
+	 */
+	if (in_hw)
+		efx_mae_free_action_set(efx, act);
 	if (act->count) {
 		spin_lock_bh(&act->count->cnt->lock);
 		if (!list_empty(&act->count_user))
@@ -1026,12 +1032,6 @@ static void efx_tc_free_action_set(struct efx_nic *efx,
 		list_del(&act->encap_user);
 		efx_tc_flower_release_encap_md(efx, act->encap_md);
 	}
-	/* Failure paths calling this on the 'running action' set in_hw=false,
-	 * because if the alloc had succeeded we'd've put it in acts.list and
-	 * not still have it in act.
-	 */
-	if (in_hw)
-		efx_mae_free_action_set(efx, act);
 	kfree(act);
 }
 
@@ -1039,16 +1039,17 @@ static void efx_tc_free_action_set_list(struct efx_nic *efx,
 					struct efx_tc_action_set_list *acts,
 					bool in_hw)
 {
-	struct efx_tc_action_set *act;
+	struct efx_tc_action_set *act, *next;
 
-	list_for_each_entry(act, &acts->list, list)
-		efx_tc_free_action_set(efx, act, true);
 	/* Failure paths set in_hw=false, because usually the acts didn't get
 	 * to efx_mae_alloc_action_set_list(); if they did, the failure tree
 	 * has a separate efx_mae_free_action_set_list() before calling us.
 	 */
 	if (in_hw)
 		efx_mae_free_action_set_list(efx, acts);
+	/* Any act that's on the list will be in_hw even if the list isn't */
+	list_for_each_entry_safe(act, next, &acts->list, list)
+		efx_tc_free_action_set(efx, act, true);
 	/* Don't kfree, as acts is embedded inside a struct efx_tc_flow_rule */
 }
 
@@ -1757,7 +1758,11 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 			match->value.ip_frag = fm.key->flags & FLOW_DIS_IS_FRAGMENT;
 			match->mask.ip_frag = true;
 		}
-		if (fm.mask->flags & ~FLOW_DIS_IS_FRAGMENT) {
+		if (fm.mask->flags & FLOW_DIS_FIRST_FRAG) {
+			match->value.ip_firstfrag = fm.key->flags & FLOW_DIS_FIRST_FRAG;
+			match->mask.ip_firstfrag = true;
+		}
+		if (fm.mask->flags & ~(FLOW_DIS_IS_FRAGMENT | FLOW_DIS_FIRST_FRAG)) {
 			efx_tc_err(efx, "Unsupported match on control.flags %#x\n",
 				   fm.mask->flags);
 			NL_SET_ERR_MSG_MOD(extack, "Unsupported match on control.flags");
@@ -1891,6 +1896,12 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 		struct flow_match_control fm;
 
 		flow_rule_match_enc_control(rule, &fm);
+		if (fm.mask->flags) {
+			efx_tc_err(efx, "Unsupported match on enc_control.flags %#x\n",
+				   fm.mask->flags);
+			NL_SET_ERR_MSG_MOD(extack, "Unsupported match on enc_control.flags");
+			return -EOPNOTSUPP;
+		}
 		if (!IS_ALL_ONES(fm.mask->addr_type)) {
 			efx_tc_err(efx, "Unsupported enc addr_type mask %u (key %u).\n",
 				   fm.mask->addr_type, fm.key->addr_type);
@@ -4450,6 +4461,8 @@ static void efx_tc_debugfs_dump_match(struct seq_file *file,
 	DUMP_ONE_MATCH(ip_ttl);
 	if (match->mask.ip_frag)
 		seq_printf(file, "\tip_frag = %d\n", match->value.ip_frag);
+	if (match->mask.ip_firstfrag)
+		seq_printf(file, "\tip_firstfrag = %d\n", match->value.ip_firstfrag);
 	DUMP_FMT_AMP_MATCH(src_ip, "%pI4");
 	DUMP_FMT_AMP_MATCH(dst_ip, "%pI4");
 	DUMP_FMT_PTR_MATCH(src_ip6, "%pI6");
@@ -4815,6 +4828,7 @@ static const char *efx_mae_field_names[] = {
 	NAME(L4_SPORT),
 	NAME(L4_DPORT),
 	NAME(TCP_FLAGS),
+	NAME(IP_FIRST_FRAG),
 	NAME(ENCAP_TYPE),
 	NAME(OUTER_RULE_ID),
 	NAME(ENC_ETHER_TYPE),
@@ -5155,6 +5169,8 @@ int efx_tc_insert_rep_filters(struct efx_nic *efx)
 		return 0;
 	if (!efx->tc)
 		return 0;
+	if (!efx->tc->up)
+		return 0;
 	efx_filter_init_rx(&promisc, EFX_FILTER_PRI_REQUIRED, 0, 0);
 	efx_filter_set_uc_def(&promisc);
 	efx_filter_set_vport_id(&promisc, efx->tc->reps_mport_vport_id);
@@ -5396,16 +5412,16 @@ fail1:
 
 static void efx_tc_delete_rule(struct efx_nic *efx, struct efx_tc_flow_rule *rule)
 {
-	struct efx_tc_action_set *act;
+	struct efx_tc_action_set *act, *next;
 
 	efx_mae_delete_rule(efx, rule->fw_id);
 
 	/* Release entries in subsidiary tables */
-	list_for_each_entry(act, &rule->acts.list, list) {
+	efx_mae_free_action_set_list(efx, &rule->acts);
+	list_for_each_entry_safe(act, next, &rule->acts.list, list) {
 		efx_mae_free_action_set(efx, act);
 		kfree(act);
 	}
-	efx_mae_free_action_set_list(efx, &rule->acts);
 	rule->fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
 }
 

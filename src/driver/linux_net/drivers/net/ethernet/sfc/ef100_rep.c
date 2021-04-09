@@ -487,6 +487,7 @@ static int efx_ef100_rep_poll(struct napi_struct *napi, int weight)
 	struct sk_buff_head head;
 #endif
 	struct sk_buff *skb;
+	bool need_resched;
 	int spent = 0;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
@@ -515,8 +516,19 @@ static int efx_ef100_rep_poll(struct napi_struct *napi, int weight)
 	/* Receive them */
 	netif_receive_skb_list(&head);
 	if (spent < weight)
-		if (napi_complete_done(napi, spent))
+		if (napi_complete_done(napi, spent)) {
+			spin_lock_bh(&efv->rx_lock);
 			efv->read_index = read_index;
+			/* If write_index advanced while we were doing the
+			 * RX, then storing our read_index won't re-prime the
+			 * fake-interrupt.  In that case, we need to schedule
+			 * NAPI again to consume the additional packet(s).
+			 */
+			need_resched = efv->write_index != read_index;
+			spin_unlock_bh(&efv->rx_lock);
+			if (need_resched)
+				napi_schedule(&efv->napi);
+		}
 	return spent;
 }
 

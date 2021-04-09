@@ -533,6 +533,7 @@ int efx_mae_match_check_caps(struct efx_nic *efx,
 		return -EINVAL;
 	}
 	CHECK_BIT(IS_IP_FRAG, ip_frag);
+	CHECK_BIT(IP_FIRST_FRAG, ip_firstfrag);
 	CHECK_BIT(DO_CT, ct_state_trk);
 	CHECK_BIT(CT_HIT, ct_state_est);
 	UNSUPPORTED_BIT(ct_state_new);
@@ -593,6 +594,7 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 	UNSUPPORTED(recirc_id);
 	/* Can't filter on ip_frag either (which might be a problem...) */
 	UNSUPPORTED_BIT(ip_frag);
+	UNSUPPORTED_BIT(ip_firstfrag);
 	return 0;
 }
 #undef CHECK
@@ -1379,20 +1381,24 @@ static int efx_mae_populate_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_crit),
 	MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_INGRESS_MPORT_SELECTOR_MASK,
 			      match->mask.ingress_port);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	EFX_POPULATE_DWORD_3(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS),
+	EFX_POPULATE_DWORD_4(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS),
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_DO_CT,
 			     match->value.ct_state_trk,
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_CT_HIT,
 			     match->value.ct_state_est,
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_IS_IP_FRAG,
-			     match->value.ip_frag);
-	EFX_POPULATE_DWORD_3(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS_MASK),
+			     match->value.ip_frag,
+			     MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_FIRST_FRAG,
+			     match->value.ip_firstfrag);
+	EFX_POPULATE_DWORD_4(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS_MASK),
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_DO_CT,
 			     match->mask.ct_state_trk,
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_CT_HIT,
 			     match->mask.ct_state_est,
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_IS_IP_FRAG,
-			     match->mask.ip_frag);
+			     match->mask.ip_frag,
+			     MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_FIRST_FRAG,
+			     match->mask.ip_firstfrag);
 	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_RECIRC_ID,
 			     match->value.recirc_id);
 	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_RECIRC_ID_MASK,

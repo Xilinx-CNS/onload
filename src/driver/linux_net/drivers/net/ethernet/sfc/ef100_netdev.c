@@ -128,7 +128,6 @@ static int ef100_net_stop(struct net_device *net_dev)
 		efx->type->detach_reps(efx);
 #endif
 	netif_stop_queue(net_dev);
-	efx_tc_remove_rep_filters(efx);
 	efx_stop_all(efx);
 
 	efx->state = STATE_NET_ALLOCATED;
@@ -185,10 +184,6 @@ static int ef100_net_open(struct net_device *net_dev)
 		goto fail;
 
 	rc = efx_start_all(efx);
-	if (rc)
-		goto fail;
-
-	rc = efx_tc_insert_rep_filters(efx);
 	if (rc)
 		goto fail;
 

@@ -390,7 +390,7 @@ function read_make_variables()
 	regexp=$regexp$split$variable
 	split='|'
     done
-    make -C $KPATH $EXTRA_MAKEFLAGS ARCH=$ARCH M=$dir 2>&1 >/dev/null | sed -r "s#$dir/Makefile:.*: ($regexp)=.*$)#\1#; t; d"
+    make -C $KPATH $EXTRA_MAKEFLAGS O=$KOUT ARCH=$ARCH M=$dir 2>&1 >/dev/null | sed -r "s#$dir/Makefile:.*: ($regexp)=.*$)#\1#; t; d"
     rc=$?
 
     rm -rf $dir
@@ -474,10 +474,12 @@ vmsg "MAKEFLAGS  := $MAKEFLAGS"
 
 # Need to set CC explicitly on the kernel make line
 # Needs to override top-level kernel Makefile setting
-# Somehow this script does the wrong thing when ccache is used, so disable
-# that.
+# Somehow this script does the wrong thing when a space is used in $CC,
+# particularly when ccache is used, so disable that.
 if [ -n "${CC:-}" ]; then
-    EXTRA_MAKEFLAGS=CC=\"${CC/ccache /}\"
+    CC=${CC/ccache /}
+    CC=${CC/ /}
+    EXTRA_MAKEFLAGS=CC=${CC}
 fi
 
 if [ -n "${CROSS_COMPILE:-}" ]; then

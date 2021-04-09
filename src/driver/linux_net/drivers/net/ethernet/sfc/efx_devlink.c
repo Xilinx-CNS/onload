@@ -424,8 +424,8 @@ static int efx_devlink_flash_update(struct devlink *devlink,
 	struct efx_nic *efx = devlink_private->efx;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_DEVLINK_FLASH_UPDATE_PARAMS_FW)
 	const struct firmware *fw;
-#endif
 	int rc;
+#endif
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_DEVLINK_FLASH_UPDATE_PARAMS)
 	if (component) {

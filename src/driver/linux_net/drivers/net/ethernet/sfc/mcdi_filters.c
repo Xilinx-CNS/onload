@@ -1045,6 +1045,11 @@ int efx_mcdi_filter_get_safe(struct efx_nic *efx,
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
+	if (!table || !table->entry) {
+		up_read(&efx->filter_sem);
+		return -ENETDOWN;
+	}
+
 	down_read(&table->lock);
 	saved_spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 	if (saved_spec && saved_spec->priority == priority &&
@@ -1581,6 +1586,11 @@ u32 efx_mcdi_filter_count_rx_used(struct efx_nic *efx,
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
+	if (!table || !table->entry) {
+		up_read(&efx->filter_sem);
+		return -ENETDOWN;
+	}
+
 	down_read(&table->lock);
 
 	for (filter_idx = 0;
@@ -1614,6 +1624,10 @@ s32 efx_mcdi_filter_get_rx_ids(struct efx_nic *efx,
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
+	if (!table || !table->entry) {
+		up_read(&efx->filter_sem);
+		return -ENETDOWN;
+	}
 	down_read(&table->lock);
 
 	for (filter_idx = 0;
@@ -2530,6 +2544,10 @@ bool efx_mcdi_filter_rfs_expire_one(struct efx_nic *efx, u32 flow_id,
 
 	down_read(&efx->filter_sem);
 	table = efx->filter_state;
+	if (!table || !table->entry) {
+		up_read(&efx->filter_sem);
+		return false;
+	}
 	down_write(&table->lock);
 	spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 

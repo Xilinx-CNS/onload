@@ -1156,12 +1156,6 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 			   tx_ring);
 	efx->txq_entries = tx_ring;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
-	efx_ptp_get_attributes(efx);
-	rc = 0;
-	if (efx_ptp_uses_separate_channel(efx) ||
-	    efx_ptp_use_mac_tx_timestamps(efx))
-#endif
 	rc = efx_ptp_defer_probe_with_channel(efx);
 	if (rc)
 		return rc;

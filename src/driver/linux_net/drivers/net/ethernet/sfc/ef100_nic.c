@@ -569,7 +569,7 @@ static int ef100_filter_table_init(struct efx_nic *efx)
 static int ef100_filter_table_up(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	int rc = 0;
+	int rc = 0, rc2;
 
 	down_write(&efx->filter_sem);
 	if (nic_data->filters_up)
@@ -579,12 +579,22 @@ static int ef100_filter_table_up(struct efx_nic *efx)
 out:
 	nic_data->filters_up = !rc;
 	up_write(&efx->filter_sem);
+
+	if (!rc) {
+		rc2 = efx_tc_insert_rep_filters(efx);
+		if (rc2)
+			netif_warn(efx, drv, efx->net_dev,
+				   "Failed to insert representor filters, rc %d\n",
+				   rc2);
+	}
 	return rc;
 }
 
 static void ef100_filter_table_down(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
+
+	efx_tc_remove_rep_filters(efx);
 
 	down_write(&efx->filter_sem);
 	if (!nic_data->filters_up)
