@@ -134,7 +134,10 @@ int citp_pipe_splice_write(citp_fdinfo* fdi, int alien_fd, loff_t* alien_off,
   int len = olen;
   int no_more = 1; /* for now we only run single loop */
   int written_total = 0;
-  int non_block = flags & SPLICE_F_NONBLOCK;
+  int non_block = flags & SPLICE_F_NONBLOCK ||
+                  epi->pipe->aflags &
+                      (CI_PFD_AFLAG_NONBLOCK << CI_PFD_AFLAG_WRITER_SHIFT);
+
   if( fdi_is_reader(fdi) ) {
     errno = EINVAL;
     return -1;
@@ -153,7 +156,11 @@ int citp_pipe_splice_write(citp_fdinfo* fdi, int alien_fd, loff_t* alien_off,
 
     if( onload_fcntl(alien_fd, F_GETFL) & O_NONBLOCK ) {
       /* alien_fd is non-blocking.  Do we have any data? */
-      if( onload_poll(&pfd, 1, 0) == 0 ) {
+      if ( !non_block ) {
+        if ( oo_pipe_write_block(epi->ni, epi->pipe, 0) != 0 )
+          return -1;
+      }
+      if ( onload_poll(&pfd, 1, 0) == 0 ) {
         errno = EAGAIN;
         return -1;
       }
@@ -161,7 +168,11 @@ int citp_pipe_splice_write(citp_fdinfo* fdi, int alien_fd, loff_t* alien_off,
     else {
       /* alien_fd could block.  Do it before allocating pipe buffers. */
     restart_poll:
-      rc = onload_poll(&pfd, 1, -1);
+
+      if ( non_block )
+        rc = onload_poll(&pfd, 1, 0);
+      else
+        rc = onload_poll(&pfd, 1, -1);
 
       /* Run pending signals. */
       {
@@ -316,7 +327,10 @@ int citp_pipe_splice_read(citp_fdinfo* fdi, int alien_fd, loff_t* alien_off,
   citp_pipe_fdi* epi = fdi_to_pipe_fdi(fdi);
   int rc;
   int read_len = 0;
-  int non_block = flags & SPLICE_F_NONBLOCK;
+  int non_block = flags & SPLICE_F_NONBLOCK ||
+                  epi->pipe->aflags &
+                      (CI_PFD_AFLAG_NONBLOCK << CI_PFD_AFLAG_READER_SHIFT);
+
   if( ! fdi_is_reader(fdi) ) {
     errno = EINVAL;
     return -1;

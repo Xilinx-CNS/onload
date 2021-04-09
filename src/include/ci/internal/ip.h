@@ -1042,6 +1042,7 @@ typedef int (*ci_pipe_zc_read_cb)(void* context, struct iovec* iovec,
 
 extern int ci_pipe_read(ci_netif*, struct oo_pipe*, const struct iovec*,
                   size_t iovlen) CI_HF;
+extern int oo_pipe_write_block(ci_netif* ni, struct oo_pipe* p, int flags) CI_HF;
 extern int ci_pipe_write(ci_netif*, struct oo_pipe*, const struct iovec*,
                          size_t iovlen) CI_HF;
 extern int ci_pipe_zc_read(ci_netif* ni, struct oo_pipe* p, int len,

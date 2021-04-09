@@ -431,6 +431,41 @@ ci_inline void oo_pipe_signal(ci_netif* ni)
 #endif
 }
 
+int oo_pipe_write_block(ci_netif* ni, struct oo_pipe* p, int flags)
+{
+  ci_uint64 sleep_seq;
+  int rc = 0;
+
+  do {
+    sleep_seq = p->b.sleep_seq.all;
+    ci_rmb();
+
+    /* if we have enough space at this moment - just exit */
+    if( oo_pipe_is_writable(p) )
+      break;
+
+    /* we should sleep here */
+    LOG_PIPE("%s: going to sleep", __FUNCTION__);
+    rc = ci_sock_sleep(ni, &p->b, CI_SB_FLAG_WAKE_TX, 0, sleep_seq, 0);
+    if ( p->aflags & (CI_PFD_AFLAG_CLOSED << CI_PFD_AFLAG_READER_SHIFT) ) {
+      CI_SET_ERROR(rc, EPIPE);
+      if( ! (flags & MSG_NOSIGNAL) )
+        oo_pipe_signal(ni);
+      return rc;
+    }
+
+    LOG_PIPE("%s[%u]: woke up - %d", __FUNCTION__, p->b.bufid, rc);
+
+    if( rc < 0 ) {
+      LOG_PIPE("%s: sleep rc = %d", __FUNCTION__, rc);
+      CI_SET_ERROR(rc, -rc);
+      return rc;
+    }
+  } while( ! oo_pipe_is_writable(p) );
+
+  /* we have some space! */
+  return 0;
+}
 
 /* This function is a helper for ci_pipe_write. It is called with the stack
  * lock held, and will set *stack_locked to indicate whether it is still locked
@@ -438,7 +473,6 @@ ci_inline void oo_pipe_signal(ci_netif* ni)
 static int oo_pipe_wait_write(ci_netif* ni, struct oo_pipe* p, int flags,
                               int *stack_locked)
 {
-  ci_uint64 sleep_seq;
   int rc = 0;
 
   ci_assert(ci_netif_is_locked(ni));
@@ -487,35 +521,9 @@ static int oo_pipe_wait_write(ci_netif* ni, struct oo_pipe* p, int flags,
   }
 #endif /* spin code end */
 
-  do {
-    sleep_seq = p->b.sleep_seq.all;
-    ci_rmb();
+  rc = oo_pipe_write_block(ni, p, flags);
 
-    /* if we have enough space at this moment - just exit */
-    if( oo_pipe_is_writable(p) )
-      break;
-
-    /* we should sleep here */
-    LOG_PIPE("%s: going to sleep", __FUNCTION__);
-    rc = ci_sock_sleep(ni, &p->b, CI_SB_FLAG_WAKE_TX, 0, sleep_seq, 0);
-    if ( p->aflags & (CI_PFD_AFLAG_CLOSED << CI_PFD_AFLAG_READER_SHIFT) ) {
-      CI_SET_ERROR(rc, EPIPE);
-      if( ! (flags & MSG_NOSIGNAL) )
-        oo_pipe_signal(ni);
-      return rc;
-    }
-
-    LOG_PIPE("%s[%u]: woke up - %d", __FUNCTION__, p->b.bufid, rc);
-
-    if( rc < 0 ) {
-      LOG_PIPE("%s: sleep rc = %d", __FUNCTION__, rc);
-      CI_SET_ERROR(rc, -rc);
-      return rc;
-    }
-  } while( ! oo_pipe_is_writable(p) );
-
-  /* we have some space! */
-  return 0;
+  return rc;
 }
 
 
