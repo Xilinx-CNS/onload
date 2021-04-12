@@ -53,6 +53,7 @@
 #include <linux/syscalls.h>
 #include <linux/fdtable.h>
 #include <asm/syscall.h>
+#include <net/sock.h>
 
 #include <driver/linux_resource/autocompat.h>
 
