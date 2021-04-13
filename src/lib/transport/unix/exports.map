@@ -58,6 +58,7 @@
     __fxstat;
     __fxstat64;
     fstat;
+    fstat64;
     _fxstat;
     setuid;
     chroot;
