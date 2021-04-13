@@ -126,7 +126,7 @@ EFRM_HAVE_MMAP_LOCK_WRAPPERS		file	include/linux/mmap_lock.h
 EFRM_HAVE_SOCK_BINDTOINDEX		symbol	sock_bindtoindex	include/net/sock.h
 
 EFRM_MSGHDR_HAS_MSG_CONTROL_USER	member	struct_msghdr	msg_control_user	include/linux/socket.h
-EFRM_HAS_SOCKPTR		memtype	struct_proto_ops	setsockopt	include/linux/net.h	int(*)((struct socket *sock, int level, int optname, sockptr_t optval, unsigned int optlen)
+EFRM_HAS_SOCKPTR		memtype	struct_proto_ops	setsockopt	include/linux/net.h	int(*)(struct socket *sock, int level, int optname, sockptr_t optval, unsigned int optlen)
 
 EFRM_SYS_CLOSE_EXPORTED 	export	sys_close	include/linux/syscalls.h	fs/open.c
 EFRM_CLOSE_FD_EXPORTED		export	close_fd	include/linux/fdtable.h	fs/file.c
