@@ -612,6 +612,10 @@ typedef struct {
   uint32_t  added;
   /** Descriptors removed from the ring */
   uint32_t  removed;
+  /** Bytes added to the cut-through FIFO */
+  uint32_t  ct_added;
+  /** Bytes removed from the cut-through FIFO */
+  uint32_t  ct_removed;
   /** Timestamp in nanoseconds */
   uint32_t  ts_nsec;
 } ef_vi_txq_state;
@@ -665,6 +669,8 @@ typedef struct {
 typedef struct {
   /** Mask for indexes within ring, to wrap around */
   uint32_t         mask;
+  /** Maximum space in the cut-through FIFO, reduced to account for header */
+  uint32_t         ct_fifo_bytes;
   /** Pointer to descriptors */
   void*            descriptors;
   /** Pointer to IDs */
@@ -1441,6 +1447,42 @@ ef_vi_inline int ef_vi_transmit_fill_level(const ef_vi* vi)
 {
   ef_vi_txq_state* qs = &vi->ep_state->txq;
   return qs->added - qs->removed;
+}
+
+
+/*! \brief Returns the amount of free space in the TX cut-through FIFO
+**
+** \param vi The virtual interface to query.
+**
+** \return The amount of free space in the TX cut-through FIFO, in bytes
+**
+** For architectures with a TX FIFO, returns the the space available for the
+** next packet. The function accounts for any extra overhead required by the
+** architecture (e.g. headers), so the value returned is the maximum number of
+** payload bytes that can be sent in a single packet.
+**
+** To simplify the calculation, the value can be negative if the FIFO is full.
+**
+** For architectures without a TX FIFO, returns a large value to indicate that
+** there is no limit on the number of bytes which may be sent.
+*/
+ef_vi_inline int ef_vi_transmit_space_bytes(const ef_vi* vi)
+{
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  return vi->vi_txq.ct_fifo_bytes - (qs->ct_added - qs->ct_removed);
+}
+
+
+/*! \brief Returns the fill level of the TX cut-through FIFO
+**
+** \param vi The virtual interface to query.
+**
+** \return The fill level of the TX cut-through FIFO, in bytes
+*/
+ef_vi_inline int ef_vi_transmit_fill_level_bytes(const ef_vi* vi)
+{
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  return qs->ct_added - qs->ct_removed;
 }
 
 

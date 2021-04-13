@@ -4,6 +4,16 @@
 #include "ef_vi_internal.h"
 #include "efct_hw_defs.h"
 
+#include <stdbool.h>
+
+/* tx packet descriptor, stored in the ring until completion */
+/* TODO fix the size of this, and update tx_desc_bytes in vi_init.c */
+struct efct_tx_descriptor
+{
+  /* total length including header and padding, in bytes */
+  uint16_t len;
+};
+
 /* state of a partially-completed tx operation */
 struct efct_tx_state
 {
@@ -40,16 +50,25 @@ static uint64_t efct_tx_pkt_header(unsigned length, unsigned ct_thresh,
   return efct_tx_header(length, ct_thresh, timestamp_flag, 0, 0);
 }
 
+/* check that we have space to send a packet of this length */
+static bool efct_tx_check(ef_vi* vi, int len)
+{
+  /* We require the txq to be large enough for the maximum number of packets
+   * which can be written to the FIFO. Each packet consumes at least 64 bytes.
+   */
+  BUG_ON((vi->vi_txq.mask + 1) <
+         (vi->vi_txq.ct_fifo_bytes + EFCT_TX_HEADER_BYTES) / EFCT_TX_ALIGNMENT);
+
+  return ef_vi_transmit_space_bytes(vi) >= len;
+}
+
 /* initialise state for a transmit operation */
 static void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
 {
-  /* TODO should check for space in the tx FIFO before trying to transmit */
+  unsigned offset = vi->ep_state->txq.ct_added % EFCT_TX_APERTURE;
 
-  /* TODO should probably add new state to store the offset. For now, I'm
-   * abusing the TXQ 'added' counter, which will make functions like
-   * 'ef_vi_transmit_space' give wrong results. */
-  BUG_ON(vi->ep_state->txq.added >= EFCT_TX_APERTURE);
-  tx->aperture = (void*)(vi->vi_ctpio_mmap_ptr + vi->ep_state->txq.added);
+  BUG_ON(offset % EFCT_TX_ALIGNMENT != 0);
+  tx->aperture = (void*)(vi->vi_ctpio_mmap_ptr + offset);
   tx->tail.word = 0;
   tx->tail_len = 0;
 }
@@ -100,13 +119,41 @@ static void efct_tx_block(struct efct_tx_state* tx, char* base, int len)
 /* complete a tx operation, writing leftover bytes and padding as needed */
 static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx)
 {
+  unsigned start, end, len;
+
+  ef_vi_txq_state* txq = &vi->ep_state->txq;
+  struct efct_tx_descriptor* desc = vi->vi_txq.descriptors;
+  int i = txq->added & vi->vi_txq.mask;
+
   if( tx->tail_len != 0 )
     efct_tx_word(tx, tx->tail.word);
   while( (uintptr_t)tx->aperture % EFCT_TX_ALIGNMENT != 0 )
     efct_tx_word(tx, 0);
 
-  vi->ep_state->txq.added =
-    ((char*)tx->aperture - vi->vi_ctpio_mmap_ptr) % EFCT_TX_APERTURE;
+  start = txq->ct_added % EFCT_TX_APERTURE;
+  end = ((char*)tx->aperture - vi->vi_ctpio_mmap_ptr);
+  len = end - start;
+
+  desc[i].len = len;
+  txq->ct_added += len;
+  txq->added += 1;
+}
+
+/* handle a tx completion event */
+static void efct_tx_event(ef_vi* vi, ci_qword_t event)
+{
+  ef_vi_txq_state* txq = &vi->ep_state->txq;
+  struct efct_tx_descriptor* desc = vi->vi_txq.descriptors;
+
+  unsigned seq = CI_QWORD_FIELD(event, EFCT_TX_EVENT_SEQUENCE);
+  unsigned seq_mask = (1 << EFCT_TX_EVENT_SEQUENCE_WIDTH) - 1;
+
+  while( (txq->removed & seq_mask) != seq ) {
+    int i = txq->removed & vi->vi_txq.mask;
+    BUG_ON(txq->removed == txq->added);
+    txq->ct_removed += desc[i].len;
+    txq->removed += 1;
+  }
 }
 
 static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
@@ -114,8 +161,11 @@ static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
 {
   /* TODO need to avoid calling this with CTPIO fallback buffers */
   struct efct_tx_state tx;
-  efct_tx_init(vi, &tx);
 
+  if( ! efct_tx_check(vi, len) )
+    return -EAGAIN;
+
+  efct_tx_init(vi, &tx);
   /* TODO timestamp flag */
   efct_tx_word(&tx, efct_tx_pkt_header(len, EFCT_TX_CT_DISABLE, 0));
   efct_tx_block(&tx, (void*)(uintptr_t)base, len);
@@ -134,6 +184,9 @@ static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
 
   for( i = 0; i < iov_len; ++i )
     len += iov[i].iov_len;
+
+  if( ! efct_tx_check(vi, len) )
+    return -EAGAIN;
 
   /* TODO timestamp flag */
   efct_tx_word(&tx, efct_tx_pkt_header(len, EFCT_TX_CT_DISABLE, 0));
@@ -179,6 +232,13 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   struct efct_tx_state tx;
   int i;
 
+  /* The caller must check space, as this function can't report failure. */
+  /* TODO this function should probably remain compatible with legacy ef_vi,
+   * perhaps by doing nothing and deferring transmission to when the fallback
+   * buffer is posted. In that case we'd need another API, very similar to
+   * this, but without the requirement for a fallback buffer, for best speed.
+   */
+  BUG_ON(!efct_tx_check(vi, len));
   efct_tx_init(vi, &tx);
 
   /* TODO timestamp flag */
@@ -239,6 +299,8 @@ static int efct_ef_eventq_poll(ef_vi* evq, ef_event* evs, int evs_len)
 {
   /* TODO X3 */
   return -ENOSYS;
+  /* Dummy call to avoid warning. TODO remove when function is used. */
+  {ci_qword_t q; q.u64[0] = 0; efct_tx_event(evq, q);}
 }
 
 static void efct_ef_eventq_prime(ef_vi* vi)
@@ -312,6 +374,9 @@ static void efct_vi_initialise_ops(ef_vi* vi)
 
 void efct_vi_init(ef_vi* vi)
 {
+  EF_VI_BUILD_ASSERT(sizeof(struct efct_tx_descriptor) ==
+                     EFCT_TX_DESCRIPTOR_BYTES);
+
   efct_vi_initialise_ops(vi);
 }
 
