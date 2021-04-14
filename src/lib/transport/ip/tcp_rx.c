@@ -4319,9 +4319,11 @@ static void handle_rx_slow(ci_tcp_state* ts, ci_netif* netif,
     }
     else {
       /* only a pure ACK should get here (or could be a duplicate SYN
-       * that we ignored above and removed the SYN flag for) */
+       * that we ignored above and removed the SYN flag for). Other flags may
+       * have been bogusly set by the peer. */
       ci_assert(!pkt->pf.tcp_rx.pay_len);
-      ci_assert((tcp->tcp_flags & ~CI_TCP_FLAG_ACK) == 0);
+      ci_assert_nflags(tcp->tcp_flags, CI_TCP_FLAG_SYN | CI_TCP_FLAG_RST |
+                                       CI_TCP_FLAG_FIN);
       ci_netif_pkt_release_rx(netif, pkt);
     }
 
