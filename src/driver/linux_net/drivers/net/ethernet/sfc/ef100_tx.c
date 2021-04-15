@@ -487,6 +487,8 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 		goto err;
 	ef100_tx_make_descriptors(tx_queue, skb, segments, efv);
 
+	EFX_WARN_ON_PARANOID(!tx_queue->core_txq);
+
 	fill_level = efx_channel_tx_fill_level(tx_queue->channel);
 	if (fill_level > efx->txq_stop_thresh) {
 		netif_tx_stop_queue(tx_queue->core_txq);

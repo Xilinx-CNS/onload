@@ -771,6 +771,11 @@ static u64 ef100_vdpa_get_features(struct vdpa_device *vdev)
 		 */
 		return 0;
 	}
+
+	/* FIXME: temporary change to fix VDPALINUX-120 */
+	if (features & VIRTIO_F_IN_ORDER)
+		features &= ~(1ULL << VIRTIO_F_IN_ORDER);
+
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Features returned:\n", __func__);
 	print_features_str(features, vdev);

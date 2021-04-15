@@ -662,10 +662,6 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 	dev_close(efx->net_dev);
 
 	if (reset_type == RESET_TYPE_TX_WATCHDOG) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-		if (efx->type->attach_reps)
-			efx->type->attach_reps(efx);
-#endif
 		netif_device_attach(efx->net_dev);
 		__clear_bit(reset_type, &efx->reset_pending);
 		efx->state = STATE_NET_DOWN;
@@ -680,10 +676,6 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 			return rc;
 
 		efx->last_reset = jiffies;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-		if (efx->type->attach_reps)
-			efx->type->attach_reps(efx);
-#endif
 		netif_device_attach(efx->net_dev);
 
 		rc = ef100_filter_table_up(efx);
