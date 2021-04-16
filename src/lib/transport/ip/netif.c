@@ -388,6 +388,7 @@ void ci_netif_try_to_reap(ci_netif* ni, int stop_once_freed_n)
   struct oo_p_dllink_state reap_list =
                            oo_p_dllink_ptr(ni, &ni->state->reap_list);
   struct oo_p_dllink_state lnk, tmp;
+  oo_p lnk_to_stop = OO_P_NULL;
   citp_waitable_obj* wo;
   int freed_n = 0;
   int add_to_reap_list;
@@ -405,6 +406,9 @@ void ci_netif_try_to_reap(ci_netif* ni, int stop_once_freed_n)
 
   oo_p_dllink_for_each_safe(ni, lnk, tmp, reap_list) {
     add_to_reap_list = 0;
+
+    if( lnk.p == lnk_to_stop )
+      break;
 
     oo_p_dllink_del(ni, lnk);
     oo_p_dllink_init(ni, lnk);
@@ -429,8 +433,8 @@ void ci_netif_try_to_reap(ci_netif* ni, int stop_once_freed_n)
         freed_n += q_num_b4 - ts->recv1.num;
         ci_sock_unlock(ni, &ts->s.b);
       }
-      if( ts->recv1.num > 1 || add_to_reap_list)
-        oo_p_dllink_add_tail(ni, reap_list, lnk);
+      if( ts->recv1.num > 1 )
+        add_to_reap_list = 1;
     }
     else if( wo->waitable.state == CI_TCP_STATE_UDP ) {
       ci_udp_state* us = &wo->udp;
@@ -440,11 +444,13 @@ void ci_netif_try_to_reap(ci_netif* ni, int stop_once_freed_n)
       freed_n += ci_netif_try_to_reap_udp_recv_q(ni, &us->timestamp_q,
                                                  &add_to_reap_list);
 #endif
-
-      if( add_to_reap_list )
-        oo_p_dllink_add_tail(ni, reap_list, lnk);
     }
 
+    if( add_to_reap_list) {
+      oo_p_dllink_add_tail(ni, reap_list, lnk);
+      if( OO_P_IS_NULL(lnk_to_stop) )
+        lnk_to_stop = lnk.p;
+    }
     if( freed_n >= stop_once_freed_n )
       break;
   }
