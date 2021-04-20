@@ -236,9 +236,6 @@ static bool efx_mcdi_filter_vlan_filter(struct efx_nic *efx)
 	if (WARN_ON(!table))
 		return false;
 
-	/* these filters are broken at the moment */
-	return false;
-
 	if (!(efx->net_dev->features & NETIF_F_HW_VLAN_CTAG_FILTER))
 		return false;
 

@@ -176,7 +176,7 @@ static void ef100_mcdi_put_buf(struct efx_nic *efx, u8 bufid)
 
 /*	MCDI calls
  */
-static int ef100_get_mac_address(struct efx_nic *efx, u8 *mac_address)
+int ef100_get_mac_address(struct efx_nic *efx, u8 *mac_address)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_MAC_ADDRESSES_OUT_LEN);
 	size_t outlen;
@@ -842,7 +842,7 @@ static size_t ef100_update_stats(struct efx_nic *efx,
 {
 	__le64 *mc_stats = kmalloc(efx->num_mac_stats * sizeof(__le64), GFP_ATOMIC);
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	DECLARE_BITMAP(mask, EF100_STAT_COUNT);
+	DECLARE_BITMAP(mask, EF100_STAT_COUNT) = {};
 	u64 *stats = nic_data->stats;
 
 	spin_lock_bh(&efx->stats_lock);
@@ -1654,13 +1654,6 @@ int ef100_probe_netdev_pf(struct efx_nic *efx)
 #endif
 	int rc;
 
-	rc = ef100_get_mac_address(efx, net_dev->perm_addr);
-	if (rc)
-		goto fail;
-	/* Assign MAC address */
-	memcpy(net_dev->dev_addr, net_dev->perm_addr, ETH_ALEN);
-	memcpy(nic_data->port_id, net_dev->perm_addr, ETH_ALEN);
-
 	if (!nic_data->grp_mae)
 		return 0;
 
@@ -1718,15 +1711,16 @@ int ef100_probe_netdev_pf(struct efx_nic *efx)
 				    sizeof(struct net_device *),
 				    GFP_KERNEL);
 	if (!nic_data->rem_rep) {
-		rc = -ENOMEM;
-		goto fail;
+		netif_warn(efx, probe, net_dev,
+			   "Failed to allocate memory for remote_reps\n");
+		return 0;
 	}
 
 	for (i = 0; i < efx->tc->n_mports; i++) {
 		if (!ef100_mport_needs_rep(efx, &efx->tc->mports[i]))
 			continue;
 		if (WARN_ON(nic_data->rem_rep_count >= nreps))
-			goto fail;
+			return 0;
 		/* increment rem_rep_count early, as it is used in
 		 * ef100_get_remote_rep called in the stack of
 		 * efx_ef100_remote_rep_create */
@@ -1734,15 +1728,15 @@ int ef100_probe_netdev_pf(struct efx_nic *efx)
 		rc = efx_ef100_remote_rep_create(efx, rep_idx, i);
 		if (rc) {
 			nic_data->rem_rep_count--;
-			goto fail;
+			netif_warn(efx, probe, net_dev,
+				   "Failed to create a remote_rep, rc %d\n",
+				   rc);
+			return 0;
 		}
 	}
 #endif
 
 	return 0;
-
-fail:
-	return rc;
 }
 
 int ef100_probe_vf(struct efx_nic *efx)
@@ -1791,7 +1785,7 @@ void ef100_remove(struct efx_nic *efx)
 #define EF100_OFFLOAD_FEATURES	(NETIF_F_HW_CSUM | NETIF_F_RXCSUM |	\
 	NETIF_F_HIGHDMA | NETIF_F_SG | NETIF_F_FRAGLIST | NETIF_F_NTUPLE | \
 	NETIF_F_RXHASH | NETIF_F_RXFCS | NETIF_F_TSO_ECN | NETIF_F_RXALL | \
-	NETIF_F_HW_VLAN_CTAG_TX | NETIF_F_HW_VLAN_CTAG_FILTER)
+	NETIF_F_HW_VLAN_CTAG_TX)
 #endif
 
 const struct efx_nic_type ef100_pf_nic_type = {

@@ -41,6 +41,7 @@ struct efx_rep {
 	bool remote; /* flag to indicate remote rep */
 	u32 msg_enable;
 	u32 mport; /* m-port ID of corresponding PF/VF */
+	u32 clid; /* client ID of corresponding PF/VF */
 	unsigned int idx; /* rep index  */
 	unsigned int write_index, read_index;
 	unsigned int rx_pring_size; /* max length of RX list */

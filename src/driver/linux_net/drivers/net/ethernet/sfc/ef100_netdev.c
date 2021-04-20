@@ -148,7 +148,6 @@ void ef100_net_dealloc(struct efx_nic *efx)
 #endif
 #endif
 
-	efx_mcdi_mac_fini_stats(efx);
 	efx_disable_interrupts(efx);
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
 	if (efx->interrupt_mode != EFX_INT_MODE_POLLED) {
@@ -363,10 +362,6 @@ int ef100_net_alloc(struct efx_nic *efx)
 	 * to the warm reboot count
 	 */
 	(void) efx_mcdi_poll_reboot(efx);
-
-	rc = efx_mcdi_mac_init_stats(efx);
-	if (rc)
-		return rc;
 
 	return 0;
 }
@@ -823,6 +818,7 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 
 	efx_mcdi_filter_table_remove(efx);
 	efx_fini_channels(efx);
+	efx_mcdi_mac_fini_stats(efx);
 	kfree(efx->phy_data);
 	efx->phy_data = NULL;
 
@@ -894,6 +890,10 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	if (rc)
 		goto fail;
 
+	rc = efx_mcdi_mac_init_stats(efx);
+	if (rc)
+		goto fail;
+
 	nic_data = efx->nic_data;
 	if (nic_data->grp_mae) {
 		rc = efx_init_struct_tc(efx);
@@ -927,6 +927,13 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 
 	/* Don't fail init if RSS setup doesn't work. */
 	efx_mcdi_push_default_indir_table(efx, efx->n_rss_channels);
+
+	rc = ef100_get_mac_address(efx, net_dev->perm_addr);
+	if (rc)
+		return rc;
+	/* Assign MAC address */
+	memcpy(net_dev->dev_addr, net_dev->perm_addr, ETH_ALEN);
+	memcpy(nic_data->port_id, net_dev->perm_addr, ETH_ALEN);
 
 	if (!efx->type->is_vf) {
 		rc = ef100_probe_netdev_pf(efx);

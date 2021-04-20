@@ -92,7 +92,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.7.1010"
+#define EFX_DRIVER_VERSION	"5.3.7.1011"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -2504,7 +2504,8 @@ efx_channel_get_xsk_tx_queue(struct efx_channel *channel)
 
 static inline bool efx_is_xsk_tx_queue(struct efx_tx_queue *tx_queue)
 {
-	return (tx_queue->label == (tx_queue->channel->tx_queue_count - 1));
+	return (tx_queue->channel->tx_queue_count > 1 &&
+		tx_queue->label == (tx_queue->channel->tx_queue_count - 1));
 }
 #endif
 #endif

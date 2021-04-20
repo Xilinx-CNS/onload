@@ -125,14 +125,30 @@ static int efx_ef100_rep_get_phys_port_name(struct net_device *dev,
 }
 #endif
 
-/* Nothing to configure hw-wise, just set sw state */
 static int efx_ef100_rep_set_mac_address(struct net_device *net_dev, void *data)
 {
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_CLIENT_MAC_ADDRESSES_IN_LEN(1));
+	struct efx_rep *efv = netdev_priv(net_dev);
+	struct efx_nic *efx = efv->parent;
 	struct sockaddr *addr = data;
 	u8 *new_addr = addr->sa_data;
+	int rc;
+
+	if (efv->clid == CLIENT_HANDLE_NULL) {
+		netif_info(efx, drv, net_dev, "Unable to set representee MAC address (client ID is null)\n");
+	} else {
+		BUILD_BUG_ON(MC_CMD_SET_CLIENT_MAC_ADDRESSES_OUT_LEN);
+		MCDI_SET_DWORD(inbuf, SET_CLIENT_MAC_ADDRESSES_IN_CLIENT_HANDLE,
+			       efv->clid);
+		ether_addr_copy(MCDI_PTR(inbuf, SET_CLIENT_MAC_ADDRESSES_IN_MAC_ADDRS),
+				new_addr);
+		rc = efx_mcdi_rpc(efx, MC_CMD_SET_CLIENT_MAC_ADDRESSES, inbuf,
+				  sizeof(inbuf), NULL, 0, NULL);
+		if (rc)
+			return rc;
+	}
 
 	ether_addr_copy(net_dev->dev_addr, new_addr);
-
 	return 0;
 }
 
@@ -276,9 +292,34 @@ static int efx_ef100_rep_tc_egdev_cb(enum tc_setup_type type, void *type_data,
 }
 #endif
 
+static int efx_ef100_lookup_client_id(struct efx_nic *efx, efx_qword_t pciefn,
+				      u32 *id)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CLIENT_HANDLE_OUT_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_CLIENT_HANDLE_IN_LEN);
+	u64 pciefn_flat = le64_to_cpu(pciefn.u64[0]);
+	size_t outlen;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, GET_CLIENT_HANDLE_IN_TYPE,
+		       MC_CMD_GET_CLIENT_HANDLE_IN_TYPE_FUNC);
+	MCDI_SET_QWORD(inbuf, GET_CLIENT_HANDLE_IN_FUNC,
+		       pciefn_flat);
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_CLIENT_HANDLE, inbuf,
+			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	*id = MCDI_DWORD(outbuf, GET_CLIENT_HANDLE_OUT_HANDLE);
+	return 0;
+}
+
 static int efx_ef100_configure_rep(struct efx_rep *efv)
 {
 	struct efx_nic *efx = efv->parent;
+	efx_qword_t pciefn;
 	u32 selector;
 	int rc;
 
@@ -289,11 +330,28 @@ static int efx_ef100_configure_rep(struct efx_rep *efv)
 	rc = efx_mae_lookup_mport(efx, selector, &efv->mport);
 	if (rc)
 		return rc;
-	netif_dbg(efv->parent, probe, efv->net_dev,
-		  "VF representor mport ID %#x\n",
-		  efv->mport);
+	netif_dbg(efx, probe, efv->net_dev,
+		  "Representee mport ID %#x\n", efv->mport);
 	/* mport label should fit in 16 bits */
 	WARN_ON(efv->mport >> 16);
+
+	/* Construct PCIE_FUNCTION structure for the VF */
+	EFX_POPULATE_QWORD_3(pciefn,
+			     PCIE_FUNCTION_PF, PCIE_FUNCTION_PF_NULL,
+			     PCIE_FUNCTION_VF, efv->idx,
+			     PCIE_FUNCTION_INTF, PCIE_INTERFACE_CALLER);
+	/* look up VF's client ID */
+	rc = efx_ef100_lookup_client_id(efx, pciefn, &efv->clid);
+	if (rc) {
+		/* We won't be able to set the representee's MAC address */
+		efv->clid = CLIENT_HANDLE_NULL;
+		netif_dbg(efx, probe, efv->net_dev,
+			  "Failed to get representee client ID, rc %d\n", rc);
+	} else {
+		netif_dbg(efx, probe, efv->net_dev,
+			  "Representee client ID %#x\n", efv->clid);
+	}
+
 	mutex_lock(&efx->tc->mutex);
 	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF(efv->idx));
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
@@ -313,16 +371,35 @@ static int efx_ef100_configure_remote_rep(struct efx_rep *efv,
 {
 	struct efx_nic *efx = efv->parent;
 	struct ef100_nic_data *nic_data;
+	efx_qword_t pciefn;
 	int rc;
 
 	nic_data = efx->nic_data;
 	efv->rx_pring_size = EFX_REP_DEFAULT_PSEUDO_RING_SIZE;
 	efv->mport = mport_desc->mport_id;
-	netif_dbg(efv->parent, probe, efv->net_dev,
-		  "Remote representor mport ID %#x\n",
+	netif_dbg(efx, probe, efv->net_dev,
+		  "Remote representee mport ID %#x\n",
 		  efv->mport);
 	/* mport label should fit in 16 bits */
 	WARN_ON(efv->mport >> 16);
+
+	/* Construct PCIE_FUNCTION structure for the representee */
+	EFX_POPULATE_QWORD_3(pciefn,
+			     PCIE_FUNCTION_PF, mport_desc->pf_idx,
+			     PCIE_FUNCTION_VF, mport_desc->vf_idx,
+			     PCIE_FUNCTION_INTF, mport_desc->interface_idx);
+	/* look up representee's client ID */
+	rc = efx_ef100_lookup_client_id(efx, pciefn, &efv->clid);
+	if (rc) {
+		/* We won't be able to set the representee's MAC address */
+		efv->clid = CLIENT_HANDLE_NULL;
+		netif_dbg(efx, probe, efv->net_dev,
+			  "Failed to get representee client ID, rc %d\n", rc);
+	} else {
+		netif_dbg(efx, probe, efv->net_dev,
+			  "Remote representee client ID %#x\n", efv->clid);
+	}
+
 	mutex_lock(&efx->tc->mutex);
 	rc = efx_tc_configure_default_rule(efx,
 					   EFX_TC_DFLT_REM(efv->idx));

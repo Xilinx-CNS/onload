@@ -376,6 +376,7 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 		mutex_lock(&efx->mac_lock);
 		rc = efx_mac_reconfigure(efx, false);
 		mutex_unlock(&efx->mac_lock);
+		netif_info(efx, link, net_dev, "MTU changed to %d\n", new_mtu);
 	}
 	return rc;
 }
