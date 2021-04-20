@@ -1702,6 +1702,7 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
   oo_sp sp;
   struct oo_p_dllink_state list;
   struct oo_p_dllink_state link, tmp;
+  struct oo_p_dllink_state last;
 
   ci_assert(ci_netif_is_locked(ni));
 
@@ -1725,7 +1726,11 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
   if( oo_p_dllink_is_empty(ni, list) )
     return OO_SP_NULL;
 
+  last = oo_p_dllink_statep(ni, list.l->prev);
   oo_p_dllink_for_each_safe(ni, link, tmp, list) {
+    oo_p_dllink_del(ni, link);
+    oo_p_dllink_add_tail(ni, list, link);
+
     aw = CI_CONTAINER(ci_active_wild, pool_link, link.l);
 
     lport = sock_lport_be16(&aw->s);
@@ -1773,7 +1778,6 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
             ci_assert_equal(seq, table_seq);
         }
 
-        oo_p_dllink_del(ni, link);
         *prev_seq_out = seq;
         ci_netif_timeout_leave(ni, ts);
         *port_out = lport;
@@ -1787,11 +1791,16 @@ static oo_sp __ci_netif_active_wild_pool_get(ci_netif* ni, int aw_pool,
       /* If no-one's using this 4-tuple we can let the caller share this
        * active wild.
        */
-      oo_p_dllink_del(ni, link);
       *port_out = lport;
       return SC_SP(&aw->s);
     }
     CITP_STATS_NETIF_INC(ni, tcp_shared_local_ports_skipped);
+
+    /* We never remove any entry from the list, we push the entries to the
+     * end only.  We should stop after meeting the entry which was the last
+     * when we started. */
+    if( link.p == last.p )
+      break;
   }
 
   return OO_SP_NULL;
