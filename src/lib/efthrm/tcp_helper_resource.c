@@ -3455,7 +3455,7 @@ tcp_helper_alloc_to_aw_pool(tcp_helper_resource_t* rs,
     aw->s.b.sb_aflags |= CI_SB_AFLAG_ORPHAN;
     efab_tcp_helper_drop_os_socket(rs, ci_netif_ep_get(ni, W_SP(&aw->s.b)));
     citp_waitable_obj_free(ni, &aw->s.b);
-    return 0;
+    return -ENOSPC;
   }
 
   oo_p_dllink_add(ni, list, oo_p_dllink_sb(ni, &aw->s.b, &aw->pool_link));
