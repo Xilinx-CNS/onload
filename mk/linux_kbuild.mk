@@ -22,6 +22,7 @@ ifndef NDEBUG
 EXTRA_CFLAGS += -g
 endif
 
+AUX_BUS_PATH ?= $(TOPPATH)/../cns-auxiliary-bus
 TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_extra.h
 EXTRA_CFLAGS += -DTRANSPORT_CONFIG_OPT_HDR='<$(TRANSPORT_CONFIG_OPT_HDR)>'
 
