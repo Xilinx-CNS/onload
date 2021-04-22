@@ -54,7 +54,7 @@
 #define EF100_VDPA_MAX_MSIX_NAME_SIZE 256
 
 /* Default high IOVA for MCDI buffer */
-#define EF100_VDPA_IOVA_BASE_ADDR 0x200000000
+#define EF100_VDPA_IOVA_BASE_ADDR 0x20000000000
 
 #define EFX_VDPA_NAME(_vdpa) "vdpa_%d_%d", (_vdpa)->pf_index, (_vdpa)->vf_index
 #define EFX_VDPA_VRING_NAME(_idx) "vring_%d", _idx
