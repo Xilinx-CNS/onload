@@ -11,7 +11,8 @@
 RESOURCE_SRCS	:= resource_driver.c \
 	iopage.c driverlink_new.c kernel_proc.c filter.c \
 	bt_stats.c compat_pat_wc.c port_sniff.c nondl_resource.c sysfs.c \
-	nondl_driver.c sfcaffinity.c nic_notifier.c
+	nondl_driver.c sfcaffinity.c nic_notifier.c \
+	aux_driver.c aux_efct.c
 
 EFHW_SRCS	:= nic.c eventq.c ef10.c ef100.c af_xdp.c ethtool_rxclass.c \
 		efct.c
@@ -47,6 +48,7 @@ IMPORT		:= $(EFHW_SRCS:%=../../lib/efhw/%) \
 		   $(EFRM_HDRS:%=../../lib/efrm/%) \
 		   ../linux_net/drivers/net/ethernet/sfc/driverlink_api.h
 
+
 RESOURCE_TARGET	:= sfc_resource.o
 RESOURCE_TARGET_SRCS := $(RESOURCE_SRCS) $(EFHW_SRCS) $(EFRM_SRCS)
 
@@ -62,6 +64,12 @@ arm64_TARGET_SRCS := syscall_aarch64.o
 #
 
 KBUILD_EXTRA_SYMBOLS := $(BUILDPATH)/driver/linux_net/drivers/net/ethernet/sfc/Module.symvers
+
+ifndef CONFIG_AUXILIARY_BUS
+ifneq ($(HAVE_CNS_AUX),0)
+KBUILD_EXTRA_SYMBOLS += $(AUX_BUS_PATH)/drivers/base/Module.symvers
+endif
+endif
 
 all: $(KBUILD_EXTRA_SYMBOLS)
 	$(MAKE) $(MMAKE_KBUILD_ARGS) M=$(CURDIR)

@@ -296,6 +296,10 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 		map_min = res_dim->vi_min;
 		map_max = res_dim->vi_lim;;
 	}
+	else if (dev_type->arch == EFHW_ARCH_EFCT) {
+		map_min = res_dim->vi_min;
+		map_max = res_dim->vi_lim;;
+	}
 	else {
 		rc = -EINVAL;
 		goto fail;
@@ -745,6 +749,10 @@ static int init_sfc_resource(void)
 	if (rc < 0)
 		goto failed_driverlink;
 
+	rc = efrm_auxbus_register();
+	if (rc < 0)
+		goto failed_auxbus;
+
 	efrm_nondl_init();
 	efrm_install_sysfs_entries();
 	efrm_nondl_register();
@@ -758,6 +766,8 @@ static int init_sfc_resource(void)
 
 	return 0;
 
+failed_auxbus:
+	efrm_driverlink_unregister();
 failed_driverlink:
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();
@@ -786,6 +796,7 @@ static void cleanup_sfc_resource(void)
 	efrm_nondl_unregister();
 	efrm_remove_sysfs_entries();
 	efrm_nondl_shutdown();
+	efrm_auxbus_unregister();
 	/* Unregister from driverlink first, free
 	 * the per-NIC structures next. */
 	efrm_driverlink_unregister();

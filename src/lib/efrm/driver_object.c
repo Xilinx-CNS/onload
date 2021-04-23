@@ -112,6 +112,7 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 
 	if (!(efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10 ||
 	      efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF100 ||
+	      efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EFCT ||
 	      efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP)) {
 		EFRM_ERR("%s: unknown efhw device architecture %u)",
 			 __FUNCTION__, efrm_nic->efhw_nic.devtype.arch);

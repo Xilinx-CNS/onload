@@ -1,10 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
 
-#if CI_HAVE_CNS_AUX && CI_HAVE_X3_NET
-
 #include <ci/driver/kernel_compat.h>
 #include <ci/efhw/nic.h>
+#include <ci/driver/ci_efct.h>
+
+#if CI_HAVE_EFCT_AUX
 
 /*----------------------------------------------------------------------------
  *

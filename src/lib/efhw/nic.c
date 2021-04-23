@@ -34,9 +34,11 @@
 
 #include <ci/efhw/debug.h>
 #include <ci/driver/efab/hardware.h>
+#include <ci/driver/ci_efct.h>
 #include <ci/efhw/ef10.h>
 #include <ci/efhw/ef100.h>
 #include <ci/efhw/af_xdp.h>
+#include <ci/efhw/efct.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/eventq.h>
 
@@ -249,6 +251,11 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		nic->num_dmaqs = 1;
 		nic->num_timers = 0;
 		nic->efhw_func = &af_xdp_char_functional_units;
+		break;
+#endif
+#if CI_HAVE_EFCT_AUX
+	case EFHW_ARCH_EFCT:
+		nic->efhw_func = &efct_char_functional_units;
 		break;
 #endif
 	default:

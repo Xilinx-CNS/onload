@@ -4,7 +4,6 @@
 #ifndef EFCT_TEST_DEVICE_H
 #define EFCT_TEST_DEVICE_H
 
-#include <ci/driver/ci_aux.h>
 #include <ci/driver/ci_efct.h>
 
 struct net_device;
