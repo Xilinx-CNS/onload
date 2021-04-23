@@ -88,6 +88,7 @@ union vi_attr_u {
 /*** Data definitions ****************************************************/
 
 static const char *q_names[EFHW_N_Q_TYPES] = { "TXQ", "RXQ", "EVQ" };
+static const char default_irq_name[] = "Onload";
 
 struct vi_resource_manager *efrm_vi_manager;
 
@@ -261,9 +262,12 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 static void
 efrm_vi_irq_free(struct efrm_vi *vi)
 {
+	char *name;
 	EFRM_ASSERT(vi);
 
-	free_irq(vi->irq, vi);
+	name = (char*)free_irq(vi->irq, vi);
+	if (name != default_irq_name)
+		kfree(name);
 	tasklet_kill(&vi->tasklet);
 }
 
@@ -1101,16 +1105,22 @@ static int
 efrm_vi_irq_setup(struct efrm_vi *vi, const char *vi_name, unsigned int irq)
 {
 	int rc;
+	const char *name;
 
 	spin_lock_init(&vi->evq_callback_lock);
 
 	/* Enable interrupts */
 	tasklet_init(&vi->tasklet, &efrm_vi_tasklet, (unsigned long)vi);
+	name = kstrdup(vi_name, GFP_KERNEL);
+	if (!name)
+		name = default_irq_name;
 	rc = request_irq(irq, vi_interrupt,
-			 IRQF_SAMPLE_RANDOM, vi_name, vi);
+			 IRQF_SAMPLE_RANDOM, name, vi);
 	if (rc != 0) {
 		EFRM_ERR("failed to request IRQ %d for VI %d",
 			 irq, vi->rs.rs_instance);
+		if (name != default_irq_name)
+			kfree(name);
 	}
 
 	return rc;
