@@ -117,43 +117,50 @@ static void efct_tx_block(struct efct_tx_state* tx, char* base, int len)
 }
 
 /* complete a tx operation, writing leftover bytes and padding as needed */
-static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx)
+static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dma_id)
 {
   unsigned start, end, len;
 
-  ef_vi_txq_state* txq = &vi->ep_state->txq;
-  struct efct_tx_descriptor* desc = vi->vi_txq.descriptors;
-  int i = txq->added & vi->vi_txq.mask;
+  ef_vi_txq* q = &vi->vi_txq;
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  struct efct_tx_descriptor* desc = q->descriptors;
+  int i = qs->added & q->mask;
 
   if( tx->tail_len != 0 )
     efct_tx_word(tx, tx->tail.word);
   while( (uintptr_t)tx->aperture % EFCT_TX_ALIGNMENT != 0 )
     efct_tx_word(tx, 0);
 
-  start = txq->ct_added % EFCT_TX_APERTURE;
+  start = qs->ct_added % EFCT_TX_APERTURE;
   end = ((char*)tx->aperture - vi->vi_ctpio_mmap_ptr);
   len = end - start;
 
   desc[i].len = len;
-  txq->ct_added += len;
-  txq->added += 1;
+  q->ids[i] = dma_id;
+  qs->ct_added += len;
+  qs->added += 1;
 }
 
 /* handle a tx completion event */
-static void efct_tx_event(ef_vi* vi, ci_qword_t event)
+static void efct_tx_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
 {
-  ef_vi_txq_state* txq = &vi->ep_state->txq;
+  ef_vi_txq* q = &vi->vi_txq;
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
   struct efct_tx_descriptor* desc = vi->vi_txq.descriptors;
 
   unsigned seq = CI_QWORD_FIELD(event, EFCT_TX_EVENT_SEQUENCE);
   unsigned seq_mask = (1 << EFCT_TX_EVENT_SEQUENCE_WIDTH) - 1;
 
-  while( (txq->removed & seq_mask) != seq ) {
-    int i = txq->removed & vi->vi_txq.mask;
-    BUG_ON(txq->removed == txq->added);
-    txq->ct_removed += desc[i].len;
-    txq->removed += 1;
+  while( (qs->previous & seq_mask) != seq ) {
+    BUG_ON(qs->previous == qs->added);
+    qs->ct_removed += desc[qs->previous & q->mask].len;
+    qs->previous += 1;
   }
+
+  ev_out->tx.type = EF_EVENT_TYPE_TX; /* TODO _WITH_TIMESTAMP */
+  ev_out->tx.q_id = CI_QWORD_FIELD(event, EFCT_TX_EVENT_LABEL);
+  ev_out->tx.flags = EF_EVENT_FLAG_CTPIO;
+  ev_out->tx.desc_id = qs->previous;
 }
 
 static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
@@ -169,7 +176,7 @@ static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
   /* TODO timestamp flag */
   efct_tx_word(&tx, efct_tx_pkt_header(len, EFCT_TX_CT_DISABLE, 0));
   efct_tx_block(&tx, (void*)(uintptr_t)base, len);
-  efct_tx_complete(vi, &tx);
+  efct_tx_complete(vi, &tx, dma_id);
 
   return 0;
 }
@@ -194,7 +201,7 @@ static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
   for( i = 0; i < iov_len; ++i )
     efct_tx_block(&tx, (void*)(uintptr_t)iov[i].iov_base, iov[i].iov_len);
 
-  efct_tx_complete(vi, &tx);
+  efct_tx_complete(vi, &tx, dma_id);
 
   return 0;
 }
@@ -247,7 +254,7 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   for( i = 0; i < iovcnt; ++i )
     efct_tx_block(&tx, iov[i].iov_base, iov[i].iov_len);
 
-  efct_tx_complete(vi, &tx);
+  efct_tx_complete(vi, &tx, EF_REQUEST_ID_MASK);
 }
 
 static void efct_ef_vi_transmitv_ctpio_copy(ef_vi* vi, size_t frame_len,
@@ -295,12 +302,58 @@ static void efct_ef_vi_receive_push(ef_vi* vi)
   /* TODO X3 */
 }
 
-static int efct_ef_eventq_poll(ef_vi* evq, ef_event* evs, int evs_len)
+static int efct_ef_poll_one_queue(ef_vi* vi,
+                                  ef_eventq_state* evq, ci_qword_t* evq_base,
+                                  ef_event* evs, int evs_len)
 {
-  /* TODO X3 */
-  return -ENOSYS;
-  /* Dummy call to avoid warning. TODO remove when function is used. */
-  {ci_qword_t q; q.u64[0] = 0; efct_tx_event(evq, q);}
+  ci_qword_t event;
+  unsigned phase;
+  int i;
+
+  // check for overflow
+  event = evq_base[(evq->evq_ptr - 1) & vi->evq_mask];
+  phase = ((evq->evq_ptr - 1) & (vi->evq_mask + 1)) != 0;
+  BUG_ON(CI_QWORD_FIELD(event, EFCT_EVENT_PHASE) != phase);
+
+  for( i = 0; i < evs_len; ++i, ++evq->evq_ptr ) {
+    event = evq_base[evq->evq_ptr & vi->evq_mask];
+    phase = (evq->evq_ptr & (vi->evq_mask + 1)) != 0;
+
+    if( CI_QWORD_FIELD(event, EFCT_EVENT_PHASE) != phase )
+      break;
+
+    switch( CI_QWORD_FIELD(event, EFCT_EVENT_TYPE) ) {
+      case EFCT_EVENT_TYPE_RX:
+        /* TODO X3 */
+        break;
+      case EFCT_EVENT_TYPE_TX:
+        efct_tx_event(vi, event, &evs[i]);
+        break;
+      case EFCT_EVENT_TYPE_CONTROL:
+        /* TODO X3 */
+        break;
+      default:
+        ef_log("%s:%d: ERROR: event="CI_QWORD_FMT,
+               __FUNCTION__, __LINE__, CI_QWORD_VAL(event));
+        break;
+    }
+  }
+
+  return i;
+}
+
+static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
+{
+  int i;
+
+  // poll the tx event queue
+  // TODO maybe this should be conditional to support rx-only VI
+  i = efct_ef_poll_one_queue(vi, &vi->ep_state->evq, (ci_qword_t*)vi->evq_base,
+                             evs, evs_len);
+  // TODO poll rx event queue
+  // i += efct_ef_poll_one_queue(vi, ???, ???, evs + i, evs_len - i);
+
+  return i;
 }
 
 static void efct_ef_eventq_prime(ef_vi* vi)

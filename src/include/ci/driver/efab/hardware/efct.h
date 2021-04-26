@@ -4,7 +4,9 @@
 #ifndef __CI_DRIVER_EFAB_HARDWARE_EFCT_H__
 #define __CI_DRIVER_EFAB_HARDWARE_EFCT_H__
 
-/* tx header bit field definitions. TODO: should come from hardware defs */
+/* TODO many of these should be generated from hardware defs when possible */
+
+/* tx header bit field definitions */
 #define EFCT_TX_HEADER_PACKET_LENGTH_LBN 0
 #define EFCT_TX_HEADER_PACKET_LENGTH_WIDTH 14
 
@@ -20,7 +22,19 @@
 #define EFCT_TX_HEADER_ACTION_LBN 24
 #define EFCT_TX_HEADER_ACTION_WIDTH 3
 
-/* tx event bit field definitions. TODO: should come from hardware defs */
+/* generic event bit field definitions */
+#define EFCT_EVENT_PHASE_LBN 59
+#define EFCT_EVENT_PHASE_WIDTH 1
+
+#define EFCT_EVENT_TYPE_LBN 60
+#define EFCT_EVENT_TYPE_WIDTH 4
+
+/* event types */
+#define EFCT_EVENT_TYPE_RX 0
+#define EFCT_EVENT_TYPE_TX 1
+#define EFCT_EVENT_TYPE_CONTROL 2
+
+/* tx event bit field definitions */
 #define EFCT_TX_EVENT_PARTIAL_TSTAMP_LBN 0
 #define EFCT_TX_EVENT_PARTIAL_TSTAMP_WIDTH 40
 
@@ -32,12 +46,6 @@
 
 #define EFCT_TX_EVENT_LABEL_LBN 50
 #define EFCT_TX_EVENT_LABEL_WIDTH 6
-
-#define EFCT_TX_EVENT_PHASE_LBN 59
-#define EFCT_TX_EVENT_PHASE_WIDTH 1
-
-#define EFCT_TX_EVENT_TYPE_LBN 60
-#define EFCT_TX_EVENT_TYPE_WIDTH 4
 
 /* size of a transmit header in bytes */
 #define EFCT_TX_HEADER_BYTES 8
