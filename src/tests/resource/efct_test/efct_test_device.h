@@ -4,13 +4,16 @@
 #ifndef EFCT_TEST_DEVICE_H
 #define EFCT_TEST_DEVICE_H
 
+#include "auxiliary_bus.h"
 #include "sfc_efct.h"
 
+struct net_device;
 struct efct_test_device {
   struct sfc_efct_device dev;
+  struct net_device* net_dev;
 };
 
-extern struct efct_test_device* efct_test_add_test_dev(struct device* parent);
+extern struct efct_test_device* efct_test_add_test_dev(struct device* parent, struct net_device* net_dev);
 extern void efct_test_remove_test_dev(struct efct_test_device* tdev);
 
 #endif /* EFCT_TEST_DEVICE_H */

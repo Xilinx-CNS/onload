@@ -3,6 +3,7 @@
 
 #include <linux/init.h>
 #include <linux/module.h>
+#include <linux/netdevice.h>
 #include "auxiliary_bus.h"
 
 #include "efct_test_device.h"
@@ -29,10 +30,12 @@ static int init_aux_dev(struct auxiliary_device* adev,
 /**
  * Create a new test dev and add it to the auxiliary bus
  * @parent: A parent device to associate this test device with.
+ * @net_dev: The net device to dummy.
  *
  * Returns &struct efct_test_device pointer on success, or ERR_PTR() on error.
  */
-struct efct_test_device* efct_test_add_test_dev(struct device* parent)
+struct efct_test_device* efct_test_add_test_dev(struct device* parent,
+                                                struct net_device* net_dev)
 {
   struct efct_test_device* tdev;
   struct auxiliary_device* adev;
@@ -65,6 +68,9 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent)
     return ERR_PTR(rc);
   }
 
+  dev_hold(net_dev);
+  tdev->net_dev = net_dev;
+
   return tdev;
 }
 
@@ -76,6 +82,7 @@ void efct_test_remove_test_dev(struct efct_test_device* tdev)
 {
   struct auxiliary_device* adev = &tdev->dev.adev;
 
+  dev_put(tdev->net_dev);
   auxiliary_device_delete(adev);
   auxiliary_device_uninit(adev);
 }
