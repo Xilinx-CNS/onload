@@ -262,10 +262,17 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 static void
 efrm_vi_irq_free(struct efrm_vi *vi)
 {
-	char *name;
+	const char *name;
 	EFRM_ASSERT(vi);
 
-	name = (char*)free_irq(vi->irq, vi);
+	/* linux>=4.13: free_irq() returns name */
+#ifdef EFRM_IRQ_FREE_RETURNS_NAME
+	name = free_irq(vi->irq, vi);
+#else
+	free_irq(vi->irq, vi);
+	name = vi->irq_name;
+	vi->irq_name = NULL;
+#endif
 	if (name != default_irq_name)
 		kfree(name);
 	tasklet_kill(&vi->tasklet);
@@ -1122,6 +1129,9 @@ efrm_vi_irq_setup(struct efrm_vi *vi, const char *vi_name, unsigned int irq)
 		if (name != default_irq_name)
 			kfree(name);
 	}
+#ifndef EFRM_IRQ_FREE_RETURNS_NAME
+	vi->irq_name = name;
+#endif
 
 	return rc;
 }

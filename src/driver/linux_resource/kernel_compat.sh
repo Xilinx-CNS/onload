@@ -138,6 +138,9 @@ EFRM_FILE_HAS_F_EP	member	struct_file	f_ep	include/linux/fs.h
 EFRM_HAS_LOOKUP_FD_RCU	symbol	lookup_fd_rcu	include/linux/fdtable.h
 
 EFRM_HAS_FLUSH_DELAYED_FPUT	export	flush_delayed_fput	include/linux/file.h	fs/file_table.c
+
+EFRM_IRQ_FREE_RETURNS_NAME	symtype	free_irq	include/linux/interrupt.h void *(unsigned int, void *)
+
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
