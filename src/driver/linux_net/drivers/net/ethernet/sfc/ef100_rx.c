@@ -31,10 +31,20 @@
 #define PREFIX_FIELD(_p,_f)	((PREFIX_WORD(_p,_f) >>			\
 				  PREFIX_OFFSET_B(_f)) & PREFIX_WIDTH_MASK(_f))
 
-#define ESF_GZ_RX_PREFIX_NT_OR_INNER_L3_CLASS_LBN	\
-		(ESF_GZ_RX_PREFIX_CLASS_LBN + 8)
-#define ESF_GZ_RX_PREFIX_NT_OR_INNER_L3_CLASS_WIDTH	2
-
+/* Get the value of a field in the classification and checksum substructure
+ * of the RX prefix (rh_egres_hclass)
+ */
+#define PREFIX_HCLASS_OFFSET_W(_f) \
+	(ESF_GZ_RX_PREFIX_CLASS_LBN + ESF_GZ_RX_PREFIX_HCLASS_ ## _f ## _LBN)/32
+#define PREFIX_HCLASS_OFFSET_B(_f) \
+	(ESF_GZ_RX_PREFIX_CLASS_LBN + ESF_GZ_RX_PREFIX_HCLASS_ ## _f ## _LBN)%32
+#define PREFIX_HCLASS_WIDTH_MASK(_f) \
+	((1UL<<(ESF_GZ_RX_PREFIX_HCLASS_ ## _f ## _WIDTH)) - 1)
+#define PREFIX_HCLASS_WORD(_p,_f) \
+	le32_to_cpu((__force __le32) (_p)[ PREFIX_HCLASS_OFFSET_W(_f) ])
+#define PREFIX_HCLASS_FIELD(_p,_f) \
+	((PREFIX_HCLASS_WORD(_p,_f) >> PREFIX_HCLASS_OFFSET_B(_f)) & \
+	 PREFIX_HCLASS_WIDTH_MASK(_f))
 
 int ef100_rx_probe(struct efx_rx_queue *rx_queue)
 {
@@ -164,14 +174,22 @@ void __ef100_rx_packet(struct efx_channel *channel)
 		goto out;
 
 	if (likely(efx->net_dev->features & NETIF_F_RXCSUM)) {
-		if (PREFIX_FIELD(prefix, NT_OR_INNER_L3_CLASS) == 1) {
+		if (PREFIX_HCLASS_FIELD(prefix, NT_OR_INNER_L3_CLASS) ==
+		    ESE_GZ_RH_HCLASS_L3_CLASS_IP4BAD) {
 			++channel->n_rx_ip_hdr_chksum_err;
-		} else {
+		}
 #ifdef BUG85159_CSUM_FRAME
-			csum = get_csum(eh, prefix, true);
+		csum = get_csum(eh, prefix, true);
 #else
-			csum = get_csum(eh, prefix, false);
+		csum = get_csum(eh, prefix, false);
 #endif
+		switch (PREFIX_HCLASS_FIELD(prefix, NT_OR_INNER_L4_CLASS)) {
+		case ESE_GZ_RH_HCLASS_L4_CLASS_TCP:
+		case ESE_GZ_RH_HCLASS_L4_CLASS_UDP:
+			if (PREFIX_HCLASS_FIELD(prefix, NT_OR_INNER_L4_CSUM) ==
+			    ESE_GZ_RH_HCLASS_L4_CSUM_BAD_OR_UNKNOWN)
+				++channel->n_rx_tcp_udp_chksum_err;
+			break;
 		}
 	}
 

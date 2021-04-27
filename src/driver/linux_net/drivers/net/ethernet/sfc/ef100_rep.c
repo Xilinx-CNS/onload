@@ -71,8 +71,8 @@ static netdev_tx_t efx_ef100_rep_xmit(struct sk_buff *skb,
 	 * case of TX drops, where it will increment efx's tx_dropped.  The
 	 * efv stats really only count attempted TX, not success/failure.
 	 */
-	atomic_inc(&efv->stats.tx_packets);
-	atomic_add(skb->len, &efv->stats.tx_bytes);
+	atomic64_inc(&efv->stats.tx_packets);
+	atomic64_add(skb->len, &efv->stats.tx_bytes);
 	netif_tx_lock(efx->net_dev);
 	rc = __ef100_hard_start_xmit(skb, efx->net_dev, efv);
 	netif_tx_unlock(efx->net_dev);
@@ -171,12 +171,12 @@ static void efx_ef100_rep_get_stats64(struct net_device *dev,
 {
 	struct efx_rep *efv = netdev_priv(dev);
 
-	stats->rx_packets = atomic_read(&efv->stats.rx_packets);
-	stats->tx_packets = atomic_read(&efv->stats.tx_packets);
-	stats->rx_bytes = atomic_read(&efv->stats.rx_bytes);
-	stats->tx_bytes = atomic_read(&efv->stats.tx_bytes);
-	stats->rx_dropped = atomic_read(&efv->stats.rx_dropped);
-	stats->tx_errors = atomic_read(&efv->stats.tx_errors);
+	stats->rx_packets = atomic64_read(&efv->stats.rx_packets);
+	stats->tx_packets = atomic64_read(&efv->stats.tx_packets);
+	stats->rx_bytes = atomic64_read(&efv->stats.rx_bytes);
+	stats->tx_bytes = atomic64_read(&efv->stats.tx_bytes);
+	stats->rx_dropped = atomic64_read(&efv->stats.rx_dropped);
+	stats->tx_errors = atomic64_read(&efv->stats.tx_errors);
 }
 
 const struct net_device_ops efx_ef100_rep_netdev_ops = {
@@ -264,6 +264,13 @@ static struct efx_rep *efx_ef100_rep_create_netdev(struct efx_nic *efx,
 
 	net_dev->netdev_ops = &efx_ef100_rep_netdev_ops;
 	net_dev->ethtool_ops = &efx_ef100_rep_ethtool_ops;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_MTU_LIMITS)
+	net_dev->min_mtu = EFX_MIN_MTU;
+	net_dev->max_mtu = EFX_100_MAX_MTU;
+#elif defined(EFX_HAVE_NETDEV_EXT_MTU_LIMITS)
+	net_dev->extended->min_mtu = EFX_MIN_MTU;
+	net_dev->extended->max_mtu = EFX_100_MAX_MTU;
+#endif
 	net_dev->features |= NETIF_F_HW_TC | NETIF_F_LLTX;
 	net_dev->hw_features |= NETIF_F_HW_TC | NETIF_F_LLTX;
 	return efv;
@@ -532,9 +539,9 @@ void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i)
 	if (!rep_dev)
 		return;
 	efv = netdev_priv(rep_dev);
+	unregister_netdev(rep_dev);
 	efx_ef100_deconfigure_rep(efv);
 	nic_data->vf_rep[i] = NULL;
-	unregister_netdev(rep_dev);
 	efx_ef100_rep_destroy_netdev(efv);
 }
 
@@ -548,9 +555,9 @@ void efx_ef100_remote_rep_destroy(struct efx_nic *efx, unsigned int i)
 	if (!rep_dev)
 		return;
 	efv = netdev_priv(rep_dev);
+	unregister_netdev(rep_dev);
 	efx_ef100_deconfigure_rep(efv);
 	nic_data->rem_rep[i] = NULL;
-	unregister_netdev(rep_dev);
 	efx_ef100_rep_destroy_netdev(efv);
 }
 
@@ -619,7 +626,7 @@ void efx_ef100_rep_rx_packet(struct efx_rep *efv, struct efx_rx_buffer *rx_buf)
 	 * GFP_ATOMIC memory.  If we overrun, just start dropping.
 	 */
 	if (efv->write_index - READ_ONCE(efv->read_index) > efv->rx_pring_size) {
-		atomic_inc(&efv->stats.rx_dropped);
+		atomic64_inc(&efv->stats.rx_dropped);
 		netif_dbg(efv->parent, rx_err, efv->net_dev,
 			  "nodesc-dropped packet of length %u\n", rx_buf->len);
 		return;
@@ -627,7 +634,7 @@ void efx_ef100_rep_rx_packet(struct efx_rep *efv, struct efx_rx_buffer *rx_buf)
 
 	skb = netdev_alloc_skb(efv->net_dev, rx_buf->len);
 	if (!skb) {
-		atomic_inc(&efv->stats.rx_dropped);
+		atomic64_inc(&efv->stats.rx_dropped);
 		netif_dbg(efv->parent, rx_err, efv->net_dev,
 			  "noskb-dropped packet of length %u\n", rx_buf->len);
 		return;
@@ -642,8 +649,8 @@ void efx_ef100_rep_rx_packet(struct efx_rep *efv, struct efx_rx_buffer *rx_buf)
 
 	skb_checksum_none_assert(skb);
 
-	atomic_inc(&efv->stats.rx_packets);
-	atomic_add(rx_buf->len, &efv->stats.rx_bytes);
+	atomic64_inc(&efv->stats.rx_packets);
+	atomic64_add(rx_buf->len, &efv->stats.rx_bytes);
 
 	/* Add it to the rx list */
 	spin_lock_bh(&efv->rx_lock);

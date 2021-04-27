@@ -296,12 +296,10 @@ static int delete_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 #endif
 	rc = efx_vdpa_vring_destroy(vdpa_nic->vring[idx].vring_ctx,
 				    &vring_dyn_cfg);
-	if (rc != 0) {
+	if (rc != 0)
 		dev_err(&vdpa_nic->vdpa_dev.dev,
 			"%s: Queue delete failed index:%u Err:%d\n",
 			__func__, idx, rc);
-		return rc;
-	}
 	vdpa_nic->vring[idx].last_avail_idx = vring_dyn_cfg.avail_idx;
 	vdpa_nic->vring[idx].last_used_idx = vring_dyn_cfg.used_idx;
 	vdpa_nic->vring[idx].vring_created = false;
@@ -411,22 +409,15 @@ fail:
 
 static void reset_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 {
-	int rc = 0;
+	if (vdpa_nic->vring[idx].vring_created)
+		delete_vring(vdpa_nic, idx);
 
-	if (vdpa_nic->vring[idx].vring_created) {
-		rc = delete_vring(vdpa_nic, idx);
-		if (rc != 0) {
-			dev_err(&vdpa_nic->vdpa_dev.dev,
-				"%s:Queue deletion failed index:%u err:%d\n",
-				__func__, idx, rc);
-		}
-	}
 	memset((void *)&vdpa_nic->vring[idx], 0,
 	       sizeof(vdpa_nic->vring[idx]));
 	vdpa_nic->vring[idx].vring_type = EF100_VDPA_VQ_NTYPES;
 }
 
-static void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
+void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 {
 	int i;
 

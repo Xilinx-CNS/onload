@@ -473,7 +473,7 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 		struct efx_tx_buffer *buffer = __efx_tx_queue_get_insert_buffer(tx_queue);
 
 		if (unlikely(efx_tx_buffer_in_use(buffer))) {
-			atomic_inc(&efv->stats.tx_errors);
+			atomic64_inc(&efv->stats.tx_errors);
 			rc = -ENOSPC;
 			goto err;
 		}

@@ -732,10 +732,12 @@ void ef100_vdpa_delete(struct efx_nic *efx)
 	int rc;
 
 	if (vdpa_nic) {
+		mutex_lock(&vdpa_nic->lock);
+		reset_vdpa_device(vdpa_nic);
+		mutex_unlock(&vdpa_nic->lock);
 #ifdef CONFIG_SFC_DEBUGFS
 		efx_fini_debugfs_vdpa(vdpa_nic);
 #endif
-		ef100_vdpa_filter_remove(vdpa_nic);
 		vdpa_unregister_device(&vdpa_nic->vdpa_dev);
 	        rc = setup_ef100_mcdi_buffer(efx);
 	        if (rc) {

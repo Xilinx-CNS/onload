@@ -607,7 +607,7 @@ int efx_init_debugfs_vdpa_vring(struct ef100_vdpa_nic *vdpa,
 err_mem:
 	rc = -ENOMEM;
  err:
-	efx_fini_debugfs_vdpa(vdpa);
+	efx_fini_debugfs_vdpa_vring(vdpa_vring);
 	return rc;
 }
 

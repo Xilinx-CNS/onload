@@ -29,9 +29,9 @@ void efx_ef100_remote_rep_destroy(struct efx_nic *efx, unsigned int i);
 struct net_device *efx_ef100_find_rep_by_mport(struct efx_nic *efx, u16 mport);
 
 struct efx_rep_sw_stats {
-	atomic_t rx_packets, tx_packets;
-	atomic_t rx_bytes, tx_bytes;
-	atomic_t rx_dropped, tx_errors;
+	atomic64_t rx_packets, tx_packets;
+	atomic64_t rx_bytes, tx_bytes;
+	atomic64_t rx_dropped, tx_errors;
 };
 
 /* Private data for an Efx representor */
