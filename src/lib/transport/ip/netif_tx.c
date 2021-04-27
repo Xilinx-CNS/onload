@@ -119,6 +119,10 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
         iov_len = ci_netif_pkt_to_remote_iovec(ni, pkt, remote_iov,
                                                sizeof(remote_iov) / sizeof(remote_iov[0]));
         rc = ef_vi_transmitv_init_extra(vi, NULL, remote_iov, iov_len, OO_PKT_ID(pkt));
+#if CI_CFG_CTPIO && !defined(__KERNEL__)
+        if( rc >= 0 )
+          posted_dma = 1;
+#endif
       }
       else {
         iov_len = ci_netif_pkt_to_iovec(ni, pkt, iov,
