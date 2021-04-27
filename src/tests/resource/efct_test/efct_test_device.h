@@ -8,9 +8,11 @@
 #include "sfc_efct.h"
 
 struct net_device;
+struct sfc_efct_client;
 struct efct_test_device {
   struct sfc_efct_device dev;
   struct net_device* net_dev;
+  struct sfc_efct_client* client;
 };
 
 extern struct efct_test_device* efct_test_add_test_dev(struct device* parent, struct net_device* net_dev);
