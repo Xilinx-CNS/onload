@@ -453,9 +453,6 @@ efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
 }
 
 
-/* A count of how many NICs this driver knows about. */
-static int n_nics_probed;
-
 static struct linux_efhw_nic*
 efrm_get_redisovered_nic(struct pci_dev* dev,
 			 const struct efhw_device_type* dev_type)
@@ -551,10 +548,9 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 	struct efrm_nic *efrm_nic = NULL;
 	struct efhw_nic *nic = NULL;
 	struct pci_dev *dev = dl_device ? dl_device->pci_dev : NULL;
-	int count = 0, rc = 0, resources_init = 0;
+	int count = 0, rc = 0;
 	int constructed = 0;
 	int registered_nic = 0;
-	int nics_probed_delta = 0;
 
 	if (!efhw_device_type_init(&dev_type, dev)) {
 		EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x",
@@ -563,13 +559,6 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 		return -ENODEV;
 	}
 	efrm_dev_show(dev, &dev_type, net_dev->ifindex, res_dim);
-
-	if (n_nics_probed == 0) {
-		rc = efrm_resources_init();
-		if (rc != 0)
-			goto failed;
-		resources_init = 1;
-	}
 
 	lnic = efrm_get_redisovered_nic(dev, &dev_type);
 	if (lnic != NULL) {
@@ -616,8 +605,6 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 			goto failed;
 		}
 		registered_nic = 1;
-
-		++nics_probed_delta;
 	}
 
 	lnic->dl_device = dl_device;
@@ -677,7 +664,6 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 	efrm_nic->dmaq_state.unplugging = 0;
 
 	*lnic_out = lnic;
-	n_nics_probed += nics_probed_delta;
 	efrm_nic_enable_post_reset(nic);
 	efrm_nic_post_reset(nic);
 
@@ -689,8 +675,6 @@ failed:
 	if (constructed)
 		linux_efrm_nic_dtor(lnic);
 	kfree(lnic); /* safe in any case */
-	if (resources_init)
-		efrm_resources_fini();
 	return rc;
 }
 
@@ -802,11 +786,6 @@ static void efrm_nic_del(struct linux_efhw_nic *lnic)
 	EFRM_TRACE("%s:", __func__);
 
 	efrm_driver_unregister_nic(&lnic->efrm_nic);
-
-	/* Close down hardware and free resources. */
-	if (--n_nics_probed == 0)
-		efrm_resources_fini();
-
 	kfree(lnic);
 
 	EFRM_TRACE("%s: done", __func__);
@@ -885,6 +864,13 @@ static int init_sfc_resource(void)
 	}
 
 	efrm_driver_ctor();
+
+	rc = efrm_resources_init();
+	if( rc != 0 ) {
+		EFRM_ERR("%s: ERROR: init resources", __func__);
+		goto failed_resources;
+	}
+
 	efrm_filter_init();
 
         /* efrm_driverlink_register() attempts to create files in
@@ -925,6 +911,8 @@ failed_driverlink:
 	efrm_uninstall_proc_entries();
 	efrm_driver_stop();
 	efrm_filter_shutdown();
+	efrm_resources_fini();
+failed_resources:
 	efrm_driver_dtor();
 	return rc;
 }
@@ -957,6 +945,7 @@ static void cleanup_sfc_resource(void)
 	efrm_uninstall_proc_entries();
 
 	efrm_driver_stop();
+	efrm_resources_fini();
 
 	/* Clean up char-driver specific initialisation.
 	   - driver dtor can use both work queue and buffer table entries */
