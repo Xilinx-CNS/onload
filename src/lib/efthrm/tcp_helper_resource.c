@@ -7421,6 +7421,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
   ci_uint64 after_unlock_flags = 0;
   ci_uint64 defer_flags = 0;
   int/*bool*/ pkt_waiter_retried = 0;
+  bool orphaned;
 
   ci_assert(ci_netif_is_locked(ni));
 
@@ -7440,6 +7441,8 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     /* We expect this to sort out CI_EPLOCK_NETIF_UL_COMMON flags and clear
     * all_handled_flags. Note the flags might have re-emerged. */
     lock_val = ci_netif_unlock_slow_common(ni, lock_val, all_handled_flags & ~defer_flags);
+
+    orphaned = (thr->ref[OO_THR_REF_APP] == 0);
 
     /* Get flags set.  NB. Its possible no flags were set
     ** e.g. we tried to unlock the eplock (bottom of loop) but found
@@ -7527,7 +7530,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     ** short of packets.
     */
     if( (flags_set & CI_EPLOCK_NETIF_NEED_PKT_SET) ||
-        oo_want_proactive_packet_allocation(ni) ) {
+        (!orphaned && oo_want_proactive_packet_allocation(ni)) ) {
       OO_DEBUG_TCPH(ci_log("%s: [%u] NEED_PKT_SET now",
                            __FUNCTION__, thr->id));
       efab_tcp_helper_more_bufs(thr);
@@ -7537,7 +7540,7 @@ efab_tcp_helper_netif_lock_callback(eplock_helper_t* epl, ci_uint64 lock_val,
     /* Monitor the number of socket buffers.
      */
     if( (flags_set & CI_EPLOCK_NETIF_NEED_SOCK_BUFS) ||
-        oo_want_proactive_socket_allocation(ni) ) {
+        (!orphaned && oo_want_proactive_socket_allocation(ni)) ) {
       OO_DEBUG_TCPH(ci_log("%s: [%u] NEED_SOCK_BUFS now",
                            __FUNCTION__, thr->id));
       efab_tcp_helper_more_socks(thr);
