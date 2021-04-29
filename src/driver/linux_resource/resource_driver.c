@@ -699,54 +699,6 @@ efrm_nic_unplug(struct efhw_nic* nic)
 }
 
 
-int efrm_nic_add_device(struct net_device *net_dev, int n_vis)
-{
-	struct vi_resource_dimensions res_dim = {};
-	struct efx_dl_ef10_resources *ef10_res = NULL;
-	struct linux_efhw_nic *lnic;
-	unsigned timer_quantum_ns = 0;
-	struct efhw_nic *nic;
-	int rc;
-
-	ASSERT_RTNL();
-
-	if( efhw_nic_find(net_dev) ) {
-		EFRM_TRACE("efrm_nic_add_ifindex: netdev %s already registered",
-			   net_dev->name);
-		return 0;
-	}
-
-	ef10_res = kmalloc(sizeof(*ef10_res), GFP_KERNEL);
-	memset(ef10_res, 0, sizeof(*ef10_res));
-	ef10_res->rss_channel_count = 1;
-	ef10_res->vi_min = 0;
-	ef10_res->vi_lim = n_vis;
-	ef10_res->hdr.type = EFX_DL_EF10_RESOURCES;
-	timer_quantum_ns = ef10_res->timer_quantum_ns = 60000;
-
-	res_dim.vi_min = ef10_res->vi_min;
-	res_dim.vi_lim = ef10_res->vi_lim;
-	res_dim.rss_channel_count = ef10_res->rx_channel_count;
-	res_dim.vi_base = ef10_res->vi_base;
-	res_dim.vi_shift = ef10_res->vi_shift;
-
-	EFRM_TRACE("Using VI range %d+(%d-%d)<<%d", res_dim.vi_base,
-		   res_dim.vi_min, res_dim.vi_lim, res_dim.vi_shift);
-
-	rc = efrm_nic_add(NULL, 0, net_dev, &lnic, &res_dim,
-			  timer_quantum_ns);
-	if (rc != 0)
-		return rc;
-
-	lnic->efrm_nic.dl_dev_info = &ef10_res->hdr;
-
-	nic = &lnic->efrm_nic.efhw_nic;
-	nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
-
-	return 0;
-}
-EXPORT_SYMBOL(efrm_nic_add_device);
-
 /****************************************************************************
  *
  * efrm_nic_shutdown: Shut down our access to the NIC hw
@@ -791,9 +743,16 @@ static void efrm_nic_del(struct linux_efhw_nic *lnic)
 	EFRM_TRACE("%s: done", __func__);
 }
 
-/* Removes device from efrm
+/* Completely removes device from efrm.
  *
- * Complete teardown includes efrm nic shutdown and efrm nic deletion
+ * Removal from efrm happens in two stages, unplug and delete. Devices that
+ * support hotplug should only be efrm_nic_unplug()ed on removal, which will
+ * leave sufficient state in efrm to recognise them on return. If we don't
+ * support hotplug then the device should be fully deleted, which is what this
+ * function is for. If the device subsequently returns it will be handled as
+ * completely new device.
+ *
+ * Requires the caller holds the rtnl lock.
  *
  * Note: after shutdown device has no associated net_device meaning
  *       the removal needs to be done in one step.
@@ -815,7 +774,6 @@ void efrm_nic_del_device(struct net_device *net_dev)
 	}
 	EFRM_TRACE("%s: done", __func__);
 }
-EXPORT_SYMBOL(efrm_nic_del_device);
 
 /****************************************************************************
  *

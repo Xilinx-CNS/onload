@@ -62,6 +62,9 @@ efrm_nic_add(struct efx_dl_device *dl_device, unsigned int opts,
 	     unsigned timer_quantum_ns);
 extern int
 efrm_nic_unplug(struct efhw_nic* nic);
+extern void
+efrm_nic_del_device(struct net_device *);
+
 
 extern int efrm_install_proc_entries(void);
 extern void efrm_uninstall_proc_entries(void);
