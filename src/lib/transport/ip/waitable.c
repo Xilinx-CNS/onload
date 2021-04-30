@@ -66,9 +66,7 @@ citp_waitable_obj* citp_waitable_obj_alloc(ci_netif* netif)
       CI_DEBUG(w->next_id = CI_ILL_END);
       ci_assert_equal(w->state, CI_TCP_STATE_FREE);
       ci_assert(OO_SP_IS_NULL(w->wt_next));
-      w->wt_next = netif->state->free_eps_head;
-      netif->state->free_eps_head = W_SP(w);
-      netif->state->free_eps_num++;
+      citp_waitable_add_free_list(netif, w);
     }
   }
 
@@ -181,6 +179,15 @@ static void __citp_waitable_obj_free(ci_netif* ni, citp_waitable* w)
 }
 
 
+void citp_waitable_add_free_list(ci_netif* ni, citp_waitable* w)
+{
+  ci_assert(ci_netif_is_locked(ni));
+
+  w->wt_next = ni->state->free_eps_head;
+  ni->state->free_eps_head = W_SP(w);
+  ni->state->free_eps_num++;
+}
+
 void citp_waitable_obj_free(ci_netif* ni, citp_waitable* w)
 {
   ci_assert(ci_netif_is_locked(ni));
@@ -205,9 +212,7 @@ void citp_waitable_obj_free(ci_netif* ni, citp_waitable* w)
   __citp_waitable_obj_free(ni, w);
   citp_waitable_remove_from_epoll(ni, w, 1);
 
-  w->wt_next = ni->state->free_eps_head;
-  ni->state->free_eps_head = W_SP(w);
-  ni->state->free_eps_num++;
+  citp_waitable_add_free_list(ni, w);
   /* Must be last, as may result in stack going away. */
   ci_drop_orphan(ni);
 }

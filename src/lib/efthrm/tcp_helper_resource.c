@@ -5739,7 +5739,8 @@ add_ep(tcp_helper_resource_t* trs, unsigned id, tcp_helper_endpoint_t* ep)
   wo = SP_TO_WAITABLE_OBJ(ni, ep->id);
   CI_ZERO(wo);  /* ??fixme */
   citp_waitable_init(ni, &wo->waitable, id);
-  citp_waitable_obj_free(ni, &wo->waitable);
+  wo->waitable.state = CI_TCP_STATE_FREE;
+  citp_waitable_add_free_list(ni, &wo->waitable);
   return 0;
 }
 

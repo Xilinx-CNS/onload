@@ -1588,6 +1588,7 @@ extern void ci_active_wild_all_fds_gone(ci_netif* ni, ci_active_wild* aw,
 extern void citp_waitable_reinit(ci_netif* ni, citp_waitable* w) CI_HF;
 extern void citp_waitable_init(ci_netif* ni, citp_waitable* w, int id) CI_HF;
 extern citp_waitable_obj* citp_waitable_obj_alloc(ci_netif* netif) CI_HF;
+extern void citp_waitable_add_free_list(ci_netif* ni, citp_waitable* w) CI_HF;
 extern void citp_waitable_obj_free(ci_netif* ni, citp_waitable* w) CI_HF;
 extern void citp_waitable_obj_free_nnl(ci_netif*, citp_waitable*) CI_HF;
 #if CI_CFG_FD_CACHING
