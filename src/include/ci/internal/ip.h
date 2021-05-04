@@ -2726,25 +2726,6 @@ ci_inline int ci_netif_has_event(ci_netif* ni) {
 }
 
 
-/* Returns true if there are any hardware events outstanding on any
- * interface, where we can act on those events efficiently.
- */
-ci_inline int ci_netif_has_actionable_event(ci_netif* ni) {
-  int intf_i;
-  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    if( ci_netif_intf_has_event(ni, intf_i) ) {
-#ifdef OO_HAS_POLL_IN_KERNEL
-      if( ! ni->nic_hw[intf_i].poll_in_kernel )
-#endif
-      {
-        return 1;
-      }
-    }
-  }
-  return OO_PP_NOT_NULL(ni->state->looppkts);
-}
-
-
 /* Returns true if there are many hardware events outstanding. */
 ci_inline int ci_netif_has_many_events(ci_netif* ni, int lookahead) {
   int intf_i, rc = 0;
@@ -2844,7 +2825,7 @@ ci_inline int ci_netif_need_timer_prime(ci_netif* ni, ci_uint64 frc_now) {
 
 ci_inline int ci_netif_need_poll_spinning(ci_netif* ni, ci_uint64 frc_now)
 {
-  return ci_netif_has_actionable_event(ni) ||
+  return ci_netif_has_event(ni) ||
          ci_netif_need_timer_prime(ni, frc_now);
 }
 
