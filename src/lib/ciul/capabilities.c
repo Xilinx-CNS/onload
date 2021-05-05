@@ -61,6 +61,7 @@ static const char* names[EF_VI_CAP_MAX + 1] = {
   [EF_VI_CAP_TX_FW_VARIANT] = "TX firmware variant",
   [EF_VI_CAP_CTPIO] = "CTPIO",
   [EF_VI_CAP_RX_FORCE_EVENT_MERGING] = "RX queue is configured to force event merging",
+  [EF_VI_CAP_MIN_BUFFER_MODE_SIZE] = "Buffer mode smallest page size",
   [EF_VI_CAP_MAX] = "Unknown",
 };
 

@@ -161,6 +161,9 @@ enum ef_vi_capability {
   /** RX queue is configured to force event merging **/
   EF_VI_CAP_RX_FORCE_EVENT_MERGING,
 
+  /** Smallest supported page size/alignment when using buffer mode */
+  EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
+
   /** Maximum value of capabilities enumeration */
   EF_VI_CAP_MAX, /* Keep this last */
 };

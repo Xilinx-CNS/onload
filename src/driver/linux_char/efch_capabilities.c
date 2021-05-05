@@ -301,6 +301,24 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     get_from_nic_flags(nic, NIC_FLAG_TX_CTPIO, out);
     break;
 
+  case EF_VI_CAP_MIN_BUFFER_MODE_SIZE: {
+    int n = efhw_nic_buffer_table_orders_num(nic);
+    const int* orders = efhw_nic_buffer_table_orders(nic);
+    int i;
+    int val = INT_MAX;
+
+    for (i = 0; i < n; ++i)
+      val = CI_MIN(val, orders[i]);
+    if (val == INT_MAX) {
+      out->support_rc = -ENOENT;
+    }
+    else {
+      out->val = EFHW_NIC_PAGE_SIZE << val;
+      out->support_rc = 0;
+    }
+    break;
+  }
+
   default:
     out->support_rc = -ENOSYS;
     out->val = 0;
