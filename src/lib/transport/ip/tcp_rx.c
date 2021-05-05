@@ -1764,6 +1764,10 @@ static bool ci_tcp_rx_plugin_recycle(ci_netif* netif, ci_tcp_state* ts,
                                      ci_ip_pkt_fmt* pkt)
 {
   bool rc;
+  struct ef_vi_tx_extra extra = {
+    .flags = EF_VI_TX_EXTRA_MARK,
+    .mark = ts->plugin_stream_id,
+  };
   /* Smarter retry logic would be better here, in particular we shouldn't
    * keep trying if we reckon the plugin's blocked because of insufficient
    * FPGA DDR. This smarter logic probably belongs near the top of
@@ -1785,7 +1789,7 @@ static bool ci_tcp_rx_plugin_recycle(ci_netif* netif, ci_tcp_state* ts,
   /* Need to use the immediate version to avoid the possibility of putting the
    * packet on the dmaq - we can't do that because we're already using
    * pkt::next for the rob. */
-  rc = ci_netif_send_immediate(netif, pkt);
+  rc = ci_netif_send_immediate(netif, pkt, &extra);
   if( ! rc ) {
     pkt->flags &=~ CI_PKT_FLAG_TX_PENDING;
     ci_netif_pkt_release(netif, pkt);

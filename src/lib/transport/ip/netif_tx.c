@@ -350,7 +350,8 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
  * low-level function used by VIs which are used for communicating with
  * plugins, where the caller typically has their own reliability policy and
  * hence they don't want automatic handling of it behind the scenes. */
-bool ci_netif_send_immediate(ci_netif* netif, ci_ip_pkt_fmt* pkt)
+bool ci_netif_send_immediate(ci_netif* netif, ci_ip_pkt_fmt* pkt,
+                             const struct ef_vi_tx_extra* extra)
 {
   int intf_i;
   ef_vi* vi;
@@ -377,8 +378,26 @@ bool ci_netif_send_immediate(ci_netif* netif, ci_ip_pkt_fmt* pkt)
 
   iov_len = ci_netif_pkt_to_iovec(netif, pkt, iov,
                                   sizeof(iov) / sizeof(iov[0]));
-  if( ef_vi_transmitv(vi, iov, iov_len, OO_PKT_ID(pkt)) != 0 )
-    return false;
+  if( extra ) {
+    int i;
+    ef_remote_iovec riov[CI_IP_PKT_SEGMENTS_MAX];
+    for( i = 0; i < iov_len; ++i) {
+      riov[i] = (ef_remote_iovec){
+        .iov_base = iov[i].iov_base,
+        .iov_len = iov[i].iov_len,
+        .flags = 0,
+        .addrspace = EF_ADDRSPACE_LOCAL,
+      };
+    }
+    if( ef_vi_transmitv_init_extra(vi, extra, riov, iov_len,
+                                   OO_PKT_ID(pkt)) != 0 )
+      return false;
+    ef_vi_transmit_push(vi);
+  }
+  else {
+    if( ef_vi_transmitv(vi, iov, iov_len, OO_PKT_ID(pkt)) != 0 )
+      return false;
+  }
 
   ___ci_netif_dmaq_insert_prep_pkt(netif, pkt);
   CITP_STATS_NETIF_INC(netif, tx_dma_doorbells);
