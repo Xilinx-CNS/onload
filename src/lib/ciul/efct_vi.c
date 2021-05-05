@@ -311,12 +311,12 @@ static int efct_ef_poll_one_queue(ef_vi* vi,
   int i;
 
   // check for overflow
-  event = evq_base[(evq->evq_ptr - 1) & vi->evq_mask];
+  event = evq_base[((evq->evq_ptr - 1) & vi->evq_mask) / sizeof(event)];
   phase = ((evq->evq_ptr - 1) & (vi->evq_mask + 1)) != 0;
   BUG_ON(CI_QWORD_FIELD(event, EFCT_EVENT_PHASE) != phase);
 
-  for( i = 0; i < evs_len; ++i, ++evq->evq_ptr ) {
-    event = evq_base[evq->evq_ptr & vi->evq_mask];
+  for( i = 0; i < evs_len; ++i, evq->evq_ptr += sizeof(event) ) {
+    event = evq_base[(evq->evq_ptr & vi->evq_mask) / sizeof(event)];
     phase = (evq->evq_ptr & (vi->evq_mask + 1)) != 0;
 
     if( CI_QWORD_FIELD(event, EFCT_EVENT_PHASE) != phase )
