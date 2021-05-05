@@ -111,7 +111,7 @@ static int ef100_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
   EF_VI_BUG_ON(dma_id == 0xffffffff);
 
   /* Check for enough space in the queue */
-  if( qs->added + n_segs - qs->removed >= q->mask )
+  if( qs->added + n_segs - qs->removed > q->mask )
     return -EAGAIN;
 
   /* Generate a SEND descriptor which includes the first segment of data */
