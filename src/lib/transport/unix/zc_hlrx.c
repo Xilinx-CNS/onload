@@ -321,7 +321,8 @@ ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
     }
 
     /* Get new packet(s) */
-    if( ! ci_iovec_ptr_is_empty(&state.dest) ) {
+    if( ! ci_iovec_ptr_is_empty(&state.dest) &&
+        hlrx->pending_begin == hlrx->pending_end ) {
       struct onload_zc_recv_args args = {
         .cb = copy_cb,
         .user_ptr = &state,
@@ -329,7 +330,9 @@ ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
         .msg.msghdr.msg_name = msg->msg_name,
         .msg.msghdr.msg_namelen = msg->msg_namelen,
       };
-      int n = onload_zc_recv(hlrx->fd, &args);
+      int n;
+      ci_assert_ge(state.rc, 0);
+      n = onload_zc_recv(hlrx->fd, &args);
       if( n < 0 && state.rc == 0 )
         state.rc = n;
     }
