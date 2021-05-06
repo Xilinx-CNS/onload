@@ -73,12 +73,12 @@ int efhw_sfc_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
 	if (rc != 0) {
 		EFHW_ERR("%s: pci_read_config_byte failed (%d)",
 			 __func__, rc);
-		return 0;
+		return pcibios_err_to_errno(rc);
 	}
 
 	/* FIXME: not sure about right way for Xilinx licensing */
 	if (dev->vendor != 0x1924 && dev->vendor != 0x10ee)
-		return 0;
+		return -ENODEV;
 
 	memset(dt, 0, sizeof(*dt));
 	
@@ -95,7 +95,7 @@ int efhw_sfc_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
     case 0x0813:
 		printk(KERN_NOTICE "6000-series and earlier adapters are not "
 		                   "supported by Onload\n");
-		return 0;
+		return -ENODEV;
 	case 0x1923:
 	case 0x1903:
 	case 0x0923:
@@ -118,28 +118,19 @@ int efhw_sfc_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
 		ef100_device_type_init(dt, 'A', dev->device, class_revision);
 		break;
 	default:
-		return 0;
+		return -ENODEV;
 	}
 
-	return 1;
+	return 0;
 }
 
 
-/* Return 0 if not a known type */
-int efhw_non_pci_device_type_init(struct efhw_device_type *dt)
+int efhw_nondl_device_type_init(struct efhw_device_type *dt)
 {
-	memset(dt, 0, sizeof(*dt));
-	dt->arch = EFHW_ARCH_AF_XDP;
-	return 1;
-}
-
-
-int efhw_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
-{
-	if( dev )
-		return efhw_sfc_device_type_init(dt, dev);
-	else
-		return efhw_non_pci_device_type_init(dt);
+	*dt = (struct efhw_device_type) {
+		.arch = EFHW_ARCH_AF_XDP,
+	};
+	return 0;
 }
 
 
@@ -154,7 +145,7 @@ int efhw_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
 ** config space to find out what hardware we have
 */
 void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
-		   struct efhw_device_type *dev_type, unsigned map_min,
+		   const struct efhw_device_type *dev_type, unsigned map_min,
 		   unsigned map_max, unsigned vi_base, unsigned vi_shift,
 		   unsigned mem_bar, unsigned vi_stride)
 {

@@ -244,7 +244,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 		    unsigned nic_flags,
 		    struct net_device *net_dev,
 		    const struct vi_resource_dimensions *res_dim,
-		    struct efhw_device_type *dev_type)
+		    const struct efhw_device_type *dev_type)
 {
 	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
 	int rc;
@@ -361,7 +361,7 @@ linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
                        struct pci_dev *dev,
 		       struct net_device *net_dev,
 		       const struct vi_resource_dimensions *res_dim,
-                       struct efhw_device_type *dev_type)
+                       const struct efhw_device_type *dev_type)
 {
 	struct efhw_nic* nic = &lnic->efrm_nic.efhw_nic;
 	struct pci_dev* old_pci_dev;
@@ -417,18 +417,6 @@ static void linux_efrm_nic_dtor(struct linux_efhw_nic *lnic)
 		EFRM_ASSERT(nic->net_dev == NULL);
 	}
 	EFRM_ASSERT(nic->net_dev == NULL);
-}
-
-static void efrm_dev_show(struct pci_dev *dev,
-			  struct efhw_device_type *dev_type, int ifindex,
-			  const struct vi_resource_dimensions *res_dim)
-{
-	const char *dev_name = dev && pci_name(dev) ? pci_name(dev) : "?";
-	EFRM_NOTICE("%s pci_dev=%04x:%04x(%d) type=%d:%c%d ifindex=%d",
-		    dev_name, (unsigned) (dev ? dev->vendor : 0),
-		    (unsigned) (dev ? dev->device : 0),
-		    dev_type->revision, dev_type->arch, dev_type->variant,
-		    dev_type->revision, ifindex);
 }
 
 
@@ -537,13 +525,13 @@ int efrm_nic_get_accel_allowed(struct efhw_nic* nic)
  * TODO AF_XDP: more elegantly handle non-driverlink devices
  ****************************************************************************/
 int
-efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
+efrm_nic_add(struct efx_dl_device* dl_device,
+	     const struct efhw_device_type* dev_type, unsigned flags,
 	     struct net_device *net_dev,
 	     struct linux_efhw_nic **lnic_out,
 	     const struct vi_resource_dimensions *res_dim,
 	     unsigned timer_quantum_ns)
 {
-	struct efhw_device_type dev_type;
 	struct linux_efhw_nic *lnic = NULL;
 	struct efrm_nic *efrm_nic = NULL;
 	struct efhw_nic *nic = NULL;
@@ -552,18 +540,10 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 	int constructed = 0;
 	int registered_nic = 0;
 
-	if (!efhw_device_type_init(&dev_type, dev)) {
-		EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x",
-			 __func__, (unsigned) dev->vendor,
-			 (unsigned) dev->device);
-		return -ENODEV;
-	}
-	efrm_dev_show(dev, &dev_type, net_dev->ifindex, res_dim);
-
-	lnic = efrm_get_redisovered_nic(dev, &dev_type);
+	lnic = efrm_get_redisovered_nic(dev, dev_type);
 	if (lnic != NULL) {
 		linux_efrm_nic_reclaim(lnic, dev, net_dev, res_dim,
-				       &dev_type);
+				       dev_type);
 		/* We have now taken ownership of the state and should pull it
 		 * down on failure. */
 		constructed = registered_nic = 1;
@@ -583,7 +563,7 @@ efrm_nic_add(struct efx_dl_device* dl_device, unsigned flags,
 
 		/* OS specific hardware mappings */
 		rc = linux_efrm_nic_ctor(lnic, dev, flags,
-					 net_dev, res_dim, &dev_type);
+					 net_dev, res_dim, dev_type);
 		if (rc < 0) {
 			EFRM_ERR("%s: ERROR: linux_efrm_nic_ctor failed (%d)",
 				 __func__, rc);

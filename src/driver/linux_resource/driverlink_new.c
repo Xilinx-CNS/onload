@@ -242,6 +242,7 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 	struct efx_dl_irq_resources *irq_res = NULL;
 	struct linux_efhw_nic *lnic;
 	struct efhw_nic *nic;
+	struct efhw_device_type dev_type;
 	unsigned probe_flags = 0;
         unsigned timer_quantum_ns = 0;
 	int rc;
@@ -276,7 +277,22 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 
 	init_vi_resource_dimensions(&res_dim, ef10_res, irq_res);
 
-	rc = efrm_nic_add(efrm_dev, probe_flags,
+	rc = efhw_sfc_device_type_init(&dev_type, efrm_dev->pci_dev);
+	if (rc < 0) {
+		EFRM_ERR("%s: efhw_device_type_init failed %04x:%04x rc %d",
+			 __func__, (unsigned) efrm_dev->pci_dev->vendor,
+			 (unsigned) efrm_dev->pci_dev->device, rc);
+		return rc;
+	}
+	EFRM_NOTICE("%s pci_dev=%04x:%04x(%d) type=%d:%c%d ifindex=%d",
+		    pci_name(efrm_dev->pci_dev) ?
+		    pci_name(efrm_dev->pci_dev) : "?",
+		    (unsigned) efrm_dev->pci_dev->vendor,
+		    (unsigned) efrm_dev->pci_dev->device,
+		    dev_type.revision, dev_type.arch, dev_type.variant,
+		    dev_type.revision, net_dev->ifindex);
+
+	rc = efrm_nic_add(efrm_dev, &dev_type, probe_flags,
 			  (/*no const*/ struct net_device *)net_dev,
 			  &lnic, &res_dim, timer_quantum_ns);
 	if (rc != 0)

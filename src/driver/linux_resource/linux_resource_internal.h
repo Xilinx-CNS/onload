@@ -55,7 +55,8 @@ extern unsigned efrm_driverlink_generation(struct efrm_nic* nic);
 extern int enable_driverlink;
 
 extern int
-efrm_nic_add(struct efx_dl_device *dl_device, unsigned int opts,
+efrm_nic_add(struct efx_dl_device *dl_device,
+             const struct efhw_device_type *dev_type, unsigned int opts,
 	     struct net_device *net_dev,
 	     struct linux_efhw_nic **lnic_out,
 	     const struct vi_resource_dimensions *,

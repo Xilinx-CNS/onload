@@ -7,6 +7,7 @@
 #include <ci/driver/kernel_compat.h>
 #include <ci/efrm/efrm_client.h>
 #include <ci/efrm/nondl.h>
+#include <ci/efhw/nic.h>
 #include <linux/rtnetlink.h>
 
 
@@ -17,13 +18,14 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
   struct linux_efhw_nic *lnic;
   unsigned timer_quantum_ns = 0;
   struct efhw_nic *nic;
+  struct efhw_device_type dev_type;
   int rc;
 
   ASSERT_RTNL();
 
   if( efhw_nic_find(net_dev) ) {
     EFRM_TRACE("efrm_nic_add_ifindex: netdev %s already registered",
-               net_dev->name);
+               netdev_name(net_dev));
     return 0;
   }
 
@@ -44,7 +46,17 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
   EFRM_TRACE("Using VI range %d+(%d-%d)<<%d", res_dim.vi_base, res_dim.vi_min,
              res_dim.vi_lim, res_dim.vi_shift);
 
-  rc = efrm_nic_add(NULL, 0, net_dev, &lnic, &res_dim, timer_quantum_ns);
+  rc = efhw_nondl_device_type_init(&dev_type);
+  if( rc < 0 ) {
+    EFRM_ERR("%s: efhw_device_type_init failed %d", __func__, rc);
+    return rc;
+  }
+  EFRM_NOTICE("%s type=%d:%c%d ifindex=%d", netdev_name(net_dev),
+              dev_type.arch, dev_type.variant, dev_type.revision,
+              net_dev->ifindex);
+
+  rc = efrm_nic_add(NULL, &dev_type, 0, net_dev, &lnic, &res_dim,
+                    timer_quantum_ns);
   if (rc != 0)
     return rc;
 
