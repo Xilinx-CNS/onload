@@ -254,7 +254,15 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   for( i = 0; i < iovcnt; ++i )
     efct_tx_block(&tx, iov[i].iov_base, iov[i].iov_len);
 
-  efct_tx_complete(vi, &tx, EF_REQUEST_ID_MASK);
+  /* Use a valid but bogus dma_id rather than invalid EF_REQUEST_ID_MASK to
+   * support tcpdirect, which relies on the correct return value from
+   * ef_vi_transmit_unbundle to free its otherwise * unused transmit buffers.
+   */
+  efct_tx_complete(vi, &tx, 0);
+
+  /* TODO for ef_vi compatibility, we probably need an efct-specific version of
+   * ef_vi_transmit_ctpio_fallback to record the correct dma_id.
+   */
 }
 
 static void efct_ef_vi_transmitv_ctpio_copy(ef_vi* vi, size_t frame_len,
