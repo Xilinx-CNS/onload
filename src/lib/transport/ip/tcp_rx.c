@@ -1763,7 +1763,8 @@ static int ci_tcp_check_ooo_stripe(ci_netif* netif, ci_tcp_state* ts)
 static bool ci_tcp_rx_plugin_recycle(ci_netif* netif, ci_tcp_state* ts,
                                      ci_ip_pkt_fmt* pkt)
 {
-  bool rc;
+  bool rc = false;
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
   struct ef_vi_tx_extra extra = {
     .flags = EF_VI_TX_EXTRA_MARK,
     .mark = ts->plugin_stream_id,
@@ -1794,6 +1795,7 @@ static bool ci_tcp_rx_plugin_recycle(ci_netif* netif, ci_tcp_state* ts,
     pkt->flags &=~ CI_PKT_FLAG_TX_PENDING;
     ci_netif_pkt_release(netif, pkt);
   }
+#endif
   return rc;
 }
 
