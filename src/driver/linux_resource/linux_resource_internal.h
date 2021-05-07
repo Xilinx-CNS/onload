@@ -48,11 +48,6 @@
 
 extern int  efrm_driverlink_register(void);
 extern void efrm_driverlink_unregister(void);
-extern void efrm_driverlink_desist(struct efrm_nic* nic,
-				   unsigned failure_generation);
-extern void efrm_driverlink_resume(struct efrm_nic* nic);
-extern unsigned efrm_driverlink_generation(struct efrm_nic* nic);
-extern int enable_driverlink;
 
 extern int
 efrm_nic_add(struct efx_dl_device *dl_device,
@@ -95,12 +90,6 @@ int efrm_nondl_register_netdev(struct net_device *netdev,
 void efrm_notify_nic_probe(const struct net_device* netdev);
 void efrm_notify_nic_remove(const struct net_device* netdev);
 
-struct ethtool_rx_flow_spec;
-struct cmd_context {
-  struct net_device* netdev;
-};
-int rmgr_set_location(struct cmd_context* ctx,
-                      struct ethtool_rx_flow_spec* fsp);
 extern int efrm_nic_set_accel_allowed(struct efhw_nic* nic,
 				      int enable);
 extern int efrm_nic_get_accel_allowed(struct efhw_nic* nic);

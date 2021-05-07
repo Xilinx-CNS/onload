@@ -52,6 +52,8 @@
 struct efx_dl_device;
 struct efx_filter_spec;
 struct device;
+struct net_device;
+struct efrm_client;
 
 enum efrm_filter_block_flags {
 	EFRM_FILTER_BLOCK_UNICAST = 1,
@@ -69,6 +71,9 @@ extern int efrm_filter_redirect(struct efrm_client *,
 				int filter_id, struct efx_filter_spec *spec);
 extern int efrm_filter_block_kernel(struct efrm_client *client, int flags,
                                     bool block);
+extern int efrm_ethtool_filter_remove(struct net_device* dev, int filter_id);
+extern int efrm_ethtool_filter_insert(struct net_device* dev,
+				      struct efx_filter_spec* spec);
 
 
 int efrm_rss_context_alloc(struct efrm_client*, u32 vport_id,

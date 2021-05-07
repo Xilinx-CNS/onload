@@ -68,6 +68,7 @@
 #include "efrm_internal.h"
 #include "sfcaffinity.h"
 #include <ci/driver/resource/linux_efhw_nic.h>
+#include <ci/driver/resource/driverlink.h>
 
 MODULE_AUTHOR("Solarflare Communications");
 MODULE_LICENSE("GPL");
@@ -591,7 +592,7 @@ efrm_nic_add(struct efx_dl_device* dl_device,
 	efrm_nic = &lnic->efrm_nic;
 	nic = &efrm_nic->efhw_nic;
 	if( dev )
-		efrm_driverlink_resume(efrm_nic);
+		efrm_driverlink_resume(nic);
 	else
 		efrm_nic->rnic_flags |= EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED;
 

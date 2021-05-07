@@ -50,6 +50,7 @@
 #include <ci/internal/transport_config_opt.h>
 #include "sfcaffinity.h"
 #include <ci/driver/resource/linux_efhw_nic.h>
+#include <ci/driver/resource/driverlink.h>
 
 /* The DL driver and associated calls */
 static int efrm_dl_probe(struct efx_dl_device *efrm_dev,
@@ -377,7 +378,7 @@ static void efrm_dl_reset_resume(struct efx_dl_device *efrm_dev, int ok)
 	/* Driverlink calls might have been disabled forcibly if, e.g., the NIC
 	 * had been in BIST mode.  We know that they're safe now, so enable
 	 * them. */
-	efrm_driverlink_resume(efrm_nic);
+	efrm_driverlink_resume(nic);
 
 	/* VI base may have changed on EF10 and EF100 hardware */
 	if (nic->devtype.arch == EFHW_ARCH_EF10 ||
@@ -467,29 +468,32 @@ void efrm_driverlink_unregister(void)
 
 /* [failure_generation] is the value returned by efrm_driverlink_generation()
  * at some point before the detected failure that prompted this call. */
-void efrm_driverlink_desist(struct efrm_nic* nic, unsigned failure_generation)
+void efrm_driverlink_desist(struct efhw_nic* nic, unsigned failure_generation)
 {
+	struct efrm_nic *rnic = efrm_nic(nic);
 	EFRM_TRACE("%s:", __func__);
 
-	spin_lock_bh(&nic->lock);
-	if (failure_generation == nic->driverlink_generation)
-		nic->rnic_flags |= EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED;
-	spin_unlock_bh(&nic->lock);
+	spin_lock_bh(&rnic->lock);
+	if (failure_generation == rnic->driverlink_generation)
+		rnic->rnic_flags |= EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED;
+	spin_unlock_bh(&rnic->lock);
 }
 
-void efrm_driverlink_resume(struct efrm_nic* nic)
+void efrm_driverlink_resume(struct efhw_nic* nic)
 {
+	struct efrm_nic *rnic = efrm_nic(nic);
 	EFRM_TRACE("%s:", __func__);
 
-	spin_lock_bh(&nic->lock);
-	++nic->driverlink_generation;
-	nic->rnic_flags &= ~EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED;
-	spin_unlock_bh(&nic->lock);
+	spin_lock_bh(&rnic->lock);
+	++rnic->driverlink_generation;
+	rnic->rnic_flags &= ~EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED;
+	spin_unlock_bh(&rnic->lock);
 }
 
-unsigned efrm_driverlink_generation(struct efrm_nic* nic)
+unsigned efrm_driverlink_generation(struct efhw_nic* nic)
 {
-	return READ_ONCE(nic->driverlink_generation);
+	struct efrm_nic *rnic = efrm_nic(nic);
+	return READ_ONCE(rnic->driverlink_generation);
 }
 
 

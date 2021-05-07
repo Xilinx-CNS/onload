@@ -135,6 +135,9 @@
 #define efhw_nic_flush_rx_dma_channel(nic, client_id, dmaq) \
 	((nic)->efhw_func->flush_rx_dma_channel(nic, client_id, dmaq))
 
+#define efhw_nic_translate_dma_addrs(nic, src, dst, n) \
+	((nic))->efhw_func->translate_dma_addrs((nic), (src), (dst), (n)) \
+
 /* xdp specific */
 #define efhw_nic_dmaq_kick(nic,instance) \
 	((nic)->efhw_func->dmaq_kick((nic), (instance)))
@@ -172,23 +175,6 @@
 	((nic)->efhw_func->set_tx_port_sniff((nic), (instance), (enable), \
 					     (handle)))
 
-/*-------------- RSS ------------ */
-#define efhw_nic_rss_context_alloc(nic, vport_id, num_qs, shared, handle_out) \
-  ((nic)->efhw_func->rss_context_alloc((nic), (vport_id), (num_qs), (shared), \
-                                             (handle_out)))
-
-#define efhw_nic_rss_context_free(nic, handle)                          \
-        ((nic)->efhw_func->rss_context_free((nic), (handle)))
-
-#define efhw_nic_rss_context_set_table(nic, handle, table)              \
-	((nic)->efhw_func->rss_context_set_table((nic), (handle), (table)))
-
-#define efhw_nic_rss_context_set_key(nic, handle, key)                  \
-	((nic)->efhw_func->rss_context_set_key((nic), (handle), (key)))
-
-#define efhw_nic_rss_context_set_flags(nic, handle, flags)              \
-	((nic)->efhw_func->rss_context_set_flags((nic), (handle), (flags)))
-
 /*-------------- Licensing ---------------- */
 #define efhw_nic_license_challenge(nic, feature, challenge, expiry, signature) \
 	((nic)->efhw_func->license_challenge(nic, feature, challenge, expiry,  \
@@ -219,3 +205,33 @@
 
 #define efhw_nic_vi_set_user(nic, vi_instance, user) \
 	((nic)->efhw_func->vi_set_user((nic), (vi_instance), (user)))
+
+/*-------------- filtering --------------------- */
+#define efhw_nic_rss_alloc(nic, indir, key, nic_rss_flags, num_qs, context) \
+        ((nic)->efhw_func->rss_alloc((nic), (indir), (key), (nic_rss_flags), \
+				     (num_qs), (context)))
+#define efhw_nic_rss_update(nic, indir, key, nic_rss_flags, rss_context) \
+	((nic)->efhw_func->rss_update((nic), (indir), (key), (nic_rss_flags), \
+				      (rss_context)))
+#define efhw_nic_rss_free(nic, rss_context) \
+	((nic)->efhw_func->rss_free((nic), (rss_context)))
+#define efhw_nic_rss_flags(nic, flags_out) \
+	((nic)->efhw_func->rss_flags((nic), (flags_out)))
+
+#define efhw_nic_filter_insert(nic, spec, replace) \
+	((nic)->efhw_func->filter_insert((nic), (spec), (replace)))
+#define efhw_nic_filter_remove(nic, filter_id) \
+	((nic)->efhw_func->filter_remove((nic), (filter_id)))
+#define efhw_nic_filter_redirect(nic, filter_id, spec) \
+	((nic)->efhw_func->filter_redirect((nic), (filter_id), (spec)))
+
+#define efhw_nic_multicast_block(nic, block) \
+	((nic)->efhw_func->multicast_block((nic), (block)))
+#define efhw_nic_unicast_block(nic, block) \
+	((nic)->efhw_func->unicast_block((nic), (block)))
+
+/*-------------- vports ------------------------ */
+#define efhw_nic_vport_alloc(nic, vlan_id, vport_handle_out) \
+	((nic)->efhw_func->vport_alloc((nic), (vlan_id), (vport_handle_out)))
+#define efhw_nic_vport_free(nic, vport_handle) \
+	((nic)->efhw_func->vport_free((nic), (vport_handle)))

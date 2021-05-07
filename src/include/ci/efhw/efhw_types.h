@@ -126,6 +126,13 @@ struct eventq_resource_hardware {
  * Portable HW interface. ***************************************
  **********************************************************************/
 
+/* At the moment we define our filters in terms of an efx_filter_spec. Although
+ * this is really the internal format for a subset of supported NIC types,
+ * for ease of handling we use it here, and translate into other formats
+ * where it's not native.
+ */
+struct efx_filter_spec;
+
 /*--------------------------------------------------------------------
  *
  * EtherFabric Functional units - configuration and control
@@ -210,6 +217,9 @@ struct efhw_func_ops {
 	/*! Flush a given RX DMA channel */
 	int (*flush_rx_dma_channel) (struct efhw_nic *nic, uint32_t client_id,
 			       uint dmaq);
+
+	int (*translate_dma_addrs)(struct efhw_nic* nic, const dma_addr_t *src,
+				   dma_addr_t *dst, int n);
 
   /*-------------- Buffer table Support ------------ */
 	/*! Find all page orders available on this NIC.
@@ -305,6 +315,39 @@ struct efhw_func_ops {
 	/* Change the ID of the client allowed to create queues on a VI */
 	int (*vi_set_user)(struct efhw_nic *nic, uint32_t vi_instance,
 	                   uint32_t user);
+
+  /*-------------- filtering --------------------- */
+	/* Allocate a new RSS context */
+	int (*rss_alloc)(struct efhw_nic *nic, const u32 *indir,const u8 *key,
+			 u32 nic_rss_flags, int num_qs, u32 *rss_context_out);
+	/* Update an existing RSS context */
+	int (*rss_update)(struct efhw_nic *nic, const u32 *indir,
+			  const u8 *key, u32 nic_rss_flags, u32 rss_context);
+	/* Free an existing RSS context */
+	int (*rss_free)(struct efhw_nic *nic, u32 rss_context);
+	/* Get the default RSS flags */
+	int (*rss_flags)(struct efhw_nic *nic, u32 *flags_out);
+
+	/* Insert a filter */
+	int (*filter_insert)(struct efhw_nic *nic,
+			     struct efx_filter_spec *spec, bool replace);
+	/* Remove a filter */
+	void (*filter_remove)(struct efhw_nic *nic, int filter_id);
+	/* Redirect an existing filter */
+	int (*filter_redirect)(struct efhw_nic *nic, int filter_id,
+			       struct efx_filter_spec *spec);
+
+	/* Set multicast blocking behaviour */
+	int (*multicast_block)(struct efhw_nic *nic, bool block);
+	/* Set unicast blocking behaviour */
+	int (*unicast_block)(struct efhw_nic *nic, bool block);
+
+  /*-------------- vports ------------------------ */
+	/* Allocate a vport */
+	int (*vport_alloc)(struct efhw_nic *nic, u16 vlan_id,
+			   u16 *vport_handle_out);
+	/* Free a vport */
+	int (*vport_free)(struct efhw_nic *nic, u16 vport_handle);
 
   /*-------------- AF_XDP ------------------------ */
 

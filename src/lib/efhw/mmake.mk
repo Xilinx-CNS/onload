@@ -9,7 +9,8 @@ LIB_SRCS	:= nic.c \
 		   eventq.c \
 		   ef10.c \
 		   ef100.c \
-		   af_xdp.c
+		   af_xdp.c \
+		   ethtool_rxclass.c
 
 
 ifndef MMAKE_NO_RULES

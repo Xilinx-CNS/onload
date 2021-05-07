@@ -40,6 +40,7 @@
 #include <ci/efhw/efhw_buftable.h>
 
 #include <ci/driver/driverlink_api.h>
+#include <ci/driver/resource/driverlink.h>
 
 #include <ci/efhw/ef10.h>
 #include <ci/efhw/mc_driver_pcol.h>
@@ -1735,6 +1736,33 @@ int ef10_ef100_flush_rx_dma_channel(struct efhw_nic *nic, uint32_t client_id,
 }
 
 
+int ef10_ef100_translate_dma_addrs(struct efhw_nic* nic, const dma_addr_t *src,
+				   dma_addr_t *dst, int n)
+{
+	struct efx_dl_device *efx_dev;
+	int rc;
+
+	efx_dev = efhw_nic_acquire_dl_device(nic);
+	if (!efx_dev)
+		return -ENETDOWN;
+	rc = efx_dl_dma_xlate(efx_dev, src, dst, n);
+	if (rc < 0) {
+		EFHW_ERR("%s: ERROR: DMA address translation failed (%d)",
+		         __FUNCTION__, rc);
+	}
+	else if (rc < n) {
+		EFHW_ERR("%s: ERROR: DMA address translation failed on "
+		         "%d/%d (%llx)", __FUNCTION__, rc, n, src[rc]);
+		rc = -EIO;
+	}
+	else {
+		rc = 0;
+	}
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+
 /*--------------------------------------------------------------------
  *
  * Buffer table - MCDI cmds
@@ -2181,61 +2209,6 @@ ef10_get_rx_error_stats(struct efhw_nic *nic, int instance,
 }
 
 
-int
-ef10_vport_alloc(struct efhw_nic *nic, int vlan_id, unsigned *vport_id_out)
-{
-	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_VPORT_ALLOC_IN_LEN);
-	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_VPORT_ALLOC_OUT_LEN);
-	size_t out_size;
-	int rc;
-
-	EFHW_MCDI_INITIALISE_BUF(in);
-	EFHW_MCDI_INITIALISE_BUF(out);
-
-	if (vlan_id > 4095)
-		return -EINVAL;
-
-	EFHW_MCDI_SET_DWORD(in, VPORT_ALLOC_IN_UPSTREAM_PORT_ID,
-			    EVB_PORT_ID_ASSIGNED);
-	EFHW_MCDI_SET_DWORD(in, VPORT_ALLOC_IN_TYPE,
-			    MC_CMD_VPORT_ALLOC_IN_VPORT_TYPE_NORMAL);
-	if (vlan_id >= 0) {
-		EFHW_MCDI_SET_DWORD(in, VPORT_ALLOC_IN_NUM_VLAN_TAGS, 1);
-		EFHW_MCDI_POPULATE_DWORD_1(in, VPORT_ALLOC_IN_VLAN_TAGS,
-					   VPORT_ALLOC_IN_VLAN_TAG_0, vlan_id);
-	} else {
-		EFHW_MCDI_SET_DWORD(in, VPORT_ALLOC_IN_NUM_VLAN_TAGS, 0);
-	}
-	EFHW_MCDI_POPULATE_DWORD_1(in, VPORT_ALLOC_IN_FLAGS,
-				   VPORT_ALLOC_IN_FLAG_AUTO_PORT, 0);
-
-	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_VPORT_ALLOC, sizeof(in), sizeof(out),
-				 &out_size, in, out);
-	MCDI_CHECK(MC_CMD_VPORT_ALLOC, rc, out_size, 0);
-	if (rc)
-		return rc;
-	if (out_size < MC_CMD_VPORT_ALLOC_OUT_LEN)
-		return -EIO;
-
-	*vport_id_out = EFHW_MCDI_DWORD(out, VPORT_ALLOC_OUT_VPORT_ID);
-	return 0;
-}
-
-
-void
-ef10_vport_free(struct efhw_nic *nic, unsigned vport_id)
-{
-	size_t out_size;
-	int rc;
-	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_VPORT_FREE_IN_LEN);
-	EFHW_MCDI_INITIALISE_BUF(in);
-	EFHW_MCDI_SET_DWORD(in, VPORT_FREE_IN_VPORT_ID, vport_id);
-	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_VPORT_FREE, sizeof(in), 0,
-				 &out_size, in, NULL);
-	MCDI_CHECK(MC_CMD_VPORT_FREE, rc, out_size, 0);
-}
-
-
 /*--------------------------------------------------------------------
  *
  * Dynamic client IDs
@@ -2262,7 +2235,205 @@ ef10_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
 	return -ENOSYS;
 }
 
+/*--------------------------------------------------------------------
+ *
+ * Filtering
+ *
+ *--------------------------------------------------------------------*/
+int
+ef10_ef100_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
+		     u32 nic_rss_flags, int num_qs, u32 *rss_context_out)
+{
+	int rc;
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
 
+	if (efx_dev == NULL)
+		return -ENETDOWN;
+	rc = efx_dl_rss_context_new(efx_dev, indir, key, nic_rss_flags,
+				    num_qs, rss_context_out);
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+int
+ef10_ef100_rss_update(struct efhw_nic *nic, const u32 *indir, const u8 *key,
+		      u32 nic_rss_flags, u32 rss_context)
+{
+	int rc;
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+
+	if (efx_dev == NULL)
+		return -ENETDOWN;
+	rc = efx_dl_rss_context_set(efx_dev, indir, key, nic_rss_flags,
+				    rss_context);
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+int
+ef10_ef100_rss_free(struct efhw_nic *nic, u32 rss_context)
+{
+	int rc;
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+
+	if (efx_dev == NULL)
+		return -ENETDOWN;
+	rc = efx_dl_rss_context_free(efx_dev, rss_context);
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+int
+ef10_ef100_rss_flags(struct efhw_nic *nic, u32 *flags_out)
+{
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+
+	if (efx_dev == NULL)
+		return -ENETDOWN;
+	*flags_out = efx_dl_rss_flags_default(efx_dev);
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return 0;
+}
+
+int
+ef10_ef100_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
+			 bool replace)
+{
+	int rc;
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+
+	if (efx_dev == NULL)
+		return -ENETDOWN;
+	rc = efx_dl_filter_insert(efx_dev, spec, replace);
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+void
+ef10_ef100_filter_remove(struct efhw_nic *nic, int filter_id)
+{
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+
+	if( efx_dev != NULL ) {
+		/* If the filter op fails with ENETDOWN, that indicates that
+		 * the hardware is inacessible but that the device has not
+		 * (yet) been shut down.  It will be recovered by a subsequent
+		 * reset.  In the meantime, the net driver's and Onload's
+		 * opinions as to the installed filters will diverge.  We
+		 * minimise the damage by preventing further driverlink
+		 * activity until the reset happens. */
+		unsigned generation = efrm_driverlink_generation(nic);
+		if( efx_dl_filter_remove(efx_dev, filter_id) == -ENETDOWN )
+			efrm_driverlink_desist(nic, generation);
+		efhw_nic_release_dl_device(nic, efx_dev);
+	}
+	/* If [efx_dev] is NULL, the hardware is morally absent and so there's
+	 * nothing to do. */
+}
+
+int
+ef10_ef100_filter_redirect(struct efhw_nic *nic, int filter_id,
+			   struct efx_filter_spec *spec)
+{
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+	int stack_id = spec->flags & EFX_FILTER_FLAG_STACK_ID ?
+		       spec->stack_id : 0;
+	int rc;
+
+	/* If [efx_dev] is NULL, the hardware is morally absent and so there's
+	* nothing to do. */
+	if (efx_dev == NULL)
+		return -ENODEV;
+
+	if (spec->flags & EFX_FILTER_FLAG_RX_RSS )
+		rc = efx_dl_filter_redirect_rss(efx_dev, filter_id,
+						spec->dmaq_id,
+						spec->rss_context, stack_id);
+	else
+		rc = efx_dl_filter_redirect(efx_dev, filter_id, spec->dmaq_id,
+					    stack_id);
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+int
+ef10_ef100_multicast_block(struct efhw_nic *nic, bool block)
+{
+	int rc = 0;
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+
+	if (efx_dev == NULL)
+		return -ENETDOWN;
+	if( block )
+		rc = efx_dl_filter_block_kernel(efx_dev,
+					    EFX_DL_FILTER_BLOCK_KERNEL_MCAST);
+	else
+		efx_dl_filter_unblock_kernel(efx_dev,
+					    EFX_DL_FILTER_BLOCK_KERNEL_MCAST);
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+int
+ef10_ef100_unicast_block(struct efhw_nic *nic, bool block)
+{
+	int rc = 0;
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+
+	if (efx_dev == NULL)
+		return -ENETDOWN;
+	if( block )
+		rc = efx_dl_filter_block_kernel(efx_dev,
+					    EFX_DL_FILTER_BLOCK_KERNEL_UCAST);
+	else
+		efx_dl_filter_unblock_kernel(efx_dev,
+					    EFX_DL_FILTER_BLOCK_KERNEL_UCAST);
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+/*--------------------------------------------------------------------
+ *
+ * vports
+ *
+ *--------------------------------------------------------------------*/
+int
+ef10_ef100_vport_alloc(struct efhw_nic *nic, u16 vlan_id,
+		       u16 *vport_handle_out)
+{
+	int rc;
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+
+	/* If [efx_dev] is NULL, the hardware is morally absent. */
+	if (efx_dev == NULL)
+		return -ENETDOWN;
+
+	rc = efx_dl_vport_new(efx_dev, vlan_id, 0);
+	if( rc >= 0 ) {
+		*vport_handle_out = rc;
+		rc = 0;
+	}
+
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+int
+ef10_ef100_vport_free(struct efhw_nic *nic, u16 vport_handle)
+{
+	int rc;
+	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+
+	/* If [efx_dev] is NULL, the hardware is morally absent. */
+	if (efx_dev == NULL)
+		return -ENETDOWN;
+
+	rc = efx_dl_vport_free(efx_dev, vport_handle);
+
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+ 
 /*--------------------------------------------------------------------
  *
  * AF_XDP
@@ -2308,6 +2479,7 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_ef100_dmaq_rx_q_disable,
 	ef10_ef100_flush_tx_dma_channel,
 	ef10_ef100_flush_rx_dma_channel,
+	ef10_ef100_translate_dma_addrs,
 	__ef10_nic_buffer_table_get_orders,
 	sizeof(__ef10_nic_buffer_table_get_orders) /
 		sizeof(__ef10_nic_buffer_table_get_orders[0]),
@@ -2328,6 +2500,17 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_client_alloc,
 	ef10_client_free,
 	ef10_vi_set_user,
+	ef10_ef100_rss_alloc,
+	ef10_ef100_rss_update,
+	ef10_ef100_rss_free,
+	ef10_ef100_rss_flags,
+	ef10_ef100_filter_insert,
+	ef10_ef100_filter_remove,
+	ef10_ef100_filter_redirect,
+	ef10_ef100_multicast_block,
+	ef10_ef100_unicast_block,
+	ef10_ef100_vport_alloc,
+	ef10_ef100_vport_free,
 	ef10_dmaq_kick,
 	ef10_af_xdp_mem,
 	ef10_af_xdp_init,

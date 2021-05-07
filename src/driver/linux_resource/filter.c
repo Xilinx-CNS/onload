@@ -38,10 +38,8 @@
  */
 #include <linux/device.h>
 #include <linux/ctype.h>
-#include <linux/ethtool.h>
 
 #include "linux_resource_internal.h"
-#include <ci/driver/driverlink_api.h>
 #include <ci/driver/kernel_compat.h>
 #include <ci/driver/internal.h>
 #include <ci/tools/byteorder.h>
@@ -2064,25 +2062,31 @@ int efrm_filter_rename( struct efhw_nic *nic, struct net_device *net_dev )
 	return 0;
 }
 
-ci_inline u32 efrm_rss_mode_to_nic_flags(struct efhw_nic *efhw_nic,
-                                         struct efx_dl_device *efx_dev,
-					 u32 efrm_rss_mode)
+int efrm_rss_mode_to_nic_flags(struct efhw_nic *efhw_nic, u32 efrm_rss_mode,
+			       u32 *flags_out)
 {
+	int rc;
+	u32 rss_flags;
 	u32 nic_tcp_mode;
 	u32 nic_src_mode = (1 << RSS_MODE_HASH_SRC_ADDR_LBN) |
 			   (1 << RSS_MODE_HASH_SRC_PORT_LBN);
 	u32 nic_dst_mode = (1 << RSS_MODE_HASH_DST_ADDR_LBN) |
 			   (1 << RSS_MODE_HASH_DST_PORT_LBN);
 	u32 nic_all_mode = nic_src_mode | nic_dst_mode;
-	ci_dword_t nic_flags = { {efx_dl_rss_flags_default(efx_dev)} };
 	ci_dword_t nic_flags_new;
 	ci_dword_t nic_flags_mask;
+
+	rc = efhw_nic_rss_flags(efhw_nic, &rss_flags);
+	if( rc < 0 )
+		return rc;
 
         /* we need to use default flags in packed stream mode,
          * note in that case TCP hashing will surely be enabled,
          * so nothing to do there anyway */
-        if( efhw_nic->flags & NIC_FLAG_RX_RSS_LIMITED )
-                return nic_flags.u32[0];
+        if( efhw_nic->flags & NIC_FLAG_RX_RSS_LIMITED ) {
+		*flags_out = rss_flags;
+		return 0;
+	}
 
 	switch(efrm_rss_mode) {
 	case EFRM_RSS_MODE_SRC:
@@ -2112,7 +2116,9 @@ ci_inline u32 efrm_rss_mode_to_nic_flags(struct efhw_nic *efhw_nic,
 		MC_CMD_RSS_CONTEXT_SET_FLAGS_IN_TCP_IPV4_RSS_MODE, nic_tcp_mode
 		);
         EFHW_ASSERT((nic_flags_new.u32[0] & nic_flags_mask.u32[0]) == nic_flags_new.u32[0]);
-	return (nic_flags.u32[0] & ~nic_flags_mask.u32[0]) | nic_flags_new.u32[0];
+	*flags_out = (rss_flags & ~nic_flags_mask.u32[0]) |
+		     nic_flags_new.u32[0];
+	return 0;
 }
 
 int efrm_rss_context_alloc(struct efrm_client* client, u32 vport_id,
@@ -2124,18 +2130,16 @@ int efrm_rss_context_alloc(struct efrm_client* client, u32 vport_id,
 {
 	int rc;
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	struct efx_dl_device *efx_dev;
-	u32 nic_rss_flags;
+	u32 rss_flags;
 
-	efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
-	/* If [efx_dev] is NULL, the hardware is morally absent. */
-	if (efx_dev == NULL)
-		return -ENETDOWN;
-	nic_rss_flags = efrm_rss_mode_to_nic_flags(efhw_nic, efx_dev, efrm_rss_mode);
+	rc = efrm_rss_mode_to_nic_flags(efhw_nic, efrm_rss_mode, &rss_flags);
+	if( rc < 0 )
+		return rc;
+
 	/* Driverlink API takes ef10 MCDI compatible RSS flags */
-	rc = efx_dl_rss_context_new(efx_dev, indir, key, nic_rss_flags,
-				    num_qs, rss_context_out);
-	efhw_nic_release_dl_device(efhw_nic, efx_dev);
+	rc = efhw_nic_rss_alloc(efhw_nic, indir, key, rss_flags,
+				num_qs, rss_context_out);
+
 	return rc;
 }
 EXPORT_SYMBOL(efrm_rss_context_alloc);
@@ -2145,19 +2149,14 @@ int efrm_rss_context_update(struct efrm_client* client, u32 rss_context,
 			    const u32 *indir, const u8 *key, u32 efrm_rss_mode)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	struct efx_dl_device* efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
 	u32 nic_rss_flags;
 	int rc;
 
-	/* If [efx_dev] is NULL, the hardware is morally absent. */
-	if (efx_dev == NULL)
-		return -ENETDOWN;
+	rc = efrm_rss_mode_to_nic_flags(efhw_nic, efrm_rss_mode, &nic_rss_flags);
+	if( rc < 0 )
+		return rc;
 
-	nic_rss_flags = efrm_rss_mode_to_nic_flags(efhw_nic, efx_dev, efrm_rss_mode);
-	rc = efx_dl_rss_context_set(efx_dev, indir, key, nic_rss_flags,
-				    rss_context);
-
-	efhw_nic_release_dl_device(efhw_nic, efx_dev);
+	rc = efhw_nic_rss_update(efhw_nic, indir, key, nic_rss_flags, rss_context);
 
 	return rc;
 }
@@ -2167,183 +2166,42 @@ EXPORT_SYMBOL(efrm_rss_context_update);
 int efrm_rss_context_free(struct efrm_client* client, u32 rss_context_id)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-        struct efx_dl_device *efx_dev;
-        int rc;
-        efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
-        /* If [efx_dev] is NULL, the hardware is morally absent. */
-        if (efx_dev == NULL)
-                return -ENETDOWN;
-        rc = efx_dl_rss_context_free(efx_dev, rss_context_id);
-        efhw_nic_release_dl_device(efhw_nic, efx_dev);
-        return rc;
+        return efhw_nic_rss_free(efhw_nic, rss_context_id);
 }
 EXPORT_SYMBOL(efrm_rss_context_free);
 
 int efrm_vport_alloc(struct efrm_client* client, u16 vlan_id, u16 *vport_handle_out)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	struct efx_dl_device *efx_dev;
-	int rc;
-	efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
-	/* If [efx_dev] is NULL, the hardware is morally absent. */
-	if (efx_dev == NULL)
-		return -ENETDOWN;
-	rc = efx_dl_vport_new(efx_dev, vlan_id, 0);
-	if( rc >= 0 ) {
-		*vport_handle_out = rc;
-		rc = 0;
-	}
-	efhw_nic_release_dl_device(efhw_nic, efx_dev);
-	return rc;
+	return efhw_nic_vport_alloc(efhw_nic, vlan_id,
+				    vport_handle_out);
 }
 EXPORT_SYMBOL(efrm_vport_alloc);
 
 int efrm_vport_free(struct efrm_client* client, u16 vport_handle)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	struct efx_dl_device *efx_dev;
-	int rc;
-	efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
-	/* If [efx_dev] is NULL, the hardware is morally absent. */
-	if (efx_dev == NULL)
-		return -ENETDOWN;
-	rc = efx_dl_vport_free(efx_dev, vport_handle);
-	efhw_nic_release_dl_device(efhw_nic, efx_dev);
-	return rc;
+	return efhw_nic_vport_free(efhw_nic, vport_handle);
 }
 EXPORT_SYMBOL(efrm_vport_free);
 
 /* ************************************************************* */
 /* Entry point: check if a filter is valid, and insert it if so. */
 /* ************************************************************* */
-#ifdef EFHW_HAS_AF_XDP
-
-#define EFX_IP_FILTER_MATCH_FLAGS \
-                (EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_IP_PROTO | \
-                 EFX_FILTER_MATCH_LOC_HOST | EFX_FILTER_MATCH_LOC_PORT)
-
-static int efrm_efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
-					 struct ethtool_rx_flow_spec* fs)
-{
-	/* In order to support different driver capabilities we need to
-	 * always install the same filter type. This means that we will
-	 * always use a 3-tuple IP filter, even if a 5-tuple was requested.
-	 * Although this can in theory match traffic not destined for us, in
-	 * practice common usage means that it's sufficiently specific.
-	 *
-	 * The ethtool interface does not complain if a duplicate filter is
-	 * inserted, and does not reference count such filters. That causes
-	 * issues for the case where onload tries to replace a wild match
-	 * filter with a full match filter, as it will add the new full match
-	 * before removing the original wild. However, we treat both of these
-	 * as the same 3-tuple and so the net result is that we remove the
-	 * filter entirely. This occurs in two circumstances:
-	 * - closing a listening socket with accepted sockets still open
-	 * - connecting an already bound UDP socket
-	 * We can avoid the first by setting oof_shared_keep_thresh=0 when
-	 * using AF_XDP.
-	 * The second is a rare case, and the failure mode here is to fall
-	 * back to traffic via the kernel, so I'm living with it for now.
-	 */
-
-	/* Check that this is an IP filter */
-	if ((efx_spec->match_flags & EFX_IP_FILTER_MATCH_FLAGS) !=
-	    EFX_IP_FILTER_MATCH_FLAGS)
-		return -EOPNOTSUPP;
-
-	/* FIXME AF_XDP need to check whether we can install both IPv6 and
-	 * IPv4 filters. For now just support IPv4.
-	 */
-	if (efx_spec->ether_type != ntohs(ETH_P_IP))
-		return -EOPNOTSUPP;
-
-	if (efx_spec->ip_proto == IPPROTO_TCP)
-		fs->flow_type = TCP_V4_FLOW;
-	else if (efx_spec->ip_proto == IPPROTO_UDP)
-		fs->flow_type = UDP_V4_FLOW;
-	else
-		return -EINVAL;
-
-	/* Populate the match fields. For each field we need to set both the
-	 * value, and a mask of which bits in that field to match against.
-	 */
-	fs->h_u.tcp_ip4_spec.ip4dst = efx_spec->loc_host[0];
-	fs->m_u.tcp_ip4_spec.ip4dst = 0xffffffff;
-	fs->h_u.tcp_ip4_spec.pdst = efx_spec->loc_port;
-	fs->m_u.tcp_ip4_spec.pdst = 0xffff;
-
-	/* Give the driver free rein on where to insert the filter. */
-	fs->location = RX_CLS_LOC_ANY;
-
-	/* TODO AF_XDP: for now assume dmaq_id matches NIC channel
-	 * based on insight into efhw/af_xdp.c */
-	fs->ring_cookie = efx_spec->dmaq_id;
-
-	return 0;
-}
-
-static int efrm_ethtool_filter_insert(struct net_device* dev,
-				      struct efx_filter_spec* spec)
-{
-	int rc;
-	struct ethtool_rxnfc info;
-	const struct ethtool_ops *ops;
-	struct cmd_context ctx;
-
-	memset(&info, 0, sizeof(info));
-	info.cmd = ETHTOOL_SRXCLSRLINS;
-	rc = efrm_efx_spec_to_ethtool_flow(spec, &info.fs);
-	if ( rc < 0 )
-		return rc;
-
-	rtnl_lock();
-
-	ops = dev->ethtool_ops;
-	if (!ops->set_rxnfc) {
-		rc = -EOPNOTSUPP;
-		goto unlock_out;
-	}
-
-	ctx.netdev = dev;
-	rc = rmgr_set_location(&ctx, &info.fs);
-	if ( rc < 0 )
-		goto unlock_out;
-
-	rc = ops->set_rxnfc(dev, &info);
-	if ( rc >= 0 )
-		rc = info.fs.location;
-
-unlock_out:
-	rtnl_unlock();
-	return rc;
-}
-
-#endif
 
 int efrm_filter_insert(struct efrm_client *client,
 		       struct efx_filter_spec *spec,
 		       bool replace)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
 	struct net_device* net_dev;
 	int rc;
-
-#ifdef EFHW_HAS_AF_XDP
-	if ( efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP )
-		return efrm_ethtool_filter_insert(efhw_nic->net_dev, spec);
-#endif
-	/* If [efx_dev] is NULL, the hardware is morally absent. */
-	if ( efx_dev == NULL )
-		return -ENETDOWN;
 
 #if CI_CFG_IPV6
 	/* FIXME: add IPv6 support to firewall rules (bug 85208) */
 	if ( (spec->match_flags & EFX_FILTER_MATCH_ETHER_TYPE) &&
 	     (spec->ether_type == htons(ETH_P_IPV6)) ) {
-		rc = efx_dl_filter_insert( efx_dev, spec, replace );
-		efhw_nic_release_dl_device(efhw_nic, efx_dev);
-		return rc;
+		return efhw_nic_filter_insert( efhw_nic, spec, replace );
 	}
 #endif
 
@@ -2355,8 +2213,7 @@ int efrm_filter_insert(struct efrm_client *client,
 		rc = efrm_filter_check( net_dev->dev.parent, spec );
 		dev_put(net_dev);
 		if ( rc >= 0 )
-			rc = efx_dl_filter_insert( efx_dev, spec, replace );
-		efhw_nic_release_dl_device(efhw_nic, efx_dev);
+			rc = efhw_nic_filter_insert( efhw_nic, spec, replace );
 	}
 	else {
 		rc = -ENODEV;
@@ -2366,55 +2223,10 @@ int efrm_filter_insert(struct efrm_client *client,
 EXPORT_SYMBOL(efrm_filter_insert);
 
 
-#ifdef EFHW_HAS_AF_XDP
-static int efrm_ethtool_filter_remove(struct net_device* dev, int filter_id)
-{
-	struct ethtool_rxnfc info;
-	const struct ethtool_ops *ops;
-	int rc;
-
-	memset(&info, 0, sizeof(info));
-	info.cmd = ETHTOOL_SRXCLSRLDEL;
-	info.fs.location = filter_id;
-
-	rtnl_lock();
-	ops = dev->ethtool_ops;
-	if (!ops->set_rxnfc)
-		rc = -EOPNOTSUPP;
-	else
-		rc = ops->set_rxnfc(dev, &info);
-	rtnl_unlock();
-	return rc;
-}
-#endif
-
 void efrm_filter_remove(struct efrm_client *client, int filter_id)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	struct efrm_nic *rnic = efrm_nic(efhw_nic);
-	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
-
-#ifdef EFHW_HAS_AF_XDP
-	if ( efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP ) {
-		efrm_ethtool_filter_remove(efhw_nic->net_dev, filter_id);
-		return;
-	}
-#endif
-	if( efx_dev != NULL ) {
-		/* If the filter op fails with ENETDOWN, that indicates that
-		 * the hardware is inacessible but that the device has not
-		 * (yet) been shut down.  It will be recovered by a subsequent
-		 * reset.  In the meantime, the net driver's and Onload's
-		 * opinions as to the installed filters will diverge.  We
-		 * minimise the damage by preventing further driverlink
-		 * activity until the reset happens. */
-		unsigned generation = efrm_driverlink_generation(rnic);
-		if( efx_dl_filter_remove(efx_dev, filter_id) == -ENETDOWN )
-			efrm_driverlink_desist(rnic, generation);
-		efhw_nic_release_dl_device(efhw_nic, efx_dev);
-	}
-	/* If [efx_dev] is NULL, the hardware is morally absent and so there's
-	 * nothing to do. */
+	efhw_nic_filter_remove(efhw_nic, filter_id);
 }
 EXPORT_SYMBOL(efrm_filter_remove);
 
@@ -2423,21 +2235,7 @@ int efrm_filter_redirect(struct efrm_client *client, int filter_id,
 			 struct efx_filter_spec *spec)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
-	int stack_id = spec->flags & EFX_FILTER_FLAG_STACK_ID ? spec->stack_id : 0;
-	int rc;
-	/* If [efx_dev] is NULL, the hardware is morally absent and so there's
-	 * nothing to do. */
-	if (efx_dev == NULL)
-		return -ENODEV;
-	if (spec->flags & EFX_FILTER_FLAG_RX_RSS )
-		rc = efx_dl_filter_redirect_rss(efx_dev, filter_id, spec->dmaq_id,
-						spec->rss_context, stack_id);
-	else
-		rc = efx_dl_filter_redirect(efx_dev, filter_id, spec->dmaq_id,
-					    stack_id);
-	efhw_nic_release_dl_device(efhw_nic, efx_dev);
-	return rc;
+	return efhw_nic_filter_redirect(efhw_nic, filter_id, spec);
 }
 EXPORT_SYMBOL(efrm_filter_redirect);
 
@@ -2445,40 +2243,29 @@ EXPORT_SYMBOL(efrm_filter_redirect);
 int efrm_filter_block_kernel(struct efrm_client *client, int flags, bool block)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(efhw_nic);
 	int rc = 0;
-
-	/* If [efx_dev] is NULL, the hardware is morally absent and so there's
-	 * nothing to do. This counts as success. */
-	if ( efx_dev == NULL )
-		return 0;
 
 	if ( block ) {
 		if ( flags & EFRM_FILTER_BLOCK_UNICAST ) {
-			rc = efx_dl_filter_block_kernel(efx_dev,
-					EFX_DL_FILTER_BLOCK_KERNEL_UCAST);
+			rc = efhw_nic_unicast_block(efhw_nic, true);
 		}
 		if ( rc < 0 )
 			goto out;
 		if ( flags & EFRM_FILTER_BLOCK_MULTICAST ) {
-			rc = efx_dl_filter_block_kernel(efx_dev,
-					EFX_DL_FILTER_BLOCK_KERNEL_MCAST);
+			rc = efhw_nic_multicast_block(efhw_nic, true);
 		}
 		if ( rc < 0 )
 			goto unicast_unblock;
 	} else {
 		if ( flags & EFRM_FILTER_BLOCK_MULTICAST ) {
-			efx_dl_filter_unblock_kernel(efx_dev,
-					EFX_DL_FILTER_BLOCK_KERNEL_MCAST);
+			rc = efhw_nic_multicast_block(efhw_nic, false);
 		}
 unicast_unblock:
 		if ( flags & EFRM_FILTER_BLOCK_UNICAST ) {
-			efx_dl_filter_unblock_kernel(efx_dev,
-					EFX_DL_FILTER_BLOCK_KERNEL_UCAST);
+			efhw_nic_unicast_block(efhw_nic, false);
 		}
 	}
 out:
-	efhw_nic_release_dl_device(efhw_nic, efx_dev);
 	return rc;
 }
 EXPORT_SYMBOL(efrm_filter_block_kernel);

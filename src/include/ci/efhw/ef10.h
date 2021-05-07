@@ -124,6 +124,9 @@ extern int ef10_ef100_flush_tx_dma_channel(struct efhw_nic *nic,
 
 extern int ef10_ef100_flush_rx_dma_channel(struct efhw_nic *nic,
 					   uint32_t client_id, uint dmaq);
+extern int ef10_ef100_translate_dma_addrs(struct efhw_nic* nic,
+					  const dma_addr_t *src,
+					  dma_addr_t *dst, int n);
 
 extern int ef10_ef100_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
 					     struct efhw_buffer_table_block **block_out,
@@ -151,9 +154,29 @@ extern int ef10_nic_piobuf_link(struct efhw_nic*, unsigned txq,
 				unsigned handle);
 extern int ef10_nic_piobuf_unlink(struct efhw_nic*, unsigned txq);
 
-extern int ef10_vport_alloc(struct efhw_nic *nic, int vlan_id,
-			    unsigned *vport_id_out);
-extern void ef10_vport_free(struct efhw_nic *nic, unsigned vport_id);
+extern int ef10_ef100_rss_alloc(struct efhw_nic *nic, const u32 *indir,
+				const u8 *key, u32 nic_rss_flags, int num_qs,
+				u32 *rss_context_out);
+extern int ef10_ef100_rss_update(struct efhw_nic *nic, const u32 *indir,
+				 const u8 *key, u32 nic_rss_flags,
+				 u32 rss_context);
+extern int ef10_ef100_rss_free(struct efhw_nic *nic, u32 rss_context);
+extern int ef10_ef100_rss_flags(struct efhw_nic *nic, u32 *flags_out);
+
+struct efx_filter_spec;
+extern int ef10_ef100_filter_insert(struct efhw_nic *nic,
+				    struct efx_filter_spec *spec,
+				    bool replace);
+extern void ef10_ef100_filter_remove(struct efhw_nic *nic, int filter_id);
+extern int ef10_ef100_filter_redirect(struct efhw_nic *nic, int filter_id,
+				      struct efx_filter_spec *spec);
+
+extern int ef10_ef100_multicast_block(struct efhw_nic *nic, bool block);
+extern int ef10_ef100_unicast_block(struct efhw_nic *nic, bool block);
+
+extern int ef10_ef100_vport_alloc(struct efhw_nic *nic, u16 vlan_id,
+				  u16 *vport_handle_out);
+extern int ef10_ef100_vport_free(struct efhw_nic *nic, u16 vport_handle);
 
 
 #define EFX_DL_PRE(efx_dev, nic, rc) \

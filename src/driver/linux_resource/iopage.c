@@ -35,6 +35,7 @@
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/kernel_compat.h>
 #include <ci/efhw/nic.h>
+#include <ci/driver/efab/hardware.h>
 #include <ci/efrm/debug.h>
 
 

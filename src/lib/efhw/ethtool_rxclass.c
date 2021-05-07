@@ -13,7 +13,8 @@
 
 #include <linux/ethtool.h>
 #include <linux/rtnetlink.h>
-#include "linux_resource_internal.h"
+#include <ci/efhw/debug_linux.h>
+#include "ethtool_rxclass.h"
 
 
 static int send_ioctl(struct cmd_context *ctx, void* cmd)
@@ -24,7 +25,7 @@ static int send_ioctl(struct cmd_context *ctx, void* cmd)
 	if (!ops->get_rxnfc)
 		return -EOPNOTSUPP;
 
-	EFRM_ASSERT((info->cmd == ETHTOOL_GRXCLSRLCNT) ||
+	EFHW_ASSERT((info->cmd == ETHTOOL_GRXCLSRLCNT) ||
 		    (info->cmd == ETHTOOL_GRXCLSRLALL));
 
 	return ops->get_rxnfc(ctx->netdev, info, info->rule_locs);
@@ -44,7 +45,7 @@ static int rxclass_get_dev_info(struct cmd_context *ctx, __u32 *count,
 	if (driver_select)
 		*driver_select = !!(nfccmd.data & RX_CLS_LOC_SPECIAL);
 	if (err < 0)
-		EFRM_WARN("%s: rxclass: Cannot get RX class rule count",
+		EFHW_WARN("%s: rxclass: Cannot get RX class rule count",
 			  __FUNCTION__);
 
 	return err;
@@ -70,7 +71,7 @@ static int rmgr_ins(struct rmgr_ctrl *rmgr, __u32 loc)
 {
 	/* verify location is in rule manager range */
 	if (loc >= rmgr->size) {
-		EFRM_WARN("%s: rmgr: Location out of range\n", __FUNCTION__);
+		EFHW_WARN("%s: rmgr: Location out of range\n", __FUNCTION__);
 		return -1;
 	}
 
@@ -133,7 +134,7 @@ static int rmgr_find_empty_slot(struct rmgr_ctrl *rmgr,
 	}
 
 	/* No space to add this rule */
-	EFRM_WARN("%s: rmgr: Cannot find appropriate slot to insert rule\n",
+	EFHW_WARN("%s: rmgr: Cannot find appropriate slot to insert rule\n",
 		  __FUNCTION__);
 
 	return -1;
@@ -161,7 +162,7 @@ static int rmgr_init(struct cmd_context *ctx, struct rmgr_ctrl *rmgr)
 	nfccmd = kzalloc(sizeof(*nfccmd) + (rmgr->n_rules * sizeof(__u32)),
 			 GFP_KERNEL);
 	if (!nfccmd) {
-		EFRM_WARN("%s: rmgr: Cannot allocate memory for"
+		EFHW_WARN("%s: rmgr: Cannot allocate memory for"
 			  " RX class rule locations", __FUNCTION__);
 		return -1;
 	}
@@ -171,7 +172,7 @@ static int rmgr_init(struct cmd_context *ctx, struct rmgr_ctrl *rmgr)
 	nfccmd->rule_cnt = rmgr->n_rules;
 	err = send_ioctl(ctx, nfccmd);
 	if (err < 0) {
-		EFRM_WARN("%s: rmgr: Cannot get RX class rules", __FUNCTION__);
+		EFHW_WARN("%s: rmgr: Cannot get RX class rules", __FUNCTION__);
 		kfree(nfccmd);
 		return err;
 	}
@@ -179,7 +180,7 @@ static int rmgr_init(struct cmd_context *ctx, struct rmgr_ctrl *rmgr)
 	/* make certain the table size is valid */
 	rmgr->size = nfccmd->data;
 	if (rmgr->size == 0 || rmgr->size < rmgr->n_rules) {
-		EFRM_WARN("%s: rmgr: Invalid RX class rules table size",
+		EFHW_WARN("%s: rmgr: Invalid RX class rules table size",
 			  __FUNCTION__);
 		return -1;
 	}
@@ -188,7 +189,7 @@ static int rmgr_init(struct cmd_context *ctx, struct rmgr_ctrl *rmgr)
 	rmgr->slot = kzalloc(BITS_TO_LONGS(rmgr->size) * sizeof(long),
 			     GFP_KERNEL);
 	if (!rmgr->slot) {
-		EFRM_WARN("%s: rmgr: Cannot allocate memory for RX class rules",
+		EFHW_WARN("%s: rmgr: Cannot allocate memory for RX class rules",
 			  __FUNCTION__);
 		return -1;
 	}

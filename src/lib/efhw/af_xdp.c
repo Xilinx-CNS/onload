@@ -12,6 +12,7 @@
 
 #include <linux/socket.h>
 
+#include <linux/ethtool.h>
 #include <linux/if_xdp.h>
 #include <linux/file.h>
 #include <linux/bpf.h>
@@ -21,7 +22,9 @@
 #include <net/sock.h>
 
 #include <ci/efrm/syscall.h>
+#include <ci/efrm/efrm_filter.h>
 
+#include "ethtool_rxclass.h"
 
 /* sys_call_area: a process-mapped area which can be used to perform
  * system calls from a module.
@@ -1201,6 +1204,13 @@ static int af_xdp_flush_rx_dma_channel(struct efhw_nic *nic,
 }
 
 
+static int af_xdp_translate_dma_addrs(struct efhw_nic* nic,
+				      const dma_addr_t *src, dma_addr_t *dst,
+				      int n)
+{
+	return -EOPNOTSUPP;
+}
+
 /*--------------------------------------------------------------------
  *
  * Buffer table - API
@@ -1395,7 +1405,192 @@ af_xdp_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
 	return -ENOSYS;
 }
 
+/*--------------------------------------------------------------------
+ *
+ * Filtering
+ *
+ *--------------------------------------------------------------------*/
+static int
+af_xdp_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
+		 u32 nic_rss_flags, int num_qs, u32 *rss_context_out)
+{
+	return -ENOSYS;
+}
 
+static int
+af_xdp_rss_update(struct efhw_nic *nic, const u32 *indir, const u8 *key,
+		  u32 nic_rss_flags, u32 rss_context)
+{
+	return -ENOSYS;
+}
+
+static int
+af_xdp_rss_free(struct efhw_nic *nic, u32 rss_context)
+{
+	return -ENOSYS;
+}
+
+static int
+af_xdp_rss_flags(struct efhw_nic *nic, u32 *flags_out)
+{
+	return -ENOSYS;
+}
+
+#define EFX_IP_FILTER_MATCH_FLAGS \
+                (EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_IP_PROTO | \
+                 EFX_FILTER_MATCH_LOC_HOST | EFX_FILTER_MATCH_LOC_PORT)
+
+static int efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
+				    struct ethtool_rx_flow_spec* fs)
+{
+	/* In order to support different driver capabilities we need to
+	 * always install the same filter type. This means that we will
+	 * always use a 3-tuple IP filter, even if a 5-tuple was requested.
+	 * Although this can in theory match traffic not destined for us, in
+	 * practice common usage means that it's sufficiently specific.
+	 *
+	 * The ethtool interface does not complain if a duplicate filter is
+	 * inserted, and does not reference count such filters. That causes
+	 * issues for the case where onload tries to replace a wild match
+	 * filter with a full match filter, as it will add the new full match
+	 * before removing the original wild. However, we treat both of these
+	 * as the same 3-tuple and so the net result is that we remove the
+	 * filter entirely. This occurs in two circumstances:
+	 * - closing a listening socket with accepted sockets still open
+	 * - connecting an already bound UDP socket
+	 * We can avoid the first by setting oof_shared_keep_thresh=0 when
+	 * using AF_XDP.
+	 * The second is a rare case, and the failure mode here is to fall
+	 * back to traffic via the kernel, so I'm living with it for now.
+	 */
+
+	/* Check that this is an IP filter */
+	if ((efx_spec->match_flags & EFX_IP_FILTER_MATCH_FLAGS) !=
+	    EFX_IP_FILTER_MATCH_FLAGS)
+		return -EOPNOTSUPP;
+
+	/* FIXME AF_XDP need to check whether we can install both IPv6 and
+	 * IPv4 filters. For now just support IPv4.
+	 */
+	if (efx_spec->ether_type != ntohs(ETH_P_IP))
+		return -EOPNOTSUPP;
+
+	if (efx_spec->ip_proto == IPPROTO_TCP)
+		fs->flow_type = TCP_V4_FLOW;
+	else if (efx_spec->ip_proto == IPPROTO_UDP)
+		fs->flow_type = UDP_V4_FLOW;
+	else
+		return -EINVAL;
+
+	/* Populate the match fields. For each field we need to set both the
+	 * value, and a mask of which bits in that field to match against.
+	 */
+	fs->h_u.tcp_ip4_spec.ip4dst = efx_spec->loc_host[0];
+	fs->m_u.tcp_ip4_spec.ip4dst = 0xffffffff;
+	fs->h_u.tcp_ip4_spec.pdst = efx_spec->loc_port;
+	fs->m_u.tcp_ip4_spec.pdst = 0xffff;
+
+	/* Give the driver free rein on where to insert the filter. */
+	fs->location = RX_CLS_LOC_ANY;
+
+	/* TODO AF_XDP: for now assume dmaq_id matches NIC channel
+	 * based on insight into efhw/af_xdp.c */
+	fs->ring_cookie = efx_spec->dmaq_id;
+
+	return 0;
+}
+
+static int
+af_xdp_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
+		     bool replace)
+{
+	struct net_device *dev = nic->net_dev;
+	int rc;
+	struct ethtool_rxnfc info;
+	const struct ethtool_ops *ops;
+	struct cmd_context ctx;
+
+	memset(&info, 0, sizeof(info));
+	info.cmd = ETHTOOL_SRXCLSRLINS;
+	rc = efx_spec_to_ethtool_flow(spec, &info.fs);
+	if ( rc < 0 )
+		return rc;
+
+	rtnl_lock();
+
+	ops = dev->ethtool_ops;
+	if (!ops->set_rxnfc) {
+		rc = -EOPNOTSUPP;
+		goto unlock_out;
+	}
+
+	ctx.netdev = dev;
+	rc = rmgr_set_location(&ctx, &info.fs);
+	if ( rc < 0 )
+		goto unlock_out;
+
+	rc = ops->set_rxnfc(dev, &info);
+	if ( rc >= 0 )
+		rc = info.fs.location;
+
+unlock_out:
+	rtnl_unlock();
+	return rc;
+}
+
+static void
+af_xdp_filter_remove(struct efhw_nic *nic, int filter_id)
+{
+	struct net_device *dev = nic->net_dev;
+	struct ethtool_rxnfc info;
+	const struct ethtool_ops *ops;
+
+	memset(&info, 0, sizeof(info));
+	info.cmd = ETHTOOL_SRXCLSRLDEL;
+	info.fs.location = filter_id;
+
+	rtnl_lock();
+	ops = dev->ethtool_ops;
+	if (ops->set_rxnfc)
+		ops->set_rxnfc(dev, &info);
+	rtnl_unlock();
+}
+
+static int
+af_xdp_filter_redirect(struct efhw_nic *nic, int filter_id,
+		       struct efx_filter_spec *spec)
+{
+	return -ENOSYS;
+}
+
+static int
+af_xdp_multicast_block(struct efhw_nic *nic, bool block)
+{
+	return -ENOSYS;
+}
+
+static int
+af_xdp_unicast_block(struct efhw_nic *nic, bool block)
+{
+	return -ENOSYS;
+}
+
+/*--------------------------------------------------------------------
+ *
+ * vports
+ *
+ *--------------------------------------------------------------------*/
+static int
+af_xdp_vport_alloc(struct efhw_nic *nic, u16 vlan_id, u16 *vport_handle_out)
+{
+	return -ENOSYS;
+}
+
+static int
+af_xdp_vport_free(struct efhw_nic *nic, u16 vport_handle)
+{
+	return -ENOSYS;
+}
 
 /*--------------------------------------------------------------------
  *
@@ -1418,6 +1613,7 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_dmaq_rx_q_disable,
 	af_xdp_flush_tx_dma_channel,
 	af_xdp_flush_rx_dma_channel,
+	af_xdp_translate_dma_addrs,
 	__af_xdp_nic_buffer_table_get_orders,
 	sizeof(__af_xdp_nic_buffer_table_get_orders) /
 		sizeof(__af_xdp_nic_buffer_table_get_orders[0]),
@@ -1438,6 +1634,17 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_client_alloc,
 	af_xdp_client_free,
 	af_xdp_vi_set_user,
+	af_xdp_rss_alloc,
+	af_xdp_rss_update,
+	af_xdp_rss_free,
+	af_xdp_rss_flags,
+	af_xdp_filter_insert,
+	af_xdp_filter_remove,
+	af_xdp_filter_redirect,
+	af_xdp_multicast_block,
+	af_xdp_unicast_block,
+	af_xdp_vport_alloc,
+	af_xdp_vport_free,
 	af_xdp_dmaq_kick,
 	af_xdp_mem,
 	af_xdp_init,

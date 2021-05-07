@@ -74,10 +74,6 @@ extern struct efx_dl_device* efhw_nic_acquire_dl_device(struct efhw_nic*);
 extern void efhw_nic_release_dl_device(struct efhw_nic*, struct efx_dl_device*);
 extern void efhw_nic_flush_dl(struct efhw_nic*);
 
-extern int efhw_nic_translate_dma_addrs(struct efhw_nic* nic,
-                                        const dma_addr_t *src,
-                                        dma_addr_t *dst, int n);
-
 static inline uint8_t efhw_vi_nic_flags(const struct efhw_nic* nic)
 {
 	return (nic->flags & NIC_FLAG_BUG35388_WORKAROUND) ?
