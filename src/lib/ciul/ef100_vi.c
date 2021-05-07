@@ -170,7 +170,7 @@ static int ef100_ef_vi_transmitv_init_extra(ef_vi* vi,
     dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
     n_segs--;
 
-    CI_POPULATE_OWORD_7(*dp,
+    CI_POPULATE_OWORD_8(*dp,
                         ESF_GZ_TX_PREFIX_MARK_EN,
                         (extra->flags & EF_VI_TX_EXTRA_MARK) != 0,
 
@@ -185,7 +185,8 @@ static int ef100_ef_vi_transmitv_init_extra(ef_vi* vi,
 
                         ESF_GZ_TX_PREFIX_EGRESS_MPORT, extra->egress_mport,
                         ESF_GZ_TX_PREFIX_INGRESS_MPORT, extra->ingress_mport,
-                        ESF_GZ_TX_PREFIX_MARK, extra->mark);
+                        ESF_GZ_TX_PREFIX_MARK, extra->mark,
+                        ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_PREFIX);
   }
 
   /* Generate a SEND descriptor which includes the first segment of data */
