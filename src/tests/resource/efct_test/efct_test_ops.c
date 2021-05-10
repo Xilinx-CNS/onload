@@ -68,6 +68,14 @@ static int efct_test_get_param(struct sfc_efct_client *handle,
     arg->net_dev = handle->tdev->net_dev;
     rc = 0;
     break;
+   case SFC_EFCT_VARIANT:
+    arg->variant = 'A';
+    rc = 0;
+    break;
+   case SFC_EFCT_REVISION:
+    arg->value = 1;
+    rc = 0;
+    break;
    case SFC_EFCT_DRIVER_DATA:
     arg->ptr = handle->drv_priv;
     rc = 0;
