@@ -13,7 +13,8 @@ RESOURCE_SRCS	:= resource_driver.c \
 	bt_stats.c compat_pat_wc.c port_sniff.c nondl_resource.c sysfs.c \
 	nondl_driver.c sfcaffinity.c nic_notifier.c
 
-EFHW_SRCS	:= nic.c eventq.c ef10.c ef100.c af_xdp.c ethtool_rxclass.c
+EFHW_SRCS	:= nic.c eventq.c ef10.c ef100.c af_xdp.c ethtool_rxclass.c \
+		efct.c
 
 EFHW_HDRS	:= ef10_mcdi.h ethtool_rxclass.h ef10_ef100.h
 

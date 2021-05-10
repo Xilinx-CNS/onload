@@ -9,6 +9,7 @@ LIB_SRCS	:= nic.c \
 		   eventq.c \
 		   ef10.c \
 		   ef100.c \
+		   efct.c \
 		   af_xdp.c \
 		   ethtool_rxclass.c
 
