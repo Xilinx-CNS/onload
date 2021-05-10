@@ -312,7 +312,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
                     efrm_nic_bar_is_good(nic, dev));
 
 	spin_lock_init(&lnic->efrm_nic.efhw_nic.pci_dev_lock);
-	init_rwsem(&lnic->dl_sem);
+	init_rwsem(&lnic->drv_sem);
 
 	if (dev_type->arch != EFHW_ARCH_AF_XDP) {
 		rc = linux_efhw_nic_map_ctr_ap(lnic);
@@ -526,7 +526,7 @@ int efrm_nic_get_accel_allowed(struct efhw_nic* nic)
  * TODO AF_XDP: more elegantly handle non-driverlink devices
  ****************************************************************************/
 int
-efrm_nic_add(struct efx_dl_device* dl_device,
+efrm_nic_add(void *drv_device, struct pci_dev *dev,
 	     const struct efhw_device_type* dev_type, unsigned flags,
 	     struct net_device *net_dev,
 	     struct linux_efhw_nic **lnic_out,
@@ -536,7 +536,6 @@ efrm_nic_add(struct efx_dl_device* dl_device,
 	struct linux_efhw_nic *lnic = NULL;
 	struct efrm_nic *efrm_nic = NULL;
 	struct efhw_nic *nic = NULL;
-	struct pci_dev *dev = dl_device ? dl_device->pci_dev : NULL;
 	int count = 0, rc = 0;
 	int constructed = 0;
 	int registered_nic = 0;
@@ -588,7 +587,7 @@ efrm_nic_add(struct efx_dl_device* dl_device,
 		registered_nic = 1;
 	}
 
-	lnic->dl_device = dl_device;
+	lnic->drv_device = drv_device;
 	efrm_nic = &lnic->efrm_nic;
 	nic = &efrm_nic->efhw_nic;
 	if( dev )

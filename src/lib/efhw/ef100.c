@@ -16,6 +16,7 @@
 #include <ci/efhw/mc_driver_pcol.h>
 #include <ci/efhw/mcdi_pcol_plugins.h>
 #include "ef10_mcdi.h"
+#include "ef10_ef100.h"
 
 /*----------------------------------------------------------------------------
  *

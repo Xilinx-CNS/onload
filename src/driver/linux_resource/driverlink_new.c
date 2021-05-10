@@ -293,7 +293,7 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 		    dev_type.revision, dev_type.arch, dev_type.variant,
 		    dev_type.revision, net_dev->ifindex);
 
-	rc = efrm_nic_add(efrm_dev, &dev_type, probe_flags,
+	rc = efrm_nic_add(efrm_dev, efrm_dev->pci_dev, &dev_type, probe_flags,
 			  (/*no const*/ struct net_device *)net_dev,
 			  &lnic, &res_dim, timer_quantum_ns);
 	if (rc != 0)
@@ -333,13 +333,13 @@ static void efrm_dl_remove(struct efx_dl_device *efrm_dev)
                 /* flush all outstanding dma queues */
                 efrm_nic_flush_all_queues(nic, 0);
 
-		lnic->dl_device = NULL;
+		lnic->drv_device = NULL;
                 lnic->efrm_nic.dl_dev_info = NULL;
 
 		/* Wait for all in-flight driverlink calls to finish.  Since we
-		 * have already cleared [lnic->dl_device], no new calls can
+		 * have already cleared [lnic->drv_device], no new calls can
 		 * start. */
-		efhw_nic_flush_dl(nic);
+		efhw_nic_flush_drv(nic);
 
 		efrm_nic_unplug(nic);
 

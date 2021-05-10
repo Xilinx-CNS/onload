@@ -55,7 +55,7 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
               dev_type.arch, dev_type.variant, dev_type.revision,
               net_dev->ifindex);
 
-  rc = efrm_nic_add(NULL, &dev_type, 0, net_dev, &lnic, &res_dim,
+  rc = efrm_nic_add(NULL, NULL, &dev_type, 0, net_dev, &lnic, &res_dim,
                     timer_quantum_ns);
   if (rc != 0)
     return rc;

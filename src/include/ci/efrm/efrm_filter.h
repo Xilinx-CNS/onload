@@ -49,7 +49,6 @@
 #define EFRM_RSS_MODE_DST     0x4 /* transparent proxy active side */
 
 
-struct efx_dl_device;
 struct efx_filter_spec;
 struct device;
 struct net_device;

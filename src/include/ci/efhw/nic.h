@@ -69,10 +69,10 @@ extern struct pci_dev* efhw_nic_get_pci_dev(struct efhw_nic* nic);
 extern struct device* efhw_nic_get_dev(struct efhw_nic* nic);
 extern struct net_device* efhw_nic_get_net_dev(struct efhw_nic* nic);
 
-/* Driverlink-handle management. */
-extern struct efx_dl_device* efhw_nic_acquire_dl_device(struct efhw_nic*);
-extern void efhw_nic_release_dl_device(struct efhw_nic*, struct efx_dl_device*);
-extern void efhw_nic_flush_dl(struct efhw_nic*);
+/* Driver-handle management. */
+extern void* efhw_nic_acquire_drv_device(struct efhw_nic*);
+extern void efhw_nic_release_drv_device(struct efhw_nic*, void*);
+extern void efhw_nic_flush_drv(struct efhw_nic*);
 
 static inline uint8_t efhw_vi_nic_flags(const struct efhw_nic* nic)
 {

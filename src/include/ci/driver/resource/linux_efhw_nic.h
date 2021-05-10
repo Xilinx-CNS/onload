@@ -55,9 +55,12 @@
 struct linux_efhw_nic {
 	struct efrm_nic efrm_nic;
 
-	/* Driverlink device context */
-	struct efx_dl_device *dl_device;
-	struct rw_semaphore dl_sem;
+	/* Driver device context. The drv_device pointer is opaque to all
+	 * architecture independent code. It is used from efhw and resource
+	 * probe to communicate with the driver providing the NIC resource.
+	 */
+	void *drv_device;
+	struct rw_semaphore drv_sem;
 
 	/*! Event handlers. */
 	struct efhw_ev_handler *ev_handlers;

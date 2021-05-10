@@ -535,11 +535,11 @@ struct efhw_nic* efhw_nic_find_by_dev(const struct device *dev)
  * with the RTNL lock held, it is not safe to attempt to take that lock in
  * between calls to this function and efhw_nic_release_dl_device().
  */
-struct efx_dl_device* efhw_nic_acquire_dl_device(struct efhw_nic* efhw_nic)
+void* efhw_nic_acquire_drv_device(struct efhw_nic* efhw_nic)
 {
 	struct efrm_nic* rnic = efrm_nic(efhw_nic);
 	struct linux_efhw_nic* lnic = linux_efhw_nic(efhw_nic);
-	struct efx_dl_device* dl_device;
+	void* drv_device;
 	if (rnic->rnic_flags & EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED)
 		return NULL;
 
@@ -554,31 +554,31 @@ struct efx_dl_device* efhw_nic_acquire_dl_device(struct efhw_nic* efhw_nic)
 
 	/* Acquire the lock if the driverlink device is live, taking care to
 	 * avoid races against it changing under our feet. */
-	dl_device = READ_ONCE(lnic->dl_device);
-	if (dl_device != NULL) {
-		down_read(&lnic->dl_sem);
+	drv_device = READ_ONCE(lnic->drv_device);
+	if (drv_device != NULL) {
+		down_read(&lnic->drv_sem);
 
 		/* A flush might have occurred between the first check and
 		 * obtaining the lock, so we must re-obtain the handle. */
-		dl_device = READ_ONCE(lnic->dl_device);
-		if (dl_device == NULL) {
-			up_read(&lnic->dl_sem);
+		drv_device = READ_ONCE(lnic->drv_device);
+		if (drv_device == NULL) {
+			up_read(&lnic->drv_sem);
 			return NULL;
 		}
 	}
 
-	return dl_device;
+	return drv_device;
 }
 
 
 /* Releases a driverlink device handle acquired by
- * efhw_nic_acquire_dl_device().  This is safe to call even if the handle is
+ * efhw_nic_acquire_drv_device().  This is safe to call even if the handle is
  * NULL. */
-void efhw_nic_release_dl_device(struct efhw_nic* efhw_nic,
-				struct efx_dl_device* dl_device)
+void efhw_nic_release_drv_device(struct efhw_nic* efhw_nic,
+				 void* drv_device)
 {
-	if( dl_device != NULL )
-		up_read(&linux_efhw_nic(efhw_nic)->dl_sem);
+	if( drv_device != NULL )
+		up_read(&linux_efhw_nic(efhw_nic)->drv_sem);
 }
 
 
@@ -586,11 +586,11 @@ void efhw_nic_release_dl_device(struct efhw_nic* efhw_nic,
  * the NIC.  This suffers from the usual reader-writer-lock starvation problem;
  * callers might wish to take measures to prevent further acquisitions of the
  * semaphore before calling this function. */
-void efhw_nic_flush_dl(struct efhw_nic* efhw_nic)
+void efhw_nic_flush_drv(struct efhw_nic* efhw_nic)
 {
 	struct linux_efhw_nic* lnic = linux_efhw_nic(efhw_nic);
-	down_write(&lnic->dl_sem);
-	up_write(&lnic->dl_sem);
+	down_write(&lnic->drv_sem);
+	up_write(&lnic->drv_sem);
 }
 
 #endif  /* __KERNEL__ */
