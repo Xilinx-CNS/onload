@@ -20,6 +20,7 @@
 
 #include <etherfabric/pd.h>
 #include <etherfabric/memreg.h>
+#include <etherfabric/capabilities.h>
 
 static int parse_opts(int argc, char* argv[]);
 
@@ -113,6 +114,8 @@ int main(int argc, char* argv[])
   ef_addr dma_buf_addr;
   enum ef_pd_flags pd_flags = EF_PD_DEFAULT;
   enum ef_vi_flags vi_flags = EF_VI_FLAGS_DEFAULT;
+  unsigned long min_page_size;
+  size_t alloc_size;
 
   TRY(parse_opts(argc, argv));
 
@@ -139,9 +142,23 @@ int main(int argc, char* argv[])
          (vi.vi_out_flags & EF_VI_OUT_CLOCK_SYNC_STATUS) != 0);
 
   /* Allocate memory for packet buffers, note alignment */
-  TEST(posix_memalign(&p, CI_PAGE_SIZE, BUF_SIZE) == 0);
+  if (cfg_phys_mode)
+    min_page_size = CI_PAGE_SIZE;
+  else
+    TRY(ef_vi_capabilities_get(dh, ifindex, EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
+                               &min_page_size));
+  alloc_size = CI_MAX(min_page_size, BUF_SIZE);
+  if (min_page_size >= 2 * 1024 * 1024) {
+    /* Assume this means huge pages are mandatory */
+    p = mmap(NULL, alloc_size, PROT_READ | PROT_WRITE,
+             MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+    TEST(p != MAP_FAILED);
+  }
+  else {
+    TEST(posix_memalign(&p, min_page_size, alloc_size) == 0);
+  }
   /* Regiser memory with NIC */
-  TRY(ef_memreg_alloc(&mr, dh, &pd, dh, p, BUF_SIZE));
+  TRY(ef_memreg_alloc(&mr, dh, &pd, dh, p, alloc_size));
   /* Store DMA address of the packet buffer memory */
   dma_buf_addr = ef_memreg_dma_addr(&mr, 0);
 
