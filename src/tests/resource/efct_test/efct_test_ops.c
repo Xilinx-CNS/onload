@@ -61,7 +61,7 @@ static int efct_test_get_param(struct sfc_efct_client *handle,
 {
   int rc = -ENOSYS;
 
-  printk(KERN_INFO "%s\n", __func__);
+  printk(KERN_INFO "%s: param %d\n", __func__, p);
 
   switch(p) {
    case SFC_EFCT_NETDEV:
@@ -94,7 +94,7 @@ static int efct_test_set_param(struct sfc_efct_client *handle,
 {
   int rc = -ENOSYS;
 
-  printk(KERN_INFO "%s\n", __func__);
+  printk(KERN_INFO "%s: param %d\n", __func__, p);
 
   switch(p) {
    case SFC_EFCT_DRIVER_DATA:
