@@ -48,6 +48,8 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   }
 
   tdev->dev.ops = &test_devops;
+  dev_hold(net_dev);
+  tdev->net_dev = net_dev;
   adev = &tdev->dev.adev;
 
   /* Once we have successfully initted the aux dev then the lifetime of the
@@ -58,6 +60,7 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   rc = init_aux_dev(adev, parent);
   if( rc != 0 ) {
     printk(KERN_INFO "Failed to init aux device %d\n", rc);
+    dev_put(tdev->net_dev);
     kfree(tdev);
     return ERR_PTR(rc);
   }
@@ -70,9 +73,6 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
     auxiliary_device_uninit(adev);
     return ERR_PTR(rc);
   }
-
-  dev_hold(net_dev);
-  tdev->net_dev = net_dev;
 
   return tdev;
 }
