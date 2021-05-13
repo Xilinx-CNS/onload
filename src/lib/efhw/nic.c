@@ -160,7 +160,7 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		   const struct efhw_device_type *dev_type, unsigned map_min,
 		   unsigned map_max, unsigned vi_base, unsigned vi_shift,
 		   unsigned mem_bar, unsigned vi_stride,
-		   struct net_device *net_dev, struct pci_dev *dev)
+		   struct net_device *net_dev, struct device *dev)
 {
 	nic->devtype = *dev_type;
 	nic->flags = flags;
@@ -175,7 +175,7 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 	nic->vi_min = map_min;
 	nic->vi_lim = map_max;
 	nic->net_dev = net_dev;
-	nic->pci_dev = dev;
+	nic->dev = dev;
 	spin_lock_init(&nic->pci_dev_lock);
 
 	switch (nic->devtype.arch) {
@@ -196,7 +196,8 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 
 		if (mem_bar != EFHW_MEM_BAR_UNDEFINED)
 			nic->ctr_ap_bar = mem_bar;
-		nic->ctr_ap_dma_addr = pci_resource_start(dev, nic->ctr_ap_bar);
+		nic->ctr_ap_dma_addr = pci_resource_start(to_pci_dev(dev),
+							  nic->ctr_ap_bar);
 
 		nic->num_evqs   = 1024;
 		nic->num_dmaqs  = 1024;
@@ -224,7 +225,8 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 
 		if (mem_bar != EFHW_MEM_BAR_UNDEFINED)
 			nic->ctr_ap_bar = mem_bar;
-		nic->ctr_ap_dma_addr = pci_resource_start(dev, nic->ctr_ap_bar);
+		nic->ctr_ap_dma_addr = pci_resource_start(to_pci_dev(dev),
+							  nic->ctr_ap_bar);
 
 		/* FIXME: wrong numbers for queues numbers*/
 		nic->num_evqs   = 1024;
@@ -274,8 +276,8 @@ struct device* efhw_nic_get_dev(struct efhw_nic* nic)
 {
 	struct device* dev = NULL;
 	spin_lock_bh(&nic->pci_dev_lock);
-	if( nic->pci_dev )
-		dev = get_device(&nic->pci_dev->dev);
+	if( nic->dev )
+		dev = get_device(nic->dev);
 	spin_unlock_bh(&nic->pci_dev_lock);
 	return dev;
 }

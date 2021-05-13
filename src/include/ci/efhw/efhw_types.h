@@ -399,8 +399,8 @@ struct efhw_nic {
 # define NIC_OPT_DEFAULT            0
 
 	struct net_device *net_dev; /*!< Network device */
-	struct pci_dev *pci_dev;    /*!< pci descriptor */
-	spinlock_t pci_dev_lock;    /*!< Protects access to pci_dev & net_dev */
+	struct device *dev;         /*!< HW device */
+	spinlock_t pci_dev_lock;    /*!< Protects access to dev & net_dev */
 
 	struct efhw_device_type devtype;
 

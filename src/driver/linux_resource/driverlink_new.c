@@ -372,7 +372,8 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 		    dev_type.revision, net_dev->ifindex);
 
 	lnic = efrm_get_redisovered_nic(efrm_dev->pci_dev, &dev_type);
-	rc = efrm_nic_add(efrm_dev, efrm_dev->pci_dev, &dev_type, probe_flags,
+	rc = efrm_nic_add(efrm_dev, &efrm_dev->pci_dev->dev, &dev_type,
+			  probe_flags,
 			  (/*no const*/ struct net_device *)net_dev,
 			  &lnic, &res_dim, timer_quantum_ns);
 	if (rc != 0)

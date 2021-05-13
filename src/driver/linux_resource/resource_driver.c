@@ -263,7 +263,7 @@ irq_ranges_init(struct efhw_nic *nic, const struct vi_resource_dimensions *res_d
 
 
 static int
-linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
+linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 		    unsigned nic_flags,
 		    struct net_device *net_dev,
 		    const struct vi_resource_dimensions *res_dim,
@@ -279,7 +279,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 
 	/* Tie the lifetime of the kernel's state to that of our own. */
 	if( dev )
-		pci_dev_get(dev);
+		get_device(dev);
 	dev_hold(net_dev);
 
 	if (dev_type->arch == EFHW_ARCH_EF10 ||
@@ -323,7 +323,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 	if (enable_accel_by_default)
 		lnic->efrm_nic.rnic_flags |= EFRM_NIC_FLAG_ADMIN_ENABLED;
 
-	efrm_init_resource_filter(dev ? &dev->dev : &net_dev->dev, net_dev->ifindex);
+	efrm_init_resource_filter(dev ? dev : &net_dev->dev, net_dev->ifindex);
 
 	return 0;
 fail3:
@@ -334,7 +334,7 @@ fail1:
 	efhw_nic_dtor(nic);
 fail:
 	if( dev )
-		pci_dev_put(dev);
+		put_device(dev);
 	dev_put(net_dev);
 	return rc;
 }
@@ -345,23 +345,23 @@ fail:
  */
 static void
 linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
-                       struct pci_dev *dev,
+                       struct device *dev,
 		       struct net_device *net_dev,
 		       const struct vi_resource_dimensions *res_dim,
                        const struct efhw_device_type *dev_type)
 {
 	struct efhw_nic* nic = &lnic->efrm_nic.efhw_nic;
-	struct pci_dev* old_pci_dev;
+	struct device* old_dev;
 #ifndef NDEBUG
 	struct net_device* old_net_dev;
 #endif
 
 	/* Replace the net & pci devs */
-	pci_dev_get(dev);
+	get_device(dev);
 	dev_hold(net_dev);
 	spin_lock_bh(&nic->pci_dev_lock);
-	old_pci_dev = nic->pci_dev;
-	nic->pci_dev = dev;
+	old_dev = nic->dev;
+	nic->dev = dev;
 #ifndef NDEBUG
 	old_net_dev = nic->net_dev;
 #endif
@@ -369,18 +369,18 @@ linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
 	spin_unlock_bh(&nic->pci_dev_lock);
 
 	/* Tidy up old state. */
-	efrm_shutdown_resource_filter(&old_pci_dev->dev);
+	efrm_shutdown_resource_filter(old_dev);
 
 	/* Bring up new state. */
 	efhw_nic_update_pci_info(nic);
 	if (dev_type->arch == EFHW_ARCH_EF10) {
 		nic->vi_base = res_dim->vi_base;
 	}
-	efrm_init_resource_filter(&nic->pci_dev->dev, net_dev->ifindex);
+	efrm_init_resource_filter(nic->dev, net_dev->ifindex);
 
-	/* Drop reference to [old_pci_dev] now that the race window has been
+	/* Drop reference to [old_dev] now that the race window has been
 	 * closed for someone else trying to take out a new reference. */
-	pci_dev_put(old_pci_dev);
+	put_device(old_dev);
 	EFRM_ASSERT(old_net_dev == NULL);
 }
 
@@ -388,14 +388,14 @@ static void linux_efrm_nic_dtor(struct linux_efhw_nic *lnic)
 {
 	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
 
-	efrm_shutdown_resource_filter(&nic->pci_dev->dev);
+	efrm_shutdown_resource_filter(nic->dev);
 	efrm_nic_dtor(&lnic->efrm_nic);
 	efrm_affinity_interface_remove(lnic);
 	linux_efhw_nic_unmap_ctr_ap(lnic);
 	efhw_nic_dtor(nic);
 
-	if(nic->pci_dev) {
-		pci_dev_put(nic->pci_dev);
+	if(nic->dev) {
+		put_device(nic->dev);
 	}
 	EFRM_ASSERT(nic->net_dev == NULL);
 }
@@ -444,7 +444,7 @@ int efrm_nic_get_accel_allowed(struct efhw_nic* nic)
  * found, or the prober does not support hotplug, this should be NULL.
  ****************************************************************************/
 int
-efrm_nic_add(void *drv_device, struct pci_dev *dev,
+efrm_nic_add(void *drv_device, struct device *dev,
 	     const struct efhw_device_type* dev_type, unsigned flags,
 	     struct net_device *net_dev,
 	     struct linux_efhw_nic **lnic_inout,
@@ -535,13 +535,13 @@ efrm_nic_add(void *drv_device, struct pci_dev *dev,
 
 		/* pain */
 		EFRM_TRACE("%s hardware init failed (%d, attempt %d of %d)",
-			   dev && pci_name(dev) ? pci_name(dev) : "?",
+			   dev && dev_name(dev) ? dev_name(dev) : "?",
 			   rc, count + 1, max_hardware_init_repeats);
 	}
 	if (rc < 0) {
 		/* Again, PCI VFs may be available. */
 		EFRM_ERR("%s: ERROR: hardware init failed rc=%d",
-			 dev && pci_name(dev) ? pci_name(dev) : "?", rc);
+			 dev && dev_name(dev) ? dev_name(dev) : "?", rc);
 	}
 	efrm_resource_manager_add_total(EFRM_RESOURCE_VI,
 					efrm_nic->max_vis);
@@ -552,7 +552,7 @@ efrm_nic_add(void *drv_device, struct pci_dev *dev,
 	efrm_nic->rss_channel_count = res_dim->rss_channel_count;
 
 	EFRM_NOTICE("%s index=%d ifindex=%d",
-		    dev ? (pci_name(dev) ? pci_name(dev) : "?") : net_dev->name,
+		    dev ? (dev_name(dev) ? dev_name(dev) : "?") : net_dev->name,
 		    nic->index, net_dev->ifindex);
 
 	efrm_nic->dmaq_state.unplugging = 0;

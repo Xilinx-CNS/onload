@@ -496,8 +496,7 @@ struct efhw_nic* efhw_nic_find_by_dev(const struct device *dev)
 
 	spin_lock_bh(&efrm_nic_tablep->lock);
 	list_for_each_entry(nic, &efrm_nics, link) {
-		if (nic->efhw_nic.pci_dev &&
-		    &nic->efhw_nic.pci_dev->dev == dev) {
+		if (nic->efhw_nic.dev && nic->efhw_nic.dev == dev) {
 			result = &nic->efhw_nic;
 			break;
 		}

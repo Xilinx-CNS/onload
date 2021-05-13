@@ -2465,11 +2465,12 @@ static int ef10_af_xdp_init(struct efhw_nic* nic, int instance,
  *--------------------------------------------------------------------*/
 struct pci_dev* ef10_ef100_get_pci_dev(struct efhw_nic* nic)
 {
-	struct pci_dev* dev;
+	struct pci_dev* dev = NULL;
 	spin_lock_bh(&nic->pci_dev_lock);
-	dev = nic->pci_dev;
-	if( dev )
+	if( nic->dev ) {
+		dev = to_pci_dev(nic->dev);
 		pci_dev_get(dev);
+	}
 	spin_unlock_bh(&nic->pci_dev_lock);
 	return dev;
 }
