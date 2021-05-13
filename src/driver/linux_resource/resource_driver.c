@@ -177,28 +177,60 @@ static int iomap_bar(struct linux_efhw_nic *lnic, size_t len)
 static int linux_efhw_nic_map_ctr_ap(struct linux_efhw_nic *lnic)
 {
 	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
-	int rc;
+	int rc = 0;
 
-	if (nic->ctr_ap_bytes == 0)
-		return 0;
+	if (nic->devtype.arch == EFHW_ARCH_EF10 ||
+	    nic->devtype.arch == EFHW_ARCH_EF100) {
+		if (nic->ctr_ap_bytes == 0)
+			return 0;
 
-	rc = iomap_bar(lnic, nic->ctr_ap_bytes);
-
-	/* Bug 5195: workaround for now. */
-	if (rc != 0 && nic->ctr_ap_bytes > 16 * 1024 * 1024) {
-		/* Try half the size for now. */
-		nic->ctr_ap_bytes /= 2;
-		EFRM_WARN("Bug 5195 WORKAROUND: retrying iomap of %d bytes",
-			  nic->ctr_ap_bytes);
 		rc = iomap_bar(lnic, nic->ctr_ap_bytes);
+
+		/* Bug 5195: workaround for now. */
+		if (rc != 0 && nic->ctr_ap_bytes > 16 * 1024 * 1024) {
+			/* Try half the size for now. */
+			nic->ctr_ap_bytes /= 2;
+			EFRM_WARN("Bug 5195 WORKAROUND: retrying iomap of %d "
+				  "bytes", nic->ctr_ap_bytes);
+			rc = iomap_bar(lnic, nic->ctr_ap_bytes);
+		}
+		if (rc < 0) {
+			EFRM_ERR("Failed (%d) to map bar (%d bytes)",
+				 rc, nic->ctr_ap_bytes);
+			return rc;
+		}
 	}
-	if (rc < 0) {
-		EFRM_ERR("Failed (%d) to map bar (%d bytes)",
-			 rc, nic->ctr_ap_bytes);
-		return rc;
+	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP) {
+		/* we need a page for a VI */
+		unsigned long space_needed = nic->vi_lim * PAGE_SIZE;
+		int order = get_order(space_needed);
+		unsigned long addr = __get_free_pages(GFP_KERNEL, order);
+
+		if(addr == 0)
+			return -ENOMEM;
+
+		lnic->efrm_nic.efhw_nic.bar_ioaddr = (void *)addr;
+		memset((void *)lnic->efrm_nic.efhw_nic.bar_ioaddr,
+			   0, nic->vi_lim * PAGE_SIZE);
+		lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr = __pa(addr);
 	}
 
 	return rc;
+}
+
+static void linux_efhw_nic_unmap_ctr_ap(struct linux_efhw_nic *lnic)
+{
+	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
+
+	if (nic->devtype.arch == EFHW_ARCH_AF_XDP) {
+		unsigned long space_needed = nic->vi_lim * PAGE_SIZE;
+		int order = get_order(space_needed);
+		free_pages((unsigned long)nic->bar_ioaddr, order);
+	}
+	else if (nic->bar_ioaddr) {
+		iounmap(nic->bar_ioaddr);
+	}
+	nic->bar_ioaddr = 0;
 }
 
 
@@ -288,21 +320,6 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 	lnic->efrm_nic.efhw_nic.domain = dev ? pci_domain_nr(dev->bus) : 0;
 	if( dev ) {
 		lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr = pci_resource_start(dev, nic->ctr_ap_bar);
-	} else {
-		/* we need a page for a VI */
-		unsigned long space_needed = map_max * PAGE_SIZE;
-		int order = get_order(space_needed);
-		unsigned long addr = __get_free_pages(GFP_KERNEL, order);
-
-		if(addr == 0) {
-			rc = -ENOMEM;
-			goto fail;
-		}
-
-		lnic->efrm_nic.efhw_nic.bar_ioaddr = (void *)addr;
-		memset((void *)lnic->efrm_nic.efhw_nic.bar_ioaddr,
-			   0, map_max * PAGE_SIZE);
-		lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr = __pa(addr);
 	}
 	EFRM_WARN("%s: ctr_ap_dma_addr=%p", __func__,
 		  (void*) lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr);
@@ -314,11 +331,9 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 	spin_lock_init(&lnic->efrm_nic.efhw_nic.pci_dev_lock);
 	init_rwsem(&lnic->drv_sem);
 
-	if (dev_type->arch != EFHW_ARCH_AF_XDP) {
-		rc = linux_efhw_nic_map_ctr_ap(lnic);
-		if (rc < 0)
-			goto fail;
-	}
+	rc = linux_efhw_nic_map_ctr_ap(lnic);
+	if (rc < 0)
+		goto fail;
 
 	rc = efrm_affinity_interface_probe(lnic);
 	if (rc < 0)
@@ -326,15 +341,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 
 	rc = efrm_nic_ctor(&lnic->efrm_nic, res_dim);
 	if (rc < 0) {
-		if (dev == NULL) {
-			unsigned long space_needed = map_max * PAGE_SIZE;
-			int order = get_order(space_needed);
-			free_pages((unsigned long)nic->bar_ioaddr, order);
-		}
-		else if (nic->bar_ioaddr) {
-			iounmap(nic->bar_ioaddr);
-		}
-		nic->bar_ioaddr = 0;
+		linux_efhw_nic_unmap_ctr_ap(lnic);
 		goto fail2;
 	}
 
@@ -403,19 +410,14 @@ static void linux_efrm_nic_dtor(struct linux_efhw_nic *lnic)
 {
 	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
 
+	efrm_shutdown_resource_filter(&nic->pci_dev->dev);
 	efrm_nic_dtor(&lnic->efrm_nic);
+	efrm_affinity_interface_remove(lnic);
+	linux_efhw_nic_unmap_ctr_ap(lnic);
 	efhw_nic_dtor(nic);
 
-	efrm_affinity_interface_remove(lnic);
-
-	if (nic->bar_ioaddr && (nic->pci_dev != NULL)) {
-		iounmap(nic->bar_ioaddr);
-		nic->bar_ioaddr = 0;
-	}
 	if(nic->pci_dev) {
-		efrm_shutdown_resource_filter(&nic->pci_dev->dev);
 		pci_dev_put(nic->pci_dev);
-		EFRM_ASSERT(nic->net_dev == NULL);
 	}
 	EFRM_ASSERT(nic->net_dev == NULL);
 }
