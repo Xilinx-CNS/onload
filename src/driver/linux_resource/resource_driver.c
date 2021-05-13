@@ -312,10 +312,8 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 	}
 
 	efhw_nic_init(nic, nic_flags, NIC_OPT_DEFAULT, dev_type, map_min,
-		      map_max, vi_base, vi_shift, mem_bar, vi_stride
-		      );
-	lnic->efrm_nic.efhw_nic.pci_dev = dev;
-	lnic->efrm_nic.efhw_nic.net_dev = net_dev;
+		      map_max, vi_base, vi_shift, mem_bar, vi_stride, net_dev,
+		      dev);
 	lnic->efrm_nic.efhw_nic.bus_number = dev ? dev->bus->number : 0;
 	lnic->efrm_nic.efhw_nic.domain = dev ? pci_domain_nr(dev->bus) : 0;
 	if( dev ) {

@@ -147,7 +147,8 @@ int efhw_nondl_device_type_init(struct efhw_device_type *dt)
 void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		   const struct efhw_device_type *dev_type, unsigned map_min,
 		   unsigned map_max, unsigned vi_base, unsigned vi_shift,
-		   unsigned mem_bar, unsigned vi_stride)
+		   unsigned mem_bar, unsigned vi_stride,
+		   struct net_device *net_dev, struct pci_dev *dev)
 {
 	nic->devtype = *dev_type;
 	nic->flags = flags;
@@ -161,6 +162,8 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 	nic->timer_quantum_ns = 4968; 
 	nic->vi_min = map_min;
 	nic->vi_lim = map_max;
+	nic->net_dev = net_dev;
+	nic->pci_dev = dev;
 
 	switch (nic->devtype.arch) {
 	case EFHW_ARCH_EF10:
