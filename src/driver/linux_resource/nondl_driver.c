@@ -15,7 +15,7 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
 {
   struct vi_resource_dimensions res_dim = {};
   struct efx_dl_ef10_resources *ef10_res = NULL;
-  struct linux_efhw_nic *lnic;
+  struct linux_efhw_nic *lnic = NULL;
   unsigned timer_quantum_ns = 0;
   struct efhw_nic *nic;
   struct efhw_device_type dev_type;

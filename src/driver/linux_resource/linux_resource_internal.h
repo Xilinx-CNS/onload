@@ -53,7 +53,7 @@ extern int
 efrm_nic_add(void *drv_device, struct pci_dev *pci_dev,
              const struct efhw_device_type *dev_type, unsigned int opts,
 	     struct net_device *net_dev,
-	     struct linux_efhw_nic **lnic_out,
+	     struct linux_efhw_nic **lnic_inout,
 	     const struct vi_resource_dimensions *,
 	     unsigned timer_quantum_ns);
 extern int

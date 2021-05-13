@@ -45,6 +45,7 @@
 #include <linux/notifier.h>
 #include <net/net_namespace.h>
 #include <ci/efrm/efrm_filter.h>
+#include <ci/efrm/nic_table.h>
 #include <ci/efhw/nic.h>
 #include <ci/tools/sysdep.h>
 #include <ci/internal/transport_config_opt.h>
@@ -232,6 +233,83 @@ static void efrm_nic_del_sysfs(struct device *dev)
 }
 
 
+/* Determines whether a known NIC is equivalent to one that would be
+ * instantiated according to a [pci_dev] and an [efhw_device_type]. The
+ * intended use-case is to check whether a new NIC can step into the shoes of
+ * one that went away. */
+static inline int
+efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
+			const struct efhw_device_type* dev_type)
+{
+	int result;
+	struct pci_dev* nic_dev = efhw_nic_get_pci_dev(nic);
+	/* For NICs provided by driverlink we should always have a pci_dev */
+	EFRM_ASSERT(nic_dev);
+	result = nic->domain           == pci_domain_nr(dev->bus) &&
+		 nic->bus_number	   == dev->bus->number	 &&
+		 nic_dev->devfn	   == dev->devfn	 &&
+		 nic_dev->device	   == dev->device	 &&
+		 nic->devtype.arch	   == dev_type->arch	 &&
+		 nic->devtype.revision == dev_type->revision &&
+		 nic->devtype.variant  == dev_type->variant;
+	pci_dev_put(nic_dev);
+	return result;
+}
+
+
+/* Determines whether the control BAR for the device [dev] is where we expect
+ * it to be for the NIC [nic]. This is a requirement for hotplug
+ * revivification. */
+static inline int
+efrm_nic_bar_is_good(struct efhw_nic* nic, struct pci_dev* dev)
+{
+	return !dev || nic->ctr_ap_dma_addr == pci_resource_start(dev, nic->ctr_ap_bar);
+}
+
+
+static struct linux_efhw_nic*
+efrm_get_redisovered_nic(struct pci_dev* dev,
+			 const struct efhw_device_type* dev_type)
+{
+	struct linux_efhw_nic* lnic = NULL;
+	struct efhw_nic* old_nic;
+	int nic_index;
+
+	/* We can't detect hotplug without the pci information to compare */
+	if( !dev )
+		return NULL;
+
+	spin_lock_bh(&efrm_nic_tablep->lock);
+	EFRM_FOR_EACH_NIC(nic_index, old_nic) {
+		/* We would like to break out of this loop after rediscovering
+		 * a NIC, but the EFRM_FOR_EACH_NIC construct doesn't allow
+		 * this, so instead we check explicitly that we haven't set
+		 * [lnic] yet. */
+		if (lnic == NULL && old_nic != NULL &&
+			efrm_nic_matches_device(old_nic, dev, dev_type)) {
+			EFRM_ASSERT(old_nic->resetting);
+			if (efrm_nic_bar_is_good(old_nic, dev)) {
+				EFRM_NOTICE("%s: Rediscovered nic_index %d",
+					    __func__, nic_index);
+				lnic = linux_efhw_nic(old_nic);
+			}
+			else {
+				EFRM_WARN("%s: New device matches nic_index %d "
+					  "but has different BAR. Existing "
+					  "Onload stacks will not use the new "
+					  "device.",
+					  __func__, nic_index);
+			}
+		}
+	}
+	spin_unlock_bh(&efrm_nic_tablep->lock);
+	/* We can drop the lock now as [lnic] will not go away until the module
+	 * unloads. */
+
+	return lnic;
+}
+
+
 static int
 efrm_dl_probe(struct efx_dl_device *efrm_dev,
 	      const struct net_device *net_dev,
@@ -293,6 +371,7 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 		    dev_type.revision, dev_type.arch, dev_type.variant,
 		    dev_type.revision, net_dev->ifindex);
 
+	lnic = efrm_get_redisovered_nic(efrm_dev->pci_dev, &dev_type);
 	rc = efrm_nic_add(efrm_dev, efrm_dev->pci_dev, &dev_type, probe_flags,
 			  (/*no const*/ struct net_device *)net_dev,
 			  &lnic, &res_dim, timer_quantum_ns);

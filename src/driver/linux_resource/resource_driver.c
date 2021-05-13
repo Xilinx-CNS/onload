@@ -234,16 +234,6 @@ static void linux_efhw_nic_unmap_ctr_ap(struct linux_efhw_nic *lnic)
 }
 
 
-/* Determines whether the control BAR for the device [dev] is where we expect
- * it to be for the NIC [nic]. This is a requirement for hotplug
- * revivification. */
-static inline int
-efrm_nic_bar_is_good(struct efhw_nic* nic, struct pci_dev* dev)
-{
-	return !dev || nic->ctr_ap_dma_addr == pci_resource_start(dev, nic->ctr_ap_bar);
-}
-
-
 static void
 irq_ranges_init(struct efhw_nic *nic, const struct vi_resource_dimensions *res_dim)
 {
@@ -411,70 +401,6 @@ static void linux_efrm_nic_dtor(struct linux_efhw_nic *lnic)
 }
 
 
-/* Determines whether a known NIC is equivalent to one that would be
- * instantiated according to a [pci_dev] and an [efhw_device_type]. The
- * intended use-case is to check whether a new NIC can step into the shoes of
- * one that went away. */
-static inline int
-efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
-			const struct efhw_device_type* dev_type)
-{
-	struct pci_dev* nic_dev = efhw_nic_get_pci_dev(nic);
-	int result = nic->domain           == pci_domain_nr(dev->bus) &&
-		     nic->bus_number	   == dev->bus->number	 &&
-		     nic_dev->devfn	   == dev->devfn	 &&
-		     nic_dev->device	   == dev->device	 &&
-		     nic->devtype.arch	   == dev_type->arch	 &&
-		     nic->devtype.revision == dev_type->revision &&
-		     nic->devtype.variant  == dev_type->variant;
-	pci_dev_put(nic_dev);
-	return result;
-}
-
-
-static struct linux_efhw_nic*
-efrm_get_redisovered_nic(struct pci_dev* dev,
-			 const struct efhw_device_type* dev_type)
-{
-	struct linux_efhw_nic* lnic = NULL;
-	struct efhw_nic* old_nic;
-	int nic_index;
-
-	/* We can't detect hotplug without the pci information to compare */
-	if( !dev )
-		return NULL;
-
-	spin_lock_bh(&efrm_nic_tablep->lock);
-	EFRM_FOR_EACH_NIC(nic_index, old_nic) {
-		/* We would like to break out of this loop after rediscovering
-		 * a NIC, but the EFRM_FOR_EACH_NIC construct doesn't allow
-		 * this, so instead we check explicitly that we haven't set
-		 * [lnic] yet. */
-		if (lnic == NULL && old_nic != NULL &&
-			efrm_nic_matches_device(old_nic, dev, dev_type)) {
-			EFRM_ASSERT(old_nic->resetting);
-			if (efrm_nic_bar_is_good(old_nic, dev)) {
-				EFRM_NOTICE("%s: Rediscovered nic_index %d",
-					    __func__, nic_index);
-				lnic = linux_efhw_nic(old_nic);
-			}
-			else {
-				EFRM_WARN("%s: New device matches nic_index %d "
-					  "but has different BAR. Existing "
-					  "Onload stacks will not use the new "
-					  "device.",
-					  __func__, nic_index);
-			}
-		}
-	}
-	spin_unlock_bh(&efrm_nic_tablep->lock);
-	/* We can drop the lock now as [lnic] will not go away until the module
-	 * unloads. */
-
-	return lnic;
-}
-
-
 int efrm_nic_set_accel_allowed(struct efhw_nic* nic,
 			       int enable)
 {
@@ -513,24 +439,25 @@ int efrm_nic_get_accel_allowed(struct efhw_nic* nic)
  * So basically just make sure that any code you add checks rc>=0 before
  * doing any work and you'll be fine.
  *
- * TODO AF_XDP: more elegantly handle non-driverlink devices
+ * For probers that support hotplug the original lnic should be obtained by
+ * the caller and provided through lnic_inout. If an old device cannot be
+ * found, or the prober does not support hotplug, this should be NULL.
  ****************************************************************************/
 int
 efrm_nic_add(void *drv_device, struct pci_dev *dev,
 	     const struct efhw_device_type* dev_type, unsigned flags,
 	     struct net_device *net_dev,
-	     struct linux_efhw_nic **lnic_out,
+	     struct linux_efhw_nic **lnic_inout,
 	     const struct vi_resource_dimensions *res_dim,
 	     unsigned timer_quantum_ns)
 {
-	struct linux_efhw_nic *lnic = NULL;
+	struct linux_efhw_nic *lnic = *lnic_inout;
 	struct efrm_nic *efrm_nic = NULL;
 	struct efhw_nic *nic = NULL;
 	int count = 0, rc = 0;
 	int constructed = 0;
 	int registered_nic = 0;
 
-	lnic = efrm_get_redisovered_nic(dev, dev_type);
 	if (lnic != NULL) {
 		linux_efrm_nic_reclaim(lnic, dev, net_dev, res_dim,
 				       dev_type);
@@ -630,7 +557,7 @@ efrm_nic_add(void *drv_device, struct pci_dev *dev,
 
 	efrm_nic->dmaq_state.unplugging = 0;
 
-	*lnic_out = lnic;
+	*lnic_inout = lnic;
 	efrm_nic_enable_post_reset(nic);
 	efrm_nic_post_reset(nic);
 
