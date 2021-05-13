@@ -76,7 +76,7 @@ typedef struct efrm_filter_table_s
 	struct efrm_filter_table_s*   efrm_ft_next;
         struct net*                   efrm_ft_netns;
         struct efrm_interface_name_s* efrm_ft_interface_name;
-	char*                         efrm_ft_pcidev_name;
+	char*                         efrm_ft_dev_name;
 } efrm_filter_table_t;
 
 typedef enum efrm_filter_ruletype_e
@@ -460,13 +460,6 @@ static char const* efrm_get_action_name( efrm_filter_action_t action )
 	return efrm_action_names[action];
 }
 
-static inline char const* efrm_get_pciname_from_device( const struct device* dev )
-{
-	/* This returns something of the form 0000:13:00.0
-	   This matches the PHYSICAL port, but is unique */
-	return dev_name(dev);
-}
-
 static char const*
 efrm_get_interfacename_from_index( int ifindex, struct net_device** ndev )
 {
@@ -482,14 +475,14 @@ efrm_get_interfacename_from_index( int ifindex, struct net_device** ndev )
 }
 
 static int
-efrm_correct_table_pciname( efrm_filter_table_t* table, char const* pciname )
+efrm_correct_table_devname( efrm_filter_table_t* table, char const* devname )
 {
 	/* Returns a truth value, is this table for the given port? */
-	if ( !table || !pciname || !table->efrm_ft_pcidev_name ) {
-		EFRM_ERR("%s: Internal err %p %p", __func__, table, pciname );
+	if ( !table || !devname || !table->efrm_ft_dev_name ) {
+		EFRM_ERR("%s: Internal err %p %p", __func__, table, devname );
 		return 0;
 	}
-	return strcmp( pciname, table->efrm_ft_pcidev_name ) == 0;
+	return strcmp( devname, table->efrm_ft_dev_name ) == 0;
 }
 
 /* ******************************************************************** */
@@ -538,7 +531,7 @@ static void ethrm_unlink_table( efrm_filter_table_t* table )
 	/* Added safety; make sure this table won't be matched in future */
 	table->efrm_ft_interface_name = NULL;
         table->efrm_ft_netns = NULL;
-	*table->efrm_ft_pcidev_name = '\0';
+	*table->efrm_ft_dev_name = '\0';
 
 	spin_unlock_bh(&efrm_ft_lock);
 }
@@ -733,21 +726,21 @@ find_table_by_ifname( struct net* netns, char const* ifname,
 }
 
 static int
-find_table_by_pcidevice( char const* pciname, efrm_filter_table_t** table )
+find_table_by_device( char const* devname, efrm_filter_table_t** table )
 {
-	/* Find a table matching this pci device name.
+	/* Find a table matching this device name.
 	   Returns a truth value, outputs the table. */
         efrm_interface_name_t* cur_name = efrm_in_first_interface;
 
-	if ( !pciname || !table ) {
-		EFRM_ERR("%s:Internal error %p %p", __func__, pciname, table );
+	if ( !devname || !table ) {
+		EFRM_ERR("%s:Internal error %p %p", __func__, devname, table );
 		return 0;
 	}
 
 	while( cur_name ) {
                 efrm_filter_table_t* cur_table = cur_name->efrm_in_root_table;
                 while ( cur_table ) {
-                        if ( efrm_correct_table_pciname( cur_table, pciname ) ) {
+                        if ( efrm_correct_table_devname( cur_table, devname ) ) {
                                 *table = cur_table;
                                 return 1;
                         }
@@ -770,7 +763,7 @@ interface_has_rules( struct net* netns, char const* ifname )
 }
 
 static efrm_filter_table_t*
-efrm_allocate_new_table( char const* pci_name,
+efrm_allocate_new_table( char const* dev_name,
                          struct net* netns, char const* if_name )
 {
 	/* Allocates a new, efrm_filter_table_t structure, fills in the name,
@@ -782,32 +775,31 @@ efrm_allocate_new_table( char const* pci_name,
 	char* buf = (char*) kmalloc( size, GFP_KERNEL );
 	efrm_filter_table_t* table = (efrm_filter_table_t*) buf;
 	if ( table ) {
-		char* pcidev_name = buf
-		                     + sizeof(efrm_filter_table_t);
+		char* name = buf + sizeof(efrm_filter_table_t);
 
-		pcidev_name[0] = '\0';
+		name[0] = '\0';
 
                 table->efrm_ft_netns = netns;
 		table->efrm_ft_first_rule = NULL;
 		table->efrm_ft_last_rule = NULL;
 		table->efrm_ft_prev = NULL;
 		table->efrm_ft_next = NULL;
-		table->efrm_ft_pcidev_name = pcidev_name;
+		table->efrm_ft_dev_name = name;
 		table->efrm_ft_interface_name = NULL;
-		if ( pci_name ) {
-			strlcpy( pcidev_name, pci_name, IFNAMSIZ );
+		if ( dev_name ) {
+			strlcpy( name, dev_name, IFNAMSIZ );
 		}
 	}
 	return table;
 }
 
 static efrm_filter_table_t*
-efrm_insert_new_table( char const* pci_name,
+efrm_insert_new_table( char const* dev_name,
                        struct net* netns, char const* if_name )
 {
 	/* Create and link a table with these names. */
         efrm_interface_name_t* name;
-	efrm_filter_table_t* table = efrm_allocate_new_table(pci_name,
+	efrm_filter_table_t* table = efrm_allocate_new_table(dev_name,
                                                              netns,
 	                                                     if_name );
 	if ( table && find_interface_name( if_name, &name ) ) {
@@ -1216,12 +1208,12 @@ static inline int efrm_filter_check (const struct device* dev,
 	efrm_filter_action_t rc = EFRM_FR_ACTION_UNSUPPORTED;
 	efrm_filter_rule_t* rule = NULL;
 	efrm_filter_table_t* table = NULL;
-	char const* pci = efrm_get_pciname_from_device(dev);
+	char const* name = dev_name(dev);
 	int unsupported = 0;
 
 	spin_lock_bh(&efrm_ft_lock);
 
-	if ( !find_table_by_pcidevice( pci, &table ) )
+	if ( !find_table_by_device( name, &table ) )
 	{
 		/* No rules for this interface, so accept. */
 		goto check_filter_complete;
@@ -1943,24 +1935,24 @@ void efrm_filter_remove_proc_entries()
 	efrm_pd_del_rule = NULL;
 }
 
-int efrm_remove_table_name( char const *pciname )
+int efrm_remove_table_name( char const *devname )
 {
 	efrm_filter_table_t* table;
-	int found = find_table_by_pcidevice( pciname, &table );
+	int found = find_table_by_device( devname, &table );
 	if ( found ) {
-		*table->efrm_ft_pcidev_name = '\0';
+		*table->efrm_ft_dev_name = '\0';
 		 efrm_remove_files( table );
 	}
 	return found;
 }
 
 void efrm_map_table( struct net* netns, char const* ifname,
-                     char const* pciname )
+                     char const* devname )
 {
 	int found;
 	efrm_filter_table_t* table = NULL;
 
-	/* We may have:  A previous name for this pci_device
+	/* We may have:  A previous name for this device
 	                 Rules for this name, that don't yet have a device.
 	                 No table at all.
 	   Tables belong to *interface* names.
@@ -1968,11 +1960,11 @@ void efrm_map_table( struct net* netns, char const* ifname,
 	/* Then: Set the new mapping */
 	found = find_table_by_ifname( netns, ifname, &table );
 	if ( !found ) {
-		table = efrm_insert_new_table( pciname, netns, ifname );
+		table = efrm_insert_new_table( devname, netns, ifname );
 	}
 	if ( table ) {
 		efrm_add_files( table );
-		strlcpy( table->efrm_ft_pcidev_name, pciname,
+		strlcpy( table->efrm_ft_dev_name, devname,
 			 IFNAMSIZ );
 	}
 }
@@ -1980,7 +1972,7 @@ void efrm_map_table( struct net* netns, char const* ifname,
 void efrm_init_resource_filter(const struct device *dev, int ifindex)
 {
 	/* Per-Interface init */
-	char const* pciname;
+	char const* devname;
 	char const* ifname;
 	struct net_device* ndev;
 
@@ -1989,14 +1981,14 @@ void efrm_init_resource_filter(const struct device *dev, int ifindex)
 
 	mutex_lock( &efrm_ft_mutex );
 
-	pciname = efrm_get_pciname_from_device( dev );
+	devname = dev_name( dev );
 	ifname = efrm_get_interfacename_from_index( ifindex, &ndev );
 
-	if ( pciname )
-		efrm_remove_table_name( pciname );
+	if ( devname )
+		efrm_remove_table_name( devname );
 
 	if ( ifname ) {
-		efrm_map_table( dev_net( ndev ), ifname, pciname );
+		efrm_map_table( dev_net( ndev ), ifname, devname );
 		dev_put(ndev);
 	}
 
@@ -2007,7 +1999,7 @@ void efrm_init_resource_filter(const struct device *dev, int ifindex)
 void efrm_shutdown_resource_filter(const struct device *dev)
 {
 	/* Per interface shutdown */
-	char const* pciname;
+	char const* devname;
 
 	if ( !dev )
 		return;
@@ -2017,9 +2009,9 @@ void efrm_shutdown_resource_filter(const struct device *dev)
 	/* Un-name the table, so its rules won't get used; but don't remove
 	   the rules, as the interface can come back later. */
 
-	pciname = efrm_get_pciname_from_device( dev );
-	if ( pciname )
-		efrm_remove_table_name( pciname );
+	devname = dev_name( dev );
+	if ( devname )
+		efrm_remove_table_name( devname );
 
 	mutex_unlock( &efrm_ft_mutex );
 }
@@ -2030,7 +2022,7 @@ void efrm_shutdown_resource_filter(const struct device *dev)
 int efrm_filter_rename( struct efhw_nic *nic, struct net_device *net_dev )
 {
 	char const* ifname;
-	char const* pciname;
+	char const* devname;
 
 	if ( !nic || !net_dev ) {
 		EFRM_ERR("%s:Internal error %p %p", __func__, nic, net_dev );
@@ -2038,9 +2030,9 @@ int efrm_filter_rename( struct efhw_nic *nic, struct net_device *net_dev )
 	}
 
 	/* efhw_nic is the device, which has the real id */
-	pciname = efrm_get_pciname_from_device( net_dev->dev.parent );
-	if ( !pciname ) {
-		EFRM_ERR("%s:Old device has no pciname", __func__ );
+	devname = dev_name( net_dev->dev.parent );
+	if ( !devname ) {
+		EFRM_ERR("%s:Old device has no devname", __func__ );
 	}
 	/* net_dev->name should contain the new name */
 	ifname = net_dev->name;
@@ -2050,12 +2042,12 @@ int efrm_filter_rename( struct efhw_nic *nic, struct net_device *net_dev )
 
 	mutex_lock( &efrm_ft_mutex );
 
-	EFRM_TRACE("%s:Renaming device %s, %s", __func__, pciname, ifname );
+	EFRM_TRACE("%s:Renaming device %s, %s", __func__, devname, ifname );
 
-	if ( pciname )
-		efrm_remove_table_name( pciname );
+	if ( devname )
+		efrm_remove_table_name( devname );
 	if ( ifname )
-		efrm_map_table( dev_net( net_dev ), ifname, pciname );
+		efrm_map_table( dev_net( net_dev ), ifname, devname );
 
 	mutex_unlock( &efrm_ft_mutex );
 
