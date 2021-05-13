@@ -217,18 +217,18 @@ static const struct attribute_group sfc_resource_group = {
 	.attrs = sfc_resource_attrs,
 };
 
-static void efrm_nic_add_sysfs(const struct net_device* net_dev, struct pci_dev *dev)
+static void efrm_nic_add_sysfs(const struct net_device* net_dev, struct device *dev)
 {
-	int rc = sysfs_create_group(&dev->dev.kobj, &sfc_resource_group);
+	int rc = sysfs_create_group(&dev->kobj, &sfc_resource_group);
 	if (!rc)
 		return;
 	EFRM_WARN("%s: Sysfs group `sfc_resource` creation failed intf=%s, rc=%d.",
 		  __func__, net_dev->name, rc);
 }
 
-static void efrm_nic_del_sysfs(struct pci_dev *dev)
+static void efrm_nic_del_sysfs(struct device *dev)
 {
-	sysfs_remove_group(&dev->dev.kobj, &sfc_resource_group);
+	sysfs_remove_group(&dev->kobj, &sfc_resource_group);
 }
 
 
@@ -299,7 +299,7 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 	if (rc != 0)
 		return rc;
 
-	efrm_nic_add_sysfs(net_dev, efrm_dev->pci_dev);
+	efrm_nic_add_sysfs(net_dev, &efrm_dev->pci_dev->dev);
 	/* Store pointer to net driver's driverlink device info.  It
 	 * is guaranteed not to move, and we can use it to update our
 	 * state in a reset_resume callback
@@ -322,7 +322,7 @@ static void efrm_dl_remove(struct efx_dl_device *efrm_dev)
 {
 	struct efhw_nic *nic = efrm_dev->priv;
 	EFRM_TRACE("%s called", __func__);
-	efrm_nic_del_sysfs(efrm_dev->pci_dev);
+	efrm_nic_del_sysfs(&efrm_dev->pci_dev->dev);
 	if (nic) {
 		struct net_device* net_dev = efhw_nic_get_net_dev(nic);
 		struct linux_efhw_nic *lnic = linux_efhw_nic(nic);
