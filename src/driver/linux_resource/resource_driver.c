@@ -314,8 +314,6 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 	efhw_nic_init(nic, nic_flags, NIC_OPT_DEFAULT, dev_type, map_min,
 		      map_max, vi_base, vi_shift, mem_bar, vi_stride, net_dev,
 		      dev);
-	lnic->efrm_nic.efhw_nic.bus_number = dev ? dev->bus->number : 0;
-	lnic->efrm_nic.efhw_nic.domain = dev ? pci_domain_nr(dev->bus) : 0;
 	if( dev ) {
 		lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr = pci_resource_start(dev, nic->ctr_ap_bar);
 	}
@@ -391,8 +389,7 @@ linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
 	efrm_shutdown_resource_filter(&old_pci_dev->dev);
 
 	/* Bring up new state. */
-	nic->domain = pci_domain_nr(dev->bus);
-	nic->bus_number = dev->bus->number;
+	efhw_nic_update_pci_info(nic);
 	if (dev_type->arch == EFHW_ARCH_EF10) {
 		nic->vi_base = res_dim->vi_base;
 	}

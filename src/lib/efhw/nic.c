@@ -140,6 +140,18 @@ int efhw_nondl_device_type_init(struct efhw_device_type *dt)
  *
  *--------------------------------------------------------------------*/
 
+void efhw_nic_update_pci_info(struct efhw_nic *nic)
+{
+	struct pci_dev *pci_dev = efhw_nic_get_pci_dev(nic);
+	if( !pci_dev )
+		return;
+
+	nic->bus_number = pci_dev->bus->number;
+	nic->domain = pci_domain_nr(pci_dev->bus);
+
+	pci_dev_put(pci_dev);
+}
+
 /* make this separate from initialising data structure
 ** to allow this to be called at a later time once we can access PCI
 ** config space to find out what hardware we have
@@ -238,6 +250,8 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		EFHW_ASSERT(0);
 		break;
 	}
+
+	efhw_nic_update_pci_info(nic);
 }
 
 void efhw_nic_dtor(struct efhw_nic *nic)
