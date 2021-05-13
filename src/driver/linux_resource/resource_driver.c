@@ -314,15 +314,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 	efhw_nic_init(nic, nic_flags, NIC_OPT_DEFAULT, dev_type, map_min,
 		      map_max, vi_base, vi_shift, mem_bar, vi_stride, net_dev,
 		      dev);
-	if( dev ) {
-		lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr = pci_resource_start(dev, nic->ctr_ap_bar);
-	}
-	EFRM_WARN("%s: ctr_ap_dma_addr=%p", __func__,
-		  (void*) lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr);
 	irq_ranges_init(nic, res_dim);
-
-	EFRM_ASSERT(!dev || dev_type->arch == EFHW_ARCH_AF_XDP ||
-                    efrm_nic_bar_is_good(nic, dev));
 
 	spin_lock_init(&lnic->efrm_nic.efhw_nic.pci_dev_lock);
 	init_rwsem(&lnic->drv_sem);
