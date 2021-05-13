@@ -51,7 +51,6 @@ extern int efrm_client_get_ifindex(struct efrm_client *);
 extern int efrm_client_accel_allowed(struct efrm_client *client);
 
 extern struct efhw_nic* efhw_nic_find(const struct net_device *);
-struct efhw_nic* efhw_nic_find_by_pci_dev(const struct pci_dev *);
 struct efhw_nic* efhw_nic_find_by_dev(const struct device *dev);
 
 extern void efrm_client_disable_post_reset(struct efrm_client*);
