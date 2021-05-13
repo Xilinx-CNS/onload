@@ -526,15 +526,6 @@ void* efhw_nic_acquire_drv_device(struct efhw_nic* efhw_nic)
 	if (rnic->rnic_flags & EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED)
 		return NULL;
 
-	/* TODO AF_XDP driverlink is untested and assumed not to work.
-	 *
-	 * In particular, we want to disable filter operations for the time
-	 * being: we currently rely on ethtool to set up rules to receive
-	 * AF_XDP packets, and adding/removing filters will interfere with that.
-	 */
-	if (efhw_nic->devtype.arch == EFHW_ARCH_AF_XDP)
-		return NULL;
-
 	/* Acquire the lock if the driverlink device is live, taking care to
 	 * avoid races against it changing under our feet. */
 	drv_device = READ_ONCE(lnic->drv_device);

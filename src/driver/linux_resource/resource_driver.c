@@ -592,10 +592,7 @@ efrm_nic_add(void *drv_device, struct pci_dev *dev,
 	lnic->drv_device = drv_device;
 	efrm_nic = &lnic->efrm_nic;
 	nic = &efrm_nic->efhw_nic;
-	if( dev )
-		efrm_driverlink_resume(nic);
-	else
-		efrm_nic->rnic_flags |= EFRM_NIC_FLAG_DRIVERLINK_PROHIBITED;
+	efrm_driverlink_resume(nic);
 
 	if( timer_quantum_ns )
 		nic->timer_quantum_ns = timer_quantum_ns;
