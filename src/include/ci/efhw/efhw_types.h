@@ -369,6 +369,14 @@ struct efhw_func_ops {
 	int (*af_xdp_init) (struct efhw_nic* nic, int instance,
 	                    int chunk_size, int headroom,
 	                    struct efhw_page_map* pages_out);
+
+  /*-------------- device ------------------------ */
+
+	/*! Returns the struct pci_dev for the NIC, taking out a reference to
+	 * it, or NULL if one is not available.
+	 * Callers should call pci_dev_put() on the returned pointer to
+	 * release that reference when they're finished. */
+	struct pci_dev* (*get_pci_dev)(struct efhw_nic* nic);
 };
 
 

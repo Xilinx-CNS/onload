@@ -752,4 +752,5 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_dmaq_kick,
 	ef100_af_xdp_mem,
 	ef100_af_xdp_init,
+	ef10_ef100_get_pci_dev,
 };

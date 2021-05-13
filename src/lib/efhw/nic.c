@@ -250,21 +250,6 @@ void efhw_nic_dtor(struct efhw_nic *nic)
 }
 
 
-/* Returns the struct pci_dev for the NIC, taking out a reference to it.
- * Callers should call pci_dev_put() on the returned pointer to release that
- * reference when they're finished. */
-struct pci_dev* efhw_nic_get_pci_dev(struct efhw_nic* nic)
-{
-	struct pci_dev* dev;
-	spin_lock_bh(&nic->pci_dev_lock);
-	dev = nic->pci_dev;
-	if( dev )
-		pci_dev_get(dev);
-	spin_unlock_bh(&nic->pci_dev_lock);
-	return dev;
-}
-
-
 /* Returns the struct device for the NIC, taking out a reference to it.
  * Callers should call put_device() on the returned pointer to release that
  * reference when they're finished. */

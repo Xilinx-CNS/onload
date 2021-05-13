@@ -235,3 +235,7 @@
 	((nic)->efhw_func->vport_alloc((nic), (vlan_id), (vport_handle_out)))
 #define efhw_nic_vport_free(nic, vport_handle) \
 	((nic)->efhw_func->vport_free((nic), (vport_handle)))
+
+/*-------------- device ------------------------ */
+#define efhw_nic_get_pci_dev(nic) \
+	((nic)->efhw_func->get_pci_dev(nic))

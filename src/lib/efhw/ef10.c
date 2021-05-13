@@ -2458,6 +2458,21 @@ static int ef10_af_xdp_init(struct efhw_nic* nic, int instance,
   return 0;
 }
 
+/*--------------------------------------------------------------------
+ *
+ * Device
+ *
+ *--------------------------------------------------------------------*/
+struct pci_dev* ef10_ef100_get_pci_dev(struct efhw_nic* nic)
+{
+	struct pci_dev* dev;
+	spin_lock_bh(&nic->pci_dev_lock);
+	dev = nic->pci_dev;
+	if( dev )
+		pci_dev_get(dev);
+	spin_unlock_bh(&nic->pci_dev_lock);
+	return dev;
+}
 
 /*--------------------------------------------------------------------
  *
@@ -2515,4 +2530,5 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_dmaq_kick,
 	ef10_af_xdp_mem,
 	ef10_af_xdp_init,
+	ef10_ef100_get_pci_dev,
 };

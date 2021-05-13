@@ -1594,6 +1594,17 @@ af_xdp_vport_free(struct efhw_nic *nic, u16 vport_handle)
 
 /*--------------------------------------------------------------------
  *
+ * Device
+ *
+ *--------------------------------------------------------------------*/
+static struct pci_dev*
+af_xdp_get_pci_dev(struct efhw_nic *nic)
+{
+	return NULL;
+}
+
+/*--------------------------------------------------------------------
+ *
  * Abstraction Layer Hooks
  *
  *--------------------------------------------------------------------*/
@@ -1648,6 +1659,7 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_dmaq_kick,
 	af_xdp_mem,
 	af_xdp_init,
+	af_xdp_get_pci_dev,
 };
 
 #endif /* EFHW_HAS_AF_XDP */
