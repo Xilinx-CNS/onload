@@ -137,9 +137,6 @@ efrm_pd_set_min_align(struct efrm_pd *pd, int alignment);
 extern int
 efrm_pd_get_min_align(struct efrm_pd *pd);
 
-/* Return the PCI device associated with the protection domain. */
-struct pci_dev *efrm_pd_get_pci_dev(struct efrm_pd *pd);
-
 /* Returns the NIC's dynamic client entity grouping everything in this PD
  * together */
 extern uint32_t
