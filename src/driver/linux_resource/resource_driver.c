@@ -316,22 +316,19 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 		      dev);
 	irq_ranges_init(nic, res_dim);
 
-	spin_lock_init(&lnic->efrm_nic.efhw_nic.pci_dev_lock);
 	init_rwsem(&lnic->drv_sem);
 
 	rc = linux_efhw_nic_map_ctr_ap(lnic);
 	if (rc < 0)
-		goto fail;
+		goto fail1;
 
 	rc = efrm_affinity_interface_probe(lnic);
 	if (rc < 0)
-		goto fail;
+		goto fail2;
 
 	rc = efrm_nic_ctor(&lnic->efrm_nic, res_dim);
-	if (rc < 0) {
-		linux_efhw_nic_unmap_ctr_ap(lnic);
-		goto fail2;
-	}
+	if (rc < 0)
+		goto fail3;
 
 	if (enable_accel_by_default)
 		lnic->efrm_nic.rnic_flags |= EFRM_NIC_FLAG_ADMIN_ENABLED;
@@ -339,8 +336,12 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct pci_dev *dev,
 	efrm_init_resource_filter(dev ? &dev->dev : &net_dev->dev, net_dev->ifindex);
 
 	return 0;
-fail2:
+fail3:
 	efrm_affinity_interface_remove(lnic);
+fail2:
+	linux_efhw_nic_unmap_ctr_ap(lnic);
+fail1:
+	efhw_nic_dtor(nic);
 fail:
 	if( dev )
 		pci_dev_put(dev);

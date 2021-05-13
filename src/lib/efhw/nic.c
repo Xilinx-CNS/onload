@@ -176,6 +176,7 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 	nic->vi_lim = map_max;
 	nic->net_dev = net_dev;
 	nic->pci_dev = dev;
+	spin_lock_init(&nic->pci_dev_lock);
 
 	switch (nic->devtype.arch) {
 	case EFHW_ARCH_EF10:
