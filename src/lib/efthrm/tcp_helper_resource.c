@@ -6540,6 +6540,14 @@ static int tcp_helper_timeout(tcp_helper_resource_t* trs, int intf_i, int budget
   OO_DEBUG_RES(ci_log(FN_FMT, FN_PRI_ARGS(ni)));
   CITP_STATS_NETIF_INC(ni, timeout_interrupts);
 
+  /* We do not expect evq_primed to be set, but it may happen if we fail to
+   * serve a non-timout interrupt in time.
+   */
+  i = ci_bit_test_and_clear(&ni->state->evq_primed, intf_i);
+  if( i )
+    ci_log("WARNING: [%d] timeout interrupt when primed intf_i=%d",
+           trs->id, intf_i);
+
   /* Re-prime the timer here to ensure it is re-primed even if we don't
    * call ci_netif_poll() below.  Updating [evq_last_prime] ensures we
    * won't re-prime it again in ci_netif_poll().
