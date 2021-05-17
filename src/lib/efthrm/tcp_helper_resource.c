@@ -7250,7 +7250,7 @@ efab_create_os_socket(tcp_helper_resource_t* trs, tcp_helper_endpoint_t* ep,
   if( IS_ERR(os_file) ) {
     LOG_E(ci_log("%s: ERROR: sock_alloc_file failed (%ld)",
                  __FUNCTION__, PTR_ERR(os_file)));
-    sock_release(sock);
+    /* sock_alloc_file() releases the socket in case of failure */
     return PTR_ERR(os_file);
   }
   /* sock is consumed by os_file */
