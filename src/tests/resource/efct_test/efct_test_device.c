@@ -4,6 +4,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
+#include <linux/rtnetlink.h>
 #include "auxiliary_bus.h"
 
 #include "efct_test_device.h"
@@ -61,7 +62,9 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
     return ERR_PTR(rc);
   }
 
+  rtnl_lock();
   rc = auxiliary_device_add(adev);
+  rtnl_unlock();
   if( rc != 0 ) {
     printk(KERN_INFO "Failed to add aux device %d\n", rc);
     auxiliary_device_uninit(adev);
@@ -83,7 +86,9 @@ void efct_test_remove_test_dev(struct efct_test_device* tdev)
   struct auxiliary_device* adev = &tdev->dev.adev;
 
   dev_put(tdev->net_dev);
+  rtnl_lock();
   auxiliary_device_delete(adev);
+  rtnl_unlock();
   auxiliary_device_uninit(adev);
 }
 
