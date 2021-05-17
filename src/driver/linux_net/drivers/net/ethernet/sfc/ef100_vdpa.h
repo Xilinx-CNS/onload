@@ -203,8 +203,10 @@ int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic);
 int ef100_vdpa_filter_remove(struct ef100_vdpa_nic *vdpa_nic);
 int ef100_vdpa_irq_vectors_alloc(struct pci_dev *pci_dev, u16 min, u16 max);
 void ef100_vdpa_irq_vectors_free(void *data);
-int ef100_vdpa_free_buffer(struct efx_nic *efx, struct efx_buffer *buf);
+int ef100_vdpa_free_buffer(struct ef100_vdpa_nic *vdpa_nic,
+			   struct efx_buffer *buf);
 void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic);
+bool ef100_vdpa_dev_in_use(struct efx_nic *efx);
 #endif
 
 #endif

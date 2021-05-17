@@ -170,7 +170,7 @@ endif # !EFX_NO_KCOMPAT
 ifndef EFX_UPSTREAM
 ifeq ($(filter export export-xen,$(MAKECMDGOALS)),)
 ifndef EFX_FOR_UPSTREAM
-sfc-y			+= linux_mdio.o sfctool.o
+sfc-y			+= linux_mdio.o sfctool.o ef100_dump.o
 sfc-$(CONFIG_SFC_AOE)	+= aoe.o
 sfc-$(CONFIG_SFC_DEBUGFS) += debugfs.o
 endif # !EFX_FOR_UPSTREAM

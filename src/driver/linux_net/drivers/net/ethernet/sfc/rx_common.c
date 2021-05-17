@@ -761,15 +761,13 @@ static bool efx_alloc_buffer_zc(struct efx_rx_queue *rx_queue,
 #endif
 	bool alloc_failed = false;
 	struct xdp_buff *xsk_buf;
-	dma_addr_t dma;
 
 	xsk_buf = xsk_buff_alloc(buff_pool);
 	if (!xsk_buf) {
 		alloc_failed = true;
 		goto alloc_fail;
 	}
-	dma = xsk_buff_xdp_get_frame_dma(xsk_buf);;
-	rx_buf->dma_addr = cpu_to_le64(dma);
+	rx_buf->dma_addr = xsk_buff_xdp_get_dma(xsk_buf);;
 	xsk_buf->rxq = &rx_queue->xdp_rxq_info;
 	rx_buf->xsk_buf = xsk_buf;
 

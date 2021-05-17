@@ -2279,10 +2279,6 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 
 	/* Parse match */
 	memset(&match, 0, sizeof(match));
-	/* No ingress_port filtering; tunnel decap is on every port.
-	 * This probably isn't the right thing, but I haven't yet figured out
-	 * what is.
-	 */
 	rc = efx_tc_flower_parse_match(efx, fr, &match, NULL);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 	if (rc)
@@ -2293,6 +2289,24 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 		return rc;
 	}
 #endif
+	/* The rule as given to us doesn't specify a source netdevice.
+	 * But, determining whether packets from a VF should match it is
+	 * complicated, so leave those to the software slowpath: qualify
+	 * the filter with source m-port == wire.
+	 */
+#ifdef EFX_NOT_UPSTREAM
+	/* See SWNETLINUX-4321 for the gruesome details. */
+#endif
+	rc = efx_tc_flower_external_mport(efx, EFX_VPORT_PF);
+	if (rc < 0) {
+		efx_tc_err(efx, "Failed to identify ingress m-port for foreign filter");
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+		kfree(fr);
+#endif
+		return rc;
+	}
+	match.value.ingress_port = rc;
+	match.mask.ingress_port = ~0;
 	rc = efx_mae_match_check_caps(efx, &match.mask, NULL);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 	if (rc)
@@ -2348,6 +2362,13 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 			return rc;
 		}
 #endif
+	} else {
+		/* This is not a tunnel decap rule, ignore it */
+		netif_dbg(efx, drv, efx->net_dev, "Ignoring foreign filter without encap match\n");
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+		kfree(fr);
+#endif
+		return -EOPNOTSUPP;
 	}
 
 	rule = kzalloc(sizeof(*rule), GFP_USER);

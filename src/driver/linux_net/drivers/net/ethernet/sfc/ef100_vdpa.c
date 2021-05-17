@@ -292,7 +292,14 @@ static ssize_t vdpa_class_store(struct device *dev,
 		break;
 
 	case EF100_VDPA_CLASS_NET:
+
 		if (vdpa_class == EF100_VDPA_CLASS_NONE) {
+			if (ef100_vdpa_dev_in_use(efx)) {
+				pci_warn(efx->pci_dev,
+					 "Device in use cannot change class");
+				rc = -EBUSY;
+				goto fail;
+			}
 			ef100_vdpa_delete(efx);
 			nic_data->vdpa_class = EF100_VDPA_CLASS_NONE;
 			pci_info(efx->pci_dev,
@@ -528,9 +535,9 @@ static int ef100_vdpa_alloc_buffer(struct efx_nic *efx, struct efx_buffer *buf)
        return rc;
 }
 
-int ef100_vdpa_free_buffer(struct efx_nic *efx, struct efx_buffer *buf)
+int ef100_vdpa_free_buffer(struct ef100_vdpa_nic *vdpa_nic,
+			   struct efx_buffer *buf)
 {
-       struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
        struct device *dev;
        int rc = 0;
 
@@ -543,10 +550,10 @@ int ef100_vdpa_free_buffer(struct efx_nic *efx, struct efx_buffer *buf)
        return rc;
 }
 
-static int setup_ef100_mcdi_buffer(struct efx_nic *efx)
+static int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic)
 {
+	struct efx_nic *efx = vdpa_nic->efx;
        struct ef100_nic_data *nic_data = efx->nic_data;
-       struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
        struct efx_mcdi_iface *mcdi;
        struct efx_buffer mcdi_buf;
        struct device *dev;
@@ -565,7 +572,7 @@ static int setup_ef100_mcdi_buffer(struct efx_nic *efx)
        }
 
        /* unmap and free the vDPA MCDI buffer now */
-       ef100_vdpa_free_buffer(efx, &nic_data->mcdi_buf);
+       ef100_vdpa_free_buffer(vdpa_nic, &nic_data->mcdi_buf);
        memcpy(&nic_data->mcdi_buf, &mcdi_buf, sizeof(struct efx_buffer));
        efx->mcdi_buf_mode = EFX_BUF_MODE_EF100;
        spin_unlock_bh(&mcdi->iface_lock);
@@ -728,27 +735,47 @@ err_alloc_vis_free:
 
 void ef100_vdpa_delete(struct efx_nic *efx)
 {
-	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+	struct ef100_vdpa_nic vdpa_nic;
 	int rc;
 
-	if (vdpa_nic) {
-		mutex_lock(&vdpa_nic->lock);
-		reset_vdpa_device(vdpa_nic);
-		mutex_unlock(&vdpa_nic->lock);
+	if (efx->vdpa_nic) {
+		mutex_lock(&efx->vdpa_nic->lock);
+		reset_vdpa_device(efx->vdpa_nic);
+		mutex_unlock(&efx->vdpa_nic->lock);
+
+		memcpy(&vdpa_nic, efx->vdpa_nic, sizeof(vdpa_nic));
+		vdpa_unregister_device(&efx->vdpa_nic->vdpa_dev);
+		efx->vdpa_nic = NULL;
+		/* use the efx dev now while logging */
+		memcpy(&vdpa_nic.vdpa_dev.dev, &efx->pci_dev->dev,
+		       sizeof(struct device));
 #ifdef CONFIG_SFC_DEBUGFS
-		efx_fini_debugfs_vdpa(vdpa_nic);
+		efx_fini_debugfs_vdpa(&vdpa_nic);
 #endif
-		vdpa_unregister_device(&vdpa_nic->vdpa_dev);
-	        rc = setup_ef100_mcdi_buffer(efx);
+	        rc = setup_ef100_mcdi_buffer(&vdpa_nic);
 	        if (rc) {
 	                pci_err(efx->pci_dev,
 	                        "setup_ef100_mcdi failed, err: %d\n", rc);
 	        }
+		mutex_destroy(&vdpa_nic.lock);
 		ef100_vdpa_irq_vectors_free(efx->pci_dev);
-		mutex_destroy(&vdpa_nic->lock);
 		vdpa_free_vis(efx);
-		efx->vdpa_nic = NULL;
 	}
+}
+
+/* A non zero value of vdpa status signifies that the vDPA device
+ * is in use and hence cannot be removed. Also on killing qemu
+ * a device reset is called with status equal to 0.
+ */
+bool ef100_vdpa_dev_in_use(struct efx_nic *efx)
+{
+	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+
+	if (vdpa_nic)
+		if (vdpa_nic->status > 0)
+			return true;
+
+	return false;
 }
 
 #endif

@@ -30,6 +30,9 @@
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 #include <net/gre.h>
 #endif
+#ifdef EFX_NOT_UPSTREAM
+#include "ef100_dump.h"
+#endif
 
 static unsigned int debug = (NETIF_MSG_DRV | NETIF_MSG_PROBE |
 		NETIF_MSG_LINK | NETIF_MSG_IFDOWN |
@@ -1250,6 +1253,12 @@ static void efx_reset_work(struct work_struct *data)
 
 	pending = READ_ONCE(efx->reset_pending);
 	method = fls(pending) - 1;
+
+#ifdef EFX_NOT_UPSTREAM
+	if (method == RESET_TYPE_TX_WATCHDOG &&
+	    efx_nic_rev(efx) == EFX_REV_EF100)
+		efx_ef100_dump_sss_regs(efx);
+#endif
 
 	if (method == RESET_TYPE_MC_BIST)
 		efx_wait_for_bist_end(efx);

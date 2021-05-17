@@ -623,6 +623,14 @@
 #define          MAE_MCDI_ENCAP_TYPE_GENEVE 0x3 /* enum */
 #define          MAE_MCDI_ENCAP_TYPE_L2GRE 0x4 /* enum */
 
+/* MAE_MPORT_END enum: Selects which end of the logical link identified by an
+ * MPORT_SELECTOR is targetted by an operation.
+ */
+/* enum: Selects the port on the MAE virtual switch */
+#define          MAE_MPORT_END_MAE 0x1
+/* enum: Selects the virtual NIC plugged into the MAE switch */
+#define          MAE_MPORT_END_VNIC 0x2
+
 /* MCDI_EVENT structuredef: The structure of an MCDI_EVENT on Siena/EF10/EF100
  * platforms
  */
@@ -5567,6 +5575,129 @@
 #define        MC_CMD_SET_MAC_EXT_IN_CFG_FCS_LBN 4
 #define        MC_CMD_SET_MAC_EXT_IN_CFG_FCS_WIDTH 1
 
+/* MC_CMD_SET_MAC_V3_IN msgrequest */
+#define    MC_CMD_SET_MAC_V3_IN_LEN 40
+/* The MTU is the MTU programmed directly into the XMAC/GMAC (inclusive of
+ * EtherII, VLAN, bug16011 padding).
+ */
+#define       MC_CMD_SET_MAC_V3_IN_MTU_OFST 0
+#define       MC_CMD_SET_MAC_V3_IN_MTU_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_DRAIN_OFST 4
+#define       MC_CMD_SET_MAC_V3_IN_DRAIN_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_OFST 8
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_LEN 8
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_LO_OFST 8
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_LO_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_LO_LBN 64
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_LO_WIDTH 32
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_HI_OFST 12
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_HI_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_HI_LBN 96
+#define       MC_CMD_SET_MAC_V3_IN_ADDR_HI_WIDTH 32
+#define       MC_CMD_SET_MAC_V3_IN_REJECT_OFST 16
+#define       MC_CMD_SET_MAC_V3_IN_REJECT_LEN 4
+#define        MC_CMD_SET_MAC_V3_IN_REJECT_UNCST_OFST 16
+#define        MC_CMD_SET_MAC_V3_IN_REJECT_UNCST_LBN 0
+#define        MC_CMD_SET_MAC_V3_IN_REJECT_UNCST_WIDTH 1
+#define        MC_CMD_SET_MAC_V3_IN_REJECT_BRDCST_OFST 16
+#define        MC_CMD_SET_MAC_V3_IN_REJECT_BRDCST_LBN 1
+#define        MC_CMD_SET_MAC_V3_IN_REJECT_BRDCST_WIDTH 1
+#define       MC_CMD_SET_MAC_V3_IN_FCNTL_OFST 20
+#define       MC_CMD_SET_MAC_V3_IN_FCNTL_LEN 4
+/* enum: Flow control is off. */
+/*               MC_CMD_FCNTL_OFF 0x0 */
+/* enum: Respond to flow control. */
+/*               MC_CMD_FCNTL_RESPOND 0x1 */
+/* enum: Respond to and Issue flow control. */
+/*               MC_CMD_FCNTL_BIDIR 0x2 */
+/* enum: Auto neg flow control. */
+/*               MC_CMD_FCNTL_AUTO 0x3 */
+/* enum: Priority flow control (eftest builds only). */
+/*               MC_CMD_FCNTL_QBB 0x4 */
+/* enum: Issue flow control. */
+/*               MC_CMD_FCNTL_GENERATE 0x5 */
+#define       MC_CMD_SET_MAC_V3_IN_FLAGS_OFST 24
+#define       MC_CMD_SET_MAC_V3_IN_FLAGS_LEN 4
+#define        MC_CMD_SET_MAC_V3_IN_FLAG_INCLUDE_FCS_OFST 24
+#define        MC_CMD_SET_MAC_V3_IN_FLAG_INCLUDE_FCS_LBN 0
+#define        MC_CMD_SET_MAC_V3_IN_FLAG_INCLUDE_FCS_WIDTH 1
+/* Select which parameters to configure. A parameter will only be modified if
+ * the corresponding control flag is set. If SET_MAC_ENHANCED is not set in
+ * capabilities then this field is ignored (and all flags are assumed to be
+ * set).
+ */
+#define       MC_CMD_SET_MAC_V3_IN_CONTROL_OFST 28
+#define       MC_CMD_SET_MAC_V3_IN_CONTROL_LEN 4
+#define        MC_CMD_SET_MAC_V3_IN_CFG_MTU_OFST 28
+#define        MC_CMD_SET_MAC_V3_IN_CFG_MTU_LBN 0
+#define        MC_CMD_SET_MAC_V3_IN_CFG_MTU_WIDTH 1
+#define        MC_CMD_SET_MAC_V3_IN_CFG_DRAIN_OFST 28
+#define        MC_CMD_SET_MAC_V3_IN_CFG_DRAIN_LBN 1
+#define        MC_CMD_SET_MAC_V3_IN_CFG_DRAIN_WIDTH 1
+#define        MC_CMD_SET_MAC_V3_IN_CFG_REJECT_OFST 28
+#define        MC_CMD_SET_MAC_V3_IN_CFG_REJECT_LBN 2
+#define        MC_CMD_SET_MAC_V3_IN_CFG_REJECT_WIDTH 1
+#define        MC_CMD_SET_MAC_V3_IN_CFG_FCNTL_OFST 28
+#define        MC_CMD_SET_MAC_V3_IN_CFG_FCNTL_LBN 3
+#define        MC_CMD_SET_MAC_V3_IN_CFG_FCNTL_WIDTH 1
+#define        MC_CMD_SET_MAC_V3_IN_CFG_FCS_OFST 28
+#define        MC_CMD_SET_MAC_V3_IN_CFG_FCS_LBN 4
+#define        MC_CMD_SET_MAC_V3_IN_CFG_FCS_WIDTH 1
+/* Identifies the MAC to update by the specifying the end of a logical MAE
+ * link. Setting TARGET to MAE_LINK_ENDPOINT_COMPAT is equivalent to using the
+ * previous version of the command (MC_CMD_SET_MAC_EXT). Not all possible
+ * combinations of MPORT_END and MPORT_SELECTOR in TARGET will work in all
+ * circumstances. 1. Some will always work (e.g. a VF can always address its
+ * logical MAC using MPORT_SELECTOR=ASSIGNED,LINK_END=VNIC), 2. Some are not
+ * meaningful and will always fail with EINVAL (e.g. attempting to address the
+ * VNIC end of a link to a physical port), 3. Some are meaningful but require
+ * the MCDI client to have the required permission and fail with EPERM
+ * otherwise (e.g. trying to set the MAC on a VF the caller cannot administer),
+ * and 4. Some could be implementation-specific and fail with ENOTSUP if not
+ * available (no examples exist right now). See SF-123581-TC section 4.3 for
+ * more details.
+ */
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_OFST 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_LEN 8
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_LO_OFST 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_LO_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_LO_LBN 256
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_LO_WIDTH 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_HI_OFST 36
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_HI_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_HI_LBN 288
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_HI_WIDTH 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_OFST 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FLAT_OFST 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FLAT_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_TYPE_OFST 35
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_TYPE_LEN 1
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_MPORT_ID_OFST 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_MPORT_ID_LEN 3
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_PPORT_ID_LBN 256
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_PPORT_ID_WIDTH 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_LBN 276
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_WIDTH 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_LBN 272
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_WIDTH 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FUNC_PF_ID_OFST 34
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FUNC_PF_ID_LEN 1
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FUNC_VF_ID_OFST 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_MPORT_SELECTOR_FUNC_VF_ID_LEN 2
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_LINK_END_OFST 36
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_LINK_END_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_OFST 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_LEN 8
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_LO_OFST 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_LO_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_LO_LBN 256
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_LO_WIDTH 32
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_HI_OFST 36
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_HI_LEN 4
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_HI_LBN 288
+#define       MC_CMD_SET_MAC_V3_IN_TARGET_FLAT_HI_WIDTH 32
+
 /* MC_CMD_SET_MAC_OUT msgresponse */
 #define    MC_CMD_SET_MAC_OUT_LEN 0
 
@@ -9126,10 +9257,14 @@
 #define          NVRAM_PARTITION_TYPE_FPGA_STAGE2 0xb06
 /* enum: FPGA User XCLBIN / Programmable Region 0 bitstream */
 #define          NVRAM_PARTITION_TYPE_FPGA_REGION0 0xb07
+/* enum: FPGA User XCLBIN (this is intentionally an alias of FPGA_REGION0) */
+#define          NVRAM_PARTITION_TYPE_FPGA_XCLBIN_USER 0xb07
 /* enum: FPGA jump instruction (a.k.a. boot) partition to select Stage1
  * bitstream
  */
 #define          NVRAM_PARTITION_TYPE_FPGA_JUMP 0xb08
+/* enum: FPGA Validate XCLBIN */
+#define          NVRAM_PARTITION_TYPE_FPGA_XCLBIN_VALIDATE 0xb09
 /* enum: MUM firmware partition */
 #define          NVRAM_PARTITION_TYPE_MUM_FIRMWARE 0xc00
 /* enum: SUC firmware partition (this is intentionally an alias of
@@ -25654,6 +25789,10 @@
 #define          MC_CMD_FPGA_IN_OP_SELECT_FLASH 0x3
 /* enum: Get active flash device. */
 #define          MC_CMD_FPGA_IN_OP_GET_ACTIVE_FLASH 0x4
+/* enum: Configure internal link i.e. the FPGA port facing the ASIC. */
+#define          MC_CMD_FPGA_IN_OP_SET_INTERNAL_LINK 0x5
+/* enum: Read internal link configuration. */
+#define          MC_CMD_FPGA_IN_OP_GET_INTERNAL_LINK 0x6
 
 /* MC_CMD_FPGA_OP_GET_VERSION_IN msgrequest: Get the FPGA version string. A
  * free-format string is returned in response to this command. Any checks on
@@ -25743,6 +25882,59 @@
 #define       MC_CMD_FPGA_OP_GET_ACTIVE_FLASH_OUT_FLASH_ID_LEN 4
 /*            Enum values, see field(s): */
 /*               MC_CMD_FPGA_FLASH_INDEX */
+
+/* MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN msgrequest: Configure FPGA internal
+ * port, facing the ASIC
+ */
+#define    MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_LEN 12
+/* Sub-command code. Must be OP_SET_INTERNAL_LINK */
+#define       MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_OP_OFST 0
+#define       MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_OP_LEN 4
+/* Flags */
+#define       MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_FLAGS_OFST 4
+#define       MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_FLAGS_LEN 4
+#define        MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_LINK_STATE_OFST 4
+#define        MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_LINK_STATE_LBN 0
+#define        MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_LINK_STATE_WIDTH 2
+/* enum: Unmodified, same as last state set by firmware */
+#define          MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_AUTO 0x0
+/* enum: Configure link-up */
+#define          MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_UP 0x1
+/* enum: Configure link-down */
+#define          MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_DOWN 0x2
+#define        MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_FLUSH_OFST 4
+#define        MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_FLUSH_LBN 2
+#define        MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_FLUSH_WIDTH 1
+/* Link speed to be applied on FPGA internal port MAC. */
+#define       MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_SPEED_OFST 8
+#define       MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN_SPEED_LEN 4
+
+/* MC_CMD_FPGA_OP_SET_INTERNAL_LINK_OUT msgresponse */
+#define    MC_CMD_FPGA_OP_SET_INTERNAL_LINK_OUT_LEN 0
+
+/* MC_CMD_FPGA_OP_GET_INTERNAL_LINK_IN msgrequest: Read FPGA internal port
+ * configuration and status
+ */
+#define    MC_CMD_FPGA_OP_GET_INTERNAL_LINK_IN_LEN 4
+/* Sub-command code. Must be OP_GET_INTERNAL_LINK */
+#define       MC_CMD_FPGA_OP_GET_INTERNAL_LINK_IN_OP_OFST 0
+#define       MC_CMD_FPGA_OP_GET_INTERNAL_LINK_IN_OP_LEN 4
+
+/* MC_CMD_FPGA_OP_GET_INTERNAL_LINK_OUT msgresponse: Response format for read
+ * FPGA internal port configuration and status
+ */
+#define    MC_CMD_FPGA_OP_GET_INTERNAL_LINK_OUT_LEN 8
+/* Flags */
+#define       MC_CMD_FPGA_OP_GET_INTERNAL_LINK_OUT_FLAGS_OFST 0
+#define       MC_CMD_FPGA_OP_GET_INTERNAL_LINK_OUT_FLAGS_LEN 4
+#define        MC_CMD_FPGA_OP_GET_INTERNAL_LINK_OUT_LINK_STATE_OFST 0
+#define        MC_CMD_FPGA_OP_GET_INTERNAL_LINK_OUT_LINK_STATE_LBN 0
+#define        MC_CMD_FPGA_OP_GET_INTERNAL_LINK_OUT_LINK_STATE_WIDTH 2
+/*             Enum values, see field(s): */
+/*                MC_CMD_FPGA_OP_SET_INTERNAL_LINK_IN/FLAGS */
+/* Link speed set on FPGA internal port MAC. */
+#define       MC_CMD_FPGA_OP_GET_INTERNAL_LINK_OUT_SPEED_OFST 4
+#define       MC_CMD_FPGA_OP_GET_INTERNAL_LINK_OUT_SPEED_LEN 4
 
 
 /***********************************/
@@ -25862,6 +26054,55 @@
 #define       CLOCK_INFO_NAME_NUM 16
 #define       CLOCK_INFO_NAME_LBN 96
 #define       CLOCK_INFO_NAME_WIDTH 8
+
+/* SCHED_CREDIT_CHECK_RESULT structuredef */
+#define    SCHED_CREDIT_CHECK_RESULT_LEN 16
+/* The instance of the scheduler. Refer to XN-200389-AW for the location of
+ * these schedulers in the hardware.
+ */
+#define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_OFST 0
+#define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_LEN 1
+#define          SCHED_CREDIT_CHECK_RESULT_HUB_HOST_A 0x0 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_HUB_NET_A 0x1 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_HUB_B 0x2 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_HUB_HOST_C 0x3 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_HUB_NET_TX 0x4 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_HUB_HOST_D 0x5 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_HUB_REPLAY 0x6 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_DMAC_H2C 0x7 /* enum */
+#define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_LBN 0
+#define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_WIDTH 8
+/* The type of node that this result refers to. */
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_TYPE_OFST 1
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_TYPE_LEN 1
+/* enum: Destination node */
+#define          SCHED_CREDIT_CHECK_RESULT_DEST 0x0
+/* enum: Source node */
+#define          SCHED_CREDIT_CHECK_RESULT_SOURCE 0x1
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_TYPE_LBN 8
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_TYPE_WIDTH 8
+/* Level of node in scheduler hierarchy (level 0 is the bottom of the
+ * hierarchy, increasing towards the root node).
+ */
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_LEVEL_OFST 2
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_LEVEL_LEN 2
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_LEVEL_LBN 16
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_LEVEL_WIDTH 16
+/* Node index */
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_INDEX_OFST 4
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_INDEX_LEN 4
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_INDEX_LBN 32
+#define       SCHED_CREDIT_CHECK_RESULT_NODE_INDEX_WIDTH 32
+/* The number of credits the node is expected to have. */
+#define       SCHED_CREDIT_CHECK_RESULT_EXPECTED_CREDITS_OFST 8
+#define       SCHED_CREDIT_CHECK_RESULT_EXPECTED_CREDITS_LEN 4
+#define       SCHED_CREDIT_CHECK_RESULT_EXPECTED_CREDITS_LBN 64
+#define       SCHED_CREDIT_CHECK_RESULT_EXPECTED_CREDITS_WIDTH 32
+/* The number of credits the node actually had. */
+#define       SCHED_CREDIT_CHECK_RESULT_ACTUAL_CREDITS_OFST 12
+#define       SCHED_CREDIT_CHECK_RESULT_ACTUAL_CREDITS_LEN 4
+#define       SCHED_CREDIT_CHECK_RESULT_ACTUAL_CREDITS_LBN 96
+#define       SCHED_CREDIT_CHECK_RESULT_ACTUAL_CREDITS_WIDTH 32
 
 
 /***********************************/
@@ -26520,6 +26761,64 @@
 /* Number of SoC resets since power on */
 #define       MC_CMD_GET_SOC_STATE_OUT_RESET_COUNT_OFST 8
 #define       MC_CMD_GET_SOC_STATE_OUT_RESET_COUNT_LEN 4
+
+
+/***********************************/
+/* MC_CMD_CHECK_SCHEDULER_CREDITS
+ * For debugging purposes. For each source and destination node in the hardware
+ * schedulers, check whether the number of credits is as it should be. This
+ * should only be used when the NIC is idle, because collection is not atomic
+ * and because the expected credit counts are only meaningful when no traffic
+ * is flowing.
+ */
+#define MC_CMD_CHECK_SCHEDULER_CREDITS 0x1c8
+#undef MC_CMD_0x1c8_PRIVILEGE_CTG
+
+#define MC_CMD_0x1c8_PRIVILEGE_CTG SRIOV_CTG_ADMIN
+
+/* MC_CMD_CHECK_SCHEDULER_CREDITS_IN msgrequest */
+#define    MC_CMD_CHECK_SCHEDULER_CREDITS_IN_LEN 8
+/* Flags for the request */
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_IN_FLAGS_OFST 0
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_IN_FLAGS_LEN 4
+#define        MC_CMD_CHECK_SCHEDULER_CREDITS_IN_REPORT_ALL_OFST 0
+#define        MC_CMD_CHECK_SCHEDULER_CREDITS_IN_REPORT_ALL_LBN 0
+#define        MC_CMD_CHECK_SCHEDULER_CREDITS_IN_REPORT_ALL_WIDTH 1
+/* If there are too many results to fit into an MCDI response, they're split
+ * into pages. This field specifies which (0-indexed) page to request. A
+ * request with PAGE=0 will snapshot the results, and subsequent requests with
+ * PAGE>0 will return data from the most recent snapshot. The GENERATION field
+ * in the response allows callers to verify that all responses correspond to
+ * the same snapshot.
+ */
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_IN_PAGE_OFST 4
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_IN_PAGE_LEN 4
+
+/* MC_CMD_CHECK_SCHEDULER_CREDITS_OUT msgresponse */
+#define    MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_LENMIN 16
+#define    MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_LENMAX 240
+#define    MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_LENMAX_MCDI2 1008
+#define    MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_LEN(num) (16+16*(num))
+#define    MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_NUM(len) (((len)-16)/16)
+/* The total number of results (across all pages). */
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_TOTAL_RESULTS_OFST 0
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_TOTAL_RESULTS_LEN 4
+/* The number of pages that the response is split across. */
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_NUM_PAGES_OFST 4
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_NUM_PAGES_LEN 4
+/* The number of results in this response. */
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_THIS_PAGE_OFST 8
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_THIS_PAGE_LEN 4
+/* Result generation count. Incremented any time a request is made with PAGE=0.
+ */
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_GENERATION_OFST 12
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_GENERATION_LEN 4
+/* The results, as an array of SCHED_CREDIT_CHECK_RESULT structures. */
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_OFST 16
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_LEN 16
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_MINNUM 0
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_MAXNUM 14
+#define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_MAXNUM_MCDI2 62
 
 /* FUNCTION_PERSONALITY structuredef: The meanings of the personalities are
  * defined in SF-120734-TC with more information in SF-122717-TC.
@@ -28664,6 +28963,8 @@
 /* enum: The MPORT assigned to a given PCIe function (see also FWRIVERHD-1108)
  */
 #define          MAE_MPORT_SELECTOR_TYPE_MH_FUNC 0x5
+/* enum: This is guaranteed never to be a valid selector type */
+#define          MAE_MPORT_SELECTOR_TYPE_INVALID 0xff
 #define        MAE_MPORT_SELECTOR_MPORT_ID_OFST 0
 #define        MAE_MPORT_SELECTOR_MPORT_ID_LBN 0
 #define        MAE_MPORT_SELECTOR_MPORT_ID_WIDTH 24
@@ -28707,6 +29008,42 @@
 #define          MAE_MPORT_SELECTOR_FUNC_MH_PF_ID_CALLER 0xf
 #define       MAE_MPORT_SELECTOR_FLAT_LBN 0
 #define       MAE_MPORT_SELECTOR_FLAT_WIDTH 32
+
+/* MAE_LINK_ENDPOINT_SELECTOR structuredef: Structure that identifies a real or
+ * virtual network port by MAE port and link end
+ */
+#define    MAE_LINK_ENDPOINT_SELECTOR_LEN 8
+/* The MAE MPORT of interest */
+#define       MAE_LINK_ENDPOINT_SELECTOR_MPORT_SELECTOR_OFST 0
+#define       MAE_LINK_ENDPOINT_SELECTOR_MPORT_SELECTOR_LEN 4
+#define       MAE_LINK_ENDPOINT_SELECTOR_MPORT_SELECTOR_LBN 0
+#define       MAE_LINK_ENDPOINT_SELECTOR_MPORT_SELECTOR_WIDTH 32
+/* Which end of the link identified by MPORT to consider */
+#define       MAE_LINK_ENDPOINT_SELECTOR_LINK_END_OFST 4
+#define       MAE_LINK_ENDPOINT_SELECTOR_LINK_END_LEN 4
+/*            Enum values, see field(s): */
+/*               MAE_MPORT_END */
+#define       MAE_LINK_ENDPOINT_SELECTOR_LINK_END_LBN 32
+#define       MAE_LINK_ENDPOINT_SELECTOR_LINK_END_WIDTH 32
+/* A field for accessing the endoint selector as a collection of bits */
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_OFST 0
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_LEN 8
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_LO_OFST 0
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_LO_LEN 4
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_LO_LBN 0
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_LO_WIDTH 32
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_HI_OFST 4
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_HI_LEN 4
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_HI_LBN 32
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_HI_WIDTH 32
+/* enum: Set FLAT to this value to obtain backward-compatible behaviour in
+ * commands that have been extended to take a MAE_LINK_ENDPOINT_SELECTOR
+ * argument. New commands that are designed to take such an argument from the
+ * start will not support this.
+ */
+#define          MAE_LINK_ENDPOINT_SELECTOR_MAE_LINK_ENDPOINT_COMPAT 0x0
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_LBN 0
+#define       MAE_LINK_ENDPOINT_SELECTOR_FLAT_WIDTH 64
 
 
 /***********************************/

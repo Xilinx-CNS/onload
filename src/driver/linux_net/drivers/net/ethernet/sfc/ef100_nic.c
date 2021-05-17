@@ -1294,6 +1294,17 @@ static ssize_t bar_config_store(struct device *dev,
 		return count;
 	}
 
+#ifdef CONFIG_SFC_VDPA
+	if (old_config == EF100_BAR_CONFIG_VDPA &&
+	    new_config == EF100_BAR_CONFIG_EF100) {
+		if (ef100_vdpa_dev_in_use(efx)) {
+			pci_warn(efx->pci_dev,
+				 "Device in use. Cannot change bar config");
+			mutex_unlock(&nic_data->bar_config_lock);
+			return -EBUSY;
+		}
+	}
+#endif
 	probe_data = container_of(efx, struct efx_probe_data, efx);
 	if (bar_config_std[old_config].fini)
 		bar_config_std[old_config].fini(probe_data);
@@ -1765,7 +1776,8 @@ void ef100_remove(struct efx_nic *efx)
 			efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
 #if defined(CONFIG_SFC_VDPA)
 		else
-			ef100_vdpa_free_buffer(efx, &nic_data->mcdi_buf);
+			ef100_vdpa_free_buffer(efx->vdpa_nic,
+					       &nic_data->mcdi_buf);
 		mutex_destroy(&nic_data->bar_config_lock);
 #endif
 	}
