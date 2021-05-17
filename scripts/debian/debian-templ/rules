@@ -79,7 +79,7 @@ build-arch-stamp:
 	dh_testdir
 
 	# Add here command to compile/build the package.
-	scripts/onload_build --user
+	scripts/onload_build #BUILDPROFILE# --user
 
 	touch $@
 
@@ -94,7 +94,7 @@ binary-modules:
 	dh_installdirs lib/modules/$(KVERS)/misc
 
 	# Build the module
-	scripts/onload_build --kernel
+	scripts/onload_build #BUILDPROFILE# --kernel
 
 	# Install the module
 	scripts/onload_install --verbose deb_module_install

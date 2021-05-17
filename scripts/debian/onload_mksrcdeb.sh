@@ -19,6 +19,7 @@ usage() {
   err "options:"
   err "  --tarball <path>   - onload tarball to create packages for"
   err "  --out <path>       - directory to write source package to"
+  err "  --build-profile    - override the build profile"
   err
   exit 1
 }
@@ -34,13 +35,15 @@ onloadver=
 package=
 basename=
 outdir=$(pwd)
+buildprofile=
 
 while [ $# -gt 0 ]; do
   case "$1" in
-  --tarball)    shift; tarball=$1;;
-  --out)        shift; outdir=$1;;
-  -*)           usage;;
-  *)            break;;
+  --tarball)        shift; tarball=$1;;
+  --out)            shift; outdir=$1;;
+  --build-profile)  shift; buildprofile="--build-profile $1";;
+  -*)               usage;;
+  *)                break;;
   esac
   shift
 done
@@ -81,7 +84,7 @@ try mkdir -p $tempfile/$onloaddir/debian
 # Make any necessary replacements for the onload release we're doing in the
 # control files
 for i in $(find $TOP/debian/debian-templ/* -type f); do
-  try sed -e "s/#VERSION#/$onloadver/" -e "s/#TYPE#/$onloadtype/" -e "s/#SOVERSION#/${soversion}/" < $i > "${tempfile}/${onloaddir}/debian/$(basename $i)";
+  try sed -e "s/#VERSION#/$onloadver/" -e "s/#TYPE#/$onloadtype/" -e "s/#SOVERSION#/${soversion}/" -e "s/#BUILDPROFILE#/${buildprofile}/" < $i > "${tempfile}/${onloaddir}/debian/$(basename $i)";
 done
 try mv "${tempfile}/${onloaddir}/debian/type-user.shlibs" "${tempfile}/${onloaddir}/debian/${onloadtype}-user.shlibs"
 
