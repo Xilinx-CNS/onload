@@ -61,6 +61,7 @@ static int efct_test_get_param(struct sfc_efct_client *handle,
                                enum sfc_efct_param p,
                                union sfc_efct_param_value *arg)
 {
+  struct sfc_efct_nic_resources *nic_res;
   int rc = -ENOSYS;
 
   printk(KERN_INFO "%s: param %d\n", __func__, p);
@@ -76,6 +77,12 @@ static int efct_test_get_param(struct sfc_efct_client *handle,
     break;
    case SFC_EFCT_REVISION:
     arg->value = 1;
+    rc = 0;
+    break;
+   case SFC_EFCT_NIC_RESOURCES:
+    nic_res = arg->nic_res;
+    nic_res->evq_min = 0;
+    nic_res->evq_lim = 1;
     rc = 0;
     break;
    case SFC_EFCT_DRIVER_DATA:
@@ -119,11 +126,27 @@ static int efct_test_fw_rpc(struct sfc_efct_client *handle,
 }
 
 
+static int efct_test_init_evq(struct sfc_efct_client *handle,
+                              struct sfc_efct_evq_params *params)
+{
+  printk(KERN_INFO "%s\n", __func__);
+  return 0;
+}
+
+
+static void efct_test_free_evq(struct sfc_efct_client *handle, int evq)
+{
+  printk(KERN_INFO "%s\n", __func__);
+}
+
+
 const struct sfc_efct_devops test_devops = {
   .open = efct_test_open,
   .close = efct_test_close,
   .get_param = efct_test_get_param,
   .set_param = efct_test_set_param,
   .fw_rpc = efct_test_fw_rpc,
+  .init_evq = efct_test_init_evq,
+  .free_evq = efct_test_free_evq,
 };
 

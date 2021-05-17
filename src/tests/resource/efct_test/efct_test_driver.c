@@ -22,7 +22,7 @@ struct efct_test_device* tdev;
 
 int efct_test_add_netdev(struct net_device* net_dev)
 {
-  int rc;
+  int rc = 0;
 
   printk(KERN_INFO "%s: add %s\n", __func__, net_dev->name);
 

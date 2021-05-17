@@ -53,6 +53,15 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   tdev->net_dev = net_dev;
   adev = &tdev->dev.adev;
 
+  /* TODO EFCT look into dma handling - can we set the auxdev up so that the
+   * auxdev itself can be used for mapping, or will we need to provide a
+   * separate device for dma?
+   */
+  tdev->dev.adev.dev.dma_mask = &tdev->dma_mask;
+  rc = dma_set_mask_and_coherent(&tdev->dev.adev.dev, 0x7fffffffull);
+  if (rc)
+    printk(KERN_INFO "could not find a suitable DMA mask\n");
+
   /* Once we have successfully initted the aux dev then the lifetime of the
    * wrapping test dev must be associated with the aux device. This means
    * that the responsibility for cleanup devolves to the aux dev uninit
