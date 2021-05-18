@@ -4,7 +4,7 @@
 #ifndef EFCT_TEST_DEVICE_H
 #define EFCT_TEST_DEVICE_H
 
-#include "auxiliary_bus.h"
+#include <ci/driver/ci_aux.h>
 #include "sfc_efct.h"
 
 struct net_device;

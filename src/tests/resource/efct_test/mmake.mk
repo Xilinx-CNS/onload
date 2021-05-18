@@ -10,16 +10,22 @@ EFCT_TEST_TARGET_SRCS := $(EFCT_TEST_SRCS)
 TARGETS		:= $(EFCT_TEST_TARGET)
 
 # FIXME IMPORT is applied relative to TOPPATH, should fix this
-# to not rely on an aux bus repo in a fixed relative location.
-IMPORT		:= ../../../../../cns-auxiliary-bus/include/linux/auxiliary_bus.h \
-		../../../../../x3-net-linux/include/linux/net/sfc/sfc_efct.h
+# to not rely on a repo in a fixed relative location.
+IMPORT		:=
+IMPORT		+= ../../../../../x3-net-linux/include/linux/net/sfc/sfc_efct.h
 
 
 ######################################################
 # linux kbuild support
 #
 
+ifndef CONFIG_AUXILIARY_BUS
+ifneq ($(HAVE_CNS_AUX),0)
 KBUILD_EXTRA_SYMBOLS := $(AUX_BUS_PATH)/drivers/base/Module.symvers
+else
+$(warning "Aux bus is needed for efct_test")
+endif
+endif
 
 all: $(KBUILD_EXTRA_SYMBOLS)
 	$(MAKE) $(MMAKE_KBUILD_ARGS) M=$(CURDIR)

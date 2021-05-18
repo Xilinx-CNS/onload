@@ -4,7 +4,7 @@
 #ifndef EFCT_TEST_DRIVER_H
 #define EFCT_TEST_DRIVER_H
 
-#include "auxiliary_bus.h"
+#include <ci/driver/ci_aux.h>
 #include "sfc_efct.h"
 
 extern int efct_test_add_netdev(struct net_device* dev);

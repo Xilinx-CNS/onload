@@ -5,7 +5,8 @@
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/rtnetlink.h>
-#include "auxiliary_bus.h"
+
+#include <ci/driver/ci_aux.h>
 
 #include "efct_test_device.h"
 #include "efct_test_ops.h"
