@@ -381,6 +381,7 @@ static void ef100_nic_sw_event(struct efhw_nic *nic, int data, int evq)
 	EFHW_TRACE("%s: evq[%d]->%x", __FUNCTION__, evq, data);
 }
 
+
 /*--------------------------------------------------------------------
  *
  * Buffer table - API
@@ -705,7 +706,34 @@ static int
 ef100_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
                       const volatile uint32_t* evq_ptr)
 {
-	return -EOPNOTSUPP;
+	ci_qword_t* evq = base;
+	ci_qword_t* endev;
+	uint32_t mask = capacity - 1;
+	ci_qword_t reset_ev;
+	uint32_t ptrend;
+	uint32_t i;
+	int phase;
+
+	EFHW_ASSERT((capacity & (capacity - 1)) == 0);
+
+	ptrend = READ_ONCE(*evq_ptr);
+	for (i = 0; i < capacity; ++i) {
+		int ix = ptrend / sizeof(evq[0]);
+		phase = (ix & (mask + 1)) != 0;
+		endev = &evq[ix & mask];
+		if (CI_QWORD_FIELD(*endev, ESF_GZ_EV_RXPKTS_PHASE) != phase)
+			break;
+		ptrend += sizeof(evq[0]);
+	}
+	if (i == capacity)
+		return -EOVERFLOW;
+
+	CI_POPULATE_QWORD_3(reset_ev,
+	                    ESF_GZ_EV_RXPKTS_PHASE, phase,
+	                    ESF_GZ_E_TYPE, ESE_GZ_EF100_EV_MCDI,
+	                    MCDI_EVENT_CODE, MCDI_EVENT_CODE_MC_REBOOT);
+	WRITE_ONCE(endev->u64[0], reset_ev.u64[0]);
+	return 0;
 }
 
 /*--------------------------------------------------------------------

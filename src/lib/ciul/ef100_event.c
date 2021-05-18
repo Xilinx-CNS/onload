@@ -98,6 +98,12 @@ static void ef100_mcdi_event(ef_vi* evq, const ef_vi_event* ev,
            "check parameters to receive_init()", __FUNCTION__,
            QWORD_GET_U(MCDI_EVENT_RX_ERR_DATA, *ev), CI_QWORD_VAL(*ev));
     break;
+  case MCDI_EVENT_CODE_MC_REBOOT: {
+    ef_event* ev_out = (*evs)++;
+    --(*evs_len);
+    ev_out->generic.type = EF_EVENT_TYPE_RESET;
+    break;
+  }
   default:
     ef_log("%s: ERROR: Unhandled MCDI event code=%u", __FUNCTION__,
            code);
