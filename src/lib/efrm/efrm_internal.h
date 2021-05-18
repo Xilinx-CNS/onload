@@ -53,7 +53,8 @@ static inline void efrm_resource_init(struct efrm_resource *rs,
 extern void efrm_nic_enable_post_reset(struct efhw_nic* nic);
 extern int efrm_nic_post_reset(struct efhw_nic *nic);
 extern int efrm_nic_reset_suspend(struct efhw_nic *nic);
-extern void efrm_nic_flush_all_queues(struct efhw_nic *nic, int nohw);
+#define EFRM_FLUSH_QUEUES_F_NOHW 1
+extern void efrm_nic_flush_all_queues(struct efhw_nic *nic, int flags);
 #endif
 
 

@@ -889,17 +889,17 @@ __efrm_vi_resource_free(struct efrm_vi *virs)
 }
 
 
-/* dummy parameter indicates only sw state needs to be updated
+/* flags parameter indicates only sw state needs to be updated
  * e.g. after impolite unplug we assume all queues are gone */
-void efrm_nic_flush_all_queues(struct efhw_nic *nic, int dummy)
+void efrm_nic_flush_all_queues(struct efhw_nic *nic, int flags)
 {
 	int type;
 	struct efrm_nic *efrm_nic = efrm_nic_from_efhw_nic(nic);
 
 	mutex_lock(&efrm_nic->dmaq_state.lock);
-	if (!dummy)
+	if (!(flags & EFRM_FLUSH_QUEUES_F_NOHW))
 		efrm_nic->dmaq_state.unplugging = 1;
-	EFRM_TRACE(" Flushing all queues for nic %d nohw %d", nic->index, dummy);
+	EFRM_TRACE(" Flushing all queues for nic %d flags %x", nic->index, flags);
 	for (type = 0; type < EFHW_N_Q_TYPES; ++type) {
 		while (!list_empty(&efrm_nic->dmaq_state.q[type])) {
 			struct list_head *h = list_pop(&efrm_nic->dmaq_state.q[type]);
@@ -907,7 +907,7 @@ void efrm_nic_flush_all_queues(struct efhw_nic *nic, int dummy)
 			int rc;
 			virs = list_entry(h, struct efrm_vi, q[type].init_link);
 			INIT_LIST_HEAD(&virs->q[type].init_link);
-			if (dummy)
+			if (flags & EFRM_FLUSH_QUEUES_F_NOHW)
 				continue;
 			efrm_atomic_or(efrm_vi_shut_down_flag(type), &virs->shut_down_flags);
 			rc = __efrm_vi_q_flush(virs->rs.rs_client->nic,
