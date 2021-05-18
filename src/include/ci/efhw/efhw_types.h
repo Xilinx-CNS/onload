@@ -385,6 +385,11 @@ struct efhw_func_ops {
 	/*! Returns the size of the io area for a VI */
 	u32 (*vi_io_size)(struct efhw_nic* nic);
 
+	/*! This NIC has just been restarted: magically force a reset event in to
+	 * the given evq */
+	int (*inject_reset_ev)(struct efhw_nic* nic, void* base, unsigned capacity,
+	                       const volatile uint32_t* evq_ptr);
+
   /*-------------- ctpio ------------------------ */
 
 	/*! Obtain the address of a CTPIO region for mapping.

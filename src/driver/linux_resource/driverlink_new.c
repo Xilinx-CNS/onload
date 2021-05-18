@@ -500,7 +500,8 @@ static void efrm_dl_reset_resume(struct efx_dl_device *efrm_dev, int ok)
 
 	/* Remove record on que initialization from before a reset
 	 * No hardware operation will be performed */
-	efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NOHW);
+	efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NOHW |
+	                               EFRM_FLUSH_QUEUES_F_INJECT_EV);
 
         if( ok )
           nic->resetting = 0;

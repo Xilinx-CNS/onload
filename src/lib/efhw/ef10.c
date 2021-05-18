@@ -1246,6 +1246,13 @@ ef10_handle_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
 }
 
 
+static int
+ef10_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
+                     const volatile uint32_t* evq_ptr)
+{
+	return -EOPNOTSUPP;
+}
+
 /*----------------------------------------------------------------------------
  *
  * multicast loopback - MCDI cmds
@@ -2558,5 +2565,6 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_af_xdp_init,
 	ef10_ef100_get_pci_dev,
 	ef10_ef100_vi_io_size,
+	ef10_inject_reset_ev,
 	ef10_ctpio_addr,
 };

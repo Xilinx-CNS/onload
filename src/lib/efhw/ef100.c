@@ -701,6 +701,12 @@ static int ef100_af_xdp_init(struct efhw_nic* nic, int instance,
   return 0;
 }
 
+static int
+ef100_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
+                      const volatile uint32_t* evq_ptr)
+{
+	return -EOPNOTSUPP;
+}
 
 /*--------------------------------------------------------------------
  *
@@ -772,5 +778,6 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_af_xdp_init,
 	ef10_ef100_get_pci_dev,
 	ef10_ef100_vi_io_size,
+	ef100_inject_reset_ev,
 	ef100_ctpio_addr,
 };

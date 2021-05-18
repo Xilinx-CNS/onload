@@ -471,6 +471,13 @@ efct_vi_io_size(struct efhw_nic *nic)
   return 0;
 }
 
+static int
+efct_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
+                      const volatile uint32_t* evq_ptr)
+{
+	return -EOPNOTSUPP;
+}
+
 /*--------------------------------------------------------------------
  *
  * CTPIO
@@ -539,6 +546,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_af_xdp_init,
   efct_get_pci_dev,
   efct_vi_io_size,
+  efct_inject_reset_ev,
   efct_ctpio_addr,
 };
 
