@@ -1250,7 +1250,59 @@ static int
 ef10_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
                      const volatile uint32_t* evq_ptr)
 {
-	return -EOPNOTSUPP;
+	efhw_event_t* evq = base;
+	efhw_event_t* endev;
+	uint32_t mask = capacity - 1;
+	ci_qword_t reset_ev;
+	uint32_t ptrend;
+	uint32_t i;
+	int sanity = 10;
+
+	EFHW_ASSERT((capacity & (capacity - 1)) == 0);
+
+	while (--sanity) {
+		uint32_t ptr1, ptr2;
+
+		/* Scan for the next unused event, being careful because userspace may
+		 * be concurrently modifying evq_ptr (and hence wiping out past evs).
+		 * We assume that the NIC has stopped writing by this point. */
+		ptr1 = READ_ONCE(*evq_ptr);
+		rmb();
+
+		ptrend = ptr1;
+		for (i = 0; i < capacity; ++i) {
+			endev = &evq[(ptrend / sizeof(evq[0])) & mask];
+			if (!EFHW_IS_EVENT(endev))
+				break;
+			ptrend += sizeof(evq[0]);
+		}
+		if (i == capacity)
+			return -EOVERFLOW;
+
+		/* Deal with the race when we read evq_ptr (into ptr1) and then by the
+		 * time we test EFHW_IS_EVENT() userspace has already polled and
+		 * cleared that entry. This would make that event appear to be the
+		 * end, except that it's now in the past from userspace's perspective.
+		 * Here we're checking if there's been any poll between the
+		 * beginning and the end, and retrying everything if there has been. */
+		rmb();
+		ptr2 = READ_ONCE(*evq_ptr);
+		if (ptr1 == ptr2)
+			break;
+	}
+	/* In theory, userspace could meddle with evq_ptr constantly so that
+	 * the above loop goes around essentially forever in kernelspace. This
+	 * prevents that, with the assumption that the only way to go around so
+	 * many times is for userspace to be malicious, and malicious userspace
+	 * doesn't deserve to be told about reset */
+	if (!sanity)
+		return -EDEADLK;
+
+	CI_POPULATE_QWORD_2(reset_ev,
+	                    ESF_DZ_EV_CODE, ESE_DZ_EV_CODE_MCDI_EV,
+	                    MCDI_EVENT_CODE, MCDI_EVENT_CODE_MC_REBOOT);
+	WRITE_ONCE(endev->u64, reset_ev.u64[0]);
+	return 0;
 }
 
 /*----------------------------------------------------------------------------
