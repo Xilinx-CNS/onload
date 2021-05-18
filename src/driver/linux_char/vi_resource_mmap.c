@@ -18,6 +18,7 @@
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/efrm/efrm_client.h>
+#include <etherfabric/internal/internal.h>
 #include <ci/efch/mmap.h>
 #include "linux_char_internal.h"
 #include "char_internal.h"
@@ -185,6 +186,40 @@ efab_vi_rm_mmap_plugin(struct efrm_vi *virs, unsigned subpage,
 }
 
 
+static int
+efab_vi_rm_mmap_state(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
+                      int *map_num, unsigned long *offset)
+{
+  struct vm_area_struct* vma = opaque;
+  int rc;
+  int len;
+
+  if( ! virs->ep_state )
+    return -EINVAL;  /* Someone used an Onload VI rather than an ef_vi one */
+  if( *offset != 0 )
+    return -EINVAL;
+  len = ef_vi_calc_state_bytes(virs->q[EFHW_RXQ].capacity,
+                               virs->q[EFHW_TXQ].capacity);
+  if( *bytes > CI_ROUND_UP(len, CI_PAGE_SIZE) )
+    return -EINVAL;
+
+  /* ep_state came from vmalloc_user, which handles most of the safety issues
+   * itself (i.e. all memory is zeroed and page-aligned) */
+  rc = remap_vmalloc_range_partial(vma, vma->vm_start, (void*)virs->ep_state,
+#ifdef EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW
+                                     /* for linux>=5.7 */
+                                     0,
+#endif
+                                     *bytes);
+  if( rc < 0 )
+    EFCH_ERR("%s: ERROR: remap_vmalloc_range_partial failed rc=%d",
+             __FUNCTION__, rc);
+  else
+    *bytes -= len;
+  return rc;
+}
+
+
 static int 
 efab_vi_rm_mmap_mem(struct efrm_vi *virs,
                     unsigned long *bytes, void *opaque,
@@ -220,6 +255,9 @@ int efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes,
       break;
     case EFCH_VI_MMAP_CTPIO:
       rc = efab_vi_rm_mmap_ctpio(virs, bytes, vma, map_num, offset);
+      break;
+    case EFCH_VI_MMAP_STATE:
+      rc = efab_vi_rm_mmap_state(virs, bytes, vma, map_num, offset);
       break;
     case EFCH_VI_MMAP_PLUGIN_BASE ... EFCH_VI_MMAP_PLUGIN_MAX:
       rc = efab_vi_rm_mmap_plugin(virs, index - EFCH_VI_MMAP_PLUGIN_BASE,

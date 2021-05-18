@@ -388,6 +388,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   uint32_t* ids;
   void* p;
   int q_label;
+  int state_bytes;
 
   if( txq_capacity < 0 && (s = getenv("EF_VI_TXQ_SIZE")) )
     txq_capacity = atoi(s);
@@ -467,10 +468,14 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   txq_capacity = ra.u.vi_out.txq_capacity;
   rxq_capacity = ra.u.vi_out.rxq_capacity;
 
-  rc = -ENOMEM;
-  state = malloc(ef_vi_calc_state_bytes(rxq_capacity, txq_capacity));
-  if( state == NULL )
+  state_bytes = ef_vi_calc_state_bytes(rxq_capacity, txq_capacity);
+  rc = ci_resource_mmap(vi_dh, ra.out_id.index, EFCH_VI_MMAP_STATE,
+                        CI_ROUND_UP(state_bytes, CI_PAGE_SIZE), &p);
+  if( rc < 0 ) {
+    LOGVV(ef_log("%s: ci_resource_mmap (state) %d", __FUNCTION__, rc));
     goto fail1;
+  }
+  state = (void*)p;
 
   if( ra.u.vi_out.io_mmap_bytes ) {
     rc = ci_resource_mmap(vi_dh, ra.out_id.index, EFCH_VI_MMAP_IO,
@@ -565,6 +570,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   vi->vi_ctpio_mmap_ptr = ctpio_mmap_ptr;
   vi->vi_io_mmap_bytes = ra.u.vi_out.io_mmap_bytes;
   vi->vi_mem_mmap_bytes = ra.u.vi_out.mem_mmap_bytes;
+  vi->ep_state_bytes = state_bytes;
   vi->vi_resource_id = ra.out_id.index;
   if( ra.u.vi_out.out_flags & EFHW_VI_PS_BUF_SIZE_SET )
     vi->vi_ps_buf_size = ra.u.vi_out.ps_buf_size;
@@ -595,7 +601,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   if( io_mmap_base != NULL )
     ci_resource_munmap(vi_dh, io_mmap_base, ra.u.vi_out.io_mmap_bytes);
  fail2:
-  free(state);
+  if( state != NULL )
+    ci_resource_munmap(vi_dh, state, state_bytes);
  fail1:
   --evq->vi_qs_n;
   return rc;
@@ -678,7 +685,14 @@ int ef_vi_free(ef_vi* ep, ef_driver_handle fd)
     }
   }
 
-  free(ep->ep_state);
+  if( ep->ep_state != NULL ) {
+    rc = ci_resource_munmap(fd, ep->ep_state, ep->ep_state_bytes);
+    if( rc < 0 ) {
+      LOGV(ef_log("%s: ci_resource_munmap %d", __FUNCTION__, rc));
+      return rc;
+    }
+  }
+
   free(ep->tx_alt_id2hw);
   free(ep->tx_alt_hw2id);
   free(ep->vi_stats);

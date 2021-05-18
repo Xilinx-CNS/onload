@@ -11,6 +11,7 @@
 #include <ci/efch/mmap.h>
 #include <ci/efch/op_types.h>
 #include <ci/driver/kernel_compat.h>
+#include <etherfabric/internal/internal.h>
 #include "char_internal.h"
 #include "filter_list.h"
 #include "linux_char_internal.h"
@@ -172,6 +173,11 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
     goto fail_q_alloc;
   if ((rc = efrm_vi_q_alloc(virs, EFHW_TXQ, txq_capacity,
                             tx_q_tag, vi_flags, evq_virs)) < 0)
+    goto fail_q_alloc;
+
+  virs->ep_state = vmalloc_user(ef_vi_calc_state_bytes(rxq_capacity,
+                                                       txq_capacity));
+  if (!virs->ep_state)
     goto fail_q_alloc;
 
   *virs_out = virs;
@@ -352,6 +358,7 @@ void efch_vi_rm_free(efch_resource_t *rs)
   if( rs->vi.sniff_flags & EFCH_TX_SNIFF )
     efrm_tx_port_sniff(rs->rs_base, 0, -1);
   efrm_vi_tx_alt_free(virs);
+  vfree((void*)virs->ep_state);
 }
 
 

@@ -169,6 +169,10 @@ struct efrm_vi {
 	 */
 	volatile char __iomem *io_page;
 
+	/* Used by sfc_char only (NULL for Onload VIs). Mapped in to userspace and
+	 * read-only to the kernel; be careful when accessing. */
+	const volatile ef_vi_state *ep_state;
+
 	unsigned tx_alt_cp;
 	int      tx_alt_num;
 	unsigned tx_alt_ids[EFRM_VI_TX_ALTERNATIVES_MAX];

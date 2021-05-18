@@ -834,6 +834,8 @@ typedef struct ef_vi {
   char*                         vi_ctpio_mmap_ptr;
   /** Controls rate of writes into CTPIO aperture */
   uint32_t                      vi_ctpio_wb_ticks;
+  /** Length of region allocated at ep_state */
+  int                           ep_state_bytes;
   /** True if the virtual interface is in a cluster */
   int                           vi_clustered;
   /** True if packed stream mode is enabled for the virtual interface */
