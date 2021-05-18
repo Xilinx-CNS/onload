@@ -4,7 +4,7 @@
 #ifndef EFCT_TEST_OPS_H
 #define EFCT_TEST_OPS_H
 
-#include "sfc_efct.h"
+#include <ci/driver/ci_efct.h>
 
 extern const struct sfc_efct_devops test_devops;
 

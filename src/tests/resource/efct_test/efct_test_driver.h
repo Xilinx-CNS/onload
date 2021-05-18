@@ -5,7 +5,7 @@
 #define EFCT_TEST_DRIVER_H
 
 #include <ci/driver/ci_aux.h>
-#include "sfc_efct.h"
+#include <ci/driver/ci_efct.h>
 
 extern int efct_test_add_netdev(struct net_device* dev);
 extern int efct_test_remove_netdev(struct net_device* dev);

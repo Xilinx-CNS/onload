@@ -4,7 +4,7 @@
 #include <linux/slab.h>
 
 #include <ci/driver/ci_aux.h>
-#include "sfc_efct.h"
+#include <ci/driver/ci_efct.h>
 
 #include "efct_test_device.h"
 #include "efct_test_ops.h"

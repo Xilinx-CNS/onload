@@ -9,12 +9,6 @@ EFCT_TEST_TARGET_SRCS := $(EFCT_TEST_SRCS)
 
 TARGETS		:= $(EFCT_TEST_TARGET)
 
-# FIXME IMPORT is applied relative to TOPPATH, should fix this
-# to not rely on a repo in a fixed relative location.
-IMPORT		:=
-IMPORT		+= ../../../../../x3-net-linux/include/linux/net/sfc/sfc_efct.h
-
-
 ######################################################
 # linux kbuild support
 #
@@ -25,6 +19,10 @@ KBUILD_EXTRA_SYMBOLS := $(AUX_BUS_PATH)/drivers/base/Module.symvers
 else
 $(warning "Aux bus is needed for efct_test")
 endif
+endif
+
+ifeq ($(HAVE_X3_NET),0)
+$(warning "X3 net driver is needed for efct_test")
 endif
 
 all: $(KBUILD_EXTRA_SYMBOLS)

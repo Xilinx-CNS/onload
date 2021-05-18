@@ -5,7 +5,7 @@
 #define EFCT_TEST_DEVICE_H
 
 #include <ci/driver/ci_aux.h>
-#include "sfc_efct.h"
+#include <ci/driver/ci_efct.h>
 
 struct net_device;
 struct sfc_efct_client;
