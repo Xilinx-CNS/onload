@@ -102,6 +102,9 @@ OO_STAT("Number of timeout interrupts.  Timeout interrupts mean no "
         "EF_HELPER_PRIME_USEC.  Some at start-up are normal, otherwise this "
         "risks nodesc drops.",
         ci_uint32, timeout_interrupts, count)
+OO_STAT("Number of times timeout interrupts happened when wakeup interrupts "
+        "have been already primed.",
+        ci_uint32, timeout_interrupt_when_primed, count)
 OO_STAT("Number of times timeout interrupts polled for network events.  "
         "Timeout interrupts mean no networking call was made for at least "
         "EF_HELPER_PRIME_USEC.  Some at start-up are normal, otherwise "
