@@ -265,6 +265,8 @@ enum {
   EF_EVENT_TYPE_RX_MULTI_PKTS,
   /** A ef_vi_transmit_memcpy_sync() request has completed. */
   EF_EVENT_TYPE_MEMCPY,
+  /** Event queue has been forcibly halted (hotplug, reset, etc.) */
+  EF_EVENT_TYPE_RESET,
 };
 
 
