@@ -234,13 +234,10 @@ efab_vi_resource_mmap_bytes(struct efrm_vi* virs, int map_type)
 
   EFRM_RESOURCE_ASSERT_VALID(&virs->rs, 0);
 
-  if( map_type == 0 ) {  /* I/O mapping. */
-    if( nic->devtype.arch != EFHW_ARCH_AF_XDP )
-      bytes += CI_PAGE_SIZE;
-  }
-  else {              /* Memory mapping. */
+  if( map_type == 0 ) /* I/O mapping. */
+    bytes += efhw_nic_vi_io_size(nic);
+  else /* Memory mapping. */
     bytes += efhw_page_map_bytes(&virs->mem_mmap);
-  }
 
   /* Round up to whole number of pages. */
   return bytes;

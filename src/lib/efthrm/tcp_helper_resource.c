@@ -1498,9 +1498,12 @@ static void initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
   ef_vi_init_io(vi, vm->io_page);
   ef_vi_init_timer(vi, vm->timer_quantum_ns);
   ef_vi_init_evq(vi, vm->evq_size, vm->evq_base);
-  ef_vi_init_rxq(vi, vm->rxq_size, vm->rxq_descriptors, vi_ids,
-                 vm->rxq_prefix_len);
-  vi_ids += vm->rxq_size;
+  /* TODO EFCT request 0 RXQ here, but depends on ef_vi interface */
+  if( vm->rxq_size > 0 ) {
+    ef_vi_init_rxq(vi, vm->rxq_size, vm->rxq_descriptors, vi_ids,
+                   vm->rxq_prefix_len);
+    vi_ids += vm->rxq_size;
+  }
   if( vm->txq_size > 0 )
     ef_vi_init_txq(vi, vm->txq_size, vm->txq_descriptors, vi_ids);
   vi->vi_i = EFAB_VI_RESOURCE_INSTANCE(vi_rs);

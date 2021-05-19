@@ -1603,6 +1603,12 @@ af_xdp_get_pci_dev(struct efhw_nic *nic)
 	return NULL;
 }
 
+static u32
+af_xdp_vi_io_size(struct efhw_nic *nic)
+{
+	return 0;
+}
+
 /*--------------------------------------------------------------------
  *
  * Abstraction Layer Hooks
@@ -1660,6 +1666,7 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_mem,
 	af_xdp_init,
 	af_xdp_get_pci_dev,
+	af_xdp_vi_io_size,
 };
 
 #endif /* EFHW_HAS_AF_XDP */

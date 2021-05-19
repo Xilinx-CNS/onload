@@ -377,6 +377,9 @@ struct efhw_func_ops {
 	 * Callers should call pci_dev_put() on the returned pointer to
 	 * release that reference when they're finished. */
 	struct pci_dev* (*get_pci_dev)(struct efhw_nic* nic);
+
+	/*! Returns the size of the io area for a VI */
+	u32 (*vi_io_size)(struct efhw_nic* nic);
 };
 
 

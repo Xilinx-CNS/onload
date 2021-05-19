@@ -255,6 +255,10 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 #endif
 #if CI_HAVE_EFCT_AUX
 	case EFHW_ARCH_EFCT:
+		nic->q_sizes[EFHW_EVQ] = 128 | 256 | 512 | 1024 | 2048 | 4096 |
+			8192;
+		nic->q_sizes[EFHW_TXQ] = 0;
+		nic->q_sizes[EFHW_RXQ] = 0;
 		nic->efhw_func = &efct_char_functional_units;
 		break;
 #endif

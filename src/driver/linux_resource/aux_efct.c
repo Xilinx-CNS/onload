@@ -50,17 +50,15 @@ static int efct_resource_init(struct sfc_efct_device *edev,
                               struct sfc_efct_client *client,
                               struct vi_resource_dimensions *res_dim)
 {
-  struct sfc_efct_nic_resources nic_res = {};
   union sfc_efct_param_value val;
   int rc;
 
-  val.nic_res = &nic_res;
   rc = edev->ops->get_param(client, SFC_EFCT_NIC_RESOURCES, &val);
   if( rc < 0 )
     return rc;
 
-  res_dim->vi_min = nic_res.evq_min;
-  res_dim->vi_lim = nic_res.evq_lim;
+  res_dim->vi_min = val.nic_res.evq_min;
+  res_dim->vi_lim = val.nic_res.evq_lim;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
 
   return 0;

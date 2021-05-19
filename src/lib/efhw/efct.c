@@ -2,8 +2,13 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
 
 #include <ci/driver/kernel_compat.h>
+#include <ci/driver/efab/hardware.h>
+#include <ci/driver/ci_aux.h>
+#include <ci/driver/ci_efct.h>
 #include <ci/efhw/nic.h>
 #include <ci/driver/ci_efct.h>
+#include <ci/tools/sysdep.h>
+#include "efct.h"
 
 #if CI_HAVE_EFCT_AUX
 
@@ -88,13 +93,31 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
                             uint n_pages, int interrupting, int enable_dos_p,
                             int wakeup_evq, int flags, int* flags_out)
 {
-  return -EOPNOTSUPP;
+  struct device *dev;
+  struct sfc_efct_device* edev;
+  struct sfc_efct_client* cli;
+  struct sfc_efct_evq_params qparams = {};
+  int rc;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+  rc = edev->ops->init_evq(cli, &qparams);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  return rc;
 }
 
 static void
 efct_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
                              uint evq, int time_sync_events_enabled)
 {
+  struct device *dev;
+  struct sfc_efct_device* edev;
+  struct sfc_efct_client* cli;
+  int rc = 0;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+  edev->ops->free_evq(cli, evq);
+  EFCT_POST(dev, edev, cli, nic, rc);
 }
 
 static void
@@ -205,7 +228,9 @@ static int efct_translate_dma_addrs(struct efhw_nic* nic,
                                     const dma_addr_t *src, dma_addr_t *dst,
                                     int n)
 {
-  return -EOPNOTSUPP;
+  /* All efct NICs have 1:1 mappings */
+  memmove(dst, src, n * sizeof(src[0]));
+  return 0;
 }
 
 /*--------------------------------------------------------------------
@@ -355,7 +380,8 @@ static int
 efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
                    bool replace)
 {
-  return -EOPNOTSUPP;
+  /* TODO EFCT */
+  return 0;
 }
 
 static void
@@ -434,6 +460,16 @@ efct_get_pci_dev(struct efhw_nic *nic)
   return NULL;
 }
 
+static u32
+efct_vi_io_size(struct efhw_nic *nic)
+{
+  /* We have no need to map the IO area on efct NICs as all control through
+   * the NIC's register interface is handled through the net driver. Although
+   * we manage our own TX, there is no separate TX doorbell as TX is triggered
+   * directly through writes to the CTPIO region. */
+  return 0;
+}
+
 /*--------------------------------------------------------------------
  *
  * Abstraction Layer Hooks
@@ -490,6 +526,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_af_xdp_mem,
   efct_af_xdp_init,
   efct_get_pci_dev,
+  efct_vi_io_size,
 };
 
 #endif

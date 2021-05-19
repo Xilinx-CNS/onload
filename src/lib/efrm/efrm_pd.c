@@ -534,11 +534,21 @@ static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 				  dma_addr_t *pci_addrs)
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
-	struct device* dev = efhw_nic_get_dev(nic);
-	if (dev) {
-		efrm_pd_dma_unmap_pci(dev, n_pages, nic_order, pci_addrs);
-		put_device(dev);
-	}
+	struct device* dev;
+	switch (nic->devtype.arch) {
+	case EFHW_ARCH_EF10:
+	case EFHW_ARCH_EF100:
+		dev = efhw_nic_get_dev(nic);
+		if (dev) {
+			efrm_pd_dma_unmap_pci(dev, n_pages, nic_order,
+					      pci_addrs);
+			put_device(dev);
+		}
+		break;
+	case EFHW_ARCH_EFCT:
+	case EFHW_ARCH_AF_XDP:
+		break;
+	};
 }
 
 
@@ -548,21 +558,30 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 			       dma_addr_t *free_addrs)
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
-	struct device* dev = efhw_nic_get_dev(nic);
-	int rc;
-	if (dev) {
-		rc = efrm_pd_dma_map_pci(dev, n_pages, nic_order, addrs,
-					 free_addrs);
-		put_device(dev);
-		if (rc == 0)
-			rc = efhw_nic_translate_dma_addrs(nic, free_addrs,
-			                                  pci_addrs, n_pages);
-	}
-	else {
+	struct device* dev;
+	int rc = -ENODEV;
+	switch (nic->devtype.arch) {
+	case EFHW_ARCH_EF10:
+	case EFHW_ARCH_EF100:
+		dev = efhw_nic_get_dev(nic);
+		if( dev ) {
+			rc = efrm_pd_dma_map_pci(dev, n_pages, nic_order,
+						 addrs, free_addrs);
+			put_device(dev);
+			if (rc == 0)
+				rc = efhw_nic_translate_dma_addrs(nic,
+								  free_addrs,
+								  pci_addrs,
+								  n_pages);
+		}
+		break;
+	case EFHW_ARCH_EFCT:
+	case EFHW_ARCH_AF_XDP:
 		rc = efrm_pd_dma_map_nonpci(n_pages, nic_order, addrs,
 					    pci_addrs);
 		memcpy(free_addrs, pci_addrs, n_pages * sizeof(pci_addrs[0]));
-	}
+		break;
+	};
 
 	return rc;
 }

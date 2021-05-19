@@ -765,18 +765,20 @@ CI_CFG_OPT("EF_SHARE_WITH", share_with, ci_int32,
 "the stack.",
            , , 0, -1, SMAX, count)
 
+/* TODO EFCT allow 0 ring size for now for development purposes */
 CI_CFG_OPT("EF_RXQ_SIZE", rxq_size, ci_uint16,
 "Set the size of the receive descriptor ring.  Valid values: 512, 1024, 2048 "
 "or 4096.\n"
 
 "A larger ring size can absorb larger packet bursts without drops, but may "
 "reduce efficiency because the working set size is increased.",
-           , , 512, 512, 4096, bincount)
+           , , 512, 0, 4096, bincount)
 
+/* TODO EFCT allow 0 ring size for now for development purposes */
 CI_CFG_OPT("EF_TXQ_SIZE", txq_size, ci_uint16,
 "Set the size of the transmit descriptor ring.  Valid values: 512, 1024, 2048 "
 "or 4096.",
-           , , 512, 512, 4096, bincount)
+           , , 512, 0, 4096, bincount)
 
 CI_CFG_OPT("EF_SEND_POLL_THRESH", send_poll_thresh, ci_uint16,
 "Poll for network events after sending this many packets."
@@ -1007,11 +1009,12 @@ CI_CFG_OPT("EF_MAX_TX_PACKETS", max_tx_packets, ci_int32,
 "receive path.",
            , , 24576, 0, 1000000000, count)
 
+/* TODO EFCT allow 0 ring size for now for development purposes */
 CI_CFG_OPT("EF_RXQ_MIN", rxq_min, ci_uint16,
 "Minimum initial fill level for each RX ring.  If Onload is not able to "
 "allocate sufficient packet buffers to fill each RX ring to this level, then "
 "creation of the stack will fail.",
-           , , 256, 2 * CI_CFG_RX_DESC_BATCH + 1, MAX, count)
+           , , 256, 0, MAX, count)
 
 CI_CFG_OPT("EF_MIN_FREE_PACKETS", min_free_packets, ci_int32,
 "Minimum number of free packets to reserve for each stack at initialisation.  "

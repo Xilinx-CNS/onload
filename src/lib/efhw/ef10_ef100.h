@@ -131,6 +131,7 @@ extern int ef10_ef100_vport_alloc(struct efhw_nic *nic, u16 vlan_id,
 extern int ef10_ef100_vport_free(struct efhw_nic *nic, u16 vport_handle);
 
 extern struct pci_dev* ef10_ef100_get_pci_dev(struct efhw_nic* nic);
+extern u32 ef10_ef100_vi_io_size(struct efhw_nic* nic);
 
 static inline struct efx_dl_device* efhw_nic_acquire_dl_device(struct efhw_nic* nic)
 {

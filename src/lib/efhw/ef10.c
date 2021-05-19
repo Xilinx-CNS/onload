@@ -2475,6 +2475,11 @@ struct pci_dev* ef10_ef100_get_pci_dev(struct efhw_nic* nic)
 	return dev;
 }
 
+u32 ef10_ef100_vi_io_size(struct efhw_nic* nic)
+{
+	return PAGE_SIZE;
+}
+
 /*--------------------------------------------------------------------
  *
  * Abstraction Layer Hooks
@@ -2532,4 +2537,5 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_af_xdp_mem,
 	ef10_af_xdp_init,
 	ef10_ef100_get_pci_dev,
+	ef10_ef100_vi_io_size,
 };

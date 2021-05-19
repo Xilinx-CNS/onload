@@ -333,6 +333,8 @@ static uint32_t efrm_vi_rm_txq_bytes(struct efrm_vi *virs, int n_entries)
 		return n_entries * EF100_DMA_TX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
 		return n_entries * EFAB_AF_XDP_DESC_BYTES;
+	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
+		return 0;
 	else {
 		EFRM_ASSERT(0);
 		return -EINVAL;
@@ -351,6 +353,8 @@ static uint32_t efrm_vi_rm_rxq_bytes(struct efrm_vi *virs, int n_entries)
 		bytes_per_desc = EF100_DMA_RX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
 		bytes_per_desc = EFAB_AF_XDP_DESC_BYTES;
+	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
+		return 0;
 	else {
 		EFRM_ASSERT(0);	
 		return -EINVAL;
@@ -607,6 +611,8 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		 */
 		else if (nic->devtype.arch == EFHW_ARCH_EF100)
 			interrupting = 1;
+		else if (nic->devtype.arch == EFHW_ARCH_EFCT)
+			interrupting = 1;
 		else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
 			interrupting = 0;
 		else {
@@ -614,7 +620,8 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 			interrupting = 0;
 		}
 	
-		if (nic->devtype.arch == EFHW_ARCH_EF100) {
+		if (nic->devtype.arch == EFHW_ARCH_EF100 ||
+		    nic->devtype.arch == EFHW_ARCH_EFCT) {
 			wakeup_evq = instance;
 		}
 		else {
@@ -696,20 +703,13 @@ static int
 efrm_vi_io_map(struct efrm_vi* virs, struct efhw_nic *nic, int instance)
 {
 	int offset;
-	switch (nic->devtype.arch) {
-	case EFHW_ARCH_EF10:
-	case EFHW_ARCH_EF100:
+	u32 io_size = efhw_nic_vi_io_size(nic);
+	if (io_size > 0)  {
 		offset = instance * nic->vi_stride;
 		virs->io_page = ci_ioremap(nic->ctr_ap_dma_addr + offset,
-                                           PAGE_SIZE);
+                                           io_size);
 		if (virs->io_page == NULL)
 			return -ENOMEM;
-		break;
-	case EFHW_ARCH_AF_XDP:
-		break;
-	default:
-		EFRM_ASSERT(0);
-		break;
 	}
 	return 0;
 }
@@ -719,17 +719,8 @@ static void
 efrm_vi_io_unmap(struct efrm_vi* virs)
 {
 	struct efhw_nic* nic = virs->rs.rs_client->nic;
-	switch (nic->devtype.arch) {
-	case EFHW_ARCH_EF10:
-	case EFHW_ARCH_EF100:
+	if (efhw_nic_vi_io_size(nic) > 0)
 		iounmap(virs->io_page);
-		break;
-	case EFHW_ARCH_AF_XDP:
-		break;
-	default:
-		EFRM_ASSERT(0);
-		break;
-	}
 }
 
 
@@ -1246,7 +1237,7 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	if (rc < 0)
 		goto fail_q_alloc;
 	txq_capacity = rc;
-	
+
 	rc = efrm_vi_q_alloc_sanitize_size(virs, EFHW_RXQ, rxq_capacity);
 	if (rc < 0)
 		goto fail_q_alloc;
@@ -1272,12 +1263,8 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	if( vi_flags & EFHW_VI_TX_CTPIO )
 		ctpio_mmap_bytes = EF_VI_CTPIO_APERTURE_SIZE;
 
-	if (out_io_mmap_bytes != NULL) {
-		if (client->nic->devtype.arch == EFHW_ARCH_AF_XDP)
-			*out_io_mmap_bytes = 0;
-		else
-			*out_io_mmap_bytes = PAGE_SIZE;
-	}
+	if (out_io_mmap_bytes != NULL)
+		*out_io_mmap_bytes = efhw_nic_vi_io_size(client->nic);
 	if (out_ctpio_mmap_bytes != NULL)
 		*out_ctpio_mmap_bytes = ctpio_mmap_bytes;
 	if (out_txq_capacity != NULL)

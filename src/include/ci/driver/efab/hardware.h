@@ -62,6 +62,7 @@
 
 #include <ci/driver/efab/hardware/ef10.h>
 #include <ci/driver/efab/hardware/ef100.h>
+#include <ci/driver/efab/hardware/efct.h>
 #include <ci/driver/efab/hardware/af_xdp.h>
 
 /*----------------------------------------------------------------------------
@@ -239,3 +240,5 @@
 /*-------------- device ------------------------ */
 #define efhw_nic_get_pci_dev(nic) \
 	((nic)->efhw_func->get_pci_dev(nic))
+#define efhw_nic_vi_io_size(nic) \
+	((nic)->efhw_func->vi_io_size(nic))
