@@ -827,8 +827,13 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
         else if( any_evs )
           ci_netif_poll(ni);
 	ci_netif_unlock(ni);
-	if( ts->rcv_added != rcv_added_before )
+	if( ts->rcv_added != rcv_added_before ) {
+	  if( (flags & MSG_PEEK) ) {
+            ci_iovec_ptr_init_nz(&rinf.piov, a->msg->msg_iov, a->msg->msg_iovlen);
+            rinf.rc = 0;
+          }
 	  goto poll_recv_queue;
+	}
       }
       else {
         /* The netif lock is contended, so the chances are we're up-to-date.
