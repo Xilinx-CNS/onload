@@ -709,6 +709,26 @@ static int ci_tcp_recvmsg_spin(ci_netif* ni, ci_tcp_state* ts,
    ((~flags & MSG_WAITALL) && (bytes) >= (ts)->s.so.rcvlowat))
 
 
+static inline void ci_tcp_recvmsg_init_piov(struct tcp_recv_info* rinf)
+{
+  if( rinf->zc_args ) {
+    /* Several other bits of code check these things to determine how much
+     * data to copy. It's neater if we fake it to ensure that those checks
+     * always see that there's 'infinite' space left, but let's set the
+     * pointers to NULL as well, to catch anywhere that might actually try to
+     * write anything. */
+    rinf->piov.iov = NULL;
+    rinf->piov.iovlen = 1;
+    rinf->piov.io.iov_len = ~(size_t)0;
+    rinf->piov.io.iov_base = NULL;
+  }
+  else {
+    /* [piov] gives keeps track of our position in the apps buffer(s). */
+    ci_iovec_ptr_init_nz(&rinf->piov,
+                         rinf->a->msg->msg_iov,rinf-> a->msg->msg_iovlen);
+  }
+}
+
 __attribute__((always_inline))
 static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
                                       pkt_copy_t copier,
@@ -761,21 +781,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
   ci_assert_equal(flags & ~MSG_DONTWAIT, 0);
 #endif
 
-  if( zc_args ) {
-    /* Several other bits of code check these things to determine how much
-     * data to copy. It's neater if we fake it to ensure that those checks
-     * always see that there's 'infinite' space left, but let's set the
-     * pointers to NULL as well, to catch anywhere that might actually try to
-     * write anything. */
-    rinf.piov.iov = NULL;
-    rinf.piov.iovlen = 1;
-    rinf.piov.io.iov_len = ~(size_t)0;
-    rinf.piov.io.iov_base = NULL;
-  }
-  else {
-    /* [piov] gives keeps track of our position in the apps buffer(s). */
-    ci_iovec_ptr_init_nz(&rinf.piov, a->msg->msg_iov, a->msg->msg_iovlen);
-  }
+  ci_tcp_recvmsg_init_piov(&rinf);
 
   LOG_TR(log(LNTS_FMT "recvmsg len=%d flags=%x bytes_in_rxq=%d", 
              LNTS_PRI_ARGS(ni, ts),
@@ -829,7 +835,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
 	ci_netif_unlock(ni);
 	if( ts->rcv_added != rcv_added_before ) {
 	  if( (flags & MSG_PEEK) ) {
-            ci_iovec_ptr_init_nz(&rinf.piov, a->msg->msg_iov, a->msg->msg_iovlen);
+            ci_tcp_recvmsg_init_piov(&rinf);
             rinf.rc = 0;
           }
 	  goto poll_recv_queue;
