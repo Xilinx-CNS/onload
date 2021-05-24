@@ -70,6 +70,9 @@ void ef10_ef_eventq_timer_prime(ef_vi* q, unsigned v)
   EF_VI_ASSERT(q->nic_type.arch == EF_VI_ARCH_EF10);
   EF_VI_ASSERT(q->inited & EF_VI_INITED_TIMER);
 
+  if( vv > 0x3fff )
+    vv = 0x3fff;
+
   if( bug35388_workaround_needed(q) ) {
     if( vv > 0xff )
       vv = 0xff;
