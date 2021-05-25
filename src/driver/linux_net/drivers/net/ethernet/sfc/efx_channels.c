@@ -2288,6 +2288,12 @@ static int efx_poll(struct napi_struct *napi, int budget)
 #endif
 	int spent;
 
+#ifdef EFX_NOT_UPSTREAM
+#ifdef SFC_NAPI_DEBUG
+	channel->last_napi_poll_jiffies = jiffies;
+#endif
+#endif
+
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
 	if (!efx_channel_lock_napi(channel))
 		return budget;
@@ -2301,6 +2307,12 @@ static int efx_poll(struct napi_struct *napi, int budget)
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)
 	xdp_do_flush_map();
+#endif
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef SFC_NAPI_DEBUG
+	channel->last_complete_done = false;
+#endif
 #endif
 
 	if (spent < budget) {
@@ -2323,13 +2335,28 @@ static int efx_poll(struct napi_struct *napi, int budget)
 		 * since efx_nic_eventq_read_ack() will have no effect if
 		 * interrupts have already been disabled.
 		 */
-		if (napi_complete_done(napi, spent))
+		if (napi_complete_done(napi, spent)) {
+#ifdef EFX_NOT_UPSTREAM
+#ifdef SFC_NAPI_DEBUG
+			channel->last_complete_done = true;
+#endif
+#endif
 			efx_nic_eventq_read_ack(channel);
+		}
 	}
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
 	efx_channel_unlock_napi(channel);
 #endif
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef SFC_NAPI_DEBUG
+	channel->last_napi_poll_end_jiffies = jiffies;
+	channel->last_budget = budget;
+	channel->last_spent = spent;
+#endif
+#endif
+
 	return spent;
 }
 

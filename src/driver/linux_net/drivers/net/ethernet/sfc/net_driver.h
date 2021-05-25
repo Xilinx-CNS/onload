@@ -17,6 +17,10 @@
 #define VERBOSE_DEBUG 1
  */
 
+#ifdef EFX_NOT_UPSTREAM
+#define SFC_NAPI_DEBUG 1
+#endif
+
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/ethtool.h>
@@ -92,7 +96,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.8.1001"
+#define EFX_DRIVER_VERSION	"5.3.8.1002"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -839,6 +843,18 @@ struct efx_channel {
 	unsigned int eventq_mask;
 	unsigned int eventq_read_ptr;
 	int event_test_cpu;
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef SFC_NAPI_DEBUG
+	int last_irq_jiffies;
+	int last_napi_poll_jiffies;
+	int last_napi_poll_end_jiffies;
+	int last_budget;
+	int last_spent;
+	bool last_complete_done;
+	int last_irq_reprime_jiffies;
+#endif
+#endif
 
 	unsigned int irq_count;
 	unsigned int irq_mod_score;

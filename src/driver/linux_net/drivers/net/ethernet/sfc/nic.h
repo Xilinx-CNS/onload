@@ -571,7 +571,9 @@ int efx_ef10_licensed_app_state(struct efx_nic *efx,
 				struct efx_licensed_app_state *app_state);
 #endif
 
-extern const struct efx_nic_type siena_a0_nic_type __attribute__((weak));
+#ifdef CONFIG_SFC_SIENA
+extern const struct efx_nic_type siena_a0_nic_type;
+#endif
 extern const struct efx_nic_type efx_hunt_a0_nic_type;
 extern const struct efx_nic_type efx_hunt_a0_vf_nic_type __attribute__((weak));
 

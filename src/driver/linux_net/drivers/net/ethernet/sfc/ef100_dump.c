@@ -369,3 +369,77 @@ int efx_ef100_dump_sss_regs(struct efx_nic *efx)
 				      ARRAY_SIZE(efx_dump_xon_state));
 	return 0;
 }
+
+#ifdef SFC_NAPI_DEBUG
+#include "ef100_nic.h"
+#include "ef100_regs.h"
+
+#define MAX_EVENTS_TO_DUMP 0xffff
+
+unsigned int ef100_dump_pending_events(struct efx_channel *channel, bool print)
+{
+	unsigned int spent = 0;
+	struct efx_nic *efx = channel->efx;
+	struct ef100_nic_data *nic_data;
+	bool evq_phase, old_evq_phase;
+	unsigned int read_ptr;
+	efx_qword_t *p_event;
+	bool ev_phase;
+
+	nic_data = efx->nic_data;
+	evq_phase = test_bit (channel->channel, nic_data->evq_phases);
+	old_evq_phase = evq_phase;
+	read_ptr = channel->eventq_read_ptr;
+
+	for (;;) {
+		p_event = efx_event(channel, read_ptr);
+
+                ev_phase = !!EFX_QWORD_FIELD(*p_event, ESF_GZ_EV_RXPKTS_PHASE);
+                if (ev_phase != evq_phase)
+                        break;
+
+		if (print && spent < MAX_EVENTS_TO_DUMP) {
+			netif_dbg(efx, drv, efx->net_dev,
+				  "unprocessed event on %d " EFX_QWORD_FMT "\n",
+	                          channel->channel, EFX_QWORD_VAL(*p_event));
+		}
+		++spent;
+
+		++read_ptr;
+                if ((read_ptr & channel->eventq_mask) == 0)
+                        evq_phase = !evq_phase;
+	}
+
+	return spent;
+}
+
+/* dump time since last irq,
+ * time since last napi poll,
+ * and unprocessed events
+ */
+void efx_ef100_dump_napi_debug(struct efx_nic *efx)
+{
+	struct efx_channel *channel;
+
+	int now = jiffies;
+
+	efx_for_each_channel(channel, efx) {
+		unsigned int remaining_events = ef100_dump_pending_events(channel, false);
+
+		netif_dbg(efx, drv, efx->net_dev,
+			  "channel %d irq %u ms ago, poll start %u ms ago, poll end %u ms ago, spent/budget/done = %d/%d/%d, reprime %u ms ago, %u events pending\n",
+			  channel->channel,
+			  jiffies_to_msecs(now - channel->last_irq_jiffies),
+			  jiffies_to_msecs(now - channel->last_napi_poll_jiffies),
+			  jiffies_to_msecs(now - channel->last_napi_poll_end_jiffies),
+			  channel->last_spent, channel->last_budget, channel->last_complete_done,
+			  jiffies_to_msecs(now - channel->last_irq_reprime_jiffies),
+			  remaining_events);
+	}
+	efx_for_each_channel(channel, efx)
+		ef100_dump_pending_events(channel, true);
+}
+#else
+void efx_ef100_dump_napi_debug(struct efx_nic *efx) {}
+#endif
+

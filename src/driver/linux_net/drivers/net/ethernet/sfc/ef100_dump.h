@@ -15,4 +15,7 @@
 /* Dump state of Streaming Sub-System to dmesg */
 int efx_ef100_dump_sss_regs(struct efx_nic *efx);
 
+/* Dump napi debug */
+void efx_ef100_dump_napi_debug(struct efx_nic *efx);
+
 #endif /* EFX_EF100_DUMP_H */

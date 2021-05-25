@@ -1256,8 +1256,10 @@ static void efx_reset_work(struct work_struct *data)
 
 #ifdef EFX_NOT_UPSTREAM
 	if (method == RESET_TYPE_TX_WATCHDOG &&
-	    efx_nic_rev(efx) == EFX_REV_EF100)
+	    efx_nic_rev(efx) == EFX_REV_EF100) {
+		efx_ef100_dump_napi_debug(efx);
 		efx_ef100_dump_sss_regs(efx);
+	}
 #endif
 
 	if (method == RESET_TYPE_MC_BIST)

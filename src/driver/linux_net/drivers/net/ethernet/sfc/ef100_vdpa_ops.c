@@ -1002,7 +1002,23 @@ static int ef100_vdpa_dma_unmap(struct vdpa_device *vdev, u64 iova, u64 size)
 
 static void ef100_vdpa_free(struct vdpa_device *vdev)
 {
-	dev_info(&vdev->dev, "%s: Nothing to free\n", __func__);
+	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
+	int rc;
+
+#ifdef EFX_NOT_UPSTREAM
+	dev_info(&vdev->dev, "%s: Releasing vDPA resources\n", __func__);
+#endif
+	if (vdpa_nic) {
+#ifdef CONFIG_SFC_DEBUGFS
+		efx_fini_debugfs_vdpa(vdpa_nic);
+#endif
+		rc = setup_ef100_mcdi_buffer(vdpa_nic);
+		if (rc) {
+			dev_err(&vdev->dev,
+				"setup_ef100_mcdi failed, err: %d\n", rc);
+		}
+		mutex_destroy(&vdpa_nic->lock);
+	}
 }
 
 const struct vdpa_config_ops ef100_vdpa_config_ops = {

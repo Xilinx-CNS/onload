@@ -316,6 +316,12 @@ static void ef100_ev_read_ack(struct efx_channel *channel)
 
 	efx_writed(channel->efx, &evq_prime,
 		   efx_reg(channel->efx, ER_GZ_EVQ_INT_PRIME));
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef SFC_NAPI_DEBUG
+	channel->last_irq_reprime_jiffies = jiffies;
+#endif
+#endif
 }
 
 static bool ef100_ev_mcdi_pending(struct efx_channel *channel)
@@ -438,8 +444,7 @@ static int ef100_ev_process(struct efx_channel *channel, int quota)
 
 		switch (ev_type) {
 		case ESE_GZ_EF100_EV_RX_PKTS:
-			efx_ef100_ev_rx(channel, p_event);
-			++spent;
+			spent += efx_ef100_ev_rx(channel, p_event);
 			break;
 		case ESE_GZ_EF100_EV_MCDI:
 			spent += ef100_ev_mcdi(channel, p_event,
@@ -482,6 +487,9 @@ static int ef100_ev_process(struct efx_channel *channel, int quota)
 		spent = quota;
 #endif
 
+	if (spent > quota)
+		return quota;
+
 	return spent;
 }
 
@@ -492,6 +500,12 @@ static irqreturn_t ef100_msi_interrupt(int irq, void *dev_id)
 
 	netif_vdbg(efx, intr, efx->net_dev,
 		   "IRQ %d on CPU %d\n", irq, raw_smp_processor_id());
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef SFC_NAPI_DEBUG
+	efx->channel[context->index]->last_irq_jiffies = jiffies;
+#endif
+#endif
 
 	if (likely(READ_ONCE(efx->irq_soft_enabled))) {
 		/* Note test interrupts */

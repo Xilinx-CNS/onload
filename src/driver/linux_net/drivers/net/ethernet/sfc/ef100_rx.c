@@ -238,7 +238,7 @@ static void ef100_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index)
 	channel->rx_pkt_index = index;
 }
 
-void efx_ef100_ev_rx(struct efx_channel *channel, const efx_qword_t *p_event)
+int efx_ef100_ev_rx(struct efx_channel *channel, const efx_qword_t *p_event)
 {
 	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
 	unsigned int n_packets =
@@ -256,6 +256,8 @@ void efx_ef100_ev_rx(struct efx_channel *channel, const efx_qword_t *p_event)
 				rx_queue->removed_count & rx_queue->ptr_mask);
 		++rx_queue->removed_count;
 	}
+
+	return n_packets;
 }
 
 void ef100_rx_write(struct efx_rx_queue *rx_queue)

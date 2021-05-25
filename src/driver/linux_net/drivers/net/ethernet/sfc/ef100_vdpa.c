@@ -550,7 +550,7 @@ int ef100_vdpa_free_buffer(struct ef100_vdpa_nic *vdpa_nic,
        return rc;
 }
 
-static int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic)
+int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic)
 {
 	struct efx_nic *efx = vdpa_nic->efx;
        struct ef100_nic_data *nic_data = efx->nic_data;
@@ -735,29 +735,21 @@ err_alloc_vis_free:
 
 void ef100_vdpa_delete(struct efx_nic *efx)
 {
-	struct ef100_vdpa_nic vdpa_nic;
-	int rc;
-
 	if (efx->vdpa_nic) {
 		mutex_lock(&efx->vdpa_nic->lock);
 		reset_vdpa_device(efx->vdpa_nic);
 		mutex_unlock(&efx->vdpa_nic->lock);
 
-		memcpy(&vdpa_nic, efx->vdpa_nic, sizeof(vdpa_nic));
-		vdpa_unregister_device(&efx->vdpa_nic->vdpa_dev);
-		efx->vdpa_nic = NULL;
-		/* use the efx dev now while logging */
-		memcpy(&vdpa_nic.vdpa_dev.dev, &efx->pci_dev->dev,
-		       sizeof(struct device));
-#ifdef CONFIG_SFC_DEBUGFS
-		efx_fini_debugfs_vdpa(&vdpa_nic);
+#ifdef EFX_NOT_UPSTREAM
+		pci_info(efx->pci_dev,
+			 "%s: Calling vdpa unregister device\n", __func__);
 #endif
-	        rc = setup_ef100_mcdi_buffer(&vdpa_nic);
-	        if (rc) {
-	                pci_err(efx->pci_dev,
-	                        "setup_ef100_mcdi failed, err: %d\n", rc);
-	        }
-		mutex_destroy(&vdpa_nic.lock);
+		vdpa_unregister_device(&efx->vdpa_nic->vdpa_dev);
+#ifdef EFX_NOT_UPSTREAM
+		pci_info(efx->pci_dev,
+			 "%s: vdpa unregister device completed\n", __func__);
+#endif
+		efx->vdpa_nic = NULL;
 		ef100_vdpa_irq_vectors_free(efx->pci_dev);
 		vdpa_free_vis(efx);
 	}
