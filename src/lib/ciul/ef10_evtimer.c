@@ -70,6 +70,7 @@ void ef10_ef_eventq_timer_prime(ef_vi* q, unsigned v)
   EF_VI_ASSERT(q->nic_type.arch == EF_VI_ARCH_EF10);
   EF_VI_ASSERT(q->inited & EF_VI_INITED_TIMER);
 
+  /* NIC has 14 bits for the timer value */
   if( vv > 0x3fff )
     vv = 0x3fff;
 
