@@ -99,7 +99,7 @@ ci_inline int __ci_tcp_calc_rcv_wnd(ci_tcp_state* ts, int advance, int probe)
   ci_uint16 tmp;
   unsigned delta;
 
-  new_window = CI_MIN(ts->rcv_window_max,
+  new_window = CI_MIN((ci_int32)ts->rcv_window_max,
                       ts->s.so.rcvbuf -
                         SEQ_SUB(tcp_rcv_nxt(ts), ts->rcv_delivered));
   new_rhs = tcp_rcv_nxt(ts) + new_window;
