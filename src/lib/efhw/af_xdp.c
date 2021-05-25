@@ -238,7 +238,7 @@ static void* umem_pages_get_addr(struct umem_pages* pages, long page)
 /* Get the VI with the given instance number */
 static struct efhw_af_xdp_vi* vi_by_instance(struct efhw_nic* nic, int instance)
 {
-  struct efhw_nic_af_xdp* xdp = nic->af_xdp;
+  struct efhw_nic_af_xdp* xdp = nic->arch_extra;
 
   if( xdp == NULL || instance >= nic->vi_lim )
     return NULL;
@@ -249,7 +249,7 @@ static struct efhw_af_xdp_vi* vi_by_instance(struct efhw_nic* nic, int instance)
 /* Get the VI with the given owner ID */
 static struct protection_domain* pd_by_owner(struct efhw_nic* nic, int owner_id)
 {
-  struct efhw_nic_af_xdp* xdp = nic->af_xdp;
+  struct efhw_nic_af_xdp* xdp = nic->arch_extra;
 
   if( xdp == NULL || owner_id > MAX_PDS || owner_id < 0 )
     return NULL;
@@ -790,7 +790,7 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     goto out_free_user_offsets;
 
-  rc = xdp_map_update(nic->af_xdp, instance, file);
+  rc = xdp_map_update(nic->arch_extra, instance, file);
   if( rc < 0 )
     goto out_free_user_offsets;
 
@@ -950,7 +950,7 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	xdp->map = fget(map_fd);
 	ci_close_fd(map_fd);
 
-	nic->af_xdp = xdp;
+	nic->arch_extra = xdp;
 	memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
 
 	af_xdp_nic_tweak_hardware(nic);
@@ -1017,10 +1017,11 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 static void
 af_xdp_nic_release_hardware(struct efhw_nic* nic)
 {
+  struct efhw_nic_af_xdp* xdp = nic->arch_extra;
   xdp_set_link(nic->net_dev, NULL);
-  if( nic->af_xdp != NULL ) {
-    fput(nic->af_xdp->map);
-    kfree(nic->af_xdp);
+  if( xdp ) {
+    fput(xdp->map);
+    kfree(xdp);
   }
 }
 
@@ -1046,13 +1047,14 @@ af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 			      struct efhw_evq_params *params)
 {
   struct efhw_af_xdp_vi* vi = vi_by_instance(nic, params->evq);
+  struct efhw_nic_af_xdp* xdp = nic->arch_extra;
 
   if( vi == NULL )
     return -ENODEV;
 
   init_waitqueue_func_entry(&vi->waiter.wait, wait_callback);
   vi->waiter.nic = nic;
-  vi->waiter.ev_handlers = nic->af_xdp->ev_handlers;
+  vi->waiter.ev_handlers = xdp->ev_handlers;
   vi->waiter.evq = params->wakeup_evq;
   /* The budget currently has little relevance as Onload doesn't try to
    * poll AF_XDP from an interrupt context. The value may need some thought
