@@ -263,15 +263,6 @@ static void efct_hugepage_list_changed(void *driver_data, int rxq)
   }
 }
 
-static bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
-                                const void* meta, const void* payload)
-{
-  /* This implementation is good enough for small-scale testing. Once we start
-   * running out of hardware filters then a more advanced implementation may
-   * be needed (depending on which plan(s) we decide to go ahead with) */
-  return flow_lookup;
-}
-
 struct xlnx_efct_drvops efct_ops = {
   .name = "sfc_resource",
   .poll = efct_poll,
@@ -409,6 +400,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN;
   nic->arch_extra = efct;
+  efct_nic_filter_init(efct);
   efct->nic = nic;
 
   efrm_notify_nic_probe(net_dev);

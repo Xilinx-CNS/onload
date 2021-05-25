@@ -70,17 +70,89 @@ struct efhw_nic_efct_evq {
   unsigned capacity;
 };
 
-struct efct_hw_filter {
-  uint32_t lip;
+/* Key type for all the efct_filter_set members. Careful of ordering of
+ * members here: this struct is rigged so that prefix subsets are useful. When
+ * adding new match types, the only things which it should be necessary to
+ * update are the definitions from here to FOR_EACH_FILTER_CLASS, and the
+ * implementations of efct_filter_insert() and efct_filter_match(). */
+struct efct_filter_node {
+  struct hlist_node node;
+  struct rcu_head free_list;
+  int filter_id;
+  int hw_filter;  /* index into hw_filters, or -1 */
+  unsigned refcount;
+  /* All fields from here on are big-endian */
+  union {
+    u32 key_start;   /* marker for 'this is the beginning of the key' */
+    int32_t vlan;   /* -1 for none */
+  };
+  uint16_t ethertype;
+  uint8_t proto;
+  uint16_t rport;
   uint16_t lport;
-  uint16_t proto;
-  uint8_t rxq;
-  bool exclusive;
-  uint32_t refcount;
-  int net_driver_id;
+  union {
+    struct {
+      uint32_t lip;
+      uint32_t rip;
+    } ip4;
+    struct {
+      uint32_t lip[4];
+      uint32_t rip[4];
+    } ip6;
+  } u;
 };
 
-#define MAX_EFCT_FILTERS  256
+/* Defines the software filters supported for the net driver. There's no need
+ * for the software filters to be in any way related to hardware filtering,
+ * we merely need some kind of rule engine to define what packets the net
+ * driver should ignore (presumably because some ef_vi app is going to
+ * consume them). We choose here to implement essentially the same filtering
+ * as EF10's low-latency firmware. This gets us out-of-the-box support for
+ * Onload and TCPDirect, and there's plenty of room for being smarter later.
+ *
+ * We nominally expect ef_vi applications to implement the same filtering as
+ * that here (so that userspace and kernelspace reach identical conclusions
+ * about who should be handling each packet) however there are significant
+ * advantages to keeping divergent implementations. The most obvious is
+ * performance: an ef_vi app probably knows precisely what packet flavours it
+ * wants, so can use a highly specialised parser. As long as the parser here
+ * is a superset, i.e. is capable of describing the same packets as the
+ * user's algorithm, then coherence will be achieved.
+ *
+ * It is intended to be somewhat-easy to add new types of matching to this
+ * file by updating FOR_EACH_FILTER_CLASS() (and fixing all the compiler
+ * errors that result), adding efx_filter_spec-to-efct_filter_node conversion
+ * to efct_filter_insert(), and adding real-packet-to-efct_filter_node
+ * conversion to efct_filter_match(). */
+struct efct_filter_set {
+  struct hlist_head full_match[16384];
+  size_t full_match_n;
+  struct hlist_head semi_wild[16384];
+  size_t semi_wild_n;
+  struct hlist_head ethertype[64];
+  size_t ethertype_n;
+};
+
+#define MAX_EFCT_HW_FILTERS  256
+
+/* Totally arbitrary numbers: */
+static const size_t MAX_ALLOWED_full_match = 32768;
+static const size_t MAX_ALLOWED_semi_wild = 32768;
+static const size_t MAX_ALLOWED_ethertype = 128;
+
+#define FOR_EACH_FILTER_CLASS(action) \
+  action(full_match) \
+  action(semi_wild) \
+  action(ethertype)
+
+struct efct_hw_filter {
+  int drv_id;
+  unsigned refcount;
+  uint8_t rxq;
+  uint8_t proto;
+  uint16_t port;
+  uint32_t ip;
+};
 
 struct efhw_nic_efct {
   struct efhw_nic_efct_rxq rxq[CI_EFCT_MAX_RXQS];
@@ -88,9 +160,13 @@ struct efhw_nic_efct {
   struct xlnx_efct_device *edev;
   struct xlnx_efct_client *client;
   struct efhw_nic *nic;
-  struct efct_hw_filter driver_filters[MAX_EFCT_FILTERS];
 #ifdef __KERNEL__
   /* ZF emu includes this file from UL */
+  /* We could have one filter set per rxq, effectively adding a few more bits
+   * to the hash key. Let's not for now: the memory trade-off doesn't seem
+   * worth it */
+  struct efct_filter_set filters;
+  struct efct_hw_filter hw_filters[MAX_EFCT_HW_FILTERS];
   struct mutex driver_filters_mtx;
 #endif
 };
@@ -107,6 +183,9 @@ int efct_get_hugepages(struct efhw_nic *nic, int hwqid,
                        struct xlnx_efct_hugepage *pages, size_t n_pages);
 int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
                         unsigned sbseq, unsigned pktix);
+void efct_nic_filter_init(struct efhw_nic_efct *efct);
+bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
+                         const void* meta, const void* payload);
 #endif
 
 static inline void efct_app_list_push(struct efhw_efct_rxq **head,
