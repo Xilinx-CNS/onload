@@ -2073,6 +2073,9 @@ OO_INTERCEPT(void**, __vfork_is_vfork, (void))
   return CITP_OPTS.vfork_mode == 2 ? oo_per_thread_get()->vfork_scratch : NULL;
 }
 
+#ifdef __i386__
+__attribute__ ((force_align_arg_pointer))
+#endif
 OO_INTERCEPT(pid_t, __vfork_as_fork,
              (void))
 {
