@@ -287,13 +287,6 @@ void efx_link_status_changed(struct efx_nic *efx)
 		return;
 
 	if (link_state->up) {
-#ifndef EFX_C_MODEL
-		struct net_device *net_dev = efx->net_dev;
-
-		if (link_state->speed)
-			net_dev->watchdog_timeo = min_t(u16, 5 * HZ,
-					  5 * HZ * 10000 / link_state->speed);
-#endif
 		netif_info(efx, link, efx->net_dev,
 			   "link up at %uMbps %s-duplex (MTU %d)%s%s%s\n",
 			   link_state->speed, link_state->fd ? "full" : "half",
@@ -1714,16 +1707,18 @@ int efx_check_queue_size(struct efx_nic *efx, u32 *entries,
 }
 
 #ifdef CONFIG_SFC_MCDI_LOGGING
-static ssize_t show_mcdi_log(struct device *dev, struct device_attribute *attr,
-			     char *buf)
+static ssize_t mcdi_logging_show(struct device *dev,
+				 struct device_attribute *attr,
+				 char *buf)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 	struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
 
 	return scnprintf(buf, PAGE_SIZE, "%d\n", mcdi->logging_enabled);
 }
-static ssize_t set_mcdi_log(struct device *dev, struct device_attribute *attr,
-			    const char *buf, size_t count)
+static ssize_t mcdi_logging_store(struct device *dev,
+				  struct device_attribute *attr,
+				  const char *buf, size_t count)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 	struct efx_mcdi_iface *mcdi = efx_mcdi(efx);
@@ -1732,7 +1727,7 @@ static ssize_t set_mcdi_log(struct device *dev, struct device_attribute *attr,
 	mcdi->logging_enabled = enable;
 	return count;
 }
-static DEVICE_ATTR(mcdi_logging, 0644, show_mcdi_log, set_mcdi_log);
+static DEVICE_ATTR_RW(mcdi_logging);
 
 void efx_init_mcdi_logging(struct efx_nic *efx)
 {

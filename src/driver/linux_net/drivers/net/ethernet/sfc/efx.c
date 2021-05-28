@@ -771,13 +771,13 @@ out:
 static DEVICE_ATTR(lro, 0644, show_lro, set_lro);
 #endif
 
-static ssize_t
-show_phy_type(struct device *dev, struct device_attribute *attr, char *buf)
+static ssize_t phy_type_show(struct device *dev,
+			     struct device_attribute *attr, char *buf)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 	return scnprintf(buf, PAGE_SIZE, "%d\n", efx->phy_type);
 }
-static DEVICE_ATTR(phy_type, 0444, show_phy_type, NULL);
+static DEVICE_ATTR_RO(phy_type);
 
 static void efx_init_features(struct efx_nic *efx)
 {

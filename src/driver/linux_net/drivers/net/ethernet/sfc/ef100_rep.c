@@ -627,16 +627,20 @@ void efx_ef100_rep_rx_packet(struct efx_rep *efv, struct efx_rx_buffer *rx_buf)
 	 */
 	if (efv->write_index - READ_ONCE(efv->read_index) > efv->rx_pring_size) {
 		atomic64_inc(&efv->stats.rx_dropped);
-		netif_dbg(efv->parent, rx_err, efv->net_dev,
-			  "nodesc-dropped packet of length %u\n", rx_buf->len);
+		if (net_ratelimit())
+			netif_dbg(efv->parent, rx_err, efv->net_dev,
+				  "nodesc-dropped packet of length %u\n",
+				  rx_buf->len);
 		return;
 	}
 
 	skb = netdev_alloc_skb(efv->net_dev, rx_buf->len);
 	if (!skb) {
 		atomic64_inc(&efv->stats.rx_dropped);
-		netif_dbg(efv->parent, rx_err, efv->net_dev,
-			  "noskb-dropped packet of length %u\n", rx_buf->len);
+		if (net_ratelimit())
+			netif_dbg(efv->parent, rx_err, efv->net_dev,
+				  "noskb-dropped packet of length %u\n",
+				  rx_buf->len);
 		return;
 	}
 	memcpy(skb->data, eh, rx_buf->len);

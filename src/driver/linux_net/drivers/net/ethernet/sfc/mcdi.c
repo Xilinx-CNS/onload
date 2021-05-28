@@ -1056,6 +1056,10 @@ static void efx_mcdi_cmd_work(struct work_struct *context)
 					  cmd->cmd, cmd->inlen,
 					  cmd->polled ? MCDI_MODE_POLL : MCDI_MODE_EVENTS,
 					  jiffies_to_msecs(jiffies - cmd->started));
+			/* things are going wrong.
+			 * switch to polled mode so we tear down faster.
+			 */
+			_efx_mcdi_mode_poll(mcdi);
 		}
 		efx_mcdi_complete_cmd(mcdi, cmd, copybuf, &cleanup_list);
 	/* then check for timeout. If evented, it must have timed out */
