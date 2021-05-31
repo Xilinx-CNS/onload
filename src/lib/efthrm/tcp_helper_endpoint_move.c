@@ -795,6 +795,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
         /* There will be no more active connections in the new stack
          * - tcp_shared_local_ports is useless. */
         opts->tcp_shared_local_ports = 0;
+        opts->max_ep_bufs = EP_BUF_PER_CHUNK;
 
         /* Note: we will not attempt to create tproxy mode interfaces */
         rc = tcp_helper_alloc_kernel(&alloc, opts, 0, &new_thr);
