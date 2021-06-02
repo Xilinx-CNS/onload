@@ -51,27 +51,3 @@ ci_mmap_bar(struct efhw_nic* nic, off_t base, size_t len, void* opaque,
 			    vma->vm_page_prot);
 }
 
-
-void ci_mmap_iopages(struct efhw_iopages* p, unsigned offset,
-                     unsigned max_bytes, unsigned long* bytes, void* opaque,
-                     int* map_num, unsigned long* p_offset)
-{
-  unsigned n;
-
-  ci_assert(opaque);
-  ci_assert(map_num);
-  ci_assert(p_offset);
-  ci_assert((*p_offset &~ PAGE_MASK) == 0);
-  ci_assert(*map_num == 0 || *p_offset > 0);
-
-  EFCH_TRACE("%s: offset=0x%x max_bytes=0x%x *bytes=0x%lx *p_offset=0x%lx",
-             __FUNCTION__, offset, max_bytes, *bytes, *p_offset);
-
-  n = efhw_iopages_size(p) - offset;
-  n = CI_MIN(n, max_bytes);
-  n = CI_MIN(n, *bytes);
-  *bytes -= n;
-  ++*map_num;
-  *p_offset += n;
-}
-
