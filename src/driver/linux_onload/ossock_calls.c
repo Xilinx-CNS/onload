@@ -545,8 +545,10 @@ int efab_tcp_helper_os_sock_recvmsg(ci_private_t* priv, void *arg)
     goto out;
 
   if( CI_USER_PTR_GET(op->msg_name) &&
-      copy_to_user(CI_USER_PTR_GET(op->msg_name),
-                   sockaddr, CI_MIN(op->msg_namelen, msg.msg_namelen)) != 0 )
+      copy_to_user(CI_USER_PTR_GET(op->msg_name), sockaddr,
+                   CI_MIN((unsigned long)op->msg_namelen,
+                          (unsigned long)msg.msg_namelen))
+      != 0 )
     rc = -EFAULT;
   if( CI_USER_PTR_GET(op->msg_name) || op->msg_namelen )
     op->msg_namelen = msg.msg_namelen;
