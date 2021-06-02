@@ -579,7 +579,7 @@ void ci_tcp_timeout_rto(ci_netif* netif, ci_tcp_state* ts)
   ts->congrecover = tcp_snd_nxt(ts);
 
   /* Reset congestion window to one segment (RFC2581 p5). */
-  ts->cwnd = CI_MAX(tcp_eff_mss(ts), NI_OPTS(netif).loss_min_cwnd);
+  ts->cwnd = CI_MAX((ci_uint32)tcp_eff_mss(ts), NI_OPTS(netif).loss_min_cwnd);
   ts->cwnd = CI_MAX(ts->cwnd, NI_OPTS(netif).min_cwnd);
   ts->bytes_acked = 0;
 
