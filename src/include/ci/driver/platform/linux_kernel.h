@@ -187,7 +187,7 @@ typedef int (*ci_waiter_on_wakeup_fn)(ci_waiter_t*, void*, void*, int rc,
     else                                      \
     {                                         \
       *(t) = (timeval)->tv_sec * HZ + (timeval)->tv_usec * HZ / 1000000u; \
-      *(t) = CI_MAX(*(t), 1);                 \
+      *(t) = CI_MAX(*(t), 1L);                 \
     }                                         \
   } while(0)
 
@@ -296,7 +296,7 @@ ci_inline void ci_waitq_init_timeout(ci_waitq_timeout_t* t,
     *t = -1;
   else {
     *t = timeval->tv_sec * HZ + timeval->tv_usec * HZ / 1000000u;
-    *t = CI_MAX(*t, 1);
+    *t = CI_MAX(*t, 1L);
   }
 }
 
