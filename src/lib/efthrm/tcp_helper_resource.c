@@ -2128,7 +2128,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
     /* Max active wilds is bounded by the number of local IPs and
      * shared local ports. */
     no_active_wild_table_entries =
-      CI_MIN(CI_CFG_MAX_LOCAL_IPADDRS,
+      CI_MIN((ci_uint32)CI_CFG_MAX_LOCAL_IPADDRS,
              CI_MAX(NI_OPTS(ni).tcp_shared_local_ports,
                     NI_OPTS(ni).tcp_shared_local_ports_max));
     /* Quadruple the size to ensure the hash table does not get too full. */
