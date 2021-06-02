@@ -279,7 +279,7 @@ oo_dshm_mmap_impl(struct vm_area_struct* vma)
        * address space.  If we fail to map any of the pages, give up; the
        * kernel will then tidy up begind us.
        */
-      ci_uint32 num_pages = CI_MIN(buffer->num_pages,
+      ci_uint32 num_pages = CI_MIN((unsigned long)buffer->num_pages,
                                    map_length >> PAGE_SHIFT);
       ci_uint32 i;
       for( i = 0, rc = 0; i < num_pages && rc == 0; ++i ) {
