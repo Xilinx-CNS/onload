@@ -465,7 +465,7 @@ static ssize_t ef100_ef_vi_transmit_memcpy(struct ef_vi* vi,
       return done_bytes ? done_bytes : -EAGAIN;
     }
     this_n = CI_MIN(src.len, dst.len);
-    this_n = CI_MIN(ESE_EF100_DP_GZ_MEM2MEM_MAX_LEN_DEFAULT, this_n);
+    this_n = CI_MIN((unsigned)ESE_EF100_DP_GZ_MEM2MEM_MAX_LEN_DEFAULT, this_n);
 
     ef100_tx_mem2mem_desc_fill(src_iov, this_n, &descriptors[di1]);
     ef100_tx_mem2mem_desc_fill(dst_iov, this_n, &descriptors[di2]);
