@@ -541,6 +541,8 @@ int ci_netif_evq_poll(ci_netif* ni, int intf_i)
 {
   ef_vi* evq = ci_netif_vi(ni, intf_i);
   int n_evs;
+  size_t evs_per_poll = ef_vi_flags(evq) & EF_VI_RX_EVENT_MERGE ?
+                NI_OPTS(ni).evs_per_poll / 4 : NI_OPTS(ni).evs_per_poll;
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   ef_event *ev = ni->state->events;
 #endif
@@ -558,9 +560,7 @@ int ci_netif_evq_poll(ci_netif* ni, int intf_i)
    * normal default. */
   n_evs = ef_eventq_poll(evq, ni->state->events,
              CI_MIN(sizeof(ni->state->events) / sizeof(ni->state->events[0]),
-                    ef_vi_flags(evq) & EF_VI_RX_EVENT_MERGE ?
-                                            NI_OPTS(ni).evs_per_poll / 4 :
-                                            NI_OPTS(ni).evs_per_poll));
+                    evs_per_poll));
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   if( NI_OPTS(ni).xdp_mode == 0 )
