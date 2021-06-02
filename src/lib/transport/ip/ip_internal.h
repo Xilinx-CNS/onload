@@ -449,7 +449,7 @@ ci_get_optval(const void *optval, socklen_t optlen)
 /*! Do not call it, use ci_getsockopt_final(). */
 ci_inline int
 ci_getsockopt_final_pre(void *optval, socklen_t *optlen, int level,
-                        void *val, size_t val_size)
+                        void *val, socklen_t val_size)
 {
   if( *optlen > 0 )
     memcpy(optval, val, CI_MIN(*optlen, val_size));
