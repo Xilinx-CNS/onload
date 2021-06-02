@@ -334,7 +334,7 @@ ci_ipp_pmtu_rx_tcp(tcp_helper_resource_t* thr, ci_tcp_state* ts,
     ci_pmtu_state_init(&thr->netif, &ts->s, ts->pmtus, pmtus,
                        CI_IP_TIMER_PMTU_DISCOVER);
     ci_pmtu_set(&thr->netif, pmtus,
-                CI_MIN(ts->s.pkt.mtu,
+                CI_MIN((size_t)ts->s.pkt.mtu,
                        ts->smss + sizeof(ci_tcp_hdr) +
                        CI_IPX_HDR_SIZE(ipcache_af(&ts->s.pkt))));
   }
