@@ -46,7 +46,7 @@ extern void ci_pmtu_set(ci_netif *ni, ci_pmtu_state_t *pmtus, unsigned pmtu)
   unsigned id = CI_PMTU_PLATEAU_ENTRY_MAX;
   ci_assert_ge(pmtu, CI_CFG_TCP_MINIMUM_MSS);
 
-  pmtu = CI_MIN(CI_PMTU_MAX_MTU, pmtu);
+  pmtu = CI_MIN((unsigned)CI_PMTU_MAX_MTU, pmtu);
   while (id && pmtu < plateau[id])
     id--;
 
