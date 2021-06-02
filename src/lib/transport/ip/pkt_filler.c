@@ -79,7 +79,7 @@ int oo_pkt_fill(ci_netif* ni, ci_sock_cmn* s, int* p_netif_locked,
 
   while( 1 ) {
     n = (int) (pf->buf_end - pf->buf_start);
-    n = CI_MIN(n, CI_IOVEC_LEN(&piov->io));
+    n = CI_MIN((size_t)n, CI_IOVEC_LEN(&piov->io));
     n = CI_MIN(n, bytes_to_copy);
     if(CI_UNLIKELY( oo_pkt_fill_copy(pf->buf_start, CI_IOVEC_BASE(&piov->io),
                                      n CI_KERNEL_ARG(addr_spc)) != 0 ))

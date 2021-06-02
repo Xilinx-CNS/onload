@@ -443,7 +443,8 @@ static int copy_one_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
     /* Very strange kernel behaviour: MSG_TRUNC will consume the number
      * of bytes requested, but will not write to the user's pointer in any
      * circumstances. This code does the same. */
-    n = CI_MIN(oo_offbuf_left(&pkt->buf) - peek_off, rinf->piov.io.iov_len);
+    n = CI_MIN((size_t)oo_offbuf_left(&pkt->buf) - peek_off,
+               rinf->piov.io.iov_len);
     CI_IOVEC_LEN(&rinf->piov.io) -= n;
   }
   /* NB: on failure of this function (i.e. n<0) the caller doesn't make any

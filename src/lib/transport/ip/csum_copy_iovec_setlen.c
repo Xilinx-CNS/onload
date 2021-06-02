@@ -88,7 +88,7 @@ __ci_ip_copy_pkt_to_user(ci_netif* ni, ci_iovec* iov, ci_ip_pkt_fmt* pkt,
 {
   int len;
 
-    len = CI_MIN(oo_offbuf_left(&pkt->buf) - peek_off, iov->iov_len);
+    len = CI_MIN((size_t)oo_offbuf_left(&pkt->buf) - peek_off, iov->iov_len);
     if( copy_to_user(CI_IOVEC_BASE(iov),
                      oo_offbuf_ptr(&pkt->buf) + peek_off, len) ) {
       ci_log("%s: faulted", __FUNCTION__);

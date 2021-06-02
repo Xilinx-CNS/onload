@@ -138,7 +138,7 @@ __oo_copy_frag_to_iovec_no_adv(ci_netif* ni,
 {
   int n;
 
-  n = CI_MIN(ocs->pkt_left, CI_IOVEC_LEN(&piov->io));
+  n = CI_MIN((size_t)ocs->pkt_left, CI_IOVEC_LEN(&piov->io));
   n = CI_MIN(n, ocs->bytes_to_copy);
   if(CI_UNLIKELY( do_copy(CI_IOVEC_BASE(&piov->io),
                           ocs->from + ocs->pkt_off, n) != 0 ))
