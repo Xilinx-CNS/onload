@@ -44,7 +44,7 @@ efab_vi_rm_mmap_io(struct efrm_vi *virs,
 
   instance = virs->rs.rs_instance;
 
-  len = CI_MIN(*bytes, CI_PAGE_SIZE);
+  len = CI_MIN(*bytes, (unsigned long)CI_PAGE_SIZE);
   *bytes -=len;
 
   /* Make sure we can get away with a single page here. */
@@ -106,7 +106,7 @@ efab_vi_rm_mmap_pio(struct efrm_vi *virs,
   instance = virs->rs.rs_instance;
 
   /* Map the control page. */
-  len = CI_MIN(*bytes, CI_PAGE_SIZE);
+  len = CI_MIN(*bytes, (unsigned long)CI_PAGE_SIZE);
   *bytes -= len;
   bar_off = (ef10_tx_dma_page_base(nic->vi_stride, instance) + 4096) &
             PAGE_MASK;
@@ -139,7 +139,7 @@ efab_vi_rm_mmap_ctpio(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
   }
 
   /* Map the CTPIO region, which is 12K from the start of the VI's aperture. */
-  len = CI_MIN(*bytes, CI_PAGE_SIZE);
+  len = CI_MIN(*bytes, (unsigned long)CI_PAGE_SIZE);
   *bytes -= len;
   nic = efrm_client_get_nic(virs->rs.rs_client);
   ci_assert_ge(nic->vi_stride, CTPIO_OFFSET + len);
