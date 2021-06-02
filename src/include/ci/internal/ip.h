@@ -4371,7 +4371,7 @@ ci_inline void ci_tcp_tx_pkt_set_zc_header_pos(ci_tcp_state* ts,
 }
 
 
-ci_inline int ci_tcp_listenq_max(ci_netif* ni)
+ci_inline ci_uint32 ci_tcp_listenq_max(ci_netif* ni)
 { return NI_OPTS(ni).tcp_backlog_max; }
 
 ci_inline unsigned ci_ipx_tcp_checksum(int af, const ci_ipx_hdr_t* ipx,

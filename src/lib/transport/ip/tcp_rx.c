@@ -722,7 +722,7 @@ ci_inline void ci_tcp_opencwnd(ci_netif *ni, ci_tcp_state* ts)
      * on longer links */
     if( tcp_srtt(ts) < 32 )
       tmp = NI_OPTS(ni).cong_avoid_scale_back >> tcp_srtt(ts);
-    cwnd_scaled = CI_MAX(1, tmp) * ts->cwnd;
+    cwnd_scaled = CI_MAX(1U, tmp) * ts->cwnd;
 #else
     unsigned cwnd_scaled = ts->cwnd;
 #endif
@@ -878,9 +878,10 @@ static void ci_tcp_cwnd_extra_update(ci_netif* netif, ci_tcp_state* ts)
 {
   unsigned fack;
   int retrans_data;
+  int cwnd_extra;
   ci_tcp_get_fack(netif, ts, &fack, &retrans_data);
-  ts->cwnd_extra = SEQ_SUB(fack, tcp_snd_una(ts)) - retrans_data;
-  ts->cwnd_extra = CI_MAX(ts->cwnd_extra, 0);
+  cwnd_extra = SEQ_SUB(fack, tcp_snd_una(ts)) - retrans_data;
+  ts->cwnd_extra = CI_MAX(cwnd_extra, 0);
 }
 
 /*
