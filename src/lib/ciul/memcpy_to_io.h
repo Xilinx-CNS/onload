@@ -139,11 +139,11 @@ __memcpy_iov_to_pio(volatile uint64_t* dst,
     if( !aligned && (in_hand_count > 0) ) {
       /* How many bytes do we need to create the next 64-bit aligned
        * write? */
-      unsigned needed_bytes = MEMCPY_TO_PIO_ALIGN - in_hand_count;
+      int needed_bytes = MEMCPY_TO_PIO_ALIGN - in_hand_count;
 
       /* How many bytes are available to be taken from the start of
        * this iov? */
-      unsigned avail_bytes = CI_MIN(needed_bytes, len);
+      int avail_bytes = CI_MIN(needed_bytes, len);
 
       /* Add bytes to the in_hand buffer. */
       memcpy(in_hand.bytes + in_hand_count, data, avail_bytes);
