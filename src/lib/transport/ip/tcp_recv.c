@@ -165,7 +165,7 @@ void ci_tcp_rcvbuf_drs(ci_netif* netif, ci_tcp_state* ts)
    * the buffers (similar to flow WFQ). But general advice would be to make
    * sufficient packet buffers available (e.g. at least sum of Bandwidth Delay
    * Products * 4) */
-  int max_rcvbuf_packets =
+  ci_uint64 max_rcvbuf_packets =
     NI_OPTS(netif).max_rx_packets >> NI_OPTS(netif).tcp_sockbuf_max_fraction;
 
   time = ci_tcp_time_now(netif) - ts->rcvbuf_drs.time;
@@ -199,7 +199,7 @@ void ci_tcp_rcvbuf_drs(ci_netif* netif, ci_tcp_state* ts)
 	rcv_wnd += (rcv_wnd >> 1);
     }
 
-    rcvbuf = CI_MIN(rcv_wnd, (ci_uint64)max_rcvbuf_packets * ts->amss);
+    rcvbuf = CI_MIN((ci_uint64)rcv_wnd, max_rcvbuf_packets * ts->amss);
 
     if( rcvbuf > ts->s.so.rcvbuf ) {
       ts->s.so.rcvbuf = rcvbuf;
