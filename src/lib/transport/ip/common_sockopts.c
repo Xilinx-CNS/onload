@@ -721,7 +721,7 @@ int ci_get_sol_socket( ci_netif* netif, ci_sock_cmn* s,
 
  u_out:
   if( (int)*optlen >= 0 ) {
-    int minlen = CI_MIN(sizeof(u), (int)*optlen);
+    int minlen = CI_MIN((socklen_t)sizeof(u), *optlen);
     memcpy(optval, (char*)&u, minlen);
     *optlen = minlen;
     return 0;
