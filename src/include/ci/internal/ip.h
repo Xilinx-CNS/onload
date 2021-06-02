@@ -1035,7 +1035,7 @@ extern int ci_udp_try_to_free_pkts(ci_netif*, ci_udp_state*,
 struct ci_pipe_pkt_list {
   ci_ip_pkt_fmt* head;
   ci_ip_pkt_fmt* tail;
-  int count;
+  ci_uint32 count;
 };
 
 typedef int (*ci_pipe_zc_read_cb)(void* context, struct iovec* iovec,

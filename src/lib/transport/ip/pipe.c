@@ -384,7 +384,7 @@ int ci_pipe_read(ci_netif* ni, struct oo_pipe* p,
       do_wake += oo_pipe_move_read_ptr(ni, p, &pkt, &offset, 0);
 
       read_point = pipe_get_point(ni, p, pkt, offset);
-      burst = CI_MIN(pkt->pf.pipe.pay_len - offset, end - start);
+      burst = CI_MIN((size_t)pkt->pf.pipe.pay_len - offset, (size_t)(end - start));
       burst = CI_MIN(burst, bytes_available - rc);
       ci_assert_lt(offset, pkt->pf.pipe.pay_len);
       ci_assert_le(offset + burst, pkt->pf.pipe.pay_len);
@@ -591,14 +591,12 @@ ci_inline oo_pkt_p oo_pipe_pkt_list_next(ci_ip_pkt_fmt* pkt)
  *
  * The caller must hold the stack lock.
  */
-static int oo_pipe_more_buffers(ci_netif* ni, struct oo_pipe* p, int requested,
+static int oo_pipe_more_buffers(ci_netif* ni, struct oo_pipe* p, ci_uint32 requested,
                                 struct ci_pipe_pkt_list* pkts)
 
 {
   ci_uint32 num_alloced, total_to_alloc;
   ci_ip_pkt_fmt* write_pkt = NULL;
-
-  ci_assert_ge(requested, 0);
 
   LOG_PIPE("%s: called for ni=%d p=%d wr=%d rd=%d",
            __FUNCTION__, ni->state->stack_id, p->b.bufid,
@@ -615,7 +613,7 @@ static int oo_pipe_more_buffers(ci_netif* ni, struct oo_pipe* p, int requested,
   else
     total_to_alloc = p->bufs_num > 0 ?
         CI_MIN(p->bufs_num, p->bufs_max - p->bufs_num) :
-        CI_MIN(OO_PIPE_INITIAL_BUFS, p->bufs_max);
+        CI_MIN((ci_uint32)OO_PIPE_INITIAL_BUFS, p->bufs_max);
   for( num_alloced = 0; num_alloced < total_to_alloc; ++num_alloced ) {
     ci_ip_pkt_fmt* pkt;
 #ifndef __KERNEL__
@@ -1830,7 +1828,7 @@ int ci_pipe_write(ci_netif* ni, struct oo_pipe* p,
 
       write_point = pipe_get_point(ni, p, pkt, pkt->pf.pipe.pay_len);
       /* don't write more than left from the buffer */
-      burst = CI_MIN(oo_pipe_buf_space(pkt), end - start);
+      burst = CI_MIN(oo_pipe_buf_space(pkt), (ci_uint32)(end - start));
 
       if( burst ) {
         if(CI_UNLIKELY( do_copy_write(write_point, start, burst) != 0 )) {
