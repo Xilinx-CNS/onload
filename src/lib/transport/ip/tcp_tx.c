@@ -1179,8 +1179,8 @@ void ci_tcp_retrans_recover(ci_netif* ni, ci_tcp_state* ts,
   ci_tcp_get_fack(ni, ts, &fack, &retrans_data);
 
   if( ts->congstate == CI_TCP_CONG_FAST_RECOV ) {
-    ts->cwnd_extra = SEQ_SUB(fack, tcp_snd_una(ts)) - retrans_data;
-    ts->cwnd_extra = CI_MAX(ts->cwnd_extra, 0);
+    int cwnd_extra = SEQ_SUB(fack, tcp_snd_una(ts)) - retrans_data;
+    ts->cwnd_extra = CI_MAX(cwnd_extra, 0);
     cwnd_avail = ts->cwnd + ts->cwnd_extra - ci_tcp_inflight(ts);
     before_sacked_only = 1;
     if( force_retrans_first ) {
@@ -1227,10 +1227,11 @@ void ci_tcp_retrans_recover(ci_netif* ni, ci_tcp_state* ts,
   rc = ci_tcp_retrans(ni, ts, cwnd_avail, before_sacked_only, &seq_used);
 
   if( ts->congstate == CI_TCP_CONG_FAST_RECOV ) {
+    int cwnd_extra;
     ci_assert(seq_used <= cwnd_avail);
     retrans_data += seq_used;
-    ts->cwnd_extra = SEQ_SUB(fack, tcp_snd_una(ts)) - retrans_data;
-    ts->cwnd_extra = CI_MAX(ts->cwnd_extra, 0);
+    cwnd_extra = SEQ_SUB(fack, tcp_snd_una(ts)) - retrans_data;
+    ts->cwnd_extra = CI_MAX(cwnd_extra, 0);
   }
 
   ci_assert(SEQ_LT(tcp_snd_una(ts), ts->congrecover));
