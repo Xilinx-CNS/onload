@@ -1007,8 +1007,7 @@ oo_eplock_lock_rsop(ci_private_t* priv, void* arg)
   if (priv->thr == NULL)
     return -EINVAL;
   if(CI_UNLIKELY( *timeout_ms_p >= 0 )) {
-    timeout_jiffies = CI_MIN(msecs_to_jiffies(*timeout_ms_p),
-                             MAX_SCHEDULE_TIMEOUT);
+    timeout_jiffies = msecs_to_jiffies(*timeout_ms_p);
     has_timeout = true;
   }
 
