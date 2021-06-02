@@ -1198,7 +1198,7 @@ CI_CFG_OPT("EF_TCP_SYNRECV_MAX", tcp_synrecv_max, ci_uint32,
            , , CI_TCP_LISTENQ_MAX * CI_CFG_ASSUME_LISTEN_SOCKS,
            MIN, CI_CFG_NETIF_MAX_ENDPOINTS_MAX, bincount)
 
-CI_CFG_OPT("EF_TCP_INITIAL_CWND", initial_cwnd, ci_int32,
+CI_CFG_OPT("EF_TCP_INITIAL_CWND", initial_cwnd, ci_uint32,
 "Sets the initial size of the congestion window (in bytes) for TCP "
 "connections. Some care is needed as, for example, setting smaller than the "
 "segment size may result in Onload being unable to send traffic. "
@@ -1206,7 +1206,7 @@ CI_CFG_OPT("EF_TCP_INITIAL_CWND", initial_cwnd, ci_int32,
 "WARNING: Modifying this option may violate the TCP protocol.",
            ,  , 0, 0, SMAX, count)
 
-CI_CFG_OPT("EF_TCP_LOSS_MIN_CWND", loss_min_cwnd, ci_int32,
+CI_CFG_OPT("EF_TCP_LOSS_MIN_CWND", loss_min_cwnd, ci_uint32,
 "Sets the minimum size of the congestion window for TCP connections following "
 "loss."
 "\n"
@@ -1216,7 +1216,7 @@ CI_CFG_OPT("EF_TCP_LOSS_MIN_CWND", loss_min_cwnd, ci_int32,
 ,
            ,  , 0, 0, SMAX, count)
 
-CI_CFG_OPT("EF_TCP_MIN_CWND", min_cwnd, ci_int32,
+CI_CFG_OPT("EF_TCP_MIN_CWND", min_cwnd, ci_uint32,
 "Sets the minimum size of the congestion window for TCP connections. "
 "This value is used for any congestion window changes: connection start, "
 "packet loss, connection being idle, etc."
