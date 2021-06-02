@@ -1837,7 +1837,7 @@ ci_inline ci_uint32 ci_netif_filter_table_size(ci_netif* ni)
    * Fixme: max_ep_bufs is the number of ep states including the states
    * used for aux buffers and pipe endpoints.  How many real sockets are
    * we going to create?  Do we need a separate option? */
-  return 1u << CI_MAX(16, ci_log2_le(NI_OPTS(ni).max_ep_bufs) + 1);
+  return 1u << CI_MAX(16U, ci_log2_le(NI_OPTS(ni).max_ep_bufs) + 1);
 }
 
 
@@ -4101,14 +4101,14 @@ ci_tcp_initial_seqno(ci_netif* ni, ci_addr_t laddr, ci_uint16 lport_be,
 
 /* Returns non-scaled value of the receive window. */
 ci_inline ci_uint32 ci_tcp_rcvbuf2window(ci_uint32 so_rcvbuf,
-                                         ci_uint16 amss,
+                                         ci_uint32 amss,
                                          ci_uint8 rcv_wscl)
 {
   ci_assert(amss);
   so_rcvbuf = CI_MAX(so_rcvbuf, amss);
   if( so_rcvbuf % amss )
     so_rcvbuf += amss - (so_rcvbuf % amss);
-  so_rcvbuf = CI_MIN(so_rcvbuf, CI_CFG_TCP_MAX_WINDOW << rcv_wscl);
+  so_rcvbuf = CI_MIN(so_rcvbuf, (unsigned)CI_CFG_TCP_MAX_WINDOW << rcv_wscl);
   return so_rcvbuf;
 }
 
@@ -4120,7 +4120,7 @@ ci_inline ci_uint16 ci_tcp_calc_rcv_wnd_syn(ci_uint32 so_rcvbuf,
    * window is the full 16 bits.  If our unscaled window is more than that
    * then clamp it down.
    */
-  return CI_MIN(ci_tcp_rcvbuf2window(so_rcvbuf, amss, rcv_wscl), 0xffff);
+  return CI_MIN(ci_tcp_rcvbuf2window(so_rcvbuf, amss, rcv_wscl), 0xffffU);
 }
 
 ci_inline void ci_tcp_set_rcvbuf(ci_netif* ni, ci_tcp_state* ts)
@@ -4238,7 +4238,7 @@ ci_inline void ci_tcp_set_initialcwnd(ci_netif* ni, ci_tcp_state* ts) {
       ci_log("EF_TCP_INITIAL_CWND=%d is less than MSS value %d. Correcting.",
              NI_OPTS(ni).initial_cwnd, tcp_eff_mss(ts));
     }
-    ts->cwnd = CI_MAX(tcp_eff_mss(ts),NI_OPTS(ni).initial_cwnd);
+    ts->cwnd = CI_MAX((ci_uint32)tcp_eff_mss(ts),NI_OPTS(ni).initial_cwnd);
   }
   ts->cwnd = CI_MAX(ts->cwnd, NI_OPTS(ni).min_cwnd);
   /* RFC5681 suggests using the maximum possible send window as the initial
@@ -4714,7 +4714,7 @@ ci_inline unsigned ci_tcp_get_pmtu(ci_netif* netif, ci_tcp_state* ts)
   x = ts->s.pkt.mtu;
   if( OO_PP_NOT_NULL(ts->pmtus) ) {
     ci_pmtu_state_t* pmtus = ci_ni_aux_p2pmtus(netif, ts->pmtus);
-    return CI_MIN(x, pmtus->pmtu);
+    return CI_MIN(x, (unsigned)pmtus->pmtu);
   }
   return x;
 }
@@ -4731,8 +4731,8 @@ ci_inline void ci_tcp_set_eff_mss(ci_netif* netif, ci_tcp_state* ts) {
 
   x = ci_tcp_get_pmtu(netif, ts) - sizeof(ci_tcp_hdr) - CI_IPX_HDR_SIZE(af);
 
-  x = CI_MIN(x, ts->smss);
-  ts->eff_mss = CI_MAX(x, CI_CFG_TCP_MINIMUM_MSS) -
+  x = CI_MIN(x, (unsigned)ts->smss);
+  ts->eff_mss = CI_MAX(x, (unsigned)CI_CFG_TCP_MINIMUM_MSS) -
                 tcp_ipx_outgoing_opts_len(af, ts);
 
   /* Increase ssthresh & cwndif eff_mss has increased */
