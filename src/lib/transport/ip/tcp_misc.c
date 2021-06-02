@@ -1417,7 +1417,7 @@ void ci_tcp_expand_sndbuf(ci_netif* ni, ci_tcp_state* ts)
     NI_OPTS(ni).max_tx_packets >> NI_OPTS(ni).tcp_sockbuf_max_fraction;
 
   /* Ensure at least 10 segments for initial connection window */
-  nr_segs = CI_MAX(10, ts->cwnd / tcp_eff_mss(ts));
+  nr_segs = CI_MAX(10U, ts->cwnd / tcp_eff_mss(ts));
   /* Allow for Fast Recovery (RFC 5681 3.2)
    * Cubic needs 1.7 factor, rounded to 2 for extra cushion */
   sndpkts = 2 * nr_segs;
@@ -1463,7 +1463,7 @@ ci_int32 ci_tcp_max_rcvbuf(ci_netif* ni, ci_uint16 amss)
    * ci_tcp_rcvbuf_drs() */
   ci_uint64 res = ( (ci_uint64)NI_OPTS(ni).max_rx_packets >>
                     NI_OPTS(ni).tcp_sockbuf_max_fraction ) * amss;
-  return CI_MIN(res, 0x7fffffff);
+  return CI_MIN(res, 0x7fffffffULL);
 }
 
 
