@@ -587,7 +587,7 @@ int ef100_nic_ext_get_meta_msg(struct efhw_nic* nic, uint32_t client_id,
 	*index = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_MSG_OUT_INDEX);
 	memset(name, 0, name_len);
 	memcpy(name, EFHW_MCDI_PTR(out, PLUGIN_GET_META_MSG_OUT_NAME),
-	       CI_MIN(name_len, MC_CMD_PLUGIN_GET_META_MSG_OUT_NAME_LEN));
+	       CI_MIN(name_len, (size_t)MC_CMD_PLUGIN_GET_META_MSG_OUT_NAME_LEN));
 	*mcdi_param_size = EFHW_MCDI_DWORD(out,
 	                                   PLUGIN_GET_META_MSG_OUT_DATA_SIZE);
 	return rc;
