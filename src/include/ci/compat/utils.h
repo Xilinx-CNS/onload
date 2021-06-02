@@ -142,8 +142,13 @@
  * min / max
  **********************************************************************/ 
 
+#ifndef __KERNEL__
 #define CI_MIN(x,y) (((x) < (y)) ? (x) : (y))
 #define CI_MAX(x,y) (((x) > (y)) ? (x) : (y))
+#else
+#define CI_MIN(x,y) min(x,y)
+#define CI_MAX(x,y) max(x,y)
+#endif
 
 /**********************************************************************
  * abs
