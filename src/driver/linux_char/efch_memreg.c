@@ -138,7 +138,7 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
   uint64_t first_page;
   uint64_t last_page;
   unsigned comp_order;
-  int this_comp_order;
+  unsigned this_comp_order;
   int comp_shift;
   void *user_addrs;
   int user_addrs_stride;
