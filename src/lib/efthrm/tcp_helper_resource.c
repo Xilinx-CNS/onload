@@ -5146,7 +5146,7 @@ int oo_wakeup_waiters(ci_private_t* priv, void* arg)
     return -EINVAL;
 
   while( op->eps_num > 0 ) {
-    n = CI_MIN(op->eps_num, sizeof(ep_id) / sizeof(ep_id[0]));
+    n = CI_MIN(op->eps_num, (ci_uint32)(sizeof(ep_id) / sizeof(ep_id[0])));
     if( copy_from_user(ep_id, user_ptr, n * sizeof(ep_id[0])) )
       return -EFAULT;
     user_ptr += n;
