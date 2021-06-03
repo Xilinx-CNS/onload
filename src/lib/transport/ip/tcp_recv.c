@@ -365,7 +365,8 @@ static int copy_ceph_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
       memcpy(&data.remote, p + ofs, sizeof(data.remote));
       while( data.remote.data_len ) {
         n = offloaded_copy_block(&rinf->piov.io, zeros,
-                                 CI_MIN(sizeof(zeros), data.remote.data_len),
+                                 CI_MIN((uint16_t)sizeof(zeros),
+                                        data.remote.data_len),
                                  rinf->a->flags, &out_rc);
         if( n < 0 )
           return -EFAULT;
