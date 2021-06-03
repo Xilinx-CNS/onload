@@ -226,7 +226,7 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
   comp_order = UINT_MAX;
   for (i = 0; comp_order > 0 && i < mr->n_pages; i += 1u << this_comp_order) {
     uint64_t page_addr = (uint64_t)(ci_uintptr_t)page_address(mr->pages[i]);
-    this_comp_order = CI_MIN(compound_order(compound_head(mr->pages[i])),
+    this_comp_order = CI_MIN((unsigned)compound_order(compound_head(mr->pages[i])),
                              addr_page_align_order(page_addr));
     comp_order = CI_MIN(comp_order, this_comp_order);
   }
