@@ -2278,11 +2278,11 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
       break;
     case -ENODEV:
       LOG_E(ci_log("%s: ENODEV.\n"
-                   "This error can occur if no Solarflare network interfaces\n"
-                   "are active/UP, or they are running packed stream\n"
-                   "firmware, are disabled or lack Onload activation keys.\n"
-                   "Please check your configuration. To obtain activation\n"
-                   "keys, please contact your sales representative.",
+"This error can occur if:\n"
+" - no Solarflare network interfaces are active/UP, or they are running\n"
+"   packed stream firmware or are disabled, and\n"
+" - there are no AF_XDP interfaces registered with sfc_resource\n"
+"Please check your configuration.",
                    __FUNCTION__));
       break;
     default:
