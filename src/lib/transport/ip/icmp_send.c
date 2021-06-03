@@ -202,7 +202,7 @@ extern int __ci_icmp_send_error(ci_netif *ni, int af,
       return -1;
       
     } else
-    { ci_uint16 data_len = CI_MIN( CI_IPX_IHL(af, ipx) + 8,
+    { ci_uint16 data_len = CI_MIN( (int)CI_IPX_IHL(af, ipx) + 8,
                                    ipx_hdr_tot_len(af, ipx) );
       ci_icmp_hdr *icmp;
 
