@@ -1560,7 +1560,10 @@ static int
 af_xdp_filter_redirect(struct efhw_nic *nic, int filter_id,
 		       struct efx_filter_spec *spec)
 {
-	return -ENOSYS;
+	/* This error code is proxied by efrm_filter_redirect() and goes to
+	 * oo_hw_filter_set_hwport().  Do not change this value without
+	 * looking in there. */
+	return -ENODEV;
 }
 
 static int
