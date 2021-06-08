@@ -98,7 +98,8 @@ enum {
 #define OO_IOC_STACK_ATTACH         OO_IOC_RW(STACK_ATTACH, \
                                               oo_stack_attach_t)
   OO_OP_INSTALL_STACK_BY_ID,
-#define OO_IOC_INSTALL_STACK_BY_ID  OO_IOC_W(INSTALL_STACK_BY_ID, ci_uint32)
+#define OO_IOC_INSTALL_STACK_BY_ID  OO_IOC_W(INSTALL_STACK_BY_ID, \
+                                             oo_stack_lookup_and_attach_t)
 
   OO_OP_SOCK_ATTACH,
 #define OO_IOC_SOCK_ATTACH          OO_IOC_RW(SOCK_ATTACH, \
