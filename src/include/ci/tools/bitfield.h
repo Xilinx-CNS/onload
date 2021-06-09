@@ -391,7 +391,7 @@ typedef union ci_oword_u {
    	_field1, _value1, _field2, _value2, _field3, _value3,		\
 	_field4, _value4, _field5, _value5, _field6, _value6,		\
         _field7, _value7, _field8, _value8, _field9, _value9,		\
-        _field10, value10)
+        _field10, _value10)
 
 #define CI_POPULATE_OWORD_9(_oword,					\
    	_field1, _value1, _field2, _value2, _field3, _value3,		\
