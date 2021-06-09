@@ -698,6 +698,18 @@ static int ef100_af_xdp_init(struct efhw_nic* nic, int instance,
 
 /*--------------------------------------------------------------------
  *
+ * CTPIO
+ *
+ *--------------------------------------------------------------------*/
+static int ef100_ctpio_addr(struct efhw_nic* nic, int instance,
+			    resource_size_t* addr)
+{
+	return -ENOSYS;
+}
+
+
+/*--------------------------------------------------------------------
+ *
  * Abstraction Layer Hooks
  *
  *--------------------------------------------------------------------*/
@@ -754,4 +766,5 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_af_xdp_init,
 	ef10_ef100_get_pci_dev,
 	ef10_ef100_vi_io_size,
+	ef100_ctpio_addr,
 };

@@ -127,10 +127,8 @@ efab_vi_rm_mmap_ctpio(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
   int len;
   int instance;
   struct efhw_nic *nic;
-  int bar_off;
-
-  /* The CTPIO region is 12K from the start of the VI's aperture. */
-  const int CTPIO_OFFSET = 12 * 1024;
+  resource_size_t ctpio_addr;
+  resource_size_t ctpio_page_addr;
 
   instance = virs->rs.rs_instance;
 
@@ -140,15 +138,20 @@ efab_vi_rm_mmap_ctpio(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
     return -EINVAL;
   }
 
-  /* Map the CTPIO region, which is 12K from the start of the VI's aperture. */
+  /* Map the CTPIO region. */
   len = CI_MIN(*bytes, (unsigned long)CI_PAGE_SIZE);
   *bytes -= len;
   nic = efrm_client_get_nic(virs->rs.rs_client);
-  ci_assert_ge(nic->vi_stride, CTPIO_OFFSET + len);
-  bar_off = (ef10_tx_dma_page_base(nic->vi_stride, instance) + CTPIO_OFFSET) &
-            PAGE_MASK;
-  rc = ci_mmap_io(nic, nic->ctr_ap_dma_addr + bar_off, len, opaque, map_num,
-                  offset, 1);
+
+  rc = efhw_nic_ctpio_addr(nic, instance, &ctpio_addr);
+  if( rc < 0 ) {
+    EFRM_ERR("%s: CTPIO is not available on VI instance %d\n", __FUNCTION__,
+	     instance);
+    return rc;
+  }
+
+  ctpio_page_addr = ctpio_addr & PAGE_MASK;
+  rc = ci_mmap_io(nic, ctpio_page_addr, len, opaque, map_num, offset, 1);
   if( rc < 0 )
     EFCH_ERR("%s: ERROR: ci_mmap_io failed rc=%d", __FUNCTION__, rc);
   return rc;

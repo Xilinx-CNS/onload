@@ -242,3 +242,7 @@
 	((nic)->efhw_func->get_pci_dev(nic))
 #define efhw_nic_vi_io_size(nic) \
 	((nic)->efhw_func->vi_io_size(nic))
+
+/*-------------- ctpio ------------------------ */
+#define efhw_nic_ctpio_addr(nic, instance, addr) \
+	((nic)->efhw_func->ctpio_addr((nic), (instance), (addr)))

@@ -1614,6 +1614,17 @@ af_xdp_vi_io_size(struct efhw_nic *nic)
 
 /*--------------------------------------------------------------------
  *
+ * CTPIO
+ *
+ *--------------------------------------------------------------------*/
+static int
+af_xdp_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
+{
+	return -ENOSYS;
+}
+
+/*--------------------------------------------------------------------
+ *
  * Abstraction Layer Hooks
  *
  *--------------------------------------------------------------------*/
@@ -1670,6 +1681,7 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_init,
 	af_xdp_get_pci_dev,
 	af_xdp_vi_io_size,
+	af_xdp_ctpio_addr,
 };
 
 #endif /* EFHW_HAS_AF_XDP */

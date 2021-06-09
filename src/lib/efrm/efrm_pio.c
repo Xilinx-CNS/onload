@@ -328,16 +328,18 @@ EXPORT_SYMBOL(efrm_pio_get_size);
 
 int efrm_ctpio_map_kernel(struct efrm_vi *vi, void **io)
 {
-	const size_t VI_WINDOW_CTPIO_OFFSET = 12*1024;
 	struct efhw_nic* nic = vi->rs.rs_client->nic;
-	size_t bar_off, bar_page_off;
-	bar_off = ef10_tx_dma_page_base(nic->vi_stride, vi->rs.rs_instance);
-	bar_off += VI_WINDOW_CTPIO_OFFSET;
-	bar_page_off = bar_off & PAGE_MASK;
-	*io = ioremap_wc(nic->ctr_ap_dma_addr + bar_page_off, PAGE_SIZE);
+	resource_size_t ctpio_addr;
+	size_t ctpio_page_off;
+	int rc = efhw_nic_ctpio_addr(nic, vi->rs.rs_instance, &ctpio_addr);
+	if( rc < 0 )
+		return rc;
+
+	ctpio_page_off = ctpio_addr & PAGE_MASK;
+	*io = ioremap_wc(ctpio_page_off, PAGE_SIZE);
 	if( *io == NULL )
 		return -EINVAL;
-	*io = (char*) *io + (bar_off & (PAGE_SIZE - 1u));
+	*io = (char*) *io + (ctpio_addr & (PAGE_SIZE - 1u));
 	return 0;
 }
 EXPORT_SYMBOL(efrm_ctpio_map_kernel);

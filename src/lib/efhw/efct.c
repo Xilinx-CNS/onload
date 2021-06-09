@@ -472,6 +472,17 @@ efct_vi_io_size(struct efhw_nic *nic)
 
 /*--------------------------------------------------------------------
  *
+ * CTPIO
+ *
+ *--------------------------------------------------------------------*/
+static int
+efct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
+{
+  return -ENOSYS;
+}
+
+/*--------------------------------------------------------------------
+ *
  * Abstraction Layer Hooks
  *
  *--------------------------------------------------------------------*/
@@ -527,6 +538,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_af_xdp_init,
   efct_get_pci_dev,
   efct_vi_io_size,
+  efct_ctpio_addr,
 };
 
 #endif

@@ -380,6 +380,16 @@ struct efhw_func_ops {
 
 	/*! Returns the size of the io area for a VI */
 	u32 (*vi_io_size)(struct efhw_nic* nic);
+
+  /*-------------- ctpio ------------------------ */
+
+	/*! Obtain the address of a CTPIO region for mapping.
+	 * Returns 0 on success, a negative error otherwise.
+	 * @instance: the tx queue this ctpio region is associated with
+	 * @addr: address of the base of the region
+	 */
+	int (*ctpio_addr)(struct efhw_nic* nic, int instance,
+			  resource_size_t* addr);
 };
 
 
