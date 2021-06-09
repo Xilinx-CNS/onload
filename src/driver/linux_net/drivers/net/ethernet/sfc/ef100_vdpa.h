@@ -13,6 +13,7 @@
 #include <linux/vdpa.h>
 #include <linux/iommu.h>
 #include <uapi/linux/virtio_net.h>
+#include <linux/rbtree.h>
 #include "net_driver.h"
 #include "ef100_nic.h"
 
@@ -46,9 +47,6 @@
 #define EF100_VRING_CONFIGURED (EF100_VRING_ADDRESS_CONFIGURED | \
 				EF100_VRING_SIZE_CONFIGURED | \
 				EF100_VRING_READY_CONFIGURED)
-
-/* Maximum number of supported filters */
-#define EF100_VDPA_MAX_SUPPORTED_FILTERS 2
 
 /* Maximum size of msix name */
 #define EF100_VDPA_MAX_MSIX_NAME_SIZE 256
@@ -98,11 +96,13 @@ enum ef100_vdpa_vq_type {
 /* Enum defining the vdpa filter type
  * @EF100_VDPA_BCAST_MAC_FILTER: Broadcast MAC filter
  * @EF100_VDPA_UCAST_MAC_FILTER: Unicast MAC filter
+ * @EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER: Unknown multicast MAC filter
  *
  */
 enum ef100_vdpa_mac_filter_type {
 	EF100_VDPA_BCAST_MAC_FILTER,
 	EF100_VDPA_UCAST_MAC_FILTER,
+	EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER,
 	EF100_VDPA_MAC_FILTER_NTYPES,
 };
 
@@ -170,6 +170,11 @@ struct ef100_vdpa_filter {
  * @cfg_cb: callback for config change
  * @domain: IOMMU domain
  * @debug_dir: vDPA debugfs directory
+ * @iova_root: iova rbtree root
+ * @iova_lock: lock to synchronize updates to rbtree and freelist
+ * @free_list: list to store free iova areas of size >= MCDI buffer length
+ * @geo_aper_start: start of valid IOVA range
+ * @geo_aper_end: end of valid IOVA range
  */
 struct ef100_vdpa_nic {
 	struct vdpa_device vdpa_dev;
@@ -186,13 +191,18 @@ struct ef100_vdpa_nic {
 	u8 mac_address[ETH_ALEN];
 	u32 filter_cnt;
 	bool mac_configured;
-	struct ef100_vdpa_filter filters[EF100_VDPA_MAX_SUPPORTED_FILTERS];
+	struct ef100_vdpa_filter filters[EF100_VDPA_MAC_FILTER_NTYPES];
 	struct vdpa_callback cfg_cb;
 	struct iommu_domain *domain;
 #ifdef CONFIG_SFC_DEBUGFS
 
 	struct dentry *debug_dir;
 #endif
+	struct rb_root iova_root;
+	struct mutex iova_lock;
+	struct list_head free_list;
+	u64 geo_aper_start;
+	u64 geo_aper_end;
 };
 
 int ef100_vdpa_init(struct efx_probe_data *probe_data);
@@ -208,6 +218,8 @@ int ef100_vdpa_free_buffer(struct ef100_vdpa_nic *vdpa_nic,
 void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic);
 bool ef100_vdpa_dev_in_use(struct efx_nic *efx);
 int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic);
+int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
+int remap_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
 #endif
 
 #endif

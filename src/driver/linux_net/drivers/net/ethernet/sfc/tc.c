@@ -3908,8 +3908,10 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 	if (!rule) {
 		/* See comment in efx_tc_flower_destroy() */
 		if (efx_tc_flower_lookup_dev(efx, net_dev) >= 0)
-			netif_warn(efx, drv, efx->net_dev,
-				   "Filter %lx not found for stats\n", tc->cookie);
+			if (net_ratelimit())
+				netif_warn(efx, drv, efx->net_dev,
+					   "Filter %lx not found for stats\n",
+					   tc->cookie);
 		NL_SET_ERR_MSG_MOD(extack, "Flow cookie not found in offloaded rules");
 		return -ENOENT;
 	}
@@ -3980,8 +3982,10 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 	if (!ctr) {
 		/* See comment in efx_tc_flower_destroy() */
 		if (efx_tc_flower_lookup_dev(efx, net_dev) >= 0)
-			netif_warn(efx, drv, efx->net_dev,
-				   "Filter %lx not found for stats\n", tc->cookie);
+			if (net_ratelimit())
+				netif_warn(efx, drv, efx->net_dev,
+					   "Filter %lx not found for stats\n",
+					   tc->cookie);
 		NL_SET_ERR_MSG_MOD(extack, "Flow cookie not found in offloaded rules");
 		return -ENOENT;
 	}

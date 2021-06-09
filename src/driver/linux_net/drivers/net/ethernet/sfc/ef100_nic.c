@@ -949,6 +949,18 @@ static struct net_device *ef100_get_remote_rep(struct efx_nic *efx,
 	return NULL;
 }
 
+static void ef100_close_remote_reps(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct net_device *rep_dev;
+	unsigned int i;
+
+	for (i = 0; i < nic_data->rem_rep_count; i++) {
+		rep_dev = nic_data->rem_rep[i];
+		dev_close(rep_dev);
+	}
+}
+
 static void ef100_detach_remote_reps(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
@@ -979,6 +991,20 @@ static void ef100_attach_remote_reps(struct efx_nic *efx)
 		netif_device_attach(nic_data->rem_rep[i]);
 }
 
+void ef100_close_vf_reps(struct efx_nic *efx)
+{
+#if defined(CONFIG_SFC_SRIOV)
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct net_device *rep_dev;
+	unsigned int vf;
+
+	for (vf = 0; vf < nic_data->vf_rep_count; vf++) {
+		rep_dev = nic_data->vf_rep[vf];
+		dev_close(rep_dev);
+	}
+#endif
+}
+
 void __ef100_detach_reps(struct efx_nic *efx)
 {
 #if defined(CONFIG_SFC_SRIOV)
@@ -1002,9 +1028,11 @@ static void ef100_detach_reps(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 
+	ef100_close_vf_reps(efx);
 	spin_lock_bh(&nic_data->vf_reps_lock);
 	__ef100_detach_reps(efx);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
+	ef100_close_remote_reps(efx);
 	spin_lock_bh(&nic_data->rem_reps_lock);
 	ef100_detach_remote_reps(efx);
 	spin_unlock_bh(&nic_data->rem_reps_lock);

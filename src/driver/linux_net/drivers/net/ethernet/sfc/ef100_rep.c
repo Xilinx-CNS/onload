@@ -41,9 +41,25 @@ static int efx_ef100_rep_init_struct(struct efx_nic *efx,
 	return 0;
 }
 
+static int efx_parent_open(struct net_device *net_dev)
+{
+	return net_dev->netdev_ops->ndo_open(net_dev);
+}
+
+static int efx_parent_close(struct net_device *net_dev)
+{
+	return net_dev->netdev_ops->ndo_stop(net_dev);
+}
+
 static int efx_ef100_rep_open(struct net_device *net_dev)
 {
 	struct efx_rep *efv = netdev_priv(net_dev);
+	struct efx_nic *parent = efv->parent;
+	int rc;
+
+	rc = efx_parent_open(parent->net_dev);
+	if (rc)
+		return rc;
 
 	netif_napi_add(net_dev, &efv->napi, efx_ef100_rep_poll,
 		       NAPI_POLL_WEIGHT);
@@ -54,9 +70,11 @@ static int efx_ef100_rep_open(struct net_device *net_dev)
 static int efx_ef100_rep_close(struct net_device *net_dev)
 {
 	struct efx_rep *efv = netdev_priv(net_dev);
+	struct efx_nic *parent = efv->parent;
 
 	napi_disable(&efv->napi);
 	netif_napi_del(&efv->napi);
+	efx_parent_close(parent->net_dev);
 	return 0;
 }
 

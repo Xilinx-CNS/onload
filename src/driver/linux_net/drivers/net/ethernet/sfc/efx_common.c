@@ -346,6 +346,11 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 		return -EINVAL;
 	}
 #endif
+	if (efx->open_count > netif_running(net_dev)) {
+		netif_err(efx, drv, net_dev,
+			  "Unable to change MTU, device in use by others\n");
+		return -EBUSY;
+	}
 
 	netif_dbg(efx, drv, efx->net_dev, "changing MTU to %d\n", new_mtu);
 
@@ -2221,6 +2226,8 @@ static int __efx_dl_publish(struct efx_dl_device *efx_dev)
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 	int rc = efx_net_alloc(efx);
 
+	if (rc == -EALREADY)
+		rc = 0;
 	if (rc)
 		efx_net_dealloc(efx);
 

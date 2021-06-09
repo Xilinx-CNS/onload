@@ -17,6 +17,7 @@
 #ifdef CONFIG_SFC_DEBUGFS
 #include "debugfs.h"
 #endif
+#include "ef100_iova.h"
 
 #if defined(CONFIG_SFC_VDPA)
 extern struct vdpa_config_ops ef100_vdpa_config_ops;
@@ -31,10 +32,15 @@ ef100_vdpa_set_mac_filter(struct efx_nic *efx,
 
 	efx_filter_init_rx(spec, EFX_FILTER_PRI_MANUAL, 0, qid);
 
-	rc = efx_filter_set_eth_local(spec, EFX_FILTER_VID_UNSPEC, mac_addr);
-	if (rc != 0)
-		pci_err(efx->pci_dev,
-			"Filter set eth local failed, err: %d\n", rc);
+	if (mac_addr) {
+		rc = efx_filter_set_eth_local(spec, EFX_FILTER_VID_UNSPEC,
+					      mac_addr);
+		if (rc != 0)
+			pci_err(efx->pci_dev,
+				"Filter set eth local failed, err: %d\n", rc);
+	} else {
+		efx_filter_set_mc_def(spec);
+	}
 
 	rc = efx_filter_insert_filter(efx, spec, true);
 	if (rc < 0)
@@ -128,6 +134,19 @@ int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic)
 	vdpa_nic->filter_cnt++;
 	dev_info(&vdev->dev,
 		 "vDPA ucast filter created, filter_id: %d\n", rc);
+
+	/* Configure unknown multicast filter */
+	spec = &vdpa_nic->filters[EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER].spec;
+	rc = ef100_vdpa_set_mac_filter(efx, spec, qid, NULL);
+	if (rc < 0) {
+		dev_err(&vdev->dev,
+			"vDPA mcast MAC filter insert failed, err: %d", rc);
+		goto fail;
+	}
+	vdpa_nic->filters[EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER].filter_id = rc;
+	vdpa_nic->filter_cnt++;
+	dev_info(&vdev->dev,
+		 "vDPA UNKNOWN_MCAST filter created, filter_id: %d\n", rc);
 
 	return 0;
 
@@ -369,6 +388,7 @@ static int vdpa_update_domain(struct ef100_vdpa_nic *vdpa_nic)
 {
 	struct vdpa_device *vdpa = &vdpa_nic->vdpa_dev;
 	struct device *dma_dev = vdpa_get_dma_dev(vdpa);
+	struct iommu_domain_geometry *geo;
 	struct bus_type *bus;
 
 	bus = dma_dev->bus;
@@ -382,7 +402,22 @@ static int vdpa_update_domain(struct ef100_vdpa_nic *vdpa_nic)
 	if (!vdpa_nic->domain)
 		return -ENODEV;
 
-	return 0;
+	geo = &vdpa_nic->domain->geometry;
+	dev_info(&vdpa_nic->vdpa_dev.dev,
+		 "iova_range_start: %llx, iova_range_end: %llx\n",
+		 geo->aperture_start, geo->aperture_end);
+
+	/* save the geo aperture range for validation in dma_map */
+	vdpa_nic->geo_aper_start = geo->aperture_start;
+
+	/* Handle the boundary case */
+	if (geo->aperture_end == ~0ULL)
+		geo->aperture_end -= 1;
+	vdpa_nic->geo_aper_end = geo->aperture_end;
+
+	/* insert a sentinel node */
+	return efx_ef100_insert_iova_node(vdpa_nic,
+					  vdpa_nic->geo_aper_end + 1, 0);
 }
 
 int ef100_vdpa_init(struct efx_probe_data *probe_data)
@@ -584,7 +619,7 @@ fail_alloc:
        return rc;
 }
 
-static int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
+int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
 {
        struct ef100_nic_data *nic_data = efx->nic_data;
        struct efx_mcdi_iface *mcdi;
@@ -615,6 +650,45 @@ static int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
 fail:
        spin_unlock_bh(&mcdi->iface_lock);
        return rc;
+}
+
+int remap_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+	struct efx_mcdi_iface *mcdi;
+	struct efx_buffer *mcdi_buf;
+	int rc;
+
+	mcdi_buf = &nic_data->mcdi_buf;
+	mcdi = efx_mcdi(efx);
+	spin_lock_bh(&mcdi->iface_lock);
+
+	pci_info(efx->pci_dev,
+		 "mcdi_buf current dma_addr: %llx\n", mcdi_buf->dma_addr);
+
+	rc = iommu_unmap(vdpa_nic->domain, mcdi_buf->dma_addr, mcdi_buf->len);
+	if (rc < 0) {
+		pci_err(efx->pci_dev, "iommu_unmap failed, rc: %d\n", rc);
+		goto out;
+	}
+
+	rc = iommu_map(vdpa_nic->domain, mcdi_iova,
+		       virt_to_phys(mcdi_buf->addr),
+		       mcdi_buf->len,
+		       IOMMU_READ | IOMMU_WRITE | IOMMU_CACHE);
+	if (rc) {
+		pci_err(efx->pci_dev, "iommu_map failed, rc: %d\n", rc);
+		goto out;
+	}
+
+	mcdi_buf->dma_addr = mcdi_iova;
+	pci_info(efx->pci_dev,
+		 "remapped mcdi_buf to dma_addr: %llx\n", mcdi_iova);
+
+out:
+	spin_unlock_bh(&mcdi->iface_lock);
+	return rc;
 }
 
 struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
@@ -650,6 +724,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 	}
 
 	mutex_init(&vdpa_nic->lock);
+	mutex_init(&vdpa_nic->iova_lock);
 	vdpa_nic->vdpa_dev.dma_dev = &efx->pci_dev->dev;
 	efx->vdpa_nic = vdpa_nic;
 	vdpa_nic->efx = efx;
@@ -657,6 +732,9 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 	vdpa_nic->pf_index = nic_data->pf_index;
 	vdpa_nic->vf_index = nic_data->vf_index;
 	vdpa_nic->vdpa_state = EF100_VDPA_STATE_INITIALIZED;
+	vdpa_nic->iova_root = RB_ROOT;
+	INIT_LIST_HEAD(&vdpa_nic->free_list);
+
 	dev = &vdpa_nic->vdpa_dev.dev;
 	dev_info(dev, "%s: vDPA dev pf_index:%u vf_index:%u max_queues:%u\n",
 		 __func__, vdpa_nic->pf_index, vdpa_nic->vf_index,
@@ -686,8 +764,8 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 
 	rc = setup_vdpa_mcdi_buffer(efx, EF100_VDPA_IOVA_BASE_ADDR);
 	if (rc) {
-		 pci_err(efx->pci_dev, "realloc mcdi failed, err: %d\n", rc);
-		 goto err_irq_vectors_free;
+		pci_err(efx->pci_dev, "realloc mcdi failed, err: %d\n", rc);
+		goto err_irq_vectors_free;
 	}
 
 #ifdef CONFIG_SFC_DEBUGFS

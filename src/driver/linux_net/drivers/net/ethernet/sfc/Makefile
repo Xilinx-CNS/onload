@@ -157,7 +157,8 @@ sfc-$(CONFIG_SFC_SRIOV)	+= sriov.o
 sfc-$(CONFIG_SFC_MCDI_MON) += mcdi_mon.o
 sfc-$(CONFIG_SFC_PTP)	+= ptp.o
 sfc-$(CONFIG_SFC_MTD)	+= mtd.o
-sfc-$(CONFIG_SFC_VDPA) += ef100_vdpa.o ef100_vdpa_ops.o mcdi_vdpa.o
+sfc-$(CONFIG_SFC_VDPA) += ef100_vdpa.o ef100_vdpa_ops.o mcdi_vdpa.o \
+			  ef100_iova.o
 ifndef EFX_NO_KCOMPAT
 ifneq ($(MAKECMDGOALS),export)
 ifndef EFX_FOR_UPSTREAM

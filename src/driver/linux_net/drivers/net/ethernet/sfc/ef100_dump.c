@@ -328,7 +328,7 @@ out_free:
 
 static int efx_mcdi_dump_sched_cred(struct efx_nic *efx)
 {
-	u32 generation_count, num_pages = 1, page;
+	u32 generation_count = 0, num_pages = 1, page;
 	int rc;
 
 	for (page = 0; page < num_pages; page++) {

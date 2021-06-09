@@ -115,18 +115,21 @@ static int ef100_remap_bar(struct efx_nic *efx, int max_vis)
 /* Context: process, rtnl_lock() held.
  * Note that the kernel will ignore our return code; this method
  * should really be a void.
+ * This is also called by representer code.
  */
 static int ef100_net_stop(struct net_device *net_dev)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
+	if (efx->open_count > 1) {
+		efx->open_count--;
+		netif_dbg(efx, drv, efx->net_dev,
+			  "still open for %u clients\n", efx->open_count);
+		return 0;
+	}
 	netif_dbg(efx, ifdown, efx->net_dev, "closing on CPU %d\n",
 		  raw_smp_processor_id());
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	if (efx->type->detach_reps)
-		efx->type->detach_reps(efx);
-#endif
 	netif_stop_queue(net_dev);
 	efx_stop_all(efx);
 
@@ -139,14 +142,10 @@ static int ef100_net_stop(struct net_device *net_dev)
 
 void ef100_net_dealloc(struct efx_nic *efx)
 {
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
 	if (--efx->open_count) {
 		netif_dbg(efx, drv, efx->net_dev, "still open\n");
 		return;
 	}
-#endif
-#endif
 
 	efx_disable_interrupts(efx);
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_BUSYPOLL)
@@ -168,7 +167,9 @@ void ef100_net_dealloc(struct efx_nic *efx)
 	efx->state = STATE_NET_DOWN;
 }
 
-/* Context: process, rtnl_lock() held. */
+/* Context: process, rtnl_lock() held.
+ * This is also called by representer code.
+ */
 static int ef100_net_open(struct net_device *net_dev)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
@@ -179,6 +180,8 @@ static int ef100_net_open(struct net_device *net_dev)
 		  raw_smp_processor_id());
 
 	rc = ef100_net_alloc(efx);
+	if (rc == -EALREADY)
+		return 0;
 	if (rc)
 		goto fail;
 
@@ -195,11 +198,6 @@ static int ef100_net_open(struct net_device *net_dev)
 	mutex_unlock(&efx->mac_lock);
 
 	efx->state = STATE_NET_UP;
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	if (netif_running(efx->net_dev) && efx->type->attach_reps)
-		efx->type->attach_reps(efx);
-#endif
 	return 0;
 
 fail:
@@ -256,16 +254,13 @@ int ef100_net_alloc(struct efx_nic *efx)
 	unsigned int allocated_vis;
 	int rc;
 
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
 	if (efx->open_count++) {
-		netif_dbg(efx, drv, efx->net_dev, "already open\n");
+		netif_dbg(efx, drv, efx->net_dev,
+			  "already open, now by %u clients\n", efx->open_count);
 		/* inform the kernel about link state again */
 		efx_link_status_changed(efx);
-		return 0;
+		return -EALREADY;
 	}
-#endif
-#endif
 
 	rc = efx_check_disabled(efx);
 	if (rc)
@@ -771,6 +766,12 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 	nic_data = efx->nic_data;
 #endif
 
+	unregister_netevent_notifier(&efx->netevent_notifier);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	/* Close and detach all representors */
+	if (efx->type->detach_reps)
+		efx->type->detach_reps(efx);
+#endif
 	rtnl_lock();
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -780,12 +781,12 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 #endif
 	dev_close(efx->net_dev);
 	rtnl_unlock();
+	WARN_ON(efx->open_count);
 
 	/* Unregistering our netdev notifier triggers unbinding of TC indirect
 	 * blocks, so we have to do it before PCI removal.
 	 */
 	unregister_netdevice_notifier(&efx->netdev_notifier);
-	unregister_netevent_notifier(&efx->netevent_notifier);
 
 	ef100_unregister_netdev(efx);
 
@@ -935,15 +936,15 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	memcpy(net_dev->dev_addr, net_dev->perm_addr, ETH_ALEN);
 	memcpy(nic_data->port_id, net_dev->perm_addr, ETH_ALEN);
 
+	rc = ef100_register_netdev(efx);
+	if (rc)
+		goto fail;
+
 	if (!efx->type->is_vf) {
 		rc = ef100_probe_netdev_pf(efx);
 		if (rc)
 			goto fail;
 	}
-
-	rc = ef100_register_netdev(efx);
-	if (rc)
-		goto fail;
 
 	efx->netdev_notifier.notifier_call = ef100_netdev_event;
 	rc = register_netdevice_notifier(&efx->netdev_notifier);

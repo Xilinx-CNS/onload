@@ -17,6 +17,7 @@
 #include "ef100_nic.h"
 #include "io.h"
 #include "ef100_vdpa.h"
+#include "ef100_iova.h"
 #include "mcdi_vdpa.h"
 #ifdef CONFIG_SFC_DEBUGFS
 #include "debugfs.h"
@@ -422,6 +423,8 @@ void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 	int i;
 
 	WARN_ON(!mutex_is_locked(&vdpa_nic->lock));
+	efx_ef100_delete_iova_tree(vdpa_nic);
+
 	vdpa_nic->vdpa_state = EF100_VDPA_STATE_INITIALIZED;
 	vdpa_nic->status = 0;
 	vdpa_nic->features = 0;
@@ -964,22 +967,84 @@ static void ef100_vdpa_set_config(struct vdpa_device *vdev, unsigned int offset,
 	dev_info(&vdev->dev, "%s: This callback is not supported\n", __func__);
 }
 
+static bool is_iova_overlap(u64 iova1, u64 size1, u64 iova2, u64 size2)
+{
+	return max(iova1, iova2) < min(iova1 + size1, iova2 + size2);
+}
+
 static int ef100_vdpa_dma_map(struct vdpa_device *vdev,
 			      u64 iova, u64 size,
 			      u64 pa, u32 perm)
 {
-	struct ef100_vdpa_nic *vdpa_nic = NULL;
+	struct ef100_vdpa_nic *vdpa_nic;
+	struct ef100_nic_data *nic_data;
+	unsigned int mcdi_buf_len;
+	dma_addr_t mcdi_buf_addr;
+	u64 mcdi_iova = 0;
 	int rc;
 
 	vdpa_nic = get_vdpa_nic(vdev);
-	rc = iommu_map(vdpa_nic->domain, iova, pa, size, perm);
+	nic_data = (struct ef100_nic_data *)vdpa_nic->efx->nic_data;
+	mcdi_buf_addr = nic_data->mcdi_buf.dma_addr;
+	mcdi_buf_len = nic_data->mcdi_buf.len;
 
+	/* Validate the iova range against geo aperture */
+	if ((iova < vdpa_nic->geo_aper_start) ||
+	    ((iova + size - 1) > vdpa_nic->geo_aper_end)) {
+		dev_err(&vdpa_nic->vdpa_dev.dev,
+			"%s: iova range (%llx, %llx) not within geo aperture\n",
+			__func__, iova, (iova + size));
+		return -EINVAL;
+	}
+
+	rc = efx_ef100_insert_iova_node(vdpa_nic, iova, size);
+	if (rc) {
+		dev_err(&vdpa_nic->vdpa_dev.dev,
+			"%s: iova_node insert failure: %d\n", __func__, rc);
+		return rc;
+	}
+
+	if (is_iova_overlap(mcdi_buf_addr, mcdi_buf_len, iova, size)) {
 #ifdef EFX_NOT_UPSTREAM
-	if (rc)
+		dev_info(&vdpa_nic->vdpa_dev.dev,
+			 "%s: mcdi iova overlap detected: %llx\n",
+			 __func__, mcdi_buf_addr);
+#endif
+		/* find the new iova for mcdi buffer */
+		rc = efx_ef100_find_new_iova(vdpa_nic, mcdi_buf_len,
+					     &mcdi_iova);
+		if (rc) {
+			dev_err(&vdpa_nic->vdpa_dev.dev,
+				"new mcdi iova not found, err: %d\n", rc);
+			goto fail;
+		}
+
+		if (vdpa_nic->efx->mcdi_buf_mode == EFX_BUF_MODE_VDPA)
+			rc = remap_vdpa_mcdi_buffer(vdpa_nic->efx, mcdi_iova);
+		else if (vdpa_nic->efx->mcdi_buf_mode == EFX_BUF_MODE_EF100)
+			rc = setup_vdpa_mcdi_buffer(vdpa_nic->efx, mcdi_iova);
+		else
+			goto fail;
+
+		if (rc) {
+			dev_err(&vdpa_nic->vdpa_dev.dev,
+				"mcdi buf update failed, err: %d\n", rc);
+			goto fail;
+		}
+	}
+
+	rc = iommu_map(vdpa_nic->domain, iova, pa, size, perm);
+	if (rc) {
 		dev_err(&vdev->dev,
 			"%s: iommu_map iova: %llx size: %llx rc: %d\n",
 			__func__, iova, size, rc);
-#endif
+		goto fail;
+	}
+
+	return 0;
+
+fail:
+	efx_ef100_remove_iova_node(vdpa_nic, iova);
         return rc;
 }
 
@@ -989,14 +1054,15 @@ static int ef100_vdpa_dma_unmap(struct vdpa_device *vdev, u64 iova, u64 size)
 	int rc;
 
 	vdpa_nic = get_vdpa_nic(vdev);
-	rc = iommu_unmap(vdpa_nic->domain, iova, size);
 
+	rc = iommu_unmap(vdpa_nic->domain, iova, size);
 #ifdef EFX_NOT_UPSTREAM
 	if (rc < 0)
 		dev_err(&vdev->dev,
 			"%s: iommu_unmap iova: %llx size: %llx rc: %d\n",
 			__func__, iova, size, rc);
 #endif
+	efx_ef100_remove_iova_node(vdpa_nic, iova);
         return rc;
 }
 
@@ -1012,11 +1078,14 @@ static void ef100_vdpa_free(struct vdpa_device *vdev)
 #ifdef CONFIG_SFC_DEBUGFS
 		efx_fini_debugfs_vdpa(vdpa_nic);
 #endif
+		/* clean-up the iova tree in case unmap left stale nodes */
+		efx_ef100_delete_iova_tree(vdpa_nic);
 		rc = setup_ef100_mcdi_buffer(vdpa_nic);
 		if (rc) {
 			dev_err(&vdev->dev,
 				"setup_ef100_mcdi failed, err: %d\n", rc);
 		}
+		mutex_destroy(&vdpa_nic->iova_lock);
 		mutex_destroy(&vdpa_nic->lock);
 	}
 }
