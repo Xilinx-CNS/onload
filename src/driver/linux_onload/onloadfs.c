@@ -264,7 +264,9 @@ struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
 	if (IS_ERR(file)) {
 		ihold(inode);
 		path_put(&path);
+                return file;
 	}
+
         file->f_flags = O_RDWR | (flags & O_NONBLOCK);
 	return file;
 }
@@ -308,7 +310,7 @@ onload_alloc_file(tcp_helper_resource_t *thr, oo_sp ep_id,
   file = alloc_file_pseudo(inode, onload_mnt, "",
                            O_RDWR | (flags & O_NONBLOCK), fops);
   if( IS_ERR(file) ) {
-    iput(inode);
+    /* inode is already put in case of error */
     return PTR_ERR(file);
   }
 
