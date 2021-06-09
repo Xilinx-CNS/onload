@@ -42,7 +42,7 @@ typedef struct ci_private_char_s {
 extern int ci_char_fop_mmap(struct file* file, struct vm_area_struct* vma);
 
 extern int
-ci_mmap_bar(struct efhw_nic* nic, off_t base, size_t len, void* opaque,
-            int* map_num, unsigned long* offset, int set_wc);
+ci_mmap_io(struct efhw_nic* nic, resource_size_t page_addr, size_t len,
+           void* opaque, int* map_num, unsigned long* offset, int set_wc);
 
 #endif /* __LINUX_CHAR_INTERNAL_H__ */

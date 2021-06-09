@@ -74,7 +74,8 @@ efab_vi_rm_mmap_io(struct efrm_vi *virs,
     BUG();
   }
 
-  rc = ci_mmap_bar(nic, base, len, opaque, map_num, offset, 0);
+  rc = ci_mmap_io(nic, nic->ctr_ap_dma_addr + base, len, opaque, map_num,
+                  offset, 0);
   if (rc < 0 ) {
     EFCH_ERR("%s: ERROR: ci_mmap_bar failed rc=%d", __FUNCTION__, rc);
     return rc;
@@ -110,9 +111,10 @@ efab_vi_rm_mmap_pio(struct efrm_vi *virs,
   *bytes -= len;
   bar_off = (ef10_tx_dma_page_base(nic->vi_stride, instance) + 4096) &
             PAGE_MASK;
-  rc = ci_mmap_bar(nic, bar_off, len, opaque, map_num, offset, 1);
+  rc = ci_mmap_io(nic, nic->ctr_ap_dma_addr + bar_off, len, opaque, map_num,
+                  offset, 1);
   if( rc < 0 )
-    EFCH_ERR("%s: ERROR: ci_mmap_bar failed rc=%d", __FUNCTION__, rc);
+    EFCH_ERR("%s: ERROR: ci_mmap_io failed rc=%d", __FUNCTION__, rc);
   return rc;
 }
 
@@ -145,9 +147,10 @@ efab_vi_rm_mmap_ctpio(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
   ci_assert_ge(nic->vi_stride, CTPIO_OFFSET + len);
   bar_off = (ef10_tx_dma_page_base(nic->vi_stride, instance) + CTPIO_OFFSET) &
             PAGE_MASK;
-  rc = ci_mmap_bar(nic, bar_off, len, opaque, map_num, offset, 1);
+  rc = ci_mmap_io(nic, nic->ctr_ap_dma_addr + bar_off, len, opaque, map_num,
+                  offset, 1);
   if( rc < 0 )
-    EFCH_ERR("%s: ERROR: ci_mmap_bar failed rc=%d", __FUNCTION__, rc);
+    EFCH_ERR("%s: ERROR: ci_mmap_io failed rc=%d", __FUNCTION__, rc);
   return rc;
 }
 
@@ -160,6 +163,7 @@ efab_vi_rm_mmap_plugin(struct efrm_vi *virs, unsigned subpage,
   int rc;
   int instance = virs->rs.rs_instance;
   struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
+  off_t io_off = nic->vi_stride * instance + subpage * PAGE_SIZE;
 
   /* More checking should be here, to avoid mapping non-plugin regions */
   if( subpage == 0 || subpage >= nic->vi_stride / PAGE_SIZE ||
@@ -168,10 +172,10 @@ efab_vi_rm_mmap_plugin(struct efrm_vi *virs, unsigned subpage,
     return -EINVAL;
   }
 
-  rc = ci_mmap_bar(nic, nic->vi_stride * instance + subpage * PAGE_SIZE,
-                   *bytes, opaque, map_num, offset, 0);
+  rc = ci_mmap_io(nic, nic->ctr_ap_dma_addr + io_off, *bytes, opaque, map_num,
+                  offset, 0);
   if( rc < 0 )
-    EFCH_ERR("%s: ERROR: ci_mmap_bar failed rc=%d", __FUNCTION__, rc);
+    EFCH_ERR("%s: ERROR: ci_mmap_io failed rc=%d", __FUNCTION__, rc);
   else
     *bytes = 0;
   return rc;

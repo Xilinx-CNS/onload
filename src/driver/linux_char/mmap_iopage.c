@@ -14,8 +14,8 @@
  ****************************************************************************/
 
 int 
-ci_mmap_bar(struct efhw_nic* nic, off_t base, size_t len, void* opaque,
-	    int* map_num, unsigned long* offset, int set_wc)
+ci_mmap_io(struct efhw_nic* nic, resource_size_t page_addr, size_t len,
+           void* opaque, int* map_num, unsigned long* offset, int set_wc)
 {
   struct vm_area_struct* vma = (struct vm_area_struct*) opaque;
 
@@ -40,14 +40,14 @@ ci_mmap_bar(struct efhw_nic* nic, off_t base, size_t len, void* opaque,
   EFCH_TRACE("%s: pages=%d offset=0x%x phys=0x%llx prot=0x%lx",
              __FUNCTION__, (int) (len >> CI_PAGE_SHIFT),
              (int) (*offset >> CI_PAGE_SHIFT),
-             (unsigned long long) (nic->ctr_ap_dma_addr + base),
+             (unsigned long long) (page_addr),
              (unsigned long) pgprot_val(vma->vm_page_prot));
 
   ++*map_num;
   *offset += len;
 
   return io_remap_pfn_range(vma, vma->vm_start + *offset - len,
-			    (nic->ctr_ap_dma_addr + base) >> PAGE_SHIFT, len,
+			    (page_addr) >> PAGE_SHIFT, len,
 			    vma->vm_page_prot);
 }
 
