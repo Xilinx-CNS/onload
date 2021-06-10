@@ -6,6 +6,24 @@
 
 #include <stdbool.h>
 
+struct efct_rx_descriptor
+{
+  uint16_t refcnt;
+};
+
+static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
+{
+  ef_vi_rxq* q = &vi->vi_rxq;
+  struct efct_rx_descriptor* desc = q->descriptors;
+  return desc + pkt_id / q->superbuf_pkts;
+}
+
+static const ci_qword_t* efct_rx_header(ef_vi* vi, size_t pkt_id)
+{
+  /* TODO non-power-of-two packet buffer sizes */
+  return (const ci_qword_t*)(vi->vi_rxq.superbuf + pkt_id * vi->rx_buffer_len);
+}
+
 /* tx packet descriptor, stored in the ring until completion */
 /* TODO fix the size of this, and update tx_desc_bytes in vi_init.c */
 struct efct_tx_descriptor
@@ -310,10 +328,54 @@ static void efct_ef_vi_receive_push(ef_vi* vi)
   /* TODO X3 */
 }
 
-static int efct_ef_poll_one_queue(ef_vi* vi,
-                                  ef_eventq_state* evq, ci_qword_t* evq_base,
-                                  ef_event* evs, int evs_len)
+static int efct_poll_rx(ef_vi* vi, ef_event* evs, int evs_len)
 {
+  ef_vi_rxq* q = &vi->vi_rxq;
+  ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+  int i = 0;
+
+  if( qs->removed == qs->added )
+    return 0;
+
+  while( i < evs_len && qs->removed + 1 != qs->added ) {
+    uint32_t packet_idx = qs->removed & q->mask;
+    uint32_t header_idx = (qs->removed + 1) & q->mask;
+    ci_qword_t header = *efct_rx_header(vi, header_idx);
+
+    if( CI_QWORD_FIELD(header, EFCT_RX_HEADER_SENTINEL) == 0 )
+      break;
+
+    /* For simplicity, require configuration for a fixed data offset.
+     * Otherwise, we'd also have to check NEXT_FRAME_LOC in the previous buffer.
+     */
+    BUG_ON(CI_QWORD_FIELD(header, EFCT_RX_HEADER_NEXT_FRAME_LOC) != 1);
+
+    evs[i].rx.type = EF_EVENT_TYPE_RX;
+    /* TODO q_id from rx event? */
+    evs[i].rx.rq_id = packet_idx; /* TODO is that what we want? */
+    evs[i].rx.len = CI_QWORD_FIELD(header, EFCT_RX_HEADER_PACKET_LENGTH);
+    evs[i].rx.flags = EF_EVENT_FLAG_SOP;
+    evs[i].rx.ofs = EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+    /* TODO might be nice to provide more of the available metadata */
+
+    ++i;
+    ++qs->removed;
+
+    /* Pre-emptively take references for all packets in a new superbuf.
+     * TODO: move this to the point at which the superbuf is provided.
+     * TODO: handle manual rollover
+     */
+    if( packet_idx % q->superbuf_pkts == 0 )
+      efct_rx_desc(vi, packet_idx)->refcnt = q->superbuf_pkts;
+  }
+
+  return i;
+}
+
+static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
+{
+  ef_eventq_state* evq = &vi->ep_state->evq;
+  ci_qword_t* evq_base = (ci_qword_t*)vi->evq_base;
   ci_qword_t event;
   unsigned phase;
   int i;
@@ -331,9 +393,6 @@ static int efct_ef_poll_one_queue(ef_vi* vi,
       break;
 
     switch( CI_QWORD_FIELD(event, EFCT_EVENT_TYPE) ) {
-      case EFCT_EVENT_TYPE_RX:
-        /* TODO X3 */
-        break;
       case EFCT_EVENT_TYPE_TX:
         efct_tx_event(vi, event, &evs[i]);
         break;
@@ -354,12 +413,9 @@ static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int i;
 
-  // poll the tx event queue
-  // TODO maybe this should be conditional to support rx-only VI
-  i = efct_ef_poll_one_queue(vi, &vi->ep_state->evq, (ci_qword_t*)vi->evq_base,
-                             evs, evs_len);
-  // TODO poll rx event queue
-  // i += efct_ef_poll_one_queue(vi, ???, ???, evs + i, evs_len - i);
+  // TODO maybe these should be conditional to support rx-only or tx-only VI
+  i  = efct_poll_rx(vi, evs, evs_len);
+  i += efct_poll_tx(vi, evs, evs_len);
 
   return i;
 }
@@ -437,7 +493,25 @@ void efct_vi_init(ef_vi* vi)
 {
   EF_VI_BUILD_ASSERT(sizeof(struct efct_tx_descriptor) ==
                      EFCT_TX_DESCRIPTOR_BYTES);
+  EF_VI_BUILD_ASSERT(sizeof(struct efct_rx_descriptor) ==
+                     EFCT_RX_DESCRIPTOR_BYTES);
 
   efct_vi_initialise_ops(vi);
+}
+
+void efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id, const void** pkt_start)
+{
+  EF_VI_ASSERT(vi->nic_type.arch == EF_VI_ARCH_EFCT);
+  EF_VI_ASSERT(pkt_id <= vi->vi_rxq.mask);
+
+  *pkt_start = efct_rx_header(vi, pkt_id);
+}
+
+void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
+{
+  EF_VI_ASSERT(efct_rx_desc(vi, pkt_id)->refcnt > 0);
+
+  if( --efct_rx_desc(vi, pkt_id)->refcnt == 0 )
+    ++vi->ep_state->rxq.superbufs_removed;
 }
 

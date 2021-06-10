@@ -639,6 +639,9 @@ typedef struct {
   uint16_t  last_desc_i;                        /* ef10 only */
   /** Credit for packed stream handling (7000-series only) */
   uint16_t  rx_ps_credit_avail;                 /* ef10 only */
+  /* X3 RXQ experimental superbuf interface */
+  uint32_t superbufs_added; /* how many bufs zf_emu added */
+  uint32_t superbufs_removed; /* how many bufs ef_vi removed */
 } ef_vi_rxq_state;
 
 /*! \brief State of event queue
@@ -688,6 +691,9 @@ typedef struct {
   void*            descriptors;
   /** Pointer to IDs */
   uint32_t*        ids;
+  /* X3 RXQ experimental superbuf interface */
+  const char* superbuf; /* contiguous area of superbuf memory */
+  uint32_t superbuf_pkts; /* number of packets per superbuf */
 } ef_vi_rxq;
 
 /*! \brief State of a virtual interface
@@ -1406,6 +1412,10 @@ extern ef_request_id ef_vi_rxq_next_desc_id(ef_vi* vi);
 */
 extern int
 ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags);
+
+extern void efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id,
+                              const void** pkt_start);
+extern void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id);
 
 
 /**********************************************************************

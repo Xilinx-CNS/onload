@@ -168,6 +168,8 @@ static int rx_desc_bytes(struct ef_vi* vi)
   case EF_VI_ARCH_EF10:
   case EF_VI_ARCH_EF100:
     return 8;
+  case EF_VI_ARCH_EFCT:
+    return EFCT_RX_DESCRIPTOR_BYTES;
   default:
     EF_VI_BUG_ON(1);
     return 8;
