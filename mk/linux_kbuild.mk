@@ -34,7 +34,7 @@ X3_NET_PATH ?= $(TOPPATH)/../x3-net-linux
 HAVE_X3_NET := $(or $(and $(wildcard $(X3_NET_PATH)),1),0)
 EXTRA_CFLAGS += -DCI_HAVE_X3_NET=$(HAVE_X3_NET)
 ifneq ($(HAVE_X3_NET),0)
-EXTRA_CFLAGS += -DCI_SFC_EFCT_HEADER='"$(X3_NET_PATH)/include/linux/net/sfc/sfc_efct.h"'
+EXTRA_CFLAGS += -DCI_SFC_EFCT_HEADER='"$(X3_NET_PATH)/include/linux/net/xilinx/sfc_efct.h"'
 endif
 
 TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_extra.h
