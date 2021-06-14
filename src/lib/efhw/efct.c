@@ -175,9 +175,9 @@ efct_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 
 
 static int
-efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
-                    uint evq_id, uint own_id, uint tag, uint dmaq_size,
-                    dma_addr_t *dma_addrs, int n_dma_addrs,
+efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
+                    uint *qid_out, uint evq_id, uint own_id, uint tag,
+                    uint dmaq_size, dma_addr_t *dma_addrs, int n_dma_addrs,
                     uint vport_id, uint stack_id, uint flags)
 {
   return -EOPNOTSUPP;

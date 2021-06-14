@@ -108,10 +108,11 @@
 	((nic)->efhw_func->handle_event((nic), (handler), (ev), (budget)))
 
 /*-------------- DMA support  ------------ */
-#define efhw_nic_dmaq_tx_q_init(nic, client_id, dmaq, evq, owner, tag,		\
-				dmaq_size, dma_addrs, n_dma_addrs, \
+#define efhw_nic_dmaq_tx_q_init(nic, client_id, instance, qid_out, evq, owner, \
+				tag, dmaq_size, dma_addrs, n_dma_addrs, \
                                 vport_id, stack_id, flags)              \
-	((nic)->efhw_func->dmaq_tx_q_init(nic, client_id, dmaq, evq, owner, tag, \
+	((nic)->efhw_func->dmaq_tx_q_init(nic, client_id, instance, qid_out, \
+					  evq, owner, tag, \
 					  dmaq_size, dma_addrs,  \
                                           n_dma_addrs, vport_id, stack_id, \
                                           flags))

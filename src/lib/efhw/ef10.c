@@ -1542,9 +1542,9 @@ ef10_ef100_mcdi_cmd_init_rxq(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int
-ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
-		    uint evq_id, uint own_id, uint tag, uint dmaq_size,
-		    dma_addr_t *dma_addrs, int n_dma_addrs,
+ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
+		    uint *qid_out, uint evq_id, uint own_id, uint tag,
+		    uint dmaq_size, dma_addr_t *dma_addrs, int n_dma_addrs,
 		    uint vport_id, uint stack_id, uint flags)
 {
 	int rc;
@@ -1561,7 +1561,7 @@ ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
 
 	if (nic->flags & NIC_FLAG_MCAST_LOOP_HW) {
 		rc = _ef10_mcdi_cmd_enable_multicast_loopback
-			(nic, dmaq, flag_loopback);
+			(nic, instance, flag_loopback);
 		if(rc != 0) {
 			/* We are greaceful in case there is firmware
 			 * with incomplete support as well as in case we
@@ -1615,7 +1615,8 @@ ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
 			 QUEUE_CRC_MODE_NONE, flag_tcp_udp_only,
 			 flag_tcp_csum_dis, flag_ip_csum_dis,
 			 flag_buff_mode, flag_pacer_bypass, flag_ctpio,
-			 flag_ctpio_uthresh, flag_m2m_d2c, dmaq, tag, evq_id, dmaq_size);
+			 flag_ctpio_uthresh, flag_m2m_d2c, instance, tag,
+			 evq_id, dmaq_size);
 		if ((rc != -EPERM) || (!flag_pacer_bypass))
 			break;
 	}
@@ -1627,6 +1628,9 @@ ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
 
 	if (rc == -EOPNOTSUPP)
 		rc = -ENOKEY;
+
+	if (rc == 0)
+		*qid_out = instance;
 
 	return rc;
 }

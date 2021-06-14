@@ -214,9 +214,9 @@ ef100_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int
-ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
-		    uint evq_id, uint own_id, uint tag, uint dmaq_size,
-		    dma_addr_t *dma_addrs, int n_dma_addrs,
+ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
+		    uint *qid_out, uint evq_id, uint own_id, uint tag,
+		    uint dmaq_size, dma_addr_t *dma_addrs, int n_dma_addrs,
 		    uint vport_id, uint stack_id, uint flags)
 {
 	int rc;
@@ -245,7 +245,8 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
 			 QUEUE_CRC_MODE_NONE, flag_tcp_udp_only,
 			 flag_tcp_csum_dis, flag_ip_csum_dis,
 			 flag_buff_mode, flag_pacer_bypass, flag_ctpio,
-			 flag_ctpio_uthresh, flag_m2m_d2c, dmaq, tag, evq_id, dmaq_size);
+			 flag_ctpio_uthresh, flag_m2m_d2c, instance, tag,
+			 evq_id, dmaq_size);
 		if ((rc != -EPERM) || (!flag_pacer_bypass))
 			break;
 	}
@@ -257,6 +258,9 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
 
 	if (rc == -EOPNOTSUPP)
 		rc = -ENOKEY;
+
+	if (rc == 0)
+		*qid_out = instance;
 
 	return rc;
 }

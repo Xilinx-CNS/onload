@@ -560,6 +560,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	struct efrm_vi_q *q = &virs->q[queue_type];
 	struct efrm_nic* efrm_nic;
 	int instance, evq_instance = -1, interrupting, wakeup_evq;
+	uint qid;
 	unsigned flags = virs->flags;
 	unsigned vport_id;
 
@@ -583,7 +584,8 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	case EFHW_TXQ:
 		evq_instance = q->evq_ref->rs.rs_instance;
 		rc = efhw_nic_dmaq_tx_q_init
-			(nic, efrm_pd_get_nic_client_id(virs->pd), instance, evq_instance,
+			(nic, efrm_pd_get_nic_client_id(virs->pd), instance,
+			 &qid, evq_instance,
 			 efrm_pd_owner_id(virs->pd),
 			 virs->q[queue_type].tag, q->capacity,
 			 q->dma_addrs,
@@ -592,6 +594,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 			 efrm_pd_stack_id_get(virs->pd), flags);
 		break;
 	case EFHW_RXQ:
+		qid = instance;
 		evq_instance = q->evq_ref->rs.rs_instance;
                 rc = efhw_nic_dmaq_rx_q_init
                        (nic, efrm_pd_get_nic_client_id(virs->pd),
@@ -609,6 +612,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
                 }
 		break;
 	case EFHW_EVQ:
+		qid = instance;
 		if (nic->devtype.arch == EFHW_ARCH_EF10)
 			interrupting = 0;
 		/* EF100 hasn't wakeup events, so only interrupting
@@ -668,7 +672,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 			  nic->index, queue_type, instance, evq_instance, rc);
 	} else {
 		if( rc == 0 ) {
-			q->qid = instance;
+			q->qid = qid;
 			list_add_tail(&q->init_link,
 				      &efrm_nic->dmaq_state.q[queue_type]);
 		}
@@ -762,20 +766,20 @@ EXPORT_SYMBOL(efrm_vi_resource_mark_shut_down);
 static int
 __efrm_vi_q_flush(struct efhw_nic* nic, uint32_t client_id,
 		  enum efhw_q_type queue_type,
-		  int instance, int time_sync_events_enabled)
+		  int qid, int time_sync_events_enabled)
 {
 	int rc;
 
 	switch (queue_type) {
 	case EFHW_RXQ:
-		rc = efhw_nic_flush_rx_dma_channel(nic, client_id, instance);
+		rc = efhw_nic_flush_rx_dma_channel(nic, client_id, qid);
 		break;
 	case EFHW_TXQ:
-		rc = efhw_nic_flush_tx_dma_channel(nic, client_id, instance);
+		rc = efhw_nic_flush_tx_dma_channel(nic, client_id, qid);
 		break;
 	case EFHW_EVQ:
 		/* flushing EVQ is as good as disabling it */
-		efhw_nic_event_queue_disable(nic, client_id, instance,
+		efhw_nic_event_queue_disable(nic, client_id, qid,
 					     time_sync_events_enabled);
 		rc = 0;
 		break;
@@ -812,7 +816,7 @@ efrm_vi_q_flush(struct efrm_vi *virs, enum efhw_q_type queue_type)
 	}
 
 	rc = __efrm_vi_q_flush(nic, efrm_pd_get_nic_client_id(virs->pd),
-			       queue_type, instance,
+			       queue_type, q->qid,
 			       (virs->flags & (EFHW_VI_RX_TIMESTAMPS |
 					       EFHW_VI_TX_TIMESTAMPS)) != 0);
 	EFRM_TRACE("Flushed queue nic %d type %d 0x%x rc %d",
@@ -909,7 +913,7 @@ void efrm_nic_flush_all_queues(struct efhw_nic *nic, int dummy)
 			efrm_atomic_or(efrm_vi_shut_down_flag(type), &virs->shut_down_flags);
 			rc = __efrm_vi_q_flush(virs->rs.rs_client->nic,
 				efrm_pd_get_nic_client_id(virs->pd),
-				type, virs->rs.rs_instance,
+				type, virs->q[type].qid,
 				(virs->flags & EFHW_VI_RX_TIMESTAMPS) != 0);
 			(void) rc;
 			EFRM_TRACE(" nic %d type %d 0x%x rc %d",

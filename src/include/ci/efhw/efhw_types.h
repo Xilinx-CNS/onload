@@ -189,10 +189,14 @@ struct efhw_func_ops {
 
   /*-------------- DMA support  ------------ */
 
-	/*! Initialise NIC state for a given TX DMAQ */
+	/*! Initialise NIC state for a given TX DMAQ
+	 * On return qid_out is set to the queue id of the initialised queue.
+	 * This may differ from the resource instance if the hardware queue
+	 * model does not represent VIs with a triple of EVQ/RXQ/TXQ.
+	 */
 	int (*dmaq_tx_q_init) (struct efhw_nic *nic, uint32_t client_id,
-			       uint dmaq, uint evq, uint owner, uint tag,
-			       uint dmaq_size,
+			       uint instance, uint *qid_out, uint evq,
+			       uint owner, uint tag, uint dmaq_size,
 			       dma_addr_t *dma_addrs, int n_dma_addrs,
 			       uint vport_id, uint stack_id, uint flags);
 
