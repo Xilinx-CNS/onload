@@ -6,6 +6,19 @@
 
 #include <ci/driver/ci_efct.h>
 
+struct efct_test_evq {
+  bool inited;
+  unsigned txqs;
+};
+
+struct efct_test_txq {
+  int evq;
+  void* ctpio;
+};
+
+#define EFCT_TEST_EVQS_N 12
+#define EFCT_TEST_TXQS_N 12
+
 struct net_device;
 struct sfc_efct_client;
 struct efct_test_device {
@@ -13,6 +26,8 @@ struct efct_test_device {
   struct net_device* net_dev;
   struct sfc_efct_client* client;
   u64 dma_mask;
+  struct efct_test_evq evqs[EFCT_TEST_EVQS_N];
+  struct efct_test_txq txqs[EFCT_TEST_TXQS_N];
 };
 
 extern struct efct_test_device* efct_test_add_test_dev(struct device* parent, struct net_device* net_dev);

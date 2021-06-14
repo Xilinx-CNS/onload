@@ -42,6 +42,7 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   struct efct_test_device* tdev;
   struct auxiliary_device* adev;
   int rc;
+  int i;
 
   tdev = kzalloc(sizeof(*tdev), GFP_KERNEL);
   if( !tdev ) {
@@ -52,6 +53,8 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   dev_hold(net_dev);
   tdev->net_dev = net_dev;
   adev = &tdev->dev.adev;
+  for( i = 0; i < EFCT_TEST_TXQS_N; i++ )
+    tdev->txqs[i].evq = -1;
 
   /* TODO EFCT look into dma handling - can we set the auxdev up so that the
    * auxdev itself can be used for mapping, or will we need to provide a

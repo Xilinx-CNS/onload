@@ -80,7 +80,7 @@ static int efct_test_get_param(struct sfc_efct_client *handle,
     break;
    case SFC_EFCT_NIC_RESOURCES:
     arg->nic_res.evq_min = 0;
-    arg->nic_res.evq_lim = 1;
+    arg->nic_res.evq_lim = EFCT_TEST_EVQS_N - 1;
     rc = 0;
     break;
    case SFC_EFCT_DRIVER_DATA:
@@ -127,14 +127,95 @@ static int efct_test_fw_rpc(struct sfc_efct_client *handle,
 static int efct_test_init_evq(struct sfc_efct_client *handle,
                               struct sfc_efct_evq_params *params)
 {
-  printk(KERN_INFO "%s\n", __func__);
+  printk(KERN_INFO "%s: qid %d\n", __func__, params->qid);
+  if( handle->tdev->evqs[params->qid].inited )
+    return -EBUSY;
+
+  handle->tdev->evqs[params->qid].inited = true;
   return 0;
 }
 
 
 static void efct_test_free_evq(struct sfc_efct_client *handle, int evq)
 {
+  printk(KERN_INFO "%s: qid %d\n", __func__, evq);
+  if( !handle->tdev->evqs[evq].inited )
+    printk(KERN_INFO "%s: Error freeing q %d but not inited\n", __func__, evq);
+
+  if( handle->tdev->evqs[evq].txqs != 0 )
+    printk(KERN_INFO "%s: Error freeing evq %d, but still bound to txqs %x\n",
+           __func__, evq, handle->tdev->evqs[evq].txqs);
+
+  handle->tdev->evqs[evq].inited = false;
+}
+
+
+static int efct_test_alloc_txq(struct sfc_efct_client *handle,
+                               struct sfc_efct_txq_params *params)
+{
+  struct efct_test_device *tdev = handle->tdev;
+  int txq = -1;
+  int i;
+
+  printk(KERN_INFO "%s: evq %d\n", __func__, params->evq);
+  if( !tdev->evqs[params->evq].inited )
+    return -EINVAL;
+
+  /* Onload allocate vis (and hence EVQs) through a buddy allocator, so we can
+   * just allocate linearly and should end up testing differing EVQ and TXQ
+   * ids.
+   */
+  for( i = 0; i < EFCT_TEST_TXQS_N; i++ )
+    if( tdev->txqs[i].evq < 0 ) {
+      txq = i;
+      break;
+    }
+
+  if( txq < 0 )
+    return -EBUSY;
+
+  tdev->txqs[txq].ctpio = kzalloc(0x1000, GFP_KERNEL);
+  if( !tdev->txqs[txq].ctpio )
+    return -ENOMEM;
+
+  tdev->txqs[txq].evq = params->evq;
+  tdev->evqs[params->evq].txqs |= 1 << txq;
+
+  printk(KERN_INFO "%s: bound txq %d to evq %d\n", __func__, txq, params->evq);
+
+  return txq;
+}
+
+
+static void efct_test_free_txq(struct sfc_efct_client *handle, int txq)
+{
+  struct efct_test_device *tdev = handle->tdev;
+  int evq = tdev->txqs[txq].evq;
+
+  printk(KERN_INFO "%s: txq %d\n", __func__, txq);
+  if( evq < 0 )
+    printk(KERN_INFO "%s: Error: freeing q %d, but not bound to evq\n",
+           __func__, txq);
+
+  tdev->evqs[evq].txqs &= ~(1 << txq);
+  tdev->txqs[txq].evq = -1;
+  kfree(tdev->txqs[txq].ctpio);
+}
+
+
+static int efct_test_ctpio_addr(struct sfc_efct_client *handle, int txq,
+                                resource_size_t *addr, size_t *size)
+{
+  struct efct_test_device *tdev = handle->tdev;
+
   printk(KERN_INFO "%s\n", __func__);
+
+  if( tdev->txqs[txq].evq < 0 )
+    return -EINVAL;
+
+  *addr = virt_to_phys(tdev->txqs[txq].ctpio);
+  *size = 0x1000;
+  return 0;
 }
 
 
@@ -146,5 +227,8 @@ const struct sfc_efct_devops test_devops = {
   .fw_rpc = efct_test_fw_rpc,
   .init_evq = efct_test_init_evq,
   .free_evq = efct_test_free_evq,
+  .alloc_txq = efct_test_alloc_txq,
+  .free_txq = efct_test_free_txq,
+  .ctpio_addr = efct_test_ctpio_addr,
 };
 
