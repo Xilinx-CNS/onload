@@ -401,6 +401,8 @@ extern void efrm_vi_wait_nic_complete_flushes(struct efhw_nic *nic);
  */
 extern void efrm_vi_check_flushes(struct work_struct *data);
 
+extern int efrm_vi_qid(struct efrm_vi* virs, enum efhw_q_type type);
+
 /*! Set [n_entries] to -1 to get size of existing EVQ. */
 extern uint32_t efrm_vi_rm_evq_bytes(struct efrm_vi *virs, int n_entries);
 

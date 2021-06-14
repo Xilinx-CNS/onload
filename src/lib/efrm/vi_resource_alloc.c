@@ -307,6 +307,12 @@ static void efrm_vi_rm_free_instance(struct efrm_client *client,
 	}
 }
 
+int efrm_vi_qid(struct efrm_vi* virs, enum efhw_q_type type)
+{
+	return virs->q[type].qid;
+}
+EXPORT_SYMBOL(efrm_vi_qid);
+
 /*** Queue sizes *********************************************************/
 
 static int efrm_vi_is_phys(const struct efrm_vi* virs)
@@ -661,9 +667,11 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 			  "nic %d type %d 0x%x (evq 0x%x) rc %d",
 			  nic->index, queue_type, instance, evq_instance, rc);
 	} else {
-		if( rc == 0 )
+		if( rc == 0 ) {
+			q->qid = instance;
 			list_add_tail(&q->init_link,
 				      &efrm_nic->dmaq_state.q[queue_type]);
+		}
 	}
 
 	mutex_unlock(&efrm_nic->dmaq_state.lock);

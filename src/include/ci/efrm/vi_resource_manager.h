@@ -78,6 +78,7 @@ struct vi_resource_manager {
 
 struct efrm_vi_q {
 	unsigned                             flags;
+	int                                  qid;
 	int                                  capacity;
 	int                                  bytes;
 	/* Queue memory is allocated and managed in host sized pages. On some
