@@ -4,6 +4,9 @@
 #include "ef_vi_internal.h"
 #include "efct_hw_defs.h"
 
+/* FIXME EFCT: make this variable */
+#define EFCT_PKT_STRIDE 2048
+
 #include <stdbool.h>
 
 struct efct_rx_descriptor
@@ -23,7 +26,7 @@ static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
 static const ci_qword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
 {
   /* TODO non-power-of-two packet buffer sizes */
-  return (const ci_qword_t*)(vi->vi_rxq.superbuf + pkt_id * vi->rx_buffer_len);
+  return (const ci_qword_t*)(vi->vi_rxq.superbuf + pkt_id * EFCT_PKT_STRIDE);
 }
 
 /* The header following the next packet, or null if not available */
