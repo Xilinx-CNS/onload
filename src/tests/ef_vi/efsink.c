@@ -314,6 +314,10 @@ static int poll_evq(struct resources* res)
         handle_rx_multi_pkts(res);
       res->n_ht_events += 1;
       break;
+    case EF_EVENT_TYPE_RESET:
+      LOGE("ERROR: NIC has been Reset and VI is no longer valid\n");
+      exit(2);
+      break;
     default:
       LOGE("ERROR: unexpected event type=%d\n", (int) EF_EVENT_TYPE(evs[i]));
       break;
