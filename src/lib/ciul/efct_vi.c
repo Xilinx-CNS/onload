@@ -444,11 +444,12 @@ static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 
 static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
-  int i;
+  int i = 0;
 
-  // TODO maybe these should be conditional to support rx-only or tx-only VI
-  i  = efct_poll_rx(vi, evs, evs_len);
-  i += efct_poll_tx(vi, evs, evs_len);
+  if( vi->vi_rxq.mask )
+    i += efct_poll_rx(vi, evs, evs_len);
+  if( vi->vi_txq.mask )
+    i += efct_poll_tx(vi, evs, evs_len);
 
   return i;
 }
