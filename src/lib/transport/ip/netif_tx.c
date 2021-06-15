@@ -254,6 +254,14 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
   dmaq = &netif->state->nic[intf_i].dmaq[pkt_q_id(pkt)];
   vi = &netif->nic_hw[intf_i].vis[pkt_q_id(pkt)];
 
+#ifdef __KERNEL__
+  /* FIXME EFCT vi send is CTPIO under the hood, but not yet supported in
+   * kernel with onload.
+   */
+  if( netif->state->nic[intf_i].vi_arch == EFHW_ARCH_EFCT )
+    return;
+#endif
+
   if( oo_pktq_is_empty(dmaq) && ! (pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
 #if CI_CFG_USE_PIO
     /* pio_thresh is set to zero if PIO disabled on this stack, so don't

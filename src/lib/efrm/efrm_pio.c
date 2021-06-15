@@ -331,7 +331,13 @@ int efrm_ctpio_map_kernel(struct efrm_vi *vi, void **io)
 	struct efhw_nic* nic = vi->rs.rs_client->nic;
 	resource_size_t ctpio_addr;
 	size_t ctpio_page_off;
-	int rc = efhw_nic_ctpio_addr(nic, vi->rs.rs_instance, &ctpio_addr);
+	int rc;
+
+	/* FIXME EFCT for testing we don't have io mem available */
+	if( nic->devtype.arch == EFHW_ARCH_EFCT )
+		return 0;
+
+	rc = efhw_nic_ctpio_addr(nic, vi->rs.rs_instance, &ctpio_addr);
 	if( rc < 0 )
 		return rc;
 
