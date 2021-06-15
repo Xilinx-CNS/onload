@@ -543,6 +543,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   ef_vi_init_out_flags(vi, (ra.u.vi_out.out_flags & EFHW_VI_CLOCK_SYNC_STATUS) ?
                        EF_VI_OUT_CLOCK_SYNC_STATUS : 0);
   ef_vi_init_io(vi, io_mmap_ptr);
+  vi->dh = vi_dh;
+  vi->vi_resource_id = ra.out_id.index;
   vi->vi_i = ra.u.vi_out.instance;
   vi->abs_idx = ra.u.vi_out.abs_idx;
   ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
@@ -579,7 +581,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   vi->vi_io_mmap_bytes = ra.u.vi_out.io_mmap_bytes;
   vi->vi_mem_mmap_bytes = ra.u.vi_out.mem_mmap_bytes;
   vi->ep_state_bytes = state_bytes;
-  vi->vi_resource_id = ra.out_id.index;
   if( ra.u.vi_out.out_flags & EFHW_VI_PS_BUF_SIZE_SET )
     vi->vi_ps_buf_size = ra.u.vi_out.ps_buf_size;
   else

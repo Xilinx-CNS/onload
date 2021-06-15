@@ -28,13 +28,6 @@ extern "C" {
 #define EF_VI_NIC_PAGE_SIZE  (1<<EF_VI_NIC_PAGE_SHIFT)
 
 
-/*! \brief An ef_driver_handle is needed to allocate resources. */
-#ifdef __KERNEL__
-typedef struct efhw_nic*   ef_driver_handle;
-#else
-typedef int                ef_driver_handle;
-#endif
-
 struct timeval;
 
 /*! \brief Format for outputting an ef_addr. */

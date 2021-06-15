@@ -74,6 +74,13 @@ extern "C" {
  * Types **************************************************************
  **********************************************************************/
 
+/*! \brief An ef_driver_handle is needed to allocate resources. */
+#ifdef __KERNEL__
+typedef struct efhw_nic*   ef_driver_handle;
+#else
+typedef int                ef_driver_handle;
+#endif
+
 /*! \brief A pointer to an event queue */
 typedef uint32_t                ef_eventq_ptr;
 
@@ -817,6 +824,8 @@ typedef struct ef_vi {
   unsigned                      vi_i;
   /** NIC-global ID of this virtual interface */
   unsigned                      abs_idx;
+  /** fd used for original initialisation */
+  ef_driver_handle              dh;
 
   /** The length of a receive buffer */
   unsigned                      rx_buffer_len;
