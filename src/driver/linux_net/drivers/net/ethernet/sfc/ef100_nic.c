@@ -176,23 +176,33 @@ static void ef100_mcdi_put_buf(struct efx_nic *efx, u8 bufid)
 
 /*	MCDI calls
  */
-int ef100_get_mac_address(struct efx_nic *efx, u8 *mac_address)
+int ef100_get_mac_address(struct efx_nic *efx, u8 *mac_address,
+			  int client_handle, bool empty_ok)
 {
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_MAC_ADDRESSES_OUT_LEN);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CLIENT_MAC_ADDRESSES_OUT_LEN(1));
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_CLIENT_MAC_ADDRESSES_IN_LEN);
 	size_t outlen;
 	int rc;
 
-	BUILD_BUG_ON(MC_CMD_GET_MAC_ADDRESSES_IN_LEN != 0);
+	MCDI_SET_DWORD(inbuf, GET_CLIENT_MAC_ADDRESSES_IN_CLIENT_HANDLE,
+		       client_handle);
 
-	rc = efx_mcdi_rpc(efx, MC_CMD_GET_MAC_ADDRESSES, NULL, 0,
-			  outbuf, sizeof(outbuf), &outlen);
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_CLIENT_MAC_ADDRESSES, inbuf,
+			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
 	if (rc)
 		return rc;
-	if (outlen < MC_CMD_GET_MAC_ADDRESSES_OUT_LEN)
-		return -EIO;
 
-	ether_addr_copy(mac_address,
-			MCDI_PTR(outbuf, GET_MAC_ADDRESSES_OUT_MAC_ADDR_BASE));
+	if (outlen >= MC_CMD_GET_CLIENT_MAC_ADDRESSES_OUT_LEN(1)) {
+		ether_addr_copy(mac_address, MCDI_PTR(outbuf,
+				GET_CLIENT_MAC_ADDRESSES_OUT_MAC_ADDRS));
+	} else if (empty_ok) {
+		pci_warn(efx->pci_dev,
+			 "No MAC address provisioned for client ID %#x.\n",
+			 client_handle);
+		eth_zero_addr(mac_address);
+	} else {
+		return -ENOENT;
+	}
 	return 0;
 }
 
@@ -949,18 +959,6 @@ static struct net_device *ef100_get_remote_rep(struct efx_nic *efx,
 	return NULL;
 }
 
-static void ef100_close_remote_reps(struct efx_nic *efx)
-{
-	struct ef100_nic_data *nic_data = efx->nic_data;
-	struct net_device *rep_dev;
-	unsigned int i;
-
-	for (i = 0; i < nic_data->rem_rep_count; i++) {
-		rep_dev = nic_data->rem_rep[i];
-		dev_close(rep_dev);
-	}
-}
-
 static void ef100_detach_remote_reps(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
@@ -991,20 +989,6 @@ static void ef100_attach_remote_reps(struct efx_nic *efx)
 		netif_device_attach(nic_data->rem_rep[i]);
 }
 
-void ef100_close_vf_reps(struct efx_nic *efx)
-{
-#if defined(CONFIG_SFC_SRIOV)
-	struct ef100_nic_data *nic_data = efx->nic_data;
-	struct net_device *rep_dev;
-	unsigned int vf;
-
-	for (vf = 0; vf < nic_data->vf_rep_count; vf++) {
-		rep_dev = nic_data->vf_rep[vf];
-		dev_close(rep_dev);
-	}
-#endif
-}
-
 void __ef100_detach_reps(struct efx_nic *efx)
 {
 #if defined(CONFIG_SFC_SRIOV)
@@ -1028,11 +1012,9 @@ static void ef100_detach_reps(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 
-	ef100_close_vf_reps(efx);
 	spin_lock_bh(&nic_data->vf_reps_lock);
 	__ef100_detach_reps(efx);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
-	ef100_close_remote_reps(efx);
 	spin_lock_bh(&nic_data->rem_reps_lock);
 	ef100_detach_remote_reps(efx);
 	spin_unlock_bh(&nic_data->rem_reps_lock);
@@ -2074,6 +2056,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.describe_stats = ef100_describe_stats,
 	.update_stats = ef100_update_stats,
 	.pull_stats = ef100_pull_stats,
+	.has_dynamic_sensors = ef100_has_dynamic_sensors,
 
 	.mem_bar = NULL,
 	.mem_map_size = NULL,

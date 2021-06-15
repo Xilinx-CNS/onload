@@ -96,7 +96,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.8.1005"
+#define EFX_DRIVER_VERSION	"5.3.8.1006"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -1504,7 +1504,6 @@ enum efx_buf_alloc_mode {
  * @mac_lock: MAC access lock. Protects @port_enabled, @link_up, @phy_mode,
  *	efx_monitor() and efx_mac_work()
  * @mac_work: Work item for changing MAC promiscuity and multicast hash
- * @open_count: Number of network interfaces using this network device
  * @port_enabled: Port enabled indicator.
  *	Serialises efx_stop_all(), efx_start_all(), efx_monitor() and
  *	efx_mac_work() with kernel interfaces. Safe to read under any
@@ -1733,7 +1732,11 @@ struct efx_nic {
 
 	struct mutex mac_lock;
 	struct work_struct mac_work;
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
 	u16 open_count;
+#endif
+#endif
 	bool port_enabled;
 	bool datapath_started;
 

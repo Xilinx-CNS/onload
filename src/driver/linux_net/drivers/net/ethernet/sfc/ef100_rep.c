@@ -41,25 +41,9 @@ static int efx_ef100_rep_init_struct(struct efx_nic *efx,
 	return 0;
 }
 
-static int efx_parent_open(struct net_device *net_dev)
-{
-	return net_dev->netdev_ops->ndo_open(net_dev);
-}
-
-static int efx_parent_close(struct net_device *net_dev)
-{
-	return net_dev->netdev_ops->ndo_stop(net_dev);
-}
-
 static int efx_ef100_rep_open(struct net_device *net_dev)
 {
 	struct efx_rep *efv = netdev_priv(net_dev);
-	struct efx_nic *parent = efv->parent;
-	int rc;
-
-	rc = efx_parent_open(parent->net_dev);
-	if (rc)
-		return rc;
 
 	netif_napi_add(net_dev, &efv->napi, efx_ef100_rep_poll,
 		       NAPI_POLL_WEIGHT);
@@ -70,11 +54,9 @@ static int efx_ef100_rep_open(struct net_device *net_dev)
 static int efx_ef100_rep_close(struct net_device *net_dev)
 {
 	struct efx_rep *efv = netdev_priv(net_dev);
-	struct efx_nic *parent = efv->parent;
 
 	napi_disable(&efv->napi);
 	netif_napi_del(&efv->napi);
-	efx_parent_close(parent->net_dev);
 	return 0;
 }
 
@@ -343,6 +325,7 @@ static int efx_ef100_lookup_client_id(struct efx_nic *efx, efx_qword_t pciefn,
 
 static int efx_ef100_configure_rep(struct efx_rep *efv)
 {
+	struct net_device *net_dev = efv->net_dev;
 	struct efx_nic *efx = efv->parent;
 	efx_qword_t pciefn;
 	u32 selector;
@@ -355,7 +338,7 @@ static int efx_ef100_configure_rep(struct efx_rep *efv)
 	rc = efx_mae_lookup_mport(efx, selector, &efv->mport);
 	if (rc)
 		return rc;
-	netif_dbg(efx, probe, efv->net_dev,
+	netif_dbg(efx, probe, net_dev,
 		  "Representee mport ID %#x\n", efv->mport);
 	/* mport label should fit in 16 bits */
 	WARN_ON(efv->mport >> 16);
@@ -370,18 +353,23 @@ static int efx_ef100_configure_rep(struct efx_rep *efv)
 	if (rc) {
 		/* We won't be able to set the representee's MAC address */
 		efv->clid = CLIENT_HANDLE_NULL;
-		netif_dbg(efx, probe, efv->net_dev,
+		netif_dbg(efx, probe, net_dev,
 			  "Failed to get representee client ID, rc %d\n", rc);
 	} else {
-		netif_dbg(efx, probe, efv->net_dev,
+		netif_dbg(efx, probe, net_dev,
 			  "Representee client ID %#x\n", efv->clid);
+
+		/* Get the assigned MAC address */
+		(void)ef100_get_mac_address(efx, net_dev->perm_addr, efv->clid,
+					    true);
+		memcpy(net_dev->dev_addr, net_dev->perm_addr, ETH_ALEN);
 	}
 
 	mutex_lock(&efx->tc->mutex);
 	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF(efv->idx));
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	if (!rc) {
-		rc = tc_setup_cb_egdev_register(efv->net_dev,
+		rc = tc_setup_cb_egdev_register(net_dev,
 						efx_ef100_rep_tc_egdev_cb, efv);
 		if (rc)
 			efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->idx));
@@ -394,6 +382,7 @@ static int efx_ef100_configure_rep(struct efx_rep *efv)
 static int efx_ef100_configure_remote_rep(struct efx_rep *efv,
 					  struct mae_mport_desc *mport_desc)
 {
+	struct net_device *net_dev = efv->net_dev;
 	struct efx_nic *efx = efv->parent;
 	struct ef100_nic_data *nic_data;
 	efx_qword_t pciefn;
@@ -402,8 +391,7 @@ static int efx_ef100_configure_remote_rep(struct efx_rep *efv,
 	nic_data = efx->nic_data;
 	efv->rx_pring_size = EFX_REP_DEFAULT_PSEUDO_RING_SIZE;
 	efv->mport = mport_desc->mport_id;
-	netif_dbg(efx, probe, efv->net_dev,
-		  "Remote representee mport ID %#x\n",
+	netif_dbg(efx, probe, net_dev, "Remote representee mport ID %#x\n",
 		  efv->mport);
 	/* mport label should fit in 16 bits */
 	WARN_ON(efv->mport >> 16);
@@ -418,11 +406,16 @@ static int efx_ef100_configure_remote_rep(struct efx_rep *efv,
 	if (rc) {
 		/* We won't be able to set the representee's MAC address */
 		efv->clid = CLIENT_HANDLE_NULL;
-		netif_dbg(efx, probe, efv->net_dev,
+		netif_dbg(efx, probe, net_dev,
 			  "Failed to get representee client ID, rc %d\n", rc);
 	} else {
-		netif_dbg(efx, probe, efv->net_dev,
+		netif_dbg(efx, probe, net_dev,
 			  "Remote representee client ID %#x\n", efv->clid);
+
+		/* Get the assigned MAC address */
+		(void)ef100_get_mac_address(efx, net_dev->perm_addr, efv->clid,
+					    true);
+		memcpy(net_dev->dev_addr, net_dev->perm_addr, ETH_ALEN);
 	}
 
 	mutex_lock(&efx->tc->mutex);
@@ -430,7 +423,7 @@ static int efx_ef100_configure_remote_rep(struct efx_rep *efv,
 					   EFX_TC_DFLT_REM(efv->idx));
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	if (!rc) {
-		rc = tc_setup_cb_egdev_register(efv->net_dev,
+		rc = tc_setup_cb_egdev_register(net_dev,
 						efx_ef100_rep_tc_egdev_cb, efv);
 		if (rc) {
 			efx_tc_deconfigure_default_rule(efx,
