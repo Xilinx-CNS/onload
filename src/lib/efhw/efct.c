@@ -70,6 +70,9 @@ efct_nic_init_hardware(struct efhw_nic *nic,
                        struct efhw_ev_handler *ev_handlers,
                        const uint8_t *mac_addr)
 {
+  memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
+  nic->flags |= NIC_FLAG_TX_CTPIO
+             | NIC_FLAG_HW_RX_TIMESTAMPING | NIC_FLAG_HW_TX_TIMESTAMPING;
   return 0;
 }
 
@@ -97,7 +100,9 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
   struct device *dev;
   struct sfc_efct_device* edev;
   struct sfc_efct_client* cli;
-  struct sfc_efct_evq_params qparams = {};
+  struct sfc_efct_evq_params qparams = {
+    .qid = evq,
+  };
   int rc;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
@@ -181,7 +186,22 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
                     uint dmaq_size, dma_addr_t *dma_addrs, int n_dma_addrs,
                     uint vport_id, uint stack_id, uint flags)
 {
-  return -EOPNOTSUPP;
+  struct device *dev;
+  struct sfc_efct_device* edev;
+  struct sfc_efct_client* cli;
+  struct sfc_efct_txq_params params = { .evq = evq_id };
+  int rc;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+  rc = edev->ops->alloc_txq(cli, &params);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  if( rc >= 0 ) {
+    *qid_out = rc;
+    rc = 0;
+  }
+
+  return 0;
 }
 
 
@@ -214,7 +234,16 @@ static void efct_dmaq_rx_q_disable(struct efhw_nic *nic, uint dmaq)
 static int efct_flush_tx_dma_channel(struct efhw_nic *nic,
                                      uint32_t client_id, uint dmaq)
 {
-  return -EOPNOTSUPP;
+  struct device *dev;
+  struct sfc_efct_device* edev;
+  struct sfc_efct_client* cli;
+  int rc = 0;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+  edev->ops->free_txq(cli, dmaq);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  return 0;
 }
 
 
@@ -486,7 +515,21 @@ efct_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
 static int
 efct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
 {
-  return -ENOSYS;
+  struct device *dev;
+  struct sfc_efct_device* edev;
+  struct sfc_efct_client* cli;
+  size_t region_size;
+  int rc;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+  edev->ops->ctpio_addr(cli, instance, addr, &region_size);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  /* Currently we assume throughout onload that we have a 4k region */
+  if( (rc == 0) && (region_size != 0x1000) )
+    return -EOPNOTSUPP;
+
+  return rc;
 }
 
 /*--------------------------------------------------------------------

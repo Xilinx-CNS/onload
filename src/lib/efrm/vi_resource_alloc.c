@@ -340,7 +340,7 @@ static uint32_t efrm_vi_rm_txq_bytes(struct efrm_vi *virs, int n_entries)
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
 		return n_entries * EFAB_AF_XDP_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
-		return 0;
+		return n_entries * EFCT_TX_DESCRIPTOR_BYTES;
 	else {
 		EFRM_ASSERT(0);
 		return -EINVAL;
@@ -395,6 +395,8 @@ static int choose_size(int size_rq, unsigned sizes)
 		if ((size & sizes) && size >= size_rq)
 			return size;
 		else if ((sizes & ~((size - 1) | size)) == 0)
+			return -1;
+		else if (size == 1 << 30)
 			return -1;
 }
 

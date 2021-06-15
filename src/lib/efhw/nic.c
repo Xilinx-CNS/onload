@@ -257,7 +257,8 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 	case EFHW_ARCH_EFCT:
 		nic->q_sizes[EFHW_EVQ] = 128 | 256 | 512 | 1024 | 2048 | 4096 |
 			8192;
-		nic->q_sizes[EFHW_TXQ] = 0;
+		/* The TXQ is SW only, but reflects a limited HW resource */
+		nic->q_sizes[EFHW_TXQ] = 512;
 		nic->q_sizes[EFHW_RXQ] = 0;
 		nic->efhw_func = &efct_char_functional_units;
 		break;

@@ -144,10 +144,10 @@ efab_vi_rm_mmap_ctpio(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
   *bytes -= len;
   nic = efrm_client_get_nic(virs->rs.rs_client);
 
-  rc = efhw_nic_ctpio_addr(nic, instance, &ctpio_addr);
+  rc = efhw_nic_ctpio_addr(nic, efrm_vi_qid(virs, EFHW_TXQ), &ctpio_addr);
   if( rc < 0 ) {
-    EFRM_ERR("%s: CTPIO is not available on VI instance %d\n", __FUNCTION__,
-	     instance);
+    EFRM_ERR("%s: CTPIO is not available on TXQ %d\n", __FUNCTION__,
+	     efrm_vi_qid(virs, EFHW_TXQ));
     return rc;
   }
 
