@@ -1620,6 +1620,11 @@ void ci_tcp_send_rst_with_flags(ci_netif* netif, ci_tcp_state* ts,
   ci_netif_pkt_release(netif, pkt);
 
   CI_TCP_STATS_INC_OUT_RSTS( netif );
+
+  /* Ensure that this packet is really delivered in the case of loopback,
+   * because this socket is going to be dropped right now. */
+  if( OO_SP_NOT_NULL(ts->local_peer) && netif->state->in_poll )
+    ci_netif_loopback_pkts_send(netif);
 }
 
 

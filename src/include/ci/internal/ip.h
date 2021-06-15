@@ -478,6 +478,7 @@ extern int  ci_netif_poll_intf_future(ci_netif*, int intf_i, ci_uint64 now_frc)
 #endif
 extern int  ci_netif_poll_n(ci_netif*, int max_evs) CI_HF;
 #define     ci_netif_poll(ni)  ci_netif_poll_n((ni), NI_OPTS(ni).evs_per_poll)
+extern void ci_netif_loopback_pkts_send(ci_netif* ni) CI_HF;
 
 #if CI_CFG_WANT_BPF_NATIVE
 #ifdef __KERNEL__

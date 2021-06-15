@@ -2063,7 +2063,7 @@ handled:
 #endif
 
 
-static void ci_netif_loopback_pkts_send(ci_netif* ni)
+void ci_netif_loopback_pkts_send(ci_netif* ni)
 {
   ci_ip_pkt_fmt* pkt;
   oo_pkt_p send_list = OO_PP_ID_NULL;
