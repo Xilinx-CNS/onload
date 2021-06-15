@@ -376,7 +376,7 @@ static void oo_fixup_oldact(struct sigaction *oldact)
 
 bool oo_is_signal_intercepted(int sig, void* handler)
 {
-  if( CITP_OPTS.signals_no_postpone & (1 << (sig-1)) )
+  if( CITP_OPTS.signals_no_postpone & (1ULL << (sig-1)) )
     return false;
   if( handler == SIG_IGN || handler == SIG_ERR )
     return false;

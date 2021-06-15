@@ -460,7 +460,7 @@ static void citp_opts_getenv(citp_opts_t* opts)
   if( (s = getenv("EF_SIGNALS_NOPOSTPONE")) ) {
     opts->signals_no_postpone = 0;
     while( sscanf(s, "%u", &v) == 1 ) {
-      opts->signals_no_postpone |= (1 << (v-1));
+      opts->signals_no_postpone |= (1ULL << (v-1));
       s = strchr(s, ',');
       if( s == NULL )
         break;
@@ -468,7 +468,7 @@ static void citp_opts_getenv(citp_opts_t* opts)
     }
   }
   /* SIGONLOAD is used internally, and should not be postponed. */
-  opts->signals_no_postpone |= (1 << SIGONLOAD);
+  opts->signals_no_postpone |= (1ULL << SIGONLOAD);
 
   if( (s = getenv("EF_CLUSTER_NAME")) ) {
     strncpy(opts->cluster_name, s, CI_CFG_CLUSTER_NAME_LEN);
