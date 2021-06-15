@@ -1730,10 +1730,18 @@ static void ci_tcp_rx_process_fin(ci_netif* netif, ci_tcp_state* ts)
   if( OO_SP_NOT_NULL(ts->local_peer) ) {
     /* "Send ACK" to peer */
     ci_tcp_state* peer = ID_TO_TCP(netif, ts->local_peer);
-    if( peer->s.b.state == CI_TCP_LAST_ACK )
-      ci_tcp_drop(netif, peer, 0);
-    else
-      ci_tcp_set_slow_state(netif, peer, CI_TCP_FIN_WAIT2);
+    switch( peer->s.b.state ) {
+      case CI_TCP_LAST_ACK:
+        ci_tcp_drop(netif, peer, 0);
+        break;
+      case CI_TCP_CLOSING:
+        ci_netif_timewait_enter(netif, peer);
+        ci_tcp_set_slow_state(netif, peer, CI_TCP_TIME_WAIT);
+        break;
+      default:
+        ci_tcp_set_slow_state(netif, peer, CI_TCP_FIN_WAIT2);
+        break;
+    }
   }
 
 }
