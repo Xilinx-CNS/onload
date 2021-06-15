@@ -535,7 +535,7 @@ void efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id, const void** pkt_start)
   EF_VI_ASSERT(vi->nic_type.arch == EF_VI_ARCH_EFCT);
   EF_VI_ASSERT(pkt_id <= vi->vi_rxq.mask);
 
-  *pkt_start = efct_rx_header(vi, pkt_id);
+  *pkt_start = ((char*)efct_rx_header(vi, pkt_id)) + EFCT_RX_HEADER_BYTES;
 }
 
 void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
