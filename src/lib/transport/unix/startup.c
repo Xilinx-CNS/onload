@@ -468,7 +468,7 @@ static void citp_opts_getenv(citp_opts_t* opts)
     }
   }
   /* SIGONLOAD is used internally, and should not be postponed. */
-  opts->signals_no_postpone |= (1ULL << SIGONLOAD);
+  opts->signals_no_postpone |= (1ULL << (SIGONLOAD-1));
 
   if( (s = getenv("EF_CLUSTER_NAME")) ) {
     strncpy(opts->cluster_name, s, CI_CFG_CLUSTER_NAME_LEN);

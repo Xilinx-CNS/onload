@@ -202,6 +202,7 @@ ci_inline void citp_signal_set_pending(int signum, siginfo_t *info,
   int i;
 
   ci_assert(our_info->c.inside_lib);
+  ci_assert_nequal(info->si_signo, SIGONLOAD);
 
   for( i = 0; i < OO_SIGNAL_MAX_PENDING; i++ ) {
     if( our_info->signals[i].signum )
@@ -652,6 +653,16 @@ int oo_init_signals(void)
       continue;
     if( ! oo_is_signal_intercepted(sig, act.sa_handler) )
       continue;
+
+    /* SIGONLOAD is used to handle unintercepted close() call,
+     * and it is important to do all the real job before the syscall
+     * returns to the user.  It means that SIGONLOAD should run
+     * immmediately.
+     *
+     * Unintercepted close() syscall probably means that we are not "inside
+     * library", but let's be on the safe side.
+     */
+    ci_assert_nequal(sig, SIGONLOAD);
 
     /* Intercept! */
     rc = oo_signal_install_to_onload(sig, &act, NULL);
