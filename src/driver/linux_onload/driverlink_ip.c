@@ -225,7 +225,8 @@ static int oo_netdev_is_native(const struct net_device *net_dev)
     return 0;
   efhw_nic = efrm_client_get_nic(onic->efrm_client);
   return efhw_nic->devtype.arch == EFHW_ARCH_EF10 ||
-         efhw_nic->devtype.arch == EFHW_ARCH_EF100;
+         efhw_nic->devtype.arch == EFHW_ARCH_EF100 ||
+         efhw_nic->devtype.arch == EFHW_ARCH_EFCT;
 }
 
 /* This function will create an oo_nic if one hasn't already been created.
