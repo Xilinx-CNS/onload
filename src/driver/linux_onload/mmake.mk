@@ -30,7 +30,7 @@ EFTHRM_SRCS	:= eplock_resource_manager.c \
 
 EFTHRM_HDRS	:= oo_hw_filter.h oof_impl.h tcp_filters_internal.h \
 		tcp_helper_resource.h tcp_filters_deps.h oof_tproxy_ipproto.h \
-		oof_onload_types.h tcp_helper_stats_dump.h
+		oof_onload_types.h tcp_helper_stats_dump.h oof_filters_deps.h
 
 ifeq ($(LINUX),1)
 EFTHRM_SRCS	+= tcp_helper_linux.c

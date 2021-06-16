@@ -36,7 +36,7 @@
 #include <onload/oof_onload.h>
 #include <onload/oof_interface.h>
 #include <onload/nic.h>
-#include <onload/cplane_ops.h>
+#include <onload/cplane_moparam.h>
 #include <onload/netif_dtor.h>
 #include <ci/internal/pio_buddy.h>
 #include <onload/tmpl.h>

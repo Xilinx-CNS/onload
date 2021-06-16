@@ -31,6 +31,7 @@
 #include <onload/debug.h>
 #include "oo_hw_filter.h"
 #include "tcp_filters_internal.h"
+#include "oof_filters_deps.h"
 
 #define OOF_SRC_FLAGS_DEFAULT 0
 #define OOF_SRC_FLAGS_DEFAULT_MCAST (OO_HW_SRC_FLAG_LOOPBACK)
@@ -2627,8 +2628,9 @@ __oof_socket_add(struct oof_manager* fm, struct oof_socket* skf, int do_arm_only
         ci_dllist_push(&fm->fm_mcast_laddr_socks, &skf->sf_lp_link);
         return 0;
       }
-      ERR_LOG(FSK_FMT "ERROR: laddr=" IPX_FMT " not local",
-              FSK_PRI_ARGS(skf), IPX_ARG(AF_IP_L3(skf->sf_laddr)));
+      if( ! cplane_use_prefsrc_as_local )
+        ERR_LOG(FSK_FMT "ERROR: laddr=" IPX_FMT " not local",
+                FSK_PRI_ARGS(skf), IPX_ARG(AF_IP_L3(skf->sf_laddr)));
       return -ENOENT;
     }
 

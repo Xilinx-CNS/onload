@@ -9,6 +9,8 @@
 #include <onload/oof_onload.h>
 #include <arpa/inet.h>
 
+bool cplane_use_prefsrc_as_local = false;
+
 struct ooft_hwport* ooft_alloc_hwport(struct ooft_cplane* cp, struct net* ns,
                                       int vlans, int mcast_replication)
 {
