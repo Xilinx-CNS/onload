@@ -279,9 +279,6 @@ void efx_link_status_changed(struct efx_nic *efx)
 			netif_carrier_off(efx->net_dev);
 	}
 
-	if (efx->type->link_state_change)
-		efx->type->link_state_change(efx);
-
 	/* Status message for kernel log */
 	if (!net_ratelimit())
 		return;

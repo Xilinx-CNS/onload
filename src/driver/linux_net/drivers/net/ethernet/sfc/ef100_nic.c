@@ -1044,12 +1044,38 @@ static void ef100_attach_reps(struct efx_nic *efx)
 	ef100_attach_remote_reps(efx);
 	spin_unlock_bh(&nic_data->rem_reps_lock);
 }
+
+void ef100_reps_set_link_state(struct efx_nic *efx, bool up)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	int i;
+
+	spin_lock_bh(&nic_data->vf_reps_lock);
+	for (i = 0; i < nic_data->vf_rep_count; i++)
+		if (up)
+			netif_carrier_on(nic_data->vf_rep[i]);
+		else
+			netif_carrier_off(nic_data->vf_rep[i]);
+	spin_unlock_bh(&nic_data->vf_reps_lock);
+
+	spin_lock_bh(&nic_data->rem_reps_lock);
+	for (i = 0; i < nic_data->rem_rep_count; i++)
+		if (up)
+			netif_carrier_on(nic_data->rem_rep[i]);
+		else
+			netif_carrier_off(nic_data->rem_rep[i]);
+	spin_unlock_bh(&nic_data->rem_reps_lock);
+}
 #else /* EFX_TC_OFFLOAD */
 void __ef100_detach_reps(struct efx_nic *efx)
 {
 }
 
 void __ef100_attach_reps(struct efx_nic *efx)
+{
+}
+
+void ef100_reps_set_link_state(struct efx_nic *efx, bool up)
 {
 }
 #endif
@@ -1951,6 +1977,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.get_remote_rep = ef100_get_remote_rep,
 	.detach_reps = ef100_detach_reps,
 	.attach_reps = ef100_attach_reps,
+	.reps_set_link_state = ef100_reps_set_link_state,
 #endif
 
 #ifdef EFX_NOT_UPSTREAM

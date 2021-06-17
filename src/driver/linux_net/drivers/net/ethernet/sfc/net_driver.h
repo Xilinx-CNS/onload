@@ -96,7 +96,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.8.1007"
+#define EFX_DRIVER_VERSION	"5.3.8.1008"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -2165,6 +2165,7 @@ struct ef100_udp_tunnel {
  * @get_vf_rep: get the VF representor netdevice for given VF index
  * @detach_reps: detach (stop TX on) all representors
  * @attach_reps: attach (restart TX on) all representors
+ * @reps_set_link_state: set the link state on representors
  * @revision: Hardware architecture revision
  * @has_dynamic_sensors: check if dynamic sensor capability is set
  * @txd_ptr_tbl_base: TX descriptor ring base address
@@ -2412,8 +2413,8 @@ struct efx_nic_type {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	void (*detach_reps)(struct efx_nic *efx);
 	void (*attach_reps)(struct efx_nic *efx);
+	void (*reps_set_link_state)(struct efx_nic *efx, bool up);
 #endif
-	void (*link_state_change)(struct efx_nic *efx);
 	bool (*has_dynamic_sensors)(struct efx_nic *efx);
 
 	int revision;

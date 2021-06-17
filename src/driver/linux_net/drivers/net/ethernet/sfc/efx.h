@@ -430,6 +430,14 @@ static inline void efx_device_attach_if_not_resetting(struct efx_nic *efx)
 	}
 }
 
+static inline void efx_reps_set_link_state(struct efx_nic *efx, bool up)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	if (efx->type->reps_set_link_state)
+		efx->type->reps_set_link_state(efx, up);
+#endif
+}
+
 static inline void efx_rwsem_assert_write_locked(struct rw_semaphore *sem)
 {
 #ifdef DEBUG
