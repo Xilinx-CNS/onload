@@ -376,14 +376,16 @@ int ef100_net_alloc(struct efx_nic *efx)
 static netdev_tx_t ef100_hard_start_xmit(struct sk_buff *skb,
 					 struct net_device *net_dev)
 {
-	return __ef100_hard_start_xmit(skb, net_dev, NULL);
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	return __ef100_hard_start_xmit(skb, efx, net_dev, NULL);
 }
 
 netdev_tx_t __ef100_hard_start_xmit(struct sk_buff *skb,
+				    struct efx_nic *efx,
 				    struct net_device *net_dev,
 				    struct efx_rep *efv)
 {
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct efx_tx_queue *tx_queue;
 	struct efx_channel *channel;
 	int rc;
@@ -392,12 +394,12 @@ netdev_tx_t __ef100_hard_start_xmit(struct sk_buff *skb,
 	trace_sfc_transmit(skb, net_dev);
 #endif
 	channel = efx_get_tx_channel(efx, skb_get_queue_mapping(skb));
-	netif_vdbg(efx, tx_queued, efx->net_dev,
+	netif_vdbg(efx, tx_queued, net_dev,
 		   "%s len %d data %d channel %d\n", __FUNCTION__,
 		   skb->len, skb->data_len, channel ? channel->channel : -1);
 	if (!efx_channels(efx) || !efx_tx_channels(efx) || !channel ||
 	    !channel->tx_queue_count) {
-		netif_err(efx, tx_err, efx->net_dev,
+		netif_err(efx, tx_err, net_dev,
 			  "Bad TX channel (%u; %u; %d), stopping queue\n",
 			  efx_channels(efx), efx_tx_channels(efx),
 			  channel ? channel->tx_queue_count : -1);

@@ -856,10 +856,33 @@ static bool efx_tc_check_ready(struct efx_nic *efx, struct efx_tc_flow_rule *rul
 static void efx_tc_update_encap(struct efx_nic *efx,
 				struct efx_tc_encap_action *encap)
 {
+	struct efx_tc_flow_rule *rule, *fallback;
 	struct efx_tc_action_set_list *acts;
 	struct efx_tc_action_set *act;
-	struct efx_tc_flow_rule *rule;
 	int rc;
+
+	if (encap->n_valid) {
+		/* Make sure no rules are using this encap while we change it */
+		list_for_each_entry(act, &encap->users, encap_user) {
+			acts = act->user;
+			if (WARN_ON(!acts)) /* can't happen */
+				continue;
+			rule = container_of(acts, struct efx_tc_flow_rule, acts);
+			if (rule->fallback < EFX_TC_DFLT__MAX)
+				fallback = &efx->tc->dflt_rules[rule->fallback];
+			else /* fallback fallback: deliver to PF */
+				fallback = &efx->tc->dflt_rules[EFX_TC_DFLT_WIRE];
+			rc = efx_mae_update_rule(efx, fallback->acts.fw_id,
+						 rule->fw_id);
+			if (rc)
+				netif_err(efx, drv, efx->net_dev,
+					  "Failed to update (f) rule %08x rc %d\n",
+					  rule->fw_id, rc);
+			else
+				netif_dbg(efx, drv, efx->net_dev, "Updated (f) rule %08x\n",
+					  rule->fw_id);
+		}
+	}
 
 	if (encap->neigh) {
 		read_lock_bh(&encap->neigh->lock);
@@ -880,24 +903,17 @@ static void efx_tc_update_encap(struct efx_nic *efx,
 	}
 	netif_dbg(efx, drv, efx->net_dev, "Updated encap hdr %08x\n",
 		  encap->fw_id);
-	/* Update rule users based on their (possibly now changed) readiness */
+	if (!encap->n_valid)
+		return;
+	/* Update rule users: use the action if they are now ready */
 	list_for_each_entry(act, &encap->users, encap_user) {
 		acts = act->user;
 		if (WARN_ON(!acts)) /* can't happen */
 			continue;
 		rule = container_of(acts, struct efx_tc_flow_rule, acts);
-		if (efx_tc_check_ready(efx, rule)) {
-			rc = efx_mae_update_rule(efx, acts->fw_id, rule->fw_id);
-		} else {
-			struct efx_tc_flow_rule *fallback;
-
-			if (rule->fallback < EFX_TC_DFLT__MAX)
-				fallback = &efx->tc->dflt_rules[rule->fallback];
-			else /* fallback fallback: deliver to PF */
-				fallback = &efx->tc->dflt_rules[EFX_TC_DFLT_WIRE];
-			rc = efx_mae_update_rule(efx, fallback->acts.fw_id,
-						 rule->fw_id);
-		}
+		if (!efx_tc_check_ready(efx, rule))
+			continue;
+		rc = efx_mae_update_rule(efx, acts->fw_id, rule->fw_id);
 		if (rc)
 			netif_err(efx, drv, efx->net_dev,
 				  "Failed to update rule %08x rc %d\n",

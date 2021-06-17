@@ -2493,7 +2493,7 @@ int efx_mcdi_get_privilege_mask(struct efx_nic *efx, u32 *mask)
 			fi_outbuf, MC_CMD_GET_FUNCTION_INFO_OUT_LEN, &outlen);
 	if (rc != 0)
 		return rc;
-	if (outlen != MC_CMD_GET_FUNCTION_INFO_OUT_LEN)
+	if (outlen < MC_CMD_GET_FUNCTION_INFO_OUT_LEN)
 		return -EIO;
 
 	pf = MCDI_DWORD(fi_outbuf, GET_FUNCTION_INFO_OUT_PF);
@@ -2509,7 +2509,7 @@ int efx_mcdi_get_privilege_mask(struct efx_nic *efx, u32 *mask)
 
 	if (rc != 0)
 		return rc;
-	if (outlen != MC_CMD_PRIVILEGE_MASK_OUT_LEN)
+	if (outlen < MC_CMD_PRIVILEGE_MASK_OUT_LEN)
 		return -EIO;
 
 	*mask = MCDI_DWORD(pm_outbuf, PRIVILEGE_MASK_OUT_OLD_MASK);

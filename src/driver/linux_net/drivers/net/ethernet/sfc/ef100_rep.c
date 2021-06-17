@@ -74,7 +74,7 @@ static netdev_tx_t efx_ef100_rep_xmit(struct sk_buff *skb,
 	atomic64_inc(&efv->stats.tx_packets);
 	atomic64_add(skb->len, &efv->stats.tx_bytes);
 	netif_tx_lock(efx->net_dev);
-	rc = __ef100_hard_start_xmit(skb, efx->net_dev, efv);
+	rc = __ef100_hard_start_xmit(skb, efx, dev, efv);
 	netif_tx_unlock(efx->net_dev);
 	return rc;
 }
