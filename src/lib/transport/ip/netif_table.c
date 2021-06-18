@@ -525,7 +525,8 @@ ci_netif_filter_insert(ci_netif* netif, oo_sp tcp_id, int af_space,
     ip6_tbl = netif->ip6_filter_table;
 
     rc = ci_ip6_netif_filter_insert(ip6_tbl, netif, tcp_id, laddr, lport,
-                                      raddr, rport, protocol);
+                                    CI_IPX_ADDR_IS_ANY(raddr) ? addr_any : raddr,
+                                    rport, protocol);
     if( rc < 0 )
       return rc;
   }
@@ -566,7 +567,8 @@ ci_netif_filter_remove(ci_netif* netif, oo_sp sock_p, int af_space,
     ip6_tbl = netif->ip6_filter_table;
 
     ci_ip6_netif_filter_remove(ip6_tbl, netif, sock_p, laddr, lport,
-                               raddr, rport, protocol);
+                               CI_IPX_ADDR_IS_ANY(raddr) ? addr_any : raddr,
+                               rport, protocol);
   }
 
   if( IS_AF_SPACE_IP4(af_space) )
