@@ -265,11 +265,15 @@ static ssize_t vdpa_class_store(struct device *dev,
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	enum ef100_vdpa_class vdpa_class;
 	struct ef100_vdpa_nic *vdpa_nic;
+	bool in_order = false;
 	int rc = 0;
 
 	mutex_lock(&nic_data->bar_config_lock);
 	if (sysfs_streq(buf, "net")) {
 		vdpa_class = EF100_VDPA_CLASS_NET;
+	} else if (sysfs_streq(buf, "net_io")) {
+		vdpa_class = EF100_VDPA_CLASS_NET;
+		in_order = true;
 	} else if (sysfs_streq(buf, "block")) {
 		vdpa_class = EF100_VDPA_CLASS_BLOCK;
 	} else if (sysfs_streq(buf, "none")) {
@@ -291,6 +295,7 @@ static ssize_t vdpa_class_store(struct device *dev,
 				goto fail;
 			}
 
+			vdpa_nic->in_order = in_order;
 			nic_data->vdpa_class = EF100_VDPA_CLASS_NET;
 			pci_info(efx->pci_dev,
 				 "vDPA net device created, vf: %u\n",

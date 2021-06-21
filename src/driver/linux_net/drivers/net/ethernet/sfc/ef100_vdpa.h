@@ -175,6 +175,7 @@ struct ef100_vdpa_filter {
  * @free_list: list to store free iova areas of size >= MCDI buffer length
  * @geo_aper_start: start of valid IOVA range
  * @geo_aper_end: end of valid IOVA range
+ * @in_order: if true, allow VIRTIO_F_IN_ORDER feature negotiation
  */
 struct ef100_vdpa_nic {
 	struct vdpa_device vdpa_dev;
@@ -203,6 +204,7 @@ struct ef100_vdpa_nic {
 	struct list_head free_list;
 	u64 geo_aper_start;
 	u64 geo_aper_end;
+	bool in_order;
 };
 
 int ef100_vdpa_init(struct efx_probe_data *probe_data);

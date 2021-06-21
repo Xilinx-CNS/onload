@@ -423,7 +423,7 @@ void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 	int i;
 
 	WARN_ON(!mutex_is_locked(&vdpa_nic->lock));
-	efx_ef100_delete_iova_tree(vdpa_nic);
+	efx_ef100_delete_iova(vdpa_nic);
 
 	vdpa_nic->vdpa_state = EF100_VDPA_STATE_INITIALIZED;
 	vdpa_nic->status = 0;
@@ -766,8 +766,7 @@ static u64 ef100_vdpa_get_features(struct vdpa_device *vdev)
 		return 0;
 	}
 
-	/* FIXME: temporary change to fix VDPALINUX-120 */
-	if (features & VIRTIO_F_IN_ORDER)
+	if (!vdpa_nic->in_order)
 		features &= ~(1ULL << VIRTIO_F_IN_ORDER);
 
 #ifdef EFX_NOT_UPSTREAM
@@ -1078,8 +1077,8 @@ static void ef100_vdpa_free(struct vdpa_device *vdev)
 #ifdef CONFIG_SFC_DEBUGFS
 		efx_fini_debugfs_vdpa(vdpa_nic);
 #endif
-		/* clean-up the iova tree in case unmap left stale nodes */
-		efx_ef100_delete_iova_tree(vdpa_nic);
+		/* clean-up the mappings and iova tree */
+		efx_ef100_delete_iova(vdpa_nic);
 		rc = setup_ef100_mcdi_buffer(vdpa_nic);
 		if (rc) {
 			dev_err(&vdev->dev,

@@ -192,7 +192,7 @@ exit:
 	mutex_unlock(&vdpa_nic->iova_lock);
 }
 
-void efx_ef100_delete_iova_tree(struct ef100_vdpa_nic *vdpa_nic)
+void efx_ef100_delete_iova(struct ef100_vdpa_nic *vdpa_nic)
 {
 	struct ef100_vdpa_iova_node *iova_node;
 	struct rb_root *iova_root;
@@ -217,6 +217,8 @@ void efx_ef100_delete_iova_tree(struct ef100_vdpa_nic *vdpa_nic)
 				 __func__, iova_node->iova);
 #endif
 		}
+		iommu_unmap(vdpa_nic->domain, iova_node->iova,
+			    iova_node->size);
 		rb_erase(node, iova_root);
 		kfree(iova_node);
 	}

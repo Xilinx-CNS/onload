@@ -32,7 +32,7 @@ int efx_ef100_insert_iova_node(struct ef100_vdpa_nic *vdpa_nic,
 			       u64 iova, u64 size);
 void efx_ef100_remove_iova_node(struct ef100_vdpa_nic *vdpa_nic,
 				unsigned long iova);
-void efx_ef100_delete_iova_tree(struct ef100_vdpa_nic *vdpa_nic);
+void efx_ef100_delete_iova(struct ef100_vdpa_nic *vdpa_nic);
 
 int efx_ef100_find_new_iova(struct ef100_vdpa_nic *vdpa_nic,
 			    unsigned int buf_len,
