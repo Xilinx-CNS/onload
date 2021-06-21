@@ -12,7 +12,7 @@
 
 #ifdef __KERNEL__
 
-#include <onload/cplane_moparam.h>
+#include <onload/cplane_modparam.h>
 
 #define CICP_HANDLE(netif) (&CI_GLOBAL_CPLANE)
 
