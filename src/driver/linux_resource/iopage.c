@@ -125,7 +125,7 @@ efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 	 * But we try to allocate contiguous physical memory first.
 	 */
 	struct device *dev = efhw_nic_get_dev(nic);
-	int rc = 0;
+	int rc = -ENOMEM;
 	int gfp_flag = __GFP_COMP;
 
 	p->n_pages = 1 << order;
@@ -150,14 +150,15 @@ efhw_iopages_alloc(struct efhw_nic *nic, struct efhw_iopages *p,
 		if (rc) {
 			if (phys_cont_only || order == 0)
 				goto fail3;
-			/* If allocation of contiguous physical memory failed and
-			 * non-contiguous physical memory could be used then try to
-			 * allocate it.
-			 */
-			dev = NULL;
 		}
 	}
-	if (!dev) {
+
+	/* If allocation of contiguous physical memory failed or we never tried
+	 * to allocate any, then non-contiguous physical memory could be used
+	 * to try to allocate it.
+	 */
+	if (rc < 0) {
+		EFRM_ASSERT(!phys_cont_only);
 		rc = efhw_iopages_alloc_kernel_cont(dev, p, order);
 		if (rc != 0)
 			goto fail3;
