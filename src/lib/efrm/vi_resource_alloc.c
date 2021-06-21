@@ -1617,7 +1617,7 @@ efrm_vi_q_init_common(struct efrm_vi *virs, enum efhw_q_type q_type,
 
 	if (efhw_iopages_n_pages(&q->host_pages) > 0) {
 		n_pages = 1 << qsize.q_len_page_order;
-		EFRM_VERIFY_EQ(n_pages, efhw_iopages_n_pages(&q->host_pages));
+		EFRM_ASSERT(n_pages == efhw_iopages_n_pages(&q->host_pages));
 
 		for (i = 0; i < n_pages; ++i) {
 			for (j = 0; j < EFHW_NIC_PAGES_IN_OS_PAGE; ++j) {
