@@ -69,7 +69,6 @@ efrm_vi_shut_down_flag(enum efhw_q_type queue);
 
 extern int
 efrm_vi_q_init_common(struct efrm_vi *, enum efhw_q_type, int n_q_entries,
-		   const dma_addr_t *dma_addrs, int dma_addrs_n,
 		   int q_tag, unsigned q_flags);
 
 #endif /* __CI_EFRM_VI_RESOURCE_PRIVATE_H__ */

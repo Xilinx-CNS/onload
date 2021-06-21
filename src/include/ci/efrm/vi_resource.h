@@ -226,12 +226,11 @@ extern int  efrm_vi_q_get_size(struct efrm_vi *virs, enum efhw_q_type q_type,
 /**
  * Initialise a VI dma/event queue.
  *
+ * The memory backing this queue must have already be allocated.
+ *
  * [n_q_entries] must be a supported size for this NIC and [q_type], else
  * -EINVAL is returned.  Use efrm_vi_q_get_size() to choose an appropriate
  * size.
- *
- * [dma_addrs] gives the DMA address of each of the pages backing the
- * queue.
  *
  * [q_tag] is only used for RXQs and TXQs, and specifies the tag reflected
  * in completion events.
@@ -242,9 +241,7 @@ extern int  efrm_vi_q_get_size(struct efrm_vi *virs, enum efhw_q_type q_type,
  * then [virs] is used.  Ignored when [q_type == EFHW_EVQ].
  */
 extern int efrm_vi_q_init(struct efrm_vi *virs, enum efhw_q_type q_type,
-			  int n_q_entries,
-			  const dma_addr_t *dma_addrs, int dma_addrs_n,
-			  int q_tag, unsigned q_flags,
+			  int n_q_entries, int q_tag, unsigned q_flags,
 			  struct efrm_vi *evq);
 
 

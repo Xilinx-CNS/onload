@@ -53,7 +53,7 @@ static DEFINE_MUTEX(register_evq_cb_mutex);
 static inline efhw_event_t *
 efrm_eventq_base(struct efrm_vi *virs)
 {
-	return (efhw_event_t *) efhw_iopages_ptr(&virs->q[EFHW_EVQ].pages);
+	return (efhw_event_t *) efhw_iopages_ptr(&virs->q[EFHW_EVQ].host_pages);
 }
 
 

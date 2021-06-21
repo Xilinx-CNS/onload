@@ -35,15 +35,15 @@ efch_vi_rm_dump_nic(struct efrm_vi* virs, const char *line_prefix)
 
   ci_log("%s  nic %d EVQ kva=0x%p  dma=0x"DMA_ADDR_T_FMT" capacity=%d",
          line_prefix, nic->index,
-         efhw_iopages_ptr(&virs->q[EFHW_EVQ].pages),
-         efhw_iopages_dma_addr(&virs->q[EFHW_EVQ].pages, 0),
+         efhw_iopages_ptr(&virs->q[EFHW_EVQ].host_pages),
+         efhw_iopages_dma_addr(&virs->q[EFHW_EVQ].host_pages, 0),
          virs->q[EFHW_EVQ].capacity);
 
   for(queue_type=0; queue_type<EFRM_VI_RM_DMA_QUEUE_COUNT; queue_type++) {
     ci_log("%s  nic %d %s kva=0x%p dma=" DMA_ADDR_T_FMT,
            line_prefix, nic->index, q_names[queue_type],
-           efhw_iopages_ptr(&virs->q[queue_type].pages),
-           efhw_iopages_dma_addr(&virs->q[queue_type].pages, 0));
+           efhw_iopages_ptr(&virs->q[queue_type].host_pages),
+           efhw_iopages_dma_addr(&virs->q[queue_type].host_pages, 0));
   }
 }
 
@@ -85,8 +85,8 @@ static void efch_vi_rm_dump(struct efrm_resource* rs, ci_resource_table_t *rt,
 
   ci_log("%s  buffer table: tx_order=0x%x rx_order=0x%x",
          line_prefix,
-         virs->q[EFHW_TXQ].page_order,
-         virs->q[EFHW_RXQ].page_order);
+         virs->q[EFHW_TXQ].host_page_order,
+         virs->q[EFHW_RXQ].host_page_order);
 
   efch_vi_rm_dump_nic(virs, line_prefix);
 }

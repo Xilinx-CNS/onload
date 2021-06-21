@@ -80,9 +80,18 @@ struct efrm_vi_q {
 	unsigned                             flags;
 	int                                  capacity;
 	int                                  bytes;
-	int                                  page_order;
-	struct efhw_iopages                  pages;
+	/* Queue memory is allocated and managed in host sized pages. On some
+	 * architectures the host page size and NIC page size may not be the
+	 * same. For this reason we maintain both the host_pages structure
+	 * containing details about the memory as host pages, and a second
+	 * array dma_addrs, containing the DMA addresses of this memory in
+	 * NIC sized pages.
+	 */
+	int                                  host_page_order;
+	struct efhw_iopages                  host_pages;
 	struct efrm_buffer_table_allocation  bt_alloc;
+	/* DMA address per NIC page. The memory for this allocation is handled
+	 * through host_pages. */
 	dma_addr_t                           dma_addrs[EFRM_VI_MAX_DMA_ADDR];
 	/* The following fields are used for DMA queues only. */
 	int                                  tag;

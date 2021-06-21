@@ -581,7 +581,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 			 efrm_pd_owner_id(virs->pd),
 			 virs->q[queue_type].tag, q->capacity,
 			 q->dma_addrs,
-			 (1 << q->page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
+			 (1 << q->host_page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
 			 vport_id,
 			 efrm_pd_stack_id_get(virs->pd), flags);
 		break;
@@ -593,7 +593,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
                         efrm_pd_owner_id(virs->pd),
                         virs->q[queue_type].tag, q->capacity,
                         q->dma_addrs,
-                        (1 << q->page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
+                        (1 << q->host_page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
                         vport_id,
                         efrm_pd_stack_id_get(virs->pd), virs->ps_buf_size,
                         flags);
@@ -636,7 +636,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		rc = efhw_nic_event_queue_enable
 			(nic, efrm_pd_get_nic_client_id(virs->pd), instance, q->capacity,
 			 q->dma_addrs,
-			 (1 << q->page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
+			 (1 << q->host_page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
 			 interrupting, 0 /* DOS protection */,
 			 wakeup_evq, flags, &virs->out_flags);
 		break;
@@ -692,9 +692,9 @@ efrm_vi_rm_fini_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type)
 	/* NB. No need to disable DMA queues here.  Nobody is using it
 	 * anyway.
 	 */
-	if (efhw_iopages_n_pages(&q->pages)) {
+	if (efhw_iopages_n_pages(&q->host_pages)) {
 		struct efhw_nic* nic = virs->rs.rs_client->nic;
-		efhw_iopages_free(nic, &q->pages);
+		efhw_iopages_free(nic, &q->host_pages);
 	}
 }
 
@@ -941,11 +941,9 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 		int n_q_entries, int q_tag_in, unsigned vi_flags,
 		struct efrm_vi *evq)
 {
-	dma_addr_t *dma_addrs;
-	int dma_addrs_size, mmap_bytes;
 	struct efrm_vi_q *q = &virs->q[q_type];
 	struct efrm_vi_q_size qsize;
-	int i, rc, q_flags;
+	int rc, q_flags;
 	unsigned long iova_base = 0;
 	struct efhw_nic* nic = virs->rs.rs_client->nic;
 
@@ -970,65 +968,40 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 		}
 	}
 
-	if (nic->devtype.arch == EFHW_ARCH_AF_XDP) {
-		/* AF_XDP interfaces provide their own queue memory.
-		 * We will acquire it later, after initialising the packet
-		 * buffer memory.
-		 */
-		dma_addrs = NULL;
-		dma_addrs_size = 0;
-	}
-	else {
-		rc = efhw_iopages_alloc(nic, &q->pages, qsize.q_len_page_order,
+	/* AF_XDP interfaces provide their own queue memory.
+	 * We will acquire it later, after initialising the packet
+	 * buffer memory.
+	 */
+	if (nic->devtype.arch != EFHW_ARCH_AF_XDP) {
+		rc = efhw_iopages_alloc(nic, &q->host_pages, qsize.q_len_page_order,
 		                        nic->devtype.arch == EFHW_ARCH_EF100, iova_base);
 		if (rc < 0) {
 			EFRM_ERR("%s: Failed to allocate %s DMA buffer",
 				 __FUNCTION__, q_names[q_type]);
 			return rc;
 		}
+		q->host_page_order = qsize.q_len_page_order;
 		if (q_type == EFHW_EVQ)
-			memset(efhw_iopages_ptr(&q->pages), EFHW_CLEAR_EVENT_VALUE,
+			memset(efhw_iopages_ptr(&q->host_pages), EFHW_CLEAR_EVENT_VALUE,
 			       qsize.q_len_bytes);
 
-		rc = efhw_page_map_add_pages(&virs->mem_mmap, &q->pages);
+		rc = efhw_page_map_add_pages(&virs->mem_mmap, &q->host_pages);
 		if (rc < 0)
 			goto fail;
-
-		dma_addrs_size = 1 << EFHW_GFP_ORDER_TO_NIC_ORDER(qsize.q_len_page_order);
-		EFRM_ASSERT(dma_addrs_size <= EFRM_VI_MAX_DMA_ADDR);
-		dma_addrs = kmalloc(sizeof(*dma_addrs) * dma_addrs_size, GFP_KERNEL);
-		if (dma_addrs == NULL) {
-			rc = -ENOMEM;
-			goto fail;
-		}
-
-		for (i = 0; i < dma_addrs_size; ++i)
-			dma_addrs[i] = efhw_iopages_dma_addr(&q->pages, i);
-
-		mmap_bytes = PAGE_SIZE * (1 << qsize.q_len_page_order);
-
-		/* TODO why is this different to the value for kmalloc above? */
-		dma_addrs_size = efhw_iopages_n_pages(&q->pages) *
-		                   EFHW_NIC_PAGES_IN_OS_PAGE;
 	}
 
 	q_flags = vi_flags_to_q_flags(vi_flags, q_type);
 
 	INIT_LIST_HEAD(&q->init_link);
-	rc = efrm_vi_q_init(virs, q_type, qsize.q_len_entries,
-			    dma_addrs, dma_addrs_size,
-			    q_tag_in, q_flags, evq);
-
-	if (dma_addrs != NULL) {
-		kfree(dma_addrs);
-		if (rc < 0)
-			goto fail;
-	}
+	rc = efrm_vi_q_init(virs, q_type, qsize.q_len_entries, q_tag_in,
+			    q_flags, evq);
+	if (rc < 0)
+		goto fail;
 
 	return rc;
 
 fail:
-	efhw_iopages_free(nic, &q->pages);
+	efhw_iopages_free(nic, &q->host_pages);
 	return rc;
 }
 EXPORT_SYMBOL(efrm_vi_q_alloc);
@@ -1610,9 +1583,7 @@ EXPORT_SYMBOL(efrm_vi_q_get_size);
 
 int
 efrm_vi_q_init_common(struct efrm_vi *virs, enum efhw_q_type q_type,
-		      int n_q_entries,
-		      const dma_addr_t *dma_addrs, int dma_addrs_n,
-		      int q_tag, unsigned q_flags)
+		      int n_q_entries, int q_tag, unsigned q_flags)
 {
 	struct efhw_nic *nic = virs->rs.rs_client->nic;
 	struct efrm_vi_q *q = &virs->q[q_type];
@@ -1644,19 +1615,18 @@ efrm_vi_q_init_common(struct efrm_vi *virs, enum efhw_q_type q_type,
 		return -EINVAL;
 	efrm_vi_q_get_size(virs, q_type, n_q_entries, &qsize);
 
-	if (dma_addrs != NULL) {
+	if (efhw_iopages_n_pages(&q->host_pages) > 0) {
 		n_pages = 1 << qsize.q_len_page_order;
-		if (n_pages > dma_addrs_n)
-			return -EINVAL;
+		EFRM_VERIFY_EQ(n_pages, efhw_iopages_n_pages(&q->host_pages));
+
 		for (i = 0; i < n_pages; ++i) {
 			for (j = 0; j < EFHW_NIC_PAGES_IN_OS_PAGE; ++j) {
 				q->dma_addrs[i * EFHW_NIC_PAGES_IN_OS_PAGE + j] =
-					dma_addrs[i] + EFHW_NIC_PAGE_SIZE * j;
+					efhw_iopages_dma_addr(&q->host_pages, i) + EFHW_NIC_PAGE_SIZE * j;
 			}
 		}
 	}
 
-	q->page_order = qsize.q_len_page_order;
 	q->tag = q_tag;
 	q->flags = q_flags;
 	q->capacity = qsize.q_len_entries;
@@ -1713,15 +1683,13 @@ static int efrm_vi_q_init_pf(struct efrm_vi *virs, enum efhw_q_type q_type,
 
 
 int efrm_vi_q_init(struct efrm_vi *virs, enum efhw_q_type q_type,
-		   int n_q_entries,
-		   const dma_addr_t *dma_addrs, int dma_addrs_n,
-		   int q_tag, unsigned q_flags, struct efrm_vi *evq)
+		   int n_q_entries, int q_tag, unsigned q_flags,
+		   struct efrm_vi *evq)
 {
 	struct efrm_vi_q *q = &virs->q[q_type];
 	int rc;
 
-	rc = efrm_vi_q_init_common(virs, q_type, n_q_entries,
-				   dma_addrs, dma_addrs_n, q_tag, q_flags);
+	rc = efrm_vi_q_init_common(virs, q_type, n_q_entries, q_tag, q_flags);
 	if (rc != 0)
 		return rc;
 	rc = efrm_vi_q_init_pf(virs, q_type, q_tag, evq);
@@ -1729,8 +1697,6 @@ int efrm_vi_q_init(struct efrm_vi *virs, enum efhw_q_type q_type,
 		q->capacity = 0;
 	return rc;
 }
-EXPORT_SYMBOL(efrm_vi_q_init);
-
 
 
 static int efrm_vi_q_reinit(struct efrm_vi *virs, enum efhw_q_type q_type)
