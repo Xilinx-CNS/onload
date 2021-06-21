@@ -14,19 +14,64 @@ struct efct_rx_descriptor
   uint16_t refcnt;
 };
 
+struct efct_rxq_superbuf_meta {
+  const char* superbuf; /* contiguous area of superbuf memory */
+  uint32_t superbuf_pkts; /* number of packets per superbuf */
+  uint32_t config_generation;
+  uint64_t current_mappings[CI_EFCT_MAX_HUGEPAGES];
+};
+
+/* pkt_ids are:
+ *  bits 0..15 packet index in superbuf
+ *  bits 16..25 superbuf index
+ *  bits 26..28 rxq (as an index in to vi->efct_rxq, not as a hardware ID)
+ *  bits 29..31 unused/zero
+ *  [NB: bit 31 is stolen by some users to cache the superbuf's sentinel]
+ * This layout is not part of the stable ABI. rxq index is slammed up against
+ * superbuf index to allow for dirty tricks where we mmap all superbufs in
+ * contiguous virtual address space and thus avoid some arithmetic.
+ */
+
+#define PKTS_PER_SUPERBUF_BITS 16
+
+static int pkt_id_to_index_in_superbuf(uint32_t pkt_id)
+{
+  return pkt_id & ((1u << PKTS_PER_SUPERBUF_BITS) - 1);
+}
+
+static int pkt_id_to_global_superbuf_ix(uint32_t pkt_id)
+{
+  return pkt_id >> PKTS_PER_SUPERBUF_BITS;
+}
+
+__attribute__((unused))  /* ...so far */
+static int pkt_id_to_local_superbuf_ix(uint32_t pkt_id)
+{
+  return pkt_id_to_global_superbuf_ix(pkt_id) & (CI_EFCT_MAX_SUPERBUFS - 1);
+}
+
+__attribute__((unused))  /* ...so far */
+static int pkt_id_to_rxq_ix(uint32_t pkt_id)
+{
+  return pkt_id_to_global_superbuf_ix(pkt_id) / CI_EFCT_MAX_SUPERBUFS;
+}
+
+
 /* The superbuf descriptor for this packet */
 static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
 {
   ef_vi_rxq* q = &vi->vi_rxq;
   struct efct_rx_descriptor* desc = q->descriptors;
-  return desc + pkt_id / q->superbuf_pkts;
+  return desc + pkt_id_to_global_superbuf_ix(pkt_id);
 }
 
 /* The header preceding this packet */
 static const ci_qword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
 {
-  /* TODO non-power-of-two packet buffer sizes */
-  return (const ci_qword_t*)(vi->vi_rxq.superbuf + pkt_id * EFCT_PKT_STRIDE);
+  return (const ci_qword_t*)
+         (vi->efct_rxq[0].sb_meta->superbuf +
+          pkt_id_to_global_superbuf_ix(pkt_id) * EFCT_RX_SUPERBUF_BYTES +
+          pkt_id_to_index_in_superbuf(pkt_id) * EFCT_PKT_STRIDE);
 }
 
 /* The header following the next packet, or null if not available */
@@ -369,11 +414,15 @@ static void efct_ef_vi_receive_push(ef_vi* vi)
   /* TODO X3 */
 }
 
-static int efct_poll_rx(ef_vi* vi, ef_event* evs, int evs_len)
+static int efct_poll_rx(ef_vi* vi, ef_vi_efct_rxq* rxq, ef_event* evs, int evs_len)
 {
   ef_vi_rxq* q = &vi->vi_rxq;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+  struct efct_rxq_superbuf_meta* sb_meta = rxq->sb_meta;
   int i;
+
+  if( ! sb_meta )
+    return 0;
 
   for( i = 0; i < evs_len; ++i, ++qs->removed ) {
     const ci_qword_t* header = efct_rx_next_header(vi);
@@ -397,8 +446,8 @@ static int efct_poll_rx(ef_vi* vi, ef_event* evs, int evs_len)
      * TODO: move this to the point at which the superbuf is provided.
      * TODO: handle manual rollover
      */
-    if( qs->removed % q->superbuf_pkts == 0 )
-      efct_rx_desc(vi, qs->removed & q->mask)->refcnt = q->superbuf_pkts;
+    if( qs->removed % sb_meta->superbuf_pkts == 0 )
+      efct_rx_desc(vi, qs->removed & q->mask)->refcnt = sb_meta->superbuf_pkts;
   }
 
   return i;
@@ -436,16 +485,29 @@ static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
   return i;
 }
 
-static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
+static int efct_ef_eventq_poll_1rx(ef_vi* vi, ef_event* evs, int evs_len)
 {
-  int i = 0;
+  return efct_poll_rx(vi, &vi->efct_rxq[0], evs, evs_len);
+}
 
-  if( vi->vi_rxq.mask )
-    i += efct_poll_rx(vi, evs, evs_len);
-  if( vi->vi_txq.mask )
-    i += efct_poll_tx(vi, evs, evs_len);
+static int efct_ef_eventq_poll_1rxtx(ef_vi* vi, ef_event* evs, int evs_len)
+{
+  int i;
+
+  i = efct_poll_rx(vi, &vi->efct_rxq[0], evs, evs_len);
+  i += efct_poll_tx(vi, evs + i, evs_len - i);
 
   return i;
+}
+
+static int efct_ef_eventq_poll_generic(ef_vi* vi, ef_event* evs, int evs_len)
+{
+  int i, n = 0;
+  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
+    n += efct_poll_rx(vi, &vi->efct_rxq[i], evs + n, evs_len - n);
+  if( vi->vi_txq.mask )
+    n += efct_poll_tx(vi, evs + n, evs_len - n);
+  return n;
 }
 
 static void efct_ef_eventq_prime(ef_vi* vi)
@@ -507,7 +569,6 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_alt_discard   = efct_ef_vi_transmit_alt_discard;
   vi->ops.receive_init           = efct_ef_vi_receive_init;
   vi->ops.receive_push           = efct_ef_vi_receive_push;
-  vi->ops.eventq_poll            = efct_ef_eventq_poll;
   vi->ops.eventq_prime           = efct_ef_eventq_prime;
   vi->ops.eventq_timer_prime     = efct_ef_eventq_timer_prime;
   vi->ops.eventq_timer_run       = efct_ef_eventq_timer_run;
@@ -515,6 +576,18 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_zero      = efct_ef_eventq_timer_zero;
   vi->ops.transmit_memcpy        = efct_ef_vi_transmit_memcpy;
   vi->ops.transmit_memcpy_sync   = efct_ef_vi_transmit_memcpy_sync;
+
+  if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
+    if( vi->vi_txq.mask == 0 )
+      vi->ops.eventq_poll = efct_ef_eventq_poll_1rx;
+    else
+      vi->ops.eventq_poll = efct_ef_eventq_poll_1rxtx;
+  }
+  else {
+    /* It wouldn't be difficult to specialise this by txable too, but this is
+     * the slow, backward-compatible variant so there's not much point */
+    vi->ops.eventq_poll = efct_ef_eventq_poll_generic;
+  }
 }
 
 void efct_vi_init(ef_vi* vi)

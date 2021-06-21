@@ -95,6 +95,8 @@ typedef uint64_t ef_addrspace;
 #define EF_VI_MAX_QS              32
 /*! \brief The minimum size of array to pass when polling the event queue */
 #define EF_VI_EVENT_POLL_MIN_EVS  2
+/*! \brief The maximum number of efct receive queues per virtual interface */
+#define EF_VI_MAX_EFCT_RXQS       8
 
 
 /**********************************************************************
@@ -544,6 +546,8 @@ enum ef_vi_flags {
   EF_VI_RX_ZEROCOPY = 0x4000000,
   /** Support ef_vi_transmit_memcpy() (SN1000 series and newer). */
   EF_VI_ALLOW_MEMCPY = 0x8000000,
+  /** Disallow efct backward-compatibility emulation */
+  EF_VI_EFCT_UNIQUEUE = 0x10000000,
 };
 
 
@@ -693,10 +697,16 @@ typedef struct {
   void*            descriptors;
   /** Pointer to IDs */
   uint32_t*        ids;
-  /* X3 RXQ experimental superbuf interface */
-  const char* superbuf; /* contiguous area of superbuf memory */
-  uint32_t superbuf_pkts; /* number of packets per superbuf */
 } ef_vi_rxq;
+
+typedef struct {
+  unsigned resource_id;
+  /* efct kernel/userspace shared queue area. Opaque to ef_vi users */
+  struct efab_efct_rxq_uk_shm* shm;
+  /* Additional per-addressspace state about superbufs, containing e.g. the
+   * current superbuf mmapping state. Opaque to ef_vi users */
+  struct efct_rxq_superbuf_meta* sb_meta;
+} ef_vi_efct_rxq;
 
 /*! \brief State of a virtual interface
 **
@@ -883,6 +893,8 @@ typedef struct ef_vi {
   struct ef_vi*                 vi_qs[EF_VI_MAX_QS];
   /** Number of virtual queues for the virtual interface */
   int                           vi_qs_n;
+  /** Attached rxqs for efct VIs (NB: not necessarily in rxq order) */
+  ef_vi_efct_rxq                efct_rxq[EF_VI_MAX_EFCT_RXQS];
 
   /** Number of TX alternatives for the virtual interface */
   unsigned                      tx_alt_num;
