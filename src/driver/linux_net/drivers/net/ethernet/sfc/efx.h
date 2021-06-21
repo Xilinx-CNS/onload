@@ -401,12 +401,21 @@ static inline void efx_schedule_channel_irq(struct efx_channel *channel)
 extern struct workqueue_struct *efx_workqueue;
 #endif
 
+static inline void efx_reps_set_link_state(struct efx_nic *efx, bool up)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	if (efx->type->reps_set_link_state)
+		efx->type->reps_set_link_state(efx, up);
+#endif
+}
+
 static inline void efx_device_detach_sync(struct efx_nic *efx)
 {
 	struct net_device *dev = efx->net_dev;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	/* We must stop reps (which use our TX) before we stop ourselves. */
+	efx_reps_set_link_state(efx, false);
 	if (efx->type->detach_reps)
 		efx->type->detach_reps(efx);
 #endif
@@ -424,18 +433,10 @@ static inline void efx_device_attach_if_not_resetting(struct efx_nic *efx)
 	if ((efx->state != STATE_DISABLED) && !efx->reset_pending) {
 		netif_device_attach(efx->net_dev);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-		if (efx->type->attach_reps)
+		if (efx->type->attach_reps && efx->state == STATE_NET_UP)
 			efx->type->attach_reps(efx);
 #endif
 	}
-}
-
-static inline void efx_reps_set_link_state(struct efx_nic *efx, bool up)
-{
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	if (efx->type->reps_set_link_state)
-		efx->type->reps_set_link_state(efx, up);
-#endif
 }
 
 static inline void efx_rwsem_assert_write_locked(struct rw_semaphore *sem)
