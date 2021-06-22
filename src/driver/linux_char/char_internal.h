@@ -17,6 +17,7 @@ extern struct efch_resource_ops_s efch_memreg_ops;
 extern struct efch_resource_ops_s efch_pd_ops;
 extern struct efch_resource_ops_s efch_pio_ops;
 extern struct efch_resource_ops_s efch_slice_ext_ops;
+extern struct efch_resource_ops_s efch_efct_rxq_ops;
 
 extern struct file_operations ci_char_fops;
 extern int phys_mode_gid;

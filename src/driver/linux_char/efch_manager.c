@@ -58,6 +58,7 @@ efch_resource_ops *efch_ops_table[] = {
   &efch_pd_ops,
   &efch_pio_ops,
   &efch_slice_ext_ops,
+  &efch_efct_rxq_ops,
 };
 
 
