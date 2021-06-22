@@ -34,21 +34,18 @@ static const ci_qword_t* efct_rx_next_header(const ef_vi* vi)
 {
   const ef_vi_rxq* q = &vi->vi_rxq;
   const ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  const ci_qword_t* header;
+  const ci_qword_t* header = efct_rx_header(vi, (qs->removed + 1) & q->mask);
 
-  BUG_ON(qs->added == qs->removed);
-  if( qs->added == qs->removed + 1 )
-    return NULL;
+  int expect_phase = (qs->removed & (q->mask + 1)) == 0;
+  int actual_phase = CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
 
-  header = efct_rx_header(vi, (qs->removed + 1) & q->mask);
-  return CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL) ? header : NULL;
+  return expect_phase == actual_phase ? header : NULL;
 }
 
 /* Check whether a received packet is available */
 static bool efct_rx_check_event(const ef_vi* vi)
 {
-  ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  return (qs->added != qs->removed) && (efct_rx_next_header(vi) != NULL);
+  return vi->vi_rxq.mask && efct_rx_next_header(vi) != NULL;
 }
 
 /* tx packet descriptor, stored in the ring until completion */
@@ -200,7 +197,7 @@ static ci_qword_t* efct_tx_get_event(const ef_vi* vi, uint32_t evq_ptr)
 /* check whether a tx completion event is available */
 static bool efct_tx_check_event(const ef_vi* vi)
 {
-  return efct_tx_get_event(vi, vi->ep_state->evq.evq_ptr) != NULL;
+  return vi->evq_mask && efct_tx_get_event(vi, vi->ep_state->evq.evq_ptr);
 }
 
 /* handle a tx completion event */
@@ -377,9 +374,6 @@ static int efct_poll_rx(ef_vi* vi, ef_event* evs, int evs_len)
   ef_vi_rxq* q = &vi->vi_rxq;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   int i;
-
-  if( qs->removed == qs->added )
-    return 0;
 
   for( i = 0; i < evs_len; ++i, ++qs->removed ) {
     const ci_qword_t* header = efct_rx_next_header(vi);
