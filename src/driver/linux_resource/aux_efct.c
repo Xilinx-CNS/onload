@@ -6,7 +6,9 @@
 #include <ci/tools/sysdep.h>
 
 #include "linux_resource_internal.h"
+#include <linux/mman.h>
 #include "efrm_internal.h"
+#include <ci/driver/kernel_compat.h>
 #include <ci/driver/ci_efct.h>
 
 #if CI_HAVE_EFCT_AUX
@@ -17,9 +19,99 @@ static int efct_handle_event(void *driver_data,
   return -ENOSYS;
 }
 
+noinline
+static long do_sys_mmap(unsigned long addr, unsigned long len,
+                        unsigned long prot, unsigned long flags,
+                        unsigned long fd, unsigned long off)
+{
+  return SYSCALL_DISPATCHn(6, mmap, addr, len, prot, flags, fd, off);
+}
+
+static int efct_alloc_hugepage(void *driver_data,
+                               struct xlnx_efct_hugepage *result_out)
+{
+  /* The rx ring is owned by the net driver, not by us, so it does all
+   * DMA handling. We do need to supply it with some memory, though.
+   * We allocate hugepages one by one, rather than a single file with many
+   * pages in it, so that freeing of pages can be more granular. */
+  const size_t huge_size = HPAGE_PMD_NR * PAGE_SIZE;
+  unsigned long addr;
+  struct mm_struct *mm = current->mm;
+  struct vm_area_struct *vma;
+  struct xlnx_efct_hugepage result;
+  long rc;
+
+  /* A long dance solely to do, effectively, hugetlb_file_setup(). It's
+   * handy that we do the mapping in the correct process context because
+   * that means permissions happen correctly, but we don't leave the
+   * memory mapping in place because, even though the process is going
+   * to want it eventually, it's not going to want it in the random
+   * place that we get it here. Where it should be depends on the
+   * superbuf IDs, which we don't yet know. */
+  addr = do_sys_mmap(0, huge_size, PROT_READ | PROT_WRITE,
+                 MAP_SHARED | MAP_ANONYMOUS | MAP_POPULATE |
+                     MAP_HUGETLB | MAP_HUGE_2MB, -1, 0);
+  if( IS_ERR((void*)addr) ) {
+    rc = PTR_ERR((void*)addr);
+    EFHW_ERR("%s: ERROR: insufficient hugepage memory for rxq (%ld)",
+             __func__, rc);
+    return rc;
+  }
+  /* There's a race here (the window being crowbaropenable with
+   * userfaultfd): the app can swiftly munmap and make us grab a
+   * different file* to the one we wanted. We already don't trust the
+   * contents of the rxq so this isn't super-harmful, but there are
+   * definitely ways to use it to exceed resource limits. */
+  if( down_write_killable(&mm->mmap_sem) ) {
+    rc = -EINTR;
+    goto fail1;
+  }
+  vma = find_vma(mm, addr);
+  result.file = vma->vm_file;
+  if( result.file )
+    get_file(result.file);
+  up_write(&mm->mmap_sem);
+  if( ! result.file ) {
+    EFHW_ERR("%s: ERROR: internal fault:  hugepages not backed by hugetlbfs?",
+             __func__);
+    rc = -ENOMEM;
+    goto fail1;
+  }
+
+  /* All pages in a compound page are conjoined (without FOLL_SPLIT) so we
+   * only need the first one: */
+  rc = pin_user_pages(addr, 1, FOLL_WRITE, &result.page, NULL);
+  if( rc < 1 ) {
+    EFHW_ERR("%s: ERROR: can't pin rxq memory (%ld)", __func__, rc);
+    rc = -EFAULT;
+    goto fail2;
+  }
+  EFHW_ASSERT(PageHuge(result.page));
+  EFHW_ASSERT(!PageTail(result.page));
+  vm_munmap(addr, huge_size);
+
+  *result_out = result;
+  return 0;
+
+ fail2:
+  fput(result.file);
+ fail1:
+  vm_munmap(addr, huge_size);
+  return rc;
+}
+
+static void efct_free_hugepage(void *driver_data,
+                               struct xlnx_efct_hugepage *mem)
+{
+  unpin_user_page(mem->page);
+  fput(mem->file);
+}
+
 struct xlnx_efct_drvops efct_ops = {
   .name = "sfc_resource",
   .handle_event = efct_handle_event,
+  .alloc_hugepage = efct_alloc_hugepage,
+  .free_hugepage = efct_free_hugepage,
 };
 
 
