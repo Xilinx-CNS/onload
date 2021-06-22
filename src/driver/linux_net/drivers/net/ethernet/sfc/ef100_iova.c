@@ -126,11 +126,6 @@ int efx_ef100_insert_iova_node(struct ef100_vdpa_nic *vdpa_nic,
 	INIT_LIST_HEAD(&new_node->free_node);
 
 	/* Put the new node here */
-#ifdef EFX_NOT_UPSTREAM
-	vdpa_log(vdpa_nic,
-		 "%s: Inserting node iova: %lx, size: %lx\n",
-		 __func__, new_node->iova, new_node->size);
-#endif
 	rb_link_node(&new_node->node, parent, link);
 	rb_insert_color(&new_node->node, root);
 
@@ -179,11 +174,6 @@ void efx_ef100_remove_iova_node(struct ef100_vdpa_nic *vdpa_nic,
 	if (!iova_node)
 		goto exit;
 
-#ifdef EFX_NOT_UPSTREAM
-	vdpa_log(vdpa_nic,
-		 "%s: Removing node iova: %lx, size: %lx\n",
-		 __func__, iova_node->iova, iova_node->size);
-#endif
 	update_free_list(iova_node, vdpa_nic, false);
 
 	rb_erase(&iova_node->node, &vdpa_nic->iova_root);
@@ -204,11 +194,6 @@ void efx_ef100_delete_iova(struct ef100_vdpa_nic *vdpa_nic)
 	while (!RB_EMPTY_ROOT(iova_root)) {
 		node = rb_first(iova_root);
 		iova_node = rb_entry(node, struct ef100_vdpa_iova_node, node);
-#ifdef EFX_NOT_UPSTREAM
-		vdpa_log(vdpa_nic,
-			 "%s: Removing node iova: %lx, size: %lx\n",
-			 __func__, iova_node->iova, iova_node->size);
-#endif
 		if (!list_empty(&iova_node->free_node)) {
 			list_del_init(&iova_node->free_node);
 #ifdef EFX_NOT_UPSTREAM

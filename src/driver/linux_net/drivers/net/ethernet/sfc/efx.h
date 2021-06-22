@@ -415,7 +415,6 @@ static inline void efx_device_detach_sync(struct efx_nic *efx)
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	/* We must stop reps (which use our TX) before we stop ourselves. */
-	efx_reps_set_link_state(efx, false);
 	if (efx->type->detach_reps)
 		efx->type->detach_reps(efx);
 #endif
