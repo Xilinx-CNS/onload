@@ -370,7 +370,7 @@ void ef_vi_set_intf_ver(char* intf_ver, size_t len)
    * It'd also be possible to enhance the checksum computation to be smarter
    * (e.g. by ignoring comments, etc.).
    */
-  if( strcmp(EFCH_INTF_VER, "ced4a4438f40cfe59d397eaa3698dc10") ) {
+  if( strcmp(EFCH_INTF_VER, "118fc3ec6ee6c36a0ad0ffa217f0aea9") ) {
     fprintf(stderr, "ef_vi: ERROR: char interface has changed\n");
     abort();
   }

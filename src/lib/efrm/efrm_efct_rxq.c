@@ -10,8 +10,7 @@
 struct efrm_efct_rxq {
 	struct efrm_resource rs;
 	struct efrm_pd *pd;
-	unsigned qid;
-	size_t n_hugepages;
+	struct efhw_efct_rxq hw;
 };
 
 static bool check_efct(const struct efrm_resource *rs)
@@ -55,14 +54,12 @@ int efrm_rxq_alloc(struct efrm_pd *pd, int qid,
 		return -ENOMEM;
 
 	rxq->pd = pd;
-	rxq->n_hugepages = n_hugepages;
 	rc = efct_nic_rxq_bind(pd_rs->rs_client->nic, qid, mask, timestamp_req,
-	                       n_hugepages);
+	                       n_hugepages, &rxq->hw);
 	if (rc < 0) {
 		kfree(rxq);
 		return rc;
 	}
-	rxq->qid = rc;
 	efrm_resource_init(&rxq->rs, EFRM_RESOURCE_EFCT_RXQ, 0);
 	efrm_client_add_resource(pd_rs->rs_client, &rxq->rs);
 	efrm_resource_ref(pd_rs);
@@ -75,8 +72,7 @@ EXPORT_SYMBOL(efrm_rxq_alloc);
 void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 {
 	if (__efrm_resource_release(&rxq->rs)) {
-		efct_nic_rxq_free(rxq->rs.rs_client->nic, rxq->qid,
-		                  rxq->n_hugepages);
+		efct_nic_rxq_free(rxq->rs.rs_client->nic, &rxq->hw);
 		efrm_pd_release(rxq->pd);
 		efrm_client_put(rxq->rs.rs_client);
 		kfree(rxq);

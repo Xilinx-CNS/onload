@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Copyright 2012-2020 Xilinx, Inc. */
+/* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
 #ifndef	EFCT_HW_DEFS_H
 #define	EFCT_HW_DEFS_H
 
@@ -21,4 +21,21 @@
 #define CI_EFCT_MAX_HUGEPAGES \
                           (CI_EFCT_MAX_SUPERBUFS / CI_EFCT_SUPERBUFS_PER_PAGE)
 
-#endif /* EF10_HW_DEFS_H */
+struct efab_efct_rx_superbuf_queue {
+  uint16_t q[16];
+  uint64_t added CI_ALIGN(8);
+  uint32_t removed;
+};
+
+struct efab_efct_rxq_uk_shm {
+  struct efab_efct_rx_superbuf_queue rxq;
+  struct efab_efct_rx_superbuf_queue freeq;
+  uint64_t timestamp_hi CI_ALIGN(8);
+  unsigned config_generation;
+  struct {
+    unsigned no_rxq_space;
+    unsigned too_many_owned;
+  } stats;
+};
+
+#endif /* EFCT_HW_DEFS_H */

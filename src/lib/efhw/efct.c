@@ -6,6 +6,8 @@
 #include <ci/driver/ci_aux.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/efhw/nic.h>
+#include <ci/efhw/efct.h>
+#include <etherfabric/internal/efct_uk_api.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/sysdep.h>
 #include "efct.h"
@@ -14,7 +16,8 @@
 
 int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
-                  bool timestamp_req, size_t n_hugepages)
+                  bool timestamp_req, size_t n_hugepages,
+                  struct efhw_efct_rxq *rxq)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
@@ -27,16 +30,31 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
   };
   int rc;
 
+  if( n_hugepages > CI_EFCT_MAX_HUGEPAGES ) {
+    /* We'd fail later on in bind_rxq(), but only after we'd done a load of
+     * shuffling-about and memory allocation. So let's have this early sanity
+     * check as well */
+    return -EINVAL;
+  }
+
+  rxq->n_hugepages = n_hugepages;
+  rxq->shm = vmalloc_user(sizeof(*rxq->shm));
+  if( ! rxq->shm )
+    return -ENOMEM;
+
   EFCT_PRE(dev, edev, cli, nic, rc);
+  /* NB: as soon as bind_rxq() begins we could start getting callbacks that
+   * this binding needs to pay attention to */
   rc = edev->ops->bind_rxq(cli, &qparams);
   EFCT_POST(dev, edev, cli, nic, rc);
 
+  rxq->qid = rc;
   return rc;
 }
 
 
 void
-efct_nic_rxq_free(struct efhw_nic *nic, int qid, size_t n_hugepages)
+efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
@@ -44,8 +62,9 @@ efct_nic_rxq_free(struct efhw_nic *nic, int qid, size_t n_hugepages)
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
-  edev->ops->free_rxq(cli, qid, n_hugepages);
+  edev->ops->free_rxq(cli, rxq->qid, rxq->n_hugepages);
   EFCT_POST(dev, edev, cli, nic, rc);
+  vfree(rxq->shm);
 }
 
 
