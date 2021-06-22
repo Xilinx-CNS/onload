@@ -13,6 +13,17 @@ struct efhw_efct_rxq {
   size_t n_hugepages;
 };
 
+/* TODO EFCT find somewhere better to put this */
+#define CI_EFCT_MAX_RXQS  8
+
+struct efhw_nic_efct_rxq {
+  uint32_t superbuf_seqno;
+};
+
+struct efhw_nic_efct {
+  struct efhw_nic_efct_rxq rxq[CI_EFCT_MAX_RXQS];
+};
+
 int efct_nic_rxq_bind(struct efhw_nic *nic, int qid,
                       const struct cpumask *mask, bool timestamp_req,
                       size_t n_hugepages, struct efhw_efct_rxq *rxq);

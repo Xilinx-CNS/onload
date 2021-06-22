@@ -167,17 +167,24 @@ int efct_probe(struct auxiliary_device *auxdev,
   struct linux_efhw_nic *lnic = NULL;
   struct net_device *net_dev;
   struct efhw_nic *nic;
+  struct efhw_nic_efct *efct = NULL;
   int rc;
 
   EFRM_NOTICE("%s name %s", __func__, id->name);
 
-  client = edev->ops->open(auxdev, &efct_ops, auxdev);
-  if( IS_ERR(client) )
-    return PTR_ERR(client);
+  efct = vzalloc(sizeof(*efct));
+  if( ! efct )
+    return -ENOMEM;
+
+  client = edev->ops->open(auxdev, &efct_ops, efct);
+  if( IS_ERR(client) ) {
+    rc = PTR_ERR(client);
+    goto fail1;
+  }
 
   rc = edev->ops->get_param(client, XLNX_EFCT_NETDEV, &val);
   if( rc < 0 )
-    goto fail;
+    goto fail2;
 
   net_dev = val.net_dev;
   EFRM_NOTICE("%s probe of dev %s", __func__, net_dev->name);
@@ -185,30 +192,33 @@ int efct_probe(struct auxiliary_device *auxdev,
   if( efhw_nic_find(net_dev) ) {
     EFRM_TRACE("%s: netdev %s already registered", __func__, net_dev->name);
     rc = -EBUSY;
-    goto fail;
+    goto fail2;
   }
 
   rc = efct_devtype_init(edev, client, &dev_type);
   if( rc < 0 )
-    goto fail;
+    goto fail2;
 
   rc = efct_resource_init(edev, client, &res_dim);
   if( rc < 0 )
-    goto fail;
+    goto fail2;
 
   rc = efrm_nic_add(client, &auxdev->dev, &dev_type, 0, net_dev, &lnic,
                     &res_dim, 0);
   if( rc < 0 )
-    goto fail;
+    goto fail2;
 
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN;
+  nic->arch_extra = efct;
 
   efrm_notify_nic_probe(net_dev);
   return 0;
 
- fail:
+ fail2:
   edev->ops->close(client);
+ fail1:
+  vfree(efct);
   EFRM_ERR("%s rc %d", __func__, rc);
   return rc;
 }
@@ -221,6 +231,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   struct linux_efhw_nic *lnic;
   struct net_device *net_dev;
   struct efhw_nic* nic;
+  struct efhw_nic_efct *efct;
 
   EFRM_NOTICE("%s", __func__);
 
@@ -232,6 +243,8 @@ void efct_remove(struct auxiliary_device *auxdev)
   client = (struct xlnx_efct_client*)lnic->drv_device;
   if( !client )
     return;
+
+  efct = nic->arch_extra;
 
   net_dev = efhw_nic_get_net_dev(nic);
   efrm_notify_nic_remove(net_dev);
@@ -251,6 +264,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   efrm_nic_reset_suspend(nic);
   ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNPLUGGED);
 
+  vfree(efct);
   edev->ops->close(client);
 }
 
