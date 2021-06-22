@@ -10,6 +10,7 @@ LIB_SRCS	:= assert_valid.c \
 		   efrm_pd.c \
 		   efrm_pio.c \
 		   efrm_slice_ext.c \
+		   efrm_efct_rxq.c \
 		   iobufset_resource.c \
 		   resource_manager.c \
 		   resources.c \

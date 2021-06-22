@@ -6,4 +6,9 @@
 
 extern struct efhw_func_ops efct_char_functional_units;
 
+int efct_nic_rxq_bind(struct efhw_nic *nic, int qid,
+                      const struct cpumask *mask, bool timestamp_req,
+                      size_t n_hugepages);
+void efct_nic_rxq_free(struct efhw_nic *nic, int qid, size_t n_hugepages);
+
 #endif /* CI_EFHW_EFCT_H */

@@ -133,6 +133,16 @@ struct efch_ext_alloc {
 };
 
 
+struct efch_efct_rxq_alloc {
+  efch_resource_id_t  in_vi_rs_id;
+  int32_t             in_qid;
+  uint64_t            in_cpuset CI_ALIGN(8);  /* void __user* */
+  uint32_t            in_cpusetsize;
+  /*bool*/uint8_t     in_timestamp_req;
+  uint32_t            in_n_hugepages;
+};
+
+
 typedef struct ci_resource_alloc_s {
   char               intf_ver[EFCH_INTF_VER_LEN];
   uint32_t           ra_type;
@@ -145,6 +155,7 @@ typedef struct ci_resource_alloc_s {
     struct efch_pd_alloc       pd;
     struct efch_pio_alloc      pio;
     struct efch_ext_alloc      ext;
+    struct efch_efct_rxq_alloc rxq;
   } u;
 } ci_resource_alloc_t;
 

@@ -39,6 +39,7 @@
 
 #include <ci/efrm/private.h>
 #include <ci/efrm/slice_ext.h>
+#include <ci/efrm/efct_rxq.h>
 #include "efrm_vi.h"
 #include "efrm_vi_set.h"
 #include "efrm_pd.h"
@@ -70,6 +71,9 @@ efrm_resources_init(void)
 			break;
 		case EFRM_RESOURCE_SLICE_EXT:
 			rc = efrm_create_ext_resource_manager(rmp);
+			break;
+		case EFRM_RESOURCE_EFCT_RXQ:
+			rc = efrm_create_rxq_resource_manager(rmp);
 			break;
 		default:
 			rc = 0;

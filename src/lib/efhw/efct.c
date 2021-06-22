@@ -12,6 +12,43 @@
 
 #if CI_HAVE_EFCT_AUX
 
+int
+efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
+                  bool timestamp_req, size_t n_hugepages)
+{
+  struct device *dev;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  struct xlnx_efct_rxq_params qparams = {
+    .qid = qid,
+    .mask = mask,
+    .timestamp_req = timestamp_req,
+    .n_hugepages = n_hugepages,
+  };
+  int rc;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+  rc = edev->ops->bind_rxq(cli, &qparams);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  return rc;
+}
+
+
+void
+efct_nic_rxq_free(struct efhw_nic *nic, int qid, size_t n_hugepages)
+{
+  struct device *dev;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  int rc = 0;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+  edev->ops->free_rxq(cli, qid, n_hugepages);
+  EFCT_POST(dev, edev, cli, nic, rc);
+}
+
+
 /*----------------------------------------------------------------------------
  *
  * Initialisation and configuration discovery
