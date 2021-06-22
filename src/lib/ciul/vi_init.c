@@ -11,7 +11,7 @@
 #include "efch_intf_ver.h"
 #include <onload/version.h>
 #include "logging.h"
-#include "efct_hw_defs.h"
+#include <etherfabric/internal/efct_uk_api.h>
 
 #ifndef __KERNEL__
 #include <limits.h>

@@ -2,7 +2,7 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
 
 #include "ef_vi_internal.h"
-#include "efct_hw_defs.h"
+#include <etherfabric/internal/efct_uk_api.h>
 
 /* FIXME EFCT: make this variable */
 #define EFCT_PKT_STRIDE 2048
