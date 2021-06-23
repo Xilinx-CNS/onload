@@ -16,6 +16,71 @@
 
 #define RING_FIFO_ENTRY(q, i)   ((q)[(i) & (ARRAY_SIZE((q)) - 1)])
 
+static void finished_with_superbuf(struct xlnx_efct_device *edev,
+                                   struct xlnx_efct_client *client, int qid,
+                                   struct efhw_nic_efct_rxq* q,
+                                   struct efhw_efct_rxq* app, int sbid)
+{
+  EFHW_ASSERT(app->current_owned_superbufs > 0);
+  EFHW_ASSERT(q->superbuf_refcount[sbid] > 0);
+  __clear_bit(sbid, app->owns_superbuf);
+  --app->current_owned_superbufs;
+  if( --q->superbuf_refcount[sbid] == 0 )
+    edev->ops->release_superbuf(client, qid, sbid);
+}
+
+static void destruct_apps_work(struct work_struct* work)
+{
+  struct efhw_nic_efct_rxq *q = container_of(work, struct efhw_nic_efct_rxq,
+                                             destruct_wq);
+  struct efhw_efct_rxq *app = xchg(&q->destroy_apps, NULL);
+  while( app ) {
+    struct efhw_efct_rxq *next = app->next;
+    EFHW_ASSERT(app->current_owned_superbufs == 0);
+    vfree(app->shm);
+    app->freer(app);
+    app = next;
+  }
+}
+
+static void reap_superbufs_from_apps(struct xlnx_efct_device *edev,
+                                     struct xlnx_efct_client *client, int qid,
+                                     struct efhw_nic_efct_rxq* q)
+{
+  struct efhw_efct_rxq **pprev;
+
+  for( pprev = &q->live_apps; *pprev; ) {
+    struct efhw_efct_rxq *app = *pprev;
+    if( app->destroy ) {
+      int sbid;
+      for_each_set_bit(sbid, app->owns_superbuf, CI_EFCT_MAX_SUPERBUFS)
+        finished_with_superbuf(edev, client, qid, q, app, sbid);
+      EFHW_ASSERT(app->current_owned_superbufs == 0);
+      *pprev = app->next;
+      efct_app_list_push(&q->destroy_apps, app);
+      schedule_work(&q->destruct_wq);
+    }
+    else {
+      uint32_t added = READ_ONCE(app->shm->freeq.added);
+      uint32_t removed = READ_ONCE(app->shm->freeq.removed);
+      int maxloop = ARRAY_SIZE(app->shm->freeq.q);
+      if( removed != added ) {
+        rmb();
+        while( removed != added && maxloop-- ) {
+          uint16_t id = READ_ONCE(RING_FIFO_ENTRY(app->shm->freeq.q, removed));
+          ++removed;
+
+          /* Validate app isn't being malicious: */
+          if( id < CI_EFCT_MAX_SUPERBUFS && test_bit(id, app->owns_superbuf) )
+            finished_with_superbuf(edev, client, qid, q, app, id);
+        }
+        smp_store_release(&app->shm->freeq.removed, removed);
+      }
+      pprev = &(*pprev)->next;
+    }
+  }
+}
+
 static int efct_poll(void *driver_data, int qid, int budget)
 {
   struct efhw_nic_efct *efct = driver_data;
@@ -34,6 +99,7 @@ static int efct_poll(void *driver_data, int qid, int budget)
       q->live_apps = new_apps;
     }
   }
+  reap_superbufs_from_apps(efct->edev, efct->client, qid, &efct->rxq[qid]);
   return 0;
 }
 
@@ -66,6 +132,7 @@ static bool post_superbuf_to_apps(struct efhw_nic_efct_rxq* q, int sbid,
     }
 
     ++napps;
+    ++q->superbuf_refcount[sbid];
     ++app->current_owned_superbufs;
     __set_bit(sbid, app->owns_superbuf);
     RING_FIFO_ENTRY(app->shm->rxq.q, added) = (sentinel << 15) | sbid;
@@ -81,6 +148,7 @@ static int efct_buffer_start(void *driver_data, int qid, int sbid,
   struct efhw_nic_efct *efct = driver_data;
   struct efhw_nic_efct_rxq *q;
 
+  EFHW_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
   q = &efct->rxq[qid];
   ++q->superbuf_seqno;
   if( sbid < 0 )
@@ -253,6 +321,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   struct efhw_nic *nic;
   struct efhw_nic_efct *efct = NULL;
   int rc;
+  int i;
 
   EFRM_NOTICE("%s name %s", __func__, id->name);
 
@@ -280,6 +349,9 @@ int efct_probe(struct auxiliary_device *auxdev,
     rc = -EBUSY;
     goto fail2;
   }
+
+  for( i = 0; i < ARRAY_SIZE(efct->rxq); ++i)
+    INIT_WORK(&efct->rxq[i].destruct_wq, destruct_apps_work);
 
   rc = efct_devtype_init(edev, client, &dev_type);
   if( rc < 0 )
@@ -336,6 +408,7 @@ void efct_remove(struct auxiliary_device *auxdev)
     EFHW_ASSERT(efct->rxq[i].live_apps == NULL);
     EFHW_ASSERT(efct->rxq[i].new_apps == NULL);
   }
+  drain_workqueue(system_wq);
 
   net_dev = efhw_nic_get_net_dev(nic);
   efrm_notify_nic_remove(net_dev);

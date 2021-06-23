@@ -47,13 +47,9 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
   if( rc == 0 ) {
     struct efhw_nic_efct *efct = nic->arch_extra;
     struct efhw_nic_efct_rxq *q = &efct->rxq[rc];
-    struct efhw_efct_rxq *next;
 
     rxq->qid = rc;
-    do {
-      rxq->next = next = q->new_apps;
-    } while( cmpxchg(&q->new_apps, rxq->next, rxq) != next );
-
+    efct_app_list_push(&q->new_apps, rxq);
     edev->ops->rollover_rxq(cli, rxq->qid);
   }
   EFCT_POST(dev, edev, cli, nic, rc);
@@ -63,7 +59,8 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
 
 
 void
-efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq)
+efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
+                  efhw_efct_rxq_free_func_t *freer)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
@@ -72,10 +69,9 @@ efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq)
 
   EFCT_PRE(dev, edev, cli, nic, rc)
   rxq->destroy = true;
+  rxq->freer = freer;
   edev->ops->free_rxq(cli, rxq->qid, rxq->n_hugepages);
   EFCT_POST(dev, edev, cli, nic, rc);
-
-  vfree(rxq->shm);
 }
 
 

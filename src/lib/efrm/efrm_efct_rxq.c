@@ -69,13 +69,17 @@ int efrm_rxq_alloc(struct efrm_pd *pd, int qid,
 EXPORT_SYMBOL(efrm_rxq_alloc);
 
 
+void free_rxq(struct efhw_efct_rxq *rxq)
+{
+	kfree(container_of(rxq, struct efrm_efct_rxq, hw));
+}
+
 void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 {
 	if (__efrm_resource_release(&rxq->rs)) {
-		efct_nic_rxq_free(rxq->rs.rs_client->nic, &rxq->hw);
+		efct_nic_rxq_free(rxq->rs.rs_client->nic, &rxq->hw, free_rxq);
 		efrm_pd_release(rxq->pd);
 		efrm_client_put(rxq->rs.rs_client);
-		BUG();  /* TODO EFCT missing free(rxq) [it's moving in the next commit] */
 	}
 }
 EXPORT_SYMBOL(efrm_rxq_release);
