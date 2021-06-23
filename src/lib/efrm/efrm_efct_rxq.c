@@ -85,6 +85,15 @@ void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 EXPORT_SYMBOL(efrm_rxq_release);
 
 
+int efrm_rxq_mmap(struct efrm_efct_rxq* rxq, struct vm_area_struct *vma,
+                  unsigned long *bytes)
+{
+  *bytes += round_up(sizeof(struct efab_efct_rxq_uk_shm), PAGE_SIZE);
+  return remap_vmalloc_range(vma, rxq->hw.shm, 0);
+}
+EXPORT_SYMBOL(efrm_rxq_mmap);
+
+
 static void efrm_rxq_rm_dtor(struct efrm_resource_manager *rm)
 {
 	/* NOP */

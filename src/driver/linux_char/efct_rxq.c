@@ -6,6 +6,7 @@
 #include <ci/efrm/efct_rxq.h>
 #include <ci/efch/op_types.h>
 #include <ci/efhw/mc_driver_pcol.h>
+#include <etherfabric/internal/efct_uk_api.h>
 #include "char_internal.h"
 
 
@@ -91,6 +92,14 @@ rxq_rm_free(efch_resource_t* rs)
 }
 
 
+static int rxq_rm_mmap(struct efrm_resource *rs, unsigned long *bytes,
+                       struct vm_area_struct *vma, int index)
+{
+  struct efrm_efct_rxq* rxq = efrm_rxq_from_resource(rs);
+  return efrm_rxq_mmap(rxq, vma, bytes);
+}
+
+
 static int
 rxq_rm_rsops(efch_resource_t* rs, ci_resource_table_t* priv_opt,
              ci_resource_op_t* op, int* copy_out)
@@ -103,11 +112,20 @@ rxq_rm_rsops(efch_resource_t* rs, ci_resource_table_t* priv_opt,
 }
 
 
+static int rxq_rm_mmap_bytes(struct efrm_resource* rs, int map_type)
+{
+  if( map_type != 0 )
+    return -EINVAL;
+  return round_up(sizeof(struct efab_efct_rxq_uk_shm), PAGE_SIZE);
+}
+
+
 efch_resource_ops efch_efct_rxq_ops = {
   .rm_alloc  = rxq_rm_alloc,
   .rm_free   = rxq_rm_free,
-  .rm_mmap   = NULL,
+  .rm_mmap   = rxq_rm_mmap,
   .rm_nopage = NULL,
   .rm_dump   = NULL,
   .rm_rsops  = rxq_rm_rsops,
+  .rm_mmap_bytes = rxq_rm_mmap_bytes,
 };
