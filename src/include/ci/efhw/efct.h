@@ -13,6 +13,9 @@ struct efhw_efct_rxq {
   unsigned qid;
   bool destroy;
   size_t n_hugepages;
+  uint32_t current_owned_superbufs;
+  uint32_t max_allowed_superbufs;
+  DECLARE_BITMAP(owns_superbuf, CI_EFCT_MAX_SUPERBUFS);
 };
 
 /* TODO EFCT find somewhere better to put this */
@@ -21,6 +24,9 @@ struct efhw_efct_rxq {
 struct efhw_nic_efct_rxq {
   struct efhw_efct_rxq *new_apps;  /* Owned by process context */
   struct efhw_efct_rxq *live_apps; /* Owned by NAPI context */
+  /* Global superbuf sequence number, used for filter management (since
+   * per-app sequence numbers aren't reliable because they don't increment
+   * on nodescdrop) */
   uint32_t superbuf_seqno;
 };
 

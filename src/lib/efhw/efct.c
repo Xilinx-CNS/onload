@@ -37,6 +37,7 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
   }
 
   rxq->n_hugepages = n_hugepages;
+  rxq->max_allowed_superbufs = n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
   rxq->shm = vmalloc_user(sizeof(*rxq->shm));
   if( ! rxq->shm )
     return -ENOMEM;

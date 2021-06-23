@@ -14,10 +14,80 @@
 
 #if CI_HAVE_EFCT_AUX
 
+#define RING_FIFO_ENTRY(q, i)   ((q)[(i) & (ARRAY_SIZE((q)) - 1)])
+
+static int efct_poll(void *driver_data, int qid, int budget)
+{
+  struct efhw_nic_efct *efct = driver_data;
+  struct efhw_nic_efct_rxq *q = &efct->rxq[qid];
+
+  /* Bolt any newly-added apps on to the live_apps list. The sole reason for
+   * this dance is for thread-safety */
+  if(unlikely( q->new_apps )) {
+    struct efhw_efct_rxq* new_apps = xchg(&q->new_apps, NULL);
+    if( new_apps ) {
+      struct efhw_efct_rxq* app;
+      struct efhw_efct_rxq* last;
+      for( app = new_apps; app; app = app->next )
+        last = app;
+      last->next = q->live_apps;
+      q->live_apps = new_apps;
+    }
+  }
+  return 0;
+}
+
 static int efct_handle_event(void *driver_data,
                              const struct xlnx_efct_event *event)
 {
   return -ENOSYS;
+}
+
+static bool post_superbuf_to_apps(struct efhw_nic_efct_rxq* q, int sbid,
+                                  bool sentinel)
+{
+  struct efhw_efct_rxq *app;
+  int napps = 0;
+
+  for( app = q->live_apps; app; app = app->next ) {
+    uint32_t added;
+    uint32_t removed;
+
+    if( app->current_owned_superbufs >= app->max_allowed_superbufs ) {
+      ++app->shm->stats.too_many_owned;
+      continue;
+    }
+
+    added = (uint32_t)READ_ONCE(app->shm->rxq.added);
+    removed = READ_ONCE(app->shm->rxq.removed);
+    if( (uint32_t)(added - removed) >= ARRAY_SIZE(app->shm->rxq.q) ) {
+      ++app->shm->stats.no_rxq_space;
+      continue;
+    }
+
+    ++napps;
+    ++app->current_owned_superbufs;
+    __set_bit(sbid, app->owns_superbuf);
+    RING_FIFO_ENTRY(app->shm->rxq.q, added) = (sentinel << 15) | sbid;
+    smp_store_release(&app->shm->rxq.added,
+                      ((uint64_t)q->superbuf_seqno << 32) | (added + 1));
+  }
+  return napps != 0;
+}
+
+static int efct_buffer_start(void *driver_data, int qid, int sbid,
+                             bool sentinel)
+{
+  struct efhw_nic_efct *efct = driver_data;
+  struct efhw_nic_efct_rxq *q;
+
+  q = &efct->rxq[qid];
+  ++q->superbuf_seqno;
+  if( sbid < 0 )
+    return 0;
+  if( ! post_superbuf_to_apps(q, sbid, sentinel) )
+    efct->edev->ops->release_superbuf(efct->client, qid, sbid);
+  return 0;
 }
 
 noinline
@@ -120,7 +190,9 @@ static void efct_hugepage_list_changed(void *driver_data, int rxq)
 
 struct xlnx_efct_drvops efct_ops = {
   .name = "sfc_resource",
+  .poll = efct_poll,
   .handle_event = efct_handle_event,
+  .buffer_start = efct_buffer_start,
   .alloc_hugepage = efct_alloc_hugepage,
   .free_hugepage = efct_free_hugepage,
   .hugepage_list_changed = efct_hugepage_list_changed,
