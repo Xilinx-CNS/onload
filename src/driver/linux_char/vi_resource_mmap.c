@@ -40,7 +40,7 @@ efab_vi_rm_mmap_io(struct efrm_vi *virs,
   struct efhw_nic *nic;
 
   nic = efrm_client_get_nic(virs->rs.rs_client);
-  if( nic->devtype.arch == EFHW_ARCH_AF_XDP )
+  if( efhw_nic_vi_io_size(nic) == 0 )
     return 0;
 
   instance = virs->rs.rs_instance;
