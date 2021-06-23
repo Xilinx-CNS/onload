@@ -3,6 +3,7 @@
 
 #include <ci/efrm/efrm_client.h>
 #include <ci/efhw/nic.h>
+#include <ci/efhw/efct.h>
 #include <ci/tools/sysdep.h>
 
 #include "linux_resource_internal.h"
@@ -107,11 +108,22 @@ static void efct_free_hugepage(void *driver_data,
   fput(mem->file);
 }
 
+static void efct_hugepage_list_changed(void *driver_data, int rxq)
+{
+  struct efhw_nic_efct *efct = driver_data;
+  struct efhw_nic_efct_rxq *q = &efct->rxq[rxq];
+  struct efhw_efct_rxq *app;
+
+  for( app = q->live_apps; app; app = app->next )
+    ++app->shm->config_generation;
+}
+
 struct xlnx_efct_drvops efct_ops = {
   .name = "sfc_resource",
   .handle_event = efct_handle_event,
   .alloc_hugepage = efct_alloc_hugepage,
   .free_hugepage = efct_free_hugepage,
+  .hugepage_list_changed = efct_hugepage_list_changed,
 };
 
 
@@ -176,11 +188,13 @@ int efct_probe(struct auxiliary_device *auxdev,
   if( ! efct )
     return -ENOMEM;
 
+  efct->edev = edev;
   client = edev->ops->open(auxdev, &efct_ops, efct);
   if( IS_ERR(client) ) {
     rc = PTR_ERR(client);
     goto fail1;
   }
+  efct->client = client;
 
   rc = edev->ops->get_param(client, XLNX_EFCT_NETDEV, &val);
   if( rc < 0 )
@@ -232,6 +246,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   struct net_device *net_dev;
   struct efhw_nic* nic;
   struct efhw_nic_efct *efct;
+  int i;
 
   EFRM_NOTICE("%s", __func__);
 
@@ -245,6 +260,10 @@ void efct_remove(struct auxiliary_device *auxdev)
     return;
 
   efct = nic->arch_extra;
+  for( i = 0; i < ARRAY_SIZE(efct->rxq); ++i ) {
+    EFHW_ASSERT(efct->rxq[i].live_apps == NULL);
+    EFHW_ASSERT(efct->rxq[i].new_apps == NULL);
+  }
 
   net_dev = efhw_nic_get_net_dev(nic);
   efrm_notify_nic_remove(net_dev);

@@ -75,7 +75,7 @@ void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 		efct_nic_rxq_free(rxq->rs.rs_client->nic, &rxq->hw);
 		efrm_pd_release(rxq->pd);
 		efrm_client_put(rxq->rs.rs_client);
-		kfree(rxq);
+		BUG();  /* TODO EFCT missing free(rxq) [it's moving in the next commit] */
 	}
 }
 EXPORT_SYMBOL(efrm_rxq_release);

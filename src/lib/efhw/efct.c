@@ -7,7 +7,6 @@
 #include <ci/driver/ci_efct.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
-#include <etherfabric/internal/efct_uk_api.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/sysdep.h>
 #include "efct.h"
@@ -43,12 +42,21 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
     return -ENOMEM;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
-  /* NB: as soon as bind_rxq() begins we could start getting callbacks that
-   * this binding needs to pay attention to */
   rc = edev->ops->bind_rxq(cli, &qparams);
+  if( rc == 0 ) {
+    struct efhw_nic_efct *efct = nic->arch_extra;
+    struct efhw_nic_efct_rxq *q = &efct->rxq[rc];
+    struct efhw_efct_rxq *next;
+
+    rxq->qid = rc;
+    do {
+      rxq->next = next = q->new_apps;
+    } while( cmpxchg(&q->new_apps, rxq->next, rxq) != next );
+
+    edev->ops->rollover_rxq(cli, rxq->qid);
+  }
   EFCT_POST(dev, edev, cli, nic, rc);
 
-  rxq->qid = rc;
   return rc;
 }
 
@@ -61,9 +69,11 @@ efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq)
   struct xlnx_efct_client* cli;
   int rc = 0;
 
-  EFCT_PRE(dev, edev, cli, nic, rc);
+  EFCT_PRE(dev, edev, cli, nic, rc)
+  rxq->destroy = true;
   edev->ops->free_rxq(cli, rxq->qid, rxq->n_hugepages);
   EFCT_POST(dev, edev, cli, nic, rc);
+
   vfree(rxq->shm);
 }
 
