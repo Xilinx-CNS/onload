@@ -309,3 +309,16 @@ struct net_device* efhw_nic_get_net_dev(struct efhw_nic* nic)
 }
 EXPORT_SYMBOL(efhw_nic_get_net_dev);
 
+bool efhw_nic_phys_contig_queue(struct efhw_nic *nic, enum efhw_q_type type)
+{
+	switch(type) {
+	case EFHW_EVQ:
+		return !!(nic->flags & NIC_FLAG_PHYS_CONTIG_EVQ);
+	case EFHW_TXQ:
+		return !!(nic->flags & NIC_FLAG_PHYS_CONTIG_TXQ);
+	case EFHW_RXQ:
+		return !!(nic->flags & NIC_FLAG_PHYS_CONTIG_RXQ);
+	default:
+		EFHW_ASSERT(false);
+	};
+}

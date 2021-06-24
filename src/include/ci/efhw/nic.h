@@ -87,4 +87,7 @@ static inline unsigned efhw_nic_rel_to_abs_idx(const struct efhw_nic* nic,
 	return (rel_idx << nic->vi_shift) + nic->vi_base;
 }
 
+extern bool efhw_nic_phys_contig_queue(struct efhw_nic *nic,
+				       enum efhw_q_type type);
+
 #endif /* __CI_EFHW_NIC_H__ */

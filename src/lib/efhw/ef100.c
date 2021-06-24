@@ -117,6 +117,8 @@ ef100_nic_tweak_hardware(struct efhw_nic *nic)
 
 	/* Some capabilities are always present on ef100 */
 	nic->flags |= NIC_FLAG_PHYS_MODE;
+	nic->flags |= NIC_FLAG_PHYS_CONTIG_EVQ | NIC_FLAG_PHYS_CONTIG_TXQ |
+		      NIC_FLAG_PHYS_CONTIG_RXQ;
 
 	/* Determine what the filtering capabilies are */
 	ef10_ef100_nic_check_supported_filters(nic);

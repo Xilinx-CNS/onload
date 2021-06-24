@@ -61,6 +61,7 @@ efct_nic_v3_license_challenge(struct efhw_nic *nic,
 static void
 efct_nic_tweak_hardware(struct efhw_nic *nic)
 {
+  nic->flags |= NIC_FLAG_PHYS_CONTIG_EVQ;
 }
 
 

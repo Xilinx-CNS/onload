@@ -985,8 +985,11 @@ efrm_vi_q_alloc(struct efrm_vi *virs, enum efhw_q_type q_type,
 	 * buffer memory.
 	 */
 	if (nic->devtype.arch != EFHW_ARCH_AF_XDP) {
-		rc = efhw_iopages_alloc(nic, &q->host_pages, qsize.q_len_page_order,
-		                        nic->devtype.arch == EFHW_ARCH_EF100, iova_base);
+		rc = efhw_iopages_alloc(nic, &q->host_pages,
+					qsize.q_len_page_order,
+		                        efhw_nic_phys_contig_queue(nic, q_type)
+,
+					iova_base);
 		if (rc < 0) {
 			EFRM_ERR("%s: Failed to allocate %s DMA buffer",
 				 __FUNCTION__, q_names[q_type]);
