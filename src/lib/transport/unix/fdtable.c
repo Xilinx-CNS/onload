@@ -106,6 +106,8 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
   if( info->si_code < 0 && info->si_code != SI_ONLOAD ) {
     ci_assert_equal(info->si_code, SI_TKILL);
     /* Ensure that onload_recv() and similar functions are not restarted: */
+    ci_atomic32_or(&citp_signal_get_specific_inited()->c.aflags,
+                   OO_SIGNAL_FLAG_HAVE_PENDING);
     ci_atomic32_and(&citp_signal_get_specific_inited()->c.aflags,
                     ~OO_SIGNAL_FLAG_NEED_RESTART);
     return;
