@@ -550,13 +550,21 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
 
+  if( vi->max_efct_rxq ) {
+    rc = efct_vi_mmap_init(vi);
+    if( rc ) {
+      LOGVV(ef_log("%s: mmap (efct reserve) %d", __FUNCTION__, rc));
+      goto fail5;
+    }
+  }
+
   if( vi_flags & (EF_VI_RX_TIMESTAMPS | EF_VI_TX_TIMESTAMPS) ) {
     int rx_ts_correction, tx_ts_correction;
     enum ef_timestamp_format ts_format;
     rc = get_ts_correction(vi_dh, ra.out_id.index,
                             &rx_ts_correction, &tx_ts_correction);
     if( rc < 0 )
-      goto fail5;
+      goto fail6;
     if( rxq_capacity )
       ef_vi_init_rx_timestamping(vi, rx_ts_correction);
     if( txq_capacity )
@@ -564,14 +572,14 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     rc = get_ts_format(vi_dh, ra.out_id.index,
                         &ts_format);
     if( rc < 0 )
-      goto fail5;
+      goto fail6;
     ef_vi_set_ts_format(vi, ts_format);
   }
 
   if( need_vi_stats_buf(vi_flags) ) {
     ef_vi_stats* stats = calloc(1, sizeof(ef_vi_stats));
     if( stats == NULL )
-      goto fail5;
+      goto fail6;
     ef_vi_set_stats_buf(vi, stats);
   }
 
@@ -600,6 +608,9 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
 
   return q_label;
 
+ fail6:
+  if( vi->max_efct_rxq )
+    efct_vi_munmap(vi);
  fail5:
   if( ctpio_mmap_ptr != NULL )
     ci_resource_munmap(vi_dh, ctpio_mmap_ptr, CTPIO_MMAP_LEN);
@@ -668,6 +679,9 @@ int ef_vi_alloc_from_set(ef_vi* vi, ef_driver_handle vi_dh,
 int ef_vi_free(ef_vi* ep, ef_driver_handle fd)
 {
   int rc;
+
+  if( ep->max_efct_rxq )
+    efct_vi_munmap(ep);
 
   if( ep->vi_ctpio_mmap_ptr != NULL ) {
     rc = ci_resource_munmap(fd, ep->vi_ctpio_mmap_ptr, CTPIO_MMAP_LEN);

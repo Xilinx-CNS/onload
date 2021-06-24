@@ -904,6 +904,8 @@ typedef struct ef_vi {
   int                           vi_qs_n;
   /** Attached rxqs for efct VIs (NB: not necessarily in rxq order) */
   ef_vi_efct_rxq                efct_rxq[EF_VI_MAX_EFCT_RXQS];
+  /** 1 + highest allowed index of a used element in efct_rxq */
+  int                           max_efct_rxq;
 
   /** Number of TX alternatives for the virtual interface */
   unsigned                      tx_alt_num;

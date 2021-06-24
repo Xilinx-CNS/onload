@@ -2,6 +2,9 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
 
 #include "ef_vi_internal.h"
+#ifndef __KERNEL__
+#include "driver_access.h"
+#endif
 #include <etherfabric/internal/efct_uk_api.h>
 
 /* FIXME EFCT: make this variable */
@@ -421,7 +424,7 @@ static int efct_poll_rx(ef_vi* vi, ef_vi_efct_rxq* rxq, ef_event* evs, int evs_l
   struct efct_rxq_superbuf_meta* sb_meta = rxq->sb_meta;
   int i;
 
-  if( ! sb_meta )
+  if( ! sb_meta->superbuf_pkts )
     return 0;
 
   for( i = 0; i < evs_len; ++i, ++qs->removed ) {
@@ -578,6 +581,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_memcpy_sync   = efct_ef_vi_transmit_memcpy_sync;
 
   if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
+    vi->max_efct_rxq = 1;
     if( vi->vi_txq.mask == 0 )
       vi->ops.eventq_poll = efct_ef_eventq_poll_1rx;
     else
@@ -587,6 +591,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
     /* It wouldn't be difficult to specialise this by txable too, but this is
      * the slow, backward-compatible variant so there's not much point */
     vi->ops.eventq_poll = efct_ef_eventq_poll_generic;
+    vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
   }
 }
 
@@ -600,6 +605,95 @@ void efct_vi_init(ef_vi* vi)
   efct_vi_initialise_ops(vi);
   vi->evq_phase_bits = 1;
 }
+
+#ifndef __KERNEL__
+int efct_vi_mmap_init(ef_vi* vi)
+{
+  void* space;
+  struct efct_rxq_superbuf_meta* meta;
+  int i;
+  const size_t bytes_per_rxq = CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
+
+  meta = calloc(vi->max_efct_rxq, sizeof(*meta));
+  if( ! meta )
+    return -ENOMEM;
+
+  /* This is reserving a gigantic amount of virtual address space (with no
+   * memory behind it) so we can later on (in efct_vi_attach_rxq()) plonk the
+   * actual mmappings for each specific superbuf into a computable place
+   * within this space, i.e. so that conversion from {rxq#,superbuf#} to
+   * memory address is trivial arithmetic rather than needing various array
+   * lookups (c.f. what we need to do in ifdef __KERNEL__, which doesn't have
+   * facilities for this kind of address space trickery). */
+  space = mmap(NULL, vi->max_efct_rxq * bytes_per_rxq, PROT_NONE,
+               MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
+               -1, 0);
+  if( space == MAP_FAILED ) {
+    free(meta);
+    return -ENOMEM;
+  }
+
+  for( i = 0; i < vi->max_efct_rxq; ++i ) {
+    vi->efct_rxq[i].sb_meta = &meta[i];
+    meta[i].superbuf = (char*)space + i * bytes_per_rxq;
+    memset(meta[i].current_mappings, 0xff, sizeof(meta[i].current_mappings));
+  }
+
+  /* TODO EFCT: This will eventually move to filter_add: */
+  return efct_vi_attach_rxq(vi, 0, 4);
+}
+
+void efct_vi_munmap(ef_vi* vi)
+{
+  munmap((void*)vi->efct_rxq[0].sb_meta->superbuf,
+         vi->max_efct_rxq * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
+  free(vi->efct_rxq[0].sb_meta);
+}
+
+int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
+{
+  int rc;
+  ci_resource_alloc_t ra;
+  void* p;
+  int ix;
+
+  for( ix = 0; ix < vi->max_efct_rxq; ++ix )
+    if( vi->efct_rxq[ix].sb_meta->superbuf_pkts == 0 )
+      break;
+  if( ix == vi->max_efct_rxq )
+    return -ENOSPC;
+
+  memset(&ra, 0, sizeof(ra));
+  ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
+  ra.ra_type = EFRM_RESOURCE_EFCT_RXQ;
+  ra.u.rxq.in_qid = qid;
+  ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
+  ra.u.rxq.in_n_hugepages = CI_ROUND_UP(n_superbufs,
+                                        CI_EFCT_SUPERBUFS_PER_PAGE);
+  ra.u.rxq.in_timestamp_req = true;
+  rc = ci_resource_alloc(vi->dh, &ra);
+  if( rc < 0 ) {
+    LOGVV(ef_log("%s: ci_resource_alloc rxq %d", __FUNCTION__, rc));
+    return rc;
+  }
+
+  rc = ci_resource_mmap(vi->dh, ra.out_id.index, 0,
+                CI_ROUND_UP(sizeof(struct efab_efct_rxq_uk_shm), CI_PAGE_SIZE),
+                &p);
+  if( rc ) {
+    LOGVV(ef_log("%s: ci_resource_mmap rxq %d", __FUNCTION__, rc));
+    return rc;
+  }
+
+  vi->efct_rxq[ix].resource_id = ra.out_id.index;
+  vi->efct_rxq[ix].shm = p;
+  vi->efct_rxq[ix].sb_meta->superbuf_pkts = 512;  /* TODO EFCT make dynamic */
+
+  return 0;
+}
+
+/* efct_vi_detach_rxq not yet implemented */
+#endif
 
 void efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id, const void** pkt_start)
 {
