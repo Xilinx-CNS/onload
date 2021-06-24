@@ -47,18 +47,81 @@ static int pkt_id_to_global_superbuf_ix(uint32_t pkt_id)
   return pkt_id >> PKTS_PER_SUPERBUF_BITS;
 }
 
-__attribute__((unused))  /* ...so far */
 static int pkt_id_to_local_superbuf_ix(uint32_t pkt_id)
 {
   return pkt_id_to_global_superbuf_ix(pkt_id) & (CI_EFCT_MAX_SUPERBUFS - 1);
 }
 
-__attribute__((unused))  /* ...so far */
 static int pkt_id_to_rxq_ix(uint32_t pkt_id)
 {
   return pkt_id_to_global_superbuf_ix(pkt_id) / CI_EFCT_MAX_SUPERBUFS;
 }
 
+ef_vi_noinline
+static int superbuf_config_refresh(ef_vi* vi, ef_vi_efct_rxq* rxq)
+{
+#ifdef __KERNEL__
+  /* TODO EFCT */
+  return -ENOSYS;
+#else
+  struct efct_rxq_superbuf_meta* meta = rxq->sb_meta;
+  ci_resource_op_t op;
+  meta->config_generation = rxq->shm->config_generation;
+  op.op = CI_RSOP_RXQ_REFRESH;
+  op.id = efch_make_resource_id(rxq->resource_id);
+  op.u.rxq_refresh.superbufs = (uintptr_t)meta->superbuf;
+  op.u.rxq_refresh.current_mappings = (uintptr_t)meta->current_mappings;
+  op.u.rxq_refresh.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
+  return ci_resource_op(vi->dh, &op);
+#endif
+}
+
+static int superbuf_next(ef_vi* vi, ef_vi_efct_rxq* rxq)
+{
+  struct efab_efct_rxq_uk_shm* shm = rxq->shm;
+  uint64_t added_full;
+  uint32_t added, removed;
+  int sbid;
+
+  /* TODO: track the global superbuf sequence number */
+  added_full = OO_ACCESS_ONCE(shm->rxq.added);
+  added = (uint32_t)added_full;
+  removed = shm->rxq.removed;
+  if( added == removed )
+    return -EAGAIN;
+  ci_rmb();
+  sbid = OO_ACCESS_ONCE(shm->rxq.q[removed & (CI_ARRAY_SIZE(shm->rxq.q) - 1)]);
+  EF_VI_ASSERT((sbid & CI_EFCT_Q_SUPERBUF_ID_MASK) < CI_EFCT_MAX_SUPERBUFS);
+
+  /* No additional rmb needed here: the sync relative to rxq.added is
+   * sufficient since the kernel's ++shm->config_generation happened-before
+   * ++rxq.added */
+  if( shm->config_generation != rxq->sb_meta->config_generation ) {
+    int rc = superbuf_config_refresh(vi, rxq);
+    if( rc < 0 )
+      return rc;
+  }
+  OO_ACCESS_ONCE(shm->rxq.removed) = removed + 1;
+  return sbid;
+}
+
+static void superbuf_free(ef_vi* vi, ef_vi_efct_rxq* rxq, int sbid)
+{
+  struct efab_efct_rxq_uk_shm* shm = rxq->shm;
+  uint32_t added, removed;
+
+  ++vi->ep_state->rxq.superbufs_removed;
+
+  added = shm->freeq.added;
+  removed = OO_ACCESS_ONCE(shm->freeq.removed);
+  /* TODO: need to make this smarter and/or have a much bigger freeq if we
+   * allow apps to hold on to superbufs for longer */
+  (void)removed;
+  EF_VI_ASSERT(added - removed < CI_ARRAY_SIZE(shm->freeq.q));
+  shm->freeq.q[added & (CI_ARRAY_SIZE(shm->freeq.q) - 1)] = sbid;
+  ci_wmb();
+  OO_ACCESS_ONCE(shm->freeq.added) = added + 1;
+}
 
 /* The superbuf descriptor for this packet */
 static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
@@ -449,8 +512,15 @@ static int efct_poll_rx(ef_vi* vi, ef_vi_efct_rxq* rxq, ef_event* evs, int evs_l
      * TODO: move this to the point at which the superbuf is provided.
      * TODO: handle manual rollover
      */
-    if( qs->removed % sb_meta->superbuf_pkts == 0 )
+    if( qs->removed % sb_meta->superbuf_pkts == 0 ) {
+      int rc = superbuf_next(vi, rxq);
+      if( rc < 0 ) {
+        /* ef_eventq_poll() has historically never been able to fail, so we
+         * maintain that policy */
+        return i;
+      }
       efct_rx_desc(vi, qs->removed & q->mask)->refcnt = sb_meta->superbuf_pkts;
+    }
   }
 
   return i;
@@ -687,6 +757,8 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 
   vi->efct_rxq[ix].resource_id = ra.out_id.index;
   vi->efct_rxq[ix].shm = p;
+  vi->efct_rxq[ix].sb_meta->config_generation =
+                                  vi->efct_rxq[ix].shm->config_generation - 1;
   vi->efct_rxq[ix].sb_meta->superbuf_pkts = 512;  /* TODO EFCT make dynamic */
 
   return 0;
@@ -708,7 +780,8 @@ void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
   EF_VI_ASSERT(efct_rx_desc(vi, pkt_id)->refcnt > 0);
 
   if( --efct_rx_desc(vi, pkt_id)->refcnt == 0 )
-    ++vi->ep_state->rxq.superbufs_removed;
+    superbuf_free(vi, &vi->efct_rxq[pkt_id_to_rxq_ix(pkt_id)],
+                  pkt_id_to_local_superbuf_ix(pkt_id));
 }
 
 int efct_ef_eventq_check_event(const ef_vi* vi)

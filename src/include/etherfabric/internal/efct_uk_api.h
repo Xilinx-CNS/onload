@@ -21,6 +21,10 @@
 #define CI_EFCT_MAX_HUGEPAGES \
                           (CI_EFCT_MAX_SUPERBUFS / CI_EFCT_SUPERBUFS_PER_PAGE)
 
+/* Mask of efct_rx_superbuf_queue::q values to get the actual superbuf ID (the
+ * top bit is use in the rxq to convey the sentinel). */
+#define CI_EFCT_Q_SUPERBUF_ID_MASK  0x7fff
+
 struct efab_efct_rx_superbuf_queue {
   uint16_t q[16];
   uint64_t added CI_ALIGN(8);
