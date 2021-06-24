@@ -78,6 +78,10 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
     return ERR_PTR(rc);
   }
 
+  hrtimer_init(&tdev->rx_tick, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+  tdev->rx_tick.function = efct_rx_tick;
+  hrtimer_start(&tdev->rx_tick, ms_to_ktime(1000), HRTIMER_MODE_REL);
+
   return tdev;
 }
 
@@ -89,6 +93,7 @@ void efct_test_remove_test_dev(struct efct_test_device* tdev)
 {
   struct auxiliary_device* adev = &tdev->dev.adev;
 
+  hrtimer_cancel(&tdev->rx_tick);
   dev_put(tdev->net_dev);
   rtnl_lock();
   auxiliary_device_delete(adev);
