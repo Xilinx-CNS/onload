@@ -21,6 +21,9 @@ extern int efrm_rxq_alloc(struct efrm_pd *pd, int qid,
 extern void efrm_rxq_release(struct efrm_efct_rxq *rxq);
 int efrm_rxq_mmap(struct efrm_efct_rxq* rxq, struct vm_area_struct *vma,
                   unsigned long *bytes);
+int efrm_rxq_refresh(struct efrm_efct_rxq *rxq,
+                     unsigned long superbufs, uint64_t __user *user_current,
+                     unsigned max_superbufs);
 
 
 #endif

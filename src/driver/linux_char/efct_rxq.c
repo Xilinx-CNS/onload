@@ -104,7 +104,14 @@ static int
 rxq_rm_rsops(efch_resource_t* rs, ci_resource_table_t* priv_opt,
              ci_resource_op_t* op, int* copy_out)
 {
+  struct efrm_efct_rxq* rxq = efrm_rxq_from_resource(rs->rs_base);
+
   switch (op->op) {
+  case CI_RSOP_RXQ_REFRESH:
+    return efrm_rxq_refresh(rxq, (uintptr_t)op->u.rxq_refresh.superbufs,
+               (uint64_t __user*)(uintptr_t)op->u.rxq_refresh.current_mappings,
+               op->u.rxq_refresh.max_superbufs);
+
   default:
     EFCH_ERR("%s: Invalid op, expected CI_RSOP_RXQ_*", __FUNCTION__);
     return -EINVAL;

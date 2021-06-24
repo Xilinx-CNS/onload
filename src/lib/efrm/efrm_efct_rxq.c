@@ -5,6 +5,8 @@
 #include <ci/efrm/efct_rxq.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/efhw/efct.h>
+#include <linux/mman.h>
+#include <ci/driver/ci_efct.h>
 #include "efrm_internal.h"
 
 struct efrm_efct_rxq {
@@ -92,6 +94,93 @@ int efrm_rxq_mmap(struct efrm_efct_rxq* rxq, struct vm_area_struct *vma,
   return remap_vmalloc_range(vma, rxq->hw.shm, 0);
 }
 EXPORT_SYMBOL(efrm_rxq_mmap);
+
+
+#define REFRESH_BATCH_SIZE  8
+#define EFCT_INVALID_PFN   (~0ull)
+#define HUGE_SIZE          (HPAGE_PMD_NR * PAGE_SIZE)
+
+static int fixup_superbuf_mapping(unsigned long addr,
+                                  uint64_t *user,
+                                  const struct xlnx_efct_hugepage *kern)
+{
+	uint64_t pfn = kern->page ? __pa(kern->page) : EFCT_INVALID_PFN;
+	if (*user == pfn)
+		return 0;
+
+	if (pfn == EFCT_INVALID_PFN) {
+		vm_munmap(addr, HUGE_SIZE);
+	}
+	else {
+		unsigned long rc;
+		rc = vm_mmap(kern->file, addr, HUGE_SIZE,
+		             PROT_READ,
+		             MAP_FIXED | MAP_SHARED | MAP_POPULATE |
+		                     MAP_HUGETLB | MAP_HUGE_2MB, 0);
+		if (IS_ERR((void*)rc))
+			return PTR_ERR((void*)rc);
+	}
+	*user = pfn;
+	return 1;
+}
+
+int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
+                     uint64_t __user *user_current, unsigned max_superbufs)
+{
+	struct xlnx_efct_hugepage *pages;
+	size_t i;
+	int rc = 0;
+
+	if (max_superbufs != CI_EFCT_MAX_SUPERBUFS) {
+		/* Could be supported without much difficulty, but no need for now */
+		return -EINVAL;
+	}
+
+	pages = kmalloc_array(sizeof(pages[0]), CI_EFCT_MAX_HUGEPAGES,
+	                      GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+
+	rc = efct_get_hugepages(rxq->rs.rs_client->nic,
+	                        &rxq->hw, pages, CI_EFCT_MAX_HUGEPAGES);
+	if (rc < 0) {
+		kfree(pages);
+		return rc;
+	}
+	for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; i += REFRESH_BATCH_SIZE) {
+		uint64_t local_current[REFRESH_BATCH_SIZE];
+		size_t j;
+		size_t n = min((size_t)REFRESH_BATCH_SIZE,
+		               CI_EFCT_MAX_HUGEPAGES - i);
+		bool changes = false;
+
+		if (copy_from_user(local_current, user_current,
+		                   n * sizeof(*local_current)))
+			return -EFAULT;
+
+		for (j = 0; j < n; ++j) {
+			rc = fixup_superbuf_mapping(
+					superbufs + HUGE_SIZE * (i + j),
+					&local_current[j], &pages[i + j]);
+			if (rc < 0)
+				break;
+			if (rc)
+				changes = true;
+		}
+
+		if (changes)
+			if (copy_to_user(user_current, local_current,
+			                 n * sizeof(*local_current)))
+				rc = -EFAULT;
+
+		if (rc)
+			break;
+	}
+
+	kfree(pages);
+	return rc;
+}
+EXPORT_SYMBOL(efrm_rxq_refresh);
 
 
 static void efrm_rxq_rm_dtor(struct efrm_resource_manager *rm)

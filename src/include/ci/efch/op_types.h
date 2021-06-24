@@ -210,6 +210,7 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_VI_GET_TS_FORMAT        0x88
 # define                CI_RSOP_EXT_FREE                0x89
 # define                CI_RSOP_EXT_MSG                 0x8A
+# define                CI_RSOP_RXQ_REFRESH             0x8B
 
   union {
     struct {
@@ -309,6 +310,11 @@ typedef struct ci_resource_op_s {
       uint64_t          payload_len;
       uint32_t          flags;
     } ext_msg;
+    struct {
+      uint64_t          superbufs;
+      uint64_t          current_mappings;
+      uint32_t          max_superbufs;
+    } rxq_refresh;
   } u CI_ALIGN(8);
 } ci_resource_op_t;
 
