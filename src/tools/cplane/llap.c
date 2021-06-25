@@ -86,7 +86,8 @@ cp_laddr_add(struct cp_session* s, int af,
    * non-accelerated interface, because oof thinks the address is being
    * deleted.
    */
-  if( mib->llap[llap_id].rx_hwports == 0 )
+  if( mib->llap[llap_id].rx_hwports == 0 &&
+      ! (s->flags & CP_SESSION_LADDR_ALL) )
     return;
 
   struct cp_ip_with_prefix ipp = {

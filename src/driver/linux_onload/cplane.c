@@ -14,6 +14,7 @@
 #include <net/arp.h>
 #include <net/route.h>
 #include <ci/driver/kernel_compat.h>
+#include <onload/oof_interface.h> /* for oof_use_all_local_ip_addresses */
 #include "../linux_onload/onload_kernel_compat.h"
 
 /* Include transport_config_opt.h with CI_CFG_IPV6 definition first,
@@ -2042,7 +2043,7 @@ static int cp_spawn_server(ci_uint32 flags)
    *
    * We also can use smaller value if !NDEBUG, etc etc.
    */
-  const int DIRECT_PARAM_MAX = 12;
+  const int DIRECT_PARAM_MAX = 13;
 
   char* ns_file_path = NULL;
   char* path = cp_get_server_path();
@@ -2153,6 +2154,8 @@ static int cp_spawn_server(ci_uint32 flags)
 
   if( cplane_use_prefsrc_as_local )
     argv[direct_param_base + direct_param++] = "--"CPLANE_SERVER_PREFSRC_AS_LOCAL;
+  if( oof_use_all_local_ip_addresses )
+    argv[direct_param_base + direct_param++] = "--"CPLANE_SERVER_ALL_LADDR_AS_LOCAL;
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   if( cplane_track_xdp )
