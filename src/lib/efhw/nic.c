@@ -259,7 +259,8 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 			8192;
 		/* The TXQ is SW only, but reflects a limited HW resource */
 		nic->q_sizes[EFHW_TXQ] = 512;
-		nic->q_sizes[EFHW_RXQ] = 0;
+		/* RXQ is virtual/software-only, so we have no restrictions */
+		nic->q_sizes[EFHW_RXQ] = ~0u;
 		nic->efhw_func = &efct_char_functional_units;
 		break;
 #endif

@@ -316,7 +316,8 @@ efct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
                     dma_addr_t *dma_addrs, int n_dma_addrs,
                     uint vport_id, uint stack_id, uint ps_buf_size, uint flags)
 {
-  return -EOPNOTSUPP;
+  /* efct doesn't do rxqs like this, so nothing to do here */
+  return 0;
 }
 
 
@@ -355,7 +356,7 @@ static int efct_flush_tx_dma_channel(struct efhw_nic *nic,
 static int efct_flush_rx_dma_channel(struct efhw_nic *nic,
                                      uint32_t client_id, uint dmaq)
 {
-  return -EOPNOTSUPP;
+  return 0;
 }
 
 
