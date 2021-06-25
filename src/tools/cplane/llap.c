@@ -78,6 +78,17 @@ void
 cp_laddr_add(struct cp_session* s, int af,
              ci_addr_sh_t addr, ci_ifid_t ifindex)
 {
+  struct cp_mibs* mib = cp_get_active_mib(s);
+  cicp_rowid_t llap_id = cp_llap_find_row(mib, ifindex);
+
+  /* When an address is assigned to 2 interfaces (accelarated and
+   * non-accelerated), then it is important to avoid adding it with
+   * non-accelerated interface, because oof thinks the address is being
+   * deleted.
+   */
+  if( mib->llap[llap_id].rx_hwports == 0 )
+    return;
+
   struct cp_ip_with_prefix ipp = {
     .addr = addr,
     .prefix = ifindex,
