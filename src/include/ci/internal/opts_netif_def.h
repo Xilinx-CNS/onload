@@ -774,11 +774,10 @@ CI_CFG_OPT("EF_RXQ_SIZE", rxq_size, ci_uint16,
 "reduce efficiency because the working set size is increased.",
            , , 512, 0, 4096, bincount)
 
-/* TODO EFCT allow 0 ring size for now for development purposes */
 CI_CFG_OPT("EF_TXQ_SIZE", txq_size, ci_uint16,
 "Set the size of the transmit descriptor ring.  Valid values: 512, 1024, 2048 "
 "or 4096.",
-           , , 512, 0, 4096, bincount)
+           , , 512, 512, 4096, bincount)
 
 CI_CFG_OPT("EF_SEND_POLL_THRESH", send_poll_thresh, ci_uint16,
 "Poll for network events after sending this many packets."
