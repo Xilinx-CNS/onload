@@ -11,7 +11,7 @@
 
 #if CI_HAVE_EFCT_AUX
 
-static int efct_handle_event(struct sfc_efct_client *client,
+static int efct_handle_event(void *driver_data,
                              const struct sfc_efct_event *event)
 {
   return -ENOSYS;
@@ -79,7 +79,7 @@ int efct_probe(struct auxiliary_device *auxdev,
 
   EFRM_NOTICE("%s name %s", __func__, id->name);
 
-  client = edev->ops->open(auxdev, &efct_ops);
+  client = edev->ops->open(auxdev, &efct_ops, NULL);
   if( IS_ERR(client) )
     return PTR_ERR(client);
 
