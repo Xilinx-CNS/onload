@@ -2202,6 +2202,14 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
   /* Timers MUST NOT send via loopback. */
   ci_assert(OO_PP_IS_NULL(netif->state->looppkts));
 
+  /* Perform proactive socket allocation check.
+   * Proactive packet allocation check is more expensive, so we perform it
+   * from the unlock hook only.
+   */
+  if( oo_want_proactive_socket_allocation(netif) )
+    ef_eplock_holder_set_flag(&netif->state->lock,
+                              CI_EPLOCK_NETIF_NEED_SOCK_BUFS);
+
   if(CI_LIKELY( netif->state->rxq_low <= 1 ))
     netif->state->mem_pressure &= ~OO_MEM_PRESSURE_LOW;
   else

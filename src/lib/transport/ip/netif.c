@@ -1160,8 +1160,7 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val,
     ci_tcp_helper_more_bufs(ni);
   }
 
-  if( test_val & CI_EPLOCK_NETIF_NEED_SOCK_BUFS ||
-      oo_want_proactive_socket_allocation(ni) ) {
+  if( test_val & CI_EPLOCK_NETIF_NEED_SOCK_BUFS ) {
     /* assume caller always asks to handle this flag */
     ci_assert_flags(flags_to_handle, CI_EPLOCK_NETIF_NEED_SOCK_BUFS);
     ci_tcp_helper_more_socks(ni);
