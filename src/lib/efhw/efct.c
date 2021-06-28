@@ -522,7 +522,7 @@ efct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
   int rc;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
-  edev->ops->ctpio_addr(cli, instance, addr, &region_size);
+  rc = edev->ops->ctpio_addr(cli, instance, addr, &region_size);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   /* Currently we assume throughout onload that we have a 4k region */
