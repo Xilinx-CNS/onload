@@ -94,15 +94,13 @@ efct_nic_release_hardware(struct efhw_nic* nic)
  */
 static int
 efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
-                            uint evq, uint evq_size, dma_addr_t *dma_addrs,
-                            uint n_pages, int interrupting, int enable_dos_p,
-                            int wakeup_evq, int flags, int* flags_out)
+                            struct efhw_evq_params *efhw_params)
 {
   struct device *dev;
   struct sfc_efct_device* edev;
   struct sfc_efct_client* cli;
   struct sfc_efct_evq_params qparams = {
-    .qid = evq,
+    .qid = efhw_params->evq,
   };
   int rc;
 

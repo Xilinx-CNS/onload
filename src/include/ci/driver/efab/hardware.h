@@ -81,14 +81,8 @@
 
 /*-------------- Event support  ------------ */
 
-#define efhw_nic_event_queue_enable(nic, client_id, evq, size, dma_addrs, \
-				    n_pages, interrupting, dos_p, wakeup_evq, \
-                                    flags, flags_out)                   \
-  ((nic)->efhw_func->event_queue_enable((nic), (client_id), (evq), (size), \
-                                        (dma_addrs),        \
-                                        (n_pages), (interrupting),      \
-                                        (dos_p), (wakeup_evq),          \
-                                        (flags), (flags_out)))
+#define efhw_nic_event_queue_enable(nic, client_id, params) \
+  ((nic)->efhw_func->event_queue_enable((nic), (client_id), (params)))
 
 #define efhw_nic_event_queue_disable(nic, client_id, evq, \
 				    time_sync_events_enabled) \

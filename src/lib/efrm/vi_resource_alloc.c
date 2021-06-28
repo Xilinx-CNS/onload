@@ -561,10 +561,11 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	int rc = 0;
 	struct efrm_vi_q *q = &virs->q[queue_type];
 	struct efrm_nic* efrm_nic;
-	int instance, evq_instance = -1, interrupting, wakeup_evq;
+	int instance, evq_instance = -1;
 	uint qid;
 	unsigned flags = virs->flags;
 	unsigned vport_id;
+	struct efhw_evq_params evq_params = {};
 
 	vport_id = efrm_pd_get_vport_id(virs->pd);
 
@@ -615,26 +616,32 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		break;
 	case EFHW_EVQ:
 		qid = instance;
+		evq_params.evq = instance;
+		evq_params.evq_size = q->capacity;
+		evq_params.dma_addrs = q->dma_addrs;
+		evq_params.n_pages = (1 << q->host_page_order) *
+					EFHW_NIC_PAGES_IN_OS_PAGE;
+		evq_params.flags = flags;
+
 		if (nic->flags & NIC_FLAG_EVQ_IRQ) {
-			interrupting = 1;
-			wakeup_evq = instance;
+			evq_params.interrupting = true;
+			evq_params.wakeup_evq = instance;
 		}
 		else {
-			interrupting = 0;
-			wakeup_evq = virs->net_drv_wakeup_channel >= 0?
+			evq_params.interrupting = false;
+			evq_params.wakeup_evq =
+				virs->net_drv_wakeup_channel >= 0?
 				virs->net_drv_wakeup_channel:
 				efrm_nic->rss_channel_count == 0?
 				0:
 				instance % efrm_nic->rss_channel_count;
 		}
 
-		/* NB. We do not enable DOS protection because of bug12916. */
-		rc = efhw_nic_event_queue_enable
-			(nic, efrm_pd_get_nic_client_id(virs->pd), instance, q->capacity,
-			 q->dma_addrs,
-			 (1 << q->host_page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
-			 interrupting, 0 /* DOS protection */,
-			 wakeup_evq, flags, &virs->out_flags);
+		rc = efhw_nic_event_queue_enable(nic,
+					efrm_pd_get_nic_client_id(virs->pd),
+					&evq_params);
+		if( rc == 0 )
+			virs->out_flags = evq_params.flags_out;
 		break;
 	default:
 		EFRM_ASSERT(0);

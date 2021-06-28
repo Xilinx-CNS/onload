@@ -864,29 +864,23 @@ ef10_nic_release_hardware(struct efhw_nic *nic)
 int
 ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
 				       uint32_t client_id,
-				       uint evq, /* evq id */
-				       uint evq_size, /* Number of events */
-				       dma_addr_t *dma_addrs,
-				       uint n_pages,
-				       uint interrupting,
-				       uint enable_dos_p,
+				       struct efhw_evq_params *params,
 				       uint enable_cut_through,
 				       uint enable_rx_merging,
-				       int wakeup_evq,
 				       uint enable_timer)
 {
 	int rc, i;
 	EFHW_MCDI_DECLARE_PROXYABLE_BUF(out, MC_CMD_INIT_EVQ_V2_OUT_LEN);
 	size_t out_size;
-	size_t in_size = MC_CMD_INIT_EVQ_V2_IN_LEN(n_pages);
+	size_t in_size = MC_CMD_INIT_EVQ_V2_IN_LEN(params->n_pages);
 	EFHW_MCDI_DECLARE_BUF(in,
 		MC_CMD_INIT_EVQ_V2_IN_LEN(MC_CMD_INIT_EVQ_V2_IN_DMA_ADDR_MAXNUM));
 	EFHW_MCDI_INITIALISE_BUF_SIZE(in, in_size);
 
-	EFHW_ASSERT(n_pages <= MC_CMD_INIT_EVQ_V2_IN_DMA_ADDR_MAXNUM);
+	EFHW_ASSERT(params->n_pages <= MC_CMD_INIT_EVQ_V2_IN_DMA_ADDR_MAXNUM);
 
-	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_SIZE, evq_size);
-	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_INSTANCE, evq);
+	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_SIZE, params->evq_size);
+	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_INSTANCE, params->evq);
 	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_TMR_LOAD, 0);
 	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_TMR_RELOAD, 0);
 
@@ -900,9 +894,8 @@ ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
 		 * by requesting all three we get what we want: Event cut
 		 * through and tx event merging. 
 		 */
-		EFHW_MCDI_POPULATE_DWORD_5(in, INIT_EVQ_IN_FLAGS,
-			INIT_EVQ_IN_FLAG_INTERRUPTING, interrupting ? 1 : 0,
-			INIT_EVQ_IN_FLAG_RPTR_DOS, enable_dos_p ? 1 : 0,
+		EFHW_MCDI_POPULATE_DWORD_4(in, INIT_EVQ_IN_FLAGS,
+			INIT_EVQ_IN_FLAG_INTERRUPTING, params->interrupting ? 1 : 0,
 			INIT_EVQ_IN_FLAG_CUT_THRU, enable_cut_through ? 1 : 0,
 			INIT_EVQ_IN_FLAG_RX_MERGE, 1,
 			INIT_EVQ_IN_FLAG_TX_MERGE, 1);
@@ -914,10 +907,9 @@ ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
 		 * On Medford we must explicitly request a timer if we are
 		 * not interrupting (we'll get one anyway if we are).
 		 */
-		EFHW_MCDI_POPULATE_DWORD_6(in, INIT_EVQ_IN_FLAGS,
-			INIT_EVQ_IN_FLAG_INTERRUPTING, interrupting ? 1 : 0,
+		EFHW_MCDI_POPULATE_DWORD_5(in, INIT_EVQ_IN_FLAGS,
+			INIT_EVQ_IN_FLAG_INTERRUPTING, params->interrupting ? 1 : 0,
 			INIT_EVQ_IN_FLAG_USE_TIMER, enable_timer ? 1 : 0,
-			INIT_EVQ_IN_FLAG_RPTR_DOS, enable_dos_p ? 1 : 0,
 			INIT_EVQ_IN_FLAG_CUT_THRU, enable_cut_through ? 1 : 0,
 			INIT_EVQ_IN_FLAG_RX_MERGE, enable_rx_merging ? 1 : 0,
 			INIT_EVQ_IN_FLAG_TX_MERGE, 1);
@@ -929,19 +921,19 @@ ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
 	/* EF10 TODO We may want to direct the wakeups to another EVQ,
 	 * but by default do old-style spreading
 	 */
-	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_TARGET_EVQ, wakeup_evq);
+	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_TARGET_EVQ, params->wakeup_evq);
 
 	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_COUNT_MODE,
 			    MC_CMD_INIT_EVQ_IN_COUNT_MODE_DIS);
 	EFHW_MCDI_SET_DWORD(in, INIT_EVQ_IN_COUNT_THRSHLD, 0);
 
-	for( i = 0; i < n_pages; ++i ) {
+	for( i = 0; i < params->n_pages; ++i ) {
 		EFHW_MCDI_SET_ARRAY_QWORD(in, INIT_EVQ_IN_DMA_ADDR, i, 
-					  dma_addrs[i]);
+					  params->dma_addrs[i]);
 	}
 
-	EFHW_ASSERT(evq >= 0);
-	EFHW_ASSERT(evq < nic->num_evqs);
+	EFHW_ASSERT(params->evq >= 0);
+	EFHW_ASSERT(params->evq < nic->num_evqs);
 
 	rc = ef10_ef100_mcdi_rpc_client(nic, client_id, MC_CMD_INIT_EVQ,
 	                                in_size, sizeof(out),
@@ -1064,12 +1056,11 @@ static int _ef10_mcdi_cmd_ptp_time_event_unsubscribe(struct efhw_nic *nic,
  * properties.
  */
 static int
-ef10_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id, uint evq,
-			    uint evq_size, dma_addr_t *dma_addrs,
-			    uint n_pages, int interrupting, int enable_dos_p,
-			    int wakeup_evq, int flags, int* flags_out)
+ef10_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
+			    struct efhw_evq_params *params)
 {
 	int rc;
+	int flags = params->flags;
 	int enable_time_sync_events = (flags & (EFHW_VI_RX_TIMESTAMPS |
 						EFHW_VI_TX_TIMESTAMPS)) != 0;
 	int enable_cut_through = (flags & EFHW_VI_NO_EV_CUT_THROUGH) == 0;
@@ -1084,21 +1075,20 @@ ef10_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id, uint evq,
 	if( force_ev_timer )
 		enable_timer = 1;
 
-	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, client_id,
-						    evq, evq_size, dma_addrs,
-						    n_pages, interrupting,
-						    enable_dos_p, enable_cut_through,
+	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, client_id, params,
+						    enable_cut_through,
 						    enable_rx_merging,
-						    wakeup_evq, enable_timer);
+						    enable_timer);
 
-	EFHW_TRACE("%s: enable evq %u size %u rc %d", __FUNCTION__, evq,
-		   evq_size, rc);
+	EFHW_TRACE("%s: enable evq %u size %u rc %d", __FUNCTION__,
+		   params->evq, params->evq_size, rc);
 
 	if( rc == 0 && enable_time_sync_events ) {
 		rc = _ef10_mcdi_cmd_ptp_time_event_subscribe
-			(nic, evq, flags_out, __FUNCTION__);
+			(nic, params->evq, &params->flags_out, __FUNCTION__);
 		if( rc != 0 ) {
-			ef10_ef100_mcdi_cmd_event_queue_disable(nic, client_id, evq);
+			ef10_ef100_mcdi_cmd_event_queue_disable(nic, client_id,
+								params->evq);
 			/* Firmware returns EPERM if you do not have
 			 * the licence to subscribe to time sync
 			 * events.  We convert it to ENOKEY which in

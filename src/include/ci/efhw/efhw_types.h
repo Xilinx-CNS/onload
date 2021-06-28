@@ -113,6 +113,16 @@ enum efhw_q_type {
 	EFHW_N_Q_TYPES
 };
 
+struct efhw_evq_params {
+	uint evq;	/* event queue index */
+	uint evq_size;	/* entries in queue */
+	dma_addr_t* dma_addrs; /* 4K chunks of queue memory */
+	uint n_pages; /* number of entries in dma_addrs */
+	bool interrupting; /* whether this queue uses its own irq */
+	int wakeup_evq; /* queue to deliver wakeups for this queue */
+	int flags;
+	int flags_out;
+};
 
 /**********************************************************************
  * Portable HW interface. ***************************************
@@ -148,20 +158,9 @@ struct efhw_func_ops {
 
   /*-------------- Event support  ------------ */
 
-	/*! Enable the given event queue
-	   depending on the the addressing mode selected then either a q_base_addr
-	   in host memory, or a buffer base id should be provided
-	 */
+	/*! Enable the given event queue */
 	int (*event_queue_enable) (struct efhw_nic *nic, uint32_t client_id,
-				    uint evq,	/* evnt queue index */
-				    uint evq_size,	/* units of #entries */
-				    dma_addr_t* dma_addr,
-				    uint n_pages,
-				    int interrupting, 
-				    int enable_dos_p,
-				    int wakeup_evq,
-				    int flags,
-				    int* flags_out);
+				   struct efhw_evq_params *params);
 
 	/*! Disable the given event queue (and any associated timer) */
 	void (*event_queue_disable) (struct efhw_nic *nic, uint32_t client_id,

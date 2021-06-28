@@ -34,15 +34,9 @@ extern int ef10_ef100_nic_mac_spoofing_privilege(struct efhw_nic *nic);
 
 extern int ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
 						  uint32_t client_id,
-						  uint evq, /* evq id */
-						  uint evq_size, /* Number of events */
-						  dma_addr_t *dma_addrs,
-						  uint n_pages,
-						  uint interrupting,
-						  uint enable_dos_p,
+						  struct efhw_evq_params *params,
 						  uint enable_cut_through,
 						  uint enable_rx_merging,
-						  int wakeup_evq,
 						  uint enable_timer);
 
 extern void ef10_ef100_mcdi_cmd_event_queue_disable(struct efhw_nic *nic,

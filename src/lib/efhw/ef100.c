@@ -173,12 +173,10 @@ ef100_nic_release_hardware(struct efhw_nic *nic)
  */
 static int
 ef100_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
-			    uint evq, uint evq_size,
-			    dma_addr_t *dma_addrs,
-			    uint n_pages, int interrupting, int enable_dos_p,
-			    int wakeup_evq, int flags, int* flags_out)
+			     struct efhw_evq_params *params)
 {
 	int rc;
+	int flags = params->flags;
 	int enable_time_sync_events = (flags & (EFHW_VI_RX_TIMESTAMPS |
 						EFHW_VI_TX_TIMESTAMPS)) != 0;
 	int enable_cut_through = (flags & EFHW_VI_NO_EV_CUT_THROUGH) == 0;
@@ -192,14 +190,13 @@ ef100_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 		return -EOPNOTSUPP;
 	}
 
-	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, client_id, evq, evq_size,
-						    dma_addrs, n_pages, interrupting,
-						    enable_dos_p, enable_cut_through,
+	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, client_id, params,
+						    enable_cut_through,
 						    enable_rx_merging,
-						    wakeup_evq, enable_timer);
+						    enable_timer);
 
-	EFHW_TRACE("%s: enable evq %u size %u rc %d", __FUNCTION__, evq,
-		   evq_size, rc);
+	EFHW_TRACE("%s: enable evq %u size %u rc %d", __FUNCTION__,
+		   params->evq, params->evq_size, rc);
 
 	return rc;
 }

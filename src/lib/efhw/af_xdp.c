@@ -1043,11 +1043,9 @@ static int wait_callback(struct wait_queue_entry* wait, unsigned mode,
  */
 static int
 af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
-                              uint evq, uint evq_size, dma_addr_t *dma_addrs,
-                              uint n_pages, int interrupting, int enable_dos_p,
-                              int wakeup_evq, int flags, int* flags_out)
+			      struct efhw_evq_params *params)
 {
-  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq);
+  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, params->evq);
 
   if( vi == NULL )
     return -ENODEV;
@@ -1055,7 +1053,7 @@ af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
   init_waitqueue_func_entry(&vi->waiter.wait, wait_callback);
   vi->waiter.nic = nic;
   vi->waiter.ev_handlers = nic->af_xdp->ev_handlers;
-  vi->waiter.evq = wakeup_evq;
+  vi->waiter.evq = params->wakeup_evq;
   /* The budget currently has little relevance as Onload doesn't try to
    * poll AF_XDP from an interrupt context. The value may need some thought
    * if that changes in future. */
