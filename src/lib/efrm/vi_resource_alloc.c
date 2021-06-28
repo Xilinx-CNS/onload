@@ -615,28 +615,12 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		break;
 	case EFHW_EVQ:
 		qid = instance;
-		if (nic->devtype.arch == EFHW_ARCH_EF10)
-			interrupting = 0;
-		/* EF100 hasn't wakeup events, so only interrupting
-		 * is supported. Every VI has only one IRQ.
-		 * See ON-10914.
-		 */
-		else if (nic->devtype.arch == EFHW_ARCH_EF100)
+		if (nic->flags & NIC_FLAG_EVQ_IRQ) {
 			interrupting = 1;
-		else if (nic->devtype.arch == EFHW_ARCH_EFCT)
-			interrupting = 1;
-		else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
-			interrupting = 0;
-		else {
-			EFRM_ASSERT(0);
-			interrupting = 0;
-		}
-	
-		if (nic->devtype.arch == EFHW_ARCH_EF100 ||
-		    nic->devtype.arch == EFHW_ARCH_EFCT) {
 			wakeup_evq = instance;
 		}
 		else {
+			interrupting = 0;
 			wakeup_evq = virs->net_drv_wakeup_channel >= 0?
 				virs->net_drv_wakeup_channel:
 				efrm_nic->rss_channel_count == 0?

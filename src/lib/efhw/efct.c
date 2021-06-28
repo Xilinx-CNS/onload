@@ -62,6 +62,7 @@ static void
 efct_nic_tweak_hardware(struct efhw_nic *nic)
 {
   nic->flags |= NIC_FLAG_PHYS_CONTIG_EVQ;
+  nic->flags |= NIC_FLAG_EVQ_IRQ;
 }
 
 

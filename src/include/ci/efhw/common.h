@@ -235,6 +235,11 @@ typedef union {
 #define NIC_FLAG_PHYS_CONTIG_EVQ 0x400000000000LL
 #define NIC_FLAG_PHYS_CONTIG_TXQ 0x800000000000LL
 #define NIC_FLAG_PHYS_CONTIG_RXQ 0x1000000000000LL
+/* Use a dedicated irq rather than wakeups on this NIC
+ * This reflects what we do rather than the underlying HW capabilities as
+ * currently we have no arch where we sometimes use wakeups and sometimes use
+ * irqs. */
+#define NIC_FLAG_EVQ_IRQ 0x2000000000000LL
 
 
 #endif /* __CI_EFHW_COMMON_H__ */
