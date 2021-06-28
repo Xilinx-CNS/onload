@@ -114,14 +114,6 @@ enum efhw_q_type {
 };
 
 
-struct eventq_resource_hardware {
-	/*!iobuffer allocated for eventq - can be larger than eventq */
-	struct efhw_iopages iobuff;
-	struct efhw_buffer_table_block *bt_block;
-	int capacity;		/*!< capacity of event queue */
-};
-
-
 /**********************************************************************
  * Portable HW interface. ***************************************
  **********************************************************************/
