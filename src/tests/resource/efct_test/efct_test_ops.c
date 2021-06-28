@@ -18,7 +18,8 @@ struct sfc_efct_client {
 
 
 static struct sfc_efct_client* efct_test_open(struct auxiliary_device *adev,
-                                             const struct sfc_efct_drvops *ops)
+                                             const struct sfc_efct_drvops *ops,
+                                             void *driver_data)
 {
   struct sfc_efct_client *client;
   struct efct_test_device *tdev;
@@ -36,6 +37,7 @@ static struct sfc_efct_client* efct_test_open(struct auxiliary_device *adev,
     return ERR_PTR(-ENOMEM);
 
   client->drvops = ops;
+  client->drv_priv = driver_data;
   tdev->client = client;
   client->tdev = tdev;
 
@@ -83,10 +85,6 @@ static int efct_test_get_param(struct sfc_efct_client *handle,
     arg->nic_res.evq_lim = EFCT_TEST_EVQS_N - 1;
     rc = 0;
     break;
-   case SFC_EFCT_DRIVER_DATA:
-    arg->ptr = handle->drv_priv;
-    rc = 0;
-    break;
    default:
     break;
   };
@@ -102,15 +100,6 @@ static int efct_test_set_param(struct sfc_efct_client *handle,
   int rc = -ENOSYS;
 
   printk(KERN_INFO "%s: param %d\n", __func__, p);
-
-  switch(p) {
-   case SFC_EFCT_DRIVER_DATA:
-    handle->drv_priv = arg->ptr;
-    rc = 0;
-    break;
-   default:
-    break;
-  };
 
   return rc;
 }
