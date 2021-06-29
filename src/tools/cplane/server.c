@@ -89,7 +89,6 @@ static int cfg_bond_peak_polls = 20;
 static int cfg_bond_3ad_dump_msec = 100;
 
 static int /*bool*/ ci_cfg_pref_src_as_local = 0;
-static int /*bool*/ ci_cfg_all_laddr_as_local = 0;
 
 static ci_cfg_desc cfg_opts[] = {
   { 's', "dump",  CI_CFG_UINT, &cfg_dump_sec,
@@ -173,9 +172,6 @@ static ci_cfg_desc cfg_opts[] = {
     "Tell oof that a preferred source of any accelerated route is a local "
     "address for the network interface the route goes via.  This setting "
     "allows to accelerate unbound connections via such routes." },
-  { 0, CPLANE_SERVER_ALL_LADDR_AS_LOCAL, CI_CFG_FLAG,
-    &ci_cfg_all_laddr_as_local,
-    "Tell oof about all local address, at accelerated interfaces or not." },
   { 0, CPLANE_SERVER_TRACK_XDP, CI_CFG_FLAG, &cfg_track_xdp,
     "Track XDP programs linked to network interfaces.  Such tracking "
     "is needed for EF_XDP_MODE=compatible, and prevents dropping "
@@ -1072,8 +1068,6 @@ int main(int argc, char** argv)
     s->flags |= CP_SESSION_VERIFY_ROUTES;
   if( ci_cfg_pref_src_as_local )
     s->flags |= CP_SESSION_LADDR_USE_PREF_SRC;
-  if( ci_cfg_all_laddr_as_local )
-    s->flags |= CP_SESSION_LADDR_ALL;
   if( cfg_track_xdp )
     s->flags |= CP_SESSION_TRACK_XDP;
 
