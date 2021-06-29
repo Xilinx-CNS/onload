@@ -82,7 +82,7 @@ static int __init efct_test_init(void)
     goto fail_dev;
   }
 
-  efct_test_install_sysfs_entries();
+  efct_test_install_configfs_entries();
   return 0;
 
  fail_dev:
@@ -94,7 +94,7 @@ static int __init efct_test_init(void)
 
 static void __exit efct_test_exit(void)
 {
-  efct_test_remove_sysfs_entries();
+  efct_test_remove_configfs_entries();
 
   if(tdev)
     efct_test_remove_test_dev(tdev);

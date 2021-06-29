@@ -2,14 +2,21 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc. */
 
 #include <ci/driver/kernel_compat.h>
+#include <linux/configfs.h>
 
 #include "efct_test_driver.h"
 
-/* Name of our sysfs directory.  */
-#define SYSFS_DIR_NAME "interfaces"
+struct efct_configfs_dev_item {
+  struct config_item item;
+  struct net_device *dev;
+};
 
-/* Root directory containing our sysfs stuff. */
-static struct kobject *sysfs_dir;
+static const struct config_item_type dev_item_type;
+
+static struct efct_configfs_dev_item* to_dev_item(struct config_item *item)
+{
+  return container_of(item, struct efct_configfs_dev_item, item);
+}
 
 /* Look for the named network device in the current process's network
  * namespace. Return a reference to it if found, or NULL if not found.
@@ -30,136 +37,103 @@ static struct net_device *find_netdev(const char *ifname)
   return dev;
 }
 
-/* Handle userspace reading from the "register" or "unregister"
- * pseudo-files. We have nothing to return except an empty line. */
-static ssize_t empty_show(struct kobject *kobj, struct kobj_attribute *attr,
-                          char *buffer)
+static struct config_item* efct_test_register_interface(
+                                 struct config_group *group, const char *name)
 {
-  buffer[0] = '\n';
-  return 1;
-}
+  int rc;
+  struct net_device *dev;
+  struct efct_configfs_dev_item *item;
 
-
-/* Handle userspace writing to the pseudo-file.
- *
- * We expect a line of the form
- *
- *    "<interface-name>\n"
- *
- * Note that the incoming buffer is guaranteed to be null-terminated.
- * (https://lwn.net/Articles/178634/)
- */
-static struct net_device* netdev_from_store(struct kobject *kobj,
-                                            const char *buffer,
-                                            size_t length)
-{
-  const char *lf;
-  char ifname[IFNAMSIZ];
-  struct net_device *dev = NULL;
-
-  /* Parse arguments and check for validity. */
-  lf = memchr(buffer, '\n', length);
-  if(!lf)
-    return ERR_PTR(-EINVAL);
-  if((lf - buffer) > (IFNAMSIZ - 1))
-    return ERR_PTR(-EINVAL);
-
-  snprintf(ifname, sizeof ifname, "%.*s", (int)(lf - buffer), buffer);
-
-  /* Our arguments are OK. Look for the named network device. */
-  dev = find_netdev(ifname);
-  if(!dev)
+  dev = find_netdev(name);
+  if( ! dev )
     return ERR_PTR(-ENOENT);
 
-  return dev;
-}
-
-static ssize_t efct_test_register_store(struct kobject *kobj,
-                                        struct kobj_attribute *attr,
-                                        const char *buffer,
-                                        size_t length)
-{
-  int rc;
-
-  struct net_device *dev = netdev_from_store(kobj, buffer, length);
-  if( IS_ERR(dev) )
-    return PTR_ERR(dev);
+  item = kzalloc(sizeof(*item), GFP_KERNEL);
+  if( ! item ) {
+    rc = -ENOMEM;
+    goto fail1;
+  }
+  item->dev = dev;
+  config_item_init_type_name(&item->item, name, &dev_item_type);
 
   rc = efct_test_add_netdev(dev);
-  dev_put(dev);
-
   if( rc < 0 )
-    return rc;
-  else
-    return length;
+    goto fail2;
+
+  return &item->item;
+
+ fail2:
+  kfree(item);
+ fail1:
+  dev_put(dev);
+  return ERR_PTR(rc);
 }
 
-static ssize_t efct_test_unregister_store(struct kobject *kobj,
-                                          struct kobj_attribute *attr,
-                                          const char *buffer,
-                                          size_t length)
+static void efct_test_unregister_interface(struct config_item *cfs_item)
+{
+  struct efct_configfs_dev_item *item = to_dev_item(cfs_item);
+
+  efct_test_remove_netdev(item->dev);
+  dev_put(item->dev);
+}
+
+static ssize_t dev_ifindex_show(struct config_item *item, char *page)
+{
+  return sprintf(page, "%d\n", to_dev_item(item)->dev->ifindex);
+}
+
+CONFIGFS_ATTR_RO(dev_, ifindex);
+
+static struct configfs_attribute *dev_attrs[] = {
+  &dev_attr_ifindex,
+  NULL,
+};
+
+static struct configfs_item_operations dev_item_ops = {
+  .release = efct_test_unregister_interface,
+};
+
+static const struct config_item_type dev_item_type = {
+  .ct_item_ops = &dev_item_ops,
+  .ct_attrs = dev_attrs,
+  .ct_owner = THIS_MODULE,
+};
+
+static struct configfs_group_operations interfaces_group_ops = {
+  .make_item = efct_test_register_interface,
+};
+
+static const struct config_item_type interfaces_type = {
+  .ct_group_ops = &interfaces_group_ops,
+  .ct_owner = THIS_MODULE,
+};
+
+static struct configfs_subsystem efct_configfs_root = {
+  .su_group = {
+    .cg_item = {
+      .ci_namebuf = "efct_test",
+      .ci_type = &interfaces_type,
+    },
+  },
+};
+
+static bool efct_cfs_inited = false;
+
+/* Install configfs files on module load. */
+int efct_test_install_configfs_entries(void)
 {
   int rc;
 
-  struct net_device *dev = netdev_from_store(kobj, buffer, length);
-  if( IS_ERR(dev) )
-    return PTR_ERR(dev);
-
-  rc = efct_test_remove_netdev(dev);
-  dev_put(dev);
-
-  if( rc < 0 )
-    return rc;
-  else
-    return length;
-}
-
-static struct kobj_attribute efct_test_register = __ATTR(register, 0600,
-                                                         empty_show,
-                                                         efct_test_register_store);
-
-static struct kobj_attribute efct_test_unregister = __ATTR(unregister, 0600,
-                                                           empty_show,
-                                                           efct_test_unregister_store);
-
-static struct kobj_attribute *efct_test_attrs[] = {
-  &efct_test_register,
-  &efct_test_unregister,
-  NULL
-};
-
-static struct attribute_group efct_test_group = {
-  .attrs = (struct attribute **)efct_test_attrs,
-};
-
-/* Install sysfs files on module load. */
-int efct_test_install_sysfs_entries(void)
-{
-  int rc;
-
-  sysfs_dir = kobject_create_and_add(SYSFS_DIR_NAME,
-                                     &(THIS_MODULE->mkobj.kobj));
-  if(!sysfs_dir) {
-    printk(KERN_ERR "%s: can't create sysfs directory", __func__);
-    return -ENOMEM;
-  }
-
-  rc = sysfs_create_group(sysfs_dir, &efct_test_group);
-  if(rc < 0) {
-    printk(KERN_ERR "%s: can't create sysfs files: %d", __func__, rc);
-    kobject_put(sysfs_dir);
-    sysfs_dir = NULL;
-  }
-
+  config_group_init(&efct_configfs_root.su_group);
+  mutex_init(&efct_configfs_root.su_mutex);
+  rc = configfs_register_subsystem(&efct_configfs_root);
+  efct_cfs_inited = rc >= 0;
   return rc;
 }
 
-/* Remove sysfs files on module unload. */
-void efct_test_remove_sysfs_entries(void)
+/* Remove configfs files on module unload. */
+void efct_test_remove_configfs_entries(void)
 {
-  if(sysfs_dir != NULL) {
-    sysfs_remove_group(sysfs_dir, &efct_test_group);
-    kobject_put(sysfs_dir);
-    sysfs_dir = NULL;
-  }
+  if( efct_cfs_inited )
+    configfs_unregister_subsystem(&efct_configfs_root);
 }
