@@ -80,6 +80,7 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
 
   for( i = 0; i < EFCT_TEST_RXQS_N; i++ ) {
     tdev->rxqs[i].ix = i;
+    tdev->rxqs[i].current_sbid = -1;
     hrtimer_init(&tdev->rxqs[i].rx_tick, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
     tdev->rxqs[i].rx_tick.function = efct_rx_tick;
   }

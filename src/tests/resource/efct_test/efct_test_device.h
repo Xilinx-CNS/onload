@@ -29,10 +29,13 @@ struct efct_test_rxq {
   int ix;
   struct xlnx_efct_hugepage hugepages[EFCT_TEST_MAX_SUPERBUFS/2];
   DECLARE_BITMAP(freelist, EFCT_TEST_MAX_SUPERBUFS);
+  DECLARE_BITMAP(curr_sentinel, EFCT_TEST_MAX_SUPERBUFS);
   size_t current_n_hugepages;
   size_t target_n_hugepages;
   struct hrtimer rx_tick;
   int ms_per_pkt;
+  int current_sbid;
+  uint32_t next_pkt;
 };
 
 struct efct_test_device {

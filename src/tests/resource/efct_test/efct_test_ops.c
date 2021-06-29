@@ -5,9 +5,14 @@
 #include <linux/slab.h>
 #include <linux/set_memory.h>
 #include <linux/random.h>
+#include <linux/mm.h>
 
 #include <ci/driver/ci_aux.h>
 #include <ci/driver/ci_efct.h>
+#include <ci/compat.h>
+#include <etherfabric/internal/efct_uk_api.h>
+#include <ci/tools/byteorder.h>
+#include <ci/tools/bitfield.h>
 
 #include "efct_test_device.h"
 #include "efct_test_ops.h"
@@ -19,6 +24,54 @@ struct xlnx_efct_client {
   void* drv_priv;
 };
 
+#define EFCT_TEST_PKT_BYTES          2048
+#define EFCT_TEST_PKTS_PER_SUPERBUF  \
+                          (EFCT_RX_SUPERBUF_BYTES / EFCT_TEST_PKT_BYTES)
+
+static const unsigned char fake_pkt[] = {
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+  0x08, 0x00,
+  /* IP hdr: */
+  0x45, 0x00, 0x00, 0x21, 0x3f, 0xba, 0x40, 0x00, 0x40, 0x11, 0xfd, 0x0e,
+  0x7f, 0x00, 0x00, 0x01, 0x7f, 0x00, 0x00, 0x02,
+  /* UDP hdr: */
+  0x92, 0x55, 0x30, 0x39, 0x00, 0x0d, 0x4d, 0x68,
+  /* payload: */
+  0x74, 0x65, 0x73, 0x74, 0x0a,
+};
+
+
+static void do_rollover(struct efct_test_device *tdev, struct efct_test_rxq *q)
+{
+  int sbid = -1;
+
+  if( q->current_sbid >= 0 )
+    __change_bit(q->current_sbid, q->curr_sentinel);
+
+  if( q->target_n_hugepages ) {
+    sbid = find_first_bit(q->freelist, EFCT_TEST_MAX_SUPERBUFS);
+    if( sbid == EFCT_TEST_MAX_SUPERBUFS ) {
+      printk(KERN_INFO "q%d: no free superbufs\n", q->ix);
+      sbid = -1;
+    }
+    else {
+      __clear_bit(sbid, q->freelist);
+      tdev->client->drvops->buffer_start(tdev->client->drv_priv, q->ix, sbid,
+                                         test_bit(sbid, q->curr_sentinel));
+    }
+  }
+  printk(KERN_DEBUG "q%d: superbuf rollover %d -> %d\n",
+         q->ix, q->current_sbid, sbid);
+  q->current_sbid = sbid;
+  q->next_pkt = round_up(q->next_pkt, EFCT_TEST_PKTS_PER_SUPERBUF);
+}
+
+static void* superbuf_ptr(struct efct_test_rxq *q)
+{
+  return (char*)page_to_virt(q->hugepages[q->current_sbid/2].page) +
+         q->current_sbid % 2 * EFCT_RX_SUPERBUF_BYTES;
+}
 
 enum hrtimer_restart efct_rx_tick(struct hrtimer *hr)
 {
@@ -26,20 +79,43 @@ enum hrtimer_restart efct_rx_tick(struct hrtimer *hr)
   struct efct_test_rxq* q = container_of(hr, struct efct_test_rxq, rx_tick);
   struct efct_test_device* tdev = container_of(q, struct efct_test_device,
                                                rxqs[q->ix]);
-  int sbid;
-  printk(KERN_DEBUG "q%d: superbuf rollover\n", q->ix);
 
   tdev->client->drvops->poll(tdev->client->drv_priv, q->ix, 9999);
-  if( q->target_n_hugepages ) {
-    sbid = find_first_bit(q->freelist, EFCT_TEST_MAX_SUPERBUFS);
-    if( sbid == EFCT_TEST_MAX_SUPERBUFS )
-      printk(KERN_INFO "q%d: no free superbufs\n", q->ix);
-    else {
-      __clear_bit(sbid, q->freelist);
-      tdev->client->drvops->buffer_start(tdev->client->drv_priv, q->ix, sbid,
-                                         false);
-    }
+
+  if( q->current_sbid >= 0 ) {
+    char *buf = superbuf_ptr(q);
+    int ix = q->next_pkt % EFCT_TEST_PKTS_PER_SUPERBUF;
+    char *dst = buf + ix * EFCT_TEST_PKT_BYTES + 64;
+    /* packet data actually starts 2 bytes in to the cache line, so L3 header
+     * ends up 4-byte aligned. */
+    memset(dst, 0, 2);
+    dst += 2;
+    /* NB: doesn't necessarily copy forwards. Never mind */
+    memcpy(dst, fake_pkt, sizeof(fake_pkt));
+    memcpy(dst + sizeof(fake_pkt), &q->next_pkt, sizeof(q->next_pkt));
   }
+
+  ++q->next_pkt;
+  if( q->next_pkt % EFCT_TEST_PKTS_PER_SUPERBUF == 0 )
+    do_rollover(tdev, q);
+
+  if( q->current_sbid >= 0 ) {
+    char *buf = superbuf_ptr(q);
+    int ix = q->next_pkt % EFCT_TEST_PKTS_PER_SUPERBUF;
+    ci_oword_t meta;
+    ci_oword_t *dst = (ci_oword_t*)(buf + ix * EFCT_TEST_PKT_BYTES);
+    CI_POPULATE_OWORD_4(meta,
+                        EFCT_RX_HEADER_PACKET_LENGTH, sizeof(fake_pkt) +
+                                                      sizeof(q->next_pkt),
+                        EFCT_RX_HEADER_NEXT_FRAME_LOC, 1,
+                        EFCT_RX_HEADER_L4_CLASS, 1,
+                        EFCT_RX_HEADER_SENTINEL,
+                                  test_bit(q->current_sbid, q->curr_sentinel));
+    WRITE_ONCE(dst->u64[1], meta.u64[1]);
+    wmb();
+    WRITE_ONCE(dst->u64[0], meta.u64[0]);
+  }
+
   hrtimer_forward_now(hr, ms_to_ktime(q->ms_per_pkt));
   return HRTIMER_RESTART;
 }
@@ -296,6 +372,8 @@ static int efct_test_bind_rxq(struct xlnx_efct_client *handle,
         q->hugepages[i] = new_pages[j++];
         __set_bit(i * 2, q->freelist);
         __set_bit(i * 2 + 1, q->freelist);
+        __set_bit(i * 2, q->curr_sentinel);
+        __set_bit(i * 2 + 1, q->curr_sentinel);
       }
     }
     for( ; j < n_hugepages; ++j )
@@ -326,7 +404,9 @@ static void efct_test_free_rxq(struct xlnx_efct_client *handle, int rxq,
   q->target_n_hugepages -= n_hugepages;
   for( i = 0; i < ARRAY_SIZE(q->hugepages) &&
               q->current_n_hugepages > q->target_n_hugepages; ++i ) {
-    if( test_bit(i * 2, q->freelist) && test_bit(i * 2 + 1, q->freelist) ) {
+    /* This check is all nastily racey. Whatever */
+    if( test_bit(i * 2, q->freelist) && test_bit(i * 2 + 1, q->freelist) &&
+        q->current_sbid != i * 2 && q->current_sbid != i * 2 + 1 ) {
       __clear_bit(i * 2, q->freelist);
       __clear_bit(i * 2 + 1, q->freelist);
       tdev->client->drvops->free_hugepage(handle->drv_priv, &q->hugepages[i]);
