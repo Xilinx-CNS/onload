@@ -2,7 +2,7 @@
 # X-SPDX-Copyright-Text: (c) Copyright 2002-2020 Xilinx, Inc.
 
 EFCT_TEST_SRCS	:= efct_test_driver.c efct_test_device.c efct_test_ops.c \
-		sysfs.c
+		configfs.c
 
 EFCT_TEST_TARGET	:= efct_test.o
 EFCT_TEST_TARGET_SRCS := $(EFCT_TEST_SRCS)

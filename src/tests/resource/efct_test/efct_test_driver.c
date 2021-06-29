@@ -9,7 +9,7 @@
 #include <ci/driver/ci_aux.h>
 
 #include "efct_test_device.h"
-#include "sysfs.h"
+#include "configfs.h"
 
 /* We need a parent device to associate our aux devices with. We create one
  * on module load to be shared between any aux devices we create.
