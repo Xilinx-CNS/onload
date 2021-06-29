@@ -5,17 +5,30 @@
 #include <linux/configfs.h>
 
 #include "efct_test_driver.h"
+#include "efct_test_device.h"
+
+struct efct_configfs_rxq_item {
+  struct config_group group;
+  int ix;
+};
 
 struct efct_configfs_dev_item {
-  struct config_item item;
+  struct config_group group;
   struct net_device *dev;
+  struct efct_configfs_rxq_item rxqs[EFCT_TEST_RXQS_N];
 };
 
 static const struct config_item_type dev_item_type;
+static const struct config_item_type rxq_item_type;
 
 static struct efct_configfs_dev_item* to_dev_item(struct config_item *item)
 {
-  return container_of(item, struct efct_configfs_dev_item, item);
+  return container_of(item, struct efct_configfs_dev_item, group.cg_item);
+}
+
+static struct efct_configfs_rxq_item* to_rxq_item(struct config_item *item)
+{
+  return container_of(item, struct efct_configfs_rxq_item, group.cg_item);
 }
 
 /* Look for the named network device in the current process's network
@@ -37,9 +50,10 @@ static struct net_device *find_netdev(const char *ifname)
   return dev;
 }
 
-static struct config_item* efct_test_register_interface(
+static struct config_group* efct_test_register_interface(
                                  struct config_group *group, const char *name)
 {
+  int i;
   int rc;
   struct net_device *dev;
   struct efct_configfs_dev_item *item;
@@ -54,13 +68,21 @@ static struct config_item* efct_test_register_interface(
     goto fail1;
   }
   item->dev = dev;
-  config_item_init_type_name(&item->item, name, &dev_item_type);
+  config_group_init_type_name(&item->group, name, &dev_item_type);
+
+  for( i = 0; i < EFCT_TEST_RXQS_N; ++i ) {
+    char rxname[8];
+    item->rxqs[i].ix = i;
+    sprintf(rxname, "rx%d", i);
+    config_group_init_type_name(&item->rxqs[i].group, rxname, &rxq_item_type);
+    configfs_add_default_group(&item->rxqs[i].group, &item->group);
+  }
 
   rc = efct_test_add_netdev(dev);
   if( rc < 0 )
     goto fail2;
 
-  return &item->item;
+  return &item->group;
 
  fail2:
   kfree(item);
@@ -76,6 +98,23 @@ static void efct_test_unregister_interface(struct config_item *cfs_item)
   efct_test_remove_netdev(item->dev);
   dev_put(item->dev);
 }
+
+static ssize_t rxq_index_show(struct config_item *item, char *page)
+{
+  return sprintf(page, "%d\n", to_rxq_item(item)->ix);
+}
+
+CONFIGFS_ATTR_RO(rxq_, index);
+
+static struct configfs_attribute *rxq_attrs[] = {
+  &rxq_attr_index,
+  NULL,
+};
+
+static const struct config_item_type rxq_item_type = {
+  .ct_attrs = rxq_attrs,
+  .ct_owner = THIS_MODULE,
+};
 
 static ssize_t dev_ifindex_show(struct config_item *item, char *page)
 {
@@ -100,7 +139,7 @@ static const struct config_item_type dev_item_type = {
 };
 
 static struct configfs_group_operations interfaces_group_ops = {
-  .make_item = efct_test_register_interface,
+  .make_group = efct_test_register_interface,
 };
 
 static const struct config_item_type interfaces_type = {
