@@ -2202,7 +2202,11 @@ int efrm_filter_insert(struct efrm_client *client,
 	   block it. */
 	net_dev = efhw_nic_get_net_dev(efhw_nic);
 	if( net_dev ) {
-		rc = efrm_filter_check( net_dev->dev.parent, spec );
+		/* AF_XDP does not work with onload_iptables */
+		if( efhw_nic->devtype.arch != EFHW_ARCH_AF_XDP ) {
+			EFRM_ASSERT(net_dev->dev.parent);
+			rc = efrm_filter_check( net_dev->dev.parent, spec );
+		}
 		dev_put(net_dev);
 		if ( rc >= 0 )
 			rc = efhw_nic_filter_insert( efhw_nic, spec, replace );
