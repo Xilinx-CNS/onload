@@ -23,26 +23,24 @@ struct xlnx_efct_client {
 enum hrtimer_restart efct_rx_tick(struct hrtimer *hr)
 {
   /* Totally artificially do superbuf rollover once a second */
-  struct efct_test_device* tdev = container_of(hr, struct efct_test_device,
-                                               rx_tick);
-  int i;
-  printk(KERN_DEBUG "superbuf rollover\n");
-  for( i = 0; i < EFCT_TEST_RXQS_N; ++i ) {
-    struct efct_test_rxq* q = &tdev->rxqs[i];
-    int sbid;
+  struct efct_test_rxq* q = container_of(hr, struct efct_test_rxq, rx_tick);
+  struct efct_test_device* tdev = container_of(q, struct efct_test_device,
+                                               rxqs[q->ix]);
+  int sbid;
+  printk(KERN_DEBUG "q%d: superbuf rollover\n", q->ix);
 
-    tdev->client->drvops->poll(tdev->client->drv_priv, i, 9999);
-    if( q->target_n_hugepages == 0 )
-      continue;
+  tdev->client->drvops->poll(tdev->client->drv_priv, q->ix, 9999);
+  if( q->target_n_hugepages ) {
     sbid = find_first_bit(q->freelist, EFCT_TEST_MAX_SUPERBUFS);
-    if( sbid == EFCT_TEST_MAX_SUPERBUFS ) {
-      printk(KERN_INFO "q%d: no free superbufs\n", i);
-      continue;
+    if( sbid == EFCT_TEST_MAX_SUPERBUFS )
+      printk(KERN_INFO "q%d: no free superbufs\n", q->ix);
+    else {
+      __clear_bit(sbid, q->freelist);
+      tdev->client->drvops->buffer_start(tdev->client->drv_priv, q->ix, sbid,
+                                         false);
     }
-    __clear_bit(sbid, tdev->rxqs[i].freelist);
-    tdev->client->drvops->buffer_start(tdev->client->drv_priv, i, sbid, false);
   }
-  hrtimer_forward_now(hr, ms_to_ktime(1000));
+  hrtimer_forward_now(hr, ms_to_ktime(q->ms_per_pkt));
   return HRTIMER_RESTART;
 }
 

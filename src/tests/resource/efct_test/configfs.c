@@ -10,6 +10,7 @@
 struct efct_configfs_rxq_item {
   struct config_group group;
   int ix;
+  int ms_per_pkt;
 };
 
 struct efct_configfs_dev_item {
@@ -29,6 +30,12 @@ static struct efct_configfs_dev_item* to_dev_item(struct config_item *item)
 static struct efct_configfs_rxq_item* to_rxq_item(struct config_item *item)
 {
   return container_of(item, struct efct_configfs_rxq_item, group.cg_item);
+}
+
+static struct efct_configfs_dev_item* rxq_item_to_dev(
+                                        struct efct_configfs_rxq_item *item)
+{
+  return container_of(item, struct efct_configfs_dev_item, rxqs[item->ix]);
 }
 
 /* Look for the named network device in the current process's network
@@ -99,15 +106,34 @@ static void efct_test_unregister_interface(struct config_item *cfs_item)
   dev_put(item->dev);
 }
 
-static ssize_t rxq_index_show(struct config_item *item, char *page)
+static ssize_t rxq_ms_per_pkt_store(struct config_item *item,
+                                    const char *page, size_t count)
 {
-  return sprintf(page, "%d\n", to_rxq_item(item)->ix);
+  struct efct_configfs_rxq_item *rxq = to_rxq_item(item);
+  int v;
+  int rc = kstrtoint(page, 10, &v);
+
+  if( rc )
+    return rc;
+  if( v < 0 )
+    return -EINVAL;
+  rc = efct_test_netdev_set_rxq_ms_per_pkt(rxq_item_to_dev(rxq)->dev, rxq->ix,
+                                           v);
+  if( rc < 0 )
+    return rc;
+  rxq->ms_per_pkt = v;
+  return count;
 }
 
-CONFIGFS_ATTR_RO(rxq_, index);
+static ssize_t rxq_ms_per_pkt_show(struct config_item *item, char *page)
+{
+  return sprintf(page, "%d\n", to_rxq_item(item)->ms_per_pkt);
+}
+
+CONFIGFS_ATTR(rxq_, ms_per_pkt);
 
 static struct configfs_attribute *rxq_attrs[] = {
-  &rxq_attr_index,
+  &rxq_attr_ms_per_pkt,
   NULL,
 };
 

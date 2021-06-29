@@ -20,6 +20,20 @@ struct device* dev;
 /* Currently only support creation of one test device with a static config. */
 struct efct_test_device* tdev;
 
+static int check_netdev(const char* func, struct net_device* net_dev)
+{
+  if( ! tdev ) {
+    printk(KERN_INFO "%s: no test dev registered\n", func);
+    return -EBUSY;
+  }
+
+  if( tdev->net_dev != net_dev ) {
+    printk(KERN_INFO "%s: %s not registered\n", func, net_dev->name);
+    return -EBUSY;
+  }
+  return 0;
+}
+
 int efct_test_add_netdev(struct net_device* net_dev)
 {
   int rc = 0;
@@ -44,22 +58,29 @@ int efct_test_add_netdev(struct net_device* net_dev)
 
 int efct_test_remove_netdev(struct net_device* net_dev)
 {
+  int rc;
+
   printk(KERN_INFO "efct_test remove %s\n", net_dev->name);
-
-  if(!tdev) {
-    printk(KERN_INFO "%s: no test dev registered\n", __func__);
-    return -EBUSY;
-  }
-
-  if(tdev->net_dev != net_dev) {
-    printk(KERN_INFO "%s: %s not registered\n", __func__, net_dev->name);
-    return -EBUSY;
-  }
+  if( (rc = check_netdev(__func__, net_dev)) < 0 )
+    return rc;
 
   efct_test_remove_test_dev(tdev);
   tdev = NULL;
 
   return 0;
+}
+
+int efct_test_netdev_set_rxq_ms_per_pkt(struct net_device* net_dev, int rxq,
+                                        int ms_per_pkt)
+{
+  int rc;
+
+  printk(KERN_INFO "efct_test ms_per_pkt dev=%s q=%d ms=%d\n",
+         net_dev->name, rxq, ms_per_pkt);
+  if( (rc = check_netdev(__func__, net_dev)) < 0 )
+    return rc;
+
+  return efct_test_set_rxq_ms_per_pkt(tdev, rxq, ms_per_pkt);
 }
 
 static int __init efct_test_init(void)

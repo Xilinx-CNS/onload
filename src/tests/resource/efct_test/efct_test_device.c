@@ -78,9 +78,11 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
     return ERR_PTR(rc);
   }
 
-  hrtimer_init(&tdev->rx_tick, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
-  tdev->rx_tick.function = efct_rx_tick;
-  hrtimer_start(&tdev->rx_tick, ms_to_ktime(1000), HRTIMER_MODE_REL);
+  for( i = 0; i < EFCT_TEST_RXQS_N; i++ ) {
+    tdev->rxqs[i].ix = i;
+    hrtimer_init(&tdev->rxqs[i].rx_tick, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+    tdev->rxqs[i].rx_tick.function = efct_rx_tick;
+  }
 
   return tdev;
 }
@@ -92,8 +94,10 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
 void efct_test_remove_test_dev(struct efct_test_device* tdev)
 {
   struct auxiliary_device* adev = &tdev->dev.adev;
+  int i;
 
-  hrtimer_cancel(&tdev->rx_tick);
+  for( i = 0; i < EFCT_TEST_RXQS_N; i++ )
+    hrtimer_cancel(&tdev->rxqs[i].rx_tick);
   dev_put(tdev->net_dev);
   rtnl_lock();
   auxiliary_device_delete(adev);
@@ -101,3 +105,15 @@ void efct_test_remove_test_dev(struct efct_test_device* tdev)
   auxiliary_device_uninit(adev);
 }
 
+int efct_test_set_rxq_ms_per_pkt(struct efct_test_device* tdev, int rxq,
+                                 int ms_per_pkt)
+{
+  struct efct_test_rxq* q = &tdev->rxqs[rxq];
+  if( rxq < 0 || rxq >= EFCT_TEST_RXQS_N || ms_per_pkt < 0 )
+    return -EINVAL;
+  hrtimer_cancel(&q->rx_tick);
+  q->ms_per_pkt = ms_per_pkt;
+  if( ms_per_pkt )
+    hrtimer_start(&q->rx_tick, ms_to_ktime(ms_per_pkt), HRTIMER_MODE_REL);
+  return 0;
+}
