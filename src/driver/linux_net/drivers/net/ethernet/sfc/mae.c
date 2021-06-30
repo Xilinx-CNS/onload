@@ -112,7 +112,7 @@ int efx_mae_lookup_mport(struct efx_nic *efx, u32 selector, u32 *id)
 	return 0;
 }
 
-int efx_mae_start_counters(struct efx_nic *efx, struct efx_channel *channel)
+int efx_mae_start_counters(struct efx_nic *efx, struct efx_rx_queue *rx_queue)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_COUNTERS_STREAM_START_OUT_LEN);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_COUNTERS_STREAM_START_IN_LEN);
@@ -120,7 +120,7 @@ int efx_mae_start_counters(struct efx_nic *efx, struct efx_channel *channel)
 	size_t outlen;
 	int rc;
 
-	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_START_IN_QID, channel->channel);
+	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_START_IN_QID, rx_queue->queue);
 	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_START_IN_PACKET_SIZE,
 		      efx->net_dev->mtu);
 	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_COUNTERS_STREAM_START,
@@ -133,7 +133,7 @@ int efx_mae_start_counters(struct efx_nic *efx, struct efx_channel *channel)
 	if (out_flags & BIT(MC_CMD_MAE_COUNTERS_STREAM_START_OUT_USES_CREDITS_OFST)) {
 		netif_dbg(efx, drv, efx->net_dev,
 			  "MAE counter stream uses credits\n");
-		channel->rx_queue.grant_credits = true;
+		rx_queue->grant_credits = true;
 		out_flags &= ~BIT(MC_CMD_MAE_COUNTERS_STREAM_START_OUT_USES_CREDITS_OFST);
 	}
 	if (out_flags) {
@@ -144,18 +144,18 @@ int efx_mae_start_counters(struct efx_nic *efx, struct efx_channel *channel)
 	}
 	return 0;
 out_stop:
-	efx_mae_stop_counters(efx, channel);
+	efx_mae_stop_counters(efx, rx_queue);
 	return -EOPNOTSUPP;
 }
 
-int efx_mae_stop_counters(struct efx_nic *efx, struct efx_channel *channel)
+int efx_mae_stop_counters(struct efx_nic *efx, struct efx_rx_queue *rx_queue)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_COUNTERS_STREAM_STOP_IN_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_COUNTERS_STREAM_STOP_OUT_LEN);
 	size_t outlen;
 	int rc;
 
-	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_STOP_IN_QID, channel->channel);
+	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_STOP_IN_QID, rx_queue->queue);
 	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_COUNTERS_STREAM_STOP,
 			  inbuf, sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
 	/* final_generation_count = MCDI_DWORD(outbuf, MAE_COUNTERS_STREAM_STOP_OUT_GENERATION_COUNT); */

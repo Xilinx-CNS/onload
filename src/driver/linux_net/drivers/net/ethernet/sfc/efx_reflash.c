@@ -460,7 +460,7 @@ int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw)
 	u32 type, data_subtype, subtype;
 	const u8 *data;
 	bool protected;
-	int rc, rc2;
+	int rc;
 
 	if (!efx_has_cap(efx, BUNDLE_UPDATE)) {
 		netif_err(efx, hw, efx->net_dev,
@@ -564,10 +564,12 @@ int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw)
 					    EFX_DEVLINK_UPDATE_FINISH_TIMEOUT);
 
 out_update_finish:
-	rc2 = efx_mcdi_nvram_update_finish_polled(efx, type);
-	/* Don't obscure the return code from an earlier failure */
-	if (!rc)
-		rc = rc2;
+	if (rc)
+		/* Don't obscure the return code from an earlier failure */
+		(void) efx_mcdi_nvram_update_finish(efx, type,
+						    EFX_UPDATE_FINISH_ABORT);
+	else
+		rc = efx_mcdi_nvram_update_finish_polled(efx, type);
 
 out:
 	if (!rc) {

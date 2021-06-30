@@ -3245,9 +3245,9 @@ bool efx_ptp_is_ptp_tx(struct efx_nic *efx, struct sk_buff *skb)
  * the receive timestamp from the MC - this will probably occur after the
  * packet arrival because of the processing in the MC.
  */
-static bool efx_ptp_rx(struct efx_channel *channel, struct sk_buff *skb)
+static bool efx_ptp_rx(struct efx_rx_queue *rx_queue, struct sk_buff *skb)
 {
-	struct efx_nic *efx = channel->efx;
+	struct efx_nic *efx = rx_queue->efx;
 	struct efx_ptp_data *ptp = efx->ptp_data;
 	struct efx_ptp_match *match = (struct efx_ptp_match *)skb->cb;
 	u8 *match_data_012, *match_data_345;

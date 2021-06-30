@@ -648,6 +648,7 @@ enum efx_update_finish_mode {
 	EFX_UPDATE_FINISH_WAIT,
 	EFX_UPDATE_FINISH_BACKGROUND,
 	EFX_UPDATE_FINISH_POLL,
+	EFX_UPDATE_FINISH_ABORT,
 };
 
 int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,

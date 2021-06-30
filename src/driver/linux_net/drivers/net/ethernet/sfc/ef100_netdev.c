@@ -880,6 +880,7 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	efx->ef10_resources = efx->type->ef10_resources;
 	efx->n_dl_irqs = EF100_ONLOAD_IRQS;
 #endif
+	efx_nic_check_pcie_link(efx, EFX_BW_PCIE_GEN3_X16, NULL, NULL);
 #endif
 
 	rc = efx_ef100_init_datapath_caps(efx);

@@ -1205,6 +1205,19 @@ static void efx_remove_eventq(struct efx_channel *channel)
 	efx_nic_remove_eventq(channel);
 }
 
+/* Configure a normal RX channel */
+static int efx_set_channel_rx(struct efx_nic *efx, struct efx_channel *channel)
+{
+	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
+
+	rx_queue->core_index = channel->channel;
+	rx_queue->queue = efx_rx_queue_id_internal(efx, channel->channel);
+	rx_queue->label = channel->channel;
+	rx_queue->receive_skb = channel->type->receive_skb;
+	rx_queue->receive_raw = channel->type->receive_raw;
+	return 0;
+}
+
 /* Configure a normal TX channel - add TX queues */
 static int efx_set_channel_tx(struct efx_nic *efx, struct efx_channel *channel)
 {
@@ -1430,11 +1443,6 @@ efx_copy_channel(struct efx_channel *old_channel)
 #endif
 	memset(&channel->eventq, 0, sizeof(channel->eventq));
 
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	/* Invalidate SSR state */
-	channel->ssr.conns = NULL;
-#endif
-
 	if (channel->tx_queue_count) {
 		channel->tx_queues = new_tx_queues;
 		memcpy(channel->tx_queues, old_channel->tx_queues,
@@ -1454,6 +1462,10 @@ efx_copy_channel(struct efx_channel *old_channel)
 	rx_queue = &channel->rx_queue;
 	rx_queue->buffer = NULL;
 	memset(&rx_queue->rxd, 0, sizeof(rx_queue->rxd));
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
+	/* Invalidate SSR state */
+	rx_queue->ssr.conns = NULL;
+#endif
 
 #ifdef EFX_USE_IRQ_NOTIFIERS
 	efx_set_affinity_notifier(channel);
@@ -1801,9 +1813,11 @@ int efx_set_channels(struct efx_nic *efx)
 	 */
 	efx_for_each_channel(channel, efx) {
 		if (channel->channel < efx_rx_channels(efx))
-			channel->rx_queue.core_index = channel->channel;
+			rc = efx_set_channel_rx(efx, channel);
 		else
 			channel->rx_queue.core_index = -1;
+		if (rc)
+			return rc;
 
 		if (efx_channel_is_xdp_tx(channel))
 			rc = efx_set_channel_xdp(efx, channel);
@@ -2178,9 +2192,9 @@ static int efx_process_channel(struct efx_channel *channel, int budget)
 		struct efx_rx_queue *rx_queue =
 			efx_channel_get_rx_queue(channel);
 
-		efx_rx_flush_packet(channel);
+		efx_rx_flush_packet(rx_queue);
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-		efx_ssr_end_of_burst(channel);
+		efx_ssr_end_of_burst(rx_queue);
 #endif
 		efx_fast_push_rx_descriptors(rx_queue, true);
 	}
@@ -2367,16 +2381,6 @@ static int efx_init_napi_channel(struct efx_channel *channel)
 	channel->napi_dev = efx->net_dev;
 	netif_napi_add(channel->napi_dev, &channel->napi_str,
 		       efx_poll, napi_weight);
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	{
-		int rc = efx_ssr_init(channel, efx);
-
-		if (rc) {
-			efx_fini_napi(efx);
-			return rc;
-		}
-	}
-#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
 	efx_channel_busy_poll_init(channel);
 #endif
@@ -2400,9 +2404,6 @@ int efx_init_napi(struct efx_nic *efx)
 
 static void efx_fini_napi_channel(struct efx_channel *channel)
 {
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	efx_ssr_fini(channel);
-#endif
 	if (channel->napi_dev)
 		netif_napi_del(&channel->napi_str);
 	channel->napi_dev = NULL;
@@ -2510,9 +2511,10 @@ int efx_busy_poll(struct napi_struct *napi)
 {
 	struct efx_channel *channel =
 		container_of(napi, struct efx_channel, napi_str);
+	unsigned long old_rx_packets = 0, rx_packets = 0;
 	struct efx_nic *efx = channel->efx;
+	struct efx_rx_queue *rx_queue;
 	int budget = 4;
-	int old_rx_packets, rx_packets;
 
 	if (!netif_running(efx->net_dev))
 		return LL_FLUSH_FAILED;
@@ -2520,10 +2522,13 @@ int efx_busy_poll(struct napi_struct *napi)
 	if (!efx_channel_try_lock_poll(channel))
 		return LL_FLUSH_BUSY;
 
-	old_rx_packets = channel->rx_queue.rx_packets;
+	efx_for_each_channel_rx_queue(rx_queue, channel)
+		old_rx_packets += rx_queue->rx_packets;
 	efx_process_channel(channel, budget);
 
-	rx_packets = channel->rx_queue.rx_packets - old_rx_packets;
+	efx_for_each_channel_rx_queue(rx_queue, channel)
+		rx_packets += rx_queue->rx_packets;
+	rx_packets -= old_rx_packets;
 
 	/* There is no race condition with NAPI here.
 	 * NAPI will automatically be rescheduled if it yielded during busy

@@ -23,6 +23,7 @@ struct efx_sw_stat_desc {
 	enum {
 		EFX_ETHTOOL_STAT_SOURCE_nic,
 		EFX_ETHTOOL_STAT_SOURCE_channel,
+		EFX_ETHTOOL_STAT_SOURCE_rx_queue,
 		EFX_ETHTOOL_STAT_SOURCE_tx_queue
 	} source;
 	unsigned int offset;
@@ -62,6 +63,9 @@ static u64 efx_get_atomic_stat(void *field)
 	EFX_ETHTOOL_STAT(field, channel, field,			\
 			 unsigned int, efx_get_uint_stat)
 
+#define EFX_ETHTOOL_UINT_RXQ_STAT(field)			\
+	EFX_ETHTOOL_STAT(field, rx_queue, n_##field,		\
+			 unsigned int, efx_get_uint_stat)
 #define EFX_ETHTOOL_UINT_TXQ_STAT(field)			\
 	EFX_ETHTOOL_STAT(tx_##field, tx_queue, field,		\
 			 unsigned int, efx_get_uint_stat)
@@ -76,23 +80,23 @@ static const struct efx_sw_stat_desc efx_sw_stat_desc[] = {
 	EFX_ETHTOOL_UINT_TXQ_STAT(pio_packets),
 	EFX_ETHTOOL_UINT_TXQ_STAT(cb_packets),
 	EFX_ETHTOOL_ATOMIC_NIC_ERROR_STAT(rx_reset),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_tobe_disc),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_ip_hdr_chksum_err),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_tcp_udp_chksum_err),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_inner_ip_hdr_chksum_err),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_inner_tcp_udp_chksum_err),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_outer_ip_hdr_chksum_err),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_outer_tcp_udp_chksum_err),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_eth_crc_err),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_mcast_mismatch),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_frm_trunc),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_merge_events),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_merge_packets),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_tobe_disc),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_ip_hdr_chksum_err),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_tcp_udp_chksum_err),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_inner_ip_hdr_chksum_err),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_inner_tcp_udp_chksum_err),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_outer_ip_hdr_chksum_err),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_outer_tcp_udp_chksum_err),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_eth_crc_err),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_mcast_mismatch),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_frm_trunc),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_merge_events),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_merge_packets),
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_xdp_drops),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_xdp_bad_drops),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_xdp_tx),
-	EFX_ETHTOOL_UINT_CHANNEL_STAT(rx_xdp_redirect),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_drops),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_bad_drops),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_tx),
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_redirect),
 #endif
 #ifdef CONFIG_RFS_ACCEL
 	EFX_ETHTOOL_UINT_CHANNEL_STAT_NO_N(rfs_filter_count),
@@ -122,7 +126,7 @@ void efx_ethtool_get_drvinfo(struct net_device *net_dev,
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
-	strlcpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
+	strlcpy(info->driver, efx->pci_dev->driver->name, sizeof(info->driver));
 	strlcpy(info->version, EFX_DRIVER_VERSION, sizeof(info->version));
 	if (!in_interrupt())
 		efx_mcdi_print_fwver(efx, info->fw_version,
@@ -665,6 +669,15 @@ void efx_ethtool_get_stats(struct net_device *net_dev,
 			efx_for_each_channel(channel, efx)
 				data[i] += stat->get_stat((void *)channel +
 							  stat->offset);
+			break;
+		case EFX_ETHTOOL_STAT_SOURCE_rx_queue:
+			data[i] = 0;
+			efx_for_each_channel(channel, efx) {
+				efx_for_each_channel_rx_queue(rx_queue, channel)
+					data[i] +=
+						stat->get_stat((void *)rx_queue
+							       + stat->offset);
+			}
 			break;
 		case EFX_ETHTOOL_STAT_SOURCE_tx_queue:
 			data[i] = 0;

@@ -24,6 +24,9 @@
 
 #define EF100_ONLOAD_IRQS 8
 #endif
+
+#define EF100_BRIDGE_DOWNSTREAM_PCI_DEVICE 0x9434
+#define EF100_BRIDGE_UPSTREAM_PCI_DEVICE 0x913f
 #endif
 #define EF100_QDMA_ADDR_REGIONS_MAX	MC_CMD_GET_DESC_ADDR_REGIONS_OUT_REGIONS_MAXNUM
 
@@ -97,6 +100,9 @@ enum {
 	EFX_EF100_TEST = 1,
 	EFX_EF100_REFILL,
 };
+#define EFX_EF100_DRVGEN_MAGIC(_code, _data)	((_code) | ((_data) << 8))
+#define EFX_EF100_DRVGEN_CODE(_magic)	((_magic) & 0xff)
+#define EFX_EF100_DRVGEN_DATA(_magic)	((_magic) >> 8)
 
 /** QDMA address region
  * This is the driver equivalent of DEVEL_NIC_ADDR_REGION structuredef

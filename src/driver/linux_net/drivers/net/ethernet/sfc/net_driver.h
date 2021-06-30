@@ -96,7 +96,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.8.1011"
+#define EFX_DRIVER_VERSION	"5.3.9.1001"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -519,120 +519,6 @@ struct efx_rx_page_state {
 	unsigned int __pad[0] ____cacheline_aligned;
 };
 
-/**
- * struct efx_rx_queue - An Efx RX queue
- * @efx: The associated Efx NIC
- * @buffer: The software buffer ring
- * @rxd: The hardware descriptor ring
- * @core_index: Index of network core RX queue.  Will be >= 0 iff this
- *	is associated with a real RX queue.
- * @ptr_mask: The size of the ring minus 1.
- * @refill_enabled: Enable refill whenever fill level is low
- * @flush_pending: Set when a RX flush is pending. Has the same lifetime as
- *	@rxq_flush_pending.
- * @grant_credits: Posted RX descriptors need to be granted to the MAE with
- *	%MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS.  For %EFX_EXTRA_CHANNEL_TC,
- *	and only supported on EF100.
- * @added_count: Number of buffers added to the receive queue.
- * @notified_count: Number of buffers given to NIC (<= @added_count).
- * @granted_count: Number of buffers granted to the MAE (<= @notified_count).
- * @removed_count: Number of buffers removed from the receive queue.
- * @scatter_n: Used by NIC specific receive code.
- * @scatter_len: Used by NIC specific receive code.
- * @page_ring: The ring to store DMA mapped pages for reuse.
- * @page_add: Counter to calculate the write pointer for the recycle ring.
- * @page_remove: Counter to calculate the read pointer for the recycle ring.
- * @page_recycle_count: The number of pages that have been recycled.
- * @page_recycle_failed: The number of pages that couldn't be recycled because
- *      the kernel still held a reference to them.
- * @page_recycle_full: The number of pages that were released because the
- *      recycle ring was full.
- * @page_ptr_mask: The number of pages in the RX recycle ring minus 1.
- * @max_fill: RX descriptor maximum fill level (<= ring size)
- * @fast_fill_trigger: RX descriptor fill level that will trigger a fast fill
- *	(<= @max_fill)
- * @min_fill: RX descriptor minimum non-zero fill level.
- *	This records the minimum fill level observed when a ring
- *	refill was triggered.
- * @recycle_count: RX buffer recycle counter.
- * @slow_fill: Timer used to defer efx_nic_generate_fill_event().
- * @grant_work: workitem used to grant credits to the MAE if @grant_credits
- * @umem: umem assigned to this queue.
- * @zca: zero copy allocator for rx_queue
- * @xdp_rxq_info: XDP specific RX queue information.
- */
-struct efx_rx_queue {
-	struct efx_nic *efx;
-	struct efx_rx_buffer *buffer;
-	struct efx_special_buffer rxd;
-	int core_index;
-	unsigned int ptr_mask;
-	bool refill_enabled;
-	bool flush_pending;
-	bool grant_credits;
-	unsigned int added_count;
-	unsigned int notified_count;
-	unsigned int granted_count;
-	unsigned int removed_count;
-	unsigned int scatter_n;
-	unsigned int scatter_len;
-#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
-	struct page **page_ring;
-	unsigned int page_add;
-	unsigned int page_remove;
-	unsigned int page_recycle_count;
-	unsigned int page_recycle_failed;
-	unsigned int page_recycle_full;
-	unsigned int page_repost_count;
-	unsigned int page_ptr_mask;
-#endif
-	unsigned int max_fill;
-	unsigned int fast_fill_trigger;
-	unsigned int min_fill;
-	unsigned int recycle_count;
-	unsigned int slow_fill_count;
-	struct delayed_work slow_fill_work;
-	struct work_struct grant_work;
-	/* Statistics to supplement MAC stats */
-	unsigned long rx_packets;
-#if defined(EFX_NOT_UPSTREAM)
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4,2,0) && !(defined(RHEL_MAJOR) && RHEL_MAJOR >= 7)
-#define SKB_CACHE_SIZE 8
-#else
-#define SKB_CACHE_SIZE 0
-#endif
-#else
-#define SKB_CACHE_SIZE 0
-#endif
-	struct sk_buff *skb_cache[SKB_CACHE_SIZE];
-	unsigned int skb_cache_next_unused;
-	unsigned int failed_flush_count;
-
-#ifdef CONFIG_SFC_DEBUGFS
-	struct dentry *debug_dir;
-#endif
-
-#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XDP_SOCK)
-#if defined(CONFIG_XDP_SOCKETS)
-#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XSK_POOL)
-	struct xsk_buff_pool *xsk_pool;
-#else
-	struct xdp_umem *umem;
-#endif
-#endif
-#endif /* EFX_HAVE_XSK_POOL */
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
-#if defined(CONFIG_XDP_SOCKETS)
-	struct zero_copy_allocator zca;
-#endif
-#endif /* EFX_HAVE_XDP_SOCK */
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
-	struct xdp_rxq_info xdp_rxq_info;
-#endif /* EFX_HAVE_XDP_RXQ_INFO */
-};
-
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 
 /**
@@ -717,6 +603,169 @@ struct efx_ssr_state {
 
 #endif
 
+/**
+ * struct efx_rx_queue - An Efx RX queue
+ * @efx: The associated Efx NIC
+ * @buffer: The software buffer ring
+ * @rxd: The hardware descriptor ring
+ * @queue: Hardware RXQ instance number
+ * @label: Hardware RXQ label
+ * @core_index: Index of network core RX queue.  Will be >= 0 iff this
+ *	is associated with a real RX queue.
+ * @ptr_mask: The size of the ring minus 1.
+ * @refill_enabled: Enable refill whenever fill level is low
+ * @flush_pending: Set when a RX flush is pending. Has the same lifetime as
+ *	@rxq_flush_pending.
+ * @grant_credits: Posted RX descriptors need to be granted to the MAE with
+ *	%MC_CMD_MAE_COUNTERS_STREAM_GIVE_CREDITS.  For %EFX_EXTRA_CHANNEL_TC,
+ *	and only supported on EF100.
+ * @added_count: Number of buffers added to the receive queue.
+ * @notified_count: Number of buffers given to NIC (<= @added_count).
+ * @granted_count: Number of buffers granted to the MAE (<= @notified_count).
+ * @removed_count: Number of buffers removed from the receive queue.
+ * @scatter_n: Used by NIC specific receive code.
+ * @scatter_len: Used by NIC specific receive code.
+ * @rx_pkt_n_frags: Number of fragments in next packet to be delivered by
+ *	__efx_rx_packet(), or zero if there is none
+ * @rx_pkt_index: Ring index of first buffer for next packet to be delivered
+ *	by __efx_rx_packet(), if @rx_pkt_n_frags != 0
+ * @page_ring: The ring to store DMA mapped pages for reuse.
+ * @page_add: Counter to calculate the write pointer for the recycle ring.
+ * @page_remove: Counter to calculate the read pointer for the recycle ring.
+ * @page_recycle_count: The number of pages that have been recycled.
+ * @page_recycle_failed: The number of pages that couldn't be recycled because
+ *      the kernel still held a reference to them.
+ * @page_recycle_full: The number of pages that were released because the
+ *      recycle ring was full.
+ * @page_ptr_mask: The number of pages in the RX recycle ring minus 1.
+ * @max_fill: RX descriptor maximum fill level (<= ring size)
+ * @fast_fill_trigger: RX descriptor fill level that will trigger a fast fill
+ *	(<= @max_fill)
+ * @min_fill: RX descriptor minimum non-zero fill level.
+ *	This records the minimum fill level observed when a ring
+ *	refill was triggered.
+ * @recycle_count: RX buffer recycle counter.
+ * @slow_fill: Timer used to defer efx_nic_generate_fill_event().
+ * @grant_work: workitem used to grant credits to the MAE if @grant_credits
+ * @n_rx_tobe_disc: Count of RX_TOBE_DISC errors
+ * @n_rx_ip_hdr_chksum_err: Count of RX IP header checksum errors
+ * @n_rx_tcp_udp_chksum_err: Count of RX TCP and UDP checksum errors
+ * @n_rx_eth_crc_err: Count of RX CRC errors
+ * @n_rx_mcast_mismatch: Count of unmatched multicast frames
+ * @n_rx_frm_trunc: Count of RX_FRM_TRUNC errors
+ * @n_rx_overlength: Count of RX_OVERLENGTH errors
+ * @n_rx_nodesc_trunc: Number of RX packets truncated and then dropped due to
+ *	lack of descriptors
+ * @n_rx_merge_events: Number of RX merged completion events
+ * @n_rx_merge_packets: Number of RX packets completed by merged events
+ * @n_rx_xdp_drops: Count of RX packets intentionally dropped due to XDP
+ * @n_rx_xdp_bad_drops: Count of RX packets dropped due to XDP errors
+ * @n_rx_xdp_tx: Count of RX packets retransmitted due to XDP
+ * @n_rx_xdp_redirect: Count of RX packets redirected to a different NIC by XDP
+ * @n_rx_mport_bad: Count of RX packets dropped because their ingress mport was
+ *	not recognised
+ * @umem: umem assigned to this queue.
+ * @zca: zero copy allocator for rx_queue
+ * @xdp_rxq_info: XDP specific RX queue information.
+ * @receive_skb: Handle an skb ready to be passed to netif_receive_skb()
+ * @receive_raw: Handle an RX buffer ready to be passed to __efx_rx_packet()
+ */
+struct efx_rx_queue {
+	struct efx_nic *efx;
+	struct efx_rx_buffer *buffer;
+	struct efx_special_buffer rxd;
+	int queue;
+	int label;
+	int core_index;
+	unsigned int ptr_mask;
+	bool refill_enabled;
+	bool flush_pending;
+	bool grant_credits;
+	unsigned int added_count;
+	unsigned int notified_count;
+	unsigned int granted_count;
+	unsigned int removed_count;
+	unsigned int scatter_n;
+	unsigned int scatter_len;
+
+	unsigned int rx_pkt_n_frags;
+	unsigned int rx_pkt_index;
+
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+	struct page **page_ring;
+	unsigned int page_add;
+	unsigned int page_remove;
+	unsigned int page_recycle_count;
+	unsigned int page_recycle_failed;
+	unsigned int page_recycle_full;
+	unsigned int page_repost_count;
+	unsigned int page_ptr_mask;
+#endif
+	unsigned int max_fill;
+	unsigned int fast_fill_trigger;
+	unsigned int min_fill;
+	unsigned int recycle_count;
+	unsigned int slow_fill_count;
+	struct delayed_work slow_fill_work;
+	struct work_struct grant_work;
+	/* Statistics to supplement MAC stats */
+	unsigned long rx_packets;
+	unsigned int n_rx_tobe_disc;
+	unsigned int n_rx_ip_hdr_chksum_err;
+	unsigned int n_rx_tcp_udp_chksum_err;
+	unsigned int n_rx_outer_ip_hdr_chksum_err;
+	unsigned int n_rx_outer_tcp_udp_chksum_err;
+	unsigned int n_rx_inner_ip_hdr_chksum_err;
+	unsigned int n_rx_inner_tcp_udp_chksum_err;
+	unsigned int n_rx_eth_crc_err;
+	unsigned int n_rx_mcast_mismatch;
+	unsigned int n_rx_frm_trunc;
+	unsigned int n_rx_overlength;
+	unsigned int n_rx_nodesc_trunc;
+	unsigned int n_rx_merge_events;
+	unsigned int n_rx_merge_packets;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
+	unsigned int n_rx_xdp_drops;
+	unsigned int n_rx_xdp_bad_drops;
+	unsigned int n_rx_xdp_tx;
+	unsigned int n_rx_xdp_redirect;
+#endif
+	unsigned int n_rx_mport_bad;
+	unsigned int failed_flush_count;
+
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
+	struct efx_ssr_state ssr;
+#endif
+
+#ifdef CONFIG_SFC_DEBUGFS
+	struct dentry *debug_dir;
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XDP_SOCK)
+#if defined(CONFIG_XDP_SOCKETS)
+#if !defined(EFX_USE_KCOMPAT) ||  defined(EFX_HAVE_XSK_POOL)
+	struct xsk_buff_pool *xsk_pool;
+#else
+	struct xdp_umem *umem;
+#endif
+#endif
+#endif /* EFX_HAVE_XSK_POOL */
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
+#if defined(CONFIG_XDP_SOCKETS)
+	struct zero_copy_allocator zca;
+#endif
+#endif /* EFX_HAVE_XDP_SOCK */
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
+	struct xdp_rxq_info xdp_rxq_info;
+#endif /* EFX_HAVE_XDP_RXQ_INFO */
+
+	/* Special RX handlers (normally %NULL) */
+	bool (*receive_skb)(struct efx_rx_queue *, struct sk_buff *);
+	bool (*receive_raw)(struct efx_rx_queue *);
+};
+
 #ifdef CONFIG_SFC_PTP
 enum efx_sync_events_state {
 	SYNC_EVENTS_DISABLED = 0,
@@ -787,28 +836,6 @@ struct efx_rss_context {
  * @filter_work: Work item for efx_filter_rfs_expire()
  * @rps_flow_id: Flow IDs of filters allocated for accelerated RFS,
  *      indexed by filter ID
- * @n_rx_tobe_disc: Count of RX_TOBE_DISC errors
- * @n_rx_ip_hdr_chksum_err: Count of RX IP header checksum errors
- * @n_rx_tcp_udp_chksum_err: Count of RX TCP and UDP checksum errors
- * @n_rx_eth_crc_err: Count of RX CRC errors
- * @n_rx_mcast_mismatch: Count of unmatched multicast frames
- * @n_rx_frm_trunc: Count of RX_FRM_TRUNC errors
- * @n_rx_overlength: Count of RX_OVERLENGTH errors
- * @n_skbuff_leaks: Count of skbuffs leaked due to RX overrun
- * @n_rx_nodesc_trunc: Number of RX packets truncated and then dropped due to
- *	lack of descriptors
- * @n_rx_merge_events: Number of RX merged completion events
- * @n_rx_merge_packets: Number of RX packets completed by merged events
- * @n_rx_xdp_drops: Count of RX packets intentionally dropped due to XDP
- * @n_rx_xdp_bad_drops: Count of RX packets dropped due to XDP errors
- * @n_rx_xdp_tx: Count of RX packets retransmitted due to XDP
- * @n_rx_xdp_redirect: Count of RX packets redirected to a different NIC by XDP
- * @n_rx_mport_bad: Count of RX packets dropped because their ingress mport was
- *	not recognised
- * @rx_pkt_n_frags: Number of fragments in next packet to be delivered by
- *	__efx_rx_packet(), or zero if there is none
- * @rx_pkt_index: Ring index of first buffer for next packet to be delivered
- *	by __efx_rx_packet(), if @rx_pkt_n_frags != 0
  * @rx_list: list of SKBs from current RX, awaiting processing
  * @zc: zero-copy enabled on channel
  * @rx_queue: RX queue for this channel
@@ -878,36 +905,6 @@ struct efx_channel {
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_NEED_UNMASK_MSIX_VECTORS)
 	u32 msix_ctrl;
 #endif
-
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	struct efx_ssr_state ssr;
-#endif
-
-	unsigned int n_rx_tobe_disc;
-	unsigned int n_rx_ip_hdr_chksum_err;
-	unsigned int n_rx_tcp_udp_chksum_err;
-	unsigned int n_rx_outer_ip_hdr_chksum_err;
-	unsigned int n_rx_outer_tcp_udp_chksum_err;
-	unsigned int n_rx_inner_ip_hdr_chksum_err;
-	unsigned int n_rx_inner_tcp_udp_chksum_err;
-	unsigned int n_rx_eth_crc_err;
-	unsigned int n_rx_mcast_mismatch;
-	unsigned int n_rx_frm_trunc;
-	unsigned int n_rx_overlength;
-	unsigned int n_skbuff_leaks;
-	unsigned int n_rx_nodesc_trunc;
-	unsigned int n_rx_merge_events;
-	unsigned int n_rx_merge_packets;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
-	unsigned int n_rx_xdp_drops;
-	unsigned int n_rx_xdp_bad_drops;
-	unsigned int n_rx_xdp_tx;
-	unsigned int n_rx_xdp_redirect;
-#endif
-	unsigned int n_rx_mport_bad;
-
-	unsigned int rx_pkt_n_frags;
-	unsigned int rx_pkt_index;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	struct list_head *rx_list;
@@ -1106,8 +1103,8 @@ struct efx_channel_type {
 	void (*post_remove)(struct efx_channel *);
 	void (*get_name)(struct efx_channel *, char *buf, size_t len);
 	struct efx_channel *(*copy)(struct efx_channel *);
-	bool (*receive_skb)(struct efx_channel *, struct sk_buff *);
-	bool (*receive_raw)(struct efx_channel *);
+	bool (*receive_skb)(struct efx_rx_queue *, struct sk_buff *);
+	bool (*receive_raw)(struct efx_rx_queue *);
 	bool keep_eventq;
 	bool hide_tx;
 };
@@ -2291,7 +2288,7 @@ struct efx_nic_type {
 	void (*rx_remove)(struct efx_rx_queue *rx_queue);
 	void (*rx_write)(struct efx_rx_queue *rx_queue);
 	int (*rx_defer_refill)(struct efx_rx_queue *rx_queue);
-	void (*rx_packet)(struct efx_channel *channel);
+	void (*rx_packet)(struct efx_rx_queue *rx_queue);
 	bool (*rx_buf_hash_valid)(const u8 *prefix);
 	int (*ev_probe)(struct efx_channel *channel);
 	int (*ev_init)(struct efx_channel *channel);
@@ -2611,9 +2608,20 @@ efx_rx_queue_channel(struct efx_rx_queue *rx_queue)
 	return container_of(rx_queue, struct efx_channel, rx_queue);
 }
 
+/* Software index of the RX queue, meaningful to the driver.
+ * Not necessarily related to hardware RXQ number in any way.
+ */
 static inline int efx_rx_queue_index(struct efx_rx_queue *rx_queue)
 {
-	return efx_rx_queue_channel(rx_queue)->channel;
+	return rx_queue->label;
+}
+
+/* Hardware RXQ instance number.  Relative VI number of the VI backing
+ * this RX queue.
+ */
+static inline int efx_rx_queue_instance(struct efx_rx_queue *rx_queue)
+{
+	return rx_queue->queue;
 }
 
 /* Returns a pointer to the specified receive buffer in the RX
@@ -2623,6 +2631,12 @@ static inline struct efx_rx_buffer *efx_rx_buffer(struct efx_rx_queue *rx_queue,
 						  unsigned int index)
 {
 	return &rx_queue->buffer[index];
+}
+
+/* Returns a pointer to the receive buffer waiting in the RX pipeline */
+static inline struct efx_rx_buffer *efx_rx_buf_pipe(struct efx_rx_queue *rx_queue)
+{
+	return efx_rx_buffer(rx_queue, rx_queue->rx_pkt_index);
 }
 
 static inline struct efx_rx_buffer *

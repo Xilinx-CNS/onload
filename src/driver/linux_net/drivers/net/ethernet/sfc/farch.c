@@ -958,7 +958,6 @@ efx_farch_handle_tx_event(struct efx_channel *channel, efx_qword_t *event)
 static u16 efx_farch_handle_rx_not_ok(struct efx_rx_queue *rx_queue,
 				      const efx_qword_t *event)
 {
-	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
 	struct efx_nic *efx = rx_queue->efx;
 	bool rx_ev_buf_owner_id_err, rx_ev_ip_hdr_chksum_err;
 	bool rx_ev_tcp_udp_chksum_err, rx_ev_eth_crc_err;
@@ -988,20 +987,20 @@ static u16 efx_farch_handle_rx_not_ok(struct efx_rx_queue *rx_queue,
 	/* Count errors that are not in MAC stats.  Ignore expected
 	 * checksum errors during self-test. */
 	if (rx_ev_frm_trunc)
-		++channel->n_rx_frm_trunc;
+		++rx_queue->n_rx_frm_trunc;
 	else if (likely(!efx->loopback_selftest)) {
 		/* only look at tobe_disc if we're not in loopback mode */
 		rx_ev_tobe_disc =
 			EFX_QWORD_FIELD(*event, FSF_AZ_RX_EV_TOBE_DISC);
 
 		if (rx_ev_tobe_disc)
-			++channel->n_rx_tobe_disc;
+			++rx_queue->n_rx_tobe_disc;
 		else if (rx_ev_eth_crc_err)
-			++channel->n_rx_eth_crc_err;
+			++rx_queue->n_rx_eth_crc_err;
 		else if (rx_ev_ip_hdr_chksum_err)
-			++channel->n_rx_ip_hdr_chksum_err;
+			++rx_queue->n_rx_ip_hdr_chksum_err;
 		else if (rx_ev_tcp_udp_chksum_err)
-			++channel->n_rx_tcp_udp_chksum_err;
+			++rx_queue->n_rx_tcp_udp_chksum_err;
 	}
 
 	/* TOBE_DISC is expected on unicast mismatches; don't print out an
@@ -1043,14 +1042,13 @@ static u16 efx_farch_handle_rx_not_ok(struct efx_rx_queue *rx_queue,
 static bool
 efx_farch_handle_rx_bad_index(struct efx_rx_queue *rx_queue, unsigned int index)
 {
-	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
 	struct efx_nic *efx = rx_queue->efx;
 	unsigned int expected, dropped;
 
 	if (rx_queue->scatter_n &&
 	    index == ((rx_queue->removed_count + rx_queue->scatter_n - 1) &
 		      rx_queue->ptr_mask)) {
-		++channel->n_rx_nodesc_trunc;
+		++rx_queue->n_rx_nodesc_trunc;
 		return true;
 	}
 
@@ -1079,6 +1077,7 @@ efx_farch_handle_rx_event(struct efx_channel *channel, const efx_qword_t *event)
 	unsigned int rx_ev_hdr_type, rx_ev_pkt_type, rx_ev_mcast_pkt;
 	unsigned int expected_ptr;
 	bool rx_ev_pkt_ok, rx_ev_sop, rx_ev_cont;
+	u8 rx_ev_q_label;
 	u16 flags;
 	struct efx_rx_queue *rx_queue;
 	struct efx_nic *efx = channel->efx;
@@ -1088,10 +1087,11 @@ efx_farch_handle_rx_event(struct efx_channel *channel, const efx_qword_t *event)
 
 	rx_ev_cont = EFX_QWORD_FIELD(*event, FSF_AZ_RX_EV_JUMBO_CONT);
 	rx_ev_sop = EFX_QWORD_FIELD(*event, FSF_AZ_RX_EV_SOP);
-	WARN_ON(EFX_QWORD_FIELD(*event, FSF_AZ_RX_EV_Q_LABEL) !=
-		channel->channel);
 
 	rx_queue = efx_channel_get_rx_queue(channel);
+
+	rx_ev_q_label = EFX_QWORD_FIELD(*event, FSF_AZ_RX_EV_Q_LABEL);
+	WARN_ON(rx_ev_q_label != efx_rx_queue_index(rx_queue));
 
 	rx_ev_desc_ptr = EFX_QWORD_FIELD(*event, FSF_AZ_RX_EV_DESC_PTR);
 	expected_ptr = ((rx_queue->removed_count + rx_queue->scatter_n) &
@@ -1173,7 +1173,7 @@ efx_farch_handle_rx_event(struct efx_channel *channel, const efx_qword_t *event)
 			EFX_QWORD_FIELD(*event, FSF_AZ_RX_EV_MCAST_HASH_MATCH);
 
 		if (unlikely(!rx_ev_mcast_hash_match)) {
-			++channel->n_rx_mcast_mismatch;
+			++rx_queue->n_rx_mcast_mismatch;
 			flags |= EFX_RX_PKT_DISCARD;
 		}
 	}
@@ -1213,20 +1213,28 @@ static void efx_farch_handle_generated_event(struct efx_channel *channel,
 
 	if (magic == EFX_CHANNEL_MAGIC_TEST(channel)) {
 		channel->event_test_cpu = raw_smp_processor_id();
-	} else if (rx_queue && magic == EFX_CHANNEL_MAGIC_FILL(rx_queue)) {
-		/* The queue must be empty, so we won't receive any rx
-		 * events, so efx_process_channel() won't refill the
-		 * queue. Refill it here */
-		efx_fast_push_rx_descriptors(rx_queue, true);
-	} else if (rx_queue && magic == EFX_CHANNEL_MAGIC_RX_DRAIN(rx_queue)) {
-		efx_farch_handle_drain_event(channel);
-	} else if (code == _EFX_CHANNEL_MAGIC_TX_DRAIN) {
-		efx_farch_handle_drain_event(channel);
-	} else {
-		netif_dbg(efx, hw, efx->net_dev, "channel %d received "
-			  "generated event "EFX_QWORD_FMT"\n",
-			  channel->channel, EFX_QWORD_VAL(*event));
+		return;
 	}
+	efx_for_each_channel_rx_queue(rx_queue, channel) {
+		if (magic == EFX_CHANNEL_MAGIC_FILL(rx_queue)) {
+			/* The queue must be empty, so we won't receive any rx
+			 * events, so efx_process_channel() won't refill the
+			 * queue. Refill it here */
+			efx_fast_push_rx_descriptors(rx_queue, true);
+			return;
+		}
+		if (magic == EFX_CHANNEL_MAGIC_RX_DRAIN(rx_queue)) {
+			efx_farch_handle_drain_event(channel);
+			return;
+		}
+	}
+	if (code == _EFX_CHANNEL_MAGIC_TX_DRAIN) {
+		efx_farch_handle_drain_event(channel);
+		return;
+	}
+	netif_dbg(efx, hw, efx->net_dev, "channel %d received "
+		  "generated event "EFX_QWORD_FMT"\n",
+		  channel->channel, EFX_QWORD_VAL(*event));
 }
 
 /* If this flush done event corresponds to a &struct efx_tx_queue, then

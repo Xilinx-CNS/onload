@@ -107,6 +107,9 @@ enum {
 	EFX_EF10_RERING_RX_DOORBELL,
 #endif
 };
+#define EFX_EF10_DRVGEN_MAGIC(_code, _data)	((_code) | ((_data) << 8))
+#define EFX_EF10_DRVGEN_CODE(_magic)	((_magic) & 0xff)
+#define EFX_EF10_DRVGEN_DATA(_magic)	((_magic) >> 8)
 
 #ifdef EFX_NOT_UPSTREAM
 #define EF10_ONLOAD_PF_VIS 240
@@ -1604,10 +1607,13 @@ static int efx_ef10_rx_defer_ring_rx_doorbell(struct efx_rx_queue *rx_queue)
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_DRIVER_EVENT_IN_LEN);
 	efx_qword_t event;
 	size_t outlen;
+	u32 magic;
 
+	magic = EFX_EF10_DRVGEN_MAGIC(EFX_EF10_RERING_RX_DOORBELL,
+				      efx_rx_queue_index(rx_queue));
 	EFX_POPULATE_QWORD_2(event,
 			     ESF_DZ_EV_CODE, EFX_EF10_DRVGEN_EV,
-			     ESF_DZ_EV_DATA, EFX_EF10_RERING_RX_DOORBELL);
+			     ESF_DZ_EV_DATA, magic);
 
 	MCDI_SET_DWORD(inbuf, DRIVER_EVENT_IN_EVQ, channel->channel);
 
@@ -3196,10 +3202,13 @@ static int efx_ef10_rx_defer_refill(struct efx_rx_queue *rx_queue)
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_DRIVER_EVENT_IN_LEN);
 	efx_qword_t event;
 	size_t outlen;
+	u32 magic;
 
+	magic = EFX_EF10_DRVGEN_MAGIC(EFX_EF10_REFILL,
+				      efx_rx_queue_index(rx_queue));
 	EFX_POPULATE_QWORD_2(event,
 			     ESF_DZ_EV_CODE, EFX_EF10_DRVGEN_EV,
-			     ESF_DZ_EV_DATA, EFX_EF10_REFILL);
+			     ESF_DZ_EV_DATA, magic);
 
 	MCDI_SET_DWORD(inbuf, DRIVER_EVENT_IN_EVQ, channel->channel);
 
@@ -3268,18 +3277,18 @@ static void efx_ef10_handle_rx_abort(struct efx_rx_queue *rx_queue)
 	rx_queue->removed_count += rx_queue->scatter_n;
 	rx_queue->scatter_n = 0;
 	rx_queue->scatter_len = 0;
-	++efx_rx_queue_channel(rx_queue)->n_rx_nodesc_trunc;
+	++rx_queue->n_rx_nodesc_trunc;
 }
 
 static u16
-efx_ef10_handle_rx_event_errors(struct efx_channel *channel,
+efx_ef10_handle_rx_event_errors(struct efx_rx_queue *rx_queue,
 				unsigned int n_packets,
 				unsigned int rx_encap_hdr,
 				unsigned int rx_l3_class,
 				unsigned int rx_l4_class,
 				const efx_qword_t *event)
 {
-	struct efx_nic *efx = channel->efx;
+	struct efx_nic *efx = rx_queue->efx;
 	bool handled = false;
 
 	if (EFX_QWORD_FIELD(*event, ESF_DZ_RX_ECRC_ERR)) {
@@ -3289,7 +3298,7 @@ efx_ef10_handle_rx_event_errors(struct efx_channel *channel,
 		if (!(efx->net_dev->features & NETIF_F_RXALL)) {
 #endif
 			if (!efx->loopback_selftest)
-				channel->n_rx_eth_crc_err += n_packets;
+				rx_queue->n_rx_eth_crc_err += n_packets;
 			return EFX_RX_PKT_DISCARD;
 		}
 		handled = true;
@@ -3306,8 +3315,8 @@ efx_ef10_handle_rx_event_errors(struct efx_channel *channel,
 				    EFX_QWORD_VAL(*event));
 		if (!efx->loopback_selftest)
 			*(rx_encap_hdr ?
-				&channel->n_rx_outer_ip_hdr_chksum_err :
-				&channel->n_rx_ip_hdr_chksum_err) += n_packets;
+				&rx_queue->n_rx_outer_ip_hdr_chksum_err :
+				&rx_queue->n_rx_ip_hdr_chksum_err) += n_packets;
 		return 0;
 	}
 	if (EFX_QWORD_FIELD(*event, ESF_DZ_RX_TCPUDP_CKSUM_ERR)) {
@@ -3322,8 +3331,8 @@ efx_ef10_handle_rx_event_errors(struct efx_channel *channel,
 				    EFX_QWORD_VAL(*event));
 		if (!efx->loopback_selftest)
 			*(rx_encap_hdr ?
-				&channel->n_rx_outer_tcp_udp_chksum_err :
-				&channel->n_rx_tcp_udp_chksum_err) += n_packets;
+				&rx_queue->n_rx_outer_tcp_udp_chksum_err :
+				&rx_queue->n_rx_tcp_udp_chksum_err) += n_packets;
 		return 0;
 	}
 	if (EFX_QWORD_FIELD(*event, ESF_EZ_RX_IP_INNER_CHKSUM_ERR)) {
@@ -3341,7 +3350,7 @@ efx_ef10_handle_rx_event_errors(struct efx_channel *channel,
 				    EFX_QWORD_FMT "\n",
 				    EFX_QWORD_VAL(*event));
 		if (!efx->loopback_selftest)
-			channel->n_rx_inner_ip_hdr_chksum_err += n_packets;
+			rx_queue->n_rx_inner_ip_hdr_chksum_err += n_packets;
 		return 0;
 	}
 	if (EFX_QWORD_FIELD(*event, ESF_EZ_RX_TCP_UDP_INNER_CHKSUM_ERR)) {
@@ -3359,7 +3368,7 @@ efx_ef10_handle_rx_event_errors(struct efx_channel *channel,
 				    EFX_QWORD_FMT "\n",
 				    EFX_QWORD_VAL(*event));
 		if (!efx->loopback_selftest)
-			channel->n_rx_inner_tcp_udp_chksum_err += n_packets;
+			rx_queue->n_rx_inner_tcp_udp_chksum_err += n_packets;
 		return 0;
 	}
 
@@ -3444,8 +3453,8 @@ static int efx_ef10_handle_rx_event(struct efx_channel *channel,
 		rx_queue->scatter_n = 1;
 		rx_queue->scatter_len = 0;
 		n_packets = n_descs;
-		++channel->n_rx_merge_events;
-		channel->n_rx_merge_packets += n_packets;
+		++rx_queue->n_rx_merge_events;
+		rx_queue->n_rx_merge_packets += n_packets;
 		flags |= EFX_RX_PKT_PREFIX_LEN;
 	} else {
 		++rx_queue->scatter_n;
@@ -3462,7 +3471,7 @@ static int efx_ef10_handle_rx_event(struct efx_channel *channel,
 				     ESF_EZ_RX_TCP_UDP_INNER_CHKSUM_ERR, 1);
 	EFX_AND_QWORD(errors, *event, errors);
 	if (unlikely(!EFX_QWORD_IS_ZERO(errors))) {
-		flags |= efx_ef10_handle_rx_event_errors(channel, n_packets,
+		flags |= efx_ef10_handle_rx_event_errors(rx_queue, n_packets,
 							 rx_encap_hdr,
 							 rx_l3_class, rx_l4_class,
 							 event);
@@ -3668,11 +3677,12 @@ static void efx_ef10_handle_driver_generated_event(struct efx_channel *channel,
 						   efx_qword_t *event)
 {
 	struct efx_nic *efx = channel->efx;
+	struct efx_rx_queue *rx_queue;
 	u32 subcode;
 
 	subcode = EFX_QWORD_FIELD(*event, EFX_DWORD_0);
 
-	switch (subcode) {
+	switch (EFX_EF10_DRVGEN_CODE(subcode)) {
 	case EFX_EF10_TEST:
 		channel->event_test_cpu = raw_smp_processor_id();
 		break;
@@ -3681,12 +3691,18 @@ static void efx_ef10_handle_driver_generated_event(struct efx_channel *channel,
 		 * events, so efx_process_channel() won't refill the
 		 * queue. Refill it here
 		 */
-		efx_fast_push_rx_descriptors(&channel->rx_queue, true);
+		efx_for_each_channel_rx_queue(rx_queue, channel)
+			if (EFX_EF10_DRVGEN_DATA(subcode) ==
+			    efx_rx_queue_index(rx_queue))
+				efx_fast_push_rx_descriptors(rx_queue, true);
 		break;
 #ifdef EFX_NOT_UPSTREAM
 	case EFX_EF10_RERING_RX_DOORBELL:
 		/* For workaround 59975 */
-		_efx_ef10_rx_write(&channel->rx_queue);
+		efx_for_each_channel_rx_queue(rx_queue, channel)
+			if (EFX_EF10_DRVGEN_DATA(subcode) ==
+			    efx_rx_queue_index(rx_queue))
+				_efx_ef10_rx_write(rx_queue);
 		break;
 #endif
 	default:

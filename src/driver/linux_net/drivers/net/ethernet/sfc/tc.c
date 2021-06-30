@@ -1325,18 +1325,20 @@ static int efx_tc_probe_channel(struct efx_channel *channel)
 
 static int efx_tc_start_channel(struct efx_channel *channel)
 {
+	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
 	struct efx_nic *efx = channel->efx;
 
-	return efx_mae_start_counters(efx, channel);
+	return efx_mae_start_counters(efx, rx_queue);
 }
 
 static void efx_tc_stop_channel(struct efx_channel *channel)
 {
+	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
 	struct efx_nic *efx = channel->efx;
 	int rc;
 
-	flush_work(&channel->rx_queue.grant_work);
-	rc = efx_mae_stop_counters(efx, channel);
+	flush_work(&rx_queue->grant_work);
+	rc = efx_mae_stop_counters(efx, rx_queue);
 	if (rc)
 		netif_warn(efx, drv, efx->net_dev,
 			   "Failed to stop MAE counters streaming, rc=%d.\n",
@@ -1542,12 +1544,11 @@ static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data)
 /* We always swallow the packet, whether successful or not, since it's not
  * a network packet and shouldn't ever be forwarded to the stack
  */
-static bool efx_tc_rx(struct efx_channel *channel)
+static bool efx_tc_rx(struct efx_rx_queue *rx_queue)
 {
-	struct efx_rx_buffer *rx_buf = efx_rx_buffer(&channel->rx_queue,
-						     channel->rx_pkt_index);
+	struct efx_rx_buffer *rx_buf = efx_rx_buf_pipe(rx_queue);
 	const u8 *data = efx_rx_buf_va(rx_buf);
-	struct efx_nic *efx = channel->efx;
+	struct efx_nic *efx = rx_queue->efx;
 	u8 version;
 
 	/* version is always first byte of packet */
@@ -1568,8 +1569,8 @@ static bool efx_tc_rx(struct efx_channel *channel)
 		break;
 	}
 
-	efx_free_rx_buffers(&channel->rx_queue, rx_buf, 1);
-	channel->rx_pkt_n_frags = 0;
+	efx_free_rx_buffers(rx_queue, rx_buf, 1);
+	rx_queue->rx_pkt_n_frags = 0;
 	return true;
 }
 

@@ -393,11 +393,12 @@ static void efx_ef100_handle_driver_generated_event(struct efx_channel *channel,
 						    efx_qword_t *event)
 {
 	struct efx_nic *efx = channel->efx;
+	struct efx_rx_queue *rx_queue;
 	u32 subcode;
 
 	subcode = EFX_QWORD_FIELD(*event, EFX_DWORD_0);
 
-	switch (subcode) {
+	switch (EFX_EF100_DRVGEN_CODE(subcode)) {
 	case EFX_EF100_TEST:
 		netif_info(efx, drv, efx->net_dev,
 			   "Driver initiated event " EFX_QWORD_FMT "\n",
@@ -408,7 +409,10 @@ static void efx_ef100_handle_driver_generated_event(struct efx_channel *channel,
 		 * events, so efx_process_channel() won't refill the
 		 * queue. Refill it here
 		 */
-		efx_fast_push_rx_descriptors(&channel->rx_queue, true);
+		efx_for_each_channel_rx_queue(rx_queue, channel)
+			if (EFX_EF100_DRVGEN_DATA(subcode) ==
+			    efx_rx_queue_index(rx_queue))
+				efx_fast_push_rx_descriptors(rx_queue, true);
 		break;
 	default:
 		netif_err(efx, hw, efx->net_dev,

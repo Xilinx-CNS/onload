@@ -11,21 +11,6 @@
 #ifndef EFX_KERNEL_COMPAT_H
 #define EFX_KERNEL_COMPAT_H
 
-/* KBUILD_MODNAME is not defined for shared files on older Kbuilds. If it
- * isn't, then define it now.
- */
-#ifndef KBUILD_MODNAME
-#ifdef CONFIG_SFC
-#ifdef CONFIG_SFC_EF100
-#define KBUILD_MODNAME "sfc:sfc_ef100"
-#else
-#define KBUILD_MODNAME "sfc"
-#endif
-#else
-#define KBUILD_MODNAME "sfc_ef100"
-#endif
-#endif
-
 #include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/errno.h>

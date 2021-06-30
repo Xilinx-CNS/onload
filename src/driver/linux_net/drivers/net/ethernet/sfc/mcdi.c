@@ -2669,19 +2669,24 @@ int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,
 	MCDI_SET_DWORD(inbuf, NVRAM_UPDATE_FINISH_IN_TYPE, type);
 	MCDI_SET_DWORD(inbuf, NVRAM_UPDATE_FINISH_IN_REBOOT, reboot);
 
-	/* Old firmware doesn't support background update finish operations.
-	 * A request to run the operation in the background will wait instead.
+	/* Old firmware doesn't support background update finish and abort
+	 * operations. Fallback to waiting if the requested mode is not
+	 * supported.
 	 */
-	if (!efx_has_cap(efx, NVRAM_UPDATE_POLL_VERIFY_RESULT))
+	if (!efx_has_cap(efx, NVRAM_UPDATE_POLL_VERIFY_RESULT) ||
+	    (!efx_has_cap(efx, NVRAM_UPDATE_ABORT_SUPPORTED) &&
+	     mode == EFX_UPDATE_FINISH_ABORT))
 		mode = EFX_UPDATE_FINISH_WAIT;
 
-	/* Always set the REPORT_VERIFY_RESULT flag. Old firmware ignores it */
-	MCDI_POPULATE_DWORD_3(inbuf, NVRAM_UPDATE_FINISH_V2_IN_FLAGS,
-			      NVRAM_UPDATE_FINISH_V2_IN_FLAG_REPORT_VERIFY_RESULT, 1,
+	MCDI_POPULATE_DWORD_4(inbuf, NVRAM_UPDATE_FINISH_V2_IN_FLAGS,
+			      NVRAM_UPDATE_FINISH_V2_IN_FLAG_REPORT_VERIFY_RESULT,
+			      (mode != EFX_UPDATE_FINISH_ABORT),
 			      NVRAM_UPDATE_FINISH_V2_IN_FLAG_RUN_IN_BACKGROUND,
 			      (mode == EFX_UPDATE_FINISH_BACKGROUND),
 			      NVRAM_UPDATE_FINISH_V2_IN_FLAG_POLL_VERIFY_RESULT,
-			      (mode == EFX_UPDATE_FINISH_POLL));
+			      (mode == EFX_UPDATE_FINISH_POLL),
+			      NVRAM_UPDATE_FINISH_V2_IN_FLAG_ABORT,
+			      (mode == EFX_UPDATE_FINISH_ABORT));
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_NVRAM_UPDATE_FINISH, inbuf, sizeof(inbuf),
 			  outbuf, sizeof(outbuf), &outlen);

@@ -25,6 +25,7 @@
 #include "efx.h"
 #include "nic.h"
 #include "ef10_regs.h"
+#include "ef100_nic.h"
 #include "farch_regs.h"
 #include "io.h"
 #include "workarounds.h"
@@ -181,29 +182,115 @@ void efx_nic_fini_interrupt(struct efx_nic *efx)
 }
 
 #ifdef EFX_NOT_UPSTREAM
+unsigned int
+efx_device_check_pcie_link(struct pci_dev *pdev, unsigned int *actual_width,
+			   unsigned int *max_width, unsigned int *actual_speed,
+			   unsigned int *nic_bandwidth)
+{
+	int cap = pci_find_capability(pdev, PCI_CAP_ID_EXP);
+	unsigned int nic_speed;
+	u16 lnksta;
+	u16 lnkcap;
+
+	*actual_speed = 0;
+	*actual_width = 0;
+	*max_width = 0;
+	*nic_bandwidth = 0;
+
+	if (!cap ||
+	    pci_read_config_word(pdev, cap + PCI_EXP_LNKSTA, &lnksta) ||
+	    pci_read_config_word(pdev, cap + PCI_EXP_LNKCAP, &lnkcap))
+		return 0;
+
+	*actual_width = (lnksta & PCI_EXP_LNKSTA_NLW) >>
+			__ffs(PCI_EXP_LNKSTA_NLW);
+
+	*max_width = (lnkcap & PCI_EXP_LNKCAP_MLW) >> __ffs(PCI_EXP_LNKCAP_MLW);
+	*actual_speed = (lnksta & PCI_EXP_LNKSTA_CLS);
+
+	nic_speed = 1;
+	if (lnkcap & PCI_EXP_LNKCAP_SLS_5_0GB)
+		nic_speed = 2;
+	/* PCIe Gen3 capabilities are in a different config word. */
+	if (!pci_read_config_word(pdev, cap + PCI_EXP_LNKCAP2, &lnkcap)) {
+		if (lnkcap & PCI_EXP_LNKCAP2_SLS_8_0GB)
+			nic_speed = 3;
+	}
+
+	*nic_bandwidth = *max_width << (nic_speed - 1);
+
+	return nic_speed;
+}
+
+/* Return the embedded PCI bridge device if it exists. If the PCI device has
+ * been assigned to a virtual machine, the bridge will not be found so the
+ * pcie link check is done with the NIC PCI device.
+ */
+struct pci_dev *efx_get_bridge_device(struct pci_dev *nic)
+{
+	struct pci_dev *pdev = NULL;
+	struct pci_dev *p = NULL;
+
+	/* Find PCI device bridging the NIC PCI bus.
+	 * First the bridge downstream port device.
+	 */
+	for_each_pci_dev(p) {
+		if (p->subordinate == nic->bus) {
+			/* Is this the EF100 embedded bridge downstream
+			 * port?
+			 */
+			if ((p->vendor != PCI_VENDOR_ID_XILINX) ||
+			    (p->device != EF100_BRIDGE_DOWNSTREAM_PCI_DEVICE))
+				return nic;
+			/* We got the downstream port. */
+			pdev = p;
+		}
+	}
+
+	/* This should never happen. */
+	if (!pdev)
+		return nic;
+
+	/* We got the embedded bridge downstream port. Let's get the upstream
+	 * port now which is the physical PCI link to the Host.
+	 */
+	p = NULL;
+	for_each_pci_dev(p) {
+		if (p->subordinate == pdev->bus) {
+			if ((p->vendor != PCI_VENDOR_ID_XILINX) ||
+			    (p->device != EF100_BRIDGE_UPSTREAM_PCI_DEVICE)) {
+				WARN_ON(1);
+				return nic;
+			}
+			/* We got the upstream port. This is the device we are
+			 * interested in.
+			 */
+			return p;
+		}
+	}
+	return nic;
+}
+
 void
 efx_nic_check_pcie_link(struct efx_nic *efx, unsigned int desired_bandwidth,
 			unsigned int *actual_width, unsigned int *actual_speed)
 {
-	int cap = pci_find_capability(efx->pci_dev, PCI_CAP_ID_EXP);
+	struct pci_dev *pdev = efx->pci_dev;
 	unsigned int nic_bandwidth;
 	unsigned int bandwidth;
 	unsigned int nic_width;
 	unsigned int nic_speed;
-	unsigned int width = 0;
-	unsigned int speed = 0;
-	u16 lnksta;
-	u16 lnkcap;
+	unsigned int width;
+	unsigned int speed;
 
-	if (!cap ||
-	    pci_read_config_word(efx->pci_dev, cap + PCI_EXP_LNKSTA, &lnksta) ||
-	    pci_read_config_word(efx->pci_dev, cap + PCI_EXP_LNKCAP, &lnkcap))
+	if (efx_nic_rev(efx) == EFX_REV_EF100)
+		pdev = efx_get_bridge_device(efx->pci_dev);
+
+	nic_speed = efx_device_check_pcie_link(pdev, &width, &nic_width, &speed,
+					       &nic_bandwidth);
+
+	if(!nic_speed)
 		goto out;
-
-	width = (lnksta & PCI_EXP_LNKSTA_NLW) >> __ffs(PCI_EXP_LNKSTA_NLW);
-	speed = (lnksta & PCI_EXP_LNKSTA_CLS);
-
-	nic_width = (lnkcap & PCI_EXP_LNKCAP_MLW) >> __ffs(PCI_EXP_LNKCAP_MLW);
 
 	if (width > nic_width)
 		netif_dbg(efx, drv, efx->net_dev,
@@ -212,18 +299,7 @@ efx_nic_check_pcie_link(struct efx_nic *efx, unsigned int desired_bandwidth,
 			  "otherwise it indicates a PCI problem.\n",
 			  width, nic_width);
 
-	nic_speed = 1;
-	if (lnkcap & PCI_EXP_LNKCAP_SLS_5_0GB)
-		nic_speed = 2;
-	/* PCIe Gen3 capabilities are in a different config word. */
-	if (!pci_read_config_word(efx->pci_dev,
-				  cap + PCI_EXP_LNKCAP2, &lnkcap)) {
-		if (lnkcap & PCI_EXP_LNKCAP2_SLS_8_0GB)
-			nic_speed = 3;
-	}
-
 	bandwidth = width << (speed - 1);
-	nic_bandwidth = nic_width << (nic_speed - 1);
 
 	if (desired_bandwidth > nic_bandwidth)
 		/* You can desire all you want, it ain't gonna happen. */

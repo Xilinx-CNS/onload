@@ -20,6 +20,7 @@
 #include "ef100_iova.h"
 
 #if defined(CONFIG_SFC_VDPA)
+#define EFX_VDPA_NAME_LEN 32
 extern struct vdpa_config_ops ef100_vdpa_config_ops;
 
 static int
@@ -700,6 +701,9 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct ef100_vdpa_nic *vdpa_nic;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM)
+	char name[EFX_VDPA_NAME_LEN];
+#endif
 	unsigned int allocated_vis;
 	struct device *dev;
 	int rc;
@@ -713,11 +717,17 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 		return ERR_PTR(rc);
 	}
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM)
+	snprintf(name, sizeof(name), EFX_VDPA_NAME(nic_data));
+#endif
 	vdpa_nic = vdpa_alloc_device(struct ef100_vdpa_nic,
 				     vdpa_dev, &efx->pci_dev->dev,
 				     &ef100_vdpa_config_ops
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NVQS_PARAM)
 				     , (allocated_vis - 1) * 2
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM)
+				     , name
 #endif
 				     );
 	if (!vdpa_nic) {
@@ -779,7 +789,12 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 		goto err_irq_vectors_free;
 #endif
 
+#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_VDPA_REGISTER_NVQS_PARAM)
 	rc = vdpa_register_device(&vdpa_nic->vdpa_dev);
+#else
+	rc = vdpa_register_device(&vdpa_nic->vdpa_dev,
+				  (allocated_vis - 1) * 2);
+#endif
 	if (rc) {
 		pci_err(efx->pci_dev,
 			"vDPA device registration failed for vf: %u\n",
