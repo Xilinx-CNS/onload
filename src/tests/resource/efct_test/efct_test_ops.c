@@ -10,18 +10,18 @@
 #include "efct_test_ops.h"
 
 
-struct sfc_efct_client {
+struct xlnx_efct_client {
   struct efct_test_device *tdev;
-  const struct sfc_efct_drvops *drvops;
+  const struct xlnx_efct_drvops *drvops;
   void* drv_priv;
 };
 
 
-static struct sfc_efct_client* efct_test_open(struct auxiliary_device *adev,
-                                             const struct sfc_efct_drvops *ops,
-                                             void *driver_data)
+static struct xlnx_efct_client* efct_test_open(struct auxiliary_device *adev,
+                                               const struct xlnx_efct_drvops *ops,
+                                               void *driver_data)
 {
-  struct sfc_efct_client *client;
+  struct xlnx_efct_client *client;
   struct efct_test_device *tdev;
 
   printk(KERN_INFO "%s\n", __func__);
@@ -45,7 +45,7 @@ static struct sfc_efct_client* efct_test_open(struct auxiliary_device *adev,
 }
 
 
-static int efct_test_close(struct sfc_efct_client *handle)
+static int efct_test_close(struct xlnx_efct_client *handle)
 {
   printk(KERN_INFO "%s\n", __func__);
 
@@ -59,28 +59,28 @@ static int efct_test_close(struct sfc_efct_client *handle)
 }
 
 
-static int efct_test_get_param(struct sfc_efct_client *handle,
-                               enum sfc_efct_param p,
-                               union sfc_efct_param_value *arg)
+static int efct_test_get_param(struct xlnx_efct_client *handle,
+                               enum xlnx_efct_param p,
+                               union xlnx_efct_param_value *arg)
 {
   int rc = -ENOSYS;
 
   printk(KERN_INFO "%s: param %d\n", __func__, p);
 
   switch(p) {
-   case SFC_EFCT_NETDEV:
+   case XLNX_EFCT_NETDEV:
     arg->net_dev = handle->tdev->net_dev;
     rc = 0;
     break;
-   case SFC_EFCT_VARIANT:
+   case XLNX_EFCT_VARIANT:
     arg->variant = 'A';
     rc = 0;
     break;
-   case SFC_EFCT_REVISION:
+   case XLNX_EFCT_REVISION:
     arg->value = 1;
     rc = 0;
     break;
-   case SFC_EFCT_NIC_RESOURCES:
+   case XLNX_EFCT_NIC_RESOURCES:
     arg->nic_res.evq_min = 0;
     arg->nic_res.evq_lim = EFCT_TEST_EVQS_N - 1;
     rc = 0;
@@ -93,9 +93,9 @@ static int efct_test_get_param(struct sfc_efct_client *handle,
 }
 
 
-static int efct_test_set_param(struct sfc_efct_client *handle,
-                               enum sfc_efct_param p,
-                               union sfc_efct_param_value *arg)
+static int efct_test_set_param(struct xlnx_efct_client *handle,
+                               enum xlnx_efct_param p,
+                               union xlnx_efct_param_value *arg)
 {
   int rc = -ENOSYS;
 
@@ -105,16 +105,16 @@ static int efct_test_set_param(struct sfc_efct_client *handle,
 }
 
 
-static int efct_test_fw_rpc(struct sfc_efct_client *handle,
-                            struct sfc_efct_rpc *rpc)
+static int efct_test_fw_rpc(struct xlnx_efct_client *handle,
+                            struct xlnx_efct_rpc *rpc)
 {
   printk(KERN_INFO "%s: cmd %d\n", __func__, rpc->cmd);
   return -ENOSYS;
 }
 
 
-static int efct_test_init_evq(struct sfc_efct_client *handle,
-                              struct sfc_efct_evq_params *params)
+static int efct_test_init_evq(struct xlnx_efct_client *handle,
+                              struct xlnx_efct_evq_params *params)
 {
   printk(KERN_INFO "%s: qid %d\n", __func__, params->qid);
   if( handle->tdev->evqs[params->qid].inited )
@@ -125,7 +125,7 @@ static int efct_test_init_evq(struct sfc_efct_client *handle,
 }
 
 
-static void efct_test_free_evq(struct sfc_efct_client *handle, int evq)
+static void efct_test_free_evq(struct xlnx_efct_client *handle, int evq)
 {
   printk(KERN_INFO "%s: qid %d\n", __func__, evq);
   if( !handle->tdev->evqs[evq].inited )
@@ -139,8 +139,8 @@ static void efct_test_free_evq(struct sfc_efct_client *handle, int evq)
 }
 
 
-static int efct_test_alloc_txq(struct sfc_efct_client *handle,
-                               struct sfc_efct_txq_params *params)
+static int efct_test_alloc_txq(struct xlnx_efct_client *handle,
+                               struct xlnx_efct_txq_params *params)
 {
   struct efct_test_device *tdev = handle->tdev;
   int txq = -1;
@@ -176,7 +176,7 @@ static int efct_test_alloc_txq(struct sfc_efct_client *handle,
 }
 
 
-static void efct_test_free_txq(struct sfc_efct_client *handle, int txq)
+static void efct_test_free_txq(struct xlnx_efct_client *handle, int txq)
 {
   struct efct_test_device *tdev = handle->tdev;
   int evq = tdev->txqs[txq].evq;
@@ -192,7 +192,7 @@ static void efct_test_free_txq(struct sfc_efct_client *handle, int txq)
 }
 
 
-static int efct_test_ctpio_addr(struct sfc_efct_client *handle, int txq,
+static int efct_test_ctpio_addr(struct xlnx_efct_client *handle, int txq,
                                 resource_size_t *addr, size_t *size)
 {
   struct efct_test_device *tdev = handle->tdev;
@@ -208,7 +208,7 @@ static int efct_test_ctpio_addr(struct sfc_efct_client *handle, int txq,
 }
 
 
-const struct sfc_efct_devops test_devops = {
+const struct xlnx_efct_devops test_devops = {
   .open = efct_test_open,
   .close = efct_test_close,
   .get_param = efct_test_get_param,

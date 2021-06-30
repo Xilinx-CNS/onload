@@ -12,33 +12,33 @@
 #if CI_HAVE_EFCT_AUX
 
 static int efct_handle_event(void *driver_data,
-                             const struct sfc_efct_event *event)
+                             const struct xlnx_efct_event *event)
 {
   return -ENOSYS;
 }
 
-struct sfc_efct_drvops efct_ops = {
+struct xlnx_efct_drvops efct_ops = {
   .name = "sfc_resource",
   .handle_event = efct_handle_event,
 };
 
 
-static int efct_devtype_init(struct sfc_efct_device *edev,
-                             struct sfc_efct_client *client,
+static int efct_devtype_init(struct xlnx_efct_device *edev,
+                             struct xlnx_efct_client *client,
                              struct efhw_device_type *dev_type)
 {
-  union sfc_efct_param_value val;
+  union xlnx_efct_param_value val;
   int rc;
 
   dev_type->arch = EFHW_ARCH_EFCT;
   dev_type->function = EFHW_FUNCTION_PF;
 
-  rc = edev->ops->get_param(client, SFC_EFCT_VARIANT, &val);
+  rc = edev->ops->get_param(client, XLNX_EFCT_VARIANT, &val);
   if( rc < 0 )
     return rc;
   dev_type->variant = val.variant;
 
-  rc = edev->ops->get_param(client, SFC_EFCT_REVISION, &val);
+  rc = edev->ops->get_param(client, XLNX_EFCT_REVISION, &val);
   if( rc < 0 )
     return rc;
   dev_type->revision = val.value;
@@ -46,14 +46,14 @@ static int efct_devtype_init(struct sfc_efct_device *edev,
   return 0;
 }
 
-static int efct_resource_init(struct sfc_efct_device *edev,
-                              struct sfc_efct_client *client,
+static int efct_resource_init(struct xlnx_efct_device *edev,
+                              struct xlnx_efct_client *client,
                               struct vi_resource_dimensions *res_dim)
 {
-  union sfc_efct_param_value val;
+  union xlnx_efct_param_value val;
   int rc;
 
-  rc = edev->ops->get_param(client, SFC_EFCT_NIC_RESOURCES, &val);
+  rc = edev->ops->get_param(client, XLNX_EFCT_NIC_RESOURCES, &val);
   if( rc < 0 )
     return rc;
 
@@ -67,11 +67,11 @@ static int efct_resource_init(struct sfc_efct_device *edev,
 int efct_probe(struct auxiliary_device *auxdev,
                const struct auxiliary_device_id *id)
 {
-  struct sfc_efct_device *edev = to_sfc_efct_device(auxdev);
+  struct xlnx_efct_device *edev = to_xlnx_efct_device(auxdev);
   struct vi_resource_dimensions res_dim = {};
   struct efhw_device_type dev_type;
-  struct sfc_efct_client *client;
-  union sfc_efct_param_value val;
+  struct xlnx_efct_client *client;
+  union xlnx_efct_param_value val;
   struct linux_efhw_nic *lnic = NULL;
   struct net_device *net_dev;
   struct efhw_nic *nic;
@@ -83,7 +83,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   if( IS_ERR(client) )
     return PTR_ERR(client);
 
-  rc = edev->ops->get_param(client, SFC_EFCT_NETDEV, &val);
+  rc = edev->ops->get_param(client, XLNX_EFCT_NETDEV, &val);
   if( rc < 0 )
     goto fail;
 
@@ -124,8 +124,8 @@ int efct_probe(struct auxiliary_device *auxdev,
 
 void efct_remove(struct auxiliary_device *auxdev)
 {
-  struct sfc_efct_device *edev = to_sfc_efct_device(auxdev);
-  struct sfc_efct_client *client;
+  struct xlnx_efct_device *edev = to_xlnx_efct_device(auxdev);
+  struct xlnx_efct_client *client;
   struct linux_efhw_nic *lnic;
   struct net_device *net_dev;
   struct efhw_nic* nic;
@@ -137,7 +137,7 @@ void efct_remove(struct auxiliary_device *auxdev)
     return;
 
   lnic = linux_efhw_nic(nic);
-  client = (struct sfc_efct_client*)lnic->drv_device;
+  client = (struct xlnx_efct_client*)lnic->drv_device;
   if( !client )
     return;
 
@@ -164,7 +164,7 @@ void efct_remove(struct auxiliary_device *auxdev)
 
 
 static const struct auxiliary_device_id efct_id_table[] = {
-  { .name = "efct_test." SFC_EFCT_DEVNAME, },
+  { .name = "efct_test." XLNX_EFCT_DEVNAME, },
   {},
 };
 MODULE_DEVICE_TABLE(auxiliary, efct_id_table);

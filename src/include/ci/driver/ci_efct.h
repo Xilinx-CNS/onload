@@ -7,7 +7,7 @@
 #include <ci/driver/ci_aux.h>
 
 #if CI_HAVE_AUX_BUS && CI_HAVE_X3_NET
-  #include CI_SFC_EFCT_HEADER
+  #include CI_XLNX_EFCT_HEADER
   #define CI_HAVE_EFCT_AUX 1
 #else
   #define CI_HAVE_EFCT_AUX 0

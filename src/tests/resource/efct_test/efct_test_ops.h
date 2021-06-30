@@ -6,6 +6,6 @@
 
 #include <ci/driver/ci_efct.h>
 
-extern const struct sfc_efct_devops test_devops;
+extern const struct xlnx_efct_devops test_devops;
 
 #endif /* EFCT_TEST_OPS_H */

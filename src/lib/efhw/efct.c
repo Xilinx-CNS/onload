@@ -97,9 +97,9 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
                             struct efhw_evq_params *efhw_params)
 {
   struct device *dev;
-  struct sfc_efct_device* edev;
-  struct sfc_efct_client* cli;
-  struct sfc_efct_evq_params qparams = {
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  struct xlnx_efct_evq_params qparams = {
     .qid = efhw_params->evq,
   };
   int rc;
@@ -116,8 +116,8 @@ efct_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
                              uint evq, int time_sync_events_enabled)
 {
   struct device *dev;
-  struct sfc_efct_device* edev;
-  struct sfc_efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
@@ -186,9 +186,9 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
                     uint vport_id, uint stack_id, uint flags)
 {
   struct device *dev;
-  struct sfc_efct_device* edev;
-  struct sfc_efct_client* cli;
-  struct sfc_efct_txq_params params = { .evq = evq_id };
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  struct xlnx_efct_txq_params params = { .evq = evq_id };
   int rc;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
@@ -234,8 +234,8 @@ static int efct_flush_tx_dma_channel(struct efhw_nic *nic,
                                      uint32_t client_id, uint dmaq)
 {
   struct device *dev;
-  struct sfc_efct_device* edev;
-  struct sfc_efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
@@ -515,8 +515,8 @@ static int
 efct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
 {
   struct device *dev;
-  struct sfc_efct_device* edev;
-  struct sfc_efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   size_t region_size;
   int rc;
 

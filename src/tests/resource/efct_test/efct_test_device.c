@@ -22,7 +22,7 @@ static void release_aux_dev(struct device* dev)
 static int init_aux_dev(struct auxiliary_device* adev,
                         struct device* parent)
 {
-  adev->name = SFC_EFCT_DEVNAME;
+  adev->name = XLNX_EFCT_DEVNAME;
   adev->dev.parent = parent;
   adev->dev.release = release_aux_dev;
 
