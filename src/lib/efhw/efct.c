@@ -101,8 +101,35 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
   struct xlnx_efct_client* cli;
   struct xlnx_efct_evq_params qparams = {
     .qid = efhw_params->evq,
+    .entries = efhw_params->evq_size,
+    /* We don't provide a pci_dev to enable queue memory to be mapped for us,
+     * so we're given plain physical addresses.
+     */
+    .q_page = pfn_to_page(efhw_params->dma_addrs[0] >> PAGE_SHIFT),
+    .page_offset = 0,
+    .q_size = efhw_params->evq_size * sizeof(efhw_event_t),
   };
   int rc;
+#ifndef NDEBUG
+  int i;
+#endif
+
+  /* We only look at the first page because this memory should be physically
+   * contiguous, but the API provides us with an address per 4K (NIC page)
+   * chunk, so sanity check that there are enough pages for the size of queue
+   * we're asking for.
+   */
+  EFHW_ASSERT(efhw_params->n_pages * EFHW_NIC_PAGES_IN_OS_PAGE * CI_PAGE_SIZE
+	      >= qparams.q_size);
+#ifndef NDEBUG
+  /* We should have been provided with physical addresses of physically
+   * contiguous memory, so sanity check the addresses look right.
+   */
+  for( i = 1; i < efhw_params->n_pages; i++ ) {
+    EFHW_ASSERT(efhw_params->dma_addrs[i] - efhw_params->dma_addrs[i-1] ==
+		EFHW_NIC_PAGE_SIZE);
+  }
+#endif
 
   EFCT_PRE(dev, edev, cli, nic, rc);
   rc = edev->ops->init_evq(cli, &qparams);

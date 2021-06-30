@@ -116,7 +116,11 @@ enum efhw_q_type {
 struct efhw_evq_params {
 	uint evq;	/* event queue index */
 	uint evq_size;	/* entries in queue */
-	dma_addr_t* dma_addrs; /* 4K chunks of queue memory */
+	/* 4K chunks of queue memory.
+	 * For NICs that provide a pci_dev these addresses have already been
+	 * DMA mapped. Otherwise they are simply physical addresses.
+	 */
+	dma_addr_t* dma_addrs;
 	uint n_pages; /* number of entries in dma_addrs */
 	bool interrupting; /* whether this queue uses its own irq */
 	int wakeup_evq; /* queue to deliver wakeups for this queue */
