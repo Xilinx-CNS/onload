@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* X-SPDX-Copyright-Text: (c) Copyright 2002-2020 Xilinx, Inc. */
 
+#include <linux/mm.h>
 #include <linux/slab.h>
 
 #include <ci/driver/ci_aux.h>
@@ -116,11 +117,16 @@ static int efct_test_fw_rpc(struct xlnx_efct_client *handle,
 static int efct_test_init_evq(struct xlnx_efct_client *handle,
                               struct xlnx_efct_evq_params *params)
 {
+  struct efct_test_evq *evq = &handle->tdev->evqs[params->qid];
+
   printk(KERN_INFO "%s: qid %d\n", __func__, params->qid);
-  if( handle->tdev->evqs[params->qid].inited )
+  if( evq->inited )
     return -EBUSY;
 
-  handle->tdev->evqs[params->qid].inited = true;
+  evq->inited = true;
+  evq->q_base = page_to_virt(params->q_page);
+  evq->entries = params->entries;
+
   return 0;
 }
 

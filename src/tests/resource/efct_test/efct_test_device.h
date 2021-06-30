@@ -8,6 +8,8 @@
 
 struct efct_test_evq {
   bool inited;
+  void *q_base;
+  size_t entries;
   unsigned txqs;
 };
 
