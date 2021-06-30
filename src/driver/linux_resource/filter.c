@@ -2187,7 +2187,7 @@ int efrm_filter_insert(struct efrm_client *client,
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
 	struct net_device* net_dev;
-	int rc;
+	int rc = 0;
 
 #if CI_CFG_IPV6
 	/* FIXME: add IPv6 support to firewall rules (bug 85208) */
