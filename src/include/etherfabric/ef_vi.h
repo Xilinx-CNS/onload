@@ -633,6 +633,20 @@ typedef struct {
   uint32_t  ts_nsec;
 } ef_vi_txq_state;
 
+/*! \brief State of efct receive queue
+**
+** Users should not access this structure.
+*/
+typedef struct {
+  /** Prior value of 'next'. Usually next-1, but not if there was a rollover.
+   * This is effectively the pointer to the packet payload. */
+  uint32_t prev;
+  /** Next pkt_id, with bit 31 abused to contain the expected sentinel of the
+   * pointed-to superbuf (this is duplicated info, but improves locality).
+   * This is effectively the pointer to the packet metadata */
+  uint32_t next;
+} ef_vi_efct_rxq_ptr;
+
 /*! \brief State of RX descriptor ring
 **
 ** Users should not access this structure.
@@ -652,9 +666,7 @@ typedef struct {
   uint16_t  last_desc_i;                        /* ef10 only */
   /** Credit for packed stream handling (7000-series only) */
   uint16_t  rx_ps_credit_avail;                 /* ef10 only */
-  /* X3 RXQ experimental superbuf interface */
-  uint32_t superbufs_added; /* how many bufs zf_emu added */
-  uint32_t superbufs_removed; /* how many bufs ef_vi removed */
+  ef_vi_efct_rxq_ptr rxq_ptr[EF_VI_MAX_EFCT_RXQS]; /* efct only */
 } ef_vi_rxq_state;
 
 /*! \brief State of event queue
