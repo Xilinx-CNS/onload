@@ -174,19 +174,13 @@ static inline int64_t timespec_diff_ns(struct timespec a, struct timespec b)
 }
 
 
-static void handle_rx(struct resources* res, int pkt_buf_i, int len)
+static void handle_rx_core(struct resources* res, const void* dma_ptr,
+                           const void* rx_ptr, int len)
 {
-  struct pkt_buf* pkt_buf;
-
-  LOGV("PKT: received pkt=%d len=%d\n", pkt_buf_i, len);
-
-  pkt_buf = pkt_buf_from_id(res, pkt_buf_i);
-
   if( cfg_timestamping ) {
     struct timespec hw_ts, sw_ts;
     unsigned ts_flags;
     TRY(clock_gettime(CLOCK_REALTIME, &sw_ts));
-    void* dma_ptr = (char*) pkt_buf + RX_DMA_OFF;
     TRY(ef_vi_receive_get_timestamp_with_sync_flags(&res->vi, dma_ptr,
                                                     &hw_ts, &ts_flags));
     pthread_mutex_lock(&printf_mutex);
@@ -199,11 +193,22 @@ static void handle_rx(struct resources* res, int pkt_buf_i, int len)
 
   /* Do something useful with packet contents here! */
   if( cfg_hexdump )
-    hexdump(pkt_buf->rx_ptr, len);
+    hexdump(rx_ptr, len);
 
-  pkt_buf_free(res, pkt_buf);
   res->n_rx_pkts += 1;
   res->n_rx_bytes += len;
+}
+
+
+static void handle_rx(struct resources* res, int pkt_buf_i, int len)
+{
+  struct pkt_buf* pkt_buf;
+
+  LOGV("PKT: received pkt=%d len=%d\n", pkt_buf_i, len);
+
+  pkt_buf = pkt_buf_from_id(res, pkt_buf_i);
+  handle_rx_core(res, (char*)pkt_buf + RX_DMA_OFF, pkt_buf->rx_ptr, len);
+  pkt_buf_free(res, pkt_buf);
 }
 
 
@@ -251,6 +256,17 @@ static void handle_rx_multi_pkts(struct resources* res)
     handle_rx_discard(res, pkt_buf_i, len, discard_flags);
   else
     handle_rx(res, pkt_buf_i, len);
+}
+
+
+static void handle_rx_ref(struct resources* res, unsigned pkt_id, int len)
+{
+  const void *p;
+
+  LOGV("PKT: received pkt=%u len=%d\n", pkt_id, len);
+  efct_vi_rxpkt_get(&res->vi, pkt_id, &p);
+  handle_rx_core(res, p, p, len);
+  efct_vi_rxpkt_release(&res->vi, pkt_id);
 }
 
 
@@ -313,6 +329,13 @@ static int poll_evq(struct resources* res)
       for( j = 0; j < evs[i].rx_multi_pkts.n_pkts; ++j )
         handle_rx_multi_pkts(res);
       res->n_ht_events += 1;
+      break;
+    case EF_EVENT_TYPE_RX_REF:
+      handle_rx_ref(res, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
+      break;
+    case EF_EVENT_TYPE_RX_REF_DISCARD:
+      handle_rx_ref(res, evs[i].rx_ref_discard.pkt_id,
+                    evs[i].rx_ref_discard.len);
       break;
     case EF_EVENT_TYPE_RESET:
       LOGE("ERROR: NIC has been Reset and VI is no longer valid\n");
