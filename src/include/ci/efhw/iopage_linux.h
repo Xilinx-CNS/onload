@@ -116,6 +116,12 @@ struct efhw_iopages {
 	void *ptr;
 	unsigned n_pages;
 	unsigned phys_cont;
+	/* For NICs which provide a pci_dev for DMA mapping these are the
+	 * DMA mapped (free_addrs) and translated (dma_addrs) page addresses
+	 * for this memory.
+	 * For NICs which do not provide a pci_dev for DMA mapping they are
+	 * the physical addresses of the pages for this memory.
+	 */
 	dma_addr_t *free_addrs;
 	dma_addr_t *dma_addrs;
 };
