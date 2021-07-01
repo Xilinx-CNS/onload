@@ -14,7 +14,7 @@ ONLOAD_SRCS	:= driver.c timesync.c \
 		oo_shmbuf.c compat.c \
 		ossock_calls.c mmap.c \
 		epoll_device.c onloadfs.c \
-		dshm.c cplane.c cplane_prot.c
+		dshm.c cplane.c cplane_prot.c linux_syscall.c
 
 # This is a kernel makefile, so gets re-called by kbuild with 'src' set
 src ?= .
@@ -46,10 +46,6 @@ IP_TARGET      := onload.o
 IP_TARGET_SRCS := $(ONLOAD_SRCS) $(EFTHRM_SRCS)
 
 TARGETS		:= $(IP_TARGET)
-
-x86_TARGET_SRCS    := x86_linux_trampoline.o
-
-arm64_TARGET_SRCS := aarch64_linux_trampoline.o
 
 
 ######################################################
@@ -88,7 +84,7 @@ ifeq ($(ARCH),arm64)
 EXTRA_CFLAGS+= -Wno-error=discarded-qualifiers
 endif
 
-onload-objs  := $(IP_TARGET_SRCS:%.c=%.o) $($(ARCH)_TARGET_SRCS:%.c=%.o)
+onload-objs  := $(IP_TARGET_SRCS:%.c=%.o)
 onload-objs  += $(BUILD)/lib/transport/ip/ci_ip_lib.o	\
 		$(BUILD)/lib/cplane/cplane_lib.o \
 		$(BUILD)/lib/citools/citools_lib.o	\

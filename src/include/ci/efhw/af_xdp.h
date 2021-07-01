@@ -10,11 +10,8 @@
 /* For Onload over AF_XDP we need:
  * - CONFIG_XDP_SOCKETS
  * - __NR_bpf
- * - EFRM_SYSCALL_PTREGS
- *
- * x86 is probably unnecessary limitation, but we do not use it on ARM64.
  */
-#if defined(CONFIG_XDP_SOCKETS) && defined(__NR_bpf) && defined(EFRM_SYSCALL_PTREGS) && defined(CONFIG_X86_64)
+#if defined(CONFIG_XDP_SOCKETS) && defined(__NR_bpf)
 #define EFHW_HAS_AF_XDP
 #endif
 

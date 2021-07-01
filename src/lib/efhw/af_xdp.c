@@ -264,32 +264,11 @@ static struct protection_domain* pd_by_owner(struct efhw_nic* nic, int owner_id)
  *---------------------------------------------------------------------------*/
 
 
-static asmlinkage long (*sys_call_bpf)(const struct pt_regs*) = NULL;
-
-static int init_sys_call_bpf(void)
-{
-  if( sys_call_bpf != NULL )
-    return 0;
-
-  if( efrm_syscall_table == NULL || efrm_syscall_table[__NR_bpf] == NULL )
-    return -ENOSYS;
-  sys_call_bpf = efrm_syscall_table[__NR_bpf];
-  EFHW_ASSERT(sys_call_bpf);
-  return 0;
-}
-
 /* Invoke the bpf() syscall args is assumed to be kernel memory */
+noinline
 static int xdp_sys_bpf(int cmd, unsigned long user_addr)
 {
-  int rc;
-  struct pt_regs regs;
-
-  EFHW_ASSERT(sys_call_bpf);
-
-  regs.di = cmd;
-  regs.si = user_addr;
-  regs.dx = sizeof(union bpf_attr);
-  rc = sys_call_bpf(&regs);
+  int rc = SYSCALL_DISPATCHn(3, bpf, cmd, user_addr, sizeof(union bpf_attr));
   if( rc < 0 )
     EFHW_ERR("%s: sys_bpf(%d) failed: %d", __func__, cmd, rc);
   return rc;
@@ -912,10 +891,6 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	int map_fd, rc;
 	struct bpf_prog* prog;
 	struct efhw_nic_af_xdp* xdp;
-
-	rc = init_sys_call_bpf();
-	if( rc != 0 )
-		return rc;
 
 	xdp = kzalloc(sizeof(*xdp) +
 		      nic->vi_lim * sizeof(struct efhw_af_xdp_vi) +

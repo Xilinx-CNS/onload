@@ -97,11 +97,6 @@ static inline int oo_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 extern asmlinkage int
 efab_linux_sys_close(int fd);
 
-union bpf_attr;
-
-extern asmlinkage int
-efab_linux_sys_bpf(int cmd, union bpf_attr __user* attr, int size);
-
 extern asmlinkage int efab_linux_sys_epoll_create1(int flags);
 extern asmlinkage int efab_linux_sys_epoll_ctl(int epfd, int op, int fd,
                                                struct epoll_event *event);
