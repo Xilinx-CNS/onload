@@ -254,9 +254,16 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 		goto fail1;
 	}
 
+	/* NICs that do not use a buffer table will report 0 orders. For
+	 * compatability we don't care whether buffer table or phys mode has
+	 * been requested as packet hardware addresses are not visible to
+	 * userspace when using these NICs.
+	 */
+	orders_num = efhw_nic_buffer_table_orders_num(client_opt->nic);
+	if( orders_num == 0 )
+		use_buffer_table = 0;
+
 	if (use_buffer_table) {
-		orders_num = efhw_nic_buffer_table_orders_num(
-						client_opt->nic);
 		EFRM_ASSERT(orders_num);
 		/* FIXME EF100: The only buffer table order supported in
 		 * Riverhead is 9. But EF100 will have orders starting from 0

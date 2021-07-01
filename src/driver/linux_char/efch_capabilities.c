@@ -310,7 +310,14 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     for (i = 0; i < n; ++i)
       val = CI_MIN(val, orders[i]);
     if (val == INT_MAX) {
-      out->support_rc = -ENOENT;
+      /* If we don't have a buffer table then claim basic 4k page support.
+       * We don't want to return an error here, because we want to maintain
+       * compat with existing apps, so we need to return something. There's
+       * an existing requirement in ef_memreg_alloc() for 4k alignment, so
+       * let's report that here, though in theory we have no minimum.
+       */
+      out->val = EFHW_NIC_PAGE_SIZE;
+      out->support_rc = 0;
     }
     else {
       out->val = EFHW_NIC_PAGE_SIZE << val;
