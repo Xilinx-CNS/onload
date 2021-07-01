@@ -384,7 +384,10 @@ efct_get_rx_error_stats(struct efhw_nic *nic, int instance,
 static int
 efct_client_alloc(struct efhw_nic *nic, uint32_t parent, uint32_t *id)
 {
-  return -EOPNOTSUPP;
+  /* The specific return value of ENOSYS is recognised by clients to mean that
+   * we don't provide or require client ids.
+   */
+  return -ENOSYS;
 }
 
 
