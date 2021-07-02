@@ -134,6 +134,7 @@ init_vi_resource_dimensions(struct vi_resource_dimensions *rd,
 		unsigned i;
 
 		EFRM_ASSERT(irq_res->n_ranges <= IRQ_N_RANGES_MAX);
+		EFRM_BUILD_ASSERT(IRQ_N_RANGES_MAX == NIC_IRQ_MAX_RANGES);
 		rd->irq_n_ranges = irq_res->n_ranges;
 		rd->irq_prime_reg = irq_res->int_prime;
 		for( i = 0; i < irq_res->n_ranges; i++ ) {
