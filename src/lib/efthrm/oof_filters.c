@@ -1731,7 +1731,7 @@ oof_manager_update_all_filters(struct oof_manager* fm)
   /* Find all filters potentially affected by a change in the set of
    * hwports, and modify the set of ports filtered as needed.
    */
-  for( hash = 0; hash < OOF_LOCAL_PORT_TBL_SIZE; ++hash )
+  for( hash = 0; hash < OOF_LOCAL_PORT_TBL_SIZE; ++hash ) {
     CI_DLLIST_FOR_EACH2(struct oof_local_port, lp, lp_manager_link,
                         &fm->fm_local_ports[hash]) {
       /* Find and update unicast filters. */
@@ -1777,11 +1777,12 @@ oof_manager_update_all_filters(struct oof_manager* fm)
         }
       }
     }
+  }
 
-    /* let us update tproxy filters */
-    CI_DLLIST_FOR_EACH2(struct oof_tproxy, ft, ft_manager_link,
-                        &fm->fm_tproxies)
-      oof_tproxy_filter_update(fm, ft);
+  /* let us update tproxy filters */
+  CI_DLLIST_FOR_EACH2(struct oof_tproxy, ft, ft_manager_link,
+                      &fm->fm_tproxies)
+    oof_tproxy_filter_update(fm, ft);
 }
 
 

@@ -84,7 +84,7 @@ static int get_wire_order_cfg(int socket, int32_t* n_socks_out,
 
 static int wire_order_server_ready(int socket)
 {
-  int dummy;
+  int dummy = 0;
   TRY(send(socket, &dummy, 1, 0));
   return 0;
 }
