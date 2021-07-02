@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* X-SPDX-Copyright-Text: (c) Copyright 2002-2020 Xilinx, Inc. */
+/* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
 
 #include <linux/mm.h>
 #include <linux/slab.h>
@@ -16,6 +16,7 @@
 
 #include "efct_test_device.h"
 #include "efct_test_ops.h"
+#include "efct_test_tx.h"
 
 
 struct xlnx_efct_client {
@@ -238,9 +239,13 @@ static int efct_test_init_evq(struct xlnx_efct_client *handle,
   if( evq->inited )
     return -EBUSY;
 
+  BUG_ON(evq->txqs != 0);
+
   evq->inited = true;
   evq->q_base = page_to_virt(params->q_page);
   evq->entries = params->entries;
+  evq->ptr = 0;
+  evq->mask = evq->entries - 1;
 
   return 0;
 }
@@ -249,12 +254,12 @@ static int efct_test_init_evq(struct xlnx_efct_client *handle,
 static void efct_test_free_evq(struct xlnx_efct_client *handle, int evq)
 {
   printk(KERN_INFO "%s: qid %d\n", __func__, evq);
-  if( !handle->tdev->evqs[evq].inited )
-    printk(KERN_INFO "%s: Error freeing q %d but not inited\n", __func__, evq);
+  WARN(!handle->tdev->evqs[evq].inited,
+       "%s: Error freeing q %d but not inited\n", __func__, evq);
 
-  if( handle->tdev->evqs[evq].txqs != 0 )
-    printk(KERN_INFO "%s: Error freeing evq %d, but still bound to txqs %x\n",
-           __func__, evq, handle->tdev->evqs[evq].txqs);
+  WARN(handle->tdev->evqs[evq].txqs != 0,
+       "%s: Error freeing evq %d, but still bound to txqs %x\n",
+       __func__, evq, handle->tdev->evqs[evq].txqs);
 
   handle->tdev->evqs[evq].inited = false;
 }
@@ -264,7 +269,8 @@ static int efct_test_alloc_txq(struct xlnx_efct_client *handle,
                                struct xlnx_efct_txq_params *params)
 {
   struct efct_test_device *tdev = handle->tdev;
-  int txq = -1;
+  struct efct_test_txq *txq;
+  int txq_idx = -1;
   int i;
 
   printk(KERN_INFO "%s: evq %d\n", __func__, params->evq);
@@ -277,41 +283,56 @@ static int efct_test_alloc_txq(struct xlnx_efct_client *handle,
    */
   for( i = 0; i < EFCT_TEST_TXQS_N; i++ )
     if( tdev->txqs[i].evq < 0 ) {
-      txq = i;
+      txq_idx = i;
       break;
     }
 
-  if( txq < 0 )
+  if( txq_idx < 0 )
     return -EBUSY;
 
-  tdev->txqs[txq].ctpio = kzalloc(0x1000, GFP_KERNEL);
-  if( !tdev->txqs[txq].ctpio )
+  txq = &tdev->txqs[txq_idx];
+
+  txq->ctpio = kmalloc(0x1000, GFP_KERNEL);
+  if( !txq->ctpio )
     return -ENOMEM;
-  set_memory_wc((unsigned long)tdev->txqs[txq].ctpio, 1);
+  memset(txq->ctpio, 0xff, 0x1000);
+  set_memory_wc((unsigned long)txq->ctpio, 1);
 
-  tdev->txqs[txq].evq = params->evq;
-  tdev->evqs[params->evq].txqs |= 1 << txq;
+  atomic_set(&txq->timer_running, 1);
+  INIT_DELAYED_WORK(&txq->timer, efct_test_tx_timer);
+  schedule_delayed_work(&txq->timer, 100);
 
-  printk(KERN_INFO "%s: bound txq %d to evq %d\n", __func__, txq, params->evq);
+  txq->evq = params->evq;
+  txq->tdev = tdev;
+  tdev->evqs[params->evq].txqs |= 1 << txq_idx;
+  txq->ptr = 0;
+  txq->pkt_ctr = 0;
 
-  return txq;
+  printk(KERN_INFO "%s: bound txq %d to evq %d\n", __func__, txq_idx,
+         params->evq);
+
+  return txq_idx;
 }
 
 
-static void efct_test_free_txq(struct xlnx_efct_client *handle, int txq)
+static void efct_test_free_txq(struct xlnx_efct_client *handle, int txq_idx)
 {
   struct efct_test_device *tdev = handle->tdev;
-  int evq = tdev->txqs[txq].evq;
+  int evq = tdev->txqs[txq_idx].evq;
+  struct efct_test_txq *txq = &tdev->txqs[txq_idx];
 
-  printk(KERN_INFO "%s: txq %d\n", __func__, txq);
-  if( evq < 0 )
-    printk(KERN_INFO "%s: Error: freeing q %d, but not bound to evq\n",
-           __func__, txq);
+  printk(KERN_INFO "%s: txq %d\n", __func__, txq_idx);
+  WARN(evq < 0,
+       "%s: Error: freeing q %d, but not bound to evq\n", __func__, txq_idx);
 
-  tdev->evqs[evq].txqs &= ~(1 << txq);
-  tdev->txqs[txq].evq = -1;
-  set_memory_wb((unsigned long)tdev->txqs[txq].ctpio, 1);
-  kfree(tdev->txqs[txq].ctpio);
+  atomic_set(&txq->timer_running, 0);
+  cancel_delayed_work_sync(&txq->timer);
+
+  tdev->evqs[evq].txqs &= ~(1 << txq_idx);
+  txq->evq = -1;
+  set_memory_wb((unsigned long)txq->ctpio, 1);
+
+  kfree(txq->ctpio);
 }
 
 

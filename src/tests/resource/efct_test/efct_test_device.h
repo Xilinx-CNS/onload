@@ -8,14 +8,21 @@
 
 struct efct_test_evq {
   bool inited;
-  void *q_base;
-  size_t entries;
   unsigned txqs;
+  size_t entries;
+  uint64_t *q_base;
+  unsigned ptr;
+  unsigned mask;
 };
 
 struct efct_test_txq {
   int evq;
-  void* ctpio;
+  uint8_t* ctpio;
+  unsigned ptr;
+  unsigned pkt_ctr;
+  atomic_t timer_running;
+  struct delayed_work timer;
+  struct efct_test_device *tdev;
 };
 
 #define EFCT_TEST_EVQS_N 12
