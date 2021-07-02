@@ -1328,7 +1328,8 @@ static void stack_more_stats_describe(ci_netif* ni)
 
 static void stack_ip_stats(ci_netif* ni)
 {
-  ci_ip_stats_count stats = ni->state->stats_snapshot.ip;
+  ci_ip_stats_count stats;
+  memcpy(&stats, &ni->state->stats_snapshot.ip, sizeof(stats));
   ci_log("--------------------- ci_ip_stats: %d -----------------------",
          NI_ID(ni));
   ci_dump_stats(ip_stats_fields, N_IP_STATS_FIELDS, &stats, 0, NULL, NULL);
@@ -1336,7 +1337,8 @@ static void stack_ip_stats(ci_netif* ni)
 
 static void stack_ip_stats_describe(ci_netif* ni)
 {
-  ci_ip_stats_count stats = ni->state->stats_snapshot.ip;
+  ci_ip_stats_count stats;
+  memcpy(&stats, &ni->state->stats_snapshot.ip, sizeof(stats));
   ci_log("--------------------- ci_ip_stats: %d -----------------------",
          NI_ID(ni));
   ci_dump_stats(ip_stats_fields, N_IP_STATS_FIELDS, &stats, 1, NULL, NULL);
@@ -1344,7 +1346,8 @@ static void stack_ip_stats_describe(ci_netif* ni)
 
 static void stack_tcp_stats(ci_netif* ni)
 {
-  ci_tcp_stats_count stats = ni->state->stats_snapshot.tcp;
+  ci_tcp_stats_count stats;
+  memcpy(&stats, &ni->state->stats_snapshot.tcp, sizeof(stats));
   ci_log("-------------------- ci_tcp_stats: %d -----------------------",
          NI_ID(ni));
   ci_dump_stats(tcp_stats_fields, N_TCP_STATS_FIELDS, &stats, 0, NULL, NULL);
@@ -1352,7 +1355,8 @@ static void stack_tcp_stats(ci_netif* ni)
 
 static void stack_tcp_stats_describe(ci_netif* ni)
 {
-  ci_tcp_stats_count stats = ni->state->stats_snapshot.tcp;
+  ci_tcp_stats_count stats;
+  memcpy(&stats, &ni->state->stats_snapshot.tcp, sizeof(stats));
   ci_log("-------------------- ci_tcp_stats: %d -----------------------",
          NI_ID(ni));
   ci_dump_stats(tcp_stats_fields, N_TCP_STATS_FIELDS, &stats, 1, NULL, NULL);
@@ -1360,7 +1364,8 @@ static void stack_tcp_stats_describe(ci_netif* ni)
 
 static void stack_tcp_ext_stats(ci_netif* ni)
 {
-  ci_tcp_ext_stats_count stats = ni->state->stats_snapshot.tcp_ext;
+  ci_tcp_ext_stats_count stats;
+  memcpy(&stats, &ni->state->stats_snapshot.tcp_ext, sizeof(stats));
   ci_log("-------------------- ci_tcp_ext_stats: %d -------------------",
          NI_ID(ni));
   ci_dump_stats(tcp_ext_stats_fields, N_TCP_EXT_STATS_FIELDS, &stats, 0, NULL,
@@ -1369,7 +1374,8 @@ static void stack_tcp_ext_stats(ci_netif* ni)
 
 static void stack_tcp_ext_stats_describe(ci_netif* ni)
 {
-  ci_tcp_ext_stats_count stats = ni->state->stats_snapshot.tcp_ext;
+  ci_tcp_ext_stats_count stats;
+  memcpy(&stats, &ni->state->stats_snapshot.tcp_ext, sizeof(stats));
   ci_log("-------------------- ci_tcp_ext_stats: %d -------------------",
          NI_ID(ni));
   ci_dump_stats(tcp_ext_stats_fields, N_TCP_EXT_STATS_FIELDS, &stats, 1, NULL,
@@ -1378,7 +1384,8 @@ static void stack_tcp_ext_stats_describe(ci_netif* ni)
 
 static void stack_udp_stats(ci_netif* ni)
 {
-  ci_udp_stats_count stats = ni->state->stats_snapshot.udp;
+  ci_udp_stats_count stats;
+  memcpy(&stats, &ni->state->stats_snapshot.udp, sizeof(stats));
   ci_log("-------------------- ci_udp_stats: %d -----------------------",
          NI_ID(ni));
   ci_dump_stats(udp_stats_fields, N_UDP_STATS_FIELDS, &stats, 0, NULL, NULL);
@@ -1386,7 +1393,8 @@ static void stack_udp_stats(ci_netif* ni)
 
 static void stack_udp_stats_describe(ci_netif* ni)
 {
-  ci_udp_stats_count stats = ni->state->stats_snapshot.udp;
+  ci_udp_stats_count stats;
+  memcpy(&stats, &ni->state->stats_snapshot.udp, sizeof(stats));
   ci_log("-------------------- ci_udp_stats: %d -----------------------",
          NI_ID(ni));
   ci_dump_stats(udp_stats_fields, N_UDP_STATS_FIELDS, &stats, 1, NULL, NULL);
