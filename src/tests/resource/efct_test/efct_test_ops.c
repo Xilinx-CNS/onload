@@ -3,6 +3,7 @@
 
 #include <linux/mm.h>
 #include <linux/slab.h>
+#include <linux/set_memory.h>
 
 #include <ci/driver/ci_aux.h>
 #include <ci/driver/ci_efct.h>
@@ -172,6 +173,7 @@ static int efct_test_alloc_txq(struct xlnx_efct_client *handle,
   tdev->txqs[txq].ctpio = kzalloc(0x1000, GFP_KERNEL);
   if( !tdev->txqs[txq].ctpio )
     return -ENOMEM;
+  set_memory_wc((unsigned long)tdev->txqs[txq].ctpio, 1);
 
   tdev->txqs[txq].evq = params->evq;
   tdev->evqs[params->evq].txqs |= 1 << txq;
@@ -194,6 +196,7 @@ static void efct_test_free_txq(struct xlnx_efct_client *handle, int txq)
 
   tdev->evqs[evq].txqs &= ~(1 << txq);
   tdev->txqs[txq].evq = -1;
+  set_memory_wb((unsigned long)tdev->txqs[txq].ctpio, 1);
   kfree(tdev->txqs[txq].ctpio);
 }
 
