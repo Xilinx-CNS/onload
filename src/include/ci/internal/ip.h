@@ -2811,12 +2811,14 @@ ci_netif_intf_rx_future(ci_netif* ni, int intf_i, const uint32_t* poison)
     return poison;
 
   pkt = ci_netif_intf_next_rx_pkt(ni, intf_i);
+  if( pkt == NULL )
+    return poison;
 
   /* FIXME: colocate all the fields used by the rx path to reduce cache usage */
   for( p = (ci_uint8*)pkt; p < pkt->dma_start; p += CI_CACHE_LINE_SIZE )
     ci_prefetch(p);
 
-  return pkt ? ci_netif_poison_location(pkt) : poison;
+  return ci_netif_poison_location(pkt);
 }
 
 #endif
