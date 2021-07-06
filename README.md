@@ -50,10 +50,10 @@ The following operating system distributions are known to provide an adequate
 level of AF_XDP support for Onload:
 
 * Ubuntu LTS 20.04
-* Ubuntu 20.10, 21.04
+* Ubuntu 21.04
 * Debian 10 with Linux kernel 5.10
 * Debian 11
-* Redhat Enterprise Linux 8.3
+* Redhat Enterprise Linux 8.3, 8.4
 * Linux kernel in the range 5.3 - 5.12
 
 Onload also works with the native ef_vi hardware interface, supported by Xilinx
@@ -70,6 +70,16 @@ The following adapters at least are able to support OpenOnload without AF_XDP:
 * X2522, X2522-25G
 * SFN8042
 * SFN8522, SFN8542
+
+### Compatible Linux kernels and distributions for Xilinx network adapters
+
+This source tree is known to work with Xilinx network adapters on following
+Linux distributions:
+
+* Ubuntu LTS 18.04, LTS 20.04, 21.04
+* Debian 10, 11
+* Redhat Enterprise Linux 7.9, 8.3, 8.4
+* Linux kernel in the range 4.9 - 5.12
 
 ## Support
 
