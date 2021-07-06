@@ -395,6 +395,9 @@ int efch_filter_list_op_add(struct efrm_resource *rs, struct efrm_pd *pd,
                             int *copy_out, unsigned efx_filter_flags,
                             int rss_context)
 {
+  /* This whole function is the legacy filter_add ioctl interface, maintained
+   * solely for backward-compatibility with old userspace. All current
+   * userspace code uses efch_filter_list_add() instead */
   int rc;
   int replace;
   struct efx_filter_spec spec;
@@ -522,31 +525,102 @@ int efch_filter_list_op_block(struct efrm_resource *rs, struct efrm_pd *pd,
     return efch_filter_list_del(rs, pd, fl, FILTER_ID_INDEPENDENT_BLOCK);
 }
 
+#define TRY(f)  ({ int rc_ = (f); if( rc_ < 0 ) return rc_; rc_; })
+
 int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
                          struct efch_filter_list *fl,
                          ci_filter_add_t *filter_add, int *copy_out)
 {
   struct efx_filter_spec spec;
   struct filter *f;
-  int replace;
-  int rc;
+  int rc = 0;
   unsigned stack_id;
+  enum efx_filter_flags filter_flags = EFX_FILTER_FLAG_RX_SCATTER;
+  uint16_t vid;
 
-  efx_filter_init_rx(&spec, EFX_FILTER_PRI_REQUIRED, EFX_FILTER_FLAG_RX_SCATTER,
+  if( ! capable(CAP_NET_ADMIN) ) {
+    if( (filter_add->in.fields & (CI_FILTER_FIELD_LOC_HOST |
+                                  CI_FILTER_FIELD_LOC_PORT)) !=
+        (CI_FILTER_FIELD_LOC_HOST | CI_FILTER_FIELD_LOC_PORT) )
+      return -EPERM;
+  }
+
+  if( filter_add->in.fields & CI_FILTER_FIELD_REM_MAC )
+    return -EOPNOTSUPP;
+  if( filter_add->in.fields & CI_FILTER_FIELD_LOC_HOST &&
+      ! (filter_add->in.fields & CI_FILTER_FIELD_LOC_PORT) )
+    return -EOPNOTSUPP;
+  if( filter_add->in.fields & CI_FILTER_FIELD_REM_HOST &&
+      ! (filter_add->in.fields & CI_FILTER_FIELD_REM_PORT) )
+    return -EOPNOTSUPP;
+  if( filter_add->in.fields & CI_FILTER_FIELD_REM_HOST &&
+      ! (filter_add->in.fields & CI_FILTER_FIELD_LOC_HOST) )
+    return -EOPNOTSUPP;
+  if( filter_add->in.fields == 0 )
+    return -EINVAL;
+
+  if( filter_add->in.flags & CI_FILTER_FLAG_MCAST_LOOP )
+    filter_flags |= EFX_FILTER_FLAG_TX;
+  if( filter_add->in.flags & CI_FILTER_FLAG_RSS )
+    filter_flags |= EFX_FILTER_FLAG_RX_RSS;
+  efx_filter_init_rx(&spec, EFX_FILTER_PRI_REQUIRED, filter_flags,
                      rs->rs_instance);
+  spec.rss_context = filter_add->in.rss_context;
 
   *copy_out = 1;
+
+  if( efrm_pd_has_vport(pd) )
+    efx_filter_set_vport_id(&spec, efrm_pd_get_vport_id(pd));
 
   stack_id = efrm_pd_stack_id_get(pd);
   ci_assert( stack_id >= 0 );
   efx_filter_set_stack_id(&spec, stack_id);
 
-  if( filter_add->in.spec.l2.vid != 0xffff )
-    rc = efch_filter_list_set_ip6_vlan(&spec, filter_add, &replace);
-  else
-    rc = efch_filter_list_set_ip6(&spec, filter_add, &replace);
-  if( rc < 0 )
-    return rc;
+  vid = filter_add->in.fields & CI_FILTER_FIELD_OUTER_VID ?
+        filter_add->in.spec.l2.vid : EFX_FILTER_VID_UNSPEC;
+
+  if( filter_add->in.fields & CI_FILTER_FIELD_LOC_MAC )
+    TRY(efx_filter_set_eth_local(&spec, vid, filter_add->in.spec.l2.dhost));
+  else if( filter_add->in.fields & CI_FILTER_FIELD_OUTER_VID )
+    TRY(efx_filter_set_eth_local(&spec, vid, NULL));
+
+  if( filter_add->in.fields & CI_FILTER_FIELD_IP_PROTO ) {
+    spec.match_flags |= EFX_FILTER_MATCH_IP_PROTO;
+    spec.ip_proto = filter_add->in.spec.l3.protocol;
+  }
+  if( filter_add->in.fields & CI_FILTER_FIELD_ETHER_TYPE ) {
+    spec.match_flags |= EFX_FILTER_MATCH_ETHER_TYPE;
+    spec.ether_type = filter_add->in.spec.l2.type;
+  }
+
+  if( filter_add->in.fields & CI_FILTER_FIELD_LOC_HOST ) {
+    if( filter_add->in.spec.l2.type == htons(ETH_P_IP) ) {
+      if( filter_add->in.fields & CI_FILTER_FIELD_REM_HOST )
+        TRY(efx_filter_set_ipv4_full(&spec, filter_add->in.spec.l3.protocol,
+                                     filter_add->in.spec.l3.u.ipv4.daddr,
+                                     filter_add->in.spec.l4.ports.dest,
+                                     filter_add->in.spec.l3.u.ipv4.saddr,
+                                     filter_add->in.spec.l4.ports.source));
+      else
+        TRY(efx_filter_set_ipv4_local(&spec, filter_add->in.spec.l3.protocol,
+                                      filter_add->in.spec.l3.u.ipv4.daddr,
+                                      filter_add->in.spec.l4.ports.dest));
+    }
+    else if( filter_add->in.spec.l2.type == htons(ETH_P_IPV6) ) {
+      if( filter_add->in.fields & CI_FILTER_FIELD_REM_HOST )
+        TRY(efx_filter_set_ipv6_full(&spec, filter_add->in.spec.l3.protocol,
+                                     filter_add->in.spec.l3.u.ipv6.daddr,
+                                     filter_add->in.spec.l4.ports.dest,
+                                     filter_add->in.spec.l3.u.ipv6.saddr,
+                                     filter_add->in.spec.l4.ports.source));
+      else
+        TRY(efx_filter_set_ipv6_local(&spec, filter_add->in.spec.l3.protocol,
+                                      filter_add->in.spec.l3.u.ipv6.daddr,
+                                      filter_add->in.spec.l4.ports.dest));
+    }
+    else
+      return -EINVAL;
+  }
 
   if( (f = ci_alloc(sizeof(*f))) == NULL )
     return -ENOMEM;
@@ -554,7 +628,7 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
   f->flags = 0;
   f->rxq = -1;
 
-  rc = efch_filter_insert(rs, pd, &spec, f, replace);
+  rc = efch_filter_insert(rs, pd, &spec, f, false);
   if( rc < 0 ) {
     efch_filter_delete(rs, pd, f);
     return rc;

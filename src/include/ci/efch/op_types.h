@@ -329,8 +329,19 @@ typedef union ci_filter_add_u {
     uint16_t            out_size;
     efch_resource_id_t  res_id;
     uint32_t            fields;
+#define CI_FILTER_FIELD_REM_MAC        0x0001
+#define CI_FILTER_FIELD_REM_HOST       0x0002
+#define CI_FILTER_FIELD_REM_PORT       0x0004
+#define CI_FILTER_FIELD_LOC_MAC        0x0008
+#define CI_FILTER_FIELD_LOC_HOST       0x0010
+#define CI_FILTER_FIELD_LOC_PORT       0x0020
+#define CI_FILTER_FIELD_ETHER_TYPE     0x0040
+#define CI_FILTER_FIELD_OUTER_VID      0x0080
+#define CI_FILTER_FIELD_IP_PROTO       0x0100
     uint32_t            opt_fields;
     uint32_t            flags;
+#define CI_FILTER_FLAG_MCAST_LOOP          0x0001
+#define CI_FILTER_FLAG_RSS                 0x0002
     struct {
       struct {
         uint8_t  dhost[6];
@@ -367,6 +378,7 @@ typedef union ci_filter_add_u {
         };
       } l4;
     } spec;
+    uint32_t            rss_context;
   } in;
   struct {
     uint16_t  out_len;
