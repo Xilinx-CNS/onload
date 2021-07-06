@@ -21,6 +21,9 @@ typedef struct stat_desc_s {
 typedef struct dstats_s {
   unsigned        rx_evs_per_poll;
   unsigned        tx_evs_per_poll;
+  /* See ON-13341: without this padding gcc-11 complains on ‘stats’ may be
+   * used uninitialized */
+  uint64_t        padding;
 } dstats_t;
 
 
@@ -190,5 +193,6 @@ ci_inline void* get_dstats(void* to, const void* from, size_t len)
   polls = s.k_polls + s.u_polls;
   d->rx_evs_per_poll = s.rx_evs / polls;
   d->tx_evs_per_poll = s.tx_evs / polls;
+  d->padding = 0;
   return NULL;
 }
