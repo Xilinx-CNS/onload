@@ -1913,7 +1913,7 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
           rc_os = 0; /* ignore errors */
         }
         if( rc == maxevents ) {
-          ep->phase = EPOLL_PHASE_DONE_OTHER;
+          ep->phase = 0;
           goto unlock_release_exit_ret;
         }
       }
