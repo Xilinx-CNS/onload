@@ -4003,7 +4003,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   int rc, intf_i;
   ci_netif* ni;
   int hw_resources_allocated = 0;
+#ifdef EFRM_DO_NAMESPACES
   struct nsproxy* nsproxy;
+#endif
 
   ci_assert(alloc);
   ci_assert(rs_out);
