@@ -97,47 +97,120 @@ ef100_tx_desc2cmpt_desc_fill(uint64_t data, bool ordered, uint16_t abs_vi_id,
                       ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_DESC2CMPT);
 }
 
-static int ef100_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
-				     int iov_len, ef_request_id dma_id)
+static unsigned ef100_calc_n_segs(ef_vi* vi, const void* piov, int iov_len,
+                                  size_t stride)
+{
+  int i;
+  unsigned n = 0;
+  EF_VI_BUG_ON((iov_len <= 0));
+  EF_VI_BUG_ON(piov == NULL);
+
+  if (vi->vi_flags & EF_VI_TX_PHYS_ADDR )
+    return iov_len;
+  for( i = 0; i < iov_len; ++i ) {
+    const ef_iovec* iov = (const ef_iovec*)((const char*)piov + i * stride);
+    ef_addr bt1 = iov->iov_base >> EF_VI_NIC_PAGE_SHIFT;
+    ef_addr bt2 = (iov->iov_base + iov->iov_len + EF_VI_NIC_PAGE_SIZE - 1) >>
+                  EF_VI_NIC_PAGE_SHIFT;
+    n += bt2 - bt1;
+  }
+  return n;
+}
+
+__attribute__((always_inline))
+static inline void ef100_tx_init_generic(ef_vi* vi, const void* iovv,
+                                         int iov_len, size_t stride,
+                                         int n_segs, ef_request_id dma_id)
 {
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
   ef_vi_ef100_dma_tx_desc* dp;
-  unsigned di, n_segs = iov_len;
+  unsigned di;
+  const ef_remote_iovec* piov = iovv;
 
-  EF_VI_BUG_ON((iov_len <= 0));
-  EF_VI_BUG_ON(iov == NULL);
   EF_VI_BUG_ON((dma_id & EF_REQUEST_ID_MASK) != dma_id);
   EF_VI_BUG_ON(dma_id == 0xffffffff);
-
-  /* Check for enough space in the queue */
-  if( qs->added + n_segs - qs->removed > q->mask )
-    return -EAGAIN;
 
   /* Generate a SEND descriptor which includes the first segment of data */
   di = qs->added++ & q->mask;
   dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
 
-  ef100_tx_send_desc_fill(vi, n_segs,
-                          iov->iov_base,
-                          iov->iov_len, dp);
-  iov++;
-  n_segs--;
-
-  while( n_segs > 0 ) {
-    di = qs->added++ & q->mask;
-    dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
-
-    ef100_tx_segment_desc_fill(iov->iov_base,
-                               iov->iov_len,
-                               EF_ADDRSPACE_LOCAL, 0,
-                               dp);
-    iov++;
+  if( vi->vi_flags & EF_VI_TX_PHYS_ADDR ) {
+    ef100_tx_send_desc_fill(vi, n_segs, piov->iov_base, piov->iov_len, dp);
+    piov = (const ef_remote_iovec*)((const char*)piov + stride);
     n_segs--;
+
+    while( n_segs > 0 ) {
+      di = qs->added++ & q->mask;
+      dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
+
+      ef100_tx_segment_desc_fill(piov->iov_base, piov->iov_len,
+                                 stride >= sizeof(ef_remote_iovec) ?
+                                         piov->addrspace : EF_ADDRSPACE_LOCAL,
+                                 stride >= sizeof(ef_remote_iovec) ?
+                                         piov->flags : 0,
+                                 dp);
+      piov = (const ef_remote_iovec*)((const char*)piov + stride);
+      n_segs--;
+    }
+  }
+  else {
+    /* buffer mode. We chop all sends up into 4KB chunks because the NIC won't
+     * allow a single segment to traverse two buffertable mappings. We do not,
+     * of course, know that the buffertable entries we're hitting are only 4KB
+     * in size (they're almost certainly much bigger), so a future improvement
+     * could be to figure out that min order and apply it here. */
+    ef_addr page_mask = EF_VI_NIC_PAGE_SIZE - 1;
+    ef_remote_iovec iov = {
+      .iov_base = piov->iov_base,
+      .iov_len = piov->iov_len,
+      .addrspace = EF_ADDRSPACE_LOCAL,
+    };
+    unsigned len;
+
+    len = CI_MIN(iov.iov_len, (unsigned)(~iov.iov_base & page_mask) + 1);
+    ef100_tx_send_desc_fill(vi, n_segs, iov.iov_base, len, dp);
+    n_segs--;
+    iov.iov_base += len;
+    iov.iov_len -= len;
+
+    while( n_segs > 0 ) {
+      if( iov.iov_len == 0 ) {
+        piov = (const ef_remote_iovec*)((const char*)piov + stride);
+        iov = (ef_remote_iovec){
+          .iov_base = piov->iov_base,
+          .iov_len = piov->iov_len,
+          .addrspace = stride >= sizeof(ef_remote_iovec) ?
+                                         piov->addrspace : EF_ADDRSPACE_LOCAL,
+          .flags = stride >= sizeof(ef_remote_iovec) ? piov->flags : 0,
+        };
+      }
+      di = qs->added++ & q->mask;
+      dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
+
+      len = CI_MIN(iov.iov_len, (unsigned)(~iov.iov_base & page_mask) + 1);
+      ef100_tx_segment_desc_fill(iov.iov_base, len, iov.addrspace, iov.flags,
+                                 dp);
+      n_segs--;
+    }
   }
 
   EF_VI_BUG_ON(q->ids[di] != EF_REQUEST_ID_MASK);
   q->ids[di] = dma_id;
+}
+
+static int ef100_ef_vi_transmitv_init(ef_vi* vi, const ef_iovec* iov,
+				     int iov_len, ef_request_id dma_id)
+{
+  ef_vi_txq* q = &vi->vi_txq;
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  unsigned n_segs = ef100_calc_n_segs(vi, iov, iov_len, sizeof(*iov));
+
+  /* Check for enough space in the queue */
+  if( qs->added + n_segs - qs->removed > q->mask )
+    return -EAGAIN;
+
+  ef100_tx_init_generic(vi, iov, iov_len, sizeof(*iov), n_segs, dma_id);
   return 0;
 }
 
@@ -149,12 +222,8 @@ static int ef100_ef_vi_transmitv_init_extra(ef_vi* vi,
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
   ef_vi_ef100_dma_tx_desc* dp;
-  unsigned di, n_segs = iov_len;
+  unsigned di, n_segs = ef100_calc_n_segs(vi, iov, iov_len, sizeof(*iov));
 
-  EF_VI_BUG_ON((iov_len <= 0));
-  EF_VI_BUG_ON(iov == NULL);
-  EF_VI_BUG_ON((dma_id & EF_REQUEST_ID_MASK) != dma_id);
-  EF_VI_BUG_ON(dma_id == 0xffffffff);
   EF_VI_BUG_ON(iov[0].addrspace != EF_ADDRSPACE_LOCAL);
   EF_VI_BUG_ON((iov[0].flags & EF_RIOV_FLAG_TRANSLATE_ADDR) != 0);
 
@@ -189,30 +258,7 @@ static int ef100_ef_vi_transmitv_init_extra(ef_vi* vi,
                         ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_PREFIX);
   }
 
-  /* Generate a SEND descriptor which includes the first segment of data */
-  di = qs->added++ & q->mask;
-  dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
-
-  ef100_tx_send_desc_fill(vi, n_segs,
-                          iov->iov_base,
-                          iov->iov_len, dp);
-  iov++;
-  n_segs--;
-
-  while( n_segs > 0 ) {
-    di = qs->added++ & q->mask;
-    dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
-
-    ef100_tx_segment_desc_fill(iov->iov_base,
-                               iov->iov_len,
-                               iov->addrspace,
-                               iov->flags, dp);
-    iov++;
-    n_segs--;
-  }
-
-  EF_VI_BUG_ON(q->ids[di] != EF_REQUEST_ID_MASK);
-  q->ids[di] = dma_id;
+  ef100_tx_init_generic(vi, iov, iov_len, sizeof(*iov), n_segs, dma_id);
   return 0;
 }
 
