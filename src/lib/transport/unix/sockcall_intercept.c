@@ -994,8 +994,6 @@ OO_INTERCEPT(ssize_t, sendto,
            fd, msg,(unsigned)len,flags,
            OO_PRINT_SOCKADDR_ARG(to, tolen));
     )
-  Log_CALL(ci_log("%s(%d, %p, %u, %d, %p, %u)", __FUNCTION__,
-                  fd,msg,(unsigned)len,flags,to,tolen));
 
   if( (fdi = citp_fdtable_lookup_fast(&lib_context, fd)) ) {
     iov[0].iov_base = (void*) msg;
@@ -1037,7 +1035,12 @@ OO_INTERCEPT(ssize_t, sendmsg,
     return ci_sys_sendmsg(fd, msg, flags);
   }
 
-  Log_CALL(ci_log("%s(%d, %p, 0x%x)", __FUNCTION__, fd, msg, flags));
+  Log_CALL(
+    ci_log("%s(%d, %p(iov[%zu]:%p, "OO_PRINT_SOCKADDR_FMT", cmsg[%zu]:%p),"
+           " 0x%x)", __FUNCTION__, fd, msg, msg->msg_iovlen, msg->msg_iov,
+           OO_PRINT_SOCKADDR_ARG(msg->msg_name, msg->msg_namelen),
+           msg->msg_controllen, msg->msg_control, flags)
+    )
 
   if( (fdi = citp_fdtable_lookup_fast(&lib_context, fd)) ) {
     if(CI_LIKELY( msg != NULL ))
