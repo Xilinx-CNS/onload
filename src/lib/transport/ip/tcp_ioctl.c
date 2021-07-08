@@ -182,7 +182,7 @@ static int ci_tcp_ioctl_lk(citp_socket* ep, ci_fd_t fd, int request,
       union ceph_control_pkt cmd = {
         .consume_payload.cmd = XSN_CEPH_CTRL_CONSUME_PAYLOAD,
         .consume_payload.stream_id = ts->plugin_stream_id,
-        .consume_payload.buf_tail = (CI_IOCTL_GETARG(uint64_t, arg) - ts->plugin_ddr_base) % ts->plugin_ddr_size,
+        .consume_payload.buf_tail = CI_IOCTL_GETARG(uint64_t, arg) - ts->plugin_ddr_base,
       };
       if( ! pkt )
         return -ENOMEM;
