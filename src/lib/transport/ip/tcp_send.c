@@ -2515,23 +2515,29 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
         /* Up to the end of the current page is guaranteed to be contiguous */
         contig_len = ((iov_base + EF_VI_NIC_PAGE_SIZE) & NIC_PAGE_MASK) -
                      iov_base;
-        /* Keep going until we find any noncontiguity. It'll be common that
-         * there isn't any, so this optimisation is worth it */
-        while( contig_len < CI_MIN(iov_len, MAX_CONTIG_LEN) ) {
-          uint64_t ix = (iov_base + contig_len - (uintptr_t)um->base) >>
-                        EF_VI_NIC_PAGE_SHIFT;
-          uint64_t size = um->size >> EF_VI_NIC_PAGE_SHIFT;
-          bool noncontig = false;
-          OO_STACK_FOR_EACH_INTF_I(ni, i) {
-            if( um->hw_addrs[i * size + ix] !=
-                um->hw_addrs[i * size + ix - 1] + EF_VI_NIC_PAGE_SIZE ) {
-              noncontig = true;
-              break;
+        if( NI_OPTS(ni).packet_buffer_mode == CITP_PKTBUF_MODE_PHYS ) {
+          /* Keep going until we find any noncontiguity. It'll be common that
+           * there isn't any, so this optimisation is worth it.
+           * In buffertable mode we always split at NIC page boundaries. This
+           * is because ef_vi_transmitv_init() is going to do the same thing,
+           * so it's a good idea to ensure that we don't try to enqueue such a
+           * large single block that it overflows the whole txq on its own. */
+          while( contig_len < CI_MIN(iov_len, MAX_CONTIG_LEN) ) {
+            uint64_t ix = (iov_base + contig_len - (uintptr_t)um->base) >>
+                          EF_VI_NIC_PAGE_SHIFT;
+            uint64_t size = um->size >> EF_VI_NIC_PAGE_SHIFT;
+            bool noncontig = false;
+            OO_STACK_FOR_EACH_INTF_I(ni, i) {
+              if( um->hw_addrs[i * size + ix] !=
+                  um->hw_addrs[i * size + ix - 1] + EF_VI_NIC_PAGE_SIZE ) {
+                noncontig = true;
+                break;
+              }
             }
+            if (noncontig)
+              break;
+            contig_len += EF_VI_NIC_PAGE_SIZE;
           }
-          if (noncontig)
-            break;
-          contig_len += EF_VI_NIC_PAGE_SIZE;
         }
         if( contig_len > iov_len )
           contig_len = iov_len;
