@@ -1674,6 +1674,7 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
   int iov_max = CI_ZC_IOV_STATIC_MAX;
   int out_rc = 0;
   enum onload_zc_callback_rc cb_rc;
+  ssize_t overrun;
 
   /* Not currently a required feature, and a little tricky to get right: */
   if( rinf->msg_flags & MSG_PEEK )
@@ -1689,11 +1690,16 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
       goto unrecoverable;
     }
 
-    if( iovlen == iov_max ) {
+    if( iovlen >= iov_max - 1 ) {
       /* There are no good options for what to do if we get here. Dynamic
        * memory allocation is the least-worst option: giving up is mean, and
        * calling the callback here so we can start again creates immense
-       * difficulties with pkt refcounts. */
+       * difficulties with pkt refcounts.
+       *
+       * NOTE: the -1 here is to account for the fact that in the
+       * CEPH_DATA_REMOTE case, we need two iovs if the data wraps round
+       * the DDR ring buffer. A message will never require more than two
+       * iovs: the plugin will not deliver a message longer than ddr_size. */
       struct onload_zc_iovec* iov_new;
       LOG_TR(log(LNTS_FMT "large number of iovs in metapkt (%d @ %d/%d)", 
                  LNTS_PRI_ARGS(netif, rinf->a->ts), iovlen,
@@ -1741,6 +1747,21 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
       iov[iovlen].rx_memreg_idx = 0;
       iov[iovlen].addr_space = netif->state->nic[pkt->intf_i].plugin_addr_space;
       out_rc += data.remote.data_len;
+
+      overrun = data.remote.start_ptr + data.remote.data_len - rinf->a->ts->plugin_ddr_size;
+      if( overrun > 0 ) {
+        /* This data wraps round the DDR ring buffer; the end of the data
+         * will be found at the start of the ring. */
+        iov[iovlen].iov_len -= overrun;
+        iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
+        iov[iovlen].iov_flags = 0;
+
+        ++iovlen;
+        iov[iovlen].iov_ptr = rinf->a->ts->plugin_ddr_base;
+        iov[iovlen].iov_len = overrun;
+        iov[iovlen].rx_memreg_idx = 0;
+        iov[iovlen].addr_space = netif->state->nic[pkt->intf_i].plugin_addr_space;
+      }
       break;
 
     case XSN_CEPH_DATA_LOST_SYNC:
