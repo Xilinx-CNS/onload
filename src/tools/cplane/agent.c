@@ -10,7 +10,7 @@
 #include <cplane/agent.h>
 #include "private.h"
 
-#define AGENT_SOCK_PATH "/var/run/onload_cp_server_agent"
+#define AGENT_SOCK_PATH "/run/onload_cp_server_agent"
 
 
 enum process_result {
