@@ -1,0 +1,4 @@
+include $(src)/mmake.mk
+lib-y := $(obj-y)
+undefine obj-y
+KBUILD_BUILTIN := 1

@@ -168,6 +168,7 @@ what="--platforms"
 builddir=
 custom=0
 driver=
+newdriver=
 gnu=
 
 
@@ -177,6 +178,7 @@ while [ $# -gt 0 ]; do
     -c|--custom) custom=1; what="--allplatforms"; shift;;
     -b|--build-dir) if [ -z "$2" ]; then usage; fi; builddir="$2";  shift;;
     --driver) driver=1;;
+    --newdriver) driver=1; newdriver=1;;
     --gnu|--user) gnu=1;;
     --cc) CC="$2"; shift;;
     --help | -*) usage;;
@@ -266,10 +268,26 @@ fi
   }
 }
 
+if [ -z "$BUILDPATH" ] ; then
+    if [ -z "$builddir" ]; then
+        BUILDPATH="$TOPPATH/build/$dest"
+    else
+        BUILDPATH="$builddir/$dest"
+    fi
+fi
+
 # Choose platform if it is not set and add nic type
 if [ -z "$PLATFORM" ]; then
     choose_platform
 fi
+
+if [ -n "$newdriver" ]; then
+  BUILDPATH="$BUILDPATH"
+  mkdir -p "$BUILDPATH"
+  echo -e "all:\n\t\$(MAKE) -C ../.. KPATH=$KPATH KBUILDTOP=\$(abspath .)" > "$BUILDPATH/GNUmakefile"
+  exit 0
+fi
+
 check_platform_exists "$PLATFORM"
 
 [ "$CURRENT" = src ] && {  # Going to need to make top-level config files.
@@ -332,14 +350,6 @@ if [ "$($mmaketool --libc_minor_version)" -ge 32 ] ; then
 fi
 
 [ -z "$SRCPATH" ] && SRCPATH=$("$mmaketool" --toppath)/src
-
-if [ -z "$BUILDPATH" ] ; then
-    if [ -z "$builddir" ]; then
-        BUILDPATH="$TOPPATH/build/$dest"
-    else
-        BUILDPATH="$builddir/$dest"
-    fi
-fi
 
 do_build_tree "$BUILDPATH"
 rc=$?

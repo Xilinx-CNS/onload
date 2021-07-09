@@ -1,0 +1,5 @@
+include $(src)/mmake.mk
+
+sfc_char-objs := $(CHAR_TARGET_SRCS:%.c=%.o) \
+		$(BUILD)/../../lib/citools/lib.a \
+		$(BUILD)/../../lib/ciul/lib.a

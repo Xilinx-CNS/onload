@@ -1,0 +1,10 @@
+ccflags-y += -I$(src)/../../lib/efrm
+override undefine MMAKE_IN_KBUILD
+include $(src)/mmake.mk
+
+obj-m := $(RESOURCE_TARGET)
+
+sfc_resource-objs := $(RESOURCE_SRCS:%.c=%.o) \
+                     $(EFHW_SRCS:%.c=../../lib/efhw/%.o) \
+                     $(EFRM_SRCS:%.c=../../lib/efrm/%.o) \
+                     $($(ARCH)_TARGET_SRCS:%.c=%.o)

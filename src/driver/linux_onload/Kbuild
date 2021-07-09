@@ -1,0 +1,6 @@
+include $(src)/mmake.mk
+onload-objs  := $(ONLOAD_SRCS:%.c=%.o) $(EFTHRM_SRCS:%.c=../../lib/efthrm/%.o) $($(ARCH)_TARGET_SRCS:%.c=%.o)
+onload-objs  += ../../lib/transport/ip/lib.a \
+                ../../lib/cplane/lib.a \
+                ../../lib/citools/lib.a \
+                ../../lib/ciul/lib.a

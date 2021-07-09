@@ -1,0 +1,11 @@
+override undefine MMAKE_IN_KBUILD
+include $(src)/mmake.mk
+BUILDPATH := $(obj)
+include $(src)/../../../mk/site/cplane.mk
+
+LIB_OBJS  := $(LIB_SRCS:%.c=%.o)
+lib-y     := $(LIB_OBJS)
+ccflags-y := -include $(CP_INTF_VER_HDR)
+
+$(addprefix $(obj)/,$(LIB_OBJS)) : $(CP_INTF_VER_HDR)
+KBUILD_BUILTIN := 1
