@@ -170,11 +170,10 @@ static inline void ef100_tx_init_generic(ef_vi* vi, const void* iovv,
 
     len = CI_MIN(iov.iov_len, (unsigned)(~iov.iov_base & page_mask) + 1);
     ef100_tx_send_desc_fill(vi, n_segs, iov.iov_base, len, dp);
-    n_segs--;
-    iov.iov_base += len;
-    iov.iov_len -= len;
 
-    while( n_segs > 0 ) {
+    while( --n_segs > 0 ) {
+      iov.iov_base += len;
+      iov.iov_len -= len;
       if( iov.iov_len == 0 ) {
         piov = (const ef_remote_iovec*)((const char*)piov + stride);
         iov = (ef_remote_iovec){
@@ -191,7 +190,6 @@ static inline void ef100_tx_init_generic(ef_vi* vi, const void* iovv,
       len = CI_MIN(iov.iov_len, (unsigned)(~iov.iov_base & page_mask) + 1);
       ef100_tx_segment_desc_fill(iov.iov_base, len, iov.addrspace, iov.flags,
                                  dp);
-      n_segs--;
     }
   }
 
