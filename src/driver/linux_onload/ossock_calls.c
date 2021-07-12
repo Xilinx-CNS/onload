@@ -743,7 +743,9 @@ efab_alloc_ephemeral_port(ci_addr_t laddr, ci_uint16 lport_be16,
   if( IS_ERR(keeper->os_file) ) {
     rc = PTR_ERR(keeper->os_file);
     LOG_TC(ci_log("%s: Failed to allocate file: rc=%d", __FUNCTION__, rc));
-    goto fail2;
+    /* NB: goto fail1, because sock_alloc_file() releases the socket in the
+     * case of failure. */
+    goto fail1;
   }
 
   *keeper_out = keeper;
