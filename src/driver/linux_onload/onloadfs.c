@@ -310,7 +310,7 @@ onload_alloc_file(tcp_helper_resource_t *thr, oo_sp ep_id,
   file = alloc_file_pseudo(inode, onload_mnt, "",
                            O_RDWR | (flags & O_NONBLOCK), fops);
   if( IS_ERR(file) ) {
-    /* inode is already put in case of error */
+    iput(inode);
     return PTR_ERR(file);
   }
 
