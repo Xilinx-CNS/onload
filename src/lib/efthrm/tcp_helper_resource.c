@@ -3754,8 +3754,8 @@ static inline void netns_get_identifiers(ci_netif_state* state,
 }
 
 
-static void tcp_helper_put_ns_components(struct oo_cplane_handle* cplane,
-                                         struct oo_filter_ns* filter_ns)
+void tcp_helper_put_ns_components(struct oo_cplane_handle* cplane,
+                                  struct oo_filter_ns* filter_ns)
 {
   oo_filter_ns_put(&efab_tcp_driver, filter_ns);
   cp_release(cplane);

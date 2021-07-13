@@ -44,6 +44,8 @@ extern int tcp_helper_alloc_ul(ci_resource_onload_alloc_t* alloc,
 
 extern int tcp_helper_get_ns_components(struct oo_cplane_handle** cplane,
                                         struct oo_filter_ns**  filter_ns);
+extern void tcp_helper_put_ns_components(struct oo_cplane_handle* cplane,
+                                         struct oo_filter_ns* filter_ns);
 
 struct user_namespace;
 extern struct user_namespace* tcp_helper_get_user_ns(tcp_helper_resource_t*);

@@ -238,6 +238,7 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
                                                ephemeral_port_count)) < 0 ) {
       tcp_helper_free_ephemeral_ports(thc->thc_ephem_table,
                                       thc->thc_ephem_table_entries);
+      tcp_helper_put_ns_components(thc->thc_cplane, thc->thc_filter_ns);
       kfree(thc->thc_thr_rrobin);
       kfree(thc);
       return rc;
