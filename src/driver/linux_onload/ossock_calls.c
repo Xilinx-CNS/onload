@@ -252,6 +252,7 @@ int sock_map_fd(struct socket *sock, int flags)
   if( (fd = get_unused_fd_flags(flags)) < 0 )
     return fd;
   if( IS_ERR(file = sock_alloc_file(sock, flags, NULL)) ) {
+    /* NB: sock_alloc_file() releases the socket in the case of failure. */
     put_unused_fd(fd);
     return PTR_ERR(file);
   }
@@ -969,10 +970,8 @@ efab_tcp_helper_os_sock_accept(ci_private_t* priv, void *arg)
 #else
   op->rc = sock_map_fd(newsock);
 #endif
-  if( op->rc < 0 ) {
-    sock_release(newsock);
+  if( op->rc < 0 )
     return op->rc;
-  }
 
 #ifndef SOCK_TYPE_MASK
   /* This is 'off' on linux, unless set via environment */
