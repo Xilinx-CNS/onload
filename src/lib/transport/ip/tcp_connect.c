@@ -100,6 +100,19 @@ ci_inline void ci_tcp_bind_flags_assert_valid(ci_sock_cmn* s)
   }
 }
 
+#ifndef __ci_driver__
+/* Set CI_SOCK_FLAG_BOUND_ALIEN if needed */
+static void ci_tcp_bind_check_laddr(ci_netif *ni, ci_sock_cmn *s,
+                                   ci_addr_t addr)
+{
+  if( (s->s_flags & CI_SOCK_FLAG_TPROXY) || CI_IPX_ADDR_IS_ANY(addr) ||
+      cicp_user_addr_is_local_efab(ni, addr) )
+    return;
+
+  s->s_flags |= CI_SOCK_FLAG_BOUND_ALIEN;
+}
+#endif
+
 /* Bind a TCP socket, performing an OS socket bind if necessary.
  * \param ni       Stack
  * \param s        Socket to be bound
@@ -111,8 +124,9 @@ ci_inline void ci_tcp_bind_flags_assert_valid(ci_sock_cmn* s)
  *                 CI_SOCKET_HANDOVER, Pass to OS, OS bound ok, (no error)
  *                 CI_SOCKET_ERROR & errno set
  */
-int __ci_tcp_bind(ci_netif *ni, ci_sock_cmn *s, ci_fd_t fd,
-                  ci_addr_t addr, ci_uint16* port_be16, int may_defer)
+static int
+__ci_tcp_bind(ci_netif *ni, ci_sock_cmn *s, ci_fd_t fd,
+              ci_addr_t addr, ci_uint16* port_be16, int may_defer)
 {
   int rc = 0;
   ci_uint16 user_port; /* Port number specified by user, not by OS.
@@ -204,13 +218,6 @@ int __ci_tcp_bind(ci_netif *ni, ci_sock_cmn *s, ci_fd_t fd,
   if( !CI_IPX_ADDR_IS_ANY(addr) )
     s->cp.sock_cp_flags |= OO_SCP_BOUND_ADDR;
 
-#ifndef __ci_driver__
-  /* We do not call bind() to alien address from in-kernel code */
-  if( ! (s->s_flags & CI_SOCK_FLAG_TPROXY) && !CI_IPX_ADDR_IS_ANY(addr) &&
-      ! cicp_user_addr_is_local_efab(ni, addr) )
-    s->s_flags |= CI_SOCK_FLAG_BOUND_ALIEN;
-#endif
-  
   ci_tcp_bind_flags_assert_valid(s);
   return rc;
 }
@@ -927,6 +934,21 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
 
     saddr = sock_ipx_laddr(s);
 
+#ifndef __KERNEL__
+  /* In the normal case, we only install filters for IP addresses configured on
+   * acceleratable interfaces, and so if the socket is bound to an alien
+   * address, we can't accelerate it.  Using a MAC filter overcomes this
+   * limitation, however. */
+  if( ! (ts->s.s_flags & CI_SOCK_FLAG_BOUND) )
+    ci_tcp_bind_check_laddr(ni, &ts->s, saddr);
+  if( ~ni->state->flags & CI_NETIF_FLAG_USE_ALIEN_LADDRS &&
+      (ts->s.s_flags & CI_SOCK_FLAG_BOUND_ALIEN) &&
+      ! (ts->s.pkt.flags & CI_IP_CACHE_IS_LOCALROUTE ||
+         ts->s.s_flags & CI_SOCK_FLAG_SCALACTIVE) ) {
+    return CI_CONNECT_UL_ALIEN_BOUND;
+  }
+#endif
+
 #if !defined(__KERNEL__) && CI_CFG_TCP_SHARED_LOCAL_PORTS
     active_wild = ci_netif_active_wild_get(ni, sock_ipx_laddr(&ts->s),
                                            sock_ipx_raddr(&ts->s),
@@ -942,10 +964,7 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
         CI_SET_ERROR(rc, EADDRNOTAVAIL);
       else
 #endif
-      if( s->cp.sock_cp_flags & OO_SCP_BOUND_ADDR )
-        rc = __ci_tcp_bind(ni, &ts->s, fd, saddr, &source_be16, 0);
-      else
-        rc = __ci_tcp_bind(ni, &ts->s, fd, addr_any, &source_be16, 0);
+      rc = __ci_tcp_bind(ni, &ts->s, fd, saddr, &source_be16, 0);
 
       if(CI_UNLIKELY( rc != 0 )) {
         LOG_U(ci_log("__ci_tcp_bind returned %d at %s:%d", rc,
@@ -966,18 +985,6 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
     LOG_TC(log(LNT_FMT "connect: our bind returned " IPX_PORT_FMT,
                LNT_PRI_ARGS(ni, ts), IPX_ARG(AF_IP(saddr)),
                (unsigned) CI_BSWAP_BE16(TS_IPX_TCP(ts)->tcp_source_be16)));
-  }
-
-  /* In the normal case, we only install filters for IP addresses configured on
-   * acceleratable interfaces, and so if the socket is bound to an alien
-   * address, we can't accelerate it.  Using a MAC filter overcomes this
-   * limitation, however. */
-  if( ~ni->state->flags & CI_NETIF_FLAG_USE_ALIEN_LADDRS &&
-      (ts->s.s_flags & CI_SOCK_FLAG_BOUND_ALIEN) &&
-      ! (ts->s.pkt.flags & CI_IP_CACHE_IS_LOCALROUTE ||
-         ts->s.s_flags & (CI_SOCK_FLAG_TPROXY | CI_SOCK_FLAG_SCALACTIVE)) ) {
-    ci_assert_equal(active_wild, OO_SP_NULL);
-    return CI_CONNECT_UL_ALIEN_BOUND;
   }
 
   /* Commit peer now - these are OK to be overwritten by following attempt */
@@ -1342,10 +1349,7 @@ complete_deferred_bind(ci_netif* netif, ci_sock_cmn* s, ci_fd_t fd)
 
   ci_assert_flags(s->s_flags, CI_SOCK_FLAG_DEFERRED_BIND);
 
-  if( s->cp.sock_cp_flags & OO_SCP_BOUND_ADDR )
-    rc = __ci_tcp_bind(netif, s, fd, s->laddr, &source_be16, 0);
-  else
-    rc = __ci_tcp_bind(netif, s, fd, addr_any, &source_be16, 0);
+  rc = __ci_tcp_bind(netif, s, fd, s->laddr, &source_be16, 0);
 
   if(CI_LIKELY( rc == 0 )) {
     s->s_flags &= ~(CI_SOCK_FLAG_DEFERRED_BIND |
@@ -1978,6 +1982,7 @@ int ci_tcp_bind(citp_socket* ep, const struct sockaddr* my_addr,
   CI_LOGLEVEL_TRY_RET(LOG_TV,
 		      __ci_tcp_bind(ep->netif, ep->s, fd, addr,
                                     &new_port, 1));
+  ci_tcp_bind_check_laddr(ep->netif, ep->s, addr);
   ep->s->s_flags |= CI_SOCK_FLAG_BOUND;
 #if CI_CFG_IPV6
   ci_tcp_ipcache_convert(CI_ADDR_AF(addr), c);
@@ -2094,9 +2099,8 @@ int ci_tcp_listen(citp_socket* ep, ci_fd_t fd, int backlog)
     /* They haven't previously done a bind, so we need to choose 
      * a port.  As we haven't been given a hint we let the OS choose.
      *
-     * NB The previously-calculated will_accelerate variable remains valid,
-     * because this call __ci_tcp_bind() never results in
-     * CI_SOCK_FLAG_BOUND_ALIEN flag being set.
+     * NB We don't need to call ci_tcp_bind_check_laddr() here,
+     * so will_accelerate variable remains valid.
      */
 
     source_be16 = 0;

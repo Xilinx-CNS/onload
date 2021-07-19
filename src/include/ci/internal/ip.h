@@ -1983,9 +1983,6 @@ extern int ci_tcp_sync_sockopts_to_os_sock(ci_netif* ni, oo_sp sock_id,
 #endif
 
 extern int ci_tcp_listen_init(ci_netif *ni, ci_tcp_socket_listen *tls) CI_HF;
-extern int __ci_tcp_bind(ci_netif*, ci_sock_cmn*, ci_fd_t,
-                         ci_addr_t addr, ci_uint16* port_be16,
-                         int may_defer) CI_HF;
 
 /* Send/recv called from within kernel & user-library, so outside above #if */
 extern int ci_tcp_recvmsg(const ci_tcp_recvmsg_args*) CI_HF;
