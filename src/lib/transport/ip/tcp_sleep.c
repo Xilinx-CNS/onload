@@ -92,9 +92,19 @@ int ci_sock_sleep(ci_netif* ni, citp_waitable* w, ci_bits why,
   ci_assert_nequal(rc, -EINVAL);
   ci_assert(si->c.inside_lib == 0);
   if(CI_UNLIKELY( rc == -EBUSY )) {
-    if( si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING )
-      citp_signal_run_pending(si);
-    ci_assert(~si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING );
+    si->c.inside_lib = 1;
+    if( si->c.aflags & OO_SIGNAL_FLAG_HAVE_PENDING ) {
+      /* Call oo_spinloop_run_pending_sigs() with w=NULL because the socket
+       * is not locked. */
+      rc = oo_spinloop_run_pending_sigs(
+                                ni, NULL, si,
+                                timeout_ms_p != NULL && *timeout_ms_p != 0);
+      /* Return the failure.  There is no need to update timeout, because
+       * it has not changed. */
+      if( rc < 0 )
+        return rc;
+
+    }
     op.lock_flags &= ~(CI_SLEEP_NETIF_LOCKED | CI_SLEEP_SOCK_LOCKED);
     goto again;
   }
