@@ -96,6 +96,8 @@ int efrm_rxq_mmap(struct efrm_efct_rxq* rxq, struct vm_area_struct *vma,
 EXPORT_SYMBOL(efrm_rxq_mmap);
 
 
+#if CI_HAVE_EFCT_AUX
+
 #define REFRESH_BATCH_SIZE  8
 #define EFCT_INVALID_PFN   (~0ull)
 #define HUGE_SIZE          (HPAGE_PMD_NR * PAGE_SIZE)
@@ -124,9 +126,12 @@ static int fixup_superbuf_mapping(unsigned long addr,
 	return 1;
 }
 
+#endif /* CI_HAVE_EFCT_AUX */
+
 int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
                      uint64_t __user *user_current, unsigned max_superbufs)
 {
+#if CI_HAVE_EFCT_AUX
 	struct xlnx_efct_hugepage *pages;
 	size_t i;
 	int rc = 0;
@@ -179,6 +184,9 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 
 	kfree(pages);
 	return rc;
+#else
+	return -EOPNOTSUPP;
+#endif /* CI_HAVE_EFCT_AUX */
 }
 EXPORT_SYMBOL(efrm_rxq_refresh);
 
