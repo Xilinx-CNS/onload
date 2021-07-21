@@ -2128,35 +2128,7 @@ no_events:
 
   ep->blocking = 1;
 
-#if CI_CFG_EPOLL3
-  if( ! ep->home_stack &&
-      ( CITP_OPTS.ul_epoll == 1 || ! ep->not_mt_safe ) )
-#endif
   {
-    /* If there is no home stack and it can not be created while we are
-     * blocked, we can block on epoll_wait() */
-
-    /* Fixme:
-     * - interrupt-driven stacks do not need to be primed at all;
-     * - home stack is primed by oo_epoll1_poll() function.
-     * - Quantization of the timeout to millisecond granularity means that
-     *   we can block for up to EF_POLL_USECS%1000 microseconds more than the
-     *   user requested (NB: this is the same behaviour we exhibit in poll()
-     *   and select())
-     * We need to prime all other stacks if there are any - in the most
-     * cases, there are no other stacks.
-     */
-    int timeout_ms = timeout_hr_to_ms(timeout_hr);
-    ci_sys_ioctl(ep->epfd_os, OO_EPOLL1_IOC_PRIME);
-
-    if( sigmask != NULL )
-      rc = ci_sys_epoll_pwait(fdi->fd, events, maxevents, timeout_ms, sigmask);
-    else
-      rc = ci_sys_epoll_wait(fdi->fd, events, maxevents, timeout_ms);
-    ep->blocking = 0;
-  }
-#if CI_CFG_EPOLL3
-  else {
     struct oo_epoll1_block_on_arg op;
 
     op.flags = 0;
@@ -2217,7 +2189,6 @@ no_events:
       rc = op.flags & (OO_EPOLL1_EVENT_ON_HOME | OO_EPOLL1_EVENT_ON_OTHER);
     }
   }
-#endif
 
   if( rc && ordering ) {
     ordering->poll_again = 1;

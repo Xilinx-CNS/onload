@@ -1208,12 +1208,6 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
     break;
   }
 
-  case OO_EPOLL1_IOC_PRIME: {
-    oo_epoll_prime_all_stacks(priv);
-    rc = 0;
-    break;
-  }
-
   case OO_EPOLL_IOC_CLONE: {
     ci_clone_fd_t local_arg;
 
