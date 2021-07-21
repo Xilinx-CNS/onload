@@ -268,7 +268,8 @@ static struct protection_domain* pd_by_owner(struct efhw_nic* nic, int owner_id)
 noinline
 static int xdp_sys_bpf(int cmd, unsigned long user_addr)
 {
-  int rc = SYSCALL_DISPATCHn(3, bpf, cmd, user_addr, sizeof(union bpf_attr));
+  int rc = SYSCALL_DISPATCHn(3, bpf, (int, unsigned long, size_t),
+                             cmd, user_addr, sizeof(union bpf_attr));
   if( rc < 0 )
     EFHW_ERR("%s: sys_bpf(%d) failed: %d", __func__, cmd, rc);
   return rc;

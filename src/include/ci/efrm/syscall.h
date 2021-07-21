@@ -35,7 +35,7 @@ extern int efrm_syscall_ctor(void);
    (The user-space calling convention is the same as before, though).
 */
 #ifdef EFRM_SYSCALL_PTREGS
-#  define SYSCALL_PTR_DEF(_name)                                \
+#  define SYSCALL_PTR_DEF(_name, _sig)                          \
   asmlinkage long (*syscall_fn)(const struct pt_regs *regs) =   \
     efrm_syscall_table[__NR_##_name]
 #  define PASS_SYSCALL1(_name, _arg)                \
@@ -66,8 +66,8 @@ extern int efrm_syscall_ctor(void);
       .r8 = (unsigned long)(_arg5),                                     \
       .r9 = (unsigned long)(_arg6)}))
 #else
-#  define SYSCALL_PTR_DEF(_name)         \
-    asmlinkage typeof(_name) *syscall_fn = efrm_syscall_table[__NR_##name]
+#  define SYSCALL_PTR_DEF(_name, _sig)         \
+    asmlinkage long (*syscall_fn)_sig = efrm_syscall_table[__NR_##_name]
 #  define PASS_SYSCALL1(_name, _arg) ((_name)(_arg))
 #  define PASS_SYSCALL2(_name, _arg1, _arg2) ((_name)(_arg1, _arg2))
 #  define PASS_SYSCALL3(_name, _arg1, _arg2, _arg3) \
@@ -149,9 +149,9 @@ extern int efrm_syscall_ctor(void);
  * because it's tricky to come up with a compact way to get parameter types
  * and names defined in a readable way. If the containing function is static
  * then it should also be noinline (see SET_SYSCALL_NO). */
-#define SYSCALL_DISPATCHn(_n, _name, ...)                         \
+#define SYSCALL_DISPATCHn(_n, _name, _sig, ...)                   \
   ({                                                              \
-    SYSCALL_PTR_DEF(_name);                                       \
+    SYSCALL_PTR_DEF(_name, _sig);                                 \
     EFRM_ASSERT(syscall_fn != NULL);                              \
     SET_SYSCALL_NO(_name);                                        \
     PASS_SYSCALL##_n(syscall_fn, ## __VA_ARGS__);                 \

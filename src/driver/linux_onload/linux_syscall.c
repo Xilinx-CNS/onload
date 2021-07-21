@@ -61,52 +61,61 @@
  */
 asmlinkage int efab_linux_sys_close(int fd)
 {
-  return (int)SYSCALL_DISPATCHn(1, close, fd);
+  return (int)SYSCALL_DISPATCHn(1, close, (int), fd);
 }
 
 
 asmlinkage int efab_linux_sys_epoll_create1(int flags)
 {
-  return (int)SYSCALL_DISPATCHn(1, epoll_create1, flags);
+  return (int)SYSCALL_DISPATCHn(1, epoll_create1, (int), flags);
 }
 
 asmlinkage int efab_linux_sys_epoll_ctl(int epfd, int op, int fd,
                                         struct epoll_event *event)
 {
-  return (int)SYSCALL_DISPATCHn(4, epoll_ctl, epfd, op, fd, event);
+  return (int)SYSCALL_DISPATCHn(4, epoll_ctl,
+                                (int, int, int, struct epoll_event*),
+                                epfd, op, fd, event);
 }
 
 asmlinkage int efab_linux_sys_epoll_wait(int epfd, struct epoll_event *events,
                                          int maxevents, int timeout)
 {
 #ifdef __aarch64__
-  return (int)SYSCALL_DISPATCHn(6, epoll_pwait, epfd, events, maxevents,
+  return (int)SYSCALL_DISPATCHn(6, epoll_pwait,
+                                (int, struct epoll_event*, int, int,
+                                 const sigset_t*, size_t),
+                                epfd, events, maxevents,
                                 timeout, NULL, sizeof(sigset_t));
 #else
-  return (int)SYSCALL_DISPATCHn(4, epoll_wait, epfd, events, maxevents,
-                                timeout);
+  return (int)SYSCALL_DISPATCHn(4, epoll_wait,
+                                (int, struct epoll_event*, int, int),
+                                epfd, events, maxevents, timeout);
 #endif
 }
 
 #ifdef OO_DO_HUGE_PAGES
 asmlinkage int efab_linux_sys_shmget(key_t key, size_t size, int shmflg)
 {
-  return (int)SYSCALL_DISPATCHn(3, shmget, key, size, shmflg);
+  return (int)SYSCALL_DISPATCHn(3, shmget, (key_t, size_t, int),
+                                key, size, shmflg);
 }
 
 asmlinkage long efab_linux_sys_shmat(int shmid, char __user *addr, int shmflg)
 {
-  return (long)SYSCALL_DISPATCHn(3, shmat, shmid, addr, shmflg);
+  return (long)SYSCALL_DISPATCHn(3, shmat, (int, char*, int),
+                                 shmid, addr, shmflg);
 }
 
 asmlinkage int efab_linux_sys_shmdt(char __user *addr)
 {
-  return (int)SYSCALL_DISPATCHn(1, shmdt, addr);
+  return (int)SYSCALL_DISPATCHn(1, shmdt, (char*), addr);
 }
 
 asmlinkage int efab_linux_sys_shmctl(int shmid, int cmd, struct shmid_ds __user *buf)
 {
-  return (int)SYSCALL_DISPATCHn(3, shmctl, shmid, cmd, buf);
+  return (int)SYSCALL_DISPATCHn(3, shmctl, (int, int, struct shmid_ds*),
+                                shmid, cmd, buf);
 }
 #endif
 

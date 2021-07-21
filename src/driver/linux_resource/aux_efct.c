@@ -8,6 +8,7 @@
 
 #include "linux_resource_internal.h"
 #include <linux/mman.h>
+#include <linux/rwsem.h>
 #include "efrm_internal.h"
 #include <ci/driver/kernel_compat.h>
 #include <ci/driver/ci_efct.h>
@@ -163,7 +164,10 @@ static long do_sys_mmap(unsigned long addr, unsigned long len,
                         unsigned long prot, unsigned long flags,
                         unsigned long fd, unsigned long off)
 {
-  return SYSCALL_DISPATCHn(6, mmap, addr, len, prot, flags, fd, off);
+  return SYSCALL_DISPATCHn(6, mmap,
+                           (unsigned long, unsigned long, unsigned long,
+                            unsigned long, unsigned long, unsigned long),
+                           addr, len, prot, flags, fd, off);
 }
 
 static int efct_alloc_hugepage(void *driver_data,
@@ -201,15 +205,12 @@ static int efct_alloc_hugepage(void *driver_data,
    * different file* to the one we wanted. We already don't trust the
    * contents of the rxq so this isn't super-harmful, but there are
    * definitely ways to use it to exceed resource limits. */
-  if( down_write_killable(&mm->mmap_sem) ) {
-    rc = -EINTR;
-    goto fail1;
-  }
+  mmap_write_lock(mm);
   vma = find_vma(mm, addr);
   result.file = vma->vm_file;
   if( result.file )
     get_file(result.file);
-  up_write(&mm->mmap_sem);
+  mmap_write_unlock(mm);
   if( ! result.file ) {
     EFHW_ERR("%s: ERROR: internal fault:  hugepages not backed by hugetlbfs?",
              __func__);
