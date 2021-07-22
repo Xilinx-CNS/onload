@@ -134,7 +134,7 @@ CI_CFG_OPT("EF_TCP_URG_MODE", urg_mode, ci_uint32,
 "ignore - ignore the urgent flag and pointer in received packets.\n"
 "         WARNING: applications actually using urgent data will see "
 "corrupt streams",
-           1, , EF_TCP_URG_MODE_ALLOW, 0, 1, oneof:allow;ignore)
+           1, , EF_TCP_URG_MODE_IGNORE, 0, 1, oneof:allow;ignore)
 
 
 CI_CFG_OPT("EF_TX_PUSH", tx_push, ci_uint32,
