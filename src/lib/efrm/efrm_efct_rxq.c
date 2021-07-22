@@ -15,6 +15,7 @@ struct efrm_efct_rxq {
 	struct efhw_efct_rxq hw;
 };
 
+#if CI_HAVE_EFCT_AUX
 static bool check_efct(const struct efrm_resource *rs)
 {
 	if (rs->rs_client->nic->devtype.arch != EFHW_ARCH_EFCT) {
@@ -25,6 +26,7 @@ static bool check_efct(const struct efrm_resource *rs)
 	}
 	return true;
 }
+#endif
 
 extern struct efrm_resource* efrm_rxq_to_resource(struct efrm_efct_rxq *rxq)
 {
@@ -44,6 +46,7 @@ int efrm_rxq_alloc(struct efrm_pd *pd, int qid,
                    const struct cpumask *mask, bool timestamp_req,
                    size_t n_hugepages, struct efrm_efct_rxq **rxq_out)
 {
+#if CI_HAVE_EFCT_AUX
 	int rc;
 	struct efrm_efct_rxq *rxq;
 	struct efrm_resource *pd_rs = efrm_pd_to_resource(pd);
@@ -67,22 +70,29 @@ int efrm_rxq_alloc(struct efrm_pd *pd, int qid,
 	efrm_resource_ref(pd_rs);
 	*rxq_out = rxq;
 	return 0;
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 EXPORT_SYMBOL(efrm_rxq_alloc);
 
 
-void free_rxq(struct efhw_efct_rxq *rxq)
+#if CI_HAVE_EFCT_AUX
+static void free_rxq(struct efhw_efct_rxq *rxq)
 {
 	kfree(container_of(rxq, struct efrm_efct_rxq, hw));
 }
+#endif
 
 void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 {
+#if CI_HAVE_EFCT_AUX
 	if (__efrm_resource_release(&rxq->rs)) {
 		efct_nic_rxq_free(rxq->rs.rs_client->nic, &rxq->hw, free_rxq);
 		efrm_pd_release(rxq->pd);
 		efrm_client_put(rxq->rs.rs_client);
 	}
+#endif
 }
 EXPORT_SYMBOL(efrm_rxq_release);
 

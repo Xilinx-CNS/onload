@@ -4,6 +4,7 @@
 #ifndef CI_EFHW_EFCT_H
 #define CI_EFHW_EFCT_H
 #include <etherfabric/internal/efct_uk_api.h>
+#include <ci/driver/ci_efct.h>
 
 extern struct efhw_func_ops efct_char_functional_units;
 
@@ -44,6 +45,7 @@ struct efhw_nic_efct {
   struct xlnx_efct_client *client;
 };
 
+#if CI_HAVE_EFCT_AUX
 int efct_nic_rxq_bind(struct efhw_nic *nic, int qid,
                       const struct cpumask *mask, bool timestamp_req,
                       size_t n_hugepages, struct efhw_efct_rxq *rxq);
@@ -51,6 +53,7 @@ void efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
                        efhw_efct_rxq_free_func_t *freer);
 int efct_get_hugepages(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
                        struct xlnx_efct_hugepage *pages, size_t n_pages);
+#endif
 
 static inline void efct_app_list_push(struct efhw_efct_rxq **head,
                                       struct efhw_efct_rxq *app)
