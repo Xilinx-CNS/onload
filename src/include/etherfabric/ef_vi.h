@@ -237,6 +237,23 @@ typedef union {
     unsigned       __reserved :16;
     unsigned       dma_id     :32;
   } memcpy;
+  /** An event of type EF_EVENT_TYPE_RX_REF */
+  struct {
+    unsigned       type       :16;
+    unsigned       len        :16;
+    unsigned       pkt_id     :32;
+    unsigned       q_id       :8;
+    unsigned       user       :24;
+  } rx_ref;
+  /** An event of type EF_EVENT_TYPE_RX_REF_DISCARD */
+  struct {
+    unsigned       type       :16;
+    unsigned       len        :16;
+    unsigned       pkt_id     :32;
+    unsigned       q_id       :8;
+    unsigned       user       :24;
+    unsigned       flags      :16;
+  } rx_ref_discard;
 } ef_event;
 
 
@@ -276,6 +293,10 @@ enum {
   EF_EVENT_TYPE_MEMCPY,
   /** Event queue has been forcibly halted (hotplug, reset, etc.) */
   EF_EVENT_TYPE_RESET,
+  /** Good packets have been received on an efct adapter */
+  EF_EVENT_TYPE_RX_REF,
+  /** Packets with a bad checksum have been received on an efct adapter */
+  EF_EVENT_TYPE_RX_REF_DISCARD,
 };
 
 

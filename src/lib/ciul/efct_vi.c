@@ -119,11 +119,11 @@ static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
 }
 
 /* The header preceding this packet */
-static const ci_qword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
+static const ci_oword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
 {
   /* Sneakily rely on vi->efct_rxq[i].superbuf being contiguous.
    * TODO EFCT: kernelspace won't be able to be this cunning */
-  return (const ci_qword_t*)
+  return (const ci_oword_t*)
          (vi->efct_rxq[0].superbuf +
           pkt_id_to_global_superbuf_ix(pkt_id) * EFCT_RX_SUPERBUF_BYTES +
           pkt_id_to_index_in_superbuf(pkt_id) * EFCT_PKT_STRIDE);
@@ -152,9 +152,9 @@ static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq)
 }
 
 /* The header following the next packet, or null if not available */
-static const ci_qword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
+static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
 {
-  const ci_qword_t* header = efct_rx_header(vi, rxq_ptr_to_pkt_id(next));
+  const ci_oword_t* header = efct_rx_header(vi, rxq_ptr_to_pkt_id(next));
   int sentinel = CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
 
   return sentinel == rxq_ptr_to_sentinel(next) ? header : NULL;
@@ -552,6 +552,30 @@ static int rx_rollover(ef_vi* vi, int qid)
   return 0;
 }
 
+#ifdef __KERNEL__
+__attribute__((unused))
+#endif
+static void efct_rx_discard(int qid, uint32_t pkt_id,
+                            const ci_oword_t* header, ef_event* ev)
+{
+  ev->rx_ref_discard.type = EF_EVENT_TYPE_RX_REF_DISCARD;
+  ev->rx_ref_discard.len = CI_OWORD_FIELD(*header,
+                                             EFCT_RX_HEADER_PACKET_LENGTH);
+  ev->rx_ref_discard.pkt_id = pkt_id;
+  ev->rx_ref_discard.q_id = qid;
+  ev->rx_ref_discard.user = CI_OWORD_FIELD(*header,
+                                              EFCT_RX_HEADER_USER);
+  ev->rx_ref_discard.flags =
+    (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) & 1 ?
+            EF_VI_DISCARD_RX_ETH_LEN_ERR : 0) |
+    (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) & 2 ?
+            EF_VI_DISCARD_RX_ETH_FCS_ERR : 0) |
+    (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L3_STATUS) ?
+            EF_VI_DISCARD_RX_L3_CSUM_ERR : 0) |
+    (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L4_STATUS) ?
+            EF_VI_DISCARD_RX_L4_CSUM_ERR : 0);
+}
+
 static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
@@ -562,22 +586,25 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   if( ! efct_rxq_is_active(rxq) )
     return 0;
 
+  if( efct_rxq_need_rollover(rxq, rxq_ptr->next) )
+    if( rx_rollover(vi, qid) < 0 )
+      /* ef_eventq_poll() has historically never been able to fail, so we
+       * maintain that policy */
+      return 0;
+
+  if( efct_rxq_need_config(rxq) )
+    if( superbuf_config_refresh(vi, rxq) < 0 )
+      return 0;
+
+  /* By never crossing a superbuf in a single poll we can exploit
+   * ef_vi_receive_get_timestamp_with_sync_flags()'s API rules to ensure we
+   * can always easily convert from a packet pointer to the superbuf */
+  evs_len = CI_MIN(evs_len, (int)(rxq->superbuf_pkts -
+                                  pkt_id_to_index_in_superbuf(rxq_ptr->next)));
+
   for( i = 0; i < evs_len; ++i, ++qs->removed ) {
-    const ci_qword_t* header;
-
-    if( efct_rxq_need_rollover(rxq, rxq_ptr->next) )
-      if( rx_rollover(vi, qid) < 0 )
-        /* ef_eventq_poll() has historically never been able to fail, so we
-         * maintain that policy */
-        break;
-
-    /* We only need to check for new config after a rollover and for the first
-     * ev in a poll (in case some other address space did a rollover and we
-     * now need to mmap here), but it's just as cheap to test the real thing
-     * every time */
-    if( efct_rxq_need_config(rxq) )
-      if( superbuf_config_refresh(vi, rxq) < 0 )
-        break;
+    const ci_oword_t* header;
+    uint32_t pkt_id;
 
     header = efct_rx_next_header(vi, rxq_ptr->next);
     if( header == NULL )
@@ -586,14 +613,25 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     /* For simplicity, require configuration for a fixed data offset.
      * Otherwise, we'd also have to check NEXT_FRAME_LOC in the previous buffer.
      */
-    BUG_ON(CI_QWORD_FIELD(*header, EFCT_RX_HEADER_NEXT_FRAME_LOC) != 1);
+    BUG_ON(CI_OWORD_FIELD(*header, EFCT_RX_HEADER_NEXT_FRAME_LOC) != 1);
 
-    evs[i].rx.type = EF_EVENT_TYPE_RX;
-    evs[i].rx.q_id = qid;
-    evs[i].rx.rq_id = rxq_ptr_to_pkt_id(rxq_ptr->prev);
-    evs[i].rx.len = CI_QWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
-    evs[i].rx.flags = EF_EVENT_FLAG_SOP;
-    evs[i].rx.ofs = EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+    pkt_id = rxq_ptr_to_pkt_id(rxq_ptr->prev);
+    if(unlikely( header[0].u64[0] &
+         ((CI_MASK64(EFCT_RX_HEADER_L2_STATUS_WIDTH) <<
+           EFCT_RX_HEADER_L2_STATUS_LBN) |
+          (CI_MASK64(EFCT_RX_HEADER_L3_STATUS_WIDTH) <<
+           EFCT_RX_HEADER_L3_STATUS_LBN) |
+          (CI_MASK64(EFCT_RX_HEADER_L4_STATUS_WIDTH) <<
+           EFCT_RX_HEADER_L4_STATUS_LBN)) )) {
+      efct_rx_discard(qid, pkt_id, header, &evs[i]);
+    }
+    else {
+      evs[i].rx_ref.type = EF_EVENT_TYPE_RX_REF;
+      evs[i].rx_ref.len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
+      evs[i].rx_ref.pkt_id = pkt_id;
+      evs[i].rx_ref.q_id = qid;
+      evs[i].rx_ref.user = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_USER);
+    }
     /* TODO might be nice to provide more of the available metadata */
     /* TODO: handle manual rollover */
 
@@ -876,4 +914,3 @@ int efct_ef_eventq_check_event(const ef_vi* vi)
 {
   return efct_tx_check_event(vi) || efct_rx_check_event(vi);
 }
-
