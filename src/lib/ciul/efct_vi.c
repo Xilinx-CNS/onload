@@ -331,7 +331,8 @@ static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
   unsigned seq = CI_QWORD_FIELD(event, EFCT_TX_EVENT_SEQUENCE);
   unsigned seq_mask = (1 << EFCT_TX_EVENT_SEQUENCE_WIDTH) - 1;
 
-  while( (qs->previous & seq_mask) != seq ) {
+  /* Fully inclusive range as both previous and seq are both inclusive */
+  while( (qs->previous & seq_mask) != ((seq + 1) & seq_mask) ) {
     BUG_ON(qs->previous == qs->added);
     qs->ct_removed += desc[qs->previous & q->mask].len;
     qs->previous += 1;
