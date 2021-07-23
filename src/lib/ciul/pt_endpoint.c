@@ -551,10 +551,15 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
 
   if( vi->max_efct_rxq ) {
-    rc = efct_vi_mmap_init(vi);
-    if( rc ) {
-      LOGVV(ef_log("%s: mmap (efct reserve) %d", __FUNCTION__, rc));
-      goto fail5;
+    if( rxq_capacity ) {
+      rc = efct_vi_mmap_init(vi);
+      if( rc ) {
+        LOGVV(ef_log("%s: mmap (efct reserve) %d", __FUNCTION__, rc));
+        goto fail5;
+      }
+    }
+    else {
+      vi->max_efct_rxq = 0;
     }
   }
 

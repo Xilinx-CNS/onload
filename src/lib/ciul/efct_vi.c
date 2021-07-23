@@ -622,7 +622,7 @@ static int efct_ef_eventq_poll_1rxtx(ef_vi* vi, ef_event* evs, int evs_len)
 static int efct_ef_eventq_poll_generic(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int i, n = 0;
-  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
+  for( i = 0; i < vi->max_efct_rxq; ++i )
     n += efct_poll_rx(vi, i, evs + n, evs_len - n);
   if( vi->vi_txq.mask )
     n += efct_poll_tx(vi, evs + n, evs_len - n);
