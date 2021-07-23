@@ -2094,33 +2094,34 @@ no_events:
   CITP_EPOLL_EP_UNLOCK(ep, 0);
   Log_POLL(ci_log("%s(%d): to kernel", __FUNCTION__, fdi->fd));
 
-  if( pwait_was_spinning) {
-    Log_POLL(ci_log("%s(%d): pwait_was_spinning", __FUNCTION__, fdi->fd));
-    /* Fixme:
-     * if we've got both signal and event, we can't return both to user.
-     * As signal will be processed anyway (in exit_lib), we MUST
-     * tell the user about it with -1(EINTR).  User will get events with
-     * the next epoll_pwait call.
-     *
-     * The problem is, if some events are with EPOLLET or EPOLLONESHOT,
-     * they are lost.  Ideally, we should un-mark them as "reported" in our
-     * internal oo_sockets list.
-     *
-     * Workaround is to disable spinning for one next epoll_pwait call,
-     * because we report EPOLLET events twice in such a way.
-     */
-    citp_ul_pwait_spin_done(lib_context, &sigsaved, &rc);
-    if( rc < 0 ) {
-      if( eps.has_epollet )
-        ep->avoid_spin_once = 1;
-      return rc;
+  if( rc != 0 || timeout_hr == 0 ) {
+    if( pwait_was_spinning) {
+      Log_POLL(ci_log("%s(%d): pwait_was_spinning", __FUNCTION__, fdi->fd));
+      /* Fixme:
+       * if we've got both signal and event, we can't return both to user.
+       * As signal will be processed anyway (in exit_lib), we MUST
+       * tell the user about it with -1(EINTR).  User will get events with
+       * the next epoll_pwait call.
+       *
+       * The problem is, if some events are with EPOLLET or EPOLLONESHOT,
+       * they are lost.  Ideally, we should un-mark them as "reported" in our
+       * internal oo_sockets list.
+       *
+       * Workaround is to disable spinning for one next epoll_pwait call,
+       * because we report EPOLLET events twice in such a way.
+       */
+      citp_ul_pwait_spin_done(lib_context, &sigsaved, &rc);
+      if( rc < 0 ) {
+        if( eps.has_epollet )
+          ep->avoid_spin_once = 1;
+        return rc;
+      }
     }
-  }
-  else
-    citp_exit_lib(lib_context, FALSE);
+    else
+      citp_exit_lib(lib_context, FALSE);
 
-  if( rc != 0 || timeout_hr == 0 )
     return rc;
+  }
 
   Log_POLL(ci_log("%s(%d): rc=0 timeout=%" CI_PRId64 " sigmask=%p",
                   __FUNCTION__, fdi->fd, timeout_hr, sigmask));
@@ -2133,9 +2134,16 @@ no_events:
 
     op.flags = 0;
     op.epoll_fd = fdi->fd;
+    CI_USER_PTR_SET(op.sig_state, &lib_context->thread->sig.c);
     if( sigmask != NULL ) {
-      op.flags = OO_EPOLL1_HAS_SIGMASK;
-      op.sigmask = *(ci_uint64*)sigmask;
+      if( pwait_was_spinning ) {
+        op.flags = OO_EPOLL1_HAS_SIGSAVED;
+        op.sigmask = *(ci_uint64*)&sigsaved;
+      }
+      else {
+        op.flags = OO_EPOLL1_HAS_SIGMASK;
+        op.sigmask = *(ci_uint64*)sigmask;
+      }
     }
    block_again:
     /* Unlike when we fall back to normal epoll_wait(), we can block for a

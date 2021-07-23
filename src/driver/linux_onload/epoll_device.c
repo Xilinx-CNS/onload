@@ -1166,7 +1166,9 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
 
   case OO_EPOLL1_IOC_BLOCK_ON: {
     struct oo_epoll1_block_on_arg local_arg;
-    sigset_t sigmask, sigsaved;
+    sigset_t sigsaved;
+    __user struct oo_signal_common_state* sts;
+    ci_int32 inside_lib;
     struct file* other_filp;
 
     ci_assert_equal(_IOC_SIZE(cmd), sizeof(local_arg));
@@ -1175,15 +1177,38 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
     if( copy_from_user(&local_arg, argp, _IOC_SIZE(cmd)) )
       return -EFAULT;
 
+    /* exit from the library */
+    sts = CI_USER_PTR_GET(local_arg.sig_state);
+    ci_assert(sts);
+    rc = get_user(inside_lib, &sts->inside_lib);
+    if( rc < 0 )
+      return rc;
+    ci_assert(inside_lib);
+    if( inside_lib ) {
+      ci_int32 aflags;
+      /* We don't check put_user/get_user rc, because we don't care about
+       * a user who plays games with the signal state.  It is checked once,
+       * see above. */
+      put_user(0, &sts->inside_lib);
+      ci_compiler_barrier();
+      get_user(aflags, &sts->aflags);
+      if( aflags & OO_SIGNAL_FLAG_HAVE_PENDING )
+        return -EINTR;
+    }
+
     other_filp = fget(local_arg.epoll_fd);
     if( other_filp == NULL )
       return -EINVAL;
 
+    ci_assert_equal(sizeof(sigset_t), sizeof(local_arg.sigmask));
     if( local_arg.flags & OO_EPOLL1_HAS_SIGMASK ) {
-      ci_assert_equal(sizeof(sigset_t), sizeof(local_arg.sigmask));
+      sigset_t sigmask;
       memcpy(&sigmask, &local_arg.sigmask, sizeof(sigset_t));
       sigdelsetmask(&sigmask, sigmask(SIGKILL)|sigmask(SIGSTOP));
       sigprocmask(SIG_SETMASK, &sigmask, &sigsaved);
+    }
+    else if( local_arg.flags & OO_EPOLL1_HAS_SIGSAVED ) {
+      memcpy(&sigsaved, &local_arg.sigmask, sizeof(sigset_t));
     }
 
 #if CI_CFG_EPOLL3

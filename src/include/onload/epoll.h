@@ -76,13 +76,15 @@ struct oo_epoll1_spin_on_arg {
 
 struct oo_epoll1_block_on_arg {
   ci_uint64     sigmask CI_ALIGN(8);
-  ci_uint64     timeout_us CI_ALIGN(8);
+  ci_user_ptr_t sig_state;
+  ci_uint64     timeout_us;
   ci_fixed_descriptor_t epoll_fd;
   ci_uint32     flags; /* INOUT */
-#define OO_EPOLL1_EVENT_ON_HOME  1 /* OUT */
-#define OO_EPOLL1_EVENT_ON_OTHER 2 /* OUT */
-#define OO_EPOLL1_HAS_SIGMASK    4 /* IN */
-#define OO_EPOLL1_EVENT_ON_EVQ   8 /* OUT */
+#define OO_EPOLL1_EVENT_ON_HOME  0x01 /* OUT */
+#define OO_EPOLL1_EVENT_ON_OTHER 0x02 /* OUT */
+#define OO_EPOLL1_HAS_SIGMASK    0x04 /* IN */
+#define OO_EPOLL1_HAS_SIGSAVED   0x08 /* IN */
+#define OO_EPOLL1_EVENT_ON_EVQ   0x10 /* OUT */
 };
 
 struct oo_epoll1_shared {
