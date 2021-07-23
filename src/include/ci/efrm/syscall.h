@@ -38,28 +38,28 @@ extern int efrm_syscall_ctor(void);
 #  define SYSCALL_PTR_DEF(_name, _sig)                          \
   asmlinkage long (*syscall_fn)(const struct pt_regs *regs) =   \
     efrm_syscall_table[__NR_##_name]
-#  define PASS_SYSCALL1(_name, _arg)                \
-  ((_name)(&(struct pt_regs){.di = (unsigned long)(_arg)}))
-#  define PASS_SYSCALL2(_name, _arg1, _arg2)                            \
-  ((_name)(&(struct pt_regs){.di = (unsigned long)(_arg1),              \
+#  define PASS_SYSCALL1(_arg)                \
+  (syscall_fn(&(struct pt_regs){.di = (unsigned long)(_arg)}))
+#  define PASS_SYSCALL2(_arg1, _arg2)                                   \
+  (syscall_fn(&(struct pt_regs){.di = (unsigned long)(_arg1),           \
       .si = (unsigned long)(_arg2)}))
-#  define PASS_SYSCALL3(_name, _arg1, _arg2, _arg3)                     \
-  ((_name)(&(struct pt_regs){.di = (unsigned long)(_arg1),              \
+#  define PASS_SYSCALL3(_arg1, _arg2, _arg3)                            \
+  (syscall_fn(&(struct pt_regs){.di = (unsigned long)(_arg1),           \
       .si = (unsigned long)(_arg2),                                     \
       .dx = (unsigned long)(_arg3)}))
-#  define PASS_SYSCALL4(_name, _arg1, _arg2, _arg3, _arg4)              \
-  ((_name)(&(struct pt_regs){.di = (unsigned long)(_arg1),              \
+#  define PASS_SYSCALL4(_arg1, _arg2, _arg3, _arg4)                     \
+  (syscall_fn(&(struct pt_regs){.di = (unsigned long)(_arg1),           \
       .si = (unsigned long)(_arg2),                                     \
       .dx = (unsigned long)(_arg3),                                     \
       .r10 = (unsigned long)(_arg4)}))
-#  define PASS_SYSCALL5(_name, _arg1, _arg2, _arg3, _arg4, _arg5)       \
-  ((_name)(&(struct pt_regs){.di = (unsigned long)(_arg1),              \
+#  define PASS_SYSCALL5(_arg1, _arg2, _arg3, _arg4, _arg5)              \
+  (syscall_fn(&(struct pt_regs){.di = (unsigned long)(_arg1),           \
       .si = (unsigned long)(_arg2),                                     \
       .dx = (unsigned long)(_arg3),                                     \
       .r10 = (unsigned long)(_arg4),                                    \
       .r8 = (unsigned long)(_arg5)}))
-#  define PASS_SYSCALL6(_name, _arg1, _arg2, _arg3, _arg4, _arg5, _arg6)\
-  ((_name)(&(struct pt_regs){.di = (unsigned long)(_arg1),              \
+#  define PASS_SYSCALL6(_arg1, _arg2, _arg3, _arg4, _arg5, _arg6)       \
+  (syscall_fn(&(struct pt_regs){.di = (unsigned long)(_arg1),           \
       .si = (unsigned long)(_arg2),                                     \
       .dx = (unsigned long)(_arg3),                                     \
       .r10 = (unsigned long)(_arg4),                                    \
@@ -68,16 +68,16 @@ extern int efrm_syscall_ctor(void);
 #else
 #  define SYSCALL_PTR_DEF(_name, _sig)         \
     asmlinkage long (*syscall_fn)_sig = efrm_syscall_table[__NR_##_name]
-#  define PASS_SYSCALL1(_name, _arg) ((_name)(_arg))
-#  define PASS_SYSCALL2(_name, _arg1, _arg2) ((_name)(_arg1, _arg2))
-#  define PASS_SYSCALL3(_name, _arg1, _arg2, _arg3) \
-  ((_name)(_arg1, _arg2, _arg3))
-#  define PASS_SYSCALL4(_name, _arg1, _arg2, _arg3, _arg4)    \
-  ((_name)(_arg1, _arg2, _arg3, _arg4))
-#  define PASS_SYSCALL5(_name, _arg1, _arg2, _arg3, _arg4, _arg5)    \
-  ((_name)(_arg1, _arg2, _arg3, _arg4, _arg5))
-#  define PASS_SYSCALL6(_name, _arg1, _arg2, _arg3, _arg4, _arg5, _arg6)    \
-  ((_name)(_arg1, _arg2, _arg3, _arg4, _arg5, _arg6))
+#  define PASS_SYSCALL1(_arg) (syscall_fn(_arg))
+#  define PASS_SYSCALL2(_arg1, _arg2) (syscall_fn(_arg1, _arg2))
+#  define PASS_SYSCALL3(_arg1, _arg2, _arg3) \
+  (syscall_fn(_arg1, _arg2, _arg3))
+#  define PASS_SYSCALL4(_arg1, _arg2, _arg3, _arg4)    \
+  (syscall_fn(_arg1, _arg2, _arg3, _arg4))
+#  define PASS_SYSCALL5(_arg1, _arg2, _arg3, _arg4, _arg5)    \
+  (syscall_fn(_arg1, _arg2, _arg3, _arg4, _arg5))
+#  define PASS_SYSCALL6(_arg1, _arg2, _arg3, _arg4, _arg5, _arg6)    \
+  (syscall_fn(_arg1, _arg2, _arg3, _arg4, _arg5, _arg6))
 #endif
 
 #define SET_SYSCALL_NO(_sc)
@@ -89,7 +89,7 @@ extern int efrm_syscall_ctor(void);
    (The user-space calling convention is the same as before, though).
 */
 #ifdef EFRM_SYSCALL_PTREGS
-#  define SYSCALL_PTR_DEF(_name)                                \
+#  define SYSCALL_PTR_DEF(_name, _sig)                          \
   asmlinkage long (*syscall_fn)(const struct pt_regs *regs) =   \
     efrm_syscall_table[__NR_##_name]
 #  define PASS_SYSCALL1(_arg)                                   \
@@ -114,7 +114,7 @@ extern int efrm_syscall_ctor(void);
         .regs[4] = (u64)(_arg5),                                    \
         .regs[5] = (u64)(_arg6)}))
 #else
-#  define SYSCALL_PTR_DEF(_name)                \
+#  define SYSCALL_PTR_DEF(_name, _sig)                \
     asmlinkage typeof(_name) *syscall_fn = efrm_syscall_table[__NR_##name]
 #  define PASS_SYSCALL1(_arg) (syscall_fn(_arg))
 #  define PASS_SYSCALL2(_arg1, _arg2) (syscall_fn(_arg1, _arg2))
@@ -154,7 +154,7 @@ extern int efrm_syscall_ctor(void);
     SYSCALL_PTR_DEF(_name, _sig);                                 \
     EFRM_ASSERT(syscall_fn != NULL);                              \
     SET_SYSCALL_NO(_name);                                        \
-    PASS_SYSCALL##_n(syscall_fn, ## __VA_ARGS__);                 \
+    PASS_SYSCALL##_n(__VA_ARGS__);                                \
   })
 
 #endif /* __CI_EFRM_SYSCALL_H__ */
