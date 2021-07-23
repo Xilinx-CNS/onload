@@ -2064,7 +2064,7 @@ no_events:
       citp_poll_if_needed(ordering->ordering_stack, eps.this_poll_frc,
                           eps.ul_epoll_spin);
     if( CITP_OPTS.sleep_spin_usec ) {
-      struct oo_epoll1_block_on_arg op = {};
+      struct oo_epoll1_spin_on_arg op = {};
       op.epoll_fd = fdi->fd;
       op.timeout_us = timeout_hr_to_us(timeout_hr);
       op.sleep_iter_us = CITP_OPTS.sleep_spin_usec;
@@ -2073,7 +2073,7 @@ no_events:
 
       rc = ci_sys_ioctl(ep->epfd_os, OO_EPOLL1_IOC_SPIN_ON, &op);
       citp_epoll_find_timeout(&timeout_hr, &poll_start_frc);
-      Log_POLL(ci_log("%s(%d): SPIN ON %d ", __FUNCTION__, fdi->fd, op.flags));
+      Log_POLL(ci_log("%s(%d): SPIN ON", __FUNCTION__, fdi->fd));
     }
     goto poll_again;
   } /* endif ul_epoll_spin spinning*/

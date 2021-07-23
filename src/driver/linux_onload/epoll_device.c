@@ -1137,9 +1137,33 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
     oo_epoll1_set_home_stack(&priv->p.p1, NULL, 0);
     rc = 0;
     break;
+
+  case OO_EPOLL1_IOC_SPIN_ON: {
+    struct oo_epoll1_spin_on_arg local_arg;
+    struct file* other_filp;
+
+    ci_assert_equal(_IOC_SIZE(cmd), sizeof(local_arg));
+    if( priv->type != OO_EPOLL_TYPE_1 )
+      return -EINVAL;
+    if( copy_from_user(&local_arg, argp, _IOC_SIZE(cmd)) )
+      return -EFAULT;
+
+    other_filp = fget(local_arg.epoll_fd);
+    if( other_filp == NULL )
+      return -EINVAL;
+
+    rc = oo_epoll1_spin_on(filp, other_filp, local_arg.timeout_us,
+                                             local_arg.sleep_iter_us);
+
+    if( signal_pending(current) )
+      rc = -EINTR;
+
+    if( copy_to_user(argp, &local_arg, _IOC_SIZE(cmd)) )
+      return -EFAULT;
+    break;
+  }
 #endif
 
-  case OO_EPOLL1_IOC_SPIN_ON:
   case OO_EPOLL1_IOC_BLOCK_ON: {
     struct oo_epoll1_block_on_arg local_arg;
     sigset_t sigmask, sigsaved;
@@ -1167,13 +1191,7 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
     priv->p.p1.flags = 0;
 #endif
 
-#if CI_CFG_EPOLL3
-    if( cmd == OO_EPOLL1_IOC_SPIN_ON )
-      rc = oo_epoll1_spin_on(filp, other_filp, local_arg.timeout_us,
-                                               local_arg.sleep_iter_us);
-    else
-#endif
-      rc = oo_epoll1_block_on(filp, other_filp, local_arg.timeout_us);
+    rc = oo_epoll1_block_on(filp, other_filp, local_arg.timeout_us);
 
     if( signal_pending(current) )
       rc = -EINTR;

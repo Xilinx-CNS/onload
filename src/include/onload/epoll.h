@@ -68,11 +68,16 @@ struct oo_epoll1_set_home_arg {
   ci_int32              ready_list;  /**< id of ready list to use */
 };
 
+struct oo_epoll1_spin_on_arg {
+  ci_uint64     timeout_us CI_ALIGN(8);
+  ci_fixed_descriptor_t epoll_fd;
+  ci_uint32     sleep_iter_us;
+};
+
 struct oo_epoll1_block_on_arg {
   ci_uint64     sigmask CI_ALIGN(8);
   ci_uint64     timeout_us CI_ALIGN(8);
   ci_fixed_descriptor_t epoll_fd;
-  ci_uint32     sleep_iter_us;
   ci_uint32     flags; /* INOUT */
 #define OO_EPOLL1_EVENT_ON_HOME  1 /* OUT */
 #define OO_EPOLL1_EVENT_ON_OTHER 2 /* OUT */
@@ -132,7 +137,7 @@ enum {
   OO_EPOLL1_OP_SPIN_ON,
 #define OO_EPOLL1_IOC_SPIN_ON \
   _IOWR(OO_EPOLL_IOC_BASE, OO_EPOLL1_OP_SPIN_ON, \
-        struct oo_epoll1_block_on_arg)
+        struct oo_epoll1_spin_on_arg)
   OO_EPOLL1_OP_INIT,
 #define OO_EPOLL1_IOC_INIT \
   _IO(OO_EPOLL_IOC_BASE, OO_EPOLL1_OP_INIT)
