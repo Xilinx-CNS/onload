@@ -177,7 +177,6 @@ static int efct_alloc_hugepage(void *driver_data,
    * DMA handling. We do need to supply it with some memory, though.
    * We allocate hugepages one by one, rather than a single file with many
    * pages in it, so that freeing of pages can be more granular. */
-  const size_t huge_size = HPAGE_PMD_NR * PAGE_SIZE;
   unsigned long addr;
   struct mm_struct *mm = current->mm;
   struct vm_area_struct *vma;
@@ -191,7 +190,7 @@ static int efct_alloc_hugepage(void *driver_data,
    * to want it eventually, it's not going to want it in the random
    * place that we get it here. Where it should be depends on the
    * superbuf IDs, which we don't yet know. */
-  addr = do_sys_mmap(0, huge_size, PROT_READ | PROT_WRITE,
+  addr = do_sys_mmap(0, CI_HUGEPAGE_SIZE, PROT_READ | PROT_WRITE,
                  MAP_SHARED | MAP_ANONYMOUS | MAP_POPULATE |
                      MAP_HUGETLB | MAP_HUGE_2MB, -1, 0);
   if( IS_ERR((void*)addr) ) {
@@ -228,7 +227,7 @@ static int efct_alloc_hugepage(void *driver_data,
   }
   EFHW_ASSERT(PageHuge(result.page));
   EFHW_ASSERT(!PageTail(result.page));
-  vm_munmap(addr, huge_size);
+  vm_munmap(addr, CI_HUGEPAGE_SIZE);
 
   *result_out = result;
   return 0;
@@ -236,7 +235,7 @@ static int efct_alloc_hugepage(void *driver_data,
  fail2:
   fput(result.file);
  fail1:
-  vm_munmap(addr, huge_size);
+  vm_munmap(addr, CI_HUGEPAGE_SIZE);
   return rc;
 }
 

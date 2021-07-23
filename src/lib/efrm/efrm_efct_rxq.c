@@ -110,7 +110,6 @@ EXPORT_SYMBOL(efrm_rxq_mmap);
 
 #define REFRESH_BATCH_SIZE  8
 #define EFCT_INVALID_PFN   (~0ull)
-#define HUGE_SIZE          (HPAGE_PMD_NR * PAGE_SIZE)
 
 static int fixup_superbuf_mapping(unsigned long addr,
                                   uint64_t *user,
@@ -121,11 +120,11 @@ static int fixup_superbuf_mapping(unsigned long addr,
 		return 0;
 
 	if (pfn == EFCT_INVALID_PFN) {
-		vm_munmap(addr, HUGE_SIZE);
+		vm_munmap(addr, CI_HUGEPAGE_SIZE);
 	}
 	else {
 		unsigned long rc;
-		rc = vm_mmap(kern->file, addr, HUGE_SIZE,
+		rc = vm_mmap(kern->file, addr, CI_HUGEPAGE_SIZE,
 		             PROT_READ,
 		             MAP_FIXED | MAP_SHARED | MAP_POPULATE |
 		                     MAP_HUGETLB | MAP_HUGE_2MB, 0);
@@ -175,7 +174,7 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 
 		for (j = 0; j < n; ++j) {
 			rc = fixup_superbuf_mapping(
-					superbufs + HUGE_SIZE * (i + j),
+					superbufs + CI_HUGEPAGE_SIZE * (i + j),
 					&local_current[j], &pages[i + j]);
 			if (rc < 0)
 				break;
