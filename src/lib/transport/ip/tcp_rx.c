@@ -1410,10 +1410,12 @@ static void ci_tcp_rx_free_acked_bufs(ci_netif* netif, ci_tcp_state* ts,
         (p->flags & CI_PKT_FLAG_INDIRECT &&
          ci_tcp_zc_has_cookies(netif, p)) ) {
       ci_udp_recv_q_put_pending(netif, &ts->timestamp_q, p);
-      if( p->flags & CI_PKT_FLAG_TX_PENDING)
-        ts_q_pending = OO_PKT_P(p);
-      else if( OO_PP_IS_NULL(ts_q_pending) )
-        ts_q_bufs += p->n_buffers;
+      if( OO_PP_IS_NULL(ts_q_pending) ) {
+        if( p->flags & CI_PKT_FLAG_TX_PENDING)
+          ts_q_pending = OO_PKT_P(p);
+        else
+          ts_q_bufs += p->n_buffers;
+      }
     }
     else
 #endif
