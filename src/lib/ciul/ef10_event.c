@@ -747,6 +747,9 @@ ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
 					    ef_timespec* ts_out,
 				            unsigned* flags_out)
 {
+  if( vi->nic_type.arch == EF_VI_ARCH_EFCT )
+    return efct_receive_get_timestamp_with_sync_flags(vi, pkt, ts_out,
+                                                      flags_out);
   return ef10_receive_get_timestamp_with_sync_flags(vi, pkt, ts_out,
                                                     flags_out);
 }

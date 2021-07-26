@@ -914,3 +914,109 @@ int efct_ef_eventq_check_event(const ef_vi* vi)
 {
   return efct_tx_check_event(vi) || efct_rx_check_event(vi);
 }
+
+static int efct_get_timestamp_qns_internal(struct efab_efct_rxq_uk_shm* shm,
+                                           const ci_oword_t* pkt_header,
+                                           ef_timespec* ts_out,
+                                           unsigned* flags_out)
+{
+  const int PARTIAL_TS_BITS = EFCT_RX_HEADER_PARTIAL_TIMESTAMP_WIDTH;
+  const int32_t MAX_DIFF = ((1ull << PARTIAL_TS_BITS) / 2) >> 32;
+  const uint64_t MINOR_MASK = CI_MASK64(PARTIAL_TS_BITS);
+  uint64_t pkt_partial = CI_OWORD_FIELD(*pkt_header,
+                                        EFCT_RX_HEADER_PARTIAL_TIMESTAMP);
+  /* The bulk of this algorithm runs in 32-bit, because the code is slightly
+   * smaller (and thus more efficiently cached) */
+  uint64_t tsync = shm->timestamp_hi;
+  uint32_t pkt_minor = pkt_partial >> 32;
+  uint32_t tsync_minor = (tsync >> (32 - CI_EFCT_SHM_TS_SHIFT)) &
+                         (MINOR_MASK >> 32);
+  int32_t diff;
+
+  *flags_out = shm->tsync_flags;
+  EF_VI_ASSERT((uint32_t)pkt_partial < 4000000000);
+
+  if(unlikely( CI_OWORD_FIELD(*pkt_header,
+                              EFCT_RX_HEADER_TIMESTAMP_STATUS) != 1 )) {
+    *ts_out = (ef_timespec) { 0 };
+    return -ENOMSG;
+  }
+
+  if(unlikely( shm->tsync_flags !=
+      (EF_VI_SYNC_FLAG_CLOCK_SET | EF_VI_SYNC_FLAG_CLOCK_IN_SYNC) )) {
+    *ts_out = (ef_timespec) { 0 };
+    return -EL2NSYNC;
+  }
+
+  diff = pkt_minor - tsync_minor;
+  /* /2 below is a somewhat-arbitrary slack value, in order to detect when
+   * things are horribly out of sync */
+  if(unlikely( ! (diff >= -MAX_DIFF / 2 && diff < MAX_DIFF / 2) )) {
+    *ts_out = (ef_timespec) { 0 };
+    return -EL2NSYNC;
+  }
+  /* Sneaky branch-free trickery, equivalent to
+   *  if( diff < 0 ) tsync -= 1 << (PARTIAL_TS_BITS - CI_EFCT_SHM_TS_SHIFT); */
+  tsync -= -(int32_t)(diff < 0) &
+           (1 << (PARTIAL_TS_BITS - CI_EFCT_SHM_TS_SHIFT));
+
+  ts_out->tv_nsec = (uint32_t)pkt_partial >> 2;
+  ts_out->tv_sec = ((tsync >> (32 - CI_EFCT_SHM_TS_SHIFT)) &
+                    ~(MINOR_MASK >> 32)) |
+                   pkt_minor;
+  return 0;
+}
+
+static const ci_oword_t* pkt_to_metadata(ef_vi* vi, int qid, const void* pkt)
+{
+  ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  uintptr_t off = (uintptr_t)pkt & (EFCT_RX_SUPERBUF_BYTES - 1);
+  uintptr_t mask;
+
+  /* Locate the metadata corresponding to this payload pointer, in a
+   * frightening-yet-efficient way. We're totally relying on the "never
+   * crossing a superbuf in a single poll" comment in efct_poll_rx() to ensure
+   * that we know which superbuf, so we just need to jump to the end of the
+   * current packet, wrapping around to 0 if we were at the last packet in the
+   * superbuf (done with the "&= -mask" magic below). */
+  mask = off < EFCT_PKT_STRIDE * (rxq->superbuf_pkts - 1);
+  EF_VI_BUILD_ASSERT(EFCT_RX_HEADER_NEXT_FRAME_LOC_1 <
+                     EFCT_RX_HEADER_NEXT_FRAME_LOC_0 + 64);
+  off += EFCT_PKT_STRIDE - EFCT_RX_HEADER_NEXT_FRAME_LOC_0;
+  off &= ~63;
+  off &= -mask;    /* trickery to avoid a branch */
+
+  return (const ci_oword_t*)
+         (vi->efct_rxq[0].superbuf +
+          (unsigned)pkt_id_to_global_superbuf_ix(
+                                 vi->ep_state->rxq.rxq_ptr[qid].next) *
+              EFCT_RX_SUPERBUF_BYTES + off);
+}
+
+int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
+                                               ef_timespec* ts_out,
+                                               unsigned* flags_out)
+{
+  const ci_oword_t* header;
+  int qid;
+
+  if(likely( vi->vi_flags & EF_VI_EFCT_UNIQUEUE )) {
+    qid = 0;
+  }
+  else {
+    int i;
+    const void* base = (const void*)((uintptr_t)pkt &
+                                      ~(uintptr_t)(EFCT_RX_SUPERBUF_BYTES - 1));
+
+    for( i = 0; i < vi->max_efct_rxq; ++i )
+      if( base == vi->efct_rxq[0].superbuf +
+            pkt_id_to_global_superbuf_ix(vi->ep_state->rxq.rxq_ptr[i].prev) )
+        break;
+    EF_VI_BUG_ON(i == vi->max_efct_rxq);
+    qid = i;
+  }
+
+  header = pkt_to_metadata(vi, qid, pkt);
+  return efct_get_timestamp_qns_internal(vi->efct_rxq[qid].shm, header, ts_out,
+                                         flags_out);
+}

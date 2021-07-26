@@ -148,6 +148,10 @@ extern int ef10_receive_get_timestamp_with_sync_flags_internal
 
 #endif
 
+int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
+                                               ef_timespec* ts_out,
+                                               unsigned* flags_out);
+
 /*! Size of the CTPIO aperture in bytes (if present) */
 #define EF_VI_CTPIO_APERTURE_SIZE     4096
 

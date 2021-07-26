@@ -31,10 +31,17 @@ struct efab_efct_rx_superbuf_queue {
   uint32_t removed;
 };
 
+/* decimation of efab_efct_rxq_uk_shm::timestamp_hi relative to a 'full'
+ * timestamp. A full timestamp is ((secs << 32) | quarterns), i.e.
+ * timestamp_hi stores a value that looks like that but shifted down by 16.
+ * This is done to give room to avoid y2.038k issues. */
+#define CI_EFCT_SHM_TS_SHIFT 16
+
 struct efab_efct_rxq_uk_shm {
   struct efab_efct_rx_superbuf_queue rxq;
   struct efab_efct_rx_superbuf_queue freeq;
   uint64_t timestamp_hi CI_ALIGN(8);
+  uint8_t tsync_flags;
   unsigned config_generation;
   struct {
     unsigned no_rxq_space;
