@@ -41,6 +41,8 @@ enum efx_mcdi_mode {
 #define MCDI_RPC_LONG_TIMEOUT  (60 * HZ)
 #define MCDI_RPC_POST_RST_TIME (10 * HZ)
 
+#define MCDI_BUF_LEN (8 + MCDI_CTL_SDU_LEN_MAX)
+
 /**
  * enum efx_mcdi_cmd_state - State for an individual MCDI command
  * @MCDI_STATE_QUEUED: Command not started
@@ -52,8 +54,6 @@ enum efx_mcdi_mode {
  * @MCDI_STATE_ABORT: Command has been completed or aborted. Used to resolve
  *		      race between completion in another threads and the worker.
  */
-
-#define MCDI_BUF_LEN (8 + MCDI_CTL_SDU_LEN_MAX)
 
 enum efx_mcdi_cmd_state {
 	/* waiting to run */
@@ -588,6 +588,7 @@ static inline void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_
 			      MCDI_CAPABILITY_OFST(field))
 
 void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len);
+void efx_mcdi_print_fw_bundle_ver(struct efx_nic *efx, char *buf, size_t len);
 int efx_mcdi_drv_attach(struct efx_nic *efx, u32 fw_variant, u32 *out_flags,
 			bool reattach);
 int efx_mcdi_drv_detach(struct efx_nic *efx);

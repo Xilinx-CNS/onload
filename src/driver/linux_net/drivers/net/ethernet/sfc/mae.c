@@ -112,6 +112,7 @@ int efx_mae_lookup_mport(struct efx_nic *efx, u32 selector, u32 *id)
 	return 0;
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 int efx_mae_start_counters(struct efx_nic *efx, struct efx_rx_queue *rx_queue)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_COUNTERS_STREAM_START_OUT_LEN);
@@ -158,7 +159,22 @@ int efx_mae_stop_counters(struct efx_nic *efx, struct efx_rx_queue *rx_queue)
 	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_STOP_IN_QID, rx_queue->queue);
 	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_COUNTERS_STREAM_STOP,
 			  inbuf, sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
-	/* final_generation_count = MCDI_DWORD(outbuf, MAE_COUNTERS_STREAM_STOP_OUT_GENERATION_COUNT); */
+
+	efx->tc->flush_gen = MCDI_DWORD(outbuf, MAE_COUNTERS_STREAM_STOP_OUT_GENERATION_COUNT);
+	efx->tc->flush_counters = true;
+	netif_dbg(efx, drv, efx->net_dev,
+		  "Draining counters, awaiting gen %u\n", efx->tc->flush_gen);
+	/* Drain can take up to 2 seconds owing to FWRIVERHD-2884; whatever
+	 * timeout we use, that delay is added to unload on nonresponsive
+	 * hardware, so 2500ms seems like a reasonable compromise.
+	 */
+	if (!wait_event_timeout(efx->tc->flush_wq,
+				(s32)(efx->tc->flush_gen - efx->tc->seen_gen) <= 0,
+				msecs_to_jiffies(2500)))
+		netif_warn(efx, drv, efx->net_dev,
+			   "Failed to drain counters RXQ, FW may be unhappy\n");
+	efx->tc->flush_counters = false;
+
 	return rc;
 }
 
@@ -178,6 +194,7 @@ void efx_mae_counters_grant_credits(struct work_struct *work)
 			  inbuf, sizeof(inbuf), NULL, 0, NULL))
 		rx_queue->granted_count += credits;
 }
+#endif
 
 struct mae_mport_desc *efx_mae_enumerate_mports(struct efx_nic *efx,
 						unsigned int *n_mports)
@@ -510,8 +527,10 @@ int efx_mae_match_check_caps(struct efx_nic *efx,
 	CHECK(IP_TTL, ip_ttl);
 	CHECK(SRC_IP4, src_ip);
 	CHECK(DST_IP4, dst_ip);
+#ifdef CONFIG_IPV6
 	CHECK(SRC_IP6, src_ip6);
 	CHECK(DST_IP6, dst_ip6);
+#endif
 	CHECK(L4_SPORT, l4_sport);
 	CHECK(L4_DPORT, l4_dport);
 	CHECK(TCP_FLAGS, tcp_flags);
@@ -576,8 +595,10 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 	CHECK(ENC_IP_TTL, ip_ttl);
 	CHECK(ENC_SRC_IP4, src_ip);
 	CHECK(ENC_DST_IP4, dst_ip);
+#ifdef CONFIG_IPV6
 	CHECK(ENC_SRC_IP6, src_ip6);
 	CHECK(ENC_DST_IP6, dst_ip6);
+#endif
 	CHECK(ENC_L4_SPORT, l4_sport);
 	CHECK(ENC_L4_DPORT, l4_dport);
 	UNSUPPORTED(tcp_flags);
@@ -1041,7 +1062,9 @@ int efx_mae_register_encap_match(struct efx_nic *efx,
 	 * ipproto == udp.
 	 */
 	MCDI_SET_DWORD(inbuf, MAE_OUTER_RULE_INSERT_IN_ENCAP_TYPE, rc);
+#ifdef CONFIG_IPV6
 	if (encap->src_ip | encap->dst_ip) {
+#endif
 		MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_SRC_IP4_BE,
 					 encap->src_ip);
 		MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_SRC_IP4_BE_MASK,
@@ -1052,6 +1075,7 @@ int efx_mae_register_encap_match(struct efx_nic *efx,
 					 ~(__be32)0);
 		MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_ETHER_TYPE_BE,
 					htons(ETH_P_IP));
+#ifdef CONFIG_IPV6
 	} else {
 		memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_PAIRS_ENC_SRC_IP6_BE),
 		       &encap->src_ip6, sizeof(encap->src_ip6));
@@ -1064,6 +1088,7 @@ int efx_mae_register_encap_match(struct efx_nic *efx,
 		MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_ETHER_TYPE_BE,
 					htons(ETH_P_IPV6));
 	}
+#endif
 	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_ETHER_TYPE_BE_MASK,
 				~(__be16)0);
 	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_L4_DPORT_BE,
@@ -1170,6 +1195,7 @@ static int efx_mae_populate_lhs_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_cri
 				 match->value.dst_ip);
 	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_DST_IP4_BE_MASK,
 				 match->mask.dst_ip);
+#ifdef CONFIG_IPV6
 	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_PAIRS_ENC_SRC_IP6_BE),
 			       &match->value.src_ip6, sizeof(struct in6_addr));
 	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_PAIRS_ENC_SRC_IP6_BE_MASK),
@@ -1178,6 +1204,7 @@ static int efx_mae_populate_lhs_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_cri
 			       &match->value.dst_ip6, sizeof(struct in6_addr));
 	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_ENC_FIELD_PAIRS_ENC_DST_IP6_BE_MASK),
 			       &match->mask.dst_ip6, sizeof(struct in6_addr));
+#endif
 	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_L4_SPORT_BE,
 				match->value.l4_sport);
 	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_L4_SPORT_BE_MASK,
@@ -1193,10 +1220,12 @@ static int efx_mae_populate_lhs_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_cri
 		return -EOPNOTSUPP;
 	if (WARN_ON_ONCE(match->mask.enc_dst_ip))
 		return -EOPNOTSUPP;
+#ifdef CONFIG_IPV6
 	if (WARN_ON_ONCE(!ipv6_addr_any(&match->mask.enc_src_ip6)))
 		return -EOPNOTSUPP;
 	if (WARN_ON_ONCE(!ipv6_addr_any(&match->mask.enc_dst_ip6)))
 		return -EOPNOTSUPP;
+#endif
 	if (WARN_ON_ONCE(match->mask.enc_ip_tos))
 		return -EOPNOTSUPP;
 	if (WARN_ON_ONCE(match->mask.enc_ip_ttl))
@@ -1455,6 +1484,7 @@ static int efx_mae_populate_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_crit),
 				 match->value.dst_ip);
 	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_DST_IP4_BE_MASK,
 				 match->mask.dst_ip);
+#ifdef CONFIG_IPV6
 	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_SRC_IP6_BE),
 			       &match->value.src_ip6, sizeof(struct in6_addr));
 	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_SRC_IP6_BE_MASK),
@@ -1463,6 +1493,7 @@ static int efx_mae_populate_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_crit),
 			       &match->value.dst_ip6, sizeof(struct in6_addr));
 	memcpy(MCDI_STRUCT_PTR(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_DST_IP6_BE_MASK),
 			       &match->mask.dst_ip6, sizeof(struct in6_addr));
+#endif
 	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_L4_SPORT_BE,
 				match->value.l4_sport);
 	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_L4_SPORT_BE_MASK,

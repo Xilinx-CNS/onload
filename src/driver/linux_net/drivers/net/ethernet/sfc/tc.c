@@ -168,7 +168,9 @@ static s64 efx_tc_flower_external_mport(struct efx_nic *efx, int vport_id)
 struct efx_neigh_binder {
 	struct net *net;
 	__be32 dst_ip;
+#ifdef CONFIG_IPV6
 	struct in6_addr dst_ip6;
+#endif
 	char ha[ETH_ALEN];
 	bool n_valid;
 	rwlock_t lock;
@@ -301,7 +303,9 @@ static int efx_bind_neigh(struct efx_nic *efx,
 			  struct netlink_ext_ack *extack)
 {
 	struct efx_neigh_binder *neigh, *old;
+#ifdef CONFIG_IPV6
 	struct flowi6 flow6 = {};
+#endif
 	struct flowi4 flow4 = {};
 	int rc;
 
@@ -318,6 +322,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		flow4.daddr = encap->key.u.ipv4.dst;
 		flow4.saddr = encap->key.u.ipv4.src;
 		break;
+#ifdef CONFIG_IPV6
 	case EFX_ENCAP_TYPE_VXLAN | EFX_ENCAP_FLAG_IPV6:
 	case EFX_ENCAP_TYPE_GENEVE | EFX_ENCAP_FLAG_IPV6:
 		flow6.flowi6_proto = IPPROTO_UDP;
@@ -327,6 +332,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		flow6.daddr = encap->key.u.ipv6.dst;
 		flow6.saddr = encap->key.u.ipv6.src;
 		break;
+#endif
 	default:
 		EFX_TC_ERR_MSG(efx, extack, "Unsupported encap type");
 		return -EOPNOTSUPP;
@@ -337,7 +343,9 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		return -ENOMEM;
 	neigh->net = get_net(net);
 	neigh->dst_ip = flow4.daddr;
+#ifdef CONFIG_IPV6
 	neigh->dst_ip6 = flow6.daddr;
+#endif
 
 	old = rhashtable_lookup_get_insert_fast(&efx->tc->neigh_ht,
 						&neigh->linkage,
@@ -352,11 +360,12 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		neigh = old;
 	} else {
 		/* New entry.  We need to initiate a lookup */
-		struct dst_entry *dst;
 		struct neighbour *n;
 		struct rtable *rt;
 
+#ifdef CONFIG_IPV6
 		if (encap->type & EFX_ENCAP_FLAG_IPV6) {
+			struct dst_entry *dst;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_IPV6_STUBS_DST_LOOKUP_FLOW)
 			dst = ipv6_stub->ipv6_dst_lookup_flow(net, NULL, &flow6,
 							      NULL);
@@ -373,6 +382,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 			n = dst_neigh_lookup(dst, &flow6.daddr);
 			dst_release(dst);
 		} else {
+#endif
 			rt = ip_route_output_key(net, &flow4);
 			if (IS_ERR_OR_NULL(rt)) {
 				rc = PTR_ERR(rt);
@@ -385,7 +395,9 @@ static int efx_bind_neigh(struct efx_nic *efx,
 			neigh->ttl = ip4_dst_hoplimit(&rt->dst);
 			n = dst_neigh_lookup(&rt->dst, &flow4.daddr);
 			ip_rt_put(rt);
+#ifdef CONFIG_IPV6
 		}
+#endif
 		if (!n) {
 			rc = -ENETUNREACH;
 			EFX_TC_ERR_MSG(efx, extack, "Failed to lookup neighbour for encap");
@@ -481,9 +493,11 @@ static int efx_neigh_event(struct efx_nic *efx, struct neighbour *n)
 	if (n->tbl == &arp_tbl) {
 		ipv = 4;
 		keysize = sizeof(keys.dst_ip);
+#ifdef CONFIG_IPV6
 	} else if (n->tbl == &nd_tbl) {
 		ipv = 6;
 		keysize = sizeof(keys.dst_ip6);
+#endif
 	} else {
 		return NOTIFY_DONE;
 	}
@@ -505,9 +519,11 @@ static int efx_neigh_event(struct efx_nic *efx, struct neighbour *n)
 	case 4:
 		memcpy(&keys.dst_ip, n->primary_key, n->tbl->key_len);
 		break;
+#ifdef CONFIG_IPV6
 	case 6:
 		memcpy(&keys.dst_ip6, n->primary_key, n->tbl->key_len);
 		break;
+#endif
 	default: /* can't happen */
 		return NOTIFY_DONE;
 	}
@@ -709,6 +725,7 @@ static void efx_gen_tun_header_ipv4(struct efx_tc_encap_action *encap, u8 ipprot
 	ip_send_check(ip);
 }
 
+#ifdef CONFIG_IPV6
 static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipproto, u8 len)
 {
 	struct efx_neigh_binder *neigh = encap->neigh;
@@ -726,6 +743,7 @@ static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipprot
 	ip->version = 0x6;
 	ip->payload_len = cpu_to_be16(len);
 }
+#endif
 
 static void efx_gen_tun_header_udp(struct efx_tc_encap_action *encap, u8 len)
 {
@@ -789,6 +807,7 @@ static void efx_gen_geneve_header_ipv4(struct efx_tc_encap_action *encap)
 	efx_gen_tun_header_geneve(encap);
 }
 
+#ifdef CONFIG_IPV6
 #define vxlan6_header_len	(sizeof(struct ethhdr) + sizeof(struct ipv6hdr) + vxlan_header_l4_len)
 static void efx_gen_vxlan_header_ipv6(struct efx_tc_encap_action *encap)
 {
@@ -808,6 +827,7 @@ static void efx_gen_geneve_header_ipv6(struct efx_tc_encap_action *encap)
 	efx_gen_tun_header_udp(encap, sizeof(struct genevehdr));
 	efx_gen_tun_header_geneve(encap);
 }
+#endif
 
 static void efx_gen_encap_header(struct efx_tc_encap_action *encap)
 {
@@ -825,12 +845,14 @@ static void efx_gen_encap_header(struct efx_tc_encap_action *encap)
 	case EFX_ENCAP_TYPE_GENEVE:
 		efx_gen_geneve_header_ipv4(encap);
 		break;
+#ifdef CONFIG_IPV6
 	case EFX_ENCAP_TYPE_VXLAN | EFX_ENCAP_FLAG_IPV6:
 		efx_gen_vxlan_header_ipv6(encap);
 		break;
 	case EFX_ENCAP_TYPE_GENEVE | EFX_ENCAP_FLAG_IPV6:
 		efx_gen_geneve_header_ipv6(encap);
 		break;
+#endif
 	default:
 		/* unhandled encap type, can't happen */
 		WARN_ON(1);
@@ -1337,12 +1359,13 @@ static void efx_tc_stop_channel(struct efx_channel *channel)
 	struct efx_nic *efx = channel->efx;
 	int rc;
 
-	flush_work(&rx_queue->grant_work);
 	rc = efx_mae_stop_counters(efx, rx_queue);
 	if (rc)
 		netif_warn(efx, drv, efx->net_dev,
 			   "Failed to stop MAE counters streaming, rc=%d.\n",
 			   rc);
+	rx_queue->grant_credits = false;
+	flush_work(&rx_queue->grant_work);
 }
 
 static void efx_tc_remove_channel(struct efx_channel *channel)
@@ -1391,7 +1414,7 @@ static void efx_tc_counter_work(struct work_struct *work)
 }
 
 static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
-				  u64 packets, u64 bytes)
+				  u64 packets, u64 bytes, u32 mark)
 {
 	struct efx_tc_counter *cnt;
 
@@ -1417,16 +1440,31 @@ static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
 	}
 
 	spin_lock_bh(&cnt->lock);
-	cnt->packets += packets;
-	cnt->bytes += bytes;
-	cnt->touched = jiffies;
+	if ((s32)mark - (s32)cnt->gen < 0) {
+		/* This counter update packet is from before the counter was
+		 * allocated; thus it must be for a previous counter with
+		 * the same ID that has since been freed, and it should be
+		 * ignored.
+		 */
+	} else {
+		/* Update latest seen generation count.  This ensures that
+		 * even a long-lived counter won't start getting ignored if
+		 * the generation count wraps around, unless it somehow
+		 * manages to go 1<<31 generations without an update.
+		 */
+		cnt->gen = mark;
+		/* update counter values */
+		cnt->packets += packets;
+		cnt->bytes += bytes;
+		cnt->touched = jiffies;
+	}
 	spin_unlock_bh(&cnt->lock);
 	schedule_work(&cnt->work);
 out:
 	rcu_read_unlock();
 }
 
-static void efx_tc_rx_version_1(struct efx_nic *efx, const u8 *data)
+static void efx_tc_rx_version_1(struct efx_nic *efx, const u8 *data, u32 mark)
 {
 	u16 seq_index, n_counters, i;
 
@@ -1453,7 +1491,7 @@ static void efx_tc_rx_version_1(struct efx_nic *efx, const u8 *data)
 			       ((u64)le16_to_cpu(*(const __le16 *)(entry + 8)) << 32);
 		byte_count = le16_to_cpu(*(const __le16 *)(entry + 10)) |
 			     ((u64)le32_to_cpu(*(const __le32 *)(entry + 12)) << 16);
-		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count);
+		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count, mark);
 	}
 }
 
@@ -1483,7 +1521,7 @@ static u64 efx_tc_read48(const __le16 *field)
 	return out;
 }
 
-static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data)
+static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data, u32 mark)
 {
 	u8 payload_offset, header_offset, ident;
 	u16 n_counters, i;
@@ -1537,14 +1575,15 @@ static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data)
 		BUILD_BUG_ON(ERF_SC_PACKETISER_PAYLOAD_BYTE_COUNT_LBN & 15);
 		byte_count = efx_tc_read48((const __le16 *)byte_count_p);
 
-		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count);
+		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count, mark);
 	}
 }
 
 /* We always swallow the packet, whether successful or not, since it's not
- * a network packet and shouldn't ever be forwarded to the stack
+ * a network packet and shouldn't ever be forwarded to the stack.
+ * @mark is the generation count for counter allocations.
  */
-static bool efx_tc_rx(struct efx_rx_queue *rx_queue)
+static bool efx_tc_rx(struct efx_rx_queue *rx_queue, u32 mark)
 {
 	struct efx_rx_buffer *rx_buf = efx_rx_buf_pipe(rx_queue);
 	const u8 *data = efx_rx_buf_va(rx_buf);
@@ -1555,10 +1594,10 @@ static bool efx_tc_rx(struct efx_rx_queue *rx_queue)
 	version = *data;
 	switch (version) {
 	case 1:
-		efx_tc_rx_version_1(efx, data);
+		efx_tc_rx_version_1(efx, data, mark);
 		break;
 	case ERF_SC_PACKETISER_HEADER_VERSION_VALUE: // 2
-		efx_tc_rx_version_2(efx, data);
+		efx_tc_rx_version_2(efx, data, mark);
 		break;
 	default:
 		if (net_ratelimit())
@@ -1569,9 +1608,26 @@ static bool efx_tc_rx(struct efx_rx_queue *rx_queue)
 		break;
 	}
 
+	/* Update seen_gen unconditionally, to avoid a missed wakeup if
+	 * we race with efx_mae_stop_counters().
+	 */
+	efx->tc->seen_gen = mark;
+	if (efx->tc->flush_counters && (s32)(efx->tc->flush_gen - mark) <= 0)
+		wake_up(&efx->tc->flush_wq);
+
 	efx_free_rx_buffers(rx_queue, rx_buf, 1);
 	rx_queue->rx_pkt_n_frags = 0;
 	return true;
+}
+
+const char *efx_tc_get_queue_name(struct efx_channel * channel, bool tx)
+{
+	(void)channel;
+
+	if (tx)
+		return "counter_unused";
+	else
+		return "counter_updates";
 }
 
 static const struct efx_channel_type efx_tc_channel_type = {
@@ -1585,6 +1641,7 @@ static const struct efx_channel_type efx_tc_channel_type = {
 	.receive_raw		= efx_tc_rx,
 	.keep_eventq		= true,
 	.hide_tx		= true,
+	.get_queue_name		= efx_tc_get_queue_name,
 };
 
 int efx_init_struct_tc(struct efx_nic *efx)
@@ -1605,6 +1662,7 @@ int efx_init_struct_tc(struct efx_nic *efx)
 	INIT_LIST_HEAD(&efx->tc->block_list);
 
 	mutex_init(&efx->tc->mutex);
+	init_waitqueue_head(&efx->tc->flush_wq);
 
 	rc = rhashtable_init(&efx->tc->neigh_ht, &efx_neigh_ht_params);
 	if (rc < 0)
@@ -1902,10 +1960,13 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 	if (ipv == 4) {
 		MAP_KEY_AND_MASK(IPV4_ADDRS, ipv4_addrs, src, src_ip);
 		MAP_KEY_AND_MASK(IPV4_ADDRS, ipv4_addrs, dst, dst_ip);
-	} else if (ipv == 6) {
+	}
+#ifdef CONFIG_IPV6
+	else if (ipv == 6) {
 		MAP_KEY_AND_MASK(IPV6_ADDRS, ipv6_addrs, src, src_ip6);
 		MAP_KEY_AND_MASK(IPV6_ADDRS, ipv6_addrs, dst, dst_ip6);
 	}
+#endif
 	MAP_KEY_AND_MASK(PORTS, ports, src, l4_sport);
 	MAP_KEY_AND_MASK(PORTS, ports, dst, l4_dport);
 	MAP_KEY_AND_MASK(TCP, tcp, flags, tcp_flags);
@@ -1932,12 +1993,14 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 			MAP_ENC_KEY_AND_MASK(IPV4_ADDRS, ipv4_addrs, enc_ipv4_addrs,
 					     dst, enc_dst_ip);
 			break;
+#ifdef CONFIG_IPV6
 		case FLOW_DISSECTOR_KEY_IPV6_ADDRS:
 			MAP_ENC_KEY_AND_MASK(IPV6_ADDRS, ipv6_addrs, enc_ipv6_addrs,
 					     src, enc_src_ip6);
 			MAP_ENC_KEY_AND_MASK(IPV6_ADDRS, ipv6_addrs, enc_ipv6_addrs,
 					     dst, enc_dst_ip6);
 			break;
+#endif
 		default:
 			efx_tc_err(efx, "Unsupported enc addr_type %u\n",
 				   fm.key->addr_type);
@@ -1994,10 +2057,12 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 }
 #undef MAP_KEY_AND_MASK
 
+#ifdef CONFIG_IPV6
 static bool efx_ipv6_addr_all_ones(struct in6_addr *addr)
 {
 	return !memchr_inv(addr, 0xff, sizeof(*addr));
 }
+#endif
 
 static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 					    struct efx_tc_match *match,
@@ -2023,12 +2088,16 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			efx_tc_err(efx, "Egress encap match is not exact on src IP address\n");
 			return -EOPNOTSUPP;
 		}
+#ifdef CONFIG_IPV6
 		if (!ipv6_addr_any(&match->mask.enc_dst_ip6) ||
 		    !ipv6_addr_any(&match->mask.enc_src_ip6)) {
 			efx_tc_err(efx, "Egress encap match on both IPv4 and IPv6, don't understand\n");
 			return -EOPNOTSUPP;
 		}
-	} else {
+#endif
+	}
+#ifdef CONFIG_IPV6
+	else {
 		ipv = 6;
 		if (!efx_ipv6_addr_all_ones(&match->mask.enc_dst_ip6)) {
 			efx_tc_err(efx, "Egress encap match is not exact on dst IP address\n");
@@ -2039,6 +2108,7 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			return -EOPNOTSUPP;
 		}
 	}
+#endif
 	if (!IS_ALL_ONES(match->mask.enc_dport)) {
 		efx_tc_err(efx, "Egress encap match is not exact on dst UDP port\n");
 		return -EOPNOTSUPP;
@@ -2072,10 +2142,12 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 		encap->src_ip = match->value.enc_src_ip;
 		encap->dst_ip = match->value.enc_dst_ip;
 		break;
+#ifdef CONFIG_IPV6
 	case 6:
 		encap->src_ip6 = match->value.enc_src_ip6;
 		encap->dst_ip6 = match->value.enc_dst_ip6;
 		break;
+#endif
 	default: /* can't happen */
 		netif_err(efx, hw, efx->net_dev, "Egress encap match is IP version %d, huh?\n", ipv);
 		kfree(encap);
@@ -2105,10 +2177,12 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			snprintf(buf, sizeof(buf), "%pI4->%pI4",
 				 &encap->src_ip, &encap->dst_ip);
 			break;
+#ifdef CONFIG_IPV6
 		case 6:
 			snprintf(buf, sizeof(buf), "%pI6c->%pI6c",
 				 &encap->src_ip6, &encap->dst_ip6);
 			break;
+#endif
 		default: /* can't happen */
 			snprintf(buf, sizeof(buf), "[IP version %d, huh?]", ipv);
 			break;
@@ -2143,12 +2217,16 @@ static void efx_tc_flower_release_encap_match(struct efx_nic *efx,
 	if (!refcount_dec_and_test(&encap->ref))
 		return; /* still in use */
 
+#ifdef CONFIG_IPV6
 	if (encap->src_ip | encap->dst_ip)
+#endif
 		snprintf(buf, sizeof(buf), "%pI4->%pI4",
 			 &encap->src_ip, &encap->dst_ip);
+#ifdef CONFIG_IPV6
 	else
 		snprintf(buf, sizeof(buf), "%pI6c->%pI6c",
 			 &encap->src_ip6, &encap->dst_ip6);
+#endif
 	rc = efx_mae_unregister_encap_match(efx, encap);
 	if (rc)
 		/* Display message but carry on and remove entry from our
@@ -2705,7 +2783,9 @@ static int efx_tc_ct_parse_match(struct efx_nic *efx, struct flow_rule *fr,
 			return -EOPNOTSUPP;
 		}
 		conn->dst_ip = fm.key->dst;
-	} else if (ipv == 6 && flow_rule_match_key(fr, FLOW_DISSECTOR_KEY_IPV6_ADDRS)) {
+	}
+#ifdef CONFIG_IPV6
+	else if (ipv == 6 && flow_rule_match_key(fr, FLOW_DISSECTOR_KEY_IPV6_ADDRS)) {
 		struct flow_match_ipv6_addrs fm;
 
 		flow_rule_match_ipv6_addrs(fr, &fm);
@@ -2721,7 +2801,9 @@ static int efx_tc_ct_parse_match(struct efx_nic *efx, struct flow_rule *fr,
 			return -EOPNOTSUPP;
 		}
 		conn->dst_ip6 = fm.key->dst;
-	} else {
+	}
+#endif
+	else {
 		efx_tc_err(efx, "Conntrack missing IPv%hhu addrs\n", ipv);
 		return -EOPNOTSUPP;
 	}
@@ -4374,13 +4456,17 @@ static void efx_tc_debugfs_dump_encap_match(struct seq_file *file,
 					    struct efx_tc_encap_match *encap)
 {
 	seq_printf(file, "\tencap_match (%#x)\n", encap->fw_id);
+#ifdef CONFIG_IPV6
 	if (encap->src_ip | encap->dst_ip) {
+#endif
 		seq_printf(file, "\t\tsrc_ip = %pI4\n", &encap->src_ip);
 		seq_printf(file, "\t\tdst_ip = %pI4\n", &encap->dst_ip);
+#ifdef CONFIG_IPV6
 	} else {
 		seq_printf(file, "\t\tsrc_ip6 = %pI6c\n", &encap->src_ip6);
 		seq_printf(file, "\t\tdst_ip6 = %pI6c\n", &encap->dst_ip6);
 	}
+#endif
 	seq_printf(file, "\t\tudp_dport = %u\n", be16_to_cpu(encap->udp_dport));
 	if (encap->tun_type < ARRAY_SIZE(efx_tc_encap_type_names))
 		seq_printf(file, "\t\ttun_type = %s\n",
@@ -4507,15 +4593,19 @@ static void efx_tc_debugfs_dump_match(struct seq_file *file,
 		seq_printf(file, "\tip_firstfrag = %d\n", match->value.ip_firstfrag);
 	DUMP_FMT_AMP_MATCH(src_ip, "%pI4");
 	DUMP_FMT_AMP_MATCH(dst_ip, "%pI4");
+#ifdef CONFIG_IPV6
 	DUMP_FMT_PTR_MATCH(src_ip6, "%pI6");
 	DUMP_FMT_PTR_MATCH(dst_ip6, "%pI6");
+#endif
 	DUMP_ONE_MATCH(l4_sport);
 	DUMP_ONE_MATCH(l4_dport);
 	DUMP_ONE_MATCH(tcp_flags);
 	DUMP_FMT_AMP_MATCH(enc_src_ip, "%pI4");
 	DUMP_FMT_AMP_MATCH(enc_dst_ip, "%pI4");
+#ifdef CONFIG_IPV6
 	DUMP_FMT_PTR_MATCH(enc_src_ip6, "%pI6c");
 	DUMP_FMT_PTR_MATCH(enc_dst_ip6, "%pI6c");
+#endif
 	DUMP_ONE_MATCH(enc_ip_tos);
 	DUMP_ONE_MATCH(enc_ip_ttl);
 	DUMP_ONE_MATCH(enc_sport);
@@ -4667,6 +4757,7 @@ static void efx_tc_debugfs_dump_one_counter(struct seq_file *file,
 {
 	u64 packets, bytes, old_packets, old_bytes;
 	unsigned long age;
+	u32 gen;
 
 	/* get a consistent view */
 	spin_lock_bh(&cnt->lock);
@@ -4675,10 +4766,11 @@ static void efx_tc_debugfs_dump_one_counter(struct seq_file *file,
 	old_packets = cnt->old_packets;
 	old_bytes = cnt->old_bytes;
 	age = jiffies - cnt->touched;
+	gen = cnt->gen;
 	spin_unlock_bh(&cnt->lock);
 
-	seq_printf(file, "%#x: %llu pkts %llu bytes (old %llu pkts %llu bytes) age %lu\n",
-		   cnt->fw_id, packets, bytes, old_packets, old_bytes, age);
+	seq_printf(file, "%#x: %llu pkts %llu bytes (old %llu pkts %llu bytes) gen %u age %lu\n",
+		   cnt->fw_id, packets, bytes, old_packets, old_bytes, gen, age);
 }
 
 static int efx_tc_debugfs_dump_mae_counters(struct seq_file *file, void *data)
@@ -4804,12 +4896,14 @@ static void efx_tc_debugfs_dump_ct(struct seq_file *file,
 		seq_printf(file, "\t%cnat = %pI4:%u\n", conn->dnat ? 'd' : 's',
 			   &conn->nat_ip, be16_to_cpu(conn->l4_natport));
 		break;
+#ifdef CONFIG_IPV6
 	case htons(ETH_P_IPV6):
 		seq_printf(file, "\tsrc = %pI6c:%u\n", &conn->src_ip6,
 			   be16_to_cpu(conn->l4_sport));
 		seq_printf(file, "\tdst = %pI6c:%u\n", &conn->dst_ip6,
 			   be16_to_cpu(conn->l4_dport));
 		break;
+#endif
 	default:
 		break;
 	}
@@ -4978,16 +5072,20 @@ static int efx_tc_debugfs_dump_mae_neighs(struct seq_file *file, void *data)
 	while ((neigh = rhashtable_walk_next(&walk)) != NULL) {
 		if (IS_ERR(neigh))
 			continue;
+#ifdef CONFIG_IPV6
 		if (neigh->dst_ip) /* IPv4 */
+#endif
 			seq_printf(file, "%pI4: %svalid %pM ttl %hhu egdev %s ref %u\n",
 				   &neigh->dst_ip, neigh->n_valid ? "" : "in",
 				   neigh->ha, neigh->ttl, neigh->egdev->name,
 				   refcount_read(&neigh->ref));
+#ifdef CONFIG_IPV6
 		else /* IPv6 */
 			seq_printf(file, "%pI6c: %svalid %pM ttl %hhu egdev %s ref %u\n",
 				   &neigh->dst_ip6, neigh->n_valid ? "" : "in",
 				   neigh->ha, neigh->ttl, neigh->egdev->name,
 				   refcount_read(&neigh->ref));
+#endif
 	}
 	rhashtable_walk_stop(&walk);
 	rhashtable_walk_exit(&walk);

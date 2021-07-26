@@ -1661,6 +1661,49 @@ fail:
 	buf[0] = 0;
 }
 
+void efx_mcdi_print_fw_bundle_ver(struct efx_nic *efx, char *buf, size_t len)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_VERSION_V5_OUT_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_VERSION_EXT_IN_LEN);
+	unsigned int flags;
+	size_t outlength;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, GET_VERSION_EXT_IN_EXT_FLAGS, 0);
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_VERSION, inbuf, sizeof(inbuf),
+			  outbuf, sizeof(outbuf), &outlength);
+	if (rc)
+		goto fail;
+	if (outlength < MC_CMD_GET_VERSION_V5_OUT_LEN) {
+		rc = -EIO;
+		pci_err(efx->pci_dev, "%s: failed rc=%d\n", __func__, rc);
+		goto fail;
+	}
+
+	flags = MCDI_DWORD(outbuf, GET_VERSION_V5_OUT_FLAGS);
+	if (flags & BIT(MC_CMD_GET_VERSION_V5_OUT_BUNDLE_VERSION_PRESENT_LBN)) {
+		const __le32 *ver_dwords = (__le32 *)MCDI_PTR(outbuf,
+			GET_VERSION_V5_OUT_BUNDLE_VERSION);
+		size_t needed;
+
+		needed = snprintf(buf, len, "%u.%u.%u.%u",
+				  le32_to_cpu(ver_dwords[0]),
+				  le32_to_cpu(ver_dwords[1]),
+				  le32_to_cpu(ver_dwords[2]),
+				  le32_to_cpu(ver_dwords[3]));
+		if (WARN_ON(needed >= len))
+			goto fail;
+	} else {
+		strlcpy(buf, "N/A", len);
+	}
+
+	return;
+
+fail:
+	buf[0] = 0;
+}
+
 static int efx_mcdi_drv_attach_attempt(struct efx_nic *efx,
 				       u32 fw_variant, u32 new_state,
 				       u32 *flags, bool reattach)

@@ -1633,6 +1633,11 @@ static void efx_mcdi_hwmon_remove(struct efx_nic *efx)
 		kfree(hwmon->attrs);
 	hwmon->attrs = NULL;
 	hwmon->n_attrs = 0;
+	if (hwmon->sensor_list)
+		kfree(hwmon->sensor_list);
+	hwmon->sensor_list = NULL;
+	hwmon->n_dynamic_sensors = 0;
+
 	efx_nic_free_buffer(efx, &hwmon->dma_buf);
 	mutex_unlock(&hwmon->update_lock);
 }

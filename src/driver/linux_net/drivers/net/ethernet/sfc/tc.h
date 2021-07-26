@@ -123,7 +123,9 @@ struct efx_tc_match_fields {
 	/* L3 (when IP) */
 	u8 ip_proto, ip_tos, ip_ttl;
 	__be32 src_ip, dst_ip;
+#ifdef CONFIG_IPV6
 	struct in6_addr src_ip6, dst_ip6;
+#endif
 	bool ip_frag, ip_firstfrag;
 	/* L4 */
 	__be16 l4_sport, l4_dport; /* Ports (UDP, TCP) */
@@ -285,6 +287,11 @@ enum efx_tc_rule_prios {
  * @reps_filter_uc: VNIC filter for representor unicast RX (promisc)
  * @reps_filter_mc: VNIC filter for representor multicast RX (allmulti)
  * @reps_mport_vport_id: vport user_id for representor RX filters
+ * @flush_counters: counters have been stopped, waiting for drain
+ * @flush_gen: final generation count as reported by MC_CMD_MAE_COUNTERS_STREAM_STOP
+ * @seen_gen: most recent generation count seen by efx_tc_rx()
+ * @flush_wq: wait queue used by efx_mae_stop_counters() to wait for
+ *	MAE counters RXQ to finish draining
  * @dflt_rules: Match-action rules for default switching; at priority
  *	%EFX_TC_PRIO_DFLT, and indexed by &enum efx_tc_default_rules.
  *	Also used for fallback actions when actual action isn't ready
@@ -314,6 +321,9 @@ struct efx_tc_state {
 	u32 reps_mport_id;
 	u32 reps_filter_uc, reps_filter_mc;
 	u16 reps_mport_vport_id;
+	bool flush_counters;
+	u32 flush_gen, seen_gen;
+	wait_queue_head_t flush_wq;
 	struct efx_tc_flow_rule *dflt_rules;
 	bool up;
 };

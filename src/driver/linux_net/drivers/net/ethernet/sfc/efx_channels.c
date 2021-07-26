@@ -1173,14 +1173,7 @@ void efx_stop_eventq(struct efx_channel *channel)
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
 	while (!efx_channel_disable(channel))
 		usleep_range(1000, 20000);
-	efx_channel_unlock_napi(channel);
 
-#ifdef CONFIG_NET_RX_BUSY_POLL
-	if (channel->busy_poll_state != (1 << EFX_CHANNEL_STATE_DISABLE_BIT))
-		netif_err(channel->efx, drv, channel->efx->net_dev,
-			  "chan %d bad state %#lx\n", channel->channel,
-			  channel->busy_poll_state);
-#endif
 #endif
 	channel->enabled = false;
 }
@@ -2087,15 +2080,18 @@ void efx_stop_channels(struct efx_nic *efx)
 	struct efx_mcdi_iface *mcdi = NULL;
 	int rc = 0;
 
-	/* Stop RX refill */
+	/* Stop special channels and RX refill.
+	 * The channel's stop has to be called first, since it might wait
+	 * for a sentinel RX to indicate the channel has fully drained.
+	 */
 	efx_for_each_channel(channel, efx) {
+		if (channel->type->stop)
+			channel->type->stop(channel);
 		efx_for_each_channel_rx_queue(rx_queue, channel)
 			rx_queue->refill_enabled = false;
 	}
 
 	efx_for_each_channel(channel, efx) {
-		if (channel->type->stop)
-			channel->type->stop(channel);
 		/* RX packet processing is pipelined, so wait for the
 		 * NAPI handler to complete.  At least event queue 0
 		 * might be kept active by non-data events, so don't
@@ -2309,8 +2305,14 @@ static int efx_poll(struct napi_struct *napi, int budget)
 #endif
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
-	if (!efx_channel_lock_napi(channel))
-		return budget;
+	/* Worst case scenario is this poll waiting for as many packets to be
+	 * processed as if it would process itself without busy poll. If no
+	 * further packets to process, this poll will be quick. If further
+	 * packets reaching after busy poll is done, this will handle them.
+	 * This active wait is simpler than synchronizing busy poll and napi
+	 * which implies to schedule napi from the busy poll driver's code.
+	 */
+	spin_lock(&channel->poll_lock);
 #endif
 
 	netif_vdbg(efx, intr, efx->net_dev,
@@ -2360,7 +2362,7 @@ static int efx_poll(struct napi_struct *napi, int budget)
 	}
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
-	efx_channel_unlock_napi(channel);
+	spin_unlock(&channel->poll_lock);
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
@@ -2446,16 +2448,7 @@ void efx_pause_napi(struct efx_nic *efx)
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
 		while (!efx_channel_disable(channel))
 			usleep_range(1000, 20000);
-		efx_channel_unlock_napi(channel);
 
-#ifdef CONFIG_NET_RX_BUSY_POLL
-		if (channel->busy_poll_state !=
-		    (1 << EFX_CHANNEL_STATE_DISABLE_BIT))
-			netif_err(channel->efx, drv, channel->efx->net_dev,
-				  "chan %d bad state %#lx in %s\n",
-				  channel->channel,
-				  channel->busy_poll_state, __func__);
-#endif
 #endif
 	}
 }
@@ -2519,8 +2512,12 @@ int efx_busy_poll(struct napi_struct *napi)
 	if (!netif_running(efx->net_dev))
 		return LL_FLUSH_FAILED;
 
+	/* Tell about busy poll in progress if napi channel enabled */
 	if (!efx_channel_try_lock_poll(channel))
 		return LL_FLUSH_BUSY;
+
+	/* Protect against napi poll scheduled in any core */
+	spin_lock_bh(&channel->poll_lock);
 
 	efx_for_each_channel_rx_queue(rx_queue, channel)
 		old_rx_packets += rx_queue->rx_packets;
@@ -2530,12 +2527,12 @@ int efx_busy_poll(struct napi_struct *napi)
 		rx_packets += rx_queue->rx_packets;
 	rx_packets -= old_rx_packets;
 
-	/* There is no race condition with NAPI here.
-	 * NAPI will automatically be rescheduled if it yielded during busy
-	 * polling, because it was not able to take the lock and thus returned
-	 * the full budget.
-	 */
+	/* Tell code disabling napi that busy poll is done */
 	efx_channel_unlock_poll(channel);
+
+	/* Allow napi poll to go on if waiting and net_rx_action softirq to
+	 * execute in this core */
+	spin_unlock_bh(&channel->poll_lock);
 
 	return rx_packets;
 }

@@ -230,7 +230,8 @@ void efx_fini_tx_queue(struct efx_tx_queue *tx_queue)
 	if (!efx_is_xsk_tx_queue(tx_queue))
 #endif
 #endif
-		netdev_tx_reset_queue(tx_queue->core_txq);
+		if (tx_queue->core_txq)
+			netdev_tx_reset_queue(tx_queue->core_txq);
 }
 
 void efx_remove_tx_queue(struct efx_tx_queue *tx_queue)

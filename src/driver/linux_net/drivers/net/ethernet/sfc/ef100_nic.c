@@ -974,9 +974,10 @@ static void ef100_detach_remote_reps(struct efx_nic *efx)
 	assert_spin_locked(&nic_data->rem_reps_lock);
 	for (i = 0; i < nic_data->rem_rep_count; i++) {
 		rep_dev = nic_data->rem_rep[i];
+		netif_carrier_off(rep_dev);
 		/* See efx_device_detach_sync() */
 		netif_tx_lock_bh(rep_dev);
-		netif_device_detach(rep_dev);
+		netif_tx_stop_all_queues(rep_dev);
 		netif_tx_unlock_bh(rep_dev);
 	}
 }
@@ -989,8 +990,10 @@ static void ef100_attach_remote_reps(struct efx_nic *efx)
 	netif_dbg(efx, drv, efx->net_dev, "Attaching %d remote reps\n",
 		  nic_data->rem_rep_count);
 	assert_spin_locked(&nic_data->rem_reps_lock);
-	for (i = 0; i < nic_data->rem_rep_count; i++)
-		netif_device_attach(nic_data->rem_rep[i]);
+	for (i = 0; i < nic_data->rem_rep_count; i++) {
+		netif_tx_wake_all_queues(nic_data->rem_rep[i]);
+		netif_carrier_on(nic_data->rem_rep[i]);
+	}
 }
 
 void __ef100_detach_reps(struct efx_nic *efx)
@@ -1004,9 +1007,10 @@ void __ef100_detach_reps(struct efx_nic *efx)
 		  nic_data->vf_rep_count);
 	for (vf = 0; vf < nic_data->vf_rep_count; vf++) {
 		rep_dev = nic_data->vf_rep[vf];
+		netif_carrier_off(rep_dev);
 		/* See efx_device_detach_sync() */
 		netif_tx_lock_bh(rep_dev);
-		netif_device_detach(rep_dev);
+		netif_tx_stop_all_queues(rep_dev);
 		netif_tx_unlock_bh(rep_dev);
 	}
 #endif
@@ -1032,8 +1036,10 @@ void __ef100_attach_reps(struct efx_nic *efx)
 
 	netif_dbg(efx, drv, efx->net_dev, "Attaching %d vfreps\n",
 		  nic_data->vf_rep_count);
-	for (vf = 0; vf < nic_data->vf_rep_count; vf++)
-		netif_device_attach(nic_data->vf_rep[vf]);
+	for (vf = 0; vf < nic_data->vf_rep_count; vf++) {
+		netif_tx_wake_all_queues(nic_data->vf_rep[vf]);
+		netif_carrier_on(nic_data->vf_rep[vf]);
+	}
 #endif
 }
 
@@ -1048,38 +1054,12 @@ static void ef100_attach_reps(struct efx_nic *efx)
 	ef100_attach_remote_reps(efx);
 	spin_unlock_bh(&nic_data->rem_reps_lock);
 }
-
-void ef100_reps_set_link_state(struct efx_nic *efx, bool up)
-{
-	struct ef100_nic_data *nic_data = efx->nic_data;
-	int i;
-
-	spin_lock_bh(&nic_data->vf_reps_lock);
-	for (i = 0; i < nic_data->vf_rep_count; i++)
-		if (up)
-			netif_carrier_on(nic_data->vf_rep[i]);
-		else
-			netif_carrier_off(nic_data->vf_rep[i]);
-	spin_unlock_bh(&nic_data->vf_reps_lock);
-
-	spin_lock_bh(&nic_data->rem_reps_lock);
-	for (i = 0; i < nic_data->rem_rep_count; i++)
-		if (up)
-			netif_carrier_on(nic_data->rem_rep[i]);
-		else
-			netif_carrier_off(nic_data->rem_rep[i]);
-	spin_unlock_bh(&nic_data->rem_reps_lock);
-}
 #else /* EFX_TC_OFFLOAD */
 void __ef100_detach_reps(struct efx_nic *efx)
 {
 }
 
 void __ef100_attach_reps(struct efx_nic *efx)
-{
-}
-
-void ef100_reps_set_link_state(struct efx_nic *efx, bool up)
 {
 }
 #endif
@@ -1911,6 +1891,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_packet = __ef100_rx_packet,
 	.rx_buf_hash_valid = ef100_rx_buf_hash_valid,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
+	.set_id_led = efx_mcdi_set_id_led,
 	.filter_table_probe = ef100_filter_table_init,
 	.filter_table_up = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
@@ -1981,7 +1962,6 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.get_remote_rep = ef100_get_remote_rep,
 	.detach_reps = ef100_detach_reps,
 	.attach_reps = ef100_attach_reps,
-	.reps_set_link_state = ef100_reps_set_link_state,
 #endif
 
 #ifdef EFX_NOT_UPSTREAM

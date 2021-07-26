@@ -124,7 +124,6 @@ static int ef100_net_stop(struct net_device *net_dev)
 		  raw_smp_processor_id());
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	efx_reps_set_link_state(efx, false);
 	if (efx->type->detach_reps)
 		efx->type->detach_reps(efx);
 #endif
@@ -200,7 +199,6 @@ static int ef100_net_open(struct net_device *net_dev)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	if (netif_running(efx->net_dev) && efx->type->attach_reps)
 		efx->type->attach_reps(efx);
-	efx_reps_set_link_state(efx, true);
 #endif
 	return 0;
 

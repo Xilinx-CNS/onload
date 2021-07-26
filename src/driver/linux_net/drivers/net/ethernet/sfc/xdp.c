@@ -726,6 +726,7 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_rx_queue *rx_queue,
 		if (rx_buf->flags & EFX_RX_BUF_ZC) {
 			xdp_ptr = rx_buf->xsk_buf;
 			xdp_ptr->data = xdp.data;
+			xdp_ptr->data_end = xdp.data_end;
 		}
 #endif
 #endif

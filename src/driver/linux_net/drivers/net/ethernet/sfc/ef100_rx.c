@@ -121,6 +121,13 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 	}
 #endif
 
+	if (rx_queue->receive_raw) {
+		u32 mark = PREFIX_FIELD(prefix, USER_MARK);
+
+		if (rx_queue->receive_raw(rx_queue, mark))
+			return; /* packet was consumed */
+	}
+
 	if (check_fcs(rx_queue, prefix) &&
 	    unlikely(!(efx->net_dev->features & NETIF_F_RXALL)))
 		goto out;

@@ -96,7 +96,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.9.1001"
+#define EFX_DRIVER_VERSION	"5.3.9.1006"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -668,7 +668,8 @@ struct efx_ssr_state {
  * @zca: zero copy allocator for rx_queue
  * @xdp_rxq_info: XDP specific RX queue information.
  * @receive_skb: Handle an skb ready to be passed to netif_receive_skb()
- * @receive_raw: Handle an RX buffer ready to be passed to __efx_rx_packet()
+ * @receive_raw: Handle an RX buffer ready to be passed to __efx_rx_packet().
+ *	Also takes the value of the USER_MARK extracted from the prefix.
  */
 struct efx_rx_queue {
 	struct efx_nic *efx;
@@ -763,7 +764,7 @@ struct efx_rx_queue {
 
 	/* Special RX handlers (normally %NULL) */
 	bool (*receive_skb)(struct efx_rx_queue *, struct sk_buff *);
-	bool (*receive_raw)(struct efx_rx_queue *);
+	bool (*receive_raw)(struct efx_rx_queue *, u32);
 };
 
 #ifdef CONFIG_SFC_PTP
@@ -864,6 +865,7 @@ struct efx_channel {
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	unsigned long busy_poll_state;
+	spinlock_t poll_lock;
 #endif
 #endif
 	struct efx_special_buffer eventq;
@@ -939,55 +941,15 @@ struct efx_channel {
 #ifdef CONFIG_NET_RX_BUSY_POLL
 enum efx_channel_busy_poll_state {
 	EFX_CHANNEL_STATE_IDLE = 0,
-	EFX_CHANNEL_STATE_NAPI_BIT = 0,
-	EFX_CHANNEL_STATE_NAPI = BIT(0),
-	EFX_CHANNEL_STATE_NAPI_REQ_BIT = 1,
-	EFX_CHANNEL_STATE_NAPI_REQ = BIT(1),
-	EFX_CHANNEL_STATE_POLL_BIT = 2,
-	EFX_CHANNEL_STATE_POLL = BIT(2),
-	EFX_CHANNEL_STATE_DISABLE_BIT = 3,
+	EFX_CHANNEL_STATE_POLL_BIT = 1,
+	EFX_CHANNEL_STATE_POLL = BIT(1),
+	EFX_CHANNEL_STATE_DISABLE_BIT = 2,
 };
 
 static inline void efx_channel_busy_poll_init(struct efx_channel *channel)
 {
 	WRITE_ONCE(channel->busy_poll_state, EFX_CHANNEL_STATE_IDLE);
-}
-
-/* Called from the device poll routine to get ownership of a channel. */
-static inline bool efx_channel_lock_napi(struct efx_channel *channel)
-{
-	unsigned long prev, old = READ_ONCE(channel->busy_poll_state);
-
-	while (1) {
-		if (test_bit(EFX_CHANNEL_STATE_DISABLE_BIT, &old))
-			return false;
-
-		switch (old) {
-		case EFX_CHANNEL_STATE_POLL:
-			/* Ensure efx_channel_try_lock_poll() wont starve us */
-			set_bit(EFX_CHANNEL_STATE_NAPI_REQ_BIT,
-				&channel->busy_poll_state);
-			/* fallthrough */
-		case EFX_CHANNEL_STATE_POLL | EFX_CHANNEL_STATE_NAPI_REQ:
-			return false;
-		default:
-			break;
-		}
-		prev = cmpxchg(&channel->busy_poll_state, old,
-				EFX_CHANNEL_STATE_NAPI);
-		if (unlikely(prev != old)) {
-			/* This is likely to mean we've just entered polling
-			 * state. Go back round to set the REQ bit. */
-			old = prev;
-			continue;
-		}
-		return true;
-	}
-}
-
-static inline void efx_channel_unlock_napi(struct efx_channel *channel)
-{
-	clear_bit_unlock(EFX_CHANNEL_STATE_NAPI_BIT, &channel->busy_poll_state);
+	spin_lock_init(&channel->poll_lock);
 }
 
 /* Called from efx_busy_poll(). */
@@ -1019,7 +981,6 @@ static inline void efx_channel_enable(struct efx_channel *channel)
 static inline bool efx_channel_disable(struct efx_channel *channel)
 {
 	set_bit(EFX_CHANNEL_STATE_DISABLE_BIT, &channel->busy_poll_state);
-	clear_bit(EFX_CHANNEL_STATE_NAPI_REQ_BIT, &channel->busy_poll_state);
 	/* Implicit barrier in efx_channel_busy_polling() */
 	return !efx_channel_busy_polling(channel);
 }
@@ -1104,9 +1065,10 @@ struct efx_channel_type {
 	void (*get_name)(struct efx_channel *, char *buf, size_t len);
 	struct efx_channel *(*copy)(struct efx_channel *);
 	bool (*receive_skb)(struct efx_rx_queue *, struct sk_buff *);
-	bool (*receive_raw)(struct efx_rx_queue *);
+	bool (*receive_raw)(struct efx_rx_queue *, u32);
 	bool keep_eventq;
 	bool hide_tx;
+	const char *(*get_queue_name)(struct efx_channel *, bool tx);
 };
 
 enum efx_led_mode {
@@ -1372,10 +1334,10 @@ struct efx_async_filter_insertion {
  * @user_id: the port_id exposed to the user
  * @vlan: VID of this vport's VLAN, or %EFX_FILTER_VID_UNSPEC for none
  * @vlan_restrict: as per %MC_CMD_VPORT_ALLOC_IN_FLAG_VLAN_RESTRICT
- */
 #ifdef EFX_NOT_UPSTREAM
-/* These are used by Driverlink (and no-one else currently). */
+ * These are used by Driverlink (and no-one else currently).
 #endif
+ */
 struct efx_vport {
 	struct list_head list;
 	u32 vport_id;
@@ -1385,6 +1347,7 @@ struct efx_vport {
 };
 
 
+#ifdef CONFIG_SFC_MTD
 /**
  * struct efx_mtd - Struct to holds mtd list and krer for deletion without efx
  * @efx: The associated efx_nic
@@ -1393,7 +1356,6 @@ struct efx_vport {
  * @creation_work: I don't know what this is
  * @probed_flag: I don't know what this is
  */
-#ifdef CONFIG_SFC_MTD
 struct efx_mtd {
 	struct efx_nic *efx;
 	struct list_head list;
@@ -1569,6 +1531,7 @@ enum efx_buf_alloc_mode {
  * @mem_bar: The BAR that is mapped into membase.
  * @reg_base: Offset from the start of the bar to the function control window.
  * @mcdi_buf_mode: mcdi buffer allocation mode
+ * @reflash_mutex: Mutex for serialising firmware reflash operations.
  * @monitor_work: Hardware monitor workitem
  * @biu_lock: BIU (bus interface unit) lock
  * @last_irq_cpu: Last CPU to handle a possible test interrupt.  This
@@ -1876,6 +1839,7 @@ struct efx_nic {
 #ifdef CONFIG_SFC_VDPA
 	struct ef100_vdpa_nic *vdpa_nic;
 #endif
+	struct mutex reflash_mutex;
 
 	/* The following fields may be written more often */
 
@@ -2162,7 +2126,6 @@ struct ef100_udp_tunnel {
  * @get_vf_rep: get the VF representor netdevice for given VF index
  * @detach_reps: detach (stop TX on) all representors
  * @attach_reps: attach (restart TX on) all representors
- * @reps_set_link_state: set the link state on representors
  * @revision: Hardware architecture revision
  * @has_dynamic_sensors: check if dynamic sensor capability is set
  * @txd_ptr_tbl_base: TX descriptor ring base address
@@ -2410,7 +2373,6 @@ struct efx_nic_type {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	void (*detach_reps)(struct efx_nic *efx);
 	void (*attach_reps)(struct efx_nic *efx);
-	void (*reps_set_link_state)(struct efx_nic *efx, bool up);
 #endif
 	bool (*has_dynamic_sensors)(struct efx_nic *efx);
 

@@ -17,6 +17,7 @@
 #include "efx_channels.h"
 #include "mcdi_port_common.h"
 #include "mcdi_filters.h"
+#include "tc.h"
 
 struct efx_sw_stat_desc {
 	const char *name;
@@ -121,21 +122,85 @@ static const char efx_ethtool_priv_flags_strings[][ETH_GSTRING_LEN] = {
 
 #define EFX_ETHTOOL_PRIV_FLAGS_COUNT ARRAY_SIZE(efx_ethtool_priv_flags_strings)
 
+void efx_ethtool_get_common_drvinfo(struct efx_nic *efx,
+				    struct ethtool_drvinfo *info)
+{
+#ifdef EFX_NOT_UPSTREAM
+	/* This is not populated on RHEL 6 */
+	if (efx->pci_dev->driver)
+		strlcpy(info->driver, efx->pci_dev->driver->name,
+			sizeof(info->driver));
+	else
+		strlcpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
+#else
+	strlcpy(info->driver, efx->pci_dev->driver->name, sizeof(info->driver));
+#endif
+	strlcpy(info->version, EFX_DRIVER_VERSION, sizeof(info->version));
+	strlcpy(info->fw_version, "N/A", sizeof(info->fw_version));
+	strlcpy(info->bus_info, pci_name(efx->pci_dev), sizeof(info->bus_info));
+	info->n_priv_flags = EFX_ETHTOOL_PRIV_FLAGS_COUNT;
+}
+
 void efx_ethtool_get_drvinfo(struct net_device *net_dev,
 			     struct ethtool_drvinfo *info)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
-	strlcpy(info->driver, efx->pci_dev->driver->name, sizeof(info->driver));
-	strlcpy(info->version, EFX_DRIVER_VERSION, sizeof(info->version));
+	efx_ethtool_get_common_drvinfo(efx, info);
 	if (!in_interrupt())
 		efx_mcdi_print_fwver(efx, info->fw_version,
 				     sizeof(info->fw_version));
-	else
-		strlcpy(info->fw_version, "N/A", sizeof(info->fw_version));
-	strlcpy(info->bus_info, pci_name(efx->pci_dev), sizeof(info->bus_info));
-	info->n_priv_flags = EFX_ETHTOOL_PRIV_FLAGS_COUNT;
 }
+
+/* Identify device by flashing LEDs */
+int efx_ethtool_phys_id(struct net_device *net_dev,
+			enum ethtool_phys_id_state state)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	enum efx_led_mode mode = EFX_LED_DEFAULT;
+
+	switch (state) {
+	case ETHTOOL_ID_ON:
+		mode = EFX_LED_ON;
+		break;
+	case ETHTOOL_ID_OFF:
+		mode = EFX_LED_OFF;
+		break;
+	case ETHTOOL_ID_INACTIVE:
+		mode = EFX_LED_DEFAULT;
+		break;
+	case ETHTOOL_ID_ACTIVE:
+		return 1;	/* cycle on/off once per second */
+	}
+
+	efx->type->set_id_led(efx, mode);
+	return 0;
+}
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
+int efx_ethtool_phys_id_loop(struct net_device *net_dev, u32 count)
+{
+	/* Driver expects to be called at twice the frequency in rc */
+	int rc = efx_ethtool_phys_id(net_dev, ETHTOOL_ID_ACTIVE);
+	int n = rc * 2, i, interval = HZ / n;
+
+	/* Count down seconds */
+	do {
+		/* Count down iterations per second */
+		i = n;
+		do {
+			efx_ethtool_phys_id(net_dev,
+					    (i & 1) ? ETHTOOL_ID_OFF
+					    : ETHTOOL_ID_ON);
+			schedule_timeout_interruptible(interval);
+		} while (!signal_pending(current) && --i != 0);
+	} while (!signal_pending(current) &&
+		 (count == 0 || --count != 0));
+
+	(void)efx_ethtool_phys_id(net_dev, ETHTOOL_ID_INACTIVE);
+	return 0;
+}
+#endif
 
 u32 efx_ethtool_get_msglevel(struct net_device *net_dev)
 {
@@ -473,6 +538,7 @@ int efx_ethtool_fill_self_tests(struct efx_nic *efx,
 static size_t efx_describe_per_queue_stats(struct efx_nic *efx, u8 *strings)
 {
 	size_t n_stats = 0;
+	const char *q_name;
 	struct efx_channel *channel;
 
 	efx_for_each_channel(channel, efx) {
@@ -482,8 +548,13 @@ static size_t efx_describe_per_queue_stats(struct efx_nic *efx, u8 *strings)
 				unsigned int core_txq = channel->channel -
 							efx->tx_channel_offset;
 
+				if (channel->type->get_queue_name)
+					q_name = channel->type->get_queue_name(channel, true);
+				else
+					q_name = "tx_packets";
+
 				snprintf(strings, ETH_GSTRING_LEN,
-					 "tx-%u.tx_packets", core_txq);
+					 "tx-%u.%s", core_txq, q_name);
 				strings += ETH_GSTRING_LEN;
 			}
 		}
@@ -492,8 +563,13 @@ static size_t efx_describe_per_queue_stats(struct efx_nic *efx, u8 *strings)
 		if (efx_channel_has_rx_queue(channel)) {
 			n_stats++;
 			if (strings != NULL) {
+				if (channel->type->get_queue_name)
+					q_name = channel->type->get_queue_name(channel, false);
+				else
+					q_name = "rx_packets";
+
 				snprintf(strings, ETH_GSTRING_LEN,
-					 "rx-%d.rx_packets", channel->channel);
+					 "rx-%d.%s", channel->channel, q_name);
 				strings += ETH_GSTRING_LEN;
 			}
 		}

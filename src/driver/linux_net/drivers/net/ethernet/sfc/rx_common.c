@@ -577,7 +577,8 @@ void efx_fini_rx_queue(struct efx_rx_queue *rx_queue)
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
-	xdp_rxq_info_unreg(&rx_queue->xdp_rxq_info);
+	if (xdp_rxq_info_is_reg(&rx_queue->xdp_rxq_info))
+		xdp_rxq_info_unreg(&rx_queue->xdp_rxq_info);
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 #if defined(CONFIG_XDP_SOCKETS)

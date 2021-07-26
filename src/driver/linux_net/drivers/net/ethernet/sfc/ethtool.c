@@ -43,56 +43,6 @@
  **************************************************************************
  */
 
-/* Identify device by flashing LEDs */
-static int efx_ethtool_phys_id(struct net_device *net_dev,
-			       enum ethtool_phys_id_state state)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	enum efx_led_mode mode = EFX_LED_DEFAULT;
-
-	switch (state) {
-	case ETHTOOL_ID_ON:
-		mode = EFX_LED_ON;
-		break;
-	case ETHTOOL_ID_OFF:
-		mode = EFX_LED_OFF;
-		break;
-	case ETHTOOL_ID_INACTIVE:
-		mode = EFX_LED_DEFAULT;
-		break;
-	case ETHTOOL_ID_ACTIVE:
-		return 1;	/* cycle on/off once per second */
-	}
-
-	efx->type->set_id_led(efx, mode);
-	return 0;
-}
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
-static int efx_ethtool_phys_id_loop(struct net_device *net_dev, u32 count)
-{
-	/* Driver expects to be called at twice the frequency in rc */
-	int rc = efx_ethtool_phys_id(net_dev, ETHTOOL_ID_ACTIVE);
-	int n = rc * 2, i, interval = HZ / n;
-
-	/* Count down seconds */
-	do {
-		/* Count down iterations per second */
-		i = n;
-		do {
-			efx_ethtool_phys_id(net_dev,
-					    (i & 1) ? ETHTOOL_ID_OFF
-					    : ETHTOOL_ID_ON);
-			schedule_timeout_interruptible(interval);
-		} while (!signal_pending(current) && --i != 0);
-	} while (!signal_pending(current) &&
-		 (count == 0 || --count != 0));
-
-	(void)efx_ethtool_phys_id(net_dev, ETHTOOL_ID_INACTIVE);
-	return 0;
-}
-#endif
-
 static int efx_ethtool_get_regs_len(struct net_device *net_dev)
 {
 	return efx_nic_get_regs_len(efx_netdev_priv(net_dev));
@@ -456,7 +406,14 @@ int efx_ethtool_flash_device(struct net_device *net_dev,
 	rc = request_firmware(&fw, flash->data, &efx->pci_dev->dev);
 	if (rc)
 		return rc;
+
+	dev_hold(net_dev);
+	rtnl_unlock();
+
 	rc = efx_reflash_flash_firmware(efx, fw);
+
+	rtnl_lock();
+	dev_put(net_dev);
 
 	release_firmware(fw);
 	return rc;

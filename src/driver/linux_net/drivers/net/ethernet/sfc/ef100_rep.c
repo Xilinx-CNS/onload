@@ -261,10 +261,13 @@ static struct efx_rep *efx_ef100_rep_create_netdev(struct efx_nic *efx,
 	efv->net_dev = net_dev;
 	efv->remote = remote;
 	rtnl_lock();
-	if (efx->state == STATE_NET_UP)
+	if (netif_running(efx->net_dev) && efx->state == STATE_NET_UP) {
+		netif_device_attach(net_dev);
 		netif_carrier_on(net_dev);
-	else
+	} else {
+		netif_tx_stop_all_queues(net_dev);
 		netif_carrier_off(net_dev);
+	}
 	rtnl_unlock();
 
 	net_dev->netdev_ops = &efx_ef100_rep_netdev_ops;

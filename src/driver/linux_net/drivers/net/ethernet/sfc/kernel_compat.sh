@@ -418,6 +418,7 @@ EFX_HAVE_COALESCE_PARAMS		member struct_ethtool_ops supported_coalesce_params in
 EFX_HAVE_XDP_QUERY_PROG			symbol XDP_QUERY_PROG	include/linux/netdevice.h
 EFX_HAVE_VIRTIO_F_IN_ORDER		symbol VIRTIO_F_IN_ORDER	include/uapi/linux/virtio_config.h
 EFX_HAVE_VDPA_VQ_STATE			symbol vdpa_vq_state		include/linux/vdpa.h
+EFX_HAVE_VDPA_VQ_STATE_SPLIT		symbol vdpa_vq_state_split	include/linux/vdpa.h
 EFX_HAVE_GET_VQ_IRQ			member struct_vdpa_config_ops get_vq_irq include/linux/vdpa.h
 EFX_HAVE_GET_VQ_NOTIFY			member struct_vdpa_config_ops get_vq_notification include/linux/vdpa.h
 EFX_HAVE_VDPA_ALLOC_NVQS_PARAM		symtype __vdpa_alloc_device	include/linux/vdpa.h struct vdpa_device *(struct device *, const struct vdpa_config_ops *, int, size_t)

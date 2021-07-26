@@ -74,11 +74,9 @@ void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 static inline void efx_rx_flush_packet(struct efx_rx_queue *rx_queue)
 {
 	if (rx_queue->rx_pkt_n_frags)
-		if (!rx_queue->receive_raw ||
-		    !rx_queue->receive_raw(rx_queue))
-			INDIRECT_CALL_2(rx_queue->efx->type->rx_packet,
-					__ef100_rx_packet, __efx_rx_packet,
-					rx_queue);
+		INDIRECT_CALL_2(rx_queue->efx->type->rx_packet,
+				__ef100_rx_packet, __efx_rx_packet,
+				rx_queue);
 }
 
 static inline bool efx_rx_buf_hash_valid(struct efx_nic *efx, const u8 *prefix)
@@ -395,14 +393,6 @@ static inline void efx_schedule_channel_irq(struct efx_channel *channel)
 #if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_CANCEL_WORK_SYNC) || !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC))
 extern struct workqueue_struct *efx_workqueue;
 #endif
-
-static inline void efx_reps_set_link_state(struct efx_nic *efx, bool up)
-{
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	if (efx->type->reps_set_link_state)
-		efx->type->reps_set_link_state(efx, up);
-#endif
-}
 
 static inline void efx_device_detach_sync(struct efx_nic *efx)
 {

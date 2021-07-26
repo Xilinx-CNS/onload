@@ -771,23 +771,36 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 		goto err_put_device;
 	}
 
+	rc = devm_add_action_or_reset(&efx->pci_dev->dev,
+				      ef100_vdpa_irq_vectors_free,
+				      efx->pci_dev);
+	if (rc) {
+		pci_err(efx->pci_dev,
+			"Failed adding devres for freeing irq vectors\n");
+		goto err_put_device;
+	}
+
 	rc = vdpa_update_domain(vdpa_nic);
 	if (rc) {
 		pci_err(efx->pci_dev, "update_domain failed, err: %d\n", rc);
-		goto err_irq_vectors_free;
+		goto err_put_device;
 	}
 
 	rc = setup_vdpa_mcdi_buffer(efx, EF100_VDPA_IOVA_BASE_ADDR);
 	if (rc) {
 		pci_err(efx->pci_dev, "realloc mcdi failed, err: %d\n", rc);
-		goto err_irq_vectors_free;
+		goto err_put_device;
 	}
 
 #ifdef CONFIG_SFC_DEBUGFS
 	rc = efx_init_debugfs_vdpa(vdpa_nic);
 	if (rc)
-		goto err_irq_vectors_free;
+		goto err_put_device;
 #endif
+
+	rc = get_net_config(vdpa_nic);
+	if (rc)
+		goto err_put_device;
 
 #if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_VDPA_REGISTER_NVQS_PARAM)
 	rc = vdpa_register_device(&vdpa_nic->vdpa_dev);
@@ -799,36 +812,18 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 		pci_err(efx->pci_dev,
 			"vDPA device registration failed for vf: %u\n",
 			nic_data->vf_index);
-		goto err_fini_debugfs;
+		goto err_put_device;
 	}
-
-	rc = devm_add_action_or_reset(dev, ef100_vdpa_irq_vectors_free, efx->pci_dev);
-	if (rc) {
-		pci_err(efx->pci_dev,
-			"Failed adding devres for freeing irq vectors\n");
-		goto err_fini_debugfs;
-	}
-
-	rc = get_net_config(vdpa_nic);
-	if (rc)
-		goto err_fini_debugfs;
 
 	return vdpa_nic;
 
-err_fini_debugfs:
-	efx_fini_debugfs_vdpa(vdpa_nic);
-
-err_irq_vectors_free:
-	ef100_vdpa_irq_vectors_free(efx->pci_dev);
-
 err_put_device:
-	mutex_destroy(&vdpa_nic->lock);
+	/* put_device invokes ef100_vdpa_free */
 	put_device(&vdpa_nic->vdpa_dev.dev);
 
 err_alloc_vis_free:
 	vdpa_free_vis(efx);
 	return ERR_PTR(rc);
-
 }
 
 void ef100_vdpa_delete(struct efx_nic *efx)
@@ -848,7 +843,6 @@ void ef100_vdpa_delete(struct efx_nic *efx)
 			 "%s: vdpa unregister device completed\n", __func__);
 #endif
 		efx->vdpa_nic = NULL;
-		ef100_vdpa_irq_vectors_free(efx->pci_dev);
 		vdpa_free_vis(efx);
 	}
 }

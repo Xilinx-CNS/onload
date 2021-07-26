@@ -25,9 +25,11 @@ void efx_mae_mport_mport(struct efx_nic *efx, u32 mport_id, u32 *out);
 
 int efx_mae_lookup_mport(struct efx_nic *efx, u32 selector, u32 *id);
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 int efx_mae_start_counters(struct efx_nic *efx, struct efx_rx_queue *rx_queue);
 int efx_mae_stop_counters(struct efx_nic *efx, struct efx_rx_queue *rx_queue);
 void efx_mae_counters_grant_credits(struct work_struct *work);
+#endif
 
 enum mae_mport_desc_caller_flags {
 	MAE_MPORT_DESC_FLAG_CAN_RECEIVE_ON = BIT(MAE_MPORT_DESC_CAN_RECEIVE_ON_LBN),

@@ -468,6 +468,7 @@ int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw)
 		return -EOPNOTSUPP;
 	}
 
+	mutex_lock(&efx->reflash_mutex);
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_DEVLINK) && defined(EFX_HAVE_DEVLINK_FLASH_UPDATE_BEGIN_NOTIFY)
 	devlink_flash_update_begin_notify(devlink);
 #endif
@@ -587,6 +588,7 @@ out:
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_DEVLINK) && defined(EFX_HAVE_DEVLINK_FLASH_UPDATE_BEGIN_NOTIFY)
 	devlink_flash_update_end_notify(devlink);
 #endif
+	mutex_unlock(&efx->reflash_mutex);
 
 	return rc;
 }

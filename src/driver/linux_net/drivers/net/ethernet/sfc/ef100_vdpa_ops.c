@@ -636,9 +636,17 @@ static int ef100_vdpa_set_vq_state(struct vdpa_device *vdev, u16 idx,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE)
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Queue:%u State:0x%x", __func__, idx,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE_SPLIT)
+		 state->split.avail_index);
+#else
 		 state->avail_index);
 #endif
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE_SPLIT)
+	vdpa_nic->vring[idx].last_avail_idx = state->split.avail_index;
+#else
 	vdpa_nic->vring[idx].last_avail_idx = state->avail_index;
+#endif
 #else
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Queue:%u State:0x%llx", __func__, idx, state);
@@ -671,7 +679,11 @@ static u64 ef100_vdpa_get_vq_state(struct vdpa_device *vdev, u16 idx)
 
 	mutex_lock(&vdpa_nic->lock);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE_SPLIT)
+	state->split.avail_index = (u16)vdpa_nic->vring[idx].last_avail_idx;
+#else
 	state->avail_index = (u16)vdpa_nic->vring[idx].last_avail_idx;
+#endif
 #else
 	last_avail_index = vdpa_nic->vring[idx].last_avail_idx;
 #endif
@@ -1079,14 +1091,19 @@ static void ef100_vdpa_free(struct vdpa_device *vdev)
 #endif
 		/* clean-up the mappings and iova tree */
 		efx_ef100_delete_iova(vdpa_nic);
-		rc = setup_ef100_mcdi_buffer(vdpa_nic);
-		if (rc) {
-			dev_err(&vdev->dev,
-				"setup_ef100_mcdi failed, err: %d\n", rc);
+		if (vdpa_nic->efx->mcdi_buf_mode == EFX_BUF_MODE_VDPA) {
+			rc = setup_ef100_mcdi_buffer(vdpa_nic);
+			if (rc) {
+				dev_err(&vdev->dev,
+					"setup_ef100_mcdi failed, err: %d\n",
+					rc);
+			}
 		}
+		ef100_vdpa_irq_vectors_free(vdpa_nic->efx->pci_dev);
 		mutex_destroy(&vdpa_nic->iova_lock);
 		mutex_destroy(&vdpa_nic->lock);
 	}
+	vdpa_nic->efx->vdpa_nic = NULL;
 }
 
 const struct vdpa_config_ops ef100_vdpa_config_ops = {
