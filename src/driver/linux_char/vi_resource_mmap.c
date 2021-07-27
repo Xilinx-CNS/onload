@@ -205,12 +205,7 @@ efab_vi_rm_mmap_state(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
 
   /* ep_state came from vmalloc_user, which handles most of the safety issues
    * itself (i.e. all memory is zeroed and page-aligned) */
-  rc = remap_vmalloc_range_partial(vma, vma->vm_start, (void*)virs->ep_state,
-#ifdef EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW
-                                     /* for linux>=5.7 */
-                                     0,
-#endif
-                                     *bytes);
+  rc = remap_vmalloc_range(vma, (void*)virs->ep_state, 0);
   if( rc < 0 )
     EFCH_ERR("%s: ERROR: remap_vmalloc_range_partial failed rc=%d",
              __FUNCTION__, rc);
