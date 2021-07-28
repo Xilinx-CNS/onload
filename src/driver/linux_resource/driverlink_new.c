@@ -241,19 +241,23 @@ static inline int
 efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
 			const struct efhw_device_type* dev_type)
 {
-	int result;
+	int match;
 	struct pci_dev* nic_dev = efhw_nic_get_pci_dev(nic);
 	/* For NICs provided by driverlink we should always have a pci_dev */
 	EFRM_ASSERT(nic_dev);
-	result = nic->domain           == pci_domain_nr(dev->bus) &&
-		 nic->bus_number	   == dev->bus->number	 &&
-		 nic_dev->devfn	   == dev->devfn	 &&
-		 nic_dev->device	   == dev->device	 &&
-		 nic->devtype.arch	   == dev_type->arch	 &&
-		 nic->devtype.revision == dev_type->revision &&
-		 nic->devtype.variant  == dev_type->variant;
+	match = nic_dev->devfn == dev->devfn && nic_dev->device == dev->device;
 	pci_dev_put(nic_dev);
-	return result;
+	if (!match)
+		return 0;
+
+	if (nic->domain != pci_domain_nr(dev->bus) ||
+	    nic->bus_number != dev->bus->number ||
+	    nic->devtype.arch != dev_type->arch ||
+	    nic->devtype.revision != dev_type->revision ||
+	    nic->devtype.variant != dev_type->variant)
+		return 0;
+
+	return 1;
 }
 
 
