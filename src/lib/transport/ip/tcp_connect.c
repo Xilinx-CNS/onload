@@ -861,7 +861,7 @@ void ci_tcp_prev_seq_remember(ci_netif* ni, ci_tcp_state* ts)
 /* Linux clears implicit address on connect failure */
 ci_inline void ci_tcp_connect_drop_implicit_address(ci_tcp_state *ts)
 {
-    if( ! (ts->s.cp.sock_cp_flags & OO_SCP_BOUND_ADDR) ) {
+    if( ! (ts->s.s_flags & CI_SOCK_FLAG_BOUND) ) {
 #if CI_CFG_IPV6
       if( ts->s.domain == AF_INET6 )
         ts->s.cp.laddr = ts->s.laddr = addr_any;
