@@ -82,18 +82,12 @@ extern void efrm_driver_unregister_nic(struct efrm_nic *);
  *--------------------------------------------------------------------*/
 
 struct vi_resource_dimensions {
-	/* EF10 Only */
 	unsigned rss_channel_count;
 	unsigned vi_min, vi_lim;
 	unsigned vi_base, vi_shift;
 #define VI_RES_MEM_BAR_UNDEFINED ((unsigned)~0)
 	unsigned mem_bar;
 	unsigned vi_stride;
-
-	/* SRIOV Only */
-	unsigned vf_vi_base;
-	unsigned vf_vi_scale;
-	unsigned vf_count;
 
 	/* EF100 only */
 	/* 8 is an arbitrary number which is empirically larger than any number

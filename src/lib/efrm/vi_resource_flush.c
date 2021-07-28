@@ -564,23 +564,14 @@ efrm_handle_dmaq_flushed_schedule(struct efhw_nic *flush_nic,
 				  int rx_flush, int failed)
 {
 	struct efrm_flushed_req *req = kmalloc(sizeof(*req), GFP_ATOMIC);
-	unsigned vi_base, vi_scale, vf_count;
 
 	/* Failed kmalloc complains to syslog, so we shouldn't. */
 	if (req == NULL)
 		return 0;
 
-	vi_base = 0;
-	vi_scale = 0;
-	vf_count = 0;
-
 	/* PF vi range [flush_nic->vi_min, flush_nic->vi_lim)
-	 * VF vi range [vi_base, vi_base + (1 << vi_scale) * vf_count)
 	 */
-	if( ((instance >= flush_nic->vi_min) &&
-	     (instance < flush_nic->vi_lim)) ||
-	    ((instance >= vi_base) &&
-	     (instance < vi_base + ((1 << vi_scale) * vf_count))) ) {
+	if (instance >= flush_nic->vi_min && instance < flush_nic->vi_lim) {
 		req->flush_nic = flush_nic;
 		req->instance = instance;
 		req->rx_flush = rx_flush;

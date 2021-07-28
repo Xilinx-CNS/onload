@@ -128,7 +128,6 @@ init_vi_resource_dimensions(struct vi_resource_dimensions *rd,
 			   rd->vi_min, rd->vi_lim, rd->vi_shift,
 			   rd->mem_bar, rd->vi_stride);
 	}
-	rd->vf_count = rd->vf_vi_base = rd->vf_vi_scale = 0;
 
 	if (irq_res != NULL && irq_res->n_ranges > 0) {
 		unsigned i;
