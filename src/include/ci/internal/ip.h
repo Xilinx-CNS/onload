@@ -729,10 +729,8 @@ extern void ci_sock_cmn_dump(ci_netif*, ci_sock_cmn*, const char* pf,
 #define W_FMT(w)   OO_SP_FMT(W_SP(w))
 
 
-/* Wrappers to determine whether a socket has been bound, and if so, how */
-#define CI_SOCK_EXPLICIT_BIND(s) ((s)->s_flags & CI_SOCK_FLAG_BOUND)
-#define CI_SOCK_IMPLICIT_BIND(s) \
-  (!CI_SOCK_EXPLICIT_BIND((s)) && sock_lport_be16((s)))
+/* Wrappers to determine whether a socket has been bound, explicitly or
+ * implicitly */
 #define CI_SOCK_NOT_BOUND(s)     (!sock_lport_be16((s)))
 
 void ci_ipcache_set_saddr(ci_ip_cached_hdrs* ipcache, ci_addr_t addr);
