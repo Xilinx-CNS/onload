@@ -240,12 +240,12 @@ irq_ranges_init(struct efhw_nic *nic, const struct vi_resource_dimensions *res_d
 	unsigned i;
 	unsigned n_irqs = 0;
 
+	nic->vi_irq_n_ranges = res_dim->irq_n_ranges;
 	if (res_dim->irq_n_ranges == 0)
 		return;
 
 	EFRM_ASSERT(res_dim->irq_n_ranges <= NIC_IRQ_MAX_RANGES);
 	nic->int_prime_reg = res_dim->irq_prime_reg;
-	nic->vi_irq_n_ranges = res_dim->irq_n_ranges;
 	for (i = 0; i < res_dim->irq_n_ranges; i++ ) {
 		nic->vi_irq_ranges[i].base = res_dim->irq_ranges[i].irq_base;
 		nic->vi_irq_ranges[i].range = res_dim->irq_ranges[i].irq_range;

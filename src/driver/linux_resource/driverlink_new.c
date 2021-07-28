@@ -250,6 +250,8 @@ efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
 	if (!match)
 		return 0;
 
+	/* Check that the PCI device is of the same type and in the same place.
+	 */
 	if (nic->domain != pci_domain_nr(dev->bus) ||
 	    nic->bus_number != dev->bus->number ||
 	    nic->devtype.arch != dev_type->arch ||
@@ -258,6 +260,46 @@ efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
 		return 0;
 
 	return 1;
+}
+
+
+static inline int
+efrm_nic_resources_match(struct efhw_nic* nic,
+			 const struct vi_resource_dimensions* res_dim)
+{
+	int match;
+	int old_range, new_range;
+	struct efrm_nic* efrm_nic = efrm_nic(nic);
+
+	/* Check that we have a compatible set of available VIs. */
+	if (nic->vi_min != res_dim->vi_min ||
+	    /* nic->vi_lim might have been reduced owing to a shortage of
+	     * IRQs, but that's OK. */
+	    nic->vi_lim > res_dim->vi_lim ||
+	    nic->vi_stride != res_dim->vi_stride ||
+	    efrm_nic->rss_channel_count != res_dim->rss_channel_count)
+		return 0;
+
+	/* Check that we have all of the IRQ ranges that we had before. */
+	if (nic->vi_irq_n_ranges > res_dim->irq_n_ranges)
+		return 0;
+	for (old_range = 0; old_range < nic->vi_irq_n_ranges; ++old_range) {
+		match = 0;
+		for (new_range = 0; new_range < res_dim->irq_n_ranges;
+		     ++new_range) {
+			if (nic->vi_irq_ranges[old_range].base ==
+			    res_dim->irq_ranges[new_range].irq_base &&
+			    nic->vi_irq_ranges[old_range].range ==
+			    res_dim->irq_ranges[new_range].irq_range) {
+				match = 1;
+				break;
+			}
+		}
+		if (!match)
+			break;
+	}
+
+	return match;
 }
 
 
@@ -272,8 +314,9 @@ efrm_nic_bar_is_good(struct efhw_nic* nic, struct pci_dev* dev)
 
 
 static struct linux_efhw_nic*
-efrm_get_redisovered_nic(struct pci_dev* dev,
-			 const struct efhw_device_type* dev_type)
+efrm_get_rediscovered_nic(struct pci_dev* dev,
+			  const struct efhw_device_type* dev_type,
+			  const struct vi_resource_dimensions* res_dim)
 {
 	struct linux_efhw_nic* lnic = NULL;
 	struct efhw_nic* old_nic;
@@ -292,17 +335,24 @@ efrm_get_redisovered_nic(struct pci_dev* dev,
 		if (lnic == NULL && old_nic != NULL &&
 			efrm_nic_matches_device(old_nic, dev, dev_type)) {
 			EFRM_ASSERT(old_nic->resetting);
-			if (efrm_nic_bar_is_good(old_nic, dev)) {
-				EFRM_NOTICE("%s: Rediscovered nic_index %d",
-					    __func__, nic_index);
-				lnic = linux_efhw_nic(old_nic);
-			}
-			else {
+			if (!efrm_nic_bar_is_good(old_nic, dev)) {
 				EFRM_WARN("%s: New device matches nic_index %d "
 					  "but has different BAR. Existing "
 					  "Onload stacks will not use the new "
 					  "device.",
 					  __func__, nic_index);
+			}
+			else if (!efrm_nic_resources_match(old_nic, res_dim)) {
+				EFRM_WARN("%s: New device matches nic_index %d "
+					  "but has different resource "
+					  "parameters. Existing Onload stacks "
+					  "will not use the new device.",
+					  __func__, nic_index);
+			}
+			else {
+				EFRM_NOTICE("%s: Rediscovered nic_index %d",
+					    __func__, nic_index);
+				lnic = linux_efhw_nic(old_nic);
 			}
 		}
 	}
@@ -375,7 +425,8 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 		    dev_type.revision, dev_type.arch, dev_type.variant,
 		    dev_type.revision, net_dev->ifindex);
 
-	lnic = efrm_get_redisovered_nic(efrm_dev->pci_dev, &dev_type);
+	lnic = efrm_get_rediscovered_nic(efrm_dev->pci_dev, &dev_type,
+					 &res_dim);
 	rc = efrm_nic_add(efrm_dev, &efrm_dev->pci_dev->dev, &dev_type,
 			  probe_flags,
 			  (/*no const*/ struct net_device *)net_dev,
