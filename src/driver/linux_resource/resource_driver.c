@@ -377,9 +377,9 @@ linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
 
 	/* Bring up new state. */
 	efhw_nic_update_pci_info(nic);
-	if (dev_type->arch == EFHW_ARCH_EF10) {
-		nic->vi_base = res_dim->vi_base;
-	}
+	nic->vi_base = res_dim->vi_base;
+	nic->vi_shift = res_dim->vi_shift;
+	irq_ranges_init(nic, res_dim);
 	efrm_init_resource_filter(nic->dev, net_dev->ifindex);
 
 	/* Drop reference to [old_dev] now that the race window has been
