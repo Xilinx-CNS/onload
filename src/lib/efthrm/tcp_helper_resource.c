@@ -6048,13 +6048,24 @@ static long efab_get_unstraddled_user_pages(unsigned long base, long max_pages,
                                             struct page** pages)
 {
   long rc;
+#ifdef FOLL_SPLIT
   long count;
+#endif
   ci_assert_gt(max_pages, 0);
 
   rc = efab_get_all_user_pages(base, max_pages, pages, FOLL_WRITE);
   if( rc < 0 )
     return rc;
 
+#ifdef FOLL_SPLIT
+  /*
+   * From experiments:
+   * It is not needed for linux<=4.9, and it is not needed for linux>=5.4.
+   * It is definitely needed for linux-4.18 (RHEL 8) and linux-4.19 (Debain 10).
+   *
+   * However let's be on the safe side: FOLL_SPLIT is defined for
+   * 2.6.38 <= linux <= 5.12.
+   */
   if( PageTail(pages[0]) ) {
     /* Beginning of the region straddles a hugepage. Put those pages and
      * re-get them with FOLL_SPLIT */
@@ -6094,6 +6105,8 @@ static long efab_get_unstraddled_user_pages(unsigned long base, long max_pages,
       return -EBUSY;
     }
   }
+#endif
+
   return 0;
 }
 
