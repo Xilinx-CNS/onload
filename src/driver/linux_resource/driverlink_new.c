@@ -296,10 +296,10 @@ efrm_nic_resources_match(struct efhw_nic* nic,
 			}
 		}
 		if (!match)
-			break;
+			return 0;
 	}
 
-	return match;
+	return 1;
 }
 
 
