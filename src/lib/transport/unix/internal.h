@@ -446,7 +446,12 @@ extern int citp_ep_dup_fcntl_dup(int oldfd, long arg) CI_HF;
 extern int citp_ep_dup_fcntl_dup_cloexec(int oldfd, long arg) CI_HF;
 
 extern int citp_ep_dup3(unsigned oldfd, unsigned newfd, int flags) CI_HF;
-extern int citp_ep_close(unsigned fd, bool already_closed) CI_HF;
+enum citp_ep_close_flag {
+  CITP_EP_CLOSE_NOFLAG = 0,
+  CITP_EP_CLOSE_ALREADY,
+  CITP_EP_CLOSE_TRAMPOLINED,
+};
+extern int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag) CI_HF;
 
 
 /**********************************************************************

@@ -99,7 +99,7 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
   int rc;
   int fd_closed;
   int fd_duped;
-  bool already_closed = false;
+  enum citp_ep_close_flag close_flag = CITP_EP_CLOSE_TRAMPOLINED;
 
   /* It the signal comes from dup(), then pthread_kill() results in
    * tgkill() syscall, which uses SI_TKILL code. */
@@ -125,7 +125,7 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
     rc = ci_sys_fcntl(fd_duped, F_DUPFD_CLOEXEC, fd_closed);
     if( rc != fd_closed ) {
       /* We failed to install the closed fd on the same place. */
-      already_closed = true;
+      close_flag = CITP_EP_CLOSE_ALREADY;
       if( rc >= 0 )
         ci_tcp_helper_close_no_trampoline(rc);
       errno = saved_errno;
@@ -133,7 +133,7 @@ static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
     ci_tcp_helper_close_no_trampoline(fd_duped);
   }
 
-  rc = citp_ep_close(fd_closed, already_closed);
+  rc = citp_ep_close(fd_closed, close_flag);
   citp_exit_lib(&lib_context, false);
   Log_CALL_RESULT(rc);
   if( rc < 0 )
@@ -1875,7 +1875,7 @@ int citp_ep_dup3(unsigned fromfd, unsigned tofd, int flags)
  * citp_ep_close()
  */
 
-int citp_ep_close(unsigned fd, bool already_closed)
+int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag)
 {
   volatile citp_fdinfo_p* p_fdip;
   citp_fdinfo_p fdip;
@@ -1885,7 +1885,7 @@ int citp_ep_close(unsigned fd, bool already_closed)
   /* Do not touch shared fdtable when in vfork child or too large value. */
   if( oo_per_thread_get()->in_vfork_child ||
       fd >= citp_fdtable.inited_count )
-    return already_closed ? 0 : ci_tcp_helper_close_no_trampoline(fd);
+    return flag == CITP_EP_CLOSE_ALREADY ? 0 : ci_tcp_helper_close_no_trampoline(fd);
 
   /* Interlock against other closes, against the fdtable being extended,
   ** and against select and poll.
@@ -1948,7 +1948,7 @@ int citp_ep_close(unsigned fd, bool already_closed)
     Log_V(ci_log("%s: fd=%d u/l socket", __FUNCTION__, fd));
     ci_assert_equal(fdi->fd, fd);
     ci_assert_equal(fdi->on_ref_count_zero, FDI_ON_RCZ_NONE);
-    fdi->on_ref_count_zero = already_closed ?
+    fdi->on_ref_count_zero = flag == CITP_EP_CLOSE_ALREADY ?
                              FDI_ON_RCZ_ALREADY_CLOSED : FDI_ON_RCZ_CLOSE;
 
 #if CI_CFG_EPOLL3
