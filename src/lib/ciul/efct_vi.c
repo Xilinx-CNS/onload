@@ -17,13 +17,6 @@ struct efct_rx_descriptor
   uint16_t refcnt;
 };
 
-struct efct_rxq_superbuf_meta {
-  const char* superbuf; /* contiguous area of superbuf memory */
-  uint32_t superbuf_pkts; /* number of packets per superbuf */
-  uint32_t config_generation;
-  uint64_t current_mappings[CI_EFCT_MAX_HUGEPAGES];
-};
-
 /* pkt_ids are:
  *  bits 0..15 packet index in superbuf
  *  bits 16..25 superbuf index
@@ -64,13 +57,12 @@ static int superbuf_config_refresh(ef_vi* vi, ef_vi_efct_rxq* rxq)
   /* TODO EFCT */
   return -ENOSYS;
 #else
-  struct efct_rxq_superbuf_meta* meta = rxq->sb_meta;
   ci_resource_op_t op;
-  meta->config_generation = rxq->shm->config_generation;
+  rxq->config_generation = rxq->shm->config_generation;
   op.op = CI_RSOP_RXQ_REFRESH;
   op.id = efch_make_resource_id(rxq->resource_id);
-  op.u.rxq_refresh.superbufs = (uintptr_t)meta->superbuf;
-  op.u.rxq_refresh.current_mappings = (uintptr_t)meta->current_mappings;
+  op.u.rxq_refresh.superbufs = (uintptr_t)rxq->superbuf;
+  op.u.rxq_refresh.current_mappings = (uintptr_t)rxq->current_mappings;
   op.u.rxq_refresh.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
   return ci_resource_op(vi->dh, &op);
 #endif
@@ -114,7 +106,7 @@ static void superbuf_free(ef_vi* vi, ef_vi_efct_rxq* rxq, int sbid)
 
 static bool efct_rxq_is_active(const ef_vi* vi, int qid)
 {
-  return vi->efct_rxq[qid].sb_meta->superbuf_pkts != 0;
+  return vi->efct_rxq[qid].superbuf_pkts != 0;
 }
 
 /* The superbuf descriptor for this packet */
@@ -128,10 +120,10 @@ static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
 /* The header preceding this packet */
 static const ci_qword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
 {
-  /* Sneakily rely on vi->efct_rxq[i].sb_meta->superbuf being contiguous.
+  /* Sneakily rely on vi->efct_rxq[i].superbuf being contiguous.
    * TODO EFCT: kernelspace won't be able to be this cunning */
   return (const ci_qword_t*)
-         (vi->efct_rxq[0].sb_meta->superbuf +
+         (vi->efct_rxq[0].superbuf +
           pkt_id_to_global_superbuf_ix(pkt_id) * EFCT_RX_SUPERBUF_BYTES +
           pkt_id_to_index_in_superbuf(pkt_id) * EFCT_PKT_STRIDE);
 }
@@ -495,7 +487,7 @@ static int rx_rollover(ef_vi* vi, int qid)
 {
   uint32_t pkt_id;
   uint32_t next;
-  uint32_t superbuf_pkts = vi->efct_rxq[qid].sb_meta->superbuf_pkts;
+  uint32_t superbuf_pkts = vi->efct_rxq[qid].superbuf_pkts;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   int rc = superbuf_next(vi, &vi->efct_rxq[qid]);
   if( rc < 0 )
@@ -521,9 +513,9 @@ static int rx_rollover(ef_vi* vi, int qid)
 static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  struct efct_rxq_superbuf_meta* sb_meta = vi->efct_rxq[qid].sb_meta;
-  struct efab_efct_rxq_uk_shm* shm = vi->efct_rxq[qid].shm;
-  uint32_t superbuf_pkts = sb_meta->superbuf_pkts;
+  ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  struct efab_efct_rxq_uk_shm* shm = rxq->shm;
+  uint32_t superbuf_pkts = rxq->superbuf_pkts;
   int i;
 
   if( ! efct_rxq_is_active(vi, qid) )
@@ -544,8 +536,8 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
      * ev in a poll (in case some other address space did a rollover and we
      * now need to mmap here), but it's just as cheap to test the real thing
      * every time */
-    if( shm->config_generation != sb_meta->config_generation )
-      if( superbuf_config_refresh(vi, &vi->efct_rxq[qid]) < 0 )
+    if( shm->config_generation != rxq->config_generation )
+      if( superbuf_config_refresh(vi, rxq) < 0 )
         return i;
 
     header = efct_rx_next_header(vi, qid);
@@ -726,13 +718,17 @@ void efct_vi_init(ef_vi* vi)
 int efct_vi_mmap_init(ef_vi* vi)
 {
   void* space;
-  struct efct_rxq_superbuf_meta* meta;
+  uint64_t* mappings;
   int i;
   const size_t bytes_per_rxq = CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
+  const size_t mappings_bytes =
+    vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES * sizeof(mappings[0]);
 
-  meta = calloc(vi->max_efct_rxq, sizeof(*meta));
-  if( ! meta )
+  mappings = malloc(mappings_bytes);
+  if( mappings == NULL )
     return -ENOMEM;
+
+  memset(mappings, 0xff, mappings_bytes);
 
   /* This is reserving a gigantic amount of virtual address space (with no
    * memory behind it) so we can later on (in efct_vi_attach_rxq()) plonk the
@@ -745,14 +741,14 @@ int efct_vi_mmap_init(ef_vi* vi)
                MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
                -1, 0);
   if( space == MAP_FAILED ) {
-    free(meta);
+    free(mappings);
     return -ENOMEM;
   }
 
   for( i = 0; i < vi->max_efct_rxq; ++i ) {
-    vi->efct_rxq[i].sb_meta = &meta[i];
-    meta[i].superbuf = (char*)space + i * bytes_per_rxq;
-    memset(meta[i].current_mappings, 0xff, sizeof(meta[i].current_mappings));
+    ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
+    rxq->superbuf = (char*)space + i * bytes_per_rxq;
+    rxq->current_mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
   }
 
   /* TODO EFCT: This will eventually move to filter_add: */
@@ -761,9 +757,9 @@ int efct_vi_mmap_init(ef_vi* vi)
 
 void efct_vi_munmap(ef_vi* vi)
 {
-  munmap((void*)vi->efct_rxq[0].sb_meta->superbuf,
+  munmap((void*)vi->efct_rxq[0].superbuf,
          vi->max_efct_rxq * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
-  free(vi->efct_rxq[0].sb_meta);
+  free(vi->efct_rxq[0].current_mappings);
 }
 
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
@@ -772,7 +768,7 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   ci_resource_alloc_t ra;
   void* p;
   int ix;
-  uint32_t superbuf_pkts;
+  ef_vi_efct_rxq* rxq;
 
   for( ix = 0; ix < vi->max_efct_rxq; ++ix )
     if( ! efct_rxq_is_active(vi, ix) )
@@ -802,16 +798,15 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
     return rc;
   }
 
-  vi->efct_rxq[ix].resource_id = ra.out_id.index;
-  vi->efct_rxq[ix].shm = p;
-  vi->efct_rxq[ix].sb_meta->config_generation =
-                                  vi->efct_rxq[ix].shm->config_generation - 1;
-  superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
-  vi->efct_rxq[ix].sb_meta->superbuf_pkts = superbuf_pkts;
+  rxq = &vi->efct_rxq[ix];
+  rxq->resource_id = ra.out_id.index;
+  rxq->shm = p;
+  rxq->config_generation = rxq->shm->config_generation - 1;
+  rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
   /* This is a totally fake pkt_id, but it makes efct_poll_rx() think that a
    * rollover is needed. We use +1 as a marker that this is the first packet,
    * i.e. ignore the first metadata: */
-  vi->ep_state->rxq.rxq_ptr[ix].next = 1 + superbuf_pkts;
+  vi->ep_state->rxq.rxq_ptr[ix].next = 1 + rxq->superbuf_pkts;
 
   return 0;
 }

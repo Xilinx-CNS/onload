@@ -718,13 +718,20 @@ typedef struct {
   uint32_t*        ids;
 } ef_vi_rxq;
 
+/*! \brief EFCT RX buffer memory and metadata
+**
+** Users should not access this structure.
+*/
 typedef struct {
   unsigned resource_id;
-  /* efct kernel/userspace shared queue area. Opaque to ef_vi users */
+  /** efct kernel/userspace shared queue area*/
   struct efab_efct_rxq_uk_shm* shm;
-  /* Additional per-addressspace state about superbufs, containing e.g. the
-   * current superbuf mmapping state. Opaque to ef_vi users */
-  struct efct_rxq_superbuf_meta* sb_meta;
+  /** contiguous area of superbuf memory */
+  const char* superbuf;
+  /** number of packets per superbuf */
+  uint32_t superbuf_pkts;
+  uint32_t config_generation;
+  uint64_t* current_mappings;
 } ef_vi_efct_rxq;
 
 /*! \brief State of a virtual interface
