@@ -91,7 +91,7 @@ int citp_nonsock_is_spinning(citp_fdinfo* fdi);
 
 #if CI_CFG_FD_CACHING
 extern
-int citp_nonsock_cache(citp_fdinfo* fdi);
+int citp_nonsock_cache(citp_fdinfo* fdi, enum citp_ep_close_flag close_flag);
 #endif
 
 #endif

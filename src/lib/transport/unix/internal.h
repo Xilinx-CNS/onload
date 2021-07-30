@@ -126,6 +126,12 @@ typedef struct {
 } citp_lib_context_t;
 
 
+enum citp_ep_close_flag {
+  CITP_EP_CLOSE_NOFLAG = 0,
+  CITP_EP_CLOSE_ALREADY,
+  CITP_EP_CLOSE_TRAMPOLINED,
+};
+
 /**********************************************************************
  ** Protocol implementations.
  */
@@ -193,7 +199,7 @@ typedef struct {
 #endif
   int (*is_spinning)(citp_fdinfo*);
 #if CI_CFG_FD_CACHING
-  int  (*cache     )(citp_fdinfo*);
+  int  (*cache     )(citp_fdinfo*, enum citp_ep_close_flag close_flag);
 #endif
   enum onload_delegated_send_rc
        (*dsend_prepare)(citp_fdinfo*, int size, unsigned flags,
@@ -248,12 +254,6 @@ extern void citp_fdtable_assert_valid(void) CI_HF;
 #endif
 
 #define PTHREAD_NULL    ((pthread_t)(-1L))
-
-enum citp_ep_close_flag {
-  CITP_EP_CLOSE_NOFLAG = 0,
-  CITP_EP_CLOSE_ALREADY,
-  CITP_EP_CLOSE_TRAMPOLINED,
-};
 
 /**********************************************************************
  ** File descriptor info.

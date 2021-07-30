@@ -1155,7 +1155,7 @@ void __citp_fdinfo_ref_count_zero(citp_fdinfo* fdi, int fdt_locked)
   case FDI_ON_RCZ_CLOSE:
 #if CI_CFG_FD_CACHING
     if( fdi->on_rcz.close_flag != CITP_EP_CLOSE_ALREADY ) {
-      cached = citp_fdinfo_get_ops(fdi)->cache(fdi);
+      cached = citp_fdinfo_get_ops(fdi)->cache(fdi, fdi->on_rcz.close_flag);
       if( cached == 1 ) {
         if( ! fdt_locked && fdtable_strict() )  CITP_FDTABLE_LOCK();
         fdi_to_socket(fdi)->netif->cached_count++;
