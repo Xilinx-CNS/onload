@@ -1154,20 +1154,20 @@ void __citp_fdinfo_ref_count_zero(citp_fdinfo* fdi, int fdt_locked)
   switch( fdi->on_ref_count_zero ) {
   case FDI_ON_RCZ_CLOSE:
 #if CI_CFG_FD_CACHING
-    cached = citp_fdinfo_get_ops(fdi)->cache(fdi);
-    if( cached == 1 ) {
-      if( ! fdt_locked && fdtable_strict() )  CITP_FDTABLE_LOCK();
-      fdi_to_socket(fdi)->netif->cached_count++;
-      fdtable_swap(fdi->fd, fdip_closing, fdip_unknown,
-                   fdt_locked | fdtable_strict());
-      citp_fdinfo_get_ops(fdi)->dtor(fdi, fdt_locked | fdtable_strict());
-      if( ! fdt_locked && fdtable_strict() )  CITP_FDTABLE_UNLOCK();
-      citp_fdinfo_free(fdi);
-      break;
+    if( fdi->on_rcz.close_flag != CITP_EP_CLOSE_ALREADY ) {
+      cached = citp_fdinfo_get_ops(fdi)->cache(fdi);
+      if( cached == 1 ) {
+        if( ! fdt_locked && fdtable_strict() )  CITP_FDTABLE_LOCK();
+        fdi_to_socket(fdi)->netif->cached_count++;
+        fdtable_swap(fdi->fd, fdip_closing, fdip_unknown,
+                     fdt_locked | fdtable_strict());
+        citp_fdinfo_get_ops(fdi)->dtor(fdi, fdt_locked | fdtable_strict());
+        if( ! fdt_locked && fdtable_strict() )  CITP_FDTABLE_UNLOCK();
+        citp_fdinfo_free(fdi);
+        break;
+      }
     }
 #endif
-    /* fallthrough */
-  case FDI_ON_RCZ_ALREADY_CLOSED:
     {
 #if CI_CFG_UL_INTERRUPT_HELPER
       ci_netif* netif = fdi_to_stack(fdi);
@@ -1948,8 +1948,8 @@ int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag)
     Log_V(ci_log("%s: fd=%d u/l socket", __FUNCTION__, fd));
     ci_assert_equal(fdi->fd, fd);
     ci_assert_equal(fdi->on_ref_count_zero, FDI_ON_RCZ_NONE);
-    fdi->on_ref_count_zero = flag == CITP_EP_CLOSE_ALREADY ?
-                             FDI_ON_RCZ_ALREADY_CLOSED : FDI_ON_RCZ_CLOSE;
+    fdi->on_rcz.close_flag = flag;
+    fdi->on_ref_count_zero = FDI_ON_RCZ_CLOSE;
 
 #if CI_CFG_EPOLL3
     if( fdi->epoll_fd >= 0 ) {
