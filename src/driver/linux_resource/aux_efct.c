@@ -153,10 +153,8 @@ static int efct_buffer_start(void *driver_data, int qid, int sbid,
   q = &efct->rxq[qid];
   ++q->superbuf_seqno;
   if( sbid < 0 )
-    return 0;
-  if( ! post_superbuf_to_apps(q, sbid, sentinel) )
-    efct->edev->ops->release_superbuf(efct->client, qid, sbid);
-  return 0;
+    return -1;
+  return post_superbuf_to_apps(q, sbid, sentinel) ? 0 : -1;
 }
 
 noinline
