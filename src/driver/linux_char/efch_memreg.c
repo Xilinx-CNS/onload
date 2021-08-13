@@ -2,12 +2,14 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2012-2020 Xilinx, Inc. */
 #include "efch.h"
 #include <ci/efrm/vi_resource.h>
+#include <ci/efrm/efrm_client.h>
 #include <ci/efch/op_types.h>
 #include <ci/efrm/pd.h>
 #include <ci/efrm/buffer_table.h>
 #include "char_internal.h"
 #include <ci/efrm/sysdep.h>
 #include "ci/driver/kernel_compat.h"
+#include <ci/driver/efab/hardware.h>
 
 struct efch_memreg_area_params {
   struct efrm_bt_collection           bt_alloc;
@@ -113,6 +115,38 @@ static int efch_dma_map(struct efrm_pd *pd,
                          (ar->n_addrs << nic_order) * user_addrs_stride);
 
   return 0;
+}
+
+static void efch_dummy_map(struct efrm_pd *pd, uint64_t in_ptr, int nic_pages,
+                           void *user_addrs, int user_addrs_stride,
+                           void (*user_addr_put)(uint64_t, uint64_t *))
+{
+  int i;
+
+  /* user_addrs is for pages of size EFHW_NIC_PAGE_SIZE, always */
+  for (i = 0; i < nic_pages; ++i) {
+    user_addr_put(in_ptr + EFHW_NIC_PAGE_SIZE * i, user_addrs);
+    user_addrs = (void *)((char *)user_addrs + user_addrs_stride);
+  }
+}
+
+static int efch_memreg_map(struct efrm_pd *pd, uint64_t in_ptr,
+                           struct efch_memreg_area_params *ar,
+                           int nic_order, void **addrs,
+                           void **user_addrs, int user_addrs_stride,
+                           void (*user_addr_put)(uint64_t, uint64_t *))
+{
+  int rc = 0;
+  struct efhw_nic *nic = efrm_client_get_nic(efrm_pd_to_resource(pd)->rs_client);
+
+  if( efhw_nic_buffer_table_orders_num(nic) > 0 )
+    rc = efch_dma_map(pd, ar, nic_order, addrs, user_addrs, user_addrs_stride,
+                      user_addr_put);
+  else
+    efch_dummy_map(pd, in_ptr, ar->n_addrs << nic_order,
+                   *user_addrs, user_addrs_stride, user_addr_put);
+
+  return rc;
 }
 
 
@@ -269,9 +303,8 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
       cur_page = (struct page **)((char *)cur_page + page_stride);
     }
 
-    rc = efch_dma_map(pd, &mr->area, mr->nic_order, addrs,
-                      &user_addrs, user_addrs_stride,
-                      put_user_64);
+    rc = efch_memreg_map(pd, alloc->in_mem_ptr, &mr->area, mr->nic_order,
+                         addrs, &user_addrs, user_addrs_stride, put_user_64);
     if (rc < 0)
       goto fail4;
 
