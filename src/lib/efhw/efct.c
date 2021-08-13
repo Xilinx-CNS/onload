@@ -9,9 +9,13 @@
 #include <ci/efhw/efct.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/sysdep.h>
+#include <uapi/linux/ethtool.h>
+#include "ethtool_flow.h"
 #include "efct.h"
 
 #if CI_HAVE_EFCT_AUX
+
+#define EFCT_TODO_NEW_FILTER_API 0  /* EFCT TODO */
 
 int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
@@ -519,17 +523,111 @@ efct_rss_flags(struct efhw_nic *nic, u32 *flags_out)
   return -EOPNOTSUPP;
 }
 
+static uint32_t zero_remote_port(uint32_t l4_4_bytes)
+{
+  return htonl(ntohl(l4_4_bytes) & 0xffff);
+}
+
+static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
+                                       struct ethtool_rx_flow_spec *dst)
+{
+  int rc = efx_spec_to_ethtool_flow(src, dst);
+  if( rc < 0 )
+    return rc;
+
+  /* Blat out the remote fields: we can soft-filter them even though the
+   * hardware can't */
+  switch (dst->flow_type) {
+  case UDP_V4_FLOW:
+    if( dst->m_u.udp_ip4_spec.tos )
+      return -EPROTONOSUPPORT;
+    dst->h_u.udp_ip4_spec.ip4src = 0;
+    dst->h_u.udp_ip4_spec.psrc = 0;
+    dst->m_u.udp_ip4_spec.ip4src = 0;
+    dst->m_u.udp_ip4_spec.psrc = 0;
+    break;
+  case TCP_V4_FLOW:
+    if( dst->m_u.tcp_ip4_spec.tos )
+      return -EPROTONOSUPPORT;
+    dst->h_u.tcp_ip4_spec.ip4src = 0;
+    dst->h_u.tcp_ip4_spec.psrc = 0;
+    dst->m_u.tcp_ip4_spec.ip4src = 0;
+    dst->m_u.tcp_ip4_spec.psrc = 0;
+    break;
+  case IPV4_USER_FLOW:
+    if( dst->m_u.usr_ip4_spec.tos || dst->m_u.usr_ip4_spec.ip_ver )
+      return -EPROTONOSUPPORT;
+    dst->h_u.usr_ip4_spec.ip4src = 0;
+    dst->m_u.usr_ip4_spec.ip4src = 0;
+    dst->h_u.usr_ip4_spec.l4_4_bytes =
+                          zero_remote_port(dst->h_u.usr_ip4_spec.l4_4_bytes);
+    dst->m_u.usr_ip4_spec.l4_4_bytes =
+                          zero_remote_port(dst->m_u.usr_ip4_spec.l4_4_bytes);
+    break;
+  default:
+    return -EPROTONOSUPPORT;
+  }
+
+  return 0;
+}
+
 static int
 efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
                    int *rxq, const struct cpumask *mask, unsigned flags)
 {
-  /* TODO EFCT */
-  return 0;
+  int rc;
+  struct ethtool_rx_flow_spec filter;
+  struct xlnx_efct_filter_params params;
+  struct device *dev;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+
+  if( flags & EFHW_FILTER_F_REPLACE )
+    return -EOPNOTSUPP;
+  rc = filter_spec_to_ethtool_spec(spec, &filter);
+  if( rc < 0 )
+    return rc;
+  params = (struct xlnx_efct_filter_params){
+    .spec = &filter,
+    .mask = cpu_all_mask,   /* EFCT TODO */
+  };
+  if( *rxq >= 0 )
+    filter.ring_cookie = *rxq;
+  if( flags & EFHW_FILTER_F_ANY_RXQ )
+    params.flags = XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
+  if( flags & EFHW_FILTER_F_PREF_RXQ )
+    params.flags = XLNX_EFCT_FILTER_F_PREF_QUEUE;
+  if( flags & EFHW_FILTER_F_EXCL_RXQ )
+    params.flags = XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+#if EFCT_TODO_NEW_FILTER_API
+  rc = edev->ops->filter_insert(cli, &params);
+#else
+  rc = 0;
+#endif
+  EFCT_POST(dev, edev, cli, nic, rc);
+  if( rc < 0 )
+    return rc;
+  *rxq = params.rxq_out;
+  return params.filter_id_out;
 }
 
 static void
 efct_filter_remove(struct efhw_nic *nic, int filter_id)
 {
+  struct device *dev;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  int rc;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+#if EFCT_TODO_NEW_FILTER_API
+  rc = edev->ops->filter_remove(cli, filter_id);
+#else
+  rc = 0;
+#endif
+  EFCT_POST(dev, edev, cli, nic, rc);
 }
 
 static int

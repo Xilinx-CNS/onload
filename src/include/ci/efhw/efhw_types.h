@@ -140,6 +140,9 @@ struct efhw_evq_params {
 struct efx_filter_spec;
 
 #define EFHW_FILTER_F_REPLACE  0x0001
+#define EFHW_FILTER_F_PREF_RXQ 0x0002
+#define EFHW_FILTER_F_ANY_RXQ  0x0004
+#define EFHW_FILTER_F_EXCL_RXQ 0x0008
 
 /*--------------------------------------------------------------------
  *
