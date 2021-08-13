@@ -1679,6 +1679,20 @@ void ci_netif_tx_pkt_complete(ci_netif* ni, struct ci_netif_poll_state* ps,
   __ci_netif_tx_pkt_complete(ni, ps, pkt, NULL);
 }
 
+static ci_ip_pkt_fmt* alloc_rx_efct_pkt(ci_netif* ni, int intf_i, int pay_len)
+{
+  ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(ni, 0);
+  if(CI_UNLIKELY( ! pkt ))
+    return NULL;
+  pkt->pkt_start_off = 0;
+  pkt->intf_i = intf_i;
+  pkt->flags |= CI_PKT_FLAG_RX;
+  pkt->refcount = 1;
+  pkt->pay_len = pay_len;
+  ++ni->state->n_rx_pkts;
+  return pkt;
+}
+
 
 static int ci_netif_poll_evq(ci_netif* ni, struct ci_netif_poll_state* ps,
                              int intf_i, int n_evs)
@@ -1765,6 +1779,20 @@ have_events:
           handle_rx_scatter(ni, &s, pkt,
                             EF_EVENT_RX_BYTES(ev[i]) - evq->rx_prefix_len,
                             ev[i].rx.flags);
+        }
+      }
+
+      else if( EF_EVENT_TYPE(ev[i]) == EF_EVENT_TYPE_RX_REF ) {
+        const void* payload;
+        int pay_len = ev[i].rx_ref.len;
+        CITP_STATS_NETIF_INC(ni, rx_evs);
+        pkt = alloc_rx_efct_pkt(ni, intf_i, pay_len);
+        if( pkt ) {
+          __handle_rx_pkt(ni, ps, &s.rx_pkt);
+          efct_vi_rxpkt_get(evq, ev[i].rx_ref.pkt_id, &payload);
+          memcpy(pkt->dma_start, payload, pkt->pay_len);
+          oo_offbuf_init(&pkt->buf, pkt->dma_start, pay_len);
+          s.rx_pkt = pkt;
         }
       }
 
@@ -1858,6 +1886,19 @@ have_events:
 
         for( j = 0; j < n_ids; ++j )
           handle_rx_multi_discard(ni, ps, intf_i, &s, ev[i], ids[j], vi);
+      }
+
+      else if( EF_EVENT_TYPE(ev[i]) == EF_EVENT_TYPE_RX_REF_DISCARD ) {
+        const void* payload;
+        int pay_len = ev[i].rx_ref_discard.len;
+        pkt = alloc_rx_efct_pkt(ni, intf_i, pay_len);
+        if( pkt ) {
+          efct_vi_rxpkt_get(evq, ev[i].rx_ref.pkt_id, &payload);
+          memcpy(pkt->dma_start, payload, pkt->pay_len);
+          oo_offbuf_init(&pkt->buf, pkt->dma_start, pay_len);
+          discard_rx_multi_pkts(ni, ps, intf_i, &s, pay_len,
+                                ev[i].rx_ref_discard.flags, pkt);
+        }
       }
 
       else if( EF_EVENT_TYPE(ev[i]) == EF_EVENT_TYPE_TX_ERROR ) {

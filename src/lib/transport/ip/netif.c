@@ -12,6 +12,7 @@
 
 #include "ip_internal.h"
 #include <ci/tools/utils.h>
+#include <ci/efhw/device.h>
 #include <onload/cplane_ops.h>
 
 #define LPF "NETIF "
@@ -717,6 +718,9 @@ int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
   int max_n_to_post, rx_allowed, n_to_post, n_posted = 0;
   int bufset_id = NI_PKT_SET(netif);
   int ask_for_more_packets = 0;
+
+  if( netif->state->nic[intf_i].vi_arch == EFHW_ARCH_EFCT )
+    return 0;
 
   ci_assert(ci_netif_is_locked(netif));
   ci_assert(ci_netif_rx_vi_space(netif, vi) >= CI_CFG_RX_DESC_BATCH);
