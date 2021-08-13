@@ -2351,14 +2351,15 @@ ef10_ef100_rss_flags(struct efhw_nic *nic, u32 *flags_out)
 
 int
 ef10_ef100_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-			 bool replace)
+			 int *rxq, const struct cpumask *mask, unsigned flags)
 {
 	int rc;
 	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
 
 	if (efx_dev == NULL)
 		return -ENETDOWN;
-	rc = efx_dl_filter_insert(efx_dev, spec, replace);
+	rc = efx_dl_filter_insert(efx_dev, spec,
+	                          (flags & EFHW_FILTER_F_REPLACE) != 0);
 	efhw_nic_release_dl_device(nic, efx_dev);
 	return rc;
 }

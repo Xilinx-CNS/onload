@@ -521,7 +521,7 @@ efct_rss_flags(struct efhw_nic *nic, u32 *flags_out)
 
 static int
 efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                   bool replace)
+                   int *rxq, const struct cpumask *mask, unsigned flags)
 {
   /* TODO EFCT */
   return 0;

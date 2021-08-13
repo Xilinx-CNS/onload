@@ -1479,7 +1479,7 @@ static int efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
 
 static int
 af_xdp_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-		     bool replace)
+		     int *rxq, const struct cpumask *mask, unsigned flags)
 {
 	struct net_device *dev = nic->net_dev;
 	int rc;

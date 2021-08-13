@@ -214,8 +214,8 @@
 #define efhw_nic_rss_flags(nic, flags_out) \
 	((nic)->efhw_func->rss_flags((nic), (flags_out)))
 
-#define efhw_nic_filter_insert(nic, spec, replace) \
-	((nic)->efhw_func->filter_insert((nic), (spec), (replace)))
+#define efhw_nic_filter_insert(nic, spec, rxq, mask, flags) \
+	((nic)->efhw_func->filter_insert((nic), (spec), (rxq), (mask), (flags)))
 #define efhw_nic_filter_remove(nic, filter_id) \
 	((nic)->efhw_func->filter_remove((nic), (filter_id)))
 #define efhw_nic_filter_redirect(nic, filter_id, spec) \

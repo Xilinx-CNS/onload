@@ -53,6 +53,7 @@ struct efx_filter_spec;
 struct device;
 struct net_device;
 struct efrm_client;
+struct cpumask;
 
 enum efrm_filter_block_flags {
 	EFRM_FILTER_BLOCK_UNICAST = 1,
@@ -63,8 +64,8 @@ enum efrm_filter_block_flags {
 
 
 extern int  efrm_filter_insert(struct efrm_client *,
-			       struct efx_filter_spec *spec,
-			       bool replace_equal);
+			       struct efx_filter_spec *spec, int *rxq,
+			       const struct cpumask *mask, unsigned flags);
 extern void efrm_filter_remove(struct efrm_client *, int filter_id);
 extern int efrm_filter_redirect(struct efrm_client *,
 				int filter_id, struct efx_filter_spec *spec);

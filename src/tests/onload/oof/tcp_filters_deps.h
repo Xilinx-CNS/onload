@@ -10,6 +10,7 @@
 
 struct tcp_helper_cluster_s;
 struct efhw_nic;
+#define EFHW_FILTER_F_REPLACE  0x0001
 
 #include <onload/oof_hw_filter.h>
 #include <onload/nic.h>

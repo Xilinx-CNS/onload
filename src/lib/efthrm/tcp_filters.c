@@ -124,6 +124,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
 {
   struct efx_filter_spec spec;
   int rc = 0;
+  int rxq;
   int vi_id;
   const u8* mac_ptr = NULL;
   int replace = false;
@@ -291,7 +292,9 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
         return 0;
       }
     }
-    rc = efrm_filter_insert(get_client(hwport), &spec, replace);
+    rxq = -1;
+    rc = efrm_filter_insert(get_client(hwport), &spec, &rxq, NULL,
+                            replace ? EFHW_FILTER_F_REPLACE : 0);
     /* ENETDOWN indicates that the hardware has gone away. This is not a
      * failure condition at this layer as we can attempt to restore filters
      * when the hardware comes back. A negative filter ID signifies that there

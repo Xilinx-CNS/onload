@@ -157,7 +157,9 @@ static int efch_filter_insert(struct efrm_resource *rs, struct efrm_pd *pd,
                               struct efx_filter_spec *spec, struct filter *f,
                               bool replace)
 {
-  int rc = efrm_filter_insert(rs->rs_client, spec, replace);
+  int rxq = -1;
+  int rc = efrm_filter_insert(rs->rs_client, spec, &rxq, NULL,
+                              replace ? EFHW_FILTER_F_REPLACE : 0);
   if( rc < 0 )
     return rc;
 

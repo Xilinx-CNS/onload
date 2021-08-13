@@ -14,7 +14,8 @@
 
 
 int efrm_filter_insert(struct efrm_client* client,
-                       struct efx_filter_spec *spec, bool replace_equal)
+                       struct efx_filter_spec *spec, int *rxq,
+                       const struct cpumask *mask, unsigned flags)
 {
   /* FIXME consider handling of replace_equal */
   struct ooft_hw_filter* filter;
@@ -41,6 +42,7 @@ int efrm_filter_insert(struct efrm_client* client,
     rc = -EINVAL;
   }
 
+  *rxq = 0;
   return rc;
 }
 

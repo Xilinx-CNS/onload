@@ -139,6 +139,8 @@ struct efhw_evq_params {
  */
 struct efx_filter_spec;
 
+#define EFHW_FILTER_F_REPLACE  0x0001
+
 /*--------------------------------------------------------------------
  *
  * EtherFabric Functional units - configuration and control
@@ -329,7 +331,8 @@ struct efhw_func_ops {
 
 	/* Insert a filter */
 	int (*filter_insert)(struct efhw_nic *nic,
-			     struct efx_filter_spec *spec, bool replace);
+			     struct efx_filter_spec *spec, int *rxq,
+			     const struct cpumask *mask, unsigned flags);
 	/* Remove a filter */
 	void (*filter_remove)(struct efhw_nic *nic, int filter_id);
 	/* Redirect an existing filter */
