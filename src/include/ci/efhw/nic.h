@@ -77,8 +77,12 @@ extern void efhw_nic_flush_drv(struct efhw_nic*);
 
 static inline uint8_t efhw_vi_nic_flags(const struct efhw_nic* nic)
 {
-	return (nic->flags & NIC_FLAG_BUG35388_WORKAROUND) ?
-	       EFHW_VI_NIC_BUG35388_WORKAROUND : 0;
+	uint8_t flags = 0;
+	flags |= (nic->flags & NIC_FLAG_BUG35388_WORKAROUND) ?
+		 EFHW_VI_NIC_BUG35388_WORKAROUND : 0;
+	flags |= (nic->flags & NIC_FLAG_CTPIO_ONLY) ?
+		 EFHW_VI_NIC_CTPIO_ONLY : 0;
+	return flags;
 }
 
 static inline unsigned efhw_nic_rel_to_abs_idx(const struct efhw_nic* nic,

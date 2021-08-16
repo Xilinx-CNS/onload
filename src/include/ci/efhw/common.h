@@ -120,6 +120,7 @@ typedef union {
 
 /* Flags for hw features */
 #define EFHW_VI_NIC_BUG35388_WORKAROUND 0x01  /*! workaround for bug35388 */
+#define EFHW_VI_NIC_CTPIO_ONLY          0x02  /*! TX only using CTPIO */
 
 /* Types of hardware filter */
 /* Each of these values implicitly selects scatter filters on B0 - or in
@@ -240,6 +241,8 @@ typedef union {
  * currently we have no arch where we sometimes use wakeups and sometimes use
  * irqs. */
 #define NIC_FLAG_EVQ_IRQ 0x2000000000000LL
+/* The only supported TX mode is CTPIO */
+#define NIC_FLAG_CTPIO_ONLY 0x4000000000000LL
 
 
 #endif /* __CI_EFHW_COMMON_H__ */

@@ -6,6 +6,7 @@
 #include "driver_access.h"
 #endif
 #include <etherfabric/internal/efct_uk_api.h>
+#include <ci/efhw/common.h>
 
 /* FIXME EFCT: make this variable */
 #define EFCT_PKT_STRIDE 2048
@@ -724,6 +725,7 @@ void efct_vi_init(ef_vi* vi)
                      EFCT_TX_DESCRIPTOR_BYTES);
   EF_VI_BUILD_ASSERT(sizeof(struct efct_rx_descriptor) ==
                      EFCT_RX_DESCRIPTOR_BYTES);
+  EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
 
   efct_vi_initialise_ops(vi);
   vi->evq_phase_bits = 1;

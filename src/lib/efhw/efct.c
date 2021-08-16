@@ -151,7 +151,7 @@ efct_nic_init_hardware(struct efhw_nic *nic,
                        const uint8_t *mac_addr)
 {
   memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
-  nic->flags |= NIC_FLAG_TX_CTPIO
+  nic->flags |= NIC_FLAG_TX_CTPIO | NIC_FLAG_CTPIO_ONLY
              | NIC_FLAG_HW_RX_TIMESTAMPING | NIC_FLAG_HW_TX_TIMESTAMPING;
   return 0;
 }
