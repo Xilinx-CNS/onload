@@ -188,6 +188,12 @@ static uint64_t efct_tx_header(unsigned packet_length, unsigned ct_thresh,
 {
   ci_qword_t qword;
 
+  RANGECHCK(packet_length, EFCT_TX_HEADER_PACKET_LENGTH_WIDTH);
+  RANGECHCK(ct_thresh, EFCT_TX_HEADER_CT_THRESH_WIDTH);
+  RANGECHCK(timestamp_flag, EFCT_TX_HEADER_TIMESTAMP_FLAG_WIDTH);
+  RANGECHCK(warm_flag, EFCT_TX_HEADER_WARM_FLAG_WIDTH);
+  RANGECHCK(action, EFCT_TX_HEADER_ACTION_WIDTH);
+
   CI_POPULATE_QWORD_5(qword,
       EFCT_TX_HEADER_PACKET_LENGTH, packet_length,
       EFCT_TX_HEADER_CT_THRESH, ct_thresh,
@@ -422,6 +428,15 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   efct_tx_init(vi, &tx);
 
   /* TODO timestamp flag */
+  /* ef_vi interface takes threshold in bytes, but the efct hardware interface
+   * takes multiples of 64.
+   */
+  threshold >>= 6;
+  /* Anything too big to fit in the field width is equivalent in disabling
+   * cut through.
+   */
+  if( threshold > EFCT_TX_CT_DISABLE )
+    threshold = EFCT_TX_CT_DISABLE;
   efct_tx_word(&tx, efct_tx_pkt_header(len, threshold, 0));
 
   for( i = 0; i < iovcnt; ++i )
