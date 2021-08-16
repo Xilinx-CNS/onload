@@ -4,8 +4,8 @@
 
 # A 'make' wrapper
 
-. "$(dirname "$0")/sh/fns"
-. "$bin/sh/mmake-fns"
+. "$(dirname "$0")/shell-fns/fns"
+. "$bin/shell-fns/mmake-fns"
 
 ######################################################################
 # main()

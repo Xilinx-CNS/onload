@@ -4,9 +4,9 @@
 
 # Useful info for other scripts.
 
-. "$(dirname "$0")/sh/fns"
-. "$bin/sh/mmake-fns"
-. "$bin/sh/disttag"
+. "$(dirname "$0")/shell-fns/fns"
+. "$bin/shell-fns/mmake-fns"
+. "$bin/shell-fns/disttag"
 
 usage () {
   err

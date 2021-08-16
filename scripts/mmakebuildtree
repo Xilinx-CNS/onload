@@ -4,10 +4,10 @@
 
 # Creates a build tree.
 
-. "$(dirname "$0")/sh/fns"
-. "$bin/sh/mmake-fns"
+. "$(dirname "$0")/shell-fns/fns"
+. "$bin/shell-fns/mmake-fns"
 
-export PATH="$bin/sh:$bin:$PATH"
+export PATH="$bin/shell-fns:$bin:$PATH"
 
 ######################################################################
 
