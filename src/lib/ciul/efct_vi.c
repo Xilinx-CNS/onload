@@ -738,60 +738,6 @@ static int efct_ef_vi_transmit_memcpy_sync(struct ef_vi* vi,
   return -EOPNOTSUPP;
 }
 
-static void efct_vi_initialise_ops(ef_vi* vi)
-{
-  vi->ops.transmit               = efct_ef_vi_transmit;
-  vi->ops.transmitv              = efct_ef_vi_transmitv;
-  vi->ops.transmitv_init         = efct_ef_vi_transmitv;
-  vi->ops.transmit_push          = efct_ef_vi_transmit_push;
-  vi->ops.transmit_pio           = efct_ef_vi_transmit_pio;
-  vi->ops.transmit_copy_pio      = efct_ef_vi_transmit_copy_pio;
-  vi->ops.transmit_pio_warm      = efct_ef_vi_transmit_pio_warm;
-  vi->ops.transmit_copy_pio_warm = efct_ef_vi_transmit_copy_pio_warm;
-  vi->ops.transmitv_ctpio        = efct_ef_vi_transmitv_ctpio;
-  vi->ops.transmitv_ctpio_copy   = efct_ef_vi_transmitv_ctpio_copy;
-  vi->ops.transmit_alt_select    = efct_ef_vi_transmit_alt_select;
-  vi->ops.transmit_alt_select_default = efct_ef_vi_transmit_alt_select_default;
-  vi->ops.transmit_alt_stop      = efct_ef_vi_transmit_alt_stop;
-  vi->ops.transmit_alt_go        = efct_ef_vi_transmit_alt_go;
-  vi->ops.transmit_alt_discard   = efct_ef_vi_transmit_alt_discard;
-  vi->ops.receive_init           = efct_ef_vi_receive_init;
-  vi->ops.receive_push           = efct_ef_vi_receive_push;
-  vi->ops.eventq_prime           = efct_ef_eventq_prime;
-  vi->ops.eventq_timer_prime     = efct_ef_eventq_timer_prime;
-  vi->ops.eventq_timer_run       = efct_ef_eventq_timer_run;
-  vi->ops.eventq_timer_clear     = efct_ef_eventq_timer_clear;
-  vi->ops.eventq_timer_zero      = efct_ef_eventq_timer_zero;
-  vi->ops.transmit_memcpy        = efct_ef_vi_transmit_memcpy;
-  vi->ops.transmit_memcpy_sync   = efct_ef_vi_transmit_memcpy_sync;
-
-  if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
-    vi->max_efct_rxq = 1;
-    if( vi->vi_txq.mask == 0 )
-      vi->ops.eventq_poll = efct_ef_eventq_poll_1rx;
-    else
-      vi->ops.eventq_poll = efct_ef_eventq_poll_1rxtx;
-  }
-  else {
-    /* It wouldn't be difficult to specialise this by txable too, but this is
-     * the slow, backward-compatible variant so there's not much point */
-    vi->ops.eventq_poll = efct_ef_eventq_poll_generic;
-    vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
-  }
-}
-
-void efct_vi_init(ef_vi* vi)
-{
-  EF_VI_BUILD_ASSERT(sizeof(struct efct_tx_descriptor) ==
-                     EFCT_TX_DESCRIPTOR_BYTES);
-  EF_VI_BUILD_ASSERT(sizeof(struct efct_rx_descriptor) ==
-                     EFCT_RX_DESCRIPTOR_BYTES);
-  EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
-
-  efct_vi_initialise_ops(vi);
-  vi->evq_phase_bits = 1;
-}
-
 #ifndef __KERNEL__
 int efct_vi_mmap_init(ef_vi* vi)
 {
@@ -825,12 +771,12 @@ int efct_vi_mmap_init(ef_vi* vi)
 
   for( i = 0; i < vi->max_efct_rxq; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
+    rxq->qid = -1;
     rxq->superbuf = (char*)space + i * bytes_per_rxq;
     rxq->current_mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
   }
 
-  /* TODO EFCT: This will eventually move to filter_add: */
-  return efct_vi_attach_rxq(vi, 0, 4);
+  return 0;
 }
 
 void efct_vi_munmap(ef_vi* vi)
@@ -848,9 +794,12 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   int ix;
   ef_vi_efct_rxq* rxq;
 
-  for( ix = 0; ix < vi->max_efct_rxq; ++ix )
+  for( ix = 0; ix < vi->max_efct_rxq; ++ix ) {
+    if( vi->efct_rxq[ix].qid == qid )
+      return -EALREADY;
     if( ! efct_rxq_is_active(&vi->efct_rxq[ix]) )
       break;
+  }
   if( ix == vi->max_efct_rxq )
     return -ENOSPC;
 
@@ -878,6 +827,7 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 
   rxq = &vi->efct_rxq[ix];
   rxq->resource_id = ra.out_id.index;
+  rxq->qid = qid;
   rxq->shm = p;
   rxq->config_generation = rxq->shm->config_generation - 1;
   rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
@@ -891,6 +841,22 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 
 /* efct_vi_detach_rxq not yet implemented */
 #endif
+
+static int efct_post_filter_add(struct ef_vi* vi,
+                                const struct ef_filter_spec* fs,
+                                const struct ef_filter_cookie* cookie, int rxq)
+{
+#ifdef __KERNEL__
+  return 0; /* EFCT TODO */
+#else
+  int rc;
+  EF_VI_ASSERT(rxq >= 0);
+  rc = efct_vi_attach_rxq(vi, rxq, 4 /* EFCT TODO */);
+  if( rc == -EALREADY )
+    rc = 0;
+  return rc;
+#endif
+}
 
 void efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id, const void** pkt_start)
 {
@@ -1019,4 +985,59 @@ int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
   header = pkt_to_metadata(vi, qid, pkt);
   return efct_get_timestamp_qns_internal(vi->efct_rxq[qid].shm, header, ts_out,
                                          flags_out);
+}
+
+static void efct_vi_initialise_ops(ef_vi* vi)
+{
+  vi->ops.transmit               = efct_ef_vi_transmit;
+  vi->ops.transmitv              = efct_ef_vi_transmitv;
+  vi->ops.transmitv_init         = efct_ef_vi_transmitv;
+  vi->ops.transmit_push          = efct_ef_vi_transmit_push;
+  vi->ops.transmit_pio           = efct_ef_vi_transmit_pio;
+  vi->ops.transmit_copy_pio      = efct_ef_vi_transmit_copy_pio;
+  vi->ops.transmit_pio_warm      = efct_ef_vi_transmit_pio_warm;
+  vi->ops.transmit_copy_pio_warm = efct_ef_vi_transmit_copy_pio_warm;
+  vi->ops.transmitv_ctpio        = efct_ef_vi_transmitv_ctpio;
+  vi->ops.transmitv_ctpio_copy   = efct_ef_vi_transmitv_ctpio_copy;
+  vi->ops.transmit_alt_select    = efct_ef_vi_transmit_alt_select;
+  vi->ops.transmit_alt_select_default = efct_ef_vi_transmit_alt_select_default;
+  vi->ops.transmit_alt_stop      = efct_ef_vi_transmit_alt_stop;
+  vi->ops.transmit_alt_go        = efct_ef_vi_transmit_alt_go;
+  vi->ops.transmit_alt_discard   = efct_ef_vi_transmit_alt_discard;
+  vi->ops.receive_init           = efct_ef_vi_receive_init;
+  vi->ops.receive_push           = efct_ef_vi_receive_push;
+  vi->ops.eventq_prime           = efct_ef_eventq_prime;
+  vi->ops.eventq_timer_prime     = efct_ef_eventq_timer_prime;
+  vi->ops.eventq_timer_run       = efct_ef_eventq_timer_run;
+  vi->ops.eventq_timer_clear     = efct_ef_eventq_timer_clear;
+  vi->ops.eventq_timer_zero      = efct_ef_eventq_timer_zero;
+  vi->ops.transmit_memcpy        = efct_ef_vi_transmit_memcpy;
+  vi->ops.transmit_memcpy_sync   = efct_ef_vi_transmit_memcpy_sync;
+  vi->internal_ops.post_filter_add = efct_post_filter_add;
+
+  if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
+    vi->max_efct_rxq = 1;
+    if( vi->vi_txq.mask == 0 )
+      vi->ops.eventq_poll = efct_ef_eventq_poll_1rx;
+    else
+      vi->ops.eventq_poll = efct_ef_eventq_poll_1rxtx;
+  }
+  else {
+    /* It wouldn't be difficult to specialise this by txable too, but this is
+     * the slow, backward-compatible variant so there's not much point */
+    vi->ops.eventq_poll = efct_ef_eventq_poll_generic;
+    vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
+  }
+}
+
+void efct_vi_init(ef_vi* vi)
+{
+  EF_VI_BUILD_ASSERT(sizeof(struct efct_tx_descriptor) ==
+                     EFCT_TX_DESCRIPTOR_BYTES);
+  EF_VI_BUILD_ASSERT(sizeof(struct efct_rx_descriptor) ==
+                     EFCT_RX_DESCRIPTOR_BYTES);
+  EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
+
+  efct_vi_initialise_ops(vi);
+  vi->evq_phase_bits = 1;
 }

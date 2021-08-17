@@ -254,12 +254,13 @@ typedef struct ci_resource_op_s {
       } mac;
 #     define            CI_RSOP_FILTER_ADD_FLAG_REPLACE            1
 #     define            CI_RSOP_FILTER_ADD_FLAG_MCAST_LOOP_RECEIVE 2
-      int32_t           flags;
       union {
         struct {
+          int32_t       flags;
           uint16_t      ether_type_be16;
         } in;
         struct {
+          uint32_t      rxq;
           int32_t       filter_id;
         } out;
       } u;
@@ -366,6 +367,7 @@ typedef union ci_filter_add_u {
   } in;
   struct {
     uint16_t  out_len;
+    uint8_t   rxq;
     uint64_t  filter_id;
   } out;
 } ci_filter_add_t;

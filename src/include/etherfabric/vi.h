@@ -442,7 +442,7 @@ enum ef_filter_flags {
 };
 
 /*! \brief Specification of a filter */
-typedef struct {
+typedef struct ef_filter_spec {
   /** Type of filter */
   unsigned type;
   /** Flags for filter */
@@ -458,7 +458,7 @@ enum {
 };
 
 /*! \brief Cookie identifying a filter */
-typedef struct {
+typedef struct ef_filter_cookie {
   /** ID of the filter */
   int filter_id;
   /** Type of the filter */

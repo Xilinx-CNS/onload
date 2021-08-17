@@ -249,13 +249,13 @@ int ef_filter_spec_set_eth_type(ef_filter_spec *fs, uint16_t ether_type_be16)
 
 static int ef_filter_add(ef_driver_handle dh, int resource_id,
 			 const ef_filter_spec *fs,
-			 ef_filter_cookie *filter_cookie_out)
+			 ef_filter_cookie *filter_cookie_out, int *rxq_out)
 {
   ci_resource_op_t op;
   int rc;
 
   op.id = efch_make_resource_id(resource_id);
-  op.u.filter_add.flags =
+  op.u.filter_add.u.in.flags =
     ( (fs->flags & EF_FILTER_FLAG_MCAST_LOOP_RECEIVE) ?
       CI_RSOP_FILTER_ADD_FLAG_MCAST_LOOP_RECEIVE : 0);
 
@@ -354,6 +354,7 @@ static int ef_filter_add(ef_driver_handle dh, int resource_id,
     return -EINVAL;
   }
   rc = ci_resource_op(dh, &op);
+  *rxq_out = op.u.filter_add.u.out.rxq;
   if( rc == 0 && filter_cookie_out != NULL ) {
     /* SNIFF does not return an ID.  The
      * filter_id field is ignored when removing,
@@ -374,7 +375,7 @@ static int ef_filter_add(ef_driver_handle dh, int resource_id,
 
 static int ef_filter_add_ip6(ef_driver_handle dh, int resource_id,
 			     const ef_filter_spec *fs,
-			     ef_filter_cookie *filter_cookie_out)
+			     ef_filter_cookie *filter_cookie_out, int *rxq_out)
 {
   ci_filter_add_t filter_add;
   int rc;
@@ -396,6 +397,7 @@ static int ef_filter_add_ip6(ef_driver_handle dh, int resource_id,
     filter_add.in.spec.l2.vid = 0xffff;
 
   rc = ci_filter_add(dh, &filter_add);
+  *rxq_out = filter_add.out.rxq;
   if( rc == 0 && filter_cookie_out != NULL ) {
     filter_cookie_out->filter_id = filter_add.out.filter_id;
     filter_cookie_out->filter_type = fs->type;
@@ -435,12 +437,28 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
 		     ef_filter_cookie *filter_cookie_out)
 {
   if( ! vi->vi_clustered ) {
+    int rc;
+    int rxq;
+    ef_filter_cookie cookie;
+
+    /* EFCT TODO: pass additional constraint parameters for the rxq selection */
     if( fs->type & EF_FILTER_IP6 )
-      return ef_filter_add_ip6(dh, vi->vi_resource_id,
-                               fs, filter_cookie_out);
+      rc = ef_filter_add_ip6(dh, vi->vi_resource_id,
+                               fs, &cookie, &rxq);
     else
-      return ef_filter_add(dh, vi->vi_resource_id,
-                           fs, filter_cookie_out);
+      rc = ef_filter_add(dh, vi->vi_resource_id,
+                           fs, &cookie, &rxq);
+    if( rc < 0 )
+      return rc;
+
+    if( filter_cookie_out )
+      *filter_cookie_out = cookie;
+    if( vi->internal_ops.post_filter_add ) {
+      rc = vi->internal_ops.post_filter_add(vi, fs, &cookie, rxq);
+      if( rc < 0 )
+        ef_filter_del(dh, vi->vi_resource_id, &cookie);
+    }
+    return rc;
   }
   ef_log("%s: WARNING: Ignored attempt to set a filter on a cluster",
          __FUNCTION__);
@@ -461,7 +479,8 @@ int ef_vi_set_filter_add(ef_vi_set* vi_set, ef_driver_handle dh,
 			 const ef_filter_spec* fs,
 			 ef_filter_cookie *filter_cookie_out)
 {
-  return ef_filter_add(dh, vi_set->vis_res_id, fs, filter_cookie_out);
+  int rxq;
+  return ef_filter_add(dh, vi_set->vis_res_id, fs, filter_cookie_out, &rxq);
 }
 
 

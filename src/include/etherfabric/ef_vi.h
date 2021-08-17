@@ -94,6 +94,9 @@ typedef uint64_t ef_addrspace;
 
 #define EF_ADDRSPACE_LOCAL ((uint64_t)-1)
 
+struct ef_filter_spec;
+struct ef_filter_cookie;
+
 /**********************************************************************
  * Dimensions *********************************************************
  **********************************************************************/
@@ -745,6 +748,8 @@ typedef struct {
 */
 typedef struct {
   unsigned resource_id;
+  /** hardware queue ID */
+  int qid;
   /** efct kernel/userspace shared queue area*/
   struct efab_efct_rxq_uk_shm* shm;
   /** contiguous area of superbuf memory */
@@ -1034,6 +1039,15 @@ typedef struct ef_vi {
     int (*transmit_memcpy_sync)(struct ef_vi*, ef_request_id dma_id);
   } ops;  /**< Driver-dependent operations. */
   /* Doxygen comment above is documentation for the ops member of ef_vi */
+
+  /*! \brief Driver-dependent operations not corresponding to a public API. */
+  /** The difference between this and ops is purely documentational. Functions
+   * here may be NULL if the driver doesn't need the feature. */
+  struct internal_ops {
+    /** A filter has just been added to the given VI */
+    int (*post_filter_add)(struct ef_vi*, const struct ef_filter_spec* fs,
+                           const struct ef_filter_cookie* cookie, int rxq);
+  } internal_ops;
 } ef_vi;
 
 

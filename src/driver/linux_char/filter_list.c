@@ -33,6 +33,7 @@ struct filter {
 #define FILTER_FLAGS_USES_EFRM_FILTER    0x4
 
   unsigned   flags;
+  int        rxq;
 };
 
 
@@ -165,6 +166,7 @@ static int efch_filter_insert(struct efrm_resource *rs, struct efrm_pd *pd,
 
   f->efrm_filter_id = rc;
   f->flags |= FILTER_FLAGS_USES_EFRM_FILTER;
+  f->rxq = rxq;
 
   return rc;
 }
@@ -184,6 +186,7 @@ static int efch_filter_list_rsops_add(struct efrm_resource *rs,
     return -ENOMEM;
 
   f->flags = 0;
+  f->rxq = -1;
 
   if( op->op == CI_RSOP_FILTER_ADD_BLOCK_KERNEL )
     block_flags = FILTER_FLAGS_BLOCK_ALL;
@@ -231,6 +234,7 @@ static int efch_filter_list_rsops_add(struct efrm_resource *rs,
   }
 
   op->u.filter_add.u.out.filter_id = f->filter_id;
+  op->u.filter_add.u.out.rxq = f->rxq;
   return 0;
 }
 
@@ -397,7 +401,7 @@ int efch_filter_list_op_add(struct efrm_resource *rs, struct efrm_pd *pd,
   int need_spec = ! is_op_block_kernel_only(op->op);
   unsigned stack_id;
 
-  if( op->u.filter_add.flags & CI_RSOP_FILTER_ADD_FLAG_MCAST_LOOP_RECEIVE )
+  if( op->u.filter_add.u.in.flags & CI_RSOP_FILTER_ADD_FLAG_MCAST_LOOP_RECEIVE )
     efx_filter_flags |= EFX_FILTER_FLAG_TX;
 
   if( need_spec ) {
@@ -548,6 +552,7 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
     return -ENOMEM;
 
   f->flags = 0;
+  f->rxq = -1;
 
   rc = efch_filter_insert(rs, pd, &spec, f, replace);
   if( rc < 0 ) {
@@ -570,5 +575,6 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
 
   filter_add->out.out_len = sizeof(filter_add->out);
   filter_add->out.filter_id = f->filter_id;
+  filter_add->out.rxq = f->rxq;
   return 0;
 }
