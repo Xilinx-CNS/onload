@@ -964,7 +964,9 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
         CI_SET_ERROR(rc, EADDRNOTAVAIL);
       else
 #endif
-      rc = __ci_tcp_bind(ni, &ts->s, fd, saddr, &source_be16, 0);
+      rc = __ci_tcp_bind(ni, &ts->s, fd,
+                         s->cp.sock_cp_flags & OO_SCP_BOUND_ADDR ? saddr : addr_any,
+                         &source_be16, 0);
 
       if(CI_UNLIKELY( rc != 0 )) {
         LOG_U(ci_log("__ci_tcp_bind returned %d at %s:%d", rc,
@@ -1349,7 +1351,9 @@ complete_deferred_bind(ci_netif* netif, ci_sock_cmn* s, ci_fd_t fd)
 
   ci_assert_flags(s->s_flags, CI_SOCK_FLAG_DEFERRED_BIND);
 
-  rc = __ci_tcp_bind(netif, s, fd, s->laddr, &source_be16, 0);
+  rc = __ci_tcp_bind(netif, s, fd,
+                     s->cp.sock_cp_flags & OO_SCP_BOUND_ADDR ? s->laddr : addr_any,
+                     &source_be16, 0);
 
   if(CI_LIKELY( rc == 0 )) {
     s->s_flags &= ~(CI_SOCK_FLAG_DEFERRED_BIND |
