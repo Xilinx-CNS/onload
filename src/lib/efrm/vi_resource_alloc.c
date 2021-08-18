@@ -1033,7 +1033,8 @@ vi_call_evq_callback(struct efrm_vi *vi)
 	efrm_evq_callback_fn handler;
 	void *arg;
 
-	spin_lock_bh(&vi->evq_callback_lock);
+	/* This function is called from a tasklet, and is therefore serialised
+	 * with respect to itself. */
 
 	handler = vi->evq_callback_fn;
 	rmb();
@@ -1051,11 +1052,12 @@ vi_call_evq_callback(struct efrm_vi *vi)
 		handler(arg, false, vi->rs.rs_client->nic,
 			INT_MAX);
 	}
-
-	spin_unlock_bh(&vi->evq_callback_lock);
 }
 
 
+/* The callee of this function relies on the fact that it's running in a
+ * tasklet in order to guarantee that it's serialised, so the tasklet should
+ * not be converted to a workqueue without additional serialisation. */
 static void
 efrm_vi_tasklet(unsigned long l)
 {
@@ -1097,8 +1099,6 @@ efrm_vi_irq_setup(struct efrm_vi *vi, const char *vi_name, unsigned int irq)
 {
 	int rc;
 	const char *name;
-
-	spin_lock_init(&vi->evq_callback_lock);
 
 	/* Enable interrupts */
 	tasklet_init(&vi->tasklet, &efrm_vi_tasklet, (unsigned long)vi);

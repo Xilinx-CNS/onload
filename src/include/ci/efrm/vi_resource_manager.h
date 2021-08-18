@@ -160,7 +160,6 @@ struct efrm_vi {
 	int net_drv_wakeup_channel;
 
 	/* On EF100 we should handle IRQ in VI resource manager. */
-	spinlock_t evq_callback_lock;
 	uint32_t irq;                        /* IRQ vector */
 	struct tasklet_struct tasklet;       /* IRQ tasklet */
 
