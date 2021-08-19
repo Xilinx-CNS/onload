@@ -82,11 +82,8 @@ static void reap_superbufs_from_apps(struct xlnx_efct_device *edev,
   }
 }
 
-static int efct_poll(void *driver_data, int qid, int budget)
+static void activate_new_apps(struct efhw_nic_efct_rxq *q)
 {
-  struct efhw_nic_efct *efct = driver_data;
-  struct efhw_nic_efct_rxq *q = &efct->rxq[qid];
-
   /* Bolt any newly-added apps on to the live_apps list. The sole reason for
    * this dance is for thread-safety */
   if(unlikely( q->new_apps )) {
@@ -100,6 +97,13 @@ static int efct_poll(void *driver_data, int qid, int budget)
       q->live_apps = new_apps;
     }
   }
+}
+
+static int efct_poll(void *driver_data, int qid, int budget)
+{
+  struct efhw_nic_efct *efct = driver_data;
+
+  activate_new_apps(&efct->rxq[qid]);
   reap_superbufs_from_apps(efct->edev, efct->client, qid, &efct->rxq[qid]);
   return 0;
 }
@@ -154,6 +158,7 @@ static int efct_buffer_start(void *driver_data, int qid, int sbid,
   ++q->superbuf_seqno;
   if( sbid < 0 )
     return -1;
+  activate_new_apps(q);
   return post_superbuf_to_apps(q, sbid, sentinel) ? 0 : -1;
 }
 
