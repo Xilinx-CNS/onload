@@ -38,7 +38,7 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 {
   struct efch_efct_rxq_alloc* alloc = &alloc_->u.rxq;
   struct efrm_efct_rxq* rxq;
-  struct efrm_pd* pd;
+  struct efrm_vi* vi;
   efch_resource_t* vi_rs;
   cpumask_var_t cpumask;
   int rc;
@@ -57,7 +57,7 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
     return -EINVAL;
   }
 
-  pd = efrm_vi_from_resource(vi_rs->rs_base)->pd;
+  vi = efrm_vi_from_resource(vi_rs->rs_base);
 
   if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
     return -ENOMEM;
@@ -72,8 +72,8 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
       return rc;
   }
 
-  rc = efrm_rxq_alloc(pd, alloc->in_qid, cpumask, alloc->in_timestamp_req,
-                      alloc->in_n_hugepages, &rxq);
+  rc = efrm_rxq_alloc(vi, alloc->in_qid, alloc->in_shm_ix, cpumask,
+                      alloc->in_timestamp_req, alloc->in_n_hugepages, &rxq);
   free_cpumask_var(cpumask);
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: rxq_alloc failed (%d)", __FUNCTION__, rc);
@@ -89,14 +89,6 @@ static void
 rxq_rm_free(efch_resource_t* rs)
 {
   efrm_rxq_release(efrm_rxq_from_resource(rs->rs_base));
-}
-
-
-static int rxq_rm_mmap(struct efrm_resource *rs, unsigned long *bytes,
-                       struct vm_area_struct *vma, int index)
-{
-  struct efrm_efct_rxq* rxq = efrm_rxq_from_resource(rs);
-  return efrm_rxq_mmap(rxq, vma, bytes);
 }
 
 
@@ -130,7 +122,7 @@ static int rxq_rm_mmap_bytes(struct efrm_resource* rs, int map_type)
 efch_resource_ops efch_efct_rxq_ops = {
   .rm_alloc  = rxq_rm_alloc,
   .rm_free   = rxq_rm_free,
-  .rm_mmap   = rxq_rm_mmap,
+  .rm_mmap   = NULL,
   .rm_nopage = NULL,
   .rm_dump   = NULL,
   .rm_rsops  = rxq_rm_rsops,

@@ -1159,6 +1159,11 @@ static void af_xdp_dmaq_rx_q_disable(struct efhw_nic *nic, uint dmaq)
 }
 
 
+static size_t af_xdp_max_shared_rxqs(struct efhw_nic *nic)
+{
+  return 0;
+}
+
 /*--------------------------------------------------------------------
  *
  * DMA Queues - mid level API
@@ -1657,6 +1662,7 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_vi_io_size,
   af_xdp_inject_reset_ev,
 	af_xdp_ctpio_addr,
+	af_xdp_max_shared_rxqs,
 };
 
 #endif /* EFHW_HAS_AF_XDP */

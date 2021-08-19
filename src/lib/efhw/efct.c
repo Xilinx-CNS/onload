@@ -20,7 +20,7 @@
 int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
                   bool timestamp_req, size_t n_hugepages,
-                  struct efhw_efct_rxq *rxq)
+                  struct efab_efct_rxq_uk_shm *shm, struct efhw_efct_rxq *rxq)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
@@ -46,9 +46,7 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
 
   rxq->n_hugepages = n_hugepages;
   rxq->max_allowed_superbufs = n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
-  rxq->shm = vmalloc_user(sizeof(*rxq->shm));
-  if( ! rxq->shm )
-    return -ENOMEM;
+  rxq->shm = shm;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
   rc = edev->ops->bind_rxq(cli, &qparams);
@@ -98,6 +96,12 @@ efct_get_hugepages(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
   return rc;
 }
 
+
+static size_t
+efct_max_shared_rxqs(struct efhw_nic *nic)
+{
+  return CI_EFCT_MAX_RXQS;
+}
 
 /*----------------------------------------------------------------------------
  *
@@ -802,6 +806,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_vi_io_size,
   efct_inject_reset_ev,
   efct_ctpio_addr,
+  efct_max_shared_rxqs,
 };
 
 #endif

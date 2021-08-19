@@ -1,9 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
 #include <ci/efrm/private.h>
-#include <ci/efrm/pd.h>
 #include <ci/efrm/efct_rxq.h>
+#include <ci/efrm/vi_resource.h>
+#include <ci/efrm/vi_resource_manager.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
+#include <ci/driver/efab/hardware.h>
 #include <ci/efhw/efct.h>
 #include <linux/mman.h>
 #include <ci/driver/ci_efct.h>
@@ -11,7 +13,7 @@
 
 struct efrm_efct_rxq {
 	struct efrm_resource rs;
-	struct efrm_pd *pd;
+	struct efrm_vi *vi;
 	struct efhw_efct_rxq hw;
 };
 
@@ -42,32 +44,36 @@ extern struct efrm_efct_rxq* efrm_rxq_from_resource(struct efrm_resource *rs)
 EXPORT_SYMBOL(efrm_rxq_from_resource);
 
 
-int efrm_rxq_alloc(struct efrm_pd *pd, int qid,
+int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
                    const struct cpumask *mask, bool timestamp_req,
                    size_t n_hugepages, struct efrm_efct_rxq **rxq_out)
 {
 #if CI_HAVE_EFCT_AUX
 	int rc;
 	struct efrm_efct_rxq *rxq;
-	struct efrm_resource *pd_rs = efrm_pd_to_resource(pd);
+	struct efrm_resource *vi_rs = efrm_from_vi_resource(vi);
 
-	if (!check_efct(pd_rs))
+	if (!check_efct(vi_rs))
 		return -EOPNOTSUPP;
+
+	if (shm_ix < 0 ||
+	    shm_ix >= efhw_nic_max_shared_rxqs(vi_rs->rs_client->nic) )
+		return -EINVAL;
 
 	rxq = kzalloc(sizeof(struct efrm_efct_rxq), GFP_KERNEL);
 	if (!rxq)
 		return -ENOMEM;
 
-	rxq->pd = pd;
-	rc = efct_nic_rxq_bind(pd_rs->rs_client->nic, qid, mask, timestamp_req,
-	                       n_hugepages, &rxq->hw);
+	rxq->vi = vi;
+	rc = efct_nic_rxq_bind(vi_rs->rs_client->nic, qid, mask, timestamp_req,
+	                       n_hugepages, &vi->efct_shm[shm_ix], &rxq->hw);
 	if (rc < 0) {
 		kfree(rxq);
 		return rc;
 	}
 	efrm_resource_init(&rxq->rs, EFRM_RESOURCE_EFCT_RXQ, 0);
-	efrm_client_add_resource(pd_rs->rs_client, &rxq->rs);
-	efrm_resource_ref(pd_rs);
+	efrm_client_add_resource(vi_rs->rs_client, &rxq->rs);
+	efrm_resource_ref(vi_rs);
 	*rxq_out = rxq;
 	return 0;
 #else
@@ -89,21 +95,12 @@ void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 #if CI_HAVE_EFCT_AUX
 	if (__efrm_resource_release(&rxq->rs)) {
 		efct_nic_rxq_free(rxq->rs.rs_client->nic, &rxq->hw, free_rxq);
-		efrm_pd_release(rxq->pd);
+		efrm_vi_resource_release(rxq->vi);
 		efrm_client_put(rxq->rs.rs_client);
 	}
 #endif
 }
 EXPORT_SYMBOL(efrm_rxq_release);
-
-
-int efrm_rxq_mmap(struct efrm_efct_rxq* rxq, struct vm_area_struct *vma,
-                  unsigned long *bytes)
-{
-  *bytes += round_up(sizeof(struct efab_efct_rxq_uk_shm), PAGE_SIZE);
-  return remap_vmalloc_range(vma, rxq->hw.shm, 0);
-}
-EXPORT_SYMBOL(efrm_rxq_mmap);
 
 
 #if CI_HAVE_EFCT_AUX

@@ -43,6 +43,7 @@
 #include <ci/efhw/public.h>
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/mc_driver_pcol.h>
+#include <ci/efhw/efct.h>
 #include <ci/efrm/private.h>
 #include <ci/efrm/vi_resource_private.h>
 #include <ci/efrm/efrm_client.h>
@@ -875,6 +876,7 @@ __efrm_vi_resource_free(struct efrm_vi *virs)
 			EFRM_ERR("%s: couldn't restore user of VI %d: %d\n",
 					__FUNCTION__, instance, rc);
 	}
+	vfree(virs->efct_shm);
 	efrm_vi_rm_free_instance(virs->rs.rs_client, virs);
 	efrm_pd_release(virs->pd);
 	efrm_client_put(virs->rs.rs_client);
@@ -1408,6 +1410,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	int rc;
 	struct efrm_pd *pd;
 	uint32_t nic_client_id;
+	size_t n_shm_rxqs;
 
 	if (o_attr == NULL) {
 		efrm_vi_attr_init(&s_attr);
@@ -1491,6 +1494,17 @@ int  efrm_vi_alloc(struct efrm_client *client,
 		}
 	}
 
+	n_shm_rxqs = efhw_nic_max_shared_rxqs(efrm_client_get_nic(client));
+	if( n_shm_rxqs ) {
+		virs->efct_shm = vmalloc_user(CI_ROUND_UP(sizeof(*virs->efct_shm) *
+		                                          n_shm_rxqs, PAGE_SIZE));
+		if (!virs->efct_shm) {
+			EFRM_ERR("%s: ERROR: OOM for efct rxq (%zu*%zu)",
+						__func__, sizeof(*virs->efct_shm), n_shm_rxqs);
+			goto fail_efct_rxq;
+		}
+	}
+
 	rc = efrm_vi_io_map(virs, client->nic,
 			    virs->allocation.instance);
 	if (rc < 0) {
@@ -1537,6 +1551,8 @@ int  efrm_vi_alloc(struct efrm_client *client,
 
 
 fail_mmap:
+	vfree(virs->efct_shm);
+fail_efct_rxq:
 	if (nic_client_id != EFRM_NIC_CLIENT_ID_NONE)
 		efhw_nic_vi_set_user(client->nic, virs->allocation.instance,
 		                     EFRM_NIC_CLIENT_ID_NONE);

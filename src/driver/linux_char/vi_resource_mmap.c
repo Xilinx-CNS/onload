@@ -19,6 +19,7 @@
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/efrm/efrm_client.h>
 #include <etherfabric/internal/internal.h>
+#include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efch/mmap.h>
 #include "linux_char_internal.h"
 #include "char_internal.h"
@@ -216,6 +217,32 @@ efab_vi_rm_mmap_state(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
 }
 
 
+static int
+efab_vi_rm_mmap_rxq_shm(struct efrm_vi *virs, unsigned long *bytes,
+                        void *opaque, int *map_num, unsigned long *offset)
+{
+  struct vm_area_struct* vma = opaque;
+  int rc;
+  int len;
+
+  if( ! virs->efct_shm )
+    return -EINVAL;  /* A NIC arch which doesn't have shm */
+  if( *offset != 0 )
+    return -EINVAL;
+  len = sizeof(struct efab_efct_rxq_uk_shm) *
+        efhw_nic_max_shared_rxqs(efrm_client_get_nic(virs->rs.rs_client));
+  if( *bytes > CI_ROUND_UP(len, CI_PAGE_SIZE) )
+    return -EINVAL;
+
+  rc = remap_vmalloc_range(vma, virs->efct_shm, 0);
+  if( rc < 0 )
+    EFCH_ERR("%s: ERROR: remap_vmalloc_range failed rc=%d", __func__, rc);
+  else
+    *bytes -= len;
+  return rc;
+}
+
+
 static int 
 efab_vi_rm_mmap_mem(struct efrm_vi *virs,
                     unsigned long *bytes, void *opaque,
@@ -254,6 +281,9 @@ int efab_vi_resource_mmap(struct efrm_vi *virs, unsigned long *bytes,
       break;
     case EFCH_VI_MMAP_STATE:
       rc = efab_vi_rm_mmap_state(virs, bytes, vma, map_num, offset);
+      break;
+    case EFCH_VI_MMAP_RXQ_SHM:
+      rc = efab_vi_rm_mmap_rxq_shm(virs, bytes, vma, map_num, offset);
       break;
     case EFCH_VI_MMAP_PLUGIN_BASE ... EFCH_VI_MMAP_PLUGIN_MAX:
       rc = efab_vi_rm_mmap_plugin(virs, index - EFCH_VI_MMAP_PLUGIN_BASE,

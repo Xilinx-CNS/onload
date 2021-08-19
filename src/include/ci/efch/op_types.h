@@ -135,7 +135,8 @@ struct efch_ext_alloc {
 
 struct efch_efct_rxq_alloc {
   efch_resource_id_t  in_vi_rs_id;
-  int32_t             in_qid;
+  uint8_t             in_qid;
+  uint8_t             in_shm_ix;
   uint64_t            in_cpuset CI_ALIGN(8);  /* void __user* */
   uint32_t            in_cpusetsize;
   /*bool*/uint8_t     in_timestamp_req;

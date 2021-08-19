@@ -400,6 +400,11 @@ struct efhw_func_ops {
 	 */
 	int (*ctpio_addr)(struct efhw_nic* nic, int instance,
 			  resource_size_t* addr);
+
+	/*! Maximum permitted number of rxqs carrying shared packets. Shared
+	 * queues are attached-to by multiple clients and they're read-only to
+	 * all of them. */
+	size_t (*max_shared_rxqs)(struct efhw_nic* nic);
 };
 
 

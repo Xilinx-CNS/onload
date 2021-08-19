@@ -52,14 +52,15 @@ static int pkt_id_to_rxq_ix(uint32_t pkt_id)
 }
 
 ef_vi_noinline
-static int superbuf_config_refresh(ef_vi* vi, ef_vi_efct_rxq* rxq)
+static int superbuf_config_refresh(ef_vi* vi, int qid)
 {
 #ifdef __KERNEL__
   /* TODO EFCT */
   return -ENOSYS;
 #else
+  ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
   ci_resource_op_t op;
-  rxq->config_generation = rxq->shm->config_generation;
+  rxq->config_generation = vi->efct_shm[qid].config_generation;
   op.op = CI_RSOP_RXQ_REFRESH;
   op.id = efch_make_resource_id(rxq->resource_id);
   op.u.rxq_refresh.superbufs = (uintptr_t)rxq->superbuf;
@@ -69,9 +70,9 @@ static int superbuf_config_refresh(ef_vi* vi, ef_vi_efct_rxq* rxq)
 #endif
 }
 
-static int superbuf_next(ef_vi* vi, ef_vi_efct_rxq* rxq)
+static int superbuf_next(ef_vi* vi, int qid)
 {
-  struct efab_efct_rxq_uk_shm* shm = rxq->shm;
+  struct efab_efct_rxq_uk_shm* shm = &vi->efct_shm[qid];
   uint64_t added_full;
   uint32_t added, removed;
   int sbid;
@@ -89,9 +90,9 @@ static int superbuf_next(ef_vi* vi, ef_vi_efct_rxq* rxq)
   return sbid;
 }
 
-static void superbuf_free(ef_vi* vi, ef_vi_efct_rxq* rxq, int sbid)
+static void superbuf_free(ef_vi* vi, int qid, int sbid)
 {
-  struct efab_efct_rxq_uk_shm* shm = rxq->shm;
+  struct efab_efct_rxq_uk_shm* shm = &vi->efct_shm[qid];
   uint32_t added, removed;
 
   added = shm->freeq.added;
@@ -146,9 +147,10 @@ static bool efct_rxq_need_rollover(const ef_vi_efct_rxq* rxq, uint32_t next)
   return pkt_id_to_index_in_superbuf(pkt_id) >= rxq->superbuf_pkts;
 }
 
-static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq)
+static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq,
+                                 const struct efab_efct_rxq_uk_shm* shm)
 {
-  return rxq->config_generation != rxq->shm->config_generation;
+  return rxq->config_generation != shm->config_generation;
 }
 
 /* The header following the next packet, or null if not available */
@@ -165,11 +167,12 @@ static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
 static bool efct_rxq_check_event(const ef_vi* vi, int qid)
 {
   const ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  struct efab_efct_rxq_uk_shm* shm = &vi->efct_shm[qid];
   uint32_t next = vi->ep_state->rxq.rxq_ptr[qid].next;
 
   return efct_rxq_is_active(rxq) &&
     (efct_rxq_need_rollover(rxq, next) ||
-     efct_rxq_need_config(rxq) ||
+     efct_rxq_need_config(rxq, shm) ||
      efct_rx_next_header(vi, next) != NULL);
 }
 
@@ -531,7 +534,7 @@ static int rx_rollover(ef_vi* vi, int qid)
   uint32_t next;
   uint32_t superbuf_pkts = vi->efct_rxq[qid].superbuf_pkts;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  int rc = superbuf_next(vi, &vi->efct_rxq[qid]);
+  int rc = superbuf_next(vi, qid);
   if( rc < 0 )
     return rc;
   pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + (rc & CI_EFCT_Q_SUPERBUF_ID_MASK)) <<
@@ -581,6 +584,7 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
   ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  struct efab_efct_rxq_uk_shm* shm = &vi->efct_shm[qid];
   int i;
 
   if( ! efct_rxq_is_active(rxq) )
@@ -592,8 +596,8 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
        * maintain that policy */
       return 0;
 
-  if( efct_rxq_need_config(rxq) )
-    if( superbuf_config_refresh(vi, rxq) < 0 )
+  if( efct_rxq_need_config(rxq, shm) )
+    if( superbuf_config_refresh(vi, qid) < 0 )
       return 0;
 
   /* By never crossing a superbuf in a single poll we can exploit
@@ -744,6 +748,8 @@ int efct_vi_mmap_init(ef_vi* vi)
   void* space;
   uint64_t* mappings;
   int i;
+  int rc;
+  void* p;
   const size_t bytes_per_rxq = CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
   const size_t mappings_bytes =
     vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES * sizeof(mappings[0]);
@@ -769,6 +775,17 @@ int efct_vi_mmap_init(ef_vi* vi)
     return -ENOMEM;
   }
 
+  rc = ci_resource_mmap(vi->dh, vi->vi_resource_id, EFCH_VI_MMAP_RXQ_SHM,
+                        CI_ROUND_UP(sizeof(struct efab_efct_rxq_uk_shm) *
+                                    EF_VI_MAX_EFCT_RXQS, CI_PAGE_SIZE),
+                        &p);
+  if( rc ) {
+    LOGVV(ef_log("%s: ci_resource_mmap rxq shm %d", __FUNCTION__, rc));
+    return rc;
+  }
+
+  vi->efct_shm = p;
+
   for( i = 0; i < vi->max_efct_rxq; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
     rxq->qid = -1;
@@ -783,6 +800,9 @@ void efct_vi_munmap(ef_vi* vi)
 {
   munmap((void*)vi->efct_rxq[0].superbuf,
          vi->max_efct_rxq * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
+  ci_resource_munmap(vi->dh, vi->efct_shm,
+                     CI_ROUND_UP(sizeof(struct efab_efct_rxq_uk_shm) *
+                                 EF_VI_MAX_EFCT_RXQS, CI_PAGE_SIZE));
   free(vi->efct_rxq[0].current_mappings);
 }
 
@@ -790,7 +810,6 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 {
   int rc;
   ci_resource_alloc_t ra;
-  void* p;
   int ix;
   ef_vi_efct_rxq* rxq;
 
@@ -807,6 +826,7 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
   ra.ra_type = EFRM_RESOURCE_EFCT_RXQ;
   ra.u.rxq.in_qid = qid;
+  ra.u.rxq.in_shm_ix = ix;
   ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
   ra.u.rxq.in_n_hugepages = CI_ROUND_UP(n_superbufs,
                                         CI_EFCT_SUPERBUFS_PER_PAGE);
@@ -817,19 +837,10 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
     return rc;
   }
 
-  rc = ci_resource_mmap(vi->dh, ra.out_id.index, 0,
-                CI_ROUND_UP(sizeof(struct efab_efct_rxq_uk_shm), CI_PAGE_SIZE),
-                &p);
-  if( rc ) {
-    LOGVV(ef_log("%s: ci_resource_mmap rxq %d", __FUNCTION__, rc));
-    return rc;
-  }
-
   rxq = &vi->efct_rxq[ix];
   rxq->resource_id = ra.out_id.index;
   rxq->qid = qid;
-  rxq->shm = p;
-  rxq->config_generation = rxq->shm->config_generation - 1;
+  rxq->config_generation = vi->efct_shm[ix].config_generation - 1;
   rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
   /* This is a totally fake pkt_id, but it makes efct_poll_rx() think that a
    * rollover is needed. We use +1 as a marker that this is the first packet,
@@ -872,7 +883,7 @@ void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
   EF_VI_ASSERT(efct_rx_desc(vi, pkt_id)->refcnt > 0);
 
   if( --efct_rx_desc(vi, pkt_id)->refcnt == 0 )
-    superbuf_free(vi, &vi->efct_rxq[pkt_id_to_rxq_ix(pkt_id)],
+    superbuf_free(vi, pkt_id_to_rxq_ix(pkt_id),
                   pkt_id_to_local_superbuf_ix(pkt_id));
 }
 
@@ -983,7 +994,7 @@ int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
   }
 
   header = pkt_to_metadata(vi, qid, pkt);
-  return efct_get_timestamp_qns_internal(vi->efct_rxq[qid].shm, header, ts_out,
+  return efct_get_timestamp_qns_internal(&vi->efct_shm[qid], header, ts_out,
                                          flags_out);
 }
 

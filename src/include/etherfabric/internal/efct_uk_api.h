@@ -47,6 +47,6 @@ struct efab_efct_rxq_uk_shm {
     unsigned no_rxq_space;
     unsigned too_many_owned;
   } stats;
-};
+} CI_ALIGN(CI_CACHE_LINE_SIZE);
 
 #endif /* EFCT_HW_DEFS_H */

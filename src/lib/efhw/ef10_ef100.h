@@ -71,6 +71,8 @@ extern void ef10_ef100_dmaq_tx_q_disable(struct efhw_nic *nic, uint dmaq);
 
 extern void ef10_ef100_dmaq_rx_q_disable(struct efhw_nic *nic, uint dmaq);
 
+extern size_t ef10_ef100_max_shared_rxqs(struct efhw_nic *nic);
+
 extern int ef10_ef100_flush_tx_dma_channel(struct efhw_nic *nic,
 					   uint32_t client_id, uint dmaq);
 

@@ -134,6 +134,9 @@
 #define efhw_nic_translate_dma_addrs(nic, src, dst, n) \
 	((nic))->efhw_func->translate_dma_addrs((nic), (src), (dst), (n)) \
 
+#define efhw_nic_max_shared_rxqs(nic) \
+	((nic)->efhw_func->max_shared_rxqs((nic)))
+
 /* xdp specific */
 #define efhw_nic_dmaq_kick(nic,instance) \
 	((nic)->efhw_func->dmaq_kick((nic), (instance)))

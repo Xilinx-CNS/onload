@@ -38,7 +38,6 @@ static void destruct_apps_work(struct work_struct* work)
   while( app ) {
     struct efhw_efct_rxq *next = app->next;
     EFHW_ASSERT(app->current_owned_superbufs == 0);
-    vfree(app->shm);
     app->freer(app);
     app = next;
   }

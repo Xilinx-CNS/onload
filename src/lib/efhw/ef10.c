@@ -1726,6 +1726,10 @@ void ef10_ef100_dmaq_rx_q_disable(struct efhw_nic *nic, uint dmaq)
 {
 }
 
+size_t ef10_ef100_max_shared_rxqs(struct efhw_nic *nic)
+{
+	return 0;
+}
 
 /*--------------------------------------------------------------------
  *
@@ -2610,4 +2614,5 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_ef100_vi_io_size,
 	ef10_inject_reset_ev,
 	ef10_ctpio_addr,
+	ef10_ef100_max_shared_rxqs,
 };
