@@ -2533,19 +2533,17 @@ static void* cp_server_pids_next(struct seq_file* s, void* state_,
 
   state->cp = state->cp->next;
 
-  while( ci_dllist_is_anchor(&cp_hash_table[state->bucket], state->cp) &&
-         (state->bucket < CP_INSTANCE_HASH_SIZE) ) {
+  while( ci_dllist_is_anchor(&cp_hash_table[state->bucket], state->cp) ) {
     state->bucket++;
+    if( state->bucket == CP_INSTANCE_HASH_SIZE ) {
+      /* End of file. */
+      kfree(state);
+      return NULL;
+    }
     state->cp = ci_dllist_head(&cp_hash_table[state->bucket]);
   }
 
   *pos = state->offset;
-
-  if( state->bucket == CP_INSTANCE_HASH_SIZE ) {
-    /* End of file. */
-    kfree(state);
-    return NULL;
-  }
 
   return state;
 }
