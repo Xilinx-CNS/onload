@@ -1202,6 +1202,7 @@ void ci_tcp_sendmsg_enqueue_prequeue(ci_netif* ni, ci_tcp_state* ts,
     ++n_pkts;
   }
   while( OO_PP_NOT_NULL(id) );
+  oo_atomic_add(&ts->send_prequeue_in, -n_pkts);
 
   /* Prep each packet. */
   while( 1 ) {
