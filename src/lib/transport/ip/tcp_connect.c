@@ -893,7 +893,10 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
 
   ci_assert(ts->s.pkt.mtu);
 
+  /* Recover from previous connection via the same socket: */
   ts->tcpflags &=~ CI_TCPT_FLAG_FIN_RECEIVED;
+  ts->send_prequeue = OO_PP_ID_NULL;
+  ci_assert_equal(oo_atomic_read(&ts->send_prequeue_in), 0);
 
   /* Now that we know the outgoing route, set the MTU related values.
    * Note, even these values are speculative since the real MTU
