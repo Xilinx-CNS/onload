@@ -2159,6 +2159,7 @@ no_events:
         eps.events += rc;
       }
 
+#if CI_CFG_EPOLL3
       /* Are there any events in the home stack? */
       if( op.flags & OO_EPOLL1_EVENT_ON_HOME ) {
         citp_reenter_lib(lib_context);
@@ -2173,6 +2174,7 @@ no_events:
         citp_exit_lib(lib_context, FALSE);
         rc = eps.events - events;
       }
+#endif
 
       if( rc == 0 ) {
         /* False alarm. Let's block again.  */
