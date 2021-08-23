@@ -8,9 +8,6 @@
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/common.h>
 
-/* FIXME EFCT: make this variable */
-#define EFCT_PKT_STRIDE 2048
-
 #include <stdbool.h>
 
 struct efct_rx_descriptor
@@ -51,24 +48,19 @@ static int pkt_id_to_rxq_ix(uint32_t pkt_id)
   return pkt_id_to_global_superbuf_ix(pkt_id) / CI_EFCT_MAX_SUPERBUFS;
 }
 
-ef_vi_noinline
+#ifndef __KERNEL__
 static int superbuf_config_refresh(ef_vi* vi, int qid)
 {
-#ifdef __KERNEL__
-  /* TODO EFCT */
-  return -ENOSYS;
-#else
   ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
   ci_resource_op_t op;
-  rxq->config_generation = vi->efct_shm[qid].config_generation;
   op.op = CI_RSOP_RXQ_REFRESH;
   op.id = efch_make_resource_id(rxq->resource_id);
   op.u.rxq_refresh.superbufs = (uintptr_t)rxq->superbuf;
   op.u.rxq_refresh.current_mappings = (uintptr_t)rxq->current_mappings;
   op.u.rxq_refresh.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
   return ci_resource_op(vi->dh, &op);
-#endif
 }
+#endif
 
 static int superbuf_next(ef_vi* vi, int qid)
 {
@@ -106,9 +98,9 @@ static void superbuf_free(ef_vi* vi, int qid, int sbid)
   OO_ACCESS_ONCE(shm->freeq.added) = added + 1;
 }
 
-static bool efct_rxq_is_active(const ef_vi_efct_rxq* rxq)
+static bool efct_rxq_is_active(const struct efab_efct_rxq_uk_shm* shm)
 {
-  return rxq->superbuf_pkts != 0;
+  return shm->superbuf_pkts != 0;
 }
 
 /* The superbuf descriptor for this packet */
@@ -141,10 +133,11 @@ static int rxq_ptr_to_sentinel(uint32_t ptr)
   return ptr >> 31;
 }
 
-static bool efct_rxq_need_rollover(const ef_vi_efct_rxq* rxq, uint32_t next)
+static bool efct_rxq_need_rollover(const struct efab_efct_rxq_uk_shm* shm,
+                                   uint32_t next)
 {
   uint32_t pkt_id = rxq_ptr_to_pkt_id(next);
-  return pkt_id_to_index_in_superbuf(pkt_id) >= rxq->superbuf_pkts;
+  return pkt_id_to_index_in_superbuf(pkt_id) >= shm->superbuf_pkts;
 }
 
 static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq,
@@ -170,8 +163,8 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
   struct efab_efct_rxq_uk_shm* shm = &vi->efct_shm[qid];
   uint32_t next = vi->ep_state->rxq.rxq_ptr[qid].next;
 
-  return efct_rxq_is_active(rxq) &&
-    (efct_rxq_need_rollover(rxq, next) ||
+  return efct_rxq_is_active(shm) &&
+    (efct_rxq_need_rollover(shm, next) ||
      efct_rxq_need_config(rxq, shm) ||
      efct_rx_next_header(vi, next) != NULL);
 }
@@ -532,7 +525,7 @@ static int rx_rollover(ef_vi* vi, int qid)
 {
   uint32_t pkt_id;
   uint32_t next;
-  uint32_t superbuf_pkts = vi->efct_rxq[qid].superbuf_pkts;
+  uint32_t superbuf_pkts = vi->efct_shm[qid].superbuf_pkts;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   int rc = superbuf_next(vi, qid);
   if( rc < 0 )
@@ -587,23 +580,27 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   struct efab_efct_rxq_uk_shm* shm = &vi->efct_shm[qid];
   int i;
 
-  if( ! efct_rxq_is_active(rxq) )
+  if( ! efct_rxq_is_active(shm) )
     return 0;
 
-  if( efct_rxq_need_rollover(rxq, rxq_ptr->next) )
+  if( efct_rxq_need_rollover(shm, rxq_ptr->next) )
     if( rx_rollover(vi, qid) < 0 )
       /* ef_eventq_poll() has historically never been able to fail, so we
        * maintain that policy */
       return 0;
 
-  if( efct_rxq_need_config(rxq, shm) )
-    if( superbuf_config_refresh(vi, qid) < 0 )
+  if( efct_rxq_need_config(rxq, shm) ) {
+    /* Update rxq's value even if the refresh_func fails, since retrying it
+     * every poll is unlikely to be productive either */
+    rxq->config_generation = shm->config_generation;
+    if( rxq->refresh_func(vi, qid) < 0 )
       return 0;
+  }
 
   /* By never crossing a superbuf in a single poll we can exploit
    * ef_vi_receive_get_timestamp_with_sync_flags()'s API rules to ensure we
    * can always easily convert from a packet pointer to the superbuf */
-  evs_len = CI_MIN(evs_len, (int)(rxq->superbuf_pkts -
+  evs_len = CI_MIN(evs_len, (int)(shm->superbuf_pkts -
                                   pkt_id_to_index_in_superbuf(rxq_ptr->next)));
 
   for( i = 0; i < evs_len; ++i ) {
@@ -788,7 +785,6 @@ int efct_vi_mmap_init(ef_vi* vi)
 
   for( i = 0; i < vi->max_efct_rxq; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
-    rxq->qid = -1;
     rxq->superbuf = (char*)space + i * bytes_per_rxq;
     rxq->current_mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
   }
@@ -814,9 +810,9 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   ef_vi_efct_rxq* rxq;
 
   for( ix = 0; ix < vi->max_efct_rxq; ++ix ) {
-    if( vi->efct_rxq[ix].qid == qid )
+    if( vi->efct_shm[ix].qid == qid )
       return -EALREADY;
-    if( ! efct_rxq_is_active(&vi->efct_rxq[ix]) )
+    if( ! efct_rxq_is_active(&vi->efct_shm[ix]) )
       break;
   }
   if( ix == vi->max_efct_rxq )
@@ -839,13 +835,12 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 
   rxq = &vi->efct_rxq[ix];
   rxq->resource_id = ra.out_id.index;
-  rxq->qid = qid;
   rxq->config_generation = vi->efct_shm[ix].config_generation - 1;
-  rxq->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
+  rxq->refresh_func = superbuf_config_refresh;
   /* This is a totally fake pkt_id, but it makes efct_poll_rx() think that a
    * rollover is needed. We use +1 as a marker that this is the first packet,
    * i.e. ignore the first metadata: */
-  vi->ep_state->rxq.rxq_ptr[ix].next = 1 + rxq->superbuf_pkts;
+  vi->ep_state->rxq.rxq_ptr[ix].next = 1 + vi->efct_shm[ix].superbuf_pkts;
 
   return 0;
 }
@@ -946,7 +941,6 @@ static int efct_get_timestamp_qns_internal(struct efab_efct_rxq_uk_shm* shm,
 
 static const ci_oword_t* pkt_to_metadata(ef_vi* vi, int qid, const void* pkt)
 {
-  ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
   uintptr_t off = (uintptr_t)pkt & (EFCT_RX_SUPERBUF_BYTES - 1);
   uintptr_t mask;
 
@@ -956,7 +950,7 @@ static const ci_oword_t* pkt_to_metadata(ef_vi* vi, int qid, const void* pkt)
    * that we know which superbuf, so we just need to jump to the end of the
    * current packet, wrapping around to 0 if we were at the last packet in the
    * superbuf (done with the "&= -mask" magic below). */
-  mask = off < EFCT_PKT_STRIDE * (rxq->superbuf_pkts - 1);
+  mask = off < EFCT_PKT_STRIDE * (vi->efct_shm[qid].superbuf_pkts - 1);
   EF_VI_BUILD_ASSERT(EFCT_RX_HEADER_NEXT_FRAME_LOC_1 <
                      EFCT_RX_HEADER_NEXT_FRAME_LOC_0 + 64);
   off += EFCT_PKT_STRIDE - EFCT_RX_HEADER_NEXT_FRAME_LOC_0;

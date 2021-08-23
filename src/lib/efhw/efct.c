@@ -60,6 +60,11 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
   }
   EFCT_POST(dev, edev, cli, nic, rc);
 
+  if( rc >= 0 ) {
+    shm->qid = rc;
+    shm->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
+  }
+
   return rc;
 }
 

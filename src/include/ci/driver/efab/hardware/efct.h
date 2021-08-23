@@ -124,5 +124,8 @@
 /* size of each receive buffer posted to RX_BUFFER_POST (DP_RX_BUFFER_SIZE) */
 #define EFCT_RX_SUPERBUF_BYTES  1048576
 
+/* FIXME EFCT: make this variable */
+#define EFCT_PKT_STRIDE 2048
+
 #endif
 

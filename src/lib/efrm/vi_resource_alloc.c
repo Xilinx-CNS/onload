@@ -1496,6 +1496,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 
 	n_shm_rxqs = efhw_nic_max_shared_rxqs(efrm_client_get_nic(client));
 	if( n_shm_rxqs ) {
+		size_t i;
 		virs->efct_shm = vmalloc_user(CI_ROUND_UP(sizeof(*virs->efct_shm) *
 		                                          n_shm_rxqs, PAGE_SIZE));
 		if (!virs->efct_shm) {
@@ -1503,6 +1504,8 @@ int  efrm_vi_alloc(struct efrm_client *client,
 						__func__, sizeof(*virs->efct_shm), n_shm_rxqs);
 			goto fail_efct_rxq;
 		}
+		for (i = 0; i < n_shm_rxqs; ++i)
+			virs->efct_shm[i].qid = -1;
 	}
 
 	rc = efrm_vi_io_map(virs, client->nic,

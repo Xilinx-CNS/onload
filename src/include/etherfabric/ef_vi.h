@@ -94,6 +94,7 @@ typedef uint64_t ef_addrspace;
 
 #define EF_ADDRSPACE_LOCAL ((uint64_t)-1)
 
+struct ef_vi;
 struct ef_filter_spec;
 struct ef_filter_cookie;
 
@@ -742,20 +743,19 @@ typedef struct {
   uint32_t*        ids;
 } ef_vi_rxq;
 
+typedef int ef_vi_efct_superbuf_refresh_t(struct ef_vi*, int);
+
 /*! \brief EFCT RX buffer memory and metadata
 **
 ** Users should not access this structure.
 */
 typedef struct {
   unsigned resource_id;
-  /** hardware queue ID */
-  int qid;
   /** contiguous area of superbuf memory */
   const char* superbuf;
-  /** number of packets per superbuf */
-  uint32_t superbuf_pkts;
   uint32_t config_generation;
   uint64_t* current_mappings;
+  ef_vi_efct_superbuf_refresh_t* refresh_func;
 } ef_vi_efct_rxq;
 
 /*! \brief State of a virtual interface

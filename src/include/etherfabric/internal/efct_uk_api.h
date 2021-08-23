@@ -38,11 +38,16 @@ struct efab_efct_rx_superbuf_queue {
 #define CI_EFCT_SHM_TS_SHIFT 16
 
 struct efab_efct_rxq_uk_shm {
+  /* TODO EFCT look in to field ordering of this struct. Might be quicker, for
+   * example, to collect all the superbuf_pkts fields for all the rxqs at the
+   * top */
   struct efab_efct_rx_superbuf_queue rxq;
   struct efab_efct_rx_superbuf_queue freeq;
   uint64_t timestamp_hi CI_ALIGN(8);
   uint8_t tsync_flags;
+  int8_t qid;                        /* hardware queue ID */
   unsigned config_generation;
+  uint32_t superbuf_pkts;            /* number of packets per superbuf */
   struct {
     unsigned no_rxq_space;
     unsigned too_many_owned;
