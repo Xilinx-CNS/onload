@@ -62,7 +62,7 @@ void doORMPipeline(List gcovr_options)
 }
 
 void doDeveloperBuild(String build_profile=null) {
-  def components = ['kernel_driver', 'userspace', 'userspace_32']
+  def components = ['kernel_driver', 'userspace']
   def debugnesses = ['DEBUG', 'NDEBUG']
 
   def stage_name = 'Developer Build'

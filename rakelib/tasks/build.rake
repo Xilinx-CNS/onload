@@ -5,7 +5,6 @@ require 'pathname'
 
 toppath = nil
 $user_build_dir = nil
-$user32_build_dir = nil
 $kernel_build_dir = nil
 
 namespace :build do
@@ -22,13 +21,6 @@ namespace :build do
     sh 'mmakebuildtree --gnu'
     userbuild = `mmaketool --userbuild`.chomp
     $user_build_dir = File.join(toppath, 'build', userbuild)
-  end
-
-  task user_build_tree_32: [:toppath] do
-    ENV['ZF_DEVEL'] = '1'
-    userbuild32 = `mmaketool --userbuild_base32`.chomp
-    sh "mmakebuildtree #{userbuild32}"
-    $user32_build_dir = File.join(toppath, 'build', userbuild32)
   end
 
   task kernel_build_tree: [:toppath] do
@@ -86,13 +78,9 @@ namespace :build do
     Onload::Utils.make($user_build_dir)
   end
 
-  desc 'Userspace build (32 bit)'
-  task userspace_32: [:user_build_tree_32, :user_compiler_setup] do
-    Onload::Utils.make($user32_build_dir)
-  end
 
   desc 'Build everything'
-  task all: [:kernel_driver, :userspace, :userspace_32]
+  task all: [:kernel_driver, :userspace]
 
   # For each (recognised) subdirectory of lib, create a task to build it, with
   # the task named after the subdirectory.  All the tasks are defined with a
