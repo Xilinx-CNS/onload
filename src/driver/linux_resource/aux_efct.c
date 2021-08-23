@@ -254,8 +254,14 @@ static void efct_hugepage_list_changed(void *driver_data, int rxq)
   struct efhw_nic_efct_rxq *q = &efct->rxq[rxq];
   struct efhw_efct_rxq *app;
 
-  for( app = q->live_apps; app; app = app->next )
-    ++app->shm->config_generation;
+  for( app = q->live_apps; app; app = app->next ) {
+    unsigned new_gen = app->shm->config_generation + 1;
+    /* Avoid 0 so that the reader can always use it as a 'not yet initialised'
+     * marker. */
+    if( new_gen == 0 )
+      ++new_gen;
+    WRITE_ONCE(app->shm->config_generation, new_gen);
+  }
 }
 
 struct xlnx_efct_drvops efct_ops = {

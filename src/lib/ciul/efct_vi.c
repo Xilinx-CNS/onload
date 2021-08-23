@@ -835,7 +835,7 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 
   rxq = &vi->efct_rxq[ix];
   rxq->resource_id = ra.out_id.index;
-  rxq->config_generation = vi->efct_shm[ix].config_generation - 1;
+  rxq->config_generation = 0;
   rxq->refresh_func = superbuf_config_refresh;
   /* This is a totally fake pkt_id, but it makes efct_poll_rx() think that a
    * rollover is needed. We use +1 as a marker that this is the first packet,

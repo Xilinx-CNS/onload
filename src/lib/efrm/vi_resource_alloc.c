@@ -1504,8 +1504,10 @@ int  efrm_vi_alloc(struct efrm_client *client,
 						__func__, sizeof(*virs->efct_shm), n_shm_rxqs);
 			goto fail_efct_rxq;
 		}
-		for (i = 0; i < n_shm_rxqs; ++i)
+		for (i = 0; i < n_shm_rxqs; ++i) {
 			virs->efct_shm[i].qid = -1;
+			virs->efct_shm[i].config_generation = 1;
+		}
 	}
 
 	rc = efrm_vi_io_map(virs, client->nic,
