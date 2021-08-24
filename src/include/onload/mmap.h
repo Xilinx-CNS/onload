@@ -21,7 +21,7 @@
  * - CI_NETIF_MMAP_ID_PIO       VI resource: PIO IO BAR
  * - CI_NETIF_MMAP_ID_CTPIO     VI resource: CTPIO IO BAR
  * - CI_NETIF_MMAP_ID_PLUGIN    VI resource: EF100 plugin-specific BAR
- * - CI_NETIF_MMAP_ID_CPLANE    Control plame MIBs mapping
+ * - CI_NETIF_MMAP_ID_EFCT_SHM  VI resource: EFCT rxq shared state
  * - CI_NETIF_MMAP_ID_PKTS + packet set id
  *   packet sets
  */
@@ -32,6 +32,7 @@
 #define CI_NETIF_MMAP_ID_PIO      4
 #define CI_NETIF_MMAP_ID_CTPIO    5
 #define CI_NETIF_MMAP_ID_PLUGIN   6
+#define CI_NETIF_MMAP_ID_EFCT_SHM 7
 #define CI_NETIF_MMAP_ID_PKTS     8
 #define CI_NETIF_MMAP_ID_PKTSET(id) (CI_NETIF_MMAP_ID_PKTS+(id))
 

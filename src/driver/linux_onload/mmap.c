@@ -37,6 +37,7 @@
 #include <ci/driver/kernel_compat.h>
 #include <onload/cplane_driver.h>
 #include <ci/efch/mmap.h>
+#include <ci/efrm/vi_resource_manager.h>
 
 
 /****************************************************************************
@@ -144,6 +145,7 @@ tcp_helper_rm_nopage(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
       *page_out = tcp_helper_rm_nopage_iobuf(trs, vma, offset);
       return *page_out == NULL ? VM_FAULT_SIGBUS : 0;
     case CI_NETIF_MMAP_ID_IO:
+    case CI_NETIF_MMAP_ID_EFCT_SHM:
 #if CI_CFG_PIO
     case CI_NETIF_MMAP_ID_PIO:
 #endif
@@ -151,8 +153,8 @@ tcp_helper_rm_nopage(tcp_helper_resource_t* trs, struct vm_area_struct *vma,
     case CI_NETIF_MMAP_ID_CTPIO:
 #endif
       OO_DEBUG_SHM(ci_log("%s: map_id=%d. Debugger?", __FUNCTION__, map_id));
-      /* IO mappings are always present, and so a page fault should never come
-       * down this path, but ptrace() can get us here. */
+      /* These mappings are always present, and so a page fault should never
+       * come down this path, but ptrace() can get us here. */
       return VM_FAULT_SIGBUS;
     default:
       ci_assert_ge(map_id, CI_NETIF_MMAP_ID_PKTS);
@@ -418,6 +420,28 @@ static int tcp_helper_rm_mmap_buf(tcp_helper_resource_t* trs,
   return 0;
 }
 
+
+static int tcp_helper_rm_mmap_efct_shm(tcp_helper_resource_t* trs,
+                                       unsigned long bytes,
+                                       struct vm_area_struct* vma)
+{
+  int intf_i;
+  ci_netif* ni;
+  int map_num = 0;
+  unsigned long offset = 0;
+
+  ni = &trs->netif;
+  OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
+
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    mmap_all_vis(trs, intf_i, &bytes, vma, &map_num, &offset,
+                 EFCH_VI_MMAP_RXQ_SHM);
+  }
+  ci_assert_equal(bytes, 0);
+  return 0;
+}
+
+
 /* fixme: this handler is linux-only */
 static int tcp_helper_rm_mmap_pkts(tcp_helper_resource_t* trs,
                                    unsigned long bytes,
@@ -495,6 +519,9 @@ efab_tcp_helper_rm_mmap(tcp_helper_resource_t* trs, unsigned long bytes,
 #endif
     case CI_NETIF_MMAP_ID_IOBUFS:
       rc = tcp_helper_rm_mmap_buf(trs, bytes, vma);
+      break;
+    case CI_NETIF_MMAP_ID_EFCT_SHM:
+      rc = tcp_helper_rm_mmap_efct_shm(trs, bytes, vma);
       break;
     default:
       /* CI_NETIF_MMAP_ID_PKTS + set_id */

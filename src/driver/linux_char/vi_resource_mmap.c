@@ -227,18 +227,19 @@ efab_vi_rm_mmap_rxq_shm(struct efrm_vi *virs, unsigned long *bytes,
 
   if( ! virs->efct_shm )
     return -EINVAL;  /* A NIC arch which doesn't have shm */
-  if( *offset != 0 )
-    return -EINVAL;
-  len = sizeof(struct efab_efct_rxq_uk_shm) *
-        efhw_nic_max_shared_rxqs(efrm_client_get_nic(virs->rs.rs_client));
-  if( *bytes > CI_ROUND_UP(len, CI_PAGE_SIZE) )
+  len = efrm_vi_get_efct_shm_bytes(virs);
+  if( *bytes < len )
     return -EINVAL;
 
-  rc = remap_vmalloc_range(vma, virs->efct_shm, 0);
+  rc = oo_remap_vmalloc_range_partial(vma, vma->vm_start + *offset,
+                                      virs->efct_shm,
+                                      DIV_ROUND_UP(len, PAGE_SIZE));
   if( rc < 0 )
     EFCH_ERR("%s: ERROR: remap_vmalloc_range failed rc=%d", __func__, rc);
-  else
+  else {
     *bytes -= len;
+    *offset += len;
+  }
   return rc;
 }
 
