@@ -56,6 +56,7 @@
 #include <net/sock.h>
 
 #include <driver/linux_resource/autocompat.h>
+#include <ci/tools.h>
 
 /********* Memory allocation *************/
 
@@ -349,6 +350,50 @@ static inline int oo_file_is_in_epoll(struct file* file)
   return file->f_ep != NULL && ! hlist_empty(file->f_ep);
 #else
   return ! list_empty(&file->f_ep_links);
+#endif
+}
+
+
+static inline int
+oo_remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
+                               void *kaddr, unsigned long size)
+{
+#ifdef EFRM_HAS_REMAP_VMALLOC_RANGE_PARTIAL
+  /* linux<5.13 */
+  return remap_vmalloc_range_partial(vma, uaddr, kaddr,
+#ifdef EFRM_REMAP_VMALLOC_RANGE_PARTIAL_NEW
+                                     0 /*pgoff, in linux>=5.7 */,
+#endif
+                                     size);
+#else
+  /* linux>=5.13 */
+  unsigned long npages = size >> PAGE_SHIFT;
+  struct page** pages = kmalloc_array(npages, sizeof(struct page*),
+                                      GFP_KERNEL);
+  unsigned long i;
+  int rc;
+
+  if( pages == NULL )
+    return -ENOMEM;
+
+  for( i = 0; i < npages; i++ ) {
+    pages[i] = vmalloc_to_page(kaddr);
+    ci_assert(pages[i]);
+    kaddr += PAGE_SIZE;
+  }
+
+  rc = vm_insert_pages(vma, uaddr, pages, &i);
+
+  /* There is not much we can do in case of an error. "npages - i"
+   * pages have been already inserted into vma, and we can't get them out
+   * of there.  So we log the error and return.
+   */
+  if( rc != 0 )
+    ci_log("%s: partial remap for shmbuf: rc=%d, inserting %lu pages, "
+           "%lu remain", __func__, rc, npages, i);
+
+  kfree(pages);
+  return rc;
 #endif
 }
 
