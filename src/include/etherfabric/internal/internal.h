@@ -125,6 +125,13 @@ extern void ef_vi_reset_txq(struct ef_vi*);
 
 extern void ef_vi_reset_evq(struct ef_vi*, int clear_ring);
 
+extern int efct_vi_mmap_init_internal(ef_vi* vi,
+                                      struct efab_efct_rxq_uk_shm *shm);
+void efct_vi_munmap_internal(ef_vi* vi);
+int efct_vi_find_free_rxq(ef_vi* vi, int qid);
+void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
+                                 ef_vi_efct_superbuf_refresh_t *refresh_func);
+
 
 /* This returns the ID of the next RX buffer in the RXQ.  In the absence of
  * event merging and errors, this will be the same packet that will be returned

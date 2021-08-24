@@ -157,6 +157,9 @@ static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
 
 /* Check for actions needed on an rxq. This must match the checks made in
  * efct_poll_rx to ensure none are missed. */
+#ifdef __KERNEL__
+__attribute__((unused))
+#endif
 static bool efct_rxq_check_event(const ef_vi* vi, int qid)
 {
   const ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
@@ -172,6 +175,10 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
 /* Check whether a received packet is available */
 static bool efct_rx_check_event(const ef_vi* vi)
 {
+#ifdef __KERNEL__
+  /* TODO EFCT */
+  return false;
+#else
   int i;
 
   if( ! vi->vi_rxq.mask )
@@ -182,6 +189,7 @@ static bool efct_rx_check_event(const ef_vi* vi)
     if( efct_rxq_check_event(vi, i) )
       return true;
   return false;
+#endif
 }
 
 /* tx packet descriptor, stored in the ring until completion */
@@ -521,6 +529,9 @@ static void efct_ef_vi_receive_push(ef_vi* vi)
   /* TODO X3 */
 }
 
+#ifdef __KERNEL__
+__attribute__((unused))
+#endif
 static int rx_rollover(ef_vi* vi, int qid)
 {
   uint32_t pkt_id;
@@ -574,6 +585,10 @@ static void efct_rx_discard(int qid, uint32_t pkt_id,
 
 static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
 {
+#ifdef __KERNEL__
+  /* TODO EFCT */
+  return 0;
+#else
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
   ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
@@ -640,6 +655,7 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   }
 
   return i;
+#endif
 }
 
 static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
@@ -742,11 +758,31 @@ static int efct_ef_vi_transmit_memcpy_sync(struct ef_vi* vi,
 #ifndef __KERNEL__
 int efct_vi_mmap_init(ef_vi* vi)
 {
+  int rc;
+  void* p;
+
+  rc = ci_resource_mmap(vi->dh, vi->vi_resource_id, EFCH_VI_MMAP_RXQ_SHM,
+                        CI_ROUND_UP(sizeof(struct efab_efct_rxq_uk_shm) *
+                                    EF_VI_MAX_EFCT_RXQS, CI_PAGE_SIZE),
+                        &p);
+  if( rc ) {
+    LOGVV(ef_log("%s: ci_resource_mmap rxq shm %d", __FUNCTION__, rc));
+    return rc;
+  }
+
+  rc = efct_vi_mmap_init_internal(vi, p);
+  if( rc )
+    ci_resource_munmap(vi->dh, vi->efct_shm,
+                       CI_ROUND_UP(sizeof(struct efab_efct_rxq_uk_shm) *
+                                   EF_VI_MAX_EFCT_RXQS, CI_PAGE_SIZE));
+  return rc;
+}
+
+int efct_vi_mmap_init_internal(ef_vi* vi, struct efab_efct_rxq_uk_shm *shm)
+{
   void* space;
   uint64_t* mappings;
   int i;
-  int rc;
-  void* p;
   const size_t bytes_per_rxq = CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
   const size_t mappings_bytes =
     vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES * sizeof(mappings[0]);
@@ -772,16 +808,7 @@ int efct_vi_mmap_init(ef_vi* vi)
     return -ENOMEM;
   }
 
-  rc = ci_resource_mmap(vi->dh, vi->vi_resource_id, EFCH_VI_MMAP_RXQ_SHM,
-                        CI_ROUND_UP(sizeof(struct efab_efct_rxq_uk_shm) *
-                                    EF_VI_MAX_EFCT_RXQS, CI_PAGE_SIZE),
-                        &p);
-  if( rc ) {
-    LOGVV(ef_log("%s: ci_resource_mmap rxq shm %d", __FUNCTION__, rc));
-    return rc;
-  }
-
-  vi->efct_shm = p;
+  vi->efct_shm = shm;
 
   for( i = 0; i < vi->max_efct_rxq; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
@@ -794,12 +821,30 @@ int efct_vi_mmap_init(ef_vi* vi)
 
 void efct_vi_munmap(ef_vi* vi)
 {
-  munmap((void*)vi->efct_rxq[0].superbuf,
-         vi->max_efct_rxq * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
+  efct_vi_munmap_internal(vi);
   ci_resource_munmap(vi->dh, vi->efct_shm,
                      CI_ROUND_UP(sizeof(struct efab_efct_rxq_uk_shm) *
                                  EF_VI_MAX_EFCT_RXQS, CI_PAGE_SIZE));
+}
+
+void efct_vi_munmap_internal(ef_vi* vi)
+{
+  munmap((void*)vi->efct_rxq[0].superbuf,
+         vi->max_efct_rxq * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
   free(vi->efct_rxq[0].current_mappings);
+}
+
+int efct_vi_find_free_rxq(ef_vi* vi, int qid)
+{
+  int ix;
+
+  for( ix = 0; ix < vi->max_efct_rxq; ++ix ) {
+    if( vi->efct_shm[ix].qid == qid )
+      return -EALREADY;
+    if( ! efct_rxq_is_active(&vi->efct_shm[ix]) )
+      return ix;
+  }
+  return -ENOSPC;
 }
 
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
@@ -807,16 +852,10 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   int rc;
   ci_resource_alloc_t ra;
   int ix;
-  ef_vi_efct_rxq* rxq;
 
-  for( ix = 0; ix < vi->max_efct_rxq; ++ix ) {
-    if( vi->efct_shm[ix].qid == qid )
-      return -EALREADY;
-    if( ! efct_rxq_is_active(&vi->efct_shm[ix]) )
-      break;
-  }
-  if( ix == vi->max_efct_rxq )
-    return -ENOSPC;
+  ix = efct_vi_find_free_rxq(vi, qid);
+  if( ix < 0 )
+    return ix;
 
   memset(&ra, 0, sizeof(ra));
   ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
@@ -833,16 +872,24 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
     return rc;
   }
 
-  rxq = &vi->efct_rxq[ix];
-  rxq->resource_id = ra.out_id.index;
-  rxq->config_generation = 0;
-  rxq->refresh_func = superbuf_config_refresh;
+  efct_vi_attach_rxq_internal(vi, ix, ra.out_id.index,
+                              superbuf_config_refresh);
   /* This is a totally fake pkt_id, but it makes efct_poll_rx() think that a
    * rollover is needed. We use +1 as a marker that this is the first packet,
    * i.e. ignore the first metadata: */
   vi->ep_state->rxq.rxq_ptr[ix].next = 1 + vi->efct_shm[ix].superbuf_pkts;
-
   return 0;
+}
+
+void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
+                                 ef_vi_efct_superbuf_refresh_t *refresh_func)
+{
+  ef_vi_efct_rxq* rxq;
+
+  rxq = &vi->efct_rxq[ix];
+  rxq->resource_id = resource_id;
+  rxq->config_generation = 0;
+  rxq->refresh_func = refresh_func;
 }
 
 /* efct_vi_detach_rxq not yet implemented */
