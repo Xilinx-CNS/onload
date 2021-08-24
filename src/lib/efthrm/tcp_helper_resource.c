@@ -26,12 +26,14 @@
 
 #include <etherfabric/timer.h>
 #include <etherfabric/internal/internal.h>
+#include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/nic.h>
 #include <ci/efrm/efrm_client.h>
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/efrm/pd.h>
 #include <ci/efrm/vi_set.h>
 #include <ci/efrm/slice_ext.h>
+#include <ci/efrm/efct_rxq.h>
 #include <ci/driver/efab/hardware.h>
 #include <onload/oof_onload.h>
 #include <onload/oof_interface.h>
@@ -1335,6 +1337,7 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
   ci_uint32 required_feature_mask;
   struct vi_allocate_info info_base;
   int i;
+  size_t n_shm_rxqs;
 
   /* Choose DMA queue sizes, and calculate suitable size for EVQ. */
   evq_min = info->rxq_capacity + info->txq_capacity;
@@ -1414,6 +1417,10 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
     /* Loop until we've tried the least-featureful permissible allocation,
      * taking care that we don't underflow. */
   } while( feature_mask && feature_mask-- >= required_feature_mask );
+
+  n_shm_rxqs = efhw_nic_max_shared_rxqs(efrm_client_get_nic(info->client));
+  info->vi_efct_shm_mmap_bytes = CI_ROUND_UP(sizeof(*evq_virs->efct_shm) *
+                                             n_shm_rxqs, PAGE_SIZE);
 
   if( rc < 0 ) {
     OO_DEBUG_VM (ci_log ("%s: ERROR: efrm_vi_resource_alloc(%d) failed %d",
@@ -1517,6 +1524,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 #if CI_CFG_CTPIO
   ci_assert_equal(trs->ctpio_mmap_bytes, 0);
 #endif
+  ci_assert_equal(trs->efct_shm_mmap_bytes, 0);
 
   /* Outside the per-interface loop we initialise some values that are common
    * across all interfaces.
@@ -1626,6 +1634,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
     nsn->oo_vi_flags = alloc_info.oo_vi_flags;
     nsn->vi_io_mmap_bytes = alloc_info.vi_io_mmap_bytes;
+    nsn->vi_efct_shm_mmap_bytes = alloc_info.vi_efct_shm_mmap_bytes;
 #if CI_CFG_CTPIO
     nsn->ctpio_ct_threshold = alloc_info.ctpio_threshold;
     nsn->ctpio_max_frame_len = nsn->ctpio_frame_len_check =
@@ -1657,6 +1666,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     nsn->ts_format = vm->ts_format;
 
     trs->io_mmap_bytes += alloc_info.vi_io_mmap_bytes;
+    trs->efct_shm_mmap_bytes += alloc_info.vi_efct_shm_mmap_bytes;
     vi_state = (char*) vi_state +
                ef_vi_calc_state_bytes(vm->rxq_size, vm->txq_size);
 
@@ -2075,6 +2085,7 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   trs->ctpio_mmap_bytes = 0;
 #endif
   trs->buf_mmap_bytes = 0;
+  trs->efct_shm_mmap_bytes = 0;
 
   no_table_entries = ci_netif_filter_table_size(ni);
 
@@ -2577,6 +2588,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
 #if CI_CFG_CTPIO
   ns->ctpio_mmap_bytes = trs->ctpio_mmap_bytes;
 #endif
+  ns->efct_shm_mmap_bytes = trs->efct_shm_mmap_bytes;
   ns->timesync_bytes = PAGE_SIZE;
 
   OO_DEBUG_MEMSIZE(ci_log("helper=%u map_bytes=%u (0x%x)",

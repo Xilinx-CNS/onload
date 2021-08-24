@@ -25,6 +25,7 @@ struct vi_allocate_info {
   struct efrm_vi **virs;
   tcp_helper_cluster_t* cluster;
   unsigned vi_io_mmap_bytes;
+  unsigned vi_efct_shm_mmap_bytes;
   unsigned vi_ctpio_mmap_bytes;
   unsigned ctpio_threshold;
   int try_ctpio;

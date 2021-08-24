@@ -1398,6 +1398,22 @@ void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *attr, int channel_id)
 EXPORT_SYMBOL(efrm_vi_attr_set_wakeup_channel);
 
 
+static size_t efrm_vi_get_efct_shm_bytes_nrxq(struct efrm_vi *vi,
+                                              size_t n_shm_rxqs)
+{
+	return CI_ROUND_UP(sizeof(*vi->efct_shm) * n_shm_rxqs, PAGE_SIZE);
+}
+
+
+size_t efrm_vi_get_efct_shm_bytes(struct efrm_vi *vi)
+{
+	size_t n_shm_rxqs = efhw_nic_max_shared_rxqs(
+	                                    efrm_client_get_nic(vi->rs.rs_client));
+	return efrm_vi_get_efct_shm_bytes_nrxq(vi, n_shm_rxqs);
+}
+EXPORT_SYMBOL(efrm_vi_get_efct_shm_bytes);
+
+
 int  efrm_vi_alloc(struct efrm_client *client,
 		   const struct efrm_vi_attr *o_attr,
 		   int print_resource_warnings,
@@ -1497,8 +1513,8 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	n_shm_rxqs = efhw_nic_max_shared_rxqs(efrm_client_get_nic(client));
 	if( n_shm_rxqs ) {
 		size_t i;
-		virs->efct_shm = vmalloc_user(CI_ROUND_UP(sizeof(*virs->efct_shm) *
-		                                          n_shm_rxqs, PAGE_SIZE));
+		virs->efct_shm = vmalloc_user(efrm_vi_get_efct_shm_bytes_nrxq(virs,
+		                                                          n_shm_rxqs));
 		if (!virs->efct_shm) {
 			EFRM_ERR("%s: ERROR: OOM for efct rxq (%zu*%zu)",
 						__func__, sizeof(*virs->efct_shm), n_shm_rxqs);

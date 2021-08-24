@@ -313,6 +313,7 @@ typedef struct tcp_helper_resource_s {
   /* Length of the CTPIO mapping.  The same one is used for all VIs. */
   unsigned              ctpio_mmap_bytes;
 #endif
+  unsigned              efct_shm_mmap_bytes;
 
   /* Used to block threads that are waiting for free pkt buffers. */
   ci_waitq_t            pkt_waitq;

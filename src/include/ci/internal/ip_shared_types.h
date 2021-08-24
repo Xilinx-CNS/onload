@@ -1024,6 +1024,7 @@ typedef struct {
    * and the udp_rxq_vi there is an extra field for the udp_rxq_vi.
    */
   CI_ULCONST ci_uint32  vi_io_mmap_bytes;
+  CI_ULCONST ci_uint32  vi_efct_shm_mmap_bytes;
   CI_ULCONST ci_uint32  vi_evq_bytes;
   CI_ULCONST ci_uint16  vi_instance[CI_MAX_VIS_PER_INTF];
   CI_ULCONST ci_uint16  vi_abs_idx[CI_MAX_VIS_PER_INTF];
@@ -1357,6 +1358,7 @@ struct ci_netif_state_s {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   CI_ULCONST ci_uint32   plugin_mmap_bytes;
 #endif
+  CI_ULCONST ci_uint32  efct_shm_mmap_bytes;
 
   /* Set to true when endpoints are woken. */
   CI_ULCONST ci_int32 poll_did_wake;

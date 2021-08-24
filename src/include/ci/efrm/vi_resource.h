@@ -282,6 +282,8 @@ extern int efrm_vi_set_get_vi_instance(struct efrm_vi *);
 
 extern int efrm_vi_af_xdp_kick(struct efrm_vi *vi);
 
+extern size_t efrm_vi_get_efct_shm_bytes(struct efrm_vi *vi);
+
 /* Make these inline instead of macros for type checking */
 static inline struct efrm_vi *
 efrm_to_vi_resource(struct efrm_resource *rs)
