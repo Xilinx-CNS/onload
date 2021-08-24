@@ -44,6 +44,7 @@ struct tcp_helper_nic {
   unsigned             thn_ctpio_io_mmap_bytes;
   void*                thn_ctpio_io_mmap;
 #endif
+  struct efrm_efct_rxq* thn_efct_rxq[EF_VI_MAX_EFCT_RXQS];
 };
 
 

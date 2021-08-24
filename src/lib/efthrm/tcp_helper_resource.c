@@ -1544,6 +1544,8 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     trs->nic[intf_i].thn_pio_rs = NULL;
     trs->nic[intf_i].thn_pio_io_mmap_bytes = 0;
 #endif
+    memset(trs->nic[intf_i].thn_efct_rxq, 0,
+           sizeof(trs->nic[intf_i].thn_efct_rxq));
   }
 
   /* This loop does the work of allocating a vi, using the information built
@@ -1682,6 +1684,22 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       }
     }
 #endif
+
+    /* TODO EFCT: this shouldn't be here, it should be in filter add instead */
+    if( efhw_nic_max_shared_rxqs(nic) ) {
+      rc = efrm_rxq_alloc(vi_rs, 0, 0, cpu_all_mask, true, 2,
+                          &trs_nic->thn_efct_rxq[0]);
+      if( rc < 0 ) {
+        ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)\n", __func__, rc);
+        efrm_pd_release(alloc_info.pd);
+        goto error_out;
+      }
+      /* NB: when moving this line to a more appropriate place,
+       * "EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE" should turn in to
+       * shm->superbuf_pkts: */
+      vi->ep_state->rxq.rxq_ptr[0].next =
+                                1 + (EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE);
+    }
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
     /* The TCP plugin uses multiple VIs per intf to distinguish various types
@@ -1907,9 +1925,16 @@ static void release_vi(tcp_helper_resource_t* trs)
                               trs_nic->thn_ctpio_io_mmap);
 #endif
     for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
+      size_t rxq_i;
       efrm_vi_resource_release_flushed(trs_nic->thn_vi_rs[vi_i]);
       trs_nic->thn_vi_rs[vi_i] = NULL;
       CI_DEBUG_ZERO(&trs->netif.nic_hw[intf_i].vis[vi_i]);
+      for( rxq_i = 0; rxq_i < ARRAY_SIZE(trs_nic->thn_efct_rxq); ++rxq_i ) {
+        if( trs_nic->thn_efct_rxq[rxq_i] ) {
+          efrm_rxq_release(trs_nic->thn_efct_rxq[rxq_i]);
+          CI_DEBUG_ZERO(&trs_nic->thn_efct_rxq[rxq_i]);
+        }
+      }
     }
   }
 
