@@ -17,6 +17,7 @@
 #include <ci/internal/banner.h>
 #include <onload/version.h>
 #include <etherfabric/internal/internal.h>
+#include <etherfabric/internal/efct_uk_api.h>
 #include <stddef.h>
 #include <onload/tcp-ceph.h>
 
@@ -1708,6 +1709,12 @@ static void netif_tcp_helper_munmap(ci_netif* ni)
     }
   }
 
+  if( ni->efct_shm_ptr != NULL ) {
+    rc = oo_resource_munmap(ci_netif_get_driver_handle(ni),
+                            ni->efct_shm_ptr, ni->state->efct_shm_mmap_bytes);
+    if( rc < 0 )  LOG_NV(ci_log("%s: munmap efct shm %d", __FUNCTION__, rc));
+  }
+
   if( ni->buf_ptr != NULL ) {
     rc = oo_resource_munmap(ci_netif_get_driver_handle(ni),
                             ni->buf_ptr, ni->state->buf_mmap_bytes);
@@ -1772,6 +1779,7 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
   ni->plugin_ptr = NULL;
 #endif
   ni->buf_ptr = NULL;
+  ni->efct_shm_ptr = NULL;
   ni->packets = NULL;
 
   /****************************************************************************
@@ -1886,6 +1894,21 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
     ni->buf_ptr = (char*) p;
   }
 
+  /****************************************************************************
+   * Create the efct rxq shm mapping.
+   */
+  if( ns->efct_shm_mmap_bytes != 0 ) {
+    rc = oo_resource_mmap(ci_netif_get_driver_handle(ni),
+                          OO_MMAP_TYPE_NETIF,
+                          CI_NETIF_MMAP_ID_EFCT_SHM, ns->efct_shm_mmap_bytes,
+                          OO_MMAP_FLAG_POPULATE, &p);
+    if( rc < 0 ) {
+      LOG_NV(ci_log("%s: oo_resource_mmap rxq shm %d", __FUNCTION__, rc));
+      goto fail2;
+    }
+    ni->efct_shm_ptr = p;
+  }
+
   return 0;
 
  fail2:
@@ -1895,10 +1918,24 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
 }
 
 
-static void init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
-                       int vi_io_offset, char** vi_mem_ptr,
-                       ef_vi* vi, unsigned vi_instance, unsigned abs_idx,
-                       int evq_bytes, int txq_size, ef_vi_stats* vi_stats)
+static int oo_efct_superbuf_config_refresh(ef_vi* vi, int qid)
+{
+  oo_efct_superbuf_config_refresh_t op;
+  ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  op.intf_i = rxq->resource_id;
+  op.qid = qid;
+  op.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
+  CI_USER_PTR_SET(op.superbufs,rxq->superbuf);
+  CI_USER_PTR_SET(op.current_mappings, rxq->current_mappings);
+  return oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH, &op);
+}
+
+
+static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
+                      int vi_io_offset, int vi_efct_shm_offset,
+                      char** vi_mem_ptr,
+                      ef_vi* vi, unsigned vi_instance, unsigned abs_idx,
+                      int evq_bytes, int txq_size, ef_vi_stats* vi_stats)
 {
   ef_vi_state* state = (void*) ((char*) ni->state + vi_state_offset);
   ci_netif_state_nic_t* nsn = &(ni->state->nic[nic_i]);
@@ -1913,13 +1950,49 @@ static void init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   ef_vi_init_timer(vi, nsn->timer_quantum_ns);
   vi->vi_i = vi_instance;
   vi->abs_idx = abs_idx;
+  vi->dh = ci_netif_get_driver_handle(ni);
   *vi_mem_ptr = ef_vi_init_qs(vi, *vi_mem_ptr, ids, evq_bytes / 8,
                               nsn->vi_rxq_size, nsn->rx_prefix_len, txq_size);
+  if( vi->max_efct_rxq ) {
+    int i;
+    int rc = efct_vi_mmap_init_internal(vi,
+                        (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset));
+    if( rc < 0 )
+      return rc;
+    for( i = 0; i < vi->max_efct_rxq; ++i )
+      efct_vi_attach_rxq_internal(vi, i, nic_i,
+                                  oo_efct_superbuf_config_refresh);
+  }
   ef_vi_set_ts_format(vi, nsn->ts_format);
   ef_vi_init_rx_timestamping(vi, nsn->rx_ts_correction);
   ef_vi_init_tx_timestamping(vi, nsn->tx_ts_correction);
   ef_vi_add_queue(vi, vi);
   ef_vi_set_stats_buf(vi, vi_stats);
+  return 0;
+}
+
+
+static void cleanup_ef_vi(ef_vi* vi)
+{
+  if( vi->max_efct_rxq )
+    efct_vi_munmap_internal(vi);
+}
+
+
+static void cleanup_all_vis(ci_netif* ni, unsigned vis_inited)
+{
+  int nic_i;
+  OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
+    int i;
+    int num_vis = ci_netif_num_vis(ni);
+
+    for( i = 0; i < num_vis; ++i ) {
+      if( vis_inited > 0 ) {
+        cleanup_ef_vi(&ni->nic_hw[nic_i].vis[i]);
+        --vis_inited;
+      }
+    }
+  }
 }
 
 
@@ -1966,9 +2039,10 @@ static int netif_tcp_helper_build(ci_netif* ni)
   */
   ci_netif_state* ns = ni->state;
   int rc, nic_i, size, expected_buf_ofs;
-  unsigned vi_io_offset, vi_state_offset;
+  unsigned vi_io_offset, vi_state_offset, vi_efct_shm_offset;
   char* vi_mem_ptr;
   int vi_state_bytes;
+  int vis_inited = 0;
 #if CI_CFG_PIO
   unsigned pio_io_offset = 0, pio_buf_offset = 0, vi_bar_off;
 #endif
@@ -1995,6 +2069,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
   ** nic_index.
   */
   vi_io_offset = 0;
+  vi_efct_shm_offset = 0;
   vi_mem_ptr = ni->buf_ptr;
   vi_state_offset = sizeof(*ni->state);
 
@@ -2024,10 +2099,14 @@ static int netif_tcp_helper_build(ci_netif* ni)
     vi_state_bytes = 0;
     for( i = 0; i < num_vis; ++i ) {
       vi = &ni->nic_hw[nic_i].vis[i];
-      init_ef_vi(ni, nic_i, vi_state_offset + vi_state_bytes, vi_io_offset,
-                 &vi_mem_ptr, vi, nsn->vi_instance[i], nsn->vi_abs_idx[i],
-                 i ? 0 : nsn->vi_evq_bytes, nsn->vi_txq_size,
-                 &ni->state->vi_stats);
+      rc = init_ef_vi(ni, nic_i, vi_state_offset + vi_state_bytes, vi_io_offset,
+                      vi_efct_shm_offset,
+                      &vi_mem_ptr, vi, nsn->vi_instance[i], nsn->vi_abs_idx[i],
+                      i ? 0 : nsn->vi_evq_bytes, nsn->vi_txq_size,
+                      &ni->state->vi_stats);
+      if( rc )
+        goto fail2;
+      ++vis_inited;
       if( i )
         ef_vi_add_queue(ci_netif_vi(ni, nic_i), vi);
       if( NI_OPTS(ni).tx_push )
@@ -2036,6 +2115,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
       vi_state_bytes += ef_vi_calc_state_bytes(nsn->vi_rxq_size,
                                                nsn->vi_txq_size);
       vi_io_offset += nsn->vi_io_mmap_bytes;
+      vi_efct_shm_offset += nsn->vi_efct_shm_mmap_bytes;
     }
     vi_state_offset += vi_state_bytes;
 
@@ -2103,7 +2183,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
   ni->pkt_bufs = CI_ALLOC_ARRAY(char*, ni->packets->sets_max);
   if( ni->pkt_bufs == NULL ) {
     rc = -ENOMEM;
-    goto fail1;
+    goto fail2;
   }
   CI_ZERO_ARRAY(ni->pkt_bufs, ni->packets->sets_max);
 
@@ -2146,13 +2226,13 @@ static int netif_tcp_helper_build(ci_netif* ni)
     ci_log("b: 1 <= %zd <= %d ", size / sizeof(oo_pktbuf_set), 
            ni->packets->sets_max);
     rc = -EINVAL;
-    goto fail2;
+    goto fail3;
   }
 
   ni->eps = CI_ALLOC_ARRAY(typeof(*ni->eps), ni->state->max_ep_bufs);
   if( ni->eps == NULL ) {
     rc = -ENOMEM;
-    goto fail2;
+    goto fail3;
   }
   {
     int i;
@@ -2171,8 +2251,10 @@ static int netif_tcp_helper_build(ci_netif* ni)
 
   return 0;
 
-fail2:
+fail3:
   CI_FREE_OBJ(ni->pkt_bufs);
+fail2:
+  cleanup_all_vis(ni, vis_inited);
 fail1:
   return rc;
 }
@@ -2218,6 +2300,7 @@ ci_inline void netif_tcp_helper_free(ci_netif* ni)
 {
   if( ni->state != NULL )
     netif_tcp_helper_munmap(ni);
+  cleanup_all_vis(ni, ~0u);
   if( ni->eps != NULL )
     CI_FREE_OBJ(ni->eps);
   if( ni->pkt_bufs != NULL )

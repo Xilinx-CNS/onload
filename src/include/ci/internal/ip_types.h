@@ -139,6 +139,7 @@ struct ci_netif_s {
 #endif
   char*                buf_ptr;
 #endif
+  struct efab_efct_rxq_uk_shm* efct_shm_ptr;
 
 #ifdef __ci_driver__
   cicp_hwport_mask_t   hwport_mask; /* hwports accelearted by the stack */
