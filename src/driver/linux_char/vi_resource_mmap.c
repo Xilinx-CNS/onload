@@ -200,7 +200,8 @@ efab_vi_rm_mmap_state(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
     return -EINVAL;
   len = ef_vi_calc_state_bytes(virs->q[EFHW_RXQ].capacity,
                                virs->q[EFHW_TXQ].capacity);
-  if( *bytes > CI_ROUND_UP(len, CI_PAGE_SIZE) )
+  len = CI_ROUND_UP(len, CI_PAGE_SIZE);
+  if( *bytes != len )
     return -EINVAL;
 
   /* ep_state came from vmalloc_user, which handles most of the safety issues
