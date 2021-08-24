@@ -242,6 +242,11 @@ enum {
   OO_OP_AF_XDP_KICK,
 #define OO_IOC_AF_XDP_KICK OO_IOC_W(AF_XDP_KICK, ci_int32)
 
+  OO_OP_EFCT_SUPERBUF_CONFIG_REFRESH,
+#define OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH \
+                               OO_IOC_W(EFCT_SUPERBUF_CONFIG_REFRESH, \
+                                        oo_efct_superbuf_config_refresh_t)
+
   OO_OP_CONTIG_END,  /* This is the last in range of contigous opcodes */
 
   /* Here come only placeholder for operations with arbitrary codes */

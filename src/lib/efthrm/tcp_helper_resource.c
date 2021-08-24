@@ -8207,6 +8207,23 @@ int efab_tcp_helper_tcp_offload_get_stream_id(tcp_helper_resource_t* trs,
 #endif
 }
 
+int efab_tcp_helper_efct_superbuf_config_refresh(
+                                        tcp_helper_resource_t* trs,
+                                        oo_efct_superbuf_config_refresh_t* op)
+{
+  struct tcp_helper_nic* nic;
+  if( op->intf_i >= oo_stack_intf_max(&trs->netif) )
+    return -EINVAL;
+  nic = &trs->nic[op->intf_i];
+  if( op->qid >= ARRAY_SIZE(nic->thn_efct_rxq) ||
+      ! nic->thn_efct_rxq[op->qid] )
+    return -EINVAL;
+  return efrm_rxq_refresh(nic->thn_efct_rxq[op->qid],
+                          (unsigned long)CI_USER_PTR_GET(op->superbufs),
+                          CI_USER_PTR_GET(op->current_mappings),
+                          op->max_superbufs);
+}
+
 static tcp_helper_resource_t*
 thr_ref2thr(oo_thr_ref_t ref)
 {

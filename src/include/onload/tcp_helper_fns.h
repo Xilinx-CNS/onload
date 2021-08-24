@@ -257,6 +257,9 @@ extern int efab_tcp_helper_tcp_offload_get_stream_id(
                                          ci_uint64* ddr_base,
                                          ci_uint64* ddr_size);
 
+extern int efab_tcp_helper_efct_superbuf_config_refresh(
+                                        tcp_helper_resource_t* trs,
+                                        oo_efct_superbuf_config_refresh_t* op);
 
 extern void
 tcp_helper_cluster_ref(tcp_helper_cluster_t* thc);

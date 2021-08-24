@@ -995,6 +995,13 @@ efab_eplock_wake_and_do_rsop(ci_private_t *priv, void *arg)
   return efab_eplock_wake_and_do(&priv->thr->netif, l);
 }
 #endif
+static int
+oo_efct_superbuf_config_refresh_rsop(ci_private_t *priv, void *op)
+{
+  if (priv->thr == NULL)
+    return -EINVAL;
+  return efab_tcp_helper_efct_superbuf_config_refresh(priv->thr, op);
+}
 
 static int
 oo_eplock_lock_rsop(ci_private_t* priv, void* arg)
@@ -1686,6 +1693,7 @@ oo_operations_table_t oo_operations[] = {
 #endif
 
   op(OO_IOC_AF_XDP_KICK, oo_af_xdp_kick_rsop),
+  op(OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH,oo_efct_superbuf_config_refresh_rsop),
 
 /* Here come non contigous operations only, their position need to match
  * index according to their placeholder */

@@ -287,6 +287,13 @@ typedef struct {
   ci_ifid_t	ifindex;
 } cp_user_pkt_dest_ifid_t;
 
+typedef struct {
+  uint32_t      intf_i;
+  uint32_t      qid;
+  uint32_t      max_superbufs;
+  ci_user_ptr_t superbufs;
+  ci_user_ptr_t current_mappings;
+} oo_efct_superbuf_config_refresh_t;
 
 /* Flags & types.  It could be enum if enum had fixed size. */
 typedef ci_uint16 oo_fd_flags;
