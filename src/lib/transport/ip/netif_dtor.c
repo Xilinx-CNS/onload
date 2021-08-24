@@ -6,7 +6,7 @@
 #if OO_DO_STACK_DTOR
 
 /* Release all the deferred packets */
-void oo_deferred_free(ci_netif *ni)
+static void oo_deferred_free(ci_netif *ni)
 {
   CI_DEBUG(int n = 0;)
   struct oo_p_dllink_state l;
@@ -73,6 +73,13 @@ void oo_netif_dtor_pkts(ci_netif* ni)
       return;
     }
   }
+
+  /* Free all kinds of deferred packets to appease the packet leak check
+   */
+#if CI_CFG_INJECT_PACKETS
+  oo_inject_packets_kernel(netif2tcp_helper_resource(ni), 1);
+#endif
+  oo_deferred_free(ni);
 
   /* Check for packet leak */
   ci_assert_equal(ni->packets->n_pkts_allocated,

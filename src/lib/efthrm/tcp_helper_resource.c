@@ -168,11 +168,6 @@ static void
 efab_tcp_helper_drop_os_socket(tcp_helper_resource_t* trs,
                                tcp_helper_endpoint_t* ep);
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
-static void
-oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync);
-#endif
-
 /* Allocate a block of IDs from the pool of ID blocks */
 static int efab_ipid_alloc(efab_ipid_cb_t* ipid);
 
@@ -5471,10 +5466,6 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
   /* Get the stack lock; it is needed for filter removal and leak check. */
   if( ~trs->netif.flags & CI_NETIF_FLAG_WEDGED ) {
     if( efab_tcp_helper_netif_try_lock(trs, 0) ) {
-      /* Free all kinds of deferred packets to appease the packet leak check
-       */
-      oo_inject_packets_kernel(trs, 1);
-      oo_deferred_free(&trs->netif);
       oo_netif_dtor_pkts(&trs->netif);
     }
     else {
@@ -7952,11 +7943,10 @@ static void oo_inject_packets_work(struct work_struct* work)
 }
 #endif
 
-#if ! CI_CFG_UL_INTERRUPT_HELPER
-/* Injects all pending kernel packets into the kernel's network stack. */
-static void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
-{
 #if CI_CFG_INJECT_PACKETS
+/* Injects all pending kernel packets into the kernel's network stack. */
+void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
+{
   ci_netif* ni = &trs->netif;
   struct oo_inject_packets_work_data* data;
 
@@ -8007,9 +7997,8 @@ static void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
   ni->state->kernel_packets_tail = OO_PP_NULL;
   ni->state->kernel_packets_pending = 0;
   ci_frc64(&ni->state->kernel_packets_last_forwarded);
-#endif /* CI_CFG_INJECT_PACKETS */
 }
-#endif /* CI_CFG_UL_INTERRUPT_HELPER */
+#endif /* CI_CFG_INJECT_PACKETS */
 
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE

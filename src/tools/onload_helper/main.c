@@ -86,7 +86,6 @@ do_exit(ci_netif* ni)
 {
   ci_log("No time-waiting sockets: exit");
   ci_assert(ci_netif_is_locked(ni));
-  oo_deferred_free(ni);
   oo_netif_dtor_pkts(ni);
   exit(0);
 }
