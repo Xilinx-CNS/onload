@@ -163,6 +163,38 @@ static void efxdp_ef_vi_transmitv_ctpio_copy(ef_vi* vi, size_t frame_len,
   // TODO copy to fallback
 }
 
+static int efxdp_ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr,
+                                               size_t len, ef_request_id dma_id)
+{
+  EF_VI_ASSERT( vi->vi_flags & EF_VI_TX_CTPIO );
+  return efxdp_ef_vi_transmit(vi, dma_addr, len, dma_id);
+}
+
+static int efxdp_ef_vi_transmitv_ctpio_fallback(ef_vi* vi,
+                                                const ef_iovec* dma_iov,
+                                                int dma_iov_len,
+                                                ef_request_id dma_id)
+{
+  EF_VI_ASSERT( vi->vi_flags & EF_VI_TX_CTPIO );
+  return efxdp_ef_vi_transmitv(vi, dma_iov, dma_iov_len, dma_id);
+}
+
+static int efxdp_ef_vi_transmit_ctpio_fallback_not_supp(ef_vi* vi,
+                                                        ef_addr dma_addr,
+                                                        size_t len,
+                                                        ef_request_id dma_id)
+{
+  return -EOPNOTSUPP;
+}
+
+static int efxdp_ef_vi_transmitv_ctpio_fallback_not_supp(ef_vi* vi,
+                                                       const ef_iovec* dma_iov,
+                                                       int dma_iov_len,
+                                                       ef_request_id dma_id)
+{
+  return -EOPNOTSUPP;
+}
+
 static int efxdp_ef_vi_transmit_alt_select(ef_vi* vi, unsigned alt_id)
 {
   return -EOPNOTSUPP;
@@ -375,6 +407,16 @@ void efxdp_vi_init(ef_vi* vi)
   vi->ops.eventq_timer_zero      = efxdp_ef_eventq_timer_zero;
   vi->ops.transmit_memcpy        = efxdp_ef_vi_transmit_memcpy;
   vi->ops.transmit_memcpy_sync   = efxdp_ef_vi_transmit_memcpy_sync;
+  if( vi->vi_flags & EF_VI_TX_CTPIO ) {
+    vi->ops.transmit_ctpio_fallback = efxdp_ef_vi_transmit_ctpio_fallback;
+    vi->ops.transmitv_ctpio_fallback = efxdp_ef_vi_transmitv_ctpio_fallback;
+  }
+  else {
+    vi->ops.transmit_ctpio_fallback =
+                                 efxdp_ef_vi_transmit_ctpio_fallback_not_supp;
+    vi->ops.transmitv_ctpio_fallback =
+                                 efxdp_ef_vi_transmitv_ctpio_fallback_not_supp;
+  }
 
   vi->rx_buffer_len = 2048;
   vi->rx_prefix_len = 0;

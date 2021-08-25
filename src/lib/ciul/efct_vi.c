@@ -442,6 +442,7 @@ static void efct_ef_vi_transmit_copy_pio_warm(ef_vi* vi, int pio_offset,
 {
 }
 
+#define EFCT_TX_POSTED_ID 0xefc7efc7
 static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
                                        const struct iovec* iov, int iovcnt,
                                        unsigned threshold)
@@ -476,12 +477,11 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   /* Use a valid but bogus dma_id rather than invalid EF_REQUEST_ID_MASK to
    * support tcpdirect, which relies on the correct return value from
    * ef_vi_transmit_unbundle to free its otherwise * unused transmit buffers.
+   *
+   * For compat with existing ef_vi apps which will post a fallback and may
+   * want to use the dma_id we'll replace this value with the real one then.
    */
-  efct_tx_complete(vi, &tx, 0);
-
-  /* TODO for ef_vi compatibility, we probably need an efct-specific version of
-   * ef_vi_transmit_ctpio_fallback to record the correct dma_id.
-   */
+  efct_tx_complete(vi, &tx, EFCT_TX_POSTED_ID);
 }
 
 static void efct_ef_vi_transmitv_ctpio_copy(ef_vi* vi, size_t frame_len,
@@ -490,6 +490,34 @@ static void efct_ef_vi_transmitv_ctpio_copy(ef_vi* vi, size_t frame_len,
 {
   /* Fallback is unnecessary for this architecture */
   efct_ef_vi_transmitv_ctpio(vi, frame_len, iov, iovcnt, threshold);
+}
+
+static inline int efct_ef_vi_ctpio_fallback(ef_vi* vi, ef_request_id dma_id)
+{
+  ef_vi_txq *q = &vi->vi_txq;
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+  unsigned di = (qs->added - 1) & q->mask;
+
+  EF_VI_BUG_ON(qs->added == qs->removed);
+  EF_VI_BUG_ON(q->ids[di] != EFCT_TX_POSTED_ID);
+  q->ids[di] = dma_id;
+
+  return 0;
+}
+
+static int efct_ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr,
+                                              size_t len, ef_request_id dma_id)
+{
+  return efct_ef_vi_ctpio_fallback(vi, dma_id);
+}
+
+
+static int efct_ef_vi_transmitv_ctpio_fallback(ef_vi* vi,
+                                               const ef_iovec* dma_iov,
+                                               int dma_iov_len,
+                                               ef_request_id dma_id)
+{
+  return efct_ef_vi_ctpio_fallback(vi, dma_id);
 }
 
 static int efct_ef_vi_transmit_alt_select(ef_vi* vi, unsigned alt_id)
@@ -1065,6 +1093,8 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_zero      = efct_ef_eventq_timer_zero;
   vi->ops.transmit_memcpy        = efct_ef_vi_transmit_memcpy;
   vi->ops.transmit_memcpy_sync   = efct_ef_vi_transmit_memcpy_sync;
+  vi->ops.transmit_ctpio_fallback = efct_ef_vi_transmit_ctpio_fallback;
+  vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
   vi->internal_ops.post_filter_add = efct_post_filter_add;
 
   if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {

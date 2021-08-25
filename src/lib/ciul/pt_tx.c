@@ -98,28 +98,4 @@ unsigned ef_vi_transmit_alt_num_ids(ef_vi* vi)
 }
 
 
-int ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr, size_t len,
-                                  ef_request_id dma_id)
-{
-  if( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY )
-    return 0;
-  else if( vi->vi_flags & EF_VI_TX_CTPIO )
-    return ef_vi_transmit(vi, dma_addr, len, dma_id);
-  else
-    return -EOPNOTSUPP;
-}
-
-
-int ef_vi_transmitv_ctpio_fallback(ef_vi* vi, const ef_iovec* dma_iov,
-                                   int dma_iov_len, ef_request_id dma_id)
-{
-  if( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY )
-    return 0;
-  else if( vi->vi_flags & EF_VI_TX_CTPIO )
-    return ef_vi_transmitv(vi, dma_iov, dma_iov_len, dma_id);
-  else
-    return -EOPNOTSUPP;
-}
-
-
 /*! \cidoxg_end */

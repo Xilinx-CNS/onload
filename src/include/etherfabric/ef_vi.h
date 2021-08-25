@@ -1038,6 +1038,10 @@ typedef struct ef_vi {
                                int dst_iov_len, const ef_remote_iovec* src_iov,
                                int src_iov_len);
     int (*transmit_memcpy_sync)(struct ef_vi*, ef_request_id dma_id);
+    int (*transmit_ctpio_fallback)(struct ef_vi* vi, ef_addr dma_addr,
+                                   size_t len, ef_request_id dma_id);
+    int (*transmitv_ctpio_fallback)(struct ef_vi* vi, const ef_iovec* dma_iov,
+                                    int dma_iov_len, ef_request_id dma_id);
   } ops;  /**< Driver-dependent operations. */
   /* Doxygen comment above is documentation for the ops member of ef_vi */
 
@@ -2239,8 +2243,8 @@ ef_vi_transmit_ctpio(ef_vi* vi, const void* frame_buf, size_t frame_len,
 ** Ordinarily the fallback frame will be the same as the CTPIO frame, but
 ** it doesn't have to be.
 */
-extern int ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr,
-                                         size_t len, ef_request_id dma_id);
+#define ef_vi_transmit_ctpio_fallback(vi, dma_addr, len, dma_id) \
+  (vi)->ops.transmit_ctpio_fallback((vi), (dma_addr), (len), (dma_id))
 
 
 /*! \brief Post fallback frame for a CTPIO transmit
@@ -2260,9 +2264,8 @@ extern int ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr,
 ** Ordinarily the fallback frame will be the same as the CTPIO frame, but
 ** it doesn't have to be.
 */
-extern int ef_vi_transmitv_ctpio_fallback(ef_vi* vi, const ef_iovec* dma_iov,
-                                          int dma_iov_len,
-                                          ef_request_id dma_id);
+#define ef_vi_transmitv_ctpio_fallback(vi, dma_iov, dma_iov_len, dma_id) \
+  (vi)->ops.transmitv_ctpio_fallback((vi), (dma_iov), (dma_iov_len), (dma_id))
 
 
 /*! Cut-through threshold to use if store-and-forward behavior is wanted

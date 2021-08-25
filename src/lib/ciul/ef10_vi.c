@@ -540,6 +540,37 @@ static void
                              1, 0, 1, fallback);
 }
 
+static int ef10_ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr,
+                                              size_t len, ef_request_id dma_id)
+{
+  EF_VI_ASSERT( vi->vi_flags & EF_VI_TX_CTPIO );
+  return ef10_ef_vi_transmit(vi, dma_addr, len, dma_id);
+}
+
+static int ef10_ef_vi_transmitv_ctpio_fallback(ef_vi* vi,
+                                               const ef_iovec* dma_iov,
+                                               int dma_iov_len,
+                                               ef_request_id dma_id)
+{
+  EF_VI_ASSERT( vi->vi_flags & EF_VI_TX_CTPIO );
+  return ef10_ef_vi_transmitv(vi, dma_iov, dma_iov_len, dma_id);
+}
+
+static int ef10_ef_vi_transmit_ctpio_fallback_not_supp(ef_vi* vi,
+                                                       ef_addr dma_addr,
+                                                       size_t len,
+                                                       ef_request_id dma_id)
+{
+  return -EOPNOTSUPP;
+}
+
+static int ef10_ef_vi_transmitv_ctpio_fallback_not_supp(ef_vi* vi,
+                                                       const ef_iovec* dma_iov,
+                                                       int dma_iov_len,
+                                                       ef_request_id dma_id)
+{
+  return -EOPNOTSUPP;
+}
 
 /* ?? todo: rename and move to host_ef10_common.h (via firmwaresrc) */
 #define ALT_OP_VFIFO_ID_LBN    48
@@ -774,6 +805,16 @@ static void ef10_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_zero      = ef10_ef_eventq_timer_zero;
   vi->ops.transmit_memcpy        = ef10_ef_vi_transmit_memcpy;
   vi->ops.transmit_memcpy_sync   = ef10_ef_vi_transmit_memcpy_sync;
+  if( vi->vi_flags & EF_VI_TX_CTPIO ) {
+    vi->ops.transmit_ctpio_fallback = ef10_ef_vi_transmit_ctpio_fallback;
+    vi->ops.transmitv_ctpio_fallback = ef10_ef_vi_transmitv_ctpio_fallback;
+  }
+  else {
+    vi->ops.transmit_ctpio_fallback =
+                                 ef10_ef_vi_transmit_ctpio_fallback_not_supp;
+    vi->ops.transmitv_ctpio_fallback =
+                                 ef10_ef_vi_transmitv_ctpio_fallback_not_supp;
+  }
 }
 
 

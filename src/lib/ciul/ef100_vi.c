@@ -394,6 +394,25 @@ static void
   ef100_unsupported_msg(__FUNCTION__);
 }
 
+
+static int ef100_ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr,
+                                               size_t len, ef_request_id dma_id)
+{
+  ef100_unsupported_msg(__FUNCTION__);
+  return -EOPNOTSUPP;
+}
+
+
+static int ef100_ef_vi_transmitv_ctpio_fallback(ef_vi* vi,
+                                                const ef_iovec* dma_iov,
+                                                int dma_iov_len,
+                                                ef_request_id dma_id)
+{
+  ef100_unsupported_msg(__FUNCTION__);
+  return -EOPNOTSUPP;
+}
+
+
 static int ef100_ef_vi_transmit_alt_select(ef_vi* vi, unsigned alt_id)
 {
   ef100_unsupported_msg(__FUNCTION__);
@@ -585,6 +604,8 @@ static void ef100_vi_initialise_ops(ef_vi* vi)
     vi->ops.transmit_memcpy        = ef100_ef_vi_transmit_memcpy_disabled;
     vi->ops.transmit_memcpy_sync   = ef100_ef_vi_transmit_memcpy_sync_disabled;
   }
+  vi->ops.transmit_ctpio_fallback = ef100_ef_vi_transmit_ctpio_fallback;
+  vi->ops.transmitv_ctpio_fallback = ef100_ef_vi_transmitv_ctpio_fallback;
 }
 
 void ef100_vi_init(ef_vi* vi)
