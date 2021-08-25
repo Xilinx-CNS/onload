@@ -105,9 +105,9 @@ static void superbuf_free(ef_vi* vi, ef_vi_efct_rxq* rxq, int sbid)
   OO_ACCESS_ONCE(shm->freeq.added) = added + 1;
 }
 
-static bool efct_rxq_is_active(const ef_vi* vi, int qid)
+static bool efct_rxq_is_active(const ef_vi_efct_rxq* rxq)
 {
-  return vi->efct_rxq[qid].superbuf_pkts != 0;
+  return rxq->superbuf_pkts != 0;
 }
 
 /* The superbuf descriptor for this packet */
@@ -135,29 +135,55 @@ static uint32_t rxq_ptr_to_pkt_id(uint32_t ptr)
   return ptr & 0x7fffffff;
 }
 
-/* The header following the next packet, or null if not available */
-static const ci_qword_t* efct_rx_next_header(const ef_vi* vi, int qid)
+static int rxq_ptr_to_sentinel(uint32_t ptr)
 {
-  const ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  uint32_t next = qs->rxq_ptr[qid].next;
+  return ptr >> 31;
+}
+
+static bool efct_rxq_need_rollover(const ef_vi_efct_rxq* rxq, uint32_t next)
+{
+  uint32_t pkt_id = rxq_ptr_to_pkt_id(next);
+  return pkt_id_to_index_in_superbuf(pkt_id) >= rxq->superbuf_pkts;
+}
+
+static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq)
+{
+  return rxq->config_generation != rxq->shm->config_generation;
+}
+
+/* The header following the next packet, or null if not available */
+static const ci_qword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
+{
   const ci_qword_t* header = efct_rx_header(vi, rxq_ptr_to_pkt_id(next));
+  int sentinel = CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
 
-  int expect_phase = next >> 31;
-  int actual_phase = CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
+  return sentinel == rxq_ptr_to_sentinel(next) ? header : NULL;
+}
 
-  return expect_phase == actual_phase ? header : NULL;
+/* Check for actions needed on an rxq. This must match the checks made in
+ * efct_poll_rx to ensure none are missed. */
+static bool efct_rxq_check_event(const ef_vi* vi, int qid)
+{
+  const ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  uint32_t next = vi->ep_state->rxq.rxq_ptr[qid].next;
+
+  return efct_rxq_is_active(rxq) &&
+    (efct_rxq_need_rollover(rxq, next) ||
+     efct_rxq_need_config(rxq) ||
+     efct_rx_next_header(vi, next) != NULL);
 }
 
 /* Check whether a received packet is available */
 static bool efct_rx_check_event(const ef_vi* vi)
 {
   int i;
+
   if( ! vi->vi_rxq.mask )
     return false;
   if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE )
-    return efct_rxq_is_active(vi, 0) && efct_rx_next_header(vi, 0) != NULL;
+    return efct_rxq_check_event(vi, 0);
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
-    if( efct_rxq_is_active(vi, i) && efct_rx_next_header(vi, i) != NULL )
+    if( efct_rxq_check_event(vi, i) )
       return true;
   return false;
 }
@@ -529,34 +555,31 @@ static int rx_rollover(ef_vi* vi, int qid)
 static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+  ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
   ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
-  struct efab_efct_rxq_uk_shm* shm = rxq->shm;
-  uint32_t superbuf_pkts = rxq->superbuf_pkts;
   int i;
 
-  if( ! efct_rxq_is_active(vi, qid) )
+  if( ! efct_rxq_is_active(rxq) )
     return 0;
 
   for( i = 0; i < evs_len; ++i, ++qs->removed ) {
     const ci_qword_t* header;
 
-    if( pkt_id_to_index_in_superbuf(rxq_ptr_to_pkt_id(qs->rxq_ptr[qid].next))
-        >= superbuf_pkts ) {
-      if( rx_rollover(vi, qid) < 0 ) {
+    if( efct_rxq_need_rollover(rxq, rxq_ptr->next) )
+      if( rx_rollover(vi, qid) < 0 )
         /* ef_eventq_poll() has historically never been able to fail, so we
          * maintain that policy */
-        return i;
-      }
-    }
+        break;
+
     /* We only need to check for new config after a rollover and for the first
      * ev in a poll (in case some other address space did a rollover and we
      * now need to mmap here), but it's just as cheap to test the real thing
      * every time */
-    if( shm->config_generation != rxq->config_generation )
+    if( efct_rxq_need_config(rxq) )
       if( superbuf_config_refresh(vi, rxq) < 0 )
-        return i;
+        break;
 
-    header = efct_rx_next_header(vi, qid);
+    header = efct_rx_next_header(vi, rxq_ptr->next);
     if( header == NULL )
       break;
 
@@ -567,14 +590,14 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
 
     evs[i].rx.type = EF_EVENT_TYPE_RX;
     evs[i].rx.q_id = qid;
-    evs[i].rx.rq_id = rxq_ptr_to_pkt_id(qs->rxq_ptr[qid].prev);
+    evs[i].rx.rq_id = rxq_ptr_to_pkt_id(rxq_ptr->prev);
     evs[i].rx.len = CI_QWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
     evs[i].rx.flags = EF_EVENT_FLAG_SOP;
     evs[i].rx.ofs = EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
     /* TODO might be nice to provide more of the available metadata */
     /* TODO: handle manual rollover */
 
-    qs->rxq_ptr[qid].prev = qs->rxq_ptr[qid].next++;
+    rxq_ptr->prev = rxq_ptr->next++;
   }
 
   return i;
@@ -788,7 +811,7 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   ef_vi_efct_rxq* rxq;
 
   for( ix = 0; ix < vi->max_efct_rxq; ++ix )
-    if( ! efct_rxq_is_active(vi, ix) )
+    if( ! efct_rxq_is_active(&vi->efct_rxq[ix]) )
       break;
   if( ix == vi->max_efct_rxq )
     return -ENOSPC;
