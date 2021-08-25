@@ -592,15 +592,6 @@
 /* Whether to include code to transmit packets via CTPIO */
 #define CI_CFG_CTPIO 1
 
-/* Whether this build should use PIO/CTPIO or not.
- *
- * This is needed in addition to CI_CFG_PIO and CI_CFG_CTPIO as on some 32 bit
- * systems PIO is suspected to not be safe, but those builds may be sharing a
- * stack with a 64 bit system that is using PIO safely.
- */
-#define CI_CFG_USE_PIO  (EF_VI_CONFIG_PIO && CI_CFG_PIO)
-#define CI_CFG_USE_CTPIO (EF_VI_CONFIG_PIO && CI_CFG_CTPIO)
-
 /* How many epolls sets will have a ready list maintained by the stack */
 #define CI_CFG_EPOLL1_SETS_PER_STACK 4
 /* How many ready lists are maintained */

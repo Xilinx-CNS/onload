@@ -154,7 +154,7 @@ ci_inline unsigned ci_netif_pkt_to_host_iovec(ci_netif* ni,
 ci_inline int /*bool*/ ci_netif_may_ctpio(ci_netif* ni, int intf_i,
                                           size_t frame_len)
 {
-#if CI_CFG_USE_CTPIO && ! defined(__KERNEL__)
+#if CI_CFG_CTPIO && ! defined(__KERNEL__)
   /* Only use CTPIO if not desisted, frame length is below threshold, and
    * TX ring is not very full.  (It is essential that we have room to post
    * a fallback).

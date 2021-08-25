@@ -91,7 +91,7 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
 {
   ci_ip_pkt_fmt* pkt = PKT_CHK(ni, dmaq->head);
   int rc;
-#if CI_CFG_USE_CTPIO && !defined(__KERNEL__)
+#if CI_CFG_CTPIO && !defined(__KERNEL__)
   int ctpio = is_fresh;
 #endif
 #if CI_CFG_CTPIO && !defined(__KERNEL__)
@@ -131,7 +131,7 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
                                         sizeof(iov) / sizeof(iov[0]));
         if( CI_UNLIKELY(iov_len < 0) )
           break;
-#if CI_CFG_USE_CTPIO && !defined(__KERNEL__)
+#if CI_CFG_CTPIO && !defined(__KERNEL__)
         if( ctpio && (iov_len < 1 || iov_len > CI_IP_PKT_SEGMENTS_MAX ||
                       ! ci_netif_may_ctpio(ni, intf_i, pkt->pay_len) ||
                       pkt->flags & CI_PKT_FLAG_INDIRECT) )
@@ -217,7 +217,7 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
   ef_vi* vi;
   ef_iovec iov[CI_IP_PKT_SEGMENTS_MAX];
   int iov_len;
-#if CI_CFG_USE_PIO
+#if CI_CFG_PIO
   ci_uint8 order;
   ci_int32 offset;
   ci_pio_buddy_allocator* buddy;
@@ -265,7 +265,7 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
 #endif
 
   if( oo_pktq_is_empty(dmaq) && ! (pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
-#if CI_CFG_USE_PIO
+#if CI_CFG_PIO
     /* pio_thresh is set to zero if PIO disabled on this stack, so don't
      * need to check NI_OPTS().pio here
      */
@@ -304,7 +304,7 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
     calc_csum_if_needed(netif, vi, pkt);
     iov_len = ci_netif_pkt_to_iovec(netif, pkt, iov,
                                     sizeof(iov) / sizeof(iov[0]));
-#if CI_CFG_USE_CTPIO && !defined(__KERNEL__)
+#if CI_CFG_CTPIO && !defined(__KERNEL__)
     if( (iov_len > 0) && (iov_len <= CI_IP_PKT_SEGMENTS_MAX) &&
         ci_netif_may_ctpio(netif, intf_i, pkt->pay_len) &&
         is_to_primary_vi(pkt) ) {

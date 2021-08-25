@@ -2551,23 +2551,6 @@ static void ci_netif_pkt_prefault_reserve(ci_netif* ni)
 }
 
 
-#if CI_CFG_PIO && !CI_CFG_USE_PIO
-/*
- * Enforce EF_PIO semantics: on non-x86_64 systems we need to also
- * perform this check here at user-level, rather than just in the kernel
- */
-static int check_pio(ci_netif_config_opts* opts)
-{
-  if( opts->pio == 2 ) {
-    /* EF_PIO == 2 => fail if no PIO */
-    ci_log("ERROR: PIO not supported on this system");
-    return -EINVAL;
-  }
-  return 0;
-}
-#endif
-
-
 void ci_netif_cluster_prefault(ci_netif* ni)
 {
   if( ni->flags & CI_NETIF_FLAGS_PREFAULTED )
@@ -2794,11 +2777,6 @@ int ci_netif_ctor(ci_netif* ni, ef_driver_handle fd, const char* stack_name,
 
   ci_assert(ni);
   ci_netif_sanity_checks();
-
-#if CI_CFG_PIO && !CI_CFG_USE_PIO
-  rc = check_pio(opts);
-  if( rc < 0 ) return rc;
-#endif
 
   rc = ci_netif_init(ni, fd);
   if( rc < 0 )

@@ -931,38 +931,6 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
 
 #if CI_CFG_PIO
 
-# if ! CI_CFG_USE_PIO
-
-/* PIO should not be used: Check whether we should continue and emit
- * warning.
- */ 
-static int allocate_pio(tcp_helper_resource_t* trs, int intf_i, 
-                        struct efrm_pd *pd, struct efhw_nic* nic,
-                        unsigned *pio_buf_offset)
-{
-  ci_netif* ni = &trs->netif;
-  int rc;
-  static int printed = 0;
-
-  if( NI_OPTS(ni).pio == 1 ) {
-    if( !printed ) {
-      ci_log("PIO not supported on this system, will continue without it");
-      printed = 1;
-    }
-    rc = 0;
-  }
-  else {
-    /* EF_PIO == 2 => fail if no PIO */
-    ci_log("[%s] ERROR: PIO not supported on this system", 
-           ni->state->pretty_name);
-    rc = -EOPNOTSUPP;
-  }
-
-  return rc;
-}
-
-# else
-
 static int allocate_pio(tcp_helper_resource_t* trs, int intf_i, 
                         struct efrm_pd *pd, struct efhw_nic* nic,
                         unsigned *pio_buf_offset)
@@ -1071,8 +1039,6 @@ static int allocate_pio(tcp_helper_resource_t* trs, int intf_i,
 
   return 0;
 }
-
-# endif /* PPC / __x86_64__ */
 
 #endif /* CI_CFG_PIO */
 
@@ -1183,8 +1149,6 @@ static int /*bool*/ should_try_ctpio(ci_netif* ni, struct efhw_nic* nic,
                                      struct vi_allocate_info* info)
 {
   return
-    /* Build configured to use CTPIO. */
-    CI_CFG_USE_CTPIO &&
     /* Stack configured to use CTPIO. */
     NI_OPTS(ni).ctpio > 0 &&
     /* NIC claims support for CTPIO. */
@@ -2585,7 +2549,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
 #if CI_CFG_PIO
   ns->pio_mmap_bytes = trs->pio_mmap_bytes;
 #endif
-#if CI_CFG_CTPIO && CI_CFG_USE_CTPIO
+#if CI_CFG_CTPIO
   ns->ctpio_mmap_bytes = trs->ctpio_mmap_bytes;
 #endif
   ns->timesync_bytes = PAGE_SIZE;

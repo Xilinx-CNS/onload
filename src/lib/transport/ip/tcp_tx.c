@@ -48,7 +48,7 @@ ci_inline void ci_ip_tcp_list_to_dmaq(ci_netif* ni, ci_tcp_state* ts,
   oo_pkt_p pp;
   ef_vi* vi;
   int n;
-#if CI_CFG_USE_PIO
+#if CI_CFG_PIO
   int rc;
   ci_uint8 order;
   ci_int32 offset;
@@ -72,7 +72,7 @@ ci_inline void ci_ip_tcp_list_to_dmaq(ci_netif* ni, ci_tcp_state* ts,
 
   ci_netif_dmaq_and_vi_for_pkt(ni, tail_pkt, &dmaq, &vi);
 
-#if CI_CFG_USE_PIO
+#if CI_CFG_PIO
     /* pio_thresh is set to zero if PIO disabled on this stack, so don't
      * need to check NI_OPTS().pio here
      */
