@@ -382,13 +382,8 @@ static void ef_vi_init(struct client_state* cs)
                              -1, 0, -1, NULL, -1, EF_VI_FLAGS_DEFAULT) );
     cs->use_ctpio = 0;
   }
-#if EF_VI_CONFIG_PIO
   TRY( ef_pio_alloc(&(cs->pio), cs->dh, &(cs->pd), -1, cs->dh));
   TRY( ef_pio_link_vi(&(cs->pio), cs->dh, &(cs->vi), cs->dh));
-#else
-  fprintf(stderr, "PIO not available on this CPU type\n");
-  TEST( 0 );
-#endif
 
   int bytes = N_TX_BUFS * PKT_BUF_SIZE;
   void* p;

@@ -22,12 +22,8 @@ extern "C" {
 #endif
 
 
-#if defined(__x86_64__) || defined(__PPC64__) || defined(__aarch64__)
 /*! \brief True if Programmed I/O regions can be configured */
 # define EF_VI_CONFIG_PIO  1
-#else
-# define EF_VI_CONFIG_PIO  0
-#endif
 
 
 /*! \brief A Programmed I/O region */
@@ -48,7 +44,6 @@ struct ef_pd;
 struct ef_vi;
 
 
-#if EF_VI_CONFIG_PIO
 /*! \brief Allocate a Programmed I/O region
 **
 ** \param pio      Memory to use for the allocated Programmed I/O region.
@@ -68,7 +63,6 @@ struct ef_vi;
 */
 extern int ef_pio_alloc(ef_pio* pio, ef_driver_handle pio_dh, struct ef_pd* pd,
                         unsigned len_hint, ef_driver_handle pd_dh);
-#endif
 
 
 /*! \brief Get the size of the Programmed I/O region

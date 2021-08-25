@@ -541,22 +541,6 @@ static void
 }
 
 
-static void
-  ef10_ef_vi_transmitv_ctpio_not_supp(ef_vi* vi, size_t frame_len,
-                                      const struct iovec* iov, int iovcnt,
-                                      unsigned threshold)
-{
-  /* We return an error in ef_vi_transmit_ctpio_fallback(). */
-}
-static void
-  ef10_ef_vi_transmitv_ctpio_copy_not_supp(ef_vi* vi, size_t frame_len,
-                                         const struct iovec* iov, int iovcnt,
-                                         unsigned threshold, void* copy_buf)
-{
-  /* We return an error in ef_vi_transmit_ctpio_fallback(). */
-}
-
-
 /* ?? todo: rename and move to host_ef10_common.h (via firmwaresrc) */
 #define ALT_OP_VFIFO_ID_LBN    48
 #define ALT_OP_VFIFO_ID_WIDTH  5
@@ -767,13 +751,7 @@ static void ef10_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_copy_pio      = ef10_ef_vi_transmit_copy_pio;
   vi->ops.transmit_pio_warm      = ef10_ef_vi_transmit_pio_warm;
   vi->ops.transmit_copy_pio_warm = ef10_ef_vi_transmit_copy_pio_warm;
-  if( EF_VI_CONFIG_PIO ) {
-    select_ctpio_method(vi);
-  }
-  else {
-    vi->ops.transmitv_ctpio      = ef10_ef_vi_transmitv_ctpio_not_supp;
-    vi->ops.transmitv_ctpio_copy = ef10_ef_vi_transmitv_ctpio_copy_not_supp;
-  }
+  select_ctpio_method(vi);
   vi->ops.transmit_alt_select    = ef10_ef_vi_transmit_alt_select;
   vi->ops.transmit_alt_select_default = ef10_ef_vi_transmit_alt_select_normal;
   vi->ops.transmit_alt_stop      = ef10_ef_vi_transmit_alt_stop;

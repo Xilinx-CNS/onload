@@ -72,9 +72,7 @@ static ef_vi		 vi;
 struct pkt_buf*          pkt_bufs[N_BUFS];
 static ef_pd             pd;
 static ef_memreg         memreg;
-#if EF_VI_CONFIG_PIO
 static ef_pio            pio;
-#endif
 static int               tx_frame_len;
 
 
@@ -205,7 +203,6 @@ static const test_t dma_test = {
  * PIO
  */
 
-#if EF_VI_CONFIG_PIO
 static inline void pio_send(ef_vi* vi)
 {
   TRY(ef_vi_transmit_pio(vi, 0, tx_frame_len, 0));
@@ -220,7 +217,6 @@ static const test_t pio_test = {
   .pong = pio_pong,
   .cleanup = NULL,
 };
-#endif
 
 
 
@@ -491,7 +487,6 @@ static const test_t* do_init(int ifindex)
     alt_fill(&vi);
     t = &alt_test;
   }
-#if EF_VI_CONFIG_PIO
   /* If we couldn't allocate an alternative, try PIO. */
   else if( cfg_mode & MODE_PIO &&
            ef_pio_alloc(&pio, driver_handle, &pd, -1, driver_handle) == 0 ) {
@@ -499,7 +494,6 @@ static const test_t* do_init(int ifindex)
     TRY(ef_pio_memcpy(&vi, pkt_bufs[FIRST_TX_BUF]->dma_buf, 0, tx_frame_len));
     t = &pio_test;
   }
-#endif
   /* In the worst case, fall back to DMA sends. */
   else if( cfg_mode & MODE_DMA ) {
     t = &dma_test;

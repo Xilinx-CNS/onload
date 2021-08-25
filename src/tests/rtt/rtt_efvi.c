@@ -361,13 +361,8 @@ static void init_vi(struct vi* vi, const char* interface,
                                -1, for_tx ? 0 : -1, for_tx ? -1 : 0,
                                NULL, -1, vi_flags) );
   if( tx_pio ) {
-    #if EF_VI_CONFIG_PIO
-      RTT_TRY( ef_pio_alloc(&(vi->pio), vi->dh, &(vi->pd), -1, vi->dh) );
-      RTT_TRY( ef_pio_link_vi(&(vi->pio), vi->dh, &(vi->vi), vi->dh) );
-    #else
-      fprintf(stderr, "PIO not available on this CPU type\n");
-      RTT_TEST( 0 );
-    #endif
+    RTT_TRY( ef_pio_alloc(&(vi->pio), vi->dh, &(vi->pd), -1, vi->dh) );
+    RTT_TRY( ef_pio_link_vi(&(vi->pio), vi->dh, &(vi->vi), vi->dh) );
   }
   if( tx_alt )
     RTT_TRY( ef_vi_transmit_alt_alloc(&(vi->vi), vi->dh,
