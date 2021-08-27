@@ -606,7 +606,7 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   evs_len = CI_MIN(evs_len, (int)(rxq->superbuf_pkts -
                                   pkt_id_to_index_in_superbuf(rxq_ptr->next)));
 
-  for( i = 0; i < evs_len; ++i, ++qs->removed ) {
+  for( i = 0; i < evs_len; ++i ) {
     const ci_oword_t* header;
     uint32_t pkt_id;
 

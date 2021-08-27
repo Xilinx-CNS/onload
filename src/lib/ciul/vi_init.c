@@ -435,7 +435,12 @@ void ef_vi_reset_rxq(struct ef_vi* vi)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   qs->posted = 0;
-  qs->added = 0;
+  /* shared rxqs have their buffer posting managed elsewhere, not by the app,
+   * so let's make it look like the queue is constantly full */
+  if( vi->max_efct_rxq )
+    qs->added = vi->vi_rxq.mask + 1;
+  else
+    qs->added = 0;
   qs->removed = 0;
   qs->in_jumbo = 0;
   qs->bytes_acc = 0;
