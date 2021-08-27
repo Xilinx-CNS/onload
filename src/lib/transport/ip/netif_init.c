@@ -779,7 +779,7 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->urg_rfc = atoi(s);
 
   static const char* const urgent_opts[] = { "allow", "ignore", 0 };
-  opts->urg_mode = parse_enum(opts, "EF_TCP_URG_MODE", urgent_opts, "allow");
+  opts->urg_mode = parse_enum(opts, "EF_TCP_URG_MODE", urgent_opts, "ignore");
 
   if( (s = getenv("EF_MCAST_RECV")) )
     opts->mcast_recv = atoi(s);
