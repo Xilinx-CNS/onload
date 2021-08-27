@@ -895,6 +895,9 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
 
   /* Recover from previous connection via the same socket: */
   ts->tcpflags &=~ CI_TCPT_FLAG_FIN_RECEIVED;
+  /* send_prequeue may be set to OO_PP_ID_INVALID by a previous connection
+   * attempt.  However there is no need to reinit send_prequeue_in and
+   * other counters, because no real send was possible. */
   ts->send_prequeue = OO_PP_ID_NULL;
   ci_assert_equal(oo_atomic_read(&ts->send_prequeue_in), 0);
 

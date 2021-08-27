@@ -2849,6 +2849,8 @@ struct ci_tcp_state_s {
   ** lock is contended, and are later transferred to the sendq.  This is a
   ** linked list of packets in reverse order. */
   ci_int32             send_prequeue;
+  /* send_prequeue_in is an atomic addition to send_in; it is never
+   * decremented.  See ci_tcp_sendq_n_pkts(). */
   oo_atomic_t          send_prequeue_in;
 
   struct oo_p_dllink   timeout_q_link;

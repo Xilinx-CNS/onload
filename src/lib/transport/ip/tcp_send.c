@@ -1202,7 +1202,6 @@ void ci_tcp_sendmsg_enqueue_prequeue(ci_netif* ni, ci_tcp_state* ts,
     ++n_pkts;
   }
   while( OO_PP_NOT_NULL(id) );
-  oo_atomic_add(&ts->send_prequeue_in, -n_pkts);
 
   /* Prep each packet. */
   while( 1 ) {
@@ -1308,6 +1307,10 @@ ci_tcp_tx_free_prequeue(ci_netif* ni, ci_tcp_state* ts, int netif_locked)
 
   n_pkts = ci_tcp_sendmsg_free_pkt_list(ni, ts, id, netif_locked, 1);
 
+  /* Despite the comment at send_prequeue_in definition, we do decrement it
+   * here.  This function is called from ci_tcp_sendmsg_handle_tx_errno()
+   * only, i.e. these packets have not really got into sendq, and should
+   * not be accounted at all.  */
   oo_atomic_add(&ts->send_prequeue_in, -n_pkts);
 }
 
