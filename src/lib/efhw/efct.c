@@ -23,7 +23,11 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
   struct xlnx_efct_client* cli;
   struct xlnx_efct_rxq_params qparams = {
     .qid = qid,
+/* EFCT TODO: temporary hack to keep things building across both sides of an
+ * API change. Ultimately all masks are moving to filter add */
+#ifndef XLNX_EFCT_FILTER_F_ANYQUEUE_STRICT
     .mask = mask,
+#endif
     .timestamp_req = timestamp_req,
     .n_hugepages = n_hugepages,
   };
