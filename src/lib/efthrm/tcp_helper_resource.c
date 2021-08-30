@@ -5840,6 +5840,9 @@ efab_tcp_helper_no_more_bufs(tcp_helper_resource_t* trs)
 }
 
 
+/* hw_addrs below is structured as following:
+ *      hw_addrs[n_page + intf_i * n_hw_pages]
+ */
 static int
 efab_tcp_helper_iobufset_map(tcp_helper_resource_t* trs,
                              struct oo_buffer_pages* pages,
@@ -6114,6 +6117,7 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
   ci_netif* ni = &trs->netif;
   long rc;
   uint64_t* hw_addrs = NULL;
+  uint64_t* tmp_hw_addrs = NULL;
   struct page** pages;
   int last_order = -1;
   int i;
@@ -6156,14 +6160,15 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
 
   ioum->groups = kmalloc_array(ioum->n_groups, sizeof(*ioum->groups),
                                GFP_KERNEL);
-  if( ! ioum->groups ) {
-    rc = -ENOMEM;
-    goto fail2;
-  }
-
   hw_addrs = kmalloc(sizeof(hw_addrs[0]) * n_pages * oo_stack_intf_max(ni),
                      GFP_KERNEL);
-  if( ! hw_addrs ) {
+  if( ioum->n_groups > 1 )
+    tmp_hw_addrs = kmalloc(sizeof(hw_addrs[0]) * n_pages *
+                           oo_stack_intf_max(ni),
+                           GFP_KERNEL);
+  else
+    tmp_hw_addrs = hw_addrs;
+  if( ioum->groups == NULL || hw_addrs == NULL || tmp_hw_addrs == NULL ) {
     rc = -ENOMEM;
     goto fail3;
   }
@@ -6173,6 +6178,7 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
     int order = compound_order(pages[i]);
     int j;
     int group_pages = 1 << order;
+    int intf_i;
 
     if( EFHW_GFP_ORDER_TO_NIC_ORDER(order) < min_nics_order ) {
       rc = -EMSGSIZE;   /* Same as oo_bufpage_alloc() */
@@ -6191,10 +6197,18 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
       g->pages->pages[j] = pages[i + (j << order)];
 
     rc = efab_tcp_helper_iobufset_map(trs, g->pages, group_pages,
-                                      g->all, hw_addrs + i, NULL);
+                                      g->all, tmp_hw_addrs, NULL);
     if( rc < 0 ) {
       oo_iobufset_kfree(g->pages);
       goto fail4;
+    }
+
+    if( tmp_hw_addrs != hw_addrs ) {
+      OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
+        memcpy(hw_addrs + i + intf_i * n_pages,
+               tmp_hw_addrs + intf_i * group_pages,
+               sizeof(hw_addrs[0]) * group_pages);
+      }
     }
 
     i += group_pages;
@@ -6236,6 +6250,8 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
   ci_assert_ge(i, n_pages);
 #endif
   kfree(pages);
+  if( tmp_hw_addrs != hw_addrs )
+    kfree(tmp_hw_addrs);
 
   *hw_addrs_out = hw_addrs;
   return 0;
@@ -6248,10 +6264,12 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
         oo_iobufset_resource_release(g->all[i], 0);
     oo_iobufset_kfree(g->pages);
   }
-  kfree(hw_addrs);
  fail3:
+  /* kfree() handles NULL, so we do not care to create fail2 */
+  kfree(hw_addrs);
+  if( tmp_hw_addrs != hw_addrs )
+    kfree(tmp_hw_addrs);
   kfree(ioum->groups);
- fail2:
   efab_put_pages(pages, n_pages);
  fail1:
   kfree(pages);

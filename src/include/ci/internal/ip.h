@@ -5317,6 +5317,8 @@ struct ci_zc_usermem {
   uint64_t base;
   uint64_t size;
   uint64_t kernel_id;
+  /* HW addresses are structured as
+   * hw_addr[page_n + intf_i * size << PAGE_SHIFT] */
   uint64_t hw_addrs[0];
 };
 
