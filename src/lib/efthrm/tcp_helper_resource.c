@@ -6148,7 +6148,11 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
     last_order = order;
     i += 1 << order;
   }
+#ifdef FOLL_SPLIT
   ci_assert_equal(i, n_pages);
+#else
+  ci_assert_ge(i, n_pages);
+#endif
 
   ioum->groups = kmalloc_array(ioum->n_groups, sizeof(*ioum->groups),
                                GFP_KERNEL);
@@ -6195,7 +6199,11 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
 
     i += group_pages;
   }
+#ifdef FOLL_SPLIT
   ci_assert_equal(i, n_pages);
+#else
+  ci_assert_ge(i, n_pages);
+#endif
 
   /* For compound pages we only store the head page and we're about to lose
    * the struct page* for all the tail pages. Decref all those tail pages
@@ -6210,13 +6218,23 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
     int group_pages = g->pages->n_bufs << order;
 
     if (order) {
-      int j;
-      for( j = 0; j < group_pages >> order; ++j )
-        efab_put_pages(pages + i + (j << order) + 1, (1 << order) - 1);
+      while( i < n_pages ) {
+        /* The CI_MIN() below is needed for ! FOLL_SPLIT case only,
+         * i.e. for linux >= 5.13. */
+        efab_put_pages(pages + i + 1,
+                       CI_MIN(1 << order, n_pages - i) - 1);
+        i += 1 << order;
+      }
     }
-    i += group_pages;
+    else {
+      i += group_pages;
+    }
   }
+#ifdef FOLL_SPLIT
   ci_assert_equal(i, n_pages);
+#else
+  ci_assert_ge(i, n_pages);
+#endif
   kfree(pages);
 
   *hw_addrs_out = hw_addrs;
