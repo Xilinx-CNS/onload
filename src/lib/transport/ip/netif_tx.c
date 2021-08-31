@@ -60,6 +60,7 @@ static inline void calc_csum_if_needed(ci_netif* ni, ef_vi* vi,
 }
 
 
+#if CI_CFG_CTPIO
 static inline int tx_ctpio(ci_netif* ni, int intf_i, ef_vi* vi,
                            ci_ip_pkt_fmt* pkt, const ef_iovec *iov,
                            int iov_len)
@@ -80,6 +81,7 @@ static inline int tx_ctpio(ci_netif* ni, int intf_i, ef_vi* vi,
   ci_assert_equal(rc, 0);
   return rc;
 }
+#endif
 
 
 /* [is_fresh] is a hint indicating that the requested TXs are latency-

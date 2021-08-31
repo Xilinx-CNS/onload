@@ -1690,12 +1690,14 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     nsn->tx_ts_correction = vm->tx_ts_correction;
     nsn->ts_format = vm->ts_format;
 
-    trs_nic->thn_ctpio_io_mmap_bytes = alloc_info.vi_ctpio_mmap_bytes;
-    trs_nic->thn_ctpio_io_mmap = NULL;
     trs->io_mmap_bytes += alloc_info.vi_io_mmap_bytes;
-    trs->ctpio_mmap_bytes += alloc_info.vi_ctpio_mmap_bytes;
     vi_state = (char*) vi_state +
                ef_vi_calc_state_bytes(vm->rxq_size, vm->txq_size);
+
+#if CI_CFG_CTPIO
+    trs_nic->thn_ctpio_io_mmap_bytes = alloc_info.vi_ctpio_mmap_bytes;
+    trs_nic->thn_ctpio_io_mmap = NULL;
+    trs->ctpio_mmap_bytes += alloc_info.vi_ctpio_mmap_bytes;
 
     if( nsn->oo_vi_flags & OO_VI_FLAGS_CTPIO_EN ) {
       rc = efrm_ctpio_map_kernel(vi_rs, &(trs_nic->thn_ctpio_io_mmap));
@@ -1705,6 +1707,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
         goto error_out;
       }
     }
+#endif
 
 #if CI_CFG_PIO
     if( NI_OPTS(ni).pio && (nic->devtype.arch == EFHW_ARCH_EF10) ) {

@@ -2094,7 +2094,9 @@ static int netif_tcp_helper_build(ci_netif* ni)
   }
   ni->future_intf_mask = ci_netif_build_future_intf_mask(ni);
 
+#if CI_CFG_CTPIO
   ci_assert_equal(ctpio_io_offset, ns->ctpio_mmap_bytes);
+#endif
 
   /* Set up ni->packets->sets_max */
   netif_tcp_helper_build2(ni);
