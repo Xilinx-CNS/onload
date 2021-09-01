@@ -243,12 +243,9 @@ donet () {
     /sbin/modprobe -q mdio
     /sbin/modprobe -q 8021q
     /sbin/modprobe -q ptp
-    # Kernel versions up to 2.6.22 inclusive have an 'mtdpart' module
-    # needed for partition support.  From 2.6.23 this is combined
-    # with other code into an 'mtd' module.
-    if modprobe -q mtdpart || modprobe -q mtd; then
-        modprobe mtdchar
-    fi
+    /sbin/modprobe -q mtd
+    # We also want either mtdchar or mtdblock, but don't mind which.
+    /sbin/modprobe -q mtdchar || /sbin/modprobe -q mtdblock
     modprobe -q vdpa
     # ef100 support requires nf_flow_table if it is configured in
     modprobe nf_flow_table
@@ -283,9 +280,6 @@ donet () {
         [ -c /dev/$F ] || try mknod /dev/$F c 90 $i
         i=`expr $i + 2`
     done
-
-    mknod_for_drv sfc_control 0600
-    ln -sf sfc_control /dev/sfc_tweak
   fi
 
   # Find all interfaces created by driver
