@@ -532,7 +532,7 @@
 
 
 /* Max length of "name" of a stack. */
-#define CI_CFG_STACK_NAME_LEN  16
+#define CI_CFG_STACK_NAME_LEN  26
 
 /* Max length of "name" of a cluster. */
 #define CI_CFG_CLUSTER_NAME_LEN (CI_CFG_STACK_NAME_LEN >> 1)

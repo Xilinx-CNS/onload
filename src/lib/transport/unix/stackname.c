@@ -147,7 +147,7 @@ int onload_set_stackname(enum onload_stackname_who who,
     }
     
     /* Make sure we have room for the suffix */
-    if( strlen(stackname) > CI_CFG_STACK_NAME_LEN - 8 ) {
+    if( strlen(stackname) > CI_CFG_STACK_NAME_LEN - 10 ) {
       errno = ENAMETOOLONG;
       return -1;
     }
@@ -395,8 +395,8 @@ void oo_stackname_state_init(struct oo_stackname_state *spt)
 
   if( (s = getenv("EF_NAME")) != NULL ) {
     spt->context = ONLOAD_SCOPE_GLOBAL;
-    strncpy(spt->stackname, s, CI_CFG_STACK_NAME_LEN - 8);
-    strncpy(spt->scoped_stackname, s, CI_CFG_STACK_NAME_LEN - 8);
+    strncpy(spt->stackname, s, CI_CFG_STACK_NAME_LEN - 10);
+    strncpy(spt->scoped_stackname, s, CI_CFG_STACK_NAME_LEN - 10);
   }
 
   if( CITP_OPTS.stack_per_thread ) {

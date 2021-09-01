@@ -93,7 +93,7 @@ int main(int argc, char **argv)
   s1 = createSocket(20001);
 
   /* temporarily switch to a different stackname */
-  if( onload_set_stackname(ONLOAD_THIS_THREAD, ONLOAD_SCOPE_THREAD, "tmp_stk") )
+  if( onload_set_stackname(ONLOAD_THIS_THREAD, ONLOAD_SCOPE_THREAD, "tmp_long_stcknme") )
     perror("Error setting stackname:");
 
   /* create a socket in the temporary stackname */
