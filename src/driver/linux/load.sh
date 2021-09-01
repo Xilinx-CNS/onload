@@ -26,10 +26,6 @@ LOAD_CONFIG=false
 PROBE_CP_SERVER_PATH=true
 LINUX_NET="sfc"
 
-if [ "$DATABASE_LOG" = "" ] ; then
-   DATABASE_LOG=1
-fi
-
 
 usage () {
   err 
@@ -60,7 +56,6 @@ usage () {
   err "  -noifup         - don't bring the interface(s) up"
   err "  -jumbo          - Set interface mtu to 9000"
   err "  -mtu <mtu>      - Set interface mtu to <mtu>"
-  err "  -[no]dblog      - Post a record of the driver load to central database"
   err
   err "resource driver specific options:"
   err "  -irqmodc <val>  - char driver int moderation (in usec)"
@@ -350,36 +345,6 @@ donet () {
                 fi
         fi
 
-        # Send to the database
-        if [ "$DATABASE_LOG" = "1" ] ; then
-                if ! myname="`hostname -s 2>/dev/null`"; then
-                   myname="$houseip"
-                fi
-
-                #see if we can query feprogtool
-                feprog=`which feprogtool 1>/dev/null 2>/dev/null && feprogtool --device $ethif --oper=dbloginfo  2>/dev/null`
-		
-                set -- `who am i`; user=$1
-                tmpf=$(mktemp /tmp/load_sh.XXXXXX)
-                tmpf2=$(mktemp /tmp/load_sh.XXXXXX)
-                echo "operation=load&srctype=linux&ip=${houseip}&user=${user}&os=${os}&hostname=$myname.`dnsdomainname`&extra=${extra}${feprog}&data=" >$tmpf
-                /sbin/ifconfig $ethif >>$tmpf
-                # Work-around for lack of dns in US office.
-                boarddb="boarddb.uk.solarflarecom.com"
-		(host "$boarddb" | grep 'has address ' &>/dev/null) || boarddb=10.17.128.88
-                wget -q --timeout=10 -t 1 -O - --post-file=$tmpf http://$boarddb:8091/post >$tmpf2 2>/dev/null
-		if [  $? == 0 ] ; then 
-                   echo "*********************************************"
-                   echo "BoardDB returned:"
-		   echo
-                   cat $tmpf2
-		   echo
-                   echo "*********************************************"
-                else
-                   echo "WARN: BoardDB upload failed"
-                fi
-                rm -f $tmpf $tmpf2
-        fi
         /sbin/ip link set $ethif up mtu $mtu
 
         # The link-local address is probably harmless, but the user did say NOip...
@@ -654,8 +619,6 @@ while [ $# -gt 0 ]; do
     -noifup)    IFUP=false;;
     -jumbo)	mtu=8982;;
     -mtu)	mtu="$2"; shift;;
-    -dblog)     DATABASE_LOG=1 ;;
-    -nodblog)     DATABASE_LOG=0 ;;
     -largeeeprom) EEPROM_ARG="eeprom_type=1" ;;
     -smalleeprom) EEPROM_ARG="eeprom_type=0" ;;
     -flash)     FLASH_ARG="flash_type=$2"; shift ;;
