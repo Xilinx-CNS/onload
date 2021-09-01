@@ -1730,6 +1730,14 @@ static void netif_tcp_helper_munmap(ci_netif* ni)
   }
 #endif
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  if( ni->plugin_ptr != NULL ) {
+    rc = oo_resource_munmap(ci_netif_get_driver_handle(ni),
+                            ni->plugin_ptr, CI_PAGE_SIZE);
+    if( rc < 0 )  LOG_NV(ci_log("%s: munmap plugin %d", __FUNCTION__, rc));
+  }
+#endif
+
   if( ni->io_ptr != NULL ) {
     rc = oo_resource_munmap(ci_netif_get_driver_handle(ni),
                             ni->io_ptr, ni->state->io_mmap_bytes);
@@ -1759,6 +1767,9 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
 #if CI_CFG_CTPIO
   ni->ctpio_ptr = NULL;
   ni->ctpio_bytes_mapped = 0;
+#endif
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  ni->plugin_ptr = NULL;
 #endif
   ni->buf_ptr = NULL;
   ni->packets = NULL;
