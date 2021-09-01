@@ -154,7 +154,8 @@ ci_inline unsigned ci_netif_pkt_to_host_iovec(ci_netif* ni,
 ci_inline int /*bool*/ ci_netif_may_ctpio(ci_netif* ni, int intf_i,
                                           size_t frame_len)
 {
-#if CI_CFG_CTPIO && ! defined(__KERNEL__)
+#if CI_CFG_CTPIO
+ #ifndef __KERNEL__
   /* Only use CTPIO if not desisted, frame length is below threshold, and
    * TX ring is not very full.  (It is essential that we have room to post
    * a fallback).
@@ -164,6 +165,9 @@ ci_inline int /*bool*/ ci_netif_may_ctpio(ci_netif* ni, int intf_i,
   int max_fill = ef_vi_transmit_capacity(vi) >> 2;
   return frame_len <= nsn->ctpio_frame_len_check &&
          ef_vi_transmit_fill_level(vi) < max_fill;
+ #else
+  return 0;
+ #endif
 #else
   return 0;
 #endif
