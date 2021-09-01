@@ -117,15 +117,24 @@ static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
   return desc + pkt_id_to_global_superbuf_ix(pkt_id);
 }
 
+static const char* efct_superbuf_base(const ef_vi* vi, size_t pkt_id)
+{
+#ifdef __KERNEL__
+  return vi->efct_rxq[0].superbufs[pkt_id_to_global_superbuf_ix(pkt_id)];
+#else
+  /* Sneakily rely on vi->efct_rxq[i].superbuf being contiguous, thus avoiding
+   * an array lookup (or, more specifically, relying on the TLB to do the
+   * lookup for us) */
+  return vi->efct_rxq[0].superbuf +
+         pkt_id_to_global_superbuf_ix(pkt_id) * EFCT_RX_SUPERBUF_BYTES;
+#endif
+}
+
 /* The header preceding this packet */
 static const ci_oword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
 {
-  /* Sneakily rely on vi->efct_rxq[i].superbuf being contiguous.
-   * TODO EFCT: kernelspace won't be able to be this cunning */
-  return (const ci_oword_t*)
-         (vi->efct_rxq[0].superbuf +
-          pkt_id_to_global_superbuf_ix(pkt_id) * EFCT_RX_SUPERBUF_BYTES +
-          pkt_id_to_index_in_superbuf(pkt_id) * EFCT_PKT_STRIDE);
+  return (const ci_oword_t*)(efct_superbuf_base(vi, pkt_id) +
+                        pkt_id_to_index_in_superbuf(pkt_id) * EFCT_PKT_STRIDE);
 }
 
 static uint32_t rxq_ptr_to_pkt_id(uint32_t ptr)
@@ -163,9 +172,6 @@ static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
 
 /* Check for actions needed on an rxq. This must match the checks made in
  * efct_poll_rx to ensure none are missed. */
-#ifdef __KERNEL__
-__attribute__((unused))
-#endif
 static bool efct_rxq_check_event(const ef_vi* vi, int qid)
 {
   const ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
@@ -181,10 +187,6 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
 /* Check whether a received packet is available */
 static bool efct_rx_check_event(const ef_vi* vi)
 {
-#ifdef __KERNEL__
-  /* TODO EFCT */
-  return false;
-#else
   int i;
 
   if( ! vi->vi_rxq.mask )
@@ -195,7 +197,6 @@ static bool efct_rx_check_event(const ef_vi* vi)
     if( efct_rxq_check_event(vi, i) )
       return true;
   return false;
-#endif
 }
 
 /* tx packet descriptor, stored in the ring until completion */
@@ -563,9 +564,6 @@ static void efct_ef_vi_receive_push(ef_vi* vi)
   /* TODO X3 */
 }
 
-#ifdef __KERNEL__
-__attribute__((unused))
-#endif
 static int rx_rollover(ef_vi* vi, int qid)
 {
   uint32_t pkt_id;
@@ -593,9 +591,6 @@ static int rx_rollover(ef_vi* vi, int qid)
   return 0;
 }
 
-#ifdef __KERNEL__
-__attribute__((unused))
-#endif
 static void efct_rx_discard(int qid, uint32_t pkt_id,
                             const ci_oword_t* header, ef_event* ev)
 {
@@ -619,10 +614,6 @@ static void efct_rx_discard(int qid, uint32_t pkt_id,
 
 static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
 {
-#ifdef __KERNEL__
-  /* TODO EFCT */
-  return 0;
-#else
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
   ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
@@ -689,7 +680,6 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   }
 
   return i;
-#endif
 }
 
 static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
@@ -811,12 +801,20 @@ int efct_vi_mmap_init(ef_vi* vi)
                                    EF_VI_MAX_EFCT_RXQS, CI_PAGE_SIZE));
   return rc;
 }
+#endif
 
 int efct_vi_mmap_init_internal(ef_vi* vi, struct efab_efct_rxq_uk_shm *shm)
 {
   void* space;
-  uint64_t* mappings;
   int i;
+
+#ifdef __KERNEL__
+  space = kvmalloc(vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES *
+                   sizeof(vi->efct_rxq[0].superbufs[0]), GFP_KERNEL);
+  if( space == NULL )
+    return -ENOMEM;
+#else
+  uint64_t* mappings;
   const size_t bytes_per_rxq = CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
   const size_t mappings_bytes =
     vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES * sizeof(mappings[0]);
@@ -832,8 +830,11 @@ int efct_vi_mmap_init_internal(ef_vi* vi, struct efab_efct_rxq_uk_shm *shm)
    * actual mmappings for each specific superbuf into a computable place
    * within this space, i.e. so that conversion from {rxq#,superbuf#} to
    * memory address is trivial arithmetic rather than needing various array
-   * lookups (c.f. what we need to do in ifdef __KERNEL__, which doesn't have
-   * facilities for this kind of address space trickery). */
+   * lookups.
+   *
+   * In kernelspace we can't do this trickery (see the other #ifdef branch), so
+   * we pay the price of doing the naive array lookups: we have an array of
+   * pointers to superbufs. */
   space = mmap(NULL, vi->max_efct_rxq * bytes_per_rxq, PROT_NONE,
                MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
                -1, 0);
@@ -841,18 +842,24 @@ int efct_vi_mmap_init_internal(ef_vi* vi, struct efab_efct_rxq_uk_shm *shm)
     free(mappings);
     return -ENOMEM;
   }
+#endif
 
   vi->efct_shm = shm;
 
   for( i = 0; i < vi->max_efct_rxq; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
+#ifdef __KERNEL__
+    rxq->superbufs = (const char**)space + i * CI_EFCT_MAX_HUGEPAGES;
+#else
     rxq->superbuf = (char*)space + i * bytes_per_rxq;
     rxq->current_mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
+#endif
   }
 
   return 0;
 }
 
+#ifndef __KERNEL__
 void efct_vi_munmap(ef_vi* vi)
 {
   efct_vi_munmap_internal(vi);
@@ -860,12 +867,17 @@ void efct_vi_munmap(ef_vi* vi)
                      CI_ROUND_UP(sizeof(struct efab_efct_rxq_uk_shm) *
                                  EF_VI_MAX_EFCT_RXQS, CI_PAGE_SIZE));
 }
+#endif
 
 void efct_vi_munmap_internal(ef_vi* vi)
 {
+#ifdef __KERNEL__
+  kvfree(vi->efct_rxq[0].superbufs);
+#else
   munmap((void*)vi->efct_rxq[0].superbuf,
          vi->max_efct_rxq * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
   free(vi->efct_rxq[0].current_mappings);
+#endif
 }
 
 int efct_vi_find_free_rxq(ef_vi* vi, int qid)
@@ -881,6 +893,7 @@ int efct_vi_find_free_rxq(ef_vi* vi, int qid)
   return -ENOSPC;
 }
 
+#ifndef __KERNEL__
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 {
   int rc;
@@ -937,6 +950,7 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   vi->ep_state->rxq.rxq_ptr[ix].next = 1 + vi->efct_shm[ix].superbuf_pkts;
   return 0;
 }
+#endif
 
 void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
                                  ef_vi_efct_superbuf_refresh_t *refresh_func)
@@ -950,7 +964,6 @@ void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
 }
 
 /* efct_vi_detach_rxq not yet implemented */
-#endif
 
 static int efct_post_filter_add(struct ef_vi* vi,
                                 const struct ef_filter_spec* fs,
@@ -1062,10 +1075,7 @@ static const ci_oword_t* pkt_to_metadata(ef_vi* vi, int qid, const void* pkt)
   off &= -mask;    /* trickery to avoid a branch */
 
   return (const ci_oword_t*)
-         (vi->efct_rxq[0].superbuf +
-          (unsigned)pkt_id_to_global_superbuf_ix(
-                                 vi->ep_state->rxq.rxq_ptr[qid].next) *
-              EFCT_RX_SUPERBUF_BYTES + off);
+         (efct_superbuf_base(vi, vi->ep_state->rxq.rxq_ptr[qid].next) + off);
 }
 
 int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
@@ -1084,8 +1094,7 @@ int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
                                       ~(uintptr_t)(EFCT_RX_SUPERBUF_BYTES - 1));
 
     for( i = 0; i < vi->max_efct_rxq; ++i )
-      if( base == vi->efct_rxq[0].superbuf +
-            pkt_id_to_global_superbuf_ix(vi->ep_state->rxq.rxq_ptr[i].prev) )
+      if( base == efct_superbuf_base(vi, vi->ep_state->rxq.rxq_ptr[i].prev) )
         break;
     EF_VI_BUG_ON(i == vi->max_efct_rxq);
     qid = i;

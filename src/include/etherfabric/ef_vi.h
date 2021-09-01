@@ -751,10 +751,15 @@ typedef int ef_vi_efct_superbuf_refresh_t(struct ef_vi*, int);
 */
 typedef struct {
   unsigned resource_id;
+#ifdef __KERNEL__
+  /** array of CI_EFCT_MAX_SUPERBUFS elements */
+  const char** superbufs;
+#else
   /** contiguous area of superbuf memory */
   const char* superbuf;
-  uint32_t config_generation;
   uint64_t* current_mappings;
+#endif
+  uint32_t config_generation;
   ef_vi_efct_superbuf_refresh_t* refresh_func;
 } ef_vi_efct_rxq;
 
