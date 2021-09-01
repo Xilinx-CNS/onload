@@ -157,7 +157,7 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 		return -ENOMEM;
 
 	rc = efct_get_hugepages(rxq->rs.rs_client->nic,
-	                        &rxq->hw, pages, CI_EFCT_MAX_HUGEPAGES);
+	                        rxq->hw.qid, pages, CI_EFCT_MAX_HUGEPAGES);
 	if (rc < 0) {
 		kfree(pages);
 		return rc;
@@ -199,6 +199,40 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 #endif /* CI_HAVE_EFCT_AUX */
 }
 EXPORT_SYMBOL(efrm_rxq_refresh);
+
+
+/* This function is identical to efrm_rxq_refresh(), except with the output
+ * being pointers to kernelspace rather than userspace */
+int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
+						    const char** superbufs)
+{
+#if CI_HAVE_EFCT_AUX
+	struct xlnx_efct_hugepage *pages;
+	size_t i;
+	int rc = 0;
+
+	pages = kmalloc_array(sizeof(pages[0]), CI_EFCT_MAX_HUGEPAGES, GFP_KERNEL);
+	if (!pages)
+		return -ENOMEM;
+
+	rc = efct_get_hugepages(nic, hwqid, pages, CI_EFCT_MAX_HUGEPAGES);
+	if (rc < 0) {
+		kfree(pages);
+		return rc;
+	}
+	for (i = 0; i < CI_EFCT_MAX_SUPERBUFS; ++i) {
+		struct page* page = pages[i / CI_EFCT_SUPERBUFS_PER_PAGE].page;
+		superbufs[i] = page_to_virt(page) +
+		              EFCT_RX_SUPERBUF_BYTES * (i % CI_EFCT_SUPERBUFS_PER_PAGE);
+	}
+
+	kfree(pages);
+	return rc;
+#else
+	return -EOPNOTSUPP;
+#endif /* CI_HAVE_EFCT_AUX */
+}
+EXPORT_SYMBOL(efrm_rxq_refresh_kernel);
 
 
 static void efrm_rxq_rm_dtor(struct efrm_resource_manager *rm)

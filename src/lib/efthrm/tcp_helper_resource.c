@@ -1444,12 +1444,18 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
 }
 
 
-static void initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
-                          struct efrm_vi_mappings* vm, void* vi_state,
-                          int vi_arch, int vi_variant, int vi_revision,
-                          unsigned char vi_nic_flags,
-                          struct vi_allocate_info* alloc_info,
-                          unsigned* vi_out_flags, ef_vi_stats* vi_stats)
+static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int qid)
+{
+  return efrm_rxq_refresh_kernel(vi->dh, qid, vi->efct_rxq[qid].superbufs);
+}
+
+
+static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
+                         struct efrm_vi_mappings* vm, void* vi_state,
+                         int vi_arch, int vi_variant, int vi_revision,
+                         unsigned char vi_nic_flags,
+                         struct vi_allocate_info* alloc_info,
+                         unsigned* vi_out_flags, ef_vi_stats* vi_stats)
 {
   uint32_t* vi_ids = (void*) ((ef_vi_state*) vi_state + 1);
 
@@ -1473,6 +1479,16 @@ static void initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
   if( vm->txq_size > 0 )
     ef_vi_init_txq(vi, vm->txq_size, vm->txq_descriptors, vi_ids);
   vi->vi_i = EFAB_VI_RESOURCE_INSTANCE(vi_rs);
+  vi->dh = efrm_client_get_nic(vi_rs->rs.rs_client);
+  if( vi->max_efct_rxq ) {
+    int i;
+    int rc = efct_vi_mmap_init_internal(vi, vi_rs->efct_shm);
+    if( rc < 0 )
+      return rc;
+    for( i = 0; i < vi->max_efct_rxq; ++i )
+      efct_vi_attach_rxq_internal(vi, i, -1 /* resource ID not needed */,
+                                  tcp_helper_superbuf_config_refresh);
+  }
   ef_vi_init_state(vi);
   ef_vi_set_stats_buf(vi, vi_stats);
   if( vm->txq_size || vm->rxq_size )
@@ -1483,6 +1499,7 @@ static void initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
   ef_vi_set_ts_format(vi, vm->ts_format);
   ef_vi_init_rx_timestamping(vi, vm->rx_ts_correction);
   ef_vi_init_tx_timestamping(vi, vm->tx_ts_correction);
+  return 0;
 }
 
 /* callback from ef_vi->ops */
@@ -1547,6 +1564,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     for( vi_i = 0; vi_i < CI_MAX_VIS_PER_INTF; ++vi_i ) {
       trs->nic[intf_i].thn_vi_rs[vi_i] = NULL;
       trs->nic[intf_i].thn_vi_mmap_bytes[vi_i] = 0;
+      ni->nic_hw[intf_i].vis[vi_i].efct_rxq[0].superbufs = NULL;
     }
 #if CI_CFG_PIO
     trs->nic[intf_i].thn_pio_rs = NULL;
@@ -1624,10 +1642,12 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     }
 
     vi = ci_netif_vi(ni, intf_i);
-    initialise_vi(ni, vi, tcp_helper_vi(trs, intf_i), vm,
-                  vi_state, nic->devtype.arch, nic->devtype.variant,
-                  nic->devtype.revision, efhw_vi_nic_flags(nic), &alloc_info,
-                  &vi_out_flags, &ni->state->vi_stats);
+    rc = initialise_vi(ni, vi, tcp_helper_vi(trs, intf_i), vm,
+                       vi_state, nic->devtype.arch, nic->devtype.variant,
+                       nic->devtype.revision, efhw_vi_nic_flags(nic),
+                       &alloc_info, &vi_out_flags, &ni->state->vi_stats);
+    if( rc < 0 )
+      goto error_out;
 
     vi->xdp_kick = af_xdp_kick;
     vi->xdp_kick_context = vi_rs;
@@ -1754,11 +1774,16 @@ static int allocate_vis(tcp_helper_resource_t* trs,
           goto error_out;
         }
         vi_rs = trs_nic->thn_vi_rs[vi_i];
-        initialise_vi(ni, &ni->nic_hw[intf_i].vis[vi_i],
-                      vi_rs, vm,
-                      vi_state, nic->devtype.arch, nic->devtype.variant,
-                      nic->devtype.revision, efhw_vi_nic_flags(nic),
-                      &alloc_info, &vi_out_flags, &ni->state->vi_stats);
+        rc = initialise_vi(ni, &ni->nic_hw[intf_i].vis[vi_i],
+                           vi_rs, vm,
+                           vi_state, nic->devtype.arch, nic->devtype.variant,
+                           nic->devtype.revision, efhw_vi_nic_flags(nic),
+                           &alloc_info, &vi_out_flags, &ni->state->vi_stats);
+        if( rc < 0 ) {
+          if( release_pd )
+            efrm_pd_release(alloc_info.pd); /* vi keeps a ref to pd */
+          goto error_out;
+        }
 
         nsn->vi_instance[vi_i] =
                   (ci_uint16) EFAB_VI_RESOURCE_INSTANCE(vi_rs);
@@ -1786,6 +1811,9 @@ error_out:
     int vi_i;
     for( vi_i = ci_netif_num_vis(ni) - 1; vi_i >= 0; --vi_i ) {
       if( trs->nic[intf_i].thn_vi_rs[vi_i] ) {
+        ef_vi* vi = &ni->nic_hw[intf_i].vis[vi_i];
+        if( vi->efct_rxq[0].superbufs )
+          efct_vi_munmap_internal(vi);
         efrm_vi_resource_release(trs->nic[intf_i].thn_vi_rs[vi_i]);
         trs->nic[intf_i].thn_vi_rs[vi_i] = NULL;
       }
@@ -1940,6 +1968,9 @@ static void release_vi(tcp_helper_resource_t* trs)
 #endif
     for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
       size_t rxq_i;
+      ef_vi* vi = &trs->netif.nic_hw[intf_i].vis[vi_i];
+      if( vi->efct_rxq[0].superbufs )
+        efct_vi_munmap_internal(vi);
       efrm_vi_resource_release_flushed(trs_nic->thn_vi_rs[vi_i]);
       trs_nic->thn_vi_rs[vi_i] = NULL;
       CI_DEBUG_ZERO(&trs->netif.nic_hw[intf_i].vis[vi_i]);

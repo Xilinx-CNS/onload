@@ -23,6 +23,8 @@ extern void efrm_rxq_release(struct efrm_efct_rxq *rxq);
 int efrm_rxq_refresh(struct efrm_efct_rxq *rxq,
                      unsigned long superbufs, uint64_t __user *user_current,
                      unsigned max_superbufs);
+int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
+                            const char** superbufs);
 
 
 #endif

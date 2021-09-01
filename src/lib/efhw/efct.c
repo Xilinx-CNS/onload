@@ -90,7 +90,7 @@ efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
 
 
 int
-efct_get_hugepages(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
+efct_get_hugepages(struct efhw_nic *nic, int hwqid,
                    struct xlnx_efct_hugepage *pages, size_t n_pages)
 {
   struct device *dev;
@@ -99,7 +99,7 @@ efct_get_hugepages(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc)
-  rc = edev->ops->get_hugepages(cli, rxq->qid, pages, n_pages);
+  rc = edev->ops->get_hugepages(cli, hwqid, pages, n_pages);
   EFCT_POST(dev, edev, cli, nic, rc);
   return rc;
 }

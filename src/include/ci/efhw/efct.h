@@ -53,7 +53,7 @@ int efct_nic_rxq_bind(struct efhw_nic *nic, int qid,
                       struct efhw_efct_rxq *rxq);
 void efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
                        efhw_efct_rxq_free_func_t *freer);
-int efct_get_hugepages(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
+int efct_get_hugepages(struct efhw_nic *nic, int hwqid,
                        struct xlnx_efct_hugepage *pages, size_t n_pages);
 #endif
 
