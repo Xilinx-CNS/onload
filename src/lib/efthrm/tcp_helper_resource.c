@@ -6232,11 +6232,12 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
     int group_pages = g->pages->n_bufs << order;
 
     if (order) {
-      while( i < n_pages ) {
-        /* The CI_MIN() below is needed for ! FOLL_SPLIT case only,
+        /* The 2 CI_MIN()s below are needed for ! FOLL_SPLIT case only,
          * i.e. for linux >= 5.13. */
+      int i_max = CI_MIN(n_pages, i + group_pages);
+      while( i < i_max ) {
         efab_put_pages(pages + i + 1,
-                       CI_MIN(1 << order, n_pages - i) - 1);
+                       CI_MIN(1 << order, i_max - i) - 1);
         i += 1 << order;
       }
     }
