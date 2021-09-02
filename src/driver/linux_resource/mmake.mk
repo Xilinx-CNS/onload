@@ -15,9 +15,10 @@ RESOURCE_SRCS	:= resource_driver.c \
 	aux_driver.c aux_efct.c
 
 EFHW_SRCS	:= nic.c eventq.c ef10.c ef100.c af_xdp.c ethtool_rxclass.c \
-		efct.c
+		ethtool_flow.c efct.c
 
-EFHW_HDRS	:= ef10_mcdi.h ethtool_rxclass.h ef10_ef100.h efct.h
+EFHW_HDRS	:= ef10_mcdi.h ethtool_rxclass.h ethtool_flow.h ef10_ef100.h \
+		efct.h
 
 EFRM_SRCS	:=			\
 		assert_valid.c		\

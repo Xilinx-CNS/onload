@@ -11,7 +11,8 @@ LIB_SRCS	:= nic.c \
 		   ef100.c \
 		   efct.c \
 		   af_xdp.c \
-		   ethtool_rxclass.c
+		   ethtool_rxclass.c \
+		   ethtool_flow.c
 
 
 ifndef MMAKE_NO_RULES

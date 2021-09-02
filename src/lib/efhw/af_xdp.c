@@ -25,6 +25,7 @@
 #include <ci/efrm/efrm_filter.h>
 
 #include "ethtool_rxclass.h"
+#include "ethtool_flow.h"
 
 /* sys_call_area: a process-mapped area which can be used to perform
  * system calls from a module.
@@ -1413,12 +1414,8 @@ af_xdp_rss_flags(struct efhw_nic *nic, u32 *flags_out)
 	return -ENOSYS;
 }
 
-#define EFX_IP_FILTER_MATCH_FLAGS \
-                (EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_IP_PROTO | \
-                 EFX_FILTER_MATCH_LOC_HOST | EFX_FILTER_MATCH_LOC_PORT)
-
-static int efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
-				    struct ethtool_rx_flow_spec* fs)
+static int af_xdp_efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
+					   struct ethtool_rx_flow_spec* fs)
 {
 	/* In order to support different driver capabilities we need to
 	 * always install the same filter type. This means that we will
@@ -1441,34 +1438,27 @@ static int efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
 	 * back to traffic via the kernel, so I'm living with it for now.
 	 */
 
-	/* Check that this is an IP filter */
-	if ((efx_spec->match_flags & EFX_IP_FILTER_MATCH_FLAGS) !=
-	    EFX_IP_FILTER_MATCH_FLAGS)
+	int rc = efx_spec_to_ethtool_flow(efx_spec, fs);
+	if (rc < 0)
+		return rc;
+
+	switch (fs->flow_type) {
+	case UDP_V4_FLOW:
+		if (fs->m_u.udp_ip4_spec.ip4src || fs->m_u.udp_ip4_spec.psrc ||
+		    fs->m_u.udp_ip4_spec.tos)
+			return -EOPNOTSUPP;
+		break;
+	case TCP_V4_FLOW:
+		if (fs->m_u.tcp_ip4_spec.ip4src || fs->m_u.tcp_ip4_spec.psrc ||
+		    fs->m_u.tcp_ip4_spec.tos)
+			return -EOPNOTSUPP;
+		break;
+	default:
+		/* FIXME AF_XDP need to check whether we can install both IPv6
+		 * and IPv4 filters. For now just support IPv4.
+		 */
 		return -EOPNOTSUPP;
-
-	/* FIXME AF_XDP need to check whether we can install both IPv6 and
-	 * IPv4 filters. For now just support IPv4.
-	 */
-	if (efx_spec->ether_type != ntohs(ETH_P_IP))
-		return -EOPNOTSUPP;
-
-	if (efx_spec->ip_proto == IPPROTO_TCP)
-		fs->flow_type = TCP_V4_FLOW;
-	else if (efx_spec->ip_proto == IPPROTO_UDP)
-		fs->flow_type = UDP_V4_FLOW;
-	else
-		return -EINVAL;
-
-	/* Populate the match fields. For each field we need to set both the
-	 * value, and a mask of which bits in that field to match against.
-	 */
-	fs->h_u.tcp_ip4_spec.ip4dst = efx_spec->loc_host[0];
-	fs->m_u.tcp_ip4_spec.ip4dst = 0xffffffff;
-	fs->h_u.tcp_ip4_spec.pdst = efx_spec->loc_port;
-	fs->m_u.tcp_ip4_spec.pdst = 0xffff;
-
-	/* Give the driver free rein on where to insert the filter. */
-	fs->location = RX_CLS_LOC_ANY;
+	}
 
 	/* TODO AF_XDP: for now assume dmaq_id matches NIC channel
 	 * based on insight into efhw/af_xdp.c */
@@ -1489,7 +1479,7 @@ af_xdp_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 
 	memset(&info, 0, sizeof(info));
 	info.cmd = ETHTOOL_SRXCLSRLINS;
-	rc = efx_spec_to_ethtool_flow(spec, &info.fs);
+	rc = af_xdp_efx_spec_to_ethtool_flow(spec, &info.fs);
 	if ( rc < 0 )
 		return rc;
 
