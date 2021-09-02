@@ -17,6 +17,7 @@ struct efhw_efct_rxq {
   struct efab_efct_rxq_uk_shm *shm;
   unsigned qid;
   bool destroy;
+  uint32_t next_sbuf_seq;
   size_t n_hugepages;
   uint32_t current_owned_superbufs;
   uint32_t max_allowed_superbufs;
@@ -31,11 +32,16 @@ struct efhw_nic_efct_rxq {
   struct efhw_efct_rxq *new_apps;  /* Owned by process context */
   struct efhw_efct_rxq *live_apps; /* Owned by NAPI context */
   struct efhw_efct_rxq *destroy_apps; /* Owned by NAPI context */
-  /* Global superbuf sequence number, used for filter management (since
-   * per-app sequence numbers aren't reliable because they don't increment
-   * on nodescdrop) */
-  uint32_t superbuf_seqno;
   uint32_t superbuf_refcount[CI_EFCT_MAX_SUPERBUFS];
+  /* Tracks buffers passed to us from the driver in order they are going
+   * to be filled by HW. We need to do this to:
+   *  * progressively refill client app superbuf queues,
+   *    as x3net can refill RX ring with more superbufs than an app can hold
+   *    (or if queues are equal there is a race)
+   *  * resume a stopped app (subset of the above really),
+   *  * start new app (without rollover)
+   */
+  struct efab_efct_rx_superbuf_queue sbufs;
   struct work_struct destruct_wq;
 };
 

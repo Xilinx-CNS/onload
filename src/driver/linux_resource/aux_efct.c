@@ -37,6 +37,8 @@ void efct_unprovide_bind_memfd(void)
 
 #define RING_FIFO_ENTRY(q, i)   ((q)[(i) & (ARRAY_SIZE((q)) - 1)])
 
+static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_rxq *app);
+
 static void finished_with_superbuf(struct xlnx_efct_device *edev,
                                    struct xlnx_efct_client *client, int qid,
                                    struct efhw_nic_efct_rxq* q,
@@ -48,6 +50,11 @@ static void finished_with_superbuf(struct xlnx_efct_device *edev,
   --app->current_owned_superbufs;
   if( --q->superbuf_refcount[sbid] == 0 )
     edev->ops->release_superbuf(client, qid, sbid);
+
+  EFHW_ASSERT(app->current_owned_superbufs < app->max_allowed_superbufs);
+
+  /* perhaps we can feed more buffer(s) to the app */
+  post_superbuf_to_app(q, app);
 }
 
 static void destruct_apps_work(struct work_struct* work)
@@ -133,41 +140,93 @@ static int efct_handle_event(void *driver_data,
   return -ENOSYS;
 }
 
-static bool post_superbuf_to_apps(struct efhw_nic_efct_rxq* q, int sbid,
-                                  bool sentinel)
+/* returns true if we can/should squeeze more buffers into the app */
+bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_rxq *app)
+{
+  uint32_t driver_buf_count;
+  uint32_t sbuf_seq;
+  uint16_t sbid_sentinel;
+  uint16_t sbid;
+
+  uint32_t added;
+  uint32_t removed;
+
+
+  if( app->destroy )
+    return false;
+
+  if( app->next_sbuf_seq == q->sbufs.added )
+    /* nothing new */
+    return false;
+
+  if( app->current_owned_superbufs >= app->max_allowed_superbufs ) {
+    ++app->shm->stats.too_many_owned;
+    return false;
+  }
+
+  added = (uint32_t)READ_ONCE(app->shm->rxq.added);
+  removed = READ_ONCE(app->shm->rxq.removed);
+  if( (uint32_t)(added - removed) >= ARRAY_SIZE(app->shm->rxq.q) ) {
+    /* the shared state is actually corrupted */
+    EFHW_ASSERT(app->max_allowed_superbufs <= ARRAY_SIZE(app->shm->rxq.q));
+    ++app->shm->stats.no_rxq_space;
+    return false;
+  }
+
+  driver_buf_count = q->sbufs.added - q->sbufs.removed;
+  EFHW_ASSERT(driver_buf_count <= ARRAY_SIZE(q->sbufs.q));
+
+  /* pick the next buffer the app wants ... unless there is something wrong
+   * (e.g. the app got stalled) in that case pick the oldest sbuf we have
+   */
+  if( (uint32_t)(q->sbufs.added - app->next_sbuf_seq) < driver_buf_count &&
+      (uint32_t)(app->next_sbuf_seq - q->sbufs.removed) < driver_buf_count )
+    sbuf_seq = app->next_sbuf_seq;
+  else
+    sbuf_seq = q->sbufs.removed;
+
+  sbid_sentinel = q->sbufs.q[sbuf_seq % CI_ARRAY_SIZE(q->sbufs.q)];
+  sbid = sbid_sentinel & CI_EFCT_Q_SUPERBUF_ID_MASK;
+  app->next_sbuf_seq = sbuf_seq + 1;
+
+  ++q->superbuf_refcount[sbid];
+  ++app->current_owned_superbufs;
+  __set_bit(sbid, app->owns_superbuf);
+  RING_FIFO_ENTRY(app->shm->rxq.q, added) = sbid_sentinel;
+  smp_store_release(&app->shm->rxq.added,
+                    ((uint64_t)sbuf_seq << 32) | (added + 1));
+  return true;
+}
+
+static bool post_superbuf_to_apps(struct efhw_nic_efct_rxq* q)
 {
   struct efhw_efct_rxq *app;
-  int napps = 0;
 
   for( app = q->live_apps; app; app = app->next ) {
-    uint32_t added;
-    uint32_t removed;
-
-    if( app->destroy )
-      continue;
-
-    if( app->current_owned_superbufs >= app->max_allowed_superbufs ) {
-      ++app->shm->stats.too_many_owned;
-      continue;
-    }
-
-    added = (uint32_t)READ_ONCE(app->shm->rxq.added);
-    removed = READ_ONCE(app->shm->rxq.removed);
-    if( (uint32_t)(added - removed) >= ARRAY_SIZE(app->shm->rxq.q) ) {
-      ++app->shm->stats.no_rxq_space;
-      continue;
-    }
-
-    ++napps;
-    ++q->superbuf_refcount[sbid];
-    ++app->current_owned_superbufs;
-    __set_bit(sbid, app->owns_superbuf);
-    RING_FIFO_ENTRY(app->shm->rxq.q, added) = (sentinel << 15) | sbid;
-    smp_store_release(&app->shm->rxq.added,
-                      ((uint64_t)q->superbuf_seqno << 32) | (added + 1));
+    /* post app to single buffer */
+    post_superbuf_to_app(q, app);
   }
-  return napps != 0;
+  return true;
 }
+
+
+/* net driver finished processing packets from the buffer,
+ * check whether we can free the buffer */
+static int efct_buffer_end(void *driver_data, int qid, int sbid, bool force)
+{
+  /* TODO support force flag */
+  struct efhw_nic_efct *efct = driver_data;
+  struct efhw_nic_efct_rxq *q;
+  EFHW_ASSERT(sbid >= 0);
+  EFHW_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
+  q = &efct->rxq[qid];
+  EFHW_ASSERT((uint32_t)(q->sbufs.added - q->sbufs.removed) < ARRAY_SIZE(q->sbufs.q));
+  EFHW_ASSERT((q->sbufs.q[q->sbufs.removed % CI_ARRAY_SIZE(q->sbufs.q)] & CI_EFCT_Q_SUPERBUF_ID_MASK) == sbid);
+  q->sbufs.removed++;
+  EFHW_ASSERT((int)q->superbuf_refcount[sbid] > 0);
+  return --q->superbuf_refcount[sbid] == 0;
+}
+
 
 static int efct_buffer_start(void *driver_data, int qid, int sbid,
                              bool sentinel)
@@ -177,11 +236,17 @@ static int efct_buffer_start(void *driver_data, int qid, int sbid,
 
   EFHW_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
   q = &efct->rxq[qid];
-  ++q->superbuf_seqno;
+
   if( sbid < 0 )
     return -1;
+
+  /* remember buffers owned by x3net */
+  ++q->superbuf_refcount[sbid];
+  q->sbufs.q[(q->sbufs.added++) % CI_ARRAY_SIZE(q->sbufs.q)] = sbid | (sentinel << 15);
+
   activate_new_apps(q);
-  return post_superbuf_to_apps(q, sbid, sentinel) ? 0 : -1;
+  post_superbuf_to_apps(q);
+  return 1; /* always hold on to buffer until efct_buffer_end() is called */
 }
 
 /* Allocating huge pages which are able to be mapped to userspace is a
@@ -312,6 +377,7 @@ struct xlnx_efct_drvops efct_ops = {
   .poll = efct_poll,
   .handle_event = efct_handle_event,
   .buffer_start = efct_buffer_start,
+  .buffer_end = efct_buffer_end,
   .alloc_hugepage = efct_alloc_hugepage,
   .free_hugepage = efct_free_hugepage,
   .hugepage_list_changed = efct_hugepage_list_changed,
