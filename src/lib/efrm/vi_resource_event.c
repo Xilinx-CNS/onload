@@ -68,6 +68,9 @@ void efrm_eventq_request_wakeup(struct efrm_vi *virs, unsigned current_ptr)
 EXPORT_SYMBOL(efrm_eventq_request_wakeup);
 
 
+/* Registers a callback function for an event queue.  This must not be called
+ * on an event queue that already has a registered callback.  To change the
+ * callback, first call efrm_eventq_kill_callback(), and then this function. */
 int
 efrm_eventq_register_callback(struct efrm_vi *virs,
 			      efrm_evq_callback_fn handler, void *arg)
@@ -88,7 +91,6 @@ efrm_eventq_register_callback(struct efrm_vi *virs,
 	}
 
 	virs->evq_callback_arg = arg;
-	wmb();
 	virs->evq_callback_fn = handler;
 
 	instance = virs->rs.rs_instance;
@@ -118,7 +120,6 @@ void efrm_eventq_kill_callback(struct efrm_vi *virs)
 
 	instance = virs->rs.rs_instance;
 	cb_info = &efrm_nic(virs->rs.rs_client->nic)->vis[instance];
-	cb_info->vi = NULL;
 
 	/* Disable the callback. */
 	bit = test_and_clear_bit(VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED,
@@ -137,39 +138,35 @@ void efrm_eventq_kill_callback(struct efrm_vi *virs)
 		evq_state = cb_info->state;
 	} while ((evq_state & VI_RESOURCE_EVQ_STATE(BUSY)));
 
+	wmb();
+	cb_info->vi = NULL;
 	virs->evq_callback_fn = NULL;
 	mutex_unlock(&register_evq_cb_mutex);
 }
 EXPORT_SYMBOL(efrm_eventq_kill_callback);
 
-static int
-efrm_eventq_do_callback(struct efhw_nic *nic, unsigned instance,
-			bool is_timeout, int budget)
+
+/* This is in effect a spinlock on an event queue that ensures that it's safe
+ * to run that queue's callback.  We will only succeed in taking this lock if
+ * there's a callback registered, and no-one will be able to unregister the
+ * callback (nor continue to free the queue) while we hold the lock. */
+static struct efrm_vi*
+eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
+			  bool is_timeout)
 {
-	struct efrm_nic *rnic = efrm_nic(nic);
-	efrm_evq_callback_fn handler;
-	void *arg;
-	struct efrm_nic_per_vi *cb_info;
-	int32_t evq_state;
-	int32_t new_evq_state;
-	struct efrm_vi *virs;
-	int bit;
-	int rc = 0;
+	struct efrm_nic_per_vi *cb_info = &rnic->vis[instance];
 
-	EFRM_ASSERT(efrm_vi_manager);
-
-	cb_info = &rnic->vis[instance];
-
-	/* Set the BUSY bit and clear WAKEUP_PENDING.  Do this
-	 * before waking up the sleeper to avoid races. */
+	/* Set the BUSY bit and clear WAKEUP_PENDING.  Do this before waking up
+	 * the sleeper to avoid races. */
 	while (1) {
-		evq_state = cb_info->state;
-		new_evq_state = evq_state;
+		int32_t evq_state = cb_info->state;
+		int32_t new_evq_state = evq_state;
 
 		if ((evq_state & VI_RESOURCE_EVQ_STATE(BUSY)) != 0) {
 			EFRM_ERR("%s:%d: evq_state[%d] corrupted!",
 				 __FUNCTION__, __LINE__, instance);
-			return 0;
+			EFRM_ASSERT(0);
+			return NULL;
 		}
 
 		if (!is_timeout)
@@ -177,34 +174,63 @@ efrm_eventq_do_callback(struct efhw_nic *nic, unsigned instance,
 
 		if (evq_state & VI_RESOURCE_EVQ_STATE(CALLBACK_REGISTERED)) {
 			new_evq_state |= VI_RESOURCE_EVQ_STATE(BUSY);
-			virs = cb_info->vi;
 			if (cmpxchg(&cb_info->state, evq_state,
-				    new_evq_state) == evq_state)
-				break;
-		} else {
+				    new_evq_state) == evq_state) {
+				EFRM_ASSERT(cb_info->vi);
+				return cb_info->vi;
+			}
+		}
+		else {
 			/* Just update the state if necessary. */
 			if (new_evq_state == evq_state ||
 			    cmpxchg(&cb_info->state, evq_state,
 				    new_evq_state) == evq_state)
-				return 0;
+				return NULL;
 		}
 	}
+}
 
-	if (virs) {
-		handler = virs->evq_callback_fn;
-		rmb();
-		arg = virs->evq_callback_arg;
-		EFRM_ASSERT(handler != NULL);
-		rc = handler(arg, is_timeout, nic, budget);
-	}
+
+/* Run an event queue's callback.  The event queue must be marked as BUSY: see
+ * eventq_mark_callback_busy(). */
+static int eventq_do_callback(struct efhw_nic *nic, struct efrm_vi *virs,
+			      bool is_timeout, int budget)
+{
+	efrm_evq_callback_fn handler = virs->evq_callback_fn;
+	void *arg = virs->evq_callback_arg;
+	EFRM_ASSERT(handler != NULL);
+	return handler(arg, is_timeout, nic, budget);
+}
+
+
+static void
+eventq_unmark_callback_busy(struct efrm_nic *rnic, unsigned instance)
+{
+	struct efrm_nic_per_vi *cb_info = &rnic->vis[instance];
 
 	/* Clear the BUSY bit. */
-	bit =
-	    test_and_clear_bit(VI_RESOURCE_EVQ_STATE_BUSY,
-			       &cb_info->state);
-	if (!bit) {
+	if (!test_and_clear_bit(VI_RESOURCE_EVQ_STATE_BUSY, &cb_info->state)) {
 		EFRM_ERR("%s:%d: evq_state corrupted!",
 			 __FUNCTION__, __LINE__);
+		EFRM_ASSERT(0);
+	}
+}
+
+
+static int
+efrm_eventq_do_callback(struct efhw_nic *nic, unsigned instance,
+			bool is_timeout, int budget)
+{
+	struct efrm_nic *rnic = efrm_nic(nic);
+	struct efrm_vi *virs;
+	int rc = 0;
+
+	EFRM_ASSERT(efrm_vi_manager);
+
+	virs = eventq_mark_callback_busy(rnic, instance, is_timeout);
+	if (virs) {
+		rc = eventq_do_callback(nic, virs, is_timeout, budget);
+		eventq_unmark_callback_busy(rnic, instance);
 	}
 
 	return rc;
