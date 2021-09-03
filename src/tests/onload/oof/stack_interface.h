@@ -7,6 +7,8 @@
 #include "efrm_interface.h"
 #include "stack.h"
 
+struct efx_filter_spec;
+
 /* Return the instance number of the VI associated with the named hwport,
  * or -1 if we don't have a VI for that hwport.
  */
@@ -36,5 +38,9 @@ extern int tcp_helper_vi_hw_rx_loopback_supported(tcp_helper_resource_t* trs,
 
 extern int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
                                                   int hwport);
+
+int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
+                               const struct efx_filter_spec* spec, int rxq,
+                               bool replace);
 
 #endif /* __OOF_TEST_STACK_INTERFACE_H__ */

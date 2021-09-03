@@ -931,6 +931,46 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
 }
 
 
+int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
+                               const struct efx_filter_spec* spec, int rxq,
+                               bool replace)
+{
+  int intf_i;
+  struct efhw_nic* nic;
+  const unsigned HUGEPAGES_PER_RXQ = 2;  /* EFCT TODO: un-hardcode */
+
+  ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
+  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) < 0 )
+    return 0;
+
+  nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
+  if( efhw_nic_max_shared_rxqs(nic) ) {
+    struct efrm_vi* vi_rs = tcp_helper_vi(trs, intf_i);
+    ef_vi* vi = ci_netif_vi(&trs->netif, intf_i);
+    int qix;
+    int rc;
+
+    ci_assert_ge(rxq, 0);
+    qix = efct_vi_find_free_rxq(vi, rxq);
+    if( qix == -EALREADY )
+      return 0;
+
+    /* EFCT TODO: some hard-coded parameters here: */
+    rc = efrm_rxq_alloc(vi_rs, rxq, qix, cpu_all_mask, true, HUGEPAGES_PER_RXQ,
+                        trs->thc_efct_memfd,
+                        (intf_i * EF_VI_MAX_EFCT_RXQS + qix) *
+                            HUGEPAGES_PER_RXQ * CI_HUGEPAGE_SIZE,
+                        &trs->nic[intf_i].thn_efct_rxq[0]);
+    if( rc < 0 ) {
+      ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)\n", __func__, rc);
+      return rc;
+    }
+    efct_vi_start_rxq(vi, qix);
+  }
+  return 0;
+}
+
+
 #if CI_CFG_PIO
 
 static int allocate_pio(tcp_helper_resource_t* trs, int intf_i, 
@@ -1714,26 +1754,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
       }
     }
 #endif
-
-    /* TODO EFCT: this shouldn't be here, it should be in filter add instead */
-    if( efhw_nic_max_shared_rxqs(nic) ) {
-      const unsigned HUGEPAGES_PER_RXQ = 2;  /* EFCT TODO: un-hardcode */
-      rc = efrm_rxq_alloc(vi_rs, 0, 0, cpu_all_mask, true, HUGEPAGES_PER_RXQ,
-                          trs->thc_efct_memfd,
-                          (intf_i * EF_VI_MAX_EFCT_RXQS) *
-                              HUGEPAGES_PER_RXQ * CI_HUGEPAGE_SIZE,
-                          &trs_nic->thn_efct_rxq[0]);
-      if( rc < 0 ) {
-        ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)\n", __func__, rc);
-        efrm_pd_release(alloc_info.pd);
-        goto error_out;
-      }
-      /* NB: when moving this line to a more appropriate place,
-       * "EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE" should turn in to
-       * shm->superbuf_pkts: */
-      vi->ep_state->rxq.rxq_ptr[0].next =
-                                1 + (EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE);
-    }
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
     /* The TCP plugin uses multiple VIs per intf to distinguish various types

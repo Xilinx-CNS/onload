@@ -59,6 +59,11 @@ extern int tcp_helper_vi_hw_rx_loopback_supported(tcp_helper_resource_t* trs,
 extern int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
                                                   int hwport);
 
+/* Executed after any hardware filter add. Used by efct to bring up a new rxq
+ * if one has been added */
+extern int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
+                                      const struct efx_filter_spec* spec,
+                                      int rxq, bool replace);
 
 /*--------------------------------------------------------------------
 *

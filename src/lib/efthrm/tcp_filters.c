@@ -304,6 +304,20 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
       oofilter->filter_id[hwport] = rc;
       rc = 0;
     }
+    if( rc == 0 && oofilter->filter_id[hwport] >= 0 ) {
+      rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
+                                      replace);
+      if( rc < 0 ) {
+        if( ! replace )
+          efrm_filter_remove(get_client(hwport), oofilter->filter_id[hwport]);
+        /* We ideally want to restore replaced filters too, but we're not
+         * keeping enough info to know how. In any case, we currently have no
+         * hardware on which this matters (no hardware uses both a non-trivial
+         * tcp_helper_post_filter_add() and the replace option), so it'd be
+         * untested code. If/when that hardware comes, there are many possible
+         * locations for the solution. */
+      }
+    }
   }
   return rc;
 }

@@ -944,10 +944,7 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 
   efct_vi_attach_rxq_internal(vi, ix, ra.out_id.index,
                               superbuf_config_refresh);
-  /* This is a totally fake pkt_id, but it makes efct_poll_rx() think that a
-   * rollover is needed. We use +1 as a marker that this is the first packet,
-   * i.e. ignore the first metadata: */
-  vi->ep_state->rxq.rxq_ptr[ix].next = 1 + vi->efct_shm[ix].superbuf_pkts;
+  efct_vi_start_rxq(vi, ix);
   return 0;
 }
 #endif
@@ -961,6 +958,14 @@ void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
   rxq->resource_id = resource_id;
   rxq->config_generation = 0;
   rxq->refresh_func = refresh_func;
+}
+
+void efct_vi_start_rxq(ef_vi* vi, int ix)
+{
+  /* This is a totally fake pkt_id, but it makes efct_poll_rx() think that a
+   * rollover is needed. We use +1 as a marker that this is the first packet,
+   * i.e. ignore the first metadata: */
+  vi->ep_state->rxq.rxq_ptr[ix].next = 1 + vi->efct_shm[ix].superbuf_pkts;
 }
 
 /* efct_vi_detach_rxq not yet implemented */
