@@ -15,6 +15,7 @@
 #define _GNU_SOURCE /* for strsignal */
 #include <stdlib.h>
 #include <ci/internal/ip.h>
+#include <ci/internal/ip_signal.h>
 #include "libc_compat.h"
 
 #if CI_CFG_TCPDUMP
@@ -537,6 +538,14 @@ static void atexit_fn(void)
   /* Do not use fflush, sice we exit via signal.  All our threads are
    * cancelled, so we are safe here. */
   fflush_unlocked(stdout);
+
+  /* Never run this twice: */
+  _exit(0);
+}
+
+static void signal_terminate(int sig)
+{
+  atexit_fn();
 }
 
 static void write_pcap_header(void)
@@ -696,6 +705,8 @@ int main(int argc, char* argv[])
 
   /* Set up exit and signals before we attach to stacks */
   atexit(atexit_fn);
+  ci_tp_init(NULL, signal_terminate);
+  oo_init_signals();
 
   /* Attach to stacks: attach locks the stacks, stack_dump_on unlocks. */
   if( argc == 0 ) {
