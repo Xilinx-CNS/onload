@@ -251,7 +251,6 @@ static void stack_dump_on(ci_netif *ni)
 
   cpu_khz = IPTIMER_STATE(ni)->khz;
 
-#ifdef NDEBUG
   {
     int i;
     /* Warn user if this is not the only tcpdump process running */
@@ -269,7 +268,6 @@ static void stack_dump_on(ci_netif *ni)
       }
     }
   }
-#endif
 
   /* No data from other tcpdump processes should be available. */
   ci_assert_equal(ni->state->dump_read_i, ni->state->dump_write_i);
