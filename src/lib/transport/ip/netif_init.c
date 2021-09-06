@@ -2298,9 +2298,10 @@ static void ci_netif_deinit(ci_netif* ni);
 
 ci_inline void netif_tcp_helper_free(ci_netif* ni)
 {
-  if( ni->state != NULL )
+  if( ni->state != NULL ) {
+    cleanup_all_vis(ni, ~0u);
     netif_tcp_helper_munmap(ni);
-  cleanup_all_vis(ni, ~0u);
+  }
   if( ni->eps != NULL )
     CI_FREE_OBJ(ni->eps);
   if( ni->pkt_bufs != NULL )
