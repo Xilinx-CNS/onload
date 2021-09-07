@@ -78,8 +78,7 @@ efrm_dl_event(struct efx_dl_device *efx_dev, void *p_event, int budget);
 static struct efx_dl_driver efrm_dl_driver = {
 	.name = "resource",
 	.priority = EFX_DL_EV_HIGH,
-	.flags = EFX_DL_DRIVER_CHECKS_FALCON_RX_USR_BUF_SIZE |
-		 EFX_DL_DRIVER_CHECKS_MEDFORD2_VI_STRIDE,
+	.flags = EFX_DL_DRIVER_CHECKS_MEDFORD2_VI_STRIDE,
 	.probe = efrm_dl_probe,
 	.remove = efrm_dl_remove,
 	.reset_suspend = efrm_dl_reset_suspend,
