@@ -79,7 +79,7 @@ Linux distributions:
 * Ubuntu LTS 18.04, LTS 20.04, 21.04
 * Debian 10, 11
 * Redhat Enterprise Linux 7.9, 8.3, 8.4
-* Linux kernel in the range 4.9 - 5.12
+* Linux kernel in the range 4.15 - 5.12
 
 ## Support
 
