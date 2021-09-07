@@ -88,6 +88,10 @@ struct efrm_nic {
 	  struct list_head q[EFHW_N_Q_TYPES];
         } dmaq_state;
 
+	struct mutex irq_list_lock;
+	struct list_head irq_list;
+	/* Buffer used to back the individual entries on the above list. */
+	void *irq_vectors_buffer;
 };
 
 

@@ -42,6 +42,7 @@
 
 #include <ci/efhw/nic.h>
 #include <ci/efrm/resource.h>
+#include <ci/efrm/private.h>
 #include <ci/efrm/debug.h>
 
 
@@ -281,6 +282,11 @@ extern int efrm_vi_get_channel(struct efrm_vi *);
 extern int efrm_vi_set_get_vi_instance(struct efrm_vi *);
 
 extern int efrm_vi_af_xdp_kick(struct efrm_vi *vi);
+
+extern int
+efrm_interrupt_vectors_ctor(struct efrm_nic *nic,
+			    const struct vi_resource_dimensions *res_dim);
+extern void efrm_interrupt_vectors_dtor(struct efrm_nic *nic);
 
 extern size_t efrm_vi_get_efct_shm_bytes(struct efrm_vi *vi);
 

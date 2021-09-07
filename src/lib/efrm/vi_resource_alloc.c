@@ -124,6 +124,234 @@ static inline void efrm_atomic_or(int i, atomic_t *v)
 	} while (atomic_cmpxchg(v, old, new) != old);
 }
 
+/* The callee of this function relies on the fact that it's running in a
+ * tasklet in order to guarantee that it's serialised, so the tasklet should
+ * not be converted to a workqueue without additional serialisation. */
+static void
+efrm_vi_tasklet(unsigned long l)
+{
+	struct efrm_interrupt_vector *vec = (void *)l;
+	/* Fixme: callback with is_timeout=true? */
+	efrm_eventq_do_interrupt_callbacks(vec, false, INT_MAX);
+}
+
+
+static irqreturn_t
+vi_interrupt(int irq, void *dev_id
+#if defined(EFX_HAVE_IRQ_HANDLER_REGS)
+	, struct pt_regs *regs __attribute__ ((unused))
+#endif
+	)
+{
+	struct tasklet_struct *tasklet = dev_id;
+
+	/* Processing of hardware interrupt should be done in 2 steps: top-half
+	 * and bottom-half. Top-half is a handler function that is performed in
+	 * the context of the disabled interrupts. So it should performs only
+	 * the most minimal work that cannot be postponed for later.
+	 * Bottom-half is the deferred processing of interrupts is performed in
+	 * the kernel context with enabled interrupts. It can be done with
+	 * tasklet, workqueue and request_threaded_irq().
+	 * Tasklet is used here because it has better latency performance.
+	 */
+	tasklet_schedule(tasklet);
+	return IRQ_HANDLED;
+}
+
+
+#ifndef IRQF_SAMPLE_RANDOM
+#define IRQF_SAMPLE_RANDOM 0
+#endif
+
+
+static int
+efrm_vi_irq_setup(struct efrm_interrupt_vector *vec)
+{
+	char name_local[80];
+	int rc;
+	const char *name;
+
+	snprintf(name_local, sizeof(name_local), "onload-%d@%d",
+		 vec->nic->index, vec->irq);
+	name_local[sizeof(name_local) - 1] = '\0';
+
+	/* Enable interrupts */
+	tasklet_init(&vec->tasklet, &efrm_vi_tasklet, (unsigned long)vec);
+	name = kstrdup(name_local, GFP_KERNEL);
+	if (!name)
+		name = default_irq_name;
+	rc = request_irq(vec->irq, vi_interrupt, IRQF_SAMPLE_RANDOM, name,
+			 &vec->tasklet);
+	if (rc != 0) {
+		EFRM_ERR("failed to request IRQ %d for NIC %d", vec->irq,
+			 vec->nic->index);
+		if (name != default_irq_name)
+			kfree(name);
+	}
+#ifndef EFRM_IRQ_FREE_RETURNS_NAME
+	vec->irq_name = name;
+#endif
+
+	return rc;
+}
+
+
+static void
+efrm_vi_irq_free(struct efrm_interrupt_vector *vec)
+{
+	const char *name;
+	EFRM_ASSERT(vec);
+
+	/* linux>=4.13: free_irq() returns name */
+#ifdef EFRM_IRQ_FREE_RETURNS_NAME
+	name = free_irq(vec->irq, &vec->tasklet);
+#else
+	free_irq(vec->irq, &vec->tasklet);
+	name = vec->irq_name;
+	vec->irq_name = NULL;
+#endif
+	EFRM_ASSERT(name);
+	if (name != default_irq_name)
+		kfree(name);
+	tasklet_kill(&vec->tasklet);
+}
+
+
+static int efrm_interrupt_vector_acquire(struct efrm_interrupt_vector *vec)
+{
+	int rc = 0;
+
+	mutex_lock(&vec->vec_acquire_lock);
+	if (vec->num_vis == 0)
+		rc = efrm_vi_irq_setup(vec);
+	if (rc == 0)
+		++vec->num_vis;
+	mutex_unlock(&vec->vec_acquire_lock);
+
+	return rc;
+}
+
+
+static void efrm_interrupt_vector_release(struct efrm_interrupt_vector *vec)
+{
+	mutex_lock(&vec->vec_acquire_lock);
+	--vec->num_vis;
+	if (vec->num_vis == 0)
+		efrm_vi_irq_free(vec);
+	mutex_unlock(&vec->vec_acquire_lock);
+}
+
+
+static int
+efrm_interrupt_vector_choose(struct efrm_nic *nic, struct efrm_vi *virs)
+{
+	struct efrm_interrupt_vector *vec = NULL, *least_used_vec = NULL;
+	int rc;
+
+	mutex_lock(&nic->irq_list_lock);
+	list_for_each_entry(vec, &nic->irq_list, link) {
+		/* The num_vis could be changing under our feet, but it's not
+		 * worth locking each vector to prevent this. */
+		if (least_used_vec == NULL ||
+		    vec->num_vis < least_used_vec->num_vis)
+			least_used_vec = vec;
+		if (vec->num_vis == 0)
+			break;
+	}
+	mutex_unlock(&nic->irq_list_lock);
+
+	EFRM_ASSERT(least_used_vec);
+
+	rc = efrm_interrupt_vector_acquire(least_used_vec);
+
+	if (rc >= 0) {
+		virs->vec = least_used_vec;
+		spin_lock(&least_used_vec->vi_irq_lock);
+		list_add(&virs->irq_link, &least_used_vec->vi_list);
+		spin_unlock(&least_used_vec->vi_irq_lock);
+		/* Move the vector to the end of the list in order to
+		 * discourage re-use. */
+		mutex_lock(&nic->irq_list_lock);
+		list_move_tail(&least_used_vec->link, &nic->irq_list);
+		mutex_unlock(&nic->irq_list_lock);
+	}
+
+	return rc;
+}
+
+
+int efrm_interrupt_vectors_ctor(struct efrm_nic *nic,
+				const struct vi_resource_dimensions *res_dim)
+{
+	int range, index, count;
+	uint32_t channel;
+	struct efrm_interrupt_vector *vec;
+
+	count = 0;
+	for (range = 0; range < res_dim->irq_n_ranges; ++range)
+		for (index = 0; index < res_dim->irq_ranges[range].irq_range;
+		     ++index)
+			++count;
+
+	if (count == 0) {
+		nic->irq_vectors_buffer = NULL;
+	}
+	else {
+		nic->irq_vectors_buffer = vmalloc(count * sizeof(*vec));
+		if (nic->irq_vectors_buffer == NULL)
+			return -ENOMEM;
+	}
+
+	vec = nic->irq_vectors_buffer;
+	INIT_LIST_HEAD(&nic->irq_list);
+	channel = res_dim->vi_min;
+	for (range = 0; range < res_dim->irq_n_ranges; ++range) {
+		for (index = 0; index < res_dim->irq_ranges[range].irq_range;
+		     ++index) {
+			spin_lock_init(&vec->vi_irq_lock);
+			mutex_init(&vec->vec_acquire_lock);
+			INIT_LIST_HEAD(&vec->vi_list);
+			vec->irq = res_dim->irq_ranges[range].irq_base + index;
+			vec->channel = channel;
+			vec->nic = &nic->efhw_nic;
+			vec->num_vis = 0;
+			list_add_tail(&vec->link, &nic->irq_list);
+			++vec;
+			++channel;
+		}
+	}
+
+	mutex_init(&nic->irq_list_lock);
+
+	return 0;
+}
+
+
+void efrm_interrupt_vectors_dtor(struct efrm_nic *nic)
+{
+	struct efrm_interrupt_vector *vec;
+	list_for_each_entry(vec, &nic->irq_list, link)
+		mutex_destroy(&vec->vec_acquire_lock);
+	mutex_destroy(&nic->irq_list_lock);
+	vfree(nic->irq_vectors_buffer);
+}
+
+
+static int efrm_vi_request_irq(struct efrm_vi *virs)
+{
+	struct efhw_nic *nic = virs->rs.rs_client->nic;
+	int rc;
+
+	rc = efrm_interrupt_vector_choose(efrm_nic(nic), virs);
+	if (rc != 0) {
+		EFRM_ERR("%s: Failed to assign IRQ: %d\n", __FUNCTION__, rc);
+		return rc;
+	}
+
+	return 0;
+}
+
+
 /*** Instance numbers ****************************************************/
 
 
@@ -260,26 +488,6 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 }
 
 
-static void
-efrm_vi_irq_free(struct efrm_vi *vi)
-{
-	const char *name;
-	EFRM_ASSERT(vi);
-
-	/* linux>=4.13: free_irq() returns name */
-#ifdef EFRM_IRQ_FREE_RETURNS_NAME
-	name = free_irq(vi->irq, vi);
-#else
-	free_irq(vi->irq, vi);
-	name = vi->irq_name;
-	vi->irq_name = NULL;
-#endif
-	if (name != default_irq_name)
-		kfree(name);
-	tasklet_kill(&vi->tasklet);
-}
-
-
 static void efrm_vi_rm_free_instance(struct efrm_client *client,
                                      struct efrm_vi *virs)
 {
@@ -299,12 +507,36 @@ static void efrm_vi_rm_free_instance(struct efrm_client *client,
 			complete(&vi_set->allocation_completion);
 	}
 	else {
-		struct efhw_nic *nic = efrm_client_get_nic(client);
+		struct efrm_nic *nic = efrm_nic(efrm_client_get_nic(client));
 
-		if (virs->irq != 0)
-			efrm_vi_irq_free(virs);
+		if (virs->vec != NULL) {
+			struct efrm_interrupt_vector *first;
 
-		efrm_vi_allocator_free_set(efrm_nic(nic), &virs->allocation);
+			efrm_interrupt_vector_release(virs->vec);
+
+			spin_lock(&virs->vec->vi_irq_lock);
+			list_del(&virs->irq_link);
+			spin_unlock(&virs->vec->vi_irq_lock);
+
+			mutex_lock(&nic->irq_list_lock);
+			first = list_first_entry(&nic->irq_list,
+						 struct efrm_interrupt_vector,
+						 link);
+			/* As a heuristic to promote the selection of
+			 * under-utilised IRQs for subsequent VIs, move the
+			 * just-released IRQ to the front of the list if and
+			 * only if it is now no more heavily subscribed than
+			 * the current first entry.
+			 *     The num_vis fields of both vectors could be
+			 * changing under our feet, but the worst that can
+			 * happen as a result of that is that we make the wrong
+			 * heuristic decision. */
+			if (virs->vec->num_vis <= first->num_vis)
+				list_move(&virs->vec->link, &nic->irq_list);
+			mutex_unlock(&nic->irq_list_lock);
+		}
+
+		efrm_vi_allocator_free_set(nic, &virs->allocation);
 	}
 }
 
@@ -625,19 +857,9 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 					EFHW_NIC_PAGES_IN_OS_PAGE;
 		evq_params.flags = flags;
 
-		if (nic->flags & NIC_FLAG_EVQ_IRQ) {
-			evq_params.interrupting = true;
-			evq_params.wakeup_evq = instance;
-		}
-		else {
-			evq_params.interrupting = false;
-			evq_params.wakeup_evq =
-				virs->net_drv_wakeup_channel >= 0?
-				virs->net_drv_wakeup_channel:
-				efrm_nic->rss_channel_count == 0?
-				0:
-				instance % efrm_nic->rss_channel_count;
-		}
+		evq_params.interrupting = nic->flags & NIC_FLAG_EVQ_IRQ;
+		evq_params.wakeup_evq = efrm_vi_get_channel(virs);
+		EFRM_VERIFY_EQ(evq_params.interrupting, virs->vec != NULL);
 
 		rc = efhw_nic_event_queue_enable(nic,
 					efrm_pd_get_nic_client_id(virs->pd),
@@ -1027,145 +1249,6 @@ fail:
 EXPORT_SYMBOL(efrm_vi_q_alloc);
 
 
-static void
-vi_call_evq_callback(struct efrm_vi *vi)
-{
-	efrm_evq_callback_fn handler;
-	void *arg;
-
-	/* This function is called from a tasklet, and is therefore serialised
-	 * with respect to itself. */
-
-	handler = vi->evq_callback_fn;
-	rmb();
-	arg = vi->evq_callback_arg;
-
-	if (handler == NULL) {
-		/* This is seen at VI creation time, so we should not cry
-		 * too loud.  It will be nice to see this at other times,
-		 * but it is not easy. */
-		EFRM_TRACE("VI %d/%d interrupt IRQ %d but no handler",
-			   vi->rs.rs_instance, vi->allocation.instance, vi->irq);
-	}
-	else {
-		/* Fixme: callback with is_timeout=true? */
-		handler(arg, false, vi->rs.rs_client->nic,
-			INT_MAX);
-	}
-}
-
-
-/* The callee of this function relies on the fact that it's running in a
- * tasklet in order to guarantee that it's serialised, so the tasklet should
- * not be converted to a workqueue without additional serialisation. */
-static void
-efrm_vi_tasklet(unsigned long l)
-{
-	struct efrm_vi *vi = (void *)l;
-	vi_call_evq_callback(vi);
-}
-
-
-static irqreturn_t
-vi_interrupt(int irq, void *dev_id
-#if defined(EFX_HAVE_IRQ_HANDLER_REGS)
-	, struct pt_regs *regs __attribute__ ((unused))
-#endif
-	)
-{
-	struct efrm_vi *vi = dev_id;
-
-	/* Processing of hardware interrupt should be done in 2 steps: top-half
-	 * and bottom-half. Top-half is a handler function that is performed in
-	 * the context of the disabled interrupts. So it should performs only
-	 * the most minimal work that cannot be postponed for later.
-	 * Bottom-half is the deferred processing of interrupts is performed in
-	 * the kernel context with enabled interrupts. It can be done with
-	 * tasklet, workqueue and request_threaded_irq().
-	 * Tasklet is used here because it has better latency performance.
-	 */
-	tasklet_schedule(&vi->tasklet);
-	return IRQ_HANDLED;
-}
-
-
-#ifndef IRQF_SAMPLE_RANDOM
-#define IRQF_SAMPLE_RANDOM 0
-#endif
-
-
-static int
-efrm_vi_irq_setup(struct efrm_vi *vi, const char *vi_name, unsigned int irq)
-{
-	int rc;
-	const char *name;
-
-	/* Enable interrupts */
-	tasklet_init(&vi->tasklet, &efrm_vi_tasklet, (unsigned long)vi);
-	name = kstrdup(vi_name, GFP_KERNEL);
-	if (!name)
-		name = default_irq_name;
-	rc = request_irq(irq, vi_interrupt,
-			 IRQF_SAMPLE_RANDOM, name, vi);
-	if (rc != 0) {
-		EFRM_ERR("failed to request IRQ %d for VI %d",
-			 irq, vi->rs.rs_instance);
-		if (name != default_irq_name)
-			kfree(name);
-	}
-#ifndef EFRM_IRQ_FREE_RETURNS_NAME
-	vi->irq_name = name;
-#endif
-
-	return rc;
-}
-
-
-static int
-efrm_vi_request_irq(struct efrm_vi *virs, const char *vi_name)
-{
-	char name[80];
-	unsigned vi_index;
-	unsigned irq = 0;
-	unsigned i;
-	struct efhw_nic *nic = virs->rs.rs_client->nic;
-	int rc;
-
-	if (vi_name == NULL) {
-		snprintf(name, sizeof(name),
-			 "SolarFlare NIC %d VI %d pid %d",
-			 nic->index,
-			 virs->rs.rs_instance,
-			 current ? current->tgid : -1);
-		name[sizeof(name)-1] = '\0';
-		vi_name = name;
-	}
-
-	vi_index = virs->rs.rs_instance - nic->vi_min;
-	for (i = 0; i < nic->vi_irq_n_ranges; i++) {
-		if (vi_index < nic->vi_irq_ranges[i].range) {
-			irq = nic->vi_irq_ranges[i].base + vi_index;
-			break;
-		} else {
-			vi_index -= nic->vi_irq_ranges[i].range;
-		}
-	}
-
-	if (irq == 0) {
-		EFRM_ERR("%s: VI number is out of range IRQs\n",
-			 __FUNCTION__);
-		return -EINVAL;
-	}
-
-	rc = efrm_vi_irq_setup(virs, vi_name, irq);
-	if (rc != 0)
-		return rc;
-
-	virs->irq = irq;
-	return 0;
-}
-
-
 /* This function must always be called with pd != NULL.
  *
  * If this function is called with vi_set != NULL, then pd must be
@@ -1214,7 +1297,7 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	 */
 	if (client->nic->devtype.arch == EFHW_ARCH_EF100 &&
 	    evq_virs == NULL) {
-		rc = efrm_vi_request_irq(virs, name);
+		rc = efrm_vi_request_irq(virs);
 		if (rc != 0)
 			goto fail_irq;
 	}

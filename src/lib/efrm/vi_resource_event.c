@@ -236,6 +236,68 @@ efrm_eventq_do_callback(struct efhw_nic *nic, unsigned instance,
 	return rc;
 }
 
+
+int efrm_eventq_do_interrupt_callbacks(struct efrm_interrupt_vector *vec,
+				       bool is_timeout, int budget)
+{
+	struct efrm_vi *virs, *next;
+	struct list_head vis;
+	struct efrm_nic *rnic = efrm_nic(vec->nic);
+	int rc = 0;
+
+	INIT_LIST_HEAD(&vis);
+
+	/* This function is called from a tasklet, and is therefore serialised
+	 * with respect to itself. */
+
+	/* With the list locked, mark the VIs as busy.  This will prevent
+	 * anyone from freeing them. */
+	spin_lock(&vec->vi_irq_lock);
+	list_for_each_entry_safe(virs, next, &vec->vi_list, irq_link) {
+		if (eventq_mark_callback_busy(rnic, virs->rs.rs_instance,
+					      is_timeout))
+			list_move_tail(&virs->irq_link, &vis);
+	}
+	spin_unlock(&vec->vi_irq_lock);
+
+	/* Now that we've dropped the lock, call the handlers. */
+	list_for_each_entry(virs, &vis, irq_link) {
+		int rc1 = eventq_do_callback(vec->nic, virs, is_timeout,
+					     budget);
+		if (rc1 >= 0) {
+			EFRM_ASSERT(rc1 <= budget);
+			budget -= rc;
+			if (rc >= 0)
+				rc += rc1;
+		}
+		else {
+			/* We've hit a failure.  Poll any remaining EVQs with
+			 * a budget of zero so that they can schedule deferred
+			 * polling. */
+			budget = 0;
+			if (rc == 0)
+				rc = rc1;
+			else
+				EFRM_TRACE("%s: EVQ %d callback failed (%d), "
+					   "but can't propagate error",
+					   __FUNCTION__, virs->rs.rs_instance,
+					   rc1);
+		}
+	}
+
+	/* Unmark the VIs as busy and return them to the list.  The busy-marker
+	 * means that nobody can have attempted to free them, so returning them
+	 * to the list is legitimate. */
+	spin_lock(&vec->vi_irq_lock);
+	list_for_each_entry(virs, &vis, irq_link)
+		eventq_unmark_callback_busy(rnic, virs->rs.rs_instance);
+	list_splice(&vis, &vec->vi_list);
+	spin_unlock(&vec->vi_irq_lock);
+
+	return rc;
+}
+
+
 int efrm_handle_wakeup_event(struct efhw_nic *nic, unsigned instance,
 			     int budget)
 {

@@ -44,6 +44,7 @@
 #include <ci/efrm/efrm_nic.h>
 #include <ci/efrm/driver_private.h>
 #include <ci/efrm/pd.h>
+#include <ci/efrm/vi_resource.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <linux/nsproxy.h>
 #include "efrm_internal.h"
@@ -151,6 +152,13 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 		goto fail3;
 	}
 
+	rc = efrm_interrupt_vectors_ctor(efrm_nic, res_dim);
+	if (rc < 0) {
+		EFRM_ERR("%s: efrm_interrupt_vectors_ctor failed (%d)",
+			 __FUNCTION__, rc);
+		goto fail4;
+	}
+
 	spin_lock_init(&efrm_nic->lock);
 	INIT_LIST_HEAD(&efrm_nic->clients);
 	efrm_nic->rx_sniff_rxq = EFRM_PORT_SNIFF_NO_OWNER;
@@ -164,9 +172,10 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 
 	return 0;
 
+fail4:
+	efrm_pd_owner_ids_dtor(efrm_nic->owner_ids);
 fail3:
 	efrm_vi_allocator_dtor(efrm_nic);
-	
 fail2:
 	vfree(efrm_nic->vis);
 fail1:
@@ -183,6 +192,7 @@ void efrm_nic_dtor(struct efrm_nic *efrm_nic)
         EFRM_ASSERT(list_empty(&efrm_nic->dmaq_state.q[EFHW_RXQ]));
         EFRM_ASSERT(list_empty(&efrm_nic->dmaq_state.q[EFHW_TXQ]));
 
+	efrm_interrupt_vectors_dtor(efrm_nic);
 	efrm_pd_owner_ids_dtor(efrm_nic->owner_ids);
 	efrm_vi_allocator_dtor(efrm_nic);
 	vfree(efrm_nic->vis);

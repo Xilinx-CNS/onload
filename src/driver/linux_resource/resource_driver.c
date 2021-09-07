@@ -238,7 +238,6 @@ static void
 irq_ranges_init(struct efhw_nic *nic, const struct vi_resource_dimensions *res_dim)
 {
 	unsigned i;
-	unsigned n_irqs = 0;
 
 	nic->vi_irq_n_ranges = res_dim->irq_n_ranges;
 	if (res_dim->irq_n_ranges == 0)
@@ -249,15 +248,6 @@ irq_ranges_init(struct efhw_nic *nic, const struct vi_resource_dimensions *res_d
 	for (i = 0; i < res_dim->irq_n_ranges; i++ ) {
 		nic->vi_irq_ranges[i].base = res_dim->irq_ranges[i].irq_base;
 		nic->vi_irq_ranges[i].range = res_dim->irq_ranges[i].irq_range;
-		n_irqs += nic->vi_irq_ranges[i].range;
-	}
-
-	/* For EF100 the number of VIs must match number of IRQs.
-	 * See ON-10914.
-	 */
-	if (nic->devtype.arch == EFHW_ARCH_EF100 &&
-	    n_irqs < nic->vi_lim - nic->vi_min) {
-		nic->vi_lim = nic->vi_min + n_irqs;
 	}
 }
 

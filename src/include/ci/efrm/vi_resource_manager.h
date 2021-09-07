@@ -104,6 +104,39 @@ struct efrm_vi_q {
 };
 
 
+/* When a function is probed over driverlink, one of the parameters that is
+ * reported is the set of available interrupt vectors.  When creating an
+ * interrupting EVQ, we assign it one of these vectors, ordinarily preferring
+ * one that is currently unused, but allowing multiple EVQs to map to the same
+ * interrupt when necessary or advantageous.
+ *     Note that on architectures that use wakeups (notably EF10), interrupts
+ * are managed by the net driver, and the structre below does not apply. */
+struct efrm_interrupt_vector {
+	/* Link into efrm_nic::irq_list.  Protected by efrm_nic::lock. */
+	struct list_head link;
+
+	/* The irq field is absolute, whereas the channel field is a
+	 * NIC-relative index in the range [vi_min, vi_lim).  The fields here
+	 * are initialised when an instance of the structure is created, and
+	 * then never change over its lifetime. */
+	uint32_t irq;
+	uint32_t channel;
+	struct efhw_nic *nic;
+
+	/* vi_list is protected by vi_irq_lock. */
+	spinlock_t vi_irq_lock;
+	struct list_head vi_list;
+
+	/* The following fields are protected by vec_acquire_lock. */
+	struct mutex vec_acquire_lock;
+	unsigned num_vis;
+	struct tasklet_struct tasklet;
+#ifndef EFRM_IRQ_FREE_RETURNS_NAME
+	const char *irq_name;
+#endif
+};
+
+
 struct efrm_vi {
 	/* Some macros make the assumption that the struct efrm_resource is
 	 * the first member of a struct efrm_vi. */
@@ -158,10 +191,8 @@ struct efrm_vi {
 	struct efab_efct_rxq_uk_shm *efct_shm;
 
 	int net_drv_wakeup_channel;
-
-	/* On EF100 we should handle IRQ in VI resource manager. */
-	uint32_t irq;                        /* IRQ vector */
-	struct tasklet_struct tasklet;       /* IRQ tasklet */
+	struct efrm_interrupt_vector *vec;
+	struct list_head irq_link;
 
 	/* A memory mapping onto the IO page for this VI mapped into the
 	 * kernel address space.  For EF10 this mapping is private to
@@ -176,10 +207,6 @@ struct efrm_vi {
 	unsigned tx_alt_cp;
 	int      tx_alt_num;
 	unsigned tx_alt_ids[EFRM_VI_TX_ALTERNATIVES_MAX];
-
-#ifndef EFRM_IRQ_FREE_RETURNS_NAME
-	const char *irq_name;
-#endif
 };
 
 

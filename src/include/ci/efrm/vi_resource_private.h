@@ -48,6 +48,9 @@ extern void efrm_vi_rm_salvage_flushed_vis(struct efhw_nic *);
 
 extern void efrm_vi_rm_free_flushed_resource(struct efrm_vi *virs);
 
+extern int
+efrm_eventq_do_interrupt_callbacks(struct efrm_interrupt_vector *vec,
+				   bool is_timeout, int budget);
 /*! Wakeup handler */
 extern int efrm_handle_wakeup_event(struct efhw_nic *nic,
 				    unsigned id, int budget);

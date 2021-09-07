@@ -46,25 +46,11 @@ int efrm_vi_allocator_ctor(struct efrm_nic *efrm_nic,
 	unsigned vi_min, vi_lim;
 
 	if (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10 ||
-	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP) {
-		vi_min = dims->vi_min; 
-		vi_lim = dims->vi_lim;
-	}
-	else if (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF100 ||
+	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP ||
+	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF100 ||
 	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EFCT) {
-		unsigned n_irqs = 0;
-		unsigned i;
-
 		vi_min = dims->vi_min;
 		vi_lim = dims->vi_lim;
-		/* On EF100 number of VIs must match number of IRQs.
-		 * See ON-10914.
-		 */
-		if (dims->irq_n_ranges != 0) {
-			for (i = 0; i < dims->irq_n_ranges; i++)
-				n_irqs += dims->irq_ranges[i].irq_range;
-			vi_lim = min(vi_lim, dims->vi_min + n_irqs);
-		}
 	} else {
 		rc = -EINVAL;
 		EFRM_ERR("%s: unknown efhw device architecture %u",
