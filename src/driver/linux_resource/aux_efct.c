@@ -164,90 +164,83 @@ static int efct_buffer_start(void *driver_data, int qid, int sbid,
   return post_superbuf_to_apps(q, sbid, sentinel) ? 0 : -1;
 }
 
-noinline
-static long do_sys_mmap(unsigned long addr, unsigned long len,
-                        unsigned long prot, unsigned long flags,
-                        unsigned long fd, unsigned long off)
+/* Allocating huge pages which are able to be mapped to userspace is a
+ * nightmarish problem: the only thing that mmap() will accept is hugetlbfs
+ * files, so we need to get ourselves one of them. And there's no single
+ * way. */
+
+#ifdef ERFM_HAVE_NEW_KALLSYMS
+#include <linux/hugetlb.h>
+
+static struct file* efct_hugetlb_file_setup(void)
 {
-  return SYSCALL_DISPATCHn(6, mmap,
-                           (unsigned long, unsigned long, unsigned long,
-                            unsigned long, unsigned long, unsigned long),
-                           addr, len, prot, flags, fd, off);
+  /* Old kernels */
+  static __typeof__(hugetlb_file_setup)* fn_hugetlb_file_setup;
+  struct user_struct* user;
+
+  if( ! fn_hugetlb_file_setup ) {
+    fn_hugetlb_file_setup = efrm_find_ksym("hugetlb_file_setup");
+    if( ! fn_hugetlb_file_setup ) {
+      EFHW_ERR("%s: ERROR: efct hugepages not possible on this kernel",
+                __func__);
+      return ERR_PTR(-EOPNOTSUPP);
+    }
+  }
+
+  return fn_hugetlb_file_setup(HUGETLB_ANON_FILE, CI_HUGEPAGE_SIZE,
+                               0, &user, HUGETLB_ANONHUGE_INODE,
+                               ilog2(CI_HUGEPAGE_SIZE));
 }
+#else
+  #error EFCT TODO
+#endif
 
 static int efct_alloc_hugepage(void *driver_data,
                                struct xlnx_efct_hugepage *result_out)
 {
   /* The rx ring is owned by the net driver, not by us, so it does all
-   * DMA handling. We do need to supply it with some memory, though.
-   * We allocate hugepages one by one, rather than a single file with many
-   * pages in it, so that freeing of pages can be more granular. */
-  unsigned long addr;
-  struct mm_struct *mm = current->mm;
-  struct vm_area_struct *vma;
+   * DMA handling. We do need to supply it with some memory, though. */
   struct xlnx_efct_hugepage result;
+  struct inode* inode;
+  struct address_space* mapping;
   long rc;
 
-  /* A long dance solely to do, effectively, hugetlb_file_setup(). It's
-   * handy that we do the mapping in the correct process context because
-   * that means permissions happen correctly, but we don't leave the
-   * memory mapping in place because, even though the process is going
-   * to want it eventually, it's not going to want it in the random
-   * place that we get it here. Where it should be depends on the
-   * superbuf IDs, which we don't yet know. */
-  addr = do_sys_mmap(0, CI_HUGEPAGE_SIZE, PROT_READ | PROT_WRITE,
-                 MAP_SHARED | MAP_ANONYMOUS | MAP_POPULATE |
-                     MAP_HUGETLB | MAP_HUGE_2MB, -1, 0);
-  if( IS_ERR((void*)addr) ) {
-    rc = PTR_ERR((void*)addr);
+  result.file = efct_hugetlb_file_setup();
+  if( IS_ERR(result.file) ) {
+    rc = PTR_ERR(result.file);
     EFHW_ERR("%s: ERROR: insufficient hugepage memory for rxq (%ld)",
              __func__, rc);
     return rc;
   }
-  /* There's a race here (the window being crowbaropenable with
-   * userfaultfd): the app can swiftly munmap and make us grab a
-   * different file* to the one we wanted. We already don't trust the
-   * contents of the rxq so this isn't super-harmful, but there are
-   * definitely ways to use it to exceed resource limits. */
-  mmap_write_lock(mm);
-  vma = find_vma(mm, addr);
-  result.file = vma->vm_file;
-  if( result.file )
-    get_file(result.file);
-  mmap_write_unlock(mm);
-  if( ! result.file ) {
-    EFHW_ERR("%s: ERROR: internal fault:  hugepages not backed by hugetlbfs?",
-             __func__);
-    rc = -ENOMEM;
-    goto fail1;
+
+  rc = vfs_fallocate(result.file, 0, 0, CI_HUGEPAGE_SIZE);
+  if( rc < 0 ) {
+    EFHW_ERR("%s: ERROR: fallocate hugepage memory failed for rxq (%ld)",
+             __func__, rc);
+    return rc;
   }
 
-  /* All pages in a compound page are conjoined (without FOLL_SPLIT) so we
-   * only need the first one: */
-  rc = pin_user_pages(addr, 1, FOLL_WRITE, &result.page, NULL);
-  if( rc < 1 ) {
-    EFHW_ERR("%s: ERROR: can't pin rxq memory (%ld)", __func__, rc);
-    rc = -EFAULT;
-    goto fail2;
-  }
+  inode = file_inode(result.file);
+  inode_lock(inode);
+  mapping = inode->i_mapping;
+  i_mmap_lock_read(mapping);
+  result.page = find_get_page(mapping, 0);
+  i_mmap_unlock_read(mapping);
+  inode_unlock(inode);
+
+  EFHW_ASSERT(result.page);
   EFHW_ASSERT(PageHuge(result.page));
   EFHW_ASSERT(!PageTail(result.page));
-  vm_munmap(addr, CI_HUGEPAGE_SIZE);
+  get_page(result.page);
 
   *result_out = result;
   return 0;
-
- fail2:
-  fput(result.file);
- fail1:
-  vm_munmap(addr, CI_HUGEPAGE_SIZE);
-  return rc;
 }
 
 static void efct_free_hugepage(void *driver_data,
                                struct xlnx_efct_hugepage *mem)
 {
-  unpin_user_page(mem->page);
+  put_page(mem->page);
   fput(mem->file);
 }
 
