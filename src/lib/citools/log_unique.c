@@ -82,6 +82,7 @@ void __ci_log_unique(const char* msg)
     }
     state = STATE_NONE;
     /* Fall through to look for new loop... */
+    ci_fallthrough;
 
   case STATE_NONE:
     for( loop_size = 1; loop_size <= MAX_REPEAT_LINES; ++loop_size ) {

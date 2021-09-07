@@ -1781,7 +1781,7 @@ efrm_vi_shut_down_flag(enum efhw_q_type queue)
 	switch (queue) {
 		default:
 			EFRM_ASSERT(0);
-			/* Fall through. */
+			ci_fallthrough;
 		case EFHW_TXQ:
 			return EFRM_VI_SHUT_DOWN_TXQ;
 		case EFHW_RXQ:

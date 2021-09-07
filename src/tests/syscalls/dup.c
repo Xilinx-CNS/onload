@@ -687,7 +687,7 @@ connect_socket (int me) {
          * sockets, otherwise we'll run out!
          */
         ephem_exhausted = 1;
-        /* fall through */
+        ci_fallthrough;
 
       default:
         ci_log ("Error %d on connect\n", e);

@@ -1014,7 +1014,7 @@ static void ci_tcp_try_cwndrecover(ci_tcp_state* ts, ci_netif* netif,
       ci_assert(! ci_ip_queue_is_empty(rtq));
       ci_tcp_rto_restart(netif, ts);
       ts->congstate = CI_TCP_CONG_RTO_RECOV;
-      /* fall through to RTO_RECOV */
+      ci_fallthrough;
 
     case CI_TCP_CONG_RTO_RECOV:
       break; /* Just proceed below to ci_tcp_retrans_recover() */
@@ -2915,7 +2915,7 @@ static void handle_rx_listen(ci_netif* netif, ci_tcp_socket_listen* tls,
       ci_ipcache_set_saddr(&ipcache, RX_PKT_DADDR(pkt));
       break;
     }
-    /* fall through */
+    ci_fallthrough;
   default:
     LOG_U(ci_log("%s: no return route to "IPX_FMT" exists, "
                  "dropping listen response pkt",

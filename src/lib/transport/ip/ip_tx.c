@@ -151,7 +151,7 @@ int ci_ip_send_pkt_send(ci_netif* ni, const struct oo_sock_cplane* sock_cp,
   case retrrc_localroute:
     if( ipcache->flags & CI_IP_CACHE_IS_LOCALROUTE )
         ci_assert(0);
-    /* fall through */
+    ci_fallthrough;
   default:
     if( ipcache->status < 0 )
       return ipcache->status;

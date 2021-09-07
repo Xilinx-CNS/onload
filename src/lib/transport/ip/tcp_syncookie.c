@@ -97,13 +97,13 @@ sip_hash(ci_uint64* key, const void* data, int len)
   b = (h.c + left) << 56;
 
   switch (left) {
-    case 7: b |= (uint64_t)h.buf.b[6] << 48; /* fall through */
-    case 6: b |= (uint64_t)h.buf.b[5] << 40; /* fall through */
-    case 5: b |= (uint64_t)h.buf.b[4] << 32; /* fall through */
-    case 4: b |= (uint64_t)h.buf.b[3] << 24; /* fall through */
-    case 3: b |= (uint64_t)h.buf.b[2] << 16; /* fall through */
-    case 2: b |= (uint64_t)h.buf.b[1] << 8;  /* fall through */
-    case 1: b |= (uint64_t)h.buf.b[0] << 0;  /* fall through */
+    case 7: b |= (uint64_t)h.buf.b[6] << 48; ci_fallthrough;
+    case 6: b |= (uint64_t)h.buf.b[5] << 40; ci_fallthrough;
+    case 5: b |= (uint64_t)h.buf.b[4] << 32; ci_fallthrough;
+    case 4: b |= (uint64_t)h.buf.b[3] << 24; ci_fallthrough;
+    case 3: b |= (uint64_t)h.buf.b[2] << 16; ci_fallthrough;
+    case 2: b |= (uint64_t)h.buf.b[1] << 8;  ci_fallthrough;
+    case 1: b |= (uint64_t)h.buf.b[0] << 0;  ci_fallthrough;
     case 0: break;
   }
 

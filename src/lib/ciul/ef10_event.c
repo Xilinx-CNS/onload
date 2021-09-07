@@ -897,7 +897,7 @@ int ef10_ef_eventq_poll(ef_vi* evq, ef_event* evs, int evs_len)
           ESE_DZ_DRV_START_UP_EV)
         /* Ignore. */
         break;
-      /* fall-through */
+      ci_fallthrough;
     default:
       ef_log("%s: ERROR: event type=%u ev="CI_QWORD_FMT,
              __FUNCTION__,

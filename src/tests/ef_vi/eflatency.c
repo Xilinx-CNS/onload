@@ -356,7 +356,7 @@ generic_rx_wait(ef_vi* vi)
           rx_post(vi);
           break;
         }
-        /* Otherwise, fall through. */
+        ci_fallthrough;
       default:
         fprintf(stderr, "ERROR: unexpected event "EF_EVENT_FMT"\n",
                 EF_EVENT_PRI_ARG(evs[i]));

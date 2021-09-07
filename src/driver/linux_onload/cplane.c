@@ -1940,7 +1940,7 @@ int __oo_cp_arp_confirm(struct oo_cplane_handle* cp,
        * the state value.  So we change to NUD_DELAY and then back to
        * NUD_REACHABLE. */
       oo_cp_neigh_update(neigh, NUD_DELAY);
-      /* fall through */
+      ci_fallthrough;
     case NUD_STALE:
       /* In theory, we should update in NUD_REACHABLE state only, but we
        * may be a bit slow in confirming ARP.  It is not sufficient to set

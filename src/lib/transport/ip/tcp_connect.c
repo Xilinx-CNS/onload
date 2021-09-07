@@ -1558,7 +1558,7 @@ int ci_tcp_connect(citp_socket* ep, const struct sockaddr* serv_addr,
     switch( crc ) {
     case CI_CONNECT_UL_ALIEN_BOUND:
       rc = CI_SOCKET_HANDOVER;
-      /* Fall through. */
+      ci_fallthrough;
     case CI_CONNECT_UL_FAIL:
       /* Check non-blocking */
       if( errno == EINPROGRESS ) {

@@ -69,7 +69,7 @@ endif
 cxxwarnings	:= $(warnerror) -Wall -Wundef -Wpointer-arith
 
 ifdef W_IMPLICIT_FALLTHROUGH
-cwarnings += -Wimplicit-fallthrough=2
+cwarnings += -Wimplicit-fallthrough=5
 cxxwarnings += -Wimplicit-fallthrough=5
 endif
 

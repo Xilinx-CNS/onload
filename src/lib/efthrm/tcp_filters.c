@@ -208,7 +208,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
 
     case OO_HW_FILTER_TYPE_IP_PROTO_MAC:
       mac_ptr = oo_filter_spec->addr.ipproto.mac;
-      /* Fall through. */
+      ci_fallthrough;
     case OO_HW_FILTER_TYPE_IP_PROTO:
       /* As in the case of the ethertype filter above, we have to populate
        * [spec] ourselves. */

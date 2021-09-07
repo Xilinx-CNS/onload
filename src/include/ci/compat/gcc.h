@@ -142,6 +142,18 @@ typedef ci_uint64                       ci_fixed_descriptor_t;
 #define CI_PRINTF_LIKE(a,b) __attribute__((format(printf,a,b)))
 #define CI_UNUSED __attribute__((__unused__))
 
+/* gcc <5 does not have __has_attribute macro.  It also does not have any
+ * attribute we'd like to check for, including __fallthrough__. */
+#ifndef __has_attribute
+#define __has_attribute(x) 0
+#endif
+
+#if __has_attribute(__fallthrough__)
+#define ci_fallthrough __attribute__((__fallthrough__));
+#else
+#define ci_fallthrough do{}while(0) /*fallthrough*/
+#endif
+
 # define ci_bswapc16  __builtin_bswap16
 # define ci_bswap16   ci_bswapc16
 
