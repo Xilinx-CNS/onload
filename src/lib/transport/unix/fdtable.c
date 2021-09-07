@@ -2115,8 +2115,13 @@ void __oo_service_fd(bool fdtable_locked)
 int ci_tcp_helper_close_no_trampoline(int fd)
 {
   ci_uint32 op = fd;
+  int onload_fd = oo_service_fd();
 
-  return ci_sys_ioctl(oo_service_fd(), OO_IOC_CLOSE, &op);
+
+  if( onload_fd >= 0 )
+    return ci_sys_ioctl(oo_service_fd(), OO_IOC_CLOSE, &op);
+  else
+    return ci_sys_close(fd);
 }
 
 /*! \cidoxg_end */
