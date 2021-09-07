@@ -21,11 +21,10 @@
 #include "mcdi.h"
 
 enum {
-	/* Revisions 0-2 were Falcon A0, A1 and B0 respectively.
+	/* Revisions 0-3 were Falcon A0, A1, B0 and Siena respectively.
 	 * They are not supported by this driver but these revision numbers
 	 * form part of the ethtool API for register dumping.
 	 */
-	EFX_REV_SIENA_A0 = 3,
 	EFX_REV_HUNT_A0 = 4,
 	EFX_REV_EF100 = 5,
 };
@@ -35,13 +34,11 @@ static inline int efx_nic_rev(struct efx_nic *efx)
 	return efx->type->revision;
 }
 
-u32 efx_farch_fpga_ver(struct efx_nic *efx);
-
 /* Read the current event from the event queue */
 static inline efx_qword_t *efx_event(struct efx_channel *channel,
 				     unsigned int index)
 {
-	return ((efx_qword_t *) (channel->eventq.buf.addr)) +
+	return ((efx_qword_t *)(channel->eventq.addr)) +
 		(index & channel->eventq_mask);
 }
 
@@ -67,7 +64,7 @@ static inline int efx_event_present(efx_qword_t *event)
 static inline efx_qword_t *
 efx_tx_desc(struct efx_tx_queue *tx_queue, unsigned int index)
 {
-	return ((efx_qword_t *) (tx_queue->txd.buf.addr)) + index;
+	return ((efx_qword_t *)(tx_queue->txd.addr)) + index;
 }
 
 /* Report whether the NIC considers this TX queue empty, given the
@@ -89,7 +86,7 @@ static inline bool __efx_nic_tx_is_empty(struct efx_tx_queue *tx_queue,
 static inline efx_qword_t *
 efx_rx_desc(struct efx_rx_queue *rx_queue, unsigned int index)
 {
-	return ((efx_qword_t *) (rx_queue->rxd.buf.addr)) + index;
+	return ((efx_qword_t *)(rx_queue->rxd.addr)) + index;
 }
 
 enum {
@@ -118,113 +115,6 @@ enum {
 
 #define EFX_GENERIC_SW_STAT(ext_name)				\
 	[GENERIC_STAT_ ## ext_name] = { #ext_name, 0, 0 }
-
-enum {
-	SIENA_STAT_tx_bytes = GENERIC_STAT_COUNT,
-	SIENA_STAT_tx_good_bytes,
-	SIENA_STAT_tx_bad_bytes,
-	SIENA_STAT_tx_packets,
-	SIENA_STAT_tx_bad,
-	SIENA_STAT_tx_pause,
-	SIENA_STAT_tx_control,
-	SIENA_STAT_tx_unicast,
-	SIENA_STAT_tx_multicast,
-	SIENA_STAT_tx_broadcast,
-	SIENA_STAT_tx_lt64,
-	SIENA_STAT_tx_64,
-	SIENA_STAT_tx_65_to_127,
-	SIENA_STAT_tx_128_to_255,
-	SIENA_STAT_tx_256_to_511,
-	SIENA_STAT_tx_512_to_1023,
-	SIENA_STAT_tx_1024_to_15xx,
-	SIENA_STAT_tx_15xx_to_jumbo,
-	SIENA_STAT_tx_gtjumbo,
-	SIENA_STAT_tx_collision,
-	SIENA_STAT_tx_single_collision,
-	SIENA_STAT_tx_multiple_collision,
-	SIENA_STAT_tx_excessive_collision,
-	SIENA_STAT_tx_deferred,
-	SIENA_STAT_tx_late_collision,
-	SIENA_STAT_tx_excessive_deferred,
-	SIENA_STAT_tx_non_tcpudp,
-	SIENA_STAT_tx_mac_src_error,
-	SIENA_STAT_tx_ip_src_error,
-	SIENA_STAT_rx_bytes,
-	SIENA_STAT_rx_good_bytes,
-	SIENA_STAT_rx_bad_bytes,
-	SIENA_STAT_rx_packets,
-	SIENA_STAT_rx_good,
-	SIENA_STAT_rx_bad,
-	SIENA_STAT_rx_pause,
-	SIENA_STAT_rx_control,
-	SIENA_STAT_rx_unicast,
-	SIENA_STAT_rx_multicast,
-	SIENA_STAT_rx_broadcast,
-	SIENA_STAT_rx_lt64,
-	SIENA_STAT_rx_64,
-	SIENA_STAT_rx_65_to_127,
-	SIENA_STAT_rx_128_to_255,
-	SIENA_STAT_rx_256_to_511,
-	SIENA_STAT_rx_512_to_1023,
-	SIENA_STAT_rx_1024_to_15xx,
-	SIENA_STAT_rx_15xx_to_jumbo,
-	SIENA_STAT_rx_gtjumbo,
-	SIENA_STAT_rx_bad_gtjumbo,
-	SIENA_STAT_rx_overflow,
-	SIENA_STAT_rx_false_carrier,
-	SIENA_STAT_rx_symbol_error,
-	SIENA_STAT_rx_align_error,
-	SIENA_STAT_rx_length_error,
-	SIENA_STAT_rx_internal_error,
-	SIENA_STAT_rx_nodesc_drop_cnt,
-	SIENA_STAT_rx_char_error_lane0,
-	SIENA_STAT_rx_char_error_lane1,
-	SIENA_STAT_rx_char_error_lane2,
-	SIENA_STAT_rx_char_error_lane3,
-	SIENA_STAT_rx_disp_error_lane0,
-	SIENA_STAT_rx_disp_error_lane1,
-	SIENA_STAT_rx_disp_error_lane2,
-	SIENA_STAT_rx_disp_error_lane3,
-	SIENA_STAT_rx_match_fault,
-	SIENA_STAT_COUNT
-};
-
-/**
- * struct siena_nic_data - Siena NIC state
- * @efx: Pointer back to main interface structure
- * @wol_filter_id: Wake-on-LAN packet filter id
- * @stats: Hardware statistics
- * @vf: Array of &struct siena_vf objects
- * @vf_rtnl_count: Number of VFs exposed to rtnetlink.
- * @vf_buftbl_base: The zeroth buffer table index used to back VF queues.
- * @vfdi_status: Common VFDI status page to be dmad to VF address space.
- * @local_addr_list: List of local addresses. Protected by %local_lock.
- * @local_page_list: List of DMA addressable pages used to broadcast
- *	%local_addr_list. Protected by %local_lock.
- * @local_lock: Mutex protecting %local_addr_list and %local_page_list.
- * @peer_work: Work item to broadcast peer addresses to VMs.
- */
-struct siena_nic_data {
-	struct efx_nic *efx;
-	int wol_filter_id;
-	u32 caps;
-	u64 stats[SIENA_STAT_COUNT];
-#ifdef CONFIG_SFC_SRIOV
-	struct siena_vf *vf;
-	struct efx_channel *vfdi_channel;
-	unsigned int vf_rtnl_count;
-	struct efx_buffer vfdi_status;
-	struct list_head local_addr_list;
-	struct list_head local_page_list;
-	struct mutex local_lock;
-	struct work_struct peer_work;
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	struct efx_dl_siena_sriov sriov_resources;
-#endif
-#endif
-#endif
-};
 
 enum {
 	EF10_STAT_port_tx_bytes = GENERIC_STAT_COUNT,
@@ -455,9 +345,6 @@ int efx_ptp_ts_settime(struct efx_nic *efx, struct efx_ts_settime *settime);
 int efx_ptp_ts_adjtime(struct efx_nic *efx, struct efx_ts_adjtime *adjtime);
 int efx_ptp_ts_sync(struct efx_nic *efx, struct efx_ts_sync *sync);
 int efx_ptp_ts_set_sync_status(struct efx_nic *efx, struct efx_ts_set_sync_status *status);
-int efx_ptp_ts_set_vlan_filter(struct efx_nic *efx, struct efx_ts_set_vlan_filter *vlan_filter);
-int efx_ptp_ts_set_uuid_filter(struct efx_nic *efx, struct efx_ts_set_uuid_filter *uuid_filter);
-int efx_ptp_ts_set_domain_filter(struct efx_nic *efx, struct efx_ts_set_domain_filter *domain_filter);
 #endif
 void efx_ptp_remove_post_io(struct efx_nic *efx);
 int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel);
@@ -571,9 +458,6 @@ int efx_ef10_licensed_app_state(struct efx_nic *efx,
 				struct efx_licensed_app_state *app_state);
 #endif
 
-#ifdef CONFIG_SFC_SIENA
-extern const struct efx_nic_type siena_a0_nic_type;
-#endif
 extern const struct efx_nic_type efx_hunt_a0_nic_type;
 extern const struct efx_nic_type efx_hunt_a0_vf_nic_type __attribute__((weak));
 
@@ -686,76 +570,6 @@ static inline bool efx_nic_has_dynamic_sensors(struct efx_nic *efx)
 	return false;
 }
 void efx_nic_event_test_start(struct efx_channel *channel);
-
-/* Falcon/Siena queue operations */
-int efx_farch_tx_probe(struct efx_tx_queue *tx_queue);
-int efx_farch_tx_init(struct efx_tx_queue *tx_queue);
-void efx_farch_tx_fini(struct efx_tx_queue *tx_queue);
-void efx_farch_tx_remove(struct efx_tx_queue *tx_queue);
-void efx_farch_tx_write(struct efx_tx_queue *tx_queue);
-void efx_farch_notify_tx_desc(struct efx_tx_queue *tx_queue);
-unsigned int efx_farch_tx_limit_len(struct efx_tx_queue *tx_queue,
-				    dma_addr_t dma_addr, unsigned int len);
-unsigned int efx_farch_tx_max_skb_descs(struct efx_nic *efx);
-int efx_farch_rx_probe(struct efx_rx_queue *rx_queue);
-int efx_farch_rx_init(struct efx_rx_queue *rx_queue);
-void efx_farch_rx_fini(struct efx_rx_queue *rx_queue);
-void efx_farch_rx_remove(struct efx_rx_queue *rx_queue);
-void efx_farch_rx_write(struct efx_rx_queue *rx_queue);
-int efx_farch_rx_defer_refill(struct efx_rx_queue *rx_queue);
-int efx_farch_ev_probe(struct efx_channel *channel);
-int efx_farch_ev_init(struct efx_channel *channel);
-void efx_farch_ev_fini(struct efx_channel *channel);
-void efx_farch_ev_remove(struct efx_channel *channel);
-int efx_farch_ev_process(struct efx_channel *channel, int quota);
-bool efx_farch_ev_mcdi_pending(struct efx_channel *channel);
-void efx_farch_ev_read_ack(struct efx_channel *channel);
-void efx_farch_ev_test_generate(struct efx_channel *channel);
-
-/* Falcon/Siena filter operations */
-int efx_farch_filter_table_probe(struct efx_nic *efx);
-void efx_farch_filter_table_restore(struct efx_nic *efx);
-void efx_farch_filter_table_remove(struct efx_nic *efx);
-bool efx_farch_filter_match_supported(struct efx_nic *efx, bool encap,
-				      unsigned int match_flags);
-void efx_farch_filter_update_rx_scatter(struct efx_nic *efx);
-s32 efx_farch_filter_insert(struct efx_nic *efx,
-			    const struct efx_filter_spec *spec, bool replace);
-int efx_farch_filter_remove_safe(struct efx_nic *efx,
-				 enum efx_filter_priority priority,
-				 u32 filter_id);
-int efx_farch_filter_get_safe(struct efx_nic *efx,
-			      enum efx_filter_priority priority, u32 filter_id,
-			      struct efx_filter_spec *);
-int efx_farch_filter_clear_rx(struct efx_nic *efx,
-			      enum efx_filter_priority priority);
-u32 efx_farch_filter_count_rx_used(struct efx_nic *efx,
-				   enum efx_filter_priority priority);
-u32 efx_farch_filter_get_rx_id_limit(struct efx_nic *efx);
-s32 efx_farch_filter_get_rx_ids(struct efx_nic *efx,
-				enum efx_filter_priority priority, u32 *buf,
-				u32 size);
-#ifdef CONFIG_RFS_ACCEL
-bool efx_farch_filter_rfs_expire_one(struct efx_nic *efx, u32 flow_id,
-				     unsigned int index);
-#endif
-#ifdef EFX_NOT_UPSTREAM
-int efx_farch_filter_redirect(struct efx_nic *efx, u32 filter_id,
-			      u32 *rss_context, int rxq_i, int stack_id);
-#ifdef CONFIG_SFC_DRIVERLINK
-int efx_farch_filter_block_kernel(struct efx_nic *efx, enum
-				  efx_dl_filter_block_kernel_type type);
-void efx_farch_filter_unblock_kernel(struct efx_nic *efx, enum
-				     efx_dl_filter_block_kernel_type type);
-#endif
-int efx_farch_vport_filter_insert(struct efx_nic *efx, unsigned int vport_id,
-				  const struct efx_filter_spec *spec,
-				  u64 *filter_id_out, bool *is_exclusive_out);
-int efx_farch_vport_filter_remove(struct efx_nic *efx, unsigned int vport_id,
-				  u64 filter_id, bool is_exclusive);
-#endif
-void efx_farch_filter_sync_rx_mode(struct efx_nic *efx);
-
 bool efx_nic_event_present(struct efx_channel *channel);
 
 /* Some statistics are computed as A - B where A and B each increase
@@ -782,14 +596,6 @@ int efx_nic_init_interrupt(struct efx_nic *efx);
 int efx_nic_irq_test_start(struct efx_nic *efx);
 void efx_nic_fini_interrupt(struct efx_nic *efx);
 
-/* Falcon/Siena interrupts */
-void efx_farch_irq_enable_master(struct efx_nic *efx);
-int efx_farch_irq_test_generate(struct efx_nic *efx);
-void efx_farch_irq_disable_master(struct efx_nic *efx);
-irqreturn_t efx_farch_msi_interrupt(int irq, void *dev_id);
-irqreturn_t efx_farch_legacy_interrupt(int irq, void *dev_id);
-irqreturn_t efx_farch_fatal_interrupt(struct efx_nic *efx);
-
 static inline int efx_nic_event_test_irq_cpu(struct efx_channel *channel)
 {
 	return READ_ONCE(channel->event_test_cpu);
@@ -801,16 +607,7 @@ static inline int efx_nic_irq_test_irq_cpu(struct efx_nic *efx)
 
 /* Global Resources */
 int efx_nic_flush_queues(struct efx_nic *efx);
-void siena_prepare_flush(struct efx_nic *efx);
-int efx_farch_fini_dmaq(struct efx_nic *efx);
-void efx_farch_finish_flr(struct efx_nic *efx);
-void siena_finish_flush(struct efx_nic *efx);
-int efx_farch_dimension_resources(struct efx_nic *efx,
-				  unsigned int sram_lim_qw);
-void efx_farch_init_common(struct efx_nic *efx);
 void efx_ef10_handle_drain_event(struct efx_nic *efx);
-void efx_farch_rx_push_indir_table(struct efx_nic *efx);
-void efx_farch_rx_pull_indir_table(struct efx_nic *efx);
 void efx_nic_check_pcie_link(struct efx_nic *efx,
 			     unsigned int desired_bandwidth,
 			     unsigned int *actual_width,
@@ -819,25 +616,6 @@ void efx_nic_check_pcie_link(struct efx_nic *efx,
 int efx_nic_alloc_buffer(struct efx_nic *efx, struct efx_buffer *buffer,
 			 unsigned int len, gfp_t gfp_flags);
 void efx_nic_free_buffer(struct efx_nic *efx, struct efx_buffer *buffer);
-
-/* Tests */
-struct efx_farch_register_test {
-	unsigned int address;
-	efx_oword_t mask;
-};
-struct efx_farch_table_test {
-	unsigned int address;
-	unsigned int step;
-	unsigned int rows;
-	efx_oword_t mask;
-};
-int efx_farch_test_registers(struct efx_nic *efx,
-			     const struct efx_farch_register_test *regs,
-			     size_t n_regs);
-int efx_farch_test_table(struct efx_nic *efx,
-			 const struct efx_farch_table_test *table,
-			 void (*pattern)(unsigned int, efx_qword_t *, int, int),
-			 int a, int b);
 
 size_t efx_nic_get_regs_len(struct efx_nic *efx);
 void efx_nic_get_regs(struct efx_nic *efx, void *buf);
@@ -857,11 +635,6 @@ void efx_nic_update_stats(const struct efx_hw_stat_desc *desc, size_t count,
 void efx_nic_fix_nodesc_drop_stat(struct efx_nic *efx, u64 *stat);
 
 #define EFX_MAX_FLUSH_TIME 5000
-
-void efx_farch_generate_event(struct efx_nic *efx, unsigned int evq,
-			      efx_qword_t *event);
-struct efx_tx_queue *efx_farch_select_tx_queue(struct efx_channel *channel,
-					       struct sk_buff *skb);
 
 bool efx_mcdi_port_process_event(struct efx_channel *channel, efx_qword_t *event,
 				 int *rc, int budget);

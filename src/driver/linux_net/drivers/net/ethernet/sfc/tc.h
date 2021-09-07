@@ -57,18 +57,12 @@ struct efx_tc_encap_action {
 	u32 fw_id; /* index of this entry in firmware encap table */
 };
 
-/* Multiple pedit actions are represented by means of a linked list of entries
- * in the pedit_actions table (in the driver, efx->tc_pedit_ht).
- */
-struct efx_tc_pedit_action {
-	u16 hdr_type; /* enum pedit_header_type; */
-	u8 cmd; /* enum pedit_cmd; */
-	/* 8 bits hole */
-	struct tc_pedit_key key; /* 24 bytes */
-	struct efx_tc_pedit_action *next;
+/* MAC address edits are indirected through a table in the hardware */
+struct efx_tc_mac_pedit_action {
+	u8 h_addr[ETH_ALEN];
 	struct rhash_head linkage;
 	refcount_t ref;
-	u32 fw_id; /* index of this entry in firmware pedit table */
+	u32 fw_id; /* index of this entry in firmware MAC address table */
 };
 
 struct efx_tc_counter_index {
@@ -104,8 +98,8 @@ struct efx_tc_action_set {
 #endif
 	u32 dest_mport;
 	struct efx_tc_encap_action *encap_md; /* entry in tc_encap_ht table */
-	/* pedit is not currently supported, so this will always be NULL */
-	struct efx_tc_pedit_action *pedit_md; /* entry in tc_pedit_ht table */
+	struct efx_tc_mac_pedit_action *src_mac; /* entry in tc_mac_ht table */
+	struct efx_tc_mac_pedit_action *dst_mac; /* entry in tc_mac_ht table */
 	struct list_head encap_user; /* entry on encap_md->users list */
 	struct list_head count_user; /* entry on counter->users list, if encap */
 	struct efx_tc_action_set_list *user; /* Only populated if encap_md */
@@ -253,7 +247,6 @@ struct efx_tc_ct_entry {
 	__be16 l4_sport, l4_dport, l4_natport; /* Ports (UDP, TCP) */
 	u16 zone;
 	u32 mark;
-	u32 fw_id;
 };
 #endif
 
@@ -261,6 +254,47 @@ enum efx_tc_rule_prios {
 	EFX_TC_PRIO_TC, /* Rule inserted by TC */
 	EFX_TC_PRIO_DFLT, /* Default switch rule; one of efx_tc_default_rules */
 	EFX_TC_PRIO__NUM
+};
+
+struct efx_tc_table_field_fmt {
+	u16 field_id;
+	u16 lbn;
+	u16 width;
+	u8 masking;
+	u8 scheme;
+};
+
+struct efx_tc_table_desc {
+	u16 type;
+	u16 key_width;
+	u16 resp_width;
+	u16 n_keys;
+	u16 n_resps;
+	u16 n_prios;
+	u8 flags;
+	u8 scheme;
+	struct efx_tc_table_field_fmt *keys;
+	struct efx_tc_table_field_fmt *resps;
+};
+
+struct efx_tc_table_ct { /* TABLE_ID_CONNTRACK_TABLE */
+	struct efx_tc_table_desc desc;
+	bool hooked;
+	struct { /* indices of named fields within @desc.keys */
+		u8 eth_proto_idx;
+		u8 ip_proto_idx;
+		u8 src_ip_idx; /* either v4 or v6 */
+		u8 dst_ip_idx;
+		u8 l4_sport_idx;
+		u8 l4_dport_idx;
+		u8 zone_idx; /* for TABLE_FIELD_ID_DOMAIN */
+	} keys;
+	struct { /* indices of named fields within @desc.resps */
+		u8 dnat_idx;
+		u8 nat_ip_idx;
+		u8 l4_natport_idx;
+		u8 mark_idx;
+	} resps;
 };
 
 /**
@@ -275,7 +309,7 @@ enum efx_tc_rule_prios {
  * @counter_id_ht: Hashtable mapping TC counter cookies to counters
  * @ctr_agg_ht: Hashtable of TC counter aggregators (for LHS rules)
  * @encap_ht: Hashtable of TC encap actions
- * @pedit_ht: Hashtable of TC pedit actions
+ * @mac_ht: Hashtable of MAC address entries (for pedits)
  * @match_action_ht: Hashtable of TC match-action rules
  * @lhs_rule_ht: Hashtable of TC left-hand (act ct & goto chain) rules
  * @ct_zone_ht: Hashtable of TC conntrack flowtable bindings
@@ -283,6 +317,7 @@ enum efx_tc_rule_prios {
  * @neigh_ht: Hashtable of neighbour watches (&struct efx_neigh_binder)
  * @recirc_ht: Hashtable of recirculation ID mappings (&struct efx_tc_recirc_id)
  * @recirc_ida: Recirculation ID allocator
+ * @meta_ct: MAE table layout for conntrack table
  * @reps_mport_id: MAE port allocated for representor RX
  * @reps_filter_uc: VNIC filter for representor unicast RX (promisc)
  * @reps_filter_mc: VNIC filter for representor multicast RX (allmulti)
@@ -307,7 +342,7 @@ struct efx_tc_state {
 	struct rhashtable counter_id_ht;
 	struct rhashtable ctr_agg_ht;
 	struct rhashtable encap_ht;
-	struct rhashtable pedit_ht;
+	struct rhashtable mac_ht;
 	struct rhashtable encap_match_ht;
 	struct rhashtable match_action_ht;
 	struct rhashtable lhs_rule_ht;
@@ -318,6 +353,7 @@ struct efx_tc_state {
 	struct rhashtable neigh_ht;
 	struct rhashtable recirc_ht;
 	struct ida recirc_ida;
+	struct efx_tc_table_ct meta_ct;
 	u32 reps_mport_id;
 	u32 reps_filter_uc, reps_filter_mc;
 	u16 reps_mport_vport_id;

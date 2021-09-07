@@ -763,6 +763,10 @@
 	}
 #endif
 
+#ifndef PORT_DA
+	#define PORT_DA			0x05
+#endif
+
 #ifndef PORT_OTHER
 	#define PORT_OTHER		0xff
 #endif
@@ -3459,13 +3463,22 @@ static inline int devlink_info_board_serial_number_put(struct devlink_info_req *
 	return 0;
 }
 #endif
+#ifdef EFX_NEED_DEVLINK_FLASH_UPDATE_STATUS_NOTIFY
+static inline void devlink_flash_update_status_notify(struct devlink *devlink,
+						      const char *status_msg,
+						      const char *component,
+						      unsigned long done,
+						      unsigned long total)
+{
+	/* Do nothing */
+}
+#endif
 #ifdef EFX_NEED_DEVLINK_FLASH_UPDATE_TIMEOUT_NOTIFY
 void devlink_flash_update_timeout_notify(struct devlink *devlink,
 					 const char *status_msg,
 					 const char *component,
 					 unsigned long timeout);
 #endif
-
 #else
 
 /* devlink is not available, provide a 'fake' devlink info request structure

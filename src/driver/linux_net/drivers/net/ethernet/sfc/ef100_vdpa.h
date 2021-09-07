@@ -189,7 +189,7 @@ struct ef100_vdpa_nic {
 	u32 max_queue_pairs;
 	struct virtio_net_config net_config;
 	struct ef100_vdpa_vring_info vring[EF100_VDPA_MAX_QUEUES_PAIRS * 2];
-	u8 mac_address[ETH_ALEN];
+	u8 *mac_address;
 	u32 filter_cnt;
 	bool mac_configured;
 	struct ef100_vdpa_filter filters[EF100_VDPA_MAC_FILTER_NTYPES];
@@ -222,6 +222,8 @@ bool ef100_vdpa_dev_in_use(struct efx_nic *efx);
 int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic);
 int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
 int remap_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
-#endif
 
-#endif
+extern const struct vdpa_config_ops ef100_vdpa_config_ops;
+#endif /* CONFIG_SFC_VDPA */
+
+#endif /* __EF100_VDPA_H__ */

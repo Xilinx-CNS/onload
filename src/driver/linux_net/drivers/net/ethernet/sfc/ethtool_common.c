@@ -1355,7 +1355,7 @@ int efx_ethtool_get_rxnfc(struct net_device *net_dev,
 			switch (info->flow_type & ~FLOW_RSS) {
 			case TCP_V4_FLOW:
 				info->data |= RXH_L4_B_0_1 | RXH_L4_B_2_3;
-				/* fall through */
+				fallthrough;
 			case UDP_V4_FLOW:
 			case SCTP_V4_FLOW:
 			case AH_ESP_V4_FLOW:
@@ -1364,7 +1364,7 @@ int efx_ethtool_get_rxnfc(struct net_device *net_dev,
 				break;
 			case TCP_V6_FLOW:
 				info->data |= RXH_L4_B_0_1 | RXH_L4_B_2_3;
-				/* fall through */
+				fallthrough;
 			case UDP_V6_FLOW:
 			case SCTP_V6_FLOW:
 			case AH_ESP_V6_FLOW:

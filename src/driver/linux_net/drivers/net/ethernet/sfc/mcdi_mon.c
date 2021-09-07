@@ -267,12 +267,12 @@ struct efx_dynamic_sensor_description {
 	unsigned int type;
 	int limits[EFX_SENSOR_LIMITS];
 	unsigned int gen_count;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 	struct rhash_head entry;
 #endif
 };
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 const static struct rhashtable_params sensor_entry_params = {
 	.key_len     = sizeof(unsigned int),
 	.key_offset  = offsetof(struct efx_dynamic_sensor_description, handle),
@@ -283,7 +283,7 @@ const static struct rhashtable_params sensor_entry_params = {
 static struct efx_dynamic_sensor_description *
 efx_mcdi_get_dynamic_sensor(struct efx_nic *efx, unsigned int handle)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
 
 	return rhashtable_lookup_fast(&hwmon->sensor_table, &handle,
@@ -511,7 +511,7 @@ efx_mcdi_mon_add_attr(struct efx_nic *efx,
 	++hwmon->n_attrs;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 static void efx_mcdi_add_dynamic_sensor(struct efx_nic *efx,
 					unsigned int handle,
 					unsigned int idx)
@@ -1585,7 +1585,7 @@ int efx_mcdi_mon_probe(struct efx_nic *efx)
 	mutex_init(&hwmon->update_lock);
 
 	if (has_dynamic_sensors) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 		rhashtable_init(&hwmon->sensor_table, &sensor_entry_params);
 		rc = efx_mcdi_read_dynamic_sensor_list(efx);
 		n_sensors = hwmon->n_dynamic_sensors;
@@ -1649,7 +1649,7 @@ void efx_mcdi_mon_remove(struct efx_nic *efx)
 	if (!hwmon || !hwmon->dma_buf.addr)
 		return;
 	efx_mcdi_hwmon_remove(efx);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 	if (efx_nic_has_dynamic_sensors(efx))
 		rhashtable_free_and_destroy(&hwmon->sensor_table,
 					    NULL,

@@ -484,17 +484,6 @@ static int efx_ef10_get_mac_address_pf(struct efx_nic *efx, u8 *mac_address)
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_GET_MAC_ADDRESSES, NULL, 0,
 			  outbuf, sizeof(outbuf), &outlen);
-#ifdef EFX_NOT_UPSTREAM
-	/* XXX remove fallback in 2013-10
-	 * efx_mcdi_get_board_cfg() should also be made static in siena.c then
-	 */
-	if (rc == -ENOSYS && efx_port_num(efx) < 2) {
-		netif_warn(efx, probe, efx->net_dev,
-			   "current firmware does not support GET_MAC_ADDRESSES; falling back to GET_BOARD_CFG\n");
-		return efx_mcdi_get_board_cfg(efx, efx_port_num(efx),
-					      mac_address, NULL, NULL);
-	}
-#endif
 	if (rc)
 		return rc;
 	if (outlen < MC_CMD_GET_MAC_ADDRESSES_OUT_LEN)
@@ -2500,7 +2489,7 @@ static int efx_ef10_irq_test_generate(struct efx_nic *efx)
 
 static int efx_ef10_tx_probe(struct efx_tx_queue *tx_queue)
 {
-	return efx_nic_alloc_buffer(tx_queue->efx, &tx_queue->txd.buf,
+	return efx_nic_alloc_buffer(tx_queue->efx, &tx_queue->txd,
 				    (tx_queue->ptr_mask + 1) *
 				    sizeof(efx_qword_t),
 				    GFP_KERNEL);
@@ -3493,7 +3482,7 @@ static int efx_ef10_handle_rx_event(struct efx_channel *channel,
 		case ESE_EZ_ENCAP_HDR_NONE:
 			if (rx_l4_class == ESE_FZ_L4_CLASS_TCP)
 				flags |= EFX_RX_PKT_TCP;
-			/* fall thru */
+			fallthrough;
 		case ESE_EZ_ENCAP_HDR_GRE:
 			if (tcpudp)
 				flags |= EFX_RX_PKT_CSUMMED;
@@ -3727,7 +3716,7 @@ static int efx_ef10_ev_process(struct efx_channel *channel, int quota)
 
 	read_ptr = channel->eventq_read_ptr;
 
-	EFX_WARN_ON_ONCE_PARANOID(!IS_ALIGNED((uintptr_t)channel->eventq.buf.addr,
+	EFX_WARN_ON_ONCE_PARANOID(!IS_ALIGNED((uintptr_t)channel->eventq.addr,
 					      L1_CACHE_BYTES));
 
 	for (;;) {
@@ -4151,7 +4140,7 @@ static unsigned int efx_ef10_mcdi_rpc_timeout(struct efx_nic *efx,
 		if (efx_ef10_has_cap(nic_data->datapath_caps2,
 				     NVRAM_UPDATE_REPORT_VERIFY_RESULT))
 			return MCDI_RPC_LONG_TIMEOUT;
-		/* fall through */
+		fallthrough;
 	default:
 		/* Some things take longer shortly after a reset. */
 		if (time_before(jiffies,
@@ -6136,7 +6125,6 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.sriov_init = efx_ef10_sriov_init,
 	.sriov_fini = efx_ef10_sriov_fini,
 	.sriov_wanted = efx_ef10_sriov_wanted,
-	.sriov_flr = efx_ef10_sriov_flr,
 	.sriov_set_vf_mac = efx_ef10_sriov_set_vf_mac,
 	.sriov_set_vf_vlan = efx_ef10_sriov_set_vf_vlan,
 	.sriov_set_vf_spoofchk = efx_ef10_sriov_set_vf_spoofchk,

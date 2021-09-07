@@ -43,11 +43,6 @@ MODULE_PARM_DESC(debug, "Bitmapped debugging message enable value");
 
 /* This is the time (in ms) between invocations of the hardware
  * monitor.
- * On Falcon-based NICs, this will:
- * - Check the on-board hardware monitor;
- * - Poll the link state and reconfigure the hardware as necessary.
- * On Siena-based NICs for power systems with EEH support, this will give EEH a
- * chance to start.
  */
 unsigned int monitor_interval_ms = 200;
 module_param(monitor_interval_ms, uint, 0644);

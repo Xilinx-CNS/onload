@@ -42,7 +42,9 @@ static const struct feature_bit feature_table[] = {
 	{VIRTIO_F_ACCESS_PLATFORM, "VIRTIO_F_ACCESS_PLATFORM"},
 	{VIRTIO_F_RING_PACKED, "VIRTIO_F_RING_PACKED"},
 	{VIRTIO_F_ORDER_PLATFORM, "VIRTIO_F_ORDER_PLATFORM"},
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_VIRTIO_F_IN_ORDER)
 	{VIRTIO_F_IN_ORDER, "VIRTIO_F_IN_ORDER"},
+#endif
 	{VIRTIO_F_SR_IOV, "VIRTIO_F_SR_IOV"},
 	{VIRTIO_NET_F_CSUM, "VIRTIO_NET_F_CSUM"},
 	{VIRTIO_NET_F_GUEST_CSUM, "VIRTIO_NET_F_GUEST_CSUM"},
@@ -120,6 +122,7 @@ static void print_status_str(u8 status, struct vdpa_device *vdev)
 		dev_info(&vdev->dev, "Unknown status:0x%x\n", status);
 }
 
+#ifdef EFX_NOT_UPSTREAM
 static void print_features_str(u64 features, struct vdpa_device *vdev)
 {
 	int table_len = sizeof(feature_table) / sizeof(struct feature_bit);
@@ -138,6 +141,7 @@ static void print_features_str(u64 features, struct vdpa_device *vdev)
 			 __func__, features);
 	}
 }
+#endif
 
 static char *get_vdpa_state_str(enum ef100_vdpa_nic_state state)
 {
@@ -163,6 +167,7 @@ static irqreturn_t vring_intr_handler(int irq, void *arg)
 	return IRQ_NONE;
 }
 
+#ifdef EFX_NOT_UPSTREAM
 static void print_vring_state(u16 state, struct vdpa_device *vdev)
 {
 	dev_info(&vdev->dev, "%s: Vring state:\n", __func__);
@@ -173,6 +178,7 @@ static void print_vring_state(u16 state, struct vdpa_device *vdev)
 	dev_info(&vdev->dev, "%s: Ready Configured:%s\n", __func__,
 		 (state & EF100_VRING_READY_CONFIGURED) ? "true" : "false");
 }
+#endif
 
 int ef100_vdpa_irq_vectors_alloc(struct pci_dev *pci_dev, u16 min, u16 max)
 {
@@ -711,8 +717,8 @@ static struct vdpa_notification_area
 		goto unlock_end;
 	}
 	efx = vdpa_nic->efx;
-	notify_area.addr = (resource_size_t)efx_mem(efx,
-					vdpa_nic->vring[idx].doorbell_offset);
+	notify_area.addr = (uintptr_t)efx_mem(efx,
+					      vdpa_nic->vring[idx].doorbell_offset);
 
 	/* VDPA doorbells are at a stride of VI/2
 	 * One VI stride is shared by both rx & tx doorbells
@@ -778,9 +784,10 @@ static u64 ef100_vdpa_get_features(struct vdpa_device *vdev)
 		return 0;
 	}
 
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_VIRTIO_F_IN_ORDER)
 	if (!vdpa_nic->in_order)
 		features &= ~(1ULL << VIRTIO_F_IN_ORDER);
-
+#endif
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Features returned:\n", __func__);
 	print_features_str(features, vdev);

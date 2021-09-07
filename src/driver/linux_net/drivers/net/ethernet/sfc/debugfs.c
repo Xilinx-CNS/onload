@@ -203,12 +203,20 @@ int efx_debugfs_read_dword(struct seq_file *file, void *data)
 	return 0;
 }
 
-#ifdef EFX_NOT_UPSTREAM
 int efx_debugfs_read_u64(struct seq_file *file, void *data)
 {
 	unsigned long long value = *((u64 *) data);
 
 	seq_printf(file, "%llu\n", value);
+	return 0;
+}
+
+#ifdef CONFIG_SFC_VDPA
+int efx_debugfs_read_x64(struct seq_file *file, void *data)
+{
+	unsigned long long value = *((u64 *) data);
+
+	seq_printf(file, "0x%llx\n", value);
 	return 0;
 }
 #endif
@@ -418,7 +426,6 @@ static struct efx_debugfs_parameter efx_debugfs_port_parameters[] = {
 			    bool, efx_debugfs_read_bool),
 	EFX_NAMED_PARAMETER(link_speed, struct efx_nic, link_state.speed,
 			    unsigned int, efx_debugfs_read_uint),
-	EFX_BOOL_PARAMETER(struct efx_nic, unicast_filter),
 	EFX_U64_PARAMETER(struct efx_nic, loopback_modes),
 	EFX_LOOPBACK_MODE_PARAMETER(struct efx_nic, loopback_mode),
 	EFX_UINT_PARAMETER(struct efx_nic, phy_type),
@@ -481,14 +488,23 @@ void efx_trim_debugfs_port(struct efx_nic *efx,
 
 #ifdef CONFIG_SFC_VDPA
 
+/* vDPA device MAC address */
+static int efx_debugfs_read_vdpa_mac(struct seq_file *file, void *data)
+{
+        struct ef100_vdpa_nic *vdpa_nic =  data;
+
+        seq_printf(file, "%pM\n", vdpa_nic->mac_address);
+        return 0;
+}
+
 /* Per vdpa parameters */
 static struct efx_debugfs_parameter efx_debugfs_vdpa_parameters[] = {
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, vdpa_state),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, pf_index),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, vf_index),
-	EFX_U64_PARAMETER(struct ef100_vdpa_nic, features),
+	EFX_X64_PARAMETER(struct ef100_vdpa_nic, features),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, max_queue_pairs),
-	EFX_BOOL_PARAMETER(struct ef100_vdpa_nic, mac_configured),
+	_EFX_RAW_PARAMETER(mac_address, efx_debugfs_read_vdpa_mac),
 	{NULL},
 };
 
@@ -936,9 +952,6 @@ static int efx_nic_debugfs_read_desc(struct seq_file *file, void *data)
 	uint8_t revision;
 
 	switch (efx_nic_rev(efx)) {
-	case EFX_REV_SIENA_A0:
-		rev_name = "Siena";
-		break;
 	case EFX_REV_HUNT_A0:
 		rev_name = "Huntington";
 		break;

@@ -48,7 +48,7 @@
 
 int ef100_rx_probe(struct efx_rx_queue *rx_queue)
 {
-	return ef100_alloc_qdma_buffer(rx_queue->efx, &rx_queue->rxd.buf,
+	return ef100_alloc_qdma_buffer(rx_queue->efx, &rx_queue->rxd,
 				       (rx_queue->ptr_mask + 1) *
 				       sizeof(efx_qword_t));
 }

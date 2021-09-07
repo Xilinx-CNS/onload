@@ -321,11 +321,20 @@ static int efx_ethtool_set_ringparam(struct net_device *net_dev,
 	else if (rc == -EINVAL)
 		netif_err(efx, drv, efx->net_dev,
 			  "Tx queue length must be power of two\n");
-
 	if (rc)
 		return rc;
 
-	return efx_realloc_channels(efx, ring->rx_pending, ring->tx_pending);
+	/* Apply the new settings */
+	efx->rxq_entries = ring->rx_pending;
+	efx->txq_entries = ring->tx_pending;
+
+	/* Update the datapath with the new settings if the interface is up */
+	if (!efx_check_disabled(efx) && netif_running(efx->net_dev)) {
+		dev_close(net_dev);
+		rc = dev_open(net_dev, NULL);
+	}
+
+	return rc;
 }
 
 static void efx_ethtool_get_wol(struct net_device *net_dev,

@@ -1396,80 +1396,6 @@ int efx_init_channels(struct efx_nic *efx)
 	return rc;
 }
 
-/* Allocate and initialise a channel structure, copying parameters
- * (but not resources) from an old channel structure.
- */
-static struct efx_channel *
-efx_copy_channel(struct efx_channel *old_channel)
-{
-	struct efx_tx_queue *new_tx_queues;
-	struct efx_rx_queue *rx_queue;
-	struct efx_tx_queue *tx_queue;
-	struct efx_channel *channel;
-
-	channel = kmalloc(sizeof(*channel), GFP_KERNEL);
-	if (!channel)
-		return NULL;
-
-	if (old_channel->tx_queue_count) {
-		new_tx_queues = kcalloc(old_channel->tx_queue_count,
-					sizeof(*new_tx_queues), GFP_KERNEL);
-		if (!new_tx_queues) {
-			kfree(channel);
-			return NULL;
-		}
-	} else {
-		new_tx_queues = NULL;
-	}
-
-#ifdef EFX_USE_IRQ_NOTIFIERS
-	efx_clear_affinity_notifier(old_channel);
-#endif
-
-	*channel = *old_channel;
-
-	channel->napi_dev = NULL;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NAPI_STRUCT_NAPI_ID)
-	INIT_HLIST_NODE(&channel->napi_str.napi_hash_node);
-	channel->napi_str.napi_id = 0;
-	channel->napi_str.state = 0;
-#endif
-	memset(&channel->eventq, 0, sizeof(channel->eventq));
-
-	if (channel->tx_queue_count) {
-		channel->tx_queues = new_tx_queues;
-		memcpy(channel->tx_queues, old_channel->tx_queues,
-		       channel->tx_queue_count * sizeof(*tx_queue));
-
-		efx_for_each_channel_tx_queue(tx_queue, channel) {
-			if (tx_queue->channel)
-				tx_queue->channel = channel;
-			tx_queue->buffer = NULL;
-			tx_queue->cb_page = NULL;
-			memset(&tx_queue->txd, 0, sizeof(tx_queue->txd));
-		}
-	} else {
-		channel->tx_queues = NULL;
-	}
-
-	rx_queue = &channel->rx_queue;
-	rx_queue->buffer = NULL;
-	memset(&rx_queue->rxd, 0, sizeof(rx_queue->rxd));
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	/* Invalidate SSR state */
-	rx_queue->ssr.conns = NULL;
-#endif
-
-#ifdef EFX_USE_IRQ_NOTIFIERS
-	efx_set_affinity_notifier(channel);
-#endif
-#ifdef CONFIG_RFS_ACCEL
-	INIT_DELAYED_WORK(&channel->filter_work, efx_filter_rfs_expire);
-#endif
-
-	return channel;
-}
-
 static int efx_calc_queue_entries(struct efx_nic *efx)
 {
 	unsigned int entries;
@@ -1579,9 +1505,6 @@ int efx_probe_channels(struct efx_nic *efx)
 	INIT_WORK(&efx->schedule_all_channels_work, efx_schedule_all_channels);
 #endif
 
-	/* Restart buffer table allocation */
-	efx->next_buffer_table = 0;
-
 	/* Probe channels in reverse, so that any 'extra' channels
 	 * use the start of the buffer table. This allows the traffic
 	 * channels to be resized without moving them or wasting the
@@ -1629,130 +1552,6 @@ void efx_remove_channels(struct efx_nic *efx)
 
 	efx_for_each_channel(channel, efx)
 		efx_remove_channel(channel);
-}
-
-int
-efx_realloc_channels(struct efx_nic *efx, u32 rxq_entries, u32 txq_entries)
-{
-	struct efx_channel *other_channel[EFX_MAX_CHANNELS], *channel;
-	u32 old_rxq_entries, old_txq_entries;
-	unsigned int i, next_buffer_table = 0;
-	int rc, rc2;
-
-	rc = efx_check_disabled(efx);
-	if (rc)
-		return rc;
-
-	/* Not all channels should be reallocated. We must avoid
-	 * reallocating their buffer table entries.
-	 */
-	efx_for_each_channel(channel, efx) {
-		struct efx_rx_queue *rx_queue;
-		struct efx_tx_queue *tx_queue;
-
-		if (channel->type->copy)
-			continue;
-		next_buffer_table = max(next_buffer_table,
-					channel->eventq.index +
-					channel->eventq.entries);
-		efx_for_each_channel_rx_queue(rx_queue, channel)
-			next_buffer_table = max(next_buffer_table,
-						rx_queue->rxd.index +
-						rx_queue->rxd.entries);
-		efx_for_each_channel_tx_queue(tx_queue, channel)
-			next_buffer_table = max(next_buffer_table,
-						tx_queue->txd.index +
-						tx_queue->txd.entries);
-	}
-
-	efx_device_detach_sync(efx);
-	efx_stop_all(efx);
-	efx_soft_disable_interrupts(efx);
-
-	/* Clone channels (where possible) */
-	memset(other_channel, 0, sizeof(other_channel));
-	for (i = 0; i < efx_channels(efx); i++) {
-		channel = efx->channel[i];
-		if (channel->type->copy)
-			channel = channel->type->copy(channel);
-		if (!channel) {
-			rc = -ENOMEM;
-			goto out;
-		}
-		other_channel[i] = channel;
-	}
-
-	/* Swap entry counts and channel pointers */
-	old_rxq_entries = efx->rxq_entries;
-	old_txq_entries = efx->txq_entries;
-	efx->rxq_entries = rxq_entries;
-	efx->txq_entries = txq_entries;
-	for (i = 0; i < efx_channels(efx); i++) {
-		channel = efx->channel[i];
-		efx->channel[i] = other_channel[i];
-		other_channel[i] = channel;
-	}
-
-	/* Restart buffer table allocation */
-	efx->next_buffer_table = next_buffer_table;
-
-	for (i = 0; i < efx_channels(efx); i++) {
-		channel = efx->channel[i];
-		if (!channel->type->copy)
-			continue;
-		rc = efx_probe_channel(channel);
-		if (rc)
-			goto rollback;
-		rc = efx_init_napi_channel(efx->channel[i]);
-		if (rc)
-			goto rollback;
-	}
-
-out:
-	/* Destroy unused channel structures */
-	for (i = 0; i < efx_channels(efx); i++) {
-		channel = other_channel[i];
-		if (channel && channel->type->copy) {
-			efx_fini_napi_channel(channel);
-			efx_remove_channel(channel);
-			kfree(channel->tx_queues);
-			kfree(channel);
-		}
-	}
-
-	rc2 = efx_soft_enable_interrupts(efx);
-	if (rc2) {
-		rc = rc ? rc : rc2;
-		netif_err(efx, drv, efx->net_dev,
-			  "unable to restart interrupts on channel reallocation\n");
-		efx_schedule_reset(efx, RESET_TYPE_DISABLE);
-	} else {
-		if (efx->state == STATE_NET_UP)
-			efx_start_all(efx);
-		efx_device_attach_if_not_resetting(efx);
-		if (efx->state == STATE_NET_UP && !efx->reset_pending) {
-			mutex_lock(&efx->mac_lock);
-			down_read(&efx->filter_sem);
-			efx_mcdi_filter_sync_rx_mode(efx);
-			up_read(&efx->filter_sem);
-			mutex_unlock(&efx->mac_lock);
-		}
-	}
-	return rc;
-
-rollback:
-	/* Swap back */
-	efx->rxq_entries = old_rxq_entries;
-	efx->txq_entries = old_txq_entries;
-	for (i = 0; i < efx_channels(efx); i++) {
-		channel = efx->channel[i];
-		efx->channel[i] = other_channel[i];
-		other_channel[i] = channel;
-#ifdef EFX_USE_IRQ_NOTIFIERS
-		efx_set_affinity_notifier(efx->channel[i]);
-#endif
-	}
-	goto out;
 }
 
 int efx_set_channels(struct efx_nic *efx)
@@ -2556,7 +2355,6 @@ static const struct efx_channel_type efx_default_channel_type = {
 	.pre_probe              = efx_channel_dummy_op_int,
 	.post_remove            = efx_channel_dummy_op_void,
 	.get_name               = efx_get_channel_name,
-	.copy                   = efx_copy_channel,
 	.keep_eventq            = false,
 };
 

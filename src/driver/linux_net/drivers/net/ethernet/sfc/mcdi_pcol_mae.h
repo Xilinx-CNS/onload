@@ -36,21 +36,6 @@
  */
 #define          DEVEL_PCIE_INTERFACE_CALLER 0xffffffff
 
-/* MAE_CT_VNI_MODE enum: Controls the layout of the VNI input to the conntrack
- * lookup.
- */
-/* enum: The VNI input to the conntrack lookup will be zero. */
-#define          MAE_CT_VNI_MODE_ZERO 0x0
-/* enum: The VNI input to the conntrack lookup will be the VNI field from the
- * packet.
- */
-#define          MAE_CT_VNI_MODE_VNI 0x1
-/* enum: The VNI input to the conntrack lookup will be the outermost VLAN tag.
- */
-#define          MAE_CT_VNI_MODE_1VLAN 0x2
-/* enum: The VNI input to the conntrack lookup will be both VLAN tags. */
-#define          MAE_CT_VNI_MODE_2VLAN 0x3
-
 /***********************************/
 /* MC_CMD_MAE_COUNTER_LIST_ALLOC
  * Allocate a list of match-action-engine counters

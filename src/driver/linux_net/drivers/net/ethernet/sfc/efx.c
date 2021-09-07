@@ -974,12 +974,6 @@ static void efx_unregister_netdev(struct efx_nic *efx)
  * On changes make sure to update sfc_pci_table, below
  */
 static const struct pci_device_id efx_pci_table[] = {
-#ifdef CONFIG_SFC_SIENA
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0803),	/* SFC9020 */
-	 .driver_data = (unsigned long) &siena_a0_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0813),	/* SFL9021 */
-	 .driver_data = (unsigned long) &siena_a0_nic_type},
-#endif
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0903),  /* SFC9120 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1903),  /* SFC9120 VF */
@@ -1001,12 +995,6 @@ static const struct pci_device_id efx_pci_table[] = {
 
 /* Module device ID table - efx_pci_table + ef100_pci_table */
 static const struct pci_device_id sfc_pci_table[] = {
-#ifdef CONFIG_SFC_SIENA
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0803),	/* SFC9020 */
-	 .driver_data = (unsigned long) &siena_a0_nic_type},
-	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0813),	/* SFL9021 */
-	 .driver_data = (unsigned long) &siena_a0_nic_type},
-#endif
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0903),  /* SFC9120 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1903),  /* SFC9120 VF */
@@ -1107,8 +1095,6 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	/* Initialise NIC resource information */
-	efx->farch_resources = efx->type->farch_resources;
-	efx->farch_resources.biu_lock = &efx->biu_lock;
 	efx->ef10_resources = efx->type->ef10_resources;
 #endif
 #endif

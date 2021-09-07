@@ -482,13 +482,22 @@ int efx_probe_devlink(struct efx_nic *efx)
 	int rc;
 
 	efx->devlink = devlink_alloc(&sfc_devlink_ops,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_ALLOC_DEV)
+				     sizeof(struct efx_devlink),
+				     &efx->pci_dev->dev);
+#else
 				     sizeof(struct efx_devlink));
+#endif
 	if (!efx->devlink)
 		return -ENOMEM;
 	devlink_private = devlink_priv(efx->devlink);
 	devlink_private->efx = efx;
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_ALLOC_DEV)
+	rc = devlink_register(efx->devlink);
+#else
 	rc = devlink_register(efx->devlink, &efx->pci_dev->dev);
+#endif
 	if (rc)
 		goto out_free;
 

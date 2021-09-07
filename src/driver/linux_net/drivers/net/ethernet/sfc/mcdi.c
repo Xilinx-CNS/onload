@@ -13,7 +13,6 @@
 #include "efx_common.h"
 #include "efx_devlink.h"
 #include "io.h"
-#include "farch_regs.h"
 #include "mcdi_pcol.h"
 #include "aoe.h"
 
@@ -463,7 +462,7 @@ static int efx_mcdi_errno(struct efx_nic *efx, unsigned int mcdi_err)
 	case MC_CMD_ERR_NO_EVB_PORT:
 		if (efx->type->is_vf)
 			return -EAGAIN;
-		/* Fall through */
+		fallthrough;
 	default:
 		return -EPROTO;
 	}
@@ -623,6 +622,14 @@ static void efx_mcdi_ev_proxy_response(struct efx_nic *efx,
 	}
 }
 
+static void efx_mcdi_cmd_mode_poll(struct efx_mcdi_iface *mcdi,
+				   struct efx_mcdi_cmd *cmd)
+{
+	cmd->polled = true;
+	if (cancel_delayed_work(&cmd->work))
+		queue_delayed_work(mcdi->workqueue, &cmd->work, 0);
+}
+
 static void efx_mcdi_ev_cpl(struct efx_nic *efx, unsigned int seqno,
 			    unsigned int datalen, unsigned int mcdi_err)
 {
@@ -635,11 +642,27 @@ static void efx_mcdi_ev_cpl(struct efx_nic *efx, unsigned int seqno,
 	spin_lock(&mcdi->iface_lock);
 	cmd = mcdi->seq_held_by[seqno];
 	if (cmd) {
-		kref_get(&cmd->ref);
-		if (efx_mcdi_complete_cmd(mcdi, cmd, copybuf, &cleanup_list))
-			if (cancel_delayed_work(&cmd->work))
-				kref_put(&cmd->ref, efx_mcdi_cmd_release);
-		kref_put(&cmd->ref, efx_mcdi_cmd_release);
+		if (efx_mcdi_poll_once(mcdi, cmd)) {
+			kref_get(&cmd->ref);
+			if (efx_mcdi_complete_cmd(mcdi, cmd, copybuf,
+						  &cleanup_list))
+				if (cancel_delayed_work(&cmd->work))
+					kref_put(&cmd->ref,
+						 efx_mcdi_cmd_release);
+			kref_put(&cmd->ref, efx_mcdi_cmd_release);
+		} else {
+			/* on some EF100 hardware completion event can overtake
+			 * the write to the MCDI buffer.
+			 * If so, convert the command to polled mode.
+			 * If this is a genuine error, then the
+			 * command will eventually time out.
+			 */
+			if (efx_nic_rev(efx) != EFX_REV_EF100)
+				netif_warn(mcdi->efx, drv, mcdi->efx->net_dev,
+					   "command %#x inlen %zu event received before response\n",
+					   cmd->cmd, cmd->inlen);
+			efx_mcdi_cmd_mode_poll(mcdi, cmd);
+		}
 	} else {
 		netif_err(efx, hw, efx->net_dev,
 			  "MC response unexpected tx seq 0x%x\n",
@@ -1474,10 +1497,7 @@ static void _efx_mcdi_mode_poll(struct efx_mcdi_iface *mcdi)
 				netif_dbg(mcdi->efx, drv, mcdi->efx->net_dev,
 					  "converting command %#x inlen %zu to polled mode\n",
 					  cmd->cmd, cmd->inlen);
-				cmd->polled = true;
-				if (cancel_delayed_work(&cmd->work))
-					queue_delayed_work(mcdi->workqueue,
-							   &cmd->work, 0);
+				efx_mcdi_cmd_mode_poll(mcdi, cmd);
 			}
 	}
 }
@@ -2060,40 +2080,8 @@ static int efx_mcdi_nvram_test(struct efx_nic *efx, unsigned int type)
 	}
 }
 
-static int efx_old_mcdi_nvram_test_all(struct efx_nic *efx)
-{
-	u32 nvram_types;
-	unsigned int type;
-	int rc;
-
-	rc = efx_mcdi_nvram_types(efx, &nvram_types);
-	if (rc)
-		goto fail1;
-
-	/* Require at least one check */
-	rc = -EAGAIN;
-
-	type = 0;
-	while (nvram_types != 0) {
-		if (nvram_types & 1) {
-			rc = efx_mcdi_nvram_test(efx, type);
-			if (rc)
-				goto fail1;
-		}
-		type++;
-		nvram_types >>= 1;
-	}
-
-	return rc;
-
-fail1:
-	if (rc != -EPERM)
-		netif_err(efx, hw, efx->net_dev, "%s: failed rc=%d\n", __func__, rc);
-	return rc;
-}
-
-/* This function tests nvram partitions using the new mcdi partition lookup scheme */
-int efx_new_mcdi_nvram_test_all(struct efx_nic *efx)
+/* This function tests all nvram partitions */
+int efx_mcdi_nvram_test_all(struct efx_nic *efx)
 {
 	u32 *nvram_types = kzalloc(MC_CMD_NVRAM_PARTITIONS_OUT_LENMAX_MCDI2,
 	                           GFP_KERNEL);
@@ -2122,19 +2110,6 @@ int efx_new_mcdi_nvram_test_all(struct efx_nic *efx)
 
 fail:
 	kfree(nvram_types);
-	return rc;
-}
-
-int efx_mcdi_nvram_test_all(struct efx_nic *efx)
-{
-	int rc;
-
-	/* old_mcdi_nvram is only necessary for siena cards */
-	if (efx_nic_rev(efx) >= EFX_REV_HUNT_A0)
-		rc = efx_new_mcdi_nvram_test_all(efx);
-	else
-		rc = efx_old_mcdi_nvram_test_all(efx);
-
 	return rc;
 }
 

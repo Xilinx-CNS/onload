@@ -15,7 +15,6 @@
 #include "mcdi.h"
 #include "mcdi_pcol.h"
 #include "io.h"
-#include "farch_regs.h"
 #include "nic.h"
 
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)

@@ -747,7 +747,7 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_rx_queue *rx_queue,
 
 	default:
 		bpf_warn_invalid_xdp_action(xdp_act);
-		/* Fall through */
+		fallthrough;
 	case XDP_ABORTED:
 		trace_xdp_exception(efx->net_dev, xdp_prog, xdp_act);
 		if (free_buf_on_fail)

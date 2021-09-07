@@ -300,7 +300,7 @@ int ef100_alloc_qdma_buffer(struct efx_nic *efx, struct efx_buffer *buffer,
 static int ef100_ev_probe(struct efx_channel *channel)
 {
 	/* Allocate an extra descriptor for the QMDA status completion entry */
-	return ef100_alloc_qdma_buffer(channel->efx, &channel->eventq.buf,
+	return ef100_alloc_qdma_buffer(channel->efx, &channel->eventq,
 				       (channel->eventq_mask + 2) *
 				       sizeof(efx_qword_t));
 }
@@ -1688,6 +1688,29 @@ static bool ef100_mport_needs_rep(struct efx_nic *efx,
 }
 #endif
 
+int efx_ef100_lookup_client_id(struct efx_nic *efx, efx_qword_t pciefn, u32 *id)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CLIENT_HANDLE_OUT_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_CLIENT_HANDLE_IN_LEN);
+	u64 pciefn_flat = le64_to_cpu(pciefn.u64[0]);
+	size_t outlen;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, GET_CLIENT_HANDLE_IN_TYPE,
+		       MC_CMD_GET_CLIENT_HANDLE_IN_TYPE_FUNC);
+	MCDI_SET_QWORD(inbuf, GET_CLIENT_HANDLE_IN_FUNC,
+		       pciefn_flat);
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_CLIENT_HANDLE, inbuf,
+			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	*id = MCDI_DWORD(outbuf, GET_CLIENT_HANDLE_OUT_HANDLE);
+	return 0;
+}
+
 int ef100_probe_netdev_pf(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
@@ -1912,7 +1935,9 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.regionmap_buffer = ef100_regionmap_buffer,
 #endif
 #endif
+#ifdef CONFIG_RFS_ACCEL
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
+#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
@@ -1935,7 +1960,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 
 	.reconfigure_mac = ef100_reconfigure_mac,
 	.reconfigure_port = efx_mcdi_port_reconfigure,
-	.test_nvram = efx_new_mcdi_nvram_test_all,
+	.test_nvram = efx_mcdi_nvram_test_all,
 	.describe_stats = ef100_describe_stats,
 	.update_stats = ef100_update_stats,
 	.pull_stats = ef100_pull_stats,
@@ -2047,7 +2072,9 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.regionmap_buffer = ef100_regionmap_buffer,
 #endif
 #endif
+#ifdef CONFIG_RFS_ACCEL
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
+#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
@@ -2063,7 +2090,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.rx_restore_rss_contexts = efx_mcdi_rx_restore_rss_contexts,
 
 	.reconfigure_mac = ef100_reconfigure_mac,
-	.test_nvram = efx_new_mcdi_nvram_test_all,
+	.test_nvram = efx_mcdi_nvram_test_all,
 	.describe_stats = ef100_describe_stats,
 	.update_stats = ef100_update_stats,
 	.pull_stats = ef100_pull_stats,

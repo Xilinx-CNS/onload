@@ -171,6 +171,8 @@ int ef100_phy_probe(struct efx_nic *efx);
 int ef100_filter_table_probe(struct efx_nic *efx);
 int ef100_alloc_qdma_buffer(struct efx_nic *efx, struct efx_buffer *buffer,
 			    unsigned int len);
+int efx_ef100_lookup_client_id(struct efx_nic *efx, efx_qword_t pciefn,
+			       u32 *id);
 
 static inline bool
 ef100_region_addr_is_populated(struct ef100_addr_region *region)

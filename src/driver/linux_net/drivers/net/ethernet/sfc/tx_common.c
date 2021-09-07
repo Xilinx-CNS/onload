@@ -242,7 +242,7 @@ void efx_remove_tx_queue(struct efx_tx_queue *tx_queue)
 	if (tx_queue->efx->type->tx_remove)
 		tx_queue->efx->type->tx_remove(tx_queue);
 	else
-		efx_nic_free_buffer(tx_queue->efx, &tx_queue->txd.buf);
+		efx_nic_free_buffer(tx_queue->efx, &tx_queue->txd);
 }
 
 void efx_destroy_tx_queue(struct efx_tx_queue *tx_queue)
@@ -260,11 +260,13 @@ void efx_purge_tx_queue(struct efx_tx_queue *tx_queue)
 {
 	while (tx_queue->read_count != tx_queue->insert_count) {
 		unsigned int pkts_compl = 0, bytes_compl = 0;
+		unsigned int efv_pkts_compl = 0;
 		struct efx_tx_buffer *buffer =
 			&tx_queue->buffer[tx_queue->read_count &
 					  tx_queue->ptr_mask];
 
-		efx_dequeue_buffer(tx_queue, buffer, &pkts_compl, &bytes_compl);
+		efx_dequeue_buffer(tx_queue, buffer, &pkts_compl, &bytes_compl,
+				   &efv_pkts_compl);
 		++tx_queue->read_count;
 	}
 }
@@ -272,7 +274,8 @@ void efx_purge_tx_queue(struct efx_tx_queue *tx_queue)
 void efx_dequeue_buffer(struct efx_tx_queue *tx_queue,
 			struct efx_tx_buffer *buffer,
 			unsigned int *pkts_compl,
-			unsigned int *bytes_compl)
+			unsigned int *bytes_compl,
+			unsigned int *efv_pkts_compl)
 {
 	if (buffer->unmap_len) {
 		struct device *dma_dev = &tx_queue->efx->pci_dev->dev;
@@ -290,9 +293,15 @@ void efx_dequeue_buffer(struct efx_tx_queue *tx_queue,
 	if (buffer->flags & EFX_TX_BUF_SKB) {
 		struct sk_buff *skb = (struct sk_buff *)buffer->skb;
 
-		EFX_WARN_ON_PARANOID(!pkts_compl || !bytes_compl);
-		(*pkts_compl)++;
-		(*bytes_compl) += skb->len;
+		if (unlikely(buffer->flags & EFX_TX_BUF_EFV)) {
+			EFX_WARN_ON_PARANOID(!efv_pkts_compl);
+			(*efv_pkts_compl)++;
+		} else {
+			EFX_WARN_ON_PARANOID(!pkts_compl);
+			EFX_WARN_ON_PARANOID(!bytes_compl);
+			(*pkts_compl)++;
+			(*bytes_compl) += skb->len;
+		}
 
 #if defined(EFX_HAVE_SKB_TSTAMP_TX)
 		if (tx_queue->timestamping &&
@@ -346,7 +355,8 @@ void efx_dequeue_buffer(struct efx_tx_queue *tx_queue,
 static void efx_dequeue_buffers(struct efx_tx_queue *tx_queue,
 				unsigned int index,
 				unsigned int *pkts_compl,
-				unsigned int *bytes_compl)
+				unsigned int *bytes_compl,
+				unsigned int *efv_pkts_compl)
 {
 	struct efx_nic *efx = tx_queue->efx;
 	unsigned int stop_index, read_ptr;
@@ -368,7 +378,8 @@ static void efx_dequeue_buffers(struct efx_tx_queue *tx_queue,
 			}
 		}
 
-		efx_dequeue_buffer(tx_queue, buffer, pkts_compl, bytes_compl);
+		efx_dequeue_buffer(tx_queue, buffer, pkts_compl, bytes_compl,
+				   efv_pkts_compl);
 
 		++tx_queue->read_count;
 		tx_queue->read_jiffies = jiffies;
@@ -390,15 +401,16 @@ void efx_xmit_done_check_empty(struct efx_tx_queue *tx_queue)
 
 void efx_xmit_done(struct efx_tx_queue *tx_queue, unsigned int index)
 {
-	unsigned int pkts_compl = 0, bytes_compl = 0;
+	unsigned int pkts_compl = 0, efv_pkts_compl = 0, bytes_compl = 0;
 
 	EFX_WARN_ON_ONCE_PARANOID(index > tx_queue->ptr_mask);
 
-	efx_dequeue_buffers(tx_queue, index, &pkts_compl, &bytes_compl);
+	efx_dequeue_buffers(tx_queue, index, &pkts_compl, &bytes_compl,
+			    &efv_pkts_compl);
 	tx_queue->pkts_compl += pkts_compl;
 	tx_queue->bytes_compl += bytes_compl;
 
-	if (pkts_compl > 1)
+	if (pkts_compl + efv_pkts_compl > 1)
 		++tx_queue->merge_events;
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_XDP_SOCK) && defined(EFX_HAVE_XSK_NEED_WAKEUP))
 #if defined(CONFIG_XDP_SOCKETS)
@@ -425,10 +437,12 @@ void efx_enqueue_unwind(struct efx_tx_queue *tx_queue,unsigned int insert_count)
 	/* Work backwards until we hit the original insert pointer value */
 	while (tx_queue->insert_count != insert_count) {
 		unsigned int pkts_compl = 0, bytes_compl = 0;
+		unsigned int efv_pkts_compl = 0;
 
 		--tx_queue->insert_count;
 		buffer = __efx_tx_queue_get_insert_buffer(tx_queue);
-		efx_dequeue_buffer(tx_queue, buffer, &pkts_compl, &bytes_compl);
+		efx_dequeue_buffer(tx_queue, buffer, &pkts_compl, &bytes_compl,
+				   &efv_pkts_compl);
 	}
 }
 

@@ -295,6 +295,208 @@ fail:
 	return ERR_PTR(rc);
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+static int efx_mae_table_get_desc(struct efx_nic *efx,
+				  struct efx_tc_table_desc *desc,
+				  u32 table_id)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_TABLE_DESCRIPTOR_OUT_LEN(16));
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_TABLE_DESCRIPTOR_IN_LEN);
+	unsigned int offset = 0, i;
+	size_t outlen;
+	int rc;
+
+	memset(desc, 0, sizeof(*desc));
+
+	MCDI_SET_DWORD(inbuf, TABLE_DESCRIPTOR_IN_TABLE_ID, table_id);
+more:
+	MCDI_SET_DWORD(inbuf, TABLE_DESCRIPTOR_IN_FIRST_FIELDS_INDEX, offset);
+	rc = efx_mcdi_rpc(efx, MC_CMD_TABLE_DESCRIPTOR, inbuf, sizeof(inbuf),
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		goto fail;
+	if (outlen < MC_CMD_TABLE_DESCRIPTOR_OUT_LEN(1)) {
+		rc = -EIO;
+		goto fail;
+	}
+	if (!offset) { /* first iteration: get metadata */
+		desc->type = MCDI_WORD(outbuf, TABLE_DESCRIPTOR_OUT_TYPE);
+		desc->key_width = MCDI_WORD(outbuf, TABLE_DESCRIPTOR_OUT_KEY_WIDTH);
+		desc->resp_width = MCDI_WORD(outbuf, TABLE_DESCRIPTOR_OUT_RESP_WIDTH);
+		desc->n_keys = MCDI_WORD(outbuf, TABLE_DESCRIPTOR_OUT_N_KEY_FIELDS);
+		desc->n_resps = MCDI_WORD(outbuf, TABLE_DESCRIPTOR_OUT_N_RESP_FIELDS);
+		desc->n_prios = MCDI_WORD(outbuf, TABLE_DESCRIPTOR_OUT_N_PRIORITIES);
+		desc->flags = MCDI_BYTE(outbuf, TABLE_DESCRIPTOR_OUT_FLAGS);
+		rc = -EOPNOTSUPP;
+		if (desc->flags)
+			goto fail;
+		desc->scheme = MCDI_BYTE(outbuf, TABLE_DESCRIPTOR_OUT_SCHEME);
+		if (desc->scheme)
+			goto fail;
+		rc = -ENOMEM;
+		desc->keys = kcalloc(desc->n_keys,
+				     sizeof(struct efx_tc_table_field_fmt),
+				     GFP_KERNEL);
+		if (!desc->keys)
+			goto fail;
+		desc->resps = kcalloc(desc->n_resps,
+				      sizeof(struct efx_tc_table_field_fmt),
+				      GFP_KERNEL);
+		if (!desc->resps)
+			goto fail;
+	}
+	/* FW could have returned more than the 16 field_descrs we
+	 * made room for in our outbuf
+	 */
+	outlen = min(outlen, sizeof(outbuf));
+	for (i = 0; i + offset < desc->n_keys + desc->n_resps; i++) {
+		struct efx_tc_table_field_fmt *field;
+		MCDI_DECLARE_STRUCT_PTR(fdesc);
+
+		if (outlen < MC_CMD_TABLE_DESCRIPTOR_OUT_LEN(i + 1)) {
+			offset += i;
+			goto more;
+		}
+		if (i + offset < desc->n_keys)
+			field = desc->keys + i + offset;
+		else
+			field = desc->resps + (i + offset - desc->n_keys);
+		fdesc = MCDI_ARRAY_STRUCT_PTR(outbuf,
+					      TABLE_DESCRIPTOR_OUT_FIELDS, i);
+		field->field_id = MCDI_STRUCT_WORD(fdesc,
+						   TABLE_FIELD_DESCR_FIELD_ID);
+		field->lbn = MCDI_STRUCT_WORD(fdesc, TABLE_FIELD_DESCR_LBN);
+		field->width = MCDI_STRUCT_WORD(fdesc, TABLE_FIELD_DESCR_WIDTH);
+		field->masking = MCDI_STRUCT_BYTE(fdesc, TABLE_FIELD_DESCR_MASK_TYPE);
+		field->scheme = MCDI_STRUCT_BYTE(fdesc, TABLE_FIELD_DESCR_SCHEME);
+	}
+	return 0;
+
+fail:
+	kfree(desc->keys);
+	kfree(desc->resps);
+	return rc;
+}
+
+static int efx_mae_table_hook_find(u16 n_fields,
+				   struct efx_tc_table_field_fmt *fields,
+				   u16 field_id)
+{
+	unsigned int i;
+
+	for (i = 0; i < n_fields; i++) {
+		if (fields[i].field_id == field_id)
+			return i;
+	}
+	return -EPROTO;
+}
+
+#define TABLE_FIND_KEY(_desc, _id)	\
+	efx_mae_table_hook_find((_desc)->n_keys, (_desc)->keys, _id)
+#define TABLE_FIND_RESP(_desc, _id)	\
+	efx_mae_table_hook_find((_desc)->n_resps, (_desc)->resps, _id)
+
+#define TABLE_HOOK_KEY(_meta, _name, _mcdi_name)	({			\
+	int _rc = TABLE_FIND_KEY(&_meta->desc, TABLE_FIELD_ID_##_mcdi_name);	\
+										\
+	if (_rc > U8_MAX)							\
+		_rc = -EOPNOTSUPP;						\
+	if (_rc >= 0) {								\
+		_meta->keys._name##_idx = _rc;					\
+		_rc = 0;							\
+	}									\
+	_rc;									\
+})
+#define TABLE_HOOK_RESP(_meta, _name, _mcdi_name)	({			\
+	int _rc = TABLE_FIND_RESP(&_meta->desc, TABLE_FIELD_ID_##_mcdi_name);	\
+										\
+	if (_rc > U8_MAX)							\
+		_rc = -EOPNOTSUPP;						\
+	if (_rc >= 0) {								\
+		_meta->resps._name##_idx = _rc;					\
+		_rc = 0;							\
+	}									\
+	_rc;									\
+})
+
+static int efx_mae_table_hook_ct(struct efx_nic *efx,
+				 struct efx_tc_table_ct *meta_ct)
+{
+	int rc;
+
+	rc = TABLE_HOOK_KEY(meta_ct, eth_proto, ETHER_TYPE);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_KEY(meta_ct, ip_proto, IP_PROTO);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_KEY(meta_ct, src_ip, SRC_IP);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_KEY(meta_ct, dst_ip, DST_IP);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_KEY(meta_ct, l4_sport, SRC_PORT);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_KEY(meta_ct, l4_dport, DST_PORT);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_KEY(meta_ct, zone, DOMAIN);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_RESP(meta_ct, dnat, NAT_DIR);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_RESP(meta_ct, nat_ip, NAT_IP);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_RESP(meta_ct, l4_natport, NAT_PORT);
+	if (rc)
+		return rc;
+	rc = TABLE_HOOK_RESP(meta_ct, mark, CT_MARK);
+	if (rc)
+		return rc;
+	meta_ct->hooked = true;
+	return 0;
+}
+
+static void efx_mae_table_free_desc(struct efx_tc_table_desc *desc)
+{
+	kfree(desc->keys);
+	kfree(desc->resps);
+	memset(desc, 0, sizeof(*desc));
+}
+
+int efx_mae_get_tables(struct efx_nic *efx)
+{
+	int rc;
+
+	efx->tc->meta_ct.hooked = false;
+	rc = efx_mae_table_get_desc(efx, &efx->tc->meta_ct.desc,
+				    TABLE_ID_CONNTRACK_TABLE);
+	if (rc) {
+		netif_warn(efx, drv, efx->net_dev,
+			   "failed to probe MAE conntrack table rc %d\n", rc);
+	} else {
+		rc = efx_mae_table_hook_ct(efx, &efx->tc->meta_ct);
+		if (rc)
+			netif_warn(efx, drv, efx->net_dev,
+				   "failed to hook MAE conntrack table rc %d\n",
+				   rc);
+	}
+	return 0;
+}
+
+void efx_mae_free_tables(struct efx_nic *efx)
+{
+	efx_mae_table_free_desc(&efx->tc->meta_ct.desc);
+}
+#else /* EFX_TC_OFFLOAD */
+int efx_mae_get_tables(struct efx_nic *efx) { return 0; }
+void efx_mae_free_tables(struct efx_nic *efx) {}
+#endif
+
 static int efx_mae_get_basic_caps(struct efx_nic *efx, struct mae_caps *caps)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_GET_CAPS_OUT_LEN);
@@ -430,7 +632,7 @@ static int efx_mae_match_check_cap_typ(u8 support, enum mask_type typ)
 	case MAE_FIELD_SUPPORTED_MATCH_OPTIONAL:
 		if (typ == MASK_ZEROES)
 			return 0;
-		/* fall through */
+		fallthrough;
 	case MAE_FIELD_SUPPORTED_MATCH_ALWAYS:
 		if (typ == MASK_ONES)
 			return 0;
@@ -593,6 +795,7 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 	CHECK(ENC_IP_PROTO, ip_proto);
 	CHECK(ENC_IP_TOS, ip_tos);
 	CHECK(ENC_IP_TTL, ip_ttl);
+	CHECK_BIT(ENC_IP_FRAG, ip_frag);
 	CHECK(ENC_SRC_IP4, src_ip);
 	CHECK(ENC_DST_IP4, dst_ip);
 #ifdef CONFIG_IPV6
@@ -613,8 +816,7 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 	UNSUPPORTED_BIT(ct_state_rel);
 	UNSUPPORTED(ct_mark);
 	UNSUPPORTED(recirc_id);
-	/* Can't filter on ip_frag either (which might be a problem...) */
-	UNSUPPORTED_BIT(ip_frag);
+	/* Can't filter on ip_firstfrag either */
 	UNSUPPORTED_BIT(ip_firstfrag);
 	return 0;
 }
@@ -822,6 +1024,56 @@ int efx_mae_free_encap_md(struct efx_nic *efx,
 	encap->fw_id = MC_CMD_MAE_ENCAP_HEADER_ALLOC_OUT_ENCAP_HEADER_ID_NULL;
 	return 0;
 }
+
+int efx_mae_allocate_pedit_mac(struct efx_nic *efx,
+			       struct efx_tc_mac_pedit_action *ped)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_MAC_ADDR_ALLOC_OUT_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_MAC_ADDR_ALLOC_IN_LEN);
+	size_t outlen;
+	int rc;
+
+	BUILD_BUG_ON(MC_CMD_MAE_MAC_ADDR_ALLOC_IN_MAC_ADDR_LEN !=
+		     sizeof(ped->h_addr));
+	memcpy(MCDI_PTR(inbuf, MAE_MAC_ADDR_ALLOC_IN_MAC_ADDR), ped->h_addr,
+	       sizeof(ped->h_addr));
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_MAC_ADDR_ALLOC, inbuf, sizeof(inbuf),
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	ped->fw_id = MCDI_DWORD(outbuf, MAE_MAC_ADDR_ALLOC_OUT_MAC_ID);
+	return 0;
+}
+
+int efx_mae_free_pedit_mac(struct efx_nic *efx,
+			   struct efx_tc_mac_pedit_action *ped)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_MAC_ADDR_FREE_OUT_LEN(1));
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_MAC_ADDR_FREE_IN_LEN(1));
+	size_t outlen;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, MAE_MAC_ADDR_FREE_IN_MAC_ID, ped->fw_id);
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_MAC_ADDR_FREE, inbuf,
+			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	/* FW freed a different ID than we asked for, should also never happen.
+	 * Warn because it means we've now got a different idea to the FW of
+	 * what MAC addresses exist, which could cause mayhem later.
+	 */
+	if (WARN_ON(MCDI_DWORD(outbuf, MAE_MAC_ADDR_FREE_OUT_FREED_MAC_ID) != ped->fw_id))
+		return -EIO;
+	/* We're probably about to free @ped, but let's just make sure its
+	 * fw_id is blatted so that it won't look valid if it leaks out.
+	 */
+	ped->fw_id = MC_CMD_MAE_MAC_ADDR_ALLOC_OUT_MAC_ID_NULL;
+	return 0;
+}
 #endif /* EFX_TC_OFFLOAD */
 
 static bool efx_mae_asl_id(u32 id)
@@ -868,10 +1120,22 @@ int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 			      MAE_ACTION_SET_ALLOC_IN_VLAN_POP, vlan_pop,
 			      MAE_ACTION_SET_ALLOC_IN_DECAP, act->decap,
 			      MAE_ACTION_SET_ALLOC_IN_DO_NAT, act->do_nat);
-	MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_SRC_MAC_ID,
-		       MC_CMD_MAE_MAC_ADDR_ALLOC_OUT_MAC_ID_NULL);
-	MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_DST_MAC_ID,
-		       MC_CMD_MAE_MAC_ADDR_ALLOC_OUT_MAC_ID_NULL);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	if (act->src_mac)
+		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_SRC_MAC_ID,
+			       act->src_mac->fw_id);
+	else
+#endif
+		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_SRC_MAC_ID,
+			       MC_CMD_MAE_MAC_ADDR_ALLOC_OUT_MAC_ID_NULL);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	if (act->dst_mac)
+		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_DST_MAC_ID,
+			       act->dst_mac->fw_id);
+	else
+#endif
+		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_DST_MAC_ID,
+			       MC_CMD_MAE_MAC_ADDR_ALLOC_OUT_MAC_ID_NULL);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	if (act->count && !WARN_ON(!act->count->cnt))
 		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_COUNTER_ID,
@@ -902,10 +1166,6 @@ int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 #endif
 		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_ENCAP_HEADER_ID,
 			       MC_CMD_MAE_ENCAP_HEADER_ALLOC_OUT_ENCAP_HEADER_ID_NULL);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	if (act->pedit_md)
-		return -EOPNOTSUPP;
-#endif
 	if (act->deliver)
 		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_DELIVER,
 			       act->dest_mport);
@@ -1187,6 +1447,14 @@ static int efx_mae_populate_lhs_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_cri
 			     match->value.ip_ttl);
 	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_IP_TTL_MASK,
 			     match->mask.ip_ttl);
+	MCDI_STRUCT_POPULATE_BYTE_1(match_crit,
+				    MAE_ENC_FIELD_PAIRS_ENC_VLAN_FLAGS,
+				    MAE_ENC_FIELD_PAIRS_ENC_IP_FRAG,
+				    match->value.ip_frag);
+	MCDI_STRUCT_POPULATE_BYTE_1(match_crit,
+				    MAE_ENC_FIELD_PAIRS_ENC_VLAN_FLAGS_MASK,
+				    MAE_ENC_FIELD_PAIRS_ENC_IP_FRAG_MASK,
+				    match->mask.ip_frag);
 	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_SRC_IP4_BE,
 				 match->value.src_ip);
 	MCDI_STRUCT_SET_DWORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_SRC_IP4_BE_MASK,
@@ -1310,89 +1578,238 @@ int efx_mae_remove_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule)
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
-int efx_mae_insert_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn)
+/* Populating is done by taking each byte of @value in turn and storing
+ * it in the appropriate bits of @row.  @value must be big-endian; we
+ * convert it to little-endianness as we go.
+ */
+static int efx_mae_table_populate(struct efx_tc_table_field_fmt field,
+				  __le32 *row, size_t row_bits,
+				  void *value, size_t value_size)
 {
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_TRACK_CONNECTION_OUT_LEN);
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_TRACK_CONNECTION_IN_LEN);
-	bool ipv6 = false, udp = false;
-	size_t outlen;
+	unsigned int i;
+
+	/* For now only scheme 0 is supported for any field, so we check here
+	 * (rather than, say, in calling code, which knows the semantics and
+	 * could in principle encode for other schemes).
+	 */
+	if (field.scheme)
+		return -EOPNOTSUPP;
+	if (DIV_ROUND_UP(field.width, 8) != value_size)
+		return -EINVAL;
+	if (field.lbn + field.width > row_bits)
+		return -EINVAL;
+	for (i = 0; i < value_size; i++) {
+		unsigned int bn = field.lbn + i * 8;
+		unsigned int wn = bn / 32;
+		u64 v;
+
+		v = ((u8 *)value)[value_size - i - 1];
+		v <<= (bn % 32);
+		row[wn] |= cpu_to_le32(v & 0xffffffff);
+		if (wn * 32 < row_bits)
+			row[wn + 1] |= cpu_to_le32(v >> 32);
+	}
+	return 0;
+}
+
+static int efx_mae_table_populate_bool(struct efx_tc_table_field_fmt field,
+				       __le32 *row, size_t row_bits, bool value)
+{
+	u8 v = value ? 1 : 0;
+
+	if (field.width != 1)
+		return -EINVAL;
+	return efx_mae_table_populate(field, row, row_bits, &v, 1);
+}
+
+static int efx_mae_table_populate_ipv4(struct efx_tc_table_field_fmt field,
+				       __le32 *row, size_t row_bits, __be32 value)
+{
+	/* IPv4 is placed in the first 4 bytes of an IPv6-sized field */
+	struct in6_addr v = {};
+
+	if (field.width != 128)
+		return -EINVAL;
+	v.s6_addr32[0] = value;
+	return efx_mae_table_populate(field, row, row_bits, &v, sizeof(v));
+}
+
+#define _TABLE_POPULATE(dst, dw, _field, _value) ({	\
+	typeof(_value) _v = _value;			\
+							\
+	(_field.width == sizeof(_value) * 8) ?		\
+	 efx_mae_table_populate(_field, dst, dw, &_v,	\
+				sizeof(_v)) : -EINVAL;	\
+})
+#define TABLE_POPULATE_KEY_IPV4(dst, _table, _field, _value)			\
+	efx_mae_table_populate_ipv4(efx->tc->meta_##_table.desc.keys[		\
+				    efx->tc->meta_##_table.keys._field##_idx],	\
+				    dst, efx->tc->meta_##_table.desc.key_width,\
+				    _value)
+#define TABLE_POPULATE_KEY(dst, _table, _field, _value)			\
+	_TABLE_POPULATE(dst, efx->tc->meta_##_table.desc.key_width,	\
+			efx->tc->meta_##_table.desc.keys[		\
+			efx->tc->meta_##_table.keys._field##_idx],	\
+			_value)
+
+#define TABLE_POPULATE_RESP_BOOL(dst, _table, _field, _value)			\
+	efx_mae_table_populate_bool(efx->tc->meta_##_table.desc.resps[		\
+				    efx->tc->meta_##_table.resps._field##_idx],	\
+				    dst, efx->tc->meta_##_table.desc.resp_width,\
+				    _value)
+#define TABLE_POPULATE_RESP(dst, _table, _field, _value)		\
+	_TABLE_POPULATE(dst, efx->tc->meta_##_table.desc.resp_width,	\
+			efx->tc->meta_##_table.desc.resps[		\
+			efx->tc->meta_##_table.resps._field##_idx],	\
+			_value)
+
+static int efx_mae_populate_ct_key(struct efx_nic *efx, __le32 *key, size_t kw,
+				   struct efx_tc_ct_entry *conn)
+{
+	bool ipv6 = conn->eth_proto == htons(ETH_P_IPV6);
 	int rc;
 
-	switch (conn->eth_proto) {
-	case htons(ETH_P_IP):
-		break;
-	case htons(ETH_P_IPV6):
-		ipv6 = true;
-		break;
-	default:
-		return -EOPNOTSUPP;
-	}
-	switch (conn->ip_proto) {
-	case IPPROTO_TCP:
-		break;
-	case IPPROTO_UDP:
-		udp = true;
-		break;
-	default:
-		return -EOPNOTSUPP;
-	}
-	MCDI_POPULATE_DWORD_3(inbuf, MAE_TRACK_CONNECTION_IN_FLAGS,
-			      MAE_TRACK_CONNECTION_IN_IS_IPV6, ipv6,
-			      MAE_TRACK_CONNECTION_IN_IS_UDP, udp,
-			      MAE_TRACK_CONNECTION_IN_NAT_DIR_IS_DST, conn->dnat);
-	MCDI_SET_WORD(inbuf, MAE_TRACK_CONNECTION_IN_DOMAIN, conn->zone);
-	if (ipv6) {
-		memcpy(MCDI_PTR(inbuf, MAE_TRACK_CONNECTION_IN_SRC_ADDR),
-				&conn->src_ip6, sizeof(struct in6_addr));
-		memcpy(MCDI_PTR(inbuf, MAE_TRACK_CONNECTION_IN_DST_ADDR),
-				&conn->dst_ip6, sizeof(struct in6_addr));
-	} else {
-		MCDI_SET_DWORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_SRC_ADDR,
-			       conn->src_ip);
-		MCDI_SET_DWORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_DST_ADDR,
-			       conn->dst_ip);
-		MCDI_SET_DWORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_NAT_IP,
-			       conn->nat_ip);
-	}
-	MCDI_SET_WORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_SRC_PORT, conn->l4_sport);
-	MCDI_SET_WORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_DST_PORT, conn->l4_dport);
-	MCDI_SET_WORD_BE(inbuf, MAE_TRACK_CONNECTION_IN_NAT_PORT, conn->l4_natport);
-	MCDI_SET_DWORD(inbuf, MAE_TRACK_CONNECTION_IN_CT_MARK, conn->mark);
-	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_TRACK_CONNECTION, inbuf, sizeof(inbuf),
-			  outbuf, sizeof(outbuf), &outlen);
+	rc = TABLE_POPULATE_KEY(key, ct, eth_proto, conn->eth_proto);
 	if (rc)
 		return rc;
-	if (outlen < sizeof(outbuf))
-		return -EIO;
-	conn->fw_id = MCDI_DWORD(outbuf, MAE_TRACK_CONNECTION_OUT_CONN_ID);
-	return 0;
+	rc = TABLE_POPULATE_KEY(key, ct, ip_proto, conn->ip_proto);
+	if (rc)
+		return rc;
+	if (ipv6)
+		rc = TABLE_POPULATE_KEY(key, ct, src_ip, conn->src_ip6);
+	else
+		rc = TABLE_POPULATE_KEY_IPV4(key, ct, src_ip, conn->src_ip);
+	if (rc)
+		return rc;
+	if (ipv6)
+		rc = TABLE_POPULATE_KEY(key, ct, dst_ip, conn->dst_ip6);
+	else
+		rc = TABLE_POPULATE_KEY_IPV4(key, ct, dst_ip, conn->dst_ip);
+	if (rc)
+		return rc;
+	rc = TABLE_POPULATE_KEY(key, ct, l4_sport, conn->l4_sport);
+	if (rc)
+		return rc;
+	rc = TABLE_POPULATE_KEY(key, ct, l4_dport, conn->l4_dport);
+	if (rc)
+		return rc;
+	return TABLE_POPULATE_KEY(key, ct, zone, cpu_to_be16(conn->zone));
+}
+
+int efx_mae_insert_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn)
+{
+	bool ipv6 = conn->eth_proto == htons(ETH_P_IPV6);
+	__le32 *key = NULL, *resp = NULL;
+	size_t inlen, kw, rw;
+	efx_dword_t *inbuf;
+	int rc = -ENOMEM;
+
+	/* Check table access is supported */
+	if (!efx->tc->meta_ct.hooked)
+		return -EOPNOTSUPP;
+
+	/* key/resp widths are in bits; convert to dwords for IN_LEN */
+	kw = DIV_ROUND_UP(efx->tc->meta_ct.desc.key_width, 32);
+	rw = DIV_ROUND_UP(efx->tc->meta_ct.desc.resp_width, 32);
+	BUILD_BUG_ON(sizeof(__le32) != MC_CMD_TABLE_INSERT_IN_DATA_LEN);
+	inlen = MC_CMD_TABLE_INSERT_IN_LEN(kw + rw);
+	if (inlen > MC_CMD_TABLE_INSERT_IN_LENMAX_MCDI2)
+		return -E2BIG;
+	inbuf = kzalloc(inlen, GFP_KERNEL);
+	if (!inbuf)
+		return -ENOMEM;
+
+	key = kcalloc(sizeof(__le32), kw, GFP_KERNEL);
+	if (!key)
+		goto out_free;
+	resp = kcalloc(sizeof(__le32), rw, GFP_KERNEL);
+	if (!resp)
+		goto out_free;
+
+	rc = efx_mae_populate_ct_key(efx, key, kw, conn);
+	if (rc)
+		goto out_free;
+
+	rc = TABLE_POPULATE_RESP_BOOL(resp, ct, dnat, conn->dnat);
+	if (rc)
+		goto out_free;
+	/* No support in hw for IPv6 NAT; field is only 32 bits */
+	if (!ipv6)
+		rc = TABLE_POPULATE_RESP(resp, ct, nat_ip, conn->nat_ip);
+	if (rc)
+		goto out_free;
+	rc = TABLE_POPULATE_RESP(resp, ct, l4_natport, conn->l4_natport);
+	if (rc)
+		goto out_free;
+	rc = TABLE_POPULATE_RESP(resp, ct, mark, cpu_to_be32(conn->mark));
+	if (rc)
+		goto out_free;
+
+	MCDI_SET_DWORD(inbuf, TABLE_INSERT_IN_TABLE_ID, TABLE_ID_CONNTRACK_TABLE);
+	MCDI_SET_WORD(inbuf, TABLE_INSERT_IN_KEY_WIDTH,
+		      efx->tc->meta_ct.desc.key_width);
+	/* MASK_WIDTH is zero as CT is a BCAM */
+	MCDI_SET_WORD(inbuf, TABLE_INSERT_IN_RESP_WIDTH,
+		      efx->tc->meta_ct.desc.resp_width);
+	memcpy(MCDI_PTR(inbuf, TABLE_INSERT_IN_DATA), key, kw * sizeof(__le32));
+	memcpy(MCDI_PTR(inbuf, TABLE_INSERT_IN_DATA) + kw * sizeof(__le32),
+	       resp, rw * sizeof(__le32));
+
+	BUILD_BUG_ON(MC_CMD_TABLE_INSERT_OUT_LEN);
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_TABLE_INSERT, inbuf, inlen, NULL, 0, NULL);
+
+out_free:
+	kfree(resp);
+	kfree(key);
+	kfree(inbuf);
+	return rc;
 }
 
 int efx_mae_remove_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn)
 {
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_FORGET_CONNECTION_OUT_LEN(1));
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_FORGET_CONNECTION_IN_LEN(1));
-	size_t outlen;
-	int rc;
+	__le32 *key = NULL;
+	efx_dword_t *inbuf;
+	size_t inlen, kw;
+	int rc = -ENOMEM;
 
-	MCDI_SET_DWORD(inbuf, MAE_FORGET_CONNECTION_IN_CONN_ID, conn->fw_id);
-	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_FORGET_CONNECTION, inbuf, sizeof(inbuf),
-			  outbuf, sizeof(outbuf), &outlen);
+	/* Check table access is supported */
+	if (!efx->tc->meta_ct.hooked)
+		return -EOPNOTSUPP;
+
+	/* key width is in bits; convert to dwords for IN_LEN */
+	kw = DIV_ROUND_UP(efx->tc->meta_ct.desc.key_width, 32);
+	BUILD_BUG_ON(sizeof(__le32) != MC_CMD_TABLE_DELETE_IN_DATA_LEN);
+	inlen = MC_CMD_TABLE_DELETE_IN_LEN(kw);
+	if (inlen > MC_CMD_TABLE_DELETE_IN_LENMAX_MCDI2)
+		return -E2BIG;
+	inbuf = kzalloc(inlen, GFP_KERNEL);
+	if (!inbuf)
+		return -ENOMEM;
+
+	key = kcalloc(sizeof(__le32), kw, GFP_KERNEL);
+	if (!key)
+		goto out_free;
+
+	rc = efx_mae_populate_ct_key(efx, key, kw, conn);
 	if (rc)
-		return rc;
-	if (outlen < sizeof(outbuf))
-		return -EIO;
-	/* FW freed a different ID than we asked for, should also never happen.
-	 * Warn because it means we've now got a different idea to the FW of
-	 * what rules exist, which could cause mayhem later.
-	 */
-	if (WARN_ON(MCDI_DWORD(outbuf, MAE_FORGET_CONNECTION_OUT_REMOVED_CONN_ID) != conn->fw_id))
-		return -EIO;
-	/* We're probably about to free @conn, but let's just make sure its
-	 * fw_id is blatted so that it won't look valid if it leaks out.
-	 */
-	conn->fw_id = MC_CMD_MAE_TRACK_CONNECTION_OUT_CONN_ID_NULL;
-	return 0;
+		goto out_free;
+
+	MCDI_SET_DWORD(inbuf, TABLE_DELETE_IN_TABLE_ID, TABLE_ID_CONNTRACK_TABLE);
+	MCDI_SET_WORD(inbuf, TABLE_DELETE_IN_KEY_WIDTH,
+		      efx->tc->meta_ct.desc.key_width);
+	/* MASK_WIDTH is zero as CT is a BCAM */
+	/* RESP_WIDTH is zero for DELETE */
+	memcpy(MCDI_PTR(inbuf, TABLE_DELETE_IN_DATA), key, kw * sizeof(__le32));
+
+	BUILD_BUG_ON(MC_CMD_TABLE_DELETE_OUT_LEN);
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_TABLE_DELETE, inbuf, inlen, NULL, 0, NULL);
+
+out_free:
+	kfree(key);
+	kfree(inbuf);
+	return rc;
 }
 #endif
 #endif /* EFX_TC_OFFLOAD */

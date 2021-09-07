@@ -96,7 +96,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.9.1006"
+#define EFX_DRIVER_VERSION	"5.3.10.1002"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -133,8 +133,6 @@
 #define EFX_EXTRA_CHANNEL_PTP	0
 #define EFX_EXTRA_CHANNEL_TC	1
 #define EFX_MAX_EXTRA_CHANNELS	2U
-
-#define EFX_SIENA_MAX_CHANNELS 32U
 
 /* Checksum generation is a per-queue option in hardware, so each
  * queue visible to the networking core is backed by two hardware TX
@@ -221,26 +219,6 @@ struct efx_buffer {
 };
 
 /**
- * struct efx_special_buffer - DMA buffer entered into buffer table
- * @buf: Standard &struct efx_buffer
- * @index: Buffer index within controller;s buffer table
- * @entries: Number of buffer table entries
- *
- * The NIC has a buffer table that maps buffers of size %EFX_BUF_SIZE.
- * Event and descriptor rings are addressed via one or more buffer
- * table entries (and so can be physically non-contiguous, although we
- * currently do not take advantage of that).  On Falcon and Siena we
- * have to take care of allocating and initialising the entries
- * ourselves.  On later hardware this is managed by the firmware and
- * @index and @entries are left as 0.
- */
-struct efx_special_buffer {
-	struct efx_buffer buf;
-	unsigned int index;
-	unsigned int entries;
-};
-
-/**
  * struct efx_tx_buffer - buffer state for a TX descriptor
  * @skb: When @flags & %EFX_TX_BUF_SKB, the associated socket buffer to be
  *	freed when descriptor completes
@@ -286,6 +264,7 @@ struct efx_tx_buffer {
 #endif
 #endif
 #define EFX_TX_BUF_TSO_V3	0x40	/* empty buffer for a TSO_V3 descriptor */
+#define EFX_TX_BUF_EFV		0x100	/* buffer was sent from representor */
 
 /**
  * struct efx_tx_queue - An Efx TX queue
@@ -336,6 +315,8 @@ struct efx_tx_buffer {
  *	avoid cache-line ping-pong between the xmit path and the
  *	completion path.
  * @merge_events: Number of TX merged completion events
+ * @bytes_compl: Number of bytes completed to report to BQL
+ * @pkts_compl: Number of packets completed to report to BQL
  * @completed_timestamp_major: Top part of the most recent tx timestamp.
  * @completed_timestamp_minor: Low part of the most recent tx timestamp.
  * @completion_remainder: The number of outstanding descriptors left over after
@@ -384,7 +365,7 @@ struct efx_tx_queue {
 	struct netdev_queue *core_txq;
 	struct efx_tx_buffer *buffer;
 	struct efx_buffer *cb_page;
-	struct efx_special_buffer txd;
+	struct efx_buffer txd;
 	unsigned int ptr_mask;
 	void __iomem *piobuf;
 	unsigned int piobuf_offset;
@@ -674,7 +655,7 @@ struct efx_ssr_state {
 struct efx_rx_queue {
 	struct efx_nic *efx;
 	struct efx_rx_buffer *buffer;
-	struct efx_special_buffer rxd;
+	struct efx_buffer rxd;
 	int queue;
 	int label;
 	int core_index;
@@ -868,7 +849,7 @@ struct efx_channel {
 	spinlock_t poll_lock;
 #endif
 #endif
-	struct efx_special_buffer eventq;
+	struct efx_buffer eventq;
 	unsigned int eventq_mask;
 	unsigned int eventq_read_ptr;
 	int event_test_cpu;
@@ -1049,8 +1030,6 @@ struct efx_msi_context {
  * @post_remove: Tear down extra state after finalisation, if allocated.
  *	May be called on channels that have not been probed.
  * @get_name: Generate the channel's name (used for its IRQ handler)
- * @copy: Copy the channel state prior to reallocation.  May be %NULL if
- *	reallocation is not supported.
  * @receive_skb: Handle an skb ready to be passed to netif_receive_skb()
  * @receive_raw: Handle an RX buffer ready to be passed to __efx_rx_packet()
  * @keep_eventq: Flag for whether event queue should be kept initialised
@@ -1063,7 +1042,6 @@ struct efx_channel_type {
 	void (*stop)(struct efx_channel *);
 	void (*post_remove)(struct efx_channel *);
 	void (*get_name)(struct efx_channel *, char *buf, size_t len);
-	struct efx_channel *(*copy)(struct efx_channel *);
 	bool (*receive_skb)(struct efx_rx_queue *, struct sk_buff *);
 	bool (*receive_raw)(struct efx_rx_queue *, u32);
 	bool keep_eventq;
@@ -1227,18 +1205,6 @@ struct efx_hw_stat_desc {
 	const char *name;
 	u16 dma_width;
 	u16 offset;
-};
-
-/* Number of bits used in a multicast filter hash address */
-#define EFX_MCAST_HASH_BITS 8
-
-/* Number of (single-bit) entries in a multicast filter hash */
-#define EFX_MCAST_HASH_ENTRIES (1 << EFX_MCAST_HASH_BITS)
-
-/* An Efx multicast filter hash */
-union efx_multicast_hash {
-	u8 byte[EFX_MCAST_HASH_ENTRIES / 8];
-	efx_oword_t oword[EFX_MCAST_HASH_ENTRIES / sizeof(efx_oword_t) / 8];
 };
 
 /* Efx Error condition statistics */
@@ -1420,7 +1386,6 @@ enum efx_buf_alloc_mode {
  * @tx_dc_base: Base qword address in SRAM of TX queue descriptor caches
  * @rx_dc_base: Base qword address in SRAM of RX queue descriptor caches
  * @sram_lim_qw: Qword address limit of SRAM
- * @next_buffer_table: Next buffer table index to use
  * @n_combined_channels: Number of combined RX/TX channels
  * @n_rx_only_channels: Number of channels used only for RX (after combined)
  * @n_rss_channels: Number of rx channels available for RSS.
@@ -1489,10 +1454,6 @@ enum efx_buf_alloc_mode {
  *	see &enum ethtool_fec_config_bits.
  * @link_state: Current state of the link
  * @n_link_state_changes: Number of times the link has changed state
- * @unicast_filter: Flag for Falcon-arch simple unicast filter.
- *	Protected by @mac_lock.
- * @multicast_hash: Multicast hash table for Falcon-arch.
- *	Protected by @mac_lock.
  * @wanted_fc: Wanted flow control flags
  * @fc_disable: When non-zero flow control is disabled. Typically used to
  *	ensure that network back pressure doesn't delay dma queue flushes.
@@ -1611,13 +1572,10 @@ struct efx_nic {
 	unsigned int tx_dc_base;
 	unsigned int rx_dc_base;
 	unsigned int sram_lim_qw;
-	unsigned int next_buffer_table;
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	int n_dl_irqs;
-/* Falcon driverlink parameters */
-	struct efx_dl_falcon_resources farch_resources;
-/* EF10 driverlink parameters */
+	/* EF10 driverlink parameters */
 	struct efx_dl_ef10_resources ef10_resources;
 	struct efx_dl_aoe_resources aoe_resources;
 	struct efx_dl_irq_resources *irq_resources;
@@ -1749,8 +1707,6 @@ struct efx_nic {
 	struct efx_link_state link_state;
 	unsigned int n_link_state_changes;
 
-	bool unicast_filter;
-	union efx_multicast_hash multicast_hash;
 	u8 wanted_fc;
 	unsigned int fc_disable;
 
@@ -1987,10 +1943,6 @@ struct ef100_udp_tunnel {
  * @remove_port: Free resources allocated by probe_port()
  * @handle_global_event: Handle a "global" event (may be %NULL)
  * @fini_dmaq: Flush and finalise DMA queues (RX and TX queues)
- * @prepare_flush: Prepare the hardware for flushing the DMA queues
- *	(for Falcon architecture)
- * @finish_flush: Clean up after flushing the DMA queues (for Falcon
- *	architecture)
  * @prepare_flr: Prepare for an FLR
  * @finish_flr: Clean up after an FLR
  * @describe_stats: Describe statistics for ethtool
@@ -2010,8 +1962,7 @@ struct ef100_udp_tunnel {
  * @get_wol: Get WoL configuration from driver state
  * @set_wol: Push WoL configuration to the NIC
  * @resume_wol: Synchronise WoL state between driver and MC (e.g. after resume)
- * @test_chip: Test registers and memory.  Should use efx_test_memory()
- *	and may use efx_farch_test_registers(), and is expected to reset
+ * @test_chip: Test registers and memory. This is expected to reset
  *	the NIC.
  * @test_memory: Test read/write functionality of memory blocks, using
  *	the given test pattern generator
@@ -2105,9 +2056,7 @@ struct ef100_udp_tunnel {
  * @sriov_init: Initialise VFs when vf-count is set via module parameter.
  * @sriov_fini: Disable sriov
  * @sriov_wanted: Check that max_vf > 0.
- * @sriov_respet: Reset sriov, siena only.
  * @sriov_configure: Enable VFs.
- * @sriov_flr: Handles FLR on a VF, siena only.
  * @sriov_set_vf_mac: Performs MCDI commands to delete and add back a new
  *       vport with new mac address.
  * @sriov_set_vf_vlan: Set up VF vlan.
@@ -2172,8 +2121,6 @@ struct efx_nic_type {
 	void (*remove_port)(struct efx_nic *efx);
 	bool (*handle_global_event)(struct efx_channel *channel, efx_qword_t *);
 	int (*fini_dmaq)(struct efx_nic *efx);
-	void (*prepare_flush)(struct efx_nic *efx);
-	void (*finish_flush)(struct efx_nic *efx);
 	void (*prepare_flr)(struct efx_nic *efx);
 	void (*finish_flr)(struct efx_nic *efx);
 	size_t (*describe_stats)(struct efx_nic *efx, u8 *names);
@@ -2337,7 +2284,6 @@ struct efx_nic_type {
 	void (*sriov_fini)(struct efx_nic *efx);
 	bool (*sriov_wanted)(struct efx_nic *efx);
 	int (*sriov_configure)(struct efx_nic *efx, int num_vfs);
-	void (*sriov_flr)(struct efx_nic *efx, unsigned int vf_i);
 	int (*sriov_set_vf_mac)(struct efx_nic *efx, int vf_i, u8 *mac);
 	int (*sriov_set_vf_vlan)(struct efx_nic *efx, int vf_i, u16 vlan,
 				 u8 qos);
@@ -2395,11 +2341,9 @@ struct efx_nic_type {
 	unsigned int timer_period_max;
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
-/* Resources to be shared via driverlink (copied and updated as efx_nic::farch_resources)
- */
-	struct efx_dl_falcon_resources farch_resources;
-/* Resources to be shared via driverlink (copied and updated as efx_nic::ef10_resources)
- */
+	/* Resources to be shared via driverlink (copied and updated as
+	 * efx_nic::ef10_resources).
+	 */
 	struct efx_dl_ef10_resources ef10_resources;
 	struct efx_dl_hash_insertion dl_hash_insertion;
 #endif

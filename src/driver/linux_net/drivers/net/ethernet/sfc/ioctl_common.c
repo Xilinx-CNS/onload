@@ -300,26 +300,7 @@ static int efx_ioctl_get_ts_info(struct efx_nic *efx,
 	return efx_ethtool_get_ts_info(efx->net_dev, &data->ts_info);
 }
 #endif
-
-static int efx_ioctl_ts_set_vlan_filter(struct efx_nic *efx,
-					union efx_ioctl_data *data)
-{
-	return efx_ptp_ts_set_vlan_filter(efx, &data->ts_vlan_filter);
-}
-
-static int efx_ioctl_ts_set_uuid_filter(struct efx_nic *efx,
-					union efx_ioctl_data *data)
-{
-	return efx_ptp_ts_set_uuid_filter(efx, &data->ts_uuid_filter);
-}
-
-static int efx_ioctl_ts_set_domain_filter(struct efx_nic *efx,
-					  union efx_ioctl_data *data)
-{
-	return efx_ptp_ts_set_domain_filter(efx, &data->ts_domain_filter);
-}
 #endif
-
 #endif
 
 #ifdef CONFIG_SFC_PPS
@@ -567,18 +548,6 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 		op = efx_ioctl_get_ts_info;
 		break;
 #endif
-	case EFX_TS_SET_VLAN_FILTER:
-		size = sizeof(data->ts_vlan_filter);
-		op = efx_ioctl_ts_set_vlan_filter;
-		break;
-	case EFX_TS_SET_UUID_FILTER:
-		size = sizeof(data->ts_uuid_filter);
-		op = efx_ioctl_ts_set_uuid_filter;
-		break;
-	case EFX_TS_SET_DOMAIN_FILTER:
-		size = sizeof(data->ts_domain_filter);
-		op = efx_ioctl_ts_set_domain_filter;
-		break;
 #endif
 #endif
 	case EFX_SFCTOOL:

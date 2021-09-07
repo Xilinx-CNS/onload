@@ -403,7 +403,9 @@ EFX_HAVE_DEVLINK_OPS_SUPPORTED_FLASH_UPDATE_PARAMS	member	devlink_ops	supported_
 EFX_HAVE_DEVLINK_FLASH_UPDATE_PARAMS	symbol devlink_flash_update_params	include/net/devlink.h
 EFX_HAVE_DEVLINK_FLASH_UPDATE_PARAMS_FW	member	struct_devlink_flash_update_params	fw	include/net/devlink.h
 EFX_HAVE_DEVLINK_FLASH_UPDATE_BEGIN_NOTIFY	symbol	devlink_flash_update_begin_notify	include/net/devlink.h
+EFX_NEED_DEVLINK_FLASH_UPDATE_STATUS_NOTIFY	nsymbol	devlink_flash_update_status_notify	include/net/devlink.h
 EFX_NEED_DEVLINK_FLASH_UPDATE_TIMEOUT_NOTIFY	nsymbol	devlink_flash_update_timeout_notify	include/net/devlink.h
+EFX_HAVE_DEVLINK_ALLOC_DEV		symtype	devlink_register	include/net/devlink.h	int(struct devlink *)
 EFX_NEED_ETHTOOL_FLASH_DEVICE		nsymbol devlink_compat_flash_update	include/net/devlink.h
 
 EFX_HAVE_PCI_FIND_NEXT_EXT_CAPABILITY	symbol	pci_find_next_ext_capability	include/linux/pci.h
@@ -425,6 +427,7 @@ EFX_HAVE_VDPA_ALLOC_NVQS_PARAM		symtype __vdpa_alloc_device	include/linux/vdpa.h
 EFX_HAVE_VDPA_ALLOC_NAME_PARAM          symtype __vdpa_alloc_device     include/linux/vdpa.h struct vdpa_device *(struct device *, const struct vdpa_config_ops *, size_t, const char *)
 EFX_HAVE_VDPA_REGISTER_NVQS_PARAM       symtype _vdpa_register_device   include/linux/vdpa.h int(struct vdpa_device *, int )
 EFX_HAVE_RHASHTABLE			file	include/linux/rhashtable.h
+EFX_HAVE_RHASHTABLE_LOOKUP_FAST		symbol	rhashtable_lookup_fast	include/linux/rhashtable.h
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 

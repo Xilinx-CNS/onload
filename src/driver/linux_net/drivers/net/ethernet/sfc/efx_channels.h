@@ -35,7 +35,6 @@ int efx_set_channels(struct efx_nic *efx);
 void efx_unset_channels(struct efx_nic *efx);
 void efx_remove_channels(struct efx_nic *efx);
 void efx_fini_channels(struct efx_nic *efx);
-int efx_realloc_channels(struct efx_nic *efx, u32 rxq_entries, u32 txq_entries);
 
 void efx_set_channel_names(struct efx_nic *efx);
 

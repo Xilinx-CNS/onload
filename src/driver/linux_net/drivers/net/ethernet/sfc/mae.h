@@ -64,6 +64,9 @@ struct mae_mport_desc {
 struct mae_mport_desc *efx_mae_enumerate_mports(struct efx_nic *efx,
 						unsigned int *n_mports);
 
+int efx_mae_get_tables(struct efx_nic *efx);
+void efx_mae_free_tables(struct efx_nic *efx);
+
 #define MAE_NUM_FIELDS	(MAE_FIELD_ENC_VNET_ID + 1)
 
 struct mae_caps {
@@ -98,6 +101,10 @@ int efx_mae_update_encap_md(struct efx_nic *efx,
 			    struct efx_tc_encap_action *encap);
 int efx_mae_free_encap_md(struct efx_nic *efx,
 			  struct efx_tc_encap_action *encap);
+int efx_mae_allocate_pedit_mac(struct efx_nic *efx,
+			       struct efx_tc_mac_pedit_action *ped);
+int efx_mae_free_pedit_mac(struct efx_nic *efx,
+			   struct efx_tc_mac_pedit_action *ped);
 #endif
 
 int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act);

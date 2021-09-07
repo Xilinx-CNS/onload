@@ -15,13 +15,7 @@
  * Bug numbers are from Solarflare's Bugzilla.
  */
 
-#define EFX_WORKAROUND_SIENA(efx) (efx_nic_rev(efx) == EFX_REV_SIENA_A0)
 #define EFX_WORKAROUND_EF10(efx) (efx_nic_rev(efx) >= EFX_REV_HUNT_A0)
-
-/* Selftests need to be retried */
-#define EFX_WORKAROUND_8568 EFX_WORKAROUND_SIENA
-/* Legacy interrupt storm when interrupt fifo fills */
-#define EFX_WORKAROUND_17213 EFX_WORKAROUND_SIENA
 
 /* Lockup when writing event block registers at gen2/gen3 */
 #define EFX_EF10_WORKAROUND_35388(efx)					\

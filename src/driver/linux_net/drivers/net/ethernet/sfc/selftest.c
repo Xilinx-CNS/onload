@@ -42,8 +42,7 @@
 /*
  * Loopback test packet structure
  *
- * The self-test should stress every RSS vector, and unfortunately
- * Falcon only performs RSS on TCP/UDP packets.
+ * The self-test should stress every RSS vector.
  */
 struct efx_loopback_payload {
 	struct ethhdr header;
@@ -663,10 +662,6 @@ efx_test_loopback(struct efx_tx_queue *tx_queue,
 	return 0;
 }
 
-/* Wait for link up. On Falcon, we would prefer to rely on efx_monitor, but
- * any contention on the mac lock (via e.g. efx_mac_mcast_work) causes it
- * to delay and retry. Therefore, it's safer to just poll directly. Wait
- * for link up and any faults to dissipate. */
 static int efx_wait_for_link(struct efx_nic *efx)
 {
 	struct efx_link_state *link_state = &efx->link_state;
@@ -708,7 +703,6 @@ static int efx_test_loopbacks(struct efx_nic *efx, struct efx_self_tests *tests,
 		efx_get_channel(efx, efx->tx_channel_offset);
 	struct efx_tx_queue *tx_queue;
 	int rc = 0;
-	bool retry;
 	s32 temp_filter_id = -1;
 
 	/* Set the port loopback_selftest member. From this point on
@@ -744,8 +738,6 @@ static int efx_test_loopbacks(struct efx_nic *efx, struct efx_self_tests *tests,
 		if (!(loopback_modes & (1 << mode)))
 			continue;
 
-		retry = EFX_WORKAROUND_8568(efx);
-	set_loopback:
 		/* Move the port into the specified loopback mode. */
 		state->flush = true;
 		mutex_lock(&efx->mac_lock);
@@ -774,29 +766,8 @@ static int efx_test_loopbacks(struct efx_nic *efx, struct efx_self_tests *tests,
 					EFX_TXQ_TYPE_CSUM_OFFLOAD;
 			rc = efx_test_loopback(tx_queue,
 					       &tests->loopback[mode]);
-			if (rc && !retry)
+			if (rc)
 				goto out;
-			if (rc) {
-				/* Give the PHY a kick by moving into
-				 * a Falcon internal loopback mode and
-				 * then back out */
-				int first = ffs(efx->loopback_modes) - 1;
-
-				netif_info(efx, drv, efx->net_dev,
-					   "retrying %s loopback\n",
-					   LOOPBACK_MODE(efx));
-
-				state->flush = true;
-				mutex_lock(&efx->mac_lock);
-				efx->loopback_mode = first;
-				__efx_reconfigure_port(efx);
-				mutex_unlock(&efx->mac_lock);
-
-				memset(&tests->loopback[mode], 0,
-				       sizeof(tests->loopback[mode]));
-				retry = false;
-				goto set_loopback;
-			}
 		}
 	}
 

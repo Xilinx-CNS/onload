@@ -21,7 +21,6 @@
 
 #if defined(CONFIG_SFC_VDPA)
 #define EFX_VDPA_NAME_LEN 32
-extern struct vdpa_config_ops ef100_vdpa_config_ops;
 
 static int
 ef100_vdpa_set_mac_filter(struct efx_nic *efx,
@@ -134,7 +133,8 @@ int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic)
 	vdpa_nic->filters[EF100_VDPA_UCAST_MAC_FILTER].filter_id = rc;
 	vdpa_nic->filter_cnt++;
 	dev_info(&vdev->dev,
-		 "vDPA ucast filter created, filter_id: %d\n", rc);
+		 "vDPA ucast filter mac: %pM created, filter_id: %d\n",
+		 vdpa_nic->mac_address, rc);
 
 	/* Configure unknown multicast filter */
 	spec = &vdpa_nic->filters[EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER].spec;
@@ -168,7 +168,7 @@ static ssize_t vdpa_mac_show(struct device *dev,
 	int len;
 
 	/* print MAC in big-endian format */
-	len = scnprintf(buf_out, PAGE_SIZE, "%pMR\n", vdpa_nic->mac_address);
+	len = scnprintf(buf_out, PAGE_SIZE, "%pM\n", vdpa_nic->mac_address);
 
 	return len;
 }
@@ -480,36 +480,43 @@ void ef100_vdpa_fini(struct efx_probe_data *probe_data)
 static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 {
 	struct efx_nic *efx = vdpa_nic->efx;
+	u16 mtu, link_up;
+	u32 speed;
+	u8 duplex;
 	int rc = 0;
 
 	rc = efx_vdpa_get_mac_address(efx,
 				      vdpa_nic->net_config.mac);
 	if (rc) {
 		dev_err(&vdpa_nic->vdpa_dev.dev,
-			"%s: Get MAC address for vf:%u failed:%d\n", __func__,
-			vdpa_nic->vf_index, rc);
+			"%s: Get MAC address for vf:%u failed, rc:%d\n",
+			 __func__, vdpa_nic->vf_index, rc);
 		return rc;
 	}
+	vdpa_nic->mac_configured = true;
 
-	vdpa_nic->net_config.max_virtqueue_pairs = vdpa_nic->max_queue_pairs;
+	vdpa_nic->net_config.max_virtqueue_pairs =
+		(__virtio16 __force)vdpa_nic->max_queue_pairs;
 
-	rc = efx_vdpa_get_mtu(efx, &vdpa_nic->net_config.mtu);
+	rc = efx_vdpa_get_mtu(efx, &mtu);
 	if (rc) {
 		dev_err(&vdpa_nic->vdpa_dev.dev,
 			"%s: Get MTU for vf:%u failed:%d\n", __func__,
 			vdpa_nic->vf_index, rc);
 		return rc;
 	}
+	vdpa_nic->net_config.mtu = (__virtio16 __force)mtu;
 
-	rc = efx_vdpa_get_link_details(efx, &vdpa_nic->net_config.status,
-				       &vdpa_nic->net_config.speed,
-				       &vdpa_nic->net_config.duplex);
+	rc = efx_vdpa_get_link_details(efx, &link_up, &speed, &duplex);
 	if (rc) {
 		dev_err(&vdpa_nic->vdpa_dev.dev,
 			"%s: Get Link details for vf:%u failed:%d\n", __func__,
 			vdpa_nic->vf_index, rc);
 		return rc;
 	}
+	vdpa_nic->net_config.status = (__virtio16 __force)link_up;
+	vdpa_nic->net_config.speed = (__le32 __force)speed;
+	vdpa_nic->net_config.duplex = duplex;
 
 	dev_info(&vdpa_nic->vdpa_dev.dev, "%s: mac address: %pM\n", __func__,
 		 vdpa_nic->net_config.mac);
@@ -723,7 +730,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 	vdpa_nic = vdpa_alloc_device(struct ef100_vdpa_nic,
 				     vdpa_dev, &efx->pci_dev->dev,
 				     &ef100_vdpa_config_ops
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NVQS_PARAM)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_REGISTER_NVQS_PARAM) && defined(EFX_HAVE_VDPA_ALLOC_NVQS_PARAM)
 				     , (allocated_vis - 1) * 2
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM)
@@ -748,6 +755,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 	vdpa_nic->vf_index = nic_data->vf_index;
 	vdpa_nic->vdpa_state = EF100_VDPA_STATE_INITIALIZED;
 	vdpa_nic->iova_root = RB_ROOT;
+	vdpa_nic->mac_address = (u8 *)&vdpa_nic->net_config.mac;
 	INIT_LIST_HEAD(&vdpa_nic->free_list);
 
 	dev = &vdpa_nic->vdpa_dev.dev;
@@ -802,11 +810,11 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 	if (rc)
 		goto err_put_device;
 
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_VDPA_REGISTER_NVQS_PARAM)
-	rc = vdpa_register_device(&vdpa_nic->vdpa_dev);
-#else
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_REGISTER_NVQS_PARAM)
 	rc = vdpa_register_device(&vdpa_nic->vdpa_dev,
 				  (allocated_vis - 1) * 2);
+#else
+	rc = vdpa_register_device(&vdpa_nic->vdpa_dev);
 #endif
 	if (rc) {
 		pci_err(efx->pci_dev,
@@ -856,7 +864,7 @@ bool ef100_vdpa_dev_in_use(struct efx_nic *efx)
 	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
 
 	if (vdpa_nic)
-		if (vdpa_nic->status > 0)
+		if (vdpa_nic->status >= VIRTIO_CONFIG_S_DRIVER)
 			return true;
 
 	return false;
