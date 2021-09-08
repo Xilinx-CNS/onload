@@ -1697,7 +1697,11 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
     /* TODO EFCT: this shouldn't be here, it should be in filter add instead */
     if( efhw_nic_max_shared_rxqs(nic) ) {
-      rc = efrm_rxq_alloc(vi_rs, 0, 0, cpu_all_mask, true, 2, NULL, 0,
+      const unsigned HUGEPAGES_PER_RXQ = 2;  /* EFCT TODO: un-hardcode */
+      rc = efrm_rxq_alloc(vi_rs, 0, 0, cpu_all_mask, true, HUGEPAGES_PER_RXQ,
+                          trs->thc_efct_memfd,
+                          (intf_i * EF_VI_MAX_EFCT_RXQS) *
+                              HUGEPAGES_PER_RXQ * CI_HUGEPAGE_SIZE,
                           &trs_nic->thn_efct_rxq[0]);
       if( rc < 0 ) {
         ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)\n", __func__, rc);
@@ -4334,6 +4338,17 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   }
 #endif
 
+  rs->thc_efct_memfd = NULL;
+  if( alloc->in_memfd >= 0 ) {
+    rs->thc_efct_memfd = fget(alloc->in_memfd);
+    if( ! rs->thc_efct_memfd ) {
+      rc = -EBADF;
+      OO_DEBUG_ERR(ci_log("%s: [%d] Bad fd for efct (%d).",
+                  __func__, NI_ID(ni), alloc->in_memfd));
+      goto fail13;
+    }
+  }
+
   /* We're about to expose this stack to other people.  so we should be
    * sufficiently initialised here that other people don't get upset.
    */
@@ -4343,7 +4358,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     rc = efab_thr_table_check_name(alloc->in_name, rs->netif.cplane->cp_netns);
     if( rc != 0 ) {
       ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
-      goto fail13;
+      goto fail14;
     }
   }
   /* This must be set when we are guaranteed that stack creation
@@ -4432,6 +4447,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   OO_DEBUG_RES(ci_log("tcp_helper_rm_alloc: allocated %u", rs->id));
   return 0;
 
+ fail14:
+  if( rs->thc_efct_memfd )
+    fput(rs->thc_efct_memfd);
  fail13:
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
   vfree(rs->trs_ephem_table_consumed);
@@ -5525,6 +5543,8 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
 
   release_netif_hw_resources(trs);
   release_netif_resources(trs);
+  if( trs->thc_efct_memfd )
+    fput(trs->thc_efct_memfd);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   destroy_workqueue(trs->wq);

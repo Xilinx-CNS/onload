@@ -2330,6 +2330,19 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
   else
   if( name != NULL )
     strncpy(ra->in_name, name, CI_CFG_STACK_NAME_LEN);
+
+  ra->in_memfd = -1;
+#ifdef MFD_HUGETLB
+  /* The kernel code can cope with no memfd being provided, but only on older
+   * kernels */
+  {
+    char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
+    snprintf(mfd_name, sizeof(mfd_name), "efct/%s", name);
+    ra->in_memfd = memfd_create(mfd_name, MFD_CLOEXEC | MFD_HUGETLB);
+    if( ra->in_memfd < 0 && errno != ENOSYS )
+      LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
+  }
+#endif
 }
 
 
@@ -2352,6 +2365,9 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
    * the cplane. If a non-fatal signal is received while we're asleep,
    * we get an EINTR and want to try again. */
   while( (rc = oo_resource_alloc(fd, &ra)) == -EINTR );
+
+  if( ra.in_memfd >= 0 )
+    ci_sys_close(ra.in_memfd);
 
   if( rc < 0 ) {
     switch( rc ) {

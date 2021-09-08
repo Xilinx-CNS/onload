@@ -86,6 +86,7 @@ typedef struct ci_resource_onload_alloc_s {
   char                    in_name[CI_CFG_STACK_NAME_LEN + 1];
   int                     in_cluster_size;
   int                     in_cluster_restart;
+  int                     in_memfd;
   efrm_nic_set_t          out_nic_set;
   ci_uint32               out_netif_mmap_bytes;
 } ci_resource_onload_alloc_t;
