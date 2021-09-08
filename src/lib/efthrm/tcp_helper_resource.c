@@ -1697,7 +1697,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
     /* TODO EFCT: this shouldn't be here, it should be in filter add instead */
     if( efhw_nic_max_shared_rxqs(nic) ) {
-      rc = efrm_rxq_alloc(vi_rs, 0, 0, cpu_all_mask, true, 2,
+      rc = efrm_rxq_alloc(vi_rs, 0, 0, cpu_all_mask, true, 2, NULL, 0,
                           &trs_nic->thn_efct_rxq[0]);
       if( rc < 0 ) {
         ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)\n", __func__, rc);

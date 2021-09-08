@@ -1,10 +1,16 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
 
-#include "ef_vi_internal.h"
 #ifndef __KERNEL__
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/mman.h>
 #include "driver_access.h"
 #endif
+#include "ef_vi_internal.h"
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/common.h>
 
@@ -880,10 +886,30 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   int rc;
   ci_resource_alloc_t ra;
   int ix;
+  int mfd = -1;
+  unsigned n_hugepages = (n_superbufs + CI_EFCT_SUPERBUFS_PER_PAGE - 1) /
+                         CI_EFCT_SUPERBUFS_PER_PAGE;
 
   ix = efct_vi_find_free_rxq(vi, qid);
   if( ix < 0 )
     return ix;
+
+#ifdef MFD_HUGETLB
+  /* The kernel code can cope with no memfd being provided, but only on older
+   * kernels. MFD_HUGETLB is available in >=4.14 (after memfd_create() itself
+   * in >=3.17). The fallback employs efrm_find_ksym(), so stopped working in
+   * >=5.7. Plenty of overlap. */
+  {
+    char name[32];
+    snprintf(name, sizeof(name), "ef_vi:%d", qid);
+    mfd = memfd_create(name, MFD_CLOEXEC | MFD_HUGETLB);
+    if( mfd < 0 && errno != ENOSYS ) {
+      rc = -errno;
+      LOGVV(ef_log("%s: memfd_create failed %d", __FUNCTION__, rc));
+      return rc;
+    }
+  }
+#endif
 
   memset(&ra, 0, sizeof(ra));
   ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
@@ -891,10 +917,13 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   ra.u.rxq.in_qid = qid;
   ra.u.rxq.in_shm_ix = ix;
   ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
-  ra.u.rxq.in_n_hugepages = CI_ROUND_UP(n_superbufs,
-                                        CI_EFCT_SUPERBUFS_PER_PAGE);
+  ra.u.rxq.in_n_hugepages = n_hugepages;
   ra.u.rxq.in_timestamp_req = true;
+  ra.u.rxq.in_memfd = mfd;
+  ra.u.rxq.in_memfd_off = 0;
   rc = ci_resource_alloc(vi->dh, &ra);
+  if( mfd >= 0 )
+    close(mfd);
   if( rc < 0 ) {
     LOGVV(ef_log("%s: ci_resource_alloc rxq %d", __FUNCTION__, rc));
     return rc;

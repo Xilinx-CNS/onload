@@ -56,5 +56,8 @@ efhw_nic_release_efct_device(struct efhw_nic* nic,
   put_device((dev)); \
 }
 
+void efct_provide_bind_memfd(struct file* memfd, off_t memfd_off);
+void efct_unprovide_bind_memfd(void);
+
 #endif
 

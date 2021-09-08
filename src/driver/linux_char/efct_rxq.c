@@ -41,6 +41,7 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   struct efrm_vi* vi;
   efch_resource_t* vi_rs;
   cpumask_var_t cpumask;
+  struct file* memfd = NULL;
   int rc;
 
   rc = efch_resource_id_lookup(alloc->in_vi_rs_id, priv_opt, &vi_rs);
@@ -69,11 +70,20 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
     rc = get_user_cpu_mask((void __user*)alloc->in_cpuset,
                            alloc->in_cpusetsize, cpumask);
     if (rc)
-      return rc;
+      goto fail1;
+  }
+
+  if (alloc->in_memfd >= 0) {
+    memfd = fget(alloc->in_memfd);
+    if (!memfd)
+      goto fail1;
   }
 
   rc = efrm_rxq_alloc(vi, alloc->in_qid, alloc->in_shm_ix, cpumask,
-                      alloc->in_timestamp_req, alloc->in_n_hugepages, &rxq);
+                      alloc->in_timestamp_req, alloc->in_n_hugepages, memfd,
+                      alloc->in_memfd_off, &rxq);
+  if (memfd)
+    fput(memfd);
   free_cpumask_var(cpumask);
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: rxq_alloc failed (%d)", __FUNCTION__, rc);
@@ -82,6 +92,10 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 
   rs->rs_base = efrm_rxq_to_resource(rxq);
   return 0;
+
+ fail1:
+  free_cpumask_var(cpumask);
+  return rc;
 }
 
 

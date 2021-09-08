@@ -46,7 +46,8 @@ EXPORT_SYMBOL(efrm_rxq_from_resource);
 
 int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
                    const struct cpumask *mask, bool timestamp_req,
-                   size_t n_hugepages, struct efrm_efct_rxq **rxq_out)
+                   size_t n_hugepages, struct file* memfd, off_t memfd_off,
+                   struct efrm_efct_rxq **rxq_out)
 {
 #if CI_HAVE_EFCT_AUX
 	int rc;
@@ -57,7 +58,8 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
 		return -EOPNOTSUPP;
 
 	if (shm_ix < 0 ||
-	    shm_ix >= efhw_nic_max_shared_rxqs(vi_rs->rs_client->nic) )
+	    shm_ix >= efhw_nic_max_shared_rxqs(vi_rs->rs_client->nic) ||
+	    memfd_off < 0 )
 		return -EINVAL;
 
 	rxq = kzalloc(sizeof(struct efrm_efct_rxq), GFP_KERNEL);
@@ -66,7 +68,8 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
 
 	rxq->vi = vi;
 	rc = efct_nic_rxq_bind(vi_rs->rs_client->nic, qid, mask, timestamp_req,
-	                       n_hugepages, &vi->efct_shm[shm_ix], &rxq->hw);
+	                       n_hugepages, memfd, memfd_off,
+	                       &vi->efct_shm[shm_ix], &rxq->hw);
 	if (rc < 0) {
 		kfree(rxq);
 		return rc;
@@ -124,7 +127,8 @@ static int fixup_superbuf_mapping(unsigned long addr,
 		rc = vm_mmap(kern->file, addr, CI_HUGEPAGE_SIZE,
 		             PROT_READ,
 		             MAP_FIXED | MAP_SHARED | MAP_POPULATE |
-		                     MAP_HUGETLB | MAP_HUGE_2MB, 0);
+		                     MAP_HUGETLB | MAP_HUGE_2MB,
+		             kern->page->index * CI_HUGEPAGE_SIZE);
 		if (IS_ERR((void*)rc))
 			return PTR_ERR((void*)rc);
 	}
