@@ -142,6 +142,8 @@ EFRM_HAS_FLUSH_DELAYED_FPUT	export	flush_delayed_fput	include/linux/file.h	fs/fi
 
 EFRM_IRQ_FREE_RETURNS_NAME	symtype	free_irq	include/linux/interrupt.h void *(unsigned int, void *)
 
+EFRM_HAS_ITER_TYPE	memtype	struct_iov_iter	iter_type	include/linux/uio.h	u8
+
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
