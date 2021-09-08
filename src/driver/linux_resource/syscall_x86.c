@@ -117,14 +117,25 @@ void** find_syscall_table(void)
    * NB It is possible to extend this to support linux>=4.6,
    * which is slightly different.  We do not have any DUTs to test such
    * a linux system without KALLSYMS, though.
+   *
+   * linux>=5.14 is slightly different, see
+   * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit?id=3e5e7f7736b05d5fdf2cc4e0ba4f2d8bc42c630d
+   * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit?id=0595494891723a1dcca5eaa8eeca8ab54ad953b9
+   * movq	%rsp, %rdi
+   *    48 89 e7
+   * movslq	%eax, %rsi
+   *    48 63 f0
+   * call	do_syscall_64
+   *    e8 XX XX XX XX
+   *
    */
   p += 0x40; /* skip the first part of entry_SYSCALL_64() */
   result = 0;
   pend = p + 1024 - 11;
   while (p < pend) {
-    if( p[0] == 0x48 && p[1] == 0x89 && p[2] == 0xc7 &&
-        p[3] == 0x48 && p[4] == 0x89 && p[5] == 0xe6 &&
-        p[6] == 0xe8 ) {
+    if( p[0] == 0x48 && p[1] == 0x89 && p[3] == 0x48 && p[6] == 0xe8 &&
+        ((p[2] == 0xc7 && p[4] == 0x89 && p[5] == 0xe6) ||
+         (p[2] == 0xe7 && p[4] == 0x63 && p[5] == 0xf0)) ) {
       result = (unsigned long)p + 11;
       result += p[7] | (p[8] << 8) | (p[9] << 16) | (p[10] << 24);
       break;
