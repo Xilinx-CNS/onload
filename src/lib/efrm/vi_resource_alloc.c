@@ -859,7 +859,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 
 		evq_params.interrupting = nic->flags & NIC_FLAG_EVQ_IRQ;
 		evq_params.wakeup_evq = efrm_vi_get_channel(virs);
-		EFRM_VERIFY_EQ(evq_params.interrupting, virs->vec != NULL);
+		EFRM_ASSERT(evq_params.interrupting == (virs->vec != NULL));
 
 		rc = efhw_nic_event_queue_enable(nic,
 					efrm_pd_get_nic_client_id(virs->pd),
