@@ -1883,9 +1883,34 @@ int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag)
   int rc, got_lock;
   citp_fdinfo* fdi;
 
-  /* Do not touch shared fdtable when in vfork child or too large value. */
-  if( oo_per_thread_get()->in_vfork_child ||
-      fd >= citp_fdtable.inited_count )
+  if( fd < 0 )
+    RET_WITH_ERRNO(EINVAL);
+
+  /* Do not touch fdtable when in vfork.
+   * Avoid ci_tcp_helper_close_no_trampoline() when citp.onload_fd is not
+   * present, because it modifies fdtable. */
+  if( oo_per_thread_get()->in_vfork_child ) {
+    if( flag == CITP_EP_CLOSE_ALREADY )
+      return 0;
+    else if( citp.onload_fd >= 0 )
+      ci_tcp_helper_close_no_trampoline(fd);
+    else
+      ci_sys_close(fd);
+  }
+
+  /* Initialise fdtable and trampolining (i.e. citp.onload_fd) if needed.
+   * Do not allow to close log_fd or onload_fd unknowingly. */
+  if( citp_fdtable.inited_count == 0 ) {
+    CITP_FDTABLE_LOCK();
+    if( citp.onload_fd < 0 )
+      __oo_service_fd(true);
+    else
+      __citp_fdtable_extend(CI_MAX(citp.log_fd, citp.onload_fd));
+    CITP_FDTABLE_UNLOCK();
+  }
+
+  /* Do not touch fdtable when too large value. */
+  if( fd >= citp_fdtable.inited_count )
     return flag == CITP_EP_CLOSE_ALREADY ? 0 : ci_tcp_helper_close_no_trampoline(fd);
 
   /* Interlock against other closes, against the fdtable being extended,
@@ -2121,8 +2146,10 @@ int ci_tcp_helper_close_no_trampoline(int fd)
   int onload_fd = oo_service_fd();
 
 
-  if( onload_fd >= 0 )
-    return ci_sys_ioctl(oo_service_fd(), OO_IOC_CLOSE, &op);
+  if( onload_fd == fd )
+    return -EBADF;
+  else if( onload_fd >= 0 )
+    return ci_sys_ioctl(onload_fd, OO_IOC_CLOSE, &op);
   else
     return ci_sys_close(fd);
 }
