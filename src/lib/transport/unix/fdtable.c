@@ -647,7 +647,8 @@ citp_fdtable_probe_locked(unsigned fd, int print_banner,
 #endif
 
 #ifndef NDEBUG
-  /* /dev/onload may be netif only; they are closed on fork or exec */
+  /* /dev/onload may be netif or log_fd or onload_fd;
+   * they are closed on fork or exec */
   if( ci_major(st.st_rdev) == ci_major(oo_get_st_rdev(OO_STACK_DEV)) )
     Log_U(log("%s: %d is /dev/onload", __FUNCTION__, fd));
 #endif
@@ -2107,7 +2108,9 @@ void __oo_service_fd(bool fdtable_locked)
     }
   }
   else {
-    ci_sys_ioctl(fd, OO_IOC_CLOSE, fd);
+    /* Unspecialised /dev/onload does not trampoline,
+     * so simple close is OK.  */
+    ci_sys_close(fd);
   }
 }
 

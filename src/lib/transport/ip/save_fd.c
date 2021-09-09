@@ -95,9 +95,10 @@ int ef_onload_handle_move_and_do_cloexec(ef_driver_handle* pfd, int do_cloexec)
    * needed on the new fd, so we're done.
    */
   if( fd >= 0 ) {
-    /* ci_tcp_helper_close_no_trampoline() belongs to libunix, so we use
-     * direct ioctl here: */
-    ci_sys_ioctl(*pfd, OO_IOC_CLOSE, *pfd);
+    /* Unspecialised /dev/onload does not trampoline, see oo_fops:
+     * it does not have oo_fop_flush().  So we can simply close this.
+     */
+    ci_sys_close(*pfd);
     *pfd = fd;
     return 0;
   }
