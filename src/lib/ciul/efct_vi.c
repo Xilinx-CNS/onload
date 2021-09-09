@@ -663,13 +663,21 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     BUG_ON(CI_OWORD_FIELD(*header, EFCT_RX_HEADER_NEXT_FRAME_LOC) != 1);
 
     pkt_id = rxq_ptr_to_pkt_id(rxq_ptr->prev);
-    if(unlikely( header[0].u64[0] &
-         ((CI_MASK64(EFCT_RX_HEADER_L2_STATUS_WIDTH) <<
-           EFCT_RX_HEADER_L2_STATUS_LBN) |
-          (CI_MASK64(EFCT_RX_HEADER_L3_STATUS_WIDTH) <<
-           EFCT_RX_HEADER_L3_STATUS_LBN) |
-          (CI_MASK64(EFCT_RX_HEADER_L4_STATUS_WIDTH) <<
-           EFCT_RX_HEADER_L4_STATUS_LBN)) )) {
+
+#define M_(FIELD) (CI_MASK64(FIELD ## _WIDTH) << FIELD ## _LBN)
+#define M(FIELD) M_(EFCT_RX_HEADER_ ## FIELD)
+#define CHECK_FIELDS (M(L2_STATUS) | M(L3_STATUS) | M(L4_STATUS) | M(ROLLOVER))
+    if(unlikely( header->u64[0] & CHECK_FIELDS )) {
+
+      if( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_ROLLOVER) ) {
+        /* Force a rollover on the next poll, while preserving the superbuf
+         * index encoded in rxq_ptr->next since that is required by
+         * get_timestamp to identify packets within this superbuf.
+         */
+        rxq_ptr->next += shm->superbuf_pkts;
+        break;
+      }
+
       efct_rx_discard(qid, pkt_id, header, &evs[i]);
     }
     else {
@@ -680,7 +688,6 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
       evs[i].rx_ref.user = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_USER);
     }
     /* TODO might be nice to provide more of the available metadata */
-    /* TODO: handle manual rollover */
 
     rxq_ptr->prev = rxq_ptr->next++;
   }
