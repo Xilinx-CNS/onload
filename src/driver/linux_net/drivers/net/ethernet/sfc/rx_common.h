@@ -92,7 +92,7 @@ void efx_cancel_slow_fill(struct efx_rx_queue *rx_queue);
 void efx_fast_push_rx_descriptors(struct efx_rx_queue *rx_queue, bool atomic);
 
 void
-efx_rx_packet_gro(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
+efx_rx_packet_gro(struct efx_channel *channel, struct efx_rx_buffer *rx_buf,
 		  unsigned int n_frags, u8 *eh, __wsum csum);
 
 bool efx_filter_is_mc_recipient(const struct efx_filter_spec *spec);
@@ -126,7 +126,10 @@ static inline bool efx_tx_vi_spreading(struct efx_nic *efx)
 	       (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_TX_ONLY_VI_SPREADING_ENABLED);
 }
 int efx_rx_queue_id_internal(struct efx_nic *efx, int rxq_id);
-
+static inline int efx_rx_queue_instance(struct efx_rx_queue *rxq)
+{
+	return efx_rx_queue_id_internal(rxq->efx, efx_rx_queue_index(rxq));
+}
 
 #endif
 

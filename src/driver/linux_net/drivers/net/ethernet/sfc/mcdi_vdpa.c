@@ -13,7 +13,6 @@
 #include "nic.h"
 #include "mcdi_vdpa.h"
 #include "mcdi_pcol.h"
-#include "ef100_rep.h"
 
 #if defined(CONFIG_SFC_VDPA)
 
@@ -21,9 +20,7 @@
 #include <uapi/linux/virtio_config.h>
 static u64 ef100vdpa_features = (1ULL << VIRTIO_F_ANY_LAYOUT) |
 			      (1ULL << VIRTIO_F_VERSION_1) |
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_VIRTIO_F_IN_ORDER)
 			      (1ULL << VIRTIO_F_IN_ORDER) |
-#endif
 			      (1ULL << VIRTIO_NET_F_MAC) |
 			      (1ULL << VIRTIO_NET_F_MTU) |
 			      (1ULL << VIRTIO_NET_F_SPEED_DUPLEX);
@@ -340,30 +337,14 @@ int efx_vdpa_get_doorbell_offset(struct efx_vring_ctx *vring_ctx,
 
 int efx_vdpa_get_mac_address(struct efx_nic *efx, u8 *mac_address)
 {
-	struct ef100_nic_data *nic_data = efx->nic_data;
-	unsigned int vf_index = nic_data->vf_index;
-	efx_qword_t pciefn;
-	u32 clid;
-	int rc;
+	/* TODO: MCDI invocation for getting MAC Address.*/
+#ifdef VDPA_TEST
+	u8 mac[6];
 
-	/* Construct PCIE_FUNCTION structure for the VF */
-	EFX_POPULATE_QWORD_3(pciefn,
-			     PCIE_FUNCTION_PF, PCIE_FUNCTION_PF_NULL,
-			     PCIE_FUNCTION_VF, vf_index,
-			     PCIE_FUNCTION_INTF, PCIE_INTERFACE_CALLER);
-	/* look up VF's client ID */
-	rc = efx_ef100_lookup_client_id(efx, pciefn, &clid);
-	if (rc) {
-		pr_err("%s: Failed to get VF %u client ID, rc %d\n",
-		       __func__, vf_index, rc);
-	} else {
-		pr_info("%s: VF %u client ID %#x\n", __func__, vf_index, clid);
-
-		/* Get the assigned MAC address */
-		rc = ef100_get_mac_address(efx, mac_address, clid, false);
-	}
-
-	return rc;
+	eth_random_addr(mac);
+	memcpy(mac_address, mac, sizeof(mac));
+#endif
+	return 0;
 }
 
 int efx_vdpa_get_mtu(struct efx_nic *efx, u16 *mtu)

@@ -1016,3 +1016,6 @@ bool efx_ef10_sriov_wanted(struct efx_nic *efx)
 	return false;
 #endif
 }
+
+void efx_ef10_sriov_flr(struct efx_nic *efx, unsigned int vf_i) {}
+

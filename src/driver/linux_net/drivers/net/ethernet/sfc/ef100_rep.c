@@ -261,13 +261,10 @@ static struct efx_rep *efx_ef100_rep_create_netdev(struct efx_nic *efx,
 	efv->net_dev = net_dev;
 	efv->remote = remote;
 	rtnl_lock();
-	if (netif_running(efx->net_dev) && efx->state == STATE_NET_UP) {
-		netif_device_attach(net_dev);
+	if (efx->state == STATE_NET_UP)
 		netif_carrier_on(net_dev);
-	} else {
-		netif_tx_stop_all_queues(net_dev);
+	else
 		netif_carrier_off(net_dev);
-	}
 	rtnl_unlock();
 
 	net_dev->netdev_ops = &efx_ef100_rep_netdev_ops;
@@ -306,6 +303,30 @@ static int efx_ef100_rep_tc_egdev_cb(enum tc_setup_type type, void *type_data,
 	}
 }
 #endif
+
+static int efx_ef100_lookup_client_id(struct efx_nic *efx, efx_qword_t pciefn,
+				      u32 *id)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CLIENT_HANDLE_OUT_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_CLIENT_HANDLE_IN_LEN);
+	u64 pciefn_flat = le64_to_cpu(pciefn.u64[0]);
+	size_t outlen;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, GET_CLIENT_HANDLE_IN_TYPE,
+		       MC_CMD_GET_CLIENT_HANDLE_IN_TYPE_FUNC);
+	MCDI_SET_QWORD(inbuf, GET_CLIENT_HANDLE_IN_FUNC,
+		       pciefn_flat);
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_CLIENT_HANDLE, inbuf,
+			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	*id = MCDI_DWORD(outbuf, GET_CLIENT_HANDLE_OUT_HANDLE);
+	return 0;
+}
 
 static int efx_ef100_configure_rep(struct efx_rep *efv)
 {

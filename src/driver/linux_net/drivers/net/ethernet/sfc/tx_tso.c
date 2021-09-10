@@ -99,11 +99,11 @@ static inline void prefetch_ptr(struct efx_tx_queue *tx_queue)
 	unsigned int insert_ptr = efx_tx_queue_get_insert_index(tx_queue);
 	char *ptr;
 
-	ptr = (char *)(tx_queue->buffer + insert_ptr);
+	ptr = (char *) (tx_queue->buffer + insert_ptr);
 	prefetch(ptr);
 	prefetch(ptr + 0x80);
 
-	ptr = (char *)(((efx_qword_t *)tx_queue->txd.addr) + insert_ptr);
+	ptr = (char *) (((efx_qword_t *)tx_queue->txd.buf.addr) + insert_ptr);
 	prefetch(ptr);
 	prefetch(ptr + 0x80);
 }

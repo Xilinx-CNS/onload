@@ -380,7 +380,8 @@ int efx_probe_rx_queue(struct efx_rx_queue *rx_queue)
 
 	netif_dbg(efx, probe, efx->net_dev,
 		  "creating RX queue %d size %#x mask %#x\n",
-		  efx_rx_queue_index(rx_queue), entries, rx_queue->ptr_mask);
+		  efx_rx_queue_index(rx_queue), efx->rxq_entries,
+		  rx_queue->ptr_mask);
 
 	/* Allocate RX buffers */
 	rx_queue->buffer = kcalloc(entries, sizeof(*rx_queue->buffer),
@@ -533,10 +534,6 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 	/* Set up RX descriptor ring */
 	rc = efx_nic_init_rx(rx_queue);
 
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	if (!rc)
-		rc = efx_ssr_init(rx_queue, efx);
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
 	if (rc)
 		xdp_rxq_info_unreg(&rx_queue->xdp_rxq_info);
@@ -552,10 +549,6 @@ void efx_fini_rx_queue(struct efx_rx_queue *rx_queue)
 
 	netif_dbg(rx_queue->efx, drv, rx_queue->efx->net_dev,
 		  "shutting down RX queue %d\n", efx_rx_queue_index(rx_queue));
-
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	efx_ssr_fini(rx_queue);
-#endif
 
 	efx_cancel_slow_fill(rx_queue);
 	if (rx_queue->grant_credits)
@@ -577,8 +570,7 @@ void efx_fini_rx_queue(struct efx_rx_queue *rx_queue)
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
-	if (xdp_rxq_info_is_reg(&rx_queue->xdp_rxq_info))
-		xdp_rxq_info_unreg(&rx_queue->xdp_rxq_info);
+	xdp_rxq_info_unreg(&rx_queue->xdp_rxq_info);
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 #if defined(CONFIG_XDP_SOCKETS)
@@ -1120,10 +1112,9 @@ out:
  * regardless of checksum state and skbs with a good checksum.
  */
 void
-efx_rx_packet_gro(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
+efx_rx_packet_gro(struct efx_channel *channel, struct efx_rx_buffer *rx_buf,
 		  unsigned int n_frags, u8 *eh, __wsum csum)
 {
-	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
 #if IS_ENABLED(CONFIG_VLAN_8021Q) || defined(CONFIG_SFC_TRACING)
 	struct efx_rx_buffer *head_buf = rx_buf;
 #endif
@@ -1133,6 +1124,9 @@ efx_rx_packet_gro(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
 
 	skb = napi_get_frags(napi);
 	if (unlikely(!skb)) {
+		struct efx_rx_queue *rx_queue;
+
+		rx_queue = efx_channel_get_rx_queue(channel);
 		efx_free_rx_buffers(rx_queue, rx_buf, n_frags);
 		return;
 	}
@@ -1162,15 +1156,15 @@ efx_rx_packet_gro(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
 		if (skb_shinfo(skb)->nr_frags == n_frags)
 			break;
 
-		rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
+		rx_buf = efx_rx_buf_next(&channel->rx_queue, rx_buf);
 	}
 
 	skb->data_len = skb->len;
 	skb->truesize += n_frags * efx->rx_buffer_truesize;
 
-	skb_record_rx_queue(skb, rx_queue->core_index);
+	skb_record_rx_queue(skb, channel->rx_queue.core_index);
 
-	skb_mark_napi_id(skb, napi);
+	skb_mark_napi_id(skb, &channel->napi_str);
 
 	efx_rx_skb_attach_timestamp(channel, skb,
 			eh - efx->type->rx_prefix_size);

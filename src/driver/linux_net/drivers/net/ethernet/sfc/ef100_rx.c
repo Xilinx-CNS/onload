@@ -48,7 +48,7 @@
 
 int ef100_rx_probe(struct efx_rx_queue *rx_queue)
 {
-	return ef100_alloc_qdma_buffer(rx_queue->efx, &rx_queue->rxd,
+	return ef100_alloc_qdma_buffer(rx_queue->efx, &rx_queue->rxd.buf,
 				       (rx_queue->ptr_mask + 1) *
 				       sizeof(efx_qword_t));
 }
@@ -85,7 +85,7 @@ static __wsum get_csum(u8 *va, u32 *prefix, bool csum_frame)
 	return (__force __wsum) ~ret16;
 }
 
-static bool check_fcs(struct efx_rx_queue *rx_queue, u32 *prefix)
+static bool check_fcs(struct efx_channel *channel, u32 *prefix)
 {
 	u16 fcsum;
 
@@ -96,16 +96,17 @@ static bool check_fcs(struct efx_rx_queue *rx_queue, u32 *prefix)
 		/* Everything is ok */
 		return 0;
 	} else if (fcsum == ESE_GZ_RH_HCLASS_L2_STATUS_FCS_ERR) {
-		rx_queue->n_rx_eth_crc_err++;
+		channel->n_rx_eth_crc_err++;
 	}
 
 	return 1;
 }
 
-void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
+void __ef100_rx_packet(struct efx_channel *channel)
 {
-	struct efx_rx_buffer *rx_buf = efx_rx_buf_pipe(rx_queue);
-	struct efx_nic *efx = rx_queue->efx;
+	struct efx_rx_buffer *rx_buf =
+		efx_rx_buffer(&channel->rx_queue, channel->rx_pkt_index);
+	struct efx_nic *efx = channel->efx;
 	struct ef100_nic_data *nic_data;
 	u8 *eh = efx_rx_buf_va(rx_buf);
 	__wsum csum = 0;
@@ -116,28 +117,21 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 #if 0	// Dump the RX prefix
 	{
 		netif_dbg(efx, drv, efx->net_dev, "rx prefix data@%d: %*ph\n",
-			  rx_queue->rx_pkt_index,
+			  channel->rx_pkt_index,
 			  ESE_GZ_RX_PKT_PREFIX_LEN, prefix);
 	}
 #endif
 
-	if (rx_queue->receive_raw) {
-		u32 mark = PREFIX_FIELD(prefix, USER_MARK);
-
-		if (rx_queue->receive_raw(rx_queue, mark))
-			return; /* packet was consumed */
-	}
-
-	if (check_fcs(rx_queue, prefix) &&
+	if (check_fcs(channel, prefix) &&
 	    unlikely(!(efx->net_dev->features & NETIF_F_RXALL)))
 		goto out;
 
 	rx_buf->len = le16_to_cpu((__force __le16) PREFIX_FIELD(prefix, LENGTH));
 	if (rx_buf->len <= sizeof(struct ethhdr)) {
 		if (net_ratelimit())
-			netif_err(efx, rx_err, efx->net_dev,
+			netif_err(channel->efx, rx_err, channel->efx->net_dev,
 				  "RX packet too small (%d)\n", rx_buf->len);
-		++rx_queue->n_rx_frm_trunc;
+		++channel->n_rx_frm_trunc;
 		goto out;
 	}
 
@@ -160,7 +154,8 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 			 * with the Rx buffer from PF point of view and should
 			 * free it.
 			 */
-			efx_free_rx_buffers(rx_queue, rx_buf, 1);
+			efx_free_rx_buffers(efx_channel_get_rx_queue(channel),
+					    rx_buf, 1);
 			goto out;
 		}
 		if (net_ratelimit())
@@ -170,18 +165,18 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 		/* TODO hook this up to SW stats reporting (when that's fully
 		 * implemented).
 		 */
-		rx_queue->n_rx_mport_bad++;
-		efx_free_rx_buffers(rx_queue, rx_buf, 1);
+		channel->n_rx_mport_bad++;
+		efx_free_rx_buffers(efx_channel_get_rx_queue(channel), rx_buf, 1);
 		goto out;
 	}
 
-	if (!efx_xdp_rx(efx, rx_queue, rx_buf, &eh))
+	if (!efx_xdp_rx(efx, channel, rx_buf, &eh))
 		goto out;
 
 	if (likely(efx->net_dev->features & NETIF_F_RXCSUM)) {
 		if (PREFIX_HCLASS_FIELD(prefix, NT_OR_INNER_L3_CLASS) ==
 		    ESE_GZ_RH_HCLASS_L3_CLASS_IP4BAD) {
-			++rx_queue->n_rx_ip_hdr_chksum_err;
+			++channel->n_rx_ip_hdr_chksum_err;
 		}
 #ifdef BUG85159_CSUM_FRAME
 		csum = get_csum(eh, prefix, true);
@@ -193,26 +188,29 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 		case ESE_GZ_RH_HCLASS_L4_CLASS_UDP:
 			if (PREFIX_HCLASS_FIELD(prefix, NT_OR_INNER_L4_CSUM) ==
 			    ESE_GZ_RH_HCLASS_L4_CSUM_BAD_OR_UNKNOWN)
-				++rx_queue->n_rx_tcp_udp_chksum_err;
+				++channel->n_rx_tcp_udp_chksum_err;
 			break;
 		}
 	}
 
-	if (rx_queue->receive_skb) {
+	if (channel->type->receive_skb) {
+		struct efx_rx_queue *rx_queue =
+			efx_channel_get_rx_queue(channel);
+
 		/* no support for special channels yet, so just discard */
 		WARN_ON_ONCE(1);
 		efx_free_rx_buffers(rx_queue, rx_buf, 1);
 		goto out;
 	}
 
-	efx_rx_packet_gro(rx_queue, rx_buf, rx_queue->rx_pkt_n_frags, eh, csum);
+	efx_rx_packet_gro(channel, rx_buf, channel->rx_pkt_n_frags, eh, csum);
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_NET_DEVICE_LAST_RX)
 	efx->net_dev->last_rx = jiffies;
 #endif
 
 out:
-	rx_queue->rx_pkt_n_frags = 0;
+	channel->rx_pkt_n_frags = 0;
 }
 
 static void ef100_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index)
@@ -235,24 +233,21 @@ static void ef100_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index)
 
 	efx_recycle_rx_pages(channel, rx_buf, 1);
 
-	efx_rx_flush_packet(rx_queue);
-	rx_queue->rx_pkt_n_frags = 1;
-	rx_queue->rx_pkt_index = index;
+	efx_rx_flush_packet(channel);
+	channel->rx_pkt_n_frags = 1;
+	channel->rx_pkt_index = index;
 }
 
 int efx_ef100_ev_rx(struct efx_channel *channel, const efx_qword_t *p_event)
 {
 	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
-	unsigned int n_packets = EFX_QWORD_FIELD(*p_event,
-						 ESF_GZ_EV_RXPKTS_NUM_PKT);
-	unsigned int label = EFX_QWORD_FIELD(*p_event,
-					     ESF_GZ_EV_RXPKTS_Q_LABEL);
+	unsigned int n_packets =
+		EFX_QWORD_FIELD(*p_event, ESF_GZ_EV_RXPKTS_NUM_PKT);
 	int i;
 
-	WARN_ON_ONCE(label != efx_rx_queue_index(rx_queue));
 	WARN_ON_ONCE(!n_packets);
 	if (n_packets > 1)
-		++rx_queue->n_rx_merge_events;
+		++channel->n_rx_merge_events;
 
 	channel->irq_mod_score += 2 * n_packets;
 
@@ -312,13 +307,10 @@ int efx_ef100_rx_defer_refill(struct efx_rx_queue *rx_queue)
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_DRIVER_EVENT_IN_LEN);
 	efx_qword_t *event = (efx_qword_t *)MCDI_PTR(inbuf, DRIVER_EVENT_IN_DATA);
 	size_t outlen;
-	u32 magic;
 
-	magic = EFX_EF100_DRVGEN_MAGIC(EFX_EF100_REFILL,
-				       efx_rx_queue_index(rx_queue));
 	EFX_POPULATE_QWORD_2(*event,
 			     ESF_GZ_E_TYPE, ESE_GZ_EF100_EV_DRIVER,
-			     ESF_GZ_DRIVER_DATA, magic);
+			     ESF_GZ_DRIVER_DATA, EFX_EF100_REFILL);
 
 	MCDI_SET_DWORD(inbuf, DRIVER_EVENT_IN_EVQ, channel->channel);
 

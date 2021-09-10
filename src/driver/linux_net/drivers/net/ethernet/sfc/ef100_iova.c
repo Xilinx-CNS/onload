@@ -202,9 +202,8 @@ void efx_ef100_delete_iova(struct ef100_vdpa_nic *vdpa_nic)
 				 __func__, iova_node->iova);
 #endif
 		}
-		if (vdpa_nic->domain)
-			iommu_unmap(vdpa_nic->domain, iova_node->iova,
-				    iova_node->size);
+		iommu_unmap(vdpa_nic->domain, iova_node->iova,
+			    iova_node->size);
 		rb_erase(node, iova_root);
 		kfree(iova_node);
 	}

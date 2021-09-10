@@ -14,10 +14,10 @@
 unsigned int efx_xdp_max_mtu(struct efx_nic *efx);
 int efx_xdp_setup_prog(struct efx_nic *efx, struct bpf_prog *prog);
 int efx_xdp(struct net_device *dev, struct netdev_bpf *xdp);
-int efx_xdp_rx(struct efx_nic *efx, struct efx_rx_queue *rx_queue,
+int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 	       struct efx_rx_buffer *rx_buf, u8 **ehp);
 #else
-static inline int efx_xdp_rx(struct efx_nic *efx, struct efx_rx_queue *rx_queue,
+static inline int efx_xdp_rx(struct efx_nic *efx, struct efx_channel *channel,
 			     struct efx_rx_buffer *rx_buf, u8 **ehp)
 {
 	return -ENOTSUPP;

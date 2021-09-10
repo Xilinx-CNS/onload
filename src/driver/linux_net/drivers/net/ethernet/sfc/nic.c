@@ -25,7 +25,7 @@
 #include "efx.h"
 #include "nic.h"
 #include "ef10_regs.h"
-#include "ef100_nic.h"
+#include "farch_regs.h"
 #include "io.h"
 #include "workarounds.h"
 #include "mcdi_pcol.h"
@@ -181,115 +181,29 @@ void efx_nic_fini_interrupt(struct efx_nic *efx)
 }
 
 #ifdef EFX_NOT_UPSTREAM
-static unsigned int
-efx_device_check_pcie_link(struct pci_dev *pdev, unsigned int *actual_width,
-			   unsigned int *max_width, unsigned int *actual_speed,
-			   unsigned int *nic_bandwidth)
-{
-	int cap = pci_find_capability(pdev, PCI_CAP_ID_EXP);
-	unsigned int nic_speed;
-	u16 lnksta;
-	u16 lnkcap;
-
-	*actual_speed = 0;
-	*actual_width = 0;
-	*max_width = 0;
-	*nic_bandwidth = 0;
-
-	if (!cap ||
-	    pci_read_config_word(pdev, cap + PCI_EXP_LNKSTA, &lnksta) ||
-	    pci_read_config_word(pdev, cap + PCI_EXP_LNKCAP, &lnkcap))
-		return 0;
-
-	*actual_width = (lnksta & PCI_EXP_LNKSTA_NLW) >>
-			__ffs(PCI_EXP_LNKSTA_NLW);
-
-	*max_width = (lnkcap & PCI_EXP_LNKCAP_MLW) >> __ffs(PCI_EXP_LNKCAP_MLW);
-	*actual_speed = (lnksta & PCI_EXP_LNKSTA_CLS);
-
-	nic_speed = 1;
-	if (lnkcap & PCI_EXP_LNKCAP_SLS_5_0GB)
-		nic_speed = 2;
-	/* PCIe Gen3 capabilities are in a different config word. */
-	if (!pci_read_config_word(pdev, cap + PCI_EXP_LNKCAP2, &lnkcap)) {
-		if (lnkcap & PCI_EXP_LNKCAP2_SLS_8_0GB)
-			nic_speed = 3;
-	}
-
-	*nic_bandwidth = *max_width << (nic_speed - 1);
-
-	return nic_speed;
-}
-
-/* Return the embedded PCI bridge device if it exists. If the PCI device has
- * been assigned to a virtual machine, the bridge will not be found so the
- * pcie link check is done with the NIC PCI device.
- */
-static struct pci_dev *efx_get_bridge_device(struct pci_dev *nic)
-{
-	struct pci_dev *pdev = NULL;
-	struct pci_dev *p = NULL;
-
-	/* Find PCI device bridging the NIC PCI bus.
-	 * First the bridge downstream port device.
-	 */
-	for_each_pci_dev(p) {
-		if (p->subordinate == nic->bus) {
-			/* Is this the EF100 embedded bridge downstream
-			 * port?
-			 */
-			if ((p->vendor != PCI_VENDOR_ID_XILINX) ||
-			    (p->device != EF100_BRIDGE_DOWNSTREAM_PCI_DEVICE))
-				return nic;
-			/* We got the downstream port. */
-			pdev = p;
-		}
-	}
-
-	/* This should never happen. */
-	if (!pdev)
-		return nic;
-
-	/* We got the embedded bridge downstream port. Let's get the upstream
-	 * port now which is the physical PCI link to the Host.
-	 */
-	p = NULL;
-	for_each_pci_dev(p) {
-		if (p->subordinate == pdev->bus) {
-			if ((p->vendor != PCI_VENDOR_ID_XILINX) ||
-			    (p->device != EF100_BRIDGE_UPSTREAM_PCI_DEVICE)) {
-				WARN_ON(1);
-				return nic;
-			}
-			/* We got the upstream port. This is the device we are
-			 * interested in.
-			 */
-			return p;
-		}
-	}
-	return nic;
-}
-
 void
 efx_nic_check_pcie_link(struct efx_nic *efx, unsigned int desired_bandwidth,
 			unsigned int *actual_width, unsigned int *actual_speed)
 {
-	struct pci_dev *pdev = efx->pci_dev;
+	int cap = pci_find_capability(efx->pci_dev, PCI_CAP_ID_EXP);
 	unsigned int nic_bandwidth;
 	unsigned int bandwidth;
 	unsigned int nic_width;
 	unsigned int nic_speed;
-	unsigned int width;
-	unsigned int speed;
+	unsigned int width = 0;
+	unsigned int speed = 0;
+	u16 lnksta;
+	u16 lnkcap;
 
-	if (efx_nic_rev(efx) == EFX_REV_EF100)
-		pdev = efx_get_bridge_device(efx->pci_dev);
-
-	nic_speed = efx_device_check_pcie_link(pdev, &width, &nic_width, &speed,
-					       &nic_bandwidth);
-
-	if(!nic_speed)
+	if (!cap ||
+	    pci_read_config_word(efx->pci_dev, cap + PCI_EXP_LNKSTA, &lnksta) ||
+	    pci_read_config_word(efx->pci_dev, cap + PCI_EXP_LNKCAP, &lnkcap))
 		goto out;
+
+	width = (lnksta & PCI_EXP_LNKSTA_NLW) >> __ffs(PCI_EXP_LNKSTA_NLW);
+	speed = (lnksta & PCI_EXP_LNKSTA_CLS);
+
+	nic_width = (lnkcap & PCI_EXP_LNKCAP_MLW) >> __ffs(PCI_EXP_LNKCAP_MLW);
 
 	if (width > nic_width)
 		netif_dbg(efx, drv, efx->net_dev,
@@ -298,7 +212,18 @@ efx_nic_check_pcie_link(struct efx_nic *efx, unsigned int desired_bandwidth,
 			  "otherwise it indicates a PCI problem.\n",
 			  width, nic_width);
 
+	nic_speed = 1;
+	if (lnkcap & PCI_EXP_LNKCAP_SLS_5_0GB)
+		nic_speed = 2;
+	/* PCIe Gen3 capabilities are in a different config word. */
+	if (!pci_read_config_word(efx->pci_dev,
+				  cap + PCI_EXP_LNKCAP2, &lnkcap)) {
+		if (lnkcap & PCI_EXP_LNKCAP2_SLS_8_0GB)
+			nic_speed = 3;
+	}
+
 	bandwidth = width << (speed - 1);
+	nic_bandwidth = nic_width << (nic_speed - 1);
 
 	if (desired_bandwidth > nic_bandwidth)
 		/* You can desire all you want, it ain't gonna happen. */
@@ -333,6 +258,10 @@ out:
 
 /* Register dump */
 
+#define REGISTER_REVISION_FA	1
+#define REGISTER_REVISION_FB	2
+#define REGISTER_REVISION_FC	3
+#define REGISTER_REVISION_FZ	3	/* last Falcon arch revision */
 #define REGISTER_REVISION_ED	4
 #define REGISTER_REVISION_EZ	4	/* latest EF10 revision */
 
@@ -346,9 +275,119 @@ struct efx_nic_reg {
 	REGISTER_REVISION_ ## arch ## min_rev,				\
 	REGISTER_REVISION_ ## arch ## max_rev				\
 }
+#define REGISTER_AA(name) REGISTER(name, F, A, A)
+#define REGISTER_AB(name) REGISTER(name, F, A, B)
+#define REGISTER_AZ(name) REGISTER(name, F, A, Z)
+#define REGISTER_BB(name) REGISTER(name, F, B, B)
+#define REGISTER_BZ(name) REGISTER(name, F, B, Z)
+#define REGISTER_CZ(name) REGISTER(name, F, C, Z)
 #define REGISTER_DZ(name) REGISTER(name, E, D, Z)
 
 static const struct efx_nic_reg efx_nic_regs[] = {
+	REGISTER_AZ(ADR_REGION),
+	REGISTER_AZ(INT_EN_KER),
+	REGISTER_BZ(INT_EN_CHAR),
+	REGISTER_AZ(INT_ADR_KER),
+	REGISTER_BZ(INT_ADR_CHAR),
+	/* INT_ACK_KER is WO */
+	/* INT_ISR0 is RC */
+	REGISTER_AZ(HW_INIT),
+	REGISTER_CZ(USR_EV_CFG),
+	REGISTER_AB(EE_SPI_HCMD),
+	REGISTER_AB(EE_SPI_HADR),
+	REGISTER_AB(EE_SPI_HDATA),
+	REGISTER_AB(EE_BASE_PAGE),
+	REGISTER_AB(EE_VPD_CFG0),
+	/* EE_VPD_SW_CNTL and EE_VPD_SW_DATA are not used */
+	/* PMBX_DBG_IADDR and PBMX_DBG_IDATA are indirect */
+	/* PCIE_CORE_INDIRECT is indirect */
+	REGISTER_AB(NIC_STAT),
+	REGISTER_AB(GPIO_CTL),
+	REGISTER_AB(GLB_CTL),
+	/* FATAL_INTR_KER and FATAL_INTR_CHAR are partly RC */
+	REGISTER_BZ(DP_CTRL),
+	REGISTER_AZ(MEM_STAT),
+	REGISTER_AZ(CS_DEBUG),
+	REGISTER_AZ(ALTERA_BUILD),
+	REGISTER_AZ(CSR_SPARE),
+	REGISTER_AB(PCIE_SD_CTL0123),
+	REGISTER_AB(PCIE_SD_CTL45),
+	REGISTER_AB(PCIE_PCS_CTL_STAT),
+	/* DEBUG_DATA_OUT is not used */
+	/* DRV_EV is WO */
+	REGISTER_AZ(EVQ_CTL),
+	REGISTER_AZ(EVQ_CNT1),
+	REGISTER_AZ(EVQ_CNT2),
+	REGISTER_AZ(BUF_TBL_CFG),
+	REGISTER_AZ(SRM_RX_DC_CFG),
+	REGISTER_AZ(SRM_TX_DC_CFG),
+	REGISTER_AZ(SRM_CFG),
+	/* BUF_TBL_UPD is WO */
+	REGISTER_AZ(SRM_UPD_EVQ),
+	REGISTER_AZ(SRAM_PARITY),
+	REGISTER_AZ(RX_CFG),
+	REGISTER_BZ(RX_FILTER_CTL),
+	/* RX_FLUSH_DESCQ is WO */
+	REGISTER_AZ(RX_DC_CFG),
+	REGISTER_AZ(RX_DC_PF_WM),
+	REGISTER_BZ(RX_RSS_TKEY),
+	/* RX_NODESC_DROP is RC */
+	REGISTER_AA(RX_SELF_RST),
+	/* RX_DEBUG, RX_PUSH_DROP are not used */
+	REGISTER_CZ(RX_RSS_IPV6_REG1),
+	REGISTER_CZ(RX_RSS_IPV6_REG2),
+	REGISTER_CZ(RX_RSS_IPV6_REG3),
+	/* TX_FLUSH_DESCQ is WO */
+	REGISTER_AZ(TX_DC_CFG),
+	REGISTER_AA(TX_CHKSM_CFG),
+	REGISTER_AZ(TX_CFG),
+	/* TX_PUSH_DROP is not used */
+	REGISTER_AZ(TX_RESERVED),
+	REGISTER_BZ(TX_PACE),
+	/* TX_PACE_DROP_QID is RC */
+	REGISTER_BB(TX_VLAN),
+	REGISTER_BZ(TX_IPFIL_PORTEN),
+	REGISTER_AB(MD_TXD),
+	REGISTER_AB(MD_RXD),
+	REGISTER_AB(MD_CS),
+	REGISTER_AB(MD_PHY_ADR),
+	REGISTER_AB(MD_ID),
+	/* MD_STAT is RC */
+	REGISTER_AB(MAC_STAT_DMA),
+	REGISTER_AB(MAC_CTRL),
+	REGISTER_BB(GEN_MODE),
+	REGISTER_AB(MAC_MC_HASH_REG0),
+	REGISTER_AB(MAC_MC_HASH_REG1),
+	REGISTER_AB(GM_CFG1),
+	REGISTER_AB(GM_CFG2),
+	/* GM_IPG and GM_HD are not used */
+	REGISTER_AB(GM_MAX_FLEN),
+	/* GM_TEST is not used */
+	REGISTER_AB(GM_ADR1),
+	REGISTER_AB(GM_ADR2),
+	REGISTER_AB(GMF_CFG0),
+	REGISTER_AB(GMF_CFG1),
+	REGISTER_AB(GMF_CFG2),
+	REGISTER_AB(GMF_CFG3),
+	REGISTER_AB(GMF_CFG4),
+	REGISTER_AB(GMF_CFG5),
+	REGISTER_BB(TX_SRC_MAC_CTL),
+	REGISTER_AB(XM_ADR_LO),
+	REGISTER_AB(XM_ADR_HI),
+	REGISTER_AB(XM_GLB_CFG),
+	REGISTER_AB(XM_TX_CFG),
+	REGISTER_AB(XM_RX_CFG),
+	REGISTER_AB(XM_MGT_INT_MASK),
+	REGISTER_AB(XM_FC),
+	REGISTER_AB(XM_PAUSE_TIME),
+	REGISTER_AB(XM_TX_PARAM),
+	REGISTER_AB(XM_RX_PARAM),
+	/* XM_MGT_INT_MSK (note no 'A') is RC */
+	REGISTER_AB(XX_PWR_RST),
+	REGISTER_AB(XX_SD_CTL),
+	REGISTER_AB(XX_TXDRV_CTL),
+	/* XX_PRBS_CTL, XX_PRBS_CHK and XX_PRBS_ERR are not used */
+	/* XX_CORE_STAT is partly RC */
 	REGISTER_DZ(BIU_HW_REV_ID),
 	REGISTER_DZ(MC_DB_LWRD),
 	REGISTER_DZ(MC_DB_HWRD),
@@ -372,9 +411,51 @@ struct efx_nic_reg_table {
 		arch, min_rev, max_rev,					\
 		arch ## R_ ## min_rev ## max_rev ## _ ## name ## _STEP,	\
 		arch ## R_ ## min_rev ## max_rev ## _ ## name ## _ROWS)
+#define REGISTER_TABLE_AA(name) REGISTER_TABLE(name, F, A, A)
+#define REGISTER_TABLE_AZ(name) REGISTER_TABLE(name, F, A, Z)
+#define REGISTER_TABLE_BB(name) REGISTER_TABLE(name, F, B, B)
+#define REGISTER_TABLE_BZ(name) REGISTER_TABLE(name, F, B, Z)
+#define REGISTER_TABLE_BB_CZ(name)					\
+	REGISTER_TABLE_DIMENSIONS(name, FR_BZ_ ## name, F, B, B,	\
+				  FR_BZ_ ## name ## _STEP,		\
+				  FR_BB_ ## name ## _ROWS),		\
+	REGISTER_TABLE_DIMENSIONS(name, FR_BZ_ ## name, F, C, Z,	\
+				  FR_BZ_ ## name ## _STEP,		\
+				  FR_CZ_ ## name ## _ROWS)
+#define REGISTER_TABLE_CZ(name) REGISTER_TABLE(name, F, C, Z)
 #define REGISTER_TABLE_DZ(name) REGISTER_TABLE(name, E, D, Z)
 
 static const struct efx_nic_reg_table efx_nic_reg_tables[] = {
+	/* DRIVER is not used */
+	/* EVQ_RPTR, TIMER_COMMAND, USR_EV and {RX,TX}_DESC_UPD are WO */
+	REGISTER_TABLE_BB(TX_IPFIL_TBL),
+	REGISTER_TABLE_BB(TX_SRC_MAC_TBL),
+	REGISTER_TABLE_AA(RX_DESC_PTR_TBL_KER),
+	REGISTER_TABLE_BB_CZ(RX_DESC_PTR_TBL),
+	REGISTER_TABLE_AA(TX_DESC_PTR_TBL_KER),
+	REGISTER_TABLE_BB_CZ(TX_DESC_PTR_TBL),
+	REGISTER_TABLE_AA(EVQ_PTR_TBL_KER),
+	REGISTER_TABLE_BB_CZ(EVQ_PTR_TBL),
+	/* We can't reasonably read all of the buffer table (up to 8MB!).
+	 * However this driver will only use a few entries.  Reading
+	 * 1K entries allows for some expansion of queue count and
+	 * size before we need to change the version. */
+	REGISTER_TABLE_DIMENSIONS(BUF_FULL_TBL_KER, FR_AA_BUF_FULL_TBL_KER,
+				  F, A, A, 8, 1024),
+	REGISTER_TABLE_DIMENSIONS(BUF_FULL_TBL, FR_BZ_BUF_FULL_TBL,
+				  F, B, Z, 8, 1024),
+	REGISTER_TABLE_CZ(RX_MAC_FILTER_TBL0),
+	REGISTER_TABLE_BB_CZ(TIMER_TBL),
+	REGISTER_TABLE_BB_CZ(TX_PACE_TBL),
+	REGISTER_TABLE_BZ(RX_INDIRECTION_TBL),
+	/* TX_FILTER_TBL0 is huge and not used by this driver */
+	REGISTER_TABLE_CZ(TX_MAC_FILTER_TBL0),
+	REGISTER_TABLE_CZ(MC_TREG_SMEM),
+	/* MSIX_PBA_TABLE is not mapped */
+	/* SRM_DBG is not mapped (and is redundant with BUF_FLL_TBL) */
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VMALLOC_REG_DUMP_BUF)
+	REGISTER_TABLE_BZ(RX_FILTER_TBL0),
+#endif
 	REGISTER_TABLE_DZ(BIU_MC_SFT_STATUS),
 };
 
@@ -431,6 +512,11 @@ void efx_nic_get_regs(struct efx_nic *efx, void *buf)
 			switch (table->step) {
 			case 4: /* 32-bit SRAM */
 				efx_readd(efx, buf, table->offset + 4 * i);
+				break;
+			case 8: /* 64-bit SRAM */
+				efx_sram_readq(efx,
+					       efx->membase + table->offset,
+					       buf, i);
 				break;
 			case 16: /* 128-bit-readable register */
 				efx_reado_table(efx, buf, table->offset, i);

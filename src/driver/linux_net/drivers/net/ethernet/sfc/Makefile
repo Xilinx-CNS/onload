@@ -39,7 +39,7 @@ export CONFIG_SFC_PTP := y
 export CONFIG_SFC_PPS := y
 export CONFIG_SFC_TRACING :=
 export CONFIG_SFC_MCDI_LOGGING := y
-export CONFIG_SFC_SIENA :=
+export CONFIG_SFC_SIENA := y
 export CONFIG_SFC_DRIVERLINK := m
 export CONFIG_SFC_AOE := $(subst m,y,$(CONFIG_SFC_DRIVERLINK))
 export CONFIG_SFC_BUSYPOLL := n
@@ -152,6 +152,7 @@ sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 
 sfc_driverlink-y	:= driverlink.o
 
+sfc-$(CONFIG_SFC_SIENA)	+= farch.o siena.o
 sfc-$(CONFIG_SFC_SRIOV)	+= sriov.o
 sfc-$(CONFIG_SFC_MCDI_MON) += mcdi_mon.o
 sfc-$(CONFIG_SFC_PTP)	+= ptp.o
@@ -180,9 +181,6 @@ endif # !EFX_UPSTREAM
 
 obj-$(CONFIG_SFC)	+= sfc.o
 obj-$(CONFIG_SFC_DRIVERLINK) += sfc_driverlink.o
-ifneq ($(CONFIG_SFC_SIENA),)
-obj-$(CONFIG_SFC_SIENA)	+= siena/
-endif
 
 #
 ifndef EFX_UPSTREAM
@@ -212,10 +210,7 @@ ifndef EFX_DISABLE_OVERLAY_TX_CSUM
 EXTRA_CFLAGS += -DEFX_USE_OVERLAY_TX_CSUM
 endif
 
-all_sfc_ko = $(subst .o,.ko,$(filter-out siena/,$(obj-m)))
-ifdef CONFIG_SFC_SIENA
-all_sfc_ko += siena/sfc-siena.ko
-endif
+all_sfc_ko = $(subst .o,.ko,$(obj-m))
 
 ifdef KERNELRELEASE
 TOPDIR = $(src)/../../../..
@@ -281,9 +276,6 @@ endif # EFX_NOT_EXPORTED
 modules_install :
 	mkdir -p $(INSTALL_MOD_PATH)/lib/modules/$(KVER)/$(INSTALL_MOD_DIR)
 	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd) INSTALL_MOD_DIR=$(INSTALL_MOD_DIR) modules_install
-ifneq ($(CONFIG_SFC_SIENA),)
-	$(MAKE) -C siena $@
-endif
 
 clean : clean_modules clean_tests
 
@@ -293,9 +285,6 @@ clean_tests:
 clean_modules :
 	rm -f *.o *.s *.ko *.mod.c *.symvers config.h autocompat.h .kpath
 	$(MAKE) -C $(KDIR) $(EXTRA_MAKEFLAGS) M=$$(pwd) clean
-ifneq ($(CONFIG_SFC_SIENA),)
-	! [ -d siena ] || $(MAKE) -C siena clean
-endif
 
 .PHONY : all modules modules_install clean clean_modules top FORCE
 
@@ -335,7 +324,6 @@ endif # EFX_NOT_EXPORTED
 # Export into kernel tree
 export:
 	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c)
-	$(MAKE) -C siena $@
 
 export-resolve-kcompat:
 	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c)

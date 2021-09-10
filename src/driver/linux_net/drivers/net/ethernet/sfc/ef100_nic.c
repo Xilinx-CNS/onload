@@ -300,7 +300,7 @@ int ef100_alloc_qdma_buffer(struct efx_nic *efx, struct efx_buffer *buffer,
 static int ef100_ev_probe(struct efx_channel *channel)
 {
 	/* Allocate an extra descriptor for the QMDA status completion entry */
-	return ef100_alloc_qdma_buffer(channel->efx, &channel->eventq,
+	return ef100_alloc_qdma_buffer(channel->efx, &channel->eventq.buf,
 				       (channel->eventq_mask + 2) *
 				       sizeof(efx_qword_t));
 }
@@ -393,12 +393,11 @@ static void efx_ef100_handle_driver_generated_event(struct efx_channel *channel,
 						    efx_qword_t *event)
 {
 	struct efx_nic *efx = channel->efx;
-	struct efx_rx_queue *rx_queue;
 	u32 subcode;
 
 	subcode = EFX_QWORD_FIELD(*event, EFX_DWORD_0);
 
-	switch (EFX_EF100_DRVGEN_CODE(subcode)) {
+	switch (subcode) {
 	case EFX_EF100_TEST:
 		netif_info(efx, drv, efx->net_dev,
 			   "Driver initiated event " EFX_QWORD_FMT "\n",
@@ -409,10 +408,7 @@ static void efx_ef100_handle_driver_generated_event(struct efx_channel *channel,
 		 * events, so efx_process_channel() won't refill the
 		 * queue. Refill it here
 		 */
-		efx_for_each_channel_rx_queue(rx_queue, channel)
-			if (EFX_EF100_DRVGEN_DATA(subcode) ==
-			    efx_rx_queue_index(rx_queue))
-				efx_fast_push_rx_descriptors(rx_queue, true);
+		efx_fast_push_rx_descriptors(&channel->rx_queue, true);
 		break;
 	default:
 		netif_err(efx, hw, efx->net_dev,
@@ -974,10 +970,9 @@ static void ef100_detach_remote_reps(struct efx_nic *efx)
 	assert_spin_locked(&nic_data->rem_reps_lock);
 	for (i = 0; i < nic_data->rem_rep_count; i++) {
 		rep_dev = nic_data->rem_rep[i];
-		netif_carrier_off(rep_dev);
 		/* See efx_device_detach_sync() */
 		netif_tx_lock_bh(rep_dev);
-		netif_tx_stop_all_queues(rep_dev);
+		netif_device_detach(rep_dev);
 		netif_tx_unlock_bh(rep_dev);
 	}
 }
@@ -990,10 +985,8 @@ static void ef100_attach_remote_reps(struct efx_nic *efx)
 	netif_dbg(efx, drv, efx->net_dev, "Attaching %d remote reps\n",
 		  nic_data->rem_rep_count);
 	assert_spin_locked(&nic_data->rem_reps_lock);
-	for (i = 0; i < nic_data->rem_rep_count; i++) {
-		netif_tx_wake_all_queues(nic_data->rem_rep[i]);
-		netif_carrier_on(nic_data->rem_rep[i]);
-	}
+	for (i = 0; i < nic_data->rem_rep_count; i++)
+		netif_device_attach(nic_data->rem_rep[i]);
 }
 
 void __ef100_detach_reps(struct efx_nic *efx)
@@ -1007,10 +1000,9 @@ void __ef100_detach_reps(struct efx_nic *efx)
 		  nic_data->vf_rep_count);
 	for (vf = 0; vf < nic_data->vf_rep_count; vf++) {
 		rep_dev = nic_data->vf_rep[vf];
-		netif_carrier_off(rep_dev);
 		/* See efx_device_detach_sync() */
 		netif_tx_lock_bh(rep_dev);
-		netif_tx_stop_all_queues(rep_dev);
+		netif_device_detach(rep_dev);
 		netif_tx_unlock_bh(rep_dev);
 	}
 #endif
@@ -1036,10 +1028,8 @@ void __ef100_attach_reps(struct efx_nic *efx)
 
 	netif_dbg(efx, drv, efx->net_dev, "Attaching %d vfreps\n",
 		  nic_data->vf_rep_count);
-	for (vf = 0; vf < nic_data->vf_rep_count; vf++) {
-		netif_tx_wake_all_queues(nic_data->vf_rep[vf]);
-		netif_carrier_on(nic_data->vf_rep[vf]);
-	}
+	for (vf = 0; vf < nic_data->vf_rep_count; vf++)
+		netif_device_attach(nic_data->vf_rep[vf]);
 #endif
 }
 
@@ -1054,12 +1044,38 @@ static void ef100_attach_reps(struct efx_nic *efx)
 	ef100_attach_remote_reps(efx);
 	spin_unlock_bh(&nic_data->rem_reps_lock);
 }
+
+void ef100_reps_set_link_state(struct efx_nic *efx, bool up)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	int i;
+
+	spin_lock_bh(&nic_data->vf_reps_lock);
+	for (i = 0; i < nic_data->vf_rep_count; i++)
+		if (up)
+			netif_carrier_on(nic_data->vf_rep[i]);
+		else
+			netif_carrier_off(nic_data->vf_rep[i]);
+	spin_unlock_bh(&nic_data->vf_reps_lock);
+
+	spin_lock_bh(&nic_data->rem_reps_lock);
+	for (i = 0; i < nic_data->rem_rep_count; i++)
+		if (up)
+			netif_carrier_on(nic_data->rem_rep[i]);
+		else
+			netif_carrier_off(nic_data->rem_rep[i]);
+	spin_unlock_bh(&nic_data->rem_reps_lock);
+}
 #else /* EFX_TC_OFFLOAD */
 void __ef100_detach_reps(struct efx_nic *efx)
 {
 }
 
 void __ef100_attach_reps(struct efx_nic *efx)
+{
+}
+
+void ef100_reps_set_link_state(struct efx_nic *efx, bool up)
 {
 }
 #endif
@@ -1688,29 +1704,6 @@ static bool ef100_mport_needs_rep(struct efx_nic *efx,
 }
 #endif
 
-int efx_ef100_lookup_client_id(struct efx_nic *efx, efx_qword_t pciefn, u32 *id)
-{
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_CLIENT_HANDLE_OUT_LEN);
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_CLIENT_HANDLE_IN_LEN);
-	u64 pciefn_flat = le64_to_cpu(pciefn.u64[0]);
-	size_t outlen;
-	int rc;
-
-	MCDI_SET_DWORD(inbuf, GET_CLIENT_HANDLE_IN_TYPE,
-		       MC_CMD_GET_CLIENT_HANDLE_IN_TYPE_FUNC);
-	MCDI_SET_QWORD(inbuf, GET_CLIENT_HANDLE_IN_FUNC,
-		       pciefn_flat);
-
-	rc = efx_mcdi_rpc(efx, MC_CMD_GET_CLIENT_HANDLE, inbuf,
-			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
-	if (rc)
-		return rc;
-	if (outlen < sizeof(outbuf))
-		return -EIO;
-	*id = MCDI_DWORD(outbuf, GET_CLIENT_HANDLE_OUT_HANDLE);
-	return 0;
-}
-
 int ef100_probe_netdev_pf(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
@@ -1914,7 +1907,6 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_packet = __ef100_rx_packet,
 	.rx_buf_hash_valid = ef100_rx_buf_hash_valid,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
-	.set_id_led = efx_mcdi_set_id_led,
 	.filter_table_probe = ef100_filter_table_init,
 	.filter_table_up = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
@@ -1935,9 +1927,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.regionmap_buffer = ef100_regionmap_buffer,
 #endif
 #endif
-#ifdef CONFIG_RFS_ACCEL
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
@@ -1960,7 +1950,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 
 	.reconfigure_mac = ef100_reconfigure_mac,
 	.reconfigure_port = efx_mcdi_port_reconfigure,
-	.test_nvram = efx_mcdi_nvram_test_all,
+	.test_nvram = efx_new_mcdi_nvram_test_all,
 	.describe_stats = ef100_describe_stats,
 	.update_stats = ef100_update_stats,
 	.pull_stats = ef100_pull_stats,
@@ -1987,6 +1977,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.get_remote_rep = ef100_get_remote_rep,
 	.detach_reps = ef100_detach_reps,
 	.attach_reps = ef100_attach_reps,
+	.reps_set_link_state = ef100_reps_set_link_state,
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
@@ -2072,9 +2063,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.regionmap_buffer = ef100_regionmap_buffer,
 #endif
 #endif
-#ifdef CONFIG_RFS_ACCEL
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
@@ -2090,7 +2079,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.rx_restore_rss_contexts = efx_mcdi_rx_restore_rss_contexts,
 
 	.reconfigure_mac = ef100_reconfigure_mac,
-	.test_nvram = efx_mcdi_nvram_test_all,
+	.test_nvram = efx_new_mcdi_nvram_test_all,
 	.describe_stats = ef100_describe_stats,
 	.update_stats = ef100_update_stats,
 	.pull_stats = ef100_pull_stats,

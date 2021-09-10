@@ -27,7 +27,7 @@
 int ef100_tx_probe(struct efx_tx_queue *tx_queue)
 {
 	/* Allocate an extra descriptor for the QMDA status completion entry */
-	return ef100_alloc_qdma_buffer(tx_queue->efx, &tx_queue->txd,
+	return ef100_alloc_qdma_buffer(tx_queue->efx, &tx_queue->txd.buf,
 				       (tx_queue->ptr_mask + 2) *
 				       sizeof(efx_oword_t));
 }
@@ -108,8 +108,8 @@ static bool ef100_tx_can_tso(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 static inline efx_oword_t *ef100_tx_desc(struct efx_tx_queue *tx_queue,
 					 unsigned int index)
 {
-	if (likely(tx_queue->txd.addr))
-		return ((efx_oword_t *)(tx_queue->txd.addr)) + index;
+	if (likely(tx_queue->txd.buf.addr))
+		return ((efx_oword_t *) (tx_queue->txd.buf.addr)) + index;
 	else
 		return NULL;
 }
@@ -383,9 +383,6 @@ static void ef100_tx_make_descriptors(struct efx_tx_queue *tx_queue,
 		/* if it's a raw write (such as XDP) then always SEND */
 		next_desc_type = skb ? ESE_GZ_TX_DESC_TYPE_SEG :
 				       ESE_GZ_TX_DESC_TYPE_SEND;
-		/* mark as an EFV buffer if applicable */
-		if (unlikely(efv))
-			buffer->flags |= EFX_TX_BUF_EFV;
 
 #if 0		/* Dump the TX descriptor */
 		netif_dbg(efx, tx_queued, efx->net_dev,
@@ -475,27 +472,12 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 	if (unlikely(efv)) {
 		struct efx_tx_buffer *buffer = __efx_tx_queue_get_insert_buffer(tx_queue);
 
-		/* Drop representor packets if the queue is stopped.
-		 * We currently don't assert backoff to representors so this is
-		 * to make sure representor traffic can't starve the main
-		 * net device.
-		 * Also drop representor traffic if it could cause us to
-		 * stop the queue. If we assert backoff and we haven't
-		 * received traffic on the main net device recently then the
-		 * TX watchdog can go off erroneously.
-		 * And, of course, if there are no TX descriptors left.
-		 */
-		fill_level = efx_channel_tx_fill_level(tx_queue->channel);
-		fill_level += efx->type->tx_max_skb_descs(efx);
-		if (netif_tx_queue_stopped(tx_queue->core_txq) ||
-		    fill_level > efx->txq_stop_thresh ||
-		    unlikely(efx_tx_buffer_in_use(buffer))) {
+		if (unlikely(efx_tx_buffer_in_use(buffer))) {
 			atomic64_inc(&efv->stats.tx_errors);
 			rc = -ENOSPC;
 			goto err;
 		}
-
-		buffer->flags = EFX_TX_BUF_OPTION | EFX_TX_BUF_EFV;
+		buffer->flags = EFX_TX_BUF_OPTION;
 		tx_queue->insert_count++;
 	}
 
@@ -509,11 +491,6 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 
 	fill_level = efx_channel_tx_fill_level(tx_queue->channel);
 	if (fill_level > efx->txq_stop_thresh) {
-		/* Because of checks above, representor traffic should
-		 * not be able to stop the queue.
-		 */
-		WARN_ON(efv);
-
 		netif_tx_stop_queue(tx_queue->core_txq);
 		/* Re-read after a memory barrier in case we've raced with
 		 * the completion path. Otherwise there's a danger we'll never
@@ -525,11 +502,7 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 			netif_tx_start_queue(tx_queue->core_txq);
 	}
 
-	if (unlikely(efv))
-		/* always push for representor traffic */
-		tx_queue->xmit_pending = false;
-	else if (__netdev_tx_sent_queue(tx_queue->core_txq, skb->len,
-					xmit_more))
+	if (__netdev_tx_sent_queue(tx_queue->core_txq, skb->len, xmit_more))
 		tx_queue->xmit_pending = false; /* push doorbell */
 	else if (tx_queue->write_count - tx_queue->notify_count > 255)
 		/* Ensure we never push more than 256 packets at once */

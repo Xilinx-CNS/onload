@@ -62,6 +62,12 @@ bool efx_mcdi_port_process_event(struct efx_channel *channel, efx_qword_t *event
 			  EFX_QWORD_VAL(*event));
 		efx_schedule_reset(efx, RESET_TYPE_DMA_ERROR);
 		return true;
+	case MCDI_EVENT_CODE_FLR:
+		if (efx->type->sriov_flr)
+			efx->type->sriov_flr(efx,
+					     MCDI_EVENT_FIELD(*event, FLR_VF));
+		return true;
+	case MCDI_EVENT_CODE_PTP_RX:
 	case MCDI_EVENT_CODE_PTP_FAULT:
 	case MCDI_EVENT_CODE_PTP_PPS:
 	case MCDI_EVENT_CODE_HW_PPS:

@@ -65,7 +65,7 @@ int efx_mcdi_alloc_vis(struct efx_nic *efx,
 
 int efx_mcdi_ev_probe(struct efx_channel *channel)
 {
-	return efx_nic_alloc_buffer(channel->efx, &channel->eventq,
+	return efx_nic_alloc_buffer(channel->efx, &channel->eventq.buf,
 				    (channel->eventq_mask + 1) *
 				    sizeof(efx_qword_t),
 				    GFP_KERNEL);
@@ -75,7 +75,7 @@ int efx_mcdi_ev_init(struct efx_channel *channel, bool v1_cut_thru, bool v2)
 {
 	efx_dword_t *inbuf = kzalloc(MC_CMD_INIT_EVQ_V2_IN_LENMAX, GFP_KERNEL);
         MCDI_DECLARE_BUF(outbuf, MC_CMD_INIT_EVQ_V2_OUT_LEN);
-	size_t entries = DIV_ROUND_UP(channel->eventq.len, EFX_BUF_SIZE);
+	size_t entries = DIV_ROUND_UP(channel->eventq.buf.len, EFX_BUF_SIZE);
 	struct efx_nic *efx = channel->efx;
 
 	size_t inlen, outlen;
@@ -87,7 +87,7 @@ int efx_mcdi_ev_init(struct efx_channel *channel, bool v1_cut_thru, bool v2)
 		return -ENOMEM;
 
 	/* Fill event queue with all ones (i.e. empty events) */
-	memset(channel->eventq.addr, 0xff, channel->eventq.len);
+	memset(channel->eventq.buf.addr, 0xff, channel->eventq.buf.len);
 
 	MCDI_SET_DWORD(inbuf, INIT_EVQ_IN_SIZE, channel->eventq_mask + 1);
 	MCDI_SET_DWORD(inbuf, INIT_EVQ_IN_INSTANCE, channel->channel);
@@ -134,7 +134,7 @@ int efx_mcdi_ev_init(struct efx_channel *channel, bool v1_cut_thru, bool v2)
 	if (efx->type->revision == EFX_REV_EF100)
 		entries = 1;	/* No need to split the memory up any more */
 
-	dma_addr = channel->eventq.dma_addr;
+	dma_addr = channel->eventq.buf.dma_addr;
 	for (i = 0; i < entries; ++i) {
 		MCDI_SET_ARRAY_QWORD(inbuf, INIT_EVQ_IN_DMA_ADDR, i, dma_addr);
 		dma_addr += EFX_BUF_SIZE;
@@ -158,7 +158,7 @@ int efx_mcdi_ev_init(struct efx_channel *channel, bool v1_cut_thru, bool v2)
 
 void efx_mcdi_ev_remove(struct efx_channel *channel)
 {
-	efx_nic_free_buffer(channel->efx, &channel->eventq);
+	efx_nic_free_buffer(channel->efx, &channel->eventq.buf);
 }
 
 void efx_mcdi_ev_fini(struct efx_channel *channel)
@@ -187,7 +187,7 @@ fail:
 int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool tso_v2)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_INIT_TXQ_EXT_IN_LEN);
-	size_t entries = DIV_ROUND_UP(tx_queue->txd.len, EFX_BUF_SIZE);
+	size_t entries = DIV_ROUND_UP(tx_queue->txd.buf.len, EFX_BUF_SIZE);
 	struct efx_channel *channel = tx_queue->channel;
 	struct efx_nic *efx = tx_queue->efx;
 	dma_addr_t dma_addr;
@@ -207,7 +207,7 @@ int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool tso_v2)
 	MCDI_SET_DWORD(inbuf, INIT_TXQ_EXT_IN_OWNER_ID, 0);
 	MCDI_SET_DWORD(inbuf, INIT_TXQ_EXT_IN_PORT_ID, efx->vport.vport_id);
 
-	dma_addr = tx_queue->txd.dma_addr;
+	dma_addr = tx_queue->txd.buf.dma_addr;
 	netif_dbg(efx, hw, efx->net_dev, "pushing TXQ %d. %zu entries (%llx)\n",
 		  tx_queue->queue, entries, (u64)dma_addr);
 
@@ -283,7 +283,7 @@ fail:
 
 int efx_mcdi_rx_probe(struct efx_rx_queue *rx_queue)
 {
-	return efx_nic_alloc_buffer(rx_queue->efx, &rx_queue->rxd,
+	return efx_nic_alloc_buffer(rx_queue->efx, &rx_queue->rxd.buf,
 				    (rx_queue->ptr_mask + 1) *
 				    sizeof(efx_qword_t),
 				    GFP_KERNEL);
@@ -293,7 +293,7 @@ int efx_mcdi_rx_init(struct efx_rx_queue *rx_queue, bool want_outer_classes)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_INIT_RXQ_V4_IN_LEN);
 	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
-	size_t entries = DIV_ROUND_UP(rx_queue->rxd.len, EFX_BUF_SIZE);
+	size_t entries = DIV_ROUND_UP(rx_queue->rxd.buf.len, EFX_BUF_SIZE);
 	struct efx_nic *efx = rx_queue->efx;
 	unsigned int buffer_size;
 	dma_addr_t dma_addr;
@@ -322,7 +322,7 @@ int efx_mcdi_rx_init(struct efx_rx_queue *rx_queue, bool want_outer_classes)
 	MCDI_SET_DWORD(inbuf, INIT_RXQ_IN_PORT_ID, efx->vport.vport_id);
 	MCDI_SET_DWORD(inbuf, INIT_RXQ_V4_IN_BUFFER_SIZE_BYTES, buffer_size);
 
-	dma_addr = rx_queue->rxd.dma_addr;
+	dma_addr = rx_queue->rxd.buf.dma_addr;
 	netif_dbg(efx, hw, efx->net_dev, "pushing RXQ %d. %zu entries (%llx)\n",
 			efx_rx_queue_index(rx_queue), entries, (u64)dma_addr);
 
@@ -341,7 +341,7 @@ int efx_mcdi_rx_init(struct efx_rx_queue *rx_queue, bool want_outer_classes)
 
 void efx_mcdi_rx_remove(struct efx_rx_queue *rx_queue)
 {
-	efx_nic_free_buffer(rx_queue->efx, &rx_queue->rxd);
+	efx_nic_free_buffer(rx_queue->efx, &rx_queue->rxd.buf);
 }
 
 void efx_mcdi_rx_fini(struct efx_rx_queue *rx_queue)

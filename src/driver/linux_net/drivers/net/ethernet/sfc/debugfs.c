@@ -203,20 +203,12 @@ int efx_debugfs_read_dword(struct seq_file *file, void *data)
 	return 0;
 }
 
+#ifdef EFX_NOT_UPSTREAM
 int efx_debugfs_read_u64(struct seq_file *file, void *data)
 {
 	unsigned long long value = *((u64 *) data);
 
 	seq_printf(file, "%llu\n", value);
-	return 0;
-}
-
-#ifdef CONFIG_SFC_VDPA
-int efx_debugfs_read_x64(struct seq_file *file, void *data)
-{
-	unsigned long long value = *((u64 *) data);
-
-	seq_printf(file, "0x%llx\n", value);
 	return 0;
 }
 #endif
@@ -426,6 +418,7 @@ static struct efx_debugfs_parameter efx_debugfs_port_parameters[] = {
 			    bool, efx_debugfs_read_bool),
 	EFX_NAMED_PARAMETER(link_speed, struct efx_nic, link_state.speed,
 			    unsigned int, efx_debugfs_read_uint),
+	EFX_BOOL_PARAMETER(struct efx_nic, unicast_filter),
 	EFX_U64_PARAMETER(struct efx_nic, loopback_modes),
 	EFX_LOOPBACK_MODE_PARAMETER(struct efx_nic, loopback_mode),
 	EFX_UINT_PARAMETER(struct efx_nic, phy_type),
@@ -488,23 +481,14 @@ void efx_trim_debugfs_port(struct efx_nic *efx,
 
 #ifdef CONFIG_SFC_VDPA
 
-/* vDPA device MAC address */
-static int efx_debugfs_read_vdpa_mac(struct seq_file *file, void *data)
-{
-        struct ef100_vdpa_nic *vdpa_nic =  data;
-
-        seq_printf(file, "%pM\n", vdpa_nic->mac_address);
-        return 0;
-}
-
 /* Per vdpa parameters */
 static struct efx_debugfs_parameter efx_debugfs_vdpa_parameters[] = {
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, vdpa_state),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, pf_index),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, vf_index),
-	EFX_X64_PARAMETER(struct ef100_vdpa_nic, features),
+	EFX_U64_PARAMETER(struct ef100_vdpa_nic, features),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, max_queue_pairs),
-	_EFX_RAW_PARAMETER(mac_address, efx_debugfs_read_vdpa_mac),
+	EFX_BOOL_PARAMETER(struct ef100_vdpa_nic, mac_configured),
 	{NULL},
 };
 
@@ -762,29 +746,7 @@ static struct efx_debugfs_parameter efx_debugfs_rx_queue_parameters[] = {
 	EFX_UINT_PARAMETER(struct efx_rx_queue, page_recycle_full),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, page_repost_count),
 #endif
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_merges),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_bursts),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_slow_start),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_misorder),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_too_many),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_new_stream),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_drop_idle),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, ssr.n_drop_closed),
-#endif
 	EFX_UINT_PARAMETER(struct efx_rx_queue, slow_fill_count),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_tobe_disc),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_ip_hdr_chksum_err),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_tcp_udp_chksum_err),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_outer_ip_hdr_chksum_err),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_outer_tcp_udp_chksum_err),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_inner_ip_hdr_chksum_err),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_inner_tcp_udp_chksum_err),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_eth_crc_err),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_mcast_mismatch),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_frm_trunc),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_overlength),
-	EFX_UINT_PARAMETER(struct efx_rx_queue, n_rx_nodesc_trunc),
 	{NULL},
 };
 
@@ -874,6 +836,29 @@ static struct efx_debugfs_parameter efx_debugfs_channel_parameters[] = {
 	EFX_INT_PARAMETER(struct efx_channel, irq),
 	EFX_UINT_PARAMETER(struct efx_channel, irq_moderation_us),
 	EFX_UINT_PARAMETER(struct efx_channel, eventq_read_ptr),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_tobe_disc),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_ip_hdr_chksum_err),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_tcp_udp_chksum_err),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_outer_ip_hdr_chksum_err),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_outer_tcp_udp_chksum_err),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_inner_ip_hdr_chksum_err),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_inner_tcp_udp_chksum_err),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_eth_crc_err),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_mcast_mismatch),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_frm_trunc),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_overlength),
+	EFX_UINT_PARAMETER(struct efx_channel, n_rx_nodesc_trunc),
+	EFX_UINT_PARAMETER(struct efx_channel, n_skbuff_leaks),
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
+	EFX_UINT_PARAMETER(struct efx_channel, ssr.n_merges),
+	EFX_UINT_PARAMETER(struct efx_channel, ssr.n_bursts),
+	EFX_UINT_PARAMETER(struct efx_channel, ssr.n_slow_start),
+	EFX_UINT_PARAMETER(struct efx_channel, ssr.n_misorder),
+	EFX_UINT_PARAMETER(struct efx_channel, ssr.n_too_many),
+	EFX_UINT_PARAMETER(struct efx_channel, ssr.n_new_stream),
+	EFX_UINT_PARAMETER(struct efx_channel, ssr.n_drop_idle),
+	EFX_UINT_PARAMETER(struct efx_channel, ssr.n_drop_closed),
+#endif
 	{NULL},
 };
 
@@ -952,6 +937,9 @@ static int efx_nic_debugfs_read_desc(struct seq_file *file, void *data)
 	uint8_t revision;
 
 	switch (efx_nic_rev(efx)) {
+	case EFX_REV_SIENA_A0:
+		rev_name = "Siena";
+		break;
 	case EFX_REV_HUNT_A0:
 		rev_name = "Huntington";
 		break;

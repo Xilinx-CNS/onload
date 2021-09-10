@@ -33,7 +33,7 @@ static u8 efx_mcdi_link_state_fcntl(struct efx_link_state *link_state)
 		return MC_CMD_FCNTL_RESPOND;
 	default:
 		WARN_ON_ONCE(1);
-		fallthrough;
+		/* fall through */
 	case 0:
 		return MC_CMD_FCNTL_OFF;
 	}
@@ -442,6 +442,27 @@ u32 efx_get_mcdi_phy_flags(struct efx_nic *efx)
 	return flags;
 }
 
+static u8 mcdi_to_ethtool_media(u32 media)
+{
+	switch (media) {
+	case MC_CMD_MEDIA_XAUI:
+	case MC_CMD_MEDIA_CX4:
+	case MC_CMD_MEDIA_KX4:
+		return PORT_OTHER;
+
+	case MC_CMD_MEDIA_XFP:
+	case MC_CMD_MEDIA_SFP_PLUS:
+	case MC_CMD_MEDIA_QSFP_PLUS:
+		return PORT_FIBRE;
+
+	case MC_CMD_MEDIA_BASE_T:
+		return PORT_TP;
+
+	default:
+		return PORT_OTHER;
+	}
+}
+
 void efx_mcdi_phy_decode_link(struct efx_nic *efx,
 			      struct efx_link_state *link_state,
 			      u32 speed, u32 flags, u32 fcntl,
@@ -460,7 +481,7 @@ void efx_mcdi_phy_decode_link(struct efx_nic *efx,
 		break;
 	default:
 		WARN_ON(1);
-		fallthrough;
+		/* fall through */
 	case MC_CMD_FCNTL_OFF:
 		link_state->fc = 0;
 		break;
@@ -602,6 +623,40 @@ bool efx_mcdi_phy_poll(struct efx_nic *efx)
 	return !efx_link_state_equal(&efx->link_state, &old_state);
 }
 
+void efx_mcdi_phy_get_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd)
+{
+	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_LP_ADVERTISING)
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_LINK_OUT_LEN);
+	int rc;
+#endif
+
+	ecmd->supported = mcdi_to_ethtool_cap(efx, phy_cfg->media,
+					      phy_cfg->supported_cap);
+	ecmd->advertising = efx->link_advertising[0];
+	ethtool_cmd_speed_set(ecmd, efx->link_state.speed);
+	ecmd->duplex = efx->link_state.fd;
+	ecmd->port = mcdi_to_ethtool_media(phy_cfg->media);
+	ecmd->phy_address = phy_cfg->port;
+	ecmd->transceiver = XCVR_INTERNAL;
+	ecmd->autoneg = !!(efx->link_advertising[0] & ADVERTISED_Autoneg);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_MDIO_SUPPORT)
+	ecmd->mdio_support = (efx->mdio.mode_support &
+			      (MDIO_SUPPORTS_C45 | MDIO_SUPPORTS_C22));
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_LP_ADVERTISING)
+	BUILD_BUG_ON(MC_CMD_GET_LINK_IN_LEN != 0);
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_LINK, NULL, 0,
+			  outbuf, sizeof(outbuf), NULL);
+	if (rc)
+		return;
+	ecmd->lp_advertising =
+		mcdi_to_ethtool_cap(efx, phy_cfg->media,
+				    MCDI_DWORD(outbuf, GET_LINK_OUT_LP_CAP));
+#endif
+}
+
 static u32 ethtool_speed_to_mcdi_cap(bool duplex, u32 speed)
 {
 	if (duplex) {
@@ -679,6 +734,51 @@ int efx_mcdi_phy_set_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd,
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
+void efx_mcdi_phy_get_ksettings(struct efx_nic *efx,
+				struct ethtool_link_ksettings *out)
+{
+	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_LINK_OUT_LEN);
+	struct ethtool_link_settings *base = &out->base;
+	int rc;
+
+	if (netif_carrier_ok(efx->net_dev)) {
+		base->speed = efx->link_state.speed;
+		base->duplex = efx->link_state.fd ? DUPLEX_FULL : DUPLEX_HALF;
+	} else {
+		base->speed = 0;
+		base->duplex = DUPLEX_UNKNOWN;
+	}
+	base->port = mcdi_to_ethtool_media(phy_cfg->media);
+	base->phy_address = phy_cfg->port;
+	base->autoneg = efx->link_advertising[0] & ADVERTISED_Autoneg ?
+							AUTONEG_ENABLE :
+							AUTONEG_DISABLE;
+	base->mdio_support = (efx->mdio.mode_support &
+			      (MDIO_SUPPORTS_C45 | MDIO_SUPPORTS_C22));
+	mcdi_to_ethtool_linkset(efx, phy_cfg->media, phy_cfg->supported_cap,
+				out->link_modes.supported);
+	memcpy(out->link_modes.advertising, efx->link_advertising,
+	       sizeof(__ETHTOOL_DECLARE_LINK_MODE_MASK()));
+
+	BUILD_BUG_ON(MC_CMD_GET_LINK_IN_LEN != 0);
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_LINK, NULL, 0,
+			  outbuf, sizeof(outbuf), NULL);
+	if (rc)
+		return;
+	mcdi_to_ethtool_linkset(efx, phy_cfg->media,
+				MCDI_DWORD(outbuf, GET_LINK_OUT_LP_CAP),
+				out->link_modes.lp_advertising);
+#ifdef EFX_HAVE_LINK_MODE_FEC_BITS
+	mcdi_fec_to_ethtool_linkset(MCDI_DWORD(outbuf, GET_LINK_OUT_CAP),
+				    out->link_modes.advertising);
+	mcdi_fec_to_ethtool_linkset(phy_cfg->supported_cap,
+				    out->link_modes.supported);
+	mcdi_fec_to_ethtool_linkset(MCDI_DWORD(outbuf, GET_LINK_OUT_LP_CAP),
+				    out->link_modes.lp_advertising);
+#endif
+}
+
 int efx_mcdi_phy_set_ksettings(struct efx_nic *efx,
 			       const struct ethtool_link_ksettings *settings,
 			       unsigned long *advertising)
@@ -905,6 +1005,10 @@ int efx_mcdi_set_mac(struct efx_nic *efx)
 
 	MCDI_SET_DWORD(cmdbytes, SET_MAC_IN_MTU, efx_calc_mac_mtu(efx));
 	MCDI_SET_DWORD(cmdbytes, SET_MAC_IN_DRAIN, 0);
+
+	/* Set simple MAC filter for Siena */
+	MCDI_POPULATE_DWORD_1(cmdbytes, SET_MAC_IN_REJECT,
+			      SET_MAC_IN_REJECT_UNCST, efx->unicast_filter);
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
 	forward_fcs = efx->forward_fcs;
@@ -1511,144 +1615,6 @@ static u32 efx_mcdi_phy_module_type(struct efx_nic *efx)
 		return 0;
 	}
 }
-
-static u8 efx_mcdi_phy_connector(struct efx_nic *efx)
-{
-	u8 connector;
-
-	switch (efx_mcdi_phy_module_type(efx)) {
-	case MC_CMD_MEDIA_SFP_PLUS:
-		/* SFP/SFP+ (SFF-8472). Connector type is page 0 byte 2 */
-		connector = efx_mcdi_phy_get_module_eeprom_byte(efx, 0, 2);
-		break;
-	case MC_CMD_MEDIA_QSFP_PLUS:
-		/* QSFP/QSFP+/QSFP28 (SFF-8636/SFF-8436)
-		 * Connector type is page 0 byte 130 (upper page 0 byte 2).
-		 */
-		connector = efx_mcdi_phy_get_module_eeprom_byte(efx, 0, 2);
-		break;
-	default:
-		connector = 0; /* unknown */
-		break;
-	}
-
-	/* Check connector type (SFF-8024 table 4-3). */
-	switch (connector) {
-	case 0x0b: /* Optical pigtail */
-		return PORT_FIBRE;
-	case 0x21: /* Copper pigtail */
-	case 0x23: /* No separable connector */
-		return PORT_DA;
-	case 0x22: /* RJ45 */
-		return PORT_TP;
-	default:
-		return PORT_OTHER;
-	}
-}
-
-static u8 mcdi_to_ethtool_media(struct efx_nic *efx)
-{
-	struct efx_mcdi_phy_data *phy_data = efx->phy_data;
-
-	switch (phy_data->media) {
-	case MC_CMD_MEDIA_XAUI:
-	case MC_CMD_MEDIA_CX4:
-	case MC_CMD_MEDIA_KX4:
-		return PORT_OTHER;
-
-	case MC_CMD_MEDIA_XFP:
-	case MC_CMD_MEDIA_SFP_PLUS:
-	case MC_CMD_MEDIA_QSFP_PLUS:
-		return efx_mcdi_phy_connector(efx);
-
-	case MC_CMD_MEDIA_BASE_T:
-		return PORT_TP;
-
-	default:
-		return PORT_OTHER;
-	}
-}
-
-void efx_mcdi_phy_get_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd)
-{
-	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_LP_ADVERTISING)
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_LINK_OUT_LEN);
-	int rc;
-#endif
-
-	ecmd->supported = mcdi_to_ethtool_cap(efx, phy_cfg->media,
-					      phy_cfg->supported_cap);
-	ecmd->advertising = efx->link_advertising[0];
-	ethtool_cmd_speed_set(ecmd, efx->link_state.speed);
-	ecmd->duplex = efx->link_state.fd;
-	ecmd->port = mcdi_to_ethtool_media(efx);
-	ecmd->phy_address = phy_cfg->port;
-	ecmd->transceiver = XCVR_INTERNAL;
-	ecmd->autoneg = !!(efx->link_advertising[0] & ADVERTISED_Autoneg);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_MDIO_SUPPORT)
-	ecmd->mdio_support = (efx->mdio.mode_support &
-			      (MDIO_SUPPORTS_C45 | MDIO_SUPPORTS_C22));
-#endif
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_LP_ADVERTISING)
-	BUILD_BUG_ON(MC_CMD_GET_LINK_IN_LEN != 0);
-	rc = efx_mcdi_rpc(efx, MC_CMD_GET_LINK, NULL, 0,
-			  outbuf, sizeof(outbuf), NULL);
-	if (rc)
-		return;
-	ecmd->lp_advertising =
-		mcdi_to_ethtool_cap(efx, phy_cfg->media,
-				    MCDI_DWORD(outbuf, GET_LINK_OUT_LP_CAP));
-#endif
-}
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
-void efx_mcdi_phy_get_ksettings(struct efx_nic *efx,
-				struct ethtool_link_ksettings *out)
-{
-	struct efx_mcdi_phy_data *phy_cfg = efx->phy_data;
-	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_LINK_OUT_LEN);
-	struct ethtool_link_settings *base = &out->base;
-	int rc;
-
-	if (netif_carrier_ok(efx->net_dev)) {
-		base->speed = efx->link_state.speed;
-		base->duplex = efx->link_state.fd ? DUPLEX_FULL : DUPLEX_HALF;
-	} else {
-		base->speed = 0;
-		base->duplex = DUPLEX_UNKNOWN;
-	}
-	base->port = mcdi_to_ethtool_media(efx);
-	base->phy_address = phy_cfg->port;
-	base->autoneg = efx->link_advertising[0] & ADVERTISED_Autoneg ?
-							AUTONEG_ENABLE :
-							AUTONEG_DISABLE;
-	base->mdio_support = (efx->mdio.mode_support &
-			      (MDIO_SUPPORTS_C45 | MDIO_SUPPORTS_C22));
-	mcdi_to_ethtool_linkset(efx, phy_cfg->media, phy_cfg->supported_cap,
-				out->link_modes.supported);
-	memcpy(out->link_modes.advertising, efx->link_advertising,
-	       sizeof(__ETHTOOL_DECLARE_LINK_MODE_MASK()));
-
-	BUILD_BUG_ON(MC_CMD_GET_LINK_IN_LEN != 0);
-	rc = efx_mcdi_rpc(efx, MC_CMD_GET_LINK, NULL, 0,
-			  outbuf, sizeof(outbuf), NULL);
-	if (rc)
-		return;
-	mcdi_to_ethtool_linkset(efx, phy_cfg->media,
-				MCDI_DWORD(outbuf, GET_LINK_OUT_LP_CAP),
-				out->link_modes.lp_advertising);
-#ifdef EFX_HAVE_LINK_MODE_FEC_BITS
-	mcdi_fec_to_ethtool_linkset(MCDI_DWORD(outbuf, GET_LINK_OUT_CAP),
-				    out->link_modes.advertising);
-	mcdi_fec_to_ethtool_linkset(phy_cfg->supported_cap,
-				    out->link_modes.supported);
-	mcdi_fec_to_ethtool_linkset(MCDI_DWORD(outbuf, GET_LINK_OUT_LP_CAP),
-				    out->link_modes.lp_advertising);
-#endif
-}
-#endif
 
 static
 int efx_mcdi_phy_get_module_eeprom_locked(struct efx_nic *efx,

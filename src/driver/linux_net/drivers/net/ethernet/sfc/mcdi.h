@@ -41,8 +41,6 @@ enum efx_mcdi_mode {
 #define MCDI_RPC_LONG_TIMEOUT  (60 * HZ)
 #define MCDI_RPC_POST_RST_TIME (10 * HZ)
 
-#define MCDI_BUF_LEN (8 + MCDI_CTL_SDU_LEN_MAX)
-
 /**
  * enum efx_mcdi_cmd_state - State for an individual MCDI command
  * @MCDI_STATE_QUEUED: Command not started
@@ -54,6 +52,8 @@ enum efx_mcdi_mode {
  * @MCDI_STATE_ABORT: Command has been completed or aborted. Used to resolve
  *		      race between completion in another threads and the worker.
  */
+
+#define MCDI_BUF_LEN (8 + MCDI_CTL_SDU_LEN_MAX)
 
 enum efx_mcdi_cmd_state {
 	/* waiting to run */
@@ -320,12 +320,6 @@ static inline void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_
 #define MCDI_STRUCT_SET_BYTE(_buf, _field, _value) do {			\
 	BUILD_BUG_ON(_field ## _LEN != 1);				\
 	*(u8 *)MCDI_STRUCT_PTR(_buf, _field) = _value;			\
-	} while (0)
-#define MCDI_STRUCT_POPULATE_BYTE_1(_buf, _field, _name, _value) do {	\
-	efx_dword_t _temp;						\
-	EFX_POPULATE_DWORD_1(_temp, _name, _value);			\
-	MCDI_STRUCT_SET_BYTE(_buf, _field,				\
-			     EFX_DWORD_FIELD(_temp, EFX_BYTE_0));	\
 	} while (0)
 #define MCDI_BYTE(_buf, _field)						\
 	((void)BUILD_BUG_ON_ZERO(MC_CMD_ ## _field ## _LEN != 1),	\
@@ -594,7 +588,6 @@ static inline void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_
 			      MCDI_CAPABILITY_OFST(field))
 
 void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len);
-void efx_mcdi_print_fw_bundle_ver(struct efx_nic *efx, char *buf, size_t len);
 int efx_mcdi_drv_attach(struct efx_nic *efx, u32 fw_variant, u32 *out_flags,
 			bool reattach);
 int efx_mcdi_drv_detach(struct efx_nic *efx);
@@ -655,7 +648,6 @@ enum efx_update_finish_mode {
 	EFX_UPDATE_FINISH_WAIT,
 	EFX_UPDATE_FINISH_BACKGROUND,
 	EFX_UPDATE_FINISH_POLL,
-	EFX_UPDATE_FINISH_ABORT,
 };
 
 int efx_mcdi_nvram_update_finish(struct efx_nic *efx, unsigned int type,

@@ -224,6 +224,12 @@ int efx_dl_register_driver(struct efx_dl_driver *driver)
 {
 	struct efx_dl_nic *nic;
 
+	if (!(driver->flags & EFX_DL_DRIVER_CHECKS_FALCON_RX_USR_BUF_SIZE)) {
+		pr_err("Efx driverlink: %s did not promise to check rx_usr_buf_size\n",
+		       driver->name);
+		return -EPERM;
+	}
+
 	if (driver->flags & EFX_DL_DRIVER_REQUIRES_MINOR_VER &&
 	    driver->minor_ver > EFX_DRIVERLINK_API_VERSION_MINOR) {
 		pr_err("Efx driverlink: %s requires API %d.%d, %s has %d.%d\n",

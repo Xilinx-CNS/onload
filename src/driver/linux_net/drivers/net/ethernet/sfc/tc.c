@@ -168,9 +168,7 @@ static s64 efx_tc_flower_external_mport(struct efx_nic *efx, int vport_id)
 struct efx_neigh_binder {
 	struct net *net;
 	__be32 dst_ip;
-#ifdef CONFIG_IPV6
 	struct in6_addr dst_ip6;
-#endif
 	char ha[ETH_ALEN];
 	bool n_valid;
 	rwlock_t lock;
@@ -207,12 +205,6 @@ const static struct rhashtable_params efx_tc_encap_ht_params = {
 	.key_len	= offsetofend(struct efx_tc_encap_action, key),
 	.key_offset	= 0,
 	.head_offset	= offsetof(struct efx_tc_encap_action, linkage),
-};
-
-const static struct rhashtable_params efx_tc_mac_ht_params = {
-	.key_len	= offsetofend(struct efx_tc_mac_pedit_action, h_addr),
-	.key_offset	= 0,
-	.head_offset	= offsetof(struct efx_tc_mac_pedit_action, linkage),
 };
 
 const static struct rhashtable_params efx_tc_encap_match_ht_params = {
@@ -309,9 +301,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 			  struct netlink_ext_ack *extack)
 {
 	struct efx_neigh_binder *neigh, *old;
-#ifdef CONFIG_IPV6
 	struct flowi6 flow6 = {};
-#endif
 	struct flowi4 flow4 = {};
 	int rc;
 
@@ -328,7 +318,6 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		flow4.daddr = encap->key.u.ipv4.dst;
 		flow4.saddr = encap->key.u.ipv4.src;
 		break;
-#ifdef CONFIG_IPV6
 	case EFX_ENCAP_TYPE_VXLAN | EFX_ENCAP_FLAG_IPV6:
 	case EFX_ENCAP_TYPE_GENEVE | EFX_ENCAP_FLAG_IPV6:
 		flow6.flowi6_proto = IPPROTO_UDP;
@@ -338,7 +327,6 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		flow6.daddr = encap->key.u.ipv6.dst;
 		flow6.saddr = encap->key.u.ipv6.src;
 		break;
-#endif
 	default:
 		EFX_TC_ERR_MSG(efx, extack, "Unsupported encap type");
 		return -EOPNOTSUPP;
@@ -349,9 +337,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		return -ENOMEM;
 	neigh->net = get_net(net);
 	neigh->dst_ip = flow4.daddr;
-#ifdef CONFIG_IPV6
 	neigh->dst_ip6 = flow6.daddr;
-#endif
 
 	old = rhashtable_lookup_get_insert_fast(&efx->tc->neigh_ht,
 						&neigh->linkage,
@@ -366,12 +352,11 @@ static int efx_bind_neigh(struct efx_nic *efx,
 		neigh = old;
 	} else {
 		/* New entry.  We need to initiate a lookup */
+		struct dst_entry *dst;
 		struct neighbour *n;
 		struct rtable *rt;
 
-#ifdef CONFIG_IPV6
 		if (encap->type & EFX_ENCAP_FLAG_IPV6) {
-			struct dst_entry *dst;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_IPV6_STUBS_DST_LOOKUP_FLOW)
 			dst = ipv6_stub->ipv6_dst_lookup_flow(net, NULL, &flow6,
 							      NULL);
@@ -388,7 +373,6 @@ static int efx_bind_neigh(struct efx_nic *efx,
 			n = dst_neigh_lookup(dst, &flow6.daddr);
 			dst_release(dst);
 		} else {
-#endif
 			rt = ip_route_output_key(net, &flow4);
 			if (IS_ERR_OR_NULL(rt)) {
 				rc = PTR_ERR(rt);
@@ -401,9 +385,7 @@ static int efx_bind_neigh(struct efx_nic *efx,
 			neigh->ttl = ip4_dst_hoplimit(&rt->dst);
 			n = dst_neigh_lookup(&rt->dst, &flow4.daddr);
 			ip_rt_put(rt);
-#ifdef CONFIG_IPV6
 		}
-#endif
 		if (!n) {
 			rc = -ENETUNREACH;
 			EFX_TC_ERR_MSG(efx, extack, "Failed to lookup neighbour for encap");
@@ -499,11 +481,9 @@ static int efx_neigh_event(struct efx_nic *efx, struct neighbour *n)
 	if (n->tbl == &arp_tbl) {
 		ipv = 4;
 		keysize = sizeof(keys.dst_ip);
-#ifdef CONFIG_IPV6
 	} else if (n->tbl == &nd_tbl) {
 		ipv = 6;
 		keysize = sizeof(keys.dst_ip6);
-#endif
 	} else {
 		return NOTIFY_DONE;
 	}
@@ -525,11 +505,9 @@ static int efx_neigh_event(struct efx_nic *efx, struct neighbour *n)
 	case 4:
 		memcpy(&keys.dst_ip, n->primary_key, n->tbl->key_len);
 		break;
-#ifdef CONFIG_IPV6
 	case 6:
 		memcpy(&keys.dst_ip6, n->primary_key, n->tbl->key_len);
 		break;
-#endif
 	default: /* can't happen */
 		return NOTIFY_DONE;
 	}
@@ -731,7 +709,6 @@ static void efx_gen_tun_header_ipv4(struct efx_tc_encap_action *encap, u8 ipprot
 	ip_send_check(ip);
 }
 
-#ifdef CONFIG_IPV6
 static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipproto, u8 len)
 {
 	struct efx_neigh_binder *neigh = encap->neigh;
@@ -749,7 +726,6 @@ static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipprot
 	ip->version = 0x6;
 	ip->payload_len = cpu_to_be16(len);
 }
-#endif
 
 static void efx_gen_tun_header_udp(struct efx_tc_encap_action *encap, u8 len)
 {
@@ -813,7 +789,6 @@ static void efx_gen_geneve_header_ipv4(struct efx_tc_encap_action *encap)
 	efx_gen_tun_header_geneve(encap);
 }
 
-#ifdef CONFIG_IPV6
 #define vxlan6_header_len	(sizeof(struct ethhdr) + sizeof(struct ipv6hdr) + vxlan_header_l4_len)
 static void efx_gen_vxlan_header_ipv6(struct efx_tc_encap_action *encap)
 {
@@ -833,7 +808,6 @@ static void efx_gen_geneve_header_ipv6(struct efx_tc_encap_action *encap)
 	efx_gen_tun_header_udp(encap, sizeof(struct genevehdr));
 	efx_gen_tun_header_geneve(encap);
 }
-#endif
 
 static void efx_gen_encap_header(struct efx_tc_encap_action *encap)
 {
@@ -851,14 +825,12 @@ static void efx_gen_encap_header(struct efx_tc_encap_action *encap)
 	case EFX_ENCAP_TYPE_GENEVE:
 		efx_gen_geneve_header_ipv4(encap);
 		break;
-#ifdef CONFIG_IPV6
 	case EFX_ENCAP_TYPE_VXLAN | EFX_ENCAP_FLAG_IPV6:
 		efx_gen_vxlan_header_ipv6(encap);
 		break;
 	case EFX_ENCAP_TYPE_GENEVE | EFX_ENCAP_FLAG_IPV6:
 		efx_gen_geneve_header_ipv6(encap);
 		break;
-#endif
 	default:
 		/* unhandled encap type, can't happen */
 		WARN_ON(1);
@@ -1056,56 +1028,6 @@ static void efx_tc_flower_release_encap_md(struct efx_nic *efx,
 	kfree(encap);
 }
 
-static struct efx_tc_mac_pedit_action *efx_tc_flower_get_mac(
-			struct efx_nic *efx, unsigned char h_addr[ETH_ALEN],
-			struct netlink_ext_ack *extack)
-{
-	struct efx_tc_mac_pedit_action *ped, *old;
-	int rc;
-
-	ped = kzalloc(sizeof(*ped), GFP_USER);
-	if (!ped)
-		return ERR_PTR(-ENOMEM);
-	memcpy(ped->h_addr, h_addr, ETH_ALEN);
-	old = rhashtable_lookup_get_insert_fast(&efx->tc->mac_ht,
-						&ped->linkage,
-						efx_tc_mac_ht_params);
-	if (old) {
-		/* don't need our new entry */
-		kfree(ped);
-		if (!refcount_inc_not_zero(&old->ref))
-			return ERR_PTR(-EAGAIN);
-		/* existing entry found, ref taken */
-		return old;
-	}
-
-	rc = efx_mae_allocate_pedit_mac(efx, ped);
-	if (rc < 0) {
-		EFX_TC_ERR_MSG(efx, extack, "Failed to store pedit MAC address in hw");
-		goto out_remove;
-	}
-
-	/* ref and return */
-	refcount_set(&ped->ref, 1);
-	return ped;
-out_remove:
-	rhashtable_remove_fast(&efx->tc->mac_ht, &ped->linkage,
-			       efx_tc_mac_ht_params);
-	kfree(ped);
-	return ERR_PTR(rc);
-}
-
-static void efx_tc_flower_put_mac(struct efx_nic *efx,
-				  struct efx_tc_mac_pedit_action *ped)
-{
-	if (!refcount_dec_and_test(&ped->ref))
-		return; /* still in use */
-	rhashtable_remove_fast(&efx->tc->mac_ht, &ped->linkage,
-			       efx_tc_mac_ht_params);
-	efx_mae_free_pedit_mac(efx, ped);
-	kfree(ped);
-}
-
 static void efx_tc_free_action_set(struct efx_nic *efx,
 				   struct efx_tc_action_set *act, bool in_hw)
 {
@@ -1126,10 +1048,6 @@ static void efx_tc_free_action_set(struct efx_nic *efx,
 		list_del(&act->encap_user);
 		efx_tc_flower_release_encap_md(efx, act->encap_md);
 	}
-	if (act->src_mac)
-		efx_tc_flower_put_mac(efx, act->src_mac);
-	if (act->dst_mac)
-		efx_tc_flower_put_mac(efx, act->dst_mac);
 	kfree(act);
 }
 
@@ -1281,14 +1199,6 @@ static void efx_tc_encap_free(void *ptr, void *__unused)
 	kfree(enc);
 }
 
-static void efx_tc_mac_free(void *ptr, void *__unused)
-{
-	struct efx_tc_mac_pedit_action *ped = ptr;
-
-	WARN_ON(refcount_read(&ped->ref));
-	kfree(ped);
-}
-
 static void efx_tc_encap_match_free(void *ptr, void *__unused)
 {
 	struct efx_tc_encap_match *encap = ptr;
@@ -1415,25 +1325,22 @@ static int efx_tc_probe_channel(struct efx_channel *channel)
 
 static int efx_tc_start_channel(struct efx_channel *channel)
 {
-	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
 	struct efx_nic *efx = channel->efx;
 
-	return efx_mae_start_counters(efx, rx_queue);
+	return efx_mae_start_counters(efx, channel);
 }
 
 static void efx_tc_stop_channel(struct efx_channel *channel)
 {
-	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
 	struct efx_nic *efx = channel->efx;
 	int rc;
 
-	rc = efx_mae_stop_counters(efx, rx_queue);
+	flush_work(&channel->rx_queue.grant_work);
+	rc = efx_mae_stop_counters(efx, channel);
 	if (rc)
 		netif_warn(efx, drv, efx->net_dev,
 			   "Failed to stop MAE counters streaming, rc=%d.\n",
 			   rc);
-	rx_queue->grant_credits = false;
-	flush_work(&rx_queue->grant_work);
 }
 
 static void efx_tc_remove_channel(struct efx_channel *channel)
@@ -1482,7 +1389,7 @@ static void efx_tc_counter_work(struct work_struct *work)
 }
 
 static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
-				  u64 packets, u64 bytes, u32 mark)
+				  u64 packets, u64 bytes)
 {
 	struct efx_tc_counter *cnt;
 
@@ -1508,31 +1415,16 @@ static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
 	}
 
 	spin_lock_bh(&cnt->lock);
-	if ((s32)mark - (s32)cnt->gen < 0) {
-		/* This counter update packet is from before the counter was
-		 * allocated; thus it must be for a previous counter with
-		 * the same ID that has since been freed, and it should be
-		 * ignored.
-		 */
-	} else {
-		/* Update latest seen generation count.  This ensures that
-		 * even a long-lived counter won't start getting ignored if
-		 * the generation count wraps around, unless it somehow
-		 * manages to go 1<<31 generations without an update.
-		 */
-		cnt->gen = mark;
-		/* update counter values */
-		cnt->packets += packets;
-		cnt->bytes += bytes;
-		cnt->touched = jiffies;
-	}
+	cnt->packets += packets;
+	cnt->bytes += bytes;
+	cnt->touched = jiffies;
 	spin_unlock_bh(&cnt->lock);
 	schedule_work(&cnt->work);
 out:
 	rcu_read_unlock();
 }
 
-static void efx_tc_rx_version_1(struct efx_nic *efx, const u8 *data, u32 mark)
+static void efx_tc_rx_version_1(struct efx_nic *efx, const u8 *data)
 {
 	u16 seq_index, n_counters, i;
 
@@ -1559,7 +1451,7 @@ static void efx_tc_rx_version_1(struct efx_nic *efx, const u8 *data, u32 mark)
 			       ((u64)le16_to_cpu(*(const __le16 *)(entry + 8)) << 32);
 		byte_count = le16_to_cpu(*(const __le16 *)(entry + 10)) |
 			     ((u64)le32_to_cpu(*(const __le32 *)(entry + 12)) << 16);
-		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count, mark);
+		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count);
 	}
 }
 
@@ -1589,7 +1481,7 @@ static u64 efx_tc_read48(const __le16 *field)
 	return out;
 }
 
-static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data, u32 mark)
+static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data)
 {
 	u8 payload_offset, header_offset, ident;
 	u16 n_counters, i;
@@ -1643,29 +1535,29 @@ static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data, u32 mark)
 		BUILD_BUG_ON(ERF_SC_PACKETISER_PAYLOAD_BYTE_COUNT_LBN & 15);
 		byte_count = efx_tc_read48((const __le16 *)byte_count_p);
 
-		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count, mark);
+		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count);
 	}
 }
 
 /* We always swallow the packet, whether successful or not, since it's not
- * a network packet and shouldn't ever be forwarded to the stack.
- * @mark is the generation count for counter allocations.
+ * a network packet and shouldn't ever be forwarded to the stack
  */
-static bool efx_tc_rx(struct efx_rx_queue *rx_queue, u32 mark)
+static bool efx_tc_rx(struct efx_channel *channel)
 {
-	struct efx_rx_buffer *rx_buf = efx_rx_buf_pipe(rx_queue);
+	struct efx_rx_buffer *rx_buf = efx_rx_buffer(&channel->rx_queue,
+						     channel->rx_pkt_index);
 	const u8 *data = efx_rx_buf_va(rx_buf);
-	struct efx_nic *efx = rx_queue->efx;
+	struct efx_nic *efx = channel->efx;
 	u8 version;
 
 	/* version is always first byte of packet */
 	version = *data;
 	switch (version) {
 	case 1:
-		efx_tc_rx_version_1(efx, data, mark);
+		efx_tc_rx_version_1(efx, data);
 		break;
 	case ERF_SC_PACKETISER_HEADER_VERSION_VALUE: // 2
-		efx_tc_rx_version_2(efx, data, mark);
+		efx_tc_rx_version_2(efx, data);
 		break;
 	default:
 		if (net_ratelimit())
@@ -1676,26 +1568,9 @@ static bool efx_tc_rx(struct efx_rx_queue *rx_queue, u32 mark)
 		break;
 	}
 
-	/* Update seen_gen unconditionally, to avoid a missed wakeup if
-	 * we race with efx_mae_stop_counters().
-	 */
-	efx->tc->seen_gen = mark;
-	if (efx->tc->flush_counters && (s32)(efx->tc->flush_gen - mark) <= 0)
-		wake_up(&efx->tc->flush_wq);
-
-	efx_free_rx_buffers(rx_queue, rx_buf, 1);
-	rx_queue->rx_pkt_n_frags = 0;
+	efx_free_rx_buffers(&channel->rx_queue, rx_buf, 1);
+	channel->rx_pkt_n_frags = 0;
 	return true;
-}
-
-static const char *efx_tc_get_queue_name(struct efx_channel *channel, bool tx)
-{
-	(void)channel;
-
-	if (tx)
-		return "counter_unused";
-	else
-		return "counter_updates";
 }
 
 static const struct efx_channel_type efx_tc_channel_type = {
@@ -1705,10 +1580,10 @@ static const struct efx_channel_type efx_tc_channel_type = {
 	.stop			= efx_tc_stop_channel,
 	.post_remove		= efx_tc_remove_channel,
 	.get_name		= efx_tc_get_channel_name,
+	/* no copy operation; there is no need to reallocate this channel */
 	.receive_raw		= efx_tc_rx,
 	.keep_eventq		= true,
 	.hide_tx		= true,
-	.get_queue_name		= efx_tc_get_queue_name,
 };
 
 int efx_init_struct_tc(struct efx_nic *efx)
@@ -1724,51 +1599,47 @@ int efx_init_struct_tc(struct efx_nic *efx)
 	efx->tc->caps = kzalloc(sizeof(struct mae_caps), GFP_KERNEL);
 	if (!efx->tc->caps) {
 		rc = -ENOMEM;
-		goto fail_alloc_caps;
+		goto fail0;
 	}
 	INIT_LIST_HEAD(&efx->tc->block_list);
 
 	mutex_init(&efx->tc->mutex);
-	init_waitqueue_head(&efx->tc->flush_wq);
 
 	rc = rhashtable_init(&efx->tc->neigh_ht, &efx_neigh_ht_params);
 	if (rc < 0)
-		goto fail_neigh_ht;
+		goto fail1;
 	rc = rhashtable_init(&efx->tc->counter_id_ht, &efx_tc_counter_id_ht_params);
 	if (rc < 0)
-		goto fail_counter_id_ht;
+		goto fail2;
 	rc = rhashtable_init(&efx->tc->counter_ht, &efx_tc_counter_ht_params);
 	if (rc < 0)
-		goto fail_counter_ht;
+		goto fail3;
 	rc = rhashtable_init(&efx->tc->encap_ht, &efx_tc_encap_ht_params);
 	if (rc < 0)
-		goto fail_encap_ht;
-	rc = rhashtable_init(&efx->tc->mac_ht, &efx_tc_mac_ht_params);
-	if (rc < 0)
-		goto fail_mac_ht;
+		goto fail4;
 	rc = rhashtable_init(&efx->tc->encap_match_ht, &efx_tc_encap_match_ht_params);
 	if(rc < 0)
-		goto fail_encap_match_ht;
+		goto fail5;
 	rc = rhashtable_init(&efx->tc->match_action_ht, &efx_tc_match_action_ht_params);
 	if (rc < 0)
-		goto fail_match_action_ht;
+		goto fail6;
 	rc = rhashtable_init(&efx->tc->lhs_rule_ht, &efx_tc_lhs_rule_ht_params);
 	if (rc < 0)
-		goto fail_lhs_rule_ht;
+		goto fail7;
 	rc = rhashtable_init(&efx->tc->ctr_agg_ht, &efx_tc_ctr_agg_ht_params);
 	if (rc < 0)
-		goto fail_ctr_agg_ht;
+		goto fail8;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	rc = rhashtable_init(&efx->tc->ct_zone_ht, &efx_tc_ct_zone_ht_params);
 	if (rc < 0)
-		goto fail_ct_zone_ht;
+		goto fail9;
 	rc = rhashtable_init(&efx->tc->ct_ht, &efx_tc_ct_ht_params);
 	if (rc < 0)
-		goto fail_ct_ht;
+		goto fail10;
 #endif
 	rc = rhashtable_init(&efx->tc->recirc_ht, &efx_tc_recirc_ht_params);
 	if (rc < 0)
-		goto fail_recirc_ht;
+		goto fail11;
 	ida_init(&efx->tc->recirc_ida);
 	efx->tc->reps_filter_uc = -1;
 	efx->tc->reps_filter_mc = -1;
@@ -1780,43 +1651,41 @@ int efx_init_struct_tc(struct efx_nic *efx)
 					 GFP_KERNEL);
 	rc = -ENOMEM;
 	if (!efx->tc->dflt_rules)
-		goto fail_alloc_dflt;
+		goto fail12;
 	for (i = 0; i < EFX_TC_DFLT__MAX; i++) {
 		efx->tc->dflt_rules[i].fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
 		efx->tc->dflt_rules[i].cookie = i;
 	}
 	efx->extra_channel_type[EFX_EXTRA_CHANNEL_TC] = &efx_tc_channel_type;
 	return 0;
-fail_alloc_dflt:
+fail12:
 	ida_destroy(&efx->tc->recirc_ida);
 	rhashtable_destroy(&efx->tc->recirc_ht);
-fail_recirc_ht:
+fail11:
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	rhashtable_destroy(&efx->tc->ct_ht);
-fail_ct_ht:
+fail10:
 	rhashtable_destroy(&efx->tc->ct_zone_ht);
-fail_ct_zone_ht:
+fail9:
 #endif
 	rhashtable_destroy(&efx->tc->ctr_agg_ht);
-fail_ctr_agg_ht:
+fail8:
 	rhashtable_destroy(&efx->tc->lhs_rule_ht);
-fail_lhs_rule_ht:
+fail7:
 	rhashtable_destroy(&efx->tc->match_action_ht);
-fail_match_action_ht:
+fail6:
 	rhashtable_destroy(&efx->tc->encap_match_ht);
-fail_encap_match_ht:
-	rhashtable_destroy(&efx->tc->mac_ht);
-fail_mac_ht:
+fail5:
 	rhashtable_destroy(&efx->tc->encap_ht);
-fail_encap_ht:
+fail4:
 	rhashtable_destroy(&efx->tc->counter_id_ht);
-fail_counter_id_ht:
+fail3:
 	rhashtable_destroy(&efx->tc->counter_ht);
-fail_counter_ht:
+fail2:
 	rhashtable_destroy(&efx->tc->neigh_ht);
-fail_neigh_ht:
+fail1:
 	kfree(efx->tc->caps);
-fail_alloc_caps:
+fail0:
 	kfree(efx->tc);
 	efx->tc = NULL;
 	return rc;
@@ -1844,7 +1713,6 @@ void efx_fini_struct_tc(struct efx_nic *efx)
 	rhashtable_free_and_destroy(&efx->tc->match_action_ht, efx_tc_flow_free,
 				    efx);
 	rhashtable_free_and_destroy(&efx->tc->encap_match_ht, efx_tc_encap_match_free, NULL);
-	rhashtable_free_and_destroy(&efx->tc->mac_ht, efx_tc_mac_free, NULL);
 	rhashtable_free_and_destroy(&efx->tc->encap_ht, efx_tc_encap_free, NULL);
 	rhashtable_free_and_destroy(&efx->tc->counter_id_ht, efx_tc_counter_id_free, NULL);
 	rhashtable_free_and_destroy(&efx->tc->counter_ht, efx_tc_counter_free, NULL);
@@ -2033,13 +1901,10 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 	if (ipv == 4) {
 		MAP_KEY_AND_MASK(IPV4_ADDRS, ipv4_addrs, src, src_ip);
 		MAP_KEY_AND_MASK(IPV4_ADDRS, ipv4_addrs, dst, dst_ip);
-	}
-#ifdef CONFIG_IPV6
-	else if (ipv == 6) {
+	} else if (ipv == 6) {
 		MAP_KEY_AND_MASK(IPV6_ADDRS, ipv6_addrs, src, src_ip6);
 		MAP_KEY_AND_MASK(IPV6_ADDRS, ipv6_addrs, dst, dst_ip6);
 	}
-#endif
 	MAP_KEY_AND_MASK(PORTS, ports, src, l4_sport);
 	MAP_KEY_AND_MASK(PORTS, ports, dst, l4_dport);
 	MAP_KEY_AND_MASK(TCP, tcp, flags, tcp_flags);
@@ -2066,14 +1931,12 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 			MAP_ENC_KEY_AND_MASK(IPV4_ADDRS, ipv4_addrs, enc_ipv4_addrs,
 					     dst, enc_dst_ip);
 			break;
-#ifdef CONFIG_IPV6
 		case FLOW_DISSECTOR_KEY_IPV6_ADDRS:
 			MAP_ENC_KEY_AND_MASK(IPV6_ADDRS, ipv6_addrs, enc_ipv6_addrs,
 					     src, enc_src_ip6);
 			MAP_ENC_KEY_AND_MASK(IPV6_ADDRS, ipv6_addrs, enc_ipv6_addrs,
 					     dst, enc_dst_ip6);
 			break;
-#endif
 		default:
 			efx_tc_err(efx, "Unsupported enc addr_type %u\n",
 				   fm.key->addr_type);
@@ -2130,12 +1993,10 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 }
 #undef MAP_KEY_AND_MASK
 
-#ifdef CONFIG_IPV6
 static bool efx_ipv6_addr_all_ones(struct in6_addr *addr)
 {
 	return !memchr_inv(addr, 0xff, sizeof(*addr));
 }
-#endif
 
 static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 					    struct efx_tc_match *match,
@@ -2161,16 +2022,12 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			efx_tc_err(efx, "Egress encap match is not exact on src IP address\n");
 			return -EOPNOTSUPP;
 		}
-#ifdef CONFIG_IPV6
 		if (!ipv6_addr_any(&match->mask.enc_dst_ip6) ||
 		    !ipv6_addr_any(&match->mask.enc_src_ip6)) {
 			efx_tc_err(efx, "Egress encap match on both IPv4 and IPv6, don't understand\n");
 			return -EOPNOTSUPP;
 		}
-#endif
-	}
-#ifdef CONFIG_IPV6
-	else {
+	} else {
 		ipv = 6;
 		if (!efx_ipv6_addr_all_ones(&match->mask.enc_dst_ip6)) {
 			efx_tc_err(efx, "Egress encap match is not exact on dst IP address\n");
@@ -2181,7 +2038,6 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			return -EOPNOTSUPP;
 		}
 	}
-#endif
 	if (!IS_ALL_ONES(match->mask.enc_dport)) {
 		efx_tc_err(efx, "Egress encap match is not exact on dst UDP port\n");
 		return -EOPNOTSUPP;
@@ -2215,12 +2071,10 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 		encap->src_ip = match->value.enc_src_ip;
 		encap->dst_ip = match->value.enc_dst_ip;
 		break;
-#ifdef CONFIG_IPV6
 	case 6:
 		encap->src_ip6 = match->value.enc_src_ip6;
 		encap->dst_ip6 = match->value.enc_dst_ip6;
 		break;
-#endif
 	default: /* can't happen */
 		netif_err(efx, hw, efx->net_dev, "Egress encap match is IP version %d, huh?\n", ipv);
 		kfree(encap);
@@ -2250,12 +2104,10 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			snprintf(buf, sizeof(buf), "%pI4->%pI4",
 				 &encap->src_ip, &encap->dst_ip);
 			break;
-#ifdef CONFIG_IPV6
 		case 6:
 			snprintf(buf, sizeof(buf), "%pI6c->%pI6c",
 				 &encap->src_ip6, &encap->dst_ip6);
 			break;
-#endif
 		default: /* can't happen */
 			snprintf(buf, sizeof(buf), "[IP version %d, huh?]", ipv);
 			break;
@@ -2290,16 +2142,12 @@ static void efx_tc_flower_release_encap_match(struct efx_nic *efx,
 	if (!refcount_dec_and_test(&encap->ref))
 		return; /* still in use */
 
-#ifdef CONFIG_IPV6
 	if (encap->src_ip | encap->dst_ip)
-#endif
 		snprintf(buf, sizeof(buf), "%pI4->%pI4",
 			 &encap->src_ip, &encap->dst_ip);
-#ifdef CONFIG_IPV6
 	else
 		snprintf(buf, sizeof(buf), "%pI6c->%pI6c",
 			 &encap->src_ip6, &encap->dst_ip6);
-#endif
 	rc = efx_mae_unregister_encap_match(efx, encap);
 	if (rc)
 		/* Display message but carry on and remove entry from our
@@ -2340,12 +2188,11 @@ static const char *efx_tc_encap_type_names[] = {
 	[EFX_ENCAP_TYPE_GENEVE] = "geneve",
 };
 
-/* For details of action order constraints refer to SF-123102-TC-1§12.6.1 */
 enum efx_tc_action_order {
 	EFX_TC_AO_DECAP,
-	EFX_TC_AO_PEDIT_MAC_ADDRS,
 	EFX_TC_AO_VLAN1_POP,
 	EFX_TC_AO_VLAN0_POP,
+	EFX_TC_AO_PEDIT,
 	EFX_TC_AO_VLAN0_PUSH,
 	EFX_TC_AO_VLAN1_PUSH,
 	EFX_TC_AO_COUNT,
@@ -2360,37 +2207,35 @@ static bool efx_tc_flower_action_order_ok(const struct efx_tc_action_set *act,
 	case EFX_TC_AO_DECAP:
 		if (act->decap)
 			return false;
-		/* PEDIT_MAC_ADDRS must not happen before DECAP, though it
-		 * can wait until much later
-		 */
-		if (act->src_mac || act->dst_mac)
-			return false;
-		fallthrough;
+		/* fall through */
 	case EFX_TC_AO_VLAN0_POP:
 		if (act->vlan_pop & 1)
 			return false;
-		fallthrough;
+		/* fall through */
 	case EFX_TC_AO_VLAN1_POP:
 		if (act->vlan_pop & 2)
 			return false;
-		fallthrough;
+		/* fall through */
+	case EFX_TC_AO_PEDIT:
+		if (act->pedit_md)
+			return false;
+		/* fall through */
 	case EFX_TC_AO_VLAN0_PUSH:
 		if (act->vlan_push & 1)
 			return false;
-		fallthrough;
+		/* fall through */
 	case EFX_TC_AO_VLAN1_PUSH:
 		if (act->vlan_push & 2)
 			return false;
-		fallthrough;
+		/* fall through */
 	case EFX_TC_AO_COUNT:
 		if (act->count)
 			return false;
-		fallthrough;
-	case EFX_TC_AO_PEDIT_MAC_ADDRS:
+		/* fall through */
 	case EFX_TC_AO_ENCAP:
 		if (act->encap_md)
 			return false;
-		fallthrough;
+		/* fall through */
 	case EFX_TC_AO_DELIVER:
 		return !act->deliver;
 	default:
@@ -2859,9 +2704,7 @@ static int efx_tc_ct_parse_match(struct efx_nic *efx, struct flow_rule *fr,
 			return -EOPNOTSUPP;
 		}
 		conn->dst_ip = fm.key->dst;
-	}
-#ifdef CONFIG_IPV6
-	else if (ipv == 6 && flow_rule_match_key(fr, FLOW_DISSECTOR_KEY_IPV6_ADDRS)) {
+	} else if (ipv == 6 && flow_rule_match_key(fr, FLOW_DISSECTOR_KEY_IPV6_ADDRS)) {
 		struct flow_match_ipv6_addrs fm;
 
 		flow_rule_match_ipv6_addrs(fr, &fm);
@@ -2877,9 +2720,7 @@ static int efx_tc_ct_parse_match(struct efx_nic *efx, struct flow_rule *fr,
 			return -EOPNOTSUPP;
 		}
 		conn->dst_ip6 = fm.key->dst;
-	}
-#endif
-	else {
+	} else {
 		efx_tc_err(efx, "Conntrack missing IPv%hhu addrs\n", ipv);
 		return -EOPNOTSUPP;
 	}
@@ -3194,8 +3035,6 @@ static struct efx_tc_ct_zone *efx_tc_ct_register_zone(struct efx_nic *efx,
 		netif_dbg(efx, drv, efx->net_dev, "Found existing ct_zone for %u\n", zone);
 		return old;
 	}
-	ct_zone->nf_ft = ct_ft;
-	ct_zone->efx = efx;
 	rc = nf_flow_table_offload_add_cb(ct_ft, efx_tc_flow_block, ct_zone);
 	netif_dbg(efx, drv, efx->net_dev, "Adding new ct_zone for %u, rc %d\n", zone, rc);
 	if (rc < 0) {
@@ -3204,6 +3043,8 @@ static struct efx_tc_ct_zone *efx_tc_ct_register_zone(struct efx_nic *efx,
 		kfree(ct_zone);
 		return ERR_PTR(rc);
 	}
+	ct_zone->nf_ft = ct_ft;
+	ct_zone->efx = efx;
 	refcount_set(&ct_zone->ref, 1);
 	return ct_zone;
 }
@@ -3412,126 +3253,6 @@ release:
 	return rc;
 }
 
-struct efx_tc_mangler_state {
-	u8 dst_mac_32:1; /* eth->h_dest[0:3] */
-	u8 dst_mac_16:1; /* eth->h_dest[4:5] */
-	u8 src_mac_16:1; /* eth->h_source[0:1] */
-	u8 src_mac_32:1; /* eth->h_source[2:5] */
-	unsigned char dst_mac[ETH_ALEN];
-	unsigned char src_mac[ETH_ALEN];
-};
-
-static int efx_tc_complete_mac_mangle(struct efx_nic *efx,
-				      struct efx_tc_action_set *act,
-				      struct efx_tc_mangler_state *mung,
-				      struct netlink_ext_ack *extack)
-{
-	struct efx_tc_mac_pedit_action *ped;
-
-	if (mung->dst_mac_32 && mung->dst_mac_16) {
-		ped = efx_tc_flower_get_mac(efx, mung->dst_mac, extack);
-		if (IS_ERR(ped))
-			return PTR_ERR(ped);
-		act->dst_mac = ped;
-		/* consume the incomplete state */
-		mung->dst_mac_32 = 0;
-		mung->dst_mac_16 = 0;
-	}
-	if (mung->src_mac_16 && mung->src_mac_32) {
-		ped = efx_tc_flower_get_mac(efx, mung->src_mac, extack);
-		if (IS_ERR(ped))
-			return PTR_ERR(ped);
-		act->src_mac = ped;
-		/* consume the incomplete state */
-		mung->src_mac_32 = 0;
-		mung->src_mac_16 = 0;
-	}
-	return 0;
-}
-
-static int efx_tc_mangle(struct efx_nic *efx, struct efx_tc_action_set *act,
-			 const struct flow_action_entry *fa,
-			 struct efx_tc_mangler_state *mung,
-			 struct netlink_ext_ack *extack)
-{
-	__le32 mac32;
-	__le16 mac16;
-
-	switch (fa->mangle.htype) {
-	case FLOW_ACT_MANGLE_HDR_TYPE_ETH:
-		BUILD_BUG_ON(offsetof(struct ethhdr, h_dest) != 0);
-		BUILD_BUG_ON(offsetof(struct ethhdr, h_source) != 6);
-		switch (fa->mangle.offset) {
-		case 0:
-			if (fa->mangle.mask) {
-				NL_SET_ERR_MSG_MOD(extack, "Unsupported mask for eth.h_dest mangle");
-				efx_tc_err(efx, "Unsupported: mask (%#x) of eth.dst32 mangle\n",
-					   fa->mangle.mask);
-				return -EOPNOTSUPP;
-			}
-			/* Ethernet address is little-endian */
-			mac32 = cpu_to_le32(fa->mangle.val);
-			memcpy(mung->dst_mac, &mac32, sizeof(mac32));
-			mung->dst_mac_32 = 1;
-			return efx_tc_complete_mac_mangle(efx, act, mung, extack);
-		case 4:
-			if (fa->mangle.mask == 0xffff) {
-				mac16 = cpu_to_le16(fa->mangle.val >> 16);
-				memcpy(mung->src_mac, &mac16, sizeof(mac16));
-				mung->src_mac_16 = 1;
-			} else if (fa->mangle.mask == 0xffff0000) {
-				mac16 = cpu_to_le16((u16)fa->mangle.val);
-				memcpy(mung->dst_mac + 4, &mac16, sizeof(mac16));
-				mung->dst_mac_16 = 1;
-			} else {
-				NL_SET_ERR_MSG_MOD(extack, "Unsupported mask for eth mangle");
-				efx_tc_err(efx, "Unsupported: mask (%#x) of eth+4 mangle is not high or low 16b\n",
-					   fa->mangle.mask);
-				return -EOPNOTSUPP;
-			}
-			return efx_tc_complete_mac_mangle(efx, act, mung, extack);
-		case 8:
-			if (fa->mangle.mask) {
-				NL_SET_ERR_MSG_MOD(extack, "Unsupported mask for eth.h_source mangle");
-				efx_tc_err(efx, "Unsupported: mask (%#x) of eth.src32 mangle\n",
-					   fa->mangle.mask);
-				return -EOPNOTSUPP;
-			}
-			mac32 = cpu_to_le32(fa->mangle.val);
-			memcpy(mung->src_mac + 2, &mac32, sizeof(mac32));
-			mung->src_mac_32 = 1;
-			return efx_tc_complete_mac_mangle(efx, act, mung, extack);
-		default:
-			NL_SET_ERR_MSG_MOD(extack, "Unsupported offset for ethhdr mangle");
-			efx_tc_err(efx, "Unsupported: mangle eth+%u %x/%x\n",
-				   fa->mangle.offset, fa->mangle.val, fa->mangle.mask);
-			return -EOPNOTSUPP;
-		}
-		break;
-	default:
-		NL_SET_ERR_MSG_MOD(extack, "Unsupported header type for mangle");
-		efx_tc_err(efx, "Unhandled mangle htype %u for action rule\n",
-			   fa->mangle.htype);
-		return -EOPNOTSUPP;
-	}
-	return 0;
-}
-
-static int efx_tc_incomplete_mangle(struct efx_nic *efx,
-				    struct efx_tc_mangler_state *mung,
-				    struct netlink_ext_ack *extack)
-{
-	if (mung->dst_mac_32 || mung->dst_mac_16) {
-		EFX_TC_ERR_MSG(efx, extack, "Incomplete pedit of dest MAC address");
-		return -EOPNOTSUPP;
-	}
-	if (mung->src_mac_16 || mung->src_mac_32) {
-		EFX_TC_ERR_MSG(efx, extack, "Incomplete pedit of source MAC address");
-		return -EOPNOTSUPP;
-	}
-	return 0;
-}
-
 static int efx_tc_flower_replace(struct efx_nic *efx,
 				 struct net_device *net_dev,
 				 struct flow_cls_offload *tc,
@@ -3549,7 +3270,6 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 #endif
 	const struct ip_tunnel_info *encap_info = NULL;
 	struct efx_tc_flow_rule *rule = NULL, *old;
-	struct efx_tc_mangler_state mung = {};
 	struct efx_tc_action_set *act = NULL;
 	const struct flow_action_entry *fa;
 	struct efx_tc_recirc_id *rid;
@@ -3889,16 +3609,6 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 			act->vlan_tci[depth] = cpu_to_be16(tci);
 			act->vlan_proto[depth] = fa->vlan.proto;
 			break;
-		case FLOW_ACTION_MANGLE:
-			if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_PEDIT_MAC_ADDRS)) {
-				rc = -EOPNOTSUPP;
-				EFX_TC_ERR_MSG(efx, extack, "Pedit action violates action order");
-				goto release;
-			}
-			rc = efx_tc_mangle(efx, act, fa, &mung, extack);
-			if (rc < 0)
-				goto release;
-			break;
 		case FLOW_ACTION_TUNNEL_ENCAP:
 			if (encap_info) {
 				/* Can't specify encap multiple times.
@@ -3959,9 +3669,6 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 			goto release;
 		}
 	}
-	rc = efx_tc_incomplete_mangle(efx, &mung, extack);
-	if (rc < 0)
-		goto release;
 	if (act) {
 		/* Not shot/redirected, so deliver to default dest */
 		switch (vport_id) {
@@ -4666,17 +4373,13 @@ static void efx_tc_debugfs_dump_encap_match(struct seq_file *file,
 					    struct efx_tc_encap_match *encap)
 {
 	seq_printf(file, "\tencap_match (%#x)\n", encap->fw_id);
-#ifdef CONFIG_IPV6
 	if (encap->src_ip | encap->dst_ip) {
-#endif
 		seq_printf(file, "\t\tsrc_ip = %pI4\n", &encap->src_ip);
 		seq_printf(file, "\t\tdst_ip = %pI4\n", &encap->dst_ip);
-#ifdef CONFIG_IPV6
 	} else {
 		seq_printf(file, "\t\tsrc_ip6 = %pI6c\n", &encap->src_ip6);
 		seq_printf(file, "\t\tdst_ip6 = %pI6c\n", &encap->dst_ip6);
 	}
-#endif
 	seq_printf(file, "\t\tudp_dport = %u\n", be16_to_cpu(encap->udp_dport));
 	if (encap->tun_type < ARRAY_SIZE(efx_tc_encap_type_names))
 		seq_printf(file, "\t\ttun_type = %s\n",
@@ -4803,26 +4506,22 @@ static void efx_tc_debugfs_dump_match(struct seq_file *file,
 		seq_printf(file, "\tip_firstfrag = %d\n", match->value.ip_firstfrag);
 	DUMP_FMT_AMP_MATCH(src_ip, "%pI4");
 	DUMP_FMT_AMP_MATCH(dst_ip, "%pI4");
-#ifdef CONFIG_IPV6
 	DUMP_FMT_PTR_MATCH(src_ip6, "%pI6");
 	DUMP_FMT_PTR_MATCH(dst_ip6, "%pI6");
-#endif
 	DUMP_ONE_MATCH(l4_sport);
 	DUMP_ONE_MATCH(l4_dport);
 	DUMP_ONE_MATCH(tcp_flags);
 	DUMP_FMT_AMP_MATCH(enc_src_ip, "%pI4");
 	DUMP_FMT_AMP_MATCH(enc_dst_ip, "%pI4");
-#ifdef CONFIG_IPV6
 	DUMP_FMT_PTR_MATCH(enc_src_ip6, "%pI6c");
 	DUMP_FMT_PTR_MATCH(enc_dst_ip6, "%pI6c");
-#endif
 	DUMP_ONE_MATCH(enc_ip_tos);
 	DUMP_ONE_MATCH(enc_ip_ttl);
 	DUMP_ONE_MATCH(enc_sport);
 	DUMP_ONE_MATCH(enc_dport);
 	DUMP_ONE_MATCH(enc_keyid);
 	efx_tc_debugfs_dump_ct_bits(file, match);
-	DUMP_FMT_MATCH(ct_mark, "%#010x");
+	DUMP_ONE_MATCH(ct_mark);
 	DUMP_ONE_MATCH(recirc_id);
 #undef DUMP_ONE_MATCH
 #undef DUMP_FMT_MATCH
@@ -4848,18 +4547,8 @@ static void efx_tc_debugfs_dump_one_rule(struct seq_file *file,
 			seq_printf(file, "\t\t\tvlan1_pop\n");
 		if (act->vlan_pop & BIT(0))
 			seq_printf(file, "\t\t\tvlan0_pop\n");
-		if (act->src_mac) {
-			seq_printf(file, "\t\t\tpedit src_mac (%#x)\n",
-				   act->src_mac->fw_id);
-			seq_printf(file, "\t\t\t\th_addr=%pM\n",
-				   act->src_mac->h_addr);
-		}
-		if (act->dst_mac) {
-			seq_printf(file, "\t\t\tpedit dst_mac (%#x)\n",
-				   act->dst_mac->fw_id);
-			seq_printf(file, "\t\t\t\th_addr=%pM\n",
-				   act->dst_mac->h_addr);
-		}
+		if (act->pedit_md) /* TODO dump pedits when we have them */
+			seq_printf(file, "\t\t\tpedit %p\n", act->pedit_md);
 		if (act->vlan_push & BIT(0))
 			seq_printf(file, "\t\t\tvlan0_push tci=%u proto=%x\n",
 				   be16_to_cpu(act->vlan_tci[0]),
@@ -4977,7 +4666,6 @@ static void efx_tc_debugfs_dump_one_counter(struct seq_file *file,
 {
 	u64 packets, bytes, old_packets, old_bytes;
 	unsigned long age;
-	u32 gen;
 
 	/* get a consistent view */
 	spin_lock_bh(&cnt->lock);
@@ -4986,11 +4674,10 @@ static void efx_tc_debugfs_dump_one_counter(struct seq_file *file,
 	old_packets = cnt->old_packets;
 	old_bytes = cnt->old_bytes;
 	age = jiffies - cnt->touched;
-	gen = cnt->gen;
 	spin_unlock_bh(&cnt->lock);
 
-	seq_printf(file, "%#x: %llu pkts %llu bytes (old %llu pkts %llu bytes) gen %u age %lu\n",
-		   cnt->fw_id, packets, bytes, old_packets, old_bytes, gen, age);
+	seq_printf(file, "%#x: %llu pkts %llu bytes (old %llu pkts %llu bytes) age %lu\n",
+		   cnt->fw_id, packets, bytes, old_packets, old_bytes, age);
 }
 
 static int efx_tc_debugfs_dump_mae_counters(struct seq_file *file, void *data)
@@ -5007,32 +4694,6 @@ static int efx_tc_debugfs_dump_mae_counters(struct seq_file *file, void *data)
 			if (IS_ERR(cnt))
 				continue;
 			efx_tc_debugfs_dump_one_counter(file, cnt);
-		}
-		rhashtable_walk_stop(&walk);
-		rhashtable_walk_exit(&walk);
-	} else {
-		seq_printf(file, "tc is down\n");
-	}
-	mutex_unlock(&efx->tc->mutex);
-
-	return 0;
-}
-
-static int efx_tc_debugfs_dump_mae_macs(struct seq_file *file, void *data)
-{
-	struct efx_tc_mac_pedit_action *ped;
-	struct rhashtable_iter walk;
-	struct efx_nic *efx = data;
-
-	mutex_lock(&efx->tc->mutex);
-	if (efx->tc->up) {
-		rhashtable_walk_enter(&efx->tc->mac_ht, &walk);
-		rhashtable_walk_start(&walk);
-		while ((ped = rhashtable_walk_next(&walk)) != NULL) {
-			if (IS_ERR(ped))
-				continue;
-			seq_printf(file, "%#x: %pM ref %u\n", ped->fw_id,
-				   ped->h_addr, refcount_read(&ped->ref));
 		}
 		rhashtable_walk_stop(&walk);
 		rhashtable_walk_exit(&walk);
@@ -5128,7 +4789,7 @@ static int efx_tc_debugfs_dump_lhs_rules(struct seq_file *file, void *data)
 static void efx_tc_debugfs_dump_ct(struct seq_file *file,
 				   struct efx_tc_ct_entry *conn)
 {
-	seq_printf(file, "%#lx\n", conn->cookie);
+	seq_printf(file, "%#lx (%#x)\n", conn->cookie, conn->fw_id);
 	seq_printf(file, "\tzone = %u\n", conn->zone);
 	seq_printf(file, "\teth_proto = %#06x\n", be16_to_cpu(conn->eth_proto));
 	seq_printf(file, "\tip_proto = %#04x (%u)\n",
@@ -5142,14 +4803,12 @@ static void efx_tc_debugfs_dump_ct(struct seq_file *file,
 		seq_printf(file, "\t%cnat = %pI4:%u\n", conn->dnat ? 'd' : 's',
 			   &conn->nat_ip, be16_to_cpu(conn->l4_natport));
 		break;
-#ifdef CONFIG_IPV6
 	case htons(ETH_P_IPV6):
 		seq_printf(file, "\tsrc = %pI6c:%u\n", &conn->src_ip6,
 			   be16_to_cpu(conn->l4_sport));
 		seq_printf(file, "\tdst = %pI6c:%u\n", &conn->dst_ip6,
 			   be16_to_cpu(conn->l4_dport));
 		break;
-#endif
 	default:
 		break;
 	}
@@ -5193,13 +4852,6 @@ static const char *efx_mae_field_names[] = {
 	NAME(CT_MARK),
 	NAME(CT_DOMAIN),
 	NAME(ETHER_TYPE),
-	NAME(CT_PRIVATE_FLAGS),
-	NAME(IS_FROM_NETWORK),
-	NAME(HAS_OVLAN),
-	NAME(HAS_IVLAN),
-	NAME(ENC_HAS_OVLAN),
-	NAME(ENC_HAS_IVLAN),
-	NAME(ENC_IP_FRAG),
 	NAME(VLAN0_TCI),
 	NAME(VLAN0_PROTO),
 	NAME(VLAN1_TCI),
@@ -5217,7 +4869,6 @@ static const char *efx_mae_field_names[] = {
 	NAME(L4_SPORT),
 	NAME(L4_DPORT),
 	NAME(TCP_FLAGS),
-	NAME(TCP_SYN_FIN_RST),
 	NAME(IP_FIRST_FRAG),
 	NAME(ENCAP_TYPE),
 	NAME(OUTER_RULE_ID),
@@ -5326,20 +4977,16 @@ static int efx_tc_debugfs_dump_mae_neighs(struct seq_file *file, void *data)
 	while ((neigh = rhashtable_walk_next(&walk)) != NULL) {
 		if (IS_ERR(neigh))
 			continue;
-#ifdef CONFIG_IPV6
 		if (neigh->dst_ip) /* IPv4 */
-#endif
 			seq_printf(file, "%pI4: %svalid %pM ttl %hhu egdev %s ref %u\n",
 				   &neigh->dst_ip, neigh->n_valid ? "" : "in",
 				   neigh->ha, neigh->ttl, neigh->egdev->name,
 				   refcount_read(&neigh->ref));
-#ifdef CONFIG_IPV6
 		else /* IPv6 */
 			seq_printf(file, "%pI6c: %svalid %pM ttl %hhu egdev %s ref %u\n",
 				   &neigh->dst_ip6, neigh->n_valid ? "" : "in",
 				   neigh->ha, neigh->ttl, neigh->egdev->name,
 				   refcount_read(&neigh->ref));
-#endif
 	}
 	rhashtable_walk_stop(&walk);
 	rhashtable_walk_exit(&walk);
@@ -5415,226 +5062,11 @@ static int efx_tc_debugfs_dump_mports(struct seq_file *file, void *data)
 	return 0;
 }
 
-static const char *efx_mae_field_id_names[] = {
-#define NAME(_name)	[TABLE_FIELD_ID_##_name] = #_name
-	NAME(UNUSED),
-	NAME(SRC_MPORT),
-	NAME(DST_MPORT),
-	NAME(SRC_MGROUP_ID),
-	NAME(NETWORK_PORT_ID),
-	NAME(IS_FROM_NETWORK),
-	NAME(CH_VC),
-	NAME(CH_VC_LOW),
-	NAME(USER_MARK),
-	NAME(USER_FLAG),
-	NAME(COUNTER_ID),
-	NAME(DISCRIM),
-	NAME(DST_MAC),
-	NAME(SRC_MAC),
-	NAME(OVLAN_TPID_COMPRESSED),
-	NAME(OVLAN),
-	NAME(OVLAN_VID),
-	NAME(IVLAN_TPID_COMPRESSED),
-	NAME(IVLAN),
-	NAME(IVLAN_VID),
-	NAME(ETHER_TYPE),
-	NAME(SRC_IP),
-	NAME(DST_IP),
-	NAME(IP_TOS),
-	NAME(IP_PROTO),
-	NAME(SRC_PORT),
-	NAME(DST_PORT),
-	NAME(TCP_FLAGS),
-	NAME(VNI),
-	NAME(HAS_ENCAP),
-	NAME(HAS_ENC_OVLAN),
-	NAME(HAS_ENC_IVLAN),
-	NAME(HAS_ENC_IP),
-	NAME(HAS_ENC_IP4),
-	NAME(HAS_ENC_UDP),
-	NAME(HAS_OVLAN),
-	NAME(HAS_IVLAN),
-	NAME(HAS_IP),
-	NAME(HAS_L4),
-	NAME(IP_FRAG),
-	NAME(IP_FIRST_FRAG),
-	NAME(IP_TTL_LE_ONE),
-	NAME(TCP_INTERESTING_FLAGS),
-	NAME(RDP_PL_CHAN),
-	NAME(RDP_C_PL_EN),
-	NAME(RDP_C_PL),
-	NAME(RDP_D_PL_EN),
-	NAME(RDP_D_PL),
-	NAME(RDP_OUT_HOST_CHAN_EN),
-	NAME(RDP_OUT_HOST_CHAN),
-	NAME(RECIRC_ID),
-	NAME(DOMAIN),
-	NAME(CT_VNI_MODE),
-	NAME(CT_TCP_FLAGS_INHIBIT),
-	NAME(DO_CT_IP4_TCP),
-	NAME(DO_CT_IP4_UDP),
-	NAME(DO_CT_IP6_TCP),
-	NAME(DO_CT_IP6_UDP),
-	NAME(OUTER_RULE_ID),
-	NAME(ENCAP_TYPE),
-	NAME(ENCAP_TUNNEL_ID),
-	NAME(CT_ENTRY_ID),
-	NAME(NAT_PORT),
-	NAME(NAT_IP),
-	NAME(NAT_DIR),
-	NAME(CT_MARK),
-	NAME(CT_PRIV_FLAGS),
-	NAME(CT_HIT),
-	NAME(SUPPRESS_SELF_DELIVERY),
-	NAME(DO_DECAP),
-	NAME(DECAP_DSCP_COPY),
-	NAME(DECAP_ECN_RFC6040),
-	NAME(DO_REPLACE_DSCP),
-	NAME(DO_REPLACE_ECN),
-	NAME(DO_DECR_IP_TTL),
-	NAME(DO_SRC_MAC),
-	NAME(DO_DST_MAC),
-	NAME(DO_VLAN_POP),
-	NAME(DO_VLAN_PUSH),
-	NAME(DO_COUNT),
-	NAME(DO_ENCAP),
-	NAME(ENCAP_DSCP_COPY),
-	NAME(ENCAP_ECN_COPY),
-	NAME(DO_DELIVER),
-	NAME(DO_FLAG),
-	NAME(DO_MARK),
-	NAME(DO_SET_NET_CHAN),
-	NAME(DO_SET_SRC_MPORT),
-	NAME(ENCAP_HDR_ID),
-	NAME(DSCP_VALUE),
-	NAME(ECN_CONTROL),
-	NAME(SRC_MAC_ID),
-	NAME(DST_MAC_ID),
-	NAME(REPORTED_SRC_MPORT_OR_NET_CHAN),
-	NAME(CHUNK64),
-	NAME(CHUNK32),
-	NAME(CHUNK16),
-	NAME(CHUNK8),
-	NAME(CHUNK4),
-	NAME(CHUNK2),
-	NAME(HDR_LEN_W),
-	NAME(ENC_LACP_HASH_L23),
-	NAME(ENC_LACP_HASH_L4),
-	NAME(USE_ENC_LACP_HASHES),
-	NAME(DO_CT),
-	NAME(DO_NAT),
-	NAME(DO_RECIRC),
-	NAME(NEXT_ACTION_SET_PAYLOAD),
-	NAME(NEXT_ACTION_SET_ROW),
-	NAME(MC_ACTION_SET_PAYLOAD),
-	NAME(MC_ACTION_SET_ROW),
-	NAME(LACP_INC_L4),
-	NAME(LACP_PLUGIN),
-	NAME(BAL_TBL_BASE_DIV64),
-	NAME(BAL_TBL_LEN_ID),
-	NAME(UDP_PORT),
-	NAME(RSS_ON_OUTER),
-	NAME(STEER_ON_OUTER),
-	NAME(DST_QID),
-	NAME(DROP),
-	NAME(VLAN_STRIP),
-	NAME(MARK_OVERRIDE),
-	NAME(FLAG_OVERRIDE),
-	NAME(RSS_CTX_ID),
-	NAME(RSS_EN),
-	NAME(KEY),
-	NAME(TCP_V4_KEY_MODE),
-	NAME(TCP_V6_KEY_MODE),
-	NAME(UDP_V4_KEY_MODE),
-	NAME(UDP_V6_KEY_MODE),
-	NAME(OTHER_V4_KEY_MODE),
-	NAME(OTHER_V6_KEY_MODE),
-	NAME(SPREAD_MODE),
-	NAME(INDIR_TBL_BASE),
-	NAME(INDIR_TBL_LEN_ID),
-	NAME(INDIR_OFFSET),
-#undef NAME
-};
-
-static const char *efx_mae_table_masking_names[] = {
-#define NAME(_name)	[TABLE_FIELD_DESCR_MASK_##_name] = #_name
-	NAME(NEVER),
-	NAME(EXACT),
-	NAME(TERNARY),
-	NAME(WHOLE_FIELD),
-	NAME(LPM),
-#undef NAME
-};
-
-static void efx_tc_debugfs_dump_mae_table_field(struct seq_file *file,
-						const struct efx_tc_table_field_fmt *field,
-						bool resp)
-{
-	seq_printf(file, "\t%s ", resp ? "resp" : "key");
-	if (field->field_id < ARRAY_SIZE(efx_mae_field_id_names) &&
-	    efx_mae_field_id_names[field->field_id])
-		seq_printf(file, "%s: ", efx_mae_field_id_names[field->field_id]);
-	else
-		seq_printf(file, "unknown-%#x: ", field->field_id);
-	seq_printf(file, "%u @ %u; ", field->width, field->lbn);
-	if (field->masking < ARRAY_SIZE(efx_mae_table_masking_names) &&
-	    efx_mae_table_masking_names[field->masking])
-		seq_printf(file, "mask %s ",
-			   efx_mae_table_masking_names[field->masking]);
-	else
-		seq_printf(file, "mask unknown-%#x ", field->masking);
-	seq_printf(file, "scheme %u\n", field->scheme);
-}
-
-static const char *efx_mae_table_type_names[] = {
-#define NAME(_name)	[MC_CMD_TABLE_DESCRIPTOR_OUT_TYPE_##_name] = #_name
-	NAME(DIRECT),
-	NAME(BCAM),
-	NAME(TCAM),
-	NAME(STCAM),
-#undef NAME
-};
-
-static void efx_tc_debugfs_dump_mae_table(struct seq_file *file,
-					  const char *name,
-					  const struct efx_tc_table_desc *meta,
-					  bool hooked)
-{
-	unsigned int i;
-
-	seq_printf(file, "%s: ", name);
-	if (meta->type < ARRAY_SIZE(efx_mae_table_type_names) &&
-	    efx_mae_table_type_names[meta->type])
-		seq_printf(file, "type %s ",
-			   efx_mae_table_type_names[meta->type]);
-	else
-		seq_printf(file, "type unknown-%#x ", meta->type);
-	seq_printf(file, "kw %u rw %u; %u prios; flags %#x scheme %#x\n",
-		   meta->key_width, meta->resp_width, meta->n_prios,
-		   meta->flags, meta->scheme);
-	for (i = 0; i < meta->n_keys; i++)
-		efx_tc_debugfs_dump_mae_table_field(file, meta->keys + i, false);
-	for (i = 0; i < meta->n_resps; i++)
-		efx_tc_debugfs_dump_mae_table_field(file, meta->resps + i, true);
-	if (hooked)
-		seq_printf(file, "\thooked\n");
-}
-
-static int efx_tc_debugfs_dump_mae_tables(struct seq_file *file, void *data)
-{
-	struct efx_nic *efx = data;
-
-	efx_tc_debugfs_dump_mae_table(file, "ct", &efx->tc->meta_ct.desc,
-				      efx->tc->meta_ct.hooked);
-	return 0;
-}
-
 static struct efx_debugfs_parameter efx_tc_debugfs[] = {
 	_EFX_RAW_PARAMETER(mae_rules, efx_tc_debugfs_dump_rules),
 	_EFX_RAW_PARAMETER(lhs_rules, efx_tc_debugfs_dump_lhs_rules),
 	_EFX_RAW_PARAMETER(mae_default_rules, efx_tc_debugfs_dump_default_rules),
 	_EFX_RAW_PARAMETER(mae_counters, efx_tc_debugfs_dump_mae_counters),
-	_EFX_RAW_PARAMETER(mae_pedit_macs, efx_tc_debugfs_dump_mae_macs),
 	_EFX_RAW_PARAMETER(mae_recirc_ids, efx_tc_debugfs_dump_recirc_ids),
 	_EFX_RAW_PARAMETER(mae_action_rule_caps, efx_tc_debugfs_dump_mae_ar_caps),
 	_EFX_RAW_PARAMETER(mae_outer_rule_caps, efx_tc_debugfs_dump_mae_or_caps),
@@ -5645,7 +5077,6 @@ static struct efx_debugfs_parameter efx_tc_debugfs[] = {
 	_EFX_RAW_PARAMETER(tracked_conns, efx_tc_debugfs_dump_cts),
 #endif
 	_EFX_RAW_PARAMETER(mae_mport_map, efx_tc_debugfs_dump_mports),
-	_EFX_RAW_PARAMETER(mae_tables, efx_tc_debugfs_dump_mae_tables),
 	{NULL}
 };
 #endif /* CONFIG_SFC_DEBUGFS */
@@ -5833,12 +5264,9 @@ int efx_init_tc(struct efx_nic *efx)
 			  efx->tc->caps->action_prios, EFX_TC_PRIO__NUM);
 		return -EIO;
 	}
-	rc = efx_mae_get_tables(efx);
-	if (rc)
-		goto out_free;
 	rc = efx_tc_configure_rep_mport(efx);
 	if (rc)
-		goto out_free;
+		return rc;
 	rc = efx_tc_enumerate_mports(efx);
 	if (rc) /* Not fatal, but means we can't create PF reps for other IFs */
 		netif_warn(efx, probe, efx->net_dev,
@@ -5862,9 +5290,6 @@ int efx_init_tc(struct efx_nic *efx)
 
 out_unlock:
 	mutex_unlock(&efx->tc->mutex);
-out_free:
-	if (rc)
-		efx_mae_free_tables(efx);
 	return rc;
 }
 
@@ -5891,7 +5316,6 @@ void efx_fini_tc(struct efx_nic *efx)
 	efx->tc->mports = NULL;
 	efx->tc->n_mports = 0;
 	mutex_unlock(&efx->tc->mutex);
-	efx_mae_free_tables(efx);
 }
 
 int efx_setup_tc(struct net_device *net_dev, enum tc_setup_type type,

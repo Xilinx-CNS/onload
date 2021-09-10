@@ -460,7 +460,7 @@ int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw)
 	u32 type, data_subtype, subtype;
 	const u8 *data;
 	bool protected;
-	int rc;
+	int rc, rc2;
 
 	if (!efx_has_cap(efx, BUNDLE_UPDATE)) {
 		netif_err(efx, hw, efx->net_dev,
@@ -468,7 +468,6 @@ int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw)
 		return -EOPNOTSUPP;
 	}
 
-	mutex_lock(&efx->reflash_mutex);
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_DEVLINK) && defined(EFX_HAVE_DEVLINK_FLASH_UPDATE_BEGIN_NOTIFY)
 	devlink_flash_update_begin_notify(devlink);
 #endif
@@ -565,12 +564,10 @@ int efx_reflash_flash_firmware(struct efx_nic *efx, const struct firmware *fw)
 					    EFX_DEVLINK_UPDATE_FINISH_TIMEOUT);
 
 out_update_finish:
-	if (rc)
-		/* Don't obscure the return code from an earlier failure */
-		(void) efx_mcdi_nvram_update_finish(efx, type,
-						    EFX_UPDATE_FINISH_ABORT);
-	else
-		rc = efx_mcdi_nvram_update_finish_polled(efx, type);
+	rc2 = efx_mcdi_nvram_update_finish_polled(efx, type);
+	/* Don't obscure the return code from an earlier failure */
+	if (!rc)
+		rc = rc2;
 
 out:
 	if (!rc) {
@@ -588,7 +585,6 @@ out:
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_DEVLINK) && defined(EFX_HAVE_DEVLINK_FLASH_UPDATE_BEGIN_NOTIFY)
 	devlink_flash_update_end_notify(devlink);
 #endif
-	mutex_unlock(&efx->reflash_mutex);
 
 	return rc;
 }

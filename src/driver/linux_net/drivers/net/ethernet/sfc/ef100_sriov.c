@@ -48,6 +48,11 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 	}
 	spin_lock_bh(&nic_data->vf_reps_lock);
 	nic_data->vf_rep_count = num_vfs;
+	if (netif_running(efx->net_dev) &&
+	    (efx->state == STATE_NET_UP))
+		__ef100_attach_reps(efx);
+	else
+		__ef100_detach_reps(efx);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
 
 	return 0;

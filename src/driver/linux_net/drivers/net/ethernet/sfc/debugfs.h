@@ -154,11 +154,6 @@ int efx_debugfs_read_bool(struct seq_file *, void *);
 	EFX_PARAMETER(container_type, parameter,		\
 		      u64, efx_debugfs_read_u64)
 
-/* A u64 hex parameter */
-#define EFX_X64_PARAMETER(container_type, parameter)            \
-	EFX_PARAMETER(container_type, parameter,                \
-			u64, efx_debugfs_read_x64)
-
 /* An atomic_t parameter */
 #define EFX_ATOMIC_PARAMETER(container_type, parameter)		\
 	EFX_PARAMETER(container_type, parameter,		\

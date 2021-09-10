@@ -11,6 +11,21 @@
 #ifndef EFX_KERNEL_COMPAT_H
 #define EFX_KERNEL_COMPAT_H
 
+/* KBUILD_MODNAME is not defined for shared files on older Kbuilds. If it
+ * isn't, then define it now.
+ */
+#ifndef KBUILD_MODNAME
+#ifdef CONFIG_SFC
+#ifdef CONFIG_SFC_EF100
+#define KBUILD_MODNAME "sfc:sfc_ef100"
+#else
+#define KBUILD_MODNAME "sfc"
+#endif
+#else
+#define KBUILD_MODNAME "sfc_ef100"
+#endif
+#endif
+
 #include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
@@ -761,10 +776,6 @@
 
 		return adv;
 	}
-#endif
-
-#ifndef PORT_DA
-	#define PORT_DA			0x05
 #endif
 
 #ifndef PORT_OTHER
@@ -3463,22 +3474,13 @@ static inline int devlink_info_board_serial_number_put(struct devlink_info_req *
 	return 0;
 }
 #endif
-#ifdef EFX_NEED_DEVLINK_FLASH_UPDATE_STATUS_NOTIFY
-static inline void devlink_flash_update_status_notify(struct devlink *devlink,
-						      const char *status_msg,
-						      const char *component,
-						      unsigned long done,
-						      unsigned long total)
-{
-	/* Do nothing */
-}
-#endif
 #ifdef EFX_NEED_DEVLINK_FLASH_UPDATE_TIMEOUT_NOTIFY
 void devlink_flash_update_timeout_notify(struct devlink *devlink,
 					 const char *status_msg,
 					 const char *component,
 					 unsigned long timeout);
 #endif
+
 #else
 
 /* devlink is not available, provide a 'fake' devlink info request structure
