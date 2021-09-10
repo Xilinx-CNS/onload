@@ -19,8 +19,8 @@ struct efct_configfs_dev_item {
   struct efct_configfs_rxq_item rxqs[EFCT_TEST_RXQS_N];
 };
 
-static const struct config_item_type dev_item_type;
-static const struct config_item_type rxq_item_type;
+static struct config_item_type dev_item_type;
+static struct config_item_type rxq_item_type;
 
 static struct efct_configfs_dev_item* to_dev_item(struct config_item *item)
 {
@@ -137,7 +137,7 @@ static struct configfs_attribute *rxq_attrs[] = {
   NULL,
 };
 
-static const struct config_item_type rxq_item_type = {
+static struct config_item_type rxq_item_type = {
   .ct_attrs = rxq_attrs,
   .ct_owner = THIS_MODULE,
 };
@@ -158,7 +158,7 @@ static struct configfs_item_operations dev_item_ops = {
   .release = efct_test_unregister_interface,
 };
 
-static const struct config_item_type dev_item_type = {
+static struct config_item_type dev_item_type = {
   .ct_item_ops = &dev_item_ops,
   .ct_attrs = dev_attrs,
   .ct_owner = THIS_MODULE,
@@ -168,7 +168,7 @@ static struct configfs_group_operations interfaces_group_ops = {
   .make_group = efct_test_register_interface,
 };
 
-static const struct config_item_type interfaces_type = {
+static struct config_item_type interfaces_type = {
   .ct_group_ops = &interfaces_group_ops,
   .ct_owner = THIS_MODULE,
 };

@@ -2,6 +2,7 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
 
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 
 #include <ci/tools.h>
 #include <ci/tools/bitfield.h>

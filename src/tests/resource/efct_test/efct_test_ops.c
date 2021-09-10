@@ -3,9 +3,15 @@
 
 #include <linux/mm.h>
 #include <linux/slab.h>
-#include <linux/set_memory.h>
+#include <asm/cacheflush.h>
 #include <linux/random.h>
+#include <linux/hrtimer.h>
 #include <linux/mm.h>
+#ifdef __has_include
+#if __has_include(<linux/set_memory.h>)
+#include <linux/set_memory.h>
+#endif
+#endif
 
 #include <ci/driver/ci_aux.h>
 #include <ci/driver/ci_efct.h>
@@ -18,6 +24,10 @@
 #include "efct_test_ops.h"
 #include "efct_test_tx.h"
 
+#ifndef page_to_virt
+/* Only RHEL7 doesn't have this macro */
+#define page_to_virt(x)        __va(PFN_PHYS(page_to_pfn(x)))
+#endif
 
 struct xlnx_efct_client {
   struct efct_test_device *tdev;
@@ -366,7 +376,7 @@ static int efct_test_bind_rxq(struct xlnx_efct_client *handle,
          params->timestamp_req, params->n_hugepages);
 
   if( qid < 0 )
-    qid = get_random_u32() % EFCT_TEST_RXQS_N;
+    qid = get_random_int() % EFCT_TEST_RXQS_N;
   if( qid >= EFCT_TEST_RXQS_N )
     return -EINVAL;
 
