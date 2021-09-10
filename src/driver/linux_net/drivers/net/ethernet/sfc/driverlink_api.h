@@ -27,7 +27,7 @@ struct efx_dl_device_info;
  * is not used for binary compatibility checking, as that is done by
  * kbuild and the module loader using symbol versions.
  */
-#define EFX_DRIVERLINK_API_VERSION 32
+#define EFX_DRIVERLINK_API_VERSION 33
 #define EFX_DRIVERLINK_API_VERSION_MINOR_MAX 0
 
 /* If the client didn't define their VERSION_MINOR, default to 0 */
@@ -49,9 +49,6 @@ enum efx_dl_ev_prio {
 
 /**
  * enum efx_dl_driver_flags - flags for Driverlink client driver behaviour
- * @EFX_DL_DRIVER_CHECKS_FALCON_RX_USR_BUF_SIZE: Set by drivers that
- *	promise to use the RX buffer size programmed by the net driver
- *	on Falcon and Siena.  Defined from API version 8.
  * @EFX_DL_DRIVER_REQUIRES_MINOR_VER: Set by client drivers to indicate the
  *      minor_ver entry us present in their struct. Defined from API 22.1.
  * @EFX_DL_DRIVER_SUPPORTS_MINOR_VER: Set by the device driver to
@@ -66,7 +63,6 @@ enum efx_dl_ev_prio {
  *      they cannot insert filters or create queues.
  */
 enum efx_dl_driver_flags {
-	EFX_DL_DRIVER_CHECKS_FALCON_RX_USR_BUF_SIZE = 0x1,
 	EFX_DL_DRIVER_REQUIRES_MINOR_VER = 0x2,
 	EFX_DL_DRIVER_SUPPORTS_MINOR_VER = 0x4,
 	EFX_DL_DRIVER_CHECKS_MEDFORD2_VI_STRIDE = 0x8,
@@ -143,18 +139,14 @@ struct efx_dl_driver {
  * Used to identify each item in the &struct efx_dl_device_info linked list
  * provided to each driverlink client in the probe() @dev_info member.
  *
- * @EFX_DL_FALCON_RESOURCES: Information type is &struct efx_dl_falcon_resources
  * @EFX_DL_HASH_INSERTION: Information type is &struct efx_dl_hash_insertion
- * @EFX_DL_SIENA_SRIOV: Information type is &struct efx_dl_siena_sriov
  * @EFX_DL_AOE_RESOURCES: Information type is &struct efx_dl_aoe_resources.
  *	Defined from API version 6.
  * @EFX_DL_EF10_RESOURCES: Information type is &struct efx_dl_ef10_resources.
  *	Defined from API version 9.
  */
 enum efx_dl_device_info_type {
-	EFX_DL_FALCON_RESOURCES = 0,
 	EFX_DL_HASH_INSERTION = 1,
-	EFX_DL_SIENA_SRIOV = 2,
 	EFX_DL_MCDI_RESOURCES = 3,
 	EFX_DL_AOE_RESOURCES = 4,
 	EFX_DL_EF10_RESOURCES = 5,
@@ -170,79 +162,6 @@ enum efx_dl_device_info_type {
 struct efx_dl_device_info {
 	struct efx_dl_device_info *next;
 	enum efx_dl_device_info_type type;
-};
-
-/**
- * enum efx_dl_falcon_resource_flags - Falcon/Siena resource information flags.
- *
- * Flags that describe hardware variations for the current Falcon or
- * Siena device.
- *
- * @EFX_DL_FALCON_DUAL_FUNC: Port is dual-function. (obsolete)
- * @EFX_DL_FALCON_USE_MSI: Port is initialised to use MSI/MSI-X interrupts.
- *	Falcon supports traditional legacy interrupts and MSI/MSI-X
- *	interrupts. The choice is made at run time by the sfc driver, and
- *	notified to the clients by this enumeration
- * @EFX_DL_FALCON_ONLOAD_UNSUPPORTED: OpenOnload unsupported on this port.
- * @EFX_DL_FALCON_HAVE_RSS_CHANNEL_COUNT: %rss_channel_count member is valid.
- * @EFX_DL_FALCON_HAVE_TIMER_QUANTUM_NS: %timer_quantum_ns member is valid.
- */
-enum efx_dl_falcon_resource_flags {
-	EFX_DL_FALCON_DUAL_FUNC = 0x1,
-	EFX_DL_FALCON_USE_MSI = 0x2,
-	EFX_DL_FALCON_ONLOAD_UNSUPPORTED = 0x4,
-	EFX_DL_FALCON_WRITE_COMBINING = 0x8,
-	EFX_DL_FALCON_HAVE_RSS_CHANNEL_COUNT = 0x10,
-	EFX_DL_FALCON_HAVE_TIMER_QUANTUM_NS = 0x20,
-};
-
-/**
- * struct efx_dl_falcon_resources - Falcon/Siena resource information.
- *
- * This structure describes Falcon or Siena hardware resources available for
- * use by a driverlink driver.
- *
- * @hdr: Resource linked list header
- * @biu_lock: Register access lock. Access to configuration registers on
- *	the underlying PCI function must be serialised using this spinlock.
- * @buffer_table_min: First available buffer table entry
- * @buffer_table_lim: Last available buffer table entry + 1
- * @evq_timer_min: First available event queue with timer
- * @evq_timer_lim: Last available event queue with timer + 1
- * @evq_int_min: First available event queue with interrupt
- * @evq_int_lim: Last available event queue with interrupt + 1
- * @rxq_min: First available RX queue
- * @rxq_lim: Last available RX queue + 1
- * @txq_min: First available TX queue
- * @txq_lim: Last available TX queue + 1
- * @flags: Hardware variation flags
- * @rss_channel_count: Number of receive channels used for RSS. This member is
- *	only present if %EFX_DL_FALCON_HAVE_RSS_CHANNEL_COUNT is set.
- * @timer_quantum_ns: Timer quantum (nominal period between timer ticks)
- *	for wakeup timers, in nanoseconds. This member is only present if
- *	%EFX_DL_FALCON_HAVE_TIMER_QUANTUM_NS is set.
- * @rx_usr_buf_size: RX buffer size for user-mode queues and kernel-mode
- *	queues with scatter enabled, in bytes.  Defined from API version 8.
- * @rx_channel_count: Number of receive channels available for use.
- */
-struct efx_dl_falcon_resources {
-	struct efx_dl_device_info hdr;
-	spinlock_t *biu_lock;
-	unsigned int buffer_table_min;
-	unsigned int buffer_table_lim;
-	unsigned int evq_timer_min;
-	unsigned int evq_timer_lim;
-	unsigned int evq_int_min;
-	unsigned int evq_int_lim;
-	unsigned int rxq_min;
-	unsigned int rxq_lim;
-	unsigned int txq_min;
-	unsigned int txq_lim;
-	enum efx_dl_falcon_resource_flags flags;
-	unsigned int rss_channel_count;
-	unsigned int timer_quantum_ns;
-	unsigned int rx_usr_buf_size;
-	unsigned int rx_channel_count;
 };
 
 /**
@@ -273,25 +192,6 @@ struct efx_dl_hash_insertion {
 	unsigned int data_offset;
 	unsigned int hash_offset;
 	enum efx_dl_hash_type_flags flags;
-};
-
-/**
- * struct efx_dl_siena_sriov - Siena SRIOV information - UNUSED
- *
- * This structure is initialised before pci_enable_sriov() is called,
- * which mail fail. Therefore the consumer should cope with the fact
- * that there may be fewer than %vf_count VFs.
- *
- * @hdr: Resource linked list header
- * @vi_base: The zeroth VI mapped into VFs
- * @vi_scale: Log2 of the number of VIs per VF
- * @vf_count: Number of VFs intended to be enabled
- */
-struct efx_dl_siena_sriov {
-	struct efx_dl_device_info hdr;
-	unsigned int vi_base;
-	unsigned int vi_scale;
-	unsigned int vf_count;
 };
 
 /**
@@ -955,11 +855,11 @@ static inline int efx_dl_vi_set_user(struct efx_dl_device *dl_dev,
  * @_p: Iterator variable
  *
  * Example:
- *	struct efx_dl_falcon_resources *res;
- *	efx_dl_for_each_device_info_matching(dev_info, EFX_DL_FALCON_RESOURCES,
- *					     struct efx_dl_falcon_resources,
+ *	struct efx_dl_ef10_resources *res;
+ *	efx_dl_for_each_device_info_matching(dev_info, EFX_DL_EF10_RESOURCES,
+ *					     struct efx_dl_ef10_resources,
  *					     hdr, res) {
- *		if (res->flags & EFX_DL_FALCON_HAVE_RSS_CHANNEL_COUNT)
+ *		if (res->flags & EFX_DL_EF10_USE_MSI)
  *			....
  *	}
  */
@@ -981,9 +881,9 @@ static inline int efx_dl_vi_set_user(struct efx_dl_device *dl_dev,
  * @_p: Result variable
  *
  * Example:
- *	struct efx_dl_falcon_resources *res;
- *	efx_dl_search_device_info(dev_info, EFX_DL_FALCON_RESOURCES,
- *				  struct efx_dl_falcon_resources, hdr, res);
+ *	struct efx_dl_ef10_resources *res;
+ *	efx_dl_search_device_info(dev_info, EFX_DL_EF10_RESOURCES,
+ *				  struct efx_dl_ef10_resources, hdr, res);
  *	if (res)
  *		....
  */

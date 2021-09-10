@@ -57,6 +57,5 @@ struct efx_rep {
 };
 
 void efx_ef100_rep_rx_packet(struct efx_rep *efv, struct efx_rx_buffer *rx_buf);
-
 extern const struct net_device_ops efx_ef100_rep_netdev_ops;
 #endif /* EF10_REP_H */

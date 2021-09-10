@@ -49,10 +49,9 @@ MODULE_PARM_DESC(underreport_skb_truesize, "Give false skb truesizes. "
 static unsigned int rx_cb_size = EFX_RX_CB_DEFAULT;
 
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
-static void efx_repost_rx_page(struct efx_channel *channel,
+static void efx_repost_rx_page(struct efx_rx_queue *rx_queue,
 			       struct efx_rx_buffer *rx_buf)
 {
-	struct efx_rx_queue *rx_queue = efx_channel_get_rx_queue(channel);
 	struct efx_nic *efx = rx_queue->efx;
 	struct page *page = rx_buf->page;
 	u16 flags;
@@ -68,7 +67,7 @@ static void efx_repost_rx_page(struct efx_channel *channel,
 		return;
 
 	/* This indicates broken logic in packet processing functions */
-	EFX_WARN_ON_ONCE_PARANOID(channel->rx_pkt_n_frags > 1);
+	EFX_WARN_ON_ONCE_PARANOID(rx_queue->rx_pkt_n_frags > 1);
 	/* Non-recycled page has ended up being marked for reposting. */
 	EFX_WARN_ON_ONCE_PARANOID(!(rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING));
 
@@ -143,7 +142,7 @@ static void efx_rx_packet__check_len(struct efx_rx_queue *rx_queue,
 			  "(%#x > %#x)\n",
 			  efx_rx_queue_index(rx_queue), len, max_len);
 
-	efx_rx_queue_channel(rx_queue)->n_rx_overlength++;
+	rx_queue->n_rx_overlength++;
 }
 
 /* Allocate and construct an SKB around page fragments
@@ -152,13 +151,14 @@ static void efx_rx_packet__check_len(struct efx_rx_queue *rx_queue,
  * onto the RX recycle ring, and efx_init_rx_buffer() will be called.
  * If so reset the callers rx_buf so that it is not reused.
  */
-static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
+static struct sk_buff *efx_rx_mk_skb(struct efx_rx_queue *rx_queue,
 				     struct efx_rx_buffer **_rx_buf,
 				     unsigned int n_frags,
 				     u8 **ehp, int hdr_len)
 {
+	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
 	struct efx_rx_buffer *rx_buf = *_rx_buf;
-	struct efx_nic *efx = channel->efx;
+	struct efx_nic *efx = rx_queue->efx;
 	struct sk_buff *skb = NULL;
 	unsigned int data_cp_len = efx->rx_prefix_size + hdr_len;
 	unsigned int alloc_len = efx->rx_ip_align + efx->rx_prefix_size +
@@ -211,7 +211,7 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 			if (skb_shinfo(skb)->nr_frags == n_frags)
 				break;
 
-			rx_buf = efx_rx_buf_next(&channel->rx_queue, rx_buf);
+			rx_buf = efx_rx_buf_next(rx_queue, rx_buf);
 		}
 	} else {
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
@@ -220,7 +220,7 @@ static struct sk_buff *efx_rx_mk_skb(struct efx_channel *channel,
 			__free_pages(rx_buf->page, efx->rx_buffer_order);
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 		} else {
-			efx_repost_rx_page(channel, rx_buf);
+			efx_repost_rx_page(rx_queue, rx_buf);
 			*_rx_buf = NULL;
 		}
 #endif
@@ -278,7 +278,7 @@ void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 	 * previous receive first.
 	 */
 	if (unlikely(rx_buf->flags & EFX_RX_PKT_DISCARD)) {
-		efx_rx_flush_packet(channel);
+		efx_rx_flush_packet(rx_queue);
 		efx_discard_rx_packet(channel, rx_buf, n_frags);
 		return;
 	}
@@ -336,30 +336,30 @@ skip_recycle_pages:
 	/* Pipeline receives so that we give time for packet headers to be
 	 * prefetched into cache.
 	 */
-	efx_rx_flush_packet(channel);
-	channel->rx_pkt_n_frags = n_frags;
-	channel->rx_pkt_index = index;
+	efx_rx_flush_packet(rx_queue);
+	rx_queue->rx_pkt_n_frags = n_frags;
+	rx_queue->rx_pkt_index = index;
 }
 
-static void efx_rx_deliver(struct efx_channel *channel, u8 *eh,
+static void efx_rx_deliver(struct efx_rx_queue *rx_queue, u8 *eh,
 			   struct efx_rx_buffer *rx_buf,
 			   unsigned int n_frags)
 {
+	struct efx_channel *channel = efx_rx_queue_channel(rx_queue);
 	u16 hdr_len = min_t(u16, rx_buf->len, rx_cb_size);
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
 	u16 rx_buf_vlan_tci = rx_buf->vlan_tci;
 #endif
+	struct efx_nic *efx = rx_queue->efx;
 	u16 rx_buf_flags = rx_buf->flags;
-	struct efx_rx_queue *rx_queue;
 	bool free_buf_on_fail = true;
 	struct sk_buff *skb;
 
-	rx_queue = efx_channel_get_rx_queue(channel);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (channel->zc)
 		free_buf_on_fail = false;
 #endif
-	skb = efx_rx_mk_skb(channel, &rx_buf, n_frags, &eh, hdr_len);
+	skb = efx_rx_mk_skb(rx_queue, &rx_buf, n_frags, &eh, hdr_len);
 
 	if (unlikely(skb == NULL)) {
 		if (free_buf_on_fail)
@@ -378,11 +378,11 @@ static void efx_rx_deliver(struct efx_channel *channel, u8 *eh,
 	}
 
 	efx_rx_skb_attach_timestamp(channel, skb,
-				    eh - channel->efx->type->rx_prefix_size);
+				    eh - efx->type->rx_prefix_size);
 
 #if   !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RXHASH_SUPPORT)
-	if (channel->efx->net_dev->features & NETIF_F_RXHASH)
-		skb_set_hash(skb, efx_rx_buf_hash(channel->efx, eh),
+	if (efx->net_dev->features & NETIF_F_RXHASH)
+		skb_set_hash(skb, efx_rx_buf_hash(efx, eh),
 			     (rx_buf_flags & EFX_RX_PKT_TCP? PKT_HASH_TYPE_L4:
 			      PKT_HASH_TYPE_L3));
 #endif
@@ -393,8 +393,8 @@ static void efx_rx_deliver(struct efx_channel *channel, u8 *eh,
 				       rx_buf_vlan_tci);
 #endif
 
-	if (channel->type->receive_skb)
-		if (channel->type->receive_skb(channel, skb))
+	if (rx_queue->receive_skb)
+		if (rx_queue->receive_skb(rx_queue, skb))
 			return;
 
 	/* Pass the packet up */
@@ -405,7 +405,7 @@ static void efx_rx_deliver(struct efx_channel *channel, u8 *eh,
 #if IS_ENABLED(CONFIG_VLAN_8021Q) && defined(EFX_USE_KCOMPAT) && \
 	defined(EFX_HAVE_VLAN_RX_PATH)
 	if (rx_buf_flags & EFX_RX_BUF_VLAN_XTAG) {
-		vlan_hwaccel_receive_skb(skb, channel->efx->vlan_group,
+		vlan_hwaccel_receive_skb(skb, efx->vlan_group,
 					 rx_buf_vlan_tci);
 		return;
 	}
@@ -423,11 +423,13 @@ static void efx_rx_deliver(struct efx_channel *channel, u8 *eh,
 }
 
 /* Handle a received packet.  Second half: Touches packet payload. */
-void __efx_rx_packet(struct efx_channel *channel)
+void __efx_rx_packet(struct efx_rx_queue *rx_queue)
 {
-	struct efx_nic *efx = channel->efx;
-	struct efx_rx_buffer *rx_buf =
-		efx_rx_buffer(&channel->rx_queue, channel->rx_pkt_index);
+#if (defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL) || !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK))
+	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
+#endif
+	struct efx_rx_buffer *rx_buf = efx_rx_buf_pipe(rx_queue);
+	struct efx_nic *efx = rx_queue->efx;
 	u8 *eh = efx_rx_buf_va(rx_buf);
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
 	struct vlan_ethhdr *veh;
@@ -446,24 +448,21 @@ void __efx_rx_packet(struct efx_channel *channel)
 	 * loopback layer, and free the rx_buf here
 	 */
 	if (unlikely(efx->loopback_selftest)) {
-		struct efx_rx_queue *rx_queue;
-
 		efx_loopback_rx_packet(efx, eh, rx_buf->len);
-		rx_queue = efx_channel_get_rx_queue(channel);
 		efx_free_rx_buffers(rx_queue, rx_buf,
-				    channel->rx_pkt_n_frags);
+				    rx_queue->rx_pkt_n_frags);
 		goto out;
 	}
 
 
-	rc = efx_xdp_rx(efx, channel, rx_buf, &eh);
+	rc = efx_xdp_rx(efx, rx_queue, rx_buf, &eh);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (channel->zc) {
 		if (rc == XDP_REDIRECT || rc == XDP_TX)
 			goto free_buf;
 		else
 			efx_recycle_rx_bufs_zc(channel, rx_buf,
-					       channel->rx_pkt_n_frags);
+					       rx_queue->rx_pkt_n_frags);
 		if (rc != XDP_PASS)
 			goto free_buf;
 	} else if (rc != XDP_PASS) {
@@ -519,21 +518,21 @@ void __efx_rx_packet(struct efx_channel *channel)
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	if ((rx_buf->flags & (EFX_RX_PKT_CSUMMED | EFX_RX_PKT_TCP)) ==
 	    (EFX_RX_PKT_CSUMMED | EFX_RX_PKT_TCP) &&
-	    efx_channel_ssr_enabled(channel) &&
-	    likely(channel->rx_pkt_n_frags == 1))
-		efx_ssr(channel, rx_buf, eh);
+	    efx_ssr_enabled(efx) &&
+	    likely(rx_queue->rx_pkt_n_frags == 1))
+		efx_ssr(rx_queue, rx_buf, eh);
 	else
 		/* fall through */
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_GRO)
 	if ((rx_buf->flags & EFX_RX_PKT_TCP) &&
-	    !channel->type->receive_skb
+	    !rx_queue->receive_skb
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
 	    && !efx_channel_busy_polling(channel)
 #endif
 	   ) {
-		efx_rx_packet_gro(channel, rx_buf,
-				  channel->rx_pkt_n_frags,
+		efx_rx_packet_gro(rx_queue, rx_buf,
+				  rx_queue->rx_pkt_n_frags,
 				  eh, 0);
 	} else {
 		rx_deliver = true;
@@ -542,15 +541,15 @@ void __efx_rx_packet(struct efx_channel *channel)
 #endif
 deliver_now:
 	if (rx_deliver)
-		efx_rx_deliver(channel, eh, rx_buf, channel->rx_pkt_n_frags);
+		efx_rx_deliver(rx_queue, eh, rx_buf, rx_queue->rx_pkt_n_frags);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 free_buf:
 	if (channel->zc)
-		efx_free_rx_buffers(&channel->rx_queue, rx_buf,
-				    channel->rx_pkt_n_frags);
+		efx_free_rx_buffers(rx_queue, rx_buf,
+				    rx_queue->rx_pkt_n_frags);
 #endif
 out:
-	channel->rx_pkt_n_frags = 0;
+	rx_queue->rx_pkt_n_frags = 0;
 }
 
 #if defined(EFX_NOT_UPSTREAM)
@@ -687,9 +686,9 @@ MODULE_PARM_DESC(lro_loss_packets, "Number of packets that must "
 #define EFX_SSR_CONN_IS_TCPIPV4(c) (!((c)->l2_id & EFX_SSR_L2_ID_IPV6))
 #define EFX_SSR_CONN_VLAN_TCI(c) ((c)->l2_id & 0xffff)
 
-int efx_ssr_init(struct efx_channel *channel, struct efx_nic *efx)
+int efx_ssr_init(struct efx_rx_queue *rx_queue, struct efx_nic *efx)
 {
-	struct efx_ssr_state *st = &channel->ssr;
+	struct efx_ssr_state *st = &rx_queue->ssr;
 	unsigned int i;
 
 	st->conns_mask = lro_table_size - 1;
@@ -731,27 +730,27 @@ static inline void efx_rx_buffer_set_empty(struct efx_rx_buffer *rx_buf)
 }
 
 /* Drop the given connection, and add it to the free list. */
-static void efx_ssr_drop(struct efx_channel *channel, struct efx_ssr_conn *c)
+static void efx_ssr_drop(struct efx_rx_queue *rx_queue, struct efx_ssr_conn *c)
 {
 	unsigned int bucket;
 
 	EFX_WARN_ON_ONCE_PARANOID(c->skb);
 
 	if (efx_rx_buffer_is_full(&c->next_buf)) {
-		efx_rx_deliver(channel, c->next_eh, &c->next_buf, 1);
+		efx_rx_deliver(rx_queue, c->next_eh, &c->next_buf, 1);
 		list_del(&c->active_link);
 	}
 
-	bucket = c->conn_hash & channel->ssr.conns_mask;
-	EFX_WARN_ON_ONCE_PARANOID(channel->ssr.conns_n[bucket] <= 0);
-	--channel->ssr.conns_n[bucket];
+	bucket = c->conn_hash & rx_queue->ssr.conns_mask;
+	EFX_WARN_ON_ONCE_PARANOID(rx_queue->ssr.conns_n[bucket] <= 0);
+	--rx_queue->ssr.conns_n[bucket];
 	list_del(&c->link);
-	list_add(&c->link, &channel->ssr.free_conns);
+	list_add(&c->link, &rx_queue->ssr.free_conns);
 }
 
-void efx_ssr_fini(struct efx_channel *channel)
+void efx_ssr_fini(struct efx_rx_queue *rx_queue)
 {
-	struct efx_ssr_state *st = &channel->ssr;
+	struct efx_ssr_state *st = &rx_queue->ssr;
 	struct efx_ssr_conn *c;
 	unsigned int i;
 
@@ -765,7 +764,7 @@ void efx_ssr_fini(struct efx_channel *channel)
 		while (!list_empty(&st->conns[i])) {
 			c = list_entry(st->conns[i].prev,
 				       struct efx_ssr_conn, link);
-			efx_ssr_drop(channel, c);
+			efx_ssr_drop(rx_queue, c);
 		}
 	}
 
@@ -863,23 +862,23 @@ static void efx_ssr_deliver(struct efx_ssr_state *st, struct efx_ssr_conn *c)
 /* Stop tracking connections that have gone idle in order to keep hash
  * chains short.
  */
-static void efx_ssr_purge_idle(struct efx_channel *channel, unsigned int now)
+static void efx_ssr_purge_idle(struct efx_rx_queue *rx_queue, unsigned int now)
 {
 	struct efx_ssr_conn *c;
 	unsigned int i;
 
-	EFX_WARN_ON_ONCE_PARANOID(!list_empty(&channel->ssr.active_conns));
+	EFX_WARN_ON_ONCE_PARANOID(!list_empty(&rx_queue->ssr.active_conns));
 
-	channel->ssr.last_purge_jiffies = now;
-	for (i = 0; i <= channel->ssr.conns_mask; ++i) {
-		if (list_empty(&channel->ssr.conns[i]))
+	rx_queue->ssr.last_purge_jiffies = now;
+	for (i = 0; i <= rx_queue->ssr.conns_mask; ++i) {
+		if (list_empty(&rx_queue->ssr.conns[i]))
 			continue;
 
-		c = list_entry(channel->ssr.conns[i].prev,
+		c = list_entry(rx_queue->ssr.conns[i].prev,
 			       struct efx_ssr_conn, link);
 		if (now - c->last_pkt_jiffies > lro_idle_jiffies) {
-			++channel->ssr.n_drop_idle;
-			efx_ssr_drop(channel, c);
+			++rx_queue->ssr.n_drop_idle;
+			efx_ssr_drop(rx_queue, c);
 		}
 	}
 }
@@ -941,7 +940,7 @@ efx_ssr_merge_page(struct efx_ssr_state *st, struct efx_ssr_conn *c,
 		   struct tcphdr *th, int hdr_length, int data_length)
 {
 	struct efx_rx_buffer *rx_buf = &c->next_buf;
-	struct efx_channel *channel;
+	struct efx_rx_queue *rx_queue;
 	size_t rx_prefix_size;
 	u8 *eh = c->next_eh;
 
@@ -958,16 +957,16 @@ efx_ssr_merge_page(struct efx_ssr_state *st, struct efx_ssr_conn *c,
 
 		return 1;
 	} else {
-		channel = container_of(st, struct efx_channel, ssr);
+		rx_queue = container_of(st, struct efx_rx_queue, ssr);
 
-		c->skb = efx_rx_mk_skb(channel, &rx_buf, 1, &eh, hdr_length);
+		c->skb = efx_rx_mk_skb(rx_queue, &rx_buf, 1, &eh, hdr_length);
 		if (unlikely(c->skb == NULL))
 			return 0;
 
-		rx_prefix_size = channel->efx->type->rx_prefix_size;
+		rx_prefix_size = rx_queue->efx->type->rx_prefix_size;
 
-		efx_rx_skb_attach_timestamp(channel, c->skb,
-					    eh - rx_prefix_size);
+		efx_rx_skb_attach_timestamp(efx_get_rx_queue_channel(rx_queue),
+					    c->skb, eh - rx_prefix_size);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RXHASH_SUPPORT)
 		if (st->efx->net_dev->features & NETIF_F_RXHASH)
@@ -994,7 +993,7 @@ efx_ssr_merge_page(struct efx_ssr_state *st, struct efx_ssr_conn *c,
  * indicating whether the connection is still active for SSR purposes.
  */
 static bool
-efx_ssr_try_merge(struct efx_channel *channel, struct efx_ssr_conn *c)
+efx_ssr_try_merge(struct efx_rx_queue *rx_queue, struct efx_ssr_conn *c)
 {
 	struct efx_rx_buffer *rx_buf = &c->next_buf;
 	u8 *eh = c->next_eh;
@@ -1005,10 +1004,10 @@ efx_ssr_try_merge(struct efx_channel *channel, struct efx_ssr_conn *c)
 
 	now = jiffies;
 	if (now - c->last_pkt_jiffies > lro_idle_jiffies) {
-		++channel->ssr.n_drop_idle;
+		++rx_queue->ssr.n_drop_idle;
 		if (c->skb)
-			efx_ssr_deliver(&channel->ssr, c);
-		efx_ssr_drop(channel, c);
+			efx_ssr_deliver(&rx_queue->ssr, c);
+		efx_ssr_drop(rx_queue, c);
 		return false;
 	}
 	c->last_pkt_jiffies = jiffies;
@@ -1047,41 +1046,41 @@ efx_ssr_try_merge(struct efx_channel *channel, struct efx_ssr_conn *c)
 	if (unlikely(th_seq - c->next_seq)) {
 		/* Out-of-order, so start counting again. */
 		if (c->skb)
-			efx_ssr_deliver(&channel->ssr, c);
+			efx_ssr_deliver(&rx_queue->ssr, c);
 		c->n_in_order_pkts -= lro_loss_packets;
 		c->next_seq = th_seq + data_length;
-		++channel->ssr.n_misorder;
+		++rx_queue->ssr.n_misorder;
 		goto deliver_buf_out;
 	}
 	c->next_seq = th_seq + data_length;
 
 	if (c->n_in_order_pkts < lro_slow_start_packets) {
 		/* May be in slow-start, so don't merge. */
-		++channel->ssr.n_slow_start;
+		++rx_queue->ssr.n_slow_start;
 		++c->n_in_order_pkts;
 		goto deliver_buf_out;
 	}
 
 	if (unlikely(dont_merge)) {
 		if (c->skb)
-			efx_ssr_deliver(&channel->ssr, c);
+			efx_ssr_deliver(&rx_queue->ssr, c);
 		if (th->fin || th->rst) {
-			++channel->ssr.n_drop_closed;
-			efx_ssr_drop(channel, c);
+			++rx_queue->ssr.n_drop_closed;
+			efx_ssr_drop(rx_queue, c);
 			return false;
 		}
 		goto deliver_buf_out;
 	}
 
-	if (efx_ssr_merge_page(&channel->ssr, c, th,
+	if (efx_ssr_merge_page(&rx_queue->ssr, c, th,
 			       hdr_length, data_length) == 0)
 		goto deliver_buf_out;
 
-	channel->irq_mod_score += 2;
+	efx_get_rx_queue_channel(rx_queue)->irq_mod_score += 2;
 	return true;
 
  deliver_buf_out:
-	efx_rx_deliver(channel, eh, rx_buf, 1);
+	efx_rx_deliver(rx_queue, eh, rx_buf, 1);
 	return true;
 }
 
@@ -1127,10 +1126,10 @@ static void efx_ssr_new_conn(struct efx_ssr_state *st, u32 conn_hash,
 /* Process SKB and decide whether to dispatch it to the stack now or
  * later.
  */
-void efx_ssr(struct efx_channel *channel, struct efx_rx_buffer *rx_buf,
+void efx_ssr(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
 	     u8 *rx_data)
 {
-	struct efx_nic *efx = channel->efx;
+	struct efx_nic *efx = rx_queue->efx;
 	struct ethhdr *eh = (struct ethhdr *)rx_data;
 	struct efx_ssr_conn *c;
 	u32 l2_id = 0;
@@ -1183,9 +1182,9 @@ void efx_ssr(struct efx_channel *channel, struct efx_rx_buffer *rx_buf,
 		goto deliver_now;
 	}
 
-	bucket = conn_hash & channel->ssr.conns_mask;
+	bucket = conn_hash & rx_queue->ssr.conns_mask;
 
-	list_for_each_entry(c, &channel->ssr.conns[bucket], link) {
+	list_for_each_entry(c, &rx_queue->ssr.conns[bucket], link) {
 		if ((c->l2_id - l2_id) | (c->conn_hash - conn_hash))
 			continue;
 		if ((c->source ^ th->source) | (c->dest ^ th->dest))
@@ -1209,13 +1208,13 @@ void efx_ssr(struct efx_channel *channel, struct efx_rx_buffer *rx_buf,
 
 		/* Re-insert at head of list to reduce lookup time. */
 		list_del(&c->link);
-		list_add(&c->link, &channel->ssr.conns[bucket]);
+		list_add(&c->link, &rx_queue->ssr.conns[bucket]);
 
 		if (efx_rx_buffer_is_full(&c->next_buf)) {
-			if (!efx_ssr_try_merge(channel, c))
+			if (!efx_ssr_try_merge(rx_queue, c))
 				goto deliver_now;
 		} else {
-			list_add(&c->active_link, &channel->ssr.active_conns);
+			list_add(&c->active_link, &rx_queue->ssr.active_conns);
 		}
 		c->next_buf = *rx_buf;
 		c->next_eh = rx_data;
@@ -1224,17 +1223,17 @@ void efx_ssr(struct efx_channel *channel, struct efx_rx_buffer *rx_buf,
 		return;
 	}
 
-	efx_ssr_new_conn(&channel->ssr, conn_hash, l2_id, th);
+	efx_ssr_new_conn(&rx_queue->ssr, conn_hash, l2_id, th);
  deliver_now:
-	efx_rx_deliver(channel, rx_data, rx_buf, 1);
+	efx_rx_deliver(rx_queue, rx_data, rx_buf, 1);
 }
 
 /* Push held skbs down into network stack.
  * Only called when active list is non-empty.
  */
-void __efx_ssr_end_of_burst(struct efx_channel *channel)
+void __efx_ssr_end_of_burst(struct efx_rx_queue *rx_queue)
 {
-	struct efx_ssr_state *st = &channel->ssr;
+	struct efx_ssr_state *st = &rx_queue->ssr;
 	struct efx_ssr_conn *c;
 	unsigned int j;
 
@@ -1245,7 +1244,7 @@ void __efx_ssr_end_of_burst(struct efx_channel *channel)
 			       active_link);
 		if (!c->delivered && c->skb)
 			efx_ssr_deliver(st, c);
-		if (efx_ssr_try_merge(channel, c)) {
+		if (efx_ssr_try_merge(rx_queue, c)) {
 			if (c->skb)
 				efx_ssr_deliver(st, c);
 			list_del(&c->active_link);
@@ -1255,7 +1254,7 @@ void __efx_ssr_end_of_burst(struct efx_channel *channel)
 
 	j = jiffies;
 	if (unlikely(j != st->last_purge_jiffies))
-		efx_ssr_purge_idle(channel, j);
+		efx_ssr_purge_idle(rx_queue, j);
 }
 
 

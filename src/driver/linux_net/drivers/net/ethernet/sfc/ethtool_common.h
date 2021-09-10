@@ -10,6 +10,14 @@
 #ifndef EFX_ETHTOOL_COMMON_H
 #define EFX_ETHTOOL_COMMON_H
 
+int efx_ethtool_phys_id(struct net_device *net_dev,
+			enum ethtool_phys_id_state state);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
+int efx_ethtool_phys_id_loop(struct net_device *net_dev, u32 count);
+#endif
+
+void efx_ethtool_get_common_drvinfo(struct efx_nic *efx,
+				    struct ethtool_drvinfo *info);
 void efx_ethtool_get_drvinfo(struct net_device *net_dev,
 			     struct ethtool_drvinfo *info);
 u32 efx_ethtool_get_msglevel(struct net_device *net_dev);

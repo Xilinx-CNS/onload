@@ -43,11 +43,6 @@ MODULE_PARM_DESC(debug, "Bitmapped debugging message enable value");
 
 /* This is the time (in ms) between invocations of the hardware
  * monitor.
- * On Falcon-based NICs, this will:
- * - Check the on-board hardware monitor;
- * - Poll the link state and reconfigure the hardware as necessary.
- * On Siena-based NICs for power systems with EEH support, this will give EEH a
- * chance to start.
  */
 unsigned int monitor_interval_ms = 200;
 module_param(monitor_interval_ms, uint, 0644);
@@ -467,9 +462,6 @@ void efx_start_monitor(struct efx_nic *efx)
 static int efx_start_datapath(struct efx_nic *efx)
 {
 	bool old_rx_scatter = efx->rx_scatter;
-	struct efx_tx_queue *tx_queue;
-	struct efx_rx_queue *rx_queue;
-	struct efx_channel *channel;
 	size_t rx_page_buf_step;
 	int rc = 0;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_FEATURES_CHANGE)
@@ -593,31 +585,12 @@ static int efx_start_datapath(struct efx_nic *efx)
 	if (netif_device_present(efx->net_dev))
 		netif_tx_wake_all_queues(efx->net_dev);
 
-	goto out;
-
+	return 0;
 fail:
+	efx_stop_channels(efx);
+
 	if (efx->type->filter_table_down)
 		efx->type->filter_table_down(efx);
-
-	efx_for_each_channel(channel, efx) {
-		efx_for_each_channel_tx_queue(tx_queue, channel) {
-			if (atomic_read(&efx->active_queues) == 0)
-				goto out;
-			efx_remove_tx_queue(tx_queue);
-			atomic_dec(&efx->active_queues);
-		}
-
-		efx_for_each_channel_rx_queue(rx_queue, channel) {
-			if (atomic_read(&efx->active_queues) == 0)
-				goto out;
-			efx_remove_rx_queue(rx_queue);
-			atomic_dec(&efx->active_queues);
-		}
-		if (channel->type->stop)
-			channel->type->stop(channel);
-	}
-
-out:
 	return rc;
 }
 
@@ -1527,6 +1500,8 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 
 	efx->max_channels = EFX_MAX_CHANNELS;
 	efx->max_tx_channels = EFX_MAX_CHANNELS;
+
+	mutex_init(&efx->reflash_mutex);
 
 	return 0;
 }

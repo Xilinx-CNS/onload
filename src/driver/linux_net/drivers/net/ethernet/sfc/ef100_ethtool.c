@@ -87,10 +87,21 @@ static int ef100_ethtool_set_ringparam(struct net_device *net_dev,
 	return rc;
 }
 
+static void ef100_ethtool_get_drvinfo(struct net_device *net_dev,
+				      struct ethtool_drvinfo *info)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	efx_ethtool_get_common_drvinfo(efx, info);
+	if (!in_interrupt())
+		efx_mcdi_print_fw_bundle_ver(efx, info->fw_version,
+					     sizeof(info->fw_version));
+}
+
 /*	Ethtool options available
  */
 const struct ethtool_ops ef100_ethtool_ops = {
-	.get_drvinfo		= efx_ethtool_get_drvinfo,
+	.get_drvinfo		= ef100_ethtool_get_drvinfo,
 	.get_msglevel		= efx_ethtool_get_msglevel,
 	.set_msglevel		= efx_ethtool_set_msglevel,
 	.nway_reset		= efx_ethtool_nway_reset,
@@ -114,6 +125,11 @@ const struct ethtool_ops ef100_ethtool_ops = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_FECPARAM)
 	.get_fecparam		= efx_ethtool_get_fecparam,
 	.set_fecparam		= efx_ethtool_set_fecparam,
+#endif
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID) && !defined(EFX_USE_ETHTOOL_OPS_EXT))
+	.set_phys_id            = efx_ethtool_phys_id,
+#elif !defined(EFX_USE_ETHTOOL_OPS_EXT)
+	.phys_id                = efx_ethtool_phys_id_loop,
 #endif
 	.get_ethtool_stats	= efx_ethtool_get_stats,
 #if !defined(EFX_USE_KCOMPAT)

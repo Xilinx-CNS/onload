@@ -75,7 +75,9 @@ struct efx_mcdi_filter_table {
 #define EFX_MCDI_FILTER_FLAGS	   3UL
 		u64 handle;	     /* firmware handle */
 	} *entry;
-/* Shadow of net_device address lists, guarded by mac_lock */
+	/* are the filters meant to be on the NIC */
+	bool push_filters;
+	/* Shadow of net_device address lists, guarded by mac_lock */
 	struct efx_mcdi_dev_addr dev_uc_list[EFX_MCDI_FILTER_DEV_UC_MAX];
 	struct efx_mcdi_dev_addr dev_mc_list[EFX_MCDI_FILTER_DEV_MC_MAX];
 	int dev_uc_count;
@@ -357,7 +359,7 @@ efx_mcdi_filter_push_prep_set_match_fields(struct efx_nic *efx,
 		switch (encap_type & EFX_ENCAP_TYPES_MASK) {
 		case EFX_ENCAP_TYPE_VXLAN:
 			vxlan = true;
-			/* fallthrough */
+			fallthrough;
 		case EFX_ENCAP_TYPE_GENEVE:
 			COPY_VALUE(false, ether_type, ETHER_TYPE);
 			outer_ip_proto = IPPROTO_UDP;
@@ -518,12 +520,19 @@ static int efx_mcdi_filter_push(struct efx_nic *efx,
 				struct efx_rss_context *ctx,
 				const struct efx_vport *vpx, bool replacing)
 {
+	struct efx_mcdi_filter_table *table = efx->filter_state;
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_FILTER_OP_EXT_IN_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_FILTER_OP_EXT_OUT_LEN);
 	size_t outlen;
 	int rc;
 
+	if (!table->push_filters) {
+		*handle = EFX_MCDI_FILTER_ID_INVALID;
+		return 0;
+	}
+
 	efx_mcdi_filter_push_prep(efx, spec, inbuf, *handle, ctx, vpx, replacing);
+
 	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_FILTER_OP, inbuf, sizeof(inbuf),
 				outbuf, sizeof(outbuf), &outlen);
 	if (rc && spec->priority != EFX_FILTER_PRI_HINT)
@@ -531,8 +540,14 @@ static int efx_mcdi_filter_push(struct efx_nic *efx,
 				       outbuf, outlen, rc);
 	if (rc == 0)
 		*handle = MCDI_QWORD(outbuf, FILTER_OP_OUT_HANDLE);
+#ifdef EFX_NOT_UPSTREAM
+	/* Returning EBUSY was originally done to match Falcon/Siena behaviour.
+	 * This code is also called by Onload, so this is now kept to
+	 * keep that ABI the same.
+	 */
+#endif
 	if (rc == -ENOSPC)
-		rc = -EBUSY; /* to match efx_farch_filter_insert() */
+		rc = -EBUSY;
 	return rc;
 }
 
@@ -874,6 +889,8 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 			}
 
 			if (rc == 0) {
+				table->entry[i].handle =
+					EFX_MCDI_FILTER_ID_INVALID;
 				kfree(saved_spec);
 				saved_spec = NULL;
 				priv_flags = 0;
@@ -937,6 +954,10 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 	     efx_mcdi_filter_get_unsafe_pri(filter_id)))
 		return -ENOENT;
 
+	/* If the filter isn't on the NIC then there's nothing to do. */
+	if (table->entry[filter_idx].handle == EFX_MCDI_FILTER_ID_INVALID)
+		return 0;
+
 	if (spec->flags & EFX_FILTER_FLAG_RX_OVER_AUTO &&
 	    priority_mask == (1U << EFX_FILTER_PRI_AUTO)) {
 		/* Just remove flags */
@@ -986,6 +1007,8 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 			 */
 			kfree(spec);
 			efx_mcdi_filter_set_entry(table, filter_idx, NULL, 0);
+			table->entry[filter_idx].handle =
+				EFX_MCDI_FILTER_ID_INVALID;
 		} else {
 			efx_mcdi_display_error(efx, MC_CMD_FILTER_OP,
 					MC_CMD_FILTER_OP_IN_LEN, NULL, 0, rc);
@@ -1990,6 +2013,7 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 	struct net_device *net_dev  = efx->net_dev;
+	unsigned int filter_idx;
 	int rc;
 
 	table->mc_chaining = mc_chaining;
@@ -2001,6 +2025,11 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 		rc = -ENOMEM;
 		goto fail;
 	}
+
+	for (filter_idx = 0;
+	     filter_idx < EFX_MCDI_FILTER_TBL_ROWS;
+	     filter_idx++)
+		table->entry[filter_idx].handle = EFX_MCDI_FILTER_ID_INVALID;
 
 	rc = efx_mcdi_filter_probe_supported_filters(efx);
 	if (rc)
@@ -2102,6 +2131,8 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 	mutex_lock(&efx->rss_lock);
 	mutex_lock(&efx->vport_lock);
 
+	table->push_filters = true;
+
 	/* remove any filters that are no longer supported */
 	for (filter_idx = 0; filter_idx < EFX_MCDI_FILTER_TBL_ROWS; filter_idx++) {
 		spec = efx_mcdi_filter_entry_spec(table, filter_idx);
@@ -2116,6 +2147,7 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 		if (match_pri < table->rx_match_count)
 			continue;
 
+		table->entry[filter_idx].handle = EFX_MCDI_FILTER_ID_INVALID;
 		kfree(spec);
 		efx_mcdi_filter_invalidate_filter_id(efx, filter_idx);
 		++invalid_filters;
@@ -2133,12 +2165,6 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 			spec = efx_mcdi_filter_entry_spec(table, filter_idx);
 			if (!spec)
 				continue;
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_DRIVERLINK)
-			/* Do not restore Onload filters: we did not remove them. */
-			if (spec->flags & EFX_FILTER_FLAG_STACK_ID)
-				continue;
-#endif
 
 			mcdi_flags = efx_mcdi_filter_mcdi_flags_from_spec(spec);
 			if (mcdi_flags != table->rx_match_mcdi_flags[match_pri])
@@ -2240,12 +2266,6 @@ void efx_mcdi_filter_table_down(struct efx_nic *efx)
 		if (!spec)
 			continue;
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_DRIVERLINK)
-		/* Do not remove Onload filters. */
-		if (spec->flags & EFX_FILTER_FLAG_STACK_ID)
-			continue;
-#endif
-
 		MCDI_SET_DWORD(inbuf, FILTER_OP_IN_OP,
 			       efx_mcdi_filter_is_exclusive(spec) ?
 			       MC_CMD_FILTER_OP_IN_OP_REMOVE :
@@ -2258,14 +2278,16 @@ void efx_mcdi_filter_table_down(struct efx_nic *efx)
 			netif_info(efx, drv, efx->net_dev,
 					"%s: filter %04x remove failed %d\n",
 					__func__, filter_idx, rc);
-		kfree(spec);
-		efx_mcdi_filter_set_entry(table, filter_idx, NULL, 0);
+		table->entry[filter_idx].handle = EFX_MCDI_FILTER_ID_INVALID;
 	}
+
+	table->push_filters = false;
 }
 
 void efx_mcdi_filter_table_fini(struct efx_nic *efx)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
+	unsigned int filter_idx;
 
 	if (!table)
 		return;
@@ -2275,6 +2297,13 @@ void efx_mcdi_filter_table_fini(struct efx_nic *efx)
 	efx_trim_debugfs_port(efx, filter_debugfs);
 #endif
 
+	if (!table->entry)
+		return;
+
+	for (filter_idx = 0;
+	     filter_idx < EFX_MCDI_FILTER_TBL_ROWS;
+	     filter_idx++)
+		kfree(efx_mcdi_filter_entry_spec(table, filter_idx));
 	vfree(table->entry);
 	table->entry = NULL;
 }
@@ -2282,6 +2311,9 @@ void efx_mcdi_filter_table_fini(struct efx_nic *efx)
 void efx_mcdi_filter_table_remove(struct efx_nic *efx)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	if (!table)
+		return;
 
 	down_write(&efx->filter_sem);
 	efx_mcdi_filter_del_vlans(efx);

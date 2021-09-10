@@ -67,18 +67,16 @@ extern bool separate_tx_channels;
 /* RX */
 void efx_set_default_rx_indir_table(struct efx_nic *efx,
 				    struct efx_rss_context *ctx);
-void __efx_rx_packet(struct efx_channel *channel);
+void __efx_rx_packet(struct efx_rx_queue *rx_queue);
 void efx_rx_packet(struct efx_rx_queue *rx_queue, unsigned int index,
 		   unsigned int n_frags, unsigned int len, u16 flags);
 
-static inline void efx_rx_flush_packet(struct efx_channel *channel)
+static inline void efx_rx_flush_packet(struct efx_rx_queue *rx_queue)
 {
-	if (channel->rx_pkt_n_frags)
-		if (!channel->type->receive_raw ||
-		    !channel->type->receive_raw(channel))
-			INDIRECT_CALL_2(channel->efx->type->rx_packet,
-					__ef100_rx_packet, __efx_rx_packet,
-					channel);
+	if (rx_queue->rx_pkt_n_frags)
+		INDIRECT_CALL_2(rx_queue->efx->type->rx_packet,
+				__ef100_rx_packet, __efx_rx_packet,
+				rx_queue);
 }
 
 static inline bool efx_rx_buf_hash_valid(struct efx_nic *efx, const u8 *prefix)
@@ -172,20 +170,15 @@ static inline bool efx_ssr_enabled(struct efx_nic *efx)
 #endif
 }
 
-static inline bool efx_channel_ssr_enabled(struct efx_channel *channel)
-{
-	return efx_ssr_enabled(channel->efx);
-}
+int efx_ssr_init(struct efx_rx_queue *rx_queue, struct efx_nic *efx);
+void efx_ssr_fini(struct efx_rx_queue *rx_queue);
+void __efx_ssr_end_of_burst(struct efx_rx_queue *rx_queue);
+void efx_ssr(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf, u8 *eh);
 
-int efx_ssr_init(struct efx_channel *channel, struct efx_nic *efx);
-void efx_ssr_fini(struct efx_channel *channel);
-void __efx_ssr_end_of_burst(struct efx_channel *channel);
-void efx_ssr(struct efx_channel *, struct efx_rx_buffer *rx_buf, u8 *eh);
-
-static inline void efx_ssr_end_of_burst(struct efx_channel *channel)
+static inline void efx_ssr_end_of_burst(struct efx_rx_queue *rx_queue)
 {
-	if (!list_empty(&channel->ssr.active_conns))
-		__efx_ssr_end_of_burst(channel);
+	if (!list_empty(&rx_queue->ssr.active_conns))
+		__efx_ssr_end_of_burst(rx_queue);
 }
 
 #endif /* EFX_USE_SFC_LRO */
@@ -400,14 +393,6 @@ static inline void efx_schedule_channel_irq(struct efx_channel *channel)
 #if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_CANCEL_WORK_SYNC) || !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC))
 extern struct workqueue_struct *efx_workqueue;
 #endif
-
-static inline void efx_reps_set_link_state(struct efx_nic *efx, bool up)
-{
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	if (efx->type->reps_set_link_state)
-		efx->type->reps_set_link_state(efx, up);
-#endif
-}
 
 static inline void efx_device_detach_sync(struct efx_nic *efx)
 {

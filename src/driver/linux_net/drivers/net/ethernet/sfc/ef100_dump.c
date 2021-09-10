@@ -376,7 +376,8 @@ int efx_ef100_dump_sss_regs(struct efx_nic *efx)
 
 #define MAX_EVENTS_TO_DUMP 0xffff
 
-unsigned int ef100_dump_pending_events(struct efx_channel *channel, bool print)
+static unsigned int ef100_dump_pending_events(struct efx_channel *channel,
+					      bool print)
 {
 	unsigned int spent = 0;
 	struct efx_nic *efx = channel->efx;

@@ -42,8 +42,11 @@ void efx_mcdi_filter_table_reset_mc_allocations(struct efx_nic *efx);
  *
  * Huntington has a single 8K filter table shared between all filter
  * types and both ports.
+ *
+ * Medford/Medford2 have a single 16K filter table shared between all
+ * filter types and ports.
  */
-#define EFX_MCDI_FILTER_TBL_ROWS 8192
+#define EFX_MCDI_FILTER_TBL_ROWS 16384
 
 int efx_mcdi_filter_probe_supported_filters(struct efx_nic *efx);
 bool efx_mcdi_filter_match_supported(struct efx_nic *efx,
