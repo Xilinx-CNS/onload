@@ -237,6 +237,7 @@ efab_vi_rm_mmap_rxq_shm(struct efrm_vi *virs, unsigned long *bytes,
   if( rc < 0 )
     EFCH_ERR("%s: ERROR: remap_vmalloc_range failed rc=%d", __func__, rc);
   else {
+    vma->vm_flags &= ~VM_DONTDUMP; /* remap_vmalloc_range_partial sets this */
     *bytes -= len;
     *offset += len;
   }

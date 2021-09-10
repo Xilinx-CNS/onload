@@ -474,9 +474,7 @@ static int tcp_helper_rm_mmap_pkts(tcp_helper_resource_t* trs,
 
   if( oo_iobufset_npages(ni->pkt_bufs[bufid]) == 1 ) {
     /* Avoid nopage handler, mmap it all at once */
-    return remap_pfn_range(vma, vma->vm_start,
-                           oo_iobufset_pfn(ni->pkt_bufs[bufid], 0), bytes,
-                           vma->vm_page_prot);
+    return vm_insert_page(vma, vma->vm_start, ni->pkt_bufs[bufid]->pages[0]);
   }
 
   return 0;

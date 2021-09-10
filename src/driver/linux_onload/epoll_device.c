@@ -647,8 +647,7 @@ static int oo_epoll1_mmap(struct oo_epoll1_private* priv,
 
   /* Map memory to user */
   if( priv->page == NULL ||
-      remap_pfn_range(vma, vma->vm_start, page_to_pfn(priv->page),
-                      PAGE_SIZE, vma->vm_page_prot) < 0) {
+      vm_insert_page(vma, vma->vm_start, priv->page) < 0) {
     return -EIO;
   }
 
