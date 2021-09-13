@@ -274,6 +274,9 @@ static void* monitor_fn(void* dummy)
   int pkt_rates[2];
   int ms, i;
 
+  /* The thread name is limited to 15 characters so abbreviate. */
+  pthread_setname_np(pthread_self(), "efforward_mon");
+
   for( i = 0; i < 2; ++i )
     prev_pkts[i] = vis[i].n_pkts;
   gettimeofday(&start, NULL);
