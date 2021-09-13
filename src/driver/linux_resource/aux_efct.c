@@ -10,9 +10,11 @@
 #include <linux/mman.h>
 #include <linux/rwsem.h>
 #include <linux/hugetlb.h>
+#include <uapi/linux/ip.h>
 #include "efrm_internal.h"
 #include <ci/driver/kernel_compat.h>
 #include <ci/driver/ci_efct.h>
+#include <ci/tools/bitfield.h>
 
 #if CI_HAVE_EFCT_AUX
 
@@ -372,6 +374,24 @@ static void efct_hugepage_list_changed(void *driver_data, int rxq)
   }
 }
 
+static bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
+                                const void* meta, const void* payload)
+{
+  /* This is all a massive hack, just to make things mostly work for now. A
+   * real implementation would either use the flow_lookup or keep a filter
+   * table inside Onload */
+  const ci_oword_t* header = meta;
+  unsigned len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
+  const struct ethhdr* eth = payload + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+  const struct iphdr* ip = (const struct iphdr*)(eth + 1);
+
+  if( len < sizeof(*eth) + sizeof(*ip) )
+    return false;
+  if (eth->h_proto != htons(ETH_P_IP) )
+    return false;
+  return ip->protocol == IPPROTO_UDP || ip->protocol == IPPROTO_TCP;
+}
+
 struct xlnx_efct_drvops efct_ops = {
   .name = "sfc_resource",
   .poll = efct_poll,
@@ -381,6 +401,7 @@ struct xlnx_efct_drvops efct_ops = {
   .alloc_hugepage = efct_alloc_hugepage,
   .free_hugepage = efct_free_hugepage,
   .hugepage_list_changed = efct_hugepage_list_changed,
+  .packet_handled = efct_packet_handled,
 };
 
 
