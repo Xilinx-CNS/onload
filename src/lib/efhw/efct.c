@@ -15,8 +15,6 @@
 
 #if CI_HAVE_EFCT_AUX
 
-#define EFCT_TODO_NEW_FILTER_API 0  /* EFCT TODO */
-
 int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
                   bool timestamp_req, size_t n_hugepages, struct file* memfd,
@@ -613,11 +611,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     params.flags = XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
-#if EFCT_TODO_NEW_FILTER_API
   rc = edev->ops->filter_insert(cli, &params);
-#else
-  rc = 0;
-#endif
   EFCT_POST(dev, edev, cli, nic, rc);
   if( rc < 0 )
     return rc;
@@ -634,11 +628,7 @@ efct_filter_remove(struct efhw_nic *nic, int filter_id)
   int rc;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
-#if EFCT_TODO_NEW_FILTER_API
   rc = edev->ops->filter_remove(cli, filter_id);
-#else
-  rc = 0;
-#endif
   EFCT_POST(dev, edev, cli, nic, rc);
 }
 
