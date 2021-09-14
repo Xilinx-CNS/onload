@@ -621,10 +621,24 @@ int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
                                               OO_TRUSTED_LOCK_HANDLE_ICMP,
                                               CI_EPLOCK_NETIF_HANDLE_ICMP,
                                               1) ) {
-    oo_icmp_handle(thr);
-    efab_tcp_helper_netif_unlock(thr, 1);
+    if( thr->netif.flags & CI_NETIF_FLAG_AF_XDP ) {
+      /* We are in softirq context here, but AF_XDP poll can sleep.
+       * Defer to workqueue. */
+      ef_eplock_holder_set_flag(&thr->netif.state->lock,
+                                CI_EPLOCK_NETIF_HANDLE_ICMP);
+      tcp_helper_defer_dl2work(thr, OO_THR_AFLAG_UNLOCK_TRUSTED);
+    }
+    else {
+      oo_icmp_handle(thr);
+      efab_tcp_helper_netif_unlock(thr, 1);
+    }
   }
 
+  /* We either handled the ICMP packet, or deferred the handling.
+   * In the first case we obviously may and should drop the reference.
+   * In the second case we may do it as well, because we always flush
+   * non-atomic workqueue before destroying the thr.
+   */
   oo_thr_ref_drop(thr->ref, OO_THR_REF_BASE);
 
   return 0;
