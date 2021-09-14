@@ -1449,14 +1449,20 @@ static int af_xdp_efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
 
 	switch (fs->flow_type) {
 	case UDP_V4_FLOW:
-		if (fs->m_u.udp_ip4_spec.ip4src || fs->m_u.udp_ip4_spec.psrc ||
-		    fs->m_u.udp_ip4_spec.tos)
+		if (fs->m_u.udp_ip4_spec.tos)
 			return -EOPNOTSUPP;
+		fs->h_u.udp_ip4_spec.ip4src = 0;
+		fs->h_u.udp_ip4_spec.psrc = 0;
+		fs->m_u.udp_ip4_spec.ip4src = 0;
+		fs->m_u.udp_ip4_spec.psrc = 0;
 		break;
 	case TCP_V4_FLOW:
-		if (fs->m_u.tcp_ip4_spec.ip4src || fs->m_u.tcp_ip4_spec.psrc ||
-		    fs->m_u.tcp_ip4_spec.tos)
+		if (fs->m_u.tcp_ip4_spec.tos)
 			return -EOPNOTSUPP;
+		fs->h_u.tcp_ip4_spec.ip4src = 0;
+		fs->h_u.tcp_ip4_spec.psrc = 0;
+		fs->m_u.tcp_ip4_spec.ip4src = 0;
+		fs->m_u.tcp_ip4_spec.psrc = 0;
 		break;
 	default:
 		/* FIXME AF_XDP need to check whether we can install both IPv6
