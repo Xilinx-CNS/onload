@@ -4,6 +4,7 @@
 #include <ci/efrm/efrm_client.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
+#include <ci/efhw/eventq.h>
 #include <ci/tools/sysdep.h>
 
 #include "linux_resource_internal.h"
@@ -138,10 +139,99 @@ static int efct_poll(void *driver_data, int qid, int budget)
   return 0;
 }
 
+static bool seq_lt(uint32_t a, uint32_t b)
+{
+  return (int32_t)(a - b) < 0;
+}
+
+static uint32_t make_pkt_seq(unsigned sbseq, unsigned pktix)
+{
+  return (sbseq << 16) | pktix;
+}
+
+static int do_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
+                     int budget)
+{
+  return efct->nic->ev_handlers->wakeup_fn(efct->nic, app->wakeup_instance,
+                                           budget);
+}
+
 static int efct_handle_event(void *driver_data,
                              const struct xlnx_efct_event *event, int budget)
 {
+  struct efhw_nic_efct *efct = driver_data;
+
+  switch( event->type ) {
+    case XLNX_EVENT_WAKEUP: {
+      struct efhw_nic_efct_rxq* q = &efct->rxq[event->rxq];
+      struct efhw_efct_rxq *app;
+      unsigned sbseq = event->value >> 32;
+      unsigned pktix = event->value & 0xffffffff;
+      uint32_t now = make_pkt_seq(sbseq, pktix);
+      int spent = 0;
+
+      WRITE_ONCE(q->now, now);
+      mb();
+      if( READ_ONCE(q->awaiters) == 0 )
+        return 0;
+
+      for( app = q->live_apps; app; app = app->next ) {
+        uint32_t wake_at = READ_ONCE(app->wake_at_seqno);
+        if( wake_at != EFCT_INVALID_PKT_SEQNO && seq_lt(wake_at, now) ) {
+          if( cmpxchg(&app->wake_at_seqno, wake_at, EFCT_INVALID_PKT_SEQNO) ==
+              wake_at ) {
+            int rc;
+            ci_atomic32_dec(&q->awaiters);
+            rc = do_wakeup(efct, app, budget - spent);
+            if( rc >= 0 )
+              spent += rc;
+          }
+        }
+      }
+      return spent;
+    }
+
+    case XLNX_EVENT_RESET_UP:
+    case XLNX_EVENT_RESET_DOWN:
+    case XLNX_EVENT_RX_FLUSH:
+      return -ENOSYS;
+  }
   return -ENOSYS;
+}
+
+int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
+                        unsigned sbseq, unsigned pktix)
+{
+  struct efhw_nic_efct_rxq* q = &efct->rxq[app->qid];
+  uint32_t pkt_seqno = make_pkt_seq(sbseq, pktix);
+  uint32_t now = READ_ONCE(q->now);
+
+  EFHW_ASSERT(pkt_seqno != EFCT_INVALID_PKT_SEQNO);
+  /* Interrupt wakeups are traditionally defined simply by equality, but we
+   * need to use proper ordering because apps can run significantly ahead of
+   * the net driver due to interrupt coalescing, and it'd be contrary to the
+   * goal of being interrupt-driven to spin entering and exiting the kernel
+   * for an entire coalesce period */
+  if( seq_lt(pkt_seqno, now) ) {
+    do_wakeup(efct, app, INT_MAX);
+    return 0;
+  }
+
+  if( xchg(&app->wake_at_seqno, pkt_seqno) == EFCT_INVALID_PKT_SEQNO )
+    ci_atomic32_inc(&q->awaiters);
+
+  mb();
+  now = READ_ONCE(q->now);
+  if( ! seq_lt(pkt_seqno, now) )
+    return 0;
+
+  if( cmpxchg(&app->wake_at_seqno, pkt_seqno, EFCT_INVALID_PKT_SEQNO) ==
+      pkt_seqno ) {
+    ci_atomic32_dec(&q->awaiters);
+    do_wakeup(efct, app, INT_MAX);
+    return 0;
+  }
+  return 0;
 }
 
 /* returns true if we can/should squeeze more buffers into the app */
@@ -149,7 +239,7 @@ bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_rxq *app
 {
   uint32_t driver_buf_count;
   uint32_t sbuf_seq;
-  uint16_t sbid_sentinel;
+  struct efhw_nic_efct_rxq_superbuf sbufs_q_entry;
   uint16_t sbid;
 
   uint32_t added;
@@ -189,16 +279,17 @@ bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_rxq *app
   else
     sbuf_seq = q->sbufs.removed;
 
-  sbid_sentinel = q->sbufs.q[sbuf_seq % CI_ARRAY_SIZE(q->sbufs.q)];
-  sbid = sbid_sentinel & CI_EFCT_Q_SUPERBUF_ID_MASK;
+  sbufs_q_entry = q->sbufs.q[sbuf_seq % CI_ARRAY_SIZE(q->sbufs.q)];
+  sbid = sbufs_q_entry.value & CI_EFCT_Q_SUPERBUF_ID_MASK;
   app->next_sbuf_seq = sbuf_seq + 1;
 
   ++q->superbuf_refcount[sbid];
   ++app->current_owned_superbufs;
   __set_bit(sbid, app->owns_superbuf);
-  RING_FIFO_ENTRY(app->shm->rxq.q, added) = sbid_sentinel;
+  RING_FIFO_ENTRY(app->shm->rxq.q, added) = sbufs_q_entry.value;
   smp_store_release(&app->shm->rxq.added,
-                    ((uint64_t)sbuf_seq << 32) | (added + 1));
+                    ((uint64_t)sbufs_q_entry.global_seqno << 32) |
+                    (added + 1));
   return true;
 }
 
@@ -225,7 +316,7 @@ static int efct_buffer_end(void *driver_data, int qid, int sbid, bool force)
   EFHW_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
   q = &efct->rxq[qid];
   EFHW_ASSERT((uint32_t)(q->sbufs.added - q->sbufs.removed) < ARRAY_SIZE(q->sbufs.q));
-  EFHW_ASSERT((q->sbufs.q[q->sbufs.removed % CI_ARRAY_SIZE(q->sbufs.q)] & CI_EFCT_Q_SUPERBUF_ID_MASK) == sbid);
+  EFHW_ASSERT((q->sbufs.q[q->sbufs.removed % CI_ARRAY_SIZE(q->sbufs.q)].value & CI_EFCT_Q_SUPERBUF_ID_MASK) == sbid);
   q->sbufs.removed++;
   EFHW_ASSERT((int)q->superbuf_refcount[sbid] > 0);
   return --q->superbuf_refcount[sbid] == 0;
@@ -239,13 +330,16 @@ static int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
 
   EFHW_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
   q = &efct->rxq[qid];
-  q->superbuf_seqno = sbseq;
   if( sbid < 0 )
     return -1;
 
   /* remember buffers owned by x3net */
   ++q->superbuf_refcount[sbid];
-  q->sbufs.q[(q->sbufs.added++) % CI_ARRAY_SIZE(q->sbufs.q)] = sbid | (sentinel << 15);
+  q->sbufs.q[(q->sbufs.added++) % CI_ARRAY_SIZE(q->sbufs.q)] =
+              (struct efhw_nic_efct_rxq_superbuf){
+                .value = sbid | (sentinel << 15),
+                .global_seqno = sbseq,
+              };
 
   activate_new_apps(q);
   post_superbuf_to_apps(q);
@@ -526,6 +620,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN;
   nic->arch_extra = efct;
+  efct->nic = nic;
 
   efrm_notify_nic_probe(net_dev);
   return 0;

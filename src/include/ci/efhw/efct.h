@@ -11,6 +11,12 @@ extern struct efhw_func_ops efct_char_functional_units;
 struct efhw_efct_rxq;
 struct xlnx_efct_hugepage;
 typedef void efhw_efct_rxq_free_func_t(struct efhw_efct_rxq*);
+typedef void efhw_efct_rxq_int_wake_func_t(struct efhw_efct_rxq*);
+
+/* Packet sequences are defined as (superbuf_seqno << 16) | pkt_index_in_sb,
+ * therefore -1 is an impossible value because we'll never have 65535 packets
+ * in a single superbuf */
+#define EFCT_INVALID_PKT_SEQNO (~0u)
 
 struct efhw_efct_rxq {
   struct efhw_efct_rxq *next;
@@ -19,14 +25,23 @@ struct efhw_efct_rxq {
   bool destroy;
   uint32_t next_sbuf_seq;
   size_t n_hugepages;
+  uint32_t wake_at_seqno;
   uint32_t current_owned_superbufs;
   uint32_t max_allowed_superbufs;
   DECLARE_BITMAP(owns_superbuf, CI_EFCT_MAX_SUPERBUFS);
   efhw_efct_rxq_free_func_t *freer;
+  unsigned wakeup_instance;
 };
 
 /* TODO EFCT find somewhere better to put this */
 #define CI_EFCT_MAX_RXQS  8
+
+struct efhw_nic_efct_rxq_superbuf {
+  /* Each value is (sentinel << 15) | sbid, i.e. identical to
+   * efab_efct_rx_superbuf_queue::q */
+  uint16_t value;
+  uint32_t global_seqno;
+};
 
 struct efhw_nic_efct_rxq {
   struct efhw_efct_rxq *new_apps;  /* Owned by process context */
@@ -41,14 +56,21 @@ struct efhw_nic_efct_rxq {
    *  * resume a stopped app (subset of the above really),
    *  * start new app (without rollover)
    */
-  struct efab_efct_rx_superbuf_queue sbufs;
+  struct {
+    struct efhw_nic_efct_rxq_superbuf q[16];
+    uint32_t added;
+    uint32_t removed;
+  } sbufs;
   struct work_struct destruct_wq;
+  uint32_t now;
+  uint32_t awaiters;
 };
 
 struct efhw_nic_efct {
   struct efhw_nic_efct_rxq rxq[CI_EFCT_MAX_RXQS];
   struct xlnx_efct_device *edev;
   struct xlnx_efct_client *client;
+  struct efhw_nic *nic;
 };
 
 #if CI_HAVE_EFCT_AUX
@@ -61,6 +83,8 @@ void efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
                        efhw_efct_rxq_free_func_t *freer);
 int efct_get_hugepages(struct efhw_nic *nic, int hwqid,
                        struct xlnx_efct_hugepage *pages, size_t n_pages);
+int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
+                        unsigned sbseq, unsigned pktix);
 #endif
 
 static inline void efct_app_list_push(struct efhw_efct_rxq **head,
