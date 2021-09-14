@@ -283,9 +283,12 @@ oo_dshm_mmap_impl(struct vm_area_struct* vma)
                                    map_length >> PAGE_SHIFT);
       ci_uint32 i;
       for( i = 0, rc = 0; i < num_pages && rc == 0; ++i ) {
-        rc = vm_insert_page(vma,
-                            vma->vm_start + (unsigned long) i * PAGE_SIZE,
-                            buffer->pages[i]);
+        /* vm_insert_page() would have been simpler (and allow core dumps to
+         * capture these pages), but it fails with anonymous pages */
+        rc = remap_pfn_range(vma,
+                             vma->vm_start + (unsigned long) i * PAGE_SIZE,
+                             page_to_pfn(buffer->pages[i]),
+                             PAGE_SIZE, vma->vm_page_prot);
       }
     }
     else {
