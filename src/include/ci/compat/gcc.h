@@ -149,7 +149,7 @@ typedef ci_uint64                       ci_fixed_descriptor_t;
 #endif
 
 #if __has_attribute(__fallthrough__)
-#define ci_fallthrough __attribute__((__fallthrough__));
+#define ci_fallthrough __attribute__((__fallthrough__))
 #else
 #define ci_fallthrough do{}while(0) /*fallthrough*/
 #endif
