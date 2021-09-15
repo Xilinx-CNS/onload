@@ -139,7 +139,7 @@ static int efct_poll(void *driver_data, int qid, int budget)
 }
 
 static int efct_handle_event(void *driver_data,
-                             const struct xlnx_efct_event *event)
+                             const struct xlnx_efct_event *event, int budget)
 {
   return -ENOSYS;
 }
@@ -231,16 +231,15 @@ static int efct_buffer_end(void *driver_data, int qid, int sbid, bool force)
   return --q->superbuf_refcount[sbid] == 0;
 }
 
-
-static int efct_buffer_start(void *driver_data, int qid, int sbid,
-                             bool sentinel)
+static int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
+                             int sbid, bool sentinel)
 {
   struct efhw_nic_efct *efct = driver_data;
   struct efhw_nic_efct_rxq *q;
 
   EFHW_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
   q = &efct->rxq[qid];
-
+  q->superbuf_seqno = sbseq;
   if( sbid < 0 )
     return -1;
 
