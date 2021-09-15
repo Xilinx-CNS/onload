@@ -19,4 +19,14 @@
 #define WIRE_ORDER_CFG_FLAGS_OFST 0
 #define WIRE_ORDER_CFG_N_SOCKS_OFST 4
 
+#ifdef __has_attribute
+#if __has_attribute(__fallthrough__)
+#define fallthrough __attribute__((__fallthrough__))
+#endif
+#endif
+
+#ifndef fallthrough
+#define fallthrough do{}while(0) /*fallthrough*/
+#endif
+
 #endif /* WIRE_ORDER_H */

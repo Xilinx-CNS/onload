@@ -196,7 +196,7 @@ int main(int argc, char* argv[])
       break;
     case '?':
       usage();
-      /* fallthrough */
+      fallthrough;
     default:
       TRY(-1);
     }
