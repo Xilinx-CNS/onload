@@ -452,6 +452,18 @@ typedef struct ci_resource_prime_op_s {
   uint32_t           crp_current_ptr;
 } ci_resource_prime_op_t;
 
+typedef struct ci_resource_prime_qs_op_s {
+  efch_resource_id_t crp_id;
+  uint32_t           n_rxqs;
+  uint32_t           n_txqs;
+  struct {
+    efch_resource_id_t rxq_id;
+    uint32_t           sbseq;
+    uint32_t           pktix;
+  } rxq_current[EF_VI_MAX_EFCT_RXQS];
+  uint32_t           txq_current;
+} ci_resource_prime_qs_op_t;
+
 
 /**********************************************************************
  *

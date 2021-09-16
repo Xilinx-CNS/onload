@@ -69,7 +69,8 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
 	rxq->vi = vi;
 	rc = efct_nic_rxq_bind(vi_rs->rs_client->nic, qid, mask, timestamp_req,
 	                       n_hugepages, memfd, memfd_off,
-	                       &vi->efct_shm[shm_ix], &rxq->hw);
+	                       &vi->efct_shm[shm_ix], vi->rs.rs_instance,
+						   &rxq->hw);
 	if (rc < 0) {
 		kfree(rxq);
 		return rc;
@@ -233,6 +234,16 @@ int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
 #endif /* CI_HAVE_EFCT_AUX */
 }
 EXPORT_SYMBOL(efrm_rxq_refresh_kernel);
+
+
+void efrm_rxq_request_wakeup(struct efrm_efct_rxq *rxq, unsigned sbseq,
+                             unsigned pktix)
+{
+	struct efhw_nic *nic = rxq->vi->rs.rs_client->nic;
+	efct_request_wakeup(nic->arch_extra, &rxq->hw, sbseq, pktix);
+}
+EXPORT_SYMBOL(efrm_rxq_request_wakeup);
+
 
 
 static void efrm_rxq_rm_dtor(struct efrm_resource_manager *rm)

@@ -19,7 +19,7 @@ int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
                   bool timestamp_req, size_t n_hugepages, struct file* memfd,
                   off_t* memfd_off, struct efab_efct_rxq_uk_shm *shm,
-                  struct efhw_efct_rxq *rxq)
+                  unsigned wakeup_instance, struct efhw_efct_rxq *rxq)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
@@ -46,6 +46,8 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
   rxq->n_hugepages = n_hugepages;
   rxq->max_allowed_superbufs = n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
   rxq->shm = shm;
+  rxq->wakeup_instance = wakeup_instance;
+  rxq->wake_at_seqno = EFCT_INVALID_PKT_SEQNO;
 
   efct_provide_bind_memfd(memfd, *memfd_off);
   EFCT_PRE(dev, edev, cli, nic, rc);

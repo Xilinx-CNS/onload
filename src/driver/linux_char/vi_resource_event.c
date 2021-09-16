@@ -3,9 +3,11 @@
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/efrm/efrm_nic.h>
 #include <ci/efrm/efrm_client.h>
+#include <ci/efrm/efct_rxq.h>
 #include <ci/driver/efab/hardware.h>
 #include <ci/driver/internal.h>
 #include <ci/efrm/driver_private.h> /* FIXME for efrm_rm_table */
+#include <ci/efch/op_types.h>
 #include "char_internal.h"
 #include "linux_char_internal.h"
 
@@ -201,8 +203,8 @@ static int efab_vi_rm_prime_cb(void *arg, int is_timeout,
 }
 
 
-static int efab_vi_rm_prime(struct efrm_vi* virs, ci_private_char_t* priv,
-                            unsigned current_ptr)
+static bool efab_vi_prepare_request_wakeup(struct efrm_vi* virs,
+                                           ci_private_char_t* priv)
 {
   struct efhw_nic* nic = efrm_client_get_nic(virs->rs.rs_client);
   struct efrm_nic_per_vi* cb_info = &efrm_nic(nic)->vis[virs->rs.rs_instance];
@@ -210,41 +212,97 @@ static int efab_vi_rm_prime(struct efrm_vi* virs, ci_private_char_t* priv,
 
   priv->cpcp_readable = 0;
   bit = test_and_set_bit(VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING, &cb_info->state);
-  if( ! bit )
-    efrm_eventq_request_wakeup(virs, current_ptr / sizeof(efhw_event_t));
+  return ! bit;
+}
+
+
+static int efab_vi_rm_prime_lookup_vi(ci_private_char_t* priv,
+                                      efch_resource_id_t vi_rs_id,
+                                      bool expect_rxqs)
+{
+  int rc = 0;
+
+  if(likely( priv->cpcp_vi ))
+    return 0;
+  /* First time: Find the VI object. */
+  mutex_lock(&efch_mutex);
+  if( priv->cpcp_vi == NULL ) {
+    efch_resource_t* rs;
+    rc = efch_resource_id_lookup(vi_rs_id, &priv->rt, &rs);
+    if( rc == 0 ) {
+      if( rs->rs_base->rs_type == EFRM_RESOURCE_VI ) {
+        struct efrm_vi* virs = efrm_vi(rs->rs_base);
+        struct efhw_nic* nic = efrm_client_get_nic(virs->rs.rs_client);
+        if( (efhw_nic_max_shared_rxqs(nic) != 0) != expect_rxqs )
+          rc = -EINVAL;
+        else
+          rc = efrm_eventq_register_callback(virs, efab_vi_rm_prime_cb, priv);
+        if( rc == 0 )
+          priv->cpcp_vi = virs;
+      }
+      else {
+        rc = -EOPNOTSUPP;
+      }
+    }
+  }
+  mutex_unlock(&efch_mutex);
+  return rc;
+}
+
+
+/* Prime a simple VI (i.e. an evq) for interrupts */
+int efch_vi_prime(ci_private_char_t* priv, efch_resource_id_t vi_rs_id,
+                  unsigned current_ptr)
+{
+  int rc = efab_vi_rm_prime_lookup_vi(priv, vi_rs_id, false);
+  if( rc < 0 )
+    return rc;
+
+  if( efab_vi_prepare_request_wakeup(priv->cpcp_vi, priv) )
+    efrm_eventq_request_wakeup(priv->cpcp_vi,
+                               current_ptr / sizeof(efhw_event_t));
   return 0;
 }
 
 
-int efch_vi_prime(ci_private_char_t* priv, efch_resource_id_t vi_rs_id,
-                  unsigned current_ptr)
+/* Prime a multi-queue VI for interrupts, i.e. an efct VI which has multiple
+ * rxqs and 0 or 1 txqs underneath it, without a single evq gathering them all
+ * together. This effectively means to prime each underlying queue in turn. */
+int efch_vi_prime_qs(ci_private_char_t* priv,
+                     const ci_resource_prime_qs_op_t* args)
 {
-  int rc = 0;
+  int rc;
 
-  if( priv->cpcp_vi == NULL ) {
-    /* First time: Find the VI object. */
-    mutex_lock(&efch_mutex);
-    if( priv->cpcp_vi == NULL ) {
-      efch_resource_t* rs;
-      rc = efch_resource_id_lookup(vi_rs_id, &priv->rt, &rs);
-      if( rc == 0 ) {
-        if( rs->rs_base->rs_type == EFRM_RESOURCE_VI ) {
-          struct efrm_vi* virs = efrm_vi(rs->rs_base);
-          rc = efrm_eventq_register_callback(virs, efab_vi_rm_prime_cb, priv);
-          if( rc == 0 )
-            priv->cpcp_vi = virs;
-        }
-        else {
-          rc = -EOPNOTSUPP;
-        }
-      }
-    }
-    mutex_unlock(&efch_mutex);
-  }
+  if( args->n_rxqs > EF_VI_MAX_EFCT_RXQS || args->n_txqs > 1 )
+    return -EINVAL;
+
+  rc = efab_vi_rm_prime_lookup_vi(priv, args->crp_id, true);
   if( rc < 0 )
     return rc;
 
-  return efab_vi_rm_prime(priv->cpcp_vi, priv, current_ptr);
+  /* EFCT TODO: txqs */
+
+  if( efab_vi_prepare_request_wakeup(priv->cpcp_vi, priv) ) {
+    unsigned i;
+    for( i = 0; i < args->n_rxqs; ++i ) {
+      efch_resource_t* rs;
+      rc = efch_resource_id_lookup(args->rxq_current[i].rxq_id, &priv->rt,
+                                   &rs);
+      if( rc < 0 )
+        break;
+      if( rs->rs_base->rs_type != EFRM_RESOURCE_EFCT_RXQ ) {
+        rc = -EINVAL;
+        /* It doesn't really matter if we abort half way after priming some
+         * queues and not others: it only means that some spurious wakes will
+         * happen */
+        break;
+      }
+      efrm_rxq_request_wakeup(efrm_rxq_from_resource(rs->rs_base),
+                              args->rxq_current[i].sbseq,
+                              args->rxq_current[i].pktix);
+    }
+  }
+  return rc;
 }
 
 

@@ -25,6 +25,8 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq,
                      unsigned max_superbufs);
 int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
                             const char** superbufs);
+void efrm_rxq_request_wakeup(struct efrm_efct_rxq *rxq, unsigned sbseq,
+                             unsigned pktix);
 
 
 #endif
