@@ -132,6 +132,7 @@ int efct_vi_find_free_rxq(ef_vi* vi, int qid);
 void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
                                  ef_vi_efct_superbuf_refresh_t *refresh_func);
 void efct_vi_start_rxq(ef_vi* vi, int ix);
+int efct_vi_prime(ef_vi* vi, ef_driver_handle dh);
 
 
 /* This returns the ID of the next RX buffer in the RXQ.  In the absence of

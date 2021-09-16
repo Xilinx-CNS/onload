@@ -37,6 +37,7 @@
 struct ci_private_char_s;
 struct ci_resource_alloc_s;
 struct ci_resource_op_s;
+struct ci_resource_prime_qs_op_s;
 union ci_filter_add_u;
 struct ci_resource_table_s;
 struct efch_resource_s;
@@ -179,6 +180,9 @@ extern int efch_filter_add(ci_resource_table_t* rt,
 
 extern int efch_vi_prime(struct ci_private_char_s* priv,
                          efch_resource_id_t, unsigned current_ptr);
+
+extern int efch_vi_prime_qs(struct ci_private_char_s* priv,
+                         const struct ci_resource_prime_qs_op_s* args);
 
 extern unsigned efch_vi_poll(struct ci_private_char_s* priv,
                              struct file* filp, poll_table* wait);

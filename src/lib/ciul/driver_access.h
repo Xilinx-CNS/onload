@@ -82,6 +82,16 @@ ci_resource_prime(int fp, struct ci_resource_prime_op_s* io)
 
 /*! \i_efab_unix */
 ci_inline int
+ci_resource_prime_qs(int fp, struct ci_resource_prime_qs_op_s* io)
+{
+  int r;
+  if( (r = ioctl(fp, CI_RESOURCE_PRIME_QS, io)) < 0 )  return -errno;
+  return r;
+}
+
+
+/*! \i_efab_unix */
+ci_inline int
 ci_capabilities_op(int fp, struct ci_capabilities_op_s* io)
 {
   int r;

@@ -460,7 +460,7 @@ typedef struct ci_resource_prime_qs_op_s {
     efch_resource_id_t rxq_id;
     uint32_t           sbseq;
     uint32_t           pktix;
-  } rxq_current[EF_VI_MAX_EFCT_RXQS];
+  } rxq_current[8];
   uint32_t           txq_current;
 } ci_resource_prime_qs_op_t;
 
@@ -501,6 +501,7 @@ typedef struct ci_capabilities_op_s {
 #define CI_CAPABILITIES_OP  (CI_IOC_CHAR_BASE+ 5)  /* capabilities check */
 #define CI_V3_LICENSE_CHALLENGE (CI_IOC_CHAR_BASE+ 6) /* V3 license challenge */
 #define CI_IOC_CHAR_MAX     (CI_IOC_CHAR_BASE+ 7)
+#define CI_RESOURCE_PRIME_QS (CI_IOC_CHAR_BASE+ 8)  /* prime VI queues (efct) */
 
 
 /**********************************************************************

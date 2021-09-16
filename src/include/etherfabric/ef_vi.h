@@ -670,6 +670,8 @@ typedef struct {
    * pointed-to superbuf (this is duplicated info, but improves locality).
    * This is effectively the pointer to the packet metadata */
   uint32_t next;
+  /* Global sequence number of the current superbuf; used for primes/wakeups */
+  uint32_t sbseq;
 } ef_vi_efct_rxq_ptr;
 
 /*! \brief State of RX descriptor ring

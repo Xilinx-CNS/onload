@@ -17,8 +17,15 @@
 
 int ef_vi_prime(ef_vi* vi, ef_driver_handle dh, unsigned current_ptr)
 {
-  ci_resource_prime_op_t  op;
-  op.crp_id = efch_make_resource_id(vi->vi_resource_id);
-  op.crp_current_ptr = current_ptr;
-  return ci_resource_prime(dh, &op);
+  if( vi->max_efct_rxq ) {
+    /* current_ptr is ignored on this architecture - it's not permitted to use
+     * any value other than the equivalent of ef_eventq_current() */
+    return efct_vi_prime(vi, dh);
+  }
+  else {
+    ci_resource_prime_op_t  op;
+    op.crp_id = efch_make_resource_id(vi->vi_resource_id);
+    op.crp_current_ptr = current_ptr;
+    return ci_resource_prime(dh, &op);
+  }
 }

@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include "driver_access.h"
+#include <ci/efch/op_types.h>
 #endif
 #include "ef_vi_internal.h"
 #include <etherfabric/internal/efct_uk_api.h>
@@ -68,19 +69,19 @@ static int superbuf_config_refresh(ef_vi* vi, int qid)
 }
 #endif
 
-static int superbuf_next(ef_vi* vi, int qid)
+static int superbuf_next(ef_vi* vi, int qid, unsigned *sbseq)
 {
   struct efab_efct_rxq_uk_shm* shm = &vi->efct_shm[qid];
   uint64_t added_full;
   uint32_t added, removed;
   int sbid;
 
-  /* TODO: track the global superbuf sequence number */
   added_full = OO_ACCESS_ONCE(shm->rxq.added);
   added = (uint32_t)added_full;
   removed = shm->rxq.removed;
   if( added == removed )
     return -EAGAIN;
+  *sbseq = added_full >> 32;
   ci_rmb();
   sbid = OO_ACCESS_ONCE(shm->rxq.q[removed & (CI_ARRAY_SIZE(shm->rxq.q) - 1)]);
   EF_VI_ASSERT((sbid & CI_EFCT_Q_SUPERBUF_ID_MASK) < CI_EFCT_MAX_SUPERBUFS);
@@ -573,7 +574,8 @@ static int rx_rollover(ef_vi* vi, int qid)
   uint32_t next;
   uint32_t superbuf_pkts = vi->efct_shm[qid].superbuf_pkts;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
-  int rc = superbuf_next(vi, qid);
+  unsigned sbseq;
+  int rc = superbuf_next(vi, qid, &sbseq);
   if( rc < 0 )
     return rc;
   pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + (rc & CI_EFCT_Q_SUPERBUF_ID_MASK)) <<
@@ -588,6 +590,7 @@ static int rx_rollover(ef_vi* vi, int qid)
   else {
     qs->rxq_ptr[qid].next = next;
   }
+  qs->rxq_ptr[qid].sbseq = sbseq;
   /* Preload the superbuf's refcount with all the (potential) packets in
    * it - more efficient than incrementing for each rx individually */
   efct_rx_desc(vi, pkt_id)->refcnt = superbuf_pkts;
@@ -854,6 +857,7 @@ int efct_vi_mmap_init_internal(ef_vi* vi, struct efab_efct_rxq_uk_shm *shm)
 #ifdef __KERNEL__
     rxq->superbufs = (const char**)space + i * CI_EFCT_MAX_HUGEPAGES;
 #else
+    rxq->resource_id = EFCH_RESOURCE_ID_PRI_ARG(efch_resource_id_none());
     rxq->superbuf = (char*)space + i * bytes_per_rxq;
     rxq->current_mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
 #endif
@@ -1127,6 +1131,41 @@ int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
   return efct_get_timestamp_qns_internal(&vi->efct_shm[qid], header, ts_out,
                                          flags_out);
 }
+
+#ifndef __KERNEL__
+int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
+{
+    ci_resource_prime_qs_op_t  op;
+    ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+    int i;
+
+    EF_VI_BUILD_ASSERT(CI_ARRAY_SIZE(op.rxq_current) >= EF_VI_MAX_EFCT_RXQS);
+    op.crp_id = efch_make_resource_id(vi->vi_resource_id);
+    for( i = 0; i < vi->max_efct_rxq; ++i ) {
+      ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[i];
+      ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
+      struct efab_efct_rxq_uk_shm* shm = &vi->efct_shm[i];
+
+      op.rxq_current[i].rxq_id = efch_make_resource_id(rxq->resource_id);
+      if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
+        break;
+      if( ! efct_rxq_is_active(shm) )
+        break;
+
+      if( efct_rxq_need_rollover(shm, rxq_ptr->next) )
+        if( rx_rollover(vi, i) < 0 )
+          break;
+
+      op.rxq_current[i].sbseq = rxq_ptr->sbseq;
+      op.rxq_current[i].pktix = pkt_id_to_index_in_superbuf(rxq_ptr->next);
+    }
+    op.n_rxqs = i;
+    op.n_txqs = vi->vi_txq.mask != 0 ? 1 : 0;
+    if( op.n_txqs )
+      op.txq_current = vi->ep_state->evq.evq_ptr;
+    return ci_resource_prime_qs(dh, &op);
+}
+#endif
 
 static void efct_vi_initialise_ops(ef_vi* vi)
 {

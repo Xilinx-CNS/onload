@@ -108,6 +108,16 @@ ioctl_resource_prime (ci_private_char_t *priv, ulong arg)
   return efch_vi_prime(priv, local.crp_id, local.crp_current_ptr);
 }
 
+
+ci_noinline int
+ioctl_resource_prime_qs (ci_private_char_t *priv, ulong arg)
+{
+  ci_resource_prime_qs_op_t local;
+  copy_from_user_ret(&local, (caddr_t) arg, sizeof(local), -EFAULT);
+  return efch_vi_prime_qs(priv, &local);
+}
+
+
 ci_noinline int
 ioctl_filter_add (ci_private_char_t *priv, ulong arg)
 {
@@ -178,6 +188,9 @@ ci_char_fop_ioctl(struct file *filp, uint cmd, ulong arg)
 
   case CI_RESOURCE_PRIME:
     return ioctl_resource_prime (priv, arg);
+
+  case CI_RESOURCE_PRIME_QS:
+    return ioctl_resource_prime_qs (priv, arg);
 
   case CI_FILTER_ADD:
     return ioctl_filter_add (priv, arg);
