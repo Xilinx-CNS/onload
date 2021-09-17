@@ -67,11 +67,24 @@ static inline int tx_ctpio(ci_netif* ni, int intf_i, ef_vi* vi,
 {
   ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
   struct iovec host_iov[CI_IP_PKT_SEGMENTS_MAX];
-  unsigned total_length;
+  int total_length;
   int rc;
 
   total_length = ci_netif_pkt_to_host_iovec(ni, pkt, host_iov,
                                       sizeof(host_iov) / sizeof(host_iov[0]));
+
+  if( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY &&
+      ef_vi_transmit_space_bytes(vi) < total_length)
+    return -ENOSPC;
+
+#ifdef __KERNEL__
+  /* TODO EFCT The 'T' variant is reported by fake test hardware, which
+     doesn't provide iomem.
+   */
+  if((vi->nic_type.arch == EFHW_ARCH_EFCT) && (vi->nic_type.variant == 'T'))
+    return -ENOSPC;
+#endif
+
   oo_pkt_calc_checksums(ni, pkt, host_iov);
   ef_vi_transmitv_ctpio(vi, total_length, host_iov,
                         iov_len, nsn->ctpio_ct_threshold);
@@ -139,7 +152,7 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
                       ! ci_netif_may_ctpio(ni, intf_i, pkt->pay_len) ||
                       pkt->flags & CI_PKT_FLAG_INDIRECT) )
           ctpio = 0;
-        if( ctpio ) {
+        if( ctpio || vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY ) {
           ci_assert(! posted_dma);
           rc = tx_ctpio(ni, intf_i, vi, pkt, iov, iov_len);
         }
@@ -259,14 +272,6 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
   dmaq = &netif->state->nic[intf_i].dmaq[pkt_q_id(pkt)];
   vi = &netif->nic_hw[intf_i].vis[pkt_q_id(pkt)];
 
-#ifdef __KERNEL__
-  /* FIXME EFCT vi send is CTPIO under the hood, but not yet supported in
-   * kernel with onload.
-   */
-  if( netif->state->nic[intf_i].vi_arch == EFHW_ARCH_EFCT )
-    return;
-#endif
-
   if( oo_pktq_is_empty(dmaq) && ! (pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
 #if CI_CFG_PIO
     /* pio_thresh is set to zero if PIO disabled on this stack, so don't
@@ -307,6 +312,18 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
     calc_csum_if_needed(netif, vi, pkt);
     iov_len = ci_netif_pkt_to_iovec(netif, pkt, iov,
                                     sizeof(iov) / sizeof(iov[0]));
+
+    /* CTPIO only NICs always claim to be able to do CTPIO, so the only
+     * things that might stop them are packets that are split over multiple
+     * buffers, which should be prevented by the declared MTU and indirect
+     * packets, which aren't used with this NIC type.
+     */
+    if( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY ) {
+      ci_assert_gt(iov_len, 0);
+      ci_assert_le(iov_len, CI_IP_PKT_SEGMENTS_MAX);
+      ci_assert(is_to_primary_vi(pkt));
+    }
+
 #if CI_CFG_CTPIO
     if( (iov_len > 0) && (iov_len <= CI_IP_PKT_SEGMENTS_MAX) &&
         ci_netif_may_ctpio(netif, intf_i, pkt->pay_len) &&

@@ -1742,6 +1742,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
         efrm_pd_release(alloc_info.pd);
         goto error_out;
       }
+      vi->vi_ctpio_mmap_ptr = trs_nic->thn_ctpio_io_mmap;
     }
 #endif
 
