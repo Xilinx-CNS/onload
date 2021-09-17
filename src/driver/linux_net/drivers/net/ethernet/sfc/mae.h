@@ -93,7 +93,7 @@ int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv);
 int efx_mae_check_encap_type_supported(struct efx_nic *efx, enum efx_encap_type typ);
 
 int efx_mae_allocate_counter(struct efx_nic *efx, struct efx_tc_counter *cnt);
-int efx_mae_free_counter(struct efx_nic *efx, u32 id);
+int efx_mae_free_counter(struct efx_nic *efx, struct efx_tc_counter *cnt);
 
 int efx_mae_allocate_encap_md(struct efx_nic *efx,
 			      struct efx_tc_encap_action *encap);

@@ -563,7 +563,8 @@ done:
 
 static void efx_tc_counter_work(struct work_struct *work);
 
-static struct efx_tc_counter *efx_tc_flower_allocate_counter(struct efx_nic *efx)
+static struct efx_tc_counter *efx_tc_flower_allocate_counter(struct efx_nic *efx,
+							     int type)
 {
 	struct efx_tc_counter *cnt;
 	int rc, rc2;
@@ -575,6 +576,7 @@ static struct efx_tc_counter *efx_tc_flower_allocate_counter(struct efx_nic *efx
 	spin_lock_init(&cnt->lock);
 	INIT_WORK(&cnt->work, efx_tc_counter_work);
 	cnt->touched = jiffies;
+	cnt->type = type;
 
 	rc = efx_mae_allocate_counter(efx, cnt);
 	if (rc)
@@ -591,7 +593,7 @@ fail2:
 	 * In that case, it's unclear whether we really 'own' the fw_id; but
 	 * the firmware seemed to think we did, so it's proper to free it.
 	 */
-	rc2 = efx_mae_free_counter(efx, cnt->fw_id);
+	rc2 = efx_mae_free_counter(efx, cnt);
 	if (rc2)
 		netif_warn(efx, hw, efx->net_dev,
 			   "Failed to free MAE counter %u, rc %d\n",
@@ -608,7 +610,7 @@ static void efx_tc_flower_release_counter(struct efx_nic *efx,
 
 	rhashtable_remove_fast(&efx->tc->counter_ht, &cnt->linkage,
 			       efx_tc_counter_ht_params);
-	rc = efx_mae_free_counter(efx, cnt->fw_id);
+	rc = efx_mae_free_counter(efx, cnt);
 	if (rc)
 		netif_warn(efx, hw, efx->net_dev,
 			   "Failed to free MAE counter %u, rc %d\n",
@@ -628,11 +630,13 @@ static void efx_tc_flower_release_counter(struct efx_nic *efx,
 }
 
 static struct efx_tc_counter *efx_tc_flower_find_counter_by_fw_id(
-				struct efx_nic *efx, u32 fw_id)
+				struct efx_nic *efx, int type, u32 fw_id)
 {
 	struct efx_tc_counter key = {};
 
 	key.fw_id = fw_id;
+	key.type = type;
+
 	return rhashtable_lookup_fast(&efx->tc->counter_ht, &key,
 				      efx_tc_counter_ht_params);
 }
@@ -649,7 +653,8 @@ static void efx_tc_flower_put_counter_index(struct efx_nic *efx,
 }
 
 static struct efx_tc_counter_index *efx_tc_flower_get_counter_index(
-				struct efx_nic *efx, unsigned long cookie)
+				struct efx_nic *efx, unsigned long cookie,
+				enum efx_tc_counter_type type)
 {
 	struct efx_tc_counter_index *ctr, *old;
 	struct efx_tc_counter *cnt;
@@ -669,7 +674,7 @@ static struct efx_tc_counter_index *efx_tc_flower_get_counter_index(
 		/* existing entry found */
 		ctr = old;
 	} else {
-		cnt = efx_tc_flower_allocate_counter(efx);
+		cnt = efx_tc_flower_allocate_counter(efx, type);
 		if (IS_ERR(cnt)) {
 			rhashtable_remove_fast(&efx->tc->counter_id_ht,
 					       &ctr->linkage,
@@ -1223,6 +1228,7 @@ static void efx_tc_ct_free(void *ptr, void *arg)
 		  conn->cookie);
 
 	efx_mae_remove_ct(efx, conn);
+	efx_tc_flower_release_counter(efx, conn->cnt);
 	kfree(conn);
 }
 
@@ -1481,8 +1487,10 @@ static void efx_tc_counter_work(struct work_struct *work)
 	spin_unlock_bh(&cnt->lock);
 }
 
-static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
-				  u64 packets, u64 bytes, u32 mark)
+static void efx_tc_counter_update(struct efx_nic *efx,
+				  enum efx_tc_counter_type counter_type,
+				  u32 counter_idx, u64 packets, u64 bytes,
+				  u32 mark)
 {
 	struct efx_tc_counter *cnt;
 
@@ -1490,7 +1498,7 @@ static void efx_tc_counter_update(struct efx_nic *efx, u32 counter_idx,
 	 * get assigned, can we identify them here?
 	 */
 	rcu_read_lock(); /* Protect against deletion of 'cnt' */
-	cnt = efx_tc_flower_find_counter_by_fw_id(efx, counter_idx);
+	cnt = efx_tc_flower_find_counter_by_fw_id(efx, counter_type, counter_idx);
 	if (!cnt) {
 		/* This could theoretically happen due to a race where an
 		 * update from the counter is generated between allocating
@@ -1559,7 +1567,8 @@ static void efx_tc_rx_version_1(struct efx_nic *efx, const u8 *data, u32 mark)
 			       ((u64)le16_to_cpu(*(const __le16 *)(entry + 8)) << 32);
 		byte_count = le16_to_cpu(*(const __le16 *)(entry + 10)) |
 			     ((u64)le32_to_cpu(*(const __le32 *)(entry + 12)) << 16);
-		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count, mark);
+		efx_tc_counter_update(efx, EFX_TC_COUNTER_TYPE_AR, counter_idx,
+				      packet_count, byte_count, mark);
 	}
 }
 
@@ -1589,24 +1598,27 @@ static u64 efx_tc_read48(const __le16 *field)
 	return out;
 }
 
-static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data, u32 mark)
+static enum efx_tc_counter_type efx_tc_rx_version_2(struct efx_nic *efx,
+						    const u8 *data, u32 mark)
 {
 	u8 payload_offset, header_offset, ident;
+	enum efx_tc_counter_type type;
 	u16 n_counters, i;
 
 	ident = TCV2_HDR_BYTE(data, IDENTIFIER);
 	switch (ident) {
 	case ERF_SC_PACKETISER_HEADER_IDENTIFIER_AR:
+		type = EFX_TC_COUNTER_TYPE_AR;
 		break;
 	case ERF_SC_PACKETISER_HEADER_IDENTIFIER_CT:
-		/* TODO handle CT counters */
-		return;
+		type = EFX_TC_COUNTER_TYPE_CT;
+		break;
 	default:
 		if (net_ratelimit())
 			netif_err(efx, drv, efx->net_dev,
 				  "ignored v2 MAE counter packet (bad identifier %u"
 				  "), counters may be inaccurate\n", ident);
-		return;
+		return EFX_TC_COUNTER_TYPE_MAX;
 	}
 	header_offset = TCV2_HDR_BYTE(data, HEADER_OFFSET);
 	/* mae_counter_format.h implies that this offset is fixed, since it
@@ -1617,7 +1629,7 @@ static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data, u32 mark)
 			netif_err(efx, drv, efx->net_dev,
 				  "choked on v2 MAE counter packet (bad header_offset %u"
 				  "), counters may be inaccurate\n", header_offset);
-		return;
+		return EFX_TC_COUNTER_TYPE_MAX;
 	}
 	payload_offset = TCV2_HDR_BYTE(data, PAYLOAD_OFFSET);
 	n_counters = le16_to_cpu(TCV2_HDR_WORD(data, COUNT));
@@ -1643,8 +1655,10 @@ static void efx_tc_rx_version_2(struct efx_nic *efx, const u8 *data, u32 mark)
 		BUILD_BUG_ON(ERF_SC_PACKETISER_PAYLOAD_BYTE_COUNT_LBN & 15);
 		byte_count = efx_tc_read48((const __le16 *)byte_count_p);
 
-		efx_tc_counter_update(efx, counter_idx, packet_count, byte_count, mark);
+		efx_tc_counter_update(efx, type, counter_idx, packet_count,
+				      byte_count, mark);
 	}
+	return type;
 }
 
 /* We always swallow the packet, whether successful or not, since it's not
@@ -1656,16 +1670,18 @@ static bool efx_tc_rx(struct efx_rx_queue *rx_queue, u32 mark)
 	struct efx_rx_buffer *rx_buf = efx_rx_buf_pipe(rx_queue);
 	const u8 *data = efx_rx_buf_va(rx_buf);
 	struct efx_nic *efx = rx_queue->efx;
+	enum efx_tc_counter_type type;
 	u8 version;
 
 	/* version is always first byte of packet */
 	version = *data;
 	switch (version) {
 	case 1:
+		type = EFX_TC_COUNTER_TYPE_AR;
 		efx_tc_rx_version_1(efx, data, mark);
 		break;
 	case ERF_SC_PACKETISER_HEADER_VERSION_VALUE: // 2
-		efx_tc_rx_version_2(efx, data, mark);
+		type = efx_tc_rx_version_2(efx, data, mark);
 		break;
 	default:
 		if (net_ratelimit())
@@ -1673,16 +1689,17 @@ static bool efx_tc_rx(struct efx_rx_queue *rx_queue, u32 mark)
 				  "choked on MAE counter packet (bad version %u"
 				  "); counters may be inaccurate\n",
 				  version);
-		break;
+		goto out;
 	}
 
 	/* Update seen_gen unconditionally, to avoid a missed wakeup if
 	 * we race with efx_mae_stop_counters().
 	 */
-	efx->tc->seen_gen = mark;
-	if (efx->tc->flush_counters && (s32)(efx->tc->flush_gen - mark) <= 0)
+	efx->tc->seen_gen[type] = mark;
+	if (efx->tc->flush_counters &&
+	    (s32)(efx->tc->flush_gen[type] - mark) <= 0)
 		wake_up(&efx->tc->flush_wq);
-
+out:
 	efx_free_rx_buffers(rx_queue, rx_buf, 1);
 	rx_queue->rx_pkt_n_frags = 0;
 	return true;
@@ -2116,10 +2133,9 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 #undef MAP_CT_STATE
 		match->value.ct_mark = fm.key->ct_mark;
 		match->mask.ct_mark = fm.mask->ct_mark;
-		if (fm.mask->ct_zone) {
-			EFX_TC_ERR_MSG(efx, extack, "Matching on ct_zone not supported");
-			return -EOPNOTSUPP;
-		}
+		match->value.ct_zone = fm.key->ct_zone;
+		match->mask.ct_zone = fm.mask->ct_zone;
+
 		if (memchr_inv(fm.mask->ct_labels, 0, sizeof(fm.mask->ct_labels))) {
 			EFX_TC_ERR_MSG(efx, extack, "Matching on ct_label not supported");
 			return -EOPNOTSUPP;
@@ -2595,10 +2611,11 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 
 					ctr = efx_tc_flower_get_counter_index(efx,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
-									      fa->cookie);
+									      fa->cookie,
 #else
-									      tc->cookie);
+									      tc->cookie,
 #endif
+									      EFX_TC_COUNTER_TYPE_AR);
 					if (IS_ERR(ctr)) {
 						rc = PTR_ERR(ctr);
 						goto release;
@@ -3035,6 +3052,7 @@ static int efx_tc_ct_replace(struct efx_tc_ct_zone *ct_zone,
 	struct efx_tc_ct_entry *conn, *old;
 	struct efx_nic *efx = ct_zone->efx;
 	const struct flow_action_entry *fa;
+	struct efx_tc_counter *cnt;
 	int rc, i;
 
 	if (WARN_ON(!efx->tc))
@@ -3097,6 +3115,13 @@ static int efx_tc_ct_replace(struct efx_tc_ct_zone *ct_zone,
 	if (!mung.tcpudp)
 		conn->l4_natport = conn->dnat ? conn->l4_dport : conn->l4_sport;
 
+	cnt = efx_tc_flower_allocate_counter(efx, EFX_TC_COUNTER_TYPE_CT);
+	if (IS_ERR(cnt)) {
+		rc = PTR_ERR(cnt);
+		goto release;
+	}
+	conn->cnt = cnt;
+
 	rc = efx_mae_insert_ct(efx, conn);
 	if (rc) {
 		efx_tc_err(efx, "Failed to insert conntrack, %d\n", rc);
@@ -3105,6 +3130,8 @@ static int efx_tc_ct_replace(struct efx_tc_ct_zone *ct_zone,
 
 	return 0;
 release:
+	if (conn->cnt)
+		efx_tc_flower_release_counter(efx, conn->cnt);
 	if (!old)
 		rhashtable_remove_fast(&efx->tc->ct_ht, &conn->linkage,
 				       efx_tc_ct_ht_params);
@@ -3131,7 +3158,23 @@ static int efx_tc_ct_destroy(struct efx_tc_ct_zone *ct_zone,
 	/* Delete it from SW */
 	rhashtable_remove_fast(&efx->tc->ct_ht, &conn->linkage,
 			       efx_tc_ct_ht_params);
+	synchronize_rcu();
 	netif_dbg(efx, drv, efx->net_dev, "Removed conntrack %lx\n", conn->cookie);
+	/* Remove related CT counter. This is delayed after the conn object we
+	 * are working with has been succesfully removed. This is specifically
+	 * for properly protecting the counter from being used inside
+	 * efx_tc_ct_stats:
+	 *
+	 *	1) no conn, no counter reachable.
+	 *	2) Conn exists, the previous synchronize_rcu precludes us from
+	 *	   removing the counter here until efx_tc_ct_stats is done.
+	 *
+	 * Note releasing the counter through the next function call is fine
+	 * with concurrent uses of the counter since that is all done through
+	 * the rhastable API for the counter_ht rhashtable which takes care of
+	 * the safe counter removal.
+	 */
+	efx_tc_flower_release_counter(efx, conn->cnt);
 	kfree(conn);
 	return 0;
 }
@@ -3140,11 +3183,35 @@ static int efx_tc_ct_stats(struct efx_tc_ct_zone *ct_zone,
 			   struct flow_cls_offload *tc)
 {
 	struct efx_nic *efx = ct_zone->efx;
+	struct efx_tc_ct_entry *conn;
+	struct efx_tc_counter *cnt;
 
-	/* TODO handle these */
-	netif_err(efx, drv, efx->net_dev, "Got a ct_stats, zone %u\n",
-		  ct_zone->zone);
-	return -EOPNOTSUPP;
+	rcu_read_lock();
+	conn = rhashtable_lookup_fast(&efx->tc->ct_ht, &tc->cookie,
+				      efx_tc_ct_ht_params);
+	if (!conn) {
+		netif_warn(efx, drv, efx->net_dev,
+			   "Conntrack %lx not found for stats\n", tc->cookie);
+		rcu_read_unlock();
+		return -ENOENT;
+	}
+
+	cnt = conn->cnt;
+	spin_lock_bh(&cnt->lock);
+	/* Report only last use */
+	flow_stats_update(&tc->stats, 0, 0,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_STATS_DROPS)
+			  0,
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_STATS_TYPE)
+			  cnt->touched, FLOW_ACTION_HW_STATS_DELAYED);
+#else
+			  cnt->touched);
+#endif
+	spin_unlock_bh(&cnt->lock);
+	rcu_read_unlock();
+
+	return 0;
 }
 
 static int efx_tc_flow_block(enum tc_setup_type type, void *type_data,
@@ -3737,10 +3804,11 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 
 			ctr = efx_tc_flower_get_counter_index(efx,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
-							      fa->cookie);
+							      fa->cookie,
 #else
-							      tc->cookie);
+							      tc->cookie,
 #endif
+							      EFX_TC_COUNTER_TYPE_AR);
 			if (IS_ERR(ctr)) {
 				rc = PTR_ERR(ctr);
 				EFX_TC_ERR_MSG(efx, extack, "Failed to obtain a counter");
@@ -4978,6 +5046,7 @@ static void efx_tc_debugfs_dump_one_counter(struct seq_file *file,
 					    struct efx_tc_counter *cnt)
 {
 	u64 packets, bytes, old_packets, old_bytes;
+	enum efx_tc_counter_type type;
 	unsigned long age;
 	u32 gen;
 
@@ -4989,10 +5058,11 @@ static void efx_tc_debugfs_dump_one_counter(struct seq_file *file,
 	old_bytes = cnt->old_bytes;
 	age = jiffies - cnt->touched;
 	gen = cnt->gen;
+	type = cnt->type;
 	spin_unlock_bh(&cnt->lock);
 
-	seq_printf(file, "%#x: %llu pkts %llu bytes (old %llu pkts %llu bytes) gen %u age %lu\n",
-		   cnt->fw_id, packets, bytes, old_packets, old_bytes, gen, age);
+	seq_printf(file, "%#x: %d type, %llu pkts %llu bytes (old %llu pkts %llu bytes) gen %u age %lu\n",
+		   cnt->fw_id, type, packets, bytes, old_packets, old_bytes, gen, age);
 }
 
 static int efx_tc_debugfs_dump_mae_counters(struct seq_file *file, void *data)

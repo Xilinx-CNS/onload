@@ -27,8 +27,15 @@
 #include <linux/idr.h>
 #include "ef100_rep.h"
 
+enum efx_tc_counter_type {
+	EFX_TC_COUNTER_TYPE_AR = MAE_COUNTER_TYPE_AR,
+	EFX_TC_COUNTER_TYPE_CT = MAE_COUNTER_TYPE_CT,
+	EFX_TC_COUNTER_TYPE_MAX
+};
+
 struct efx_tc_counter {
 	u32 fw_id; /* index in firmware counter table */
+	enum efx_tc_counter_type type;
 	struct rhash_head linkage; /* efx->tc->counter_ht */
 	spinlock_t lock; /* Serialises updates to counter values */
 	u32 gen; /* Generation count at which this counter is current */
@@ -138,6 +145,7 @@ struct efx_tc_match_fields {
 	    ct_state_rel:1,
 	    ct_state_new:1; /* only these bits are defined in TC uapi so far */
 	u32 ct_mark; /* For now we ignore ct_label, and don't indirect */
+	u16 ct_zone; /* also referred to as CT domain */
 	u8 recirc_id; /* mapped from (u32) TC chain_index to smaller space */
 };
 
@@ -247,6 +255,7 @@ struct efx_tc_ct_entry {
 	__be16 l4_sport, l4_dport, l4_natport; /* Ports (UDP, TCP) */
 	u16 zone;
 	u32 mark;
+	struct efx_tc_counter *cnt;
 };
 #endif
 
@@ -294,6 +303,7 @@ struct efx_tc_table_ct { /* TABLE_ID_CONNTRACK_TABLE */
 		u8 nat_ip_idx;
 		u8 l4_natport_idx;
 		u8 mark_idx;
+		u8 counter_id_idx;
 	} resps;
 };
 
@@ -323,8 +333,9 @@ struct efx_tc_table_ct { /* TABLE_ID_CONNTRACK_TABLE */
  * @reps_filter_mc: VNIC filter for representor multicast RX (allmulti)
  * @reps_mport_vport_id: vport user_id for representor RX filters
  * @flush_counters: counters have been stopped, waiting for drain
- * @flush_gen: final generation count as reported by MC_CMD_MAE_COUNTERS_STREAM_STOP
- * @seen_gen: most recent generation count seen by efx_tc_rx()
+ * @flush_gen: final generation count per type array as reported by
+ *             MC_CMD_MAE_COUNTERS_STREAM_STOP
+ * @seen_gen: most recent generation count per type as seen by efx_tc_rx()
  * @flush_wq: wait queue used by efx_mae_stop_counters() to wait for
  *	MAE counters RXQ to finish draining
  * @dflt_rules: Match-action rules for default switching; at priority
@@ -358,7 +369,8 @@ struct efx_tc_state {
 	u32 reps_filter_uc, reps_filter_mc;
 	u16 reps_mport_vport_id;
 	bool flush_counters;
-	u32 flush_gen, seen_gen;
+	u32 flush_gen[EFX_TC_COUNTER_TYPE_MAX];
+	u32 seen_gen[EFX_TC_COUNTER_TYPE_MAX];
 	wait_queue_head_t flush_wq;
 	struct efx_tc_flow_rule *dflt_rules;
 	bool up;
