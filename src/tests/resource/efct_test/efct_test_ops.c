@@ -200,7 +200,7 @@ static int efct_test_get_param(struct xlnx_efct_client *handle,
     rc = 0;
     break;
    case XLNX_EFCT_VARIANT:
-    arg->variant = 'A';
+    arg->variant = 'T';
     rc = 0;
     break;
    case XLNX_EFCT_REVISION:
