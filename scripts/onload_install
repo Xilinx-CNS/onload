@@ -251,7 +251,8 @@ install_userland() {
       failorm=false
     }
     install_solar_clusterd
-  
+  fi
+
   # Install scripts.
   try $docd "$TOP/scripts"
   install_x onload_tool "$i_sbin/onload_tool"
