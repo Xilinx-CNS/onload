@@ -52,7 +52,6 @@ PATH="$bin:$PATH"; export PATH
 strict=false
 kernel=false
 user=false
-user32=false
 user64=false
 all=true
 keepbuild=false
@@ -66,7 +65,7 @@ while [ $# -gt 0 ]; do
   --kernelver)  [ $# -gt 1 ] || usage; KVER="$2"; export KVER; shift;;
   --kernelver=*)KVER=${1#--kernelver=};;
   --user)       all=false; user=true;;
-  --user32)     all=false; user32=true;;
+  --user32)     err "No 32-bit build support"; exit 2;;
   --user64)     all=false; user64=true;;
   --kernel)     all=false; kernel=true;;
   --keep)       keepbuild=true;;
@@ -174,34 +173,6 @@ if $all || $user || $user64; then
         fail "ERROR: Failed to build with IBM Advanced Tools ($ppc_at)"
     fi
   fi
-fi
-
-if $all || $user || $user32; then
-  # 32-bit user-level drivers and tools.
-  userplatform=$(mmaketool --userbuild_base32)
-  if [ -d "$userplatform" ]; then
-    nodeps=
-  else
-    try mmakebuildtree "$userplatform"
-    nodeps=MMAKE_NO_DEPS=1
-  fi
-
-  TOP=$("$bin/mmaketool" --toppath)
-  if [ -d "$TOP/prebuilt/$userplatform" ]; then
-    try cp -ad "$TOP/prebuilt/$userplatform" .
-  fi
-
-  make $parallel -C "$userplatform" ONLOAD_ONLY=1 $nodeps || {
-    if $is64; then
-      err
-      log "WARNING: Failed to build 32-bit user-level components."
-      log "WARNING: Most likely this is because 32-bit development"
-      log "WARNING: packages are not installed."
-      err
-    else
-      fail "ERROR: Failed to build 32-bit user-level components."
-    fi
-  }
 fi
 
 exit 0

@@ -545,9 +545,7 @@ eval $(read_make_variables KBUILD_SRC ARCH SRCARCH CONFIG_X86_32 CONFIG_X86_64 C
 [ -n "${KBUILD_SRC:-}" ] || KBUILD_SRC=${abs_srctree:-}
 [ -n "${KBUILD_SRC:-}" ] || KBUILD_SRC=$KPATH
 [ -n "${SRCARCH:-}" ] || SRCARCH=$ARCH
-if [ "$ARCH" = "i386" ] || [ "${CONFIG_X86_32:-}" = "y" ]; then
-    WORDSUFFIX=_32
-elif [ "$ARCH" = "x86_64" ] || [ "${CONFIG_X86_64:-}" = "y" ]; then
+if [ "$ARCH" = "x86_64" ] || [ "${CONFIG_X86_64:-}" = "y" ]; then
     WORDSUFFIX=_64
 else
     WORDSUFFIX=

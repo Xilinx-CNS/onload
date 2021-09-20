@@ -27,7 +27,6 @@ usage () {
   err "  --driverbuild_base    - base canonical driver build name for this host"
   err "  --userbuild           - canonical userlevel build name for this host"
   err "  --userbuild_base      - base userlevel build name for this host"
-  err "  --userbuild_base32    - base userlevel 32 bit build name for this host"
   err "  --ignoreenv           - Ignore MMAKE_*"
   err "  --kernelid            - kernel-dependent part of --driverbuild"
   err "  --transportlib        - location of userlevel transport library"
@@ -96,17 +95,6 @@ userarch() {
   esac
 }
 
-userbuild_linux32() {
-  local proc=$(processor)
-  case "$proc" in
-    ppc64)  echo gnu_ppc32 ;;
-    ppc64le)echo gnu_ppc32le ;;
-    x86_64) echo gnu ;;
-    i*86)   echo gnu ;;
-    *)      echo gnu_$proc ;;
-  esac
-}
-
 userbuild_linux() {
   local ua=$(userarch)
   case "$ua" in
@@ -143,14 +131,6 @@ add_opts() {
   else
     echo "$dir"
   fi
-}
-
-userbuild_base32() {
-  k=$(toolplatform)
-  case "$k" in
-    linux)      echo $(userbuild_linux32);;
-    *)          err "mmaketool:userbuild_base32: unknown system type"; exit 1;;
-  esac
 }
 
 userbuild_base() {
@@ -363,8 +343,6 @@ case "$1" in
 --userbuild)	userbuild
 		;;
 --userbuild_base) userbuild_base
-		;;
---userbuild_base32) userbuild_base32
 		;;
 --kernelid)	kernelid
 		;;

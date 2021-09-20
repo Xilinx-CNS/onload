@@ -25,7 +25,6 @@ usage() {
   err "  --newkernel <ver>          - Build and install drivers for new kernel"
   err "  --kernelver <ver>          - Specify kernel version for drivers"
   err "  --nobuild                  - Do not (re)compile"
-  err "  --require32                - Fail if 32-bit binaries are not installed"
   err "  --setuid                   - Preload libraries are set-uid and set-gid"
   err "  --nosetuid                 - Preload libraries are not set-uid/gid"
   err "  --affinity                 - Include sfcaffinity_config"
@@ -149,27 +148,11 @@ install_dlib() {
 }
 
 
-# Install a 32-bit dynamic (shared) library on 64-bit systems.
-install_dlib32() {
-  if ! (install_dlib "$@" 2>/dev/null); then
-    fail32=true
-  fi
-}
-
-
 # Install a preload library.
 install_plib() {
   install_x "$@" &&
   $setuid && try $do chmod +s "$2"
   return 0
-}
-
-
-# Use to install 32-bit preload lib on 64-bit systems.
-install_plib32() {
-  if ! (install_plib "$@" 2>/dev/null); then
-    fail32=true
-  fi
 }
 
 
@@ -180,13 +163,6 @@ install_slib() {
   install_f "$libf" "$destdir/$(basename "$libf")"
 }
 
-
-# Install a 32-bit static library on 64-bit systems.
-install_slib32() {
-  if ! (install_slib "$@" 2>/dev/null); then
-    fail32=true
-  fi
-}
 
 install_solar_clusterd() {
   local clusterd_lib="$u64/tools/solar_clusterd/cluster_protocol.so"
@@ -241,23 +217,17 @@ install_userland() {
   try $docd "$TOP/build"
   userarch="$(mmaketool --userarch)"
   if ${devel}; then
-    u32="$(mmaketool --userbuild_base32)"
     u64="$(mmaketool --userbuild)"
   else
-    u32="$(mmaketool --userbuild_base32)"
     u64="gnu_${userarch}"
   fi
 
   if [ -d "$u64" ]; then
     # Tolerate lack of 32-bit transport library on 64-bit systems.
-    install_plib32 "$u32/lib/transport/unix/libcitransport0.so" \
-                "$i_lib32/libonload.so"
     install_plib "$u64/lib/transport/unix/libcitransport0.so" \
               "$i_lib64/libonload.so"
     install_dlib "$u64"/lib/onload_ext/libonload_ext.so "$i_lib64"
-    install_dlib32 "$u32"/lib/onload_ext/libonload_ext.so "$i_lib32"
     install_slib "$u64"/lib/onload_ext/libonload_ext.a "$i_lib64"
-    install_slib32 "$u32"/lib/onload_ext/libonload_ext.a "$i_lib32"
     if [ -n "$ppc_at" ]; then
       install_plib "${u64}_at/lib/transport/unix/libcitransport0.so" \
                    "$i_prefix/$ppc_at/lib64/libonload.so"
@@ -265,7 +235,6 @@ install_userland() {
                    "$i_prefix/$ppc_at/lib64"
     fi
     install_slib "$u64"/lib/ciul/libciul1.a "$i_lib64"
-    install_slib32 "$u32"/lib/ciul/libciul1.a "$i_lib32"
     install_x "$u64/tools/ip/onload_stackdump" "$i_usrbin/onload_stackdump"
     install_x "$u64/tools/ip/onload_tcpdump.bin" "$i_usrbin/onload_tcpdump.bin"
     install_x "$u64/tools/ip/onload_fuser" "$i_usrbin/onload_fuser"
@@ -282,23 +251,7 @@ install_userland() {
       failorm=false
     }
     install_solar_clusterd
-  else
-    install_plib "$u32/lib/transport/unix/libcitransport0.so" \
-              "$i_lib32/libonload.so"
-    install_dlib "$u32"/lib/onload_ext/libonload_ext.so "$i_lib32"
-    install_slib "$u32"/lib/onload_ext/libonload_ext.a "$i_lib32"
-    install_slib "$u32"/lib/ciul/libciul1.a "$i_lib32"
-    install_x "$u32/tools/ip/onload_stackdump" "$i_usrbin/onload_stackdump"
-    install_x "$u32/tools/ip/onload_tcpdump.bin" "$i_usrbin/onload_tcpdump.bin"
-    install_x "$u32/tools/ip/onload_fuser" "$i_usrbin/onload_fuser"
-    if [ "$userarch" != "x86_64" ]; then
-      install_x "$u32/tools/cplane/onload_cp_server" "$i_sbin/onload_cp_server"
-    fi
-    [ -f "$u32/tools/ip/onload_fe" ] && install_x "$u32/tools/ip/onload_fe" "$i_usrbin/onload_fe"
-    install_x "$u32/tools/onload_mibdump/onload_mibdump" \
-              "$i_usrbin/onload_mibdump"
-  fi
-
+  
   # Install scripts.
   try $docd "$TOP/scripts"
   install_x onload_tool "$i_sbin/onload_tool"
@@ -363,7 +316,6 @@ install_userland() {
 install_ldconfig() {
   # Run ldconfig.
   [ -d "$i_lib64" ] && ldconfig -n "$i_lib64"
-  [ -d "$i_lib32" ] && ldconfig -n "$i_lib32"
 }
 
 
@@ -604,25 +556,11 @@ calculate_install_paths() {
   i_kernelmodules="$i_prefix$kernelmodulesdir/$KVER/extra"
 
   # look for biarch/multiarch library directories
-  if [ -z "$lib32dir" ]; then
-    detect_lib32_path
-  fi
-  i_lib32="$i_prefix$lib32dir"
 
   if [ -z "$lib64dir" ]; then
     detect_lib64_path
   fi
   i_lib64="$i_prefix$lib64dir"
-}
-
-detect_lib32_path() {
-  lib32dir="$usrdir/lib"
-  if [ -e /lib/i386-linux-gnu/libc.so.6 ]; then
-    lib32dir="$usrdir/lib/i386-linux-gnu"
-  elif [ -e /lib32/libc.so.6 ]; then
-    # pure64 with secondary 32-bit
-    lib32dir="$usrdir/lib32"
-  fi
 }
 
 detect_lib64_path() {
@@ -690,9 +628,7 @@ do=
 # docd is used for actually changing working dir in listfiles and test modes
 docd=cd
 listfiles=false
-fail32=false
 failorm=false
-require32=false
 setuid=false
 force=false
 allow_unsupported_cpu=false
@@ -727,7 +663,6 @@ while [ $# -gt 0 ]; do
   --kernelver)  [ $# -gt 1 ] || usage; shift; KVER="$1";;
   --kernelver=*)KVER=${1#--kernelver=};;
   --nobuild)    build=false;;
-  --require32)  require32=true;;
   --setuid)     setuid=true;;
   --nosetuid)   setuid=false;;
   --noaffinity) affinity=false; buildargs="$buildargs $1";;
@@ -840,14 +775,6 @@ if $install_user; then
 install_modules_load_d
 fi
 
-if $fail32 && $require32; then
-  err
-  log "ERROR: 32-bit libraries were not installed.  See build log"
-  log "ERROR: for further details."
-  err
-  exit 1
-fi
-
 logprog "Install complete."
 
 if $failorm; then
@@ -857,13 +784,7 @@ if $failorm; then
       "automake, then rebuild. See build log for further details."
   err
 fi
-if $fail32; then
-  err
-  log "WARNING: 32-bit libraries were not installed.  As a result it will" \
-      "not be possible to accelerate 32-bit applications with OpenOnload. " \
-      "See build log for further details."
-  err
-fi
+
 if $sfccheck; then
   if /sbin/lsmod | grep -qw sfc; then
     err
