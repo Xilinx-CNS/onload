@@ -18,7 +18,7 @@
 int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
                   bool timestamp_req, size_t n_hugepages, struct file* memfd,
-                  off_t memfd_off, struct efab_efct_rxq_uk_shm *shm,
+                  off_t* memfd_off, struct efab_efct_rxq_uk_shm *shm,
                   struct efhw_efct_rxq *rxq)
 {
   struct device *dev;
@@ -47,7 +47,7 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
   rxq->max_allowed_superbufs = n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
   rxq->shm = shm;
 
-  efct_provide_bind_memfd(memfd, memfd_off);
+  efct_provide_bind_memfd(memfd, *memfd_off);
   EFCT_PRE(dev, edev, cli, nic, rc);
   rc = edev->ops->bind_rxq(cli, &qparams);
   if( rc == 0 ) {
@@ -59,7 +59,7 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
     edev->ops->rollover_rxq(cli, rxq->qid);
   }
   EFCT_POST(dev, edev, cli, nic, rc);
-  efct_unprovide_bind_memfd();
+  efct_unprovide_bind_memfd(memfd_off);
 
   if( rc >= 0 ) {
     shm->qid = rc;

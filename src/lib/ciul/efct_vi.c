@@ -921,6 +921,21 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
       LOGVV(ef_log("%s: memfd_create failed %d", __FUNCTION__, rc));
       return rc;
     }
+
+    /* The kernel will happily do this fallocation for us if we didn't,
+     * however doing it here gives us nicer error reporting */
+    rc = fallocate(mfd, 0, 0, n_hugepages * CI_HUGEPAGE_SIZE);
+    if( rc < 0 ) {
+      rc = -errno;
+      close(mfd);
+      if( rc == -ENOSPC )
+        LOGVV(ef_log("%s: memfd fallocate failed ENOSPC: insufficient huge "
+                     "pages reserved with /proc/sys/vm/nr_hugepages?",
+                     __FUNCTION__));
+      else
+        LOGVV(ef_log("%s: memfd fallocate failed %d", __FUNCTION__, rc));
+      return rc;
+    }
   }
 #endif
 

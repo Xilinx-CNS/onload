@@ -346,6 +346,8 @@ typedef struct tcp_helper_resource_s {
   int thc_rss_instance;
   /* backing store for efct's mmappable hugepages */
   struct file*          thc_efct_memfd;
+  /* byte offset in thc_efct_memfd of the next hugepage to allocate */
+  off_t                 thc_efct_memfd_off;
 
   ci_waitable_t         ready_list_waitqs[CI_CFG_N_READY_LISTS];
   ci_dllist             os_ready_lists[CI_CFG_N_READY_LISTS];

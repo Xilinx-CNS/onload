@@ -957,9 +957,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
 
     /* EFCT TODO: some hard-coded parameters here: */
     rc = efrm_rxq_alloc(vi_rs, rxq, qix, cpu_all_mask, true, HUGEPAGES_PER_RXQ,
-                        trs->thc_efct_memfd,
-                        (intf_i * EF_VI_MAX_EFCT_RXQS + qix) *
-                            HUGEPAGES_PER_RXQ * CI_HUGEPAGE_SIZE,
+                        trs->thc_efct_memfd, &trs->thc_efct_memfd_off,
                         &trs->nic[intf_i].thn_efct_rxq[0]);
     if( rc < 0 ) {
       ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)\n", __func__, rc);
@@ -4391,6 +4389,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 #endif
 
   rs->thc_efct_memfd = NULL;
+  rs->thc_efct_memfd_off = 0;
   if( alloc->in_memfd >= 0 ) {
     rs->thc_efct_memfd = fget(alloc->in_memfd);
     if( ! rs->thc_efct_memfd ) {

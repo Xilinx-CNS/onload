@@ -31,8 +31,10 @@ void efct_provide_bind_memfd(struct file* memfd, off_t memfd_off)
   memfd_provided_off = memfd_off;
 }
 
-void efct_unprovide_bind_memfd(void)
+void efct_unprovide_bind_memfd(off_t *final_off)
 {
+  if( final_off )
+    *final_off = memfd_provided_off;
   memfd_provided = NULL;
   mutex_unlock(&memfd_provision_mtx);
 }
@@ -308,23 +310,23 @@ static int efct_alloc_hugepage(void *driver_data,
     return rc;
   }
 
-  rc = vfs_truncate(&result.file->f_path, off + CI_HUGEPAGE_SIZE);
-  if( rc < 0 ) {
-    EFHW_ERR("%s: ERROR: ftruncate hugepage memory failed for rxq (%ld)",
-             __func__, rc);
-    fput(result.file);
-    return rc;
+  inode = file_inode(result.file);
+  if( i_size_read(inode) < off + CI_HUGEPAGE_SIZE ) {
+    rc = vfs_truncate(&result.file->f_path, off + CI_HUGEPAGE_SIZE);
+    if( rc < 0 ) {
+      EFHW_ERR("%s: ERROR: ftruncate hugepage memory failed for rxq (%ld)",
+              __func__, rc);
+      goto fail;
+    }
   }
 
   rc = vfs_fallocate(result.file, 0, off, CI_HUGEPAGE_SIZE);
   if( rc < 0 ) {
     EFHW_ERR("%s: ERROR: fallocate hugepage memory failed for rxq (%ld)",
              __func__, rc);
-    fput(result.file);
-    return rc;
+    goto fail;
   }
 
-  inode = file_inode(result.file);
   inode_lock(inode);
   mapping = inode->i_mapping;
   i_mmap_lock_read(mapping);
@@ -338,12 +340,18 @@ static int efct_alloc_hugepage(void *driver_data,
     EFHW_ERR("%s: ERROR: rxq memfd was badly created (%ld / %d / %d)",
              __func__, off, result.page ? PageHuge(result.page) : -1,
              result.page ? PageTail(result.page) : -1);
-    fput(result.file);
-    return -EINVAL;
+    rc = -EINVAL;
+    goto fail;
   }
 
   *result_out = result;
   return 0;
+
+ fail:
+  if( memfd_provided )
+    memfd_provided_off -= CI_HUGEPAGE_SIZE;
+  fput(result.file);
+  return rc;
 }
 
 static void efct_free_hugepage(void *driver_data,

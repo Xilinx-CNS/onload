@@ -42,6 +42,7 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   efch_resource_t* vi_rs;
   cpumask_var_t cpumask;
   struct file* memfd = NULL;
+  off_t memfd_off;
   int rc;
 
   rc = efch_resource_id_lookup(alloc->in_vi_rs_id, priv_opt, &vi_rs);
@@ -79,9 +80,10 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
       goto fail1;
   }
 
+  memfd_off = alloc->in_memfd_off;
   rc = efrm_rxq_alloc(vi, alloc->in_qid, alloc->in_shm_ix, cpumask,
                       alloc->in_timestamp_req, alloc->in_n_hugepages, memfd,
-                      alloc->in_memfd_off, &rxq);
+                      &memfd_off, &rxq);
   if (memfd)
     fput(memfd);
   free_cpumask_var(cpumask);

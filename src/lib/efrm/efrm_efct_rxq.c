@@ -46,7 +46,7 @@ EXPORT_SYMBOL(efrm_rxq_from_resource);
 
 int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
                    const struct cpumask *mask, bool timestamp_req,
-                   size_t n_hugepages, struct file* memfd, off_t memfd_off,
+                   size_t n_hugepages, struct file* memfd, off_t* memfd_off,
                    struct efrm_efct_rxq **rxq_out)
 {
 #if CI_HAVE_EFCT_AUX
