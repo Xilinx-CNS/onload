@@ -76,6 +76,8 @@
 
 #define EFAB_THR_MAX_NUM_INSTANCES  0x00010000
 
+static const unsigned EFCT_HUGEPAGES_PER_RXQ = 2;  /* EFCT TODO: un-hardcode */
+
 /* Provides upper limit to EF_MAX_PACKETS. default is 512K packets,
  * which equates to roughly 1GB of memory 
  */
@@ -937,7 +939,6 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
 {
   int intf_i;
   struct efhw_nic* nic;
-  const unsigned HUGEPAGES_PER_RXQ = 2;  /* EFCT TODO: un-hardcode */
 
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) < 0 )
@@ -956,7 +957,8 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       return 0;
 
     /* EFCT TODO: some hard-coded parameters here: */
-    rc = efrm_rxq_alloc(vi_rs, rxq, qix, cpu_all_mask, true, HUGEPAGES_PER_RXQ,
+    rc = efrm_rxq_alloc(vi_rs, rxq, qix, cpu_all_mask, true,
+                        EFCT_HUGEPAGES_PER_RXQ,
                         trs->thc_efct_memfd, &trs->thc_efct_memfd_off,
                         &trs->nic[intf_i].thn_efct_rxq[0]);
     if( rc < 0 ) {
@@ -2608,6 +2610,31 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
 
   OO_DEBUG_SHM(ci_log("%s:", __func__));
 
+  if( NI_OPTS(ni).prealloc_packets && trs->thc_efct_memfd ) {
+    int n_rxqs = 0;
+    OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+      struct efhw_nic* nic =
+                efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
+      n_rxqs += efhw_nic_max_shared_rxqs(nic);
+    }
+    if( n_rxqs ) {
+      off_t bytes = CI_HUGEPAGE_SIZE * EFCT_HUGEPAGES_PER_RXQ * n_rxqs;
+      rc = vfs_fallocate(trs->thc_efct_memfd, 0, 0, bytes);
+      if( rc < 0 ) {
+        if( rc == -ENOSPC )
+          OO_DEBUG_ERR(ci_log("tcp_helper_alloc: fallocate hugepage memory "
+                              "for EF_PREALLOC_PACKETS failed (%d queues): "
+                              "ENOSPC. Check /proc/sys/vm/nr_hugepages",
+                              n_rxqs));
+        else
+          OO_DEBUG_ERR(ci_log("tcp_helper_alloc: fallocate hugepage memory "
+                              "for EF_PREALLOC_PACKETS failed (%d queues): %d",
+                              n_rxqs, rc));
+        goto fail0;
+      }
+    }
+  }
+
   rc = allocate_vis(trs, alloc, ns + 1, thc);
   if( rc < 0 )  goto fail1;
 
@@ -2673,6 +2700,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
  fail4:
   release_vi(trs);
  fail1:
+ fail0:
   return rc;
 }
 
@@ -4279,6 +4307,18 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   ci_dllist_push(&THR_TABLE.started_stacks, &rs->all_stacks_link);
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
+  rs->thc_efct_memfd = NULL;
+  rs->thc_efct_memfd_off = 0;
+  if( alloc->in_memfd >= 0 ) {
+    rs->thc_efct_memfd = fget(alloc->in_memfd);
+    if( ! rs->thc_efct_memfd ) {
+      rc = -EBADF;
+      OO_DEBUG_ERR(ci_log("%s: [%d] Bad fd for efct (%d).",
+                  __func__, NI_ID(ni), alloc->in_memfd));
+      goto fail_memfd;
+    }
+  }
+
   /* Allocate hardware resources */
   ni->ep_tbl = NULL;
   ni->flags = alloc->in_flags;
@@ -4388,18 +4428,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   }
 #endif
 
-  rs->thc_efct_memfd = NULL;
-  rs->thc_efct_memfd_off = 0;
-  if( alloc->in_memfd >= 0 ) {
-    rs->thc_efct_memfd = fget(alloc->in_memfd);
-    if( ! rs->thc_efct_memfd ) {
-      rc = -EBADF;
-      OO_DEBUG_ERR(ci_log("%s: [%d] Bad fd for efct (%d).",
-                  __func__, NI_ID(ni), alloc->in_memfd));
-      goto fail13;
-    }
-  }
-
   /* We're about to expose this stack to other people.  so we should be
    * sufficiently initialised here that other people don't get upset.
    */
@@ -4409,7 +4437,7 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     rc = efab_thr_table_check_name(alloc->in_name, rs->netif.cplane->cp_netns);
     if( rc != 0 ) {
       ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
-      goto fail14;
+      goto fail13;
     }
   }
   /* This must be set when we are guaranteed that stack creation
@@ -4498,9 +4526,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   OO_DEBUG_RES(ci_log("tcp_helper_rm_alloc: allocated %u", rs->id));
   return 0;
 
- fail14:
-  if( rs->thc_efct_memfd )
-    fput(rs->thc_efct_memfd);
  fail13:
 #if CI_CFG_TCP_SHARED_LOCAL_PORTS
   vfree(rs->trs_ephem_table_consumed);
@@ -4546,6 +4571,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   tcp_helper_stop_periodic_work(rs);
 #endif
 
+  if( rs->thc_efct_memfd )
+    fput(rs->thc_efct_memfd);
+ fail_memfd:
 #if CI_CFG_NIC_RESET_SUPPORT
   destroy_workqueue(rs->reset_wq);
  fail5a:
