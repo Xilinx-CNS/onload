@@ -272,6 +272,11 @@ extern int
 tcp_helper_cluster_from_cluster(tcp_helper_resource_t* thr);
 
 extern int
+tcp_helper_cluster_post_filter_add(tcp_helper_cluster_t* thc, int hwport,
+                                   const struct efx_filter_spec* spec,
+                                   int rxq, bool replace);
+
+extern int
 tcp_helper_cluster_dump(tcp_helper_resource_t* thr, void* buf, int buf_len);
 
 extern int tcp_helper_cluster_alloc_thr(const char* name,

@@ -5,6 +5,7 @@
 
 #include <onload/debug.h>
 #include <onload/tcp_helper_endpoint.h>
+#include <onload/tcp_helper_fns.h>
 #include <onload/driverlink_filter.h>
 #include <ci/efrm/efrm_client.h>
 #include <ci/efrm/efrm_filter.h>

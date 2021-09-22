@@ -1615,6 +1615,23 @@ unlock_sock:
 }
 
 
+int tcp_helper_cluster_post_filter_add(tcp_helper_cluster_t* thc, int hwport,
+                                       const struct efx_filter_spec* spec,
+                                       int rxq, bool replace)
+{
+  ci_dllink* link;
+  int rc = 0;
+
+  CI_DLLIST_FOR_EACH(link, &thc->thc_thr_list) {
+    tcp_helper_resource_t* trs = CI_CONTAINER(tcp_helper_resource_t,
+                                              thc_thr_link, link);
+    rc = tcp_helper_post_filter_add(trs, hwport, spec, rxq, replace);
+    if( rc < 0 )
+      break;
+  }
+  return rc;
+}
+
 
 /****************************************************************
 Cluster dump functions
