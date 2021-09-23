@@ -9,7 +9,23 @@
 #include <onload/extensions_zc.h>
 
 
-struct zc_remote_data;
+#define HLRX_REMOTE_RING_BLOCK_SHIFT  8  /* 2KB */
+#define HLRX_REMOTE_RING_BLOCK_SIZE  (1 << HLRX_REMOTE_RING_BLOCK_SHIFT)
+#define HLRX_REMOTE_PTR_DONE_FLAG  0x8000000000000000ull
+struct hlrx_remote_ring_block {
+  /* Pointers to these are given out to the user instead of packets as
+   * onload_zc_handles (see ZC_IS_REMOTE_FLAG) when a non-local address space
+   * is seen. The caller is expected to free them as usual with
+   * onload_zc_hlrx_buffer_release,  whereupon we can figure out the max_ptr
+   * and send the appropriate free request to the NIC plugin */
+  uint64_t max_ptr[HLRX_REMOTE_RING_BLOCK_SIZE];
+};
+
+struct hlrx_remote_ring {
+  struct hlrx_remote_ring_block** blocks;
+  size_t nblocks;
+  size_t added, removed;
+};
 
 /* Top-level state object the user owns for the whole hlrx thing */
 struct onload_zc_hlrx {
@@ -37,26 +53,10 @@ struct onload_zc_hlrx {
   struct onload_zc_iovec static_pending[32];
   struct onload_zc_iovec* pending;
 
-  /* Singly-linked list of objects given out to the user which point to
+  /* Storage for the things that are given out to the user to point to
    * non-local address space data. These are in order, so we know what to
    * post to the underlying app plugin when the app's done with them. */
-  struct zc_remote_data* remotes_head;
-  struct zc_remote_data** remotes_ptail;
-  /* Protects fd and remotes_* */
-  pthread_mutex_t mtx;
-};
-
-
-/* Pointers to these are given out to the user instead of packets as
- * onload_zc_handles (see ZC_IS_REMOTE_FLAG) when a non-local address space is
- * seen. The caller is expected to free them as usual with
- * onload_zc_hlrx_buffer_release,  whereupon we can figure out the max_ptr and
- * send the appropriate free request to the NIC plugin */
-struct zc_remote_data {
-  struct onload_zc_hlrx* owner;
-  struct zc_remote_data* next;
-  uint64_t max_ptr;
-  bool done;
+  struct hlrx_remote_ring remote_ring;
 };
 
 
@@ -65,7 +65,7 @@ struct zc_remote_data {
  * to debug if we use something different. */
 #define ZC_IS_REMOTE_FLAG  2
 
-static inline onload_zc_handle zc_remote_to_handle(struct zc_remote_data* rd)
+static inline onload_zc_handle zc_remote_to_handle(uint64_t* rd)
 {
   return (onload_zc_handle)((uintptr_t)rd | ZC_IS_REMOTE_FLAG);
 }
@@ -75,11 +75,27 @@ static inline bool zc_is_remote(onload_zc_handle h)
   return ((uintptr_t)h & ZC_IS_REMOTE_FLAG) != 0;
 }
 
-static inline struct zc_remote_data* zc_handle_to_remote(onload_zc_handle h)
+static inline uint64_t* zc_handle_to_remote(onload_zc_handle h)
 {
   ci_assert(zc_is_remote(h));
   /* -2 rather than &~2 because it allows better codegen */
-  return (struct zc_remote_data*)((uintptr_t)h - ZC_IS_REMOTE_FLAG);
+  return (uint64_t*)((uintptr_t)h - ZC_IS_REMOTE_FLAG);
+}
+
+
+static size_t remote_ring_inc(const struct hlrx_remote_ring* ring, size_t i)
+{
+  /* We need >= rather than == here in order to handle the case where the ring
+   * is empty. */
+  return i + 1 >= ring->nblocks * HLRX_REMOTE_RING_BLOCK_SIZE ? 0 : i + 1;
+}
+
+
+static uint64_t* remote_ring_entry(struct hlrx_remote_ring* ring, size_t i)
+{
+  ci_assert_lt(i, ring->nblocks * HLRX_REMOTE_RING_BLOCK_SIZE);
+  return &ring->blocks[i >> HLRX_REMOTE_RING_BLOCK_SHIFT]
+              ->max_ptr[i & (HLRX_REMOTE_RING_BLOCK_SIZE - 1)];
 }
 
 
@@ -103,13 +119,11 @@ int onload_zc_hlrx_alloc(int fd, int flags, struct onload_zc_hlrx** hlrx_out)
       rc = -ENOMEM;
     }
     else {
-      pthread_mutex_init(&hlrx->mtx, NULL);
       hlrx->fd = fd;
       hlrx->udp = sock_type == SOCK_DGRAM;
       hlrx->pending = hlrx->static_pending;
       hlrx->pending_capacity = sizeof(hlrx->static_pending) /
                                sizeof(hlrx->static_pending[0]);
-      hlrx->remotes_ptail = &hlrx->remotes_head;
       *hlrx_out = hlrx;
     }
   }
@@ -122,21 +136,26 @@ int onload_zc_hlrx_alloc(int fd, int flags, struct onload_zc_hlrx** hlrx_out)
 int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx)
 {
   int rc = 0;
+  size_t i;
 
   Log_CALL(ci_log("%s(%p)", __FUNCTION__, hlrx));
-  pthread_mutex_lock(&hlrx->mtx);
-  if( hlrx->remotes_head ) {
-    Log_E(ci_log("%s: remote ZC blocks remain unfreed", __FUNCTION__));
-    rc = -EBUSY;
+  for( i = hlrx->remote_ring.removed; i != hlrx->remote_ring.added;
+       i = remote_ring_inc(&hlrx->remote_ring, i) ) {
+    uint64_t ptr = *remote_ring_entry(&hlrx->remote_ring, i);
+    if( ! (ptr & HLRX_REMOTE_PTR_DONE_FLAG) ) {
+      Log_E(ci_log("%s: remote ZC blocks remain unfreed", __FUNCTION__));
+      rc = -EBUSY;
+      break;
+    }
   }
-  pthread_mutex_unlock(&hlrx->mtx);
 
   if( rc == 0 ) {
+    for( i = 0; i < hlrx->remote_ring.nblocks; ++i )
+      free(hlrx->remote_ring.blocks[i]);
     if( hlrx->pending_begin != hlrx->pending_end )
       onload_zc_buffer_decref(hlrx->fd, hlrx->pending[0].buf);
     if( hlrx->pending != hlrx->static_pending )
       free(hlrx->pending);
-    pthread_mutex_destroy(&hlrx->mtx);
     free(hlrx);
   }
   Log_CALL_RESULT(rc);
@@ -146,43 +165,31 @@ int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx)
 
 static void consume_done_remotes(struct onload_zc_hlrx* hlrx)
 {
-  struct zc_remote_data* rd;
-  uint64_t max = 0;
-  bool freed_some = false;
+  unsigned added = hlrx->remote_ring.added;
+  unsigned removed = hlrx->remote_ring.removed;
+  unsigned old_removed = removed;
+  uint64_t max_ptr = 0;
 
-  if( OO_ACCESS_ONCE(hlrx->remotes_head) == NULL )
-    return;
-
-  pthread_mutex_lock(&hlrx->mtx);
-  rd = OO_ACCESS_ONCE(hlrx->remotes_head);
-  while( rd && rd->done ) {
-    struct zc_remote_data* next = rd->next;
-    max = rd->max_ptr;
-    freed_some = true;
-    free(rd);
-    rd = next;
+  while( removed != added ) {
+    uint64_t v = *remote_ring_entry(&hlrx->remote_ring, removed);
+    if( ! (v & HLRX_REMOTE_PTR_DONE_FLAG) )
+      break;
+    max_ptr = v;
+    removed = remote_ring_inc(&hlrx->remote_ring, removed);
   }
-
-  if( freed_some ) {
-    hlrx->remotes_head = rd;
-    if( ! rd )
-      hlrx->remotes_ptail = &hlrx->remotes_head;
-    ioctl(hlrx->fd, ONLOAD_SIOC_CEPH_REMOTE_CONSUME, &max);
+  if( removed != old_removed ) {
+    max_ptr &= ~HLRX_REMOTE_PTR_DONE_FLAG;
+    ioctl(hlrx->fd, ONLOAD_SIOC_CEPH_REMOTE_CONSUME, &max_ptr);
+    hlrx->remote_ring.removed = removed;
   }
-  pthread_mutex_unlock(&hlrx->mtx);
 }
 
 
 int onload_zc_hlrx_buffer_release(int fd, onload_zc_handle buf)
 {
   if(CI_UNLIKELY( zc_is_remote(buf) )) {
-    struct zc_remote_data* rd = zc_handle_to_remote(buf);
-    struct onload_zc_hlrx* hlrx = OO_ACCESS_ONCE(rd->owner);
-
-    OO_ACCESS_ONCE(rd->done) = true;
-    /* Do not access rd any more: it could have been freed */
-    consume_done_remotes(hlrx);
-    /* Do not access hlrx any more: it could have been destroyed */
+    uint64_t* rd = zc_handle_to_remote(buf);
+    OO_ACCESS_ONCE(*rd) |= HLRX_REMOTE_PTR_DONE_FLAG;
     return 0;
   }
   return onload_zc_buffer_decref(fd, buf);
@@ -298,6 +305,7 @@ ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
 
   Log_CALL(ci_log("%s(%p, %p, %d)", __FUNCTION__, hlrx, msg, flags));
 
+  consume_done_remotes(hlrx);
   if( flags & MSG_ERRQUEUE ) {
     state.rc = onload_recvmsg(hlrx->fd, msg, flags);
     if( state.rc < 0 )
@@ -353,8 +361,6 @@ struct zc_cb_zc_state {
   ssize_t rc;
   size_t max_bytes;
   int curr_iov;      /* Index into the user's iov array msg->iov */
-  struct zc_remote_data* remotes_head;
-  struct zc_remote_data** remotes_ptail;
 };
 
 
@@ -373,6 +379,59 @@ static void zc_buffer_addref(int fd, onload_zc_handle buf, int delta)
 }
 
 
+/* Allocate a new item on the end of hlrx->remote_ring */
+static uint64_t* zc_remote_block_add(struct hlrx_remote_ring* ring)
+{
+  unsigned added = ring->added;
+  unsigned added_inc = remote_ring_inc(ring, added);
+  unsigned removed = ring->removed;
+  unsigned added_block = added >> HLRX_REMOTE_RING_BLOCK_SHIFT;
+  unsigned removed_block = removed >> HLRX_REMOTE_RING_BLOCK_SHIFT;
+
+  /* We're sloppy about overlap in order to make ring resize possible: we
+   * consider the ring to be full when the added block catches up to the
+   * removed block, so we can insert entire new blocks in to the middle rather
+   * than shuffling existing pointers which we've already given-out */
+  if(CI_UNLIKELY( (added_block == removed_block && added < removed) ||
+                  added_inc == removed )) {
+    size_t to_add = ring->nblocks == 0 ? 2 : 1;
+    size_t i;
+    struct hlrx_remote_ring_block** new_blocks;
+
+    new_blocks = calloc(ring->nblocks + to_add, sizeof(*new_blocks));
+    if( ! new_blocks )
+      return NULL;
+    memcpy(new_blocks, ring->blocks, sizeof(*new_blocks) * added_block);
+    memcpy(new_blocks + added_block + to_add, ring->blocks + added_block,
+           sizeof(*new_blocks) * (ring->nblocks - added_block));
+    for( i = 0; i < to_add; ++i ) {
+      new_blocks[added_block + i] = malloc(sizeof(**new_blocks));
+      if( ! new_blocks[added_block + i] ) {
+        while( i )
+          free(new_blocks[added_block + --i]);
+        free(new_blocks);
+        return NULL;
+      }
+    }
+    free(ring->blocks);
+    ring->blocks = new_blocks;
+    ring->nblocks += to_add;
+    ring->removed += to_add * HLRX_REMOTE_RING_BLOCK_SIZE;
+    if( ring->removed >= ring->nblocks * HLRX_REMOTE_RING_BLOCK_SIZE ) {
+      /* This can only happen in the case where the ring was initially empty,
+       * where the initial value of removed was already out of bounds. */
+      ci_assert_equal(ring->nblocks, to_add);
+      ci_assert_equal(ring->removed, to_add * HLRX_REMOTE_RING_BLOCK_SIZE);
+      ring->removed = 0;
+    }
+    added_inc = added + 1;
+  }
+
+  ring->added = added_inc;
+  return remote_ring_entry(ring, added);
+}
+
+
 /* Pass buffers from 'iovs' to state->msg->iov, updating the tracking as we
  * go */
 static void zc_iovs(struct zc_cb_zc_state* state,
@@ -386,22 +445,14 @@ static void zc_iovs(struct zc_cb_zc_state* state,
     struct onload_zc_iovec* dst = &state->msg->iov[state->curr_iov];
     *dst = iovs[begin];
     if( iovs[begin].addr_space != EF_ADDRSPACE_LOCAL ) {
-      struct zc_remote_data* rd = malloc(sizeof(struct zc_remote_data));
+      uint64_t* rd = zc_remote_block_add(&state->hlrx->remote_ring);
       if( ! rd ) {
         if( state->rc == 0 )
           state->rc = -ENOMEM;
         break;
       }
-      *rd = (struct zc_remote_data){
-        .owner = state->hlrx,
-        .next = NULL,
-        .done = false,
-        .max_ptr = iovs[begin].iov_ptr + CI_MIN(iovs[begin].iov_len64,
-                                                state->max_bytes),
-      };
-      /* Append to the linked list at state->remotes_head */
-      *state->remotes_ptail = rd;
-      state->remotes_ptail = &rd->next;
+      *rd = iovs[begin].iov_ptr + CI_MIN(iovs[begin].iov_len64,
+                                         state->max_bytes),
       dst->buf = zc_remote_to_handle(rd);
     }
     else {
@@ -487,11 +538,11 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
     .max_bytes = max_bytes,
     .curr_iov = 0,
   };
-  state.remotes_ptail = &state.remotes_head;
 
   Log_CALL(ci_log("%s(%p, %p, %zu, %d)", __FUNCTION__, hlrx, msg, max_bytes,
                   flags));
 
+  consume_done_remotes(hlrx);
   if( flags & (MSG_PEEK | MSG_TRUNC | MSG_ERRQUEUE) ) {
     state.rc = -EINVAL;
   }
@@ -524,13 +575,6 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
     }
 
     msg->msghdr.msg_iovlen = state.curr_iov;
-  }
-
-  if( state.remotes_head ) {
-    pthread_mutex_lock(&hlrx->mtx);
-    *hlrx->remotes_ptail = state.remotes_head;
-    hlrx->remotes_ptail = state.remotes_ptail;
-    pthread_mutex_unlock(&hlrx->mtx);
   }
 
   Log_CALL_RESULT((int)state.rc);
