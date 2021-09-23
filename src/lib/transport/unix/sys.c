@@ -87,6 +87,8 @@ extern int __open(const char*, int, ...);
 extern ssize_t __read(int, void*, size_t);
 extern ssize_t __write(int, const void*, size_t);
 extern int __close(int);
+extern int __sigaction(int signum, const struct sigaction *act,
+                       struct sigaction* oldact);
 
 int
 citp_basic_syscall_init(void)
@@ -109,6 +111,7 @@ citp_basic_syscall_init(void)
   ci_sys_read = __read;
   ci_sys_write = __write;
   ci_sys_close = __close;
+  ci_sys_sigaction = __sigaction;
   return 0;
 }
 

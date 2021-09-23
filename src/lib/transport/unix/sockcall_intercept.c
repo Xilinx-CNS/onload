@@ -2843,7 +2843,7 @@ OO_INTERCEPT(int, sigaction,
   int rc;
 
   if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) ) {
-    citp_do_init(CITP_INIT_SYSCALLS);
+    citp_do_init(CITP_INIT_BASIC_SYSCALLS);
     return ci_sys_sigaction(signum, act, oldact);
   }
 
