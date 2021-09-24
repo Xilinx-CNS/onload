@@ -310,10 +310,14 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
        * everything) change in the future, but it's difficult to predict in
        * what way. */
       if( ! kernel_redirect ) {
+#if ! CI_CFG_ENDPOINT_MOVE
+        ci_assert_equal(cluster, 0);
+#else
         if( cluster )
           rc = tcp_helper_cluster_post_filter_add(oofilter->thc, hwport, &spec,
                                                   rxq, replace);
         else
+#endif
           rc = tcp_helper_post_filter_add(oofilter->trs, hwport, &spec, rxq,
                                           replace);
         if( rc < 0 ) {
