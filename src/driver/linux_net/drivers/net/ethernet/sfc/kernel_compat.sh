@@ -418,7 +418,6 @@ EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM	symtype xsk_umem_consume_tx	include/net/xdp_soc
 EFX_HAVE_XSK_NEED_WAKEUP		symbol	xsk_umem_uses_need_wakeup	include/net/xdp_sock.h include/net/xdp_sock_drv.h
 EFX_HAVE_COALESCE_PARAMS		member struct_ethtool_ops supported_coalesce_params include/linux/ethtool.h
 EFX_HAVE_XDP_QUERY_PROG			symbol XDP_QUERY_PROG	include/linux/netdevice.h
-EFX_HAVE_VIRTIO_F_IN_ORDER		symbol VIRTIO_F_IN_ORDER	include/uapi/linux/virtio_config.h
 EFX_HAVE_VDPA_VQ_STATE			symbol vdpa_vq_state		include/linux/vdpa.h
 EFX_HAVE_VDPA_VQ_STATE_SPLIT		symbol vdpa_vq_state_split	include/linux/vdpa.h
 EFX_HAVE_GET_VQ_IRQ			member struct_vdpa_config_ops get_vq_irq include/linux/vdpa.h

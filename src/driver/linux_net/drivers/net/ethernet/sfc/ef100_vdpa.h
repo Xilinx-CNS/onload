@@ -218,6 +218,7 @@ void ef100_vdpa_irq_vectors_free(void *data);
 int ef100_vdpa_free_buffer(struct ef100_vdpa_nic *vdpa_nic,
 			   struct efx_buffer *buf);
 void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic);
+void ef100_reset_vdpa(struct efx_nic *efx);
 bool ef100_vdpa_dev_in_use(struct efx_nic *efx);
 int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic);
 int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);

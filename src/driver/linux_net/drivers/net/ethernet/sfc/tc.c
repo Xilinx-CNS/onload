@@ -233,12 +233,6 @@ const static struct rhashtable_params efx_tc_lhs_rule_ht_params = {
 	.head_offset	= offsetof(struct efx_tc_lhs_rule, linkage),
 };
 
-const static struct rhashtable_params efx_tc_ctr_agg_ht_params = {
-	.key_len	= sizeof(unsigned long),
-	.key_offset	= offsetof(struct efx_tc_ctr_agg, cookie),
-	.head_offset	= offsetof(struct efx_tc_ctr_agg, linkage),
-};
-
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 const static struct rhashtable_params efx_tc_ct_zone_ht_params = {
 	.key_len	= offsetof(struct efx_tc_ct_zone, linkage),
@@ -1159,44 +1153,6 @@ static void efx_tc_free_action_set_list(struct efx_nic *efx,
 static void efx_tc_flower_release_encap_match(struct efx_nic *efx,
 					      struct efx_tc_encap_match *encap);
 
-static struct efx_tc_ctr_agg *efx_tc_get_ctr_agg(struct efx_nic *efx,
-						 unsigned long cookie)
-{
-	struct efx_tc_ctr_agg *agg, *old;
-
-	agg = kzalloc(sizeof(*agg), GFP_USER);
-	if (!agg)
-		return ERR_PTR(-ENOMEM);
-	agg->cookie = cookie;
-	INIT_LIST_HEAD(&agg->count.users);
-	refcount_set(&agg->ref, 1);
-	old = rhashtable_lookup_get_insert_fast(&efx->tc->ctr_agg_ht,
-						&agg->linkage,
-						efx_tc_ctr_agg_ht_params);
-	if (old) {
-		/* don't need our new entry */
-		kfree(agg);
-		if (!refcount_inc_not_zero(&old->ref))
-			return ERR_PTR(-EAGAIN);
-		/* existing entry found */
-		return old;
-	}
-	/* new entry was inserted, return it */
-	return agg;
-}
-
-static void efx_tc_put_ctr_agg(struct efx_nic *efx, struct efx_tc_ctr_agg *agg)
-{
-	if (!refcount_dec_and_test(&agg->ref))
-		return; /* still in use */
-	rhashtable_remove_fast(&efx->tc->ctr_agg_ht, &agg->linkage,
-			       efx_tc_ctr_agg_ht_params);
-	/* TODO check to see what synchronisation we might need here in case of
-	 * concurrent updates to the counters that feed us.
-	 */
-	kfree(agg);
-}
-
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 #if IS_ENABLED(CONFIG_NF_FLOW_TABLE)
 static int efx_tc_flow_block(enum tc_setup_type type, void *type_data,
@@ -1250,7 +1206,7 @@ static void efx_tc_lhs_free(void *ptr, void *arg)
 		efx_tc_ct_unregister_zone(efx, rule->lhs_act.zone);
 #endif
 	if (rule->lhs_act.count)
-		efx_tc_put_ctr_agg(efx, rule->lhs_act.count);
+		efx_tc_flower_put_counter_index(efx, rule->lhs_act.count);
 	efx_mae_remove_lhs_rule(efx, rule);
 
 	kfree(rule);
@@ -1336,15 +1292,6 @@ static void efx_neigh_free(void *ptr, void *__unused)
 	put_net(neigh->net);
 	dev_put(neigh->egdev);
 	kfree(neigh);
-}
-
-static void efx_tc_ctr_agg_free(void *ptr, void *__unused)
-{
-	struct efx_tc_ctr_agg *agg = ptr;
-
-	WARN_ON(refcount_read(&agg->ref));
-	WARN_ON(!list_empty(&agg->count.users)); /* shouldn't be used */
-	kfree(agg);
 }
 
 static struct efx_tc_recirc_id *efx_tc_get_recirc_id(struct efx_nic *efx, u32 chain_index)
@@ -1494,9 +1441,6 @@ static void efx_tc_counter_update(struct efx_nic *efx,
 {
 	struct efx_tc_counter *cnt;
 
-	/* TODO handle 1:1 counters and feed their aggs?  How do their ids
-	 * get assigned, can we identify them here?
-	 */
 	rcu_read_lock(); /* Protect against deletion of 'cnt' */
 	cnt = efx_tc_flower_find_counter_by_fw_id(efx, counter_type, counter_idx);
 	if (!cnt) {
@@ -1612,6 +1556,9 @@ static enum efx_tc_counter_type efx_tc_rx_version_2(struct efx_nic *efx,
 		break;
 	case ERF_SC_PACKETISER_HEADER_IDENTIFIER_CT:
 		type = EFX_TC_COUNTER_TYPE_CT;
+		break;
+	case ERF_SC_PACKETISER_HEADER_IDENTIFIER_OR:
+		type = EFX_TC_COUNTER_TYPE_OR;
 		break;
 	default:
 		if (net_ratelimit())
@@ -1772,9 +1719,6 @@ int efx_init_struct_tc(struct efx_nic *efx)
 	rc = rhashtable_init(&efx->tc->lhs_rule_ht, &efx_tc_lhs_rule_ht_params);
 	if (rc < 0)
 		goto fail_lhs_rule_ht;
-	rc = rhashtable_init(&efx->tc->ctr_agg_ht, &efx_tc_ctr_agg_ht_params);
-	if (rc < 0)
-		goto fail_ctr_agg_ht;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	rc = rhashtable_init(&efx->tc->ct_zone_ht, &efx_tc_ct_zone_ht_params);
 	if (rc < 0)
@@ -1814,8 +1758,6 @@ fail_ct_ht:
 	rhashtable_destroy(&efx->tc->ct_zone_ht);
 fail_ct_zone_ht:
 #endif
-	rhashtable_destroy(&efx->tc->ctr_agg_ht);
-fail_ctr_agg_ht:
 	rhashtable_destroy(&efx->tc->lhs_rule_ht);
 fail_lhs_rule_ht:
 	rhashtable_destroy(&efx->tc->match_action_ht);
@@ -1857,7 +1799,6 @@ void efx_fini_struct_tc(struct efx_nic *efx)
 	rhashtable_free_and_destroy(&efx->tc->ct_zone_ht, efx_tc_ct_zone_free, NULL);
 #endif
 	rhashtable_free_and_destroy(&efx->tc->lhs_rule_ht, efx_tc_lhs_free, efx);
-	rhashtable_free_and_destroy(&efx->tc->ctr_agg_ht, efx_tc_ctr_agg_free, NULL);
 	rhashtable_free_and_destroy(&efx->tc->match_action_ht, efx_tc_flow_free,
 				    efx);
 	rhashtable_free_and_destroy(&efx->tc->encap_match_ht, efx_tc_encap_match_free, NULL);
@@ -3313,6 +3254,7 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 #endif
 	struct efx_tc_lhs_rule *rule, *old;
 	const struct flow_action_entry *fa;
+	struct efx_tc_counter_index *cnt;
 	bool pipe = true;
 	int rc, i;
 
@@ -3354,7 +3296,6 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 		struct efx_tc_ct_zone *ct_zone;
 #endif
 		struct efx_tc_recirc_id *rid;
-		struct efx_tc_ctr_agg *agg;
 
 		if (!pipe) {
 			/* more actions after a non-pipe action */
@@ -3376,21 +3317,21 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 				goto release;
 			}
 			rule->lhs_act.rid = rid;
-			/* TODO check fa->hw_stats */
+
+			cnt = efx_tc_flower_get_counter_index(efx,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
-			agg = efx_tc_get_ctr_agg(efx, fa->cookie);
+							      fa->cookie,
 #else
-			/* No action cookies, so use rule cookie */
-			agg = efx_tc_get_ctr_agg(efx, rule->cookie);
+							      tc->cookie,
 #endif
-			if (IS_ERR_OR_NULL(agg)) {
-				EFX_TC_ERR_MSG(efx, extack, "Failed to create counter aggregator");
-				rc = PTR_ERR(agg);
-				if (!rc)
-					rc = -EIO;
+							      EFX_TC_COUNTER_TYPE_OR);
+			if (IS_ERR(cnt)) {
+				rc = PTR_ERR(cnt);
+				EFX_TC_ERR_MSG(efx, extack, "Failed to obtain a counter");
 				goto release;
 			}
-			rule->lhs_act.count = agg;
+			WARN_ON(rule->lhs_act.count);
+			rule->lhs_act.count = cnt;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 			rule->lhs_act.count_action_idx = i;
 #endif
@@ -3473,7 +3414,7 @@ release:
 		efx_tc_ct_unregister_zone(efx, rule->lhs_act.zone);
 #endif
 	if (rule->lhs_act.count)
-		efx_tc_put_ctr_agg(efx, rule->lhs_act.count);
+		efx_tc_flower_put_counter_index(efx, rule->lhs_act.count);
 	if (!old)
 		rhashtable_remove_fast(&efx->tc->lhs_rule_ht, &rule->linkage,
 				       efx_tc_lhs_rule_ht_params);
@@ -4155,7 +4096,7 @@ static int efx_tc_flower_destroy(struct efx_nic *efx,
 	if (lhs_rule) {
 		/* Remove it from HW */
 		if (lhs_rule->lhs_act.count)
-			efx_tc_put_ctr_agg(efx, lhs_rule->lhs_act.count);
+			efx_tc_flower_put_counter_index(efx, lhs_rule->lhs_act.count);
 		efx_mae_remove_lhs_rule(efx, lhs_rule);
 		/* Delete it from SW */
 		if (lhs_rule->lhs_act.rid)
@@ -4203,22 +4144,8 @@ static int efx_tc_action_stats(struct efx_nic *efx,
 {
 	struct netlink_ext_ack *extack = tc->common.extack;
 	struct efx_tc_counter_index *ctr;
-	struct efx_tc_ctr_agg *agg;
 	struct efx_tc_counter *cnt;
 	u64 packets, bytes;
-
-	agg = efx_tc_find_ctr_agg(efx, tca->cookie);
-	if (agg) {
-		cnt = &agg->count;
-		/* Report only new pkts/bytes since last time TC asked */
-		packets = cnt->packets;
-		bytes = cnt->bytes;
-		flow_stats_update(&tca->stats, bytes - cnt->old_bytes,
-				  packets - cnt->old_packets, cnt->touched);
-		cnt->old_packets = packets;
-		cnt->old_bytes = bytes;
-		return 0;
-	}
 
 	ctr = efx_tc_flower_find_counter_index(efx, tca->cookie);
 	if (!ctr) {
@@ -4265,7 +4192,7 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 		if (lhs_rule->lhs_act.count) {
 			struct tc_action *a;
 
-			cnt = &lhs_rule->lhs_act.count->count;
+			cnt = lhs_rule->lhs_act.count->cnt;
 			/* Report only new pkts/bytes since last time TC asked */
 			packets = cnt->packets;
 			bytes = cnt->bytes;
@@ -4328,34 +4255,9 @@ static int efx_tc_flower_stats(struct efx_nic *efx, struct net_device *net_dev,
 			       struct flow_cls_offload *tc)
 {
 	struct netlink_ext_ack *extack = tc->common.extack;
-	struct efx_tc_lhs_rule *lhs_rule;
 	struct efx_tc_counter_index *ctr;
 	struct efx_tc_counter *cnt;
 	u64 packets, bytes;
-
-	lhs_rule = rhashtable_lookup_fast(&efx->tc->lhs_rule_ht, &tc->cookie,
-					  efx_tc_lhs_rule_ht_params);
-	if (lhs_rule) {
-		if (lhs_rule->lhs_act.count) {
-			cnt = &lhs_rule->lhs_act.count->count;
-			/* Report only new pkts/bytes since last time TC asked */
-			packets = cnt->packets;
-			bytes = cnt->bytes;
-			flow_stats_update(&tc->stats, bytes - cnt->old_bytes,
-					  packets - cnt->old_packets,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_STATS_DROPS)
-					  0,
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_STATS_TYPE)
-					  cnt->touched, FLOW_ACTION_HW_STATS_DELAYED);
-#else
-					  cnt->touched);
-#endif
-			cnt->old_packets = packets;
-			cnt->old_bytes = bytes;
-		}
-		return 0;
-	}
 
 	ctr = efx_tc_flower_find_counter_index(efx, tc->cookie);
 	if (!ctr) {
@@ -5157,7 +5059,7 @@ static void efx_tc_debugfs_dump_lhs_rule(struct seq_file *file,
 		seq_printf(file, "\t\tct zone %u\n", act->zone->zone);
 #endif
 	if (act->count) {
-		seq_printf(file, "\t\t\tcount\n");
+		seq_printf(file, "\t\t\tcount %u\n", act->count->cnt->fw_id);
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 		seq_printf(file, "\t\t\t\tact_idx=%d\n",
 			   act->count_action_idx);

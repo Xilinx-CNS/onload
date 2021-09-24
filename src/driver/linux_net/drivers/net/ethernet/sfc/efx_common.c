@@ -33,6 +33,9 @@
 #ifdef EFX_NOT_UPSTREAM
 #include "ef100_dump.h"
 #endif
+#ifdef CONFIG_SFC_VDPA
+#include "ef100_vdpa.h"
+#endif
 
 static unsigned int debug = (NETIF_MSG_DRV | NETIF_MSG_PROBE |
 		NETIF_MSG_LINK | NETIF_MSG_IFDOWN |
@@ -1092,6 +1095,57 @@ fail:
 	return rc;
 }
 
+static int efx_do_reset(struct efx_nic *efx, enum reset_type method)
+{
+	int rc = efx->type->reset(efx, method);
+
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev, "failed to reset hardware\n");
+		return rc;
+	}
+
+	/* Clear flags for the scopes we covered.  We assume the NIC and
+	 * driver are now quiescent so that there is no race here.
+	 */
+	if (method < RESET_TYPE_MAX_METHOD)
+		efx->reset_pending &= -(1 << (method + 1));
+	else /* it doesn't fit into the well-ordered scope hierarchy */
+		__clear_bit(method, &efx->reset_pending);
+
+	/* Reinitialise bus-mastering, which may have been turned off before
+	 * the reset was scheduled. This is still appropriate, even in the
+	 * RESET_TYPE_DISABLE since this driver generally assumes the hardware
+	 * can respond to requests.
+	 */
+	pci_set_master(efx->pci_dev);
+
+	return 0;
+}
+
+/* Do post-processing after the reset.
+ * Returns whether the reset was completed and the device is back up.
+ */
+static int efx_reset_complete(struct efx_nic *efx, enum reset_type method,
+			      bool retry, bool disabled)
+{
+	if (disabled) {
+		netif_err(efx, drv, efx->net_dev, "has been disabled\n");
+		efx->state = STATE_DISABLED;
+		return false;
+	}
+
+	if (retry) {
+		netif_info(efx, drv, efx->net_dev, "scheduling retry of reset\n");
+		if (method == RESET_TYPE_MC_BIST)
+			method = RESET_TYPE_DATAPATH;
+		efx_schedule_reset(efx, method);
+		return false;
+	}
+
+	netif_dbg(efx, drv, efx->net_dev, "reset complete\n");
+	return true;
+}
+
 /* Reset the NIC using the specified method.  Note that the reset may
  * fail, in which case the card will be left in an unusable state.
  *
@@ -1129,28 +1183,8 @@ int efx_reset(struct efx_nic *efx, enum reset_type method)
 		efx_link_status_changed(efx);
 	}
 
-	rc = efx->type->reset(efx, method);
-	if (rc) {
-		netif_err(efx, drv, efx->net_dev, "failed to reset hardware\n");
-		goto out;
-	}
+	rc = efx_do_reset(efx, method);
 
-	/* Clear flags for the scopes we covered.  We assume the NIC and
-	 * driver are now quiescent so that there is no race here.
-	 */
-	if (method < RESET_TYPE_MAX_METHOD)
-		efx->reset_pending &= -(1 << (method + 1));
-	else /* it doesn't fit into the well-ordered scope hierarchy */
-		__clear_bit(method, &efx->reset_pending);
-
-	/* Reinitialise bus-mastering, which may have been turned off before
-	 * the reset was scheduled. This is still appropriate, even in the
-	 * RESET_TYPE_DISABLE since this driver generally assumes the hardware
-	 * can respond to requests.
-	 */
-	pci_set_master(efx->pci_dev);
-
-out:
 	retry = rc == -EAGAIN;
 
 	/* Leave device stopped if necessary */
@@ -1173,17 +1207,10 @@ out:
 			rc = rc2;
 	}
 
-	if (disabled) {
+	if (disabled)
 		dev_close(efx->net_dev);
-		netif_err(efx, drv, efx->net_dev, "has been disabled\n");
-		efx->state = STATE_DISABLED;
-	} else if (retry) {
-		netif_info(efx, drv, efx->net_dev, "scheduling retry of reset\n");
-		if (method == RESET_TYPE_MC_BIST)
-			method = RESET_TYPE_DATAPATH;
-		efx_schedule_reset(efx, method);
-	} else {
-		netif_dbg(efx, drv, efx->net_dev, "reset complete\n");
+
+	if (efx_reset_complete(efx, method, retry, disabled)) {
 		efx_device_attach_if_not_resetting(efx);
 
 		/* Now reset is finished, reconfigure MAC
@@ -1205,6 +1232,31 @@ out:
 	return rc;
 }
 
+#ifdef CONFIG_SFC_VDPA
+void efx_reset_vdpa(struct efx_nic *efx, enum reset_type method)
+{
+	bool retry, disabled;
+	int rc;
+
+	WARN_ON(method != RESET_TYPE_DISABLE);
+	method = RESET_TYPE_DISABLE;
+
+	pr_info("%s: VDPA resetting (%s)\n", __func__, RESET_TYPE(method));
+
+	rc = efx_do_reset(efx, method);
+
+	retry = rc == -EAGAIN;
+
+	/* Leave device stopped if necessary */
+	disabled = (rc && !retry) || method == RESET_TYPE_DISABLE;
+
+	if (disabled)
+		reset_vdpa_device(efx->vdpa_nic);
+
+	efx_reset_complete(efx, method, retry, disabled);
+}
+#endif
+
 /* The worker thread exists so that code that cannot sleep can
  * schedule a reset for later.
  */
@@ -1220,6 +1272,7 @@ static void efx_reset_work(struct work_struct *data)
 #ifdef EFX_NOT_UPSTREAM
 	if (method == RESET_TYPE_TX_WATCHDOG &&
 	    efx_nic_rev(efx) == EFX_REV_EF100) {
+		WARN_ON(efx->state == STATE_VDPA);
 		efx_ef100_dump_napi_debug(efx);
 		efx_ef100_dump_sss_regs(efx);
 	}
@@ -1243,6 +1296,10 @@ static void efx_reset_work(struct work_struct *data)
 	 */
 	if (efx_net_active(efx->state))
 		(void)efx_reset(efx, method);
+#ifdef CONFIG_SFC_VDPA
+	else if (efx->state == STATE_VDPA)
+		efx_reset_vdpa(efx, method);
+#endif
 
 	rtnl_unlock();
 }
@@ -1295,20 +1352,23 @@ void efx_schedule_reset(struct efx_nic *efx, enum reset_type type)
 
 	set_bit(method, &efx->reset_pending);
 
-	/* If we're not READY then just leave the flags set as the cue
-	 * to abort probing or reschedule the reset later.
-	 */
-	if (!efx_net_active(READ_ONCE(efx->state)))
-		return;
+	if (efx->state != STATE_VDPA) {
+		/* If we're not READY then just leave the flags set as the cue
+		 * to abort probing or reschedule the reset later.
+		 */
+		if (!efx_net_active(READ_ONCE(efx->state)))
+			return;
 
-	/* we might be resetting because things are broken, so detach so we
-	 * don't get things like the TX watchdog firing while we wait to reset.
-	 */
+		/* we might be resetting because things are broken, so detach
+		 * so we don't get things like the TX watchdog firing while we
+		 * wait to reset.
+		 */
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	if (efx->type->detach_reps)
-		efx->type->detach_reps(efx);
+		if (efx->type->detach_reps)
+			efx->type->detach_reps(efx);
 #endif
-	netif_device_detach(efx->net_dev);
+		netif_device_detach(efx->net_dev);
+	}
 
 	efx_queue_reset_work(efx);
 }

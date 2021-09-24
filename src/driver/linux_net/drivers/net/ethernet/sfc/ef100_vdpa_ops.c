@@ -30,6 +30,16 @@
  */
 #define EFX_GET_VI_INDEX(vq_num) (((vq_num) / 2) + 1)
 
+#if defined(EFX_USE_KCOMPAT) && !defined(VIRTIO_F_IN_ORDER)
+/* Virtio feature bit number 35 is not defined in
+ * include/uapi/linux/virtio_config.h, make it available for the
+ * out-of-tree builds. VIRTIO_F_IN_ORDER is defined in section 6
+ * (Reserved Feature Bits) of the VirtIO v1.1 spec
+ */
+#define VIRTIO_F_IN_ORDER 35
+#endif
+
+
 struct feature_bit {
 	u8 bit;
 	char *str;
@@ -42,7 +52,7 @@ static const struct feature_bit feature_table[] = {
 	{VIRTIO_F_ACCESS_PLATFORM, "VIRTIO_F_ACCESS_PLATFORM"},
 	{VIRTIO_F_RING_PACKED, "VIRTIO_F_RING_PACKED"},
 	{VIRTIO_F_ORDER_PLATFORM, "VIRTIO_F_ORDER_PLATFORM"},
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_VIRTIO_F_IN_ORDER)
+#if defined(EFX_USE_KCOMPAT)
 	{VIRTIO_F_IN_ORDER, "VIRTIO_F_IN_ORDER"},
 #endif
 	{VIRTIO_F_SR_IOV, "VIRTIO_F_SR_IOV"},
@@ -440,6 +450,16 @@ void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 		reset_vring(vdpa_nic, i);
 }
 
+/* May be called under the rtnl lock */
+void ef100_reset_vdpa(struct efx_nic *efx)
+{
+	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+
+	mutex_lock(&vdpa_nic->lock);
+	reset_vdpa_device(vdpa_nic);
+	mutex_unlock(&vdpa_nic->lock);
+}
+
 static int start_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 {
 	int rc = 0;
@@ -786,7 +806,7 @@ static u64 ef100_vdpa_get_features(struct vdpa_device *vdev)
 		return 0;
 	}
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_VIRTIO_F_IN_ORDER)
+#if defined(EFX_USE_KCOMPAT)
 	if (!vdpa_nic->in_order)
 		features &= ~(1ULL << VIRTIO_F_IN_ORDER);
 #endif

@@ -130,7 +130,7 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 
 	if (check_fcs(rx_queue, prefix) &&
 	    unlikely(!(efx->net_dev->features & NETIF_F_RXALL)))
-		goto out;
+		goto free_rx_buffer;
 
 	rx_buf->len = le16_to_cpu((__force __le16) PREFIX_FIELD(prefix, LENGTH));
 	if (rx_buf->len <= sizeof(struct ethhdr)) {
@@ -160,8 +160,7 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 			 * with the Rx buffer from PF point of view and should
 			 * free it.
 			 */
-			efx_free_rx_buffers(rx_queue, rx_buf, 1);
-			goto out;
+			goto free_rx_buffer;
 		}
 		if (net_ratelimit())
 			netif_warn(efx, drv, efx->net_dev,
@@ -171,8 +170,7 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 		 * implemented).
 		 */
 		rx_queue->n_rx_mport_bad++;
-		efx_free_rx_buffers(rx_queue, rx_buf, 1);
-		goto out;
+		goto free_rx_buffer;
 	}
 
 	if (!efx_xdp_rx(efx, rx_queue, rx_buf, &eh))
@@ -201,8 +199,7 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 	if (rx_queue->receive_skb) {
 		/* no support for special channels yet, so just discard */
 		WARN_ON_ONCE(1);
-		efx_free_rx_buffers(rx_queue, rx_buf, 1);
-		goto out;
+		goto free_rx_buffer;
 	}
 
 	efx_rx_packet_gro(rx_queue, rx_buf, rx_queue->rx_pkt_n_frags, eh, csum);
@@ -210,7 +207,9 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_NET_DEVICE_LAST_RX)
 	efx->net_dev->last_rx = jiffies;
 #endif
-
+	goto out;
+free_rx_buffer:
+	efx_free_rx_buffers(rx_queue, rx_buf, 1);
 out:
 	rx_queue->rx_pkt_n_frags = 0;
 }

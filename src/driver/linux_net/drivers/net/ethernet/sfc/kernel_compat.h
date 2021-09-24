@@ -3423,13 +3423,6 @@ int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 #include <net/xdp_sock.h>
 #endif /* EFX_HAVE_XDP_SOCK_DRV */
 
-/* Virtio feature bit number 35 is not defined in
- * include/uapi/linux/virtio_config.h
- */
-#ifndef EFX_HAVE_VIRTIO_F_IN_ORDER
-#define VIRTIO_F_IN_ORDER 35
-#endif
-
 #if defined(VIRTIO_F_IOMMU_PLATFORM) && !defined(VIRTIO_F_ACCESS_PLATFORM)
 #define VIRTIO_F_ACCESS_PLATFORM VIRTIO_F_IOMMU_PLATFORM
 #endif

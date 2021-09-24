@@ -125,7 +125,8 @@ int efx_mae_start_counters(struct efx_nic *efx, struct efx_rx_queue *rx_queue)
 	MCDI_SET_WORD(inbuf, MAE_COUNTERS_STREAM_START_V2_IN_PACKET_SIZE,
 		      efx->net_dev->mtu);
 	MCDI_SET_DWORD(inbuf, MAE_COUNTERS_STREAM_START_V2_IN_COUNTER_TYPES_MASK,
-		       BIT(MAE_COUNTER_TYPE_AR) | BIT(MAE_COUNTER_TYPE_CT));
+		       BIT(MAE_COUNTER_TYPE_AR) | BIT(MAE_COUNTER_TYPE_CT) |
+		       BIT(MAE_COUNTER_TYPE_OR));
 	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_COUNTERS_STREAM_START,
 			  inbuf, sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
 	if (rc)
@@ -1566,15 +1567,19 @@ int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
 		return rc;
 	MCDI_SET_DWORD(inbuf, MAE_OUTER_RULE_INSERT_IN_ENCAP_TYPE, rc);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
-	MCDI_POPULATE_DWORD_3(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
-			      MAE_OUTER_RULE_INSERT_IN_DO_CT, !!act->zone,
+	MCDI_POPULATE_DWORD_4(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
+			      MAE_OUTER_RULE_INSERT_IN_DO_CT,  !!act->zone,
 			      MAE_OUTER_RULE_INSERT_IN_CT_DOMAIN,
 			      act->zone ? act->zone->zone : 0,
+			      MAE_OUTER_RULE_INSERT_IN_DO_COUNT, !!act->count,
 			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->rid ? act->rid->fw_id : 0);
 #else
 	MCDI_POPULATE_DWORD_1(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
 			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->rid ? act->rid->fw_id : 0);
 #endif
+	if (act->count)
+		MCDI_SET_DWORD(inbuf, MAE_OUTER_RULE_INSERT_IN_COUNTER_ID,
+			       act->count->cnt->fw_id);
 	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_OUTER_RULE_INSERT, inbuf,
 			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
 	if (rc)

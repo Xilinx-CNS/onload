@@ -30,6 +30,7 @@
 enum efx_tc_counter_type {
 	EFX_TC_COUNTER_TYPE_AR = MAE_COUNTER_TYPE_AR,
 	EFX_TC_COUNTER_TYPE_CT = MAE_COUNTER_TYPE_CT,
+	EFX_TC_COUNTER_TYPE_OR = MAE_COUNTER_TYPE_OR,
 	EFX_TC_COUNTER_TYPE_MAX
 };
 
@@ -186,13 +187,6 @@ struct efx_tc_action_set_list {
 	u32 fw_id;
 };
 
-struct efx_tc_ctr_agg {
-	unsigned long cookie;
-	struct rhash_head linkage;
-	refcount_t ref;
-	struct efx_tc_counter count; /* stores SW totals */
-};
-
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 struct efx_tc_ct_zone {
 	u16 zone;
@@ -209,7 +203,7 @@ struct efx_tc_lhs_action {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	struct efx_tc_ct_zone *zone; /* For now no filtering on VLAN or VNI (which we would do via recirc anyway), so this is a pure zone rather than a domain */
 #endif
-	struct efx_tc_ctr_agg *count; /* there's no counter fw_id, it's 1:1 */
+	struct efx_tc_counter_index *count;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 	int count_action_idx;
 #endif
@@ -317,7 +311,6 @@ struct efx_tc_table_ct { /* TABLE_ID_CONNTRACK_TABLE */
  * @mutex: Used to serialise operations on TC hashtables
  * @counter_ht: Hashtable of TC counters (FW IDs and counter values)
  * @counter_id_ht: Hashtable mapping TC counter cookies to counters
- * @ctr_agg_ht: Hashtable of TC counter aggregators (for LHS rules)
  * @encap_ht: Hashtable of TC encap actions
  * @mac_ht: Hashtable of MAC address entries (for pedits)
  * @match_action_ht: Hashtable of TC match-action rules
@@ -351,7 +344,6 @@ struct efx_tc_state {
 	struct mutex mutex;
 	struct rhashtable counter_ht;
 	struct rhashtable counter_id_ht;
-	struct rhashtable ctr_agg_ht;
 	struct rhashtable encap_ht;
 	struct rhashtable mac_ht;
 	struct rhashtable encap_match_ht;

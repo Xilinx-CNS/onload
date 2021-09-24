@@ -687,7 +687,8 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 {
 	int rc;
 
-	dev_close(efx->net_dev);
+	if (efx->net_dev)
+		dev_close(efx->net_dev);
 
 	if (reset_type == RESET_TYPE_TX_WATCHDOG) {
 		netif_device_attach(efx->net_dev);
@@ -1300,6 +1301,16 @@ static ssize_t bar_config_store(struct device *dev,
 	enum ef100_bar_config new_config, old_config;
 	struct efx_probe_data *probe_data;
 	int rc;
+
+	/* Current EF100 hardware supports vDPA on VFs only
+	 * (see SF-122427-SW)
+	 */
+	if (!efx->type->is_vf &&
+	    !strncasecmp(buf, "vdpa", min_t(size_t, count, 4))) {
+		pci_err(efx->pci_dev, "vdpa over PF not supported : %s",
+			efx->name);
+		return -EOPNOTSUPP;
+	}
 
 #ifdef CONFIG_SFC_VDPA
 	mutex_lock(&nic_data->bar_config_lock);
