@@ -21,6 +21,10 @@
 #include <onload/pkt_filler.h>
 #include <onload/sleep.h>
 
+#ifndef __KERNEL__
+#include <ci/internal/efabcfg.h>
+#endif
+
 
 #if OO_DO_STACK_POLL
 #define VERB(x)
@@ -515,6 +519,10 @@ static int ci_udp_sendmsg_os_get_binding(citp_socket *ep, ci_fd_t fd,
                                OO_SP_NULL);
     if( rc ) {
       LOG_U(log("%s: FILTER ADD FAIL %d", __FUNCTION__, -rc));
+      if( rc == -EFILTERSSOME )
+        UDP_SET_FLAG(us, CI_UDPF_FILTERED);
+      if( CITP_OPTS.no_fail )
+        rc = 0;
     }
     else {
       UDP_SET_FLAG(us, CI_UDPF_FILTERED);
