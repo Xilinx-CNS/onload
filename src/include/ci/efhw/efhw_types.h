@@ -208,12 +208,6 @@ struct efhw_func_ops {
 			       uint vport_id, uint stack_id, 
 			       uint ps_buf_size, uint flags);
 
-	/*! Disable a given TX DMAQ */
-	void (*dmaq_tx_q_disable) (struct efhw_nic *nic, uint dmaq);
-
-	/*! Disable a given RX DMAQ */
-	void (*dmaq_rx_q_disable) (struct efhw_nic *nic, uint dmaq);
-
 	/*! Flush a given TX DMA channel */
 	int (*flush_tx_dma_channel) (struct efhw_nic *nic, uint32_t client_id,
 			       uint dmaq);

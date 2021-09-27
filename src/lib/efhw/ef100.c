@@ -763,8 +763,6 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_handle_event,
 	ef100_dmaq_tx_q_init,
 	ef100_dmaq_rx_q_init,
-	ef10_ef100_dmaq_tx_q_disable,
-	ef10_ef100_dmaq_rx_q_disable,
 	ef10_ef100_flush_tx_dma_channel,
 	ef10_ef100_flush_rx_dma_channel,
 	ef10_ef100_translate_dma_addrs,

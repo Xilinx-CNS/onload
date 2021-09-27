@@ -339,15 +339,6 @@ efct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
 }
 
 
-static void efct_dmaq_tx_q_disable(struct efhw_nic *nic, uint dmaq)
-{
-}
-
-static void efct_dmaq_rx_q_disable(struct efhw_nic *nic, uint dmaq)
-{
-}
-
-
 /*--------------------------------------------------------------------
  *
  * DMA Queues - mid level API
@@ -762,8 +753,6 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_handle_event,
   efct_dmaq_tx_q_init,
   efct_dmaq_rx_q_init,
-  efct_dmaq_tx_q_disable,
-  efct_dmaq_rx_q_disable,
   efct_flush_tx_dma_channel,
   efct_flush_rx_dma_channel,
   efct_translate_dma_addrs,

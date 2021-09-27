@@ -1148,17 +1148,6 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
 }
 
 
-static void af_xdp_dmaq_tx_q_disable(struct efhw_nic *nic, uint dmaq)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-}
-
-static void af_xdp_dmaq_rx_q_disable(struct efhw_nic *nic, uint dmaq)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-}
-
-
 static size_t af_xdp_max_shared_rxqs(struct efhw_nic *nic)
 {
   return 0;
@@ -1625,8 +1614,6 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_handle_event,
 	af_xdp_dmaq_tx_q_init,
 	af_xdp_dmaq_rx_q_init,
-	af_xdp_dmaq_tx_q_disable,
-	af_xdp_dmaq_rx_q_disable,
 	af_xdp_flush_tx_dma_channel,
 	af_xdp_flush_rx_dma_channel,
 	af_xdp_translate_dma_addrs,

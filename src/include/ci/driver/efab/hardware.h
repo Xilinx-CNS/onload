@@ -119,12 +119,6 @@
                                           n_dma_addrs, vport_id, stack_id, \
                                           ps_buf_size, flags))
 
-#define efhw_nic_dmaq_tx_q_disable(nic, dmaq) \
-	((nic)->efhw_func->dmaq_tx_q_disable(nic, dmaq))
-
-#define efhw_nic_dmaq_rx_q_disable(nic, dmaq) \
-	((nic)->efhw_func->dmaq_rx_q_disable(nic, dmaq))
-
 #define efhw_nic_flush_tx_dma_channel(nic, client_id, dmaq) \
 	((nic)->efhw_func->flush_tx_dma_channel(nic, client_id, dmaq))
 
