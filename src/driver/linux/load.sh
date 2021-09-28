@@ -683,6 +683,7 @@ else
     mknod)
       mknod_for_drv sfc_char 0666
       mknod_for_drv onload 0666
+      mknod_for_drv onload_epoll 0666
       ;;
     *)
       err "arg = $1"
