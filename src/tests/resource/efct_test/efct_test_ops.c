@@ -338,6 +338,8 @@ static void efct_test_free_txq(struct xlnx_efct_client *handle, int txq_idx)
   atomic_set(&txq->timer_running, 0);
   cancel_delayed_work_sync(&txq->timer);
 
+  evq_push_tx_flush_complete(&tdev->evqs[evq], txq_idx);
+
   tdev->evqs[evq].txqs &= ~(1 << txq_idx);
   txq->evq = -1;
   set_memory_wb((unsigned long)txq->ctpio, 1);

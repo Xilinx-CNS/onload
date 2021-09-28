@@ -79,6 +79,19 @@ evq_push_tx(struct efct_test_evq *evq, uint32_t pkt_cnt)
 }
 
 
+void evq_push_tx_flush_complete(struct efct_test_evq *evq, int txq)
+{
+  CI_POPULATE_QWORD_6(*evq_next_desc(evq),
+              EFCT_CTRL_SUBTYPE, EFCT_CTRL_EV_FLUSH,
+              EFCT_EVENT_TYPE, EFCT_EVENT_TYPE_CONTROL,
+              EFCT_FLUSH_TYPE, EFCT_FLUSH_TYPE_TX,
+              EFCT_FLUSH_LABEL, txq,
+              EFCT_FLUSH_REASON, EFCT_FLUSH_REASON_MCDI,
+              EFCT_EVENT_PHASE, evq_next_phase(evq));
+  evq->ptr++;
+}
+
+
 static void decode_efct_tx_header(ci_qword_t *desc,
                                   struct efct_tx_ctpio_header *header)
 {
