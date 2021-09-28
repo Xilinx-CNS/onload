@@ -1295,7 +1295,8 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	 * one VI has one IRQ.
 	 * See ON-10914.
 	 */
-	if (client->nic->devtype.arch == EFHW_ARCH_EF100 &&
+	if ((client->nic->devtype.arch == EFHW_ARCH_EF100 ||
+	     client->nic->devtype.arch == EFHW_ARCH_EFCT) &&
 	    evq_virs == NULL) {
 		rc = efrm_vi_request_irq(virs);
 		if (rc != 0)

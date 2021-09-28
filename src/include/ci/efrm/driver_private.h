@@ -89,7 +89,7 @@ struct vi_resource_dimensions {
 	unsigned mem_bar;
 	unsigned vi_stride;
 
-	/* EF100 only */
+	/* EF100/X3 only */
 	/* 8 is an arbitrary number which is empirically larger than any number
 	 * which has been observed to be needed. It can't go too high without
 	 * moving this struct off the stack. */

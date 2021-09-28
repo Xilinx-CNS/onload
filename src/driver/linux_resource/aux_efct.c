@@ -442,6 +442,7 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
 {
   union xlnx_efct_param_value val;
   int rc;
+  int i;
 
   rc = edev->ops->get_param(client, XLNX_EFCT_NIC_RESOURCES, &val);
   if( rc < 0 )
@@ -450,6 +451,17 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   res_dim->vi_min = val.nic_res.evq_min;
   res_dim->vi_lim = val.nic_res.evq_lim;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
+
+  rc = edev->ops->get_param(client, XLNX_EFCT_IRQ_RESOURCES, &val);
+  if( rc < 0 )
+    return rc;
+
+  res_dim->irq_n_ranges = val.irq_res->n_ranges;
+  EFRM_ASSERT(res_dim->irq_n_ranges <= IRQ_N_RANGES_MAX);
+  for( i = 0; i < res_dim->irq_n_ranges; i++ ) {
+      res_dim->irq_ranges[i].irq_base = val.irq_res->irq_ranges[i].vector;
+      res_dim->irq_ranges[i].irq_range = val.irq_res->irq_ranges[i].range;
+  }
 
   return 0;
 }
