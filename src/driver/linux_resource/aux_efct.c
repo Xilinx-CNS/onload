@@ -551,6 +551,9 @@ void efct_remove(struct auxiliary_device *auxdev)
 
   efct = nic->arch_extra;
   for( i = 0; i < ARRAY_SIZE(efct->rxq); ++i ) {
+    /* All workqueues should be already shut down by now, but it may happen
+     * that the final efct_poll() did not happen.  Do it now. */
+    efct_poll(efct, i, 0);
     EFHW_ASSERT(efct->rxq[i].live_apps == NULL);
     EFHW_ASSERT(efct->rxq[i].new_apps == NULL);
   }
