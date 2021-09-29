@@ -165,7 +165,7 @@ def cpdecorate(tag=None, parent_tag=None):
                 with NetNS(cpserver.getNetNsPath()) as netns:
                     d = dict(cpserver=cpserver, netns=netns, cp=cp)
                     if tag:
-                        d = { tag: type('cp_wrapper', (object,), d) }
+                        d = { tag: type('onload_cp_server', (object,), d) }
                     kwargs.update(d)
                     func(*args, **kwargs)
             except:

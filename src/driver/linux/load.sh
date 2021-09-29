@@ -151,7 +151,7 @@ mknod_for_drv() {
 get_cp_server_path() {
   # The path defaults to /sbin/onload_cp_server, so we need to fix this up when
   # loading from a developer build.
-  echo "${EF_BUILDTREE_UL}/tools/cplane/cp_wrapper"
+  echo "${EF_BUILDTREE_UL}/tools/cplane/onload_cp_server"
 }
 
 

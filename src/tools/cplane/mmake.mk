@@ -41,13 +41,7 @@ $(onload_cp_server): $(SERVER_OBJS) $(MMAKE_LIB_DEPS)
 $(onload_cp_client): $(CLIENT_OBJS) $(MMAKE_LIB_DEPS)
 	(libs="$(MMAKE_LIBS)"; $(MMakeLinkCApp))
 
-cp_wrapper_src := $(TOPPATH)/$(CURRENT)/cp_wrapper
-cp_wrapper_dst := $(shell pwd)/cp_wrapper
-
-$(cp_wrapper_dst): $(cp_wrapper_src)
-	ln -sf $< $@
-
-all: $(TARGETS) $(cp_wrapper_dst)
+all: $(TARGETS)
 
 clean:
 	rm -f *.o $(TARGETS)
