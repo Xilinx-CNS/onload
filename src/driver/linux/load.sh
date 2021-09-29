@@ -188,9 +188,12 @@ doonload () {
   dochar
   startcmd onload && return 0
 
+  # Add default cplane parameters.  If user provides the same parameters
+  # via ONLOAD_OPT, then user's values win, because the deafult parameters
+  # are added to the beginning of the command line.
   echo "ONLOAD_OPT is $ONLOAD_OPT"
   $PROBE_CP_SERVER_PATH && \
-    O_MOD_ARGS="cplane_server_path=$(get_cp_server_path) ${O_MOD_ARGS}"
+    O_MOD_ARGS="cplane_server_path=$(get_cp_server_path) cplane_server_params=-K ${O_MOD_ARGS}"
 
   # For developers we'd like to set cplane_track_xdp on all the kernels
   # which support it.  Unfortunately RHEL7 (linux-3.10) is unable to ignore
