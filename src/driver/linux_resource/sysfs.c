@@ -22,27 +22,6 @@
 /* Root directory containing our sysfs stuff. */
 static struct kobject *sysfs_dir;
 
-/* Look for the named network device in the current process's network
- * namespace. Return a reference to it if found, or NULL if not found.
- *
- * This assumes that it's being called from process context. */
-static struct net_device *find_netdev(const char *ifname)
-{
-        struct net *netns;
-        struct net_device *dev;
-
-        ASSERT_RTNL();
-
-        netns = get_net_ns_by_pid(task_pid_nr(current));
-        if(!netns)
-                return NULL;
-
-        dev = dev_get_by_name(netns, ifname);
-
-        put_net(netns);
-        return dev;
-}
-
 /* Handle userspace reading from the "register" or "unregister"
  * pseudo-files. We have nothing to return except an empty line. */
 static ssize_t empty_show(struct kobject *kobj,
@@ -97,7 +76,7 @@ static ssize_t nondl_register_store(struct kobject *kobj,
 
         rtnl_lock();
 
-        dev = find_netdev(ifname);
+        dev = dev_get_by_name(current->nsproxy->net_ns, ifname);
         if(!dev) {
                 rtnl_unlock();
                 return -ENOENT;
@@ -162,7 +141,7 @@ static ssize_t nondl_unregister_store(struct kobject *kobj,
 
         rtnl_lock();
 
-        dev = find_netdev(ifname);
+        dev = dev_get_by_name(current->nsproxy->net_ns, ifname);
         if(!dev) {
                 rtnl_unlock();
                 return -ENOENT;

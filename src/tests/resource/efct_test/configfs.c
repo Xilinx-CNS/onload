@@ -38,25 +38,6 @@ static struct efct_configfs_dev_item* rxq_item_to_dev(
   return container_of(item, struct efct_configfs_dev_item, rxqs[item->ix]);
 }
 
-/* Look for the named network device in the current process's network
- * namespace. Return a reference to it if found, or NULL if not found.
- *
- * This assumes that it's being called from process context. */
-static struct net_device *find_netdev(const char *ifname)
-{
-  struct net *netns;
-  struct net_device *dev;
-
-  netns = get_net_ns_by_pid(task_pid_nr(current));
-  if( IS_ERR(netns) )
-    return NULL;
-
-  dev = dev_get_by_name(netns, ifname);
-
-  put_net(netns);
-  return dev;
-}
-
 static struct config_group* efct_test_register_interface(
                                  struct config_group *group, const char *name)
 {
@@ -65,7 +46,7 @@ static struct config_group* efct_test_register_interface(
   struct net_device *dev;
   struct efct_configfs_dev_item *item;
 
-  dev = find_netdev(name);
+  dev = dev_get_by_name(current->nsproxy->net_ns, name);
   if( ! dev )
     return ERR_PTR(-ENOENT);
 
