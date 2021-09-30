@@ -163,9 +163,19 @@ eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
 		int32_t new_evq_state = evq_state;
 
 		if ((evq_state & VI_RESOURCE_EVQ_STATE(BUSY)) != 0) {
-			EFRM_ERR("%s:%d: evq_state[%d] corrupted!",
-				 __FUNCTION__, __LINE__, instance);
-			EFRM_ASSERT(0);
+			/* Races are only expected here with AF_XDP.  EF10-
+			 * style wakeups and EF100-style interrupts on a given
+			 * queue are serialised by the lower-level mechanisms
+			 * that despatch them. */
+			if (rnic->efhw_nic.devtype.arch != EFHW_ARCH_AF_XDP) {
+				EFRM_ERR("%s:%d: evq_state[%d] corrupted!",
+					 __FUNCTION__, __LINE__, instance);
+				EFRM_ASSERT(0);
+			}
+			/* When we do encounter a race, the right thing to do
+			 * is just to return NULL in the race-loser.  The
+			 * winner will get the pointer to the VI and call the
+			 * callback. */
 			return NULL;
 		}
 
