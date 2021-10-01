@@ -1067,6 +1067,7 @@ static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
       goto drop;
     }
     else if( ci_udp_csum_correct(pkt, udp) ) {
+      CI_DEBUG(pkt->pkt_eth_payload_off = PKT_START_OFF_BAD);
       __handle_rx_pkt(ni, ps, &pkt);
       return 1;
     }
