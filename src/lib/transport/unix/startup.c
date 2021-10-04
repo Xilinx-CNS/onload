@@ -341,8 +341,6 @@ static void citp_opts_getenv(citp_opts_t* opts)
   unsigned v;
 
   opts->log_via_ioctl = 3;
-  /* TODO: Old name.  Keeping reading 'til 2011, then purge. */
-  GET_ENV_OPT_HEX("EF_Log_VIA_IOCTL",	log_via_ioctl);
   GET_ENV_OPT_INT("EF_LOG_VIA_IOCTL",	log_via_ioctl);
 
   if( (s = getenv("EF_LOG_FILE")) && opts->log_via_ioctl == 3) {
