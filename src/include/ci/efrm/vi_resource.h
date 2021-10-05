@@ -173,6 +173,9 @@ extern void efrm_vi_attr_set_interrupt_core(struct efrm_vi_attr *, int core);
 extern void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *,
 					    int channel_id);
 
+/** Allocate a VI that is capable of receiving wakeups. */
+extern void efrm_vi_attr_set_want_interrupt(struct efrm_vi_attr *attr);
+
 extern struct efrm_vi *
 efrm_vi_from_resource(struct efrm_resource *);
 

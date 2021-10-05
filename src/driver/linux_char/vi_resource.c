@@ -109,6 +109,8 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
 
   if (vi_flags & EFHW_VI_RX_PACKED_STREAM)
     efrm_vi_attr_set_packed_stream(attr, 1);
+  if (evq_capacity != 0)
+    efrm_vi_attr_set_want_interrupt(attr);
 
   if ((rc = efrm_vi_alloc(client, attr, 1, NULL, &virs)) < 0)
     goto fail_vi_alloc;

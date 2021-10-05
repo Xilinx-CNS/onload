@@ -69,6 +69,7 @@ struct vi_attr {
 	struct efrm_vi_set *vi_set;
 	int16_t             interrupt_core;
 	int16_t             channel;
+	uint8_t             want_interrupt;
 	uint8_t             vi_set_instance;
 	int8_t              packed_stream;
 	int32_t             ps_buffer_size;
@@ -337,9 +338,8 @@ void efrm_interrupt_vectors_dtor(struct efrm_nic *nic)
 }
 
 
-static int efrm_vi_request_irq(struct efrm_vi *virs)
+static int efrm_vi_request_irq(struct efhw_nic *nic, struct efrm_vi *virs)
 {
-	struct efhw_nic *nic = virs->rs.rs_client->nic;
 	int rc;
 
 	rc = efrm_interrupt_vector_choose(efrm_nic(nic), virs);
@@ -859,9 +859,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 
 		evq_params.interrupting = nic->flags & NIC_FLAG_EVQ_IRQ;
 		evq_params.wakeup_evq = efrm_vi_get_channel(virs);
-		if( evq_params.interrupting != (virs->vec != NULL) )
-			EFRM_WARN("FIXME: ef_vi interrupts are broken on NIC %d",
-			          nic->index);
+		EFRM_ASSERT(evq_params.interrupting == (virs->vec != NULL));
 
 		rc = efhw_nic_event_queue_enable(nic,
 					efrm_pd_get_nic_client_id(virs->pd),
@@ -1286,22 +1284,12 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		efrm_vi_attr_set_interrupt_core(&attr, wakeup_cpu_core);
 	if (wakeup_channel >= 0)
 		efrm_vi_attr_set_wakeup_channel(&attr, wakeup_channel);
+	if (evq_virs == NULL)
+		efrm_vi_attr_set_want_interrupt(&attr);
 
 	if ((rc = efrm_vi_alloc(client, &attr, print_resource_warnings,
 				name, &virs)) < 0)
 		goto fail_vi_alloc;
-
-	/* EF100 hasn't wakeup events, so only interrupting
-	 * is supported. Net driver via driverlink provides range of interrupts
-	 * and register to prime EVQ. Resource manager setups IRQ for VI,
-	 * one VI has one IRQ.
-	 * See ON-10914.
-	 */
-	if ((client->nic->flags & NIC_FLAG_EVQ_IRQ) && evq_virs == NULL) {
-		rc = efrm_vi_request_irq(virs);
-		if (rc != 0)
-			goto fail_irq;
-	}
 
 	/* We have to jump through some hoops here:
 	 * - EF10 needs the event queue allocated before rx and tx queues
@@ -1354,7 +1342,6 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	return 0;
 
 
-fail_irq:
 fail_q_alloc:
 	efrm_vi_resource_release(virs);
 fail_vi_alloc:
@@ -1415,6 +1402,7 @@ int __efrm_vi_attr_init(struct efrm_client *client_obsolete,
 	a->vi_set = NULL;
 	a->interrupt_core = -1;
 	a->channel = -1;
+	a->want_interrupt = false;
 	a->packed_stream = 0;
 	return 0;
 }
@@ -1481,6 +1469,14 @@ void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *attr, int channel_id)
 	a->channel = channel_id;
 }
 EXPORT_SYMBOL(efrm_vi_attr_set_wakeup_channel);
+
+
+void efrm_vi_attr_set_want_interrupt(struct efrm_vi_attr *attr)
+{
+	struct vi_attr *a = VI_ATTR_FROM_O_ATTR(attr);
+	a->want_interrupt = true;
+}
+EXPORT_SYMBOL(efrm_vi_attr_set_want_interrupt);
 
 
 static size_t efrm_vi_get_efct_shm_bytes_nrxq(struct efrm_vi *vi,
@@ -1619,6 +1615,18 @@ int  efrm_vi_alloc(struct efrm_client *client,
 		goto fail_mmap;
 	}
 
+	/* EF100 hasn't wakeup events, so only interrupting
+	 * is supported. Net driver via driverlink provides range of interrupts
+	 * and register to prime EVQ. Resource manager setups IRQ for VI,
+	 * one VI has one IRQ.
+	 * See ON-10914.
+	 */
+	if ((client->nic->flags & NIC_FLAG_EVQ_IRQ) && attr->want_interrupt) {
+		rc = efrm_vi_request_irq(client->nic, virs);
+		if (rc != 0)
+			goto fail_irq;
+	}
+
 	efrm_resource_init(&virs->rs, EFRM_RESOURCE_VI,
 			   virs->allocation.instance);
 
@@ -1656,6 +1664,8 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	return 0;
 
 
+fail_irq:
+	efrm_vi_io_unmap(virs);
 fail_mmap:
 	vfree(virs->efct_shm);
 fail_efct_rxq:
