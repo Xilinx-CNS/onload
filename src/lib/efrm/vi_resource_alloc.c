@@ -859,7 +859,9 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 
 		evq_params.interrupting = nic->flags & NIC_FLAG_EVQ_IRQ;
 		evq_params.wakeup_evq = efrm_vi_get_channel(virs);
-		EFRM_ASSERT(evq_params.interrupting == (virs->vec != NULL));
+		if( evq_params.interrupting != (virs->vec != NULL) )
+			EFRM_WARN("FIXME: ef_vi interrupts are broken on NIC %d",
+			          nic->index);
 
 		rc = efhw_nic_event_queue_enable(nic,
 					efrm_pd_get_nic_client_id(virs->pd),
