@@ -951,6 +951,9 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     int qix;
     int rc;
 
+    if( vi_rs->q[EFHW_RXQ].capacity == 0 )   /* e.g. EF_RXQ_SIZE=0 */
+      return 0;
+
     ci_assert_ge(rxq, 0);
     qix = efct_vi_find_free_rxq(vi, rxq);
     if( qix == -EALREADY )
@@ -1510,11 +1513,16 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
   ef_vi_init_io(vi, vm->io_page);
   ef_vi_init_timer(vi, vm->timer_quantum_ns);
   ef_vi_init_evq(vi, vm->evq_size, vm->evq_base);
-  /* TODO EFCT request 0 RXQ here, but depends on ef_vi interface */
   if( vm->rxq_size > 0 ) {
     ef_vi_init_rxq(vi, vm->rxq_size, vm->rxq_descriptors, vi_ids,
                    vm->rxq_prefix_len);
     vi_ids += vm->rxq_size;
+  }
+  else {
+    /* efct_poll_rx() will crash if called when rx hasn't been inited, so
+     * guarantee that it never will be even if somebody corrupts the shared
+     * memory */
+    vi->max_efct_rxq = 0;
   }
   if( vm->txq_size > 0 )
     ef_vi_init_txq(vi, vm->txq_size, vm->txq_descriptors, vi_ids);
