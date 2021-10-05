@@ -98,8 +98,8 @@
 #define efhw_nic_sw_event(nic, data, ev) \
 	((nic)->efhw_func->sw_event(nic, data, ev))
 
-#define efhw_nic_handle_event(nic, handler, ev, budget) \
-	((nic)->efhw_func->handle_event((nic), (handler), (ev), (budget)))
+#define efhw_nic_handle_event(nic, ev, budget) \
+	((nic)->efhw_func->handle_event((nic), (ev), (budget)))
 
 /*-------------- DMA support  ------------ */
 #define efhw_nic_dmaq_tx_q_init(nic, client_id, instance, qid_out, evq, owner, \

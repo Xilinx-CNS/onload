@@ -169,6 +169,7 @@ efct_nic_init_hardware(struct efhw_nic *nic,
                        const uint8_t *mac_addr)
 {
   memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
+  nic->ev_handlers = ev_handlers;
   nic->flags |= NIC_FLAG_TX_CTPIO | NIC_FLAG_CTPIO_ONLY
              | NIC_FLAG_HW_RX_TIMESTAMPING | NIC_FLAG_HW_TX_TIMESTAMPING;
   efct_nic_tweak_hardware(nic);
@@ -267,8 +268,7 @@ static void efct_nic_sw_event(struct efhw_nic *nic, int data, int evq)
  *--------------------------------------------------------------------*/
 
 static int
-efct_handle_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
-                  efhw_event_t *ev, int budget)
+efct_handle_event(struct efhw_nic *nic, efhw_event_t *ev, int budget)
 {
   return -EOPNOTSUPP;
 }

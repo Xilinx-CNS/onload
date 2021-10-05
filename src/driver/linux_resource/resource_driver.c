@@ -470,8 +470,6 @@ efrm_nic_add(void *drv_device, struct device *dev,
 		}
 		memset(lnic, 0, sizeof(*lnic));
 
-		lnic->ev_handlers = &ev_handler;
-
 		/* OS specific hardware mappings */
 		rc = linux_efrm_nic_ctor(lnic, dev, flags,
 					 net_dev, res_dim, dev_type);

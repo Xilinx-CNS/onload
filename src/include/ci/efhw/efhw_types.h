@@ -184,8 +184,8 @@ struct efhw_func_ops {
 	void (*sw_event) (struct efhw_nic *nic, int data, int evq);
 
 	/*! Handle an event from hardware, e.g. delivered via driverlink */
-	int (*handle_event) (struct efhw_nic *nic, struct efhw_ev_handler *h, 
-			     efhw_event_t *ev, int budget);
+	int (*handle_event) (struct efhw_nic *nic, efhw_event_t *ev,
+			     int budget);
 
   /*-------------- DMA support  ------------ */
 
@@ -423,6 +423,9 @@ struct efhw_nic {
 	struct net_device *net_dev; /*!< Network device */
 	struct device *dev;         /*!< HW device */
 	spinlock_t pci_dev_lock;    /*!< Protects access to dev & net_dev */
+
+	/*! Event handlers. */
+	const struct efhw_ev_handler *ev_handlers;
 
 	struct efhw_device_type devtype;
 

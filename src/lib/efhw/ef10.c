@@ -804,6 +804,7 @@ ef10_nic_init_hardware(struct efhw_nic *nic,
 
 	memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
 
+	nic->ev_handlers = ev_handlers;
 	ef10_nic_tweak_hardware(nic);
 
 	rc = ef10_nic_get_timestamp_correction(nic, &(nic->rx_ts_correction),
@@ -1158,8 +1159,7 @@ static void ef10_nic_sw_event(struct efhw_nic *nic, int data, int evq)
  *--------------------------------------------------------------------*/
 
 static int
-ef10_handle_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
-		  efhw_event_t *ev, int budget)
+ef10_handle_event(struct efhw_nic *nic, efhw_event_t *ev, int budget)
 {
 	unsigned evq;
 
@@ -1168,7 +1168,7 @@ ef10_handle_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
 		case ESE_DZ_DRV_WAKE_UP_EV:
 			evq = (EF10_EVENT_WAKE_EVQ_ID(ev) - nic->vi_base) >> nic->vi_shift;
 			if (evq < nic->vi_lim && evq >= nic->vi_min) {
-				return efhw_handle_wakeup_event(nic, h, evq,
+				return efhw_handle_wakeup_event(nic, evq,
 								budget);
 			}
 			else {
@@ -1181,7 +1181,7 @@ ef10_handle_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
 		case ESE_DZ_DRV_TIMER_EV:
 			evq = (EF10_EVENT_WAKE_EVQ_ID(ev) - nic->vi_base) >> nic->vi_shift;
 			if (evq < nic->vi_lim && evq >= nic->vi_min) {
-				return efhw_handle_timeout_event(nic, h, evq,
+				return efhw_handle_timeout_event(nic, evq,
 								 budget);
 			}
 			else {
@@ -1204,11 +1204,11 @@ ef10_handle_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
 		case MCDI_EVENT_CODE_TX_FLUSH:
 			evq = EF10_EVENT_TX_FLUSH_Q_ID(ev);
 			EFHW_TRACE("%s: tx flush done %d", __FUNCTION__, evq);
-			return efhw_handle_txdmaq_flushed(nic, h, evq);
+			return efhw_handle_txdmaq_flushed(nic, evq);
 		case MCDI_EVENT_CODE_RX_FLUSH:
 			evq = EF10_EVENT_RX_FLUSH_Q_ID(ev);
 			EFHW_TRACE("%s: rx flush done %d", __FUNCTION__, evq);
-			return efhw_handle_rxdmaq_flushed(nic, h, evq, false);
+			return efhw_handle_rxdmaq_flushed(nic, evq, false);
 		case MCDI_EVENT_CODE_TX_ERR:
 			EFHW_NOTICE("%s: unexpected MCDI TX error event "
 				    "(event code %d)",__FUNCTION__, code);

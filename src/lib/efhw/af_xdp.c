@@ -132,7 +132,6 @@ struct event_waiter
   struct wait_queue_entry wait;
 
   struct efhw_nic* nic;
-  struct efhw_ev_handler* ev_handlers;
   int evq;
   int budget;
 };
@@ -162,7 +161,6 @@ struct protection_domain
 struct efhw_nic_af_xdp
 {
   struct file* map;
-  struct efhw_ev_handler* ev_handlers;
   struct efhw_af_xdp_vi* vi;
   struct protection_domain* pd;
 };
@@ -899,7 +897,7 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	if( xdp == NULL )
 		return -ENOMEM;
 
-	xdp->ev_handlers = ev_handlers;
+	nic->ev_handlers = ev_handlers;
 	xdp->vi = (struct efhw_af_xdp_vi*) (xdp + 1);
 	xdp->pd = (struct protection_domain*) (xdp->vi + nic->vi_lim);
 
@@ -1010,7 +1008,7 @@ static int wait_callback(struct wait_queue_entry* wait, unsigned mode,
                          int flags, void* key)
 {
   struct event_waiter* w = container_of(wait, struct event_waiter, wait);
-  efhw_handle_wakeup_event(w->nic, w->ev_handlers, w->evq, w->budget);
+  efhw_handle_wakeup_event(w->nic, w->evq, w->budget);
   return 1;
 }
 
@@ -1022,14 +1020,12 @@ af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 			      struct efhw_evq_params *params)
 {
   struct efhw_af_xdp_vi* vi = vi_by_instance(nic, params->evq);
-  struct efhw_nic_af_xdp* xdp = nic->arch_extra;
 
   if( vi == NULL )
     return -ENODEV;
 
   init_waitqueue_func_entry(&vi->waiter.wait, wait_callback);
   vi->waiter.nic = nic;
-  vi->waiter.ev_handlers = xdp->ev_handlers;
   vi->waiter.evq = params->wakeup_evq;
   /* The budget currently has little relevance as Onload doesn't try to
    * poll AF_XDP from an interrupt context. The value may need some thought
@@ -1069,8 +1065,7 @@ static void af_xdp_nic_sw_event(struct efhw_nic *nic, int data, int evq)
  *--------------------------------------------------------------------*/
 
 static int
-af_xdp_handle_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
-		  efhw_event_t *ev, int budget)
+af_xdp_handle_event(struct efhw_nic *nic, efhw_event_t *ev, int budget)
 {
 	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
 	EFHW_ASSERT(0);

@@ -42,55 +42,51 @@
  */
 
 int
-efhw_handle_txdmaq_flushed(struct efhw_nic *nic, struct efhw_ev_handler *h,
-			   unsigned instance)
+efhw_handle_txdmaq_flushed(struct efhw_nic *nic, unsigned instance)
 {
 	EFHW_TRACE("%s: instance=%d", __FUNCTION__, instance);
 
-	if (!h->dmaq_flushed_fn) {
+	if (!nic->ev_handlers->dmaq_flushed_fn) {
 		EFHW_WARN("%s: no handler registered", __FUNCTION__);
 		return 0;
 	}
 
-	return h->dmaq_flushed_fn(nic, instance, false, false);
+	return nic->ev_handlers->dmaq_flushed_fn(nic, instance, false, false);
 }
 
 int
-efhw_handle_rxdmaq_flushed(struct efhw_nic *nic, struct efhw_ev_handler *h,
-			   unsigned instance, int failed)
+efhw_handle_rxdmaq_flushed(struct efhw_nic *nic, unsigned instance, int failed)
 {
 	EFHW_TRACE("%s: instance=%d", __FUNCTION__, instance);
 
-	if (!h->dmaq_flushed_fn) {
+	if (!nic->ev_handlers->dmaq_flushed_fn) {
 		EFHW_WARN("%s: no handler registered", __FUNCTION__);
 		return 0;
 	}
 
-	return h->dmaq_flushed_fn(nic, instance, true, failed);
+	return nic->ev_handlers->dmaq_flushed_fn(nic, instance, true, failed);
 }
 
 int
-efhw_handle_wakeup_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
-			 unsigned instance, int budget)
+efhw_handle_wakeup_event(struct efhw_nic *nic, unsigned instance, int budget)
 {
-	if (!h->wakeup_fn) {
+	if (!nic->ev_handlers->wakeup_fn) {
 		EFHW_WARN("%s: no handler registered", __FUNCTION__);
 		return 0;
 	}
 
-	return h->wakeup_fn(nic, instance, budget);
+	return nic->ev_handlers->wakeup_fn(nic, instance, budget);
 }
 
 int
-efhw_handle_timeout_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
-			  unsigned instance, int budget)
+efhw_handle_timeout_event(struct efhw_nic *nic, unsigned instance, int budget)
 {
-	if (!h->timeout_fn) {
+	if (!nic->ev_handlers->timeout_fn) {
 		EFHW_WARN("%s: no handler registered", __FUNCTION__);
 		return 0;
 	}
 
-	return h->timeout_fn(nic, instance, budget);
+	return nic->ev_handlers->timeout_fn(nic, instance, budget);
 }
 
 /**********************************************************************

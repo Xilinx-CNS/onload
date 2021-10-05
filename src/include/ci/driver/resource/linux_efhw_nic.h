@@ -62,9 +62,6 @@ struct linux_efhw_nic {
 	void *drv_device;
 	struct rw_semaphore drv_sem;
 
-	/*! Event handlers. */
-	struct efhw_ev_handler *ev_handlers;
-
 	int* cpu_to_q;
 };
 

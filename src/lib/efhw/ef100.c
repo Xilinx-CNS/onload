@@ -137,6 +137,7 @@ ef100_nic_init_hardware(struct efhw_nic *nic,
 {
 	EFHW_TRACE("%s:", __FUNCTION__);
 
+	nic->ev_handlers = ev_handlers;
 	memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
 
 	ef100_nic_tweak_hardware(nic);
@@ -323,8 +324,7 @@ ef100_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
  *--------------------------------------------------------------------*/
 
 static int
-ef100_handle_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
-		   efhw_event_t *ev, int budget)
+ef100_handle_event(struct efhw_nic *nic, efhw_event_t *ev, int budget)
 {
 	unsigned evq;
 
@@ -334,11 +334,11 @@ ef100_handle_event(struct efhw_nic *nic, struct efhw_ev_handler *h,
 		case MCDI_EVENT_CODE_TX_FLUSH:
 			evq = EF100_EVENT_TX_FLUSH_Q_ID(ev);
 			EFHW_TRACE("%s: tx flush done %d", __FUNCTION__, evq);
-			return efhw_handle_txdmaq_flushed(nic, h, evq);
+			return efhw_handle_txdmaq_flushed(nic, evq);
 		case MCDI_EVENT_CODE_RX_FLUSH:
 			evq = EF100_EVENT_RX_FLUSH_Q_ID(ev);
 			EFHW_TRACE("%s: rx flush done %d", __FUNCTION__, evq);
-			return efhw_handle_rxdmaq_flushed(nic, h, evq, false);
+			return efhw_handle_rxdmaq_flushed(nic, evq, false);
 		case MCDI_EVENT_CODE_TX_ERR:
 			EFHW_NOTICE("%s: unexpected MCDI TX error event "
 				    "(event code %d)",__FUNCTION__, code);

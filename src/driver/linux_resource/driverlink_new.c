@@ -660,7 +660,6 @@ static int efrm_netdev_event(struct notifier_block *this,
 static int
 efrm_dl_event(struct efx_dl_device *efx_dev, void *p_event, int budget)
 {
-	struct linux_efhw_nic *lnic;
 	struct efhw_nic *nic;
 	efhw_event_t *ev = p_event;
 	int rc;
@@ -670,7 +669,6 @@ efrm_dl_event(struct efx_dl_device *efx_dev, void *p_event, int budget)
 		return 0;
 
 	nic = efx_dev->priv;
-	lnic = linux_efhw_nic(efx_dev->priv);
-	rc = efhw_nic_handle_event(nic, lnic->ev_handlers, ev, budget);
+	rc = efhw_nic_handle_event(nic, ev, budget);
 	return rc;
 }
