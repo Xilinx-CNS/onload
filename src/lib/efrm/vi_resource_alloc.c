@@ -571,7 +571,7 @@ static uint32_t efrm_vi_rm_txq_bytes(struct efrm_vi *virs, int n_entries)
 	else if (nic->devtype.arch == EFHW_ARCH_EF100)
 		return n_entries * EF100_DMA_TX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
-		return n_entries * sizeof(struct xdp_desc);
+		return n_entries * EFAB_AF_XDP_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
 		return n_entries * EFCT_TX_DESCRIPTOR_BYTES;
 	else {
@@ -591,7 +591,7 @@ static uint32_t efrm_vi_rm_rxq_bytes(struct efrm_vi *virs, int n_entries)
 	else if (nic->devtype.arch == EFHW_ARCH_EF100)
 		bytes_per_desc = EF100_DMA_RX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
-		bytes_per_desc = sizeof(struct xdp_desc);
+		bytes_per_desc = EFAB_AF_XDP_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
 		return 1;  /* EFCT TODO: fixup other bits of code to cope with the
 		            * correct 'doesn't need this' value of 0 */

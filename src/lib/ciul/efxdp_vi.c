@@ -380,6 +380,8 @@ static void efxdp_ef_eventq_timer_zero(ef_vi* vi)
 
 void efxdp_vi_init(ef_vi* vi)
 {
+  EF_VI_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
+
   vi->ops.transmit               = efxdp_ef_vi_transmit;
   vi->ops.transmitv              = efxdp_ef_vi_transmitv;
   vi->ops.transmitv_init         = efxdp_ef_vi_transmitv_init;

@@ -516,8 +516,8 @@ static int xdp_create_ring(struct socket* sock,
                            struct efhw_page_map* page_map, void* kern_mem_base,
                            int capacity, int desc_size, int sockopt, long pgoff,
                            const struct xdp_ring_offset* xdp_offset,
-                           struct xdp_ring_offset* kern_offset,
-                           struct xdp_ring_offset* user_offset)
+                           struct efab_af_xdp_offsets_ring* kern_offset,
+                           struct efab_af_xdp_offsets_ring* user_offset)
 {
   int rc;
   unsigned long map_size, addr, pfn, pages;
@@ -575,13 +575,15 @@ static int xdp_create_ring(struct socket* sock,
 static int xdp_create_rings(struct socket* sock,
                             struct efhw_page_map* page_map, void* kern_mem_base,
                             long rxq_capacity, long txq_capacity,
-                            struct xdp_mmap_offsets* kern_offsets,
-                            struct xdp_mmap_offsets* user_offsets)
+                            struct efab_af_xdp_offsets_rings* kern_offsets,
+                            struct efab_af_xdp_offsets_rings* user_offsets)
 {
   int rc;
   struct sys_call_area rw_area;
   struct xdp_mmap_offsets* mmap_offsets;
   int* optlen;
+
+  EFHW_BUILD_ASSERT(EFAB_AF_XDP_DESC_BYTES == sizeof(struct xdp_desc));
 
   /* We need a read-write area to call getsockopt().  We unmap it from UL
    * as soon as possible. */
