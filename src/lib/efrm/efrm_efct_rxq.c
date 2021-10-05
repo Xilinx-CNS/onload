@@ -239,8 +239,10 @@ EXPORT_SYMBOL(efrm_rxq_refresh_kernel);
 void efrm_rxq_request_wakeup(struct efrm_efct_rxq *rxq, unsigned sbseq,
                              unsigned pktix)
 {
+#if CI_HAVE_EFCT_AUX
 	struct efhw_nic *nic = rxq->vi->rs.rs_client->nic;
 	efct_request_wakeup(nic->arch_extra, &rxq->hw, sbseq, pktix);
+#endif
 }
 EXPORT_SYMBOL(efrm_rxq_request_wakeup);
 
