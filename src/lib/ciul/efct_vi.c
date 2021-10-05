@@ -455,6 +455,7 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
                                        unsigned threshold)
 {
   struct efct_tx_state tx;
+  unsigned threshold_extra;
   int i;
 
   /* The caller must check space, as this function can't report failure. */
@@ -466,16 +467,18 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   BUG_ON(!efct_tx_check(vi, len));
   efct_tx_init(vi, &tx);
 
-  /* TODO timestamp flag */
   /* ef_vi interface takes threshold in bytes, but the efct hardware interface
-   * takes multiples of 64.
+   * takes multiples of 64 (rounded up), and includes the 8-byte header in the
+   * count. Anything too big to fit in the field is equivalent to disabling
+   * cut-through; test that first to avoid arithmetic overflow.
    */
-  threshold >>= 6;
-  /* Anything too big to fit in the field width is equivalent in disabling
-   * cut through.
-   */
-  if( threshold > EFCT_TX_CT_DISABLE )
+  threshold_extra = EFCT_TX_HEADER_BYTES + EFCT_TX_ALIGNMENT - 1;
+  if( threshold > EFCT_TX_CT_DISABLE * EFCT_TX_ALIGNMENT - threshold_extra )
     threshold = EFCT_TX_CT_DISABLE;
+  else
+    threshold = (threshold + threshold_extra) / EFCT_TX_ALIGNMENT;
+
+  /* TODO timestamp flag */
   efct_tx_word(&tx, efct_tx_pkt_header(len, threshold, 0));
 
   for( i = 0; i < iovcnt; ++i )
