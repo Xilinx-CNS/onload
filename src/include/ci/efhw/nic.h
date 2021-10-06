@@ -82,6 +82,8 @@ static inline uint8_t efhw_vi_nic_flags(const struct efhw_nic* nic)
 		 EFHW_VI_NIC_BUG35388_WORKAROUND : 0;
 	flags |= (nic->flags & NIC_FLAG_CTPIO_ONLY) ?
 		 EFHW_VI_NIC_CTPIO_ONLY : 0;
+	flags |= (nic->flags & NIC_FLAG_RX_OVERCAPTURE) ?
+		 EFHW_VI_NIC_RX_OVERCAPTURE : 0;
 	return flags;
 }
 

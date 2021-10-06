@@ -974,6 +974,13 @@ static void handle_rx_scatter_merge(ci_netif* ni, struct oo_rx_state* s,
 }
 
 
+static unsigned unexpected_rx_log_flag(ci_netif* ni, int intf_i)
+{
+  return ni->state->nic[intf_i].vi_nic_flags & EFHW_VI_NIC_RX_OVERCAPTURE ?
+         CI_TP_LOG_NR : CI_TP_LOG_U;
+}
+
+
 static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
                               ci_ip_pkt_fmt* pkt, int frame_len)
 {
@@ -1036,7 +1043,8 @@ static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
   }
 #endif
   else {
-    LOG_U(log(FN_FMT "BAD frame ether_type=%d", FN_PRI_ARGS(ni), ether_type));
+    LOG_FL(unexpected_rx_log_flag(ni, pkt->intf_i),
+           log(FN_FMT "BAD frame ether_type=%d", FN_PRI_ARGS(ni), ether_type));
     goto drop;
   }
 
@@ -1095,8 +1103,9 @@ static void discard_rx_multi_pkts(ci_netif* ni, struct ci_netif_poll_state* ps,
   int is_frag = OO_PP_NOT_NULL(pkt->frag_next);
   int handled = 0;
 
-  LOG_U(log(LPF "[%d] intf %d discard RX_MULTI_PKTS 0x%x", NI_ID(ni), intf_i,
-            discard_flags));
+  LOG_FL(unexpected_rx_log_flag(ni, intf_i),
+         log(LPF "[%d] intf %d discard RX_MULTI_PKTS 0x%x",
+             NI_ID(ni), intf_i, discard_flags));
 
   /* Previous packet is already handled, s->rx_pkt can contain only current
    * packet. Fragmented packet must be processed and linked, i.e. it is in
