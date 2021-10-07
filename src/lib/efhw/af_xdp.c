@@ -1156,7 +1156,7 @@ static size_t af_xdp_max_shared_rxqs(struct efhw_nic *nic)
 
 
 static int af_xdp_flush_tx_dma_channel(struct efhw_nic *nic,
-		    uint32_t client_id, uint dmaq)
+		    uint32_t client_id, uint dmaq, uint evq)
 {
 	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
 	return -EOPNOTSUPP;

@@ -981,22 +981,40 @@ EXPORT_SYMBOL(efrm_vi_resource_mark_shut_down);
 
 
 static int
-__efrm_vi_q_flush(struct efhw_nic* nic, uint32_t client_id,
-		  enum efhw_q_type queue_type,
-		  int qid, int time_sync_events_enabled)
+efrm_vi_evq_id(struct efrm_vi *virs, enum efhw_q_type queue_type)
+{
+	struct efrm_vi *evq;
+
+	if( queue_type != EFHW_EVQ )
+		evq = virs->q[queue_type].evq_ref;
+	else
+		evq = virs;
+
+	return evq->q[EFHW_EVQ].qid;
+}
+
+
+static int
+__efrm_vi_q_flush(struct efhw_nic* nic, struct efrm_vi* virs,
+		  enum efhw_q_type queue_type)
 {
 	int rc;
+	uint32_t client_id = efrm_pd_get_nic_client_id(virs->pd);
+	struct efrm_vi_q *q = &virs->q[queue_type];
+	int evq = efrm_vi_evq_id(virs, queue_type);
+	int time_sync_events_enabled = (virs->flags &
+			(EFHW_VI_RX_TIMESTAMPS | EFHW_VI_TX_TIMESTAMPS)) != 0;
 
 	switch (queue_type) {
 	case EFHW_RXQ:
-		rc = efhw_nic_flush_rx_dma_channel(nic, client_id, qid);
+		rc = efhw_nic_flush_rx_dma_channel(nic, client_id, q->qid);
 		break;
 	case EFHW_TXQ:
-		rc = efhw_nic_flush_tx_dma_channel(nic, client_id, qid);
+		rc = efhw_nic_flush_tx_dma_channel(nic, client_id, q->qid, evq);
 		break;
 	case EFHW_EVQ:
 		/* flushing EVQ is as good as disabling it */
-		efhw_nic_event_queue_disable(nic, client_id, qid,
+		efhw_nic_event_queue_disable(nic, client_id, q->qid,
 					     time_sync_events_enabled);
 		rc = 0;
 		break;
@@ -1014,7 +1032,6 @@ efrm_vi_q_flush(struct efrm_vi *virs, enum efhw_q_type queue_type)
 	struct efrm_vi_q *q = &virs->q[queue_type];
 	struct efhw_nic *nic = virs->rs.rs_client->nic;
 	struct efrm_nic* efrm_nic = efrm_nic(nic);
-
 	int rc = 0;
 
 	mutex_lock(&efrm_nic->dmaq_state.lock);
@@ -1031,10 +1048,7 @@ efrm_vi_q_flush(struct efrm_vi *virs, enum efhw_q_type queue_type)
 		INIT_LIST_HEAD(&q->init_link);
 	}
 
-	rc = __efrm_vi_q_flush(nic, efrm_pd_get_nic_client_id(virs->pd),
-			       queue_type, q->qid,
-			       (virs->flags & (EFHW_VI_RX_TIMESTAMPS |
-					       EFHW_VI_TX_TIMESTAMPS)) != 0);
+	rc = __efrm_vi_q_flush(nic, virs, queue_type);
 	EFRM_TRACE("Flushed queue nic %d type %d 0x%x(0x%x) rc %d",
 		  nic->index, queue_type, virs->rs.rs_instance, q->qid, rc);
 	mutex_unlock(&efrm_nic->dmaq_state.lock);
@@ -1139,9 +1153,7 @@ void efrm_nic_flush_all_queues(struct efhw_nic *nic, int flags)
 				continue;
 			efrm_atomic_or(efrm_vi_shut_down_flag(type), &virs->shut_down_flags);
 			rc = __efrm_vi_q_flush(virs->rs.rs_client->nic,
-				efrm_pd_get_nic_client_id(virs->pd),
-				type, virs->q[type].qid,
-				(virs->flags & EFHW_VI_RX_TIMESTAMPS) != 0);
+					       virs, type);
 			(void) rc;
 			EFRM_TRACE(" nic %d type %d 0x%x rc %d",
 				nic->index, type, virs->rs.rs_instance, rc);

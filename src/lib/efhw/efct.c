@@ -345,7 +345,7 @@ efct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
 
 
 static int efct_flush_tx_dma_channel(struct efhw_nic *nic,
-                                     uint32_t client_id, uint dmaq)
+                                     uint32_t client_id, uint dmaq, uint evq)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;

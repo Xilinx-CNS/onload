@@ -210,7 +210,7 @@ struct efhw_func_ops {
 
 	/*! Flush a given TX DMA channel */
 	int (*flush_tx_dma_channel) (struct efhw_nic *nic, uint32_t client_id,
-			       uint dmaq);
+				     uint dmaq, uint evq);
 
 	/*! Flush a given RX DMA channel */
 	int (*flush_rx_dma_channel) (struct efhw_nic *nic, uint32_t client_id,

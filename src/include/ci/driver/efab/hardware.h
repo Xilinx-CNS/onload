@@ -119,8 +119,9 @@
                                           n_dma_addrs, vport_id, stack_id, \
                                           ps_buf_size, flags))
 
-#define efhw_nic_flush_tx_dma_channel(nic, client_id, dmaq) \
-	((nic)->efhw_func->flush_tx_dma_channel(nic, client_id, dmaq))
+#define efhw_nic_flush_tx_dma_channel(nic, client_id, dmaq, evq) \
+	((nic)->efhw_func->flush_tx_dma_channel((nic), (client_id), (dmaq), \
+						(evq)))
 
 #define efhw_nic_flush_rx_dma_channel(nic, client_id, dmaq) \
 	((nic)->efhw_func->flush_rx_dma_channel(nic, client_id, dmaq))

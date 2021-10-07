@@ -1773,7 +1773,7 @@ _ef10_ef100_mcdi_cmd_fini_txq(struct efhw_nic *nic, uint32_t client_id,
 
 
 int ef10_ef100_flush_tx_dma_channel(struct efhw_nic *nic, uint32_t client_id,
-					uint dmaq)
+				    uint dmaq, uint evq)
 {
 	return _ef10_ef100_mcdi_cmd_fini_txq(nic, client_id, dmaq);
 }
