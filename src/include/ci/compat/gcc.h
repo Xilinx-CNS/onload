@@ -118,6 +118,8 @@ typedef ci_uint64                       ci_fixed_descriptor_t;
 
 
 #define OO_ACCESS_ONCE(p) (*(volatile __typeof__(p) *)&(p))
+#define CI_WRITE_ONCE(x, v) (OO_ACCESS_ONCE((x)) = (v))
+#define CI_READ_ONCE(x) OO_ACCESS_ONCE((x))
 
 
 /**********************************************************************
