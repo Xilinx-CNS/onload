@@ -511,7 +511,7 @@ efrm_handle_tx_dmaq_flushed(struct efhw_nic *nic, int instance,
 		virs = container_of(pos, struct efrm_vi,
 				    q[EFHW_TXQ].flush_link);
 
-		if (instance == virs->rs.rs_instance) {
+		if (instance == efrm_vi_qid(virs, EFHW_TXQ)) {
 			efrm_vi_resource_tx_flush_done(virs, completed);
 			efrm_vi_rm_may_complete_flushes(efrm_nic);
 			return;
@@ -569,22 +569,14 @@ efrm_handle_dmaq_flushed_schedule(struct efhw_nic *flush_nic,
 	if (req == NULL)
 		return 0;
 
-	/* PF vi range [flush_nic->vi_min, flush_nic->vi_lim)
-	 */
-	if (instance >= flush_nic->vi_min && instance < flush_nic->vi_lim) {
-		req->flush_nic = flush_nic;
-		req->instance = instance;
-		req->rx_flush = rx_flush;
-		req->failed = failed;
+	req->flush_nic = flush_nic;
+	req->instance = instance;
+	req->rx_flush = rx_flush;
+	req->failed = failed;
 
-		INIT_WORK(&req->work, efrm_handle_dmaq_flushed_work);
-		queue_work(efrm_vi_manager->workqueue, &req->work);
-		return 1;
-	}
-	else {
-		kfree(req);
-		return 0;
-	}
+	INIT_WORK(&req->work, efrm_handle_dmaq_flushed_work);
+	queue_work(efrm_vi_manager->workqueue, &req->work);
+	return 1;
 }
 
 

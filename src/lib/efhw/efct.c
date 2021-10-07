@@ -12,12 +12,15 @@
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/bitfield.h>
 #include <ci/tools/sysdep.h>
+#include <ci/tools/bitfield.h>
 #include <uapi/linux/ethtool.h>
 #include "ethtool_flow.h"
 #include "efct.h"
 #include "efct_superbuf.h"
 
 #if CI_HAVE_EFCT_AUX
+
+static void efct_check_for_flushes(struct work_struct *work);
 
 int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
@@ -194,6 +197,8 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
     .page_offset = 0,
     .q_size = efhw_params->evq_size * sizeof(efhw_event_t),
   };
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  struct efhw_nic_efct_evq *efct_evq = &efct->evq[efhw_params->evq];
   int rc;
 #ifndef NDEBUG
   int i;
@@ -220,6 +225,14 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
   rc = edev->ops->init_evq(cli, &qparams);
   EFCT_POST(dev, edev, cli, nic, rc);
 
+  if( rc == 0 ) {
+    efct_evq->nic = nic;
+    efct_evq->base = phys_to_virt(efhw_params->dma_addrs[0]);
+    efct_evq->capacity = efhw_params->evq_size;
+    atomic_set(&efct_evq->queues_flushing, 0);
+    INIT_DELAYED_WORK(&efct_evq->check_flushes, efct_check_for_flushes);
+  }
+
   return rc;
 }
 
@@ -230,7 +243,16 @@ efct_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  struct efhw_nic_efct_evq *efct_evq = &efct->evq[evq];
   int rc = 0;
+
+  /* In the normal case we'll be disabling the queue because all outstanding
+   * flushes have completed. However, in the case of a flush timeout there may
+   * still be a work item scheduled. We want to avoid it rescheduling if so.
+   */
+  atomic_set(&efct_evq->queues_flushing, -1);
+  cancel_delayed_work_sync(&efct_evq->check_flushes);
 
   EFCT_PRE(dev, edev, cli, nic, rc);
   edev->ops->free_evq(cli, evq);
@@ -344,17 +366,58 @@ efct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
  *--------------------------------------------------------------------*/
 
 
+static void efct_check_for_flushes(struct work_struct *work)
+{
+  struct efhw_nic_efct_evq *evq =  container_of(work, struct efhw_nic_efct_evq,
+                                                check_flushes.work);
+  ci_qword_t *event = evq->base;
+  bool found_flush = false;
+  int txq;
+  int i;
+
+  /* In the case of a flush timeout this may have been rescheduled following
+   * evq disable. In which case bail out now.
+   */
+  if( atomic_read(&evq->queues_flushing) < 0 )
+    return;
+
+  for(i = 0; i < evq->capacity; i++) {
+    if(CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) == EFCT_EVENT_TYPE_CONTROL &&
+       CI_QWORD_FIELD(*event, EFCT_CTRL_SUBTYPE) == EFCT_CTRL_EV_FLUSH &&
+       CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX &&
+       CI_QWORD_FIELD(*event, EFCT_FLUSH_REASON) == EFCT_FLUSH_REASON_MCDI) {
+      found_flush = true;
+      txq = CI_QWORD_FIELD(*event, EFCT_FLUSH_LABEL);
+      efhw_handle_txdmaq_flushed(evq->nic, txq);
+      break;
+    }
+    event++;
+  }
+
+  if( !found_flush || !atomic_dec_and_test(&evq->queues_flushing) ) {
+    EFHW_ERR("%s: WARNING: No TX flush found, scheduling delayed work",
+             __FUNCTION__);
+    schedule_delayed_work(&evq->check_flushes, 100);
+  }
+}
+
+
 static int efct_flush_tx_dma_channel(struct efhw_nic *nic,
                                      uint32_t client_id, uint dmaq, uint evq)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  struct efhw_nic_efct_evq *efct_evq = &efct->evq[evq];
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
   edev->ops->free_txq(cli, dmaq);
   EFCT_POST(dev, edev, cli, nic, rc);
+
+  atomic_inc(&efct_evq->queues_flushing);
+  schedule_delayed_work(&efct_evq->check_flushes, 0);
 
   return 0;
 }

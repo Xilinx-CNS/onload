@@ -37,6 +37,7 @@ struct efhw_efct_rxq {
 
 /* TODO EFCT find somewhere better to put this */
 #define CI_EFCT_MAX_RXQS  8
+#define CI_EFCT_MAX_EVQS 24
 
 struct efhw_nic_efct_rxq_superbuf {
   /* Each value is (sentinel << 15) | sbid, i.e. identical to
@@ -68,8 +69,17 @@ struct efhw_nic_efct_rxq {
   uint32_t awaiters;
 };
 
+struct efhw_nic_efct_evq {
+  struct efhw_nic *nic;
+  atomic_t queues_flushing;
+  struct delayed_work check_flushes;
+  void *base;
+  unsigned capacity;
+};
+
 struct efhw_nic_efct {
   struct efhw_nic_efct_rxq rxq[CI_EFCT_MAX_RXQS];
+  struct efhw_nic_efct_evq evq[CI_EFCT_MAX_EVQS];
   struct xlnx_efct_device *edev;
   struct xlnx_efct_client *client;
   struct efhw_nic *nic;
