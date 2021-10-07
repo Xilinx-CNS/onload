@@ -1346,7 +1346,7 @@ CI_CFG_OPT("EF_CTPIO_MAX_FRAME_LEN", ctpio_max_frame_len, ci_uint16,
 "PIO and/or DMA.  The cost per byte of packet payload varies between host "
 "architectures, as does the effect of packet size on the probability of "
 "poisoning, and so on some hosts it may be beneficial to reduce this value.",
-           , , 0, 0, MAX, count)
+           , , 0, 0, 4092, count)
 #endif
 
 #if CI_CFG_CTPIO
