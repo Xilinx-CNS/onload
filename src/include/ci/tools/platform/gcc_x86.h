@@ -403,8 +403,21 @@ typedef ci_uint32  ci_bits;
 ci_inline void ci_bits_clear_all(volatile ci_bits* b, int n_bits)
 { memset((void*) b, 0, (n_bits+CI_BITS_N-1u) / CI_BITS_N * sizeof(ci_bits)); }
 
+ci_inline void __ci_bit_set(volatile ci_bits* b, int i) {
+  __asm__ __volatile__("btsl %1, %0"
+		       : "=m" (*b)
+		       : "Ir" (i)
+		       : "memory");
+}
 ci_inline void ci_bit_set(volatile ci_bits* b, int i) {
   __asm__ __volatile__("lock; btsl %1, %0"
+		       : "=m" (*b)
+		       : "Ir" (i)
+		       : "memory");
+}
+
+ci_inline void __ci_bit_clear(volatile ci_bits* b, int i) {
+  __asm__ __volatile__("btrl %1, %0"
 		       : "=m" (*b)
 		       : "Ir" (i)
 		       : "memory");
@@ -447,6 +460,20 @@ ci_inline int ci_bit_test_and_clear(volatile ci_bits* b, int i) {
 /* These mask ops only work within a single ci_bits word. */
 #define ci_bit_mask_set(b,m)	ci_atomic32_or((b), (m))
 #define ci_bit_mask_clear(b,m)	ci_atomic32_and((b), ~(m))
+
+
+#define ci_bit_find_next(a, sz, from) ( \
+  __builtin_ffs((*a) & -(1 << (from))) ? \
+  __builtin_ffs((*a) & -(1 << (from))) - 1 : \
+  (sz) \
+  )
+
+#define ci_bit_find_first(a, sz) ci_bit_find_next(a, sz, 0)
+
+#define ci_bit_for_each_set(bit, addr, size) \
+	for ((bit) = ci_bit_find_first((addr), (size));		\
+	     (bit) < (size);					\
+	     (bit) = ci_bit_find_next((addr), (size), (bit) + 1))
 
 
 /**********************************************************************
