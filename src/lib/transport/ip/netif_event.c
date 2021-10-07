@@ -974,7 +974,7 @@ static void handle_rx_scatter_merge(ci_netif* ni, struct oo_rx_state* s,
 }
 
 
-static unsigned unexpected_rx_log_flag(ci_netif* ni, int intf_i)
+static inline unsigned unexpected_rx_log_flag(ci_netif* ni, int intf_i)
 {
   return ni->state->nic[intf_i].vi_nic_flags & EFHW_VI_NIC_RX_OVERCAPTURE ?
          CI_TP_LOG_NR : CI_TP_LOG_U;
