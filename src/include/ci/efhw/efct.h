@@ -5,6 +5,7 @@
 #define CI_EFHW_EFCT_H
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/driver/ci_efct.h>
+#include <ci/tools/sysdep.h>
 
 extern struct efhw_func_ops efct_char_functional_units;
 
@@ -28,7 +29,7 @@ struct efhw_efct_rxq {
   uint32_t wake_at_seqno;
   uint32_t current_owned_superbufs;
   uint32_t max_allowed_superbufs;
-  DECLARE_BITMAP(owns_superbuf, CI_EFCT_MAX_SUPERBUFS);
+  CI_BITS_DECLARE(owns_superbuf, CI_EFCT_MAX_SUPERBUFS);
   efhw_efct_rxq_free_func_t *freer;
   unsigned wakeup_instance;
 };
@@ -93,7 +94,7 @@ static inline void efct_app_list_push(struct efhw_efct_rxq **head,
   struct efhw_efct_rxq *next;
   do {
     app->next = next = *head;
-  } while( cmpxchg(head, next, app) != next );
+  } while( ci_cas_uintptr_fail(head, (uintptr_t) next, (uintptr_t)app) );
 }
 
 #endif /* CI_EFHW_EFCT_H */
