@@ -84,7 +84,7 @@ try mkdir -p $tempfile/$onloaddir/debian
 # Make any necessary replacements for the onload release we're doing in the
 # control files
 for i in $(find $TOP/debian/debian-templ/* -type f); do
-  try sed -e "s/#VERSION#/$onloadver/" -e "s/#TYPE#/$onloadtype/" -e "s/#SOVERSION#/${soversion}/" -e "s/#BUILDPROFILE#/${buildprofile}/" < $i > "${tempfile}/${onloaddir}/debian/$(basename $i)";
+  try sed -e "s/#VERSION#/$onloadver/g" -e "s/#TYPE#/$onloadtype/g" -e "s/#SOVERSION#/${soversion}/g" -e "s/#BUILDPROFILE#/${buildprofile}/g" < $i > "${tempfile}/${onloaddir}/debian/$(basename $i)";
 done
 try mv "${tempfile}/${onloaddir}/debian/type-user.shlibs" "${tempfile}/${onloaddir}/debian/${onloadtype}-user.shlibs"
 
