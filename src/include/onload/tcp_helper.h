@@ -560,6 +560,13 @@ ci_inline struct pid* ci_netif_pid_lookup(ci_netif* ni, pid_t pid)
 #endif
 }
 
+ci_inline bool ci_netif_tcp_plugin_uses_p2h(ci_netif* ni, int intf_i)
+{
+  ci_assert(ni->nic_hw[intf_i].plugin);
+  /* The plugin design using P2H doesn't exist yet. */
+  return false;
+}
+
 #endif /* defined(__KERNEL__) */
 
 

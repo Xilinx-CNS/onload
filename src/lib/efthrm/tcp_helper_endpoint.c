@@ -531,6 +531,11 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
 
       if( ! ni->nic_hw[intf_i].plugin )
         continue;
+      /* With the non-P2H design, we must only create the stream on one
+       * interface. */
+      if( ! ci_netif_tcp_plugin_uses_p2h(ni, intf_i) &&
+          intf_i != s->pkt.intf_i )
+        continue;
       create = (struct xsn_ceph_create_stream){
         .tcp.in_app_id = cpu_to_le32(ni->nic_hw[intf_i].plugin_app_id),
         .tcp.in_user_mark = cpu_to_le32(ep->id),

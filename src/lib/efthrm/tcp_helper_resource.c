@@ -8272,7 +8272,8 @@ int efab_tcp_helper_tcp_offload_set_isn(tcp_helper_resource_t* trs,
   ci_assert(! in_atomic());
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    if( ni->nic_hw[intf_i].plugin ) {
+    if( ni->nic_hw[intf_i].plugin &&
+        tep_p->plugin_stream_id[intf_i] != INVALID_PLUGIN_HANDLE ) {
       struct xsn_tcp_sync_stream sync = {
         .in_conn_id = tep_p->plugin_stream_id[intf_i],
         .in_seq = isn,
@@ -8298,9 +8299,16 @@ int efab_tcp_helper_tcp_offload_get_stream_id(tcp_helper_resource_t* trs,
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_netif* ni = &trs->netif;
   tcp_helper_endpoint_t* tep_p = ci_trs_get_valid_ep(trs, ep_id);
+  ci_tcp_state* ts = SP_TO_TCP(ni, ep_id);
 
   if( intf_i < 0 || intf_i >= oo_stack_intf_max(ni) )
     return -EINVAL;
+
+  /* With the non-P2H design, we only created a stream on the interface over
+   * which the stream routes.  That might not be the same as the interface on
+   * which traffic is received. */
+  if( ! ci_netif_tcp_plugin_uses_p2h(ni, intf_i) )
+    intf_i = ts->s.pkt.intf_i;
 
   if( stream_id )
     *stream_id = tep_p->plugin_stream_id[intf_i];
