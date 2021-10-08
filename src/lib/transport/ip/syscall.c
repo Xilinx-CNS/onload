@@ -22,6 +22,12 @@
 #include <ci/internal/transport_config_opt.h>
 
 #include <onload/syscall_unix.h>
+
+/* We are not interested whether siginterrupt() and friends are deprected.
+ * We do not use the following functions, we need them to intercept is
+ * a user application happened to use them. */
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+
 /* define the ci_sys_ pointers */
 #define CI_MK_DECL(ret, fn, args)  ret (*ci_sys_##fn) args = fn
 #include <onload/declare_syscalls.h.tmpl>
