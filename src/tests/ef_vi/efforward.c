@@ -15,6 +15,8 @@
  * Date: 2011/04/13
  */
 
+#define _GNU_SOURCE
+
 #include <etherfabric/vi.h>
 #include <etherfabric/pd.h>
 #include <etherfabric/memreg.h>
