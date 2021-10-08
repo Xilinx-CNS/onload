@@ -566,8 +566,9 @@ calculate_install_paths() {
 
 detect_lib64_path() {
   lib64dir="$usrdir/lib64"
-  if [ -e /lib/x86_64-linux-gnu/libc.so.6 ]; then
-    lib64dir="$usrdir/lib/x86_64-linux-gnu"
+  local libc="/lib/$(uname -m)-linux-gnu/libc.so.6"
+  if [ -e "$libc" ]; then
+    lib64dir="$usrdir/$(dirname $libc)"
   fi
 }
 ######################################################################
