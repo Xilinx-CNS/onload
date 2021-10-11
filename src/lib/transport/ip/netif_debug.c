@@ -770,7 +770,7 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
       logger(log_arg, "  txq[%d]: cap=%d lim=%d spc=%d level=%d oflow_pkts=%d",
              i, ef_vi_transmit_capacity(pvi), ef_vi_transmit_capacity(pvi),
              ef_vi_transmit_space(pvi), ef_vi_transmit_fill_level(pvi),
-             nic->dmaq[i + 1].num);
+             nic->dmaq[i].num);
     }
   }
 #endif
