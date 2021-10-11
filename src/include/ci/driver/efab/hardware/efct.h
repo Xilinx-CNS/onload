@@ -127,5 +127,11 @@
 /* FIXME EFCT: make this variable */
 #define EFCT_PKT_STRIDE 2048
 
+/* Interrupt priming */
+#define ERF_HZ_READ_IDX_LBN 16
+#define ERF_HZ_READ_IDX_WIDTH 16
+#define ERF_HZ_EVQ_ID_LBN 0
+#define ERF_HZ_EVQ_ID_WIDTH 16
+
 #endif
 

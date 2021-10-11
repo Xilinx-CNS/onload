@@ -556,6 +556,8 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
       res_dim->irq_ranges[i].irq_range = val.irq_res->irq_ranges[i].range;
   }
 
+  res_dim->irq_prime_reg = val.irq_res->int_prime;
+
   return 0;
 }
 
