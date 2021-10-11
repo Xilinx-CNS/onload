@@ -52,7 +52,7 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
   efct_provide_bind_memfd(memfd, *memfd_off);
   EFCT_PRE(dev, edev, cli, nic, rc);
   rc = edev->ops->bind_rxq(cli, &qparams);
-  if( rc == 0 ) {
+  if( rc >= 0 ) {
     struct efhw_nic_efct *efct = nic->arch_extra;
     struct efhw_nic_efct_rxq *q = &efct->rxq[rc];
 
