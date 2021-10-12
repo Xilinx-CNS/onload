@@ -10,6 +10,7 @@
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/checks.h>
 #include <ci/driver/ci_efct.h>
+#include <ci/tools/bitfield.h>
 #include <ci/tools/sysdep.h>
 #include <uapi/linux/ethtool.h>
 #include "ethtool_flow.h"
