@@ -19,6 +19,43 @@
 #if CI_HAVE_EFCT_AUX
 
 int
+__efct_nic_rxq_bind(struct xlnx_efct_device* edev,
+                    struct xlnx_efct_client* cli,
+                    struct xlnx_efct_rxq_params *rxq_params,
+                    struct efhw_nic_efct *efct,
+                    int n_hugepages,
+                    struct efab_efct_rxq_uk_shm *shm,
+                    unsigned wakeup_instance,
+                    struct efhw_efct_rxq *rxq)
+{
+
+  int rc;
+
+
+  rxq->n_hugepages = n_hugepages;
+  rxq->max_allowed_superbufs = n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
+  rxq->shm = shm;
+  rxq->wakeup_instance = wakeup_instance;
+  rxq->wake_at_seqno = EFCT_INVALID_PKT_SEQNO;
+
+  rc = edev->ops->bind_rxq(cli, rxq_params);
+  if( rc >= 0 ) {
+    struct efhw_nic_efct_rxq *q = &efct->rxq[rc];
+
+    rxq->qid = rc;
+    efct_app_list_push(&q->new_apps, rxq);
+    edev->ops->rollover_rxq(cli, rxq->qid);
+  }
+
+  if( rc >= 0 ) {
+    shm->qid = rc;
+    shm->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
+  }
+
+  return rc;
+}
+
+int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
                   bool timestamp_req, size_t n_hugepages, struct file* memfd,
                   off_t* memfd_off, struct efab_efct_rxq_uk_shm *shm,
@@ -27,6 +64,8 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
+  int rc;
+
   struct xlnx_efct_rxq_params qparams = {
     .qid = qid,
 /* EFCT TODO: temporary hack to keep things building across both sides of an
@@ -37,7 +76,6 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
     .timestamp_req = timestamp_req,
     .n_hugepages = n_hugepages,
   };
-  int rc;
 
   if( n_hugepages > CI_EFCT_MAX_HUGEPAGES ) {
     /* We'd fail later on in bind_rxq(), but only after we'd done a load of
@@ -45,33 +83,25 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
      * check as well */
     return -EINVAL;
   }
-
-  rxq->n_hugepages = n_hugepages;
-  rxq->max_allowed_superbufs = n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE;
-  rxq->shm = shm;
-  rxq->wakeup_instance = wakeup_instance;
-  rxq->wake_at_seqno = EFCT_INVALID_PKT_SEQNO;
-
   efct_provide_bind_memfd(memfd, *memfd_off);
   EFCT_PRE(dev, edev, cli, nic, rc);
-  rc = edev->ops->bind_rxq(cli, &qparams);
-  if( rc >= 0 ) {
-    struct efhw_nic_efct *efct = nic->arch_extra;
-    struct efhw_nic_efct_rxq *q = &efct->rxq[rc];
 
-    rxq->qid = rc;
-    efct_app_list_push(&q->new_apps, rxq);
-    edev->ops->rollover_rxq(cli, rxq->qid);
-  }
+  rc = __efct_nic_rxq_bind(edev, cli, &qparams, nic->arch_extra, n_hugepages, shm, wakeup_instance, rxq);
   EFCT_POST(dev, edev, cli, nic, rc);
   efct_unprovide_bind_memfd(memfd_off);
-
-  if( rc >= 0 ) {
-    shm->qid = rc;
-    shm->superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
-  }
-
   return rc;
+}
+
+
+void
+__efct_nic_rxq_free(struct xlnx_efct_device* edev,
+                    struct xlnx_efct_client* cli,
+                    struct efhw_efct_rxq *rxq,
+                    efhw_efct_rxq_free_func_t *freer)
+{
+  rxq->destroy = true;
+  rxq->freer = freer;
+  edev->ops->free_rxq(cli, rxq->qid, rxq->n_hugepages);
 }
 
 
@@ -85,9 +115,7 @@ efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc)
-  rxq->destroy = true;
-  rxq->freer = freer;
-  edev->ops->free_rxq(cli, rxq->qid, rxq->n_hugepages);
+  __efct_nic_rxq_free(edev, cli, rxq, freer);
   EFCT_POST(dev, edev, cli, nic, rc);
 }
 
