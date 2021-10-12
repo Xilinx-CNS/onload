@@ -637,8 +637,14 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     /* Update rxq's value even if the refresh_func fails, since retrying it
      * every poll is unlikely to be productive either */
     rxq->config_generation = shm->config_generation;
-    if( rxq->refresh_func(vi, qid) < 0 )
+    if( rxq->refresh_func(vi, qid) < 0 ) {
+#ifdef __KERNEL__
+      /* Kernelspace is an exception to the above comment, since one of the
+       * possible outcomes is a crash and we don't want that */
+      rxq->config_generation = 0;
+#endif
       return 0;
+    }
   }
 
   /* By never crossing a superbuf in a single poll we can exploit

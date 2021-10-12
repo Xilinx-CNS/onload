@@ -1489,7 +1489,8 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
 
 static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int qid)
 {
-  return efrm_rxq_refresh_kernel(vi->dh, qid, vi->efct_rxq[qid].superbufs);
+  return efrm_rxq_refresh_kernel(vi->dh, vi->efct_shm[qid].qid,
+                                 vi->efct_rxq[qid].superbufs);
 }
 
 
