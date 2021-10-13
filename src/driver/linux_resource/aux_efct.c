@@ -122,8 +122,17 @@ static void activate_new_apps(struct efhw_nic_efct_rxq *q)
     if( new_apps ) {
       struct efhw_efct_rxq* app;
       struct efhw_efct_rxq* last;
-      for( app = new_apps; app; app = app->next )
+      for( app = new_apps; app; app = app->next ) {
+        /* Set from which superbuf we want the app to start reading packets.
+         * This relies on activate_new_apps being called during or not too long after
+         * efct_nic_rxq_bind.
+         * Currently, efct_nic_rxq_bind calls x3net's rollover_rxq. And
+         * x3net's rollover_rxq calls our efct_buffer_start
+         * which calls this function. And we rely on x3net's rollover_rxq behaviour
+         * for corner cases. */
+        app->next_sbuf_seq = q->sbufs.added;
         last = app;
+      }
       last->next = q->live_apps;
       q->live_apps = new_apps;
     }
