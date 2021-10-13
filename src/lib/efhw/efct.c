@@ -426,7 +426,8 @@ static int efct_flush_tx_dma_channel(struct efhw_nic *nic,
 static int efct_flush_rx_dma_channel(struct efhw_nic *nic,
                                      uint32_t client_id, uint dmaq)
 {
-  return 0;
+  /* rxqs are a software-only concept, no flush required */
+  return -EALREADY;
 }
 
 
