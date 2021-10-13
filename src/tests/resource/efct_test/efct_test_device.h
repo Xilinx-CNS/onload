@@ -43,6 +43,7 @@ struct efct_test_rxq {
   int ms_per_pkt;
   int current_sbid;
   uint32_t next_pkt;
+  unsigned sbseq;
 };
 
 struct efct_test_device {

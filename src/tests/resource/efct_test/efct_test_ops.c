@@ -68,12 +68,14 @@ static void do_rollover(struct efct_test_device *tdev, struct efct_test_rxq *q)
     }
     else {
       __clear_bit(sbid, q->freelist);
-      tdev->client->drvops->buffer_start(tdev->client->drv_priv, q->ix, sbid,
+      tdev->client->drvops->buffer_start(tdev->client->drv_priv, q->ix,
+                                         q->sbseq, sbid,
                                          test_bit(sbid, q->curr_sentinel));
     }
   }
   printk(KERN_DEBUG "q%d: superbuf rollover %d -> %d\n",
          q->ix, q->current_sbid, sbid);
+  ++q->sbseq;
   q->current_sbid = sbid;
   q->next_pkt = round_up(q->next_pkt, EFCT_TEST_PKTS_PER_SUPERBUF);
 }
