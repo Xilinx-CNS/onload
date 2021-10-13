@@ -229,7 +229,7 @@
 
 
 #define CI_SOCK_FLAGS_FMT \
-  "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s"
+  "%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s"
 #define CI_SOCK_FLAGS_PRI_ARG(s)                                        \
   ((s)->s_aflags & CI_SOCK_AFLAG_CORK     ? "CORK ":""),                \
   ((s)->s_aflags & CI_SOCK_AFLAG_NEED_SHUT_RD ? "SHUTRD ":""),          \
@@ -244,6 +244,7 @@
   ((s)->s_flags & CI_SOCK_FLAG_DONTROUTE  ? "DONTROUTE ":""),           \
   ((s)->s_flags & CI_SOCK_FLAG_FILTER     ? "FILTER ":""),              \
   ((s)->s_flags & CI_SOCK_FLAG_BOUND      ? "BOUND ":""),               \
+  ((s)->s_flags & CI_SOCK_FLAG_TCP_OFFLOAD ? "TCP_OFFLOAD ":""),        \
   ((s)->s_flags & CI_SOCK_FLAG_PORT_BOUND ? "PBOUND ":""),              \
   ((s)->s_flags & CI_SOCK_FLAG_SET_SNDBUF ? "SNDBUF ":""),              \
   ((s)->s_flags & CI_SOCK_FLAG_SET_RCVBUF ? "RCVBUF ":""),              \
