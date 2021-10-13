@@ -218,6 +218,8 @@ struct efct_tx_state
   union {uint64_t word; uint8_t bytes[8];} tail;
   /* number of left over bytes in 'tail' */
   unsigned tail_len;
+  /* number of 64-bit words from start of aperture */
+  uint64_t offset;
 };
 
 /* generic tx header */
@@ -266,11 +268,11 @@ static bool efct_tx_check(ef_vi* vi, int len)
 static void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
 {
   unsigned offset = vi->ep_state->txq.ct_added % EFCT_TX_APERTURE;
-
   BUG_ON(offset % EFCT_TX_ALIGNMENT != 0);
-  tx->aperture = (void*)(vi->vi_ctpio_mmap_ptr + offset);
+  tx->aperture = (void*) vi->vi_ctpio_mmap_ptr;
   tx->tail.word = 0;
   tx->tail_len = 0;
+  tx->offset = offset >> 3;
 }
 
 /* store a left-over byte from the start or end of a block */
@@ -280,14 +282,15 @@ static void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
   tx->tail.bytes[tx->tail_len++] = byte;
 }
 
-/* write a 64-bit word to the CTPIO aperture */
+/* write a 64-bit word to the CTPIO aperture, dealing with wrapping */
 static void efct_tx_word(struct efct_tx_state* tx, uint64_t value)
 {
-  *tx->aperture++ = value;
+  *(tx->aperture + tx->offset++) = value;
+  tx->offset %= EFCT_TX_APERTURE >> 3;
 }
 
-/* write a block of bytes to the CTPIO aperture, dealing with leftovers */
-static void efct_tx_block(struct efct_tx_state* tx, char* base, int len)
+/* write a block of bytes to the CTPIO aperture, dealing with wrapping and leftovers */
+static void efct_tx_block(struct efct_tx_state* __restrict__ tx, char* base, int len)
 {
   if( tx->tail_len != 0 ) {
     while( len > 0 && tx->tail_len < 8 ) {
@@ -317,24 +320,19 @@ static void efct_tx_block(struct efct_tx_state* tx, char* base, int len)
 }
 
 /* complete a tx operation, writing leftover bytes and padding as needed */
-static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dma_id)
+static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dma_id, int len)
 {
-  unsigned start, end, len;
-
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
   struct efct_tx_descriptor* desc = q->descriptors;
   int i = qs->added & q->mask;
 
-  if( tx->tail_len != 0 )
+  if( tx->tail_len != 0 ) 
     efct_tx_word(tx, tx->tail.word);
-  while( (uintptr_t)tx->aperture % EFCT_TX_ALIGNMENT != 0 )
+  while( tx->offset % (EFCT_TX_ALIGNMENT >> 3) != 0 )
     efct_tx_word(tx, 0);
 
-  start = qs->ct_added % EFCT_TX_APERTURE;
-  end = ((char*)tx->aperture - vi->vi_ctpio_mmap_ptr);
-  len = end - start;
-
+  len = CI_ROUND_UP(len + EFCT_TX_HEADER_BYTES, EFCT_TX_ALIGNMENT);
   desc[i].len = len;
   q->ids[i] = dma_id;
   qs->ct_added += len;
@@ -394,7 +392,7 @@ static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
   /* TODO timestamp flag */
   efct_tx_word(&tx, efct_tx_pkt_header(len, EFCT_TX_CT_DISABLE, 0));
   efct_tx_block(&tx, (void*)(uintptr_t)base, len);
-  efct_tx_complete(vi, &tx, dma_id);
+  efct_tx_complete(vi, &tx, dma_id, len);
 
   return 0;
 }
@@ -419,7 +417,7 @@ static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
   for( i = 0; i < iov_len; ++i )
     efct_tx_block(&tx, (void*)(uintptr_t)iov[i].iov_base, iov[i].iov_len);
 
-  efct_tx_complete(vi, &tx, dma_id);
+  efct_tx_complete(vi, &tx, dma_id, len);
 
   return 0;
 }
@@ -492,7 +490,7 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
    * For compat with existing ef_vi apps which will post a fallback and may
    * want to use the dma_id we'll replace this value with the real one then.
    */
-  efct_tx_complete(vi, &tx, EFCT_TX_POSTED_ID);
+  efct_tx_complete(vi, &tx, EFCT_TX_POSTED_ID, len);
 }
 
 static void efct_ef_vi_transmitv_ctpio_copy(ef_vi* vi, size_t frame_len,
