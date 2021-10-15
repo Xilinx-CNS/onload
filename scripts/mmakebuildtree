@@ -150,6 +150,16 @@ recurse () {
   done
 }
 
+normalize_buildpath () {
+  if [ -z "$BUILDPATH" ] ; then
+      if [ -z "$builddir" ]; then
+          BUILDPATH="$TOPPATH/build/$dest"
+      else
+          BUILDPATH="$builddir/$dest"
+      fi
+  fi
+}
+
 ######################################################################
 # main()
 
@@ -268,20 +278,13 @@ fi
   }
 }
 
-if [ -z "$BUILDPATH" ] ; then
-    if [ -z "$builddir" ]; then
-        BUILDPATH="$TOPPATH/build/$dest"
-    else
-        BUILDPATH="$builddir/$dest"
-    fi
-fi
-
 # Choose platform if it is not set and add nic type
 if [ -z "$PLATFORM" ]; then
     choose_platform
 fi
 
 if [ -n "$newdriver" ]; then
+  normalize_buildpath
   BUILDPATH="$BUILDPATH"
   mkdir -p "$BUILDPATH"
   echo -e "all:\n\t\$(MAKE) -C ../.. KPATH=$KPATH KBUILDTOP=\$(abspath .)" > "$BUILDPATH/GNUmakefile"
@@ -351,6 +354,7 @@ fi
 
 [ -z "$SRCPATH" ] && SRCPATH=$("$mmaketool" --toppath)/src
 
+normalize_buildpath
 do_build_tree "$BUILDPATH"
 rc=$?
 
