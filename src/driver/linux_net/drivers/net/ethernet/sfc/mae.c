@@ -1151,11 +1151,13 @@ int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 		break;
 	}
 
-	MCDI_POPULATE_DWORD_4(inbuf, MAE_ACTION_SET_ALLOC_IN_FLAGS,
+	MCDI_POPULATE_DWORD_5(inbuf, MAE_ACTION_SET_ALLOC_IN_FLAGS,
 			      MAE_ACTION_SET_ALLOC_IN_VLAN_PUSH, vlan_push,
 			      MAE_ACTION_SET_ALLOC_IN_VLAN_POP, vlan_pop,
 			      MAE_ACTION_SET_ALLOC_IN_DECAP, act->decap,
-			      MAE_ACTION_SET_ALLOC_IN_DO_NAT, act->do_nat);
+			      MAE_ACTION_SET_ALLOC_IN_DO_NAT, act->do_nat,
+			      MAE_ACTION_SET_ALLOC_IN_DO_DECR_IP_TTL,
+			      act->do_ttl_dec);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	if (act->src_mac)
 		MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_ALLOC_IN_SRC_MAC_ID,

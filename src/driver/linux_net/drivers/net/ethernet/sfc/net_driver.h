@@ -96,7 +96,7 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.11.1000"
+#define EFX_DRIVER_VERSION	"5.3.12.1002"
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -1535,6 +1535,7 @@ struct efx_nic {
 	enum efx_int_mode interrupt_mode;
 	unsigned int timer_quantum_ns;
 	unsigned int timer_max_ns;
+	bool tc_match_ignore_ttl;
 	bool irq_rx_adaptive;
 	bool xdp_tx;
 	bool irqs_hooked;

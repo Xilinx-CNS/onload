@@ -113,12 +113,14 @@ static const char efx_ethtool_priv_flags_strings[][ETH_GSTRING_LEN] = {
 	"link-down-on-reset",
 	"xdp-tx",
 	"log-tc-errors",
+	"tc-match-ignore-ttl",
 };
 
 #define EFX_ETHTOOL_PRIV_FLAGS_PHY_POWER		BIT(0)
 #define EFX_ETHTOOL_PRIV_FLAGS_LINK_DOWN_ON_RESET	BIT(1)
 #define EFX_ETHTOOL_PRIV_FLAGS_XDP			BIT(2)
 #define EFX_ETHTOOL_PRIV_FLAGS_LOG_TC_ERRS		BIT(3)
+#define EFX_ETHTOOL_PRIV_FLAGS_TC_MATCH_IGNORE_TTL	BIT(4)
 
 #define EFX_ETHTOOL_PRIV_FLAGS_COUNT ARRAY_SIZE(efx_ethtool_priv_flags_strings)
 
@@ -677,6 +679,9 @@ u32 efx_ethtool_get_priv_flags(struct net_device *net_dev)
 	if (efx->log_tc_errs)
 		ret_flags |= EFX_ETHTOOL_PRIV_FLAGS_LOG_TC_ERRS;
 
+	if (efx->tc_match_ignore_ttl)
+		ret_flags |= EFX_ETHTOOL_PRIV_FLAGS_TC_MATCH_IGNORE_TTL;
+
 	return ret_flags;
 }
 
@@ -711,6 +716,8 @@ int efx_ethtool_set_priv_flags(struct net_device *net_dev, u32 flags)
 		!!(flags & EFX_ETHTOOL_PRIV_FLAGS_XDP);
 	efx->log_tc_errs =
 		!!(flags & EFX_ETHTOOL_PRIV_FLAGS_LOG_TC_ERRS);
+	efx->tc_match_ignore_ttl =
+		!!(flags & EFX_ETHTOOL_PRIV_FLAGS_TC_MATCH_IGNORE_TTL);
 
 	if (is_up && xdp_change)
 		return dev_open(net_dev, NULL);

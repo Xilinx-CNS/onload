@@ -4640,9 +4640,8 @@ static int efx_ef10_set_udp_tnl_ports(struct efx_nic *efx, bool unloading)
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_SET_TUNNEL_ENCAP_UDP_PORTS_OUT_LEN);
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	efx_dword_t flags_and_num_entries;
+	size_t inlen, outlen, num_entries;
 	bool will_reset = false;
-	size_t num_entries = 0;
-	size_t inlen, outlen;
 	size_t i;
 	int rc;
 
@@ -4658,10 +4657,14 @@ static int efx_ef10_set_udp_tnl_ports(struct efx_nic *efx, bool unloading)
 	BUILD_BUG_ON(ARRAY_SIZE(nic_data->udp_tunnels) >
 		     MC_CMD_SET_TUNNEL_ENCAP_UDP_PORTS_IN_ENTRIES_MAXNUM);
 
-	for (i = 0; i < ARRAY_SIZE(nic_data->udp_tunnels); ++i) {
-		if (nic_data->udp_tunnels[i].type !=
-		    TUNNEL_ENCAP_UDP_PORT_ENTRY_INVALID) {
+	num_entries = 0;
+	if (!unloading) {
+		for (i = 0; i < ARRAY_SIZE(nic_data->udp_tunnels); ++i) {
 			efx_dword_t entry;
+
+			if (nic_data->udp_tunnels[i].type ==
+			    TUNNEL_ENCAP_UDP_PORT_ENTRY_INVALID)
+				continue;
 
 			EFX_POPULATE_DWORD_2(entry,
 				TUNNEL_ENCAP_UDP_PORT_ENTRY_UDP_PORT,
@@ -4912,7 +4915,7 @@ again:
 	num_entries = 0;
 	for (i = 0; i < ARRAY_SIZE(nic_data->udp_tunnels); ++i) {
 		tnl = nic_data->udp_tunnels + i;
-		if (tnl->count && !tnl->removing && tnl->port) {
+		if (!unloading && tnl->count && !tnl->removing && tnl->port) {
 			efx_dword_t entry;
 
 			adding[i] = true;
@@ -5348,9 +5351,7 @@ static DEVICE_ATTR_RO(primary_flag);
 static void efx_ef10_remove_post_io(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 	int i;
-#endif
 
 	if (!nic_data)
 		return;
@@ -5372,7 +5373,11 @@ static void efx_ef10_remove_post_io(struct efx_nic *efx)
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
-	memset(nic_data->udp_tunnels, 0, sizeof(nic_data->udp_tunnels));
+	for (i = 0; i < ARRAY_SIZE(nic_data->udp_tunnels); ++i) {
+		nic_data->udp_tunnels[i].type =
+			TUNNEL_ENCAP_UDP_PORT_ENTRY_INVALID;
+		nic_data->udp_tunnels[i].port = 0;
+	}
 	mutex_lock(&nic_data->udp_tunnels_lock);
 	(void)efx_ef10_set_udp_tnl_ports(efx, true);
 	mutex_unlock(&nic_data->udp_tunnels_lock);

@@ -440,6 +440,10 @@ void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 	int i;
 
 	WARN_ON(!mutex_is_locked(&vdpa_nic->lock));
+
+	if (!vdpa_nic->status)
+		return;
+
 	efx_ef100_delete_iova(vdpa_nic);
 
 	efx->type->filter_table_down(efx);

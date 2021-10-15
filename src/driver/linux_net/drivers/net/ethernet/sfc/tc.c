@@ -1602,6 +1602,23 @@ static enum efx_tc_counter_type efx_tc_rx_version_2(struct efx_nic *efx,
 		BUILD_BUG_ON(ERF_SC_PACKETISER_PAYLOAD_BYTE_COUNT_LBN & 15);
 		byte_count = efx_tc_read48((const __le16 *)byte_count_p);
 
+		if (type == EFX_TC_COUNTER_TYPE_CT) {
+			/* CT counters are 1-bit saturating counters to update
+			 * the lastuse time in CT stats. A received CT counter
+			 * should have packet counter to 0 and only LSB bit on
+			 * in byte counter.
+			 */
+			if (packet_count || (byte_count != 1))
+				netdev_warn_once(efx->net_dev,
+						 "CT counter with inconsistent state (%llu, %llu)\n",
+						 packet_count, byte_count);
+			/* zeroing the counters before updating the driver's
+			 * CT counter object.
+			 */
+			packet_count = 0;
+			byte_count = 0;
+		}
+
 		efx_tc_counter_update(efx, type, counter_idx, packet_count,
 				      byte_count, mark);
 	}
@@ -3462,10 +3479,12 @@ static int efx_tc_complete_mac_mangle(struct efx_nic *efx,
 static int efx_tc_mangle(struct efx_nic *efx, struct efx_tc_action_set *act,
 			 const struct flow_action_entry *fa,
 			 struct efx_tc_mangler_state *mung,
-			 struct netlink_ext_ack *extack)
+			 struct netlink_ext_ack *extack,
+			 struct efx_tc_match *match)
 {
 	__le32 mac32;
 	__le16 mac16;
+	u8 tr_ttl;
 
 	switch (fa->mangle.htype) {
 	case FLOW_ACT_MANGLE_HDR_TYPE_ETH:
@@ -3518,6 +3537,85 @@ static int efx_tc_mangle(struct efx_nic *efx, struct efx_tc_action_set *act,
 			return -EOPNOTSUPP;
 		}
 		break;
+	case FLOW_ACT_MANGLE_HDR_TYPE_IP4:
+		switch (fa->mangle.offset) {
+		case 8:
+			/* we currently only support pedit IP4 when it applies
+			 * to TTL and then only when it can be achieved with a
+			 * decrement ttl action
+			 */
+
+			/* check that pedit applies to ttl only */
+			if (fa->mangle.mask != 0xffffff00)
+				return -EOPNOTSUPP;
+
+			/* we can only convert to a dec ttl when we have an
+			 * exact match on the ttl field
+			 */
+			if (match->mask.ip_ttl != 0xff)
+				return -EOPNOTSUPP;
+
+			/* check that we don't try to decrement 0, which equates
+			 * to setting the ttl to 0xff
+			 */
+			if (match->value.ip_ttl == 0)
+				return -EOPNOTSUPP;
+
+			/* check pedit can be achieved with decrement action */
+			tr_ttl = match->value.ip_ttl - 1;
+			if ((fa->mangle.val & 0x000000ff) == tr_ttl) {
+				act->do_ttl_dec = 1;
+				if (efx->tc_match_ignore_ttl) {
+					match->mask.ip_ttl = 0;
+					match->value.ip_ttl = 0;
+				}
+				return 0;
+			}
+
+			fallthrough;
+		default:
+			return -EOPNOTSUPP;
+		}
+		break;
+	case FLOW_ACT_MANGLE_HDR_TYPE_IP6:
+		switch (fa->mangle.offset) {
+		case 4:
+			/* we currently only support pedit IP6 when it applies
+			 * to the hoplimit and then only when it can be achieved
+			 * with a decrement hoplimit action
+			 */
+
+			/* check that pedit applies to ttl only */
+			if (fa->mangle.mask != 0x00ffffff)
+				return -EOPNOTSUPP;
+
+			/* we can only convert to a dec ttl when we have an
+			 * exact match on the ttl field
+			 */
+			if (match->mask.ip_ttl != 0xff)
+				return -EOPNOTSUPP;
+
+			/* check that we don't try to decrement 0, which equates
+			 * to setting the ttl to 0xff
+			 */
+			if (match->value.ip_ttl == 0)
+				return -EOPNOTSUPP;
+
+			/* check pedit can be achieved with decrement action */
+			tr_ttl = match->value.ip_ttl - 1;
+			if ((fa->mangle.val >> 24) == tr_ttl) {
+				act->do_ttl_dec = 1;
+				if (efx->tc_match_ignore_ttl) {
+					match->mask.ip_ttl = 0;
+					match->value.ip_ttl = 0;
+				}
+				return 0;
+			}
+
+			fallthrough;
+		default:
+			return -EOPNOTSUPP;
+		}
 	default:
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported header type for mangle");
 		efx_tc_err(efx, "Unhandled mangle htype %u for action rule\n",
@@ -3540,6 +3638,25 @@ static int efx_tc_incomplete_mangle(struct efx_nic *efx,
 		return -EOPNOTSUPP;
 	}
 	return 0;
+}
+
+static int efx_tc_late_ttl_match_check(struct efx_nic *efx,
+				       struct efx_tc_match *match,
+				       struct netlink_ext_ack *extack)
+{
+	/* Either ttl matches are ignored, or the ttl match value must be 1.
+	 * Current hardware only supports matching ttl 1 or wildcard ttl.
+	 */
+	if (match->mask.ip_ttl == 0)
+		return 0;
+
+	if (match->mask.ip_ttl == 0xff && match->value.ip_ttl == 1)
+		return 0;
+
+	efx_tc_err(efx, "Unsupported TTL or Hop Limit match %#x/%#x\n",
+		   match->value.ip_ttl, match->mask.ip_ttl);
+	NL_SET_ERR_MSG_MOD(extack, "ip ttl match not supported");
+	return -EOPNOTSUPP;
 }
 
 static int efx_tc_flower_replace(struct efx_nic *efx,
@@ -3906,7 +4023,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 				EFX_TC_ERR_MSG(efx, extack, "Pedit action violates action order");
 				goto release;
 			}
-			rc = efx_tc_mangle(efx, act, fa, &mung, extack);
+			rc = efx_tc_mangle(efx, act, fa, &mung, extack, &match);
 			if (rc < 0)
 				goto release;
 			break;
@@ -4004,6 +4121,12 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 		  tc->cookie);
 
 	rule->match = match;
+	/* Perform a late check on the ttl match field in order to take into
+	 * account the changes that a pedit dec ttl action could have had on it
+	 */
+	rc = efx_tc_late_ttl_match_check(efx, &match, extack);
+	if (rc)
+		goto release;
 
 	rc = efx_mae_alloc_action_set_list(efx, &rule->acts);
 	if (rc) {
@@ -5059,7 +5182,7 @@ static void efx_tc_debugfs_dump_lhs_rule(struct seq_file *file,
 		seq_printf(file, "\t\tct zone %u\n", act->zone->zone);
 #endif
 	if (act->count) {
-		seq_printf(file, "\t\t\tcount %u\n", act->count->cnt->fw_id);
+		seq_printf(file, "\t\t\tcount %#x\n", act->count->cnt->fw_id);
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 		seq_printf(file, "\t\t\t\tact_idx=%d\n",
 			   act->count_action_idx);

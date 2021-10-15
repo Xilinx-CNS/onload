@@ -1233,7 +1233,7 @@ int efx_reset(struct efx_nic *efx, enum reset_type method)
 }
 
 #ifdef CONFIG_SFC_VDPA
-void efx_reset_vdpa(struct efx_nic *efx, enum reset_type method)
+static void efx_reset_vdpa(struct efx_nic *efx, enum reset_type method)
 {
 	bool retry, disabled;
 	int rc;
@@ -1251,7 +1251,7 @@ void efx_reset_vdpa(struct efx_nic *efx, enum reset_type method)
 	disabled = (rc && !retry) || method == RESET_TYPE_DISABLE;
 
 	if (disabled)
-		reset_vdpa_device(efx->vdpa_nic);
+		ef100_reset_vdpa(efx);
 
 	efx_reset_complete(efx, method, retry, disabled);
 }
@@ -1516,6 +1516,7 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 #ifdef DEBUG
 	efx->log_tc_errs = true;
 #endif
+	efx->tc_match_ignore_ttl = true;
 	efx->rx_prefix_size = efx->type->rx_prefix_size;
 	efx->rx_ip_align =
 		NET_IP_ALIGN ? (efx->rx_prefix_size + NET_IP_ALIGN) % 4 : 0;
@@ -1967,7 +1968,23 @@ static pci_ers_result_t efx_io_error_detected(struct pci_dev *pdev,
 
 	rtnl_lock();
 
-	if (efx->state != STATE_DISABLED) {
+	switch (efx->state) {
+#ifdef CONFIG_SFC_VDPA
+	case STATE_VDPA:
+		WARN_ON(efx_nic_rev(efx) != EFX_REV_EF100);
+		efx->state = STATE_DISABLED;
+		ef100_reset_vdpa(efx);
+
+		status = PCI_ERS_RESULT_DISCONNECT;
+		break;
+#endif
+	case STATE_DISABLED:
+		/* If the interface is disabled we don't want to do anything
+		 * with it.
+		 */
+		status = PCI_ERS_RESULT_RECOVERED;
+		break;
+	default:
 		efx->state = efx_begin_recovery(efx->state);
 		efx->reset_pending = 0;
 
@@ -1979,11 +1996,7 @@ static pci_ers_result_t efx_io_error_detected(struct pci_dev *pdev,
 		}
 
 		status = PCI_ERS_RESULT_NEED_RESET;
-	} else {
-		/* If the interface is disabled we don't want to do anything
-		 * with it.
-		 */
-		status = PCI_ERS_RESULT_RECOVERED;
+		break;
 	}
 
 	rtnl_unlock();

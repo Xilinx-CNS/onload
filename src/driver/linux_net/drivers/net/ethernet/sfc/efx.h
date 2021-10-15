@@ -177,7 +177,7 @@ void efx_ssr(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf, u8 *eh
 
 static inline void efx_ssr_end_of_burst(struct efx_rx_queue *rx_queue)
 {
-	if (!list_empty(&rx_queue->ssr.active_conns))
+	if (rx_queue->ssr.conns && !list_empty(&rx_queue->ssr.active_conns))
 		__efx_ssr_end_of_burst(rx_queue);
 }
 

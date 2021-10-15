@@ -98,6 +98,7 @@ struct efx_tc_action_set {
 	u16 decap:1;
 	u16 do_nat:1;
 	u16 deliver:1;
+	u16 do_ttl_dec:1;
 	__be16 vlan_tci[2]; /* TCIs for vlan_push */
 	__be16 vlan_proto[2]; /* Ethertypes for vlan_push */
 	struct efx_tc_counter_index *count;
@@ -388,6 +389,7 @@ struct efx_tc_action_set {
 	u16 decap:1;
 	u16 do_nat:1;
 	u16 deliver:1;
+	u16 do_ttl_dec:1;
 	__be16 vlan_tci[2]; /* TCIs for vlan_push */
 	__be16 vlan_proto[2]; /* Ethertypes for vlan_push */
 	struct efx_tc_counter_index *count;

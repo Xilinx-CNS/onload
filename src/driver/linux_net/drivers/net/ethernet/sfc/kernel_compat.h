@@ -2377,14 +2377,6 @@ static inline unsigned long __attribute_const__ rounddown_pow_of_two(unsigned lo
 	#define skb_checksum_help efx_skb_checksum_help
 #endif
 
-#ifdef EFX_HAVE_OLDER_SKB_CHECKSUM_HELP
-	static inline int efx_skb_checksum_help(struct sk_buff *skb)
-	{
-		return skb_checksum_help(&skb, 0);
-	}
-	#define skb_checksum_help efx_skb_checksum_help
-#endif
-
 #if defined(CONFIG_X86) && NET_IP_ALIGN != 0
 	#undef NET_IP_ALIGN
 	#define NET_IP_ALIGN 0

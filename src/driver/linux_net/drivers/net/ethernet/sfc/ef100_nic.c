@@ -1178,6 +1178,9 @@ static unsigned int efx_ef100_mcdi_rpc_timeout(struct efx_nic *efx,
 	switch (cmd) {
 	case MC_CMD_NVRAM_ERASE:
 	case MC_CMD_NVRAM_UPDATE_FINISH:
+#ifdef EFX_C_MODEL
+	case MC_CMD_ENTITY_RESET:
+#endif
 		return MCDI_RPC_LONG_TIMEOUT;
 	default:
 		return MCDI_RPC_TIMEOUT;
