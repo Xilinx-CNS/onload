@@ -11,6 +11,12 @@
 #include <ci/driver/ci_efct.h>
 #include "efrm_internal.h"
 
+
+#ifndef page_to_virt
+/* Needed for RHEL7 only */
+#define page_to_virt(page) __va(page_to_pfn(page) << PAGE_SHIFT)
+#endif
+
 struct efrm_efct_rxq {
 	struct efrm_resource rs;
 	struct efrm_vi *vi;
