@@ -422,9 +422,7 @@ static int efct_alloc_hugepage(void *driver_data,
 
   inode_lock(inode);
   mapping = inode->i_mapping;
-  i_mmap_lock_read(mapping);
   result.page = find_get_page(mapping, off / CI_HUGEPAGE_SIZE);
-  i_mmap_unlock_read(mapping);
   inode_unlock(inode);
 
   if( ! result.page || ! PageHuge(result.page) || PageTail(result.page) ) {
