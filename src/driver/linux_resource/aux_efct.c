@@ -8,6 +8,7 @@
 #include <ci/tools/sysdep.h>
 
 #include "linux_resource_internal.h"
+#include <linux/file.h>
 #include <linux/mman.h>
 #include <linux/rwsem.h>
 #include <linux/hugetlb.h>
