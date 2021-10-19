@@ -62,7 +62,7 @@ void doORMPipeline(List gcovr_options)
 }
 
 void doDeveloperBuild(String build_profile=null) {
-  def components = ['kernel_driver', 'userspace']
+  def components = ['kernel_driver', 'userspace', 'efct_driver']
   def debugnesses = ['DEBUG', 'NDEBUG']
 
   def stage_name = 'Developer Build'
@@ -89,7 +89,26 @@ void doDeveloperBuild(String build_profile=null) {
 
         tasks[thread_title] = {
           node('dev-build') {
-            ws("workspace/${new URLDecoder().decode(env.JOB_NAME)}/exec-${env.EXECUTOR_NUMBER}-${thread_title}") {
+            def workspace = "workspace/${new URLDecoder().decode(env.JOB_NAME)}/exec-${env.EXECUTOR_NUMBER}-${thread_title}" 
+            ws(workspace) {
+              if( component == 'efct_driver' ) {
+                  dir("x3-net") {
+                    echo("Checking out x3")
+                    x3net = checkout([
+                      $class: 'GitSCM',
+                      branches: [[name: 'dev']],
+                      userRemoteConfigs: [[url: 'ssh://git@github.com/Xilinx-CNS/x3-net-linux.git']]
+                    ])
+                  }
+                  dir("aux-bus"){
+                    echo("Checking out Aux")
+                    aux = checkout([
+                      $class: 'GitSCM',
+                      branches: [[name: 'master']],
+                      userRemoteConfigs: [[url: 'ssh://git@github.com/Xilinx-CNS/cns-auxiliary-bus.git']]
+                    ])
+                  }
+              }
               checkout scm
               utils.rake(["build:${component}"], defines: defines)
               deleteDir() // Delete the manually allocated workspace

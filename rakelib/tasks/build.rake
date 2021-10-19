@@ -6,6 +6,7 @@ require 'pathname'
 toppath = nil
 $user_build_dir = nil
 $kernel_build_dir = nil
+$efct_build_dir = nil
 
 namespace :build do
   task :scripts_in_path do
@@ -28,6 +29,13 @@ namespace :build do
     sh 'mmakebuildtree --driver'
     kernelbuild = `mmaketool --driverbuild`.chomp
     $kernel_build_dir = File.join(toppath, 'build', kernelbuild)
+  end
+
+  task efct_build_tree: [:toppath] do
+    Onload::Utils.add_to_path(File.join(pwd, 'scripts'))
+    sh 'mmakebuildtree --driver'
+    kernelbuild = `mmaketool --driverbuild`.chomp
+    $efct_build_dir = File.join(toppath, 'build', kernelbuild)
   end
 
   task :choose_compiler do
@@ -76,6 +84,21 @@ namespace :build do
   desc 'Userspace build (64 bit)'
   task userspace: [:user_build_tree, :user_compiler_setup] do
     Onload::Utils.make($user_build_dir)
+  end
+
+  desc 'efct_build'
+  task efct_driver: [:efct_build_tree, :kernel_compiler_setup] do
+    if Dir.exist?(File.join(toppath, 'aux-bus'))
+      ENV['AUX_BUS_PATH'] = File.join(toppath, 'aux-bus')
+      puts "Using AUX PATH #{ENV['AUX_BUS_PATH']}"
+      puts "Attempting to compile aux bus"
+      Onload::Utils.make(File.join(toppath, 'aux-bus'))
+    end
+    if Dir.exist?(File.join(toppath, 'x3-net'))
+      ENV['X3_NET_PATH'] = File.join(toppath, 'x3-net')
+      puts "Using X3 PATH #{ENV['X3_NET_PATH']}"
+    end
+    Onload::Utils.make($efct_build_dir)
   end
 
 
