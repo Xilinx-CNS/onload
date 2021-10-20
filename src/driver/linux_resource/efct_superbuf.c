@@ -224,6 +224,8 @@ int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
   if( sbid < 0 )
     return -1;
 
+  activate_new_apps(q);
+
   /* remember buffers owned by x3net */
   ++q->superbuf_refcount[sbid];
   q->sbufs.q[(q->sbufs.added++) % CI_ARRAY_SIZE(q->sbufs.q)] =
@@ -232,7 +234,6 @@ int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
                 .global_seqno = sbseq,
               };
 
-  activate_new_apps(q);
   post_superbuf_to_apps(q);
   return 1; /* always hold on to buffer until efct_buffer_end() is called */
 }
