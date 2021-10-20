@@ -11,6 +11,7 @@ extern struct efhw_func_ops efct_char_functional_units;
 
 struct efhw_efct_rxq;
 struct xlnx_efct_hugepage;
+struct xlnx_efct_rxq_params;
 typedef void efhw_efct_rxq_free_func_t(struct efhw_efct_rxq*);
 typedef void efhw_efct_rxq_int_wake_func_t(struct efhw_efct_rxq*);
 
