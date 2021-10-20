@@ -174,8 +174,8 @@ static void activate_new_apps(struct efhw_nic_efct_rxq *q)
 
 void efct_destruct_apps_work(struct work_struct* work)
 {
-  struct efhw_nic_efct_rxq *q = container_of(work, struct efhw_nic_efct_rxq,
-                                             destruct_wq);
+  struct efhw_nic_efct_rxq *q = CI_CONTAINER(struct efhw_nic_efct_rxq,
+                                             destruct_wq, work);
   struct efhw_efct_rxq *app = (struct efhw_efct_rxq *)
     ci_xchg_uintptr(&q->destroy_apps, (ci_uintptr_t) (NULL));
   while( app ) {
