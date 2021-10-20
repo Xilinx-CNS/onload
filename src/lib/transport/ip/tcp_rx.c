@@ -238,6 +238,9 @@ static void ci_tcp_rx_clean_plugin_rob(ci_netif *netif, ci_tcp_state *ts,
     }
     ci_netif_pkt_release_rx(netif, p);
   }
+  /* The head of the rob might now overlap partially with payload already
+   * received in order from the plugin.  This is OK for subsequent recycling:
+   * the plugin handles partially in-order packets on the fast path. */
 }
 
 
