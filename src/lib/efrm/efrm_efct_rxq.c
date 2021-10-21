@@ -176,9 +176,11 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 		               CI_EFCT_MAX_HUGEPAGES - i);
 		bool changes = false;
 
-		if (copy_from_user(local_current, user_current,
-		                   n * sizeof(*local_current)))
-			return -EFAULT;
+		if (copy_from_user(local_current, user_current + i,
+		                   n * sizeof(*local_current))) {
+			rc = -EFAULT;
+			break;
+		}
 
 		for (j = 0; j < n; ++j) {
 			rc = fixup_superbuf_mapping(
@@ -191,11 +193,11 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 		}
 
 		if (changes)
-			if (copy_to_user(user_current, local_current,
+			if (copy_to_user(user_current + i, local_current,
 			                 n * sizeof(*local_current)))
 				rc = -EFAULT;
 
-		if (rc)
+		if (rc < 0)
 			break;
 	}
 
