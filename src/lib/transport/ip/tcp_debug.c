@@ -843,6 +843,10 @@ void ci_tcp_state_dump(ci_netif* ni, ci_tcp_state* ts,
   logger(log_arg, "%s  tmpl: send_fast=%u send_slow=%u active=%u", pf,
          stats.tx_tmpl_send_fast, stats.tx_tmpl_send_slow,
          stats.tx_tmpl_active);
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+  logger(log_arg, "%s  plugin: stream_id=%x ddr_base=%x ddr_size=%x",
+         pf, ts->plugin_stream_id, ts->plugin_ddr_base, ts->plugin_ddr_size);
+#endif
 
 #ifndef __KERNEL__
 # define fmt_timer(_b, _l, _n, name, tid)                       \
