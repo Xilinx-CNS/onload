@@ -725,11 +725,6 @@ static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
   return i;
 }
 
-static int efct_ef_eventq_poll_1rx(ef_vi* vi, ef_event* evs, int evs_len)
-{
-  return efct_poll_rx(vi, 0, evs, evs_len);
-}
-
 static int efct_ef_eventq_poll_1rxtx(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int i;
@@ -1204,10 +1199,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
 
   if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
     vi->max_efct_rxq = 1;
-    if( vi->vi_txq.mask == 0 )
-      vi->ops.eventq_poll = efct_ef_eventq_poll_1rx;
-    else
-      vi->ops.eventq_poll = efct_ef_eventq_poll_1rxtx;
+    vi->ops.eventq_poll = efct_ef_eventq_poll_1rxtx;
   }
   else {
     /* It wouldn't be difficult to specialise this by txable too, but this is
