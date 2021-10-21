@@ -84,25 +84,24 @@ static void handle_completions(void)
 static inline
 int send_more_packets(int desired, ef_vi* vi, ef_addr dma_buf_addr) {
   int i;
-  /* Don't try to send more packets than currently fit on the TX ring */
-  int to_send;
-  int possible = ef_vi_transmit_space(vi);
-  to_send = (possible > desired) ? desired : possible;
-  /* Further limit to requested batch size, if needed */
-  to_send = (to_send > cfg_max_batch) ? cfg_max_batch : to_send;
+  int to_send = cfg_max_batch < desired ? cfg_max_batch : desired;
 
-  if( to_send > 0 ) {
-    /* This is sending the same packet buffer over and over again.
-     * a real application would usually send new data. */
-    for( i = 0; i < to_send; ++i )
-      TRY(ef_vi_transmit_init(vi, dma_buf_addr, tx_frame_len,
-          n_pushed + i));
+  /* This is sending the same packet buffer over and over again.
+   * a real application would usually send new data. */
+  for( i = 0; i < to_send; ++i ) {
+    int rc = ef_vi_transmit_init(vi, dma_buf_addr, tx_frame_len,
+                                 n_pushed + i);
+    if( rc == -EAGAIN )
+      break;
+    TRY(rc);
+  }
 
+  if( i ) {
     /* Actually submit the packets to the NIC for transmission. */
     ef_vi_transmit_push(vi);
   }
 
-  return to_send;
+  return i;
 }
 
 int main(int argc, char* argv[])
@@ -163,7 +162,7 @@ int main(int argc, char* argv[])
   dma_buf_addr = ef_memreg_dma_addr(&mr, 0);
 
   /* Prepare packet contents */
-  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, cfg_vlan, 0);
+  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, cfg_vlan, 1);
 
   /* Continue until all sends are complete */
   while( n_sent < cfg_iter ) {
