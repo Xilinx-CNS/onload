@@ -266,19 +266,10 @@ static void efct_hugepage_list_changed(void *driver_data, int rxq)
 static bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
                                 const void* meta, const void* payload)
 {
-  /* This is all a massive hack, just to make things mostly work for now. A
-   * real implementation would either use the flow_lookup or keep a filter
-   * table inside Onload */
-  const ci_oword_t* header = meta;
-  unsigned len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
-  const struct ethhdr* eth = payload + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
-  const struct iphdr* ip = (const struct iphdr*)(eth + 1);
-
-  if( len < sizeof(*eth) + sizeof(*ip) )
-    return false;
-  if (eth->h_proto != htons(ETH_P_IP) )
-    return false;
-  return ip->protocol == IPPROTO_UDP || ip->protocol == IPPROTO_TCP;
+  /* This implementation is good enough for small-scale testing. Once we start
+   * running out of hardware filters then a more advanced implementation may
+   * be needed (depending on which plan(s) we decide to go ahead with) */
+  return flow_lookup;
 }
 
 struct xlnx_efct_drvops efct_ops = {
