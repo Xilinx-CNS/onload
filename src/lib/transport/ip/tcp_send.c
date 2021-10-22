@@ -2304,7 +2304,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
 
 /* 
  * TODO:
- *  - handle case where iov_len > mss;
  *  - improve TCP send path (in general) to handle fragmented buffers, then:
  *   o append a small buffer to the existing send queue (via frag
  *     next) if there's space;
@@ -2461,6 +2460,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
       struct ci_pkt_zc_payload* zcp = NULL;
       int i;
       uint64_t iov_base, iov_len;
+      uint32_t tcp_pay_len = 0;
 
       if( OO_SP_NOT_NULL(ts->local_peer) ) {
         /* Sending to loopback gets really complicated. We'd need to
@@ -2503,6 +2503,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
             tail_pkt->flags & CI_PKT_FLAG_TX_MORE ) {
           pkt = tail_pkt;
           reusing_prev_pkt = true;
+          tcp_pay_len = PKT_TCP_TX_SEQ_SPACE(pkt);
         }
       }
 
@@ -2514,7 +2515,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
         /* Max size is bounded by ci_ip_pkt_fmt::pay_len, minus slack to make
          * the boundary case in the loop below easier */
         const uint32_t MAX_CONTIG_LEN = INT_MAX - EF_VI_NIC_PAGE_SIZE;
-        uint32_t contig_len;
+        uint32_t contig_len, room_len;
 
         /* Up to the end of the current page is guaranteed to be contiguous */
         contig_len = ((iov_base + EF_VI_NIC_PAGE_SIZE) & NIC_PAGE_MASK) -
@@ -2546,75 +2547,91 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
         if( contig_len > iov_len )
           contig_len = iov_len;
 
-        /* We could arguably make this dependent on NI_OPTS().tcp_combine_sends_mode
-         * But for now assume that a single call is a single message and can be combined
-         */
-        if( pkt == NULL || ! ci_tcp_tx_has_room_for_zc(ni, pkt) ) {
-          /* No previous packet with space: alloc and init a new one */
-          pkt = ci_netif_pkt_tx_tcp_alloc(ni, ts);
-          if( ! pkt ) {
-            /* Since we're about to give up, ensure that the API remains
-             * consistent about delivering completion events */
-            if( zcp )
-              zcp->use_remote_cookie = 1;
-            goto bad_buffer;
+        do {
+          /* We could arguably make this dependent on
+           * NI_OPTS().tcp_combine_sends_mode But for now assume that
+           * a single call is a single message and can be combined
+           */
+          if( pkt == NULL || ! ci_tcp_tx_has_room_for_zc(ni, pkt) ||
+              tcp_pay_len >= eff_mss ) {
+            tcp_pay_len = 0;
+            reusing_prev_pkt = false;
+            /* No previous packet with space: alloc and init a new one */
+            pkt = ci_netif_pkt_tx_tcp_alloc(ni, ts);
+            if( ! pkt ) {
+              /* Since we're about to give up, ensure that the API remains
+               * consistent about delivering completion events */
+              if( zcp )
+                zcp->use_remote_cookie = 1;
+              goto bad_buffer;
+            }
+            room_len = CI_MIN(eff_mss, contig_len);
+            ++ni->state->n_async_pkts;
+            pkt->flags |= CI_PKT_FLAG_INDIRECT;
+            pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
+            oo_pkt_af_set(pkt, af);
+            oo_tx_pkt_layout_init(pkt);
+            __ci_tcp_tx_pkt_init(pkt, ts->outgoing_hdrs_len, eff_mss);
+            ci_tcp_tx_pkt_set_zc_header_pos(ts, pkt);
+            pkt->pay_len = oo_tx_ether_hdr_size(pkt) + ts->outgoing_hdrs_len;
+            zch = oo_tx_zc_header(pkt);
+            zch->segs = 0;
+            zch->end = sizeof(*zch);
+   
+            CI_USER_PTR_SET(pkt->pf.tcp_tx.next, sinf.fill_list);
+            sinf.fill_list = pkt;
+            --sinf.sendq_credit;
           }
-          reusing_prev_pkt = false;
-          ++ni->state->n_async_pkts;
-          pkt->flags |= CI_PKT_FLAG_INDIRECT;
-          pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
-          oo_pkt_af_set(pkt, af);
-          oo_tx_pkt_layout_init(pkt);
-          __ci_tcp_tx_pkt_init(pkt, ts->outgoing_hdrs_len, eff_mss);
-          ci_tcp_tx_pkt_set_zc_header_pos(ts, pkt);
-          pkt->pay_len = oo_tx_ether_hdr_size(pkt) + ts->outgoing_hdrs_len;
+          else {
+            room_len = CI_MIN(eff_mss - tcp_pay_len, contig_len);
+   
+            if( ! (pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
+              /* ci_tcp_tx_has_room_for_zc() has already decided that we can do
+               * this */
+              pkt->flags |= CI_PKT_FLAG_INDIRECT;
+              pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
+              oo_offbuf_set_end(&pkt->buf, CI_PTR_ALIGN_FWD(
+                           CI_MIN(oo_offbuf_end(&pkt->buf),
+                                  oo_offbuf_ptr(&pkt->buf) + CI_TCP_MAX_OPTS_LEN),
+                           CI_PKT_ZC_PAYLOAD_ALIGN));
+              zch = oo_tx_zc_header(pkt);
+              zch->segs = 0;
+              zch->end = sizeof(*zch);
+            }
+          }
           zch = oo_tx_zc_header(pkt);
-          zch->segs = 0;
-          zch->end = sizeof(*zch);
+          zcp = (struct ci_pkt_zc_payload*)((char*)zch + zch->end);
+          zch->end += oo_tx_zc_payload_size(ni);
+          ++zch->segs;
+   
+          pkt->pf.tcp_tx.end_seq += room_len;
+          tcp_pay_len += pkt->pf.tcp_tx.end_seq;
+          pkt->pay_len += room_len;
+          zcp->is_remote = 1;
+          zcp->use_remote_cookie = iov_len == room_len;
+          zcp->len = room_len;
+          zcp->remote.app_cookie = (uintptr_t)msg->msg.iov[j].app_cookie;
+          zcp->remote.addr_space = um->addr_space;
+          OO_STACK_FOR_EACH_INTF_I(ni, i)
+            zcp->remote.dma_addr[i] = zc_usermem_dma_addr(um, iov_base, i);
+   
+          ASSERT_VALID_PKT(ni, pkt);
+   
+          iov_base += room_len;
+          iov_len -= room_len;
+   
+          if( reusing_prev_pkt ) {
+            sinf.total_sent += room_len;
+            tcp_enq_nxt(ts) += room_len;
+          }
+          else
+            sinf.fill_list_bytes += room_len;
+   
+          contig_len -= room_len;
 
-          CI_USER_PTR_SET(pkt->pf.tcp_tx.next, sinf.fill_list);
-          sinf.fill_list = pkt;
-          --sinf.sendq_credit;
-        }
-        else if( ! (pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
-          /* ci_tcp_tx_has_room_for_zc() has already decided that we can do
-           * this */
-          pkt->flags |= CI_PKT_FLAG_INDIRECT;
-          pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
-          oo_offbuf_set_end(&pkt->buf, CI_PTR_ALIGN_FWD(
-                       CI_MIN(oo_offbuf_end(&pkt->buf),
-                              oo_offbuf_ptr(&pkt->buf) + CI_TCP_MAX_OPTS_LEN),
-                       CI_PKT_ZC_PAYLOAD_ALIGN));
-          zch = oo_tx_zc_header(pkt);
-          zch->segs = 0;
-          zch->end = sizeof(*zch);
-        }
-        zch = oo_tx_zc_header(pkt);
-        zcp = (struct ci_pkt_zc_payload*)((char*)zch + zch->end);
-        zch->end += oo_tx_zc_payload_size(ni);
-        ++zch->segs;
-
-        pkt->pf.tcp_tx.end_seq += contig_len;
-        pkt->pay_len += contig_len;
-        zcp->is_remote = 1;
-        zcp->use_remote_cookie = iov_len == contig_len;
-        zcp->len = contig_len;
-        zcp->remote.app_cookie = (uintptr_t)msg->msg.iov[j].app_cookie;
-        zcp->remote.addr_space = um->addr_space;
-        OO_STACK_FOR_EACH_INTF_I(ni, i)
-          zcp->remote.dma_addr[i] = zc_usermem_dma_addr(um, iov_base, i);
-
-        ASSERT_VALID_PKT(ni, pkt);
-
-        iov_base += contig_len;
-        iov_len -= contig_len;
-
-        if( reusing_prev_pkt ) {
-          sinf.total_sent += contig_len;
-          tcp_enq_nxt(ts) += contig_len;
-        }
-        else
-          sinf.fill_list_bytes += contig_len;
+          if( contig_len > 0 )
+            pkt = NULL;
+        } while( contig_len > 0 );
       }
 #endif
     }
