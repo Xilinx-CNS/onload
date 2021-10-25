@@ -133,6 +133,30 @@ typedef struct {
 } test_t;
 
 static void
+x3_ping(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*)) {
+  struct timeval start, end;
+  int i, usec;
+
+  for( i = 0; i < cfg_warmups; ++i ) {
+    tx_send(vi);
+    rx_wait(vi);
+  }
+
+  gettimeofday(&start, NULL);
+
+  for( i = 0; i < cfg_iter; ++i ) {
+    tx_send(vi);
+    rx_wait(vi);
+  }
+
+  gettimeofday(&end, NULL);
+
+  usec = (end.tv_sec - start.tv_sec) * 1000000;
+  usec += end.tv_usec - start.tv_usec;
+  printf("mean round-trip time: %0.3f usec\n", (double) usec / cfg_iter);
+}
+
+static void
 generic_ping(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*))
 {
   struct timeval start, end;
@@ -162,6 +186,15 @@ generic_ping(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*))
   printf("mean round-trip time: %0.3f usec\n", (double) usec / cfg_iter);
 }
 
+static void x3_pong(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*)) {
+  int i;
+
+  for( i = 0; i < cfg_warmups + cfg_iter; ++i ) {
+    rx_wait(vi);
+    tx_send(vi);
+  }
+}
+
 static void
 generic_pong(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*))
 {
@@ -177,6 +210,10 @@ generic_pong(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*))
   }
 }
 
+static void handle_rx_ref(ef_vi* vi, unsigned pkt_id, int len)
+{
+  efct_vi_rxpkt_release(vi, pkt_id);
+}
 
 /*
  * DMA
@@ -297,20 +334,23 @@ static inline void ctpio_send(ef_vi* vi)
   TRY(ef_vi_transmit_ctpio_fallback(vi, pb->dma_buf_addr, tx_frame_len, 0));
 }
 
-static void ctpio_ping(ef_vi* vi)
-{
-  generic_ping(vi, rx_wait_no_ts, ctpio_send);
-}
+static void ctpio_ping(ef_vi* vi) { generic_ping(vi, rx_wait_no_ts, ctpio_send); }
+static void ctpio_pong(ef_vi* vi) { generic_pong(vi, rx_wait_no_ts, ctpio_send); }
 
-static void ctpio_pong(ef_vi* vi)
-{
-  generic_pong(vi, rx_wait_no_ts, ctpio_send);
-}
+static void x3_ctpio_ping(ef_vi* vi) { x3_ping(vi, rx_wait_no_ts, ctpio_send); }
+static void x3_ctpio_pong(ef_vi* vi) { x3_pong(vi, rx_wait_no_ts, ctpio_send); }
 
 static const test_t ctpio_test = {
   .name = "CTPIO",
   .ping = ctpio_ping,
   .pong = ctpio_pong,
+  .cleanup = NULL,
+};
+
+static const test_t x3_ctpio_test = {
+  .name = "X3 CTPIO",
+  .ping = x3_ctpio_ping,
+  .pong = x3_ctpio_pong,
   .cleanup = NULL,
 };
 
@@ -335,6 +375,10 @@ generic_rx_wait(ef_vi* vi)
       case EF_EVENT_TYPE_RX:
         ++i;
         return;
+      case EF_EVENT_TYPE_RX_REF:
+        handle_rx_ref(vi, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
+        ++i;
+        return;
       case EF_EVENT_TYPE_TX:
         ef_vi_transmit_unbundle(vi, &(evs[i]), tx_ids);
         break;
@@ -347,6 +391,16 @@ generic_rx_wait(ef_vi* vi)
         TEST(n_rx == 1);
         ++i;
         return;
+      case EF_EVENT_TYPE_RX_REF_DISCARD:
+        handle_rx_ref(vi, evs[i].rx_ref_discard.pkt_id, evs[i].rx_ref_discard.len);
+        if( EF_EVENT_RX_DISCARD_TYPE(evs[i]) == EF_EVENT_RX_DISCARD_CRC_BAD &&
+            cfg_ctpio_thresh >= tx_frame_len && ! cfg_ctpio_no_poison ) {
+          break;
+        }
+        fprintf(stderr, "ERROR: unexpected event "EF_EVENT_FMT"\n",
+                EF_EVENT_PRI_ARG(evs[i]));
+        TEST(0);
+        break;
       case EF_EVENT_TYPE_RX_DISCARD:
         if( EF_EVENT_RX_DISCARD_TYPE(evs[i]) == EF_EVENT_RX_DISCARD_CRC_BAD &&
             (ef_vi_flags(vi) & EF_VI_TX_CTPIO) && ! cfg_ctpio_no_poison ) {
@@ -472,8 +526,12 @@ static const test_t* do_init(int ifindex)
   init_udp_pkt(pkt_bufs[FIRST_TX_BUF]->dma_buf, cfg_payload_len);
   tx_frame_len = cfg_payload_len + HEADER_SIZE;
 
+  /* Other modes don't work with X3 */
+  if ( vi.nic_type.arch == EF_VI_ARCH_EFCT ) {
+    t = &x3_ctpio_test;
+  } 
   /* First, try CTPIO. */
-  if( vi_flags & EF_VI_TX_CTPIO ) {
+  else if ( vi_flags & EF_VI_TX_CTPIO ) {
     t = &ctpio_test;
   }
   /* Next, try to allocate alternatives. */
