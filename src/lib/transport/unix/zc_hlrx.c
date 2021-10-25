@@ -382,33 +382,45 @@ static void zc_buffer_addref(int fd, onload_zc_handle buf, int delta)
 /* Allocate a new item on the end of hlrx->remote_ring */
 static uint64_t* zc_remote_block_add(struct hlrx_remote_ring* ring)
 {
+  /* Note that added is the _count_ (modulo the ring-size) of added buffers,
+   * and thus is also the _index_ of the _next_ buffer to add. */
   unsigned added = ring->added;
   unsigned added_inc = remote_ring_inc(ring, added);
   unsigned removed = ring->removed;
-  unsigned added_block = added >> HLRX_REMOTE_RING_BLOCK_SHIFT;
+  unsigned added_inc_block = added_inc >> HLRX_REMOTE_RING_BLOCK_SHIFT;
   unsigned removed_block = removed >> HLRX_REMOTE_RING_BLOCK_SHIFT;
 
   /* We're sloppy about overlap in order to make ring resize possible: we
    * consider the ring to be full when the added block catches up to the
    * removed block, so we can insert entire new blocks in to the middle rather
    * than shuffling existing pointers which we've already given-out */
-  if(CI_UNLIKELY( (added_block == removed_block && added < removed) ||
-                  added_inc == removed )) {
+  if(CI_UNLIKELY( added_inc_block == removed_block && added_inc <= removed )) {
     size_t to_add = ring->nblocks == 0 ? 2 : 1;
     size_t i;
     struct hlrx_remote_ring_block** new_blocks;
+    unsigned first_new_block = added_inc_block ? added_inc_block
+                                               : ring->nblocks;
+
+    /* We must be entering a new block. */
+    ci_assert_equal(added_inc % HLRX_REMOTE_RING_BLOCK_SIZE, 0);
 
     new_blocks = calloc(ring->nblocks + to_add, sizeof(*new_blocks));
     if( ! new_blocks )
       return NULL;
-    memcpy(new_blocks, ring->blocks, sizeof(*new_blocks) * added_block);
-    memcpy(new_blocks + added_block + to_add, ring->blocks + added_block,
-           sizeof(*new_blocks) * (ring->nblocks - added_block));
+    /* Inserting new blocks starting at first_new_block will not interrupt the
+     * contiguous sequence of in-flight buffers in the range [removed, added).
+     * Begin by populating the new ring with the blocks on either side of the
+     * new blocks. */
+    memcpy(new_blocks, ring->blocks, sizeof(*new_blocks) * first_new_block);
+    memcpy(new_blocks + first_new_block + to_add,
+           ring->blocks + first_new_block,
+           sizeof(*new_blocks) * (ring->nblocks - first_new_block));
+    /* Allocate the new blocks. */
     for( i = 0; i < to_add; ++i ) {
-      new_blocks[added_block + i] = malloc(sizeof(**new_blocks));
-      if( ! new_blocks[added_block + i] ) {
+      new_blocks[first_new_block + i] = malloc(sizeof(**new_blocks));
+      if( ! new_blocks[first_new_block + i] ) {
         while( i )
-          free(new_blocks[added_block + --i]);
+          free(new_blocks[first_new_block + --i]);
         free(new_blocks);
         return NULL;
       }
@@ -416,14 +428,10 @@ static uint64_t* zc_remote_block_add(struct hlrx_remote_ring* ring)
     free(ring->blocks);
     ring->blocks = new_blocks;
     ring->nblocks += to_add;
-    ring->removed += to_add * HLRX_REMOTE_RING_BLOCK_SIZE;
-    if( ring->removed >= ring->nblocks * HLRX_REMOTE_RING_BLOCK_SIZE ) {
-      /* This can only happen in the case where the ring was initially empty,
-       * where the initial value of removed was already out of bounds. */
-      ci_assert_equal(ring->nblocks, to_add);
-      ci_assert_equal(ring->removed, to_add * HLRX_REMOTE_RING_BLOCK_SIZE);
-      ring->removed = 0;
-    }
+    if( removed > added )
+      ring->removed += to_add * HLRX_REMOTE_RING_BLOCK_SIZE;
+    else
+      ci_assert_equal(removed_block, 0);
     added_inc = added + 1;
   }
 
