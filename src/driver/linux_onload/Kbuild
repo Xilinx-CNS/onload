@@ -1,6 +1,6 @@
 include $(src)/mmake.mk
 onload-objs  := $(ONLOAD_SRCS:%.c=%.o) $(EFTHRM_SRCS:%.c=../../lib/efthrm/%.o) $($(ARCH)_TARGET_SRCS:%.c=%.o)
-onload-objs  += ../../lib/transport/ip/lib.a \
-                ../../lib/cplane/lib.a \
-                ../../lib/citools/lib.a \
-                ../../lib/ciul/lib.a
+LIBS := $(patsubst %,$(obj)/../../lib/%/lib.a, \
+          transport/ip cplane citools ciul)
+$(obj)/onload.o: $(LIBS)
+ldflags-y := --start-group $(LIBS)
