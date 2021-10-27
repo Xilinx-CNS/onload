@@ -844,7 +844,8 @@ void ci_tcp_state_dump(ci_netif* ni, ci_tcp_state* ts,
          stats.tx_tmpl_send_fast, stats.tx_tmpl_send_slow,
          stats.tx_tmpl_active);
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
-  logger(log_arg, "%s  plugin: stream_id=%x ddr_base=%x ddr_size=%x",
+  logger(log_arg, "%s  plugin: stream_id=%x ddr_base=%"PRIx64
+                  " ddr_size=%"PRIx64,
          pf, ts->plugin_stream_id, ts->plugin_ddr_base, ts->plugin_ddr_size);
 #endif
 
