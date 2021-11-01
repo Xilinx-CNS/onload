@@ -2006,7 +2006,17 @@ int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag)
     Log_V(ci_log("%s: fd=%d passthru=%d unknown=%d", __FUNCTION__, fd,
 		 fdip_is_passthru(fdip), fdip_is_unknown(fdip)));
     fdtable_swap(fd, fdip_closing, fdip_unknown, fdtable_strict());
-    rc = ci_tcp_helper_close_no_trampoline(fd);
+    if( flag == CITP_EP_CLOSE_ALREADY ) {
+      /* It's possible to get here if another thread managed to create a
+       * passthrough fd while this thread was doing its messing-around with
+       * signals. In that case our fdtable is 'in the future' so we shouldn't
+       * close the fd, but we should mark our fdtable entry as unknown because
+       * we're not actually sure that the race happened. */
+      rc = 0;
+    }
+    else {
+      rc = ci_tcp_helper_close_no_trampoline(fd);
+    }
   }
 
  done:
@@ -2144,7 +2154,6 @@ int ci_tcp_helper_close_no_trampoline(int fd)
 {
   ci_uint32 op = fd;
   int onload_fd = oo_service_fd();
-
 
   if( onload_fd == fd )
     return -EBADF;
