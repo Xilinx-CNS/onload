@@ -148,13 +148,25 @@ ef_vi_inline void ef100_rx_event(ef_vi* evq_vi, const ef_vi_event* ev,
 }
 
 
+static inline void write_tx_event(ef_event** evs, int* evs_len, int q_label,
+                                  unsigned num_desc, unsigned* desc_id)
+{
+  ef_event* ev_out = (*evs)++;
+  --(*evs_len);
+  ev_out->tx.type = EF_EVENT_TYPE_TX;
+  ev_out->tx.q_id = q_label;
+  desc_id[q_label] += num_desc;
+  ev_out->tx.desc_id = desc_id[q_label];
+}
+
+
 static inline void ef100_tx_event_completion(ef_vi* evq, const ef_vi_event* ev,
-                                            ef_event** evs, int* evs_len,
-                                            unsigned* desc_id,
+                                            ef_vi_event* pev, ef_event** evs,
+                                            int* evs_len, unsigned* desc_id,
                                             unsigned* desc_init)
 {
   int q_label = QWORD_GET_U(ESF_GZ_EV_TXCMPL_Q_LABEL, *ev);
-  ef_event* ev_out;
+  unsigned num_desc = QWORD_GET_U(ESF_GZ_EV_TXCMPL_NUM_DESC, *ev);
 
   if(likely( ! (*desc_init & (1u << q_label)) )) {
     ef_vi* vi = evq->vi_qs[q_label];
@@ -166,21 +178,32 @@ static inline void ef100_tx_event_completion(ef_vi* evq, const ef_vi_event* ev,
     *desc_init |= 1u << q_label;
   }
 
-  ev_out = (*evs)++;
-  --(*evs_len);
-
-  ev_out->tx.type = EF_EVENT_TYPE_TX;
-  ev_out->tx.q_id = q_label;
-  desc_id[q_label] += QWORD_GET_U(ESF_GZ_EV_TXCMPL_NUM_DESC, *ev);
-  ev_out->tx.desc_id = desc_id[q_label];
+  if(unlikely( num_desc > EF_VI_TRANSMIT_BATCH )) {
+    /* This would (potentially) overflow the output array of
+     * ef_vi_transmit_unbundle(), so we create multiple ef_vi_events from the
+     * single ef_event by consuming it piecemeal and leaving it in-place */
+    do {
+      write_tx_event(evs, evs_len, q_label, EF_VI_TRANSMIT_BATCH, desc_id);
+      num_desc -= EF_VI_TRANSMIT_BATCH;
+      if( *evs_len == 0 ) {
+        /* Doubly-unlikely: we expanded this so much that we need to resume
+         * next time */
+        CI_SET_QWORD_FIELD(*pev, ESF_GZ_EV_TXCMPL_NUM_DESC, num_desc);
+        evq->ep_state->evq.evq_ptr -= sizeof(ef_vi_event);
+        return;
+      }
+    } while( num_desc > EF_VI_TRANSMIT_BATCH );
+  }
+  write_tx_event(evs, evs_len, q_label, num_desc, desc_id);
 }
 
 
 ef_vi_inline void ef100_tx_event(ef_vi* evq, const ef_vi_event* ev,
-				ef_event** evs, int* evs_len, unsigned* desc_id, unsigned* desc_init)
+				ef_vi_event* pev, ef_event** evs, int* evs_len,
+				unsigned* desc_id, unsigned* desc_init)
 {
   if( (evq->vi_flags & EF_VI_TX_TIMESTAMPS) == 0 ) {
-    ef100_tx_event_completion(evq, ev, evs, evs_len, desc_id, desc_init);
+    ef100_tx_event_completion(evq, ev, pev, evs, evs_len, desc_id, desc_init);
   }
   else {
     /* TODO: */
@@ -221,7 +244,7 @@ int ef100_ef_eventq_poll(ef_vi* evq, ef_event* evs, int evs_len)
       break;
 
     case ESE_GZ_EF100_EV_TX_COMPLETION:
-      ef100_tx_event(evq, &ev, &evs, &evs_len, tx_desc_id, &tx_desc_init);
+      ef100_tx_event(evq, &ev, pev, &evs, &evs_len, tx_desc_id, &tx_desc_init);
       break;
 
     case ESE_GZ_EF100_EV_MCDI:
