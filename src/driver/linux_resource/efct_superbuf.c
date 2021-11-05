@@ -262,20 +262,6 @@ __efct_nic_rxq_bind(struct xlnx_efct_device* edev,
   if( rc >= 0 ) {
     struct efhw_nic_efct_rxq *q = &efct->rxq[rc];
 
-    /* Poison the start of each packet buffer with the appropriate value for
-     * tcpdirect's packet header detection.
-     * EFCT TODO: rationalise other uses of poison (onload, and tcpdirect's
-     * partial-packet detection) so they all take the same value.
-     */
-    union xlnx_efct_param_value poison = {
-      .poison = {
-        .qid = rc,
-        .value = 0x0000FFA0C09B0000,
-        .length = 8
-      }
-    };
-    edev->ops->set_param(cli, XLNX_EFCT_POISON_CONFIG, &poison);
-
     rxq->qid = rc;
     efct_app_list_push(&q->new_apps, rxq);
     edev->ops->rollover_rxq(cli, rxq->qid);
