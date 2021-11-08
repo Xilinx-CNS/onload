@@ -331,6 +331,11 @@ static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dma_i
     efct_tx_word(tx, tx->tail.word);
   while( tx->offset % (EFCT_TX_ALIGNMENT >> 3) != 0 )
     efct_tx_word(tx, 0);
+  /* EFCT TODO: X3-251: Suspect CPU reordering greater than the hardware can
+   * handle. Bodge it for now while we wait for hardware fixes. */
+#ifdef __x86_64__
+  ci_x86_sfence();
+#endif
 
   len = CI_ROUND_UP(len + EFCT_TX_HEADER_BYTES, EFCT_TX_ALIGNMENT);
   desc[i].len = len;
