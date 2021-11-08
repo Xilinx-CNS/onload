@@ -25,7 +25,7 @@
 #include <net/netfilter/nf_flow_table.h>
 #endif
 #include <linux/idr.h>
-#include "ef100_rep.h"
+#include "mcdi_pcol.h"
 
 enum efx_tc_counter_type {
 	EFX_TC_COUNTER_TYPE_AR = MAE_COUNTER_TYPE_AR,
@@ -171,6 +171,7 @@ struct efx_tc_encap_match {
 
 struct efx_tc_recirc_id {
 	u32 chain_index;
+	struct net_device *net_dev;
 	struct rhash_head linkage;
 	refcount_t ref;
 	u8 fw_id; /* index allocated for use in the MAE */
@@ -191,10 +192,14 @@ struct efx_tc_action_set_list {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 struct efx_tc_ct_zone {
 	u16 zone;
+	u8 vni_mode; /* MAE_CT_VNI_MODE enum */
 	struct rhash_head linkage;
 	refcount_t ref;
 	struct nf_flowtable *nf_ft;
 	struct efx_nic *efx;
+	u16 domain; /* ID allocated for hardware use */
+	struct rw_semaphore rwsem; /* protects cts list */
+	struct list_head cts; /* list of efx_tc_ct_entry in this domain */
 };
 #endif
 
@@ -202,7 +207,7 @@ struct efx_tc_lhs_action {
 	u16 tun_type; /* enum efx_encap_type */
 	struct efx_tc_recirc_id *rid;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
-	struct efx_tc_ct_zone *zone; /* For now no filtering on VLAN or VNI (which we would do via recirc anyway), so this is a pure zone rather than a domain */
+	struct efx_tc_ct_zone *zone;
 #endif
 	struct efx_tc_counter_index *count;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
@@ -210,23 +215,12 @@ struct efx_tc_lhs_action {
 #endif
 };
 
-enum efx_tc_default_rules { /* named by ingress port */
-	EFX_TC_DFLT_PF,
-	EFX_TC_DFLT_WIRE,
-	EFX_TC_DFLT_VF_BASE,
-	EFX_TC_DFLT_REMOTE_BASE = EFX_TC_DFLT_VF_BASE + EFX_TC_VF_MAX
-};
-
-#define	EFX_TC_DFLT_VF(_vf)	(EFX_TC_DFLT_VF_BASE + (_vf))
-#define	EFX_TC_DFLT_REM(i)	(EFX_TC_DFLT_VF(EFX_TC_VF_MAX) + (i))
-#define EFX_TC_DFLT__MAX	EFX_TC_DFLT_REM(EFX_TC_REMOTE_MAX)
-
 struct efx_tc_flow_rule {
 	unsigned long cookie;
 	struct rhash_head linkage;
 	struct efx_tc_match match;
 	struct efx_tc_action_set_list acts;
-	enum efx_tc_default_rules fallback; /* what to use when unready? */
+	struct efx_tc_action_set_list *fallback; /* what to use when unready? */
 	u32 fw_id;
 };
 
@@ -248,9 +242,10 @@ struct efx_tc_ct_entry {
 	__be32 src_ip, dst_ip, nat_ip;
 	struct in6_addr src_ip6, dst_ip6;
 	__be16 l4_sport, l4_dport, l4_natport; /* Ports (UDP, TCP) */
-	u16 zone;
+	u16 domain; /* we'd rather have struct efx_tc_ct_zone *zone; but that's unsafe currently */
 	u32 mark;
 	struct efx_tc_counter *cnt;
+	struct list_head list; /* entry on zone->cts */
 };
 #endif
 
@@ -321,6 +316,7 @@ struct efx_tc_table_ct { /* TABLE_ID_CONNTRACK_TABLE */
  * @neigh_ht: Hashtable of neighbour watches (&struct efx_neigh_binder)
  * @recirc_ht: Hashtable of recirculation ID mappings (&struct efx_tc_recirc_id)
  * @recirc_ida: Recirculation ID allocator
+ * @domain_ida: CT domain (zone + vni_mode) ID allocator
  * @meta_ct: MAE table layout for conntrack table
  * @reps_mport_id: MAE port allocated for representor RX
  * @reps_filter_uc: VNIC filter for representor unicast RX (promisc)
@@ -332,9 +328,15 @@ struct efx_tc_table_ct { /* TABLE_ID_CONNTRACK_TABLE */
  * @seen_gen: most recent generation count per type as seen by efx_tc_rx()
  * @flush_wq: wait queue used by efx_mae_stop_counters() to wait for
  *	MAE counters RXQ to finish draining
- * @dflt_rules: Match-action rules for default switching; at priority
- *	%EFX_TC_PRIO_DFLT, and indexed by &enum efx_tc_default_rules.
- *	Also used for fallback actions when actual action isn't ready
+ * @dflt: Match-action rules for default switching; at priority
+ *	%EFX_TC_PRIO_DFLT.  Named by *ingress* port
+ * @dflt.pf: rule for traffic ingressing from PF (egresses to wire)
+ * @dflt.wire: rule for traffic ingressing from wire (egresses to PF)
+ * @facts: Fallback action-set-lists for unready rules.  Named by *egress* port
+ * @facts.pf: action-set-list for unready rules on PF netdev, hence applying to
+ *	traffic from wire, and egressing to PF
+ * @facts.reps: action-set-list for unready rules on representors, hence
+ *	applying to traffic from representees, and egressing to the reps mport
  * @up: have TC datastructures been set up?
  */
 struct efx_tc_state {
@@ -357,6 +359,9 @@ struct efx_tc_state {
 	struct rhashtable neigh_ht;
 	struct rhashtable recirc_ht;
 	struct ida recirc_ida;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+	struct ida domain_ida;
+#endif
 	struct efx_tc_table_ct meta_ct;
 	u32 reps_mport_id;
 	u32 reps_filter_uc, reps_filter_mc;
@@ -365,14 +370,22 @@ struct efx_tc_state {
 	u32 flush_gen[EFX_TC_COUNTER_TYPE_MAX];
 	u32 seen_gen[EFX_TC_COUNTER_TYPE_MAX];
 	wait_queue_head_t flush_wq;
-	struct efx_tc_flow_rule *dflt_rules;
+	struct {
+		struct efx_tc_flow_rule pf;
+		struct efx_tc_flow_rule wire;
+	} dflt;
+	struct {
+		struct efx_tc_action_set_list pf;
+		struct efx_tc_action_set_list reps;
+	} facts;
 	bool up;
 };
 
-int efx_tc_configure_default_rule(struct efx_nic *efx,
-				  enum efx_tc_default_rules dflt);
+struct efx_rep;
+
+int efx_tc_configure_default_rule_rep(struct efx_rep *efv);
 void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
-				     enum efx_tc_default_rules dflt);
+				     struct efx_tc_flow_rule *rule);
 int efx_tc_flower(struct efx_nic *efx, struct net_device *net_dev,
 		  struct flow_cls_offload *tc, struct efx_rep *efv);
 int efx_tc_block_cb(enum tc_setup_type type, void *type_data, void *cb_priv);
@@ -439,7 +452,10 @@ enum efx_tc_rule_prios {
 
 struct efx_tc_state {
 	struct mae_caps *caps;
-	struct efx_tc_flow_rule *dflt_rules;
+	struct {
+		struct efx_tc_flow_rule pf;
+		struct efx_tc_flow_rule wire;
+	} dflt;
 };
 
 #endif /* EFX_TC_OFFLOAD */

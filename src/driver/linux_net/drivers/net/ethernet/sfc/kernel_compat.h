@@ -1553,6 +1553,11 @@ static inline struct sk_buff *
 		     (bit) = find_next_bit((addr), (size), (bit) + 1))
 #endif
 
+#ifdef EFX_NEED_BITMAP_ZALLOC
+#define bitmap_zalloc(count, gfp)	kzalloc(BITS_TO_LONGS(count), gfp)
+#define bitmap_free(ptr)		kfree(ptr)
+#endif
+
 #ifndef EFX_HAVE_IOREMAP_WC
 	/* This should never be called */
 	static inline void *
@@ -1758,6 +1763,10 @@ static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 #endif
 #ifndef pci_dbg
 #define pci_dbg(pdev, fmt, arg...)	dev_dbg(&(pdev)->dev, fmt, ##arg)
+#endif
+
+#ifdef EFX_NEED_STRSCPY
+#define strscpy(dest, src, count)	strlcpy(dest, src, count)
 #endif
 
 /**************************************************************************

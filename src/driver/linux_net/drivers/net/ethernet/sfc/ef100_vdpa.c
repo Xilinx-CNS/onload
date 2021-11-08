@@ -715,7 +715,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct ef100_vdpa_nic *vdpa_nic;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
 	char name[EFX_VDPA_NAME_LEN];
 #endif
 	unsigned int allocated_vis;
@@ -731,7 +731,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 		return ERR_PTR(rc);
 	}
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
 	snprintf(name, sizeof(name), EFX_VDPA_NAME(nic_data));
 #endif
 	vdpa_nic = vdpa_alloc_device(struct ef100_vdpa_nic,
@@ -740,8 +740,11 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_REGISTER_NVQS_PARAM) && defined(EFX_HAVE_VDPA_ALLOC_NVQS_PARAM)
 				     , (allocated_vis - 1) * 2
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
 				     , name
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
+				     , false
 #endif
 				     );
 	if (!vdpa_nic) {

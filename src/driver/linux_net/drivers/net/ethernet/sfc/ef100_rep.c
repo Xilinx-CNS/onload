@@ -22,12 +22,16 @@
 
 static int efx_ef100_rep_poll(struct napi_struct *napi, int weight);
 
-static int efx_ef100_rep_init_struct(struct efx_nic *efx,
-				     struct efx_rep *efv, unsigned int i)
+static int efx_ef100_rep_init_struct(struct efx_nic *efx, struct efx_rep *efv,
+				     bool remote, unsigned int i)
 {
 	efv->parent = efx;
 	BUILD_BUG_ON(MAE_MPORT_SELECTOR_NULL);
 	efv->idx = i;
+	efv->remote = remote;
+	efv->dflt.cookie = (remote ? 0x200 : 0x100) + i;
+	efv->dflt.fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
+	INIT_LIST_HEAD(&efv->dflt.acts.list);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	INIT_LIST_HEAD(&efv->rx_list);
 #else
@@ -197,8 +201,8 @@ const struct net_device_ops efx_ef100_rep_netdev_ops = {
 static void efx_ef100_rep_get_drvinfo(struct net_device *dev,
 				      struct ethtool_drvinfo *drvinfo)
 {
-	strlcpy(drvinfo->driver, EFX_EF100_REP_DRIVER, sizeof(drvinfo->driver));
-	strlcpy(drvinfo->version, EFX_EF100_REP_VERSION, sizeof(drvinfo->version));
+	strscpy(drvinfo->driver, EFX_EF100_REP_DRIVER, sizeof(drvinfo->driver));
+	strscpy(drvinfo->version, EFX_EF100_REP_VERSION, sizeof(drvinfo->version));
 }
 
 static u32 efx_ef100_rep_ethtool_get_msglevel(struct net_device *net_dev)
@@ -255,11 +259,10 @@ static struct efx_rep *efx_ef100_rep_create_netdev(struct efx_nic *efx,
 		return ERR_PTR(-ENOMEM);
 
 	efv = netdev_priv(net_dev);
-	rc = efx_ef100_rep_init_struct(efx, efv, i);
+	rc = efx_ef100_rep_init_struct(efx, efv, remote, i);
 	if (rc)
 		goto fail1;
 	efv->net_dev = net_dev;
-	efv->remote = remote;
 	rtnl_lock();
 	if (netif_running(efx->net_dev) && efx->state == STATE_NET_UP) {
 		netif_device_attach(net_dev);
@@ -350,13 +353,13 @@ static int efx_ef100_configure_rep(struct efx_rep *efv)
 	}
 
 	mutex_lock(&efx->tc->mutex);
-	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_VF(efv->idx));
+	rc = efx_tc_configure_default_rule_rep(efv);
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	if (!rc) {
 		rc = tc_setup_cb_egdev_register(net_dev,
 						efx_ef100_rep_tc_egdev_cb, efv);
 		if (rc)
-			efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->idx));
+			efx_tc_deconfigure_default_rule(efx, &efv->dflt);
 	}
 #endif
 	mutex_unlock(&efx->tc->mutex);
@@ -403,15 +406,13 @@ static int efx_ef100_configure_remote_rep(struct efx_rep *efv,
 	}
 
 	mutex_lock(&efx->tc->mutex);
-	rc = efx_tc_configure_default_rule(efx,
-					   EFX_TC_DFLT_REM(efv->idx));
+	rc = efx_tc_configure_default_rule_rep(efv);
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	if (!rc) {
 		rc = tc_setup_cb_egdev_register(net_dev,
 						efx_ef100_rep_tc_egdev_cb, efv);
 		if (rc) {
-			efx_tc_deconfigure_default_rule(efx,
-							EFX_TC_DFLT_REM(efv->idx));
+			efx_tc_deconfigure_default_rule(efx, &efv->dflt);
 		}
 	}
 #endif
@@ -428,10 +429,7 @@ static void efx_ef100_deconfigure_rep(struct efx_rep *efv)
 	tc_setup_cb_egdev_unregister(efv->net_dev, efx_ef100_rep_tc_egdev_cb,
 				     efv);
 #endif
-	if (efv->remote)
-		efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_REM(efv->idx));
-	else
-		efx_tc_deconfigure_default_rule(efx, EFX_TC_DFLT_VF(efv->idx));
+	efx_tc_deconfigure_default_rule(efx, &efv->dflt);
 	mutex_unlock(&efx->tc->mutex);
 }
 

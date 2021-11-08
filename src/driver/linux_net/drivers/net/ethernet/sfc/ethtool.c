@@ -186,8 +186,15 @@ static u32 efx_ethtool_get_link(struct net_device *net_dev)
  * in it.
  */
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_COALESCE_CQE)
+static int efx_ethtool_get_coalesce(struct net_device *net_dev,
+				    struct ethtool_coalesce *coalesce,
+				    struct kernel_ethtool_coalesce *kernel_coal,
+				    struct netlink_ext_ack *extack)
+#else
 static int efx_ethtool_get_coalesce(struct net_device *net_dev,
 				    struct ethtool_coalesce *coalesce)
+#endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	unsigned int tx_usecs, rx_usecs;
@@ -205,8 +212,15 @@ static int efx_ethtool_get_coalesce(struct net_device *net_dev,
 	return 0;
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_COALESCE_CQE)
+static int efx_ethtool_set_coalesce(struct net_device *net_dev,
+				    struct ethtool_coalesce *coalesce,
+				    struct kernel_ethtool_coalesce *kernel_coal,
+				    struct netlink_ext_ack *extack)
+#else
 static int efx_ethtool_set_coalesce(struct net_device *net_dev,
 				    struct ethtool_coalesce *coalesce)
+#endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct efx_channel *channel;

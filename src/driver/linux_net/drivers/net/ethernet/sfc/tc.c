@@ -248,8 +248,8 @@ const static struct rhashtable_params efx_tc_ct_ht_params = {
 #endif
 
 const static struct rhashtable_params efx_tc_recirc_ht_params = {
-	.key_len	= sizeof(u32),
-	.key_offset	= offsetof(struct efx_tc_recirc_id, chain_index),
+	.key_len	= offsetof(struct efx_tc_recirc_id, linkage),
+	.key_offset	= 0,
 	.head_offset	= offsetof(struct efx_tc_recirc_id, linkage),
 };
 
@@ -883,8 +883,8 @@ static bool efx_tc_check_ready(struct efx_nic *efx, struct efx_tc_flow_rule *rul
 static void efx_tc_update_encap(struct efx_nic *efx,
 				struct efx_tc_encap_action *encap)
 {
-	struct efx_tc_flow_rule *rule, *fallback;
-	struct efx_tc_action_set_list *acts;
+	struct efx_tc_action_set_list *acts, *fallback;
+	struct efx_tc_flow_rule *rule;
 	struct efx_tc_action_set *act;
 	int rc;
 
@@ -895,11 +895,11 @@ static void efx_tc_update_encap(struct efx_nic *efx,
 			if (WARN_ON(!acts)) /* can't happen */
 				continue;
 			rule = container_of(acts, struct efx_tc_flow_rule, acts);
-			if (rule->fallback < EFX_TC_DFLT__MAX)
-				fallback = &efx->tc->dflt_rules[rule->fallback];
+			if (rule->fallback)
+				fallback = rule->fallback;
 			else /* fallback fallback: deliver to PF */
-				fallback = &efx->tc->dflt_rules[EFX_TC_DFLT_WIRE];
-			rc = efx_mae_update_rule(efx, fallback->acts.fw_id,
+				fallback = &efx->tc->facts.pf;
+			rc = efx_mae_update_rule(efx, fallback->fw_id,
 						 rule->fw_id);
 			if (rc)
 				netif_err(efx, drv, efx->net_dev,
@@ -1112,8 +1112,13 @@ static void efx_tc_free_action_set(struct efx_nic *efx,
 	 * because if the alloc had succeeded we'd've put it in acts.list and
 	 * not still have it in act.
 	 */
-	if (in_hw)
+	if (in_hw) {
 		efx_mae_free_action_set(efx, act);
+		/* in_hw is true iff we are on an acts.list; make sure to
+		 * remove ourselves from that list before we are freed.
+		 */
+		list_del(&act->list);
+	}
 	if (act->count) {
 		spin_lock_bh(&act->count->cnt->lock);
 		if (!list_empty(&act->count_user))
@@ -1168,6 +1173,7 @@ static void efx_tc_ct_zone_free(void *ptr, void *arg)
 		  "tc ct_zone %u still present at teardown, removing\n",
 		  zone->zone);
 
+	ida_free(&efx->tc->domain_ida, zone->domain);
 #if IS_ENABLED(CONFIG_NF_FLOW_TABLE)
 	nf_flow_table_offload_del_cb(zone->nf_ft, efx_tc_flow_block, zone);
 #endif
@@ -1178,12 +1184,17 @@ static void efx_tc_ct_free(void *ptr, void *arg)
 {
 	struct efx_tc_ct_entry *conn = ptr;
 	struct efx_nic *efx = arg;
+	int rc;
 
 	netif_err(efx, drv, efx->net_dev,
 		  "tc ct_entry %lx still present at teardown, removing\n",
 		  conn->cookie);
 
-	efx_mae_remove_ct(efx, conn);
+	rc = efx_mae_remove_ct(efx, conn);
+	if (rc)
+		netif_err(efx, drv, efx->net_dev,
+			  "failed to remove ct %lx from hw, rc %d\n",
+			  conn->cookie, rc);
 	efx_tc_flower_release_counter(efx, conn->cnt);
 	kfree(conn);
 }
@@ -1294,7 +1305,9 @@ static void efx_neigh_free(void *ptr, void *__unused)
 	kfree(neigh);
 }
 
-static struct efx_tc_recirc_id *efx_tc_get_recirc_id(struct efx_nic *efx, u32 chain_index)
+static struct efx_tc_recirc_id *efx_tc_get_recirc_id(struct efx_nic *efx,
+						     u32 chain_index,
+						     struct net_device *net_dev)
 {
 	struct efx_tc_recirc_id *rid, *old;
 	int rc;
@@ -1303,6 +1316,11 @@ static struct efx_tc_recirc_id *efx_tc_get_recirc_id(struct efx_nic *efx, u32 ch
 	if (!rid)
 		return ERR_PTR(-ENOMEM);
 	rid->chain_index = chain_index;
+	/* We don't take a reference here, because it's implied - if there's
+	 * a rule on the net_dev that's been offloaded to us, then the net_dev
+	 * can't go away until the rule has been deoffloaded.
+	 */
+	rid->net_dev = net_dev;
 	old = rhashtable_lookup_get_insert_fast(&efx->tc->recirc_ht,
 						&rid->linkage,
 						efx_tc_recirc_ht_params);
@@ -1694,7 +1712,7 @@ static const struct efx_channel_type efx_tc_channel_type = {
 
 int efx_init_struct_tc(struct efx_nic *efx)
 {
-	int rc, i;
+	int rc;
 
 	if (efx->type->is_vf || efx->tc)
 		return 0;
@@ -1748,26 +1766,23 @@ int efx_init_struct_tc(struct efx_nic *efx)
 	if (rc < 0)
 		goto fail_recirc_ht;
 	ida_init(&efx->tc->recirc_ida);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+	ida_init(&efx->tc->domain_ida);
+#endif
 	efx->tc->reps_filter_uc = -1;
 	efx->tc->reps_filter_mc = -1;
-	/* TODO consider making this dynamically resized, rather than always
-	 * allocating space for the maximum possible # of VFs
-	 */
-	efx->tc->dflt_rules = kcalloc(EFX_TC_DFLT__MAX,
-					 sizeof(*efx->tc->dflt_rules),
-					 GFP_KERNEL);
-	rc = -ENOMEM;
-	if (!efx->tc->dflt_rules)
-		goto fail_alloc_dflt;
-	for (i = 0; i < EFX_TC_DFLT__MAX; i++) {
-		efx->tc->dflt_rules[i].fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
-		efx->tc->dflt_rules[i].cookie = i;
-	}
+	INIT_LIST_HEAD(&efx->tc->dflt.pf.acts.list);
+	efx->tc->dflt.pf.fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
+	efx->tc->dflt.pf.cookie = 0;
+	INIT_LIST_HEAD(&efx->tc->dflt.wire.acts.list);
+	efx->tc->dflt.wire.fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
+	efx->tc->dflt.wire.cookie = 1;
+	INIT_LIST_HEAD(&efx->tc->facts.pf.list);
+	efx->tc->facts.pf.fw_id = MC_CMD_MAE_ACTION_SET_ALLOC_OUT_ACTION_SET_ID_NULL;
+	INIT_LIST_HEAD(&efx->tc->facts.reps.list);
+	efx->tc->facts.reps.fw_id = MC_CMD_MAE_ACTION_SET_ALLOC_OUT_ACTION_SET_ID_NULL;
 	efx->extra_channel_type[EFX_EXTRA_CHANNEL_TC] = &efx_tc_channel_type;
 	return 0;
-fail_alloc_dflt:
-	ida_destroy(&efx->tc->recirc_ida);
-	rhashtable_destroy(&efx->tc->recirc_ht);
 fail_recirc_ht:
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	rhashtable_destroy(&efx->tc->ct_ht);
@@ -1807,17 +1822,28 @@ void efx_fini_struct_tc(struct efx_nic *efx)
 		return;
 
 	mutex_lock(&efx->tc->mutex);
-	kfree(efx->tc->dflt_rules);
-	rhashtable_free_and_destroy(&efx->tc->recirc_ht, efx_tc_recirc_free, efx);
-	WARN_ON(!ida_is_empty(&efx->tc->recirc_ida));
-	ida_destroy(&efx->tc->recirc_ida);
+	EFX_WARN_ON_PARANOID(efx->tc->dflt.pf.fw_id !=
+			     MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL);
+	EFX_WARN_ON_PARANOID(efx->tc->dflt.wire.fw_id !=
+			     MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL);
+	EFX_WARN_ON_PARANOID(efx->tc->facts.pf.fw_id !=
+			     MC_CMD_MAE_ACTION_SET_LIST_ALLOC_OUT_ACTION_SET_LIST_ID_NULL);
+	EFX_WARN_ON_PARANOID(efx->tc->facts.reps.fw_id !=
+			     MC_CMD_MAE_ACTION_SET_LIST_ALLOC_OUT_ACTION_SET_LIST_ID_NULL);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
 	rhashtable_free_and_destroy(&efx->tc->ct_ht, efx_tc_ct_free, efx);
-	rhashtable_free_and_destroy(&efx->tc->ct_zone_ht, efx_tc_ct_zone_free, NULL);
 #endif
 	rhashtable_free_and_destroy(&efx->tc->lhs_rule_ht, efx_tc_lhs_free, efx);
 	rhashtable_free_and_destroy(&efx->tc->match_action_ht, efx_tc_flow_free,
 				    efx);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+	rhashtable_free_and_destroy(&efx->tc->ct_zone_ht, efx_tc_ct_zone_free, NULL);
+	WARN_ON(!ida_is_empty(&efx->tc->domain_ida));
+	ida_destroy(&efx->tc->domain_ida);
+#endif
+	rhashtable_free_and_destroy(&efx->tc->recirc_ht, efx_tc_recirc_free, efx);
+	WARN_ON(!ida_is_empty(&efx->tc->recirc_ida));
+	ida_destroy(&efx->tc->recirc_ida);
 	rhashtable_free_and_destroy(&efx->tc->encap_match_ht, efx_tc_encap_match_free, NULL);
 	rhashtable_free_and_destroy(&efx->tc->mac_ht, efx_tc_mac_free, NULL);
 	rhashtable_free_and_destroy(&efx->tc->encap_ht, efx_tc_encap_free, NULL);
@@ -2374,339 +2400,6 @@ static bool efx_tc_flower_action_order_ok(const struct efx_tc_action_set *act,
 	}
 }
 
-static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
-					 struct net_device *net_dev,
-					 struct flow_cls_offload *tc)
-{
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-	struct flow_rule *fr = flow_cls_offload_flow_rule(tc);
-#else
-	struct flow_rule *fr;
-#endif
-	struct efx_tc_flow_rule *rule = NULL, *old = NULL;
-	struct efx_tc_action_set *act = NULL;
-	bool found = false, uplinked = false;
-	const struct flow_action_entry *fa;
-	struct efx_tc_match match;
-	s64 rc;
-	int i;
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-	fr = efx_compat_flow_rule_build(tc);
-	if (IS_ERR(fr)) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Failed to convert tc cls to a flow_rule (rc %ld)\n",
-			  PTR_ERR(fr));
-		return PTR_ERR(fr);
-	}
-#endif
-
-	flow_action_for_each(i, fa, &fr->action) {
-		switch (fa->id) {
-		case FLOW_ACTION_REDIRECT:
-		case FLOW_ACTION_MIRRED: /* mirred means mirror here */
-			rc = efx_tc_flower_lookup_dev(efx, fa->dev);
-			if (rc < 0)
-				continue;
-			found = true;
-			break;
-		default:
-			break;
-		}
-	}
-	if (!found) { /* We don't care. */
-		netif_dbg(efx, drv, efx->net_dev, "Ignoring foreign filter that doesn't egdev us\n");
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-		kfree(fr);
-#endif
-		return -EOPNOTSUPP;
-	}
-
-	/* Parse match */
-	memset(&match, 0, sizeof(match));
-	rc = efx_tc_flower_parse_match(efx, fr, &match, NULL);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-	if (rc)
-		return rc;
-#else
-	if (rc) {
-		kfree(fr);
-		return rc;
-	}
-#endif
-	/* The rule as given to us doesn't specify a source netdevice.
-	 * But, determining whether packets from a VF should match it is
-	 * complicated, so leave those to the software slowpath: qualify
-	 * the filter with source m-port == wire.
-	 */
-#ifdef EFX_NOT_UPSTREAM
-	/* See SWNETLINUX-4321 for the gruesome details. */
-#endif
-	rc = efx_tc_flower_external_mport(efx, EFX_VPORT_PF);
-	if (rc < 0) {
-		efx_tc_err(efx, "Failed to identify ingress m-port for foreign filter");
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-		kfree(fr);
-#endif
-		return rc;
-	}
-	match.value.ingress_port = rc;
-	match.mask.ingress_port = ~0;
-	rc = efx_mae_match_check_caps(efx, &match.mask, NULL);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-	if (rc)
-		return rc;
-#else
-	if (rc) {
-		kfree(fr);
-		return rc;
-	}
-#endif
-
-	if (efx_tc_match_is_encap(&match.mask)) {
-		enum efx_encap_type type;
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) || defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
-		type = efx_tc_indr_netdev_type(net_dev);
-#else
-		/* This is deeply unsatisfactory: we're using the UDP port to
-		 * determine the tunnel type but then still inserting a full
-		 * match (with IP addresses) into the encap match table in hw.
-		 */
-		type = efx_tc_egdev_udp_type(efx, &match);
-#endif
-		if (type == EFX_ENCAP_TYPE_NONE) {
-			efx_tc_err(efx, "Egress encap match on unsupported tunnel device\n");
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-			kfree(fr);
-#endif
-			return -EOPNOTSUPP;
-		}
-
-		rc = efx_mae_check_encap_type_supported(efx, type);
-		if (rc) {
-			if (type < ARRAY_SIZE(efx_tc_encap_type_names))
-				efx_tc_err(efx, "Firmware reports no support for %s encap match\n",
-					   efx_tc_encap_type_names[type]);
-			else
-				efx_tc_err(efx, "Firmware reports no support for type %u encap match\n",
-					   type);
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-			kfree(fr);
-#endif
-			return rc;
-		}
-
-		rc = efx_tc_flower_record_encap_match(efx, &match, type);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-		if (rc)
-			return rc;
-#else
-		if (rc) {
-			kfree(fr);
-			return rc;
-		}
-#endif
-	} else {
-		/* This is not a tunnel decap rule, ignore it */
-		netif_dbg(efx, drv, efx->net_dev, "Ignoring foreign filter without encap match\n");
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-		kfree(fr);
-#endif
-		return -EOPNOTSUPP;
-	}
-
-	rule = kzalloc(sizeof(*rule), GFP_USER);
-	if (!rule) {
-		rc = -ENOMEM;
-		goto release;
-	}
-	INIT_LIST_HEAD(&rule->acts.list);
-	rule->cookie = tc->cookie;
-	old = rhashtable_lookup_get_insert_fast(&efx->tc->match_action_ht,
-						&rule->linkage,
-						efx_tc_match_action_ht_params);
-	if (old) {
-		netif_dbg(efx, drv, efx->net_dev,
-			  "Ignoring already-offloaded rule (cookie %lx)\n",
-			  tc->cookie);
-		rc = -EEXIST;
-		goto release;
-	}
-
-	/* Parse actions */
-	act = kzalloc(sizeof(*act), GFP_USER);
-	if (!act) {
-		rc = -ENOMEM;
-		goto release;
-	}
-
-	/* Parse actions.  For foreign rules we only support decap & redirect */
-	flow_action_for_each(i, fa, &fr->action) {
-		struct efx_tc_action_set save;
-
-		switch (fa->id) {
-		case FLOW_ACTION_REDIRECT:
-		case FLOW_ACTION_MIRRED:
-			/* See corresponding code in efx_tc_flower_replace() for
-			 * long explanations of what's going on here.
-			 */
-			save = *act;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_STATS_TYPE)
-			if (fa->hw_stats) {
-				if (!(fa->hw_stats & FLOW_ACTION_HW_STATS_DELAYED)) {
-					efx_tc_err(efx, "hw_stats_type %u not supported (only 'delayed')\n",
-						   fa->hw_stats);
-					rc = -EOPNOTSUPP;
-					goto release;
-				}
-#endif
-				if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_COUNT)) {
-					rc = -EOPNOTSUPP;
-					goto release;
-				} else {
-					struct efx_tc_counter_index *ctr;
-
-					ctr = efx_tc_flower_get_counter_index(efx,
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
-									      fa->cookie,
-#else
-									      tc->cookie,
-#endif
-									      EFX_TC_COUNTER_TYPE_AR);
-					if (IS_ERR(ctr)) {
-						rc = PTR_ERR(ctr);
-						goto release;
-					}
-					act->count = ctr;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-					act->count_action_idx = i;
-#endif
-					INIT_LIST_HEAD(&act->count_user);
-				}
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_STATS_TYPE)
-			}
-#endif
-
-			if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_DELIVER)) {
-				/* can't happen */
-				rc = -EOPNOTSUPP;
-				goto release;
-			}
-			rc = efx_tc_flower_lookup_dev(efx, fa->dev);
-			/* PF implies egdev is us, in which case we really
-			 * want to deliver to the uplink (because this is an
-			 * ingress filter).  If we don't recognise the egdev
-			 * at all, then we'd better trap so SW can handle it.
-			 */
-			if (rc < 0)
-				rc = EFX_VPORT_PF;
-			if (rc == EFX_VPORT_PF) {
-				if (uplinked)
-					break;
-				uplinked = true;
-			}
-			rc = efx_tc_flower_internal_mport(efx, rc);
-			if (rc < 0)
-				goto release;
-			act->dest_mport = rc;
-			act->deliver = 1;
-			rc = efx_mae_alloc_action_set(efx, act);
-			if (rc)
-				goto release;
-			list_add_tail(&act->list, &rule->acts.list);
-			act = NULL;
-			if (fa->id == FLOW_ACTION_REDIRECT)
-				break; /* end of the line */
-			/* Mirror, so continue on with saved act */
-			act = kzalloc(sizeof(*act), GFP_USER);
-			if (!act) {
-				rc = -ENOMEM;
-				goto release;
-			}
-			*act = save;
-			break;
-		case FLOW_ACTION_TUNNEL_DECAP:
-			if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_DECAP)) {
-				rc = -EINVAL;
-				goto release;
-			}
-			act->decap = 1;
-			/* If we previously delivered/trapped to uplink, now
-			 * that we've decapped we'll want another copy if we
-			 * try to deliver/trap to uplink again.
-			 */
-			uplinked = false;
-			break;
-		default:
-			efx_tc_err(efx, "Unhandled action %u\n", fa->id);
-			rc = -EOPNOTSUPP;
-			goto release;
-		}
-	}
-
-	if (act) {
-		if (!uplinked) {
-			/* Not shot/redirected, so deliver to default dest (which is
-			 * the uplink, as this is an ingress filter)
-			 */
-			efx_mae_mport_uplink(efx, &act->dest_mport);
-			act->deliver = 1;
-		}
-		rc = efx_mae_alloc_action_set(efx, act);
-		if (rc)
-			goto release;
-		list_add_tail(&act->list, &rule->acts.list);
-		act = NULL; /* Prevent double-free in error path */
-	}
-
-	rule->match = match;
-
-	netif_dbg(efx, drv, efx->net_dev,
-		  "Successfully parsed foreign filter (cookie %lx)\n",
-		  tc->cookie);
-
-	if (!efx_tc_check_ready(efx, rule)) {
-		/* can't happen, as foreign filters don't support encap actions */
-		netif_err(efx, drv, efx->net_dev, "action not ready for hw\n");
-		rc = -EOPNOTSUPP;
-		goto release;
-	}
-	rc = efx_mae_alloc_action_set_list(efx, &rule->acts);
-	if (rc)
-		goto release;
-	rc = efx_mae_insert_rule(efx, &rule->match, EFX_TC_PRIO_TC,
-				 rule->acts.fw_id, &rule->fw_id);
-	if (rc)
-		goto release_act;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-	kfree(fr);
-#endif
-	return 0;
-
-release_act:
-	efx_mae_free_action_set_list(efx, &rule->acts);
-release:
-	/* We failed to insert the rule, so free up any entries we created in
-	 * subsidiary tables.
-	 */
-	if (act)
-		efx_tc_free_action_set(efx, act, false);
-	if (rule) {
-		rhashtable_remove_fast(&efx->tc->match_action_ht,
-				       &rule->linkage,
-				       efx_tc_match_action_ht_params);
-		efx_tc_free_action_set_list(efx, &rule->acts, false);
-	}
-	kfree(rule);
-	if (match.encap)
-		efx_tc_flower_release_encap_match(efx, match.encap);
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
-	kfree(fr);
-#endif
-	return rc;
-}
-
 static bool efx_tc_rule_is_lhs_rule(struct flow_rule *fr,
 				    struct efx_tc_match *match)
 {
@@ -3033,7 +2726,7 @@ static int efx_tc_ct_replace(struct efx_tc_ct_zone *ct_zone,
 	}
 
 	/* Parse match */
-	conn->zone = ct_zone->zone;
+	conn->domain = ct_zone->domain;
 	rc = efx_tc_ct_parse_match(efx, fr, conn);
 	if (rc)
 		goto release;
@@ -3085,7 +2778,9 @@ static int efx_tc_ct_replace(struct efx_tc_ct_zone *ct_zone,
 		efx_tc_err(efx, "Failed to insert conntrack, %d\n", rc);
 		goto release;
 	}
-
+	down_write(&ct_zone->rwsem);
+	list_add_tail(&conn->list, &ct_zone->cts);
+	up_write(&ct_zone->rwsem);
 	return 0;
 release:
 	if (conn->cnt)
@@ -3097,27 +2792,28 @@ release:
 	return rc;
 }
 
-static int efx_tc_ct_destroy(struct efx_tc_ct_zone *ct_zone,
-			     struct flow_cls_offload *tc)
+/* Caller must follow with efx_tc_ct_remove_finish() after RCU grace period! */
+static void efx_tc_ct_remove(struct efx_nic *efx, struct efx_tc_ct_entry *conn)
 {
-	struct efx_nic *efx = ct_zone->efx;
-	struct efx_tc_ct_entry *conn;
-
-	conn = rhashtable_lookup_fast(&efx->tc->ct_ht, &tc->cookie,
-				      efx_tc_ct_ht_params);
-	if (!conn) {
-		netif_warn(efx, drv, efx->net_dev,
-			   "Conntrack %lx not found to remove\n", tc->cookie);
-		return -ENOENT;
-	}
+	int rc;
 
 	/* Remove it from HW */
-	efx_mae_remove_ct(efx, conn);
+	rc = efx_mae_remove_ct(efx, conn);
 	/* Delete it from SW */
 	rhashtable_remove_fast(&efx->tc->ct_ht, &conn->linkage,
 			       efx_tc_ct_ht_params);
-	synchronize_rcu();
-	netif_dbg(efx, drv, efx->net_dev, "Removed conntrack %lx\n", conn->cookie);
+	if (rc) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to remove conntrack %lx from hw, rc %d\n",
+			  conn->cookie, rc);
+	} else {
+		netif_dbg(efx, drv, efx->net_dev, "Removed conntrack %lx\n",
+			  conn->cookie);
+	}
+}
+
+static void efx_tc_ct_remove_finish(struct efx_nic *efx, struct efx_tc_ct_entry *conn)
+{
 	/* Remove related CT counter. This is delayed after the conn object we
 	 * are working with has been succesfully removed. This is specifically
 	 * for properly protecting the counter from being used inside
@@ -3134,6 +2830,28 @@ static int efx_tc_ct_destroy(struct efx_tc_ct_zone *ct_zone,
 	 */
 	efx_tc_flower_release_counter(efx, conn->cnt);
 	kfree(conn);
+}
+
+static int efx_tc_ct_destroy(struct efx_tc_ct_zone *ct_zone,
+			     struct flow_cls_offload *tc)
+{
+	struct efx_nic *efx = ct_zone->efx;
+	struct efx_tc_ct_entry *conn;
+
+	conn = rhashtable_lookup_fast(&efx->tc->ct_ht, &tc->cookie,
+				      efx_tc_ct_ht_params);
+	if (!conn) {
+		netif_warn(efx, drv, efx->net_dev,
+			   "Conntrack %lx not found to remove\n", tc->cookie);
+		return -ENOENT;
+	}
+
+	down_write(&ct_zone->rwsem);
+	list_del(&conn->list);
+	efx_tc_ct_remove(efx, conn);
+	up_write(&ct_zone->rwsem);
+	synchronize_rcu();
+	efx_tc_ct_remove_finish(efx, conn);
 	return 0;
 }
 
@@ -3196,7 +2914,7 @@ static int efx_tc_flow_block(enum tc_setup_type type, void *type_data,
 }
 
 static struct efx_tc_ct_zone *efx_tc_ct_register_zone(struct efx_nic *efx,
-						      u16 zone,
+						      u16 zone, u8 vni_mode,
 						      struct nf_flowtable *ct_ft)
 {
 	struct efx_tc_ct_zone *ct_zone, *old;
@@ -3206,6 +2924,7 @@ static struct efx_tc_ct_zone *efx_tc_ct_register_zone(struct efx_nic *efx,
 	if (!ct_zone)
 		return ERR_PTR(-ENOMEM);
 	ct_zone->zone = zone;
+	ct_zone->vni_mode = vni_mode;
 	old = rhashtable_lookup_get_insert_fast(&efx->tc->ct_zone_ht,
 						&ct_zone->linkage,
 						efx_tc_ct_zone_ht_params);
@@ -3216,38 +2935,65 @@ static struct efx_tc_ct_zone *efx_tc_ct_register_zone(struct efx_nic *efx,
 			return ERR_PTR(-EAGAIN);
 		/* existing entry found */
 		WARN_ON_ONCE(old->nf_ft != ct_ft);
-		netif_dbg(efx, drv, efx->net_dev, "Found existing ct_zone for %u\n", zone);
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Found existing ct_zone for %u@%u\n", zone, vni_mode);
 		return old;
 	}
 	ct_zone->nf_ft = ct_ft;
 	ct_zone->efx = efx;
-	rc = nf_flow_table_offload_add_cb(ct_ft, efx_tc_flow_block, ct_zone);
-	netif_dbg(efx, drv, efx->net_dev, "Adding new ct_zone for %u, rc %d\n", zone, rc);
+	INIT_LIST_HEAD(&ct_zone->cts);
+	init_rwsem(&ct_zone->rwsem);
+	rc = ida_alloc_range(&efx->tc->domain_ida, 0, U16_MAX, GFP_USER);
 	if (rc < 0) {
-		rhashtable_remove_fast(&efx->tc->ct_zone_ht, &ct_zone->linkage,
-				       efx_tc_ct_zone_ht_params);
-		kfree(ct_zone);
-		return ERR_PTR(rc);
+		if (net_ratelimit())
+			netif_warn(efx, drv, efx->net_dev,
+				   "Failed to allocate a domain (rc %d) for %u@%u\n",
+				   rc, zone, vni_mode);
+		goto fail1;
 	}
+	ct_zone->domain = rc;
+	rc = nf_flow_table_offload_add_cb(ct_ft, efx_tc_flow_block, ct_zone);
+	netif_dbg(efx, drv, efx->net_dev, "Adding new ct_zone for %u@%u, rc %d\n",
+		  zone, vni_mode, rc);
+	if (rc < 0)
+		goto fail2;
 	refcount_set(&ct_zone->ref, 1);
 	return ct_zone;
+fail2:
+	ida_free(&efx->tc->domain_ida, ct_zone->domain);
+fail1:
+	rhashtable_remove_fast(&efx->tc->ct_zone_ht, &ct_zone->linkage,
+				       efx_tc_ct_zone_ht_params);
+	kfree(ct_zone);
+	return ERR_PTR(rc);
 }
 
 static void efx_tc_ct_unregister_zone(struct efx_nic *efx,
 				      struct efx_tc_ct_zone *ct_zone)
 {
+	struct efx_tc_ct_entry *conn, *next;
+
 	if (!refcount_dec_and_test(&ct_zone->ref))
 		return; /* still in use */
 	nf_flow_table_offload_del_cb(ct_zone->nf_ft, efx_tc_flow_block, ct_zone);
 	rhashtable_remove_fast(&efx->tc->ct_zone_ht, &ct_zone->linkage,
 			       efx_tc_ct_zone_ht_params);
-	netif_dbg(efx, drv, efx->net_dev, "Removed ct_zone for %u\n",
-		  ct_zone->zone);
+	down_write(&ct_zone->rwsem);
+	list_for_each_entry(conn, &ct_zone->cts, list)
+		efx_tc_ct_remove(efx, conn);
+	synchronize_rcu();
+	/* _safe because efx_tc_ct_remove_finish() frees conn */
+	list_for_each_entry_safe(conn, next, &ct_zone->cts, list)
+		efx_tc_ct_remove_finish(efx, conn);
+	up_write(&ct_zone->rwsem);
+	ida_free(&efx->tc->domain_ida, ct_zone->domain);
+	netif_dbg(efx, drv, efx->net_dev, "Removed ct_zone for %u@%u\n",
+		  ct_zone->zone, ct_zone->vni_mode);
 	kfree(ct_zone);
 }
 #else
 static struct efx_tc_ct_zone *efx_tc_ct_register_zone(struct efx_nic *efx,
-						      u16 zone,
+						      u16 zone, u8 vni_mode,
 						      struct nf_flowtable *ct_ft)
 {
 	return ERR_PTR(-EOPNOTSUPP);
@@ -3258,11 +3004,624 @@ static void efx_tc_ct_unregister_zone(struct efx_nic *efx,
 #endif /* CONFIG_NF_FLOW_TABLE */
 #endif
 
+/* A foreign LHS rule has matches on enc_ keys at the TC layer (including an
+ * implied match on enc_ip_proto UDP).  Translate these into non-enc_ keys,
+ * so that we can use the same MAE machinery as local LHS rules (and so that
+ * debugfs lhs_rules dumps have uniform semantics).  It may seem odd to do it
+ * this way round, given that the corresponding fields in the MAE MCDIs are
+ * all ENC_, but (a) we don't have enc_L2 or enc_ip_proto in struct
+ * efx_tc_match_fields and (b) semantically an LHS rule doesn't have inner
+ * fields so it's just matching on *the* header rather than the outer header.
+ * Make sure that the non-enc_ keys were not already being matched on, as that
+ * would imply a rule that needed a triple lookup.  (Hardware can do that,
+ * with OR-AR-CT-AR, but it would halve packet rate and it's not currently
+ * supported by the driver.)
+ */
+static int efx_tc_flower_translate_flhs_match(struct efx_tc_match *match)
+{
+#define COPY_MASK_AND_VALUE(_key, _ekey)	do {	\
+	if (match->mask._key) return -EOPNOTSUPP;	\
+	match->mask._key = match->mask._ekey;		\
+	match->mask._ekey = 0;				\
+	match->value._key = match->value._ekey;		\
+	match->value._ekey = 0;				\
+} while (0)
+#define COPY_FROM_ENC(_key)	COPY_MASK_AND_VALUE(_key, enc_##_key)
+	if (match->mask.ip_proto) return -EOPNOTSUPP;
+	match->mask.ip_proto = ~0;
+	match->value.ip_proto = IPPROTO_UDP;
+	COPY_FROM_ENC(src_ip);
+	COPY_FROM_ENC(dst_ip);
+#ifdef CONFIG_IPV6
+	if (!ipv6_addr_any(&match->mask.src_ip6)) return -EOPNOTSUPP;
+	match->mask.src_ip6 = match->mask.enc_src_ip6;
+	memset(&match->mask.enc_src_ip6, 0, sizeof(struct in6_addr));
+	if (!ipv6_addr_any(&match->mask.dst_ip6)) return -EOPNOTSUPP;
+	match->mask.dst_ip6 = match->mask.enc_dst_ip6;
+	memset(&match->mask.enc_dst_ip6, 0, sizeof(struct in6_addr));
+#endif
+	COPY_FROM_ENC(ip_tos);
+	COPY_FROM_ENC(ip_ttl);
+	/* TODO should really copy enc_ip_frag but we don't have that in
+	 * parse_match yet
+	 */
+	COPY_MASK_AND_VALUE(l4_sport, enc_sport);
+	COPY_MASK_AND_VALUE(l4_dport, enc_dport);
+	return 0;
+#undef COPY_FROM_ENC
+#undef COPY_MASK_AND_VALUE
+}
+
+static int efx_tc_flower_replace_foreign_lhs(struct efx_nic *efx,
+					     struct flow_cls_offload *tc,
+					     struct flow_rule *fr,
+					     struct efx_tc_match *match,
+					     struct net_device *net_dev)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD) || defined(EFX_HAVE_TCF_EXTACK)
+	struct netlink_ext_ack *extack = tc->common.extack;
+#else
+	struct netlink_ext_ack *extack = NULL;
+#endif
+	struct efx_tc_lhs_rule *rule, *old;
+	const struct flow_action_entry *fa;
+	enum efx_encap_type type;
+	bool pipe = true;
+	int rc, i;
+
+	if (tc->common.chain_index) {
+		EFX_TC_ERR_MSG(efx, extack, "LHS rule only allowed in chain 0");
+		return -EOPNOTSUPP;
+	}
+
+	if (efx_tc_match_is_encap(&match->mask)) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) || defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
+		type = efx_tc_indr_netdev_type(net_dev);
+#else
+		/* This is deeply unsatisfactory: we're using the UDP port to
+		 * determine the tunnel type but then still inserting a full
+		 * match (with IP addresses) into the encap match table in hw.
+		 */
+		type = efx_tc_egdev_udp_type(efx, match);
+#endif
+		if (type == EFX_ENCAP_TYPE_NONE) {
+			efx_tc_err(efx, "Egress encap match on unsupported tunnel device\n");
+			return -EOPNOTSUPP;
+		}
+
+		rc = efx_mae_check_encap_type_supported(efx, type);
+		if (rc) {
+			if (type < ARRAY_SIZE(efx_tc_encap_type_names))
+				efx_tc_err(efx, "Firmware reports no support for %s encap match\n",
+					   efx_tc_encap_type_names[type]);
+			else
+				efx_tc_err(efx, "Firmware reports no support for type %u encap match\n",
+					   type);
+			return rc;
+		}
+	} else {
+		/* This is not a tunnel decap rule, ignore it */
+		netif_dbg(efx, drv, efx->net_dev, "Ignoring foreign LHS filter without encap match\n");
+		return -EOPNOTSUPP;
+	}
+
+	if (match->mask.ct_state_trk && match->value.ct_state_trk) {
+		EFX_TC_ERR_MSG(efx, extack, "LHS rule can never match +trk");
+		return -EOPNOTSUPP;
+	}
+	/* LHS rules are always -trk, so we don't need to match on that */
+	match->mask.ct_state_trk = 0;
+	match->value.ct_state_trk = 0;
+
+	rc = efx_tc_flower_translate_flhs_match(match);
+	if (rc) {
+		EFX_TC_ERR_MSG(efx, extack, "LHS rule cannot match on inner fields");
+		return rc;
+	}
+
+	rc = efx_mae_match_check_caps_lhs(efx, &match->mask, extack);
+	if (rc)
+		return rc;
+
+	rule = kzalloc(sizeof(*rule), GFP_USER);
+	if (!rule)
+		return -ENOMEM;
+	rule->cookie = tc->cookie;
+	old = rhashtable_lookup_get_insert_fast(&efx->tc->lhs_rule_ht,
+						&rule->linkage,
+						efx_tc_lhs_rule_ht_params);
+	if (old) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Already offloaded rule (cookie %lx)\n", tc->cookie);
+		rc = -EEXIST;
+		NL_SET_ERR_MSG_MOD(extack, "Rule already offloaded");
+		goto release;
+	}
+
+	/* Parse actions */
+	flow_action_for_each(i, fa, &fr->action) {
+		struct efx_tc_counter_index *cnt;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+		struct efx_tc_ct_zone *ct_zone;
+#endif
+		struct efx_tc_recirc_id *rid;
+
+		if (!pipe) {
+			/* more actions after a non-pipe action */
+			EFX_TC_ERR_MSG(efx, extack, "Action follows non-pipe action");
+			rc = -EINVAL;
+			goto release;
+		}
+		switch (fa->id) {
+		case FLOW_ACTION_GOTO:
+			if (!fa->chain_index) {
+				EFX_TC_ERR_MSG(efx, extack, "Can't goto chain 0, no looping in hw");
+				rc = -EOPNOTSUPP;
+				goto release;
+			}
+			rid = efx_tc_get_recirc_id(efx, fa->chain_index,
+						   net_dev);
+			if (IS_ERR(rid)) {
+				EFX_TC_ERR_MSG(efx, extack, "Failed to allocate a hardware recirculation ID for this chain_index");
+				rc = PTR_ERR(rid);
+				goto release;
+			}
+			rule->lhs_act.rid = rid;
+			/* TODO check fa->hw_stats */
+			cnt = efx_tc_flower_get_counter_index(efx,
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
+							      fa->cookie,
+#else
+							      tc->cookie,
+#endif
+							      EFX_TC_COUNTER_TYPE_OR);
+			if (IS_ERR(cnt)) {
+				rc = PTR_ERR(cnt);
+				EFX_TC_ERR_MSG(efx, extack, "Failed to obtain a counter");
+				goto release;
+			}
+			WARN_ON(rule->lhs_act.count);
+			rule->lhs_act.count = cnt;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+			rule->lhs_act.count_action_idx = i;
+#endif
+			pipe = false;
+			break;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+		case FLOW_ACTION_CT:
+			if (rule->lhs_act.zone) {
+				rc = -EOPNOTSUPP;
+				EFX_TC_ERR_MSG(efx, extack, "Can't offload multiple ct actions");
+				goto release;
+			}
+#if !defined(EFX_USE_KCOMPAT) || defined(TCA_CT_ACT_COMMIT)
+			if (fa->ct.action & (TCA_CT_ACT_COMMIT |
+					     TCA_CT_ACT_FORCE)) {
+				rc = -EOPNOTSUPP;
+				EFX_TC_ERR_MSG(efx, extack, "Can't offload ct commit/force");
+				goto release;
+			}
+			if (fa->ct.action & TCA_CT_ACT_CLEAR) {
+				rc = -EOPNOTSUPP;
+				EFX_TC_ERR_MSG(efx, extack, "Can't clear ct in LHS rule");
+				goto release;
+			}
+			if (fa->ct.action & (TCA_CT_ACT_NAT |
+					     TCA_CT_ACT_NAT_SRC |
+					     TCA_CT_ACT_NAT_DST)) {
+				rc = -EOPNOTSUPP;
+				EFX_TC_ERR_MSG(efx, extack, "Can't perform NAT in LHS rule - packet isn't conntracked yet");
+				goto release;
+			}
+#endif
+			if (fa->ct.action) {
+				efx_tc_err(efx, "Unhandled ct.action %u for LHS rule\n", fa->ct.action);
+				rc = -EOPNOTSUPP;
+				NL_SET_ERR_MSG_MOD(extack, "Unrecognised ct.action flag");
+				goto release;
+			}
+			ct_zone = efx_tc_ct_register_zone(efx, fa->ct.zone,
+							  MAE_CT_VNI_MODE_ZERO,
+							  fa->ct.flow_table);
+			if (IS_ERR(ct_zone)) {
+				rc = PTR_ERR(ct_zone);
+				EFX_TC_ERR_MSG(efx, extack, "Failed to register for CT updates");
+				goto release;
+			}
+			rule->lhs_act.zone = ct_zone;
+			break;
+#endif
+		default:
+			efx_tc_err(efx, "Unhandled action %u for LHS rule\n", fa->id);
+			rc = -EOPNOTSUPP;
+			NL_SET_ERR_MSG_MOD(extack, "Unsupported action for LHS rule");
+			goto release;
+		}
+	}
+
+	if (pipe) {
+		/* TODO we might actually want to allow this */
+		rc = -EOPNOTSUPP;
+		EFX_TC_ERR_MSG(efx, extack, "Missing goto chain in LHS rule");
+		goto release;
+	}
+
+	rule->match = *match;
+	rule->lhs_act.tun_type = type;
+
+	rc = efx_mae_insert_lhs_rule(efx, rule, EFX_TC_PRIO_TC);
+	if (rc) {
+		EFX_TC_ERR_MSG(efx, extack, "Failed to insert rule in hw");
+		goto release;
+	}
+	netif_dbg(efx, drv, efx->net_dev,
+		  "Successfully parsed lhs rule (cookie %lx)\n",
+		  tc->cookie);
+	return 0;
+
+release:
+	if (rule->lhs_act.rid)
+		efx_tc_put_recirc_id(efx, rule->lhs_act.rid);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+	if (rule->lhs_act.zone)
+		efx_tc_ct_unregister_zone(efx, rule->lhs_act.zone);
+#endif
+	if (rule->lhs_act.count)
+		efx_tc_flower_put_counter_index(efx, rule->lhs_act.count);
+	if (!old)
+		rhashtable_remove_fast(&efx->tc->lhs_rule_ht, &rule->linkage,
+				       efx_tc_lhs_rule_ht_params);
+	kfree(rule);
+	return rc;
+}
+
+static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
+					 struct net_device *net_dev,
+					 struct flow_cls_offload *tc)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+	struct flow_rule *fr = flow_cls_offload_flow_rule(tc);
+#else
+	struct flow_rule *fr;
+#endif
+	struct efx_tc_flow_rule *rule = NULL, *old = NULL;
+	struct efx_tc_action_set *act = NULL;
+	bool found = false, uplinked = false;
+	const struct flow_action_entry *fa;
+	struct efx_tc_recirc_id *rid;
+	struct efx_tc_match match;
+	s64 rc;
+	int i;
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+	fr = efx_compat_flow_rule_build(tc);
+	if (IS_ERR(fr)) {
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to convert tc cls to a flow_rule (rc %ld)\n",
+			  PTR_ERR(fr));
+		return PTR_ERR(fr);
+	}
+#endif
+
+	/* Parse match */
+	memset(&match, 0, sizeof(match));
+	rc = efx_tc_flower_parse_match(efx, fr, &match, NULL);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+	if (rc)
+		return rc;
+#else
+	if (rc) {
+		kfree(fr);
+		return rc;
+	}
+#endif
+	/* The rule as given to us doesn't specify a source netdevice.
+	 * But, determining whether packets from a VF should match it is
+	 * complicated, so leave those to the software slowpath: qualify
+	 * the filter with source m-port == wire.
+	 */
+#ifdef EFX_NOT_UPSTREAM
+	/* See SWNETLINUX-4321 for the gruesome details. */
+#endif
+	rc = efx_tc_flower_external_mport(efx, EFX_VPORT_PF);
+	if (rc < 0) {
+		efx_tc_err(efx, "Failed to identify ingress m-port for foreign filter");
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+		kfree(fr);
+#endif
+		return rc;
+	}
+	match.value.ingress_port = rc;
+	match.mask.ingress_port = ~0;
+
+	if (efx_tc_rule_is_lhs_rule(fr, &match)) {
+		rc = efx_tc_flower_replace_foreign_lhs(efx, tc, fr, &match, net_dev);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+		kfree(fr);
+#endif
+		return rc;
+	}
+
+	if (tc->common.chain_index) {
+		rid = efx_tc_get_recirc_id(efx, tc->common.chain_index, net_dev);
+		if (IS_ERR(rid)) {
+			efx_tc_err(efx, "Failed to allocate a hardware recirculation ID for this chain_index");
+			rc = PTR_ERR(rid);
+			goto release;
+		}
+		match.rid = rid;
+		match.value.recirc_id = rid->fw_id;
+	}
+	match.mask.recirc_id = 0xff;
+
+	flow_action_for_each(i, fa, &fr->action) {
+		switch (fa->id) {
+		case FLOW_ACTION_REDIRECT:
+		case FLOW_ACTION_MIRRED: /* mirred means mirror here */
+			rc = efx_tc_flower_lookup_dev(efx, fa->dev);
+			if (rc < 0)
+				continue;
+			found = true;
+			break;
+		default:
+			break;
+		}
+	}
+	if (!found) { /* We don't care. */
+		netif_dbg(efx, drv, efx->net_dev, "Ignoring foreign filter that doesn't egdev us\n");
+		rc = -EOPNOTSUPP;
+		goto release;
+	}
+
+	/* AR table can't match on DO_CT (+trk).  But a commonly used pattern is
+	 * +trk+est, which is strictly implied by +est, so rewrite it to that.
+	 */
+	if (match.mask.ct_state_trk && match.value.ct_state_trk &&
+	    match.mask.ct_state_est && match.value.ct_state_est)
+		match.mask.ct_state_trk = 0;
+
+	rc = efx_mae_match_check_caps(efx, &match.mask, NULL);
+	if (rc)
+		goto release;
+
+	if (efx_tc_match_is_encap(&match.mask)) {
+		enum efx_encap_type type;
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) || defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
+		type = efx_tc_indr_netdev_type(net_dev);
+#else
+		/* This is deeply unsatisfactory: we're using the UDP port to
+		 * determine the tunnel type but then still inserting a full
+		 * match (with IP addresses) into the encap match table in hw.
+		 */
+		type = efx_tc_egdev_udp_type(efx, &match);
+#endif
+		if (type == EFX_ENCAP_TYPE_NONE) {
+			efx_tc_err(efx, "Egress encap match on unsupported tunnel device\n");
+			rc = -EOPNOTSUPP;
+			goto release;
+		}
+
+		rc = efx_mae_check_encap_type_supported(efx, type);
+		if (rc) {
+			if (type < ARRAY_SIZE(efx_tc_encap_type_names))
+				efx_tc_err(efx, "Firmware reports no support for %s encap match\n",
+					   efx_tc_encap_type_names[type]);
+			else
+				efx_tc_err(efx, "Firmware reports no support for type %u encap match\n",
+					   type);
+			goto release;
+		}
+
+		rc = efx_tc_flower_record_encap_match(efx, &match, type);
+		if (rc)
+			goto release;
+	} else if (!tc->common.chain_index) {
+		/* This is not a tunnel decap rule, ignore it */
+		netif_dbg(efx, drv, efx->net_dev, "Ignoring foreign filter without encap match\n");
+		rc = -EOPNOTSUPP;
+		goto release;
+	}
+
+	rule = kzalloc(sizeof(*rule), GFP_USER);
+	if (!rule) {
+		rc = -ENOMEM;
+		goto release;
+	}
+	INIT_LIST_HEAD(&rule->acts.list);
+	rule->cookie = tc->cookie;
+	old = rhashtable_lookup_get_insert_fast(&efx->tc->match_action_ht,
+						&rule->linkage,
+						efx_tc_match_action_ht_params);
+	if (old) {
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Ignoring already-offloaded rule (cookie %lx)\n",
+			  tc->cookie);
+		rc = -EEXIST;
+		goto release;
+	}
+
+	/* Parse actions */
+	act = kzalloc(sizeof(*act), GFP_USER);
+	if (!act) {
+		rc = -ENOMEM;
+		goto release;
+	}
+
+	/* Parse actions.  For foreign rules we only support decap & redirect */
+	flow_action_for_each(i, fa, &fr->action) {
+		struct efx_tc_action_set save;
+
+		switch (fa->id) {
+		case FLOW_ACTION_REDIRECT:
+		case FLOW_ACTION_MIRRED:
+			/* See corresponding code in efx_tc_flower_replace() for
+			 * long explanations of what's going on here.
+			 */
+			save = *act;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_STATS_TYPE)
+			if (fa->hw_stats) {
+				if (!(fa->hw_stats & FLOW_ACTION_HW_STATS_DELAYED)) {
+					efx_tc_err(efx, "hw_stats_type %u not supported (only 'delayed')\n",
+						   fa->hw_stats);
+					rc = -EOPNOTSUPP;
+					goto release;
+				}
+#endif
+				if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_COUNT)) {
+					rc = -EOPNOTSUPP;
+					goto release;
+				} else {
+					struct efx_tc_counter_index *ctr;
+
+					ctr = efx_tc_flower_get_counter_index(efx,
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
+									      fa->cookie,
+#else
+									      tc->cookie,
+#endif
+									      EFX_TC_COUNTER_TYPE_AR);
+					if (IS_ERR(ctr)) {
+						rc = PTR_ERR(ctr);
+						goto release;
+					}
+					act->count = ctr;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+					act->count_action_idx = i;
+#endif
+					INIT_LIST_HEAD(&act->count_user);
+				}
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_STATS_TYPE)
+			}
+#endif
+
+			if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_DELIVER)) {
+				/* can't happen */
+				rc = -EOPNOTSUPP;
+				goto release;
+			}
+			rc = efx_tc_flower_lookup_dev(efx, fa->dev);
+			/* PF implies egdev is us, in which case we really
+			 * want to deliver to the uplink (because this is an
+			 * ingress filter).  If we don't recognise the egdev
+			 * at all, then we'd better trap so SW can handle it.
+			 */
+			if (rc < 0)
+				rc = EFX_VPORT_PF;
+			if (rc == EFX_VPORT_PF) {
+				if (uplinked)
+					break;
+				uplinked = true;
+			}
+			rc = efx_tc_flower_internal_mport(efx, rc);
+			if (rc < 0)
+				goto release;
+			act->dest_mport = rc;
+			act->deliver = 1;
+			rc = efx_mae_alloc_action_set(efx, act);
+			if (rc)
+				goto release;
+			list_add_tail(&act->list, &rule->acts.list);
+			act = NULL;
+			if (fa->id == FLOW_ACTION_REDIRECT)
+				break; /* end of the line */
+			/* Mirror, so continue on with saved act */
+			act = kzalloc(sizeof(*act), GFP_USER);
+			if (!act) {
+				rc = -ENOMEM;
+				goto release;
+			}
+			*act = save;
+			break;
+		case FLOW_ACTION_TUNNEL_DECAP:
+			if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_DECAP)) {
+				rc = -EINVAL;
+				goto release;
+			}
+			act->decap = 1;
+			/* If we previously delivered/trapped to uplink, now
+			 * that we've decapped we'll want another copy if we
+			 * try to deliver/trap to uplink again.
+			 */
+			uplinked = false;
+			break;
+		default:
+			efx_tc_err(efx, "Unhandled action %u\n", fa->id);
+			rc = -EOPNOTSUPP;
+			goto release;
+		}
+	}
+
+	if (act) {
+		if (!uplinked) {
+			/* Not shot/redirected, so deliver to default dest (which is
+			 * the uplink, as this is an ingress filter)
+			 */
+			efx_mae_mport_uplink(efx, &act->dest_mport);
+			act->deliver = 1;
+		}
+		rc = efx_mae_alloc_action_set(efx, act);
+		if (rc)
+			goto release;
+		list_add_tail(&act->list, &rule->acts.list);
+		act = NULL; /* Prevent double-free in error path */
+	}
+
+	rule->match = match;
+
+	netif_dbg(efx, drv, efx->net_dev,
+		  "Successfully parsed foreign filter (cookie %lx)\n",
+		  tc->cookie);
+
+	if (!efx_tc_check_ready(efx, rule)) {
+		/* can't happen, as foreign filters don't support encap actions */
+		netif_err(efx, drv, efx->net_dev, "action not ready for hw\n");
+		rc = -EOPNOTSUPP;
+		goto release;
+	}
+	rc = efx_mae_alloc_action_set_list(efx, &rule->acts);
+	if (rc)
+		goto release;
+	rc = efx_mae_insert_rule(efx, &rule->match, EFX_TC_PRIO_TC,
+				 rule->acts.fw_id, &rule->fw_id);
+	if (rc)
+		goto release_act;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+	kfree(fr);
+#endif
+	return 0;
+
+release_act:
+	efx_mae_free_action_set_list(efx, &rule->acts);
+release:
+	/* We failed to insert the rule, so free up any entries we created in
+	 * subsidiary tables.
+	 */
+	if (match.rid)
+		efx_tc_put_recirc_id(efx, match.rid);
+	if (act)
+		efx_tc_free_action_set(efx, act, false);
+	if (rule) {
+		rhashtable_remove_fast(&efx->tc->match_action_ht,
+				       &rule->linkage,
+				       efx_tc_match_action_ht_params);
+		efx_tc_free_action_set_list(efx, &rule->acts, false);
+	}
+	kfree(rule);
+	if (match.encap)
+		efx_tc_flower_release_encap_match(efx, match.encap);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
+	kfree(fr);
+#endif
+	return rc;
+}
+
 static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 				     struct flow_cls_offload *tc,
 				     struct flow_rule *fr,
 				     struct efx_tc_match *match,
-				     struct efx_rep *efv)
+				     struct efx_rep *efv,
+				     struct net_device *net_dev)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD) || defined(EFX_HAVE_TCF_EXTACK)
 	struct netlink_ext_ack *extack = tc->common.extack;
@@ -3327,7 +3686,19 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 				rc = -EOPNOTSUPP;
 				goto release;
 			}
-			rid = efx_tc_get_recirc_id(efx, fa->chain_index);
+			/* VFrep and PF can share the same chain namespace, as
+			 * they have distinct ingress_mports.  So we don't need
+			 * to burn an extra recirc_id if both use the same
+			 * chain_index.
+			 * (Strictly speaking, we could give each VFrep its own
+			 * recirc_id namespace that doesn't take IDs away from
+			 * the PF, but that would require a bunch of additional
+			 * IDAs - one for each representor - and that's not
+			 * likely to be the main cause of recirc_id exhaustion
+			 * anyway.)
+			 */
+			rid = efx_tc_get_recirc_id(efx, fa->chain_index,
+						   efx->net_dev);
 			if (IS_ERR(rid)) {
 				EFX_TC_ERR_MSG(efx, extack, "Failed to allocate a hardware recirculation ID for this chain_index");
 				rc = PTR_ERR(rid);
@@ -3387,7 +3758,9 @@ static int efx_tc_flower_replace_lhs(struct efx_nic *efx,
 				NL_SET_ERR_MSG_MOD(extack, "Unrecognised ct.action flag");
 				goto release;
 			}
-			ct_zone = efx_tc_ct_register_zone(efx, fa->ct.zone, fa->ct.flow_table);
+			ct_zone = efx_tc_ct_register_zone(efx, fa->ct.zone,
+							  MAE_CT_VNI_MODE_ZERO,
+							  fa->ct.flow_table);
 			if (IS_ERR(ct_zone)) {
 				rc = PTR_ERR(ct_zone);
 				EFX_TC_ERR_MSG(efx, extack, "Failed to register for CT updates");
@@ -3695,8 +4068,6 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 
 	vport_id = efx_tc_flower_lookup_dev(efx, net_dev);
 	if (vport_id < 0) {
-		if (tc->common.chain_index)
-			return -EOPNOTSUPP;
 		netif_dbg(efx, drv, efx->net_dev, "Got notification for otherdev\n");
 		return efx_tc_flower_replace_foreign(efx, net_dev, tc);
 	}
@@ -3745,7 +4116,7 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 	}
 
 	if (efx_tc_rule_is_lhs_rule(fr, &match)) {
-		rc = efx_tc_flower_replace_lhs(efx, tc, fr, &match, efv);
+		rc = efx_tc_flower_replace_lhs(efx, tc, fr, &match, efv, net_dev);
 		if (rc)
 			goto release;
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_FLOW_OFFLOAD)
@@ -3759,7 +4130,11 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 	 * to the initial memset(), so we don't need to do anything in that case.
 	 */
 	if (tc->common.chain_index) {
-		rid = efx_tc_get_recirc_id(efx, tc->common.chain_index);
+		/* VFreps and PF can share chain namespace, see comment in
+		 * efx_tc_flower_replace_lhs().
+		 */
+		rid = efx_tc_get_recirc_id(efx, tc->common.chain_index,
+					   efx->net_dev);
 		if (IS_ERR(rid)) {
 			EFX_TC_ERR_MSG(efx, extack, "Failed to allocate a hardware recirculation ID for this chain_index");
 			rc = PTR_ERR(rid);
@@ -4080,6 +4455,18 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 			efx_tc_err(efx, "goto chain_index=%u\n", fa->chain_index);
 			NL_SET_ERR_MSG_MOD(extack, "Can't offload goto chain in RHS rules");
 			goto release;
+		case FLOW_ACTION_CSUM:
+			/* HW will automatically update the checksum by applying
+			 * a delta when executing a dec ttl action, therefore,
+			 * the checksum update action can be ignored.
+			 */
+			if (!act->do_ttl_dec) {
+				rc = -EOPNOTSUPP;
+				EFX_TC_ERR_MSG(efx, extack,
+					       "Csum action unsupported");
+				goto release;
+			}
+			break;
 		default:
 			efx_tc_err(efx, "Unhandled action %u\n", fa->id);
 			rc = -EOPNOTSUPP;
@@ -4133,24 +4520,15 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 		EFX_TC_ERR_MSG(efx, extack, "Failed to write action set list to hw");
 		goto release;
 	}
-	switch (vport_id) {
-	case EFX_VPORT_PF:
-		rule->fallback = EFX_TC_DFLT_WIRE;
-		break;
-	default:
-		/* rep, so rule applies to traffic from representee */
-		if (efv->remote)
-			rule->fallback =
-				EFX_TC_DFLT_REM(vport_id -
-						EFX_VPORT_REMOTE_OFFSET);
-		else
-			rule->fallback = EFX_TC_DFLT_VF(vport_id -
-							EFX_VPORT_VF_OFFSET);
-		break;
-	}
+	if (vport_id == EFX_VPORT_PF)
+		/* PF netdev, so rule applies to traffic from wire */
+		rule->fallback = &efx->tc->facts.pf;
+	else
+		/* repdev, so rule applies to traffic from representee */
+		rule->fallback = &efx->tc->facts.reps;
 	if (!efx_tc_check_ready(efx, rule)) {
 		netif_dbg(efx, drv, efx->net_dev, "action not ready for hw\n");
-		acts_id = efx->tc->dflt_rules[rule->fallback].acts.fw_id;
+		acts_id = rule->fallback->fw_id;
 	} else {
 		netif_dbg(efx, drv, efx->net_dev, "ready for hw\n");
 		acts_id = rule->acts.fw_id;
@@ -4663,45 +5041,14 @@ int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
 }
 #endif
 
-int efx_tc_configure_default_rule(struct efx_nic *efx,
-				  enum efx_tc_default_rules dflt)
+static int efx_tc_configure_default_rule(struct efx_nic *efx, u32 ing_port,
+					 u32 eg_port, struct efx_tc_flow_rule *rule)
 {
-	struct efx_tc_flow_rule *rule = efx->tc->dflt_rules + dflt;
 	struct efx_tc_action_set_list *acts = &rule->acts;
 	struct efx_tc_match *match = &rule->match;
 	struct efx_tc_action_set *act;
-	struct net_device *rep_dev;
-	struct efx_rep *efv;
-	u32 ing_port, eg_port;
-	int rc, idx;
+	int rc;
 
-	INIT_LIST_HEAD(&acts->list);
-	switch (dflt) {
-	case EFX_TC_DFLT_PF:
-		efx_mae_mport_uplink(efx, &ing_port);
-		efx_mae_mport_wire(efx, &eg_port);
-		break;
-	case EFX_TC_DFLT_WIRE:
-		efx_mae_mport_wire(efx, &ing_port);
-		efx_mae_mport_uplink(efx, &eg_port);
-		break;
-	default:
-		if (dflt >= EFX_TC_DFLT_REMOTE_BASE) {
-			idx = dflt - EFX_TC_DFLT_REMOTE_BASE;
-			rep_dev = efx_get_remote_rep(efx, idx);
-		} else {
-			idx = dflt - EFX_TC_DFLT_VF_BASE;
-			rep_dev = efx_get_vf_rep(efx, idx);
-		}
-		if (IS_ERR(rep_dev))
-			return PTR_ERR(rep_dev);
-		if (!rep_dev)
-			return -EINVAL;
-		efv = netdev_priv(rep_dev);
-		efx_mae_mport_mport(efx, efv->mport, &ing_port);
-		efx_mae_mport_mport(efx, efx->tc->reps_mport_id, &eg_port);
-		break;
-	}
 	match->value.ingress_port = ing_port;
 	match->mask.ingress_port = ~0;
 	act = kzalloc(sizeof(*act), GFP_KERNEL);
@@ -4712,6 +5059,7 @@ int efx_tc_configure_default_rule(struct efx_nic *efx,
 	rc = efx_mae_alloc_action_set(efx, act);
 	if (rc)
 		goto fail1;
+	EFX_WARN_ON_PARANOID(!list_empty(&acts->list));
 	list_add_tail(&act->list, &acts->list);
 	rc = efx_mae_alloc_action_set_list(efx, acts);
 	if (rc)
@@ -4731,14 +5079,95 @@ fail1:
 	return rc;
 }
 
-void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
-				     enum efx_tc_default_rules dflt)
+static int efx_tc_configure_default_rule_pf(struct efx_nic *efx)
 {
-	struct efx_tc_flow_rule *rule = efx->tc->dflt_rules + dflt;
+	struct efx_tc_flow_rule *rule = &efx->tc->dflt.pf;
+	u32 ing_port, eg_port;
 
+	efx_mae_mport_uplink(efx, &ing_port);
+	efx_mae_mport_wire(efx, &eg_port);
+	return efx_tc_configure_default_rule(efx, ing_port, eg_port, rule);
+}
+
+static int efx_tc_configure_default_rule_wire(struct efx_nic *efx)
+{
+	struct efx_tc_flow_rule *rule = &efx->tc->dflt.wire;
+	u32 ing_port, eg_port;
+
+	efx_mae_mport_wire(efx, &ing_port);
+	efx_mae_mport_uplink(efx, &eg_port);
+	return efx_tc_configure_default_rule(efx, ing_port, eg_port, rule);
+}
+
+int efx_tc_configure_default_rule_rep(struct efx_rep *efv)
+{
+	struct efx_tc_flow_rule *rule = &efv->dflt;
+	struct efx_nic *efx = efv->parent;
+	u32 ing_port, eg_port;
+
+	efx_mae_mport_mport(efx, efv->mport, &ing_port);
+	efx_mae_mport_mport(efx, efx->tc->reps_mport_id, &eg_port);
+	return efx_tc_configure_default_rule(efx, ing_port, eg_port, rule);
+}
+
+void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
+				     struct efx_tc_flow_rule *rule)
+{
 	if (rule->fw_id != MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL)
 		efx_tc_delete_rule(efx, rule);
 	rule->fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
+}
+
+static int efx_tc_configure_fallback_acts(struct efx_nic *efx, u32 eg_port,
+					  struct efx_tc_action_set_list *acts)
+{
+	struct efx_tc_action_set *act;
+	int rc;
+
+	act = kzalloc(sizeof(*act), GFP_KERNEL);
+	if (!act)
+		return -ENOMEM;
+	act->deliver = 1;
+	act->dest_mport = eg_port;
+	rc = efx_mae_alloc_action_set(efx, act);
+	if (rc)
+		goto fail1;
+	EFX_WARN_ON_PARANOID(!list_empty(&acts->list));
+	list_add_tail(&act->list, &acts->list);
+	rc = efx_mae_alloc_action_set_list(efx, acts);
+	if (rc)
+		goto fail2;
+	return 0;
+fail2:
+	list_del(&act->list);
+	efx_mae_free_action_set(efx, act);
+fail1:
+	kfree(act);
+	return rc;
+}
+
+static int efx_tc_configure_fallback_acts_pf(struct efx_nic *efx)
+{
+	struct efx_tc_action_set_list *acts = &efx->tc->facts.pf;
+	u32 eg_port;
+
+	efx_mae_mport_uplink(efx, &eg_port);
+	return efx_tc_configure_fallback_acts(efx, eg_port, acts);
+}
+
+static int efx_tc_configure_fallback_acts_reps(struct efx_nic *efx)
+{
+	struct efx_tc_action_set_list *acts = &efx->tc->facts.reps;
+	u32 eg_port;
+
+	efx_mae_mport_mport(efx, efx->tc->reps_mport_id, &eg_port);
+	return efx_tc_configure_fallback_acts(efx, eg_port, acts);
+}
+
+static void efx_tc_deconfigure_fallback_acts(struct efx_nic *efx,
+					     struct efx_tc_action_set_list *acts)
+{
+	efx_tc_free_action_set_list(efx, acts, true);
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
@@ -5056,12 +5485,31 @@ static int efx_tc_debugfs_dump_rules(struct seq_file *file, void *data)
 static int efx_tc_debugfs_dump_default_rules(struct seq_file *file, void *data)
 {
 	struct efx_nic *efx = data;
+	struct net_device *rep_dev;
+	struct efx_rep *efv;
 	int i;
 
 	mutex_lock(&efx->tc->mutex);
-	for (i = 0; i < EFX_TC_DFLT__MAX; i++)
-		if (efx->tc->dflt_rules[i].fw_id != MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL)
-			efx_tc_debugfs_dump_one_rule(file, &efx->tc->dflt_rules[i]);
+	if (efx->tc->dflt.pf.fw_id != MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL)
+		efx_tc_debugfs_dump_one_rule(file, &efx->tc->dflt.pf);
+	if (efx->tc->dflt.wire.fw_id != MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL)
+		efx_tc_debugfs_dump_one_rule(file, &efx->tc->dflt.wire);
+	for (i = 0; i < EFX_TC_VF_MAX; i++) {
+		rep_dev = efx_get_vf_rep(efx, i);
+		if (IS_ERR_OR_NULL(rep_dev))
+			continue;
+		efv = netdev_priv(rep_dev);
+		if (efv->dflt.fw_id != MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL)
+			efx_tc_debugfs_dump_one_rule(file, &efv->dflt);
+	}
+	for (i = 0; i < EFX_TC_REMOTE_MAX; i++) {
+		rep_dev = efx_get_remote_rep(efx, i);
+		if (IS_ERR_OR_NULL(rep_dev))
+			continue;
+		efv = netdev_priv(rep_dev);
+		if (efv->dflt.fw_id != MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL)
+			efx_tc_debugfs_dump_one_rule(file, &efv->dflt);
+	}
 	mutex_unlock(&efx->tc->mutex);
 
 	return 0;
@@ -5155,6 +5603,9 @@ static int efx_tc_debugfs_dump_recirc_ids(struct seq_file *file, void *data)
 			if (IS_ERR(rid))
 				continue;
 			seq_printf(file, "%#x: %u\n", rid->fw_id, rid->chain_index);
+			if (rid->net_dev != efx->net_dev)
+				seq_printf(file, "\tnetdev %s\n",
+					   netdev_name(rid->net_dev));
 		}
 		rhashtable_walk_stop(&walk);
 		rhashtable_walk_exit(&walk);
@@ -5176,10 +5627,20 @@ static void efx_tc_debugfs_dump_lhs_rule(struct seq_file *file,
 	efx_tc_debugfs_dump_match(file, &rule->match);
 
 	seq_printf(file, "\tlhs_action\n");
+	if (act->tun_type) {
+		if (act->tun_type < ARRAY_SIZE(efx_tc_encap_type_names))
+			seq_printf(file, "\t\ttun_type = %s\n",
+				   efx_tc_encap_type_names[act->tun_type]);
+		else
+			seq_printf(file, "\t\ttun_type = %u\n", act->tun_type);
+	}
 	seq_printf(file, "\t\trecirc_id %#02x\n", act->rid ? act->rid->fw_id : 0);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
-	if (act->zone)
-		seq_printf(file, "\t\tct zone %u\n", act->zone->zone);
+	if (act->zone) {
+		seq_printf(file, "\t\tct domain %#x\n", act->zone->domain);
+		seq_printf(file, "\t\t\tzone %u\n", act->zone->zone);
+		seq_printf(file, "\t\t\tvni_mode %u\n", act->zone->vni_mode);
+	}
 #endif
 	if (act->count) {
 		seq_printf(file, "\t\t\tcount %#x\n", act->count->cnt->fw_id);
@@ -5226,7 +5687,7 @@ static void efx_tc_debugfs_dump_ct(struct seq_file *file,
 				   struct efx_tc_ct_entry *conn)
 {
 	seq_printf(file, "%#lx\n", conn->cookie);
-	seq_printf(file, "\tzone = %u\n", conn->zone);
+	seq_printf(file, "\tdomain = %#x\n", conn->domain);
 	seq_printf(file, "\teth_proto = %#06x\n", be16_to_cpu(conn->eth_proto));
 	seq_printf(file, "\tip_proto = %#04x (%u)\n",
 		   conn->ip_proto, conn->ip_proto);
@@ -5942,10 +6403,16 @@ int efx_init_tc(struct efx_nic *efx)
 		netif_warn(efx, probe, efx->net_dev,
 			   "Could not enumerate mports (rc=%d), are we admin?",
 			   rc);
-	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_PF);
+	rc = efx_tc_configure_default_rule_pf(efx);
 	if (rc)
 		goto out_free;
-	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_WIRE);
+	rc = efx_tc_configure_default_rule_wire(efx);
+	if (rc)
+		goto out_free;
+	rc = efx_tc_configure_fallback_acts_pf(efx);
+	if (rc)
+		goto out_free;
+	rc = efx_tc_configure_fallback_acts_reps(efx);
 	if (rc)
 		goto out_free;
 
@@ -5966,6 +6433,8 @@ out_free:
 
 void efx_fini_tc(struct efx_nic *efx)
 {
+	struct net_device *rep_dev;
+	struct efx_rep *efv;
 	int i;
 
 	/* We can get called even if efx_init_struct_tc() failed */
@@ -5979,8 +6448,24 @@ void efx_fini_tc(struct efx_nic *efx)
 	if (efx->tc->up)
 		flow_indr_dev_unregister(efx_tc_indr_setup_cb, efx, efx_tc_block_unbind);
 #endif
-	for (i = 0; i < EFX_TC_DFLT__MAX; i++)
-		efx_tc_deconfigure_default_rule(efx, i);
+	efx_tc_deconfigure_default_rule(efx, &efx->tc->dflt.pf);
+	efx_tc_deconfigure_default_rule(efx, &efx->tc->dflt.wire);
+	for (i = 0; i < EFX_TC_VF_MAX; i++) {
+		rep_dev = efx_get_vf_rep(efx, i);
+		if (IS_ERR_OR_NULL(rep_dev))
+			continue;
+		efv = netdev_priv(rep_dev);
+		efx_tc_deconfigure_default_rule(efx, &efv->dflt);
+	}
+	for (i = 0; i < EFX_TC_REMOTE_MAX; i++) {
+		rep_dev = efx_get_remote_rep(efx, i);
+		if (IS_ERR_OR_NULL(rep_dev))
+			continue;
+		efv = netdev_priv(rep_dev);
+		efx_tc_deconfigure_default_rule(efx, &efv->dflt);
+	}
+	efx_tc_deconfigure_fallback_acts(efx, &efx->tc->facts.pf);
+	efx_tc_deconfigure_fallback_acts(efx, &efx->tc->facts.reps);
 	efx_tc_deconfigure_rep_mport(efx);
 	efx->tc->up = false;
 	kfree(efx->tc->mports);
@@ -6070,30 +6555,14 @@ int efx_tc_netevent_event(struct efx_nic *efx, unsigned long event,
 #include "tc.h"
 #include "mae.h"
 
-static int efx_tc_configure_default_rule(struct efx_nic *efx,
-					 enum efx_tc_default_rules dflt)
+static int efx_tc_configure_default_rule(struct efx_nic *efx, u32 ing_port,
+					 u32 eg_port, struct efx_tc_flow_rule *rule)
 {
-	struct efx_tc_flow_rule *rule = efx->tc->dflt_rules + dflt;
 	struct efx_tc_action_set_list *acts = &rule->acts;
 	struct efx_tc_match *match = &rule->match;
 	struct efx_tc_action_set *act;
-	u32 ing_port, eg_port;
 	int rc;
 
-	INIT_LIST_HEAD(&acts->list);
-	switch (dflt) {
-	case EFX_TC_DFLT_PF:
-		efx_mae_mport_uplink(efx, &ing_port);
-		efx_mae_mport_wire(efx, &eg_port);
-		break;
-	case EFX_TC_DFLT_WIRE:
-		efx_mae_mport_wire(efx, &ing_port);
-		efx_mae_mport_uplink(efx, &eg_port);
-		break;
-	default:
-		WARN_ON_ONCE(1);
-		return -EIO;
-	}
 	match->value.ingress_port = ing_port;
 	match->mask.ingress_port = ~0;
 	act = kzalloc(sizeof(*act), GFP_KERNEL);
@@ -6123,6 +6592,26 @@ fail1:
 	return rc;
 }
 
+static int efx_tc_configure_default_rule_pf(struct efx_nic *efx)
+{
+	struct efx_tc_flow_rule *rule = &efx->tc->dflt.pf;
+	u32 ing_port, eg_port;
+
+	efx_mae_mport_uplink(efx, &ing_port);
+	efx_mae_mport_wire(efx, &eg_port);
+	return efx_tc_configure_default_rule(efx, ing_port, eg_port, rule);
+}
+
+static int efx_tc_configure_default_rule_wire(struct efx_nic *efx)
+{
+	struct efx_tc_flow_rule *rule = &efx->tc->dflt.wire;
+	u32 ing_port, eg_port;
+
+	efx_mae_mport_wire(efx, &ing_port);
+	efx_mae_mport_uplink(efx, &eg_port);
+	return efx_tc_configure_default_rule(efx, ing_port, eg_port, rule);
+}
+
 static void efx_tc_delete_rule(struct efx_nic *efx, struct efx_tc_flow_rule *rule)
 {
 	struct efx_tc_action_set *act, *next;
@@ -6139,12 +6628,11 @@ static void efx_tc_delete_rule(struct efx_nic *efx, struct efx_tc_flow_rule *rul
 }
 
 static void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
-					    enum efx_tc_default_rules dflt)
+					    struct efx_tc_flow_rule *rule)
 {
-	struct efx_tc_flow_rule *rule = efx->tc->dflt_rules + dflt;
-
 	if (rule->fw_id != MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL)
 		efx_tc_delete_rule(efx, rule);
+	rule->fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
 }
 
 int efx_tc_insert_rep_filters(struct efx_nic *efx)
@@ -6177,26 +6665,24 @@ int efx_init_tc(struct efx_nic *efx)
 			  efx->tc->caps->action_prios, EFX_TC_PRIO__NUM);
 		return -EIO;
 	}
-	rc = efx_tc_configure_default_rule(efx, EFX_TC_DFLT_PF);
+	rc = efx_tc_configure_default_rule_pf(efx);
 	if (rc)
 		return rc;
-	return efx_tc_configure_default_rule(efx, EFX_TC_DFLT_WIRE);
+	return efx_tc_configure_default_rule_wire(efx);
 }
 
 void efx_fini_tc(struct efx_nic *efx)
 {
-	int i;
-
 	/* We can get called even if efx_init_struct_tc() failed */
 	if (!efx->tc)
 		return;
-	for (i = 0; i < EFX_TC_DFLT__MAX; i++)
-		efx_tc_deconfigure_default_rule(efx, i);
+	efx_tc_deconfigure_default_rule(efx, &efx->tc->dflt.pf);
+	efx_tc_deconfigure_default_rule(efx, &efx->tc->dflt.wire);
 }
 
 int efx_init_struct_tc(struct efx_nic *efx)
 {
-	int rc, i;
+	int rc;
 
 	if (efx->type->is_vf)
 		return 0;
@@ -6210,17 +6696,11 @@ int efx_init_struct_tc(struct efx_nic *efx)
 		goto fail1;
 	}
 
-	efx->tc->dflt_rules = kcalloc(EFX_TC_DFLT__MAX,
-				      sizeof(*efx->tc->dflt_rules),
-				      GFP_KERNEL);
-	rc = -ENOMEM;
-	if (!efx->tc->dflt_rules)
-		goto fail2;
-	for (i = 0; i < EFX_TC_DFLT__MAX; i++)
-		efx->tc->dflt_rules[i].fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
+	INIT_LIST_HEAD(&efx->tc->dflt.pf.acts.list);
+	efx->tc->dflt.pf.fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
+	INIT_LIST_HEAD(&efx->tc->dflt.wire.acts.list);
+	efx->tc->dflt.wire.fw_id = MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL;
 	return 0;
-fail2:
-	kfree(efx->tc->caps);
 fail1:
 	kfree(efx->tc);
 	efx->tc = NULL;
@@ -6232,7 +6712,10 @@ void efx_fini_struct_tc(struct efx_nic *efx)
 	if (!efx->tc)
 		return;
 
-	kfree(efx->tc->dflt_rules);
+	EFX_WARN_ON_PARANOID(efx->tc->dflt.pf.fw_id !=
+			     MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL);
+	EFX_WARN_ON_PARANOID(efx->tc->dflt.wire.fw_id !=
+			     MC_CMD_MAE_ACTION_RULE_INSERT_OUT_ACTION_RULE_ID_NULL);
 	kfree(efx->tc->caps);
 	kfree(efx->tc);
 	efx->tc = NULL;

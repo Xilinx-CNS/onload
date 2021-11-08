@@ -1569,10 +1569,12 @@ int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
 		return rc;
 	MCDI_SET_DWORD(inbuf, MAE_OUTER_RULE_INSERT_IN_ENCAP_TYPE, rc);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
-	MCDI_POPULATE_DWORD_4(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
-			      MAE_OUTER_RULE_INSERT_IN_DO_CT,  !!act->zone,
+	MCDI_POPULATE_DWORD_5(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
+			      MAE_OUTER_RULE_INSERT_IN_DO_CT, !!act->zone,
 			      MAE_OUTER_RULE_INSERT_IN_CT_DOMAIN,
-			      act->zone ? act->zone->zone : 0,
+			      act->zone ? act->zone->domain : 0,
+			      MAE_OUTER_RULE_INSERT_IN_CT_VNI_MODE,
+			      act->zone ? act->zone->vni_mode : 0,
 			      MAE_OUTER_RULE_INSERT_IN_DO_COUNT, !!act->count,
 			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->rid ? act->rid->fw_id : 0);
 #else
@@ -1754,7 +1756,7 @@ static int efx_mae_populate_ct_key(struct efx_nic *efx, __le32 *key, size_t kw,
 	rc = TABLE_POPULATE_KEY(key, ct, l4_dport, conn->l4_dport);
 	if (rc)
 		return rc;
-	return TABLE_POPULATE_KEY(key, ct, zone, cpu_to_be16(conn->zone));
+	return TABLE_POPULATE_KEY(key, ct, zone, cpu_to_be16(conn->domain));
 }
 
 int efx_mae_insert_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn)

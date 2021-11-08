@@ -1715,7 +1715,7 @@ void efx_mcdi_print_fw_bundle_ver(struct efx_nic *efx, char *buf, size_t len)
 		if (WARN_ON(needed >= len))
 			goto fail;
 	} else {
-		strlcpy(buf, "N/A", len);
+		strscpy(buf, "N/A", len);
 	}
 
 	return;
@@ -1737,7 +1737,7 @@ static int efx_mcdi_drv_attach_attempt(struct efx_nic *efx,
 	MCDI_SET_DWORD(inbuf, DRV_ATTACH_IN_UPDATE, 1);
 	MCDI_SET_DWORD(inbuf, DRV_ATTACH_IN_FIRMWARE_ID, fw_variant);
 
-	strlcpy(MCDI_PTR(inbuf, DRV_ATTACH_IN_V2_DRIVER_VERSION),
+	strscpy(MCDI_PTR(inbuf, DRV_ATTACH_IN_V2_DRIVER_VERSION),
 		EFX_DRIVER_VERSION, MC_CMD_DRV_ATTACH_IN_V2_DRIVER_VERSION_LEN);
 
 	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_DRV_ATTACH, inbuf, sizeof(inbuf),

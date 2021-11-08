@@ -130,16 +130,16 @@ void efx_ethtool_get_common_drvinfo(struct efx_nic *efx,
 #ifdef EFX_NOT_UPSTREAM
 	/* This is not populated on RHEL 6 */
 	if (efx->pci_dev->driver)
-		strlcpy(info->driver, efx->pci_dev->driver->name,
+		strscpy(info->driver, efx->pci_dev->driver->name,
 			sizeof(info->driver));
 	else
-		strlcpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
+		strscpy(info->driver, KBUILD_MODNAME, sizeof(info->driver));
+	strscpy(info->version, EFX_DRIVER_VERSION, sizeof(info->version));
 #else
-	strlcpy(info->driver, efx->pci_dev->driver->name, sizeof(info->driver));
+	strscpy(info->driver, efx->pci_dev->driver->name, sizeof(info->driver));
 #endif
-	strlcpy(info->version, EFX_DRIVER_VERSION, sizeof(info->version));
-	strlcpy(info->fw_version, "N/A", sizeof(info->fw_version));
-	strlcpy(info->bus_info, pci_name(efx->pci_dev), sizeof(info->bus_info));
+	strscpy(info->fw_version, "N/A", sizeof(info->fw_version));
+	strscpy(info->bus_info, pci_name(efx->pci_dev), sizeof(info->bus_info));
 	info->n_priv_flags = EFX_ETHTOOL_PRIV_FLAGS_COUNT;
 }
 
@@ -640,7 +640,7 @@ void efx_ethtool_get_strings(struct net_device *net_dev, u32 string_set,
 		strings += (efx->type->describe_stats(efx, strings) *
 			    ETH_GSTRING_LEN);
 		for (i = 0; i < EFX_ETHTOOL_SW_STAT_COUNT; i++)
-			strlcpy(strings + i * ETH_GSTRING_LEN,
+			strscpy(strings + i * ETH_GSTRING_LEN,
 				efx_sw_stat_desc[i].name, ETH_GSTRING_LEN);
 		strings += EFX_ETHTOOL_SW_STAT_COUNT * ETH_GSTRING_LEN;
 		strings += (efx_describe_per_queue_stats(efx, strings) *
@@ -652,7 +652,7 @@ void efx_ethtool_get_strings(struct net_device *net_dev, u32 string_set,
 		break;
 	case ETH_SS_PRIV_FLAGS:
 		for (i = 0; i < EFX_ETHTOOL_PRIV_FLAGS_COUNT; i++)
-			strlcpy(strings + i * ETH_GSTRING_LEN,
+			strscpy(strings + i * ETH_GSTRING_LEN,
 				efx_ethtool_priv_flags_strings[i],
 				ETH_GSTRING_LEN);
 		break;

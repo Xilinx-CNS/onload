@@ -16,6 +16,7 @@ struct efx_rep;
 
 #include "net_driver.h"
 #include "nic.h"
+#include "tc.h"
 
 int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i);
 int efx_ef100_remote_rep_create(struct efx_nic *efx, unsigned int i,
@@ -46,6 +47,7 @@ struct efx_rep {
 	unsigned int write_index, read_index;
 	unsigned int rx_pring_size; /* max length of RX list */
 	unsigned int mport_desc_idx;
+	struct efx_tc_flow_rule dflt; /* default-rule for switching */
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	struct list_head rx_list;
 #else

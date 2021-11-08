@@ -318,7 +318,7 @@ void efx_get_irq_moderation(struct efx_nic *efx, unsigned int *tx_usecs,
 	} else {
 		struct efx_channel *tx_channel;
 
-		tx_channel = efx->channel[efx->tx_channel_offset];
+		tx_channel = efx_get_channel(efx, efx->tx_channel_offset);
 		*tx_usecs = tx_channel->irq_moderation_us;
 	}
 }
@@ -444,6 +444,10 @@ int __efx_net_alloc(struct efx_nic *efx)
 
 	efx->stats_initialised = false;
 
+	rc = efx_init_channels(efx);
+	if (rc)
+		return rc;
+
 	do {
 		if (!efx->max_channels || !efx->max_tx_channels) {
 			netif_err(efx, drv, efx->net_dev,
@@ -567,6 +571,7 @@ void __efx_net_dealloc(struct efx_nic *efx)
 		efx->type->free_resources(efx);
 	efx_unset_channels(efx);
 	efx_remove_interrupts(efx);
+	efx_fini_channels(efx);
 
 	efx->state = STATE_NET_DOWN;
 }
@@ -954,7 +959,7 @@ static void efx_unregister_netdev(struct efx_nic *efx)
 #endif
 #endif
 	if (efx_dev_registered(efx)) {
-		strlcpy(efx->name, pci_name(efx->pci_dev), sizeof(efx->name));
+		strscpy(efx->name, pci_name(efx->pci_dev), sizeof(efx->name));
 		efx_fini_devlink(efx);
 		efx_fini_mcdi_logging(efx);
 		rtnl_lock();
@@ -1051,7 +1056,7 @@ void efx_pci_remove_post_io(struct efx_nic *efx,
 		efx->type->sriov_fini(efx);
 	if (efx->type->vswitching_remove)
 		efx->type->vswitching_remove(efx);
-	efx_fini_channels(efx);
+	efx_fini_interrupts(efx);
 #ifdef CONFIG_SFC_PTP
 	efx_ptp_remove_post_io(efx);
 #endif
@@ -1152,9 +1157,13 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 	if (rc)
 		return rc;
 
-	rc = efx_init_channels(efx);
-	if (rc)
+	rc = efx_init_interrupts(efx);
+	if (rc < 0)
 		return rc;
+
+	/* Update maximum channel count for ethtool */
+	efx->max_channels = min_t(u16, efx->max_channels, efx->max_irqs);
+	efx->max_tx_channels = efx->max_channels;
 
 	rc = efx->type->vswitching_probe(efx);
 	if (rc) /* not fatal; the PF will still work fine */
@@ -1853,7 +1862,11 @@ static int __init efx_init_module(void)
 {
 	int rc;
 
+#ifdef EFX_NOT_UPSTREAM
 	printk(KERN_INFO "Solarflare NET driver v" EFX_DRIVER_VERSION "\n");
+#else
+	printk(KERN_INFO "Solarflare NET driver\n");
+#endif
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_GCOV)
 	gcov_provider_init(THIS_MODULE);
@@ -1936,4 +1949,6 @@ MODULE_AUTHOR("Solarflare Communications and "
 MODULE_DESCRIPTION("Solarflare network driver");
 MODULE_LICENSE("GPL");
 MODULE_DEVICE_TABLE(pci, sfc_pci_table);
+#ifdef EFX_NOT_UPSTREAM
 MODULE_VERSION(EFX_DRIVER_VERSION);
+#endif

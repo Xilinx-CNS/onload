@@ -309,6 +309,12 @@ static int efx_ioctl_get_pps_event(struct efx_nic *efx,
 {
 	return efx_ptp_pps_get_event(efx, &data->pps_event);
 }
+
+static int
+efx_ioctl_hw_pps_enable(struct efx_nic *efx, union efx_ioctl_data *data)
+{
+	return efx_ptp_hw_pps_enable(efx, data->pps_enable.enable != 0);
+}
 #endif
 
 static int efx_ioctl_get_device_ids(struct efx_nic *efx,
@@ -558,8 +564,9 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 		op = efx_ioctl_get_pps_event;
 		break;
 	case EFX_TS_ENABLE_HW_PPS:
-		/* This no longer does anything, PPS is always enabled */
-		return 0;
+		size = sizeof(data->pps_enable);
+		op = efx_ioctl_hw_pps_enable;
+		break;
 #endif
 	case EFX_GET_DEVICE_IDS:
 		size = sizeof(data->device_ids);

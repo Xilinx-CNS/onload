@@ -1498,7 +1498,7 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	efx->pci_dev = pci_dev;
 	efx->msg_enable = debug;
 	efx->state = STATE_UNINIT;
-	strlcpy(efx->name, pci_name(pci_dev), sizeof(efx->name));
+	strscpy(efx->name, pci_name(pci_dev), sizeof(efx->name));
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SET_FEATURES) && !defined(EFX_HAVE_EXT_NDO_SET_FEATURES)
 	efx->rx_checksum_enabled = true;
@@ -1517,6 +1517,7 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	efx->log_tc_errs = true;
 #endif
 	efx->tc_match_ignore_ttl = true;
+	INIT_LIST_HEAD(&efx->channel_list);
 	efx->rx_prefix_size = efx->type->rx_prefix_size;
 	efx->rx_ip_align =
 		NET_IP_ALIGN ? (efx->rx_prefix_size + NET_IP_ALIGN) % 4 : 0;

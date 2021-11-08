@@ -111,9 +111,6 @@ endif
 ifndef CONFIG_VIRTUAL_BUS
 # Pick up exported symbols of our build of virtual_bus.ko
 KBUILD_EXTRA_SYMBOLS += $(KBUILD_EXTMOD)/../../../bus/Module.symvers
-
-$(KBUILD_EXTMOD)/../../../bus/Module.symvers:
-	make -C ../../../bus
 endif
 endif # CONFIG_NET
 

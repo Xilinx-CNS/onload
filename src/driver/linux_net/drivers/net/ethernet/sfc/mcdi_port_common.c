@@ -880,6 +880,10 @@ u32 efx_get_mcdi_caps(struct efx_nic *efx)
 
 int efx_mcdi_port_reconfigure(struct efx_nic *efx)
 {
+	/* Avoid using PHY data if unavailable (e.g. probe retry). */
+	if (efx->phy_data == NULL)
+		return -ENETDOWN;
+
 	return efx_mcdi_set_link(efx, efx_get_mcdi_caps(efx),
 				 efx_get_mcdi_phy_flags(efx),
 				 efx->loopback_mode, false,

@@ -2456,6 +2456,7 @@ static irqreturn_t efx_ef10_msi_interrupt(int irq, void *dev_id)
 {
 	struct efx_msi_context *context = dev_id;
 	struct efx_nic *efx = context->efx;
+	struct efx_channel *channel;
 
 	netif_vdbg(efx, intr, efx->net_dev,
 		   "IRQ %d on CPU %d\n", irq, raw_smp_processor_id());
@@ -2466,7 +2467,8 @@ static irqreturn_t efx_ef10_msi_interrupt(int irq, void *dev_id)
 			efx->last_irq_cpu = raw_smp_processor_id();
 
 		/* Schedule processing of the channel */
-		efx_schedule_channel_irq(efx->channel[context->index]);
+		channel = efx_get_channel(efx, context->index);
+		efx_schedule_channel_irq(channel);
 	}
 
 	return IRQ_HANDLED;

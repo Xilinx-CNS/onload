@@ -109,6 +109,9 @@ int efx_nic_init_interrupt(struct efx_nic *efx)
 	/* Hook MSI or MSI-X interrupt */
 	n_irqs = 0;
 	efx_for_each_channel(channel, efx) {
+		if (!channel->irq)
+			continue;
+
 		rc = request_irq(channel->irq, efx->type->irq_handle_msi, 0,
 				 efx->msi_context[channel->channel].name,
 				 &efx->msi_context[channel->channel]);
@@ -144,6 +147,8 @@ int efx_nic_init_interrupt(struct efx_nic *efx)
 	free_irq_cpu_rmap(cpu_rmap);
 #endif
 	efx_for_each_channel(channel, efx) {
+		if (!channel->irq)
+			continue;
 		if (n_irqs-- == 0)
 			break;
 		free_irq(channel->irq, &efx->msi_context[channel->channel]);
@@ -467,7 +472,7 @@ size_t efx_nic_describe_stats(const struct efx_hw_stat_desc *desc, size_t count,
 	for_each_set_bit(index, mask, count) {
 		if (desc[index].name) {
 			if (names) {
-				strlcpy(names, desc[index].name,
+				strscpy(names, desc[index].name,
 					ETH_GSTRING_LEN);
 				names += ETH_GSTRING_LEN;
 			}

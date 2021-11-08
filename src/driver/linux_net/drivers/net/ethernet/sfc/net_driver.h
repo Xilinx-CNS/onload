@@ -96,7 +96,9 @@
  *
  **************************************************************************/
 
-#define EFX_DRIVER_VERSION	"5.3.12.1002"
+#ifdef EFX_NOT_UPSTREAM
+#define EFX_DRIVER_VERSION	"5.3.12.1005"
+#endif
 
 #ifdef DEBUG
 #define EFX_WARN_ON_ONCE_PARANOID(x) WARN_ON_ONCE(x)
@@ -128,7 +130,10 @@
  *
  **************************************************************************/
 
-#define EFX_MAX_CHANNELS 64U
+/* This limit is arbitrary, it only exists to impose a testing limit and
+ * to avoid large memory allocations in case of a bug.
+ */
+#define EFX_MAX_CHANNELS 255U
 #define EFX_MAX_RX_QUEUES EFX_MAX_CHANNELS
 #define EFX_EXTRA_CHANNEL_PTP	0
 #define EFX_EXTRA_CHANNEL_TC	1
@@ -793,6 +798,7 @@ struct efx_rss_context {
  * @efx: Associated Efx NIC
  * @channel: Channel instance number
  * @type: Channel type definition
+ * @list: Link to the previous and next channel.
  * @eventq_init: Event queue initialised flag
  * @enabled: Channel enabled indicator
  * @tx_coalesce_doorbell: Coalescing of doorbell notifications enabled
@@ -835,6 +841,7 @@ struct efx_channel {
 	struct efx_nic *efx;
 	int channel;
 	const struct efx_channel_type *type;
+	struct list_head list;
 	bool eventq_init;
 	bool enabled;
 	bool tx_coalesce_doorbell;
@@ -1366,11 +1373,12 @@ enum efx_buf_alloc_mode {
  * @irq_rx_moderation_us: IRQ moderation time for RX event queues
  * @msg_enable: Log message enable flags
  * @state: Device state number (%STATE_*). Serialised by the rtnl_lock.
+ * @max_irqs: Maximum number if interrupts the device supports.
  * @reset_pending: Bitmask for pending resets
  * @last_reset: Time of last reset (jiffies)
  * @tx_queue: TX DMA queues
  * @rx_queue: RX DMA queues
- * @channel: Channels
+ * @channel_list: Channels used by a PCI function.
  * @msi_context: Context for each MSI
  * @extra_channel_type: Types of extra (non-traffic) channels that
  *	should be allocated for this NIC
@@ -1542,20 +1550,23 @@ struct efx_nic {
 	bool log_tc_errs;
 	unsigned int irq_mod_step_us;
 	unsigned int irq_rx_moderation_us;
+#if !defined(EFX_NOT_UPSTREAM)
 	enum efx_rss_mode rss_mode;
+#endif
 	u32 msg_enable;
 #ifdef EFX_NOT_UPSTREAM
 	enum efx_performance_profile performance_profile;
 #endif
 
 	enum nic_state state;
+	u16 max_irqs;
 	unsigned long reset_pending;
 	unsigned long last_reset;
 	unsigned long current_reset;
 	unsigned int reset_count;
 
-	struct efx_channel *channel[EFX_MAX_CHANNELS];
-	struct efx_msi_context msi_context[EFX_MAX_CHANNELS];
+	struct list_head channel_list;
+	struct efx_msi_context *msi_context;
 	const struct efx_channel_type *
 		extra_channel_type[EFX_MAX_EXTRA_CHANNELS];
 
@@ -2361,39 +2372,28 @@ struct efx_nic_type {
  *
  *************************************************************************/
 
-static inline struct efx_channel *
-efx_get_channel(struct efx_nic *efx, unsigned int index)
-{
-	EFX_WARN_ON_ONCE_PARANOID(index >= efx_channels(efx));
-	return efx->channel[index];
-}
+struct efx_channel *efx_get_channel(struct efx_nic *efx, unsigned int index);
 
 /* Iterate over all used channels */
 #define efx_for_each_channel(_channel, _efx)				\
-	for (_channel = (_efx)->channel[0];				\
-	     _channel;							\
-	     _channel = (_channel->channel + 1 < efx_channels(_efx)) ?	\
-		     (_efx)->channel[_channel->channel + 1] : NULL)
+	list_for_each_entry(_channel, &_efx->channel_list, list)
 
 /* Iterate over all used channels in reverse */
 #define efx_for_each_channel_rev(_channel, _efx)			\
-	for (_channel = (_efx)->channel[efx_channels(_efx) - 1];	\
-	     _channel;							\
-	     _channel = _channel->channel ?				\
-		     (_efx)->channel[_channel->channel - 1] : NULL)
+	list_for_each_entry_reverse(_channel, &_efx->channel_list, list)
 
 static inline struct efx_channel *
 efx_get_tx_channel(struct efx_nic *efx, unsigned int index)
 {
 	EFX_WARN_ON_ONCE_PARANOID(index >= efx_tx_channels(efx));
-	return efx->channel[efx->tx_channel_offset + index];
+	return efx_get_channel(efx, efx->tx_channel_offset + index);
 }
 
 static inline struct efx_channel *
 efx_get_xdp_channel(struct efx_nic *efx, unsigned int index)
 {
 	EFX_WARN_ON_ONCE_PARANOID(index >= efx->n_xdp_channels);
-	return efx->channel[efx_xdp_channel_offset(efx) + index];
+	return efx_get_channel(efx, efx_xdp_channel_offset(efx) + index);
 }
 
 static inline struct efx_channel *
@@ -2469,7 +2469,7 @@ efx_get_tx_queue_from_index(struct efx_nic *efx, unsigned int index)
 
 /* Iterate over all TX queues belonging to a channel */
 #define efx_for_each_channel_tx_queue(_tx_queue, _channel)		 \
-	if (!(_channel)->tx_queues)					 \
+	if (!_channel || !(_channel)->tx_queues)			 \
 		;							 \
 	else								 \
 		for (_tx_queue = (_channel)->tx_queues;			 \
@@ -2479,7 +2479,7 @@ efx_get_tx_queue_from_index(struct efx_nic *efx, unsigned int index)
 
 static inline bool efx_channel_has_rx_queue(struct efx_channel *channel)
 {
-	return channel->rx_queue.core_index >= 0;
+	return channel && channel->rx_queue.core_index >= 0;
 }
 
 static inline struct efx_rx_queue *

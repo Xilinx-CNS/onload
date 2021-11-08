@@ -543,6 +543,7 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 
 	if (fcw.offset > pci_resource_len(efx->pci_dev, fcw.bar) - ESE_GZ_FCW_LEN) {
 		pci_err(pci_dev, "Func control window overruns BAR\n");
+		rc = -EIO;
 		goto fail;
 	}
 

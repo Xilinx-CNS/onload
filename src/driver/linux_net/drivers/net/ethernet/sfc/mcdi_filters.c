@@ -848,6 +848,8 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 			saved_spec->flags |= spec->flags;
 			saved_spec->rss_context = spec->rss_context;
 			saved_spec->dmaq_id = spec->dmaq_id;
+			saved_spec->stack_id = spec->stack_id;
+			saved_spec->vport_id = spec->vport_id;
 		}
 	} else if (!replacing) {
 		kfree(saved_spec);
@@ -981,6 +983,7 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 		new_spec.dmaq_id = 0;
 		new_spec.rss_context = 0;
 		new_spec.vport_id = 0;
+		new_spec.stack_id = 0;
 		rc = efx_mcdi_filter_push(efx, &new_spec,
 					  &table->entry[filter_idx].handle,
 					  &efx->rss_context, &efx->vport,
@@ -2225,16 +2228,21 @@ invalid:
 		}
 	}
 
+	/* if we fail to insert some filters then don't fail whatever
+	 * control operation we're performing, but don't mark filters
+	 * as installed so they'll be tried again later
+	 */
 	if (fail_rc)
 		netif_err(efx, hw, efx->net_dev,
 			  "unable to restore all filters, rc=%d\n",
 			  fail_rc);
 	else
 		table->must_restore_filters = false;
+
 	mutex_unlock(&efx->vport_lock);
 	mutex_unlock(&efx->rss_lock);
 	up_write(&table->lock);
-	return fail_rc;
+	return 0;
 }
 
 void efx_mcdi_filter_table_restore(struct efx_nic *efx)

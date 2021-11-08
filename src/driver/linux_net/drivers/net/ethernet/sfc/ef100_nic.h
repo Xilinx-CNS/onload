@@ -131,7 +131,7 @@ struct ef100_nic_data {
 	struct mutex bar_config_lock; /* lock to control access to bar config */
 #endif
 	u64 licensed_features;
-	DECLARE_BITMAP(evq_phases, EFX_MAX_CHANNELS);
+	unsigned long *evq_phases;
 	u64 stats[EF100_STAT_COUNT];
 	spinlock_t vf_reps_lock; /* Synchronises 'all-VFreps' operations */
 	unsigned int vf_rep_count; /* usually but not always efx->vf_count */

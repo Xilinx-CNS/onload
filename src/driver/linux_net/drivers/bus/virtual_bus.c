@@ -59,10 +59,17 @@ static int virtbus_probe(struct device *dev)
 	return dev->driver->probe(dev);
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_BUS_REMOVE_VOID)
+static void virtbus_remove(struct device *dev)
+{
+	dev->driver->remove(dev);
+}
+#else
 static int virtbus_remove(struct device *dev)
 {
 	return dev->driver->remove(dev);
 }
+#endif
 
 static void virtbus_shutdown(struct device *dev)
 {

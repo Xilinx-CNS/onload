@@ -493,13 +493,17 @@ int efx_probe_devlink(struct efx_nic *efx)
 	devlink_private = devlink_priv(efx->devlink);
 	devlink_private->efx = efx;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_DEVLINK_ALLOC_DEV)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
+	devlink_register(efx->devlink);
+#elif defined(EFX_HAVE_DEVLINK_ALLOC_DEV)
 	rc = devlink_register(efx->devlink);
-#else
-	rc = devlink_register(efx->devlink, &efx->pci_dev->dev);
-#endif
 	if (rc)
 		goto out_free;
+#else
+	rc = devlink_register(efx->devlink, &efx->pci_dev->dev);
+	if (rc)
+		goto out_free;
+#endif
 
 	rc = devlink_port_register(efx->devlink, &devlink_private->dl_port,
 				   efx->port_num);
@@ -511,7 +515,9 @@ int efx_probe_devlink(struct efx_nic *efx)
 
 out_unreg:
 	devlink_unregister(efx->devlink);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VOID_DEVLINK_REGISTER)
 out_free:
+#endif
 	devlink_free(efx->devlink);
 	efx->devlink = NULL;
 	return rc;

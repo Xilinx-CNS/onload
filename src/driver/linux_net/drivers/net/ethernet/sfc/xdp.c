@@ -61,6 +61,7 @@ int efx_xdp_setup_prog(struct efx_nic *efx, struct bpf_prog *prog)
 static int efx_xsk_pool_enable(struct efx_nic *efx, struct xsk_buff_pool *pool,
 			       u16 qid)
 {
+	struct efx_channel *channel;
 	bool if_running;
 	int err;
 
@@ -68,34 +69,35 @@ static int efx_xsk_pool_enable(struct efx_nic *efx, struct xsk_buff_pool *pool,
 	if (err)
 		return err;
 
+	channel = efx_get_channel(efx, qid);
 	if_running = (efx->state == STATE_NET_UP);
 
 	if (if_running) {
-		err = efx_channel_stop_xsk_queue(efx->channel[qid]);
+		err = efx_channel_stop_xsk_queue(channel);
 		if (err) {
 			netif_err(efx, drv, efx->net_dev,
 				  "Channel %u Stop data path failed\n",
-					qid);
+				  qid);
 			goto xsk_q_stop_fail;
 		}
 	}
 
-	efx->channel[qid]->zc = true;
+	channel->zc = true;
 
 	if (if_running) {
-		err = efx_channel_start_xsk_queue(efx->channel[qid]);
+		err = efx_channel_start_xsk_queue(channel);
 		if (err) {
 			netif_err(efx, drv, efx->net_dev,
 				  "Channel %u Start data path failed\n",
-					qid);
+				  qid);
 			goto xsk_q_start_fail;
 		}
 	}
 
 	return 0;
 xsk_q_start_fail: /* try to recover old configuration */
-	efx->channel[qid]->zc = false;
-	efx_channel_start_xsk_queue(efx->channel[qid]);
+	channel->zc = false;
+	efx_channel_start_xsk_queue(channel);
 xsk_q_stop_fail:
 	xsk_pool_dma_unmap(pool, 0);
 	return err;
@@ -104,6 +106,7 @@ xsk_q_stop_fail:
 static int efx_xsk_pool_disable(struct efx_nic *efx, u16 qid)
 {
 	struct net_device *netdev = efx->net_dev;
+	struct efx_channel *channel;
 	struct xsk_buff_pool *pool;
 	bool if_running;
 	int rc;
@@ -112,19 +115,20 @@ static int efx_xsk_pool_disable(struct efx_nic *efx, u16 qid)
 	if (!pool)
 		return -EINVAL;
 
+	channel = efx_get_channel(efx, qid);
 	if_running = (efx->state == STATE_NET_UP);
 
 	if (if_running) {
-		rc = efx_channel_stop_xsk_queue(efx->channel[qid]);
+		rc = efx_channel_stop_xsk_queue(channel);
 		WARN_ON(rc);
 		if (rc)
 			goto xsk_q_stop_fail;
 	}
 
-	efx->channel[qid]->zc = false;
+	channel->zc = false;
 
 	if (if_running) {
-		rc = efx_channel_start_xsk_queue(efx->channel[qid]);
+		rc = efx_channel_start_xsk_queue(channel);
 		WARN_ON(rc);
 	}
 
@@ -132,7 +136,7 @@ static int efx_xsk_pool_disable(struct efx_nic *efx, u16 qid)
 
 	return 0;
 xsk_q_stop_fail:
-	efx->channel[qid]->zc = false;
+	channel->zc = false;
 	xsk_pool_dma_unmap(pool, 0);
 	return rc;
 }
@@ -188,6 +192,7 @@ static void efx_xsk_umem_dma_unmap(struct pci_dev *pci_dev,
 static int efx_xsk_umem_enable(struct efx_nic *efx, struct xdp_umem *umem,
 			       u16 qid)
 {
+	struct efx_channel *channel = efx_get_channel(efx, qid);
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
 	struct xdp_umem_fq_reuse *reuseq;
 #endif
@@ -195,7 +200,7 @@ static int efx_xsk_umem_enable(struct efx_nic *efx, struct xdp_umem *umem,
 	int err;
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_XSK_BUFFER_ALLOC)
-	reuseq = xsk_reuseq_prepare(efx->channel[qid]->rx_queue.ptr_mask + 1);
+	reuseq = xsk_reuseq_prepare(channel->rx_queue.ptr_mask + 1);
 	if (!reuseq)
 		return -ENOMEM;
 
@@ -208,31 +213,31 @@ static int efx_xsk_umem_enable(struct efx_nic *efx, struct xdp_umem *umem,
 	if_running = (efx->state == STATE_NET_UP);
 
 	if (if_running) {
-		err = efx_channel_stop_xsk_queue(efx->channel[qid]);
+		err = efx_channel_stop_xsk_queue(channel);
 		if (err) {
 			netif_err(efx, drv, efx->net_dev,
 				  "Channel %u Stop data path failed\n",
-					qid);
+				  qid);
 			goto xsk_q_stop_fail;
 		}
 	}
 
-	efx->channel[qid]->zc = true;
+	channel->zc = true;
 
 	if (if_running) {
-		err = efx_channel_start_xsk_queue(efx->channel[qid]);
+		err = efx_channel_start_xsk_queue(channel);
 		if (err) {
 			netif_err(efx, drv, efx->net_dev,
 				  "Channel %u Start data path failed\n",
-					qid);
+				  qid);
 			goto xsk_q_start_fail;
 		}
 	}
 
 	return 0;
 xsk_q_start_fail: /* try to recover old configuration */
-	efx->channel[qid]->zc = false;
-	efx_channel_start_xsk_queue(efx->channel[qid]);
+	channel->zc = false;
+	efx_channel_start_xsk_queue(channel);
 xsk_q_stop_fail:
 	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
 	return err;
@@ -241,6 +246,7 @@ xsk_q_stop_fail:
 static int efx_xsk_umem_disable(struct efx_nic *efx, u16 qid)
 {
 	struct net_device *netdev = efx->net_dev;
+	struct efx_channel *channel;
 	struct xdp_umem *umem;
 	bool if_running;
 	int rc;
@@ -249,19 +255,20 @@ static int efx_xsk_umem_disable(struct efx_nic *efx, u16 qid)
 	if (!umem)
 		return -EINVAL;
 
+	channel = efx_get_channel(efx, qid);
 	if_running = (efx->state == STATE_NET_UP);
 
 	if (if_running) {
-		rc = efx_channel_stop_xsk_queue(efx->channel[qid]);
+		rc = efx_channel_stop_xsk_queue(channel);
 		WARN_ON(rc);
 		if (rc)
 			goto xsk_q_stop_fail;
 	}
 
-	efx->channel[qid]->zc = false;
+	channel->zc = false;
 
 	if (if_running) {
-		rc = efx_channel_start_xsk_queue(efx->channel[qid]);
+		rc = efx_channel_start_xsk_queue(channel);
 		WARN_ON(rc);
 	}
 
@@ -269,7 +276,7 @@ static int efx_xsk_umem_disable(struct efx_nic *efx, u16 qid)
 
 	return 0;
 xsk_q_stop_fail:
-	efx->channel[qid]->zc = false;
+	channel->zc = false;
 	efx_xsk_umem_dma_unmap(efx->pci_dev, umem);
 	return rc;
 }

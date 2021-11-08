@@ -23,6 +23,7 @@ EFX_HAVE_VIRTUAL_BUS			symbol	virtbus_drv_unregister	include/linux/virtual_bus.h
 EFX_HAVE_DEV_PM_DOMAIN_ATTACH		symbol	dev_pm_domain_attach	include/linux/pm_domain.h
 EFX_HAVE_OF_IRQ_H			file	include/linux/of_irq.h
 EFX_NEED_IDA				nsymbol	ida_simple_get	include/linux/idr.h
+EFX_HAVE_BUS_REMOVE_VOID		memtype	struct_bus_type	remove	include/linux/device/bus.h	void (*)(struct device *)
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 

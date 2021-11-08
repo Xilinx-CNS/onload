@@ -139,6 +139,8 @@ static int ef100_net_stop(struct net_device *net_dev)
 
 void ef100_net_dealloc(struct efx_nic *efx)
 {
+	struct ef100_nic_data *nic_data;
+
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	if (--efx->open_count) {
@@ -160,10 +162,17 @@ void ef100_net_dealloc(struct efx_nic *efx)
 #endif
 	efx_fini_filters(efx);
 	efx_fini_napi(efx);
+
+	nic_data = efx->nic_data;
+	if (nic_data->evq_phases)
+		bitmap_free(nic_data->evq_phases);
+	nic_data->evq_phases = NULL;
+
 	efx_remove_channels(efx);
 	efx_mcdi_free_vis(efx);
 	efx_unset_channels(efx);
 	efx_remove_interrupts(efx);
+	efx_fini_channels(efx);
 
 	efx->state = STATE_NET_DOWN;
 }
@@ -253,6 +262,7 @@ static void ef100_adjust_channels(struct efx_nic *efx, unsigned int avail_vis)
 
 int ef100_net_alloc(struct efx_nic *efx)
 {
+	struct ef100_nic_data *nic_data;
 	unsigned int allocated_vis;
 	int rc;
 
@@ -268,6 +278,10 @@ int ef100_net_alloc(struct efx_nic *efx)
 #endif
 
 	rc = efx_check_disabled(efx);
+	if (rc)
+		return rc;
+
+	rc = efx_init_channels(efx);
 	if (rc)
 		return rc;
 
@@ -310,6 +324,11 @@ int ef100_net_alloc(struct efx_nic *efx)
 	rc = ef100_remap_bar(efx, allocated_vis);
 	if (rc)
 		return rc;
+
+	nic_data = efx->nic_data;
+	nic_data->evq_phases = bitmap_zalloc(efx_channels(efx), GFP_KERNEL);
+	if (!nic_data->evq_phases)
+		return -ENOMEM;
 
 	rc = efx_init_napi(efx);
 	if (rc)
@@ -819,7 +838,7 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 #endif
 
 	efx_mcdi_filter_table_remove(efx);
-	efx_fini_channels(efx);
+	efx_fini_interrupts(efx);
 	efx_mcdi_mac_fini_stats(efx);
 	kfree(efx->phy_data);
 	efx->phy_data = NULL;
@@ -904,9 +923,13 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 			goto fail;
 	}
 
-	rc = efx_init_channels(efx);
-	if (rc)
+	rc = efx_init_interrupts(efx);
+	if (rc < 0)
 		goto fail;
+
+	/* Update maximum channel count for ethtool */
+	efx->max_channels = min_t(u16, efx->max_channels, efx->max_irqs);
+	efx->max_tx_channels = efx->max_channels;
 
 	rc = ef100_filter_table_probe(efx);
 	if (rc)

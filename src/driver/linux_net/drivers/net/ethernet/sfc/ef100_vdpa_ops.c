@@ -1018,7 +1018,11 @@ static bool is_iova_overlap(u64 iova1, u64 size1, u64 iova2, u64 size2)
 
 static int ef100_vdpa_dma_map(struct vdpa_device *vdev,
 			      u64 iova, u64 size,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_DMA_MAP_OPAQUE_PARAM)
+			      u64 pa, u32 perm, void *opaque)
+#else
 			      u64 pa, u32 perm)
+#endif
 {
 	struct ef100_vdpa_nic *vdpa_nic;
 	struct ef100_nic_data *nic_data;

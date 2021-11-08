@@ -2739,7 +2739,9 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_PTP_PF_NONE) && defined(EFX_HAVE_PHC_SUPPORT))
 	struct ptp_pin_desc *ppd;
 #endif
+#ifdef CONFIG_SFC_DEBUGFS
 	unsigned int pos;
+#endif
 #ifdef CONFIG_SFC_PPS
 	bool pps_ok;
 #endif

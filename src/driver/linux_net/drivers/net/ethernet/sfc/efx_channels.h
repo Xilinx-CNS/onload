@@ -18,6 +18,8 @@ void efx_channel_dummy_op_void(struct efx_channel *channel);
 int efx_channels_init_module(void);
 void efx_channels_fini_module(void);
 
+int efx_init_interrupts(struct efx_nic *efx);
+void efx_fini_interrupts(struct efx_nic *efx);
 int efx_probe_interrupts(struct efx_nic *efx);
 void efx_remove_interrupts(struct efx_nic *efx);
 int efx_enable_interrupts(struct efx_nic *efx);

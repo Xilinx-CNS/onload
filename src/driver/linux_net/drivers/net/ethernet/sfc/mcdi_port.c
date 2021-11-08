@@ -258,7 +258,7 @@ static int efx_mcdi_phy_probe(struct efx_nic *efx)
 	/* Fill out nic state */
 	efx->phy_data = phy_data;
 	efx->phy_type = phy_data->type;
-	strlcpy(efx->phy_name, phy_data->name, sizeof(efx->phy_name));
+	strscpy(efx->phy_name, phy_data->name, sizeof(efx->phy_name));
 
 	efx->mdio_bus = phy_data->channel;
 	efx->mdio.prtad = phy_data->port;
