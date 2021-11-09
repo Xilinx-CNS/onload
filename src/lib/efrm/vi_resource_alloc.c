@@ -125,37 +125,17 @@ static inline void efrm_atomic_or(int i, atomic_t *v)
 	} while (atomic_cmpxchg(v, old, new) != old);
 }
 
-/* The callee of this function relies on the fact that it's running in a
- * tasklet in order to guarantee that it's serialised, so the tasklet should
- * not be converted to a workqueue without additional serialisation. */
-static void
-efrm_vi_tasklet(unsigned long l)
+static irqreturn_t
+vi_interrupt(int irq, void *dev_id)
 {
-	struct efrm_interrupt_vector *vec = (void *)l;
+	struct efrm_interrupt_vector *vec = dev_id;
+
+	/* efrm_eventq_do_interrupt_callbacks() assumes its calls are
+	 * serialised.  request_threaded_irq() creates exactly one thread
+	 * for each IRQ, so we don't need any additional locking here. */
+
 	/* Fixme: callback with is_timeout=true? */
 	efrm_eventq_do_interrupt_callbacks(vec, false, INT_MAX);
-}
-
-
-static irqreturn_t
-vi_interrupt(int irq, void *dev_id
-#if defined(EFX_HAVE_IRQ_HANDLER_REGS)
-	, struct pt_regs *regs __attribute__ ((unused))
-#endif
-	)
-{
-	struct tasklet_struct *tasklet = dev_id;
-
-	/* Processing of hardware interrupt should be done in 2 steps: top-half
-	 * and bottom-half. Top-half is a handler function that is performed in
-	 * the context of the disabled interrupts. So it should performs only
-	 * the most minimal work that cannot be postponed for later.
-	 * Bottom-half is the deferred processing of interrupts is performed in
-	 * the kernel context with enabled interrupts. It can be done with
-	 * tasklet, workqueue and request_threaded_irq().
-	 * Tasklet is used here because it has better latency performance.
-	 */
-	tasklet_schedule(tasklet);
 	return IRQ_HANDLED;
 }
 
@@ -177,12 +157,10 @@ efrm_vi_irq_setup(struct efrm_interrupt_vector *vec)
 	name_local[sizeof(name_local) - 1] = '\0';
 
 	/* Enable interrupts */
-	tasklet_init(&vec->tasklet, &efrm_vi_tasklet, (unsigned long)vec);
 	name = kstrdup(name_local, GFP_KERNEL);
 	if (!name)
 		name = default_irq_name;
-	rc = request_irq(vec->irq, vi_interrupt, IRQF_SAMPLE_RANDOM, name,
-			 &vec->tasklet);
+	rc = request_threaded_irq(vec->irq, NULL, vi_interrupt, IRQF_SAMPLE_RANDOM, name, vec);
 	if (rc != 0) {
 		EFRM_ERR("failed to request IRQ %d for NIC %d", vec->irq,
 			 vec->nic->index);
@@ -207,14 +185,13 @@ efrm_vi_irq_free(struct efrm_interrupt_vector *vec)
 #ifdef EFRM_IRQ_FREE_RETURNS_NAME
 	name = free_irq(vec->irq, &vec->tasklet);
 #else
-	free_irq(vec->irq, &vec->tasklet);
+	free_irq(vec->irq, vec);
 	name = vec->irq_name;
 	vec->irq_name = NULL;
 #endif
 	EFRM_ASSERT(name);
 	if (name != default_irq_name)
 		kfree(name);
-	tasklet_kill(&vec->tasklet);
 }
 
 

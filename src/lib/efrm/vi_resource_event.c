@@ -257,8 +257,8 @@ int efrm_eventq_do_interrupt_callbacks(struct efrm_interrupt_vector *vec,
 
 	INIT_LIST_HEAD(&vis);
 
-	/* This function is called from a tasklet, and is therefore serialised
-	 * with respect to itself. */
+	/* This function is called from a threaded IRQ handler, and is therefore
+	 * serialised with respect to itself. */
 
 	/* With the list locked, mark the VIs as busy.  This will prevent
 	 * anyone from freeing them. */

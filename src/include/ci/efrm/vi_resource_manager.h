@@ -130,7 +130,6 @@ struct efrm_interrupt_vector {
 	/* The following fields are protected by vec_acquire_lock. */
 	struct mutex vec_acquire_lock;
 	unsigned num_vis;
-	struct tasklet_struct tasklet;
 #ifndef EFRM_IRQ_FREE_RETURNS_NAME
 	const char *irq_name;
 #endif
