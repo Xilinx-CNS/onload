@@ -666,11 +666,6 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     if( header == NULL )
       break;
 
-    /* For simplicity, require configuration for a fixed data offset.
-     * Otherwise, we'd also have to check NEXT_FRAME_LOC in the previous buffer.
-     */
-    BUG_ON(CI_OWORD_FIELD(*header, EFCT_RX_HEADER_NEXT_FRAME_LOC) != 1);
-
     pkt_id = rxq_ptr_to_pkt_id(rxq_ptr->prev);
 
 #define M_(FIELD) (CI_MASK64(FIELD ## _WIDTH) << FIELD ## _LBN)
@@ -690,6 +685,13 @@ static int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
       efct_rx_discard(qid, pkt_id, header, &evs[i]);
     }
     else {
+      /* For simplicity, require configuration for a fixed data offset.
+       * Otherwise, we'd also have to check NEXT_FRAME_LOC in the previous
+       * buffer. In theory the hardware could use variable offsets, but for now
+       * we rely on knowing that the current implementation uses fixed offsets.
+       */
+      BUG_ON(CI_OWORD_FIELD(*header, EFCT_RX_HEADER_NEXT_FRAME_LOC) != 1);
+
       evs[i].rx_ref.type = EF_EVENT_TYPE_RX_REF;
       evs[i].rx_ref.len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
       evs[i].rx_ref.pkt_id = pkt_id;
