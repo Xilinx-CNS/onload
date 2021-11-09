@@ -67,6 +67,7 @@ static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_r
 
   ++q->superbuf_refcount[sbid];
   ++app->current_owned_superbufs;
+  EFHW_ASSERT(!ci_bit_test(app->owns_superbuf, sbid));
   __ci_bit_set(app->owns_superbuf, sbid);
   RING_FIFO_ENTRY(app->shm->rxq.q, added) = sbufs_q_entry.value;
   ci_wmb();
@@ -95,6 +96,7 @@ static void finished_with_superbuf(struct xlnx_efct_device *edev,
 {
   EFHW_ASSERT(app->current_owned_superbufs > 0);
   EFHW_ASSERT(q->superbuf_refcount[sbid] > 0);
+  EFHW_ASSERT(ci_bit_test(app->owns_superbuf, sbid));
   __ci_bit_clear(app->owns_superbuf, sbid);
   --app->current_owned_superbufs;
   if( --q->superbuf_refcount[sbid] == 0 )
