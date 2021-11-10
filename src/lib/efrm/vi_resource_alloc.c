@@ -152,8 +152,8 @@ efrm_vi_irq_setup(struct efrm_interrupt_vector *vec)
 	int rc;
 	const char *name;
 
-	snprintf(name_local, sizeof(name_local), "onload-%d@%d",
-		 vec->nic->index, vec->irq);
+	snprintf(name_local, sizeof(name_local), "onld-%d",
+		 vec->nic->index);
 	name_local[sizeof(name_local) - 1] = '\0';
 
 	/* Enable interrupts */
