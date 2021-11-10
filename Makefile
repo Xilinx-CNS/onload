@@ -166,7 +166,7 @@ endif
 
 kernel: modules
 	@mkdir -p $(KBUILDTOP)/driver/linux
-	$(Q)ln -sf $(KBUILDTOP)/src/driver/linux_{onload,char,resource}/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/bus/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/net/ethernet/sfc/*.ko $(KBUILDTOP)/driver/linux
+	$(Q)ln -rsf $(KBUILDTOP)/src/driver/linux_onload/*.ko $(KBUILDTOP)/src/driver/linux_char/*.ko $(KBUILDTOP)/src/driver/linux_resource/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/bus/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/net/ethernet/sfc/*.ko $(KBUILDTOP)/driver/linux
 	$(Q)cp src/driver/linux/*.sh $(KBUILDTOP)/driver/linux
 
 modules modules_install: $(OUTMAKEFILES)
