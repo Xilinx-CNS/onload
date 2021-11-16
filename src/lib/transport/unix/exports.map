@@ -108,6 +108,8 @@
     onload_stackname_restore;
     onload_stack_opt_get_int;
     onload_stack_opt_set_int;
+    onload_stack_opt_get_str;
+    onload_stack_opt_set_str;
     onload_stack_opt_reset;
     onload_version;
     onload_lib_ext_version;
