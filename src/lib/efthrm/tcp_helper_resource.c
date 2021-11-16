@@ -238,6 +238,7 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
  again:
   l = trs->trusted_lock;
   ci_assert_flags(l, OO_TRUSTED_LOCK_LOCKED);
+  ci_assert_impl(ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC, !in_dl_context);
 
   if(CI_UNLIKELY( l & OO_TRUSTED_LOCK_AWAITING_FREE )) {
     /* We may be called from the stack workqueue, so postpone destruction
@@ -4360,6 +4361,8 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     nic = efrm_client_get_nic(rs->nic[intf_i].thn_oo_nic->efrm_client);
     if( nic->devtype.arch == EFHW_ARCH_AF_XDP )
       ni->flags |= CI_NETIF_FLAG_AF_XDP;
+    if( nic->devtype.arch == EFHW_ARCH_EFCT )
+      ni->flags |= CI_NETIF_FLAG_EFCT;
     if( nic->flags & NIC_FLAG_ONLOAD_UNSUPPORTED )
       ni->state->flags |= CI_NETIF_FLAG_ONLOAD_UNSUPPORTED;
 #if CI_CFG_NIC_RESET_SUPPORT
@@ -6631,7 +6634,7 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
     if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
       CITP_STATS_NETIF(++ni->state->stats.interrupt_polls);
 
-      if( ni->flags & CI_NETIF_FLAG_AF_XDP ) {
+      if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC ) {
         /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
         tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
         return 0;
@@ -6718,7 +6721,7 @@ static int tcp_helper_timeout(tcp_helper_resource_t* trs, int intf_i, int budget
     if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
       CITP_STATS_NETIF(++ni->state->stats.timeout_interrupt_polls);
 
-      if( ni->flags & CI_NETIF_FLAG_AF_XDP ) {
+      if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC ) {
         /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
         tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
         return 0;
@@ -6811,7 +6814,7 @@ static int oo_handle_wakeup_int_driven(void* context, int is_timeout,
         CITP_STATS_NETIF(++ni->state->stats.interrupt_polls);
         ci_assert( ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT);
 
-        if( ni->flags & CI_NETIF_FLAG_AF_XDP ) {
+        if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC ) {
           /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
           ci_bit_set(&ni->state->evq_prime_deferred, tcph_nic->thn_intf_i);
           tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);

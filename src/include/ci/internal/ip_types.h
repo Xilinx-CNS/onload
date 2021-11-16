@@ -286,6 +286,12 @@ struct ci_netif_s {
 #define CI_NETIF_FLAG_MAY_INJECT_TO_KERNEL 0x8000
 /* one of the NICs is AF_XDP */
 #define CI_NETIF_FLAG_AF_XDP               0x10000
+/* one of the NICs is EFCT */
+#define CI_NETIF_FLAG_EFCT                 0x20000
+/* these architecture cannot handle polling in atomic */
+#define CI_NETIF_FLAGS_AVOID_ATOMIC \
+        (CI_NETIF_FLAG_AF_XDP|\
+         CI_NETIF_FLAG_EFCT)
 
 #endif
 

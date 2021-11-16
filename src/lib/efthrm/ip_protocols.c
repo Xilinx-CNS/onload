@@ -621,7 +621,7 @@ int efab_handle_ipp_pkt_task(int thr_id, efab_ipp_addr* addr,
                                               OO_TRUSTED_LOCK_HANDLE_ICMP,
                                               CI_EPLOCK_NETIF_HANDLE_ICMP,
                                               1) ) {
-    if( thr->netif.flags & CI_NETIF_FLAG_AF_XDP ) {
+    if( thr->netif.flags & CI_NETIF_FLAGS_AVOID_ATOMIC ) {
       /* We are in softirq context here, but AF_XDP poll can sleep.
        * Defer to workqueue. */
       ef_eplock_holder_set_flag(&thr->netif.state->lock,
