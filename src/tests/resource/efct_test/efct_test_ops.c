@@ -11,6 +11,9 @@
 #if __has_include(<linux/set_memory.h>)
 #include <linux/set_memory.h>
 #endif
+#if __has_include(<asm/set_memory.h>)
+#include <asm/set_memory.h>
+#endif
 #endif
 
 #include <ci/driver/ci_aux.h>
