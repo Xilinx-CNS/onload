@@ -302,10 +302,12 @@ static void ci_netif_dump_pkt_summary(ci_netif* ni, oo_dump_log_fn_t logger,
   rx_ring = 0;
   tx_ring = 0;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    rx_ring += ef_vi_receive_fill_level(ci_netif_vi(ni, intf_i));
-    tx_ring += ef_vi_transmit_fill_level(ci_netif_vi(ni, intf_i));
-    for( i = 0; i < ci_netif_num_vis(ni); ++i )
+    for( i = 0; i < ci_netif_num_vis(ni); ++i ) {
+      ef_vi* pvi = &ni->nic_hw[intf_i].vis[i];
+      rx_ring += ef_vi_receive_fill_level(pvi);
+      tx_ring += ef_vi_transmit_fill_level(pvi);
       tx_oflow += ns->nic[intf_i].dmaq[i].num;
+    }
   }
   used = ni->packets->n_pkts_allocated - ni->packets->n_free - ns->n_async_pkts;
   rx_queued = ns->n_rx_pkts - rx_ring - ns->mem_pressure_pkt_pool_n;
