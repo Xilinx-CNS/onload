@@ -43,6 +43,9 @@ struct efx_sw_stat_desc {
 	.get_stat = get_stat_function,					\
 }
 
+/* MAC address mask including only I/G bit */
+static const u8 mac_addr_ig_mask[ETH_ALEN] __aligned(2) = {0x01, 0, 0, 0, 0, 0};
+
 static u64 efx_get_uint_stat(void *field)
 {
 	return *(unsigned int *)field;

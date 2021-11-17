@@ -232,8 +232,8 @@ static void ef100_make_tso_desc(struct efx_nic *efx,
 #else
 	bool encap = false;
 #endif
+	bool vlan_enable = false;
 	bool udp_encap = false;
-	u16 vlan_enable = 0;
 	struct tcphdr *tcp;
 	bool outer_csum;
 	u32 paylen;

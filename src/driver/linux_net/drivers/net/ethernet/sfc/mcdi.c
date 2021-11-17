@@ -1736,9 +1736,10 @@ static int efx_mcdi_drv_attach_attempt(struct efx_nic *efx,
 	MCDI_SET_DWORD(inbuf, DRV_ATTACH_IN_NEW_STATE, new_state);
 	MCDI_SET_DWORD(inbuf, DRV_ATTACH_IN_UPDATE, 1);
 	MCDI_SET_DWORD(inbuf, DRV_ATTACH_IN_FIRMWARE_ID, fw_variant);
-
+#ifdef EFX_NOT_UPSTREAM
 	strscpy(MCDI_PTR(inbuf, DRV_ATTACH_IN_V2_DRIVER_VERSION),
 		EFX_DRIVER_VERSION, MC_CMD_DRV_ATTACH_IN_V2_DRIVER_VERSION_LEN);
+#endif
 
 	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_DRV_ATTACH, inbuf, sizeof(inbuf),
 				outbuf, sizeof(outbuf), &outlen);

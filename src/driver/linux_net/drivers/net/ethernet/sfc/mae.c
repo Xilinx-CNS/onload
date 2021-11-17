@@ -499,22 +499,71 @@ static void efx_mae_table_free_desc(struct efx_tc_table_desc *desc)
 	memset(desc, 0, sizeof(*desc));
 }
 
+static bool efx_mae_check_table_exists(struct efx_nic *efx, u32 tbl_req)
+{
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_TABLE_LIST_OUT_LEN(16));
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_TABLE_LIST_IN_LEN);
+	u32 tbl_id, tbl_total, tbl_cnt, pos = 0;
+	size_t outlen, msg_max;
+	bool ct_tbl = false;
+	int rc, idx;
+
+	msg_max = sizeof(outbuf);
+	efx->tc->meta_ct.hooked = false;
+more:
+	memset(outbuf, 0, sizeof(*outbuf));
+	MCDI_SET_DWORD(inbuf, TABLE_LIST_IN_FIRST_TABLE_ID_INDEX, pos);
+	rc = efx_mcdi_rpc(efx, MC_CMD_TABLE_LIST, inbuf, sizeof(inbuf), outbuf,
+			  msg_max, &outlen);
+	if (rc)
+		return false;
+
+	if (outlen < MC_CMD_TABLE_LIST_OUT_LEN(1))
+		return false;
+
+	tbl_total = MCDI_DWORD(outbuf, TABLE_LIST_OUT_N_TABLES);
+	tbl_cnt = MC_CMD_TABLE_LIST_OUT_TABLE_ID_NUM(min(outlen, msg_max));
+
+	for (idx = 0; idx < tbl_cnt; idx++) {
+		tbl_id = MCDI_ARRAY_DWORD(outbuf, TABLE_LIST_OUT_TABLE_ID, idx);
+		if (tbl_id == tbl_req) {
+			ct_tbl = true;
+			break;
+		}
+	}
+
+	pos += tbl_cnt;
+	if (!ct_tbl && pos < tbl_total)
+		goto more;
+
+	return ct_tbl;
+}
+
 int efx_mae_get_tables(struct efx_nic *efx)
 {
 	int rc;
 
 	efx->tc->meta_ct.hooked = false;
-	rc = efx_mae_table_get_desc(efx, &efx->tc->meta_ct.desc,
-				    TABLE_ID_CONNTRACK_TABLE);
-	if (rc) {
-		netif_warn(efx, drv, efx->net_dev,
-			   "failed to probe MAE conntrack table rc %d\n", rc);
-	} else {
-		rc = efx_mae_table_hook_ct(efx, &efx->tc->meta_ct);
-		if (rc)
-			netif_warn(efx, drv, efx->net_dev,
-				   "failed to hook MAE conntrack table rc %d\n",
+	if (efx_mae_check_table_exists(efx, TABLE_ID_CONNTRACK_TABLE)) {
+		rc = efx_mae_table_get_desc(efx, &efx->tc->meta_ct.desc,
+					    TABLE_ID_CONNTRACK_TABLE);
+		if (rc) {
+			netif_info(efx, hw, efx->net_dev,
+				   "FW does not support conntrack desc rc %d\n",
 				   rc);
+			return 0;
+		}
+
+		rc = efx_mae_table_hook_ct(efx, &efx->tc->meta_ct);
+		if (rc) {
+			netif_info(efx, hw, efx->net_dev,
+				   "FW does not support conntrack hook rc %d\n",
+				   rc);
+			return 0;
+		}
+	} else {
+		netif_info(efx, hw, efx->net_dev,
+			   "FW does not support conntrack table\n");
 	}
 	return 0;
 }

@@ -2082,6 +2082,7 @@ struct pci_error_handlers efx_err_handlers = {
 #endif	/* !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER) */
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_ENCAPSULATION)
 /* Determine whether the NIC will be able to handle TX offloads for a given
  * encapsulated packet.
  */
@@ -2147,6 +2148,7 @@ static bool efx_can_encap_offloads(struct efx_nic *efx, struct sk_buff *skb)
 	}
 #endif
 }
+#endif
 
 netdev_features_t efx_features_check(struct sk_buff *skb,
 					    struct net_device *dev,

@@ -2959,6 +2959,23 @@ struct EFX_HWMON_DEVICE_REGISTER_TYPE *hwmon_device_register_with_info(
 #define xdp_rxq_info_reg(_i,_d,_q,_n)	xdp_rxq_info_reg(_i,_d,_q)
 #endif
 
+#if defined(EFX_HAVE_XDP) && defined(EFX_NEED_XDP_INIT_BUFF)
+static __always_inline void
+xdp_init_buff(struct xdp_buff *xdp, u32 frame_sz
+#ifdef EFX_HAVE_XDP_RXQ_INFO
+	      , struct xdp_rxq_info *rxq
+#endif
+	      )
+{
+#ifdef EFX_HAVE_XDP_FRAME_SZ
+	xdp->frame_sz = frame_sz;
+#endif
+#ifdef EFX_HAVE_XDP_RXQ_INFO
+	xdp->rxq = rxq;
+#endif
+}
+#endif
+
 #ifdef EFX_NEED_VOID_SKB_PUT
 static inline void *efx_skb_put(struct sk_buff *skb, unsigned int len)
 {

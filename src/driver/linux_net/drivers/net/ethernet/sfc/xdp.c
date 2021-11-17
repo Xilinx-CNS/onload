@@ -643,6 +643,11 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_rx_queue *rx_queue,
 	memcpy(rx_prefix, *ehp - efx->rx_prefix_size,
 	       efx->rx_prefix_size);
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
+	xdp_init_buff(&xdp, efx->rx_page_buf_step, &rx_queue->xdp_rxq_info);
+#else
+	xdp_init_buff(&xdp, efx->rx_page_buf_step);
+#endif
 	xdp.data = *ehp;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_HEAD)
 	xdp.data_hard_start = xdp.data - XDP_PACKET_HEADROOM;
@@ -652,9 +657,6 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_rx_queue *rx_queue,
 	xdp_set_data_meta_invalid(&xdp);
 #endif
 	xdp.data_end = xdp.data + rx_buf->len;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
-	xdp.rxq = &rx_queue->xdp_rxq_info;
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (efx_rx_queue_channel(rx_queue)->zc) {

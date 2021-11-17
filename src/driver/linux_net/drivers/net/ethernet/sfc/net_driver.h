@@ -97,7 +97,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.12.1005"
+#define EFX_DRIVER_VERSION	"5.3.12.1006"
 #endif
 
 #ifdef DEBUG
@@ -820,7 +820,7 @@ struct efx_rss_context {
  *	were checked for expiry
  * @rfs_expire_index: next accelerated RFS filter ID to check for expiry
  * @n_rfs_succeeded: number of successful accelerated RFS filter insertions
- * @n_rfs_failed; number of failed accelerated RFS filter insertions
+ * @n_rfs_failed: number of failed accelerated RFS filter insertions
  * @filter_work: Work item for efx_filter_rfs_expire()
  * @rps_flow_id: Flow IDs of filters allocated for accelerated RFS,
  *      indexed by filter ID

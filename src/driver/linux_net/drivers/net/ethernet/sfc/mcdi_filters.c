@@ -944,7 +944,7 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 	struct efx_filter_spec *spec;
 	DEFINE_WAIT(wait);
-	int rc;
+	int rc = 0;
 
 	if (!table || !table->entry)
 		return -ENOENT;
@@ -955,10 +955,6 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 	     efx_mcdi_filter_pri(table, spec) !=
 	     efx_mcdi_filter_get_unsafe_pri(filter_id)))
 		return -ENOENT;
-
-	/* If the filter isn't on the NIC then there's nothing to do. */
-	if (table->entry[filter_idx].handle == EFX_MCDI_FILTER_ID_INVALID)
-		return 0;
 
 	if (spec->flags & EFX_FILTER_FLAG_RX_OVER_AUTO &&
 	    priority_mask == (1U << EFX_FILTER_PRI_AUTO)) {
@@ -984,6 +980,7 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 		new_spec.rss_context = 0;
 		new_spec.vport_id = 0;
 		new_spec.stack_id = 0;
+
 		rc = efx_mcdi_filter_push(efx, &new_spec,
 					  &table->entry[filter_idx].handle,
 					  &efx->rss_context, &efx->vport,
@@ -1000,8 +997,10 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 			       MC_CMD_FILTER_OP_IN_OP_UNSUBSCRIBE);
 		MCDI_SET_QWORD(inbuf, FILTER_OP_IN_HANDLE,
 			       table->entry[filter_idx].handle);
-		rc = efx_mcdi_rpc_quiet(efx, MC_CMD_FILTER_OP,
-				  inbuf, sizeof(inbuf), NULL, 0, NULL);
+		if (table->push_filters)
+			rc = efx_mcdi_rpc_quiet(efx, MC_CMD_FILTER_OP,
+						inbuf, sizeof(inbuf), NULL, 0,
+						NULL);
 
 		if ((rc == 0) || (rc == -ENOENT) || (rc == -EIO) ||
 		    (efx->reset_pending)) {
