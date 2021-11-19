@@ -5,6 +5,10 @@
 
 #include <ci/driver/efab/hardware/efct.h>
 
+/* Increment this when the layout of efab_efct_rxq_uk_shm_base changes. It's
+ * passed to the kernel in struct efch_efct_rxq_alloc */
+#define CI_EFCT_SWRXQ_ABI_VERSION  0
+
 /* The following definitions aren't hardware-specific, but they do describe
  * low-level contraints and properties of the efhw interface */
 

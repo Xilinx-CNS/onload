@@ -45,6 +45,19 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   off_t memfd_off;
   int rc;
 
+  if (alloc->in_flags != 0) {
+    EFCH_ERR("%s: ERROR: flags != 0", __FUNCTION__);
+    return -EINVAL;
+  }
+
+  /* NB: we'd need to do more with this once we actually have more than one
+   * version */
+  if (alloc->in_abi_version > CI_EFCT_SWRXQ_ABI_VERSION) {
+    EFCH_ERR("%s: ERROR: ABI version from the future (%u > %d)",
+             __FUNCTION__, alloc->in_abi_version, CI_EFCT_SWRXQ_ABI_VERSION);
+    return -EINVAL;
+  }
+
   rc = efch_resource_id_lookup(alloc->in_vi_rs_id, priv_opt, &vi_rs);
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: id="EFCH_RESOURCE_ID_FMT" (%d)",

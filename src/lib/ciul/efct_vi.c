@@ -1047,6 +1047,8 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   memset(&ra, 0, sizeof(ra));
   ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
   ra.ra_type = EFRM_RESOURCE_EFCT_RXQ;
+  ra.u.rxq.in_abi_version = CI_EFCT_SWRXQ_ABI_VERSION;
+  ra.u.rxq.in_flags = 0;
   ra.u.rxq.in_qid = qid;
   ra.u.rxq.in_shm_ix = ix;
   ra.u.rxq.in_vi_rs_id = efch_make_resource_id(vi->vi_resource_id);
