@@ -15,6 +15,7 @@
 #include <asm/set_memory.h>
 #endif
 #endif
+#include <asm/io.h>
 
 #include <ci/driver/ci_aux.h>
 #include <ci/driver/ci_efct.h>
