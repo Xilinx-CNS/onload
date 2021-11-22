@@ -16,6 +16,7 @@
 #include "ip_internal.h"
 #include "udp_internal.h"
 #include <onload/sleep.h>
+#include <ci/efhw/common.h>
 
 
 #define LPF "ci_udp_"
@@ -305,8 +306,10 @@ void ci_udp_handle_rx(ci_netif* ni, ci_ip_pkt_fmt* pkt, ci_udp_hdr* udp,
   }
 
   if( state.delivered == 0 ) {
+    bool nic_overcapture = (ni->state->nic[pkt->intf_i].vi_nic_flags &
+                            EFHW_VI_NIC_RX_OVERCAPTURE) != 0;
 
-    if( ci_netif_pkt_pass_to_kernel(ni, pkt) ) {
+    if( ! nic_overcapture && ci_netif_pkt_pass_to_kernel(ni, pkt) ) {
       CITP_STATS_NETIF_INC(ni, no_match_pass_to_kernel_udp);
       return;
     }
@@ -325,7 +328,8 @@ void ci_udp_handle_rx(ci_netif* ni, ci_ip_pkt_fmt* pkt, ci_udp_hdr* udp,
     CITP_STATS_NETIF_INC(ni, udp_rx_no_match_drops);
     if( ! CI_IPX_IS_MULTICAST(ipx_hdr_daddr(af, ipx)) ) {
       CI_UDP_STATS_INC_NO_PORTS(ni);
-      ci_icmp_send_port_unreach(ni, pkt);
+      if( ! nic_overcapture )
+        ci_icmp_send_port_unreach(ni, pkt);
     }
   }
   goto drop_out;
