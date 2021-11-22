@@ -1802,6 +1802,7 @@ have_events:
           __handle_rx_pkt(ni, ps, &s.rx_pkt);
           efct_vi_rxpkt_get(evq, ev[i].rx_ref.pkt_id, &payload);
           memcpy(pkt->dma_start, payload, pkt->pay_len);
+          efct_vi_rxpkt_release(evq, ev[i].rx_ref.pkt_id);
           oo_offbuf_init(&pkt->buf, pkt->dma_start, pay_len);
           s.rx_pkt = pkt;
         }
@@ -1906,6 +1907,7 @@ have_events:
         if( pkt ) {
           efct_vi_rxpkt_get(evq, ev[i].rx_ref.pkt_id, &payload);
           memcpy(pkt->dma_start, payload, pkt->pay_len);
+          efct_vi_rxpkt_release(evq, ev[i].rx_ref.pkt_id);
           oo_offbuf_init(&pkt->buf, pkt->dma_start, pay_len);
           discard_rx_multi_pkts(ni, ps, intf_i, &s, pay_len,
                                 ev[i].rx_ref_discard.flags, pkt);
