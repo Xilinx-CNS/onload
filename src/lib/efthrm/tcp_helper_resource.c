@@ -238,7 +238,6 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
  again:
   l = trs->trusted_lock;
   ci_assert_flags(l, OO_TRUSTED_LOCK_LOCKED);
-  ci_assert_impl(ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC, !in_dl_context);
 
   if(CI_UNLIKELY( l & OO_TRUSTED_LOCK_AWAITING_FREE )) {
     /* We may be called from the stack workqueue, so postpone destruction
@@ -408,6 +407,8 @@ void
 efab_tcp_helper_netif_unlock(tcp_helper_resource_t* trs, int in_dl_context)
 {
   ci_assert_equiv(in_dl_context, trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT);
+  ci_assert_impl(trs->netif.flags & CI_NETIF_FLAGS_AVOID_ATOMIC, !in_dl_context);
+
   if( in_dl_context )
     trs->netif.flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
   /* We drop trusted lock first as this allow to drain trusted lock work
