@@ -58,6 +58,9 @@ efrm_nic_add(void *drv_device, struct device *dev,
 	     unsigned timer_quantum_ns);
 extern int
 efrm_nic_unplug(struct efhw_nic* nic);
+/* Same as _unplug, but also assumes the underlying 'struct device' may go */
+extern int
+efrm_nic_unplug_hard(struct efhw_nic* nic);
 extern void
 efrm_nic_del_device(struct net_device *);
 

@@ -399,10 +399,11 @@ int efct_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail2;
 
+  rtnl_lock();
   rc = efrm_nic_add(client, &auxdev->dev, &dev_type, 0, net_dev, &lnic,
                     &res_dim, 0);
   if( rc < 0 )
-    goto fail2;
+    goto fail3;
 
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = net_dev->mtu + ETH_HLEN;
@@ -410,8 +411,11 @@ int efct_probe(struct auxiliary_device *auxdev,
   efct->nic = nic;
 
   efrm_notify_nic_probe(net_dev);
+  rtnl_unlock();
   return 0;
 
+ fail3:
+  rtnl_unlock();
  fail2:
   edev->ops->close(client);
  fail1:
@@ -452,6 +456,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   }
   drain_workqueue(system_wq);
 
+  rtnl_lock();
   net_dev = efhw_nic_get_net_dev(nic);
   efrm_notify_nic_remove(net_dev);
   dev_put(net_dev);
@@ -464,11 +469,12 @@ void efct_remove(struct auxiliary_device *auxdev)
    * have already cleared [lnic->drv_device], no new calls can
    * start. */
   efhw_nic_flush_drv(nic);
-  efrm_nic_unplug(nic);
+  efrm_nic_unplug_hard(nic);
 
   /* Absent hardware is treated as a protracted reset. */
   efrm_nic_reset_suspend(nic);
   ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNPLUGGED);
+  rtnl_unlock();
 
   vfree(efct);
   edev->ops->close(client);

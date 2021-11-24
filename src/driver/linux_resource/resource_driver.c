@@ -564,24 +564,58 @@ failed:
 	return rc;
 }
 
-int
-efrm_nic_unplug(struct efhw_nic* nic)
+
+/* "hard" mode declares that the underlying struct device* should be discarded
+ * too. This applies to cases where it's some kind of software device (e.g.
+ * aux bus, AF_XDP) which can be made to disappear at any time (now that we've
+ * decrefed the net_device). When the dev is a real PCI device then it's worth
+ * keeping it around so that we can reattach to a new NIC which hot-plugged
+ * back in to the slot. */
+static int
+efrm_nic_do_unplug(struct efhw_nic* nic, bool hard)
 {
 	struct net_device* net_dev;
+	struct device* dev = NULL;
 
 	efhw_nic_release_hardware(nic);
+	if (hard) {
+		/* Filter tables are tracked by device (for management reasons), so if
+		 * we're getting rid of the device then we'd best drop the filter
+		 * table(s) too */
+		EFRM_ASSERT(nic->dev != NULL);
+		efrm_shutdown_resource_filter(nic->dev);
+	}
 
 	/* We keep the pci device to reclaim it after hot-plug, but release
 	 * the net device. */
 	spin_lock_bh(&nic->pci_dev_lock);
 	net_dev = nic->net_dev;
 	nic->net_dev = NULL;
+	if (hard) {
+		dev = nic->dev;
+		nic->dev = NULL;
+	}
 	spin_unlock_bh(&nic->pci_dev_lock);
 
 	EFRM_ASSERT(net_dev != NULL);
 	dev_put(net_dev);
+	put_device(dev);
 
 	return 0;
+}
+
+
+int
+efrm_nic_unplug(struct efhw_nic* nic)
+{
+	return efrm_nic_do_unplug(nic, false);
+}
+
+
+int
+efrm_nic_unplug_hard(struct efhw_nic* nic)
+{
+	return efrm_nic_do_unplug(nic, true);
 }
 
 
