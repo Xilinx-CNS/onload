@@ -138,7 +138,7 @@ include Makefile
 endef
 $(eval $(patsubst CONFIG_%,export CONFIG_%$(_LF), \
        $(shell echo -e '$(_GET_NET_CONFIG_OPTS)' | \
-               make -C src/driver/linux_net/drivers/net/ethernet/sfc -r --no-print-directory -f - print_vars)))
+               MFLAGS= MAKEFLAGS= make -C src/driver/linux_net/drivers/net/ethernet/sfc -r --no-print-directory -f - print_vars)))
 
 # CFLAGS
 ONLOAD_CFLAGS += -I$$(obj) -I$$(obj)/src -I$$(src) -I$$(src)/src -I$$(src)/src/include \
