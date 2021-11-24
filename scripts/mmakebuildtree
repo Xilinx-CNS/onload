@@ -287,7 +287,13 @@ if [ -n "$newdriver" ]; then
   normalize_buildpath
   BUILDPATH="$BUILDPATH"
   mkdir -p "$BUILDPATH"
-  echo -e "all:\n\t\$(MAKE) -C ../.. KPATH=$KPATH KBUILDTOP=\$(abspath .)" > "$BUILDPATH/GNUmakefile"
+  > "$BUILDPATH/GNUmakefile" cat - <<HERE
+all:
+	\$(MAKE) -C ../.. KPATH=$KPATH KBUILDTOP=\$(abspath .) kernel
+clean:
+	\$(MAKE) -C ../.. KPATH=$KPATH KBUILDTOP=\$(abspath .) clean_kernel
+.PHONY: all clean
+HERE
   exit 0
 fi
 

@@ -180,7 +180,7 @@ modules modules_install: $(OUTMAKEFILES)
 kernel: modules
 
 clean_kernel:
-	$(RM) $(KBUILDTOP)
+	$(RM) -r $(KBUILDTOP)
 
 # Can't figure out a way to get modpost to look in the src directory. At least
 # the number of makefiles is much smaller than the number of source files
