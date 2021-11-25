@@ -1401,7 +1401,6 @@ void efx_port_dummy_op_void(struct efx_nic *efx) {}
  **************************************************************************/
 void efx_fini_struct(struct efx_nic *efx)
 {
-	efx_fini_struct_tc(efx);
 #ifdef CONFIG_RFS_ACCEL
 	kfree(efx->rps_hash_table);
 #endif

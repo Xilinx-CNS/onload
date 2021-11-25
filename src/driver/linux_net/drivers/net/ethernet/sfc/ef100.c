@@ -476,6 +476,7 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 	probe_data = container_of(efx, struct efx_probe_data, efx);
 	ef100_remove_netdev(probe_data);
 	efx_virtbus_unregister(efx);
+	efx_fini_struct_tc(efx);
 	ef100_remove(efx);
 	efx_fini_io(efx);
 	pci_dbg(pci_dev, "shutdown successful\n");

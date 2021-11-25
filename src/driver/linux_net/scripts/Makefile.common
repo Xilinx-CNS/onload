@@ -89,7 +89,6 @@ endif
 
 $(obj)/autocompat.h: $(obj)/.kpath $(src)/kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh FORCE
 	+$(call filechk,autocompat.h)
-	@touch $@
 
 endif # !EFX_UPSTREAM
 else

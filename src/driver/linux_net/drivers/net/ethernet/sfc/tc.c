@@ -2343,6 +2343,7 @@ static const char *efx_tc_encap_type_names[] = {
 /* For details of action order constraints refer to SF-123102-TC-1§12.6.1 */
 enum efx_tc_action_order {
 	EFX_TC_AO_DECAP,
+	EFX_TC_AO_DEC_TTL,
 	EFX_TC_AO_PEDIT_MAC_ADDRS,
 	EFX_TC_AO_VLAN1_POP,
 	EFX_TC_AO_VLAN0_POP,
@@ -2364,6 +2365,10 @@ static bool efx_tc_flower_action_order_ok(const struct efx_tc_action_set *act,
 		 * can wait until much later
 		 */
 		if (act->src_mac || act->dst_mac)
+			return false;
+
+		/* Decrementing ttl must not happen before DECAP */
+		if (act->do_ttl_dec)
 			return false;
 		fallthrough;
 	case EFX_TC_AO_VLAN0_POP:
@@ -2393,6 +2398,10 @@ static bool efx_tc_flower_action_order_ok(const struct efx_tc_action_set *act,
 		fallthrough;
 	case EFX_TC_AO_DELIVER:
 		return !act->deliver;
+	case EFX_TC_AO_DEC_TTL:
+		if (act->encap_md)
+			return false;
+		return !act->do_ttl_dec;
 	default:
 		/* Bad caller.  Whatever they wanted to do, say they can't. */
 		WARN_ON_ONCE(1);
@@ -3849,6 +3858,74 @@ static int efx_tc_complete_mac_mangle(struct efx_nic *efx,
 	return 0;
 }
 
+static int efx_tc_pedit_add(struct efx_nic *efx, struct efx_tc_action_set *act,
+			    const struct flow_action_entry *fa,
+			    struct netlink_ext_ack *extack)
+{
+	switch (fa->mangle.htype) {
+	case FLOW_ACT_MANGLE_HDR_TYPE_IP4:
+		switch (fa->mangle.offset) {
+		case offsetof(struct iphdr, ttl):
+			/* check that pedit applies to ttl only */
+			if (fa->mangle.mask != 0xffffff00)
+				break;
+
+			/* Adding 0xff is equivalent to decrementing the ttl.
+			 * Other added values are not supported.
+			 */
+			if ((fa->mangle.val & 0x000000ff) != 0xff)
+				break;
+
+			/* check that we do not decrement ttl twice */
+			if (!efx_tc_flower_action_order_ok(act,
+							   EFX_TC_AO_DEC_TTL)) {
+				EFX_TC_ERR_MSG(efx, extack,
+					       "Unsupported: multiple dec ttl");
+				return -EOPNOTSUPP;
+			}
+			act->do_ttl_dec = 1;
+			return 0;
+		default:
+			break;
+		}
+		break;
+	case FLOW_ACT_MANGLE_HDR_TYPE_IP6:
+		switch (fa->mangle.offset) {
+		case round_down(offsetof(struct ipv6hdr, hop_limit), 4):
+			/* check that pedit applies to hoplimit only */
+			if (fa->mangle.mask != 0x00ffffff)
+				break;
+
+			/* Adding 0xff is equivalent to decrementing the hoplimit.
+			 * Other added values are not supported.
+			 */
+			if ((fa->mangle.val >> 24) != 0xff)
+				break;
+
+			/* check that we do not decrement hoplimit twice */
+			if (!efx_tc_flower_action_order_ok(act,
+							   EFX_TC_AO_DEC_TTL)) {
+				EFX_TC_ERR_MSG(efx, extack,
+					       "Unsupported: multiple dec ttl");
+				return -EOPNOTSUPP;
+			}
+			act->do_ttl_dec = 1;
+			return 0;
+		default:
+			break;
+		}
+		break;
+	default:
+		break;
+	}
+
+	NL_SET_ERR_MSG_MOD(extack, "Unsupported: ttl add pedit must be a pure decrement");
+	efx_tc_err(efx, "Unsupported: ttl add action type %x %x %x/%x\n",
+		   fa->mangle.htype, fa->mangle.offset, fa->mangle.val,
+		   fa->mangle.mask);
+	return -EOPNOTSUPP;
+}
+
 static int efx_tc_mangle(struct efx_nic *efx, struct efx_tc_action_set *act,
 			 const struct flow_action_entry *fa,
 			 struct efx_tc_mangler_state *mung,
@@ -3912,7 +3989,7 @@ static int efx_tc_mangle(struct efx_nic *efx, struct efx_tc_action_set *act,
 		break;
 	case FLOW_ACT_MANGLE_HDR_TYPE_IP4:
 		switch (fa->mangle.offset) {
-		case 8:
+		case offsetof(struct iphdr, ttl):
 			/* we currently only support pedit IP4 when it applies
 			 * to TTL and then only when it can be achieved with a
 			 * decrement ttl action
@@ -3934,6 +4011,14 @@ static int efx_tc_mangle(struct efx_nic *efx, struct efx_tc_action_set *act,
 			if (match->value.ip_ttl == 0)
 				return -EOPNOTSUPP;
 
+			/* check that we do not decrement ttl twice */
+			if (!efx_tc_flower_action_order_ok(act,
+							   EFX_TC_AO_DEC_TTL)) {
+				EFX_TC_ERR_MSG(efx, extack,
+					       "Unsupported: multiple dec ttl");
+				return -EOPNOTSUPP;
+			}
+
 			/* check pedit can be achieved with decrement action */
 			tr_ttl = match->value.ip_ttl - 1;
 			if ((fa->mangle.val & 0x000000ff) == tr_ttl) {
@@ -3952,7 +4037,7 @@ static int efx_tc_mangle(struct efx_nic *efx, struct efx_tc_action_set *act,
 		break;
 	case FLOW_ACT_MANGLE_HDR_TYPE_IP6:
 		switch (fa->mangle.offset) {
-		case 4:
+		case round_down(offsetof(struct ipv6hdr, hop_limit), 4):
 			/* we currently only support pedit IP6 when it applies
 			 * to the hoplimit and then only when it can be achieved
 			 * with a decrement hoplimit action
@@ -3973,6 +4058,14 @@ static int efx_tc_mangle(struct efx_nic *efx, struct efx_tc_action_set *act,
 			 */
 			if (match->value.ip_ttl == 0)
 				return -EOPNOTSUPP;
+
+			/* check that we do not decrement hoplimit twice */
+			if (!efx_tc_flower_action_order_ok(act,
+							   EFX_TC_AO_DEC_TTL)) {
+				EFX_TC_ERR_MSG(efx, extack,
+					       "Unsupported: multiple dec ttl");
+				return -EOPNOTSUPP;
+			}
 
 			/* check pedit can be achieved with decrement action */
 			tr_ttl = match->value.ip_ttl - 1;
@@ -4391,6 +4484,11 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 			act->vlan_push |= (1 << depth);
 			act->vlan_tci[depth] = cpu_to_be16(tci);
 			act->vlan_proto[depth] = fa->vlan.proto;
+			break;
+		case FLOW_ACTION_ADD:
+			rc = efx_tc_pedit_add(efx, act, fa, extack);
+			if (rc < 0)
+				goto release;
 			break;
 		case FLOW_ACTION_MANGLE:
 			if (!efx_tc_flower_action_order_ok(act, EFX_TC_AO_PEDIT_MAC_ADDRS)) {
@@ -5515,11 +5613,18 @@ static int efx_tc_debugfs_dump_default_rules(struct seq_file *file, void *data)
 	return 0;
 }
 
+static const char *efx_mae_counter_type_names[] = {
+	[EFX_TC_COUNTER_TYPE_AR] = "AR",
+	[EFX_TC_COUNTER_TYPE_CT] = "CT",
+	[EFX_TC_COUNTER_TYPE_OR] = "OR",
+	[EFX_TC_COUNTER_TYPE_MAX] = "unknown",
+};
+
 static void efx_tc_debugfs_dump_one_counter(struct seq_file *file,
 					    struct efx_tc_counter *cnt)
 {
 	u64 packets, bytes, old_packets, old_bytes;
-	enum efx_tc_counter_type type;
+	enum efx_tc_counter_type type, cnt_type;
 	unsigned long age;
 	u32 gen;
 
@@ -5532,10 +5637,16 @@ static void efx_tc_debugfs_dump_one_counter(struct seq_file *file,
 	age = jiffies - cnt->touched;
 	gen = cnt->gen;
 	type = cnt->type;
+	cnt_type = cnt->type;
 	spin_unlock_bh(&cnt->lock);
 
-	seq_printf(file, "%#x: %d type, %llu pkts %llu bytes (old %llu pkts %llu bytes) gen %u age %lu\n",
-		   cnt->fw_id, type, packets, bytes, old_packets, old_bytes, gen, age);
+	if (type < 0 || type > EFX_TC_COUNTER_TYPE_MAX)
+		type = EFX_TC_COUNTER_TYPE_MAX;
+
+	seq_printf(file,
+		   "%#x: type %s (type id: %u), %llu pkts %llu bytes (old %llu pkts %llu bytes) gen %u age %lu\n",
+		   cnt->fw_id, efx_mae_counter_type_names[type], cnt_type,
+		   packets, bytes, old_packets, old_bytes, gen, age);
 }
 
 static int efx_tc_debugfs_dump_mae_counters(struct seq_file *file, void *data)

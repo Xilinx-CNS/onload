@@ -19,7 +19,7 @@
 #ifdef EFX_C_MODEL
 #define EF100_ONLOAD_VIS 4
 #else
-#define EF100_ONLOAD_VIS 32
+#define EF100_ONLOAD_VIS 64
 #endif
 
 #define EF100_ONLOAD_IRQS 8
