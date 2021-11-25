@@ -2900,7 +2900,8 @@ OO_INTERCEPT(int, siginterrupt,
   return rc;
 }
 
-OO_INTERCEPT(__sighandler_t, bsd_signal,
+/* BSD semantics for signal() function in Linux glibc */
+OO_INTERCEPT(__sighandler_t, signal,
              (int sig, __sighandler_t handler))
 {
   struct sigaction act, oact;
@@ -2911,7 +2912,7 @@ OO_INTERCEPT(__sighandler_t, bsd_signal,
      * libc.
      */
     citp_do_init(CITP_INIT_SYSCALLS);
-    return ci_sys_bsd_signal(sig, handler);
+    return ci_sys_signal(sig, handler);
   }
 
   Log_CALL(ci_log("%s(%d, %p)", __FUNCTION__, sig, handler));
@@ -2955,11 +2956,9 @@ OO_INTERCEPT(__sighandler_t, sysv_signal,
   return oact.sa_handler;
 }
 
-OO_INTERCEPT(__sighandler_t, signal,
-             (int sig, __sighandler_t handler))
-{
-  return onload_sysv_signal(sig, handler);
-}
+strong_alias(onload_signal, bsd_signal);
+strong_alias(onload_sysv_signal, __sysv_signal);
+
 
 /*
  * vi: sw=2:ai:aw
