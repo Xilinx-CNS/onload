@@ -461,12 +461,22 @@ ci_inline int ci_bit_test_and_clear(volatile ci_bits* b, int i) {
 #define ci_bit_mask_set(b,m)	ci_atomic32_or((b), (m))
 #define ci_bit_mask_clear(b,m)	ci_atomic32_and((b), ~(m))
 
+ci_inline int ci_bit_find_next(const ci_bits* a, int sz, int from)
+{
+  const int bits_per_unit = sizeof(*a) * 8;
+  const int unit_mask = bits_per_unit - 1;
+  const ci_bits *ptr = &a[from / bits_per_unit];
+  ci_bits x = *ptr & -((ci_bits)1 << (from & unit_mask));
 
-#define ci_bit_find_next(a, sz, from) ( \
-  __builtin_ffs((*a) & -(1 << (from))) ? \
-  __builtin_ffs((*a) & -(1 << (from))) - 1 : \
-  (sz) \
-  )
+  from &= ~unit_mask;
+  while (!x) {
+    from += bits_per_unit;
+    if (from >= sz)
+      return sz;
+    x = *++ptr;
+  }
+  return from + __builtin_ctz(x);
+}
 
 #define ci_bit_find_first(a, sz) ci_bit_find_next(a, sz, 0)
 
