@@ -762,9 +762,8 @@ void ci_tcp_state_dump(ci_netif* ni, ci_tcp_state* ts,
   int n;
 
 #if CI_CFG_TIMESTAMPING
-  if( onload_timestamping_want_tx_nic(ts->s.timestamping_flags) )
-    ci_udp_recvq_dump(ni, &ts->timestamp_q, pf, "  TX timestamping queue:",
-                      logger, log_arg);
+  ci_udp_recvq_dump(ni, &ts->timestamp_q, pf, "  TX timestamping queue:",
+                    logger, log_arg);
 #endif
   if( ts->s.s_flags & CI_SOCK_FLAG_DNAT )
     logger(log_arg, "%s  DNAT: original destination "CI_IP_PRINTF_FORMAT":%d",
