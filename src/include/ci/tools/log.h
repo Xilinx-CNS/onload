@@ -36,7 +36,8 @@
 #ifndef __CI_TOOLS_LOG_H__
 #define __CI_TOOLS_LOG_H__
 
-#include <stdarg.h>
+#include <ci/tools/sysdep.h>
+
 #ifndef __KERNEL__
 # include <sys/select.h>
 #endif

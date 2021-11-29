@@ -24,6 +24,8 @@
 #include <ci/compat.h>
 #include <ci/tools/sysdep.h>
 #include <ci/tools/byteorder.h>
+#include <ci/tools/log.h>
+#include <ci/tools/debug.h>
 #include <ci/net/ipvx_sh.h>
 #include <linux/neighbour.h>
 #include "mib_dllist_tmpl_instantiate.h"

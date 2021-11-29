@@ -68,6 +68,13 @@
 #define ci_in_atomic     in_atomic
 
 
+#ifdef EFRM_HAS_LINUX_STDARG_H
+# include <linux/stdarg.h>
+#else
+# include <stdarg.h>
+#endif
+
+
 /**********************************************************************
  * Misc stuff.
  */

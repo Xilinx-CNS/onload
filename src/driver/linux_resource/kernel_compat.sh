@@ -144,6 +144,7 @@ EFRM_IRQ_FREE_RETURNS_NAME	symtype	free_irq	include/linux/interrupt.h void *(uns
 
 EFRM_HAS_ITER_TYPE	memtype	struct_iov_iter	iter_type	include/linux/uio.h	u8
 
+EFRM_HAS_LINUX_STDARG_H			file	include/linux/stdarg.h
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

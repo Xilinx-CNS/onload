@@ -30,10 +30,9 @@
 #ifndef __CI_TOOLS_SYSDEP_H__
 #define __CI_TOOLS_SYSDEP_H__
 
+
 /* Make this header self-sufficient */
 #include <ci/compat.h>
-#include <ci/tools/log.h>
-#include <ci/tools/debug.h>
 
 
 /**********************************************************************

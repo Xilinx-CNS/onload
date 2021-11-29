@@ -12,6 +12,8 @@ extern "C" {
 #endif
 
 #include <onload/mmap_base.h>
+#include <ci/tools/log.h>
+#include <ci/tools/debug.h>
 #include <ci/tools/dllist.h>
 
 enum {
