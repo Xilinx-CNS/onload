@@ -1485,7 +1485,7 @@ EXPORT_SYMBOL(efrm_vi_attr_set_want_interrupt);
 static size_t efrm_vi_get_efct_shm_bytes_nrxq(struct efrm_vi *vi,
                                               size_t n_shm_rxqs)
 {
-	return CI_ROUND_UP(sizeof(*vi->efct_shm) * n_shm_rxqs, PAGE_SIZE);
+	return CI_ROUND_UP(CI_EFCT_SHM_BYTES(n_shm_rxqs), PAGE_SIZE);
 }
 
 
@@ -1600,13 +1600,14 @@ int  efrm_vi_alloc(struct efrm_client *client,
 		virs->efct_shm = vmalloc_user(efrm_vi_get_efct_shm_bytes_nrxq(virs,
 		                                                          n_shm_rxqs));
 		if (!virs->efct_shm) {
-			EFRM_ERR("%s: ERROR: OOM for efct rxq (%zu*%zu)",
-						__func__, sizeof(*virs->efct_shm), n_shm_rxqs);
+			EFRM_ERR("%s: ERROR: OOM for efct rxq (%zu+%zu*%zu)",
+						__func__, sizeof(*virs->efct_shm),
+						sizeof(virs->efct_shm->q[0]), n_shm_rxqs);
 			goto fail_efct_rxq;
 		}
 		for (i = 0; i < n_shm_rxqs; ++i) {
-			virs->efct_shm[i].qid = -1;
-			virs->efct_shm[i].config_generation = 1;
+			virs->efct_shm->q[i].qid = -1;
+			virs->efct_shm->q[i].config_generation = 1;
 		}
 	}
 

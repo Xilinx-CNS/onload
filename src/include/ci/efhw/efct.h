@@ -22,7 +22,7 @@ typedef void efhw_efct_rxq_int_wake_func_t(struct efhw_efct_rxq*);
 
 struct efhw_efct_rxq {
   struct efhw_efct_rxq *next;
-  struct efab_efct_rxq_uk_shm *shm;
+  struct efab_efct_rxq_uk_shm_q *shm;
   unsigned qid;
   bool destroy;
   uint32_t next_sbuf_seq;
@@ -106,7 +106,7 @@ struct efhw_nic_efct {
 int efct_nic_rxq_bind(struct efhw_nic *nic, int qid,
                       const struct cpumask *mask, bool timestamp_req,
                       size_t n_hugepages, struct file* memfd, off_t* memfd_off,
-                      struct efab_efct_rxq_uk_shm *shm,
+                      struct efab_efct_rxq_uk_shm_q *shm,
                       unsigned wakeup_instance, struct efhw_efct_rxq *rxq);
 void efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
                        efhw_efct_rxq_free_func_t *freer);

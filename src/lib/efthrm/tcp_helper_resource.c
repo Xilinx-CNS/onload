@@ -1468,8 +1468,8 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
   } while( feature_mask && feature_mask-- >= required_feature_mask );
 
   n_shm_rxqs = efhw_nic_max_shared_rxqs(efrm_client_get_nic(info->client));
-  info->vi_efct_shm_mmap_bytes = CI_ROUND_UP(sizeof(*evq_virs->efct_shm) *
-                                             n_shm_rxqs, PAGE_SIZE);
+  info->vi_efct_shm_mmap_bytes = CI_ROUND_UP(CI_EFCT_SHM_BYTES(n_shm_rxqs),
+                                             PAGE_SIZE);
 
   if( rc < 0 ) {
     OO_DEBUG_VM (ci_log ("%s: ERROR: efrm_vi_resource_alloc(%d) failed %d",
@@ -1495,7 +1495,7 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
 
 static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int qid)
 {
-  return efrm_rxq_refresh_kernel(vi->dh, vi->efct_shm[qid].qid,
+  return efrm_rxq_refresh_kernel(vi->dh, vi->efct_shm->q[qid].qid,
                                  vi->efct_rxq[qid].superbufs);
 }
 

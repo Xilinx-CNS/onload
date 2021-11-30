@@ -246,7 +246,7 @@ __efct_nic_rxq_bind(struct xlnx_efct_device* edev,
                     struct xlnx_efct_rxq_params *rxq_params,
                     struct efhw_nic_efct *efct,
                     int n_hugepages,
-                    struct efab_efct_rxq_uk_shm *shm,
+                    struct efab_efct_rxq_uk_shm_q *shm,
                     unsigned wakeup_instance,
                     struct efhw_efct_rxq *rxq)
 {
@@ -297,6 +297,7 @@ __efct_nic_rxq_free(struct xlnx_efct_device* edev,
                     struct efhw_efct_rxq *rxq,
                     efhw_efct_rxq_free_func_t *freer)
 {
+  rxq->shm->superbuf_pkts = 0;
   rxq->destroy = true;
   rxq->freer = freer;
   edev->ops->free_rxq(cli, rxq->qid, rxq->n_hugepages);

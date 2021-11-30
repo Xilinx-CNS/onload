@@ -370,7 +370,7 @@ void ef_vi_set_intf_ver(char* intf_ver, size_t len)
    * It'd also be possible to enhance the checksum computation to be smarter
    * (e.g. by ignoring comments, etc.).
    */
-  if( strcmp(EFCH_INTF_VER, "f91072981813a9a20ba073459deaef91") ) {
+  if( strcmp(EFCH_INTF_VER, "f4090e3f57aa30a51297f97a68cde64d") ) {
     fprintf(stderr, "ef_vi: ERROR: char interface has changed\n");
     abort();
   }
@@ -553,15 +553,10 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
 
   if( vi->max_efct_rxq ) {
-    if( rxq_capacity ) {
-      rc = efct_vi_mmap_init(vi);
-      if( rc ) {
-        LOGVV(ef_log("%s: mmap (efct reserve) %d", __FUNCTION__, rc));
-        goto fail5;
-      }
-    }
-    else {
-      vi->max_efct_rxq = 0;
+    rc = efct_vi_mmap_init(vi, rxq_capacity);
+    if( rc ) {
+      LOGVV(ef_log("%s: mmap (efct reserve) %d", __FUNCTION__, rc));
+      goto fail5;
     }
   }
 

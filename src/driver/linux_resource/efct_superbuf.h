@@ -14,7 +14,7 @@ __efct_nic_rxq_bind(struct xlnx_efct_device* edev,
                     struct xlnx_efct_rxq_params *rxq_params,
                     struct efhw_nic_efct *efct,
                     int n_hugepages,
-                    struct efab_efct_rxq_uk_shm *shm,
+                    struct efab_efct_rxq_uk_shm_q *shm,
                     unsigned wakeup_instance,
                     struct efhw_efct_rxq *rxq);
 

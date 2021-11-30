@@ -127,14 +127,6 @@ rxq_rm_rsops(efch_resource_t* rs, ci_resource_table_t* priv_opt,
 }
 
 
-static int rxq_rm_mmap_bytes(struct efrm_resource* rs, int map_type)
-{
-  if( map_type != 0 )
-    return -EINVAL;
-  return round_up(sizeof(struct efab_efct_rxq_uk_shm), PAGE_SIZE);
-}
-
-
 efch_resource_ops efch_efct_rxq_ops = {
   .rm_alloc  = rxq_rm_alloc,
   .rm_free   = rxq_rm_free,
@@ -142,5 +134,5 @@ efch_resource_ops efch_efct_rxq_ops = {
   .rm_nopage = NULL,
   .rm_dump   = NULL,
   .rm_rsops  = rxq_rm_rsops,
-  .rm_mmap_bytes = rxq_rm_mmap_bytes,
+  .rm_mmap_bytes = NULL,
 };

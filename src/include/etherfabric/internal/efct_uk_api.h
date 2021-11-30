@@ -31,13 +31,13 @@ struct efab_efct_rx_superbuf_queue {
   uint32_t removed;
 };
 
-/* decimation of efab_efct_rxq_uk_shm::timestamp_hi relative to a 'full'
+/* decimation of efab_efct_rxq_uk_shm_q::timestamp_hi relative to a 'full'
  * timestamp. A full timestamp is ((secs << 32) | quarterns), i.e.
  * timestamp_hi stores a value that looks like that but shifted down by 16.
  * This is done to give room to avoid y2.038k issues. */
 #define CI_EFCT_SHM_TS_SHIFT 16
 
-struct efab_efct_rxq_uk_shm {
+struct efab_efct_rxq_uk_shm_q {
   /* TODO EFCT look in to field ordering of this struct. Might be quicker, for
    * example, to collect all the superbuf_pkts fields for all the rxqs at the
    * top */
@@ -47,11 +47,24 @@ struct efab_efct_rxq_uk_shm {
   uint8_t tsync_flags;
   int8_t qid;                        /* hardware queue ID */
   unsigned config_generation;
-  uint32_t superbuf_pkts;            /* number of packets per superbuf */
+  uint32_t superbuf_pkts;            /* number of packets per superbuf.
+                                      * 0 indicates inactive queue. */
   struct {
     unsigned no_rxq_space;
     unsigned too_many_owned;
   } stats;
 } CI_ALIGN(CI_CACHE_LINE_SIZE);
+
+struct efab_efct_rxq_uk_shm_base {
+  /* Both q[i].superbuf_pkts != 0 and active_qs & (1 << i) indicate an active
+   * queue and are synchronised with each other. Either may be used, with the
+   * choice usually being made according to cache locality considerations */
+  uint64_t active_qs;   /* Bitmask, same indices as 'q' */
+  struct efab_efct_rxq_uk_shm_q q[0];
+};
+
+#define CI_EFCT_SHM_BYTES(max_qs)  \
+                        (sizeof(struct efab_efct_rxq_uk_shm_base) + \
+                         (max_qs) * sizeof(struct efab_efct_rxq_uk_shm_q))
 
 #endif /* EFCT_HW_DEFS_H */

@@ -187,7 +187,7 @@ struct efrm_vi {
 	struct efrm_vi_set *vi_set;
 	struct efrm_bt_manager bt_manager;
 	struct efrm_vi_q q[EFHW_N_Q_TYPES];
-	struct efab_efct_rxq_uk_shm *efct_shm;
+	struct efab_efct_rxq_uk_shm_base *efct_shm;
 
 	int net_drv_wakeup_channel;
 	struct efrm_interrupt_vector *vec;

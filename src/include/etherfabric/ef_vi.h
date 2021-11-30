@@ -957,9 +957,8 @@ typedef struct ef_vi {
   int                           vi_qs_n;
   /** Attached rxqs for efct VIs (NB: not necessarily in rxq order) */
   ef_vi_efct_rxq                efct_rxq[EF_VI_MAX_EFCT_RXQS];
-  /** efct kernel/userspace shared queue area. Array of length
-   * EF_VI_MAX_EFCT_RXQS with the same indices as efct_rxq */
-  struct efab_efct_rxq_uk_shm*  efct_shm;
+  /** efct kernel/userspace shared queue area. */
+  struct efab_efct_rxq_uk_shm_base* efct_shm;
   /** 1 + highest allowed index of a used element in efct_rxq */
   int                           max_efct_rxq;
 

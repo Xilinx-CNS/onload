@@ -75,12 +75,13 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
 	rxq->vi = vi;
 	rc = efct_nic_rxq_bind(vi_rs->rs_client->nic, qid, mask, timestamp_req,
 	                       n_hugepages, memfd, memfd_off,
-	                       &vi->efct_shm[shm_ix], vi->rs.rs_instance,
+	                       &vi->efct_shm->q[shm_ix], vi->rs.rs_instance,
 						   &rxq->hw);
 	if (rc < 0) {
 		kfree(rxq);
 		return rc;
 	}
+	vi->efct_shm->active_qs |= 1ull << shm_ix;
 	efrm_resource_init(&rxq->rs, EFRM_RESOURCE_EFCT_RXQ, 0);
 	efrm_client_add_resource(vi_rs->rs_client, &rxq->rs);
 	efrm_resource_ref(vi_rs);
@@ -104,6 +105,8 @@ void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 {
 #if CI_HAVE_EFCT_AUX
 	if (__efrm_resource_release(&rxq->rs)) {
+		int shm_ix = rxq->hw.shm - rxq->vi->efct_shm->q;
+		rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
 		efct_nic_rxq_free(rxq->rs.rs_client->nic, &rxq->hw, free_rxq);
 		efrm_vi_resource_release(rxq->vi);
 		efrm_client_put(rxq->rs.rs_client);
