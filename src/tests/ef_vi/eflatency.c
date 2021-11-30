@@ -38,6 +38,7 @@ static int              cfg_warmups = 10000;
 static unsigned		cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
 static int              cfg_ctpio_no_poison;
 static unsigned         cfg_ctpio_thresh = 64;
+static const char*      cfg_save_file = NULL;
 enum mode {
   MODE_DMA = 1,
   MODE_PIO = 2,
@@ -74,6 +75,7 @@ static ef_pd             pd;
 static ef_memreg         memreg;
 static ef_pio            pio;
 static int               tx_frame_len;
+static uint64_t*         timings;
 
 
 /* The IP addresses can be chosen arbitrarily. */
@@ -121,6 +123,45 @@ static inline void rx_post(ef_vi* vi)
 }
 
 
+static int cmp_u64(const void* ap, const void* bp)
+{
+  uint64_t a = *(const uint64_t*)ap;
+  uint64_t b = *(const uint64_t*)bp;
+  if (a < b)
+    return -1;
+  return a > b;
+}
+
+
+static void output_results(struct timeval start, struct timeval end)
+{
+  unsigned freq = 0;
+  double div;
+  int usec = (end.tv_sec - start.tv_sec) * 1000000;
+  usec += end.tv_usec - start.tv_usec;
+
+  ci_get_cpu_khz(&freq);
+  div = freq / 1e3;
+  if( cfg_save_file ) {
+    int i;
+    FILE* fp = fopen(cfg_save_file, "wt");
+    TEST(fp != NULL);
+    for( i = 0 ; i < cfg_iter; ++i )
+      fprintf(fp, "%lld\n", (long long)(timings[i] * 1000. / div));
+    fclose(fp);
+  }
+
+  qsort(timings, cfg_iter, sizeof(timings[0]), cmp_u64);
+  printf("mean\tmin\t50%%\t95%%\t99%%\tmax\n");
+  printf("%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\n",
+         (double) usec / cfg_iter,
+         timings[0] / div,
+         timings[cfg_iter / 2] / div,
+         timings[cfg_iter - cfg_iter / 20] / div,
+         timings[cfg_iter - cfg_iter / 100] / div,
+         timings[cfg_iter - 1] / div);
+  printf("mean round-trip time: %.3lf usec\n", (double) usec / cfg_iter);
+}
 
 /**********************************************************************/
 
@@ -135,7 +176,7 @@ typedef struct {
 static void
 x3_ping(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*)) {
   struct timeval start, end;
-  int i, usec;
+  int i;
 
   for( i = 0; i < cfg_warmups; ++i ) {
     tx_send(vi);
@@ -145,22 +186,22 @@ x3_ping(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*)) {
   gettimeofday(&start, NULL);
 
   for( i = 0; i < cfg_iter; ++i ) {
+    uint64_t start = ci_frc64_get();
     tx_send(vi);
     rx_wait(vi);
+    uint64_t stop = ci_frc64_get();
+    timings[i] = stop - start;
   }
 
   gettimeofday(&end, NULL);
-
-  usec = (end.tv_sec - start.tv_sec) * 1000000;
-  usec += end.tv_usec - start.tv_usec;
-  printf("mean round-trip time: %0.3f usec\n", (double) usec / cfg_iter);
+  output_results(start, end);
 }
 
 static void
 generic_ping(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*))
 {
   struct timeval start, end;
-  int i, usec;
+  int i;
 
   for( i = 0; i < N_RX_BUFS; ++i )
     rx_post(vi);
@@ -174,16 +215,16 @@ generic_ping(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*))
   gettimeofday(&start, NULL);
 
   for( i = 0; i < cfg_iter; ++i ) {
+    uint64_t start = ci_frc64_get();
     tx_send(vi);
     rx_post(vi);
     rx_wait(vi);
+    uint64_t stop = ci_frc64_get();
+    timings[i] = stop - start;
   }
 
   gettimeofday(&end, NULL);
-
-  usec = (end.tv_sec - start.tv_sec) * 1000000;
-  usec += end.tv_usec - start.tv_usec;
-  printf("mean round-trip time: %0.3f usec\n", (double) usec / cfg_iter);
+  output_results(start, end);
 }
 
 static void x3_pong(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*)) {
@@ -576,6 +617,7 @@ static CI_NORETURN usage(void)
   fprintf(stderr, "  -p                  - CTPIO no-poison mode\n");
   fprintf(stderr, "  -m <modes>          - allow mode of the set: [c]tpio, \n");
   fprintf(stderr, "                      [pio], [a]lternatives, [d]ma, [x]dp\n");
+  fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
   fprintf(stderr, "\n");
   exit(1);
 }
@@ -590,7 +632,7 @@ int main(int argc, char* argv[])
 
   printf("# ef_vi_version_str: %s\n", ef_vi_version_str());
 
-  while( (c = getopt (argc, argv, "n:s:w:c:pm:")) != -1 )
+  while( (c = getopt (argc, argv, "n:s:w:c:pm:o:")) != -1 )
     switch( c ) {
     case 'n':
       cfg_iter = atoi(optarg);
@@ -606,6 +648,9 @@ int main(int argc, char* argv[])
       break;
     case 'p':
       cfg_ctpio_no_poison = 1;
+      break;
+    case 'o':
+      cfg_save_file = optarg;
       break;
     case 'm':
       #define OPT_C(ch) (strchr(optarg, ch) != NULL)
@@ -644,6 +689,11 @@ int main(int argc, char* argv[])
    * possible.  The return value specifies the test that the application must
    * run to use the VI in its configured mode. */
   t = do_init(ifindex);
+
+  if( ping ) {
+    timings = mmap(NULL, cfg_iter * sizeof(timings[0]), PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+  }
 
   printf("# udp payload len: %d\n", cfg_payload_len);
   printf("# iterations: %d\n", cfg_iter);
