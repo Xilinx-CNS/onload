@@ -22,6 +22,7 @@
 #include <etherfabric/timer.h>
 #include <etherfabric/vi.h>
 #include <ci/internal/pio_buddy.h>
+#include <ci/driver/efab/hardware/efct.h>
 
 #if OO_DO_STACK_POLL
 #include <linux/ip.h>
@@ -2060,17 +2061,22 @@ static int ci_netif_poll_intf(ci_netif* ni, int intf_i, int max_evs)
   return total_evs;
 }
 
-
 #ifndef __KERNEL__
 int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
 {
   int i, rc = 0, status;
+  bool handle_future = false;
   struct oo_rx_future future;
   ci_uint64 now_frc, max_spin;
   ef_vi* evq = ci_netif_vi(ni, intf_i);
   ef_event* ev = ni->state->events;
   struct ci_netif_poll_state ps;
   ci_ip_pkt_fmt* pkt;
+  const uint8_t* dma;
+  unsigned efct_pkt_id = 0;
+  /* Number of data bytes in the first cache line of efct packets */
+  static const size_t efct_begin_len = CI_CACHE_LINE_SIZE - 
+                  (EFCT_RX_HEADER_NEXT_FRAME_LOC_1 & (CI_CACHE_LINE_SIZE - 1));
 
   ci_assert(ci_netif_is_locked(ni));
   ci_assert(ni->state->in_poll == 0);
@@ -2078,16 +2084,26 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   ci_assert_equal(NI_OPTS(ni).poll_in_kernel, 0);
 #endif
 
-  pkt = ci_netif_intf_next_rx_pkt(ni, intf_i);
-  if( pkt == NULL || ci_netif_rx_pkt_is_poisoned(pkt) )
-    return 0;
+  if( evq->nic_type.arch == EF_VI_ARCH_EFCT ) {
+    pkt = alloc_rx_efct_pkt(ni, intf_i, 0);
+    if( pkt == NULL )
+      return 0;
+    dma = ci_netif_efct_pkt_start(evq, &efct_pkt_id);
+    memcpy(pkt->dma_start, dma, efct_begin_len);
+  }
+  else {
+    pkt = ci_netif_intf_next_rx_pkt(ni, evq);
+    dma = pkt->dma_start;
+    if( pkt == NULL || ci_netif_rx_pkt_is_poisoned(pkt) )
+      return 0;
+  }
 
   ci_assert_equal(pkt->intf_i, intf_i);
   ci_ip_time_update(IPTIMER_STATE(ni), start_frc);
 
   status = handle_rx_pre_future(ni, pkt, &future);
   if( status == FUTURE_NONE )
-    return 0;
+    goto free_out;
 
   /* From this point, the expectation is that we will receive the detected
    * packet. If that doesn't happen, then we must call rollback_rx_future,
@@ -2110,7 +2126,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
     ci_frc64(&now_frc);
     if( now_frc - start_frc > max_spin ) {
       rollback_rx_future(ni, pkt, status, &future);
-      return 0;
+      goto free_out;
     }
   }
 
@@ -2119,7 +2135,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
    * more at this point, ahead of copying the packet data.
    */
   for( i = 2; i < 5; ++i )
-    ci_prefetch(pkt->dma_start + i * CI_CACHE_LINE_SIZE);
+    ci_prefetch(dma + i * CI_CACHE_LINE_SIZE);
 
   ++ni->state->in_poll;
   if( EF_EVENT_TYPE(ev[0]) == EF_EVENT_TYPE_RX ) {
@@ -2127,28 +2143,42 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
     if( (ev[0].rx.flags & (EF_EVENT_FLAG_SOP | EF_EVENT_FLAG_CONT))
                                                        == EF_EVENT_FLAG_SOP ) {
       pkt->pay_len = EF_EVENT_RX_BYTES(ev[0]) - evq->rx_prefix_len;
-      oo_offbuf_init(&pkt->buf, PKT_START(pkt), pkt->pay_len);
-
-      handle_rx_post_future(ni, &ps, pkt, status, &future);
-      if(CI_UNLIKELY( rc > 1 )) {
-        /* We have handled the first event, so remove it from the array and
-         * handle the rest normally. Add one to the returned count to include
-         * the one handled here.
-         */
-        for( i = 1; i < rc; ++i )
-          ev[i - 1] = ev[i];
-        rc = 1 + ci_netif_poll_evq(ni, &ps, intf_i, rc - 1);
-      }
-      goto handled;
+      handle_future = true;
     }
+  }
+  else if( EF_EVENT_TYPE(ev[0]) == EF_EVENT_TYPE_RX_REF &&
+           ev[0].rx_ref.pkt_id == efct_pkt_id ) {
+    pkt->pay_len = ev[0].rx_ref.len;
+    if( pkt->pay_len > efct_begin_len )
+      memcpy(pkt->dma_start + efct_begin_len, dma + efct_begin_len,
+             pkt->pay_len - efct_begin_len);
+    efct_vi_rxpkt_release(evq, ev[0].rx_ref.pkt_id);
+    handle_future = true;
   }
   /* maybe handle other simple events like TX? */
 
-  rollback_rx_future(ni, pkt, status, &future);
+  if( handle_future ) {
+    oo_offbuf_init(&pkt->buf, PKT_START(pkt), pkt->pay_len);
+    handle_rx_post_future(ni, &ps, pkt, status, &future);
 
-  rc = ci_netif_poll_evq(ni, &ps, intf_i, rc);
+    if(CI_UNLIKELY( rc > 1 )) {
+      /* We have handled the first event, so remove it from the array and
+       * handle the rest normally. Add one to the returned count to include
+       * the one handled here.
+       */
+      for( i = 1; i < rc; ++i )
+        ev[i - 1] = ev[i];
+      rc = 1 + ci_netif_poll_evq(ni, &ps, intf_i, rc - 1);
+    }
+  }
+  else {
+    rollback_rx_future(ni, pkt, status, &future);
+    if( evq->nic_type.arch == EF_VI_ARCH_EFCT )
+      ci_netif_pkt_release_rx_1ref(ni, pkt);
+    rc = ci_netif_poll_evq(ni, &ps, intf_i, rc);
+  }
+
   if( rc != 0 ) {
-handled:
     process_post_poll_list(ni);
     ni->state->poll_work_outstanding = 1;
   }
@@ -2156,6 +2186,11 @@ handled:
   if( ps.tx_pkt_free_list_n )
     ci_netif_poll_free_pkts(ni, &ps);
   return rc;
+
+free_out:
+  if( evq->nic_type.arch == EF_VI_ARCH_EFCT )
+    ci_netif_pkt_release_rx_1ref(ni, pkt);
+  return 0;
 }
 #endif
 

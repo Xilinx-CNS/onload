@@ -2322,8 +2322,18 @@ ci_inline ef_driver_handle ci_netif_get_driver_handle(const ci_netif* ni) {
 #endif
 }
 
+ci_inline int oo_stack_intf_max(ci_netif* ni) {
+#if defined(__KERNEL__)
+  return ni->nic_n;
+#else
+  return ni->state->nic_n;
+#endif
+}
 
 ci_inline ef_vi* ci_netif_vi(ci_netif* ni, int nic_i) {
+  ci_assert_ge(nic_i, 0);
+  ci_assert_lt(nic_i, oo_stack_intf_max(ni));
+
   return &ni->nic_hw[nic_i].vis[0];
 }
 
@@ -2345,14 +2355,6 @@ ci_inline int ci_netif_rx_vi_space(ci_netif* ni, ef_vi* vi)
 { return ni->state->rxq_limit - ef_vi_receive_fill_level(vi); }
 
 
-
-ci_inline int oo_stack_intf_max(ci_netif* ni) {
-#if defined(__KERNEL__)
-  return ni->nic_n;
-#else
-  return ni->state->nic_n;
-#endif
-}
 
 extern void ci_netif_send_plugin_app_ctrl(ci_netif* ni, int nic_index,
                                           ci_ip_pkt_fmt* pkt,
@@ -2745,8 +2747,11 @@ ci_inline int ci_netif_has_many_events(ci_netif* ni, int lookahead) {
  * are enabled, there will be the possibility of deciding falsely that a packet
  * is still poisonous when in fact it is not, but there is very little that we
  * can do about that. It would not cause a functional problem in any case.
+ *
+ * For EFCT, this must match the value provided to the driver in
+ * efct_nic_rxq_bind. TODO EFCT centralise the definition of this value.
  */
-#define CI_PKT_RX_POISON 0xFEA0C09Cu
+#define CI_PKT_RX_POISON 0xFFA0C09Bu
 ci_inline volatile uint32_t* ci_netif_poison_location(ci_ip_pkt_fmt* pkt)
 {
   return (volatile uint32_t*)pkt->dma_start;
@@ -2754,6 +2759,20 @@ ci_inline volatile uint32_t* ci_netif_poison_location(ci_ip_pkt_fmt* pkt)
 ci_inline void ci_netif_poison_rx_pkt(ci_ip_pkt_fmt* pkt)
 {
   *ci_netif_poison_location(pkt) = CI_PKT_RX_POISON;
+}
+
+ci_inline const void* ci_netif_efct_pkt_start(ef_vi* vi, unsigned* pkt_id)
+{
+  const void* pkt_start;
+  unsigned id = efct_vi_next_rx_rq_id(vi, 0); /* TODO EFCT use correct qid */
+  efct_vi_rxpkt_get(vi, id, &pkt_start);
+  *pkt_id = id;
+  return pkt_start;
+}
+ci_inline volatile const uint32_t* ci_netif_efct_poison_location(ef_vi* vi)
+{
+  unsigned pkt_id;
+  return (volatile const uint32_t*)ci_netif_efct_pkt_start(vi, &pkt_id);
 }
 
 #ifndef __KERNEL__
@@ -2767,24 +2786,16 @@ ci_inline int ci_netif_intf_may_poll_future(ci_netif* ni, int intf_i)
   return (ni->future_intf_mask & (1u << intf_i)) != 0;
 }
 
-ci_inline ci_ip_pkt_fmt* ci_netif_intf_next_rx_pkt(ci_netif* ni, int intf_i)
+ci_inline ci_ip_pkt_fmt* ci_netif_intf_next_rx_pkt(ci_netif* ni, ef_vi* vi)
 {
   int id;
   oo_pkt_p pp;
 
-  ci_assert_ge(intf_i, 0);
-  ci_assert_lt(intf_i, oo_stack_intf_max(ni));
+  ci_assert(vi->nic_type.arch != EF_VI_ARCH_EFCT);
 
-  id = ef_vi_next_rx_rq_id(ci_netif_vi(ni, intf_i));
+  id = ef_vi_next_rx_rq_id(vi);
   OO_PP_INIT(ni, pp, id);
   return OO_PP_IS_NULL(pp) ? NULL : PKT_CHK(ni, pp);
-}
-
-
-ci_inline int ci_netif_intf_has_rx_future(ci_netif* ni, int intf_i)
-{
-  ci_ip_pkt_fmt* pkt = ci_netif_intf_next_rx_pkt(ni, intf_i);
-  return pkt && ! ci_netif_rx_pkt_is_poisoned(pkt);
 }
 
 
@@ -2799,13 +2810,18 @@ ci_netif_intf_rx_future(ci_netif* ni, int intf_i, const uint32_t* poison)
 {
   ci_ip_pkt_fmt* pkt;
   ci_uint8* p;
+  ef_vi* vi;
 
   ci_assert(*poison == CI_PKT_RX_POISON);
 
   if( ! ci_netif_intf_may_poll_future(ni, intf_i) )
     return poison;
 
-  pkt = ci_netif_intf_next_rx_pkt(ni, intf_i);
+  vi = ci_netif_vi(ni, intf_i);
+  if( vi->nic_type.arch == EF_VI_ARCH_EFCT )
+    return ci_netif_efct_poison_location(vi);
+
+  pkt = ci_netif_intf_next_rx_pkt(ni, vi);
   if( pkt == NULL )
     return poison;
 
