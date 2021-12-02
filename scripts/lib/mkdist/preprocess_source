@@ -44,11 +44,12 @@ update_product_strings() {
   local product="$2"
   local version="$3"
 
-  try sed -i \
-    -e "/define ONLOAD_VERSION/ c# define ONLOAD_VERSION \"$version\"" \
-    -e "/define ONLOAD_PRODUCT/ c#define ONLOAD_PRODUCT \"$Product\"" \
-    -e "/define ONLOAD_COPYRIGHT/ c#define ONLOAD_COPYRIGHT \"$banner\"" \
-    src/include/onload/version.h
+  (
+    echo "echo \"#define ONLOAD_VERSION  \\\"$version\\\"\""
+    echo "echo \"#define ONLOAD_SHORT_VERSION ONLOAD_VERSION\""
+    echo "echo \"#define ONLOAD_PRODUCT \\\"$Product\\\"\""
+    echo "echo \"#define ONLOAD_COPYRIGHT \\\"$banner\\\"\""
+  ) > scripts/onload_version_gen
   try sed -i \
     "/define pkgversion/ c%define pkgversion $version" \
     scripts/onload_misc/openonload.spec

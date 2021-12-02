@@ -33,10 +33,10 @@ static inline void ci_netif_log_startup_banner(ci_netif* ni, const char* verb)
 
   NI_LOG(ni, BANNER, "%s %s %s [%s]",
          verb,
-         sku != NULL ? sku : ONLOAD_PRODUCT,
-         ONLOAD_VERSION,
+         sku != NULL ? sku : onload_product,
+         onload_version,
          ni->state->pretty_name);
-  NI_LOG(ni, BANNER, ONLOAD_COPYRIGHT);
+  NI_LOG(ni, BANNER, "%s", onload_copyright);
 
   free(sku);
 }

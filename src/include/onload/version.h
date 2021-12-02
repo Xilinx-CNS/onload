@@ -15,16 +15,12 @@
 #define __ONLOAD_VERSION_H__
 
 
-#ifndef ONLOAD_VERSION
-# define ONLOAD_VERSION  "<dev-snapshot>"
-#endif
-
-#define ONLOAD_PRODUCT  "Onload"
-
-#define ONLOAD_COPYRIGHT  "Copyright 2019-present Xilinx, 2006-2019 Solarflare Communications, 2002-2005 Level 5 Networks"
+extern const char* onload_version;
+extern const char* onload_product;
+extern const char* onload_copyright;
 
 /* Max length of version string used for version skew checking. */
-enum { OO_VER_STR_LEN = 40 };
+enum { OO_VER_STR_LEN = 80 };
 
 
 /* We use an md5sum over certain headers to ensure that userland and kernel

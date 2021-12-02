@@ -331,7 +331,7 @@ cp_session_init_memory(struct cp_session* s, struct cp_tables_dim* m,
       cicp_ip6if_row_free(&mib->ip6if[id]);
     for( id = 0; id < mib->dim->llap_max; id++ )
       cicp_llap_row_free(&mib->llap[id]);
-    snprintf(mib->sku->value, sizeof(mib->sku->value), "%s", ONLOAD_PRODUCT);
+    snprintf(mib->sku->value, sizeof(mib->sku->value), "%s", onload_product);
   }
   ci_wmb();
 
@@ -1013,7 +1013,7 @@ int main(int argc, char** argv)
   memset(s, 0, sizeof(*s));
 
   if( ci_ver ) {
-    ci_log("Version: %s\n%s", ONLOAD_VERSION, ONLOAD_COPYRIGHT);
+    ci_log("Version: %s\n%s", onload_version, onload_copyright);
     return 0;
   }
 
@@ -1151,7 +1151,7 @@ int main(int argc, char** argv)
   ci_dllist_init(&s->fwd_req_ul);
 
   /* We have some MIBs ready - tell others about us! */
-  ci_log("Onload Control Plane server %s started: id %u, pid %d", ONLOAD_VERSION, s->cplane_id,
+  ci_log("Onload Control Plane server %s started: id %u, pid %d", onload_version, s->cplane_id,
          dim.server_pid);
 
   do {

@@ -789,7 +789,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
 
         /* create new stack
          * todo: no hardware interfaces are necessary */
-        strcpy(alloc.in_version, ONLOAD_VERSION);
+        strcpy(alloc.in_version, onload_version);
         strcpy(alloc.in_uk_intf_ver, oo_uk_intf_ver);
 
         /* There will be no more active connections in the new stack

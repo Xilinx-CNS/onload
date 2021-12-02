@@ -160,6 +160,7 @@ docopy scripts                onload_rpmtest
 docopy scripts                libc_compat.sh check_library_presence
 docopy scripts                check_prototype
 docopy scripts                check_header_presence
+docopy scripts                onload_version_gen
 docopy scripts/shell-fns      fns mmake-fns mmakebuildtree_gen disttag
 docopy .                      mk
 

@@ -897,7 +897,7 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
     logger(log_arg, "  namespace=net:[%u]", ni->state->netns_id);
   }
   logger(log_arg, "  %s %s uid=%d pid=%d ns_flags=%x%s%s%s%s",
-         ni->cplane->mib->sku->value, ONLOAD_VERSION
+         ni->cplane->mib->sku->value, onload_version
       , (int) ns->uuid, (int) ns->pid
       , ns->flags
       , (ns->flags & CI_NETIF_FLAG_ONLOAD_UNSUPPORTED)
@@ -1024,7 +1024,7 @@ void ci_netif_dump_vi_stats_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
 
   logger(log_arg, "%s: stack=%d name=%s", __FUNCTION__, NI_ID(ni),
          ni->state->name);
-  logger(log_arg, "  ver=%s", ONLOAD_VERSION);
+  logger(log_arg, "  ver=%s", onload_version);
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     ci_netif_dump_vi_stats_vi(ni, intf_i, logger, log_arg);

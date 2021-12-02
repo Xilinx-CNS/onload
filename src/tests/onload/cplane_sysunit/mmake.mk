@@ -5,11 +5,13 @@
 MMAKE_LIBS := \
 	$(LINK_CIAPP_LIB) \
 	$(LINK_CITOOLS_LIB) \
+	$(LINK_CIUL_LIB) \
 	-lmnl
 
 MMAKE_LIB_DEPS := \
 	$(CIAPP_LIB_DEPEND) \
-	$(CITOOLS_LIB_DEPEND)
+	$(CITOOLS_LIB_DEPEND) \
+	$(CIUL_LIB_DEPEND)
 
 MMAKE_CFLAGS += -fPIC -DCP_SYSUNIT -D_GNU_SOURCE -Dcp_server_entry=main \
                 -Dcp_frc64_get=ci_frc64_get

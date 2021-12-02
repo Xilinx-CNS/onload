@@ -2320,7 +2320,7 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
   /* No need to NULL terminate these -- driver must assume they're not in
    * any case.
    */
-  strncpy(ra->in_version, ONLOAD_VERSION, sizeof(ra->in_version));
+  strncpy(ra->in_version, onload_version, sizeof(ra->in_version));
   strncpy(ra->in_uk_intf_ver, OO_UK_INTF_VER, sizeof(ra->in_uk_intf_ver));
   if( flags & CI_NETIF_FLAG_DO_ALLOCATE_SCALABLE_FILTERS_RSS ) {
     ra->in_cluster_size = CITP_OPTS.cluster_size;
@@ -2440,7 +2440,8 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
   }
 
   if( ns->flags & CI_NETIF_FLAG_ONLOAD_UNSUPPORTED ) {
-    ci_log("*** Warning: use of "ONLOAD_PRODUCT" with this adapter is likely");
+    ci_log("*** Warning: use of %s with this adapter is likely",
+	   onload_product);
     ci_log("***  to show suboptimal performance for all cases other than the");
     ci_log("***  most trivial benchmarks.  Please see your Solarflare");
     ci_log("***  representative/reseller to obtain an Onload-capable");

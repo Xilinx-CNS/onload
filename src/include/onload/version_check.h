@@ -17,7 +17,7 @@ oo_version_check_impl(const char* user_version, const char* user_intf_ver,
   int ver_chk_bad, intf_chk_bad;
   int rc = 0;
 
-  CI_BUILD_ASSERT(sizeof(ONLOAD_VERSION) <= OO_VER_STR_LEN + 1);
+  ci_assert_le(strlen(onload_version), OO_VER_STR_LEN);
   ci_assert_le(strlen(kernel_intf_ver), CI_CHSUM_STR_LEN);
 
   if( strnlen(user_version, OO_VER_STR_LEN + 1) > OO_VER_STR_LEN )
@@ -25,13 +25,13 @@ oo_version_check_impl(const char* user_version, const char* user_intf_ver,
   if( strnlen(user_intf_ver, CI_CHSUM_STR_LEN + 1) > CI_CHSUM_STR_LEN )
     return -EINVAL;
 
-  ver_chk_bad = strncmp(ONLOAD_VERSION, user_version, OO_VER_STR_LEN + 1);
+  ver_chk_bad = strncmp(onload_version, user_version, OO_VER_STR_LEN + 1);
   intf_chk_bad = strncmp(kernel_intf_ver, user_intf_ver, CI_CHSUM_STR_LEN + 1);
 
   if( ver_chk_bad ) {
     ci_log("ERROR: user/driver version mismatch");
     ci_log("  user-version: %s", user_version);
-    ci_log("  driver-version: %s", ONLOAD_VERSION);
+    ci_log("  driver-version: %s", onload_version);
     rc = -ELIBACC;
   }
   if( intf_chk_bad ) {

@@ -314,8 +314,8 @@ static struct proc_ops efab_stacks_k_seq_fops = {
 static int 
 efab_version_read_proc(struct seq_file *seq, void *s)
 {
-  seq_printf(seq, "onload_product: %s\n", ONLOAD_PRODUCT);
-  seq_printf(seq, "onload_version: %s\n", ONLOAD_VERSION);
+  seq_printf(seq, "onload_product: %s\n", onload_product);
+  seq_printf(seq, "onload_version: %s\n", onload_version);
   seq_printf(seq, "uk_intf_ver: %s\n", oo_uk_intf_ver);
   return 0;
 }

@@ -687,10 +687,9 @@ void _fini(void)
    Ensure that no libc() functions are used */
 void onload_version_msg(void)
 {
-  struct iovec v[1];
-  static const char msg0[] =
-    ONLOAD_PRODUCT" "ONLOAD_VERSION"\n"
-    ONLOAD_COPYRIGHT"\n"
+  const char* msg0[] = {
+    onload_product, " ", onload_version, "\n",
+    onload_copyright, "\n"
     "Built: "__DATE__" "__TIME__" "
 #ifdef NDEBUG
     "(release)"
@@ -698,16 +697,20 @@ void onload_version_msg(void)
     "(debug)"
 #endif
     "\n"
-    "Build profile header: " OO_STRINGIFY(TRANSPORT_CONFIG_OPT_HDR) "\n";
+    "Build profile header: " OO_STRINGIFY(TRANSPORT_CONFIG_OPT_HDR) "\n"};
+#define MSG0_SIZE CI_ARRAY_SIZE(msg0)
+  struct iovec v[MSG0_SIZE];
+  int i;
 
-  v[0].iov_base = (void*) msg0;
-  v[0].iov_len  = sizeof(msg0)-1;
 
-  my_syscall3(writev, STDOUT_FILENO, (long) v, 1);
+  for( i = 0; i < MSG0_SIZE; i++ ) {
+    v[i].iov_base = (char*)msg0[i]; /* discard const qualifier */
+    v[i].iov_len = strlen(msg0[i]);
+  }
+
+  my_syscall3(writev, STDOUT_FILENO, (long) v, MSG0_SIZE);
   my_syscall3(exit, 0, 0, 0); 
 }
 
-
-const char*const onload_version = ONLOAD_VERSION;
 
 /*! \cidoxg_end */

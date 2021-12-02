@@ -875,7 +875,7 @@ static int thc_alloc_thr(tcp_helper_cluster_t* thc,
   }
   roa.in_flags = ni_flags & ~(CI_NETIF_FLAG_DO_DROP_SHARED_LOCAL_PORTS |
                               CI_NETIF_FLAG_IN_DL_CONTEXT);
-  strncpy(roa.in_version, ONLOAD_VERSION, sizeof(roa.in_version));
+  strncpy(roa.in_version, onload_version, sizeof(roa.in_version));
   strncpy(roa.in_uk_intf_ver, oo_uk_intf_ver, sizeof(roa.in_uk_intf_ver));
   if( (opts = kmalloc(sizeof(*opts), GFP_KERNEL)) == NULL )
     return -ENOMEM;

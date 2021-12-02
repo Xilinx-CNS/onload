@@ -1097,7 +1097,7 @@ int orm_do_dump(const struct orm_cfg* cfg, int output_flags,
     goto done;
   }
 
-  dump_buf_cat_comma("{\"onload_version\":\"%s\"", ONLOAD_VERSION);
+  dump_buf_cat_comma("{\"onload_version\":\"%s\"", onload_version);
   if( ! cfg->flat )
     dump_buf_literal("\"json\":[");
 

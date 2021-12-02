@@ -99,7 +99,7 @@ void ef_vi_set_tx_push_threshold(ef_vi* vi, unsigned threshold)
 
 const char* ef_vi_version_str(void)
 {
-  return ONLOAD_VERSION;
+  return onload_version;
 }
 
 

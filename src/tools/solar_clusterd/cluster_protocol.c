@@ -185,7 +185,7 @@ PyMODINIT_FUNC initcluster_protocol(void)
 {
   PyObject *module = Py_InitModule("cluster_protocol",cluster_protocol_methods);
 
-  MODULE_STR_CONST(module, ONLOAD_VERSION);
+  MODULE_STR_CONST(module, onload_version);
 
   MODULE_STR_CONST(module, DEFAULT_CLUSTERD_DIR);
   MODULE_STR_CONST(module, DEFAULT_CLUSTERD_SOCK_NAME);
