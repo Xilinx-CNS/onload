@@ -14,6 +14,7 @@
 #include "ef_vi_internal.h"
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/common.h>
+#include <ci/tools/byteorder.h>
 
 #include <stdbool.h>
 
@@ -215,7 +216,7 @@ struct efct_tx_state
    * mapped twice, so that each packet can be written contiguously */
   volatile uint64_t* aperture;
   /* up to 7 bytes left over after writing a block in 64-bit chunks */
-  union {uint64_t word; uint8_t bytes[8];} tail;
+  uint64_t tail;
   /* number of left over bytes in 'tail' */
   unsigned tail_len;
   /* number of 64-bit words from start of aperture */
@@ -270,7 +271,7 @@ static void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
   unsigned offset = vi->ep_state->txq.ct_added % EFCT_TX_APERTURE;
   BUG_ON(offset % EFCT_TX_ALIGNMENT != 0);
   tx->aperture = (void*) vi->vi_ctpio_mmap_ptr;
-  tx->tail.word = 0;
+  tx->tail = 0;
   tx->tail_len = 0;
   tx->offset = offset >> 3;
 }
@@ -279,7 +280,8 @@ static void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
 static void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
 {
   BUG_ON(tx->tail_len >= 8);
-  tx->tail.bytes[tx->tail_len++] = byte;
+  tx->tail = (tx->tail << 8) | byte;
+  tx->tail_len++;
 }
 
 /* write a 64-bit word to the CTPIO aperture, dealing with wrapping */
@@ -300,8 +302,8 @@ static void efct_tx_block(struct efct_tx_state* __restrict__ tx, char* base, int
     }
 
     if( tx->tail_len == 8 ) {
-      efct_tx_word(tx, tx->tail.word);
-      tx->tail.word = 0;
+      efct_tx_word(tx, CI_BSWAP_LE64(tx->tail));
+      tx->tail = 0;
       tx->tail_len = 0;
     }
   }
@@ -327,8 +329,10 @@ static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dma_i
   struct efct_tx_descriptor* desc = q->descriptors;
   int i = qs->added & q->mask;
 
-  if( tx->tail_len != 0 ) 
-    efct_tx_word(tx, tx->tail.word);
+  if( tx->tail_len != 0 ) {
+    tx->tail <<= (8 - tx->tail_len) * 8;
+    efct_tx_word(tx, CI_BSWAP_LE64(tx->tail));
+  }
   while( tx->offset % (EFCT_TX_ALIGNMENT >> 3) != 0 )
     efct_tx_word(tx, 0);
   /* EFCT TODO: X3-251: Suspect CPU reordering greater than the hardware can
