@@ -2320,7 +2320,7 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
   /* No need to NULL terminate these -- driver must assume they're not in
    * any case.
    */
-  strncpy(ra->in_version, onload_version, sizeof(ra->in_version));
+  strncpy(ra->in_version, onload_short_version, sizeof(ra->in_version));
   strncpy(ra->in_uk_intf_ver, OO_UK_INTF_VER, sizeof(ra->in_uk_intf_ver));
   if( flags & CI_NETIF_FLAG_DO_ALLOCATE_SCALABLE_FILTERS_RSS ) {
     ra->in_cluster_size = CITP_OPTS.cluster_size;

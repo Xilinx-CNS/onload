@@ -50,7 +50,7 @@ int oo_version_check_ul(ci_fd_t fd)
 {
   int rc;
   oo_version_check_t vc;
-  strncpy(vc.in_version, onload_version, sizeof(vc.in_version));
+  strncpy(vc.in_version, onload_short_version, sizeof(vc.in_version));
   strncpy(vc.in_uk_intf_ver, OO_UK_INTF_VER, sizeof(vc.in_uk_intf_ver));
   vc.debug =
 #ifdef NDEBUG

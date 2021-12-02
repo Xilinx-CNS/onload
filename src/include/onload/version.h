@@ -16,6 +16,7 @@
 
 
 extern const char* onload_version;
+extern const char* onload_short_version;
 extern const char* onload_product;
 extern const char* onload_copyright;
 
