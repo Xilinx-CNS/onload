@@ -5081,6 +5081,7 @@ void ci_tcp_rx_plugin_meta(ci_netif* netif, struct ci_netif_poll_state* ps,
 
   ci_assert(oo_offbuf_not_empty(&pkt->buf));  /* broken plugin */
   ci_tcp_rx_add_to_recvq(netif, ts, pkt, get_actual_ceph_bytes(pkt));
+  ci_netif_put_on_post_poll(netif, &ts->s.b);
   ci_tcp_wake(netif, ts, CI_SB_FLAG_WAKE_RX);
 #endif
 }
