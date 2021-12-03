@@ -2519,7 +2519,6 @@ int cp_proc_stats_open(struct inode *inode, struct file *file)
 
 struct cp_pid_seq_state {
   ci_dllink* cp;
-  loff_t offset;
   unsigned bucket;
 };
 
@@ -2529,7 +2528,7 @@ static void* cp_server_pids_next(struct seq_file* s, void* state_,
 {
   struct cp_pid_seq_state* state = state_;
 
-  state->offset++;
+  (*pos)++;
 
   state->cp = state->cp->next;
 
@@ -2542,8 +2541,6 @@ static void* cp_server_pids_next(struct seq_file* s, void* state_,
     }
     state->cp = ci_dllist_head(&cp_hash_table[state->bucket]);
   }
-
-  *pos = state->offset;
 
   return state;
 }
@@ -2560,8 +2557,6 @@ static void* cp_server_pids_start(struct seq_file* s, loff_t* pos)
   if ( !state ) {
     return NULL;
   }
-
-  state->offset = 0;
 
   for( state->bucket = 0;
        state->bucket < CP_INSTANCE_HASH_SIZE;
