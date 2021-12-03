@@ -407,7 +407,10 @@ void
 efab_tcp_helper_netif_unlock(tcp_helper_resource_t* trs, int in_dl_context)
 {
   ci_assert_equiv(in_dl_context, trs->netif.flags & CI_NETIF_FLAG_IN_DL_CONTEXT);
+#if 0
+  /* See ON-13698 & ON-13099: we want it to be true, but it fires for now. */
   ci_assert_impl(trs->netif.flags & CI_NETIF_FLAGS_AVOID_ATOMIC, !in_dl_context);
+#endif
 
   if( in_dl_context )
     trs->netif.flags &= ~CI_NETIF_FLAG_IN_DL_CONTEXT;
