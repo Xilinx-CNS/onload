@@ -397,7 +397,7 @@ generic_rx_wait(ef_vi* vi)
             cfg_ctpio_thresh >= tx_frame_len && ! cfg_ctpio_no_poison ) {
           break;
         }
-        fprintf(stderr, "ERROR: unexpected event "EF_EVENT_FMT"\n",
+        fprintf(stderr, "ERROR: unexpected discard "EF_EVENT_FMT"\n",
                 EF_EVENT_PRI_ARG(evs[i]));
         TEST(0);
         break;

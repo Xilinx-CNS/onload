@@ -302,7 +302,7 @@ static void efct_tx_block(struct efct_tx_state* __restrict__ tx, char* base, int
     }
 
     if( tx->tail_len == 8 ) {
-      efct_tx_word(tx, CI_BSWAP_LE64(tx->tail));
+      efct_tx_word(tx, CI_BSWAP_BE64(tx->tail));
       tx->tail = 0;
       tx->tail_len = 0;
     }
@@ -331,7 +331,7 @@ static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dma_i
 
   if( tx->tail_len != 0 ) {
     tx->tail <<= (8 - tx->tail_len) * 8;
-    efct_tx_word(tx, CI_BSWAP_LE64(tx->tail));
+    efct_tx_word(tx, CI_BSWAP_BE64(tx->tail));
   }
   while( tx->offset % (EFCT_TX_ALIGNMENT >> 3) != 0 )
     efct_tx_word(tx, 0);
