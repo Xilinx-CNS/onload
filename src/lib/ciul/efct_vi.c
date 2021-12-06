@@ -655,17 +655,22 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
       return 0;
 
   if( efct_rxq_need_config(rxq, shm) ) {
-    /* Update rxq's value even if the refresh_func fails, since retrying it
-     * every poll is unlikely to be productive either */
-    rxq->config_generation = shm->config_generation;
+    unsigned new_generation = OO_ACCESS_ONCE(shm->config_generation);
+    /* We have to use the shm->config_generation from before we started
+     * thinking, to deal with multiple successive refreshes correctly, but we
+     * must write it after we're done, to deal with concurrent calls to
+     * efct_rxq_check_event() */
     if( rxq->refresh_func(vi, qid) < 0 ) {
-#ifdef __KERNEL__
-      /* Kernelspace is an exception to the above comment, since one of the
-       * possible outcomes is a crash and we don't want that */
-      rxq->config_generation = 0;
+#ifndef __KERNEL__
+      /* Update rxq's value even if the refresh_func fails, since retrying it
+       * every poll is unlikely to be productive either. Except in
+       * kernelspace, since one of the possible outcomes is a crash and we
+       * don't want that */
+      OO_ACCESS_ONCE(rxq->config_generation) = new_generation;
 #endif
       return 0;
     }
+    OO_ACCESS_ONCE(rxq->config_generation) = new_generation;
   }
 
   /* By never crossing a superbuf in a single poll we can exploit
