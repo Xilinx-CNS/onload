@@ -100,6 +100,7 @@
     bsd_signal;
     sysv_signal;
     signal;
+    __sysv_signal;
 
     onload_fd_stat;
     onload_is_present;
