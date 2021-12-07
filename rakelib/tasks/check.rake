@@ -37,7 +37,7 @@ namespace :check do
     namespace_leaf_name = ENV['TEST_THREAD_NAME'] || nm.scope.path.split(':')[-1]
 
     # build the cplane system tests
-    task build: ['build:lib:citools', 'build:lib:ciapp'] do
+    task build: ['build:lib:ciul', 'build:lib:citools', 'build:lib:ciapp'] do
       Dir.chdir($user_build_dir) do
         Onload::Utils.make('tests/onload/cplane_sysunit')
       end
