@@ -77,12 +77,26 @@ struct efhw_nic_efct_evq {
   unsigned capacity;
 };
 
+struct efct_hw_filter {
+  uint32_t lip;
+  uint16_t lport;
+  uint16_t proto;
+  uint8_t rxq;
+  bool exclusive;
+  uint32_t refcount;
+  int net_driver_id;
+};
+
+#define MAX_EFCT_FILTERS  256
+
 struct efhw_nic_efct {
   struct efhw_nic_efct_rxq rxq[CI_EFCT_MAX_RXQS];
   struct efhw_nic_efct_evq evq[CI_EFCT_MAX_EVQS];
   struct xlnx_efct_device *edev;
   struct xlnx_efct_client *client;
   struct efhw_nic *nic;
+  struct efct_hw_filter driver_filters[MAX_EFCT_FILTERS];
+  struct mutex driver_filters_mtx;
 };
 
 #if CI_HAVE_EFCT_AUX

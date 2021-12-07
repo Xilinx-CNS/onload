@@ -367,6 +367,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   if( ! efct )
     return -ENOMEM;
 
+  mutex_init(&efct->driver_filters_mtx);
   efct->edev = edev;
   client = edev->ops->open(auxdev, &efct_ops, efct);
   if( IS_ERR(client) ) {

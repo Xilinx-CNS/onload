@@ -644,11 +644,17 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
                    int *rxq, const struct cpumask *mask, unsigned flags)
 {
   int rc;
+  int i, free_table_ix = -1;
+  bool dedupe_filter;
+  struct efhw_nic_efct *efct = nic->arch_extra;
   struct ethtool_rx_flow_spec filter;
   struct xlnx_efct_filter_params params;
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
+  const unsigned dedupe_match_flags = EFX_FILTER_MATCH_IP_PROTO |
+                                      EFX_FILTER_MATCH_LOC_HOST |
+                                      EFX_FILTER_MATCH_LOC_PORT;
 
   if( flags & EFHW_FILTER_F_REPLACE )
     return -EOPNOTSUPP;
@@ -668,9 +674,79 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   if( flags & EFHW_FILTER_F_EXCL_RXQ )
     params.flags = XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
 
+  dedupe_filter = (filter.flow_type == UDP_V4_FLOW ||
+                   filter.flow_type == TCP_V4_FLOW) &&
+                (spec->match_flags & dedupe_match_flags) == dedupe_match_flags;
+
+  if( dedupe_filter ) {
+    /* We virtualize the filtering by allowing arbitrary numbers of duplicates.
+     * This is logically correct in that arbitrary numbers of people _can_
+     * listen to the same traffic, but is also needed to make various bits of
+     * functionality work:
+     * - multicast 'replication'
+     * - apps creating multiple different 5-tuple filters which share the same
+     *   3-tuple (the remote portion of those 5-tuples was discarded by this
+     *   function, so it's our responsibility to deal with the confusion)
+     * - Various cases in oof which switch between wild and 5-tuple filters,
+     *   e.g. UDP connect, TCP listen, and expect to be able to do so without
+     *   gaps in the presence of their filters
+     */
+    /* This implementation is currently a little over-generous, in that it
+     * allows multiple users to add the exact same filters. That's accurately
+     * representative of the hardware's capabilities, but potentially slightly
+     * confusing */
+    mutex_lock(&efct->driver_filters_mtx);
+
+    for( i = 0; i < MAX_EFCT_FILTERS; ++i ) {
+      struct efct_hw_filter *row = &efct->driver_filters[i];
+      if( row->refcount == 0 ) {
+        if( free_table_ix < 0 )
+          free_table_ix = i;
+        continue;
+      }
+
+      if( row->lip == spec->loc_host[0] && row->lport == spec->loc_port &&
+          row->proto == spec->ip_proto ) {
+        int rc;
+        if( (row->exclusive || flags & EFHW_FILTER_F_EXCL_RXQ) &&
+            *rxq != row->rxq ) {
+          rc = -EPERM;
+        }
+        else {
+          ++row->refcount;
+          rc = row->net_driver_id;
+          *rxq = row->rxq;
+        }
+        mutex_unlock(&efct->driver_filters_mtx);
+        return rc;
+      }
+    }
+    if( free_table_ix < 0 ) {
+      /* Probably means that the hardware has grown more capable but nobody
+       * told us */
+      EFHW_ERR("%s: disambiguation table full", __func__);
+      return -ENOSPC;
+    }
+  }
+
   EFCT_PRE(dev, edev, cli, nic, rc);
   rc = edev->ops->filter_insert(cli, &params);
   EFCT_POST(dev, edev, cli, nic, rc);
+
+  if( dedupe_filter ) {
+    if( rc >= 0 ) {
+      efct->driver_filters[free_table_ix] = (struct efct_hw_filter){
+        .lip = spec->loc_host[0],
+        .lport = spec->loc_port,
+        .proto = spec->ip_proto,
+        .rxq = params.rxq_out,
+        .exclusive = (flags & EFHW_FILTER_F_EXCL_RXQ) != 0,
+        .refcount = 1,
+        .net_driver_id = params.filter_id_out,
+      };
+    }
+    mutex_unlock(&efct->driver_filters_mtx);
+  }
   if( rc < 0 )
     return rc;
   *rxq = params.rxq_out;
@@ -680,14 +756,30 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 static void
 efct_filter_remove(struct efhw_nic *nic, int filter_id)
 {
+  struct efhw_nic_efct *efct = nic->arch_extra;
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
   int rc;
+  int i;
+  bool delete = true;
 
-  EFCT_PRE(dev, edev, cli, nic, rc);
-  rc = edev->ops->filter_remove(cli, filter_id);
-  EFCT_POST(dev, edev, cli, nic, rc);
+  mutex_lock(&efct->driver_filters_mtx);
+  for( i = 0; i < MAX_EFCT_FILTERS; ++i ) {
+    struct efct_hw_filter *row = &efct->driver_filters[i];
+    if( row->refcount && row->net_driver_id == filter_id ) {
+      if( --row->refcount )
+        delete = false;
+      break;
+    }
+  }
+
+  if( delete ) {
+    EFCT_PRE(dev, edev, cli, nic, rc);
+    rc = edev->ops->filter_remove(cli, filter_id);
+    EFCT_POST(dev, edev, cli, nic, rc);
+  }
+  mutex_unlock(&efct->driver_filters_mtx);
 }
 
 static int
