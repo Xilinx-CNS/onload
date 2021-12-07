@@ -151,6 +151,21 @@ efrm_vi_irq_setup(struct efrm_interrupt_vector *vec)
 	char name_local[80];
 	int rc;
 	const char *name;
+	unsigned flags = IRQF_SAMPLE_RANDOM;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4,19,0) && \
+    (!defined RHEL_MAJOR || RHEL_MAJOR < 8)
+	/* This flag is safe to use for all kernels (per commentary surrounding
+	 * https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=923aa4c378f9 )
+	 * however it does come with a performance cost ("For !ONESHOT irqs the
+	 * thread mask is 0 so we can avoid a conditional in irq_wake_thread()" in
+	 * kernel/irq/manage.c). The above ifdefs, then, are a minimal attempt at
+	 * avoiding that extra cost on systems where we've manually verified that
+	 * we don't need it. Ubuntu's 4.15.0 has been verified to be 'old'. If
+	 * that condition is imperfect then it just means a system might be a
+	 * little slower than it could be. */
+	flags |= IRQF_ONESHOT;
+#endif
 
 	snprintf(name_local, sizeof(name_local), "onld-%d",
 		 vec->nic->index);
@@ -160,7 +175,7 @@ efrm_vi_irq_setup(struct efrm_interrupt_vector *vec)
 	name = kstrdup(name_local, GFP_KERNEL);
 	if (!name)
 		name = default_irq_name;
-	rc = request_threaded_irq(vec->irq, NULL, vi_interrupt, IRQF_SAMPLE_RANDOM, name, vec);
+	rc = request_threaded_irq(vec->irq, NULL, vi_interrupt, flags, name, vec);
 	if (rc != 0) {
 		EFRM_ERR("failed to request IRQ %d for NIC %d", vec->irq,
 			 vec->nic->index);
@@ -922,9 +937,8 @@ efrm_vi_io_map(struct efrm_vi* virs, struct efhw_nic *nic, int instance)
 
 
 static void
-efrm_vi_io_unmap(struct efrm_vi* virs)
+efrm_vi_io_unmap(struct efrm_vi* virs, struct efhw_nic* nic)
 {
-	struct efhw_nic* nic = virs->rs.rs_client->nic;
 	if (efhw_nic_vi_io_size(nic) > 0)
 		iounmap(virs->io_page);
 }
@@ -1080,7 +1094,7 @@ __efrm_vi_resource_free(struct efrm_vi *virs)
 	efrm_vi_rm_fini_dmaq(virs, EFHW_EVQ);
 	efrm_vi_detach_evq(virs, EFHW_RXQ);
 	efrm_vi_detach_evq(virs, EFHW_TXQ);
-	efrm_vi_io_unmap(virs);
+	efrm_vi_io_unmap(virs, &efrm_nic->efhw_nic);
 	nic_client_id = efrm_pd_get_nic_client_id(virs->pd);
 	if (nic_client_id != EFRM_NIC_CLIENT_ID_NONE) {
 		rc = efhw_nic_vi_set_user(&efrm_nic->efhw_nic, instance,
@@ -1654,7 +1668,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 
 
 fail_irq:
-	efrm_vi_io_unmap(virs);
+	efrm_vi_io_unmap(virs, client->nic);
 fail_mmap:
 	vfree(virs->efct_shm);
 fail_efct_rxq:
