@@ -224,7 +224,7 @@ struct efct_tx_state
 };
 
 /* generic tx header */
-static uint64_t efct_tx_header(unsigned packet_length, unsigned ct_thresh,
+ci_inline uint64_t efct_tx_header(unsigned packet_length, unsigned ct_thresh,
                                unsigned timestamp_flag, unsigned warm_flag,
                                unsigned action)
 {
@@ -247,14 +247,14 @@ static uint64_t efct_tx_header(unsigned packet_length, unsigned ct_thresh,
 }
 
 /* tx header for standard (non-templated) send */
-static uint64_t efct_tx_pkt_header(unsigned length, unsigned ct_thresh,
+ci_inline uint64_t efct_tx_pkt_header(unsigned length, unsigned ct_thresh,
                                    unsigned timestamp_flag)
 {
   return efct_tx_header(length, ct_thresh, timestamp_flag, 0, 0);
 }
 
 /* check that we have space to send a packet of this length */
-static bool efct_tx_check(ef_vi* vi, int len)
+ci_inline bool efct_tx_check(ef_vi* vi, int len)
 {
   /* We require the txq to be large enough for the maximum number of packets
    * which can be written to the FIFO. Each packet consumes at least 64 bytes.
@@ -266,7 +266,7 @@ static bool efct_tx_check(ef_vi* vi, int len)
 }
 
 /* initialise state for a transmit operation */
-static void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
+ci_inline void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
 {
   unsigned offset = vi->ep_state->txq.ct_added % EFCT_TX_APERTURE;
   BUG_ON(offset % EFCT_TX_ALIGNMENT != 0);
@@ -277,7 +277,7 @@ static void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
 }
 
 /* store a left-over byte from the start or end of a block */
-static void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
+ci_inline void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
 {
   BUG_ON(tx->tail_len >= 8);
   tx->tail = (tx->tail << 8) | byte;
@@ -285,14 +285,14 @@ static void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
 }
 
 /* write a 64-bit word to the CTPIO aperture, dealing with wrapping */
-static void efct_tx_word(struct efct_tx_state* tx, uint64_t value)
+ci_inline void efct_tx_word(struct efct_tx_state* tx, uint64_t value)
 {
   *(tx->aperture + tx->offset++) = value;
   tx->offset %= EFCT_TX_APERTURE >> 3;
 }
 
 /* write a block of bytes to the CTPIO aperture, dealing with wrapping and leftovers */
-static void efct_tx_block(struct efct_tx_state* __restrict__ tx, char* base, int len)
+ci_inline void efct_tx_block(struct efct_tx_state* __restrict__ tx, char* base, int len)
 {
   if( tx->tail_len != 0 ) {
     while( len > 0 && tx->tail_len < 8 ) {
@@ -322,7 +322,7 @@ static void efct_tx_block(struct efct_tx_state* __restrict__ tx, char* base, int
 }
 
 /* complete a tx operation, writing leftover bytes and padding as needed */
-static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dma_id, int len)
+ci_inline void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dma_id, int len)
 {
   ef_vi_txq* q = &vi->vi_txq;
   ef_vi_txq_state* qs = &vi->ep_state->txq;
@@ -349,7 +349,7 @@ static void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dma_i
 }
 
 /* get a tx completion event, or null if no valid event available */
-static ci_qword_t* efct_tx_get_event(const ef_vi* vi, uint32_t evq_ptr)
+ci_inline ci_qword_t* efct_tx_get_event(const ef_vi* vi, uint32_t evq_ptr)
 {
   ci_qword_t* event = (ci_qword_t*)(vi->evq_base + (evq_ptr & vi->evq_mask));
 
@@ -360,7 +360,7 @@ static ci_qword_t* efct_tx_get_event(const ef_vi* vi, uint32_t evq_ptr)
 }
 
 /* check whether a tx completion event is available */
-static bool efct_tx_check_event(const ef_vi* vi)
+ci_inline bool efct_tx_check_event(const ef_vi* vi)
 {
   return vi->evq_mask && efct_tx_get_event(vi, vi->ep_state->evq.evq_ptr);
 }
