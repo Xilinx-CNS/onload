@@ -195,7 +195,7 @@ int main(int argc, char** argv)
   ci_set_log_prefix("");
   if( cfg_ni_id < 0 ) {
     ci_log("Usage: %s -s <stack id>", argv[0]);
-    ci_log("Version: %s\n%s", ONLOAD_VERSION, ONLOAD_COPYRIGHT);
+    ci_log("Version: %s\n%s", onload_version, onload_copyright);
     return 1;
   }
 
@@ -292,7 +292,7 @@ int main(int argc, char** argv)
   act.sa_sigaction = sigalarm_exit;
   sigaction(SIGALRM, &act, NULL);
 
-  ci_log("Starting helper "ONLOAD_VERSION);
+  ci_log("Starting helper %s", onload_version);
   main_loop(ni);
   return 0;
 }
