@@ -26,8 +26,9 @@
 
 
 /* Forward declarations. */
-static inline void rx_wait_no_ts(ef_vi*);
-static inline void rx_wait_with_ts(ef_vi*);
+struct eflatency_vi;
+static inline void rx_wait_no_ts(struct eflatency_vi*);
+static inline void rx_wait_with_ts(struct eflatency_vi*);
 
 
 #define DEFAULT_PAYLOAD_SIZE  0
@@ -66,13 +67,19 @@ struct pkt_buf {
   unsigned        dma_buf[1] EF_VI_ALIGN(EF_VI_DMA_ALIGN);
 };
 
+struct eflatency_vi {
+  ef_vi     vi;
+  int       n_ev;
+  int       i;
+  ef_event  evs[EF_VI_EVENT_POLL_MIN_EVS];
+  ef_pd     pd;
+  ef_memreg memreg;
+};
 
 static ef_driver_handle  driver_handle;
-static ef_vi		 vi;
+static struct eflatency_vi rx_vi, tx_vi;
 
 struct pkt_buf*          pkt_bufs[N_BUFS];
-static ef_pd             pd;
-static ef_memreg         memreg;
 static ef_pio            pio;
 static int               tx_frame_len;
 static uint64_t*         timings;
@@ -101,7 +108,7 @@ static void init_udp_pkt(void* pkt_buf, int paylen)
   udp = (void*) (ip4 + 1);
 
   memcpy(eth->ether_dhost, remote_mac, sizeof(remote_mac));
-  ef_vi_get_mac(&vi, driver_handle, eth->ether_shost);
+  ef_vi_get_mac(&rx_vi.vi, driver_handle, eth->ether_shost);
   eth->ether_type = htons(0x0800);
   ci_ip4_hdr_init(ip4, CI_NO_OPTS, ip_len, 0, IPPROTO_UDP, htonl(laddr_he),
                   htonl(raddr_he), 0);
@@ -168,86 +175,64 @@ static void output_results(struct timeval start, struct timeval end)
 
 typedef struct {
   const char* name;
-  void (*ping)(ef_vi*);
-  void (*pong)(ef_vi*);
-  void (*cleanup)(ef_vi*);
+  void (*ping)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
+  void (*pong)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
+  void (*cleanup)(ef_vi* rx_vi, ef_vi* tx_vi);
 } test_t;
 
 static void
-x3_ping(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*)) {
+generic_desc_check(struct eflatency_vi* vi, int wait);
+
+static void
+generic_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
+             void (*rx_wait)(struct eflatency_vi*),
+             void (*tx_send)(struct eflatency_vi*))
+{
   struct timeval start, end;
   int i;
+  int do_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
 
   for( i = 0; i < cfg_warmups; ++i ) {
-    tx_send(vi);
-    rx_wait(vi);
+    tx_send(tx_vi);
+    if( do_rx_post )
+      rx_post(&rx_vi->vi);
+    rx_wait(rx_vi);
+   generic_desc_check(tx_vi, 0);
   }
 
   gettimeofday(&start, NULL);
 
   for( i = 0; i < cfg_iter; ++i ) {
     uint64_t start = ci_frc64_get();
-    tx_send(vi);
-    rx_wait(vi);
+    tx_send(tx_vi);
+    if( do_rx_post )
+      rx_post(&rx_vi->vi);
+    rx_wait(rx_vi);
     uint64_t stop = ci_frc64_get();
     timings[i] = stop - start;
+    generic_desc_check(tx_vi, 0);
   }
 
   gettimeofday(&end, NULL);
   output_results(start, end);
 }
 
-static void
-generic_ping(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*))
-{
-  struct timeval start, end;
-  int i;
 
-  for( i = 0; i < N_RX_BUFS; ++i )
-    rx_post(vi);
-
-  for( i = 0; i < cfg_warmups; ++i ) {
-    tx_send(vi);
-    rx_post(vi);
-    rx_wait(vi);
-  }
-
-  gettimeofday(&start, NULL);
-
-  for( i = 0; i < cfg_iter; ++i ) {
-    uint64_t start = ci_frc64_get();
-    tx_send(vi);
-    rx_post(vi);
-    rx_wait(vi);
-    uint64_t stop = ci_frc64_get();
-    timings[i] = stop - start;
-  }
-
-  gettimeofday(&end, NULL);
-  output_results(start, end);
-}
-
-static void x3_pong(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*)) {
-  int i;
-
-  for( i = 0; i < cfg_warmups + cfg_iter; ++i ) {
-    rx_wait(vi);
-    tx_send(vi);
-  }
-}
 
 static void
-generic_pong(ef_vi* vi, void (*rx_wait)(ef_vi*), void (*tx_send)(ef_vi*))
+generic_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
+             void (*rx_wait)(struct eflatency_vi*),
+             void (*tx_send)(struct eflatency_vi*))
 {
   int i;
-
-  for( i = 0; i < N_RX_BUFS; ++i )
-    rx_post(vi);
+  int do_rx_post = ( rx_vi->vi.nic_type.arch != EF_VI_ARCH_EFCT );
 
   for( i = 0; i < cfg_warmups + cfg_iter; ++i ) {
-    rx_wait(vi);
-    tx_send(vi);
-    rx_post(vi);
+    rx_wait(rx_vi);
+    tx_send(tx_vi);
+    if( do_rx_post )
+      rx_post(&rx_vi->vi);
+    generic_desc_check(tx_vi, 0);
   }
 }
 
@@ -260,14 +245,21 @@ static void handle_rx_ref(ef_vi* vi, unsigned pkt_id, int len)
  * DMA
  */
 
-static inline void dma_send(ef_vi* vi)
+static inline void dma_send(struct eflatency_vi* vi)
 {
   struct pkt_buf* pb = pkt_bufs[FIRST_TX_BUF];
-  TRY(ef_vi_transmit(vi, pb->dma_buf_addr, tx_frame_len, 0));
+  TRY(ef_vi_transmit(&vi->vi, pb->dma_buf_addr, tx_frame_len, 0));
 }
 
-static void dma_ping(ef_vi* vi) { generic_ping(vi, rx_wait_no_ts, dma_send); }
-static void dma_pong(ef_vi* vi) { generic_pong(vi, rx_wait_no_ts, dma_send); }
+static void dma_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  generic_ping(rx_vi, tx_vi, rx_wait_no_ts, dma_send);
+}
+
+static void dma_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  generic_pong(rx_vi, tx_vi, rx_wait_no_ts, dma_send);
+}
 
 static const test_t dma_test = {
   .name = "DMA",
@@ -281,13 +273,20 @@ static const test_t dma_test = {
  * PIO
  */
 
-static inline void pio_send(ef_vi* vi)
+static inline void pio_send(struct eflatency_vi* vi)
 {
-  TRY(ef_vi_transmit_pio(vi, 0, tx_frame_len, 0));
+  TRY(ef_vi_transmit_pio(&vi->vi, 0, tx_frame_len, 0));
 }
 
-static void pio_ping(ef_vi* vi) { generic_ping(vi, rx_wait_no_ts, pio_send); }
-static void pio_pong(ef_vi* vi) { generic_pong(vi, rx_wait_no_ts, pio_send); }
+static void pio_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  generic_ping(rx_vi, tx_vi, rx_wait_no_ts, pio_send);
+}
+
+static void pio_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  generic_pong(rx_vi, tx_vi, rx_wait_no_ts, pio_send);
+}
 
 static const test_t pio_test = {
   .name = "PIO",
@@ -318,11 +317,11 @@ static void alt_assert_state_validity(void)
   assert( tx_alt.complete_id - tx_alt.send_id <= INT32_MAX );
 }
 
-static inline void alt_fill(ef_vi* vi)
+static inline void alt_fill(struct eflatency_vi* vi)
 {
-  TRY(ef_vi_transmit_alt_stop(vi, tx_alt.send_id & TX_ALT_MASK));
+  TRY(ef_vi_transmit_alt_stop(&vi->vi, tx_alt.send_id & TX_ALT_MASK));
   if( N_TX_ALT > 1 )
-    TRY(ef_vi_transmit_alt_select(vi, tx_alt.send_id & TX_ALT_MASK));
+    TRY(ef_vi_transmit_alt_select(&vi->vi, tx_alt.send_id & TX_ALT_MASK));
   dma_send(vi);
 }
 
@@ -331,25 +330,32 @@ static inline void alt_go(ef_vi* vi)
   TRY(ef_vi_transmit_alt_go(vi, tx_alt.send_id++ & TX_ALT_MASK));
 }
 
-static inline void alt_discard(ef_vi* vi)
+static inline void alt_discard(ef_vi* rx_vi, ef_vi* vi)
 {
   TRY(ef_vi_transmit_alt_discard(vi, tx_alt.send_id & TX_ALT_MASK));
   TRY(ef_vi_transmit_alt_free(vi, driver_handle));
 }
 
-static inline void alt_send(ef_vi* vi)
+static inline void alt_send(struct eflatency_vi* vi)
 {
   alt_assert_state_validity();
 
   /* Release the previously-posted packet onto the wire. */
-  alt_go(vi);
+  alt_go(&vi->vi);
 
   /* Pre-fill the next packet. */
   alt_fill(vi);
 }
 
-static void alt_ping(ef_vi* vi) { generic_ping(vi, rx_wait_with_ts, alt_send); }
-static void alt_pong(ef_vi* vi) { generic_pong(vi, rx_wait_with_ts, alt_send); }
+static void alt_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  generic_ping(rx_vi, tx_vi, rx_wait_with_ts, alt_send);
+}
+
+static void alt_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  generic_pong(rx_vi, tx_vi, rx_wait_with_ts, alt_send);
+}
 
 static const test_t alt_test = {
   .name = "Alternatives",
@@ -365,21 +371,25 @@ static const test_t alt_test = {
  * CTPIO
  */
 
-static inline void ctpio_send(ef_vi* vi)
+static inline void ctpio_send(struct eflatency_vi* vi)
 {
   /* TODO: May be desirable to compute cut-through threshold from frame
    * length.
    */
   struct pkt_buf* pb = pkt_bufs[FIRST_TX_BUF];
-  ef_vi_transmit_ctpio(vi, pb->dma_buf, tx_frame_len, cfg_ctpio_thresh);
-  TRY(ef_vi_transmit_ctpio_fallback(vi, pb->dma_buf_addr, tx_frame_len, 0));
+  ef_vi_transmit_ctpio(&vi->vi, pb->dma_buf, tx_frame_len, cfg_ctpio_thresh);
+  TRY(ef_vi_transmit_ctpio_fallback(&vi->vi, pb->dma_buf_addr, tx_frame_len, 0));
 }
 
-static void ctpio_ping(ef_vi* vi) { generic_ping(vi, rx_wait_no_ts, ctpio_send); }
-static void ctpio_pong(ef_vi* vi) { generic_pong(vi, rx_wait_no_ts, ctpio_send); }
+static void ctpio_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  generic_ping(rx_vi, tx_vi, rx_wait_no_ts, ctpio_send);
+}
 
-static void x3_ctpio_ping(ef_vi* vi) { x3_ping(vi, rx_wait_no_ts, ctpio_send); }
-static void x3_ctpio_pong(ef_vi* vi) { x3_pong(vi, rx_wait_no_ts, ctpio_send); }
+static void ctpio_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  generic_pong(rx_vi, tx_vi, rx_wait_no_ts, ctpio_send);
+}
 
 static const test_t ctpio_test = {
   .name = "CTPIO",
@@ -390,8 +400,8 @@ static const test_t ctpio_test = {
 
 static const test_t x3_ctpio_test = {
   .name = "X3 CTPIO",
-  .ping = x3_ctpio_ping,
-  .pong = x3_ctpio_pong,
+  .ping = ctpio_ping,
+  .pong = ctpio_pong,
   .cleanup = NULL,
 };
 
@@ -400,40 +410,41 @@ static const test_t x3_ctpio_test = {
 /**********************************************************************/
 
 static void
-generic_rx_wait(ef_vi* vi)
+generic_desc_check(struct eflatency_vi* vi, int wait)
 {
   /* We might exit with events read but unprocessed. */
-  static int      n_ev = 0;
-  static int      i = 0;
-  static ef_event evs[EF_VI_EVENT_POLL_MIN_EVS];
+  int i = vi->i;
+  int n_ev = vi->n_ev;
+  ef_event* evs = vi->evs;
   int n_rx;
   ef_request_id   tx_ids[EF_VI_TRANSMIT_BATCH];
   ef_request_id   rx_ids[EF_VI_RECEIVE_BATCH];
 
   while( 1 ) {
-    for( ; i < n_ev; ++i )
+    for( ; i < n_ev; vi->i = ++i )
       switch( EF_EVENT_TYPE(evs[i]) ) {
       case EF_EVENT_TYPE_RX:
-        ++i;
+        vi->i = ++i;
         return;
       case EF_EVENT_TYPE_RX_REF:
-        handle_rx_ref(vi, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
-        ++i;
+        handle_rx_ref(&vi->vi, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
+        vi->i = ++i;
         return;
       case EF_EVENT_TYPE_TX:
-        ef_vi_transmit_unbundle(vi, &(evs[i]), tx_ids);
+        ef_vi_transmit_unbundle(&vi->vi, &(evs[i]), tx_ids);
         break;
       case EF_EVENT_TYPE_TX_ALT:
         ++(tx_alt.complete_id);
         break;
       case EF_EVENT_TYPE_RX_MULTI:
       case EF_EVENT_TYPE_RX_MULTI_DISCARD:
-        n_rx = ef_vi_receive_unbundle(vi, &(evs[i]), rx_ids);
+        n_rx = ef_vi_receive_unbundle(&vi->vi, &(evs[i]), rx_ids);
         TEST(n_rx == 1);
-        ++i;
+        vi->i = ++i;
         return;
       case EF_EVENT_TYPE_RX_REF_DISCARD:
-        handle_rx_ref(vi, evs[i].rx_ref_discard.pkt_id, evs[i].rx_ref_discard.len);
+        handle_rx_ref(&vi->vi, evs[i].rx_ref_discard.pkt_id,
+                      evs[i].rx_ref_discard.len);
         if( EF_EVENT_RX_DISCARD_TYPE(evs[i]) == EF_EVENT_RX_DISCARD_CRC_BAD &&
             cfg_ctpio_thresh >= tx_frame_len && ! cfg_ctpio_no_poison ) {
           break;
@@ -444,11 +455,11 @@ generic_rx_wait(ef_vi* vi)
         break;
       case EF_EVENT_TYPE_RX_DISCARD:
         if( EF_EVENT_RX_DISCARD_TYPE(evs[i]) == EF_EVENT_RX_DISCARD_CRC_BAD &&
-            (ef_vi_flags(vi) & EF_VI_TX_CTPIO) && ! cfg_ctpio_no_poison ) {
+            (ef_vi_flags(&vi->vi) & EF_VI_TX_CTPIO) && ! cfg_ctpio_no_poison ) {
           /* Likely a poisoned frame caused by underrun.  A good copy will
            * follow.
            */
-          rx_post(vi);
+          rx_post(&vi->vi);
           break;
         }
         ci_fallthrough;
@@ -458,12 +469,21 @@ generic_rx_wait(ef_vi* vi)
         TEST(0);
         break;
       }
-    n_ev = ef_eventq_poll((vi), evs, sizeof(evs) / sizeof(evs[0]));
-    i = 0;
+    vi->n_ev = n_ev = ef_eventq_poll(&vi->vi, evs,
+                                     sizeof(vi->evs) / sizeof(vi->evs[0]));
+    vi->i = i = 0;
+    if( ! n_ev && ! wait )
+      break;
   }
 }
 
-static inline void rx_wait_no_ts(ef_vi* vi)
+static void
+generic_rx_wait(struct eflatency_vi* vi)
+{
+  generic_desc_check(vi, 1);
+}
+
+static inline void rx_wait_no_ts(struct eflatency_vi* vi)
 {
   generic_rx_wait(vi);
 }
@@ -476,34 +496,37 @@ tx_with_ts_handler(ef_vi* vi, const ef_event* ev, ef_request_id* ids)
   return 0;
 }
 
-static inline void rx_wait_with_ts(ef_vi* vi)
+static inline void rx_wait_with_ts(struct eflatency_vi* vi)
 {
   generic_rx_wait(vi);
 }
 
 /**********************************************************************/
 
-static const test_t* do_init(int ifindex)
+static const test_t* do_init(int ifindex, int mode,
+                             struct eflatency_vi* latency_vi, void* pkt_mem,
+                             size_t pkt_mem_bytes)
 {
+  ef_vi* vi = &latency_vi->vi;
   enum ef_pd_flags pd_flags = 0;
   ef_filter_spec filter_spec;
   enum ef_vi_flags vi_flags = 0;
-  int i, rc;
+  int rc;
   const test_t* t;
   unsigned long capability_val;
 
   TRY(ef_driver_open(&driver_handle));
-  TRY(ef_pd_alloc(&pd, driver_handle, ifindex, pd_flags));
+  TRY(ef_pd_alloc(&latency_vi->pd, driver_handle, ifindex, pd_flags));
 
   if( cfg_ctpio_no_poison )
     vi_flags |= EF_VI_TX_CTPIO_NO_POISON;
 
   /* Try with CTPIO first. */
-  if( cfg_mode & MODE_CTPIO &&
+  if( mode & MODE_CTPIO &&
       ef_vi_capabilities_get(driver_handle, ifindex, EF_VI_CAP_CTPIO,
                              &capability_val) == 0 && capability_val ) {
     vi_flags |= EF_VI_TX_CTPIO;
-    if( ef_vi_alloc_from_pd(&vi, driver_handle, &pd, driver_handle,
+    if( ef_vi_alloc_from_pd(vi, driver_handle, &latency_vi->pd, driver_handle,
                             -1, -1, -1, NULL, -1, vi_flags) == 0 )
         goto got_vi;
     fprintf(stderr, "Failed to allocate VI with CTPIO.\n");
@@ -511,55 +534,46 @@ static const test_t* do_init(int ifindex)
   }
 
   /* Try with TX alternatives if CTPIO failed. */
-  if( cfg_mode & MODE_ALT &&
+  if( mode & MODE_ALT &&
       ef_vi_capabilities_get(driver_handle, ifindex, EF_VI_CAP_TX_ALTERNATIVES,
                              &capability_val) == 0 && capability_val ) {
     vi_flags |= EF_VI_TX_ALT;
-    if( ef_vi_alloc_from_pd(&vi, driver_handle, &pd, driver_handle,
+    if( ef_vi_alloc_from_pd(vi, driver_handle, &latency_vi->pd, driver_handle,
                             -1, -1, -1, NULL, -1, vi_flags) == 0 ) {
-      if( ef_vi_transmit_alt_alloc(&vi, driver_handle,
+      if( ef_vi_transmit_alt_alloc(vi, driver_handle,
                                    N_TX_ALT, N_TX_ALT * BUF_SIZE) == 0 ) 
         goto got_vi;
-      ef_vi_free(&vi, driver_handle);
+      ef_vi_free(vi, driver_handle);
     }
     fprintf(stderr, "Failed to allocate VI with TX alternatives.\n");
     vi_flags &=~ EF_VI_TX_ALT;
   }
 
-  if( (rc = ef_vi_alloc_from_pd(&vi, driver_handle, &pd, driver_handle, -1, -1, -1,
-                                NULL, -1, vi_flags)) < 0 ) {
+  if( (rc = ef_vi_alloc_from_pd(vi, driver_handle, &latency_vi->pd,
+                                driver_handle, -1, -1, -1, NULL, -1,
+                                vi_flags)) < 0 ) {
     if( rc == -EPERM ) {
       fprintf(stderr, "Failed to allocate VI without event merging\n");
       vi_flags |= EF_VI_RX_EVENT_MERGE;
-      TRY( ef_vi_alloc_from_pd(&vi, driver_handle, &pd, driver_handle, -1, -1, -1,
-                               NULL, -1, vi_flags) );
+      TRY( ef_vi_alloc_from_pd(vi, driver_handle, &latency_vi->pd,
+                               driver_handle, -1, -1, -1, NULL, -1,
+                               vi_flags) );
     }
     else
       TRY( rc );
   }
 
  got_vi:
-  ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_NONE);
-  TRY(ef_filter_spec_set_ip4_local(&filter_spec, IPPROTO_UDP, htonl(raddr_he),
-                                   htons(port_he)));
-  TRY(ef_vi_filter_add(&vi, driver_handle, &filter_spec, NULL));
-
-  {
-    int bytes = N_BUFS * BUF_SIZE;
-    void* p;
-    TEST(posix_memalign(&p, 4096, bytes) == 0);
-
-    TRY(ef_memreg_alloc(&memreg, driver_handle, &pd, driver_handle, p,
-                        CI_ROUND_UP(bytes, 4096)));
-    for( i = 0; i < N_BUFS; ++i ) {
-      struct pkt_buf* pb = (void*) ((char*) p + i * BUF_SIZE);
-      pkt_bufs[i] = pb;
-      pb->dma_buf_addr = ef_memreg_dma_addr(&memreg, i * BUF_SIZE);
-      pb->dma_buf_addr += offsetof(struct pkt_buf, dma_buf);
-      pb->id = i;
-    }
+  if( latency_vi == &rx_vi ) {
+    ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_NONE);
+    TRY(ef_filter_spec_set_ip4_local(&filter_spec, IPPROTO_UDP, htonl(raddr_he),
+                                    htons(port_he)));
+    TRY(ef_vi_filter_add(vi, driver_handle, &filter_spec, NULL));
   }
 
+  TRY(ef_memreg_alloc(&latency_vi->memreg, driver_handle, &latency_vi->pd,
+                      driver_handle, pkt_mem,
+                      CI_ROUND_UP(pkt_mem_bytes, 4096)));
 
   /* Build the UDP packet inside the DMA buffer.  As well as being used for
    * straightforward DMA sends, it will also be used to fill alternatives, and
@@ -568,9 +582,9 @@ static const test_t* do_init(int ifindex)
   tx_frame_len = cfg_payload_len + HEADER_SIZE;
 
   /* Other modes don't work with X3 */
-  if ( vi.nic_type.arch == EF_VI_ARCH_EFCT ) {
+  if ( vi->nic_type.arch == EF_VI_ARCH_EFCT ) {
     t = &x3_ctpio_test;
-  } 
+  }
   /* First, try CTPIO. */
   else if ( vi_flags & EF_VI_TX_CTPIO ) {
     t = &ctpio_test;
@@ -579,18 +593,19 @@ static const test_t* do_init(int ifindex)
   else if( vi_flags & EF_VI_TX_ALT ) {
     /* Check that the packet will fit in the available buffer space. */
     struct ef_vi_transmit_alt_overhead overhead;
-    TRY(ef_vi_transmit_alt_query_overhead(&vi, &overhead));
+    TRY(ef_vi_transmit_alt_query_overhead(vi, &overhead));
     int pkt_bytes = ef_vi_transmit_alt_usage(&overhead, tx_frame_len);
     TEST(pkt_bytes <= BUF_SIZE);
     /* Pre-fill the first packet. */
-    alt_fill(&vi);
+    alt_fill(latency_vi);
     t = &alt_test;
   }
   /* If we couldn't allocate an alternative, try PIO. */
   else if( cfg_mode & MODE_PIO &&
-           ef_pio_alloc(&pio, driver_handle, &pd, -1, driver_handle) == 0 ) {
-    TRY(ef_pio_link_vi(&pio, driver_handle, &vi, driver_handle));
-    TRY(ef_pio_memcpy(&vi, pkt_bufs[FIRST_TX_BUF]->dma_buf, 0, tx_frame_len));
+           ef_pio_alloc(&pio, driver_handle, &latency_vi->pd, -1,
+                        driver_handle) == 0 ) {
+    TRY(ef_pio_link_vi(&pio, driver_handle, vi, driver_handle));
+    TRY(ef_pio_memcpy(vi, pkt_bufs[FIRST_TX_BUF]->dma_buf, 0, tx_frame_len));
     t = &pio_test;
   }
   /* In the worst case, fall back to DMA sends. */
@@ -604,11 +619,19 @@ static const test_t* do_init(int ifindex)
   return t;
 }
 
+static void prepare(ef_vi* vi)
+{
+  int i;
+  if( vi->nic_type.arch != EF_VI_ARCH_EFCT )
+    for( i = 0; i < N_RX_BUFS; ++i )
+      rx_post(vi);
+}
+
 
 static CI_NORETURN usage(void)
 {
   fprintf(stderr, "\nusage:\n");
-  fprintf(stderr, "  eflatency [options] <ping|pong> <interface>\n");
+  fprintf(stderr, "  eflatency [options] <ping|pong> <interface> <tx_interface>\n");
   fprintf(stderr, "\noptions:\n");
   fprintf(stderr, "  -n <iterations>     - set number of iterations\n");
   fprintf(stderr, "  -s <message-size>   - set udp payload size\n");
@@ -625,7 +648,7 @@ static CI_NORETURN usage(void)
 
 int main(int argc, char* argv[])
 {
-  int ifindex;
+  int rx_ifindex = -1 , tx_ifindex = -1;
   int c;
   bool ping = false;
   const test_t* t;
@@ -670,9 +693,12 @@ int main(int argc, char* argv[])
   argc -= optind;
   argv += optind;
 
-  if( argc != 2 )
+  if( argc != 2 && argc != 3 )
     usage();
-  if( ! parse_interface(argv[1], &ifindex) )
+  if( ! parse_interface(argv[1], &rx_ifindex) )
+    usage();
+
+  if( argc == 3 && ! parse_interface(argv[2], &tx_ifindex) )
     usage();
 
   if( cfg_payload_len > MAX_UDP_PAYLEN ) {
@@ -685,25 +711,57 @@ int main(int argc, char* argv[])
   else if( strcmp(argv[0], "pong") != 0 )
     usage();
 
+  void* pkt_mem;
+  int pkt_mem_bytes = N_BUFS * BUF_SIZE;
+  {
+    int i;
+    TEST(posix_memalign(&pkt_mem, 4096, pkt_mem_bytes) == 0);
+    for( i = 0; i < N_BUFS; ++i ) {
+      struct pkt_buf* pb = (void*) ((char*) pkt_mem + i * BUF_SIZE);
+      pkt_bufs[i] = pb;
+      pb->id = i;
+    }
+  }
+
   /* Initialize a VI and configure it to operate with the lowest latency
    * possible.  The return value specifies the test that the application must
    * run to use the VI in its configured mode. */
-  t = do_init(ifindex);
+  t = do_init(rx_ifindex, cfg_mode, &rx_vi, pkt_mem, pkt_mem_bytes);
+
+  if( tx_ifindex < 0 ) {
+    tx_vi = rx_vi;
+  } else {
+    /* mode really selects tx method */
+    t = do_init(tx_ifindex, cfg_mode, &tx_vi, pkt_mem, pkt_mem_bytes);
+  }
+
+  {
+    int i;
+    for( i = 0; i < N_BUFS; ++i ) {
+      struct pkt_buf* pb = (void*) ((char*) pkt_mem + i * BUF_SIZE);
+      ef_memreg* memreg = i < N_RX_BUFS ? &rx_vi.memreg : &tx_vi.memreg;
+      pb->dma_buf_addr = ef_memreg_dma_addr(memreg, i * BUF_SIZE);
+      pb->dma_buf_addr += offsetof(struct pkt_buf, dma_buf);
+    }
+  }
+
+  prepare(&rx_vi.vi);
 
   if( ping ) {
     timings = mmap(NULL, cfg_iter * sizeof(timings[0]), PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
   }
 
+  printf("# NIC(s) %d %d\n", rx_ifindex, tx_ifindex);
   printf("# udp payload len: %d\n", cfg_payload_len);
   printf("# iterations: %d\n", cfg_iter);
   printf("# warmups: %d\n", cfg_warmups);
   printf("# frame len: %d\n", tx_frame_len);
   printf("# mode: %s\n", t->name);
 
-  (ping ? t->ping : t->pong)(&vi);
+  (ping ? t->ping : t->pong)(&rx_vi, &tx_vi);
   if( t->cleanup != NULL )
-    t->cleanup(&vi);
+    t->cleanup(&rx_vi.vi, &tx_vi.vi);
 
   return 0;
 }
