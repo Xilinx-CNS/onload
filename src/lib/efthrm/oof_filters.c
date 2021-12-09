@@ -1381,8 +1381,15 @@ __oof_manager_addr_add(struct oof_manager *fm, int af, ci_addr_t laddr,
   for( hash = 0; hash < OOF_LOCAL_PORT_TBL_SIZE; ++hash )
     CI_DLLIST_FOR_EACH2(struct oof_local_port, lp, lp_manager_link,
                         &fm->fm_local_ports[hash]) {
+      int hwports_no5tuple;
       lpa = &lp->lp_addr[la_i];
       skf = oof_wild_socket(lp, lpa, OO_AF_FAMILY2SPACE(af));
+      hwports_no5tuple = fm->fm_hwports_available & fm->fm_hwports_up & fm->fm_hwports_no5tuple;
+      /* TODO utilize fm_hwports_no5tuple mask to apply appropriate strategy per NIC */
+      if( skf == NULL && hwports_no5tuple )
+        /* In case 5tuple filters are not supported a 3tuple filteris needed for sharing.
+         * It is installed using details of first full skf.  */
+        skf = oof_socket_at_head(&lpa->lpa_full_socks, 0, 0, skf->af_space);
       if( skf != NULL )
         oof_hw_filter_set(fm, skf, &lpa->lpa_filter,
                           oof_socket_stack_effective(skf),
@@ -1396,15 +1403,24 @@ __oof_manager_addr_add(struct oof_manager *fm, int af, ci_addr_t laddr,
         ci_assert(!is_new);
         ci_assert(! oof_socket_is_clustered(skf));
         ci_assert(! oof_socket_is_dummy(skf));
-        if( oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter) )
+        if( oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter) ) {
           ++lpa->lpa_n_full_sharers;
-        else
+        }
+        else if( ! hwports_no5tuple ) {
           oof_hw_filter_set(fm, skf, &skf->sf_full_match_filter,
                             oof_cb_socket_stack(skf), NULL, af,
                             lp->lp_protocol, skf->sf_raddr, skf->sf_rport,
                             skf->sf_laddr, lp->lp_lport,
                             fm->fm_hwports_available & fm->fm_hwports_up,
                             OOF_SRC_FLAGS_DEFAULT, 1);
+        } else {
+          /* No support for 5tuple filters off separate/incompatible stacks yet */
+          IPF_LOG(FSK_FMT IPX_QUIN_FMT "CONFLICT: ",
+                  FSK_PRI_ARGS_SAFE(skf, oof_socket_is_stackless(skf)),
+                  IPX_QUIN_ARGS(lp->lp_protocol, AF_IP(skf->sf_laddr),
+                                lp->lp_lport, AF_IP(skf->sf_raddr),
+                                skf->sf_rport));
+        }
       }
       oof_manager_sw_filter_insert(fm, af, laddr, lp, la_i);
     }
@@ -2104,24 +2120,40 @@ oof_full_socks_add_hw_filters(struct oof_manager* fm,
   CI_DLLIST_FOR_EACH2(struct oof_socket, skf, sf_lp_link,
                       &lpa->lpa_full_socks) {
     int lport = skf->sf_lport_prenat != 0 ? skf->sf_lport_prenat : lp->lp_lport;
+    int hwports_no5tuple = 0;
+    int hwports_5tuple;
     if( ! oo_hw_filter_is_empty(&skf->sf_full_match_filter) )
       continue;
     if( ! oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter) )
       continue;
     ci_assert(! oof_socket_is_clustered(skf));
-    rc = oof_hw_filter_set(fm, skf, &skf->sf_full_match_filter,
-                           oof_cb_socket_stack(skf), NULL, af,
-                           lp->lp_protocol, skf->sf_raddr, skf->sf_rport,
-                           skf->sf_laddr, lport,
-                           fm->fm_hwports_available & fm->fm_hwports_up,
-                           OOF_SRC_FLAGS_DEFAULT, 1);
-    if( rc < 0 ) {
-      oof_full_socks_del_hw_filters(fm, lp, lpa);
-      break;
+    /* Figure out which interfaces need to resort to 3 tuples only...
+     * Well currently a presence of one such interface leads to applying
+     * unified (no5tuple) approach to all the interfaces - that is
+     * hwports_no5tuple would contain all the interfaces and hwports_5tuple
+     * none making making the `if` statements below mutually exclusive.
+     * FIXME: this is to be changed */
+    if( fm->fm_hwports_no5tuple ) /* TODO use mask to act per interface */
+      hwports_no5tuple = fm->fm_hwports_available & fm->fm_hwports_up;
+    hwports_5tuple = fm->fm_hwports_available & fm->fm_hwports_up & ~hwports_no5tuple;
+
+    if( hwports_5tuple ) {
+      rc = oof_hw_filter_set(fm, skf, &skf->sf_full_match_filter,
+                            oof_cb_socket_stack(skf), NULL, af,
+                            lp->lp_protocol, skf->sf_raddr, skf->sf_rport,
+                            skf->sf_laddr, lport,
+                            hwports_5tuple,
+                            OOF_SRC_FLAGS_DEFAULT, 1);
+      if( rc < 0 ) {
+        oof_full_socks_del_hw_filters(fm, lp, lpa);
+        break;
+      }
+      oof_cb_callback_set_filter(skf);
     }
-    oof_cb_callback_set_filter(skf);
-    ci_assert(lpa->lpa_n_full_sharers > 0);
-    --lpa->lpa_n_full_sharers;
+    if( ! hwports_no5tuple ) {
+      ci_assert(lpa->lpa_n_full_sharers > 0);
+      --lpa->lpa_n_full_sharers;
+    }
   }
 
   return rc;
@@ -2148,17 +2180,21 @@ oof_local_port_addr_fixup_wild(struct oof_manager* fm,
   int unshare_full_match;
   int thresh;
   int af = CI_IS_ADDR_IP6(laddr) ? AF_INET6 : AF_INET;
+  int hwports_no5tuple = 0;
 
   if( ! oof_local_port_addr_valid(fm, lpa) ) {
     ci_assert(oo_hw_filter_is_empty(&lpa->lpa_filter));
     /* nothing to do when addr is removed */
     return;
   }
+  if( fm->fm_hwports_no5tuple )
+    hwports_no5tuple = fm->fm_hwports_available & fm->fm_hwports_up; /* TODO & fm->fm_hwports_no5tuple; */
+
   /* Decide whether we need to insert full-match filters for sockets that
    * are currently sharing a wild filter.
    */
   skf = oof_wild_socket(lp, lpa, oof_addr_to_af_space(laddr));
-  unshare_full_match = lpa->lpa_n_full_sharers > 0;
+  unshare_full_match = lpa->lpa_n_full_sharers > 0 && ! hwports_no5tuple;
   if( skf == NULL ) {
     thresh = oof_shared_keep_thresh;
   }
@@ -2362,10 +2398,15 @@ oof_socket_add_full_hw(struct oof_manager* fm, struct oof_socket* skf,
                        struct oof_local_port_addr* lpa, int af)
 {
   int rc;
+  int hwports_no5tuple;
+  hwports_no5tuple = fm->fm_hwports_available & fm->fm_hwports_up & fm->fm_hwports_no5tuple;
+
   ci_assert(! oof_socket_is_clustered(skf));
   ci_assert(! oof_socket_is_dummy(skf));
   ci_assert(oof_local_port_addr_valid(fm, lpa));
-  if( ! oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter) ) {
+
+
+  if( ! oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter)  && ! hwports_no5tuple ) {
     struct oof_local_port* lp = skf->sf_local_port;
     rc = oof_hw_filter_set(fm, skf, &skf->sf_full_match_filter,
                            oof_cb_socket_stack(skf), NULL, af,
