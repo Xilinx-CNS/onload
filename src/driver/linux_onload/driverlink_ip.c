@@ -232,7 +232,7 @@ static int oo_netdev_is_native(const struct net_device *net_dev)
 static void oo_hwport_up(struct oo_nic* onic, int up)
 {
   struct efhw_nic* efhw_nic = efrm_client_get_nic(onic->efrm_client);
-  int replication_capable = efhw_nic->devtype.arch == EFHW_ARCH_EF10;
+  int replication_capable = efhw_nic->flags & NIC_FLAG_HW_MULTICAST_REPLICATION;
   int vlan_capable = efhw_nic->flags & NIC_FLAG_VLAN_FILTERS;
   oof_onload_hwport_up_down(&efab_tcp_driver, oo_nic_hwport(onic), up,
                             replication_capable, vlan_capable, 0);
