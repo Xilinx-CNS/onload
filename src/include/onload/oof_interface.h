@@ -66,7 +66,8 @@ oof_manager_dnat_reset(struct oof_manager* fm, ci_uint16 lp_protocol);
 
 extern void
 oof_hwport_up_down(struct oof_manager* fm, int hwport, int up,
-                   int mcast_replicate_capable, int vlan_filters, int sync);
+                   int mcast_replicate_capable, int vlan_filters,
+                   int no5tuple, int sync);
 
 extern void
 oof_hwport_removed(struct oof_manager* fm, int hwport);

@@ -33,6 +33,7 @@ struct ooft_hwport {
   int active;
   int vlans;
   int mcast_replication;
+  int no5tuple;
 
   struct efrm_client client;
 
@@ -107,7 +108,8 @@ extern int ooft_default_cplane_init(struct net* ns);
 
 extern struct ooft_hwport* ooft_alloc_hwport(struct ooft_cplane* cp,
                                              struct net* ns,
-                                            int vlans, int mcast_replication);
+                                            int vlans, int mcast_replication,
+                                            int no5tuple);
 extern void ooft_hwport_up_down(struct ooft_hwport* hw, int up);
 
 extern struct ooft_ifindex* ooft_alloc_ifindex(struct ooft_cplane* cp,

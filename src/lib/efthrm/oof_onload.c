@@ -91,7 +91,7 @@ void oof_onload_hwport_removed(efab_tcp_driver_t* drv, int hwport)
 
 void oof_onload_hwport_up_down(efab_tcp_driver_t* drv, int hwport, int up,
                                int mcast_replicate_capable, int vlan_filters,
-                               int sync)
+                               int no5tuple, int sync)
 {
   struct oo_filter_ns* fns;
   struct oo_filter_ns_manager* manager = drv->filter_ns_manager;
@@ -101,6 +101,7 @@ void oof_onload_hwport_up_down(efab_tcp_driver_t* drv, int hwport, int up,
 
   mcast_replicate_capable = !! mcast_replicate_capable;
   vlan_filters = !! vlan_filters;
+  no5tuple = !! no5tuple;
 
   if( up ) {
     /* Reset hwport capabilities when bringing it up */
@@ -113,6 +114,7 @@ void oof_onload_hwport_up_down(efab_tcp_driver_t* drv, int hwport, int up,
     manager->ofnm_hwports_mcast_replicate_capable |=
                                            mcast_replicate_capable << hwport;
     manager->ofnm_hwports_vlan_filters |= vlan_filters << hwport;
+    manager->ofnm_hwports_no5tuple |= no5tuple << hwport;
   }
   else {
     manager->ofnm_hwports_up &= ~(1 << hwport);
@@ -122,7 +124,7 @@ void oof_onload_hwport_up_down(efab_tcp_driver_t* drv, int hwport, int up,
   CI_DLLIST_FOR_EACH(link, &manager->ofnm_ns_list) {
     fns = CI_CONTAINER(struct oo_filter_ns, ofn_ofnm_link, link);
     oof_hwport_up_down(fns->ofn_filter_manager, hwport, up,
-                       mcast_replicate_capable, vlan_filters, sync);
+                       mcast_replicate_capable, vlan_filters, no5tuple, sync);
   }
   mutex_unlock(&manager->ofnm_lock);
 }
@@ -285,12 +287,14 @@ oof_onload_init_hwport_state_locked(struct oo_filter_ns_manager* manager,
     if( manager->ofnm_hwports_up & (1 << i) ) {
       oof_hwport_up_down(fns->ofn_filter_manager, i, 1,
                       manager->ofnm_hwports_mcast_replicate_capable & (1 << i),
-                      manager->ofnm_hwports_vlan_filters & (1 << i), 1);
+                      manager->ofnm_hwports_vlan_filters & (1 << i),
+                      manager->ofnm_hwports_no5tuple & (1 << i), 1);
     }
     else if( manager->ofnm_hwports_down & (1 << i) ) {
       oof_hwport_up_down(fns->ofn_filter_manager, i, 0,
                       manager->ofnm_hwports_mcast_replicate_capable & (1 << i),
-                      manager->ofnm_hwports_vlan_filters & (1 << i), 1);
+                      manager->ofnm_hwports_vlan_filters & (1 << i),
+                      manager->ofnm_hwports_no5tuple & (1 << i), 1);
     }
   }
 }

@@ -46,7 +46,8 @@ extern void oof_onload_mcast_update_filters(ci_ifid_t ifindex,
 extern void oof_onload_hwport_removed(struct efab_tcp_driver_s*, int hwport);
 extern void oof_onload_hwport_up_down(struct efab_tcp_driver_s*, int hwport,
                                       int up, int mcast_replicate_capable,
-                                      int vlan_filters, int sync);
+                                      int vlan_filters, int no5tuple,
+                                      int sync);
 
 extern int
 oof_onload_dnat_add(struct efab_tcp_driver_s*, const ci_addr_t orig_addr,

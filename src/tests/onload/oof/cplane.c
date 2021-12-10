@@ -12,7 +12,8 @@
 bool cplane_use_prefsrc_as_local = false;
 
 struct ooft_hwport* ooft_alloc_hwport(struct ooft_cplane* cp, struct net* ns,
-                                      int vlans, int mcast_replication)
+                                      int vlans, int mcast_replication,
+                                      int no5tuple)
 {
   struct ooft_hwport* hw = calloc(1, sizeof(struct ooft_hwport));
   TEST(hw);
@@ -20,6 +21,7 @@ struct ooft_hwport* ooft_alloc_hwport(struct ooft_cplane* cp, struct net* ns,
   hw->id = cp->hwport_ids++;
   hw->vlans = vlans;
   hw->mcast_replication = mcast_replication;
+  hw->no5tuple = no5tuple;
   ci_dllist_init(&hw->idxs);
   ci_dllist_push_tail(&cp->hwports, &hw->cplane_link);
 
@@ -247,8 +249,8 @@ struct ooft_cplane* ooft_alloc_cplane(void)
 
 int ooft_default_cplane_init(struct net* net_ns)
 {
-  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns, 1, 1);
-  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns, 1, 1);
+  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns, 1, 1, 0);
+  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns, 1, 1, 0);
 
   unsigned char mac0[6] = { 0,1,0,0,0,0 };
   struct ooft_ifindex* idx0 = ooft_alloc_ifindex(cp, hw0, net_ns,
@@ -277,7 +279,7 @@ void ooft_free_cplane(struct ooft_cplane* cp)
 void ooft_hwport_up_down(struct ooft_hwport* hw, int up)
 {
   oof_onload_hwport_up_down(&efab_tcp_driver, hw->id, up,
-                            hw->mcast_replication, hw->vlans, 1);
+                            hw->mcast_replication, hw->vlans, hw->no5tuple, 1);
 }
 
 

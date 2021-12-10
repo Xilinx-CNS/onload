@@ -75,6 +75,7 @@ struct oo_filter_ns_manager {
   unsigned ofnm_hwports_available;
   unsigned ofnm_hwports_mcast_replicate_capable;
   unsigned ofnm_hwports_vlan_filters;
+  unsigned ofnm_hwports_no5tuple;
 
   struct oof_nat_table* ofnm_nat_table;
 };

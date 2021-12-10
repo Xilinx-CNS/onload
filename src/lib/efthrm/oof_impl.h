@@ -199,10 +199,15 @@ struct oof_manager {
    */
   unsigned     fm_hwports_mcast_replicate_capable;
 
-  /* This mask tracks which hwports can by used with filters specifying a
+  /* This mask tracks which hwports can be used with filters specifying a
    * VLAN.
    */
   unsigned     fm_hwports_vlan_filters;
+
+  /* This mask tracks which hwports cannot be used with 5-tuple filters
+   * making a need for sharing 3-tuple filters instead.
+   */
+  unsigned     fm_hwports_no5tuple;
 
   /* This mask tracks which hwports have been handled by
    * __oof_mcast_update_filters().
@@ -220,6 +225,7 @@ struct oof_manager {
   unsigned     fm_hwports_avail_per_tag_new[OOF_HWPORT_AVAIL_TAG_NUM];
   unsigned     fm_hwports_mcast_replicate_capable_new;
   unsigned     fm_hwports_vlan_filters_new;
+  unsigned     fm_hwports_no5tuple_new;
 
   /* Queue of oof_cplane_update objects representing changes to control
    * plane.  They are queued temporarily to be applied in a workitem in

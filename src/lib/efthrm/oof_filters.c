@@ -1087,6 +1087,8 @@ oof_manager_alloc(unsigned local_addr_max, void* owner_private)
   fm->fm_hwports_mcast_replicate_capable_new = 0;
   fm->fm_hwports_vlan_filters = 0;
   fm->fm_hwports_vlan_filters_new = 0;
+  fm->fm_hwports_no5tuple = 0;
+  fm->fm_hwports_no5tuple_new = 0;
   fm->fm_hwports_mcast_update_seen = 0;
   {
     int tag;
@@ -1788,7 +1790,7 @@ oof_manager_update_all_filters(struct oof_manager* fm)
 
 void oof_hwport_up_down(struct oof_manager* fm, int hwport, int up,
                         int mcast_replicate_capable, int vlan_filters,
-                        int sync)
+                        int no5tuple, int sync)
 {
   /* A physical interface has gone up or down. */
   if( fm == NULL )
@@ -1801,6 +1803,7 @@ void oof_hwport_up_down(struct oof_manager* fm, int hwport, int up,
     /* we allow resetting these flags only when device goes up */
     fm->fm_hwports_mcast_replicate_capable_new &= ~(1 << hwport);
     fm->fm_hwports_vlan_filters_new &= ~(1 << hwport);
+    fm->fm_hwports_no5tuple_new &= ~(1 << hwport);
   }
 
   if( mcast_replicate_capable )
@@ -1808,6 +1811,8 @@ void oof_hwport_up_down(struct oof_manager* fm, int hwport, int up,
   fm->fm_hwports_vlan_filters_new &= ~(1 << hwport);
   if( vlan_filters )
     fm->fm_hwports_vlan_filters_new |= 1 << hwport;
+  if( no5tuple )
+    fm->fm_hwports_no5tuple_new |= 1 << hwport;
   if( up ) {
     fm->fm_hwports_up_new |= 1 << hwport;
     fm->fm_hwports_down_new &= ~(1 << hwport);
@@ -1884,6 +1889,11 @@ void __oof_do_deferred_work(struct oof_manager* fm)
                      fm->fm_hwports_vlan_filters_new;
 
   fm->fm_hwports_vlan_filters = fm->fm_hwports_vlan_filters_new;
+
+  hwports_changed |= fm->fm_hwports_no5tuple ^
+                     fm->fm_hwports_no5tuple_new;
+
+  fm->fm_hwports_no5tuple = fm->fm_hwports_no5tuple_new;
 
   hwports_removed = fm->fm_hwports_removed;
   hwports_up_new = fm->fm_hwports_up_new;

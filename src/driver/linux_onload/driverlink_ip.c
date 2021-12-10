@@ -234,8 +234,9 @@ static void oo_hwport_up(struct oo_nic* onic, int up)
   struct efhw_nic* efhw_nic = efrm_client_get_nic(onic->efrm_client);
   int replication_capable = efhw_nic->flags & NIC_FLAG_HW_MULTICAST_REPLICATION;
   int vlan_capable = efhw_nic->flags & NIC_FLAG_VLAN_FILTERS;
+  int no5tuple = ~efhw_nic->flags & NIC_FLAG_RX_FILTER_TYPE_IP_FULL;
   oof_onload_hwport_up_down(&efab_tcp_driver, oo_nic_hwport(onic), up,
-                            replication_capable, vlan_capable, 0);
+                            replication_capable, vlan_capable, no5tuple, 0);
   if( up )
     onic->oo_nic_flags |= OO_NIC_UP;
   else
@@ -341,7 +342,7 @@ void oo_nic_remove(const struct net_device* netdev)
      * regarding filters.
      */
     oof_onload_hwport_up_down(&efab_tcp_driver,
-                              oo_nic_hwport(onic), 0, 0, 0, 1);
+                              oo_nic_hwport(onic), 0, 0, 0, 0, 1);
 
 #if CI_CFG_NIC_RESET_SUPPORT
     /* We need to prevent simultaneous resets so that the queues that are to be
