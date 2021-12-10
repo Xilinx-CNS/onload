@@ -229,6 +229,20 @@ static int oo_netdev_is_native(const struct net_device *net_dev)
          efhw_nic->devtype.arch == EFHW_ARCH_EFCT;
 }
 
+static void oo_hwport_up(struct oo_nic* onic, int up)
+{
+  struct efhw_nic* efhw_nic = efrm_client_get_nic(onic->efrm_client);
+  int replication_capable = efhw_nic->devtype.arch == EFHW_ARCH_EF10;
+  int vlan_capable = efhw_nic->flags & NIC_FLAG_VLAN_FILTERS;
+  oof_onload_hwport_up_down(&efab_tcp_driver, oo_nic_hwport(onic), up,
+                            replication_capable, vlan_capable, 0);
+  if( up )
+    onic->oo_nic_flags |= OO_NIC_UP;
+  else
+    onic->oo_nic_flags &= ~OO_NIC_UP;
+}
+
+
 /* This function will create an oo_nic if one hasn't already been created.
  *
  * There are two code paths whereby this function can be called multiple
@@ -243,7 +257,6 @@ static int oo_netdev_is_native(const struct net_device *net_dev)
  */
 struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
 {
-  struct efhw_nic* efhw_nic;
   struct oo_nic* onic;
 
   onic = oo_nic_find_dev(net_dev);
@@ -251,15 +264,7 @@ struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
     onic = oo_nic_add(net_dev);
 
   if( onic != NULL ) {
-    int up = net_dev->flags & IFF_UP;
-    efhw_nic = efrm_client_get_nic(onic->efrm_client);
-    oof_onload_hwport_up_down(&efab_tcp_driver, oo_nic_hwport(onic), up,
-                              efhw_nic->devtype.arch == EFHW_ARCH_EF10 ? 1:0,
-                              efhw_nic->flags & NIC_FLAG_VLAN_FILTERS ? 1:0, 0);
-    if( up )
-      onic->oo_nic_flags |= OO_NIC_UP;
-    else
-      onic->oo_nic_flags &= ~OO_NIC_UP;
+    oo_hwport_up(onic, net_dev->flags & IFF_UP);
 
     /* Remove OO_NIC_UNPLUGGED regardless of whether the interface is IFF_UP,
      * as we don't want to attempt to create ghost VIs now that the hardware is
@@ -268,7 +273,7 @@ struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
     if( onic->oo_nic_flags & OO_NIC_UNPLUGGED ) {
       ci_log("%s: Rediscovered %s ifindex %d hwport %d", __func__,
              net_dev->name, net_dev->ifindex, (int)(onic - oo_nics));
-      cp_announce_hwport(efhw_nic, onic - oo_nics);
+      cp_announce_hwport(efrm_client_get_nic(onic->efrm_client), onic - oo_nics);
       onic->oo_nic_flags &= ~OO_NIC_UNPLUGGED;
     }
   }
@@ -383,7 +388,6 @@ static void oo_fixup_wakeup_breakage(const struct net_device* dev)
 void oo_netdev_up(const struct net_device* netdev)
 {
   struct oo_nic *onic;
-  struct efhw_nic* efhw_nic;
   /* Does efrm own this device? */
   if( efhw_nic_find(netdev) ) {
     /* oo_netdev_may_add may trigger oof_hwport_up_down only
@@ -391,11 +395,7 @@ void oo_netdev_up(const struct net_device* netdev)
     onic = oo_netdev_may_add(netdev);
     if( onic != NULL ) {
       oo_fixup_wakeup_breakage(netdev);
-      onic->oo_nic_flags |= OO_NIC_UP;
-      efhw_nic = efrm_client_get_nic(onic->efrm_client);
-      oof_onload_hwport_up_down(&efab_tcp_driver,oo_nic_hwport(onic), 1,
-                               efhw_nic->devtype.arch == EFHW_ARCH_EF10 ? 1:0,
-                               efhw_nic->flags & NIC_FLAG_VLAN_FILTERS ? 1:0, 0);
+      oo_hwport_up(onic, 1);
     }
   }
 }
@@ -406,11 +406,8 @@ static void oo_netdev_going_down(struct net_device* netdev)
   struct oo_nic *onic;
 
   onic = oo_nic_find_dev(netdev);
-  if( onic != NULL ) {
-      oof_onload_hwport_up_down(&efab_tcp_driver,
-                                oo_nic_hwport(onic), 0, 0, 0, 0);
-      onic->oo_nic_flags &= ~OO_NIC_UP;
-  }
+  if( onic != NULL )
+      oo_hwport_up(onic, 0);
 }
 
 
