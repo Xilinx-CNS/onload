@@ -483,6 +483,35 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 static void efrm_vi_rm_free_instance(struct efrm_client *client,
                                      struct efrm_vi *virs)
 {
+	struct efrm_nic *nic = efrm_nic(efrm_client_get_nic(client));
+
+	if (virs->vec != NULL) {
+		struct efrm_interrupt_vector *first;
+
+		efrm_interrupt_vector_release(virs->vec);
+
+		spin_lock(&virs->vec->vi_irq_lock);
+		list_del(&virs->irq_link);
+		spin_unlock(&virs->vec->vi_irq_lock);
+
+		mutex_lock(&nic->irq_list_lock);
+		first = list_first_entry(&nic->irq_list,
+					 struct efrm_interrupt_vector,
+					 link);
+		/* As a heuristic to promote the selection of
+		 * under-utilised IRQs for subsequent VIs, move the
+		 * just-released IRQ to the front of the list if and
+		 * only if it is now no more heavily subscribed than
+		 * the current first entry.
+		 *     The num_vis fields of both vectors could be
+		 * changing under our feet, but the worst that can
+		 * happen as a result of that is that we make the wrong
+		 * heuristic decision. */
+		if (virs->vec->num_vis <= first->num_vis)
+			list_move(&virs->vec->link, &nic->irq_list);
+		mutex_unlock(&nic->irq_list_lock);
+	}
+
 	if (virs->vi_set != NULL) {
 		struct efrm_vi_set* vi_set = virs->vi_set;
 		int si = virs->allocation.instance -
@@ -499,35 +528,6 @@ static void efrm_vi_rm_free_instance(struct efrm_client *client,
 			complete(&vi_set->allocation_completion);
 	}
 	else {
-		struct efrm_nic *nic = efrm_nic(efrm_client_get_nic(client));
-
-		if (virs->vec != NULL) {
-			struct efrm_interrupt_vector *first;
-
-			efrm_interrupt_vector_release(virs->vec);
-
-			spin_lock(&virs->vec->vi_irq_lock);
-			list_del(&virs->irq_link);
-			spin_unlock(&virs->vec->vi_irq_lock);
-
-			mutex_lock(&nic->irq_list_lock);
-			first = list_first_entry(&nic->irq_list,
-						 struct efrm_interrupt_vector,
-						 link);
-			/* As a heuristic to promote the selection of
-			 * under-utilised IRQs for subsequent VIs, move the
-			 * just-released IRQ to the front of the list if and
-			 * only if it is now no more heavily subscribed than
-			 * the current first entry.
-			 *     The num_vis fields of both vectors could be
-			 * changing under our feet, but the worst that can
-			 * happen as a result of that is that we make the wrong
-			 * heuristic decision. */
-			if (virs->vec->num_vis <= first->num_vis)
-				list_move(&virs->vec->link, &nic->irq_list);
-			mutex_unlock(&nic->irq_list_lock);
-		}
-
 		efrm_vi_allocator_free_set(nic, &virs->allocation);
 	}
 }
