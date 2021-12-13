@@ -233,7 +233,7 @@ efab_vi_rm_mmap_rxq_shm(struct efrm_vi *virs, unsigned long *bytes,
 
   rc = oo_remap_vmalloc_range_partial(vma, vma->vm_start + *offset,
                                       virs->efct_shm,
-                                      DIV_ROUND_UP(len, PAGE_SIZE));
+                                      CI_ROUND_UP(len, PAGE_SIZE));
   if( rc < 0 )
     EFCH_ERR("%s: ERROR: remap_vmalloc_range failed rc=%d", __func__, rc);
   else {
