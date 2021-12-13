@@ -40,6 +40,22 @@ static bool is_movq_indirect_8(const unsigned char *p)
          (p[3] & 0xc7) == 0xc5;
 }
 
+/* Test whether p points to something like
+ *  e8 XX XX XX XX callq __x86_indirect_thunk_rax   (vulnerable CPU)
+ * or
+ *  ff d0     callq *%rax     (new, fixed CPU)
+ *  0f 1f 00  nop3
+ */
+static bool is_callq_indirect_reg(const unsigned char *p)
+{
+  if( p[0] == 0xe8 )
+    return true;
+  if( p[0] == 0xff && p[1] == 0xd0 && p[2] == 0x0f && p[3] == 0x1f &&
+      p[4] == 0x00 )
+    return true;
+  return false;
+}
+
 #else
 
 /* Test whether p points to something like
@@ -160,6 +176,8 @@ void** find_syscall_table(void)
    *
    * See the comments at is_movq_indirect_8() and is_movq_to_rdi().
    * And 2 mov instructions can be swapped.
+   * Kernels built for retpoline but running on a modern, mitigated chip will
+   * patch the call instruction with "callq *%rax; nop3"
    *
    * Without RETPOLINE (see ON-13350) it can be following:
    *    48 89 ef             	mov    %rbp,%rdi
@@ -191,8 +209,8 @@ void** find_syscall_table(void)
   while (p < pend) {
 #ifdef CONFIG_RETPOLINE
     if( is_movq_indirect_8(p) ) {
-      if( (is_movq_to_rdi(p + 8) && p[11] == 0xe8) ||
-          (is_movq_to_rdi(p-3) && p[8] == 0xe8) ) {
+      if( (is_movq_to_rdi(p + 8) && is_callq_indirect_reg(p + 11)) ||
+          (is_movq_to_rdi(p-3) && is_callq_indirect_reg(p + 8)) ) {
         s32 addr = p[4] | (p[5] << 8) | (p[6] << 16) | (p[7] << 24);
         result = (long)addr;
         TRAMP_DEBUG("sys_call_table=%lx", result);
