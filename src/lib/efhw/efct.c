@@ -332,7 +332,12 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
-  struct xlnx_efct_txq_params params = { .evq = evq_id };
+  struct xlnx_efct_txq_params params = {
+    .evq = evq_id,
+#if XLNX_EFCT_AUX_VERSION >= KERNEL_VERSION(4,0,0)
+    .label = -1,
+#endif
+  };
   int rc;
 
   EFCT_PRE(dev, edev, cli, nic, rc);
