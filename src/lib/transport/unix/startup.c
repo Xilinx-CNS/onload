@@ -683,12 +683,22 @@ void _fini(void)
 }
 
 
+/* We're not allowed to use libc in onload_version_msg() */
+static size_t local_strlen(const char *s)
+{
+  size_t len = 0;
+  while (*s++)
+    ++len;
+  return len;
+}
+
+
 /* This is called if the library is run as an executable!
    Ensure that no libc() functions are used */
 void onload_version_msg(void)
 {
   const char* msg0[] = {
-    onload_product, " ", onload_version, "\n",
+    onload_product, " ", onload_version_private, "\n",
     onload_copyright, "\n"
     "Built: "__DATE__" "__TIME__" "
 #ifdef NDEBUG
@@ -705,7 +715,7 @@ void onload_version_msg(void)
 
   for( i = 0; i < MSG0_SIZE; i++ ) {
     v[i].iov_base = (char*)msg0[i]; /* discard const qualifier */
-    v[i].iov_len = strlen(msg0[i]);
+    v[i].iov_len = local_strlen(msg0[i]);
   }
 
   my_syscall3(writev, STDOUT_FILENO, (long) v, MSG0_SIZE);

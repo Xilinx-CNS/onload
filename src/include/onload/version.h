@@ -15,10 +15,14 @@
 #define __ONLOAD_VERSION_H__
 
 
+/* onload_version and onload_version_private are the same data, but _private
+ * is not exported so can't be overridden by the dynamic linker so has the
+ * correct value at early startup */
 extern const char* onload_version;
-extern const char* onload_short_version;
-extern const char* onload_product;
-extern const char* onload_copyright;
+extern const char onload_version_private[];
+extern const char onload_short_version[];
+extern const char onload_product[];
+extern const char onload_copyright[];
 
 /* Max length of version string used for version skew checking. */
 enum { OO_VER_STR_LEN = 80 };

@@ -16,18 +16,18 @@
 #include <ci/app/onload.h>
 
 
-/* If the onload library is present, and defines onload_version, then this
- * will resolve to the onload library.  Otherwise &onload_version will be
+/* If the onload library is present, and defines onload_version_weak, then this
+ * will resolve to the onload library.  Otherwise &onload_version_weak will be
  * null (because it is weak and undefined).
  */
-extern const char*const onload_version __attribute__((weak));
+extern const char*const onload_version_weak __attribute__((weak));
 extern char** environ;
 
 
 int ci_onload_is_active(void)
 {
   const char* ld_preload;
-  if( &onload_version )
+  if( &onload_version_weak )
     return 1;
   ld_preload = getenv("LD_PRELOAD");
   if( ld_preload == NULL )
@@ -45,8 +45,8 @@ void ci_onload_info_dump(FILE* f, const char* pf)
   ld_preload = getenv("LD_PRELOAD");
   if( ld_preload )
     fprintf(f, "%sLD_PRELOAD=%s\n", pf, ld_preload);
-  if( &onload_version )
-    fprintf(f, "%sonload_version=%s\n", pf, onload_version);
+  if( &onload_version_weak )
+    fprintf(f, "%sonload_version=%s\n", pf, onload_version_weak);
   if( ci_onload_is_active() )
     for( p = environ; *p != NULL; ++p )
       if( strncmp("EF_", *p, 3) == 0 )
