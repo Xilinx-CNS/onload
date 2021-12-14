@@ -466,13 +466,11 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   unsigned threshold_extra;
   int i;
 
-  /* The caller must check space, as this function can't report failure. */
-  /* TODO this function should probably remain compatible with legacy ef_vi,
-   * perhaps by doing nothing and deferring transmission to when the fallback
-   * buffer is posted. In that case we'd need another API, very similar to
-   * this, but without the requirement for a fallback buffer, for best speed.
-   */
-  BUG_ON(!efct_tx_check(vi, len));
+  /* If we didn't have space then we must report this in _fallback and have
+   * another go */
+  vi->last_ctpio_failed = !efct_tx_check(vi, len);
+  if(unlikely( vi->last_ctpio_failed ))
+    return;
   efct_tx_init(vi, &tx);
 
   /* ef_vi interface takes threshold in bytes, but the efct hardware interface
@@ -526,6 +524,11 @@ static inline int efct_ef_vi_ctpio_fallback(ef_vi* vi, ef_request_id dma_id)
 static int efct_ef_vi_transmit_ctpio_fallback(ef_vi* vi, ef_addr dma_addr,
                                               size_t len, ef_request_id dma_id)
 {
+  if(unlikely( vi->last_ctpio_failed )) {
+    int rc = efct_ef_vi_transmit(vi, dma_addr, len, dma_id);
+    vi->last_ctpio_failed = rc == -EAGAIN;
+    return rc;
+  }
   return efct_ef_vi_ctpio_fallback(vi, dma_id);
 }
 
@@ -535,6 +538,11 @@ static int efct_ef_vi_transmitv_ctpio_fallback(ef_vi* vi,
                                                int dma_iov_len,
                                                ef_request_id dma_id)
 {
+  if(unlikely( vi->last_ctpio_failed )) {
+    int rc = efct_ef_vi_transmitv(vi, dma_iov, dma_iov_len, dma_id);
+    vi->last_ctpio_failed = rc == -EAGAIN;
+    return rc;
+  }
   return efct_ef_vi_ctpio_fallback(vi, dma_id);
 }
 

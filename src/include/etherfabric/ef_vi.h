@@ -881,6 +881,9 @@ typedef struct ef_vi {
   unsigned                      rx_buffer_len;
   /** The length of the prefix at the start of a received packet */
   unsigned                      rx_prefix_len;
+  /** efct: The last call to transmit_ctpio didn't have space; remember this
+   * for the call to ctpio_fallback */
+  uint8_t                       last_ctpio_failed;
   /** The mask to select which errors cause a discard event */
   uint64_t                      rx_discard_mask;
   /** The timestamp correction (ticks) for received packets */
