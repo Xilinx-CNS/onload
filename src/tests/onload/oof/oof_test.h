@@ -30,6 +30,7 @@ extern int oo_debug_bits;
 extern int scalable_filter_gid;
 
 extern int test_sanity(void);
+extern int test_sanity_no5tuple(void);
 extern int test_multicast_sanity(void);
 extern int test_namespace_sanity(void);
 extern int test_namespace_macvlan_move(void);

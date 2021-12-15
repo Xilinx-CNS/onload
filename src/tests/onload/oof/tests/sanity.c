@@ -34,7 +34,7 @@ static void check_all_filters(tcp_helper_resource_t* thr1,
 /* This test covers adding the different types of sockets to a basic cplane
  * environment.
  */
-int test_sanity(void)
+int __test_sanity(int no5tuple)
 {
   tcp_helper_resource_t* thr1;
   struct ooft_endpoint* udp_wild;
@@ -54,6 +54,7 @@ int test_sanity(void)
   ci_dllist hw_passive2;
   int rc;
   struct oof_manager* fm;
+  int with_hw_5tuple_only = !no5tuple;
 
   new_test();
   plan(49);
@@ -86,7 +87,7 @@ int test_sanity(void)
    * For a more complex setup each of the components can be added individually
    * using the functions in cplane.h.
    */
-  TRY(ooft_default_cplane_init(current_ns()));
+  TRY(ooft_cplane_init(current_ns(), no5tuple));
 
   TEST_DEBUG(oof_onload_manager_dump(&efab_tcp_driver, dump, "\n"));
 
@@ -147,13 +148,14 @@ int test_sanity(void)
   check_all_filters(thr1, thr2);
   ooft_cplane_claim_added_hw_filters(cp, &hw_semi_wild);
 
-  ooft_endpoint_expect_unicast_filters(udp_connected, 1);
+  /* for no5tuple not expecting a change in HW filters */
+  ooft_endpoint_expect_unicast_filters(udp_connected, with_hw_5tuple_only);
   rc = ooft_endpoint_add(udp_connected, 0);
   cmp_ok(rc, "==", 0, "add UDP connected endpoint");
   check_all_filters(thr1, thr2);
   ooft_cplane_claim_added_hw_filters(cp, &hw_connected);
 
-  ooft_endpoint_expect_unicast_filters(tcp_active, 1);
+  ooft_endpoint_expect_unicast_filters(tcp_active, with_hw_5tuple_only);
   rc = ooft_endpoint_add(tcp_active, 0);
   cmp_ok(rc, "==", 0, "add TCP active endpoint");
   check_all_filters(thr1, thr2);
@@ -217,8 +219,8 @@ int test_sanity(void)
   check_all_filters(thr1, thr2);
 
   /* Removing the listener will add new hw filter for passive2, unless the
-   * threshold is too small. */
-  bool expect_unshare = oof_shared_keep_thresh >= 1;
+   * threshold is too small or 3tuple sharing is forced by lack of 5tuple filters. */
+  bool expect_unshare = oof_shared_keep_thresh >= 1 && with_hw_5tuple_only;
   ooft_endpoint_expect_sw_remove_all(tcp_listen);
   if( expect_unshare ) {
     ooft_endpoint_expect_hw_unicast(tcp_passive2, tcp_passive2->laddr_be);
@@ -243,3 +245,11 @@ int test_sanity(void)
   done_testing();
 }
 
+int test_sanity() {
+  return __test_sanity(0);
+}
+
+int test_sanity_no5tuple()
+{
+  return __test_sanity(1);
+}

@@ -247,10 +247,10 @@ struct ooft_cplane* ooft_alloc_cplane(void)
   return cp;
 }
 
-int ooft_default_cplane_init(struct net* net_ns)
+int ooft_cplane_init(struct net* net_ns, int no5tuple)
 {
-  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns, 1, 1, 0);
-  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns, 1, 1, 0);
+  struct ooft_hwport* hw0 = ooft_alloc_hwport(cp, net_ns, 1, 1, no5tuple);
+  struct ooft_hwport* hw1 = ooft_alloc_hwport(cp, net_ns, 1, 1, no5tuple);
 
   unsigned char mac0[6] = { 0,1,0,0,0,0 };
   struct ooft_ifindex* idx0 = ooft_alloc_ifindex(cp, hw0, net_ns,
@@ -269,6 +269,11 @@ int ooft_default_cplane_init(struct net* net_ns)
   ooft_hwport_up_down(hw1, 1);
 
   return 0;
+}
+
+int ooft_default_cplane_init(struct net* net_ns)
+{
+  return ooft_cplane_init(net_ns, 0);
 }
 
 void ooft_free_cplane(struct ooft_cplane* cp)

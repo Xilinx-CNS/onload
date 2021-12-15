@@ -105,6 +105,7 @@ extern void ooft_cplane_expect_hw_remove_all(struct ooft_cplane* cp);
  * IP address to each interface and brings the interface up.
  */
 extern int ooft_default_cplane_init(struct net* ns);
+extern int ooft_cplane_init(struct net* net_ns, int no5tuple);
 
 extern struct ooft_hwport* ooft_alloc_hwport(struct ooft_cplane* cp,
                                              struct net* ns,

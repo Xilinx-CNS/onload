@@ -104,6 +104,9 @@ int main(int argc, char* argv[])
   if( all || !strcmp(argv[1], "sanity") )
     test_sanity();
 
+  if( all || !strcmp(argv[1], "sanity_no5tuple") )
+    test_sanity_no5tuple();
+
   if( all || !strcmp(argv[1], "multicast_sanity") )
     test_multicast_sanity();
 

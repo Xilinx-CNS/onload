@@ -269,13 +269,16 @@ void ooft_endpoint_expect_hw_unicast(struct ooft_endpoint* ep,
   unsigned hwport_mask = ep->thr->ns->hwport_mask;
 
   for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
-    if( (1 << i) & hwport_mask )
+    struct ooft_hwport* hw = HWPORT_FROM_CLIENT(oo_nics[i].efrm_client);
+    int no5tuple = hw->no5tuple;
+    if( (1 << i) & hwport_mask)
       ooft_client_expect_hw_add_ip(oo_nics[i].efrm_client,
                                    tcp_helper_rx_vi_id(ep->thr, i),
                                    tcp_helper_vi_hw_stack_id(ep->thr, i),
                                    EFX_FILTER_VID_UNSPEC,
                                    ep->proto, laddr_be, ep->lport_be,
-                                   ep->raddr_be, ep->rport_be);
+                                   no5tuple ? 0 : ep->raddr_be,
+                                   no5tuple ? 0 : ep->rport_be);
   }
 }
 

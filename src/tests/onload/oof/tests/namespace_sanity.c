@@ -56,7 +56,7 @@ static void second_namespace_init(struct net* net_ns)
 /* This test covers adding the different types of sockets to a basic cplane
  * environment.
  */
-int test_namespace_sanity(void)
+int test_namespace_sanity()
 {
   tcp_helper_resource_t* thr1;
   struct ooft_endpoint* udp_wild;
@@ -258,7 +258,7 @@ int test_namespace_sanity(void)
   check_all_filters(thr1, thr2);
 
   /* Removing the listener will add new hw filter for passive2, unless the
-   * threshold is too small. */
+   * threshold is too small */
   bool expect_unshare = oof_shared_keep_thresh >= 1;
   if( expect_unshare ) {
     ooft_endpoint_expect_hw_unicast(tcp_passive2, tcp_passive2->laddr_be);
@@ -289,4 +289,3 @@ int test_namespace_sanity(void)
   ooft_free_namespace(ns1);
   done_testing();
 }
-
