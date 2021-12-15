@@ -128,13 +128,14 @@ efab_vi_rm_mmap_ctpio(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
   int rc;
   int len;
   int instance;
-  struct efhw_nic *nic;
+  struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
   resource_size_t ctpio_addr;
   resource_size_t ctpio_page_addr;
 
   instance = virs->rs.rs_instance;
 
-  if( ! (virs->flags & EFHW_VI_TX_CTPIO) ) {
+  if( ! (virs->flags & EFHW_VI_TX_CTPIO ||
+        nic->flags & NIC_FLAG_CTPIO_ONLY) ) {
     EFRM_ERR("%s: CTPIO is not enabled on VI instance %d\n", __FUNCTION__,
 	     instance);
     return -EINVAL;
@@ -143,7 +144,6 @@ efab_vi_rm_mmap_ctpio(struct efrm_vi *virs, unsigned long *bytes, void *opaque,
   /* Map the CTPIO region. */
   len = CI_MIN(*bytes, (unsigned long)CI_PAGE_SIZE);
   *bytes -= len;
-  nic = efrm_client_get_nic(virs->rs.rs_client);
 
   rc = efhw_nic_ctpio_addr(nic, efrm_vi_qid(virs, EFHW_TXQ), &ctpio_addr);
   if( rc < 0 ) {
