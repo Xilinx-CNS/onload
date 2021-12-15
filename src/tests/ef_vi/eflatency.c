@@ -378,7 +378,14 @@ static inline void ctpio_send(struct eflatency_vi* vi)
    */
   struct pkt_buf* pb = pkt_bufs[FIRST_TX_BUF];
   ef_vi_transmit_ctpio(&vi->vi, pb->dma_buf, tx_frame_len, cfg_ctpio_thresh);
-  TRY(ef_vi_transmit_ctpio_fallback(&vi->vi, pb->dma_buf_addr, tx_frame_len, 0));
+  for( ; ; ) {
+    int rc = ef_vi_transmit_ctpio_fallback(&vi->vi, pb->dma_buf_addr, tx_frame_len, 0);
+    if( rc != -EAGAIN ) {
+      TRY(rc);
+      break;
+    }
+    generic_desc_check(vi, 0);
+  }
 }
 
 static void ctpio_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
