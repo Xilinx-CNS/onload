@@ -945,6 +945,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
   int intf_i;
   struct efhw_nic* nic;
 
+  int hugepages = max(1, DIV_ROUND_UP(NI_OPTS_TRS(trs).rxq_size * EFCT_PKT_STRIDE, CI_HUGEPAGE_SIZE));
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
   if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) < 0 )
     return 0;
@@ -966,7 +967,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
 
     /* EFCT TODO: some hard-coded parameters here: */
     rc = efrm_rxq_alloc(vi_rs, rxq, qix, cpu_all_mask, true,
-                        EFCT_HUGEPAGES_PER_RXQ,
+                        hugepages,
                         trs->thc_efct_memfd, &trs->thc_efct_memfd_off,
                         &trs->nic[intf_i].thn_efct_rxq[0]);
     if( rc < 0 ) {
