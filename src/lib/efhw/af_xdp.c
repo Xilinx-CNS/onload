@@ -83,7 +83,9 @@ static int __sys_call_area_alloc(struct sys_call_area* area, const char* func)
     return -ENOMEM;
   }
 
+  mmap_read_lock(current->mm);
   rc = pin_user_pages(area->user_addr, 1, FOLL_WRITE, &area->page, NULL);
+  mmap_read_unlock(current->mm);
   if( rc != 1 ) {
     EFHW_ERR("%s: ERROR: failed to get a page: rc=%d:", func, rc);
     sys_call_area_unmap(area);

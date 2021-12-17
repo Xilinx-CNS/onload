@@ -6131,14 +6131,18 @@ static long efab_get_all_user_pages(unsigned long base, long max_pages,
 {
   long n;
   long rc;
+
+  mmap_read_lock(current->mm);
   for( n = 0; n < max_pages; n += rc ) {
     rc = pin_user_pages(base + n * PAGE_SIZE, max_pages - n, gup_flags,
                         pages + n, NULL);
     if (rc <= 0) {
       efab_put_pages(pages, n);
+      mmap_read_unlock(current->mm);
       return rc ? rc : -EFAULT;
     }
   }
+  mmap_read_unlock(current->mm);
   return n;
 }
 
