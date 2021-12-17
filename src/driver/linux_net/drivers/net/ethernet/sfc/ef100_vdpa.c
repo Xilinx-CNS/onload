@@ -22,6 +22,8 @@
 #if defined(CONFIG_SFC_VDPA)
 #define EFX_VDPA_NAME_LEN 32
 
+static const char * const filter_names[] = { "bcast", "ucast", "mcast" };
+
 static int
 ef100_vdpa_set_mac_filter(struct efx_nic *efx,
 			  struct efx_filter_spec *spec,
@@ -50,54 +52,110 @@ ef100_vdpa_set_mac_filter(struct efx_nic *efx,
 	return rc;
 }
 
-int ef100_vdpa_filter_remove(struct ef100_vdpa_nic *vdpa_nic)
+static int ef100_vdpa_delete_filter(struct ef100_vdpa_nic *vdpa_nic,
+				    enum ef100_vdpa_mac_filter_type type)
 {
 	struct vdpa_device *vdev = &vdpa_nic->vdpa_dev;
-	u8 fail_cnt = 0;
+	int rc = 0;
+
+	if (vdpa_nic->filters[type].filter_id == -1)
+		return rc;
+
+	rc = efx_filter_remove_id_safe(vdpa_nic->efx,
+				       EFX_FILTER_PRI_MANUAL,
+				       vdpa_nic->filters[type].filter_id);
+	if (rc) {
+		dev_err(&vdev->dev, "%s filter id: %d remove failed, err: %d\n",
+			filter_names[type], vdpa_nic->filters[type].filter_id,
+			rc);
+	} else {
+		dev_dbg(&vdev->dev, "%s filter id: %d removed\n",
+			filter_names[type], vdpa_nic->filters[type].filter_id);
+		vdpa_nic->filters[type].filter_id = -1;
+		vdpa_nic->filter_cnt--;
+	}
+	return rc;
+}
+
+static int ef100_vdpa_add_filter(struct ef100_vdpa_nic *vdpa_nic,
+				 enum ef100_vdpa_mac_filter_type type)
+{
+	struct vdpa_device *vdev = &vdpa_nic->vdpa_dev;
+	struct efx_nic *efx = vdpa_nic->efx;
+	/* Configure filter on base Rx queue only */
+	u32 qid = EF100_VDPA_BASE_RX_QID;
+	struct efx_filter_spec *spec;
+	u8 baddr[ETH_ALEN];
+	int rc = 0;
+
+	/* remove existing filter */
+	rc = ef100_vdpa_delete_filter(vdpa_nic, type);
+	if (rc < 0) {
+		dev_err(&vdev->dev, "%s MAC filter deletion failed, err: %d",
+			filter_names[type], rc);
+		return rc;
+	}
+
+	/* Configure MAC Filter */
+	spec = &vdpa_nic->filters[type].spec;
+	if (type == EF100_VDPA_BCAST_MAC_FILTER) {
+		eth_broadcast_addr(baddr);
+		rc = ef100_vdpa_set_mac_filter(efx, spec, qid, baddr);
+	} else if (type == EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER) {
+		rc = ef100_vdpa_set_mac_filter(efx, spec, qid, NULL);
+	} else {
+		rc = ef100_vdpa_set_mac_filter(efx, spec, qid,
+					       vdpa_nic->mac_address);
+		dev_dbg(&vdev->dev, "ucast mac: %pM\n", vdpa_nic->mac_address);
+	}
+
+	if (rc < 0) {
+		if (type != EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER) {
+			dev_err(&vdev->dev,
+				"%s MAC filter insert failed, err: %d\n",
+				filter_names[type], rc);
+			goto fail;
+		} else {
+			dev_warn(&vdev->dev,
+				 "%s MAC filter insert failed, err: %d\n",
+				 filter_names[type], rc);
+			/* return success, mcast filter not mandatory */
+			return 0;
+		}
+	}
+
+	vdpa_nic->filters[type].filter_id = rc;
+	vdpa_nic->filter_cnt++;
+	dev_dbg(&vdev->dev, "vDPA %s filter created, filter_id: %d\n",
+		filter_names[type], rc);
+	return 0;
+
+fail:
+	ef100_vdpa_filter_remove(vdpa_nic);
+	return rc;
+}
+
+int ef100_vdpa_filter_remove(struct ef100_vdpa_nic *vdpa_nic)
+{
+	enum ef100_vdpa_mac_filter_type filter;
 	int err = 0;
 	int rc = 0;
-	int i;
 
-	for (i = 0; i < vdpa_nic->filter_cnt; i++) {
-		if (vdpa_nic->filters[i].filter_id == -1)
-			continue;
-
-		rc = efx_filter_remove_id_safe(vdpa_nic->efx,
-					       EFX_FILTER_PRI_MANUAL,
-					       vdpa_nic->filters[i].filter_id);
-		if (rc != 0) {
-			dev_err(&vdev->dev,
-				"filter %d id: %d remove failed, err: %d\n",
-				i, vdpa_nic->filters[i].filter_id, rc);
-			fail_cnt++;
+	for (filter = EF100_VDPA_BCAST_MAC_FILTER;
+	     filter <= EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER; filter++) {
+		rc = ef100_vdpa_delete_filter(vdpa_nic, filter);
+		if (rc < 0)
+			/* store status of last failed filter remove */
 			err = rc;
-		} else {
-			dev_info(&vdev->dev,
-				 "filter %d id %d removed\n",
-				 i, vdpa_nic->filters[i].filter_id);
-		}
-
-		vdpa_nic->filters[i].filter_id = -1;
 	}
-
-	if (fail_cnt) {
-		dev_err(&vdev->dev,
-			"%d filters couldn't be removed\n", fail_cnt);
-		rc = err;
-	}
-
-	vdpa_nic->filter_cnt = 0;
-	return rc;
+	return err;
 }
 
 int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic)
 {
 	struct vdpa_device *vdev = &vdpa_nic->vdpa_dev;
+	enum ef100_vdpa_mac_filter_type filter;
 	struct efx_nic *efx = vdpa_nic->efx;
-	struct efx_filter_spec *spec;
-	u8 baddr[ETH_ALEN];
-	/* Configure filter on base Rx queue only */
-	u32 qid = EF100_VDPA_BASE_RX_QID;
 	int rc = 0;
 
 	/* remove existing filters, if any */
@@ -105,63 +163,26 @@ int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic)
 	if (rc < 0) {
 		dev_err(&vdev->dev,
 			"MAC filter deletion failed, err: %d", rc);
-		goto fail2;
+		goto fail;
 	}
 
 	rc = efx->type->filter_table_up(efx);
 	if (rc < 0) {
 		dev_err(&vdev->dev,
 			"filter_table_up failed, err: %d", rc);
-		goto fail2;
-	}
-
-	/* Configure broadcast MAC Filter */
-	eth_broadcast_addr(baddr);
-	spec = &vdpa_nic->filters[EF100_VDPA_BCAST_MAC_FILTER].spec;
-	rc = ef100_vdpa_set_mac_filter(efx, spec, qid, baddr);
-	if (rc < 0) {
-		dev_err(&vdev->dev,
-			"bcast MAC filter insert failed, err: %d", rc);
-		goto fail2;
-	}
-	vdpa_nic->filters[EF100_VDPA_BCAST_MAC_FILTER].filter_id = rc;
-	vdpa_nic->filter_cnt++;
-	dev_info(&vdev->dev,
-		 "vDPA bcast filter created, filter_id: %d\n", rc);
-
-	/* Configure unicast MAC Filter */
-	spec = &vdpa_nic->filters[EF100_VDPA_UCAST_MAC_FILTER].spec;
-	rc = ef100_vdpa_set_mac_filter(efx, spec, qid, vdpa_nic->mac_address);
-	if (rc < 0) {
-		dev_err(&vdev->dev,
-			"ucast MAC filter insert failed, err: %d", rc);
 		goto fail;
 	}
-	vdpa_nic->filters[EF100_VDPA_UCAST_MAC_FILTER].filter_id = rc;
-	vdpa_nic->filter_cnt++;
-	dev_info(&vdev->dev,
-		 "vDPA ucast filter mac: %pM created, filter_id: %d\n",
-		 vdpa_nic->mac_address, rc);
 
-	/* Configure unknown multicast filter */
-	spec = &vdpa_nic->filters[EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER].spec;
-	rc = ef100_vdpa_set_mac_filter(efx, spec, qid, NULL);
-	if (rc < 0) {
-		dev_err(&vdev->dev,
-			"vDPA mcast MAC filter insert failed, err: %d", rc);
-		goto fail;
+	for (filter = EF100_VDPA_BCAST_MAC_FILTER;
+	     filter <= EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER; filter++) {
+		if (filter == EF100_VDPA_UCAST_MAC_FILTER &&
+		    !vdpa_nic->mac_configured)
+			continue;
+		rc = ef100_vdpa_add_filter(vdpa_nic, filter);
+		if (rc < 0)
+			goto fail;
 	}
-	vdpa_nic->filters[EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER].filter_id = rc;
-	vdpa_nic->filter_cnt++;
-	dev_info(&vdev->dev,
-		 "vDPA UNKNOWN_MCAST filter created, filter_id: %d\n", rc);
-
-	return 0;
-
 fail:
-	ef100_vdpa_filter_remove(vdpa_nic);
-
-fail2:
 	return rc;
 }
 
@@ -222,7 +243,7 @@ static ssize_t vdpa_mac_store(struct device *dev,
 	vdpa_nic->mac_configured = true;
 
 	if (vdpa_nic->vring[0].vring_created)
-		ef100_vdpa_filter_configure(vdpa_nic);
+		ef100_vdpa_add_filter(vdpa_nic, EF100_VDPA_UCAST_MAC_FILTER);
 
 err:
 	mutex_unlock(&vdpa_nic->lock);
@@ -492,6 +513,7 @@ static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 	u8 duplex;
 	int rc = 0;
 
+	vdpa_nic->mac_configured = false;
 	rc = efx_vdpa_get_mac_address(efx,
 				      vdpa_nic->net_config.mac);
 	if (rc) {
@@ -500,7 +522,10 @@ static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 			 __func__, vdpa_nic->vf_index, rc);
 		return rc;
 	}
-	vdpa_nic->mac_configured = true;
+
+	/* Set mac_configured to true for Non-Zero MAC address */
+	if (!is_zero_ether_addr(vdpa_nic->mac_address))
+		vdpa_nic->mac_configured = true;
 
 	vdpa_nic->net_config.max_virtqueue_pairs =
 		(__virtio16 __force)vdpa_nic->max_queue_pairs;

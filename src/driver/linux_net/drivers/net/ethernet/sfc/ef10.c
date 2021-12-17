@@ -715,7 +715,7 @@ int efx_ef10_evb_port_assign(struct efx_nic *efx, unsigned int port_id,
 			    NULL, 0, NULL);
 }
 
-int efx_ef10_vport_add_mac(struct efx_nic *efx, unsigned int port_id, u8 *mac)
+int efx_ef10_vport_add_mac(struct efx_nic *efx, unsigned int port_id, const u8 *mac)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_VPORT_ADD_MAC_ADDRESS_IN_LEN);
 
@@ -726,7 +726,7 @@ int efx_ef10_vport_add_mac(struct efx_nic *efx, unsigned int port_id, u8 *mac)
 			    sizeof(inbuf), NULL, 0, NULL);
 }
 
-int efx_ef10_vport_del_mac(struct efx_nic *efx, unsigned int port_id, u8 *mac)
+int efx_ef10_vport_del_mac(struct efx_nic *efx, unsigned int port_id, const u8 *mac)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_VPORT_DEL_MAC_ADDRESS_IN_LEN);
 

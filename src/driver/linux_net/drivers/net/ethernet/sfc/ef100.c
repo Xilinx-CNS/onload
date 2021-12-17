@@ -78,21 +78,20 @@ static int ef100_pci_parse_ef100_entry(struct efx_nic *efx, int entry_location,
 	u64 offset = ef100_pci_get_bar_bits(efx, entry_location,
 					    ESF_GZ_CFGBAR_EF100_FUNC_CTL_WIN_OFF) << ESE_GZ_EF100_FUNC_CTL_WIN_OFF_SHIFT;
 
-	netif_dbg(efx, probe, efx->net_dev,
-		  "Found EF100 function control window bar=%d offset=0x%llx\n",
-		  bar, offset);
+	pci_dbg(efx->pci_dev,
+		"Found EF100 function control window bar=%d offset=0x%llx\n",
+		bar, offset);
 
 	if (result->valid) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Duplicated EF100 table entry.\n");
+		pci_err(efx->pci_dev, "Duplicated EF100 table entry.\n");
 		return -EINVAL;
 	}
 
 	if ((bar == ESE_GZ_CFGBAR_EF100_BAR_NUM_EXPANSION_ROM) ||
 	    (bar == ESE_GZ_CFGBAR_EF100_BAR_NUM_INVALID)) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Bad BAR value of %d in Xilinx capabilities EF100 entry.\n",
-			  bar);
+		pci_err(efx->pci_dev,
+			"Bad BAR value of %d in Xilinx capabilities EF100 entry.\n",
+			bar);
 		return -EINVAL;
 	}
 
@@ -132,7 +131,7 @@ static int ef100_pci_parse_continue_entry(struct efx_nic *efx, int entry_locatio
 
 	if ((bar == ESE_GZ_VSEC_BAR_NUM_EXPANSION_ROM) ||
 	    (bar == ESE_GZ_VSEC_BAR_NUM_INVALID)) {
-		netif_err(efx, probe, efx->net_dev,
+		pci_err(efx->pci_dev,
 			"Bad BAR value of %d in Xilinx capabilities sub-table.\n",
 			bar);
 		return -EINVAL;
@@ -142,9 +141,9 @@ static int ef100_pci_parse_continue_entry(struct efx_nic *efx, int entry_locatio
 		efx_fini_io(efx);
 
 		if (ef100_pci_does_bar_overflow(efx, bar, offset)) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Xilinx table will overrun BAR[%d] offset=0x%llx\n",
-				  bar, offset);
+			pci_err(efx->pci_dev,
+				"Xilinx table will overrun BAR[%d] offset=0x%llx\n",
+				bar, offset);
 			return -EINVAL;
 		}
 
@@ -152,8 +151,8 @@ static int ef100_pci_parse_continue_entry(struct efx_nic *efx, int entry_locatio
 		rc = efx_init_io(efx, bar, efx->type->max_dma_mask,
 				 pci_resource_len(efx->pci_dev, bar));
 		if (rc) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Mapping new BAR for Xilinx table failed, rc=%d\n", rc);
+			pci_err(efx->pci_dev,
+				"Mapping new BAR for Xilinx table failed, rc=%d\n", rc);
 			return rc;
 		}
 	}
@@ -169,8 +168,8 @@ static int ef100_pci_parse_continue_entry(struct efx_nic *efx, int entry_locatio
 		rc = efx_init_io(efx, previous_bar, efx->type->max_dma_mask,
 				 pci_resource_len(efx->pci_dev, previous_bar));
 		if (rc) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Putting old BAR back failed, rc=%d\n", rc);
+			pci_err(efx->pci_dev,
+				"Putting old BAR back failed, rc=%d\n", rc);
 			return rc;
 		}
 	}
@@ -203,13 +202,13 @@ static int ef100_pci_walk_xilinx_table(struct efx_nic *efx, u64 offset,
 		entry_size = ef100_pci_get_bar_bits(efx, current_entry,
 						    ESF_GZ_CFGBAR_ENTRY_SIZE);
 
-		netif_dbg(efx, probe, efx->net_dev,
-			  "Seen Xilinx table entry 0x%x size 0x%x at 0x%llx in BAR[%d]\n",
-			  id, entry_size, current_entry, efx->mem_bar);
+		pci_dbg(efx->pci_dev,
+			"Seen Xilinx table entry 0x%x size 0x%x at 0x%llx in BAR[%d]\n",
+			id, entry_size, current_entry, efx->mem_bar);
 
 		if (entry_size < sizeof(uint32_t)*2) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Xilinx table entry too short len=0x%x\n", entry_size);
+			pci_err(efx->pci_dev,
+				"Xilinx table entry too short len=0x%x\n", entry_size);
 			return -EINVAL;
 		}
 
@@ -217,9 +216,9 @@ static int ef100_pci_walk_xilinx_table(struct efx_nic *efx, u64 offset,
 		case ESE_GZ_CFGBAR_ENTRY_EF100:
 			if ((rev != ESE_GZ_CFGBAR_ENTRY_REV_EF100) ||
 			    (entry_size < ESE_GZ_CFGBAR_ENTRY_SIZE_EF100)) {
-				netif_err(efx, probe, efx->net_dev,
-					  "Bad length or rev for EF100 entry in Xilinx capabilities table. entry_size=%d rev=%d.\n",
-					  entry_size, rev);
+				pci_err(efx->pci_dev,
+					"Bad length or rev for EF100 entry in Xilinx capabilities table. entry_size=%d rev=%d.\n",
+					entry_size, rev);
 				return -EINVAL;
 			}
 
@@ -230,9 +229,9 @@ static int ef100_pci_walk_xilinx_table(struct efx_nic *efx, u64 offset,
 			break;
 		case ESE_GZ_CFGBAR_ENTRY_CONT_CAP_ADDR:
 			if ((rev != 0) || (entry_size < ESE_GZ_CFGBAR_CONT_CAP_MIN_LENGTH)) {
-				netif_err(efx, probe, efx->net_dev,
-					  "Bad length or rev for continue entry in Xilinx capabilities table. entry_size=%d rev=%d.\n",
-					  entry_size, rev);
+				pci_err(efx->pci_dev,
+					"Bad length or rev for continue entry in Xilinx capabilities table. entry_size=%d rev=%d.\n",
+					entry_size, rev);
 				return -EINVAL;
 			}
 
@@ -251,9 +250,9 @@ static int ef100_pci_walk_xilinx_table(struct efx_nic *efx, u64 offset,
 		current_entry += entry_size;
 
 		if (ef100_pci_does_bar_overflow(efx, efx->mem_bar, current_entry)) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Xilinx table overrun at position=0x%llx.\n",
-				  current_entry);
+			pci_err(efx->pci_dev,
+				"Xilinx table overrun at position=0x%llx.\n",
+				current_entry);
 			return -EINVAL;
 		}
 	}
@@ -268,9 +267,9 @@ static int _ef100_pci_get_config_bits_with_width(struct efx_nic *efx,
 
 	int rc = pci_read_config_dword(efx->pci_dev, pos, &temp);
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Failed to read PCI config dword at %d\n",
-			  pos);
+		pci_err(efx->pci_dev,
+			"Failed to read PCI config dword at %d\n",
+			pos);
 		return rc;
 	}
 
@@ -298,25 +297,25 @@ static int ef100_pci_parse_xilinx_cap(struct efx_nic *efx, int vndr_cap,
 
 	rc = ef100_pci_get_config_bits(efx, vndr_cap, ESF_GZ_VSEC_TBL_BAR, &bar);
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Failed to read ESF_GZ_VSEC_TBL_BAR, rc=%d\n",
-			  rc);
+		pci_err(efx->pci_dev,
+			"Failed to read ESF_GZ_VSEC_TBL_BAR, rc=%d\n",
+			rc);
 		return rc;
 	}
 
 	if ((bar == ESE_GZ_CFGBAR_CONT_CAP_BAR_NUM_EXPANSION_ROM) ||
 	    (bar == ESE_GZ_CFGBAR_CONT_CAP_BAR_NUM_INVALID)) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Bad BAR value of %d in Xilinx capabilities sub-table.\n",
-			  bar);
+		pci_err(efx->pci_dev,
+			"Bad BAR value of %d in Xilinx capabilities sub-table.\n",
+			bar);
 		return -EINVAL;
 	}
 
 	rc = ef100_pci_get_config_bits(efx, vndr_cap, ESF_GZ_VSEC_TBL_OFF_LO, &offset_lo);
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Failed to read ESF_GZ_VSEC_TBL_OFF_LO, rc=%d\n",
-			  rc);
+		pci_err(efx->pci_dev,
+			"Failed to read ESF_GZ_VSEC_TBL_OFF_LO, rc=%d\n",
+			rc);
 		return rc;
 	}
 
@@ -324,9 +323,9 @@ static int ef100_pci_parse_xilinx_cap(struct efx_nic *efx, int vndr_cap,
 	if (has_offset_hi) {
 		rc = ef100_pci_get_config_bits(efx, vndr_cap, ESF_GZ_VSEC_TBL_OFF_HI, &offset_high);
 		if (rc) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Failed to read ESF_GZ_VSEC_TBL_OFF_HI, rc=%d\n",
-				  rc);
+			pci_err(efx->pci_dev,
+				"Failed to read ESF_GZ_VSEC_TBL_OFF_HI, rc=%d\n",
+				rc);
 			return rc;
 		}
 	}
@@ -335,9 +334,9 @@ static int ef100_pci_parse_xilinx_cap(struct efx_nic *efx, int vndr_cap,
 		 (((u64)offset_high) << ESE_GZ_VSEC_TBL_OFF_HI_BYTES_SHIFT);
 
 	if (offset > pci_resource_len(efx->pci_dev, bar) - sizeof(uint32_t)*2) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Xilinx table will overrun BAR[%d] offset=0x%llx\n",
-			  bar, offset);
+		pci_err(efx->pci_dev,
+			"Xilinx table will overrun BAR[%d] offset=0x%llx\n",
+			bar, offset);
 		return -EINVAL;
 	}
 
@@ -345,8 +344,7 @@ static int ef100_pci_parse_xilinx_cap(struct efx_nic *efx, int vndr_cap,
 	rc = efx_init_io(efx, bar, efx->type->max_dma_mask,
 			 pci_resource_len(efx->pci_dev, bar));
 	if (rc) {
-		netif_err(efx, probe, efx->net_dev,
-			  "efx_init_io failed, rc=%d\n", rc);
+		pci_err(efx->pci_dev, "efx_init_io failed, rc=%d\n", rc);
 		return rc;
 	}
 
@@ -381,18 +379,18 @@ static int ef100_pci_find_func_ctrl_window(struct efx_nic *efx,
 		rc = ef100_pci_get_config_bits(efx, vndr_cap, ESF_GZ_VSEC_ID,
 					       &vsec_id);
 		if (rc) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Failed to read ESF_GZ_VSEC_ID, rc=%d\n",
-				  rc);
+			pci_err(efx->pci_dev,
+				"Failed to read ESF_GZ_VSEC_ID, rc=%d\n",
+				rc);
 			return rc;
 		}
 
 		rc = ef100_pci_get_config_bits(efx, vndr_cap, ESF_GZ_VSEC_VER,
 					       &vsec_ver);
 		if (rc) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Failed to read ESF_GZ_VSEC_VER, rc=%d\n",
-				  rc);
+			pci_err(efx->pci_dev,
+				"Failed to read ESF_GZ_VSEC_VER, rc=%d\n",
+				rc);
 			return rc;
 		}
 
@@ -400,9 +398,9 @@ static int ef100_pci_find_func_ctrl_window(struct efx_nic *efx,
 		rc = ef100_pci_get_config_bits(efx, vndr_cap, ESF_GZ_VSEC_LEN,
 					       &vsec_len);
 		if (rc) {
-			netif_err(efx, probe, efx->net_dev,
-				  "Failed to read ESF_GZ_VSEC_LEN, rc=%d\n",
-				  rc);
+			pci_err(efx->pci_dev,
+				"Failed to read ESF_GZ_VSEC_LEN, rc=%d\n",
+				rc);
 			return rc;
 		}
 
@@ -419,9 +417,9 @@ static int ef100_pci_find_func_ctrl_window(struct efx_nic *efx,
 	}
 
 	if (num_xilinx_caps && !result->valid) {
-		netif_err(efx, probe, efx->net_dev,
-			  "Seen %d Xilinx tables, but no EF100 entry.\n",
-			  num_xilinx_caps);
+		pci_err(efx->pci_dev,
+			"Seen %d Xilinx tables, but no EF100 entry.\n",
+			num_xilinx_caps);
 		return -EINVAL;
 	}
 
@@ -489,7 +487,6 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 	kfree(probe_data);
 };
 
-#ifdef EFX_C_MODEL
 static int efx_check_func_ctl_magic(struct efx_nic *efx)
 {
 	efx_dword_t reg;
@@ -500,7 +497,6 @@ static int efx_check_func_ctl_magic(struct efx_nic *efx)
 
 	return 0;
 }
-#endif
 
 static int ef100_pci_probe(struct pci_dev *pci_dev,
 			   const struct pci_device_id *entry)
@@ -556,13 +552,11 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 
 	efx->reg_base = fcw.offset;
 
-#ifdef EFX_C_MODEL
 	rc = efx_check_func_ctl_magic(efx);
 	if (rc) {
 		pci_err(pci_dev, "Func control window magic is wrong\n");
 		goto fail;
 	}
-#endif
 
 	rc = efx->type->probe(efx);
 	if (rc)

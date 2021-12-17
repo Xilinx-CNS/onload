@@ -33,27 +33,6 @@
 #include "efx_common.h"
 #include "debugfs.h"
 
-/* Error reporting: convenience macros.  For indicating why a given filter
- * insertion is not supported; errors in internal operation or in the
- * hardware should be netif_err()s instead.
- */
-/* Used when error message is constant, to ensure we get a message out even
- * if extack isn't available.
- */
-#define EFX_TC_ERR_MSG(efx, extack, message)	do {			\
-	if (extack)							\
-		NL_SET_ERR_MSG_MOD(extack, message);			\
-	if (efx->log_tc_errs || !extack)				\
-		netif_info(efx, drv, efx->net_dev, "%s\n", message);	\
-} while (0)
-/* Used when error message is not constant; caller should also supply a
- * constant extack message with NL_SET_ERR_MSG_MOD().
- */
-#define efx_tc_err(efx, fmt, args...)	do {		\
-if (efx->log_tc_errs)					\
-	netif_info(efx, drv, efx->net_dev, fmt, ##args);\
-} while (0)
-
 static enum efx_encap_type efx_tc_indr_netdev_type(struct net_device *net_dev)
 {
 	if (netif_is_vxlan(net_dev))
@@ -2139,7 +2118,7 @@ static bool efx_ipv6_addr_all_ones(struct in6_addr *addr)
 
 static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 					    struct efx_tc_match *match,
-					    enum efx_encap_type type)
+					    enum efx_encap_type type, bool hw)
 {
 	struct efx_tc_encap_match *encap, *old;
 	unsigned char ipv;
@@ -2228,6 +2207,7 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 	}
 	encap->udp_dport = match->value.enc_dport;
 	encap->tun_type = type;
+	encap->hw = hw;
 	old = rhashtable_lookup_get_insert_fast(&efx->tc->encap_match_ht,
 						&encap->linkage,
 						efx_tc_encap_match_ht_params);
@@ -2236,6 +2216,15 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 		kfree(encap);
 		if (old->tun_type != type) {
 			netif_err(efx, drv, efx->net_dev, "Egress encap match with conflicting tun_type\n");
+			return -EEXIST;
+		}
+		/* Pseudo EMs correspond to an OR that has to be unique (it
+		 * must not overlap with any other OR, whether EM or pseudo).
+		 */
+		if (!hw || !old->hw) {
+			netif_err(efx, drv, efx->net_dev, "%s encap match conflicts with existing %s entry\n",
+				  hw ? "Direct" : "Pseudo",
+				  old->hw ? "direct" : "pseudo");
 			return -EEXIST;
 		}
 		if (!refcount_inc_not_zero(&old->ref))
@@ -2260,16 +2249,22 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			snprintf(buf, sizeof(buf), "[IP version %d, huh?]", ipv);
 			break;
 		}
-		rc = efx_mae_register_encap_match(efx, encap);
-		if (rc) {
-			netif_err(efx, drv, efx->net_dev,
-				  "Failed to record encap match %s:%u, rc %d\n",
-				  buf, ntohs(encap->udp_dport), rc);
-			goto fail;
+		if (hw) {
+			rc = efx_mae_register_encap_match(efx, encap);
+			if (rc) {
+				netif_err(efx, drv, efx->net_dev,
+					  "Failed to record encap match %s:%u, rc %d\n",
+					  buf, ntohs(encap->udp_dport), rc);
+				goto fail;
+			}
+			netif_dbg(efx, drv, efx->net_dev,
+				  "Recorded new encap match %s:%u\n",
+				  buf, ntohs(encap->udp_dport));
+		} else {
+			netif_dbg(efx, drv, efx->net_dev,
+				  "Recorded pseudo encap match %s:%u\n",
+				  buf, ntohs(encap->udp_dport));
 		}
-		netif_dbg(efx, drv, efx->net_dev,
-			  "Recorded new encap match %s:%u\n",
-			  buf, ntohs(encap->udp_dport));
 		refcount_set(&encap->ref, 1);
 	}
 	match->encap = encap;
@@ -2300,18 +2295,24 @@ static void efx_tc_flower_release_encap_match(struct efx_nic *efx,
 		snprintf(buf, sizeof(buf), "%pI6c->%pI6c",
 			 &encap->src_ip6, &encap->dst_ip6);
 #endif
-	rc = efx_mae_unregister_encap_match(efx, encap);
-	if (rc)
-		/* Display message but carry on and remove entry from our
-		 * SW tables, because there's not much we can do about it.
-		 */
-		netif_err(efx, drv, efx->net_dev,
-			  "Failed to release encap match %s:%u, rc %d\n",
-			  buf, ntohs(encap->udp_dport), rc);
-	else
+	if (encap->hw) {
+		rc = efx_mae_unregister_encap_match(efx, encap);
+		if (rc)
+			/* Display message but carry on and remove entry from our
+			 * SW tables, because there's not much we can do about it.
+			 */
+			netif_err(efx, drv, efx->net_dev,
+				  "Failed to release encap match %s:%u, rc %d\n",
+				  buf, ntohs(encap->udp_dport), rc);
+		else
+			netif_dbg(efx, drv, efx->net_dev,
+				  "Released encap match %s:%u\n",
+				  buf, ntohs(encap->udp_dport));
+	} else {
 		netif_dbg(efx, drv, efx->net_dev,
-			  "Released encap match %s:%u\n",
+			  "Released pseudo encap match %s:%u\n",
 			  buf, ntohs(encap->udp_dport));
+	}
 	rhashtable_remove_fast(&efx->tc->encap_match_ht, &encap->linkage,
 			       efx_tc_encap_match_ht_params);
 	kfree(encap);
@@ -3108,6 +3109,9 @@ static int efx_tc_flower_replace_foreign_lhs(struct efx_nic *efx,
 					   type);
 			return rc;
 		}
+		rc = efx_tc_flower_record_encap_match(efx, match, type, false);
+		if (rc)
+			return rc;
 	} else {
 		/* This is not a tunnel decap rule, ignore it */
 		netif_dbg(efx, drv, efx->net_dev, "Ignoring foreign LHS filter without encap match\n");
@@ -3116,7 +3120,8 @@ static int efx_tc_flower_replace_foreign_lhs(struct efx_nic *efx,
 
 	if (match->mask.ct_state_trk && match->value.ct_state_trk) {
 		EFX_TC_ERR_MSG(efx, extack, "LHS rule can never match +trk");
-		return -EOPNOTSUPP;
+		rc = -EOPNOTSUPP;
+		goto release_encap_match;
 	}
 	/* LHS rules are always -trk, so we don't need to match on that */
 	match->mask.ct_state_trk = 0;
@@ -3125,16 +3130,18 @@ static int efx_tc_flower_replace_foreign_lhs(struct efx_nic *efx,
 	rc = efx_tc_flower_translate_flhs_match(match);
 	if (rc) {
 		EFX_TC_ERR_MSG(efx, extack, "LHS rule cannot match on inner fields");
-		return rc;
+		goto release_encap_match;
 	}
 
 	rc = efx_mae_match_check_caps_lhs(efx, &match->mask, extack);
 	if (rc)
-		return rc;
+		goto release_encap_match;
 
 	rule = kzalloc(sizeof(*rule), GFP_USER);
-	if (!rule)
-		return -ENOMEM;
+	if (!rule) {
+		rc = -ENOMEM;
+		goto release_encap_match;
+	}
 	rule->cookie = tc->cookie;
 	old = rhashtable_lookup_get_insert_fast(&efx->tc->lhs_rule_ht,
 						&rule->linkage,
@@ -3281,6 +3288,9 @@ release:
 		rhashtable_remove_fast(&efx->tc->lhs_rule_ht, &rule->linkage,
 				       efx_tc_lhs_rule_ht_params);
 	kfree(rule);
+release_encap_match:
+	if (match->encap)
+		efx_tc_flower_release_encap_match(efx, match->encap);
 	return rc;
 }
 
@@ -3422,7 +3432,7 @@ static int efx_tc_flower_replace_foreign(struct efx_nic *efx,
 			goto release;
 		}
 
-		rc = efx_tc_flower_record_encap_match(efx, &match, type);
+		rc = efx_tc_flower_record_encap_match(efx, &match, type, true);
 		if (rc)
 			goto release;
 	} else if (!tc->common.chain_index) {
@@ -4706,6 +4716,8 @@ static int efx_tc_flower_destroy(struct efx_nic *efx,
 #endif
 		rhashtable_remove_fast(&efx->tc->lhs_rule_ht, &lhs_rule->linkage,
 				       efx_tc_lhs_rule_ht_params);
+		if (lhs_rule->match.encap)
+			efx_tc_flower_release_encap_match(efx, lhs_rule->match.encap);
 		netif_dbg(efx, drv, efx->net_dev, "Removed (lhs) filter %lx\n",
 			  lhs_rule->cookie);
 		kfree(lhs_rule);
@@ -5287,7 +5299,10 @@ static int efx_tc_enumerate_mports(struct efx_nic *efx)
 static void efx_tc_debugfs_dump_encap_match(struct seq_file *file,
 					    struct efx_tc_encap_match *encap)
 {
-	seq_printf(file, "\tencap_match (%#x)\n", encap->fw_id);
+	if (encap->hw)
+		seq_printf(file, "\tencap_match (%#x)\n", encap->fw_id);
+	else
+		seq_printf(file, "\tencap_match (pseudo)\n");
 #ifdef CONFIG_IPV6
 	if (encap->src_ip | encap->dst_ip) {
 #endif
@@ -5305,6 +5320,7 @@ static void efx_tc_debugfs_dump_encap_match(struct seq_file *file,
 			   efx_tc_encap_type_names[encap->tun_type]);
 	else
 		seq_printf(file, "\t\ttun_type = %u\n", encap->tun_type);
+	seq_printf(file, "\t\tref = %u\n", refcount_read(&encap->ref));
 }
 
 #define efx_tc_debugfs_dump_fmt_match_item(_file, _name, _key, _mask, _fmt, _amp)\

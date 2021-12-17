@@ -736,9 +736,8 @@ static int efx_mae_match_check_cap_typ(u8 support, enum mask_type typ)
 	rc = efx_mae_match_check_cap_typ(supported_fields[MAE_FIELD_ ## _mcdi],\
 					 typ);				       \
 	if (rc) {							       \
-		netif_err(efx, drv, efx->net_dev,			       \
-			  "No support for %s mask in field %s\n",	       \
-			  mask_type_name(typ), #_field);		       \
+		efx_tc_err(efx, "No support for %s mask in field %s\n",	       \
+			   mask_type_name(typ), #_field);		       \
 		if (typ == MASK_ONES)					       \
 			NL_SET_ERR_MSG_MOD(extack, "Unsupported match field " #_field);\
 		else							       \
@@ -749,8 +748,7 @@ static int efx_mae_match_check_cap_typ(u8 support, enum mask_type typ)
 #define UNSUPPORTED(_field)						       \
 if (classify_mask((const u8 *)&mask->_field,				       \
 		  sizeof(mask->_field)) != MASK_ZEROES) {		       \
-	netif_err(efx, drv, efx->net_dev, "No support for field %s\n", #_field);\
-	NL_SET_ERR_MSG_MOD(extack, "Unsupported match field " #_field);	       \
+	EFX_TC_ERR_MSG(efx, extack, "Unsupported match field " #_field);       \
 	return -EOPNOTSUPP;						       \
 }
 /* Bitfield members need special handling.  For now we only have 1-bit fields */
@@ -760,9 +758,8 @@ if (classify_mask((const u8 *)&mask->_field,				       \
 	rc = efx_mae_match_check_cap_typ(supported_fields[MAE_FIELD_ ## _mcdi],\
 					 typ);				       \
 	if (rc) {							       \
-		netif_err(efx, drv, efx->net_dev,			       \
-			  "No support for %s mask in field %s\n",	       \
-			  mask_type_name(typ), #_field);		       \
+		efx_tc_err(efx,  "No support for %s mask in field %s\n",       \
+			   mask_type_name(typ), #_field);		       \
 		if (typ == MASK_ONES)					       \
 			NL_SET_ERR_MSG_MOD(extack, "Unsupported match field " #_field);\
 		else							       \
@@ -772,8 +769,7 @@ if (classify_mask((const u8 *)&mask->_field,				       \
 } while (0)
 #define UNSUPPORTED_BIT(_field)						       \
 if (mask->_field) {							       \
-	netif_err(efx, drv, efx->net_dev, "No support for field %s\n", #_field);\
-	NL_SET_ERR_MSG_MOD(extack, "Unsupported match field " #_field);	       \
+	EFX_TC_ERR_MSG(efx, extack, "Unsupported match field " #_field);       \
 	return -EOPNOTSUPP;						       \
 }
 
@@ -792,9 +788,8 @@ int efx_mae_match_check_caps(struct efx_nic *efx,
 	rc = efx_mae_match_check_cap_typ(supported_fields[MAE_FIELD_INGRESS_PORT],
 					 ingress_port_mask_type);
 	if (rc) {
-		netif_err(efx, drv, efx->net_dev,
-			  "No support for %s mask in field %s\n",
-			  mask_type_name(ingress_port_mask_type), "ingress_port");
+		efx_tc_err(efx, "No support for %s mask in field %s\n",
+			   mask_type_name(ingress_port_mask_type), "ingress_port");
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported mask type for ingress_port");
 		return rc;
 	}
@@ -822,16 +817,12 @@ int efx_mae_match_check_caps(struct efx_nic *efx,
 				supported_fields[MAE_FIELD_OUTER_RULE_ID],
 				MASK_ONES);
 		if (rc) {
-			netif_err(efx, drv, efx->net_dev,
-				  "No support for encap rule ID matches\n");
-			NL_SET_ERR_MSG_MOD(extack, "No support for encap rule ID matches");
+			EFX_TC_ERR_MSG(efx, extack, "No support for encap rule ID matches");
 			return rc;
 		}
 		CHECK(ENC_VNET_ID, enc_keyid);
 	} else if (mask->enc_keyid) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Match on enc_keyid requires other encap fields\n");
-		NL_SET_ERR_MSG_MOD(extack, "Match on enc_keyid requires other encap fields");
+		EFX_TC_ERR_MSG(efx, extack, "Match on enc_keyid requires other encap fields");
 		return -EINVAL;
 	}
 	CHECK_BIT(IS_IP_FRAG, ip_frag);
@@ -861,9 +852,8 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 	rc = efx_mae_match_check_cap_typ(supported_fields[MAE_FIELD_INGRESS_PORT],
 					 ingress_port_mask_type);
 	if (rc) {
-		netif_err(efx, drv, efx->net_dev,
-			  "No support for %s mask in field %s\n",
-			  mask_type_name(ingress_port_mask_type), "ingress_port");
+		efx_tc_err(efx, "No support for %s mask in field %s\n",
+			   mask_type_name(ingress_port_mask_type), "ingress_port");
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported mask type for ingress_port");
 		return rc;
 	}
@@ -887,10 +877,14 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 	CHECK(ENC_L4_SPORT, l4_sport);
 	CHECK(ENC_L4_DPORT, l4_dport);
 	UNSUPPORTED(tcp_flags);
-	if (efx_tc_match_is_encap(mask) || mask->enc_keyid) {
-		NL_SET_ERR_MSG_MOD(extack, "No support for encap matches in LHS rules");
+	if (efx_tc_match_is_encap(mask)) {
+		/* can't happen; disallowed for local rules, translated
+		 * for foreign rules.
+		 */
+		EFX_TC_ERR_MSG(efx, extack, "Unexpected encap match in LHS rule");
 		return -EOPNOTSUPP;
 	}
+	UNSUPPORTED(enc_keyid);
 	/* Can't filter on conntrack in LHS rules */
 	UNSUPPORTED_BIT(ct_state_trk);
 	UNSUPPORTED_BIT(ct_state_est);
@@ -909,8 +903,7 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 	rc = efx_mae_match_check_cap_typ(supported_fields[MAE_FIELD_ ## _mcdi],\
 					 MASK_ONES);			       \
 	if (rc) {							       \
-		netif_err(efx, drv, efx->net_dev, "No support for field %s\n", \
-			  #_mcdi);					       \
+		efx_tc_err(efx, "No support for field %s\n", #_mcdi);	       \
 		return rc;						       \
 	}								       \
 } while (0)
@@ -1568,8 +1561,12 @@ static int efx_mae_populate_lhs_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_cri
 				match->value.l4_dport);
 	MCDI_STRUCT_SET_WORD_BE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_L4_DPORT_BE_MASK,
 				match->mask.l4_dport);
-	/* No enc-keys in LHS rules.  Caps check should have caught this */
-	if (WARN_ON_ONCE(match->encap))
+	/* No enc-keys in LHS rules.  Caps check should have caught this; any
+	 * enc-keys from an fLHS should have been translated to regular keys
+	 * and any EM should be a pseudo (we're an OR so can't have a direct
+	 * EM with another OR).
+	 */
+	if (WARN_ON_ONCE(match->encap && match->encap->hw))
 		return -EOPNOTSUPP;
 	if (WARN_ON_ONCE(match->mask.enc_src_ip))
 		return -EOPNOTSUPP;

@@ -280,7 +280,8 @@ void efx_mtd_remove(struct efx_nic *efx)
 	list_for_each_entry_safe(part, next, &mtd_struct->list, node)
 		efx_mtd_remove_partition(mtd_struct, part);
 	kref_put(&mtd_struct->parts_kref, efx_mtd_free_parts);
-	kfree(efx->mtd_struct);
+
+	efx_mtd_free(efx);
 }
 
 void efx_mtd_rename(struct efx_nic *efx)

@@ -401,8 +401,7 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 	vdpa_nic->vring[idx].doorbell_offset = offset;
 
 	/* Configure filters on rxq 0 */
-	if ((idx == 0) && vdpa_nic->mac_configured &&
-	    (vdpa_nic->filter_cnt == 0)) {
+	if ((idx == 0) && (vdpa_nic->filter_cnt == 0)) {
 		rc = ef100_vdpa_filter_configure(vdpa_nic);
 		if (rc < 0) {
 			dev_err(&vdpa_nic->vdpa_dev.dev,

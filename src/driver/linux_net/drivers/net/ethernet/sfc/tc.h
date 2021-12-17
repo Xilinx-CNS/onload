@@ -12,6 +12,27 @@
 #ifndef EFX_TC_H
 #define EFX_TC_H
 
+/* Error reporting: convenience macros.  For indicating why a given filter
+ * insertion is not supported; errors in internal operation or in the
+ * hardware should be netif_err()s instead.
+ */
+/* Used when error message is constant, to ensure we get a message out even
+ * if extack isn't available.
+ */
+#define EFX_TC_ERR_MSG(efx, extack, message)	do {			\
+	if (extack)							\
+		NL_SET_ERR_MSG_MOD(extack, message);			\
+	if (efx->log_tc_errs || !extack)				\
+		netif_info(efx, drv, efx->net_dev, "%s\n", message);	\
+} while (0)
+/* Used when error message is not constant; caller should also supply a
+ * constant extack message with NL_SET_ERR_MSG_MOD().
+ */
+#define efx_tc_err(efx, fmt, args...)	do {		\
+if (efx->log_tc_errs)					\
+	netif_info(efx, drv, efx->net_dev, fmt, ##args);\
+} while (0)
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 #include <linux/mutex.h>
 #include <net/pkt_cls.h>
@@ -167,6 +188,13 @@ struct efx_tc_encap_match {
 	struct rhash_head linkage;
 	refcount_t ref;
 	u32 fw_id; /* index of this entry in firmware encap match table */
+	/* match is present in HW.
+	 * fLHS rules that fit in the OR will register a "pseudo" EM, with
+	 * this set to false, since the struct efx_tc_lhs_rule already
+	 * holds the HW OR entry.  In that case, our fw_id will be unused.
+	 * EMs with hw=true are called "direct" EMs.
+	 */
+	bool hw;
 };
 
 struct efx_tc_recirc_id {

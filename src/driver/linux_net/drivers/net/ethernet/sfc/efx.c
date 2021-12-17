@@ -329,10 +329,35 @@ void efx_get_irq_moderation(struct efx_nic *efx, unsigned int *tx_usecs,
  *
  *************************************************************************/
 
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_PRIVATE_IOCTL)
+static int efx_do_siocefx(struct net_device *net_dev, struct ifreq *ifr,
+			  struct efx_sock_ioctl __user *user_data)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	u16 efx_cmd;
+
+	if (copy_from_user(&efx_cmd, &user_data->cmd, sizeof(efx_cmd)))
+		return -EFAULT;
+	return efx_private_ioctl(efx, efx_cmd, &user_data->u);
+}
+#endif
+
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_PRIVATE_IOCTL)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SIOCDEVPRIVATE)
+static int efx_siocdevprivate(struct net_device *net_dev, struct ifreq *ifr,
+			      void __user *data, int cmd)
+{
+	if (cmd == SIOCEFX)
+		return efx_do_siocefx(net_dev, ifr, data);
+	return -EOPNOTSUPP;
+}
+#endif
+#endif
+
 /* Net device ioctl
  * Context: process, rtnl_lock() held.
  */
-int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
+static int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct mii_ioctl_data *data = if_mii(ifr);
@@ -343,17 +368,11 @@ int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 	if (cmd == SIOCGHWTSTAMP)
 		return efx_ptp_get_ts_config(efx, ifr);
 #endif
-
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_PRIVATE_IOCTL)
-	if (cmd == SIOCEFX) {
-		struct efx_sock_ioctl __user *user_data =
-			(struct efx_sock_ioctl __user *)ifr->ifr_data;
-		u16 efx_cmd;
-
-		if (copy_from_user(&efx_cmd, &user_data->cmd, sizeof(efx_cmd)))
-			return -EFAULT;
-		return efx_private_ioctl(efx, efx_cmd, &user_data->u);
-	}
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SIOCDEVPRIVATE)
+	if (cmd == SIOCEFX)
+		return efx_do_siocefx(net_dev, ifr, ifr->ifr_data);
+#endif
 #endif
 
 	/* Convert phy_id from older PRTAD/DEVAD format */
@@ -1125,7 +1144,7 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 		return rc;
 
 	/* Initialise MAC address to permanent address */
-	ether_addr_copy(efx->net_dev->dev_addr, efx->net_dev->perm_addr);
+	eth_hw_addr_set(efx->net_dev, efx->net_dev->perm_addr);
 
 	rc = efx_check_queue_size(efx, &rx_ring,
 				  EFX_RXQ_MIN_ENT, efx_max_dmaq_size(efx),
@@ -1692,6 +1711,11 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_tx_timeout		= efx_watchdog,
 	.ndo_start_xmit		= efx_hard_start_xmit,
 	.ndo_validate_addr	= eth_validate_addr,
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_PRIVATE_IOCTL)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SIOCDEVPRIVATE)
+	.ndo_siocdevprivate     = efx_siocdevprivate,
+#endif
+#endif
 	.ndo_do_ioctl		= efx_ioctl,
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_CHANGE_MTU)
 	.extended.ndo_change_mtu = efx_change_mtu,

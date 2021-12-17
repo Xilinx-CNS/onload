@@ -204,7 +204,7 @@ int efx_set_mac_address(struct net_device *net_dev, void *data)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct sockaddr *addr = data;
-	u8 *new_addr = addr->sa_data;
+	const u8 *new_addr = addr->sa_data;
 	u8 old_addr[6];
 	int rc;
 
@@ -216,12 +216,12 @@ int efx_set_mac_address(struct net_device *net_dev, void *data)
 	}
 
 	ether_addr_copy(old_addr, net_dev->dev_addr); /* save old address */
-	ether_addr_copy(net_dev->dev_addr, new_addr);
+	eth_hw_addr_set(net_dev, new_addr);
 
 	if (efx->type->set_mac_address) {
 		rc = efx->type->set_mac_address(efx);
 		if (rc) {
-			ether_addr_copy(net_dev->dev_addr, old_addr);
+			eth_hw_addr_set(net_dev, old_addr);
 			return rc;
 		}
 	}

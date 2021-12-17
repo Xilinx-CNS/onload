@@ -135,7 +135,7 @@ static int efx_ef100_rep_set_mac_address(struct net_device *net_dev, void *data)
 	struct efx_rep *efv = netdev_priv(net_dev);
 	struct efx_nic *efx = efv->parent;
 	struct sockaddr *addr = data;
-	u8 *new_addr = addr->sa_data;
+	const u8 *new_addr = addr->sa_data;
 	int rc;
 
 	if (efv->clid == CLIENT_HANDLE_NULL) {
@@ -152,7 +152,7 @@ static int efx_ef100_rep_set_mac_address(struct net_device *net_dev, void *data)
 			return rc;
 	}
 
-	ether_addr_copy(net_dev->dev_addr, new_addr);
+	eth_hw_addr_set(net_dev, new_addr);
 	return 0;
 }
 
@@ -349,7 +349,7 @@ static int efx_ef100_configure_rep(struct efx_rep *efv)
 		/* Get the assigned MAC address */
 		(void)ef100_get_mac_address(efx, net_dev->perm_addr, efv->clid,
 					    true);
-		memcpy(net_dev->dev_addr, net_dev->perm_addr, ETH_ALEN);
+		eth_hw_addr_set(net_dev, net_dev->perm_addr);
 	}
 
 	mutex_lock(&efx->tc->mutex);
@@ -402,7 +402,7 @@ static int efx_ef100_configure_remote_rep(struct efx_rep *efv,
 		/* Get the assigned MAC address */
 		(void)ef100_get_mac_address(efx, net_dev->perm_addr, efv->clid,
 					    true);
-		memcpy(net_dev->dev_addr, net_dev->perm_addr, ETH_ALEN);
+		eth_hw_addr_set(net_dev, net_dev->perm_addr);
 	}
 
 	mutex_lock(&efx->tc->mutex);

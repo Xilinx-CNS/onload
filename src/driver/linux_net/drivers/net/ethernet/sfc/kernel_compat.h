@@ -1269,6 +1269,13 @@
 #define eth_random_addr	random_ether_addr
 #endif
 
+#ifdef EFX_NEED_ETH_HW_ADDR_SET
+	static inline void eth_hw_addr_set(struct net_device *dev, const u8 *addr)
+	{
+		ether_addr_copy(dev->dev_addr, addr);
+	}
+#endif
+
 #ifdef EFX_NEED_MAC_PTON
 	#ifndef EFX_HAVE_HEX_TO_BIN
 		static inline int hex_to_bin(char ch)

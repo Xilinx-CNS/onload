@@ -299,7 +299,7 @@ int efx_ef10_vswitching_restore_vf(struct efx_nic *efx)
 			   "PF has changed my MAC to %pM\n",
 			   new_addr);
 		ether_addr_copy(perm_addr, new_addr);
-		ether_addr_copy(efx->net_dev->dev_addr, new_addr);
+		eth_hw_addr_set(efx->net_dev, new_addr);
 	}
 
 	if (!nic_data->must_probe_vswitching)
@@ -648,7 +648,7 @@ static int efx_ef10_sriov_reopen(struct efx_nic *efx)
 	return rc;
 }
 
-int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, u8 *mac)
+int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac)
 {
 	enum nic_state old_state = STATE_UNINIT;
 	struct ef10_vf *vf;
@@ -708,7 +708,7 @@ int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, u8 *mac)
 			goto restore_evb_port;
 		eth_zero_addr(vf->mac);
 		if (vf->efx)
-			eth_zero_addr(vf->efx->net_dev->dev_addr);
+			eth_hw_addr_set(vf->efx->net_dev, vf->mac);
 	}
 
 	if (!is_zero_ether_addr(mac)) {
@@ -717,7 +717,7 @@ int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, u8 *mac)
 			goto reset_nic;
 		ether_addr_copy(vf->mac, mac);
 		if (vf->efx)
-			ether_addr_copy(vf->efx->net_dev->dev_addr, mac);
+			eth_hw_addr_set(vf->efx->net_dev, mac);
 	}
 
 restore_evb_port:
@@ -989,7 +989,7 @@ int efx_ef10_sriov_get_vf_config(struct efx_nic *efx, int vf_i,
 }
 #endif
 
-int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, u8 *mac)
+int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac)
 {
 	return -EOPNOTSUPP;
 }

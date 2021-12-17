@@ -22,7 +22,6 @@
 #include "efx_common.h"
 
 /* netdevice_ops */
-int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd);
 int efx_net_open(struct net_device *net_dev);
 int efx_net_stop(struct net_device *net_dev);
 int efx_change_mtu(struct net_device *net_dev, int new_mtu);

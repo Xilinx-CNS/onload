@@ -436,33 +436,41 @@ err:
 	return NETDEV_TX_OK;
 }
 
-static int ef100_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
+#if defined(EFX_NOT_UPSTREAM)
+static int ef100_do_siocefx(struct net_device *net_dev, struct ifreq *ifr,
+			    void __user *data)
 {
-#ifdef EFX_NOT_UPSTREAM
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-#endif
-	int rc = -EOPNOTSUPP;
+	struct efx_sock_ioctl __user *user_data = data;
+	u16 efx_cmd;
+	int rc;
 
-#ifdef EFX_NOT_UPSTREAM
-	if (cmd == SIOCEFX) {
-		struct efx_sock_ioctl __user *user_data =
-			(struct efx_sock_ioctl __user *) ifr->ifr_data;
-		u16 efx_cmd;
-
-		if (copy_from_user(&efx_cmd, &user_data->cmd, sizeof(efx_cmd)))
-			return -EFAULT;
-		rc = efx_private_ioctl_common(efx, efx_cmd, &user_data->u);
-		if (rc == -EOPNOTSUPP)
-			netif_err(efx, drv, efx->net_dev,
-				  "unknown private ioctl cmd %x\n", efx_cmd);
-	}
-#else
-	net_dev = net_dev;
-	ifr = ifr;
-	cmd = cmd;
-#endif
+	if (copy_from_user(&efx_cmd, &user_data->cmd, sizeof(efx_cmd)))
+		return -EFAULT;
+	rc = efx_private_ioctl_common(efx, efx_cmd, &user_data->u);
+	if (rc == -EOPNOTSUPP)
+		netif_err(efx, drv, efx->net_dev,
+			  "unknown private ioctl cmd %x\n", efx_cmd);
 	return rc;
 }
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SIOCDEVPRIVATE)
+static int ef100_siocdevprivate(struct net_device *net_dev, struct ifreq *ifr,
+				void __user *data, int cmd)
+{
+	if (cmd == SIOCEFX)
+		return ef100_do_siocefx(net_dev, ifr, data);
+	return -EOPNOTSUPP;
+}
+#else
+static int ef100_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
+{
+	if (cmd == SIOCEFX)
+		return ef100_do_siocefx(net_dev, ifr, ifr->ifr_data);
+	return -EOPNOTSUPP;
+}
+#endif
+#endif
 
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
 #ifdef EFX_HAVE_NDO_UDP_TUNNEL_ADD
@@ -574,7 +582,13 @@ static const struct net_device_ops ef100_netdev_ops = {
 	.ndo_change_mtu         = efx_change_mtu,
 #endif
 	.ndo_validate_addr      = eth_validate_addr,
+#if defined(EFX_NOT_UPSTREAM)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SIOCDEVPRIVATE)
+	.ndo_siocdevprivate     = ef100_siocdevprivate,
+#else
 	.ndo_do_ioctl           = ef100_ioctl,
+#endif
+#endif
 	.ndo_set_mac_address    = efx_set_mac_address,
 #if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_NDO_SET_MULTICAST_LIST)
 	.ndo_set_rx_mode        = efx_set_rx_mode, /* Lookout */
@@ -959,8 +973,8 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	if (rc)
 		return rc;
 	/* Assign MAC address */
-	memcpy(net_dev->dev_addr, net_dev->perm_addr, ETH_ALEN);
-	memcpy(nic_data->port_id, net_dev->perm_addr, ETH_ALEN);
+	eth_hw_addr_set(net_dev, net_dev->perm_addr);
+	ether_addr_copy(nic_data->port_id, net_dev->perm_addr);
 
 	if (!efx->type->is_vf) {
 		rc = ef100_probe_netdev_pf(efx);
