@@ -96,7 +96,10 @@ struct efhw_nic_efct {
   struct xlnx_efct_client *client;
   struct efhw_nic *nic;
   struct efct_hw_filter driver_filters[MAX_EFCT_FILTERS];
+#ifdef __KERNEL__
+  /* ZF emu includes this file from UL */
   struct mutex driver_filters_mtx;
+#endif
 };
 
 #if CI_HAVE_EFCT_AUX
