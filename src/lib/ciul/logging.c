@@ -14,7 +14,7 @@
   
 /*! \cidoxg_lib_citools */
 #include "ef_vi_internal.h"
-#include <stdarg.h>
+#include "ci/tools/sysdep.h"
 
 
 /* ****************************************************************************

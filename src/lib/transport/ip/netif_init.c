@@ -18,7 +18,7 @@
 #include <onload/version.h>
 #include <etherfabric/internal/internal.h>
 #include <etherfabric/internal/efct_uk_api.h>
-#include <stddef.h>
+#include <ci/tools/sysdep.h>
 #include <onload/tcp-ceph.h>
 
 #ifndef __KERNEL__

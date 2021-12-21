@@ -70,8 +70,10 @@
 
 #ifdef EFRM_HAS_LINUX_STDARG_H
 # include <linux/stdarg.h>
+# include <linux/stddef.h>
 #else
 # include <stdarg.h>
+# include <stddef.h>
 #endif
 
 

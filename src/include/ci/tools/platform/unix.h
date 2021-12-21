@@ -25,6 +25,7 @@
 #include <netinet/in.h>
 
 #include <stdarg.h>
+#include <stddef.h>
 #include <pthread.h>
 #include <assert.h>
 #include <stdlib.h>

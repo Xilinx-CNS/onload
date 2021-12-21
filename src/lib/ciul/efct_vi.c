@@ -16,7 +16,6 @@
 #include <ci/efhw/common.h>
 #include <ci/tools/byteorder.h>
 
-#include <stdbool.h>
 
 struct efct_rx_descriptor
 {

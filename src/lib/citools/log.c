@@ -14,7 +14,6 @@
 /*! \cidoxg_lib_citools */
 
 #include "citools_internal.h"
-#include <stdarg.h>
 
 
 #ifndef  CI_LOG_PREFIX_DEFAULT 
