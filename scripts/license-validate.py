@@ -1,13 +1,19 @@
-#!/usr/bin/python2
+#!/usr/bin/python3
 # SPDX-License-Identifier: Solarflare-Binary
 # X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc.
 from __future__ import print_function
-import sys, os, os.path, re, argparse, urlparse, collections, fnmatch
+import sys, os, os.path, re, argparse, collections, fnmatch
+
+# Python 2 backwards compatibility
+if sys.version_info < (3,0):
+    from urlparse import urlparse
+else:
+    from urllib.parse import urlparse
 
 
 def is_binary_header(header):
-    return (header.startswith('!<arch>./       ')
-            or header.startswith('\x7fELF'))
+    return (header.startswith(b'!<arch>./       ')
+            or header.startswith(b'\x7fELF'))
 
 
 _error_count = 0
@@ -46,7 +52,7 @@ def is_known_licence(value):
 
 def is_url(value):
     try:
-        urlparse.urlparse(value)
+        urlparse(value)
         return True
     except ValueError:
         return False
@@ -73,7 +79,7 @@ def check_tagset(path, tags):
         counts[k] += 1
         if not kt.validator(v):
             err(path, 0, '', "Malformed SPDX value %s: '%s'" % (k, v))
-    for k,t in _known_tags.iteritems():
+    for k,t in _known_tags.items():
         if not (t.min <= counts[k] <= t.max):
             if not counts[k]:
                 err(path, 0, '', "Missing required SPDX tag '%s'" % k)
@@ -130,6 +136,7 @@ def validate(path):
     maybe_continuation = False
     linenum = 0
     for line in f:
+        line = line.decode(errors='ignore')
         linenum += 1
         m = _strict_re.match(line)
         if m:

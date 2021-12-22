@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0
 # X-SPDX-Copyright-Text: (c) Copyright 2012-2019 Xilinx, Inc.
 
@@ -39,13 +39,8 @@ def GenerateIptables():
 		cmdline.append( '-v' )
 
 	p = subprocess.Popen( cmdline, stdout=subprocess.PIPE )
-	while p.returncode is not None:
-		# While it's alive, keep reading
-		for line in p.stdout:
-			yield data
-	# And grab any data that it spat out before it died that we didn't read yet
 	for line in p.stdout:
-		yield line
+		yield line.decode()
 
 def StripEntry(x):
 	''' Just strip whitespace from each line of x '''
@@ -163,7 +158,7 @@ def GenerateBits( line ):
 		rval['rule'] = [ bits[6] ]
 
 	if len(bits) > 7:
-		for i in xrange( 7, len(bits) ):
+		for i in range( 7, len(bits) ):
 			rval['rule'].append( bits[i] )
 	
 	rval['action'] 		= bits[0]
@@ -298,11 +293,6 @@ def SysFsAction( action ):
 
 def GenerateInterfaces():
 	p = subprocess.Popen( ['ls', '/proc/sys/net/ipv4/conf/'], stdout=subprocess.PIPE )
-	while p.returncode is not None:
-		# While it's alive, keep reading
-		for line in p.stdout:
-			yield data
-	# And grab any data that it spat out before it died that we didn't read yet
 	for line in p.stdout:
 		yield line
 
@@ -393,7 +383,7 @@ def PrintInstalledRules(filename=None):
 			rules = fp.read()
 			fp.close()
 		except IOError:
-			print "Cannot find the file", filename
+			print("Cannot find the file", filename)
 			sys.exit(1)
 		print(rules)
 
@@ -454,7 +444,7 @@ def ParseCommandLineOptions():
 	parser.add_option("--use-extended", action="store_true", dest="use_verbose_iptables", default=False,
 				help="Use extended IPtables (-L -n -v, rather than just -L -n) input, which includes which interface each rule is applied to.  Disabled by default, as the format may vary." )
 	parser.add_option("--treat-as-outgoing", action="store_true", dest="treat_as_outgoing", default=False,
-				help="Treat the chain as an OUTPUT chain, and so treat its dest rules as remote hosts.\Note: Onload can ONLY block incoming packets; but this is often suffcieint to prevent the connection." )
+				help="Treat the chain as an OUTPUT chain, and so treat its dest rules as remote hosts. Note: Onload can ONLY block incoming packets; but this is often suffcieint to prevent the connection." )
 	(options, args) = parser.parse_args()
 	unparsable_is_fatal = options.unparsable_is_fatal and not options.verbose
 	use_verbose_iptables = options.use_verbose_iptables

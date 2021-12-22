@@ -115,7 +115,7 @@ ExclusiveArch	: i386 i586 i686 x86_64 ppc64
 BuildRequires	: gawk gcc sed make bash libpcap libpcap-devel automake libtool autoconf libcap-devel
 # The glibc, python-devel, and libcap packages we need depend on distro and platform
 %if %{redhat}
-BuildRequires	: glibc-common python2-devel libcap
+BuildRequires	: glibc-common python3-devel libcap
 %else
 BuildRequires	: glibc-devel glibc python-devel libcap2
 %ifarch x86_64

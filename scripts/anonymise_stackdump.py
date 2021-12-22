@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 #
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2015-2020 Xilinx, Inc.

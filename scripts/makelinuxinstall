@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 #
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2009-2020 Xilinx, Inc.
@@ -9,11 +9,6 @@
 # Translated from an earlier bash version of the same script
 #
 # David Russell, July 2010
-
-
-# THIS SCRIPT MUST RUN ON PYTHON 2.2 - 2.6
-#
-# Be careful with imports and syntax
 
 import os, sys, optparse, shutil
 
@@ -86,7 +81,7 @@ def choose_files(onload):
         other = onload_files
     else:
         other = kernel_files
-    for tree,files in (common_files.items() + other.items()):
+    for tree,files in (list(common_files.items()) + list(other.items())):
         for f in files: yield tree,f
 
 def parse_args():
@@ -120,11 +115,11 @@ def parse_args():
         else:
             options.target_dir = 'kernel_install_package'
         if not options.ultree:
-            print "ERROR: -u/--ultree is required\n"
+            print("ERROR: -u/--ultree is required\n")
             parser.print_help()
             sys.exit(1)
         if (not options.onload) and (not options.ktree):
-            print "ERROR: -k/--ktree is required for kernel packages\n"
+            print("ERROR: -k/--ktree is required for kernel packages\n")
             parser.print_help()
             sys.exit(1)
     return options
@@ -134,10 +129,10 @@ def main(onload, ktree, ultree, target_dir=None, allow_missing=None,
          print_kernel_build_dirs=False):
     if print_ul_build_dirs:
         for directory in ul_build_dirs:
-            print directory
+            print(directory)
     if print_kernel_build_dirs:
         for directory in kernel_build_dirs:
-            print directory
+            print(directory)
     if print_ul_build_dirs or print_kernel_build_dirs:
         sys.exit(0)
 
@@ -145,13 +140,13 @@ def main(onload, ktree, ultree, target_dir=None, allow_missing=None,
         allow_missing = []
     for path in [ktree, ultree, ultree32]:
         if path and not os.path.isdir(path):
-            print "ERROR: Cannot find",path
+            print("ERROR: Cannot find",path)
             sys.exit(2)
 
     if os.path.isdir(target_dir):
         shutil.rmtree(target_dir)
 
-    print "TARGET=" + target_dir
+    print("TARGET=" + target_dir)
 
     for tree,f in choose_files(onload):
         if tree == 'ktree':
@@ -168,20 +163,20 @@ def main(onload, ktree, ultree, target_dir=None, allow_missing=None,
             destdir = os.path.join(target_dir, subdir)
             if not os.path.isfile(source):
                 if os.path.basename(source) in allow_missing:
-                    print "WARNING: Cannot find", source
+                    print("WARNING: Cannot find", source)
                     continue
                 else:
-                    print "ERROR: Cannot find",source
+                    print("ERROR: Cannot find",source)
                     sys.exit(3)
-            print "Copy '%s' to '$TARGET/%s'" % (source, subdir)
+            print("Copy '%s' to '$TARGET/%s'" % (source, subdir))
             if not os.path.isdir(destdir):
                 os.makedirs(destdir)
             if os.path.islink(source):
                 dest = os.path.realpath(source)
-                print "treating '%s' as a link to '%s'"%(source, dest)
+                print("treating '%s' as a link to '%s'"%(source, dest))
                 source = dest
             if os.system("cp '%s' '%s'" % (source, destdir)) != 0:
-                print "ERROR: Failed to copy",source,"to",destdir
+                print("ERROR: Failed to copy",source,"to",destdir)
                 sys.exit(4)
 
 if __name__ == '__main__':

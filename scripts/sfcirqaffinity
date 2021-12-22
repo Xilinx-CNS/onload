@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0
 # X-SPDX-Copyright-Text: (c) Copyright 2010-2019 Xilinx, Inc.
 
@@ -18,7 +18,7 @@ options = None
 
 def top_and_tail(x, pre="", post=""):
     if type(x) is list:
-        return map(lambda a: pre + str(a) + post, x)
+        return [pre + str(a) + post for a in x]
     else:
         return pre + str(x) + post
 

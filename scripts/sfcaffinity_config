@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0
 # X-SPDX-Copyright-Text: (c) Copyright 2009-2020 Xilinx, Inc.
 
@@ -132,7 +132,7 @@ class EthInterface(object):
 
 def top_and_tail(x, pre="", post=""):
     if type(x) is list:
-        return map(lambda a: pre + str(a) + post, x)
+        return [pre + str(a) + post for a in x]
     else:
         return pre + str(x) + post
 
@@ -185,7 +185,8 @@ def fail(x, exit_code=1):
 
 
 def isint(x):
-    return type(x) is int or type(x) is long
+    # Python 2 backwards compatibility
+    return type(x) is int or (sys.version_info < (3,0) and type(x) is long)
 
 
 def do_system(command, loglevel=LL_SYSTEM):
@@ -559,19 +560,6 @@ def interface_show(ethx):
         out("%s not registered with sfc_resource" % ethx)
 
 
-def my_min(seq, key=None):
-    # Yuk -- older python versions don't support "key" arg to min(), so we
-    # need our own implementation for the time being.
-    if key is None:
-        key = lambda x: x
-    min_s = seq[0]
-    if len(seq) > 1:
-        for s in seq[1:]:
-            if cmp(key(s), key(min_s)) < 0:
-                min_s = s
-    return min_s
-
-
 def generate_core_to_rxq_map(topology, rxq_to_core_id):
     """Generate a mapping from core_id to rxq.  If core has its own rxq,
     use it.  Otherwise map to an rxq on a nearby core.  If there are
@@ -596,7 +584,7 @@ def generate_core_to_rxq_map(topology, rxq_to_core_id):
             if not cwq:
                 continue
             # Of those, find the core with the fewest other cores mapped on.
-            core = my_min(cwq, key=(lambda c: c.n_mapped))
+            core = min(cwq, key=(lambda c: c.n_mapped))
             core.n_mapped += 1
             # Which rxq?  Pick the first.  (Ultimately it would be better
             # to spread evenly over them if there are multiple).
@@ -627,7 +615,7 @@ def cores_spread_over(topology, core_groups):
         core_groups = core_groups[1:] + [g]
         g_cores = [topology.id2core[core_id] for core_id in g.core_ids_left]
         if g_cores:
-            core_w_fewest_irqs = my_min(g_cores, key=(lambda c: c.n_irqs))
+            core_w_fewest_irqs = min(g_cores, key=(lambda c: c.n_irqs))
             g.core_ids_left.discard(core_w_fewest_irqs.id)
             core_ids.append(core_w_fewest_irqs.id)
     return core_ids
