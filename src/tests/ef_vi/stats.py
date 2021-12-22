@@ -1,9 +1,12 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2016-2019 Xilinx, Inc.
 ######################################################################
 # Report stats on dataset.
 ######################################################################
+
+from __future__ import print_function
+import sys
 
 def data_generator(lines, delimiter=None, field_no=0, pass_comments=False,
                    comment_prefix='#'):
@@ -14,7 +17,7 @@ def data_generator(lines, delimiter=None, field_no=0, pass_comments=False,
             continue
         if l[0] == comment_prefix:
             if pass_comments:
-                print l
+                print(l)
             continue
         fields = l.split(delimiter)
         yield fields[field_no]
@@ -82,11 +85,7 @@ def get_mode(b, dataset, val_t):
         if v not in d:
             d[v] = 0
         d[v] += 1
-    tmp = d.items()
-    if tmp:
-        tmp.sort(cmp=lambda a, b: cmp(a[1], b[1]))
-        b.mode = tmp[-1][0]
-        b.mode_n = tmp[-1][1]
+    b.mode, b.mode_n = max(d.items(), key=lambda a: a[1])
 
 
 def main():
@@ -116,18 +115,19 @@ def main():
     if opts.use_float:
         val_t = float
     elif opts.use_int:
-        val_t = long
+        # Python 2 backwards compatibility
+        val_t = int if sys.version_info > (3,0) else long
     elif opts.big:
         sys.stderr.write("ERROR: Must specify --int or --float with --big\n")
         sys.exit(1)
     else:
         # Work out whether we need floating pt or not.
         dataset = list(dataset)
-        try:
-            (d for d in dataset if '.' in d).next()
+        if any(d for d in dataset if '.' in d):
             val_t = float
-        except StopIteration:
-            val_t = long
+        else:
+            # Python 2 backwards compatibility
+            val_t = int if sys.version_info > (3,0) else long
 
     processors = []
     if not args:
@@ -169,18 +169,16 @@ def main():
     if args:
         keys = args
     else:
-        keys = s.__dict__.keys()
-        keys.sort()
+        keys = sorted(s.__dict__.keys())
     if not args:
         for k in keys:
-            print k, getattr(s, k)
+            print(k, getattr(s, k))
     else:
         for k in keys:
-            print getattr(s, k),
-        print
+            print(getattr(s, k), end=' ')
+        print()
 
 
 if __name__ == '__main__':
     main()
-    import sys
     sys.exit(0)

@@ -116,8 +116,13 @@ def getdict(struct):
     result = {}
     for field, _ in struct._fields_:
          value = getattr(struct, field)
+
+         primitive_types = {int, float, bool}
+         # Python 2 backwards compatibility
+         if sys.version_info < (3,0):
+             primitive_types.add(long)
          # if the type is not a primitive and it evaluates to False ...
-         if (type(value) not in [int, long, float, bool]) and not bool(value):
+         if (type(value) not in primitive_types) and not bool(value):
              # it's a null pointer
              value = None
          elif hasattr(value, "_length_") and hasattr(value, "_type_"):

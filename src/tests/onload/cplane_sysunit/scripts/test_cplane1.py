@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2017-2020 Xilinx, Inc.
 
+from __future__ import print_function
 import pytest
 import sys, os, time, struct, socket, copy, platform
 import random
@@ -12,7 +13,6 @@ from random import randint
 from pyroute2 import NetNS, netlink, IPRoute, NetlinkError
 from pyroute2.netlink.rtnl.ifaddrmsg import IFA_F_NODAD
 from cplane import *
-
 
 def ip2v4(ip):
     if CI_CFG_IPV6:
@@ -114,7 +114,7 @@ def bond_set_mode(cpserver, bond_name, bond_mode):
 
 def cpsystem(cpserver, cmd, ignore_status=False):
     cmd = ' '.join([cpserver.getCmdPrefix(),cmd])
-    print >> sys.stderr, datetime.now().strftime('%H:%M:%S.%f'), cmd
+    print(datetime.now().strftime('%H:%M:%S.%f'), cmd, file=sys.stderr)
     status = os.system(cmd)
     if not ignore_status and status != 0:
         raise Exception('Execution of %s failed with code %d'%(cmd, status))
@@ -233,11 +233,11 @@ def wait_for_hwports(cp, v, k, attempts=10, expected_hwports=None, netns=None):
         time.sleep(0.1)
 
     if d['hwports'] != expected_hwports:
-        print "hwports = %d, expected %d" % (d['hwports'], expected_hwports)
+        print("hwports = %d, expected %d" % (d['hwports'], expected_hwports))
 
     if delayed:
         elapsed = time.time() - t0
-        print "Spun for %fs while waiting for hwports update" % elapsed
+        print("Spun for %fs while waiting for hwports update" % elapsed)
         assert elapsed < 1
 
     return d
@@ -400,7 +400,7 @@ def fake_ip_subnet(v6, part1, part2=1, suffix=8):
 # inadvertantly running in the wrong environment.
 @cpdecorate()
 def test_ensure_running_in_expected_environment(cpserver,cp,netns):
-    hwports = range(2)
+    hwports = list(range(2))
     bond_name, _ = prep_bond(cpserver,cp,netns,hwports,mode=1)
 
     envvar = 'CPLANE_SYS_ASSERT_NETLINK_BOND'
@@ -506,7 +506,7 @@ def prep_bond(cpserver,cp,netns,hwports,v6=False,mode=1,
 @v4andv6
 @cpdecorate()
 def test_bond(cpserver,cp,netns,v6):
-    hwports = range(2)
+    hwports = list(range(2))
     bond_name, slavenames = prep_bond(cpserver,cp,netns,hwports,v6,mode=1)
     mac = mac_addr(netns, ifname=bond_name)
 
@@ -527,7 +527,7 @@ def test_bond(cpserver,cp,netns,v6):
 
 @cpdecorate()
 def do_test_accelerated_bond(cpserver,cp,netns,mode,v6):
-    hwports = range(2)
+    hwports = list(range(2))
     bond_name, slavenames = prep_bond(cpserver, cp, netns, hwports,
                                       v6, mode=mode)
 
@@ -552,7 +552,7 @@ def test_accelerated_bond(mode, v6):
 
 @cpdecorate()
 def do_test_alien_bond(cpserver,cp,netns,mode,v6,include_non_sf_intf=False):
-    hwports = range(2)
+    hwports = list(range(2))
     bond_name, slavenames = prep_bond(cpserver, cp, netns, hwports, v6,
                                       mode=mode,
                                       include_non_sf_intf=include_non_sf_intf)
@@ -595,7 +595,7 @@ def compare_routing_tables(cp, netns, v6, applied_routes, requery_always,
 
     # Firstly, we issue all requests asynchronously
     # for each route 3 requests are issued
-    for r, attribs in applied_routes.iteritems():
+    for r, attribs in applied_routes.items():
         gw, vers = attribs
         ips = gen_ips2query(r)
         # issue those requests, store version information
@@ -616,7 +616,7 @@ def compare_routing_tables(cp, netns, v6, applied_routes, requery_always,
     while True:
         disparities = []
         oo_index = 0
-        for r, attribs in applied_routes.iteritems():
+        for r, attribs in applied_routes.items():
             gw, vers = attribs
             ips = gen_ips2query(r)
             for ip, ver in zip(ips, list(vers)):
@@ -714,7 +714,7 @@ def do_test_route(v6, requery_always=False, iteration_count=64,
         gw = gen_gw(rand(255))
         # give it some gateway
         spec = dict(dst='%s/%d'%r, gateway=ip2str(gw))
-        print 'route add %s'%spec
+        print('route add %s'%spec)
         netns.route('add', **spec)
 
         # give reasonable timeout to cp_server
@@ -733,7 +733,7 @@ def init_seed():
         seed = int(os.environ["UNIT_TEST_SEED"])
     except KeyError:
         seed = randint(0,1000000000)
-    print 'SEED: ', seed
+    print('SEED: ', seed)
     random.seed(seed)
 
 
@@ -768,7 +768,7 @@ def do_test_nic_order(myns, encap):
          * for fresh cp_server instance
     '''
 
-    slave_hwports=range(3)
+    slave_hwports=list(range(3))
 
     cpserver,cp,netns = myns.cpserver, myns.cp, myns.netns
 
@@ -799,9 +799,9 @@ def do_test_nic_order(myns, encap):
     k = cp_fwd_key(any_ip4, IP('192.168.0.1'))
 
     for i in range(2):
-        print "i=%d"%i
+        print("i=%d"%i)
         for active in slave_hwports + list(reversed(slave_hwports)):
-            print"active=%d"%active
+            print("active=%d"%active)
             ifname='bond2'
             bond_set_active(cpserver, ifname, 's%dmv'%active)
             expected_hwports = 1 << active
@@ -852,9 +852,9 @@ def do_test_multi_ns(main_ns, myns, encap):
     main_ns.netns.link('set', index=ix,
                        net_ns_fd=myns.cpserver.getNetNsPath())
 
-    print 'ix=',ix,'iface=',vifname
+    print('ix=',ix,'iface=',vifname)
     for l in myns.netns.get_links():
-        print l
+        print(l)
     addr_add(myns.netns, '192.168.0.2', index=ix, mask=24)
     myns.netns.link('set', index=ix, state='up')
 
@@ -864,7 +864,7 @@ def do_test_multi_ns(main_ns, myns, encap):
     assert data
     d = getdict(data)
     result = CICP_ROUTE_TYPE.NORMAL
-    print '192.168.0.1', d
+    print('192.168.0.1', d)
     check_route(d, result, mac_addr(myns.netns, index=ix), 1)
 
 
@@ -876,7 +876,7 @@ def test_multi_ns(encap):
 @cpdecorate(tag='main_ns')
 @cpdecorate(tag='myns', parent_tag='main_ns')
 def do_test_multi_ns_bond(main_ns, myns, encap):
-    hwports = range(3)
+    hwports = list(range(3))
     prep_bond(main_ns.cpserver, main_ns.cp, main_ns.netns,
               hwports=hwports, address=None)
 
@@ -1067,7 +1067,7 @@ def do_combination(cpserver,cp,netns,combination):
 
     # verify route is ALIEN and through
     d = getdict(data)
-    print d
+    print(d)
     assert ip2str(d['base']['next_hop']) == '192.168.0.1'
     assert (d['base']['ifindex'] == 0) == (route_type == ALIEN)
 
@@ -1227,7 +1227,7 @@ def test_multipath(v6, n):
 @pytest.mark.parametrize("v6", [False])
 @pytest.mark.parametrize("n", [2, 3, 5, hwport_max])
 def test_multipath_uneven(v6, n):
-    do_multipath(v6=v6, n=n, weights=range(1, 1 + n))
+    do_multipath(v6=v6, n=n, weights=list(range(1, 1 + n)))
 
 
 @cpdecorate()

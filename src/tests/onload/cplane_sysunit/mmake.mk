@@ -205,6 +205,6 @@ test: $(TARGETS)
 	chmod a+rw $(PYTEST_JUNIT_XML_FILE) ; \
 	sudo /usr/bin/timeout $(HARNESS_TIME_OUT) \
 	  env $(UNIT_TEST_ENV_VARS) \
-	  python2 -B $(shell which py.test) -p no:cacheprovider \
+	  python3 -B $(shell which py.test) -p no:cacheprovider \
 	    $(PYTEST_JUNIT_XML_OPT) $(PYTEST_SELECT_OPT); \
 	sudo pkill -s 0 shim_cp_server || true

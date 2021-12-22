@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 #
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2014-2020 Xilinx, Inc.
@@ -19,10 +19,16 @@ and verify that the ORM values are between the other two readings
 """
 
 import os, sys, socket, json, time, subprocess, re
-from urllib2 import Request, urlopen, URLError
+
+# Python 2 backwards compatibility
+if sys.version_info < (3,0):
+    from urllib2 import Request, urlopen, URLError
+else:
+    from urllib.request import Request, urlopen
+    from urllib.error import URLError
 
 def usage():
-    print 'Usage: %s [http] host:port' % sys.argv[0]
+    print('Usage: %s [http] host:port' % sys.argv[0])
     sys.exit(1)
 
 
@@ -77,11 +83,11 @@ def orm_get_http(host, port):
             return json.loads(response)
     except URLError as e:
         if hasattr(e, 'reason'):
-            print 'We failed to reach a server.'
-            print 'Reason: ', e.reason
+            print('We failed to reach a server.')
+            print('Reason: ', e.reason)
         elif hasattr(e, 'code'):
-            print 'The server couldn\'t fulfill the request.'
-            print 'Error code: ', e.code
+            print('The server couldn\'t fulfill the request.')
+            print('Error code: ', e.code)
     return ''
 
 ############################################################
@@ -108,7 +114,7 @@ def osd_stats_get(output):
 
 
 def orm_stats_get(output):
-    return dict([(int(s.keys()[0]), s.values()[0]['stats'])
+    return dict([(int(next(iter(s.keys()))), next(iter(s.values()))['stats'])
                  for s in output['json']])
 
 
@@ -121,11 +127,11 @@ def netif_stats_cmp(osd_stats, orm_stats, osd_stats2):
             if not my_cmp(int(osd_stats[k]),
                           int(orm_stats[k]),
                           int(osd_stats2[k])):
-                print 'Fail: {0}=osd({1}),orm({2}),osd2({3})'.format(
-                    k, osd_stats[k], orm_stats[k], osd_stats2[k])
+                print('Fail: {0}=osd({1}),orm({2}),osd2({3})'.format(
+                    k, osd_stats[k], orm_stats[k], osd_stats2[k]))
                 sys.exit(1)
         except KeyError:
-            print 'Fail: Key {0} not found'.format(k)
+            print('Fail: Key {0} not found'.format(k))
             sys.exit(1)
 
 ############################################################
@@ -148,7 +154,7 @@ def osd_opts_get(output):
 
 
 def orm_opts_get(output):
-    return dict([(int(s.keys()[0]), s.values()[0]['opts'])
+    return dict([(int(next(iter(s.keys()))), next(iter(s.values()))['opts'])
                  for s in output['json']])
 
 
@@ -165,11 +171,11 @@ def netif_opts_cmp(osd_opts, orm_opts, osd_opts2):
                 c2 = set(c2.split())
                 c3 = set(c3.split())
             if not exact_cmp(c1, c2, c3):
-                print 'Fail: {0}=osd({1}),orm({2}),osd2({3})'.format(
-                    k, c1, c2, c3)
+                print('Fail: {0}=osd({1}),orm({2}),osd2({3})'.format(
+                    k, c1, c2, c3))
                 sys.exit(1)
         except KeyError:
-            print 'Fail: Key {0} not found'.format(k)
+            print('Fail: Key {0} not found'.format(k))
             sys.exit(1)
 
 ############################################################
@@ -296,9 +302,9 @@ def orm_socket_state_get(orm_output, socket_type):
     ret = {}
     for stack in orm_output['json']:
         assert len(stack.keys()) == 1
-        stack_id = int(stack.keys()[0])
+        stack_id = int(next(iter(stack.keys())))
         ret[stack_id] = {}
-        stack_stats = stack.values()[0]
+        stack_stats = next(iter(stack.values()))
         assert type(stack_stats) == dict
         for section in ['stats', 'more_stats', 'tcp_stats', 'tcp_ext_stats',
                         'opts']:
@@ -388,7 +394,7 @@ def osd_socket_state_get(output, socket_type):
                                 struct_key][stat_key] = int(m.group(i + 1))
                         matched = True
                 if not matched:
-                    print 'warning, no matches for regexp ',pattern
+                    print('warning, no matches for regexp ',pattern)
     return ret
 
 
@@ -411,7 +417,7 @@ def socket_state_cmp(osd_stats, orm_stats, osd_stats2, socket_type):
                 orm_stat_val = orm_stats_val[stat_key]
                 osd_stat_val2 = osd_stats_val2[stat_key]
                 if not my_cmp(osd_stat_val, orm_stat_val, osd_stat_val2):
-                    print ('Fail: {0}=stackdump({1}),remote_monitor({2}),'
+                    print('Fail: {0}=stackdump({1}),remote_monitor({2}),'
                            'stackdump2({3})'.format(
                                stat_key, osd_stat_val, orm_stat_val,
                                osd_stat_val2))
@@ -449,14 +455,14 @@ def main():
     orm_opts  = orm_opts_get(orm_output)
     osd_opts2 = osd_opts_get(osd_output2)
 
-    print 'Stacks: ' + ' '.join(map(str, osd_stats.keys()))
+    print('Stacks: ' + ' '.join(map(str, osd_stats.keys())))
 
     # Check all outputs report the same stack ids
     if not (sorted(osd_stats.keys()) == sorted(orm_stats.keys())
             == sorted(osd_stats2.keys())):
-        print ('Fail: osd_stacks({0}) != orm_stacks({1}) != '
+        print('Fail: osd_stacks({0}) != orm_stacks({1}) != '
                'osd_stacks2({2})'.format(
-                   osd_stats.keys(), orm_stats.keys(), osd_stats2.keys()))
+                   list(osd_stats.keys()), list(orm_stats.keys()), list(osd_stats2.keys())))
         sys.exit(1)
 
     for stack_id in orm_stats.keys():
@@ -471,7 +477,7 @@ def main():
     orm_udp_state = orm_socket_state_get(orm_output, 'udp')
     osd_udp_state2 = osd_socket_state_get(osd_output2, 'udp')
     for stack_id in orm_stats.keys():
-        print '  UDP: ' + ' '.join(osd_udp_state[stack_id].keys())
+        print('  UDP: ' + ' '.join(osd_udp_state[stack_id].keys()))
         socket_state_cmp(osd_udp_state[stack_id],
                          orm_udp_state[stack_id],
                          osd_udp_state2[stack_id],
@@ -481,7 +487,7 @@ def main():
     orm_tcp_state = orm_socket_state_get(orm_output, 'tcp')
     osd_tcp_state2 = osd_socket_state_get(osd_output2, 'tcp')
     for stack_id in orm_stats.keys():
-        print '  TCP: ' + ' '.join(osd_tcp_state[stack_id].keys())
+        print('  TCP: ' + ' '.join(osd_tcp_state[stack_id].keys()))
         socket_state_cmp(osd_tcp_state[stack_id],
                          orm_tcp_state[stack_id],
                          osd_tcp_state2[stack_id],
@@ -491,7 +497,7 @@ def main():
     orm_listen_state = orm_socket_state_get(orm_output, 'tcp_listen')
     osd_listen_state2 = osd_socket_state_get(osd_output2, 'tcp_listen')
     for stack_id in orm_stats.keys():
-        print '  LISTEN: ' + ' '.join(osd_listen_state[stack_id].keys())
+        print('  LISTEN: ' + ' '.join(osd_listen_state[stack_id].keys()))
         socket_state_cmp(osd_listen_state[stack_id],
                          orm_listen_state[stack_id],
                          osd_listen_state2[stack_id],
