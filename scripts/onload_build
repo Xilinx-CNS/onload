@@ -26,6 +26,8 @@ usage() {
   err "  --debug                     - Build debug binaries"
   err "  --strict                    - Compiler warnings are errors"
   err "  --require-optional-targets  - Require optional targets"
+  err "  --cc <path>                 - Use non-default compiler for driver"\
+                                       "build"
   if is_ppc ; then
   err "  --ppc-at <path>             - Path to IBM Advanced Toolchain install"
   fi
@@ -58,6 +60,7 @@ keepbuild=false
 ppc_at=
 NDEBUG=1; export NDEBUG
 build_profile=
+use_cc=
 parallel=-j$(nproc 2> /dev/null || echo 4)
 
 while [ $# -gt 0 ]; do
@@ -76,6 +79,7 @@ while [ $# -gt 0 ]; do
   --ppc-at)     is_ppc || usage; ppc_at="$2"; shift;;
   --build-profile)   [ $# -gt 1 ] || usage; build_profile="$2"; shift;;
   --build-profile=*) build_profile=${1#--build-profile=};;
+  --cc)  [ $# -gt 1 ] || usage; use_cc="CC=$2"; export use_cc; shift;;
   -*)           usage;;
   *)            break;;
   esac
@@ -137,7 +141,7 @@ if $all || $kernel; then
     try cp -ad "$TOP/prebuilt/${driver_prebuilt}"/* "$d"
   fi
 
-  make $parallel -C "$d" ONLOAD_ONLY=1 $nodeps ||
+  make $parallel -C "$d" ONLOAD_ONLY=1 $nodeps $use_cc ||
     fail "ERROR: Failed to build driver components."
 fi
 
