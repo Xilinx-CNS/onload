@@ -54,7 +54,7 @@ level of AF_XDP support for Onload:
 * Debian 10 with Linux kernel 5.10
 * Debian 11
 * Redhat Enterprise Linux 8.3, 8.4
-* Linux kernel in the range 5.3 - 5.13
+* Linux kernel in the range 5.3 - 5.15
 
 Onload also works with the native ef_vi hardware interface, supported by Xilinx
 network adapters. In this mode of operation, AF_XDP kernel and driver support
@@ -79,7 +79,7 @@ Linux distributions:
 * Ubuntu LTS 18.04, LTS 20.04, 21.04
 * Debian 10, 11
 * Redhat Enterprise Linux 7.9, 8.3, 8.4
-* Linux kernel in the range 4.15 - 5.13
+* Linux kernel in the range 4.15 - 5.15
 
 ## Support
 
