@@ -122,6 +122,7 @@ typedef union {
 #define EFHW_VI_NIC_BUG35388_WORKAROUND 0x01  /*! workaround for bug35388 */
 #define EFHW_VI_NIC_CTPIO_ONLY          0x02  /*! TX only using CTPIO */
 #define EFHW_VI_NIC_RX_OVERCAPTURE      0x04  /*! RX filters are lower bound */
+#define EFHW_VI_NIC_RX_MCAST_REPLICATION 0x08 /*! RX mcast replication */
 
 /* Types of hardware filter */
 /* Each of these values implicitly selects scatter filters on B0 - or in
@@ -248,6 +249,8 @@ typedef union {
  * added. This flag is intended solely to give guidance about logging severity
  * levels to use */
 #define NIC_FLAG_RX_OVERCAPTURE 0x8000000000000LL
+/* Multicast replication of incoming packets is implemented in the NIC */
+#define NIC_FLAG_RX_MCAST_REPLICATION 0x10000000000000LL
 
 
 #endif /* __CI_EFHW_COMMON_H__ */

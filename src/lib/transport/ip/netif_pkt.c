@@ -373,24 +373,6 @@ int ci_netif_pkt_pass_to_kernel(ci_netif* ni, ci_ip_pkt_fmt* pkt)
     return 0;
   }
 
-  /* Multicast packets can be replicated across multiple Onload stacks and so we
-   * cannot simply inject non-matching multicast packets into the kernel.
-   * However, in most cases we should not see kernel-destined multicast packets
-   * anyway: the packet cannot have come via a MAC filter, since Onload only uses
-   * unicast MAC filters, and if it matched an IP filter then it should be stolen
-   * by Onload.  The only time we expect to be on this path, where a multicast
-   * packet matched a hardware IP filter but did not match any socket, is when
-   * the firmware is not capable of filtering by VLAN and the VLAN of the packet
-   * is incorrect.  In this case the packet could usefully be delivered to the
-   * kernel stack, but as cross-VLAN-stealing with low-latency firmware is a
-   * long-standing limitation, and as this is a distinct problem from the one
-   * that packet-injection was introduced to solve (namely the disruption of
-   * kernel traffic resulting from the use of scalable filters), we make no
-   * attempt to work around the aforementioned replication problem, and we just
-   * drop the packet. */
-  if( ci_eth_addr_is_multicast(oo_ether_dhost(pkt)) )
-    return 0;
-
   /* offbuf for the first segment may be tweaked in attempt to deliver this
    * packet to Onload.  We have to restore it now. */
   oo_offbuf_set_start(&pkt->buf, oo_ether_hdr(pkt));
