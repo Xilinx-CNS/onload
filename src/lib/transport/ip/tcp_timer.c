@@ -520,7 +520,7 @@ void ci_tcp_timeout_rto(ci_netif* netif, ci_tcp_state* ts)
        * pushed something to the net, and restarted RTO.  Return. */
       return;
     }
-    if( ts->retransmits >= max_retrans) {
+    if( ts->retransmits > max_retrans) {
       ci_tcp_drop_due_to_rto(netif, ts, max_retrans);
       CITP_STATS_NETIF_INC(netif, tcp_cant_fin_dropped);
       return;
@@ -534,7 +534,7 @@ void ci_tcp_timeout_rto(ci_netif* netif, ci_tcp_state* ts)
     return;
   }
 
-  if( ts->retransmits >= max_retrans || NI_OPTS(netif).rst_delayed_conn ) {
+  if( ts->retransmits > max_retrans || NI_OPTS(netif).rst_delayed_conn ) {
     ts->s.so_error = ETIMEDOUT;
     ci_tcp_drop_due_to_rto(netif, ts, max_retrans);
     return;
