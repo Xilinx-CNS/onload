@@ -77,22 +77,23 @@ OO_VERSION_HDR_TMP := $(objd)onload_version.h.tmp
 # In case of UL build dependency tracking is done by mmake, and it is
 # unable to detect dependency for onload_version.h.
 # So we remove onload_version.o and library when the version changes.
-make_oo_version: $(OO_VERSION_GEN)
+make_oo_version: $(OO_VERSION_GEN) FORCE
 	echo "  GENERATE $(OO_VERSION_HDR)"
 	(cd $(SRCPATH); $(OO_VERSION_GEN)) > $(OO_VERSION_HDR_TMP)
 	if diff -q $(OO_VERSION_HDR) $(OO_VERSION_HDR_TMP) 2>/dev/null; \
 		then echo "Not updating onload_version.h"; \
 		else cp $(OO_VERSION_HDR_TMP) $(OO_VERSION_HDR); \
-		rm -f $(objd)$(MMAKE_OBJ_PREFIX)onload_version.o $(CIUL_LIB); \
 	fi
 	rm -f $(OO_VERSION_HDR_TMP)
 
 # We want to re-build the version header every time
 .PHONY: make_oo_version
 
+FORCE:
+
 $(OO_VERSION_HDR): make_oo_version
 
-$(objd)$(MMAKE_OBJ_PREFIX)onload_version.o: $(OO_VERSION_HDR)
+$(objd)$(MMAKE_OBJ_PREFIX)onload_version.o: make_oo_version
 
 
 ######################################################################
@@ -120,7 +121,7 @@ EFVI_OBJS	 := $(EFVI_SRCS:%.c=$(MMAKE_OBJ_PREFIX)%.o)
 LIB_OBJS	 := $(LIB_SRCS:%.c=$(MMAKE_OBJ_PREFIX)%.o)
 
 
-all: make_oo_version $(TARGETS)
+all: $(TARGETS)
 
 lib: $(TARGETS)
 
