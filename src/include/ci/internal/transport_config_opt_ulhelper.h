@@ -6,6 +6,8 @@
 /* Use default values for the most of options: */
 #include <ci/internal/transport_config_opt_extra.h>
 
+#define ONLOAD_BUILD_PROFILE "ulhelper"
+
 #undef CI_CFG_UL_INTERRUPT_HELPER
 #define CI_CFG_UL_INTERRUPT_HELPER 1
 

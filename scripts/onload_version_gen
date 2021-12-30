@@ -17,10 +17,9 @@ if test -f `which git`; then
 else
   echo -n "<dev-snapshot>"
 fi
-echo "\""
+echo " \"ONLOAD_BUILD_PROFILE"
 
 if test -n "$human_name"; then
-  echo "#define ONLOAD_SHORT_VERSION \"$human_name\""
-else
-  echo "#define ONLOAD_SHORT_VERSION \"<dev-snapshot>\""
+  human_name="<dev-snapshot>"
 fi
+echo "#define ONLOAD_SHORT_VERSION \"$human_name \"ONLOAD_BUILD_PROFILE"

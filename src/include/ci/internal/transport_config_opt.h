@@ -673,6 +673,10 @@
 /* Include "extra" transport_config_opt to allow build-time profiles */
 #include TRANSPORT_CONFIG_OPT_HDR
 
+#ifndef ONLOAD_BUILD_PROFILE
+#define ONLOAD_BUILD_PROFILE ""
+#endif
+
 /* Size of socket shared state buffer.  Must be 1024 or 2048.  Larger
  * value is needed if you enable too many CI_CFG_* options, such as
  * CI_CFG_TCP_SOCK_STATS. */
