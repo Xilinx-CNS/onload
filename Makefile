@@ -182,7 +182,11 @@ modules modules_install: $(OUTMAKEFILES)
 kernel: modules
 
 clean_kernel:
-	$(RM) -r $(KBUILDTOP)
+	$(RM) -r $(KBUILDTOP)/src
+	$(RM) -r $(KBUILDTOP)/driver
+	$(RM) -r $(KBUILDTOP)/built-in.a
+	$(RM) -r $(KBUILDTOP)/modules.order
+	$(RM) -r $(KBUILDTOP)/Module.symvers
 
 # Can't figure out a way to get modpost to look in the src directory. At least
 # the number of makefiles is much smaller than the number of source files
