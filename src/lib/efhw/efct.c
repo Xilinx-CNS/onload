@@ -724,6 +724,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     if( free_table_ix < 0 ) {
       /* Probably means that the hardware has grown more capable but nobody
        * told us */
+      mutex_unlock(&efct->driver_filters_mtx);
       EFHW_ERR("%s: disambiguation table full", __func__);
       return -ENOSPC;
     }
