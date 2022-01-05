@@ -122,26 +122,45 @@ EXPORT_SYMBOL(efrm_rxq_release);
 #define REFRESH_BATCH_SIZE  8
 #define EFCT_INVALID_PFN   (~0ull)
 
+static int map_one_superbuf(unsigned long addr,
+                            const struct xlnx_efct_hugepage *kern)
+{
+	unsigned long rc;
+	rc = vm_mmap(kern->file, addr, CI_HUGEPAGE_SIZE, PROT_READ,
+	             MAP_FIXED | MAP_SHARED | MAP_POPULATE |
+	                 MAP_HUGETLB | MAP_HUGE_2MB,
+	             kern->page->index * CI_HUGEPAGE_SIZE);
+	if (IS_ERR((void*)rc))
+		return PTR_ERR((void*)rc);
+	return 0;
+}
+
 static int fixup_superbuf_mapping(unsigned long addr,
                                   uint64_t *user,
-                                  const struct xlnx_efct_hugepage *kern)
+                                  const struct xlnx_efct_hugepage *kern,
+                                  const struct xlnx_efct_hugepage *spare_page)
 {
 	uint64_t pfn = kern->page ? __pa(kern->page) : EFCT_INVALID_PFN;
 	if (*user == pfn)
 		return 0;
 
 	if (pfn == EFCT_INVALID_PFN) {
-		vm_munmap(addr, CI_HUGEPAGE_SIZE);
+		/* Rather than actually unmapping the memory, we prefer to map in some
+		 * random other valid page instead. Ideally we'd use the huge zero
+		 * page, but we can't get at that so we pick a random other one of our
+		 * pages instead.
+		 * The reason for all this is that we promise that
+		 * ef_eventq_has_event() is safe to call concurrently with
+		 * ef_eventq_poll(). The latter might call in to this function to
+		 * unmap the exact page that the former is just about to look at. */
+		if (!spare_page->page ||
+		    map_one_superbuf(addr, spare_page))
+			vm_munmap(addr, CI_HUGEPAGE_SIZE);
 	}
 	else {
-		unsigned long rc;
-		rc = vm_mmap(kern->file, addr, CI_HUGEPAGE_SIZE,
-		             PROT_READ,
-		             MAP_FIXED | MAP_SHARED | MAP_POPULATE |
-		                     MAP_HUGETLB | MAP_HUGE_2MB,
-		             kern->page->index * CI_HUGEPAGE_SIZE);
-		if (IS_ERR((void*)rc))
-			return PTR_ERR((void*)rc);
+		int rc = map_one_superbuf(addr, kern);
+		if (rc)
+			return rc;
 	}
 	*user = pfn;
 	return 1;
@@ -154,6 +173,7 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 {
 #if CI_HAVE_EFCT_AUX
 	struct xlnx_efct_hugepage *pages;
+	struct xlnx_efct_hugepage spare_page = {};
 	size_t i;
 	int rc = 0;
 
@@ -173,6 +193,18 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 		kfree(pages);
 		return rc;
 	}
+	for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; ++i) {
+		if (pages[i].page) {
+			/* See commentary in fixup_superbuf_mapping(). It'd be possible to
+			 * have extensive debates about which is the least-worst page to
+			 * use for this purpose, but any decision would be crystal ball
+			 * work: we're trying to avoid wasting memory by having a page
+			 * mapped which is used for no other purpose other than as our
+			 * free page filler. */
+			spare_page = pages[i];
+			break;
+		}
+	}
 	for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; i += REFRESH_BATCH_SIZE) {
 		uint64_t local_current[REFRESH_BATCH_SIZE];
 		size_t j;
@@ -189,7 +221,7 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 		for (j = 0; j < n; ++j) {
 			rc = fixup_superbuf_mapping(
 					superbufs + CI_HUGEPAGE_SIZE * (i + j),
-					&local_current[j], &pages[i + j]);
+					&local_current[j], &pages[i + j], &spare_page);
 			if (rc < 0)
 				break;
 			if (rc)
