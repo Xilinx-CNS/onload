@@ -181,9 +181,18 @@ static PyMethodDef cluster_protocol_methods[] = {
 };
 
 
-PyMODINIT_FUNC initcluster_protocol(void)
+static struct PyModuleDef cluster_module = {
+  PyModuleDef_HEAD_INIT,
+  "cluster_protocol",
+  "",
+  -1,
+  cluster_protocol_methods
+};
+
+
+PyMODINIT_FUNC PyInit_cluster_protocol(void)
 {
-  PyObject *module = Py_InitModule("cluster_protocol",cluster_protocol_methods);
+  PyObject *module = PyModule_Create(&cluster_module);
 
   MODULE_STR_CONST(module, onload_version);
 
@@ -206,4 +215,6 @@ PyMODINIT_FUNC initcluster_protocol(void)
   MODULE_INT_CONST(module, EF_PD_PHYS_MODE);
   MODULE_INT_CONST(module, EF_PD_RX_PACKED_STREAM);
   MODULE_INT_CONST(module, EF_PD_VPORT);
+
+  return module;
 }

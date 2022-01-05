@@ -1,4 +1,4 @@
-#! /usr/bin/python2
+#! /usr/bin/python3
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2014-2019 Xilinx, Inc.
 
@@ -29,7 +29,7 @@ def check_orm_json():
         os.path.dirname(sys.argv[0]), '../../..', 'build', 'gnu_x86_64',
         'tools', 'onload_remote_monitor', 'orm_json')
     if not os.path.exists(orm_json):
-        print 'orm_json not built.'
+        print('orm_json not built.')
         sys.exit(1)
 
 
@@ -40,11 +40,11 @@ class Server(object):
         self.lsock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.lsock.bind(('', port))
         self.lsock.listen(listen_backlog)
-        print 'Server: Listening on %d' % (port)
+        print('Server: Listening on %d' % (port))
         self.clients = {} # sock -> buffered_data
 
     def handle_bad_req(self, sock, req):
-        print 'Client %d: bad request %r' % (sock.fileno(), req)
+        print('Client %d: bad request %r' % (sock.fileno(), req))
         sock.send('%r: Bad request\n' % (req))
 
     def stack_state_get_req(self, sock):
@@ -85,7 +85,7 @@ class Server(object):
     def loop(self):
         try:
             while True:
-                socks = [self.lsock] + self.clients.keys()
+                socks = [self.lsock] + list(self.clients.keys())
                 readable, _, _ = select.select(socks, [], [])
                 for sock in readable:
                     if sock == self.lsock:
@@ -93,12 +93,12 @@ class Server(object):
                     else:
                         self.do_recv(sock)
         except KeyboardInterrupt:
-            print
+            print()
             sys.exit()
 
 
 def usage():
-    print 'Usage: %s port' % sys.argv[0]
+    print('Usage: %s port' % sys.argv[0])
     sys.exit(1)
 
 

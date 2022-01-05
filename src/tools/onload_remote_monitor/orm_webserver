@@ -1,4 +1,4 @@
-#! /usr/bin/env python2
+#! /usr/bin/env python3
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2014-2019 Xilinx, Inc.
 
@@ -7,7 +7,12 @@ import sys
 import socket
 import select
 import subprocess
-import BaseHTTPServer
+
+# Python 2 backwards compatibility
+if sys.version_info < (3,0):
+    from BaseHTTPServer import HTTPServer, BaseHTTPRequestHandler
+else:
+    from http.server import HTTPServer, BaseHTTPRequestHandler
 
 def run_cmd(cmd):
     child = subprocess.Popen(cmd, stdout=subprocess.PIPE)
@@ -28,14 +33,14 @@ def cmd_exists(cmd):
 
 def check_orm_json():
     if not cmd_exists('orm_json'):
-        print 'orm_json not found on PATH. Not able to start.'
+        print('orm_json not found on PATH. Not able to start.')
         sys.exit(1)
 
 def usage():
-    print 'Usage: %s port' % sys.argv[0]
+    print('Usage: %s port' % sys.argv[0])
     sys.exit(1)
 
-class Handler(BaseHTTPServer.BaseHTTPRequestHandler):
+class Handler(BaseHTTPRequestHandler):
     def valid_path(s):
         valid_options = ['stats','stack','opts','lots','all']
         dirname, basename = os.path.split(str.rstrip(s.path, '/'))
@@ -83,9 +88,9 @@ def main():
         usage()
     check_orm_json()
     port = int(sys.argv[1])
-    server = BaseHTTPServer.HTTPServer
+    server = HTTPServer
     httpd = server(('', port), Handler)
-    print 'Started http server on port %s' % port
+    print('Started http server on port %s' % port)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

@@ -1,4 +1,4 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0
 # X-SPDX-Copyright-Text: (c) Copyright 2013-2019 Xilinx, Inc.
 
@@ -128,7 +128,7 @@ class Server(object):
 
     def main_loop(self):
         while True:
-            select_fds = [self.listen_sock] + self.clients.keys()
+            select_fds = [self.listen_sock] + list(self.clients.keys())
             readable, _, _ = select.select(select_fds, [], [])
             for fd in readable:
                 if fd is self.listen_sock:
@@ -236,7 +236,7 @@ class Server(object):
 
 def main(config_file, options):
     config = parse_config.Config(config_file)
-    sys.stdout.write('solar_clusterd version: %s\n' % cp.ONLOAD_VERSION)
+    sys.stdout.write('solar_clusterd version: %s\n' % cp.onload_version)
     server = Server(options, config)
     server.init_vis()
     if not options.foreground:
@@ -262,7 +262,7 @@ def parse_cmdline():
 
     usage = 'usage: %prog [options] config-file'
     parser = optparse.OptionParser(
-        version=cp.ONLOAD_VERSION, usage=usage)
+        version=cp.onload_version, usage=usage)
     parser.add_option('-l', '--logfile', help='This option is deprecated and '
                       'only present for backwards compatibility.  We log via '
                       'syslogd(8) now.  Setting this is a NOP.')

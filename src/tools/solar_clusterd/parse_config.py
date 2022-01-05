@@ -47,7 +47,7 @@ class Stream(object):
 class Config(object):
     def __init__(self, filename):
         assert filename
-        self.__parse_text(file(filename).read())
+        self.__parse_text(open(filename).read())
         self.process_clusters()
 
 

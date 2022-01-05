@@ -4,10 +4,12 @@
 CWARNINGS	:= -Wall -Wundef -Wstrict-prototypes -Wpointer-arith \
 		   -Wnested-externs
 
-PYTHON_VER	:= $(shell python2 -V 2>&1 | \
+PYTHON_VER	:= $(shell python3 -V 2>&1 | \
 			sed 's/Python \([0-9][0-9]*\.[0-9][0-9]*\).*/\1/')
-PYTHON_CFLAGS	+= $(shell python2-config --cflags 2>/dev/null)
-PYTHON_LIBS	:= $(shell python2-config --libs 2>/dev/null)
+PYTHON_VER_MAJOR:= $(shell python3 -V 2>&1 | \
+			sed 's/Python \([0-9][0-9]*\)\.[0-9][0-9]*.*/\1/')
+PYTHON_CFLAGS	+= $(shell python3-config --cflags 2>/dev/null)
+PYTHON_LIBS	:= $(shell python3-config --libs 2>/dev/null)
 
 ifeq ($(PYTHON_CFLAGS),)
 PYTHON_CFLAGS	:= -fno-strict-aliasing -fPIC -I/usr/include/python$(PYTHON_VER)
@@ -17,8 +19,11 @@ endif
 # On SLES11, '$ python-config --cflags' doesn't include -fPIC but it
 # is needed to properly compile PYTHON_SRCS.
 PYTHON_CFLAGS   += -fPIC
+ifeq ($(PYTHON_VER_MAJOR),2)
+PYTHON_VERDEF	:= -DPYTHON2
+endif
 
-CFLAGS += $(PYTHON_CFLAGS)
+CFLAGS += $(PYTHON_CFLAGS) $(PYTHON_VERDEF)
 CFLAGS += -Werror $(CWARNINGS) -g -O2 -DNDEBUG
 LIBS   += $(PYTHON_LIBS)
 
@@ -46,7 +51,7 @@ endif
 
 # Don't build cluster_protocol.so if python-devel is not present.  The
 # way we detect this is by checking if Python.h is present.
-ifeq (,$(wildcard /usr/include/python$(PYTHON_VER)/Python.h))
+ifeq (,$(wildcard /usr/include/python$(PYTHON_VER)*/Python.h))
 BUILD_SC := 0
 endif
 
