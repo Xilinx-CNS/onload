@@ -36,7 +36,9 @@ static inline void rx_wait_with_ts(struct eflatency_vi*);
 
 static int              cfg_iter = 100000;
 static int              cfg_warmups = 10000;
-static unsigned		cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
+static int              cfg_payload_len = DEFAULT_PAYLOAD_SIZE;
+static int              cfg_payload_end = DEFAULT_PAYLOAD_SIZE;
+static int              cfg_payload_step = 1;
 static int              cfg_ctpio_no_poison;
 static unsigned         cfg_ctpio_thresh = 64;
 static const char*      cfg_save_file = NULL;
@@ -83,6 +85,7 @@ struct pkt_buf*          pkt_bufs[N_BUFS];
 static ef_pio            pio;
 static int               tx_frame_len;
 static uint64_t*         timings;
+static double            last_mean_latency_usec;
 
 
 /* The IP addresses can be chosen arbitrarily. */
@@ -151,7 +154,22 @@ static void output_results(struct timeval start, struct timeval end)
   div = freq / 1e3;
   if( cfg_save_file ) {
     int i;
-    FILE* fp = fopen(cfg_save_file, "wt");
+    char* subst = strstr(cfg_save_file, "$s");
+    FILE* fp;
+
+    if( subst ) {
+      size_t ix = subst - cfg_save_file;
+      size_t len = strlen(cfg_save_file);
+      char* path = malloc(len + 12);
+      memcpy(path, cfg_save_file, ix);
+      snprintf(path + ix, 12, "%d", cfg_payload_len);
+      memcpy(path + strlen(path), cfg_save_file + ix + 2, len - ix - 1);
+      fp = fopen(path, "wt");
+      free(path);
+    }
+    else {
+      fp = fopen(cfg_save_file, "wt");
+    }
     TEST(fp != NULL);
     for( i = 0 ; i < cfg_iter; ++i )
       fprintf(fp, "%lld\n", (long long)(timings[i] * 1000. / div));
@@ -159,15 +177,15 @@ static void output_results(struct timeval start, struct timeval end)
   }
 
   qsort(timings, cfg_iter, sizeof(timings[0]), cmp_u64);
-  printf("mean\tmin\t50%%\t95%%\t99%%\tmax\n");
-  printf("%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\n",
+  printf("%d\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\t%0.3lf\n",
+         cfg_payload_len,
          (double) usec / cfg_iter,
          timings[0] / div,
          timings[cfg_iter / 2] / div,
          timings[cfg_iter - cfg_iter / 20] / div,
          timings[cfg_iter - cfg_iter / 100] / div,
          timings[cfg_iter - 1] / div);
-  printf("mean round-trip time: %.3lf usec\n", (double) usec / cfg_iter);
+  last_mean_latency_usec = (double) usec / cfg_iter;
 }
 
 /**********************************************************************/
@@ -175,6 +193,7 @@ static void output_results(struct timeval start, struct timeval end)
 
 typedef struct {
   const char* name;
+  void (*init)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
   void (*ping)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
   void (*pong)(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi);
   void (*cleanup)(ef_vi* rx_vi, ef_vi* tx_vi);
@@ -278,6 +297,12 @@ static inline void pio_send(struct eflatency_vi* vi)
   TRY(ef_vi_transmit_pio(&vi->vi, 0, tx_frame_len, 0));
 }
 
+static void pio_init(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  TRY(ef_pio_memcpy(&tx_vi->vi, pkt_bufs[FIRST_TX_BUF]->dma_buf, 0,
+                    tx_frame_len));
+}
+
 static void pio_ping(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
 {
   generic_ping(rx_vi, tx_vi, rx_wait_no_ts, pio_send);
@@ -290,6 +315,7 @@ static void pio_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
 
 static const test_t pio_test = {
   .name = "PIO",
+  .init = pio_init,
   .ping = pio_ping,
   .pong = pio_pong,
   .cleanup = NULL,
@@ -330,6 +356,17 @@ static inline void alt_go(ef_vi* vi)
   TRY(ef_vi_transmit_alt_go(vi, tx_alt.send_id++ & TX_ALT_MASK));
 }
 
+static void alt_init(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
+{
+  /* Check that the packet will fit in the available buffer space. */
+  struct ef_vi_transmit_alt_overhead overhead;
+  TRY(ef_vi_transmit_alt_query_overhead(&tx_vi->vi, &overhead));
+  int pkt_bytes = ef_vi_transmit_alt_usage(&overhead, tx_frame_len);
+  TEST(pkt_bytes <= BUF_SIZE);
+  /* Pre-fill the first packet. */
+  alt_fill(tx_vi);
+}
+
 static inline void alt_discard(ef_vi* rx_vi, ef_vi* vi)
 {
   TRY(ef_vi_transmit_alt_discard(vi, tx_alt.send_id & TX_ALT_MASK));
@@ -359,6 +396,7 @@ static void alt_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi)
 
 static const test_t alt_test = {
   .name = "Alternatives",
+  .init = alt_init,
   .ping = alt_ping,
   .pong = alt_pong,
   /* Flush the alternative before freeing it. */
@@ -598,13 +636,6 @@ static const test_t* do_init(int ifindex, int mode,
   }
   /* Next, try to allocate alternatives. */
   else if( vi_flags & EF_VI_TX_ALT ) {
-    /* Check that the packet will fit in the available buffer space. */
-    struct ef_vi_transmit_alt_overhead overhead;
-    TRY(ef_vi_transmit_alt_query_overhead(vi, &overhead));
-    int pkt_bytes = ef_vi_transmit_alt_usage(&overhead, tx_frame_len);
-    TEST(pkt_bytes <= BUF_SIZE);
-    /* Pre-fill the first packet. */
-    alt_fill(latency_vi);
     t = &alt_test;
   }
   /* If we couldn't allocate an alternative, try PIO. */
@@ -612,7 +643,6 @@ static const test_t* do_init(int ifindex, int mode,
            ef_pio_alloc(&pio, driver_handle, &latency_vi->pd, -1,
                         driver_handle) == 0 ) {
     TRY(ef_pio_link_vi(&pio, driver_handle, vi, driver_handle));
-    TRY(ef_pio_memcpy(vi, pkt_bufs[FIRST_TX_BUF]->dma_buf, 0, tx_frame_len));
     t = &pio_test;
   }
   /* In the worst case, fall back to DMA sends. */
@@ -641,7 +671,7 @@ static CI_NORETURN usage(void)
   fprintf(stderr, "  eflatency [options] <ping|pong> <interface> <tx_interface>\n");
   fprintf(stderr, "\noptions:\n");
   fprintf(stderr, "  -n <iterations>     - set number of iterations\n");
-  fprintf(stderr, "  -s <message-size>   - set udp payload size\n");
+  fprintf(stderr, "  -s <message-size>   - set udp payload size. Accepts Python slices\n");
   fprintf(stderr, "  -w <iterations>     - set number of warmup iterations\n");
   fprintf(stderr, "  -c <cut-through>    - CTPIO cut-through threshold\n");
   fprintf(stderr, "  -p                  - CTPIO no-poison mode\n");
@@ -659,6 +689,7 @@ int main(int argc, char* argv[])
   int c;
   bool ping = false;
   const test_t* t;
+  int iters_run = 0;
 
   printf("# ef_vi_version_str: %s\n", ef_vi_version_str());
 
@@ -667,9 +698,18 @@ int main(int argc, char* argv[])
     case 'n':
       cfg_iter = atoi(optarg);
       break;
-    case 's':
-      cfg_payload_len = atoi(optarg);
+    case 's': {
+      char* colon;
+      cfg_payload_end = cfg_payload_len = atoi(optarg);
+      colon = strchr(optarg, ':');
+      if( colon ) {
+        cfg_payload_end = atoi(colon + 1);
+        colon = strchr(colon + 1, ':');
+        if( colon )
+          cfg_payload_step = atoi(colon + 1);
+      }
       break;
+    }
     case 'w':
       cfg_warmups = atoi(optarg);
       break;
@@ -708,9 +748,16 @@ int main(int argc, char* argv[])
   if( argc == 3 && ! parse_interface(argv[2], &tx_ifindex) )
     usage();
 
-  if( cfg_payload_len > MAX_UDP_PAYLEN ) {
+  if( cfg_payload_len > MAX_UDP_PAYLEN || cfg_payload_end > MAX_UDP_PAYLEN ) {
     fprintf(stderr, "WARNING: UDP payload length %d is larger than standard "
             "MTU\n", cfg_payload_len);
+  }
+  if( cfg_payload_step == 0 && cfg_payload_len != cfg_payload_end )
+    usage();
+  if( (cfg_payload_step < 0 && cfg_payload_end > cfg_payload_len) ||
+      (cfg_payload_step > 0 && cfg_payload_end < cfg_payload_len) ) {
+    fprintf(stderr, "Max payload size not reachable from min\n");
+    usage();
   }
 
   if( strcmp(argv[0], "ping") == 0 )
@@ -760,15 +807,34 @@ int main(int argc, char* argv[])
   }
 
   printf("# NIC(s) %d %d\n", rx_ifindex, tx_ifindex);
-  printf("# udp payload len: %d\n", cfg_payload_len);
+  printf("# udp payload len: %d:%d:%d\n", cfg_payload_len, cfg_payload_end,
+         cfg_payload_step);
   printf("# iterations: %d\n", cfg_iter);
   printf("# warmups: %d\n", cfg_warmups);
   printf("# frame len: %d\n", tx_frame_len);
   printf("# mode: %s\n", t->name);
+  if( ping )
+    printf("paylen\tmean\tmin\t50%%\t95%%\t99%%\tmax\n");
 
-  (ping ? t->ping : t->pong)(&rx_vi, &tx_vi);
-  if( t->cleanup != NULL )
-    t->cleanup(&rx_vi.vi, &tx_vi.vi);
+  for( ; ; ) {
+    ++iters_run;
+    if( t->init )
+      t->init(&rx_vi, &tx_vi);
+    (ping ? t->ping : t->pong)(&rx_vi, &tx_vi);
+    if( t->cleanup != NULL )
+      t->cleanup(&rx_vi.vi, &tx_vi.vi);
+    cfg_payload_len += cfg_payload_step;
+    if( cfg_payload_step < 0 ) {
+      if( cfg_payload_len <= cfg_payload_end )
+        break;
+    }
+    else if( cfg_payload_len >= cfg_payload_end )
+      break;
+    init_udp_pkt(pkt_bufs[FIRST_TX_BUF]->dma_buf, cfg_payload_len);
+    tx_frame_len = cfg_payload_len + HEADER_SIZE;
+  }
+  if( ping && iters_run == 1 )
+    printf("mean round-trip time: %.3lf usec\n", last_mean_latency_usec);
 
   return 0;
 }
