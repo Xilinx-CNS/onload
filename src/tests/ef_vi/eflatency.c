@@ -490,12 +490,12 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
       case EF_EVENT_TYPE_RX_REF_DISCARD:
         handle_rx_ref(&vi->vi, evs[i].rx_ref_discard.pkt_id,
                       evs[i].rx_ref_discard.len);
-        if( EF_EVENT_RX_DISCARD_TYPE(evs[i]) == EF_EVENT_RX_DISCARD_CRC_BAD &&
-            cfg_ctpio_thresh >= tx_frame_len && ! cfg_ctpio_no_poison ) {
+        if( evs[i].rx_ref_discard.flags & EF_VI_DISCARD_RX_ETH_FCS_ERR &&
+            cfg_ctpio_thresh < tx_frame_len ) {
           break;
         }
-        fprintf(stderr, "ERROR: unexpected discard "EF_EVENT_FMT"\n",
-                EF_EVENT_PRI_ARG(evs[i]));
+        fprintf(stderr, "ERROR: unexpected ref discard flags=%x\n",
+                evs[i].rx_ref_discard.flags);
         TEST(0);
         break;
       case EF_EVENT_TYPE_RX_DISCARD:
