@@ -251,7 +251,6 @@ generic_pong(struct eflatency_vi* rx_vi, struct eflatency_vi* tx_vi,
     tx_send(tx_vi);
     if( do_rx_post )
       rx_post(&rx_vi->vi);
-    generic_desc_check(tx_vi, 0);
   }
 }
 
