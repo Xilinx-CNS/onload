@@ -82,7 +82,7 @@ make_oo_version: $(OO_VERSION_GEN) FORCE
 	(cd $(SRCPATH); $(OO_VERSION_GEN)) > $(OO_VERSION_HDR_TMP)
 	if diff -q $(OO_VERSION_HDR) $(OO_VERSION_HDR_TMP) 2>/dev/null; \
 		then echo "Not updating onload_version.h"; \
-		else cp $(OO_VERSION_HDR_TMP) $(OO_VERSION_HDR); \
+		else mv $(OO_VERSION_HDR_TMP) $(OO_VERSION_HDR); \
 	fi
 	rm -f $(OO_VERSION_HDR_TMP)
 
