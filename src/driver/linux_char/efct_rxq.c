@@ -134,5 +134,4 @@ efch_resource_ops efch_efct_rxq_ops = {
   .rm_nopage = NULL,
   .rm_dump   = NULL,
   .rm_rsops  = rxq_rm_rsops,
-  .rm_mmap_bytes = NULL,
 };

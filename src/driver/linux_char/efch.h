@@ -90,9 +90,6 @@ typedef struct efch_resource_ops_s {
   int (*rm_rsops)(struct efch_resource_s* rs, ci_resource_table_t* rt,
 		  struct ci_resource_op_s* op, int* copy_out);
 
-  /** Return the size of the memory mapping of the given type. */
-  int (*rm_mmap_bytes)(struct efrm_resource*, int map_type_index);
-
 } efch_resource_ops;
 
 

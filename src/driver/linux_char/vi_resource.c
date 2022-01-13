@@ -595,12 +595,6 @@ efch_vi_rm_nopage(struct efrm_resource *rs, struct vm_area_struct *vma,
 }
 
 
-static int efch_vi_rm_mmap_bytes(struct efrm_resource* rs, int map_type)
-{
-  return efab_vi_resource_mmap_bytes(efrm_vi(rs), map_type);
-}
-
-
 int efch_vi_filter_add(efch_resource_t* rs, ci_filter_add_t* filter_add,
                        int* copy_out)
 {
@@ -618,6 +612,5 @@ efch_resource_ops efch_vi_ops = {
   .rm_nopage = efch_vi_rm_nopage,
   .rm_dump = efch_vi_rm_dump,
   .rm_rsops = efch_vi_rm_rsops,
-  .rm_mmap_bytes = efch_vi_rm_mmap_bytes,
 };
 

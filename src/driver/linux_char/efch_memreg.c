@@ -343,5 +343,4 @@ efch_resource_ops efch_memreg_ops = {
   .rm_nopage = NULL,
   .rm_dump = NULL,
   .rm_rsops = NULL,
-  .rm_mmap_bytes = NULL,
 };
