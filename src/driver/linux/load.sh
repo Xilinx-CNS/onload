@@ -211,10 +211,17 @@ doxdp () {
   R_MOD_ARGS="${R_MOD_ARGS} enable_driverlink=0"
   doonload
 
-  for ethif in $(get_interfaces); do
-    echo $ethif >/sys/module/sfc_resource/afxdp/register
-    echo "Register $ethif in sfc_resource/afxdp"
-  done
+  (
+    # BPF requires this for linux<5.11
+    # We are increasing the ulimit in subshell, so it does not affect the
+    # caller
+    ulimit -l unlimited
+
+    for ethif in $(get_interfaces); do
+      echo $ethif >/sys/module/sfc_resource/afxdp/register
+      echo "Register $ethif in sfc_resource/afxdp"
+    done
+  )
 }
 
 ###############################################################################

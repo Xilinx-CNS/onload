@@ -945,44 +945,11 @@ af_xdp_nic_init_hardware(struct efhw_nic *nic,
 			 struct efhw_ev_handler *ev_handlers,
 			 const uint8_t *mac_addr)
 {
-	static asmlinkage long (*set)(const struct pt_regs*) = NULL;
-	struct pt_regs regs;
-	struct rlimit* rlim;
-
 	int rc;
 	struct sys_call_area area;
 
 	rc = sys_call_area_alloc(&area);
 	if( rc < 0 )
-		return rc;
-
-	rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr, &area);
-
-
-	if (rc != -EPERM)
-		return rc;
-
-	/* EPERM probably means that we are limited by
-	 * RLIMIT_MEMLOCK.  Let's work around it. */
-	if (set == NULL) {
-		if( efrm_syscall_table == NULL ||
-		    efrm_syscall_table[__NR_setrlimit] == NULL)
-			return -ENOSYS;
-		set = efrm_syscall_table[__NR_setrlimit];
-	}
-
-	rlim = sys_call_area_ptr(&area);
-
-	/* We need a page per a bpf call: + 3 pages */
-	rlim->rlim_cur = task_rlimit(current, RLIMIT_MEMLOCK) +
-				(3 << PAGE_SHIFT);
-	rlim->rlim_max = CI_MAX(task_rlimit_max(current, RLIMIT_MEMLOCK),
-			       rlim->rlim_cur);
-
-	regs.di = RLIMIT_MEMLOCK;
-	regs.si = sys_call_area_user_addr(&area, rlim);
-	rc = set(&regs);
-	if (rc != 0)
 		return rc;
 
 	rc = __af_xdp_nic_init_hardware(nic, ev_handlers, mac_addr, &area);

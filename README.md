@@ -28,6 +28,9 @@ For each interface on which Onload is to use AF_XDP, execute the following:
 echo ens2f0 > /sys/module/sfc_resource/afxdp/register
 ```
 
+Nota bene: for linux<5.11 you may need to run `ulimit -l unlimited`
+before the line above.
+
 The application to be Onloaded should be launched by prefixing the command
 line with `onload`.
 
