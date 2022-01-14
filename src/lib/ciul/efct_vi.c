@@ -334,10 +334,18 @@ ci_inline void efct_tx_complete(ef_vi* vi, struct efct_tx_state* tx, uint32_t dm
   }
   while( tx->offset % (EFCT_TX_ALIGNMENT >> 3) != 0 )
     efct_tx_word(tx, 0);
-  /* EFCT TODO: X3-251: Suspect CPU reordering greater than the hardware can
-   * handle. Bodge it for now while we wait for hardware fixes. */
-#ifdef __x86_64__
+
+  /* Force the write-combined traffic to be flushed to PCIe, to limit the
+   * maximum possible reordering the NIC will see to one packet. Benchmarks
+   * demonstrate that this sfence is well-parallelised by the CPU, so smarter
+   * algorithms trying to avoid it for small packets are unlikely to be
+   * cost-effective */
+#if defined __x86_64__ || defined __i386__
+  /* Our compat tools define ci_wmb() as just a compiler fence on x86, since
+   * that's usually right due to TSO. Not in this case. */
   ci_x86_sfence();
+#else
+  ci_wmb();
 #endif
 
   len = CI_ROUND_UP(len + EFCT_TX_HEADER_BYTES, EFCT_TX_ALIGNMENT);
