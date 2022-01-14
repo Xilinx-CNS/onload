@@ -1468,8 +1468,8 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
   } while( feature_mask && feature_mask-- >= required_feature_mask );
 
   n_shm_rxqs = efhw_nic_max_shared_rxqs(efrm_client_get_nic(info->client));
-  info->vi_efct_shm_mmap_bytes = CI_ROUND_UP(CI_EFCT_SHM_BYTES(n_shm_rxqs),
-                                             PAGE_SIZE);
+  info->vi_efct_shm_mmap_bytes =
+        n_shm_rxqs ? CI_ROUND_UP(CI_EFCT_SHM_BYTES(n_shm_rxqs), PAGE_SIZE) : 0;
 
   if( rc < 0 ) {
     OO_DEBUG_VM (ci_log ("%s: ERROR: efrm_vi_resource_alloc(%d) failed %d",
