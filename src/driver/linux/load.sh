@@ -76,6 +76,7 @@ usage () {
   err "  -allowload      - Ignore test failures during load"
   err "  -noselftest     - Don't do an offline self-test during load"
   err "  -nolro          - turn off Large Recieve Offload"
+  err "  -singlequeue   - use one RX queue only"
   err "  -netparm        - Add a module parameter setting for net driver"
   err "  -charparm       - Add a module parameter setting for char driver"
   err "  -suspend        - Suspend all interfaces by default"
@@ -661,6 +662,7 @@ while [ $# -gt 0 ]; do
     -allowload | -allowload2 | -noselftest)
 		err "WARNING: $1 no longer has any effect" ;;
     -nolro)	NET_OPT="$NET_OPT lro=0";;
+    -singlequeue)	NET_OPT="$NET_OPT rss_cpus=1";;
     -netparm)	NET_OPT="$NET_OPT $2"; shift;;
     -charparm)	CHAR_OPT="$CHAR_OPT $2"; shift;;
     --debug)	set -x;;
