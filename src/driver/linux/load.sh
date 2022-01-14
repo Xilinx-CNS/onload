@@ -39,6 +39,7 @@ usage () {
   err "  onload          - Load drivers needed for onload"
   err "  [net]char       - Load drivers needed for char access"
   err "  mknod           - Create /dev/* nodes for char and onload"
+  err "  onload_xdp      - Load onload and register SFC interfaces as af_xdp ones"
   err
   err "configuration options"
   err "  -char           - Load sfc_char module (where available)"
@@ -205,6 +206,16 @@ doonload () {
   $LOAD_CONFIG && doonloadconfig
 }
 
+doxdp () {
+  O_MOD_ARGS="${O_MOD_ARGS} oof_shared_keep_thresh=0"
+  R_MOD_ARGS="${R_MOD_ARGS} enable_driverlink=0"
+  doonload
+
+  for ethif in $(get_interfaces); do
+    echo $ethif >/sys/module/sfc_resource/afxdp/register
+    echo "Register $ethif in sfc_resource/afxdp"
+  done
+}
 
 ###############################################################################
 # insert module for net device driver
@@ -217,6 +228,21 @@ hostip6 () { host -t AAAA -- "$1" | awk '/has (AAAA|IPv6) address/{print $5}'; }
 # (Unless it's the root directory, but we can ignore that here.)
 is_mount_point () {
   test -d "$1" -a "$(stat -c %D "$1" 2>/dev/null)" != "$(stat -c %D "$1/.." 2>/dev/null)"
+}
+
+# Find all interfaces created by driver
+get_interfaces() {
+  declare -a interfaces
+  for d in /sys/class/net/*; do
+    driver="$(readlink "$d"/device/driver/module)"
+    for m in $LINUX_NET; do
+        if [ "${driver%/"$m"}" != "$driver" ]; then
+          interfaces[${#interfaces[*]}]="$(basename "$d")"
+        fi
+    done
+  done
+
+  echo "${interfaces[@]}"
 }
 
 donet () {
@@ -280,17 +306,6 @@ donet () {
     done
   fi
 
-  # Find all interfaces created by driver
-  declare -a interfaces
-  for d in /sys/class/net/*; do
-    driver="$(readlink "$d"/device/driver/module)"
-    for m in $LINUX_NET; do
-        if [ "${driver%/"$m"}" != "$driver" ]; then
-          interfaces[${#interfaces[*]}]="$(basename "$d")"
-        fi
-    done
-  done
-
   # Find driver debug dir
   if grep -q debugfs /proc/filesystems; then
     if is_mount_point /debug; then
@@ -317,7 +332,7 @@ donet () {
       netpf=$(echo "$netpf" | egrep -o "/[0-9]+ " | sed 's+[/ ]++g')
       os=`uname -a`
       os=${os// /%20}
-      for ethif in "${interfaces[@]}"; do
+      for ethif in $(get_interfaces); do
         # Set an IP address using DNS for <host>-l/-m
         echo Bring up interface $ethif
         suffix="-"${NET_SUFFIX[$suffixindex]}
@@ -687,6 +702,9 @@ else
       mknod_for_drv sfc_char 0666
       mknod_for_drv onload 0666
       mknod_for_drv onload_epoll 0666
+      ;;
+    onload_xdp)
+      doxdp
       ;;
     *)
       err "arg = $1"
