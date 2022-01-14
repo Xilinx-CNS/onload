@@ -722,11 +722,54 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   return i;
 }
 
+static void efct_tx_handle_error_event(ef_vi* vi, ci_qword_t event,
+                                       ef_event* ev_out)
+{
+  ef_vi_txq_state* qs = &vi->ep_state->txq;
+
+  /* If we get an error event then all that we'll get subsequently for this
+   * TXQ is a flush, as the queue will be torn down. That means there's no
+   * need to update any of our queue state tracking.
+   */
+  ev_out->tx_error.type = EF_EVENT_TYPE_TX_ERROR;
+  ev_out->tx_error.q_id = CI_QWORD_FIELD(event, EFCT_ERROR_LABEL);
+  ev_out->tx_error.flags = 0;
+  ev_out->tx_error.desc_id = ++qs->previous;
+  ev_out->tx_error.subtype = CI_QWORD_FIELD(event, EFCT_ERROR_REASON);
+}
+
+static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
+                                        ef_event* ev_out)
+{
+  int n_evs = 0;
+
+  switch( CI_QWORD_FIELD(event, EFCT_CTRL_SUBTYPE) ) {
+    case EFCT_CTRL_EV_ERROR:
+      efct_tx_handle_error_event(vi, event, ev_out);
+      n_evs++;
+      ef_log("%s: ERROR: MCDI TX error event %u (raw: "CI_QWORD_FMT") - "
+             "check parameters to transmit_init()", __FUNCTION__,
+             QWORD_GET_U(EFCT_ERROR_REASON, event), CI_QWORD_VAL(event));
+      break;
+    case EFCT_CTRL_EV_FLUSH:
+      LOG(ef_log("%s: Saw flush in poll", __FUNCTION__));
+      break;
+    case EFCT_CTRL_EV_TIME_SYNC:
+    case EFCT_CTRL_EV_UNSOL_OVERFLOW:
+      ef_log("%s: ERROR: Unhandled MCDI control event subtype=%u",
+             __FUNCTION__, QWORD_GET_U(EFCT_CTRL_SUBTYPE, event));
+      break;
+  }
+
+  return n_evs;
+}
+
 static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 {
   ef_eventq_state* evq = &vi->ep_state->evq;
   ci_qword_t* event;
   int i;
+  int n_evs = 0;
 
   /* Check for overflow. If the previous entry has been overwritten already,
    * then it will have the wrong phase value and will appear invalid */
@@ -739,10 +782,11 @@ static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 
     switch( CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) ) {
       case EFCT_EVENT_TYPE_TX:
-        efct_tx_handle_event(vi, *event, &evs[i]);
+        efct_tx_handle_event(vi, *event, &evs[n_evs]);
+        n_evs++;
         break;
       case EFCT_EVENT_TYPE_CONTROL:
-        /* TODO X3 */
+        n_evs += efct_tx_handle_control_event(vi, *event, &evs[n_evs]);
         break;
       default:
         ef_log("%s:%d: ERROR: event="CI_QWORD_FMT,
@@ -751,7 +795,7 @@ static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
     }
   }
 
-  return i;
+  return n_evs;
 }
 
 static int efct_ef_eventq_poll_1rxtx(ef_vi* vi, ef_event* evs, int evs_len)
