@@ -389,8 +389,7 @@ static void efct_check_for_flushes(struct work_struct *work)
   for(i = 0; i < evq->capacity; i++) {
     if(CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) == EFCT_EVENT_TYPE_CONTROL &&
        CI_QWORD_FIELD(*event, EFCT_CTRL_SUBTYPE) == EFCT_CTRL_EV_FLUSH &&
-       CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX &&
-       CI_QWORD_FIELD(*event, EFCT_FLUSH_REASON) == EFCT_FLUSH_REASON_MCDI) {
+       CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX) {
       found_flush = true;
       txq = CI_QWORD_FIELD(*event, EFCT_FLUSH_QUEUE_ID);
       efhw_handle_txdmaq_flushed(evq->nic, txq);
