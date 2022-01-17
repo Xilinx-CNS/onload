@@ -19,22 +19,47 @@
 
 #include <net/if.h>
 
+static int __ef_tok_eq(const char* tok, size_t tok_len, const char* tmpl)
+{
+    size_t l = strlen(tmpl);
+    return l == tok_len && ! strncmp(tok, tmpl, l);
+}
+
+static enum ef_pd_flags __ef_env2flags(enum ef_pd_flags flags)
+{
+    const char* s = getenv("EF_VI_PD_FLAGS");
+    if( s == NULL )
+        return flags;
+
+    enum ef_pd_flags new_flags = 0;
+    const char* tok_end;
+    do
+    {
+        tok_end = strchr(s, ',');
+        if( ! tok_end )
+            tok_end = s + strlen(s);
+        if( __ef_tok_eq(s, tok_end - s, "vf") )
+            new_flags |= EF_PD_VF;
+        else if( __ef_tok_eq(s, tok_end - s, "phys") )
+            new_flags |= EF_PD_PHYS_MODE;
+        else if( __ef_tok_eq(s, tok_end - s, "default") )
+            flags = 0;
+        else if( __ef_tok_eq(s, tok_end - s, "mcast_loop") )
+            new_flags |= EF_PD_MCAST_LOOP;
+        s = tok_end + 1;
+    } while( *tok_end != '\0' );
+
+    return new_flags != 0 ? new_flags : flags;
+}
+
 
 static int __ef_pd_alloc(ef_pd* pd, ef_driver_handle pd_dh,
 			 int ifindex, enum ef_pd_flags flags, int vlan_id)
 {
   ci_resource_alloc_t ra;
-  const char* s;
   int rc;
 
-  if( (s = getenv("EF_VI_PD_FLAGS")) != NULL ) {
-    if( ! strcmp(s, "vf") )
-      flags = EF_PD_VF;
-    else if( ! strcmp(s, "phys") )
-      flags = EF_PD_PHYS_MODE;
-    else if( ! strcmp(s, "default") )
-      flags = 0;
-  }
+  flags = __ef_env2flags(flags);
 
   if( flags & EF_PD_VF )
     flags |= EF_PD_PHYS_MODE;
