@@ -335,7 +335,7 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
   struct xlnx_efct_txq_params params = {
     .evq = evq_id,
 #if XLNX_EFCT_AUX_VERSION >= KERNEL_VERSION(4,0,0)
-    .label = -1,
+    .label = tag,
 #endif
   };
   int rc;
@@ -392,7 +392,7 @@ static void efct_check_for_flushes(struct work_struct *work)
        CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX &&
        CI_QWORD_FIELD(*event, EFCT_FLUSH_REASON) == EFCT_FLUSH_REASON_MCDI) {
       found_flush = true;
-      txq = CI_QWORD_FIELD(*event, EFCT_FLUSH_LABEL);
+      txq = CI_QWORD_FIELD(*event, EFCT_FLUSH_QUEUE_ID);
       efhw_handle_txdmaq_flushed(evq->nic, txq);
       break;
     }
