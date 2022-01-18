@@ -37,14 +37,84 @@ typedef struct {
  * as the scheme is somewhat "symmetrical".
  */
 
+/* There are currently no known compilers which produce bad codegen for this,
+ * but the naming of this macro leaves open the possibility that we might need
+ * to exclude some. */
+#if defined __clang__ && __clang_major__ * 100 + __clang_minor__ >= 304
+#define EF_ADDCARRY_INTRINSIC_IS_GOOD 1
+#elif __GNUC__ >= 5
+#define EF_ADDCARRY_INTRINSIC_IS_GOOD 1
+#elif !defined __x86_64__
+#error For non-x64 builds, please use a newer compiler
+#else
+#define EF_ADDCARRY_INTRINSIC_IS_GOOD 0
+#endif
+
+static inline unsigned long long addc64(unsigned long long a,
+                                        unsigned long long b)
+{
+#if EF_ADDCARRY_INTRINSIC_IS_GOOD
+  unsigned char c = __builtin_uaddll_overflow(a, b, &a);
+  return a + c;
+#else
+  __asm__("addq %1,%0; adcq $0,%0" : "+r"(a) : "g"(b));
+#endif
+  return a;
+}
+
+static inline uint32_t addc32(uint32_t a, uint32_t b)
+{
+#if EF_ADDCARRY_INTRINSIC_IS_GOOD
+  unsigned char c = __builtin_uadd_overflow(a, b, &a);
+  return a + c;
+#else
+  __asm__("addl %1,%0; adcl $0,%0" : "+r"(a) : "g"(b));
+#endif
+  return a;
+}
+
+static inline uint16_t addc16(uint16_t a, uint16_t b)
+{
+#ifdef __x86_64__
+  __asm__("addw %1,%0; adcw $0,%0" : "+r"(a) : "g"(b));
+  return a;
+#else
+  uint32_t sum = a + b;
+  return sum + (sum >= 0x10000);
+#endif
+}
+
 ef_vi_inline uint64_t
 ip_csum64_partial(uint64_t csum64, const void*__restrict__ buf, size_t bytes)
 {
+  uint64_t other = 0;
   EF_VI_ASSERT(buf || bytes == 0);
   EF_VI_ASSERT(bytes >= 0);
   EF_VI_ASSERT((bytes & 1) == 0);
 
-  while( bytes >= 4 ) {
+  while( bytes >= 16 ) {
+    /* This loop looks like it's just been unrolled once, but actually its
+     * purpose is to run two independent dependency chains through the CPU */
+    uint64_t bounce;
+    memcpy(&bounce, buf, sizeof(bounce));
+    csum64 = addc64(csum64, bounce);
+    buf = (char*) buf + sizeof(bounce);
+    bytes -= sizeof(bounce);
+    memcpy(&bounce, buf, sizeof(bounce));
+    other = addc64(other, bounce);
+    buf = (char*) buf + sizeof(bounce);
+    bytes -= sizeof(bounce);
+  }
+  if( bytes >= 8 ) {
+    uint64_t bounce;
+    memcpy(&bounce, buf, sizeof(bounce));
+    csum64 = addc64(csum64, bounce);
+    buf = (char*) buf + sizeof(bounce);
+    bytes -= sizeof(bounce);
+  }
+  csum64 = addc64(csum64, other);
+  csum64 = addc32((uint32_t)csum64, csum64 >> 32);
+  if( bytes >= 4 ) {
     uint32_t bounce;
     memcpy(&bounce, buf, sizeof(bounce));
     csum64 += bounce;
@@ -65,34 +135,26 @@ static uint64_t
 ip_csum64_partialv(uint64_t csum64, const struct iovec* iov, int iovlen)
 {
   int n, carry = 0;
-  union {
-    uint8_t u8[2];
-    uint16_t u16;
-  } carried;
-  carried.u8[0] = 0;  /* avoid compiler warning */
 
   for( n = 0; n < iovlen; n++ ) {
     uint8_t* data = (uint8_t*)iov[n].iov_base;
     int bytes = iov[n].iov_len;
-    if( bytes == 0 )
+    if(unlikely( bytes == 0 ))
       continue;
-    if( carry ) {
-      carried.u8[1] = data[0];
-      csum64 += carried.u16;
+    if(unlikely( carry )) {
+      csum64 += data[0] << 8;
       data++;
       bytes--;
     }
     csum64 = ip_csum64_partial(csum64, data, bytes & ~1);
-    if( (bytes & 1) == 0 ) {
+    if(likely( (bytes & 1) == 0 )) {
       carry = 0;
     }
     else {
       carry = 1;
-      carried.u8[0] = data[bytes - 1];
+      csum64 += data[0];
     }
   }
-  if( carry )
-    csum64 += carried.u8[0];
   return csum64;
 }
 
@@ -104,10 +166,8 @@ ef_vi_inline uint32_t ip_proto_csum64_finish(uint64_t csum64)
    */
   EF_VI_ASSERT((csum64 >> 48) == 0);
   {
-    unsigned sum = ( ((csum64 >> 32) & 0xffff) + ((csum64 >> 16) & 0xffff)
-                     + (csum64 & 0xffff) );
-    sum =  (sum >> 16) + (sum & 0xffff);
-    sum += (sum >> 16);
+    unsigned sum = addc32((uint32_t)csum64, csum64 >> 32);
+    sum = addc16((uint16_t)sum, sum >> 16);
     sum = ~sum & 0xffff;
     return sum;
   }
