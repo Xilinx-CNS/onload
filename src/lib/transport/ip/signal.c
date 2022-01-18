@@ -508,6 +508,20 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
 
   /* Are we going to intercept this signal? */
   if( ! oo_is_signal_intercepted(sig, act->sa_handler) ) {
+    if( sig == SIGONLOAD ) {
+      /* Onload needs its SIGONLOAD handler.  Hide this minuscule thingy if the
+       * user reads, and complain if the user installs their own handler.
+       */
+      if( act->sa_handler == SIG_DFL )
+        return 0;
+      ci_log("ERROR: a signal handler for signal %d can't be "
+             "overwritten without breaking Onload.  "
+             "Returning EACCES error.", SIGONLOAD);
+      ci_log("You can change SIGONLOAD value in the Onload source code");
+      errno = EACCES;
+      return -1;
+    }
+
     rc = oo_libc_sigaction(sig, act, &old);
     LOG_SIG(ci_log("%s: rc=%d: do not intercept signal %d "
                    OO_PRINT_SIGACTION_FMT,
@@ -583,7 +597,7 @@ int oo_sigonload_init(void* handler)
   memset(&sa, 0, sizeof(sa));
   sa.sa_flags = SA_SIGINFO;
   sa.sa_sigaction = handler;
-  rc = oo_do_sigaction(SIGONLOAD, &sa, &oldsa);
+  rc = ci_sys_sigaction(SIGONLOAD, &sa, &oldsa);
   ci_assert_equal(rc, 0);
   if( rc < 0 ) {
     ci_log("%s: ERROR: failed to install SIGONLOAD handler %s",
