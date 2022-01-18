@@ -204,6 +204,15 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 			break;
 	}
 
+#if XLNX_EFCT_AUX_VERSION >= KERNEL_VERSION(5,0,0)
+	for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; i++) {
+		if (pages[i].page != NULL) {
+			put_page(pages[i].page);
+			fput(pages[i].file);
+		}
+	}
+#endif
+
 	kfree(pages);
 	return rc;
 #else
@@ -236,6 +245,13 @@ int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
 		struct page* page = pages[i / CI_EFCT_SUPERBUFS_PER_PAGE].page;
 		superbufs[i] = page_to_virt(page) +
 		              EFCT_RX_SUPERBUF_BYTES * (i % CI_EFCT_SUPERBUFS_PER_PAGE);
+		
+#if XLNX_EFCT_AUX_VERSION >= KERNEL_VERSION(5,0,0)
+		if (pages[i].page != NULL) {
+			put_page(pages[i].page);
+			fput(pages[i].file);
+		}
+#endif
 	}
 
 	kfree(pages);
