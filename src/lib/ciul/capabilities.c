@@ -62,6 +62,8 @@ static const char* names[EF_VI_CAP_MAX + 1] = {
   [EF_VI_CAP_CTPIO] = "CTPIO",
   [EF_VI_CAP_RX_FORCE_EVENT_MERGING] = "RX queue is configured to force event merging",
   [EF_VI_CAP_MIN_BUFFER_MODE_SIZE] = "Buffer mode smallest page size",
+  [EF_VI_CAP_CTPIO_ONLY] = "TX exclusively supports CTPIO transmit method",
+  [EF_VI_CAP_RX_SHARED] = "VI may report packets destined to other VIs sharing RX queue",
   [EF_VI_CAP_MAX] = "Unknown",
 };
 

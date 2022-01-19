@@ -301,6 +301,14 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     get_from_nic_flags(nic, NIC_FLAG_TX_CTPIO, out);
     break;
 
+  case EF_VI_CAP_CTPIO_ONLY:
+    get_from_nic_flags(nic, NIC_FLAG_CTPIO_ONLY, out);
+    break;
+
+  case EF_VI_CAP_RX_SHARED:
+    get_from_nic_flags(nic, NIC_FLAG_RX_SHARED, out);
+    break;
+
   case EF_VI_CAP_MIN_BUFFER_MODE_SIZE: {
     int n = efhw_nic_buffer_table_orders_num(nic);
     const int* orders = efhw_nic_buffer_table_orders(nic);

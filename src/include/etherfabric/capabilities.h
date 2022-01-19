@@ -164,6 +164,12 @@ enum ef_vi_capability {
   /** Smallest supported page size/alignment when using buffer mode */
   EF_VI_CAP_MIN_BUFFER_MODE_SIZE,
 
+  /** Hardware supports only CTPIO sending method */
+  EF_VI_CAP_CTPIO_ONLY,
+
+  /** Packets captured on a VI might belong to other instance */
+  EF_VI_CAP_RX_SHARED,
+
   /** Maximum value of capabilities enumeration */
   EF_VI_CAP_MAX, /* Keep this last */
 };
