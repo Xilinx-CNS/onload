@@ -30,7 +30,7 @@
  * kernel vi resource manager.  They fully resolve the base addresses of
  * the Rx & Tx doorbell & DMA queue.
  */
-
+/* TODO move this to driver code as EFHW_* APIs are not userspace interface */
 static unsigned vi_flags_to_efab_flags(unsigned vi_flags)
 {
   unsigned efab_flags = 0u;
@@ -75,13 +75,13 @@ static int /*bool*/ need_vi_stats_buf(unsigned vi_flags)
 /* Certain VI functionalities are only supported on certain NIC types.
  * This function validates that the requested functionality is present
  * on the selected NIC. */
-static int check_nic_compatibility(unsigned vi_flags, unsigned ef_vi_arch)
+static int check_nic_compatibility(unsigned vi_flags, enum ef_vi_arch ef_vi_arch)
 {
   switch (ef_vi_arch) {
-  case EFHW_ARCH_EF10:
+  case EF_VI_ARCH_EF10:
     return 0;
 
-  case EFHW_ARCH_EF100:
+  case EF_VI_ARCH_EF100:
     if (vi_flags & EF_VI_RX_TIMESTAMPS) {
       LOGVV(ef_log("%s: ERROR: RX TIMESTAMPS flag not supported"
                    " on EF100 architecture", __FUNCTION__));
@@ -94,7 +94,7 @@ static int check_nic_compatibility(unsigned vi_flags, unsigned ef_vi_arch)
     }
     return 0;
 
-  case EFHW_ARCH_AF_XDP:
+  case EF_VI_ARCH_AF_XDP:
     if (vi_flags & EF_VI_TX_PUSH_ALWAYS) {
       LOGVV(ef_log("%s: ERROR: TX PUSH ALWAYS flag not supported"
                    " on AF_XDP architecture", __FUNCTION__));
@@ -112,7 +112,7 @@ static int check_nic_compatibility(unsigned vi_flags, unsigned ef_vi_arch)
     }
     return 0;
 
-  case EFHW_ARCH_EFCT:
+  case EF_VI_ARCH_EFCT:
     if (vi_flags & EF_VI_RX_EVENT_MERGE) {
       LOGVV(ef_log("%s: ERROR: RX EVENT MERGE flag not supported"
                    " on EFCT architecture", __FUNCTION__));
@@ -783,7 +783,7 @@ int ef_vi_pace(ef_vi* ep, ef_driver_handle fd, int val)
   return -EOPNOTSUPP;
 }
 
-
+/* TODO move this to driver code as EFHW_* APIs are not userspace interface */
 int ef_vi_arch_from_efhw_arch(int efhw_arch)
 {
   switch( efhw_arch ) {
