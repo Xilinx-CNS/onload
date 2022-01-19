@@ -8,6 +8,7 @@
 #include <ci/driver/efab/hardware.h>
 #include <ci/efhw/efct.h>
 #include <linux/mman.h>
+#include <linux/file.h>
 #include <ci/driver/ci_efct.h>
 #include "efrm_internal.h"
 
