@@ -1235,6 +1235,20 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
     info->ef_vi_flags |= EF_VI_RX_EVENT_MERGE;
   }
 
+  if( nic->flags & NIC_FLAG_CTPIO_ONLY )
+    info->oo_vi_flags |= OO_VI_FLAGS_TX_CTPIO_ONLY;
+  else
+    info->oo_vi_flags &=~ OO_VI_FLAGS_TX_CTPIO_ONLY;
+
+  if( nic->flags & NIC_FLAG_RX_SHARED )
+    info->oo_vi_flags |= OO_VI_FLAGS_RX_SHARED;
+  else
+    info->oo_vi_flags &=~ OO_VI_FLAGS_RX_SHARED;
+
+  if( nic->flags & NIC_FLAG_HW_MULTICAST_REPLICATION )
+    info->oo_vi_flags |= OO_VI_FLAGS_HW_MULTICAST_REPLICATION;
+  else
+    info->oo_vi_flags &=~ OO_VI_FLAGS_HW_MULTICAST_REPLICATION;
 
   if( (nic->flags & NIC_FLAG_MCAST_LOOP_HW) &&
       (NI_OPTS(ni).mcast_recv_hw_loop) ) {
