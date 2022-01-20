@@ -73,7 +73,7 @@ static inline int tx_ctpio(ci_netif* ni, int intf_i, ef_vi* vi,
   total_length = ci_netif_pkt_to_host_iovec(ni, pkt, host_iov,
                                       sizeof(host_iov) / sizeof(host_iov[0]));
 
-  if( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY &&
+  if( (nsn->oo_vi_flags & OO_VI_FLAGS_TX_CTPIO_ONLY) &&
       ef_vi_transmit_space_bytes(vi) < total_length)
     return -ENOSPC;
 
@@ -152,7 +152,8 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
                       ! ci_netif_may_ctpio(ni, intf_i, pkt->pay_len) ||
                       pkt->flags & CI_PKT_FLAG_INDIRECT) )
           ctpio = 0;
-        if( ctpio || vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY ) {
+        ctpio |= !! (ni->state->nic[pkt->intf_i].oo_vi_flags & OO_VI_FLAGS_TX_CTPIO_ONLY);
+        if( ctpio ) {
           ci_assert(! posted_dma);
           rc = tx_ctpio(ni, intf_i, vi, pkt, iov, iov_len);
         }
@@ -318,7 +319,7 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
      * buffers, which should be prevented by the declared MTU and indirect
      * packets, which aren't used with this NIC type.
      */
-    if( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY ) {
+  if( netif->state->nic[pkt->intf_i].oo_vi_flags & OO_VI_FLAGS_TX_CTPIO_ONLY ) {
       ci_assert_gt(iov_len, 0);
       ci_assert_le(iov_len, CI_IP_PKT_SEGMENTS_MAX);
       ci_assert(is_to_primary_vi(pkt));

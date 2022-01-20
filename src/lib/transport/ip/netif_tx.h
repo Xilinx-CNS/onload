@@ -157,14 +157,9 @@ ci_inline int /*bool*/ ci_netif_may_ctpio(ci_netif* ni, int intf_i,
                                           size_t frame_len)
 {
 #if CI_CFG_CTPIO
- #ifndef __KERNEL__
   const ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
-  int max_fill;
- #endif
-  ef_vi* vi = ci_netif_vi(ni, intf_i);
-
   /* On arches where CTPIO is the only option we always want to try it */
-  if( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY )
+  if( nsn->oo_vi_flags & OO_VI_FLAGS_TX_CTPIO_ONLY )
     return 1;
 
  #ifndef __KERNEL__
@@ -172,9 +167,14 @@ ci_inline int /*bool*/ ci_netif_may_ctpio(ci_netif* ni, int intf_i,
    * TX ring is not very full.  (It is essential that we have room to post
    * a fallback).
    */
-  max_fill = ef_vi_transmit_capacity(vi) >> 2;
-  return frame_len <= nsn->ctpio_frame_len_check &&
-         ef_vi_transmit_fill_level(vi) < max_fill;
+  {
+    ef_vi* vi = ci_netif_vi(ni, intf_i);
+    int max_fill;
+
+    max_fill = ef_vi_transmit_capacity(vi) >> 2;
+    return frame_len <= nsn->ctpio_frame_len_check &&
+          ef_vi_transmit_fill_level(vi) < max_fill;
+  }
  #else
   return 0;
  #endif
