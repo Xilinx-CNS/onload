@@ -471,7 +471,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     LOGVV(ef_log("%s: ci_resource_alloc %d", __FUNCTION__, rc));
     goto fail1;
   }
-  if ( ra.u.vi_out.nic_flags & EFHW_VI_NIC_CTPIO_ONLY ) 
+  if ( ra.u.vi_out.nic_flags & EFHW_VI_NIC_CTPIO_ONLY &&
+       ra.u.vi_out.txq_capacity )
     vi_flags |= EF_VI_TX_CTPIO;
 
   evq_capacity = ra.u.vi_out.evq_capacity;
