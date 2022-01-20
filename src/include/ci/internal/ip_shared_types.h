@@ -404,6 +404,7 @@ struct ci_ip_pkt_fmt_s {
                                    * packet was set by the NIC during datapath
                                    * processing (EF100 feature). The user_mark
                                    * is put in pf.tcp_rx.lo.rx_sock */
+#define CI_PKT_RX_FLAG_RX_SHARED       0x08 /* Packet comes from shared RXQ */
   ci_uint8              rx_flags;
 
   /*! Number of these buffers that are chained together using

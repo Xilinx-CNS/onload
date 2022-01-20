@@ -355,6 +355,11 @@ static void handle_rx_plugin_data(ci_netif* netif,
 }
 #endif
 
+static inline unsigned unexpected_rx_log_flag(ci_ip_pkt_fmt* pkt)
+{
+  return (pkt->rx_flags & CI_PKT_RX_FLAG_RX_SHARED) ?
+         CI_TP_LOG_NR : CI_TP_LOG_U;
+}
 
 static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
                           ci_ip_pkt_fmt* pkt)
@@ -396,9 +401,6 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
     LOG_DR(ci_hex_dump(ci_log_fn, PKT_START(pkt),
                        ip_pkt_dump_len(ip_tot_len), 0));
 
-    if( oo_tcpdump_check(netif, pkt, pkt->intf_i) )
-      oo_tcpdump_dump_pkt(netif, pkt);
-
     /* Hardware should not deliver us fragments when using scalable
      * filters, but it happens in some corner cases.  We can't handle them.
      * Also check for valid IP length for non-fragmented packets.*/
@@ -436,6 +438,9 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
 
       get_rx_timestamp(netif, pkt);
 
+      if( oo_tcpdump_check(netif, pkt, pkt->intf_i) )
+        oo_tcpdump_dump_pkt(netif, pkt);
+
       /* Demux to appropriate protocol. */
       if( ip->ip_protocol == IPPROTO_TCP ) {
         ci_tcp_handle_rx(netif, ps, pkt, (ci_tcp_hdr*) payload, ip_paylen);
@@ -448,10 +453,10 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
         return;
       }
 
-      LOG_U(CI_RLLOG(10, LPF "IGNORE IP protocol=%d",
-                     (int) ip->ip_protocol));
+      LOG_FL(unexpected_rx_log_flag(pkt),
+             CI_RLLOG(10, LPF "IGNORE IP protocol=%d", (int) ip->ip_protocol));
     }
-    else {
+    else if( ~pkt->rx_flags & CI_PKT_RX_FLAG_RX_SHARED ) {
       /*! \todo IP slow path.  Don't want to deal with this yet.
        * 
        * It is probably bad idea to print all IP fragments, but we should
@@ -468,6 +473,19 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
     }
 
     CI_IPV4_STATS_INC_IN_DISCARDS( netif );
+
+    /* On architectures with RX_SHARED (EFCT), we expect unexpected packets to show up
+    * as the queue is shared with kernel stack and potentially other onload/ef_vi stacks,
+    * we need to ignore those packets. */
+    if( pkt->rx_flags & CI_PKT_RX_FLAG_RX_SHARED ) {
+      CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_ip_other);
+      ci_netif_pkt_release_rx_1ref(netif, pkt);
+      return;
+    }
+
+    if( oo_tcpdump_check(netif, pkt, pkt->intf_i) )
+      oo_tcpdump_dump_pkt(netif, pkt);
+
     if( ci_netif_pkt_pass_to_kernel(netif, pkt) )
       CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_ip_other);
     else
@@ -502,6 +520,16 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
     }
 
     CI_IP_STATS_INC_IN6_DISCARDS( netif );
+
+    /* On architectures with RX_SHARED (EFCT), we expect unexpected packets to show up
+    * as the queue is shared with kernel stack and potentially other onload/ef_vi stacks,
+    * we need to ignore those packets. */
+    if( pkt->rx_flags & CI_PKT_RX_FLAG_RX_SHARED ) {
+      CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_ip6_other);
+      ci_netif_pkt_release_rx_1ref(netif, pkt);
+      return;
+    }
+
     if( ci_netif_pkt_pass_to_kernel(netif, pkt) )
       CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_ip6_other);
     else
@@ -509,6 +537,15 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
     return;
   }
 #endif
+
+  /* On architectures with RX_SHARED (EFCT), we expect unexpected packets to show up
+  * as the queue is shared with kernel stack and potentially other onload/ef_vi stacks,
+  * we need to ignore those packets. */
+  if( pkt->rx_flags & CI_PKT_RX_FLAG_RX_SHARED ) {
+    CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_non_ip);
+    ci_netif_pkt_release_rx_1ref(netif, pkt);
+    return;
+  }
 
   /* If this assert fails then it's likely either a bug in the plugin or the
    * plugin has tried to do something so clever that it won't work: */
@@ -828,6 +865,12 @@ ci_inline void handle_rx_post_future(ci_netif* ni,
                 ip_tot_len, pkt->pay_len, PKT_DBG_ARGS(pkt)));
       LOG_DU(ci_hex_dump(ci_log_fn, PKT_START(pkt), 64, 0));
       CI_IPV4_STATS_INC_IN_DISCARDS( ni );
+
+      if( pkt->rx_flags & CI_PKT_RX_FLAG_RX_SHARED ) {
+        CITP_STATS_NETIF_INC(ni, no_match_pass_to_kernel_ip_other);
+        ci_netif_pkt_release_rx_1ref(ni, pkt);
+        return;
+      }
       if( ci_netif_pkt_pass_to_kernel(ni, pkt) )
         CITP_STATS_NETIF_INC(ni, no_match_pass_to_kernel_ip_other);
       else
@@ -974,12 +1017,6 @@ static void handle_rx_scatter_merge(ci_netif* ni, struct oo_rx_state* s,
 }
 
 
-static inline unsigned unexpected_rx_log_flag(ci_netif* ni, int intf_i)
-{
-  return ni->state->nic[intf_i].vi_nic_flags & EFHW_VI_NIC_RX_SHARED ?
-         CI_TP_LOG_NR : CI_TP_LOG_U;
-}
-
 
 static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
                               ci_ip_pkt_fmt* pkt, int frame_len)
@@ -1043,7 +1080,7 @@ static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
   }
 #endif
   else {
-    LOG_FL(unexpected_rx_log_flag(ni, pkt->intf_i),
+    LOG_FL(unexpected_rx_log_flag(pkt),
            log(FN_FMT "BAD frame ether_type=%d", FN_PRI_ARGS(ni), ether_type));
     goto drop;
   }
@@ -1103,7 +1140,7 @@ static void discard_rx_multi_pkts(ci_netif* ni, struct ci_netif_poll_state* ps,
   int is_frag = OO_PP_NOT_NULL(pkt->frag_next);
   int handled = 0;
 
-  LOG_FL(unexpected_rx_log_flag(ni, intf_i),
+  LOG_FL(unexpected_rx_log_flag(pkt),
          log(LPF "[%d] intf %d discard RX_MULTI_PKTS 0x%x",
              NI_ID(ni), intf_i, discard_flags));
 
@@ -1698,6 +1735,9 @@ static ci_ip_pkt_fmt* alloc_rx_efct_pkt(ci_netif* ni, int intf_i, int pay_len)
   pkt->pkt_start_off = 0;
   pkt->intf_i = intf_i;
   pkt->flags |= CI_PKT_FLAG_RX;
+  ci_assert_equal(pkt->rx_flags, 0);
+  ci_assert_flags(ni->state->nic[intf_i].oo_vi_flags, OO_VI_FLAGS_RX_SHARED);
+  pkt->rx_flags = CI_PKT_RX_FLAG_RX_SHARED;
   pkt->refcount = 1;
   pkt->pay_len = pay_len;
   ++ni->state->n_rx_pkts;

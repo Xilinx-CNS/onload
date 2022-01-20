@@ -4969,6 +4969,15 @@ void ci_tcp_handle_rx(ci_netif* netif, struct ci_netif_poll_state* ps,
       return;
   }
 
+  /* On architectures with RX_SHARED (X3), we expect unexpected packets to show up
+   * as the queue is shared with kernel stack and potentially other onload/ef_vi stacks,
+   * we need to ignore those packets. */
+  if( pkt->rx_flags & CI_PKT_RX_FLAG_RX_SHARED ) {
+    CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_tcp);
+    ci_netif_pkt_release_rx_1ref(netif, pkt);
+    return;
+  }
+
   if( ci_netif_pkt_pass_to_kernel(netif, pkt) ) {
     CITP_STATS_NETIF_INC(netif, no_match_pass_to_kernel_tcp);
     return;
