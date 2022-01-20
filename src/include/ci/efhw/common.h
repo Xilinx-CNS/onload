@@ -121,7 +121,7 @@ typedef union {
 /* Flags for hw features */
 #define EFHW_VI_NIC_BUG35388_WORKAROUND 0x01  /*! workaround for bug35388 */
 #define EFHW_VI_NIC_CTPIO_ONLY          0x02  /*! TX only using CTPIO */
-#define EFHW_VI_NIC_RX_OVERCAPTURE      0x04  /*! RX filters are lower bound */
+#define EFHW_VI_NIC_RX_SHARED           0x04  /*! RX filters are lower bound */
 #define EFHW_VI_NIC_RX_MCAST_REPLICATION 0x08 /*! RX mcast replication */
 
 /* Types of hardware filter */
@@ -245,10 +245,12 @@ typedef union {
 #define NIC_FLAG_EVQ_IRQ 0x2000000000000LL
 /* The only supported TX mode is CTPIO */
 #define NIC_FLAG_CTPIO_ONLY 0x4000000000000LL
-/* VIs will tend to receive more packets than just those for which filters were
- * added. This flag is intended solely to give guidance about logging severity
- * levels to use */
-#define NIC_FLAG_RX_OVERCAPTURE 0x8000000000000LL
+/* A physical RX queue might be shared with other entities e.g. kernel stack or VIs of other apps.
+ * The implications are that applications should:
+ *  * expect traffic that has not been requested through their explicit HW filter installation,
+ *  * ignore such unsolicited traffic as it is handled by other parties.
+ */
+#define NIC_FLAG_RX_SHARED 0x8000000000000LL
 /* Multicast replication of incoming packets is implemented in the NIC */
 #define NIC_FLAG_RX_MCAST_REPLICATION 0x10000000000000LL
 
