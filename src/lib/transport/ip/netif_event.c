@@ -503,6 +503,8 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
 
     CI_IP_STATS_INC_IN6_RECVS( netif );
 
+    get_rx_timestamp(netif, pkt);
+
     if( oo_tcpdump_check(netif, pkt, pkt->intf_i) )
       oo_tcpdump_dump_pkt(netif, pkt);
 
