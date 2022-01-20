@@ -719,7 +719,7 @@ int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
   int bufset_id = NI_PKT_SET(netif);
   int ask_for_more_packets = 0;
 
-  if( netif->state->nic[intf_i].vi_arch == EFHW_ARCH_EFCT )
+  if( vi->nic_type.arch == EF_VI_ARCH_EFCT )
     return 0;
 
   ci_assert(ci_netif_is_locked(netif));

@@ -81,7 +81,7 @@ static inline int tx_ctpio(ci_netif* ni, int intf_i, ef_vi* vi,
   /* TODO EFCT The 'T' variant is reported by fake test hardware, which
      doesn't provide iomem.
    */
-  if((vi->nic_type.arch == EFHW_ARCH_EFCT) && (vi->nic_type.variant == 'T'))
+  if((vi->nic_type.arch == EF_VI_ARCH_EFCT) && (vi->nic_type.variant == 'T'))
     return -ENOSPC;
 #endif
 
