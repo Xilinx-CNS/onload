@@ -77,7 +77,7 @@ OO_VERSION_GEN := $(SRCPATH)/../scripts/onload_version_gen
 # So we remove onload_version.o and library when the version changes.
 make_oo_version: $(OO_VERSION_GEN) FORCE
 	@echo "  GENERATE $(OO_VERSION_HDR)"
-	T=$$(mktemp -p ./$(objd)); \
+	T=$$(mktemp -p $(objd).); \
 	(cd $(SRCPATH); $(OO_VERSION_GEN)) > $$T; \
 	if diff -q $(OO_VERSION_HDR) $$T 2>/dev/null; \
 		then echo "Not updating onload_version.h"; \
