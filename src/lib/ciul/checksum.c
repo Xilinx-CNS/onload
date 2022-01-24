@@ -152,7 +152,7 @@ ip_csum64_partialv(uint64_t csum64, const struct iovec* iov, int iovlen)
     }
     else {
       carry = 1;
-      csum64 += data[0];
+      csum64 += data[bytes - 1];
     }
   }
   return csum64;
