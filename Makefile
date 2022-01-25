@@ -73,11 +73,9 @@ obj-m := $(addsuffix /,$(DRIVER_SUBDIRS))
 
 AUTOCOMPAT := $(obj)/src/driver/linux_resource/autocompat.h
 LINUX_RESOURCE := $(src)/src/driver/linux_resource
-# It's not at all clear why "unset CC" is necessary in the recipe below to
-# make Debian 10 (4.19) work. Perhaps a bug in kbuild? - it's set to " gcc-8"
 $(AUTOCOMPAT): $(LINUX_RESOURCE)/kernel_compat.sh $(LINUX_RESOURCE)/kernel_compat_funcs.sh
 	@mkdir -p $(@D)
-	(unset CC; $< -k $(CURDIR) $(if $(filter 1,$(V)),-v,-q) > $@) || (rm -f $@ && false)
+	($< -k $(CURDIR) $(if $(filter 1,$(V)),-v,-q) > $@) || (rm -f $@ && false)
 
 mkdirs:
 	@mkdir -p $(obj)/src/lib/efhw
