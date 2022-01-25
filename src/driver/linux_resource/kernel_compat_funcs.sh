@@ -476,10 +476,14 @@ vmsg "MAKEFLAGS  := $MAKEFLAGS"
 
 # Need to set CC explicitly on the kernel make line
 # Needs to override top-level kernel Makefile setting
-# Somehow this script does the wrong thing when ccache is used, so disable
-# that.
+# Debian (specifically Debian 10) adds ccache and/or space.
+# Somehow this script does the wrong thing with space, so disable that.
+# On the flip side, we should not remove CC completely, because sometimes
+# it is important.  For example, when using elrepo kernels with old RHEL.
 if [ -n "${CC:-}" ]; then
-    EXTRA_MAKEFLAGS=CC=\"${CC/ccache /}\"
+    CC=${CC/ccache /}
+    CC=${CC/ /}
+    EXTRA_MAKEFLAGS=CC=${CC}
 fi
 
 if [ -n "${CROSS_COMPILE:-}" ]; then
