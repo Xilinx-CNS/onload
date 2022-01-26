@@ -695,6 +695,18 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     if(unlikely( header->u64[0] & CHECK_FIELDS )) {
 
       if( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_ROLLOVER) ) {
+        /* We created the desc->refcnt assuming that this superbuf would be
+         * full of packets. It wasn't, so consume all the unused refs */
+        int nskipped = shm->superbuf_pkts -
+                       pkt_id_to_index_in_superbuf(pkt_id);
+        struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
+        EF_VI_ASSERT(nskipped > 0);
+        EF_VI_ASSERT(nskipped <= desc->refcnt);
+        desc->refcnt -= nskipped;
+        if( desc->refcnt == 0 )
+          superbuf_free(vi, pkt_id_to_rxq_ix(pkt_id),
+                        pkt_id_to_local_superbuf_ix(pkt_id));
+
         /* Force a rollover on the next poll, while preserving the superbuf
          * index encoded in rxq_ptr->next since that is required by
          * get_timestamp to identify packets within this superbuf.
