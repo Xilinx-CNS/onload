@@ -52,6 +52,7 @@ struct oo_dshm_buffer {
   ci_dllink class_link;
   ci_dllink handle_link;
   uid_t owner_euid;
+  atomic_t refcount;
 };
 
 
@@ -84,6 +85,7 @@ oo_dshm_register_impl(ci_int32 shm_class, ci_user_ptr_t user_addr,
 
   buffer->shm_class = shm_class;
   buffer->owner_euid = ci_geteuid();
+  atomic_set(&buffer->refcount, 1);
 
   /* Allocate storage for page metadata. */
   buffer->num_pages =
@@ -198,6 +200,22 @@ oo_dshm_list_impl(ci_int32 shm_class, ci_user_ptr_t buffer_ids,
 }
 
 
+static void dshm_release(struct oo_dshm_buffer* buffer)
+{
+  if( atomic_dec_and_test(&buffer->refcount) ) {
+    ci_uint32 i;
+    for( i = 0; i < buffer->num_pages; ++i )
+      unpin_user_page(buffer->pages[i]);
+
+    ci_id_pool_free(&oo_dshm_state.ids[buffer->shm_class], buffer->buffer_id,
+                    &oo_dshm_state.lock);
+
+    vfree(buffer->pages);
+    ci_free(buffer);
+  }
+}
+
+
 /* Frees all dshm buffers in a list for a given driver handle.  Existing
  * mappings of those segments will continue to be valid. */
 int
@@ -214,8 +232,6 @@ oo_dshm_free_handle_list(ci_dllist* list)
    * lock to adjust the class list and the ID pool. */
   CI_DLLIST_FOR_EACH3(struct oo_dshm_buffer, buffer, handle_link, list,
                       next_buffer) {
-    ci_uint32 i;
-
     OO_DEBUG_SHM(ci_log("%s: id=%d class=%d", __FUNCTION__, buffer->buffer_id,
                         buffer->shm_class));
 
@@ -225,14 +241,7 @@ oo_dshm_free_handle_list(ci_dllist* list)
     ci_dllist_remove(&buffer->class_link);
     ci_irqlock_unlock(&oo_dshm_state.lock, &lock_flags);
 
-    for( i = 0; i < buffer->num_pages; ++i )
-      unpin_user_page(buffer->pages[i]);
-
-    ci_id_pool_free(&oo_dshm_state.ids[buffer->shm_class], buffer->buffer_id,
-                    &oo_dshm_state.lock);
-
-    vfree(buffer->pages);
-    ci_free(buffer);
+    dshm_release(buffer);
   }
 
   return 0;
@@ -264,16 +273,19 @@ oo_dshm_mmap_impl(struct vm_area_struct* vma)
 
   /* Do a linear search for the requested buffer. */
   CI_DLLIST_FOR_EACH2(struct oo_dshm_buffer, buffer, class_link,
-                      &oo_dshm_state.buffers[shm_class])
-    if( buffer->buffer_id == buffer_id )
+                      &oo_dshm_state.buffers[shm_class]) {
+    if( buffer->buffer_id == buffer_id ) {
+      atomic_inc(&buffer->refcount);
       break;
+    }
+  }
 
   /* We've finished traversing the list, so we can drop the lock, which is
    * necessary before calling remap_pfn_range(). */
   ci_irqlock_unlock(&oo_dshm_state.lock, &lock_flags);
 
   /* If we found a matching buffer, try to map it. */
-  if( buffer != NULL && buffer->buffer_id == buffer_id ) {
+  if( buffer != NULL ) {
     if( can_map_dshm(buffer) ) {
       /* We've found the buffer.  Map as many of its pages as we can into our
        * address space.  If we fail to map any of the pages, give up; the
@@ -296,6 +308,7 @@ oo_dshm_mmap_impl(struct vm_area_struct* vma)
                           buffer->owner_euid));
       rc = -EACCES;
     }
+    dshm_release(buffer);
   }
 
   return rc;
