@@ -29,6 +29,8 @@
  * top bit is use in the rxq to convey the sentinel). */
 #define CI_EFCT_Q_SUPERBUF_ID_MASK  0x7fff
 
+#define CI_EFCT_DEFAULT_POISON  0x0000FFA0C09B0000ull
+
 struct efab_efct_rx_superbuf_queue {
   uint16_t q[16];
   uint64_t added CI_ALIGN(8);

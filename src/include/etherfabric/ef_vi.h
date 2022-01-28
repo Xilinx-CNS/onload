@@ -1511,6 +1511,7 @@ ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags);
 extern void efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id,
                               const void** pkt_start);
 extern void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id);
+extern const void* efct_vi_rx_future_peek(ef_vi* vi);
 
 
 /**********************************************************************

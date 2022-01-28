@@ -1138,6 +1138,22 @@ void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
                   pkt_id_to_local_superbuf_ix(pkt_id));
 }
 
+const void* efct_vi_rx_future_peek(ef_vi* vi)
+{
+  uint64_t qs = vi->efct_shm->active_qs;
+  while(CI_LIKELY( qs )) {
+    unsigned qid = __builtin_ctzll(qs);
+    unsigned pkt_id = vi->ep_state->rxq.rxq_ptr[qid].prev;
+    const char* start = (char*)efct_rx_header(vi, pkt_id) +
+                        EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+    uint64_t v = *(volatile uint64_t*)(start - 2);
+    if(CI_LIKELY( v != CI_EFCT_DEFAULT_POISON ))
+      return start;
+    qs &= ~(1ull << qid);
+  }
+  return NULL;
+}
+
 int efct_ef_eventq_check_event(const ef_vi* vi)
 {
   return efct_tx_check_event(vi) || efct_rx_check_event(vi);

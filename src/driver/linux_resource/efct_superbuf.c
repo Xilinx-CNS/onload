@@ -272,7 +272,7 @@ __efct_nic_rxq_bind(struct xlnx_efct_device* edev,
     union xlnx_efct_param_value poison = {
       .poison = {
         .qid = rc,
-        .value = 0x0000FFA0C09B0000,
+        .value = CI_EFCT_DEFAULT_POISON,
         .length = 8
       }
     };
