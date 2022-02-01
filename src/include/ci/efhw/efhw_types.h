@@ -506,7 +506,7 @@ struct efhw_nic {
 	unsigned vi_min;
 	unsigned vi_lim;
 	/* VI IRQ range to use, used on EF100 only. */
-#define NIC_IRQ_MAX_RANGES 8
+#define NIC_IRQ_MAX_RANGES 16
 	unsigned vi_irq_n_ranges;
 	struct vi_irq_ranges {
 		unsigned base;

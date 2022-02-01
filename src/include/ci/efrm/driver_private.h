@@ -90,10 +90,10 @@ struct vi_resource_dimensions {
 	unsigned vi_stride;
 
 	/* EF100/X3 only */
-	/* 8 is an arbitrary number which is empirically larger than any number
-	 * which has been observed to be needed. It can't go too high without
-	 * moving this struct off the stack. */
-#define IRQ_N_RANGES_MAX 8
+	/* 16 is an arbitrary number which is empirically larger than any
+	 * number which has been observed to be needed. It can't go too high
+	 * without moving this struct off the stack. */
+#define IRQ_N_RANGES_MAX 16
 	unsigned irq_n_ranges;
 	struct irq_ranges {
 		unsigned irq_base;
