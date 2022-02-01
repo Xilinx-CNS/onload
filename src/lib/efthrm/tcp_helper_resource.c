@@ -6345,7 +6345,7 @@ int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
       OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
         memcpy(hw_addrs + i + intf_i * n_pages,
                tmp_hw_addrs + intf_i * group_pages,
-               sizeof(hw_addrs[0]) * group_pages);
+               sizeof(hw_addrs[0]) * CI_MIN(group_pages, n_pages - i));
       }
     }
 
