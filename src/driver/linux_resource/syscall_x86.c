@@ -42,9 +42,12 @@ static bool is_movq_indirect_8(const unsigned char *p)
 
 /* Test whether p points to something like
  *  e8 XX XX XX XX callq __x86_indirect_thunk_rax   (vulnerable CPU)
- * or
- *  ff d0     callq *%rax     (new, fixed CPU)
+ * or for new, fixed CPU:
+ *  ff d0     callq *%rax     (linux-5.15)
  *  0f 1f 00  nop3
+ * or
+ *  0f ae e8  lfence
+ *  ff d0     callq *%rax     (linux-5.16 amd, see patch_retpoline())
  */
 static bool is_callq_indirect_reg(const unsigned char *p)
 {
@@ -52,6 +55,9 @@ static bool is_callq_indirect_reg(const unsigned char *p)
     return true;
   if( p[0] == 0xff && p[1] == 0xd0 && p[2] == 0x0f && p[3] == 0x1f &&
       p[4] == 0x00 )
+    return true;
+  if( p[0] == 0x0f && p[1] == 0xae && p[2] == 0xe8 && p[3] == 0xff &&
+      p[4] == 0xd0 )
     return true;
   return false;
 }
