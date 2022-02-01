@@ -156,11 +156,10 @@ int efch_filter_list_gen_id(struct efch_filter_list *fl)
 
 static int efch_filter_insert(struct efrm_resource *rs, struct efrm_pd *pd,
                               struct efx_filter_spec *spec, struct filter *f,
-                              bool replace)
+                              unsigned flags)
 {
   int rxq = -1;
-  int rc = efrm_filter_insert(rs->rs_client, spec, &rxq, NULL,
-                              replace ? EFHW_FILTER_F_REPLACE : 0);
+  int rc = efrm_filter_insert(rs->rs_client, spec, &rxq, NULL, flags);
   if( rc < 0 )
     return rc;
 
@@ -213,7 +212,8 @@ static int efch_filter_list_rsops_add(struct efrm_resource *rs,
   }
 
   if( ! is_op_block_kernel_only(op->op) ) {
-    rc = efch_filter_insert(rs, pd, spec, f, replace);
+    rc = efch_filter_insert(rs, pd, spec, f,
+                            replace ? EFHW_FILTER_F_REPLACE : 0);
     if( rc < 0 ) {
       efch_filter_delete(rs, pd, f);
       return rc;
@@ -628,7 +628,12 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
   f->flags = 0;
   f->rxq = -1;
 
-  rc = efch_filter_insert(rs, pd, &spec, f, false);
+  /* EFCT TODO: this EXCLUSIVE_RXQ flag conversion works for apps having only
+   * one filter (e.g. eflatency) but needs to be smarter to go beyond that */
+  rc = efch_filter_insert(rs, pd, &spec, f,
+                          filter_add->in.flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ ?
+                             EFHW_FILTER_F_EXCL_RXQ | EFHW_FILTER_F_ANY_RXQ :
+                             0);
   if( rc < 0 ) {
     efch_filter_delete(rs, pd, f);
     return rc;

@@ -554,7 +554,7 @@ static const test_t* do_init(int ifindex, int mode,
   ef_vi* vi = &latency_vi->vi;
   enum ef_pd_flags pd_flags = 0;
   ef_filter_spec filter_spec;
-  enum ef_vi_flags vi_flags = 0;
+  enum ef_vi_flags vi_flags = EF_VI_RX_EXCLUSIVE;
   int rc;
   const test_t* t;
   unsigned long capability_val;

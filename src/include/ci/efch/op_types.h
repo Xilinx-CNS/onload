@@ -344,6 +344,7 @@ typedef union ci_filter_add_u {
     uint32_t            flags;
 #define CI_FILTER_FLAG_MCAST_LOOP          0x0001
 #define CI_FILTER_FLAG_RSS                 0x0002
+#define CI_FILTER_FLAG_EXCLUSIVE_RXQ       0x0004
     struct {
       struct {
         uint8_t  dhost[6];

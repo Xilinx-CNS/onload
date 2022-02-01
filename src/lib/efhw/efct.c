@@ -667,11 +667,11 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   if( *rxq >= 0 )
     filter.ring_cookie = *rxq;
   if( flags & EFHW_FILTER_F_ANY_RXQ )
-    params.flags = XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
+    params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
   if( flags & EFHW_FILTER_F_PREF_RXQ )
-    params.flags = XLNX_EFCT_FILTER_F_PREF_QUEUE;
+    params.flags |= XLNX_EFCT_FILTER_F_PREF_QUEUE;
   if( flags & EFHW_FILTER_F_EXCL_RXQ )
-    params.flags = XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
+    params.flags |= XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
 
   dedupe_filter = (filter.flow_type == UDP_V4_FLOW ||
                    filter.flow_type == TCP_V4_FLOW) &&

@@ -1023,6 +1023,11 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   ix = efct_vi_find_free_rxq(vi, qid);
   if( ix < 0 )
     return ix;
+  if( ix > 0 && vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
+    /* An attempt to add a filter which caused this must mean that some other
+     * app is already using the same 3-tuple, hence the error EADDRINUSE */
+    return -EADDRINUSE;
+  }
 
 #ifdef MFD_HUGETLB
   /* The kernel code can cope with no memfd being provided, but only on older
@@ -1324,6 +1329,13 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_ctpio_fallback = efct_ef_vi_transmit_ctpio_fallback;
   vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
   vi->internal_ops.post_filter_add = efct_post_filter_add;
+
+  /* The guarantees offered by RX_EXCLUSIVE imply that it's impossible for
+   * there to be more than one queue. These semantics aren't strictly
+   * necessary, but coming up with intelligible documentation of what the
+   * semantics would actually be were this not the case is hard. */
+  if( vi->vi_flags & EF_VI_RX_EXCLUSIVE )
+    vi->vi_flags |= EF_VI_EFCT_UNIQUEUE;
 
   if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
     vi->max_efct_rxq = 1;

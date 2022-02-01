@@ -448,6 +448,10 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     int rc;
     int rxq;
     ef_filter_cookie cookie;
+    unsigned flags = 0;
+
+    if( vi->vi_flags & EF_VI_RX_EXCLUSIVE )
+      flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
 
     switch( fs->type ) {
     case EF_FILTER_PORT_SNIFF:
@@ -465,7 +469,7 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
                                  fs->data[5], &cookie, &rxq);
       break;
     default:
-      rc = ef_filter_add(dh, vi->vi_resource_id, fs, 0, &cookie, &rxq);
+      rc = ef_filter_add(dh, vi->vi_resource_id, fs, flags, &cookie, &rxq);
       break;
     }
     if( rc < 0 )
