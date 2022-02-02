@@ -21,7 +21,7 @@ static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_r
 {
   uint32_t driver_buf_count;
   uint32_t sbuf_seq;
-  struct efhw_nic_efct_rxq_superbuf sbufs_q_entry;
+  struct efab_efct_rxq_uk_shm_rxq_entry sbufs_q_entry;
   uint16_t sbid;
 
   uint32_t added;
@@ -40,7 +40,7 @@ static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_r
     return false;
   }
 
-  added = (uint32_t)CI_READ_ONCE(app->shm->rxq.added);
+  added = CI_READ_ONCE(app->shm->rxq.added);
   removed = CI_READ_ONCE(app->shm->rxq.removed);
   if( (uint32_t)(added - removed) >= CI_ARRAY_SIZE(app->shm->rxq.q) ) {
     /* the shared state is actually corrupted */
@@ -62,18 +62,16 @@ static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_r
     sbuf_seq = q->sbufs.removed;
 
   sbufs_q_entry = q->sbufs.q[sbuf_seq % CI_ARRAY_SIZE(q->sbufs.q)];
-  sbid = sbufs_q_entry.value & CI_EFCT_Q_SUPERBUF_ID_MASK;
+  sbid = sbufs_q_entry.sbid;
   app->next_sbuf_seq = sbuf_seq + 1;
 
   ++q->superbuf_refcount[sbid];
   ++app->current_owned_superbufs;
   EFHW_ASSERT(!ci_bit_test(app->owns_superbuf, sbid));
   __ci_bit_set(app->owns_superbuf, sbid);
-  RING_FIFO_ENTRY(app->shm->rxq.q, added) = sbufs_q_entry.value;
+  RING_FIFO_ENTRY(app->shm->rxq.q, added) = sbufs_q_entry;
   ci_wmb();
-  CI_WRITE_ONCE(app->shm->rxq.added,
-                ((uint64_t)sbufs_q_entry.global_seqno << 32) |
-                (added + 1));
+  CI_WRITE_ONCE(app->shm->rxq.added, added + 1);
   return true;
 }
 
@@ -209,7 +207,7 @@ int efct_buffer_end(void *driver_data, int qid, int sbid, bool force)
   EFHW_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
   q = &efct->rxq[qid];
   EFHW_ASSERT((uint32_t)(q->sbufs.added - q->sbufs.removed) < CI_ARRAY_SIZE(q->sbufs.q));
-  EFHW_ASSERT((q->sbufs.q[q->sbufs.removed % CI_ARRAY_SIZE(q->sbufs.q)].value & CI_EFCT_Q_SUPERBUF_ID_MASK) == sbid);
+  EFHW_ASSERT(q->sbufs.q[q->sbufs.removed % CI_ARRAY_SIZE(q->sbufs.q)].sbid == sbid);
   q->sbufs.removed++;
   EFHW_ASSERT((int)q->superbuf_refcount[sbid] > 0);
   return --q->superbuf_refcount[sbid] == 0;
@@ -231,9 +229,10 @@ int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
   /* remember buffers owned by x3net */
   ++q->superbuf_refcount[sbid];
   q->sbufs.q[(q->sbufs.added++) % CI_ARRAY_SIZE(q->sbufs.q)] =
-              (struct efhw_nic_efct_rxq_superbuf){
-                .value = (uint16_t) (sbid | (sentinel << 15)),
-                .global_seqno = sbseq,
+              (struct efab_efct_rxq_uk_shm_rxq_entry){
+                .sbid = (uint16_t)sbid,
+                .sentinel = sentinel,
+                .sbseq = sbseq,
               };
 
   post_superbuf_to_apps(q);

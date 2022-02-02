@@ -25,24 +25,33 @@
 #define CI_EFCT_MAX_HUGEPAGES \
                           (CI_EFCT_MAX_SUPERBUFS / CI_EFCT_SUPERBUFS_PER_PAGE)
 
-/* Mask of efct_rx_superbuf_queue::q values to get the actual superbuf ID (the
- * top bit is use in the rxq to convey the sentinel). */
-#define CI_EFCT_Q_SUPERBUF_ID_MASK  0x7fff
-
 #define CI_EFCT_DEFAULT_POISON  0x0000FFA0C09B0000ull
 
-struct efab_efct_rx_superbuf_queue {
-  uint16_t q[16];
-  uint64_t added CI_ALIGN(8);
-  uint32_t removed;
+struct efab_efct_rxq_uk_shm_rxq_entry {
+  uint16_t sbid;
+  uint8_t sentinel;
+  uint8_t unused_padding;
+  uint32_t sbseq;
 };
 
 struct efab_efct_rxq_uk_shm_q {
   /* TODO EFCT look in to field ordering of this struct. Might be quicker, for
    * example, to collect all the superbuf_pkts fields for all the rxqs at the
    * top */
-  struct efab_efct_rx_superbuf_queue rxq;
-  struct efab_efct_rx_superbuf_queue freeq;
+  struct {
+    struct efab_efct_rxq_uk_shm_rxq_entry q[16];
+    uint32_t added;
+    uint32_t removed;
+  } rxq;
+  struct {
+    /* There is no requirement that the rxq and freeq be similarly sized.
+     * For use-cases supporting long-term app ownership, it could be
+     * advantageous to allow the freeq to be much bigger. Anyway, that's the
+     * reason why they don't share a macro to define the queue size */
+    uint16_t q[16];
+    uint32_t added;
+    uint32_t removed;
+  } freeq;
   int8_t qid;                        /* hardware queue ID */
   unsigned config_generation;
   uint32_t superbuf_pkts;            /* number of packets per superbuf.

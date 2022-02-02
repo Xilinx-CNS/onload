@@ -39,13 +39,6 @@ struct efhw_efct_rxq {
 #define CI_EFCT_MAX_RXQS  8
 #define CI_EFCT_MAX_EVQS 24
 
-struct efhw_nic_efct_rxq_superbuf {
-  /* Each value is (sentinel << 15) | sbid, i.e. identical to
-   * efab_efct_rx_superbuf_queue::q */
-  uint16_t value;
-  uint32_t global_seqno;
-};
-
 struct efhw_nic_efct_rxq {
   struct efhw_efct_rxq *new_apps;  /* Owned by process context */
   struct efhw_efct_rxq *live_apps; /* Owned by NAPI context */
@@ -60,7 +53,7 @@ struct efhw_nic_efct_rxq {
    *  * start new app (without rollover)
    */
   struct {
-    struct efhw_nic_efct_rxq_superbuf q[16];
+    struct efab_efct_rxq_uk_shm_rxq_entry q[16];
     uint32_t added;
     uint32_t removed;
   } sbufs;

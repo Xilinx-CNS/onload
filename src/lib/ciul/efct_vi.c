@@ -69,22 +69,23 @@ static int superbuf_config_refresh(ef_vi* vi, int qid)
 }
 #endif
 
-static int superbuf_next(ef_vi* vi, int qid, unsigned *sbseq)
+static int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 {
   struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
-  uint64_t added_full;
+  struct efab_efct_rxq_uk_shm_rxq_entry* entry;
   uint32_t added, removed;
   int sbid;
 
-  added_full = OO_ACCESS_ONCE(shm->rxq.added);
-  added = (uint32_t)added_full;
+  added = OO_ACCESS_ONCE(shm->rxq.added);
   removed = shm->rxq.removed;
   if( added == removed )
     return -EAGAIN;
-  *sbseq = added_full >> 32;
+  entry = &shm->rxq.q[removed & (CI_ARRAY_SIZE(shm->rxq.q) - 1)];
   ci_rmb();
-  sbid = OO_ACCESS_ONCE(shm->rxq.q[removed & (CI_ARRAY_SIZE(shm->rxq.q) - 1)]);
-  EF_VI_ASSERT((sbid & CI_EFCT_Q_SUPERBUF_ID_MASK) < CI_EFCT_MAX_SUPERBUFS);
+  *sbseq = OO_ACCESS_ONCE(entry->sbseq);
+  *sentinel = OO_ACCESS_ONCE(entry->sentinel);
+  sbid = OO_ACCESS_ONCE(entry->sbid);
+  EF_VI_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
   OO_ACCESS_ONCE(shm->rxq.removed) = removed + 1;
   return sbid;
 }
@@ -597,12 +598,13 @@ static int rx_rollover(ef_vi* vi, int qid)
   uint32_t superbuf_pkts = vi->efct_shm->q[qid].superbuf_pkts;
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   unsigned sbseq;
-  int rc = superbuf_next(vi, qid, &sbseq);
+  bool sentinel;
+  int rc = superbuf_next(vi, qid, &sentinel, &sbseq);
   if( rc < 0 )
     return rc;
-  pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + (rc & CI_EFCT_Q_SUPERBUF_ID_MASK)) <<
+  pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + rc) <<
            PKTS_PER_SUPERBUF_BITS;
-  next = pkt_id | ((rc >> 15) << 31);
+  next = pkt_id | ((uint32_t)sentinel << 31);
   if( pkt_id_to_index_in_superbuf(qs->rxq_ptr[qid].next) > superbuf_pkts ) {
     /* special case for when we want to ignore the first metadata, e.g. at
      * queue startup */
