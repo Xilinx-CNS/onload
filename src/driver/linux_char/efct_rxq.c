@@ -117,7 +117,13 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 static void
 rxq_rm_free(efch_resource_t* rs)
 {
-  efrm_rxq_release(efrm_rxq_from_resource(rs->rs_base));
+  /* No need to mutex anything here: we're protected by only being callable
+   * from userspace via a single ef_driver_handle, so the file lock is
+   * guarding us */
+  if( rs->rs_base ) {
+    efrm_rxq_release(efrm_rxq_from_resource(rs->rs_base));
+    rs->rs_base = NULL;
+  }
 }
 
 

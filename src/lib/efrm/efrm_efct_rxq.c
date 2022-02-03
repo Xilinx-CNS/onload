@@ -107,10 +107,13 @@ void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 #if CI_HAVE_EFCT_AUX
 	if (__efrm_resource_release(&rxq->rs)) {
 		int shm_ix = rxq->hw.shm - rxq->vi->efct_shm->q;
+		struct efrm_vi* vi = rxq->vi;
+		struct efrm_client* rs_client = rxq->rs.rs_client;
 		rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
 		efct_nic_rxq_free(rxq->rs.rs_client->nic, &rxq->hw, free_rxq);
-		efrm_vi_resource_release(rxq->vi);
-		efrm_client_put(rxq->rs.rs_client);
+		/* caution! rxq may have been freed now */
+		efrm_vi_resource_release(vi);
+		efrm_client_put(rs_client);
 	}
 #endif
 }
