@@ -1200,13 +1200,15 @@ static int /*bool*/ should_try_ctpio(ci_netif* ni, struct efhw_nic* nic,
                                      struct vi_allocate_info* info)
 {
   return
+    nic->flags & NIC_FLAG_CTPIO_ONLY ||
     /* Stack configured to use CTPIO. */
-    NI_OPTS(ni).ctpio > 0 &&
-    /* NIC claims support for CTPIO. */
-    (nic->flags & NIC_FLAG_TX_CTPIO) != 0 &&
-    /* CTPIO bypasses the NIC's switch.  When the switch is enabled, don't use
-     * CTPIO unless we've been told to do so explicitly. */
-    (~nic->flags & NIC_FLAG_MCAST_LOOP_HW || NI_OPTS(ni).ctpio_switch_bypass);
+    (NI_OPTS(ni).ctpio > 0 &&
+     /* NIC claims support for CTPIO. */
+     (nic->flags & NIC_FLAG_TX_CTPIO) != 0 &&
+     /* CTPIO bypasses the NIC's switch.  When the switch is enabled, don't use
+      * CTPIO unless we've been told to do so explicitly. */
+     (~nic->flags & NIC_FLAG_MCAST_LOOP_HW ||
+      NI_OPTS(ni).ctpio_switch_bypass));
 }
 #endif
 
