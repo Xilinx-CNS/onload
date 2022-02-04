@@ -320,10 +320,7 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   alloc_out->nic_variant = nic->devtype.variant;
   alloc_out->nic_revision = nic->devtype.revision;
   alloc_out->nic_flags = efhw_vi_nic_flags(nic);
-  if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
-    alloc_out->io_mmap_bytes = 0;
-  else
-    alloc_out->io_mmap_bytes = 4096;
+  alloc_out->io_mmap_bytes = efhw_nic_vi_io_size(nic);
   alloc_out->mem_mmap_bytes = efhw_page_map_bytes(&virs->mem_mmap);
   alloc_out->rx_prefix_len = virs->rx_prefix_len;
   alloc_out->out_flags = virs->out_flags;
