@@ -112,6 +112,17 @@ ci_ip_set_mac_and_port(ci_netif* ni, const ci_ip_cached_hdrs* ipcache,
 
 extern void ci_ip_send_tcp_slow(ci_netif*, ci_tcp_state*, ci_ip_pkt_fmt*)CI_HF;
 
+ci_inline void oo_tcp_ipcache_update(ci_netif* ni, ci_tcp_state* ts)
+{
+  int prev_mtu = ts->s.pkt.mtu;
+
+  cicp_user_retrieve(ni, &ts->s.pkt, &ts->s.cp);
+
+  if( CI_UNLIKELY(ts->s.pkt.mtu != prev_mtu) &&
+     (ts->s.pkt.status == retrrc_success ||
+       ts->s.pkt.status == retrrc_nomac) )
+    ci_tcp_tx_change_mss(ni, ts);
+}
 
 ci_inline void
 __ci_ip_send_tcp(ci_netif* ni, ci_ip_pkt_fmt* pkt, ci_tcp_state* ts)
@@ -134,7 +145,7 @@ __ci_ip_send_tcp(ci_netif* ni, ci_ip_pkt_fmt* pkt, ci_tcp_state* ts)
     ci_netif_send(ni, pkt);
   }
   else {
-    cicp_user_retrieve(ni, &ts->s.pkt, &ts->s.cp);
+    oo_tcp_ipcache_update(ni, ts);
     ci_ip_send_tcp_slow(ni, ts, pkt);
   }
 }

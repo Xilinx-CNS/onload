@@ -664,7 +664,7 @@ int ci_tcp_tmpl_alloc(ci_netif* ni, ci_tcp_state* ts,
   /* Check for valid cplane information.
    */
   if(CI_UNLIKELY( ! oo_cp_ipcache_is_valid(ni, ipcache) )) {
-    cicp_user_retrieve(ni, ipcache, &ts->s.cp);
+    oo_tcp_ipcache_update(ni, ts);
     switch( ipcache->status ) {
     case retrrc_success:
       /* Successfully validated cplane info on the socket.  We will copy
@@ -2807,7 +2807,7 @@ static int ci_tcp_ds_get_arp(ci_netif* ni, ci_tcp_state* ts)
 
   ci_assert(ci_netif_is_locked(ni));
 
-  cicp_user_retrieve(ni, &ts->s.pkt, &ts->s.cp);
+  oo_tcp_ipcache_update(ni, ts);
   if( ts->s.pkt.status == retrrc_success )
     return 1;
   if( ts->s.pkt.status != retrrc_nomac )
@@ -2825,7 +2825,7 @@ static int ci_tcp_ds_get_arp(ci_netif* ni, ci_tcp_state* ts)
 
   /* We can set up netlink notification, but let's spin for now */
   for( i = 0; i < 1000; i++ ) {
-    cicp_user_retrieve(ni, &ts->s.pkt, &ts->s.cp);
+    oo_tcp_ipcache_update(ni, ts);
     if( ts->s.pkt.status == retrrc_success )
       return 1;
     if( ts->s.pkt.status != retrrc_nomac )

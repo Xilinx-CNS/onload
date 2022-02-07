@@ -175,16 +175,11 @@ int ci_ip_send_pkt(ci_netif* ni, const struct oo_sock_cplane* sock_cp_opt,
 void ci_ip_send_tcp_slow(ci_netif* ni, ci_tcp_state* ts, ci_ip_pkt_fmt* pkt)
 {
   /* We're here because the ipcache is not valid. */
-  int rc, prev_mtu = ts->s.pkt.mtu;
+  int rc;
 
-  if(CI_UNLIKELY( ! oo_cp_ipcache_is_valid(ni, &ts->s.pkt) )) {
-    cicp_user_retrieve(ni, &ts->s.pkt, &ts->s.cp);
-  }
+  if(CI_UNLIKELY( ! oo_cp_ipcache_is_valid(ni, &ts->s.pkt) ))
+    oo_tcp_ipcache_update(ni, ts);
 
-  /* For success and nomac cases, we have to update various
-   * packet meta-data */
-  if( ts->s.pkt.mtu != prev_mtu )
-    ci_tcp_tx_change_mss(ni, ts);
   ci_ip_set_mac_and_port(ni, &ts->s.pkt, pkt);
 
   if( ts->s.pkt.status == retrrc_success ) {

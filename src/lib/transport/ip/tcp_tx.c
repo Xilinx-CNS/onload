@@ -256,13 +256,8 @@ fast:
       ci_ip_tcp_list_to_dmaq(ni, ts, head_id, tail_pkt);
   }
   else {
-    int prev_mtu = ts->s.pkt.mtu;
-
     /* Update the ipcache first - ask for ARP as early as possible. */
-    cicp_user_retrieve(ni, &ts->s.pkt, &ts->s.cp);
-
-    if( ts->s.pkt.status == retrrc_success && ts->s.pkt.mtu != prev_mtu )
-      ci_tcp_tx_change_mss(ni, ts);
+    oo_tcp_ipcache_update(ni, ts);
 
     if(CI_UNLIKELY( ts->tcpflags & CI_TCPT_FLAG_MSG_WARM ))
       return;
