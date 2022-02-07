@@ -48,7 +48,6 @@ DRIVER_SUBDIRS := src/driver/linux_char src/driver/linux_onload \
                   src/driver/linux_net/drivers/net/ethernet/sfc
 export AUX_BUS_PATH ?= $(abspath ../cns-auxiliary-bus)
 export HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
-
 ifneq ($(HAVE_CNS_AUX),0)
 KBUILD_EXTRA_SYMBOLS := $(AUX_BUS_PATH)/drivers/base/Module.symvers
 endif
@@ -81,7 +80,6 @@ $(obj)/src/driver/linux_resource: $(AUTOCOMPAT) mkdirs
 $(obj)/src/lib/transport/ip: $(AUTOCOMPAT)
 $(obj)/src/lib/citools: $(AUTOCOMPAT)
 $(obj)/src/lib/cplane: $(AUTOCOMPAT)
-$(obj)/src/tests/resource/efct_test: $(AUTOCOMPAT)
 $(obj)/src/driver/linux_char: $(AUTOCOMPAT)
 $(obj)/src/driver/linux_char: $(obj)/src/lib/citools $(obj)/src/lib/ciul
 $(obj)/src/driver/linux_onload: $(obj)/src/lib/citools $(obj)/src/lib/ciul \

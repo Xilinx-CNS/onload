@@ -484,7 +484,6 @@ void efct_remove(struct auxiliary_device *auxdev)
 
 static const struct auxiliary_device_id efct_id_table[] = {
   { .name = "xlnx_efct." XLNX_EFCT_DEVNAME, },
-  { .name = "efct_test." XLNX_EFCT_DEVNAME ".test", },
   {},
 };
 MODULE_DEVICE_TABLE(auxiliary, efct_id_table);

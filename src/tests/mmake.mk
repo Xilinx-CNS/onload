@@ -21,7 +21,7 @@ endif
 
 endif
 
-DRIVER_SUBDIRS	:= resource
+DRIVER_SUBDIRS	:=
 
 all:
 	+@$(MakeSubdirs)
