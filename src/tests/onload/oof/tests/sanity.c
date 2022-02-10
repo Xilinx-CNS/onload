@@ -248,8 +248,3 @@ int __test_sanity(int no5tuple)
 int test_sanity() {
   return __test_sanity(0);
 }
-
-int test_sanity_no5tuple()
-{
-  return __test_sanity(1);
-}
