@@ -267,7 +267,9 @@ uint32_t ef_tcp_checksum(const struct iphdr* ip, const struct tcphdr* tcp,
   csum64 = (uint64_t)ip->saddr + ip->daddr +       /* This is the TCP */
            htonl((IPPROTO_TCP << 16) | paylen);    /* pseudo-header */
   csum64 = ip_csum64_partial(csum64, tcp, (tcp->doff * 4));
-  csum64 -= tcp->check;
+  /* The above may already have been folded to a value <64K, so here we ensure
+   * that the subtraction doesn't borrow. 0xffff is -0 in ones' complement. */
+  csum64 += 0xffff - tcp->check;
   csum64 = ip_csum64_partialv(csum64, iov, iovlen);
   return ip_proto_csum64_finish(csum64);
 }
@@ -279,7 +281,7 @@ uint32_t ef_tcp_checksum_ip6(const struct ipv6hdr* ip6, const struct tcphdr* tcp
   uint64_t csum64 =
       ef_ip6_pseudo_hdr_checksum(ip6, ip6->payload_len, IPPROTO_TCP);
   csum64 = ip_csum64_partial(csum64, tcp, (tcp->doff * 4));
-  csum64 -= tcp->check;
+  csum64 += 0xffff - tcp->check;
   csum64 = ip_csum64_partialv(csum64, iov, iovlen);
   return ip_proto_csum64_finish(csum64);
 }
