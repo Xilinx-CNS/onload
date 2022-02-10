@@ -218,6 +218,7 @@ int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
 {
   struct efhw_nic_efct *efct = (struct efhw_nic_efct *) driver_data;
   struct efhw_nic_efct_rxq *q;
+  struct efab_efct_rxq_uk_shm_rxq_entry entry;
 
   EFHW_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
   q = &efct->rxq[qid];
@@ -228,12 +229,10 @@ int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
 
   /* remember buffers owned by x3net */
   ++q->superbuf_refcount[sbid];
-  q->sbufs.q[(q->sbufs.added++) % CI_ARRAY_SIZE(q->sbufs.q)] =
-              (struct efab_efct_rxq_uk_shm_rxq_entry){
-                .sbid = (uint16_t)sbid,
-                .sentinel = sentinel,
-                .sbseq = sbseq,
-              };
+  entry.sbid = sbid;
+  entry.sentinel = sentinel;
+  entry.sbseq = sbseq;
+  q->sbufs.q[(q->sbufs.added++) % CI_ARRAY_SIZE(q->sbufs.q)] = entry;
 
   post_superbuf_to_apps(q);
   return 1; /* always hold on to buffer until efct_buffer_end() is called */
