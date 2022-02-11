@@ -269,6 +269,8 @@ void ooft_endpoint_expect_hw_unicast(struct ooft_endpoint* ep,
   unsigned hwport_mask = ep->thr->ns->hwport_mask;
 
   for( i = 0; i < CI_CFG_MAX_HWPORTS; i++ ) {
+    if( ! oo_nics[i].efrm_client )
+      continue;
     struct ooft_hwport* hw = HWPORT_FROM_CLIENT(oo_nics[i].efrm_client);
     int no5tuple = hw->no5tuple;
     if( (1 << i) & hwport_mask)
