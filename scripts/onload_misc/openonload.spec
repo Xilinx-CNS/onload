@@ -106,7 +106,7 @@ Release     	: 1%{?dist}%{?debug:DEBUG}
 Group       	: System Environment/Kernel
 License   	: Various
 URL             : http://www.openonload.org/
-Vendor		: Solarflare Communications, Inc.
+Vendor		: Xilinx, Inc.
 Provides	: openonload = %{version}-%{release}
 Source0		: openonload-%{pkgversion}.tgz
 BuildRoot   	: %{_builddir}/%{name}-root
