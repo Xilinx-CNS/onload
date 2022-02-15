@@ -783,7 +783,7 @@ static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
   return n_evs;
 }
 
-static int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
+int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 {
   ef_eventq_state* evq = &vi->ep_state->evq;
   ci_qword_t* event;
