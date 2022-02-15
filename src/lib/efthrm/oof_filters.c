@@ -2166,6 +2166,7 @@ enum fixup_wild_why {
   fuw_del_wild,
   fuw_add_wild,
   fuw_udp_connect,
+  fuw_3tuple_sharers,
 };
 
 
@@ -2190,10 +2191,18 @@ oof_local_port_addr_fixup_wild(struct oof_manager* fm,
   if( fm->fm_hwports_no5tuple )
     hwports_no5tuple = fm->fm_hwports_available & fm->fm_hwports_up; /* TODO & fm->fm_hwports_no5tuple; */
 
+  if( ! hwports_no5tuple && why == fuw_3tuple_sharers)
+    return;
+
   /* Decide whether we need to insert full-match filters for sockets that
    * are currently sharing a wild filter.
    */
   skf = oof_wild_socket(lp, lpa, oof_addr_to_af_space(laddr));
+  if( skf == NULL && hwports_no5tuple ) {
+    /* In case 5tuple filters are not supported a 3tuple HW filter is needed for sharing.
+     * It is installed using details of first full skf.  */
+     skf = oof_socket_at_head(&lpa->lpa_full_socks, 0, 0, skf->af_space);
+  }
   unshare_full_match = lpa->lpa_n_full_sharers > 0 && ! hwports_no5tuple;
   if( skf == NULL ) {
     thresh = oof_shared_keep_thresh;
@@ -2254,7 +2263,7 @@ oof_local_port_addr_fixup_wild(struct oof_manager* fm,
   if( skf != NULL ) {
     skf_has_filter = 0;
     if( oo_hw_filter_is_empty(&lpa->lpa_filter) ) {
-      ci_assert(lpa->lpa_n_full_sharers == 0);
+      ci_assert(lpa->lpa_n_full_sharers == 0 || hwports_no5tuple);
       rc = oof_hw_filter_set(fm, skf, &lpa->lpa_filter,
                              oof_socket_stack_effective(skf),
                              oof_socket_thc_effective(skf), af,
@@ -2705,6 +2714,11 @@ __oof_socket_add(struct oof_manager* fm, struct oof_socket* skf, int do_arm_only
         }
       }
       ci_dllist_push(&lpa->lpa_full_socks, &skf->sf_lp_link);
+
+      /* in case of no5tuple NICs a wild filters might be needed
+        * hence we call fixup_wild */
+      oof_local_port_addr_fixup_wild(fm, lp, lpa, skf->sf_laddr,
+                                     fuw_3tuple_sharers);
     }
     else {
       if( do_arm ) {

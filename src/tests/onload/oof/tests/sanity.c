@@ -149,13 +149,13 @@ int __test_sanity(int no5tuple)
   ooft_cplane_claim_added_hw_filters(cp, &hw_semi_wild);
 
   /* for no5tuple not expecting a change in HW filters */
-  ooft_endpoint_expect_unicast_filters(udp_connected, with_hw_5tuple_only);
+  ooft_endpoint_expect_unicast_filters(udp_connected, 1);
   rc = ooft_endpoint_add(udp_connected, 0);
   cmp_ok(rc, "==", 0, "add UDP connected endpoint");
   check_all_filters(thr1, thr2);
   ooft_cplane_claim_added_hw_filters(cp, &hw_connected);
 
-  ooft_endpoint_expect_unicast_filters(tcp_active, with_hw_5tuple_only);
+  ooft_endpoint_expect_unicast_filters(tcp_active, 1);
   rc = ooft_endpoint_add(tcp_active, 0);
   cmp_ok(rc, "==", 0, "add TCP active endpoint");
   check_all_filters(thr1, thr2);
