@@ -1281,6 +1281,26 @@ oof_manager_sw_filter_remove(int af, ci_addr_t laddr, struct oof_local_port* lp,
     }
 }
 
+
+/* Reasons why fixup_wild() is called. */
+enum fixup_wild_why {
+  fuw_del_full,
+  fuw_del_wild,
+  fuw_add_wild,
+  fuw_udp_connect,
+  fuw_3tuple_sharers,
+};
+
+static void
+oof_local_port_addr_fixup_wild(struct oof_manager* fm,
+                               struct oof_local_port* lp,
+                               struct oof_local_port_addr* lpa,
+                               ci_addr_t laddr, enum fixup_wild_why why);
+static int
+oof_socket_add_full_hw(struct oof_manager* fm, struct oof_socket* skf,
+                       struct oof_local_port_addr* lpa, int af);
+
+
 static void
 __oof_manager_addr_add(struct oof_manager *fm, int af, ci_addr_t laddr,
                        unsigned ifindex)
@@ -1381,15 +1401,8 @@ __oof_manager_addr_add(struct oof_manager *fm, int af, ci_addr_t laddr,
   for( hash = 0; hash < OOF_LOCAL_PORT_TBL_SIZE; ++hash )
     CI_DLLIST_FOR_EACH2(struct oof_local_port, lp, lp_manager_link,
                         &fm->fm_local_ports[hash]) {
-      int hwports_no5tuple;
       lpa = &lp->lp_addr[la_i];
       skf = oof_wild_socket(lp, lpa, OO_AF_FAMILY2SPACE(af));
-      hwports_no5tuple = fm->fm_hwports_available & fm->fm_hwports_up & fm->fm_hwports_no5tuple;
-      /* TODO utilize fm_hwports_no5tuple mask to apply appropriate strategy per NIC */
-      if( skf == NULL && hwports_no5tuple )
-        /* In case 5tuple filters are not supported a 3tuple filteris needed for sharing.
-         * It is installed using details of first full skf.  */
-        skf = oof_socket_at_head(&lpa->lpa_full_socks, 0, 0, skf->af_space);
       if( skf != NULL )
         oof_hw_filter_set(fm, skf, &lpa->lpa_filter,
                           oof_socket_stack_effective(skf),
@@ -1403,25 +1416,10 @@ __oof_manager_addr_add(struct oof_manager *fm, int af, ci_addr_t laddr,
         ci_assert(!is_new);
         ci_assert(! oof_socket_is_clustered(skf));
         ci_assert(! oof_socket_is_dummy(skf));
-        if( oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter) ) {
-          ++lpa->lpa_n_full_sharers;
-        }
-        else if( ! hwports_no5tuple ) {
-          oof_hw_filter_set(fm, skf, &skf->sf_full_match_filter,
-                            oof_cb_socket_stack(skf), NULL, af,
-                            lp->lp_protocol, skf->sf_raddr, skf->sf_rport,
-                            skf->sf_laddr, lp->lp_lport,
-                            fm->fm_hwports_available & fm->fm_hwports_up,
-                            OOF_SRC_FLAGS_DEFAULT, 1);
-        } else {
-          /* No support for 5tuple filters off separate/incompatible stacks yet */
-          IPF_LOG(FSK_FMT IPX_QUIN_FMT "CONFLICT: ",
-                  FSK_PRI_ARGS_SAFE(skf, oof_socket_is_stackless(skf)),
-                  IPX_QUIN_ARGS(lp->lp_protocol, AF_IP(skf->sf_laddr),
-                                lp->lp_lport, AF_IP(skf->sf_raddr),
-                                skf->sf_rport));
-        }
+        oof_socket_add_full_hw(fm, skf, lpa, af);
       }
+      /* fixup in case sockets need to share non-existent 3-tuple filters */
+      oof_local_port_addr_fixup_wild(fm, lp, lpa, laddr, fuw_3tuple_sharers);
       oof_manager_sw_filter_insert(fm, af, laddr, lp, la_i);
     }
 }
@@ -2160,16 +2158,6 @@ oof_full_socks_add_hw_filters(struct oof_manager* fm,
 }
 
 
-/* Reasons why fixup_wild() is called. */
-enum fixup_wild_why {
-  fuw_del_full,
-  fuw_del_wild,
-  fuw_add_wild,
-  fuw_udp_connect,
-  fuw_3tuple_sharers,
-};
-
-
 static void
 oof_local_port_addr_fixup_wild(struct oof_manager* fm,
                                struct oof_local_port* lp,
@@ -2415,7 +2403,7 @@ oof_socket_add_full_hw(struct oof_manager* fm, struct oof_socket* skf,
   ci_assert(oof_local_port_addr_valid(fm, lpa));
 
 
-  if( ! oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter)  && ! hwports_no5tuple ) {
+  if( ! oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter) && ! hwports_no5tuple ) {
     struct oof_local_port* lp = skf->sf_local_port;
     rc = oof_hw_filter_set(fm, skf, &skf->sf_full_match_filter,
                            oof_cb_socket_stack(skf), NULL, af,
@@ -2445,7 +2433,13 @@ oof_socket_add_full_hw(struct oof_manager* fm, struct oof_socket* skf,
   else {
     /* Share the existing wildcard filter for h/w demux. */
     ++lpa->lpa_n_full_sharers;
-    IPF_LOG(FSK_FMT "SHARE "SK_ADDR_FMT, FSK_PRI_ARGS(skf), SK_ADDR_ARGS(skf));
+    if ( oof_socket_can_share_hw_filter(skf, &lpa->lpa_filter) ) {
+      IPF_LOG(FSK_FMT "SHARE "SK_ADDR_FMT, FSK_PRI_ARGS(skf), SK_ADDR_ARGS(skf));
+    } else { // ! oof_socket_can_share_hw_filter && hwports_no5tuple
+      IPF_LOG(FSK_FMT "SHARE CONFLICT " SK_ADDR_FMT,
+              FSK_PRI_ARGS_SAFE(skf, oof_socket_is_stackless(skf)),
+              SK_ADDR_ARGS(skf));
+    }
   }
   return 0;
 }
