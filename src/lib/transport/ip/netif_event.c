@@ -575,7 +575,92 @@ static void handle_rx_pkt(ci_netif* netif, struct ci_netif_poll_state* ps,
 }
 
 
+static ci_ip_pkt_fmt* alloc_rx_efct_pkt(ci_netif* ni, int intf_i, int pay_len)
+{
+  ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(ni, 0);
+  if(CI_UNLIKELY( ! pkt ))
+    return NULL;
+  pkt->pkt_start_off = 0;
+  pkt->intf_i = intf_i;
+  pkt->flags |= CI_PKT_FLAG_RX;
+  ci_assert_equal(pkt->rx_flags, 0);
+  ci_assert_flags(ni->state->nic[intf_i].oo_vi_flags, OO_VI_FLAGS_RX_SHARED);
+  pkt->rx_flags = CI_PKT_RX_FLAG_RX_SHARED;
+  pkt->refcount = 1;
+  pkt->pay_len = pay_len;
+  ++ni->state->n_rx_pkts;
+  return pkt;
+}
+
+
 #ifdef __KERNEL__
+
+static unsigned convert_discard_flags_efct_ef10(unsigned flags)
+{
+  if( flags & EF_VI_DISCARD_RX_ETH_FCS_ERR )
+    return EF_EVENT_RX_DISCARD_CRC_BAD;
+  if( flags & EF_VI_DISCARD_RX_ETH_LEN_ERR )
+    return EF_EVENT_RX_DISCARD_TRUNC;
+  if( flags & EF_VI_DISCARD_RX_L4_CSUM_ERR )
+    return EF_EVENT_RX_DISCARD_CSUM_BAD;
+  if( flags & EF_VI_DISCARD_RX_L3_CSUM_ERR )
+    return EF_EVENT_RX_DISCARD_CSUM_BAD;
+  if( flags & EF_VI_DISCARD_RX_TOBE_DISC )
+    return EF_EVENT_RX_DISCARD_OTHER;
+  if( flags & EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR )
+    return EF_EVENT_RX_DISCARD_INNER_CSUM_BAD;
+  if( flags & EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR )
+    return EF_EVENT_RX_DISCARD_INNER_CSUM_BAD;
+  return 0;
+}
+
+static int convert_efct_to_pkts(ci_netif* ni, int intf_i, ef_event* evs,
+                                int n_evs)
+{
+  int i;
+  ef_vi* evq = ci_netif_vi(ni, intf_i);
+
+  for( i = 0; i < n_evs; ++i ) {
+    ef_event new_ev;
+    ci_ip_pkt_fmt* pkt;
+    const void* payload;
+
+    if( EF_EVENT_TYPE(evs[i]) == EF_EVENT_TYPE_RX_REF ) {
+      new_ev.rx.type = EF_EVENT_TYPE_RX;
+    }
+    else if( EF_EVENT_TYPE(evs[i]) == EF_EVENT_TYPE_RX_REF_DISCARD ) {
+      new_ev.rx_discard.type = EF_EVENT_TYPE_RX_DISCARD;
+      new_ev.rx_discard.subtype =
+                  convert_discard_flags_efct_ef10(evs[i].rx_ref_discard.flags);
+    }
+    else {
+      continue;
+    }
+
+    pkt = alloc_rx_efct_pkt(ni, intf_i, evs[i].rx_ref.len);
+    if( ! pkt ) {
+      /* Little more we can do than pretend that this didn't happen */
+      efct_vi_rxpkt_release(evq, evs[i].rx_ref.pkt_id);
+      --n_evs;
+      memmove(evs + i, evs + i + 1, sizeof(evs[0]) * (n_evs - i));
+      --i;
+      continue;
+    }
+
+    efct_vi_rxpkt_get(evq, evs[i].rx_ref.pkt_id, &payload);
+    memcpy(pkt->dma_start, payload, pkt->pay_len);
+    efct_vi_rxpkt_release(evq, evs[i].rx_ref.pkt_id);
+
+    new_ev.rx.q_id = evs[i].rx_ref.q_id;
+    new_ev.rx.rq_id = OO_PKT_ID(pkt);
+    new_ev.rx.len = evs[i].rx_ref.len;
+    new_ev.rx.flags = EF_EVENT_FLAG_SOP;
+    new_ev.rx.ofs = 0;
+    evs[i] = new_ev;
+  }
+  return n_evs;
+}
+
 
 int ci_netif_evq_poll(ci_netif* ni, int intf_i)
 {
@@ -601,6 +686,21 @@ int ci_netif_evq_poll(ci_netif* ni, int intf_i)
   n_evs = ef_eventq_poll(evq, ni->state->events,
              CI_MIN(sizeof(ni->state->events) / sizeof(ni->state->events[0]),
                     evs_per_poll));
+
+  /* Converting EVENT_TYPE_RX_REF to EVENT_TYPE_RX is a dirty trick, but we're
+   * faced with two problems with X3:
+   * 1) Once we return to userspace we won't necessarily be able to read from
+   *    the superbuf pointer returned by efct_vi_rxpkt_get(): ef_eventq_poll()
+   *    may not have run in that address space so the hugepages may not be
+   *    mapped in
+   * 2) The XDP stuff below might invoke eBPF which modifies the packet.
+   *    Running that on a superbuf would be Really Bad, and Even More Bad if
+   *    more than one app were attached to the same rxq.
+   *
+   * Hence we memcpy to an Onload packet buffer here, and use the event type
+   * conversion trickery to con userspace in to not doing the memcpy itself.
+   */
+  n_evs = convert_efct_to_pkts(ni, intf_i, ni->state->events, n_evs);
 
 #if CI_CFG_WANT_BPF_NATIVE && CI_HAVE_BPF_NATIVE
   if( NI_OPTS(ni).xdp_mode == 0 )
@@ -1733,24 +1833,6 @@ void ci_netif_tx_pkt_complete(ci_netif* ni, struct ci_netif_poll_state* ps,
 {
   __ci_netif_tx_pkt_complete(ni, ps, pkt, NULL);
 }
-
-static ci_ip_pkt_fmt* alloc_rx_efct_pkt(ci_netif* ni, int intf_i, int pay_len)
-{
-  ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(ni, 0);
-  if(CI_UNLIKELY( ! pkt ))
-    return NULL;
-  pkt->pkt_start_off = 0;
-  pkt->intf_i = intf_i;
-  pkt->flags |= CI_PKT_FLAG_RX;
-  ci_assert_equal(pkt->rx_flags, 0);
-  ci_assert_flags(ni->state->nic[intf_i].oo_vi_flags, OO_VI_FLAGS_RX_SHARED);
-  pkt->rx_flags = CI_PKT_RX_FLAG_RX_SHARED;
-  pkt->refcount = 1;
-  pkt->pay_len = pay_len;
-  ++ni->state->n_rx_pkts;
-  return pkt;
-}
-
 
 static int ci_netif_poll_evq(ci_netif* ni, struct ci_netif_poll_state* ps,
                              int intf_i, int n_evs)
