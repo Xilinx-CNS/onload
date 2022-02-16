@@ -2189,7 +2189,7 @@ oof_local_port_addr_fixup_wild(struct oof_manager* fm,
   if( skf == NULL && hwports_no5tuple ) {
     /* In case 5tuple filters are not supported a 3tuple HW filter is needed for sharing.
      * It is installed using details of first full skf.  */
-     skf = oof_socket_at_head(&lpa->lpa_full_socks, 0, 0, skf->af_space);
+     skf = oof_socket_at_head(&lpa->lpa_full_socks, 0, 0, oof_addr_to_af_space(laddr));
   }
   unshare_full_match = lpa->lpa_n_full_sharers > 0 && ! hwports_no5tuple;
   if( skf == NULL ) {
