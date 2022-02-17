@@ -586,6 +586,7 @@ tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
   struct file* os_sock_ref;
   ci_sock_cmn* s = SP_TO_SOCK(&ep->thr->netif, ep->id);
   int rc = 0;
+  int handled_flags = CI_SOCK_FLAG_FILTER | CI_SOCK_FLAG_STACK_FILTER;
 
   OO_DEBUG_TCPH(
     ci_log("%s: [%d:%d] %s%s%s", __FUNCTION__, ep->thr->id, OO_SP_FMT(ep->id),
@@ -642,6 +643,7 @@ tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
        * pending on endpoint to sort that out - we fall through to clearing
        * socket filter flags */
       rc = -EAGAIN;
+      handled_flags = CI_SOCK_FLAG_STACK_FILTER;
     }
     else {
       os_sock_ref = oo_file_xchg(&ep->os_port_keeper, NULL);
@@ -662,8 +664,7 @@ tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
   }
 
 bail_out:
-  SP_TO_SOCK(&ep->thr->netif, ep->id)->s_flags &=
-                              ~(CI_SOCK_FLAG_FILTER | CI_SOCK_FLAG_STACK_FILTER);
+  SP_TO_SOCK(&ep->thr->netif, ep->id)->s_flags &= ~handled_flags;
 
   return rc;
 }

@@ -956,9 +956,11 @@ static int ci_tcp_connect_ul_start(ci_netif *ni, ci_tcp_state* ts, ci_fd_t fd,
 #endif
 
 #if !defined(__KERNEL__) && CI_CFG_TCP_SHARED_LOCAL_PORTS
-    active_wild = ci_netif_active_wild_get(ni, sock_ipx_laddr(&ts->s),
-                                           sock_ipx_raddr(&ts->s),
-                                           dport_be16, &source_be16, &prev_seq);
+    if( ! (ts->s.s_flags & CI_SOCK_FLAG_FILTER) )
+      active_wild = ci_netif_active_wild_get(ni, sock_ipx_laddr(&ts->s),
+                                             sock_ipx_raddr(&ts->s),
+                                             dport_be16, &source_be16,
+                                             &prev_seq);
 #endif
 
     /* Defer active_wild related state update to after potential lock drops
