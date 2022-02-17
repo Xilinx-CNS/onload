@@ -414,7 +414,9 @@ void libstack_stack_mapping_print(void)
       printf("unaccessable\n");
       continue;
     }
-    if( strlen(netif->ni.state->name) != 0 )
+    if( ! netif->ni.state )
+      printf("<zombie>        ");
+    else if( strlen(netif->ni.state->name) != 0 )
       printf("%-16s", netif->ni.state->name);
     else
       printf("-               ");
