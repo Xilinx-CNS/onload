@@ -211,8 +211,6 @@ const char* cplane_server_const_params[] = {
 #endif
 #endif /* CI_CFG_IPV6 */
     "--"CPLANE_SERVER_DAEMONISE_CMDLINE_OPT,
-    "--"CPLANE_SERVER_HWPORT_NUM_OPT, OO_STRINGIFY(CI_CFG_MAX_HWPORTS),
-    "--"CPLANE_SERVER_IPADDR_NUM_OPT, OO_STRINGIFY(CI_CFG_MAX_LOCAL_IPADDRS),
 };
 #define CP_SERVER_CONST_PARAM_NUM \
   (sizeof(cplane_server_const_params) / sizeof(char*))
