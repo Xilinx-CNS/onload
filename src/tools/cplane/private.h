@@ -116,10 +116,6 @@
 #define CP_FWD_FLAG_DUMP            0x01000000
 #define CP_FWD_FLAG_REFRESH_MASK    0x00ffffff
 
-#ifdef __CI_INTERNAL_TRANSPORT_CONFIG_OPT_H__
-#error "don't include ci/internal/transport_config_opt.h from cplane code"
-#endif
-
 
 struct cp_timer {
   enum {

@@ -37,6 +37,8 @@
 #include <cplane/server.h>
 #include "print.h"
 
+#include <ci/internal/transport_config_opt.h>
+
 /* CP_ANYUNIT is defined in private.h, so this check needs to come after the
  * inclusion. */
 #ifndef CP_ANYUNIT
@@ -74,9 +76,9 @@ static int cfg_gid = 0;
 static int cfg_core_size = CFG_CORE_SIZE_DEFAULT;
 #endif
 
-static int cfg_hwport_max = 8;
+static int cfg_hwport_max = CI_CFG_MAX_HWPORTS;
 static int cfg_llap_max = 32;
-static int cfg_ipif_max = 64;
+static int cfg_ipif_max = CI_CFG_MAX_LOCAL_IPADDRS;
 static int cfg_svc_arrays_max = 0;
 static int cfg_svc_ep_max = 0;
 static int cfg_bond_max = 64;
