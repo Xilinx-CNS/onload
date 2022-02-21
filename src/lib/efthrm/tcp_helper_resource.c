@@ -1977,6 +1977,26 @@ static void release_pkts(tcp_helper_resource_t* trs)
 }
 
 
+static void detach_efct_rxqs(tcp_helper_resource_t* trs)
+{
+  int intf_i;
+  OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
+    int num_vis = ci_netif_num_vis(&trs->netif);
+    int vi_i;
+    struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
+    for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
+      size_t rxq_i;
+      for( rxq_i = 0; rxq_i < ARRAY_SIZE(trs_nic->thn_efct_rxq); ++rxq_i ) {
+        if( trs_nic->thn_efct_rxq[rxq_i] ) {
+          efrm_rxq_release(trs_nic->thn_efct_rxq[rxq_i]);
+          trs_nic->thn_efct_rxq[rxq_i] = NULL;
+        }
+      }
+    }
+  }
+}
+
+
 static void release_vi(tcp_helper_resource_t* trs)
 {
   int intf_i;
@@ -2019,21 +2039,17 @@ static void release_vi(tcp_helper_resource_t* trs)
                               trs_nic->thn_ctpio_io_mmap);
 #endif
     for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
-      size_t rxq_i;
       ef_vi* vi = &trs->netif.nic_hw[intf_i].vis[vi_i];
       if( vi->efct_rxq[0].superbufs )
         efct_vi_munmap_internal(vi);
       efrm_vi_resource_release_flushed(trs_nic->thn_vi_rs[vi_i]);
       trs_nic->thn_vi_rs[vi_i] = NULL;
       CI_DEBUG_ZERO(&trs->netif.nic_hw[intf_i].vis[vi_i]);
-      for( rxq_i = 0; rxq_i < ARRAY_SIZE(trs_nic->thn_efct_rxq); ++rxq_i ) {
-        if( trs_nic->thn_efct_rxq[rxq_i] ) {
-          efrm_rxq_release(trs_nic->thn_efct_rxq[rxq_i]);
-          CI_DEBUG_ZERO(&trs_nic->thn_efct_rxq[rxq_i]);
-        }
-      }
     }
   }
+  /* On the normal path we've already done this, but it's convenient to have
+   * it here to catch the various failure paths */
+  detach_efct_rxqs(trs);
 
 #if CI_CFG_ENDPOINT_MOVE
   if( trs->thc != NULL )
@@ -5597,6 +5613,10 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
   tcp_helper_stop(trs);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
+  /* oo_netif_dtor_pkts() is going to wait until there's nothing more coming,
+   * but that might never happen on X3 rxqs, so detech from them now */
+  detach_efct_rxqs(trs);
+
   /* Get the stack lock; it is needed for filter removal and leak check. */
   if( ~trs->netif.flags & CI_NETIF_FLAG_WEDGED ) {
     if( efab_tcp_helper_netif_try_lock(trs, 0) ) {
