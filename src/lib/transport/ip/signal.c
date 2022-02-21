@@ -511,14 +511,17 @@ int oo_do_sigaction(int sig, const struct sigaction *act,
     if( sig == SIGONLOAD ) {
       /* Onload needs its SIGONLOAD handler.  Hide this minuscule thingy if the
        * user reads, and complain if the user installs their own handler.
+       *
+       * gdb throws exception if it sees something other than EINVAL,
+       * so we use this value.
        */
       if( act->sa_handler == SIG_DFL )
         return 0;
       ci_log("ERROR: a signal handler for signal %d can't be "
              "overwritten without breaking Onload.  "
-             "Returning EACCES error.", SIGONLOAD);
+             "Returning EINVAL error.", SIGONLOAD);
       ci_log("You can change SIGONLOAD value in the Onload source code");
-      errno = EACCES;
+      errno = EINVAL;
       return -1;
     }
 
