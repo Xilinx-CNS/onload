@@ -1947,6 +1947,7 @@ have_events:
         int pay_len = ev[i].rx_ref_discard.len;
         pkt = alloc_rx_efct_pkt(ni, intf_i, pay_len);
         if( pkt ) {
+          __handle_rx_pkt(ni, ps, &s.rx_pkt);
           efct_vi_rxpkt_get(evq, ev[i].rx_ref.pkt_id, &payload);
           memcpy(pkt->dma_start, payload, pkt->pay_len);
           efct_vi_rxpkt_release(evq, ev[i].rx_ref.pkt_id);
