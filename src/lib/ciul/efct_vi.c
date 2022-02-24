@@ -994,7 +994,7 @@ void efct_vi_munmap_internal(ef_vi* vi)
   kvfree(vi->efct_rxq[0].superbufs);
 #else
   munmap((void*)vi->efct_rxq[0].superbuf,
-         vi->max_efct_rxq * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
+         (size_t)vi->max_efct_rxq * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
   free(vi->efct_rxq[0].current_mappings);
 #endif
 }
