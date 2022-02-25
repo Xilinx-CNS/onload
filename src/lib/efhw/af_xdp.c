@@ -27,6 +27,14 @@
 #include "ethtool_rxclass.h"
 #include "ethtool_flow.h"
 
+
+int enable_af_xdp_flow_filters = 1;
+module_param(enable_af_xdp_flow_filters, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(enable_af_xdp_flow_filters,
+                 "Enables flow filter use for AF_XDP devices ");
+/* filter id when no actual filter is installed */
+#define AF_XDP_NO_FILTER_MAGIC_ID 0x7FFFFF00
+
 /* sys_call_area: a process-mapped area which can be used to perform
  * system calls from a module.
  *
@@ -1443,6 +1451,8 @@ af_xdp_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 	const struct ethtool_ops *ops;
 	struct cmd_context ctx;
 
+	if (!enable_af_xdp_flow_filters)
+		return AF_XDP_NO_FILTER_MAGIC_ID; /* pretend a filter is installed */
 	memset(&info, 0, sizeof(info));
 	info.cmd = ETHTOOL_SRXCLSRLINS;
 	rc = af_xdp_efx_spec_to_ethtool_flow(spec, &info.fs);
@@ -1477,6 +1487,9 @@ af_xdp_filter_remove(struct efhw_nic *nic, int filter_id)
 	struct net_device *dev = nic->net_dev;
 	struct ethtool_rxnfc info;
 	const struct ethtool_ops *ops;
+
+	if (filter_id == AF_XDP_NO_FILTER_MAGIC_ID)
+		return;
 
 	memset(&info, 0, sizeof(info));
 	info.cmd = ETHTOOL_SRXCLSRLDEL;
