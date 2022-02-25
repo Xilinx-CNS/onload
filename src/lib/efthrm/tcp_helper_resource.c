@@ -1755,6 +1755,8 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     nsn->rx_ts_correction = vm->rx_ts_correction;
     nsn->tx_ts_correction = vm->tx_ts_correction;
     nsn->ts_format = vm->ts_format;
+    if( ! (nic->flags & NIC_FLAG_USERSPACE_PRIME) )
+      ni->state->flags |= CI_NETIF_FLAG_EVQ_KERNEL_PRIME_ONLY;
 
     trs->io_mmap_bytes += alloc_info.vi_io_mmap_bytes;
     trs->efct_shm_mmap_bytes += alloc_info.vi_efct_shm_mmap_bytes;

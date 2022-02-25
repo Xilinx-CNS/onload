@@ -11,6 +11,7 @@
 
 #include <onload/debug.h>
 #include <onload/tcp_helper_fns.h>
+#include <ci/efrm/efct_rxq.h>
 
 
 /**********************************************************************
@@ -136,6 +137,30 @@ efab_tcp_helper_sock_sleep(tcp_helper_resource_t* trs,
 
   return ci_waiter_wait(&waiter, &ep->waitq, &timeout, trs, op,
 			sock_sleep__on_wakeup);
+}
+
+
+void tcp_helper_request_wakeup_nic(tcp_helper_resource_t* trs, int intf_i) {
+  /* This assertion is good, but fails on linux so currently disabled */
+  /* ci_assert(ci_bit_test(&trs->netif.state->evq_primed, nic_i)); */
+
+  /* If we're not allowed to poll the stack in the kernel, it's neither useful
+   * nor safe to prime the interrupt. */
+  if( ci_netif_may_poll_in_kernel(&trs->netif, intf_i) ) {
+    ef_vi* vi = ci_netif_vi(&trs->netif, intf_i);
+    int i;
+    unsigned current_i =
+      ef_eventq_current(vi) / sizeof(efhw_event_t);
+    efrm_eventq_request_wakeup(tcp_helper_vi(trs, intf_i), current_i);
+
+    for( i = 0; i < vi->max_efct_rxq; ++i ) {
+      struct efrm_efct_rxq* rxq = trs->nic[intf_i].thn_efct_rxq[i];
+      unsigned sbseq, pktix;
+      int rc = efct_vi_get_wakeup_params(vi, i, &sbseq, &pktix);
+      if( rc == 0 )
+        efrm_rxq_request_wakeup(rxq, sbseq, pktix);
+    }
+  }
 }
 
 

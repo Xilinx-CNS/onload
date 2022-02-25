@@ -2123,10 +2123,6 @@ static int netif_tcp_helper_build(ci_netif* ni)
     vi->xdp_kick = af_xdp_kick;
     vi->xdp_kick_context = ni;
 
-    /* On EF100 EVQ cannot be primed from UL */
-    if( vi->nic_type.arch == EF_VI_ARCH_EF100 )
-      ni->state->flags |= CI_NETIF_FLAG_EVQ_KERNEL_PRIME_ONLY;
-
     ci_assert_equal(vi_state_bytes, ns->vi_state_bytes);
 
 #if CI_CFG_PIO

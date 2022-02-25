@@ -338,19 +338,8 @@ iterate_netifs_unlocked_dropref(ci_netif * netif, enum oo_thr_ref_type ref_type)
 }
 
 
-ci_inline void
-tcp_helper_request_wakeup_nic(tcp_helper_resource_t* trs, int intf_i) {
-  /* This assertion is good, but fails on linux so currently disabled */
-  /* ci_assert(ci_bit_test(&trs->netif.state->evq_primed, nic_i)); */
-
-  /* If we're not allowed to poll the stack in the kernel, it's neither useful
-   * nor safe to prime the interrupt. */
-  if( ci_netif_may_poll_in_kernel(&trs->netif, intf_i) ) {
-    unsigned current_i =
-      ef_eventq_current(ci_netif_vi(&trs->netif, intf_i)) / sizeof(efhw_event_t);
-    efrm_eventq_request_wakeup(tcp_helper_vi(trs, intf_i), current_i);
-  }
-}
+extern void
+tcp_helper_request_wakeup_nic(tcp_helper_resource_t* trs, int intf_i);
 
 
 ci_inline void

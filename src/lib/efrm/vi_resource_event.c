@@ -163,11 +163,13 @@ eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
 		int32_t new_evq_state = evq_state;
 
 		if ((evq_state & VI_RESOURCE_EVQ_STATE(BUSY)) != 0) {
-			/* Races are only expected here with AF_XDP.  EF10-
-			 * style wakeups and EF100-style interrupts on a given
-			 * queue are serialised by the lower-level mechanisms
-			 * that despatch them. */
-			if (rnic->efhw_nic.devtype.arch != EFHW_ARCH_AF_XDP) {
+			/* Races are expected here with AF_XDP (since the kernel decides
+			 * how much parallelism to use) and X3 (since a single wakeup
+			 * request is broadcast to multiple rxqs and an evq).  EF10-style
+			 * wakeups and EF100-style interrupts on a given queue are
+			 * serialised by the lower-level mechanisms that despatch them. */
+			if (rnic->efhw_nic.devtype.arch != EFHW_ARCH_AF_XDP &&
+			    rnic->efhw_nic.devtype.arch != EFHW_ARCH_EFCT) {
 				EFRM_ERR("%s:%d: evq_state[%d] corrupted!",
 					 __FUNCTION__, __LINE__, instance);
 				EFRM_ASSERT(0);

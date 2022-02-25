@@ -253,6 +253,8 @@ typedef union {
 #define NIC_FLAG_RX_SHARED 0x8000000000000LL
 /* Multicast replication of incoming packets is implemented in the NIC */
 #define NIC_FLAG_RX_MCAST_REPLICATION 0x10000000000000LL
+/*! ef_vi_prime() runs entirely in userspace */
+#define NIC_FLAG_USERSPACE_PRIME 0x20000000000000LL
 
 
 #endif /* __CI_EFHW_COMMON_H__ */

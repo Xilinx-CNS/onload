@@ -1228,31 +1228,44 @@ int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
 }
 
 #ifndef __KERNEL__
+static
+#endif
+int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
+                              unsigned* pktix)
+{
+  ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+  ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
+  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
+
+  if( ! efct_rxq_is_active(shm) )
+    return -ENOENT;
+
+  if( efct_rxq_need_rollover(shm, rxq_ptr->next) )
+    if( rx_rollover(vi, qid) < 0 )
+      return -EAGAIN;
+
+  *sbseq = rxq_ptr->sbseq;
+  *pktix = pkt_id_to_index_in_superbuf(rxq_ptr->next);
+  return 0;
+}
+
+#ifndef __KERNEL__
 int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
 {
     ci_resource_prime_qs_op_t  op;
-    ef_vi_rxq_state* qs = &vi->ep_state->rxq;
     int i;
 
     EF_VI_BUILD_ASSERT(CI_ARRAY_SIZE(op.rxq_current) >= EF_VI_MAX_EFCT_RXQS);
     op.crp_id = efch_make_resource_id(vi->vi_resource_id);
     for( i = 0; i < vi->max_efct_rxq; ++i ) {
-      ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[i];
       ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
-      struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[i];
 
       op.rxq_current[i].rxq_id = efch_make_resource_id(rxq->resource_id);
       if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
         break;
-      if( ! efct_rxq_is_active(shm) )
+      if( efct_vi_get_wakeup_params(vi, i, &op.rxq_current[i].sbseq,
+                                    &op.rxq_current[i].pktix) < 0 )
         break;
-
-      if( efct_rxq_need_rollover(shm, rxq_ptr->next) )
-        if( rx_rollover(vi, i) < 0 )
-          break;
-
-      op.rxq_current[i].sbseq = rxq_ptr->sbseq;
-      op.rxq_current[i].pktix = pkt_id_to_index_in_superbuf(rxq_ptr->next);
     }
     op.n_rxqs = i;
     op.n_txqs = vi->vi_txq.mask != 0 ? 1 : 0;
