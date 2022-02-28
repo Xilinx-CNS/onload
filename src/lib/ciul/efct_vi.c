@@ -711,9 +711,11 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
 
         /* Force a rollover on the next poll, while preserving the superbuf
          * index encoded in rxq_ptr->next since that is required by
-         * get_timestamp to identify packets within this superbuf.
+         * get_timestamp to identify packets within this superbuf. The +1 is
+         * necessary to avoid ending up with exactly superbuf_pkts (which means
+         * normal rollover)
          */
-        rxq_ptr->next += shm->superbuf_pkts;
+        rxq_ptr->next += 1 + shm->superbuf_pkts;
         break;
       }
 
