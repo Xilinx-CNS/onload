@@ -12,6 +12,7 @@
 \**************************************************************************/
 
 #include "internal.h"
+#include <ci/efhw/common.h>
 #include <onload/ul/tcp_helper.h>
 
 #include <unistd.h>
@@ -444,12 +445,13 @@ static int verify_addrspace_override(ci_netif* ni)
 }
 
 
-static bool have_af_xdp(ci_netif* ni)
+static bool have_unsupported_nic(ci_netif* ni)
 {
   int nic_i;
 
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i)
-    if( ci_netif_vi(ni, nic_i)->nic_type.arch == EF_VI_ARCH_AF_XDP )
+    if( ci_netif_vi(ni, nic_i)->nic_type.arch == EF_VI_ARCH_AF_XDP ||
+        ci_netif_vi(ni, nic_i)->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY )
       return true;
 
   return false;
@@ -490,8 +492,8 @@ int onload_zc_register_buffers(int fd, ef_addrspace addr_space,
              (rc = verify_addrspace_override(ni)) < 0 ) {
       /* error code already set appropriately */
     }
-    else if( have_af_xdp(ni) ) {
-      /* Because AF_XDP doesn't support checksum offload, the code necessary
+    else if( have_unsupported_nic(ni) ) {
+      /* Because these NICs don't support checksum offload, the code necessary
        * to compute checksums on the host is gnarly and thus non-existant. */
       rc = -ENOTSUP;
     }

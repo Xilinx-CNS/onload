@@ -192,8 +192,8 @@ extern int onload_zc_buffer_decref(int fd, onload_zc_handle buf);
  * This function locks the regions of memory. The caller's RLIMIT_MEMLOCK must
  * permit this.
  *
- * This function is not available when an AF_XDP adaptor is registered for use
- * by Onload.
+ * This function is not available when an AF_XDP or X3 adaptor is registered
+ * for use by Onload.
  *
  * fd indicates the stack on which to register the buffers. It can be any
  * socket allocated on that stack.
