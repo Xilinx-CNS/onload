@@ -515,7 +515,7 @@ tcp_rc_means_handover(int rc)
   return rc == CI_SOCKET_HANDOVER
          || ( (rc < 0) && CITP_OPTS.no_fail &&
               ( errno == ENOMEM || errno == EBUSY || errno == ENOBUFS ||
-                errno == ERFKILL || errno == ENOENT ) );
+                errno == ERFKILL || errno == ENOENT || errno == ENOSPC ) );
 }
 
 static int citp_tcp_listen(citp_fdinfo* fdinfo, int backlog)
