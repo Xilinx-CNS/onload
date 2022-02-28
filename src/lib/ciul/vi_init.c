@@ -201,8 +201,9 @@ static int tx_fifo_bytes(struct ef_vi* vi)
     /* No FIFO, so return a large number to indicate no limit */
     return INT_MAX;
   case EF_VI_ARCH_EFCT:
-    /* 32k FIFO, reduced by 8 bytes for the TX header */
-    return EFCT_TX_FIFO_BYTES - EFCT_TX_HEADER_BYTES;
+    /* 32k FIFO, reduced by 8 bytes for the TX header. Hardware reduces this
+     * by one cache line to make their overflow tracking easier */
+    return EFCT_TX_FIFO_BYTES - EFCT_TX_ALIGNMENT - EFCT_TX_HEADER_BYTES;
   default:
     EF_VI_BUG_ON(1);
     return 0;
