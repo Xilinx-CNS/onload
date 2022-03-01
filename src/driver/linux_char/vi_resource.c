@@ -139,7 +139,7 @@ vi_resource_alloc(struct efrm_vi_attr *attr,
       evq_capacity = 32 * 1024;
     }
     else if( efrm_client_get_nic(virs->rs.rs_client)->flags &
-             NIC_FLAG_RX_DRIVER_OWNED ) {
+             NIC_FLAG_RX_SHARED ) {
       /* evq_capacity<0 indicates an additional reserve. See below. */
       evq_capacity = txq_capacity - evq_capacity - 1;
       if (vi_flags & EFHW_VI_TX_TIMESTAMPS)
