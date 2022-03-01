@@ -727,7 +727,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
        * told us */
       mutex_unlock(&efct->driver_filters_mtx);
       EFHW_ERR("%s: disambiguation table full", __func__);
-      return -ENOSPC;
+      return -ENOBUFS;
     }
   }
 
