@@ -486,6 +486,12 @@ generic_desc_check(struct eflatency_vi* vi, int wait)
         TEST(n_rx == 1);
         vi->i = ++i;
         return;
+      case EF_EVENT_TYPE_RX_MULTI_PKTS:
+        n_rx = evs[i].rx_multi_pkts.n_pkts;
+        TEST(n_rx == 1);
+        ef_vi_rxq_next_desc_id(&vi->vi);
+        vi->i = ++i;
+        return;
       case EF_EVENT_TYPE_RX_REF_DISCARD:
         handle_rx_ref(&vi->vi, evs[i].rx_ref_discard.pkt_id,
                       evs[i].rx_ref_discard.len);
@@ -559,7 +565,6 @@ static const test_t* do_init(int ifindex, int mode,
   const test_t* t;
   unsigned long capability_val;
 
-  TRY(ef_driver_open(&driver_handle));
   TRY(ef_pd_alloc(&latency_vi->pd, driver_handle, ifindex, pd_flags));
 
   if( cfg_ctpio_no_poison )
@@ -658,9 +663,13 @@ static const test_t* do_init(int ifindex, int mode,
 static void prepare(ef_vi* vi)
 {
   int i;
-  if( vi->nic_type.arch != EF_VI_ARCH_EFCT )
-    for( i = 0; i < N_RX_BUFS; ++i )
+  if( vi->nic_type.arch != EF_VI_ARCH_EFCT ) {
+    /* Ensure we leave space to allow ping/pong to unconditionally post a
+     * buffer, which they do at the start of their loop.
+     */
+    for( i = 0; i < N_RX_BUFS && ef_vi_receive_space(vi) > 1; ++i )
       rx_post(vi);
+  }
 }
 
 
@@ -690,6 +699,11 @@ int main(int argc, char* argv[])
   const test_t* t;
   int iters_run = 0;
   struct eflatency_vi* tx_vi_ptr;
+  unsigned long rx_min_page_size;
+  unsigned long min_page_size;
+  void* pkt_mem;
+  int pkt_mem_bytes;
+  int i;
 
   printf("# ef_vi_version_str: %s\n", ef_vi_version_str());
 
@@ -765,16 +779,33 @@ int main(int argc, char* argv[])
   else if( strcmp(argv[0], "pong") != 0 )
     usage();
 
-  void* pkt_mem;
-  int pkt_mem_bytes = N_BUFS * BUF_SIZE;
-  {
-    int i;
-    TEST(posix_memalign(&pkt_mem, 4096, pkt_mem_bytes) == 0);
-    for( i = 0; i < N_BUFS; ++i ) {
-      struct pkt_buf* pb = (void*) ((char*) pkt_mem + i * BUF_SIZE);
-      pkt_bufs[i] = pb;
-      pb->id = i;
-    }
+  TRY(ef_driver_open(&driver_handle));
+  TRY(ef_vi_capabilities_get(driver_handle, rx_ifindex,
+                             EF_VI_CAP_MIN_BUFFER_MODE_SIZE, &rx_min_page_size));
+  if( tx_ifindex < 0 ) {
+    min_page_size = rx_min_page_size;
+  }
+  else {
+    TRY(ef_vi_capabilities_get(driver_handle, tx_ifindex,
+                               EF_VI_CAP_MIN_BUFFER_MODE_SIZE, &min_page_size));
+    min_page_size = CI_MAX(rx_min_page_size, min_page_size);
+  }
+
+  pkt_mem_bytes = N_BUFS * BUF_SIZE;
+  pkt_mem_bytes = CI_MAX(min_page_size, pkt_mem_bytes);
+  if (min_page_size >= 2 * 1024 * 1024) {
+    /* Assume this means huge pages are mandatory */
+    pkt_mem = mmap(NULL, pkt_mem_bytes, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+    TEST(pkt_mem != MAP_FAILED);
+  }
+  else {
+    TEST(posix_memalign(&pkt_mem, min_page_size, pkt_mem_bytes) == 0);
+  }
+  for( i = 0; i < N_BUFS; ++i ) {
+    struct pkt_buf* pb = (void*) ((char*) pkt_mem + i * BUF_SIZE);
+    pkt_bufs[i] = pb;
+    pb->id = i;
   }
 
   /* Initialize a VI and configure it to operate with the lowest latency
@@ -790,14 +821,11 @@ int main(int argc, char* argv[])
     tx_vi_ptr = &tx_vi;
   }
 
-  {
-    int i;
-    for( i = 0; i < N_BUFS; ++i ) {
-      struct pkt_buf* pb = (void*) ((char*) pkt_mem + i * BUF_SIZE);
-      ef_memreg* memreg = i < N_RX_BUFS ? &rx_vi.memreg : &tx_vi_ptr->memreg;
-      pb->dma_buf_addr = ef_memreg_dma_addr(memreg, i * BUF_SIZE);
-      pb->dma_buf_addr += offsetof(struct pkt_buf, dma_buf);
-    }
+  for( i = 0; i < N_BUFS; ++i ) {
+    struct pkt_buf* pb = (void*) ((char*) pkt_mem + i * BUF_SIZE);
+    ef_memreg* memreg = i < N_RX_BUFS ? &rx_vi.memreg : &tx_vi_ptr->memreg;
+    pb->dma_buf_addr = ef_memreg_dma_addr(memreg, i * BUF_SIZE);
+    pb->dma_buf_addr += offsetof(struct pkt_buf, dma_buf);
   }
 
   prepare(&rx_vi.vi);
