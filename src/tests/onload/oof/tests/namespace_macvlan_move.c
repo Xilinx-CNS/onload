@@ -215,7 +215,7 @@ int test_namespace_macvlan_move(void)
 
   ooft_endpoint_expect_sw_add(udp_wild, IPPROTO_UDP,
                               inet_addr("1.0.2.0"), htons(2000), 0, 0);
-  ooft_endpoint_expect_hw_unicast(udp_wild, inet_addr("1.0.2.0"));
+  ooft_endpoint_expect_hw_unicast(udp_wild, inet_addr("1.0.2.0"), 0);
 
   TEST_DEBUG(oof_onload_manager_dump(&efab_tcp_driver, dump, "\n"));
 

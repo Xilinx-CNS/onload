@@ -123,6 +123,28 @@ int ooft_endpoint_add(struct ooft_endpoint* ep, int flags)
                         ep->lport_be, raddr, ep->rport_be, NULL);
 }
 
+int ooft_endpoint_add_wild(struct ooft_endpoint* ep, int flags)
+{
+  ci_addr_t laddr;
+  ci_addr_t raddr = {};
+
+  laddr = CI_ADDR_FROM_IP4(ep->laddr_be);
+  return oof_socket_add(ep->thr->ofn->ofn_filter_manager, &ep->skf,
+                        flags, ep->proto, AF_SPACE_FLAG_IP4, laddr,
+                        ep->lport_be, raddr, 0, NULL);
+}
+
+int ooft_endpoint_udp_connect(struct ooft_endpoint* ep, int flags)
+{
+  ci_addr_t laddr, raddr;
+
+  laddr = CI_ADDR_FROM_IP4(ep->laddr_be);
+  raddr = CI_ADDR_FROM_IP4(ep->raddr_be);
+
+  return oof_udp_connect(ep->thr->ofn->ofn_filter_manager, &ep->skf,
+                         AF_SPACE_FLAG_IP4, laddr, raddr, ep->rport_be);
+}
+
 
 int ooft_endpoint_mcast_add(struct ooft_endpoint* ep, unsigned group,
                             struct ooft_ifindex* idx)
@@ -261,9 +283,10 @@ void ooft_endpoint_expect_sw_remove_addr(struct ooft_endpoint* ep,
 
 /* Adds a filter with the supplied local address on each hwport in this
  * endpoint's namespace.  Other fields are taken from the endpoint.
+ * flag OOFT_EXPECT_FLAG_WILD would omit details of remote to create semi-wild filters.
  */
 void ooft_endpoint_expect_hw_unicast(struct ooft_endpoint* ep,
-                                     unsigned laddr_be)
+                                     unsigned laddr_be, int flags)
 {
   int i;
   unsigned hwport_mask = ep->thr->ns->hwport_mask;
@@ -272,15 +295,17 @@ void ooft_endpoint_expect_hw_unicast(struct ooft_endpoint* ep,
     if( ! oo_nics[i].efrm_client )
       continue;
     struct ooft_hwport* hw = HWPORT_FROM_CLIENT(oo_nics[i].efrm_client);
-    int no5tuple = hw->no5tuple;
+    int wild = hw->no5tuple || (flags & OOFT_EXPECT_FLAG_WILD);
+    int raddr_be = wild ? 0 : ep->raddr_be;
+    int rport_be = wild ? 0 : ep->rport_be;
     if( (1 << i) & hwport_mask)
       ooft_client_expect_hw_add_ip(oo_nics[i].efrm_client,
                                    tcp_helper_rx_vi_id(ep->thr, i),
                                    tcp_helper_vi_hw_stack_id(ep->thr, i),
                                    EFX_FILTER_VID_UNSPEC,
                                    ep->proto, laddr_be, ep->lport_be,
-                                   no5tuple ? 0 : ep->raddr_be,
-                                   no5tuple ? 0 : ep->rport_be);
+                                   raddr_be,
+                                   rport_be);
   }
 }
 
@@ -291,14 +316,18 @@ void ooft_endpoint_expect_hw_unicast(struct ooft_endpoint* ep,
  *   the namespace of this socket
  * - for semi-wild sockets a semi-wild filter for the socket's laddr
  * - for full-match sockets a full-match filter
+ *  flag OOFT_EXPECT_FLAG_WILD would omit details of remote to create semi-wild filters.
  */
-void ooft_endpoint_expect_unicast_filters(struct ooft_endpoint* ep, int hw)
+void ooft_endpoint_expect_unicast_filters(struct ooft_endpoint* ep, int flags)
 {
+  int raddr_be = (flags & OOFT_EXPECT_FLAG_WILD) ? 0 : ep->raddr_be;
+  int rport_be = (flags & OOFT_EXPECT_FLAG_WILD) ? 0 : ep->rport_be;
+
   if( ep->laddr_be != INADDR_ANY ) {
     ooft_endpoint_expect_sw_add(ep, ep->proto, ep->laddr_be, ep->lport_be,
-                                ep->raddr_be, ep->rport_be);
-    if( hw )
-      ooft_endpoint_expect_hw_unicast(ep, ep->laddr_be);
+                                raddr_be, rport_be);
+    if( flags & OOFT_EXPECT_FLAG_HW )
+      ooft_endpoint_expect_hw_unicast(ep, ep->laddr_be, flags);
   }
   else {
     ci_dllist* idxs = &ep->thr->ns->idxs;
@@ -312,9 +341,9 @@ void ooft_endpoint_expect_unicast_filters(struct ooft_endpoint* ep, int hw)
       CI_DLLIST_FOR_EACH(addr_link, &idx->addrs) {
         addr = CI_CONTAINER(struct ooft_addr, idx_link, addr_link);
         ooft_endpoint_expect_sw_add(ep, ep->proto, addr->laddr_be,
-                                    ep->lport_be, ep->raddr_be, ep->rport_be);
-        if( hw )
-          ooft_endpoint_expect_hw_unicast(ep, addr->laddr_be);
+                                    ep->lport_be, raddr_be, rport_be);
+        if( flags & OOFT_EXPECT_FLAG_HW )
+          ooft_endpoint_expect_hw_unicast(ep, addr->laddr_be, flags);
       }
     }
   }

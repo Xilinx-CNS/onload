@@ -87,8 +87,10 @@ extern int ooft_endpoint_id(struct ooft_endpoint* ep);
  * Utility functions to add sockets to oof
  * --------------------------------------- */
 extern int ooft_endpoint_add(struct ooft_endpoint* ep, int flags);
+extern int ooft_endpoint_add_wild(struct ooft_endpoint* ep, int flags);
 extern int ooft_endpoint_mcast_add(struct ooft_endpoint* ep, unsigned group,
                                    struct ooft_ifindex* idx);
+int ooft_endpoint_udp_connect(struct ooft_endpoint* ep, int flags);
 
 /* ---------------------------------------
  * Functions to handle test SW filters
@@ -115,12 +117,14 @@ extern void ooft_endpoint_expect_sw_remove(struct ooft_endpoint* ep,
                                            struct ooft_sw_filter* filter);
 extern void ooft_endpoint_expect_sw_remove_all(struct ooft_endpoint* ep);
 extern void ooft_endpoint_expect_hw_unicast(struct ooft_endpoint* ep,
-                                            unsigned laddr_be);
+                                            unsigned laddr_be, int flags);
 extern void ooft_endpoint_expect_sw_remove_addr(struct ooft_endpoint* ep,
                                                 unsigned laddr_be);
 
+#define OOFT_EXPECT_FLAG_HW 1
+#define OOFT_EXPECT_FLAG_WILD 2
 extern void ooft_endpoint_expect_unicast_filters(struct ooft_endpoint* ep,
-                                                 int hw);
+                                                 int flags);
 extern void ooft_endpoint_expect_multicast_filters(struct ooft_endpoint* ep,
                                                    struct ooft_ifindex* idx,
                                                    unsigned laddr_be);

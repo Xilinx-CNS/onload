@@ -57,7 +57,7 @@ int __test_sanity(int no5tuple)
   int with_hw_5tuple_only = !no5tuple;
 
   new_test();
-  plan(49);
+  plan(60);
 
   /* Allocates the ns manager and cplane structures that are used
    * throughout the test.
@@ -140,6 +140,7 @@ int __test_sanity(int no5tuple)
    * In more complex tests it could be necessary to further split this list,
    * but here we are just doing one thing at a time, so this is sufficient.
    */
+  ci_dllist_init(&hw_wild);
   ooft_cplane_claim_added_hw_filters(cp, &hw_wild);
 
   ooft_endpoint_expect_unicast_filters(udp_semi_wild, 1);
@@ -223,7 +224,7 @@ int __test_sanity(int no5tuple)
   bool expect_unshare = oof_shared_keep_thresh >= 1 && with_hw_5tuple_only;
   ooft_endpoint_expect_sw_remove_all(tcp_listen);
   if( expect_unshare ) {
-    ooft_endpoint_expect_hw_unicast(tcp_passive2, tcp_passive2->laddr_be);
+    ooft_endpoint_expect_hw_unicast(tcp_passive2, tcp_passive2->laddr_be, 0);
     ooft_hw_filter_expect_remove_list(&hw_listen);
   }
   oof_socket_del(fm, &tcp_listen->skf);
@@ -238,6 +239,50 @@ int __test_sanity(int no5tuple)
     ooft_hw_filter_expect_remove_list(&hw_listen);
   oof_socket_del(fm, &tcp_passive2->skf);
   check_all_filters(thr1, thr2);
+
+  {
+    /* udp connect test */
+    diag("Create semi wild socket");
+    ooft_endpoint_expect_unicast_filters(udp_connected, OOFT_EXPECT_FLAG_WILD | OOFT_EXPECT_FLAG_HW);
+    rc = ooft_endpoint_add_wild(udp_connected, 0);
+
+    cmp_ok(rc, "==", 0, "add UDP semi-wild endpoint");
+
+    check_all_filters(thr1, thr2);
+
+    diag("Connect the semi wild socket");
+    /* we expect removal of all previously installed SW and HW filters */
+    /* TODO check the HW filter replacement is in correct order */
+
+    ooft_cplane_claim_added_hw_filters(cp, &hw_wild);
+    if( no5tuple )
+      ooft_endpoint_expect_unicast_filters(udp_connected, 0);
+    else {
+      ooft_endpoint_expect_unicast_filters(udp_connected, OOFT_EXPECT_FLAG_HW);
+      ooft_hw_filter_expect_remove_list(&hw_wild);
+    }
+    ooft_endpoint_expect_sw_remove_all(udp_connected);
+
+    rc = ooft_endpoint_udp_connect (udp_connected, 0);
+
+    cmp_ok(rc, "==", 0, "connected UDP");
+
+    check_all_filters(thr1, thr2);
+
+    /* remove socket */
+    if( ! no5tuple ) {
+      ci_dllist_init(&hw_wild);
+      ooft_cplane_claim_added_hw_filters(cp, &hw_wild);
+    }
+
+
+    diag("Closing the connected socket");
+    ooft_hw_filter_expect_remove_list(&hw_wild);
+    ooft_endpoint_expect_sw_remove_all(udp_connected);
+
+    oof_socket_del(fm, &udp_connected->skf);
+    check_all_filters(thr1, thr2);
+  }
 
   ooft_free_stack(thr1);
   ooft_free_stack(thr2);

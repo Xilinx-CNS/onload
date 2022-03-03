@@ -62,6 +62,7 @@ void efrm_filter_remove(struct efrm_client* client, int filter_id)
     }
   }
 
+  /* filter in question was not expected to be removed */
   ci_assert(link);
 }
 

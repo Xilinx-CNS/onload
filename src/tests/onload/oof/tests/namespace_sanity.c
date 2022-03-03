@@ -261,7 +261,7 @@ int test_namespace_sanity()
    * threshold is too small */
   bool expect_unshare = oof_shared_keep_thresh >= 1;
   if( expect_unshare ) {
-    ooft_endpoint_expect_hw_unicast(tcp_passive2, tcp_passive2->laddr_be);
+    ooft_endpoint_expect_hw_unicast(tcp_passive2, tcp_passive2->laddr_be, 0);
     ooft_hw_filter_expect_remove_list(&hw_listen);
   }
   ooft_endpoint_expect_sw_remove_all(tcp_listen);
