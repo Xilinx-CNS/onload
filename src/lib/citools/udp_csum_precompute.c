@@ -19,7 +19,6 @@
 
 unsigned ci_udp_csum_precompute(const ci_ip4_hdr* ip, const ci_udp_hdr* udp)
 {
-  ci_ip4_pseudo_hdr ph;
   const ci_uint16* p;
   unsigned csum;
 
@@ -33,10 +32,8 @@ unsigned ci_udp_csum_precompute(const ci_ip4_hdr* ip, const ci_udp_hdr* udp)
   csum += p[7];
   csum += p[8];	/* ip_daddr_be32	  */
   csum += p[9];
-  ph.zero = 0;
-  ph.ip_protocol = IPPROTO_UDP;
-  p = (const ci_uint16*) &ph;
-  csum += p[4];	/* zero, ip_protocol */
+
+  csum += htons(IPPROTO_UDP);  /* zero, ip_protocol */
 
   csum += udp->udp_source_be16;
   csum += udp->udp_dest_be16;

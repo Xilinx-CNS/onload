@@ -1277,7 +1277,8 @@ static void stack_opts(ci_netif* ni)
 
 static void stack_stats(ci_netif* ni)
 {
-  ci_netif_stats stats = ni->state->stats;
+  ci_netif_stats stats;
+  memcpy(&stats, &ni->state->stats, sizeof(ci_netif_stats));
   ci_log("-------------------- ci_netif_stats: %d ---------------------",
          NI_ID(ni));
   ci_dump_stats(netif_stats_fields, N_NETIF_STATS_FIELDS, &stats, 0, NULL,
@@ -1286,7 +1287,8 @@ static void stack_stats(ci_netif* ni)
 
 static void stack_stats_describe(ci_netif* ni)
 {
-  ci_netif_stats stats = ni->state->stats;
+  ci_netif_stats stats;
+  memcpy(&stats, &ni->state->stats, sizeof(ci_netif_stats));
   ci_log("-------------------- ci_netif_stats: %d ---------------------",
          NI_ID(ni));
   ci_dump_stats(netif_stats_fields, N_NETIF_STATS_FIELDS, &stats, 1, NULL,

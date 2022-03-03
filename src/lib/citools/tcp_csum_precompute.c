@@ -19,7 +19,6 @@
 
 unsigned ci_tcp_csum_precompute(const ci_ip4_hdr* ip, const ci_tcp_hdr* tcp)
 {
-  ci_ip4_pseudo_hdr ph;
   const ci_uint16* p;
   unsigned csum;
 
@@ -34,10 +33,8 @@ unsigned ci_tcp_csum_precompute(const ci_ip4_hdr* ip, const ci_tcp_hdr* tcp)
   csum += p[7];
   csum += p[8];	/* ip_daddr_be32	  */
   csum += p[9];
-  ph.zero = 0;
-  ph.ip_protocol = (ci_uint8)IPPROTO_TCP;
-  p = (const ci_uint16*) &ph;
-  csum += p[4];	/* zero, ip_protocol */
+
+  csum += htons(IPPROTO_TCP); /* zero, ip_protocol */
 
   p = (const ci_uint16*) tcp;
   csum += p[0];	/* tcp_source_be16	      */
