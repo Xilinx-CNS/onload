@@ -94,6 +94,9 @@ static void finished_with_superbuf(struct xlnx_efct_device *edev,
 {
   EFHW_ASSERT(app->current_owned_superbufs > 0);
   EFHW_ASSERT(q->superbuf_refcount[sbid] > 0);
+  /* check for wrap around, using max number of references <= CI_EFCT_MAX_SUPERBUFS
+   * as clients are limited by number of superbufs */
+  EFHW_ASSERT(q->superbuf_refcount[sbid] <= CI_EFCT_MAX_SUPERBUFS);
   EFHW_ASSERT(ci_bit_test(app->owns_superbuf, sbid));
   __ci_bit_clear(app->owns_superbuf, sbid);
   --app->current_owned_superbufs;
