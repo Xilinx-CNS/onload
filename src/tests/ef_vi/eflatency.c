@@ -689,6 +689,7 @@ int main(int argc, char* argv[])
   bool ping = false;
   const test_t* t;
   int iters_run = 0;
+  struct eflatency_vi* tx_vi_ptr;
 
   printf("# ef_vi_version_str: %s\n", ef_vi_version_str());
 
@@ -782,17 +783,18 @@ int main(int argc, char* argv[])
   t = do_init(rx_ifindex, cfg_mode, &rx_vi, pkt_mem, pkt_mem_bytes);
 
   if( tx_ifindex < 0 ) {
-    tx_vi = rx_vi;
+    tx_vi_ptr = &rx_vi;
   } else {
     /* mode really selects tx method */
     t = do_init(tx_ifindex, cfg_mode, &tx_vi, pkt_mem, pkt_mem_bytes);
+    tx_vi_ptr = &tx_vi;
   }
 
   {
     int i;
     for( i = 0; i < N_BUFS; ++i ) {
       struct pkt_buf* pb = (void*) ((char*) pkt_mem + i * BUF_SIZE);
-      ef_memreg* memreg = i < N_RX_BUFS ? &rx_vi.memreg : &tx_vi.memreg;
+      ef_memreg* memreg = i < N_RX_BUFS ? &rx_vi.memreg : &tx_vi_ptr->memreg;
       pb->dma_buf_addr = ef_memreg_dma_addr(memreg, i * BUF_SIZE);
       pb->dma_buf_addr += offsetof(struct pkt_buf, dma_buf);
     }
@@ -818,10 +820,10 @@ int main(int argc, char* argv[])
   for( ; ; ) {
     ++iters_run;
     if( t->init )
-      t->init(&rx_vi, &tx_vi);
-    (ping ? t->ping : t->pong)(&rx_vi, &tx_vi);
+      t->init(&rx_vi, tx_vi_ptr);
+    (ping ? t->ping : t->pong)(&rx_vi, tx_vi_ptr);
     if( t->cleanup != NULL )
-      t->cleanup(&rx_vi.vi, &tx_vi.vi);
+      t->cleanup(&rx_vi.vi, &tx_vi_ptr->vi);
     cfg_payload_len += cfg_payload_step;
     if( cfg_payload_step < 0 ) {
       if( cfg_payload_len <= cfg_payload_end )
