@@ -2,6 +2,7 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc. */
 #include <uapi/linux/ethtool.h>
 #include <ci/driver/driverlink_api.h>
+#include <ci/efhw/debug.h>
 
 static uint32_t combine_ports(uint16_t loc, uint16_t rem)
 {
@@ -11,10 +12,12 @@ static uint32_t combine_ports(uint16_t loc, uint16_t rem)
 int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
                              struct ethtool_rx_flow_spec *dst)
 {
+  static const __be32 zero[4] = {};
+  static const __be32 minus1[4] = {~0u, ~0u, ~0u, ~0u};
   int proto = -1;
-  uint32_t loc_ip = 0, loc_ip_mask = 0;
+  const __be32 *loc_ip = zero, *loc_ip_mask = zero;
   uint16_t loc_port = 0, loc_port_mask = 0;
-  uint32_t rem_ip = 0, rem_ip_mask = 0;
+  const __be32 *rem_ip = zero, *rem_ip_mask = zero;
   uint16_t rem_port = 0, rem_port_mask = 0;
 
   memset(dst, 0, sizeof(*dst));
@@ -47,63 +50,96 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
       EFX_FILTER_MATCH_REM_PORT )
     return -EPROTONOSUPPORT;
   if( src->match_flags & EFX_FILTER_MATCH_ETHER_TYPE &&
-      src->ether_type != htons(ETH_P_IP) )
+      src->ether_type != htons(ETH_P_IP) &&
+      src->ether_type != htons(ETH_P_IPV6) )
     return -EPROTONOSUPPORT;
 
   if( src->match_flags & EFX_FILTER_MATCH_IP_PROTO )
     proto = src->ip_proto;
 
   if( src->match_flags & EFX_FILTER_MATCH_LOC_HOST ) {
-    loc_ip = src->loc_host[0];
-    loc_ip_mask = -1;
+    loc_ip = src->loc_host;
+    loc_ip_mask = minus1;
   }
   if( src->match_flags & EFX_FILTER_MATCH_LOC_PORT ) {
     loc_port = src->loc_port;
     loc_port_mask = -1;
   }
   if( src->match_flags & EFX_FILTER_MATCH_REM_HOST ) {
-    rem_ip = src->rem_host[0];
-    rem_ip_mask = -1;
+    rem_ip = src->rem_host;
+    rem_ip_mask = minus1;
   }
   if( src->match_flags & EFX_FILTER_MATCH_REM_PORT ) {
     rem_port = src->rem_port;
     rem_port_mask = -1;
   }
-  switch( proto ) {
-  case IPPROTO_UDP:
-    dst->flow_type = UDP_V4_FLOW;
-    dst->h_u.udp_ip4_spec.ip4dst = loc_ip;
-    dst->h_u.udp_ip4_spec.pdst = loc_port;
-    dst->h_u.udp_ip4_spec.ip4src = rem_ip;
-    dst->h_u.udp_ip4_spec.psrc = rem_port;
-    dst->m_u.udp_ip4_spec.ip4dst = loc_ip_mask;
-    dst->m_u.udp_ip4_spec.pdst = loc_port_mask;
-    dst->m_u.udp_ip4_spec.ip4src = rem_ip_mask;
-    dst->m_u.udp_ip4_spec.psrc = rem_port_mask;
-    break;
-  case IPPROTO_TCP:
-    dst->flow_type = TCP_V4_FLOW;
-    dst->h_u.tcp_ip4_spec.ip4dst = loc_ip;
-    dst->h_u.tcp_ip4_spec.pdst = loc_port;
-    dst->h_u.tcp_ip4_spec.ip4src = rem_ip;
-    dst->h_u.tcp_ip4_spec.psrc = rem_port;
-    dst->m_u.tcp_ip4_spec.ip4dst = loc_ip_mask;
-    dst->m_u.tcp_ip4_spec.pdst = loc_port_mask;
-    dst->m_u.tcp_ip4_spec.ip4src = rem_ip_mask;
-    dst->m_u.tcp_ip4_spec.psrc = rem_port_mask;
-    break;
-  default:
-    dst->flow_type = IPV4_USER_FLOW;
-    dst->h_u.usr_ip4_spec.proto = proto;
-    dst->h_u.usr_ip4_spec.ip4dst = loc_ip;
-    dst->h_u.usr_ip4_spec.ip4src = rem_ip;
-    dst->h_u.usr_ip4_spec.l4_4_bytes = combine_ports(loc_port, rem_port);
-    dst->m_u.usr_ip4_spec.proto = proto < 0 ? 0 : -1;
-    dst->m_u.usr_ip4_spec.ip4dst = loc_ip_mask;
-    dst->m_u.usr_ip4_spec.ip4src = rem_ip_mask;
-    dst->m_u.usr_ip4_spec.l4_4_bytes = combine_ports(loc_port_mask,
-                                                     rem_port_mask);
-    break;
+  if( src->ether_type == htons(ETH_P_IPV6) ) {
+    switch( proto ) {
+    case IPPROTO_UDP:
+    case IPPROTO_TCP:
+      /* This assert is checking both the location and the type */
+      EFHW_ASSERT(&dst->h_u.udp_ip6_spec == &dst->h_u.tcp_ip6_spec);
+      dst->flow_type = proto == IPPROTO_UDP ? UDP_V6_FLOW : TCP_V6_FLOW;
+      memcpy(dst->h_u.udp_ip6_spec.ip6dst, loc_ip,
+             sizeof(dst->h_u.udp_ip6_spec.ip6dst));
+      dst->h_u.udp_ip6_spec.pdst = loc_port;
+      memcpy(dst->h_u.udp_ip6_spec.ip6src, rem_ip,
+             sizeof(dst->h_u.udp_ip6_spec.ip6src));
+      dst->h_u.udp_ip6_spec.psrc = rem_port;
+      memcpy(dst->m_u.udp_ip6_spec.ip6dst, loc_ip_mask,
+             sizeof(dst->m_u.udp_ip6_spec.ip6dst));
+      dst->m_u.udp_ip6_spec.pdst = loc_port_mask;
+      memcpy(dst->m_u.udp_ip6_spec.ip6src, rem_ip_mask,
+             sizeof(dst->m_u.udp_ip6_spec.ip6src));
+      dst->m_u.udp_ip6_spec.psrc = rem_port_mask;
+      break;
+    default:
+      dst->flow_type = IPV6_USER_FLOW;
+      dst->h_u.usr_ip6_spec.l4_proto = proto;
+      memcpy(dst->h_u.usr_ip6_spec.ip6dst, loc_ip,
+             sizeof(dst->h_u.usr_ip6_spec.ip6dst));
+      memcpy(dst->h_u.usr_ip6_spec.ip6src, rem_ip,
+             sizeof(dst->h_u.usr_ip6_spec.ip6src));
+      dst->h_u.usr_ip6_spec.l4_4_bytes = combine_ports(loc_port, rem_port);
+      dst->m_u.usr_ip6_spec.l4_proto = proto < 0 ? 0 : -1;
+      memcpy(dst->m_u.usr_ip6_spec.ip6dst, loc_ip_mask,
+             sizeof(dst->m_u.usr_ip6_spec.ip6dst));
+      memcpy(dst->m_u.usr_ip6_spec.ip6src, rem_ip_mask,
+             sizeof(dst->m_u.usr_ip6_spec.ip6src));
+      dst->m_u.usr_ip6_spec.l4_4_bytes = combine_ports(loc_port_mask,
+                                                      rem_port_mask);
+      break;
+    }
+  }
+  else {
+    switch( proto ) {
+    case IPPROTO_UDP:
+    case IPPROTO_TCP:
+      /* This assert is checking both the location and the type */
+      EFHW_ASSERT(&dst->h_u.udp_ip4_spec == &dst->h_u.tcp_ip4_spec);
+      dst->flow_type = proto == IPPROTO_UDP ? UDP_V4_FLOW : TCP_V4_FLOW;
+      dst->h_u.tcp_ip4_spec.ip4dst = loc_ip[0];
+      dst->h_u.tcp_ip4_spec.pdst = loc_port;
+      dst->h_u.tcp_ip4_spec.ip4src = rem_ip[0];
+      dst->h_u.tcp_ip4_spec.psrc = rem_port;
+      dst->m_u.tcp_ip4_spec.ip4dst = loc_ip_mask[0];
+      dst->m_u.tcp_ip4_spec.pdst = loc_port_mask;
+      dst->m_u.tcp_ip4_spec.ip4src = rem_ip_mask[0];
+      dst->m_u.tcp_ip4_spec.psrc = rem_port_mask;
+      break;
+    default:
+      dst->flow_type = IPV4_USER_FLOW;
+      dst->h_u.usr_ip4_spec.proto = proto;
+      dst->h_u.usr_ip4_spec.ip4dst = loc_ip[0];
+      dst->h_u.usr_ip4_spec.ip4src = rem_ip[0];
+      dst->h_u.usr_ip4_spec.l4_4_bytes = combine_ports(loc_port, rem_port);
+      dst->m_u.usr_ip4_spec.proto = proto < 0 ? 0 : -1;
+      dst->m_u.usr_ip4_spec.ip4dst = loc_ip_mask[0];
+      dst->m_u.usr_ip4_spec.ip4src = rem_ip_mask[0];
+      dst->m_u.usr_ip4_spec.l4_4_bytes = combine_ports(loc_port_mask,
+                                                      rem_port_mask);
+      break;
+    }
   }
   return 0;
 }

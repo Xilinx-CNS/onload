@@ -650,20 +650,14 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
    * hardware can't */
   switch (dst->flow_type) {
   case UDP_V4_FLOW:
+  case TCP_V4_FLOW:
+    EFHW_ASSERT(&dst->h_u.udp_ip4_spec == &dst->h_u.tcp_ip4_spec);
     if( dst->m_u.udp_ip4_spec.tos )
       return -EPROTONOSUPPORT;
     dst->h_u.udp_ip4_spec.ip4src = 0;
     dst->h_u.udp_ip4_spec.psrc = 0;
     dst->m_u.udp_ip4_spec.ip4src = 0;
     dst->m_u.udp_ip4_spec.psrc = 0;
-    break;
-  case TCP_V4_FLOW:
-    if( dst->m_u.tcp_ip4_spec.tos )
-      return -EPROTONOSUPPORT;
-    dst->h_u.tcp_ip4_spec.ip4src = 0;
-    dst->h_u.tcp_ip4_spec.psrc = 0;
-    dst->m_u.tcp_ip4_spec.ip4src = 0;
-    dst->m_u.tcp_ip4_spec.psrc = 0;
     break;
   case IPV4_USER_FLOW:
     if( dst->m_u.usr_ip4_spec.tos || dst->m_u.usr_ip4_spec.ip_ver )
@@ -674,6 +668,26 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
                           zero_remote_port(dst->h_u.usr_ip4_spec.l4_4_bytes);
     dst->m_u.usr_ip4_spec.l4_4_bytes =
                           zero_remote_port(dst->m_u.usr_ip4_spec.l4_4_bytes);
+    break;
+  case UDP_V6_FLOW:
+  case TCP_V6_FLOW:
+    EFHW_ASSERT(&dst->h_u.udp_ip6_spec == &dst->h_u.tcp_ip6_spec);
+    memset(dst->h_u.udp_ip6_spec.ip6src, 0,
+           sizeof(dst->h_u.udp_ip6_spec.ip6src));
+    dst->h_u.udp_ip6_spec.psrc = 0;
+    memset(dst->m_u.udp_ip6_spec.ip6src, 0,
+           sizeof(dst->m_u.udp_ip6_spec.ip6src));
+    dst->m_u.udp_ip6_spec.psrc = 0;
+    break;
+  case IPV6_USER_FLOW:
+    memset(dst->h_u.usr_ip6_spec.ip6src, 0,
+           sizeof(dst->h_u.usr_ip6_spec.ip6src));
+    memset(dst->m_u.usr_ip6_spec.ip6src, 0,
+           sizeof(dst->m_u.usr_ip6_spec.ip6src));
+    dst->h_u.usr_ip6_spec.l4_4_bytes =
+                          zero_remote_port(dst->h_u.usr_ip6_spec.l4_4_bytes);
+    dst->m_u.usr_ip6_spec.l4_4_bytes =
+                          zero_remote_port(dst->m_u.usr_ip6_spec.l4_4_bytes);
     break;
   default:
     return -EPROTONOSUPPORT;
