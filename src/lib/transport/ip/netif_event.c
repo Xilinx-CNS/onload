@@ -1050,6 +1050,9 @@ static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
     int ip_len = CI_BSWAP_BE16(ip->ip_tot_len_be16);
     ip_paylen = ip_len - CI_IP4_IHL(ip);
     ip_proto = ip->ip_protocol;
+#if CI_CFG_IPV6
+    pkt->flags &=~ CI_PKT_FLAG_IS_IP6;
+#endif
 
     if( pkt->pay_len < oo_pre_l3_len(pkt) + ip_len  ){
       CI_IPV4_STATS_INC_IN_HDR_ERRS(ni);
@@ -1070,6 +1073,7 @@ static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
     ci_ip6_hdr *ip = oo_ip6_hdr(pkt);
     ip_paylen = CI_BSWAP_BE16(ip->payload_len);
     ip_proto = ip->next_hdr;
+    pkt->flags |= CI_PKT_FLAG_IS_IP6;
 
     if( ip_paylen <= 0 ||
         pkt->pay_len < oo_pre_l3_len(pkt) + sizeof(ci_ip6_hdr) + ip_paylen ) {
