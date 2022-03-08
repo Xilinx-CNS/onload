@@ -951,6 +951,7 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
 
 #ifdef __KERNEL__
   space = kvmalloc(vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES *
+                   CI_EFCT_SUPERBUFS_PER_PAGE *
                    sizeof(vi->efct_rxq[0].superbufs[0]), GFP_KERNEL);
   if( space == NULL )
     return -ENOMEM;
@@ -990,7 +991,8 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
   for( i = 0; i < vi->max_efct_rxq; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
 #ifdef __KERNEL__
-    rxq->superbufs = (const char**)space + i * CI_EFCT_MAX_HUGEPAGES;
+    rxq->superbufs = (const char**)space +
+                     i * CI_EFCT_MAX_HUGEPAGES * CI_EFCT_SUPERBUFS_PER_PAGE;
 #else
     rxq->resource_id = EFCH_RESOURCE_ID_PRI_ARG(efch_resource_id_none());
     rxq->superbuf = (char*)space + i * bytes_per_rxq;
