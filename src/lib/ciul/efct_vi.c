@@ -662,6 +662,14 @@ static int rx_rollover(ef_vi* vi, int qid)
     rxq_ptr->prev = pkt_id;
     ++next;
   }
+  else if( sbseq != (rxq_ptr->next >> 32) + 1 ) {
+    /* nodescdrop on the swrxq. This is the same as the startup case, but it
+     * also means that we're going to discard the last packet of the previous
+     * superbuf */
+    efct_vi_rxpkt_release(vi, rxq_ptr->prev);
+    rxq_ptr->prev = pkt_id;
+    ++next;
+  }
   rxq_ptr->next = ((uint64_t)sbseq << 32) | next;
 
   /* Preload the superbuf's refcount with all the (potential) packets in
