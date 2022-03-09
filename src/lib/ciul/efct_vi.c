@@ -42,6 +42,7 @@ static int pkt_id_to_index_in_superbuf(uint32_t pkt_id)
 
 static int pkt_id_to_global_superbuf_ix(uint32_t pkt_id)
 {
+  EF_VI_ASSERT(pkt_id >> 29 == 0);
   return pkt_id >> PKTS_PER_SUPERBUF_BITS;
 }
 
@@ -163,7 +164,8 @@ static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq,
   return rxq->config_generation != shm->config_generation;
 }
 
-/* The header following the next packet, or null if not available */
+/* The header following the next packet, or null if not available.
+ * `next` is a rxq "pointer", containing packet id and sentinel. */
 static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
 {
   const ci_oword_t* header = efct_rx_header(vi, rxq_ptr_to_pkt_id(next));
@@ -1155,7 +1157,7 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
   uint64_t qs = vi->efct_shm->active_qs;
   while(CI_LIKELY( qs )) {
     unsigned qid = __builtin_ctzll(qs);
-    unsigned pkt_id = vi->ep_state->rxq.rxq_ptr[qid].prev;
+    unsigned pkt_id = rxq_ptr_to_pkt_id(vi->ep_state->rxq.rxq_ptr[qid].prev);
     const char* start = (char*)efct_rx_header(vi, pkt_id) +
                         EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
     uint64_t v = *(volatile uint64_t*)(start - 2);
