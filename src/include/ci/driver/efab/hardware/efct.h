@@ -163,7 +163,7 @@
 #define EFCT_RX_HEADER_BYTES 16
 
 /* size of a transmit descriptor in bytes */
-#define EFCT_RX_DESCRIPTOR_BYTES 2
+#define EFCT_RX_DESCRIPTOR_BYTES 16
 
 /* size of each receive buffer posted to RX_BUFFER_POST (DP_RX_BUFFER_SIZE) */
 #define EFCT_RX_SUPERBUF_BYTES  1048576

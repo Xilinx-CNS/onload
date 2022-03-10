@@ -20,6 +20,10 @@
 struct efct_rx_descriptor
 {
   uint16_t refcnt;
+  uint16_t superbuf_pkts;
+  uint8_t  padding_[3];
+  uint8_t  final_ts_status;
+  uint64_t final_timestamp;
 };
 
 /* pkt_ids are:
@@ -123,6 +127,7 @@ static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
 static const char* efct_superbuf_base(const ef_vi* vi, size_t pkt_id)
 {
 #ifdef __KERNEL__
+  /* FIXME: is this right? I think the table is indexed by huge page not sbuf */
   return vi->efct_rxq[0].superbufs[pkt_id_to_global_superbuf_ix(pkt_id)];
 #else
   /* Sneakily rely on vi->efct_rxq[i].superbuf being contiguous, thus avoiding
@@ -133,7 +138,8 @@ static const char* efct_superbuf_base(const ef_vi* vi, size_t pkt_id)
 #endif
 }
 
-/* The header preceding this packet */
+/* The header preceding this packet. Note: this contains metadata for the
+ * previous packet, not this one. */
 static const ci_oword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
 {
   return (const ci_oword_t*)(efct_superbuf_base(vi, pkt_id) +
@@ -598,28 +604,36 @@ static int rx_rollover(ef_vi* vi, int qid)
   uint32_t pkt_id;
   uint32_t next;
   uint32_t superbuf_pkts = vi->efct_shm->q[qid].superbuf_pkts;
-  ef_vi_rxq_state* qs = &vi->ep_state->rxq;
+  ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
   unsigned sbseq;
   bool sentinel;
+  struct efct_rx_descriptor* desc;
+
   int rc = superbuf_next(vi, qid, &sentinel, &sbseq);
   if( rc < 0 )
     return rc;
-  pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + rc) <<
-           PKTS_PER_SUPERBUF_BITS;
+
+  pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKTS_PER_SUPERBUF_BITS;
   next = pkt_id | ((uint32_t)sentinel << 31);
-  if( pkt_id_to_index_in_superbuf(qs->rxq_ptr[qid].next) > superbuf_pkts ) {
+
+  if( pkt_id_to_index_in_superbuf(rxq_ptr->next) > superbuf_pkts ) {
     /* special case for when we want to ignore the first metadata, e.g. at
      * queue startup */
-    qs->rxq_ptr[qid].prev = next;
-    qs->rxq_ptr[qid].next = next + 1;
+    rxq_ptr->prev = next;
+    rxq_ptr->next = next + 1;
   }
   else {
-    qs->rxq_ptr[qid].next = next;
+    rxq_ptr->next = next;
   }
-  qs->rxq_ptr[qid].sbseq = sbseq;
+  rxq_ptr->sbseq = sbseq;
+
   /* Preload the superbuf's refcount with all the (potential) packets in
    * it - more efficient than incrementing for each rx individually */
-  efct_rx_desc(vi, pkt_id)->refcnt = superbuf_pkts;
+  EF_VI_ASSERT(superbuf_pkts < (1 << PKTS_PER_SUPERBUF_BITS));
+  desc = efct_rx_desc(vi, pkt_id);
+  desc->refcnt = superbuf_pkts;
+  desc->superbuf_pkts = superbuf_pkts;
+
   return 0;
 }
 
@@ -677,14 +691,14 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     OO_ACCESS_ONCE(rxq->config_generation) = new_generation;
   }
 
-  /* By never crossing a superbuf in a single poll we can exploit
-   * ef_vi_receive_get_timestamp_with_sync_flags()'s API rules to ensure we
-   * can always easily convert from a packet pointer to the superbuf */
+  /* Avoid crossing a superbuf in a single poll. Otherwise we'd need to check
+   * for rollover after each packet. */
   evs_len = CI_MIN(evs_len, (int)(shm->superbuf_pkts -
                                   pkt_id_to_index_in_superbuf(rxq_ptr->next)));
 
   for( i = 0; i < evs_len; ++i ) {
     const ci_oword_t* header;
+    struct efct_rx_descriptor* desc;
     uint32_t pkt_id;
 
     header = efct_rx_next_header(vi, rxq_ptr->next);
@@ -692,6 +706,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
       break;
 
     pkt_id = rxq_ptr_to_pkt_id(rxq_ptr->prev);
+    desc = efct_rx_desc(vi, pkt_id);
 
 #define M_(FIELD) (CI_MASK64(FIELD ## _WIDTH) << FIELD ## _LBN)
 #define M(FIELD) M_(EFCT_RX_HEADER_ ## FIELD)
@@ -703,7 +718,6 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
          * full of packets. It wasn't, so consume all the unused refs */
         int nskipped = shm->superbuf_pkts -
                        pkt_id_to_index_in_superbuf(pkt_id);
-        struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
         EF_VI_ASSERT(nskipped > 0);
         EF_VI_ASSERT(nskipped <= desc->refcnt);
         desc->refcnt -= nskipped;
@@ -712,10 +726,8 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
                         pkt_id_to_local_superbuf_ix(pkt_id));
 
         /* Force a rollover on the next poll, while preserving the superbuf
-         * index encoded in rxq_ptr->next since that is required by
-         * get_timestamp to identify packets within this superbuf. The +1 is
-         * necessary to avoid ending up with exactly superbuf_pkts (which means
-         * normal rollover)
+         * index encoded in rxq_ptr->next. The +1 is necessary to avoid ending
+         * up with exactly superbuf_pkts (which means normal rollover)
          */
         rxq_ptr->next += 1 + shm->superbuf_pkts;
         break;
@@ -737,7 +749,13 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
       evs[i].rx_ref.q_id = qid;
       evs[i].rx_ref.user = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_USER);
     }
-    /* TODO might be nice to provide more of the available metadata */
+
+    /* This is only necessary for the final packet of each superbuf, storing
+     * metadata from the next superbuf, but it may be faster to do it
+     * unconditionally. */
+    desc->final_timestamp = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP);
+    desc->final_ts_status = CI_OWORD_FIELD(*header,
+                                           EFCT_RX_HEADER_TIMESTAMP_STATUS);
 
     rxq_ptr->prev = rxq_ptr->next++;
   }
@@ -1174,60 +1192,30 @@ int efct_ef_eventq_check_event(const ef_vi* vi)
 }
 
 
-static const ci_oword_t* pkt_to_metadata(ef_vi* vi, int qid, const void* pkt)
-{
-  uintptr_t off = (uintptr_t)pkt & (EFCT_RX_SUPERBUF_BYTES - 1);
-  uintptr_t mask;
-
-  /* Locate the metadata corresponding to this payload pointer, in a
-   * frightening-yet-efficient way. We're totally relying on the "never
-   * crossing a superbuf in a single poll" comment in efct_poll_rx() to ensure
-   * that we know which superbuf, so we just need to jump to the end of the
-   * current packet, wrapping around to 0 if we were at the last packet in the
-   * superbuf (done with the "&= -mask" magic below). */
-  mask = off < EFCT_PKT_STRIDE * (vi->efct_shm->q[qid].superbuf_pkts - 1);
-  EF_VI_BUILD_ASSERT(EFCT_RX_HEADER_NEXT_FRAME_LOC_1 <
-                     EFCT_RX_HEADER_NEXT_FRAME_LOC_0 + 64);
-  off += EFCT_PKT_STRIDE - EFCT_RX_HEADER_NEXT_FRAME_LOC_0;
-  off &= ~63;
-  off &= -mask;    /* trickery to avoid a branch */
-
-  return (const ci_oword_t*)
-         (efct_superbuf_base(vi, vi->ep_state->rxq.rxq_ptr[qid].next) + off);
-}
-
-int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
+int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, uint32_t pkt_id,
                                                ef_timespec* ts_out,
                                                unsigned* flags_out)
 {
-  const ci_oword_t* header;
-  int qid;
-  unsigned ts_status;
+  const struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
   uint64_t ts;
+  unsigned status;
 
-  if(likely( vi->vi_flags & EF_VI_EFCT_UNIQUEUE )) {
-    qid = 0;
+  if( pkt_id_to_index_in_superbuf(pkt_id) == desc->superbuf_pkts - 1 ) {
+    ts = desc->final_timestamp;
+    status = desc->final_ts_status;
   }
   else {
-    int i;
-    const void* base = (const void*)((uintptr_t)pkt &
-                                      ~(uintptr_t)(EFCT_RX_SUPERBUF_BYTES - 1));
-
-    for( i = 0; i < vi->max_efct_rxq; ++i )
-      if( base == efct_superbuf_base(vi, vi->ep_state->rxq.rxq_ptr[i].prev) )
-        break;
-    EF_VI_BUG_ON(i == vi->max_efct_rxq);
-    qid = i;
+    const ci_oword_t* header = efct_rx_header(vi, pkt_id + 1);
+    ts = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP);
+    status = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP_STATUS);
   }
 
-  header = pkt_to_metadata(vi, qid, pkt);
-  ts = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP);
-  ts_status = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_TIMESTAMP_STATUS);
+  if( status != 1 )
+    return -ENODATA;
 
-  EF_VI_BUILD_ASSERT(EF_VI_SYNC_FLAG_CLOCK_SET == 1);
-  *flags_out = ts_status;
   ts_out->tv_sec = ts >> 32;
   ts_out->tv_nsec = (uint32_t)ts >> 2;
+  *flags_out = EF_VI_SYNC_FLAG_CLOCK_SET; /* TODO read from evq */
   return 0;
 }
 
