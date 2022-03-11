@@ -48,12 +48,6 @@ DRIVER_SUBDIRS := src/driver/linux_char src/driver/linux_onload \
                   src/driver/linux_net/drivers/net/ethernet/sfc
 export AUX_BUS_PATH ?= $(abspath ../cns-auxiliary-bus)
 export HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
-export X3_NET_PATH ?= $(abspath ../x3-net-linux)
-export HAVE_X3_NET := $(or $(and $(wildcard $(X3_NET_PATH)),1),0)
-
-ifeq ($(HAVE_X3_NET),1)
-DRIVER_SUBDIRS += src/tests/resource/efct_test
-endif
 
 ifneq ($(HAVE_CNS_AUX),0)
 KBUILD_EXTRA_SYMBOLS := $(AUX_BUS_PATH)/drivers/base/Module.symvers
@@ -153,10 +147,19 @@ ifneq ($(HAVE_CNS_AUX),0)
 ONLOAD_CFLAGS += -DCI_AUX_HEADER='"$(AUX_BUS_PATH)/include/linux/auxiliary_bus.h"'
 ONLOAD_CFLAGS += -DCI_AUX_MOD_HEADER='"$(AUX_BUS_PATH)/drivers/base/mod_devicetable_auxiliary.h"'
 endif
-ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=$(HAVE_X3_NET)
-ifneq ($(HAVE_X3_NET),0)
-ONLOAD_CFLAGS += -DCI_XLNX_EFCT_HEADER='"$(X3_NET_PATH)/include/linux/net/xilinx/xlnx_efct.h"'
+
+X3_NET_HDR := linux/net/xilinx/xlnx_efct.h
+X3_NET_PATH ?= $(abspath ../x3-net-linux)
+ifneq ($(wildcard $(X3_NET_PATH)/include/$(X3_NET_HDR)),)
+ ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=1 -DCI_XLNX_EFCT_HEADER='"$(X3_NET_PATH)/include/$(X3_NET_HDR)"'
+else
+ ifneq ($(wildcard $(KPATH)/include/$(X3_NET_HDR),)
+  ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=1 -DCI_XLNX_EFCT_HEADER='<$(X3_NET_HDR)>'
+ else
+  ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=0
+ endif
 endif
+
 ifneq ($(MMAKE_LIBERAL),1)
 ONLOAD_CFLAGS += -Werror
 endif
