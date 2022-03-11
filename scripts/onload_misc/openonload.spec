@@ -28,6 +28,9 @@
 # If you want to generate debuginfo rpm package when generating release binary packages add:
 #   --define "debuginfo true"
 #
+# If you want to install the Onload libraries with setuid add:
+#   --define "setuid true"
+#
 # If your distribution does not provide a dist macro (e.g. CentOS) which is used
 # to differentiate the filename, you may overrise it:
 #    --define 'dist .el5'
@@ -102,7 +105,7 @@
 Summary     	: OpenOnload user-space
 Name        	: openonload
 Version     	: %(echo '%{pkgversion}' | sed 's/-/_/g')
-Release     	: 1%{?dist}%{?debug:DEBUG}
+Release     	: 1%{?dist}%{?setuid:SETUID}%{?debug:DEBUG}
 Group       	: System Environment/Kernel
 License   	: Various
 URL             : http://www.openonload.org/
@@ -196,7 +199,7 @@ mkdir -p "$i_prefix/etc/modprobe.d"
 mkdir -p "$i_prefix/etc/depmod.d"
 ./scripts/onload_install --verbose --kernelver "%{kernel}" \
   %{?build_profile:--build-profile %build_profile} \
-  %{?debug:--debug} rpm_install
+  %{?debug:--debug} %{?setuid:--setuid} rpm_install
 docdir="$i_prefix%{_defaultdocdir}/%{name}-%{pkgversion}"
 mkdir -p "$docdir"
 install -m 644 LICENSE* README* ChangeLog* ReleaseNotes* "$docdir"
@@ -275,6 +278,10 @@ rm -fR $RPM_BUILD_ROOT
 %defattr(-,root,root)
 /usr/lib*/lib*.so*
 %attr(644, -, -) /usr/lib*/lib*.a
+%if 0%{?setuid:1}
+# Ensure SETUID is present - e.g. can get lost if RPM built using mock root
+%attr(6755, -, -) /usr/lib*/libonload.so
+%endif
 /usr/libexec/onload/apps
 /usr/libexec/onload/profiles
 %{_bindir}/*
