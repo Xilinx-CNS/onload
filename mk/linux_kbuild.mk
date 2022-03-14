@@ -36,7 +36,7 @@ ifneq ($(wildcard $(X3_NET_PATH)/include/$(X3_NET_HDR)),)
  HAVE_X3_NET := 1
  EXTRA_CFLAGS += -DCI_XLNX_EFCT_HEADER='"$(X3_NET_PATH)/include/$(X3_NET_HDR)"'
 else
- ifneq ($(wildcard include/$(X3_NET_HDR),)
+ ifneq ($(wildcard include/$(X3_NET_HDR)),)
   HAVE_X3_NET := 1
   EXTRA_CFLAGS += -DCI_XLNX_EFCT_HEADER='<$(X3_NET_HDR)>'
  else

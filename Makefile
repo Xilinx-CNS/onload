@@ -153,7 +153,7 @@ X3_NET_PATH ?= $(abspath ../x3-net-linux)
 ifneq ($(wildcard $(X3_NET_PATH)/include/$(X3_NET_HDR)),)
  ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=1 -DCI_XLNX_EFCT_HEADER='"$(X3_NET_PATH)/include/$(X3_NET_HDR)"'
 else
- ifneq ($(wildcard $(KPATH)/include/$(X3_NET_HDR),)
+ ifneq ($(wildcard $(KPATH)/include/$(X3_NET_HDR)),)
   ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=1 -DCI_XLNX_EFCT_HEADER='<$(X3_NET_HDR)>'
  else
   ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=0
