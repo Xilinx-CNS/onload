@@ -585,8 +585,7 @@ static uint32_t efrm_vi_rm_rxq_bytes(struct efrm_vi *virs, int n_entries)
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
 		bytes_per_desc = EFAB_AF_XDP_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
-		return 1;  /* EFCT TODO: fixup other bits of code to cope with the
-		            * correct 'doesn't need this' value of 0 */
+		bytes_per_desc = EFCT_RX_DESCRIPTOR_BYTES;
 	else {
 		EFRM_ASSERT(0);	
 		return -EINVAL;
