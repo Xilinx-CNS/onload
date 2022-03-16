@@ -239,6 +239,7 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
     .q_page = pfn_to_page(efhw_params->dma_addrs[0] >> PAGE_SHIFT),
     .page_offset = 0,
     .q_size = efhw_params->evq_size * sizeof(efhw_event_t),
+    .subscribe_time_sync = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS,
   };
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct efhw_nic_efct_evq *efct_evq = &efct->evq[efhw_params->evq];

@@ -255,9 +255,9 @@ ci_inline uint64_t efct_tx_header(unsigned packet_length, unsigned ct_thresh,
 }
 
 /* tx header for standard (non-templated) send */
-ci_inline uint64_t efct_tx_pkt_header(unsigned length, unsigned ct_thresh,
-                                   unsigned timestamp_flag)
+ci_inline uint64_t efct_tx_pkt_header(ef_vi* vi, unsigned length, unsigned ct_thresh)
 {
+  unsigned timestamp_flag = (vi->vi_flags & EF_VI_TX_TIMESTAMPS ? 1 : 0);
   return efct_tx_header(length, ct_thresh, timestamp_flag, 0, 0);
 }
 
@@ -398,10 +398,29 @@ static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
     qs->previous += 1;
   }
 
-  ev_out->tx.type = EF_EVENT_TYPE_TX; /* TODO _WITH_TIMESTAMP */
-  ev_out->tx.q_id = CI_QWORD_FIELD(event, EFCT_TX_EVENT_LABEL);
-  ev_out->tx.flags = EF_EVENT_FLAG_CTPIO;
-  ev_out->tx.desc_id = qs->previous;
+  if ( vi->vi_flags & EF_VI_TX_TIMESTAMPS ) {
+    EF_VI_ASSERT(CI_QWORD_FIELD(event, EFCT_TX_EVENT_TIMESTAMP_STATUS) == 1);
+    uint64_t ptstamp = CI_QWORD_FIELD64(event, EFCT_TX_EVENT_PARTIAL_TSTAMP);
+    uint32_t ptstamp_seconds = ptstamp >> 32;
+    uint32_t timesync_seconds = (vi->ep_state->evq.sync_timestamp_major & 0xFF);
+    ev_out->tx_timestamp.ts_sec = vi->ep_state->evq.sync_timestamp_major;
+    if ( ptstamp_seconds == ((timesync_seconds + 1) % 256) ) {
+      ev_out->tx_timestamp.ts_sec++;
+    } 
+    ev_out->tx_timestamp.ts_nsec = (ptstamp & 0xFFFFFFFF) >> DP_PARTIAL_TSTAMP_SUB_NANO_BITS;
+    ev_out->tx_timestamp.ts_nsec &= ~EF_EVENT_TX_WITH_TIMESTAMP_SYNC_MASK;
+    ev_out->tx_timestamp.ts_nsec |= vi->ep_state->evq.sync_flags;
+    ev_out->tx_timestamp.type = EF_EVENT_TYPE_TX_WITH_TIMESTAMP;
+    ev_out->tx_timestamp.rq_id = q->ids[(qs->previous - 1) & q->mask];
+    ev_out->tx_timestamp.flags = EF_EVENT_FLAG_CTPIO;
+    ev_out->tx_timestamp.q_id = CI_QWORD_FIELD(event, EFCT_TX_EVENT_LABEL);
+
+  } else {
+    ev_out->tx.type = EF_EVENT_TYPE_TX;
+    ev_out->tx.desc_id = qs->previous;
+    ev_out->tx.flags = EF_EVENT_FLAG_CTPIO;
+    ev_out->tx.q_id = CI_QWORD_FIELD(event, EFCT_TX_EVENT_LABEL);
+  }
 }
 
 static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
@@ -414,8 +433,7 @@ static int efct_ef_vi_transmit(ef_vi* vi, ef_addr base, int len,
     return -EAGAIN;
 
   efct_tx_init(vi, &tx);
-  /* TODO timestamp flag */
-  efct_tx_word(&tx, efct_tx_pkt_header(len, EFCT_TX_CT_DISABLE, 0));
+  efct_tx_word(&tx, efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE));
   efct_tx_block(&tx, (void*)(uintptr_t)base, len);
   efct_tx_complete(vi, &tx, dma_id, len);
 
@@ -436,8 +454,7 @@ static int efct_ef_vi_transmitv(ef_vi* vi, const ef_iovec* iov, int iov_len,
   if( ! efct_tx_check(vi, len) )
     return -EAGAIN;
 
-  /* TODO timestamp flag */
-  efct_tx_word(&tx, efct_tx_pkt_header(len, EFCT_TX_CT_DISABLE, 0));
+  efct_tx_word(&tx, efct_tx_pkt_header(vi, len, EFCT_TX_CT_DISABLE));
 
   for( i = 0; i < iov_len; ++i )
     efct_tx_block(&tx, (void*)(uintptr_t)iov[i].iov_base, iov[i].iov_len);
@@ -500,8 +517,7 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   else
     threshold = (threshold + threshold_extra) / EFCT_TX_ALIGNMENT;
 
-  /* TODO timestamp flag */
-  efct_tx_word(&tx, efct_tx_pkt_header(len, threshold, 0));
+  efct_tx_word(&tx, efct_tx_pkt_header(vi, len, threshold));
 
   for( i = 0; i < iovcnt; ++i )
     efct_tx_block(&tx, iov[i].iov_base, iov[i].iov_len);
@@ -796,6 +812,12 @@ static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
       LOG(ef_log("%s: Saw flush in poll", __FUNCTION__));
       break;
     case EFCT_CTRL_EV_TIME_SYNC:
+      vi->ep_state->evq.sync_timestamp_major = CI_QWORD_FIELD64(event, EFCT_TIME_SYNC_EVENT_TIME_HIGH) >> 16;
+      vi->ep_state->evq.sync_timestamp_minor = CI_QWORD_FIELD64(event, EFCT_TIME_SYNC_EVENT_TIME_HIGH) & 0xFFFF;
+      uint8_t time_sync = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IN_SYNC) ? EF_VI_SYNC_FLAG_CLOCK_IN_SYNC : 0);
+      uint8_t time_set = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IS_SET) ? EF_VI_SYNC_FLAG_CLOCK_SET : 0);
+      vi->ep_state->evq.sync_flags = time_sync | time_set; 
+      break;
     case EFCT_CTRL_EV_UNSOL_OVERFLOW:
       ef_log("%s: ERROR: Unhandled MCDI control event subtype=%u",
              __FUNCTION__, QWORD_GET_U(EFCT_CTRL_SUBTYPE, event));

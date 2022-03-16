@@ -58,7 +58,7 @@ static void wait_for_some_completions(void)
     n_ev = ef_eventq_poll(&vi, evs, sizeof(evs) / sizeof(evs[0]));
     if( n_ev > 0 ) {
       for( i = 0; i < n_ev; ++i ) {
-        if( EF_EVENT_TYPE(evs[i]) == EF_EVENT_TYPE_TX_WITH_TIMESTAMP) {
+        if( EF_EVENT_TYPE(evs[i]) == EF_EVENT_TYPE_TX_WITH_TIMESTAMP ) {
           /* One TX_with_timestamp event can signal completion of just one
            * TX, so there is no need to call ef_vi_transmit_unbundle().
            */
@@ -117,7 +117,7 @@ int main(int argc, char* argv[])
   dma_buf_addr = ef_memreg_dma_addr(&mr, 0);
 
   /* Prepare packet content */
-  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, -1, 0);
+  tx_frame_len = init_udp_pkt(p, cfg_payload_len, &vi, dh, -1, (vi.nic_type.arch == EF_VI_ARCH_EFCT ? 1 : 0));
 
   /* Start sending */
   for( i = 0; i < cfg_iter; ++i ) {
@@ -141,7 +141,7 @@ void usage(void)
   fprintf(stderr, "\n");
   fprintf(stderr, "e.g.:\n");
   fprintf(stderr, "  - Send pkts to 239.1.2.3:1234 from eth2:\n"
-          "          efsend eth2 239.1.2.3 1234\n");
+          "          efsend_timstamping eth2 239.1.2.3 1234\n");
   exit(1);
 }
 
