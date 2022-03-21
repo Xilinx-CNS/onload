@@ -1372,6 +1372,9 @@ extern int ef_vi_receive_post(ef_vi* vi, ef_addr addr, ef_request_id dma_id);
 **
 ** If the virtual interface does not have RX timestamps enabled, the
 ** behavior of this function is undefined.
+**
+** Note: ef_eventq_poll(), efct_vi_rx_future_poll() and efct_vi_rx_future_peek()
+**       invalidate timestamps retrieved by previous poll function.
 */
 extern int ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
                                        ef_timespec* ts_out);

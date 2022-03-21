@@ -1251,15 +1251,28 @@ void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
 const void* efct_vi_rx_future_peek(ef_vi* vi)
 {
   uint64_t qs = vi->efct_shm->active_qs;
-  while(CI_LIKELY( qs )) {
+  for( ; CI_LIKELY( qs ); qs &= (qs - 1) ) {
     unsigned qid = __builtin_ctzll(qs);
-    unsigned pkt_id = vi->ep_state->rxq.rxq_ptr[qid].prev;
-    const char* start = (char*)efct_rx_header(vi, pkt_id) +
-                        EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
-    uint64_t v = *(volatile uint64_t*)(start - 2);
-    if(CI_LIKELY( v != CI_EFCT_DEFAULT_POISON ))
-      return start;
-    qs &= ~(1ull << qid);
+    struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
+    ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
+    unsigned pkt_id = rxq_ptr->prev;
+
+    /* Perhaps we need to do rollover before being able to access pkt's metadata */
+    if( efct_rxq_need_rollover(shm, rxq_ptr->next) ) {
+      if( rx_rollover(vi, qid) < 0 )
+        continue;
+      pkt_id = rxq_ptr->prev;
+    }
+    if( efct_rxq_need_config(&vi->efct_rxq[qid], shm) )
+      continue;
+    EF_VI_ASSERT(pkt_id_to_index_in_superbuf(pkt_id) < shm->superbuf_pkts);
+    {
+      const char* start = (char*)efct_rx_header(vi, pkt_id) +
+                          EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+      uint64_t v = *(volatile uint64_t*)(start - 2);
+      if(CI_LIKELY( v != CI_EFCT_DEFAULT_POISON ))
+        return start;
+    }
   }
   return NULL;
 }
