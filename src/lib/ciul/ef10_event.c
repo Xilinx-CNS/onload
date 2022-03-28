@@ -866,8 +866,8 @@ static void ef10_mcdi_event(ef_vi* evq, const ef_vi_event* ev,
     break;
   }
   default:
-    ef_log("%s: ERROR: Unhandled MCDI event code=%u", __FUNCTION__,
-           code);
+    ef_log("%s: ERROR: Unhandled MCDI event code=%u desc=" CI_QWORD_FMT,
+           __FUNCTION__, code, CI_QWORD_VAL(*ev));
     break;
   }
 }
