@@ -214,6 +214,19 @@ static long close_nocancel_entry(long fd)
 }
 
 
+#ifdef __aarch64__
+static void aarch64_write_ptr_insns(void* dst, const void* value)
+{
+  unsigned* u = dst;
+  uintptr_t v = (uintptr_t)value;
+  u[0] |= ((v >> 0) & 0xffff) << 5;
+  u[1] |= ((v >> 16) & 0xffff) << 5;
+  u[2] |= ((v >> 32) & 0xffff) << 5;
+  u[3] |= ((v >> 48) & 0xffff) << 5;
+}
+#endif
+
+
 static int modify_glibc_code(void* dst, const void* src, size_t n)
 {
   int rc;
@@ -305,25 +318,80 @@ static int patch_libc_close_nocancel(void)
     return modify_glibc_code(close_nocancel + 1, new_glibc_bytes,
                              sizeof(new_glibc_bytes));
   }
+#elif defined __aarch64__
+  {
+    static const unsigned expected[] = {
+      0x93407c00,   /* sxtw x0, w0 */
+      0xd2800728,   /* mov  x8, #57 */
+      0xd4000001,   /* svc  #0 */
+    };
+    unsigned replacement[] = {
+      0xd2a00008,   /* mov	x8, #0xnnnn0000 */
+      0xf2c00008,   /* movk	x8, #0xnnnn, lsl #32 */
+      0xd61f0100,   /* br x8 */
+    };
+    static const unsigned trampo_code[] = {
+      0xa9bf7bfd,   /* stp  x29, x30, [sp, #-16]! */
+      0x910003fd,   /* mov  x29, sp */
+      0xd2800008,   /* mov  x8, #0xnnnn */
+      0xf2a00008,   /* movk x8, #0xnnnn, lsl #16 */
+      0xf2c00008,   /* movk x8, #0xnnnn, lsl #32 */
+      0xf2e00008,   /* movk x8, #0xnnnn, lsl #48 */
+      0xd63f0100,   /* blr  x8 */
+      0xa8c17bfd,   /* ldp  x29, x30, [sp], #16 */
+      0xd2800008,   /* mov  x8, #0xnnnn */
+      0xf2a00008,   /* movk x8, #0xnnnn, lsl #16 */
+      0xf2c00008,   /* movk x8, #0xnnnn, lsl #32 */
+      0xf2e00008,   /* movk x8, #0xnnnn, lsl #48 */
+      0xd61f0100,   /* br x8 */
+    };
+    void* trampo_area;
+    unsigned* trampoline;
+    int rc;
+
+    if( memcmp(close_nocancel, expected, sizeof(expected)) ) {
+      LOG_S(ci_log("Mismatching syscall implementation in __close_nocancel"));
+      return -ESRCH;
+    }
+    /* In order to fit the replacement into the requisite 3 instructions we
+     * need a 64KB-aligned address to jump to. Allocate 64KB of address space
+     * and map only the useful page. AArch64 has only a 48-bit virtual address
+     * space, so we get a pointer we can fit in to two mov instructions. */
+    trampo_area = mmap(NULL, 65536, PROT_NONE,
+                       MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+    if( trampo_area == MAP_FAILED ) {
+      rc = -errno;
+      LOG_S(ci_log("__close_nocancel reservation failed: %d", errno));
+      return rc;
+    }
+    trampoline = (unsigned*)CI_PTR_ALIGN_FWD(trampo_area, 65536);
+    if( mmap(trampoline, CI_PAGE_SIZE, PROT_READ | PROT_WRITE,
+             MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0) != trampoline ) {
+      rc = -errno;
+      LOG_S(ci_log("__close_nocancel mmap failed: %d", errno));
+      return rc;
+    }
+    memcpy(trampoline, trampo_code, sizeof(trampo_code));
+    aarch64_write_ptr_insns(trampoline + 2, close_nocancel_entry);
+    aarch64_write_ptr_insns(trampoline + 8, (unsigned*)close_nocancel + 3);
+    rc = mprotect(trampoline, CI_PAGE_SIZE, PROT_READ | PROT_EXEC);
+    if( rc != 0 ) {
+      rc = -errno;
+      LOG_S(ci_log("ERROR: mprotect(trampoline) = %d", errno));
+      return rc;
+    }
+
+    ci_assert_equal((uintptr_t)trampoline & 0xffff, 0);
+    ci_assert_equal((uintptr_t)trampoline >> 48, 0);
+    replacement[0] |= (((uintptr_t)trampoline >> 16) & 0xffff) << 5;
+    replacement[1] |= (((uintptr_t)trampoline >> 32) & 0xffff) << 5;
+    return modify_glibc_code(close_nocancel, replacement, sizeof(replacement));
+  }
 #else
   /* x86 plan:
    * The syscall instruction is 65 ff 15 10 00 00 00 call *%gs:0x10, so we
    * can just overwrite the whole thing with
    * "push %ebx;call close_nocancel_entry;pop %ebx"
-   *
-   * aarch64 plan:
-   * __close_nocancel is:
-   *    00 7c 40 93  sxtw    x0, w0
-   *    28 07 80 d2  mov     x8, #57
-   *    01 00 00 d4  svc     #0
-   * so replace that with "mov x8,#lo lsl 16; movk x8,#hi lsl 32; br x8", and
-   * have a trampoline which is 64KB-aligned doing something like
-   *   push x30
-   *   mov x8, close_nocancel_entry
-   *   blr x8
-   *   pop x30
-   *   mov x8, __close_nocancel+12
-   *   br x8
    */
   LOG_S(ci_log("Unsupported architecture for patching libc close"));
   return -EOPNOTSUPP;
