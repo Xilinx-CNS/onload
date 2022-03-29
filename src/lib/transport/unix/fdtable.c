@@ -22,6 +22,7 @@
 #include <onload/dup2_lock.h>
 #include <onload/ul/tcp_helper.h>
 #include <onload/version.h>
+#include <dlfcn.h>
 
 #include "ul_pipe.h"
 #include "ul_poll.h"
@@ -199,6 +200,137 @@ void oo_exit_hook(int status)
 static citp_fdinfo_p citp_fdtable_closing_wait(unsigned fd, int fdt_locked);
 
 
+static long close_nocancel_entry(long fd)
+{
+  int rc;
+  citp_lib_context_t lib_context;
+
+  Log_CALL(ci_log("%s: close_nocancel(%ld)", __func__, fd));
+  citp_enter_lib(&lib_context);
+  rc = citp_ep_close((int)fd, CITP_EP_CLOSE_NOFLAG);
+  citp_exit_lib(&lib_context, false);
+  Log_CALL_RESULT(rc);
+  return rc;
+}
+
+
+static int modify_glibc_code(void* dst, const void* src, size_t n)
+{
+  int rc;
+  void* patch_page_start;
+  size_t patch_page_size;
+
+  /* This patching is thread-unsafe, but happens at process startup when
+   * there's only one thread */
+  patch_page_start = CI_PTR_ALIGN_BACK(dst, CI_PAGE_SIZE);
+  patch_page_size = (char*)CI_PTR_ALIGN_FWD((char*)dst + n, CI_PAGE_SIZE) -
+                    (char*)patch_page_start;
+  rc = mprotect(patch_page_start, patch_page_size, PROT_READ | PROT_WRITE);
+  if( rc != 0 ) {
+    rc = -errno;
+    LOG_S(ci_log("ERROR: mprotect(glibc write) = %d", errno));
+    return rc;
+  }
+  memcpy(dst, src, n);
+  rc = mprotect(patch_page_start, patch_page_size, PROT_READ | PROT_EXEC);
+  if( rc != 0 ) {
+    rc = -errno;
+    ci_log("CRITICAL: mprotect(glibc exec) = %d. "
+            "Process will likely crash now", errno);
+    return rc;
+  }
+  return 0;
+}
+
+
+static int patch_libc_close_nocancel(void)
+{
+  unsigned char* close_nocancel = dlsym(NULL, "__close_nocancel");
+  if( ! close_nocancel ) {
+    LOG_S(ci_log("libc __close_nocancel not found: not running glibc?"));
+    return -ENOENT;
+  }
+
+#ifdef __x86_64__
+  {
+    static const unsigned char endbr[] = {0xf3, 0x0f, 0x1e, 0xfa};
+    static const unsigned char sysclose[] = {
+      0xb8, 0x03, 0x00, 0x00, 0x00,   /* mov $3, %eax */
+      0x0f, 0x05                      /* syscall */
+    };
+    static const unsigned char call_rax[] = {
+      0xff, 0xd0                      /* call *%rax */
+    };
+    static const unsigned char trampo_code[] = {
+      0xf3, 0x0f, 0x1e, 0xfa,         /* endbr64 */
+      0x48, 0xb8, 0xef, 0xcd, 0xab, 0x89, 0x67,
+      0x45, 0x23, 0x01,               /* movabs $0x123456789abcdef,%rax */
+      0xff, 0xe0,                     /* jmpq *%rax */
+    };
+    unsigned char new_glibc_bytes[6];
+    unsigned char* trampoline;
+    long (*target)(long) = close_nocancel_entry;
+    int rc;
+
+    /* One x86-64 we somehow have to replace the 7 bytes "mov $3,eax;syscall"
+     * with a call to an 8-byte absolute address. The fundamental insight here
+     * is to use mmap(MAP_32BIT) to get ourselves a 32-bit address and put an
+     * intermediate trampoline there. That allows us to replace those 7 bytes
+     * with a call to a 4-byte absolute address. Doable. */
+    if( ! memcmp(close_nocancel, endbr, sizeof(endbr)) )
+      close_nocancel += sizeof(endbr);
+    if( memcmp(close_nocancel, sysclose, sizeof(sysclose)) ) {
+      LOG_S(ci_log("Mismatching syscall implementation in __close_nocancel"));
+      return -ESRCH;
+    }
+    trampoline = mmap(NULL, sizeof(trampo_code), PROT_READ | PROT_WRITE,
+                      MAP_32BIT | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if( trampoline == MAP_FAILED ) {
+      rc = -errno;
+      LOG_S(ci_log("__close_nocancel mmap failed: %d", errno));
+      return rc;
+    }
+    ci_assert_le((uintptr_t)trampoline, 0xffffffff);
+    memcpy(trampoline, trampo_code, sizeof(trampo_code));
+    memcpy(trampoline + 6, &target, sizeof(void*));
+    rc = mprotect(trampoline, CI_PAGE_SIZE, PROT_READ | PROT_EXEC);
+    if( rc != 0 ) {
+      rc = -errno;
+      LOG_S(ci_log("ERROR: mprotect(trampoline) = %d", errno));
+      return rc;
+    }
+
+    memcpy(new_glibc_bytes, &trampoline, 4);
+    memcpy(new_glibc_bytes + 4, call_rax, sizeof(call_rax));
+    return modify_glibc_code(close_nocancel + 1, new_glibc_bytes,
+                             sizeof(new_glibc_bytes));
+  }
+#else
+  /* x86 plan:
+   * The syscall instruction is 65 ff 15 10 00 00 00 call *%gs:0x10, so we
+   * can just overwrite the whole thing with
+   * "push %ebx;call close_nocancel_entry;pop %ebx"
+   *
+   * aarch64 plan:
+   * __close_nocancel is:
+   *    00 7c 40 93  sxtw    x0, w0
+   *    28 07 80 d2  mov     x8, #57
+   *    01 00 00 d4  svc     #0
+   * so replace that with "mov x8,#lo lsl 16; movk x8,#hi lsl 32; br x8", and
+   * have a trampoline which is 64KB-aligned doing something like
+   *   push x30
+   *   mov x8, close_nocancel_entry
+   *   blr x8
+   *   pop x30
+   *   mov x8, __close_nocancel+12
+   *   br x8
+   */
+  LOG_S(ci_log("Unsupported architecture for patching libc close"));
+  return -EOPNOTSUPP;
+#endif
+}
+
+
 int citp_fdtable_ctor()
 {
   struct rlimit rlim;
@@ -261,6 +393,12 @@ int citp_fdtable_ctor()
   if( (rc = oo_rwlock_ctor(&citp_dup2_lock)) != 0 ) {
     Log_E(log("%s: oo_rwlock_ctor(dup2_lock) %d", __FUNCTION__, rc));
     return -1;
+  }
+
+  rc = patch_libc_close_nocancel();
+  if( rc < 0 ) {
+    Log_E(log("%s: Didn't intercept libc internal close %d", __FUNCTION__, rc));
+    /* Which is bad, but not fatal */
   }
 
   /* Install SIGONLOAD handler */
