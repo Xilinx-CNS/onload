@@ -843,19 +843,10 @@ static unsigned linux_tcp_helper_fop_poll_alien(struct file* filp,
   return alien_file->f_op->poll(alien_file, wait);
 }
 
-#if defined(__aarch64__) || defined(__powerpc64__)
-/* These architectures stores the return value in the 1st parameter
- * register.  To get the parameter from the signal handler, we'll store
- * the 1st parameter in the place of the 2nd.
- */
-#define OO_ARCH_RETURN_IN_1ST_ARG
-#endif
-
 int oo_fop_flush(struct file *f, fl_owner_t id)
 {
   struct pt_regs *regs;
-  int nr, fd;
-  struct siginfo info = {};
+  int nr;
 
   /* Are we called from some strange context, of from do_exit()? */
   if( current == NULL || (current->flags & PF_EXITING) )
@@ -884,35 +875,10 @@ int oo_fop_flush(struct file *f, fl_owner_t id)
   if( nr != __NR_close )
     return 0;
 
-#ifdef OO_ARCH_RETURN_IN_1ST_ARG
-  {
-    unsigned long args[6];
-    syscall_get_arguments(current, regs, args);
-    /* Store the original X0 value into X1.  We'll use it from
-     * sighandler_sigonload().
-     */
-#ifdef __aarch64__
-    regs->regs[1] = args[0];
-#else
-#error unknown architecture
-#endif
-  }
-#endif
-
-  /* Attach the file to some fd, avoiding close. */
-  fd = get_unused_fd_flags(O_CLOEXEC);
-  if( fd >= 0 ) {
-    fd_install(fd, f);
-    get_file(f);
-  }
-  else {
-    /* Give UL some distinguishable value */
-    fd = SI_ONLOAD;
-  }
-
-  info.si_signo = SIGONLOAD;
-  info.si_code = fd;
-  return send_sig_info(SIGONLOAD, (void*)&info, current);
+  WARN_ONCE(1, "Missed intercept of Onloaded fd close");
+  /* Sorry, we don't know which fd at this point. Best to put a kprobe on the
+   * above and get a stack trace */
+  return 0;
 }
 
 /* Linux file operations for TCP and UDP.

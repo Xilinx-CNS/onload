@@ -46,23 +46,6 @@ ci_uint64 fdtable_seq_no = 1;
 static void dup2_complete(citp_fdinfo* prev_newfdi,
 			  citp_fdinfo_p prev_newfdip, int fdt_locked);
 
-#if defined(__i386__)
-#define OO_REG_ARG1(mc) mc->gregs[REG_EBX]
-#define OO_REG_RET(mc)  mc->gregs[REG_EAX]
-#elif defined(__x86_64__)
-#define OO_REG_ARG1(mc) mc->gregs[REG_RDI]
-#define OO_REG_RET(mc)  mc->gregs[REG_RAX]
-#elif defined(__aarch64__)
-/* aarch64 overwrites the first parameter by the return code.
- * This is why we cheat: we store the 1st parameter in the 2nd register
- * inside oo_fop_flush().  See OO_ARCH_RETURN_IN_1ST_ARG.
- */
-#define OO_REG_ARG1(mc) mc->regs[1]
-#define OO_REG_RET(mc)  mc->regs[0]
-#else
-#error unknown architecture
-#endif
-
 
 static void exit_with_status(int status)
 {
@@ -94,52 +77,7 @@ void oo_signal_terminate(int signum)
 
 static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
 {
-  ucontext_t *ctx = context;
-  mcontext_t *mc;
-  citp_lib_context_t lib_context;
-  int rc;
-  int fd_closed;
-  int fd_duped;
-  enum citp_ep_close_flag close_flag = CITP_EP_CLOSE_TRAMPOLINED;
-
-  /* It the signal comes from dup(), then pthread_kill() results in
-   * tgkill() syscall, which uses SI_TKILL code. */
-  if( info->si_code < 0 && info->si_code != SI_ONLOAD ) {
-    ci_assert_equal(info->si_code, SI_TKILL);
-    /* Ensure that onload_recv() and similar functions are not restarted: */
-    ci_atomic32_or(&citp_signal_get_specific_inited()->c.aflags,
-                   OO_SIGNAL_FLAG_HAVE_PENDING);
-    ci_atomic32_and(&citp_signal_get_specific_inited()->c.aflags,
-                    ~OO_SIGNAL_FLAG_NEED_RESTART);
-    return;
-  }
-
-  mc = &ctx->uc_mcontext;
-  fd_closed = OO_REG_ARG1(mc);
-  fd_duped = info->si_code;
-  Log_CALL(ci_log("%s: close(%d) with helper %d",
-                  __func__, fd_closed, fd_duped));
-  citp_enter_lib(&lib_context);
-
-  if( fd_closed != fd_duped && fd_duped >= 0 ) {
-    int saved_errno = errno;
-    rc = ci_sys_fcntl(fd_duped, F_DUPFD_CLOEXEC, fd_closed);
-    if( rc != fd_closed ) {
-      /* We failed to install the closed fd on the same place. */
-      close_flag = CITP_EP_CLOSE_ALREADY;
-      if( rc >= 0 )
-        ci_tcp_helper_close_no_trampoline(rc);
-      errno = saved_errno;
-    }
-    ci_tcp_helper_close_no_trampoline(fd_duped);
-  }
-
-  rc = citp_ep_close(fd_closed, close_flag);
-  citp_exit_lib(&lib_context, false);
-  Log_CALL_RESULT(rc);
-  if( rc < 0 )
-    OO_REG_RET(mc) = -errno;
-  (void)rc;
+  /* The signal was sent solely in order to wake up the app, so nothing to do */
 }
 
 /* Hook to be called at gracious exit */

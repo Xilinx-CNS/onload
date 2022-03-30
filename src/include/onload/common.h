@@ -71,9 +71,6 @@ enum oo_device_type {
  */
 #define SIGONLOAD (SIGRTMAX-10)
 
-/* SI_ONLOAD should differ from all other SI_* and be negative */
-#define SI_ONLOAD -10
-
 /*! This data structure contains the arguments required to create a new
  *  tcp helper resource and the results that the allocation operation
  *  subsequently returns.

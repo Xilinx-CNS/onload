@@ -671,14 +671,6 @@ int oo_init_signals(void)
     if( ! oo_is_signal_intercepted(sig, act.sa_handler) )
       continue;
 
-    /* SIGONLOAD is used to handle unintercepted close() call,
-     * and it is important to do all the real job before the syscall
-     * returns to the user.  It means that SIGONLOAD should run
-     * immmediately.
-     *
-     * Unintercepted close() syscall probably means that we are not "inside
-     * library", but let's be on the safe side.
-     */
     ci_assert_nequal(sig, SIGONLOAD);
 
     /* Intercept! */
