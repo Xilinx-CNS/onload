@@ -193,7 +193,7 @@ void efct_nic_filter_init(struct efhw_nic_efct *efct)
 {
   if( ! filter_hash_table_seed_inited ) {
     filter_hash_table_seed_inited = true;
-    filter_hash_table_seed = get_random_u32();
+    filter_hash_table_seed = get_random_int();
   }
 
 #define ACTION_INIT_HASH_TABLE(F) \
