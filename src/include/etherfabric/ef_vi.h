@@ -672,8 +672,9 @@ typedef struct {
 ** Users should not access this structure.
 */
 typedef struct {
-  /** Prior value of 'next'. Usually next-1, but not if there was a rollover.
-   * This is effectively the pointer to the packet payload. */
+  /** Prior value of 'next', however without bit 31 abused (i.e. it's always
+   * 0). Usually next-1, but not if there was a rollover. This is effectively
+   * the pointer to the packet payload. */
   uint32_t prev;
   /** Next pkt_id, with bit 31 abused to contain the expected sentinel of the
    * pointed-to superbuf (this is duplicated info, but improves locality).

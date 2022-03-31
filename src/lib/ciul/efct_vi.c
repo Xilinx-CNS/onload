@@ -619,7 +619,7 @@ static int rx_rollover(ef_vi* vi, int qid)
   if( pkt_id_to_index_in_superbuf(rxq_ptr->next) > superbuf_pkts ) {
     /* special case for when we want to ignore the first metadata, e.g. at
      * queue startup */
-    rxq_ptr->prev = next;
+    rxq_ptr->prev = pkt_id;
     rxq_ptr->next = next + 1;
   }
   else {
@@ -705,7 +705,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     if( header == NULL )
       break;
 
-    pkt_id = rxq_ptr_to_pkt_id(rxq_ptr->prev);
+    pkt_id = rxq_ptr->prev;
     desc = efct_rx_desc(vi, pkt_id);
 
 #define M_(FIELD) (CI_MASK64(FIELD ## _WIDTH) << FIELD ## _LBN)
@@ -757,7 +757,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     desc->final_ts_status = CI_OWORD_FIELD(*header,
                                            EFCT_RX_HEADER_TIMESTAMP_STATUS);
 
-    rxq_ptr->prev = rxq_ptr->next++;
+    rxq_ptr->prev = rxq_ptr_to_pkt_id(rxq_ptr->next++);
   }
 
   return i;
@@ -1178,7 +1178,7 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
   uint64_t qs = vi->efct_shm->active_qs;
   while(CI_LIKELY( qs )) {
     unsigned qid = __builtin_ctzll(qs);
-    unsigned pkt_id = rxq_ptr_to_pkt_id(vi->ep_state->rxq.rxq_ptr[qid].prev);
+    unsigned pkt_id = vi->ep_state->rxq.rxq_ptr[qid].prev;
     const char* start = (char*)efct_rx_header(vi, pkt_id) +
                         EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
     uint64_t v = *(volatile uint64_t*)(start - 2);
