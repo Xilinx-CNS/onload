@@ -648,7 +648,7 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
 
   /* Blat out the remote fields: we can soft-filter them even though the
    * hardware can't */
-  switch (dst->flow_type) {
+  switch (dst->flow_type & ~FLOW_EXT) {
   case UDP_V4_FLOW:
   case TCP_V4_FLOW:
     EFHW_ASSERT(&dst->h_u.udp_ip4_spec == &dst->h_u.tcp_ip4_spec);
@@ -691,6 +691,13 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
     break;
   default:
     return -EPROTONOSUPPORT;
+  }
+
+  if (dst->flow_type & FLOW_EXT) {
+    if (dst->m_ext.vlan_etype || dst->m_ext.vlan_tci != 0xffff ||
+        dst->m_ext.data[0] || dst->m_ext.data[1])
+      return -EPROTONOSUPPORT;
+    dst->flow_type &= ~FLOW_EXT;
   }
 
   return 0;
