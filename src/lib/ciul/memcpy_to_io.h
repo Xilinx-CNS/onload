@@ -203,6 +203,24 @@ __memcpy_iov_to_pio(volatile uint64_t* dst,
   return dst;
 }
 
+
+/* Read the n bytes at p, returning them in little-endian, LSB-aligned */
+static inline uint64_t load_partial_le(const void* p, size_t n)
+{
+  EF_VI_ASSERT(n < 8);
+  if(unlikely( ((uintptr_t)p & CI_PAGE_MASK) > CI_PAGE_SIZE - 8 )) {
+    /* The normal 'overread' branch would have crossed a page boundary and
+     * thus potentially segfaulted, so 'overread backwards' instead */
+    uint64_t v = CI_BSWAP_LE64(*(const uint64_t*)((const char*)p - (8 - n)));
+    return v >> (8 * (8 - n));
+  }
+  else {
+    uint64_t v = CI_BSWAP_LE64(*(const uint64_t*)p);
+    return v & (~0ull << (8 * n));
+  }
+}
+
+
 /* Note that all of the macros below pad their write to the end of a
  * WC buffer. This means they're not suitable for non-sequential
  * writes in general because they may touch bytes of the destination
@@ -264,15 +282,15 @@ static inline volatile uint64_t*
 #define CTPIO_EMIT_IN_HAND()                    \
   do {                                          \
     if( first ) {                               \
-      *dst++ = in_hand.qword;                   \
+      *dst++ = CI_BSWAP_LE64(in_hand);          \
       if( copy ) {                              \
-        *(uint32_t*)copy_dst = in_hand.dwords[1];\
-        copy_dst += sizeof(in_hand.dwords[1]);  \
+        *(uint32_t*)copy_dst = CI_BSWAP_LE32(in_hand >> 32); \
+        copy_dst += 4;                          \
       }                                         \
       first = 0;                                \
     }                                           \
     else {                                      \
-      CTPIO_EMIT_WORD(in_hand.qword);           \
+      CTPIO_EMIT_WORD(CI_BSWAP_LE64(in_hand));  \
     }                                           \
   } while(0)
 
@@ -286,11 +304,7 @@ static inline __attribute__((always_inline)) void
                       int copy,
                       char*__restrict__ fallback)
 {
-  union {
-    uint8_t  bytes[MEMCPY_TO_PIO_ALIGN];
-    uint32_t dwords[MEMCPY_TO_PIO_ALIGN / 4];
-    uint64_t qword;
-  } in_hand;
+  uint64_t in_hand;
   size_t in_hand_len, src_iov_len = iov[0].iov_len;
   const uint64_t*__restrict__ src_iov_p = iov[0].iov_base;
   unsigned iov_next_i = 1;
@@ -310,7 +324,7 @@ static inline __attribute__((always_inline)) void
      */
     ci_frc32(&start);
 
-  in_hand.dwords[0] = ctpio_control;
+  in_hand = CI_BSWAP_LE32(ctpio_control);
   in_hand_len = 4;
 
   while( 1 ) {
@@ -318,7 +332,7 @@ static inline __attribute__((always_inline)) void
     size_t in_hand_space = MEMCPY_TO_PIO_ALIGN - in_hand_len;
     size_t n = CI_MIN(in_hand_space, src_iov_len);
     EF_VI_ASSERT( in_hand_len > 0 );
-    __builtin_memcpy(in_hand.bytes + in_hand_len, src_iov_p, n);
+    in_hand |= load_partial_le(src_iov_p, n) << (in_hand_len * 8);
     in_hand_len += n;
     src_iov_len -= n;
     src_iov_p = (void*) ((char*) src_iov_p + n);
@@ -338,7 +352,7 @@ static inline __attribute__((always_inline)) void
 
     if( src_iov_len ) {
       EF_VI_ASSERT( src_iov_len < MEMCPY_TO_PIO_ALIGN );
-      __builtin_memcpy(in_hand.bytes, src_iov_p, src_iov_len);
+      in_hand = load_partial_le(src_iov_p, src_iov_len);
       in_hand_len = src_iov_len;
     }
     else {
