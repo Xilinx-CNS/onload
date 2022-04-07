@@ -229,6 +229,10 @@ ci_tcp_recvmsg_get_nopeek(int peek_off, ci_tcp_state *ts, ci_netif *netif,
       /* We've emptied the receive queue. Return non-zero to report this
        * to the calling function, so that it can return appropriately. */
       return 1;
+    /* Bumping recv1_extract transfers ownership of the current packet from the
+     * socket lock to the stack lock, so make sure that concurrent stack
+     * pollers see a coherent picture of the packet's state. */
+    ci_wmb();
     ci_assert(OO_PP_EQ(ts->recv1_extract, OO_PKT_P(*pkt)));
     ts->recv1_extract = (*pkt)->next;
     *pkt = PKT_CHK_NNL(netif, ts->recv1_extract);
@@ -503,6 +507,8 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
   pkt = PKT_CHK_NNL(netif, ts->recv1_extract);
   if( oo_offbuf_is_empty(&pkt->buf) ) {
     if( OO_PP_IS_NULL(pkt->next) )  return rc;  /* recv1 is empty. */
+    /* See ci_tcp_recvmsg_get_nopeek() for barrier discussion. */
+    ci_wmb();
     ts->recv1_extract = pkt->next;
     pkt = PKT_CHK_NNL(netif, ts->recv1_extract);
     ci_assert(oo_offbuf_not_empty(&pkt->buf));

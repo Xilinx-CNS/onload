@@ -3649,8 +3649,11 @@ ci_inline ci_ip_pkt_fmt* ci_udp_recv_q_get(ci_netif* ni,
   if( ci_udp_recv_q_is_empty(q) )
      return NULL;
 
-  /* prevent reordering of access to q->extract before the above check */
-  ci_rmb();
+  /* Full barrier needed here: we need to prevent reordering of access to
+   * q->extract before the above check, and also, since bumping q->extract
+   * makes the preceding packet eligible for reaping, to ensure that concurrent
+   * reapers see a coherent view of that packet's state. */
+  ci_mb();
 
   pkt = PKT_CHK_NNL(ni, q->extract);
   if( pkt->rx_flags & CI_PKT_RX_FLAG_RECV_Q_CONSUMED ) {
