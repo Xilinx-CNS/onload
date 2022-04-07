@@ -868,7 +868,6 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 
   /* Step 1 of 2: Convert ethtool_rx_flow_spec to efct_filter_node */
   memset(&node, 0, sizeof(node));
-  node.vlan = -1;
 
   if( no_vlan_flags == EFX_FILTER_MATCH_ETHER_TYPE ) {
     clas = FILTER_CLASS_ethertype;
@@ -1062,7 +1061,6 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
   EFHW_ASSERT(CI_OWORD_FIELD(*header, EFCT_RX_HEADER_NEXT_FRAME_LOC) == 1);
   pkt += EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
   memset(&node, 0, sizeof(node));
-  node.vlan = -1;
 
   /* -------- layer 2 -------- */
   l3_off = ETH_HLEN;
@@ -1084,6 +1082,10 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
       }
     }
   }
+  /* If there's no VLAN tag then we leave node.vlan=0, making us match EF10
+   * and EF100 firmware behaviour by having a filter with vid==0 match packets
+   * with no VLAN tag in addition to packets with the (technically-illegal)
+   * tag of 0 */
 
   /* -------- layer 3 -------- */
   if( node.ethertype == htons(ETH_P_IP) ) {
