@@ -220,6 +220,7 @@ void ci_netif_pkt_free(ci_netif* ni, ci_ip_pkt_fmt* pkt
 #else
   ci_assert(ci_netif_is_locked(ni));
 #endif
+  ci_assert_equal(pkt->pio_addr, -1);
 
   if( OO_PP_NOT_NULL(pkt->frag_next) ) {
 #ifdef __KERNEL__
