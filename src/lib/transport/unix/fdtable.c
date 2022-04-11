@@ -145,7 +145,7 @@ static long close_nocancel_entry(long fd)
 
   Log_CALL(ci_log("%s: close_nocancel(%ld)", __func__, fd));
   citp_enter_lib(&lib_context);
-  rc = citp_ep_close((int)fd, CITP_EP_CLOSE_NOFLAG);
+  rc = citp_ep_close((int)fd);
   citp_exit_lib(&lib_context, false);
   Log_CALL_RESULT(rc);
   return rc;
@@ -1299,18 +1299,16 @@ void __citp_fdinfo_ref_count_zero(citp_fdinfo* fdi, int fdt_locked)
   switch( fdi->on_ref_count_zero ) {
   case FDI_ON_RCZ_CLOSE:
 #if CI_CFG_FD_CACHING
-    if( fdi->on_rcz.close_flag != CITP_EP_CLOSE_ALREADY ) {
-      cached = citp_fdinfo_get_ops(fdi)->cache(fdi, fdi->on_rcz.close_flag);
-      if( cached == 1 ) {
-        if( ! fdt_locked && fdtable_strict() )  CITP_FDTABLE_LOCK();
-        fdi_to_socket(fdi)->netif->cached_count++;
-        fdtable_swap(fdi->fd, fdip_closing, fdip_unknown,
-                     fdt_locked | fdtable_strict());
-        citp_fdinfo_get_ops(fdi)->dtor(fdi, fdt_locked | fdtable_strict());
-        if( ! fdt_locked && fdtable_strict() )  CITP_FDTABLE_UNLOCK();
-        citp_fdinfo_free(fdi);
-        break;
-      }
+    cached = citp_fdinfo_get_ops(fdi)->cache(fdi);
+    if( cached == 1 ) {
+      if( ! fdt_locked && fdtable_strict() )  CITP_FDTABLE_LOCK();
+      fdi_to_socket(fdi)->netif->cached_count++;
+      fdtable_swap(fdi->fd, fdip_closing, fdip_unknown,
+                    fdt_locked | fdtable_strict());
+      citp_fdinfo_get_ops(fdi)->dtor(fdi, fdt_locked | fdtable_strict());
+      if( ! fdt_locked && fdtable_strict() )  CITP_FDTABLE_UNLOCK();
+      citp_fdinfo_free(fdi);
+      break;
     }
 #endif
     {
@@ -2020,7 +2018,7 @@ int citp_ep_dup3(unsigned fromfd, unsigned tofd, int flags)
  * citp_ep_close()
  */
 
-int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag)
+int citp_ep_close(unsigned fd)
 {
   volatile citp_fdinfo_p* p_fdip;
   citp_fdinfo_p fdip;
@@ -2034,9 +2032,7 @@ int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag)
    * Avoid ci_tcp_helper_close_no_trampoline() when citp.onload_fd is not
    * present, because it modifies fdtable. */
   if( oo_per_thread_get()->in_vfork_child ) {
-    if( flag == CITP_EP_CLOSE_ALREADY )
-      return 0;
-    else if( citp.onload_fd >= 0 )
+    if( citp.onload_fd >= 0 )
       ci_tcp_helper_close_no_trampoline(fd);
     else
       ci_sys_close(fd);
@@ -2055,7 +2051,7 @@ int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag)
 
   /* Do not touch fdtable when too large value. */
   if( fd >= citp_fdtable.inited_count )
-    return flag == CITP_EP_CLOSE_ALREADY ? 0 : ci_tcp_helper_close_no_trampoline(fd);
+    return ci_tcp_helper_close_no_trampoline(fd);
 
   /* Interlock against other closes, against the fdtable being extended,
   ** and against select and poll.
@@ -2118,7 +2114,6 @@ int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag)
     Log_V(ci_log("%s: fd=%d u/l socket", __FUNCTION__, fd));
     ci_assert_equal(fdi->fd, fd);
     ci_assert_equal(fdi->on_ref_count_zero, FDI_ON_RCZ_NONE);
-    fdi->on_rcz.close_flag = flag;
     fdi->on_ref_count_zero = FDI_ON_RCZ_CLOSE;
 
 #if CI_CFG_EPOLL3
@@ -2150,17 +2145,7 @@ int citp_ep_close(unsigned fd, enum citp_ep_close_flag flag)
     Log_V(ci_log("%s: fd=%d passthru=%d unknown=%d", __FUNCTION__, fd,
 		 fdip_is_passthru(fdip), fdip_is_unknown(fdip)));
     fdtable_swap(fd, fdip_closing, fdip_unknown, fdtable_strict());
-    if( flag == CITP_EP_CLOSE_ALREADY ) {
-      /* It's possible to get here if another thread managed to create a
-       * passthrough fd while this thread was doing its messing-around with
-       * signals. In that case our fdtable is 'in the future' so we shouldn't
-       * close the fd, but we should mark our fdtable entry as unknown because
-       * we're not actually sure that the race happened. */
-      rc = 0;
-    }
-    else {
-      rc = ci_tcp_helper_close_no_trampoline(fd);
-    }
+    rc = ci_tcp_helper_close_no_trampoline(fd);
   }
 
  done:

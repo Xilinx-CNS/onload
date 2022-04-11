@@ -1346,8 +1346,7 @@ static int citp_tcp_cache_port_eligible(ci_sock_cmn* s) {
  * cached (the fd will only be reused on a subsequent accept).
  * The usual "-ve error code for failure" applies
  */
-static int citp_tcp_cache(citp_fdinfo* fdinfo,
-                          enum citp_ep_close_flag close_flag)
+static int citp_tcp_cache(citp_fdinfo* fdinfo)
 {
   int rc = 0;
   citp_sock_fdi* epi = fdi_to_sock_fdi(fdinfo);
@@ -1430,9 +1429,6 @@ static int citp_tcp_cache(citp_fdinfo* fdinfo,
     CITP_STATS_NETIF(++netif->state->stats.sockcache_contention);
     return 0;
   }
-
-  if( close_flag == CITP_EP_CLOSE_TRAMPOLINED )
-    ci_atomic32_or(&ts->s.b.sb_aflags, CI_SB_AFLAG_O_CLOEXEC);
 
   /* We need to decide whether this socket should go on the passive- or
    * active-open cache, as the remaining work is different in each case. */

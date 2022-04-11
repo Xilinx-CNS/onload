@@ -240,7 +240,7 @@ static int citp_closedfd_zc_recv_filter(citp_fdinfo* fdi,
 
 
 #if CI_CFG_FD_CACHING
-static int citp_closedfd_cache(citp_fdinfo* fdi, enum citp_ep_close_flag close_flag)
+static int citp_closedfd_cache(citp_fdinfo* fdi)
 {
   /* This should only be called as we're deciding whether to actually close an
    * fd - the closedfd doesn't really have an fd, so we shouldn't get here!

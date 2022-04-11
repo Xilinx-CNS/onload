@@ -216,7 +216,7 @@ int citp_nonsock_sendmmsg(citp_fdinfo* fdinfo, struct mmsghdr* msg,
 }
 
 #if CI_CFG_FD_CACHING
-int citp_nonsock_cache(citp_fdinfo* fdi, enum citp_ep_close_flag close_flag)
+int citp_nonsock_cache(citp_fdinfo* fdi)
 {
   Log_V(log(LPF "cache(%d)", fdi->fd));
   return -EOPNOTSUPP;
