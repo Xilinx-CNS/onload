@@ -499,6 +499,8 @@ static int onload_sanity_checks(void)
    * buffer.
    */
   CI_BUILD_ASSERT(CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start) <= 256);
+
+  CI_BUILD_ASSERT(CI_CFG_MAX_HWPORTS >= CI_CFG_MAX_INTERFACES);
   return 0;
 }
 

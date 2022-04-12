@@ -33,10 +33,10 @@
 #endif
 
 /* Maximum number of network interfaces (ports) per stack. */
-#define CI_CFG_MAX_INTERFACES           8
+#define CI_CFG_MAX_INTERFACES           32
 
 /* Maximim number of hwports in the system */
-#define CI_CFG_MAX_HWPORTS              8
+#define CI_CFG_MAX_HWPORTS              32
 
 /* Maximum number of local IP addresses in the system */
 #define CI_CFG_MAX_LOCAL_IPADDRS        256
