@@ -25,21 +25,13 @@ MODULE_PARM_DESC(rx_refill_threshold,
 		 "RX descriptor ring refill threshold (%)");
 
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
-/* Number of RX buffers to recycle pages for.  When creating the RX page recycle
- * ring, this number is divided by the number of buffers per page to calculate
- * the number of pages to store in the RX page recycle ring.
+/* By default use the NIC specific calculation. This can be set to 0
+ * to disable the RX recycle ring.
  */
-#ifdef CONFIG_PPC64
-#define EFX_RECYCLE_RING_SIZE_DEFAULT 4096
-#else
-#define EFX_RECYCLE_RING_SIZE_DEFAULT 1024
-#endif
-static int rx_recycle_ring_size = EFX_RECYCLE_RING_SIZE_DEFAULT;
+static int rx_recycle_ring_size = -1;
 module_param(rx_recycle_ring_size, uint, 0444);
 MODULE_PARM_DESC(rx_recycle_ring_size,
 		 "Maximum number of RX buffers to recycle pages for");
-#else
-#define rx_recycle_ring_size    0
 #endif
 
 /*
@@ -84,9 +76,6 @@ static struct page *efx_reuse_page(struct efx_rx_queue *rx_queue)
 	struct page *page;
 	unsigned int index;
 
-	if (!rx_recycle_ring_size)
-		return NULL;
-
 	/* No page recycling when queue in ZC mode */
 	if (!rx_queue->page_ring)
 		return NULL;
@@ -129,8 +118,7 @@ static void efx_recycle_rx_page(struct efx_channel *channel,
 	if (!(rx_buf->flags & EFX_RX_BUF_LAST_IN_PAGE))
 		return;
 
-	if (rx_recycle_ring_size != 0 &&
-	    rx_queue->page_add != rx_recycle_ring_size) {
+	if (rx_queue->page_ring) {
 		index = rx_queue->page_add & rx_queue->page_ptr_mask;
 		if (rx_queue->page_ring[index] == NULL) {
 			rx_queue->page_ring[index] = page;
@@ -161,8 +149,8 @@ static void efx_init_rx_recycle_ring(struct efx_rx_queue *rx_queue)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	struct efx_channel *channel = efx_get_rx_queue_channel(rx_queue);
 #endif
+	unsigned int bufs_in_recycle_ring, page_ring_size;
 	struct efx_nic *efx = rx_queue->efx;
-	unsigned int page_ring_size;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (channel->zc) {
@@ -170,23 +158,30 @@ static void efx_init_rx_recycle_ring(struct efx_rx_queue *rx_queue)
 		return;
 	}
 #endif
+#if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 	if (!rx_recycle_ring_size)
 		return;
-
-	page_ring_size = roundup_pow_of_two(rx_recycle_ring_size /
+	else if (rx_recycle_ring_size == -1)
+		bufs_in_recycle_ring = efx_rx_recycle_ring_size(efx);
+	else
+		bufs_in_recycle_ring = rx_recycle_ring_size;
+#else
+	bufs_in_recycle_ring = efx_rx_recycle_ring_size(efx);
+#endif
+	page_ring_size = roundup_pow_of_two(bufs_in_recycle_ring /
 					    efx->rx_bufs_per_page);
 	rx_queue->page_ring = kcalloc(page_ring_size,
 				      sizeof(*rx_queue->page_ring), GFP_KERNEL);
-	rx_queue->page_ptr_mask = page_ring_size - 1;
+	if (!rx_queue->page_ring)
+		rx_queue->page_ptr_mask = 0;
+	else
+		rx_queue->page_ptr_mask = page_ring_size - 1;
 }
 
 static void efx_fini_rx_recycle_ring(struct efx_rx_queue *rx_queue)
 {
 	struct efx_nic *efx = rx_queue->efx;
 	unsigned int i;
-
-	if (rx_recycle_ring_size == 0)
-		return;
 
 	if (!rx_queue->page_ring)
 		return;
@@ -227,7 +222,10 @@ static void efx_recycle_rx_buf(struct efx_rx_queue *rx_queue,
 
 	/* Page is not shared, so it is always the last */
 	new_buf->flags = rx_buf->flags & EFX_RX_BUF_LAST_IN_PAGE;
-	new_buf->flags |= rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING;
+	if (likely(rx_queue->page_ring)) {
+		new_buf->flags |= rx_buf->flags & EFX_RX_PAGE_IN_RECYCLE_RING;
+		++rx_queue->recycle_count;
+	}
 
 	/* Since removed_count is updated after packet processing the
 	 * following can happen here:
@@ -237,7 +235,6 @@ static void efx_recycle_rx_buf(struct efx_rx_queue *rx_queue,
 	 * a NAPI poll cycle, at which point removed_count has been updated.
 	 */
 	++rx_queue->added_count;
-	++rx_queue->recycle_count;
 }
 
 void efx_discard_rx_packet(struct efx_channel *channel,
@@ -788,7 +785,7 @@ alloc_fail:
  * efx_reuse_rx_buffer_zc - reuse a single zc rx_buf structure
  *
  * @rx_queue:           Efx RX queue
- * @rx-buf_reuse:       EFX RX buffer that can be reused
+ * @rx_buf_reuse:       EFX RX buffer that can be reused
  * This will reuse zc buffer dma addresses.
  *
  */
@@ -818,14 +815,16 @@ static void efx_reuse_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 
 /**
  * efx_init_rx_buffer_zc - inititalise a single zc rx_buf structure
- *
  * @rx_queue:           Efx RX queue
  * @flags:              Flags field
+ *
  * This will initialise a single rx_buf structure for use at the end of
  * the rx_buf array.
  *
  * WARNING: The page_offset calculated here must match with the value of
  * calculated by efx_rx_buffer_step().
+ *
+ * Return: a negative error code or 0 on success.
  */
 static int efx_init_rx_buffer_zc(struct efx_rx_queue *rx_queue,
 				 u16 flags)
@@ -913,11 +912,12 @@ void efx_init_rx_buffer(struct efx_rx_queue *rx_queue,
 #if defined(CONFIG_XDP_SOCKETS)
 /**
  * efx_init_rx_buffers_zc - create xsk_pool/umem->fq based RX buffers
- *
  * @rx_queue:           Efx RX queue
  *
  * This allocates a buffers from xsk_pool/umem->fq using memory model alloc calls for
  * zero-copy RX, and populates struct efx_rx_buffers for each one.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static int efx_init_rx_buffers_zc(struct efx_rx_queue *rx_queue)
 {
@@ -943,12 +943,14 @@ static int efx_init_rx_buffers_zc(struct efx_rx_queue *rx_queue)
 /**
  * efx_init_rx_buffers_nzc - create EFX_RX_BATCH page-based RX buffers
  *
- * @rx_queue:           Efx RX queue
+ * @rx_queue:	Efx RX queue
+ * @atomic:	Perform atomic allocations
  *
- * This allocates a batch of pages, maps them for DMA, and populates
- * struct efx_rx_buffers for each one. Return a negative error code or
- * 0 on success. If a single page can be used for multiple buffers,
- * then the page will either be inserted fully, or not at all.
+ * This allocates a batch of pages, maps them for DMA, and populates struct
+ * efx_rx_buffers for each one. If a single page can be used for multiple
+ * buffers, then the page will either be inserted fully, or not at all.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static int efx_init_rx_buffers_nzc(struct efx_rx_queue *rx_queue, bool atomic)
 {
@@ -1000,8 +1002,8 @@ static int efx_init_rx_buffers_nzc(struct efx_rx_queue *rx_queue, bool atomic)
 			}
 			state = page_address(page);
 			state->dma_addr = dma_addr;
-		} else {
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
+		} else if (rx_queue->page_ring) {
 			flags |= EFX_RX_PAGE_IN_RECYCLE_RING;
 #endif
 		}
@@ -1054,7 +1056,8 @@ void efx_rx_config_page_split(struct efx_nic *efx)
 
 /**
  * efx_fast_push_rx_descriptors - push new RX descriptors quickly
- * @rx_queue:           RX descriptor queue
+ * @rx_queue:	RX descriptor queue
+ * @atomic:	Perform atomic allocations
  *
  * This will aim to fill the RX descriptor queue up to
  * @rx_queue->@max_fill. If there is insufficient atomic
@@ -1439,6 +1442,162 @@ void efx_rps_hash_del(struct efx_nic *efx, const struct efx_filter_spec *spec)
 }
 #endif
 
+/* We're using linked lists and crappy O(n) algorithms, because
+ * this is an infrequent control-plane operation, n is likely to be
+ * small, and it gives good memory efficiency in the likely event n is
+ * very small.
+ */
+static struct efx_ntuple_rule *efx_find_ntuple_rule(struct efx_nic *efx, u32 id)
+{
+	struct list_head *head = &efx->ntuple_list;
+	struct efx_ntuple_rule *rule;
+
+	list_for_each_entry(rule, head, list)
+		if (rule->user_id == id)
+			return rule;
+	return NULL;
+}
+
+size_t efx_filter_count_ntuple(struct efx_nic *efx)
+{
+	struct list_head *head = &efx->ntuple_list, *l;
+	size_t n = 0;
+
+	list_for_each(l, head)
+		++n;
+
+	return n;
+}
+
+void efx_filter_get_ntuple_ids(struct efx_nic *efx, u32 *buf, u32 size)
+{
+	struct list_head *head = &efx->ntuple_list;
+	struct efx_ntuple_rule *rule;
+	size_t n = 0;
+
+	list_for_each_entry(rule, head, list)
+		if (n < size)
+			buf[n++] = rule->user_id;
+}
+
+int efx_filter_ntuple_get(struct efx_nic *efx, u32 id,
+			  struct efx_filter_spec *spec)
+{
+	struct efx_ntuple_rule *rule = efx_find_ntuple_rule(efx, id);
+
+	if (!rule)
+		return -ENOENT;
+
+	*spec = rule->spec;
+
+	return 0;
+}
+
+int efx_filter_ntuple_insert(struct efx_nic *efx, struct efx_filter_spec *spec)
+{
+	struct efx_ntuple_rule *gap = NULL, *rule, *new;
+	struct list_head *head = &efx->ntuple_list;
+	u32 id = 0;
+
+	/* Search for first gap in the numbering */
+	list_for_each_entry(rule, head, list) {
+		/* is this rule here already? */
+		if (efx_filter_spec_equal(&rule->spec, spec))
+			return rule->user_id;
+
+		/* if we haven't found a gap yet, see if there's one here */
+		if (!gap) {
+			if (rule->user_id != id) {
+				gap = rule;
+				continue;
+			}
+
+			id++;
+		}
+	}
+
+	if (id >= efx_filter_get_rx_id_limit(efx))
+		return -ENOSPC;
+
+	/* Create the new entry */
+	new = kmalloc(sizeof(*new), GFP_KERNEL);
+	if (!new)
+		return -ENOMEM;
+
+	if (efx_net_allocated(efx->state)) {
+		int rc = efx->type->filter_insert(efx, spec, false);
+
+		if (rc < 0) {
+			kfree(new);
+			return rc;
+		}
+
+		new->filter_id = rc;
+	}
+
+	new->spec = *spec;
+	new->user_id = id;
+
+	/* Insert the new entry into the gap (or tail if none) */
+	list_add_tail(&new->list, gap ? &gap->list : head);
+
+	return id;
+}
+
+int efx_filter_ntuple_remove(struct efx_nic *efx, u32 id)
+{
+	struct efx_ntuple_rule *rule = efx_find_ntuple_rule(efx, id);
+
+	if (!rule)
+		return -ENOENT;
+
+	if (efx_net_allocated(efx->state))
+		efx->type->filter_remove_safe(efx, EFX_FILTER_PRI_MANUAL,
+					      rule->filter_id);
+
+	list_del(&rule->list);
+	kfree(rule);
+
+	return 0;
+}
+
+void efx_filter_clear_ntuple(struct efx_nic *efx)
+{
+	struct list_head *head = &efx->ntuple_list;
+	/* this only clears the structure, it doesn't remove filters,
+	 * so should only be done when the interface is down
+	 */
+	WARN_ON(efx_net_allocated(efx->state));
+
+	while (!list_empty(head)) {
+		struct efx_ntuple_rule *rule =
+			list_first_entry(head, struct efx_ntuple_rule, list);
+
+		efx_filter_ntuple_remove(efx, rule->user_id);
+	}
+}
+
+static void efx_filter_init_ntuple(struct efx_nic *efx)
+{
+	struct list_head *head = &efx->ntuple_list;
+	struct efx_ntuple_rule *rule, *tmp;
+
+	list_for_each_entry_safe(rule, tmp, head, list) {
+		int rc = efx->type->filter_insert(efx, &rule->spec, false);
+
+		if (rc >= 0) {
+			rule->filter_id = rc;
+		} else {
+			/* if we couldn't insert, delete the entry */
+			netif_err(efx, drv, efx->net_dev,
+				  "error inserting ntuple filter ID %u\n",
+				  rule->user_id);
+			list_del(&rule->list);
+			kfree(rule);
+		}
+	}
+}
+
 int efx_init_filters(struct efx_nic *efx)
 {
 	int rc = 0;
@@ -1484,9 +1643,14 @@ int efx_init_filters(struct efx_nic *efx)
 		}
 	}
 #endif
+
 out_unlock:
 	up_write(&efx->filter_sem);
 	mutex_unlock(&efx->mac_lock);
+
+	if (!rc)
+		efx_filter_init_ntuple(efx);
+
 	return rc;
 }
 

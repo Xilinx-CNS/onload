@@ -460,7 +460,7 @@ void efx_nic_get_regs(struct efx_nic *efx, void *buf)
  * @names: Buffer to copy names to, or %NULL.  The names are copied
  *	starting at intervals of %ETH_GSTRING_LEN bytes.
  *
- * Returns the number of visible statistics, i.e. the number of set
+ * Return: the number of visible statistics, i.e. the number of set
  * bits in the first @count bits of @mask for which a name is defined.
  */
 size_t efx_nic_describe_stats(const struct efx_hw_stat_desc *desc, size_t count,
@@ -484,12 +484,15 @@ size_t efx_nic_describe_stats(const struct efx_hw_stat_desc *desc, size_t count,
 }
 
 /**
- * efx_nic_copy_stats - Copy stats from the DMA buffer in to an
- *	intermediate buffer. This is used to get a consistent
- *	set of stats while the DMA buffer can be written at any time
- *	by the NIC.
+ * efx_nic_copy_stats - Copy stats from the DMA buffer
  * @efx: The associated NIC.
  * @dest: Destination buffer. Must be the same size as the DMA buffer.
+ *
+ * Copy stats from the DMA buffer in to an intermediate buffer. This is
+ * used to get a consistent set of stats while the DMA buffer can be
+ * written at any time by the NIC.
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_nic_copy_stats(struct efx_nic *efx, __le64 *dest)
 {

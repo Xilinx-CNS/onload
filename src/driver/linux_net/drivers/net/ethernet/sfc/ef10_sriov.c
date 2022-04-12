@@ -45,7 +45,7 @@ static void efx_ef10_sriov_free_vf_vports(struct efx_nic *efx)
 	if (!nic_data->vf)
 		return;
 
-	for (i = 0; i < efx->vf_count; i++) {
+	for (i = 0; i < nic_data->vf_count; i++) {
 		struct ef10_vf *vf = nic_data->vf + i;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
@@ -121,12 +121,12 @@ static int efx_ef10_sriov_alloc_vf_vswitching(struct efx_nic *efx)
 	unsigned int i;
 	int rc;
 
-	nic_data->vf = kcalloc(efx->vf_count, sizeof(struct ef10_vf),
+	nic_data->vf = kcalloc(nic_data->vf_count, sizeof(struct ef10_vf),
 			       GFP_KERNEL);
 	if (!nic_data->vf)
 		return -ENOMEM;
 
-	for (i = 0; i < efx->vf_count; i++) {
+	for (i = 0; i < nic_data->vf_count; i++) {
 		eth_random_addr(nic_data->vf[i].mac);
 		nic_data->vf[i].efx = NULL;
 		nic_data->vf[i].vlan = EFX_VF_VID_DEFAULT;
@@ -140,18 +140,17 @@ static int efx_ef10_sriov_alloc_vf_vswitching(struct efx_nic *efx)
 
 	return 0;
 fail:
-	efx_ef10_sriov_free_vf_vports(efx);
-	kfree(nic_data->vf);
-	nic_data->vf = NULL;
+	efx_ef10_sriov_free_vf_vswitching(efx);
 	return rc;
 }
 
 static int efx_ef10_sriov_restore_vf_vswitching(struct efx_nic *efx)
 {
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	unsigned int i;
 	int rc;
 
-	for (i = 0; i < efx->vf_count; i++) {
+	for (i = 0; i < nic_data->vf_count; i++) {
 		rc = efx_ef10_sriov_assign_vf_vport(efx, i);
 		if (rc)
 			goto fail;
@@ -206,7 +205,7 @@ int efx_ef10_vswitching_probe_pf(struct efx_nic *efx)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_GET_TOTALVFS)
 	if (pci_sriov_get_totalvfs(efx->pci_dev) <= 0 && !enable_vswitch) {
 #else
-	if (efx->max_vfs <= 0 && !enable_vswitch) {
+	if (nic_data->max_vfs <= 0 && !enable_vswitch) {
 #endif
 		/* vswitch not needed as we have no VFs */
 		efx_ef10_vadaptor_alloc_set_features(efx);
@@ -354,34 +353,30 @@ void efx_ef10_vswitching_remove_vf(struct efx_nic *efx)
 #ifdef CONFIG_SFC_SRIOV
 static int efx_ef10_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 {
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	struct pci_dev *dev = efx->pci_dev;
 	int rc;
 
-	efx->vf_count = num_vfs;
+	nic_data->vf_count = num_vfs;
 
 	rc = efx_ef10_sriov_alloc_vf_vswitching(efx);
 	if (rc)
 		goto fail1;
 
 	rc = pci_enable_sriov(dev, num_vfs);
+	if (!rc)
+		return 0;
 
-	if (rc)
-		goto fail2;
-
-	efx->vf_init_count = num_vfs;
-
-	return 0;
-
-fail2:
 	efx_ef10_sriov_free_vf_vswitching(efx);
 fail1:
-	efx->vf_count = 0;
+	nic_data->vf_count = 0;
 	netif_err(efx, probe, efx->net_dev, "Failed to enable SRIOV VFs\n");
 	return rc;
 }
 
 static int efx_ef10_pci_sriov_disable(struct efx_nic *efx, bool force)
 {
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	struct pci_dev *dev = efx->pci_dev;
 	unsigned int vfs_assigned = 0;
 
@@ -399,8 +394,7 @@ static int efx_ef10_pci_sriov_disable(struct efx_nic *efx, bool force)
 		pci_disable_sriov(dev);
 
 	efx_ef10_sriov_free_vf_vswitching(efx);
-	efx->vf_count = 0;
-	efx->vf_init_count = 0;
+	nic_data->vf_count = 0;
 	return 0;
 }
 #endif
@@ -440,13 +434,12 @@ static int efx_ef10_sriov_vf_max(struct efx_nic *efx)
 int efx_ef10_sriov_init(struct efx_nic *efx)
 {
 #ifdef CONFIG_SFC_SRIOV
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	int vf_max = efx_ef10_sriov_vf_max(efx);
 	int vf_count;
 	int rc;
 
-	vf_count = min(vf_max, efx->max_vfs);
-
-
+	vf_count = min(vf_max, nic_data->max_vfs);
 	if (vf_count > 0) {
 		rc = efx->type->sriov_configure(efx, vf_count);
 		if (rc)
@@ -480,7 +473,7 @@ void efx_ef10_sriov_fini(struct efx_nic *efx)
 	}
 
 	/* Remove any VFs in the host */
-	for (i = 0; i < efx->vf_count; ++i) {
+	for (i = 0; i < nic_data->vf_count; ++i) {
 		struct efx_nic *vf_efx = nic_data->vf[i].efx;
 
 		if (vf_efx) {
@@ -1011,7 +1004,9 @@ int efx_ef10_sriov_set_vf_spoofchk(struct efx_nic *efx, int vf_i,
 bool efx_ef10_sriov_wanted(struct efx_nic *efx)
 {
 #ifdef CONFIG_SFC_SRIOV
-	return efx->max_vfs != 0 && efx_ef10_sriov_vf_max(efx) > 0;
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	return nic_data->max_vfs != 0 && efx_ef10_sriov_vf_max(efx) > 0;
 #else
 	return false;
 #endif

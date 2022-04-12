@@ -74,8 +74,7 @@ static bool ef100_tx_can_tso(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 	}
 
 	header_len = efx_tx_tso_header_length(skb);
-	if (header_len < 0 ||
-	    header_len > nic_data->tso_max_hdr_len)
+	if (header_len > nic_data->tso_max_hdr_len)
 		return false;
 
 	if (skb_shinfo(skb)->gso_segs > nic_data->tso_max_payload_num_segs) {
@@ -119,6 +118,8 @@ void ef100_notify_tx_desc(struct efx_tx_queue *tx_queue)
 	unsigned int write_ptr;
 	efx_dword_t reg;
 
+	tx_queue->xmit_pending = false;
+
 	if (unlikely(tx_queue->notify_count == tx_queue->write_count))
 		return;
 
@@ -139,7 +140,6 @@ void ef100_notify_tx_desc(struct efx_tx_queue *tx_queue)
 	tx_queue->notify_count = tx_queue->write_count;
 	tx_queue->notify_jiffies = jiffies;
 	++tx_queue->doorbell_notify_tx;
-	tx_queue->xmit_pending = false;
 }
 
 static void ef100_tx_push_buffers(struct efx_tx_queue *tx_queue)
@@ -485,7 +485,7 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 		 * TX watchdog can go off erroneously.
 		 * And, of course, if there are no TX descriptors left.
 		 */
-		fill_level = efx_channel_tx_fill_level(tx_queue->channel);
+		fill_level = efx_channel_tx_old_fill_level(tx_queue->channel);
 		fill_level += efx->type->tx_max_skb_descs(efx);
 		if (netif_tx_queue_stopped(tx_queue->core_txq) ||
 		    fill_level > efx->txq_stop_thresh ||
@@ -507,8 +507,10 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 
 	EFX_WARN_ON_PARANOID(!tx_queue->core_txq);
 
-	fill_level = efx_channel_tx_fill_level(tx_queue->channel);
+	fill_level = efx_channel_tx_old_fill_level(tx_queue->channel);
 	if (fill_level > efx->txq_stop_thresh) {
+		struct efx_tx_queue *txq2;
+
 		/* Because of checks above, representor traffic should
 		 * not be able to stop the queue.
 		 */
@@ -520,7 +522,9 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 		 * restart the queue if all completions have just happened.
 		 */
 		smp_mb();
-		fill_level = efx_channel_tx_fill_level(tx_queue->channel);
+		efx_for_each_channel_tx_queue(txq2, tx_queue->channel)
+			txq2->old_read_count = READ_ONCE(txq2->read_count);
+		fill_level = efx_channel_tx_old_fill_level(tx_queue->channel);
 		if (fill_level < efx->txq_stop_thresh)
 			netif_tx_start_queue(tx_queue->core_txq);
 	}
@@ -557,7 +561,7 @@ err:
 
 	/* If we're not expecting another transmit and we had something to push
 	 * on this queue then we need to push here to get the previous packets
-	 * out.  We only enter this branch from before the 'Update BQL' section
+	 * out.  We only enter this branch from before the xmit_more handling
 	 * above, so xmit_pending still refers to the old state.
 	 */
 	if (tx_queue->xmit_pending && !xmit_more)

@@ -88,12 +88,14 @@ enum ef100_bar_config {
 #endif
 };
 
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 #ifdef CONFIG_SFC_VDPA
 enum ef100_vdpa_class {
 	EF100_VDPA_CLASS_NONE,
 	EF100_VDPA_CLASS_NET,
 	EF100_VDPA_CLASS_BLOCK,
 };
+#endif
 #endif
 
 enum {
@@ -121,15 +123,18 @@ struct ef100_nic_data {
 	unsigned long mcdi_buf_use;
 	u32 datapath_caps;
 	u32 datapath_caps2;
+	u32 datapath_caps3;
 	unsigned int pf_index;
 	unsigned int vf_index;
 	u16 warm_boot_count;
 	u8 port_id[ETH_ALEN];
 	enum ef100_bar_config bar_config;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 #ifdef CONFIG_SFC_VDPA
 	enum ef100_vdpa_class vdpa_class;
-	struct mutex bar_config_lock; /* lock to control access to bar config */
 #endif
+#endif
+	struct mutex bar_config_lock; /* lock to control access to bar config */
 	u64 licensed_features;
 	unsigned long *evq_phases;
 	u64 stats[EF100_STAT_COUNT];
@@ -164,7 +169,7 @@ void __ef100_detach_reps(struct efx_nic *efx);
 void __ef100_attach_reps(struct efx_nic *efx);
 
 #define efx_ef100_has_cap(caps, flag) \
-	(!!((caps) & BIT_ULL(MC_CMD_GET_CAPABILITIES_V4_OUT_ ## flag ## _LBN)))
+	(!!((caps) & BIT_ULL(MC_CMD_GET_CAPABILITIES_V10_OUT_ ## flag ## _LBN)))
 
 int efx_ef100_init_datapath_caps(struct efx_nic *efx);
 int ef100_phy_probe(struct efx_nic *efx);
@@ -178,5 +183,13 @@ static inline bool
 ef100_region_addr_is_populated(struct ef100_addr_region *region)
 {
 	return region->size_log2 != 0;
+}
+
+static inline bool efx_have_mport_journal_event(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+
+	return efx_ef100_has_cap(nic_data->datapath_caps3,
+				 DYNAMIC_MPORT_JOURNAL);
 }
 #endif	/* EFX_EF100_NIC_H */

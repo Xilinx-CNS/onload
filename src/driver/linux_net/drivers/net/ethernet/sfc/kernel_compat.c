@@ -232,11 +232,13 @@ int pci_wake_from_d3(struct pci_dev *dev, bool enable)
 #define PCI_MSIX_PBA           8
 #define  PCI_MSIX_BIR          0x7
 
+#ifndef PCI_MSIX_ENTRY_SIZE
 #define PCI_MSIX_ENTRY_SIZE		16
 #define  PCI_MSIX_ENTRY_LOWER_ADDR	0
 #define  PCI_MSIX_ENTRY_UPPER_ADDR	4
 #define  PCI_MSIX_ENTRY_DATA		8
 #define  PCI_MSIX_ENTRY_VECTOR_CTRL	12
+#endif
 
 static void
 efx_for_each_msix_vector(struct efx_nic *efx,

@@ -592,7 +592,6 @@ netdev_tx_t efx_hard_start_xmit(struct sk_buff *skb,
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	struct efx_channel *channel;
 	struct efx_tx_queue *tx_queue;
-	int rc;
 
 #ifdef CONFIG_SFC_TRACING
 	trace_sfc_transmit(skb, net_dev);
@@ -618,7 +617,7 @@ netdev_tx_t efx_hard_start_xmit(struct sk_buff *skb,
 
 	tx_queue = efx->select_tx_queue(channel, skb);
 
-	rc = __efx_enqueue_skb(tx_queue, skb);
+	__efx_enqueue_skb(tx_queue, skb);
 	return NETDEV_TX_OK;
 }
 

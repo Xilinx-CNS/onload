@@ -10,7 +10,10 @@
 #ifndef EFX_CHANNELS_H
 #define EFX_CHANNELS_H
 
-extern unsigned int interrupt_mode;
+extern unsigned int efx_interrupt_mode;
+#if !defined(EFX_NOT_UPSTREAM)
+extern unsigned int rss_cpus;
+#endif
 
 int efx_channel_dummy_op_int(struct efx_channel *channel);
 void efx_channel_dummy_op_void(struct efx_channel *channel);

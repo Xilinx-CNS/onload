@@ -176,9 +176,7 @@ enum ptp_packet_state {
 /* Number of received packets to hold in timestamp queue */
 #define	MAX_RX_TS_ENTRIES	16
 
-/**
- * struct efx_ptp_rx_timestamp - Compatibility layer
- */
+/* struct efx_ptp_rx_timestamp - Compatibility layer */
 struct efx_ptp_rx_timestamp {
 	struct skb_shared_hwtstamps ts;
 	u8 uuid[PTP_V1_UUID_LENGTH];
@@ -198,7 +196,10 @@ struct efx_ptp_rx_timestamp {
  */
 struct efx_ptp_match {
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-	struct skb_shared_hwtstamps timestamps;	/* Must be first member */
+	/**
+	 * @timestamps: Last hardware timestamp received from the NIC.
+	 */
+	struct skb_shared_hwtstamps timestamps; /* Must be first member */
 #endif
 	unsigned long expiry;
 	enum ptp_packet_state state;
@@ -231,7 +232,7 @@ struct efx_ptp_event_rx {
  * @wait: Number of NIC clock ticks between hardware timestamp being read and
  *          host end time being seen
  * @window: Difference of host_end and host_start
- * @valid: Whether this timeset is valid
+ * @mc_host_diff: Difference between firmware time and host time
  */
 struct efx_ptp_timeset {
 	u32 host_start;
@@ -260,6 +261,7 @@ struct efx_ptp_data;
  * @major: device major number
  * @last_ev: Last event sequence number
  * @last_ev_taken: Last event sequence number read by API
+ * @device: Pointer to the kernel PPS device
  */
 struct efx_pps_data {
 	struct efx_ptp_data *ptp;
@@ -366,15 +368,20 @@ static struct pps_source_info efx_pps_info = {
  * @usr_evt_enabled: Flag indicating how NIC generated TS events are handled
  * @txbuf: Buffer for use when transmitting (PTP) packets to MC (avoids
  *         allocations in main data path).
- * @good_syncs: Number of successful synchronisations.
- * @fast_syncs: Number of synchronisations requiring short delay
- * @bad_syncs: Number of failed synchronisations.
- * @sync_timeouts: Number of synchronisation timeouts
- * @no_time_syncs: Number of synchronisations with no good times.
- * @invalid_sync_windows: Number of sync windows with bad durations.
- * @undersize_sync_windows: Number of corrected sync windows that are too small
- * @oversize_sync_windows: Number of corrected sync windows that are too large
- * @rx_no_timestamp: Number of packets received without a timestamp.
+ * @sw_stats: Driver level statistics.
+ * @sw_stats.good_syncs: Number of successful synchronisations.
+ * @sw_stats.fast_syncs: Number of synchronisations requiring short delay
+ * @sw_stats.bad_syncs: Number of failed synchronisations.
+ * @sw_stats.sync_timeouts: Number of synchronisation timeouts
+ * @sw_stats.no_time_syncs: Number of synchronisations with no good times.
+ * @sw_stats.invalid_sync_windows: Number of sync windows with bad durations.
+ * @sw_stats.undersize_sync_windows: Number of corrected sync windows that
+ *                                   are too small
+ * @sw_stats.oversize_sync_windows: Number of corrected sync windows that
+ *                                  are too large
+ * @sw_stats.rx_no_timestamp: Number of packets received without a timestamp.
+ * @initialised_stats: Indicates if @initial_mc_stats has been populated.
+ * @initial_mc_stats: Firmware statistics.
  * @timeset: Last set of synchronisation statistics.
  * @xmit_skb: Transmit SKB function.
  */
@@ -396,13 +403,16 @@ struct efx_ptp_data {
 	u32 rxfilter_peer_delay_general;
 	bool rxfilter_installed;
 #ifdef EFX_NOT_UPSTREAM
-	/* Indicates if unicast filters are installed */
+	/**
+	 * @rxfilter_unicast_installed: Indicates if unicast filters are
+	 *				installed.
+	 */
 	bool rxfilter_unicast_installed;
-	/* Unicast address to filter on */
+	/** @rxfilter_unicast_address: Unicast address to filter on. */
 	__be32 rxfilter_unicast_address;
-	/* Receive filter for unicast address */
+	/** @rxfilter_unicast_event: Receive filter for unicast address. */
 	u32 rxfilter_unicast_event;
-	/* Receive filter for unicast address */
+	/** @rxfilter_unicast_general: Receive filter for unicast address. */
 	u32 rxfilter_unicast_general;
 #endif
 	struct hwtstamp_config config;
@@ -436,10 +446,12 @@ struct efx_ptp_data {
 	s64 max_adjfreq;
 	s64 current_adjfreq;
 #if defined(EFX_NOT_UPSTREAM)
-	/* Last measurement of delta between system and NIC clocks and
-	 * associated boolean to indicate if the valud is valid.
+	/**
+	 * @last_delta: Last measurement of delta between system and NIC
+	 *		clocks.
 	 */
 	struct timespec64 last_delta;
+	/** @last_delta_valid: indicates if @last_delta is valid. */
 	bool last_delta_valid;
 #endif
 	struct ptp_clock *phc_clock;
@@ -447,11 +459,12 @@ struct efx_ptp_data {
 	struct work_struct pps_work;
 	struct workqueue_struct *pps_workwq;
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
-	/* Data associated with optional HW PPS events */
+	/** @pps_data: Data associated with optional HW PPS events. */
 	struct efx_pps_data *pps_data;
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
+	/** @pin_config: Function of the EXTTS pin. */
 	struct ptp_pin_desc pin_config[1];
 #endif
 	u8 usr_evt_enabled;
@@ -472,38 +485,66 @@ struct efx_ptp_data {
 	bool initialised_stats;
 	__le16 initial_mc_stats[MC_CMD_PTP_OUT_STATUS_LEN / sizeof(__le16)];
 #ifdef CONFIG_SFC_DEBUGFS
-	/* Host nanoseconds at last synchronisation. */
+	/** @last_sync_time_host: Host nanoseconds at last synchronisation. */
 	unsigned int last_sync_time_host;
-	/* Minimum time between event and synchronisation */
+	/** @min_sync_delta: Minimum time between event and synchronisation. */
 	unsigned int min_sync_delta;
-	/* Maximum time between event and synchronisation */
+	/** @max_sync_delta: Maximum time between event and synchronisation. */
 	unsigned int max_sync_delta;
-	/* Average time between event and synchronisation.
-	 * Modified moving average. */
+	/**
+	 * @average_sync_delta: Average time between event and synchronisation.
+	 *			Modified moving average.
+	 */
 	unsigned int average_sync_delta;
-	/* Last time between event and synchronisation */
+	/** @last_sync_delta: Last time between event and synchronisation. */
 	unsigned int last_sync_delta;
-	/* Count of appended timestamps (AOE) marked or determined to be
-	 * invalid. */
+	/**
+	 * @bad_trailing_timestamps: Count of appended timestamps (AOE) marked or
+	 *			     determined to be invalid.
+	 */
 	unsigned int bad_trailing_timestamps;
+	/** @sync_window_last: Last synchronisation window. */
 	int sync_window_last[PTP_SYNC_ATTEMPTS];
+	/** @sync_window_min: Minimum synchronisation window seen. */
 	int sync_window_min;
+	/** @sync_window_max: Maximum synchronisation window seen. */
 	int sync_window_max;
+	/** @sync_window_average: Average synchronisation window seen. */
 	int sync_window_average;
+	/**
+	 * @corrected_sync_window_last: Last corrected synchronisation window.
+	 */
 	int corrected_sync_window_last[PTP_SYNC_ATTEMPTS];
+	/**
+	 * @corrected_sync_window_min: Minimum corrected synchronisation
+	 *			       window seen.
+	 */
 	int corrected_sync_window_min;
+	/**
+	 * @corrected_sync_window_max: Maximum corrected synchronisation
+	 *			       window seen.
+	 */
 	int corrected_sync_window_max;
+	/**
+	 * @corrected_sync_window_average: Average corrected synchronisation
+	 *				   window seen.
+	 */
 	int corrected_sync_window_average;
-	/* Context value for MC statistics */
+	/** @mc_stats: Context value for MC statistics. */
 	u8 mc_stats[MC_CMD_PTP_OUT_STATUS_LEN / sizeof(u32)];
 #endif
 	struct efx_ptp_timeset
 	timeset[MC_CMD_PTP_OUT_SYNCHRONIZE_TIMESET_MAXNUM];
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
+	/** @tx_ts_valid: Indicates if @tx_ts is populated. */
 	bool tx_ts_valid;
+	/** @tx_ts: Last timestamp send in and SKB. */
 	struct skb_shared_hwtstamps tx_ts;
+	/** @rx_ts_head: First valid entry in @rx_ts. */
 	unsigned int rx_ts_head;
+	/** @rx_ts_tail: Last valid entry in @rx_ts. */
 	unsigned int rx_ts_tail;
+	/** @rx_ts: Timestamps received from the NIC. */
 	struct efx_ptp_rx_timestamp rx_ts[MAX_RX_TS_ENTRIES];
 #endif
 	void (*xmit_skb)(struct efx_nic *efx, struct sk_buff *skb);
@@ -1784,24 +1825,29 @@ static void efx_ptp_xmit_skb_queue(struct efx_nic *efx, struct sk_buff *skb)
 	tx_queue = efx->select_tx_queue(ptp_data->channel, skb);
 	if (tx_queue && tx_queue->timestamping) {
 
-/*
- * Some RH RT kernels are shipped with CONFIG_PREEMPT_RT_BASE instead of
- * CONFIG_PREEMPT_RT
- */
-#if defined(CONFIG_PREEMPT) || defined(CONFIG_PREEMPT_RT) || defined(CONFIG_PREEMPT_RT_BASE)
-		/*
-		 * Kernels using xmit_more() based on per-cpu data warn if
-		 * preemption is enabled when invoked. Disabling preemption
-		 * here before calling tx driver code which invokes xmit_more.
-		 * This is only needed in kernels with preemption enabled or
-		 * RT kernels.
+		/* This code invokes normal driver TX code which is always
+		 * protected from softirqs when called from generic TX code,
+		 * which in turn disables preemption. Look at __dev_queue_xmit
+		 * which uses rcu_read_lock_bh disabling preemption for RCU
+		 * plus disabling softirqs. We do not need RCU reader
+		 * protection here.
+		 *
+		 * Although it is theoretically safe for current PTP TX/RX code
+		 * running without disabling softirqs, there are three good
+		 * reasond for doing so:
+		 *
+		 *      1) The code invoked is mainly implemented for non-PTP
+		 *         packets and it is always executed with softirqs
+		 *         disabled.
+		 *      2) This being a single PTP packet, better to not
+		 *         interrupt its processing by softirqs which can lead
+		 *         to high latencies.
+		 *      3) netdev_xmit_more checks preemption is disabled and
+		 *         triggers a BUG_ON if not.
 		 */
-		preempt_disable();
-#endif
+		local_bh_disable();
 		efx_enqueue_skb(tx_queue, skb);
-#if defined(CONFIG_PREEMPT) || defined(CONFIG_PREEMPT_RT) || defined(CONFIG_PREEMPT_RT_BASE)
-		preempt_enable();
-#endif
+
 		/* If netdev_xmit_more() was true in enqueue_skb() then our
 		 * queue will be waiting for the next packet to push the
 		 * doorbell. Since the next packet might not be coming this
@@ -1809,6 +1855,7 @@ static void efx_ptp_xmit_skb_queue(struct efx_nic *efx, struct sk_buff *skb)
 		 * directly.
 		 */
 		efx_nic_push_buffers(tx_queue);
+		local_bh_enable();
 	} else {
 		WARN_ONCE(1, "PTP channel has no timestamped tx queue\n");
 		dev_kfree_skb_any(skb);
@@ -3190,8 +3237,11 @@ int efx_ptp_change_mode(struct efx_nic *efx, bool enable_wanted,
 		if (netif_running(efx->net_dev))
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
-		/* if it exists then we *actually* want to check open_count */
-			;
+		{
+			/* if it exists then we *actually* want to check
+			 * open_count.
+			 */
+		}
 		if (efx->open_count)
 #endif
 #endif

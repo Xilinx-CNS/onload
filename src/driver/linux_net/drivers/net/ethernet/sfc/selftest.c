@@ -65,7 +65,7 @@ static const char payload_msg[] =
 	"Hello world! This is an Efx loopback test in progress!";
 
 /**
- * efx_loopback_state - persistent state during a loopback selftest
+ * struct efx_loopback_state - Persistent state during a loopback selftest.
  * @flush:		Drop all packets in efx_loopback_rx_packet
  * @packet_count:	Number of packets being used in this test
  * @skbs:		An array of skbs transmitted
@@ -245,9 +245,9 @@ static int efx_test_eventq_irq(struct efx_nic *efx,
 
 	bitmap_size = DIV_ROUND_UP(efx_channels(efx), BITS_PER_LONG);
 
-	napi_ran = kzalloc(bitmap_size * sizeof(unsigned long), GFP_KERNEL);
-	dma_pend = kzalloc(bitmap_size * sizeof(unsigned long), GFP_KERNEL);
-	int_pend = kzalloc(bitmap_size * sizeof(unsigned long), GFP_KERNEL);
+	napi_ran = kcalloc(bitmap_size, sizeof(unsigned long), GFP_KERNEL);
+	dma_pend = kcalloc(bitmap_size, sizeof(unsigned long), GFP_KERNEL);
+	int_pend = kcalloc(bitmap_size, sizeof(unsigned long), GFP_KERNEL);
 
 	if (!read_ptr || !napi_ran || !dma_pend || !int_pend) {
 		rc = -ENOMEM;

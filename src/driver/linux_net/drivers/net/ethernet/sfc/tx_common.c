@@ -234,17 +234,6 @@ void efx_fini_tx_queue(struct efx_tx_queue *tx_queue)
 			netdev_tx_reset_queue(tx_queue->core_txq);
 }
 
-void efx_remove_tx_queue(struct efx_tx_queue *tx_queue)
-{
-
-	netif_dbg(tx_queue->efx, drv, tx_queue->efx->net_dev,
-		  "removing TX queue %d\n", tx_queue->queue);
-	if (tx_queue->efx->type->tx_remove)
-		tx_queue->efx->type->tx_remove(tx_queue);
-	else
-		efx_nic_free_buffer(tx_queue->efx, &tx_queue->txd);
-}
-
 void efx_destroy_tx_queue(struct efx_tx_queue *tx_queue)
 {
 	netif_dbg(tx_queue->efx, drv, tx_queue->efx->net_dev,

@@ -228,12 +228,16 @@ function defer_test_symtype()
     fi
 
     defer_test_compile $sense "
+#include <linux/compiler.h>
 #include <linux/types.h>
+#include <linux/bitops.h>
 #include <${file:8}>
 
 #include \"_autocompat.h\"
 
-__typeof($type) *kernel_compat_dummy = &$symbol;
+#pragma GCC diagnostic ignored \"-Wmissing-format-attribute\"
+typedef __typeof($type) kernel_compat_test_t;
+kernel_compat_test_t *kernel_compat_dummy = &$symbol;
 "
 }
 
@@ -272,6 +276,7 @@ function defer_test_bitfield()
     defer_test_compile $sense "
 #include <${file:8}>
 $aggtype kernel_compat_dummy_1;
+unsigned long test(void);
 unsigned long test(void) {
 	return kernel_compat_dummy_1.$memname;
 }

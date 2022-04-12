@@ -104,6 +104,7 @@ struct vfdi_endpoint {
  *	from PF and write the initial status.
  * @VFDI_OP_CLEAR_STATUS_PAGE: Clear the DMA page(s) used for status
  *	updates from PF.
+ * @VFDI_OP_LIMIT: Count of operations in enumeration
  */
 enum vfdi_op {
 	VFDI_OP_RESPONSE = 0,
@@ -129,17 +130,21 @@ enum vfdi_op {
  * struct vfdi_req - Request from VF driver to PF driver
  * @op: Operation code or response indicator, taken from &enum vfdi_op.
  * @rc: Response code.  Set to 0 on success or a negative error code on failure.
+ * @u: Operation parameters
+ * @u.init_evq: params for %VFDI_OP_INIT_EVQ
  * @u.init_evq.index: Index of event queue to create.
  * @u.init_evq.buf_count: Number of 4k buffers backing event queue.
- * @u.init_evq.addr: Array of length %u.init_evq.buf_count containing DMA
+ * @u.init_evq.addr: Array of length @u.init_evq.buf_count containing DMA
  *	address of each page backing the event queue.
+ * @u.init_rxq: params for %VFDI_OP_INIT_RXQ
  * @u.init_rxq.index: Index of receive queue to create.
  * @u.init_rxq.buf_count: Number of 4k buffers backing receive queue.
  * @u.init_rxq.evq: Instance of event queue to target receive events at.
  * @u.init_rxq.label: Label used in receive events.
  * @u.init_rxq.flags: Unused.
- * @u.init_rxq.addr: Array of length %u.init_rxq.buf_count containing DMA
+ * @u.init_rxq.addr: Array of length @u.init_rxq.buf_count containing DMA
  *	address of each page backing the receive queue.
+ * @u.init_txq: params for %VFDI_OP_INIT_TXQ
  * @u.init_txq.index: Index of transmit queue to create.
  * @u.init_txq.buf_count: Number of 4k buffers backing transmit queue.
  * @u.init_txq.evq: Instance of event queue to target transmit completion
@@ -148,9 +153,11 @@ enum vfdi_op {
  * @u.init_txq.flags: Checksum offload flags.
  * @u.init_txq.addr: Array of length %u.init_txq.buf_count containing DMA
  *	address of each page backing the transmit queue.
+ * @u.mac_filter: params for %VFDI_OP_INSERT_FILTER
  * @u.mac_filter.rxq: Insert MAC filter at VF local address/VLAN targetting
  *	all traffic at this receive queue.
  * @u.mac_filter.flags: MAC filter flags.
+ * @u.set_status_page: params for %VFDI_OP_SET_STATUS_PAGE
  * @u.set_status_page.dma_addr: Base address for the &struct vfdi_status.
  *	This address must be page-aligned and the PF may write up to a
  *	whole page (allowing for extension of the structure).
@@ -164,9 +171,13 @@ enum vfdi_op {
  */
 struct vfdi_req {
 	u32 op;
+/* private: */
 	u32 reserved1;
+/* public: */
 	s32 rc;
+/* private: */
 	u32 reserved2;
+/* public: */
 	union {
 		struct {
 			u32 index;
@@ -180,7 +191,9 @@ struct vfdi_req {
 			u32 label;
 			u32 flags;
 #define VFDI_RXQ_FLAG_SCATTER_EN 1
+/* private: */
 			u32 reserved;
+/* public: */
 			u64 addr[];
 		} init_rxq;
 		struct {
@@ -191,7 +204,9 @@ struct vfdi_req {
 			u32 flags;
 #define VFDI_TXQ_FLAG_IP_CSUM_DIS 1
 #define VFDI_TXQ_FLAG_TCPUDP_CSUM_DIS 2
+/* private: */
 			u32 reserved;
+/* public: */
 			u64 addr[];
 		} init_txq;
 		struct {
@@ -242,9 +257,13 @@ struct vfdi_status {
 	u8 vi_scale;
 	u8 max_tx_channels;
 	u8 rss_rxq_count;
+/* private: */
 	u8 reserved1;
+/* public: */
 	u16 peer_count;
+/* private: */
 	u16 reserved2;
+/* public: */
 	struct vfdi_endpoint local;
 	struct vfdi_endpoint peers[256];
 

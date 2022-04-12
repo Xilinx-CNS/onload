@@ -292,10 +292,13 @@ int efx_debugfs_read_string(struct seq_file *file, void *data)
  * @parent:		Containing directory
  * @params:		Pointer to zero-terminated parameter definition array
  * @ignore:		Bitmask of array entries to ignore
- * @structure:		Structure containing parameters
+ * @get_struct:		Obtain the structure containing parameters
+ * @ref:		Opaque reference passed into the @get_struct call
+ * @struct_index:	Index passed into the @get_struct call
  *
- * Add parameter-files to the given debugfs directory.  Return a
- * negative error code or 0 on success.
+ * Add parameter-files to the given debugfs directory.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static int
 efx_init_debugfs_files(struct dentry *parent,
@@ -344,10 +347,11 @@ err:
  * efx_init_debugfs_netdev - create debugfs sym-links for net device
  * @net_dev:		Net device
  *
- * Create sym-links named after @net_dev to the debugfs directories for
- * the corresponding NIC and  port.  Return a negative error code or 0 on
- * success.  The sym-links must be cleaned up using
+ * Create sym-links named after @net_dev to the debugfs directories for the
+ * corresponding NIC and port.  The sym-links must be cleaned up using
  * efx_fini_debugfs_netdev().
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_init_debugfs_netdev(struct net_device *net_dev)
 {
@@ -450,10 +454,11 @@ static void *efx_debugfs_get_same(void *ref, unsigned int index)
  * @ignore:		Bitmask of structure elements to ignore
  * @params:		Pointer to zero-terminated parameter definition array
  *
- * Add parameter-files to the debugfs directory for @efx.  Return
- * a negative error code or 0 on success.  This is intended for
- * PHY-specific parameters.  The files must be cleaned up using
+ * Add parameter-files to the debugfs directory for @efx.  This is intended
+ * for PHY-specific parameters.  The files must be cleaned up using
  * efx_trim_debugfs_port().
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_extend_debugfs_port(struct efx_nic *efx,
 			    void *structure, u64 ignore,
@@ -512,10 +517,11 @@ static struct efx_debugfs_parameter efx_debugfs_vdpa_parameters[] = {
  * efx_init_debugfs_vdpa - create debugfs directories for vdpa device
  * @vdpa:		ef100_vdpa_nic
  *
- * Create subdirectories of @vdpa debugfs directory for the
- * corresponding vDPA device.  Return a negative error code or 0 on
- * success.  The sym-links must be cleaned up using
+ * Create subdirectories of @vdpa debugfs directory for the corresponding
+ * vDPA device.  The symlinks must be cleaned up using
  * efx_fini_debugfs_vdpa().
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_init_debugfs_vdpa(struct ef100_vdpa_nic *vdpa)
 {
@@ -583,10 +589,10 @@ static struct efx_debugfs_parameter efx_debugfs_vdpa_vring_parameters[] = {
  * @idx:		index of the vring
  *
  * Create subdirectories of @vdpa_vring debugfs directory for the
- * corresponding vDPA device, vring with index idx.
- * Return a negative error code or 0 on
- * success.  The debugfs must be cleaned up using
- * efx_fini_debugfs_vdpa_vring().
+ * corresponding vDPA device, vring with index idx.  The debugfs must be
+ * cleaned up using efx_fini_debugfs_vdpa_vring().
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_init_debugfs_vdpa_vring(struct ef100_vdpa_nic *vdpa,
 				struct ef100_vdpa_vring_info *vdpa_vring,
@@ -675,8 +681,9 @@ static void efx_fini_debugfs_tx_queue(struct efx_tx_queue *tx_queue);
  * @tx_queue:		Efx TX queue
  *
  * Create a debugfs directory containing parameter-files for @tx_queue.
- * Return a negative error code or 0 on success.  The directory must be
- * cleaned up using efx_fini_debugfs_tx_queue().
+ * The directory must be cleaned up using efx_fini_debugfs_tx_queue().
+ *
+ * Return: a negative error code or 0 on success.
  */
 static int efx_init_debugfs_tx_queue(struct efx_tx_queue *tx_queue)
 {
@@ -800,8 +807,9 @@ static void efx_fini_debugfs_rx_queue(struct efx_rx_queue *rx_queue);
  * @rx_queue:		Efx RX queue
  *
  * Create a debugfs directory containing parameter-files for @rx_queue.
- * Return a negative error code or 0 on success.  The directory must be
- * cleaned up using efx_fini_debugfs_rx_queue().
+ * The directory must be cleaned up using efx_fini_debugfs_rx_queue().
+ *
+ * Return: a negative error code or 0 on success.
  */
 static int efx_init_debugfs_rx_queue(struct efx_rx_queue *rx_queue)
 {
@@ -889,8 +897,9 @@ static void efx_fini_debugfs_channel(struct efx_channel *channel);
  * @channel:		Efx channel
  *
  * Create a debugfs directory containing parameter-files for @channel.
- * Return a negative error code or 0 on success.  The directory must be
- * cleaned up using efx_fini_debugfs_channel().
+ * The directory must be cleaned up using efx_fini_debugfs_channel().
+ *
+ * Return: a negative error code or 0 on success.
  */
 static int efx_init_debugfs_channel(struct efx_channel *channel)
 {
@@ -1032,10 +1041,11 @@ static struct efx_debugfs_parameter efx_debugfs_nic_error_parameters[] = {
  * efx_init_debugfs_channels - create debugfs directories for NIC channels
  * @efx:		Efx NIC
  *
- * Create subdirectories of @efx's debugfs directory for all the
- * channels, RX queues and TX queues used by this driver.  Return a
- * negative error code or 0 on success.  The subdirectories must be
+ * Create subdirectories of @efx's debugfs directory for all the channels,
+ * RX queues and TX queues used by this driver.  The subdirectories must be
  * cleaned up using efx_fini_debugfs_channels().
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_init_debugfs_channels(struct efx_nic *efx)
 {
@@ -1099,8 +1109,9 @@ void efx_fini_debugfs_channels(struct efx_nic *efx)
  *
  * Create debugfs directory containing parameter-files for @efx,
  * and a subdirectory "errors" containing per-NIC error counts.
- * Return a negative error code or 0 on success.  The directories
- * must be cleaned up using efx_fini_debugfs_nic().
+ * The directories must be cleaned up using efx_fini_debugfs_nic().
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_init_debugfs_nic(struct efx_nic *efx)
 {
@@ -1183,11 +1194,14 @@ void efx_fini_debugfs_nic(struct efx_nic *efx)
 
 /**
  * efx_init_debugfs - create debugfs directories for sfc driver
+ * @module: Name of the kernel module.
  *
  * Create debugfs directories "sfc" and "sfc/cards".  This must be
  * called before any of the other functions that create debugfs
- * directories.  Return a negative error code or 0 on success.  The
- * directories must be cleaned up using efx_fini_debugfs().
+ * directories.  The directories must be cleaned up using
+ * efx_fini_debugfs().
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_init_debugfs(const char *module)
 {

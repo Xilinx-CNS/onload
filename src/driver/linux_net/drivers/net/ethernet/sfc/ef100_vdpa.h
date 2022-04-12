@@ -207,9 +207,18 @@ struct ef100_vdpa_nic {
 	bool in_order;
 };
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+int ef100_vdpa_register_mgmtdev(struct efx_nic *efx);
+void ef100_vdpa_unregister_mgmtdev(struct efx_nic *efx);
+struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
+					 const char *dev_name);
+#else
+struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
+					 const char *dev_name,
+					 enum ef100_vdpa_class dev_type);
+#endif
 int ef100_vdpa_init(struct efx_probe_data *probe_data);
 void ef100_vdpa_fini(struct efx_probe_data *probe_data);
-struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx);
 void ef100_vdpa_delete(struct efx_nic *efx);
 int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic);
 int ef100_vdpa_filter_remove(struct ef100_vdpa_nic *vdpa_nic);

@@ -699,12 +699,12 @@ int efx_ssr_init(struct efx_rx_queue *rx_queue, struct efx_nic *efx)
 		return -EINVAL;
 	}
 	st->efx = efx;
-	st->conns = kmalloc((st->conns_mask + 1)
-			    * sizeof(st->conns[0]), GFP_KERNEL);
+	st->conns = kmalloc_array((st->conns_mask + 1),
+				  sizeof(st->conns[0]), GFP_KERNEL);
 	if (st->conns == NULL)
 		return -ENOMEM;
-	st->conns_n = kmalloc((st->conns_mask + 1)
-			      * sizeof(st->conns_n[0]), GFP_KERNEL);
+	st->conns_n = kmalloc_array((st->conns_mask + 1),
+				    sizeof(st->conns_n[0]), GFP_KERNEL);
 	if (st->conns_n == NULL) {
 		kfree(st->conns);
 		st->conns = NULL;

@@ -19,7 +19,13 @@
 #define EFX_EF100_MAX_DMAQ_SIZE 16384UL
 
 static void ef100_ethtool_get_ringparam(struct net_device *net_dev,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RINGPARAM_EXTACK)
+					struct ethtool_ringparam *ring,
+				       struct kernel_ethtool_ringparam *kring,
+					struct netlink_ext_ack *ext_ack)
+#else
 					struct ethtool_ringparam *ring)
+#endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	unsigned long driver_bitmap;
@@ -37,7 +43,13 @@ static void ef100_ethtool_get_ringparam(struct net_device *net_dev,
 }
 
 static int ef100_ethtool_set_ringparam(struct net_device *net_dev,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_SET_RINGPARAM_EXTACK)
+				       struct ethtool_ringparam *ring,
+				       struct kernel_ethtool_ringparam *kring,
+				       struct netlink_ext_ack *ext_ack)
+#else
 				       struct ethtool_ringparam *ring)
+#endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	int rc = 0;

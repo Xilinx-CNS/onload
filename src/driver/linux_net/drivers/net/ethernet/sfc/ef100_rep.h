@@ -16,13 +16,18 @@ struct efx_rep;
 
 #include "net_driver.h"
 #include "nic.h"
+#include "mae.h"
 #include "tc.h"
 
-int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i);
-int efx_ef100_remote_rep_create(struct efx_nic *efx, unsigned int i,
-				unsigned int mport_desc_idx);
+void efx_ef100_init_reps(struct efx_nic *efx);
+void efx_ef100_fini_reps(struct efx_nic *efx);
+void efx_ef100_remove_mport(struct efx_nic *efx, struct mae_mport_desc *mport);
+int efx_ef100_add_mport(struct efx_nic *efx, struct mae_mport_desc *mport);
+
+void efx_ef100_fini_vfreps(struct efx_nic *efx);
+int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i,
+			   struct mae_mport_desc *mport_desc);
 void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i);
-void efx_ef100_remote_rep_destroy(struct efx_nic *efx, unsigned int i);
 
 /* Returns the representor netdevice corresponding to a VF m-port, or NULL
  * @mport is an m-port label, *not* an m-port ID!
@@ -46,7 +51,7 @@ struct efx_rep {
 	unsigned int idx; /* rep index  */
 	unsigned int write_index, read_index;
 	unsigned int rx_pring_size; /* max length of RX list */
-	unsigned int mport_desc_idx;
+	u32 mport_id;
 	struct efx_tc_flow_rule dflt; /* default-rule for switching */
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	struct list_head rx_list;

@@ -701,7 +701,9 @@ struct efx_ioctl {
 struct efx_sock_ioctl {
 	/* Command to run */
 	__u16 cmd;
+/* private: */
 	__u16 reserved;
+/* public: */
 	/* Parameters */
 	union efx_ioctl_data u;
 } __attribute__ ((packed));

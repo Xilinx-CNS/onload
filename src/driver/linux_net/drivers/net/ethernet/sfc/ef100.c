@@ -611,6 +611,8 @@ static const struct pci_device_id ef100_pci_table[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x0100),  /* Riverhead PF */
 		.driver_data = (unsigned long) &ef100_pf_nic_type },
 	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x1100),  /* Riverhead VF */
+		.class = PCI_CLASS_NETWORK_ETHERNET << 8,
+		.class_mask =  0xffff00,
 		.driver_data = (unsigned long) &ef100_vf_nic_type },
 	{0}                     /* end of list */
 };

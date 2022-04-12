@@ -10,8 +10,6 @@
 #ifndef EFX_COMMON_H
 #define EFX_COMMON_H
 
-int efx_void_dummy_op_int(void);
-void efx_void_dummy_op_void(void);
 int efx_port_dummy_op_int(struct efx_nic *efx);
 void efx_port_dummy_op_void(struct efx_nic *efx);
 

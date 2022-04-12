@@ -224,23 +224,90 @@ void efx_mae_counters_grant_credits(struct work_struct *work)
 }
 #endif
 
-struct mae_mport_desc *efx_mae_enumerate_mports(struct efx_nic *efx,
-						unsigned int *n_mports)
+/*	mport handling
+ */
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+static const struct rhashtable_params efx_mae_mports_ht_params = {
+	.key_len	= sizeof(u32),
+	.key_offset	= offsetof(struct mae_mport_desc, mport_id),
+	.head_offset	= offsetof(struct mae_mport_desc, linkage),
+};
+#endif
+
+struct mae_mport_desc *efx_mae_find_mport(struct efx_nic *efx, u32 mport_id)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	return rhashtable_lookup_fast(&efx->mae->mports_ht, &mport_id,
+				      efx_mae_mports_ht_params);
+#else
+	return NULL;
+#endif
+}
+
+static int efx_mae_add_mport(struct efx_nic *efx, struct mae_mport_desc *desc)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	struct efx_mae *mae = efx->mae;
+	int rc = rhashtable_insert_fast(&mae->mports_ht, &desc->linkage,
+					efx_mae_mports_ht_params);
+
+	if (rc)
+		pci_err(efx->pci_dev, "Failed to insert MPORT %08x, rc %d\n",
+			desc->mport_id, rc);
+#endif
+	return efx_ef100_add_mport(efx, desc);
+}
+
+static void efx_mae_remove_mport(struct efx_nic *efx,
+				 struct mae_mport_desc *desc)
+{
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	struct efx_mae *mae = efx->mae;
+	int rc;
+
+#endif
+	efx_ef100_remove_mport(efx, desc);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	rc = rhashtable_remove_fast(&mae->mports_ht, &desc->linkage,
+				    efx_mae_mports_ht_params);
+	if (rc)
+		netif_err(efx, drv, efx->net_dev,
+			  "Failed to remove MPORT %08x, rc %d\n",
+			  desc->mport_id, rc);
+	else
+		kfree(desc);
+#endif
+}
+
+static int efx_mae_process_mport(struct efx_nic *efx, struct mae_mport_desc *desc)
+{
+	struct mae_mport_desc *mport;
+
+	mport = efx_mae_find_mport(efx, desc->mport_id);
+	if (!mport)
+		return efx_mae_add_mport(efx, desc);
+
+	efx_mae_remove_mport(efx, mport);
+	if (desc->caller_flags & MAE_MPORT_DESC_FLAG_IS_ZOMBIE) {
+		kfree(desc);
+		return 0;
+	}
+	return efx_mae_add_mport(efx, desc);
+}
+
+int efx_mae_enumerate_mports(struct efx_nic *efx)
 {
 #define MCDI_MPORT_JOURNAL_LEN \
 	sizeof(efx_dword_t[DIV_ROUND_UP(MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_LENMAX_MCDI2, 4)])
 	efx_dword_t *outbuf = kzalloc(MCDI_MPORT_JOURNAL_LEN, GFP_KERNEL);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_MPORT_READ_JOURNAL_IN_LEN);
-	struct mae_mport_desc *mports = NULL;
 	MCDI_DECLARE_STRUCT_PTR(desc);
 	size_t outlen, stride, count;
-	int rc, i, j = 0;
+	int rc, i;
 
 	if (!outbuf)
-		return ERR_PTR(-ENOMEM);
+		return -ENOMEM;
 	do {
-		struct mae_mport_desc *r_mports; /* realloc of mports */
-
 		rc = efx_mcdi_rpc(efx, MC_CMD_MAE_MPORT_READ_JOURNAL, inbuf, sizeof(inbuf),
 				  outbuf, MCDI_MPORT_JOURNAL_LEN, &outlen);
 		if (rc)
@@ -261,30 +328,20 @@ struct mae_mport_desc *efx_mae_enumerate_mports(struct efx_nic *efx,
 			rc = -EIO;
 			goto fail;
 		}
-		r_mports = krealloc(mports, array_size(j + count, sizeof(*mports)), GFP_KERNEL);
-		if (!r_mports) {
-			rc = -ENOMEM;
-			goto fail;
-		}
-		mports = r_mports;
 		for (i = 0; i < count; i++) {
-			struct mae_mport_desc *d = mports + j;
+			struct mae_mport_desc *d;
+
+			d = kzalloc(sizeof(*d), GFP_KERNEL);
+			if (!d) {
+				rc = -ENOMEM;
+				goto fail;
+			}
 
 			desc = (efx_dword_t *)_MCDI_PTR(outbuf, MC_CMD_MAE_MPORT_READ_JOURNAL_OUT_MPORT_DESC_DATA_OFST + i * stride);
-			memset(d, 0, sizeof(*d));
 			d->mport_id = MCDI_STRUCT_DWORD(desc, MAE_MPORT_DESC_MPORT_ID);
 			d->flags = MCDI_STRUCT_DWORD(desc, MAE_MPORT_DESC_FLAGS);
 			d->caller_flags = MCDI_STRUCT_DWORD(desc,
 							    MAE_MPORT_DESC_CALLER_FLAGS);
-			if (d->caller_flags & MAE_MPORT_DESC_FLAG_IS_ZOMBIE) {
-				/* Zombie flag implies that an existing mport was
-				 * destroyed.  We don't currently support finding the
-				 * existing entry in *mports and removing it, but we
-				 * can at least not add a duplicate.
-				 */
-				netif_warn(efx, drv, efx->net_dev, "unsupported Z flag on mport journal\n");
-				continue;
-			}
 			d->mport_type = MCDI_STRUCT_DWORD(desc,
 							  MAE_MPORT_DESC_MPORT_TYPE);
 			switch (d->mport_type) {
@@ -310,17 +367,28 @@ struct mae_mport_desc *efx_mae_enumerate_mports(struct efx_nic *efx,
 				/* Unknown mport_type, just accept it */
 				break;
 			}
-			j++;
+			rc = efx_mae_process_mport(efx, d);
+			/* Any failure will be due to memory allocation faiure,
+			 * so there is no point to try subsequent entries.
+			 */
+#if 0
+			if (rc)
+				goto fail;
+#endif
 		}
 	} while (MCDI_FIELD(outbuf, MAE_MPORT_READ_JOURNAL_OUT, MORE) &&
 		 !WARN_ON(!count));
-	kfree(outbuf);
-	*n_mports = j;
-	return mports;
 fail:
-	kfree(mports);
 	kfree(outbuf);
-	return ERR_PTR(rc);
+	return rc;
+}
+
+static void efx_mae_mport_work(struct work_struct *data)
+{
+	struct efx_mae *mae = container_of(data, struct efx_mae, mport_work);
+	struct efx_nic *efx = mae->efx;
+
+	efx_mae_enumerate_mports(efx);
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
@@ -548,22 +616,22 @@ int efx_mae_get_tables(struct efx_nic *efx)
 		rc = efx_mae_table_get_desc(efx, &efx->tc->meta_ct.desc,
 					    TABLE_ID_CONNTRACK_TABLE);
 		if (rc) {
-			netif_info(efx, hw, efx->net_dev,
-				   "FW does not support conntrack desc rc %d\n",
-				   rc);
+			pci_info(efx->pci_dev,
+				 "FW does not support conntrack desc rc %d\n",
+				 rc);
 			return 0;
 		}
 
 		rc = efx_mae_table_hook_ct(efx, &efx->tc->meta_ct);
 		if (rc) {
-			netif_info(efx, hw, efx->net_dev,
-				   "FW does not support conntrack hook rc %d\n",
-				   rc);
+			pci_info(efx->pci_dev,
+				 "FW does not support conntrack hook rc %d\n",
+				 rc);
 			return 0;
 		}
 	} else {
-		netif_info(efx, hw, efx->net_dev,
-			   "FW does not support conntrack table\n");
+		pci_info(efx->pci_dev,
+			 "FW does not support conntrack table\n");
 	}
 	return 0;
 }
@@ -812,6 +880,7 @@ int efx_mae_match_check_caps(struct efx_nic *efx,
 	CHECK(L4_SPORT, l4_sport);
 	CHECK(L4_DPORT, l4_dport);
 	CHECK(TCP_FLAGS, tcp_flags);
+	CHECK_BIT(TCP_SYN_FIN_RST, tcp_syn_fin_rst);
 	if (efx_tc_match_is_encap(mask)) {
 		rc = efx_mae_match_check_cap_typ(
 				supported_fields[MAE_FIELD_OUTER_RULE_ID],
@@ -877,6 +946,7 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 	CHECK(ENC_L4_SPORT, l4_sport);
 	CHECK(ENC_L4_DPORT, l4_dport);
 	UNSUPPORTED(tcp_flags);
+	CHECK_BIT(TCP_SYN_FIN_RST, tcp_syn_fin_rst);
 	if (efx_tc_match_is_encap(mask)) {
 		/* can't happen; disallowed for local rules, translated
 		 * for foreign rules.
@@ -907,12 +977,14 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 		return rc;						       \
 	}								       \
 } while (0)
-/* Checks that the fields needed for encap-rule matches (all of which are exact)
- * are supported by the MAE.
+/* Checks that the fields needed for encap-rule matches are supported by the
+ * MAE.  All the fields are exact-match, except possibly ENC_IP_TOS.
  */
-int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv)
+int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv,
+				   u8 ip_tos_mask)
 {
 	u8 *supported_fields = efx->tc->caps->outer_rule_fields;
+	enum mask_type typ;
 	int rc;
 
 	CHECK(ENC_ETHER_TYPE);
@@ -931,6 +1003,14 @@ int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv)
 	}
 	CHECK(ENC_L4_DPORT);
 	CHECK(ENC_IP_PROTO);
+	typ = classify_mask(&ip_tos_mask, sizeof(ip_tos_mask));
+	rc = efx_mae_match_check_cap_typ(supported_fields[MAE_FIELD_ENC_IP_TOS],
+					 typ);
+	if (rc) {
+		efx_tc_err(efx, "No support for %s mask in field %s\n",
+			   mask_type_name(typ), "enc_ip_tos");
+		return rc;
+	}
 	return 0;
 }
 #undef CHECK
@@ -1261,20 +1341,20 @@ int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 	 * The firmware API guarantees this, but let's check it ourselves.
 	 */
 	if (WARN_ON_ONCE(efx_mae_asl_id(act->fw_id))) {
-		efx_mae_free_action_set(efx, act);
+		efx_mae_free_action_set(efx, act->fw_id);
 		return -EIO;
 	}
 	return 0;
 }
 
-int efx_mae_free_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
+int efx_mae_free_action_set(struct efx_nic *efx, u32 fw_id)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_ACTION_SET_FREE_OUT_LEN(1));
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_ACTION_SET_FREE_IN_LEN(1));
 	size_t outlen;
 	int rc;
 
-	MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_FREE_IN_AS_ID, act->fw_id);
+	MCDI_SET_DWORD(inbuf, MAE_ACTION_SET_FREE_IN_AS_ID, fw_id);
 	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_ACTION_SET_FREE, inbuf, sizeof(inbuf),
 			  outbuf, sizeof(outbuf), &outlen);
 	if (rc)
@@ -1285,12 +1365,8 @@ int efx_mae_free_action_set(struct efx_nic *efx, struct efx_tc_action_set *act)
 	 * Warn because it means we've now got a different idea to the FW of
 	 * what encap_mds exist, which could cause mayhem later.
 	 */
-	if (WARN_ON(MCDI_DWORD(outbuf, MAE_ACTION_SET_FREE_OUT_FREED_AS_ID) != act->fw_id))
+	if (WARN_ON(MCDI_DWORD(outbuf, MAE_ACTION_SET_FREE_OUT_FREED_AS_ID) != fw_id))
 		return -EIO;
-	/* We're probably about to free @act, but let's just make sure its
-	 * fw_id is blatted so that it won't look valid if it leaks out.
-	 */
-	act->fw_id = MC_CMD_MAE_ACTION_SET_ALLOC_OUT_ACTION_SET_ID_NULL;
 	return 0;
 }
 
@@ -1437,6 +1513,10 @@ int efx_mae_register_encap_match(struct efx_nic *efx,
 				~(__be16)0);
 	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_IP_PROTO, IPPROTO_UDP);
 	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_IP_PROTO_MASK, ~0);
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_IP_TOS,
+			     encap->ip_tos);
+	MCDI_STRUCT_SET_BYTE(match_crit, MAE_ENC_FIELD_PAIRS_ENC_IP_TOS_MASK,
+			     encap->ip_tos_mask);
 	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_OUTER_RULE_INSERT, inbuf,
 			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
 	if (rc)
@@ -1566,7 +1646,7 @@ static int efx_mae_populate_lhs_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_cri
 	 * and any EM should be a pseudo (we're an OR so can't have a direct
 	 * EM with another OR).
 	 */
-	if (WARN_ON_ONCE(match->encap && match->encap->hw))
+	if (WARN_ON_ONCE(match->encap && !match->encap->type))
 		return -EOPNOTSUPP;
 	if (WARN_ON_ONCE(match->mask.enc_src_ip))
 		return -EOPNOTSUPP;
@@ -1591,8 +1671,8 @@ static int efx_mae_populate_lhs_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_cri
 	return 0;
 }
 
-int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
-			    u32 prio)
+static int efx_mae_insert_lhs_outer_rule(struct efx_nic *efx,
+					 struct efx_tc_lhs_rule *rule, u32 prio)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_OUTER_RULE_INSERT_IN_LEN(MAE_ENC_FIELD_PAIRS_LEN));
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_OUTER_RULE_INSERT_OUT_LEN);
@@ -1615,8 +1695,13 @@ int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
 		return rc;
 	MCDI_SET_DWORD(inbuf, MAE_OUTER_RULE_INSERT_IN_ENCAP_TYPE, rc);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
-	MCDI_POPULATE_DWORD_5(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
+	/* We always inhibit CT lookup on TCP_INTERESTING_FLAGS, since the
+	 * SW path needs to process the packet to update the conntrack tables
+	 * on connection establishment (SYN) or termination (FIN, RST).
+	 */
+	MCDI_POPULATE_DWORD_6(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
 			      MAE_OUTER_RULE_INSERT_IN_DO_CT, !!act->zone,
+			      MAE_OUTER_RULE_INSERT_IN_CT_TCP_FLAGS_INHIBIT, 1,
 			      MAE_OUTER_RULE_INSERT_IN_CT_DOMAIN,
 			      act->zone ? act->zone->domain : 0,
 			      MAE_OUTER_RULE_INSERT_IN_CT_VNI_MODE,
@@ -1624,7 +1709,8 @@ int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
 			      MAE_OUTER_RULE_INSERT_IN_DO_COUNT, !!act->count,
 			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->rid ? act->rid->fw_id : 0);
 #else
-	MCDI_POPULATE_DWORD_1(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
+	MCDI_POPULATE_DWORD_2(inbuf, MAE_OUTER_RULE_INSERT_IN_LOOKUP_CONTROL,
+			      MAE_OUTER_RULE_INSERT_IN_DO_COUNT, !!act->count,
 			      MAE_OUTER_RULE_INSERT_IN_RECIRC_ID, act->rid ? act->rid->fw_id : 0);
 #endif
 	if (act->count)
@@ -1640,7 +1726,72 @@ int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
 	return 0;
 }
 
-int efx_mae_remove_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule)
+static int efx_mae_populate_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_crit),
+					   const struct efx_tc_match *match);
+
+static int efx_mae_insert_lhs_action_rule(struct efx_nic *efx,
+					  struct efx_tc_lhs_rule *rule,
+					  u32 prio)
+{
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_ACTION_RULE_INSERT_IN_LEN(MAE_FIELD_MASK_VALUE_PAIRS_V2_LEN));
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_ACTION_RULE_INSERT_OUT_LEN);
+	struct efx_tc_lhs_action *act = &rule->lhs_act;
+	MCDI_DECLARE_STRUCT_PTR(match_crit);
+	MCDI_DECLARE_STRUCT_PTR(response);
+	size_t outlen;
+	int rc;
+
+	match_crit = _MCDI_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_MATCH_CRITERIA);
+	response = _MCDI_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_RESPONSE);
+	MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_ASL_ID,
+			      MC_CMD_MAE_ACTION_SET_LIST_ALLOC_OUT_ACTION_SET_LIST_ID_NULL);
+	MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_AS_ID,
+			      MC_CMD_MAE_ACTION_SET_ALLOC_OUT_ACTION_SET_ID_NULL);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+	EFX_POPULATE_DWORD_5(*_MCDI_STRUCT_DWORD(response, MAE_ACTION_RULE_RESPONSE_LOOKUP_CONTROL),
+			     MAE_ACTION_RULE_RESPONSE_DO_CT, !!act->zone,
+			     MAE_ACTION_RULE_RESPONSE_DO_RECIRC,
+			     act->rid && !act->zone,
+			     MAE_ACTION_RULE_RESPONSE_CT_VNI_MODE,
+			     act->zone ? act->zone->vni_mode : MAE_CT_VNI_MODE_ZERO,
+			     MAE_ACTION_RULE_RESPONSE_RECIRC_ID,
+			     act->rid ? act->rid->fw_id : 0,
+			     MAE_ACTION_RULE_RESPONSE_CT_DOMAIN,
+			     act->zone ? act->zone->domain : 0);
+#else
+	EFX_POPULATE_DWORD_2(*_MCDI_STRUCT_DWORD(response, MAE_ACTION_RULE_RESPONSE_LOOKUP_CONTROL),
+			     MAE_ACTION_RULE_RESPONSE_DO_RECIRC, !!act->rid,
+			     MAE_ACTION_RULE_RESPONSE_RECIRC_ID,
+			     act->rid ? act->rid->fw_id : 0);
+#endif
+	MCDI_STRUCT_SET_DWORD(response, MAE_ACTION_RULE_RESPONSE_COUNTER_ID,
+			      act->count ? act->count->cnt->fw_id :
+			      MC_CMD_MAE_COUNTER_ALLOC_OUT_COUNTER_ID_NULL);
+	MCDI_SET_DWORD(inbuf, MAE_ACTION_RULE_INSERT_IN_PRIO, prio);
+	rc = efx_mae_populate_match_criteria(match_crit, &rule->match);
+	if (rc)
+		return rc;
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_MAE_ACTION_RULE_INSERT, inbuf, sizeof(inbuf),
+			  outbuf, sizeof(outbuf), &outlen);
+	if (rc)
+		return rc;
+	if (outlen < sizeof(outbuf))
+		return -EIO;
+	rule->fw_id = MCDI_DWORD(outbuf, MAE_ACTION_RULE_INSERT_OUT_AR_ID);
+	return 0;
+}
+
+int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
+			    u32 prio)
+{
+	if (rule->is_ar)
+		return efx_mae_insert_lhs_action_rule(efx, rule, prio);
+	return efx_mae_insert_lhs_outer_rule(efx, rule, prio);
+}
+
+static int efx_mae_remove_lhs_outer_rule(struct efx_nic *efx,
+					 struct efx_tc_lhs_rule *rule)
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_MAE_OUTER_RULE_REMOVE_OUT_LEN(1));
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_MAE_OUTER_RULE_REMOVE_IN_LEN(1));
@@ -1665,6 +1816,13 @@ int efx_mae_remove_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule)
 	 */
 	rule->fw_id = MC_CMD_MAE_OUTER_RULE_INSERT_OUT_OUTER_RULE_ID_NULL;
 	return 0;
+}
+
+int efx_mae_remove_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule)
+{
+	if (rule->is_ar)
+		return efx_mae_delete_rule(efx, rule->fw_id);
+	return efx_mae_remove_lhs_outer_rule(efx, rule);
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
@@ -1939,7 +2097,7 @@ static int efx_mae_populate_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_crit),
 	MCDI_STRUCT_SET_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_INGRESS_MPORT_SELECTOR_MASK,
 			      match->mask.ingress_port);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	EFX_POPULATE_DWORD_4(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS),
+	EFX_POPULATE_DWORD_5(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS),
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_DO_CT,
 			     match->value.ct_state_trk,
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_CT_HIT,
@@ -1947,8 +2105,10 @@ static int efx_mae_populate_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_crit),
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_IS_IP_FRAG,
 			     match->value.ip_frag,
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_FIRST_FRAG,
-			     match->value.ip_firstfrag);
-	EFX_POPULATE_DWORD_4(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS_MASK),
+			     match->value.ip_firstfrag,
+			     MAE_FIELD_MASK_VALUE_PAIRS_V2_TCP_SYN_FIN_RST,
+			     match->value.tcp_syn_fin_rst);
+	EFX_POPULATE_DWORD_5(*_MCDI_STRUCT_DWORD(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_FLAGS_MASK),
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_DO_CT,
 			     match->mask.ct_state_trk,
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_CT_HIT,
@@ -1956,7 +2116,9 @@ static int efx_mae_populate_match_criteria(MCDI_DECLARE_STRUCT_PTR(match_crit),
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_IS_IP_FRAG,
 			     match->mask.ip_frag,
 			     MAE_FIELD_MASK_VALUE_PAIRS_V2_IP_FIRST_FRAG,
-			     match->mask.ip_firstfrag);
+			     match->mask.ip_firstfrag,
+			     MAE_FIELD_MASK_VALUE_PAIRS_V2_TCP_SYN_FIN_RST,
+			     match->mask.tcp_syn_fin_rst);
 	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_RECIRC_ID,
 			     match->value.recirc_id);
 	MCDI_STRUCT_SET_BYTE(match_crit, MAE_FIELD_MASK_VALUE_PAIRS_V2_RECIRC_ID_MASK,
@@ -2159,4 +2321,46 @@ int efx_mae_delete_rule(struct efx_nic *efx, u32 id)
 	if (WARN_ON(MCDI_DWORD(outbuf, MAE_ACTION_RULE_DELETE_OUT_DELETED_AR_ID) != id))
 		return -EIO;
 	return 0;
+}
+
+int efx_init_mae(struct efx_nic *efx)
+{
+	struct efx_mae *mae = kmalloc(sizeof(*mae), GFP_KERNEL);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	int rc;
+#endif
+
+	if (!mae)
+		return -ENOMEM;
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	mutex_init(&mae->mports_mutex);
+	rc = rhashtable_init(&mae->mports_ht, &efx_mae_mports_ht_params);
+	if (rc < 0) {
+		kfree(mae);
+		return rc;
+	}
+#endif
+	efx->mae = mae;
+	mae->efx = efx;
+	INIT_WORK(&mae->mport_work, efx_mae_mport_work);
+	return 0;
+}
+
+void efx_fini_mae(struct efx_nic *efx)
+{
+	struct efx_mae *mae = efx->mae;
+
+	if (!mae)
+		return;
+
+	cancel_work_sync(&mae->mport_work);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	mutex_lock(&mae->mports_mutex);
+	rhashtable_destroy(&mae->mports_ht);
+	mutex_unlock(&mae->mports_mutex);
+	mutex_destroy(&mae->mports_mutex);
+#endif
+	kfree(mae);
+	efx->mae = NULL;
 }

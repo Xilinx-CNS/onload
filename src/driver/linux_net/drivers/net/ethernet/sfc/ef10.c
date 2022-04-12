@@ -12,6 +12,7 @@
 #include "io.h"
 #include "mcdi.h"
 #include "mcdi_pcol.h"
+#include "mcdi_port.h"
 #include "mcdi_port_common.h"
 #include "nic.h"
 #include "mcdi_filters.h"
@@ -236,8 +237,8 @@ static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 	if (rc)
 		return rc;
 	if (outlen < MC_CMD_GET_CAPABILITIES_OUT_LEN) {
-		netif_err(efx, drv, efx->net_dev,
-			  "unable to read datapath firmware capabilities\n");
+		pci_err(efx->pci_dev,
+			"unable to read datapath firmware capabilities\n");
 		return -EIO;
 	}
 
@@ -261,8 +262,8 @@ static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 	}
 
 	if (!efx_ef10_has_cap(nic_data->datapath_caps, RX_PREFIX_LEN_14)) {
-		netif_err(efx, probe, efx->net_dev,
-			  "current firmware does not support an RX prefix\n");
+		pci_err(efx->pci_dev,
+			"current firmware does not support an RX prefix\n");
 		return -ENODEV;
 	}
 
@@ -275,22 +276,22 @@ static int efx_ef10_init_datapath_caps(struct efx_nic *efx)
 			return rc;
 	} else {
 		/* keep default VI stride */
-		netif_dbg(efx, probe, efx->net_dev,
-			  "firmware did not report VI window mode, assuming vi_stride = %u\n",
-			  efx->vi_stride);
+		pci_dbg(efx->pci_dev,
+			"firmware did not report VI window mode, assuming vi_stride = %u\n",
+			efx->vi_stride);
 	}
 
 	if (outlen >= MC_CMD_GET_CAPABILITIES_V4_OUT_LEN) {
 		efx->num_mac_stats = MCDI_WORD(outbuf,
 				GET_CAPABILITIES_V4_OUT_MAC_STATS_NUM_STATS);
-		netif_dbg(efx, probe, efx->net_dev,
-			  "firmware reports num_mac_stats = %u\n",
-			  efx->num_mac_stats);
+		pci_dbg(efx->pci_dev,
+			"firmware reports num_mac_stats = %u\n",
+			efx->num_mac_stats);
 	} else {
 		/* leave num_mac_stats as the default value, MC_CMD_MAC_NSTATS */
-		netif_dbg(efx, probe, efx->net_dev,
-			  "firmware did not report num_mac_stats, assuming %u\n",
-			  efx->num_mac_stats);
+		pci_dbg(efx->pci_dev,
+			"firmware did not report num_mac_stats, assuming %u\n",
+			efx->num_mac_stats);
 	}
 
 	return 0;
@@ -400,12 +401,12 @@ static int efx_ef10_get_timer_workarounds(struct efx_nic *efx)
 		}
 	}
 
-	netif_dbg(efx, probe, efx->net_dev,
-		  "workaround for bug 35388 is %sabled\n",
-		  nic_data->workaround_35388 ? "en" : "dis");
-	netif_dbg(efx, probe, efx->net_dev,
-		  "workaround for bug 61265 is %sabled\n",
-		  nic_data->workaround_61265 ? "en" : "dis");
+	pci_dbg(efx->pci_dev,
+		"workaround for bug 35388 is %sabled\n",
+		nic_data->workaround_35388 ? "en" : "dis");
+	pci_dbg(efx->pci_dev,
+		"workaround for bug 61265 is %sabled\n",
+		nic_data->workaround_61265 ? "en" : "dis");
 
 	return rc;
 }
@@ -434,9 +435,9 @@ static void efx_ef10_process_timer_config(struct efx_nic *efx,
 		efx->timer_max_ns = max_count * efx->timer_quantum_ns;
 	}
 
-	netif_dbg(efx, probe, efx->net_dev,
-		  "got timer properties from MC: quantum %u ns; max %u ns\n",
-		  efx->timer_quantum_ns, efx->timer_max_ns);
+	pci_dbg(efx->pci_dev,
+		"got timer properties from MC: quantum %u ns; max %u ns\n",
+		efx->timer_quantum_ns, efx->timer_max_ns);
 }
 
 static int efx_ef10_get_timer_config(struct efx_nic *efx)
@@ -1385,8 +1386,8 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 		nic_data->must_realloc_vis = false;
 	}
 
-	nic_data->mc_stats = kmalloc(efx->num_mac_stats * sizeof(__le64),
-				     GFP_KERNEL);
+	nic_data->mc_stats = kmalloc_array(efx->num_mac_stats, sizeof(__le64),
+					   GFP_KERNEL);
 	if (!nic_data->mc_stats)
 		return -ENOMEM;
 
@@ -1477,7 +1478,7 @@ static void efx_ef10_reset_mc_allocations(struct efx_nic *efx)
 	efx->vport.vport_id = EVB_PORT_ID_ASSIGNED;
 #ifdef CONFIG_SFC_SRIOV
 	if (nic_data->vf)
-		for (i = 0; i < efx->vf_count; i++)
+		for (i = 0; i < nic_data->vf_count; i++)
 			nic_data->vf[i].vport_id = 0;
 #endif
 
@@ -1941,6 +1942,24 @@ static size_t efx_ef10_describe_stats(struct efx_nic *efx, u8 *names)
 				      mask, names);
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_FECSTATS)
+static void efx_ef10_get_fec_stats(struct efx_nic *efx,
+				   struct ethtool_fec_stats *fec_stats)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+	DECLARE_BITMAP(mask, EF10_STAT_COUNT) = {};
+	u64 *stats = nic_data->stats;
+
+	efx_ef10_get_stat_mask(efx, mask);
+	if (test_bit(EF10_STAT_fec_corrected_errors, mask))
+		fec_stats->corrected_blocks.total =
+			stats[EF10_STAT_fec_corrected_errors];
+	if (test_bit(EF10_STAT_fec_uncorrected_errors, mask))
+		fec_stats->uncorrectable_blocks.total =
+			stats[EF10_STAT_fec_uncorrected_errors];
+}
+#endif
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_STATS64)
 static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 					   struct rtnl_link_stats64 *core_stats)
@@ -1969,7 +1988,7 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 		return stats_count;
 
 #ifdef CONFIG_SFC_SRIOV
-	if (efx->vf_count) {
+	if (nic_data->vf_count || efx->type->is_vf) {
 		/* Use vadaptor stats. */
 		core_stats->rx_packets = stats[EF10_STAT_rx_unicast] +
 					 stats[EF10_STAT_rx_multicast] +
@@ -3371,7 +3390,10 @@ static int efx_ef10_handle_rx_event(struct efx_channel *channel,
 				    const efx_qword_t *event)
 {
 	unsigned int rx_bytes, next_ptr_lbits, rx_queue_label, rx_l4_class;
-	unsigned int rx_eth_tag_class, rx_l3_class, rx_encap_hdr;
+	unsigned int rx_l3_class, rx_encap_hdr;
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
+	unsigned int rx_eth_tag_class;
+#endif
 	unsigned int n_descs, n_packets, i;
 	struct efx_nic *efx = channel->efx;
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
@@ -3387,7 +3409,9 @@ static int efx_ef10_handle_rx_event(struct efx_channel *channel,
 	rx_bytes = EFX_QWORD_FIELD(*event, ESF_DZ_RX_BYTES);
 	next_ptr_lbits = EFX_QWORD_FIELD(*event, ESF_DZ_RX_DSC_PTR_LBITS);
 	rx_queue_label = EFX_QWORD_FIELD(*event, ESF_DZ_RX_QLABEL);
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
 	rx_eth_tag_class = EFX_QWORD_FIELD(*event, ESF_DZ_RX_ETH_TAG_CLASS);
+#endif
 	rx_l3_class = EFX_QWORD_FIELD(*event, ESF_DZ_RX_L3_CLASS);
 	rx_l4_class = EFX_QWORD_FIELD(*event, ESF_FZ_RX_L4_CLASS);
 	rx_cont = EFX_QWORD_FIELD(*event, ESF_DZ_RX_CONT);
@@ -4067,7 +4091,7 @@ static int efx_ef10_set_mac_address(struct efx_nic *efx)
 			/* MAC address successfully changed by VF (with MAC
 			 * spoofing) so update the parent PF if possible.
 			 */
-			for (i = 0; i < efx_pf->vf_count; ++i) {
+			for (i = 0; i < nic_data->vf_count; ++i) {
 				struct ef10_vf *vf = nic_data->vf + i;
 
 				if (vf->efx == efx) {
@@ -5281,13 +5305,13 @@ static ssize_t forward_fcs_store(struct device *dev,
 	bool old_forward_fcs = efx->forward_fcs;
 #endif
 
-	if (!strcmp(buf, "1\n"))
+	if (sysfs_streq(buf, "1"))
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
 		efx->forward_fcs = true;
 #else
 		efx->net_dev->wanted_features |= NETIF_F_RXFCS | NETIF_F_RXALL;
 #endif
-	else if (!strcmp(buf, "0\n"))
+	else if (sysfs_streq(buf, "0"))
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_FCS)
 		efx->forward_fcs = false;
 #else
@@ -5740,6 +5764,10 @@ static void efx_ef10_remove_vf(struct efx_nic *efx)
 	efx_ef10_remove(efx);
 
 #if defined(CONFIG_SFC_SRIOV) && (!defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN)))
+	/* If PCI probe fails early there is no NIC specific data yet */
+	if (!nic_data)
+		return;
+
 	if (efx->pci_dev->is_virtfn) {
 		pci_dev_pf = efx->pci_dev->physfn;
 		if (pci_dev_pf) {
@@ -5823,6 +5851,30 @@ static unsigned int ef10_check_caps(const struct efx_nic *efx,
 	}
 }
 
+static unsigned int efx_ef10_recycle_ring_size(const struct efx_nic *efx)
+{
+	unsigned int ret = EFX_RECYCLE_RING_SIZE_10G;
+
+	/* There is no difference between PFs and VFs. The size is based on
+	 * the maximum link speed of a given NIC.
+	 */
+	switch (efx->pci_dev->device & 0xfff) {
+	case 0x0903:	/* Farmingdale can do up to 10G */
+		break;
+	case 0x0923:	/* Greenport can do up to 40G */
+	case 0x0a03:	/* Medford can do up to 40G */
+		ret *= 4;
+		break;
+	default:	/* Medford2 can do up to 100G */
+		ret *= 10;
+	}
+
+	if (IS_ENABLED(CONFIG_PPC64))
+		ret *= 4;
+
+	return ret;
+}
+
 #if !defined(EFX_USE_KCOMPAT) || defined(NETIF_F_IPV6_CSUM)
 #define EF10_OFFLOAD_FEATURES		\
 	(NETIF_F_IP_CSUM |		\
@@ -5866,7 +5918,6 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.pull_stats = efx_ef10_pull_stats_vf,
 	.stop_stats = efx_ef10_stop_stats_vf,
 	.update_stats_period = efx_ef10_vf_schedule_stats_work,
-	.set_id_led = efx_mcdi_set_id_led,
 	.push_irq_moderation = efx_ef10_push_irq_moderation,
 	.reconfigure_mac = efx_ef10_mac_reconfigure,
 	.check_mac_fault = efx_mcdi_mac_check_fault,
@@ -5997,6 +6048,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 #endif
 	.rx_hash_key_size = 40,
 	.check_caps = ef10_check_caps,
+	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
 };
 #endif
 
@@ -6025,7 +6077,6 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.describe_stats = efx_ef10_describe_stats,
 	.update_stats = efx_ef10_update_stats_pf,
 	.pull_stats = efx_ef10_pull_stats_pf,
-	.set_id_led = efx_mcdi_set_id_led,
 	.push_irq_moderation = efx_ef10_push_irq_moderation,
 	.reconfigure_mac = efx_ef10_mac_reconfigure,
 	.check_mac_fault = efx_mcdi_mac_check_fault,
@@ -6033,6 +6084,9 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.get_wol = efx_ef10_get_wol,
 	.set_wol = efx_ef10_set_wol,
 	.resume_wol = efx_port_dummy_op_void,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_FECSTATS)
+	.get_fec_stats = efx_ef10_get_fec_stats,
+#endif
 	.test_chip = efx_ef10_test_chip,
 	.test_nvram = efx_mcdi_nvram_test_all,
 	.mcdi_request = efx_ef10_mcdi_request,
@@ -6196,4 +6250,5 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 #endif
 	.rx_hash_key_size = 40,
 	.check_caps = ef10_check_caps,
+	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
 };

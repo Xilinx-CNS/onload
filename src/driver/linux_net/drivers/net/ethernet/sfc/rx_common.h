@@ -13,6 +13,12 @@
 #include "mcdi.h"
 #include "net_driver.h"
 
+/* Number of RX buffers to recycle pages for. When creating the RX page recycle
+ * ring, this number is divided by the number of buffers per page to calculate
+ * the number of pages to store in the RX page recycle ring.
+ */
+#define EFX_RECYCLE_RING_SIZE_10G	256
+
 void efx_rx_config_page_split(struct efx_nic *efx);
 
 int efx_probe_rx_queue(struct efx_rx_queue *rx_queue);
@@ -116,6 +122,14 @@ struct efx_arfs_rule *efx_rps_hash_add(struct efx_nic *efx,
 
 void efx_rps_hash_del(struct efx_nic *efx, const struct efx_filter_spec *spec);
 #endif
+
+void efx_filter_clear_ntuple(struct efx_nic *efx);
+int efx_filter_ntuple_get(struct efx_nic *efx, u32 id,
+			  struct efx_filter_spec *spec);
+int efx_filter_ntuple_insert(struct efx_nic *efx, struct efx_filter_spec *spec);
+int efx_filter_ntuple_remove(struct efx_nic *efx, u32 id);
+size_t efx_filter_count_ntuple(struct efx_nic *efx);
+void efx_filter_get_ntuple_ids(struct efx_nic *efx, u32 *buf, u32 size);
 
 int efx_init_filters(struct efx_nic *efx);
 void efx_fini_filters(struct efx_nic *efx);

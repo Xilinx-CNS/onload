@@ -18,11 +18,165 @@
 #include "debugfs.h"
 #endif
 #include "ef100_iova.h"
+#include "ef100_netdev.h"
 
 #if defined(CONFIG_SFC_VDPA)
 #define EFX_VDPA_NAME_LEN 32
 
 static const char * const filter_names[] = { "bcast", "ucast", "mcast" };
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+static const struct virtio_device_id ef100_vdpa_id_table[] = {
+	{ .device = VIRTIO_ID_NET, .vendor = PCI_VENDOR_ID_REDHAT_QUMRANET },
+	{ 0 },
+};
+
+static void ef100_vdpa_net_dev_del(struct vdpa_mgmt_dev *mgmt_dev,
+				   struct vdpa_device *vdev)
+{
+	struct efx_probe_data *probe_data;
+	struct ef100_nic_data *nic_data;
+	struct efx_nic *efx;
+	int rc;
+
+	efx = pci_get_drvdata(to_pci_dev(mgmt_dev->device));
+	probe_data = container_of(efx, struct efx_probe_data, efx);
+	nic_data = efx->nic_data;
+
+	ef100_vdpa_fini(probe_data);
+	rc = ef100_probe_netdev(probe_data);
+	/* Update the bar_config value to maintain consistency across
+	 * different user interfaces for vdpa device management
+	 */
+	if (rc) {
+#ifdef EFX_NOT_UPSTREAM
+		nic_data->bar_config = EF100_BAR_CONFIG_NONE;
+#endif
+		pci_err(efx->pci_dev,
+			"netdev initialisation failed, err: %d\n", rc);
+	} else {
+		nic_data->bar_config = EF100_BAR_CONFIG_EF100;
+		pci_dbg(efx->pci_dev,
+			"vdpa net device deleted, vf: %u\n",
+			nic_data->vf_index);
+	}
+}
+
+static int ef100_vdpa_net_dev_add(struct vdpa_mgmt_dev *mgmt_dev,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
+				  const char *name,
+				  const struct vdpa_dev_set_config *config)
+#else
+				  const char *name)
+#endif
+{
+	struct efx_probe_data *probe_data;
+	struct ef100_vdpa_nic *vdpa_nic;
+	struct ef100_nic_data *nic_data;
+	struct efx_nic *efx;
+	int rc, err;
+
+	efx = pci_get_drvdata(to_pci_dev(mgmt_dev->device));
+	if (efx->vdpa_nic) {
+		pci_warn(efx->pci_dev,
+			 "vDPA device already exists on this VF\n");
+		return -EEXIST;
+	}
+
+	probe_data = container_of(efx, struct efx_probe_data, efx);
+	nic_data = efx->nic_data;
+
+	ef100_remove_netdev(probe_data);
+	rc = ef100_vdpa_init(probe_data);
+	if (rc) {
+		pci_err(efx->pci_dev,
+			"ef100_vdpa_init failed, err: %d\n", rc);
+		goto err_vdpa_init;
+	}
+
+	/* Update the bar_config value to maintain consistency across
+	 * different user interfaces for vdpa device management
+	 */
+	nic_data->bar_config = EF100_BAR_CONFIG_VDPA;
+
+	/* TODO: handle in_order feature with management interface
+	 * This will be done in VDPALINUX-242
+	 */
+
+	vdpa_nic = ef100_vdpa_create(efx, name);
+	if (IS_ERR(vdpa_nic)) {
+		pci_err(efx->pci_dev,
+			"vDPA device creation failed, vf: %u, err: %ld\n",
+			nic_data->vf_index, PTR_ERR(vdpa_nic));
+		rc = PTR_ERR(vdpa_nic);
+		ef100_vdpa_fini(probe_data);
+		goto err_vdpa_init;
+	} else {
+		pci_info(efx->pci_dev,
+			 "vDPA net device created, vf: %u\n",
+			 nic_data->vf_index);
+	}
+
+	/* TODO: handle MAC and MTU configuration from config parameter */
+	return 0;
+
+err_vdpa_init:
+	err = ef100_probe_netdev(probe_data);
+	if (err) {
+#ifdef EFX_NOT_UPSTREAM
+		nic_data->bar_config = EF100_BAR_CONFIG_NONE;
+#endif
+		pci_err(efx->pci_dev,
+			"netdev initialisation failed, err: %d\n", err);
+	} else {
+		nic_data->bar_config = EF100_BAR_CONFIG_EF100;
+		pci_dbg(efx->pci_dev,
+			"ef100 netdev initialized, vf: %u\n",
+			nic_data->vf_index);
+	}
+	return rc;
+}
+
+static const struct vdpa_mgmtdev_ops ef100_vdpa_net_mgmtdev_ops = {
+	.dev_add = ef100_vdpa_net_dev_add,
+	.dev_del = ef100_vdpa_net_dev_del
+};
+
+int ef100_vdpa_register_mgmtdev(struct efx_nic *efx)
+{
+	struct vdpa_mgmt_dev *mgmt_dev;
+	int rc;
+
+	mgmt_dev = kzalloc(sizeof(*mgmt_dev), GFP_KERNEL);
+	if (!mgmt_dev)
+		return -ENOMEM;
+
+	efx->mgmt_dev = mgmt_dev;
+	mgmt_dev->device = &efx->pci_dev->dev;
+	mgmt_dev->id_table = ef100_vdpa_id_table;
+	mgmt_dev->ops = &ef100_vdpa_net_mgmtdev_ops;
+	rc = vdpa_mgmtdev_register(mgmt_dev);
+	if (rc) {
+		pci_err(efx->pci_dev,
+			"vdpa management device register failed, err: %d\n",
+			rc);
+		kfree(mgmt_dev);
+		efx->mgmt_dev = NULL;
+	} else {
+		pci_dbg(efx->pci_dev, "vdpa management device created\n");
+	}
+
+	return rc;
+}
+
+void ef100_vdpa_unregister_mgmtdev(struct efx_nic *efx)
+{
+	pci_dbg(efx->pci_dev, "Unregister vdpa_management_device\n");
+	if (efx->mgmt_dev)
+		vdpa_mgmtdev_unregister(efx->mgmt_dev);
+	efx->mgmt_dev = NULL;
+}
+#endif
 
 static int
 ef100_vdpa_set_mac_filter(struct efx_nic *efx,
@@ -206,7 +360,9 @@ static ssize_t vdpa_mac_store(struct device *dev,
 				 const char *buf, size_t count)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 	struct ef100_nic_data *nic_data = efx->nic_data;
+#endif
 	struct ef100_vdpa_nic *vdpa_nic;
 	struct vdpa_device *vdev;
 	u8 mac_address[ETH_ALEN];
@@ -221,12 +377,14 @@ static ssize_t vdpa_mac_store(struct device *dev,
 
 	mutex_lock(&vdpa_nic->lock);
 	vdev = &vdpa_nic->vdpa_dev;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 	if (nic_data->vdpa_class != EF100_VDPA_CLASS_NET) {
 		dev_err(&vdev->dev,
 			"Invalid vDPA device class: %u\n", nic_data->vdpa_class);
 		rc = -EINVAL;
 		goto err;
 	}
+#endif
 
 	rc = sscanf(buf, "%02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx",
 		    &mac_address[0], &mac_address[1], &mac_address[2],
@@ -255,6 +413,7 @@ err:
 static DEVICE_ATTR_RW(vdpa_mac);
 #endif
 
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 static ssize_t vdpa_class_show(struct device *dev,
 				struct device_attribute *attr,
 				char *buf_out)
@@ -315,7 +474,11 @@ static ssize_t vdpa_class_store(struct device *dev,
 	switch (nic_data->vdpa_class) {
 	case EF100_VDPA_CLASS_NONE:
 		if (vdpa_class == EF100_VDPA_CLASS_NET) {
-			vdpa_nic = ef100_vdpa_create(efx);
+			char name[EFX_VDPA_NAME_LEN];
+
+			snprintf(name, sizeof(name), EFX_VDPA_NAME(nic_data));
+			/* only vdpa net devices are supported as of now */
+			vdpa_nic = ef100_vdpa_create(efx, name, EF100_VDPA_CLASS_NET);
 			if (IS_ERR(vdpa_nic)) {
 				pci_err(efx->pci_dev,
 					"vDPA device creation failed, err: %ld",
@@ -325,7 +488,6 @@ static ssize_t vdpa_class_store(struct device *dev,
 			}
 
 			vdpa_nic->in_order = in_order;
-			nic_data->vdpa_class = EF100_VDPA_CLASS_NET;
 			pci_info(efx->pci_dev,
 				 "vDPA net device created, vf: %u\n",
 				 nic_data->vf_index);
@@ -386,28 +548,35 @@ fail:
 }
 
 static DEVICE_ATTR_RW(vdpa_class);
+#endif
 
 static int vdpa_create_files(struct efx_nic *efx)
 {
+#if (defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)) ||\
+defined(EFX_NOT_UPSTREAM)
 	int rc;
+#endif
 
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_vdpa_class);
 	if (rc) {
 		pci_err(efx->pci_dev, "vdpa_class file creation failed\n");
-		goto fail;
+		return rc;
 	}
+#endif
 
 #ifdef EFX_NOT_UPSTREAM
 	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_vdpa_mac);
 	if (rc) {
 		pci_err(efx->pci_dev, "vdpa_mac file creation failed\n");
-		goto fail;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+		device_remove_file(&efx->pci_dev->dev, &dev_attr_vdpa_class);
+#endif
+		return rc;
 	}
 #endif
 
 	return 0;
-fail:
-	return rc;
 }
 
 static void vdpa_remove_files(struct efx_nic *efx)
@@ -415,7 +584,9 @@ static void vdpa_remove_files(struct efx_nic *efx)
 #ifdef EFX_NOT_UPSTREAM
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_vdpa_mac);
 #endif
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_vdpa_class);
+#endif
 }
 
 static int vdpa_update_domain(struct ef100_vdpa_nic *vdpa_nic)
@@ -457,7 +628,7 @@ static int vdpa_update_domain(struct ef100_vdpa_nic *vdpa_nic)
 int ef100_vdpa_init(struct efx_probe_data *probe_data)
 {
 	struct efx_nic *efx = &probe_data->efx;
-	int rc;
+	int rc = 0;
 
 	if (efx->state != STATE_PROBED) {
 		pci_err(efx->pci_dev, "Invalid efx state %u", efx->state);
@@ -473,28 +644,42 @@ int ef100_vdpa_init(struct efx_probe_data *probe_data)
 	rc = ef100_filter_table_probe(efx);
 	if (rc) {
 		pci_err(efx->pci_dev, "filter probe failed, err: %d\n", rc);
-		return rc;
+		goto err_remove_vdpa_files;
 	}
 
-	if (efx->type->filter_table_probe)
-		rc = efx->type->filter_table_probe(efx);
+	if (!efx->type->filter_table_probe)
+		goto err_remove_vdpa_files;
 
-	return 0;
+	rc = efx->type->filter_table_probe(efx);
+	if (!rc)
+		return 0;
+
+	pci_err(efx->pci_dev, "filter_table_probe failed, err: %d\n", rc);
+	efx_mcdi_filter_table_remove(efx);
+
+err_remove_vdpa_files:
+	vdpa_remove_files(efx);
+	efx->state = STATE_PROBED;
+	return rc;
 }
 
 void ef100_vdpa_fini(struct efx_probe_data *probe_data)
 {
 	struct efx_nic *efx = &probe_data->efx;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 	struct ef100_nic_data *nic_data = efx->nic_data;
+#endif
 
-	if (efx->state != STATE_VDPA) {
+	if (efx->state != STATE_VDPA && efx->state != STATE_DISABLED) {
 		pci_err(efx->pci_dev, "Invalid efx state %u", efx->state);
 		return;
 	}
 
 	/* Handle vdpa device deletion, if not done explicitly */
 	ef100_vdpa_delete(efx);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 	nic_data->vdpa_class = EF100_VDPA_CLASS_NONE;
+#endif
 
 	vdpa_remove_files(efx);
 
@@ -636,10 +821,20 @@ int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic)
        struct ef100_nic_data *nic_data = efx->nic_data;
        struct efx_mcdi_iface *mcdi;
        struct efx_buffer mcdi_buf;
+       enum efx_mcdi_mode mode;
        struct device *dev;
        int rc;
 
+       /* Set MCDI mode to fail to prevent any new commands and
+	* then wait for outstanding commands to complete.
+	*/
        mcdi = efx_mcdi(efx);
+       spin_lock_bh(&mcdi->iface_lock);
+       mode = mcdi->mode;
+       mcdi->mode = MCDI_MODE_FAIL;
+       spin_unlock_bh(&mcdi->iface_lock);
+       efx_mcdi_wait_for_cleanup(efx);
+
        dev = &vdpa_nic->vdpa_dev.dev;
        spin_lock_bh(&mcdi->iface_lock);
 
@@ -655,6 +850,7 @@ int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic)
        ef100_vdpa_free_buffer(vdpa_nic, &nic_data->mcdi_buf);
        memcpy(&nic_data->mcdi_buf, &mcdi_buf, sizeof(struct efx_buffer));
        efx->mcdi_buf_mode = EFX_BUF_MODE_EF100;
+       mcdi->mode = mode;
        spin_unlock_bh(&mcdi->iface_lock);
 
        return 0;
@@ -669,11 +865,20 @@ int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
        struct ef100_nic_data *nic_data = efx->nic_data;
        struct efx_mcdi_iface *mcdi;
        struct efx_buffer mcdi_buf;
+       enum efx_mcdi_mode mode;
        int rc;
 
+       /* Set MCDI mode to fail to prevent any new commands and
+	* then wait for outstanding commands to complete.
+	*/
        mcdi = efx_mcdi(efx);
        spin_lock_bh(&mcdi->iface_lock);
+       mode = mcdi->mode;
+       mcdi->mode = MCDI_MODE_FAIL;
+       spin_unlock_bh(&mcdi->iface_lock);
+       efx_mcdi_wait_for_cleanup(efx);
 
+       spin_lock_bh(&mcdi->iface_lock);
        /* First, prepare the MCDI buffer for vDPA mode */
        mcdi_buf.dma_addr = mcdi_iova;
        /* iommu_map requires page aligned memory */
@@ -688,6 +893,7 @@ int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
        efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
        memcpy(&nic_data->mcdi_buf, &mcdi_buf, sizeof(struct efx_buffer));
        efx->mcdi_buf_mode = EFX_BUF_MODE_VDPA;
+       mcdi->mode = mode;
        spin_unlock_bh(&mcdi->iface_lock);
 
        return 0;
@@ -736,17 +942,32 @@ out:
 	return rc;
 }
 
-struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
+					 const char *dev_name,
+					 enum ef100_vdpa_class dev_type)
+#else
+struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
+					 const char *dev_name)
+#endif
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct ef100_vdpa_nic *vdpa_nic;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
-	char name[EFX_VDPA_NAME_LEN];
-#endif
 	unsigned int allocated_vis;
 	struct device *dev;
 	int rc;
 	u8 i;
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+	if (dev_type != EF100_VDPA_CLASS_NET) {
+		/* only vdpa net devices are supported as of now */
+		pci_err(efx->pci_dev,
+			"Invalid vDPA device class: %u\n", dev_type);
+		return ERR_PTR(-EINVAL);
+	} else {
+		nic_data->vdpa_class = dev_type;
+	}
+#endif
 
 	rc = vdpa_allocate_vis(efx, &allocated_vis);
 	if (rc) {
@@ -756,9 +977,6 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 		return ERR_PTR(rc);
 	}
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
-	snprintf(name, sizeof(name), EFX_VDPA_NAME(nic_data));
-#endif
 	vdpa_nic = vdpa_alloc_device(struct ef100_vdpa_nic,
 				     vdpa_dev, &efx->pci_dev->dev,
 				     &ef100_vdpa_config_ops
@@ -766,7 +984,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 				     , (allocated_vis - 1) * 2
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
-				     , name
+				     , dev_name
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
 				     , false
@@ -845,11 +1063,20 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx)
 	if (rc)
 		goto err_put_device;
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+	vdpa_nic->vdpa_dev.mdev = efx->mgmt_dev;
+	/* Caller must invoke this routine in the management device
+	 * dev_add() callback
+	 */
+	rc = _vdpa_register_device(&vdpa_nic->vdpa_dev,
+				   (allocated_vis - 1) * 2);
+#else
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_REGISTER_NVQS_PARAM)
 	rc = vdpa_register_device(&vdpa_nic->vdpa_dev,
 				  (allocated_vis - 1) * 2);
 #else
 	rc = vdpa_register_device(&vdpa_nic->vdpa_dev);
+#endif
 #endif
 	if (rc) {
 		pci_err(efx->pci_dev,
@@ -880,7 +1107,16 @@ void ef100_vdpa_delete(struct efx_nic *efx)
 		pci_info(efx->pci_dev,
 			 "%s: Calling vdpa unregister device\n", __func__);
 #endif
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 		vdpa_unregister_device(&efx->vdpa_nic->vdpa_dev);
+#else
+		/* Caller must invoke this routine as part of
+		 * management device dev_del() callback
+		 */
+		_vdpa_unregister_device(&efx->vdpa_nic->vdpa_dev);
+#endif
+
 #ifdef EFX_NOT_UPSTREAM
 		pci_info(efx->pci_dev,
 			 "%s: vdpa unregister device completed\n", __func__);

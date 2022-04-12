@@ -73,6 +73,7 @@ struct dump_location {
  * @dumpfile: Dumpfile location
  * @addr: Dumpfile buffer address
  * @dma_addr: Dumpfile buffer physical address
+ * @total_pages: Number of pages needed for dump
  * @enabled: Flag for dump enable
  */
 struct efx_dump_data {
@@ -276,19 +277,17 @@ static int efx_dump_alloc_buffer(struct efx_nic *efx)
 		  dump_data->total_pages, mli_depth);
 
 	/* Allocate all MLI pages */
-	dump_data->addr = kmalloc(dump_data->total_pages *
+	dump_data->addr = kcalloc(dump_data->total_pages,
 				  sizeof(void *), GFP_KERNEL);
 	if (!dump_data->addr) {
 		return -ENOMEM;
 	}
-	memset(dump_data->addr, 0, dump_data->total_pages*sizeof(void *));
-	dump_data->dma_addr = kmalloc(dump_data->total_pages *
+	dump_data->dma_addr = kcalloc(dump_data->total_pages,
 				      sizeof(dma_addr_t), GFP_KERNEL);
 	if (!dump_data->dma_addr) {
 		efx_dump_free_buffer(efx);
 		return -ENOMEM;
 	}
-	memset(dump_data->dma_addr, 0, dump_data->total_pages*sizeof(dma_addr_t));
 	for (pgn = 0; pgn < dump_data->total_pages; pgn++) {
 		dump_data->addr[pgn] =
 			dma_alloc_coherent(&efx->pci_dev->dev, MLI_PAGE_SIZE,

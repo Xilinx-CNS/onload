@@ -648,15 +648,10 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_rx_queue *rx_queue,
 #else
 	xdp_init_buff(&xdp, efx->rx_page_buf_step);
 #endif
-	xdp.data = *ehp;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_HEAD)
-	xdp.data_hard_start = xdp.data - XDP_PACKET_HEADROOM;
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_DATA_META)
+
 	/* No support yet for XDP metadata */
-	xdp_set_data_meta_invalid(&xdp);
-#endif
-	xdp.data_end = xdp.data + rx_buf->len;
+	xdp_prepare_buff(&xdp, *ehp - XDP_PACKET_HEADROOM, XDP_PACKET_HEADROOM,
+			 rx_buf->len, false);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	if (efx_rx_queue_channel(rx_queue)->zc) {
@@ -755,7 +750,11 @@ int efx_xdp_rx(struct efx_nic *efx, struct efx_rx_queue *rx_queue,
 #endif
 
 	default:
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_BPF_WARN_INVALID_XDP_ACTION_3PARAM)
+		bpf_warn_invalid_xdp_action(efx->net_dev, xdp_prog, xdp_act);
+#else
 		bpf_warn_invalid_xdp_action(xdp_act);
+#endif
 		fallthrough;
 	case XDP_ABORTED:
 		trace_xdp_exception(efx->net_dev, xdp_prog, xdp_act);

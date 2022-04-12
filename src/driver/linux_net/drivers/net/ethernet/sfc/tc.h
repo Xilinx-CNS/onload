@@ -108,10 +108,6 @@ struct efx_tc_counter_index {
 #define EFX_TC_VF_MAX           (255)
 /* TODO correct this after finding max */
 #define EFX_TC_REMOTE_MAX       (16) /* including for VNIC_TYPE_PLUGIN */
-/* Driver-internal numbering scheme for vports.  See efx_tc_flower_lookup_dev() */
-#define EFX_VPORT_PF		0
-#define EFX_VPORT_VF_OFFSET	1
-#define EFX_VPORT_REMOTE_OFFSET	(EFX_VPORT_VF_OFFSET + EFX_TC_VF_MAX)
 
 struct efx_tc_action_set {
 	u16 vlan_push:2;
@@ -154,6 +150,7 @@ struct efx_tc_match_fields {
 	/* L4 */
 	__be16 l4_sport, l4_dport; /* Ports (UDP, TCP) */
 	__be16 tcp_flags;
+	bool tcp_syn_fin_rst; /* true if ANY of SYN/FIN/RST are set */
 	/* Encap.  The following are *outer* fields.  Note that there are no
 	 * outer eth (L2) fields; this is because TC doesn't have them.
 	 */
@@ -180,21 +177,42 @@ static inline bool efx_tc_match_is_encap(const struct efx_tc_match_fields *mask)
 	       mask->enc_ip_ttl || mask->enc_sport || mask->enc_dport;
 }
 
+/**
+ * enum efx_tc_em_pseudo_type - &struct efx_tc_encap_match pseudo type
+ *
+ * These are used to classify "pseudo" encap matches, which don't refer
+ * to an entry in hardware but rather indicate that a section of the
+ * match space is in use by another Outer Rule.
+ *
+ * @EFX_TC_EM_DIRECT: real HW entry in Outer Rule table; not a pseudo.
+ *	Hardware index in &struct efx_tc_encap_match.fw_id is valid.
+ * @EFX_TC_EM_PSEUDO_OR: registered by an fLHS rule that fits in the OR
+ *	table.  The &struct efx_tc_lhs_rule already holds the HW OR entry.
+ *	Only one reference to this encap match may exist.
+ * @EFX_TC_EM_PSEUDO_TOS: registered by an encap match which includes an
+ *	ip_tos match, to prevent an overlapping encap match _without_
+ *	ip_tos.  The pseudo encap match may be referenced again by
+ *	an encap match with a different ip_tos value, but all ip_tos_mask
+ *	must match the first (stored in our child_ip_tos_mask).
+ */
+enum efx_tc_em_pseudo_type {
+	EFX_TC_EM_DIRECT,
+	EFX_TC_EM_PSEUDO_OR,
+	EFX_TC_EM_PSEUDO_TOS,
+};
+
 struct efx_tc_encap_match {
 	__be32 src_ip, dst_ip;
 	struct in6_addr src_ip6, dst_ip6;
 	__be16 udp_dport;
-	u16 tun_type; /* enum efx_encap_type */
+	u8 ip_tos, ip_tos_mask;
 	struct rhash_head linkage;
+	u16 tun_type; /* enum efx_encap_type */
+	u8 child_ip_tos_mask;
 	refcount_t ref;
+	enum efx_tc_em_pseudo_type type;
 	u32 fw_id; /* index of this entry in firmware encap match table */
-	/* match is present in HW.
-	 * fLHS rules that fit in the OR will register a "pseudo" EM, with
-	 * this set to false, since the struct efx_tc_lhs_rule already
-	 * holds the HW OR entry.  In that case, our fw_id will be unused.
-	 * EMs with hw=true are called "direct" EMs.
-	 */
-	bool hw;
+	struct efx_tc_encap_match *pseudo; /* Referenced pseudo EM if needed */
 };
 
 struct efx_tc_recirc_id {
@@ -258,6 +276,7 @@ struct efx_tc_lhs_rule {
 	struct efx_tc_lhs_action lhs_act;
 	struct rhash_head linkage;
 	u32 fw_id;
+	bool is_ar; /* Action Rule (for OR-AR-CT-AR sequence) */
 };
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
@@ -329,14 +348,13 @@ struct efx_tc_table_ct { /* TABLE_ID_CONNTRACK_TABLE */
  * struct efx_tc_state - control plane data for TC offload
  *
  * @caps: MAE capabilities reported by MCDI
- * @n_mports: length of @mports array
- * @mports: m-port descriptions from MC_CMD_MAE_MPORT_ENUMERATE
  * @block_list: List of &struct efx_tc_block_binding
  * @mutex: Used to serialise operations on TC hashtables
  * @counter_ht: Hashtable of TC counters (FW IDs and counter values)
  * @counter_id_ht: Hashtable mapping TC counter cookies to counters
  * @encap_ht: Hashtable of TC encap actions
  * @mac_ht: Hashtable of MAC address entries (for pedits)
+ * @encap_match_ht: Hashtable of TC encap matches
  * @match_action_ht: Hashtable of TC match-action rules
  * @lhs_rule_ht: Hashtable of TC left-hand (act ct & goto chain) rules
  * @ct_zone_ht: Hashtable of TC conntrack flowtable bindings
@@ -369,8 +387,6 @@ struct efx_tc_table_ct { /* TABLE_ID_CONNTRACK_TABLE */
  */
 struct efx_tc_state {
 	struct mae_caps *caps;
-	unsigned int n_mports;
-	struct mae_mport_desc *mports;
 	struct list_head block_list;
 	struct mutex mutex;
 	struct rhashtable counter_ht;

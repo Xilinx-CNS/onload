@@ -53,6 +53,12 @@ static bool mcdi_logging_default;
 module_param(mcdi_logging_default, bool, 0644);
 MODULE_PARM_DESC(mcdi_logging_default,
 		 "Enable MCDI logging on newly-probed functions");
+#ifdef EFX_NOT_UPSTREAM
+static char *mcdi_log_commands;
+module_param(mcdi_log_commands, charp, 0444);
+MODULE_PARM_DESC(mcdi_log_commands,
+		 "Specify which MCDI commands to log when logging is enabled. Comma or space separated list of hex values e.g. 'b,4c'. An empty string will log all commands");
+#endif
 #endif
 
 static int efx_mcdi_rpc_async_internal(struct efx_nic *efx,
@@ -154,6 +160,50 @@ static unsigned long efx_mcdi_rpc_timeout(struct efx_nic *efx, unsigned int cmd)
 		return efx->type->mcdi_rpc_timeout(efx, cmd);
 }
 
+#ifdef EFX_NOT_UPSTREAM
+static void efx_mcdi_parse_mcdi_list(struct efx_nic *efx, char *list,
+				     unsigned long *bitmap)
+{
+	if (!list || *list == '\0') {
+		bitmap_fill(bitmap, MCDI_NUM_LOG_COMMANDS);
+		return;
+	}
+
+	bitmap_zero(bitmap, MCDI_NUM_LOG_COMMANDS);
+
+	do {
+		int val = -1;
+		int digits, matched;
+
+		matched = sscanf(list, " %x%n", &val, &digits);
+		if (matched >= 1) {
+			list += digits;
+		} else {
+			netif_err(efx, drv, efx->net_dev,
+				  "bad input in mcdi_log_commands\n");
+			break;
+		}
+
+		if (*list == ' ' || *list == ',' || *list == '\0') {
+			/* valid entry */
+			if (val >= 0 && val < MCDI_NUM_LOG_COMMANDS) {
+				set_bit(val, bitmap);
+			} else {
+				netif_warn(efx, drv, efx->net_dev,
+					   "value too large in mcdi_log_commands\n");
+			}
+
+			if (*list)
+				++list;
+		} else {
+			netif_err(efx, drv, efx->net_dev,
+				  "bad input in mcdi_log_commands\n");
+			break;
+		}
+	} while (*list);
+}
+#endif
+
 int efx_mcdi_init(struct efx_nic *efx)
 {
 	struct efx_mcdi_iface *mcdi;
@@ -171,6 +221,9 @@ int efx_mcdi_init(struct efx_nic *efx)
 	if (!mcdi->logging_buffer)
 		goto fail2;
 	mcdi->logging_enabled = mcdi_logging_default;
+#ifdef EFX_NOT_UPSTREAM
+	efx_mcdi_parse_mcdi_list(efx, mcdi_log_commands, mcdi->log_commands);
+#endif
 #endif
 	mcdi->workqueue = create_workqueue("mcdi_wq");
 	if (!mcdi->workqueue)
@@ -335,6 +388,15 @@ void efx_mcdi_post_reset(struct efx_nic *efx)
 	mcdi->new_epoch = true;
 }
 
+#ifdef EFX_NOT_UPSTREAM
+static bool should_log_command(unsigned int cmd, unsigned long *log_commands)
+{
+	if (cmd >= MCDI_NUM_LOG_COMMANDS)
+		return true; /* allow out of range values to be logged */
+	return test_bit(cmd, log_commands);
+}
+#endif
+
 static void efx_mcdi_send_request(struct efx_nic *efx,
 				  struct efx_mcdi_cmd *cmd)
 {
@@ -386,7 +448,12 @@ static void efx_mcdi_send_request(struct efx_nic *efx,
 	}
 
 #ifdef CONFIG_SFC_MCDI_LOGGING
+#ifdef EFX_NOT_UPSTREAM
+	if (mcdi->logging_enabled && !WARN_ON_ONCE(!buf) &&
+	    should_log_command(cmd->cmd, mcdi->log_commands)) {
+#else
 	if (mcdi->logging_enabled && !WARN_ON_ONCE(!buf)) {
+#endif
 		const efx_dword_t *frags[] = { hdr, inbuf };
 		size_t frag_len[] = { hdr_len, round_up(inlen, 4) };
 		const efx_dword_t *frag;
@@ -412,9 +479,9 @@ static void efx_mcdi_send_request(struct efx_nic *efx,
 					dcount = 0;
 					bytes = 0;
 				}
-				bytes += snprintf(buf + bytes,
-						  LOG_LINE_MAX - bytes, " %08x",
-						  le32_to_cpu(frag[i].u32[0]));
+				bytes += scnprintf(buf + bytes,
+						   LOG_LINE_MAX - bytes, " %08x",
+						   le32_to_cpu(frag[i].u32[0]));
 				dcount++;
 			}
 		}
@@ -1132,7 +1199,7 @@ static bool efx_mcdi_complete_cmd(struct efx_mcdi_iface *mcdi,
 	struct efx_nic *efx = mcdi->efx;
 	int rc;
 	size_t resp_hdr_len, resp_data_len;
-	unsigned int respseq, respcmd, error;
+	unsigned int respcmd, error;
 	efx_dword_t hdr;
 	efx_dword_t *outbuf = copybuf ? copybuf->buffer : NULL;
 	u8 bufid = cmd->bufid;
@@ -1142,7 +1209,6 @@ static bool efx_mcdi_complete_cmd(struct efx_mcdi_iface *mcdi,
 	kref_get(&cmd->ref);
 
 	efx->type->mcdi_read_response(efx, bufid, &hdr, 0, 4);
-	respseq = EFX_DWORD_FIELD(hdr, MCDI_HEADER_SEQ);
 	respcmd = EFX_DWORD_FIELD(hdr, MCDI_HEADER_CODE);
 	error = EFX_DWORD_FIELD(hdr, MCDI_HEADER_ERROR);
 
@@ -1158,7 +1224,12 @@ static bool efx_mcdi_complete_cmd(struct efx_mcdi_iface *mcdi,
 	}
 
 #ifdef CONFIG_SFC_MCDI_LOGGING
+#ifdef EFX_NOT_UPSTREAM
+	if (mcdi->logging_enabled && !WARN_ON_ONCE(!mcdi->logging_buffer) &&
+	    should_log_command(cmd->cmd, mcdi->log_commands)) {
+#else
 	if (mcdi->logging_enabled && !WARN_ON_ONCE(!mcdi->logging_buffer)) {
+#endif
 		size_t len;
 		int bytes = 0;
 		int i;
@@ -1180,8 +1251,8 @@ static bool efx_mcdi_complete_cmd(struct efx_mcdi_iface *mcdi,
 			}
 			efx->type->mcdi_read_response(efx, bufid,
 						      &hdr, (i * 4), 4);
-			bytes += snprintf(log + bytes, LOG_LINE_MAX - bytes,
-					" %08x", le32_to_cpu(hdr.u32[0]));
+			bytes += scnprintf(log + bytes, LOG_LINE_MAX - bytes,
+					   " %08x", le32_to_cpu(hdr.u32[0]));
 			dcount++;
 		}
 
@@ -1329,7 +1400,7 @@ static void efx_mcdi_timeout_cmd(struct efx_mcdi_iface *mcdi,
  *	of 4 and no greater than %MCDI_CTL_SDU_LEN_MAX_V1.
  * @outbuf: Response buffer.  May be %NULL if @outlen is 0.
  * @outlen: Length of response buffer, in bytes.  If the actual
- *	reponse is longer than @outlen & ~3, it will be truncated
+ *	response is longer than @outlen & ~3, it will be truncated
  *	to that length.
  * @outlen_actual: Pointer through which to return the actual response
  *	length.  May be %NULL if this is not needed.
@@ -1376,7 +1447,6 @@ int efx_mcdi_rpc_quiet(struct efx_nic *efx, unsigned int cmd,
  * @cmd: Command type number
  * @inbuf: Command parameters
  * @inlen: Length of command parameters, in bytes
- * @outlen: Length to allocate for response buffer, in bytes
  * @complete: Function to be called on completion or cancellation.
  * @cookie: Arbitrary value to be passed to @complete.
  *
@@ -1389,6 +1459,8 @@ int efx_mcdi_rpc_quiet(struct efx_nic *efx, unsigned int cmd,
  * (a) the completion event is received (in NAPI context)
  * (b) event queues are disabled (in the process that disables them)
  * (c) the request times-out (in timer context)
+ *
+ * Return: a negative error code or 0 on success.
  */
 int
 efx_mcdi_rpc_async(struct efx_nic *efx, unsigned int cmd,
@@ -1409,16 +1481,31 @@ int efx_mcdi_rpc_async_quiet(struct efx_nic *efx, unsigned int cmd,
 }
 
 /**
- * efx_mcdi_rpc_client - issue an MCDI command on a non-base client
- * This is a superset of the functionality of efx_mcdi_rpc(), adding:
- * @client_id: A dynamic client ID on which to send this MCDI command, or
- *	MC_CMD_CLIENT_ID_SELF to send the command to the base client (which
- *	makes this function identical to efx_mcdi_rpc()).
+ * efx_mcdi_rpc_client - Issue an MCDI command on a non-base client.
  *
+ * @efx: NIC through which to issue the command.
+ * @client_id: A dynamic client ID on which to send this MCDI command, or
+ *	       MC_CMD_CLIENT_ID_SELF to send the command to the base client
+ *	       (which makes this function identical to efx_mcdi_rpc()).
+ * @cmd: Command type number.
+ * @inbuf: Command parameters.
+ * @inlen: Length of command parameters, in bytes.  Must be a multiple
+ *	   of 4 and no greater than %MCDI_CTL_SDU_LEN_MAX_V1.
+ * @outbuf: Response buffer.  May be %NULL if @outlen is 0.
+ * @outlen: Length of response buffer, in bytes.  If the actual
+ *	    response is longer than @outlen & ~3, it will be truncated
+ *	    to that length.
+ * @outlen_actual: Pointer through which to return the actual response
+ *		   length.  May be %NULL if this is not needed.
+ *
+ * This is a superset of the functionality of efx_mcdi_rpc(), adding the
+ * @client_id.
  * The caller must provide space for 12 additional bytes (beyond inlen) in the
  * memory at inbuf since inbuf may be modified in-situ.
  * MCDI_DECLARE_PROXYABLE_BUF should be used for this. This function may sleep
  * and therefore must be called in process context.
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_mcdi_rpc_client(struct efx_nic *efx, u32 client_id, unsigned int cmd,
 			efx_dword_t *inbuf, size_t inlen, efx_dword_t *outbuf,
@@ -1638,9 +1725,11 @@ void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len)
 	}
 
 	ver_words = (__le16 *)MCDI_PTR(outbuf, GET_VERSION_OUT_VERSION);
-	offset = snprintf(buf, len, "%u.%u.%u.%u",
-			  le16_to_cpu(ver_words[0]), le16_to_cpu(ver_words[1]),
-			  le16_to_cpu(ver_words[2]), le16_to_cpu(ver_words[3]));
+	offset = scnprintf(buf, len, "%u.%u.%u.%u",
+			   le16_to_cpu(ver_words[0]),
+			   le16_to_cpu(ver_words[1]),
+			   le16_to_cpu(ver_words[2]),
+			   le16_to_cpu(ver_words[3]));
 
 	/* EF10 may have multiple datapath firmware variants within a
 	 * single version.  Report which variants are running.
@@ -1663,8 +1752,8 @@ void efx_mcdi_print_fwver(struct efx_nic *efx, char *buf, size_t len)
 		rx_id = MCDI_WORD(capbuf, GET_CAPABILITIES_OUT_RX_DPCPU_FW_ID);
 		tx_id = MCDI_WORD(capbuf, GET_CAPABILITIES_OUT_TX_DPCPU_FW_ID);
 
-		offset += snprintf(buf + offset, len - offset, " rx%x tx%x",
-				   rx_id, tx_id);
+		offset += scnprintf(buf + offset, len - offset, " rx%x tx%x",
+				    rx_id, tx_id);
 
 		/* It's theoretically possible for the string to exceed 31
 		 * characters, though in practice the first three version
@@ -1707,11 +1796,11 @@ void efx_mcdi_print_fw_bundle_ver(struct efx_nic *efx, char *buf, size_t len)
 			GET_VERSION_V5_OUT_BUNDLE_VERSION);
 		size_t needed;
 
-		needed = snprintf(buf, len, "%u.%u.%u.%u",
-				  le32_to_cpu(ver_dwords[0]),
-				  le32_to_cpu(ver_dwords[1]),
-				  le32_to_cpu(ver_dwords[2]),
-				  le32_to_cpu(ver_dwords[3]));
+		needed = scnprintf(buf, len, "%u.%u.%u.%u",
+				   le32_to_cpu(ver_dwords[0]),
+				   le32_to_cpu(ver_dwords[1]),
+				   le32_to_cpu(ver_dwords[2]),
+				   le32_to_cpu(ver_dwords[3]));
 		if (WARN_ON(needed >= len))
 			goto fail;
 	} else {
@@ -1950,10 +2039,10 @@ void efx_mcdi_log_puts(struct efx_nic *efx, const char *text)
 	int inlen;
 
 	ktime_get_real_ts64(&tv);
-	inlen = snprintf(MCDI_PTR(inbuf, PUTS_IN_STRING),
-			 MC_CMD_PUTS_IN_STRING_MAXNUM,
-			 "{%lld %s}", (long long int)tv.tv_sec,
-			 (text ? text : ""));
+	inlen = scnprintf(MCDI_PTR(inbuf, PUTS_IN_STRING),
+			  MC_CMD_PUTS_IN_STRING_MAXNUM,
+			  "{%lld %s}", (long long int)tv.tv_sec,
+			  (text ? text : ""));
 	/* Count the NULL byte as well */
 	inlen += MC_CMD_PUTS_IN_STRING_OFST + 1;
 
@@ -2215,10 +2304,9 @@ int efx_mcdi_handle_assertion(struct efx_nic *efx)
 	return efx_mcdi_exit_assertion(efx);
 }
 
-void efx_mcdi_set_id_led(struct efx_nic *efx, enum efx_led_mode mode)
+int efx_mcdi_set_id_led(struct efx_nic *efx, enum efx_led_mode mode)
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_ID_LED_IN_LEN);
-	int rc;
 
 	BUILD_BUG_ON(EFX_LED_OFF != MC_CMD_LED_OFF);
 	BUILD_BUG_ON(EFX_LED_ON != MC_CMD_LED_ON);
@@ -2228,8 +2316,8 @@ void efx_mcdi_set_id_led(struct efx_nic *efx, enum efx_led_mode mode)
 
 	MCDI_SET_DWORD(inbuf, SET_ID_LED_IN_STATE, mode);
 
-	rc = efx_mcdi_rpc(efx, MC_CMD_SET_ID_LED, inbuf, sizeof(inbuf),
-			  NULL, 0, NULL);
+	return efx_mcdi_rpc(efx, MC_CMD_SET_ID_LED, inbuf, sizeof(inbuf),
+			    NULL, 0, NULL);
 }
 
 static int efx_mcdi_reset_func(struct efx_nic *efx)
@@ -2547,6 +2635,8 @@ int efx_mcdi_get_privilege_mask(struct efx_nic *efx, u32 *mask)
  *	be updated in the case of failure as well.
  * @response_size: Size of the buffer for MCDI response
  * @response_size_actual: Optional location to put actual response size
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_mcdi_rpc_proxy_cmd(struct efx_nic *efx, u32 pf, u32 vf,
 			   const void *request_buf, size_t request_size,

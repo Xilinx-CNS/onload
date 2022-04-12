@@ -8,6 +8,7 @@
  */
 
 #include "net_driver.h"
+#include <linux/filter.h>
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/aer.h>
@@ -1008,8 +1009,7 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 
 	efx_mcdi_post_reset(efx);
 
-	/* Ensure that SRAM is initialised even if we're disabling the device */
-	if (efx->type->init)
+	if (efx->port_initialized && efx->type->init)
 		rc = efx->type->init(efx);
 	if (rc) {
 		if (rc != -EAGAIN)
@@ -1375,19 +1375,13 @@ void efx_schedule_reset(struct efx_nic *efx, enum reset_type type)
 
 /**************************************************************************
  *
- * Dummy PHY/MAC operations
+ * Dummy NIC operations
  *
  * Can be used for some unimplemented operations
  * Needed so all function pointers are valid and do not have to be tested
  * before use
  *
  **************************************************************************/
-int efx_void_dummy_op_int(void)
-{
-	return 0;
-}
-void efx_void_dummy_op_void(void) {}
-
 int efx_port_dummy_op_int(struct efx_nic *efx)
 {
 	return 0;
@@ -1401,6 +1395,7 @@ void efx_port_dummy_op_void(struct efx_nic *efx) {}
  **************************************************************************/
 void efx_fini_struct(struct efx_nic *efx)
 {
+	efx_filter_clear_ntuple(efx);
 #ifdef CONFIG_RFS_ACCEL
 	kfree(efx->rps_hash_table);
 #endif
@@ -1536,6 +1531,7 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	efx->vi_stride = EFX_DEFAULT_VI_STRIDE;
 	mutex_init(&efx->mac_lock);
 	init_rwsem(&efx->filter_sem);
+	INIT_LIST_HEAD(&efx->ntuple_list);
 #ifdef CONFIG_RFS_ACCEL
 	mutex_init(&efx->rps_mutex);
 	spin_lock_init(&efx->rps_hash_lock);

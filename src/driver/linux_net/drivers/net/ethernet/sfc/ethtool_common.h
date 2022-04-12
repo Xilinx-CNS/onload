@@ -59,7 +59,10 @@ int efx_ethtool_get_settings(struct net_device *net_dev,
 int efx_ethtool_set_settings(struct net_device *net_dev,
 			     struct ethtool_cmd *ecmd);
 #endif
-
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_FECSTATS)
+void efx_ethtool_get_fec_stats(struct net_device *net_dev,
+			       struct ethtool_fec_stats *fec_stats);
+#endif
 int efx_ethtool_get_fecparam(struct net_device *net_dev,
 			       struct ethtool_fecparam *fecparam);
 int efx_ethtool_set_fecparam(struct net_device *net_dev,

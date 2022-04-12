@@ -6,15 +6,124 @@
  * under the terms of the GNU General Public License version 2 as published
  * by the Free Software Foundation, incorporated herein by reference.
  */
+#ifdef CONFIG_SFC_DEBUGFS
+#include <linux/seq_file.h>
+#endif
 #include "efx.h"
 #include "nic.h"
 #include "efx_common.h"
 #include "mcdi_port_common.h"
+#include "debugfs.h"
 
 static int efx_mcdi_phy_diag_type(struct efx_nic *efx);
 static int efx_mcdi_phy_sff_8472_level(struct efx_nic *efx);
 static u32 efx_mcdi_phy_module_type(struct efx_nic *efx);
 
+
+#ifdef CONFIG_SFC_DEBUGFS
+
+/* DMA all of the phy statistics, and return a single statistic out of the block.
+ * Means we can't view a snapshot of all the statistics, but they're not
+ * populated in zero time anyway */
+static int efx_mcdi_phy_stats_read(struct seq_file *file, void *data)
+{
+	u8 pos = *((u8 *)data);
+	struct efx_mcdi_phy_data *phy_data =
+		container_of(data, struct efx_mcdi_phy_data, index[pos]);
+	struct efx_nic *efx = phy_data->efx;
+	efx_dword_t *value;
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_PHY_STATS_IN_LEN);
+	int rc;
+
+	MCDI_SET_QWORD(inbuf, PHY_STATS_IN_DMA_ADDR, phy_data->stats_addr);
+	BUILD_BUG_ON(MC_CMD_PHY_STATS_OUT_DMA_LEN != 0);
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_PHY_STATS, inbuf, MC_CMD_PHY_STATS_IN_LEN,
+			  NULL, 0, NULL);
+	if (rc)
+		return rc;
+
+	value = (efx_dword_t *)phy_data->stats + pos;
+
+	seq_printf(file, "%d\n", EFX_DWORD_FIELD(*value, EFX_DWORD_0));
+	return 0;
+}
+
+#define PHY_STAT_PARAMETER(_index, _name)				\
+	[_index] = EFX_NAMED_PARAMETER(_name,				\
+				       struct efx_mcdi_phy_data,	\
+				       index[_index], u8,		\
+				       efx_mcdi_phy_stats_read)
+
+static struct efx_debugfs_parameter debug_entries[] = {
+	PHY_STAT_PARAMETER(MC_CMD_OUI, oui),
+	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_LINK_UP, pma_pmd_link_up),
+	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_RX_FAULT, pma_pmd_rx_fault),
+	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_TX_FAULT, pma_pmd_tx_fault),
+	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_SIGNAL, pma_pmd_signal),
+	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_SNR_A, pma_pmd_snr_a),
+	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_SNR_B, pma_pmd_snr_b),
+	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_SNR_C, pma_pmd_snr_c),
+	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_SNR_D, pma_pmd_snr_d),
+	PHY_STAT_PARAMETER(MC_CMD_PCS_LINK_UP, pcs_link_up),
+	PHY_STAT_PARAMETER(MC_CMD_PCS_RX_FAULT, pcs_rx_fault),
+	PHY_STAT_PARAMETER(MC_CMD_PCS_TX_FAULT, pcs_tx_fault),
+	PHY_STAT_PARAMETER(MC_CMD_PCS_BER, pcs_ber),
+	PHY_STAT_PARAMETER(MC_CMD_PCS_BLOCK_ERRORS, pcs_block_errors),
+	PHY_STAT_PARAMETER(MC_CMD_PHYXS_LINK_UP, phyxs_link_up),
+	PHY_STAT_PARAMETER(MC_CMD_PHYXS_RX_FAULT, phxys_rx_fault),
+	PHY_STAT_PARAMETER(MC_CMD_PHYXS_TX_FAULT, phyxs_tx_fault),
+	PHY_STAT_PARAMETER(MC_CMD_PHYXS_ALIGN, phyxs_align),
+	PHY_STAT_PARAMETER(MC_CMD_PHYXS_SYNC, phyxs_sync),
+	PHY_STAT_PARAMETER(MC_CMD_AN_LINK_UP, an_link_up),
+	PHY_STAT_PARAMETER(MC_CMD_AN_COMPLETE, an_complete),
+	PHY_STAT_PARAMETER(MC_CMD_AN_10GBT_STATUS, an_10gbt_status),
+	PHY_STAT_PARAMETER(MC_CMD_CL22_LINK_UP, cl22_link_up),
+	{NULL},
+};
+
+static int efx_mcdi_phy_stats_init(struct efx_nic *efx)
+{
+	struct efx_mcdi_phy_data *phy_data = efx->phy_data;
+	int pos, rc;
+
+	/* debug_entries[] must be contiguous */
+	BUILD_BUG_ON(ARRAY_SIZE(debug_entries) != MC_CMD_PHY_NSTATS + 1);
+
+	/* Allocata a DMA buffer for phy stats */
+	phy_data->stats = pci_alloc_consistent(efx->pci_dev, EFX_PAGE_SIZE,
+					       &phy_data->stats_addr);
+	if (phy_data->stats == NULL)
+		return -ENOMEM;
+
+	phy_data->efx = efx;
+	for (pos = 0; pos < MC_CMD_PHY_NSTATS; ++pos)
+		phy_data->index[pos] = pos;
+	rc = efx_extend_debugfs_port(efx, phy_data, ~phy_data->stats_mask,
+				     debug_entries);
+	if (rc < 0)
+		goto fail;
+
+	return 0;
+
+fail:
+	pci_free_consistent(efx->pci_dev, EFX_PAGE_SIZE, phy_data->stats,
+			    phy_data->stats_addr);
+
+	return rc;
+}
+
+static void efx_mcdi_phy_stats_fini(struct efx_nic *efx)
+{
+	struct efx_mcdi_phy_data *phy_data = efx->phy_data;
+
+	efx_trim_debugfs_port(efx, debug_entries);
+	if (phy_data)
+		pci_free_consistent(efx->pci_dev, EFX_PAGE_SIZE,
+				    phy_data->stats, phy_data->stats_addr);
+}
+
+#endif
 
 static u8 efx_mcdi_link_state_flags(struct efx_link_state *link_state)
 {
@@ -236,9 +345,9 @@ static u32 mcdi_to_ethtool_cap(struct efx_nic *efx, u32 media, u32 cap)
 		static bool warned;
 
 		if (!warned) {
-			netif_notice(efx, drv, efx->net_dev,
-				     "This NIC has link speeds that are not supported by your kernel: %#x\n",
-				     cap);
+			pci_notice(efx->pci_dev,
+				   "This NIC has link speeds that are not supported by your kernel: %#x\n",
+				   cap);
 			warned = true;
 		}
 	}
@@ -251,6 +360,7 @@ static u32 mcdi_to_ethtool_cap(struct efx_nic *efx, u32 media, u32 cap)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
 #define SET_CAP(name)	__set_bit(ETHTOOL_LINK_MODE_ ## name ## _BIT, \
 				  linkset)
+
 void mcdi_to_ethtool_linkset(struct efx_nic *efx, u32 media, u32 cap,
 			     unsigned long *linkset)
 {
@@ -258,49 +368,83 @@ void mcdi_to_ethtool_linkset(struct efx_nic *efx, u32 media, u32 cap,
 	switch (media) {
 	case MC_CMD_MEDIA_KX4:
 		SET_CAP(Backplane);
-		MAP_CAP(1000FDX, 1000baseKX_Full);
-		MAP_CAP(10000FDX, 10000baseKX4_Full);
-		MAP_CAP(40000FDX, 40000baseKR4_Full);
+		if (cap & (1 << MC_CMD_PHY_CAP_1000FDX_LBN))
+			SET_CAP(1000baseKX_Full);
+		if (cap & (1 << MC_CMD_PHY_CAP_10000FDX_LBN))
+			SET_CAP(10000baseKX4_Full);
+		if (cap & (1 << MC_CMD_PHY_CAP_40000FDX_LBN))
+			SET_CAP(40000baseKR4_Full);
 		break;
 
 	case MC_CMD_MEDIA_XFP:
 	case MC_CMD_MEDIA_SFP_PLUS:
 	case MC_CMD_MEDIA_QSFP_PLUS:
 		SET_CAP(FIBRE);
-		MAP_CAP(1000FDX, 1000baseT_Full);
-		MAP_CAP(10000FDX, 10000baseT_Full);
-		MAP_CAP(40000FDX, 40000baseCR4_Full);
+		if (cap & (1 << MC_CMD_PHY_CAP_1000FDX_LBN)) {
+			SET_CAP(1000baseT_Full);
+#if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_1000X)
+			SET_CAP(1000baseX_Full);
+#endif
+		}
+#if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_1000X)
+		if (cap & (1 << MC_CMD_PHY_CAP_10000FDX_LBN)) {
+			SET_CAP(10000baseCR_Full);
+			SET_CAP(10000baseLR_Full);
+			SET_CAP(10000baseSR_Full);
+		}
+#endif
+		if (cap & (1 << MC_CMD_PHY_CAP_40000FDX_LBN)) {
+			SET_CAP(40000baseCR4_Full);
+			SET_CAP(40000baseSR4_Full);
+		}
 #if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_25_50_100)
-		MAP_CAP(100000FDX, 100000baseCR4_Full);
-		MAP_CAP(25000FDX, 25000baseCR_Full);
-		MAP_CAP(50000FDX, 50000baseCR2_Full);
+		if (cap & (1 << MC_CMD_PHY_CAP_100000FDX_LBN)) {
+			SET_CAP(100000baseCR4_Full);
+			SET_CAP(100000baseSR4_Full);
+		}
+		if (cap & (1 << MC_CMD_PHY_CAP_25000FDX_LBN)) {
+			SET_CAP(25000baseCR_Full);
+			SET_CAP(25000baseSR_Full);
+		}
+		if (cap & (1 << MC_CMD_PHY_CAP_50000FDX_LBN))
+			SET_CAP(50000baseCR2_Full);
 #endif
 		break;
 
 	case MC_CMD_MEDIA_BASE_T:
 		SET_CAP(TP);
-		MAP_CAP(10HDX, 10baseT_Half);
-		MAP_CAP(10FDX, 10baseT_Full);
-		MAP_CAP(100HDX, 100baseT_Half);
-		MAP_CAP(100FDX, 100baseT_Full);
-		MAP_CAP(1000HDX, 1000baseT_Half);
-		MAP_CAP(1000FDX, 1000baseT_Full);
-		MAP_CAP(10000FDX, 10000baseT_Full);
+		if (cap & (1 << MC_CMD_PHY_CAP_10HDX_LBN))
+			SET_CAP(10baseT_Half);
+		if (cap & (1 << MC_CMD_PHY_CAP_10FDX_LBN))
+			SET_CAP(10baseT_Full);
+		if (cap & (1 << MC_CMD_PHY_CAP_100HDX_LBN))
+			SET_CAP(100baseT_Half);
+		if (cap & (1 << MC_CMD_PHY_CAP_100FDX_LBN))
+			SET_CAP(100baseT_Full);
+		if (cap & (1 << MC_CMD_PHY_CAP_1000HDX_LBN))
+			SET_CAP(1000baseT_Half);
+		if (cap & (1 << MC_CMD_PHY_CAP_1000FDX_LBN))
+			SET_CAP(1000baseT_Full);
+		if (cap & (1 << MC_CMD_PHY_CAP_10000FDX_LBN))
+			SET_CAP(10000baseT_Full);
 		break;
 	}
 
-	MAP_CAP(PAUSE, Pause);
-	MAP_CAP(ASYM, Asym_Pause);
-	MAP_CAP(AN, Autoneg);
+	if (cap & (1 << MC_CMD_PHY_CAP_PAUSE_LBN))
+		SET_CAP(Pause);
+	if (cap & (1 << MC_CMD_PHY_CAP_ASYM_LBN))
+		SET_CAP(Asym_Pause);
+	if (cap & (1 << MC_CMD_PHY_CAP_AN_LBN))
+		SET_CAP(Autoneg);
 
 #ifdef EFX_NOT_UPSTREAM
 	if (cap & MCDI_PORT_SPEED_CAPS) {
 		static bool warned;
 
 		if (!warned) {
-			netif_notice(efx, drv, efx->net_dev,
-				     "This NIC has link speeds that are not supported by your kernel: %#x\n",
-				     cap);
+			pci_notice(efx->pci_dev,
+				   "This NIC has link speeds that are not supported by your kernel: %#x\n",
+				   cap);
 			warned = true;
 		}
 	}
@@ -379,16 +523,27 @@ u32 ethtool_linkset_to_mcdi_cap(const unsigned long *linkset)
 		result |= (1 << MC_CMD_PHY_CAP_100FDX_LBN);
 	if (TEST_BIT(1000baseT_Half))
 		result |= (1 << MC_CMD_PHY_CAP_1000HDX_LBN);
+#if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_1000X)
+	if (TEST_BIT(1000baseT_Full) || TEST_BIT(1000baseKX_Full) ||
+	    TEST_BIT(1000baseX_Full))
+		result |= (1 << MC_CMD_PHY_CAP_1000FDX_LBN);
+	if (TEST_BIT(10000baseT_Full) || TEST_BIT(10000baseKX4_Full) ||
+	    TEST_BIT(10000baseCR_Full) || TEST_BIT(10000baseLR_Full) ||
+	    TEST_BIT(10000baseSR_Full))
+		result |= (1 << MC_CMD_PHY_CAP_10000FDX_LBN);
+#else
 	if (TEST_BIT(1000baseT_Full) || TEST_BIT(1000baseKX_Full))
 		result |= (1 << MC_CMD_PHY_CAP_1000FDX_LBN);
 	if (TEST_BIT(10000baseT_Full) || TEST_BIT(10000baseKX4_Full))
 		result |= (1 << MC_CMD_PHY_CAP_10000FDX_LBN);
-	if (TEST_BIT(40000baseCR4_Full) || TEST_BIT(40000baseKR4_Full))
+#endif
+	if (TEST_BIT(40000baseCR4_Full) || TEST_BIT(40000baseKR4_Full) ||
+	    TEST_BIT(40000baseSR4_Full))
 		result |= (1 << MC_CMD_PHY_CAP_40000FDX_LBN);
 #if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_25_50_100)
-	if (TEST_BIT(100000baseCR4_Full))
+	if (TEST_BIT(100000baseCR4_Full) || TEST_BIT(100000baseSR4_Full))
 		result |= (1 << MC_CMD_PHY_CAP_100000FDX_LBN);
-	if (TEST_BIT(25000baseCR_Full))
+	if (TEST_BIT(25000baseCR_Full) || TEST_BIT(25000baseSR_Full))
 		result |= (1 << MC_CMD_PHY_CAP_25000FDX_LBN);
 	if (TEST_BIT(50000baseCR2_Full))
 		result |= (1 << MC_CMD_PHY_CAP_50000FDX_LBN);
@@ -600,6 +755,141 @@ bool efx_mcdi_phy_poll(struct efx_nic *efx)
 	}
 
 	return !efx_link_state_equal(&efx->link_state, &old_state);
+}
+
+int efx_mcdi_phy_probe(struct efx_nic *efx)
+{
+	struct efx_mcdi_phy_data *phy_data;
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_LINK_OUT_LEN);
+	u32 caps, ld_caps, lp_caps;
+	int rc;
+
+	/* Initialise and populate phy_data */
+	phy_data = kzalloc(sizeof(*phy_data), GFP_KERNEL);
+	if (phy_data == NULL)
+		return -ENOMEM;
+
+	rc = efx_mcdi_get_phy_cfg(efx, phy_data);
+	if (rc != 0)
+		goto fail;
+
+	/* Read initial link advertisement */
+	BUILD_BUG_ON(MC_CMD_GET_LINK_IN_LEN != 0);
+	rc = efx_mcdi_rpc(efx, MC_CMD_GET_LINK, NULL, 0,
+			  outbuf, sizeof(outbuf), NULL);
+	if (rc)
+		goto fail;
+	/* Fill out nic state */
+	efx->phy_data = phy_data;
+	efx->phy_type = phy_data->type;
+	strscpy(efx->phy_name, phy_data->name, sizeof(efx->phy_name));
+
+	efx->mdio_bus = phy_data->channel;
+	efx->mdio.prtad = phy_data->port;
+	efx->mdio.mmds = phy_data->mmd_mask & ~(1 << MC_CMD_MMD_CLAUSE22);
+	efx->mdio.mode_support = 0;
+	if (phy_data->mmd_mask & (1 << MC_CMD_MMD_CLAUSE22))
+		efx->mdio.mode_support |= MDIO_SUPPORTS_C22;
+	if (phy_data->mmd_mask & ~(1 << MC_CMD_MMD_CLAUSE22))
+		efx->mdio.mode_support |= MDIO_SUPPORTS_C45 | MDIO_EMULATE_C22;
+
+	caps = ld_caps = lp_caps = MCDI_DWORD(outbuf, GET_LINK_OUT_CAP);
+#ifdef EFX_NOT_UPSTREAM
+	/* If the link isn't advertising any speeds this is almost certainly
+	 * due to an in-distro driver bug, which can have an effect if loaded
+	 * before this out-of-tree driver. It is fixed upstream in:
+	 * 3497ed8c852a ("sfc: report supported link speeds on SFP connections")
+	 *
+	 * Unfortunately this fix is not in a number of released distro kernels.
+	 * In particular:
+	 *   RHEL 6.8, kernel 2.6.32-642.el6 (fixed in 2.6.32-642.13.1.el6)
+	 *   SLES 12 sp2, kernel 4.4.21-68-default
+	 *
+	 * If no speeds are marked as supported by the link we add all those
+	 * that are supported by the NIC.
+	 */
+	if (!(caps & MCDI_PORT_SPEED_CAPS))
+		caps |= phy_data->supported_cap & MCDI_PORT_SPEED_CAPS;
+#endif
+	mcdi_to_ethtool_linkset(efx, phy_data->media, caps,
+				efx->link_advertising);
+
+	/* Assert that we can map efx -> mcdi loopback modes */
+	BUILD_BUG_ON(LOOPBACK_NONE != MC_CMD_LOOPBACK_NONE);
+	BUILD_BUG_ON(LOOPBACK_DATA != MC_CMD_LOOPBACK_DATA);
+	BUILD_BUG_ON(LOOPBACK_GMAC != MC_CMD_LOOPBACK_GMAC);
+	BUILD_BUG_ON(LOOPBACK_XGMII != MC_CMD_LOOPBACK_XGMII);
+	BUILD_BUG_ON(LOOPBACK_XGXS != MC_CMD_LOOPBACK_XGXS);
+	BUILD_BUG_ON(LOOPBACK_XAUI != MC_CMD_LOOPBACK_XAUI);
+	BUILD_BUG_ON(LOOPBACK_GMII != MC_CMD_LOOPBACK_GMII);
+	BUILD_BUG_ON(LOOPBACK_SGMII != MC_CMD_LOOPBACK_SGMII);
+	BUILD_BUG_ON(LOOPBACK_XGBR != MC_CMD_LOOPBACK_XGBR);
+	BUILD_BUG_ON(LOOPBACK_XFI != MC_CMD_LOOPBACK_XFI);
+	BUILD_BUG_ON(LOOPBACK_XAUI_FAR != MC_CMD_LOOPBACK_XAUI_FAR);
+	BUILD_BUG_ON(LOOPBACK_GMII_FAR != MC_CMD_LOOPBACK_GMII_FAR);
+	BUILD_BUG_ON(LOOPBACK_SGMII_FAR != MC_CMD_LOOPBACK_SGMII_FAR);
+	BUILD_BUG_ON(LOOPBACK_XFI_FAR != MC_CMD_LOOPBACK_XFI_FAR);
+	BUILD_BUG_ON(LOOPBACK_GPHY != MC_CMD_LOOPBACK_GPHY);
+	BUILD_BUG_ON(LOOPBACK_PHYXS != MC_CMD_LOOPBACK_PHYXS);
+	BUILD_BUG_ON(LOOPBACK_PCS != MC_CMD_LOOPBACK_PCS);
+	BUILD_BUG_ON(LOOPBACK_PMAPMD != MC_CMD_LOOPBACK_PMAPMD);
+	BUILD_BUG_ON(LOOPBACK_XPORT != MC_CMD_LOOPBACK_XPORT);
+	BUILD_BUG_ON(LOOPBACK_XGMII_WS != MC_CMD_LOOPBACK_XGMII_WS);
+	BUILD_BUG_ON(LOOPBACK_XAUI_WS != MC_CMD_LOOPBACK_XAUI_WS);
+	BUILD_BUG_ON(LOOPBACK_XAUI_WS_FAR != MC_CMD_LOOPBACK_XAUI_WS_FAR);
+	BUILD_BUG_ON(LOOPBACK_XAUI_WS_NEAR != MC_CMD_LOOPBACK_XAUI_WS_NEAR);
+	BUILD_BUG_ON(LOOPBACK_GMII_WS != MC_CMD_LOOPBACK_GMII_WS);
+	BUILD_BUG_ON(LOOPBACK_XFI_WS != MC_CMD_LOOPBACK_XFI_WS);
+	BUILD_BUG_ON(LOOPBACK_XFI_WS_FAR != MC_CMD_LOOPBACK_XFI_WS_FAR);
+	BUILD_BUG_ON(LOOPBACK_PHYXS_WS != MC_CMD_LOOPBACK_PHYXS_WS);
+
+	rc = efx_mcdi_loopback_modes(efx, &efx->loopback_modes);
+	if (rc != 0)
+		goto fail;
+	/* The MC indicates that LOOPBACK_NONE is a valid loopback mode,
+	 * but by convention we don't
+	 */
+	efx->loopback_modes &= ~(1 << LOOPBACK_NONE);
+
+	/* Set the initial link mode */
+	efx_mcdi_phy_decode_link(efx, &efx->link_state,
+				 MCDI_DWORD(outbuf, GET_LINK_OUT_LINK_SPEED),
+				 MCDI_DWORD(outbuf, GET_LINK_OUT_FLAGS),
+				 MCDI_DWORD(outbuf, GET_LINK_OUT_FCNTL),
+				 ld_caps, lp_caps);
+
+	efx->fec_config = mcdi_fec_caps_to_ethtool(caps,
+						   efx->link_state.speed == 25000 ||
+						   efx->link_state.speed == 50000);
+
+	/* Default to Autonegotiated flow control if the PHY supports it */
+	efx->wanted_fc = EFX_FC_RX | EFX_FC_TX;
+	if (phy_data->supported_cap & (1 << MC_CMD_PHY_CAP_AN_LBN))
+		efx->wanted_fc |= EFX_FC_AUTO;
+	efx_link_set_wanted_fc(efx, efx->wanted_fc);
+
+#ifdef CONFIG_SFC_DEBUGFS
+	rc = efx_mcdi_phy_stats_init(efx);
+	if (rc != 0)
+		goto fail;
+#endif
+
+	return 0;
+
+fail:
+	kfree(phy_data);
+	return rc;
+}
+
+void efx_mcdi_phy_remove(struct efx_nic *efx)
+{
+	struct efx_mcdi_phy_data *phy_data = efx->phy_data;
+
+#ifdef CONFIG_SFC_DEBUGFS
+	efx_mcdi_phy_stats_fini(efx);
+#endif
+	efx->phy_data = NULL;
+	kfree(phy_data);
 }
 
 static u32 ethtool_speed_to_mcdi_cap(bool duplex, u32 speed)
@@ -1060,25 +1350,25 @@ int efx_mcdi_mac_init_stats(struct efx_nic *efx)
 	rc = efx_nic_alloc_buffer(efx, &efx->stats_buffer,
 				  efx->num_mac_stats * sizeof(u64), GFP_KERNEL);
 	if (rc) {
-		netif_warn(efx, probe, efx->net_dev,
-			   "failed to allocate DMA buffer: %d\n", rc);
+		pci_warn(efx->pci_dev,
+			 "failed to allocate DMA buffer: %d\n", rc);
 		return rc;
 	}
 
 	efx->mc_initial_stats =
 		kcalloc(efx->num_mac_stats, sizeof(u64), GFP_KERNEL);
 	if (!efx->mc_initial_stats) {
-		netif_warn(efx, probe, efx->net_dev,
-			   "failed to allocate initial MC stats buffer\n");
+		pci_warn(efx->pci_dev,
+			 "failed to allocate initial MC stats buffer\n");
 		rc = -ENOMEM;
 		goto fail;
 	}
 
-	netif_dbg(efx, probe, efx->net_dev,
-		  "stats buffer at %llx (virt %p phys %llx)\n",
-		  (u64) efx->stats_buffer.dma_addr,
-		  efx->stats_buffer.addr,
-		  (u64) virt_to_phys(efx->stats_buffer.addr));
+	pci_dbg(efx->pci_dev,
+		"stats buffer at %llx (virt %p phys %llx)\n",
+		(u64) efx->stats_buffer.dma_addr,
+		efx->stats_buffer.addr,
+		(u64) virt_to_phys(efx->stats_buffer.addr));
 
 	return 0;
 
@@ -1418,9 +1708,9 @@ static int efx_mcdi_phy_get_module_eeprom_page(struct efx_nic *efx,
 {
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_GET_PHY_MEDIA_INFO_OUT_LENMAX);
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_GET_PHY_MEDIA_INFO_IN_LEN);
-	size_t outlen;
 	unsigned int payload_len;
 	unsigned int to_copy;
+	size_t outlen;
 	int rc;
 
 	if (offset > SFP_PAGE_SIZE)
@@ -1468,8 +1758,8 @@ static int efx_mcdi_phy_get_module_eeprom_byte(struct efx_nic *efx,
 					       unsigned int page,
 					       u8 byte)
 {
-	int rc;
 	u8 data;
+	int rc;
 
 	rc = efx_mcdi_phy_get_module_eeprom_page(efx, page, &data, byte, 1);
 	if (rc == 1)
@@ -1748,7 +2038,7 @@ static int efx_mcdi_phy_get_module_info_locked(struct efx_nic *efx,
 		 */
 		diag_type = efx_mcdi_phy_diag_type(efx);
 
-		if ((sff_8472_level == 0) ||
+		if (sff_8472_level == 0 ||
 		    (diag_type & SFF_DIAG_ADDR_CHANGE)) {
 			modinfo->type = ETH_MODULE_SFF_8079;
 			modinfo->eeprom_len = ETH_MODULE_SFF_8079_LEN;

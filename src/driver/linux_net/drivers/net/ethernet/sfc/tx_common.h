@@ -15,7 +15,6 @@ extern unsigned int tx_cb_order __read_mostly;
 int efx_probe_tx_queue(struct efx_tx_queue *tx_queue);
 int efx_init_tx_queue(struct efx_tx_queue *tx_queue);
 void efx_fini_tx_queue(struct efx_tx_queue *tx_queue);
-void efx_remove_tx_queue(struct efx_tx_queue *tx_queue);
 void efx_destroy_tx_queue(struct efx_tx_queue *tx_queue);
 
 void efx_purge_tx_queue(struct efx_tx_queue *tx_queue);

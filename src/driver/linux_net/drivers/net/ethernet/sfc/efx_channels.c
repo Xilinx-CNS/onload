@@ -9,6 +9,7 @@
 
 #include "net_driver.h"
 #include <linux/module.h>
+#include <linux/filter.h>
 #ifndef EFX_USE_KCOMPAT
 #include <xen/xen.h>
 #endif
@@ -33,6 +34,24 @@ const char *const efx_interrupt_mode_names[] = {
 #endif
 };
 
+
+/*
+ * Use separate channels for TX and RX events
+ *
+ * Set this to 1 to use separate channels for TX and RX. It allows us
+ * to control interrupt affinity separately for TX and RX.
+ *
+ * This is only used by sfc.ko in MSI-X interrupt mode
+ */
+bool separate_tx_channels;
+
+/* This is the first interrupt mode to try out of:
+ * 0 => MSI-X
+ * 1 => MSI
+ */
+unsigned int efx_interrupt_mode;
+
+#if defined(EFX_NOT_UPSTREAM)
 #if !defined(EFX_USE_KCOMPAT) || (defined(topology_core_cpumask))
 #define HAVE_EFX_NUM_PACKAGES
 #endif
@@ -51,8 +70,8 @@ const char *const efx_interrupt_mode_names[] = {
  * Systems without MSI-X will only target one CPU via legacy or MSI
  * interrupt.
  */
-static char *rss_cpus;
-module_param(rss_cpus, charp, 0444);
+static char *efx_rss_cpus_str;
+module_param_named(rss_cpus, efx_rss_cpus_str, charp, 0444);
 MODULE_PARM_DESC(rss_cpus, "Number of CPUs to use for Receive-Side Scaling, or 'packages', 'cores', 'hyperthreads', 'numa_local_cores' or 'numa_local_hyperthreads'");
 
 #if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_PACKAGES)
@@ -61,25 +80,17 @@ module_param(rss_numa_local, bool, 0444);
 MODULE_PARM_DESC(rss_numa_local, "Restrict RSS to CPUs on the local NUMA node");
 #endif
 
-#if defined(EFX_NOT_UPSTREAM)
 static enum efx_rss_mode rss_mode;
+#else
+/* This is the requested number of CPUs to use for Receive-Side Scaling (RSS),
+ * i.e. the number of CPUs among which we may distribute simultaneous
+ * interrupt handling.
+ *
+ * Cards without MSI-X will only target one CPU via legacy or MSI interrupt.
+ * The default (0) means to assign an interrupt to each core.
+ */
+unsigned int rss_cpus;
 #endif
-
-/*
- * Use separate channels for TX and RX events
- *
- * Set this to 1 to use separate channels for TX and RX. It allows us
- * to control interrupt affinity separately for TX and RX.
- *
- * This is only used by sfc.ko in MSI-X interrupt mode
- */
-bool separate_tx_channels;
-
-/* This is the first interrupt mode to try out of:
- * 0 => MSI-X
- * 1 => MSI
- */
-unsigned int interrupt_mode;
 
 static unsigned int irq_adapt_low_thresh = 8000;
 module_param(irq_adapt_low_thresh, uint, 0644);
@@ -99,7 +110,7 @@ MODULE_PARM_DESC(irq_adapt_irqs,
 /* This is the weight assigned to each of the (per-channel) virtual
  * NAPI devices.
  */
-static int napi_weight = 64;
+static int napi_weight = NAPI_POLL_WEIGHT;
 #ifdef EFX_NOT_UPSTREAM
 module_param(napi_weight, int, 0444);
 MODULE_PARM_DESC(napi_weight, "NAPI weighting");
@@ -182,10 +193,9 @@ static unsigned int efx_num_packages(const cpumask_t *in)
 
 static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 {
-	struct net_device *net_dev = efx->net_dev;
-	bool selected = false;
 #if defined(EFX_NOT_UPSTREAM)
 	static unsigned int n_rxq;
+	bool selected = false;
 #else
 	unsigned int n_rxq;
 	enum efx_rss_mode rss_mode;
@@ -194,45 +204,51 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 #if defined(EFX_NOT_UPSTREAM)
 	if (n_rxq)
 		return n_rxq;
-#endif
 	rss_mode = EFX_RSS_CORES;
 
-	if (!rss_cpus) {
+	if (!efx_rss_cpus_str) {
 		/* Leave at default. */
-	} else if (strcmp(rss_cpus, "packages") == 0) {
+	} else if (strcmp(efx_rss_cpus_str, "packages") == 0) {
 		rss_mode = EFX_RSS_PACKAGES;
 		selected = true;
-	} else if (strcmp(rss_cpus, "cores") == 0) {
+	} else if (strcmp(efx_rss_cpus_str, "cores") == 0) {
 		rss_mode = EFX_RSS_CORES;
 		selected = true;
-	} else if (strcmp(rss_cpus, "hyperthreads") == 0) {
+	} else if (strcmp(efx_rss_cpus_str, "hyperthreads") == 0) {
 		rss_mode = EFX_RSS_HYPERTHREADS;
 		selected = true;
-	} else if (strcmp(rss_cpus, "numa_local_cores") == 0) {
+	} else if (strcmp(efx_rss_cpus_str, "numa_local_cores") == 0) {
 		rss_mode = EFX_RSS_NUMA_LOCAL_CORES;
 		selected = true;
-	} else if (strcmp(rss_cpus, "numa_local_hyperthreads") == 0) {
+	} else if (strcmp(efx_rss_cpus_str, "numa_local_hyperthreads") == 0) {
 		rss_mode = EFX_RSS_NUMA_LOCAL_HYPERTHREADS;
 		selected = true;
-	} else if (sscanf(rss_cpus, "%u", &n_rxq) == 1 && n_rxq > 0) {
+	} else if (sscanf(efx_rss_cpus_str, "%u", &n_rxq) == 1 && n_rxq > 0) {
 		rss_mode = EFX_RSS_CUSTOM;
 		selected = true;
 	} else {
-		netif_err(efx, drv, net_dev,
-			  "Bad value for module parameter rss_cpus='%s'\n",
-			  rss_cpus);
+		pci_err(efx->pci_dev,
+			"Bad value for module parameter rss_cpus='%s'\n",
+			efx_rss_cpus_str);
 	}
+#else
+	if (rss_cpus) {
+		rss_mode = EFX_RSS_CUSTOM;
+		n_rxq = rss_cpus;
+	} else {
+		rss_mode = EFX_RSS_CORES;
+	}
+#endif
 
 	switch (rss_mode) {
 #if defined(HAVE_EFX_NUM_PACKAGES)
 	case EFX_RSS_PACKAGES:
 		if (xen_domain()) {
-			netif_warn(efx, drv, net_dev,
-				   "Unable to determine CPU topology on Xen reliably. Using 4 rss channels.\n");
+			pci_warn(efx->pci_dev,
+				 "Unable to determine CPU topology on Xen reliably. Using 4 rss channels.\n");
 			n_rxq = 4;
 		} else {
-			netif_dbg(efx,  drv, net_dev,
-				  "using efx_num_packages()\n");
+			pci_dbg(efx->pci_dev, "using efx_num_packages()\n");
 			n_rxq = efx_num_packages(cpu_online_mask);
 			/* Create two RSS queues even with a single package */
 			if (n_rxq == 1)
@@ -243,12 +259,11 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 #if defined(HAVE_EFX_NUM_CORES)
 	case EFX_RSS_CORES:
 		if (xen_domain()) {
-			netif_warn(efx, drv, net_dev,
-				   "Unable to determine CPU topology on Xen reliably. Assuming hyperthreading enabled.\n");
+			pci_warn(efx->pci_dev,
+				 "Unable to determine CPU topology on Xen reliably. Assuming hyperthreading enabled.\n");
 			n_rxq = max_t(int, 1, num_online_cpus() / 2);
 		} else {
-			netif_dbg(efx, drv, net_dev,
-				  "using efx_num_cores()\n");
+			pci_dbg(efx->pci_dev, "using efx_num_cores()\n");
 			n_rxq = efx_num_cores(cpu_online_mask);
 		}
 		break;
@@ -259,8 +274,8 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 #if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_CORES)
 	case EFX_RSS_NUMA_LOCAL_CORES:
 		if (xen_domain()) {
-			netif_warn(efx, drv, net_dev,
-				   "Unable to determine CPU topology on Xen reliably. Creating rss channels for half of cores/hyperthreads.\n");
+			pci_warn(efx->pci_dev,
+				 "Unable to determine CPU topology on Xen reliably. Creating rss channels for half of cores/hyperthreads.\n");
 			n_rxq = max_t(int, 1, num_online_cpus() / 2);
 		} else {
 			n_rxq = min(efx_num_cores(cpu_online_mask),
@@ -271,8 +286,8 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 #if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS))
 	case EFX_RSS_NUMA_LOCAL_HYPERTHREADS:
 		if (xen_domain()) {
-			netif_warn(efx, drv, net_dev,
-				   "Unable to determine CPU topology on Xen reliably. Creating rss channels for all cores/hyperthreads.\n");
+			pci_warn(efx->pci_dev,
+				 "Unable to determine CPU topology on Xen reliably. Creating rss channels for all cores/hyperthreads.\n");
 			n_rxq = num_online_cpus();
 		} else {
 			n_rxq = min(num_online_cpus(),
@@ -283,19 +298,21 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 	case EFX_RSS_CUSTOM:
 		break;
 	default:
+#if defined(EFX_NOT_UPSTREAM)
 		if (selected)
-			netif_err(efx, drv, net_dev,
-				  "Selected rss mode '%s' not available\n",
-				  rss_cpus);
+			pci_err(efx->pci_dev,
+				"Selected rss mode '%s' not available\n",
+				efx_rss_cpus_str);
+#endif
 		rss_mode = EFX_RSS_HYPERTHREADS;
 		n_rxq = num_online_cpus();
 		break;
 	}
 
 	if (n_rxq > EFX_MAX_RX_QUEUES) {
-		netif_warn(efx, drv, net_dev,
-			   "Reducing number of rss channels from %u to %u.\n",
-			   n_rxq, EFX_MAX_RX_QUEUES);
+		pci_warn(efx->pci_dev,
+			 "Reducing number of rss channels from %u to %u.\n",
+			 n_rxq, EFX_MAX_RX_QUEUES);
 		n_rxq = EFX_MAX_RX_QUEUES;
 	}
 
@@ -303,12 +320,11 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 	/* If RSS is requested for the PF *and* VFs then we can't write RSS
 	 * table entries that are inaccessible to VFs
 	 */
-	if (efx_sriov_wanted(efx) && efx_vf_size(efx) > 1 &&
-	    n_rxq > efx_vf_size(efx)) {
-		netif_warn(efx, drv, net_dev,
-			   "Reducing number of RSS channels from %u to %u for VF support. Increase vf-msix-limit to use more channels on the PF.\n",
-			   n_rxq, efx_vf_size(efx));
-		n_rxq = efx_vf_size(efx);
+	if (efx_sriov_wanted(efx) && n_rxq > 1) {
+		pci_warn(efx->pci_dev,
+			 "Reducing number of RSS channels from %u to 1 for VF support. Increase vf-msix-limit to use more channels on the PF.\n",
+			 n_rxq);
+		n_rxq = 1;
 	}
 #endif
 
@@ -324,11 +340,11 @@ static unsigned int efx_num_rss_channels(struct efx_nic *efx)
 	/* do not RSS to extra_channels, such as PTP */
 	unsigned int rss_channels = efx_rx_channels(efx) -
 				    efx->n_extra_channels;
+#if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_PACKAGES)
 #if !defined(EFX_NOT_UPSTREAM)
 	enum efx_rss_mode rss_mode = efx->rss_mode;
 #endif
 
-#if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_PACKAGES)
 	if (rss_numa_local) {
 		cpumask_var_t local_online_cpus;
 
@@ -389,16 +405,16 @@ static void efx_allocate_xdp_channels(struct efx_nic *efx,
 	 * This may be more pessimistic than it needs to be.
 	 */
 	if (n_channels + n_xdp_ev > max_channels) {
-		netif_err(efx, drv, efx->net_dev,
-			   "Insufficient resources for %d XDP event queues (%d current channels, max %d)\n",
-			   n_xdp_ev, n_channels, max_channels);
+		pci_err(efx->pci_dev,
+			"Insufficient resources for %d XDP event queues (%d current channels, max %d)\n",
+			n_xdp_ev, n_channels, max_channels);
 		efx->n_xdp_channels = 0;
 		efx->xdp_tx_per_channel = 0;
 		efx->xdp_tx_queue_count = 0;
 	} else if (n_channels + n_xdp_tx > efx->max_vis) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Insufficient resources for %d XDP TX queues (%d current channels, max VIs %d)\n",
-			  n_xdp_tx, n_channels, efx->max_vis);
+		pci_err(efx->pci_dev,
+			"Insufficient resources for %d XDP TX queues (%d current channels, max VIs %d)\n",
+			n_xdp_tx, n_channels, efx->max_vis);
 		efx->n_xdp_channels = 0;
 		efx->xdp_tx_per_channel = 0;
 		efx->xdp_tx_queue_count = 0;
@@ -406,9 +422,9 @@ static void efx_allocate_xdp_channels(struct efx_nic *efx,
 		efx->n_xdp_channels = n_xdp_ev;
 		efx->xdp_tx_per_channel = tx_per_ev;
 		efx->xdp_tx_queue_count = n_xdp_tx;
-		netif_dbg(efx, drv, efx->net_dev,
-			  "Allocating %d TX and %d event queues for XDP\n",
-			  n_xdp_tx, n_xdp_ev);
+		pci_dbg(efx->pci_dev,
+			"Allocating %d TX and %d event queues for XDP\n",
+			n_xdp_tx, n_xdp_ev);
 	}
 }
 
@@ -428,8 +444,8 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 	}
 
 	if (max_channels < min_channels) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Unable to satisfy minimum channel requirements\n");
+		pci_err(efx->pci_dev,
+			"Unable to satisfy minimum channel requirements\n");
 		return -ENOSPC;
 	}
 
@@ -454,16 +470,16 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 	if (vec_count < 0)
 		return vec_count;
 	if (vec_count < min_channels) {
-		netif_err(efx, drv, efx->net_dev,
-			  "Unable to satisfy minimum channel requirements\n");
+		pci_err(efx->pci_dev,
+			"Unable to satisfy minimum channel requirements\n");
 		return -ENOSPC;
 	}
 	if (vec_count < n_channels) {
-		netif_err(efx, drv, efx->net_dev,
-			  "WARNING: Insufficient MSI-X vectors available (%d < %u).\n",
-			  vec_count, n_channels);
-		netif_err(efx, drv, efx->net_dev,
-			  "WARNING: Performance may be reduced.\n");
+		pci_err(efx->pci_dev,
+			"WARNING: Insufficient MSI-X vectors available (%d < %u).\n",
+			vec_count, n_channels);
+		pci_err(efx->pci_dev,
+			"WARNING: Performance may be reduced.\n");
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -571,11 +587,9 @@ static void efx_dl_make_irq_resources(struct efx_nic *efx, size_t entries,
 	u16 n_ranges = efx_dl_make_irq_resources_(NULL, entries, xentries);
 
 	if (n_ranges) {
-		efx->irq_resources =
-			kzalloc(sizeof(struct efx_dl_irq_resources) -
-				sizeof(struct efx_dl_irq_range) +
-				sizeof(struct efx_dl_irq_range) * n_ranges,
-				GFP_KERNEL);
+		efx->irq_resources = kzalloc(struct_size(efx->irq_resources,
+							 irq_ranges, n_ranges),
+					     GFP_KERNEL);
 		if (!efx->irq_resources)
 			netif_warn(efx, drv, efx->net_dev,
 				   "Out of memory exporting interrupts to driverlink\n");
@@ -722,15 +736,6 @@ int efx_probe_interrupts(struct efx_nic *efx)
 		efx->n_xdp_channels = 0;
 	}
 #endif
-
-	/* RSS on the PF might now be impossible due to interrupt allocation
-	 * failure
-	 */
-#ifdef CONFIG_SFC_SRIOV
-	if (efx_sriov_wanted(efx) && efx->rss_spread == 1)
-		efx->rss_spread = efx_vf_size(efx);
-#endif
-
 	return 0;
 }
 
@@ -1339,8 +1344,7 @@ static int efx_set_channel_xdp(struct efx_nic *efx, struct efx_channel *channel)
 }
 
 /* Allocate and initialise a channel structure. */
-static struct efx_channel *
-efx_alloc_channel(struct efx_nic *efx, int i, struct efx_channel *old_channel)
+static struct efx_channel *efx_alloc_channel(struct efx_nic *efx, int i)
 {
 	struct efx_channel *channel;
 
@@ -1408,8 +1412,8 @@ int efx_init_interrupts(struct efx_nic *efx)
 	}
 
 	efx->max_irqs = 1;	/* For MSI mode */
-	if (BIT(interrupt_mode) & efx->type->supported_interrupt_modes)
-		efx->interrupt_mode = interrupt_mode;
+	if (BIT(efx_interrupt_mode) & efx->type->supported_interrupt_modes)
+		efx->interrupt_mode = efx_interrupt_mode;
 	else
 		efx->interrupt_mode = ffs(efx->type->supported_interrupt_modes) - 1;
 
@@ -1457,12 +1461,13 @@ int efx_init_channels(struct efx_nic *efx)
 	efx->max_tx_channels = efx->max_channels;
 
 	for (i = 0; i < efx_channels(efx); i++) {
-		struct efx_channel *channel = efx_alloc_channel(efx, i, NULL);
+		struct efx_channel *channel = efx_alloc_channel(efx, i);
 
 		if (!channel) {
 			netif_err(efx, drv, efx->net_dev,
 				  "out of memory allocating channel\n");
 			rc = -ENOMEM;
+			break;
 		}
 		list_add_tail(&channel->list, &efx->channel_list);
 		if (i < efx->max_irqs) {
@@ -1604,6 +1609,14 @@ int efx_probe_channels(struct efx_nic *efx)
 	efx_set_channel_names(efx);
 
 	return efx_init_debugfs_channels(efx);
+}
+
+static void efx_remove_tx_queue(struct efx_tx_queue *tx_queue)
+{
+
+	netif_dbg(tx_queue->efx, drv, tx_queue->efx->net_dev,
+		  "removing TX queue %d\n", tx_queue->queue);
+	efx_nic_free_buffer(tx_queue->efx, &tx_queue->txd);
 }
 
 static void efx_remove_channel(struct efx_channel *channel)
@@ -2443,7 +2456,7 @@ static const struct efx_channel_type efx_default_channel_type = {
 int efx_channels_init_module(void)
 {
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SMP)
-	rss_cpu_usage = kzalloc(NR_CPUS * sizeof(rss_cpu_usage[0]), GFP_KERNEL);
+	rss_cpu_usage = kcalloc(NR_CPUS, sizeof(rss_cpu_usage[0]), GFP_KERNEL);
 	if (!rss_cpu_usage)
 		return -ENOMEM;
 #endif

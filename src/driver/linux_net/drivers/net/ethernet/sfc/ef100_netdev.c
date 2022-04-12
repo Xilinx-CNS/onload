@@ -28,6 +28,7 @@
 #ifdef CONFIG_SFC_TRACING
 #include <trace/events/sfc.h>
 #endif
+#include "mae.h"
 #include "tc.h"
 #include "efx_devlink.h"
 #include "ef100_sriov.h"
@@ -181,6 +182,7 @@ void ef100_net_dealloc(struct efx_nic *efx)
 static int ef100_net_open(struct net_device *net_dev)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	struct ef100_nic_data *nic_data;
 	int rc;
 
 	ef100_update_name(efx);
@@ -209,6 +211,12 @@ static int ef100_net_open(struct net_device *net_dev)
 	if (netif_running(efx->net_dev) && efx->type->attach_reps)
 		efx->type->attach_reps(efx);
 #endif
+	/* Mport changes are normally event-driven. Check now because
+	 * we could have missed a change.
+	 */
+	nic_data = efx->nic_data;
+	if (nic_data->grp_mae)
+		schedule_work(&efx->mae->mport_work);
 	return 0;
 
 fail:
@@ -216,8 +224,7 @@ fail:
 	return rc;
 }
 
-/**
- * This function tries to distribute allocated VIs based on the channel
+/* This function tries to distribute allocated VIs based on the channel
  * priority from the total pool of available VIs
  */
 static void ef100_adjust_channels(struct efx_nic *efx, unsigned int avail_vis)
@@ -281,13 +288,13 @@ int ef100_net_alloc(struct efx_nic *efx)
 	if (rc)
 		return rc;
 
-	rc = efx_init_channels(efx);
-	if (rc)
-		return rc;
-
 	efx->stats_initialised = false;
 	allocated_vis = 0;
 	do {
+		rc = efx_init_channels(efx);
+		if (rc)
+			return rc;
+
 		rc = efx_probe_interrupts(efx);
 		if (rc)
 			return rc;
@@ -307,6 +314,8 @@ int ef100_net_alloc(struct efx_nic *efx)
 			if (rc == -EAGAIN) {
 				efx_unset_channels(efx);
 				efx_remove_interrupts(efx);
+				efx_fini_channels(efx);
+
 				ef100_adjust_channels(efx, allocated_vis);
 				efx->max_vis = allocated_vis;
 			}
@@ -795,16 +804,9 @@ static void ef100_unregister_netdev(struct efx_nic *efx)
 void ef100_remove_netdev(struct efx_probe_data *probe_data)
 {
 	struct efx_nic *efx = &probe_data->efx;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	struct ef100_nic_data *nic_data;
-	int i;
-#endif
 
 	if (!efx->net_dev)
 		return;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	nic_data = efx->nic_data;
-#endif
 
 	rtnl_lock();
 #ifdef EFX_NOT_UPSTREAM
@@ -830,19 +832,13 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 	rtnl_unlock();
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	for (i = 0; i < nic_data->rem_rep_count; i++)
-		efx_ef100_remote_rep_destroy(efx, i);
-	kfree(nic_data->rem_rep);
-	nic_data->rem_rep = NULL;
-	nic_data->rem_rep_count = 0;
-#endif
+	efx_ef100_fini_reps(efx);
 	if (!efx->type->is_vf) {
 #if defined(CONFIG_SFC_SRIOV)
-		if (efx->vf_count) /* Disable any VFs */
-			efx_ef100_pci_sriov_disable(efx, true);
+		efx_ef100_pci_sriov_disable(efx, true);
 #endif
 		efx_fini_tc(efx);
+		efx_fini_mae(efx);
 	}
 
 #ifdef CONFIG_SFC_DEBUGFS
@@ -900,9 +896,9 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	net_dev->hw_enc_features |= efx->type->offload_features;
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
-	if (!net_dev->gso_max_segs)
-		net_dev->gso_max_segs =
-			ESE_EF100_DP_GZ_TSO_MAX_HDR_NUM_SEGS_DEFAULT;
+	if (!READ_ONCE(net_dev->gso_max_segs))
+		netif_set_gso_max_segs(net_dev,
+				       ESE_EF100_DP_GZ_TSO_MAX_HDR_NUM_SEGS_DEFAULT);
 #endif
 	efx->mdio.dev = net_dev;
 #ifdef EFX_NOT_UPSTREAM

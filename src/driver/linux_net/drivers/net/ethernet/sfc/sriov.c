@@ -33,6 +33,7 @@ MODULE_PARM_DESC(vf_count, "Duplicate of the max_vfs parameter");
 
 void efx_sriov_init_max_vfs(struct efx_nic *efx, unsigned int pf_index)
 {
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	unsigned int idx;
 
 	if (!efx->type->sriov_init)
@@ -47,19 +48,19 @@ void efx_sriov_init_max_vfs(struct efx_nic *efx, unsigned int pf_index)
 	idx = pf_index;
 
 	if (max_vfs_count == 0)
-		efx->max_vfs = MAX_VFS_DEF;
+		nic_data->max_vfs = MAX_VFS_DEF;
 	else if (max_vfs_count == 1)
 		/* If there is only one entry in max_vfs array,
 		 * use it for all NICs for backward compatibility.
 		 */
-		efx->max_vfs = max_vfs[0];
+		nic_data->max_vfs = max_vfs[0];
 	else if (idx >= max_vfs_count)
-		efx->max_vfs = 0;
+		nic_data->max_vfs = 0;
 	else
-		efx->max_vfs = max_vfs[idx];
+		nic_data->max_vfs = max_vfs[idx];
 
-	if (efx->max_vfs < 0)
-		efx->max_vfs = MAX_VFS_ENABLE_ALL;
+	if (nic_data->max_vfs < 0)
+		nic_data->max_vfs = MAX_VFS_ENABLE_ALL;
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)

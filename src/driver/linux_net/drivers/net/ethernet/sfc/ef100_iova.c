@@ -35,18 +35,8 @@ static void update_free_list_node(struct ef100_vdpa_iova_node *target_node,
 	if (!in_list && free_area >= MCDI_BUF_LEN) {
 		list_add(&target_node->free_node,
 			 &vdpa_nic->free_list);
-#ifdef EFX_NOT_UPSTREAM
-		vdpa_log(vdpa_nic,
-			 "%s node_add: iova: %lx free_area: %lx\n",
-			 __func__, target_node->iova, free_area);
-#endif
 	} else if (in_list && free_area < MCDI_BUF_LEN) {
 		list_del_init(&target_node->free_node);
-#ifdef EFX_NOT_UPSTREAM
-		vdpa_log(vdpa_nic,
-			 "%s node_del: iova: %lx free_area: %lx\n",
-			 __func__, target_node->iova, free_area);
-#endif
 	}
 }
 

@@ -69,6 +69,7 @@ enum efx_loopback_mode {
 	LOOPBACK_XFI_WS = 24,
 	LOOPBACK_XFI_WS_FAR = 25,
 	LOOPBACK_PHYXS_WS = 26,
+	/** @LOOPBACK_MAX: Limit of enum values */
 	LOOPBACK_MAX
 };
 #define LOOPBACK_TEST_MAX LOOPBACK_PMAPMD
@@ -127,20 +128,11 @@ enum efx_loopback_mode {
 
 /**
  * enum reset_type - reset types
- *
- * %RESET_TYPE_INVSIBLE, %RESET_TYPE_ALL, %RESET_TYPE_WORLD and
- * %RESET_TYPE_DISABLE specify the method/scope of the reset.  The
- * other valuesspecify reasons, which efx_schedule_reset() will choose
- * a method for.
- *
- * Reset methods are numbered in order of increasing scope.
- *
  * @RESET_TYPE_INVISIBLE: Reset datapath and MAC (Falcon only)
  * @RESET_TYPE_RECOVER_OR_ALL: Try to recover. Apply RESET_TYPE_ALL
- * if unsuccessful.
+ *	if unsuccessful.
  * @RESET_TYPE_ALL: Reset datapath, MAC and PHY
  * @RESET_TYPE_WORLD: Reset as much as possible
- * unsuccessful.
  * @RESET_TYPE_DATAPATH: Reset datapath only.
  * @RESET_TYPE_MC_BIST: MC entering BIST mode.
  * @RESET_TYPE_DISABLE: Reset datapath, MAC and PHY; leave NIC disabled
@@ -150,6 +142,13 @@ enum efx_loopback_mode {
  * @RESET_TYPE_TX_SKIP: hardware completed empty tx descriptors
  * @RESET_TYPE_MC_FAILURE: MC reboot/assertion
  * @RESET_TYPE_MCDI_TIMEOUT: MCDI timeout.
+ *
+ * %RESET_TYPE_INVISIBLE, %RESET_TYPE_ALL, %RESET_TYPE_WORLD and
+ * %RESET_TYPE_DISABLE specify the method/scope of the reset.  The
+ * other values specify reasons, which efx_schedule_reset() will choose
+ * a method for.
+ *
+ * Reset methods are numbered in order of increasing scope.
  */
 enum reset_type {
 	RESET_TYPE_INVISIBLE,
@@ -159,6 +158,7 @@ enum reset_type {
 	RESET_TYPE_DATAPATH,
 	RESET_TYPE_MC_BIST,
 	RESET_TYPE_DISABLE,
+	/** @RESET_TYPE_MAX_METHOD: Limit of method/scope reset types */
 	RESET_TYPE_MAX_METHOD,
 	RESET_TYPE_TX_WATCHDOG,
 	RESET_TYPE_INT_ERROR,
@@ -172,6 +172,7 @@ enum reset_type {
 	 * RESET_TYPE_MAX_METHOD.  This also prevents issuing it with
 	 * efx_ioctl_reset */
 	RESET_TYPE_MCDI_TIMEOUT,
+	/** @RESET_TYPE_MAX: Limit of enum values */
 	RESET_TYPE_MAX,
 };
 

@@ -32,6 +32,7 @@
 #define EFX_WORKAROUND_63680
 #endif
 
+/* Delay creation of MTD devices to avoid naming conflicts */
 #define EFX_WORKAROUND_87308 1
 
 /* Moderation timer access must go through MCDI */

@@ -285,7 +285,13 @@ static int efx_ethtool_set_coalesce(struct net_device *net_dev,
 }
 
 static void efx_ethtool_get_ringparam(struct net_device *net_dev,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RINGPARAM_EXTACK)
+				      struct ethtool_ringparam *ring,
+				      struct kernel_ethtool_ringparam *kring,
+				      struct netlink_ext_ack *ext_ack)
+#else
 				      struct ethtool_ringparam *ring)
+#endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
@@ -296,7 +302,13 @@ static void efx_ethtool_get_ringparam(struct net_device *net_dev,
 }
 
 static int efx_ethtool_set_ringparam(struct net_device *net_dev,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_SET_RINGPARAM_EXTACK)
+				     struct ethtool_ringparam *ring,
+				     struct kernel_ethtool_ringparam *kring,
+				     struct netlink_ext_ack *ext_ack)
+#else
 				     struct ethtool_ringparam *ring)
+#endif
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	int rc;
@@ -576,6 +588,9 @@ const struct ethtool_ops_ext efx_ethtool_ops_ext = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
 	.get_link_ksettings	= efx_ethtool_get_link_ksettings,
 	.set_link_ksettings	= efx_ethtool_set_link_ksettings,
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_FECSTATS)
+	.get_fec_stats		= efx_ethtool_get_fec_stats,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_FECPARAM)
 	.get_fecparam		= efx_ethtool_get_fecparam,

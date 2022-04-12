@@ -57,6 +57,9 @@ int efx_debugfs_read_atomic(struct seq_file *, void *);
 int efx_debugfs_read_dword(struct seq_file *, void *);
 int efx_debugfs_read_u64(struct seq_file *, void *);
 int efx_debugfs_read_bool(struct seq_file *, void *);
+#ifdef CONFIG_SFC_VDPA
+int efx_debugfs_read_x64(struct seq_file *, void *);
+#endif
 
 /* Handy macros for filling out parameters */
 

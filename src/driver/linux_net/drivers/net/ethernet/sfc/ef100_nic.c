@@ -25,7 +25,6 @@
 #include "ef100_rx.h"
 #include "ef100_tx.h"
 #include "ef100_sriov.h"
-#include "ef100_rep.h"
 #include "ef100_netdev.h"
 #include "tc.h"
 #include "mae.h"
@@ -221,8 +220,8 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 	if (rc)
 		return rc;
 	if (outlen < MC_CMD_GET_CAPABILITIES_V4_OUT_LEN) {
-		netif_err(efx, drv, efx->net_dev,
-			  "unable to read datapath firmware capabilities\n");
+		pci_err(efx->pci_dev,
+			"unable to read datapath firmware capabilities\n");
 		return -EIO;
 	}
 
@@ -230,6 +229,8 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 					     GET_CAPABILITIES_OUT_FLAGS1);
 	nic_data->datapath_caps2 = MCDI_DWORD(outbuf,
 					      GET_CAPABILITIES_V2_OUT_FLAGS2);
+	nic_data->datapath_caps3 = MCDI_DWORD(outbuf,
+					      GET_CAPABILITIES_V10_OUT_FLAGS3);
 
 	vi_window_mode = MCDI_BYTE(outbuf,
 				   GET_CAPABILITIES_V3_OUT_VI_WINDOW_MODE);
@@ -278,9 +279,9 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 			MCDI_DWORD(outbuf,
 				   GET_CAPABILITIES_V10_OUT_GUARANTEED_QUEUE_SIZES);
 	}
-	netif_dbg(efx, probe, efx->net_dev,
-		  "firmware reports num_mac_stats = %u\n",
-		  efx->num_mac_stats);
+	pci_dbg(efx->pci_dev,
+		"firmware reports num_mac_stats = %u\n",
+		efx->num_mac_stats);
 	return 0;
 }
 
@@ -363,6 +364,13 @@ static bool ef100_ev_mcdi_pending(struct efx_channel *channel)
 	}
 }
 
+static void efx_mcdi_mport_journal_event(struct efx_nic *efx)
+{
+	/* Only process the event after the PF is fully up */
+	if (efx->mae && (efx->state == STATE_NET_UP))
+		schedule_work(&efx->mae->mport_work);
+}
+
 static int ef100_ev_mcdi(struct efx_channel *channel,
 			 efx_qword_t *p_event, int quota)
 {
@@ -374,13 +382,19 @@ static int ef100_ev_mcdi(struct efx_channel *channel,
 		int code = EFX_QWORD_FIELD(*p_event, MCDI_EVENT_CODE);
 		struct efx_nic *efx = channel->efx;
 
-		if (code == MCDI_EVENT_CODE_DYNAMIC_SENSORS_STATE_CHANGE ||
-		    code == MCDI_EVENT_CODE_DYNAMIC_SENSORS_CHANGE)
+		switch (code) {
+		case MCDI_EVENT_CODE_DYNAMIC_SENSORS_STATE_CHANGE:
+		case MCDI_EVENT_CODE_DYNAMIC_SENSORS_CHANGE:
 			efx_mcdi_dynamic_sensor_event(efx, p_event);
-		else
+			break;
+		case MCDI_EVENT_CODE_MPORT_JOURNAL_CHANGE:
+			efx_mcdi_mport_journal_event(efx);
+			break;
+		default:
 			netif_info(efx, drv, efx->net_dev,
 			   "Unhandled MCDI event " EFX_QWORD_FMT " code %d\n",
 			   EFX_QWORD_VAL(*p_event), code);
+		}
 	}
 	if (rc > 0)
 		spent += rc;
@@ -698,20 +712,12 @@ static int ef100_reset(struct efx_nic *efx, enum reset_type reset_type)
 		efx->state = STATE_NET_DOWN;
 		rc = dev_open(efx->net_dev, NULL);
 	} else if (reset_type == RESET_TYPE_ALL) {
-		/* A RESET_TYPE_ALL will cause filters to be removed, so we remove filters
-		 * and reprobe after reset to avoid removing filters twice
-		 */
-		ef100_filter_table_down(efx);
 		rc = efx_mcdi_reset(efx, reset_type);
 		if (rc)
 			return rc;
 
 		efx->last_reset = jiffies;
 		netif_device_attach(efx->net_dev);
-
-		rc = ef100_filter_table_up(efx);
-		if (rc)
-			return rc;
 
 		rc = dev_open(efx->net_dev, NULL);
 	} else {
@@ -871,7 +877,8 @@ static size_t ef100_update_stats(struct efx_nic *efx,
 				 struct rtnl_link_stats64 *core_stats)
 	__acquires(efx->stats_lock)
 {
-	__le64 *mc_stats = kmalloc(efx->num_mac_stats * sizeof(__le64), GFP_ATOMIC);
+	__le64 *mc_stats = kmalloc_array(efx->num_mac_stats, sizeof(__le64),
+					 GFP_ATOMIC);
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	DECLARE_BITMAP(mask, EF100_STAT_COUNT) = {};
 	u64 *stats = nic_data->stats;
@@ -950,7 +957,7 @@ static struct net_device *ef100_get_vf_rep(struct efx_nic *efx, unsigned int vf)
 #if defined(CONFIG_SFC_SRIOV)
 	struct ef100_nic_data *nic_data = efx->nic_data;
 
-	if (vf < efx->vf_count)
+	if (vf < nic_data->vf_rep_count)
 		return nic_data->vf_rep[vf];
 #endif
 	return NULL;
@@ -977,6 +984,8 @@ static void ef100_detach_remote_reps(struct efx_nic *efx)
 	assert_spin_locked(&nic_data->rem_reps_lock);
 	for (i = 0; i < nic_data->rem_rep_count; i++) {
 		rep_dev = nic_data->rem_rep[i];
+		if (!rep_dev)
+			continue;
 		netif_carrier_off(rep_dev);
 		/* See efx_device_detach_sync() */
 		netif_tx_lock_bh(rep_dev);
@@ -994,6 +1003,8 @@ static void ef100_attach_remote_reps(struct efx_nic *efx)
 		  nic_data->rem_rep_count);
 	assert_spin_locked(&nic_data->rem_reps_lock);
 	for (i = 0; i < nic_data->rem_rep_count; i++) {
+		if (!nic_data->rem_rep[i])
+			continue;
 		netif_tx_wake_all_queues(nic_data->rem_rep[i]);
 		netif_carrier_on(nic_data->rem_rep[i]);
 	}
@@ -1010,6 +1021,8 @@ void __ef100_detach_reps(struct efx_nic *efx)
 		  nic_data->vf_rep_count);
 	for (vf = 0; vf < nic_data->vf_rep_count; vf++) {
 		rep_dev = nic_data->vf_rep[vf];
+		if (!rep_dev)
+			continue;
 		netif_carrier_off(rep_dev);
 		/* See efx_device_detach_sync() */
 		netif_tx_lock_bh(rep_dev);
@@ -1035,13 +1048,17 @@ void __ef100_attach_reps(struct efx_nic *efx)
 {
 #if defined(CONFIG_SFC_SRIOV)
 	struct ef100_nic_data *nic_data = efx->nic_data;
+	struct net_device *rep_dev;
 	unsigned int vf;
 
 	netif_dbg(efx, drv, efx->net_dev, "Attaching %d vfreps\n",
 		  nic_data->vf_rep_count);
 	for (vf = 0; vf < nic_data->vf_rep_count; vf++) {
-		netif_tx_wake_all_queues(nic_data->vf_rep[vf]);
-		netif_carrier_on(nic_data->vf_rep[vf]);
+		rep_dev = nic_data->vf_rep[vf];
+		if (!rep_dev)
+			continue;
+		netif_tx_wake_all_queues(rep_dev);
+		netif_carrier_on(rep_dev);
 	}
 #endif
 }
@@ -1204,6 +1221,12 @@ static unsigned int ef100_check_caps(const struct efx_nic *efx,
 	}
 }
 
+static unsigned int efx_ef100_recycle_ring_size(const struct efx_nic *efx)
+{
+	/* Maximum link speed for Riverhead is 100G */
+	return 10 * EFX_RECYCLE_RING_SIZE_10G;
+}
+
 static int efx_ef100_get_base_mport(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
@@ -1255,11 +1278,13 @@ static struct {
 		.init = ef100_probe_netdev,
 		.fini = ef100_remove_netdev
 	},
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 #ifdef CONFIG_SFC_VDPA
 	[EF100_BAR_CONFIG_VDPA] = {
 		.init = ef100_vdpa_init,
 		.fini = ef100_vdpa_fini
 	},
+#endif
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	[EF100_BAR_CONFIG_NONE] = {
@@ -1310,41 +1335,40 @@ static ssize_t bar_config_store(struct device *dev,
 	/* Current EF100 hardware supports vDPA on VFs only
 	 * (see SF-122427-SW)
 	 */
-	if (!efx->type->is_vf &&
-	    !strncasecmp(buf, "vdpa", min_t(size_t, count, 4))) {
+	if (!efx->type->is_vf && sysfs_streq(buf, "vdpa")) {
 		pci_err(efx->pci_dev, "vdpa over PF not supported : %s",
 			efx->name);
 		return -EOPNOTSUPP;
 	}
 
-#ifdef CONFIG_SFC_VDPA
 	mutex_lock(&nic_data->bar_config_lock);
-#endif
-	if (!strncasecmp(buf, "ef100", min_t(size_t, count, 5)))
+	if (sysfs_streq(buf, "ef100"))
 		new_config = EF100_BAR_CONFIG_EF100;
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 #ifdef CONFIG_SFC_VDPA
-	else if (!strncasecmp(buf, "vdpa", min_t(size_t, count, 4)))
+	else if (sysfs_streq(buf, "vdpa"))
 		new_config = EF100_BAR_CONFIG_VDPA;
 #endif
+#endif
 #ifdef EFX_NOT_UPSTREAM
-	else if (!strncasecmp(buf, "none", min_t(size_t, count, 4)))
+	else if (sysfs_streq(buf, "none"))
 		new_config = EF100_BAR_CONFIG_NONE;
 #endif
 	else {
-#ifdef CONFIG_SFC_VDPA
 		mutex_unlock(&nic_data->bar_config_lock);
-#endif
 		return -EIO;
 	}
 	old_config = nic_data->bar_config;
 	if (new_config == old_config) {
-#ifdef CONFIG_SFC_VDPA
 		mutex_unlock(&nic_data->bar_config_lock);
-#endif
 		return count;
 	}
 
 #ifdef CONFIG_SFC_VDPA
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+	/* Change bar_config from vdpa to ef100 if
+	 * vdpa Management interface is not supported
+	 */
 	if (old_config == EF100_BAR_CONFIG_VDPA &&
 	    new_config == EF100_BAR_CONFIG_EF100) {
 		if (ef100_vdpa_dev_in_use(efx)) {
@@ -1354,25 +1378,32 @@ static ssize_t bar_config_store(struct device *dev,
 			return -EBUSY;
 		}
 	}
+#else
+	/* Restrict bar_config writes when vdpa device has been created
+	 * using management interface
+	 */
+	if (old_config == EF100_BAR_CONFIG_VDPA) {
+		pci_warn(efx->pci_dev,
+			 "Device in use. Cannot change bar config");
+		mutex_unlock(&nic_data->bar_config_lock);
+		return -EBUSY;
+	}
+#endif
 #endif
 	probe_data = container_of(efx, struct efx_probe_data, efx);
 	if (bar_config_std[old_config].fini)
 		bar_config_std[old_config].fini(probe_data);
 
-	nic_data->bar_config = new_config;
 	if (bar_config_std[new_config].init) {
 		rc = bar_config_std[new_config].init(probe_data);
 		if (rc) {
-#ifdef CONFIG_SFC_VDPA
 			mutex_unlock(&nic_data->bar_config_lock);
-#endif
 			return rc;
 		}
 	}
 
-#ifdef CONFIG_SFC_VDPA
+	nic_data->bar_config = new_config;
 	mutex_unlock(&nic_data->bar_config_lock);
-#endif
 
 	pci_info(efx->pci_dev, "BAR configuration changed to %s", buf);
 	return count;
@@ -1483,13 +1514,11 @@ static int ef100_process_design_param(struct efx_nic *efx,
 		return 0;
 	case ESE_EF100_DP_GZ_TSO_MAX_PAYLOAD_LEN:
 		nic_data->tso_max_payload_len = min_t(u64, reader->value, GSO_MAX_SIZE);
-		efx->net_dev->gso_max_size = nic_data->tso_max_payload_len;
+		netif_set_gso_max_size(efx->net_dev, nic_data->tso_max_payload_len);
 		return 0;
 	case ESE_EF100_DP_GZ_TSO_MAX_PAYLOAD_NUM_SEGS:
 		nic_data->tso_max_payload_num_segs = min_t(u64, reader->value, 0xffff);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
-		efx->net_dev->gso_max_segs = nic_data->tso_max_payload_num_segs;
-#endif
+		netif_set_gso_max_segs(efx->net_dev, nic_data->tso_max_payload_num_segs);
 		return 0;
 	case ESE_EF100_DP_GZ_TSO_MAX_NUM_FRAMES:
 		nic_data->tso_max_frames = min_t(u64, reader->value, 0xffff);
@@ -1668,41 +1697,13 @@ static int ef100_probe_main(struct efx_nic *efx)
 	nic_data->grp_mae = !!(privlege_mask &
 			       MC_CMD_PRIVILEGE_MASK_IN_GRP_MAE);
 
-#ifdef CONFIG_SFC_VDPA
 	mutex_init(&nic_data->bar_config_lock);
-#endif
-
 	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_bar_config);
 
 	return 0;
 fail:
 	return rc;
 }
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-static bool ef100_mport_needs_rep(struct efx_nic *efx,
-				  struct mae_mport_desc *mport_desc)
-{
-	bool vnic, pcie_func, local_intf, local_pf, vf, self;
-	struct ef100_nic_data *nic_data = efx->nic_data;
-
-	vnic = mport_desc->mport_type == MAE_MPORT_DESC_MPORT_TYPE_VNIC;
-	self = vnic && nic_data->have_old_mport &&
-	       mport_desc->mport_id == nic_data->old_base_mport;
-	pcie_func = vnic &&
-		    mport_desc->vnic_client_type == MAE_MPORT_DESC_VNIC_CLIENT_TYPE_FUNCTION;
-	vf = pcie_func && mport_desc->vf_idx != MAE_MPORT_DESC_VF_IDX_NULL;
-	local_intf = nic_data->have_local_intf && pcie_func &&
-		     mport_desc->interface_idx == nic_data->local_mae_intf;
-	local_pf = pcie_func && mport_desc->pf_idx == nic_data->pf_index;
-	WARN_ON(self && !local_pf);
-
-	/* All VNICs, even VNIC_PLUGIN require rep.
-	 * But no reps for ourself, or for our VFs (if we can identify them)
-	 */
-	return vnic && !self && !(vf && local_intf && local_pf);
-}
-#endif
 
 int efx_ef100_lookup_client_id(struct efx_nic *efx, efx_qword_t pciefn, u32 *id)
 {
@@ -1731,21 +1732,23 @@ int ef100_probe_netdev_pf(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct net_device *net_dev = efx->net_dev;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	unsigned int nreps = 0;
-	unsigned int rep_idx;
-	unsigned int i;
-#endif
 	int rc;
 
 	if (!nic_data->grp_mae)
 		return 0;
 
 	rc = efx_ef100_get_base_mport(efx);
-	if (rc)
+	if (rc) {
 		netif_warn(efx, probe, net_dev,
 			   "Failed to probe base mport rc %d; representors will not function\n",
 			   rc);
+	} else {
+		rc = efx_init_mae(efx);
+		if (rc)
+			pci_warn(efx->pci_dev,
+				 "Failed to init MAE rc %d; representors will not function\n",
+				 rc);
+	}
 
 	rc = efx_init_tc(efx);
 	if (rc) {
@@ -1766,65 +1769,22 @@ int ef100_probe_netdev_pf(struct efx_nic *efx)
 #endif
 	}
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-	nic_data->have_local_intf = false;
-	for (i = 0; i < efx->tc->n_mports; i++)
-		if (nic_data->have_old_mport &&
-		    efx->tc->mports[i].mport_id == nic_data->old_base_mport) {
-			WARN_ON(efx->tc->mports[i].mport_type !=
-				MAE_MPORT_DESC_MPORT_TYPE_VNIC);
-			WARN_ON(efx->tc->mports[i].vnic_client_type !=
-				MAE_MPORT_DESC_VNIC_CLIENT_TYPE_FUNCTION);
-			nic_data->local_mae_intf = efx->tc->mports[i].interface_idx;
-			nic_data->have_local_intf = true;
-			netif_dbg(efx, probe, net_dev,
-				  "MAE interface_idx is %u\n",
-				  nic_data->local_mae_intf);
-			break;
-		}
-	if (!nic_data->have_local_intf)
-		netif_warn(efx, probe, net_dev,
-			   "Own m-port desc not found; using remote_reps for local VFs\n");
-	for (i = 0; i < efx->tc->n_mports; i++) {
-		if (ef100_mport_needs_rep(efx, &efx->tc->mports[i]))
-			nreps++;
-	}
-	if (!nreps)
-		return 0;
-	nic_data->rem_rep = kcalloc(nreps,
-				    sizeof(struct net_device *),
-				    GFP_KERNEL);
-	if (!nic_data->rem_rep) {
-		netif_warn(efx, probe, net_dev,
-			   "Failed to allocate memory for remote_reps\n");
-		return 0;
-	}
-
-	for (i = 0; i < efx->tc->n_mports; i++) {
-		if (!ef100_mport_needs_rep(efx, &efx->tc->mports[i]))
-			continue;
-		if (WARN_ON(nic_data->rem_rep_count >= nreps))
-			return 0;
-		/* increment rem_rep_count early, as it is used in
-		 * ef100_get_remote_rep called in the stack of
-		 * efx_ef100_remote_rep_create */
-		rep_idx = nic_data->rem_rep_count++;
-		rc = efx_ef100_remote_rep_create(efx, rep_idx, i);
-		if (rc) {
-			nic_data->rem_rep_count--;
-			netif_warn(efx, probe, net_dev,
-				   "Failed to create a remote_rep, rc %d\n",
-				   rc);
-			return 0;
-		}
-	}
-#endif
-
+	efx_ef100_init_reps(efx);
 	return 0;
 }
 
 int ef100_probe_vf(struct efx_nic *efx)
 {
+#if defined(CONFIG_SFC_VDPA)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+	int rc;
+
+	rc = ef100_vdpa_register_mgmtdev(efx);
+	if (rc)
+		pci_warn(efx->pci_dev,
+			 "vDPA Management device registration failed\n");
+#endif
+#endif
 	BUILD_BUG_ON(MAE_MPORT_SELECTOR_NULL);
 
 	return ef100_probe_main(efx);
@@ -1833,15 +1793,12 @@ int ef100_probe_vf(struct efx_nic *efx)
 void ef100_remove(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
-#if defined(CONFIG_SFC_VDPA)
+#ifdef CONFIG_SFC_VDPA
 	struct efx_probe_data *probe_data;
-
-	if (nic_data && (nic_data->bar_config == EF100_BAR_CONFIG_VDPA)) {
-		probe_data = container_of(efx, struct efx_probe_data, efx);
+	probe_data = container_of(efx, struct efx_probe_data, efx);
+	if (nic_data && (nic_data->bar_config == EF100_BAR_CONFIG_VDPA))
 		ef100_vdpa_fini(probe_data);
-	}
 #endif
-
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_bar_config);
 	efx_remove_common(efx);
 	if (nic_data) {
@@ -1851,9 +1808,15 @@ void ef100_remove(struct efx_nic *efx)
 		else
 			ef100_vdpa_free_buffer(efx->vdpa_nic,
 					       &nic_data->mcdi_buf);
-		mutex_destroy(&nic_data->bar_config_lock);
 #endif
+		mutex_destroy(&nic_data->bar_config_lock);
 	}
+
+#if defined(CONFIG_SFC_VDPA)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+	ef100_vdpa_unregister_mgmtdev(efx);
+#endif
+#endif
 
 	kfree(nic_data);
 	efx->nic_data = NULL;
@@ -1930,7 +1893,6 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_packet = __ef100_rx_packet,
 	.rx_buf_hash_valid = ef100_rx_buf_hash_valid,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
-	.set_id_led = efx_mcdi_set_id_led,
 	.filter_table_probe = ef100_filter_table_init,
 	.filter_table_up = ef100_filter_table_up,
 	.filter_table_restore = efx_mcdi_filter_table_restore,
@@ -1973,6 +1935,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_push_rss_context_config = efx_mcdi_rx_push_rss_context_config,
 	.rx_pull_rss_context_config = efx_mcdi_rx_pull_rss_context_config,
 	.rx_restore_rss_contexts = efx_mcdi_rx_restore_rss_contexts,
+	.rx_recycle_ring_size = efx_ef100_recycle_ring_size,
 
 	.reconfigure_mac = ef100_reconfigure_mac,
 	.reconfigure_port = efx_mcdi_port_reconfigure,
@@ -2067,6 +2030,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.rx_write = ef100_rx_write,
 	.rx_defer_refill = efx_ef100_rx_defer_refill,
 	.rx_packet = __ef100_rx_packet,
+	.rx_buf_hash_valid = ef100_rx_buf_hash_valid,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
 	.filter_table_probe = ef100_filter_table_init,
 	.filter_table_up = ef100_filter_table_up,
@@ -2104,6 +2068,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.rx_pull_rss_config = efx_mcdi_rx_pull_rss_config,
 	.rx_push_rss_config = efx_mcdi_pf_rx_push_rss_config,
 	.rx_restore_rss_contexts = efx_mcdi_rx_restore_rss_contexts,
+	.rx_recycle_ring_size = efx_ef100_recycle_ring_size,
 
 	.reconfigure_mac = ef100_reconfigure_mac,
 	.test_nvram = efx_mcdi_nvram_test_all,

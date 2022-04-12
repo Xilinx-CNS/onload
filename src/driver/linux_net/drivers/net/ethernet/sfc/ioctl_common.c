@@ -395,7 +395,7 @@ int efx_ioctl_rxnfc(struct efx_nic *efx, void __user *useraddr)
 			/* No more than 1 MB of rule indices - way
 			 * more than we could possibly have! */
 			if (info.rule_cnt <= (1 << 18))
-				rule_buf = kzalloc(info.rule_cnt * sizeof(u32),
+				rule_buf = kcalloc(info.rule_cnt, sizeof(u32),
 						   GFP_USER);
 			if (!rule_buf)
 				return -ENOMEM;

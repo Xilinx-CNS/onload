@@ -50,14 +50,14 @@ enum efx_dl_ev_prio {
 /**
  * enum efx_dl_driver_flags - flags for Driverlink client driver behaviour
  * @EFX_DL_DRIVER_REQUIRES_MINOR_VER: Set by client drivers to indicate the
- *      minor_ver entry us present in their struct. Defined from API 22.1.
+ *      minor_ver entry is present in their struct. Defined from API 22.1.
  * @EFX_DL_DRIVER_SUPPORTS_MINOR_VER: Set by the device driver to
  *      indicate the minor version supplied by the client is supported.
  * @EFX_DL_DRIVER_CHECKS_MEDFORD2_VI_STRIDE: Set by client drivers that
  *	promise to use the VI stride and memory BAR supplied by the net
  *	driver on Medford2.  If this flag is not set, the client driver
  *	will not be probed for Medford2 (or newer) NICs.  Defined from API 22.5.
- * @EFX_DL_DRIVER_NO_STACK: Set by client drivers to indicate they are only
+ * @EFX_DL_DRIVER_NO_PUBLISH: Set by client drivers to indicate they are only
  *      interested in querying interfaces and are not a stack.
  *      This will cause the driver not to allocate resources for them, but
  *      they cannot insert filters or create queues.
@@ -71,11 +71,6 @@ enum efx_dl_driver_flags {
 
 /**
  * struct efx_dl_driver - Driverlink client driver
- *
- * A driverlink client defines and initializes as many instances of
- * efx_dl_driver as required, registering each one with
- * efx_dl_register_driver().
- *
  * @name: Name of the driver
  * @priority: Priority of this driver in event handling
  * @flags: Flags describing driver behaviour.  Defined from API version 8.
@@ -83,28 +78,34 @@ enum efx_dl_driver_flags {
  *	The client should use the @dev_info linked list to determine
  *	if they wish to attach to this device.  (@silicon_rev is a
  *	dummy parameter.)
- *	Context: process, rtnl_lock held
+ *	Called in process context, rtnl_lock held.
  * @remove: Called when device removed
  *	The client must ensure the finish all operations with this
  *	device before returning from this method.
- *	Context: process, rtnl_lock held
+ *	Called in process context, rtnl_lock held.
  * @reset_suspend: Called before device is reset
  *	Called immediately before a hardware reset. The client must stop all
  *	hardware processing before returning from this method. Callbacks will
  *	be inactive when this method is called.
- *	Context: process, rtnl_lock held
+ *	Called in process context, rtnl_lock held.
  * @reset_resume: Called after device is reset
  *	Called after a hardware reset. If @ok is true, the client should
  *	state and resume normal operations. If @ok is false, the client should
  *	abandon use of the hardware resources. remove() will still be called.
- *	Context: process, rtnl_lock held
+ *	Called in process context, rtnl_lock held.
  * @handle_event: Called when an event on a single-function port may
  *	need to be handled by a client.  May be %NULL if the client
  *	driver does not handle events.  Returns %true if the event is
  *	recognised and handled, else %false.  If multiple clients
  *	registered for a device implement this operation, they will be
  *	called in priority order from high to low, until one returns
- *	%true.  Context: NAPI.
+ *	%true.  Called in NAPI context.
+ * @minor_ver: API minor version, checked by the driver if @flags contains
+ *	%EFX_DL_DRIVER_REQUIRES_MINOR_VER.
+ *
+ * A driverlink client defines and initializes as many instances of
+ * efx_dl_driver as required, registering each one with
+ * efx_dl_register_driver().
  *
  * Prior to API version 7, only one driver with non-null @handle_event
  * could be registered for each device.  The @priority field was not
@@ -135,15 +136,17 @@ struct efx_dl_driver {
 
 /**
  * enum efx_dl_device_info_type - Device information identifier.
- *
- * Used to identify each item in the &struct efx_dl_device_info linked list
- * provided to each driverlink client in the probe() @dev_info member.
- *
  * @EFX_DL_HASH_INSERTION: Information type is &struct efx_dl_hash_insertion
+ * @EFX_DL_MCDI_RESOURCES: Obsolete and unused.
  * @EFX_DL_AOE_RESOURCES: Information type is &struct efx_dl_aoe_resources.
  *	Defined from API version 6.
  * @EFX_DL_EF10_RESOURCES: Information type is &struct efx_dl_ef10_resources.
  *	Defined from API version 9.
+ * @EFX_DL_IRQ_RESOURCES: Information type is &struct efx_dl_irq_resources.
+ *	Defined from API version 27.
+ *
+ * Used to identify each item in the &struct efx_dl_device_info linked list
+ * provided to each driverlink client in the probe() @dev_info member.
  */
 enum efx_dl_device_info_type {
 	EFX_DL_HASH_INSERTION = 1,
@@ -211,14 +214,13 @@ struct efx_dl_aoe_resources {
 
 /**
  * enum efx_dl_ef10_resource_flags - EF10 resource information flags.
- *
- * Flags that describe hardware variations for the current EF10 or
- * Siena device.
- *
  * @EFX_DL_EF10_USE_MSI: Port is initialised to use MSI/MSI-X interrupts.
  *      EF10 supports traditional legacy interrupts and MSI/MSI-X
  *      interrupts. The choice is made at run time by the sfc driver, and
  *      notified to the clients by this enumeration
+ *
+ * Flags that describe hardware variations for the current EF10 or
+ * Siena device.
  */
 enum efx_dl_ef10_resource_flags {
 	EFX_DL_EF10_USE_MSI = 0x2,
@@ -237,6 +239,7 @@ enum efx_dl_ef10_resource_flags {
  *      for wakeup timers, in nanoseconds.
  * @rss_channel_count: Number of receive channels used for RSS.
  * @rx_channel_count: Number of receive channels available for use.
+ * @flags: Resource information flags.
  * @vi_shift: Shift value for absolute VI number computation.
  * @vi_stride: size in bytes of a single VI.
  * @mem_bar: PCIe memory BAR index.
@@ -264,6 +267,8 @@ struct efx_dl_ef10_resources {
  * @int_prime: Address of the INT_PRIME register.
  * @channel_base: Base channel number.
  * @irq_ranges: Array of interrupts, specified as base vector + range.
+ * @irq_ranges.vector: Interrupt base vector.
+ * @irq_ranges.range: Interrupt range starting at @irq_ranges.vector.
  */
 struct efx_dl_irq_resources {
 	struct efx_dl_device_info hdr;
@@ -278,20 +283,48 @@ struct efx_dl_irq_resources {
 };
 
 /**
- * enum efx_dl_filter_block_kernel_type
+ * enum efx_dl_filter_block_kernel_type - filter types
  * @EFX_DL_FILTER_BLOCK_KERNEL_UCAST: Unicast
  * @EFX_DL_FILTER_BLOCK_KERNEL_MCAST: Multicast
  */
 enum efx_dl_filter_block_kernel_type {
 	EFX_DL_FILTER_BLOCK_KERNEL_UCAST = 0,
 	EFX_DL_FILTER_BLOCK_KERNEL_MCAST,
+	/** @EFX_DL_FILTER_BLOCK_KERNEL_MAX: Limit of enum values */
 	EFX_DL_FILTER_BLOCK_KERNEL_MAX,
 };
 
 /**
  * struct efx_dl_ops - Operations for driverlink clients to use
- * on a driverlink nic.
- */
+ *	on a driverlink nic.
+ * @hw_unavailable: Return %true if hardware is uninitialised or disabled.
+ * @pause: Pause NAPI processing in driver
+ * @resume: Resume NAPI processing in driver
+ * @schedule_reset: Schedule a driver reset
+ * @rss_flags_default: Get default RSS flags
+ * @rss_context_new: Allocate an RSS context
+ * @rss_context_set: Push RSS context settings to NIC
+ * @rss_context_free: Free an RSS context
+ * @filter_insert: Insert an RX filter
+ * @filter_remove: Remove an RX filter
+ * @filter_redirect: Redirect an RX filter
+ * @vport_new: Allocate a vport
+ * @vport_free: free a vport
+ * @init_txq: Initialise a TX queue
+ * @init_rxq: Initialise an RX queue
+ * @set_multicast_loopback_suppression: Configure if multicast loopback
+ *	traffic should be suppressed.
+ * @filter_block_kernel: Block kernel handling of traffic type
+ * @filter_unblock_kernel: Unblock kernel handling of traffic type
+ * @mcdi_rpc: Issue an MCDI command to firmware
+ * @publish: Allocate resources and bring interface up
+ * @unpublish: Release resources
+ * @dma_xlate: Translate DMA buffer addresses
+ * @mcdi_rpc_client: Issue an @mcdi_rpc for a given client ID.
+ * @client_alloc: Allocate a dynamic client ID
+ * @client_free: Free a dynamic client ID
+ * @vi_set_user: Set VI user to client ID
+*/
 struct efx_dl_ops {
 	bool (*hw_unavailable)(struct efx_dl_device *efx_dev);
 	void (*pause)(struct efx_dl_device *efx_dev);
@@ -380,7 +413,7 @@ struct efx_dl_nic {
 
 	int msg_enable;
 
-/* private: */
+	/* private */
 	struct list_head nic_node;
 	struct list_head device_list;
 };
@@ -432,13 +465,16 @@ void efx_dl_unregister_driver(struct efx_dl_driver *driver);
  *
  * This acquires the rtnl_lock and therefore must be called from
  * process context.
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_dl_register_driver(struct efx_dl_driver *driver);
 
 /**
  * efx_dl_netdev_is_ours() - Check whether netdevice is a driverlink nic
- *
  * @net_dev: Net device to be checked
+ *
+ * Return: %true if the netdevice is a driverlink nic, otherwise %false.
  */
 bool efx_dl_netdev_is_ours(const struct net_device *net_dev);
 
@@ -448,6 +484,8 @@ bool efx_dl_netdev_is_ours(const struct net_device *net_dev);
  * @driver: Driver structure for the device to be found
  *
  * Caller must hold the rtnl_lock.
+ *
+ * Return: &struct efx_dl_device on success, otherwise %NULL.
  */
 struct efx_dl_device *
 efx_dl_dev_from_netdev(const struct net_device *net_dev,
@@ -465,6 +503,8 @@ void efx_dl_unpublish(struct efx_dl_device *efx_dev);
 /**
  * efx_dl_rss_flags_default() - return appropriate default RSS flags for NIC
  * @efx_dev: NIC on which to act
+ *
+ * Return: default RSS flags.
  */
 static inline u32 efx_dl_rss_flags_default(struct efx_dl_device *efx_dev)
 {
@@ -479,6 +519,8 @@ static inline u32 efx_dl_rss_flags_default(struct efx_dl_device *efx_dev)
  * @flags: initial hashing flags (as defined by MCDI)
  * @num_queues: number of queues spanned by this context, in the range 1-64
  * @rss_context: location to store user_id of newly allocated RSS context
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_rss_context_new(struct efx_dl_device *efx_dev,
 					 const u32 *indir, const u8 *key,
@@ -497,6 +539,8 @@ static inline int efx_dl_rss_context_new(struct efx_dl_device *efx_dev,
  * @flags: new hashing flags (as defined by MCDI)
  * @rss_context: user_id of RSS context on which to act.  Should be a value
  *	previously written by efx_dl_rss_context_new().
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_rss_context_set(struct efx_dl_device *efx_dev,
 					 const u32 *indir, const u8 *key,
@@ -511,6 +555,8 @@ static inline int efx_dl_rss_context_set(struct efx_dl_device *efx_dev,
  * @efx_dev: NIC on which to act
  * @rss_context: user_id of RSS context to be removed.  Should be a value
  *	previously written by efx_dl_rss_context_new().
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_rss_context_free(struct efx_dl_device *efx_dev,
 					  u32 rss_context)
@@ -540,11 +586,14 @@ static inline int efx_dl_filter_remove(struct efx_dl_device *efx_dev,
  * @efx_dev: NIC in which to update the filter
  * @filter_id: ID of filter, as returned by @efx_dl_filter_insert
  * @rxq_i: Index of RX queue
+ * @stack_id: ID of stack, as returned by @efx_dl_filter_insert
  *
  * If filter previously had %EFX_FILTER_FLAG_RX_RSS and an associated RSS
  * context, the flag will be cleared and the RSS context deassociated.  (This
  * behaviour is new in API version 23 and is only supported by EF10; farch will
  * return -EINVAL in this case.)
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_filter_redirect(struct efx_dl_device *efx_dev,
 					 int filter_id, int rxq_i, int stack_id)
@@ -554,15 +603,19 @@ static inline int efx_dl_filter_redirect(struct efx_dl_device *efx_dev,
 }
 
 /**
- * efx_dl_filter_redirect_rss() - update the queue and RSS context for an existing RX filter
+ * efx_dl_filter_redirect_rss() - update the queue and RSS context
+ *	for an existing RX filter
  * @efx_dev: NIC in which to update the filter
  * @filter_id: ID of filter, as returned by @efx_dl_filter_insert
  * @rxq_i: Index of RX queue
  * @rss_context: user_id of RSS context.  Either a value supplied by
  *	efx_dl_rss_context_new(), or 0 to use default RSS context.
+ * @stack_id: ID of stack, as returned by @efx_dl_filter_insert
  *
  * If filter previously did not have %EFX_FILTER_FLAG_RX_RSS, it will be set
  * (EF10) or -EINVAL will be returned (farch).
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_filter_redirect_rss(struct efx_dl_device *efx_dev,
 					     int filter_id, int rxq_i,
@@ -578,7 +631,7 @@ static inline int efx_dl_filter_redirect_rss(struct efx_dl_device *efx_dev,
  * @vlan: VID of VLAN to place this vport on, or %EFX_FILTER_VID_UNSPEC for none
  * @vlan_restrict: as per corresponding flag in MCDI
  *
- * Returns user_id of new vport, or negative error.
+ * Return: user_id of new vport, or negative error.
  */
 static inline int efx_dl_vport_new(struct efx_dl_device *efx_dev,
 				   u16 vlan, bool vlan_restrict)
@@ -591,6 +644,8 @@ static inline int efx_dl_vport_new(struct efx_dl_device *efx_dev,
  * @efx_dev: NIC on which to act
  * @port_id: user_id of vport to be removed.  Should be a value previously
  *	returned by efx_dl_vport_new().
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_vport_free(struct efx_dl_device *efx_dev, u16 port_id)
 {
@@ -601,6 +656,7 @@ static inline int efx_dl_vport_free(struct efx_dl_device *efx_dev, u16 port_id)
 /**
  * efx_dl_init_txq() - initialise a TXQ
  * @efx_dev: NIC on which to act
+ * @client_id: as per MCDI
  * @dma_addrs: array of DMA addresses of buffer space for TX descriptors
  * @n_dma_addrs: count of elements in @dma_addrs
  * @vport_id: user_id of vport (returned by efx_dl_vport_new(), or 0)
@@ -624,6 +680,8 @@ static inline int efx_dl_vport_free(struct efx_dl_device *efx_dev, u16 port_id)
  * @num_entries: size of the TX ring in entries
  *
  * Available from API version 25.1.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline
 int efx_dl_init_txq(struct efx_dl_device *efx_dev, u32 client_id,
@@ -649,6 +707,7 @@ int efx_dl_init_txq(struct efx_dl_device *efx_dev, u32 client_id,
 /**
  * efx_dl_init_rxq() - initialise an RXQ
  * @efx_dev: NIC on which to act
+ * @client_id: as per MCDI
  * @dma_addrs: array of DMA addresses of buffer space for RX descriptors
  * @n_dma_addrs: count of elements in @dma_addrs
  * @vport_id: user_id of vport (returned by efx_dl_vport_new(), or 0)
@@ -669,6 +728,8 @@ int efx_dl_init_txq(struct efx_dl_device *efx_dev, u32 client_id,
  * @ef100_rx_buffer_size: RX buffer size (in bytes) for EF100.
  *
  * Available from API version 25.1.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline
 int efx_dl_init_rxq(struct efx_dl_device *efx_dev, u32 client_id,
@@ -696,6 +757,8 @@ int efx_dl_init_rxq(struct efx_dl_device *efx_dev, u32 client_id,
  * @stack_id: stack ID to OR into bits 23-16 of HW vport ID
  *
  * Available from API version 25.1.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline
 int efx_dl_set_multicast_loopback_suppression(struct efx_dl_device *efx_dev,
@@ -717,6 +780,8 @@ int efx_dl_set_multicast_loopback_suppression(struct efx_dl_device *efx_dev,
  * stack and upper devices will not receive packets except through
  * explicit configuration (e.g. ethtool -U or PTP on Siena).  The net
  * driver's loopback self-test will also fail.
+ *
+ * Return: a negative error code or 0 on success.
  */
 int efx_dl_filter_block_kernel(struct efx_dl_device *dl_dev,
 			       enum efx_dl_filter_block_kernel_type type);
@@ -740,13 +805,15 @@ void efx_dl_filter_unblock_kernel(struct efx_dl_device *dl_dev,
  *	of 4 and no greater than %MC_SMEM_PDU_LEN.
  * @outbuf: Response buffer.  May be %NULL if @outlen is 0.
  * @outlen: Length of response buffer, in bytes.  If the actual
- *	reponse is longer than @outlen & ~3, it will be truncated
+ *	response is longer than @outlen & ~3, it will be truncated
  *	to that length.
  * @outlen_actual: Pointer through which to return the actual response
  *	length.  May be %NULL if this is not needed.
  *
  * This function may sleep and therefore must be called in process
  * context.  Defined from API version 6.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_mcdi_rpc(struct efx_dl_device *dl_dev,
 				  unsigned int cmd, size_t inlen, size_t outlen,
@@ -773,6 +840,8 @@ static inline int efx_dl_mcdi_rpc(struct efx_dl_device *dl_dev,
  * address which the NIC cannot access via DMA. Translation will still
  * continue after an error is encountered; all untranslatable addresses will
  * have their dst value set to (dma_addr_t)-1.  Defined from API version 30.
+ *
+ * Return: Number of successfully translated addresses.
  */
 static inline long efx_dl_dma_xlate(struct efx_dl_device *dl_dev,
 				    const dma_addr_t *src,
@@ -783,13 +852,27 @@ static inline long efx_dl_dma_xlate(struct efx_dl_device *dl_dev,
 
 /**
  * efx_dl_mcdi_rpc_client - issue an MCDI command on a non-base client
- * This is a superset of efx_dl_mcdi_rpc, adding:
- * @client_id: A dynamic client ID created by efx_dl_client_alloc() on which
- *	to send this MCDI command
+ * @dl_dev: Driverlink client device context
+ * @client_id: A dynamic client ID created by efx_dl_client_alloc() on
+ *	which to send this MCDI command
+ * @cmd: Command type number
+ * @inlen: Length of command parameters, in bytes.  Must be a multiple
+ *	of 4 and no greater than %MC_SMEM_PDU_LEN.
+ * @outlen: Length of response buffer, in bytes.  If the actual
+ *	response is longer than @outlen & ~3, it will be truncated
+ *	to that length.
+ * @outlen_actual: Pointer through which to return the actual response
+ *	length.  May be %NULL if this is not needed.
+ * @inbuf: Command parameters
+ * @outbuf: Response buffer.  May be %NULL if @outlen is 0.
+ *
+ * This is a superset of efx_dl_mcdi_rpc(), adding @client_id.
  *
  * The caller must provide space for 12 additional bytes (beyond inlen) in the
  * memory at inbuf; inbuf may be modified in-situ. This function may sleep and
  * therefore must be called in process context. Defined from API version 30.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_mcdi_rpc_client(struct efx_dl_device *dl_dev,
 					 u32 client_id, unsigned int cmd,
@@ -810,6 +893,8 @@ static inline int efx_dl_mcdi_rpc_client(struct efx_dl_device *dl_dev,
  * @id: Out. The allocated client ID.
  *
  * Use efx_dl_client_free to release the client. Available from API version 30.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_client_alloc(struct efx_dl_device *dl_dev,
 				      u32 parent, u32 *id)
@@ -823,6 +908,8 @@ static inline int efx_dl_client_alloc(struct efx_dl_device *dl_dev,
  * @id: The dynamic client ID to destroy
  *
  * See efx_dl_client_alloc. Available from API version 30.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_client_free(struct efx_dl_device *dl_dev, u32 id)
 {
@@ -832,13 +919,15 @@ static inline int efx_dl_client_free(struct efx_dl_device *dl_dev, u32 id)
 /**
  * efx_dl_vi_set_user - reassign a VI to a dynamic client
  * @dl_dev: Driverlink client device context
- * @vi_instances: The (relative) VI number to reassign
+ * @vi_instance: The (relative) VI number to reassign
  * @client_id: Dynamic client ID to be the new user. MC_CMD_CLIENT_ID_SELF to
  *	assign back to the base function.
  *
  * See efx_dl_client_alloc. VIs may only be moved to/from the base function
  * and a dynamic client; to reassign from one dynamic client to another they
  * must go via the base function first. Available from API version 30.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_dl_vi_set_user(struct efx_dl_device *dl_dev,
 				     u32 vi_instance, u32 client_id)

@@ -44,7 +44,7 @@ static inline struct ef10_vf *efx_ef10_vf_info(struct efx_nic *efx, int vf_i)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 
-	if (!nic_data->vf || vf_i < 0 || vf_i >= efx->vf_count)
+	if (!nic_data->vf || vf_i < 0 || vf_i >= nic_data->vf_count)
 		return NULL;
 
 	return nic_data->vf + vf_i;

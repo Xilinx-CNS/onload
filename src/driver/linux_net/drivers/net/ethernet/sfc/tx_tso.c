@@ -390,8 +390,9 @@ static void tso_fill_packet_with_fragment(struct efx_tx_queue *tx_queue,
  * @st:			TSO state
  * @is_first:		true if this is the first packet
  *
- * Generate a new header and prepare for the new packet.  Return 0 on
- * success, or -%ENOMEM if failed to alloc header.
+ * Generate a new header and prepare for the new packet.
+ *
+ * Return: 0 on success, or -%ENOMEM if failed to alloc header.
  */
 static int tso_start_new_packet(struct efx_tx_queue *tx_queue,
 				const struct sk_buff *skb,
@@ -505,11 +506,11 @@ static int tso_start_new_packet(struct efx_tx_queue *tx_queue,
  * @data_mapped:        Did we map the data? Always set to true
  *                      by this on success.
  *
- * Context: You must hold netif_tx_lock() to call this function.
- *
  * Add socket buffer @skb to @tx_queue, doing TSO or return != 0 if
- * @skb was not enqueued.  In all cases @skb is consumed.  Return
- * %NETDEV_TX_OK.
+ * @skb was not enqueued.  In all cases @skb is consumed.
+ *
+ * Context: You must hold netif_tx_lock() to call this function.
+ * Return: %NETDEV_TX_OK.
  */
 int efx_nic_tx_tso_sw(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 		      bool *data_mapped)

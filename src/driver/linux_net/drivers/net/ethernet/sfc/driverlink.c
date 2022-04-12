@@ -25,11 +25,11 @@ static LIST_HEAD(efx_driver_list);
 static LIST_HEAD(efx_nic_list);
 
 /**
- * Internal extension of efx_dev
+ * struct efx_dl_handle - Internal extension of efx_dev.
  * @efx_dev: driverlink device handle exported to consumers
- * @efx: efx_nic backing the driverlink device
  * @nic_node: per-device list node
  * @driver_node: per-driver list node
+ * @publish_count: Number of external stacks that have published this handle
  * @block_kernel_count: Number of times client has requested each kernel block,
  *     indexed by enum efx_dl_filter_block_kernel_type
  */

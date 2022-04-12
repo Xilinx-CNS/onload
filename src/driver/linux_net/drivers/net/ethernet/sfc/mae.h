@@ -58,11 +58,14 @@ struct mae_mport_desc {
 			u16 vf_idx;
 		};
 	};
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	struct rhash_head linkage;
+#endif
+	struct efx_rep *efv;
 };
 
-/* Returns array of mports reported by fw, or error pointer */
-struct mae_mport_desc *efx_mae_enumerate_mports(struct efx_nic *efx,
-						unsigned int *n_mports);
+int efx_mae_enumerate_mports(struct efx_nic *efx);
+struct mae_mport_desc *efx_mae_find_mport(struct efx_nic *efx, u32 mport_id);
 
 int efx_mae_get_tables(struct efx_nic *efx);
 void efx_mae_free_tables(struct efx_nic *efx);
@@ -80,6 +83,23 @@ struct mae_caps {
 #define MAE_ENCAP_TYPE_SUPPORTED(_caps, _type)	((_caps)->encap_type & \
 						 BIT(MC_CMD_MAE_GET_CAPABILITIES_OUT_ENCAP_TYPE_ ## _type ## _LBN))
 
+/**
+ * struct efx_mae - MAE information
+ *
+ * @efx: The associated NIC
+ * @mport_work: Work item to handle MPORT journal changes
+ * @mports_ht: m-port descriptions from MC_CMD_MAE_MPORT_READ_JOURNAL
+ * @mports_mutex: Used to serialise operations on the m-port hashtable
+ */
+struct efx_mae {
+	struct efx_nic *efx;
+	struct work_struct mport_work;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	struct rhashtable mports_ht;
+	struct mutex mports_mutex;	/* Serialise operations on mports_ht */
+#endif
+};
+
 int efx_mae_get_caps(struct efx_nic *efx, struct mae_caps *caps);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
@@ -89,7 +109,8 @@ int efx_mae_match_check_caps(struct efx_nic *efx,
 int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 				 const struct efx_tc_match_fields *mask,
 				 struct netlink_ext_ack *extack);
-int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv);
+int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv,
+				   u8 ip_tos_mask);
 int efx_mae_check_encap_type_supported(struct efx_nic *efx, enum efx_encap_type typ);
 
 int efx_mae_allocate_counter(struct efx_nic *efx, struct efx_tc_counter *cnt);
@@ -108,7 +129,7 @@ int efx_mae_free_pedit_mac(struct efx_nic *efx,
 #endif
 
 int efx_mae_alloc_action_set(struct efx_nic *efx, struct efx_tc_action_set *act);
-int efx_mae_free_action_set(struct efx_nic *efx, struct efx_tc_action_set *act);
+int efx_mae_free_action_set(struct efx_nic *efx, u32 fw_id);
 
 int efx_mae_alloc_action_set_list(struct efx_nic *efx,
 				  struct efx_tc_action_set_list *acts);
@@ -134,4 +155,6 @@ int efx_mae_insert_rule(struct efx_nic *efx, const struct efx_tc_match *match,
 int efx_mae_update_rule(struct efx_nic *efx, u32 acts_id, u32 id);
 int efx_mae_delete_rule(struct efx_nic *efx, u32 id);
 
+int efx_init_mae(struct efx_nic *efx);
+void efx_fini_mae(struct efx_nic *efx);
 #endif /* EF100_MAE_H */

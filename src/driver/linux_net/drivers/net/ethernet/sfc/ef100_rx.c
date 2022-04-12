@@ -85,7 +85,7 @@ static __wsum get_csum(u8 *va, u32 *prefix, bool csum_frame)
 	return (__force __wsum) ~ret16;
 }
 
-static bool check_fcs(struct efx_rx_queue *rx_queue, u32 *prefix)
+static bool ef100_has_fcs_error(struct efx_rx_queue *rx_queue, u32 *prefix)
 {
 	u16 fcsum;
 
@@ -94,12 +94,12 @@ static bool check_fcs(struct efx_rx_queue *rx_queue, u32 *prefix)
 
 	if (likely(fcsum == ESE_GZ_RH_HCLASS_L2_STATUS_OK)) {
 		/* Everything is ok */
-		return 0;
+		return false;
 	} else if (fcsum == ESE_GZ_RH_HCLASS_L2_STATUS_FCS_ERR) {
 		rx_queue->n_rx_eth_crc_err++;
 	}
 
-	return 1;
+	return true;
 }
 
 void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
@@ -128,7 +128,7 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 			return; /* packet was consumed */
 	}
 
-	if (check_fcs(rx_queue, prefix) &&
+	if (ef100_has_fcs_error(rx_queue, prefix) &&
 	    unlikely(!(efx->net_dev->features & NETIF_F_RXALL)))
 		goto free_rx_buffer;
 

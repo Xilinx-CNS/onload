@@ -15,6 +15,7 @@
 #include "ethtool_common.h"
 #include "efx_common.h"
 #include "efx_channels.h"
+#include "rx_common.h"
 #include "mcdi_port_common.h"
 #include "mcdi_filters.h"
 #include "tc.h"
@@ -178,8 +179,7 @@ int efx_ethtool_phys_id(struct net_device *net_dev,
 		return 1;	/* cycle on/off once per second */
 	}
 
-	efx->type->set_id_led(efx, mode);
-	return 0;
+	return efx_mcdi_set_id_led(efx, mode);
 }
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_SET_PHYS_ID)
@@ -434,8 +434,9 @@ static void efx_fill_test(unsigned int test_index, u8 *strings, u64 *data,
  * @strings:		Ethtool strings, or %NULL
  * @data:		Ethtool test results, or %NULL
  *
- * Fill in a block of loopback self-test entries.  Return new test
- * index.
+ * Fill in a block of loopback self-test entries.
+ *
+ * Return: new test index.
  */
 static int efx_fill_loopback_test(struct efx_nic *efx,
 				  struct efx_loopback_self_tests *lb_tests,
@@ -479,10 +480,11 @@ static int efx_fill_loopback_test(struct efx_nic *efx,
  * @data:		Ethtool test results, or %NULL
  *
  * Get self-test number of strings, strings, and/or test results.
- * Return number of strings (== number of test results).
  *
  * The reason for merging these three functions is to make sure that
  * they can never be inconsistent.
+ *
+ * Return: number of strings (equals number of test results).
  */
 int efx_ethtool_fill_self_tests(struct efx_nic *efx,
 				struct efx_self_tests *tests,
@@ -895,6 +897,10 @@ int efx_ethtool_set_channels(struct net_device *net_dev,
 	rc = efx_mcdi_push_default_indir_table(efx,
 					       efx->n_combined_channels);
 
+	/* changing the queue setup invalidates ntuple filters */
+	if (!rc)
+		efx_filter_clear_ntuple(efx);
+
 	/* Update the datapath with the new settings */
 	if (is_up)
 		rc2 = dev_open(net_dev, NULL);
@@ -981,6 +987,17 @@ int efx_ethtool_set_settings(struct net_device *net_dev,
 	}
 	mutex_unlock(&efx->mac_lock);
 	return rc;
+}
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_FECSTATS)
+void efx_ethtool_get_fec_stats(struct net_device *net_dev,
+			       struct ethtool_fec_stats *fec_stats)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+
+	if (efx->type->get_fec_stats)
+		efx->type->get_fec_stats(efx, fec_stats);
 }
 #endif
 
@@ -1140,8 +1157,7 @@ static int efx_ethtool_get_class_rule(struct efx_nic *efx,
 	struct efx_filter_spec spec;
 	int rc;
 
-	rc = efx_filter_get_filter_safe(efx, EFX_FILTER_PRI_MANUAL,
-					rule->location, &spec);
+	rc = efx_filter_ntuple_get(efx, rule->location, &spec);
 	if (rc)
 		return rc;
 
@@ -1395,8 +1411,7 @@ out_unlock:
 		if (info->data == 0)
 			return -EOPNOTSUPP;
 		info->data |= RX_CLS_LOC_SPECIAL;
-		info->rule_cnt =
-			efx_filter_count_rx_used(efx, EFX_FILTER_PRI_MANUAL);
+		info->rule_cnt = efx_filter_count_ntuple(efx);
 		return 0;
 
 	case ETHTOOL_GRXCLSRULE:
@@ -1413,11 +1428,8 @@ out_unlock:
 		info->data = efx_filter_get_rx_id_limit(efx);
 		if (info->data == 0)
 			return -EOPNOTSUPP;
-		rc = efx_filter_get_rx_ids(efx, EFX_FILTER_PRI_MANUAL,
-					   rule_locs, info->rule_cnt);
-		if (rc < 0)
-			return rc;
-		info->rule_cnt = rc;
+		info->rule_cnt = efx_filter_count_ntuple(efx);
+		efx_filter_get_ntuple_ids(efx, rule_locs, info->rule_cnt);
 		return 0;
 
 	default:
@@ -1656,7 +1668,7 @@ static int efx_ethtool_set_class_rule(struct efx_nic *efx,
 		spec.outer_vid = rule->h_ext.vlan_tci;
 	}
 
-	rc = efx_filter_insert_filter(efx, &spec, true);
+	rc = efx_filter_ntuple_insert(efx, &spec);
 	if (rc < 0)
 		return rc;
 
@@ -1682,8 +1694,7 @@ int efx_ethtool_set_rxnfc(struct net_device *net_dev,
 						  info->rss_context);
 
 	case ETHTOOL_SRXCLSRLDEL:
-		return efx_filter_remove_id_safe(efx, EFX_FILTER_PRI_MANUAL,
-						 info->fs.location);
+		return efx_filter_ntuple_remove(efx, info->fs.location);
 
 	case ETHTOOL_SRXFH:
 		return efx_ethtool_set_rss_flags(efx, info);

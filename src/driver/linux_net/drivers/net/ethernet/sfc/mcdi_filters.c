@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /****************************************************************************
  * Driver for Solarflare network controllers and boards
- * Copyright 2019 Solarflare Communications Inc.
+ * Copyright 2005-2018 Solarflare Communications Inc.
+ * Copyright 2019-2020 Xilinx Inc.
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License version 2 as published
@@ -2021,8 +2023,8 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 	table->mc_chaining = mc_chaining;
 	table->encap_supported = encap;
 
-	table->entry = vzalloc(EFX_MCDI_FILTER_TBL_ROWS *
-			       sizeof(*table->entry));
+	table->entry = vzalloc(array_size(EFX_MCDI_FILTER_TBL_ROWS,
+					  sizeof(*table->entry)));
 	if (!table->entry) {
 		rc = -ENOMEM;
 		goto fail;

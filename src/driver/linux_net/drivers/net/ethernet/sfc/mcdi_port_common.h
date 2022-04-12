@@ -66,6 +66,8 @@ int efx_mcdi_set_link(struct efx_nic *efx, u32 capabilities,
 int efx_mcdi_loopback_modes(struct efx_nic *efx, u64 *loopback_modes);
 void efx_mcdi_phy_check_fcntl(struct efx_nic *efx, u32 lpa);
 bool efx_mcdi_phy_poll(struct efx_nic *efx);
+int efx_mcdi_phy_probe(struct efx_nic *efx);
+void efx_mcdi_phy_remove(struct efx_nic *efx);
 void efx_mcdi_phy_get_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd);
 int efx_mcdi_phy_set_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd,
 			      unsigned long *new_adv);
@@ -93,6 +95,7 @@ void efx_mcdi_mac_pull_stats(struct efx_nic *efx);
 int efx_mcdi_mac_init_stats(struct efx_nic *efx);
 void efx_mcdi_mac_fini_stats(struct efx_nic *efx);
 
+int efx_mcdi_port_reconfigure(struct efx_nic *efx);
 int efx_mcdi_port_get_number(struct efx_nic *efx);
 bool efx_mcdi_port_process_event_common(struct efx_channel *channel,
 					efx_qword_t *event, int *rc,

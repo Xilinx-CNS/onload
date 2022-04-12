@@ -227,14 +227,6 @@
 # define CONFIG_XPS
 #endif
 
-/* Cope with small changes in PCI constants between minor kernel revisions */
-#if PCI_X_STATUS != 4
-	#undef PCI_X_STATUS
-	#define PCI_X_STATUS 4
-	#undef PCI_X_STATUS_MAX_SPLIT
-	#define PCI_X_STATUS_MAX_SPLIT 0x03800000
-#endif
-
 #ifndef __GFP_COMP
 	#define __GFP_COMP 0
 #endif
@@ -1599,6 +1591,10 @@ struct efx_napi_dummy {};
 #define napi_struct efx_napi_dummy
 #endif
 
+#ifndef NAPI_POLL_WEIGHT
+#define NAPI_POLL_WEIGHT	64
+#endif
+
 #ifdef EFX_HAVE_RXHASH_SUPPORT
 #ifdef EFX_NEED_SKB_SET_HASH
 enum pkt_hash_types {
@@ -1771,9 +1767,46 @@ static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 #ifndef pci_dbg
 #define pci_dbg(pdev, fmt, arg...)	dev_dbg(&(pdev)->dev, fmt, ##arg)
 #endif
+#ifndef pci_notice
+#define pci_notice(pdev, fmt, arg...)	dev_notice(&(pdev)->dev, fmt, ##arg)
+#endif
 
 #ifdef EFX_NEED_STRSCPY
 #define strscpy(dest, src, count)	strlcpy(dest, src, count)
+#endif
+
+#ifdef EFX_NEED_ARRAY_SIZE
+/**
+ * array_size() - Calculate size of 2-dimensional array.
+ *
+ * @a: dimension one
+ * @b: dimension two
+ *
+ * Calculates size of 2-dimensional array: @a * @b.
+ *
+ * Returns: number of bytes needed to represent the array.
+ */
+static inline __must_check size_t array_size(size_t a, size_t b)
+{
+	return(a * b);
+}
+#else
+/* On RHEL7.6 nothing includes this yet */
+#include <linux/overflow.h>
+#endif
+
+#ifdef EFX_NEED_KREALLOC_ARRAY
+#ifndef SIZE_MAX
+#define SIZE_MAX (~(size_t)0)
+#endif
+
+static __must_check inline void *
+krealloc_array(void *p, size_t new_n, size_t new_size, gfp_t flags)
+{
+	size_t bytes = array_size(new_n, new_size);
+
+	return (bytes == SIZE_MAX ? NULL : krealloc(p, bytes, flags));
+}
 #endif
 
 /**************************************************************************
@@ -2725,6 +2758,26 @@ static inline bool skb_is_gso_tcp(const struct sk_buff *skb)
 }
 #endif
 
+#ifdef EFX_NEED_SET_GSO_MAX_SIZE
+static inline void netif_set_gso_max_size(struct net_device *dev,
+					  unsigned int size)
+{
+	/* dev->gso_max_size is read locklessly from sk_setup_caps() */
+	WRITE_ONCE(dev->gso_max_size, size);
+}
+#endif
+
+#ifdef EFX_NEED_SET_GSO_MAX_SEGS
+static inline void netif_set_gso_max_segs(struct net_device *dev,
+					  unsigned int segs)
+{
+#ifdef EFX_HAVE_GSO_MAX_SEGS
+	/* dev->gso_max_segs is read locklessly from sk_setup_caps() */
+	WRITE_ONCE(dev->gso_max_segs, segs);
+#endif
+}
+#endif
+
 #ifdef EFX_NEED_IS_ERR_OR_NULL
 static inline bool __must_check IS_ERR_OR_NULL(__force const void *ptr)
 {
@@ -2979,6 +3032,24 @@ xdp_init_buff(struct xdp_buff *xdp, u32 frame_sz
 #endif
 #ifdef EFX_HAVE_XDP_RXQ_INFO
 	xdp->rxq = rxq;
+#endif
+}
+#endif
+
+#if defined(EFX_HAVE_XDP) && defined(EFX_NEED_XDP_PREPARE_BUFF)
+static __always_inline void
+xdp_prepare_buff(struct xdp_buff *xdp, unsigned char *hard_start,
+		 int headroom, int data_len, const bool meta_valid)
+{
+	unsigned char *data = hard_start + headroom;
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_HEAD)
+	xdp->data_hard_start = hard_start;
+#endif
+	xdp->data = data;
+	xdp->data_end = data + data_len;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_DATA_META)
+	xdp->data_meta = meta_valid ? data : data + 1;
 #endif
 }
 #endif
@@ -3590,26 +3661,6 @@ static inline void devlink_flash_update_timeout_notify(struct devlink *devlink,
 #endif
 #ifndef DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID
 #define DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID	"fw.bundle_id"
-#endif
-
-#ifdef EFX_NEED_ARRAY_SIZE
-/**
-* array_size() - Calculate size of 2-dimensional array.
-*
-* @a: dimension one
-* @b: dimension two
-*
-* Calculates size of 2-dimensional array: @a * @b.
-*
-* Returns: number of bytes needed to represent the array.
-*/
-static inline __must_check size_t array_size(size_t a, size_t b)
-{
-	return(a * b);
-}
-#else
-/* On RHEL7.6 nothing includes this yet */
-#include <linux/overflow.h>
 #endif
 
 #endif /* EFX_KERNEL_COMPAT_H */

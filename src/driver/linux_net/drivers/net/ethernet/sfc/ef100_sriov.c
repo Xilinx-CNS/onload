@@ -17,8 +17,8 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 	struct pci_dev *dev = efx->pci_dev;
 	int rc, i;
 
-	EFX_WARN_ON_PARANOID(efx->vf_count);
-	efx->vf_count = num_vfs;
+	if (WARN_ON(nic_data->vf_rep_count))
+		return -EEXIST;
 
 	rc = pci_enable_sriov(dev, num_vfs);
 	if (rc)
@@ -26,7 +26,12 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 
 	if (!nic_data->grp_mae)
 		return 0;
+	if (efx_have_mport_journal_event(efx))
+		return 0;
 
+	/* The remainder is for compatibility with firmwares that do not
+	 * support the MPORT_JOURNAL event.
+	 */
 	if (!nic_data->have_local_intf)
 		/* We weren't able to identify our local interface, so we will
 		 * have created remote_reps for these VFs.  Thus, don't create
@@ -42,14 +47,13 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 	}
 
 	for (i = 0; i < num_vfs; i++) {
-		rc = efx_ef100_vfrep_create(efx, i);
+		rc = efx_ef100_vfrep_create(efx, i, NULL);
 		if (rc)
 			goto fail2;
 	}
 	spin_lock_bh(&nic_data->vf_reps_lock);
 	nic_data->vf_rep_count = num_vfs;
 	spin_unlock_bh(&nic_data->vf_reps_lock);
-
 	return 0;
 
 fail2:
@@ -59,17 +63,14 @@ fail2:
 	kfree(nic_data->vf_rep);
 	nic_data->vf_rep = NULL;
 fail1:
-	efx->vf_count = 0;
 	netif_err(efx, probe, efx->net_dev, "Failed to enable SRIOV VFs\n");
 	return rc;
 }
 
 int efx_ef100_pci_sriov_disable(struct efx_nic *efx, bool force)
 {
-	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct pci_dev *dev = efx->pci_dev;
 	unsigned int vfs_assigned = 0;
-	int i;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
 	vfs_assigned = pci_vfs_assigned(dev);
@@ -81,27 +82,9 @@ int efx_ef100_pci_sriov_disable(struct efx_nic *efx, bool force)
 	}
 #endif
 
-	/* We take the lock as a barrier to ensure no-one holding the lock
-	 * still sees nonzero rep_count when we start destroying reps
-	 */
-	if (nic_data->grp_mae) {
-		unsigned int vf_rep_count;
-
-		spin_lock_bh(&nic_data->vf_reps_lock);
-		vf_rep_count = nic_data->vf_rep_count;
-		nic_data->vf_rep_count = 0;
-		spin_unlock_bh(&nic_data->vf_reps_lock);
-
-		for (i = 0; i < vf_rep_count; i++)
-			efx_ef100_vfrep_destroy(efx, i);
-	}
-
+	efx_ef100_fini_vfreps(efx);
 	if (!vfs_assigned)
 		pci_disable_sriov(dev);
-
-	kfree(nic_data->vf_rep);
-	nic_data->vf_rep = NULL;
-	efx->vf_count = 0;
 	return 0;
 }
 

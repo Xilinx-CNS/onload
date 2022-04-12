@@ -35,6 +35,7 @@
 #include <asm/pci-bridge.h>
 #endif
 #include "net_driver.h"
+#include <linux/filter.h>
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_AER)
 #include <linux/aer.h>
 #endif
@@ -70,7 +71,7 @@
 #endif
 
 
-#include "mcdi.h"
+#include "mcdi_port_common.h"
 #include "mcdi_filters.h"
 #include "mcdi_pcol.h"
 #include "workarounds.h"
@@ -167,11 +168,15 @@ static unsigned int tx_irq_mod_usec = 150;
 #define HAVE_EFX_NUM_CORES
 #endif
 
-extern unsigned int interrupt_mode;
-module_param(interrupt_mode, uint, 0444);
+module_param_named(interrupt_mode, efx_interrupt_mode, uint, 0444);
 MODULE_PARM_DESC(interrupt_mode,
 		 "Interrupt mode (0=>MSIX 1=>MSI)");
 
+#if !defined(EFX_NOT_UPSTREAM)
+module_param(rss_cpus, uint, 0444);
+MODULE_PARM_DESC(rss_cpus, "Number of CPUs to use for Receive-Side Scaling");
+
+#endif
 static bool irq_adapt_enable = true;
 module_param(irq_adapt_enable, bool, 0444);
 MODULE_PARM_DESC(irq_adapt_enable,
@@ -354,34 +359,58 @@ static int efx_siocdevprivate(struct net_device *net_dev, struct ifreq *ifr,
 #endif
 #endif
 
+static int efx_eth_ioctl(struct net_device *net_dev, struct ifreq *ifr,
+			 int cmd)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	struct mii_ioctl_data *data = if_mii(ifr);
+
+	switch (cmd) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
+	case SIOCSHWTSTAMP:
+		return efx_ptp_set_ts_config(efx, ifr);
+	case SIOCGHWTSTAMP:
+		return efx_ptp_get_ts_config(efx, ifr);
+#endif
+	case SIOCGMIIREG:
+	case SIOCSMIIREG:
+		/* Convert phy_id from older PRTAD/DEVAD format */
+		if ((data->phy_id & 0xfc00) == 0x0400)
+			data->phy_id ^= MDIO_PHY_ID_C45 | 0x0400;
+		fallthrough;
+	case SIOCGMIIPHY:
+		return mdio_mii_ioctl(&efx->mdio, data, cmd);
+	default:
+		return -EOPNOTSUPP;
+	}
+}
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SIOCDEVPRIVATE) && !defined(EFX_HAVE_NDO_ETH_IOCTL)
 /* Net device ioctl
  * Context: process, rtnl_lock() held.
  */
 static int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 {
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	struct mii_ioctl_data *data = if_mii(ifr);
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
-	if (cmd == SIOCSHWTSTAMP)
-		return efx_ptp_set_ts_config(efx, ifr);
-	if (cmd == SIOCGHWTSTAMP)
-		return efx_ptp_get_ts_config(efx, ifr);
-#endif
+	switch (cmd) {
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_PRIVATE_IOCTL)
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SIOCDEVPRIVATE)
-	if (cmd == SIOCEFX)
+	case SIOCEFX:
 		return efx_do_siocefx(net_dev, ifr, ifr->ifr_data);
 #endif
 #endif
-
-	/* Convert phy_id from older PRTAD/DEVAD format */
-	if ((cmd == SIOCGMIIREG || cmd == SIOCSMIIREG) &&
-	    (data->phy_id & 0xfc00) == 0x0400)
-		data->phy_id ^= MDIO_PHY_ID_C45 | 0x0400;
-
-	return mdio_mii_ioctl(&efx->mdio, data, cmd);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_ETH_IOCTL)
+	case SIOCSHWTSTAMP:
+	case SIOCGHWTSTAMP:
+	case SIOCGMIIREG:
+	case SIOCSMIIREG:
+	case SIOCGMIIPHY:
+		return efx_eth_ioctl(net_dev, ifr, cmd);
+#endif
+	default:
+		return -EOPNOTSUPP;
+	}
 }
+#endif
 
 /**************************************************************************
  *
@@ -668,8 +697,8 @@ static void efx_udp_tunnel_del(struct net_device *dev, struct udp_tunnel_info *t
 }
 #else
 #if defined(EFX_HAVE_NDO_ADD_VXLAN_PORT)
-void efx_vxlan_add_port(struct net_device *dev, sa_family_t sa_family,
-			__be16 port)
+static void efx_vxlan_add_port(struct net_device *dev, sa_family_t sa_family,
+			       __be16 port)
 {
 	struct efx_udp_tunnel tnl = {.port = port,
 				     .type = TUNNEL_ENCAP_UDP_PORT_ENTRY_VXLAN};
@@ -679,8 +708,8 @@ void efx_vxlan_add_port(struct net_device *dev, sa_family_t sa_family,
 		efx->type->udp_tnl_add_port(efx, tnl);
 }
 
-void efx_vxlan_del_port(struct net_device *dev, sa_family_t sa_family,
-			__be16 port)
+static void efx_vxlan_del_port(struct net_device *dev, sa_family_t sa_family,
+			       __be16 port)
 {
 	struct efx_udp_tunnel tnl = {.port = port,
 				     .type = TUNNEL_ENCAP_UDP_PORT_ENTRY_VXLAN};
@@ -691,8 +720,8 @@ void efx_vxlan_del_port(struct net_device *dev, sa_family_t sa_family,
 }
 #endif
 #if defined(EFX_HAVE_NDO_ADD_GENEVE_PORT)
-void efx_geneve_add_port(struct net_device *dev, sa_family_t sa_family,
-			__be16 port)
+static void efx_geneve_add_port(struct net_device *dev, sa_family_t sa_family,
+				__be16 port)
 {
 	struct efx_udp_tunnel tnl = {.port = port,
 				     .type = TUNNEL_ENCAP_UDP_PORT_ENTRY_GENEVE};
@@ -702,8 +731,8 @@ void efx_geneve_add_port(struct net_device *dev, sa_family_t sa_family,
 		efx->type->udp_tnl_add_port(efx, tnl);
 }
 
-void efx_geneve_del_port(struct net_device *dev, sa_family_t sa_family,
-			__be16 port)
+static void efx_geneve_del_port(struct net_device *dev, sa_family_t sa_family,
+				__be16 port)
 {
 	struct efx_udp_tunnel tnl = {.port = port,
 				     .type = TUNNEL_ENCAP_UDP_PORT_ENTRY_GENEVE};
@@ -899,9 +928,7 @@ static int efx_register_netdev(struct efx_nic *efx)
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_ETHTOOL_OPS_EXT)
 	set_ethtool_ops_ext(net_dev, &efx_ethtool_ops_ext);
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
-	net_dev->gso_max_segs = EFX_TSO_MAX_SEGS;
-#endif
+	netif_set_gso_max_segs(net_dev, EFX_TSO_MAX_SEGS);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_MTU_LIMITS)
 	net_dev->min_mtu = EFX_MIN_MTU;
 	net_dev->max_mtu = EFX_MAX_MTU;
@@ -927,8 +954,7 @@ static int efx_register_netdev(struct efx_nic *efx)
 	 * section as we set state = READY.
 	 */
 	if (efx->reset_pending) {
-		netif_err(efx, probe, efx->net_dev,
-			  "aborting probe due to scheduled reset\n");
+		pci_err(efx->pci_dev, "aborting probe due to scheduled reset\n");
 		rc = -EIO;
 		goto fail_locked;
 	}
@@ -1001,18 +1027,26 @@ static const struct pci_device_id efx_pci_table[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0903),  /* SFC9120 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1903),  /* SFC9120 VF */
+	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
+	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0923),  /* SFC9140 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1923),  /* SFC9140 VF */
+	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
+	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0a03),  /* SFC9220 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1a03),  /* SFC9220 VF */
+	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
+	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0b03),  /* SFC9250 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1b03),  /* SFC9250 VF */
+	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
+	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
 	{0}			/* end of list */
 };
@@ -1022,23 +1056,33 @@ static const struct pci_device_id sfc_pci_table[] = {
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0903),  /* SFC9120 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1903),  /* SFC9120 VF */
+	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
+	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0923),  /* SFC9140 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1923),  /* SFC9140 VF */
+	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
+	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0a03),  /* SFC9220 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1a03),  /* SFC9220 VF */
+	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
+	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x0b03),  /* SFC9250 PF */
 	 .driver_data = (unsigned long) &efx_hunt_a0_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_SOLARFLARE, 0x1b03),  /* SFC9250 VF */
+	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
+	 .class_mask =  0xffff00,
 	 .driver_data = (unsigned long) &efx_hunt_a0_vf_nic_type},
 	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x0100),  /* Riverhead PF */
-		.driver_data = (unsigned long) &ef100_pf_nic_type },
+	 .driver_data = (unsigned long) &ef100_pf_nic_type },
 	{PCI_DEVICE(PCI_VENDOR_ID_XILINX, 0x1100),  /* Riverhead VF */
-		.driver_data = (unsigned long) &ef100_vf_nic_type },
+	 .class = PCI_CLASS_NETWORK_ETHERNET << 8,
+	 .class_mask =  0xffff00,
+	 .driver_data = (unsigned long) &ef100_vf_nic_type },
 	{0}			/* end of list */
 };
 
@@ -1114,7 +1158,7 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 		return 0;
 #endif
 
-	netif_dbg(efx, probe, efx->net_dev, "creating NIC\n");
+	pci_dbg(efx->pci_dev, "creating NIC\n");
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -1136,7 +1180,7 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 	efx_init_irq_moderation(efx, tx_irq_mod_usec, rx_irq_mod_usec,
 				irq_adapt_enable, true);
 
-	netif_dbg(efx, probe, efx->net_dev, "create port\n");
+	pci_dbg(efx->pci_dev, "create port\n");
 
 	/* Connect up MAC/PHY operations table */
 	rc = efx->type->probe_port(efx);
@@ -1150,26 +1194,26 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 				  EFX_RXQ_MIN_ENT, efx_max_dmaq_size(efx),
 				  true);
 	if (rc == -ERANGE)
-		netif_warn(efx, probe, efx->net_dev,
-			   "rx_ring parameter must be between %u and %lu; clamped to %u\n",
-			   EFX_RXQ_MIN_ENT, efx_max_dmaq_size(efx), rx_ring);
+		pci_warn(efx->pci_dev,
+			 "rx_ring parameter must be between %u and %lu; clamped to %u\n",
+			 EFX_RXQ_MIN_ENT, efx_max_dmaq_size(efx), rx_ring);
 	else if (rc == -EINVAL)
-		netif_warn(efx, probe, efx->net_dev,
-			   "rx_ring parameter must be a power of two; rounded to %u\n",
-			   rx_ring);
+		pci_warn(efx->pci_dev,
+			 "rx_ring parameter must be a power of two; rounded to %u\n",
+			 rx_ring);
 	efx->rxq_entries = rx_ring;
 
 	rc = efx_check_queue_size(efx, &tx_ring,
 				  efx->txq_min_entries, EFX_TXQ_MAX_ENT(efx),
 				  true);
 	if (rc == -ERANGE)
-		netif_warn(efx, probe, efx->net_dev,
-			   "tx_ring parameter must be between %u and %lu; clamped to %u\n",
-			   efx->txq_min_entries, EFX_TXQ_MAX_ENT(efx), tx_ring);
+		pci_warn(efx->pci_dev,
+			 "tx_ring parameter must be between %u and %lu; clamped to %u\n",
+			 efx->txq_min_entries, EFX_TXQ_MAX_ENT(efx), tx_ring);
 	else if (rc == -EINVAL)
-		netif_warn(efx, probe, efx->net_dev,
-			   "tx_ring parameter must be a power of two; rounded to %u\n",
-			   tx_ring);
+		pci_warn(efx->pci_dev,
+			 "tx_ring parameter must be a power of two; rounded to %u\n",
+			 tx_ring);
 	efx->txq_entries = tx_ring;
 
 	rc = efx_ptp_defer_probe_with_channel(efx);
@@ -1186,15 +1230,15 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 
 	rc = efx->type->vswitching_probe(efx);
 	if (rc) /* not fatal; the PF will still work fine */
-		netif_warn(efx, probe, efx->net_dev,
-			   "failed to setup vswitching rc=%d, VFs may not function\n",
-			   rc);
+		pci_warn(efx->pci_dev,
+			 "failed to setup vswitching rc=%d, VFs may not function\n",
+			 rc);
 
 	if (efx->type->sriov_init) {
 		rc = efx->type->sriov_init(efx);
 		if (rc)
-			netif_err(efx, probe, efx->net_dev,
-				  "SR-IOV can't be enabled rc %d\n", rc);
+			pci_err(efx->pci_dev, "SR-IOV can't be enabled rc %d\n",
+				rc);
 	}
 
 	return efx_register_netdev(efx);
@@ -1320,11 +1364,11 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 		goto fail;
 #endif
 
-	netif_info(efx, probe, efx->net_dev,
-		   "Solarflare NIC detected: device %04x:%04x subsys %04x:%04x\n",
-		   efx->pci_dev->vendor, efx->pci_dev->device,
-		   efx->pci_dev->subsystem_vendor,
-		   efx->pci_dev->subsystem_device);
+	pci_info(pci_dev,
+		 "Solarflare NIC detected: device %04x:%04x subsys %04x:%04x\n",
+		 efx->pci_dev->vendor, efx->pci_dev->device,
+		 efx->pci_dev->subsystem_vendor,
+		 efx->pci_dev->subsystem_device);
 
 #ifdef EFX_NOT_UPSTREAM
 	efx->xdp_tx = xdp_alloc_tx_resources;
@@ -1716,7 +1760,12 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_siocdevprivate     = efx_siocdevprivate,
 #endif
 #endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_ETH_IOCTL)
+	.ndo_eth_ioctl		= efx_eth_ioctl,
+#endif
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SIOCDEVPRIVATE) && !defined(EFX_HAVE_NDO_ETH_IOCTL)
 	.ndo_do_ioctl		= efx_ioctl,
+#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_EXT_CHANGE_MTU)
 	.extended.ndo_change_mtu = efx_change_mtu,
 #else

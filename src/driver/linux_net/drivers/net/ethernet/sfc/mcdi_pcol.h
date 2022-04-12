@@ -3089,7 +3089,9 @@
 #define       MC_CMD_PTP_IN_CMD_LEN 4
 #define       MC_CMD_PTP_IN_PERIPH_ID_OFST 4
 #define       MC_CMD_PTP_IN_PERIPH_ID_LEN 4
-/* Not used. Events are always sent to function relative queue 0. */
+/* Not used, initialize to 0. Events are always sent to function relative queue
+ * 0.
+ */
 #define       MC_CMD_PTP_IN_ENABLE_QUEUE_OFST 8
 #define       MC_CMD_PTP_IN_ENABLE_QUEUE_LEN 4
 /* PTP timestamping mode. Not used from Huntington onwards. */
@@ -3460,7 +3462,9 @@
 #define          MC_CMD_PTP_ENABLE_PPS 0x0
 /* enum: Disable */
 #define          MC_CMD_PTP_DISABLE_PPS 0x1
-/* Not used. Events are always sent to function relative queue 0. */
+/* Not used, initialize to 0. Events are always sent to function relative queue
+ * 0.
+ */
 #define       MC_CMD_PTP_IN_PPS_ENABLE_QUEUE_ID_OFST 8
 #define       MC_CMD_PTP_IN_PPS_ENABLE_QUEUE_ID_LEN 4
 
@@ -3821,6 +3825,87 @@
 #define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_RESERVED1_LEN 4
 #define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_RESERVED2_OFST 20
 #define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_RESERVED2_LEN 4
+
+/* MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2 msgresponse */
+#define    MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_LEN 40
+/* Time format required/used by for this NIC. Applies to all PTP MCDI
+ * operations that pass times between the host and firmware. If this operation
+ * is not supported (older firmware) a format of seconds and nanoseconds should
+ * be assumed.
+ */
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_TIME_FORMAT_OFST 0
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_TIME_FORMAT_LEN 4
+/* enum: Times are in seconds and nanoseconds */
+#define          MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_SECONDS_NANOSECONDS 0x0
+/* enum: Major register has units of 16 second per tick, minor 8 ns per tick */
+#define          MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_16SECONDS_8NANOSECONDS 0x1
+/* enum: Major register has units of seconds, minor 2^-27s per tick */
+#define          MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_SECONDS_27FRACTION 0x2
+/* enum: Major register units are seconds, minor units are quarter nanoseconds
+ */
+#define          MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_SECONDS_QTR_NANOSECONDS 0x3
+/* Minimum acceptable value for a corrected synchronization timeset. When
+ * comparing host and NIC clock times, the MC returns a set of samples that
+ * contain the host start and end time, the MC time when the host start was
+ * detected and the time the MC waited between reading the time and detecting
+ * the host end. The corrected sync window is the difference between the host
+ * end and start times minus the time that the MC waited for host end.
+ */
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_SYNC_WINDOW_MIN_OFST 4
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_SYNC_WINDOW_MIN_LEN 4
+/* Various PTP capabilities */
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_CAPABILITIES_OFST 8
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_CAPABILITIES_LEN 4
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_REPORT_SYNC_STATUS_OFST 8
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_REPORT_SYNC_STATUS_LBN 0
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_REPORT_SYNC_STATUS_WIDTH 1
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_RX_TSTAMP_OOB_OFST 8
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_RX_TSTAMP_OOB_LBN 1
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_RX_TSTAMP_OOB_WIDTH 1
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_64BIT_SECONDS_OFST 8
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_64BIT_SECONDS_LBN 2
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_64BIT_SECONDS_WIDTH 1
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FP44_FREQ_ADJ_OFST 8
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FP44_FREQ_ADJ_LBN 3
+#define        MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FP44_FREQ_ADJ_WIDTH 1
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_RESERVED0_OFST 12
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_RESERVED0_LEN 4
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_RESERVED1_OFST 16
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_RESERVED1_LEN 4
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_RESERVED2_OFST 20
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_RESERVED2_LEN 4
+/* Minimum supported value for the FREQ field in
+ * MC_CMD_PTP/MC_CMD_PTP_IN_ADJUST and
+ * MC_CMD_PTP/MC_CMD_PTP_IN_CLOCK_FREQ_ADJUST message requests. If this message
+ * response is not supported a value of -0.1 ns should be assumed, which is
+ * equivalent to a -10% adjustment.
+ */
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_OFST 24
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_LEN 8
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_LO_OFST 24
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_LO_LEN 4
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_LO_LBN 192
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_LO_WIDTH 32
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_HI_OFST 28
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_HI_LEN 4
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_HI_LBN 224
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MIN_HI_WIDTH 32
+/* Maximum supported value for the FREQ field in
+ * MC_CMD_PTP/MC_CMD_PTP_IN_ADJUST and
+ * MC_CMD_PTP/MC_CMD_PTP_IN_CLOCK_FREQ_ADJUST message requests. If this message
+ * response is not supported a value of 0.1 ns should be assumed, which is
+ * equivalent to a +10% adjustment.
+ */
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_OFST 32
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_LEN 8
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_LO_OFST 32
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_LO_LEN 4
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_LO_LBN 256
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_LO_WIDTH 32
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_HI_OFST 36
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_HI_LEN 4
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_HI_LBN 288
+#define       MC_CMD_PTP_OUT_GET_ATTRIBUTES_V2_FREQ_ADJ_MAX_HI_WIDTH 32
 
 /* MC_CMD_PTP_OUT_GET_TIMESTAMP_CORRECTIONS msgresponse */
 #define    MC_CMD_PTP_OUT_GET_TIMESTAMP_CORRECTIONS_LEN 16
@@ -11971,6 +12056,9 @@
 #define        MC_CMD_FILTER_OP_IN_MATCH_FWDEF1_OFST 16
 #define        MC_CMD_FILTER_OP_IN_MATCH_FWDEF1_LBN 11
 #define        MC_CMD_FILTER_OP_IN_MATCH_FWDEF1_WIDTH 1
+#define        MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_IPV4_MCAST_DST_OFST 16
+#define        MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_IPV4_MCAST_DST_LBN 29
+#define        MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_IPV4_MCAST_DST_WIDTH 1
 #define        MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_MCAST_DST_OFST 16
 #define        MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_MCAST_DST_LBN 30
 #define        MC_CMD_FILTER_OP_IN_MATCH_UNKNOWN_MCAST_DST_WIDTH 1
@@ -12175,6 +12263,9 @@
 #define        MC_CMD_FILTER_OP_EXT_IN_MATCH_IFRM_UNKNOWN_UCAST_DST_OFST 16
 #define        MC_CMD_FILTER_OP_EXT_IN_MATCH_IFRM_UNKNOWN_UCAST_DST_LBN 25
 #define        MC_CMD_FILTER_OP_EXT_IN_MATCH_IFRM_UNKNOWN_UCAST_DST_WIDTH 1
+#define        MC_CMD_FILTER_OP_EXT_IN_MATCH_UNKNOWN_IPV4_MCAST_DST_OFST 16
+#define        MC_CMD_FILTER_OP_EXT_IN_MATCH_UNKNOWN_IPV4_MCAST_DST_LBN 29
+#define        MC_CMD_FILTER_OP_EXT_IN_MATCH_UNKNOWN_IPV4_MCAST_DST_WIDTH 1
 #define        MC_CMD_FILTER_OP_EXT_IN_MATCH_UNKNOWN_MCAST_DST_OFST 16
 #define        MC_CMD_FILTER_OP_EXT_IN_MATCH_UNKNOWN_MCAST_DST_LBN 30
 #define        MC_CMD_FILTER_OP_EXT_IN_MATCH_UNKNOWN_MCAST_DST_WIDTH 1
@@ -12460,6 +12551,9 @@
 #define        MC_CMD_FILTER_OP_V3_IN_MATCH_IFRM_UNKNOWN_UCAST_DST_OFST 16
 #define        MC_CMD_FILTER_OP_V3_IN_MATCH_IFRM_UNKNOWN_UCAST_DST_LBN 25
 #define        MC_CMD_FILTER_OP_V3_IN_MATCH_IFRM_UNKNOWN_UCAST_DST_WIDTH 1
+#define        MC_CMD_FILTER_OP_V3_IN_MATCH_UNKNOWN_IPV4_MCAST_DST_OFST 16
+#define        MC_CMD_FILTER_OP_V3_IN_MATCH_UNKNOWN_IPV4_MCAST_DST_LBN 29
+#define        MC_CMD_FILTER_OP_V3_IN_MATCH_UNKNOWN_IPV4_MCAST_DST_WIDTH 1
 #define        MC_CMD_FILTER_OP_V3_IN_MATCH_UNKNOWN_MCAST_DST_OFST 16
 #define        MC_CMD_FILTER_OP_V3_IN_MATCH_UNKNOWN_MCAST_DST_LBN 30
 #define        MC_CMD_FILTER_OP_V3_IN_MATCH_UNKNOWN_MCAST_DST_WIDTH 1
@@ -16795,6 +16889,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_RSS_STEER_ON_OUTER_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_RSS_STEER_ON_OUTER_SUPPORTED_LBN 12
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_RSS_STEER_ON_OUTER_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_DYNAMIC_MPORT_JOURNAL_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_DYNAMIC_MPORT_JOURNAL_LBN 14
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_DYNAMIC_MPORT_JOURNAL_WIDTH 1
 
 /* MC_CMD_GET_CAPABILITIES_V8_OUT msgresponse */
 #define    MC_CMD_GET_CAPABILITIES_V8_OUT_LEN 160
@@ -17296,6 +17393,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_RSS_STEER_ON_OUTER_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_RSS_STEER_ON_OUTER_SUPPORTED_LBN 12
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_RSS_STEER_ON_OUTER_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_DYNAMIC_MPORT_JOURNAL_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_DYNAMIC_MPORT_JOURNAL_LBN 14
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_DYNAMIC_MPORT_JOURNAL_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -17811,6 +17911,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_RSS_STEER_ON_OUTER_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_RSS_STEER_ON_OUTER_SUPPORTED_LBN 12
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_RSS_STEER_ON_OUTER_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_DYNAMIC_MPORT_JOURNAL_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_DYNAMIC_MPORT_JOURNAL_LBN 14
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_DYNAMIC_MPORT_JOURNAL_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -18361,6 +18464,9 @@
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_RSS_STEER_ON_OUTER_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_RSS_STEER_ON_OUTER_SUPPORTED_LBN 12
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_RSS_STEER_ON_OUTER_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_DYNAMIC_MPORT_JOURNAL_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_DYNAMIC_MPORT_JOURNAL_LBN 14
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_DYNAMIC_MPORT_JOURNAL_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -26867,6 +26973,8 @@
 #define          SCHED_CREDIT_CHECK_RESULT_HUB_HOST_D 0x5 /* enum */
 #define          SCHED_CREDIT_CHECK_RESULT_HUB_REPLAY 0x6 /* enum */
 #define          SCHED_CREDIT_CHECK_RESULT_DMAC_H2C 0x7 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_HUB_NET_B 0x8 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_HUB_NET_REPLAY 0x9 /* enum */
 #define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_LBN 0
 #define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_WIDTH 8
 /* The type of node that this result refers to. */
@@ -27960,6 +28068,49 @@
 #define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_MINNUM 0
 #define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_MAXNUM 14
 #define       MC_CMD_CHECK_SCHEDULER_CREDITS_OUT_RESULTS_MAXNUM_MCDI2 62
+
+
+/***********************************/
+/* MC_CMD_TXQ_STATS
+ * Query per-TXQ statistics.
+ */
+#define MC_CMD_TXQ_STATS 0x1d5
+#undef MC_CMD_0x1d5_PRIVILEGE_CTG
+
+#define MC_CMD_0x1d5_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_TXQ_STATS_IN msgrequest */
+#define    MC_CMD_TXQ_STATS_IN_LEN 8
+/* Instance of TXQ to retrieve statistics for */
+#define       MC_CMD_TXQ_STATS_IN_INSTANCE_OFST 0
+#define       MC_CMD_TXQ_STATS_IN_INSTANCE_LEN 4
+/* Flags for the request */
+#define       MC_CMD_TXQ_STATS_IN_FLAGS_OFST 4
+#define       MC_CMD_TXQ_STATS_IN_FLAGS_LEN 4
+#define        MC_CMD_TXQ_STATS_IN_CLEAR_OFST 4
+#define        MC_CMD_TXQ_STATS_IN_CLEAR_LBN 0
+#define        MC_CMD_TXQ_STATS_IN_CLEAR_WIDTH 1
+
+/* MC_CMD_TXQ_STATS_OUT msgresponse */
+#define    MC_CMD_TXQ_STATS_OUT_LENMIN 0
+#define    MC_CMD_TXQ_STATS_OUT_LENMAX 248
+#define    MC_CMD_TXQ_STATS_OUT_LENMAX_MCDI2 1016
+#define    MC_CMD_TXQ_STATS_OUT_LEN(num) (0+8*(num))
+#define    MC_CMD_TXQ_STATS_OUT_STATISTICS_NUM(len) (((len)-0)/8)
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_OFST 0
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_LEN 8
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_LO_OFST 0
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_LO_LEN 4
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_LO_LBN 0
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_LO_WIDTH 32
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_HI_OFST 4
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_HI_LEN 4
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_HI_LBN 32
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_HI_WIDTH 32
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_MINNUM 0
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_MAXNUM 31
+#define       MC_CMD_TXQ_STATS_OUT_STATISTICS_MAXNUM_MCDI2 127
+#define          MC_CMD_TXQ_STATS_CTPIO_MAX_FILL 0x0 /* enum */
 
 /* FUNCTION_PERSONALITY structuredef: The meanings of the personalities are
  * defined in SF-120734-TC with more information in SF-122717-TC.
@@ -30718,10 +30869,13 @@
 /* Generation count. Packets with generation count >= GENERATION_COUNT will
  * contain valid counter values for counter IDs allocated in this call, unless
  * the counter values are zero and zero squash is enabled. Note that there is
- * an independent GENERATION_COUNT object per counter type.
+ * an independent GENERATION_COUNT object per counter type, and that generation
+ * counts wrap from 0xffffffff to 1.
  */
 #define       MC_CMD_MAE_COUNTER_ALLOC_OUT_GENERATION_COUNT_OFST 0
 #define       MC_CMD_MAE_COUNTER_ALLOC_OUT_GENERATION_COUNT_LEN 4
+/* enum: Generation counter 0 is reserved and unused. */
+#define          MC_CMD_MAE_COUNTER_ALLOC_OUT_GENERATION_COUNT_INVALID 0x0
 /* The number of counter IDs that the NIC allocated. It is never less than 1;
  * failure to allocate a single counter will cause an error to be returned. It
  * is never greater than REQUESTED_COUNT, but may be less.
@@ -30796,7 +30950,8 @@
  * values will be written for these counters. If values for these counter IDs
  * are present, the counter ID has been reallocated. A counter ID will not be
  * reallocated within a single read cycle as this would merge increments from
- * the 'old' and 'new' counters.
+ * the 'old' and 'new' counters. GENERATION_COUNT_INVALID is reserved and
+ * unused.
  */
 #define       MC_CMD_MAE_COUNTER_FREE_OUT_GENERATION_COUNT_OFST 0
 #define       MC_CMD_MAE_COUNTER_FREE_OUT_GENERATION_COUNT_LEN 4
@@ -30913,7 +31068,8 @@
 /* Generation count for AR counters. The final set of AR counter values will be
  * written out in packets with count == GENERATION_COUNT. An empty packet with
  * count > GENERATION_COUNT indicates that no more counter values of this type
- * will be written to this stream.
+ * will be written to this stream. GENERATION_COUNT_INVALID is reserved and
+ * unused.
  */
 #define       MC_CMD_MAE_COUNTERS_STREAM_STOP_OUT_GENERATION_COUNT_OFST 0
 #define       MC_CMD_MAE_COUNTERS_STREAM_STOP_OUT_GENERATION_COUNT_LEN 4
@@ -30929,6 +31085,7 @@
  * final set of counter values will be written out in packets with count ==
  * GENERATION_COUNT. An empty packet with count > GENERATION_COUNT indicates
  * that no more counter values of this type will be written to this stream.
+ * GENERATION_COUNT_INVALID is reserved and unused.
  */
 #define       MC_CMD_MAE_COUNTERS_STREAM_STOP_V2_OUT_GENERATION_COUNT_OFST 0
 #define       MC_CMD_MAE_COUNTERS_STREAM_STOP_V2_OUT_GENERATION_COUNT_LEN 4
@@ -31517,6 +31674,9 @@
 #define        MC_CMD_MAE_OUTER_RULE_INSERT_IN_DO_COUNT_OFST 8
 #define        MC_CMD_MAE_OUTER_RULE_INSERT_IN_DO_COUNT_LBN 3
 #define        MC_CMD_MAE_OUTER_RULE_INSERT_IN_DO_COUNT_WIDTH 1
+#define        MC_CMD_MAE_OUTER_RULE_INSERT_IN_CT_TCP_FLAGS_INHIBIT_OFST 8
+#define        MC_CMD_MAE_OUTER_RULE_INSERT_IN_CT_TCP_FLAGS_INHIBIT_LBN 4
+#define        MC_CMD_MAE_OUTER_RULE_INSERT_IN_CT_TCP_FLAGS_INHIBIT_WIDTH 1
 #define        MC_CMD_MAE_OUTER_RULE_INSERT_IN_RECIRC_ID_OFST 8
 #define        MC_CMD_MAE_OUTER_RULE_INSERT_IN_RECIRC_ID_LBN 8
 #define        MC_CMD_MAE_OUTER_RULE_INSERT_IN_RECIRC_ID_WIDTH 8
@@ -31615,6 +31775,9 @@
 #define        MC_CMD_MAE_OUTER_RULE_UPDATE_IN_DO_COUNT_OFST 8
 #define        MC_CMD_MAE_OUTER_RULE_UPDATE_IN_DO_COUNT_LBN 3
 #define        MC_CMD_MAE_OUTER_RULE_UPDATE_IN_DO_COUNT_WIDTH 1
+#define        MC_CMD_MAE_OUTER_RULE_UPDATE_IN_CT_TCP_FLAGS_INHIBIT_OFST 8
+#define        MC_CMD_MAE_OUTER_RULE_UPDATE_IN_CT_TCP_FLAGS_INHIBIT_LBN 4
+#define        MC_CMD_MAE_OUTER_RULE_UPDATE_IN_CT_TCP_FLAGS_INHIBIT_WIDTH 1
 #define        MC_CMD_MAE_OUTER_RULE_UPDATE_IN_RECIRC_ID_OFST 8
 #define        MC_CMD_MAE_OUTER_RULE_UPDATE_IN_RECIRC_ID_LBN 8
 #define        MC_CMD_MAE_OUTER_RULE_UPDATE_IN_RECIRC_ID_WIDTH 8

@@ -24,7 +24,7 @@ struct efx_nic;
  * @cmd: Command number = %ETHTOOL_GFECPARAM or %ETHTOOL_SFECPARAM
  * @active_fec: FEC mode which is active on porte
  * @fec: Bitmask of supported/configured FEC modes
- * @rsvd: Reserved for future extensions. i.e FEC bypass feature.
+ * @reserved: Reserved for future extensions. i.e FEC bypass feature.
  *
  * Drivers should reject a non-zero setting of @autoneg when
  * autoneogotiation is disabled (or not supported) for the link.
@@ -40,11 +40,11 @@ struct ethtool_fecparam {
 
 /**
  * enum ethtool_fec_config_bits - flags definition of ethtool_fec_configuration
- * @ETHTOOL_FEC_NONE: FEC mode configuration is not supported
- * @ETHTOOL_FEC_AUTO: Default/Best FEC mode provided by driver
- * @ETHTOOL_FEC_OFF: No FEC Mode
- * @ETHTOOL_FEC_RS: Reed-Solomon Forward Error Detection mode
- * @ETHTOOL_FEC_BASER: Base-R/Reed-Solomon Forward Error Detection mode
+ * @ETHTOOL_FEC_NONE_BIT: FEC mode configuration is not supported
+ * @ETHTOOL_FEC_AUTO_BIT: Default/Best FEC mode provided by driver
+ * @ETHTOOL_FEC_OFF_BIT: No FEC Mode
+ * @ETHTOOL_FEC_RS_BIT: Reed-Solomon Forward Error Detection mode
+ * @ETHTOOL_FEC_BASER_BIT: Base-R/Reed-Solomon Forward Error Detection mode
  */
 enum ethtool_fec_config_bits {
 	ETHTOOL_FEC_NONE_BIT,
@@ -82,7 +82,8 @@ enum ethtool_fec_config_bits {
  *	hardware hash key.
  * @hfunc: Defines the current RSS hash function used by HW (or to be set to).
  *	Valid values are one of the %ETH_RSS_HASH_*.
- * @rsvd:	Reserved for future extensions.
+ * @rsvd8:	Reserved for future extensions.
+ * @rsvd32:	Reserved for future extensions.
  * @rss_config: RX ring/queue index for each hash value i.e., indirection table
  *	of @indir_size __u32 elements, followed by hash key of @key_size
  *	bytes.

@@ -190,9 +190,6 @@ static inline void efx_ssr_end_of_burst(struct efx_rx_queue *rx_queue)
  * @replace_equal: Flag for whether the specified filter may replace an
  *	existing filter with equal priority
  *
- * On success, return the filter ID.
- * On failure, return a negative error code.
- *
  * If existing filters have equal match values to the new filter spec,
  * then the new filter might replace them or the function might fail,
  * as follows.
@@ -207,6 +204,10 @@ static inline void efx_ssr_end_of_burst(struct efx_rx_queue *rx_queue)
  *
  * This implies that filters for multiple multicast recipients must
  * all be inserted with the same priority and @replace_equal = %false.
+ *
+ * Return:
+ *  * On success, return the filter ID.
+ *  * On failure, return a negative error code.
  */
 static inline s32 efx_filter_insert_filter(struct efx_nic *efx,
 					   const struct efx_filter_spec *spec,
@@ -223,6 +224,8 @@ static inline s32 efx_filter_insert_filter(struct efx_nic *efx,
  *
  * This function will range-check @filter_id, so it is safe to call
  * with a value passed from userland.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_filter_remove_id_safe(struct efx_nic *efx,
 					    enum efx_filter_priority priority,
@@ -240,6 +243,8 @@ static inline int efx_filter_remove_id_safe(struct efx_nic *efx,
  *
  * This function will range-check @filter_id, so it is safe to call
  * with a value passed from userland.
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int
 efx_filter_get_filter_safe(struct efx_nic *efx,
@@ -365,13 +370,6 @@ void efx_mtd_creation_work(struct work_struct *data);
 static inline int efx_mtd_probe(struct efx_nic *efx) { return 0; }
 static inline void efx_mtd_rename(struct efx_nic *efx) {}
 static inline void efx_mtd_remove(struct efx_nic *efx) {}
-#endif
-
-#ifdef CONFIG_SFC_SRIOV
-static inline unsigned int efx_vf_size(struct efx_nic *efx)
-{
-	return 1 << efx->vi_scale;
-}
 #endif
 
 static inline void efx_schedule_channel(struct efx_channel *channel)

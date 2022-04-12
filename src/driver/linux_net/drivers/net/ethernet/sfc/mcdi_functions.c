@@ -418,8 +418,7 @@ int efx_mcdi_window_mode_to_stride(struct efx_nic *efx, u8 vi_window_mode)
 			  vi_window_mode);
 		return -EIO;
 	}
-	netif_dbg(efx, probe, efx->net_dev, "vi_stride = %u\n",
-		  efx->vi_stride);
+	pci_dbg(efx->pci_dev, "vi_stride = %u\n", efx->vi_stride);
 	return 0;
 }
 

@@ -273,7 +273,7 @@ struct efx_dynamic_sensor_description {
 };
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
-const static struct rhashtable_params sensor_entry_params = {
+static const struct rhashtable_params sensor_entry_params = {
 	.key_len     = sizeof(unsigned int),
 	.key_offset  = offsetof(struct efx_dynamic_sensor_description, handle),
 	.head_offset = offsetof(struct efx_dynamic_sensor_description, entry),
@@ -422,14 +422,13 @@ efx_mcdi_dynamic_sensor_list_reading_update(struct efx_nic *efx,
 			       DYNAMIC_SENSORS_READING_STATE,
 			       (MCDI_DWORD(sensor_out_entry,
 					  DYNAMIC_SENSORS_READING_STATE)));
-		netif_dbg(efx, drv, efx->net_dev,
-			  "Reading sensor, handle %u, value %u state: %u\n",
-			  handle,
-			  MCDI_DWORD(sensor_out_entry,
-				     DYNAMIC_SENSORS_READING_VALUE),
-			  MCDI_DWORD(sensor_out_entry,
-				     DYNAMIC_SENSORS_READING_STATE));
-
+		pci_dbg(efx->pci_dev,
+			"Reading sensor, handle %u, value %u state: %u\n",
+			handle,
+			MCDI_DWORD(sensor_out_entry,
+				   DYNAMIC_SENSORS_READING_VALUE),
+			MCDI_DWORD(sensor_out_entry,
+				   DYNAMIC_SENSORS_READING_STATE));
 
 		i++;
 		outlen -= MC_CMD_DYNAMIC_SENSORS_GET_READINGS_OUT_VALUES_LEN;
@@ -666,11 +665,11 @@ static int efx_mcdi_read_dynamic_sensor_list_info(struct efx_nic *efx,
 				      type_idx[sensor->type],
 				      EFX_HWMON_MAX, true);
 
-		netif_dbg(efx, drv, efx->net_dev,
-			  "Adding sensor %s, type %d, limits(%u, %u)\n",
-			  sensor->name, sensor->type,
-			  sensor->limits[EFX_SENSOR_LIMIT_WARNING_LO],
-			  sensor->limits[EFX_SENSOR_LIMIT_WARNING_HI]);
+		pci_dbg(efx->pci_dev,
+			"Adding sensor %s, type %d, limits(%u, %u)\n",
+			sensor->name, sensor->type,
+			sensor->limits[EFX_SENSOR_LIMIT_WARNING_LO],
+			sensor->limits[EFX_SENSOR_LIMIT_WARNING_HI]);
 
 		efx_mcdi_mon_add_attr(efx, sensor->idx, sensor->type, 0,
 				      type_idx[sensor->type], EFX_HWMON_LABEL,
@@ -1564,7 +1563,7 @@ static int efx_mcdi_hwmon_probe(struct efx_nic *efx, unsigned int n_sensors,
 int efx_mcdi_mon_probe(struct efx_nic *efx)
 {
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
-	unsigned int n_pages, n_sensors, page;
+	unsigned int n_pages, n_sensors;
 	bool has_dynamic_sensors = efx_nic_has_dynamic_sensors(efx);
 	int rc;
 
@@ -1580,8 +1579,6 @@ int efx_mcdi_mon_probe(struct efx_nic *efx)
 
 	/* Find out how many sensors are present */
 	n_sensors = 0;
-	page = 0;
-
 	mutex_init(&hwmon->update_lock);
 
 	if (has_dynamic_sensors) {

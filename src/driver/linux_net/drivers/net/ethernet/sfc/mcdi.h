@@ -16,6 +16,9 @@
 #include <linux/rhashtable.h>
 #endif
 #include "mcdi_pcol.h"
+#ifdef EFX_NOT_UPSTREAM
+#include <linux/types.h>
+#endif
 
 /**
  * enum efx_mcdi_mode - MCDI transaction mode
@@ -51,10 +54,11 @@ enum efx_mcdi_mode {
  * @MCDI_STATE_PROXY: Command needs authenticating with proxy auth. Will be sent
  *                    again after a PROXY_COMPLETE event.
  * @MCDI_STATE_RUNNING: Command was accepted and is running.
- * @MCDI_STATE_ABORT: Command has been completed or aborted. Used to resolve
+ * @MCDI_STATE_PROXY_CANCELLED: Sender cancelled a running proxy auth command.
+ * @MCDI_STATE_RUNNING_CANCELLED: Sender cancelled a running command.
+ * @MCDI_STATE_FINISHED: Command has been completed or aborted. Used to resolve
  *		      race between completion in another threads and the worker.
  */
-
 enum efx_mcdi_cmd_state {
 	/* waiting to run */
 	MCDI_STATE_QUEUED,
@@ -91,7 +95,7 @@ typedef void efx_mcdi_async_completer(struct efx_nic *efx,
  * @work: The work item for this command, queued in mcdi->workqueue
  * @mcdi: The mcdi_iface for this command
  * @state: The state of this command
- * @inlen: inbuf length
+ * @inlen: Size of @inbuf
  * @inbuf: Input buffer
  * @quiet: Whether to silence errors
  * @polled: Whether this command is polled or evented
@@ -101,8 +105,13 @@ typedef void efx_mcdi_async_completer(struct efx_nic *efx,
  * @bufid: Buffer ID from the NIC implementation
  * @started: Jiffies this command was started at
  * @cookie: Context for completion function
+ * @atomic_completer: Completion function for atomic context
  * @completer: Completion function
+ * @handle: Handle for this command
  * @cmd: Command number
+ * @rc: Command result
+ * @outlen: Size of @outbuf
+ * @outbuf: Output buffer
  * @proxy_handle: Handle if this command was proxied
  */
 struct efx_mcdi_cmd {
@@ -131,6 +140,10 @@ struct efx_mcdi_cmd {
 	u32 proxy_handle;
 	/* followed by inbuf data if necessary */
 };
+
+#ifdef EFX_NOT_UPSTREAM
+#define MCDI_NUM_LOG_COMMANDS 0x300
+#endif
 
 /**
  * struct efx_mcdi_iface - MCDI protocol context
@@ -165,6 +178,9 @@ struct efx_mcdi_iface {
 #ifdef CONFIG_SFC_MCDI_LOGGING
 	bool logging_enabled;
 	char *logging_buffer;
+#ifdef EFX_NOT_UPSTREAM
+	DECLARE_BITMAP(log_commands, MCDI_NUM_LOG_COMMANDS);
+#endif
 #endif
 };
 
@@ -611,17 +627,12 @@ int efx_mcdi_nvram_info(struct efx_nic *efx, unsigned int type,
 int efx_mcdi_nvram_test_all(struct efx_nic *efx);
 int efx_new_mcdi_nvram_test_all(struct efx_nic *efx);
 int efx_mcdi_handle_assertion(struct efx_nic *efx);
-void efx_mcdi_set_id_led(struct efx_nic *efx, enum efx_led_mode mode);
+int efx_mcdi_set_id_led(struct efx_nic *efx, enum efx_led_mode mode);
 int efx_mcdi_wol_filter_set_magic(struct efx_nic *efx, const u8 *mac,
 				  int *id_out);
 int efx_mcdi_wol_filter_get_magic(struct efx_nic *efx, int *id_out);
 int efx_mcdi_wol_filter_remove(struct efx_nic *efx, int id);
 int efx_mcdi_wol_filter_reset(struct efx_nic *efx);
-int efx_mcdi_port_probe(struct efx_nic *efx);
-void efx_mcdi_port_remove(struct efx_nic *efx);
-int efx_mcdi_port_reconfigure(struct efx_nic *efx);
-u32 efx_mcdi_phy_get_caps(struct efx_nic *efx);
-bool efx_mcdi_mac_check_fault(struct efx_nic *efx);
 int efx_mcdi_reset(struct efx_nic *efx, enum reset_type method);
 int efx_mcdi_set_workaround(struct efx_nic *efx, u32 type, bool enabled,
 			    unsigned int *flags);

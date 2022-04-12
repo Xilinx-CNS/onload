@@ -134,6 +134,7 @@ enum efx_filter_priority {
  * @EFX_FILTER_FLAG_TX: Filter is for TX
  * @EFX_FILTER_FLAG_STACK_ID: Stack ID value for self loopback supression.
  * @EFX_FILTER_FLAG_VPORT_ID: Virtual port ID for adapter switching.
+ * @EFX_FILTER_FLAG_LOOPBACK: Filter is for loopback testing.
  */
 enum efx_filter_flags {
 	EFX_FILTER_FLAG_RX_RSS = 0x01,
@@ -265,6 +266,8 @@ static inline void efx_filter_init_tx(struct efx_filter_spec *spec,
  * @proto: Transport layer protocol number
  * @host: Local host address (network byte order)
  * @port: Local port (network byte order)
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int
 efx_filter_set_ipv4_local(struct efx_filter_spec *spec, u8 proto,
@@ -288,6 +291,8 @@ efx_filter_set_ipv4_local(struct efx_filter_spec *spec, u8 proto,
  * @lport: Local port (network byte order)
  * @rhost: Remote host address (network byte order)
  * @rport: Remote port (network byte order)
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int
 efx_filter_set_ipv4_full(struct efx_filter_spec *spec, u8 proto,
@@ -313,6 +318,8 @@ efx_filter_set_ipv4_full(struct efx_filter_spec *spec, u8 proto,
  * @proto: Transport layer protocol number
  * @host: Local host address (network byte order)
  * @port: Local port (network byte order)
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int
 efx_filter_set_ipv6_local(struct efx_filter_spec *spec, u8 proto,
@@ -336,6 +343,8 @@ efx_filter_set_ipv6_local(struct efx_filter_spec *spec, u8 proto,
  * @lport: Local port (network byte order)
  * @rhost: Remote host address (network byte order)
  * @rport: Remote port (network byte order)
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int
 efx_filter_set_ipv6_full(struct efx_filter_spec *spec, u8 proto,
@@ -364,6 +373,8 @@ enum {
  * @spec: Specification to initialise
  * @vid: Outer VLAN ID to match, or %EFX_FILTER_VID_UNSPEC
  * @addr: Local Ethernet MAC address, or %NULL
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_filter_set_eth_local(struct efx_filter_spec *spec,
 					   u16 vid, const u8 *addr)
@@ -385,6 +396,8 @@ static inline int efx_filter_set_eth_local(struct efx_filter_spec *spec,
 /**
  * efx_filter_set_uc_def - specify matching otherwise-unmatched unicast
  * @spec: Specification to initialise
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_filter_set_uc_def(struct efx_filter_spec *spec)
 {
@@ -395,6 +408,8 @@ static inline int efx_filter_set_uc_def(struct efx_filter_spec *spec)
 /**
  * efx_filter_set_mc_def - specify matching otherwise-unmatched multicast
  * @spec: Specification to initialise
+ *
+ * Return: a negative error code or 0 on success.
  */
 static inline int efx_filter_set_mc_def(struct efx_filter_spec *spec)
 {

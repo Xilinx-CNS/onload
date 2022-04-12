@@ -366,8 +366,7 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 		dev_err(&vdpa_nic->vdpa_dev.dev,
 			"%s: irq_vring_init failed. index:%u Err:%d\n",
 			__func__, idx, rc);
-		delete_vring_ctx(vdpa_nic, idx);
-		return rc;
+		goto err_irq_vring_init;
 	}
 	vring_cfg.desc = vdpa_nic->vring[idx].desc;
 	vring_cfg.avail = vdpa_nic->vring[idx].avail;
@@ -386,8 +385,7 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 		dev_err(&vdpa_nic->vdpa_dev.dev,
 			"%s: Queue create failed index:%u Err:%d\n",
 			__func__, idx, rc);
-		delete_vring_ctx(vdpa_nic, idx);
-		return rc;
+		goto err_vring_create;
 	}
 	rc = efx_vdpa_get_doorbell_offset(vdpa_nic->vring[idx].vring_ctx,
 					  &offset);
@@ -395,7 +393,7 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 		dev_err(&vdpa_nic->vdpa_dev.dev,
 			"%s: Get Doorbell offset failed for index:%u Err:%d\n",
 			__func__, idx, rc);
-		goto fail;
+		goto err_get_doorbell_offset;
 	}
 	vdpa_nic->vring[idx].vring_created = true;
 	vdpa_nic->vring[idx].doorbell_offset = offset;
@@ -407,19 +405,28 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 			dev_err(&vdpa_nic->vdpa_dev.dev,
 				"%s: vdpa configure filter failed, err:%d\n",
 				__func__, rc);
-			goto fail;
+			goto err_filter_configure;
 		}
 	}
 
 #ifdef CONFIG_SFC_DEBUGFS
 	rc = efx_init_debugfs_vdpa_vring(vdpa_nic, &vdpa_nic->vring[idx], idx);
 	if (rc)
-		goto fail;
+		goto err_filter_configure;
 #endif
 
-	return rc;
-fail:
-	delete_vring(vdpa_nic, idx);
+	return 0;
+
+err_filter_configure:
+	ef100_vdpa_filter_remove(vdpa_nic);
+err_get_doorbell_offset:
+	efx_vdpa_vring_destroy(vdpa_nic->vring[idx].vring_ctx,
+			       &vring_dyn_cfg);
+err_vring_create:
+	irq_vring_fini(vdpa_nic, idx);
+err_irq_vring_init:
+	delete_vring_ctx(vdpa_nic, idx);
+
 	return rc;
 }
 
@@ -457,6 +464,13 @@ void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 void ef100_reset_vdpa(struct efx_nic *efx)
 {
 	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+
+	/* vdpa device can be deleted anytime but the bar_config
+	 * could still be vdpa and hence efx->state would be STATE_VDPA.
+	 * Accordingly, ensure vdpa device exists before reset handling
+	 */
+	if (!vdpa_nic)
+		return;
 
 	mutex_lock(&vdpa_nic->lock);
 	reset_vdpa_device(vdpa_nic);
@@ -791,7 +805,7 @@ static u32 ef100_vdpa_get_vq_align(struct vdpa_device *vdev)
 	return EF100_VDPA_VQ_ALIGN;
 }
 
-static u64 ef100_vdpa_get_features(struct vdpa_device *vdev)
+static u64 ef100_vdpa_get_device_features(struct vdpa_device *vdev)
 {
 	struct ef100_vdpa_nic *vdpa_nic;
 	u64 features = 0;
@@ -820,7 +834,8 @@ static u64 ef100_vdpa_get_features(struct vdpa_device *vdev)
 	return features;
 }
 
-static int ef100_vdpa_set_features(struct vdpa_device *vdev, u64 features)
+static int ef100_vdpa_set_driver_features(struct vdpa_device *vdev,
+					  u64 features)
 {
 	struct ef100_vdpa_nic *vdpa_nic;
 	int rc = 0;
@@ -852,6 +867,15 @@ err:
 	mutex_unlock(&vdpa_nic->lock);
 	return rc;
 }
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_DEVICE_FEATURES)
+static u64 ef100_vdpa_get_driver_features(struct vdpa_device *vdev)
+{
+	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
+
+	return vdpa_nic->features;
+}
+#endif
 
 static void ef100_vdpa_set_config_cb(struct vdpa_device *vdev,
 				     struct vdpa_callback *cb)
@@ -988,6 +1012,17 @@ unlock_return:
 	return;
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_CONFIG_SIZE)
+static size_t ef100_vdpa_get_config_size(struct vdpa_device *vdev)
+{
+#ifdef EFX_NOT_UPSTREAM
+	dev_info(&vdev->dev, "%s: config size:%lu\n", __func__,
+		 sizeof(struct virtio_net_config));
+#endif
+	return sizeof(struct virtio_net_config);
+}
+#endif
+
 static void ef100_vdpa_get_config(struct vdpa_device *vdev, unsigned int offset,
 				  void *buf, unsigned int len)
 {
@@ -1117,6 +1152,7 @@ static void ef100_vdpa_free(struct vdpa_device *vdev)
 {
 	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
 	int rc;
+	int i;
 
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Releasing vDPA resources\n", __func__);
@@ -1135,6 +1171,8 @@ static void ef100_vdpa_free(struct vdpa_device *vdev)
 					rc);
 			}
 		}
+		for (i = 0; i < (vdpa_nic->max_queue_pairs * 2); i++)
+			reset_vring(vdpa_nic, i);
 		ef100_vdpa_irq_vectors_free(vdpa_nic->efx->pci_dev);
 		mutex_destroy(&vdpa_nic->iova_lock);
 		mutex_destroy(&vdpa_nic->lock);
@@ -1158,14 +1196,23 @@ const struct vdpa_config_ops ef100_vdpa_config_ops = {
 	.get_vq_irq          = ef100_get_vq_irq,
 #endif
 	.get_vq_align	     = ef100_vdpa_get_vq_align,
-	.get_features	     = ef100_vdpa_get_features,
-	.set_features	     = ef100_vdpa_set_features,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_DEVICE_FEATURES)
+	.get_device_features = ef100_vdpa_get_device_features,
+	.set_driver_features = ef100_vdpa_set_driver_features,
+	.get_driver_features = ef100_vdpa_get_driver_features,
+#else
+	.get_features	     = ef100_vdpa_get_device_features,
+	.set_features	     = ef100_vdpa_set_driver_features,
+#endif
 	.set_config_cb	     = ef100_vdpa_set_config_cb,
 	.get_vq_num_max      = ef100_vdpa_get_vq_num_max,
 	.get_device_id	     = ef100_vdpa_get_device_id,
 	.get_vendor_id	     = ef100_vdpa_get_vendor_id,
 	.get_status	     = ef100_vdpa_get_status,
 	.set_status	     = ef100_vdpa_set_status,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_CONFIG_SIZE)
+	.get_config_size     = ef100_vdpa_get_config_size,
+#endif
 	.get_config	     = ef100_vdpa_get_config,
 	.set_config	     = ef100_vdpa_set_config,
 	.get_generation      = NULL,
