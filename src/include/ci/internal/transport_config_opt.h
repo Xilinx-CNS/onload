@@ -597,8 +597,6 @@
 /* How many ready lists are maintained */
 #define CI_CFG_N_READY_LISTS CI_CFG_EPOLL1_SETS_PER_STACK
 
-#define CI_CFG_MAX_SUPPORTED_INTERFACES 16
-
 /* Do we need SO_TIMESTAMPING, WODA, ...? */
 #define CI_CFG_TIMESTAMPING 1
 

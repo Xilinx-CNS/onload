@@ -499,22 +499,6 @@ static int onload_sanity_checks(void)
    * buffer.
    */
   CI_BUILD_ASSERT(CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start) <= 256);
-
-  /* Ensure that the number of interfaces we've been asked to build with in
-   * within the range that we expect to work.
-   */
-  CI_BUILD_ASSERT(CI_CFG_MAX_INTERFACES <= CI_CFG_MAX_SUPPORTED_INTERFACES);
-
-  /* This assertion is trying to check that, ignoring the padding before
-   * dma_start, there is space in the ci_ip_pkt_fmt_s structure for us
-   * to grow it to the max interfaces (the current default is 8).  This makes
-   * assumptions that other padding in the structure doesn't change by
-   * changing CI_CFG_MAX_INTERFACES to CI_CFG_MAX_SUPPORTED_INTERFACES.
-   */
-  CI_BUILD_ASSERT( CI_MEMBER_OFFSET(ci_ip_pkt_fmt, space_for_encap__do_not_use) +
-                   sizeof(((ci_ip_pkt_fmt*)NULL)->space_for_encap__do_not_use) +
-                   + (CI_CFG_MAX_SUPPORTED_INTERFACES - CI_CFG_MAX_INTERFACES)
-                   * sizeof(ef_addr) <= 256 );
   return 0;
 }
 
