@@ -96,27 +96,6 @@ static void sigalarm_exit(int sig, siginfo_t *info, void *context)
   exit(1);
 }
 
-static void sigonload_do(int sig, siginfo_t* info, void* context)
-{
-  int fd;
-  ci_uint32 op;
-
-  fd = info->si_code;
-  if( fd < 0 ) {
-    /* We get SIGONLOAD from closing only */
-    ci_assert_equal(fd, SI_ONLOAD);
-
-    /* We do not have any UL state for any fd, and the module failed to
-     * duplicate it.  Everything is already closed, we can do nothing.
-     */
-    return;
-  }
-
-  /* Close this fd via an ioctl */
-  op = fd;
-  ioctl(fd, OO_IOC_CLOSE, &op);
-}
-
 static void
 stack_lock(ci_netif* ni, bool* is_locked)
 {
@@ -207,12 +186,6 @@ int main(int argc, char** argv)
   /* We can't log to kernel yet, so keep using stderr. */
   if( ci_cfg_log_to_kern )
     log_fd = STDERR_FILENO;
-
-  /* Handle SIGONLOAD; it may come from the close() calls below. */
-  memset(&act, 0, sizeof(act));
-  act.sa_flags = SA_SIGINFO;
-  act.sa_sigaction = sigonload_do;
-  sigaction(SIGONLOAD, &act, NULL);
 
   /* See man 7 daemon for what's going on here.
    * And see ci_netif_start_helper() for the first part of
