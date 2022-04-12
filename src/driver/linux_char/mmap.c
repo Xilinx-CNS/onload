@@ -31,7 +31,6 @@
 
 #include "linux_char_internal.h"
 #include "efch.h"
-#include <ci/efhw/public.h>
 #include <ci/efch/op_types.h>
 #include <ci/tools/dllist.h>
 #include "char_internal.h"

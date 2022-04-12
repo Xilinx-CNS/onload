@@ -40,7 +40,6 @@
 #include <ci/efrm/nic_table.h>
 #include <ci/efhw/iopage.h>
 #include <ci/driver/efab/hardware.h>
-#include <ci/efhw/public.h>
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/mc_driver_pcol.h>
 #include <ci/efhw/efct.h>

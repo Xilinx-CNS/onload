@@ -42,7 +42,6 @@
 #define __CI_EFHW_NIC_H__
 
 #include <ci/efhw/efhw_types.h>
-#include <ci/efhw/public.h>
 #include <ci/driver/driverlink_api.h>
 
 

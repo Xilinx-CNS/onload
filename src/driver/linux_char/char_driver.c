@@ -30,7 +30,6 @@
  *--------------------------------------------------------------------*/
 
 #include "linux_char_internal.h"
-#include <ci/efhw/public.h>
 #include <ci/efrm/efrm_client.h>
 #include <ci/efch/op_types.h>
 #include <ci/driver/chrdev.h>
