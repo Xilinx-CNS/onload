@@ -168,7 +168,6 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 	nic->flags = flags;
 	nic->resetting = 0;
 	nic->options = options;
-	nic->bar_ioaddr = 0;
 	nic->int_prime_reg = 0;
 	nic->vi_irq_n_ranges = 0;
 	nic->mtu = 1500 + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
@@ -208,7 +207,6 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		 * for any other reason as all control ops go via the net
 		 * driver and MCDI.
 		 */
-		nic->ctr_ap_bytes = 0;
 		nic->efhw_func = &ef10_char_functional_units;
 		nic->vi_base = vi_base;
 		nic->vi_shift = vi_shift;
@@ -235,7 +233,6 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		nic->num_dmaqs  = 1024;
 		nic->num_timers = 1024;
 
-		nic->ctr_ap_bytes = 0;
 		nic->efhw_func = &ef100_char_functional_units;
 		nic->vi_base = vi_base;
 		nic->vi_shift = vi_shift;

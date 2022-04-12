@@ -160,79 +160,6 @@ EXPORT_SYMBOL(efrm_find_ksym);
  *
  *--------------------------------------------------------------------*/
 
-/* Free buffer table entries allocated for a particular NIC.
- */
-static int iomap_bar(struct linux_efhw_nic *lnic, size_t len)
-{
-	volatile char __iomem *ioaddr;
-
-	ioaddr = ci_ioremap(lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr, len);
-	if (ioaddr == 0)
-		return -ENOMEM;
-
-	lnic->efrm_nic.efhw_nic.bar_ioaddr = ioaddr;
-	return 0;
-}
-
-static int linux_efhw_nic_map_ctr_ap(struct linux_efhw_nic *lnic)
-{
-	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
-	int rc = 0;
-
-	if (nic->devtype.arch == EFHW_ARCH_EF10 ||
-	    nic->devtype.arch == EFHW_ARCH_EF100) {
-		if (nic->ctr_ap_bytes == 0)
-			return 0;
-
-		rc = iomap_bar(lnic, nic->ctr_ap_bytes);
-
-		/* Bug 5195: workaround for now. */
-		if (rc != 0 && nic->ctr_ap_bytes > 16 * 1024 * 1024) {
-			/* Try half the size for now. */
-			nic->ctr_ap_bytes /= 2;
-			EFRM_WARN("Bug 5195 WORKAROUND: retrying iomap of %d "
-				  "bytes", nic->ctr_ap_bytes);
-			rc = iomap_bar(lnic, nic->ctr_ap_bytes);
-		}
-		if (rc < 0) {
-			EFRM_ERR("Failed (%d) to map bar (%d bytes)",
-				 rc, nic->ctr_ap_bytes);
-			return rc;
-		}
-	}
-	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP) {
-		/* we need a page for a VI */
-		unsigned long space_needed = nic->vi_lim * PAGE_SIZE;
-		int order = get_order(space_needed);
-		unsigned long addr = __get_free_pages(GFP_KERNEL, order);
-
-		if(addr == 0)
-			return -ENOMEM;
-
-		lnic->efrm_nic.efhw_nic.bar_ioaddr = (void *)addr;
-		memset((void *)lnic->efrm_nic.efhw_nic.bar_ioaddr,
-			   0, nic->vi_lim * PAGE_SIZE);
-		lnic->efrm_nic.efhw_nic.ctr_ap_dma_addr = __pa(addr);
-	}
-
-	return rc;
-}
-
-static void linux_efhw_nic_unmap_ctr_ap(struct linux_efhw_nic *lnic)
-{
-	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
-
-	if (nic->devtype.arch == EFHW_ARCH_AF_XDP) {
-		unsigned long space_needed = nic->vi_lim * PAGE_SIZE;
-		int order = get_order(space_needed);
-		free_pages((unsigned long)nic->bar_ioaddr, order);
-	}
-	else if (nic->bar_ioaddr) {
-		iounmap(nic->bar_ioaddr);
-	}
-	nic->bar_ioaddr = 0;
-}
-
 
 static void
 irq_ranges_init(struct efhw_nic *nic, const struct vi_resource_dimensions *res_dim)
@@ -302,10 +229,6 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 
 	init_rwsem(&lnic->drv_sem);
 
-	rc = linux_efhw_nic_map_ctr_ap(lnic);
-	if (rc < 0)
-		goto fail1;
-
 	rc = efrm_affinity_interface_probe(lnic);
 	if (rc < 0)
 		goto fail2;
@@ -323,8 +246,6 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 fail3:
 	efrm_affinity_interface_remove(lnic);
 fail2:
-	linux_efhw_nic_unmap_ctr_ap(lnic);
-fail1:
 	efhw_nic_dtor(nic);
 fail:
 	if( dev )
@@ -385,7 +306,6 @@ static void linux_efrm_nic_dtor(struct linux_efhw_nic *lnic)
 	efrm_shutdown_resource_filter(nic->dev);
 	efrm_nic_dtor(&lnic->efrm_nic);
 	efrm_affinity_interface_remove(lnic);
-	linux_efhw_nic_unmap_ctr_ap(lnic);
 	efhw_nic_dtor(nic);
 
 	if(nic->dev) {

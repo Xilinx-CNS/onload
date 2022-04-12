@@ -446,14 +446,10 @@ struct efhw_nic {
 
 	/* hardware resources */
 
-	/*! Pointer to the control aperture bar. */
-	volatile char __iomem *bar_ioaddr;
 	/*! Pointer to the EVQ prime register, used on EF100 only. */
 	volatile char __iomem *int_prime_reg;
 	/*! Bar number of control aperture. */
 	unsigned               ctr_ap_bar;
-	/*! Length of control aperture in bytes. */
-	unsigned               ctr_ap_bytes;
 	/*! DMA address of the control aperture. */
 	dma_addr_t             ctr_ap_dma_addr;
 	/*! Stride between VIs on mem_bar */
@@ -534,7 +530,5 @@ struct efhw_nic {
         void* arch_extra;
 };
 
-
-#define EFHW_KVA(nic)       ((nic)->bar_ioaddr)
 
 #endif /* __CI_EFHW_EFHW_TYPES_H__ */
