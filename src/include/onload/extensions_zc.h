@@ -638,6 +638,10 @@ extern int onload_set_recv_filter(int fd,
  * being handled by Onload).  If a socket has been handed over to the
  * kernel stack (e.g. because it has been bound to an address that is
  * not routed over a SFC interface) it will return -ESOCKTNOSUPPORT
+ *
+ * PIO, and therefore templated send, is not available on SmartNIC
+ * (SN1000 and later series) or X3 architectures. Normal send
+ * operations provide the lowest possible latency on those devices.
  */
 
 /* Opaque pointer to the template metadata */
