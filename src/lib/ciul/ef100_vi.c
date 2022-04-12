@@ -229,7 +229,7 @@ static int ef100_ef_vi_transmitv_init_extra(ef_vi* vi,
     n_segs++;
 
   /* Check for enough space in the queue */
-  if( qs->added + n_segs - qs->removed >= q->mask )
+  if( qs->added + n_segs - qs->removed > q->mask )
     return -EAGAIN;
 
   if( CI_UNLIKELY(extra != NULL) ) {
