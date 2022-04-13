@@ -197,8 +197,8 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 
 		if (mem_bar != EFHW_MEM_BAR_UNDEFINED)
 			nic->ctr_ap_bar = mem_bar;
-		nic->ctr_ap_dma_addr = pci_resource_start(to_pci_dev(dev),
-							  nic->ctr_ap_bar);
+		nic->ctr_ap_addr = pci_resource_start(to_pci_dev(dev),
+						      nic->ctr_ap_bar);
 
 		nic->num_evqs   = 1024;
 		nic->num_dmaqs  = 1024;
@@ -225,8 +225,8 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 
 		if (mem_bar != EFHW_MEM_BAR_UNDEFINED)
 			nic->ctr_ap_bar = mem_bar;
-		nic->ctr_ap_dma_addr = pci_resource_start(to_pci_dev(dev),
-							  nic->ctr_ap_bar);
+		nic->ctr_ap_addr = pci_resource_start(to_pci_dev(dev),
+						      nic->ctr_ap_bar);
 
 		/* FIXME: wrong numbers for queues numbers*/
 		nic->num_evqs   = 1024;

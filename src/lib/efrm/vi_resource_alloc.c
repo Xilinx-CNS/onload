@@ -925,8 +925,7 @@ efrm_vi_io_map(struct efrm_vi* virs, struct efhw_nic *nic, int instance)
 	u32 io_size = efhw_nic_vi_io_size(nic);
 	if (io_size > 0)  {
 		offset = instance * nic->vi_stride;
-		virs->io_page = ci_ioremap(nic->ctr_ap_dma_addr + offset,
-                                           io_size);
+		virs->io_page = ci_ioremap(nic->ctr_ap_addr + offset, io_size);
 		if (virs->io_page == NULL)
 			return -ENOMEM;
 	}

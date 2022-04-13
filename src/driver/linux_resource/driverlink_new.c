@@ -308,7 +308,7 @@ efrm_nic_resources_match(struct efhw_nic* nic,
 static inline int
 efrm_nic_bar_is_good(struct efhw_nic* nic, struct pci_dev* dev)
 {
-	return !dev || nic->ctr_ap_dma_addr == pci_resource_start(dev, nic->ctr_ap_bar);
+	return !dev || nic->ctr_ap_addr == pci_resource_start(dev, nic->ctr_ap_bar);
 }
 
 

@@ -2602,7 +2602,7 @@ create_plugin_app(tcp_helper_resource_t* trs)
                             trs->nic[intf_i].thn_vi_rs[CI_Q_ID_TCP_APP]->
                                     rs.rs_instance);
       bar_off += meta.mapped_csr_offset;
-      ni->nic_hw[intf_i].plugin_io = ci_ioremap(nic->ctr_ap_dma_addr +
+      ni->nic_hw[intf_i].plugin_io = ci_ioremap(nic->ctr_ap_addr +
                                                 (bar_off & PAGE_MASK),
                                                 meta.mapped_csr_size);
       if( ! ni->nic_hw[intf_i].plugin_io ) {

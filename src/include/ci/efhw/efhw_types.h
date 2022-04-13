@@ -450,8 +450,8 @@ struct efhw_nic {
 	volatile char __iomem *int_prime_reg;
 	/*! Bar number of control aperture. */
 	unsigned               ctr_ap_bar;
-	/*! DMA address of the control aperture. */
-	dma_addr_t             ctr_ap_dma_addr;
+	/*! address of the control aperture. */
+	resource_size_t        ctr_ap_addr;
 	/*! Stride between VIs on mem_bar */
 	unsigned vi_stride;
 

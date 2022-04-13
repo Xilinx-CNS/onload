@@ -2543,7 +2543,7 @@ static int ef10_ctpio_addr(struct efhw_nic* nic, int instance,
 	resource_size_t bar_off;
 	bar_off = ef10_tx_dma_page_base(nic->vi_stride, instance);
 	bar_off += VI_WINDOW_CTPIO_OFFSET;
-	*addr = nic->ctr_ap_dma_addr + bar_off;
+	*addr = nic->ctr_ap_addr + bar_off;
 	return 0;
 }
 

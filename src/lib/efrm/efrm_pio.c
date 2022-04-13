@@ -303,7 +303,7 @@ int efrm_pio_map_kernel(struct efrm_vi *vi, void **io)
 	bar_off = ef10_tx_dma_page_base(nic->vi_stride, vi->rs.rs_instance);
 	bar_off += VI_WINDOW_PIO_OFFSET;
 	bar_page_off = bar_off & PAGE_MASK;
-	*io = ioremap_wc(nic->ctr_ap_dma_addr + bar_page_off, PAGE_SIZE);
+	*io = ioremap_wc(nic->ctr_ap_addr + bar_page_off, PAGE_SIZE);
 	if( *io == NULL )
 		return -EINVAL;
 	*io = (char*) *io + (bar_off & (PAGE_SIZE - 1u));

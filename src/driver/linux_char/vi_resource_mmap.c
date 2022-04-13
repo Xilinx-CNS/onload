@@ -76,7 +76,7 @@ efab_vi_rm_mmap_io(struct efrm_vi *virs,
     BUG();
   }
 
-  rc = ci_mmap_io(nic, nic->ctr_ap_dma_addr + base, len, opaque, map_num,
+  rc = ci_mmap_io(nic, nic->ctr_ap_addr + base, len, opaque, map_num,
                   offset, 0);
   if (rc < 0 ) {
     EFCH_ERR("%s: ERROR: ci_mmap_bar failed rc=%d", __FUNCTION__, rc);
@@ -113,7 +113,7 @@ efab_vi_rm_mmap_pio(struct efrm_vi *virs,
   *bytes -= len;
   bar_off = (ef10_tx_dma_page_base(nic->vi_stride, instance) + 4096) &
             PAGE_MASK;
-  rc = ci_mmap_io(nic, nic->ctr_ap_dma_addr + bar_off, len, opaque, map_num,
+  rc = ci_mmap_io(nic, nic->ctr_ap_addr + bar_off, len, opaque, map_num,
                   offset, 1);
   if( rc < 0 )
     EFCH_ERR("%s: ERROR: ci_mmap_io failed rc=%d", __FUNCTION__, rc);
@@ -177,7 +177,7 @@ efab_vi_rm_mmap_plugin(struct efrm_vi *virs, unsigned subpage,
     return -EINVAL;
   }
 
-  rc = ci_mmap_io(nic, nic->ctr_ap_dma_addr + io_off, *bytes, opaque, map_num,
+  rc = ci_mmap_io(nic, nic->ctr_ap_addr + io_off, *bytes, opaque, map_num,
                   offset, 0);
   if( rc < 0 )
     EFCH_ERR("%s: ERROR: ci_mmap_io failed rc=%d", __FUNCTION__, rc);
