@@ -700,6 +700,34 @@ static int ef100_af_xdp_init(struct efhw_nic* nic, int instance,
   return 0;
 }
 
+
+/*--------------------------------------------------------------------
+ *
+ * Device
+ *
+ *--------------------------------------------------------------------*/
+int ef100_vi_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
+		       resource_size_t* addr_out)
+{
+	unsigned vi_stride = nic->vi_stride;
+
+	*size_out = CI_PAGE_SIZE;
+
+	/* We say that we only needed one page for the IO mapping so check
+	 * that the registers we're interested in fall within a page. */
+	EFHW_ASSERT(ef100_tx_dma_page_offset(vi_stride, instance) <
+		    CI_PAGE_SIZE);
+	EFHW_ASSERT(ef100_rx_dma_page_offset(vi_stride, instance) <
+		    CI_PAGE_SIZE);
+	EFHW_ASSERT(ef100_tx_dma_page_base(vi_stride, instance) ==
+		    ef100_rx_dma_page_base(vi_stride, instance));
+
+	*addr_out = nic->ctr_ap_addr +
+		    ef100_tx_dma_page_base(vi_stride, instance);
+
+	return 0;
+}
+
 static int
 ef100_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
                       const volatile uint32_t* evq_ptr)
@@ -801,7 +829,7 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_af_xdp_mem,
 	ef100_af_xdp_init,
 	ef10_ef100_get_pci_dev,
-	ef10_ef100_vi_io_size,
+	ef100_vi_io_region,
 	ef100_inject_reset_ev,
 	ef100_ctpio_addr,
 	ef10_ef100_max_shared_rxqs,

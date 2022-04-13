@@ -921,22 +921,23 @@ efrm_vi_rm_fini_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type)
 static int
 efrm_vi_io_map(struct efrm_vi* virs, struct efhw_nic *nic, int instance)
 {
-	int offset;
-	u32 io_size = efhw_nic_vi_io_size(nic);
-	if (io_size > 0)  {
-		offset = instance * nic->vi_stride;
-		virs->io_page = ci_ioremap(nic->ctr_ap_addr + offset, io_size);
+	resource_size_t addr;
+	size_t io_size;
+	int rc = efhw_nic_vi_io_region(nic, instance, &io_size, &addr);
+	if (rc == 0 && io_size > 0)  {
+		virs->io_page = ci_ioremap(addr, io_size);
 		if (virs->io_page == NULL)
 			return -ENOMEM;
 	}
-	return 0;
+
+	return rc;
 }
 
 
 static void
 efrm_vi_io_unmap(struct efrm_vi* virs, struct efhw_nic* nic)
 {
-	if (efhw_nic_vi_io_size(nic) > 0)
+	if (virs->io_page)
 		iounmap(virs->io_page);
 }
 
@@ -1274,6 +1275,8 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	struct efrm_vi *virs;
         unsigned ctpio_mmap_bytes = 0;
 	int rc;
+	size_t io_size;
+	resource_size_t io_addr;
 
 	EFRM_ASSERT(pd != NULL);
 	efrm_vi_attr_init(&attr);
@@ -1329,8 +1332,16 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 	if( vi_flags & EFHW_VI_TX_CTPIO )
 		ctpio_mmap_bytes = EF_VI_CTPIO_APERTURE_SIZE;
 
-	if (out_io_mmap_bytes != NULL)
-		*out_io_mmap_bytes = efhw_nic_vi_io_size(client->nic);
+	if (out_io_mmap_bytes != NULL) {
+		rc = efhw_nic_vi_io_region(client->nic,
+					evq_virs ? evq_virs->rs.rs_instance :
+						   virs->rs.rs_instance,
+					&io_size, &io_addr);
+		if (rc == 0)
+			*out_io_mmap_bytes = io_size;
+		else
+			goto fail_q_alloc;
+	}
 	if (out_ctpio_mmap_bytes != NULL)
 		*out_ctpio_mmap_bytes = ctpio_mmap_bytes;
 	if (out_txq_capacity != NULL)

@@ -208,6 +208,22 @@ efch_vi_rm_find(int fd, efch_resource_id_t rs_id, int rs_type,
 }
 
 
+void efch_vi_rm_free(efch_resource_t *rs)
+{
+  struct efrm_vi *virs = efrm_vi(rs->rs_base);
+  if( virs->evq_callback_fn != NULL )
+    efrm_eventq_kill_callback(virs);
+  efch_filter_list_free(rs->rs_base, efrm_vi_get_pd(virs), &rs->vi.fl);
+  /* Remove any sniff config we may have set up. */
+  if( rs->vi.sniff_flags & EFCH_RX_SNIFF )
+    efrm_port_sniff(rs->rs_base, 0, 0, -1);
+  if( rs->vi.sniff_flags & EFCH_TX_SNIFF )
+    efrm_tx_port_sniff(rs->rs_base, 0, -1);
+  efrm_vi_tx_alt_free(virs);
+  vfree((void*)virs->ep_state);
+}
+
+
 static int
 efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
                  efch_resource_t* rs, int intf_ver_id)
@@ -224,6 +240,8 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   int rc, ps_buf_size;
   int in_flags;
   struct efrm_pd* rmpd = NULL;
+  resource_size_t io_addr;
+  size_t io_size;
 
   ci_assert(alloc != NULL);
   ci_assert(rt != NULL);
@@ -311,13 +329,18 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
 
   efch_filter_list_init(&rs->vi.fl);
   rs->vi.sniff_flags = 0;
+  rs->rs_base = &virs->rs;
+
+  nic = efrm_client_get_nic(virs->rs.rs_client);
+  rc = efhw_nic_vi_io_region(nic, virs->rs.rs_instance, &io_size, &io_addr);
+  if( rc < 0 )
+    goto fail4;
 
   /* Initialise the outputs. */
   alloc_out = &alloc->u.vi_out;
   CI_DEBUG(alloc = NULL);
   CI_DEBUG(alloc_in = NULL);
 
-  nic = efrm_client_get_nic(virs->rs.rs_client);
   alloc_out->instance = virs->rs.rs_instance;
   alloc_out->abs_idx = efhw_nic_rel_to_abs_idx(nic, alloc_out->instance);
   alloc_out->evq_capacity = virs->q[EFHW_EVQ].capacity;
@@ -327,18 +350,19 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   alloc_out->nic_variant = nic->devtype.variant;
   alloc_out->nic_revision = nic->devtype.revision;
   alloc_out->nic_flags = efhw_vi_nic_flags(nic);
-  alloc_out->io_mmap_bytes = efhw_nic_vi_io_size(nic);
+  alloc_out->io_mmap_bytes = io_size;
   alloc_out->mem_mmap_bytes = efhw_page_map_bytes(&virs->mem_mmap);
   alloc_out->rx_prefix_len = virs->rx_prefix_len;
   alloc_out->out_flags = virs->out_flags;
   alloc_out->out_flags |= EFHW_VI_PS_BUF_SIZE_SET;
   alloc_out->ps_buf_size = virs->ps_buf_size;
 
-  rs->rs_base = &virs->rs;
   EFCH_TRACE("%s: Allocated "EFRM_RESOURCE_FMT" rc=%d", __FUNCTION__,
              EFRM_RESOURCE_PRI_ARG(&virs->rs), rc);
   return 0;
 
+ fail4:
+  efch_vi_rm_free(rs);
  fail3:
   if (vi_set != NULL)
     efrm_resource_release(vi_set);
@@ -349,22 +373,6 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
     efrm_resource_release(evq);
  fail1:
   return rc;
-}
-
-
-void efch_vi_rm_free(efch_resource_t *rs)
-{
-  struct efrm_vi *virs = efrm_vi(rs->rs_base);
-  if( virs->evq_callback_fn != NULL )
-    efrm_eventq_kill_callback(virs);
-  efch_filter_list_free(rs->rs_base, efrm_vi_get_pd(virs), &rs->vi.fl);
-  /* Remove any sniff config we may have set up. */
-  if( rs->vi.sniff_flags & EFCH_RX_SNIFF )
-    efrm_port_sniff(rs->rs_base, 0, 0, -1);
-  if( rs->vi.sniff_flags & EFCH_TX_SNIFF )
-    efrm_tx_port_sniff(rs->rs_base, 0, -1);
-  efrm_vi_tx_alt_free(virs);
-  vfree((void*)virs->ep_state);
 }
 
 

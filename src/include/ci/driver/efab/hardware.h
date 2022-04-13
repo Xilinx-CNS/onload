@@ -233,8 +233,9 @@
 /*-------------- device ------------------------ */
 #define efhw_nic_get_pci_dev(nic) \
 	((nic)->efhw_func->get_pci_dev(nic))
-#define efhw_nic_vi_io_size(nic) \
-	((nic)->efhw_func->vi_io_size(nic))
+#define efhw_nic_vi_io_region(nic, instance, size_out, addr_out) \
+	((nic)->efhw_func->vi_io_region((nic), (instance), (size_out), \
+					(addr_out)))
 
 /*-------------- ctpio ------------------------ */
 #define efhw_nic_ctpio_addr(nic, instance, addr) \

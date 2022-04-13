@@ -1217,13 +1217,11 @@ efct_get_pci_dev(struct efhw_nic *nic)
   return NULL;
 }
 
-static u32
-efct_vi_io_size(struct efhw_nic *nic)
+static int
+efct_vi_io_region(struct efhw_nic *nic, int instance, size_t* size_out,
+                  resource_size_t* addr_out)
 {
-  /* We have no need to map the IO area on efct NICs as all control through
-   * the NIC's register interface is handled through the net driver. Although
-   * we manage our own TX, there is no separate TX doorbell as TX is triggered
-   * directly through writes to the CTPIO region. */
+  *size_out = 0;
   return 0;
 }
 
@@ -1313,7 +1311,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_af_xdp_mem,
   efct_af_xdp_init,
   efct_get_pci_dev,
-  efct_vi_io_size,
+  efct_vi_io_region,
   efct_inject_reset_ev,
   efct_ctpio_addr,
   efct_max_shared_rxqs,

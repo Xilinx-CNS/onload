@@ -1553,9 +1553,11 @@ af_xdp_get_pci_dev(struct efhw_nic *nic)
 	return NULL;
 }
 
-static u32
-af_xdp_vi_io_size(struct efhw_nic *nic)
+static int
+af_xdp_vi_io_region(struct efhw_nic *nic, int instance, size_t* size_out,
+		    resource_size_t* addr_out)
 {
+	*size_out = 0;
 	return 0;
 }
 
@@ -1632,8 +1634,8 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_mem,
 	af_xdp_init,
 	af_xdp_get_pci_dev,
-	af_xdp_vi_io_size,
-  af_xdp_inject_reset_ev,
+	af_xdp_vi_io_region,
+	af_xdp_inject_reset_ev,
 	af_xdp_ctpio_addr,
 	af_xdp_max_shared_rxqs,
 };

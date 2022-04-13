@@ -34,55 +34,33 @@ efab_vi_rm_mmap_io(struct efrm_vi *virs,
                    int *map_num, unsigned long *offset)
 {
   int rc;
-  int len;
-  int instance;
-  int base;
-  unsigned vi_stride;
+  size_t len;
   struct efhw_nic *nic;
+  resource_size_t addr;
 
   nic = efrm_client_get_nic(virs->rs.rs_client);
-  if( efhw_nic_vi_io_size(nic) == 0 )
+  rc = efhw_nic_vi_io_region(nic, virs->rs.rs_instance, &len, &addr);
+  if( rc < 0 )
+    return rc;
+
+  if( len == 0 )
     return 0;
 
-  instance = virs->rs.rs_instance;
-
-  len = CI_MIN(*bytes, (unsigned long)CI_PAGE_SIZE);
-  *bytes -=len;
-
-  /* Make sure we can get away with a single page here. */
-  switch (nic->devtype.arch) {
-  case EFHW_ARCH_EF10:
-    vi_stride = nic->vi_stride;
-    ci_assert_lt(ef10_tx_dma_page_offset(vi_stride, instance), CI_PAGE_SIZE);
-    ci_assert_lt(ef10_rx_dma_page_offset(vi_stride, instance), CI_PAGE_SIZE);
-    ci_assert_equal(ef10_tx_dma_page_base(vi_stride, instance),
-                    ef10_rx_dma_page_base(vi_stride, instance));
-    base = ef10_tx_dma_page_base(vi_stride, instance);
-    break;
-
-  case EFHW_ARCH_EF100:
-    vi_stride = nic->vi_stride;
-    ci_assert_lt(ef100_tx_dma_page_offset(vi_stride, instance), CI_PAGE_SIZE);
-    ci_assert_lt(ef100_rx_dma_page_offset(vi_stride, instance), CI_PAGE_SIZE);
-    ci_assert_equal(ef100_tx_dma_page_base(vi_stride, instance),
-                    ef100_rx_dma_page_base(vi_stride, instance));
-    base = ef100_tx_dma_page_base(vi_stride, instance);
-    break;
-
-  default:
-    EFCH_ERR("%s: ERROR: unknown nic type (%d)", __FUNCTION__,
-	     nic->devtype.arch);
-    base = 0; /* To quiet the compiler */
-    BUG();
+  /* We told userspace how much to map, so there's no reason to provide an
+   * area that's too small. */
+  if( *bytes < len ) {
+    EFCH_ERR("%s: ERROR: requested io map of %lu bytes, expected %zu",
+             __FUNCTION__, *bytes, len);
+    return -EINVAL;
   }
 
-  rc = ci_mmap_io(nic, nic->ctr_ap_addr + base, len, opaque, map_num,
-                  offset, 0);
+  rc = ci_mmap_io(nic, addr, len, opaque, map_num, offset, 0);
   if (rc < 0 ) {
     EFCH_ERR("%s: ERROR: ci_mmap_bar failed rc=%d", __FUNCTION__, rc);
     return rc;
   }
 
+  *bytes -= len;
   return 0;
 }
 
@@ -302,17 +280,27 @@ EXPORT_SYMBOL(efab_vi_resource_mmap);
 int
 efab_vi_resource_mmap_bytes(struct efrm_vi* virs, int map_type)
 {
+  int rc = 0;
   int bytes = 0;
+  size_t size;
+  resource_size_t addr;
   struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
 
   EFRM_RESOURCE_ASSERT_VALID(&virs->rs, 0);
 
-  if( map_type == 0 ) /* I/O mapping. */
-    bytes += efhw_nic_vi_io_size(nic);
-  else /* Memory mapping. */
-    bytes += efhw_page_map_bytes(&virs->mem_mmap);
+  if( map_type == 0 ) {
+    /* I/O mapping. */
+    rc = efhw_nic_vi_io_region(nic, virs->rs.rs_instance, &size, &addr);
+    if( rc < 0 )
+      return rc;
 
-  /* Round up to whole number of pages. */
+    bytes = size;
+  }
+  else {
+    /* Memory mapping. */
+    bytes = efhw_page_map_bytes(&virs->mem_mmap);
+  }
+
   return bytes;
 }
 EXPORT_SYMBOL(efab_vi_resource_mmap_bytes);

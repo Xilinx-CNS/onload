@@ -377,8 +377,12 @@ struct efhw_func_ops {
 	 * release that reference when they're finished. */
 	struct pci_dev* (*get_pci_dev)(struct efhw_nic* nic);
 
-	/*! Returns the size of the io area for a VI */
-	u32 (*vi_io_size)(struct efhw_nic* nic);
+	/*! Provides the size and address (if present) of the io area for a VI.
+	 * addr_out is only vaild in the case that size_out is positive.
+	 * Returns 0 on success.
+	 * Returns negative error on other failure. */
+	int (*vi_io_region)(struct efhw_nic* nic, int instance,
+                            size_t* size_out, resource_size_t* addr_out);
 
 	/*! This NIC has just been restarted: magically force a reset event in to
 	 * the given evq */
