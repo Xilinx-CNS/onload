@@ -291,12 +291,12 @@ enum {
   EF_EVENT_TYPE_TX_ALT,
   /** A batch of packets was received with error condition set. */
   EF_EVENT_TYPE_RX_MULTI_DISCARD,
-  /** A batch of packets was received. */
-  EF_EVENT_TYPE_RX_MULTI_PKTS,
-  /** A ef_vi_transmit_memcpy_sync() request has completed. */
-  EF_EVENT_TYPE_MEMCPY,
   /** Event queue has been forcibly halted (hotplug, reset, etc.) */
   EF_EVENT_TYPE_RESET,
+  /** A ef_vi_transmit_memcpy_sync() request has completed. */
+  EF_EVENT_TYPE_MEMCPY,
+  /** A batch of packets was received. */
+  EF_EVENT_TYPE_RX_MULTI_PKTS,
   /** Good packets have been received on an efct adapter */
   EF_EVENT_TYPE_RX_REF,
   /** Packets with a bad checksum have been received on an efct adapter */
