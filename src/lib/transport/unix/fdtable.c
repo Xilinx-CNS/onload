@@ -193,10 +193,63 @@ static int modify_glibc_code(void* dst, const void* src, size_t n)
   return 0;
 }
 
+#ifdef __x86_64__
+static const unsigned char x64_endbr[] = {0xf3, 0x0f, 0x1e, 0xfa};
+
+/* Returns the length of the given instruction, if it's one of the
+ * instructions that we expect to find in the implementation of libc's
+ * _IO_file_close. Currently this is just some movs */
+static int is_io_file_close_insn(const unsigned char* insn)
+{
+  if( insn[0] == 0x8b ) {   /* mov r,r/m */
+    bool has_sib = (insn[1] & 7) == 4 && insn[1] < 0xc0;
+    bool has_disp8 = (insn[1] >> 6) == 1;
+    bool has_disp32 = (insn[1] >> 6) == 2 || (insn[1] & 0xc7) == 0x04;
+    return 2 + has_sib + has_disp8 + has_disp32 * 4;
+  }
+  return 0;
+}
+#endif
+
+static void* find_close_nocancel(void)
+{
+  void* close_nocancel = dlsym(NULL, "__close_nocancel");
+  if( close_nocancel )
+    return close_nocancel;
+
+#ifdef __x86_64__
+  {
+    /* Only newish versions of glibc (e.g. RHEL8) export __close_nocancel.
+     * Prior versions (before glibc 329ea513b4) had it inline in close().
+     * That's still hard to find, however, since other components of glibc
+     * also export a close/__close, e.g. libpthread.so.
+     * Instead we start at _IO_file_close, which is a moderately simple
+     * wrapper of __close_nocancel, i.e. it ends with a jmp to it. */
+    int n;
+    unsigned char* io_file_close;
+
+    io_file_close = dlsym(RTLD_NEXT, "_IO_file_close");
+    if( ! io_file_close )
+      return NULL;
+    if( ! memcmp(io_file_close, x64_endbr, sizeof(x64_endbr)) )
+      io_file_close += sizeof(x64_endbr);
+    while( (n = is_io_file_close_insn(io_file_close)) != 0 )
+      io_file_close += n;
+    if( *io_file_close != 0xe9 )  /* jmp rel32 */
+      return NULL;
+    return io_file_close + 5 + *(uint32_t*)(io_file_close + 1);
+  }
+#else
+  /* We do not do extra searching on aarch64, since we don't support old glibc
+   * there */
+  return NULL;
+#endif
+}
+
 
 static int patch_libc_close_nocancel(void)
 {
-  unsigned char* close_nocancel = dlsym(NULL, "__close_nocancel");
+  unsigned char* close_nocancel = find_close_nocancel();
   if( ! close_nocancel ) {
     LOG_S(ci_log("libc __close_nocancel not found: not running glibc?"));
     return -ENOENT;
@@ -204,7 +257,6 @@ static int patch_libc_close_nocancel(void)
 
 #ifdef __x86_64__
   {
-    static const unsigned char endbr[] = {0xf3, 0x0f, 0x1e, 0xfa};
     static const unsigned char sysclose[] = {
       0xb8, 0x03, 0x00, 0x00, 0x00,   /* mov $3, %eax */
       0x0f, 0x05                      /* syscall */
@@ -228,8 +280,8 @@ static int patch_libc_close_nocancel(void)
      * is to use mmap(MAP_32BIT) to get ourselves a 32-bit address and put an
      * intermediate trampoline there. That allows us to replace those 7 bytes
      * with a call to a 4-byte absolute address. Doable. */
-    if( ! memcmp(close_nocancel, endbr, sizeof(endbr)) )
-      close_nocancel += sizeof(endbr);
+    if( ! memcmp(close_nocancel, x64_endbr, sizeof(x64_endbr)) )
+      close_nocancel += sizeof(x64_endbr);
     if( memcmp(close_nocancel, sysclose, sizeof(sysclose)) ) {
       LOG_S(ci_log("Mismatching syscall implementation in __close_nocancel"));
       return -ESRCH;
