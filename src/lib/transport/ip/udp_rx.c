@@ -106,7 +106,12 @@ int ci_udp_csum_correct(ci_ip_pkt_fmt* pkt, ci_udp_hdr* udp)
       ipx_hdr_tot_len(af, ipx) - CI_IPX_IHL(af, ipx) )
     return 0;
 
-  if( udp->udp_check_be16 == 0 )
+  if( udp->udp_check_be16 == 0
+#if CI_CFG_IPV6
+      /* L4 checksums are mandatory for IPv6 */
+      && ! (pkt->flags & CI_PKT_FLAG_IS_IP6)
+#endif
+     )
     return 1;  /* RFC768: csum not computed */
 
   return ci_ipx_udp_checksum(af, ipx, udp, CI_UDP_PAYLOAD(udp)) ==
