@@ -46,6 +46,10 @@ efab_vi_rm_mmap_io(struct efrm_vi *virs,
   if( len == 0 )
     return 0;
 
+  /* We expect an IO region that is an integral number of pages on all
+   * supported NICs. */
+  EFRM_ASSERT((len & ~CI_PAGE_MASK) == 0);
+
   /* We told userspace how much to map, so there's no reason to provide an
    * area that's too small. */
   if( *bytes < len ) {

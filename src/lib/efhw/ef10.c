@@ -42,6 +42,8 @@
 #include <ci/driver/driverlink_api.h>
 #include <ci/driver/resource/driverlink.h>
 
+#include <ci/tools/debug.h>
+
 #include <ci/efhw/ef10.h>
 #include <ci/efhw/mc_driver_pcol.h>
 #include "ef10_mcdi.h"
@@ -2531,6 +2533,16 @@ int ef10_vi_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
 {
 	unsigned vi_stride = nic->vi_stride;
 
+	/* If the page size was bigger than the VI window we'd have to map
+	 * multiple VI windows at a time, meaning that the window for a
+	 * specific VI would be at an offset within the mapping, needing
+	 * special handling. That handling doesn't exist, so grumble if we're
+	 * building on an arch where this would be a problem. */
+	CI_BUILD_ASSERT(PAGE_SIZE <= ER_DZ_EVQ_TMR_REG_STEP);
+
+	/* We are claiming that only one page needs to be mapped. This is less
+	 * than the full window, but it contains everything we're interested
+	 * in. */
 	*size_out = CI_PAGE_SIZE;
 
 	/* We say that we only needed one page for the IO mapping so check

@@ -388,7 +388,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   struct ef_vi_nic_type nic_type;
   ci_resource_alloc_t ra;
   char *mem_mmap_ptr_orig, *mem_mmap_ptr;
-  char *io_mmap_ptr, *io_mmap_base;
+  char *io_mmap_ptr;
   char* ctpio_mmap_ptr;
   ef_vi_state* state;
   int rc;
@@ -416,7 +416,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
 
   /* Ensure ef_vi_free() only frees what we allocate. */
   io_mmap_ptr = NULL;
-  io_mmap_base = NULL;
   mem_mmap_ptr = mem_mmap_ptr_orig = NULL;
   ctpio_mmap_ptr = NULL;
 
@@ -495,17 +494,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
       LOGVV(ef_log("%s: ci_resource_mmap (io) %d", __FUNCTION__, rc));
       goto fail2;
     }
-    { /* On systems with large pages, multiple VI windows are mapped into
-       * each system page.  Therefore the VI window may not appear at the
-       * start of the I/O mapping.
-       */
-      int inst_in_iopage = 0;
-      int vi_windows_per_page = CI_PAGE_SIZE / 8192;
-      if( vi_windows_per_page > 1 )
-        inst_in_iopage = ra.u.vi_out.instance & (vi_windows_per_page - 1);
-      io_mmap_base = (char*) p;
-      io_mmap_ptr = io_mmap_base + inst_in_iopage * 8192;
-    }
+    io_mmap_ptr = (char*) p;
   }
 
   if( ra.u.vi_out.mem_mmap_bytes ) {
@@ -586,7 +575,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     ef_vi_set_stats_buf(vi, stats);
   }
 
-  vi->vi_io_mmap_ptr = io_mmap_base;
+  vi->vi_io_mmap_ptr = io_mmap_ptr;
   vi->vi_mem_mmap_ptr = mem_mmap_ptr_orig;
   vi->vi_ctpio_mmap_ptr = ctpio_mmap_ptr;
   vi->vi_io_mmap_bytes = ra.u.vi_out.io_mmap_bytes;
@@ -621,8 +610,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   if( mem_mmap_ptr_orig != NULL )
     ci_resource_munmap(vi_dh, mem_mmap_ptr_orig, ra.u.vi_out.mem_mmap_bytes);
  fail3:
-  if( io_mmap_base != NULL )
-    ci_resource_munmap(vi_dh, io_mmap_base, ra.u.vi_out.io_mmap_bytes);
+  if( io_mmap_ptr != NULL )
+    ci_resource_munmap(vi_dh, io_mmap_ptr, ra.u.vi_out.io_mmap_bytes);
  fail2:
   if( state != NULL )
     ci_resource_munmap(vi_dh, state, state_bytes);
