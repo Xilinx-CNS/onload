@@ -58,8 +58,7 @@ static void af_xdp_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
 static void efct_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
 				 struct efrm_vi_mappings* vm)
 {
-  /* TODO EFCT */
-  vm->io_page = NULL;
+  vm->io_page = (void*) vi_rs->io_page;
 }
 
 void efrm_vi_get_mappings(struct efrm_vi* vi, struct efrm_vi_mappings* vm)

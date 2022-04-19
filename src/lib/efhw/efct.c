@@ -1221,8 +1221,21 @@ static int
 efct_vi_io_region(struct efhw_nic *nic, int instance, size_t* size_out,
                   resource_size_t* addr_out)
 {
-  *size_out = 0;
-  return 0;
+  struct device *dev;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  union xlnx_efct_param_value val;
+  int rc = 0;
+
+  EFCT_PRE(dev, edev, cli, nic, rc)
+  rc = edev->ops->get_param(cli, XLNX_EFCT_EVQ_WINDOW, &val);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  *size_out = val.evq_window.stride;
+  *addr_out = val.evq_window.base;
+  *addr_out += (instance - nic->vi_min) * val.evq_window.stride;
+
+  return rc;
 }
 
 static int

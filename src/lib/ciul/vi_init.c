@@ -269,8 +269,7 @@ int ef_vi_init(struct ef_vi* vi, int arch, int variant, int revision,
 void ef_vi_init_io(struct ef_vi* vi, void* io_area)
 {
   EF_VI_BUG_ON(vi->inited & EF_VI_INITED_IO);
-  EF_VI_BUG_ON((vi->nic_type.arch != EF_VI_ARCH_AF_XDP &&
-                vi->nic_type.arch != EF_VI_ARCH_EFCT) && io_area == NULL);
+  EF_VI_BUG_ON((vi->nic_type.arch != EF_VI_ARCH_AF_XDP) && io_area == NULL);
   vi->io = io_area;
   vi->inited |= EF_VI_INITED_IO;
 }
