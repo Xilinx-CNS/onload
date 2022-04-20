@@ -399,10 +399,14 @@ static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
   }
 
   if ( vi->vi_flags & EF_VI_TX_TIMESTAMPS ) {
+    uint64_t ptstamp;
+    uint32_t ptstamp_seconds;
+    uint32_t timesync_seconds;
+
     EF_VI_ASSERT(CI_QWORD_FIELD(event, EFCT_TX_EVENT_TIMESTAMP_STATUS) == 1);
-    uint64_t ptstamp = CI_QWORD_FIELD64(event, EFCT_TX_EVENT_PARTIAL_TSTAMP);
-    uint32_t ptstamp_seconds = ptstamp >> 32;
-    uint32_t timesync_seconds = (vi->ep_state->evq.sync_timestamp_major & 0xFF);
+    ptstamp = CI_QWORD_FIELD64(event, EFCT_TX_EVENT_PARTIAL_TSTAMP);
+    ptstamp_seconds = ptstamp >> 32;
+    timesync_seconds = (vi->ep_state->evq.sync_timestamp_major & 0xFF);
     ev_out->tx_timestamp.ts_sec = vi->ep_state->evq.sync_timestamp_major;
     if ( ptstamp_seconds == ((timesync_seconds + 1) % 256) ) {
       ev_out->tx_timestamp.ts_sec++;
@@ -798,6 +802,8 @@ static void efct_tx_handle_error_event(ef_vi* vi, ci_qword_t event,
 static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
                                         ef_event* ev_out)
 {
+  uint8_t time_sync;
+  uint8_t time_set;
   int n_evs = 0;
 
   switch( CI_QWORD_FIELD(event, EFCT_CTRL_SUBTYPE) ) {
@@ -814,8 +820,8 @@ static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
     case EFCT_CTRL_EV_TIME_SYNC:
       vi->ep_state->evq.sync_timestamp_major = CI_QWORD_FIELD64(event, EFCT_TIME_SYNC_EVENT_TIME_HIGH) >> 16;
       vi->ep_state->evq.sync_timestamp_minor = CI_QWORD_FIELD64(event, EFCT_TIME_SYNC_EVENT_TIME_HIGH) & 0xFFFF;
-      uint8_t time_sync = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IN_SYNC) ? EF_VI_SYNC_FLAG_CLOCK_IN_SYNC : 0);
-      uint8_t time_set = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IS_SET) ? EF_VI_SYNC_FLAG_CLOCK_SET : 0);
+      time_sync = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IN_SYNC) ? EF_VI_SYNC_FLAG_CLOCK_IN_SYNC : 0);
+      time_set = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IS_SET) ? EF_VI_SYNC_FLAG_CLOCK_SET : 0);
       vi->ep_state->evq.sync_flags = time_sync | time_set; 
       break;
     case EFCT_CTRL_EV_UNSOL_OVERFLOW:
