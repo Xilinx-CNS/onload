@@ -16,6 +16,7 @@
 #include <onload/sleep.h>
 #include <onload/netif_dtor.h>
 #include <etherfabric/vi.h>
+#include <etherfabric/internal/efct_uk_api.h>
 
 #ifdef NDEBUG
 # define IS_DEBUG  0
@@ -739,10 +740,23 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   logger(log_arg, "  evq: sync_synced=%x sync_flags=%x",
          vi->ep_state->evq.sync_timestamp_synchronised,
          vi->ep_state->evq.sync_flags);
-  logger(log_arg, "  rxq: cap=%d lim=%d spc=%d level=%d total_desc=%d",
-         ef_vi_receive_capacity(vi), ni->state->rxq_limit,
-         ci_netif_rx_vi_space(ni, vi), ef_vi_receive_fill_level(vi),
-         vi->ep_state->rxq.removed);
+  if( vi->efct_shm ) {
+    for( i = 0; i < vi->max_efct_rxq; ++i ) {
+      struct efab_efct_rxq_uk_shm_q* q = &vi->efct_shm->q[i];
+      if( ! q->superbuf_pkts )
+        continue;
+      logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u nospc=%u full=%u in=%u out=%u",
+             i, q->qid, q->config_generation, q->superbuf_pkts,
+             q->stats.no_rxq_space, q->stats.too_many_owned,
+             q->rxq.added - q->rxq.removed, q->freeq.added - q->freeq.removed);
+    }
+  }
+  else {
+    logger(log_arg, "  rxq: cap=%d lim=%d spc=%d level=%d total_desc=%d",
+           ef_vi_receive_capacity(vi), ni->state->rxq_limit,
+           ci_netif_rx_vi_space(ni, vi), ef_vi_receive_fill_level(vi),
+           vi->ep_state->rxq.removed);
+  }
   for( i = 0; i < ci_netif_num_vis(ni); ++i )
     sum_dmaq_num += nic->dmaq[i].num;
   logger(log_arg, "  txq: cap=%d lim=%d spc=%d level=%d pkts=%d oflow_pkts=%d",
