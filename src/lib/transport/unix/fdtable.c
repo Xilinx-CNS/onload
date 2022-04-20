@@ -137,8 +137,29 @@ void oo_exit_hook(int status)
 ** new (non-closing-or-busy) fdip. */
 static citp_fdinfo_p citp_fdtable_closing_wait(unsigned fd, int fdt_locked);
 
+#ifdef __x86_64__
+#if __GNUC__ >= 6
+__attribute__((force_align_arg_pointer))
+static long oo_close_nocancel_entry(long fd)
+#else
+long oo_close_nocancel_entry(long fd);
+__asm__(
+  "oo_close_nocancel_entry:"
+    "push %rbp;"
+    "mov  %rsp,%rbp;"
+    "and  $0xfffffffffffffff0,%rsp;"
+    "call close_nocancel_entry_fixed;"
+    "mov  %rbp,%rsp;"
+    "pop  %rbp;"
+    "ret;"
+);
 
-static long close_nocancel_entry(long fd)
+__attribute__((used))
+static long close_nocancel_entry_fixed(long fd)
+#endif
+#else
+static long oo_close_nocancel_entry(long fd)
+#endif
 {
   int rc;
   citp_lib_context_t lib_context;
@@ -272,7 +293,7 @@ static int patch_libc_close_nocancel(void)
     };
     unsigned char new_glibc_bytes[6];
     unsigned char* trampoline;
-    long (*target)(long) = close_nocancel_entry;
+    long (*target)(long) = oo_close_nocancel_entry;
     int rc;
 
     /* One x86-64 we somehow have to replace the 7 bytes "mov $3,eax;syscall"
@@ -362,7 +383,7 @@ static int patch_libc_close_nocancel(void)
       return rc;
     }
     memcpy(trampoline, trampo_code, sizeof(trampo_code));
-    aarch64_write_ptr_insns(trampoline + 2, close_nocancel_entry);
+    aarch64_write_ptr_insns(trampoline + 2, oo_close_nocancel_entry);
     aarch64_write_ptr_insns(trampoline + 8, (unsigned*)close_nocancel + 3);
     rc = mprotect(trampoline, CI_PAGE_SIZE, PROT_READ | PROT_EXEC);
     if( rc != 0 ) {
