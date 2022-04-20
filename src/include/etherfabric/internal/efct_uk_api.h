@@ -60,6 +60,7 @@ struct efab_efct_rxq_uk_shm_q {
   struct {
     unsigned no_rxq_space;
     unsigned too_many_owned;
+    unsigned no_bufs;
   } stats;
 } CI_ALIGN(CI_CACHE_LINE_SIZE);
 

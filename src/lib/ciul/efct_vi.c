@@ -83,8 +83,10 @@ static int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 
   added = OO_ACCESS_ONCE(shm->rxq.added);
   removed = shm->rxq.removed;
-  if( added == removed )
+  if( added == removed ) {
+    ++shm->stats.no_bufs;
     return -EAGAIN;
+  }
   entry = &shm->rxq.q[removed & (CI_ARRAY_SIZE(shm->rxq.q) - 1)];
   ci_rmb();
   *sbseq = OO_ACCESS_ONCE(entry->sbseq);

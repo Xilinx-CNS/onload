@@ -745,9 +745,9 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
       struct efab_efct_rxq_uk_shm_q* q = &vi->efct_shm->q[i];
       if( ! q->superbuf_pkts )
         continue;
-      logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u nospc=%u full=%u in=%u out=%u",
+      logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u nospc=%u full=%u nobufs=%u in=%u out=%u",
              i, q->qid, q->config_generation, q->superbuf_pkts,
-             q->stats.no_rxq_space, q->stats.too_many_owned,
+             q->stats.no_rxq_space, q->stats.too_many_owned, q->stats.no_bufs,
              q->rxq.added - q->rxq.removed, q->freeq.added - q->freeq.removed);
     }
   }
