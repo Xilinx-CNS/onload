@@ -1202,6 +1202,10 @@ int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, uint32_t pkt_id,
   const struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
   uint64_t ts;
   unsigned status;
+  ci_qword_t time_sync;
+
+  time_sync.u64[0] =
+    OO_ACCESS_ONCE(vi->efct_shm->q[pkt_id_to_rxq_ix(pkt_id)].time_sync);
 
   if( pkt_id_to_index_in_superbuf(pkt_id) == desc->superbuf_pkts - 1 ) {
     ts = desc->final_timestamp;
@@ -1218,7 +1222,11 @@ int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, uint32_t pkt_id,
 
   ts_out->tv_sec = ts >> 32;
   ts_out->tv_nsec = (uint32_t)ts >> 2;
-  *flags_out = EF_VI_SYNC_FLAG_CLOCK_SET; /* TODO read from evq */
+  *flags_out =
+    (CI_QWORD_FIELD(time_sync, EFCT_TIME_SYNC_CLOCK_IS_SET) ?
+      EF_VI_SYNC_FLAG_CLOCK_SET : 0) |
+    (CI_QWORD_FIELD(time_sync, EFCT_TIME_SYNC_CLOCK_IN_SYNC) ?
+      EF_VI_SYNC_FLAG_CLOCK_IN_SYNC : 0);
   return 0;
 }
 

@@ -94,6 +94,18 @@ static int efct_handle_event(void *driver_data,
       return spent;
     }
 
+    case XLNX_EVENT_TIME_SYNC: {
+      struct efhw_nic_efct_rxq* q = &efct->rxq[event->rxq];
+      struct efhw_efct_rxq *app;
+      int spent = 0;
+
+      for( app = q->live_apps; app; app = app->next ) {
+        CI_WRITE_ONCE(app->shm->time_sync, event->value);
+        spent += 1;
+      }
+      return spent;
+    }
+
     case XLNX_EVENT_RESET_UP:
     case XLNX_EVENT_RESET_DOWN:
     case XLNX_EVENT_RX_FLUSH:

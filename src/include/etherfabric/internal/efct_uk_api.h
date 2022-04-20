@@ -56,6 +56,7 @@ struct efab_efct_rxq_uk_shm_q {
   unsigned config_generation;
   uint32_t superbuf_pkts;            /* number of packets per superbuf.
                                       * 0 indicates inactive queue. */
+  uint64_t time_sync;                /* latest time sync event */
   struct {
     unsigned no_rxq_space;
     unsigned too_many_owned;
