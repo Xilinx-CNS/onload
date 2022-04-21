@@ -977,6 +977,13 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       return rc;
     }
     efct_vi_start_rxq(vi, qix);
+
+    if( NI_OPTS(&trs->netif).int_driven ) {
+      ci_bit_set(&trs->netif.state->evq_prime_deferred, intf_i);
+      ef_eplock_holder_set_flag(&trs->netif.state->lock,
+                                CI_EPLOCK_NETIF_NEED_POLL |
+                                CI_EPLOCK_NETIF_NEED_PRIME);
+    }
   }
   return 0;
 }
