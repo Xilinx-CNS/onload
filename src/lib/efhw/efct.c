@@ -869,6 +869,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 
   /* Step 1 of 2: Convert ethtool_rx_flow_spec to efct_filter_node */
   memset(&node, 0, sizeof(node));
+  node.hw_filter = -1;
 
   if( no_vlan_flags == EFX_FILTER_MATCH_ETHER_TYPE ) {
     clas = FILTER_CLASS_ethertype;
