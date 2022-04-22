@@ -744,8 +744,16 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
         EF_VI_ASSERT(nskipped <= desc->refcnt);
         desc->refcnt -= nskipped;
         if( desc->refcnt == 0 )
-          superbuf_free(vi, pkt_id_to_rxq_ix(pkt_id),
-                        pkt_id_to_local_superbuf_ix(pkt_id));
+          superbuf_free(vi, qid, pkt_id_to_local_superbuf_ix(pkt_id));
+        if( nskipped == 1 ) {
+          /* i.e. the current packet is the one straddling a superbuf
+           * boundary. We consume the last packet of the first superbuf above
+           * (it's the bogus 'manual rollover' packet) and here we consume the
+           * entirety of the current superbuf, which is the one the NIC wants
+           * to get rid of */
+          superbuf_free(vi, qid, pkt_id_to_local_superbuf_ix(
+                                          rxq_ptr_to_pkt_id(rxq_ptr->next)));
+        }
 
         /* Force a rollover on the next poll, while preserving the superbuf
          * index encoded in rxq_ptr->next. The +1 is necessary to avoid ending
