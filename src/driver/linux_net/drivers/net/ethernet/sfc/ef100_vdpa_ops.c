@@ -536,7 +536,7 @@ static void ef100_vdpa_set_vq_num(struct vdpa_device *vdev, u16 idx, u32 num)
 	dev_info(&vdev->dev, "%s: Invoked for index:%u size:%u\n", __func__,
 		 idx, num);
 #endif
-	if (num == 0 || ((num & (num - 1)) != 0)) {
+	if (!is_power_of_2(num)) {
 		dev_err(&vdev->dev, "%s: Index:%u size:%u not power of 2\n",
 			__func__, idx, num);
 		return;

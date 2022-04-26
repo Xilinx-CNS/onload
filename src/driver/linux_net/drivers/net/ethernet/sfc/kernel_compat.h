@@ -113,6 +113,13 @@
  **************************************************************************
  *
  */
+#ifndef READ_ONCE
+#define READ_ONCE(x) ACCESS_ONCE((x))
+#endif
+
+#ifndef WRITE_ONCE
+#define WRITE_ONCE(x, v) (ACCESS_ONCE((x)) = (v))
+#endif
 
 #ifndef spin_trylock_irqsave
 	#define spin_trylock_irqsave(lock, flags)	\
@@ -2799,14 +2806,6 @@ static inline bool __must_check IS_ERR_OR_NULL(__force const void *ptr)
 #endif
 #endif
 
-#ifndef READ_ONCE
-#define READ_ONCE(x) ACCESS_ONCE((x))
-#endif
-
-#ifndef WRITE_ONCE
-#define WRITE_ONCE(x, v) (ACCESS_ONCE((x)) = (v))
-#endif
-
 #ifndef NUMA_NO_NODE
 #define NUMA_NO_NODE (-1)
 #endif
@@ -2815,7 +2814,9 @@ static inline bool __must_check IS_ERR_OR_NULL(__force const void *ptr)
 #define cpu_to_mem(cpu) cpu_to_node(cpu)
 #endif
 
-#ifndef IS_ENABLED
+#if !defined(IS_ENABLED) || LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0)
+#undef IS_ENABLED
+
 /* As in include/linux/kconfig.h */
 #define __ARG_PLACEHOLDER_1 0,
 #define config_enabled(cfg) _config_enabled(cfg)

@@ -290,15 +290,6 @@ struct efx_pps_dev_attr {
 	u8 pos;
 	ssize_t (*show)(struct efx_pps_data *, u8 pos, char *);
 };
-
-static struct pps_source_info efx_pps_info = {
-        .name         = "sfc",
-        .path         = "",
-        .mode         = PPS_CAPTUREASSERT | PPS_OFFSETASSERT | PPS_CANWAIT |
-                        PPS_TSFMT_TSPEC,
-        .echo         = NULL,
-        .owner        = THIS_MODULE,
-};
 #endif
 
 /**
@@ -2547,6 +2538,14 @@ static inline bool efx_phc_exposed(struct efx_nic *efx)
 #if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
 static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 {
+	struct pps_source_info efx_pps_info = {
+		.name         = "sfc",
+		.path         = "",
+		.mode         = PPS_CAPTUREASSERT | PPS_OFFSETASSERT |
+				PPS_CANWAIT | PPS_TSFMT_TSPEC,
+		.echo         = NULL,
+		.owner        = THIS_MODULE,
+	};
 	struct efx_pps_data *pps;
 	int rc;
 
@@ -2567,6 +2566,9 @@ static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 	ptp->pps_data = pps;
 
 	if (efx_phc_exposed(ptp->efx)) {
+		snprintf(efx_pps_info.name, PPS_MAX_NAME_LEN, "ptp%d.ext",
+			 ptp_clock_index(ptp->phc_clock));
+
 		pps->device = pps_register_source(&efx_pps_info,
 						  PPS_CAPTUREASSERT |
 						  PPS_OFFSETASSERT);

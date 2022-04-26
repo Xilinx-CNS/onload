@@ -479,20 +479,36 @@ int __ef100_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 		 * We currently don't assert backoff to representors so this is
 		 * to make sure representor traffic can't starve the main
 		 * net device.
-		 * Also drop representor traffic if it could cause us to
-		 * stop the queue. If we assert backoff and we haven't
-		 * received traffic on the main net device recently then the
-		 * TX watchdog can go off erroneously.
 		 * And, of course, if there are no TX descriptors left.
 		 */
-		fill_level = efx_channel_tx_old_fill_level(tx_queue->channel);
-		fill_level += efx->type->tx_max_skb_descs(efx);
 		if (netif_tx_queue_stopped(tx_queue->core_txq) ||
-		    fill_level > efx->txq_stop_thresh ||
 		    unlikely(efx_tx_buffer_in_use(buffer))) {
 			atomic64_inc(&efv->stats.tx_errors);
 			rc = -ENOSPC;
 			goto err;
+		}
+
+		/* Also drop representor traffic if it could cause us to
+		 * stop the queue. If we assert backoff and we haven't
+		 * received traffic on the main net device recently then the
+		 * TX watchdog can go off erroneously.
+		 */
+		fill_level = efx_channel_tx_old_fill_level(tx_queue->channel);
+		fill_level += efx->type->tx_max_skb_descs(efx);
+		if (fill_level > efx->txq_stop_thresh) {
+			struct efx_tx_queue *txq2;
+
+			/* Refresh cached fill level and re-check */
+			efx_for_each_channel_tx_queue(txq2, tx_queue->channel)
+				txq2->old_read_count = READ_ONCE(txq2->read_count);
+
+			fill_level = efx_channel_tx_old_fill_level(tx_queue->channel);
+			fill_level += efx->type->tx_max_skb_descs(efx);
+			if (fill_level > efx->txq_stop_thresh) {
+				atomic64_inc(&efv->stats.tx_errors);
+				rc = -ENOSPC;
+				goto err;
+			}
 		}
 
 		buffer->flags = EFX_TX_BUF_OPTION | EFX_TX_BUF_EFV;

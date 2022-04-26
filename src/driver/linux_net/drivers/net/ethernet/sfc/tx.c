@@ -417,25 +417,20 @@ static int efx_enqueue_skb_pio(struct efx_tx_queue *tx_queue,
  * flag is set then we don't use this - there'll be another packet along
  * shortly and we want to hold off the doorbell.
  */
-static inline bool efx_tx_may_pio(struct efx_channel *channel,
-				  struct efx_tx_queue *tx_queue,
-				  struct sk_buff *skb)
+static inline bool efx_tx_may_pio(struct efx_tx_queue *tx_queue)
 {
-	bool empty = true;
+	struct efx_channel *channel = tx_queue->channel;
 
-	if (!tx_queue->piobuf || (skb->len > efx_piobuf_size) ||
-	    netdev_xmit_more())
+	if (!tx_queue->piobuf)
 		return false;
 
 	EFX_WARN_ON_ONCE_PARANOID(!channel->efx->type->option_descriptors);
 
-	efx_for_each_channel_tx_queue(tx_queue, channel) {
-		empty = empty &&
-			__efx_nic_tx_is_empty(tx_queue,
-					      tx_queue->packet_write_count);
-	}
+	efx_for_each_channel_tx_queue(tx_queue, channel)
+		if (!efx_nic_tx_is_empty(tx_queue))
+			return false;
 
-	return empty;
+	return true;
 }
 #endif /* EFX_USE_PIO */
 
@@ -512,7 +507,8 @@ int __efx_enqueue_skb(struct efx_tx_queue *tx_queue, struct sk_buff *skb)
 		if (rc)
 			goto err;
 #ifdef EFX_USE_PIO
-	} else if (efx_tx_may_pio(channel, tx_queue, skb)) {
+	} else if (skb_len <= efx_piobuf_size && !xmit_more &&
+		   efx_tx_may_pio(tx_queue)) {
 		/* Use PIO for short packets with an empty queue. */
 		rc = efx_enqueue_skb_pio(tx_queue, skb);
 		if (rc)

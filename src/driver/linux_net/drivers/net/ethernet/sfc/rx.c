@@ -692,7 +692,7 @@ int efx_ssr_init(struct efx_rx_queue *rx_queue, struct efx_nic *efx)
 	unsigned int i;
 
 	st->conns_mask = lro_table_size - 1;
-	if ((st->conns_mask + 1) & st->conns_mask) {
+	if (!is_power_of_2(lro_table_size)) {
 		netif_err(efx, drv, efx->net_dev,
 			  "lro_table_size(=%u) must be a power of 2\n",
 			  lro_table_size);

@@ -57,8 +57,8 @@ static int ef100_ethtool_set_ringparam(struct net_device *net_dev,
 	if (ring->rx_mini_pending || ring->rx_jumbo_pending)
 		return -EINVAL;
 
-	if ((ring->rx_pending & (ring->rx_pending - 1)) ||
-	    (ring->tx_pending & (ring->tx_pending - 1))) {
+	if (!is_power_of_2(ring->rx_pending) ||
+	    !is_power_of_2(ring->tx_pending)) {
 		netif_err(efx, drv, efx->net_dev,
 			  "ring sizes that are not pow of 2, not supported");
 		return -EINVAL;
