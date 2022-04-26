@@ -2302,6 +2302,17 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
 
 #ifndef __KERNEL__
 
+
+static inline ci_uint8
+zc_prefix_reservation(ci_netif* ni, const struct onload_zc_iovec* iov)
+{
+  if( iov->iov_flags == 0 )
+    return 0;
+  /* TODO: VIRTBLK-1764: Call some callbacks that might want some space. */
+  return 0;
+}
+
+
 /* 
  * TODO:
  *  - improve TCP send path (in general) to handle fragmented buffers, then:
@@ -2311,16 +2322,18 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
  *     packet;
  */
 
-static inline bool ci_tcp_tx_has_room_for_zc(ci_netif* ni, ci_ip_pkt_fmt* pkt)
+static inline bool ci_tcp_tx_has_room_for_zc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
+                                             ci_uint8 prefix_resv)
 {
   if( pkt->flags & CI_PKT_FLAG_INDIRECT ) {
-    return oo_tx_zc_left(pkt) >= oo_tx_zc_payload_size(ni) &&
+    return oo_tx_zc_left(pkt) >= oo_tx_zc_payload_size(ni) + prefix_resv &&
            /* We need one additional segment for the header: */
            oo_tx_zc_header(pkt)->segs < CI_IP_PKT_SEGMENTS_MAX - 1;
   }
   else {
     return CI_PTR_ALIGN_FWD(oo_offbuf_end(&pkt->buf), CI_PKT_ZC_PAYLOAD_ALIGN)
-           + sizeof(struct ci_pkt_zc_header) + oo_tx_zc_payload_size(ni)
+           + sizeof(struct ci_pkt_zc_header) + oo_tx_zc_payload_size(ni) +
+           prefix_resv
            <= (char*)pkt + CI_CFG_PKT_BUF_SIZE;
   }
 }
@@ -2549,11 +2562,18 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           contig_len = iov_len;
 
         do {
+          /* TODO: VIRTBLK-1762: Caution required here: the flags will change
+           * according to how the iov is split.  In particular, the insert-CRC
+           * flag only applies to portions of the iov that actually contain the
+           * CRC. */
+          ci_uint8 prefix_resv = zc_prefix_reservation(ni, &msg->msg.iov[j]);
+
           /* We could arguably make this dependent on
            * NI_OPTS().tcp_combine_sends_mode But for now assume that
            * a single call is a single message and can be combined
            */
-          if( pkt == NULL || ! ci_tcp_tx_has_room_for_zc(ni, pkt) ||
+          if( pkt == NULL ||
+              ! ci_tcp_tx_has_room_for_zc(ni, pkt, prefix_resv) ||
               tcp_pay_len >= eff_mss ) {
             tcp_pay_len = 0;
             reusing_prev_pkt = false;
@@ -2577,6 +2597,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
             pkt->pay_len = oo_tx_ether_hdr_size(pkt) + ts->outgoing_hdrs_len;
             zch = oo_tx_zc_header(pkt);
             zch->segs = 0;
+            zch->prefix_spc = 0;
             zch->end = sizeof(*zch);
    
             CI_USER_PTR_SET(pkt->pf.tcp_tx.next, sinf.fill_list);
@@ -2597,6 +2618,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
                            CI_PKT_ZC_PAYLOAD_ALIGN));
               zch = oo_tx_zc_header(pkt);
               zch->segs = 0;
+              zch->prefix_spc = 0;
               zch->end = sizeof(*zch);
             }
           }
@@ -2615,7 +2637,11 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           zcp->remote.addr_space = um->addr_space;
           OO_STACK_FOR_EACH_INTF_I(ni, i)
             zcp->remote.dma_addr[i] = zc_usermem_dma_addr(um, iov_base, i);
-   
+          zcp->prefix_space = prefix_resv;
+          zch->prefix_spc += prefix_resv;
+          /* TODO: VIRTBLK-1762: Set zcp->zcp_flags to the relevant subset of
+           * flags from msg->msg.iov[j]. */
+
           ASSERT_VALID_PKT(ni, pkt);
    
           iov_base += room_len;

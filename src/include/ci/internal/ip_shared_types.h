@@ -474,10 +474,12 @@ struct ci_ip_pkt_fmt_s {
 #define CI_PKT_ZC_PAYLOAD_ALIGN    8
 struct ci_pkt_zc_payload {
   ci_uint32 len;
+  ci_uint8 prefix_space;       /* Reserved space for building packet prefix. */
   ci_uint8 is_remote;
   ci_uint8 use_remote_cookie;  /* Send a completion using app_cookie */
                                /* This is here rather than in the union solely
                                 * for space efficiency/padding reasons */
+  ci_uint32 zcp_flags;         /* Flags from onload_zc_iovec::iov_flags. */
   union {
     struct {
       ci_uint64 app_cookie CI_ALIGN(8);  /* From onload_zc_iovec::app_cookie */
@@ -486,6 +488,8 @@ struct ci_pkt_zc_payload {
     } remote;
     char local[1];
   };
+
+  /* Space of length prefix_space is reserved at the end of the structure. */
 };
 
 
@@ -499,15 +503,24 @@ struct ci_pkt_zc_payload {
  *    ci_pkt_zc_payload
  *    ci_pkt_zc_payload            /___ zch + zch->end
  *    free space                   \
+ *    reserved space for prefixes  <--- length = zch->prefix_spc
  *
  * A single ci_pkt_zc_payload element may be either 'local' or 'remote'. A
  * local payload is just normal in-line bytes, a feature which exists so we
  * can intersperse remote payloads without wasting packet buffers. A 'remote'
- * payload is a pointer to memory owned by the user.
+ * payload is a pointer to memory owned by the user. Additionally, each
+ * ci_pkt_zc_payload can reserve additional space for building packet prefixes
+ * to be consumed by plugins, and this space is to be understood to be
+ * positioned at the end of the packet buffer.
  */
 struct ci_pkt_zc_header {
   ci_uint16 end;         /* Offset from start of this struct to the first
                           * unused byte of the ci_ip_pkt_fmt */
+  ci_uint16 prefix_spc;  /* Length of packet-prefix records stashed at the
+                          * end of the packet buffer.  This is equal to
+                          * sum(zcp->prefix_space for zcp in payloads), and is
+                          * cached here to allow determination of free space in
+                          * the buffer without walking the payloads. */
   ci_uint8 segs;         /* Number of zc_payload structs following */
   struct ci_pkt_zc_payload data[0];
 };
