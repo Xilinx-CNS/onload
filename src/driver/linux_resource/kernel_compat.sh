@@ -17,7 +17,7 @@ EFRM_HAVE_NETFILTER_OPS_HAVE_OWNER	memtype	struct_nf_hook_ops	owner	include/linu
 
 EFRM_HAVE_REINIT_COMPLETION	symbol	reinit_completion	include/linux/completion.h
 
-ERFM_HAVE_NEW_KALLSYMS	export	kallsyms_on_each_symbol	include/linux/kallsyms.h	kernel/kallsyms.c
+EFRM_HAVE_NEW_KALLSYMS	export	kallsyms_on_each_symbol	include/linux/kallsyms.h	kernel/kallsyms.c
 
 EFRM_HAVE_TASK_NSPROXY	symbol	task_nsproxy	include/linux/nsproxy.h
 
@@ -104,8 +104,8 @@ EFRM_IP6_ROUTE_INPUT_LOOKUP_TAKES_SKB	symtype ip6_route_input_lookup	include/net
 EFRM_RTABLE_HAS_RT_GW4		memtype struct_rtable rt_gw4 include/net/route.h __be32
 EFRM_HAVE_FILE_INODE			symbol file_inode include/linux/fs.h
 
-ERFM_NEIGH_USES_REFCOUNTS	memtype struct_neighbour refcnt include/net/neighbour.h refcount_t
-ERFM_NEIGH_HAS_PROTOCOL		memtype struct_neighbour protocol include/net/neighbour.h u8
+EFRM_NEIGH_USES_REFCOUNTS	memtype struct_neighbour refcnt include/net/neighbour.h refcount_t
+EFRM_NEIGH_HAS_PROTOCOL		memtype struct_neighbour protocol include/net/neighbour.h u8
 
 EFRM_HAS_STRUCT_TIMEVAL		member	struct_timeval	tv_sec	include/linux/time.h
 EFRM_HAS_STRUCT_TIMESPEC64	member	struct_timespec64	tv_sec	include/linux/time.h

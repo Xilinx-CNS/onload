@@ -241,12 +241,12 @@ typedef struct tcp_helper_resource_s {
   /* Namespaces this stack is living into */
   struct net* net_ns;
   struct pid_namespace* pid_ns;
-#ifdef ERFM_HAVE_NEW_KALLSYMS
+#ifdef EFRM_HAVE_NEW_KALLSYMS
 #define OO_HAS_IPC_NS
   /* put_ipc_ns() is not exported, so we can't use it without
    * kallsyms_on_each_symbol() */
   struct ipc_namespace* ipc_ns;
-#endif /* ERFM_HAVE_NEW_KALLSYMS */
+#endif /* EFRM_HAVE_NEW_KALLSYMS */
 #endif /* CONFIG_NAMESPACES */
 
 #ifdef EFRM_DO_USER_NS

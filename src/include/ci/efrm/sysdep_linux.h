@@ -85,7 +85,7 @@ static inline struct list_head *list_pop_tail(struct list_head *list)
  *
  ********************************************************************/
 
-#ifdef ERFM_HAVE_NEW_KALLSYMS
+#ifdef EFRM_HAVE_NEW_KALLSYMS
 #include <linux/kallsyms.h>
 /*! Find (non-exported) symbol with name @p name. */
 extern void *efrm_find_ksym(const char *name);

@@ -123,7 +123,7 @@ static int compat_pat_wc_inited = 0;
  *
  *********************************************************************/
 
-#ifdef ERFM_HAVE_NEW_KALLSYMS
+#ifdef EFRM_HAVE_NEW_KALLSYMS
 
 struct efrm_ksym_name {
 	const char *name;
@@ -152,7 +152,7 @@ void *efrm_find_ksym(const char *name)
 }
 EXPORT_SYMBOL(efrm_find_ksym);
 
-#endif  /* ERFM_HAVE_NEW_KALLSYMS */
+#endif  /* EFRM_HAVE_NEW_KALLSYMS */
 
 /*--------------------------------------------------------------------
  *

@@ -161,7 +161,7 @@ static struct file* efct_hugetlb_file_setup(off_t* off)
     return memfd_provided;
   }
 
-#ifdef ERFM_HAVE_NEW_KALLSYMS
+#ifdef EFRM_HAVE_NEW_KALLSYMS
   {
     /* This fallback only exists on old kernels, but that's fine: new kernels
      * all have memfd_create, and there's considerable overlap between 'old'

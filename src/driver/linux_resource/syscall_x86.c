@@ -110,7 +110,7 @@ void** find_syscall_table(void)
   unsigned char *pend;
 
   /* First see if it is in kallsyms */
-#ifdef ERFM_HAVE_NEW_KALLSYMS
+#ifdef EFRM_HAVE_NEW_KALLSYMS
   /* It works with CONFIG_KALLSYMS_ALL=y only. */
   p = efrm_find_ksym("sys_call_table");
 #endif
@@ -256,7 +256,7 @@ static void* find_entry_SYSCALL_64(void)
    * 5.1<=linux:
    *   MSR_LSTAR points to entry_SYSCALL_64().
    */
-#ifdef ERFM_HAVE_NEW_KALLSYMS
+#ifdef EFRM_HAVE_NEW_KALLSYMS
   void *ret = efrm_find_ksym("entry_SYSCALL_64");
   if( ret != NULL )
     return ret;

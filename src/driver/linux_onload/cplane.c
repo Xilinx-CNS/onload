@@ -1760,7 +1760,7 @@ static int neigh_fill_info(struct sk_buff *skb, struct neighbour *neigh,
 	ci.ndm_used	 = jiffies_to_clock_t(now - neigh->used);
 	ci.ndm_confirmed = jiffies_to_clock_t(now - neigh->confirmed);
 	ci.ndm_updated	 = jiffies_to_clock_t(now - neigh->updated);
-#ifdef ERFM_NEIGH_USES_REFCOUNTS
+#ifdef EFRM_NEIGH_USES_REFCOUNTS
 	/* It is linux>=4.13 */
 	ci.ndm_refcnt	 = refcount_read(&neigh->refcnt) - 1;
 #else
@@ -1772,7 +1772,7 @@ static int neigh_fill_info(struct sk_buff *skb, struct neighbour *neigh,
 	    nla_put(skb, NDA_CACHEINFO, sizeof(ci), &ci))
 		goto nla_put_failure;
 
-#ifdef ERFM_NEIGH_HAS_PROTOCOL
+#ifdef EFRM_NEIGH_HAS_PROTOCOL
 	/* It is linux>=5.0 */
 	if (neigh->protocol && nla_put_u8(skb, NDA_PROTOCOL, neigh->protocol))
 		goto nla_put_failure;
@@ -1792,7 +1792,7 @@ static inline size_t neigh_nlmsg_size(void)
 	       + nla_total_size(MAX_ADDR_LEN) /* NDA_DST */
 	       + nla_total_size(MAX_ADDR_LEN) /* NDA_LLADDR */
 	       + nla_total_size(sizeof(struct nda_cacheinfo))
-#ifdef ERFM_NEIGH_HAS_PROTOCOL
+#ifdef EFRM_NEIGH_HAS_PROTOCOL
 	       + nla_total_size(1)  /* NDA_PROTOCOL */
 #endif
 	       + nla_total_size(4); /* NDA_PROBES */

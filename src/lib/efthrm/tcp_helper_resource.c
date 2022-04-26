@@ -4104,7 +4104,7 @@ static int oo_handle_wakeup_in_ul(void* context, int is_timeout,
 }
 #endif
 
-#if defined(EFRM_DO_NAMESPACES) && defined(ERFM_HAVE_NEW_KALLSYMS)
+#if defined(EFRM_DO_NAMESPACES) && defined(EFRM_HAVE_NEW_KALLSYMS)
 #include <linux/ipc_namespace.h>
 /* put_ipc_ns() is not exported */
 static void (*my_put_ipc_ns)(struct ipc_namespace *ns);
