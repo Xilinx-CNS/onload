@@ -165,6 +165,17 @@ static long oo_close_nocancel_entry(long fd)
   int rc;
   citp_lib_context_t lib_context;
 
+  if( fd < 0 || fd >= citp_fdtable.inited_count ||
+      fdip_is_unknown(citp_fdtable.table[fd].fdip) ) {
+    /* Don't enter lib when we're not going to affect anything. This avoids
+     * cases of infinite recursion, most notably when grabbing the TLS entry
+     * requires doing TLS init (which might require initialising malloc too,
+     * which might call close()) */
+    if( citp.onload_fd >= 0 )
+      return ci_tcp_helper_close_no_trampoline(fd);
+    return ci_sys_close(fd);
+  }
+
   Log_CALL(ci_log("%s: close_nocancel(%ld)", __func__, fd));
   citp_enter_lib(&lib_context);
   rc = citp_ep_close((int)fd);
