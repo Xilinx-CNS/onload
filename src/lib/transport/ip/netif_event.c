@@ -289,44 +289,45 @@ int ci_ip_options_parse(ci_netif* netif, ci_ip4_hdr* ip, const int hdr_size)
   return error;
 }
 
+static void record_rx_timestamp(ci_netif* netif, ci_netif_state_nic_t* nsn,
+                                ci_ip_pkt_fmt* pkt,
+                                ef_timespec stamp, unsigned sync_flags)
+{
+  int tsf = (NI_OPTS(netif).timestamping_reporting &
+               CITP_TIMESTAMPING_RECORDING_FLAG_CHECK_SYNC) ?
+                 EF_VI_SYNC_FLAG_CLOCK_IN_SYNC :
+                 EF_VI_SYNC_FLAG_CLOCK_SET;
+  pkt->hw_stamp.tv_sec = stamp.tv_sec;
+  pkt->hw_stamp.tv_nsec = stamp.tv_nsec =
+            (stamp.tv_nsec & ~CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC) |
+            ((sync_flags & tsf) ? CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC : 0);
+  nsn->last_rx_timestamp = pkt->hw_stamp;
+  nsn->last_sync_flags = sync_flags;
+
+  LOG_NR(log(LPF "RX id=%d timestamp: %lu.%09lu sync %d",
+      OO_PKT_FMT(pkt), (long)stamp.tv_sec, stamp.tv_nsec, sync_flags));
+}
 
 static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
 {
 #if CI_CFG_TIMESTAMPING
   ci_netif_state_nic_t* nsn = &netif->state->nic[pkt->intf_i];
+  ef_vi* vi = ci_netif_vi(netif, pkt->intf_i);
 
-  if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_HW_TS_EN ) {
+  if( (vi->nic_type.arch != EF_VI_ARCH_EFCT) &&
+      (nsn->oo_vi_flags & OO_VI_FLAGS_RX_HW_TS_EN) ) {
     unsigned sync_flags;
     ef_timespec stamp;
-    int rc = ef_vi_receive_get_timestamp_with_sync_flags
-      (ci_netif_vi(netif, pkt->intf_i),
-       PKT_START(pkt) - nsn->rx_prefix_len, &stamp, &sync_flags);
+    int rc = ef_vi_receive_get_timestamp_with_sync_flags(
+               vi, PKT_START(pkt) - nsn->rx_prefix_len, &stamp, &sync_flags);
+
     if( rc == 0 ) {
-      int tsf = (NI_OPTS(netif).timestamping_reporting &
-                 CITP_TIMESTAMPING_RECORDING_FLAG_CHECK_SYNC) ?
-                EF_VI_SYNC_FLAG_CLOCK_IN_SYNC :
-                EF_VI_SYNC_FLAG_CLOCK_SET;
-      pkt->hw_stamp.tv_sec = stamp.tv_sec;
-      pkt->hw_stamp.tv_nsec = stamp.tv_nsec =
-                (stamp.tv_nsec & ~CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC) |
-                ((sync_flags & tsf) ? CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC : 0);
-      nsn->last_rx_timestamp = pkt->hw_stamp;
-      nsn->last_sync_flags = sync_flags;
-
+      record_rx_timestamp(netif, nsn, pkt, stamp, sync_flags);
       measure_processing_delay(netif, stamp, sync_flags);
-
-      LOG_NR(log(LPF "RX id=%d timestamp: %lu.%09lu sync %d",
-          OO_PKT_FMT(pkt), (long)stamp.tv_sec, stamp.tv_nsec, sync_flags));
     } else {
       LOG_NR(log(LPF "RX id=%d missing timestamp", OO_PKT_FMT(pkt)));
-      pkt->hw_stamp.tv_sec = 0;
     }
   }
-  else
-    pkt->hw_stamp.tv_sec = 0;
-    /* no need to set tv_nsec to 0 here as socket layer ignores
-     * timestamps when tv_sec is 0
-     */
 #else
   (void)netif;
   (void)pkt;
@@ -592,6 +593,40 @@ static ci_ip_pkt_fmt* alloc_rx_efct_pkt(ci_netif* ni, int intf_i, int pay_len)
   return pkt;
 }
 
+static void get_efct_timestamp(ci_netif* netif, ef_vi* vi,
+                               uint32_t pkt_id, ci_ip_pkt_fmt* pkt)
+{
+#if CI_CFG_TIMESTAMPING
+  ci_netif_state_nic_t* nsn = &netif->state->nic[pkt->intf_i];
+
+  if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_HW_TS_EN ) {
+    unsigned sync_flags;
+    ef_timespec stamp;
+    int rc = efct_receive_get_timestamp_with_sync_flags(vi, pkt_id,
+                                                        &stamp, &sync_flags);
+
+    if( rc == 0 )
+      record_rx_timestamp(netif, nsn, pkt, stamp, sync_flags);
+    else
+      LOG_NR(log(LPF "RX pkt=%d efct_id=%08x missing timestamp",
+                 OO_PKT_FMT(pkt), pkt_id));
+  }
+#else
+  (void)netif;
+  (void)vi;
+  (void)pkt_id;
+  (void)pkt;
+#endif
+}
+
+static void copy_efct_to_pkt(ci_netif* netif, ef_vi* vi,
+                             uint32_t pkt_id, ci_ip_pkt_fmt* pkt)
+{
+  const void* payload;
+  efct_vi_rxpkt_get(vi, pkt_id, &payload);
+  memcpy(pkt->dma_start, payload, pkt->pay_len);
+  get_efct_timestamp(netif, vi, pkt_id, pkt);
+}
 
 #ifdef __KERNEL__
 
@@ -623,7 +658,6 @@ static int convert_efct_to_pkts(ci_netif* ni, int intf_i, ef_event* evs,
   for( i = 0; i < n_evs; ++i ) {
     ef_event new_ev;
     ci_ip_pkt_fmt* pkt;
-    const void* payload;
 
     if( EF_EVENT_TYPE(evs[i]) == EF_EVENT_TYPE_RX_REF ) {
       new_ev.rx.type = EF_EVENT_TYPE_RX;
@@ -647,8 +681,7 @@ static int convert_efct_to_pkts(ci_netif* ni, int intf_i, ef_event* evs,
       continue;
     }
 
-    efct_vi_rxpkt_get(evq, evs[i].rx_ref.pkt_id, &payload);
-    memcpy(pkt->dma_start, payload, pkt->pay_len);
+    copy_efct_to_pkt(ni, evq, evs[i].rx_ref.pkt_id, pkt);
     efct_vi_rxpkt_release(evq, evs[i].rx_ref.pkt_id);
 
     new_ev.rx.q_id = evs[i].rx_ref.q_id;
@@ -1923,14 +1956,12 @@ have_events:
       }
 
       else if( EF_EVENT_TYPE(ev[i]) == EF_EVENT_TYPE_RX_REF ) {
-        const void* payload;
         int pay_len = ev[i].rx_ref.len;
         CITP_STATS_NETIF_INC(ni, rx_evs);
         pkt = alloc_rx_efct_pkt(ni, intf_i, pay_len);
         if( pkt ) {
           __handle_rx_pkt(ni, ps, &s.rx_pkt);
-          efct_vi_rxpkt_get(evq, ev[i].rx_ref.pkt_id, &payload);
-          memcpy(pkt->dma_start, payload, pkt->pay_len);
+          copy_efct_to_pkt(ni, evq, ev[i].rx_ref.pkt_id, pkt);
           oo_offbuf_init(&pkt->buf, pkt->dma_start, pay_len);
           s.rx_pkt = pkt;
         }
@@ -2030,13 +2061,11 @@ have_events:
       }
 
       else if( EF_EVENT_TYPE(ev[i]) == EF_EVENT_TYPE_RX_REF_DISCARD ) {
-        const void* payload;
         int pay_len = ev[i].rx_ref_discard.len;
         pkt = alloc_rx_efct_pkt(ni, intf_i, pay_len);
         if( pkt ) {
           __handle_rx_pkt(ni, ps, &s.rx_pkt);
-          efct_vi_rxpkt_get(evq, ev[i].rx_ref.pkt_id, &payload);
-          memcpy(pkt->dma_start, payload, pkt->pay_len);
+          copy_efct_to_pkt(ni, evq, ev[i].rx_ref.pkt_id, pkt);
           oo_offbuf_init(&pkt->buf, pkt->dma_start, pay_len);
           discard_rx_multi_pkts(ni, ps, intf_i, &s, pay_len,
                                 ev[i].rx_ref_discard.flags, pkt);
@@ -2238,6 +2267,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
     if( pkt->pay_len > efct_begin_len )
       memcpy(pkt->dma_start + efct_begin_len, dma + efct_begin_len,
              pkt->pay_len - efct_begin_len);
+    get_efct_timestamp(ni, evq, ev[0].rx_ref.pkt_id, pkt);
     efct_vi_rxpkt_release(evq, ev[0].rx_ref.pkt_id);
     handle_future = true;
   }
