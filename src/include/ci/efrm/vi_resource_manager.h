@@ -119,7 +119,6 @@ struct efrm_interrupt_vector {
 	 * NIC-relative index in the range [vi_min, vi_lim).  The fields here
 	 * are initialised when an instance of the structure is created, and
 	 * then never change over its lifetime. */
-	uint32_t irq;
 	uint32_t channel;
 	struct efhw_nic *nic;
 
@@ -127,7 +126,10 @@ struct efrm_interrupt_vector {
 	spinlock_t vi_irq_lock;
 	struct list_head vi_list;
 
-	/* The following fields are protected by vec_acquire_lock. */
+	/* The following fields are protected by vec_acquire_lock. The irq
+	 * field is set at creation time and remains fixed for the lifetime
+	 * of this structure, unless the underlying hardware is removed. */
+	uint32_t irq;
 	struct mutex vec_acquire_lock;
 	unsigned num_vis;
 #ifndef EFRM_IRQ_FREE_RETURNS_NAME

@@ -195,6 +195,11 @@ efrm_vi_irq_free(struct efrm_interrupt_vector *vec)
 	const char *name;
 	EFRM_ASSERT(vec);
 
+	/* If the underlying hardware has gone away we'll already have
+	 * freed the irq at device remove time. */
+	if( vec->irq == IRQ_NOTCONNECTED )
+		return;
+
 	/* linux>=4.13: free_irq() returns name */
 #ifdef EFRM_IRQ_FREE_RETURNS_NAME
 	name = free_irq(vec->irq, &vec->tasklet);
@@ -326,6 +331,22 @@ void efrm_interrupt_vectors_dtor(struct efrm_nic *nic)
 		mutex_destroy(&vec->vec_acquire_lock);
 	mutex_destroy(&nic->irq_list_lock);
 	vfree(nic->irq_vectors_buffer);
+}
+
+
+void efrm_interrupt_vectors_release(struct efrm_nic *nic)
+{
+	struct efrm_interrupt_vector *vec = NULL;
+
+	mutex_lock(&nic->irq_list_lock);
+	list_for_each_entry(vec, &nic->irq_list, link) {
+		mutex_lock(&vec->vec_acquire_lock);
+		if (vec->num_vis > 0)
+			efrm_vi_irq_free(vec);
+		vec->irq = IRQ_NOTCONNECTED;
+		mutex_unlock(&vec->vec_acquire_lock);
+	}
+	mutex_unlock(&nic->irq_list_lock);
 }
 
 

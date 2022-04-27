@@ -496,6 +496,7 @@ efrm_nic_do_unplug(struct efhw_nic* nic, bool hard)
 {
 	struct net_device* net_dev;
 	struct device* dev = NULL;
+	struct efrm_nic *efrm_nic = efrm_nic(nic);
 
 	efhw_nic_release_hardware(nic);
 	if (hard) {
@@ -504,6 +505,8 @@ efrm_nic_do_unplug(struct efhw_nic* nic, bool hard)
 		 * table(s) too */
 		EFRM_ASSERT(nic->dev != NULL);
 		efrm_shutdown_resource_filter(nic->dev);
+
+		efrm_interrupt_vectors_release(efrm_nic);
 	}
 
 	/* We keep the pci device to reclaim it after hot-plug, but release

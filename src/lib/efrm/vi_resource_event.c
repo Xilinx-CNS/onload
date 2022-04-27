@@ -61,6 +61,13 @@ void efrm_eventq_request_wakeup(struct efrm_vi *virs, unsigned current_ptr)
 {
 	struct efhw_nic *nic = virs->rs.rs_client->nic;
 	int next_i;
+
+	/* If the NIC is under reset we should avoid touching hardware
+	 * resources. In the onload case we won't request wakeups once we've
+	 * been informed of the reset, but ef_vi doesn't know. */
+	if( nic->resetting )
+		return;
+
 	next_i = current_ptr & (virs->q[EFHW_EVQ].capacity - 1);
 	efhw_nic_wakeup_request(nic, virs->io_page, virs->rs.rs_instance,
 				next_i);
