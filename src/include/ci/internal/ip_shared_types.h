@@ -1452,23 +1452,6 @@ struct ci_netif_state_s {
 #define kernel_packets_pending(ns) 0
 #endif
 
-#if CI_CFG_PROC_DELAY
-  /* Feature to measure delays between receiving packets at NIC and
-   * processing them in onload.
-   *
-   * These fields track the corresponence between frc and wall clock.
-   */
-  ci_uint64             sync_frc      CI_ALIGN(8);
-  ci_uint64             sync_cost     CI_ALIGN(8);
-  ci_int64              max_frc_diff  CI_ALIGN(8);
-  ci_uint64             sync_ns       CI_ALIGN(8);
-  /* These are the results we are exporting. */
-  ci_uint32             proc_delay_max;
-  ci_uint32             proc_delay_min;
-  ci_uint32             proc_delay_hist[CI_CFG_PROC_DELAY_BUCKETS];
-  ci_uint32             proc_delay_negative;
-#endif
-
   /* Reserved pkt buffers
    * Sums over each eligible sock buffer:
    *   ni_opts->endpoint_packet_reserve -

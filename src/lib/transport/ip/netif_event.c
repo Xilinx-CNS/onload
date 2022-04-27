@@ -130,113 +130,6 @@ static void ci_parse_rx_vlan(ci_ip_pkt_fmt* pkt)
 }
 
 
-#if CI_CFG_PROC_DELAY
-
-# if ! CI_CFG_TIMESTAMPING
-#  error CI_CFG_PROC_DELAY requires CI_CFG_TIMESTAMPING
-# endif
-
-
-#ifndef __KERNEL__
-static void frc_resync(ci_netif* ni)
-{
-  uint64_t after_frc, cost;
-  struct timespec ts;
-
-  if( ni->state->sync_cost == 0 ) {
-    /* First time: Measure sync_cost and set other params. */
-    int i;
-    ni->state->max_frc_diff = (ci_int64) IPTIMER_STATE(ni)->khz * 1000;
-    for( i = 0; i < 10; ++i ) {
-      ci_frc64(&ni->state->sync_frc);
-      clock_gettime(CLOCK_REALTIME, &ts);
-      ci_frc64(&after_frc);
-      cost = after_frc - ni->state->sync_frc;
-      if( i == 0 )
-        ni->state->sync_cost = cost;
-      else
-        ni->state->sync_cost = CI_MIN(ni->state->sync_cost, cost);
-    }
-  }
-
-  /* Determine correspondence between frc and host clock. */
-  do {
-    ci_frc64(&ni->state->sync_frc);
-    clock_gettime(CLOCK_REALTIME, &ts);
-    ci_frc64(&after_frc);
-  } while( after_frc - ni->state->sync_frc > ni->state->sync_cost * 3 );
-
-  ni->state->sync_ns = ts.tv_sec * 1000000000 + ts.tv_nsec;
-}
-#endif
-
-
-static void measure_processing_delay(ci_netif* ni, struct timespec pkt_ts,
-                                     unsigned sync_flags)
-{
-  const ci_ip_timer_state* its = IPTIMER_STATE(ni);
-  const unsigned in_sync =
-    EF_VI_SYNC_FLAG_CLOCK_IN_SYNC | EF_VI_SYNC_FLAG_CLOCK_SET;
-  ci_uint64 pkt_ns, stack_ns;
-  ci_int64 frc_diff;
-
-  if(CI_UNLIKELY( (sync_flags & in_sync) != in_sync ))
-    return;
-
-  frc_diff = its->frc - ni->state->sync_frc;
-  if( frc_diff > ni->state->max_frc_diff ) {
-    /* Ensure we keep a reasonable correspondence between frc and real
-     * time.  We only do this in user-space because that is convenient.
-     */
-#ifdef __KERNEL__
-    return;
-#else
-    frc_resync(ni);
-    frc_diff = its->frc - ni->state->sync_frc;
-#endif
-  }
-
-  stack_ns = ni->state->sync_ns + frc_diff * 1000000 / its->khz;
-  pkt_ns = (ci_uint64) pkt_ts.tv_sec * 1000000000 + pkt_ts.tv_nsec;
-
-  if( stack_ns >= pkt_ns ) {
-    ci_uint64 delay_ns = stack_ns - pkt_ns;
-    ci_uint64 delay = delay_ns >> CI_CFG_PROC_DELAY_NS_SHIFT;
-    if( delay == 0 ) {
-      ++(ni->state->proc_delay_hist[0]);
-    }
-    else {
-      int n_buckets = (sizeof(ni->state->proc_delay_hist) /
-                       sizeof(ni->state->proc_delay_hist[0]));
-      int bucket_i = 63 - __builtin_clzll(delay);
-      if( bucket_i < n_buckets )
-        ++(ni->state->proc_delay_hist[bucket_i]);
-      else
-        ++(ni->state->proc_delay_hist[n_buckets - 1]);
-      if( delay > ni->state->proc_delay_max )
-        ni->state->proc_delay_max = delay;
-    }
-  }
-  else {
-    ci_uint64 delay_ns = pkt_ns - stack_ns;
-    ci_uint64 delay = delay_ns >> CI_CFG_PROC_DELAY_NS_SHIFT;
-    ++(ni->state->proc_delay_negative);
-    if( delay > ni->state->proc_delay_min )
-      ni->state->proc_delay_min = delay;
-  }
-}
-
-#else
-
-static inline void measure_processing_delay(ci_netif* ni,
-                                            ef_timespec pkt_ts,
-                                            unsigned sync_flags)
-{
-}
-
-#endif
-
-
 int ci_ip_options_parse(ci_netif* netif, ci_ip4_hdr* ip, const int hdr_size)
 {
   int error = 0;
@@ -321,12 +214,10 @@ static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
     int rc = ef_vi_receive_get_timestamp_with_sync_flags(
                vi, PKT_START(pkt) - nsn->rx_prefix_len, &stamp, &sync_flags);
 
-    if( rc == 0 ) {
+    if( rc == 0 )
       record_rx_timestamp(netif, nsn, pkt, stamp, sync_flags);
-      measure_processing_delay(netif, stamp, sync_flags);
-    } else {
+    else
       LOG_NR(log(LPF "RX id=%d missing timestamp", OO_PKT_FMT(pkt)));
-    }
   }
 #else
   (void)netif;

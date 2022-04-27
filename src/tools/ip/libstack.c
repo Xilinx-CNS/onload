@@ -2187,54 +2187,6 @@ static void stack_vi_stats(ci_netif* ni)
   ci_netif_dump_vi_stats(ni);
 }
 
-#if CI_CFG_PROC_DELAY
-static void proc_delay_hist(ci_netif* ni, const char* fmt)
-{
-  const unsigned unit_ns = 1 << CI_CFG_PROC_DELAY_NS_SHIFT;
-  int i, n_buckets = (sizeof(ni->state->proc_delay_hist) /
-                      sizeof(ni->state->proc_delay_hist[0]));
-  for( i = 0; i < n_buckets; ++i ) {
-    unsigned x = ((1 << (i + 1)) - 1) * unit_ns / 1000;
-    ci_log(fmt, NI_ID(ni), x, ni->state->proc_delay_hist[i]);
-  }
-}
-
-
-static void stack_proc_delay(ci_netif* ni)
-{
-  const unsigned unit_ns = 1 << CI_CFG_PROC_DELAY_NS_SHIFT;
-  ci_log("proc_delay: stack=%d,%s", NI_ID(ni), ni->state->name);
-  ci_log("  resolution=%uns", unit_ns);
-  ci_log("  max=%uns", ni->state->proc_delay_max * unit_ns);
-  ci_log("  min=-%uns", ni->state->proc_delay_min * unit_ns);
-  ci_log("  n_negative=%u", ni->state->proc_delay_negative);
-  proc_delay_hist(ni, "  hist_%2$uus=%3$u");
-}
-
-
-static void stack_proc_delay_hist(ci_netif* ni)
-{
-  ci_log("#stackid  max_delay(us)  count");
-  proc_delay_hist(ni, "%1$-8d  %2$-13u  %3$-9u");
-}
-
-
-static void stack_proc_delay_reset(ci_netif* ni)
-{
-  int i, n_buckets = (sizeof(ni->state->proc_delay_hist) /
-                      sizeof(ni->state->proc_delay_hist[0]));
-  if( ! cfg_lock )
-    libstack_netif_lock(ni);
-  ni->state->proc_delay_max = 0;
-  ni->state->proc_delay_min = 0;
-  ni->state->proc_delay_negative = 0;
-  for( i = 0; i < n_buckets; ++i )
-    ni->state->proc_delay_hist[i] = 0;
-  if( ! cfg_lock )
-    libstack_netif_unlock(ni);
-}
-#endif
-
 /**********************************************************************
 ***********************************************************************
 **********************************************************************/
@@ -2348,11 +2300,6 @@ static const stack_op_t stack_ops[] = {
   STACK_OP(hwport_to_base_ifindex,"dump mapping between hwport and interfaces"),
   STACK_OP(vi_stats,"show per-VI interface stats. (Higher overhead, so only "
            "call occasionally)"),
-#if CI_CFG_PROC_DELAY
-  STACK_OP(proc_delay,         "dump processing delay metrics"),
-  STACK_OP(proc_delay_hist,    "dump processing delay histogram"),
-  STACK_OP(proc_delay_reset,   "reset processing delay stats"),
-#endif
 };
 #define N_STACK_OPS	(sizeof(stack_ops) / sizeof(stack_ops[0]))
 

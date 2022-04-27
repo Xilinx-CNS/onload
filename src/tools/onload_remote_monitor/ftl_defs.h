@@ -177,12 +177,6 @@
 #define ON_CI_CFG_TCP_SHARED_LOCAL_PORTS IGNORE
 #endif
 
-#if CI_CFG_PROC_DELAY
-#define ON_CI_CFG_PROC_DELAY DO
-#else
-#define ON_CI_CFG_PROC_DELAY IGNORE
-#endif
-
 #if CI_CFG_IPV6
 #define ON_CI_CFG_IPV6 DO
 #else
@@ -615,17 +609,6 @@ typedef struct oo_p_dllink oo_p_dllink_t;
     FTL_TFIELD_INT(ctx, ci_uint32, kernel_packets_pending, ORM_OUTPUT_STACK) \
     FTL_TFIELD_INT(ctx, ci_uint64, kernel_packets_last_forwarded, ORM_OUTPUT_STACK) \
     FTL_TFIELD_INT(ctx, ci_uint64, kernel_packets_cycles, ORM_OUTPUT_STACK) \
-  )                                                                       \
-  ON_CI_CFG_PROC_DELAY(                                                   \
-    FTL_TFIELD_INT(ctx, ci_uint64, sync_frc, ORM_OUTPUT_STACK)            \
-    FTL_TFIELD_INT(ctx, ci_uint64, sync_cost, ORM_OUTPUT_STACK)           \
-    FTL_TFIELD_INT(ctx, ci_int64,  max_frc_diff, ORM_OUTPUT_STACK)        \
-    FTL_TFIELD_INT(ctx, ci_uint64, sync_ns, ORM_OUTPUT_STACK)             \
-    FTL_TFIELD_INT(ctx, ci_uint32, proc_delay_max, ORM_OUTPUT_STACK)      \
-    FTL_TFIELD_INT(ctx, ci_uint32, proc_delay_min, ORM_OUTPUT_STACK)      \
-    FTL_TFIELD_ARRAYOFINT(ctx, ci_uint32, proc_delay_hist,                \
-                          CI_CFG_PROC_DELAY_BUCKETS, ORM_OUTPUT_STACK)    \
-    FTL_TFIELD_INT(ctx, ci_uint32, proc_delay_negative, ORM_OUTPUT_STACK) \
   )                                                                       \
   FTL_TSTRUCT_END(ctx)
 

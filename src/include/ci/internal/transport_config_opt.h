@@ -602,13 +602,6 @@
 /* Do we need SO_TIMESTAMPING, WODA, ...? */
 #define CI_CFG_TIMESTAMPING 1
 
-/* Set to 1 to enable measuring the delta between packets being
- * received by the NIC and processed by the stack.
- */
-#define CI_CFG_PROC_DELAY               0
-#define CI_CFG_PROC_DELAY_BUCKETS       20
-#define CI_CFG_PROC_DELAY_NS_SHIFT      10
-
 /* Enable native kernel BPF program functionality
  * (subject to kernel support see CI_HAVE_BPF_NATIVE).
  * Currently aarch64 doesn't support Onload BPF. */
