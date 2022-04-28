@@ -256,5 +256,10 @@ typedef union {
 /*! ef_vi_prime() runs entirely in userspace */
 #define NIC_FLAG_USERSPACE_PRIME 0x20000000000000LL
 
+/* Reserved space in evq for a reasonable number of time sync events.
+ * They arrive at a rate of 4 per second.  This allows app to get
+ * 25s behind...
+ */
+#define CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY (4 * 25)
 
 #endif /* __CI_EFHW_COMMON_H__ */

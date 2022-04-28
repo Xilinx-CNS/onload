@@ -15,13 +15,8 @@
 #include "char_internal.h"
 #include "filter_list.h"
 #include "linux_char_internal.h"
+#include <ci/efhw/common.h>
 
-
-/* Reserved space in evq for a reasonable number of time sync events.
- * They arrive at a rate of 4 per second.  This allows app to get
- * 25s behind...
- */
-#define CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY (4 * 25)
 
 static const char *q_names[EFHW_N_Q_TYPES] = { "TXQ", "RXQ", "EVQ" };
 

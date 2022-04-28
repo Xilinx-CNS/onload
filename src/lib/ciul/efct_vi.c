@@ -383,6 +383,24 @@ ci_inline bool efct_tx_check_event(const ef_vi* vi)
   return vi->evq_mask && efct_tx_get_event(vi, vi->ep_state->evq.evq_ptr);
 }
 
+/* Writes an unsolicited credit sequence value (max 7-bit wide) to the appropiate 
+ * register. This function should be called on timesync events, and upon an 
+ * unsolicited_credit_overflow. The sequence should correspond to how many 
+ * unsolicited credit events have been seen + a small buffer extra. When this
+ * extra buffer is consumed, an unsolicited credit overflow is expected, and
+ * the register should be reset with a sensible default. */
+static void efct_grant_unsol_credit(ef_vi* vi, bool clear_overflow, uint32_t credit_seq)
+{
+  uint32_t* unsol_reg = (void*) (vi->io + EFCT_EVQ_UNSOL_CREDIT_REGISTER_OFFSET);
+  ci_qword_t qword;
+
+  CI_POPULATE_QWORD_2(qword,
+                      EFCT_EVQ_UNSOL_GRANT_SEQ, credit_seq & CI_MASK32(EFCT_EVQ_UNSOL_GRANT_MAX_SEQ_WIDTH),
+                      EFCT_EVQ_UNSOL_CLEAR_OVERFLOW, clear_overflow);
+
+  writel(qword.u64[0], unsol_reg);
+}
+
 /* handle a tx completion event */
 static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
 {
@@ -832,11 +850,15 @@ static int efct_tx_handle_control_event(ef_vi* vi, ci_qword_t event,
       vi->ep_state->evq.sync_timestamp_minor = CI_QWORD_FIELD64(event, EFCT_TIME_SYNC_EVENT_TIME_HIGH) & 0xFFFF;
       time_sync = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IN_SYNC) ? EF_VI_SYNC_FLAG_CLOCK_IN_SYNC : 0);
       time_set = (CI_QWORD_FIELD(event, EFCT_TIME_SYNC_EVENT_CLOCK_IS_SET) ? EF_VI_SYNC_FLAG_CLOCK_SET : 0);
-      vi->ep_state->evq.sync_flags = time_sync | time_set; 
+      vi->ep_state->evq.sync_flags = time_sync | time_set;
+      vi->ep_state->evq.unsol_credit_seq++;
+      efct_grant_unsol_credit(vi, false, vi->ep_state->evq.unsol_credit_seq);
       break;
     case EFCT_CTRL_EV_UNSOL_OVERFLOW:
-      ef_log("%s: ERROR: Unhandled MCDI control event subtype=%u",
-             __FUNCTION__, QWORD_GET_U(EFCT_CTRL_SUBTYPE, event));
+      LOG(ef_log("%s: Saw unsol overflow", __FUNCTION__));
+      /* Set unsol_seq to default, but leave 1 credit-space in reserve for overflow event. */
+      vi->ep_state->evq.unsol_credit_seq = CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY - 1;
+      efct_grant_unsol_credit(vi, true, vi->ep_state->evq.unsol_credit_seq);
       break;
   }
 

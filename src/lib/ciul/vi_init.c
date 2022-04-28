@@ -12,6 +12,7 @@
 #include <onload/version.h>
 #include "logging.h"
 #include <etherfabric/internal/efct_uk_api.h>
+#include <ci/efhw/common.h>
 
 #ifndef __KERNEL__
 #include <limits.h>
@@ -478,6 +479,8 @@ void ef_vi_reset_evq(struct ef_vi* vi, int clear_ring)
   EF_VI_BUG_ON( vi->ep_state->evq.evq_clear_stride > 0 );
   vi->ep_state->evq.sync_timestamp_synchronised = 0;
   vi->ep_state->evq.sync_timestamp_major = ~0u;
+  /* Set unsol_seq to default, but leave 1 credit-space in reserve for overflow event. */
+  vi->ep_state->evq.unsol_credit_seq = CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY - 1;
   vi->ep_state->evq.sync_flags = 0;
 }
 

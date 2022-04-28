@@ -164,6 +164,15 @@
 
 #define DP_PARTIAL_TSTAMP_SUB_NANO_BITS 2
 
+/* unsolicited credit definitions */
+
+#define EFCT_EVQ_UNSOL_CREDIT_REGISTER_OFFSET 0
+#define EFCT_EVQ_UNSOL_GRANT_SEQ_LBN 0
+#define EFCT_EVQ_UNSOL_GRANT_SEQ_WIDTH 16
+#define EFCT_EVQ_UNSOL_GRANT_MAX_SEQ_WIDTH 7
+#define EFCT_EVQ_UNSOL_CLEAR_OVERFLOW_LBN 16
+#define EFCT_EVQ_UNSOL_CLEAR_OVERFLOW_WIDTH 1
+
 /* size of a transmit header in bytes */
 #define EFCT_TX_HEADER_BYTES 8
 

@@ -723,6 +723,8 @@ typedef struct {
   uint32_t      sync_timestamp_minimum;
   /** Timestamp synchronized with adapter */
   uint32_t      sync_timestamp_synchronised; /* with adapter */
+  /** Unsolicited credit sequence */
+  uint32_t      unsol_credit_seq;
   /** Time synchronization flags */
   uint32_t      sync_flags;
 } ef_eventq_state;
