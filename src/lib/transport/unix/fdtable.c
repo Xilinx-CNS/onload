@@ -142,8 +142,9 @@ static citp_fdinfo_p citp_fdtable_closing_wait(unsigned fd, int fdt_locked);
 __attribute__((force_align_arg_pointer))
 static long oo_close_nocancel_entry(long fd)
 #else
-long oo_close_nocancel_entry(long fd);
+extern long oo_close_nocancel_entry(long fd);
 __asm__(
+  ".globl oo_close_nocancel_entry;"
   "oo_close_nocancel_entry:"
     "push %rbp;"
     "mov  %rsp,%rbp;"
@@ -293,7 +294,7 @@ static int patch_libc_close_nocancel(void)
     };
     unsigned char new_glibc_bytes[6];
     unsigned char* trampoline;
-    long (*target)(long) = oo_close_nocancel_entry;
+    long (*target)(long) = &oo_close_nocancel_entry;
     int rc;
 
     /* One x86-64 we somehow have to replace the 7 bytes "mov $3,eax;syscall"
