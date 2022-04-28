@@ -597,6 +597,7 @@ ci_inline int ci_netif_num_vis(ci_netif* ni)
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   switch( NI_OPTS(ni).tcp_offload_plugin ) {
     case CITP_TCP_OFFLOAD_OFF:     return 1;
+    case CITP_TCP_OFFLOAD_NVME:    return 1;
     case CITP_TCP_OFFLOAD_RAW_TCP: return 2;
     default:                       return 2 + CI_CFG_TCP_PLUGIN_EXTRA_VIS;
   }
