@@ -940,6 +940,26 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
 }
 
 
+void tcp_helper_vi_adjust_filter_params(tcp_helper_resource_t* trs, int hwport,
+                                        int* rxq, unsigned *flags)
+{
+  int intf_i;
+  ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
+  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
+    ef_vi* vi = &trs->netif.nic_hw[intf_i].vis[0];
+    if( vi->efct_shm ) {
+      if( vi->efct_shm->q[0].superbuf_pkts ) {
+        *rxq = vi->efct_shm->q[0].qid;
+        *flags |= EFHW_FILTER_F_PREF_RXQ;
+      }
+      else {
+        *flags |= EFHW_FILTER_F_ANY_RXQ;
+      }
+    }
+  }
+}
+
+
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                                const struct efx_filter_spec* spec, int rxq,
                                bool replace)
@@ -4135,6 +4155,22 @@ static void put_namespaces(tcp_helper_resource_t* rs)
 #endif
 }
 
+static void generate_efct_filter_irqmask(cpumask_t* result)
+{
+  /* The goal here is to maintain NUMA-locality, but avoid contention between
+   * app and IRQs. */
+  int cpu;
+
+  cpumask_clear(result);
+  for_each_cpu(cpu, &current->cpus_mask)
+    cpumask_or(result, result, cpumask_of_node(cpu_to_node(cpu)));
+  /* If the app is spanned across every CPU on its node(s) then it's better
+   * to have potential contention than to do cross-NUMA stuff. Also covers the
+   * degenerate case of an app being unaffinitised. */
+  if( ! cpumask_equal(result, &current->cpus_mask) )
+    cpumask_andnot(result, result, &current->cpus_mask);
+}
+
 int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
                         const ci_netif_config_opts* opts,
                         int ifindices_len, tcp_helper_cluster_t* thc,
@@ -4270,6 +4306,8 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   rs->thc = NULL;
 #endif
   strcpy(rs->name, alloc->in_name);
+  generate_efct_filter_irqmask(&rs->filter_irqmask);
+
   mutex_init(&rs->usermem_mutex);
   rs->usermem_prev_id = 0;
   rs->usermem = NULL;

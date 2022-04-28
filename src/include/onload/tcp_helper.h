@@ -355,6 +355,10 @@ typedef struct tcp_helper_resource_s {
   spinlock_t            os_ready_list_lock;
 
   struct oo_filter_ns*  filter_ns;
+  /* X3 only: an 'appropriate' affinity mask for the application(s) using this
+   * stack, as a hint for which rxq to prefer (in the absence of any more
+   * explicit constraints from the user) */
+  struct cpumask        filter_irqmask;
 
   uint16_t*             tproxy_ifindex;
   int                   tproxy_ifindex_count;

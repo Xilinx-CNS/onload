@@ -10,6 +10,7 @@
 
 #include "onload_kernel_compat.h"
 #include "oof_onload_types.h"
+#include "oof_test.h"
 
 typedef enum {
   OOFT_EP_FREE = 0,
@@ -40,6 +41,7 @@ typedef struct tcp_helper_resource_s {
   int n_eps;
 
   struct tcp_helper_cluster_s* thc;
+  struct cpumask filter_irqmask;
 } tcp_helper_resource_t;
 
 struct ooft_endpoint {

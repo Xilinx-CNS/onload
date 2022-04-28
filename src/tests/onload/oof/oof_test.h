@@ -9,7 +9,7 @@ struct ooft_cplane;
 struct efab_tcp_driver_s;
 struct ootf_task;
 struct net;
-struct cpumask;
+struct cpumask {};
 
 extern struct ooft_cplane* cp;
 extern struct efab_tcp_driver_s efab_tcp_driver;

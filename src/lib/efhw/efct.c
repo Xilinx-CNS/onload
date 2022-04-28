@@ -857,7 +857,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     return rc;
   params = (struct xlnx_efct_filter_params){
     .spec = &hw_filter,
-    .mask = cpu_all_mask,   /* EFCT TODO */
+    .mask = mask ? mask : cpu_all_mask,
   };
   if( *rxq >= 0 )
     hw_filter.ring_cookie = *rxq;

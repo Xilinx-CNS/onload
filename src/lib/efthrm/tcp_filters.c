@@ -133,6 +133,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
   int cluster = (oofilter->thc != NULL) && ! kernel_redirect;
   int drop = (src_flags & OO_HW_SRC_FLAG_DROP) &&
              ! cluster; /* drop not supported for RSS - use proper filter */
+  unsigned insert_flags = 0;
 
   if( ! kernel_redirect )
     ci_assert_nequal(oofilter->trs == NULL, oofilter->thc == NULL);
@@ -293,8 +294,14 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
       }
     }
     rxq = -1;
-    rc = efrm_filter_insert(get_client(hwport), &spec, &rxq, NULL,
-                            replace ? EFHW_FILTER_F_REPLACE : 0);
+    if( replace )
+      insert_flags |= EFHW_FILTER_F_REPLACE;
+    if( ! cluster )
+      tcp_helper_vi_adjust_filter_params(oofilter->trs, hwport, &rxq,
+                                         &insert_flags);
+    rc = efrm_filter_insert(get_client(hwport), &spec, &rxq,
+                            cluster ? NULL : &oofilter->trs->filter_irqmask,
+                            insert_flags);
     /* ENETDOWN indicates that the hardware has gone away. This is not a
      * failure condition at this layer as we can attempt to restore filters
      * when the hardware comes back. A negative filter ID signifies that there

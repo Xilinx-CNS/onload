@@ -39,6 +39,9 @@ extern int tcp_helper_vi_hw_rx_loopback_supported(tcp_helper_resource_t* trs,
 extern int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
                                                   int hwport);
 
+extern void tcp_helper_vi_adjust_filter_params(tcp_helper_resource_t* trs,
+                                       int hwport, int* rxq, unsigned *flags);
+
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                                const struct efx_filter_spec* spec, int rxq,
                                bool replace);
