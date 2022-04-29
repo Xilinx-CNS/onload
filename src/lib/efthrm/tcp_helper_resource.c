@@ -345,6 +345,8 @@ oo_trusted_lock_drop(tcp_helper_resource_t* trs,
   if( l & OO_TRUSTED_LOCK_HANDLE_ICMP )
     sl_flags |= CI_EPLOCK_NETIF_HANDLE_ICMP;
 #endif
+  if( l & OO_TRUSTED_LOCK_PRIME_IF_IDLE )
+    sl_flags |= CI_EPLOCK_NETIF_PRIME_IF_IDLE;
   ci_assert(sl_flags != 0);
   if( ci_cas32_succeed(&trs->trusted_lock, l, OO_TRUSTED_LOCK_LOCKED) ) {
     if( has_shared )
@@ -3172,6 +3174,7 @@ static void tcp_helper_do_non_atomic(struct work_struct *data)
 
       OO_DEBUG_TCPH(ci_log("%s: [%u] deferred POLL_AND_PRIME",
                            __FUNCTION__, trs->id));
+      trs->netif.state->poll_did_wake = 0;
       ci_netif_poll(&trs->netif);
       if( NI_OPTS(&trs->netif).int_driven ) {
         ci_netif* ni = &trs->netif;
@@ -6665,6 +6668,15 @@ tcp_helper_rm_dump(oo_fd_flags fd_flags, oo_sp sock_id,
  *--------------------------------------------------------------------*/
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
+static void defer_poll_and_prime(tcp_helper_resource_t* trs)
+{
+  if( efab_tcp_helper_netif_lock_or_set_flags(trs,
+            OO_TRUSTED_LOCK_NEED_POLL | OO_TRUSTED_LOCK_PRIME_IF_IDLE,
+            CI_EPLOCK_NETIF_NEED_POLL | CI_EPLOCK_NETIF_PRIME_IF_IDLE, 1) )
+      tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
+}
+
+
 static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
 {
   ci_netif* ni = &trs->netif;
@@ -6676,6 +6688,11 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
 
   /* Must clear this before the poll rather than waiting till later */
   ci_bit_clear(&ni->state->evq_primed, intf_i);
+
+  if( budget <= 0 ) {
+    defer_poll_and_prime(trs);
+    return 0;
+  }
 
   /* Don't reprime if someone is spinning -- let them poll the stack. */
   prime_async = ! ci_netif_is_spinner(ni);
@@ -6695,10 +6712,11 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
       CITP_STATS_NETIF_ADD(ni, interrupt_evs, n);
       trs->netif.state->interrupt_numa_nodes |= 1 << numa_node_id();
 
+      budget -= n;
       /* If we've exceeded budget, and have woken up user - we trust to user
        * to poll the rest of events.  But if there is no such a user - we
        * defer the poll-and-prime action to workqueue. */
-      if( n >= budget && ! ni->state->poll_did_wake &&
+      if( budget <= 0 && ! ni->state->poll_did_wake &&
           ci_netif_intf_has_event(ni, intf_i) ) {
         CITP_STATS_NETIF_INC(&trs->netif, interrupt_budget_limited);
         raw_cpu_write(oo_budget_limit_last_ts, jiffies);
@@ -6721,9 +6739,32 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
       /* Couldn't get the lock.  We take this as evidence that another thread
        * is alive and doing stuff, so no need to re-enable interrupts.  The
        * EF_INT_REPRIME option overrides.
+       *
+       * There are three potential classes of entity which could be holding
+       * the lock:
+       *  1) Userspace doing stuff
+       "  2) Some other userspace process
+       *  3) Periodic poll in kernel
+       * In case (1) the process will almost certainly re-prime whatever it
+       * needs while it has the lock, however cases (2) and (3) likely won't.
+       * On EF10 this isn't generally a problem because a) the majority of
+       * time packets received on a VI are 'interesting' and thus will trigger
+       * a userspace wakeup, and b) if that didn't happen then we'll pick them
+       * up at the next periodic poll and recover.
+       * Neither (a) nor (b) are true on X3: we can be attached to 'somebody
+       * elses' rxq and that receives a vast number of packets, sufficiently
+       * quickly that the tiny number of packets for this stack have wrapped
+       * out of the superbufs by the time periodic polls happen. We therefore
+       * reprime interrupts much more eagerly on X3 so that these holes
+       * cannot happen, at the cost of consuming more CPU time on semi-idle
+       * processes. The classic example of an app which encounters this
+       * problem is a multi-process network server, which has a process
+       * listening for connections (a few SYNs occasionally) forking off
+       * processes handling those connections (many packets).
        */
       CITP_STATS_NETIF_INC(ni, interrupt_lock_contends);
-      if( ! NI_OPTS(ni).int_reprime )
+      if( ! NI_OPTS(ni).int_reprime &&
+          ! (ni->state->nic[intf_i].oo_vi_flags & OO_VI_FLAGS_RX_SHARED) )
         prime_async = 0;
     }
   }
@@ -6731,9 +6772,13 @@ static int tcp_helper_wakeup(tcp_helper_resource_t* trs, int intf_i, int budget)
     CITP_STATS_NETIF_INC(ni, interrupt_no_events);
   }
 
-  if( prime_async && tcp_helper_reprime_is_needed(ni) ) {
-    tcp_helper_request_wakeup_nic_if_needed(trs, intf_i);
-    CITP_STATS_NETIF_INC(ni, interrupt_primes);
+  if( prime_async && tcp_helper_reprime_is_needed(ni) &&
+      tcp_helper_start_request_wakeup(trs, intf_i) ) {
+    int rc = tcp_helper_request_wakeup_nic_from_wakeup(trs, intf_i);
+    if( rc == -EAGAIN )
+      defer_poll_and_prime(trs);
+    else
+      CITP_STATS_NETIF_INC(ni, interrupt_primes);
   }
 
   return n;
@@ -6817,6 +6862,7 @@ static int oo_handle_wakeup_or_timeout(void* context, int is_timeout,
     /* OO_THR_AFLAG_POLL_AND_PRIME is set - i.e. in some sense the
      * previous interrupt handler is already running.
      * Workqueue will handle new events if any and will prime if needed. */
+    ci_bit_clear(&trs->netif.state->evq_primed, tcph_nic->thn_intf_i);
     return 0;
   }
 
@@ -6929,10 +6975,12 @@ static int oo_handle_wakeup_int_driven(void* context, int is_timeout,
                (trs, OO_TRUSTED_LOCK_NEED_PRIME) ) {
         break;
       }
-      if( ci_bit_test_and_clear(&ni->state->evq_prime_deferred,
-                                tcph_nic->thn_intf_i) )
-        tcp_helper_request_wakeup_nic(trs, tcph_nic->thn_intf_i);
-      break;
+      if( ! ci_bit_test_and_clear(&ni->state->evq_prime_deferred,
+                                  tcph_nic->thn_intf_i) )
+        break;
+      if( tcp_helper_request_wakeup_nic_from_wakeup(trs,
+                                                    tcph_nic->thn_intf_i) == 0 )
+        break;
     }
 
     ci_bit_set(&ni->state->evq_prime_deferred, tcph_nic->thn_intf_i);

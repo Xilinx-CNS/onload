@@ -340,20 +340,23 @@ iterate_netifs_unlocked_dropref(ci_netif * netif, enum oo_thr_ref_type ref_type)
 
 extern void
 tcp_helper_request_wakeup_nic(tcp_helper_resource_t* trs, int intf_i);
+extern int
+tcp_helper_request_wakeup_nic_from_wakeup(tcp_helper_resource_t* trs,
+                                          int intf_i);
 
 
-ci_inline void
-tcp_helper_request_wakeup_nic_if_needed(tcp_helper_resource_t* trs,
-                                        int intf_i)
+ci_inline bool tcp_helper_start_request_wakeup(tcp_helper_resource_t* trs,
+                                                int intf_i)
 {
-  if( ! ci_bit_test(&trs->netif.state->evq_primed, intf_i) &&
-      ! ci_bit_test_and_set(&trs->netif.state->evq_primed, intf_i) )
-    tcp_helper_request_wakeup_nic(trs, intf_i);
+  return ! ci_bit_test(&trs->netif.state->evq_primed, intf_i) &&
+         ! ci_bit_test_and_set(&trs->netif.state->evq_primed, intf_i);
 }
+
 ci_inline void tcp_helper_request_wakeup(tcp_helper_resource_t* trs) {
   int intf_i;
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i)
-    tcp_helper_request_wakeup_nic_if_needed(trs, intf_i);
+    if( tcp_helper_start_request_wakeup(trs, intf_i) )
+      tcp_helper_request_wakeup_nic(trs, intf_i);
 }
 
 

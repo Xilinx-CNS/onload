@@ -299,7 +299,7 @@ int efch_vi_prime_qs(ci_private_char_t* priv,
       }
       efrm_rxq_request_wakeup(efrm_rxq_from_resource(rs->rs_base),
                               args->rxq_current[i].sbseq,
-                              args->rxq_current[i].pktix);
+                              args->rxq_current[i].pktix, true);
     }
   }
   return rc;

@@ -115,7 +115,7 @@ static int efct_handle_event(void *driver_data,
 }
 
 int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
-                        unsigned sbseq, unsigned pktix)
+                        unsigned sbseq, unsigned pktix, bool allow_recursion)
 {
   struct efhw_nic_efct_rxq* q = &efct->rxq[app->qid];
   uint32_t pkt_seqno = make_pkt_seq(sbseq, pktix);
@@ -128,8 +128,9 @@ int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
    * goal of being interrupt-driven to spin entering and exiting the kernel
    * for an entire coalesce period */
   if( seq_lt(pkt_seqno, now) ) {
-    do_wakeup(efct, app, INT_MAX);
-    return 0;
+    if( allow_recursion )
+      do_wakeup(efct, app, 0);
+    return -EAGAIN;
   }
 
   if( ci_xchg32(&app->wake_at_seqno, pkt_seqno) == EFCT_INVALID_PKT_SEQNO )
@@ -142,10 +143,11 @@ int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
 
   if( ci_cas32_succeed(&app->wake_at_seqno, pkt_seqno, EFCT_INVALID_PKT_SEQNO) ) {
     ci_atomic32_dec(&q->awaiters);
-    do_wakeup(efct, app, INT_MAX);
-    return 0;
+    if( allow_recursion )
+      do_wakeup(efct, app, 0);
+    return -EAGAIN;
   }
-  return 0;
+  return -EAGAIN;
 }
 
 /* Allocating huge pages which are able to be mapped to userspace is a

@@ -198,6 +198,7 @@ typedef struct tcp_helper_resource_s {
 #define OO_TRUSTED_LOCK_HANDLE_ICMP       0x40
 #define OO_TRUSTED_LOCK_SWF_UPDATE        0x80
 #define OO_TRUSTED_LOCK_PURGE_TXQS        0x100
+#define OO_TRUSTED_LOCK_PRIME_IF_IDLE     0x200
   volatile unsigned      trusted_lock;
 
   /*! this is used so we can schedule destruction at task time,

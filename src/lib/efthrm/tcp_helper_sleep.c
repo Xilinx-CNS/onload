@@ -13,7 +13,6 @@
 #include <onload/tcp_helper_fns.h>
 #include <ci/efrm/efct_rxq.h>
 
-
 /**********************************************************************
 ************************* Blocking on a socket ************************
 **********************************************************************/
@@ -140,7 +139,10 @@ efab_tcp_helper_sock_sleep(tcp_helper_resource_t* trs,
 }
 
 
-void tcp_helper_request_wakeup_nic(tcp_helper_resource_t* trs, int intf_i) {
+static int tcp_helper_request_wakeup_nic_impl(tcp_helper_resource_t* trs,
+                                             int intf_i, bool allow_recursion)
+{
+  bool again = false;
   /* This assertion is good, but fails on linux so currently disabled */
   /* ci_assert(ci_bit_test(&trs->netif.state->evq_primed, nic_i)); */
 
@@ -157,10 +159,26 @@ void tcp_helper_request_wakeup_nic(tcp_helper_resource_t* trs, int intf_i) {
       struct efrm_efct_rxq* rxq = trs->nic[intf_i].thn_efct_rxq[i];
       unsigned sbseq, pktix;
       int rc = efct_vi_get_wakeup_params(vi, i, &sbseq, &pktix);
-      if( rc == 0 )
-        efrm_rxq_request_wakeup(rxq, sbseq, pktix);
+      if( rc == 0 ) {
+        rc = efrm_rxq_request_wakeup(rxq, sbseq, pktix, allow_recursion);
+        if( rc == -EAGAIN )
+          again = true;
+      }
     }
   }
+  return again ? -EAGAIN : 0;
+}
+
+
+void tcp_helper_request_wakeup_nic(tcp_helper_resource_t* trs, int intf_i)
+{
+  tcp_helper_request_wakeup_nic_impl(trs, intf_i, true);
+}
+
+int tcp_helper_request_wakeup_nic_from_wakeup(tcp_helper_resource_t* trs,
+                                              int intf_i)
+{
+  return tcp_helper_request_wakeup_nic_impl(trs, intf_i, false);
 }
 
 

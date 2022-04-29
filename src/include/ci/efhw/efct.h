@@ -182,7 +182,7 @@ void efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
 int efct_get_hugepages(struct efhw_nic *nic, int hwqid,
                        struct xlnx_efct_hugepage *pages, size_t n_pages);
 int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
-                        unsigned sbseq, unsigned pktix);
+                        unsigned sbseq, unsigned pktix, bool allow_recursion);
 void efct_nic_filter_init(struct efhw_nic_efct *efct);
 bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
                          const void* meta, const void* payload);

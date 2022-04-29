@@ -1113,7 +1113,16 @@ ci_uint64 ci_netif_unlock_slow_common(ci_netif* ni, ci_uint64 lock_val,
 
   if( test_val & CI_EPLOCK_NETIF_NEED_POLL ) {
     CITP_STATS_NETIF(++ni->state->stats.deferred_polls);
+#ifdef __KERNEL__
+    if( test_val & CI_EPLOCK_NETIF_PRIME_IF_IDLE )
+      ni->state->poll_did_wake = 0;
+#endif
     ci_netif_poll(ni);
+    if( test_val & CI_EPLOCK_NETIF_PRIME_IF_IDLE )
+#ifdef __KERNEL__
+      if( ! ni->state->poll_did_wake )
+#endif
+        set_flags |= CI_EPLOCK_NETIF_NEED_PRIME;
   }
 
 #if CI_CFG_UL_INTERRUPT_HELPER && ! defined (__KERNEL__)
