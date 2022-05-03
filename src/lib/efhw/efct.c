@@ -950,6 +950,9 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       if( avail >= 0 ) {
         node.hw_filter = avail;
         efct->hw_filters[avail].refcount = 1;
+        efct->hw_filters[avail].proto = node.proto;
+        efct->hw_filters[avail].ip = node.u.ip4.lip;
+        efct->hw_filters[avail].port = node.lport;
         insert_hw_filter = true;
       }
     }
@@ -963,10 +966,12 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     }
   FOR_EACH_FILTER_CLASS(ACTION_DO_FILTER_INSERT)
 
-  mutex_unlock(&efct->driver_filters_mtx);
-
-  if( rc < 0 )
+  if( rc < 0 ) {
+    if( node.hw_filter >= 0 )
+      --efct->hw_filters[node.hw_filter].refcount;
+    mutex_unlock(&efct->driver_filters_mtx);
     return rc;
+  }
 
   if( insert_hw_filter ) {
     EFCT_PRE(dev, edev, cli, nic, rc);
@@ -974,7 +979,6 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     EFCT_POST(dev, edev, cli, nic, rc);
   }
 
-  mutex_lock(&efct->driver_filters_mtx);
   if( rc < 0 ) {
     int unused;
     if( node.hw_filter >= 0 )
