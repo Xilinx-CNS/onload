@@ -1375,7 +1375,7 @@ extern int ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
 **
 ** \param vi        The virtual interface that received the packet.
 ** \param pkt       The first packet buffer for the received packet.
-** \param ts_out    Pointer to a timepsec, that is updated on return with
+** \param ts_out    Pointer to a timespec, that is updated on return with
 **                  the UTC timestamp for the packet.
 ** \param flags_out Pointer to an unsigned, that is updated on return with
 **                  the sync flags for the packet.
