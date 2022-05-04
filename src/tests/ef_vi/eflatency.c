@@ -14,6 +14,7 @@
 #include <etherfabric/memreg.h>
 #include <etherfabric/capabilities.h>
 #include <etherfabric/checksum.h>
+#include <etherfabric/efct_vi.h>
 #include <ci/tools.h>
 #include <ci/tools/ipcsum_base.h>
 #include <ci/tools/ippacket.h>

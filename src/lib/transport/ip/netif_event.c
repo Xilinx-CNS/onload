@@ -493,8 +493,7 @@ static void get_efct_timestamp(ci_netif* netif, ef_vi* vi,
   if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_HW_TS_EN ) {
     unsigned sync_flags;
     ef_timespec stamp;
-    int rc = efct_receive_get_timestamp_with_sync_flags(vi, pkt_id,
-                                                        &stamp, &sync_flags);
+    int rc = efct_vi_rxpkt_get_timestamp(vi, pkt_id, &stamp, &sync_flags);
 
     if( rc == 0 )
       record_rx_timestamp(netif, nsn, pkt, stamp, sync_flags);
@@ -513,8 +512,7 @@ static void get_efct_timestamp(ci_netif* netif, ef_vi* vi,
 static void copy_efct_to_pkt(ci_netif* netif, ef_vi* vi,
                              uint32_t pkt_id, ci_ip_pkt_fmt* pkt)
 {
-  const void* payload;
-  efct_vi_rxpkt_get(vi, pkt_id, &payload);
+  const void* payload = efct_vi_rxpkt_get(vi, pkt_id);
   memcpy(pkt->dma_start, payload, pkt->pay_len);
   get_efct_timestamp(netif, vi, pkt_id, pkt);
 }

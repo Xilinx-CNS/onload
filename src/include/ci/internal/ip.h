@@ -20,6 +20,7 @@
 #include <onload/primitive_types.h>
 #include <ci/internal/ip_stats.h>
 #include <etherfabric/ef_vi.h>
+#include <etherfabric/efct_vi.h>
 #include <etherfabric/pio.h>
 #include <etherfabric/internal/internal.h>
 #include <onload/offbuf.h>
@@ -2763,13 +2764,11 @@ ci_inline void ci_netif_poison_rx_pkt(ci_ip_pkt_fmt* pkt)
 
 ci_inline const void* ci_netif_efct_pkt_start(ef_vi* vi, unsigned* pkt_id)
 {
-  const void* pkt_start;
   unsigned id = efct_vi_next_rx_rq_id(vi, 0); /* TODO EFCT use correct qid */
   if( id == ~0u )
     return NULL;
-  efct_vi_rxpkt_get(vi, id, &pkt_start);
   *pkt_id = id;
-  return pkt_start;
+  return efct_vi_rxpkt_get(vi, id);
 }
 ci_inline volatile const uint32_t* ci_netif_efct_poison_location(ef_vi* vi)
 {

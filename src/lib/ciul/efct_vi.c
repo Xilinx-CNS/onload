@@ -13,6 +13,7 @@
 #include <ci/efch/op_types.h>
 #endif
 #include "ef_vi_internal.h"
+#include <etherfabric/efct_vi.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/common.h>
 #include <ci/tools/byteorder.h>
@@ -1230,13 +1231,12 @@ static int efct_post_filter_add(struct ef_vi* vi,
 #endif
 }
 
-void efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id, const void** pkt_start)
+const void* efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id)
 {
   EF_VI_ASSERT(vi->nic_type.arch == EF_VI_ARCH_EFCT);
 
   /* assume DP_FRAME_OFFSET_FIXED (correct for initial hardware) */
-  *pkt_start = (char*)efct_rx_header(vi, pkt_id) +
-               EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+  return (char*)efct_rx_header(vi, pkt_id) + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
 }
 
 void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
@@ -1305,9 +1305,8 @@ unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid)
   return vi->ep_state->rxq.rxq_ptr[qid].prev;
 }
 
-int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, uint32_t pkt_id,
-                                               ef_timespec* ts_out,
-                                               unsigned* flags_out)
+int efct_vi_rxpkt_get_timestamp(ef_vi* vi, uint32_t pkt_id,
+                                ef_timespec* ts_out, unsigned* flags_out)
 {
   const struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
   uint64_t ts;

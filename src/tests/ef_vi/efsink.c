@@ -12,6 +12,7 @@
 #include <etherfabric/vi.h>
 #include <etherfabric/pd.h>
 #include <etherfabric/memreg.h>
+#include <etherfabric/efct_vi.h>
 
 #include <poll.h>
 
@@ -264,7 +265,7 @@ static void handle_rx_ref(struct resources* res, unsigned pkt_id, int len)
   const void *p;
 
   LOGV("PKT: received pkt=%u len=%d\n", pkt_id, len);
-  efct_vi_rxpkt_get(&res->vi, pkt_id, &p);
+  p = efct_vi_rxpkt_get(&res->vi, pkt_id);
   handle_rx_core(res, p, p, len);
   efct_vi_rxpkt_release(&res->vi, pkt_id);
 }
