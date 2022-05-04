@@ -20,13 +20,7 @@ endif
 endif
 KDIR ?= /lib/modules/$(shell uname -r)/build
 
-export-srpm export: $(KDIR)/include/linux/virtual_bus.h \
-	$(KDIR)/include/linux/net/sfc/sfc_rdma.h
-
-# To not overwrite the upstream version
-$(KDIR)/include/linux/virtual_bus.h: virtual_bus.h
-	@mkdir -p $(@D)
-	test -f $@ || cp $^ $@
+export-srpm export: $(KDIR)/include/linux/net/sfc/sfc_rdma.h
 
 $(KDIR)/include/linux/net/sfc/sfc_rdma.h: net/sfc/sfc_rdma.h
 	@mkdir -p $(@D)

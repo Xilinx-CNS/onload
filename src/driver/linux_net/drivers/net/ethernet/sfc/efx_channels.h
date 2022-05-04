@@ -31,7 +31,7 @@ void efx_disable_interrupts(struct efx_nic *efx);
 void efx_register_irq_notifiers(struct efx_nic *efx);
 void efx_unregister_irq_notifiers(struct efx_nic *efx);
 
-void efx_set_interrupt_affinity(struct efx_nic *efx, bool rtnl_held);
+void efx_set_interrupt_affinity(struct efx_nic *efx);
 void efx_clear_interrupt_affinity(struct efx_nic *efx);
 
 int efx_init_channels(struct efx_nic *efx);

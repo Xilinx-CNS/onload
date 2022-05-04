@@ -130,30 +130,32 @@ static void efx_fini_napi_channel(struct efx_channel *channel);
  * INTERRUPTS
  *************/
 
-#ifdef HAVE_EFX_NUM_CORES
-/* Count the number of unique cores in the given cpumask */
-static unsigned int efx_num_cores(const cpumask_t *in)
+#if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_CORES)
+static unsigned int count_online_cores(struct efx_nic *efx, bool local_node)
 {
-	cpumask_var_t core_mask;
+	cpumask_var_t filter_mask;
 	unsigned int count;
 	int cpu;
 
-	if (unlikely(!zalloc_cpumask_var(&core_mask, GFP_KERNEL))) {
-		printk(KERN_WARNING
-		       "sfc: RSS disabled due to allocation failure\n");
+	if (unlikely(!zalloc_cpumask_var(&filter_mask, GFP_KERNEL))) {
+		netif_warn(efx, probe, efx->net_dev,
+			   "RSS disabled due to allocation failure\n");
 		return 1;
 	}
 
+	cpumask_copy(filter_mask, cpu_online_mask);
+	if (local_node)
+		cpumask_and(filter_mask, filter_mask,
+			    cpumask_of_pcibus(efx->pci_dev->bus));
+
 	count = 0;
-	for_each_cpu(cpu, in) {
-		if (!cpumask_test_cpu(cpu, core_mask)) {
-			++count;
-			cpumask_or(core_mask, core_mask,
-				   topology_sibling_cpumask(cpu));
-		}
+	for_each_cpu(cpu, filter_mask) {
+		++count;
+		cpumask_andnot(filter_mask, filter_mask, topology_sibling_cpumask(cpu));
 	}
 
-	free_cpumask_var(core_mask);
+	free_cpumask_var(filter_mask);
+
 	return count;
 }
 #endif
@@ -263,8 +265,8 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 				 "Unable to determine CPU topology on Xen reliably. Assuming hyperthreading enabled.\n");
 			n_rxq = max_t(int, 1, num_online_cpus() / 2);
 		} else {
-			pci_dbg(efx->pci_dev, "using efx_num_cores()\n");
-			n_rxq = efx_num_cores(cpu_online_mask);
+			pci_dbg(efx->pci_dev, "using count_online_cores()\n");
+			n_rxq = count_online_cores(efx, false);
 		}
 		break;
 #endif
@@ -278,8 +280,13 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 				 "Unable to determine CPU topology on Xen reliably. Creating rss channels for half of cores/hyperthreads.\n");
 			n_rxq = max_t(int, 1, num_online_cpus() / 2);
 		} else {
-			n_rxq = min(efx_num_cores(cpu_online_mask),
-			            efx_num_cores(cpumask_of_pcibus(efx->pci_dev->bus)));
+			n_rxq = count_online_cores(efx, true);
+
+			/* If no online CPUs in local node, fallback to all
+			 * online CPUs.
+			 */
+			if (n_rxq == 0)
+				n_rxq = count_online_cores(efx, false);
 		}
 		break;
 #endif
@@ -372,7 +379,7 @@ static unsigned int efx_num_rss_channels(struct efx_nic *efx)
 #ifdef HAVE_EFX_NUM_CORES
 		else if (rss_mode == EFX_RSS_CORES)
 			rss_channels = min(rss_channels,
-					   efx_num_cores(local_online_cpus));
+					   count_online_cores(efx, true));
 #endif
 		else
 			rss_channels = min(rss_channels,
@@ -757,8 +764,7 @@ void efx_remove_interrupts(struct efx_nic *efx)
 }
 
 #if !defined(CONFIG_SMP)
-void efx_set_interrupt_affinity(struct efx_nic *efx __always_unused,
-				bool rtnl_held __always_unused)
+void efx_set_interrupt_affinity(struct efx_nic *efx __always_unused)
 {
 }
 
@@ -796,16 +802,21 @@ static void efx_set_xps_queue(struct efx_channel *channel,
 #endif
 
 #if !defined(EFX_NOT_UPSTREAM)
-void efx_set_interrupt_affinity(struct efx_nic *efx,
-				bool rtnl_held __always_unused)
+void efx_set_interrupt_affinity(struct efx_nic *efx)
 {
+	const struct cpumask *numa_mask = cpumask_of_pcibus(efx->pci_dev->bus);
 	struct efx_channel *channel;
 	unsigned int cpu;
 
-	efx_for_each_channel(channel, efx) {
-		cpu = cpumask_local_spread(channel->channel,
-					   pcibus_to_node(efx->pci_dev->bus));
+	/* If no online CPUs in local node, fallback to any online CPU */
+	if (cpumask_first_and(cpu_online_mask, numa_mask) >= nr_cpu_ids)
+		numa_mask = cpu_online_mask;
 
+	cpu = -1;
+	efx_for_each_channel(channel, efx) {
+		cpu = cpumask_next_and(cpu, cpu_online_mask, numa_mask);
+		if (cpu >= nr_cpu_ids)
+			cpu = cpumask_first_and(cpu_online_mask, numa_mask);
 		irq_set_affinity_hint(channel->irq, cpumask_of(cpu));
 		channel->irq_mem_node = cpu_to_mem(cpu);
 		efx_set_xps_queue(channel, cpumask_of(cpu));
@@ -939,7 +950,7 @@ static int efx_rss_choose_thread(const cpumask_t *set)
 }
 
 /* Stripe the RSS vectors across the CPUs. */
-void efx_set_interrupt_affinity(struct efx_nic *efx, bool rtnl_held)
+void efx_set_interrupt_affinity(struct efx_nic *efx)
 {
 	enum {PACKAGE, CORE, TEMP1, TEMP2, LOCAL, SETS_MAX};
 	struct efx_channel *channel;
@@ -961,12 +972,6 @@ void efx_set_interrupt_affinity(struct efx_nic *efx, bool rtnl_held)
 	cpumask_and(&sets[LOCAL], cpu_online_mask,
 		    cpumask_of_pcibus(efx->pci_dev->bus));
 #endif
-
-	/* Serialise access to rss_cpu_usage. On EF100 this is called from
-	 * ef100_net_open(), which already has the RTNL lock.
-	 */
-	if (!rtnl_held)
-		rtnl_lock();
 
 	/* Assign each channel a CPU */
 	efx_for_each_channel(channel, efx) {
@@ -1005,9 +1010,6 @@ void efx_set_interrupt_affinity(struct efx_nic *efx, bool rtnl_held)
 		efx_set_cpu_affinity(channel, cpu);
 		channel->irq_mem_node = cpu_to_mem(cpu);
 	}
-
-	if (!rtnl_held)
-		rtnl_unlock();
 
 	kfree(sets);
 }

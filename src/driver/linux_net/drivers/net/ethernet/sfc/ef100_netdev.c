@@ -352,13 +352,13 @@ int ef100_net_alloc(struct efx_nic *efx)
 		rc = efx_nic_init_interrupt(efx);
 		if (rc)
 			return rc;
-		efx_set_interrupt_affinity(efx, true);
+		efx_set_interrupt_affinity(efx);
 	}
 #else
 	rc = efx_nic_init_interrupt(efx);
 	if (rc)
 		return rc;
-	efx_set_interrupt_affinity(efx, true);
+	efx_set_interrupt_affinity(efx);
 #endif
 
 	rc = efx_enable_interrupts(efx);

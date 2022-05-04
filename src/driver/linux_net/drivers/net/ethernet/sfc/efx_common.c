@@ -1251,7 +1251,7 @@ static void efx_reset_vdpa(struct efx_nic *efx, enum reset_type method)
 	disabled = (rc && !retry) || method == RESET_TYPE_DISABLE;
 
 	if (disabled)
-		ef100_reset_vdpa(efx);
+		ef100_vdpa_reset(&efx->vdpa_nic->vdpa_dev);
 
 	efx_reset_complete(efx, method, retry, disabled);
 }
@@ -1580,17 +1580,7 @@ int efx_init_io(struct efx_nic *efx, int bar, dma_addr_t dma_mask, unsigned int 
 
 	pci_set_master(pci_dev);
 
-	/* Set the PCI DMA mask.  Try all possibilities from our
-	 * genuine mask down to 32 bits, because some architectures
-	 * (e.g. x86_64 with iommu_sac_force set) will allow 40 bit
-	 * masks event though they reject 46 bit masks.
-	 */
-	while (dma_mask > 0x7fffffffUL) {
-		rc = dma_set_mask_and_coherent(&pci_dev->dev, dma_mask);
-		if (rc == 0)
-			break;
-		dma_mask >>= 1;
-	}
+	rc = dma_set_mask_and_coherent(&pci_dev->dev, dma_mask);
 	if (rc) {
 		pci_err(pci_dev, "could not find a suitable DMA mask\n");
 		goto fail2;
@@ -1969,7 +1959,7 @@ static pci_ers_result_t efx_io_error_detected(struct pci_dev *pdev,
 	case STATE_VDPA:
 		WARN_ON(efx_nic_rev(efx) != EFX_REV_EF100);
 		efx->state = STATE_DISABLED;
-		ef100_reset_vdpa(efx);
+		ef100_vdpa_reset(&efx->vdpa_nic->vdpa_dev);
 
 		status = PCI_ERS_RESULT_DISCONNECT;
 		break;

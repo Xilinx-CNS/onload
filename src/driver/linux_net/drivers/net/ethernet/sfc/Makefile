@@ -108,10 +108,6 @@ $(warning => vDPA functionality will be disabled)
 endif
 endif
 
-ifndef CONFIG_VIRTUAL_BUS
-# Pick up exported symbols of our build of virtual_bus.ko
-KBUILD_EXTRA_SYMBOLS += $(KBUILD_EXTMOD)/../../../bus/Module.symvers
-endif
 endif # CONFIG_NET
 
 else # !KERNELRELEASE ###### The following is for the standalone Makefile case
@@ -142,7 +138,7 @@ sfc-y			:= efx.o efx_common.o efx_channels.o nic.o ef10.o \
 			   selftest.o ethtool_common.o ethtool.o \
 			   mcdi.o mcdi_port.o mcdi_port_common.o mcdi_functions.o \
 			   mcdi_filters.o ef10_sriov.o tx_tso.o \
-			   efx_devlink.o xdp.o efx_virtbus.o \
+			   efx_devlink.o xdp.o \
 			   ef100.o ef100_nic.o ef100_netdev.o ef100_ethtool.o \
 			   ef100_rx.o ef100_tx.o ef100_sriov.o ef100_rep.o \
 			   tc.o mae.o ef100_bsp.o efx_reflash.o
@@ -155,6 +151,7 @@ sfc-$(CONFIG_SFC_PTP)	+= ptp.o
 sfc-$(CONFIG_SFC_MTD)	+= mtd.o
 sfc-$(CONFIG_SFC_VDPA) += ef100_vdpa.o ef100_vdpa_ops.o mcdi_vdpa.o \
 			  ef100_iova.o
+sfc-$(CONFIG_AUXILIARY_BUS)	+= efx_auxbus.o
 ifndef EFX_NO_KCOMPAT
 ifneq ($(MAKECMDGOALS),export)
 ifndef EFX_FOR_UPSTREAM
@@ -331,20 +328,20 @@ endif # EFX_NOT_EXPORTED
 
 # Export into kernel tree
 export:
-	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c)
+	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) efx_auxbus.c
 	$(MAKE) -C siena $@
 
 export-resolve-kcompat:
-	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c)
+	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c) efx_auxbus.c
 
 # Export into a Xen kernel tree
 export-xen:
-	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c)
+	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) efx_auxbus.c
 
 # Export for SRPM
 export-srpm:
 	mkdir -p $(KDIR)/mtd
-	$(EXPORT_CMD) -o $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh
+	$(EXPORT_CMD) -o $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh efx_auxbus.c
 
 .PHONY : intranet doc clean_doc util clean_util export export-xen export-srpm
 
