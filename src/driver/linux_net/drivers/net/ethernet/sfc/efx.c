@@ -59,7 +59,7 @@
 #include "rx_common.h"
 #include "tx_common.h"
 #include "efx_devlink.h"
-#include "efx_auxbus.h"
+#include "efx_virtbus.h"
 #include "selftest.h"
 #include "sriov.h"
 #include "xdp.h"
@@ -547,7 +547,7 @@ int __efx_net_alloc(struct efx_nic *efx)
 	rc = efx_nic_init_interrupt(efx);
 	if (rc)
 		return rc;
-	efx_set_interrupt_affinity(efx);
+	efx_set_interrupt_affinity(efx, true);
 #ifdef EFX_USE_IRQ_NOTIFIERS
 	efx_register_irq_notifiers(efx);
 #endif
@@ -1280,7 +1280,7 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 		(void)cancel_delayed_work_sync(&efx->mtd_struct->creation_work);
 #endif
 
-	efx_auxbus_unregister(efx);
+	efx_virtbus_unregister(efx);
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_lro);
 #endif
@@ -1397,10 +1397,10 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	if (rc)
 		goto fail;
 
-	rc = efx_auxbus_register(efx);
+	rc = efx_virtbus_register(efx);
 	if (rc)
 		pci_warn(efx->pci_dev,
-			 "Unable to register auxiliary bus driver (%d)\n", rc);
+			 "Unable to register virtual bus driver (%d)\n", rc);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	efx->tx_queues_per_channel++;

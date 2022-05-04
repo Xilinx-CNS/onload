@@ -425,7 +425,6 @@ EFX_HAVE_VDPA_VQ_STATE_SPLIT		symbol vdpa_vq_state_split	include/linux/vdpa.h
 EFX_HAVE_GET_VQ_IRQ			member struct_vdpa_config_ops get_vq_irq include/linux/vdpa.h
 EFX_HAVE_GET_VQ_NOTIFY			member struct_vdpa_config_ops get_vq_notification include/linux/vdpa.h
 EFX_HAVE_GET_DEVICE_FEATURES		member struct_vdpa_config_ops get_device_features include/linux/vdpa.h
-EFX_HAVE_VDPA_RESET                     member struct_vdpa_config_ops reset include/linux/vdpa.h
 EFX_HAVE_GET_CONFIG_SIZE		member struct_vdpa_config_ops get_config_size include/linux/vdpa.h
 EFX_HAVE_VDPA_ALLOC_NVQS_PARAM		symtype __vdpa_alloc_device	include/linux/vdpa.h struct vdpa_device *(struct device *, const struct vdpa_config_ops *, int, size_t)
 EFX_HAVE_VDPA_ALLOC_NAME_PARAM          symtype __vdpa_alloc_device     include/linux/vdpa.h struct vdpa_device *(struct device *, const struct vdpa_config_ops *, size_t, const char *)

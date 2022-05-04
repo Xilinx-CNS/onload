@@ -27,9 +27,9 @@
 int ef100_tx_probe(struct efx_tx_queue *tx_queue)
 {
 	/* Allocate an extra descriptor for the QMDA status completion entry */
-	return efx_nic_alloc_buffer(tx_queue->efx, &tx_queue->txd,
-				    (tx_queue->ptr_mask + 2) *
-				    sizeof(efx_oword_t), GFP_KERNEL);
+	return ef100_alloc_qdma_buffer(tx_queue->efx, &tx_queue->txd,
+				       (tx_queue->ptr_mask + 2) *
+				       sizeof(efx_oword_t));
 }
 
 int ef100_tx_init(struct efx_tx_queue *tx_queue)

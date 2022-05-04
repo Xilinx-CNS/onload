@@ -2566,10 +2566,8 @@ static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 	ptp->pps_data = pps;
 
 	if (efx_phc_exposed(ptp->efx)) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 		snprintf(efx_pps_info.name, PPS_MAX_NAME_LEN, "ptp%d.ext",
 			 ptp_clock_index(ptp->phc_clock));
-#endif
 
 		pps->device = pps_register_source(&efx_pps_info,
 						  PPS_CAPTUREASSERT |

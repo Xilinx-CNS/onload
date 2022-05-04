@@ -461,21 +461,20 @@ void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 }
 
 /* May be called under the rtnl lock */
-int ef100_vdpa_reset(struct vdpa_device *vdev)
+void ef100_reset_vdpa(struct efx_nic *efx)
 {
-	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
+	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
 
 	/* vdpa device can be deleted anytime but the bar_config
 	 * could still be vdpa and hence efx->state would be STATE_VDPA.
 	 * Accordingly, ensure vdpa device exists before reset handling
 	 */
 	if (!vdpa_nic)
-		return -ENODEV;
+		return;
 
 	mutex_lock(&vdpa_nic->lock);
 	reset_vdpa_device(vdpa_nic);
 	mutex_unlock(&vdpa_nic->lock);
-	return 0;
 }
 
 static int start_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
@@ -1211,9 +1210,6 @@ const struct vdpa_config_ops ef100_vdpa_config_ops = {
 	.get_vendor_id	     = ef100_vdpa_get_vendor_id,
 	.get_status	     = ef100_vdpa_get_status,
 	.set_status	     = ef100_vdpa_set_status,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_RESET)
-	.reset               = ef100_vdpa_reset,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_CONFIG_SIZE)
 	.get_config_size     = ef100_vdpa_get_config_size,
 #endif

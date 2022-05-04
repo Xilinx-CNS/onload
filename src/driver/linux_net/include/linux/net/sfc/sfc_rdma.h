@@ -13,7 +13,7 @@
 #ifndef _SFC_RDMA_H
 #define _SFC_RDMA_H
 
-#define SFC_RDMA_DEVNAME	"rdma"
+#define SFC_RDMA_DEVNAME	"sfc,rdma"
 
 /* RDMA client API */
 enum sfc_event_type {
@@ -29,7 +29,7 @@ struct sfc_rdma_event {
 
 /** RDMA driver operations */
 struct sfc_rdma_drvops {
-	void (*handle_event)(struct auxiliary_device *auxdev,
+	void (*handle_event)(struct virtbus_device *vdev,
 			     const struct sfc_rdma_event *event);
 };
 
@@ -65,7 +65,7 @@ struct sfc_rdma_rpc {
  * @close: Closing a device unlocks it.
  */
 struct sfc_rdma_devops {
-	struct sfc_rdma_client *(*open)(struct auxiliary_device *auxdev,
+	struct sfc_rdma_client *(*open)(struct virtbus_device *vdev,
 					const struct sfc_rdma_drvops *ops);
 	int (*close)(struct sfc_rdma_client *handle);
 
@@ -81,7 +81,7 @@ struct sfc_rdma_devops {
  * @ops: Device API.
  */
 struct sfc_rdma_device {
-	struct auxiliary_device auxdev;
+	struct virtbus_device vdev;
 	const struct sfc_rdma_devops *ops;
 };
 

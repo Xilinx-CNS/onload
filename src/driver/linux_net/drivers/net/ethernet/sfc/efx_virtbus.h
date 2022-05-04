@@ -9,19 +9,10 @@
  * by the Free Software Foundation, incorporated herein by reference.
  */
 
-#ifndef EFX_AUXBUS_H
-#define EFX_AUXBUS_H
+#ifndef EFX_VIRTBUS_H
+#define EFX_VIRTBUS_H
 
 /* Driver API */
-#ifdef CONFIG_AUXILIARY_BUS
-int efx_auxbus_register(struct efx_nic *efx);
-void efx_auxbus_unregister(struct efx_nic *efx);
-#else
-static inline int efx_auxbus_register(struct efx_nic *efx)
-{
-	return 0;
-}
-
-static inline void efx_auxbus_unregister(struct efx_nic *efx) {}
-#endif
+int efx_virtbus_register(struct efx_nic *efx);
+void efx_virtbus_unregister(struct efx_nic *efx);
 #endif

@@ -14,7 +14,7 @@
 #endif
 #include "efx_common.h"
 #include "efx_channels.h"
-#include "efx_auxbus.h"
+#include "efx_virtbus.h"
 #include "debugfs.h"
 #include "io.h"
 #include "ef100_nic.h"
@@ -473,7 +473,7 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 
 	probe_data = container_of(efx, struct efx_probe_data, efx);
 	ef100_remove_netdev(probe_data);
-	efx_auxbus_unregister(efx);
+	efx_virtbus_unregister(efx);
 	efx_fini_struct_tc(efx);
 	ef100_remove(efx);
 	efx_fini_io(efx);
@@ -565,10 +565,10 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	rc = ef100_bsp_init(efx);
 	if (rc)
 		goto fail;
-	rc = efx_auxbus_register(efx);
+	rc = efx_virtbus_register(efx);
 	if (rc)
 		pci_warn(pci_dev,
-			 "Unable to register auxiliary bus driver (%d)\n", rc);
+			 "Unable to register virtual bus driver (%d)\n", rc);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 	(void)pci_enable_pcie_error_reporting(pci_dev);

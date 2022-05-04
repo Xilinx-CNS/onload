@@ -1081,15 +1081,7 @@
 #ifdef EFX_NEED_DMA_SET_MASK_AND_COHERENT
 	static inline int dma_set_mask_and_coherent(struct device *dev, u64 mask)
 	{
-		int rc;
-
-		/*
-		 * Truncate the mask to the actually supported dma_addr_t
-		 * width to avoid generating unsupportable addresses.
-		 */
-		mask = (dma_addr_t)mask;
-
-		rc = dma_set_mask(dev, mask);
+		int rc = dma_set_mask(dev, mask);
 		if (rc == 0)
 			dma_set_coherent_mask(dev, mask);
 		return rc;

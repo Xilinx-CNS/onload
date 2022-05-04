@@ -11,11 +11,9 @@
 
 #include "net_driver.h"
 #include "nic.h"
-#include <linux/auxiliary_bus.h>
+#include <linux/virtual_bus.h>
 #include <linux/net/sfc/sfc_rdma.h>
-#include "efx_auxbus.h"
-
-static DEFINE_IDA(efx_auxbus_ida);
+#include "efx_virtbus.h"
 
 struct sfc_rdma_dev {
 	struct sfc_rdma_device dev;	/* Must be first, drivers use this */
@@ -39,23 +37,23 @@ static struct efx_nic *rdma_client_to_efx(struct sfc_rdma_client *client)
 static struct device *rdma_client_to_dev(struct sfc_rdma_client *client)
 {
 	if (client && client->rdev)
-		return &client->rdev->dev.auxdev.dev;
+		return &client->rdev->dev.vdev.dev;
 	return NULL;
 }
 
-static struct sfc_rdma_client *efx_rdma_open(struct auxiliary_device *auxdev,
+static struct sfc_rdma_client *efx_rdma_open(struct virtbus_device *vdev,
 					     const struct sfc_rdma_drvops *ops)
 {
 	struct sfc_rdma_client *client;
 
-	if (!auxdev || !ops || !ops->handle_event)
+	if (!vdev || !ops || !ops->handle_event)
 		return ERR_PTR(-EINVAL);
 
 	client = kmalloc(sizeof(*client), GFP_KERNEL);
 	if (!client)
 		return ERR_PTR(-ENOMEM);
 
-	client->rdev = container_of(auxdev, struct sfc_rdma_dev, dev.auxdev);
+	client->rdev = container_of(vdev, struct sfc_rdma_dev, dev.vdev);
 	client->ops = ops;
 	list_add(&client->list, &client->rdev->clients);
 	return client;
@@ -117,7 +115,7 @@ static void efx_rdma_send_event(struct sfc_rdma_client *client,
 
 	ev.type = type;
 	ev.value = value;
-	(*client->ops->handle_event)(&client->rdev->dev.auxdev, &ev);
+	(*client->ops->handle_event)(&client->rdev->dev.vdev, &ev);
 }
 
 static const struct sfc_rdma_devops rdma_devops = {
@@ -127,22 +125,19 @@ static const struct sfc_rdma_devops rdma_devops = {
 	.fw_rpc = efx_rdma_fw_rpc,
 };
 
-static void efx_auxbus_release(struct device *dev)
+static void efx_virtbus_release(struct virtbus_device *vdev)
 {
-	struct auxiliary_device *auxdev = to_auxiliary_dev(dev);
 	struct sfc_rdma_dev *rdev;
 
-	ida_free(&efx_auxbus_ida, auxdev->id);
-	rdev = container_of(auxdev, struct sfc_rdma_dev, dev.auxdev);
+	rdev = container_of(vdev, struct sfc_rdma_dev, dev.vdev);
 	rdev->efx = NULL;
 	kfree(rdev);
 }
 
-void efx_auxbus_unregister(struct efx_nic *efx)
+void efx_virtbus_unregister(struct efx_nic *efx)
 {
 	struct sfc_rdma_dev *rdev = efx->rdev;
 	struct sfc_rdma_client *client, *temp;
-	struct auxiliary_device *auxdev;
 
 	if (!rdev)
 		return;
@@ -154,50 +149,31 @@ void efx_auxbus_unregister(struct efx_nic *efx)
 	}
 
 	efx->rdev = NULL;
-	auxdev = &rdev->dev.auxdev;
-	auxiliary_device_delete(auxdev);
-	auxiliary_device_uninit(auxdev);
+	virtbus_unregister_device(&rdev->dev.vdev);
 }
 
-int efx_auxbus_register(struct efx_nic *efx)
+int efx_virtbus_register(struct efx_nic *efx)
 {
-	struct auxiliary_device *auxdev;
 	struct sfc_rdma_dev *rdev;
 	int rc;
 
 	rdev = kzalloc(sizeof(*rdev), GFP_KERNEL);
 	if (!rdev)
 		return -ENOMEM;
-	auxdev = &rdev->dev.auxdev;
 
-	rc = ida_alloc(&efx_auxbus_ida, GFP_KERNEL);
-	if (rc < 0) {
-		kfree(rdev);
-		return rc;
-	}
-	auxdev->id = rc;
-
-	auxdev->name = SFC_RDMA_DEVNAME;
-	auxdev->dev.release = efx_auxbus_release;
-	auxdev->dev.parent = &efx->pci_dev->dev;
+	rdev->dev.vdev.name = SFC_RDMA_DEVNAME;
+	rdev->dev.vdev.release = efx_virtbus_release;
+	rdev->dev.vdev.dev.parent = &efx->pci_dev->dev;
 	rdev->dev.ops = &rdma_devops;
 	INIT_LIST_HEAD(&rdev->clients);
 
-	rc = auxiliary_device_init(auxdev);
-	if (rc)
-		goto fail;
-
-	rc = auxiliary_device_add(auxdev);
+	rc = virtbus_register_device(&rdev->dev.vdev);
 	if (rc) {
-		auxiliary_device_uninit(auxdev);
-		goto fail;
+		kfree(rdev);
+		return rc;
 	}
 
 	rdev->efx = efx;
 	efx->rdev = rdev;
 	return 0;
-fail:
-	ida_free(&efx_auxbus_ida, auxdev->id);
-	kfree(rdev);
-	return rc;
 }

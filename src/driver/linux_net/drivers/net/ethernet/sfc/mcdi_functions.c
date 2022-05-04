@@ -135,12 +135,6 @@ int efx_mcdi_ev_init(struct efx_channel *channel, bool v1_cut_thru, bool v2)
 		entries = 1;	/* No need to split the memory up any more */
 
 	dma_addr = channel->eventq.dma_addr;
-	if (efx->type->regionmap_buffer) {
-		rc = efx->type->regionmap_buffer(efx, &dma_addr);
-		if (rc)
-			return rc;
-	}
-
 	for (i = 0; i < entries; ++i) {
 		MCDI_SET_ARRAY_QWORD(inbuf, INIT_EVQ_IN_DMA_ADDR, i, dma_addr);
 		dma_addr += EFX_BUF_SIZE;
@@ -214,12 +208,6 @@ int efx_mcdi_tx_init(struct efx_tx_queue *tx_queue, bool tso_v2)
 	MCDI_SET_DWORD(inbuf, INIT_TXQ_EXT_IN_PORT_ID, efx->vport.vport_id);
 
 	dma_addr = tx_queue->txd.dma_addr;
-	if (efx->type->regionmap_buffer) {
-		rc = efx->type->regionmap_buffer(efx, &dma_addr);
-		if (rc)
-			return rc;
-	}
-
 	netif_dbg(efx, hw, efx->net_dev, "pushing TXQ %d. %zu entries (%llx)\n",
 		  tx_queue->queue, entries, (u64)dma_addr);
 
@@ -335,12 +323,6 @@ int efx_mcdi_rx_init(struct efx_rx_queue *rx_queue, bool want_outer_classes)
 	MCDI_SET_DWORD(inbuf, INIT_RXQ_V4_IN_BUFFER_SIZE_BYTES, buffer_size);
 
 	dma_addr = rx_queue->rxd.dma_addr;
-	if (efx->type->regionmap_buffer) {
-		rc = efx->type->regionmap_buffer(efx, &dma_addr);
-		if (rc)
-			return rc;
-	}
-
 	netif_dbg(efx, hw, efx->net_dev, "pushing RXQ %d. %zu entries (%llx)\n",
 			efx_rx_queue_index(rx_queue), entries, (u64)dma_addr);
 
