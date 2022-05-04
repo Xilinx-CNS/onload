@@ -60,7 +60,7 @@ def ip_is_any(ip):
            (ip[2] == any_ip4[2] or ip[2] == 0)
 
 def mac_to_str(mac):
-    return ':'.join([struct.pack('=B', s).encode('hex') for s in mac])
+    return ':'.join([struct.pack('=B', s).hex() for s in mac])
 
 
 _is_netlink_capable = None

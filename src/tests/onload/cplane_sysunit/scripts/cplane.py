@@ -16,18 +16,18 @@ CI_CFG_IPV6 = True
 '''
 /* Keys for forward cache table. */
 struct cp_fwd_key {
-ci_ip_addr_t  src;
-ci_ip_addr_t  dst;
-ci_ifid_t     ifindex;
-cicp_ip_tos_t tos;
+    ci_addr_sh_t  src;
+    ci_addr_sh_t  dst;
+    ci_ifid_t     ifindex;
+    cicp_ip_tos_t tos;
 
-ci_ifid_t     iif_ifindex;
+    ci_ifid_t     iif_ifindex;
 
-ci_uint8      flag;
-#define CP_FWD_KEY_REQ_REFRESH  0x80
-#define CP_FWD_KEY_REQ_WAIT     0x40
-#define CP_FWD_KEY_TRANSPARENT  0x20
-#define CP_FWD_KEY_SOURCELESS   0x08
+    ci_uint8      flag;
+    #define CP_FWD_KEY_REQ_REFRESH  0x80
+    #define CP_FWD_KEY_REQ_WAIT     0x40
+    #define CP_FWD_KEY_TRANSPARENT  0x20
+    #define CP_FWD_KEY_SOURCELESS   0x08
 };
 '''
 class CI_IFID:
@@ -40,20 +40,25 @@ class CICP_ROUTE_TYPE:
     ALIEN = 2
 
 class CICP_LLAP_TYPE:
-    NONE   = 0
-    VLAN   = 1
-    BOND   = 2
-    SFC    = 4
-    XMIT_HASH_LAYER2 = 8
+    NONE              = 0x0
+    VLAN              = 0x1
+    BOND              = 0x2
+    SLAVE             = 0x4
+    XMIT_HASH_LAYER2  = 0x8
     XMIT_HASH_LAYER34 = 0x10
     XMIT_HASH_LAYER23 = 0x20
-    LOOP = 0x40
-    MACVLAN = 0x80
+    LOOP              = 0x40
+    MACVLAN           = 0x80
+    VETH              = 0x100
+    ROUTE_ACROSS_NS   = 0x200
+    IPVLAN            = 0x400
 
 class CP_FWD_KEY:
-    NONE = 0
+    NONE        = 0
+    REQ_REFRESH = 0x80
+    REQ_WAIT    = 0x40
     TRANSPARENT = 0x20
-    UDP = 0x10
+    SOURCELESS  = 0x08
 
 ipaddr_t = c_uint * 4 if CI_CFG_IPV6 else c_uint
 
@@ -65,8 +70,11 @@ class cp_fwd_key(Structure):
                ]
 
 '''
-cicp_mac_rowid_t id;
-cp_version_t     version;
+typedef struct
+{
+    cicp_mac_rowid_t id;
+    cp_version_t     version;
+} cicp_verinfo_t;
 '''
 
 class cicp_verinfo(Structure):
@@ -76,38 +84,66 @@ class cicp_verinfo(Structure):
 '''
 /* Basic routing data, obtained from the routing table */
 struct cp_fwd_data_base {
-  ci_addr_sh_t      src;
-  ci_addr_sh_t      next_hop;
-  ci_mtu_t          mtu;
-  ci_ifid_t         ifindex;
+    ci_addr_sh_t      src;
+    ci_addr_sh_t      next_hop;
+    ci_mtu_t          mtu;
+    ci_ifid_t         ifindex;
+    /* Stores RTAX_HOPLIMIT attribute value. It would contain IPv4 TTL or
+    * IPv6 Hop Limit after parsing NETLINK route message. */
+    ci_uint8          hop_limit;
 };
 
 /* Routing info in the forward cache table. */
 struct cp_fwd_data {
-  struct cp_fwd_data_base base;
+    struct cp_fwd_data_base base;
 
-  ci_uint8          flags;
-  ci_mac_addr_t     src_mac;
-  cicp_hwport_mask_t hwports;
-  ci_mac_addr_t     dst_mac;
-  cicp_encap_t      encap;
+    ci_uint8          flags;
+    ci_mac_addr_t     src_mac;
+    cicp_hwport_mask_t hwports;
+    ci_mac_addr_t     dst_mac;
+    cicp_encap_t      encap;
+
+    struct cp_fwd_multipath_weight weight;
+};
+
+typedef struct {
+    cicp_llap_type_t type;
+    ci_uint16 vlan_id;
+    ci_ifid_t link_ifindex;     /*< ifindex for VLAN master, veth-peer, etc. */
+} cicp_encap_t;
+
+struct cp_fwd_multipath_weight {
+    ci_uint32 end;  /* End of weight range serviced by this entry */
+    ci_uint16 val;  /* Weight of this path: range 1:0x100 */
+    ci_uint16 flag;
+    /* This entry has the maximum end value among the paths for this route */
+    #define CP_FWD_MULTIPATH_FLAG_LAST 1
 };
 '''
+
+class cp_fwd_multipath_weight(Structure):
+    _fields_ = [('end', c_uint),
+        ('val', c_ushort),
+        ('flag', c_ushort)]
+
+class cicp_encap_t(Structure):
+    _fields_ = [('type', c_uint),
+        ('vlan_id', c_ushort),
+        ('link_ifindex', c_short)]
 
 class cp_fwd_data_base(Structure):
     _fields_ = [
         ("src", ipaddr_t), ("next_hop", ipaddr_t),
         ("mtu", c_ushort), ("ifindex", c_short),
-        ("pad", c_ubyte * 4)]
+        ("hop_limit", c_ubyte)]
 
 class cp_fwd_data(Structure):
     _fields_ = [
         ("base", cp_fwd_data_base),
         ('flags', c_ubyte),  ('src_mac', c_ubyte * 6),
         ('hwports', c_ushort), ('dst_mac', c_ubyte * 6),
-        ('encap_type', c_uint), # CICP_LLAP_TYPE
-        ('vlan_id', c_ushort),
-        ('link_ifindex', c_short),
+        ('encap', cicp_encap_t),
+        ('weight', cp_fwd_multipath_weight)
       ]
 
 
