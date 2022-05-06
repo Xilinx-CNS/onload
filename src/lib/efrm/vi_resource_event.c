@@ -103,9 +103,9 @@ efrm_eventq_register_callback(struct efrm_vi *virs,
 	instance = virs->rs.rs_instance;
 	cb_info = &efrm_nic(virs->rs.rs_client->nic)->vis[instance];
 	cb_info->vi = virs;
-	bit = test_and_set_bit(VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED,
+	bit = atomic_fetch_or(VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED,
 			       &cb_info->state);
-	EFRM_ASSERT(bit == 0);
+	EFRM_ASSERT((bit & VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED) == 0);
 unlock_and_out:
 	mutex_unlock(&register_evq_cb_mutex);
 	return rc;
@@ -129,21 +129,17 @@ void efrm_eventq_kill_callback(struct efrm_vi *virs)
 	cb_info = &efrm_nic(virs->rs.rs_client->nic)->vis[instance];
 
 	/* Disable the callback. */
-	bit = test_and_clear_bit(VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED,
+	bit = atomic_fetch_and(~VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED,
 				 &cb_info->state);
-	EFRM_ASSERT(bit);	/* do not call me twice! */
-
-	/* If the vi had been primed, unset it. */
-	test_and_clear_bit(VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING,
-			   &cb_info->state);
+	EFRM_ASSERT(bit & VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED);	/* do not call me twice! */
 
 	/* Spin until the callback is complete. */
 	do {
 		rmb();
 
 		udelay(1);
-		evq_state = cb_info->state;
-	} while ((evq_state & VI_RESOURCE_EVQ_STATE(BUSY)));
+		evq_state = atomic_read(&cb_info->state);
+	} while ((evq_state & VI_RESOURCE_EVQ_STATE_BUSY));
 
 	wmb();
 	cb_info->vi = NULL;
@@ -166,10 +162,10 @@ eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
 	/* Set the BUSY bit and clear WAKEUP_PENDING.  Do this before waking up
 	 * the sleeper to avoid races. */
 	while (1) {
-		int32_t evq_state = cb_info->state;
+		int32_t evq_state = atomic_read(&cb_info->state);
 		int32_t new_evq_state = evq_state;
 
-		if ((evq_state & VI_RESOURCE_EVQ_STATE(BUSY)) != 0) {
+		if ((evq_state & VI_RESOURCE_EVQ_STATE_BUSY) != 0) {
 			/* Races are expected here with AF_XDP (since the kernel decides
 			 * how much parallelism to use) and X3 (since a single wakeup
 			 * request is broadcast to multiple rxqs and an evq).  EF10-style
@@ -189,11 +185,11 @@ eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
 		}
 
 		if (!is_timeout)
-			new_evq_state &= ~VI_RESOURCE_EVQ_STATE(WAKEUP_PENDING);
+			new_evq_state &= ~VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING;
 
-		if (evq_state & VI_RESOURCE_EVQ_STATE(CALLBACK_REGISTERED)) {
-			new_evq_state |= VI_RESOURCE_EVQ_STATE(BUSY);
-			if (cmpxchg(&cb_info->state, evq_state,
+		if (evq_state & VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED) {
+			new_evq_state |= VI_RESOURCE_EVQ_STATE_BUSY;
+			if (atomic_cmpxchg(&cb_info->state, evq_state,
 				    new_evq_state) == evq_state) {
 				EFRM_ASSERT(cb_info->vi);
 				return cb_info->vi;
@@ -202,7 +198,7 @@ eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
 		else {
 			/* Just update the state if necessary. */
 			if (new_evq_state == evq_state ||
-			    cmpxchg(&cb_info->state, evq_state,
+			    atomic_cmpxchg(&cb_info->state, evq_state,
 				    new_evq_state) == evq_state)
 				return NULL;
 		}
@@ -226,9 +222,11 @@ static void
 eventq_unmark_callback_busy(struct efrm_nic *rnic, unsigned instance)
 {
 	struct efrm_nic_per_vi *cb_info = &rnic->vis[instance];
+	int old;
 
 	/* Clear the BUSY bit. */
-	if (!test_and_clear_bit(VI_RESOURCE_EVQ_STATE_BUSY, &cb_info->state)) {
+	old = atomic_fetch_and(~VI_RESOURCE_EVQ_STATE_BUSY, &cb_info->state);
+	if (!(old & VI_RESOURCE_EVQ_STATE_BUSY)) {
 		EFRM_ERR("%s:%d: evq_state corrupted!",
 			 __FUNCTION__, __LINE__);
 		EFRM_ASSERT(0);

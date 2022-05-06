@@ -91,9 +91,9 @@ eventq_wait__on_wakeup(ci_waiter_t* waiter, void* opaque_evdata,
   if ( rc == 0 && evdata->evq_wait_current != next_i ) {
     int bit;
     /* Post another request and go back to sleep. */
-    bit = test_and_set_bit(VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING,
+    bit = atomic_fetch_or(VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING,
                            &cb_info->state);
-    if (bit) {
+    if (bit & VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING) {
       /* This indicates that another process is attempting to do a
        * wait. */
       rc = -EBUSY;
@@ -167,8 +167,8 @@ efab_vi_rm_eventq_wait(struct efrm_vi* virs, unsigned current_ptr,
     goto clear_callback;
   }
 
-  bit = test_and_set_bit(VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING, &cb_info->state);
-  if (!bit) {
+  bit = atomic_fetch_or(VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING, &cb_info->state);
+  if (!(bit & VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING)) {
     evdata->evq_wait_current = next_i;
     evdata->evq_wait_request = next_i;
     /* Ask hardware to set wakeup bit / or wake us straight away. */
@@ -211,8 +211,8 @@ static bool efab_vi_prepare_request_wakeup(struct efrm_vi* virs,
   int bit;
 
   priv->cpcp_readable = 0;
-  bit = test_and_set_bit(VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING, &cb_info->state);
-  return ! bit;
+  bit = atomic_fetch_or(VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING, &cb_info->state);
+  return ! (bit & VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING);
 }
 
 

@@ -8,7 +8,7 @@
 
 
 struct efrm_nic_per_vi {
-	unsigned long state;
+	atomic_t state;
 	struct efrm_vi *vi;
 };
 

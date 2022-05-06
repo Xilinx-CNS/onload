@@ -53,20 +53,14 @@
 struct efrm_pd;
 
 
-/** Numbers of bits which can be set in the evq_state member of
- * vi_resource_evq_info. */
-enum {
-  /** This bit is set if a wakeup has been requested on the NIC. */
-	VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING,
-  /** This bit is set if the wakeup is valid for the sleeping
-   * process. */
-	VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED,
-  /** This bit is set if a wakeup or timeout event is currently being
-   * processed. */
-	VI_RESOURCE_EVQ_STATE_BUSY,
-};
-#define VI_RESOURCE_EVQ_STATE(X) \
-	(((int32_t)1) << (VI_RESOURCE_EVQ_STATE_##X))
+/** Fields which can be set in the evq_state member of vi_resource_evq_info. */
+/** This bit is set if a wakeup has been requested on the NIC. */
+#define VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING 1
+/** This bit is set if the wakeup is valid for the sleeping process. */
+#define VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED 2
+/** This bit is set if a wakeup or timeout event is currently being
+ * processed. */
+#define VI_RESOURCE_EVQ_STATE_BUSY 4
 
 
 /*! Global information for the VI resource manager. */
