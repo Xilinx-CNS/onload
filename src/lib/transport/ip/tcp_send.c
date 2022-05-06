@@ -2300,7 +2300,47 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
 }
 
 
+ci_uint8
+ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
+                                 struct ci_pkt_zc_payload* zcp,
+                                 unsigned payload_offset, void* prefix)
+{
+  /* TODO: VIRTBLK-1764: build the prefix */
+  return 0;
+}
+
+
+ci_uint8
+ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
+                                  struct ci_pkt_zc_payload* zcp,
+                                  unsigned payload_offset, void* prefix)
+{
+  /* TODO: VIRTBLK-1764: build the prefix */
+  return 0;
+}
+
+
 #ifndef __KERNEL__
+
+
+ci_uint8
+ci_tcp_offload_zc_send_get_prefix_len(ci_netif* ni,
+                                      const struct onload_zc_iovec* iov)
+{
+  /* TODO: VIRTBLK-1764: calculate prefix len based on iov_flags */
+  return 0;
+}
+
+
+static inline ci_uint32 zc_iov_flags_to_zcp_flags(unsigned iov_flags)
+{
+  ci_uint32 zcp_flags = 0;
+  if( iov_flags & ONLOAD_ZC_SEND_FLAG_ACCUM_CRC)
+    zcp_flags |= ZC_PAYLOAD_FLAG_ACCUM_CRC;
+  if( iov_flags & ONLOAD_ZC_SEND_FLAG_INSERT_CRC)
+    zcp_flags |= ZC_PAYLOAD_FLAG_INSERT_CRC;
+  return zcp_flags;
+}
 
 
 static inline ci_uint8
@@ -2308,8 +2348,7 @@ zc_prefix_reservation(ci_netif* ni, const struct onload_zc_iovec* iov)
 {
   if( iov->iov_flags == 0 )
     return 0;
-  /* TODO: VIRTBLK-1764: Call some callbacks that might want some space. */
-  return 0;
+  return ci_tcp_offload_zc_send_get_prefix_len(ni, iov);
 }
 
 
@@ -2529,7 +2568,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
         /* Max size is bounded by ci_ip_pkt_fmt::pay_len, minus slack to make
          * the boundary case in the loop below easier */
         const uint32_t MAX_CONTIG_LEN = INT_MAX - EF_VI_NIC_PAGE_SIZE;
-        uint32_t contig_len, room_len;
+        uint32_t contig_len, room_len, remaining_len;
 
         /* Up to the end of the current page is guaranteed to be contiguous */
         contig_len = ((iov_base + EF_VI_NIC_PAGE_SIZE) & NIC_PAGE_MASK) -
@@ -2562,10 +2601,12 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           contig_len = iov_len;
 
         do {
-          /* TODO: VIRTBLK-1762: Caution required here: the flags will change
-           * according to how the iov is split.  In particular, the insert-CRC
-           * flag only applies to portions of the iov that actually contain the
-           * CRC. */
+          /* NOTE: prefix_resv can be an overestimate if the IOV is split
+           * before we send it (either here or later in tcp_tx_reformat).
+           * In theory this can lead to us emitting an unnecessarily short
+           * packet if we think we've run out of space for prefixes, but in
+           * practice running out of space is very unlikely.
+           */
           ci_uint8 prefix_resv = zc_prefix_reservation(ni, &msg->msg.iov[j]);
 
           /* We could arguably make this dependent on
@@ -2639,8 +2680,22 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
             zcp->remote.dma_addr[i] = zc_usermem_dma_addr(um, iov_base, i);
           zcp->prefix_space = prefix_resv;
           zch->prefix_spc += prefix_resv;
-          /* TODO: VIRTBLK-1762: Set zcp->zcp_flags to the relevant subset of
-           * flags from msg->msg.iov[j]. */
+
+          zcp->zcp_flags = zc_iov_flags_to_zcp_flags(msg->msg.iov[j].iov_flags);
+          remaining_len = iov_len - room_len;
+          if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC ) {
+            /* The INSERT_CRC flag should only be attached to the final 4 bytes
+             * of the iov */
+            if( remaining_len >= 4 ) {
+              zcp->zcp_flags &= ~ZC_PAYLOAD_FLAG_INSERT_CRC;
+            }
+            else {
+              zcp->crc_insert_first_byte = (iov_len < 4) ? 4 - iov_len : 0;
+              zcp->crc_insert_n_bytes = (4 - remaining_len -
+                                         zcp->crc_insert_first_byte);
+              ci_assert_lt(remaining_len + zcp->crc_insert_first_byte, 4);
+            }
+          }
 
           ASSERT_VALID_PKT(ni, pkt);
    

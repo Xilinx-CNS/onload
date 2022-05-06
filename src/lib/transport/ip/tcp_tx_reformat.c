@@ -172,6 +172,23 @@ static void ci_tcp_tx_merge_indirect(ci_netif* __restrict__ ni,
       zcp->is_remote = split_zcp->is_remote;
       new_len = split_zcp->len - (split_len - new_paylen);
       zcp->len = split_len - new_paylen;
+
+      zcp->zcp_flags = split_zcp->zcp_flags;
+
+      if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC ) {
+        if( zcp->len >= split_zcp->crc_insert_n_bytes ) {
+          split_zcp->zcp_flags &= ~ZC_PAYLOAD_FLAG_INSERT_CRC;
+          zcp->crc_insert_first_byte = split_zcp->crc_insert_first_byte;
+          zcp->crc_insert_n_bytes = split_zcp->crc_insert_n_bytes;
+        }
+        else {
+          split_zcp->crc_insert_n_bytes -= zcp->len;
+          zcp->crc_insert_first_byte = (split_zcp->crc_insert_first_byte +
+                                        split_zcp->crc_insert_n_bytes);
+          zcp->crc_insert_n_bytes = zcp->len;
+        }
+      }
+
       if( split_zcp->is_remote ) {
         zcp->use_remote_cookie = split_zcp->use_remote_cookie;
         split_zcp->use_remote_cookie = 0;
@@ -198,9 +215,6 @@ static void ci_tcp_tx_merge_indirect(ci_netif* __restrict__ ni,
        * both sides of the split. */
       dest_zch->prefix_spc = src_zch->prefix_spc - src_prefix_spc +
                              split_zcp->prefix_space;
-      /* TODO: VIRTBLK-1762: Handle splitting of a segment in which a CRC
-       * should be inserted.
-       */
     }
     copy_n = (char*)src_zch + src_zch->end - (char*)copy_from;
     memcpy((char*)dest_zch + dest_zch->end, copy_from, copy_n);

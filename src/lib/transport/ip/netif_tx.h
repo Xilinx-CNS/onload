@@ -33,6 +33,7 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                              ef_remote_iovec** piov, unsigned iovlen)
 {
   int i, intf_i = pkt->intf_i;
+  unsigned zcp_offset;
   struct ci_pkt_zc_header* zch;
   struct ci_pkt_zc_payload* zcp;
   ef_remote_iovec* iov;
@@ -65,8 +66,14 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
    * might need one, and one for each ZC payload. */
   ci_assert_ge(iovlen, 1 + (zch->prefix_spc > 0) + zch->segs);
   i = 1;
+  zcp_offset = pkt->buf_len;
   OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-    /* TODO: VIRTBLK-1764: Call hook to build up prefix. */
+    /* TODO: VIRTBLK-1763: add mechanism for hooks to signal EAGAIN */
+    if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_ACCUM_CRC )
+      prefix_end += ci_tcp_offload_zc_send_accum_crc(ni, pkt, zcp, zcp_offset, prefix_end);
+    if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC )
+      prefix_end += ci_tcp_offload_zc_send_insert_crc(ni, pkt, zcp, zcp_offset, prefix_end);
+    zcp_offset += zcp->len;
     if( zcp->is_remote ) {
       iov[i].iov_base = zcp->remote.dma_addr[intf_i];
       iov[i].addrspace = zcp->remote.addr_space;

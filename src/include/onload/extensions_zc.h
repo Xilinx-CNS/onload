@@ -54,7 +54,28 @@ struct onload_zc_iovec {
   };
   onload_zc_handle buf;    /* Corresponding (opaque) buffer handle or
                               ONLOAD_ZC_HANDLE_NONZC */
-  unsigned iov_flags;      /* Not currently used */
+
+  /* When using EF_TCP_OFFLOAD, these flags can be set on an onload_zc_iovec
+   * passed to onload_zc_send. They instruct the offload engine to calculate
+   * and inject a CRC into an outgoing packet.
+   *
+   * The ONLOAD_ZC_SEND_FLAG_ACCUM_CRC flag indicates that the iovec's
+   * payload should contribute to the CRC. It can be specified on multiple
+   * iovecs to arrange for a CRC covering multiple regions of payload.
+   *
+   * The ONLOAD_ZC_SEND_FLAG_INSERT_CRC flag indicates that the calculated
+   * CRC should be placed at the end of the iov's payload, replacing the
+   * last 4 bytes.
+   *
+   * Once an INSERT flag has been seen on a connection, a subsequent ACCUM
+   * flag will start a new CRC.
+   *
+   * These flags must not be set if EF_TCP_OFFLOAD is not set, or is set
+   * to a mode that does not support TX CRC offload.
+   */
+  #define ONLOAD_ZC_SEND_FLAG_ACCUM_CRC       0x1
+  #define ONLOAD_ZC_SEND_FLAG_INSERT_CRC      0x2
+  unsigned iov_flags;      /* Flags */
   int rx_memreg_idx;       /* Index into the array returned from
                               onload_zc_query_rx_memregs() of the region
                               containing 'buf'. Populated by the recv

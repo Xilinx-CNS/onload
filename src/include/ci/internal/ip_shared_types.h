@@ -475,11 +475,24 @@ struct ci_ip_pkt_fmt_s {
 struct ci_pkt_zc_payload {
   ci_uint32 len;
   ci_uint8 prefix_space;       /* Reserved space for building packet prefix. */
-  ci_uint8 is_remote;
-  ci_uint8 use_remote_cookie;  /* Send a completion using app_cookie */
-                               /* This is here rather than in the union solely
-                                * for space efficiency/padding reasons */
-  ci_uint32 zcp_flags;         /* Flags from onload_zc_iovec::iov_flags. */
+  ci_uint8 is_remote : 1;
+  ci_uint8 use_remote_cookie : 1;  /* Send a completion using app_cookie
+                                    * This is here rather than in the union solely
+                                    * for space efficiency/padding reasons */
+
+  /* For messages with ZC_PAYLOAD_FLAG_INSERT_CRC, these track which
+   * bytes of the CRC to insert. Note that despite the flag name, the
+   * operation is a replacement rather than an insertion - we replace
+   * the last `crc_insert_n_bytes` of the payload with the corresponding
+   * bytes of the CRC.
+   */
+  ci_uint8 crc_insert_first_byte : 2;
+  ci_uint8 crc_insert_n_bytes : 3;
+  ci_uint8 reserved : 1;
+#define ZC_PAYLOAD_FLAG_ACCUM_CRC 0x1
+#define ZC_PAYLOAD_FLAG_INSERT_CRC 0x2
+  ci_uint16 zcp_flags;          /* Flags from onload_zc_iovec::iov_flags. */
+
   union {
     struct {
       ci_uint64 app_cookie CI_ALIGN(8);  /* From onload_zc_iovec::app_cookie */
