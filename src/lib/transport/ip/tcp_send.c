@@ -16,6 +16,7 @@
 #include "ip_internal.h"
 #include "tcp_tx.h"
 #include "ip_tx.h"
+#include <ci/internal/crc_offload_prefix.h>
 
 #if !defined(__KERNEL__)
 #include <sys/socket.h>
@@ -2305,8 +2306,15 @@ ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                  struct ci_pkt_zc_payload* zcp,
                                  unsigned payload_offset, void* prefix)
 {
-  /* TODO: VIRTBLK-1764: build the prefix */
-  return 0;
+  struct ci_tcp_offload_zc_send_prefix* crc_prefix = prefix;
+
+  ci_assert_equal(NI_OPTS(ni).tcp_offload_plugin, CITP_TCP_OFFLOAD_NVME);
+
+  crc_prefix->type = CI_TCP_OFFLOAD_ZC_SEND_PREFIX_TYPE_ACCUM;
+  crc_prefix->data_offset = payload_offset;
+  crc_prefix->accum_crc.data_len = zcp->len;
+  crc_prefix->plugin_context_id = 0; // TODO: VIRTBLK-1763: add allocator for these
+  return sizeof(*crc_prefix);
 }
 
 
@@ -2315,8 +2323,16 @@ ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                   struct ci_pkt_zc_payload* zcp,
                                   unsigned payload_offset, void* prefix)
 {
-  /* TODO: VIRTBLK-1764: build the prefix */
-  return 0;
+  struct ci_tcp_offload_zc_send_prefix* crc_prefix = prefix;
+
+  ci_assert_equal(NI_OPTS(ni).tcp_offload_plugin, CITP_TCP_OFFLOAD_NVME);
+
+  crc_prefix->type = CI_TCP_OFFLOAD_ZC_SEND_PREFIX_TYPE_INSERT;
+  crc_prefix->data_offset = payload_offset + zcp->len - zcp->crc_insert_n_bytes;
+  crc_prefix->insert_crc.first_byte = zcp->crc_insert_first_byte;
+  crc_prefix->insert_crc.n_bytes = zcp->crc_insert_n_bytes;
+  crc_prefix->plugin_context_id = 0; // TODO: VIRTBLK-1763: add allocator for these
+  return sizeof(*crc_prefix);
 }
 
 
@@ -2327,8 +2343,12 @@ ci_uint8
 ci_tcp_offload_zc_send_get_prefix_len(ci_netif* ni,
                                       const struct onload_zc_iovec* iov)
 {
-  /* TODO: VIRTBLK-1764: calculate prefix len based on iov_flags */
-  return 0;
+  ci_uint8 prefix_len = 0;
+  if( iov->iov_flags & ONLOAD_ZC_SEND_FLAG_ACCUM_CRC )
+    prefix_len += sizeof(struct ci_tcp_offload_zc_send_prefix);
+  if( iov->iov_flags & ONLOAD_ZC_SEND_FLAG_INSERT_CRC )
+    prefix_len += sizeof(struct ci_tcp_offload_zc_send_prefix);
+  return prefix_len;
 }
 
 
