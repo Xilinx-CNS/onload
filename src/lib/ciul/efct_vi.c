@@ -660,12 +660,9 @@ static int rx_rollover(ef_vi* vi, int qid)
     /* special case for when we want to ignore the first metadata, e.g. at
      * queue startup */
     rxq_ptr->prev = pkt_id;
-    rxq_ptr->next = next + 1;
+    ++next;
   }
-  else {
-    rxq_ptr->next = next;
-  }
-  rxq_ptr->sbseq = sbseq;
+  rxq_ptr->next = ((uint64_t)sbseq << 32) | next;
 
   /* Preload the superbuf's refcount with all the (potential) packets in
    * it - more efficient than incrementing for each rx individually */
@@ -1299,16 +1296,21 @@ int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
   struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
+  uint64_t sbseq_next;
 
   if( ! efct_rxq_is_active(shm) )
     return -ENOENT;
 
-  if( efct_rxq_need_rollover(shm, rxq_ptr->next) )
-    if( rx_rollover(vi, qid) < 0 )
-      return -EAGAIN;
+  sbseq_next = OO_ACCESS_ONCE(rxq_ptr->next);
 
-  *sbseq = rxq_ptr->sbseq;
-  *pktix = pkt_id_to_index_in_superbuf(rxq_ptr->next);
+  if( efct_rxq_need_rollover(shm, sbseq_next) ) {
+    *sbseq = (sbseq_next >> 32) + 1;
+    *pktix = 0;
+  }
+  else {
+    *sbseq = sbseq_next >> 32;
+    *pktix = pkt_id_to_index_in_superbuf(sbseq_next);
+  }
   return 0;
 }
 
