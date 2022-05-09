@@ -58,9 +58,9 @@ struct efrm_pd;
 #define VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING 1
 /** This bit is set if the wakeup is valid for the sleeping process. */
 #define VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED 2
-/** This bit is set if a wakeup or timeout event is currently being
- * processed. */
-#define VI_RESOURCE_EVQ_STATE_BUSY 4
+/** The remaining bits of the fields are the busyness, i.e. the number of
+ * wakeup or timeout event calbacks currently being processed. */
+#define VI_RESOURCE_EVQ_STATE_BUSY_BITSHIFT 2
 
 
 /*! Global information for the VI resource manager. */

@@ -139,7 +139,7 @@ void efrm_eventq_kill_callback(struct efrm_vi *virs)
 
 		udelay(1);
 		evq_state = atomic_read(&cb_info->state);
-	} while ((evq_state & VI_RESOURCE_EVQ_STATE_BUSY));
+	} while (evq_state >> VI_RESOURCE_EVQ_STATE_BUSY_BITSHIFT);
 
 	wmb();
 	cb_info->vi = NULL;
@@ -155,7 +155,7 @@ EXPORT_SYMBOL(efrm_eventq_kill_callback);
  * callback (nor continue to free the queue) while we hold the lock. */
 static struct efrm_vi*
 eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
-			  bool is_timeout)
+			  bool is_timeout, bool* contended)
 {
 	struct efrm_nic_per_vi *cb_info = &rnic->vis[instance];
 
@@ -164,8 +164,9 @@ eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
 	while (1) {
 		int32_t evq_state = atomic_read(&cb_info->state);
 		int32_t new_evq_state = evq_state;
+		bool was_busy = (evq_state >> VI_RESOURCE_EVQ_STATE_BUSY_BITSHIFT) != 0;
 
-		if ((evq_state & VI_RESOURCE_EVQ_STATE_BUSY) != 0) {
+		if (was_busy) {
 			/* Races are expected here with AF_XDP (since the kernel decides
 			 * how much parallelism to use) and X3 (since a single wakeup
 			 * request is broadcast to multiple rxqs and an evq).  EF10-style
@@ -177,21 +178,17 @@ eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
 					 __FUNCTION__, __LINE__, instance);
 				EFRM_ASSERT(0);
 			}
-			/* When we do encounter a race, the right thing to do
-			 * is just to return NULL in the race-loser.  The
-			 * winner will get the pointer to the VI and call the
-			 * callback. */
-			return NULL;
 		}
 
 		if (!is_timeout)
 			new_evq_state &= ~VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING;
 
 		if (evq_state & VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED) {
-			new_evq_state |= VI_RESOURCE_EVQ_STATE_BUSY;
+			new_evq_state += 1 << VI_RESOURCE_EVQ_STATE_BUSY_BITSHIFT;
 			if (atomic_cmpxchg(&cb_info->state, evq_state,
 				    new_evq_state) == evq_state) {
 				EFRM_ASSERT(cb_info->vi);
+				*contended = was_busy;
 				return cb_info->vi;
 			}
 		}
@@ -209,12 +206,15 @@ eventq_mark_callback_busy(struct efrm_nic *rnic, unsigned instance,
 /* Run an event queue's callback.  The event queue must be marked as BUSY: see
  * eventq_mark_callback_busy(). */
 static int eventq_do_callback(struct efhw_nic *nic, struct efrm_vi *virs,
-			      bool is_timeout, int budget)
+			      bool is_timeout, int budget, bool contended)
 {
 	efrm_evq_callback_fn handler = virs->evq_callback_fn;
 	void *arg = virs->evq_callback_arg;
 	EFRM_ASSERT(handler != NULL);
-	return handler(arg, is_timeout, nic, budget);
+	/* there's no need for an explicit flag on the callback to deal with the
+	 * contended case, since there's no way for the callbacks to do any less
+	 * work than they should do with a zero budget */
+	return handler(arg, is_timeout, nic, contended ? 0 : budget);
 }
 
 
@@ -222,11 +222,10 @@ static void
 eventq_unmark_callback_busy(struct efrm_nic *rnic, unsigned instance)
 {
 	struct efrm_nic_per_vi *cb_info = &rnic->vis[instance];
-	int old;
+	int old = atomic_fetch_sub(
+	               1 << VI_RESOURCE_EVQ_STATE_BUSY_BITSHIFT, &cb_info->state);
 
-	/* Clear the BUSY bit. */
-	old = atomic_fetch_and(~VI_RESOURCE_EVQ_STATE_BUSY, &cb_info->state);
-	if (!(old & VI_RESOURCE_EVQ_STATE_BUSY)) {
+	if ((old >> VI_RESOURCE_EVQ_STATE_BUSY_BITSHIFT) == 0) {
 		EFRM_ERR("%s:%d: evq_state corrupted!",
 			 __FUNCTION__, __LINE__);
 		EFRM_ASSERT(0);
@@ -241,12 +240,13 @@ efrm_eventq_do_callback(struct efhw_nic *nic, unsigned instance,
 	struct efrm_nic *rnic = efrm_nic(nic);
 	struct efrm_vi *virs;
 	int rc = 0;
+	bool contended;
 
 	EFRM_ASSERT(efrm_vi_manager);
 
-	virs = eventq_mark_callback_busy(rnic, instance, is_timeout);
+	virs = eventq_mark_callback_busy(rnic, instance, is_timeout, &contended);
 	if (virs) {
-		rc = eventq_do_callback(nic, virs, is_timeout, budget);
+		rc = eventq_do_callback(nic, virs, is_timeout, budget, contended);
 		eventq_unmark_callback_busy(rnic, instance);
 	}
 
@@ -261,6 +261,9 @@ int efrm_eventq_do_interrupt_callbacks(struct efrm_interrupt_vector *vec,
 	struct list_head vis;
 	struct efrm_nic *rnic = efrm_nic(vec->nic);
 	int rc = 0;
+	bool contended;
+	int64_t contended_seq = ~(uint64_t)0 << 63;
+	int num_vis = 0;
 
 	INIT_LIST_HEAD(&vis);
 
@@ -272,15 +275,26 @@ int efrm_eventq_do_interrupt_callbacks(struct efrm_interrupt_vector *vec,
 	spin_lock(&vec->vi_irq_lock);
 	list_for_each_entry_safe(virs, next, &vec->vi_list, irq_link) {
 		if (eventq_mark_callback_busy(rnic, virs->rs.rs_instance,
-					      is_timeout))
+					      is_timeout, &contended)) {
+			++num_vis;
+			/* Mildly sneaky: just to make the code smaller we only keep track
+			 * of 63 VIs' contention status on the vis list. Any more than
+			 * that and we assume that they're all contended by exploiting
+			 * arithmetic right shift. Assuming contention when there isn't
+			 * will only make the callbacks unnecessarily defer all their
+			 * work, it won't cause any functional harm. */
+			if (contended && num_vis < 63)
+				contended_seq |= (uint64_t)1 << num_vis;
 			list_move_tail(&virs->irq_link, &vis);
+		}
 	}
 	spin_unlock(&vec->vi_irq_lock);
 
 	/* Now that we've dropped the lock, call the handlers. */
 	list_for_each_entry(virs, &vis, irq_link) {
 		int rc1 = eventq_do_callback(vec->nic, virs, is_timeout,
-					     budget);
+					     budget, contended_seq & 1);
+		contended_seq >>= 1;
 		if (rc1 >= 0) {
 			EFRM_ASSERT(rc1 <= budget);
 			budget -= rc;

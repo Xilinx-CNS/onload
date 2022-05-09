@@ -6823,7 +6823,7 @@ static int tcp_helper_timeout(tcp_helper_resource_t* trs, int intf_i, int budget
     if( efab_tcp_helper_netif_try_lock(trs, 1) ) {
       CITP_STATS_NETIF(++ni->state->stats.timeout_interrupt_polls);
 
-      if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC ) {
+      if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC || budget <= 0 ) {
         /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
         tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
         return 0;
@@ -6917,7 +6917,7 @@ static int oo_handle_wakeup_int_driven(void* context, int is_timeout,
         CITP_STATS_NETIF(++ni->state->stats.interrupt_polls);
         ci_assert( ni->flags & CI_NETIF_FLAG_IN_DL_CONTEXT);
 
-        if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC ) {
+        if( ni->flags & CI_NETIF_FLAGS_AVOID_ATOMIC || budget <= 0 ) {
           /* Steal the locks and exit: don't attempt AF_XDP in atomic context */
           ci_bit_set(&ni->state->evq_prime_deferred, tcph_nic->thn_intf_i);
           tcp_helper_defer_dl2work(trs, OO_THR_AFLAG_POLL_AND_PRIME);
