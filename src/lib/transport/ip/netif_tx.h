@@ -107,8 +107,22 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
     *prefix_len = prefix_iov->iov_len;
     prefix_iov->addrspace = EF_ADDRSPACE_LOCAL;
     prefix_iov->flags = 0;
+#ifndef NVME_LOCAL_CRC_MODE
     iov = prefix_iov;
     ++i;
+#else
+#ifndef __KERNEL__
+    printf("%s: dumping %d byte prefix\n", __func__, prefix_iov->iov_len);
+    ci_hex_dump(ci_log_fn, prefix_start, prefix_iov->iov_len, 0);
+    printf("  packet: buf_len=%d iovcnt=%d  [ ", pkt->buf_len, i);
+    {
+      int j;
+      for( j = 0; j < i; ++j )
+        printf("%d ", iov[j].iov_len);
+    }
+    printf("]\n");
+#endif
+#endif
   }
 
   *piov = iov;

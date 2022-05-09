@@ -196,6 +196,10 @@ static void ci_tcp_tx_merge_indirect(ci_netif* __restrict__ ni,
         zcp->remote.addr_space = split_zcp->remote.addr_space;
         for( i = 0; i < oo_stack_intf_max(ni); ++i )
           zcp->remote.dma_addr[i] = split_zcp->remote.dma_addr[i] + new_len;
+#ifdef NVME_LOCAL_CRC_MODE
+        if( split_zcp->local_addr != NULL )
+          zcp->local_addr = (char*)split_zcp->local_addr + new_len;
+#endif
         dest_zch->end += oo_tx_zc_payload_size(ni);
         split_zcp->len = new_len;
       }
@@ -206,6 +210,9 @@ static void ci_tcp_tx_merge_indirect(ci_netif* __restrict__ ni,
         dest_zch->end += CI_MEMBER_OFFSET(struct ci_pkt_zc_payload, local) +
                         CI_ALIGN_FWD(zcp->len, CI_PKT_ZC_PAYLOAD_ALIGN);
         split_zcp->len = new_len;
+#ifdef NVME_LOCAL_CRC_MODE
+        zcp->local_addr = zcp->local;
+#endif
       }
       zcp->prefix_space = split_zcp->prefix_space;
       new_src_end = oo_tx_zc_payload_next(ni, split_zcp);

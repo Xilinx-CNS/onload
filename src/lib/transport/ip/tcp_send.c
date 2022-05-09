@@ -18,6 +18,10 @@
 #include "ip_tx.h"
 #include <ci/internal/crc_offload_prefix.h>
 
+#ifdef NVME_LOCAL_CRC_MODE
+#include "crc32c.h"
+#endif
+
 #if !defined(__KERNEL__)
 #include <sys/socket.h>
 #include <onload/extensions_zc.h>
@@ -351,6 +355,9 @@ void ci_tcp_tx_fill_sendq_tail(ci_netif* ni, ci_tcp_state* ts,
         zcp->prefix_space = 0;
         zcp->zcp_flags = 0;
         zcp->is_remote = 0;
+#ifdef NVME_LOCAL_CRC_MODE
+        zcp->local_addr = zcp->local;
+#endif
         zch->end += CI_MEMBER_OFFSET(struct ci_pkt_zc_payload, local) +
                     CI_ALIGN_FWD(n, CI_PKT_ZC_PAYLOAD_ALIGN);
         ++zch->segs;
@@ -2334,6 +2341,20 @@ ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   ts->current_crc_id = id;
   zcp->crc_id = id;
 
+#ifdef NVME_LOCAL_CRC_MODE
+#ifdef __KERNEL__
+  ci_log("WARNING: Unable to compute CRC in kernel context; "
+         "emitted CRC will be invalid");
+#else
+  if( zcp->local_addr == NULL ) {
+    ci_log("ERROR: %s: buffer is non-local\n", __func__);
+    abort();
+  }
+  ci_uint32 crc = crc_prefix->accum_crc.reset ? 0 : ni->state->nvme_crc_plugin_idp.crcs[id];
+  ni->state->nvme_crc_plugin_idp.crcs[id] = crc32c(crc ^ 0xffffffff, zcp->local_addr, zcp->len);
+#endif
+#endif
+
   return sizeof(*crc_prefix);
 }
 
@@ -2360,6 +2381,21 @@ ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
       ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
   }
   crc_prefix->plugin_context_id = zcp->crc_id;
+
+#ifdef NVME_LOCAL_CRC_MODE
+#ifdef __KERNEL__
+  ci_log("WARNING: Unable to insert CRC in kernel context; "
+         "emitted CRC will be invalid");
+#else
+  if( zcp->local_addr == NULL ) {
+    ci_log("ERROR: %s: buffer is non-local\n", __func__);
+    abort();
+  }
+  char* src = (char*)&ni->state->nvme_crc_plugin_idp.crcs[zcp->crc_id] + zcp->crc_insert_first_byte;
+  char* dst = (char*)zcp->local_addr + zcp->len - zcp->crc_insert_n_bytes;
+  memcpy(dst, src, zcp->crc_insert_n_bytes);
+#endif
+#endif
 
   return sizeof(*crc_prefix);
 }
@@ -2726,6 +2762,12 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           zcp->len = room_len;
           zcp->remote.app_cookie = (uintptr_t)msg->msg.iov[j].app_cookie;
           zcp->remote.addr_space = um->addr_space;
+#ifdef NVME_LOCAL_CRC_MODE
+          if( zcp->remote.addr_space == EF_ADDRSPACE_LOCAL )
+            zcp->local_addr = (void*)iov_base;
+          else
+            zcp->local_addr = NULL;
+#endif
           OO_STACK_FOR_EACH_INTF_I(ni, i)
             zcp->remote.dma_addr[i] = zc_usermem_dma_addr(um, iov_base, i);
           zcp->prefix_space = prefix_resv;
