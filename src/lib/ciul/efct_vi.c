@@ -1270,11 +1270,27 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
       const char* start = (char*)efct_rx_header(vi, pkt_id) +
                           EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
       uint64_t v = *(volatile uint64_t*)(start - 2);
-      if(CI_LIKELY( v != CI_EFCT_DEFAULT_POISON ))
+      if(CI_LIKELY( v != CI_EFCT_DEFAULT_POISON )) {
+        vi->future_qid = qid;
         return start;
+      }
     }
   }
   return NULL;
+}
+
+int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len)
+{
+  int count;
+
+  EF_VI_ASSERT(efct_rxq_is_active(&vi->efct_shm->q[0]));
+  EF_VI_ASSERT(((ci_int8) vi->future_qid) >= 0);
+  count = efct_poll_rx(vi, vi->future_qid, evs, evs_len);
+#ifndef NDEBUG
+  if( count )
+    vi->future_qid = -1;
+#endif
+  return count;
 }
 
 int efct_ef_eventq_check_event(const ef_vi* vi)

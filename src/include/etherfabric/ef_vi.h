@@ -972,6 +972,7 @@ typedef struct ef_vi {
   struct ef_vi*                 vi_qs[EF_VI_MAX_QS];
   /** Number of virtual queues for the virtual interface */
   int                           vi_qs_n;
+  char                          future_qid;
   /** Attached rxqs for efct VIs (NB: not necessarily in rxq order) */
   ef_vi_efct_rxq                efct_rxq[EF_VI_MAX_EFCT_RXQS];
   /** efct kernel/userspace shared queue area. */
@@ -1531,7 +1532,28 @@ ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags);
 extern void efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id,
                               const void** pkt_start);
 extern void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id);
+
+
+/* Allows to peek into a first part of a packet if it has been received.
+ *
+ * Returns ptr to the payload of the packet in the packet buffer or NULL.
+ * The packet might turn out invalid. The function should be followed up
+ * with efct_vi_rx_future_poll() to determine validity of the packet.
+ *
+ * Note: calling this function invalidates timestamps for pkts retrieved with
+ *       ef_eventq_poll.
+ */
 extern const void* efct_vi_rx_future_peek(ef_vi* vi);
+
+/* Polls VI in relation to the future packet in progress.
+ *
+ * Can return 1 or more events, however, the first RX event is expected to relate to
+ * the packet being peeked (notably the event could be EF_EVENT_TYPE_RX_REF_DISCARD).
+ *
+ * Must be preceded by efct_vi_rx_future_peek() returning non-NULL.
+ * Function is blind to TX packets or packets from different RX queues.
+ */
+int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len);
 
 
 /**********************************************************************
