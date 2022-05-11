@@ -28,6 +28,7 @@
 #include "ul_poll.h"
 #include "ul_epoll.h"
 
+#include <ci/internal/syscall.h>
 #include <ci/internal/banner.h>
 
 /* FIXME Yes, it is ugly. But we do not have any appropriate header */
@@ -173,7 +174,7 @@ static long oo_close_nocancel_entry(long fd)
      * which might call close()) */
     if( citp.onload_fd >= 0 )
       return ci_tcp_helper_close_no_trampoline(fd);
-    return ci_sys_close(fd);
+    return my_syscall3(close, fd, 0, 0);
   }
 
   Log_CALL(ci_log("%s: close_nocancel(%ld)", __func__, fd));
@@ -2374,7 +2375,7 @@ int ci_tcp_helper_close_no_trampoline(int fd)
   else if( onload_fd >= 0 )
     return ci_sys_ioctl(onload_fd, OO_IOC_CLOSE, &op);
   else
-    return ci_sys_close(fd);
+    return my_syscall3(close, fd, 0, 0);
 }
 
 /*! \cidoxg_end */
