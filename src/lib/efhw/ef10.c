@@ -587,6 +587,9 @@ static int _ef10_nic_check_capabilities(struct efhw_nic *nic,
 		     MC_CMD_GET_CAPABILITIES_V3_OUT_RX_TIMESTAMP_LBN))
 		*capability_flags |= NIC_FLAG_HW_RX_TIMESTAMPING;
 	if (flags & (1u <<
+		     MC_CMD_GET_CAPABILITIES_V3_OUT_TX_TIMESTAMP_LBN))
+		*capability_flags |= NIC_FLAG_HW_TX_TIMESTAMPING;
+	if (flags & (1u <<
 		     MC_CMD_GET_CAPABILITIES_V3_OUT_MCAST_FILTER_CHAINING_LBN))
 		*capability_flags |= NIC_FLAG_MULTICAST_FILTER_CHAINING;
 	if (flags & (1u <<

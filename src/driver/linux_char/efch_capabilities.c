@@ -100,8 +100,7 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     get_from_nic_flags(nic, NIC_FLAG_HW_RX_TIMESTAMPING, out);
     break;
   case EF_VI_CAP_HW_TX_TIMESTAMPING:
-    out->support_rc = -ENOSYS;
-    out->val = 0;
+    get_from_nic_flags(nic, NIC_FLAG_HW_TX_TIMESTAMPING, out);
     break;
 
   case EF_VI_CAP_PACKED_STREAM:
