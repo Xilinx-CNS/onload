@@ -5,6 +5,7 @@
 #include <ci/driver/efab/hardware.h>
 #include <ci/driver/ci_aux.h>
 #include <ci/driver/ci_efct.h>
+#include <ci/efhw/common.h>
 #include <ci/efhw/nic.h>
 #include <ci/efhw/efct.h>
 #include <ci/efhw/eventq.h>
@@ -240,6 +241,7 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
     .page_offset = 0,
     .q_size = efhw_params->evq_size * sizeof(efhw_event_t),
     .subscribe_time_sync = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS,
+    .unsol_credit = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS ? CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY  - 1 : 0,
   };
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct efhw_nic_efct_evq *efct_evq = &efct->evq[efhw_params->evq];
