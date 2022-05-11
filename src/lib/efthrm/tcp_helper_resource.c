@@ -1124,11 +1124,10 @@ static void get_if_name(ci_netif* ni, int intf_i, char* buf_out)
  */
 static int
 check_timestamping_support(const char* stack_name, const char* dir,
-                           int user_val, int arch, const char* if_name,
+                           int user_val, int device_supports_ts,
+                           const char* if_name,
                            int* out_try_ts, int* out_retry_without)
 {
-  const int device_supports_ts = arch == EFHW_ARCH_EF10;
-
   *out_try_ts = (user_val != 0);
   *out_retry_without = 0;
   if( ! device_supports_ts && (user_val == 3) ) {
@@ -1319,14 +1318,16 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
 
   rc = check_timestamping_support(ni->state->pretty_name, "RX",
                                   NI_OPTS(ni).rx_timestamping,
-                                  nic->devtype.arch, if_name,
+                                  (nic->flags & NIC_FLAG_HW_RX_TIMESTAMPING) != 0,
+                                  if_name,
                                   &info->try_rx_ts,
                                   &info->retry_without_rx_ts);
 
   if( rc == 0 )
     rc = check_timestamping_support(ni->state->pretty_name, "TX",
                                     NI_OPTS(ni).tx_timestamping,
-                                    nic->devtype.arch, if_name,
+                                    (nic->flags & NIC_FLAG_HW_TX_TIMESTAMPING) != 0,
+                                    if_name,
                                     &info->try_tx_ts,
                                     &info->retry_without_tx_ts);
 
