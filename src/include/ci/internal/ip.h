@@ -2765,6 +2765,8 @@ ci_inline const void* ci_netif_efct_pkt_start(ef_vi* vi, unsigned* pkt_id)
 {
   const void* pkt_start;
   unsigned id = efct_vi_next_rx_rq_id(vi, 0); /* TODO EFCT use correct qid */
+  if( id == ~0u )
+    return NULL;
   efct_vi_rxpkt_get(vi, id, &pkt_start);
   *pkt_id = id;
   return pkt_start;
@@ -2818,8 +2820,10 @@ ci_netif_intf_rx_future(ci_netif* ni, int intf_i, const uint32_t* poison)
     return poison;
 
   vi = ci_netif_vi(ni, intf_i);
-  if( vi->nic_type.arch == EF_VI_ARCH_EFCT )
-    return ci_netif_efct_poison_location(vi);
+  if( vi->nic_type.arch == EF_VI_ARCH_EFCT ) {
+    volatile const uint32_t* p = ci_netif_efct_poison_location(vi);
+    return p ? p : poison;
+  }
 
   pkt = ci_netif_intf_next_rx_pkt(ni, vi);
   if( pkt == NULL )

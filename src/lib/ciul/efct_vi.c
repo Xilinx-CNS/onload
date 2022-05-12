@@ -1259,6 +1259,12 @@ int efct_ef_eventq_check_event(const ef_vi* vi)
   return efct_tx_check_event(vi) || efct_rx_check_event(vi);
 }
 
+unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid)
+{
+  if( efct_rxq_need_config(&vi->efct_rxq[qid], &vi->efct_shm->q[qid]) )
+    return ~0u;
+  return vi->ep_state->rxq.rxq_ptr[qid].prev;
+}
 
 int efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, uint32_t pkt_id,
                                                ef_timespec* ts_out,

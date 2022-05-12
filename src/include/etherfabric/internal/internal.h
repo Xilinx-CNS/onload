@@ -148,10 +148,7 @@ ef_vi_inline unsigned ef_vi_next_rx_rq_id(ef_vi* vi)
   return vi->vi_rxq.ids[vi->ep_state->rxq.removed & vi->vi_rxq.mask];
 }
 
-ef_vi_inline unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid)
-{
-  return vi->ep_state->rxq.rxq_ptr[qid].prev;
-}
+unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid);
 
 
 #ifndef __KERNEL__
