@@ -837,8 +837,8 @@ cp_get_fwd_data_current(struct cp_fwd_row* r)
 static inline struct cp_fwd_rw_row*
 cp_get_fwd_rw(struct cp_fwd_table* fwd_table, cicp_verinfo_t* ver)
 {
-  ci_assert_nequal(ver->id, CICP_ROWID_BAD);
-  ci_assert(CICP_ROWID_IS_VALID(ver->id));
+  ci_assert_nequal(ver->id, CICP_MAC_ROWID_BAD);
+  ci_assert(CICP_MAC_ROWID_IS_VALID(ver->id));
   return &fwd_table->rw_rows[ver->id];
 }
 
@@ -847,8 +847,8 @@ cp_fwd_version_matches(struct cp_fwd_table* fwd_table, cicp_verinfo_t* ver)
 {
   struct cp_fwd_row* fwd;
   ci_assert_nequal(fwd_table, NULL);
-  ci_assert_nequal(ver->id, CICP_ROWID_BAD);
-  ci_assert(CICP_ROWID_IS_VALID(ver->id));
+  ci_assert_nequal(ver->id, CICP_MAC_ROWID_BAD);
+  ci_assert(CICP_MAC_ROWID_IS_VALID(ver->id));
   fwd = cp_get_fwd(fwd_table, ver);
 
   if( ver->version == *cp_fwd_version(fwd) ) {
