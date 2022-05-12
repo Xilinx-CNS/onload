@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <syscall.h>
 #include <sys/mman.h>
 #include "driver_access.h"
 #include <ci/efch/op_types.h>
@@ -1103,6 +1104,17 @@ int efct_vi_find_free_rxq(ef_vi* vi, int qid)
 }
 
 #ifndef __KERNEL__
+/* These definitions are needed to be able to build on old distros, but we
+ * have them on new builds too so that we get 'free' checking that they're
+ * the correct values */
+#define MFD_CLOEXEC 1U
+#define MFD_HUGETLB 4U
+#if defined __x86_64__
+#define __NR_memfd_create 319
+#elif defined __aarch64__
+#define __NR_memfd_create 385
+#endif
+
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 {
   int rc;
@@ -1121,7 +1133,6 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
     return -EADDRINUSE;
   }
 
-#ifdef MFD_HUGETLB
   /* The kernel code can cope with no memfd being provided, but only on older
    * kernels. MFD_HUGETLB is available in >=4.14 (after memfd_create() itself
    * in >=3.17). The fallback employs efrm_find_ksym(), so stopped working in
@@ -1129,8 +1140,8 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   {
     char name[32];
     snprintf(name, sizeof(name), "ef_vi:%d", qid);
-    mfd = memfd_create(name, MFD_CLOEXEC | MFD_HUGETLB);
-    if( mfd < 0 && errno != ENOSYS ) {
+    mfd = syscall(__NR_memfd_create, name, MFD_CLOEXEC | MFD_HUGETLB);
+    if( mfd < 0 && errno != ENOSYS && errno != EINVAL ) {
       rc = -errno;
       LOGVV(ef_log("%s: memfd_create failed %d", __FUNCTION__, rc));
       return rc;
@@ -1151,7 +1162,6 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
       return rc;
     }
   }
-#endif
 
   memset(&ra, 0, sizeof(ra));
   ef_vi_set_intf_ver(ra.intf_ver, sizeof(ra.intf_ver));
