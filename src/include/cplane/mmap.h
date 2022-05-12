@@ -44,8 +44,8 @@ CP_MAKE_MMAP_ID(cp_mmap_type_t map_type, cp_mmap_param_t param)
 
 #ifdef CP_SYSUNIT
 static const size_t CP_SHIM_MIB_BYTES = (1024 * 1024);
-static const size_t CP_SHIM_FWD_BYTES = (1024 * 1024);
-static const size_t CP_SHIM_FWD_RW_BYTES = (1024 * 1024);
+static const size_t CP_SHIM_FWD_BYTES = (1024 * 1024 * 16);
+static const size_t CP_SHIM_FWD_RW_BYTES = (1024 * 1024 * 16);
 #endif
 
 

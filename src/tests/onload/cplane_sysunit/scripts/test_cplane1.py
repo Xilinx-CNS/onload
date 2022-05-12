@@ -90,7 +90,8 @@ def kernel_has_ipv6_subtrees():
 
 
 def cpserver_extra_opts():
-    return '' if kernel_has_ipv6_subtrees() else '--ipv6-no-source'
+    extra_opts = '--fwd-max 6553'
+    return extra_opts if kernel_has_ipv6_subtrees() else extra_opts + ' --ipv6-no-source'
 
 
 def sleep_if_netlink_incapable(netns, any_bond_name):

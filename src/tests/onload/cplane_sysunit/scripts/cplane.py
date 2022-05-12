@@ -256,8 +256,7 @@ class CPServer(object):
                  extra_opts=''):
         f = tempfile.NamedTemporaryFile(prefix=name)
         data = (c_ubyte * 1024)()
-        # FIXME: guessing 4MB is enough for cplane state
-        for i in range(4096):
+        for i in range(4096 * 8):
           f.write(data)
         f.flush()
         cp_shim_file = f.name
