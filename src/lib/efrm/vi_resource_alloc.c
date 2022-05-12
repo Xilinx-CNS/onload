@@ -85,6 +85,11 @@ union vi_attr_u {
 #define VI_ATTR_FROM_O_ATTR(attr)					\
   (&(container_of((attr), union vi_attr_u, efrm_vi_attr)->vi_attr))
 
+/* Linux 4.6 introduced a specific define for this */
+#ifndef IRQ_NOTCONNECTED
+#define IRQ_NOTCONNECTED        (1U << 31)
+#endif
+
 
 /*** Data definitions ****************************************************/
 
