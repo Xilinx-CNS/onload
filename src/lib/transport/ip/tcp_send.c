@@ -2333,6 +2333,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
   ci_ip_pkt_fmt* pkt;
   int j;
   unsigned eff_mss;
+  uint32_t tcp_pay_len = 0;
   int af = ipcache_af(&ts->s.pkt);
 #if CI_CFG_TIMESTAMPING
   bool reusing_prev_pkt;
@@ -2441,6 +2442,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
       pkt->pay_len += msg->msg.iov[j].iov_len;
       oo_offbuf_advance(&pkt->buf, msg->msg.iov[j].iov_len);
       pkt->pf.tcp_tx.end_seq = msg->msg.iov[j].iov_len;
+      tcp_pay_len = msg->msg.iov[j].iov_len;
 
       ci_assert_equal(TX_PKT_LEN(pkt), oo_offbuf_ptr(&pkt->buf) - PKT_START(pkt));
       CI_USER_PTR_SET(pkt->pf.tcp_tx.next, sinf.fill_list);
@@ -2460,7 +2462,6 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
       struct ci_pkt_zc_payload* zcp = NULL;
       int i;
       uint64_t iov_base, iov_len;
-      uint32_t tcp_pay_len = 0;
 
       if( OO_SP_NOT_NULL(ts->local_peer) ) {
         /* Sending to loopback gets really complicated. We'd need to
@@ -2605,7 +2606,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           ++zch->segs;
    
           pkt->pf.tcp_tx.end_seq += room_len;
-          tcp_pay_len += pkt->pf.tcp_tx.end_seq;
+          tcp_pay_len += room_len;
           pkt->pay_len += room_len;
           zcp->is_remote = 1;
           zcp->use_remote_cookie = iov_len == room_len;
