@@ -90,7 +90,7 @@ def kernel_has_ipv6_subtrees():
 
 
 def cpserver_extra_opts():
-    extra_opts = '--fwd-max 6553'
+    extra_opts = '--fwd-max 65536'
     return extra_opts if kernel_has_ipv6_subtrees() else extra_opts + ' --ipv6-no-source'
 
 
