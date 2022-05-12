@@ -187,14 +187,6 @@ def cpdecorate(tag=None, parent_tag=None):
     return real_cpdecorate
 
 
-def v4andv6(func):
-    @pytest.mark.parametrize("v6", [False, True])
-    @functools.wraps(func)
-    def wrapper(v6):
-        func(v6=v6)
-    return wrapper
-
-
 # needs kernel >= 3.19 but 4 is good approximation
 want_macandipvlan = int(platform.release().split('.')[0]) < 4
 
@@ -420,9 +412,8 @@ def test_ensure_running_in_expected_environment(cpserver,cp,netns):
         #assert actual == expectation, desc
 
 
-@v4andv6
 @cpdecorate()
-def test_singleroute(cpserver,cp,netns,v6):
+def do_test_singleroute(cpserver,cp,netns,v6):
     hwport = 1
     ix = build_intf(netns, 'O%d'%hwport, fake_ip_subnet(v6, hwport, 2),
                     cp=cp, hwport=hwport)
@@ -437,6 +428,10 @@ def test_singleroute(cpserver,cp,netns,v6):
 
     mac = mac_addr(netns, ix)
     check_route(d, CICP_ROUTE_TYPE.NORMAL, mac, 1 << hwport)
+
+@pytest.mark.parametrize("v6", [False, True])
+def test_singleroute(v6):
+    do_test_singleroute(v6=v6)
 
 
 # Not yet converted to IPv6 because it looks at route src - need
@@ -503,9 +498,8 @@ def prep_bond(cpserver,cp,netns,hwports,v6=False,mode=1,
     return (ifname, ifnames)
 
 
-@v4andv6
 @cpdecorate()
-def test_bond(cpserver,cp,netns,v6):
+def do_test_bond(cpserver,cp,netns,v6):
     hwports = list(range(2))
     bond_name, slavenames = prep_bond(cpserver,cp,netns,hwports,v6,mode=1)
     mac = mac_addr(netns, ifname=bond_name)
@@ -523,6 +517,11 @@ def test_bond(cpserver,cp,netns,v6):
         d = wait_for_hwports(cp, v, k, 3, expected_hwports, netns)
 
         check_route(d, CICP_ROUTE_TYPE.NORMAL, mac, expected_hwports)
+
+
+@pytest.mark.parametrize("v6", [False, True])
+def test_bond(v6):
+    do_test_bond(v6=v6)
 
 
 @cpdecorate()
