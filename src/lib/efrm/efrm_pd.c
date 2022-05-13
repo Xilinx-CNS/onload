@@ -649,7 +649,7 @@ efrm_pd_bt_program(struct efrm_pd *pd, int nic_order, dma_addr_t *pci_addrs,
 		if (dma_size < bt_alloc->allocs[bt_num].bta_size)
 			dma_size = bt_alloc->allocs[bt_num].bta_size;
 	}
-	dma_addrs = kmalloc(dma_size * sizeof(dma_addr_t), GFP_ATOMIC);
+	dma_addrs = vmalloc(dma_size * sizeof(dma_addr_t));
 	/* We should not get this far without setting up at least one
 	 * buffer table allocation.
 	 */
@@ -676,13 +676,13 @@ efrm_pd_bt_program(struct efrm_pd *pd, int nic_order, dma_addr_t *pci_addrs,
 		if( rc != 0 ) {
 			if( ~bt_alloc->allocs[bt_num].bta_flags & 
 			    EFRM_BTA_FLAG_IN_RESET ) {
-				kfree(dma_addrs);
+				vfree(dma_addrs);
 				return rc;
 			}
 			rc1 = rc;
 		}
 	}
-	kfree(dma_addrs);
+	vfree(dma_addrs);
 
 	return rc1;
 }
