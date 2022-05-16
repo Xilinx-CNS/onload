@@ -882,6 +882,7 @@ ci_inline void handle_rx_post_future(ci_netif* ni,
         ci_udp_handle_rx_post_future(ni, pkt, payload, len, &future->udp);
     }
     else {
+      CITP_STATS_NETIF_INC(ni, rx_future_rollback_pkt);
       rollback_rx_future(ni, pkt, status, future);
       LOG_U(log(LPF "[%d] IP HARD "
                 "(ihl_ver=%x ihl=%d frag=%x ip_len=%d frame_len=%d)"
@@ -2109,8 +2110,10 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
    * have the lock, so we now need to check that this packet does indeed have
    * a packet arriving.
    */
-  if( ci_netif_rx_pkt_is_poisoned(pkt) )
+  if( ci_netif_rx_pkt_is_poisoned(pkt) ) {
+    CITP_STATS_NETIF_INC(ni, rx_future_contend);
     goto free_out;
+  }
 
   ci_assert_equal(pkt->intf_i, intf_i);
   ci_ip_time_update(IPTIMER_STATE(ni), start_frc);
@@ -2139,6 +2142,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   while( (rc = ef_eventq_poll(evq, ev, EF_VI_EVENT_POLL_MIN_EVS)) == 0 ) {
     ci_frc64(&now_frc);
     if( now_frc - start_frc > max_spin ) {
+      CITP_STATS_NETIF_INC(ni, rx_future_rollback_timeout);
       rollback_rx_future(ni, pkt, status, &future);
       goto free_out;
     }
@@ -2187,6 +2191,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
     }
   }
   else {
+    CITP_STATS_NETIF_INC(ni, rx_future_rollback_event);
     rollback_rx_future(ni, pkt, status, &future);
     if( evq->nic_type.arch == EF_VI_ARCH_EFCT )
       ci_netif_pkt_release_rx_1ref(ni, pkt);

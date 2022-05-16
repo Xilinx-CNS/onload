@@ -533,8 +533,16 @@ OO_STAT("Number of times we have refilled RX ring from recv() path.  This is "
         ci_uint32, rx_refill_recv, count)
 OO_STAT("Number of RX packets detected from the future.",
         ci_uint32, rx_future, count)
+OO_STAT("Number of RX packets detected from the future but contended.",
+        ci_uint32, rx_future_contend, count)
 OO_STAT("Number of RX packets detected from the future which did not complete.",
         ci_uint32, rx_future_rollback, count)
+OO_STAT("Number of RX packets from the future which were bad.",
+        ci_uint32, rx_future_rollback_pkt, count)
+OO_STAT("Number of RX packets from the future which did not arrive.",
+        ci_uint32, rx_future_rollback_timeout, count)
+OO_STAT("Number of RX packets from the future where other event arrived.",
+        ci_uint32, rx_future_rollback_event, count)
 OO_STAT("Number of times we've tried to free packet-buffers by reaping.  "
         "Indicates that we are very close to a memory_pressure situation.",
         ci_uint32, reap_rx_limited, count)
