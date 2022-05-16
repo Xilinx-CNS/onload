@@ -873,6 +873,8 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->rxq_size = atoi(s);
   if ( (s = getenv("EF_RXQ_LIMIT")) )
     opts->rxq_limit = atoi(s);
+  if ( (s = getenv("EF_SHARED_RXQ_NUM")) )
+    opts->shared_rxq_num = atoi(s);
   if ( (s = getenv("EF_TXQ_SIZE")) )
     opts->txq_size = atoi(s);
   if ( (s = getenv("EF_SEND_POLL_THRESH")) )

@@ -930,6 +930,18 @@ CI_CFG_OPT("EF_RXQ_LIMIT", rxq_limit, ci_int32,
 "when it has a value larger than the ring size (EF_RXQ_SIZE).",
            , , 65535, CI_CFG_RX_DESC_BATCH, 65535, level)
 
+CI_CFG_OPT("EF_SHARED_RXQ_NUM", shared_rxq_num, ci_int32,
+"Experimental option: this option may be changed or removed in future "
+"releases. For adapters using shared receive queues for their traffic (X3), "
+"the queue number to use for the next filter required. Subsequent filters "
+"will share the same queue number (if possible), in order to minimize the "
+"number of queues needing to be polled. In some cases (e.g. multicast "
+"replication, IPv6, etc.) Onload may be required to choose a different "
+"receive queue to that preferred by this option. "
+"If this option is not used, the default is to spread out stacks amongst "
+"available queues.",
+           , , -1, -1, 7, count)
+
 CI_CFG_OPT("EF_EVS_PER_POLL", evs_per_poll, ci_uint32,
 "Sets the number of hardware network events to handle before performing other "
 "work.  This is a hint for internal tuning, and the actual number handled "

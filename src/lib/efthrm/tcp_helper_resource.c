@@ -945,15 +945,21 @@ void tcp_helper_vi_adjust_filter_params(tcp_helper_resource_t* trs, int hwport,
 {
   int intf_i;
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
-  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
-    ef_vi* vi = &trs->netif.nic_hw[intf_i].vis[0];
-    if( vi->efct_shm ) {
-      if( vi->efct_shm->q[0].superbuf_pkts ) {
-        *rxq = vi->efct_shm->q[0].qid;
-        *flags |= EFHW_FILTER_F_PREF_RXQ;
-      }
-      else {
-        *flags |= EFHW_FILTER_F_ANY_RXQ;
+  if( NI_OPTS_TRS(trs).shared_rxq_num >= 0 ) {
+    *rxq = NI_OPTS_TRS(trs).shared_rxq_num;
+    *flags |= EFHW_FILTER_F_PREF_RXQ;
+  }
+  else {
+    if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
+      ef_vi* vi = &trs->netif.nic_hw[intf_i].vis[0];
+      if( vi->efct_shm ) {
+        if( vi->efct_shm->q[0].superbuf_pkts ) {
+          *rxq = vi->efct_shm->q[0].qid;
+          *flags |= EFHW_FILTER_F_PREF_RXQ;
+        }
+        else {
+          *flags |= EFHW_FILTER_F_ANY_RXQ;
+        }
       }
     }
   }
