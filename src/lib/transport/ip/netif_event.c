@@ -2100,9 +2100,17 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   else {
     pkt = ci_netif_intf_next_rx_pkt(ni, evq);
     dma = pkt->dma_start;
-    if( pkt == NULL || ci_netif_rx_pkt_is_poisoned(pkt) )
+    if( pkt == NULL )
       return 0;
   }
+
+  /* When we first detect the incoming packet we do so without the stack
+   * lock. We've re-checked what the next expected packet is, now that we
+   * have the lock, so we now need to check that this packet does indeed have
+   * a packet arriving.
+   */
+  if( ci_netif_rx_pkt_is_poisoned(pkt) )
+    goto free_out;
 
   ci_assert_equal(pkt->intf_i, intf_i);
   ci_ip_time_update(IPTIMER_STATE(ni), start_frc);
