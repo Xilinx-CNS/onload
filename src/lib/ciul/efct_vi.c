@@ -1112,7 +1112,7 @@ int efct_vi_find_free_rxq(ef_vi* vi, int qid)
 #if defined __x86_64__
 #define __NR_memfd_create 319
 #elif defined __aarch64__
-#define __NR_memfd_create 385
+#define __NR_memfd_create 279
 #endif
 
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
