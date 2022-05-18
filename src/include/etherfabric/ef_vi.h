@@ -1434,6 +1434,12 @@ ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
                                             unsigned* flags_out);
 
 
+extern int
+efct_receive_get_timestamp_with_sync_flags(ef_vi* vi, uint32_t pkt_id,
+                                               ef_timespec* ts_out,
+                                               unsigned* flags_out);
+
+
 /*! \brief Retrieve the number of bytes in a received packet in RX event
 **         merge mode
 **
