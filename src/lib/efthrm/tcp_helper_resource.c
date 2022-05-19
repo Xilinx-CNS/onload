@@ -4166,15 +4166,21 @@ static void generate_efct_filter_irqmask(cpumask_t* result)
   /* The goal here is to maintain NUMA-locality, but avoid contention between
    * app and IRQs. */
   int cpu;
+#ifdef EFRM_TASK_HAS_CPUMASK
+/* >= 5.3, backported to RHEL8 */
+  cpumask_t* current_cpus = &current->cpus_mask;
+#else
+  cpumask_t* current_cpus = &current->cpus_allowed;
+#endif
 
   cpumask_clear(result);
-  for_each_cpu(cpu, &current->cpus_mask)
+  for_each_cpu(cpu, current_cpus)
     cpumask_or(result, result, cpumask_of_node(cpu_to_node(cpu)));
   /* If the app is spanned across every CPU on its node(s) then it's better
    * to have potential contention than to do cross-NUMA stuff. Also covers the
    * degenerate case of an app being unaffinitised. */
-  if( ! cpumask_equal(result, &current->cpus_mask) )
-    cpumask_andnot(result, result, &current->cpus_mask);
+  if( ! cpumask_equal(result, current_cpus) )
+    cpumask_andnot(result, result, current_cpus);
 }
 
 int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
