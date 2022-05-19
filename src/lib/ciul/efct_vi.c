@@ -562,8 +562,15 @@ static void efct_ef_vi_transmitv_ctpio_copy(ef_vi* vi, size_t frame_len,
                                             const struct iovec* iov, int iovcnt,
                                             unsigned threshold, void* fallback)
 {
-  /* Fallback is unnecessary for this architecture */
+  int i;
+
   efct_ef_vi_transmitv_ctpio(vi, frame_len, iov, iovcnt, threshold);
+
+  /* This could be made more efficient, if anyone cares enough */
+  for( i = 0; i < iovcnt; ++i ) {
+    memcpy(fallback, iov[i].iov_base, iov[i].iov_len);
+    fallback = (char*)fallback + iov[i].iov_len;
+  }
 }
 
 static inline int efct_ef_vi_ctpio_fallback(ef_vi* vi, ef_request_id dma_id)
