@@ -2314,6 +2314,7 @@ ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   int rc;
 
   ci_assert_equal(NI_OPTS(ni).tcp_offload_plugin, CITP_TCP_OFFLOAD_NVME);
+  ci_assert_nflags(pkt->flags, CI_PKT_FLAG_RTQ_RETRANS);
 
   crc_prefix->type = CI_TCP_OFFLOAD_ZC_SEND_PREFIX_TYPE_ACCUM;
   crc_prefix->data_offset = payload_offset;

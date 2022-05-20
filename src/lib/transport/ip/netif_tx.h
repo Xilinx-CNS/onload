@@ -69,7 +69,8 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   i = 1;
   zcp_offset = pkt->buf_len;
   OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-    if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_ACCUM_CRC ) {
+    if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_ACCUM_CRC &&
+        ~pkt->flags & CI_PKT_FLAG_RTQ_RETRANS ) {
       ci_int8 prefix_size = ci_tcp_offload_zc_send_accum_crc(ni, pkt, zcp,
                                                               zcp_offset,
                                                               prefix_end);
