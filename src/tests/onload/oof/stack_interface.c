@@ -44,6 +44,7 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs,
                                   int hwport, int* vi_id, int* rxq,
                                   unsigned *flags)
 {
+  *vi_id = trs->stack_id;
 }
 
 int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
