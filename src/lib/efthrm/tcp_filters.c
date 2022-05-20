@@ -296,11 +296,12 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
     rxq = -1;
     if( replace )
       insert_flags |= EFHW_FILTER_F_REPLACE;
-    if( ! cluster )
+    if( ! cluster && ! kernel_redirect )
       tcp_helper_vi_adjust_filter_params(oofilter->trs, hwport, &rxq,
                                          &insert_flags);
     rc = efrm_filter_insert(get_client(hwport), &spec, &rxq,
-                            cluster ? NULL : &oofilter->trs->filter_irqmask,
+                            cluster || kernel_redirect ? NULL :
+                                              &oofilter->trs->filter_irqmask,
                             insert_flags);
     /* ENETDOWN indicates that the hardware has gone away. This is not a
      * failure condition at this layer as we can attempt to restore filters
