@@ -940,26 +940,25 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
 }
 
 
-void tcp_helper_vi_adjust_filter_params(tcp_helper_resource_t* trs, int hwport,
-                                        int* rxq, unsigned *flags)
+void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
+                                  int* vi_id, int* rxq, unsigned *flags)
 {
   int intf_i;
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
-  if( NI_OPTS_TRS(trs).shared_rxq_num >= 0 ) {
-    *rxq = NI_OPTS_TRS(trs).shared_rxq_num;
-    *flags |= EFHW_FILTER_F_PREF_RXQ;
-  }
-  else {
-    if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
-      ef_vi* vi = &trs->netif.nic_hw[intf_i].vis[0];
-      if( vi->efct_shm ) {
-        if( vi->efct_shm->q[0].superbuf_pkts ) {
-          *rxq = vi->efct_shm->q[0].qid;
-          *flags |= EFHW_FILTER_F_PREF_RXQ;
-        }
-        else {
-          *flags |= EFHW_FILTER_F_ANY_RXQ;
-        }
+  if( (intf_i = trs->netif.hwport_to_intf_i[hwport]) >= 0 ) {
+    ef_vi* vi = &trs->netif.nic_hw[intf_i].vis[0];
+    *vi_id = EFAB_VI_RESOURCE_INSTANCE(tcp_helper_vi(trs, intf_i));
+    if( NI_OPTS_TRS(trs).shared_rxq_num >= 0 ) {
+      *rxq = NI_OPTS_TRS(trs).shared_rxq_num;
+      *flags |= EFHW_FILTER_F_PREF_RXQ;
+    }
+    else if( vi->efct_shm ) {
+      if( vi->efct_shm->q[0].superbuf_pkts ) {
+        *rxq = vi->efct_shm->q[0].qid;
+        *flags |= EFHW_FILTER_F_PREF_RXQ;
+      }
+      else {
+        *flags |= EFHW_FILTER_F_ANY_RXQ;
       }
     }
   }

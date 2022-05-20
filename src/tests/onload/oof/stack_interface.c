@@ -40,8 +40,9 @@ int tcp_helper_vi_hw_drop_filter_supported(tcp_helper_resource_t* trs,
   return 1;
 }
 
-void tcp_helper_vi_adjust_filter_params(tcp_helper_resource_t* trs,
-                                        int hwport, int* rxq, unsigned *flags)
+void tcp_helper_get_filter_params(tcp_helper_resource_t* trs,
+                                  int hwport, int* vi_id, int* rxq,
+                                  unsigned *flags)
 {
 }
 

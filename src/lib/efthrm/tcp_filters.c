@@ -124,8 +124,8 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
 {
   struct efx_filter_spec spec;
   int rc = 0;
-  int rxq;
-  int vi_id;
+  int rxq = -1;
+  int vi_id = -1;
   const u8* mac_ptr = NULL;
   int replace = false;
   int kernel_redirect = src_flags & OO_HW_SRC_FLAG_KERNEL_REDIRECT;
@@ -149,7 +149,8 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
                                     oofilter->plugin_vi);
 #endif
   else
-    vi_id = tcp_helper_rx_vi_id(oofilter->trs, hwport);
+    tcp_helper_get_filter_params(oofilter->trs, hwport, &vi_id, &rxq,
+                                 &insert_flags);
 
   if( vi_id  >= 0 ) {
     int flags = EFX_FILTER_FLAG_RX_SCATTER;
@@ -293,12 +294,8 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
         return 0;
       }
     }
-    rxq = -1;
     if( replace )
       insert_flags |= EFHW_FILTER_F_REPLACE;
-    if( ! cluster && ! kernel_redirect )
-      tcp_helper_vi_adjust_filter_params(oofilter->trs, hwport, &rxq,
-                                         &insert_flags);
     rc = efrm_filter_insert(get_client(hwport), &spec, &rxq,
                             cluster || kernel_redirect ? NULL :
                                               &oofilter->trs->filter_irqmask,
