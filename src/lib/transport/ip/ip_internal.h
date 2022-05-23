@@ -854,7 +854,7 @@ ci_inline void ci_pkt_zc_free_clean(ci_ip_pkt_fmt* pkt,
  ****************************** ZC send offloads *********************
  *********************************************************************/
 
-ci_uint8
+ci_int8
 ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                  struct ci_pkt_zc_payload* zcp,
                                  unsigned payload_offset, void* prefix);

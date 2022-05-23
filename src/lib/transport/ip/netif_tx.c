@@ -136,12 +136,16 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
 
         iov_len = ci_netif_pkt_to_remote_iovec(ni, pkt, &remote_iov, &extra.mark,
                                                sizeof(remote_iov_storage) / sizeof(remote_iov_storage[0]));
-
-        rc = ef_vi_transmitv_init_extra(vi, extra.mark ? &extra : NULL, remote_iov, iov_len, OO_PKT_ID(pkt));
+        if( CI_UNLIKELY(iov_len < 0) ) {
+          rc = iov_len;
+        }
+        else {
+          rc = ef_vi_transmitv_init_extra(vi, extra.mark ? &extra : NULL, remote_iov, iov_len, OO_PKT_ID(pkt));
 #if CI_CFG_CTPIO
-        if( rc >= 0 )
-          posted_dma = 1;
+          if( rc >= 0 )
+            posted_dma = 1;
 #endif
+        }
       }
       else {
         iov_len = ci_netif_pkt_to_iovec(ni, pkt, iov,
@@ -173,7 +177,7 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
         CI_DEBUG(pkt->netif.tx.dmaq_next = OO_PP_NULL);
       }
       else {
-        /* Descriptor ring is full. */
+        /* Descriptor ring or plugin id pool is full. */
 #if CI_CFG_STATS_NETIF
         if( (ci_uint32) dmaq->num > ni->state->stats.tx_dma_max )
           ni->state->stats.tx_dma_max = dmaq->num;

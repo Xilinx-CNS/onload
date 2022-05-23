@@ -41,6 +41,8 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   ef_remote_iovec* prefix_iov;
   char* prefix_start;
   char* prefix_end;
+  unsigned prev_id;
+  ci_tcp_state* ts = SP_TO_TCP(ni, pkt->pf.tcp_tx.sock_id);
 
   ci_assert_flags(pkt->flags, CI_PKT_FLAG_INDIRECT);
   ci_assert_lt((unsigned) intf_i, CI_CFG_MAX_INTERFACES);
@@ -67,11 +69,21 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
    * might need one, and one for each ZC payload. */
   ci_assert_ge(iovlen, 1 + (zch->prefix_spc > 0) + zch->segs);
   i = 1;
+  prev_id = ts->current_crc_id;
   zcp_offset = pkt->buf_len;
   OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-    /* TODO: VIRTBLK-1763: add mechanism for hooks to signal EAGAIN */
-    if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_ACCUM_CRC )
-      prefix_end += ci_tcp_offload_zc_send_accum_crc(ni, pkt, zcp, zcp_offset, prefix_end);
+    if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_ACCUM_CRC ) {
+      ci_int8 prefix_size = ci_tcp_offload_zc_send_accum_crc(ni, pkt, zcp,
+                                                              zcp_offset,
+                                                              prefix_end);
+      if( prefix_size < 0 ) {
+        LOG_NT(log("%s: NVME plugin idp full, pkt id=", __FUNCTION__, OO_PKT_ID(pkt)));
+        ts->current_crc_id = prev_id;
+        ci_nvme_plugin_crc_idp_full_cleanup(ni, pkt, zcp, prev_id);
+        return -EAGAIN;
+      }
+      prefix_end += prefix_size;
+    }
     if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC )
       prefix_end += ci_tcp_offload_zc_send_insert_crc(ni, pkt, zcp, zcp_offset, prefix_end);
     zcp_offset += zcp->len;

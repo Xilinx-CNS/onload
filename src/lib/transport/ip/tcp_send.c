@@ -2303,19 +2303,31 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
 }
 
 
-ci_uint8
+ci_int8
 ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                  struct ci_pkt_zc_payload* zcp,
                                  unsigned payload_offset, void* prefix)
 {
   struct ci_tcp_offload_zc_send_prefix* crc_prefix = prefix;
+  ci_tcp_state* ts = SP_TO_TCP(ni, pkt->pf.tcp_tx.sock_id);
+  unsigned id = ts->current_crc_id;
+  int rc;
 
   ci_assert_equal(NI_OPTS(ni).tcp_offload_plugin, CITP_TCP_OFFLOAD_NVME);
 
   crc_prefix->type = CI_TCP_OFFLOAD_ZC_SEND_PREFIX_TYPE_ACCUM;
   crc_prefix->data_offset = payload_offset;
   crc_prefix->accum_crc.data_len = zcp->len;
-  crc_prefix->plugin_context_id = 0; // TODO: VIRTBLK-1763: add allocator for these
+
+  if( id == ZC_NVME_CRC_ID_INVALID ) {
+    rc = ci_nvme_plugin_crc_id_alloc(&ni->state->nvme_crc_plugin_idp, &id);
+    if( rc < 0 )
+      return rc;
+  }
+  crc_prefix->plugin_context_id = id;
+  ts->current_crc_id = id;
+  zcp->crc_id = id;
+
   return sizeof(*crc_prefix);
 }
 
@@ -2326,6 +2338,8 @@ ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                   unsigned payload_offset, void* prefix)
 {
   struct ci_tcp_offload_zc_send_prefix* crc_prefix = prefix;
+  ci_tcp_state* ts = SP_TO_TCP(ni, pkt->pf.tcp_tx.sock_id);
+  unsigned id = ts->current_crc_id;
 
   ci_assert_equal(NI_OPTS(ni).tcp_offload_plugin, CITP_TCP_OFFLOAD_NVME);
 
@@ -2333,7 +2347,13 @@ ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   crc_prefix->data_offset = payload_offset + zcp->len - zcp->crc_insert_n_bytes;
   crc_prefix->insert_crc.first_byte = zcp->crc_insert_first_byte;
   crc_prefix->insert_crc.n_bytes = zcp->crc_insert_n_bytes;
-  crc_prefix->plugin_context_id = 0; // TODO: VIRTBLK-1763: add allocator for these
+  crc_prefix->plugin_context_id = id;
+
+  if( ci_nvme_plugin_crc_last_byte_sent(zcp) )
+    ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
+
+  zcp->crc_id = id;
+
   return sizeof(*crc_prefix);
 }
 
@@ -2694,6 +2714,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           tcp_pay_len += room_len;
           pkt->pay_len += room_len;
           zcp->is_remote = 1;
+          zcp->crc_id = ZC_NVME_CRC_ID_INVALID;
           zcp->use_remote_cookie = iov_len == room_len;
           zcp->len = room_len;
           zcp->remote.app_cookie = (uintptr_t)msg->msg.iov[j].app_cookie;

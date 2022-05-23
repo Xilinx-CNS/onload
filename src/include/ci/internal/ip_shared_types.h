@@ -492,6 +492,7 @@ struct ci_pkt_zc_payload {
 #define ZC_PAYLOAD_FLAG_ACCUM_CRC 0x1
 #define ZC_PAYLOAD_FLAG_INSERT_CRC 0x2
   ci_uint16 zcp_flags;          /* Flags from onload_zc_iovec::iov_flags. */
+  ci_uint32 crc_id;
 
   union {
     struct {
@@ -1499,6 +1500,15 @@ struct ci_netif_state_s {
    * in which events are acquired in kernel, stored here,
    * and processed in UL */
   ef_event      events[256];
+
+
+#define ZC_NVME_CRC_IDP_CAP (1 << 16)
+  struct nvme_crc_plugin_idp_t {
+    unsigned    fifo_mask;
+    unsigned    fifo_rd_i;
+    unsigned    fifo_wr_i;
+    ci_uint16    fifo[ZC_NVME_CRC_IDP_CAP];
+  } nvme_crc_plugin_idp;
 
   /* Followed by:
   **
@@ -2889,6 +2899,11 @@ struct ci_tcp_state_s {
   ci_uint64             plugin_ddr_base;
   ci_uint64             plugin_ddr_size;
 #endif
+
+  /* NVMe plugin id
+   * The special id is set when a new id should be generated */
+#define ZC_NVME_CRC_ID_INVALID (ci_uint32)(-1)
+  ci_uint32             current_crc_id;
 };
 
 
