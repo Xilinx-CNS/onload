@@ -30,7 +30,8 @@ ci_inline void ci_netif_pkt_tx_assert_len(ci_netif* ni, ci_ip_pkt_fmt* pkt,
 
 ci_inline int
 ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
-                             ef_remote_iovec** piov, unsigned iovlen)
+                             ef_remote_iovec** piov, uint32_t* prefix_len,
+                             unsigned iovlen)
 {
   int i, intf_i = pkt->intf_i;
   unsigned zcp_offset;
@@ -93,6 +94,7 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                             CI_CFG_PKT_BUF_SIZE - zch->prefix_spc);
     prefix_iov->iov_len = prefix_end - prefix_start;
     ci_assert_le(prefix_iov->iov_len, zch->prefix_spc);
+    *prefix_len = prefix_iov->iov_len;
     prefix_iov->addrspace = EF_ADDRSPACE_LOCAL;
     prefix_iov->flags = 0;
     iov = prefix_iov;

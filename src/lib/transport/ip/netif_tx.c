@@ -132,10 +132,12 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, oo_pktq* dmaq, ef_vi* vi,
          * we could. */
         ef_remote_iovec remote_iov_storage[CI_IP_PKT_SEGMENTS_MAX + 1];
         ef_remote_iovec* remote_iov = remote_iov_storage;
+        struct ef_vi_tx_extra extra = { .flags = EF_VI_TX_EXTRA_MARK, .mark = 0 };
 
-        iov_len = ci_netif_pkt_to_remote_iovec(ni, pkt, &remote_iov,
+        iov_len = ci_netif_pkt_to_remote_iovec(ni, pkt, &remote_iov, &extra.mark,
                                                sizeof(remote_iov_storage) / sizeof(remote_iov_storage[0]));
-        rc = ef_vi_transmitv_init_extra(vi, NULL, remote_iov, iov_len, OO_PKT_ID(pkt));
+
+        rc = ef_vi_transmitv_init_extra(vi, extra.mark ? &extra : NULL, remote_iov, iov_len, OO_PKT_ID(pkt));
 #if CI_CFG_CTPIO
         if( rc >= 0 )
           posted_dma = 1;
