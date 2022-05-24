@@ -89,4 +89,4 @@ Linux distributions:
 The publicly-hosted repository is a community-supported project.
 
 Supported releases of OpenOnload are available from
-https://support-nic.xilinx.com/wp/onload
+https://www.xilinx.com/support/download/nic-software-and-drivers.html#open
