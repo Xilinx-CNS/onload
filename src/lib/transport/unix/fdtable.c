@@ -2126,18 +2126,18 @@ int citp_ep_close(unsigned fd)
 
   /* Initialise fdtable and trampolining (i.e. citp.onload_fd) if needed.
    * Do not allow to close log_fd or onload_fd unknowingly. */
-  if( citp_fdtable.inited_count == 0 ) {
-    CITP_FDTABLE_LOCK();
-    if( citp.onload_fd < 0 )
-      __oo_service_fd(true);
-    else
-      __citp_fdtable_extend(CI_MAX(citp.log_fd, citp.onload_fd));
-    CITP_FDTABLE_UNLOCK();
+  if( fd >= citp_fdtable.inited_count ) {
+    if( citp_fdtable.inited_count == 0 || citp_fd_is_special(fd) ) {
+      CITP_FDTABLE_LOCK();
+      if( citp.onload_fd < 0 )
+        __oo_service_fd(true);
+      else
+        __citp_fdtable_extend(CI_MAX(citp.log_fd, citp.onload_fd));
+      CITP_FDTABLE_UNLOCK();
+    }
+    if( fd >= citp_fdtable.inited_count )
+      return ci_tcp_helper_close_no_trampoline(fd);
   }
-
-  /* Do not touch fdtable when too large value. */
-  if( fd >= citp_fdtable.inited_count )
-    return ci_tcp_helper_close_no_trampoline(fd);
 
   /* Interlock against other closes, against the fdtable being extended,
   ** and against select and poll.

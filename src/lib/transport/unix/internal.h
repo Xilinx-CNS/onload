@@ -787,6 +787,10 @@ extern void        __citp_fdtable_reserve(int fd, int reserve) CI_HF;
   */
 
 
+ci_inline bool citp_fd_is_special(int fd) {
+   return fd == citp.log_fd || fd == citp.onload_fd;
+}
+
 /* Extend the initialisation of the FD table, marking each FD as unknown */
 ci_inline void __citp_fdtable_extend(unsigned fd) {
   unsigned i, max;
@@ -799,7 +803,7 @@ ci_inline void __citp_fdtable_extend(unsigned fd) {
 
   if( max > citp_fdtable.inited_count ) {
     for( i = citp_fdtable.inited_count; i < max; ++i ) {
-      if( i != citp.log_fd && i != citp.onload_fd )
+      if( ! citp_fd_is_special(i) )
 	citp_fdtable.table[i].fdip = fdip_unknown;
       else
 	citp_fdtable.table[i].fdip = fdi_to_fdip(&citp_the_reserved_fd);
