@@ -2137,6 +2137,7 @@ static void stack_lots(ci_netif* ni)
   stack_time(ni);
   ci_log("--------------------- process env --------------------------");
   process_dump(ni);
+  fflush(NULL);
 }
 
 static void stack_describe_stats(ci_netif* ni){
