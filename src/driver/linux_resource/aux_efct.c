@@ -363,7 +363,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   EFRM_NOTICE("%s name %s version %#x", __func__, id->name, edev->version);
 
   if( edev->version >> 16 != XLNX_EFCT_AUX_VERSION >> 16 ) {
-    EFRM_ERR("%s: incompatible xlnx_efct driver: have %#x want %#x",
+    EFRM_ERR("%s: incompatible xilinx_efct driver: have %#x want %#x",
              __func__, edev->version, XLNX_EFCT_AUX_VERSION);
     return -EPROTOTYPE;
   }
@@ -489,7 +489,6 @@ void efct_remove(struct auxiliary_device *auxdev)
 
 
 static const struct auxiliary_device_id efct_id_table[] = {
-  { .name = "xlnx_efct." XLNX_EFCT_DEVNAME, },
   { .name = "xilinx_efct." XLNX_EFCT_DEVNAME, },
   {},
 };
