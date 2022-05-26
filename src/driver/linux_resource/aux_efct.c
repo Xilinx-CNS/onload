@@ -442,7 +442,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   struct efhw_nic_efct *efct;
   int i;
 
-  EFRM_NOTICE("%s", __func__);
+  EFRM_TRACE("%s: %s", __func__, dev_name(&auxdev->dev));
 
   nic = efhw_nic_find_by_dev(&auxdev->dev);
   if( !nic )
