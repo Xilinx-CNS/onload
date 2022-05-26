@@ -1686,18 +1686,14 @@ CI_CFG_OPT("EF_AUTO_FLOWLABELS", auto_flowlabels, ci_uint32,
 #define CITP_TCP_OFFLOAD_OFF        0
 #define CITP_TCP_OFFLOAD_RAW_TCP    1
 #define CITP_TCP_OFFLOAD_CEPH       2
-#define CITP_TCP_OFFLOAD_NVME       3
 CI_CFG_OPT("EF_TCP_OFFLOAD", tcp_offload_plugin, ci_uint32,
 "Enable EF100 datapath plugin TCP offload functionality. "
 " off - (default) TCP offload functionality disabled."
 " tcp - Offload TCP layer only."
 " ceph - Offload TCP and Ceph layers, using the Ceph TCP processing plugin on"
 "        the NIC. The Onloaded application must use the zero-copy receive"
-"        extension APIs."
-" nvme - Offload TCP and NVMeof-TCP layers, using the NVME TCP processing"
-"        plugin on the NIC. The Onloaded application must use the zero-copy"
-"        send and receive extension APIs.\n",
-           , , CITP_TCP_OFFLOAD_OFF, 0, 3, oneof:off;tcp;ceph;nvme)
+"        extension APIs.\n",
+           , , CITP_TCP_OFFLOAD_OFF, 0, 2, oneof:off;tcp;ceph)
 
 CI_CFG_OPT("EF_CEPH_DATA_BUF_BYTES", ceph_data_buf_bytes, ci_uint32,
 "Number of bytes of on-NIC RAM to reserve for each TCP connection, for "

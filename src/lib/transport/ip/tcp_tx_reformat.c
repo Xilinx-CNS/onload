@@ -140,17 +140,13 @@ static void ci_tcp_tx_merge_indirect(ci_netif* __restrict__ ni,
     int src_segs = 0;   /*< number of zcp items prior to split_zcp */
     int i = 0;
     int copy_n;
-    ci_uint16 src_prefix_spc = 0; /*< Prefix space weakly prior to split_zcp */
 
     OO_TX_FOR_EACH_ZC_PAYLOAD(ni, src_zch, zcp) {
       total_paylen += zcp->len;
-      if( ! split_zcp ) {
-        src_prefix_spc += zcp->prefix_space;
-        if( total_paylen >= new_paylen ) {
-          split_zcp = zcp;
-          split_len = total_paylen;
-          src_segs = i;
-        }
+      if( total_paylen >= new_paylen && ! split_zcp ) {
+        split_zcp = zcp;
+        split_len = total_paylen;
+        src_segs = i;
       }
       ++i;
     }
@@ -163,7 +159,6 @@ static void ci_tcp_tx_merge_indirect(ci_netif* __restrict__ ni,
       new_src_end = copy_from;
       dest_zch->segs = src_zch->segs - src_segs - 1;
       src_zch->segs = src_segs + 1;
-      dest_zch->prefix_spc = src_zch->prefix_spc - src_prefix_spc;
     }
     else {
       uint32_t new_len;
@@ -172,23 +167,6 @@ static void ci_tcp_tx_merge_indirect(ci_netif* __restrict__ ni,
       zcp->is_remote = split_zcp->is_remote;
       new_len = split_zcp->len - (split_len - new_paylen);
       zcp->len = split_len - new_paylen;
-
-      zcp->zcp_flags = split_zcp->zcp_flags;
-
-      if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC ) {
-        if( zcp->len >= split_zcp->crc_insert_n_bytes ) {
-          split_zcp->zcp_flags &= ~ZC_PAYLOAD_FLAG_INSERT_CRC;
-          zcp->crc_insert_first_byte = split_zcp->crc_insert_first_byte;
-          zcp->crc_insert_n_bytes = split_zcp->crc_insert_n_bytes;
-        }
-        else {
-          split_zcp->crc_insert_n_bytes -= zcp->len;
-          zcp->crc_insert_first_byte = (split_zcp->crc_insert_first_byte +
-                                        split_zcp->crc_insert_n_bytes);
-          zcp->crc_insert_n_bytes = zcp->len;
-        }
-      }
-
       if( split_zcp->is_remote ) {
         zcp->use_remote_cookie = split_zcp->use_remote_cookie;
         split_zcp->use_remote_cookie = 0;
@@ -207,20 +185,14 @@ static void ci_tcp_tx_merge_indirect(ci_netif* __restrict__ ni,
                         CI_ALIGN_FWD(zcp->len, CI_PKT_ZC_PAYLOAD_ALIGN);
         split_zcp->len = new_len;
       }
-      zcp->prefix_space = split_zcp->prefix_space;
       new_src_end = oo_tx_zc_payload_next(ni, split_zcp);
       dest_zch->segs = src_zch->segs - src_segs;
       src_zch->segs = src_segs + 1;
-      /* Prefix space reserved for the split zcp must be reserved in full on
-       * both sides of the split. */
-      dest_zch->prefix_spc = src_zch->prefix_spc - src_prefix_spc +
-                             split_zcp->prefix_space;
     }
     copy_n = (char*)src_zch + src_zch->end - (char*)copy_from;
     memcpy((char*)dest_zch + dest_zch->end, copy_from, copy_n);
     dest_zch->end += copy_n;
     src_zch->end = (char*)new_src_end - (char*)src_zch;
-    src_zch->prefix_spc = src_prefix_spc;
   }
   dest_pkt->pay_len += total_paylen - new_paylen;
   dest_pkt->pf.tcp_tx.end_seq += total_paylen - new_paylen;
