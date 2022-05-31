@@ -84,7 +84,7 @@ struct efct_filter_node {
   /* All fields from here on are big-endian */
   union {
     u32 key_start;   /* marker for 'this is the beginning of the key' */
-    int32_t vlan;   /* -1 for none */
+    int32_t vlan;   /* -1 for any (i.e. don't care if it has a VLAN tag) */
   };
   uint16_t ethertype;
   uint8_t proto;

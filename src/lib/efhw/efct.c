@@ -717,23 +717,35 @@ hash_filter_node(const struct efct_filter_node* node, size_t node_len)
                 / sizeof(u32), filter_hash_table_seed);
 }
 
-/* True iff 'node' is in 'table', i.e. if a packet matches one of our stored
- * filters for one specific class of filter. */
-static bool
-filter_matches(struct hlist_head* table, size_t hash_bits,
-               const struct efct_filter_node* node, size_t node_len)
+static bool find_one_filter(struct hlist_head* table, size_t hash_bits,
+                            const struct efct_filter_node* node,
+                            size_t node_len)
 {
-  bool found = NULL;
   struct efct_filter_node* existing;
   size_t key_len = node_len - offsetof(struct efct_filter_node, key_start);
   u32 hash = hash_filter_node(node, node_len);
 
+  hlist_for_each_entry_rcu(existing, &table[hash_min(hash, hash_bits)], node)
+    if( ! memcmp(&existing->key_start, &node->key_start, key_len))
+      return true;
+  return false;
+}
+
+/* True iff 'node' is in 'table', i.e. if a packet matches one of our stored
+ * filters for one specific class of filter. */
+static bool
+filter_matches(struct hlist_head* table, size_t hash_bits,
+               struct efct_filter_node* node, size_t node_len)
+{
+  bool found;
+
   rcu_read_lock();
-  hlist_for_each_entry_rcu(existing, &table[hash_min(hash, hash_bits)], node) {
-    if( ! memcmp(&existing->key_start, &node->key_start, key_len)) {
-      found = true;
-      break;
-    }
+  found = find_one_filter(table, hash_bits, node, node_len);
+  if( ! found ) {
+    int32_t vlan = node->vlan;
+    node->vlan = -1;
+    found = find_one_filter(table, hash_bits, node, node_len);
+    node->vlan = vlan;
   }
   rcu_read_unlock();
   return found;
@@ -872,6 +884,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   /* Step 1 of 2: Convert ethtool_rx_flow_spec to efct_filter_node */
   memset(&node, 0, sizeof(node));
   node.hw_filter = -1;
+  node.vlan = -1;
 
   if( no_vlan_flags == EFX_FILTER_MATCH_ETHER_TYPE ) {
     clas = FILTER_CLASS_ethertype;
