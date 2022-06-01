@@ -2261,8 +2261,12 @@ static int ci_tcp_rx_enqueue_ooo(ci_netif* netif, ci_tcp_state* ts,
   ci_ip_pkt_fmt* block_pkt = NULL;  /* \todo Initialize in debug build only */
   int af = ipcache_af(&ts->s.pkt);
 
-  if( ci_tcp_is_pluginized(ts) && tcp_plugin_pkt_was_recycled(ts, pkt) )
-    return 0;
+  /* When Onload recycles packets, it bumps rcv_nxt to the end of the recycled
+   * region.  When the plugin sends those packets back again, whether elided or
+   * not, they will appear to be entirely to the left of rcv_nxt and therefore
+   * they will not come down this path. */
+  if( ci_tcp_is_pluginized(ts) )
+    ci_assert(! tcp_plugin_pkt_was_recycled(ts, pkt));
 
   CITP_STATS_NETIF_INC(netif, rx_out_of_order);
   CI_IP_SOCK_STATS_INC_OOO( ts );
