@@ -4,6 +4,7 @@
 #include <ci/efrm/efct_rxq.h>
 #include <ci/efrm/vi_resource.h>
 #include <ci/efrm/vi_resource_manager.h>
+#include <ci/efrm/vi_resource_private.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/efab/hardware.h>
 #include <ci/efhw/efct.h>
@@ -22,6 +23,7 @@ struct efrm_efct_rxq {
 	struct efrm_resource rs;
 	struct efrm_vi *vi;
 	struct efhw_efct_rxq hw;
+	struct work_struct free_work;
 };
 
 #if CI_HAVE_EFCT_AUX
@@ -96,9 +98,19 @@ EXPORT_SYMBOL(efrm_rxq_alloc);
 
 
 #if CI_HAVE_EFCT_AUX
+static void free_rxq_work(struct work_struct *data)
+{
+	struct efrm_efct_rxq *rmrxq = container_of(data, struct efrm_efct_rxq,
+	                                           free_work);
+	efrm_vi_resource_release(rmrxq->vi);
+	kfree(rmrxq);
+}
+
 static void free_rxq(struct efhw_efct_rxq *rxq)
 {
-	kfree(container_of(rxq, struct efrm_efct_rxq, hw));
+	struct efrm_efct_rxq *rmrxq = container_of(rxq, struct efrm_efct_rxq, hw);
+	INIT_WORK(&rmrxq->free_work, free_rxq_work);
+	queue_work(efrm_vi_manager->workqueue, &rmrxq->free_work);
 }
 #endif
 
@@ -107,12 +119,10 @@ void efrm_rxq_release(struct efrm_efct_rxq *rxq)
 #if CI_HAVE_EFCT_AUX
 	if (__efrm_resource_release(&rxq->rs)) {
 		int shm_ix = rxq->hw.shm - rxq->vi->efct_shm->q;
-		struct efrm_vi* vi = rxq->vi;
 		struct efrm_client* rs_client = rxq->rs.rs_client;
 		rxq->vi->efct_shm->active_qs &= ~(1ull << shm_ix);
 		efct_nic_rxq_free(rxq->rs.rs_client->nic, &rxq->hw, free_rxq);
 		/* caution! rxq may have been freed now */
-		efrm_vi_resource_release(vi);
 		efrm_client_put(rs_client);
 	}
 #endif
