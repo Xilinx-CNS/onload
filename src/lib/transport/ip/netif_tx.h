@@ -28,28 +28,53 @@ ci_inline void ci_netif_pkt_tx_assert_len(ci_netif* ni, ci_ip_pkt_fmt* pkt,
 }
 
 
-ci_inline int ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
-                                           ef_remote_iovec* iov, unsigned iovlen)
+ci_inline int
+ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
+                             ef_remote_iovec** piov, uint32_t* prefix_len,
+                             unsigned iovlen)
 {
   int i, intf_i = pkt->intf_i;
+  unsigned zcp_offset;
   struct ci_pkt_zc_header* zch;
   struct ci_pkt_zc_payload* zcp;
+  ef_remote_iovec* iov;
+  ef_remote_iovec* prefix_iov;
+  char* prefix_start;
+  char* prefix_end;
 
   ci_assert_flags(pkt->flags, CI_PKT_FLAG_INDIRECT);
   ci_assert_lt((unsigned) intf_i, CI_CFG_MAX_INTERFACES);
   ci_assert_ge(iovlen, pkt->n_buffers);
+
+  zch = oo_tx_zc_header(pkt);
+
+  /* The prefix is built up in the first iovec using the space reserved at the
+   * end of the packet buffer, and everything else starts at the second iovec.
+   * If it turns out that we don't have a prefix, we'll not return this first
+   * iovec. */
+  prefix_iov = *piov;
+  prefix_start = (char*)pkt + CI_CFG_PKT_BUF_SIZE - zch->prefix_spc;
+  prefix_end = prefix_start;
+  iov = prefix_iov + 1;
 
   iov[0].iov_base = pkt_dma_addr(ni, pkt, intf_i) + pkt->pkt_start_off;
   iov[0].iov_len = pkt->buf_len;
   iov[0].addrspace = EF_ADDRSPACE_LOCAL;
   iov[0].flags = 0;
 
-  zch = oo_tx_zc_header(pkt);
-
   ci_assert_equal(pkt->n_buffers, 1);
-  ci_assert_ge(iovlen, 1 + zch->segs);
+  /* One iovec for the inline data above, one reserved for the prefix if we
+   * might need one, and one for each ZC payload. */
+  ci_assert_ge(iovlen, 1 + (zch->prefix_spc > 0) + zch->segs);
   i = 1;
+  zcp_offset = pkt->buf_len;
   OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
+    /* TODO: VIRTBLK-1763: add mechanism for hooks to signal EAGAIN */
+    if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_ACCUM_CRC )
+      prefix_end += ci_tcp_offload_zc_send_accum_crc(ni, pkt, zcp, zcp_offset, prefix_end);
+    if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC )
+      prefix_end += ci_tcp_offload_zc_send_insert_crc(ni, pkt, zcp, zcp_offset, prefix_end);
+    zcp_offset += zcp->len;
     if( zcp->is_remote ) {
       iov[i].iov_base = zcp->remote.dma_addr[intf_i];
       iov[i].addrspace = zcp->remote.addr_space;
@@ -62,6 +87,21 @@ ci_inline int ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
     iov[i].iov_len = zcp->len;
     ++i;
   }
+
+  if( prefix_end > prefix_start ) {
+    prefix_iov->iov_base = (pkt_dma_addr(ni, pkt, intf_i) -
+                            CI_MEMBER_OFFSET(ci_ip_pkt_fmt, dma_start) +
+                            CI_CFG_PKT_BUF_SIZE - zch->prefix_spc);
+    prefix_iov->iov_len = prefix_end - prefix_start;
+    ci_assert_le(prefix_iov->iov_len, zch->prefix_spc);
+    *prefix_len = prefix_iov->iov_len;
+    prefix_iov->addrspace = EF_ADDRSPACE_LOCAL;
+    prefix_iov->flags = 0;
+    iov = prefix_iov;
+    ++i;
+  }
+
+  *piov = iov;
   return i;
 }
 

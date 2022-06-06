@@ -1286,7 +1286,7 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->icmp_msg_max = atoi(s);
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
-  static const char* const tcp_offload_opts[] = { "off", "tcp", "ceph", 0 };
+  static const char* const tcp_offload_opts[] = { "off", "tcp", "ceph", "nvme", 0 };
   opts->tcp_offload_plugin = parse_enum(opts, "EF_TCP_OFFLOAD",
                                         tcp_offload_opts, "off");
 
