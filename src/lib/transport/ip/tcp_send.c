@@ -348,6 +348,8 @@ void ci_tcp_tx_fill_sendq_tail(ci_netif* ni, ci_tcp_state* ts,
                                         ((char*)zch + zch->end);
         int n = ci_copy_iovec(zcp->local, CI_MIN(space, mss - last_seg), piov);
         zcp->len = n;
+        zcp->prefix_space = 0;
+        zcp->zcp_flags = 0;
         zcp->is_remote = 0;
         zch->end += CI_MEMBER_OFFSET(struct ci_pkt_zc_payload, local) +
                     CI_ALIGN_FWD(n, CI_PKT_ZC_PAYLOAD_ALIGN);
