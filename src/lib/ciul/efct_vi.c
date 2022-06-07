@@ -440,6 +440,9 @@ static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
     ev_out->tx_timestamp.rq_id = q->ids[(qs->previous - 1) & q->mask];
     ev_out->tx_timestamp.flags = EF_EVENT_FLAG_CTPIO;
     ev_out->tx_timestamp.q_id = CI_QWORD_FIELD(event, EFCT_TX_EVENT_LABEL);
+    /* Delivering the tx event with timestamp counts as removing it, as we
+     * must only be delivering a single event, so _unbundle isn't used. */
+    qs->removed++;
 
   } else {
     ev_out->tx.type = EF_EVENT_TYPE_TX;
