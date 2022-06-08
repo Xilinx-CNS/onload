@@ -157,12 +157,14 @@ static int tcp_helper_request_wakeup_nic_impl(tcp_helper_resource_t* trs,
 
     for( i = 0; i < vi->max_efct_rxq; ++i ) {
       struct efrm_efct_rxq* rxq = trs->nic[intf_i].thn_efct_rxq[i];
-      unsigned sbseq, pktix;
-      int rc = efct_vi_get_wakeup_params(vi, i, &sbseq, &pktix);
-      if( rc == 0 ) {
-        rc = efrm_rxq_request_wakeup(rxq, sbseq, pktix, allow_recursion);
-        if( rc == -EAGAIN )
-          again = true;
+      if( rxq ) {
+        unsigned sbseq, pktix;
+        int rc = efct_vi_get_wakeup_params(vi, i, &sbseq, &pktix);
+        if( rc == 0 ) {
+          rc = efrm_rxq_request_wakeup(rxq, sbseq, pktix, allow_recursion);
+          if( rc == -EAGAIN )
+            again = true;
+        }
       }
     }
   }

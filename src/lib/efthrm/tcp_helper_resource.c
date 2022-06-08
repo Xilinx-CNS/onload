@@ -994,7 +994,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
 
     rc = efrm_rxq_alloc(vi_rs, rxq, qix, true, hugepages,
                         trs->thc_efct_memfd, &trs->thc_efct_memfd_off,
-                        &trs->nic[intf_i].thn_efct_rxq[0]);
+                        &trs->nic[intf_i].thn_efct_rxq[qix]);
     if( rc < 0 ) {
       ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)\n", __func__, rc);
       return rc;
