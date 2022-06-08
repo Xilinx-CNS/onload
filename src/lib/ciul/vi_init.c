@@ -163,20 +163,20 @@ int ef_vi_evq_reinit(ef_vi* vi)
  * ef_vi_init*
  */
 
-static int rx_desc_bytes(struct ef_vi* vi)
+static int ef_vi_calc_rxq_descriptors_bytes(enum ef_vi_arch arch, int qsize)
 {
-  switch( vi->nic_type.arch ) {
+  switch( arch ) {
   case EF_VI_ARCH_EF10:
   case EF_VI_ARCH_EF100:
-    return 8;
+    return 8 * qsize;
   case EF_VI_ARCH_EFCT:
-    return EFCT_RX_DESCRIPTOR_BYTES;
+    return EFCT_RX_DESCRIPTOR_BYTES * CI_EFCT_MAX_SUPERBUFS *
+           EF_VI_MAX_EFCT_RXQS;
   default:
     EF_VI_BUG_ON(1);
-    return 8;
+    return 8 * qsize;
   }
 }
-
 
 static int tx_desc_bytes(struct ef_vi* vi)
 {
@@ -214,7 +214,8 @@ static int tx_fifo_bytes(struct ef_vi* vi)
 int ef_vi_rx_ring_bytes(struct ef_vi* vi)
 {
   EF_VI_ASSERT(vi->inited & EF_VI_INITED_RXQ);
-  return (vi->vi_rxq.mask + 1) * rx_desc_bytes(vi);
+  return ef_vi_calc_rxq_descriptors_bytes(vi->nic_type.arch,
+                                         vi->vi_rxq.mask + 1);
 }
 
 
