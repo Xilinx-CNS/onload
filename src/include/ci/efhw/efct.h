@@ -172,8 +172,7 @@ struct efhw_nic_efct {
 };
 
 #if CI_HAVE_EFCT_AUX
-int efct_nic_rxq_bind(struct efhw_nic *nic, int qid,
-                      const struct cpumask *mask, bool timestamp_req,
+int efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
                       size_t n_hugepages, struct file* memfd, off_t* memfd_off,
                       struct efab_efct_rxq_uk_shm_q *shm,
                       unsigned wakeup_instance, struct efhw_efct_rxq *rxq);

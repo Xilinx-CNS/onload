@@ -53,8 +53,7 @@ extern struct efrm_efct_rxq* efrm_rxq_from_resource(struct efrm_resource *rs)
 EXPORT_SYMBOL(efrm_rxq_from_resource);
 
 
-int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
-                   const struct cpumask *mask, bool timestamp_req,
+int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
                    size_t n_hugepages, struct file* memfd, off_t* memfd_off,
                    struct efrm_efct_rxq **rxq_out)
 {
@@ -76,7 +75,7 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
 		return -ENOMEM;
 
 	rxq->vi = vi;
-	rc = efct_nic_rxq_bind(vi_rs->rs_client->nic, qid, mask, timestamp_req,
+	rc = efct_nic_rxq_bind(vi_rs->rs_client->nic, qid, timestamp_req,
 	                       n_hugepages, memfd, memfd_off,
 	                       &vi->efct_shm->q[shm_ix], vi->rs.rs_instance,
 						   &rxq->hw);
@@ -250,14 +249,12 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 			break;
 	}
 
-#if XLNX_EFCT_AUX_VERSION >= KERNEL_VERSION(5,0,0)
 	for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; i++) {
 		if (pages[i].page != NULL) {
 			put_page(pages[i].page);
 			fput(pages[i].file);
 		}
 	}
-#endif
 
 	kfree(pages);
 	return rc;
@@ -293,14 +290,12 @@ int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
 		              EFCT_RX_SUPERBUF_BYTES * (i % CI_EFCT_SUPERBUFS_PER_PAGE);
 	}
 
-#if XLNX_EFCT_AUX_VERSION >= KERNEL_VERSION(5,0,0)
 	for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; ++i) {
 		if (pages[i].page != NULL) {
 			put_page(pages[i].page);
 			fput(pages[i].file);
 		}
 	}
-#endif
 
 	kfree(pages);
 	return rc;

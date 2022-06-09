@@ -992,9 +992,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     if( qix == -EALREADY )
       return 0;
 
-    /* EFCT TODO: some hard-coded parameters here: */
-    rc = efrm_rxq_alloc(vi_rs, rxq, qix, cpu_all_mask, true,
-                        hugepages,
+    rc = efrm_rxq_alloc(vi_rs, rxq, qix, true, hugepages,
                         trs->thc_efct_memfd, &trs->thc_efct_memfd_off,
                         &trs->nic[intf_i].thn_efct_rxq[0]);
     if( rc < 0 ) {

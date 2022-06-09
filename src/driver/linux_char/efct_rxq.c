@@ -15,23 +15,6 @@
 /* ************************************************************************ */
 /*                            ioctl interface                               */
 
-/* X-SPDX-Source-URL: https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git */
-/* X-SPDX-Source-Tag: v5.12 */
-/* X-SPDX-Source-File: kernel/sched/core.c */
-/* X-SPDX-License-Identifier: GPL-2.0-or-later */
-static int get_user_cpu_mask(unsigned long __user *user_mask_ptr, unsigned len,
-                             struct cpumask *new_mask)
-{
-  if (len < cpumask_size())
-    cpumask_clear(new_mask);
-  else if (len > cpumask_size())
-    len = cpumask_size();
-
-  return copy_from_user(new_mask, user_mask_ptr, len) ? -EFAULT : 0;
-}
-/* X-SPDX-Restore: */
-
-
 static int
 rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
              efch_resource_t* rs, int intf_ver_id)
@@ -40,7 +23,6 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   struct efrm_efct_rxq* rxq;
   struct efrm_vi* vi;
   efch_resource_t* vi_rs;
-  cpumask_var_t cpumask;
   struct file* memfd = NULL;
   off_t memfd_off;
   int rc;
@@ -74,32 +56,20 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 
   vi = efrm_vi_from_resource(vi_rs->rs_base);
 
-  if (!alloc_cpumask_var(&cpumask, GFP_KERNEL))
-    return -ENOMEM;
-
-  if (alloc->in_cpusetsize == 0) {
-    cpumask_setall(cpumask);
-  }
-  else {
-    rc = get_user_cpu_mask((void __user*)alloc->in_cpuset,
-                           alloc->in_cpusetsize, cpumask);
-    if (rc)
-      goto fail1;
-  }
-
   if (alloc->in_memfd >= 0) {
     memfd = fget(alloc->in_memfd);
-    if (!memfd)
-      goto fail1;
+    if (!memfd) {
+      EFCH_ERR("%s: ERROR: memfd is not an fd", __FUNCTION__);
+      return -EINVAL;
+    }
   }
 
   memfd_off = alloc->in_memfd_off;
-  rc = efrm_rxq_alloc(vi, alloc->in_qid, alloc->in_shm_ix, cpumask,
+  rc = efrm_rxq_alloc(vi, alloc->in_qid, alloc->in_shm_ix,
                       alloc->in_timestamp_req, alloc->in_n_hugepages, memfd,
                       &memfd_off, &rxq);
   if (memfd)
     fput(memfd);
-  free_cpumask_var(cpumask);
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: rxq_alloc failed (%d)", __FUNCTION__, rc);
     return rc;
@@ -107,10 +77,6 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 
   rs->rs_base = efrm_rxq_to_resource(rxq);
   return 0;
-
- fail1:
-  free_cpumask_var(cpumask);
-  return rc;
 }
 
 

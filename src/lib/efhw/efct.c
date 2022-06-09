@@ -42,9 +42,9 @@ static bool filter_hash_table_seed_inited = false;
 static void efct_check_for_flushes(struct work_struct *work);
 
 int
-efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
-                  bool timestamp_req, size_t n_hugepages, struct file* memfd,
-                  off_t* memfd_off, struct efab_efct_rxq_uk_shm_q *shm,
+efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
+                  size_t n_hugepages, struct file* memfd, off_t* memfd_off,
+                  struct efab_efct_rxq_uk_shm_q *shm,
                   unsigned wakeup_instance, struct efhw_efct_rxq *rxq)
 {
   struct device *dev;
@@ -54,11 +54,6 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, const struct cpumask *mask,
 
   struct xlnx_efct_rxq_params qparams = {
     .qid = qid,
-/* EFCT TODO: temporary hack to keep things building across both sides of an
- * API change. Ultimately all masks are moving to filter add */
-#ifndef XLNX_EFCT_FILTER_F_ANYQUEUE_STRICT
-    .mask = mask,
-#endif
     .timestamp_req = timestamp_req,
     .n_hugepages = n_hugepages,
   };
@@ -380,9 +375,7 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
   struct xlnx_efct_client* cli;
   struct xlnx_efct_txq_params params = {
     .evq = evq_id,
-#if XLNX_EFCT_AUX_VERSION >= KERNEL_VERSION(4,0,0)
     .label = tag,
-#endif
   };
   int rc;
 

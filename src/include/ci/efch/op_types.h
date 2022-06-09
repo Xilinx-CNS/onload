@@ -140,8 +140,6 @@ struct efch_efct_rxq_alloc {
   uint8_t             in_qid;
   uint8_t             in_shm_ix;
   /*bool*/uint8_t     in_timestamp_req;
-  uint64_t            in_cpuset CI_ALIGN(8);  /* void __user* */
-  uint32_t            in_cpusetsize;
   uint32_t            in_n_hugepages;
   int32_t             in_memfd;
   uint64_t            in_memfd_off;
