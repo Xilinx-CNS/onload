@@ -46,6 +46,7 @@
 #include <ci/efrm/pd.h>
 #include <ci/efrm/vi_resource.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
+#include <ci/driver/ci_efct.h>
 #include <linux/nsproxy.h>
 #include "efrm_internal.h"
 
@@ -395,6 +396,17 @@ int efrm_client_get_by_dev(const struct net_device *dev,
 
 	if (rnic == NULL) {
 		kfree(client);
+#if ! CI_HAVE_EFCT_AUX
+		if (dev_is_pci(dev->dev.parent)) {
+			struct pci_dev* pci_dev = to_pci_dev(dev->dev.parent);
+			if (pci_dev->vendor == 0x10ee && pci_dev->device == 0x5084) {
+				EFRM_ERR("%s: device %s (ifindex %d) is an X3, "
+				         "but this Onload was built without X3 support",
+				         __func__, dev->name, dev->ifindex);
+				return -EOPNOTSUPP;
+			}
+		}
+#endif
 		return -ENODEV;
 	}
 
