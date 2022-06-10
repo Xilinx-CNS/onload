@@ -37,6 +37,9 @@ extern int  efrm_client_get_by_dev(const struct net_device*,
                                    struct efrm_client_callbacks *,
                                    void *user_data,
                                    struct efrm_client **client_out);
+extern void efrm_client_set_callbacks(struct efrm_client *client,
+                                      struct efrm_client_callbacks *callbacks,
+                                      void *user_data);
 extern void efrm_client_put(struct efrm_client *);
 extern void efrm_client_add_ref(struct efrm_client *);
 

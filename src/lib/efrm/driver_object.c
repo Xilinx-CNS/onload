@@ -435,6 +435,20 @@ int efrm_client_get(int ifindex, struct efrm_client_callbacks *callbacks,
 EXPORT_SYMBOL(efrm_client_get);
 
 
+void efrm_client_set_callbacks(struct efrm_client *client,
+                               struct efrm_client_callbacks *callbacks,
+                               void *user_data)
+{
+	if (callbacks == NULL)
+		callbacks = &efrm_null_callbacks;
+	spin_lock_bh(&efrm_nic_tablep->lock);
+	client->user_data = user_data;
+	client->callbacks = callbacks;
+	spin_unlock_bh(&efrm_nic_tablep->lock);
+}
+EXPORT_SYMBOL(efrm_client_set_callbacks);
+
+
 void efrm_client_put(struct efrm_client *client)
 {
 	EFRM_ASSERT(client->ref_count > 0);

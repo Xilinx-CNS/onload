@@ -180,6 +180,9 @@ static void oo_nic_remove(struct oo_nic* onic)
   ci_log("%s: ifindex=%d oo_index=%d",
          __FUNCTION__, ifindex, (int) (onic - oo_nics));
   ci_assert(onic->efrm_client != NULL);
+  /* This may not be the last ref, but we don't want any more callbacks after
+   * this */
+  efrm_client_set_callbacks(onic->efrm_client, NULL, NULL);
   efrm_client_put(onic->efrm_client);
   onic->efrm_client = NULL;
 }
