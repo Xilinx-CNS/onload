@@ -4122,8 +4122,10 @@ ci_inline void ci_tcp_sendq_drop(ci_netif* ni, ci_tcp_state* ts)
 
 ci_inline void ci_tcp_retrans_drop(ci_netif* ni, ci_tcp_state* ts)
 {
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
   if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
     ci_nvme_plugin_idp_dropped_queue_cleanup(ni, ts, &ts->retrans);
+#endif
   ci_ip_queue_drop(ni, &ts->retrans);
 }
 
