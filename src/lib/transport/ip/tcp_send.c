@@ -2339,7 +2339,6 @@ ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
 {
   struct ci_tcp_offload_zc_send_prefix* crc_prefix = prefix;
   ci_tcp_state* ts = SP_TO_TCP(ni, pkt->pf.tcp_tx.sock_id);
-  unsigned id = ts->current_crc_id;
 
   ci_assert_equal(NI_OPTS(ni).tcp_offload_plugin, CITP_TCP_OFFLOAD_NVME);
 
@@ -2347,12 +2346,14 @@ ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   crc_prefix->data_offset = payload_offset + zcp->len - zcp->crc_insert_n_bytes;
   crc_prefix->insert_crc.first_byte = zcp->crc_insert_first_byte;
   crc_prefix->insert_crc.n_bytes = zcp->crc_insert_n_bytes;
-  crc_prefix->plugin_context_id = id;
-
-  if( ci_nvme_plugin_crc_last_byte_sent(zcp) )
-    ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
-
-  zcp->crc_id = id;
+  if( zcp->crc_id == ZC_NVME_CRC_ID_INVALID ) {
+    /* Not a retransmission.  Set the ID on this ZC payload and clear the
+     * connection's current ID if this is the last chunk of the CRC. */
+    zcp->crc_id = ts->current_crc_id;
+    if( ci_nvme_plugin_crc_last_byte_sent(zcp) )
+      ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
+  }
+  crc_prefix->plugin_context_id = zcp->crc_id;
 
   return sizeof(*crc_prefix);
 }
