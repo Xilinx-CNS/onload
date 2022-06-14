@@ -167,6 +167,7 @@ static void activate_new_apps(struct efhw_nic_efct_rxq *q)
          * which calls this function. And we rely on x3net's rollover_rxq behaviour
          * for corner cases. */
         app->next_sbuf_seq = q->sbufs.added;
+        app->shm->time_sync = q->time_sync;
         last = app;
       }
       last->next = q->live_apps;

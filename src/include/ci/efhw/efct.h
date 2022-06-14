@@ -60,6 +60,7 @@ struct efhw_nic_efct_rxq {
   struct work_struct destruct_wq;
   uint32_t now;
   uint32_t awaiters;
+  uint64_t time_sync;
 };
 
 struct efhw_nic_efct_evq {

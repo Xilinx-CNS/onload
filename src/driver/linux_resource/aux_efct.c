@@ -99,6 +99,7 @@ static int efct_handle_event(void *driver_data,
       struct efhw_efct_rxq *app;
       int spent = 0;
 
+      q->time_sync = event->value;
       for( app = q->live_apps; app; app = app->next ) {
         CI_WRITE_ONCE(app->shm->time_sync, event->value);
         spent += 1;
