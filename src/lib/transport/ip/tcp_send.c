@@ -2320,7 +2320,12 @@ ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   crc_prefix->data_offset = payload_offset;
   crc_prefix->accum_crc.data_len = zcp->len;
 
-  if( id == ZC_NVME_CRC_ID_INVALID ) {
+  /* Formally, the assignment above truncates, but as ZC payload lengths are
+   * bounded above by the MSS, truncation should never happen. */
+  ci_assert_equal(crc_prefix->accum_crc.data_len, zcp->len);
+
+  crc_prefix->accum_crc.reset = (id == ZC_NVME_CRC_ID_INVALID);
+  if( crc_prefix->accum_crc.reset ) {
     rc = ci_nvme_plugin_crc_id_alloc(&ni->state->nvme_crc_plugin_idp, &id);
     if( rc < 0 )
       return rc;

@@ -19,7 +19,8 @@ struct ci_tcp_offload_zc_send_prefix {
   uint16_t data_offset;
   union {
     struct {
-      uint16_t data_len;
+      uint16_t data_len : 15;
+      uint16_t reset : 1;
     } accum_crc;
     struct {
       uint8_t first_byte;
