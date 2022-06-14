@@ -314,7 +314,7 @@ static int ef_filter_add_special(ef_driver_handle dh, int resource_id,
   return rc;
 }
 
-static int ef_filter_add(ef_driver_handle dh, int resource_id,
+static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
 			 const ef_filter_spec *fs, unsigned flags,
 			 ef_filter_cookie *filter_cookie_out, int *rxq_out)
 {
@@ -417,6 +417,31 @@ static int ef_filter_add(ef_driver_handle dh, int resource_id,
 }
 
 
+static int ef_filter_add(ef_driver_handle dh, int resource_id,
+                         const ef_filter_spec *fs, unsigned flags,
+                         ef_filter_cookie *filter_cookie_out, int *rxq_out)
+{
+    switch( fs->type ) {
+    case EF_FILTER_PORT_SNIFF:
+    case EF_FILTER_TX_PORT_SNIFF:
+    case EF_FILTER_BLOCK_KERNEL:
+    case EF_FILTER_BLOCK_KERNEL_UNICAST:
+    case EF_FILTER_BLOCK_KERNEL_MULTICAST:
+    case EF_FILTER_ALL_UNICAST:
+    case EF_FILTER_ALL_MULTICAST:
+    case EF_FILTER_MISMATCH_UNICAST | EF_FILTER_VLAN:
+    case EF_FILTER_MISMATCH_UNICAST:
+    case EF_FILTER_MISMATCH_MULTICAST | EF_FILTER_VLAN:
+    case EF_FILTER_MISMATCH_MULTICAST:
+      return ef_filter_add_special(dh, resource_id, fs->type, fs->data[0],
+                                   fs->data[5], filter_cookie_out, rxq_out);
+    default:
+      return ef_filter_add_normal(dh, resource_id, fs, flags,
+                                  filter_cookie_out, rxq_out);
+    }
+}
+
+
 static int ef_filter_del(ef_driver_handle dh, int resource_id,
 			 ef_filter_cookie *filter_cookie)
 {
@@ -453,25 +478,7 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     if( vi->vi_flags & EF_VI_RX_EXCLUSIVE )
       flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
 
-    switch( fs->type ) {
-    case EF_FILTER_PORT_SNIFF:
-    case EF_FILTER_TX_PORT_SNIFF:
-    case EF_FILTER_BLOCK_KERNEL:
-    case EF_FILTER_BLOCK_KERNEL_UNICAST:
-    case EF_FILTER_BLOCK_KERNEL_MULTICAST:
-    case EF_FILTER_ALL_UNICAST:
-    case EF_FILTER_ALL_MULTICAST:
-    case EF_FILTER_MISMATCH_UNICAST | EF_FILTER_VLAN:
-    case EF_FILTER_MISMATCH_UNICAST:
-    case EF_FILTER_MISMATCH_MULTICAST | EF_FILTER_VLAN:
-    case EF_FILTER_MISMATCH_MULTICAST:
-      rc = ef_filter_add_special(dh, vi->vi_resource_id, fs->type, fs->data[0],
-                                 fs->data[5], &cookie, &rxq);
-      break;
-    default:
-      rc = ef_filter_add(dh, vi->vi_resource_id, fs, flags, &cookie, &rxq);
-      break;
-    }
+    rc = ef_filter_add(dh, vi->vi_resource_id, fs, flags, &cookie, &rxq);
     if( rc < 0 )
       return rc;
 
