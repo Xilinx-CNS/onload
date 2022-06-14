@@ -2931,6 +2931,7 @@ ci_inline void
 ci_nvme_plugin_crc_id_release(struct nvme_crc_plugin_idp_t* idp, unsigned id)
 {
   ci_assert(!ci_fifo2_is_full(idp));
+  ci_assert_nequal(id, ZC_NVME_CRC_ID_INVALID);
   ci_fifo2_put(idp, id);
 }
 
@@ -2950,32 +2951,40 @@ ci_nvme_plugin_crc_free_acked_ids(ci_netif* ni, ci_ip_pkt_fmt* pkt)
 
   OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
     if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC &&
-        ci_nvme_plugin_crc_last_byte_sent(zcp) )
+        ci_nvme_plugin_crc_last_byte_sent(zcp) ) {
       ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp,
                                     zcp->crc_id);
+      zcp->crc_id = ZC_NVME_CRC_ID_INVALID;
+    }
   }
 }
 
-/* When the id pool is full, all the ids generated until the current zcp
- * are released */
-ci_inline void ci_nvme_plugin_crc_idp_full_cleanup(ci_netif* ni,
-                                                   ci_ip_pkt_fmt* pkt,
-                                                   struct ci_pkt_zc_payload* zcp,
-                                                   unsigned prev_id)
+/* Free all CRC IDs that were allocated for the specified packet.  This is
+ * needed for cleanup when the ID pool is exhausted mid-packet or when TX of
+ * the packet fails.  The value of ts->current_crc_id should have been restored
+ * by the caller to its pre-failure value before calling this function. */
+ci_inline void
+ci_nvme_plugin_crc_packet_cleanup(ci_netif* ni, ci_tcp_state* ts,
+                                  ci_ip_pkt_fmt* pkt)
 {
   struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
+  struct ci_pkt_zc_payload* zcp;
+  ci_uint32 prev_id = ZC_NVME_CRC_ID_INVALID;
 
   OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-    if( zcp->crc_id == ZC_NVME_CRC_ID_INVALID )
-      break;
-    /* Free this ID if it was different from the preceding one, and therefore
-     * newly allocated. */
-    if( (zcp->zcp_flags & ZC_PAYLOAD_FLAG_ACCUM_CRC ||
-        zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC) &&
-        zcp->crc_id != prev_id ) {
-      ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp,
-                                    zcp->crc_id);
-      prev_id = zcp->crc_id;
+    if( zcp->zcp_flags & (ZC_PAYLOAD_FLAG_ACCUM_CRC |
+                          ZC_PAYLOAD_FLAG_INSERT_CRC) ) {
+      if( zcp->crc_id == ZC_NVME_CRC_ID_INVALID )
+        break;
+      /* Free this ID if it was different from the preceding one, and therefore
+       * newly allocated. */
+      if( zcp->crc_id != ts->current_crc_id &&
+          zcp->crc_id != prev_id ) {
+        ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp,
+                                      zcp->crc_id);
+        prev_id = zcp->crc_id;
+        zcp->crc_id = ZC_NVME_CRC_ID_INVALID;
+      }
     }
   }
 }
@@ -2992,28 +3001,14 @@ ci_inline void ci_nvme_plugin_idp_dropped_queue_cleanup(ci_netif* ni,
   ci_ip_pkt_fmt* p;
   while( OO_PP_NOT_NULL(pp) ) {
     p = PKT_CHK(ni, pp);
-
-    if( p->flags & CI_PKT_FLAG_INDIRECT ) {
-      struct ci_pkt_zc_payload* zcp;
-      struct ci_pkt_zc_header* zch = oo_tx_zc_header(p);
-      unsigned last_freed_id = ZC_NVME_CRC_ID_INVALID;
-
-      OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-        if( (zcp->zcp_flags & ZC_PAYLOAD_FLAG_ACCUM_CRC ||
-            zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC) &&
-            zcp->crc_id != ZC_NVME_CRC_ID_INVALID &&
-            zcp->crc_id != ts->current_crc_id &&
-            zcp->crc_id != last_freed_id ) {
-          ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp,
-                                        zcp->crc_id);
-          last_freed_id = zcp->crc_id;
-        }
-      }
-      if( ts->current_crc_id != ZC_NVME_CRC_ID_INVALID )
-        ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp,
-                                      ts->current_crc_id);
-    }
+    if( p->flags & CI_PKT_FLAG_INDIRECT )
+      ci_nvme_plugin_crc_packet_cleanup(ni, ts, p);
     pp = p->next;
+  }
+  if( ts->current_crc_id != ZC_NVME_CRC_ID_INVALID ) {
+    ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp,
+                                  ts->current_crc_id);
+    ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
   }
 }
 
