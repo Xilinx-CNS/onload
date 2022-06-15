@@ -2090,10 +2090,12 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
 #endif
 
   if( evq->nic_type.arch == EF_VI_ARCH_EFCT ) {
+    dma = ci_netif_efct_pkt_start(evq, &efct_pkt_id);
+    if( dma == NULL )
+      return 0;
     pkt = alloc_rx_efct_pkt(ni, intf_i, 0);
     if( pkt == NULL )
       return 0;
-    dma = ci_netif_efct_pkt_start(evq, &efct_pkt_id);
     memcpy(pkt->dma_start, dma, efct_begin_len);
   }
   else {
