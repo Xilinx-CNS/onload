@@ -484,8 +484,11 @@ void efct_remove(struct auxiliary_device *auxdev)
   ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNPLUGGED);
   rtnl_unlock();
 
-  vfree(efct);
+  /* mind we might still expect callbacks from close() context
+   * TODO: rethink where to call close and how to synchronise with
+   * the rest. */
   edev->ops->close(client);
+  vfree(efct);
 }
 
 
