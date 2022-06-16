@@ -130,12 +130,10 @@ extern void efct_vi_rxpkt_release(struct ef_vi* vi, uint32_t pkt_id);
 ** waiting for the completion event indicating that the full packet has arrived.
 ** Any work done may need to be reverted if the packet turns out to be invalid.
 **
-** Be aware that the packet might not match the next completion event, if the VI
-** is using multiple receive queues. You can check whether the completion event
-** matches this packet by comparing with the pointer obtained from
-** \a efct_vi_rxpkt_get. You can avoid polling other queues by using
-** \a efct_vi_rx_future_poll rather than \a ef_eventq_poll while waiting for
-** this packet.
+** To await the specific completion event related to this packet use
+** \a efct_vi_rx_future_poll rather than \a ef_eventq_poll.
+**
+** This function can be called concurrently with other APIs.
 */
 extern const void* efct_vi_rx_future_peek(struct ef_vi* vi);
 

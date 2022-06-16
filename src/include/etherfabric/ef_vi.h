@@ -972,7 +972,8 @@ typedef struct ef_vi {
   struct ef_vi*                 vi_qs[EF_VI_MAX_QS];
   /** Number of virtual queues for the virtual interface */
   int                           vi_qs_n;
-  char                          future_qid;
+  /** Id of queue a pending PFTF packet belongs to */
+  uint8_t                       future_qid;
   /** Attached rxqs for efct VIs (NB: not necessarily in rxq order) */
   ef_vi_efct_rxq                efct_rxq[EF_VI_MAX_EFCT_RXQS];
   /** efct kernel/userspace shared queue area. */

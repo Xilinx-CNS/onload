@@ -1276,16 +1276,14 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
     unsigned qid = __builtin_ctzll(qs);
     struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
     ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
-    unsigned pkt_id = rxq_ptr->prev;
+    unsigned pkt_id;
 
-    /* Perhaps we need to do rollover before being able to access pkt's metadata */
-    if( efct_rxq_need_rollover(shm, rxq_ptr->next) ) {
-      if( rx_rollover(vi, qid) < 0 )
-        continue;
-      pkt_id = rxq_ptr->prev;
-    }
-    if( efct_rxq_need_config(&vi->efct_rxq[qid], shm) )
+    /* Skip queues that have pending non-packet related work
+     * The work will be picked up by poll or noticed by efct_rxq_check_event */
+    if( efct_rxq_need_rollover(shm, OO_ACCESS_ONCE(rxq_ptr->next))  ||
+        efct_rxq_need_config(&vi->efct_rxq[qid], shm) )
       continue;
+    pkt_id = OO_ACCESS_ONCE(rxq_ptr->prev);
     EF_VI_ASSERT(pkt_id_to_index_in_superbuf(pkt_id) < shm->superbuf_pkts);
     {
       const char* start = (char*)efct_rx_header(vi, pkt_id) +
@@ -1304,8 +1302,8 @@ int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int count;
 
-  EF_VI_ASSERT(efct_rxq_is_active(&vi->efct_shm->q[0]));
   EF_VI_ASSERT(((ci_int8) vi->future_qid) >= 0);
+  EF_VI_ASSERT(efct_rxq_is_active(&vi->efct_shm->q[vi->future_qid]));
   count = efct_poll_rx(vi, vi->future_qid, evs, evs_len);
 #ifndef NDEBUG
   if( count )
