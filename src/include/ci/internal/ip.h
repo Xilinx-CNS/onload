@@ -2762,19 +2762,6 @@ ci_inline void ci_netif_poison_rx_pkt(ci_ip_pkt_fmt* pkt)
   *ci_netif_poison_location(pkt) = CI_PKT_RX_POISON;
 }
 
-ci_inline const void* ci_netif_efct_pkt_start(ef_vi* vi, unsigned* pkt_id)
-{
-  unsigned id = efct_vi_next_rx_rq_id(vi, 0); /* TODO EFCT use correct qid */
-  if( id == ~0u )
-    return NULL;
-  *pkt_id = id;
-  return efct_vi_rxpkt_get(vi, id);
-}
-ci_inline volatile const uint32_t* ci_netif_efct_poison_location(ef_vi* vi)
-{
-  unsigned pkt_id;
-  return (volatile const uint32_t*)ci_netif_efct_pkt_start(vi, &pkt_id);
-}
 
 #ifndef __KERNEL__
 ci_inline int ci_netif_rx_pkt_is_poisoned(ci_ip_pkt_fmt* pkt)
@@ -2805,6 +2792,8 @@ ci_inline ci_ip_pkt_fmt* ci_netif_intf_next_rx_pkt(ci_netif* ni, ef_vi* vi)
  * or if the RX queue is empty, returns the provided pointer to a fixed
  * poison value. This should be located on the stack close to other state
  * accessed while polling, to minimise cache churn.
+ *
+ * The function does not require a stack lock.
  */
 ci_inline const volatile uint32_t*
 ci_netif_intf_rx_future(ci_netif* ni, int intf_i, const uint32_t* poison)
@@ -2820,7 +2809,7 @@ ci_netif_intf_rx_future(ci_netif* ni, int intf_i, const uint32_t* poison)
 
   vi = ci_netif_vi(ni, intf_i);
   if( vi->nic_type.arch == EF_VI_ARCH_EFCT ) {
-    volatile const uint32_t* p = ci_netif_efct_poison_location(vi);
+    volatile const uint32_t* p = efct_vi_rx_future_peek(vi);
     return p ? p : poison;
   }
 

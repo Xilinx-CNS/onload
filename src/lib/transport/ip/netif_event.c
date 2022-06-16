@@ -2078,9 +2078,10 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   struct ci_netif_poll_state ps;
   ci_ip_pkt_fmt* pkt;
   const uint8_t* dma;
-  unsigned efct_pkt_id = 0;
+  int (*future_poll)(ef_vi* vi, ef_event* evs, int evs_len) = evq->ops.eventq_poll;
+
   /* Number of data bytes in the first cache line of efct packets */
-  static const size_t efct_begin_len = CI_CACHE_LINE_SIZE - 
+  static const size_t efct_begin_len = CI_CACHE_LINE_SIZE -
                   (EFCT_RX_HEADER_NEXT_FRAME_LOC_1 & (CI_CACHE_LINE_SIZE - 1));
 
   ci_assert(ci_netif_is_locked(ni));
@@ -2090,13 +2091,14 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
 #endif
 
   if( evq->nic_type.arch == EF_VI_ARCH_EFCT ) {
-    dma = ci_netif_efct_pkt_start(evq, &efct_pkt_id);
+    dma = efct_vi_rx_future_peek(evq);
     if( dma == NULL )
       return 0;
     pkt = alloc_rx_efct_pkt(ni, intf_i, 0);
     if( pkt == NULL )
       return 0;
     memcpy(pkt->dma_start, dma, efct_begin_len);
+    future_poll = efct_vi_rx_future_poll;
   }
   else {
     pkt = ci_netif_intf_next_rx_pkt(ni, evq);
@@ -2139,7 +2141,7 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
    */
   max_spin = IPTIMER_STATE(ni)->khz / 10000;
   ci_prefetch(pkt->dma_start + CI_CACHE_LINE_SIZE);
-  while( (rc = ef_eventq_poll(evq, ev, EF_VI_EVENT_POLL_MIN_EVS)) == 0 ) {
+  while( (rc = future_poll(evq, ev, EF_VI_EVENT_POLL_MIN_EVS)) == 0 ) {
     ci_frc64(&now_frc);
     if( now_frc - start_frc > max_spin ) {
       CITP_STATS_NETIF_INC(ni, rx_future_rollback_timeout);
@@ -2164,8 +2166,13 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
       handle_future = true;
     }
   }
-  else if( EF_EVENT_TYPE(ev[0]) == EF_EVENT_TYPE_RX_REF &&
-           ev[0].rx_ref.pkt_id == efct_pkt_id ) {
+  else if( EF_EVENT_TYPE(ev[0]) == EF_EVENT_TYPE_RX_REF ) {
+#ifndef NDEBUG
+    {
+      const void* pkt_start = efct_vi_rxpkt_get(evq, ev[0].rx_ref.pkt_id);
+      ci_assert_equal(pkt_start, dma);
+    }
+#endif
     pkt->pay_len = ev[0].rx_ref.len;
     if( pkt->pay_len > efct_begin_len )
       memcpy(pkt->dma_start + efct_begin_len, dma + efct_begin_len,
