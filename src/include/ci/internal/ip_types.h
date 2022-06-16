@@ -53,6 +53,8 @@ typedef struct ci_netif_nic_s {
 #define INVALID_PLUGIN_HANDLE              (~0u)
   struct efrm_ext*           plugin;
   ci_uint32                  plugin_app_id;
+  struct efrm_ext*           plugin_tx;
+  ci_uint32                  plugin_tx_region_id;
 #endif
   volatile void*             plugin_io;
 #endif

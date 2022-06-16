@@ -261,8 +261,8 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   /* Id allocator for nvme plugin */
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
-    /* TODO: VIRTBLK-1833 the IDs will have to be made plugin-global */
-    ci_nvme_plugin_crc_id_init(&nis->nvme_crc_plugin_idp);
+    ci_nvme_plugin_crc_id_init(&nis->nvme_crc_plugin_idp,
+                               ni->nic_hw[nic_i].plugin_tx_region_id);
 #endif
 
 }

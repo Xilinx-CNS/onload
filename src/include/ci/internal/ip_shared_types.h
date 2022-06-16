@@ -1507,7 +1507,7 @@ struct ci_netif_state_s {
     unsigned    fifo_mask;
     unsigned    fifo_rd_i;
     unsigned    fifo_wr_i;
-    ci_uint16    fifo[ZC_NVME_CRC_IDP_CAP];
+    ci_uint32    fifo[ZC_NVME_CRC_IDP_CAP];
   } nvme_crc_plugin_idp;
 
   /* Followed by:
