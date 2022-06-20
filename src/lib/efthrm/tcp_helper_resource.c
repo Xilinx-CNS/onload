@@ -2573,7 +2573,7 @@ static void destroy_ceph_app(struct efrm_ext* plugin, uint32_t app_id)
 #endif
 
 static int
-create_plugin_app(tcp_helper_resource_t* trs)
+create_plugin_rx_app(tcp_helper_resource_t* trs)
 {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_netif* ni = &trs->netif;
@@ -2582,7 +2582,7 @@ create_plugin_app(tcp_helper_resource_t* trs)
 
   ni->state->plugin_mmap_bytes = 0;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-    ni->nic_hw[intf_i].plugin = NULL;
+    ni->nic_hw[intf_i].plugin_rx = NULL;
 
   if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_CEPH )
     return 0;
@@ -2653,8 +2653,8 @@ create_plugin_app(tcp_helper_resource_t* trs)
       trs->nic[intf_i].thn_plugin_mapped_csr_offset = meta.mapped_csr_offset;
       ni->state->plugin_mmap_bytes += meta.mapped_csr_size;
     }
-    ni->nic_hw[intf_i].plugin = plugin;
-    ni->nic_hw[intf_i].plugin_app_id = app_id;
+    ni->nic_hw[intf_i].plugin_rx = plugin;
+    ni->nic_hw[intf_i].plugin_rx_app_id = app_id;
     got_nic = true;
   }
   if( ! got_nic ) {
@@ -2668,18 +2668,18 @@ create_plugin_app(tcp_helper_resource_t* trs)
 
 
 static void
-destroy_plugin_app(tcp_helper_resource_t* trs)
+destroy_plugin_rx_app(tcp_helper_resource_t* trs)
 {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_netif* ni = &trs->netif;
   int intf_i;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    struct efrm_ext* plugin = ni->nic_hw[intf_i].plugin;
+    struct efrm_ext* plugin = ni->nic_hw[intf_i].plugin_rx;
     if( ! plugin )
       continue;
-    destroy_ceph_app(plugin, ni->nic_hw[intf_i].plugin_app_id);
+    destroy_ceph_app(plugin, ni->nic_hw[intf_i].plugin_rx_app_id);
     efrm_ext_release(plugin);
-    ni->nic_hw[intf_i].plugin = NULL;
+    ni->nic_hw[intf_i].plugin_rx = NULL;
   }
 #endif
 }
@@ -2855,7 +2855,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
                     ef_vi_instance(&ni->nic_hw[intf_i].vis[i])));
   }
 
-  rc = create_plugin_app(trs);
+  rc = create_plugin_rx_app(trs);
   if( rc )
     goto fail5;
 
@@ -2870,7 +2870,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
   return 0;
 
  fail6:
-   destroy_plugin_app(trs);
+   destroy_plugin_rx_app(trs);
  fail5:
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     if( ni->nic_hw[intf_i].pkt_rs )
@@ -2933,7 +2933,7 @@ release_netif_hw_resources(tcp_helper_resource_t* trs)
 
   OO_DEBUG_SHM(ci_log("%s:", __func__));
 
-  destroy_plugin_app(trs);
+  destroy_plugin_rx_app(trs);
   destroy_plugin_tx_app(trs);
   release_vi(trs);
 
@@ -8524,13 +8524,13 @@ int efab_tcp_helper_tcp_offload_set_isn(tcp_helper_resource_t* trs,
   ci_assert(! in_atomic());
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    if( ni->nic_hw[intf_i].plugin &&
+    if( ni->nic_hw[intf_i].plugin_rx &&
         tep_p->plugin_stream_id[intf_i] != INVALID_PLUGIN_HANDLE ) {
       struct xsn_tcp_sync_stream sync = {
         .in_conn_id = tep_p->plugin_stream_id[intf_i],
         .in_seq = isn,
       };
-      int rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin,
+      int rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin_rx,
                             XSN_CEPH_SYNC_STREAM, &sync, sizeof(sync));
       if( rc < 0 )
         return rc;

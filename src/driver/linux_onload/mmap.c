@@ -374,7 +374,7 @@ static int tcp_helper_rm_mmap_plugin(tcp_helper_resource_t* trs,
 
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
     unsigned long n = PAGE_SIZE;
-    if( ! trs->netif.nic_hw[intf_i].plugin )
+    if( ! trs->netif.nic_hw[intf_i].plugin_rx )
       continue;
     if( ! trs->netif.nic_hw[intf_i].plugin_io ) {
       OO_DEBUG_ERR(ci_log("%s: mapping CSR region when plugin doesn't use it",
