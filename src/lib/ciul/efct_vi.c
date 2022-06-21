@@ -168,7 +168,7 @@ static bool efct_rxq_need_rollover(const struct efab_efct_rxq_uk_shm_q* shm,
   return pkt_id_to_index_in_superbuf(pkt_id) >= shm->superbuf_pkts;
 }
 
-static bool efct_rxq_can_rollover(const ef_vi* vi, int qid)
+ci_inline bool efct_rxq_can_rollover(const ef_vi* vi, int qid)
 {
   struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
   return OO_ACCESS_ONCE(shm->rxq.added) != shm->rxq.removed;
@@ -200,8 +200,14 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
   if( ! efct_rxq_is_active(shm) )
     return false;
   if( efct_rxq_need_rollover(shm, next) )
+#ifndef __KERNEL__
     /* only signal new event if rollover can be done */
     return efct_rxq_can_rollover(vi, qid);
+#else
+    /* Returning no event interferes with oo_handle_wakeup_int_driven
+     * Let the interrupt handler deal with the event */
+    return true;
+#endif
 
   return efct_rxq_need_config(rxq, shm) ||
      efct_rx_next_header(vi, next) != NULL;
