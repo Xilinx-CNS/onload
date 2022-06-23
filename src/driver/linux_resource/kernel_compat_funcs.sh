@@ -136,8 +136,14 @@ function do_export()
 function do_nexport() { ! do_export "$@"; }
 function do_file()
 {
+    shift 2; # skip action and symbol name
     for file in "$@"; do
+        # check both kernel src and common header trees as
+        # on debian these are separate
         if [ -f $KBUILD_SRC/$file ]; then
+            return 0
+        fi
+        if [ -f $KPATH/$file ]; then
             return 0
         fi
     done
