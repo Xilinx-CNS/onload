@@ -257,6 +257,7 @@ static int ef_filter_add_special(ef_driver_handle dh, int resource_id,
   ci_resource_op_t op;
   int rc;
 
+  memset(&op, 0, sizeof(op));
   op.id = efch_make_resource_id(resource_id);
   switch (type) {
   case EF_FILTER_PORT_SNIFF:
