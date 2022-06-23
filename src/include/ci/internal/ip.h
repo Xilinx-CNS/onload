@@ -2913,8 +2913,8 @@ ci_inline void
 ci_nvme_plugin_crc_id_init(struct nvme_crc_plugin_idp_t* idp, unsigned base)
 {
   int i = 0;
-  ci_fifo2_init(idp, ZC_NVME_CRC_IDP_CAP);
-  for( i = 0; i < ZC_NVME_CRC_IDP_CAP-1; i++ )
+  ci_fifo2_init(idp, 1 << ZC_NVME_CRC_IDP_CAP);
+  for( i = 0; i < (1 << ZC_NVME_CRC_IDP_CAP)-1; i++ )
       ci_fifo2_put(idp, i + base);
 }
 

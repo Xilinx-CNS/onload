@@ -29,9 +29,5 @@ struct ci_tcp_offload_zc_send_prefix {
   };
 };
 
-/* This value is used to calculate the base crc id defining
- * a region of values assigned to a given stack
- */
-#define ZC_NVME_CRC_REGION_ID_SHIFT 20
 
 #endif  /* __CI_INTERNAL_CRC_OFFLOAD_PREFIX_H__ */

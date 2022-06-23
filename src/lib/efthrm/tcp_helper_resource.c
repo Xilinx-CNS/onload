@@ -2703,7 +2703,7 @@ get_plugin_tx_crc_table_region(struct oo_nic* nic)
   nic->crc_id_pools_mask &= ~(1 << (first_set_bit - 1));
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
-  region_id = (first_set_bit - 1) << ZC_NVME_CRC_REGION_ID_SHIFT;
+  region_id = (first_set_bit - 1) << ZC_NVME_CRC_IDP_CAP;
   return region_id;
 }
 
@@ -2713,7 +2713,7 @@ release_plugin_tx_crc_table_region(struct oo_nic* nic, ci_uint32 region_id)
   ci_irqlock_state_t lock_flags;
 
   ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
-  nic->crc_id_pools_mask |= 1 << (region_id >> ZC_NVME_CRC_REGION_ID_SHIFT);
+  nic->crc_id_pools_mask |= 1 << (region_id >> ZC_NVME_CRC_IDP_CAP);
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 }
 
