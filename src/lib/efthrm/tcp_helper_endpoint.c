@@ -524,6 +524,7 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   if( rc == 0 && enable_recycler ) {
     int intf_i;
+    int stream_count = 0;
     ci_assert( ! in_atomic() );
     OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
       struct xsn_ceph_create_stream create;
@@ -550,10 +551,9 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
                         &create, sizeof(create));
       if( rc ) {
         OO_DEBUG_ERR(ci_log("ERROR: Can't create Ceph stream state (%d)", rc));
-        /* Current policy is to continue unaccelerated. We may add alternative
-         * options later. */
         continue;
       }
+      ++stream_count;
       ep->plugin_stream_id[intf_i] = le32_to_cpu(create.tcp.out_conn_id);
       /* In reality, all streams are bound to have the same address space: */
       ci_assert(nsn->plugin_addr_space == 0 ||
@@ -561,6 +561,16 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
       nsn->plugin_addr_space = create.out_addr_spc_id;
       ep->plugin_ddr_base[intf_i] = create.out_data_buf_base;
       ep->plugin_ddr_size[intf_i] = create.out_data_buf_capacity;
+    }
+    if( stream_count > 0 ) {
+      rc = 0;
+    }
+    else {
+      /* Current policy is to hand over, so choose an error code that will
+       * cause this. We may add alternative options later. */
+      rc = -EBUSY;
+      oof_socket_del(oo_filter_ns_to_manager(ep->thr->filter_ns),
+                     &ep->oofilter);
     }
   }
 #endif
