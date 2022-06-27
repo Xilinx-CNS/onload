@@ -94,8 +94,7 @@
 %{echo: %{target_cpu}}
 
 # Control debuginfo package when generating release package
-%if %{debuginfo}
-%else
+%if "%{debuginfo}" != "true"
 %define debug_package %{nil}
 %endif
 
