@@ -2318,6 +2318,7 @@ ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   struct ci_tcp_offload_zc_send_prefix* crc_prefix = prefix;
   ci_tcp_state* ts = SP_TO_TCP(ni, pkt->pf.tcp_tx.sock_id);
   unsigned id = ts->current_crc_id;
+  int intf_i = pkt->intf_i;
   int rc;
 
   ci_assert_equal(NI_OPTS(ni).tcp_offload_plugin, CITP_TCP_OFFLOAD_NVME);
@@ -2333,7 +2334,8 @@ ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
 
   crc_prefix->accum_crc.reset = (id == ZC_NVME_CRC_ID_INVALID);
   if( crc_prefix->accum_crc.reset ) {
-    rc = ci_nvme_plugin_crc_id_alloc(&ni->state->nvme_crc_plugin_idp, &id);
+    rc = ci_nvme_plugin_crc_id_alloc(&ni->state->nvme_crc_plugin_idp[intf_i],
+                                     &id);
     if( rc < 0 )
       return rc;
   }

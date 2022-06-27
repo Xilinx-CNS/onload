@@ -1512,11 +1512,11 @@ struct ci_netif_state_s {
     unsigned    fifo_mask;
     unsigned    fifo_rd_i;
     unsigned    fifo_wr_i;
-    ci_uint32    fifo[1 << ZC_NVME_CRC_IDP_CAP];
+    ci_uint32   fifo[1 << ZC_NVME_CRC_IDP_CAP];
 #ifdef NVME_LOCAL_CRC_MODE
     ci_uint32   crcs[1 << ZC_NVME_CRC_IDP_CAP];
 #endif
-  } nvme_crc_plugin_idp;
+  } nvme_crc_plugin_idp[CI_CFG_MAX_INTERFACES];
 
   /* Followed by:
   **
