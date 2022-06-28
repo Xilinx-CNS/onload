@@ -2352,8 +2352,8 @@ ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
     ci_log("ERROR: %s: buffer is non-local\n", __func__);
     abort();
   }
-  ci_uint32 crc = crc_prefix->accum_crc.reset ? 0 : ni->state->nvme_crc_plugin_idp.crcs[id];
-  ni->state->nvme_crc_plugin_idp.crcs[id] = crc32c(crc ^ 0xffffffff, zcp->local_addr, zcp->len);
+  ci_uint32 crc = crc_prefix->accum_crc.reset ? 0 : ni->state->nvme_crc_plugin_idp[intf_i].crcs[id];
+  ni->state->nvme_crc_plugin_idp[intf_i].crcs[id] = crc32c(crc ^ 0xffffffff, zcp->local_addr, zcp->len);
 #endif
 #endif
 
@@ -2393,7 +2393,7 @@ ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
     ci_log("ERROR: %s: buffer is non-local\n", __func__);
     abort();
   }
-  char* src = (char*)&ni->state->nvme_crc_plugin_idp.crcs[zcp->crc_id] + zcp->crc_insert_first_byte;
+  char* src = (char*)&ni->state->nvme_crc_plugin_idp[pkt->intf_i].crcs[zcp->crc_id] + zcp->crc_insert_first_byte;
   char* dst = (char*)zcp->local_addr + zcp->len - zcp->crc_insert_n_bytes;
   memcpy(dst, src, zcp->crc_insert_n_bytes);
 #endif
