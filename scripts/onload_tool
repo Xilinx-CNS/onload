@@ -42,7 +42,8 @@ tryunload () {
   if isloaded "$mod"; then
     # rmmod is used, to avoid modprobe failure as these modules are not present
     # in modprobe conf files in latest Onload.
-    if [ "$mod" = sfc_tune -o "$mod" = sfc_aoe -o "$mod" = onload_cplane ]; then
+    if [ "$mod" = sfc_tune -o "$mod" = sfc_aoe -o "$mod" = onload_cplane \
+         -o "$mod" = sfc_affinity ]; then
        echo "$me: rmmod -f $mod"
        rmmod -f $mod
     else
