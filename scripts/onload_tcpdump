@@ -120,5 +120,7 @@ else
     # - tcpdump prints error (incorrect pcap expression or anything);
     #   onload_tcpdump.bin is killed by SIGHUP.
     onload_tcpdump.bin $both_opts $onload_opts $stack_names_or_ids | \
-        ( setsid tcpdump -r- $w_opt $both_opts $tcpdump_opts || kill -HUP $$ )
+        ( setsid tcpdump -r- $w_opt $both_opts $tcpdump_opts || \
+        ( pgrep --parent $$ onload_tcpdump. | xargs kill -HUP ) )
+        #onload_tcpdump.bin is shortened in pgrep to onload_tcpdump.
 fi
