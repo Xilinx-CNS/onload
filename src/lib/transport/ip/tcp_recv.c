@@ -693,6 +693,8 @@ static int ci_tcp_recvmsg_spin(ci_netif* ni, ci_tcp_state* ts,
 #if CI_CFG_SPIN_STATS
     ni->state->stats.spin_tcp_recv++;
 #endif
+    if( future == &poison )
+      future = ci_netif_intf_rx_future(ni, intf_i, &poison);
   } while( now_frc - start_frc < max_spin );
 
   rc = spin_limit_by_so ? -EAGAIN : 0;
