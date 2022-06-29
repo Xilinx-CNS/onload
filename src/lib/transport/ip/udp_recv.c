@@ -766,7 +766,7 @@ ci_udp_recvmsg_socklocked_spin(ci_netif* ni, ci_udp_state* us,
 #endif
     if( ci_netif_may_poll(ni) ) {
 #ifndef __KERNEL__
-      if( spin_state->future == NULL )
+      if( spin_state->future == &spin_state->poison )
         spin_state->future = ci_netif_intf_rx_future(ni, us->future_intf_i,
                                                      &spin_state->poison);
 
@@ -778,7 +778,7 @@ ci_udp_recvmsg_socklocked_spin(ci_netif* ni, ci_udp_state* us,
           ci_netif_poll(ni);
         }
         ci_netif_unlock(ni);
-        spin_state->future = NULL;
+        spin_state->future = &spin_state->poison;
         return 0;
       }
 #endif
@@ -788,7 +788,7 @@ ci_udp_recvmsg_socklocked_spin(ci_netif* ni, ci_udp_state* us,
           ci_netif_poll(ni);
           ci_netif_unlock(ni);
 #ifndef __KERNEL__
-          spin_state->future = NULL;
+          spin_state->future = &spin_state->poison;
 #endif
         }
       if( ! ni->state->is_spinner )
@@ -932,7 +932,7 @@ ci_udp_recvmsg_common(ci_udp_recv_info *rinf)
 
     if( spin_state.do_spin ) {
       spin_state.poison = CI_PKT_RX_POISON;
-      spin_state.future = NULL;
+      spin_state.future = &spin_state.poison;
       spin_state.schedule_frc = spin_state.start_frc;
       spin_state.max_spin = us->s.b.spin_cycles;
       if( us->s.so.rcvtimeo_msec ) {
@@ -1460,7 +1460,7 @@ int ci_udp_zc_recv(ci_udp_iomsg_args* a, struct onload_zc_recv_args* args)
       spin_state.si = citp_signal_get_specific_inited();
       spin_state.max_spin = us->s.b.spin_cycles;
       spin_state.poison = CI_PKT_RX_POISON;
-      spin_state.future = NULL;
+      spin_state.future = &spin_state.poison;
 
       if( us->s.so.rcvtimeo_msec ) {
         ci_uint64 max_so_spin = (ci_uint64)us->s.so.rcvtimeo_msec *
