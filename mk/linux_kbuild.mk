@@ -45,10 +45,6 @@ EXTRA_CFLAGS += -DCI_HAVE_CNS_AUX=$(HAVE_CNS_AUX)
 ifneq ($(HAVE_CNS_AUX),0)
 EXTRA_CFLAGS += -DCI_AUX_HEADER='"$(AUX_BUS_PATH)/include/linux/auxiliary_bus.h"'
 EXTRA_CFLAGS += -DCI_AUX_MOD_HEADER='"$(AUX_BUS_PATH)/drivers/base/mod_devicetable_auxiliary.h"'
-else
-ifneq (,$(wildcard /lib/modules/$(KVER)/updates/auxiliary.symvers))
-KBUILD_EXTRA_SYMBOLS += "/lib/modules/$(KVER)/updates/auxiliary.symvers"
-endif
 endif
 
 X3_NET_HDR := linux/net/xilinx/xlnx_efct.h
