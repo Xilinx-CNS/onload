@@ -36,18 +36,11 @@ endif
 
 X3_NET_HDR := linux/net/xilinx/xlnx_efct.h
 X3_NET_PATH ?= $(TOPPATH)/../x3-net-linux
-ifneq ($(wildcard $(X3_NET_PATH)/include/$(X3_NET_HDR)),)
- HAVE_X3_NET := 1
- EXTRA_CFLAGS += -DCI_XLNX_EFCT_HEADER='"$(X3_NET_PATH)/include/$(X3_NET_HDR)"'
-else
- ifneq ($(wildcard include/$(X3_NET_HDR)),)
-  HAVE_X3_NET := 1
-  EXTRA_CFLAGS += -DCI_XLNX_EFCT_HEADER='"$(X3_NET_HDR)"'
- else
-  HAVE_X3_NET := 0
- endif
-endif
+HAVE_X3_NET := $(or $(and $(wildcard $(X3_NET_PATH)),1),0)
 EXTRA_CFLAGS += -DCI_HAVE_X3_NET=$(HAVE_X3_NET)
+ifneq ($(HAVE_X3_NET),0)
+ EXTRA_CFLAGS += -DCI_XLNX_EFCT_HEADER='"$(X3_NET_PATH)/include/$(X3_NET_HDR)"'
+endif
 
 TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_extra.h
 EXTRA_CFLAGS += -DTRANSPORT_CONFIG_OPT_HDR='<$(TRANSPORT_CONFIG_OPT_HDR)>'
