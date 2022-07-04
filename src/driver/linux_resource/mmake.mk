@@ -70,6 +70,10 @@ KBUILD_EXTRA_SYMBOLS := $(BUILDPATH)/driver/linux_net/drivers/net/ethernet/sfc/M
 ifndef CONFIG_AUXILIARY_BUS
 ifneq ($(HAVE_CNS_AUX),0)
 KBUILD_EXTRA_SYMBOLS += $(AUX_BUS_PATH)/drivers/base/Module.symvers
+else
+ifneq (,$(wildcard /lib/modules/$(KVER)/updates/auxiliary.symvers))
+KBUILD_EXTRA_SYMBOLS += /lib/modules/$(KVER)/updates/auxiliary.symvers
+endif
 endif
 endif
 
