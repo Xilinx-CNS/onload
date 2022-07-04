@@ -5,6 +5,23 @@ MMAKE_IN_KBUILD	:= 1
 include $(TOPPATH)/mk/platform/$(PLATFORM).mk
 include $(TOPPATH)/mk/site/funcs.mk
 
+ifdef KPATH
+KDIR ?= $(KPATH)
+ifndef KVER
+KVER := $(shell sed -r 's/^\#define UTS_RELEASE "(.*)"/\1/; t; d' $(KDIR)/include/generated/utsrelease.h $(KDIR)/include/linux/utsrelease.h $(KDIR)/include/linux/version.h 2>/dev/null)
+ifeq ($(KVER),)
+$(error Failed to find kernel version for $(KDIR))
+endif
+endif # !KVER
+endif # KPATH
+
+ifndef KVER
+KVER := $(shell uname -r)
+endif
+KDIR ?= /lib/modules/$(KVER)/build
+export KDIR KVER
+
+
 EXTRA_CPPFLAGS += -I$(TOPPATH)/src/include -I$(BUILDPATH)/include \
 		-I$(BUILDPATH) -I$(TOPPATH)/$(CURRENT) -D__ci_driver__
 ifdef NDEBUG
