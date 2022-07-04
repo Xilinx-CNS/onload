@@ -642,6 +642,9 @@
 #define CI_CFG_TCP_PLUGIN_RECV_NONZC 1
 #endif
 
+/* Enable cooperation with the SmartNIC TX CRC-offload plugin */
+#define CI_CFG_TX_CRC_OFFLOAD 0
+
 #ifdef __KERNEL__
 #include <linux/version.h>
 /* Enable Berkeley Packet Filter program functionality

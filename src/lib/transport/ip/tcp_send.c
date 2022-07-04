@@ -2310,6 +2310,7 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
 }
 
 
+#if CI_CFG_TX_CRC_OFFLOAD
 ci_int8
 ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                  struct ci_pkt_zc_payload* zcp,
@@ -2401,6 +2402,7 @@ ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
 
   return sizeof(*crc_prefix);
 }
+#endif /* CI_CFG_TX_CRC_OFFLOAD */
 
 
 #ifndef __KERNEL__

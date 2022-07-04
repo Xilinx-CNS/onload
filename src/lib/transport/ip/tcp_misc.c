@@ -867,7 +867,7 @@ void ci_tcp_drop(ci_netif* netif, ci_tcp_state* ts, int so_error)
     ci_tcp_wake_possibly_not_in_poll(netif, ts,
                                      CI_SB_FLAG_WAKE_RX|CI_SB_FLAG_WAKE_TX);
   }
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#if CI_CFG_TX_CRC_OFFLOAD
   if( NI_OPTS(netif).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
     ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
 #endif

@@ -34,9 +34,11 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                              unsigned iovlen)
 {
   int i, intf_i = pkt->intf_i;
-  unsigned zcp_offset;
   struct ci_pkt_zc_header* zch;
+#if CI_CFG_TX_CRC_OFFLOAD
   struct ci_pkt_zc_payload* zcp;
+  unsigned zcp_offset;
+#endif
   ef_remote_iovec* iov;
   ef_remote_iovec* prefix_iov;
   char* prefix_start;
@@ -67,6 +69,7 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
    * might need one, and one for each ZC payload. */
   ci_assert_ge(iovlen, 1 + (zch->prefix_spc > 0) + zch->segs);
   i = 1;
+#if CI_CFG_TX_CRC_OFFLOAD
   zcp_offset = pkt->buf_len;
   OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
     if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_ACCUM_CRC &&
@@ -97,6 +100,7 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
     iov[i].iov_len = zcp->len;
     ++i;
   }
+#endif
 
   if( prefix_end > prefix_start ) {
     prefix_iov->iov_base = (pkt_dma_addr(ni, pkt, intf_i) -

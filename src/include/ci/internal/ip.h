@@ -594,7 +594,7 @@ CI_DEBUG(extern void ci_netif_verify_freepkts(ci_netif *, const char *, int);)
 
 ci_inline int ci_netif_num_vis(ci_netif* ni)
 {
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#if CI_CFG_TCP_OFFLOAD_RECYCLER || CI_CFG_TX_CRC_OFFLOAD
   switch( NI_OPTS(ni).tcp_offload_plugin ) {
     case CITP_TCP_OFFLOAD_OFF:     return 1;
     case CITP_TCP_OFFLOAD_NVME:    return 1;
@@ -2906,6 +2906,7 @@ oo_tx_zc_payload_next(ci_netif* ni, struct ci_pkt_zc_payload* zcp)
        (char*)(zcp) - (char*)(zch) < (zch)->end; \
        (zcp) = oo_tx_zc_payload_next(ni, zcp) )
 
+#if CI_CFG_TX_CRC_OFFLOAD
 /* Initializes an id pool for the NVMe CRC plugin ids.
  * According to the ci_fifo2 specification, the queue capacity is cap-1
  */
@@ -2959,6 +2960,7 @@ ci_nvme_plugin_crc_free_acked_ids(ci_netif* ni, ci_ip_pkt_fmt* pkt)
     }
   }
 }
+#endif /* CI_CFG_TX_CRC_OFFLOAD */
 
 /* Free all CRC IDs that were allocated for the specified packet.  This is
  * needed for cleanup when the ID pool is exhausted mid-packet or when TX of
@@ -2968,6 +2970,7 @@ ci_inline void
 ci_nvme_plugin_crc_packet_cleanup(ci_netif* ni, ci_tcp_state* ts,
                                   ci_ip_pkt_fmt* pkt)
 {
+#if CI_CFG_TX_CRC_OFFLOAD
   struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
   struct ci_pkt_zc_payload* zcp;
   ci_uint32 prev_id = ZC_NVME_CRC_ID_INVALID;
@@ -2989,6 +2992,7 @@ ci_nvme_plugin_crc_packet_cleanup(ci_netif* ni, ci_tcp_state* ts,
       }
     }
   }
+#endif
 }
 
 /* A dropped queue affects the pending nvme crc plugin ids,
@@ -2999,6 +3003,7 @@ ci_inline void ci_nvme_plugin_idp_dropped_queue_cleanup(ci_netif* ni,
                                                         ci_tcp_state* ts,
                                                         ci_ip_pkt_queue *qu)
 {
+#if CI_CFG_TX_CRC_OFFLOAD
   oo_pkt_p pp = qu->head;
   ci_ip_pkt_fmt* p;
   int intf_i = ts->s.pkt.intf_i;
@@ -3013,6 +3018,7 @@ ci_inline void ci_nvme_plugin_idp_dropped_queue_cleanup(ci_netif* ni,
                                   ts->current_crc_id);
     ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
   }
+#endif
 }
 
 /*********************************************************************
@@ -4120,7 +4126,7 @@ ci_inline void ci_tcp_sendq_drop(ci_netif* ni, ci_tcp_state* ts)
 
 ci_inline void ci_tcp_retrans_drop(ci_netif* ni, ci_tcp_state* ts)
 {
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#if CI_CFG_TX_CRC_OFFLOAD
   if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
     ci_nvme_plugin_idp_dropped_queue_cleanup(ni, ts, &ts->retrans);
 #endif

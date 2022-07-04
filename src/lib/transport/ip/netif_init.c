@@ -73,7 +73,7 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
     assert_zero(nn->tx_dmaq_done_seq);
     nn->rx_frags = OO_PP_NULL;
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#if CI_CFG_TX_CRC_OFFLOAD
   if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
     ci_nvme_plugin_crc_id_init(&nis->nvme_crc_plugin_idp[nic_i],
                                ni->nic_hw[nic_i].plugin_tx_region_id);
@@ -1292,7 +1292,7 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_ICMP_PKTS")) )
     opts->icmp_msg_max = atoi(s);
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#if CI_CFG_TCP_OFFLOAD_RECYCLER || CI_CFG_TX_CRC_OFFLOAD
   static const char* const tcp_offload_opts[] = { "off", "tcp", "ceph", "nvme", 0 };
   opts->tcp_offload_plugin = parse_enum(opts, "EF_TCP_OFFLOAD",
                                         tcp_offload_opts, "off");

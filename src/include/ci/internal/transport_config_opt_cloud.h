@@ -21,4 +21,8 @@
 #undef CI_CFG_TCP_PLUGIN_EXTRA_VIS
 #define CI_CFG_TCP_PLUGIN_EXTRA_VIS 1
 
+/* Enable the SmartNIC TX CRC-offload plugin */
+#undef CI_CFG_TX_CRC_OFFLOAD
+#define CI_CFG_TX_CRC_OFFLOAD 1
+
 #endif /* __CI_INTERNAL_TRANSPORT_CONFIG_OPT_CLOUD_H__ */

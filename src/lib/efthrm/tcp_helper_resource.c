@@ -2685,6 +2685,7 @@ destroy_plugin_rx_app(tcp_helper_resource_t* trs)
 }
 
 
+#if CI_CFG_TX_CRC_OFFLOAD
 static ci_uint32
 get_plugin_tx_crc_table_region(struct oo_nic* nic)
 {
@@ -2716,11 +2717,12 @@ release_plugin_tx_crc_table_region(struct oo_nic* nic, ci_uint32 region_id)
   nic->crc_id_pools_mask |= 1 << (region_id >> ZC_NVME_CRC_IDP_CAP);
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 }
+#endif
 
 static int
 create_plugin_tx_app(tcp_helper_resource_t* trs)
 {
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#if CI_CFG_TX_CRC_OFFLOAD
   ci_netif* ni = &trs->netif;
   bool got_nic = false;
   int intf_i;
@@ -2760,7 +2762,7 @@ create_plugin_tx_app(tcp_helper_resource_t* trs)
 static void
 destroy_plugin_tx_app(tcp_helper_resource_t* trs)
 {
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
+#if CI_CFG_TX_CRC_OFFLOAD
   ci_netif* ni = &trs->netif;
   int intf_i;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
