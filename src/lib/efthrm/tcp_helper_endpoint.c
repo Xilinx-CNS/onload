@@ -94,7 +94,7 @@ clear_plugin_state(tcp_helper_endpoint_t * ep)
     if( conn_id == INVALID_PLUGIN_HANDLE )
       continue;
     param.in_conn_id = cpu_to_le32(conn_id);;
-    rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin,
+    rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin_rx,
                       XSN_CEPH_DESTROY_STREAM, &param, sizeof(param));
     if( rc )
       OO_DEBUG_ERR(ci_log("%s: ERROR: Destroy Ceph stream failed (%d)",
@@ -529,7 +529,7 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
       struct xsn_ceph_create_stream create;
       ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
 
-      if( ! ni->nic_hw[intf_i].plugin )
+      if( ! ni->nic_hw[intf_i].plugin_rx )
         continue;
       /* With the non-P2H design, we must only create the stream on one
        * interface. */
@@ -537,7 +537,7 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
           intf_i != s->pkt.intf_i )
         continue;
       create = (struct xsn_ceph_create_stream){
-        .tcp.in_app_id = cpu_to_le32(ni->nic_hw[intf_i].plugin_app_id),
+        .tcp.in_app_id = cpu_to_le32(ni->nic_hw[intf_i].plugin_rx_app_id),
         .tcp.in_user_mark = cpu_to_le32(ep->id),
         .tcp.in_synchronised = false,   /* passive-open not supported */
         .tcp.in_source_ip = raddr.ip4,
@@ -546,7 +546,7 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
         .tcp.in_dest_port = lport,
         .in_data_buf_capacity = NI_OPTS(ni).ceph_data_buf_bytes,
       };
-      rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin, XSN_CEPH_CREATE_STREAM,
+      rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin_rx, XSN_CEPH_CREATE_STREAM,
                         &create, sizeof(create));
       if( rc ) {
         OO_DEBUG_ERR(ci_log("ERROR: Can't create Ceph stream state (%d)", rc));

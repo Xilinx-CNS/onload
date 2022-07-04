@@ -45,6 +45,7 @@
 #include <onload/dshm.h>
 #include <ci/net/ipv4.h>
 #include <ci/internal/more_stats.h>
+#include <ci/internal/crc_offload_prefix.h>
 #include "tcp_helper_resource.h"
 #include "tcp_helper_stats_dump.h"
 #include <onload/tcp-ceph.h>
@@ -2570,7 +2571,7 @@ static void destroy_ceph_app(struct efrm_ext* plugin, uint32_t app_id)
 #endif
 
 static int
-create_plugin_app(tcp_helper_resource_t* trs)
+create_plugin_rx_app(tcp_helper_resource_t* trs)
 {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_netif* ni = &trs->netif;
@@ -2579,7 +2580,7 @@ create_plugin_app(tcp_helper_resource_t* trs)
 
   ni->state->plugin_mmap_bytes = 0;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-    ni->nic_hw[intf_i].plugin = NULL;
+    ni->nic_hw[intf_i].plugin_rx = NULL;
 
   if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_CEPH )
     return 0;
@@ -2650,8 +2651,8 @@ create_plugin_app(tcp_helper_resource_t* trs)
       trs->nic[intf_i].thn_plugin_mapped_csr_offset = meta.mapped_csr_offset;
       ni->state->plugin_mmap_bytes += meta.mapped_csr_size;
     }
-    ni->nic_hw[intf_i].plugin = plugin;
-    ni->nic_hw[intf_i].plugin_app_id = app_id;
+    ni->nic_hw[intf_i].plugin_rx = plugin;
+    ni->nic_hw[intf_i].plugin_rx_app_id = app_id;
     got_nic = true;
   }
   if( ! got_nic ) {
@@ -2665,18 +2666,106 @@ create_plugin_app(tcp_helper_resource_t* trs)
 
 
 static void
-destroy_plugin_app(tcp_helper_resource_t* trs)
+destroy_plugin_rx_app(tcp_helper_resource_t* trs)
 {
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   ci_netif* ni = &trs->netif;
   int intf_i;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    struct efrm_ext* plugin = ni->nic_hw[intf_i].plugin;
+    struct efrm_ext* plugin = ni->nic_hw[intf_i].plugin_rx;
     if( ! plugin )
       continue;
-    destroy_ceph_app(plugin, ni->nic_hw[intf_i].plugin_app_id);
+    destroy_ceph_app(plugin, ni->nic_hw[intf_i].plugin_rx_app_id);
     efrm_ext_release(plugin);
-    ni->nic_hw[intf_i].plugin = NULL;
+    ni->nic_hw[intf_i].plugin_rx = NULL;
+  }
+#endif
+}
+
+
+#if CI_CFG_TX_CRC_OFFLOAD
+static ci_uint32
+get_plugin_tx_crc_table_region(struct oo_nic* nic)
+{
+  ci_uint32 region_id;
+  ci_uint8 first_set_bit;
+  ci_irqlock_state_t lock_flags;
+
+  /* The regions will eventually be managed by plugin control messages,
+   * so the stack table lock will go away */
+  ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
+  first_set_bit = ffs(nic->crc_id_pools_mask);
+  if( ! first_set_bit ) {
+    ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
+    return -ENOSPC;
+  }
+  nic->crc_id_pools_mask &= ~(1 << (first_set_bit - 1));
+  ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
+
+  region_id = (first_set_bit - 1) << ZC_NVME_CRC_IDP_CAP;
+  return region_id;
+}
+
+static void
+release_plugin_tx_crc_table_region(struct oo_nic* nic, ci_uint32 region_id)
+{
+  ci_irqlock_state_t lock_flags;
+
+  ci_irqlock_lock(&THR_TABLE.lock, &lock_flags);
+  nic->crc_id_pools_mask |= 1 << (region_id >> ZC_NVME_CRC_IDP_CAP);
+  ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
+}
+#endif
+
+static int
+create_plugin_tx_app(tcp_helper_resource_t* trs)
+{
+#if CI_CFG_TX_CRC_OFFLOAD
+  ci_netif* ni = &trs->netif;
+  bool got_nic = false;
+  int intf_i;
+
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
+    ni->nic_hw[intf_i].plugin_tx = NULL;
+
+  if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_NVME )
+    return 0;
+
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    /* TODO: add PCM to register the TXQ with the tx_plugin */
+    struct ef_vi* nvme_vi;
+    struct efhw_nic* nic;
+    ci_uint32 region_id;
+
+    nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
+    if( nic->devtype.arch != EFHW_ARCH_EF100 )
+      continue;
+
+    nvme_vi = &ni->nic_hw[intf_i].vis[CI_Q_ID_NORMAL];
+    region_id = get_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic);
+
+    ni->nic_hw[intf_i].plugin_tx_region_id = region_id;
+    got_nic = true;
+  }
+  if( ! got_nic ) {
+    OO_DEBUG_ERR(ci_log("%s: no EF100 NICs have the requested plugin",
+                        __FUNCTION__));
+    return -ENOTSUPP;
+  }
+#endif
+ return 0;
+}
+
+
+static void
+destroy_plugin_tx_app(tcp_helper_resource_t* trs)
+{
+#if CI_CFG_TX_CRC_OFFLOAD
+  ci_netif* ni = &trs->netif;
+  int intf_i;
+  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    release_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic,
+                                      ni->nic_hw[intf_i].plugin_tx_region_id);
   }
 #endif
 }
@@ -2766,9 +2855,13 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
                     ef_vi_instance(&ni->nic_hw[intf_i].vis[i])));
   }
 
-  rc = create_plugin_app(trs);
+  rc = create_plugin_rx_app(trs);
   if( rc )
     goto fail5;
+
+  rc = create_plugin_tx_app(trs);
+  if( rc )
+    goto fail6;
 
   /* This is needed because release_netif_hw_resources() tries to free the ep
   ** table. */
@@ -2776,6 +2869,8 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
 
   return 0;
 
+ fail6:
+   destroy_plugin_rx_app(trs);
  fail5:
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     if( ni->nic_hw[intf_i].pkt_rs )
@@ -2838,7 +2933,8 @@ release_netif_hw_resources(tcp_helper_resource_t* trs)
 
   OO_DEBUG_SHM(ci_log("%s:", __func__));
 
-  destroy_plugin_app(trs);
+  destroy_plugin_rx_app(trs);
+  destroy_plugin_tx_app(trs);
   release_vi(trs);
 
   /* Once all vis are flushed we can release pkt memory */
@@ -8428,13 +8524,13 @@ int efab_tcp_helper_tcp_offload_set_isn(tcp_helper_resource_t* trs,
   ci_assert(! in_atomic());
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    if( ni->nic_hw[intf_i].plugin &&
+    if( ni->nic_hw[intf_i].plugin_rx &&
         tep_p->plugin_stream_id[intf_i] != INVALID_PLUGIN_HANDLE ) {
       struct xsn_tcp_sync_stream sync = {
         .in_conn_id = tep_p->plugin_stream_id[intf_i],
         .in_seq = isn,
       };
-      int rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin,
+      int rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin_rx,
                             XSN_CEPH_SYNC_STREAM, &sync, sizeof(sync));
       if( rc < 0 )
         return rc;

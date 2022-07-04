@@ -568,7 +568,7 @@ ci_inline struct pid* ci_netif_pid_lookup(ci_netif* ni, pid_t pid)
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
 ci_inline bool ci_netif_tcp_plugin_uses_p2h(ci_netif* ni, int intf_i)
 {
-  ci_assert(ni->nic_hw[intf_i].plugin);
+  ci_assert(ni->nic_hw[intf_i].plugin_rx);
   /* The plugin design using P2H doesn't exist yet. */
   return false;
 }

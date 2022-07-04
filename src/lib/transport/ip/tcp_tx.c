@@ -993,6 +993,7 @@ int ci_tcp_retrans_one(ci_tcp_state* ts, ci_netif* netif, ci_ip_pkt_fmt* pkt)
       CI_PKT_FLAG_TX_TIMESTAMPED )
     pkt->pf.tcp_tx.first_tx_hw_stamp = pkt->hw_stamp;
 #endif
+  pkt->flags |= CI_PKT_FLAG_RTQ_RETRANS;
   ci_tcp_tx_maybe_do_striping(pkt, ts);
   __ci_ip_send_tcp(netif, pkt, ts);
   CI_TCP_STATS_INC_OUT_SEGS(netif);
@@ -1121,7 +1122,6 @@ int ci_tcp_retrans(ci_netif* ni, ci_tcp_state* ts, int seq_limit,
       return 1;
     }
 
-    pkt->flags |= CI_PKT_FLAG_RTQ_RETRANS;
     *seq_used += seq_space;
     seq_limit -= seq_space;
     ts->retrans_seq = pkt->pf.tcp_tx.end_seq;

@@ -122,6 +122,11 @@ static void ci_tcp_state_tcb_init_fixed(ci_netif* netif, ci_tcp_state* ts,
   ts->s.pkt.ipx.ip4.ip_check_be16 = 0;
   ts->s.pkt.ipx.ip4.ip_id_be16 = 0;
   TS_IPX_TCP(ts)->tcp_check_be16 = 0;
+
+#if CI_CFG_TX_CRC_OFFLOAD
+  if( NI_OPTS(netif).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
+    ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
+#endif
 }
 
 void ci_tcp_state_tcb_reinit_minimal(ci_netif* netif, ci_tcp_state* ts)
@@ -153,6 +158,11 @@ void ci_tcp_state_tcb_reinit_minimal(ci_netif* netif, ci_tcp_state* ts)
   ts->sv = NI_CONF(netif).tconst_rto_initial; /* cwndrecover b4 rtt measured */
 
   ts->local_peer = OO_SP_NULL;
+
+#if CI_CFG_TX_CRC_OFFLOAD
+  if( NI_OPTS(netif).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
+    ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
+#endif
 }
 
 /* Reset state for a connection, used for shutdown following listen. */

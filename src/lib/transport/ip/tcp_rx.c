@@ -1403,6 +1403,12 @@ static void ci_tcp_rx_free_acked_bufs(ci_netif* netif, ci_tcp_state* ts,
                CI_TCP_HDR_FLAGS_PRI_ARG(PKT_IPX_TCP_HDR(af, p)),
                rxp->ack, rtq->num));
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
+    if( NI_OPTS(netif).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME &&
+        p->flags & CI_PKT_FLAG_INDIRECT )
+      ci_nvme_plugin_crc_free_acked_ids(netif, p);
+#endif
+
     ci_ip_queue_dequeue(netif, rtq, p);
 
     ci_assert(p->refcount > 0);

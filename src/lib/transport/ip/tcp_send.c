@@ -16,6 +16,11 @@
 #include "ip_internal.h"
 #include "tcp_tx.h"
 #include "ip_tx.h"
+#include <ci/internal/crc_offload_prefix.h>
+
+#ifdef NVME_LOCAL_CRC_MODE
+#include "crc32c.h"
+#endif
 
 #if !defined(__KERNEL__)
 #include <sys/socket.h>
@@ -347,7 +352,12 @@ void ci_tcp_tx_fill_sendq_tail(ci_netif* ni, ci_tcp_state* ts,
                                         ((char*)zch + zch->end);
         int n = ci_copy_iovec(zcp->local, CI_MIN(space, mss - last_seg), piov);
         zcp->len = n;
+        zcp->prefix_space = 0;
+        zcp->zcp_flags = 0;
         zcp->is_remote = 0;
+#ifdef NVME_LOCAL_CRC_MODE
+        zcp->local_addr = zcp->local;
+#endif
         zch->end += CI_MEMBER_OFFSET(struct ci_pkt_zc_payload, local) +
                     CI_ALIGN_FWD(n, CI_PKT_ZC_PAYLOAD_ALIGN);
         ++zch->segs;
@@ -2300,7 +2310,136 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
 }
 
 
+#if CI_CFG_TX_CRC_OFFLOAD
+ci_int8
+ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
+                                 struct ci_pkt_zc_payload* zcp,
+                                 unsigned payload_offset, void* prefix)
+{
+  struct ci_tcp_offload_zc_send_prefix* crc_prefix = prefix;
+  ci_tcp_state* ts = SP_TO_TCP(ni, pkt->pf.tcp_tx.sock_id);
+  unsigned id = ts->current_crc_id;
+  int intf_i = pkt->intf_i;
+  int rc;
+
+  ci_assert_equal(NI_OPTS(ni).tcp_offload_plugin, CITP_TCP_OFFLOAD_NVME);
+  ci_assert_nflags(pkt->flags, CI_PKT_FLAG_RTQ_RETRANS);
+
+  crc_prefix->type = CI_TCP_OFFLOAD_ZC_SEND_PREFIX_TYPE_ACCUM;
+  crc_prefix->data_offset = payload_offset;
+  crc_prefix->accum_crc.data_len = zcp->len;
+
+  /* Formally, the assignment above truncates, but as ZC payload lengths are
+   * bounded above by the MSS, truncation should never happen. */
+  ci_assert_equal(crc_prefix->accum_crc.data_len, zcp->len);
+
+  crc_prefix->accum_crc.reset = (id == ZC_NVME_CRC_ID_INVALID);
+  if( crc_prefix->accum_crc.reset ) {
+    rc = ci_nvme_plugin_crc_id_alloc(&ni->state->nvme_crc_plugin_idp[intf_i],
+                                     &id);
+    if( rc < 0 )
+      return rc;
+  }
+  crc_prefix->plugin_context_id = id;
+  ts->current_crc_id = id;
+  zcp->crc_id = id;
+
+#ifdef NVME_LOCAL_CRC_MODE
+#ifdef __KERNEL__
+  ci_log("WARNING: Unable to compute CRC in kernel context; "
+         "emitted CRC will be invalid");
+#else
+  if( zcp->local_addr == NULL ) {
+    ci_log("ERROR: %s: buffer is non-local\n", __func__);
+    abort();
+  }
+  ci_uint32 crc = crc_prefix->accum_crc.reset ? 0 : ni->state->nvme_crc_plugin_idp[intf_i].crcs[id];
+  ni->state->nvme_crc_plugin_idp[intf_i].crcs[id] = crc32c(crc ^ 0xffffffff, zcp->local_addr, zcp->len);
+#endif
+#endif
+
+  return sizeof(*crc_prefix);
+}
+
+
+ci_uint8
+ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
+                                  struct ci_pkt_zc_payload* zcp,
+                                  unsigned payload_offset, void* prefix)
+{
+  struct ci_tcp_offload_zc_send_prefix* crc_prefix = prefix;
+  ci_tcp_state* ts = SP_TO_TCP(ni, pkt->pf.tcp_tx.sock_id);
+
+  ci_assert_equal(NI_OPTS(ni).tcp_offload_plugin, CITP_TCP_OFFLOAD_NVME);
+
+  crc_prefix->type = CI_TCP_OFFLOAD_ZC_SEND_PREFIX_TYPE_INSERT;
+  crc_prefix->data_offset = payload_offset + zcp->len - zcp->crc_insert_n_bytes;
+  crc_prefix->insert_crc.first_byte = zcp->crc_insert_first_byte;
+  crc_prefix->insert_crc.n_bytes = zcp->crc_insert_n_bytes;
+  if( zcp->crc_id == ZC_NVME_CRC_ID_INVALID ) {
+    /* Not a retransmission.  Set the ID on this ZC payload and clear the
+     * connection's current ID if this is the last chunk of the CRC. */
+    zcp->crc_id = ts->current_crc_id;
+    if( ci_nvme_plugin_crc_last_byte_sent(zcp) )
+      ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
+  }
+  crc_prefix->plugin_context_id = zcp->crc_id;
+
+#ifdef NVME_LOCAL_CRC_MODE
+#ifdef __KERNEL__
+  ci_log("WARNING: Unable to insert CRC in kernel context; "
+         "emitted CRC will be invalid");
+#else
+  if( zcp->local_addr == NULL ) {
+    ci_log("ERROR: %s: buffer is non-local\n", __func__);
+    abort();
+  }
+  char* src = (char*)&ni->state->nvme_crc_plugin_idp[pkt->intf_i].crcs[zcp->crc_id] + zcp->crc_insert_first_byte;
+  char* dst = (char*)zcp->local_addr + zcp->len - zcp->crc_insert_n_bytes;
+  memcpy(dst, src, zcp->crc_insert_n_bytes);
+#endif
+#endif
+
+  return sizeof(*crc_prefix);
+}
+#endif /* CI_CFG_TX_CRC_OFFLOAD */
+
+
 #ifndef __KERNEL__
+
+
+ci_uint8
+ci_tcp_offload_zc_send_get_prefix_len(ci_netif* ni,
+                                      const struct onload_zc_iovec* iov)
+{
+  ci_uint8 prefix_len = 0;
+  if( iov->iov_flags & ONLOAD_ZC_SEND_FLAG_ACCUM_CRC )
+    prefix_len += sizeof(struct ci_tcp_offload_zc_send_prefix);
+  if( iov->iov_flags & ONLOAD_ZC_SEND_FLAG_INSERT_CRC )
+    prefix_len += sizeof(struct ci_tcp_offload_zc_send_prefix);
+  return prefix_len;
+}
+
+
+static inline ci_uint32 zc_iov_flags_to_zcp_flags(unsigned iov_flags)
+{
+  ci_uint32 zcp_flags = 0;
+  if( iov_flags & ONLOAD_ZC_SEND_FLAG_ACCUM_CRC)
+    zcp_flags |= ZC_PAYLOAD_FLAG_ACCUM_CRC;
+  if( iov_flags & ONLOAD_ZC_SEND_FLAG_INSERT_CRC)
+    zcp_flags |= ZC_PAYLOAD_FLAG_INSERT_CRC;
+  return zcp_flags;
+}
+
+
+static inline ci_uint8
+zc_prefix_reservation(ci_netif* ni, const struct onload_zc_iovec* iov)
+{
+  if( iov->iov_flags == 0 )
+    return 0;
+  return ci_tcp_offload_zc_send_get_prefix_len(ni, iov);
+}
+
 
 /* 
  * TODO:
@@ -2311,16 +2450,18 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
  *     packet;
  */
 
-static inline bool ci_tcp_tx_has_room_for_zc(ci_netif* ni, ci_ip_pkt_fmt* pkt)
+static inline bool ci_tcp_tx_has_room_for_zc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
+                                             ci_uint8 prefix_resv)
 {
   if( pkt->flags & CI_PKT_FLAG_INDIRECT ) {
-    return oo_tx_zc_left(pkt) >= oo_tx_zc_payload_size(ni) &&
+    return oo_tx_zc_left(pkt) >= oo_tx_zc_payload_size(ni) + prefix_resv &&
            /* We need one additional segment for the header: */
            oo_tx_zc_header(pkt)->segs < CI_IP_PKT_SEGMENTS_MAX - 1;
   }
   else {
     return CI_PTR_ALIGN_FWD(oo_offbuf_end(&pkt->buf), CI_PKT_ZC_PAYLOAD_ALIGN)
-           + sizeof(struct ci_pkt_zc_header) + oo_tx_zc_payload_size(ni)
+           + sizeof(struct ci_pkt_zc_header) + oo_tx_zc_payload_size(ni) +
+           prefix_resv
            <= (char*)pkt + CI_CFG_PKT_BUF_SIZE;
   }
 }
@@ -2516,7 +2657,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
         /* Max size is bounded by ci_ip_pkt_fmt::pay_len, minus slack to make
          * the boundary case in the loop below easier */
         const uint32_t MAX_CONTIG_LEN = INT_MAX - EF_VI_NIC_PAGE_SIZE;
-        uint32_t contig_len, room_len;
+        uint32_t contig_len, room_len, remaining_len;
 
         /* Up to the end of the current page is guaranteed to be contiguous */
         contig_len = ((iov_base + EF_VI_NIC_PAGE_SIZE) & NIC_PAGE_MASK) -
@@ -2549,11 +2690,20 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           contig_len = iov_len;
 
         do {
+          /* NOTE: prefix_resv can be an overestimate if the IOV is split
+           * before we send it (either here or later in tcp_tx_reformat).
+           * In theory this can lead to us emitting an unnecessarily short
+           * packet if we think we've run out of space for prefixes, but in
+           * practice running out of space is very unlikely.
+           */
+          ci_uint8 prefix_resv = zc_prefix_reservation(ni, &msg->msg.iov[j]);
+
           /* We could arguably make this dependent on
            * NI_OPTS().tcp_combine_sends_mode But for now assume that
            * a single call is a single message and can be combined
            */
-          if( pkt == NULL || ! ci_tcp_tx_has_room_for_zc(ni, pkt) ||
+          if( pkt == NULL ||
+              ! ci_tcp_tx_has_room_for_zc(ni, pkt, prefix_resv) ||
               tcp_pay_len >= eff_mss ) {
             tcp_pay_len = 0;
             reusing_prev_pkt = false;
@@ -2577,6 +2727,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
             pkt->pay_len = oo_tx_ether_hdr_size(pkt) + ts->outgoing_hdrs_len;
             zch = oo_tx_zc_header(pkt);
             zch->segs = 0;
+            zch->prefix_spc = 0;
             zch->end = sizeof(*zch);
    
             CI_USER_PTR_SET(pkt->pf.tcp_tx.next, sinf.fill_list);
@@ -2597,6 +2748,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
                            CI_PKT_ZC_PAYLOAD_ALIGN));
               zch = oo_tx_zc_header(pkt);
               zch->segs = 0;
+              zch->prefix_spc = 0;
               zch->end = sizeof(*zch);
             }
           }
@@ -2609,13 +2761,38 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
           tcp_pay_len += room_len;
           pkt->pay_len += room_len;
           zcp->is_remote = 1;
+          zcp->crc_id = ZC_NVME_CRC_ID_INVALID;
           zcp->use_remote_cookie = iov_len == room_len;
           zcp->len = room_len;
           zcp->remote.app_cookie = (uintptr_t)msg->msg.iov[j].app_cookie;
           zcp->remote.addr_space = um->addr_space;
+#ifdef NVME_LOCAL_CRC_MODE
+          if( zcp->remote.addr_space == EF_ADDRSPACE_LOCAL )
+            zcp->local_addr = (void*)iov_base;
+          else
+            zcp->local_addr = NULL;
+#endif
           OO_STACK_FOR_EACH_INTF_I(ni, i)
             zcp->remote.dma_addr[i] = zc_usermem_dma_addr(um, iov_base, i);
-   
+          zcp->prefix_space = prefix_resv;
+          zch->prefix_spc += prefix_resv;
+
+          zcp->zcp_flags = zc_iov_flags_to_zcp_flags(msg->msg.iov[j].iov_flags);
+          remaining_len = iov_len - room_len;
+          if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC ) {
+            /* The INSERT_CRC flag should only be attached to the final 4 bytes
+             * of the iov */
+            if( remaining_len >= 4 ) {
+              zcp->zcp_flags &= ~ZC_PAYLOAD_FLAG_INSERT_CRC;
+            }
+            else {
+              zcp->crc_insert_first_byte = (iov_len < 4) ? 4 - iov_len : 0;
+              zcp->crc_insert_n_bytes = (4 - remaining_len -
+                                         zcp->crc_insert_first_byte);
+              ci_assert_lt(remaining_len + zcp->crc_insert_first_byte, 4);
+            }
+          }
+
           ASSERT_VALID_PKT(ni, pkt);
    
           iov_base += room_len;

@@ -847,7 +847,10 @@ void ci_tcp_state_dump(ci_netif* ni, ci_tcp_state* ts,
                   " ddr_size=%"PRIx64,
          pf, ts->plugin_stream_id, ts->plugin_ddr_base, ts->plugin_ddr_size);
 #endif
-
+#if CI_CFG_TX_CRC_OFFLOAD
+  if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
+    logger(log_arg, "%s  nvme_plugin: last_id=%u", pf, ts->current_crc_id);
+#endif
 #ifndef __KERNEL__
 # define fmt_timer(_b, _l, _n, name, tid)                       \
   if( ci_ip_timer_pending(ni, &tid) )                           \

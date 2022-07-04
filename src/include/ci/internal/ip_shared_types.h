@@ -474,10 +474,29 @@ struct ci_ip_pkt_fmt_s {
 #define CI_PKT_ZC_PAYLOAD_ALIGN    8
 struct ci_pkt_zc_payload {
   ci_uint32 len;
-  ci_uint8 is_remote;
-  ci_uint8 use_remote_cookie;  /* Send a completion using app_cookie */
-                               /* This is here rather than in the union solely
-                                * for space efficiency/padding reasons */
+  ci_uint8 prefix_space;       /* Reserved space for building packet prefix. */
+  ci_uint8 is_remote : 1;
+  ci_uint8 use_remote_cookie : 1;  /* Send a completion using app_cookie
+                                    * This is here rather than in the union solely
+                                    * for space efficiency/padding reasons */
+
+  /* For messages with ZC_PAYLOAD_FLAG_INSERT_CRC, these track which
+   * bytes of the CRC to insert. Note that despite the flag name, the
+   * operation is a replacement rather than an insertion - we replace
+   * the last `crc_insert_n_bytes` of the payload with the corresponding
+   * bytes of the CRC.
+   */
+  ci_uint8 crc_insert_first_byte : 2;
+  ci_uint8 crc_insert_n_bytes : 3;
+  ci_uint8 reserved : 1;
+#define ZC_PAYLOAD_FLAG_ACCUM_CRC 0x1
+#define ZC_PAYLOAD_FLAG_INSERT_CRC 0x2
+  ci_uint16 zcp_flags;          /* Flags from onload_zc_iovec::iov_flags. */
+  ci_uint32 crc_id;
+#ifdef NVME_LOCAL_CRC_MODE
+  void* local_addr;
+#endif
+
   union {
     struct {
       ci_uint64 app_cookie CI_ALIGN(8);  /* From onload_zc_iovec::app_cookie */
@@ -486,6 +505,8 @@ struct ci_pkt_zc_payload {
     } remote;
     char local[1];
   };
+
+  /* Space of length prefix_space is reserved at the end of the structure. */
 };
 
 
@@ -499,15 +520,24 @@ struct ci_pkt_zc_payload {
  *    ci_pkt_zc_payload
  *    ci_pkt_zc_payload            /___ zch + zch->end
  *    free space                   \
+ *    reserved space for prefixes  <--- length = zch->prefix_spc
  *
  * A single ci_pkt_zc_payload element may be either 'local' or 'remote'. A
  * local payload is just normal in-line bytes, a feature which exists so we
  * can intersperse remote payloads without wasting packet buffers. A 'remote'
- * payload is a pointer to memory owned by the user.
+ * payload is a pointer to memory owned by the user. Additionally, each
+ * ci_pkt_zc_payload can reserve additional space for building packet prefixes
+ * to be consumed by plugins, and this space is to be understood to be
+ * positioned at the end of the packet buffer.
  */
 struct ci_pkt_zc_header {
   ci_uint16 end;         /* Offset from start of this struct to the first
                           * unused byte of the ci_ip_pkt_fmt */
+  ci_uint16 prefix_spc;  /* Length of packet-prefix records stashed at the
+                          * end of the packet buffer.  This is equal to
+                          * sum(zcp->prefix_space for zcp in payloads), and is
+                          * cached here to allow determination of free space in
+                          * the buffer without walking the payloads. */
   ci_uint8 segs;         /* Number of zc_payload structs following */
   struct ci_pkt_zc_payload data[0];
 };
@@ -1473,6 +1503,20 @@ struct ci_netif_state_s {
    * in which events are acquired in kernel, stored here,
    * and processed in UL */
   ef_event      events[256];
+
+/* Id pool capacity is 1 << ZC_NVME_CRC_IDP_CAP.
+ * The constant is also used to calculate the base id for the region
+ * assigned to the stack */
+#define ZC_NVME_CRC_IDP_CAP 16
+  struct nvme_crc_plugin_idp_t {
+    unsigned    fifo_mask;
+    unsigned    fifo_rd_i;
+    unsigned    fifo_wr_i;
+    ci_uint32   fifo[1 << ZC_NVME_CRC_IDP_CAP];
+#ifdef NVME_LOCAL_CRC_MODE
+    ci_uint32   crcs[1 << ZC_NVME_CRC_IDP_CAP];
+#endif
+  } nvme_crc_plugin_idp[CI_CFG_MAX_INTERFACES];
 
   /* Followed by:
   **
@@ -2863,6 +2907,11 @@ struct ci_tcp_state_s {
   ci_uint64             plugin_ddr_base;
   ci_uint64             plugin_ddr_size;
 #endif
+
+  /* NVMe plugin id
+   * The special id is set when a new id should be generated */
+#define ZC_NVME_CRC_ID_INVALID (ci_uint32)(-1)
+  ci_uint32             current_crc_id;
 };
 
 
