@@ -196,6 +196,15 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
   return -ENOSYS;
 }
 
+__attribute__((weak))
+ssize_t
+onload_zc_hlrx_recv_oob(struct onload_zc_hlrx* hlrx,
+                        const struct onload_zc_iovec* inband,
+                        void* buf_out, size_t len, int *flags)
+{
+  return -ENOSYS;
+}
+
 /**************************************************************************/
 
 __attribute__((weak))

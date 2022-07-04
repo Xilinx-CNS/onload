@@ -1669,6 +1669,8 @@ static int ci_tcp_recvmsg_recv2(struct tcp_recv_info *rinf)
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
 #define CI_ZC_IOV_STATIC_MAX  32
 
+CI_BUILD_ASSERT((ONLOAD_ZC_RECV_FLAG_OFFLOAD_OOB &
+                 ~ONLOAD_ZC_RECV_FLAG_OFFLOAD_RESERVED) == 0);
 
 static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
                             ci_ip_pkt_fmt* pkt, int peek_off, int* ndata)
@@ -1698,7 +1700,7 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
       goto unrecoverable;
     }
 
-    if( iovlen >= iov_max - 1 ) {
+    if( iovlen >= iov_max - 2 ) {
       /* There are no good options for what to do if we get here. Dynamic
        * memory allocation is the least-worst option: giving up is mean, and
        * calling the callback here so we can start again creates immense
@@ -1740,6 +1742,8 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
       iov[iovlen].iov_len = data.msg_len;
       iov[iovlen].rx_memreg_idx = PKT_ID2SET(pkt->pp);
       iov[iovlen].addr_space = EF_ADDRSPACE_LOCAL;
+      iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
+      iov[iovlen].iov_flags = 0;
       out_rc += data.msg_len;
       break;
 
@@ -1752,6 +1756,8 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
       memcpy(&data.remote, p, sizeof(data.remote));
       iov[iovlen].iov_ptr = data.remote.start_ptr + rinf->a->ts->plugin_ddr_base;
       iov[iovlen].iov_len = data.remote.data_len;
+      iov[iovlen].iov_flags = 0;
+      iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
       iov[iovlen].rx_memreg_idx = 0;
       iov[iovlen].addr_space = netif->state->nic[pkt->intf_i].plugin_addr_space;
       out_rc += data.remote.data_len;
@@ -1762,14 +1768,33 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
          * will be found at the start of the ring. */
         iov[iovlen].iov_len -= overrun;
         iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
-        iov[iovlen].iov_flags = 0;
 
         ++iovlen;
         iov[iovlen].iov_ptr = rinf->a->ts->plugin_ddr_base;
         iov[iovlen].iov_len = overrun;
         iov[iovlen].rx_memreg_idx = 0;
         iov[iovlen].addr_space = netif->state->nic[pkt->intf_i].plugin_addr_space;
+        iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
+        iov[iovlen].iov_flags = 0;
       }
+
+      /* CRC iov; we are currently wasting a new iov, since we can't distinguish
+       * whether the CRC is enabled or not. */
+      ++iovlen;
+      iov[iovlen].iov_flags = ONLOAD_ZC_RECV_FLAG_OFFLOAD_OOB;
+
+      /* Pass the address of the CRC within the packet buffer.  This is not
+       * necessarily naturally aligned. */
+      iov[iovlen].iov_len = sizeof(data.remote.data_crc);
+      iov[iovlen].iov_base = p + CI_MEMBER_OFFSET(typeof(data.remote),
+                                                  data_crc);
+      ci_assert_le((uintptr_t) iov[iovlen].iov_base + iov[iovlen].iov_len,
+                   (uintptr_t) p + sizeof(data.remote));
+
+      iov[iovlen].rx_memreg_idx = 0;
+      iov[iovlen].addr_space = EF_ADDRSPACE_LOCAL;
+      iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
+
       break;
 
     case XSN_CEPH_DATA_LOST_SYNC:
@@ -1797,8 +1822,6 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
       goto unrecoverable;
     }
 
-    iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
-    iov[iovlen].iov_flags = 0;
     ++iovlen;
     n -= data.msg_len;
     p += data.msg_len;

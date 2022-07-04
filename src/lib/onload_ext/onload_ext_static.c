@@ -198,6 +198,11 @@ wrap(ssize_t, onload_zc_hlrx_recv_zc, (struct onload_zc_hlrx* hlrx,
                                int flags),
      (hlrx, msg, max_bytes, flags), -ENOSYS)
 
+wrap(ssize_t, onload_zc_hlrx_recv_oob,
+     (struct onload_zc_hlrx* hlrx, const struct onload_zc_iovec* inband,
+      void* buf, size_t len, int* flags),
+     (hlrx, inband, buf, len, flags), -ENOSYS)
+
 
 wrap(int, onload_msg_template_alloc, (int fd, const struct iovec* initial_msg,
                                       int mlen, onload_template_handle* handle,

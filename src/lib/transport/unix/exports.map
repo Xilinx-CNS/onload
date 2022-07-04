@@ -130,6 +130,7 @@
     onload_zc_hlrx_buffer_release;
     onload_zc_hlrx_recv_copy;
     onload_zc_hlrx_recv_zc;
+    onload_zc_hlrx_recv_oob;
     onload_recvmsg_kernel;
     onload_thread_set_spin;
     onload_thread_get_spin;

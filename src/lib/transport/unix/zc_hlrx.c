@@ -53,6 +53,18 @@ struct onload_zc_hlrx {
   struct onload_zc_iovec static_pending[32];
   struct onload_zc_iovec* pending;
 
+  /* The hlrx OOB API currently supports reporting OOB data only for the most
+   * recently-returned iovec.  We stash a copy of that data here so that we can
+   * return it via that API.  The length of the buffer is oob_buf_len, and the
+   * buffer is expanded as necessary; the length of the data itself is
+   * oob_data_len, which is zero when there is no OOB data. */
+  void* oob_buffer;
+  size_t oob_buf_len;
+  size_t oob_data_len;
+  /* Used to enforce the limitation that onload_zc_hlrx_recv_oob() may be
+   * called only on the most recently-returned iovec. */
+  const struct onload_zc_iovec* last_inband;
+
   /* Storage for the things that are given out to the user to point to
    * non-local address space data. These are in order, so we know what to
    * post to the underlying app plugin when the app's done with them. */
@@ -156,6 +168,7 @@ int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx)
       onload_zc_buffer_decref(hlrx->fd, hlrx->pending[0].buf);
     if( hlrx->pending != hlrx->static_pending )
       free(hlrx->pending);
+    free(hlrx->oob_buffer);
     free(hlrx);
   }
   Log_CALL_RESULT(rc);
@@ -448,10 +461,38 @@ static void zc_iovs(struct zc_cb_zc_state* state,
 {
   int ref_delta = 0;
   int begin = *pbegin;
-  while( begin != end && state->max_bytes &&
-         state->curr_iov < state->msg->msghdr.msg_iovlen ) {
-    struct onload_zc_iovec* dst = &state->msg->iov[state->curr_iov];
+  while( begin != end ) {
+    struct onload_zc_iovec* dst;
+    if( iovs[begin].iov_flags & ONLOAD_ZC_RECV_FLAG_OFFLOAD_OOB ) {
+      if( iovs[begin].iov_len > state->hlrx->oob_buf_len ) {
+        void* new_buf = malloc(iovs[begin].iov_len);
+        if( new_buf != NULL ) {
+          free(state->hlrx->oob_buffer);
+          state->hlrx->oob_buffer = new_buf;
+          state->hlrx->oob_buf_len = iovs[begin].iov_len;
+        }
+      }
+      memcpy(state->hlrx->oob_buffer, iovs[begin].iov_base,
+             CI_MIN(iovs[begin].iov_len, state->hlrx->oob_buf_len));
+      /* Record the full length of the data even when we had to truncate it to
+       * fit in the buffer. */
+      state->hlrx->oob_data_len = iovs[begin].iov_len;
+      ++begin;
+      continue;
+    }
+    else if( state->max_bytes == 0 ||
+             state->curr_iov >= state->msg->msghdr.msg_iovlen ) {
+      /* We're out of caller-provided space. */
+      break;
+    }
+
+    dst = &state->msg->iov[state->curr_iov];
     *dst = iovs[begin];
+
+    /* We're going to return a new in-band buffer, so reset the OOB state. */
+    state->hlrx->oob_data_len = 0;
+    state->hlrx->last_inband = dst;
+
     if( iovs[begin].addr_space != EF_ADDRSPACE_LOCAL ) {
       uint64_t* rd = zc_remote_block_add(&state->hlrx->remote_ring);
       if( ! rd ) {
@@ -587,4 +628,30 @@ ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
 
   Log_CALL_RESULT((int)state.rc);
   return state.rc;
+}
+
+
+ssize_t
+onload_zc_hlrx_recv_oob(struct onload_zc_hlrx* hlrx,
+                        const struct onload_zc_iovec* inband,
+                        void* buf, size_t len, int *flags)
+{
+  if( flags && *flags )
+    return -EINVAL;
+
+  /* Currently we only support returning OOB data for the most recently-
+   * returned buffer. */
+  if( hlrx->last_inband != inband )
+    return -ESPIPE;
+
+  /* No OOB data associated with this buffer. */
+  if( hlrx->oob_data_len == 0 )
+    return 0;
+
+  len = CI_MIN(len, hlrx->oob_data_len);
+  len = CI_MIN(len, hlrx->oob_buf_len);
+  if( flags && len < hlrx->oob_data_len )
+    *flags = MSG_TRUNC;
+  memcpy(buf, hlrx->oob_buffer, len);
+  return len;
 }

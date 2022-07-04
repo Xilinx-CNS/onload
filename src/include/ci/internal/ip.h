@@ -74,6 +74,7 @@
 #define ONLOAD_SOF_TIMESTAMPING_STREAM (1 << 23)
 #else
 #include <onload/extensions.h>
+#include <onload/extensions_zc.h>
 #endif
 #endif
 
