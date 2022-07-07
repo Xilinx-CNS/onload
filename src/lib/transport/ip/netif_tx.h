@@ -108,10 +108,10 @@ ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                             CI_CFG_PKT_BUF_SIZE - zch->prefix_spc);
     prefix_iov->iov_len = prefix_end - prefix_start;
     ci_assert_le(prefix_iov->iov_len, zch->prefix_spc);
-    *prefix_len = prefix_iov->iov_len;
     prefix_iov->addrspace = EF_ADDRSPACE_LOCAL;
     prefix_iov->flags = 0;
-#ifndef NVME_LOCAL_CRC_MODE
+#if ! CI_CFG_NVME_LOCAL_CRC_MODE
+    *prefix_len = prefix_iov->iov_len;
     iov = prefix_iov;
     ++i;
 #else

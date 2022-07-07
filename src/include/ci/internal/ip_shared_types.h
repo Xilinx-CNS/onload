@@ -493,7 +493,7 @@ struct ci_pkt_zc_payload {
 #define ZC_PAYLOAD_FLAG_INSERT_CRC 0x2
   ci_uint16 zcp_flags;          /* Flags from onload_zc_iovec::iov_flags. */
   ci_uint32 crc_id;
-#ifdef NVME_LOCAL_CRC_MODE
+#if CI_CFG_NVME_LOCAL_CRC_MODE
   void* local_addr;
 #endif
 
@@ -1513,7 +1513,7 @@ struct ci_netif_state_s {
     unsigned    fifo_rd_i;
     unsigned    fifo_wr_i;
     ci_uint32   fifo[1 << ZC_NVME_CRC_IDP_CAP];
-#ifdef NVME_LOCAL_CRC_MODE
+#if CI_CFG_NVME_LOCAL_CRC_MODE
     ci_uint32   crcs[1 << ZC_NVME_CRC_IDP_CAP];
 #endif
   } nvme_crc_plugin_idp[CI_CFG_MAX_INTERFACES];

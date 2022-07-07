@@ -644,6 +644,9 @@
 
 /* Enable cooperation with the SmartNIC TX CRC-offload plugin */
 #define CI_CFG_TX_CRC_OFFLOAD 0
+/* Do not use SmartNIC TX CRC-offload plugin for NVMeoTCP and instead calculate
+ * PDU digests in Onload. Useful for testing of Onload CRC-offload logic. */
+#define CI_CFG_NVME_LOCAL_CRC_MODE 0
 
 #ifdef __KERNEL__
 #include <linux/version.h>
