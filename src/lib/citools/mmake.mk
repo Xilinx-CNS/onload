@@ -45,7 +45,6 @@ LIB_SRCS	:= \
 
 ifeq ($(DRIVER),1)
 LIB_SRCS	+= drv_log_fn.c memleak_debug.c
-LIB_SRCS	+= drv_thread.c
 else
 LIB_SRCS	+= get_cpu_khz.c log_fn.c log_file.c
 LIB_SRCS	+= glibc_version.c

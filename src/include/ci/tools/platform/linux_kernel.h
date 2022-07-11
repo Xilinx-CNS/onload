@@ -173,34 +173,8 @@ typedef volatile void __iomem*	ioaddr_t;
 
 
 /**********************************************************************
- * thread implementation -- kernel dependancies probably should be
- * moved to driver/linux_kernel.h
+ * Kernel sysctl variables.
  */
-
-#define ci_linux_daemonize(name) daemonize(name)
-
-#include <linux/workqueue.h>
-
-
-typedef struct {
-  void*			(*fn)(void* arg);
-  void*			arg;
-  const char*		name;
-  struct task_struct*	thrd_id;
-  struct completion	exit_event;
-} ci_kernel_thread_t;
-
-
-typedef ci_kernel_thread_t* cithread_t;
-
-
-extern int cithread_create(cithread_t* tid, void* (*fn)(void*), void* arg,
-			   const char* name);
-extern int cithread_detach(cithread_t kt);
-extern int cithread_join(cithread_t kt);
-
-
-/* Kernel sysctl variables. */
 extern int sysctl_tcp_wmem[3];
 extern int sysctl_tcp_rmem[3];
 
