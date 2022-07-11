@@ -76,23 +76,6 @@ ci_inline void ci_irqlock_unlock_i(ci_irqlock_i* l, ci_irqlock_state_t* s)
 
 
 /**********************************************************************
- * Basic thread compatability layer.
- */
-
-typedef void* (*cithread_fn)(void* arg);
-
-#define cithread_t  pthread_t
-
-#define cithread_create(citt, fn, arg, name)  pthread_create((citt), 0, (fn), (arg))
-
-#define cithread_detach(citt)           pthread_detach((citt))
-
-#define cithread_self()                 pthread_self()
-
-#define cithread_join(citt)             pthread_join((citt), 0)
-
-
-/**********************************************************************
  * Thread-safe strtok
  */
 
