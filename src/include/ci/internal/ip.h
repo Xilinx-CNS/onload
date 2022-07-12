@@ -2978,8 +2978,8 @@ ci_nvme_plugin_crc_packet_cleanup(ci_netif* ni, ci_tcp_state* ts,
         ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp[intf_i],
                                       zcp->crc_id);
         prev_id = zcp->crc_id;
-        zcp->crc_id = ZC_NVME_CRC_ID_INVALID;
       }
+      zcp->crc_id = ZC_NVME_CRC_ID_INVALID;
     }
   }
 #endif
