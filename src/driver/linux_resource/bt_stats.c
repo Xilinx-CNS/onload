@@ -87,7 +87,7 @@ efrm_read_pd_stats(struct seq_file *seq, void *s)
 }
 static int efrm_open_pd_stats(struct inode *inode, struct file *file)
 {
-	return single_open(file, efrm_read_pd_stats, PDE_DATA(inode));
+	return single_open(file, efrm_read_pd_stats, pde_data(inode));
 }
 static const struct proc_ops efrm_fops_pd_stats = {
 	PROC_OPS_SET_OWNER
