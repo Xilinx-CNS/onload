@@ -424,7 +424,7 @@ static int oo_filter_hwports_read(struct seq_file *seq, void *unused)
 }
 static int oo_filter_hwports_open(struct inode *inode, struct file *file)
 {
-    return single_open(file, oo_filter_hwports_read, PDE_DATA(inode));
+    return single_open(file, oo_filter_hwports_read, pde_data(inode));
 }
 static const struct proc_ops oo_filter_hwports_fops = {
     PROC_OPS_SET_OWNER
@@ -440,7 +440,7 @@ static int oo_filter_ipaddrs_read(struct seq_file *seq, void *unused)
 }
 static int oo_filter_ipaddrs_open(struct inode *inode, struct file *file)
 {
-    return single_open(file, oo_filter_ipaddrs_read, PDE_DATA(inode));
+    return single_open(file, oo_filter_ipaddrs_read, pde_data(inode));
 }
 static const struct proc_ops oo_filter_ipaddrs_fops = {
     PROC_OPS_SET_OWNER

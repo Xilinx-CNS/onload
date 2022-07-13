@@ -439,7 +439,7 @@ efrm_resource_read_proc(struct seq_file *seq, void *s)
 }
 static int efrm_resource_open_proc(struct inode *inode, struct file *file)
 {
-	return single_open(file, efrm_resource_read_proc, PDE_DATA(inode));
+	return single_open(file, efrm_resource_read_proc, pde_data(inode));
 }
 static const struct proc_ops efrm_resource_fops_proc = {
 	PROC_OPS_SET_OWNER
