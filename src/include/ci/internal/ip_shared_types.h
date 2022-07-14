@@ -1507,7 +1507,7 @@ struct ci_netif_state_s {
 /* Id pool capacity is 1 << ZC_NVME_CRC_IDP_CAP.
  * The constant is also used to calculate the base id for the region
  * assigned to the stack */
-#define ZC_NVME_CRC_IDP_CAP 16
+#define ZC_NVME_CRC_IDP_CAP 13
   struct nvme_crc_plugin_idp_t {
     unsigned    fifo_mask;
     unsigned    fifo_rd_i;
