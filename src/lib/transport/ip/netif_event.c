@@ -1934,6 +1934,14 @@ have_events:
       }
 
       else if( EF_EVENT_TYPE(ev[i]) == EF_EVENT_TYPE_RX_DISCARD ) {
+        /* Jumbo fragment */
+        if( (ev[i].rx_multi.flags & (EF_EVENT_FLAG_SOP | EF_EVENT_FLAG_CONT))
+               != EF_EVENT_FLAG_SOP ) {
+          OO_PP_INIT(ni, pp, EF_EVENT_RX_RQ_ID(ev[i]));
+          pkt = PKT_CHK(ni, pp);
+          s.frag_pkt = pkt;
+        }
+
         handle_rx_discard(ni, ps, intf_i, &s, ev[i]);
       }
 
