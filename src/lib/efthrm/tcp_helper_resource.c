@@ -8195,7 +8195,7 @@ static int oo_inject_packet_kernel(ci_netif* ni, ci_ip_pkt_fmt* pkt)
 
   /* Inject the skb into the kernel.  The return value indicates whether the
    * kernel decided to drop the packet, but we don't need to check that. */
-  netif_rx_ni(skb);
+  netif_rx(skb);
 
   dev_put(dev);
   return 0;
