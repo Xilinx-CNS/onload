@@ -249,7 +249,7 @@ void doUnitTestsPipeline() {
     utils.withArtifactoryURL() {
       utils.withArtifactoryCreds() {
         def publisher = new ArtifactoryPublisher(this)
-        publisher.publishStashedPackages(product, built_package_locations, autosmoke.onloadBranchName(env.BRANCH_NAME), onload_version_short)
+        publisher.publishStashedPackages(product, built_package_locations, autosmoke.onloadBranchName(env.BRANCH_NAME), onload_version_short, long_revision)
       }
     }
 
