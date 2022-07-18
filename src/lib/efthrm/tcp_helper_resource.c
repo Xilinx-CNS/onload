@@ -49,6 +49,7 @@
 #include "tcp_helper_resource.h"
 #include "tcp_helper_stats_dump.h"
 #include <onload/tcp-ceph.h>
+#include <onload/tx_plugin.h>
 
 #ifdef NDEBUG
 # define DEBUG_STR  ""
@@ -2722,8 +2723,15 @@ create_plugin_tx_app(tcp_helper_resource_t* trs)
 {
 #if CI_CFG_TX_CRC_OFFLOAD
   ci_netif* ni = &trs->netif;
-  bool got_nic = false;
   int intf_i;
+  struct efrm_ext* plugin;
+  bool got_nic = false;
+  struct ef_vi* tx_vi;
+  struct xsn_storage_tx_create_app create;
+  int rc;
+  struct efhw_nic* nic;
+  struct efrm_pd* pd;
+  ci_uint32 region_id;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     ni->nic_hw[intf_i].plugin_tx = NULL;
@@ -2732,18 +2740,29 @@ create_plugin_tx_app(tcp_helper_resource_t* trs)
     return 0;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    /* TODO: add PCM to register the TXQ with the tx_plugin */
-    struct ef_vi* nvme_vi;
-    struct efhw_nic* nic;
-    ci_uint32 region_id;
-
     nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
     if( nic->devtype.arch != EFHW_ARCH_EF100 )
       continue;
 
-    nvme_vi = &ni->nic_hw[intf_i].vis[CI_Q_ID_NORMAL];
-    region_id = get_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic);
+    pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
+    rc = efrm_ext_alloc_rs(pd, XSN_STORAGE_TX, &plugin);
+    if( rc )
+      continue;
 
+    tx_vi = &ni->nic_hw[intf_i].vis[CI_Q_ID_NORMAL];
+    create = (struct xsn_storage_tx_create_app) {
+      .vi_id = cpu_to_le16(ef_vi_instance(tx_vi))
+    };
+    rc = efrm_ext_msg(plugin, XSN_STORAGE_TX_CREATE_APP, &create, sizeof(create));
+    if( rc ) {
+      OO_DEBUG_ERR(ci_log("%s: TX_CREATE_APP failed (%d, %d)",
+                          __FUNCTION__, intf_i, rc));
+      efrm_ext_release(plugin);
+      continue;
+    }
+
+    region_id = get_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic);
+    ni->nic_hw[intf_i].plugin_tx = plugin;
     ni->nic_hw[intf_i].plugin_tx_region_id = region_id;
     got_nic = true;
   }
@@ -2763,9 +2782,15 @@ destroy_plugin_tx_app(tcp_helper_resource_t* trs)
 #if CI_CFG_TX_CRC_OFFLOAD
   ci_netif* ni = &trs->netif;
   int intf_i;
+  struct efrm_ext* plugin;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     release_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic,
                                       ni->nic_hw[intf_i].plugin_tx_region_id);
+    plugin = ni->nic_hw[intf_i].plugin_tx;
+    if( ! plugin )
+      continue;
+    efrm_ext_release(plugin);
+    ni->nic_hw[intf_i].plugin_tx = NULL;
   }
 #endif
 }
