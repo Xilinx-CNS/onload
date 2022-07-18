@@ -7569,8 +7569,8 @@ efab_create_os_socket(tcp_helper_resource_t* trs, tcp_helper_endpoint_t* ep,
 
   rc = sock_create(domain, type, 0, &sock);
   if( rc < 0 ) {
-    LOG_E(ci_log("%s: ERROR: sock_create(%d, %d, 0) failed (%d)",
-                 __FUNCTION__, domain, type, rc));
+    LOG_E(ci_log("%s: ERROR: pid %d: sock_create(%d, %d, 0) failed (%d)",
+                 __FUNCTION__, current->pid, domain, type, rc));
     return rc;
   }
   os_file = sock_alloc_file(sock, flags, NULL);
