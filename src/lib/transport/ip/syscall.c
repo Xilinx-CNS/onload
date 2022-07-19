@@ -17,6 +17,8 @@
 /* This is required to get pread() and pwrite() defined in <unistd.h> */
 #define _GNU_SOURCE
 #include <aio.h>
+#include <resolv.h>
+#include <netdb.h>
 
 #include <ci/tools.h>
 #include <ci/internal/transport_config_opt.h>

@@ -39,6 +39,7 @@
 struct oo_per_thread {
   ci_netif_config_opts*      thread_local_netif_opts;
   int                        initialised;
+  int                        avoid_fds;
   struct oo_sig_thread_state sig;
   struct oo_stackname_state  stackname;
   ci_uint64                  poll_nonblock_fast_frc;

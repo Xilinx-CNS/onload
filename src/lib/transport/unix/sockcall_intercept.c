@@ -270,7 +270,10 @@ OO_INTERCEPT(int, socket,
   Log_CALL(ci_log("%s(%s, "CI_SOCK_TYPE_FMT", %d)", __FUNCTION__,
                   domain_str(domain), CI_SOCK_TYPE_ARGS(type), protocol));
 
-  rc = citp_protocol_manager_create_socket(domain, type, protocol);
+  if( lib_context.thread->avoid_fds )
+    rc = CITP_NOT_HANDLED;
+  else
+    rc = citp_protocol_manager_create_socket(domain, type, protocol);
   
   if( rc == CITP_NOT_HANDLED ) {
     rc = ci_sys_socket(domain, type, protocol); /* NOTE: done inside ENTER_LIB
@@ -2958,6 +2961,275 @@ OO_INTERCEPT(__sighandler_t, sysv_signal,
 
 strong_alias(onload_signal, bsd_signal);
 strong_alias(onload_sysv_signal, __sysv_signal);
+
+static void dns_intercept_pre(void)
+{
+  if( CI_UNLIKELY(citp.init_level < CITP_INIT_ALL) )
+    citp_do_init(CITP_INIT_SYSCALLS);
+  ++oo_per_thread_get()->avoid_fds;
+}
+
+static void dns_intercept_post(void)
+{
+  ci_assert_gt(oo_per_thread_get()->avoid_fds, 0);
+  --oo_per_thread_get()->avoid_fds;
+}
+
+struct __res_state;
+OO_INTERCEPT(int, __res_ninit, (struct __res_state* a))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_ninit(a);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(void, __res_nclose, (struct __res_state* a))
+{
+  dns_intercept_pre();
+  ci_sys___res_nclose(a);
+  dns_intercept_post();
+}
+
+OO_INTERCEPT(int, __res_nquery, (struct __res_state* a, const char* b, int c, int d, unsigned char* e, int f))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_nquery(a, b, c, d, e, f);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_nsearch, (struct __res_state* a, const char* b, int c, int d, unsigned char* e, int f))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_nsearch(a, b, c, d, e, f);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_nquerydomain, (struct __res_state* a, const char* b, const char* c, int d, int e, unsigned char* f, int g))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_nquerydomain(a, b, c, d, e, f, g);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_nmkquery, (struct __res_state* a, int b, const char* c, int d, int e, const unsigned char* f, int g, const unsigned char* h, unsigned char* i, int j))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_nmkquery(a, b, c, d, e, f, g, h, i, j);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_nsend, (struct __res_state* a, const unsigned char* b, int c, unsigned char* d, int e))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_nsend(a, b, c, d, e);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __dn_comp, (const char* a, unsigned char* b, int c, unsigned char** d, unsigned char** e))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___dn_comp(a, b, c, d, e);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __dn_expand, (const unsigned char* a, const unsigned char* b, const unsigned char* c, char* d, int e))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___dn_expand(a, b, c, d, e);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_init, (void))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_init();
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_query, (const char* a, int b, int c, unsigned char* d, int e))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_query(a, b, c, d, e);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_search, (const char* a, int b, int c, unsigned char* d, int e))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_search(a, b, c, d, e);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_querydomain, (const char* a, const char* b, int c, int d, unsigned char* e, int f))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_querydomain(a, b, c, d, e, f);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_mkquery, (int a, const char* b, int c, int d, const unsigned char* e, int f, const unsigned char* g, unsigned char* h, int i))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_mkquery(a, b, c, d, e, f, g, h, i);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, __res_send, (const unsigned char* a, int b, unsigned char* c, int d))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys___res_send(a, b, c, d);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(struct hostent*, gethostbyname, (const char* a))
+{
+  struct hostent* r;
+  dns_intercept_pre();
+  r = ci_sys_gethostbyname(a);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(struct hostent*, gethostbyaddr, (const void* a, socklen_t b, int c))
+{
+  struct hostent* r;
+  dns_intercept_pre();
+  r = ci_sys_gethostbyaddr(a, b, c);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(void ,sethostent, (int a))
+{
+  dns_intercept_pre();
+  ci_sys_sethostent(a);
+  dns_intercept_post();
+}
+
+OO_INTERCEPT(void ,endhostent, (void))
+{
+  dns_intercept_pre();
+  ci_sys_endhostent();
+  dns_intercept_post();
+}
+
+OO_INTERCEPT(struct hostent*, gethostent, (void))
+{
+  struct hostent* r;
+  dns_intercept_pre();
+  r = ci_sys_gethostent();
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(struct hostent*, gethostbyname2, (const char* a, int b))
+{
+  struct hostent* r;
+  dns_intercept_pre();
+  r = ci_sys_gethostbyname2(a, b);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, gethostent_r, (struct hostent* a, char* b, size_t c, struct hostent** d, int* e))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys_gethostent_r(a, b, c, d, e);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, gethostbyaddr_r, (const void* a, socklen_t b, int c, struct hostent* d, char* e, size_t f, struct hostent** g, int* h))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys_gethostbyaddr_r(a, b, c, d, e, f, g, h);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, gethostbyname_r, (const char* a, struct hostent* b, char* c, size_t d, struct hostent** e, int* f))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys_gethostbyname_r(a, b, c, d, e, f);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, gethostbyname2_r, (const char* a, int b, struct hostent* c, char* d, size_t e, struct hostent** f, int* g))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys_gethostbyname2_r(a, b, c, d, e, f, g);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, getaddrinfo, (const char* a, const char* b, const struct addrinfo* c, struct addrinfo** d))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys_getaddrinfo(a, b, c, d);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, getnameinfo, (const struct sockaddr* a, socklen_t b, char* c, socklen_t d, char* e, socklen_t f, int g))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys_getnameinfo(a, b, c, d, e, f, g);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, getaddrinfo_a, (int a, struct gaicb* b[], int c, struct sigevent* d))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys_getaddrinfo_a(a, b, c, d);
+  dns_intercept_post();
+  return r;
+}
+
+OO_INTERCEPT(int, gai_suspend, (const struct gaicb* const a[], int b, const struct timespec* c))
+{
+  int r;
+  dns_intercept_pre();
+  r = ci_sys_gai_suspend(a, b, c);
+  dns_intercept_post();
+  return r;
+}
 
 
 /*

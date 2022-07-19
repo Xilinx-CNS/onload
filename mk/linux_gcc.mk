@@ -179,7 +179,7 @@ endef
 define MMakeLinkPreloadLib
 set -x; \
 $(CLINK) $(MMAKE_CARCH) $(CFLAGS) $(MMAKE_DIR_LINKFLAGS) -nostartfiles \
-	-shared -fPIC $(filter %.o,$^) $$libs -lm -lpthread -lrt -ldl -o $@; \
+	-shared -fPIC $(filter %.o,$^) $$libs -lm -lpthread -lrt -ldl -lanl -o $@; \
 $(mmake_strip)
 endef
 
@@ -195,7 +195,7 @@ endef
 define MMakeLinkCApp
 set -x; \
 $(CLINK) $(MMAKE_CARCH) $(CFLAGS) -Wl,-E $(MMAKE_DIR_LINKFLAGS) $(filter %.o,$^) \
-	$$libs -lm -lpthread -lrt -o $@
+	$$libs -lm -lpthread -lrt -lresolv -lanl -o $@
 endef
 
 
