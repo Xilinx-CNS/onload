@@ -53,12 +53,10 @@ citp_find_all_sys_calls(void)
               __FUNCTION__, lib, dlerror()));
     return -1;
   }
-# define CI_MK_DECL(ret, fn, args)              \
-  ci_sys_##fn = dlsym(dlhandle, #fn);           \
-  if( ci_sys_##fn == NULL )                     \
-    return load_sym_fail(#fn);
+# define CI_MK_DECL_OPTIONAL(ret, fn, args)     \
+  ci_sys_##fn = dlsym(dlhandle, #fn);
 #else
-# define CI_MK_DECL(ret, fn, args)                                      \
+# define CI_MK_DECL_OPTIONAL(ret, fn, args)                             \
   ci_sys_##fn = dlsym(RTLD_NEXT, #fn);                                  \
   if( ci_sys_##fn == NULL ) {                                           \
     /*                                                                  \
@@ -67,10 +65,12 @@ citp_find_all_sys_calls(void)
      *       try RTLD_DEFAULT to search all libraries.                  \
      */                                                                 \
     ci_sys_##fn = dlsym(RTLD_DEFAULT, #fn);                             \
-  }                                                                     \
+  }
+#endif
+#define CI_MK_DECL(ret, fn, args)                                       \
+  CI_MK_DECL_OPTIONAL(ret, fn, args)                                    \
   if( ci_sys_##fn == NULL )                                             \
     return load_sym_fail(#fn);
-#endif
 
 #include <onload/declare_syscalls.h.tmpl>
 

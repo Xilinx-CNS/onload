@@ -36,6 +36,9 @@
 #if !defined(CI_MK_DECL)
 # error Do not include this file unless you know what you are doing.
 #endif
+#ifndef CI_MK_DECL_OPTIONAL
+#define CI_MK_DECL_OPTIONAL CI_MK_DECL
+#endif
 
 struct aiocb;
 struct mmsghdr;
@@ -167,6 +170,44 @@ CI_MK_DECL(int           , siginterrupt, (int sig, int flag));
 CI_MK_DECL(__sighandler_t, signal, (int signum, __sighandler_t handler));
 CI_MK_DECL(__sighandler_t, sysv_signal, (int signum, __sighandler_t handler));
 
+/* DNS wrappers */
+struct __res_state;
+struct hostent;
+struct addrinfo;
+struct gaicb;
+struct sigevent;
+struct timespec;
+CI_MK_DECL_OPTIONAL(int            ,__res_ninit       , (struct __res_state*));
+CI_MK_DECL_OPTIONAL(void           ,__res_nclose      , (struct __res_state*));
+CI_MK_DECL_OPTIONAL(int            ,__res_nquery      , (struct __res_state*, const char*, int, int, unsigned char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__res_nsearch     , (struct __res_state*, const char*, int, int, unsigned char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__res_nquerydomain, (struct __res_state*, const char*, const char*, int, int, unsigned char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__res_nmkquery    , (struct __res_state*, int, const char*, int, int, const unsigned char*, int, const unsigned char*, unsigned char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__res_nsend       , (struct __res_state*, const unsigned char*, int, unsigned char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__dn_comp         , (const char*, unsigned char*, int, unsigned char**, unsigned char**));
+CI_MK_DECL_OPTIONAL(int            ,__dn_expand       , (const unsigned char*, const unsigned char*, const unsigned char*, char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__res_init        , (void));
+CI_MK_DECL_OPTIONAL(int            ,__res_query       , (const char*, int, int, unsigned char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__res_search      , (const char*, int, int, unsigned char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__res_querydomain , (const char*, const char*, int, int, unsigned char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__res_mkquery     , (int, const char*, int, int, const unsigned char*, int, const unsigned char*, unsigned char*, int));
+CI_MK_DECL_OPTIONAL(int            ,__res_send        , (const unsigned char*, int, unsigned char*, int));
+CI_MK_DECL(struct hostent*,gethostbyname     , (const char*));
+CI_MK_DECL(struct hostent*,gethostbyaddr     , (const void*, socklen_t, int));
+CI_MK_DECL(void           ,sethostent        , (int));
+CI_MK_DECL(void           ,endhostent        , (void));
+CI_MK_DECL(struct hostent*,gethostent        , (void));
+CI_MK_DECL(struct hostent*,gethostbyname2    , (const char*, int));
+CI_MK_DECL(int            ,gethostent_r      , (struct hostent*, char*, size_t, struct hostent**, int*));
+CI_MK_DECL(int            ,gethostbyaddr_r   , (const void*, socklen_t, int, struct hostent*, char*, size_t, struct hostent**, int*));
+CI_MK_DECL(int            ,gethostbyname_r   , (const char*, struct hostent*, char*, size_t, struct hostent**, int*));
+CI_MK_DECL(int            ,gethostbyname2_r  , (const char*, int, struct hostent*, char*, size_t, struct hostent**, int*));
+CI_MK_DECL(int            ,getaddrinfo       , (const char*, const char*, const struct addrinfo*, struct addrinfo**));
+CI_MK_DECL(int            ,getnameinfo       , (const struct sockaddr*, socklen_t, char*, socklen_t, char*, socklen_t, int));
+CI_MK_DECL(int            ,getaddrinfo_a     , (int, struct gaicb*[], int, struct sigevent*));
+CI_MK_DECL(int            ,gai_suspend       , (const struct gaicb* const[], int, const struct timespec*));
+
 #undef CI_MK_DECL
+#undef CI_MK_DECL_OPTIONAL
 
 /*! \cidoxg_end */
