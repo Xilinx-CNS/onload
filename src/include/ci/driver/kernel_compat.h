@@ -405,7 +405,9 @@ oo_remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
 
 #ifdef EFRM_HAVE_NETIF_RX_NI
 /* linux < 5.18 */
-#define netif_rx netif_rx_ni
+#define ci_netif_rx_non_irq netif_rx_ni
+#else
+#define ci_netif_rx_non_irq netif_rx
 #endif /* EFRM_HAVE_NETIF_RX_NI */
 
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */
