@@ -2736,7 +2736,8 @@ create_plugin_tx_app(tcp_helper_resource_t* trs)
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     ni->nic_hw[intf_i].plugin_tx = NULL;
 
-  if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_NVME )
+  if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_NVME ||
+      CI_CFG_NVME_LOCAL_CRC_MODE )
     return 0;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
@@ -2784,11 +2785,11 @@ destroy_plugin_tx_app(tcp_helper_resource_t* trs)
   int intf_i;
   struct efrm_ext* plugin;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    release_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic,
-                                      ni->nic_hw[intf_i].plugin_tx_region_id);
     plugin = ni->nic_hw[intf_i].plugin_tx;
     if( ! plugin )
       continue;
+    release_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic,
+                                       ni->nic_hw[intf_i].plugin_tx_region_id);
     efrm_ext_release(plugin);
     ni->nic_hw[intf_i].plugin_tx = NULL;
   }
