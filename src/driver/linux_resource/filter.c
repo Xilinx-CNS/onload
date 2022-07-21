@@ -1839,7 +1839,7 @@ static struct seq_operations efrm_read_rules_seq_ops = {
 
 static int efrm_read_rules_seq_open(struct inode* inode, struct file* file) {
   int rc = 0;
-  efrm_interface_name_t* name = PDE_DATA(inode);
+  efrm_interface_name_t* name = pde_data(inode);
   efrm_filter_table_t* table;
   struct net* netns = get_net(current->nsproxy->net_ns);
   if ( !find_table_by_ifname( netns, name->efrm_in_interface_name, &table ) )

@@ -54,6 +54,7 @@
 #include <linux/fdtable.h>
 #include <asm/syscall.h>
 #include <net/sock.h>
+#include <linux/filter.h>
 
 #include <driver/linux_resource/autocompat.h>
 #include <ci/tools.h>
@@ -397,5 +398,14 @@ oo_remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
 #endif
 }
 
+#ifndef EFRM_HAVE_LOWCASE_PDE_DATA
+/* linux < 5.17 */
+#define pde_data PDE_DATA
+#endif /* ! EFRM_HAVE_LOWCASE_PDE_DATA */
+
+#ifdef EFRM_HAVE_NETIF_RX_NI
+/* linux < 5.18 */
+#define netif_rx netif_rx_ni
+#endif /* EFRM_HAVE_NETIF_RX_NI */
 
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */
