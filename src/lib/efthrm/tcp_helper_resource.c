@@ -2724,23 +2724,24 @@ create_plugin_tx_app(tcp_helper_resource_t* trs)
 #if CI_CFG_TX_CRC_OFFLOAD
   ci_netif* ni = &trs->netif;
   int intf_i;
-  struct efrm_ext* plugin;
   bool got_nic = false;
-  struct ef_vi* tx_vi;
-  struct xsn_storage_tx_create_app create;
-  int rc;
-  struct efhw_nic* nic;
-  struct efrm_pd* pd;
-  ci_uint32 region_id;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
     ni->nic_hw[intf_i].plugin_tx = NULL;
 
-  if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_NVME ||
-      CI_CFG_NVME_LOCAL_CRC_MODE )
+  if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_NVME )
     return 0;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
+    ci_uint32 region_id;
+#if ! CI_CFG_NVME_LOCAL_CRC_MODE
+    struct efhw_nic* nic;
+    struct efrm_pd* pd;
+    struct efrm_ext* plugin;
+    struct xsn_storage_tx_create_app create;
+    struct ef_vi* tx_vi;
+    int rc;
+
     nic = efrm_client_get_nic(trs->nic[intf_i].thn_oo_nic->efrm_client);
     if( nic->devtype.arch != EFHW_ARCH_EF100 )
       continue;
@@ -2762,8 +2763,10 @@ create_plugin_tx_app(tcp_helper_resource_t* trs)
       continue;
     }
 
-    region_id = get_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic);
     ni->nic_hw[intf_i].plugin_tx = plugin;
+#endif
+
+    region_id = get_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic);
     ni->nic_hw[intf_i].plugin_tx_region_id = region_id;
     got_nic = true;
   }
@@ -2783,15 +2786,20 @@ destroy_plugin_tx_app(tcp_helper_resource_t* trs)
 #if CI_CFG_TX_CRC_OFFLOAD
   ci_netif* ni = &trs->netif;
   int intf_i;
-  struct efrm_ext* plugin;
+
+  if( NI_OPTS(ni).tcp_offload_plugin != CITP_TCP_OFFLOAD_NVME )
+    return;
+
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    plugin = ni->nic_hw[intf_i].plugin_tx;
+#if ! CI_CFG_NVME_LOCAL_CRC_MODE
+    struct efrm_ext* plugin = ni->nic_hw[intf_i].plugin_tx;
     if( ! plugin )
       continue;
-    release_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic,
-                                       ni->nic_hw[intf_i].plugin_tx_region_id);
     efrm_ext_release(plugin);
     ni->nic_hw[intf_i].plugin_tx = NULL;
+#endif
+    release_plugin_tx_crc_table_region(trs->nic[intf_i].thn_oo_nic,
+                                       ni->nic_hw[intf_i].plugin_tx_region_id);
   }
 #endif
 }
