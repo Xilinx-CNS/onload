@@ -228,11 +228,13 @@ ldconfig -n /usr/lib /usr/lib64
 
 %postun
 
-if [ `cat /proc/1/comm` == systemd ]
-then
-  rm /usr/local/lib/modules-load.d/onload.conf
-else
-  rm /etc/sysconfig/modules/onload.modules
+# Remove these files only during uninstall, not during an upgrade
+if [ $1 == 0 ]; then
+  if [ `cat /proc/1/comm` == systemd ]; then
+    rm /usr/local/lib/modules-load.d/onload.conf
+  else
+    rm /etc/sysconfig/modules/onload.modules
+  fi
 fi
 
 ldconfig -n /usr/lib /usr/lib64
