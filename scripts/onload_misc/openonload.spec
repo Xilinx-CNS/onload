@@ -44,6 +44,8 @@
 
 %define pkgversion 20100910
 
+%undefine __brp_mangle_shebangs
+
 %{!?kernel:  %{expand: %%define kernel %%(uname -r)}}
 %{!?target_cpu:  %{expand: %%define target_cpu %{_host_cpu}}}
 %{!?kpath: %{expand: %%define kpath /lib/modules/%%{kernel}/build}}

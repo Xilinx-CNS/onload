@@ -285,10 +285,12 @@ install_userland() {
   [ -f setup.py ] || try $do cp "$TOP/scripts/onload_misc/setup.py" .
   if [ "$i_usr" = "/usr" ]; then
     # Debian and Ubuntu mess up if --prefix=/usr is set.
-    $do python3 setup.py install --record=$python_manifest
+    $do python3 setup.py install --record=$python_manifest \
+                                 $python_install_layout
   else
     $do python3 setup.py install --prefix="$i_usr"\
-                                 --record=$python_manifest
+                                 --record=$python_manifest \
+                                 $python_install_layout
   fi
 
   if [ $? != 0 ]; then
@@ -598,6 +600,8 @@ do_deb_user_install() {
   sfccheck=false
   adduser=false
   install_modules=false
+
+  python_install_layout="--install-layout deb"
 }
 
 do_deb_module_install() {
