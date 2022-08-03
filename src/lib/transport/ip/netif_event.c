@@ -1077,7 +1077,7 @@ static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
     pkt->flags &=~ CI_PKT_FLAG_IS_IP6;
 #endif
 
-    if( pkt->pay_len < oo_pre_l3_len(pkt) + ip_len  ){
+    if( ip_paylen <= 0 || pkt->pay_len < oo_pre_l3_len(pkt) + ip_len ){
       CI_IPV4_STATS_INC_IN_HDR_ERRS(ni);
       LOG_U(log(FN_FMT "BAD ip_len=%d frame_len=%d",
                 FN_PRI_ARGS(ni), ip_len, pkt->pay_len));
@@ -1089,7 +1089,6 @@ static int handle_rx_csum_bad(ci_netif* ni, struct ci_netif_poll_state* ps,
       LOG_U(log(FN_FMT "IP BAD CHECKSUM", FN_PRI_ARGS(ni)));
       goto drop;
     }
-
   }
 #if CI_CFG_IPV6
   else if( ether_type == CI_ETHERTYPE_IP6 ) {
