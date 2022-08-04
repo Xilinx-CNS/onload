@@ -142,6 +142,7 @@ void efrm_eventq_kill_callback(struct efrm_vi *virs)
 	} while (evq_state >> VI_RESOURCE_EVQ_STATE_BUSY_BITSHIFT);
 
 	wmb();
+	atomic_fetch_and(~VI_RESOURCE_EVQ_STATE_WAKEUP_PENDING, &cb_info->state);
 	cb_info->vi = NULL;
 	virs->evq_callback_fn = NULL;
 	mutex_unlock(&register_evq_cb_mutex);
