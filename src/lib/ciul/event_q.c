@@ -12,10 +12,12 @@
 \**************************************************************************/
   
 /*! \cidoxg_lib_ef */
+#define _GNU_SOURCE
 #include <etherfabric/vi.h>
 #include "ef_vi_internal.h"
 #include "driver_access.h"
 #include "logging.h"
+#include <sys/poll.h>
 
 
 int ef_eventq_wait(ef_vi* evq, ef_driver_handle fd,
@@ -30,6 +32,22 @@ int ef_eventq_wait(ef_vi* evq, ef_driver_handle fd,
   ** to supply one.
   */
   ci_resource_op_t  op;
+
+  if( evq->max_efct_rxq ) {
+    struct pollfd pfd = {.fd = fd, .events = POLLIN};
+    struct timespec t = {0, 0};
+    /* An inefficient implementation (it enters the kernel twice) but, as the
+     * comment below states, this function is of limited utility */
+    int rc = ef_vi_prime(evq, fd, current_ptr);
+    if (rc)
+      return rc;
+    if( timeout ) {
+      t.tv_sec = timeout->tv_sec;
+      t.tv_nsec = timeout->tv_usec * 1000;
+    }
+    rc = ppoll(&pfd, 1, t.tv_sec == 0 && t.tv_nsec == 0 ? NULL : &t, NULL);
+    return rc < 0 ? rc : 0;
+  }
 
   op.op = CI_RSOP_EVENTQ_WAIT;
   op.id = efch_make_resource_id(evq->vi_resource_id);
