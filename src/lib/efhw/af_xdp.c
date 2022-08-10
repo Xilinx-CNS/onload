@@ -744,7 +744,7 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
 
   owner_id = vi->owner_id;
   pd = pd_by_owner(nic, owner_id);
-  if( vi == NULL )
+  if( pd == NULL )
     return -EINVAL;
 
   /* We need to use network namespace of network device so that
