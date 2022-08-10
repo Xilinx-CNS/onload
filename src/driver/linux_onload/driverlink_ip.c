@@ -216,19 +216,6 @@ static struct nf_hook_ops oo_netfilter_ip6_hook = {
 #endif
 
 
-static int oo_netdev_is_native(const struct net_device *net_dev)
-{
-  struct efhw_nic* efhw_nic;
-  struct oo_nic* onic;
-  onic = oo_nic_find_dev(net_dev);
-  if( onic == NULL )
-    return 0;
-  efhw_nic = efrm_client_get_nic(onic->efrm_client);
-  return efhw_nic->devtype.arch == EFHW_ARCH_EF10 ||
-         efhw_nic->devtype.arch == EFHW_ARCH_EF100 ||
-         efhw_nic->devtype.arch == EFHW_ARCH_EFCT;
-}
-
 static void oo_hwport_up(struct oo_nic* onic, int up)
 {
   struct efhw_nic* efhw_nic = efrm_client_get_nic(onic->efrm_client);
@@ -308,10 +295,8 @@ static int oo_nic_probe(const struct net_device* net_dev)
     onic = oo_netdev_may_add(net_dev);
     if( onic == NULL )
       return -1;
-    /* We get SFC NICs probed before the device is brought up, but for other
-     * NICs they're probed via sysfs in an arbitrary state, so might need to
-     * be notified as up now. */
-    else if( !oo_netdev_is_native(net_dev) && netif_running(net_dev) )
+    /* If a NIC is already up when it's probed we need to notify now. */
+    else if( netif_running(net_dev) )
       oo_netdev_up(net_dev);
   }
 
@@ -428,8 +413,7 @@ static int oo_netdev_event(struct notifier_block *this,
     break;
 
   case NETDEV_CHANGEMTU:
-    if( oo_netdev_is_native(netdev) )
-      oo_fixup_wakeup_breakage(netdev);
+    oo_fixup_wakeup_breakage(netdev);
 
 #ifdef EFRM_RTMSG_IFINFO_EXPORTED
     /* The control plane has to know about the new MTU value.
