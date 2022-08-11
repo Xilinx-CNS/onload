@@ -25,13 +25,6 @@
 */
 #define CI_CVS_OPT_HDR_VERSION ("$Revision$")
 
-/* This just makes it a little neater to test for kernel. */
-#ifdef __KERNEL__
-# define CI_CFG_KERNEL                  1
-#else
-# define CI_CFG_KERNEL                  0
-#endif
-
 /* Maximum number of network interfaces (ports) per stack. */
 #define CI_CFG_MAX_INTERFACES           30
 
@@ -132,23 +125,8 @@
  */
 #define CI_CFG_POSIX_CONNECT_AFTER_LISTEN   0
 
-/*!
- * Enable this to return EAGAIN (EWOULDBLOCK) as close() errno,
- * if socket fails to send all data before linger timeout.
- */
-#define CI_CFG_POSIX_SO_LINGER          0
-
 /* send reset for connections with invalid options in SYN packets */ 
 #define CI_CFG_TCP_INVALID_OPT_RST	1
-
-/* slack factor when setting zero window probe timer 
-** Useful as many ANVL test advertise zero/small windows during 
-** shutdown which we can probe causing fails in some tests.
-*/
-#define CI_CFG_TCP_ZWIN_SLACK_FACTOR	2
-
-/* additional slack time when setting zero window probe timer */
-#define CI_CFG_TCP_ZWIN_SLACK_TICKS	20
 
 /* initial cwnd setting possible according to rfcs:
 ** 2001, 2581, 3390
@@ -311,10 +289,6 @@
  */
 #define CI_CFG_ACCEPT_INHERITS_NONBLOCK 0
 
-/* Should the number of bytes reported by ioctl(FIONREAD) be limited
-   to a maximum of the recieve buffer size? */
-#define CI_CFG_FIONREAD_LIMIT          0
-
 /* Maximum possible value for listen queue (backlog).
  * It is substituted from OS, when possible. */
 #define CI_TCP_LISTENQ_MAX 256
@@ -356,20 +330,6 @@
 #define CI_CFG_PROC_PATH_LEN_MAX	70
 /* Match procfs/sysctl line limits. */
 #define CI_CFG_PROC_LINE_LEN_MAX	1025
-
-/*
- * CI_CFG_HANDLE_UDP_FRAG enables support for fragmented UDP interception
- * in the net driver (when disabled all UDP frags are passed to the kernel).
- * It also enabled the addition & removal of driverlink filters.
- *
- * When disabled no filter add/remove requests are sent from the char driver
- * and any ICMP messages seen at the net driver are filtered for type/code
- * and then passed across without reference to the dest. IP address.  In the
- * char driver the address is checked.
- *
- * DEPRECATED - ALWAYS set to 0 (net driver/kernel handle UDP frags)
- */
-#define CI_CFG_HANDLE_UDP_FRAG      0
 
 /*
  * CI_CFG_CONGESTION_WINDOW_VALIDATION actviates RFC2861 compliance;
@@ -442,14 +402,6 @@
  */
 #define CI_CFG_TCP_FASTSTART   1
 
-/* Number of zero window probes to be sent before we try to split packets
-** and fill the small window. We will never split packets when we have just 
-** received an ack with zero window; we will wait for at least one zwin 
-** timeout. Current default is CI_CFG_TCP_ZWIN_THRESH = 1, it means to wait 
-** for two zwin timeouts.
-*/
-#define CI_CFG_TCP_ZWIN_THRESH 1
-
 /* If a tail drop is suspected, try to probe it with a retransmission.
 */
 #define CI_CFG_TAIL_DROP_PROBE 1
@@ -478,13 +430,6 @@
  */
 #define CI_CFG_ENDPOINT_MOVE 1
 
-/* Support physical addressing (as well as protected buffer addressing). */
-#ifdef __KERNEL__
-# define CI_CFG_SUPPORT_PHYS_ADDR  1
-#else
-# define CI_CFG_SUPPORT_PHYS_ADDR  0
-#endif
-
 /* Maintain statistics for listening sockets.  At time of writing these are
 ** all gathered off the fast path, so there is no significant performance
 ** penalty for having them on.
@@ -504,12 +449,6 @@
 #else
 #define CI_CFG_SPIN_STATS 1
 #endif
-
-/*
- * install broadcast hardware filters for UDP
- * - not needed currently as all such sockets get passed to OS
- */
-#define CI_CFG_INSTALL_UDP_BROADCAST_FILTERS  0
 
 /* Size of packet buffers.  Must be 2048 or 4096.  The larger value reduces
  * overhead when packets are large, but wastes memory when they aren't.
@@ -577,13 +516,6 @@
  * are a few long-living TCP connections which use 1-10 packets from each
  * set. */
 #define CI_CFG_PKT_SET_HIGH_WATER (PKTS_PER_SET - PKTS_PER_SET / 32)
-
-#if CI_CFG_PKTS_AS_HUGE_PAGES
-/* Maximum number of packet sets; each packet set is 2Mib (huge page)
- * = 2^9 or 2^10 packets, depending on CI_CFG_PKT_BUF_SIZE.
- * See also max_packets_per_stack module parameter. */
-#define CI_CFG_MAX_PKT_SETS 1024
-#endif
 
 /* Whether to include code to transmit small packets via PIO */
 #define CI_CFG_PIO 1
