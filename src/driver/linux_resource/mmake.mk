@@ -9,12 +9,12 @@
 ############################
 
 RESOURCE_SRCS	:= resource_driver.c \
-	iopage.c driverlink_new.c kernel_proc.c filter.c \
+	iopage.c kernel_proc.c filter.c \
 	bt_stats.c compat_pat_wc.c port_sniff.c nondl_resource.c sysfs.c \
 	nondl_driver.c sfcaffinity.c nic_notifier.c \
 	aux_driver.c aux_efct.c efct_superbuf.c
 
-EFHW_SRCS	:= nic.c eventq.c ef10.c ef100.c af_xdp.c ethtool_rxclass.c \
+EFHW_SRCS	:= nic.c eventq.c af_xdp.c ethtool_rxclass.c \
 		ethtool_flow.c efct.c
 
 EFHW_HDRS	:= ef10_mcdi.h ethtool_rxclass.h ethtool_flow.h ef10_ef100.h \
@@ -43,6 +43,10 @@ EFRM_SRCS	:=			\
 EFRM_HDRS	:= efrm_internal.h efrm_vi.h efrm_vi_set.h \
 		efrm_pd.h efrm_pio.h bt_manager.h
 
+ifeq ($(HAVE_SFC),1)
+RESOURCE_SRCS += driverlink_new.c
+EFHW_SRCS += ef10.c ef100.c
+endif
 
 IMPORT		:= $(EFHW_SRCS:%=../../lib/efhw/%) \
 		   $(EFHW_HDRS:%=../../lib/efhw/%) \
@@ -65,7 +69,9 @@ arm64_TARGET_SRCS := syscall_aarch64.o
 # linux kbuild support
 #
 
+ifeq ($(HAVE_SFC),1)
 KBUILD_EXTRA_SYMBOLS := $(BUILDPATH)/driver/linux_net/drivers/net/ethernet/sfc/Module.symvers
+endif
 
 ifndef CONFIG_AUXILIARY_BUS
 ifneq ($(HAVE_CNS_AUX),0)

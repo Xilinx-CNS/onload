@@ -55,6 +55,13 @@ ifneq ($(HAVE_X3_NET),0)
  EXTRA_CFLAGS += -DCI_XLNX_EFCT_HEADER='"$(X3_NET_PATH)/include/$(X3_NET_HDR)"'
 endif
 
+HAVE_SFC ?= 1
+ifeq ($(HAVE_SFC),1)
+  EXTRA_CFLAGS += -DCI_HAVE_SFC=1
+else
+  EXTRA_CFLAGS += -DCI_HAVE_SFC=0
+endif
+
 TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_extra.h
 EXTRA_CFLAGS += -DTRANSPORT_CONFIG_OPT_HDR='<$(TRANSPORT_CONFIG_OPT_HDR)>'
 

@@ -21,4 +21,8 @@ extern struct efhw_func_ops af_xdp_char_functional_units;
 
 #endif
 
+#if !defined(EFHW_HAS_AF_XDP) && !CI_HAVE_SFC
+#error HAVE_SFC=0 build mode is unavailable since AF_XDP is not supported
+#endif
+
 #endif /* CI_EFHW_AF_XDP_H */

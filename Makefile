@@ -16,6 +16,8 @@ Options:
   V=1              Print full build command lines
   NDEBUG=1         Create optimized build
   MMAKE_LIBERAL=1  Turn off -Werror
+  HAVE_SFC=0       Build without netdriver and driverlink support to work in
+                   AF_XDP mode only
   BUILD_PROFILE=x  Onload configuration, e.g. "cloud" (default: extra)
   KBUILDTOP=<path> Where to put driver build (default: build/$$KARCH_linux-$$KVER)
   KPATH=<path>     Kernel to build for (default: /lib/modules/`uname -r`/build)
@@ -43,13 +45,17 @@ endif
 
 DRIVER_SUBDIRS := src/driver/linux_char src/driver/linux_onload \
                   src/driver/linux_resource src/lib/citools src/lib/ciul \
-                  src/lib/cplane src/lib/transport/ip \
-                  src/driver/linux_net/drivers/bus \
-                  src/driver/linux_net/drivers/net/ethernet/sfc
+                  src/lib/cplane src/lib/transport/ip
 export AUX_BUS_PATH ?= $(abspath ../cns-auxiliary-bus)
 export HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
 ifneq ($(HAVE_CNS_AUX),0)
 KBUILD_EXTRA_SYMBOLS := $(AUX_BUS_PATH)/drivers/base/Module.symvers
+endif
+
+export HAVE_SFC ?= 1
+ifeq ($(HAVE_SFC),1)
+DRIVER_SUBDIRS += src/driver/linux_net/drivers/bus \
+                  src/driver/linux_net/drivers/net/ethernet/sfc
 endif
 
 # Linux 4.6 added some object-file validation, which was also merged into
@@ -160,6 +166,12 @@ endif
 
 ifneq ($(MMAKE_LIBERAL),1)
 ONLOAD_CFLAGS += -Werror
+endif
+
+ifeq ($(HAVE_SFC),1)
+  ONLOAD_CFLAGS += -DCI_HAVE_SFC=1
+else
+  ONLOAD_CFLAGS += -DCI_HAVE_SFC=0
 endif
 
 

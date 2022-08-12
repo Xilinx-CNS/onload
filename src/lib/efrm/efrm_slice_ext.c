@@ -7,6 +7,19 @@
 #include <ci/efhw/ef100.h>
 #include "efrm_internal.h"
 
+#if ! CI_HAVE_SFC
+static int _dummy_ef100_nic_ext(struct efhw_nic *nic, ...)
+{
+	return -EOPNOTSUPP;
+}
+
+#define ef100_nic_ext_alloc _dummy_ef100_nic_ext
+#define ef100_nic_ext_free _dummy_ef100_nic_ext
+#define ef100_nic_ext_get_meta_global _dummy_ef100_nic_ext
+#define ef100_nic_ext_get_meta_msg _dummy_ef100_nic_ext
+#define ef100_nic_ext_msg _dummy_ef100_nic_ext
+#endif /* ! CI_HAVE_SFC */
+
 struct efrm_ext {
 	struct efrm_resource rs;
 	struct efrm_pd *pd;

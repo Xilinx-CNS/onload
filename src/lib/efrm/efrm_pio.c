@@ -40,6 +40,17 @@
 #include "efrm_pio.h"
 #include "efrm_internal.h"
 
+#if ! CI_HAVE_SFC
+static int _dummy_ef10_nic_piobuf(struct efhw_nic *nic, ...)
+{
+	return -EOPNOTSUPP;
+}
+
+#define ef10_nic_piobuf_alloc _dummy_ef10_nic_piobuf
+#define ef10_nic_piobuf_free _dummy_ef10_nic_piobuf
+#define ef10_nic_piobuf_link _dummy_ef10_nic_piobuf
+#define ef10_nic_piobuf_unlink _dummy_ef10_nic_piobuf
+#endif /* ! CI_HAVE_SFC */
 
 #define efrm_pio(rs1)  container_of((rs1), struct efrm_pio, epio_rs)
 
