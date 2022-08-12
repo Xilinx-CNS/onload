@@ -79,7 +79,7 @@ ci_inline ci_uint32 ci_cas32u(volatile ci_uint32* p, ci_uint32 oldval, ci_uint32
 ci_inline ci_int64 ci_cas64(volatile ci_int64* p, ci_int64 oldval, ci_int64 newval)
 {  __cas64(ci_int64, p, oldval, newval); }
 
-ci_inline ci_int64 ci_cas64u(volatile ci_uint64* p, ci_uint64 oldval, ci_uint64 newval)
+ci_inline ci_uint64 ci_cas64u(volatile ci_uint64* p, ci_uint64 oldval, ci_uint64 newval)
 {  __cas64(ci_uint64, p, oldval, newval); }
 
 ci_inline int ci_cas32_succeed(volatile ci_int32* p, ci_int32 oldval,
