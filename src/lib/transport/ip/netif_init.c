@@ -76,7 +76,8 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
 #if CI_CFG_TX_CRC_OFFLOAD
   if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
     ci_nvme_plugin_crc_id_init(&nis->nvme_crc_plugin_idp[nic_i],
-                               ni->nic_hw[nic_i].plugin_tx_region_id);
+                               ni->nic_hw[nic_i].plugin_tx_region_id,
+                               NI_OPTS(ni).nvme_crc_table_cap);
 #endif
   }
 
@@ -1299,6 +1300,9 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_CEPH_DATA_BUF_BYTES")) )
     opts->ceph_data_buf_bytes = atoi(s);
+
+  if( (s = getenv("EF_NVME_CRC_TABLE_CAP")) )
+    opts->nvme_crc_table_cap = atoi(s);
 #endif
 }
 

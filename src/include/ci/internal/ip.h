@@ -2901,11 +2901,13 @@ oo_tx_zc_payload_next(ci_netif* ni, struct ci_pkt_zc_payload* zcp)
  * According to the ci_fifo2 specification, the queue capacity is cap-1
  */
 ci_inline void
-ci_nvme_plugin_crc_id_init(struct nvme_crc_plugin_idp_t* idp, unsigned base)
+ci_nvme_plugin_crc_id_init(struct nvme_crc_plugin_idp_t* idp, unsigned base, unsigned limit)
 {
   int i = 0;
+  if( limit == 0 || limit >= (1 << ZC_NVME_CRC_IDP_CAP) )
+    limit = (1 << ZC_NVME_CRC_IDP_CAP) - 1;
   ci_fifo2_init(idp, 1 << ZC_NVME_CRC_IDP_CAP);
-  for( i = 0; i < (1 << ZC_NVME_CRC_IDP_CAP)-1; i++ )
+  for( i = 0; i < limit; i++ )
       ci_fifo2_put(idp, i + base);
 }
 

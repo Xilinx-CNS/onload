@@ -1703,6 +1703,11 @@ CI_CFG_OPT("EF_CEPH_DATA_BUF_BYTES", ceph_data_buf_bytes, ci_uint32,
 "Number of bytes of on-NIC RAM to reserve for each TCP connection, for "
 "offloaded zero-copy data. Requires EF_TCP_OFFLOAD+ceph.\n",
            , , 16*1024*1024, 4*1024, 1024*1024*1024, count)
+
+CI_CFG_OPT("EF_NVME_CRC_TABLE_CAP", nvme_crc_table_cap, ci_uint32,
+"Limit the pool of CRC table IDs available to each stack to this value. "
+"Defaults to the max supported by hardware. Requires EF_TCP_OFFLOAD=nvme.\n",
+           , , 0, 0, 1 << ZC_NVME_CRC_IDP_CAP, count)
 #endif
 
 #ifdef CI_CFG_OPTGROUP
