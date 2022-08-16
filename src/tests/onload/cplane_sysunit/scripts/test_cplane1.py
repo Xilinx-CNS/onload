@@ -438,6 +438,7 @@ def test_singleroute(v6):
 # Not yet converted to IPv6 because it looks at route src - need
 # CONFIG_IPV6_SUBTREES
 @cpdecorate()
+@pytest.mark.skip(reason="ON-14312")
 def test_singleroute_transparent(cpserver,cp,netns):
     hwport = 1
     ifname = 'O%d'%hwport
