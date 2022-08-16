@@ -538,7 +538,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   vi->dh = vi_dh;
   vi->vi_resource_id = ra.out_id.index;
   vi->vi_i = ra.u.vi_out.instance;
-  vi->abs_idx = ra.u.vi_out.abs_idx;
+  vi->abs_idx = ( ra.u.vi_out.out_flags & EFHW_VI_ABS_IDX_SET )
+    ? ra.u.vi_out.abs_idx : -1;
   ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
 

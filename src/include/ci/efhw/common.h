@@ -117,6 +117,7 @@ typedef union {
  */
 #define EFHW_VI_CLOCK_SYNC_STATUS  0x01  /*! sync status reporting */
 #define EFHW_VI_PS_BUF_SIZE_SET    0x02  /*! ps_buf_size field is set */
+#define EFHW_VI_ABS_IDX_SET        0x04  /*! abs idx field is valid */
 
 /* Flags for hw features */
 #define EFHW_VI_NIC_BUG35388_WORKAROUND 0x01  /*! workaround for bug35388 */
