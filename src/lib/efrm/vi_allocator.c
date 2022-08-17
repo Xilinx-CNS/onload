@@ -98,6 +98,7 @@ static bool accept_vi_constraints(int low, unsigned order, void* arg)
 		.channel = avc->channel,
 		.min_vis_in_set = avc->min_vis_in_set,
 		.has_rss_context = avc->has_rss_context,
+		.want_txq = avc->want_txq,
 	};
 	return efhw_nic_accept_vi_constraints(avc->efhw_nic, low, order, &evc);
 }

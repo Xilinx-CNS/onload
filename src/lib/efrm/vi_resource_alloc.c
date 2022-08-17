@@ -72,6 +72,8 @@ struct vi_attr {
 	uint8_t             vi_set_instance;
 	int8_t              packed_stream;
 	int32_t             ps_buffer_size;
+	bool                want_rxq;
+	bool                want_txq;
 };
 
 CI_BUILD_ASSERT(sizeof(struct vi_attr) <= sizeof(struct efrm_vi_attr));
@@ -468,6 +470,7 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 		.channel = vi_attr->channel,
 		.min_vis_in_set = 1,
 		.has_rss_context = 0,
+		.want_txq = vi_attr->want_txq,
 	};
 
 	efhw_nic = efrm_client_get_nic(efrm_pd_to_resource(pd)->rs_client);
@@ -1446,6 +1449,8 @@ int __efrm_vi_attr_init(struct efrm_client *client_obsolete,
 	a->channel = -1;
 	a->want_interrupt = false;
 	a->packed_stream = 0;
+	a->want_rxq = true;
+	a->want_txq = true;
 	return 0;
 }
 EXPORT_SYMBOL(__efrm_vi_attr_init);
@@ -1519,6 +1524,16 @@ void efrm_vi_attr_set_want_interrupt(struct efrm_vi_attr *attr)
 	a->want_interrupt = true;
 }
 EXPORT_SYMBOL(efrm_vi_attr_set_want_interrupt);
+
+
+void efrm_vi_attr_set_queue_types(struct efrm_vi_attr *attr, bool want_rxq,
+                                  bool want_txq)
+{
+	struct vi_attr *a = VI_ATTR_FROM_O_ATTR(attr);
+	a->want_rxq = want_rxq;
+	a->want_txq = want_txq;
+}
+EXPORT_SYMBOL(efrm_vi_attr_set_queue_types);
 
 
 static size_t efrm_vi_get_efct_shm_bytes_nrxq(struct efrm_vi *vi,

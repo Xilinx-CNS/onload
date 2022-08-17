@@ -151,6 +151,9 @@ int efrm_vi_set_alloc(struct efrm_pd *pd, int n_vis,
 		.channel = -1,
 		.min_vis_in_set = n_vis,
 		.has_rss_context = 0,
+		/* We don't know the details of individual vis when allocating
+		 * a set, so assume we may want a txq. */
+		.want_txq = true,
 	};
 	EFRM_ASSERT(0 == (rss_modes &
 		  ~(EFRM_RSS_MODE_DEFAULT|EFRM_RSS_MODE_SRC|EFRM_RSS_MODE_DST)));

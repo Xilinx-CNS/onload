@@ -176,6 +176,10 @@ extern void efrm_vi_attr_set_wakeup_channel(struct efrm_vi_attr *,
 /** Allocate a VI that is capable of receiving wakeups. */
 extern void efrm_vi_attr_set_want_interrupt(struct efrm_vi_attr *attr);
 
+/** Set which queue types this VI will want */
+extern void efrm_vi_attr_set_queue_types(struct efrm_vi_attr *attr,
+                                         bool want_rxq, bool want_txq);
+
 extern struct efrm_vi *
 efrm_vi_from_resource(struct efrm_resource *);
 

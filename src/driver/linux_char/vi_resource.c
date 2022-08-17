@@ -294,6 +294,9 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
     ps_buf_size = (int) alloc_in->ps_buf_size_kb * 1024;
   efrm_vi_attr_set_ps_buffer_size(&attr, ps_buf_size);
 
+  efrm_vi_attr_set_queue_types(&attr, alloc_in->rxq_capacity != 0,
+                               alloc_in->txq_capacity != 0);
+
   in_flags = alloc_in->flags | EFHW_VI_JUMBO_EN;
   if( rmpd != NULL && efrm_pd_stack_id_get(rmpd) > 0 )
     in_flags |= EFHW_VI_TX_LOOPBACK;

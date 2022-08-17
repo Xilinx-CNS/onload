@@ -153,6 +153,7 @@ struct efhw_vi_constraints {
 	int channel;
 	int min_vis_in_set;
 	int has_rss_context;
+	bool want_txq;
 };
 
 /**********************************************************************

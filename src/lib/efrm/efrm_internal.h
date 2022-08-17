@@ -86,6 +86,7 @@ struct efrm_alloc_vi_constraints {
 	int channel;
 	int min_vis_in_set;
 	int has_rss_context;
+	bool want_txq;
 };
 
 /* Allocate a set of VIs with given properties.  Returns 0 or negative
