@@ -817,6 +817,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	unsigned flags = virs->flags;
 	unsigned vport_id;
 	struct efhw_evq_params evq_params = {};
+	struct efhw_dmaq_params q_params = {};
 
 	vport_id = efrm_pd_get_vport_id(virs->pd);
 
@@ -834,32 +835,32 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	if (efrm_vi_is_phys(virs))
 		flags |= EFHW_VI_TX_PHYS_ADDR_EN | EFHW_VI_RX_PHYS_ADDR_EN;
 
+	if (queue_type == EFHW_TXQ || queue_type == EFHW_RXQ) {
+		evq_instance = q->evq_ref->rs.rs_instance;
+		q_params.dmaq = instance;
+		q_params.evq = evq_instance;
+		q_params.owner = efrm_pd_owner_id(virs->pd);
+		q_params.tag = virs->q[queue_type].tag;
+		q_params.dmaq_size = q->capacity;
+		q_params.dma_addrs = q->dma_addrs;
+		q_params.n_dma_addrs =
+			(1 << q->host_page_order) * EFHW_NIC_PAGES_IN_OS_PAGE;
+		q_params.vport_id = vport_id;
+		q_params.stack_id = efrm_pd_stack_id_get(virs->pd);
+		q_params.flags = flags;
+	}
+
 	switch (queue_type) {
 	case EFHW_TXQ:
-		evq_instance = q->evq_ref->rs.rs_instance;
-		rc = efhw_nic_dmaq_tx_q_init
-			(nic, efrm_pd_get_nic_client_id(virs->pd), instance,
-			 &qid, evq_instance,
-			 efrm_pd_owner_id(virs->pd),
-			 virs->q[queue_type].tag, q->capacity,
-			 q->dma_addrs,
-			 (1 << q->host_page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
-			 vport_id,
-			 efrm_pd_stack_id_get(virs->pd), flags);
+		rc = efhw_nic_dmaq_tx_q_init(nic,
+			efrm_pd_get_nic_client_id(virs->pd), &q_params);
+		qid = q_params.tx.qid_out;
 		break;
 	case EFHW_RXQ:
 		qid = instance;
-		evq_instance = q->evq_ref->rs.rs_instance;
-                rc = efhw_nic_dmaq_rx_q_init
-                       (nic, efrm_pd_get_nic_client_id(virs->pd),
-                        instance, evq_instance,
-                        efrm_pd_owner_id(virs->pd),
-                        virs->q[queue_type].tag, q->capacity,
-                        q->dma_addrs,
-                        (1 << q->host_page_order) * EFHW_NIC_PAGES_IN_OS_PAGE,
-                        vport_id,
-                        efrm_pd_stack_id_get(virs->pd), virs->ps_buf_size,
-                        flags);
+		q_params.rx.ps_buf_size = virs->ps_buf_size;
+		rc = efhw_nic_dmaq_rx_q_init(nic,
+			efrm_pd_get_nic_client_id(virs->pd), &q_params);
                 if( rc >= 0 ) {
                   virs->rx_prefix_len = rc;
                   rc = 0;

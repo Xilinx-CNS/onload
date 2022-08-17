@@ -1088,36 +1088,32 @@ af_xdp_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 
 
 static int
-af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
-                      uint *qid_out, uint evq_id, uint own_id, uint tag,
-		      uint dmaq_size, dma_addr_t *dma_addrs, int n_dma_addrs,
-                      uint vport_id, uint stack_id, uint flags)
+af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
+		      struct efhw_dmaq_params *params)
 {
-  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq_id);
+  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, params->evq);
   if( vi == NULL )
     return -ENODEV;
 
-  vi->owner_id = own_id;
-  vi->txq_capacity = dmaq_size;
-  *qid_out = instance;
+  vi->owner_id = params->owner;
+  vi->txq_capacity = params->dmaq_size;
+  params->tx.qid_out = params->dmaq;
 
   return 0;
 }
 
 
 static int
-af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
-		    uint evq_id, uint own_id, uint tag, uint dmaq_size,
-		    dma_addr_t *dma_addrs, int n_dma_addrs,
-		    uint vport_id, uint stack_id, uint ps_buf_size, uint flags)
+af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
+		      struct efhw_dmaq_params *params)
 {
-  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq_id);
+  struct efhw_af_xdp_vi* vi = vi_by_instance(nic, params->evq);
   if( vi == NULL )
     return -ENODEV;
 
-  vi->owner_id = own_id;
-  vi->rxq_capacity = dmaq_size;
-  vi->flags |= (flags & EFHW_VI_RX_ZEROCOPY) ? XDP_ZEROCOPY : XDP_COPY;
+  vi->owner_id = params->owner;
+  vi->rxq_capacity = params->dmaq_size;
+  vi->flags |= (params->flags & EFHW_VI_RX_ZEROCOPY) ? XDP_ZEROCOPY : XDP_COPY;
 
   return 0;
 }
