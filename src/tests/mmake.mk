@@ -9,7 +9,6 @@ SUBDIRS		:=     driver \
                    syscalls \
                    tap \
 		   trade_sim \
-		   unit \
 
 OTHER_SUBDIRS	:=
 
@@ -17,9 +16,7 @@ ifeq ($(ONLOAD_ONLY),1)
 SUBDIRS		:= ef_vi \
                    onload \
                    rtt \
-                   trade_sim \
-                   unit \
-
+                   trade_sim
 endif
 
 endif
