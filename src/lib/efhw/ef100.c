@@ -218,20 +218,20 @@ ef100_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int
-ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
-		    uint *qid_out, uint evq_id, uint own_id, uint tag,
-		    uint dmaq_size, dma_addr_t *dma_addrs, int n_dma_addrs,
-		    uint vport_id, uint stack_id, uint flags)
+ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
+                     struct efhw_dmaq_params *params)
 {
 	int rc;
-	int flag_timestamp = (flags & EFHW_VI_TX_TIMESTAMPS) != 0;
-	int flag_tcp_udp_only = (flags & EFHW_VI_TX_TCPUDP_ONLY) != 0;
-	int flag_tcp_csum_dis = (flags & EFHW_VI_TX_TCPUDP_CSUM_DIS) != 0;
-	int flag_ip_csum_dis = (flags & EFHW_VI_TX_IP_CSUM_DIS) != 0;
-	int flag_buff_mode = (flags & EFHW_VI_TX_PHYS_ADDR_EN) == 0;
-	int flag_ctpio = (flags & EFHW_VI_TX_CTPIO) != 0;
-	int flag_ctpio_uthresh = (flags & EFHW_VI_TX_CTPIO_NO_POISON) == 0;
-	int flag_m2m_d2c = (flags & EFHW_VI_TX_M2M_D2C) != 0;
+	int flag_timestamp = (params->flags & EFHW_VI_TX_TIMESTAMPS) != 0;
+	int flag_tcp_udp_only = (params->flags & EFHW_VI_TX_TCPUDP_ONLY) != 0;
+	int flag_tcp_csum_dis =
+		(params->flags & EFHW_VI_TX_TCPUDP_CSUM_DIS) != 0;
+	int flag_ip_csum_dis = (params->flags & EFHW_VI_TX_IP_CSUM_DIS) != 0;
+	int flag_buff_mode = (params->flags & EFHW_VI_TX_PHYS_ADDR_EN) == 0;
+	int flag_ctpio = (params->flags & EFHW_VI_TX_CTPIO) != 0;
+	int flag_ctpio_uthresh =
+		(params->flags & EFHW_VI_TX_CTPIO_NO_POISON) == 0;
+	int flag_m2m_d2c = (params->flags & EFHW_VI_TX_M2M_D2C) != 0;
 	int flag_pacer_bypass;
 
 	if (nic->flags & NIC_FLAG_MCAST_LOOP_HW) {
@@ -244,13 +244,15 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
 	 * if so we retry without it. */
 	for (flag_pacer_bypass = 1; 1; flag_pacer_bypass = 0) {
 		rc = ef10_ef100_mcdi_cmd_init_txq
-			(nic, client_id, dma_addrs, n_dma_addrs, vport_id, stack_id,
-			 REAL_OWNER_ID(own_id), flag_timestamp,
-			 QUEUE_CRC_MODE_NONE, flag_tcp_udp_only,
-			 flag_tcp_csum_dis, flag_ip_csum_dis,
-			 flag_buff_mode, flag_pacer_bypass, flag_ctpio,
-			 flag_ctpio_uthresh, flag_m2m_d2c, instance, tag,
-			 evq_id, dmaq_size);
+			(nic, client_id, params->dma_addrs,
+			 params->n_dma_addrs, params->vport_id,
+			 params->stack_id, REAL_OWNER_ID(params->owner),
+			 flag_timestamp, QUEUE_CRC_MODE_NONE,
+			 flag_tcp_udp_only, flag_tcp_csum_dis,
+			 flag_ip_csum_dis, flag_buff_mode, flag_pacer_bypass,
+			 flag_ctpio, flag_ctpio_uthresh, flag_m2m_d2c,
+			 params->dmaq, params->tag,
+			 params->evq, params->dmaq_size);
 		if ((rc != -EPERM) || (!flag_pacer_bypass))
 			break;
 	}
@@ -264,34 +266,36 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
 		rc = -ENOKEY;
 
 	if (rc == 0)
-		*qid_out = instance;
+		params->tx.qid_out = params->dmaq;
 
 	return rc;
 }
 
 
 static int
-ef100_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
-		    uint evq_id, uint own_id, uint tag, uint dmaq_size,
-		    dma_addr_t *dma_addrs, int n_dma_addrs,
-		    uint vport_id, uint stack_id, uint ps_buf_size, uint flags)
+ef100_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
+		     struct efhw_dmaq_params *params)
 {
 	int rc;
-	int flag_rx_prefix = (flags & EFHW_VI_RX_PREFIX) != 0;
-	int flag_timestamp = (flags & EFHW_VI_RX_TIMESTAMPS) != 0;
-	int flag_hdr_split = (flags & EFHW_VI_RX_HDR_SPLIT) != 0;
-	int flag_buff_mode = (flags & EFHW_VI_RX_PHYS_ADDR_EN) == 0;
-	int flag_packed_stream = (flags & EFHW_VI_RX_PACKED_STREAM) != 0;
-	int flag_force_rx_merge = ((flags & EFHW_VI_NO_RX_CUT_THROUGH) != 0) &&
-				(nic->flags & NIC_FLAG_RX_FORCE_EVENT_MERGING);
+	int flag_rx_prefix = (params->flags & EFHW_VI_RX_PREFIX) != 0;
+	int flag_timestamp = (params->flags & EFHW_VI_RX_TIMESTAMPS) != 0;
+	int flag_hdr_split = (params->flags & EFHW_VI_RX_HDR_SPLIT) != 0;
+	int flag_buff_mode = (params->flags & EFHW_VI_RX_PHYS_ADDR_EN) == 0;
+	int flag_packed_stream =
+		(params->flags & EFHW_VI_RX_PACKED_STREAM) != 0;
+	int flag_force_rx_merge =
+		((params->flags & EFHW_VI_NO_RX_CUT_THROUGH) != 0) &&
+		(nic->flags & NIC_FLAG_RX_FORCE_EVENT_MERGING);
 	if (flag_packed_stream)
 		return -EOPNOTSUPP;
 
 	rc = ef10_ef100_mcdi_cmd_init_rxq
-		(nic, client_id, dma_addrs, n_dma_addrs, vport_id, stack_id,
-		 REAL_OWNER_ID(own_id), QUEUE_CRC_MODE_NONE, flag_timestamp,
-		 flag_hdr_split, flag_buff_mode, flag_rx_prefix,
-		 flag_packed_stream, dmaq, tag, evq_id, dmaq_size, ps_buf_size,
+		(nic, client_id, params->dma_addrs, params->n_dma_addrs,
+		 params->vport_id, params->stack_id,
+		 REAL_OWNER_ID(params->owner), QUEUE_CRC_MODE_NONE,
+		 flag_timestamp, flag_hdr_split, flag_buff_mode,
+		 flag_rx_prefix, flag_packed_stream, params->dmaq, params->tag,
+		 params->evq, params->dmaq_size, params->rx.ps_buf_size,
 		 flag_force_rx_merge, EF100_RX_USR_BUF_SIZE);
 
 	return nic->rx_prefix_len;

@@ -128,6 +128,27 @@ struct efhw_evq_params {
 	int flags_out;
 };
 
+struct efhw_dmaq_params {
+	uint dmaq;
+	uint evq;
+	uint owner;
+	uint tag;
+	uint dmaq_size;
+	dma_addr_t *dma_addrs;
+	int n_dma_addrs;
+	uint vport_id;
+	uint stack_id;
+	uint flags;
+	union {
+		struct {
+			uint ps_buf_size;
+		} rx;
+		struct {
+			uint qid_out;
+		} tx;
+	};
+};
+
 /**********************************************************************
  * Portable HW interface. ***************************************
  **********************************************************************/
@@ -195,18 +216,11 @@ struct efhw_func_ops {
 	 * model does not represent VIs with a triple of EVQ/RXQ/TXQ.
 	 */
 	int (*dmaq_tx_q_init) (struct efhw_nic *nic, uint32_t client_id,
-			       uint instance, uint *qid_out, uint evq,
-			       uint owner, uint tag, uint dmaq_size,
-			       dma_addr_t *dma_addrs, int n_dma_addrs,
-			       uint vport_id, uint stack_id, uint flags);
+			       struct efhw_dmaq_params *params);
 
 	/*! Initialise NIC state for a given RX DMAQ */
 	int (*dmaq_rx_q_init) (struct efhw_nic *nic, uint32_t client_id,
-			       uint dmaq, uint evq, uint owner, uint tag,
-			       uint dmaq_size,
-			       dma_addr_t *dma_addrs, int n_dma_addrs,
-			       uint vport_id, uint stack_id, 
-			       uint ps_buf_size, uint flags);
+			       struct efhw_dmaq_params *params);
 
 	/*! Flush a given TX DMA channel */
 	int (*flush_tx_dma_channel) (struct efhw_nic *nic, uint32_t client_id,

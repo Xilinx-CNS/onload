@@ -367,17 +367,15 @@ efct_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 
 
 static int
-efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
-                    uint *qid_out, uint evq_id, uint own_id, uint tag,
-                    uint dmaq_size, dma_addr_t *dma_addrs, int n_dma_addrs,
-                    uint vport_id, uint stack_id, uint flags)
+efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
+                    struct efhw_dmaq_params *txq_params)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
   struct xlnx_efct_txq_params params = {
-    .evq = evq_id,
-    .label = tag,
+    .evq = txq_params->evq,
+    .label = txq_params->tag,
   };
   int rc;
 
@@ -386,7 +384,7 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
   EFCT_POST(dev, edev, cli, nic, rc);
 
   if( rc >= 0 ) {
-    *qid_out = rc;
+    txq_params->tx.qid_out = rc;
     rc = 0;
   }
 
@@ -395,10 +393,8 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id, uint instance,
 
 
 static int
-efct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id, uint dmaq,
-                    uint evq_id, uint own_id, uint tag, uint dmaq_size,
-                    dma_addr_t *dma_addrs, int n_dma_addrs,
-                    uint vport_id, uint stack_id, uint ps_buf_size, uint flags)
+efct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
+                    struct efhw_dmaq_params *params)
 {
   /* efct doesn't do rxqs like this, so nothing to do here */
   return 0;
