@@ -147,19 +147,54 @@ void** find_syscall_table(void)
    *    48 89 e7
    * movslq	%eax, %rsi
    *    48 63 f0
+   * linux>=5.18.14: "clobbers %rax" with IBRS in the middle
    * call	do_syscall_64
    *    e8 XX XX XX XX
    *
+   * linux>=5.18.14 and various backports (Debian's 5.10.0-17-amd64,
+   * Ubuntu's 5.15.0-46) add some code before the call instruction above.
+   * The code is: IBRS_ENTER + UNTRAIN_RET with a comment
+   * "clobbers %rax, make sure it is after saving the syscall nr"
+   *
+   * For now we just look for the first "e8" byte, but it is very
+   * error-prone.  Such a "e8" byte may be data, offset or something like
+   * this.  However it is hard to find a better solution, because these
+   * 2 macros depends on the kernel config option, and then the asm code is
+   * hot-patched at load time depending on CPU properties.
    */
   p += 0x40; /* skip the first part of entry_SYSCALL_64() */
   result = 0;
   pend = p + 1024 - 11;
   while (p < pend) {
-    if( p[0] == 0x48 && p[1] == 0x89 && p[3] == 0x48 && p[6] == 0xe8 &&
+#if 0
+    if( p[0] == 0x48 )
+      EFRM_ERR("%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x "
+               "%02x %02x %02x %02x %02x %02x",
+               p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9],
+               p[10], p[11], p[12], p[13], p[14], p[15], p[16], p[17]);
+#endif
+    if( p[0] == 0x48 && p[1] == 0x89 && p[3] == 0x48 &&
         ((p[2] == 0xc7 && p[4] == 0x89 && p[5] == 0xe6) ||
          (p[2] == 0xe7 && p[4] == 0x63 && p[5] == 0xf0)) ) {
-      result = (unsigned long)p + 11;
-      result += p[7] | (p[8] << 8) | (p[9] << 16) | (p[10] << 24);
+      /* Skip IBRS: search for the nearest "call", 0xe8. */
+      unsigned char *p1 = p + 6;
+      while( *p1 != 0xe8 )
+        p1++;
+      /* Is this our "call do_syscall_64", or something from UNTRAIN_RET?
+       * In the second case these calls go one after another, and we should
+       * take the second one.
+       *
+       * To get into this case, you need to pass retbleed=unret or
+       * retbleed=ibpb via the kernel command line.
+       * Tested with Intel(R) Xeon(R) CPU E3-1220 v6 @ 3.00GHz.
+       *
+       * No kernel I know about has a "call" after "call do_syscall_64",
+       * so 2 consecutive calls mean that do_syscall_64 is the second one. */
+      if( p1[5] == 0xe8 )
+        p1 += 5;
+
+      result = (unsigned long)p1 + 5;
+      result += p1[1] | (p1[2] << 8) | (p1[3] << 16) | (p1[4] << 24);
       break;
     }
     p++;
