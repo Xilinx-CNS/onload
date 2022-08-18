@@ -9,7 +9,6 @@ SUBDIRS		:=     driver \
                    syscalls \
                    tap \
 		   trade_sim \
-		   unit \
 
 OTHER_SUBDIRS	:=
 
@@ -18,8 +17,18 @@ SUBDIRS		:= ef_vi \
                    onload \
                    rtt \
                    trade_sim \
-                   unit \
 
+endif
+
+# Do not attempt to build unit tests with NDEBUG. This adds visibility
+# attributes to symbols in the library objects, making it an error for those
+# symbols not to be present when linking.
+#
+# TODO it would be nice to be able to run the unit tests on all builds.
+# Perhaps something could be done to resolve the link error, such as removing
+# the attributes from the object files before linking.
+ifndef NDEBUG
+  SUBDIRS += unit
 endif
 
 endif
