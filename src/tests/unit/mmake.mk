@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Copyright 2022 AMD, Inc.
+# X-SPDX-Copyright-Text: (c) Copyright 2022 Xilinx, Inc.
 
 # Override this to run only the subset of the tests beginning with the filter
 # e.g. tests in a single directory: UNIT_TEST_FILTER=transport/ip/
