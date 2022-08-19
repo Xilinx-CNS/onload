@@ -48,17 +48,19 @@ struct onload_zc_iovec {
     void* iov_base;        /* Address within buffer */
     uint64_t iov_ptr;      /* 'buf' may refer to an external address space */
   };
-  union {
-    size_t iov_len;        /* Length of data */
-    uint64_t iov_len64;    /* To allow large external address space buffers */
-  };
+
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+  uint64_t iov_len:48;      /* Length of data */
+  uint64_t iov_flags:16;    /* unused */
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+  uint64_t iov_flags:16;    /* unused */
+  uint64_t iov_len:48;      /* Length of data */
+#else
+#define endianess not recognized
+#endif
+
   onload_zc_handle buf;    /* Corresponding (opaque) buffer handle or
                               ONLOAD_ZC_HANDLE_NONZC */
-  unsigned iov_flags;      /* Not currently used */
-  int rx_memreg_idx;       /* Index into the array returned from
-                              onload_zc_query_rx_memregs() of the region
-                              containing 'buf'. Populated by the recv
-                              functions */
   union {
     void* app_cookie;      /* Arbitrary data passed back to the application
                               after send completion through the MSG_ERRQUEUE */

@@ -1739,7 +1739,6 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
       }
       iov[iovlen].iov_base = p;
       iov[iovlen].iov_len = data.msg_len;
-      iov[iovlen].rx_memreg_idx = PKT_ID2SET(pkt->pp);
       iov[iovlen].addr_space = EF_ADDRSPACE_LOCAL;
       out_rc += data.msg_len;
       break;
@@ -1753,7 +1752,6 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
       memcpy(&data.remote, p, sizeof(data.remote));
       iov[iovlen].iov_ptr = data.remote.start_ptr + rinf->a->ts->plugin_ddr_base;
       iov[iovlen].iov_len = data.remote.data_len;
-      iov[iovlen].rx_memreg_idx = 0;
       iov[iovlen].addr_space = netif->state->nic[pkt->intf_i].plugin_addr_space;
       out_rc += data.remote.data_len;
 
@@ -1768,7 +1766,6 @@ static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
         ++iovlen;
         iov[iovlen].iov_ptr = rinf->a->ts->plugin_ddr_base;
         iov[iovlen].iov_len = overrun;
-        iov[iovlen].rx_memreg_idx = 0;
         iov[iovlen].addr_space = netif->state->nic[pkt->intf_i].plugin_addr_space;
       }
       break;
@@ -1873,7 +1870,7 @@ static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
   iov.iov_base = oo_offbuf_ptr(&pkt->buf) + peek_off;
   iov.iov_len = oo_offbuf_left(&pkt->buf) - peek_off;
   iov.iov_flags = 0;
-  iov.rx_memreg_idx = PKT_ID2SET(pkt->pp);
+
   iov.addr_space = EF_ADDRSPACE_LOCAL;
   pkt->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
   cb_rc = rinf->zc_args->cb(rinf->zc_args, 0);

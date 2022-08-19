@@ -460,7 +460,7 @@ static void zc_iovs(struct zc_cb_zc_state* state,
           state->rc = -ENOMEM;
         break;
       }
-      *rd = iovs[begin].iov_ptr + CI_MIN(iovs[begin].iov_len64,
+      *rd = iovs[begin].iov_ptr + CI_MIN(iovs[begin].iov_len,
                                          state->max_bytes),
       dst->buf = zc_remote_to_handle(rd);
     }
