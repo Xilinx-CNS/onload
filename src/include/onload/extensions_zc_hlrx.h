@@ -3,12 +3,14 @@
 /**************************************************************************\
 *//*! \file
 ** <L5_PRIVATE L5_HEADER >
-** \author  rch
+** \author  rch maciejj
 **  \brief  Onload zero-copy API
 **   \date  2022/08/01
 **    \cop  (c) Solarflare Communications Ltd.
 ** </L5_PRIVATE>
 **
+** Contains zerocopy APIs for use of alternate/mixed address spaces.
+** Support is experimental and limited to ef100 series adapters.
 *//*
 \**************************************************************************/
 
@@ -24,25 +26,15 @@
 extern "C" {
 #endif
 
-/* onload_zc_await_stack_sync will block until a stack's transmit queues
- * have cycled completely.
- *
- * fd indicates the stack that will be examined. Any accelerated socket on
- * the stack of interest may be used.
- *
- * This call allows an application to synchronise with a stack to ensure that
- * zero-copy application buffers are not being used at the time that they are
- * being changed. It is typically called immediately before
- * onload_zc_unregister_buffers().
- *
- * This synchronisation check examines only the NICs' transmit queues. It is
- * the application's responsibility to ensure that socket send queues are
- * empty as well. This function will usually block for at most a few
- * microseconds.
- *
- * Returns zero on success, or <0 to indicate an error
- */
-extern int onload_zc_await_stack_sync(int fd);
+/******************************************************************************
+ * Zero-copy send/receive extensions for alternate/mixed address spaces
+ ******************************************************************************/
+
+
+
+/******************************************************************************
+ * Buffer management
+ ******************************************************************************/
 
 /* Increments the user-owned reference count for a zc handle. The application
  * is free to use this additional reference count for anything that may be
@@ -130,13 +122,8 @@ extern int onload_zc_unregister_buffers(int fd,
  *
  * On success the iov array gets filled with memory region details. Each
  * region is guaranteed to have address and size at least page-size
- * aligned and contigous. The iov_ptr, iov_len, iov_flags and addr_space
- * fields are populated. No flags are currently defined for iov_flags.
- *
- * Subsequently, additional info will be shared by onload_zc_recv* APIs in
- * order to indicate which memreg each packet belongs to: the value of
- * onload_zc_iovec::rx_memreg_idx will match the index within the iov array
- * returned by this function.
+ * aligned and contiguous. The iov_ptr, iov_len, iov_flags and addr_space
+ * fields are populated.
  *
  * Calling this function will cause all packet buffers space to be allocated,
  * if it is not already. See also EF_PREALLOC_PACKETS.
@@ -151,11 +138,15 @@ extern int onload_zc_unregister_buffers(int fd,
 extern int onload_zc_query_rx_memregs(int fd, struct onload_zc_iovec* iov,
                                       int* iovecs_len, int flags);
 
- /* 
- * The 'buf' element of onload_zc_iovec may refer to either a packet
- * buffer allocated by onload_zc_alloc_buffers() or a region of pinned
- * memory defined by onload_zc_register_buffers().
+
+/******************************************************************************
+ * Zero-copy send/receive
+ ******************************************************************************/
+
+/* onload_zc_send has now additional capabilities,
+ * specifically use of registered buffers.
  *
+ * There is an important distiction when it comes to use of registered buffers:
  *
  * If an iovec refers to (a subset of) a region of memory defined by
  * onload_zc_register_buffers() then the application must not modify
@@ -206,6 +197,28 @@ extern int onload_zc_query_rx_memregs(int fd, struct onload_zc_iovec* iov,
  * and ensure that all polling loops try to consume the socket's
  * errqueue before resuming.
  */
+
+
+/* onload_zc_await_stack_sync will block until a stack's transmit queues
+ * have cycled completely.
+ *
+ * fd indicates the stack that will be examined. Any accelerated socket on
+ * the stack of interest may be used.
+ *
+ * This call allows an application to synchronise with a stack to ensure that
+ * zero-copy application buffers are not being used at the time that they are
+ * being changed. It is typically called immediately before
+ * onload_zc_unregister_buffers().
+ *
+ * This synchronisation check examines only the NICs' transmit queues. It is
+ * the application's responsibility to ensure that socket send queues are
+ * empty as well. This function will usually block for at most a few
+ * microseconds.
+ *
+ * Returns zero on success, or <0 to indicate an error
+ */
+extern int onload_zc_await_stack_sync(int fd);
+
 
 /******************************************************************************
  * High-level receive API (hlrx)
@@ -334,7 +347,7 @@ extern ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
  *
  * The ioctl argp is a pointer to a single uint64_t, being the pointer to the
  * byte immediately after the region to be freed. This must be a value in the
- * range (iov_ptr, iov_ptr+iov_len64] for some iov which has been obtained
+ * range (iov_ptr, iov_ptr+iov_len] for some iov which has been obtained
  * from onload_zc_recv().
  *
  * Plugin memory is freed in order, i.e. passing a pointer from iov[n] will
