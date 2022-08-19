@@ -65,12 +65,8 @@ struct efrm_nic_table *efrm_nic_tablep;
 EXPORT_SYMBOL(efrm_nic_tablep);
 
 
-/* Internal table with resource managers.
- * We'd like to not export it, but we are still using efrm_rm_table
- * in the char driver. So, it is declared in the private header with
- * a purpose. */
+/* Internal table with resource managers. */
 struct efrm_resource_manager *efrm_rm_table[EFRM_RESOURCE_NUM];
-EXPORT_SYMBOL(efrm_rm_table);
 
 
 /* List of registered nics. */

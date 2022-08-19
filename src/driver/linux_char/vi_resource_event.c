@@ -6,7 +6,6 @@
 #include <ci/efrm/efct_rxq.h>
 #include <ci/driver/efab/hardware.h>
 #include <ci/driver/internal.h>
-#include <ci/efrm/driver_private.h> /* FIXME for efrm_rm_table */
 #include <ci/efch/op_types.h>
 #include "char_internal.h"
 #include "linux_char_internal.h"
@@ -23,9 +22,6 @@ typedef struct eventq_wait_data_s {
 
   struct efrm_vi   *evq_virs;
 } eventq_wait_data_t;
-
-#define efrm_vi_manager \
-  ((struct vi_resource_manager *)efrm_rm_table[EFRM_RESOURCE_VI])
 
 static int
 eventq_wait_ctor(struct efrm_vi *evq_virs, eventq_wait_data_t **evdata_out)
@@ -83,7 +79,6 @@ eventq_wait__on_wakeup(ci_waiter_t* waiter, void* opaque_evdata,
 
   ci_assert(evdata);
   ci_assert(virs);
-  ci_assert(efrm_vi_manager);
   instance = virs->rs.rs_instance;
   cb_info = &efrm_nic(nic)->vis[instance];
 
@@ -147,7 +142,6 @@ efab_vi_rm_eventq_wait(struct efrm_vi* virs, unsigned current_ptr,
 
   ci_waitable_init_timeout(&timeout, timeout_tv);
 
-  ci_assert(efrm_vi_manager);
   instance = virs->rs.rs_instance;
   cb_info = &efrm_nic(nic)->vis[instance];
 
