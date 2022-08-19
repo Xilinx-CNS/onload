@@ -813,7 +813,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	struct efrm_vi_q *q = virs->q + queue_type;
 	struct efrm_nic* efrm_nic;
 	int instance, evq_instance = -1;
-	uint qid;
+	uint qid = -1;
 	unsigned flags = virs->flags;
 	unsigned vport_id;
 	struct efhw_evq_params evq_params = {};
