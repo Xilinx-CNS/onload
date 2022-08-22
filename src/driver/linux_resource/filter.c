@@ -1782,6 +1782,7 @@ static void* efrm_read_rules_start(struct seq_file* seq, loff_t* pos) {
 static void* efrm_read_rules_next(struct seq_file* seq, void* v, loff_t* pos) {
   loff_t next;
   loff_t* iter_ptr = (loff_t*) v;
+  (*pos)++;
 
   if ( !iter_ptr )
     return NULL;
@@ -1792,7 +1793,6 @@ static void* efrm_read_rules_next(struct seq_file* seq, void* v, loff_t* pos) {
 
   if ( efrm_rule_from_iter(seq, &next) ) {
     *iter_ptr = next;
-    *pos = *pos + 1;
   } else {
     *iter_ptr = 0;
     iter_ptr = NULL;
