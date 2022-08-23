@@ -20,6 +20,7 @@
 #include <onload/osfile.h>
 #ifndef __KERNEL__
 #include <onload/extensions_zc.h>
+#include <onload/extensions_zc_hlrx.h>
 #include <onload/tcp-ceph.h>
 #endif
 

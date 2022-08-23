@@ -23,6 +23,7 @@
 
 #include <onload/extensions.h>
 #include <onload/extensions_zc.h>
+#include <onload/extensions_zc_hlrx.h>
 
 
 /* Helper for the zc functions which accept 'any' fd to refer to the stack

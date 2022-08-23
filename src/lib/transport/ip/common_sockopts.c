@@ -48,6 +48,7 @@
 #include <linux/types.h>
 #include <linux/pkt_sched.h>
 #include <onload/extensions_zc.h>
+#include <onload/extensions_zc_hlrx.h>
 
 static unsigned ci_tos2priority[] = {
     /*  0 */ TC_PRIO_BESTEFFORT,

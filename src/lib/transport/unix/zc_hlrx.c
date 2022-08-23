@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <onload/extensions.h>
 #include <onload/extensions_zc.h>
+#include <onload/extensions_zc_hlrx.h>
 
 
 #define HLRX_REMOTE_RING_BLOCK_SHIFT  8  /* 2KB */

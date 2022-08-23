@@ -20,6 +20,7 @@
 #if !defined(__KERNEL__)
 #include <sys/socket.h>
 #include <onload/extensions_zc.h>
+#include <onload/extensions_zc_hlrx.h>
 #include <limits.h>
 #endif
 #include <onload/pkt_filler.h>
