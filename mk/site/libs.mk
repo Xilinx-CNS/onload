@@ -2,13 +2,13 @@
 # X-SPDX-Copyright-Text: (c) Copyright 2005-2020 Xilinx, Inc.
 
 # Major: Increment when making a change that is not backwards compatible.
-ONLOAD_EXT_VERSION_MAJOR := 2
+ONLOAD_EXT_VERSION_MAJOR := 1
 
 # Minor: Increment when extending existing interfaces such that if caller
 # uses the new feature they must have a contemporary version of Onload for
 # it to work.  Do *not* increment when adding a new symbol, since linker
 # will detect that.  Reset to zero when major is bumped.
-ONLOAD_EXT_VERSION_MINOR := 0
+ONLOAD_EXT_VERSION_MINOR := 2
 
 # Micro: Incremented for any change.  Reset to zero when minor is bumped.
 ONLOAD_EXT_VERSION_MICRO := 0
