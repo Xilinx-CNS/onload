@@ -15,6 +15,7 @@
 
 #include <onload/extensions.h>
 #include <onload/extensions_zc.h>
+#include <onload/extensions_zc_hlrx.h>
 
 unsigned int onload_ext_version[] = 
   {ONLOAD_EXT_VERSION_MAJOR,
