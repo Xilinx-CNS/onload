@@ -79,6 +79,12 @@ struct resources {
   uint64_t           n_ht_events;
 };
 
+/* Both pkt pointer used by ef_vi_receive_get_timestamp_with_sync_flags
+ * and pkt id used by efct_vi_rxpkt_get_timestamp can be stored in
+ * uintptr_t */
+typedef uintptr_t pkt_ts_handle_t;
+typedef int (*get_timestamp_fn)(ef_vi*, pkt_ts_handle_t, ef_timespec*,
+                                unsigned*);
 
 static int cfg_hexdump;
 static int cfg_timestamping;
@@ -175,15 +181,31 @@ static inline int64_t timespec_diff_ns(struct timespec a, struct timespec b)
 }
 
 
+static int get_timestamp_rx(ef_vi* vi, pkt_ts_handle_t ts_pkt,
+                            ef_timespec* ts_out, unsigned* flags_out)
+{
+  return ef_vi_receive_get_timestamp_with_sync_flags(vi, (void*)ts_pkt,
+                                                     ts_out, flags_out);
+}
+
+
+static int get_timestamp_rx_ref(ef_vi* vi, pkt_ts_handle_t ts_pkt,
+                                ef_timespec* ts_out, unsigned* flags_out)
+{
+  return efct_vi_rxpkt_get_timestamp(vi, (uint32_t)ts_pkt, ts_out, flags_out);
+}
+
+
 static void handle_rx_core(struct resources* res, const void* dma_ptr,
-                           const void* rx_ptr, int len)
+                           const void* rx_ptr, int len,
+                           get_timestamp_fn get_timestamp,
+                           pkt_ts_handle_t ts_pkt)
 {
   if( cfg_timestamping ) {
     struct timespec hw_ts, sw_ts;
     unsigned ts_flags;
     TRY(clock_gettime(CLOCK_REALTIME, &sw_ts));
-    TRY(ef_vi_receive_get_timestamp_with_sync_flags(&res->vi, dma_ptr,
-                                                    &hw_ts, &ts_flags));
+    TRY(get_timestamp(&res->vi, ts_pkt, &hw_ts, &ts_flags));
     pthread_mutex_lock(&printf_mutex);
     printf("HW_TSTAMP=%ld.%09ld  delta=%"PRId64"ns  %s %s\n",
            hw_ts.tv_sec, hw_ts.tv_nsec, timespec_diff_ns(sw_ts, hw_ts),
@@ -204,11 +226,14 @@ static void handle_rx_core(struct resources* res, const void* dma_ptr,
 static void handle_rx(struct resources* res, int pkt_buf_i, int len)
 {
   struct pkt_buf* pkt_buf;
+  void* dma_ptr;
 
   LOGV("PKT: received pkt=%d len=%d\n", pkt_buf_i, len);
 
   pkt_buf = pkt_buf_from_id(res, pkt_buf_i);
-  handle_rx_core(res, (char*)pkt_buf + RX_DMA_OFF, pkt_buf->rx_ptr, len);
+  dma_ptr = (char*) pkt_buf + RX_DMA_OFF;
+  handle_rx_core(res, dma_ptr, pkt_buf->rx_ptr, len,
+                 get_timestamp_rx, (pkt_ts_handle_t)dma_ptr);
   pkt_buf_free(res, pkt_buf);
 }
 
@@ -266,7 +291,8 @@ static void handle_rx_ref(struct resources* res, unsigned pkt_id, int len)
 
   LOGV("PKT: received pkt=%u len=%d\n", pkt_id, len);
   p = efct_vi_rxpkt_get(&res->vi, pkt_id);
-  handle_rx_core(res, p, p, len);
+  handle_rx_core(res, p, p, len, get_timestamp_rx_ref,
+                 (pkt_ts_handle_t)pkt_id);
   efct_vi_rxpkt_release(&res->vi, pkt_id);
 }
 
