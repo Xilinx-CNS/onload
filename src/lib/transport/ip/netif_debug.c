@@ -305,7 +305,8 @@ static void ci_netif_dump_pkt_summary(ci_netif* ni, oo_dump_log_fn_t logger,
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     for( i = 0; i < ci_netif_num_vis(ni); ++i ) {
       ef_vi* pvi = &ni->nic_hw[intf_i].vis[i];
-      rx_ring += ef_vi_receive_fill_level(pvi);
+      if( ! pvi->efct_shm )
+        rx_ring += ef_vi_receive_fill_level(pvi);
       tx_ring += ef_vi_transmit_fill_level(pvi);
       tx_oflow += ns->nic[intf_i].dmaq[i].num;
     }
