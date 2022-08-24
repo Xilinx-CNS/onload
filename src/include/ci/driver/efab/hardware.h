@@ -73,6 +73,8 @@
  *---------------------------------------------------------------------------*/
 
   /*-------------- Initialisation ------------ */
+#define efhw_nic_sw_ctor(nic, res)      \
+	((nic)->efhw_func->sw_ctor((nic), (res)))
 #define efhw_nic_init_hardware(nic, ev_handlers, mac_addr)      \
 	((nic)->efhw_func->init_hardware((nic), (ev_handlers), (mac_addr)))
 #define efhw_nic_post_reset(nic) \

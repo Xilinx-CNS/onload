@@ -46,12 +46,15 @@
 #include <net/net_namespace.h>
 #include <ci/efrm/efrm_filter.h>
 #include <ci/efrm/nic_table.h>
+#include <ci/efhw/ef10.h>
+#include <ci/efhw/ef100.h>
 #include <ci/efhw/nic.h>
 #include <ci/tools/sysdep.h>
 #include <ci/internal/transport_config_opt.h>
 #include "sfcaffinity.h"
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/resource/driverlink.h>
+
 
 /* The DL driver and associated calls */
 static int efrm_dl_probe(struct efx_dl_device *efrm_dev,
@@ -425,6 +428,16 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 		    (unsigned) efrm_dev->pci_dev->device,
 		    dev_type.revision, dev_type.arch, dev_type.variant,
 		    dev_type.revision, net_dev->ifindex);
+	switch (dev_type.arch) {
+	case EFHW_ARCH_EF10:
+		res_dim.efhw_ops = &ef10_char_functional_units;
+		break;
+	case EFHW_ARCH_EF100:
+		res_dim.efhw_ops = &ef100_char_functional_units;
+		break;
+	default:
+		EFRM_ASSERT(false);
+	}
 
 	lnic = efrm_get_rediscovered_nic(efrm_dev->pci_dev, &dev_type,
 					 &res_dim);

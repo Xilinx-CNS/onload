@@ -1033,6 +1033,19 @@ fail_map:
 	return rc;
 }
 
+static void
+af_xdp_nic_sw_ctor(struct efhw_nic *nic,
+		   const struct vi_resource_dimensions *res)
+{
+	/* No restrictions on queue sizes */
+	nic->q_sizes[EFHW_EVQ] = ~0;
+	nic->q_sizes[EFHW_TXQ] = ~0;
+	nic->q_sizes[EFHW_RXQ] = ~0;
+	nic->num_evqs = 1;
+	nic->num_dmaqs = 1;
+	nic->num_timers = 0;
+}
+
 static int
 af_xdp_nic_init_hardware(struct efhw_nic *nic,
 			 struct efhw_ev_handler *ev_handlers,
@@ -1566,6 +1579,7 @@ af_xdp_vi_io_region(struct efhw_nic *nic, int instance, size_t* size_out,
  *--------------------------------------------------------------------*/
 
 struct efhw_func_ops af_xdp_char_functional_units = {
+	.sw_ctor = af_xdp_nic_sw_ctor,
 	.init_hardware = af_xdp_nic_init_hardware,
 	.post_reset = af_xdp_nic_tweak_hardware,
 	.release_hardware = af_xdp_nic_release_hardware,

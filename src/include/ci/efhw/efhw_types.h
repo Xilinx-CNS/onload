@@ -164,6 +164,30 @@ struct efhw_filter_info {
 	int flags;
 };
 
+struct vi_resource_dimensions {
+	struct efhw_func_ops *efhw_ops;
+
+	unsigned rss_channel_count;
+	unsigned vi_min, vi_lim;
+	unsigned vi_base, vi_shift;
+#define VI_RES_MEM_BAR_UNDEFINED ((unsigned)~0)
+	unsigned mem_bar;
+	unsigned vi_stride;
+
+	/* EF100/X3 only */
+	/* 16 is an arbitrary number which is empirically larger than any
+	 * number which has been observed to be needed. It can't go too high
+	 * without moving this struct off the stack. */
+#define IRQ_N_RANGES_MAX 16
+	unsigned irq_n_ranges;
+	struct irq_ranges {
+		unsigned irq_base;
+		unsigned irq_range;
+	} irq_ranges[IRQ_N_RANGES_MAX];
+	void __iomem *irq_prime_reg;;
+};
+
+
 /**********************************************************************
  * Portable HW interface. ***************************************
  **********************************************************************/
@@ -212,6 +236,10 @@ struct efx_filter_spec;
 struct efhw_func_ops {
 
   /*-------------- Initialisation ------------ */
+
+	/*! Early init of state that is known without needing HW to be up */
+	void (*sw_ctor) (struct efhw_nic *nic,
+                         const struct vi_resource_dimensions *res);
 
 	/*! initialise all hardware functional units */
 	int (*init_hardware) (struct efhw_nic *nic,

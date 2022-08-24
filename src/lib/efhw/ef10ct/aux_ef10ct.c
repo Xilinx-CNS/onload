@@ -42,6 +42,7 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
   int rc;
   int i;
 
+  res_dim->efhw_ops = &ef10ct_char_functional_units;
   rc = edev->ops->get_param(client, EFX_AUXILIARY_NIC_RESOURCES, &val);
   if( rc < 0 )
     return rc;

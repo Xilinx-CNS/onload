@@ -203,42 +203,13 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 {
 	struct efhw_nic *nic = &lnic->efrm_nic.efhw_nic;
 	int rc;
-	unsigned map_min, map_max;
-	unsigned vi_base = 0;
-	unsigned vi_shift = 0;
-	unsigned mem_bar = EFHW_MEM_BAR_UNDEFINED;
-	unsigned vi_stride = 0;
 
 	/* Tie the lifetime of the kernel's state to that of our own. */
 	if( dev )
 		get_device(dev);
 	dev_hold(net_dev);
 
-	switch (dev_type->arch) {
-		case EFHW_ARCH_EF10:
-		case EFHW_ARCH_EF100:
-			map_min = res_dim->vi_min;
-			map_max = res_dim->vi_lim;
-			vi_base = res_dim->vi_base;
-			vi_shift = res_dim->vi_shift;
-			if( res_dim->mem_bar != VI_RES_MEM_BAR_UNDEFINED )
-				mem_bar = res_dim->mem_bar;
-			vi_stride = res_dim->vi_stride;
-			break;
-		case EFHW_ARCH_AF_XDP:
-		case EFHW_ARCH_EFCT:
-		case EFHW_ARCH_EF10CT:
-			map_min = res_dim->vi_min;
-			map_max = res_dim->vi_lim;
-			break;
-		default:
-			rc = -EINVAL;
-			goto fail;
-	}
-
-	efhw_nic_init(nic, nic_flags, dev_type, map_min,
-		      map_max, vi_base, vi_shift, mem_bar, vi_stride, net_dev,
-		      dev);
+	efhw_nic_ctor(nic, nic_flags, res_dim, dev_type, net_dev, dev);
 	irq_ranges_init(nic, res_dim);
 
 	init_rwsem(&lnic->drv_sem);
@@ -261,7 +232,6 @@ fail3:
 	efrm_affinity_interface_remove(lnic);
 fail2:
 	efhw_nic_dtor(nic);
-fail:
 	if( dev )
 		put_device(dev);
 	dev_put(net_dev);

@@ -37,6 +37,7 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
   ef10_res->hdr.type = EFX_DL_EF10_RESOURCES;
   timer_quantum_ns = ef10_res->timer_quantum_ns = 60000;
 
+  res_dim.efhw_ops = &af_xdp_char_functional_units;
   res_dim.vi_min = ef10_res->vi_min;
   res_dim.vi_lim = ef10_res->vi_lim;
   res_dim.rss_channel_count = ef10_res->rx_channel_count;

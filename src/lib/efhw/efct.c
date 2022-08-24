@@ -238,6 +238,18 @@ efct_nic_tweak_hardware(struct efhw_nic *nic)
 }
 
 
+static void
+efct_nic_sw_ctor(struct efhw_nic *nic,
+                 const struct vi_resource_dimensions *res)
+{
+  nic->q_sizes[EFHW_EVQ] = 128 | 256 | 512 | 1024 | 2048 | 4096 | 8192;
+  /* The TXQ is SW only, but reflects a limited HW resource */
+  nic->q_sizes[EFHW_TXQ] = 512;
+  /* RXQ is virtual/software-only, so we have no restrictions */
+  nic->q_sizes[EFHW_RXQ] = ~0u;
+}
+
+
 static int
 efct_nic_init_hardware(struct efhw_nic *nic,
                        struct efhw_ev_handler *ev_handlers,
@@ -1488,6 +1500,7 @@ efct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
  *--------------------------------------------------------------------*/
 
 struct efhw_func_ops efct_char_functional_units = {
+  .sw_ctor = efct_nic_sw_ctor,
   .init_hardware = efct_nic_init_hardware,
   .post_reset = efct_nic_tweak_hardware,
   .release_hardware = efct_nic_release_hardware,

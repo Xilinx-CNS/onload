@@ -55,6 +55,23 @@ int ef10ct_fw_rpc(struct efhw_nic *nic, struct efx_auxiliary_rpc *cmd)
 
 
 static void
+ef10ct_nic_sw_ctor(struct efhw_nic *nic,
+                   const struct vi_resource_dimensions *res)
+{
+  nic->q_sizes[EFHW_EVQ] = 128 | 256 | 512 | 1024 | 2048 | 4096 | 8192 |
+                           16384 | 32768;
+  /* Effective TXQ size is potentially variable, as we can
+   * configure how the CTPIO windows are sized. For now assume
+   * we're sticking with fixed EFCT equivalent regions. */
+  nic->q_sizes[EFHW_TXQ] = 512;
+  /* Placeholder values consistent with ef_vi powers of 2 */
+  nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096 | 8192 | 16384 | 32768 |
+                           65536 | 131072;
+  nic->efhw_func = &ef10ct_char_functional_units;
+}
+
+
+static void
 ef10ct_nic_tweak_hardware(struct efhw_nic *nic)
 {
 }
@@ -524,6 +541,7 @@ ef10ct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
  *--------------------------------------------------------------------*/
 
 struct efhw_func_ops ef10ct_char_functional_units = {
+  .sw_ctor = ef10ct_nic_sw_ctor,
   .init_hardware = ef10ct_nic_init_hardware,
   .post_reset = ef10ct_nic_tweak_hardware,
   .release_hardware = ef10ct_nic_release_hardware,

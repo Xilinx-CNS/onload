@@ -129,6 +129,37 @@ ef100_nic_tweak_hardware(struct efhw_nic *nic)
 	nic->rx_prefix_len = 22;
 }
 
+
+static void
+ef100_nic_sw_ctor(struct efhw_nic *nic,
+		  const struct vi_resource_dimensions *res)
+{
+	/* FIXME: wrong numbers for queues sizes */
+	nic->q_sizes[EFHW_EVQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
+		8192 | 16384;
+	nic->q_sizes[EFHW_TXQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
+		8192 | 16384;
+	nic->q_sizes[EFHW_RXQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
+		8192 | 16384 ;
+
+	nic->ctr_ap_bar = EF100_P_CTR_AP_BAR;
+
+	if (res->mem_bar != VI_RES_MEM_BAR_UNDEFINED)
+		nic->ctr_ap_bar = res->mem_bar;
+	nic->ctr_ap_addr = pci_resource_start(to_pci_dev(nic->dev),
+					      nic->ctr_ap_bar);
+
+	/* FIXME: wrong numbers for queues numbers*/
+	nic->num_evqs   = 1024;
+	nic->num_dmaqs  = 1024;
+	nic->num_timers = 1024;
+
+	nic->vi_base = res->vi_base;
+	nic->vi_shift = res->vi_shift;
+	nic->vi_stride = res->vi_stride;
+}
+
+
 static int
 ef100_nic_init_hardware(struct efhw_nic *nic,
 		       struct efhw_ev_handler *ev_handlers,
@@ -694,6 +725,7 @@ ef100_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
  *--------------------------------------------------------------------*/
 
 struct efhw_func_ops ef100_char_functional_units = {
+	.sw_ctor = ef100_nic_sw_ctor,
 	.init_hardware = ef100_nic_init_hardware,
 	.post_reset = ef100_nic_tweak_hardware,
 	.release_hardware = ef100_nic_release_hardware,

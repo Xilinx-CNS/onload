@@ -166,6 +166,41 @@ ef10_ef100_mcdi_check_response(const char* caller, const char* failed_cmd,
  *
  *---------------------------------------------------------------------------*/
 
+static void ef10_nic_sw_ctor(struct efhw_nic *nic,
+			     const struct vi_resource_dimensions *res)
+{
+	nic->q_sizes[EFHW_EVQ] = 512 | 1024 | 2048 | 4096 | 8192 | 16384 |
+				 32768;
+	nic->q_sizes[EFHW_TXQ] = 512 | 1024 | 2048;
+	nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096;
+
+	switch (nic->devtype.variant) {
+	case 'C':
+		nic->ctr_ap_bar = EF10_MEDFORD2_P_CTR_AP_BAR;
+		break;
+	default:
+		nic->ctr_ap_bar = nic->devtype.function == EFHW_FUNCTION_PF ?
+				EF10_PF_P_CTR_AP_BAR : EF10_VF_P_CTR_AP_BAR;
+	}
+
+	if (res->mem_bar != VI_RES_MEM_BAR_UNDEFINED)
+		nic->ctr_ap_bar = res->mem_bar;
+	nic->ctr_ap_addr = pci_resource_start(to_pci_dev(nic->dev),
+					      nic->ctr_ap_bar);
+
+	nic->num_evqs   = 1024;
+	nic->num_dmaqs  = 1024;
+	nic->num_timers = 1024;
+	/* For EF10 we map VIs on demand.  We don't need mappings
+	 * for any other reason as all control ops go via the net
+	 * driver and MCDI.
+	 */
+	nic->vi_base = res->vi_base;
+	nic->vi_shift = res->vi_shift;
+	nic->vi_stride = res->vi_stride;
+}
+
+
 static int _ef10_nic_get_35388_workaround(struct efhw_nic *nic)
 {
 	int rc, enabled;
@@ -2471,6 +2506,7 @@ static int ef10_ctpio_addr(struct efhw_nic* nic, int instance,
  *--------------------------------------------------------------------*/
 
 struct efhw_func_ops ef10_char_functional_units = {
+	.sw_ctor = ef10_nic_sw_ctor,
 	.init_hardware = ef10_nic_init_hardware,
 	.post_reset = ef10_nic_tweak_hardware,
 	.release_hardware = ef10_nic_release_hardware,

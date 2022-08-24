@@ -161,12 +161,14 @@ void efhw_nic_update_pci_info(struct efhw_nic *nic)
 ** to allow this to be called at a later time once we can access PCI
 ** config space to find out what hardware we have
 */
-void efhw_nic_init(struct efhw_nic *nic, unsigned flags,
-		   const struct efhw_device_type *dev_type, unsigned map_min,
-		   unsigned map_max, unsigned vi_base, unsigned vi_shift,
-		   unsigned mem_bar, unsigned vi_stride,
+void efhw_nic_ctor(struct efhw_nic *nic, unsigned flags,
+		   const struct vi_resource_dimensions *nic_res,
+		   const struct efhw_device_type *dev_type,
 		   struct net_device *net_dev, struct device *dev)
 {
+	/* Most parameters are optional, but we better have some func ops */
+	EFHW_ASSERT(nic_res->efhw_ops);
+	nic->efhw_func = nic_res->efhw_ops;
 	nic->devtype = *dev_type;
 	nic->flags = flags;
 	nic->resetting = 0;
@@ -175,117 +177,13 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags,
 	nic->mtu = 1500 + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
 	/* Default: this will get overwritten if better value is known */
 	nic->timer_quantum_ns = 4968; 
-	nic->vi_min = map_min;
-	nic->vi_lim = map_max;
+	nic->vi_min = nic_res->vi_min;
+	nic->vi_lim = nic_res->vi_lim;
 	nic->net_dev = net_dev;
 	nic->dev = dev;
 	spin_lock_init(&nic->pci_dev_lock);
 
-	switch (nic->devtype.arch) {
-#if CI_HAVE_SFC
-	case EFHW_ARCH_EF10:
-		nic->q_sizes[EFHW_EVQ] = 512 | 1024 | 2048 | 4096 | 8192 |
-			16384 | 32768;
-		nic->q_sizes[EFHW_TXQ] = 512 | 1024 | 2048;
-		nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096;
-
-		switch (dev_type->variant) {
-		case 'C':
-			nic->ctr_ap_bar = EF10_MEDFORD2_P_CTR_AP_BAR;
-			break;
-		default:
-			nic->ctr_ap_bar = dev_type->function == EFHW_FUNCTION_PF ?
-				EF10_PF_P_CTR_AP_BAR : EF10_VF_P_CTR_AP_BAR;
-		}
-
-		if (mem_bar != EFHW_MEM_BAR_UNDEFINED)
-			nic->ctr_ap_bar = mem_bar;
-		nic->ctr_ap_addr = pci_resource_start(to_pci_dev(dev),
-						      nic->ctr_ap_bar);
-
-		nic->num_evqs   = 1024;
-		nic->num_dmaqs  = 1024;
-		nic->num_timers = 1024;
-		/* For EF10 we map VIs on demand.  We don't need mappings
-		 * for any other reason as all control ops go via the net
-		 * driver and MCDI.
-		 */
-		nic->efhw_func = &ef10_char_functional_units;
-		nic->vi_base = vi_base;
-		nic->vi_shift = vi_shift;
-		nic->vi_stride = vi_stride;
-		break;
-	case EFHW_ARCH_EF100:
-		/* FIXME: wrong numbers for queues sizes */
-		nic->q_sizes[EFHW_EVQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
-			8192 | 16384;
-		nic->q_sizes[EFHW_TXQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
-			8192 | 16384;
-		nic->q_sizes[EFHW_RXQ] = 16 | 256 | 512 | 1024 | 2048 | 4096 |
-			8192 | 16384 ;
-
-		nic->ctr_ap_bar = EF100_P_CTR_AP_BAR;
-
-		if (mem_bar != EFHW_MEM_BAR_UNDEFINED)
-			nic->ctr_ap_bar = mem_bar;
-		nic->ctr_ap_addr = pci_resource_start(to_pci_dev(dev),
-						      nic->ctr_ap_bar);
-
-		/* FIXME: wrong numbers for queues numbers*/
-		nic->num_evqs   = 1024;
-		nic->num_dmaqs  = 1024;
-		nic->num_timers = 1024;
-
-		nic->efhw_func = &ef100_char_functional_units;
-		nic->vi_base = vi_base;
-		nic->vi_shift = vi_shift;
-		nic->vi_stride = vi_stride;
-		break;
-#endif /* CI_HAVE_SFC */
-#ifdef EFHW_HAS_AF_XDP
-	case EFHW_ARCH_AF_XDP:
-		/* No restrictions on queue sizes */
-		nic->q_sizes[EFHW_EVQ] = ~0;
-		nic->q_sizes[EFHW_TXQ] = ~0;
-		nic->q_sizes[EFHW_RXQ] = ~0;
-		nic->num_evqs = 1;
-		nic->num_dmaqs = 1;
-		nic->num_timers = 0;
-		nic->efhw_func = &af_xdp_char_functional_units;
-		break;
-#endif
-#if CI_HAVE_EFCT_AUX
-	case EFHW_ARCH_EFCT:
-		nic->q_sizes[EFHW_EVQ] = 128 | 256 | 512 | 1024 | 2048 | 4096 |
-			8192;
-		/* The TXQ is SW only, but reflects a limited HW resource */
-		nic->q_sizes[EFHW_TXQ] = 512;
-		/* RXQ is virtual/software-only, but some restrictions
-		 * Limited by CI_EFCT_MAX_SUPERBUFS and XNET-249 to 131,072
-		 * Also EF_VI code currently still limited to powers of 2 */ 
-		nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096 | 8192 |
-		  16384 | 32768 | 65536 | 131072;
-		nic->efhw_func = &efct_char_functional_units;
-		break;
-#endif
-#if CI_HAVE_EF10CT
-	case EFHW_ARCH_EF10CT:
-		nic->q_sizes[EFHW_EVQ] = 128 | 256 | 512 | 1024 | 2048 | 4096 |
-			8192 | 16384 | 32768;
-		/* Effective TXQ size is potentially variable, as we can
-		 * configure how the CTPIO windows are sized. For now assume
-		 * we're sticking with fixed EFCT equivalent regions. */
-		nic->q_sizes[EFHW_TXQ] = 512;
-		/* Placeholder values consistent with ef_vi powers of 2 */
-		nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096 | 8192 |
-		  16384 | 32768 | 65536 | 131072;
-		nic->efhw_func = &ef10ct_char_functional_units;
-		break;
-#endif
-	default:
-		EFHW_ASSERT(0);
-		break;
-	}
+	efhw_nic_sw_ctor(nic, nic_res);
 
 	efhw_nic_update_pci_info(nic);
 }

@@ -54,11 +54,9 @@ extern int efhw_nondl_device_type_init(struct efhw_device_type *dt);
 
 
 /* Initialise fields that do not involve touching hardware. */
-#define EFHW_MEM_BAR_UNDEFINED ((unsigned)~0)
-extern void efhw_nic_init(struct efhw_nic *nic, unsigned flags,
+extern void efhw_nic_ctor(struct efhw_nic *nic, unsigned flags,
+			  const struct vi_resource_dimensions *nic_res,
 			  const struct efhw_device_type *dev_type,
-			  unsigned map_min, unsigned map_max, unsigned vi_base,
-			  unsigned vi_shift, unsigned mem_bar, unsigned vi_stride,
 			  struct net_device *net_dev, struct device *dev);
 extern void efhw_nic_update_pci_info(struct efhw_nic *nic);
 

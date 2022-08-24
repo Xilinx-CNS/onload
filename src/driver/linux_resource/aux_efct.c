@@ -303,6 +303,8 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   for( i = 0; i < efct->rxq_n; ++i)
     INIT_WORK(&efct->rxq[i].destruct_wq, efct_destruct_apps_work);
 
+  res_dim->efhw_ops = &efct_char_functional_units;
+
   rc = edev->ops->get_param(client, XLNX_EFCT_NIC_RESOURCES, &val);
   if( rc < 0 )
     return rc;

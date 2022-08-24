@@ -81,27 +81,6 @@ extern void efrm_driver_unregister_nic(struct efrm_nic *);
  *
  *--------------------------------------------------------------------*/
 
-struct vi_resource_dimensions {
-	unsigned rss_channel_count;
-	unsigned vi_min, vi_lim;
-	unsigned vi_base, vi_shift;
-#define VI_RES_MEM_BAR_UNDEFINED ((unsigned)~0)
-	unsigned mem_bar;
-	unsigned vi_stride;
-
-	/* EF100/X3 only */
-	/* 16 is an arbitrary number which is empirically larger than any
-	 * number which has been observed to be needed. It can't go too high
-	 * without moving this struct off the stack. */
-#define IRQ_N_RANGES_MAX 16
-	unsigned irq_n_ranges;
-	struct irq_ranges {
-		unsigned irq_base;
-		unsigned irq_range;
-	} irq_ranges[IRQ_N_RANGES_MAX];
-	void __iomem *irq_prime_reg;
-};
-
 /*! Initialise resources */
 extern int
 efrm_resources_init(void);
