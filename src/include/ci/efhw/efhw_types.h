@@ -433,11 +433,6 @@ struct efhw_nic {
 	/*! zero base index in efrm_nic_tablep->nic array */
 	int index;
 
-	/*! Options that can be set by user. */
-	unsigned options;
-# define NIC_OPT_EFTEST             0x1	/* owner is an eftest app */
-# define NIC_OPT_DEFAULT            0
-
 	struct net_device *net_dev; /*!< Network device */
 	struct device *dev;         /*!< HW device */
 	spinlock_t pci_dev_lock;    /*!< Protects access to dev & net_dev */
@@ -477,8 +472,6 @@ struct efhw_nic {
 
 	/*! EtherFabric Functional Units -- functions */
 	const struct efhw_func_ops *efhw_func;
-
-	int buf_commit_outstanding;	/*!< outstanding buffer commits */
 
 	void *bt_blocks_memory;
 

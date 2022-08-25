@@ -64,9 +64,6 @@ extern int efrm_handle_dmaq_flushed_schedule(struct efhw_nic *nic,
 					      unsigned id,
 					      int rx_flush, int failed);
 
-/*! SRAM update handler */
-extern void efrm_handle_sram_event(struct efhw_nic *nic);
-
 extern unsigned
 efrm_vi_shut_down_flag(enum efhw_q_type queue);
 

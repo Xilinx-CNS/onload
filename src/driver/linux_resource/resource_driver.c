@@ -239,7 +239,7 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 		goto fail;
 	}
 
-	efhw_nic_init(nic, nic_flags, NIC_OPT_DEFAULT, dev_type, map_min,
+	efhw_nic_init(nic, nic_flags, dev_type, map_min,
 		      map_max, vi_base, vi_shift, mem_bar, vi_stride, net_dev,
 		      dev);
 	irq_ranges_init(nic, res_dim);
