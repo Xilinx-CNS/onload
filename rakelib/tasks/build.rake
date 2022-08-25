@@ -86,6 +86,12 @@ namespace :build do
     Onload::Utils.make($user_build_dir)
   end
 
+  desc 'Kernel driver no sfc build'
+  task kernel_driver_no_sfc: [:kernel_build_tree, :kernel_compiler_setup] do
+    ENV['HAVE_SFC'] = '0'
+    Onload::Utils.make($kernel_build_dir)
+  end
+
   desc 'efct_build'
   task efct_driver: [:efct_build_tree, :kernel_compiler_setup] do
     if Dir.exist?(File.join(toppath, 'aux-bus'))
