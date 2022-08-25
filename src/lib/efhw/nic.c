@@ -158,7 +158,7 @@ void efhw_nic_update_pci_info(struct efhw_nic *nic)
 ** to allow this to be called at a later time once we can access PCI
 ** config space to find out what hardware we have
 */
-void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
+void efhw_nic_init(struct efhw_nic *nic, unsigned flags,
 		   const struct efhw_device_type *dev_type, unsigned map_min,
 		   unsigned map_max, unsigned vi_base, unsigned vi_shift,
 		   unsigned mem_bar, unsigned vi_stride,
@@ -167,7 +167,6 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 	nic->devtype = *dev_type;
 	nic->flags = flags;
 	nic->resetting = 0;
-	nic->options = options;
 	nic->int_prime_reg = 0;
 	nic->vi_irq_n_ranges = 0;
 	nic->mtu = 1500 + ETH_HLEN; /* ? + ETH_VLAN_HLEN */

@@ -342,8 +342,3 @@ int efrm_handle_timeout_event(struct efhw_nic *nic, unsigned instance,
 	return efrm_eventq_do_callback(nic, instance, true, budget);
 }
 
-void efrm_handle_sram_event(struct efhw_nic *nic)
-{
-	if (nic->buf_commit_outstanding > 0)
-		nic->buf_commit_outstanding--;
-}
