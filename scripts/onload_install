@@ -45,6 +45,7 @@ usage() {
   err "  --listfiles                - Do not install; just list installed files"
   err "  --build-profile            - Specify a build profile"
   err "  --no-initramfs             - Do not update initramfs"
+  err "  --no-sfc                   - Do not install sfc module"
   err
   exit 1
 }
@@ -351,9 +352,11 @@ install_kernel_modules() {
     try [ -d "$d" ]
   fi
   try $docd "$TOP/build/$d/driver/linux"
-  install_f sfc_driverlink.ko "$i_kernelmodules/sfc_driverlink.ko"
-  install_f virtual_bus.ko "$i_kernelmodules/virtual_bus.ko"
-  install_f sfc.ko "$i_kernelmodules/sfc.ko"
+  if ! $nosfc; then
+    install_f sfc_driverlink.ko "$i_kernelmodules/sfc_driverlink.ko"
+    install_f virtual_bus.ko "$i_kernelmodules/virtual_bus.ko"
+    install_f sfc.ko "$i_kernelmodules/sfc.ko"
+  fi
   install_f sfc_resource.ko "$i_kernelmodules/sfc_resource.ko"
   install_f sfc_char.ko "$i_kernelmodules/sfc_char.ko"
   install_f onload.ko "$i_kernelmodules/onload.ko"
@@ -390,14 +393,17 @@ install_kernel_modules() {
 
   # Install driver meta-data.
   try $docd "$TOP/build/$d/driver"
-  install_f linux_net/drivers/net/ethernet/sfc/Module.symvers "$i_kernelmodules/sfc.symvers"
-  install_f linux_net/drivers/bus/Module.symvers "$i_kernelmodules/virtual_bus.symvers"
+  if ! $nosfc; then
+    install_f linux_net/drivers/net/ethernet/sfc/Module.symvers "$i_kernelmodules/sfc.symvers"
+    install_f linux_net/drivers/bus/Module.symvers "$i_kernelmodules/virtual_bus.symvers"
+
+    # Install driver headers
+    install_f linux_net/drivers/net/ethernet/sfc/driverlink_api.h "$i_kernelmodules/driverlink_api.h"
+    install_f linux_net/drivers/net/ethernet/sfc/filter.h "$i_kernelmodules/filter.h"
+  fi
   install_f linux_resource/Module.symvers "$i_kernelmodules/sfc_resource.symvers"
   install_f linux_char/Module.symvers "$i_kernelmodules/sfc_char.symvers"
   install_f linux_onload/Module.symvers "$i_kernelmodules/onload.symvers"
-  # Install driver headers
-  install_f linux_net/drivers/net/ethernet/sfc/driverlink_api.h "$i_kernelmodules/driverlink_api.h"
-  install_f linux_net/drivers/net/ethernet/sfc/filter.h "$i_kernelmodules/filter.h"
 }
 
 
@@ -649,6 +655,7 @@ devel=false
 # $debug_dir is relevant for blob binaries only.  We package debug and ndebug
 # versions, and need to select between them.
 debug_dir=
+nosfc=false
 
 sbindir="/sbin"
 usrdir="/usr"
@@ -714,6 +721,7 @@ while [ $# -gt 0 ]; do
   --lib32dir=*) lib32dir=${1#--lib32dir=};;
   --lib64dir=*) lib64dir=${1#--lib64dir=};;
   --kernelmodulesdir=*) kernelmodulesdir=${1#--kernelmodulesdir=};;
+  --no-sfc) nosfc=true;;
   -*)           usage;;
   *)            break;;
   esac

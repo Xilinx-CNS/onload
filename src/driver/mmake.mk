@@ -10,7 +10,17 @@ MMAKE_NO_DEPS	:= 1
 ifeq ($(LINUX),1)
 
 # DRIVER_SUBDIRS must be ordered according to inter-driver dependencies
-DRIVER_SUBDIRS	:= linux_net linux_resource linux_char linux_onload linux
+
+# Always include linux_net when mmakebuildtree is running, to allow
+# user to switch sfc build at 'make' time.
+ifeq ($(MMAKEBUILDTREE),1)
+DRIVER_SUBDIRS  += linux_net
+else ifeq ($(HAVE_SFC),1)
+DRIVER_SUBDIRS  += linux_net
+else
+endif
+
+DRIVER_SUBDIRS	+= linux_resource linux_char linux_onload linux
 
 endif # ifeq ($(LINUX),1)
 

@@ -419,7 +419,9 @@ efrm_nic_add(void *drv_device, struct device *dev,
 	lnic->drv_device = drv_device;
 	efrm_nic = &lnic->efrm_nic;
 	nic = &efrm_nic->efhw_nic;
+#if CI_HAVE_SFC
 	efrm_driverlink_resume(nic);
+#endif
 
 	if( timer_quantum_ns )
 		nic->timer_quantum_ns = timer_quantum_ns;
@@ -685,6 +687,7 @@ static int init_sfc_resource(void)
 	}
 	efrm_filter_install_proc_entries();
 
+#if CI_HAVE_SFC
 	/* Register the driver so that our 'probe' function is called for
 	 * each EtherFabric device in the system.
 	 */
@@ -693,6 +696,7 @@ static int init_sfc_resource(void)
 		EFRM_ERR("%s: no devices found", __func__);
 	if (rc < 0)
 		goto failed_driverlink;
+#endif
 
 	rc = efrm_auxbus_register();
 	if (rc < 0)
@@ -712,8 +716,10 @@ static int init_sfc_resource(void)
 	return 0;
 
 failed_auxbus:
+#if CI_HAVE_SFC
 	efrm_driverlink_unregister();
 failed_driverlink:
+#endif
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();
 	efrm_driver_stop();
@@ -742,9 +748,11 @@ static void cleanup_sfc_resource(void)
 	efrm_remove_sysfs_entries();
 	efrm_nondl_shutdown();
 	efrm_auxbus_unregister();
+#if CI_HAVE_SFC
 	/* Unregister from driverlink first, free
 	 * the per-NIC structures next. */
 	efrm_driverlink_unregister();
+#endif
 	efrm_nic_shutdown_all();
 	efrm_nic_del_all();
 

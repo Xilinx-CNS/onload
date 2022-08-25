@@ -180,6 +180,7 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 	spin_lock_init(&nic->pci_dev_lock);
 
 	switch (nic->devtype.arch) {
+#if CI_HAVE_SFC
 	case EFHW_ARCH_EF10:
 		nic->q_sizes[EFHW_EVQ] = 512 | 1024 | 2048 | 4096 | 8192 |
 			16384 | 32768;
@@ -238,6 +239,7 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags, unsigned options,
 		nic->vi_shift = vi_shift;
 		nic->vi_stride = vi_stride;
 		break;
+#endif /* CI_HAVE_SFC */
 #ifdef EFHW_HAS_AF_XDP
 	case EFHW_ARCH_AF_XDP:
 		/* No restrictions on queue sizes */
