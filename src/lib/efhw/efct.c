@@ -13,6 +13,7 @@
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/bitfield.h>
 #include <net/sock.h>
+#include <net/ipv6.h>
 #include <ci/tools/sysdep.h>
 #include <ci/tools/bitfield.h>
 #include <uapi/linux/ethtool.h>
@@ -924,6 +925,14 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       memcpy(&node.u.ip6.rip, spec->rem_host, sizeof(node.u.ip6.rip));
     }
   }
+  else if( no_vlan_flags == EFX_FILTER_MATCH_LOC_MAC_IG ) {
+    /* Insert a filter for multicast mismatch by setting the ethertype to a magic *
+     * value. This allows us to also utilise the existing vlan combined filtering *
+     * from ethertype filters, thus supporting multicast-mis + vid filters        */
+    clas = FILTER_CLASS_ethertype;
+    node_len = offsetof(struct efct_filter_node, proto);
+    node.ethertype = EFCT_ETHERTYPE_MCAST_FILTER;
+  }
   else {
     return -EPROTONOSUPPORT;
   }
@@ -1065,6 +1074,8 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
   size_t semi_wild_node_len = 0;
   const ci_oword_t* header = meta;
   size_t pkt_len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
+  struct netdev_hw_addr *hw_addr;
+  bool is_mcast = false;
 
   if( pkt_len < ETH_HLEN )
     return false;
@@ -1110,6 +1121,7 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
       node.proto = pkt[l3_off + 9];
       memcpy(&node.u.ip4.rip, pkt + l3_off + 12, 4);
       memcpy(&node.u.ip4.lip, pkt + l3_off + 16, 4);
+      is_mcast = ipv4_is_multicast(node.u.ip4.rip);
       semi_wild_node_len = offsetof(struct efct_filter_node, u.ip4.rip);
       full_match_node_len = offsetof(struct efct_filter_node, u.ip4.rip) +
                             sizeof(node.u.ip4.rip);
@@ -1127,6 +1139,7 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
       node.proto = pkt[l3_off + 6];
       memcpy(node.u.ip6.rip, pkt + l3_off + 8, 16);
       memcpy(node.u.ip6.lip, pkt + l3_off + 24, 16);
+      is_mcast = ipv6_addr_is_multicast((struct in6_addr *) &node.u.ip6.rip);
       for( i = 0; i < 8 /* arbitrary cap */; ++i) {
         if( ! is_ipv6_extension_hdr(node.proto) || pkt_len < l4_off + 8 )
           break;
@@ -1149,14 +1162,40 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
                        &node, full_match_node_len) )
       return true;
     node.rport = 0;
-    return filter_matches(efct->filters.semi_wild,
+
+    if( filter_matches(efct->filters.semi_wild,
                           HASH_BITS(efct->filters.semi_wild),
-                          &node, semi_wild_node_len);
+                          &node, semi_wild_node_len) )
+      return true;
   }
 
-  return filter_matches(efct->filters.ethertype,
+  if( filter_matches(efct->filters.ethertype,
                         HASH_BITS(efct->filters.ethertype),
-                        &node, offsetof(struct efct_filter_node, proto));
+                        &node, offsetof(struct efct_filter_node, proto)) )
+    return true;
+  
+  if( !is_mcast )
+    return false;
+
+  if( !efct->multicast_block ) {
+    /* Iterate through our subscribed multicast MAC addresses, and check if they   *
+     * are equal to the dest MAC of the incoming packet. If any of them match,     *
+     * this this is _not_ a multicast mismatch, and we can return false here -  we *
+     * don't need to deal with multicast mismatch filtering.                       */
+    netdev_for_each_mc_addr(hw_addr, efct->nic->net_dev) {
+      if( ether_addr_equal(pkt, hw_addr->addr) )
+        return false;
+    }
+  }
+
+  node.ethertype = EFCT_ETHERTYPE_MCAST_FILTER;
+  if( filter_matches(efct->filters.ethertype,
+                        HASH_BITS(efct->filters.ethertype),
+                        &node, offsetof(struct efct_filter_node, proto)) ) {
+    return true;
+  }
+
+  return false;
 }
 
 static int
@@ -1169,7 +1208,12 @@ efct_filter_redirect(struct efhw_nic *nic, int filter_id,
 static int
 efct_multicast_block(struct efhw_nic *nic, bool block)
 {
-  return -EOPNOTSUPP;
+  /* Keep track of whether this has been set to allow us to tell if our *
+   * MAC I/G filter is multicast-mis or multicast-all.                  */
+  struct efhw_nic_efct *efct = (struct efhw_nic_efct *) nic->arch_extra;
+  efct->multicast_block = block;
+
+  return 0;
 }
 
 static int
