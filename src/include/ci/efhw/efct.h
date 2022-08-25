@@ -71,6 +71,8 @@ struct efhw_nic_efct_evq {
   unsigned capacity;
 };
 
+#define EFCT_ETHERTYPE_MCAST_FILTER 0xFFFF
+
 /* Key type for all the efct_filter_set members. Careful of ordering of
  * members here: this struct is rigged so that prefix subsets are useful. When
  * adding new match types, the only things which it should be necessary to
@@ -169,6 +171,7 @@ struct efhw_nic_efct {
   struct efct_filter_set filters;
   struct efct_hw_filter hw_filters[MAX_EFCT_HW_FILTERS];
   struct mutex driver_filters_mtx;
+  bool multicast_block;
 #endif
 };
 
