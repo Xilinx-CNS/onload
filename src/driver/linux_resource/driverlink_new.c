@@ -242,8 +242,10 @@ efrm_nic_matches_device(struct efhw_nic* nic, const struct pci_dev* dev,
 {
 	int match;
 	struct pci_dev* nic_dev = efhw_nic_get_pci_dev(nic);
-	/* For NICs provided by driverlink we should always have a pci_dev */
-	EFRM_ASSERT(nic_dev);
+	if (!nic_dev) {
+		/* Rediscovery of non-PCI NICs not currently supported */
+		return 0;
+	}
 	match = nic_dev->devfn == dev->devfn && nic_dev->device == dev->device;
 	pci_dev_put(nic_dev);
 	if (!match)
