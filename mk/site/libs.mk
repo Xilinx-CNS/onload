@@ -26,13 +26,6 @@ lib_ver	:=
 ONLOAD_EXT_LIB_DEPEND	:= $(MMakeGenerateLibDepend)
 LINK_ONLOAD_EXT_LIB	:= $(MMakeGenerateLibLink) -ldl # for dlsym
 
-lib_ver   := 0
-lib_name  := spektor
-lib_where := lib/spektor
-SPEKTOR_LIB		:= $(MMakeGenerateLibTarget)
-SPEKTOR_LIB_DEPEND	:= $(MMakeGenerateLibDepend)
-LINK_SPEKTOR_LIB	:= $(MMakeGenerateLibLink)
-
 # Minimal emulations of kernel functions, for testing purposes
 lib_ver   := 0
 lib_name  := kcompat

@@ -18,10 +18,6 @@ include $(TOPPATH)/mk/site/ciul.mk
 include $(TOPPATH)/mk/site/ciip.mk
 include $(TOPPATH)/mk/site/cplane.mk
 include $(TOPPATH)/mk/site/citpcommon.mk
-include $(TOPPATH)/mk/site/efrm.mk
-include $(TOPPATH)/mk/site/efthrm.mk
 include $(TOPPATH)/mk/site/libs.mk
-include $(TOPPATH)/mk/site/sfgpxe.mk
-include $(TOPPATH)/mk/site/efhw.mk
 endif
 include $(TOPPATH)/mk/middle.mk
