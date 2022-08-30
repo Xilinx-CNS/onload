@@ -889,7 +889,7 @@ typedef struct ef_vi {
   unsigned                      vi_resource_id;
   /** The instance ID of the virtual interface */
   unsigned                      vi_i;
-  /** NIC-global ID of this virtual interface */
+  /** NIC-global ID of this virtual interface, or -1 */
   unsigned                      abs_idx;
   /** fd used for original initialisation */
   ef_driver_handle              dh;
