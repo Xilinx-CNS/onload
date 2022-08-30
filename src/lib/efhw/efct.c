@@ -373,14 +373,19 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  struct efhw_nic_efct_evq *efct_evq = &efct->evq[txq_params->evq];
   struct xlnx_efct_txq_params params = {
     .evq = txq_params->evq,
+    .qid = efct_evq->txq,
     .label = txq_params->tag,
   };
   int rc;
 
+  EFHW_ASSERT(params.qid != EFCT_EVQ_NO_TXQ);
+
   EFCT_PRE(dev, edev, cli, nic, rc);
-  rc = edev->ops->alloc_txq(cli, &params);
+  rc = edev->ops->init_txq(cli, &params);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   if( rc >= 0 ) {
