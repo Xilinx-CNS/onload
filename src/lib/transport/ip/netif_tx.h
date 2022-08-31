@@ -213,11 +213,13 @@ extern void ci_netif_dmaq_shove1(ci_netif*, int intf_i);
  */
 extern void ci_netif_dmaq_shove2(ci_netif*, int intf_i, int is_fresh);
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
 /* Moves packets from the non-first overflow queue (i.e. for communicating
  * with EF100 slice plugins) to the hardware ring if the hardware queue has at
  * least space for one packet.
  */
 void ci_netif_dmaq_shove_plugin(ci_netif* ni, int intf_i, int q_id);
+#endif
 
 
 #define ci_netif_dmaq(ni, nic_i)  (&(ni)->state->nic[nic_i].dmaq[0])
