@@ -229,6 +229,7 @@ void ci_netif_dmaq_shove2(ci_netif* ni, int intf_i, int is_fresh)
 }
 
 
+#if CI_CFG_TCP_OFFLOAD_RECYCLER
 void ci_netif_dmaq_shove_plugin(ci_netif* ni, int intf_i, int q_id)
 {
   ef_vi* vi = &ni->nic_hw[intf_i].vis[q_id];
@@ -237,6 +238,7 @@ void ci_netif_dmaq_shove_plugin(ci_netif* ni, int intf_i, int q_id)
     __ci_netif_dmaq_shove(ni, &ni->state->nic[intf_i].dmaq[q_id], vi, intf_i,
                           0 /*is_fresh*/);
 }
+#endif
 
 
 void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
