@@ -115,18 +115,19 @@ int ef_vi_rxq_reinit(ef_vi* vi, ef_vi_reinit_callback cb, void* cb_arg)
   ef_vi_state* state = vi->ep_state;
   int di;
   
-  while( state->rxq.removed < state->rxq.added ) {
-    di = state->rxq.removed & vi->vi_rxq.mask;
-    BUG_ON(vi->vi_rxq.ids[di] == EF_REQUEST_ID_MASK);
-    (*cb)(vi->vi_rxq.ids[di], cb_arg);
-    vi->vi_rxq.ids[di] = EF_REQUEST_ID_MASK;
-    ++state->rxq.removed;
+  /* shared rxqs always claim to have a full rxq because buffer posting is
+   * managed elsewhere, but it's a lie. */
+  if( vi->vi_rxq.mask && !vi->max_efct_rxq ) {
+    while( state->rxq.removed < state->rxq.added ) {
+      di = state->rxq.removed & vi->vi_rxq.mask;
+      BUG_ON(vi->vi_rxq.ids[di] == EF_REQUEST_ID_MASK);
+      (*cb)(vi->vi_rxq.ids[di], cb_arg);
+      vi->vi_rxq.ids[di] = EF_REQUEST_ID_MASK;
+      ++state->rxq.removed;
+    }
   }
 
-  state->rxq.added = state->rxq.removed = state->rxq.posted = 0;
-  state->rxq.last_desc_i = vi->vi_is_packed_stream ? vi->vi_rxq.mask : 0;
-  state->rxq.in_jumbo = 0;
-  state->rxq.bytes_acc = 0;
+  ef_vi_reset_rxq(vi);
 
   return 0;
 }
@@ -145,7 +146,7 @@ int ef_vi_txq_reinit(ef_vi* vi, ef_vi_reinit_callback cb, void* cb_arg)
     ++state->txq.removed;
   }
 
-  state->txq.previous = state->txq.added = state->txq.removed = 0;
+  ef_vi_reset_txq(vi);
 
   return 0;
 }
@@ -462,7 +463,11 @@ void ef_vi_reset_txq(struct ef_vi* vi)
   qs->previous = 0;
   qs->added = 0;
   qs->removed = 0;
+  qs->ct_added = 0;
+  qs->ct_removed = 0;
+  vi->vi_txq.ct_fifo_bytes = 0;
   qs->ts_nsec = EF_VI_TX_TIMESTAMP_TS_NSEC_INVALID;
+
   if( vi->vi_txq.mask ) {
     int i;
     for( i = 0; i <= vi->vi_txq.mask; ++i )
