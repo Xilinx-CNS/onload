@@ -767,12 +767,13 @@ CI_CFG_OPT("EF_SHARE_WITH", share_with, ci_int32,
 
 /* TODO EFCT allow 0 ring size for now for development purposes */
 CI_CFG_OPT("EF_RXQ_SIZE", rxq_size, ci_uint16,
-"Set the size of the receive descriptor ring.  Valid values: 512, 1024, 2048 "
+"Set the size of the receive descriptor ring.  Must be a power of two.  "
+"Valid values are architecture dependent.  For EF10: 512, 1024, 2048 "
 "or 4096.\n"
 
 "A larger ring size can absorb larger packet bursts without drops, but may "
 "reduce efficiency because the working set size is increased.",
-           , , 512, 0, 4096, bincount)
+           , , 512, 0, 32768, bincount)
 
 CI_CFG_OPT("EF_TXQ_SIZE", txq_size, ci_uint16,
 "Set the size of the transmit descriptor ring.  Valid values: 512, 1024, 2048 "
