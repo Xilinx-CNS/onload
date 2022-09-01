@@ -122,7 +122,7 @@
   sizeof(((c_type*)0)->mbr_name)
 
 #define __CI_CONTAINER(c_type, mbr_name, p_mbr)  \
-  ( (c_type*) ((char*)(p_mbr) - CI_MEMBER_OFFSET(c_type, mbr_name)) )
+  ( (c_type*) ((ci_uintptr_t)(p_mbr) - CI_MEMBER_OFFSET(c_type, mbr_name)) )
 
 #ifndef CI_CONTAINER
 # define CI_CONTAINER(t,m,p)  __CI_CONTAINER(t,m,p)
