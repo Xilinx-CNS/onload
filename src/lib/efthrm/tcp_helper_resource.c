@@ -1452,7 +1452,9 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
   size_t n_shm_rxqs;
 
   /* Choose DMA queue sizes, and calculate suitable size for EVQ. */
-  evq_min = info->rxq_capacity + info->txq_capacity;
+  evq_min = info->txq_capacity;
+  if( ! (info->oo_vi_flags & OO_VI_FLAGS_RX_SHARED) )
+    evq_min += info->rxq_capacity;
   for( info->evq_capacity = 512; info->evq_capacity <= evq_min;
        info->evq_capacity *= 2 )
     ;
