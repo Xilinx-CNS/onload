@@ -197,6 +197,7 @@ static int efab_ip_queue_copy(ci_netif *ni_to, ci_ip_pkt_queue *q_to,
 {
   ci_ip_pkt_fmt *pkt_to, *pkt_from;
   oo_pkt_p pp;
+  size_t pkt_start_copy_offs = CI_MEMBER_OFFSET(ci_ip_pkt_fmt, pay_len);
 
   ci_ip_queue_init(q_to);
   if( q_from->num == 0 )
@@ -211,8 +212,9 @@ static int efab_ip_queue_copy(ci_netif *ni_to, ci_ip_pkt_queue *q_to,
       return -ENOBUFS;
     pkt_to->flags |= CI_PKT_FLAG_RX;
     ni_to->state->n_rx_pkts++;
-    memcpy(&pkt_to->pay_len, &pkt_from->pay_len,
-           CI_CFG_PKT_BUF_SIZE - CI_MEMBER_OFFSET(ci_ip_pkt_fmt, pay_len));
+    memcpy((void*)((ci_uintptr_t)pkt_to + pkt_start_copy_offs),
+           (void*)((ci_uintptr_t)pkt_from + pkt_start_copy_offs),
+           CI_CFG_PKT_BUF_SIZE - pkt_start_copy_offs);
     ci_ip_queue_enqueue(ni_to, q_to, pkt_to);
     pp = pkt_from->next;
   } while( OO_PP_NOT_NULL(pp) );

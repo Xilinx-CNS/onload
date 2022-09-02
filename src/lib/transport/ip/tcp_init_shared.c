@@ -276,9 +276,9 @@ void ci_tcp_state_init(ci_netif* netif, ci_tcp_state* ts, int from_cache)
 #if defined(TCP_STATE_POISON) && !defined(NDEBUG)
   /* Can't poison a cached socket - there's some bits of state to preserve. */
   if( !from_cache ) {
-    void *poison_start = &ts->s.b + 1;
-    memset(poison_start, TCP_STATE_POISON,
-           ((char*)(ts+1)) - (char*)poison_start);
+    ci_uintptr_t poison_start = (ci_uintptr_t)&ts->s.b + sizeof(ts->s.b);
+    size_t poison_len = (ci_uintptr_t)(ts + 1) - poison_start;
+    memset((void*)poison_start, TCP_STATE_POISON, poison_len);
   }
 #endif
 
