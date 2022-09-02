@@ -50,7 +50,12 @@ static void ci_udp_state_init(ci_netif* netif, ci_udp_state* us)
     us->s.cp.sock_cp_flags |= OO_SCP_NO_MULTICAST;
 
   /* Poison. */
-  CI_DEBUG(memset(&us->s + 1, 0xf0, (char*) (us + 1) - (char*) (&us->s + 1)));
+  CI_DEBUG(
+  {
+    ci_uintptr_t poison_start = (ci_uintptr_t)&us->s + sizeof(us->s);
+    size_t poison_len = (ci_uintptr_t)(us + 1) - poison_start;
+    memset((void*)poison_start, 0xf0, poison_len);
+  });
 
   /*! \todo This should be part of sock_cmn reinit, but the comment to that
    * function suggests that it's possibly not a good plan to move it there */
