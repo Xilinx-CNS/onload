@@ -229,6 +229,7 @@ static int modify_glibc_code(void* dst, const void* src, size_t n)
 
 #ifdef __x86_64__
 static const unsigned char x64_endbr[] = {0xf3, 0x0f, 0x1e, 0xfa};
+static const unsigned char x64_nop[] = {0x90};
 
 /* Returns the length of the given instruction, if it's one of the
  * instructions that we expect to find in the implementation of libc's
@@ -267,6 +268,9 @@ static void* find_close_nocancel(void)
       return NULL;
     if( ! memcmp(io_file_close, x64_endbr, sizeof(x64_endbr)) )
       io_file_close += sizeof(x64_endbr);
+    /* Needed for SLES15 sp4 with GNU libc 2.31 */
+    while( ! memcmp(io_file_close, x64_nop, sizeof(x64_nop)) )
+      io_file_close += sizeof(x64_nop);
     while( (n = is_io_file_close_insn(io_file_close)) != 0 )
       io_file_close += n;
     if( *io_file_close != 0xe9 )  /* jmp rel32 */
@@ -316,6 +320,9 @@ static int patch_libc_close_nocancel(void)
      * with a call to a 4-byte absolute address. Doable. */
     if( ! memcmp(close_nocancel, x64_endbr, sizeof(x64_endbr)) )
       close_nocancel += sizeof(x64_endbr);
+    /* Needed for SLES15 sp4 with GNU libc 2.31 */
+    while( ! memcmp(close_nocancel, x64_nop, sizeof(x64_nop)) )
+      close_nocancel += sizeof(x64_nop);
     if( memcmp(close_nocancel, sysclose, sizeof(sysclose)) ) {
       LOG_S(ci_log("Mismatching syscall implementation in __close_nocancel"));
       return -ESRCH;
