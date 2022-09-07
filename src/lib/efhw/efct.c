@@ -12,8 +12,9 @@
 #include <ci/efhw/checks.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/bitfield.h>
+#include <ci/net/ipv6.h>
+#include <ci/net/ipv4.h>
 #include <net/sock.h>
-#include <net/ipv6.h>
 #include <ci/tools/sysdep.h>
 #include <ci/tools/bitfield.h>
 #include <uapi/linux/ethtool.h>
@@ -1121,7 +1122,7 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
       node.proto = pkt[l3_off + 9];
       memcpy(&node.u.ip4.rip, pkt + l3_off + 12, 4);
       memcpy(&node.u.ip4.lip, pkt + l3_off + 16, 4);
-      is_mcast = ipv4_is_multicast(node.u.ip4.rip);
+      is_mcast = CI_IP_IS_MULTICAST(node.u.ip4.rip);
       semi_wild_node_len = offsetof(struct efct_filter_node, u.ip4.rip);
       full_match_node_len = offsetof(struct efct_filter_node, u.ip4.rip) +
                             sizeof(node.u.ip4.rip);
@@ -1139,7 +1140,7 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
       node.proto = pkt[l3_off + 6];
       memcpy(node.u.ip6.rip, pkt + l3_off + 8, 16);
       memcpy(node.u.ip6.lip, pkt + l3_off + 24, 16);
-      is_mcast = ipv6_addr_is_multicast((struct in6_addr *) &node.u.ip6.rip);
+      is_mcast = CI_IP6_IS_MULTICAST(node.u.ip6.rip);
       for( i = 0; i < 8 /* arbitrary cap */; ++i) {
         if( ! is_ipv6_extension_hdr(node.proto) || pkt_len < l4_off + 8 )
           break;
