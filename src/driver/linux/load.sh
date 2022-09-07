@@ -295,7 +295,6 @@ donet () {
 
     # Net driver
     loadmod sfc_driverlink
-    loadmod virtual_bus
     for m in $LINUX_NET; do
       loadmod $m $N_MOD_ARGS
     done

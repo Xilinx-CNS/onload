@@ -43,7 +43,7 @@ tryunload () {
     # rmmod is used, to avoid modprobe failure as these modules are not present
     # in modprobe conf files in latest Onload.
     if [ "$mod" = sfc_tune -o "$mod" = sfc_aoe -o "$mod" = onload_cplane \
-         -o "$mod" = sfc_affinity ]; then
+         -o "$mod" = sfc_affinity -o "$mod" = virtual_bus ]; then
        echo "$me: rmmod -f $mod"
        rmmod -f $mod
     else
@@ -271,7 +271,7 @@ do_unload() {
     tryunload sfc
     tryunload sfc_ef100      # Present in historical Onload versions.
     tryunload sfc_driverlink
-    tryunload virtual_bus
+    tryunload virtual_bus    # Present in historical Onload versions.
     grep -q sfc/sfc.ko /lib/modules/$(uname -r)/modules.dep && \
         log "WARNING: sfc driver may reload due to an in-distro driver"
   fi
