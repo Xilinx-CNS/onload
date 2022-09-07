@@ -14,7 +14,7 @@
 ifndef NOWERROR
 ifdef BUILD_INKERNEL_TESTS
 define build_selftests =
-	+! [ -d tools/testing/selftests/sfc/virtbus ] || $(MAKE) -C tools/testing/selftests/sfc/virtbus $@
+	+! [ -d tools/testing/selftests/sfc/auxbus ] || $(MAKE) -C tools/testing/selftests/sfc/auxbus $@
 endef
 else
 build_selftests :=
@@ -24,26 +24,22 @@ build_selftests :=
 endif # NOWERROR
 
 all modules:
-	$(MAKE) -C drivers/bus $@
 	$(MAKE) -C drivers/net/ethernet/sfc $@
 	$(build_selftests)
 
 install modules_install:
 	@echo INSTALL_MOD_PATH=$(INSTALL_MOD_PATH)
 	@echo INSTALL_MOD_DIR=$(INSTALL_MOD_DIR)
-	$(MAKE) -C drivers/bus modules_install
 	$(MAKE) -C drivers/net/ethernet/sfc modules_install
 	$(build_selftests)
 	depmod
 
 export-srpm export:
-	$(MAKE) -C drivers/bus $@
 	$(MAKE) -C drivers/net/ethernet/sfc $@
 	$(MAKE) -C include/linux $@
 	$(build_selftests)
 
 clean:
-	$(MAKE) -C drivers/bus $@
 	$(MAKE) -C drivers/net/ethernet/sfc $@
 	$(RM) -r deb rpm .version
 	$(build_selftests)

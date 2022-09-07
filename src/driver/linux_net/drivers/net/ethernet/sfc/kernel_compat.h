@@ -66,10 +66,6 @@
 	#undef EFX_USE_GRO
 #endif
 
-#ifdef CONFIG_SFC_PRIVATE_MDIO
-	#undef EFX_HAVE_LINUX_MDIO_H
-#endif
-
 /**************************************************************************
  *
  * Version/config/architecture compatability.
@@ -81,29 +77,14 @@
  */
 
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
 	#error "This kernel version is now unsupported"
-#endif
-
-/* netif_device_{detach,attach}() were missed in multiqueue transition */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,30)
-	#define EFX_NEED_NETIF_DEVICE_DETACH_ATTACH_MQ yes
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,33) && defined(EFX_HAVE_LINUX_MDIO_H)
-	/* mdio module lacks pause frame advertising */
-	#define EFX_NEED_MDIO45_FLOW_CONTROL_HACKS yes
 #endif
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36) && \
 	!defined(EFX_NEED_UNMASK_MSIX_VECTORS)
 	/* Fixing that bug introduced a different one, fixed in 2.6.36 */
 	#define EFX_NEED_SAVE_MSIX_MESSAGES yes
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,20) && defined(CONFIG_PPC_ISERIES)
-	/* __raw_writel and friends were broken on iSeries */
-	#define EFX_NEED_RAW_READ_AND_WRITE_FIX yes
 #endif
 
 /**************************************************************************
@@ -119,19 +100,6 @@
 
 #ifndef WRITE_ONCE
 #define WRITE_ONCE(x, v) (ACCESS_ONCE((x)) = (v))
-#endif
-
-#ifndef spin_trylock_irqsave
-	#define spin_trylock_irqsave(lock, flags)	\
-	({						\
-		local_irq_save(flags);			\
-		spin_trylock(lock) ?			\
-		1 : ({local_irq_restore(flags); 0;});	\
-	})
-#endif
-
-#ifndef raw_smp_processor_id
-	#define raw_smp_processor_id() (current_thread_info()->cpu)
 #endif
 
 #ifndef fallthrough
@@ -234,47 +202,6 @@
 # define CONFIG_XPS
 #endif
 
-#ifndef __GFP_COMP
-	#define __GFP_COMP 0
-#endif
-
-#ifndef __iomem
-	#define __iomem
-#endif
-
-#ifndef PCI_EXP_FLAGS
-	#define PCI_EXP_FLAGS		2	/* Capabilities register */
-	#define PCI_EXP_FLAGS_TYPE	0x00f0	/* Device/Port type */
-	#define  PCI_EXP_TYPE_ENDPOINT	0x0	/* Express Endpoint */
-	#define  PCI_EXP_TYPE_LEG_END	0x1	/* Legacy Endpoint */
-	#define  PCI_EXP_TYPE_ROOT_PORT 0x4	/* Root Port */
-#endif
-
-#ifndef PCI_EXP_DEVCAP
-	#define PCI_EXP_DEVCAP		4	/* Device capabilities */
-	#define  PCI_EXP_DEVCAP_PAYLOAD	0x07	/* Max_Payload_Size */
-	#define  PCI_EXP_DEVCAP_PWR_VAL	0x3fc0000 /* Slot Power Limit Value */
-	#define  PCI_EXP_DEVCAP_PWR_SCL	0xc000000 /* Slot Power Limit Scale */
-#endif
-
-#ifndef PCI_EXP_DEVCTL
-	#define PCI_EXP_DEVCTL		8	/* Device Control */
-	#define  PCI_EXP_DEVCTL_PAYLOAD	0x00e0	/* Max_Payload_Size */
-	#define  PCI_EXP_DEVCTL_READRQ	0x7000	/* Max_Read_Request_Size */
-#endif
-
-#ifndef PCI_EXP_LNKSTA
-	#define PCI_EXP_LNKSTA		18	/* Link Status */
-#endif
-#ifndef PCI_EXP_LNKSTA_CLS
-	#define  PCI_EXP_LNKSTA_CLS	0x000f	/* Current Link Speed */
-#endif
-#ifndef PCI_EXP_LNKSTA_NLW
-	#define  PCI_EXP_LNKSTA_NLW	0x03f0	/* Nogotiated Link Width */
-#endif
-#ifndef PCI_EXP_LNKCAP_MLW
-	#define  PCI_EXP_LNKCAP_MLW     0x000003f0 /* Maximum Link Width */
-#endif
 #ifndef PCI_EXP_LNKCAP_SLS_5_0GB
 	#define  PCI_EXP_LNKCAP_SLS_5_0GB 0x00000002 /* LNKCAP2 SLS bit 1 */
 #endif
@@ -296,25 +223,9 @@
 	#define PCI_EXT_CAP_ID_VNDR 0x0B
 #endif
 
-#ifndef __force
-	#define __force
-#endif
-
 #if !defined(for_each_cpu_mask) && !defined(CONFIG_SMP)
 	#define for_each_cpu_mask(cpu, mask)            \
 		for ((cpu) = 0; (cpu) < 1; (cpu)++, (void)mask)
-#endif
-
-#ifndef IRQF_SHARED
-	#define IRQF_SHARED	   SA_SHIRQ
-#endif
-
-#ifndef CHECKSUM_PARTIAL
-	#define CHECKSUM_PARTIAL CHECKSUM_HW
-#endif
-
-#ifndef DMA_BIT_MASK
-	#define DMA_BIT_MASK(n) (((n) == 64) ? ~0ULL : ((1ULL<<(n))-1))
 #endif
 
 #if defined(__GNUC__) && !defined(inline)
@@ -394,10 +305,6 @@
 	#define SIOCGHWTSTAMP	0x89b1
 #endif
 
-#ifdef EFX_NEED_UINTPTR_T
-    typedef unsigned long uintptr_t;
-#endif
-
 #ifdef EFX_NEED_IPV6_NFC
 	/**
 	 * struct ethtool_tcpip6_spec - flow specification for TCP/IPv6 etc.
@@ -455,21 +362,6 @@
 #endif
 
 /**************************************************************************/
-
-#ifdef EFX_NEED_BYTEORDER_TYPES
-	typedef __u16 __be16;
-	typedef __u32 __be32;
-	typedef __u64 __be64;
-	typedef __u16 __le16;
-	typedef __u32 __le32;
-	typedef __u64 __le64;
-#endif
-
-#ifdef EFX_HAVE_LINUX_MDIO_H
-	#include <linux/mdio.h>
-#else
-	#include "linux_mdio.h"
-#endif
 
 #ifndef ETH_RESET_SHARED_SHIFT
 	enum ethtool_reset_flags {
@@ -787,108 +679,6 @@
 	#define SUPPORTED_40000baseCR4_Full	(1 << 24)
 #endif
 
-#ifdef EFX_NEED_SKB_HEADER_MACROS
-	#define skb_mac_header(skb)	((skb)->mac.raw)
-	#define skb_network_header(skb) ((skb)->nh.raw)
-	#define skb_tail_pointer(skb)   ((skb)->tail)
-	#define skb_set_mac_header(skb, offset)			\
-		((skb)->mac.raw = (skb)->data + (offset))
-	#define skb_transport_header(skb) ((skb)->h.raw)
-
-	static inline int skb_transport_offset(const struct sk_buff *skb)
-	{
-		return skb->h.raw - skb->data;
-	}
-#endif
-
-#ifdef EFX_NEED_SKB_NETWORK_HEADER_LEN
-	static inline u32 skb_network_header_len(const struct sk_buff *skb)
-	{
-		return skb->h.raw - skb->nh.raw;
-	}
-#endif
-
-#ifdef EFX_NEED_SKB_RECORD_RX_QUEUE
-	#define skb_record_rx_queue(_skb, _channel)
-#endif
-
-#ifdef EFX_NEED_TCP_HDR
-	#define tcp_hdr(skb)		((skb)->h.th)
-#endif
-
-#ifdef EFX_NEED_UDP_HDR
-	#define udp_hdr(skb)		((skb)->h.uh)
-#endif
-
-#ifdef EFX_NEED_IP_HDR
-	#define ip_hdr(skb)		((skb)->nh.iph)
-#endif
-
-#ifdef EFX_NEED_IPV6_HDR
-	#define ipv6_hdr(skb)		((skb)->nh.ipv6h)
-#endif
-
-#ifdef EFX_NEED_RAW_READ_AND_WRITE_FIX
-	#include <asm/io.h>
-	static inline void
-	efx_raw_writeb(u8 value, volatile void __iomem *addr)
-	{
-		writeb(value, addr);
-	}
-	static inline void
-	efx_raw_writew(u16 value, volatile void __iomem *addr)
-	{
-		writew(le16_to_cpu(value), addr);
-	}
-	static inline void
-	efx_raw_writel(u32 value, volatile void __iomem *addr)
-	{
-		writel(le32_to_cpu(value), addr);
-	}
-	static inline void
-	efx_raw_writeq(u64 value, volatile void __iomem *addr)
-	{
-		writeq(le64_to_cpu(value), addr);
-	}
-	static inline u8
-	efx_raw_readb(const volatile void __iomem *addr)
-	{
-		return readb(addr);
-	}
-	static inline u16
-	efx_raw_readw(const volatile void __iomem *addr)
-	{
-		return cpu_to_le16(readw(addr));
-	}
-	static inline u32
-	efx_raw_readl(const volatile void __iomem *addr)
-	{
-		return cpu_to_le32(readl(addr));
-	}
-	static inline u64
-	efx_raw_readq(const volatile void __iomem *addr)
-	{
-		return cpu_to_le64(readq(addr));
-	}
-
-	#undef __raw_writeb
-	#undef __raw_writew
-	#undef __raw_writel
-	#undef __raw_writeq
-	#undef __raw_readb
-	#undef __raw_readw
-	#undef __raw_readl
-	#undef __raw_readq
-	#define __raw_writeb efx_raw_writeb
-	#define __raw_writew efx_raw_writew
-	#define __raw_writel efx_raw_writel
-	#define __raw_writeq efx_raw_writeq
-	#define __raw_readb efx_raw_readb
-	#define __raw_readw efx_raw_readw
-	#define __raw_readl efx_raw_readl
-	#define __raw_readq efx_raw_readq
-#endif
-
 #ifdef EFX_NEED_VZALLOC
 	static inline void *vzalloc(unsigned long size)
 	{
@@ -908,27 +698,8 @@
 	#define gso_segs efx_gso_segs
 #endif
 
-#ifndef GSO_MAX_SIZE
-	#define GSO_MAX_SIZE 65536
-#endif
-
-#ifdef EFX_NEED_NETDEV_ALLOC_SKB
-	#ifndef NET_SKB_PAD
-		#define NET_SKB_PAD 16
-	#endif
-
-	static inline
-	struct sk_buff *netdev_alloc_skb(struct net_device *dev,
-					 unsigned int length)
-	{
-		struct sk_buff *skb = alloc_skb(length + NET_SKB_PAD,
-						GFP_ATOMIC);
-		if (likely(skb)) {
-			skb_reserve(skb, NET_SKB_PAD);
-			skb->dev = dev;
-		}
-		return skb;
-	}
+#ifndef GSO_LEGACY_MAX_SIZE
+	#define GSO_LEGACY_MAX_SIZE	65536u
 #endif
 
 #ifdef EFX_NEED_NETDEV_TX_T
@@ -994,12 +765,6 @@
 	}
 #endif
 
-#ifdef EFX_NEED_RTNL_TRYLOCK
-	static inline int rtnl_trylock(void) {
-		return !rtnl_shlock_nowait();
-	}
-#endif
-
 #ifdef EFX_NEED_NETIF_TX_LOCK
 	static inline void netif_tx_lock(struct net_device *dev)
 	{
@@ -1042,35 +807,6 @@
 	}
 #endif
 
-#ifdef EFX_NEED_HEX_DUMP
-	enum {
-		DUMP_PREFIX_NONE,
-		DUMP_PREFIX_ADDRESS,
-		DUMP_PREFIX_OFFSET
-	};
-#endif
-
-#ifdef EFX_NEED_RESOURCE_SIZE_T
-	typedef unsigned long resource_size_t;
-#endif
-
-#ifdef EFX_NEED_RESOURCE_SIZE
-	static inline resource_size_t resource_size(struct resource *res)
-	{
-		return res->end - res->start + 1;
-	}
-#endif
-
-#ifdef EFX_HAVE_OLD_DMA_MAPPING_ERROR
-	static inline int
-	efx_dma_mapping_error(struct device *dev, dma_addr_t dma_addr)
-	{
-		return dma_mapping_error(dma_addr);
-	}
-	#undef dma_mapping_error
-	#define dma_mapping_error efx_dma_mapping_error
-#endif
-
 #ifdef EFX_NEED_DMA_SET_COHERENT_MASK
 	static inline int dma_set_coherent_mask(struct device *dev, u64 mask)
 	{
@@ -1081,7 +817,15 @@
 #ifdef EFX_NEED_DMA_SET_MASK_AND_COHERENT
 	static inline int dma_set_mask_and_coherent(struct device *dev, u64 mask)
 	{
-		int rc = dma_set_mask(dev, mask);
+		int rc;
+
+		/*
+		 * Truncate the mask to the actually supported dma_addr_t
+		 * width to avoid generating unsupportable addresses.
+		 */
+		mask = (dma_addr_t)mask;
+
+		rc = dma_set_mask(dev, mask);
 		if (rc == 0)
 			dma_set_coherent_mask(dev, mask);
 		return rc;
@@ -1824,19 +1568,8 @@ krealloc_array(void *p, size_t new_n, size_t new_size, gfp_t flags)
  *
  */
 
-#ifdef EFX_NEED_HEX_DUMP
-	extern void
-	print_hex_dump(const char *level, const char *prefix_str,
-		       int prefix_type, int rowsize, int groupsize,
-		       const void *buf, size_t len, int ascii);
-#endif
-
 #ifdef EFX_NEED_PCI_CLEAR_MASTER
 	void pci_clear_master(struct pci_dev *dev);
-#endif
-
-#ifdef EFX_NEED_PCI_WAKE_FROM_D3
-	int pci_wake_from_d3(struct pci_dev *dev, bool enable);
 #endif
 
 #if defined(EFX_NEED_UNMASK_MSIX_VECTORS) || \
@@ -2107,129 +1840,8 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 		   GRO_MERGED; })
 #endif
 
-#ifdef EFX_NEED_HEX_DUMP_CONST_FIX
-	#define print_hex_dump(v, s, t, r, g, b, l, a) \
-		print_hex_dump((v), (s), (t), (r), (g), (void *)(b), (l), (a))
-#endif
-
-#ifdef EFX_NEED_SCSI_SGLIST
-	#include <scsi/scsi.h>
-	#include <scsi/scsi_cmnd.h>
-	#define scsi_sglist(sc)    ((struct scatterlist *)((sc)->request_buffer))
-	#define scsi_bufflen(sc)   ((sc)->request_bufflen)
-	#define scsi_sg_count(sc)  ((sc)->use_sg)
-	static inline void scsi_set_resid(struct scsi_cmnd *sc, int resid)
-	{
-		sc->resid = resid;
-	}
-	static inline int scsi_get_resid(struct scsi_cmnd *sc)
-	{
-		return sc->resid;
-	}
-#endif
-
-
-#ifdef EFX_NEED_SG_NEXT
-	#define sg_page(sg) ((sg)->page)
-	#define sg_next(sg) ((sg) + 1)
-	#define for_each_sg(sglist, sg, nr, __i) \
-	  for (__i = 0, sg = (sglist); __i < (nr); __i++, sg = sg_next(sg))
-#endif
-
-#ifdef EFX_NEED_VMALLOC_NODE
-	static inline void *vmalloc_node(unsigned long size, int node)
-	{
-		return vmalloc(size);
-	}
-#endif
-
-#ifdef EFX_NEED_VMALLOC_TO_PFN
-	static inline unsigned long vmalloc_to_pfn(const void *addr)
-	{
-		return page_to_pfn(vmalloc_to_page((void *)addr));
-	}
-#endif
-
-#ifdef EFX_NEED_KVEC
-	struct kvec {
-		struct iovec iov;
-	};
-#endif
-
-#ifdef EFX_NEED_KERNEL_SENDMSG
-	static inline int kernel_sendmsg(struct socket *sock,
-					 struct msghdr *msg,
-					 struct kvec *vec, size_t num,
-					 size_t size)
-	{
-		mm_segment_t oldfs = get_fs();
-		int result;
-
-		set_fs(KERNEL_DS);
-		/* the following is safe, since for compiler definitions of
-		 * kvec and iovec are identical, yielding the same in-core
-		 * layout and alignment. */
-		msg->msg_iov = (struct iovec *)vec;
-		msg->msg_iovlen = num;
-		result = sock_sendmsg(sock, msg, size);
-		set_fs(oldfs);
-		return result;
-	}
-#endif
-
-#ifdef EFX_NEED_ROUNDDOWN_POW_OF_TWO
-static inline unsigned long __attribute_const__ rounddown_pow_of_two(unsigned long x)
-{
-	return 1UL << (fls(x) - 1);
-}
-#endif
-
 #ifndef order_base_2
 #define order_base_2(x) fls((x) - 1)
-#endif
-
-#ifndef EFX_HAVE_LIST_SPLICE_TAIL_INIT
-	static inline void list_splice_tail_init(struct list_head *list,
-						 struct list_head *head)
-	{
-		if (!list_empty(list)) {
-			struct list_head *first = list->next;
-			struct list_head *last = list->prev;
-			struct list_head *prev = head->prev;
-
-			first->prev = prev;
-			prev->next = first;
-			last->next = head;
-			head->prev = last;
-
-			INIT_LIST_HEAD(list);
-		}
-	}
-#endif
-
-#ifdef EFX_NEED_NETIF_DEVICE_DETACH_ATTACH_MQ
-	static inline void efx_netif_device_detach(struct net_device *dev)
-	{
-		if (test_and_clear_bit(__LINK_STATE_PRESENT, &dev->state) &&
-		    netif_running(dev)) {
-			netif_tx_stop_all_queues(dev);
-		}
-	}
-	#define netif_device_detach efx_netif_device_detach
-
-	static inline void efx_netif_device_attach(struct net_device *dev)
-	{
-		/* __netdev_watchdog_up() is not exported, so we have
-		 * to call the broken implementation and then start
-		 * the remaining queues.
-		 */
-		if (!test_bit(__LINK_STATE_PRESENT, &dev->state) &&
-		    netif_running(dev)) {
-			netif_device_attach(dev);
-			netif_tx_wake_all_queues(dev);
-		}
-	}
-	#define netif_device_attach efx_netif_device_attach
 #endif
 
 #ifdef EFX_NEED___SKB_QUEUE_HEAD_INIT
@@ -2238,11 +1850,6 @@ static inline unsigned long __attribute_const__ rounddown_pow_of_two(unsigned lo
 		list->prev = list->next = (struct sk_buff *)list;
 		list->qlen = 0;
 	}
-#endif
-
-#ifdef EFX_NEED_LIST_FIRST_ENTRY
-	#define list_first_entry(ptr, type, member) \
-		list_entry((ptr)->next, type, member)
 #endif
 
 #ifndef list_first_entry_or_null
@@ -2405,6 +2012,29 @@ static inline unsigned long __attribute_const__ rounddown_pow_of_two(unsigned lo
 	#define timespec64_to_ktime	timespec_to_ktime
 	#define timespec_to_timespec64(t) (t)
 	#define timespec64_to_timespec(t) (t)
+#else
+/* RHEL 9.0 has commit cb47755725da ("time: Prevent undefined behaviour
+ * in timespec64_to_ns()") but not commit 39ff83f2f6cc ("time: Handle
+ * negative seconds correctly in timespec64_to_ns()") which fixes it.
+ * This pulls in that patch.
+ */
+#ifdef EFX_NEED_TIMESPEC64_TO_NS_SIGNED
+	#define KTIME_MIN	(-KTIME_MAX - 1)
+	#define KTIME_SEC_MIN	(KTIME_MIN / NSEC_PER_SEC)
+
+	static inline s64 efx_timespec64_to_ns(const struct timespec64 *ts)
+	{
+		/* Prevent multiplication overflow / underflow */
+		if (ts->tv_sec >= KTIME_SEC_MAX)
+			return KTIME_MAX;
+
+		if (ts->tv_sec <= KTIME_SEC_MIN)
+			return KTIME_MIN;
+
+		return ((s64) ts->tv_sec * NSEC_PER_SEC) + ts->tv_nsec;
+	}
+	#define timespec64_to_ns efx_timespec64_to_ns
+#endif
 #endif // EFX_HAVE_TIMESPEC64
 #ifdef EFX_NEED_KTIME_GET_REAL_TS64
 	static inline void efx_ktime_get_real_ts64(struct timespec64 *ts64)
@@ -2765,8 +2395,8 @@ static inline bool skb_is_gso_tcp(const struct sk_buff *skb)
 }
 #endif
 
-#ifdef EFX_NEED_SET_GSO_MAX_SIZE
-static inline void netif_set_gso_max_size(struct net_device *dev,
+#ifdef EFX_NEED_SET_TSO_MAX_SIZE
+static inline void netif_set_tso_max_size(struct net_device *dev,
 					  unsigned int size)
 {
 	/* dev->gso_max_size is read locklessly from sk_setup_caps() */
@@ -2774,8 +2404,8 @@ static inline void netif_set_gso_max_size(struct net_device *dev,
 }
 #endif
 
-#ifdef EFX_NEED_SET_GSO_MAX_SEGS
-static inline void netif_set_gso_max_segs(struct net_device *dev,
+#ifdef EFX_NEED_SET_TSO_MAX_SEGS
+static inline void netif_set_tso_max_segs(struct net_device *dev,
 					  unsigned int segs)
 {
 #ifdef EFX_HAVE_GSO_MAX_SEGS

@@ -26,7 +26,13 @@
 static const char * const filter_names[] = { "bcast", "ucast", "mcast" };
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
-static const struct virtio_device_id ef100_vdpa_id_table[] = {
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_ASID_NAME_USEVA_PARAMS)
+static struct virtio_device_id ef100_vdpa_id_table[] =
+#else
+static const struct virtio_device_id ef100_vdpa_id_table[] =
+#endif
+{
 	{ .device = VIRTIO_ID_NET, .vendor = PCI_VENDOR_ID_REDHAT_QUMRANET },
 	{ 0 },
 };
@@ -258,6 +264,16 @@ static int ef100_vdpa_add_filter(struct ef100_vdpa_nic *vdpa_nic,
 	} else if (type == EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER) {
 		rc = ef100_vdpa_set_mac_filter(efx, spec, qid, NULL);
 	} else {
+		if (!vdpa_nic->mac_configured ||
+		    !vdpa_nic->vring[0].vring_created ||
+		    !is_valid_ether_addr(vdpa_nic->mac_address)) {
+			dev_err(&vdev->dev,
+				"MAC: %pM, mac_conf: %d, vring_created: %d\n",
+				vdpa_nic->mac_address, vdpa_nic->mac_configured,
+				vdpa_nic->vring[0].vring_created);
+			return -EINVAL;
+		}
+
 		rc = ef100_vdpa_set_mac_filter(efx, spec, qid,
 					       vdpa_nic->mac_address);
 		dev_dbg(&vdev->dev, "ucast mac: %pM\n", vdpa_nic->mac_address);
@@ -836,7 +852,6 @@ int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic)
        efx_mcdi_wait_for_cleanup(efx);
 
        dev = &vdpa_nic->vdpa_dev.dev;
-       spin_lock_bh(&mcdi->iface_lock);
 
        /* First, allocate the MCDI buffer for EF100 mode */
        rc = efx_nic_alloc_buffer(efx, &mcdi_buf,
@@ -850,13 +865,13 @@ int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic)
        ef100_vdpa_free_buffer(vdpa_nic, &nic_data->mcdi_buf);
        memcpy(&nic_data->mcdi_buf, &mcdi_buf, sizeof(struct efx_buffer));
        efx->mcdi_buf_mode = EFX_BUF_MODE_EF100;
+       spin_lock_bh(&mcdi->iface_lock);
        mcdi->mode = mode;
        spin_unlock_bh(&mcdi->iface_lock);
 
        return 0;
 
 fail_alloc:
-       spin_unlock_bh(&mcdi->iface_lock);
        return rc;
 }
 
@@ -878,7 +893,6 @@ int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
        spin_unlock_bh(&mcdi->iface_lock);
        efx_mcdi_wait_for_cleanup(efx);
 
-       spin_lock_bh(&mcdi->iface_lock);
        /* First, prepare the MCDI buffer for vDPA mode */
        mcdi_buf.dma_addr = mcdi_iova;
        /* iommu_map requires page aligned memory */
@@ -893,13 +907,13 @@ int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
        efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
        memcpy(&nic_data->mcdi_buf, &mcdi_buf, sizeof(struct efx_buffer));
        efx->mcdi_buf_mode = EFX_BUF_MODE_VDPA;
+       spin_lock_bh(&mcdi->iface_lock);
        mcdi->mode = mode;
        spin_unlock_bh(&mcdi->iface_lock);
 
        return 0;
 
 fail:
-       spin_unlock_bh(&mcdi->iface_lock);
        return rc;
 }
 
@@ -983,10 +997,13 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_REGISTER_NVQS_PARAM) && defined(EFX_HAVE_VDPA_ALLOC_NVQS_PARAM)
 				     , (allocated_vis - 1) * 2
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_ASID_NAME_USEVA_PARAMS)
+				     , 1, 1
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_PARAM) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS) || defined(EFX_HAVE_VDPA_ALLOC_ASID_NAME_USEVA_PARAMS)
 				     , dev_name
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_NAME_USEVA_PARAMS) || defined(EFX_HAVE_VDPA_ALLOC_ASID_NAME_USEVA_PARAMS)
 				     , false
 #endif
 				     );

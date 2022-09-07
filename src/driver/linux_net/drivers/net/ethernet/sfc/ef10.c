@@ -1960,6 +1960,21 @@ static void efx_ef10_get_fec_stats(struct efx_nic *efx,
 }
 #endif
 
+static bool efx_use_vadaptor_stats(struct efx_nic *efx)
+{
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+
+	if (!(efx->mcdi->fn_flags &
+	     (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_LINKCTRL)))
+		return true;
+#ifdef CONFIG_SFC_SRIOV
+	if (efx->type->is_vf || nic_data->vf_count)
+		return true;
+#endif
+
+	return false;
+}
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_STATS64)
 static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 					   struct rtnl_link_stats64 *core_stats)
@@ -1987,9 +2002,7 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 	if (!core_stats)
 		return stats_count;
 
-#ifdef CONFIG_SFC_SRIOV
-	if (nic_data->vf_count || efx->type->is_vf) {
-		/* Use vadaptor stats. */
+	if (efx_use_vadaptor_stats(efx)) {
 		core_stats->rx_packets = stats[EF10_STAT_rx_unicast] +
 					 stats[EF10_STAT_rx_multicast] +
 					 stats[EF10_STAT_rx_broadcast];
@@ -2010,7 +2023,6 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 		core_stats->rx_errors = core_stats->rx_crc_errors;
 		core_stats->tx_errors = stats[EF10_STAT_tx_bad];
 	} else {
-#endif
 		/* Use port stats. */
 		core_stats->rx_packets = stats[EF10_STAT_port_rx_packets];
 		core_stats->tx_packets = stats[EF10_STAT_port_tx_packets];
@@ -2030,9 +2042,7 @@ static size_t efx_ef10_update_stats_common(struct efx_nic *efx, u64 *full_stats,
 		core_stats->rx_errors = (core_stats->rx_length_errors +
 					 core_stats->rx_crc_errors +
 					 core_stats->rx_frame_errors);
-#ifdef CONFIG_SFC_SRIOV
 	}
-#endif
 	return stats_count;
 }
 
@@ -2591,7 +2601,7 @@ static int efx_ef10_tx_tso_desc(struct efx_tx_queue *tx_queue,
 	 * guaranteed to satisfy the second as we only attempt TSO if
 	 * inner_network_header <= 208.
 	 */
-	ip_tot_len = -EFX_TSO2_MAX_HDRLEN;
+	ip_tot_len = 0x10000 - EFX_TSO2_MAX_HDRLEN;
 	EFX_WARN_ON_ONCE_PARANOID(mss + EFX_TSO2_MAX_HDRLEN +
 				  (tcp->doff << 2u) > ip_tot_len);
 

@@ -1029,11 +1029,11 @@ static void efx_mcdi_poll_start(struct efx_mcdi_iface *mcdi,
 				struct efx_mcdi_copy_buffer *copybuf,
 				struct list_head *cleanup_list)
 {
-	/* Poll for completion. Poll quickly (once a us) for the 1st jiffy,
+	/* Poll for completion. Poll quickly (once a us) for the 1st ms,
 	 * because generally mcdi responses are fast. After that, back off
 	 * and poll once a jiffy (approximately)
 	 */
-	int spins = copybuf ? USER_TICK_USEC : 0;
+	int spins = copybuf ? 1000 : 0;
 
 	while (spins) {
 		if (efx_mcdi_poll_once(mcdi, cmd)) {
@@ -1045,8 +1045,8 @@ static void efx_mcdi_poll_start(struct efx_mcdi_iface *mcdi,
 		udelay(1);
 	}
 
-	/* didn't get a response in the first jiffy;
-	 * schedule poll after another jiffy
+	/* didn't get a response in the first millisecond.
+	 * schedule poll after one jiffy
 	 */
 	kref_get(&cmd->ref);
 	queue_delayed_work(mcdi->workqueue, &cmd->work, 1);

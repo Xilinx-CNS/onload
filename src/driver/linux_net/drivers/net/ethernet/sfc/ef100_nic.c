@@ -285,25 +285,14 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 	return 0;
 }
 
-int ef100_alloc_qdma_buffer(struct efx_nic *efx, struct efx_buffer *buffer,
-			    unsigned int len)
-{
-	int rc = efx_nic_alloc_buffer(efx, buffer, len, GFP_KERNEL);
-
-	if (rc)
-		return rc;
-
-	return ef100_regionmap_buffer(efx, &buffer->dma_addr);
-}
-
 /*	Event handling
  */
 static int ef100_ev_probe(struct efx_channel *channel)
 {
 	/* Allocate an extra descriptor for the QMDA status completion entry */
-	return ef100_alloc_qdma_buffer(channel->efx, &channel->eventq,
-				       (channel->eventq_mask + 2) *
-				       sizeof(efx_qword_t));
+	return efx_nic_alloc_buffer(channel->efx, &channel->eventq,
+				    (channel->eventq_mask + 2) *
+				    sizeof(efx_qword_t), GFP_KERNEL);
 }
 
 static int ef100_ev_init(struct efx_channel *channel)
@@ -1366,17 +1355,15 @@ static ssize_t bar_config_store(struct device *dev,
 
 #ifdef CONFIG_SFC_VDPA
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
-	/* Change bar_config from vdpa to ef100 if
-	 * vdpa Management interface is not supported
+	/* When vdpa Management interface is not supported change
+	 * of bar_config which results in vdpa device deletion
+	 * should be denied, if vdpa device is in use.
 	 */
-	if (old_config == EF100_BAR_CONFIG_VDPA &&
-	    new_config == EF100_BAR_CONFIG_EF100) {
-		if (ef100_vdpa_dev_in_use(efx)) {
-			pci_warn(efx->pci_dev,
-				 "Device in use. Cannot change bar config");
-			mutex_unlock(&nic_data->bar_config_lock);
-			return -EBUSY;
-		}
+	if (old_config == EF100_BAR_CONFIG_VDPA && ef100_vdpa_dev_in_use(efx)) {
+		pci_warn(efx->pci_dev,
+			 "Device in use. Cannot change bar config");
+		mutex_unlock(&nic_data->bar_config_lock);
+		return -EBUSY;
 	}
 #else
 	/* Restrict bar_config writes when vdpa device has been created
@@ -1513,12 +1500,14 @@ static int ef100_process_design_param(struct efx_nic *efx,
 		}
 		return 0;
 	case ESE_EF100_DP_GZ_TSO_MAX_PAYLOAD_LEN:
-		nic_data->tso_max_payload_len = min_t(u64, reader->value, GSO_MAX_SIZE);
-		netif_set_gso_max_size(efx->net_dev, nic_data->tso_max_payload_len);
+		nic_data->tso_max_payload_len = min_t(u64, reader->value,
+						      GSO_LEGACY_MAX_SIZE);
+		netif_set_tso_max_size(efx->net_dev,
+				       nic_data->tso_max_payload_len);
 		return 0;
 	case ESE_EF100_DP_GZ_TSO_MAX_PAYLOAD_NUM_SEGS:
 		nic_data->tso_max_payload_num_segs = min_t(u64, reader->value, 0xffff);
-		netif_set_gso_max_segs(efx->net_dev, nic_data->tso_max_payload_num_segs);
+		netif_set_tso_max_segs(efx->net_dev, nic_data->tso_max_payload_num_segs);
 		return 0;
 	case ESE_EF100_DP_GZ_TSO_MAX_NUM_FRAMES:
 		nic_data->tso_max_frames = min_t(u64, reader->value, 0xffff);
@@ -1769,7 +1758,6 @@ int ef100_probe_netdev_pf(struct efx_nic *efx)
 #endif
 	}
 
-	efx_ef100_init_reps(efx);
 	return 0;
 }
 

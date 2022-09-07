@@ -26,10 +26,8 @@
 #include <linux/ethtool.h>
 #include <linux/if_vlan.h>
 #include <linux/timer.h>
-#ifndef EFX_USE_KCOMPAT
-#include <linux/mdio.h>
-#endif
 #include <linux/list.h>
+#include <linux/mii.h>
 #include <linux/pci.h>
 #include <linux/device.h>
 #ifndef EFX_USE_KCOMPAT
@@ -99,7 +97,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.12.1023"
+#define EFX_DRIVER_VERSION	"5.3.13.1001"
 #endif
 
 #ifdef DEBUG
@@ -1215,7 +1213,7 @@ static inline bool efx_link_state_equal(const struct efx_link_state *left,
  * enum efx_phy_mode - PHY operating mode flags
  * @PHY_MODE_NORMAL: on and should pass traffic
  * @PHY_MODE_TX_DISABLED: on with TX disabled
- * @PHY_MODE_LOW_POWER: set to low power through MDIO
+ * @PHY_MODE_LOW_POWER: set to low power through ethtool
  * @PHY_MODE_OFF: switched off through external control
  * @PHY_MODE_SPECIAL: on but will not pass traffic
  */
@@ -1529,8 +1527,6 @@ struct efx_mae;
  * @phy_type: PHY type
  * @phy_name: PHY name
  * @phy_data: PHY data
- * @mdio: PHY MDIO interface
- * @mdio_bus: PHY MDIO bus ID (only used by Siena)
  * @phy_mode: PHY operating mode. Serialised by @mac_lock.
  * @link_down_on_reset: force link down on reset
  * @phy_power_follows_link: PHY powers off when link is taken down.
@@ -1798,8 +1794,6 @@ struct efx_nic {
 	unsigned int phy_type;
 	char phy_name[20];
 	void *phy_data;
-	struct mdio_if_info mdio;
-	unsigned int mdio_bus;
 	enum efx_phy_mode phy_mode;
 	bool link_down_on_reset;
 	bool phy_power_follows_link;
@@ -2387,10 +2381,10 @@ struct efx_nic_type {
 	 */
 	void (*filter_unblock_kernel)(struct efx_nic *efx, enum
 				      efx_dl_filter_block_kernel_type type);
+#endif
+#endif
 	/** @regionmap_buffer: Check if buffer is in accessible region */
 	int (*regionmap_buffer)(struct efx_nic *efx, dma_addr_t *dma_addr);
-#endif
-#endif
 #ifdef CONFIG_SFC_MTD
 	int (*mtd_probe)(struct efx_nic *efx);
 	void (*mtd_rename)(struct efx_mtd_partition *part);

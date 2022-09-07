@@ -91,6 +91,8 @@ static int efx_ef100_rep_get_port_parent_id(struct net_device *dev,
 	struct efx_nic *efx = efv->parent;
 	struct ef100_nic_data *nic_data;
 
+	if (!efx || !efx_net_active(efx->state))
+		return -EOPNOTSUPP;
 	nic_data = efx->nic_data;
 	/* nic_data->port_id is a u8[] */
 	ppid->id_len = sizeof(nic_data->port_id);
@@ -108,6 +110,8 @@ static int efx_ef100_rep_get_phys_port_name(struct net_device *dev,
 	struct ef100_nic_data *nic_data;
 	int ret;
 
+	if (!efx || !efx_net_active(efx->state))
+		return -EOPNOTSUPP;
 	if (efv->remote) {
 		struct mae_mport_desc *mport_desc;
 
@@ -122,6 +126,8 @@ static int efx_ef100_rep_get_phys_port_name(struct net_device *dev,
 				       "vf%u", mport_desc->vf_idx);
 	} else {
 		nic_data = efx->nic_data;
+		if (!nic_data)
+			return -EOPNOTSUPP;
 		ret = snprintf(buf, len, "p%upf%uvf%u", efx->port_num,
 			       nic_data->pf_index, efv->idx);
 	}
@@ -463,7 +469,6 @@ int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i,
 			rc);
 		return rc;
 	}
-	nic_data->vf_rep[i] = efv->net_dev;
 	rc = efx_ef100_configure_rep(efv, mport_desc);
 	if (rc) {
 		pci_err(efx->pci_dev,
@@ -478,6 +483,7 @@ int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i,
 			i, rc);
 		goto fail2;
 	}
+	nic_data->vf_rep[i] = efv->net_dev;
 	if (mport_desc)
 		mport_desc->efv = efv;
 	pci_dbg(efx->pci_dev, "Representor for VF %d is %s\n", i,
@@ -508,7 +514,6 @@ static int efx_ef100_remote_rep_create(struct efx_nic *efx, unsigned int i,
 		return rc;
 	}
 	efv->mport_id = mport_desc->mport_id;
-	nic_data->rem_rep[i] = efv->net_dev;
 	rc = efx_ef100_configure_remote_rep(efv, mport_desc);
 	if (rc) {
 		pci_err(efx->pci_dev,
@@ -517,7 +522,6 @@ static int efx_ef100_remote_rep_create(struct efx_nic *efx, unsigned int i,
 			mport_desc->vf_idx, rc);
 		goto fail1;
 	}
-	nic_data->rem_rep[i] = efv->net_dev;
 	rc = register_netdev(efv->net_dev);
 	if (rc) {
 		pci_err(efx->pci_dev,
@@ -526,6 +530,7 @@ static int efx_ef100_remote_rep_create(struct efx_nic *efx, unsigned int i,
 			mport_desc->vf_idx, rc);
 		goto fail2;
 	}
+	nic_data->rem_rep[i] = efv->net_dev;
 	mport_desc->efv = efv;
 	pci_dbg(efx->pci_dev, "Representor for IF %u PF %u VF %u is %s\n",
 		mport_desc->vf_idx, mport_desc->interface_idx,
@@ -567,9 +572,9 @@ static void efx_ef100_remote_rep_destroy(struct efx_nic *efx, unsigned int i)
 		return;
 	netif_dbg(efx, drv, rep_dev, "Removing remote representor\n");
 	efv = netdev_priv(rep_dev);
+	nic_data->rem_rep[i] = NULL;
 	unregister_netdev(rep_dev);
 	efx_ef100_deconfigure_rep(efv);
-	nic_data->rem_rep[i] = NULL;
 	efx_ef100_rep_destroy_netdev(efv);
 }
 
@@ -702,7 +707,7 @@ struct net_device *efx_ef100_find_rep_by_mport(struct efx_nic *efx, u16 mport)
 		}
 	}
 	/* Backward compatibility with old firmwares */
-	for (i = 0; i < nic_data->rem_rep_count; i++) {
+	for (i = 0; i < nic_data->rem_rep_count && nic_data->rem_rep[i]; i++) {
 		efv = netdev_priv(nic_data->rem_rep[i]);
 		if (efv->mport == mport)
 			return nic_data->rem_rep[i];
@@ -856,6 +861,7 @@ int efx_ef100_add_mport(struct efx_nic *efx, struct mae_mport_desc *mport)
 				 "Failed to allocate memory for remote_reps\n");
 			return -ENOMEM;
 		}
+		reps[nic_data->rem_rep_count] = NULL;
 		nic_data->rem_rep = reps;
 		/* increment rem_rep_count early, as it is used in
 		 * ef100_get_remote_rep called in the stack of

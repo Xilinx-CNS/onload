@@ -8,7 +8,7 @@
 ** </L5_PRIVATE>
 *//************************************************************************/
 
-/* Please use standard APIs (MDIO, ethtool, ...) or the published ioctls
+/* Please use standard APIs (ethtool, ...) or the published ioctls
  * wherever possible. */
 
 #ifndef EFX_NOT_EXPORTED

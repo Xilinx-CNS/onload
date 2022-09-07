@@ -59,17 +59,13 @@
 #include "rx_common.h"
 #include "tx_common.h"
 #include "efx_devlink.h"
-#include "efx_virtbus.h"
+#include "efx_auxbus.h"
 #include "selftest.h"
 #include "sriov.h"
 #include "xdp.h"
 #ifdef EFX_USE_KCOMPAT
 #include "efx_ioctl.h"
 #endif
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_GCOV)
-#include "../linux/gcov.h"
-#endif
-
 
 #include "mcdi_port_common.h"
 #include "mcdi_filters.h"
@@ -363,7 +359,6 @@ static int efx_eth_ioctl(struct net_device *net_dev, struct ifreq *ifr,
 			 int cmd)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	struct mii_ioctl_data *data = if_mii(ifr);
 
 	switch (cmd) {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
@@ -372,14 +367,6 @@ static int efx_eth_ioctl(struct net_device *net_dev, struct ifreq *ifr,
 	case SIOCGHWTSTAMP:
 		return efx_ptp_get_ts_config(efx, ifr);
 #endif
-	case SIOCGMIIREG:
-	case SIOCSMIIREG:
-		/* Convert phy_id from older PRTAD/DEVAD format */
-		if ((data->phy_id & 0xfc00) == 0x0400)
-			data->phy_id ^= MDIO_PHY_ID_C45 | 0x0400;
-		fallthrough;
-	case SIOCGMIIPHY:
-		return mdio_mii_ioctl(&efx->mdio, data, cmd);
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -401,9 +388,6 @@ static int efx_ioctl(struct net_device *net_dev, struct ifreq *ifr, int cmd)
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_ETH_IOCTL)
 	case SIOCSHWTSTAMP:
 	case SIOCGHWTSTAMP:
-	case SIOCGMIIREG:
-	case SIOCSMIIREG:
-	case SIOCGMIIPHY:
 		return efx_eth_ioctl(net_dev, ifr, cmd);
 #endif
 	default:
@@ -547,7 +531,7 @@ int __efx_net_alloc(struct efx_nic *efx)
 	rc = efx_nic_init_interrupt(efx);
 	if (rc)
 		return rc;
-	efx_set_interrupt_affinity(efx, true);
+	efx_set_interrupt_affinity(efx);
 #ifdef EFX_USE_IRQ_NOTIFIERS
 	efx_register_irq_notifiers(efx);
 #endif
@@ -928,7 +912,7 @@ static int efx_register_netdev(struct efx_nic *efx)
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_ETHTOOL_OPS_EXT)
 	set_ethtool_ops_ext(net_dev, &efx_ethtool_ops_ext);
 #endif
-	netif_set_gso_max_segs(net_dev, EFX_TSO_MAX_SEGS);
+	netif_set_tso_max_segs(net_dev, EFX_TSO_MAX_SEGS);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NETDEV_MTU_LIMITS)
 	net_dev->min_mtu = EFX_MIN_MTU;
 	net_dev->max_mtu = EFX_MAX_MTU;
@@ -1280,7 +1264,7 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 		(void)cancel_delayed_work_sync(&efx->mtd_struct->creation_work);
 #endif
 
-	efx_virtbus_unregister(efx);
+	efx_auxbus_unregister(efx);
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_lro);
 #endif
@@ -1358,7 +1342,6 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	rc = efx_init_struct(efx, pci_dev);
 	if (rc)
 		goto fail;
-	efx->mdio.dev = net_dev;
 #ifdef CONFIG_SFC_MTD
 	if (efx_mtd_init(efx) < 0)
 		goto fail;
@@ -1397,10 +1380,10 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 	if (rc)
 		goto fail;
 
-	rc = efx_virtbus_register(efx);
+	rc = efx_auxbus_register(efx);
 	if (rc)
 		pci_warn(efx->pci_dev,
-			 "Unable to register virtual bus driver (%d)\n", rc);
+			 "Unable to register auxiliary bus driver (%d)\n", rc);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)
 	efx->tx_queues_per_channel++;
@@ -1815,11 +1798,6 @@ const struct net_device_ops efx_netdev_ops = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.ndo_get_phys_port_id	= efx_get_phys_port_id,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_NAME)
-#ifndef CONFIG_NET_DEVLINK
-	.ndo_get_phys_port_name	= efx_get_phys_port_name,
-#endif
-#endif
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
 	.ndo_vlan_rx_register	= efx_vlan_rx_register,
 #endif
@@ -1941,10 +1919,6 @@ static int __init efx_init_module(void)
 	printk(KERN_INFO "Solarflare NET driver\n");
 #endif
 
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_GCOV)
-	gcov_provider_init(THIS_MODULE);
-#endif
-
 	rc = efx_init_debugfs("sfc");
 	if (rc)
 		goto err_debugfs;
@@ -2008,10 +1982,6 @@ static void __exit efx_exit_module(void)
 	destroy_workqueue(efx_workqueue);
 #endif
 	efx_fini_debugfs();
-
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_GCOV)
-	gcov_provider_fini(THIS_MODULE);
-#endif
 }
 
 module_init(efx_init_module);

@@ -66,7 +66,7 @@
 
 /* Efx private ioctl number */
 /* We do not use the first 3 private ioctls because some utilities expect
- * them to be the old MDIO ioctls. */
+ * them to be old ioctls. */
 #define SIOCEFX (SIOCDEVPRIVATE + 3)
 
 /*
@@ -105,20 +105,6 @@ struct efx_set_loopback_ioctl {
 
 #define LOOPBACK_NEAR	(LOOPBACK_MAX + 1)	/* loopback nearest to bus */
 #define LOOPBACK_FAR	(LOOPBACK_MAX + 2)	/* loopback furthest from bus */
-
-/* Testing/QA: debug MDIO access ********************************************/
-#define EFX_MDIO 0xef05
-
-/* Parameters for EFX_MDIO */
-struct efx_mdio_ioctl {
-	/** MDIO access */
-	__u16 read;
-	__u16 clause45;
-	__u32 value;
-	__u16 addr;
-	__u8 dev;
-	int prt;
-} __attribute__ ((packed));
 
 /* For setting the netif carrier on/off *************************************/
 #define EFX_SET_CARRIER 0xef09
@@ -614,7 +600,6 @@ union efx_ioctl_data {
 	struct efx_reset_ioctl reset;
 	struct efx_evq_ack_ioctl evq_ack;
 	struct efx_set_loopback_ioctl set_loopback;
-	struct efx_mdio_ioctl mdio;
 	struct efx_set_carrier_ioctl set_carrier;
 	struct efx_set_phy_power set_phy_power;
 #endif

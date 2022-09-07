@@ -15,7 +15,6 @@ extern unsigned int efx_interrupt_mode;
 extern unsigned int rss_cpus;
 #endif
 
-int efx_channel_dummy_op_int(struct efx_channel *channel);
 void efx_channel_dummy_op_void(struct efx_channel *channel);
 
 int efx_channels_init_module(void);
@@ -31,7 +30,7 @@ void efx_disable_interrupts(struct efx_nic *efx);
 void efx_register_irq_notifiers(struct efx_nic *efx);
 void efx_unregister_irq_notifiers(struct efx_nic *efx);
 
-void efx_set_interrupt_affinity(struct efx_nic *efx, bool rtnl_held);
+void efx_set_interrupt_affinity(struct efx_nic *efx);
 void efx_clear_interrupt_affinity(struct efx_nic *efx);
 
 int efx_init_channels(struct efx_nic *efx);

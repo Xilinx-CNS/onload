@@ -5067,6 +5067,9 @@ int efx_tc_flower(struct efx_nic *efx, struct net_device *net_dev,
 {
 	int rc;
 
+	if (!efx->tc)
+		return -EOPNOTSUPP;
+
 	mutex_lock(&efx->tc->mutex);
 	switch (tc->command) {
 	case FLOW_CLS_REPLACE:
@@ -6540,7 +6543,23 @@ static int efx_tc_indr_setup_cb(struct net_device *net_dev, void *cb_priv,
 	struct efx_tc_block_binding *binding;
 	struct flow_block_cb *block_cb;
 	struct efx_nic *efx = cb_priv;
+	bool is_ovs_int_port;
 	int rc;
+
+	if (!net_dev)
+		return -EOPNOTSUPP;
+
+	if (tcb->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS &&
+	    tcb->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_EGRESS)
+		return -EOPNOTSUPP;
+
+	is_ovs_int_port = netif_is_ovs_master(net_dev);
+	if (tcb->binder_type == FLOW_BLOCK_BINDER_TYPE_CLSACT_EGRESS &&
+	    !is_ovs_int_port)
+		return -EOPNOTSUPP;
+
+	if (is_ovs_int_port)
+		return -EOPNOTSUPP;
 
 	switch (type) {
 	case TC_SETUP_BLOCK:
