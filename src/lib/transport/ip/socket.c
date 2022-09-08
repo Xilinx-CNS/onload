@@ -50,8 +50,11 @@ void ci_sock_cmn_init(ci_netif* ni, ci_sock_cmn* s, int can_poison)
 {
   /* Poison. */
   CI_DEBUG(
-  if( can_poison )
-    memset(&s->b + 1, 0xf0, (char*) (s + 1) - (char*) (&s->b + 1));
+  if( can_poison ) {
+    ci_uintptr_t poison_start = (ci_uintptr_t)&s->b + sizeof(s->b);
+    size_t poison_len = (ci_uintptr_t)(s + 1) - poison_start;
+    memset((void*)poison_start, 0xf0, poison_len);
+  }
   )
 
   citp_waitable_reinit(ni, &s->b);

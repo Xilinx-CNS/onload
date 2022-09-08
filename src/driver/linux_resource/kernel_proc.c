@@ -99,8 +99,7 @@ efrm_proc_dir_get(char const* dirname, struct proc_dir_entry* parent,
 	
 	/* Does it already exist? If so, increment the refcount */
 	while ( procdir ) {
-		if ( procdir->efrm_pd_name
-		     && !strcmp(procdir->efrm_pd_name, dirname) ) {
+		if ( !strcmp(procdir->efrm_pd_name, dirname) ) {
 			procdir->efrm_pd_refcount++;
 			rval = procdir;
 			break;
