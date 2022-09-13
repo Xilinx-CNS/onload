@@ -439,16 +439,17 @@ static int xdp_bind(struct socket* sock, int ifindex, unsigned queue, unsigned f
 /* Link an XDP program to an interface */
 static int xdp_set_link(struct net_device* dev, struct bpf_prog* prog)
 {
-  bpf_op_t op = dev->netdev_ops->ndo_bpf;
   struct netdev_bpf bpf = {
     .command = XDP_SETUP_PROG,
     .prog = prog
   };
 
-  if( !op )
+  if( !dev->netdev_ops->ndo_bpf ) {
     EFHW_ERR("%s: %s does not support XDP", __FUNCTION__, dev->name);
+    return -ENOSYS;
+  }
 
-  return op ? op(dev, &bpf) : -ENOSYS;
+  return dev->netdev_ops->ndo_bpf(dev, &bpf);
 }
 
 /* Fault handler to provide buffer memory pages for our user mapping */
