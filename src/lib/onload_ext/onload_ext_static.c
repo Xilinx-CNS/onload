@@ -14,6 +14,7 @@
 #define _GNU_SOURCE
 #include <onload/extensions.h>
 #include <onload/extensions_zc.h>
+#include <onload/extensions_zc_hlrx.h>
 #include <dlfcn.h>
 #include <stdint.h>
 #include <stdlib.h>

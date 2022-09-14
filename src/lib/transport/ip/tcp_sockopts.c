@@ -19,6 +19,7 @@
 
 #if !defined(__KERNEL__)
 #  include <onload/extensions_zc.h>
+#  include <onload/extensions_zc_hlrx.h>
 #  include <netinet/tcp.h>
 
 #define LPF "TCP SOCKOPTS "

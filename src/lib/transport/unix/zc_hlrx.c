@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <onload/extensions.h>
 #include <onload/extensions_zc.h>
+#include <onload/extensions_zc_hlrx.h>
 
 
 #define HLRX_REMOTE_RING_BLOCK_SHIFT  8  /* 2KB */
@@ -500,7 +501,7 @@ static void zc_iovs(struct zc_cb_zc_state* state,
           state->rc = -ENOMEM;
         break;
       }
-      *rd = iovs[begin].iov_ptr + CI_MIN(iovs[begin].iov_len64,
+      *rd = iovs[begin].iov_ptr + CI_MIN(iovs[begin].iov_len,
                                          state->max_bytes),
       dst->buf = zc_remote_to_handle(rd);
     }

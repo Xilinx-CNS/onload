@@ -23,6 +23,7 @@
 
 #include <onload/extensions.h>
 #include <onload/extensions_zc.h>
+#include <onload/extensions_zc_hlrx.h>
 
 
 /* Helper for the zc functions which accept 'any' fd to refer to the stack
@@ -290,11 +291,7 @@ int onload_zc_query_rx_memregs(int fd, struct onload_zc_iovec* iov,
       /* We could be more generous here by collapsing contiguous regions in
        * to a single returned iov, but users aren't interested in that kind
        * of efficiency. If it ever gets done, note that typical allocation
-       * patterns cause sets to get mapped top-down.
-       * NB: the array indices here are those in
-       * onload_zc_iovec::rx_memreg_idx, so if the fill strategy changes in
-       * any way here then the callback call sites in udp_recv and tcp_recv
-       * need to change too. */
+       * patterns cause sets to get mapped top-down.  */
       for( i = 0; i < sets_n; ++i ) {
         iov[i].iov_len = PKTS_PER_SET * CI_CFG_PKT_BUF_SIZE;
         iov[i].iov_flags = 0;
