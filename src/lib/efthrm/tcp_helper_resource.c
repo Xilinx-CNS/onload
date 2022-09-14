@@ -988,6 +988,10 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
       return 0;
 
     ci_assert_ge(rxq, 0);
+    /* We can be here either with or without the stack lock, depending on what
+     * triggered the filter update. However, we are always called from oof
+     * with fm_outer_lock held, which protects our qix between looking it up
+     * and using it in the alloc. */
     qix = efct_vi_find_free_rxq(vi, rxq);
     if( qix == -EALREADY )
       return 0;
@@ -1003,9 +1007,14 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
 
     if( NI_OPTS(&trs->netif).int_driven ) {
       ci_bit_set(&trs->netif.state->evq_prime_deferred, intf_i);
-      ef_eplock_holder_set_flag(&trs->netif.state->lock,
-                                CI_EPLOCK_NETIF_NEED_POLL |
-                                CI_EPLOCK_NETIF_NEED_PRIME);
+      if( efab_tcp_helper_netif_lock_or_set_flags(trs,
+               OO_TRUSTED_LOCK_NEED_POLL | OO_TRUSTED_LOCK_NEED_PRIME,
+               CI_EPLOCK_NETIF_NEED_POLL | CI_EPLOCK_NETIF_NEED_PRIME, 0) ) {
+        ef_eplock_holder_set_flag(&trs->netif.state->lock,
+                                  CI_EPLOCK_NETIF_NEED_POLL |
+                                  CI_EPLOCK_NETIF_NEED_PRIME);
+        efab_tcp_helper_netif_unlock(trs, 0);
+      }
     }
   }
   return 0;
