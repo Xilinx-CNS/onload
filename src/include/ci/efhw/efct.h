@@ -73,7 +73,10 @@ struct efhw_nic_efct_evq {
   int txq;
 };
 
-#define EFCT_ETHERTYPE_MCAST_FILTER 0xFFFF
+#define EFCT_ETHERTYPE_IG_FILTER 0xFFFF
+
+#define EFCT_PROTO_UCAST_IG_FILTER 0x1
+#define EFCT_PROTO_MCAST_IG_FILTER 0x2
 
 /* Key type for all the efct_filter_set members. Careful of ordering of
  * members here: this struct is rigged so that prefix subsets are useful. When
@@ -159,6 +162,9 @@ struct efct_hw_filter {
   uint32_t ip;
 };
 
+#define EFCT_NIC_BLOCK_KERNEL_UNICAST 0x1
+#define EFCT_NIC_BLOCK_KERNEL_MULTICAST 0x2
+
 struct efhw_nic_efct {
   struct efhw_nic_efct_rxq rxq[CI_EFCT_MAX_RXQS];
   struct efhw_nic_efct_evq evq[CI_EFCT_MAX_EVQS];
@@ -173,7 +179,7 @@ struct efhw_nic_efct {
   struct efct_filter_set filters;
   struct efct_hw_filter hw_filters[MAX_EFCT_HW_FILTERS];
   struct mutex driver_filters_mtx;
-  bool multicast_block;
+  uint8_t block_kernel;
 #endif
 };
 
