@@ -25,8 +25,7 @@ LIB_SRCS	:=		\
 		$(EFVI_SRCS)	\
 		ef10_evtimer.c	\
 		logging.c \
-		checksum.c \
-		onload_version.c
+		checksum.c
 
 ifneq ($(DRIVER),1)
 LIB_SRCS	+=		\
@@ -92,8 +91,7 @@ make_oo_version: $(OO_VERSION_GEN) FORCE
 FORCE:
 
 $(OO_VERSION_HDR): make_oo_version
-
-$(objd)$(MMAKE_OBJ_PREFIX)onload_version.o: make_oo_version
+$(objd)$(MMAKE_OBJ_PREFIX)vi_init.o: $(OO_VERSION_HDR)
 
 
 ######################################################################

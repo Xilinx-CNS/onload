@@ -21,7 +21,7 @@ SANITIZE_CFLAGS := -static-libasan -static-libubsan -fsanitize=address \
 SANITIZER_OUTPUT_PREFIX := /tmp/cplane_sysunit-
 endif
 
-MMAKE_CFLAGS += $(CP_INTF_VER_CFLAGS)
+MMAKE_CFLAGS += $(CP_INTF_VER_CFLAGS) -I../../..
 
 ifeq ($(NO_CAPS),1)
 MMAKE_CFLAGS += -DNO_CAPS
@@ -39,7 +39,7 @@ CP_CLIENT_LIB_OBJ_DIR := cp_client_lib
 # This defines CLIENT_LIB_OBJS, which lists object files for the control plane
 # itself.
 # FIXME: include $(TOPPATH)/$(CURRENT)/$(CP_CLIENT_SRC_DIR)/client_lib_obj_build.mk
-CLIENT_LIB_OBJS := mib.o mib_fwd.o onload.o
+CLIENT_LIB_OBJS := mib.o mib_fwd.o onload.o onload_version.o
 SHIM_CLIENT_LIB_OBJS := $(patsubst %,$(CP_CLIENT_LIB_OBJ_DIR)/%,$(CLIENT_LIB_OBJS)) $(SHIM_OBJS)
 
 

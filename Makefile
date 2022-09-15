@@ -79,7 +79,7 @@ mkdirs:
 $(obj)/src/driver/linux_resource: $(AUTOCOMPAT) mkdirs
 $(obj)/src/lib/transport/ip: $(AUTOCOMPAT)
 $(obj)/src/lib/citools: $(AUTOCOMPAT)
-$(obj)/src/lib/cplane: $(AUTOCOMPAT)
+$(obj)/src/lib/cplane: $(AUTOCOMPAT) $(obj)/src/lib/ciul
 $(obj)/src/driver/linux_char: $(AUTOCOMPAT)
 $(obj)/src/driver/linux_char: $(obj)/src/lib/citools $(obj)/src/lib/ciul
 $(obj)/src/driver/linux_onload: $(obj)/src/lib/citools $(obj)/src/lib/ciul \

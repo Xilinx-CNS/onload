@@ -3,7 +3,7 @@
 TARGET		:= $(CPLANE_LIB)
 MMAKE_TYPE	:= LIB
 
-LIB_SRCS	:= mib.c mib_fwd.c services.c onload.c version.c
+LIB_SRCS	:= mib.c mib_fwd.c services.c onload.c version.c onload_version.c
 LIB_OBJS	:= $(LIB_SRCS:%.c=$(MMAKE_OBJ_PREFIX)%.o)
 
 ALL		:= $(TARGET)
@@ -30,7 +30,7 @@ ifdef MMAKE_USE_KBUILD
   EXTRA_CFLAGS += $(CP_INTF_VER_CFLAGS)
 else
   objd	:=
-  MMAKE_CFLAGS += $(CP_INTF_VER_CFLAGS)
+  MMAKE_CFLAGS += $(CP_INTF_VER_CFLAGS) -I../..
 endif
 
 ######################################################
