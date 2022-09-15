@@ -768,13 +768,14 @@ get_filter_class(int filter_id)
 static int
 do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
                  size_t hash_bits, size_t max_n, struct efct_filter_node* node,
-                 size_t node_len, bool allow_dups)
+                 struct efhw_nic_efct *efct, size_t node_len, bool allow_dups)
 {
   size_t key_len = node_len - offsetof(struct efct_filter_node, key_start);
   struct efct_filter_node* node_ptr;
   u32 hash = hash_filter_node(node, node_len);
   int bkt = hash_min(hash, hash_bits);
   int i;
+  bool is_duplicate = false;
 
   if( *table_n >= max_n )
     return -ENOSPC;
@@ -796,7 +797,9 @@ do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
         if( ! allow_dups )
           return -EEXIST;
         ++old->refcount;
-        return 0;
+        node->filter_id = old->filter_id;
+        is_duplicate = true;
+        break;
       }
     }
     if( ! id_dup )
@@ -805,12 +808,17 @@ do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
   if( ! i )
     return -ENOSPC;
 
-  node_ptr = kmalloc(node_len, GFP_KERNEL);
-  if( ! node_ptr )
-    return -ENOMEM;
-  memcpy(node_ptr, node, node_len);
-  hlist_add_head_rcu(&node_ptr->node, &table[bkt]);
-  ++*table_n;
+  if ( !is_duplicate ) {
+    node_ptr = kmalloc(node_len, GFP_KERNEL);
+    if( ! node_ptr )
+      return -ENOMEM;
+    memcpy(node_ptr, node, node_len);
+    hlist_add_head_rcu(&node_ptr->node, &table[bkt]);
+    ++*table_n;
+  }
+
+  if ( node->hw_filter >= 0 )
+    ++efct->hw_filters[node->hw_filter].refcount;
   return 0;
 }
 
@@ -830,9 +838,14 @@ static void do_filter_del(struct efhw_nic_efct *efct, int filter_id,
         if( node->filter_id == filter_id ) { \
           EFHW_ASSERT(efct->filters.F##_n > 0); \
           *hw_filter = node->hw_filter; \
-          hash_del_rcu(&node->node); \
-          --efct->filters.F##_n; \
-          kfree_rcu(node, free_list); \
+          if ( node->hw_filter >= 0 ) {\
+            --efct->hw_filters[node->hw_filter].refcount; \
+          } \
+          if ( --node->refcount == 0 ) { \
+            hash_del_rcu(&node->node); \
+            --efct->filters.F##_n; \
+            kfree_rcu(node, free_list); \
+          } \
           return; \
         } \
       } \
@@ -880,6 +893,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   memset(&node, 0, sizeof(node));
   node.hw_filter = -1;
   node.vlan = -1;
+  node.refcount = 1;
 
   if( no_vlan_flags == EFX_FILTER_MATCH_ETHER_TYPE ) {
     clas = FILTER_CLASS_ethertype;
@@ -956,7 +970,6 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
             efct->hw_filters[i].ip == node.u.ip4.lip &&
             efct->hw_filters[i].port == node.lport ) {
           node.hw_filter = i;
-          ++efct->hw_filters[i].refcount;
           break;
         }
       }
@@ -965,7 +978,6 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       /* If we have no free hw filters, that's fine: we'll just use rxq0 */
       if( avail >= 0 ) {
         node.hw_filter = avail;
-        efct->hw_filters[avail].refcount = 1;
         efct->hw_filters[avail].proto = node.proto;
         efct->hw_filters[avail].ip = node.u.ip4.lip;
         efct->hw_filters[avail].port = node.lport;
@@ -978,13 +990,11 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     if( clas == FILTER_CLASS_##F ) { \
       rc = do_filter_insert(clas, efct->filters.F, &efct->filters.F##_n, \
                             HASH_BITS(efct->filters.F), MAX_ALLOWED_##F, \
-                            &node, node_len, clas != FILTER_CLASS_full_match); \
+                            &node, efct, node_len, clas != FILTER_CLASS_full_match); \
     }
   FOR_EACH_FILTER_CLASS(ACTION_DO_FILTER_INSERT)
 
   if( rc < 0 ) {
-    if( node.hw_filter >= 0 )
-      --efct->hw_filters[node.hw_filter].refcount;
     mutex_unlock(&efct->driver_filters_mtx);
     return rc;
   }
@@ -997,8 +1007,6 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 
   if( rc < 0 ) {
     int unused;
-    if( node.hw_filter >= 0 )
-      --efct->hw_filters[node.hw_filter].refcount;
     do_filter_del(efct, node.filter_id, &unused);
   }
   else {
@@ -1032,7 +1040,7 @@ efct_filter_remove(struct efhw_nic *nic, int filter_id)
   mutex_lock(&efct->driver_filters_mtx);
   do_filter_del(efct, filter_id, &hw_filter);
   if( hw_filter >= 0 ) {
-    if( --efct->hw_filters[hw_filter].refcount == 0 )
+    if( efct->hw_filters[hw_filter].refcount == 0 )
       drv_id = efct->hw_filters[hw_filter].drv_id;
   }
 
