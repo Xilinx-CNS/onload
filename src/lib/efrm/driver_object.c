@@ -393,7 +393,7 @@ int efrm_client_get_by_dev(const struct net_device *dev,
 	if (rnic == NULL) {
 		kfree(client);
 #if ! CI_HAVE_EFCT_AUX
-		if (dev_is_pci(dev->dev.parent)) {
+		if (dev && dev->dev.parent && dev_is_pci(dev->dev.parent)) {
 			struct pci_dev* pci_dev = to_pci_dev(dev->dev.parent);
 			if (pci_dev->vendor == 0x10ee && pci_dev->device == 0x5084) {
 				EFRM_ERR("%s: device %s (ifindex %d) is an X3, "
