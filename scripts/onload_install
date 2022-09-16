@@ -762,6 +762,10 @@ if $build; then
     logprog "Using IBM Advanced Toolchain at $ppc_at"
     buildargs="$buildargs --ppc-at $ppc_at"
   fi
+  if $nosfc; then
+    logprog "Building Onload without sfc driver"
+    buildargs="$buildargs --no-sfc"
+  fi
   logprog "Building Onload."
   "$bin/onload_build" $buildargs ||
     fail "ERROR: Build failed.  Not installing."

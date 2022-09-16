@@ -32,6 +32,8 @@ usage() {
   err "  --ppc-at <path>             - Path to IBM Advanced Toolchain install"
   fi
   err "  --build-profile             - Specify a build profile"
+  err "  --no-sfc                    - Do not build sfc module (pass HAVE_SFC=0"\
+                                       "to the build system)"
   err
   exit 1
 }
@@ -80,6 +82,7 @@ while [ $# -gt 0 ]; do
   --build-profile)   [ $# -gt 1 ] || usage; build_profile="$2"; shift;;
   --build-profile=*) build_profile=${1#--build-profile=};;
   --cc)  [ $# -gt 1 ] || usage; use_cc="CC=$2"; export use_cc; shift;;
+  --no-sfc)     export HAVE_SFC=0;;
   -*)           usage;;
   *)            break;;
   esac
