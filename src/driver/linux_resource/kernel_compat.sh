@@ -152,6 +152,8 @@ EFRM_TASK_HAS_CPUMASK		member	struct_task_struct	cpus_mask	include/linux/sched.h
 
 EFRM_HAVE_LOWCASE_PDE_DATA symbol pde_data include/linux/proc_fs.h
 EFRM_HAVE_NETIF_RX_NI symbol netif_rx_ni include/linux/netdevice.h
+
+EFRM_HAVE_MODULE_MUTEX		symbol	module_mutex	include/linux/module.h
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

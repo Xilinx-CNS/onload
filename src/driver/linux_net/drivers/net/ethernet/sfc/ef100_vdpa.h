@@ -117,6 +117,7 @@ enum ef100_vdpa_mac_filter_type {
  * @last_avail_idx: last available index of the vring
  * @last_used_idx: last used index of the vring
  * @doorbell_offset: doorbell offset
+ * @doorbell_offset_valid: true if @doorbell_offset is updated
  * @vring_type: type of vring created
  * @vring_ctx: vring context information
  * @msix_name: device name for vring irq handler
@@ -134,6 +135,7 @@ struct ef100_vdpa_vring_info {
 	u32 last_avail_idx;
 	u32 last_used_idx;
 	u32 doorbell_offset;
+	bool doorbell_offset_valid;
 	enum ef100_vdpa_vq_type vring_type;
 	struct efx_vring_ctx *vring_ctx;
 	char msix_name[EF100_VDPA_MAX_MSIX_NAME_SIZE];
@@ -227,7 +229,7 @@ void ef100_vdpa_irq_vectors_free(void *data);
 int ef100_vdpa_free_buffer(struct ef100_vdpa_nic *vdpa_nic,
 			   struct efx_buffer *buf);
 void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic);
-void ef100_reset_vdpa(struct efx_nic *efx);
+int ef100_vdpa_reset(struct vdpa_device *vdev);
 bool ef100_vdpa_dev_in_use(struct efx_nic *efx);
 int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic);
 int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);

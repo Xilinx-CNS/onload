@@ -809,7 +809,9 @@ static struct attribute *efx_pps_device_attrs[] = {
 	EFX_PPS_ATTR_PTR(pps_off_mean),
 	NULL,
 };
-
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_KOBJECT_DEFAULT_GROUPS)
+ATTRIBUTE_GROUPS(efx_pps_device);
+#endif
 
 /* Expose maximum PPB freq adjustment as a device attribute, allowing
  * applications to use correct freq adjustment limit per NIC */
@@ -847,7 +849,11 @@ static struct kobj_type efx_sysfs_ktype = {
 	.release = ptp_boardattr_release,
 	/* May need to cast away const */
 	.sysfs_ops = (struct sysfs_ops *)&efx_sysfs_ops,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_KOBJECT_DEFAULT_GROUPS)
+	.default_groups = efx_pps_device_groups,
+#else
 	.default_attrs = efx_pps_device_attrs,
+#endif
 };
 
 #endif
@@ -2541,8 +2547,8 @@ static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 	struct pps_source_info efx_pps_info = {
 		.name         = "sfc",
 		.path         = "",
-		.mode         = PPS_CAPTUREASSERT | PPS_OFFSETASSERT |
-				PPS_CANWAIT | PPS_TSFMT_TSPEC,
+		.mode         = PPS_CAPTUREASSERT | PPS_OFFSETASSERT | PPS_CANWAIT |
+		                PPS_TSFMT_TSPEC,
 		.echo         = NULL,
 		.owner        = THIS_MODULE,
 	};
@@ -2566,8 +2572,10 @@ static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 	ptp->pps_data = pps;
 
 	if (efx_phc_exposed(ptp->efx)) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 		snprintf(efx_pps_info.name, PPS_MAX_NAME_LEN, "ptp%d.ext",
 			 ptp_clock_index(ptp->phc_clock));
+#endif
 
 		pps->device = pps_register_source(&efx_pps_info,
 						  PPS_CAPTUREASSERT |

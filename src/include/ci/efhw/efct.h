@@ -63,12 +63,14 @@ struct efhw_nic_efct_rxq {
   uint64_t time_sync;
 };
 
+#define EFCT_EVQ_NO_TXQ -1
 struct efhw_nic_efct_evq {
   struct efhw_nic *nic;
   atomic_t queues_flushing;
   struct delayed_work check_flushes;
   void *base;
   unsigned capacity;
+  int txq;
 };
 
 #define EFCT_ETHERTYPE_MCAST_FILTER 0xFFFF

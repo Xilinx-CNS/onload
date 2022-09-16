@@ -239,7 +239,7 @@ static void irq_vring_fini(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 
 static bool can_create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 {
-	if (vdpa_nic->vring[idx].vring_state & EF100_VRING_CONFIGURED &&
+	if (vdpa_nic->vring[idx].vring_state == EF100_VRING_CONFIGURED &&
 	    vdpa_nic->status & VIRTIO_CONFIG_S_DRIVER_OK &&
 	    !vdpa_nic->vring[idx].vring_created) {
 #ifdef EFX_NOT_UPSTREAM
@@ -341,6 +341,7 @@ static int delete_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 {
 	struct efx_vring_dyn_cfg vring_dyn_cfg;
+	struct efx_vring_ctx *vring_ctx;
 	struct efx_vring_cfg vring_cfg;
 	u32 vector;
 	u32 offset;
@@ -355,6 +356,7 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 			return rc;
 		}
 	}
+	vring_ctx = vdpa_nic->vring[idx].vring_ctx;
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdpa_nic->vdpa_dev.dev,
 		 "%s: Called for %u\n", __func__, idx);
@@ -379,27 +381,28 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 	vring_dyn_cfg.avail_idx = vdpa_nic->vring[idx].last_avail_idx;
 	vring_dyn_cfg.used_idx = vdpa_nic->vring[idx].last_used_idx;
 
-	rc = efx_vdpa_vring_create(vdpa_nic->vring[idx].vring_ctx, &vring_cfg,
-				   &vring_dyn_cfg);
+	rc = efx_vdpa_vring_create(vring_ctx, &vring_cfg, &vring_dyn_cfg);
 	if (rc != 0) {
 		dev_err(&vdpa_nic->vdpa_dev.dev,
 			"%s: Queue create failed index:%u Err:%d\n",
 			__func__, idx, rc);
 		goto err_vring_create;
 	}
-	rc = efx_vdpa_get_doorbell_offset(vdpa_nic->vring[idx].vring_ctx,
-					  &offset);
-	if (rc != 0) {
-		dev_err(&vdpa_nic->vdpa_dev.dev,
-			"%s: Get Doorbell offset failed for index:%u Err:%d\n",
-			__func__, idx, rc);
-		goto err_get_doorbell_offset;
-	}
 	vdpa_nic->vring[idx].vring_created = true;
-	vdpa_nic->vring[idx].doorbell_offset = offset;
+	if (!vdpa_nic->vring[idx].doorbell_offset_valid) {
+		rc = efx_vdpa_get_doorbell_offset(vring_ctx, &offset);
+		if (rc != 0) {
+			dev_err(&vdpa_nic->vdpa_dev.dev,
+				"%s: Get Doorbell offset failed for index:%u Err:%d\n",
+				__func__, idx, rc);
+			goto err_get_doorbell_offset;
+		}
+		vdpa_nic->vring[idx].doorbell_offset = offset;
+		vdpa_nic->vring[idx].doorbell_offset_valid = true;
+	}
 
 	/* Configure filters on rxq 0 */
-	if ((idx == 0) && (vdpa_nic->filter_cnt == 0)) {
+	if (idx == 0) {
 		rc = ef100_vdpa_filter_configure(vdpa_nic);
 		if (rc < 0) {
 			dev_err(&vdpa_nic->vdpa_dev.dev,
@@ -419,9 +422,11 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 
 err_filter_configure:
 	ef100_vdpa_filter_remove(vdpa_nic);
+	vdpa_nic->vring[idx].doorbell_offset_valid = false;
 err_get_doorbell_offset:
 	efx_vdpa_vring_destroy(vdpa_nic->vring[idx].vring_ctx,
 			       &vring_dyn_cfg);
+	vdpa_nic->vring[idx].vring_created = false;
 err_vring_create:
 	irq_vring_fini(vdpa_nic, idx);
 err_irq_vring_init:
@@ -461,20 +466,21 @@ void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
 }
 
 /* May be called under the rtnl lock */
-void ef100_reset_vdpa(struct efx_nic *efx)
+int ef100_vdpa_reset(struct vdpa_device *vdev)
 {
-	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
 
 	/* vdpa device can be deleted anytime but the bar_config
 	 * could still be vdpa and hence efx->state would be STATE_VDPA.
 	 * Accordingly, ensure vdpa device exists before reset handling
 	 */
 	if (!vdpa_nic)
-		return;
+		return -ENODEV;
 
 	mutex_lock(&vdpa_nic->lock);
 	reset_vdpa_device(vdpa_nic);
 	mutex_unlock(&vdpa_nic->lock);
+	return 0;
 }
 
 static int start_vdpa_device(struct ef100_vdpa_nic *vdpa_nic)
@@ -743,7 +749,10 @@ static struct vdpa_notification_area
 {
 	struct vdpa_notification_area notify_area = {0, 0};
 	struct ef100_vdpa_nic *vdpa_nic;
+	struct efx_vring_ctx *vring_ctx;
 	struct efx_nic *efx;
+	int ret = 0;
+	u32 offset;
 
 	vdpa_nic = get_vdpa_nic(vdev);
 	if (idx >= (vdpa_nic->max_queue_pairs * 2)) {
@@ -751,13 +760,32 @@ static struct vdpa_notification_area
 		goto end;
 	}
 	mutex_lock(&vdpa_nic->lock);
-	if (!vdpa_nic->vring[idx].vring_created) {
-		dev_err(&vdev->dev, "%s: Queue Id %u not created\n", __func__, idx);
-		goto unlock_end;
+	vring_ctx = vdpa_nic->vring[idx].vring_ctx;
+	if (!vring_ctx) {
+		ret = create_vring_ctx(vdpa_nic, idx);
+		if (ret != 0) {
+			dev_err(&vdpa_nic->vdpa_dev.dev,
+				"%s: Queue Context failed index:%u Err:%d\n",
+				__func__, idx, ret);
+			goto err_create_vring_ctx;
+		}
+		vring_ctx = vdpa_nic->vring[idx].vring_ctx;
 	}
+	if (!vdpa_nic->vring[idx].doorbell_offset_valid) {
+		ret = efx_vdpa_get_doorbell_offset(vring_ctx, &offset);
+		if (ret != 0) {
+			dev_err(&vdpa_nic->vdpa_dev.dev,
+				"%s: Get Doorbell offset failed for index:%u Err:%d\n",
+				__func__, idx, ret);
+			goto err_get_doorbell_off;
+		}
+		vdpa_nic->vring[idx].doorbell_offset = offset;
+		vdpa_nic->vring[idx].doorbell_offset_valid = true;
+	}
+
 	efx = vdpa_nic->efx;
-	notify_area.addr = (uintptr_t)efx_mem(efx,
-					      vdpa_nic->vring[idx].doorbell_offset);
+	notify_area.addr = (uintptr_t)(efx->membase_phys +
+				vdpa_nic->vring[idx].doorbell_offset);
 
 	/* VDPA doorbells are at a stride of VI/2
 	 * One VI stride is shared by both rx & tx doorbells
@@ -768,7 +796,12 @@ static struct vdpa_notification_area
 	dev_info(&vdev->dev, "%s: Queue Id:%u Notification addr:0x%x size:0x%x",
 		 __func__, idx, (u32)notify_area.addr, (u32)notify_area.size);
 #endif
-unlock_end:
+	mutex_unlock(&vdpa_nic->lock);
+	return notify_area;
+
+err_get_doorbell_off:
+	delete_vring_ctx(vdpa_nic, idx);
+err_create_vring_ctx:
 	mutex_unlock(&vdpa_nic->lock);
 end:
 	return notify_area;
@@ -1042,7 +1075,26 @@ static void ef100_vdpa_get_config(struct vdpa_device *vdev, unsigned int offset,
 static void ef100_vdpa_set_config(struct vdpa_device *vdev, unsigned int offset,
 				  const void *buf, unsigned int len)
 {
-	dev_info(&vdev->dev, "%s: This callback is not supported\n", __func__);
+	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
+
+#ifdef EFX_NOT_UPSTREAM
+	dev_info(&vdev->dev, "%s: offset:%u len:%u config size:%lu\n",
+		 __func__, offset, len, sizeof(vdpa_nic->net_config));
+#endif
+	if ((offset + len) > sizeof(vdpa_nic->net_config)) {
+		dev_err(&vdev->dev,
+			"%s: Offset + len exceeds config size\n", __func__);
+		return;
+	}
+
+	memcpy(&vdpa_nic->net_config + offset, buf, len);
+
+	dev_dbg(&vdpa_nic->vdpa_dev.dev,
+		 "%s: Status:%u mac address:%pM Max virtque pairs:%u MTU:%u\n",
+		 __func__, vdpa_nic->net_config.status,
+		 vdpa_nic->net_config.mac,
+		 vdpa_nic->net_config.max_virtqueue_pairs,
+		 vdpa_nic->net_config.mtu);
 }
 
 static bool is_iova_overlap(u64 iova1, u64 size1, u64 iova2, u64 size2)
@@ -1051,8 +1103,11 @@ static bool is_iova_overlap(u64 iova1, u64 size1, u64 iova2, u64 size2)
 }
 
 static int ef100_vdpa_dma_map(struct vdpa_device *vdev,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_ASID_NAME_USEVA_PARAMS)
+			      unsigned int asid,
+#endif
 			      u64 iova, u64 size,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_DMA_MAP_OPAQUE_PARAM)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_DMA_MAP_OPAQUE_PARAM) || defined(EFX_HAVE_VDPA_ALLOC_ASID_NAME_USEVA_PARAMS)
 			      u64 pa, u32 perm, void *opaque)
 #else
 			      u64 pa, u32 perm)
@@ -1130,7 +1185,11 @@ fail:
         return rc;
 }
 
-static int ef100_vdpa_dma_unmap(struct vdpa_device *vdev, u64 iova, u64 size)
+static int ef100_vdpa_dma_unmap(struct vdpa_device *vdev,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_ALLOC_ASID_NAME_USEVA_PARAMS)
+				unsigned int asid,
+#endif
+				u64 iova, u64 size)
 {
 	struct ef100_vdpa_nic *vdpa_nic = NULL;
 	int rc;
@@ -1210,6 +1269,9 @@ const struct vdpa_config_ops ef100_vdpa_config_ops = {
 	.get_vendor_id	     = ef100_vdpa_get_vendor_id,
 	.get_status	     = ef100_vdpa_get_status,
 	.set_status	     = ef100_vdpa_set_status,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_RESET)
+	.reset               = ef100_vdpa_reset,
+#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GET_CONFIG_SIZE)
 	.get_config_size     = ef100_vdpa_get_config_size,
 #endif

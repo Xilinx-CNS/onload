@@ -145,9 +145,26 @@ void *efrm_find_ksym(const char *name)
 
 	t.name = name;
 	t.addr = NULL;
+
+	/* In kernel versions earlier than 5.12 kallsyms_on_each_symbol could call
+	* module_kallsyms_on_each_symbol which would require module_mutex.
+	*
+	* Since 5.12 kallsyms_on_each_symbol and module_kallsyms_on_each_symbol
+	* have been separated, and module_kallsyms_on_each_symbol now acquires the
+	* mutex internally. A subsequent change resulted in the mutex no longer
+	* being available.
+	*
+	* For details see:
+	* https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit?id=013c1667cf78c1d847152f7116436d82dcab3db4
+	* https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit?id=922f2a7c822bf76dffb218331bd95b1eea3cf637
+	*/
+	#ifdef EFRM_HAVE_MODULE_MUTEX
 	mutex_lock(&module_mutex);
+	#endif  /* EFRM_HAVE_MODULE_MUTEX */
 	kallsyms_on_each_symbol(efrm_check_ksym, &t);
+	#ifdef EFRM_HAVE_MODULE_MUTEX
 	mutex_unlock(&module_mutex);
+	#endif  /* EFRM_HAVE_MODULE_MUTEX */
 	return t.addr;
 }
 EXPORT_SYMBOL(efrm_find_ksym);

@@ -12,8 +12,9 @@
 #include <ci/efhw/checks.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/bitfield.h>
+#include <ci/net/ipv6.h>
+#include <ci/net/ipv4.h>
 #include <net/sock.h>
-#include <net/ipv6.h>
 #include <ci/tools/sysdep.h>
 #include <ci/tools/bitfield.h>
 #include <uapi/linux/ethtool.h>
@@ -372,14 +373,19 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  struct efhw_nic_efct_evq *efct_evq = &efct->evq[txq_params->evq];
   struct xlnx_efct_txq_params params = {
     .evq = txq_params->evq,
+    .qid = efct_evq->txq,
     .label = txq_params->tag,
   };
   int rc;
 
+  EFHW_ASSERT(params.qid != EFCT_EVQ_NO_TXQ);
+
   EFCT_PRE(dev, edev, cli, nic, rc);
-  rc = edev->ops->alloc_txq(cli, &params);
+  rc = edev->ops->init_txq(cli, &params);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   if( rc >= 0 ) {
@@ -1125,7 +1131,7 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
       node.proto = pkt[l3_off + 9];
       memcpy(&node.u.ip4.rip, pkt + l3_off + 12, 4);
       memcpy(&node.u.ip4.lip, pkt + l3_off + 16, 4);
-      is_mcast = ipv4_is_multicast(node.u.ip4.rip);
+      is_mcast = CI_IP_IS_MULTICAST(node.u.ip4.rip);
       semi_wild_node_len = offsetof(struct efct_filter_node, u.ip4.rip);
       full_match_node_len = offsetof(struct efct_filter_node, u.ip4.rip) +
                             sizeof(node.u.ip4.rip);
@@ -1143,7 +1149,7 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
       node.proto = pkt[l3_off + 6];
       memcpy(node.u.ip6.rip, pkt + l3_off + 8, 16);
       memcpy(node.u.ip6.lip, pkt + l3_off + 24, 16);
-      is_mcast = ipv6_addr_is_multicast((struct in6_addr *) &node.u.ip6.rip);
+      is_mcast = CI_IP6_IS_MULTICAST(node.u.ip6.rip);
       for( i = 0; i < 8 /* arbitrary cap */; ++i) {
         if( ! is_ipv6_extension_hdr(node.proto) || pkt_len < l4_off + 8 )
           break;

@@ -2,7 +2,7 @@
 # X-SPDX-Copyright-Text: (c) 2005-2019 Solarflare Communications Inc
 
 SUBDIRS := net
-DRIVER_SUBDIRS := bus net
+DRIVER_SUBDIRS := net
 
 all:
 	+@$(MakeSubdirs)

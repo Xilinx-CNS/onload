@@ -91,8 +91,8 @@ static int efx_mcdi_phy_stats_init(struct efx_nic *efx)
 	BUILD_BUG_ON(ARRAY_SIZE(debug_entries) != MC_CMD_PHY_NSTATS + 1);
 
 	/* Allocata a DMA buffer for phy stats */
-	phy_data->stats = pci_alloc_consistent(efx->pci_dev, EFX_PAGE_SIZE,
-					       &phy_data->stats_addr);
+	phy_data->stats = dma_alloc_coherent(&efx->pci_dev->dev, EFX_PAGE_SIZE,
+					     &phy_data->stats_addr, GFP_ATOMIC);
 	if (phy_data->stats == NULL)
 		return -ENOMEM;
 
@@ -107,8 +107,8 @@ static int efx_mcdi_phy_stats_init(struct efx_nic *efx)
 	return 0;
 
 fail:
-	pci_free_consistent(efx->pci_dev, EFX_PAGE_SIZE, phy_data->stats,
-			    phy_data->stats_addr);
+	dma_free_coherent(&efx->pci_dev->dev, EFX_PAGE_SIZE, phy_data->stats,
+			  phy_data->stats_addr);
 
 	return rc;
 }
@@ -119,8 +119,8 @@ static void efx_mcdi_phy_stats_fini(struct efx_nic *efx)
 
 	efx_trim_debugfs_port(efx, debug_entries);
 	if (phy_data)
-		pci_free_consistent(efx->pci_dev, EFX_PAGE_SIZE,
-				    phy_data->stats, phy_data->stats_addr);
+		dma_free_coherent(&efx->pci_dev->dev, EFX_PAGE_SIZE,
+				  phy_data->stats, phy_data->stats_addr);
 }
 
 #endif
@@ -783,15 +783,6 @@ int efx_mcdi_phy_probe(struct efx_nic *efx)
 	efx->phy_data = phy_data;
 	efx->phy_type = phy_data->type;
 	strscpy(efx->phy_name, phy_data->name, sizeof(efx->phy_name));
-
-	efx->mdio_bus = phy_data->channel;
-	efx->mdio.prtad = phy_data->port;
-	efx->mdio.mmds = phy_data->mmd_mask & ~(1 << MC_CMD_MMD_CLAUSE22);
-	efx->mdio.mode_support = 0;
-	if (phy_data->mmd_mask & (1 << MC_CMD_MMD_CLAUSE22))
-		efx->mdio.mode_support |= MDIO_SUPPORTS_C22;
-	if (phy_data->mmd_mask & ~(1 << MC_CMD_MMD_CLAUSE22))
-		efx->mdio.mode_support |= MDIO_SUPPORTS_C45 | MDIO_EMULATE_C22;
 
 	caps = ld_caps = lp_caps = MCDI_DWORD(outbuf, GET_LINK_OUT_CAP);
 #ifdef EFX_NOT_UPSTREAM
@@ -1880,10 +1871,6 @@ void efx_mcdi_phy_get_settings(struct efx_nic *efx, struct ethtool_cmd *ecmd)
 	ecmd->phy_address = phy_cfg->port;
 	ecmd->transceiver = XCVR_INTERNAL;
 	ecmd->autoneg = !!(efx->link_advertising[0] & ADVERTISED_Autoneg);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_MDIO_SUPPORT)
-	ecmd->mdio_support = (efx->mdio.mode_support &
-			      (MDIO_SUPPORTS_C45 | MDIO_SUPPORTS_C22));
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_ETHTOOL_LP_ADVERTISING)
 	BUILD_BUG_ON(MC_CMD_GET_LINK_IN_LEN != 0);
@@ -1918,8 +1905,6 @@ void efx_mcdi_phy_get_ksettings(struct efx_nic *efx,
 	base->autoneg = efx->link_advertising[0] & ADVERTISED_Autoneg ?
 							AUTONEG_ENABLE :
 							AUTONEG_DISABLE;
-	base->mdio_support = (efx->mdio.mode_support &
-			      (MDIO_SUPPORTS_C45 | MDIO_SUPPORTS_C22));
 	mcdi_to_ethtool_linkset(efx, phy_cfg->media, phy_cfg->supported_cap,
 				out->link_modes.supported);
 	memcpy(out->link_modes.advertising, efx->link_advertising,

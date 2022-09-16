@@ -46,57 +46,6 @@ static int major;
 module_param(major, int, 0444);
 MODULE_PARM_DESC(major, "char device major number to use");
 
-#ifdef EFX_NOT_EXPORTED
-
-static int efx_ioctl_mdio(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	int read = data->mdio.read;
-	int clause45 = data->mdio.clause45;
-	int rc;
-
-	if (data->mdio.prt == -1)
-		data->mdio.prt = efx->mdio.prtad;
-
-	if (clause45) {
-		if (read) {
-			rc = efx->mdio.mdio_read(efx->net_dev,
-						 data->mdio.prt,
-						 data->mdio.dev,
-						 data->mdio.addr);
-			if (rc >= 0) {
-				data->mdio.value = (__u32) rc;
-				rc = 0;
-			}
-		} else {
-			rc = efx->mdio.mdio_write(efx->net_dev,
-						  data->mdio.prt,
-						  data->mdio.dev,
-						  data->mdio.addr,
-						  data->mdio.value);
-		}
-	} else {
-		if (read) {
-			rc = efx->mdio.mdio_read(efx->net_dev,
-						 data->mdio.prt,
-						 MDIO_DEVAD_NONE,
-						 data->mdio.dev);
-			if (rc >= 0) {
-				data->mdio.value = (__u32) rc;
-				rc = 0;
-			}
-		} else {
-			rc = efx->mdio.mdio_write(efx->net_dev,
-						  data->mdio.prt,
-						  MDIO_DEVAD_NONE,
-						  data->mdio.dev,
-						  data->mdio.value);
-		}
-	}
-	return rc;
-}
-
-#endif /* EFX_NOT_EXPORTED */
-
 static int efx_ioctl_do_mcdi_old(struct efx_nic *efx, union efx_ioctl_data *data)
 {
 	struct efx_mcdi_request *req = &data->mcdi_request;
@@ -368,12 +317,6 @@ int efx_private_ioctl(struct efx_nic *efx, u16 cmd,
 		return rc;
 
 	switch (cmd) {
-#ifdef EFX_NOT_EXPORTED
-	case EFX_MDIO:
-		size = sizeof(data->mdio);
-		op = efx_ioctl_mdio;
-		break;
-#endif
 	case EFX_MCDI_REQUEST:
 		size = sizeof(data->mcdi_request);
 		op = efx_ioctl_do_mcdi_old;

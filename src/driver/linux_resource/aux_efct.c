@@ -316,11 +316,13 @@ static int efct_devtype_init(struct xlnx_efct_device *edev,
 
 static int efct_resource_init(struct xlnx_efct_device *edev,
                               struct xlnx_efct_client *client,
+                              struct efhw_nic_efct *efct,
                               struct vi_resource_dimensions *res_dim)
 {
   union xlnx_efct_param_value val;
   int rc;
   int i;
+  int n_txqs;
 
   rc = edev->ops->get_param(client, XLNX_EFCT_NIC_RESOURCES, &val);
   if( rc < 0 )
@@ -329,6 +331,13 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   res_dim->vi_min = val.nic_res.evq_min;
   res_dim->vi_lim = val.nic_res.evq_lim;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
+
+  for( i = 0; i < CI_EFCT_MAX_EVQS; i++ )
+    efct->evq[i].txq = EFCT_EVQ_NO_TXQ;
+
+  n_txqs = val.nic_res.txq_lim - val.nic_res.txq_min;
+  for( i = 0; i < n_txqs && val.nic_res.evq_min + i < CI_EFCT_MAX_EVQS; i++ )
+    efct->evq[val.nic_res.evq_min + i].txq = val.nic_res.txq_min + i;
 
   rc = edev->ops->get_param(client, XLNX_EFCT_IRQ_RESOURCES, &val);
   if( rc < 0 )
@@ -402,7 +411,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail2;
 
-  rc = efct_resource_init(edev, client, &res_dim);
+  rc = efct_resource_init(edev, client, efct, &res_dim);
   if( rc < 0 )
     goto fail2;
 

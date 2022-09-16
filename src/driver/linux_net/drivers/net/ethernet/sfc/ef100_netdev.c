@@ -352,13 +352,13 @@ int ef100_net_alloc(struct efx_nic *efx)
 		rc = efx_nic_init_interrupt(efx);
 		if (rc)
 			return rc;
-		efx_set_interrupt_affinity(efx, true);
+		efx_set_interrupt_affinity(efx);
 	}
 #else
 	rc = efx_nic_init_interrupt(efx);
 	if (rc)
 		return rc;
-	efx_set_interrupt_affinity(efx, true);
+	efx_set_interrupt_affinity(efx);
 #endif
 
 	rc = efx_enable_interrupts(efx);
@@ -824,6 +824,7 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 	unregister_netdevice_notifier(&efx->netdev_notifier);
 	unregister_netevent_notifier(&efx->netevent_notifier);
 
+	efx_ef100_fini_reps(efx);
 	ef100_unregister_netdev(efx);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
@@ -832,7 +833,6 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 	rtnl_unlock();
 #endif
 
-	efx_ef100_fini_reps(efx);
 	if (!efx->type->is_vf) {
 #if defined(CONFIG_SFC_SRIOV)
 		efx_ef100_pci_sriov_disable(efx, true);
@@ -896,11 +896,14 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	net_dev->hw_enc_features |= efx->type->offload_features;
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_MAX_SEGS)
+#if !defined(EFX_HAVE_GSO_MAX_SEGS)
+	if (!READ_ONCE(net_dev->tso_max_segs))
+#else
 	if (!READ_ONCE(net_dev->gso_max_segs))
-		netif_set_gso_max_segs(net_dev,
+#endif
+		netif_set_tso_max_segs(net_dev,
 				       ESE_EF100_DP_GZ_TSO_MAX_HDR_NUM_SEGS_DEFAULT);
 #endif
-	efx->mdio.dev = net_dev;
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	efx_dl_probe(efx);
@@ -997,6 +1000,9 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 			  "Failed to register netevent notifier, rc=%d\n", rc);
 		goto fail;
 	}
+
+	if (!efx->type->is_vf)
+		efx_ef100_init_reps(efx);
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
