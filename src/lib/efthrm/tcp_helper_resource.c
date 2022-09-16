@@ -1005,6 +1005,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     }
     efct_vi_start_rxq(vi, qix);
 
+#if ! CI_CFG_UL_INTERRUPT_HELPER
     if( NI_OPTS(&trs->netif).int_driven ) {
       ci_bit_set(&trs->netif.state->evq_prime_deferred, intf_i);
       if( efab_tcp_helper_netif_lock_or_set_flags(trs,
@@ -1016,6 +1017,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
         efab_tcp_helper_netif_unlock(trs, 0);
       }
     }
+#endif
   }
   return 0;
 }
