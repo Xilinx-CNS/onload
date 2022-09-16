@@ -60,6 +60,32 @@ static int do_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
                                            budget);
 }
 
+static void efct_reset_down(struct efhw_nic_efct *efct)
+{
+  struct efhw_nic *nic = efct->nic;
+
+  EFRM_NOTICE("%s: %s", __func__, dev_name(nic->dev));
+
+  efrm_nic_reset_suspend(efct->nic);
+  ci_atomic32_or(&efct->nic->resetting, NIC_RESETTING_FLAG_RESET);
+}
+
+static void efct_reset_up(struct efhw_nic_efct *efct, bool success)
+{
+  struct efhw_nic *nic = efct->nic;
+
+  EFRM_NOTICE("%s: %s success=%d", __func__, dev_name(nic->dev), success);
+
+  /* TODO EFCT Add support for ef_vi reset injection */
+  efrm_nic_flush_all_queues(nic, EFRM_FLUSH_QUEUES_F_NOHW);
+
+  if( success )
+    nic->resetting = 0;
+
+  efhw_nic_post_reset(nic);
+  efrm_nic_post_reset(nic);
+}
+
 static int efct_handle_event(void *driver_data,
                              const struct xlnx_efct_event *event, int budget)
 {
@@ -107,8 +133,12 @@ static int efct_handle_event(void *driver_data,
       return spent;
     }
 
-    case XLNX_EVENT_RESET_UP:
     case XLNX_EVENT_RESET_DOWN:
+      efct_reset_down(efct);
+      break;
+    case XLNX_EVENT_RESET_UP:
+      efct_reset_up(efct, event->value);
+      break;
     case XLNX_EVENT_RX_FLUSH:
       return -ENOSYS;
   }
