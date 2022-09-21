@@ -13,6 +13,8 @@
 #include "logging.h"
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/common.h>
+#define ONLOAD_BUILD_PROFILE "ef_vi"
+#include "onload_version.h"
 
 #ifndef __KERNEL__
 #include <limits.h>
@@ -100,7 +102,7 @@ void ef_vi_set_tx_push_threshold(ef_vi* vi, unsigned threshold)
 
 const char* ef_vi_version_str(void)
 {
-  return onload_version;
+  return ONLOAD_VERSION;
 }
 
 
