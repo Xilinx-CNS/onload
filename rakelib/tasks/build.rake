@@ -72,6 +72,7 @@ namespace :build do
 
   task header_deps: [:user_build_tree, :user_compiler_setup] do
     Dir.chdir($user_build_dir) do
+      sh 'onload_version_gen include/onload_version.h'
       Onload::Utils.make('include')
     end
   end
