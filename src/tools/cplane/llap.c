@@ -2,12 +2,22 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2017-2020 Xilinx, Inc. */
 
 #include <sys/syscall.h>
-#include <linux/bpf.h>
 #include <ci/efhw/common.h>
 
 #include "private.h"
 #include <cplane/cplane.h>
 #include <cplane/ioctl.h>
+
+/* We'd better type `#ifdef BPF_PROG_GET_FD_BY_ID`, but it is a enum, not
+ * a macro.  So we check the kernel version  we are compiling with.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0)
+#define DO_XDP 1
+#endif
+
+#ifdef DO_XDP
+#include <linux/bpf.h>
+#endif
 
 static void
 __cp_llap_notify_oof(struct cp_session* s, ci_ifid_t ifindex,
@@ -332,13 +342,6 @@ find_base_properties(struct cp_session* s, cicp_rowid_t llap_id,
   return base_llap_out->ifindex != CI_IFID_BAD || *foreign_hwports_out != 0;
 }
 
-
-/* We'd better type `#ifdef BPF_PROG_GET_FD_BY_ID`, but it is a enum, not
- * a macro.  So we check the kernel version  we are compiling with.
- */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4,18,0)
-#define DO_XDP 1
-#endif
 
 void cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
                                ci_hwport_id_t hwport, ci_ifid_t ifindex,
