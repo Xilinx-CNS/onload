@@ -1336,7 +1336,8 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
 #if CI_CFG_CTPIO
   if( should_try_ctpio(ni, nic, info) ) {
     info->try_ctpio = 1;
-    info->retry_without_ctpio = (NI_OPTS(ni).ctpio < 2);
+    info->retry_without_ctpio = NI_OPTS(ni).ctpio < 2 &&
+                                ! (nic->flags & NIC_FLAG_CTPIO_ONLY);
 
     if( NI_OPTS(ni).ctpio_mode == EF_CTPIO_MODE_SF_NP ) {
       info->ef_vi_flags |= EF_VI_TX_CTPIO_NO_POISON;
