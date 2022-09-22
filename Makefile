@@ -44,7 +44,6 @@ endif
 DRIVER_SUBDIRS := src/driver/linux_char src/driver/linux_onload \
                   src/driver/linux_resource src/lib/citools src/lib/ciul \
                   src/lib/cplane src/lib/transport/ip \
-                  src/driver/linux_net/drivers/bus \
                   src/driver/linux_net/drivers/net/ethernet/sfc
 export AUX_BUS_PATH ?= $(abspath ../cns-auxiliary-bus)
 export HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
@@ -172,7 +171,7 @@ endif
 
 kernel: modules
 	@mkdir -p $(KBUILDTOP)/driver/linux
-	$(Q)ln -rsf $(KBUILDTOP)/src/driver/linux_onload/*.ko $(KBUILDTOP)/src/driver/linux_char/*.ko $(KBUILDTOP)/src/driver/linux_resource/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/bus/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/net/ethernet/sfc/*.ko $(KBUILDTOP)/driver/linux
+	$(Q)ln -rsf $(KBUILDTOP)/src/driver/linux_onload/*.ko $(KBUILDTOP)/src/driver/linux_char/*.ko $(KBUILDTOP)/src/driver/linux_resource/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/net/ethernet/sfc/*.ko $(KBUILDTOP)/driver/linux
 	$(Q)cp src/driver/linux/*.sh $(KBUILDTOP)/driver/linux
 
 modules modules_install: $(OUTMAKEFILES) $(OO_VERSION_HDR)
