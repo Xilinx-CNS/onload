@@ -54,8 +54,7 @@ endif
 
 export HAVE_SFC ?= 1
 ifeq ($(HAVE_SFC),1)
-DRIVER_SUBDIRS += src/driver/linux_net/drivers/bus \
-                  src/driver/linux_net/drivers/net/ethernet/sfc
+DRIVER_SUBDIRS += src/driver/linux_net/drivers/net/ethernet/sfc
 endif
 
 # Linux 4.6 added some object-file validation, which was also merged into
@@ -184,7 +183,7 @@ endif
 
 kernel: modules
 	@mkdir -p $(KBUILDTOP)/driver/linux
-	$(Q)ln -rsf $(KBUILDTOP)/src/driver/linux_onload/*.ko $(KBUILDTOP)/src/driver/linux_char/*.ko $(KBUILDTOP)/src/driver/linux_resource/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/bus/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/net/ethernet/sfc/*.ko $(KBUILDTOP)/driver/linux
+	$(Q)ln -rsf $(KBUILDTOP)/src/driver/linux_onload/*.ko $(KBUILDTOP)/src/driver/linux_char/*.ko $(KBUILDTOP)/src/driver/linux_resource/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/net/ethernet/sfc/*.ko $(KBUILDTOP)/driver/linux
 	$(Q)cp src/driver/linux/*.sh $(KBUILDTOP)/driver/linux
 
 modules modules_install: $(OUTMAKEFILES) $(OO_VERSION_HDR)
