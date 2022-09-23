@@ -16,3 +16,12 @@ libc_compat.h: $(TOPPATH)/scripts/libc_compat.sh
 
 all: libc_compat.h
 endif
+
+OO_VERSION_HDR := $(objd)onload_version.h
+$(OO_VERSION_HDR): $(SRCPATH)/../scripts/onload_version_gen FORCE
+	@mkdir -p $(@D)
+	$< $@
+
+FORCE:
+.PHONY: FORCE
+all: $(OO_VERSION_HDR)
