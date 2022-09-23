@@ -45,10 +45,10 @@ update_product_strings() {
   local version="$3"
 
   (
-    echo "echo \"#define ONLOAD_VERSION  \\\"$version\\\"\""
-    echo "echo \"#define ONLOAD_SHORT_VERSION ONLOAD_VERSION\""
-    echo "echo \"#define ONLOAD_PRODUCT \\\"$Product\\\"\""
-    echo "echo \"#define ONLOAD_COPYRIGHT \\\"$banner\\\"\""
+    echo "echo \"#define ONLOAD_VERSION  \\\"$version\\\"\" > \$1"
+    echo "echo \"#define ONLOAD_SHORT_VERSION ONLOAD_VERSION\" >> \$1"
+    echo "echo \"#define ONLOAD_PRODUCT \\\"$Product\\\"\" >> \$1"
+    echo "echo \"#define ONLOAD_COPYRIGHT \\\"$banner\\\"\" >> \$1"
   ) > scripts/onload_version_gen
   try sed -i \
     "/define pkgversion/ c%define pkgversion $version" \
