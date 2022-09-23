@@ -343,6 +343,9 @@ typedef union ci_filter_add_u {
 #define CI_FILTER_FLAG_MCAST_LOOP          0x0001
 #define CI_FILTER_FLAG_RSS                 0x0002
 #define CI_FILTER_FLAG_EXCLUSIVE_RXQ       0x0004
+#define CI_FILTER_FLAG_PREF_RXQ            0x0008
+#define CI_FILTER_FLAG_ANY_RXQ             0x0010
+
     struct {
       struct {
         uint8_t  dhost[6];
@@ -379,7 +382,10 @@ typedef union ci_filter_add_u {
         };
       } l4;
     } spec;
-    uint32_t            rss_context;
+    union {
+      uint32_t            rss_context;
+      uint32_t            rxq_no;
+    };
   } in;
   struct {
     uint16_t  out_len;
