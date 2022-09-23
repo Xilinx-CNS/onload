@@ -974,6 +974,11 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
         if( efct->hw_filters[i].proto == node.proto &&
             efct->hw_filters[i].ip == node.u.ip4.lip &&
             efct->hw_filters[i].port == node.lport ) {
+          if( ! (flags & (EFHW_FILTER_F_ANY_RXQ | EFHW_FILTER_F_PREF_RXQ) ) &&
+              *rxq >= 0 && *rxq != efct->hw_filters[i].rxq ) {
+            mutex_unlock(&efct->driver_filters_mtx);
+            return -EEXIST;
+          }
           node.hw_filter = i;
           break;
         }

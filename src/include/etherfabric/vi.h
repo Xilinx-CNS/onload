@@ -936,6 +936,38 @@ ef_filter_spec_set_user_flag(ef_filter_spec *filter_spec, uint8_t user_flag,
 extern int ef_filter_spec_set_block_kernel_unicast(ef_filter_spec* filter_spec);
 
 
+/*! \brief Set the destination queue for packets matched by this filter
+**
+** \param filter_spec The ef_filter_spec on which to set the filter.
+** \param dest        Hardware queue number to which to send the packets
+** \param flags       Reserved for future used, must be 0
+**
+** \return 0 on success, or a negative error code:\n
+**         -EPROTONOSUPPORT indicates that a filter is already set that is
+**         incompatible with the new filter.
+**         -EINVAL indicates that invalid flags were used
+**
+** Note that invalid \param dest values will not be detected until
+** ef_vi_filter_add() is called.
+**
+** This function may be used on any filter type in order to override the
+** default filter broker and make it use the specific queue number given. This
+** can make applications operate more efficiently in cases where multiple apps
+** will share queues in ways that the broker cannot predict at queue selection
+** time. It is generally necessary to have system-wide knowledge in order to
+** make optimal queue selection decisions.
+**
+** The queue number selected by this function is treated as a requirement:
+** ef_vi_filter_add() will return an error if that queue cannot be used for the
+** filter, for example if another app has already steered that traffic
+** elsewhere.
+**
+** This filter supported only on X3-series adapters.
+*/
+extern int ef_filter_spec_set_dest(ef_filter_spec* filter_spec, int dest,
+                                  unsigned flags);
+
+
 /*! \brief Add a filter to a virtual interface.
 **
 ** \param vi                The virtual interface on which to add the

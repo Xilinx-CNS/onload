@@ -37,8 +37,18 @@ enum ef_filter_type {
   EF_FILTER_IP_PROTO            = 0x1000,
   EF_FILTER_ETHER_TYPE          = 0x2000,
   EF_FILTER_IP6                 = 0x4000,
+  EF_FILTER_HAS_DEST            = 0x8000,
 };
 
+static void set_proto(ef_filter_spec *fs, uint16_t proto)
+{
+  fs->data[0] = (fs->data[0] & ~0xffffu) | proto;
+}
+
+static uint16_t get_proto(const ef_filter_spec *fs)
+{
+  return fs->data[0] & 0xffff;
+}
 
 /**********************************************************************
  * Initialise filter specs.
@@ -55,10 +65,10 @@ void ef_filter_spec_init(ef_filter_spec *fs,
 int ef_filter_spec_set_ip4_local(ef_filter_spec *fs, int protocol,
 				 unsigned host_be32, int port_be16)
 {
-  if (fs->type != 0 && fs->type != EF_FILTER_VLAN)
+  if (fs->type & ~(EF_FILTER_VLAN | EF_FILTER_HAS_DEST))
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_IP4;
-  fs->data[0] = protocol;
+  set_proto(fs, protocol);
   fs->data[1] = host_be32;
   fs->data[2] = port_be16;
   fs->data[3] = 0;
@@ -71,10 +81,10 @@ int ef_filter_spec_set_ip4_full(ef_filter_spec *fs, int protocol,
 				unsigned host_be32, int port_be16,
 				unsigned rhost_be32, int rport_be16)
 {
-  if (fs->type != 0 && fs->type != EF_FILTER_VLAN)
+  if (fs->type & ~(EF_FILTER_VLAN | EF_FILTER_HAS_DEST))
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_IP4;
-  fs->data[0] = protocol;
+  set_proto(fs, protocol);
   fs->data[1] = host_be32;
   fs->data[2] = port_be16;
   fs->data[3] = rhost_be32;
@@ -86,10 +96,10 @@ int ef_filter_spec_set_ip4_full(ef_filter_spec *fs, int protocol,
 int ef_filter_spec_set_ip6_local(ef_filter_spec *fs, int protocol,
 				 const struct in6_addr *host, int port_be16)
 {
-  if (fs->type != 0 && fs->type != EF_FILTER_VLAN)
+  if (fs->type & ~(EF_FILTER_VLAN | EF_FILTER_HAS_DEST))
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_IP6;
-  fs->data[0] = protocol;
+  set_proto(fs, protocol);
   memcpy(&fs->data[1], host, 16);
   /* data[5] is reserved for a VLAN ID */
   fs->data[6] = port_be16;
@@ -103,10 +113,10 @@ int ef_filter_spec_set_ip6_full(ef_filter_spec *fs, int protocol,
 				const struct in6_addr *host, int port_be16,
 				const struct in6_addr *rhost, int rport_be16)
 {
-  if (fs->type != 0 && fs->type != EF_FILTER_VLAN)
+  if (fs->type & ~(EF_FILTER_VLAN | EF_FILTER_HAS_DEST))
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_IP6;
-  fs->data[0] = protocol;
+  set_proto(fs, protocol);
   memcpy(&fs->data[1], host, 16);
   /* data[5] is reserved for a VLAN ID */
   fs->data[6] = port_be16;
@@ -118,11 +128,12 @@ int ef_filter_spec_set_ip6_full(ef_filter_spec *fs, int protocol,
 
 int ef_filter_spec_set_vlan(ef_filter_spec *fs, int vlan_id)
 {
-  if (fs->type != 0 && fs->type != EF_FILTER_IP4 &&
-      fs->type != EF_FILTER_MISMATCH_MULTICAST &&
-      fs->type != EF_FILTER_MISMATCH_UNICAST &&
-      fs->type != EF_FILTER_IP_PROTO && fs->type != EF_FILTER_ETHER_TYPE &&
-      fs->type != EF_FILTER_IP6)
+  unsigned type = fs->type & ~EF_FILTER_HAS_DEST;
+  if (type != 0 && type != EF_FILTER_IP4 &&
+      type != EF_FILTER_MISMATCH_MULTICAST &&
+      type != EF_FILTER_MISMATCH_UNICAST &&
+      type != EF_FILTER_IP_PROTO && type != EF_FILTER_ETHER_TYPE &&
+      type != EF_FILTER_IP6)
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_VLAN;
   fs->data[5] = vlan_id;
@@ -133,11 +144,11 @@ int ef_filter_spec_set_vlan(ef_filter_spec *fs, int vlan_id)
 int ef_filter_spec_set_eth_local(ef_filter_spec *fs, int vlan_id,
 				 const void *mac)
 {
-  if (fs->type != 0 && fs->type != EF_FILTER_IP_PROTO &&
-      fs->type != EF_FILTER_ETHER_TYPE)
+  unsigned type = fs->type & ~EF_FILTER_HAS_DEST;
+  if (type != 0 && type != EF_FILTER_IP_PROTO && type != EF_FILTER_ETHER_TYPE)
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_MAC;
-  fs->data[0] = vlan_id;
+  set_proto(fs, vlan_id);
   memcpy(&fs->data[1], mac, 6);
   return 0;
 }
@@ -145,7 +156,7 @@ int ef_filter_spec_set_eth_local(ef_filter_spec *fs, int vlan_id,
 
 int ef_filter_spec_set_unicast_all(ef_filter_spec *fs)
 {
-  if (fs->type != 0 )
+  if (fs->type & ~EF_FILTER_VLAN)
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_ALL_UNICAST;
   return 0;
@@ -154,7 +165,7 @@ int ef_filter_spec_set_unicast_all(ef_filter_spec *fs)
 
 int ef_filter_spec_set_multicast_all(ef_filter_spec *fs)
 {
-  if (fs->type != 0 )
+  if (fs->type & ~(EF_FILTER_VLAN | EF_FILTER_HAS_DEST))
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_ALL_MULTICAST;
   return 0;
@@ -163,7 +174,7 @@ int ef_filter_spec_set_multicast_all(ef_filter_spec *fs)
 
 int ef_filter_spec_set_unicast_mismatch(ef_filter_spec *fs)
 {
-  if (fs->type != 0 && fs->type != EF_FILTER_VLAN)
+  if (fs->type & ~(EF_FILTER_VLAN | EF_FILTER_HAS_DEST))
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_MISMATCH_UNICAST;
   return 0;
@@ -172,7 +183,7 @@ int ef_filter_spec_set_unicast_mismatch(ef_filter_spec *fs)
 
 int ef_filter_spec_set_multicast_mismatch(ef_filter_spec *fs)
 {
-  if (fs->type != 0 && fs->type != EF_FILTER_VLAN)
+  if (fs->type & ~(EF_FILTER_VLAN | EF_FILTER_HAS_DEST))
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_MISMATCH_MULTICAST;
   return 0;
@@ -184,7 +195,7 @@ int ef_filter_spec_set_port_sniff(ef_filter_spec *fs, int promiscuous)
   if (fs->type != 0)
     return -EPROTONOSUPPORT;
   fs->type |= EF_FILTER_PORT_SNIFF;
-  fs->data[0] = promiscuous;
+  set_proto(fs, promiscuous);
   return 0;
 }
 
@@ -244,6 +255,21 @@ int ef_filter_spec_set_eth_type(ef_filter_spec *fs, uint16_t ether_type_be16)
   fs->data[EF_FILTER_DATA_INDEX_IPPROTO_OR_ETHERTYPE] = ether_type_be16;
   return 0;
 }
+
+
+int ef_filter_spec_set_dest(ef_filter_spec* fs, int dest, unsigned flags)
+{
+  if (flags)
+    return -EINVAL;
+  if (fs->type & (EF_FILTER_PORT_SNIFF | EF_FILTER_TX_PORT_SNIFF |
+                  EF_FILTER_BLOCK_KERNEL | EF_FILTER_BLOCK_KERNEL_MULTICAST |
+                  EF_FILTER_BLOCK_KERNEL_UNICAST))
+    return -EPROTONOSUPPORT;
+  fs->type |= EF_FILTER_HAS_DEST;
+  fs->data[0] = (fs->data[0] & 0xffff) | (dest << 16);
+  return 0;
+}
+
 
 
 /**********************************************************************
@@ -338,9 +364,9 @@ static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
     filter_add.in.fields |= CI_FILTER_FIELD_LOC_MAC;
     memcpy(filter_add.in.spec.l2.dhost, &fs->data[1], 6);
     if (fs->type & EF_FILTER_VLAN ||
-        (int)fs->data[0] != EF_FILTER_VLAN_ID_ANY) {
+        (int16_t)get_proto(fs) != EF_FILTER_VLAN_ID_ANY) {
       filter_add.in.fields |= CI_FILTER_FIELD_OUTER_VID;
-      filter_add.in.spec.l2.vid = fs->data[0];
+      filter_add.in.spec.l2.vid = get_proto(fs);
     }
   }
   else {
@@ -348,7 +374,7 @@ static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
       filter_add.in.fields |= CI_FILTER_FIELD_LOC_HOST |
                               CI_FILTER_FIELD_LOC_PORT;
       filter_add.in.spec.l2.type = htons(ETH_P_IP);
-      filter_add.in.spec.l3.protocol = fs->data[0];
+      filter_add.in.spec.l3.protocol = get_proto(fs);
       filter_add.in.spec.l3.u.ipv4.daddr = fs->data[1];
       filter_add.in.spec.l4.ports.dest = fs->data[2];
       if (fs->data[3]) {
@@ -362,7 +388,7 @@ static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
       filter_add.in.fields |= CI_FILTER_FIELD_LOC_HOST |
                               CI_FILTER_FIELD_LOC_PORT;
       filter_add.in.spec.l2.type = htons(ETH_P_IPV6);
-      filter_add.in.spec.l3.protocol = fs->data[0];
+      filter_add.in.spec.l3.protocol = get_proto(fs);
       memcpy(&filter_add.in.spec.l3.u.ipv6.daddr, &fs->data[1], 16);
       filter_add.in.spec.l4.ports.dest = fs->data[6];
       if (fs->data[11]) {
@@ -394,7 +420,7 @@ static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
     filter_add.in.spec.l2.vid = fs->data[5];
   }
 
-  switch (fs->type) {
+  switch (fs->type & ~EF_FILTER_HAS_DEST) {
   case EF_FILTER_IP4:
   case EF_FILTER_IP4 | EF_FILTER_VLAN:
   case EF_FILTER_IP6:
@@ -411,8 +437,14 @@ static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
     return -EINVAL;
   }
 
-  if (flags & CI_FILTER_FLAG_PREF_RXQ)
+  if (fs->type & EF_FILTER_HAS_DEST) {
+    filter_add.in.fields |= CI_FILTER_FIELD_RXQ;
+    filter_add.in.rxq_no = fs->data[0] >> 16;
+  }
+  else if (flags & CI_FILTER_FLAG_PREF_RXQ) {
+    filter_add.in.fields |= CI_FILTER_FIELD_RXQ;
     filter_add.in.rxq_no = rxq_no;
+  }
 
   rc = ci_filter_add(dh, &filter_add);
   *rxq_out = filter_add.out.rxq;
@@ -441,8 +473,9 @@ static int ef_filter_add(ef_driver_handle dh, int resource_id, int rxq_no,
     case EF_FILTER_MISMATCH_UNICAST:
     case EF_FILTER_MISMATCH_MULTICAST | EF_FILTER_VLAN:
     case EF_FILTER_MISMATCH_MULTICAST:
-      return ef_filter_add_special(dh, resource_id, rxq_no, fs->type, fs->data[0],
-                                   fs->data[5], filter_cookie_out, rxq_out);
+      return ef_filter_add_special(dh, resource_id, rxq_no, fs->type,
+                                   get_proto(fs), fs->data[5],
+                                   filter_cookie_out, rxq_out);
     default:
       return ef_filter_add_normal(dh, resource_id, rxq_no, fs, flags,
                                   filter_cookie_out, rxq_out);
@@ -473,7 +506,6 @@ static int ef_filter_del(ef_driver_handle dh, int resource_id,
   return ci_resource_op(dh, &op);
 }
 
-
 int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
 		     ef_filter_cookie *filter_cookie_out)
 {
@@ -493,7 +525,7 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
         rxq_no = vi->efct_shm->q[0].qid;
       }
       
-      if ( flags == 0 )
+      if ( flags == 0 && !(fs->type & EF_FILTER_HAS_DEST) )
         flags |= CI_FILTER_FLAG_ANY_RXQ;
     }
     
