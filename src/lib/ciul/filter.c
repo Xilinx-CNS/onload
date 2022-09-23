@@ -18,6 +18,7 @@
 #include "logging.h"
 #include <stdbool.h>
 #include <netinet/ether.h>
+#include <etherfabric/internal/efct_uk_api.h>
 
 
 enum ef_filter_type {
@@ -250,9 +251,9 @@ int ef_filter_spec_set_eth_type(ef_filter_spec *fs, uint16_t ether_type_be16)
  */
 
 static int ef_filter_add_special(ef_driver_handle dh, int resource_id,
-                                 int type, bool promisc, uint16_t vlan_id,
-                                 ef_filter_cookie *filter_cookie_out,
-                                 int *rxq_out)
+                                 int pref_rxq_no, int type,
+                                 bool promisc, uint16_t vlan_id,
+                                 ef_filter_cookie *filter_cookie_out, int *rxq_out)
 {
   ci_resource_op_t op;
   int rc;
@@ -316,8 +317,9 @@ static int ef_filter_add_special(ef_driver_handle dh, int resource_id,
 }
 
 static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
-			 const ef_filter_spec *fs, unsigned flags,
-			 ef_filter_cookie *filter_cookie_out, int *rxq_out)
+                                int rxq_no, const ef_filter_spec *fs,
+                                unsigned flags,
+                                ef_filter_cookie *filter_cookie_out, int *rxq_out)
 {
   ci_filter_add_t filter_add;
   int rc;
@@ -408,8 +410,13 @@ static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
   default:
     return -EINVAL;
   }
+
+  if (flags & CI_FILTER_FLAG_PREF_RXQ)
+    filter_add.in.rxq_no = rxq_no;
+
   rc = ci_filter_add(dh, &filter_add);
   *rxq_out = filter_add.out.rxq;
+
   if( rc == 0 && filter_cookie_out != NULL ) {
     filter_cookie_out->filter_id = filter_add.out.filter_id;
     filter_cookie_out->filter_type = fs->type;
@@ -418,7 +425,7 @@ static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
 }
 
 
-static int ef_filter_add(ef_driver_handle dh, int resource_id,
+static int ef_filter_add(ef_driver_handle dh, int resource_id, int rxq_no,
                          const ef_filter_spec *fs, unsigned flags,
                          ef_filter_cookie *filter_cookie_out, int *rxq_out)
 {
@@ -434,10 +441,10 @@ static int ef_filter_add(ef_driver_handle dh, int resource_id,
     case EF_FILTER_MISMATCH_UNICAST:
     case EF_FILTER_MISMATCH_MULTICAST | EF_FILTER_VLAN:
     case EF_FILTER_MISMATCH_MULTICAST:
-      return ef_filter_add_special(dh, resource_id, fs->type, fs->data[0],
+      return ef_filter_add_special(dh, resource_id, rxq_no, fs->type, fs->data[0],
                                    fs->data[5], filter_cookie_out, rxq_out);
     default:
-      return ef_filter_add_normal(dh, resource_id, fs, flags,
+      return ef_filter_add_normal(dh, resource_id, rxq_no, fs, flags,
                                   filter_cookie_out, rxq_out);
     }
 }
@@ -475,11 +482,24 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     int rxq;
     ef_filter_cookie cookie;
     unsigned flags = 0;
+    int rxq_no = 0;
 
     if( vi->vi_flags & EF_VI_RX_EXCLUSIVE )
       flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
+      
+    if( vi->efct_shm ) {
+      if( vi->efct_shm->q[0].superbuf_pkts ) {
+        flags |= CI_FILTER_FLAG_PREF_RXQ;
+        rxq_no = vi->efct_shm->q[0].qid;
+      }
+      
+      if ( flags == 0 )
+        flags |= CI_FILTER_FLAG_ANY_RXQ;
+    }
+    
 
-    rc = ef_filter_add(dh, vi->vi_resource_id, fs, flags, &cookie, &rxq);
+
+    rc = ef_filter_add(dh, vi->vi_resource_id, rxq_no, fs, flags, &cookie, &rxq);
     if( rc < 0 )
       return rc;
 
@@ -512,7 +532,7 @@ int ef_vi_set_filter_add(ef_vi_set* vi_set, ef_driver_handle dh,
 			 ef_filter_cookie *filter_cookie_out)
 {
   int rxq;
-  return ef_filter_add(dh, vi_set->vis_res_id, fs, CI_FILTER_FLAG_RSS,
+  return ef_filter_add(dh, vi_set->vis_res_id, 0, fs, CI_FILTER_FLAG_RSS,
                        filter_cookie_out, &rxq);
 }
 

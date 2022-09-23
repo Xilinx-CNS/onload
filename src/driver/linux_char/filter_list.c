@@ -158,7 +158,7 @@ static int efch_filter_insert(struct efrm_resource *rs, struct efrm_pd *pd,
                               struct efx_filter_spec *spec, struct filter *f,
                               unsigned flags)
 {
-  int rxq = -1;
+  int rxq = ( flags & EFHW_FILTER_F_PREF_RXQ ? f->rxq : -1 );
   int rc = efrm_filter_insert(rs->rs_client, spec, &rxq, NULL, flags);
   if( rc < 0 )
     return rc;
@@ -535,6 +535,7 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
   struct filter *f;
   int rc = 0;
   unsigned stack_id;
+  unsigned onload_filter_flags = 0;
   enum efx_filter_flags filter_flags = EFX_FILTER_FLAG_RX_SCATTER;
   uint16_t vid;
 
@@ -630,10 +631,21 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
 
   /* EFCT TODO: this EXCLUSIVE_RXQ flag conversion works for apps having only
    * one filter (e.g. eflatency) but needs to be smarter to go beyond that */
-  rc = efch_filter_insert(rs, pd, &spec, f,
-                          filter_add->in.flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ ?
-                             EFHW_FILTER_F_EXCL_RXQ | EFHW_FILTER_F_ANY_RXQ :
-                             0);
+  if ( filter_add->in.flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ ) {
+    onload_filter_flags |= EFHW_FILTER_F_EXCL_RXQ;
+    onload_filter_flags |= EFHW_FILTER_F_ANY_RXQ;
+  } 
+  
+  if ( filter_add->in.flags & CI_FILTER_FLAG_PREF_RXQ ) {
+    onload_filter_flags |= EFHW_FILTER_F_PREF_RXQ;
+    f->rxq = filter_add->in.rxq_no;
+  } 
+
+  if ( filter_add->in.flags & CI_FILTER_FLAG_ANY_RXQ )
+    onload_filter_flags |= EFHW_FILTER_F_ANY_RXQ;
+
+  rc = efch_filter_insert(rs, pd, &spec, f, onload_filter_flags);
+
   if( rc < 0 ) {
     efch_filter_delete(rs, pd, f);
     return rc;
