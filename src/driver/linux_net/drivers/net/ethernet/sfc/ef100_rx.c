@@ -145,16 +145,16 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 
 	ing_port = le16_to_cpu((__force __le16) PREFIX_FIELD(prefix, INGRESS_MPORT));
 
-	if (nic_data->have_mport && ing_port != nic_data->base_mport &&
-	    /* XXX oldbase compat; remove after C-model flag day */
-	    nic_data->have_old_mport && ing_port != nic_data->old_base_mport) {
-		struct net_device *rep_dev = efx_ef100_find_rep_by_mport(efx,
-									 ing_port);
+	if (nic_data->have_mport && ing_port != nic_data->base_mport) {
+		struct net_device *rep_dev;
 
+		rcu_read_lock();
+		rep_dev = efx_ef100_find_rep_by_mport(efx, ing_port);
 		if (rep_dev) {
 			if (rep_dev->flags & IFF_UP)
 				efx_ef100_rep_rx_packet(netdev_priv(rep_dev),
 							rx_buf);
+			rcu_read_unlock();
 			/* Representor Rx doesn't care about PF Rx buffer
 			 * ownership, it just makes a copy. So, we are done
 			 * with the Rx buffer from PF point of view and should
@@ -162,13 +162,11 @@ void __ef100_rx_packet(struct efx_rx_queue *rx_queue)
 			 */
 			goto free_rx_buffer;
 		}
+		rcu_read_unlock();
 		if (net_ratelimit())
 			netif_warn(efx, drv, efx->net_dev,
 				   "Unrecognised ing_port %04x (base %04x), dropping\n",
 				   ing_port, nic_data->base_mport);
-		/* TODO hook this up to SW stats reporting (when that's fully
-		 * implemented).
-		 */
 		rx_queue->n_rx_mport_bad++;
 		goto free_rx_buffer;
 	}

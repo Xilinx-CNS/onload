@@ -166,7 +166,7 @@ static int efx_tso_check_protocol(struct sk_buff *skb, __be16 *protocol)
 	if (((struct ethhdr *)skb->data)->h_proto != *protocol)
 		return -EINVAL;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_VLAN_FEATURES) || defined(NETIF_F_VLAN_TSO)
+#if !defined(EFX_USE_KCOMPAT) || defined(NETIF_F_VLAN_TSO)
 	if (*protocol == htons(ETH_P_8021Q)) {
 		struct vlan_ethhdr *veh = (struct vlan_ethhdr *)skb->data;
 

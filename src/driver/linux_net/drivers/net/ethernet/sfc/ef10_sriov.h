@@ -69,7 +69,8 @@ int efx_ef10_vadaptor_query(struct efx_nic *efx, unsigned int port_id,
 			    unsigned int *vlan_tags);
 int efx_ef10_vadaptor_free(struct efx_nic *efx, unsigned int port_id);
 
-int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac);
+int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac,
+			      bool *reset);
 int efx_ef10_sriov_set_vf_vlan(struct efx_nic *efx, int vf_i, u16 vlan,
 			       u8 qos);
 int efx_ef10_sriov_set_vf_spoofchk(struct efx_nic *efx, int vf, bool spoofchk);

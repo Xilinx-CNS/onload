@@ -62,26 +62,7 @@ void usleep_range(unsigned long min, unsigned long max)
 
 #endif
 
-#ifdef EFX_NEED_PCI_CLEAR_MASTER
-
-void pci_clear_master(struct pci_dev *dev)
-{
-	u16 old_cmd, cmd;
-
-	pci_read_config_word(dev, PCI_COMMAND, &old_cmd);
-	cmd = old_cmd & ~PCI_COMMAND_MASTER;
-	if (cmd != old_cmd) {
-		dev_dbg(&dev->dev, "disabling bus mastering\n");
-		pci_write_config_word(dev, PCI_COMMAND, cmd);
-	}
-	dev->is_busmaster = false;
-}
-
-#endif /* EFX_NEED_PCI_CLEAR_MASTER */
-
-
-#if defined(EFX_NEED_UNMASK_MSIX_VECTORS) || \
-    defined(EFX_NEED_SAVE_MSIX_MESSAGES)
+#if defined(EFX_NEED_SAVE_MSIX_MESSAGES)
 
 #undef pci_save_state
 #undef pci_restore_state
@@ -149,9 +130,6 @@ efx_save_msix_state(struct efx_channel *channel, void __iomem *entry)
 	channel->msix_msg.address_hi = readl(entry + PCI_MSIX_ENTRY_UPPER_ADDR);
 	channel->msix_msg.data = readl(entry + PCI_MSIX_ENTRY_DATA);
 #endif
-#ifdef EFX_NEED_UNMASK_MSIX_VECTORS
-	channel->msix_ctrl = readl(entry + PCI_MSIX_ENTRY_VECTOR_CTRL);
-#endif
 }
 
 int efx_pci_save_state(struct pci_dev *pci_dev)
@@ -168,9 +146,6 @@ efx_restore_msix_state(struct efx_channel *channel, void __iomem *entry)
 	writel(channel->msix_msg.address_hi, entry + PCI_MSIX_ENTRY_UPPER_ADDR);
 	writel(channel->msix_msg.data, entry + PCI_MSIX_ENTRY_DATA);
 #endif
-#ifdef EFX_NEED_UNMASK_MSIX_VECTORS
-	writel(channel->msix_ctrl, entry + PCI_MSIX_ENTRY_VECTOR_CTRL);
-#endif
 }
 
 void efx_pci_restore_state(struct pci_dev *pci_dev)
@@ -180,40 +155,12 @@ void efx_pci_restore_state(struct pci_dev *pci_dev)
 				 efx_restore_msix_state);
 }
 
-#endif /* EFX_NEED_UNMASK_MSIX_VECTORS || EFX_NEED_SAVE_MSIX_MESSAGES */
+#endif /* EFX_NEED_SAVE_MSIX_MESSAGES */
 
 #ifdef EFX_NEED_NS_TO_TIMESPEC
 #ifndef EFX_HAVE_TIMESPEC64
 
-#ifdef EFX_HAVE_DIV_S64_REM
 #include <linux/math64.h>
-#else
-static inline s64 div_s64_rem(s64 dividend, s32 divisor, s32 *rem32)
-{
-	s64 res;
-	long remainder;
-
-	/*
-	 * This implementation has the same limitations as
-	 * div_long_long_rem_signed().  However these should not
-	 * affect its use by ns_to_timespec().  (By 2038 this driver,
-	 * the relevant kernel versions and 32-bit PCs should be long
-	 * obsolete.)
-	 */
-	EFX_WARN_ON_ONCE_PARANOID(divisor < 0);
-
-	if (unlikely(dividend < 0)) {
-		EFX_WARN_ON_ONCE_PARANOID(-dividend >> 31 >= divisor);
-		res = -div_long_long_rem(-dividend, divisor, &remainder);
-		*rem32 = -remainder;
-	} else {
-		EFX_WARN_ON_ONCE_PARANOID(dividend >> 31 >= divisor);
-		res = div_long_long_rem(dividend, divisor, &remainder);
-		*rem32 = remainder;
-	}
-	return res;
-}
-#endif
 
 struct timespec ns_to_timespec(const s64 nsec)
 {
@@ -235,24 +182,6 @@ struct timespec ns_to_timespec(const s64 nsec)
 
 #endif /* EFX_HAVE_TIMESPEC64 */
 #endif /* EFX_NEED_NS_TO_TIMESPEC */
-
-#if defined(EFX_NEED_KTIME_SUB_NS) &&				\
-	!(BITS_PER_LONG == 64 || defined(CONFIG_KTIME_SCALAR))
-ktime_t ktime_sub_ns(const ktime_t kt, u64 nsec)
-{
-	ktime_t tmp;
-
-	if (likely(nsec < NSEC_PER_SEC)) {
-		tmp.tv64 = nsec;
-	} else {
-		unsigned long rem = do_div(nsec, NSEC_PER_SEC);
-
-		tmp = ktime_set((long)nsec, rem);
-	}
-
-	return ktime_sub(kt, tmp);
-}
-#endif
 
 #ifdef EFX_HAVE_PARAM_BOOL_INT
 
@@ -292,76 +221,6 @@ int efx_param_get_bool(char *buffer, struct kernel_param *kp)
 }
 
 #endif /* EFX_HAVE_PARAM_BOOL_INT */
-
-#ifdef EFX_NEED_KOBJECT_SET_NAME_VARGS
-int efx_kobject_set_name_vargs(struct kobject *kobj, const char *fmt, va_list vargs)
-{
-	char *s;
-	int need;
-	int limit;
-	char *name;
-	const char *old_name;
-	va_list cvargs;
-
-	if (kobject_name(kobj) && !fmt)
-		return 0;
-
-	va_copy(cvargs, vargs);
-	need = vsnprintf(NULL, 0, fmt, vargs);
-	va_end(cvargs);
-
-	/*
-	 * Need more space? Allocate it and try again
-	 */
-	limit = need + 1;
-	name = kmalloc(limit, GFP_KERNEL);
-	if (!name)
-		return -ENOMEM;
-
-	vsnprintf(name, limit, fmt, vargs);
-
-	/* ewww... some of these buggers have '/' in the name ... */
-	while ((s = strchr(name, '/')))
-		s[0] = '!';
-
-	/* Free the old name, if necessary. */
-	old_name = kobject_name(kobj);
-	if (old_name && (old_name != name))
-		kfree(old_name);
-
-	/* Now, set the new name */
-	kobject_set_name(kobj, name);
-
-	return 0;
-}
-#endif /* EFX_NEED_KOBJECT_SET_NAME_VARGS */
-
-#ifdef EFX_NEED_KOBJECT_INIT_AND_ADD
-int efx_kobject_init_and_add(struct kobject *kobj, struct kobj_type *ktype,
-			     struct kobject *parent, const char *fmt, ...)
-{
-	int retval;
-	va_list args;
-
-	BUG_ON(!kobj || !ktype || atomic_read(&kobj->kref.refcount));
-
-	kref_init(&kobj->kref);
-	INIT_LIST_HEAD(&kobj->entry);
-	kobj->ktype = ktype;
-
-	va_start(args, fmt);
-	retval = kobject_set_name_vargs(kobj, fmt, args);
-	va_end(args);
-
-	if (retval) {
-		printk(KERN_ERR "kobject: can not set name properly!\n");
-		return retval;
-	}
-	kobj->parent = parent;
-	return kobject_add(kobj);
-}
-
-#endif /* EFX_NEED_KOBJECT_INIT_AND_ADD */
 
 #ifndef EFX_HAVE_PCI_VFS_ASSIGNED
 int pci_vfs_assigned(struct pci_dev *dev)
@@ -482,7 +341,7 @@ struct dentry *d_hash_and_lookup(struct dentry *dir, struct qstr *name)
 #endif
 
 #if defined(EFX_NEED_HWMON_DEVICE_REGISTER_WITH_INFO) && defined(CONFIG_SFC_MCDI_MON)
-struct EFX_HWMON_DEVICE_REGISTER_TYPE *hwmon_device_register_with_info(
+struct device *hwmon_device_register_with_info(
 	struct device *dev,
 	const char *name __always_unused,
 	void *drvdata __always_unused,

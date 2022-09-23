@@ -189,11 +189,7 @@ struct efx_mcdi_mon {
 	struct efx_buffer dma_buf;
 	struct mutex update_lock;
 	unsigned long last_update;
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_HWMON_CLASS_DEVICE)
-	struct class_device *device;
-#else
 	struct device *device;
-#endif
 	struct efx_mcdi_mon_attribute *attrs;
 	unsigned int n_attrs;
 	void *sensor_list;

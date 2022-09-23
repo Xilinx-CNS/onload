@@ -10,6 +10,9 @@
 #include <linux/err.h>
 #include <linux/vdpa.h>
 #include "ef100_vdpa.h"
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
+#include <uapi/linux/vdpa.h>
+#endif
 #include "mcdi_vdpa.h"
 #include "filter.h"
 #include "mcdi_functions.h"
@@ -22,8 +25,61 @@
 
 #if defined(CONFIG_SFC_VDPA)
 #define EFX_VDPA_NAME_LEN 32
+#define EFX_INVALID_FILTER_ID -1
 
 static const char * const filter_names[] = { "bcast", "ucast", "mcast" };
+
+static int ef100_vdpa_set_mac_filter(struct efx_nic *efx,
+				     struct efx_filter_spec *spec,
+				     u32 qid,
+				     u8 *mac_addr)
+{
+	int rc;
+
+	efx_filter_init_rx(spec, EFX_FILTER_PRI_MANUAL, 0, qid);
+
+	if (mac_addr) {
+		rc = efx_filter_set_eth_local(spec, EFX_FILTER_VID_UNSPEC,
+					      mac_addr);
+		if (rc != 0)
+			pci_err(efx->pci_dev,
+				"Filter set eth local failed, err: %d\n", rc);
+	} else {
+		efx_filter_set_mc_def(spec);
+	}
+
+	rc = efx_filter_insert_filter(efx, spec, true);
+	if (rc < 0)
+		pci_err(efx->pci_dev,
+			"Filter insert failed, err: %d\n", rc);
+
+	return rc;
+}
+
+static int ef100_vdpa_delete_filter(struct ef100_vdpa_nic *vdpa_nic,
+				    enum ef100_vdpa_mac_filter_type type)
+{
+	struct vdpa_device *vdev = &vdpa_nic->vdpa_dev;
+	int rc = 0;
+
+	if (vdpa_nic->filters[type].filter_id == EFX_INVALID_FILTER_ID)
+		return rc;
+
+	rc = efx_filter_remove_id_safe(vdpa_nic->efx,
+				       EFX_FILTER_PRI_MANUAL,
+				       vdpa_nic->filters[type].filter_id);
+	if (rc) {
+		dev_err(&vdev->dev, "%s filter id: %d remove failed, err: %d\n",
+			filter_names[type], vdpa_nic->filters[type].filter_id,
+			rc);
+	} else {
+		dev_dbg(&vdev->dev, "%s filter id: %d removed\n",
+			filter_names[type], vdpa_nic->filters[type].filter_id);
+		vdpa_nic->filters[type].filter_id = EFX_INVALID_FILTER_ID;
+		vdpa_nic->filter_cnt--;
+	}
+	return rc;
+}
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 
@@ -89,6 +145,16 @@ static int ef100_vdpa_net_dev_add(struct vdpa_mgmt_dev *mgmt_dev,
 		return -EEXIST;
 	}
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
+	if (config->mask & BIT_ULL(VDPA_ATTR_DEV_NET_CFG_MACADDR)) {
+		if (!is_valid_ether_addr(config->net.mac)) {
+			pci_err(efx->pci_dev, "Invalid MAC address %pM\n",
+				config->net.mac);
+			return -EINVAL;
+		}
+	}
+#endif
+
 	probe_data = container_of(efx, struct efx_probe_data, efx);
 	nic_data = efx->nic_data;
 
@@ -122,6 +188,16 @@ static int ef100_vdpa_net_dev_add(struct vdpa_mgmt_dev *mgmt_dev,
 			 "vDPA net device created, vf: %u\n",
 			 nic_data->vf_index);
 	}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
+	if (config->mask & BIT_ULL(VDPA_ATTR_DEV_NET_CFG_MACADDR)) {
+		ether_addr_copy(vdpa_nic->mac_address, config->net.mac);
+		vdpa_nic->mac_configured = true;
+
+		if (vdpa_nic->vring[0].vring_created)
+			ef100_vdpa_add_filter(vdpa_nic, EF100_VDPA_UCAST_MAC_FILTER);
+	}
+#endif
 
 	/* TODO: handle MAC and MTU configuration from config parameter */
 	return 0;
@@ -161,6 +237,9 @@ int ef100_vdpa_register_mgmtdev(struct efx_nic *efx)
 	mgmt_dev->device = &efx->pci_dev->dev;
 	mgmt_dev->id_table = ef100_vdpa_id_table;
 	mgmt_dev->ops = &ef100_vdpa_net_mgmtdev_ops;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
+	mgmt_dev->config_attr_mask = BIT_ULL(VDPA_ATTR_DEV_NET_CFG_MACADDR);
+#endif
 	rc = vdpa_mgmtdev_register(mgmt_dev);
 	if (rc) {
 		pci_err(efx->pci_dev,
@@ -184,61 +263,8 @@ void ef100_vdpa_unregister_mgmtdev(struct efx_nic *efx)
 }
 #endif
 
-static int
-ef100_vdpa_set_mac_filter(struct efx_nic *efx,
-			  struct efx_filter_spec *spec,
-			  u32 qid,
-			  u8 *mac_addr)
-{
-	int rc = 0;
-
-	efx_filter_init_rx(spec, EFX_FILTER_PRI_MANUAL, 0, qid);
-
-	if (mac_addr) {
-		rc = efx_filter_set_eth_local(spec, EFX_FILTER_VID_UNSPEC,
-					      mac_addr);
-		if (rc != 0)
-			pci_err(efx->pci_dev,
-				"Filter set eth local failed, err: %d\n", rc);
-	} else {
-		efx_filter_set_mc_def(spec);
-	}
-
-	rc = efx_filter_insert_filter(efx, spec, true);
-	if (rc < 0)
-		pci_err(efx->pci_dev,
-			"Filter insert failed, err: %d\n", rc);
-
-	return rc;
-}
-
-static int ef100_vdpa_delete_filter(struct ef100_vdpa_nic *vdpa_nic,
-				    enum ef100_vdpa_mac_filter_type type)
-{
-	struct vdpa_device *vdev = &vdpa_nic->vdpa_dev;
-	int rc = 0;
-
-	if (vdpa_nic->filters[type].filter_id == -1)
-		return rc;
-
-	rc = efx_filter_remove_id_safe(vdpa_nic->efx,
-				       EFX_FILTER_PRI_MANUAL,
-				       vdpa_nic->filters[type].filter_id);
-	if (rc) {
-		dev_err(&vdev->dev, "%s filter id: %d remove failed, err: %d\n",
-			filter_names[type], vdpa_nic->filters[type].filter_id,
-			rc);
-	} else {
-		dev_dbg(&vdev->dev, "%s filter id: %d removed\n",
-			filter_names[type], vdpa_nic->filters[type].filter_id);
-		vdpa_nic->filters[type].filter_id = -1;
-		vdpa_nic->filter_cnt--;
-	}
-	return rc;
-}
-
-static int ef100_vdpa_add_filter(struct ef100_vdpa_nic *vdpa_nic,
-				 enum ef100_vdpa_mac_filter_type type)
+int ef100_vdpa_add_filter(struct ef100_vdpa_nic *vdpa_nic,
+			  enum ef100_vdpa_mac_filter_type type)
 {
 	struct vdpa_device *vdev = &vdpa_nic->vdpa_dev;
 	struct efx_nic *efx = vdpa_nic->efx;
@@ -246,7 +272,7 @@ static int ef100_vdpa_add_filter(struct ef100_vdpa_nic *vdpa_nic,
 	u32 qid = EF100_VDPA_BASE_RX_QID;
 	struct efx_filter_spec *spec;
 	u8 baddr[ETH_ALEN];
-	int rc = 0;
+	int rc;
 
 	/* remove existing filter */
 	rc = ef100_vdpa_delete_filter(vdpa_nic, type);
@@ -357,6 +383,7 @@ fail:
 }
 
 #ifdef EFX_NOT_UPSTREAM
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
 static ssize_t vdpa_mac_show(struct device *dev,
 				struct device_attribute *attr,
 				char *buf_out)
@@ -428,6 +455,7 @@ err:
 
 static DEVICE_ATTR_RW(vdpa_mac);
 #endif
+#endif /* EFX_NOT_UPSTREAM */
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 static ssize_t vdpa_class_show(struct device *dev,
@@ -570,7 +598,9 @@ static int vdpa_create_files(struct efx_nic *efx)
 {
 #if (defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)) ||\
 defined(EFX_NOT_UPSTREAM)
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
 	int rc;
+#endif
 #endif
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
@@ -582,6 +612,7 @@ defined(EFX_NOT_UPSTREAM)
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
 	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_vdpa_mac);
 	if (rc) {
 		pci_err(efx->pci_dev, "vdpa_mac file creation failed\n");
@@ -591,6 +622,7 @@ defined(EFX_NOT_UPSTREAM)
 		return rc;
 	}
 #endif
+#endif
 
 	return 0;
 }
@@ -598,7 +630,9 @@ defined(EFX_NOT_UPSTREAM)
 static void vdpa_remove_files(struct efx_nic *efx)
 {
 #ifdef EFX_NOT_UPSTREAM
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_vdpa_mac);
+#endif
 #endif
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_vdpa_class);
@@ -1034,7 +1068,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
 		 vdpa_nic->max_queue_pairs);
 
 	for (i = 0; i < EF100_VDPA_MAC_FILTER_NTYPES; i++)
-		vdpa_nic->filters[i].filter_id = -1;
+		vdpa_nic->filters[i].filter_id = EFX_INVALID_FILTER_ID;
 
 	for (i = 0; i < (2 * vdpa_nic->max_queue_pairs); i++)
 		vdpa_nic->vring[i].irq = -EINVAL;

@@ -81,9 +81,8 @@
 	#error "This kernel version is now unsupported"
 #endif
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36) && \
-	!defined(EFX_NEED_UNMASK_MSIX_VECTORS)
-	/* Fixing that bug introduced a different one, fixed in 2.6.36 */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,36)
+	/* Fixing MSI-X masking introduced another bug, fixed in 2.6.36 */
 	#define EFX_NEED_SAVE_MSIX_MESSAGES yes
 #endif
 
@@ -553,21 +552,6 @@
 	};
 #endif
 
-#ifdef EFX_NEED_ETHTOOL_CMD_SPEED
-	static inline void ethtool_cmd_speed_set(struct ethtool_cmd *ep,
-						 u32 speed)
-	{
-		ep->speed = speed;
-		/* speed_hi is at offset 28 (architecture-independent) */
-		((u16 *)ep)[14] = speed >> 16;
-	}
-
-	static inline u32 ethtool_cmd_speed(const struct ethtool_cmd *ep)
-	{
-		return ((u16 *)ep)[14] << 16 | ep->speed;
-	}
-#endif
-
 #ifdef ETHTOOL_GMODULEEEPROM
 	#define EFX_HAVE_ETHTOOL_GMODULEEEPROM yes
 	#ifndef ETH_MODULE_SFF_8436
@@ -609,49 +593,6 @@
 #ifndef FLOW_CTRL_TX
 	#define FLOW_CTRL_TX		0x01
 	#define FLOW_CTRL_RX		0x02
-#endif
-
-#ifdef EFX_NEED_MII_RESOLVE_FLOWCTRL_FDX
-	/**
-	 * mii_resolve_flowctrl_fdx
-	 * @lcladv: value of MII ADVERTISE register
-	 * @rmtadv: value of MII LPA register
-	 *
-	 * Resolve full duplex flow control as per IEEE 802.3-2005 table 28B-3
-	 */
-	static inline u8 mii_resolve_flowctrl_fdx(u16 lcladv, u16 rmtadv)
-	{
-		u8 cap = 0;
-
-		if (lcladv & rmtadv & ADVERTISE_PAUSE_CAP) {
-			cap = FLOW_CTRL_TX | FLOW_CTRL_RX;
-		} else if (lcladv & rmtadv & ADVERTISE_PAUSE_ASYM) {
-			if (lcladv & ADVERTISE_PAUSE_CAP)
-				cap = FLOW_CTRL_RX;
-			else if (rmtadv & ADVERTISE_PAUSE_CAP)
-				cap = FLOW_CTRL_TX;
-		}
-
-		return cap;
-	}
-#endif
-
-#ifdef EFX_NEED_MII_ADVERTISE_FLOWCTRL
-	/**
-	 * mii_advertise_flowctrl - get flow control advertisement flags
-	 * @cap: Flow control capabilities (FLOW_CTRL_RX, FLOW_CTRL_TX or both)
-	 */
-	static inline u16 mii_advertise_flowctrl(int cap)
-	{
-		u16 adv = 0;
-
-		if (cap & FLOW_CTRL_RX)
-			adv = ADVERTISE_PAUSE_CAP | ADVERTISE_PAUSE_ASYM;
-		if (cap & FLOW_CTRL_TX)
-			adv ^= ADVERTISE_PAUSE_ASYM;
-
-		return adv;
-	}
 #endif
 
 #ifndef PORT_DA
@@ -702,32 +643,10 @@
 	#define GSO_LEGACY_MAX_SIZE	65536u
 #endif
 
-#ifdef EFX_NEED_NETDEV_TX_T
-	typedef int netdev_tx_t;
-	#ifndef NETDEV_TX_OK
-		#define NETDEV_TX_OK 0
-	#endif
-	#ifndef NETDEV_TX_BUSY
-		#define NETDEV_TX_BUSY 1
-	#endif
-#endif
-
 #ifndef netdev_for_each_uc_addr
-	#if defined(EFX_HAVE_NET_DEVICE_UC)
-		#define netdev_for_each_uc_addr(uclist, dev)		\
-			list_for_each_entry(uclist, &(dev)->uc.list, list)
-		#define netdev_uc_count(dev) (dev)->uc.count
-	#elif defined(EFX_HAVE_NET_DEVICE_UC_LIST)
-		#define netdev_for_each_uc_addr(uclist, dev)		\
-			for (uclist = (dev)->uc_list;			\
-			     uclist;					\
-			     uclist = uclist->next)
-		#define netdev_uc_count(dev) (dev)->uc_count
-	#else
-		struct dev_addr_list { void *da_addr; struct dev_addr_list *next; };
-		#define netdev_for_each_uc_addr(uclist, dev) while ((void)uclist,(void)dev,0)
-		#define netdev_uc_count(dev) ((void)dev,0)
-	#endif
+	#define netdev_for_each_uc_addr(uclist, dev)		\
+		list_for_each_entry(uclist, &(dev)->uc.list, list)
+	#define netdev_uc_count(dev) (dev)->uc.count
 #endif
 
 #ifndef netdev_for_each_mc_addr
@@ -737,14 +656,6 @@
 
 #ifndef netdev_mc_count
 	#define netdev_mc_count(dev) (dev)->mc_count
-#endif
-
-#ifdef EFX_NEED_ALLOC_ETHERDEV_MQ
-	#define alloc_etherdev_mq(sizeof_priv, queue_count)		\
-		({							\
-			BUILD_BUG_ON((queue_count) != 1);		\
-			alloc_etherdev(sizeof_priv);			\
-		})
 #endif
 
 #ifdef EFX_NEED_NETIF_SET_REAL_NUM_TX_QUEUES
@@ -762,48 +673,6 @@
 #ifdef CONFIG_RPS
 		dev->num_rx_queues = rxq;
 #endif
-	}
-#endif
-
-#ifdef EFX_NEED_NETIF_TX_LOCK
-	static inline void netif_tx_lock(struct net_device *dev)
-	{
-		spin_lock(&dev->xmit_lock);
-		dev->xmit_lock_owner = smp_processor_id();
-	}
-	static inline void netif_tx_lock_bh(struct net_device *dev)
-	{
-		spin_lock_bh(&dev->xmit_lock);
-		dev->xmit_lock_owner = smp_processor_id();
-	}
-	static inline void netif_tx_unlock_bh(struct net_device *dev)
-	{
-		dev->xmit_lock_owner = -1;
-		spin_unlock_bh(&dev->xmit_lock);
-	}
-	static inline void netif_tx_unlock(struct net_device *dev)
-	{
-		dev->xmit_lock_owner = -1;
-		spin_unlock(&dev->xmit_lock);
-	}
-#endif
-
-#ifdef EFX_NEED_NETIF_ADDR_LOCK
-	static inline void netif_addr_lock(struct net_device *dev)
-	{
-		netif_tx_lock(dev);
-	}
-	static inline void netif_addr_lock_bh(struct net_device *dev)
-	{
-		netif_tx_lock_bh(dev);
-	}
-	static inline void netif_addr_unlock_bh(struct net_device *dev)
-	{
-		netif_tx_unlock_bh(dev);
-	}
-	static inline void netif_addr_unlock(struct net_device *dev)
-	{
-		netif_tx_unlock(dev);
 	}
 #endif
 
@@ -862,13 +731,6 @@
 
 #ifndef netif_printk
 
-	/* A counterpart to SET_NETDEV_DEV */
-	#ifdef EFX_USE_NETDEV_DEV
-		#define EFX_GET_NETDEV_DEV(netdev) ((netdev)->dev.parent)
-	#else
-		#define EFX_GET_NETDEV_DEV(netdev) ((netdev)->class_dev.dev)
-	#endif
-
 	static inline const char *netdev_name(const struct net_device *dev)
 	{
 		if (dev->reg_state != NETREG_REGISTERED)
@@ -877,7 +739,7 @@
 	}
 
 	#define netdev_printk(level, netdev, format, args...)		\
-		dev_printk(level, EFX_GET_NETDEV_DEV(netdev),		\
+		dev_printk(level, (netdev)->dev.parent,			\
 			   "%s: " format,				\
 			   netdev_name(netdev), ##args)
 
@@ -1050,20 +912,6 @@
 	}
 #endif
 
-#ifdef EFX_NEED_IPV4_IS_MULTICAST
-	static inline bool ipv4_is_multicast(__be32 addr)
-	{
-		return (addr & htonl(0xf0000000)) == htonl(0xe0000000);
-	}
-#endif
-
-#ifdef EFX_NEED_IPV4_IS_LBCAST
-	static inline bool ipv4_is_lbcast(__be32 addr)
-	{
-		return addr == htonl(INADDR_BROADCAST);
-	}
-#endif
-
 #ifdef EFX_NEED_IP_IS_FRAGMENT
 	static inline bool ip_is_fragment(const struct iphdr *iph)
 	{
@@ -1081,19 +929,6 @@ netdev_notifier_info_to_dev(const void *info)
 {
 	return (struct net_device *) info;
 }
-#endif
-
-#ifdef EFX_NEED_SKB_FILL_PAGE_DESC
-	static inline void
-	skb_fill_page_desc(struct sk_buff *skb, int i, struct page *page,
-			   int off, int size)
-	{
-		skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
-		frag->page = page;
-		frag->page_offset = off;
-		frag->size = size;
-		skb_shinfo(skb)->nr_frags = i+1;
-	}
 #endif
 
 #ifdef EFX_NEED_SKB_FRAG_DMA_MAP
@@ -1326,12 +1161,8 @@ static inline struct sk_buff *
 #endif
 
 #ifdef EFX_NEED_SKB_TRANSPORT_HEADER_WAS_SET
-	#ifdef EFX_HAVE_OLD_SKB_HEADER_FIELDS
-		#define skb_transport_header_was_set(skb) (!!(skb)->h.raw)
-	#else
-		#define skb_transport_header_was_set(skb)	\
-			(!!(skb)->transport_header)
-	#endif
+	#define skb_transport_header_was_set(skb)		\
+		(!!(skb)->transport_header)
 #endif
 
 #ifndef EFX_HAVE_NAPI_STRUCT
@@ -1373,17 +1204,6 @@ static inline void skb_mark_napi_id(struct sk_buff *skb,
 
 #ifdef EFX_NEED_USLEEP_RANGE
 void usleep_range(unsigned long min, unsigned long max);
-#endif
-
-#ifndef EFX_HAVE_PCI_RESET_FUNCTION
-	static inline int pci_reset_function(struct pci_dev *dev)
-	{
-		/* If it doesn't have pci_reset_function, it probably doesn't
-		 * have all the things we need to implement it either.
-		 * So just return ENOSYS and don't have FLR recovery.
-		 */
-		return -ENOSYS;
-	}
 #endif
 
 #ifdef EFX_NEED_SKB_VLAN_TAG_GET
@@ -1437,10 +1257,6 @@ static inline struct tcphdr *inner_tcp_hdr(const struct sk_buff *skb)
 #undef EFX_CAN_SUPPORT_ENCAP_TSO
 #endif /* !NETIF_F_GSO_GRE */
 #endif /* EFX_HAVE_SKB_ENCAPSULATION */
-
-#ifndef EFX_HAVE_PCI_CHANNEL_STATE_T
-#define	pci_channel_state_t	enum pci_channel_state
-#endif
 
 #ifndef EFX_HAVE_INDIRECT_CALL_WRAPPERS
 #ifdef CONFIG_RETPOLINE
@@ -1522,6 +1338,25 @@ static inline int pci_aer_clear_nonfatal_status(struct pci_dev *dev)
 #define pci_notice(pdev, fmt, arg...)	dev_notice(&(pdev)->dev, fmt, ##arg)
 #endif
 
+#if defined(EFX_HAVE_RHASHTABLE) && defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+#ifdef EFX_NEED_RHASHTABLE_WALK_ENTER
+#include <linux/rhashtable.h>
+
+static inline void rhashtable_walk_enter(struct rhashtable *ht,
+					 struct rhashtable_iter *iter)
+{
+	int rc;
+
+	rc = rhashtable_walk_init(ht, iter
+#ifdef EFX_HAVE_RHASHTABLE_WALK_INIT_GFP
+				  , GFP_KERNEL
+#endif
+				  );
+	WARN_ON_ONCE(rc);
+}
+#endif
+#endif
+
 #ifdef EFX_NEED_STRSCPY
 #define strscpy(dest, src, count)	strlcpy(dest, src, count)
 #endif
@@ -1568,16 +1403,9 @@ krealloc_array(void *p, size_t new_n, size_t new_size, gfp_t flags)
  *
  */
 
-#ifdef EFX_NEED_PCI_CLEAR_MASTER
-	void pci_clear_master(struct pci_dev *dev);
-#endif
+#if defined(EFX_NEED_SAVE_MSIX_MESSAGES)
 
-#if defined(EFX_NEED_UNMASK_MSIX_VECTORS) || \
-    defined(EFX_NEED_SAVE_MSIX_MESSAGES)
-
-	#if defined(EFX_NEED_SAVE_MSIX_MESSAGES)
-		#include <linux/msi.h>
-	#endif
+	#include <linux/msi.h>
 
 	int efx_pci_save_state(struct pci_dev *dev);
 	#define pci_save_state efx_pci_save_state
@@ -1587,160 +1415,9 @@ krealloc_array(void *p, size_t new_n, size_t new_size, gfp_t flags)
 
 #endif
 
-#if defined(EFX_NEED_NEW_CPUMASK_API)
-
-	#define cpumask_clear efx_cpumask_clear
-	static inline void efx_cpumask_clear(cpumask_t *dstp)
-	{
-		cpus_clear(*dstp);
-	}
-
-	#define cpumask_copy efx_cpumask_copy
-	static inline void efx_cpumask_copy(cpumask_t *dstp, const cpumask_t *srcp)
-	{
-		*dstp = *srcp;
-	}
-
-	#undef cpumask_test_cpu
-	#define cpumask_test_cpu(cpu, mask) cpu_isset(cpu, *(mask))
-
-	#undef cpumask_set_cpu
-	#define cpumask_set_cpu(cpu, mask) cpu_set(cpu, *(mask))
-
-	#define cpumask_or efx_cpumask_or
-	static inline void efx_cpumask_or(cpumask_t *dstp, const cpumask_t *src1p,
-				      const cpumask_t *src2p)
-	{
-		cpus_or(*dstp, *src1p, *src2p);
-	}
-
-	#define cpumask_and efx_cpumask_and
-	static inline void efx_cpumask_and(cpumask_t *dstp, const cpumask_t *src1p,
-				      const cpumask_t *src2p)
-	{
-		cpus_and(*dstp, *src1p, *src2p);
-	}
-
-	#define cpumask_weight efx_cpumask_weight
-	static inline unsigned int efx_cpumask_weight(const cpumask_t *srcp)
-	{
-		return cpus_weight(*srcp);
-	}
-
-	#undef for_each_cpu
-	#define for_each_cpu(cpu, mask) for_each_cpu_mask(cpu, *(mask))
-
-	#undef for_each_possible_cpu
-	#define for_each_possible_cpu(CPU)			\
-		for_each_cpu_mask((CPU), cpu_possible_map)
-
-	#define cpumask_var_t efx_cpumask_var_t
-	typedef cpumask_t efx_cpumask_var_t[1];
-
-	#define alloc_cpumask_var efx_alloc_cpumask_var
-	static inline bool efx_alloc_cpumask_var(cpumask_var_t *mask, gfp_t flags)
-	{
-		return true;
-	}
-
-	#define zalloc_cpumask_var efx_zalloc_cpumask_var
-	static inline bool efx_zalloc_cpumask_var(cpumask_var_t *mask, gfp_t flags)
-	{
-		cpumask_clear(*mask);
-		return true;
-	}
-
-	#define free_cpumask_var efx_free_cpumask_var
-	static inline void efx_free_cpumask_var(cpumask_t *mask) {}
-
-	#ifdef topology_core_siblings
-		#define topology_core_cpumask(cpu)		\
-			(&(topology_core_siblings(cpu)))
-	#endif
-
-	#ifdef topology_thread_siblings
-		#define topology_sibling_cpumask(cpu)		\
-			(&(topology_thread_siblings(cpu)))
-	#endif
-
-	#if defined(cpumask_parse)
-		#define cpumask_parse_user(ubuf, ulen, src)	 \
-			__cpumask_parse(ubuf, ulen, src, NR_CPUS)
-	#elif defined(cpumask_parse_user)
-		#undef cpumask_parse_user
-		#define cpumask_parse_user(ubuf, ulen, src)	\
-			__cpumask_parse_user(ubuf, ulen, src, NR_CPUS)
-	#endif
-
-#elif defined(EFX_NEED_ZALLOC_CPUMASK_VAR)
-
-	#ifdef CONFIG_CPUMASK_OFFSTACK
-		static inline bool
-		zalloc_cpumask_var(cpumask_var_t *mask, gfp_t flags)
-		{
-			return alloc_cpumask_var(mask, flags | __GFP_ZERO);
-		}
-	#else
-		static inline bool
-		zalloc_cpumask_var(cpumask_var_t *mask, gfp_t flags)
-		{
-			cpumask_clear(*mask);
-			return true;
-		}
-	#endif
-
-#else
-	#if !defined(topology_sibling_cpumask) && defined(topology_thread_cpumask)
-		#define topology_sibling_cpumask topology_thread_cpumask
-	#endif
+#if !defined(topology_sibling_cpumask) && defined(topology_thread_cpumask)
+	#define topology_sibling_cpumask topology_thread_cpumask
 #endif
-
-#ifndef EFX_HAVE_CPUMASK_OF_NODE
-# ifdef node_to_cpumask_ptr
-#  define cpumask_of_node(NODE)				\
-	({						\
-		node_to_cpumask_ptr(result, NODE);	\
-		result;					\
-	})
-#  define EFX_HAVE_CPUMASK_OF_NODE yes
-# elif LINUX_VERSION_CODE != KERNEL_VERSION(2,6,25)
-#  define cpumask_of_node(NODE) &(node_to_cpumask(NODE))
-#  define EFX_HAVE_CPUMASK_OF_NODE yes
-# endif
-#endif
-
-#if defined(EFX_NEED_SET_CPUS_ALLOWED_PTR) && !defined(set_cpus_allowed_ptr)
-	/* kernel_compat.sh uses nexport for set_cpus_allowed_ptr() because of
-	 * redhat backport madness, but on !SMP machines it's a macro */
-	#define set_cpus_allowed_ptr efx_set_cpus_allowed_ptr
-	static inline int efx_set_cpus_allowed_ptr(struct task_struct *p,
-						   const cpumask_t *new_mask)
-	{
-	#if !defined(CONFIG_SMP)
-		/* Don't use set_cpus_allowed() if present, because 2.6.11-2.6.15
-		 * define it using an unexported symbol */
-		if (!cpu_isset(0, *new_mask))
-			return -EINVAL;
-		return 0;
-	#else
-		return set_cpus_allowed(p, *new_mask);
-	#endif
-	}
-#endif
-
-#ifdef EFX_NEED_KOBJECT_INIT_AND_ADD
-	#define kobject_init_and_add efx_kobject_init_and_add
-	extern int
-	efx_kobject_init_and_add(struct kobject *kobj, struct kobj_type *ktype,
-				 struct kobject *parent, const char *fmt, ...);
-#endif
-
-#ifdef EFX_NEED_KOBJECT_SET_NAME_VARGS
-	#define kobject_set_name_vargs efx_kobject_set_name_vargs
-	extern int
-	efx_kobject_set_name_vargs(struct kobject *kobj, const char *fmt, va_list vargs);
-#endif
-
 
 #ifdef EFX_NEED_CPUMASK_LOCAL_SPREAD
 #if NR_CPUS == 1
@@ -1760,30 +1437,6 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
  **************************************************************************
  *
  */
-#ifdef EFX_NEED_WORK_API_WRAPPERS
-	#define delayed_work work_struct
-	#undef INIT_DELAYED_WORK
-	#define INIT_DELAYED_WORK INIT_WORK
-	#undef EFX_USE_CANCEL_DELAYED_WORK_SYNC /* we can't */
-
-	/**
-	 * The old and new work-function prototypes just differ
-	 * in the type of the pointer returned, so it's safe
-	 * to cast between the prototypes.
-	 */
-	typedef void (*efx_old_work_func_t)(void *p);
-
-	#undef INIT_WORK
-	#define INIT_WORK(_work, _func)					\
-		do {							\
-			INIT_LIST_HEAD(&(_work)->entry);		\
-			(_work)->pending = 0;				\
-			PREPARE_WORK((_work),				\
-				     (efx_old_work_func_t) (_func),	\
-				     (_work));				\
-			init_timer(&(_work)->timer);                    \
-		} while (0)
-#endif
 
 #ifdef EFX_NEED_WQ_SYSFS
 	#define WQ_SYSFS	0
@@ -1803,15 +1456,6 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 #else
 	#define efx_alloc_workqueue(_fmt, _flags, _max, _name)	\
 		create_singlethread_workqueue(_name)
-#endif
-
-#if defined(EFX_NEED_NETIF_NAPI_DEL)
-	static inline void netif_napi_del(struct napi_struct *napi)
-	{
-	#ifdef CONFIG_NETPOLL
-		list_del(&napi->dev_list);
-	#endif
-	}
 #endif
 
 #if defined(EFX_USE_GRO) && defined(EFX_HAVE_NAPI_GRO_RECEIVE_GR)
@@ -1844,25 +1488,9 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 #define order_base_2(x) fls((x) - 1)
 #endif
 
-#ifdef EFX_NEED___SKB_QUEUE_HEAD_INIT
-	static inline void __skb_queue_head_init(struct sk_buff_head *list)
-	{
-		list->prev = list->next = (struct sk_buff *)list;
-		list->qlen = 0;
-	}
-#endif
-
 #ifndef list_first_entry_or_null
 	#define list_first_entry_or_null(ptr, type, member) \
 		(!list_empty(ptr) ? list_first_entry(ptr, type, member) : NULL)
-#endif
-
-#ifdef EFX_NEED_SKB_COPY_FROM_LINEAR_DATA
-	static inline void skb_copy_from_linear_data(const struct sk_buff *skb,
-			void *to, const unsigned int len)
-		{
-			memcpy(to, skb->data, len);
-		}
 #endif
 
 #ifdef EFX_NEED_NS_TO_TIMESPEC
@@ -1877,93 +1505,9 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 	}
 #endif
 
-#ifdef EFX_NEED_KTIME_SUB_NS
-	#if BITS_PER_LONG == 64 || defined(CONFIG_KTIME_SCALAR)
-		#define ktime_sub_ns(kt, nsval) \
-				({ (ktime_t){ .tv64 = (kt).tv64 - (nsval) }; })
-	#else
-		ktime_t ktime_sub_ns(const ktime_t kt, u64 nsec);
-	#endif
-#endif
-
-#ifdef EFX_HAVE_NET_TSTAMP
-	#include <linux/net_tstamp.h>
-#else
-	#include <linux/in.h>
-	#include <linux/ip.h>
-	#include <linux/udp.h>
-	/**
-	 * struct efx_ptp_timestamp - Time stamps of received packets.
-	 * @hwtstamp: Hardware (NIC) timestamp
-	 * @syststamp: System timestamp
-	 */
-	struct skb_shared_hwtstamps {
-		ktime_t	hwtstamp;
-		ktime_t	syststamp;
-	};
-
-	static inline struct skb_shared_hwtstamps *skb_hwtstamps(struct sk_buff *skb)
-	{
-		return (struct skb_shared_hwtstamps *) skb->cb;
-	}
-
-	enum {
-		SOF_TIMESTAMPING_TX_HARDWARE = (1<<0),
-		SOF_TIMESTAMPING_TX_SOFTWARE = (1<<1),
-		SOF_TIMESTAMPING_RX_HARDWARE = (1<<2),
-		SOF_TIMESTAMPING_RX_SOFTWARE = (1<<3),
-		SOF_TIMESTAMPING_SOFTWARE = (1<<4),
-		SOF_TIMESTAMPING_SYS_HARDWARE = (1<<5),
-		SOF_TIMESTAMPING_RAW_HARDWARE = (1<<6),
-		SOF_TIMESTAMPING_MASK =
-		(SOF_TIMESTAMPING_RAW_HARDWARE - 1) |
-		SOF_TIMESTAMPING_RAW_HARDWARE
-	};
-
-	enum hwtstamp_tx_types {
-		HWTSTAMP_TX_OFF,
-		HWTSTAMP_TX_ON,
-		HWTSTAMP_TX_ONESTEP_SYNC,
-	};
-
-	enum hwtstamp_rx_filters {
-		HWTSTAMP_FILTER_NONE,
-		HWTSTAMP_FILTER_ALL,
-		HWTSTAMP_FILTER_SOME,
-		HWTSTAMP_FILTER_PTP_V1_L4_EVENT,
-		HWTSTAMP_FILTER_PTP_V1_L4_SYNC,
-		HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ,
-		HWTSTAMP_FILTER_PTP_V2_L4_EVENT,
-		HWTSTAMP_FILTER_PTP_V2_L4_SYNC,
-		HWTSTAMP_FILTER_PTP_V2_L4_DELAY_REQ,
-		HWTSTAMP_FILTER_PTP_V2_L2_EVENT,
-		HWTSTAMP_FILTER_PTP_V2_L2_SYNC,
-		HWTSTAMP_FILTER_PTP_V2_L2_DELAY_REQ,
-		HWTSTAMP_FILTER_PTP_V2_EVENT,
-		HWTSTAMP_FILTER_PTP_V2_SYNC,
-		HWTSTAMP_FILTER_PTP_V2_DELAY_REQ,
-	};
-
-	struct hwtstamp_config {
-		int flags;
-		int tx_type;
-		int rx_filter;
-	};
-#endif
+#include <linux/net_tstamp.h>
 
 #ifndef EFX_HAVE_TIMESPEC64
-#ifdef EFX_NEED_TIMESPEC_ADD_NS
-	static inline void timespec_add_ns(struct timespec *a, u64 ns)
-	{
-		ns += a->tv_nsec;
-		while (unlikely(ns >= NSEC_PER_SEC)) {
-			ns -= NSEC_PER_SEC;
-			a->tv_sec++;
-		}
-		a->tv_nsec = ns;
-	}
-#endif
-
 #ifdef EFX_NEED_SET_NORMALIZED_TIMESPEC
 	/* set_normalized_timespec() might be defined by the kernel
 	 * but not exported.  Define it under our own name.
@@ -2047,34 +1591,9 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 	#define ktime_get_real_ts64 efx_ktime_get_real_ts64
 #endif // EFX_NEED_KTIME_GET_REAL_TS64
 
-#ifdef EFX_HAVE_OLD_SKB_LINEARIZE
-	static inline int efx_skb_linearize(struct sk_buff *skb)
-	{
-		return skb_linearize(skb, GFP_ATOMIC);
-	}
-	#define skb_linearize efx_skb_linearize
-#endif
-
-#ifdef EFX_HAVE_OLD_SKB_CHECKSUM_HELP
-	static inline int efx_skb_checksum_help(struct sk_buff *skb)
-	{
-		return skb_checksum_help(skb, 0);
-	}
-	#define skb_checksum_help efx_skb_checksum_help
-#endif
-
 #if defined(CONFIG_X86) && NET_IP_ALIGN != 0
 	#undef NET_IP_ALIGN
 	#define NET_IP_ALIGN 0
-#endif
-
-#ifndef EFX_HAVE_FDTABLE
-#define fdtable files_struct
-#define files_fdtable(files) (files)
-#endif
-
-#ifndef EFX_HAVE_REMAP_PFN_RANGE
-#define remap_pfn_range remap_page_range
 #endif
 
 #if defined(EFX_HAVE_OLD___VLAN_PUT_TAG)
@@ -2094,127 +1613,11 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 	}
 #endif
 
-#if defined(EFX_HAVE_FDTABLE_PARTIAL_ACCESSORS) && !defined(EFX_HAVE_FDTABLE_FULL_ACCESSORS)
-#include <linux/fdtable.h>
-static inline void efx_set_close_on_exec(int fd, struct fdtable *fdt)
-{
-	__set_bit(fd, fdt->close_on_exec);
-}
-
-static inline void efx_clear_close_on_exec(int fd, struct fdtable *fdt)
-{
-	__clear_bit(fd, fdt->close_on_exec);
-}
-
-static inline bool efx_close_on_exec(int fd, const struct fdtable *fdt)
-{
-	return close_on_exec(fd, fdt);
-}
-
-static inline void efx_set_open_fd(int fd, struct fdtable *fdt)
-{
-	__set_bit(fd, fdt->open_fds);
-}
-
-static inline void efx_clear_open_fd(int fd, struct fdtable *fdt)
-{
-	__clear_bit(fd, fdt->open_fds);
-}
-
-static inline bool efx_fd_is_open(int fd, const struct fdtable *fdt)
-{
-	return fd_is_open(fd, fdt);
-}
-
-static inline unsigned long efx_get_open_fds(int fd, const struct fdtable *fdt)
-{
-	return fdt->open_fds[fd];
-}
-#elif defined(EFX_HAVE_FDTABLE_FULL_ACCESSORS)
-#include <linux/fdtable.h>
-static inline void efx_set_close_on_exec(int fd, struct fdtable *fdt)
-{
-	__set_close_on_exec(fd, fdt);
-}
-
-static inline void efx_clear_close_on_exec(int fd, struct fdtable *fdt)
-{
-	__clear_close_on_exec(fd, fdt);
-}
-
-static inline bool efx_close_on_exec(int fd, const struct fdtable *fdt)
-{
-	return close_on_exec(fd, fdt);
-}
-
-static inline void efx_set_open_fd(int fd, struct fdtable *fdt)
-{
-	__set_open_fd(fd, fdt);
-}
-
-static inline void efx_clear_open_fd(int fd, struct fdtable *fdt)
-{
-	__clear_open_fd(fd, fdt);
-}
-
-static inline bool efx_fd_is_open(int fd, const struct fdtable *fdt)
-{
-	return fd_is_open(fd, fdt);
-}
-
-static inline unsigned long efx_get_open_fds(int fd, const struct fdtable *fdt)
-{
-	return fdt->open_fds[fd];
-}
-#else
-#ifdef EFX_HAVE_FDTABLE_H
-#include <linux/fdtable.h>
-#else
-#include <linux/file.h>
-#endif
-static inline void efx_set_close_on_exec(unsigned long fd, struct fdtable *fdt)
-{
-	FD_SET(fd, fdt->close_on_exec);
-}
-
-static inline void efx_clear_close_on_exec(unsigned long fd, struct fdtable *fdt)
-{
-	FD_CLR(fd, fdt->close_on_exec);
-}
-
-static inline bool efx_close_on_exec(unsigned long fd, const struct fdtable *fdt)
-{
-	return FD_ISSET(fd, fdt->close_on_exec);
-}
-
-static inline void efx_set_open_fd(unsigned long fd, struct fdtable *fdt)
-{
-	FD_SET(fd, fdt->open_fds);
-}
-
-static inline void efx_clear_open_fd(unsigned long fd, struct fdtable *fdt)
-{
-	FD_CLR(fd, fdt->open_fds);
-}
-
-static inline bool efx_fd_is_open(unsigned long fd, const struct fdtable *fdt)
-{
-	return FD_ISSET(fd, fdt->open_fds);
-}
-
-static inline unsigned long efx_get_open_fds(unsigned long fd, const struct fdtable *fdt)
-{
-	return fdt->open_fds->fds_bits[fd];
-}
-#endif
-
 #ifdef EFX_HAVE_ASM_SYSTEM_H
 #include <asm/system.h>
 #endif
 
-#ifdef EFX_HAVE_PPS_KERNEL
-	#include <linux/pps_kernel.h>
-#endif
+#include <linux/pps_kernel.h>
 
 #ifdef EFX_NEED_PPS_EVENT_TIME
 	struct pps_event_time {
@@ -2292,20 +1695,8 @@ static inline unsigned long efx_get_open_fds(unsigned long fd, const struct fdta
 #define PTP_CLOCK_PPSUSR (PTP_CLOCK_PPS + 1)
 #endif
 
-#ifdef EFX_HAVE_NON_CONST_JHASH2
-	static inline u32 efx_jhash2(const u32 *k, u32 length, u32 initval)
-	{
-		return jhash2((u32 *)k, length, initval);
-	}
-	#define jhash2 efx_jhash2
-#endif
-
 #ifdef EFX_NEED_RCU_ACCESS_POINTER
 #define rcu_access_pointer rcu_dereference
-#endif
-
-#ifdef EFX_NEED_CPU_ONLINE_MASK
-#define cpu_online_mask (&cpu_online_map)
 #endif
 
 #ifndef EFX_HAVE_PCI_VFS_ASSIGNED
@@ -2585,13 +1976,7 @@ enum hwmon_sensor_types {
 	hwmon_pwm,
 };
 
-#ifdef EFX_HAVE_HWMON_CLASS_DEVICE
-#define EFX_HWMON_DEVICE_REGISTER_TYPE class_device
-#else
-#define EFX_HWMON_DEVICE_REGISTER_TYPE device
-#endif
-
-struct EFX_HWMON_DEVICE_REGISTER_TYPE *hwmon_device_register_with_info(
+struct device *hwmon_device_register_with_info(
 	struct device *dev,
 	const char *name __always_unused,
 	void *drvdata __always_unused,
@@ -2691,12 +2076,6 @@ static inline void *efx_skb_put(struct sk_buff *skb, unsigned int len)
 	return skb_put(skb, len);
 }
 #define skb_put efx_skb_put
-#endif
-
-#ifndef DEFINE_RATELIMIT_STATE
-/* No rate limitation */
-#define DEFINE_RATELIMIT_STATE(var, i, b)	int var = 1
-#define __ratelimit(varp)			(*varp)
 #endif
 
 #if defined(EFX_NEED_PAGE_FRAG_FREE)
@@ -3292,6 +2671,14 @@ static inline void devlink_flash_update_timeout_notify(struct devlink *devlink,
 #endif
 #ifndef DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID
 #define DEVLINK_INFO_VERSION_GENERIC_FW_BUNDLE_ID	"fw.bundle_id"
+#endif
+
+#ifdef EFX_NEED_REFCOUNT_T
+typedef atomic_t refcount_t;
+
+#define refcount_set	atomic_set
+#define refcount_inc_not_zero	atomic_inc_not_zero
+#define refcount_dec_and_test	atomic_dec_and_test
 #endif
 
 #endif /* EFX_KERNEL_COMPAT_H */

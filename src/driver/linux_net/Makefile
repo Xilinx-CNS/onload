@@ -54,7 +54,7 @@ version:
 ifndef NOWERROR
 .PHONY: deb
 
-srpm dkms kmp:
+srpm dkms kmp kmp-suse:
 	+scripts/makesrpm --$@
 
 deb:

@@ -233,32 +233,6 @@ out_free:
 }
 
 #ifdef CONFIG_SFC_PTP
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-static int efx_ioctl_ts_init(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	/* bug 33070: We use a bit in the flags field to indicate that
-	 * the application wants to use PTPV2 enhanced UUID
-	 * filtering. Old application code has this bit set to
-	 * zero. Note that this has no effect if a V1 mode is
-	 * specified.
-	 */
-	if (data->ts_init.rx_filter >= HWTSTAMP_FILTER_PTP_V2_L4_EVENT &&
-	    !(data->ts_init.flags & EFX_TS_INIT_FLAGS_PTP_V2_ENHANCED)) {
-		netif_err(efx, drv, efx->net_dev,
-			  "PTPv2 now requires at least sfptpd 2.0.0.5\n");
-		return -EINVAL;
-	}
-
-	data->ts_init.flags &= ~EFX_TS_INIT_FLAGS_PTP_V2_ENHANCED;
-	return efx_ptp_ts_init(efx, &data->ts_init);
-}
-
-static int efx_ioctl_ts_read(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	return efx_ptp_ts_read(efx, &data->ts_read);
-}
-#endif
-
 #ifdef EFX_NOT_UPSTREAM
 static int efx_ioctl_get_ts_config(struct efx_nic *efx,
 				   union efx_ioctl_data __user *user_data)
@@ -515,19 +489,8 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 		/* This command has variable length */
 		return efx_ioctl_do_mcdi(efx, &user_data->mcdi_request2);
 #ifdef CONFIG_SFC_PTP
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-	case EFX_TS_INIT:
-		size = sizeof(data->ts_init);
-		op = efx_ioctl_ts_init;
-		break;
-	case EFX_TS_READ:
-		size = sizeof(data->ts_read);
-		op = efx_ioctl_ts_read;
-		break;
-#else
 	case EFX_TS_INIT:
 		return -EOPNOTSUPP;
-#endif
 #if defined(EFX_NOT_UPSTREAM)
 	case EFX_GET_TS_CONFIG:
 		return efx_ioctl_get_ts_config(efx, user_data);

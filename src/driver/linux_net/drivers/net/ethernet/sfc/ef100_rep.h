@@ -11,11 +11,7 @@
 #ifndef EF100_REP_H
 #define EF100_REP_H
 
-/* Forward declaration needed by nic.h for efx.h */
-struct efx_rep;
-
 #include "net_driver.h"
-#include "nic.h"
 #include "mae.h"
 #include "tc.h"
 
@@ -25,8 +21,7 @@ void efx_ef100_remove_mport(struct efx_nic *efx, struct mae_mport_desc *mport);
 int efx_ef100_add_mport(struct efx_nic *efx, struct mae_mport_desc *mport);
 
 void efx_ef100_fini_vfreps(struct efx_nic *efx);
-int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i,
-			   struct mae_mport_desc *mport_desc);
+int efx_ef100_vfrep_create(struct efx_nic *efx, unsigned int i);
 void efx_ef100_vfrep_destroy(struct efx_nic *efx, unsigned int i);
 
 /* Returns the representor netdevice corresponding to a VF m-port, or NULL
@@ -45,13 +40,13 @@ struct efx_rep {
 	struct efx_nic *parent;
 	struct net_device *net_dev;
 	bool remote; /* flag to indicate remote rep */
+	struct list_head list; /* entry on nic_data->rem_reps */
 	u32 msg_enable;
 	u32 mport; /* m-port ID of corresponding PF/VF */
 	u32 clid; /* client ID of corresponding PF/VF */
 	unsigned int idx; /* rep index  */
 	unsigned int write_index, read_index;
 	unsigned int rx_pring_size; /* max length of RX list */
-	u32 mport_id;
 	struct efx_tc_flow_rule dflt; /* default-rule for switching */
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
 	struct list_head rx_list;

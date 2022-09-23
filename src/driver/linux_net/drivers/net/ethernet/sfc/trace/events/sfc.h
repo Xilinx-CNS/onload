@@ -166,7 +166,7 @@ TRACE_EVENT(sfc_transmit,
 		__entry->transport_offset_valid =
 			skb_transport_header_was_set(skb);
 		__entry->transport_offset = skb_transport_offset(skb);
-#if defined(EFX_HAVE_NET_TSTAMP) && defined(EFX_HAVE_SKBTX_HW_TSTAMP)
+#if defined(EFX_HAVE_SKBTX_HW_TSTAMP)
 		__entry->tx_flags = skb_shinfo(skb)->tx_flags;
 #else
 		__entry->tx_flags = skb_shinfo(skb)->tx_flags.flags;

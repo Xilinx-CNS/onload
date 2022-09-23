@@ -20,25 +20,16 @@
 #include <linux/ethtool.h>
 #include <linux/topology.h>
 #include <linux/gfp.h>
-#ifndef EFX_USE_KCOMPAT
 #include <linux/aer.h>
 #include <linux/interrupt.h>
-#endif
 #ifdef EFX_NOT_UPSTREAM
-#ifdef EFX_USE_LINUX_UACCESS_H
 #include <linux/uaccess.h>
-#else
-#include <asm/uaccess.h>
-#endif
 #endif
 #if defined(CONFIG_EEH)
 #include <asm/pci-bridge.h>
 #endif
 #include "net_driver.h"
 #include <linux/filter.h>
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_AER)
-#include <linux/aer.h>
-#endif
 #if defined(EFX_USE_KCOMPAT) && (defined(EFX_HAVE_NDO_ADD_VXLAN_PORT) || defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD))
 #include <net/gre.h>
 #endif
@@ -111,10 +102,6 @@ void efx_get_udp_tunnel_type_name(u16 type, char *buf, size_t buflen)
 		snprintf(buf, buflen, "type %d", type);
 }
 
-#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_CANCEL_WORK_SYNC) || !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC))
-struct workqueue_struct *efx_workqueue;
-#endif
-
 /**************************************************************************
  *
  * Configurable values
@@ -156,13 +143,6 @@ static unsigned int rx_irq_mod_usec = 60;
  *   512 / 3 * 1.2 = 205 usec.
  */
 static unsigned int tx_irq_mod_usec = 150;
-
-#if !defined(EFX_USE_KCOMPAT) || (defined(topology_core_cpumask))
-#define HAVE_EFX_NUM_PACKAGES
-#endif
-#if !defined(EFX_USE_KCOMPAT) || (defined(topology_sibling_cpumask) && defined(EFX_HAVE_EXPORTED_CPU_SIBLING_MAP))
-#define HAVE_EFX_NUM_CORES
-#endif
 
 module_param_named(interrupt_mode, efx_interrupt_mode, uint, 0444);
 MODULE_PARM_DESC(interrupt_mode,
@@ -361,12 +341,10 @@ static int efx_eth_ioctl(struct net_device *net_dev, struct ifreq *ifr,
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	switch (cmd) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 	case SIOCSHWTSTAMP:
 		return efx_ptp_set_ts_config(efx, ifr);
 	case SIOCGHWTSTAMP:
 		return efx_ptp_get_ts_config(efx, ifr);
-#endif
 	default:
 		return -EOPNOTSUPP;
 	}
@@ -846,33 +824,10 @@ static void efx_init_features(struct efx_nic *efx)
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_TX_ACCEL)
 	efx->fixed_features |= NETIF_F_HW_VLAN_CTAG_TX;
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_VLAN_FEATURES)
 	/* Mask for features that also apply to VLAN devices */
 	net_dev->vlan_features |= (NETIF_F_CSUM_MASK | NETIF_F_SG |
 				   NETIF_F_HIGHDMA | NETIF_F_ALL_TSO |
 				   NETIF_F_RXCSUM);
-#else
-	/* Alternative to vlan_features in RHEL 5.5+.  These all
-	 * depend on NETIF_F_HW_CSUM or NETIF_F_HW_VLAN_TX because
-	 * inline VLAN tags break the Ethertype check for IPv4-only
-	 * checksum offload in dev_queue_xmit().
-	 */
-	if ((net_dev->features | efx->fixed_features) &
-	    (NETIF_F_HW_CSUM | NETIF_F_HW_VLAN_TX)) {
-#if defined(NETIF_F_VLAN_CSUM)
-		net_dev->features |= NETIF_F_VLAN_CSUM;
-#endif
-#if defined(NETIF_F_VLAN_SG)
-		net_dev->features |= NETIF_F_VLAN_SG;
-#endif
-#if defined(NETIF_F_VLAN_TSO)
-		net_dev->features |= NETIF_F_VLAN_TSO;
-#endif
-#if defined(NETIF_F_VLAN_HIGHDMA)
-		net_dev->features |= NETIF_F_VLAN_HIGHDMA;
-#endif
-	}
-#endif
 
 	efx_add_hw_features(efx, net_dev->features & ~efx->fixed_features);
 
@@ -1297,9 +1252,7 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	probe_data = container_of(efx, struct efx_probe_data, efx);
 	kfree(probe_data);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 	pci_disable_pcie_error_reporting(pci_dev);
-#endif
 };
 
 /* NIC initialisation
@@ -1439,9 +1392,7 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 		netif_warn(efx, probe, efx->net_dev,
 			   "failed to create MTDs (%d)\n", rc);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 	(void)pci_enable_pcie_error_reporting(pci_dev);
-#endif
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -1715,9 +1666,7 @@ static struct pci_driver efx_pci_driver = {
 	.resume		= efx_pm_old_resume,
 #endif
 	.shutdown	= efx_pci_shutdown,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 	.err_handler	= &efx_err_handlers,
-#endif
 #ifdef CONFIG_SFC_SRIOV
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_CONFIGURE)
 	.sriov_configure = efx_pci_sriov_configure,
@@ -1774,10 +1723,8 @@ const struct net_device_ops efx_netdev_ops = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 	.ndo_features_check	= efx_features_check,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.ndo_vlan_rx_add_vid	= efx_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid	= efx_vlan_rx_kill_vid,
-#endif
 #ifdef CONFIG_SFC_SRIOV
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	.ndo_set_vf_mac         = efx_sriov_set_vf_mac,
@@ -1923,15 +1870,6 @@ static int __init efx_init_module(void)
 	if (rc)
 		goto err_debugfs;
 
-#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_CANCEL_WORK_SYNC) || !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC))
-	efx_workqueue = create_singlethread_workqueue("sfc_wq");
-	if (!efx_workqueue) {
-		printk(KERN_ERR "Failed to create workqueue\n");
-		rc = -ENOMEM;
-		goto err_wq;
-	}
-#endif
-
 	rc = efx_create_reset_workqueue();
 	if (rc)
 		goto err_reset;
@@ -1961,10 +1899,6 @@ static int __init efx_init_module(void)
  err_channels_init:
 	efx_destroy_reset_workqueue();
  err_reset:
-#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_CANCEL_WORK_SYNC) || !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC))
-	destroy_workqueue(efx_workqueue);
- err_wq:
-#endif
 	efx_fini_debugfs();
  err_debugfs:
 	return rc;
@@ -1978,9 +1912,6 @@ static void __exit efx_exit_module(void)
 	pci_unregister_driver(&efx_pci_driver);
 	efx_channels_fini_module();
 	efx_destroy_reset_workqueue();
-#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_CANCEL_WORK_SYNC) || !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC))
-	destroy_workqueue(efx_workqueue);
-#endif
 	efx_fini_debugfs();
 }
 

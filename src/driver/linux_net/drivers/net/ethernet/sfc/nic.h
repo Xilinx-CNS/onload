@@ -191,14 +191,6 @@ struct efx_ef10_nic_data {
 	__le64 *mc_stats;
 	u64 stats[EF10_STAT_COUNT];
 	struct delayed_work vf_stats_work;
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
-	/**
-	 * @vf_stats_enabled: Marker to avoid stats work rearming if
-	 *	cancel_delayed_work_sync() is not available.
-	 *	Serialized by stats_lock.
-	 */
-	bool vf_stats_enabled;
-#endif
 	bool workaround_35388;
 	bool workaround_26807;
 	bool workaround_61265;
@@ -281,14 +273,6 @@ static inline struct net_device *efx_get_vf_rep(struct efx_nic *efx, unsigned in
 	if (efx->type->get_vf_rep == NULL)
 		return ERR_PTR(-EOPNOTSUPP);
 	return efx->type->get_vf_rep(efx, vf);
-}
-
-static inline struct net_device *efx_get_remote_rep(struct efx_nic *efx,
-						    unsigned int idx)
-{
-	if (efx->type->get_remote_rep == NULL)
-		return ERR_PTR(-EOPNOTSUPP);
-	return efx->type->get_remote_rep(efx, idx);
 }
 
 #endif /* EFX_NIC_H */

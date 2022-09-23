@@ -141,14 +141,12 @@ struct ef100_nic_data {
 	spinlock_t vf_reps_lock; /* Synchronises 'all-VFreps' operations */
 	unsigned int vf_rep_count; /* usually but not always efx->vf_count */
 	struct net_device **vf_rep; /* local VF reps */
-	spinlock_t rem_reps_lock; /* Synchronises 'all-remote-reps' operations */
-	unsigned int rem_rep_count;
-	struct net_device **rem_rep; /* remote reps */
+	struct list_head rem_reps; /* remote reps */
 	u32 base_mport;
-	u32 old_base_mport; /* compat for old C-models.  XXX remove after Cmod flag day */
+	u32 own_mport;
 	u32 local_mae_intf; /* interface_idx that corresponds to us, in mport enumerate */
 	bool have_mport; /* base_mport was populated successfully */
-	bool have_old_mport; /* old_base_mport was populated successfully */
+	bool have_own_mport; /* own_mport was populated successfully */
 	bool have_local_intf; /* local_mae_intf was populated successfully */
 	bool filters_up; /* filter table has been upped */
 	bool grp_mae; /* MAE Privilege */

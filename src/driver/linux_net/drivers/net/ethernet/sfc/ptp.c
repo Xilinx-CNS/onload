@@ -172,18 +172,6 @@ enum ptp_packet_state {
 
 #define PTP_SYNC_ATTEMPTS	4
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-/* Number of received packets to hold in timestamp queue */
-#define	MAX_RX_TS_ENTRIES	16
-
-/* struct efx_ptp_rx_timestamp - Compatibility layer */
-struct efx_ptp_rx_timestamp {
-	struct skb_shared_hwtstamps ts;
-	u8 uuid[PTP_V1_UUID_LENGTH];
-	u8 seqid[PTP_V1_SEQUENCE_LENGTH];
-};
-#endif
-
 /**
  * struct efx_ptp_match - Matching structure, stored in sk_buff's cb area.
  * @expiry: Time after which the packet should be delivered irrespective of
@@ -195,12 +183,6 @@ struct efx_ptp_rx_timestamp {
  *	only valid if this is true.
  */
 struct efx_ptp_match {
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-	/**
-	 * @timestamps: Last hardware timestamp received from the NIC.
-	 */
-	struct skb_shared_hwtstamps timestamps; /* Must be first member */
-#endif
 	unsigned long expiry;
 	enum ptp_packet_state state;
 	u16 vlan_tci;
@@ -526,18 +508,6 @@ struct efx_ptp_data {
 #endif
 	struct efx_ptp_timeset
 	timeset[MC_CMD_PTP_OUT_SYNCHRONIZE_TIMESET_MAXNUM];
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-	/** @tx_ts_valid: Indicates if @tx_ts is populated. */
-	bool tx_ts_valid;
-	/** @tx_ts: Last timestamp send in and SKB. */
-	struct skb_shared_hwtstamps tx_ts;
-	/** @rx_ts_head: First valid entry in @rx_ts. */
-	unsigned int rx_ts_head;
-	/** @rx_ts_tail: Last valid entry in @rx_ts. */
-	unsigned int rx_ts_tail;
-	/** @rx_ts: Timestamps received from the NIC. */
-	struct efx_ptp_rx_timestamp rx_ts[MAX_RX_TS_ENTRIES];
-#endif
 	void (*xmit_skb)(struct efx_nic *efx, struct sk_buff *skb);
 };
 
@@ -566,53 +536,6 @@ bool efx_ptp_use_mac_tx_timestamps(struct efx_nic *efx)
 #ifdef EFX_NOT_UPSTREAM
 static int efx_ptp_insert_unicast_filters(struct efx_nic *efx,
 					  __be32 unicast_address);
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-
-static void efx_ptp_save_rx_ts(struct efx_nic *efx, struct sk_buff *skb,
-			       struct skb_shared_hwtstamps *timestamps)
-{
-	unsigned int new_tail;
-	struct efx_ptp_data *ptp = efx->ptp_data;
-
-	local_bh_disable();
-	new_tail = ptp->rx_ts_tail + 1;
-	if (new_tail >= MAX_RX_TS_ENTRIES)
-		new_tail = 0;
-
-	if (new_tail != ptp->rx_ts_head) {
-		struct efx_ptp_rx_timestamp *ts;
-
-		ts = &ptp->rx_ts[ptp->rx_ts_tail];
-		ptp->rx_ts_tail = new_tail;
-		ts->ts = *timestamps;
-
-		if (ptp->mode == MC_CMD_PTP_MODE_V1) {
-			memcpy(ts->uuid, &skb->data[PTP_V1_UUID_OFFSET],
-			       PTP_V1_UUID_LENGTH);
-		} else if (ptp->mode == MC_CMD_PTP_MODE_V2) {
-			/* In the normal V2 mode, we pass bytes 2-7 of the V2
-			 * UUID to the application */
-			memcpy(ts->uuid, &skb->data[PTP_V2_MC_UUID_OFFSET],
-			       PTP_V2_MC_UUID_LENGTH);
-		} else {
-			/* bug 33070 In the enhanced V2 mode, we pass bytes 0-2
-			 * and 5-7 of the V2 UUID to the application */
-			ts->uuid[0] = skb->data[PTP_V2_UUID_OFFSET];
-			ts->uuid[1] = skb->data[PTP_V2_UUID_OFFSET + 1];
-			ts->uuid[2] = skb->data[PTP_V2_UUID_OFFSET + 2];
-			ts->uuid[3] = skb->data[PTP_V2_UUID_OFFSET + 5];
-			ts->uuid[4] = skb->data[PTP_V2_UUID_OFFSET + 6];
-			ts->uuid[5] = skb->data[PTP_V2_UUID_OFFSET + 7];
-			BUG_ON(ptp->mode != MC_CMD_PTP_MODE_V2_ENHANCED);
-		}
-
-		memcpy(ts->seqid, &skb->data[PTP_V1_SEQUENCE_OFFSET],
-		       PTP_V1_SEQUENCE_LENGTH);
-	}
-	local_bh_enable();
-}
 #endif
 
 #define PTP_SW_STAT(ext_name, field_name)				\
@@ -1919,12 +1842,7 @@ static void efx_ptp_xmit_skb_mc(struct efx_nic *efx, struct sk_buff *skb)
 	/* Failure to get the system timestamp is non-fatal */
 	(void)efx_ptp_get_host_time(efx, &timestamps);
 #endif
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-	efx->ptp_data->tx_ts_valid = 1;
-	efx->ptp_data->tx_ts = timestamps;
-#else
 	skb_tstamp_tx(skb, &timestamps);
-#endif
 
 	rc = 0;
 
@@ -2026,9 +1944,6 @@ static inline void efx_ptp_process_rx(struct efx_nic *efx, struct sk_buff *skb)
 		efx_ptp_get_host_time(efx, timestamps);
 #ifdef CONFIG_SFC_DEBUGFS
 		efx_ptp_update_delta_stats(efx, timestamps);
-#endif
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-		efx_ptp_save_rx_ts(efx, skb, timestamps);
 #endif
 	}
 
@@ -2309,11 +2224,6 @@ static int efx_ptp_start(struct efx_nic *efx)
 	struct efx_ptp_data *ptp = efx->ptp_data;
 	int rc;
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-	ptp->rx_ts_tail = 0;
-	ptp->rx_ts_head = 0;
-	ptp->tx_ts_valid = 0;
-#endif
 	ptp->reset_required = false;
 
 	rc = efx_ptp_insert_multicast_filters(efx);
@@ -2731,11 +2641,7 @@ static int efx_create_pps_worker(struct efx_ptp_data *ptp)
 #endif
 bool efx_ptp_uses_separate_channel(struct efx_nic *efx)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
-	  return efx->ptp_capability & (1 << MC_CMD_PTP_OUT_GET_ATTRIBUTES_RX_TSTAMP_OOB_LBN);
-#else
-	  return true;
-#endif
+	return efx->ptp_capability & (1 << MC_CMD_PTP_OUT_GET_ATTRIBUTES_RX_TSTAMP_OOB_LBN);
 }
 
 /* Find PTP data of this adapter's PHC or add its own to the list.
@@ -3017,9 +2923,7 @@ static void efx_ptp_remove_pps_workqueue(struct efx_ptp_data *ptp_data)
 	if (!pps_workwq)
 		return;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_WORK_SYNC)
 	cancel_work_sync(&ptp_data->pps_work);
-#endif
 
 	destroy_workqueue(pps_workwq);
 }
@@ -3081,19 +2985,7 @@ void efx_ptp_remove(struct efx_nic *efx)
 	if (!ptp_data || !ptp_data->workwq)
 		return;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_WORK_SYNC)
 	cancel_work_sync(&ptp_data->work);
-#endif
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_CANCEL_WORK_SYNC)
-	flush_workqueue(ptp_data->workwq);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
-	if (ptp_data->phc_clock)
-#endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT) || defined(EFX_NOT_UPSTREAM)
-		flush_workqueue(ptp_data->pps_workwq);
-#endif
-#endif
 
 	skb_queue_purge(&ptp_data->rxq);
 	skb_queue_purge(&ptp_data->txq);
@@ -3270,18 +3162,9 @@ int efx_ptp_change_mode(struct efx_nic *efx, bool enable_wanted,
 	return 0;
 }
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-int efx_ptp_ts_init(struct efx_nic *efx, struct hwtstamp_config *init)
-#else
 static int efx_ptp_ts_init(struct efx_nic *efx, struct hwtstamp_config *init)
-#endif
 {
 	int rc;
-
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-	if (!efx->ptp_data)
-		return -ENOTTY;
-#endif
 
 	if (init->flags)
 		return -EINVAL;
@@ -3337,8 +3220,6 @@ void efx_ptp_get_ts_info(struct efx_nic *efx, struct ethtool_ts_info *ts_info)
 	ts_info->rx_filters = ptp->efx->type->hwtstamp_filters;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
-
 int efx_ptp_set_ts_config(struct efx_nic *efx, struct ifreq *ifr)
 {
 	struct hwtstamp_config config;
@@ -3358,53 +3239,6 @@ int efx_ptp_set_ts_config(struct efx_nic *efx, struct ifreq *ifr)
 	return copy_to_user(ifr->ifr_data, &config, sizeof(config))
 		? -EFAULT : 0;
 }
-
-#else /* EFX_USE_KCOMPAT && !EFX_HAVE_NET_TSTAMP */
-
-int efx_ptp_ts_read(struct efx_nic *efx, struct efx_ts_read *read)
-{
-	struct efx_ptp_data *ptp = efx->ptp_data;
-	struct timespec64 uts;
-
-	if (!ptp)
-		return -ENOTTY;
-
-	local_bh_disable();
-	read->tx_valid = ptp->tx_ts_valid;
-	if (ptp->tx_ts_valid) {
-		ptp->tx_ts_valid = 0;
-		uts = ktime_to_timespec64(ptp->tx_ts.syststamp);
-		read->tx_ts.tv_sec = uts.tv_sec;
-		read->tx_ts.tv_nsec = uts.tv_nsec;
-		uts = ktime_to_timespec64(ptp->tx_ts.hwtstamp);
-		read->tx_ts_hw.tv_sec = uts.tv_sec;
-		read->tx_ts_hw.tv_nsec = uts.tv_nsec;
-	}
-	read->rx_valid = 0;
-	if (ptp->rx_ts_head != ptp->rx_ts_tail) {
-		struct efx_ptp_rx_timestamp *ts;
-
-		ts = &ptp->rx_ts[ptp->rx_ts_head];
-		uts = ktime_to_timespec64(ts->ts.syststamp);
-		read->rx_ts.tv_sec = uts.tv_sec;
-		read->rx_ts.tv_nsec = uts.tv_nsec;
-		uts = ktime_to_timespec64(ts->ts.hwtstamp);
-		read->rx_ts_hw.tv_sec = uts.tv_sec;
-		read->rx_ts_hw.tv_nsec = uts.tv_nsec;
-		memcpy(read->uuid, ts->uuid, sizeof(read->uuid));
-		memcpy(read->seqid, ts->seqid, sizeof(read->seqid));
-		read->rx_valid = 1;
-
-		ptp->rx_ts_head++;
-		if (ptp->rx_ts_head >= MAX_RX_TS_ENTRIES)
-			ptp->rx_ts_head = 0;
-	}
-	local_bh_enable();
-
-	return 0;
-}
-
-#endif /* !EFX_USE_KCOMPAT || EFX_HAVE_NET_TSTAMP */
 
 int efx_ptp_get_ts_config(struct efx_nic *efx, struct ifreq *ifr)
 {
@@ -3761,10 +3595,9 @@ void __efx_rx_skb_attach_timestamp(struct efx_channel *channel,
 		ptp->nic_to_kernel_time(pkt_timestamp_major,
 					pkt_timestamp_minor,
 					ptp->ts_corrections.general_rx);
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_NET_TSTAMP)
+#if defined(EFX_NOT_UPSTREAM)
 	/* Note the unusual preprocessor condition:
 	 * - setting syststamp is deprecated, so this is EFX_NOT_UPSTREAM
-	 * - this will be done in efx_ptp_process_rx() if !EFX_HAVE_NET_TSTAMP
 	 */
 	efx_ptp_get_host_time(efx, timestamps);
 #endif

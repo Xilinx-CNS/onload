@@ -1101,11 +1101,7 @@ static void efx_mcdi_proxy_timeout_cmd(struct efx_mcdi_iface *mcdi,
 static void efx_mcdi_cmd_work(struct work_struct *context)
 {
 	struct efx_mcdi_cmd *cmd =
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_NEED_WORK_API_WRAPPERS)
 		container_of(context, struct efx_mcdi_cmd, work.work);
-#else
-		container_of(context, struct efx_mcdi_cmd, work);
-#endif
 	struct efx_mcdi_iface *mcdi = cmd->mcdi;
 	struct efx_mcdi_copy_buffer *copybuf =
 		kmalloc(sizeof(struct efx_mcdi_copy_buffer), GFP_KERNEL);

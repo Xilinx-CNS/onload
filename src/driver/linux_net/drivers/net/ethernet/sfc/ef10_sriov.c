@@ -641,11 +641,14 @@ static int efx_ef10_sriov_reopen(struct efx_nic *efx)
 	return rc;
 }
 
-int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac)
+int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac,
+			      bool *reset)
 {
 	enum nic_state old_state = STATE_UNINIT;
 	struct ef10_vf *vf;
 	int rc, rc2 = 0;
+
+	*reset = false;
 
 	vf = efx_ef10_vf_info(efx, vf_i);
 	if (!vf)
@@ -664,12 +667,10 @@ int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac)
 		if (rc)
 			goto reopen;
 	} else {
-		bool reset = false;
-
 		rc = efx_ef10_vport_reconfigure(efx, vf->vport_id, NULL, mac,
-						&reset);
+						reset);
 		if (rc == 0) {
-			if (reset)
+			if (*reset)
 				netif_warn(efx, drv, efx->net_dev,
 				    "VF %d has been reset to reconfigure MAC\n",
 				    vf_i);
@@ -743,6 +744,7 @@ reset_nic:
 			  "Failed to restore the VF - scheduling reset.\n");
 
 		efx_schedule_reset(vf->efx, RESET_TYPE_DATAPATH);
+		*reset = true;
 	} else {
 		netif_err(efx, drv, efx->net_dev,
 			  "Failed to restore the VF and cannot reset the VF - VF is not functional.\n");
@@ -982,7 +984,8 @@ int efx_ef10_sriov_get_vf_config(struct efx_nic *efx, int vf_i,
 }
 #endif
 
-int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac)
+int efx_ef10_sriov_set_vf_mac(struct efx_nic *efx, int vf_i, const u8 *mac,
+			      bool *reset)
 {
 	return -EOPNOTSUPP;
 }

@@ -26,6 +26,7 @@
 #include "ef100_tx.h"
 #include "ef100_sriov.h"
 #include "ef100_netdev.h"
+#include "ef100_rep.h"
 #include "tc.h"
 #include "mae.h"
 #include "xdp.h"
@@ -952,27 +953,16 @@ static struct net_device *ef100_get_vf_rep(struct efx_nic *efx, unsigned int vf)
 	return NULL;
 }
 
-static struct net_device *ef100_get_remote_rep(struct efx_nic *efx,
-					       unsigned int i)
-{
-	struct ef100_nic_data *nic_data = efx->nic_data;
-
-	if (i < nic_data->rem_rep_count)
-		return nic_data->rem_rep[i];
-	return NULL;
-}
-
 static void ef100_detach_remote_reps(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct net_device *rep_dev;
-	unsigned int i;
+	struct efx_rep *efv;
 
-	netif_dbg(efx, drv, efx->net_dev, "Detaching %d remote reps\n",
-		  nic_data->rem_rep_count);
-	assert_spin_locked(&nic_data->rem_reps_lock);
-	for (i = 0; i < nic_data->rem_rep_count; i++) {
-		rep_dev = nic_data->rem_rep[i];
+	ASSERT_RTNL();
+	netif_dbg(efx, drv, efx->net_dev, "Detaching remote reps\n");
+	list_for_each_entry(efv, &nic_data->rem_reps, list) {
+		rep_dev = efv->net_dev;
 		if (!rep_dev)
 			continue;
 		netif_carrier_off(rep_dev);
@@ -986,16 +976,17 @@ static void ef100_detach_remote_reps(struct efx_nic *efx)
 static void ef100_attach_remote_reps(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	unsigned int i;
+	struct net_device *rep_dev;
+	struct efx_rep *efv;
 
-	netif_dbg(efx, drv, efx->net_dev, "Attaching %d remote reps\n",
-		  nic_data->rem_rep_count);
-	assert_spin_locked(&nic_data->rem_reps_lock);
-	for (i = 0; i < nic_data->rem_rep_count; i++) {
-		if (!nic_data->rem_rep[i])
+	ASSERT_RTNL();
+	netif_dbg(efx, drv, efx->net_dev, "Attaching remote reps\n");
+	list_for_each_entry(efv, &nic_data->rem_reps, list) {
+		rep_dev = efv->net_dev;
+		if (!rep_dev)
 			continue;
-		netif_tx_wake_all_queues(nic_data->rem_rep[i]);
-		netif_carrier_on(nic_data->rem_rep[i]);
+		netif_tx_wake_all_queues(rep_dev);
+		netif_carrier_on(rep_dev);
 	}
 }
 
@@ -1028,9 +1019,7 @@ static void ef100_detach_reps(struct efx_nic *efx)
 	spin_lock_bh(&nic_data->vf_reps_lock);
 	__ef100_detach_reps(efx);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
-	spin_lock_bh(&nic_data->rem_reps_lock);
 	ef100_detach_remote_reps(efx);
-	spin_unlock_bh(&nic_data->rem_reps_lock);
 }
 
 void __ef100_attach_reps(struct efx_nic *efx)
@@ -1059,9 +1048,7 @@ static void ef100_attach_reps(struct efx_nic *efx)
 	spin_lock_bh(&nic_data->vf_reps_lock);
 	__ef100_attach_reps(efx);
 	spin_unlock_bh(&nic_data->vf_reps_lock);
-	spin_lock_bh(&nic_data->rem_reps_lock);
 	ef100_attach_remote_reps(efx);
-	spin_unlock_bh(&nic_data->rem_reps_lock);
 }
 #else /* EFX_TC_OFFLOAD */
 void __ef100_detach_reps(struct efx_nic *efx)
@@ -1237,9 +1224,6 @@ static int efx_ef100_get_base_mport(struct efx_nic *efx)
 	nic_data->base_mport = id;
 	nic_data->have_mport = true;
 
-	/* For compat with older C models, we also need a destination base
-	 * mport.  XXX remove after C-model flag day
-	 */
 	/* Construct mport selector for "calling PF" */
 	efx_mae_mport_uplink(efx, &selector);
 	/* Look up actual mport ID */
@@ -1247,10 +1231,10 @@ static int efx_ef100_get_base_mport(struct efx_nic *efx)
 	if (rc)
 		return rc;
 	if (id >> 16)
-		netif_warn(efx, probe, efx->net_dev, "Bad oldbase m-port id %#x\n",
+		netif_warn(efx, probe, efx->net_dev, "Bad own m-port id %#x\n",
 			   id);
-	nic_data->old_base_mport = id;
-	nic_data->have_old_mport = true;
+	nic_data->own_mport = id;
+	nic_data->have_own_mport = true;
 	return 0;
 }
 
@@ -1606,7 +1590,7 @@ static int ef100_probe_main(struct efx_nic *efx)
 	efx->nic_data = nic_data;
 	nic_data->efx = efx;
 	spin_lock_init(&nic_data->vf_reps_lock);
-	spin_lock_init(&nic_data->rem_reps_lock);
+	INIT_LIST_HEAD(&nic_data->rem_reps);
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER) && !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
 	spin_lock_init(&nic_data->udp_tunnels_lock);
 	INIT_LIST_HEAD(&nic_data->udp_tunnels);
@@ -1904,11 +1888,8 @@ const struct efx_nic_type ef100_pf_nic_type = {
 #ifdef CONFIG_RFS_ACCEL
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
 #endif
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
 	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
-#endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
 	.get_phys_port_id = efx_ef100_get_phys_port_id,
@@ -1951,10 +1932,11 @@ const struct efx_nic_type ef100_pf_nic_type = {
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	.get_vf_rep = ef100_get_vf_rep,
-	.get_remote_rep = ef100_get_remote_rep,
 	.detach_reps = ef100_detach_reps,
 	.attach_reps = ef100_attach_reps,
 #endif
+	.add_mport = efx_ef100_add_mport,
+	.remove_mport = efx_ef100_remove_mport,
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
@@ -2043,11 +2025,8 @@ const struct efx_nic_type ef100_vf_nic_type = {
 #ifdef CONFIG_RFS_ACCEL
 	.filter_rfs_expire_one = efx_mcdi_filter_rfs_expire_one,
 #endif
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
 	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
-#endif
 
 	.rx_prefix_size = ESE_GZ_RX_PKT_PREFIX_LEN,
 	.rx_hash_offset = ESF_GZ_RX_PREFIX_RSS_HASH_LBN / 8,

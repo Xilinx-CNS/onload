@@ -73,9 +73,6 @@
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE)
 #include <linux/rhashtable.h>
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-#include <linux/refcount.h>
-#endif
 
 #include "enum.h"
 #include "bitfield.h"
@@ -97,7 +94,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.13.1001"
+#define EFX_DRIVER_VERSION	"5.3.13.1005"
 #endif
 
 #ifdef DEBUG
@@ -916,10 +913,6 @@ struct efx_channel {
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_NEED_SAVE_MSIX_MESSAGES)
 	/** @msix_msg: saved message data from MSI-X table */
 	struct msi_msg msix_msg;
-#endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_NEED_UNMASK_MSIX_VECTORS)
-	/** @msix_ctrl: saved vector control from MSI-X table */
-	u32 msix_ctrl;
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
@@ -2026,6 +2019,8 @@ struct ef100_udp_tunnel {
 };
 #endif
 
+struct mae_mport_desc;
+
 /**
  * struct efx_nic_type - Efx device type definition
  * @is_vf: Tells whether the function is a VF or PF
@@ -2190,9 +2185,10 @@ struct ef100_udp_tunnel {
  * @udp_tnl_add_port: Add a UDP tunnel port
  * @udp_tnl_del_port: Remove a UDP tunnel port
  * @get_vf_rep: get the VF representor netdevice for given VF index
- * @get_remote_rep: get the representor netdevice for given remote function
  * @detach_reps: detach (stop TX on) all representors
  * @attach_reps: attach (restart TX on) all representors
+ * @add_mport: process the addition of a new MAE port (e.g. create a repr)
+ * @remove_mport: process the deletion of an existing MAE port
  * @has_dynamic_sensors: check if dynamic sensor capability is set
  * @rx_recycle_ring_size: Size of the RX recycle ring
  * @revision: Hardware architecture revision
@@ -2401,10 +2397,8 @@ struct efx_nic_type {
 	int (*ptp_set_ts_config)(struct efx_nic *efx,
 				 struct hwtstamp_config *init);
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	int (*vlan_rx_add_vid)(struct efx_nic *efx, __be16 proto, u16 vid);
 	int (*vlan_rx_kill_vid)(struct efx_nic *efx, __be16 proto, u16 vid);
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
 	int (*get_phys_port_id)(struct efx_nic *efx,
 				struct netdev_phys_item_id *ppid);
@@ -2416,7 +2410,8 @@ struct efx_nic_type {
 	void (*sriov_fini)(struct efx_nic *efx);
 	bool (*sriov_wanted)(struct efx_nic *efx);
 	int (*sriov_configure)(struct efx_nic *efx, int num_vfs);
-	int (*sriov_set_vf_mac)(struct efx_nic *efx, int vf_i, const u8 *mac);
+	int (*sriov_set_vf_mac)(struct efx_nic *efx, int vf_i, const u8 *mac,
+				bool *reset);
 	int (*sriov_set_vf_vlan)(struct efx_nic *efx, int vf_i, u16 vlan,
 				 u8 qos);
 	int (*sriov_set_vf_spoofchk)(struct efx_nic *efx, int vf_i,
@@ -2450,11 +2445,12 @@ struct efx_nic_type {
 	void (*udp_tnl_del_port2)(struct efx_nic *efx, struct ef100_udp_tunnel tnl);
 #endif
 	struct net_device *(*get_vf_rep)(struct efx_nic *efx, unsigned int vf);
-	struct net_device *(*get_remote_rep)(struct efx_nic *efx, unsigned int idx);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	void (*detach_reps)(struct efx_nic *efx);
 	void (*attach_reps)(struct efx_nic *efx);
 #endif
+	int (*add_mport)(struct efx_nic *efx, struct mae_mport_desc *mport);
+	void (*remove_mport)(struct efx_nic *efx, struct mae_mport_desc *mport);
 	bool (*has_dynamic_sensors)(struct efx_nic *efx);
 	unsigned int (*rx_recycle_ring_size)(const struct efx_nic *efx);
 
@@ -2712,7 +2708,7 @@ static inline size_t efx_rx_buffer_step(struct efx_nic *efx)
 		     efx->rx_dma_len + efx->rx_ip_align, EFX_RX_BUF_ALIGNMENT);
 }
 
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NET_TSTAMP) && defined(EFX_HAVE_SKBTX_HW_TSTAMP))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKBTX_HW_TSTAMP)
 static inline bool efx_xmit_with_hwtstamp(struct sk_buff *skb)
 {
 	return skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP;
@@ -2721,7 +2717,7 @@ static inline void efx_xmit_hwtstamp_pending(struct sk_buff *skb)
 {
 	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
 }
-#elif defined(CONFIG_SFC_PTP) && defined(EFX_HAVE_NET_TSTAMP) && !defined(EFX_HAVE_SKBTX_HW_TSTAMP)
+#elif defined(CONFIG_SFC_PTP) && !defined(EFX_HAVE_SKBTX_HW_TSTAMP)
 static inline bool efx_xmit_with_hwtstamp(struct sk_buff *skb)
 {
 	return skb_shinfo(skb)->tx_flags.hardware;

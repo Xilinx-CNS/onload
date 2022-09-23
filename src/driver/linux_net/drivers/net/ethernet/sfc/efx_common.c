@@ -155,12 +155,7 @@ void efx_queue_reset_work(struct efx_nic *efx)
 
 void efx_flush_reset_workqueue(struct efx_nic *efx)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_WORK_SYNC)
 	cancel_work_sync(&efx->reset_work);
-#else
-	(void) efx;
-	flush_workqueue(reset_workqueue);
-#endif
 }
 
 void efx_destroy_reset_workqueue(void)
@@ -241,11 +236,8 @@ void efx_set_rx_mode(struct net_device *net_dev)
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 
 	if (efx->port_enabled)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_WORK_SYNC)
 		schedule_work(&efx->mac_work);
-#else
-		queue_work(efx_workqueue, &efx->mac_work);
-#endif
+
 	/* Otherwise efx_start_port() will do this */
 }
 
@@ -405,35 +397,19 @@ bool efx_dl_supported(struct efx_nic *efx)
 /* Run periodically off the general workqueue */
 static void efx_monitor(struct work_struct *data)
 {
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_NEED_WORK_API_WRAPPERS)
 	struct efx_nic *efx = container_of(data, struct efx_nic,
 			monitor_work.work);
-#else
-	struct efx_nic *efx = container_of(data, struct efx_nic,
-			monitor_work);
-#endif
 
 	netif_vdbg(efx, timer, efx->net_dev,
 		   "hardware monitor executing on CPU %d\n",
 		   raw_smp_processor_id());
 	WARN_ON_ONCE(!efx->type->monitor);
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
-	/* Without cancel_delayed_work_sync(), we have to make sure that
-	 * we don't rearm when !port_enabled
-	 */
-	mutex_lock(&efx->mac_lock);
-	if (!efx->port_enabled) {
-		mutex_unlock(&efx->mac_lock);
-		return;
-	} else {
-#else
 	/* If the mac_lock is already held then it is likely a port
 	 * reconfiguration is already in place, which will likely do
 	 * most of the work of monitor() anyway.
 	 */
 	if (mutex_trylock(&efx->mac_lock)) {
-#endif
 		if (efx->port_enabled && efx->type->monitor)
 			efx->type->monitor(efx);
 		mutex_unlock(&efx->mac_lock);
@@ -445,13 +421,8 @@ static void efx_monitor(struct work_struct *data)
 void efx_start_monitor(struct efx_nic *efx)
 {
 	if (efx->type->monitor != NULL)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
 		schedule_delayed_work(&efx->monitor_work,
 				      msecs_to_jiffies(monitor_interval_ms));
-#else
-	queue_delayed_work(efx_workqueue, &efx->monitor_work,
-			   msecs_to_jiffies(monitor_interval_ms));
-#endif
 }
 
 /**************************************************************************
@@ -652,27 +623,9 @@ static void efx_stop_port(struct efx_nic *efx)
 	netif_addr_lock_bh(efx->net_dev);
 	netif_addr_unlock_bh(efx->net_dev);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
 	cancel_delayed_work_sync(&efx->monitor_work);
-#endif
 	efx_selftest_async_cancel(efx);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_WORK_SYNC)
 	cancel_work_sync(&efx->mac_work);
-#endif
-#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_CANCEL_WORK_SYNC) || !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC))
-	/* Since we cannot synchronously cancel/wait for individual
-	 * work items, we must use cancel_delayed_work() to cancel any
-	 * work items that are currently delayed and then
-	 * flush_workqueue() to cancel/wait for all work items that
-	 * are ready to run.  Since monitor_work reschedules itself,
-	 * it must check the port_enabled flag before doing so, and to
-	 * close a race with that check we must repeat the process.
-	 */
-	cancel_delayed_work(&efx->monitor_work);
-	flush_workqueue(efx_workqueue);
-	cancel_delayed_work(&efx->monitor_work);
-	flush_workqueue(efx_workqueue);
-#endif
 }
 
 /* If the interface is supposed to be running but is not, start
@@ -1805,7 +1758,7 @@ int efx_vlan_rx_kill_vid(struct net_device *net_dev, u16 vid)
 	else
 		return -EOPNOTSUPP;
 }
-#elif defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
+#else
 void efx_vlan_rx_add_vid(struct net_device *net_dev, unsigned short vid)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
@@ -1938,7 +1891,6 @@ int __efx_enable_debug __attribute__((unused));
  *
  **************************************************************************/
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 /* A PCI error affecting this device was detected.
  * At this point MMIO and DMA may be disabled.
  * Stop the software path and request a slot reset.
@@ -2064,7 +2016,6 @@ struct pci_error_handlers efx_err_handlers = {
 	.slot_reset	= efx_io_slot_reset,
 	.resume		= efx_io_resume,
 };
-#endif	/* !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER) */
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_FEATURES_CHECK)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_ENCAPSULATION)

@@ -382,23 +382,6 @@ struct hwtstamp_config {
 
 #endif /* !__KERNEL__ */
 
-#if !defined(EFX_HAVE_NET_TSTAMP)
-
-/* Read any transmit or receive timestamps since the last call **************/
-#define EFX_TS_READ 0xef13
-
-struct efx_ts_read {
-	__u32 tx_valid;
-	struct efx_timespec tx_ts;
-	struct efx_timespec tx_ts_hw;
-	__u32 rx_valid;
-	struct efx_timespec rx_ts;
-	struct efx_timespec rx_ts_hw;
-	__u8 uuid[6];
-	__u8 seqid[2];
-};
-#endif
-
 /* Set the NIC time clock offset ********************************************/
 #define EFX_TS_SETTIME 0xef14
 struct efx_ts_settime {
@@ -609,9 +592,6 @@ union efx_ioctl_data {
 	struct efx_ethtool_rxnfc rxnfc;
 	struct efx_rxfh_indir rxfh_indir;
 	struct hwtstamp_config ts_init;
-#if !defined(EFX_HAVE_NET_TSTAMP)
-	struct efx_ts_read ts_read;
-#endif
 	struct efx_ts_settime ts_settime;
 	struct efx_ts_adjtime ts_adjtime;
 	struct efx_ts_sync ts_sync;

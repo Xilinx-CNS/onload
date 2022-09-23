@@ -14,6 +14,9 @@
 #include "net_driver.h"
 #include "tc.h"
 #include "mcdi_pcol.h" /* needed for various MC_CMD_MAE_*_NULL defines */
+#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_NEED_REFCOUNT_T)
+#include <linux/refcount.h>
+#endif
 
 int efx_mae_allocate_mport(struct efx_nic *efx, u32 *id, u32 *label);
 int efx_mae_free_mport(struct efx_nic *efx, u32 id);
@@ -60,12 +63,14 @@ struct mae_mport_desc {
 	};
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 	struct rhash_head linkage;
+	refcount_t ref;
 #endif
 	struct efx_rep *efv;
 };
 
 int efx_mae_enumerate_mports(struct efx_nic *efx);
-struct mae_mport_desc *efx_mae_find_mport(struct efx_nic *efx, u32 mport_id);
+struct mae_mport_desc *efx_mae_get_mport(struct efx_nic *efx, u32 mport_id);
+void efx_mae_put_mport(struct efx_nic *efx, struct mae_mport_desc *desc);
 
 int efx_mae_get_tables(struct efx_nic *efx);
 void efx_mae_free_tables(struct efx_nic *efx);
@@ -89,14 +94,12 @@ struct mae_caps {
  * @efx: The associated NIC
  * @mport_work: Work item to handle MPORT journal changes
  * @mports_ht: m-port descriptions from MC_CMD_MAE_MPORT_READ_JOURNAL
- * @mports_mutex: Used to serialise operations on the m-port hashtable
  */
 struct efx_mae {
 	struct efx_nic *efx;
 	struct work_struct mport_work;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 	struct rhashtable mports_ht;
-	struct mutex mports_mutex;	/* Serialise operations on mports_ht */
 #endif
 };
 
@@ -145,6 +148,7 @@ int efx_mae_insert_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule,
 			    u32 prio);
 int efx_mae_remove_lhs_rule(struct efx_nic *efx, struct efx_tc_lhs_rule *rule);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
+struct efx_tc_ct_entry; /* see tc_conntrack.h */
 int efx_mae_insert_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn);
 int efx_mae_remove_ct(struct efx_nic *efx, struct efx_tc_ct_entry *conn);
 #endif

@@ -93,8 +93,6 @@ static inline u32 efx_rx_buf_hash(struct efx_nic *efx, const u8 *eh)
 #endif
 }
 
-void efx_schedule_slow_fill(struct efx_rx_queue *rx_queue);
-void efx_cancel_slow_fill(struct efx_rx_queue *rx_queue);
 void efx_fast_push_rx_descriptors(struct efx_rx_queue *rx_queue, bool atomic);
 
 void

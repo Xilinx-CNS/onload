@@ -26,12 +26,7 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 
 	if (!nic_data->grp_mae)
 		return 0;
-	if (efx_have_mport_journal_event(efx))
-		return 0;
 
-	/* The remainder is for compatibility with firmwares that do not
-	 * support the MPORT_JOURNAL event.
-	 */
 	if (!nic_data->have_local_intf)
 		/* We weren't able to identify our local interface, so we will
 		 * have created remote_reps for these VFs.  Thus, don't create
@@ -47,7 +42,7 @@ static int efx_ef100_pci_sriov_enable(struct efx_nic *efx, int num_vfs)
 	}
 
 	for (i = 0; i < num_vfs; i++) {
-		rc = efx_ef100_vfrep_create(efx, i, NULL);
+		rc = efx_ef100_vfrep_create(efx, i);
 		if (rc)
 			goto fail2;
 	}

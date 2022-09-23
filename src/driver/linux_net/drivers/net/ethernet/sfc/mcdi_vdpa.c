@@ -156,21 +156,13 @@ int efx_vdpa_vring_create(struct efx_vring_ctx *vring_ctx,
 	int rc = 0;
 
 #ifdef EFX_NOT_UPSTREAM
-	pr_info("%s: Called for vf:0x%x type:%u vi:%u\n", __func__,
-		vring_ctx->vf_index, vring_ctx->mcdi_vring_type,
-		vring_ctx->vi_index);
+	pr_info("%s: vf:%u type:%u vi:%u last_avail: %x last_used: %x\n",
+		__func__, vring_ctx->vf_index,
+		vring_ctx->mcdi_vring_type, vring_ctx->vi_index,
+		vring_dyn_cfg ? vring_dyn_cfg->avail_idx : U32_MAX,
+		vring_dyn_cfg ? vring_dyn_cfg->used_idx : U32_MAX);
 #endif
 	efx = vring_ctx->nic;
-
-	if (vring_dyn_cfg) {
-		if (vring_dyn_cfg->avail_idx >= vring_cfg->size ||
-		    vring_dyn_cfg->used_idx >= vring_cfg->size) {
-			pr_err("%s:Last avail:%u Used size:%u incorrect %u\n",
-			       __func__, vring_dyn_cfg->avail_idx,
-			       vring_dyn_cfg->used_idx, vring_cfg->size);
-			return -EINVAL;
-		}
-	}
 
 	BUILD_BUG_ON(MC_CMD_VIRTIO_INIT_QUEUE_RESP_LEN != 0);
 

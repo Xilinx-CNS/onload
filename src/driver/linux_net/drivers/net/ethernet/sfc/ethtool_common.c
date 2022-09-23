@@ -103,6 +103,7 @@ static const struct efx_sw_stat_desc efx_sw_stat_desc[] = {
 	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_tx),
 	EFX_ETHTOOL_UINT_RXQ_STAT(rx_xdp_redirect),
 #endif
+	EFX_ETHTOOL_UINT_RXQ_STAT(rx_mport_bad),
 #ifdef CONFIG_RFS_ACCEL
 	EFX_ETHTOOL_UINT_CHANNEL_STAT_NO_N(rfs_filter_count),
 	EFX_ETHTOOL_UINT_CHANNEL_STAT(rfs_succeeded),
