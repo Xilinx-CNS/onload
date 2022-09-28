@@ -305,6 +305,7 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
     break;
 
   case EF_VI_CAP_RX_SHARED:
+  case EF_VI_CAP_RX_FILTER_SET_DEST:
     get_from_nic_flags(nic, NIC_FLAG_RX_SHARED, out);
     break;
 

@@ -170,6 +170,9 @@ enum ef_vi_capability {
   /** Packets captured on a VI might belong to other instance */
   EF_VI_CAP_RX_SHARED,
 
+  /** Ability to specify a destination for a filter */
+  EF_VI_CAP_RX_FILTER_SET_DEST,
+
   /** Maximum value of capabilities enumeration */
   EF_VI_CAP_MAX, /* Keep this last */
 };
