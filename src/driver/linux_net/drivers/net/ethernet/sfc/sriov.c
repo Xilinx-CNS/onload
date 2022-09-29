@@ -78,9 +78,10 @@ int efx_sriov_get_vf_config(struct net_device *net_dev, int vf_i, struct ifla_vf
 int efx_sriov_set_vf_mac(struct net_device *net_dev, int vf_i, u8 *mac)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
+	bool reset;
 
 	if (efx->type->sriov_set_vf_mac)
-		return efx->type->sriov_set_vf_mac(efx, vf_i, mac);
+		return efx->type->sriov_set_vf_mac(efx, vf_i, mac, &reset);
 	else
 		return -EOPNOTSUPP;
 }

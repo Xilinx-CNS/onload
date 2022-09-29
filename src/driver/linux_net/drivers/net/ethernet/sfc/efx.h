@@ -387,10 +387,6 @@ static inline void efx_schedule_channel_irq(struct efx_channel *channel)
 	efx_schedule_channel(channel);
 }
 
-#if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_CANCEL_WORK_SYNC) || !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC))
-extern struct workqueue_struct *efx_workqueue;
-#endif
-
 static inline void efx_device_detach_sync(struct efx_nic *efx)
 {
 	struct net_device *dev = efx->net_dev;

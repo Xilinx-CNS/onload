@@ -52,10 +52,8 @@ bool separate_tx_channels;
 unsigned int efx_interrupt_mode;
 
 #if defined(EFX_NOT_UPSTREAM)
-#if !defined(EFX_USE_KCOMPAT) || (defined(topology_core_cpumask))
 #define HAVE_EFX_NUM_PACKAGES
-#endif
-#if !defined(EFX_USE_KCOMPAT) || (defined(topology_sibling_cpumask) && defined(EFX_HAVE_EXPORTED_CPU_SIBLING_MAP))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_EXPORTED_CPU_SIBLING_MAP)
 #define HAVE_EFX_NUM_CORES
 #endif
 
@@ -74,7 +72,7 @@ static char *efx_rss_cpus_str;
 module_param_named(rss_cpus, efx_rss_cpus_str, charp, 0444);
 MODULE_PARM_DESC(rss_cpus, "Number of CPUs to use for Receive-Side Scaling, or 'packages', 'cores', 'hyperthreads', 'numa_local_cores' or 'numa_local_hyperthreads'");
 
-#if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_PACKAGES)
+#if defined(HAVE_EFX_NUM_PACKAGES)
 static bool rss_numa_local = true;
 module_param(rss_numa_local, bool, 0444);
 MODULE_PARM_DESC(rss_numa_local, "Restrict RSS to CPUs on the local NUMA node");
@@ -130,7 +128,7 @@ static void efx_fini_napi_channel(struct efx_channel *channel);
  * INTERRUPTS
  *************/
 
-#if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_CORES)
+#if defined(HAVE_EFX_NUM_CORES)
 static unsigned int count_online_cores(struct efx_nic *efx, bool local_node)
 {
 	cpumask_var_t filter_mask;
@@ -273,7 +271,7 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 	case EFX_RSS_HYPERTHREADS:
 		n_rxq = num_online_cpus();
 		break;
-#if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_CORES)
+#if defined(HAVE_EFX_NUM_CORES)
 	case EFX_RSS_NUMA_LOCAL_CORES:
 		if (xen_domain()) {
 			pci_warn(efx->pci_dev,
@@ -290,7 +288,6 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 		}
 		break;
 #endif
-#if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS))
 	case EFX_RSS_NUMA_LOCAL_HYPERTHREADS:
 		if (xen_domain()) {
 			pci_warn(efx->pci_dev,
@@ -301,7 +298,6 @@ static unsigned int efx_wanted_parallelism(struct efx_nic *efx)
 			            cpumask_weight(cpumask_of_pcibus(efx->pci_dev->bus)));
 		}
 		break;
-#endif
 	case EFX_RSS_CUSTOM:
 		break;
 	default:
@@ -347,7 +343,7 @@ static unsigned int efx_num_rss_channels(struct efx_nic *efx)
 	/* do not RSS to extra_channels, such as PTP */
 	unsigned int rss_channels = efx_rx_channels(efx) -
 				    efx->n_extra_channels;
-#if (!defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)) && defined(HAVE_EFX_NUM_PACKAGES)
+#if defined(HAVE_EFX_NUM_PACKAGES)
 #if !defined(EFX_NOT_UPSTREAM)
 	enum efx_rss_mode rss_mode = efx->rss_mode;
 #endif
@@ -493,7 +489,8 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		/* reduce driverlink allocated IRQs first, to a minimum of 1 */
 		n_channels -= efx->n_dl_irqs;
 		efx->n_dl_irqs = vec_count == min_channels ? 0 :
-				 max(vec_count - (int)n_channels, 1);
+				 min(max(vec_count - (int)n_channels, 1),
+				     efx->n_dl_irqs);
 		/* Make driverlink-consumed IRQ vectors unavailable for net
 		 * driver use.
 		 */
@@ -968,10 +965,8 @@ void efx_set_interrupt_affinity(struct efx_nic *efx)
 		return;
 	}
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)
 	cpumask_and(&sets[LOCAL], cpu_online_mask,
 		    cpumask_of_pcibus(efx->pci_dev->bus));
-#endif
 
 	/* Assign each channel a CPU */
 	efx_for_each_channel(channel, efx) {
@@ -981,12 +976,9 @@ void efx_set_interrupt_affinity(struct efx_nic *efx)
 		 */
 		efx_rss_choose_package(&sets[PACKAGE], &sets[TEMP1],
 				       &sets[TEMP2],
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_CPUMASK_OF_PCIBUS)
 				       rss_numa_local &&
 				       channel->channel < efx->n_rss_channels ?
-				       &sets[LOCAL] :
-#endif
-				       cpu_online_mask);
+				       &sets[LOCAL] : cpu_online_mask);
 		WARN_ON(!cpumask_weight(&sets[PACKAGE]));
 #else
 		cpumask_copy(&sets[PACKAGE], &cpu_online_map);
@@ -2015,7 +2007,7 @@ void efx_stop_channels(struct efx_nic *efx)
 			  "successfully flushed all queues\n");
 	}
 
-#if defined(EFX_NOT_UPSTREAM) && (!defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_WORK_SYNC))
+#if defined(EFX_NOT_UPSTREAM)
 	cancel_work_sync(&efx->schedule_all_channels_work);
 #endif
 

@@ -860,6 +860,7 @@ static u64 ef100_vdpa_get_device_features(struct vdpa_device *vdev)
 	if (!vdpa_nic->in_order)
 		features &= ~(1ULL << VIRTIO_F_IN_ORDER);
 #endif
+	features |= (1ULL << VIRTIO_NET_F_MAC);
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Features returned:\n", __func__);
 	print_features_str(features, vdev);
@@ -871,6 +872,7 @@ static int ef100_vdpa_set_driver_features(struct vdpa_device *vdev,
 					  u64 features)
 {
 	struct ef100_vdpa_nic *vdpa_nic;
+	u64 verify_features = features;
 	int rc = 0;
 
 #ifdef EFX_NOT_UPSTREAM
@@ -886,8 +888,10 @@ static int ef100_vdpa_set_driver_features(struct vdpa_device *vdev,
 		rc = -EINVAL;
 		goto err;
 	}
+	verify_features = features & ~(1ULL << VIRTIO_NET_F_MAC);
 	rc = efx_vdpa_verify_features(vdpa_nic->efx,
-				      EF100_VDPA_DEVICE_TYPE_NET, features);
+				      EF100_VDPA_DEVICE_TYPE_NET,
+				      verify_features);
 
 	if (rc != 0) {
 		dev_err(&vdev->dev, "%s: MCDI verify features error:%d\n",
@@ -1064,12 +1068,13 @@ static void ef100_vdpa_get_config(struct vdpa_device *vdev, unsigned int offset,
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: offset:%u len:%u\n", __func__, offset, len);
 #endif
-	if ((offset + len) > sizeof(struct virtio_net_config)) {
+	/* Avoid the possibility of wrap-up after the sum exceeds U32_MAX */
+	if (WARN_ON(((u64)offset + len) > sizeof(struct virtio_net_config))) {
 		dev_err(&vdev->dev,
 			"%s: Offset + len exceeds config size\n", __func__);
 		return;
 	}
-	memcpy(buf, &vdpa_nic->net_config + offset, len);
+	memcpy(buf, (u8 *)&vdpa_nic->net_config + offset, len);
 }
 
 static void ef100_vdpa_set_config(struct vdpa_device *vdev, unsigned int offset,
@@ -1081,18 +1086,23 @@ static void ef100_vdpa_set_config(struct vdpa_device *vdev, unsigned int offset,
 	dev_info(&vdev->dev, "%s: offset:%u len:%u config size:%lu\n",
 		 __func__, offset, len, sizeof(vdpa_nic->net_config));
 #endif
-	if ((offset + len) > sizeof(vdpa_nic->net_config)) {
+	/* Avoid the possibility of wrap-up after the sum exceeds U32_MAX */
+	if (WARN_ON(((u64)offset + len) > sizeof(vdpa_nic->net_config))) {
 		dev_err(&vdev->dev,
 			"%s: Offset + len exceeds config size\n", __func__);
 		return;
 	}
 
-	memcpy(&vdpa_nic->net_config + offset, buf, len);
+	memcpy((u8 *)&vdpa_nic->net_config + offset, buf, len);
+	if (is_valid_ether_addr(vdpa_nic->mac_address)) {
+		vdpa_nic->mac_configured = true;
+		ef100_vdpa_add_filter(vdpa_nic, EF100_VDPA_UCAST_MAC_FILTER);
+	}
 
 	dev_dbg(&vdpa_nic->vdpa_dev.dev,
-		 "%s: Status:%u mac address:%pM Max virtque pairs:%u MTU:%u\n",
+		 "%s: Status:%u MAC(conf):%pM(%d) max_qps:%u MTU:%u\n",
 		 __func__, vdpa_nic->net_config.status,
-		 vdpa_nic->net_config.mac,
+		 vdpa_nic->net_config.mac, vdpa_nic->mac_configured,
 		 vdpa_nic->net_config.max_virtqueue_pairs,
 		 vdpa_nic->net_config.mtu);
 }

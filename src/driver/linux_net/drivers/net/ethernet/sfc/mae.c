@@ -11,7 +11,8 @@
 #include "mcdi.h"
 #include "mcdi_pcol.h"
 #include "mcdi_pcol_mae.h"
-#include "ef100_rep.h"
+#include "tc_encap_actions.h"
+#include "tc_conntrack.h"
 
 int efx_mae_allocate_mport(struct efx_nic *efx, u32 *id, u32 *label)
 {
@@ -232,42 +233,65 @@ static const struct rhashtable_params efx_mae_mports_ht_params = {
 	.key_offset	= offsetof(struct mae_mport_desc, mport_id),
 	.head_offset	= offsetof(struct mae_mport_desc, linkage),
 };
-#endif
 
-struct mae_mport_desc *efx_mae_find_mport(struct efx_nic *efx, u32 mport_id)
+struct mae_mport_desc *efx_mae_get_mport(struct efx_nic *efx, u32 mport_id)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
-	return rhashtable_lookup_fast(&efx->mae->mports_ht, &mport_id,
+	struct mae_mport_desc *desc;
+
+	if (!efx->mae)
+		return NULL;
+	rcu_read_lock();
+	desc = rhashtable_lookup_fast(&efx->mae->mports_ht, &mport_id,
 				      efx_mae_mports_ht_params);
-#else
-	return NULL;
-#endif
+	if (desc)
+		/* try to take a ref */
+		if (!refcount_inc_not_zero(&desc->ref))
+			desc = ERR_PTR(-EAGAIN);
+	rcu_read_unlock();
+	return desc;
 }
 
 static int efx_mae_add_mport(struct efx_nic *efx, struct mae_mport_desc *desc)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 	struct efx_mae *mae = efx->mae;
-	int rc = rhashtable_insert_fast(&mae->mports_ht, &desc->linkage,
-					efx_mae_mports_ht_params);
+	int rc;
 
-	if (rc)
+	/* One ref for the hashtable, and one for us in case it gets removed
+	 * in parallel before we get to add_mport()
+	 */
+	refcount_set(&desc->ref, 2);
+	rc = rhashtable_insert_fast(&mae->mports_ht, &desc->linkage,
+				    efx_mae_mports_ht_params);
+
+	if (rc) {
 		pci_err(efx->pci_dev, "Failed to insert MPORT %08x, rc %d\n",
 			desc->mport_id, rc);
-#endif
-	return efx_ef100_add_mport(efx, desc);
+		kfree(desc);
+		return rc;
+	}
+	if (efx->type->add_mport)
+		rc = efx->type->add_mport(efx, desc);
+	/* drop our extra ref */
+	efx_mae_put_mport(efx, desc);
+	return rc;
+}
+
+void efx_mae_put_mport(struct efx_nic *efx, struct mae_mport_desc *desc)
+{
+	if (!refcount_dec_and_test(&desc->ref))
+		return; /* still in use */
+	synchronize_rcu();
+	if (efx->type->remove_mport)
+		efx->type->remove_mport(efx, desc);
+	kfree(desc);
 }
 
 static void efx_mae_remove_mport(struct efx_nic *efx,
 				 struct mae_mport_desc *desc)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 	struct efx_mae *mae = efx->mae;
 	int rc;
 
-#endif
-	efx_ef100_remove_mport(efx, desc);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
 	rc = rhashtable_remove_fast(&mae->mports_ht, &desc->linkage,
 				    efx_mae_mports_ht_params);
 	if (rc)
@@ -275,25 +299,46 @@ static void efx_mae_remove_mport(struct efx_nic *efx,
 			  "Failed to remove MPORT %08x, rc %d\n",
 			  desc->mport_id, rc);
 	else
-		kfree(desc);
-#endif
+		efx_mae_put_mport(efx, desc);
 }
 
 static int efx_mae_process_mport(struct efx_nic *efx, struct mae_mport_desc *desc)
 {
 	struct mae_mport_desc *mport;
 
-	mport = efx_mae_find_mport(efx, desc->mport_id);
-	if (!mport)
-		return efx_mae_add_mport(efx, desc);
-
-	efx_mae_remove_mport(efx, mport);
+	mport = efx_mae_get_mport(efx, desc->mport_id);
+	if (!IS_ERR_OR_NULL(mport)) {
+		efx_mae_remove_mport(efx, mport);
+		/* remove will put the HT's ref, but we still need to put
+		 * the one we just got.
+		 */
+		efx_mae_put_mport(efx, mport);
+	}
 	if (desc->caller_flags & MAE_MPORT_DESC_FLAG_IS_ZOMBIE) {
 		kfree(desc);
 		return 0;
 	}
 	return efx_mae_add_mport(efx, desc);
 }
+#else /* EFX_HAVE_RHASHTABLE_LOOKUP_FAST */
+struct mae_mport_desc *efx_mae_get_mport(struct efx_nic *efx, u32 mport_id)
+{
+	return NULL;
+}
+
+void efx_mae_put_mport(struct efx_nic *efx, struct mae_mport_desc *desc)
+{
+	/* Shouldn't ever be reached; potential callers should never have a
+	 * reference to put, since efx_mae_get_mport() never gives one out
+	 */
+	WARN_ON(1);
+}
+
+static int efx_mae_process_mport(struct efx_nic *efx, struct mae_mport_desc *desc)
+{
+	return 0;
+}
+#endif /* EFX_HAVE_RHASHTABLE_LOOKUP_FAST */
 
 int efx_mae_enumerate_mports(struct efx_nic *efx)
 {
@@ -367,14 +412,7 @@ int efx_mae_enumerate_mports(struct efx_nic *efx)
 				/* Unknown mport_type, just accept it */
 				break;
 			}
-			rc = efx_mae_process_mport(efx, d);
-			/* Any failure will be due to memory allocation faiure,
-			 * so there is no point to try subsequent entries.
-			 */
-#if 0
-			if (rc)
-				goto fail;
-#endif
+			efx_mae_process_mport(efx, d);
 		}
 	} while (MCDI_FIELD(outbuf, MAE_MPORT_READ_JOURNAL_OUT, MORE) &&
 		 !WARN_ON(!count));
@@ -2334,7 +2372,6 @@ int efx_init_mae(struct efx_nic *efx)
 		return -ENOMEM;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
-	mutex_init(&mae->mports_mutex);
 	rc = rhashtable_init(&mae->mports_ht, &efx_mae_mports_ht_params);
 	if (rc < 0) {
 		kfree(mae);
@@ -2350,16 +2387,27 @@ int efx_init_mae(struct efx_nic *efx)
 void efx_fini_mae(struct efx_nic *efx)
 {
 	struct efx_mae *mae = efx->mae;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
+	struct rhashtable_iter walk;
+	struct mae_mport_desc *m;
+#endif
 
 	if (!mae)
 		return;
 
 	cancel_work_sync(&mae->mport_work);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_RHASHTABLE_LOOKUP_FAST)
-	mutex_lock(&mae->mports_mutex);
+	/* Empty the mports_ht, dropping all its references */
+	rhashtable_walk_enter(&mae->mports_ht, &walk);
+	rhashtable_walk_start(&walk);
+	while ((m = rhashtable_walk_next(&walk)) != NULL) {
+		rhashtable_walk_stop(&walk);
+		efx_mae_remove_mport(efx, m); /* might sleep */
+		rhashtable_walk_start(&walk);
+	}
+	rhashtable_walk_stop(&walk);
+	rhashtable_walk_exit(&walk);
 	rhashtable_destroy(&mae->mports_ht);
-	mutex_unlock(&mae->mports_mutex);
-	mutex_destroy(&mae->mports_mutex);
 #endif
 	kfree(mae);
 	efx->mae = NULL;

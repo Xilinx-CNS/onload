@@ -467,7 +467,6 @@ void ef_vi_reset_txq(struct ef_vi* vi)
   qs->removed = 0;
   qs->ct_added = 0;
   qs->ct_removed = 0;
-  vi->vi_txq.ct_fifo_bytes = 0;
   qs->ts_nsec = EF_VI_TX_TIMESTAMP_TS_NSEC_INVALID;
 
   if( vi->vi_txq.mask ) {

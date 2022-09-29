@@ -27,11 +27,14 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
                      EFX_FILTER_FLAG_VPORT_ID | EFX_FILTER_FLAG_RX_SCATTER) )
     return -EPROTONOSUPPORT;
 
-  if( (src->match_flags & ~EFX_FILTER_MATCH_OUTER_VID) == EFX_FILTER_MATCH_LOC_MAC_IG &&
-      src->loc_mac[0] == 1 ) {
-    dst->flow_type = UDP_V4_FLOW;
-    dst->h_u.udp_ip4_spec.ip4dst = htonl(0xe0000000);
-    dst->m_u.udp_ip4_spec.ip4dst = htonl(0xf0000000);
+  if( (src->match_flags & ~EFX_FILTER_MATCH_OUTER_VID) == EFX_FILTER_MATCH_LOC_MAC_IG ) {
+    dst->flow_type = ETHER_FLOW;
+
+    memset(&(dst->m_u.ether_spec), 0, sizeof(struct ethhdr));
+    dst->m_u.ether_spec.h_dest[0] = 1;
+    memset(&(dst->h_u.ether_spec), 0, sizeof(struct ethhdr));
+    dst->h_u.ether_spec.h_dest[0] = src->loc_mac[0];
+
     return 0;
   }
 

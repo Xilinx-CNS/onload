@@ -895,32 +895,18 @@ void efx_selftest_async_start(struct efx_nic *efx)
 
 	efx_for_each_channel(channel, efx)
 		efx_nic_event_test_start(channel);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
 	schedule_delayed_work(&efx->selftest_work, IRQ_TIMEOUT);
-#else
-	queue_delayed_work(efx_workqueue, &efx->selftest_work, IRQ_TIMEOUT);
-#endif
 }
 
 void efx_selftest_async_cancel(struct efx_nic *efx)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
 	cancel_delayed_work_sync(&efx->selftest_work);
-#else
-	cancel_delayed_work(&efx->selftest_work);
-	flush_workqueue(efx_workqueue);
-#endif
 }
 
 static void efx_selftest_async_work(struct work_struct *data)
 {
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_NEED_WORK_API_WRAPPERS)
 	struct efx_nic *efx = container_of(data, struct efx_nic,
 					   selftest_work.work);
-#else
-	struct efx_nic *efx = container_of(data, struct efx_nic,
-					   selftest_work);
-#endif
 	struct efx_channel *channel;
 	int cpu;
 

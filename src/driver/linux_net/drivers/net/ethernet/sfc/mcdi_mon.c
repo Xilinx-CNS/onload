@@ -11,6 +11,7 @@
 #include <linux/slab.h>
 #include <linux/hwmon.h>
 #include <linux/stat.h>
+#include <linux/ratelimit.h>
 
 #include "net_driver.h"
 #include "mcdi.h"
@@ -553,6 +554,7 @@ static int efx_mcdi_read_dynamic_sensor_list(struct efx_nic *efx)
 	struct efx_mcdi_mon *hwmon = efx_mcdi_mon(efx);
 	unsigned int n_sensors;
 	unsigned int gen_count;
+	void *new_sensor_list;
 	size_t outlen;
 	int rc, i;
 
@@ -575,14 +577,15 @@ static int efx_mcdi_read_dynamic_sensor_list(struct efx_nic *efx)
 	mutex_lock(&hwmon->update_lock);
 	efx_mcdi_remove_dynamic_sensors(efx);
 	hwmon->n_dynamic_sensors = n_sensors;
-	hwmon->sensor_list = krealloc(hwmon->sensor_list,
-				      (n_sensors *
-				      sizeof(struct efx_dynamic_sensor_description)),
-				      GFP_KERNEL);
-	if (!hwmon->sensor_list) {
+	new_sensor_list = krealloc(hwmon->sensor_list,
+				   (n_sensors *
+				   sizeof(struct efx_dynamic_sensor_description)),
+				   GFP_KERNEL);
+	if (!new_sensor_list) {
 		mutex_unlock(&hwmon->update_lock);
 		return -ENOMEM;
 	}
+	hwmon->sensor_list = new_sensor_list;
 
 	for (i = 0; i < n_sensors; i++) {
 		unsigned int handle;

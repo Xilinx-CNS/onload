@@ -9,9 +9,7 @@
 
 #include "net_driver.h"
 #include <linux/module.h>
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 #include <linux/aer.h>
-#endif
 #include "efx_common.h"
 #include "efx_channels.h"
 #include "efx_auxbus.h"
@@ -479,9 +477,8 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 	efx_fini_io(efx);
 	pci_dbg(pci_dev, "shutdown successful\n");
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 	pci_disable_pcie_error_reporting(pci_dev);
-#endif
+
 	pci_set_drvdata(pci_dev, NULL);
 	efx_fini_struct(efx);
 	kfree(probe_data);
@@ -570,9 +567,8 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 		pci_warn(pci_dev,
 			 "Unable to register auxiliary bus driver (%d)\n", rc);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 	(void)pci_enable_pcie_error_reporting(pci_dev);
-#endif
+
 	efx->state = STATE_PROBED;
 	rc = ef100_probe_netdev(probe_data);
 	if (rc)
@@ -628,9 +624,7 @@ struct pci_driver ef100_pci_driver = {
 	.id_table       = ef100_pci_table,
 	.probe          = ef100_pci_probe,
 	.remove         = ef100_pci_remove,
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_AER)
 	.err_handler    = &efx_err_handlers,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SRIOV_CONFIGURE)
 	.sriov_configure = ef100_pci_sriov_configure,
 #elif defined(EFX_HAVE_PCI_DRIVER_RH)

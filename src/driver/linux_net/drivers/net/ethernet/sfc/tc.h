@@ -7,10 +7,11 @@
  * by the Free Software Foundation, incorporated herein by reference.
  */
 
-#include "net_driver.h"
-
 #ifndef EFX_TC_H
 #define EFX_TC_H
+#include "net_driver.h"
+
+#include "tc_counters.h"
 
 /* Error reporting: convenience macros.  For indicating why a given filter
  * insertion is not supported; errors in internal operation or in the
@@ -33,58 +34,20 @@ if (efx->log_tc_errs)					\
 	netif_info(efx, drv, efx->net_dev, fmt, ##args);\
 } while (0)
 
+#define IS_ALL_ONES(v)	(!(typeof (v))~(v))
+
+#ifdef CONFIG_IPV6
+static inline bool efx_ipv6_addr_all_ones(struct in6_addr *addr)
+{
+	return !memchr_inv(addr, 0xff, sizeof(*addr));
+}
+#endif
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 #include <linux/mutex.h>
 #include <net/pkt_cls.h>
-#include <net/tc_act/tc_tunnel_key.h>
 #include <net/tc_act/tc_pedit.h>
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
-#if defined(EFX_USE_KCOMPAT)
-/* nf_flow_table.h should include this, but on deb10 it's missing */
-#include <linux/netfilter.h>
-#endif
-#include <net/netfilter/nf_flow_table.h>
-#endif
 #include <linux/idr.h>
-#include "mcdi_pcol.h"
-
-enum efx_tc_counter_type {
-	EFX_TC_COUNTER_TYPE_AR = MAE_COUNTER_TYPE_AR,
-	EFX_TC_COUNTER_TYPE_CT = MAE_COUNTER_TYPE_CT,
-	EFX_TC_COUNTER_TYPE_OR = MAE_COUNTER_TYPE_OR,
-	EFX_TC_COUNTER_TYPE_MAX
-};
-
-struct efx_tc_counter {
-	u32 fw_id; /* index in firmware counter table */
-	enum efx_tc_counter_type type;
-	struct rhash_head linkage; /* efx->tc->counter_ht */
-	spinlock_t lock; /* Serialises updates to counter values */
-	u32 gen; /* Generation count at which this counter is current */
-	u64 packets, bytes;
-	u64 old_packets, old_bytes; /* Values last time passed to userspace */
-	/* jiffies of the last time we saw packets increase */
-	unsigned long touched;
-	struct work_struct work; /* For notifying encap actions */
-	/* owners of corresponding count actions */
-	struct list_head users;
-};
-
-#define EFX_TC_MAX_ENCAP_HDR	128 /* made-up for now, fw will decide */
-struct efx_tc_encap_action {
-	enum efx_encap_type type;
-	struct ip_tunnel_key key; /* 52 bytes */
-	u32 dest_mport; /* is copied into struct efx_tc_action_set */
-	u8 encap_hdr_len;
-	bool n_valid;
-	u8 encap_hdr[EFX_TC_MAX_ENCAP_HDR];
-	struct efx_neigh_binder *neigh;
-	struct list_head list; /* entry on neigh->users list */
-	struct list_head users; /* action sets using this encap_md */
-	struct rhash_head linkage; /* efx->tc_encap_ht */
-	refcount_t ref;
-	u32 fw_id; /* index of this entry in firmware encap table */
-};
 
 /* MAC address edits are indirected through a table in the hardware */
 struct efx_tc_mac_pedit_action {
@@ -94,20 +57,10 @@ struct efx_tc_mac_pedit_action {
 	u32 fw_id; /* index of this entry in firmware MAC address table */
 };
 
-struct efx_tc_counter_index {
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_TC_ACTION_COOKIE)
-	/* cookie is rule, not action, cookie */
-#endif
-	unsigned long cookie;
-	struct rhash_head linkage; /* efx->tc->counter_id_ht */
-	refcount_t ref;
-	struct efx_tc_counter *cnt;
-};
-
 /* In principle up to 255 VFs are possible; the last one is #254 */
 #define EFX_TC_VF_MAX           (255)
-/* TODO correct this after finding max */
-#define EFX_TC_REMOTE_MAX       (16) /* including for VNIC_TYPE_PLUGIN */
+
+struct efx_tc_encap_action; /* see tc_encap_actions.h */
 
 struct efx_tc_action_set {
 	u16 vlan_push:2;
@@ -215,6 +168,8 @@ struct efx_tc_encap_match {
 	struct efx_tc_encap_match *pseudo; /* Referenced pseudo EM if needed */
 };
 
+const char *efx_tc_encap_type_name(enum efx_encap_type typ, char *buf, size_t n);
+
 struct efx_tc_recirc_id {
 	u32 chain_index;
 	struct net_device *net_dev;
@@ -235,19 +190,7 @@ struct efx_tc_action_set_list {
 	u32 fw_id;
 };
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
-struct efx_tc_ct_zone {
-	u16 zone;
-	u8 vni_mode; /* MAE_CT_VNI_MODE enum */
-	struct rhash_head linkage;
-	refcount_t ref;
-	struct nf_flowtable *nf_ft;
-	struct efx_nic *efx;
-	u16 domain; /* ID allocated for hardware use */
-	struct rw_semaphore rwsem; /* protects cts list */
-	struct list_head cts; /* list of efx_tc_ct_entry in this domain */
-};
-#endif
+struct efx_tc_ct_zone; /* see tc_conntrack.h */
 
 struct efx_tc_lhs_action {
 	u16 tun_type; /* enum efx_encap_type */
@@ -278,23 +221,6 @@ struct efx_tc_lhs_rule {
 	u32 fw_id;
 	bool is_ar; /* Action Rule (for OR-AR-CT-AR sequence) */
 };
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_CONNTRACK_OFFLOAD)
-struct efx_tc_ct_entry {
-	unsigned long cookie;
-	struct rhash_head linkage;
-	__be16 eth_proto;
-	u8 ip_proto;
-	bool dnat;
-	__be32 src_ip, dst_ip, nat_ip;
-	struct in6_addr src_ip6, dst_ip6;
-	__be16 l4_sport, l4_dport, l4_natport; /* Ports (UDP, TCP) */
-	u16 domain; /* we'd rather have struct efx_tc_ct_zone *zone; but that's unsafe currently */
-	u32 mark;
-	struct efx_tc_counter *cnt;
-	struct list_head list; /* entry on zone->cts */
-};
-#endif
 
 enum efx_tc_rule_prios {
 	EFX_TC_PRIO_TC, /* Rule inserted by TC */
@@ -427,16 +353,18 @@ struct efx_tc_state {
 
 struct efx_rep;
 
+enum efx_encap_type efx_tc_indr_netdev_type(struct net_device *net_dev);
+struct efx_rep *efx_tc_flower_lookup_efv(struct efx_nic *efx,
+					 struct net_device *dev);
+s64 efx_tc_flower_external_mport(struct efx_nic *efx, struct efx_rep *efv);
 int efx_tc_configure_default_rule_rep(struct efx_rep *efv);
 void efx_tc_deconfigure_default_rule(struct efx_nic *efx,
 				     struct efx_tc_flow_rule *rule);
 int efx_tc_flower(struct efx_nic *efx, struct net_device *net_dev,
 		  struct flow_cls_offload *tc, struct efx_rep *efv);
-int efx_tc_block_cb(enum tc_setup_type type, void *type_data, void *cb_priv);
-int efx_tc_setup_block(struct net_device *net_dev, struct efx_nic *efx,
-		       struct flow_block_offload *tcb, struct efx_rep *efv);
-int efx_setup_tc(struct net_device *net_dev, enum tc_setup_type type,
-		 void *type_data);
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_TC_ACTION_COOKIE)
+int efx_tc_setup_action(struct efx_nic *efx, struct tc_action_offload *tca);
+#endif
 
 #else /* EFX_TC_OFFLOAD */
 
@@ -449,7 +377,6 @@ struct efx_tc_action_set {
 	u16 do_ttl_dec:1;
 	__be16 vlan_tci[2]; /* TCIs for vlan_push */
 	__be16 vlan_proto[2]; /* Ethertypes for vlan_push */
-	struct efx_tc_counter_index *count;
 	u32 dest_mport;
 	u32 fw_id; /* index of this entry in firmware actions table */
 	struct list_head list;
@@ -511,10 +438,5 @@ void efx_fini_tc(struct efx_nic *efx);
 
 int efx_init_struct_tc(struct efx_nic *efx);
 void efx_fini_struct_tc(struct efx_nic *efx);
-
-int efx_tc_netdev_event(struct efx_nic *efx, unsigned long event,
-			struct net_device *net_dev);
-int efx_tc_netevent_event(struct efx_nic *efx, unsigned long event,
-			  void *ptr);
 
 #endif /* EFX_TC_H */

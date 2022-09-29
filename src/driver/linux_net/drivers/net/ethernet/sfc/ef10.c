@@ -533,14 +533,12 @@ static int efx_ef10_get_mac_address_vf(struct efx_nic *efx, u8 *mac_address)
 #ifdef CONFIG_SFC_SRIOV
 static int efx_vf_parent(struct efx_nic *efx, struct efx_nic **efx_pf)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHYSFN)
 	struct pci_dev *pci_dev_pf = pci_physfn(efx->pci_dev);
-#endif
 	int rc = 0;
 
 	/* By default succeed without a parent PF */
 	*efx_pf = NULL;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHYSFN)
+
 	/* Suceed if this is a PF already, or if there is noparent PF.
 	 * Fail if the parent is not an sfc device.
 	 */
@@ -551,7 +549,7 @@ static int efx_vf_parent(struct efx_nic *efx, struct efx_nic **efx_pf)
 		rc = -EBUSY;
 	else
 		*efx_pf = pci_get_drvdata(pci_dev_pf);
-#endif
+
 	return rc;
 }
 #endif
@@ -1348,11 +1346,9 @@ static void efx_ef10_fini_nic(struct efx_nic *efx)
 	kfree(nic_data->mc_stats);
 	nic_data->mc_stats = NULL;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 	if (!efx_ptp_uses_separate_channel(efx) &&
 	    !efx_ptp_use_mac_tx_timestamps(efx))
 		efx_ptp_remove(efx);
-#endif
 }
 
 static int efx_ef10_init_nic(struct efx_nic *efx)
@@ -1452,11 +1448,9 @@ static int efx_ef10_init_nic(struct efx_nic *efx)
 #endif
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 	if (!efx_ptp_uses_separate_channel(efx) &&
 	    !efx_ptp_use_mac_tx_timestamps(efx))
 		efx_ptp_probe(efx, NULL);
-#endif
 
 	return 0;
 }
@@ -1962,7 +1956,9 @@ static void efx_ef10_get_fec_stats(struct efx_nic *efx,
 
 static bool efx_use_vadaptor_stats(struct efx_nic *efx)
 {
+#ifdef CONFIG_SFC_SRIOV
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
+#endif
 
 	if (!(efx->mcdi->fn_flags &
 	     (1 << MC_CMD_DRV_ATTACH_EXT_OUT_FLAG_LINKCTRL)))
@@ -2131,27 +2127,12 @@ static void efx_ef10_vf_schedule_stats_work(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
 	schedule_delayed_work(&nic_data->vf_stats_work,
 			      msecs_to_jiffies(efx->stats_period_ms));
-#else
-	spin_lock_bh(&efx->stats_lock);
-	if (nic_data->vf_stats_enabled)
-		queue_delayed_work(efx_workqueue, &nic_data->vf_stats_work,
-				   msecs_to_jiffies(efx->stats_period_ms));
-	spin_unlock_bh(&efx->stats_lock);
-#endif
 }
 
 static void efx_ef10_start_stats_vf(struct efx_nic *efx)
 {
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
-	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-
-	spin_lock_bh(&efx->stats_lock);
-	nic_data->vf_stats_enabled = true;
-	spin_unlock_bh(&efx->stats_lock);
-#endif
 	efx_ef10_vf_schedule_stats_work(efx);
 }
 
@@ -2159,15 +2140,7 @@ static void efx_ef10_stop_stats_vf(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
 	cancel_delayed_work_sync(&nic_data->vf_stats_work);
-#else
-	spin_lock_bh(&efx->stats_lock);
-	nic_data->vf_stats_enabled = false;
-	spin_unlock_bh(&efx->stats_lock);
-	cancel_delayed_work(&nic_data->vf_stats_work);
-	flush_workqueue(efx_workqueue);
-#endif
 }
 
 static void efx_ef10_pull_stats_vf(struct efx_nic *efx)
@@ -2241,13 +2214,8 @@ out:
 
 static void efx_ef10_vf_update_stats_work(struct work_struct *data)
 {
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_NEED_WORK_API_WRAPPERS)
 	struct efx_ef10_nic_data *nic_data =
 		container_of(data, struct efx_ef10_nic_data, vf_stats_work.work);
-#else
-	struct efx_ef10_nic_data *nic_data =
-		container_of(data, struct efx_ef10_nic_data, vf_stats_work);
-#endif
 
 	efx_ef10_pull_stats_vf(nic_data->efx);
 	efx_ef10_vf_schedule_stats_work(nic_data->efx);
@@ -2943,19 +2911,11 @@ static int efx_debugfs_udp_tunnels(struct seq_file *file, void *data)
 static int efx_debugfs_read_netdev_uc_addr(struct seq_file *file, void *data)
 {
 	struct net_device *net_dev = data;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_UC)
 	struct netdev_hw_addr *uc;
-#else
-	struct dev_addr_list *uc;
-#endif
 	unsigned int i = 0;
 
 	netdev_for_each_uc_addr(uc, net_dev) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_UC)
 		seq_printf(file, "%d - %pM\n", i, uc->addr);
-#else
-		seq_printf(file, "%d - %pM\n", i, uc->da_addr);
-#endif
 		i++;
 	}
 	return 0;
@@ -4036,6 +3996,33 @@ static int efx_ef10_set_mac_address(struct efx_nic *efx)
 	bool was_enabled = efx->port_enabled;
 	int rc;
 
+#ifdef CONFIG_SFC_SRIOV
+	/* If this function is a VF and we have access to the parent PF,
+	 * then use the PF control path to attempt to change the VF MAC address.
+	 */
+	if (efx->pci_dev->is_virtfn && efx->pci_dev->physfn) {
+		struct efx_nic *efx_pf = pci_get_drvdata(efx->pci_dev->physfn);
+		struct efx_ef10_nic_data *nic_data = efx->nic_data;
+		u8 mac[ETH_ALEN];
+		bool reset;
+
+		ether_addr_copy(mac, efx->net_dev->dev_addr);
+
+		rc = efx_ef10_sriov_set_vf_mac(efx_pf, nic_data->vf_index,
+					       mac, &reset);
+		if (!rc)
+			return 0;
+
+		netif_dbg(efx, drv, efx->net_dev,
+			  "Updating VF mac via PF failed (%d), %s\n",
+			  rc,
+			  reset ? "resulting in reset; aborting" :
+				  "setting directly");
+		if (reset)
+			return rc;
+	}
+#endif
+
 	ether_addr_copy(MCDI_PTR(inbuf, VADAPTOR_SET_MAC_IN_MACADDR),
 			efx->net_dev->dev_addr);
 	MCDI_SET_DWORD(inbuf, VADAPTOR_SET_MAC_IN_UPSTREAM_PORT_ID,
@@ -4077,56 +4064,6 @@ static int efx_ef10_set_mac_address(struct efx_nic *efx)
 		efx_device_attach_if_not_resetting(efx);
 	}
 
-#ifdef CONFIG_SFC_SRIOV
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHYSFN)
-	if (efx->pci_dev->is_virtfn && efx->pci_dev->physfn) {
-		struct efx_ef10_nic_data *nic_data;
-		struct pci_dev *pci_dev_pf = efx->pci_dev->physfn;
-
-		if (rc == -EPERM) {
-			struct efx_nic *efx_pf;
-
-			/* Switch to PF and change MAC address on vport */
-			efx_pf = pci_get_drvdata(pci_dev_pf);
-			nic_data = efx->nic_data;
-
-			rc = efx_ef10_sriov_set_vf_mac(efx_pf,
-						       nic_data->vf_index,
-						       efx->net_dev->dev_addr);
-		} else if (!rc) {
-			struct efx_nic *efx_pf = pci_get_drvdata(pci_dev_pf);
-			unsigned int i;
-
-			nic_data = efx_pf->nic_data;
-			/* MAC address successfully changed by VF (with MAC
-			 * spoofing) so update the parent PF if possible.
-			 */
-			for (i = 0; i < nic_data->vf_count; ++i) {
-				struct ef10_vf *vf = nic_data->vf + i;
-
-				if (vf->efx == efx) {
-					/* Add new MAC to list */
-					rc = efx_ef10_vport_add_mac(efx, vf->vport_id, efx->net_dev->dev_addr);
-					if (rc)
-						break;
-
-					/* Remove old MAC from list */
-					rc = efx_ef10_vport_del_mac(efx, vf->vport_id, vf->mac);
-					if (rc) {
-						/* If that failed, attempt to remove new MAC too */
-						efx_ef10_vport_del_mac(efx, vf->vport_id, efx->net_dev->dev_addr);
-						break;
-					}
-
-					ether_addr_copy(vf->mac,
-							efx->net_dev->dev_addr);
-					return 0;
-				}
-			}
-		}
-	} else
-#endif
-#endif
 	if (rc == -EPERM) {
 		netif_err(efx, drv, efx->net_dev,
 			  "Cannot change MAC address; use sfboot to enable mac-spoofing on this interface\n");
@@ -4608,7 +4545,6 @@ static int efx_ef10_ptp_set_ts_config(struct efx_nic *efx,
 		/* if TX timestamping is still requested then leave PTP on */
 		return efx_ptp_change_mode(efx,
 					   init->tx_type != HWTSTAMP_TX_OFF, 0);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 	case HWTSTAMP_FILTER_ALL:
 	case HWTSTAMP_FILTER_PTP_V1_L4_EVENT:
 	case HWTSTAMP_FILTER_PTP_V1_L4_SYNC:
@@ -4624,19 +4560,6 @@ static int efx_ef10_ptp_set_ts_config(struct efx_nic *efx,
 	case HWTSTAMP_FILTER_PTP_V2_DELAY_REQ:
 		init->rx_filter = HWTSTAMP_FILTER_ALL;
 		rc = efx_ptp_change_mode(efx, true, MC_CMD_PTP_MODE_V2);
-#else
-	/* We need to know which PTP protocol to match in efx_ptp_rx() */
-	case HWTSTAMP_FILTER_PTP_V1_L4_EVENT:
-	case HWTSTAMP_FILTER_PTP_V1_L4_SYNC:
-	case HWTSTAMP_FILTER_PTP_V1_L4_DELAY_REQ:
-	case HWTSTAMP_FILTER_PTP_V2_L4_EVENT:
-	case HWTSTAMP_FILTER_PTP_V2_L4_SYNC:
-	case HWTSTAMP_FILTER_PTP_V2_L4_DELAY_REQ:
-		init->rx_filter = HWTSTAMP_FILTER_PTP_V2_L4_EVENT;
-		/* this will still work for PTP v1 */
-		rc = efx_ptp_change_mode(efx, true,
-					 MC_CMD_PTP_MODE_V2_ENHANCED);
-#endif
 		if (!rc)
 			rc = efx_ef10_ptp_set_ts_sync_events(efx, true, false);
 		if (rc)
@@ -5539,7 +5462,6 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHYSFN)
 #ifdef CONFIG_SFC_SRIOV
 	if (efx->pci_dev->physfn && !efx->pci_dev->is_physfn) {
 		struct pci_dev *pci_dev_pf = efx->pci_dev->physfn;
@@ -5548,7 +5470,6 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 		efx_pf->type->get_mac_address(efx_pf, nic_data->port_id);
 	} else
 #endif
-#endif /* HAVE_PHYSFN */
 		ether_addr_copy(nic_data->port_id, efx->net_dev->perm_addr);
 #endif
 	/* If tx_coalesce_doorbell=Y disable tx_push, we do this here to avoid
@@ -5764,7 +5685,7 @@ static void efx_ef10_remove(struct efx_nic *efx)
 static void efx_ef10_remove_vf(struct efx_nic *efx)
 {
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
-#if defined(CONFIG_SFC_SRIOV) && (!defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN)))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	struct efx_ef10_nic_data *nic_data_pf;
 	struct pci_dev *pci_dev_pf;
 	struct efx_nic *efx_pf;
@@ -5773,7 +5694,7 @@ static void efx_ef10_remove_vf(struct efx_nic *efx)
 
 	efx_ef10_remove(efx);
 
-#if defined(CONFIG_SFC_SRIOV) && (!defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN)))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	/* If PCI probe fails early there is no NIC specific data yet */
 	if (!nic_data)
 		return;
@@ -5820,7 +5741,7 @@ static int efx_ef10_probe_vf(struct efx_nic *efx)
 
 	nic_data = efx->nic_data;
 
-#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_NDO_SET_VF_MAC) && defined(EFX_HAVE_PHYSFN))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	if (efx->pci_dev->physfn) {
 		struct efx_nic *efx_pf = pci_get_drvdata(efx->pci_dev->physfn);
 		struct efx_ef10_nic_data *nic_data_pf = efx_pf->nic_data;
@@ -6001,10 +5922,8 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
 	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
-#endif
 	.vswitching_probe = efx_ef10_vswitching_probe_vf,
 	.vswitching_restore = efx_ef10_vswitching_restore_vf,
 	.vswitching_remove = efx_ef10_vswitching_remove_vf,
@@ -6050,12 +5969,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.mcdi_rpc_timeout = efx_ef10_mcdi_rpc_timeout,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
 	.hwtstamp_filters = 1 << HWTSTAMP_FILTER_NONE |
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
-	1 << HWTSTAMP_FILTER_ALL,
-#else
-	1 << HWTSTAMP_FILTER_PTP_V1_L4_EVENT |
-	1 << HWTSTAMP_FILTER_PTP_V2_L4_EVENT,
-#endif
+			    1 << HWTSTAMP_FILTER_ALL,
 	.rx_hash_key_size = 40,
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,
@@ -6177,10 +6091,8 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
 	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,
-#endif
 	.udp_tnl_has_port = efx_ef10_udp_tnl_has_port,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 	.udp_tnl_push_ports = efx_ef10_udp_tnl_push_ports,
@@ -6252,12 +6164,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.mcdi_rpc_timeout = efx_ef10_mcdi_rpc_timeout,
 	.max_rx_ip_filters = EFX_MCDI_FILTER_TBL_ROWS,
 	.hwtstamp_filters = 1 << HWTSTAMP_FILTER_NONE |
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_TSTAMP)
 			    1 << HWTSTAMP_FILTER_ALL,
-#else
-			    1 << HWTSTAMP_FILTER_PTP_V1_L4_EVENT |
-			    1 << HWTSTAMP_FILTER_PTP_V2_L4_EVENT,
-#endif
 	.rx_hash_key_size = 40,
 	.check_caps = ef10_check_caps,
 	.rx_recycle_ring_size = efx_ef10_recycle_ring_size,

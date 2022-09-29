@@ -292,7 +292,6 @@ void efx_dequeue_buffer(struct efx_tx_queue *tx_queue,
 			(*bytes_compl) += skb->len;
 		}
 
-#if defined(EFX_HAVE_SKB_TSTAMP_TX)
 		if (tx_queue->timestamping &&
 		    (tx_queue->completed_timestamp_major ||
 		     tx_queue->completed_timestamp_minor)) {
@@ -305,7 +304,7 @@ void efx_dequeue_buffer(struct efx_tx_queue *tx_queue,
 			tx_queue->completed_timestamp_major = 0;
 			tx_queue->completed_timestamp_minor = 0;
 		}
-#endif
+
 		dev_kfree_skb_any(skb);
 		netif_vdbg(tx_queue->efx, tx_done, tx_queue->efx->net_dev,
 			   "TX queue %d transmission id %x complete\n",

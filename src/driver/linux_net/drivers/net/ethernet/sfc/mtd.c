@@ -298,13 +298,8 @@ void efx_mtd_rename(struct efx_nic *efx)
 #if defined(CONFIG_SFC_MTD) && defined(EFX_WORKAROUND_87308)
 void efx_mtd_creation_work(struct work_struct *data)
 {
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_NEED_WORK_API_WRAPPERS)
 	struct efx_mtd *mtd_struct = container_of(data, struct efx_mtd,
 					   creation_work.work);
-#else
-	struct efx_mtd *mtd_struct = container_of(data, struct efx_mtd,
-					   creation_work);
-#endif
 
 	if (atomic_xchg(&mtd_struct->probed_flag, 1) != 0)
 		return;

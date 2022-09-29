@@ -68,6 +68,8 @@ void efx_recycle_rx_bufs_zc(struct efx_channel *channel,
 #endif
 
 static void efx_rx_slow_fill(struct work_struct *data);
+static void efx_schedule_slow_fill(struct efx_rx_queue *rx_queue);
+static void efx_cancel_slow_fill(struct efx_rx_queue *rx_queue);
 
 #if !defined(EFX_NOT_UPSTREAM) || defined(EFX_RX_PAGE_SHARE)
 /* Check the RX page recycle ring for a page that can be reused. */
@@ -662,11 +664,7 @@ void efx_free_rx_buffers(struct efx_rx_queue *rx_queue,
 static void efx_rx_slow_fill(struct work_struct *data)
 {
 	struct efx_rx_queue *rx_queue =
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_NEED_WORK_API_WRAPPERS)
 		container_of(data, struct efx_rx_queue, slow_fill_work.work);
-#else
-		container_of(data, struct efx_rx_queue, slow_fill_work);
-#endif
 
 	/* Post an event to cause NAPI to run and refill the queue */
 	if (efx_nic_generate_fill_event(rx_queue) != 0)
@@ -674,25 +672,15 @@ static void efx_rx_slow_fill(struct work_struct *data)
 	++rx_queue->slow_fill_count;
 }
 
-void efx_schedule_slow_fill(struct efx_rx_queue *rx_queue)
+static void efx_schedule_slow_fill(struct efx_rx_queue *rx_queue)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
 	schedule_delayed_work(&rx_queue->slow_fill_work,
 			      msecs_to_jiffies(1));
-#else
-	queue_delayed_work(efx_workqueue, &rx_queue->slow_fill_work,
-			   msecs_to_jiffies(1));
-#endif
 }
 
-void efx_cancel_slow_fill(struct efx_rx_queue *rx_queue)
+static void efx_cancel_slow_fill(struct efx_rx_queue *rx_queue)
 {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_CANCEL_DELAYED_WORK_SYNC)
 	cancel_delayed_work_sync(&rx_queue->slow_fill_work);
-#else
-	cancel_delayed_work(&rx_queue->slow_fill_work);
-	flush_workqueue(efx_workqueue);
-#endif
 }
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_SOCK)

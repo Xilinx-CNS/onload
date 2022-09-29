@@ -14,12 +14,6 @@
 
 struct ethtool_ts_info;
 #ifdef CONFIG_SFC_PTP
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NET_TSTAMP)
-struct hwtstamp_config;
-struct efx_ts_read;
-int efx_ptp_ts_init(struct efx_nic *efx, struct hwtstamp_config *init);
-int efx_ptp_ts_read(struct efx_nic *efx, struct efx_ts_read *read);
-#endif
 #if defined(EFX_NOT_UPSTREAM)
 struct efx_ts_settime;
 struct efx_ts_adjtime;

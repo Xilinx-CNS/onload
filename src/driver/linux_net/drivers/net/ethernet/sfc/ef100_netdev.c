@@ -30,6 +30,8 @@
 #endif
 #include "mae.h"
 #include "tc.h"
+#include "tc_bindings.h"
+#include "tc_encap_actions.h"
 #include "efx_devlink.h"
 #include "ef100_sriov.h"
 #include "ef100_rep.h"
@@ -185,6 +187,14 @@ static int ef100_net_open(struct net_device *net_dev)
 	struct ef100_nic_data *nic_data;
 	int rc;
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
+	/* There is a small time gap at which this net_dev has been
+	 * registered but the representors have not yet been
+	 * registered. Delay open until the probe has completely finished.
+	 */
+	if (efx->state != STATE_NET_DOWN)
+		return -EAGAIN;
+#endif
 	ef100_update_name(efx);
 	netif_dbg(efx, ifup, net_dev, "opening device on CPU %d\n",
 		  raw_smp_processor_id());
@@ -615,10 +625,8 @@ static const struct net_device_ops ef100_netdev_ops = {
 #endif
 	.ndo_set_features       = efx_set_features,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_VLAN_RX_ADD_VID)
 	.ndo_vlan_rx_add_vid    = efx_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid   = efx_vlan_rx_kill_vid,
-#endif
 #if 0
 #ifdef CONFIG_SFC_SRIOV
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
@@ -778,7 +786,6 @@ static int ef100_register_netdev(struct efx_nic *efx)
 	/* Always start with carrier off; PHY events will detect the link */
 	netif_carrier_off(net_dev);
 
-	efx->state = STATE_NET_DOWN;
 	rtnl_unlock();
 	efx_init_mcdi_logging(efx);
 	efx_probe_devlink(efx);
@@ -824,7 +831,6 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 	unregister_netdevice_notifier(&efx->netdev_notifier);
 	unregister_netevent_notifier(&efx->netevent_notifier);
 
-	efx_ef100_fini_reps(efx);
 	ef100_unregister_netdev(efx);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP)
@@ -837,8 +843,9 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 #if defined(CONFIG_SFC_SRIOV)
 		efx_ef100_pci_sriov_disable(efx, true);
 #endif
-		efx_fini_tc(efx);
 		efx_fini_mae(efx);
+		efx_ef100_fini_reps(efx);
+		efx_fini_tc(efx);
 	}
 
 #ifdef CONFIG_SFC_DEBUGFS
@@ -888,10 +895,8 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	net_dev->features |= efx->type->offload_features &
 			     ~(NETIF_F_RXFCS | NETIF_F_RXALL);
 	efx_add_hw_features(efx, efx->type->offload_features);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_NETDEV_VLAN_FEATURES)
 	net_dev->vlan_features |= (NETIF_F_HW_CSUM | NETIF_F_SG |
 				   NETIF_F_HIGHDMA | NETIF_F_ALL_TSO);
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_HW_ENC_FEATURES)
 	net_dev->hw_enc_features |= efx->type->offload_features;
 #endif
@@ -1013,6 +1018,7 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 	}
 #endif
 #endif
+	efx->state = STATE_NET_DOWN;
 
 fail:
 	return rc;

@@ -518,9 +518,6 @@ const struct ethtool_ops efx_ethtool_ops = {
 	.phys_id		= efx_ethtool_phys_id_loop,
 #endif
 	.get_ethtool_stats	= efx_ethtool_get_stats,
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_ETHTOOL_GET_PERM_ADDR)
-	.get_perm_addr          = ethtool_op_get_perm_addr,
-#endif
 	.get_wol                = efx_ethtool_get_wol,
 	.set_wol                = efx_ethtool_set_wol,
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_ETHTOOL_RESET) && !defined(EFX_USE_ETHTOOL_OPS_EXT))

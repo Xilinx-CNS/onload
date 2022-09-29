@@ -234,6 +234,8 @@ bool ef100_vdpa_dev_in_use(struct efx_nic *efx);
 int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic);
 int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
 int remap_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
+int ef100_vdpa_add_filter(struct ef100_vdpa_nic *vdpa_nic,
+			  enum ef100_vdpa_mac_filter_type type);
 
 extern const struct vdpa_config_ops ef100_vdpa_config_ops;
 #endif /* CONFIG_SFC_VDPA */

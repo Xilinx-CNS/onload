@@ -2419,11 +2419,7 @@ static void efx_mcdi_filter_uc_addr_list(struct efx_nic *efx)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 	struct net_device *net_dev = efx->net_dev;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_UC)
 	struct netdev_hw_addr *uc;
-#else
-	struct dev_addr_list *uc;
-#endif
 	unsigned int i;
 
 	WARN_ON(!mutex_is_locked(&efx->mac_lock));
@@ -2444,11 +2440,7 @@ static void efx_mcdi_filter_uc_addr_list(struct efx_nic *efx)
 			table->uc_promisc = true;
 			break;
 		}
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_UC)
 		ether_addr_copy(table->dev_uc_list[i].addr, uc->addr);
-#else
-		ether_addr_copy(table->dev_uc_list[i].addr, uc->da_addr);
-#endif
 		i++;
 	}
 	table->dev_uc_count = i;
