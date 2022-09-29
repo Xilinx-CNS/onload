@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2002-2020 Xilinx, Inc.
 
-DRIVER_SUBDIRS	     := include lib driver
+DRIVER_SUBDIRS	     := lib driver
 
 ifeq ($(GNU),1)
 SUBDIRS              := include lib app driver tools tests
 endif
 
 ifeq ($(LINUX),1)
+DRIVER_SUBDIRS	     := lib driver
 OTHER_DRIVER_SUBDIRS := tests
 endif
 
@@ -36,5 +37,5 @@ endif
 
 clean:
 	@$(MakeClean)
-	rm -f $(AUTOCOMPAT) $(OO_VERSION_HDR)
+	rm -f $(AUTOCOMPAT)
 endif

@@ -29,7 +29,7 @@
 #include "onload_kernel_compat.h"
 #include <ci/driver/chrdev.h>
 #include <ci/tools.h>
-#include "onload_version.h"
+#include "lib/ciul/onload_version.h"
 
 
 /*--------------------------------------------------------------------
