@@ -69,10 +69,6 @@ $(AUTOCOMPAT): $(LINUX_RESOURCE)/kernel_compat.sh $(LINUX_RESOURCE)/kernel_compa
 	@mkdir -p $(@D)
 	($< -k $(CURDIR) $(if $(filter 1,$(V)),-v,-q) > $@) || (rm -f $@ && false)
 
-OO_VERSION_HDR := $(obj)/src/onload_version.h
-$(OO_VERSION_HDR): $(src)/scripts/onload_version_gen mkdirs FORCE
-	(cd $(src); $< $@)
-
 mkdirs:
 	@mkdir -p $(obj)/src/lib/efhw
 	@mkdir -p $(obj)/src/lib/efrm
@@ -83,7 +79,6 @@ $(obj)/src/driver/linux_resource: $(AUTOCOMPAT) mkdirs
 $(obj)/src/lib/transport/ip: $(AUTOCOMPAT)
 $(obj)/src/lib/citools: $(AUTOCOMPAT)
 $(obj)/src/lib/cplane: $(AUTOCOMPAT) $(obj)/src/lib/ciul
-$(obj)/src/lib/ciul: $(OO_VERSION_HDR)
 $(obj)/src/driver/linux_char: $(AUTOCOMPAT)
 $(obj)/src/driver/linux_char: $(obj)/src/lib/citools $(obj)/src/lib/ciul
 $(obj)/src/driver/linux_onload: $(obj)/src/lib/citools $(obj)/src/lib/ciul \
@@ -174,7 +169,7 @@ kernel: modules
 	$(Q)ln -rsf $(KBUILDTOP)/src/driver/linux_onload/*.ko $(KBUILDTOP)/src/driver/linux_char/*.ko $(KBUILDTOP)/src/driver/linux_resource/*.ko $(KBUILDTOP)/src/driver/linux_net/drivers/net/ethernet/sfc/*.ko $(KBUILDTOP)/driver/linux
 	$(Q)cp src/driver/linux/*.sh $(KBUILDTOP)/driver/linux
 
-modules modules_install: $(OUTMAKEFILES) $(OO_VERSION_HDR)
+modules modules_install: $(OUTMAKEFILES)
 	$(Q)$(MAKE) -C $(KPATH) M=$(KBUILDTOP) \
 		"src=\$$(patsubst $(KBUILDTOP)%,$$PWD%,\$$(obj))" \
 		"SRCPATH=$$PWD/src" \

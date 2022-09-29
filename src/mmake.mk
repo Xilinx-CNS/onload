@@ -37,14 +37,5 @@ endif
 
 clean:
 	@$(MakeClean)
-	rm -f $(AUTOCOMPAT) $(OO_VERSION_HDR)
+	rm -f $(AUTOCOMPAT)
 endif
-
-OO_VERSION_HDR := $(objd)include/onload_version.h
-$(OO_VERSION_HDR): $(SRCPATH)/../scripts/onload_version_gen FORCE
-	@mkdir -p $(@D)
-	$< $@
-
-FORCE:
-.PHONY: FORCE
-all: $(OO_VERSION_HDR)
