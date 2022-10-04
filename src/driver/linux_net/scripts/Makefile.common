@@ -24,10 +24,11 @@ ifdef KERNELRELEASE
 ifndef EFX_UPSTREAM
 # Compiler flags
 EXTRA_CFLAGS += -Wall -Wno-deprecated-declarations -DEFX_USE_KCOMPAT=1
+EXTRA_CFLAGS += -I$(TOPDIR)/include
 ifdef EFX_FOR_UPSTREAM
 EXTRA_CFLAGS += -include config.h
 else
-EXTRA_CFLAGS += -DEFX_NOT_UPSTREAM=1 -I$(TOPDIR)/include
+EXTRA_CFLAGS += -DEFX_NOT_UPSTREAM=1
 endif
 ifdef EFX_NOT_EXPORTED
 EXTRA_CFLAGS += -DEFX_NOT_EXPORTED

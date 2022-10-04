@@ -2131,6 +2131,9 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 	if (!table || !table->entry)
 		return -ENETDOWN;
 
+	if (table->push_filters)
+		return 0;
+
 	down_write(&table->lock);
 	mutex_lock(&efx->rss_lock);
 	mutex_lock(&efx->vport_lock);

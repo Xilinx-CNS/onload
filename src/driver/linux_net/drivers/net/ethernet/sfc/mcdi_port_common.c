@@ -356,10 +356,17 @@ static u32 mcdi_to_ethtool_cap(struct efx_nic *efx, u32 media, u32 cap)
 	return result;
 }
 #undef SET_CAP
+#undef MAP_CAP
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_LINKSETTINGS)
 #define SET_CAP(name)	__set_bit(ETHTOOL_LINK_MODE_ ## name ## _BIT, \
 				  linkset)
+#define CHECK_CAP(mcdi_cap)					\
+({								\
+	u32 bit = cap & (1 << MC_CMD_PHY_CAP_##mcdi_cap##_LBN);	\
+	cap &= ~(1 << MC_CMD_PHY_CAP_##mcdi_cap##_LBN);		\
+	bit;							\
+})
 
 void mcdi_to_ethtool_linkset(struct efx_nic *efx, u32 media, u32 cap,
 			     unsigned long *linkset)
@@ -368,11 +375,11 @@ void mcdi_to_ethtool_linkset(struct efx_nic *efx, u32 media, u32 cap,
 	switch (media) {
 	case MC_CMD_MEDIA_KX4:
 		SET_CAP(Backplane);
-		if (cap & (1 << MC_CMD_PHY_CAP_1000FDX_LBN))
+		if (CHECK_CAP(1000FDX))
 			SET_CAP(1000baseKX_Full);
-		if (cap & (1 << MC_CMD_PHY_CAP_10000FDX_LBN))
+		if (CHECK_CAP(10000FDX))
 			SET_CAP(10000baseKX4_Full);
-		if (cap & (1 << MC_CMD_PHY_CAP_40000FDX_LBN))
+		if (CHECK_CAP(40000FDX))
 			SET_CAP(40000baseKR4_Full);
 		break;
 
@@ -380,61 +387,61 @@ void mcdi_to_ethtool_linkset(struct efx_nic *efx, u32 media, u32 cap,
 	case MC_CMD_MEDIA_SFP_PLUS:
 	case MC_CMD_MEDIA_QSFP_PLUS:
 		SET_CAP(FIBRE);
-		if (cap & (1 << MC_CMD_PHY_CAP_1000FDX_LBN)) {
+		if (CHECK_CAP(1000FDX)) {
 			SET_CAP(1000baseT_Full);
 #if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_1000X)
 			SET_CAP(1000baseX_Full);
 #endif
 		}
 #if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_1000X)
-		if (cap & (1 << MC_CMD_PHY_CAP_10000FDX_LBN)) {
+		if (CHECK_CAP(10000FDX)) {
 			SET_CAP(10000baseCR_Full);
 			SET_CAP(10000baseLR_Full);
 			SET_CAP(10000baseSR_Full);
 		}
 #endif
-		if (cap & (1 << MC_CMD_PHY_CAP_40000FDX_LBN)) {
+		if (CHECK_CAP(40000FDX)) {
 			SET_CAP(40000baseCR4_Full);
 			SET_CAP(40000baseSR4_Full);
 		}
 #if !defined (EFX_USE_KCOMPAT) || defined (EFX_HAVE_LINK_MODE_25_50_100)
-		if (cap & (1 << MC_CMD_PHY_CAP_100000FDX_LBN)) {
+		if (CHECK_CAP(100000FDX)) {
 			SET_CAP(100000baseCR4_Full);
 			SET_CAP(100000baseSR4_Full);
 		}
-		if (cap & (1 << MC_CMD_PHY_CAP_25000FDX_LBN)) {
+		if (CHECK_CAP(25000FDX)) {
 			SET_CAP(25000baseCR_Full);
 			SET_CAP(25000baseSR_Full);
 		}
-		if (cap & (1 << MC_CMD_PHY_CAP_50000FDX_LBN))
+		if (CHECK_CAP(50000FDX))
 			SET_CAP(50000baseCR2_Full);
 #endif
 		break;
 
 	case MC_CMD_MEDIA_BASE_T:
 		SET_CAP(TP);
-		if (cap & (1 << MC_CMD_PHY_CAP_10HDX_LBN))
+		if (CHECK_CAP(10HDX))
 			SET_CAP(10baseT_Half);
-		if (cap & (1 << MC_CMD_PHY_CAP_10FDX_LBN))
+		if (CHECK_CAP(10FDX))
 			SET_CAP(10baseT_Full);
-		if (cap & (1 << MC_CMD_PHY_CAP_100HDX_LBN))
+		if (CHECK_CAP(100HDX))
 			SET_CAP(100baseT_Half);
-		if (cap & (1 << MC_CMD_PHY_CAP_100FDX_LBN))
+		if (CHECK_CAP(100FDX))
 			SET_CAP(100baseT_Full);
-		if (cap & (1 << MC_CMD_PHY_CAP_1000HDX_LBN))
+		if (CHECK_CAP(1000HDX))
 			SET_CAP(1000baseT_Half);
-		if (cap & (1 << MC_CMD_PHY_CAP_1000FDX_LBN))
+		if (CHECK_CAP(1000FDX))
 			SET_CAP(1000baseT_Full);
-		if (cap & (1 << MC_CMD_PHY_CAP_10000FDX_LBN))
+		if (CHECK_CAP(10000FDX))
 			SET_CAP(10000baseT_Full);
 		break;
 	}
 
-	if (cap & (1 << MC_CMD_PHY_CAP_PAUSE_LBN))
+	if (CHECK_CAP(PAUSE))
 		SET_CAP(Pause);
-	if (cap & (1 << MC_CMD_PHY_CAP_ASYM_LBN))
+	if (CHECK_CAP(ASYM))
 		SET_CAP(Asym_Pause);
-	if (cap & (1 << MC_CMD_PHY_CAP_AN_LBN))
+	if (CHECK_CAP(AN))
 		SET_CAP(Autoneg);
 
 #ifdef EFX_NOT_UPSTREAM
@@ -466,6 +473,7 @@ static void mcdi_fec_to_ethtool_linkset(u32 cap, unsigned long *linkset)
 }
 #endif
 #undef SET_CAP
+#undef CHECK_CAP
 #else
 void mcdi_to_ethtool_linkset(struct efx_nic *efx, u32 media, u32 cap,
 			     unsigned long *linkset)
