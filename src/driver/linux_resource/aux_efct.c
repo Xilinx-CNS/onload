@@ -359,7 +359,7 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
     return rc;
 
   res_dim->vi_min = val.nic_res.evq_min;
-  res_dim->vi_lim = val.nic_res.evq_lim;
+  res_dim->vi_lim = CI_EFCT_EVQ_DUMMY_MAX;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
 
   for( i = 0; i < CI_EFCT_MAX_EVQS; i++ )
