@@ -1158,6 +1158,24 @@ static void ef10_nic_sw_event(struct efhw_nic *nic, int data, int evq)
 	EFHW_TRACE("%s: evq[%d]->%x", __FUNCTION__, evq, data);
 }
 
+
+bool ef10_ef100_accept_vi_constraints(struct efhw_nic *nic, int low,
+				      unsigned order, void* arg)
+{
+	struct efhw_vi_constraints *avc = arg;
+	int high = low + avc->min_vis_in_set;
+	int ok = 1;
+	if ((avc->min_vis_in_set > 1) && (!avc->has_rss_context)) {
+		/* We need to ensure that if an RSS-enabled filter is
+		 * pointed at this VI-set then the queue selected will be
+		 * within the default set.  The queue selected by RSS will be 
+		 * in the range (low | (rss_channel_count - 1)).
+		 */
+		ok &= ((low | (nic->rss_channel_count - 1)) < high);
+	}
+	return ok;
+}
+
 /*--------------------------------------------------------------------
  *
  * EF10 specific event callbacks
@@ -2598,6 +2616,7 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_nic_wakeup_request,
 	ef10_nic_sw_event,
 	ef10_handle_event,
+	ef10_ef100_accept_vi_constraints,
 	ef10_dmaq_tx_q_init,
 	ef10_dmaq_rx_q_init,
 	ef10_ef100_flush_tx_dma_channel,

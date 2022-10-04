@@ -149,6 +149,12 @@ struct efhw_dmaq_params {
 	};
 };
 
+struct efhw_vi_constraints {
+	int channel;
+	int min_vis_in_set;
+	int has_rss_context;
+};
+
 /**********************************************************************
  * Portable HW interface. ***************************************
  **********************************************************************/
@@ -207,6 +213,9 @@ struct efhw_func_ops {
 	/*! Handle an event from hardware, e.g. delivered via driverlink */
 	int (*handle_event) (struct efhw_nic *nic, efhw_event_t *ev,
 			     int budget);
+
+	bool (*accept_vi_constraints) (struct efhw_nic *nic, int low,
+				       unsigned order, void* arg);
 
   /*-------------- DMA support  ------------ */
 
@@ -519,6 +528,7 @@ struct efhw_nic {
 		unsigned base;
 		unsigned range;
 	} vi_irq_ranges[NIC_IRQ_MAX_RANGES];
+	unsigned rss_channel_count;
 
 	/* Size of PIO buffer */
 	unsigned pio_size;

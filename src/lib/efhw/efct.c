@@ -324,6 +324,12 @@ static void efct_nic_sw_event(struct efhw_nic *nic, int data, int evq)
 {
 }
 
+static bool efct_accept_vi_constraints(struct efhw_nic *nic, int low,
+                                       unsigned order, void* arg)
+{
+  return true;
+}
+
 /*--------------------------------------------------------------------
  *
  * EF10 specific event callbacks
@@ -1381,6 +1387,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_nic_wakeup_request,
   efct_nic_sw_event,
   efct_handle_event,
+  efct_accept_vi_constraints,
   efct_dmaq_tx_q_init,
   efct_dmaq_rx_q_init,
   efct_flush_tx_dma_channel,

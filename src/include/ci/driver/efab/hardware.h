@@ -101,6 +101,9 @@
 #define efhw_nic_handle_event(nic, ev, budget) \
 	((nic)->efhw_func->handle_event((nic), (ev), (budget)))
 
+#define efhw_nic_accept_vi_constraints(nic, low, order, arg) \
+	((nic)->efhw_func->accept_vi_constraints((nic), (low), (order), (arg)))
+
 /*-------------- DMA support  ------------ */
 #define efhw_nic_dmaq_tx_q_init(nic, client_id, params) \
 	((nic)->efhw_func->dmaq_tx_q_init((nic), (client_id), (params)))

@@ -464,11 +464,15 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 {
 	struct efrm_nic *efrm_nic;
 	struct efhw_nic *efhw_nic;
-	int channel;
+	struct efrm_alloc_vi_constraints avc = {
+		.channel = vi_attr->channel,
+		.min_vis_in_set = 1,
+		.has_rss_context = 0,
+	};
 
 	efhw_nic = efrm_client_get_nic(efrm_pd_to_resource(pd)->rs_client);
+	avc.efhw_nic = efhw_nic;
 	efrm_nic = efrm_nic(efhw_nic);
-	channel = vi_attr->channel;
 	if (vi_attr->interrupt_core >= 0) {
 		struct net_device *dev = efhw_nic_get_net_dev(&efrm_nic->efhw_nic);
 		if (!dev) {
@@ -477,14 +481,14 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 				         __FUNCTION__);
 				return -ENETDOWN;
 			}
-			channel = -1;
+			avc.channel = -1;
 		}
 		else {
 			int ifindex = dev->ifindex;
-			channel = efrm_affinity_cpu_to_channel_dev(linux_efhw_nic(efhw_nic),
+			avc.channel = efrm_affinity_cpu_to_channel_dev(linux_efhw_nic(efhw_nic),
 			                                          vi_attr->interrupt_core);
 			dev_put(dev);
-			if (channel < 0 && print_resource_warnings) {
+			if (avc.channel < 0 && print_resource_warnings) {
 				EFRM_ERR("%s: ERROR: could not map core_id=%d using "
 					"ifindex=%d", __FUNCTION__,
 					(int) vi_attr->interrupt_core, ifindex);
@@ -494,14 +498,13 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 			}
 		}
 	}
-	virs->net_drv_wakeup_channel = channel;
+	virs->net_drv_wakeup_channel = avc.channel;
 
 	if (vi_attr->vi_set != NULL)
 		return efrm_vi_set_alloc_instance(virs, vi_attr->vi_set,
 						  vi_attr->vi_set_instance);
 
-	return efrm_vi_allocator_alloc_set(efrm_nic, 1, 0,
-					   channel, &virs->allocation);
+	return efrm_vi_allocator_alloc_set(efrm_nic, &avc, &virs->allocation);
 }
 
 

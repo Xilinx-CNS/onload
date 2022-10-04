@@ -1041,6 +1041,13 @@ static void af_xdp_nic_sw_event(struct efhw_nic *nic, int data, int evq)
 	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
 }
 
+static bool af_xdp_accept_vi_constraints(struct efhw_nic *nic, int low,
+					 unsigned order, void* arg)
+{
+	struct efhw_vi_constraints *avc = arg;
+	return avc->channel == low;
+}
+
 /*--------------------------------------------------------------------
  *
  * EF10 specific event callbacks
@@ -1591,6 +1598,7 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_nic_wakeup_request,
 	af_xdp_nic_sw_event,
 	af_xdp_handle_event,
+	af_xdp_accept_vi_constraints,
 	af_xdp_dmaq_tx_q_init,
 	af_xdp_dmaq_rx_q_init,
 	af_xdp_flush_tx_dma_channel,

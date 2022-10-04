@@ -36,6 +36,8 @@
 #include <ci/efrm/buddy.h>
 #include <ci/efrm/debug.h>
 #include <ci/efhw/common.h>
+#include <ci/efhw/efhw_types.h>
+#include <ci/driver/efab/hardware.h>
 #include "efrm_internal.h"
 
 
@@ -82,66 +84,42 @@ void efrm_vi_allocator_dtor(struct efrm_nic *efrm_nic)
 
 
 struct alloc_vi_constraints {
-	struct efrm_nic *efrm_nic;
+	struct efhw_nic *efhw_nic;
 	int channel;
 	int min_vis_in_set;
 	int has_rss_context;
-	int fix_channel;
 };
 
 
 static bool accept_vi_constraints(int low, unsigned order, void* arg)
 {
-	struct alloc_vi_constraints *avc = arg;
-	int high = low + avc->min_vis_in_set;
-	int ok = 1;
-	if ( avc->fix_channel >=0 && low != avc->fix_channel )
-		return 0;
-	if ((avc->min_vis_in_set > 1) && (!avc->has_rss_context)) {
-		/* We need to ensure that if an RSS-enabled filter is
-		 * pointed at this VI-set then the queue selected will be
-		 * within the default set.  The queue selected by RSS will be 
-		 * in the range (low | (rss_channel_count - 1)).
-		 */
-		ok &= ((low | (avc->efrm_nic->rss_channel_count - 1)) < high);
-	}
-	return ok;
-}
-
-
-static int buddy_alloc_vi(struct efrm_nic *efrm_nic,
-			  struct efrm_buddy_allocator *b, int order,
-			  int channel, int min_vis_in_set, int has_rss_context)
-{
-	struct alloc_vi_constraints avc;
-	avc.efrm_nic = efrm_nic;
-	avc.channel = channel;
-	avc.min_vis_in_set = min_vis_in_set;
-	avc.has_rss_context = has_rss_context;
-	avc.fix_channel = (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP) ?
-			  channel : -1;
-	return efrm_buddy_alloc_special(b, order, accept_vi_constraints, &avc);
+	struct efrm_alloc_vi_constraints *avc = arg;
+	struct efhw_vi_constraints evc = {
+		.channel = avc->channel,
+		.min_vis_in_set = avc->min_vis_in_set,
+		.has_rss_context = avc->has_rss_context,
+	};
+	return efhw_nic_accept_vi_constraints(avc->efhw_nic, low, order, &evc);
 }
 
 
 int  efrm_vi_allocator_alloc_set(struct efrm_nic *efrm_nic,
-				 int min_vis_in_set, int has_rss_context,
-				 int channel,
+				 struct efrm_alloc_vi_constraints *avc,
 				 struct efrm_vi_allocation *set_out)
 {
 	int rc;
 
 	EFRM_ASSERT(efrm_nic->vi_allocator.orders != NULL);
 
-	if (min_vis_in_set < 1)
+	if (avc->min_vis_in_set < 1)
 		return -EINVAL;
 
-	set_out->order = fls(min_vis_in_set - 1);
+	set_out->order = fls(avc->min_vis_in_set - 1);
 	spin_lock_bh(&efrm_nic->lock);
-	set_out->instance = buddy_alloc_vi(efrm_nic,
-	                   &efrm_nic->vi_allocator,
-					   set_out->order, channel,
-					   min_vis_in_set, has_rss_context);
+	set_out->instance = efrm_buddy_alloc_special(&efrm_nic->vi_allocator,
+						     set_out->order,
+						     accept_vi_constraints,
+						     avc);
 	spin_unlock_bh(&efrm_nic->lock);
 	rc = (set_out->instance >= 0) ? 0 : -EBUSY;
 	return rc;
