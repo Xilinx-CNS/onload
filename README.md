@@ -38,7 +38,9 @@ line with `onload`.
 
 Please see [CONTRIBUTING.md](CONTRIBUTING.md)
 
-## Compatible network adapters, drivers and operating systems
+## Onload with AF_XDP
+
+### Compatible network adapters, drivers and operating systems
 
 OpenOnload can accelerate applications on operating systems with AF_XDP support.
 AF_XDP support needs Linux kernel version 5.3 or later. To support zero-copy,
@@ -52,12 +54,22 @@ release quality.
 The following operating system distributions are known to provide an adequate
 level of AF_XDP support for Onload:
 
-* Ubuntu LTS 20.04
-* Ubuntu 21.04
+* Ubuntu LTS 20.04, 22.04
 * Debian 10 with Linux kernel 5.10
 * Debian 11
-* Redhat Enterprise Linux 8.3, 8.4
-* Linux kernel in the range 5.3 - 5.16
+* Redhat Enterprise Linux 8.3 and newer
+* Redhat Enterprise Linux 9.x
+* Linux kernel in the range 5.4 - 5.19
+
+### Building without Xilinx NICs, for AF_XDP only
+
+OpenOnload can be built without SFC driver:
+* `make`: use `HAVE_SFC=0` variable;
+* `onload_build` & `onload_install`: use `--no-sfc` parameter;
+* `onload_tool reload`: use `--onload-only` parameter.
+
+
+## Native Onload with Xilinx/AMD NICs
 
 Onload also works with the native ef_vi hardware interface, supported by Xilinx
 network adapters. In this mode of operation, AF_XDP kernel and driver support
@@ -82,7 +94,7 @@ Linux distributions:
 * Ubuntu LTS 18.04, LTS 20.04, 21.04
 * Debian 10, 11
 * Redhat Enterprise Linux 7.9, 8.3, 8.4
-* Linux kernel in the range 4.15 - 5.16
+* Linux kernel in the range 4.15 - 5.17
 
 ## Support
 
