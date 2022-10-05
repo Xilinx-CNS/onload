@@ -158,14 +158,12 @@ static int efch_filter_insert(struct efrm_resource *rs, struct efrm_pd *pd,
                               struct efx_filter_spec *spec, struct filter *f,
                               unsigned flags)
 {
-  int rxq = ( flags & EFHW_FILTER_F_PREF_RXQ ? f->rxq : -1 );
-  int rc = efrm_filter_insert(rs->rs_client, spec, &rxq, NULL, flags);
+  int rc = efrm_filter_insert(rs->rs_client, spec, &f->rxq, NULL, flags);
   if( rc < 0 )
     return rc;
 
   f->efrm_filter_id = rc;
   f->flags |= FILTER_FLAGS_USES_EFRM_FILTER;
-  f->rxq = rxq;
 
   return rc;
 }
@@ -559,6 +557,9 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
     return -EOPNOTSUPP;
   if( filter_add->in.fields == 0 )
     return -EINVAL;
+  if( filter_add->in.flags & CI_FILTER_FLAG_PREF_RXQ &&
+      ! (filter_add->in.fields & CI_FILTER_FIELD_RXQ) )
+    return -EINVAL;
 
   if( filter_add->in.flags & CI_FILTER_FLAG_MCAST_LOOP )
     filter_flags |= EFX_FILTER_FLAG_TX;
@@ -636,12 +637,11 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
     onload_filter_flags |= EFHW_FILTER_F_ANY_RXQ;
   } 
   
-  if ( filter_add->in.flags & CI_FILTER_FLAG_PREF_RXQ ) {
-    onload_filter_flags |= EFHW_FILTER_F_PREF_RXQ;
+  if( filter_add->in.fields & CI_FILTER_FIELD_RXQ )
     f->rxq = filter_add->in.rxq_no;
-  } 
-
-  if ( filter_add->in.flags & CI_FILTER_FLAG_ANY_RXQ )
+  if( filter_add->in.flags & CI_FILTER_FLAG_PREF_RXQ )
+    onload_filter_flags |= EFHW_FILTER_F_PREF_RXQ;
+  if( filter_add->in.flags & CI_FILTER_FLAG_ANY_RXQ )
     onload_filter_flags |= EFHW_FILTER_F_ANY_RXQ;
 
   rc = efch_filter_insert(rs, pd, &spec, f, onload_filter_flags);

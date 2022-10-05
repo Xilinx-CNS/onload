@@ -338,6 +338,7 @@ typedef union ci_filter_add_u {
 #define CI_FILTER_FIELD_ETHER_TYPE     0x0040
 #define CI_FILTER_FIELD_OUTER_VID      0x0080
 #define CI_FILTER_FIELD_IP_PROTO       0x0100
+#define CI_FILTER_FIELD_RXQ            0x0200
     uint32_t            opt_fields;
     uint32_t            flags;
 #define CI_FILTER_FLAG_MCAST_LOOP          0x0001
