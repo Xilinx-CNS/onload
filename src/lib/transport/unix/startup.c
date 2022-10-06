@@ -683,43 +683,29 @@ void _fini(void)
 }
 
 
-/* We're not allowed to use libc in onload_version_msg() */
-static size_t local_strlen(const char *s)
-{
-  size_t len = 0;
-  while (*s++)
-    ++len;
-  return len;
-}
 
+/* We can't use variables from onload_version_msg(), because strlen()
+ * is not available when the library is run as an executable.
+ * And even a simple function like `local_strlen()` results in calling
+ * strlen() because of some "hardening". */
+#include "../../ciul/onload_version.h"
 
 /* This is called if the library is run as an executable!
    Ensure that no libc() functions are used */
 void onload_version_msg(void)
 {
-  const char* msg0[] = {
-    onload_product, " ", onload_version_private, "\n",
-    onload_copyright, "\n"
-    "Built: "__DATE__" "__TIME__" "
+  const char *msg = ONLOAD_PRODUCT" "ONLOAD_VERSION"\n"ONLOAD_COPYRIGHT"\n"
+                     "Built: "__DATE__" "__TIME__" "
 #ifdef NDEBUG
-    "(release)"
+                     "(release)"
 #else
-    "(debug)"
+                     "(debug)"
 #endif
-    "\n"
-    "Build profile header: " OO_STRINGIFY(TRANSPORT_CONFIG_OPT_HDR) "\n"};
-#define MSG0_SIZE CI_ARRAY_SIZE(msg0)
-  struct iovec v[MSG0_SIZE];
-  int i;
+                     "\nBuild profile header: "
+                     OO_STRINGIFY(TRANSPORT_CONFIG_OPT_HDR) "\n";
 
-
-  for( i = 0; i < MSG0_SIZE; i++ ) {
-    v[i].iov_base = (char*)msg0[i]; /* discard const qualifier */
-    v[i].iov_len = local_strlen(msg0[i]);
-  }
-
-  my_syscall3(writev, STDOUT_FILENO, (long) v, MSG0_SIZE);
-  my_syscall3(exit, 0, 0, 0); 
+  my_syscall3(write, STDOUT_FILENO, (long) msg, strlen(msg));
+  my_syscall3(exit, 0, 0, 0);
 }
 
 
