@@ -1,6 +1,6 @@
 Solarflare 5.X Linux network driver
 ===================================
-Version:  v5.3.12.1021
+Version:  v5.3.13.1006
 
 
 Overview
@@ -61,7 +61,7 @@ kernel
 Installation of the driver can be confirmed by typing:
    modinfo sfc | grep version
 and checking for the line:
-   version: v5.3.12.1021
+   version: v5.3.13.1006
 
 All network interfaces available on the system can be found with:
   ifconfig -a
@@ -74,16 +74,13 @@ For Riverhead VCU1525 this driver package is supported on:
  - RedHat Enterprise Linux                        7.4, 7.5
 
 This driver package is supported on:
- - RedHat Enterprise Linux                        6.10
  - RedHat Enterprise Linux                        7.8 7.9
  - RedHat Enterprise Linux                        8.4, 8.5, 8.6
- - SuSE Linux Enterprise Server 12                sp3, sp4
- - SuSE Linux Enterprise Server 15                sp2, sp3
- - Canonical Ubuntu Server LTS                    18.04, 20.04
- - Debian 8 "Jessie"                              8.10
- - Debian 9 "Stretch"                             9.4
+ - RedHat Enterprise Linux                        9.0
+ - SuSE Linux Enterprise Server 15                sp2, sp3, sp4
+ - Canonical Ubuntu Server LTS                    18.04, 20.04, 22.04
  - Debian 10 "Stretch"                            10.2
- - Kernel.org linux kernels                       3.0 to 5.11
+ - Kernel.org linux kernels                       4.15 to 5.11
 
 
 Xilinx aims to support the current and previous major release of each
@@ -102,6 +99,63 @@ Please contact your local Xilinx support representative or email
 
 Changelog
 ---------
+
+### v5.3.13.1006
+[General changes]
+ ~ fixes to support newer upstream kernels
+ ~ removal of kcompat for very old kernels
+ ~ simplify DMA mask setting
+ ~ remove MDIO support
+
+Issue 4818
+ ~ Use short interface names, without the "np0" suffix.
+   These days the suffix is normally set to the port name when the NIC has
+   more than one network port on the same PCI function.
+   The EF10 adapters only support 1 network port per PCI function, so the
+   suffix never adds any useful information. The suffix numbering was unrelated
+   to the physical cage number provided on the backplate of the adapter.
+
+   The original issue (Issue 64065 below) was resolved by adding the
+   phys_port_id and phys_port_name files in sysfs. Back then the udev rules
+   provided by distributions would not have the side effect of adding the
+   suffix to the interface name. Over time those rules have evolved, and
+   removing the suffix again is best to avoid confusion and misinterpretation.
+   This means the phys_port_name file in sysfs is not supported any more for
+   EF10 adapters, but phys_port_id is still supported.
+
+Issue 4732
+ ~ Add support for SLES15SP4 checking if vdpa.ko is installed
+
+Issue 4734
+ ~ Add support for RHEL 9.0 including PTP
+
+Issue 4824
+ ~ For multi-PF provide ifconfig stats by using vadaptor stats
+
+Issue 4708
+ ~ Provide VF ifconfig stats by using vadaptor stats
+
+Issue 4837
+ ~ Fix param separate_tx_channels=1 by not increasing driverlink IRQs
+ when "reducing" them
+
+Issue 4563
+ ~ Rename external PPS device from 'sfc' to scheme 'ptp#.ext'
+
+Issue 4841
+ ~ Change VF mac via PF as first preference if available
+
+Issue 3401
+ ~ Migrate sfc.ko from virtbus to auxbus
+
+Issue 4834
+ ~ reduce mcdi busy waiting poll
+
+Issue 4840
+ ~ Fix unsupported link speeds warning
+
+Issue 4867
+ ~ Fix datapath reset on nic resume
 
 ### v5.3.12.1021
 [General changes]
@@ -2666,6 +2720,13 @@ Known issues with the platform (KVM/libvirt/kernel)
 ---------------------------------------------------
   ~ libvirt direct-bridged mode on-top of a VF is not supported. Please use
     libvirt direct-bridged mode over a PF or direct-passthrough mode with VFs.
+Issue 4732:
+  ~ On SLES15 SP4 vDPA functionality is only supported if the
+    kernel-default-extra package is installed when the driver is build. If the
+    kernel-default-extra package is removed after building the driver it will
+    subsequently fail to load due to unknown vdpa symbols. A driver rebuild is
+    then needed to remove vDPA support from the driver.
+    Note that loading the VDPA module will taint the kernel as "unsupported".
 Issue 4596
   ~ From DKMS version 2.8.8 the REMAKE_INITRD feature has been removed.
     For details see KI 33605.
