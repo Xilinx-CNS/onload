@@ -295,8 +295,11 @@ found:
 #if CI_CFG_IPV6
 static void ci_tcp_init_ipcache_ip4_hdr(ci_tcp_state* ts)
 {
+  ci_uintptr_t tcphdr_offs_new = (ci_uintptr_t)TS_TCP(ts);
+  ci_uintptr_t tcphdr_offs_old = (ci_uintptr_t)TS_IP6_TCP(ts);
+
   ci_init_ipcache_ip4_hdr(&ts->s);
-  memmove(&ts->s.pkt.ipx.ip4 + 1, &ts->s.pkt.ipx.ip6 + 1, sizeof(ci_tcp_hdr));
+  memmove((void*)tcphdr_offs_new, (void*)tcphdr_offs_old, sizeof(ci_tcp_hdr));
   ts->outgoing_hdrs_len -= CI_IPX_HDR_SIZE(AF_INET6) - CI_IPX_HDR_SIZE(AF_INET);
 
   if( CI_IS_ADDR_IP6(ts->s.cp.laddr) ) {
@@ -307,7 +310,10 @@ static void ci_tcp_init_ipcache_ip4_hdr(ci_tcp_state* ts)
 
 static void ci_tcp_init_ipcache_ip6_hdr(ci_tcp_state* ts)
 {
-  memmove(&ts->s.pkt.ipx.ip6 + 1, &ts->s.pkt.ipx.ip4 + 1, sizeof(ci_tcp_hdr));
+  ci_uintptr_t tcphdr_offs_new = (ci_uintptr_t)TS_IP6_TCP(ts);
+  ci_uintptr_t tcphdr_offs_old = (ci_uintptr_t)TS_TCP(ts);
+
+  memmove((void*)tcphdr_offs_new, (void*)tcphdr_offs_old, sizeof(ci_tcp_hdr));
   ci_init_ipcache_ip6_hdr(&ts->s);
   ts->outgoing_hdrs_len += CI_IPX_HDR_SIZE(AF_INET6) - CI_IPX_HDR_SIZE(AF_INET);
 
