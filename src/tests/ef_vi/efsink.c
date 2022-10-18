@@ -361,6 +361,7 @@ static int poll_evq(struct resources* res)
       handle_rx_ref(res, evs[i].rx_ref.pkt_id, evs[i].rx_ref.len);
       break;
     case EF_EVENT_TYPE_RX_REF_DISCARD:
+      LOGE("ERROR: ref discard flags=%x\n", evs[i].rx_ref_discard.flags);
       handle_rx_ref(res, evs[i].rx_ref_discard.pkt_id,
                     evs[i].rx_ref_discard.len);
       break;
