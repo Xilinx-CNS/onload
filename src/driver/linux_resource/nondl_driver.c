@@ -26,7 +26,7 @@ static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
   if( efhw_nic_find(net_dev) ) {
     EFRM_TRACE("efrm_nic_add_ifindex: netdev %s already registered",
                netdev_name(net_dev));
-    return 0;
+    return -EALREADY;
   }
 
   ef10_res = kmalloc(sizeof(*ef10_res), GFP_KERNEL);
