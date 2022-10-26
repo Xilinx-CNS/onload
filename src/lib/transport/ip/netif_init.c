@@ -545,6 +545,16 @@ void ci_netif_config_opts_defaults(ci_netif_config_opts* opts)
   }
 }
 
+static void round_opts(const char* opt_name, ci_uint32* opt, int multiplier)
+{
+  if( *opt % multiplier != 0 ) {
+    unsigned new_max = *opt;
+    new_max = CI_ROUND_UP(new_max, multiplier);
+    ci_log("config: %s is rounded up from %u to %u", opt_name, *opt, new_max);
+    *opt = new_max;
+  }
+}
+
 void ci_netif_config_opts_rangecheck(ci_netif_config_opts* opts)
 {
   ci_uint64 MIN;
@@ -611,12 +621,7 @@ void ci_netif_config_opts_rangecheck(ci_netif_config_opts* opts)
 # include <ci/internal/opts_netif_def.h>
 
   /* EF_MAX_ENDPOINTS should must be divisible by 2048 */
-  if( opts->max_ep_bufs % EP_BUF_PER_CHUNK != 0 ) {
-    unsigned new_max = opts->max_ep_bufs;
-    new_max = CI_ROUND_UP(new_max, EP_BUF_PER_CHUNK);
-    ci_log("config: EF_MAX_ENDPOINTS is rounded up from %u to %u", opts->max_ep_bufs, new_max);
-    opts->max_ep_bufs = new_max;
-  }
+  round_opts("EF_MAX_ENDPOINTS", &opts->max_ep_bufs, EP_BUF_PER_CHUNK);
 }
 
 
@@ -690,6 +695,7 @@ static void ci_netif_config_opts_getenv_ef_log(ci_netif_config_opts* opts)
     {EF_LOG_RESOURCE_WARNINGS, "resource_warnings"},
     {EF_LOG_CONN_DROP, "conn_drop"},
     {EF_LOG_CONFIG_WARNINGS, "config_warnings"},
+    {EF_LOG_MORE_CONFIG_WARNINGS, "more_config_warnings"},
     {EF_LOG_USAGE_WARNINGS, "usage_warnings"},
   };
 
@@ -1075,23 +1081,51 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
    * tcp_synrecv_max * 2 / 7.
    * And we need some space for real endpoints. */
   if( opts->tcp_synrecv_max * 4 > opts->max_ep_bufs * 7 ) {
-    CONFIG_LOG(opts, CONFIG_WARNINGS, "%s: EF_TCP_SYNRECV_MAX=%d and "
-               "EF_MAX_ENDPOINTS=%d are inconsistent.",
-               opts->tcp_synrecv_max * 2 > opts->max_ep_bufs * 7 ?
-               "ERROR" : "WARNING",
-               opts->tcp_synrecv_max, opts->max_ep_bufs);
-    if( getenv("EF_TCP_SYNRECV_MAX") == NULL ) {
-      CONFIG_LOG(opts, CONFIG_WARNINGS, "EF_TCP_SYNRECV_MAX is set to %d "
-                 "based on %s value and assuming up to %d listening "
-                 "sockets in the Onload stack",
-                 opts->tcp_synrecv_max,
-                 getenv("EF_TCP_BACKLOG_MAX") == NULL ?
-                 "/proc/sys/net/ipv4/tcp_max_syn_backlog" :
-                 "EF_TCP_BACKLOG_MAX",
-                 CI_CFG_ASSUME_LISTEN_SOCKS);
+    if( getenv("EF_TCP_SYNRECV_MAX") == NULL && getenv("EF_MAX_ENDPOINTS") == NULL && getenv("EF_TCP_BACKLOG_MAX") == NULL ) {
+      /* None have been manually set so warn at lower
+       * config warning level. */
+      CONFIG_LOG(opts, MORE_CONFIG_WARNINGS, "%s: EF_TCP_SYNRECV_MAX=%d and "
+                "EF_MAX_ENDPOINTS=%d are inconsistent.",
+                opts->tcp_synrecv_max * 2 > opts->max_ep_bufs * 7 ?
+                "ERROR" : "WARNING",
+                opts->tcp_synrecv_max, opts->max_ep_bufs);
+      CONFIG_LOG(opts, MORE_CONFIG_WARNINGS, "EF_TCP_SYNRECV_MAX is set to %d "
+                "based on /proc/sys/net/ipv4/tcp_max_syn_backlog value and assuming up to %d listening "
+                "sockets in the Onload stack",
+                opts->tcp_synrecv_max,
+                CI_CFG_ASSUME_LISTEN_SOCKS);
+
+      round_opts("EF_MAX_ENDPOINTS", &opts->max_ep_bufs, EP_BUF_PER_CHUNK);
+      opts->tcp_synrecv_max = CI_ROUND_UP(opts->max_ep_bufs, EP_BUF_PER_CHUNK) * 7/4;
+      CONFIG_LOG(opts, MORE_CONFIG_WARNINGS, "EF_TCP_SYNRECV_MAX has been decreased"
+                " to %d to be consistent with EF_MAX_ENDPOINTS=%d",
+                opts->tcp_synrecv_max,
+                opts->max_ep_bufs);
+      if( opts->tcp_backlog_max > opts->tcp_synrecv_max ) {
+        opts->tcp_backlog_max = opts->tcp_synrecv_max;
+        CONFIG_LOG(opts, MORE_CONFIG_WARNINGS, "EF_TCP_BACKLOG_MAX has been decreased"
+                  " to %d to be consistent with EF_TCP_SYNRECV_MAX=%d",
+                  opts->tcp_backlog_max,
+                  opts->tcp_synrecv_max);
+      }
     }
-    CONFIG_LOG(opts, CONFIG_WARNINGS, "Too few endpoints requested: ~4 "
-               "syn-receive states consume one endpoint. ");
+    else {
+      /* Any have been manually set so give the user an Error or Warning */
+      CONFIG_LOG(opts, CONFIG_WARNINGS, "%s: EF_TCP_SYNRECV_MAX=%d and "
+                "EF_MAX_ENDPOINTS=%d are inconsistent.",
+                opts->tcp_synrecv_max * 2 > opts->max_ep_bufs * 7 ?
+                "ERROR" : "WARNING",
+                opts->tcp_synrecv_max, opts->max_ep_bufs);
+      if( getenv("EF_TCP_SYNRECV_MAX") == NULL ) {
+        CONFIG_LOG(opts, CONFIG_WARNINGS, "EF_TCP_SYNRECV_MAX is set to %d "
+                  "based on EF_TCP_BACKLOG_MAX value and assuming up to %d listening "
+                  "sockets in the Onload stack",
+                  opts->tcp_synrecv_max,
+                  CI_CFG_ASSUME_LISTEN_SOCKS);
+      }
+      CONFIG_LOG(opts, CONFIG_WARNINGS, "Too few endpoints requested: ~4 "
+                "syn-receive states consume one endpoint. ");
+    }
   }
 
   if ( (s = getenv("EF_TCP_INITIAL_CWND")) )

@@ -114,7 +114,8 @@
 #define EF_LOG_CONN_DROP              2
 #define EF_LOG_CONFIG_WARNINGS        3
 #define EF_LOG_USAGE_WARNINGS         4
-#define EF_LOG_MAX                    5  /* Must be last */
+#define EF_LOG_MORE_CONFIG_WARNINGS   5
+#define EF_LOG_MAX                    6  /* Must be last */
 
 
 #define NI_LOG(ni, lg, ...)                                \
