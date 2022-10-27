@@ -226,7 +226,7 @@ ci_ipp_pmtu_rx(ci_netif *netif, ci_pmtu_state_t *pmtus,
     ipx = (ci_ipx_hdr_t*)(&tb[1]);
     len = ipx_hdr_tot_len(ipx_hdr_af(ipx), ipx);
     ctr = CI_PMTU_PLATEAU_ENTRY_MAX;
-    while( ctr >= 0 && len <= plateau[ctr] )
+    while( ctr > 0 && len <= plateau[ctr] )
       --ctr;
     DEBUGPMTU(ci_log("%s: (legacy icmp) pmtu=%u(%d) ip_tot_len=%d",
 	             __FUNCTION__, plateau[ctr], ctr, len));
