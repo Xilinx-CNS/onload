@@ -21,7 +21,6 @@
 #include <onload/dup2_lock.h>
 
 #include <ci/internal/ip.h>
-#include <ci/internal/trampoline.h>
 #include <asm/unistd.h>
 
 #define VERB(x)
