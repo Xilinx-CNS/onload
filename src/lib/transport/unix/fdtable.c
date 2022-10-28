@@ -2342,9 +2342,7 @@ void init_citp_log_fd(void)
     }
   }
   else {
-    /* Unspecialised /dev/onload does not trampoline,
-     * so simple close is OK.  */
-    ci_sys_close(fd);
+    ci_tcp_helper_close_no_trampoline(fd);
   }
 }
 
