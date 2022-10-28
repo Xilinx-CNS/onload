@@ -30,16 +30,6 @@
 
 
 /*! \i_efab_unix */
-/* Please do not add any logging here (else citp_log_fn() could recurse) */
-ci_inline int
-oo_close(ci_fd_t fp)
-{
-  if( ci_sys_close(fp) < 0 )  return -errno;
-  return 0;
-}
-
-
-/*! \i_efab_unix */
 ci_inline int
 oo_resource_alloc(ci_fd_t fp, ci_resource_onload_alloc_t* io)
 {
