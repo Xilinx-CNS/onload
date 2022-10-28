@@ -331,10 +331,6 @@ int citp_netif_alloc_and_init(ef_driver_handle* fd, ci_netif** out_ni)
 
   CITP_FDTABLE_LOCK();
 
-  /* Ensure that the onload_fd is created for close trampolining. */
-  if( citp.onload_fd < 0 )
-    __oo_service_fd(true);
-
   oo_stackname_get(&stackname);
   if( stackname == NULL ) {
     /* This implies EF_DONT_ACCELERATE is set */
