@@ -43,6 +43,15 @@ void ci_log_stdout(const char* msg)
   writev(STDOUT_FILENO, v, 2);
 }
 
+/*this function acts like configuration for ci_log_fn: no new line (works like printf)*/
+void ci_log_stdout_nonl(const char* msg)
+{
+  struct iovec v[1];
+  v[0].iov_base = (void*) msg;
+  v[0].iov_len = strlen(msg);
+
+  writev(STDOUT_FILENO, v, 1);
+}
 
 void ci_log_syslog(const char* msg)
 {

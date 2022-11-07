@@ -57,6 +57,7 @@ extern "C" {
 
 extern void ci_vlog(const char* fmt, va_list args)  CI_HF;
 extern void ci_log(const char* fmt, ...) CI_PRINTF_LIKE(1,2) CI_HF;
+extern void ci_log_nonl(const char* fmt, ...) CI_PRINTF_LIKE(1,2) CI_HF;
 extern void ci_log_dump_fn(void* unused, const char* fmt, ...)
                            CI_PRINTF_LIKE(2,3) CI_HF;
 
@@ -75,6 +76,7 @@ extern void ci_log_null(const char* msg) CI_HF;
 extern void ci_log_stderr(const char* msg) CI_HF;
 extern void ci_log_stdout(const char* msg) CI_HF;
 extern void ci_log_syslog(const char* msg) CI_HF;
+extern void ci_log_stdout_nonl(const char* msg) CI_HF;
 
 /*! Call the following to install special logging behaviours. */
 extern void ci_log_buffer_till_fail(void) CI_HF;

@@ -25,6 +25,7 @@ LIB_SRCS	:= \
 		udp_checksum.c \
 		icmp_checksum.c \
 		log.c \
+		log_nonl.c \
 		log_buffer.c \
 		log_nth.c \
 		log_unique.c \
