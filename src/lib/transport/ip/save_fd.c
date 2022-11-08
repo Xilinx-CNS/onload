@@ -17,6 +17,7 @@
 #include <onload/ul/tcp_helper.h>
 #include <ci/internal/ip_log.h>
 #include <ci/internal/efabcfg.h>
+#include <ci/internal/syscall.h>
 #include <onload/epoll.h>
 #include <onload/version.h>
 #include "uk_intf_ver.h"
@@ -95,10 +96,7 @@ int ef_onload_handle_move_and_do_cloexec(ef_driver_handle* pfd, int do_cloexec)
    * needed on the new fd, so we're done.
    */
   if( fd >= 0 ) {
-    /* Unspecialised /dev/onload does not trampoline, see oo_fops:
-     * it does not have oo_fop_flush().  So we can simply close this.
-     */
-    ci_sys_close(*pfd);
+    my_syscall3(close, *pfd, 0, 0);
     *pfd = fd;
     return 0;
   }

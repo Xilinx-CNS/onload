@@ -147,7 +147,14 @@ int efrm_vi_set_alloc(struct efrm_pd *pd, int n_vis,
 	struct efrm_nic *efrm_nic;
 	int i, j, rc;
 	int rss_limited;
-	int has_rss_context = 0;
+	struct efrm_alloc_vi_constraints avc = {
+		.channel = -1,
+		.min_vis_in_set = n_vis,
+		.has_rss_context = 0,
+		/* We don't know the details of individual vis when allocating
+		 * a set, so assume we may want a txq. */
+		.want_txq = true,
+	};
 	EFRM_ASSERT(0 == (rss_modes &
 		  ~(EFRM_RSS_MODE_DEFAULT|EFRM_RSS_MODE_SRC|EFRM_RSS_MODE_DST)));
 	EFRM_ASSERT(rss_modes & (EFRM_RSS_MODE_DEFAULT|EFRM_RSS_MODE_SRC));
@@ -164,6 +171,7 @@ int efrm_vi_set_alloc(struct efrm_pd *pd, int n_vis,
 
 	client = efrm_pd_to_resource(pd)->rs_client;
 	efrm_nic = container_of(client->nic, struct efrm_nic, efhw_nic);
+	avc.efhw_nic = &efrm_nic->efhw_nic;
 	rss_limited =
 		efrm_client_get_nic(client)->flags & NIC_FLAG_RX_RSS_LIMITED;
 
@@ -203,14 +211,12 @@ int efrm_vi_set_alloc(struct efrm_pd *pd, int n_vis,
 					 __FUNCTION__, n_vis, rc);
 		}
 		else {
-			has_rss_context = 1;
+			avc.has_rss_context = 1;
 		}
 	}
 
  skip_context_alloc:
-	rc = efrm_vi_allocator_alloc_set(efrm_nic, n_vis,
-					 has_rss_context,
-					 -1, &vi_set->allocation);
+	rc = efrm_vi_allocator_alloc_set(efrm_nic, &avc, &vi_set->allocation);
 	if (rc != 0)
 		goto fail1;
 	efrm_resource_init(&vi_set->rs, EFRM_RESOURCE_VI_SET,

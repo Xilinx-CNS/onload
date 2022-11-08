@@ -208,7 +208,7 @@ __memcpy_iov_to_pio(volatile uint64_t* dst,
 static inline uint64_t load_partial_le(const void* p, size_t n)
 {
   EF_VI_ASSERT(n < 8);
-  if(unlikely( ((uintptr_t)p & CI_PAGE_MASK) > CI_PAGE_SIZE - 8 )) {
+  if(unlikely( ((uintptr_t)p & ~CI_PAGE_MASK) > CI_PAGE_SIZE - 8 )) {
     /* The normal 'overread' branch would have crossed a page boundary and
      * thus potentially segfaulted, so 'overread backwards' instead */
     uint64_t v = CI_BSWAP_LE64(*(const uint64_t*)((const char*)p - (8 - n)));
@@ -216,7 +216,7 @@ static inline uint64_t load_partial_le(const void* p, size_t n)
   }
   else {
     uint64_t v = CI_BSWAP_LE64(*(const uint64_t*)p);
-    return v & (~0ull << (8 * n));
+    return v & ((1ull << (8 * n)) - 1);
   }
 }
 

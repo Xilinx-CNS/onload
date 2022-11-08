@@ -4,6 +4,8 @@
 
 set -o noglob
 
+trap "pkill -P $$" SIGTERM
+
 usage() {
   script=$(basename $0)
   echo "Usage:"
@@ -119,8 +121,9 @@ else
     #   * take care that tcpdump is not killed by ^C: use setsid
     # - tcpdump prints error (incorrect pcap expression or anything);
     #   onload_tcpdump.bin is killed by SIGHUP.
+    # - onload_tcpdump is killed: trap signal and pkill all children
     onload_tcpdump.bin $both_opts $onload_opts $stack_names_or_ids | \
         ( setsid tcpdump -r- $w_opt $both_opts $tcpdump_opts || \
-        ( pgrep --parent $$ onload_tcpdump. | xargs kill -HUP ) )
-        #onload_tcpdump.bin is shortened in pgrep to onload_tcpdump.
+        ( pgrep --parent $$ onload_tcpdump. | xargs kill -HUP ) ) &
+    wait
 fi

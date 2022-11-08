@@ -359,7 +359,7 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
     return rc;
 
   res_dim->vi_min = val.nic_res.evq_min;
-  res_dim->vi_lim = val.nic_res.evq_lim;
+  res_dim->vi_lim = CI_EFCT_EVQ_DUMMY_MAX;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
 
   for( i = 0; i < CI_EFCT_MAX_EVQS; i++ )
@@ -498,10 +498,15 @@ void efct_remove(struct auxiliary_device *auxdev)
     /* All workqueues should be already shut down by now, but it may happen
      * that the final efct_poll() did not happen.  Do it now. */
     efct_poll(efct, i, 0);
+  }
+  drain_workqueue(system_wq);
+
+  /* Now any destruct work items we queued as a result of the final poll have
+   * been drained, so everything should be gone. */
+  for( i = 0; i < CI_ARRAY_SIZE(efct->rxq); ++i ) {
     EFHW_ASSERT(efct->rxq[i].live_apps == NULL);
     EFHW_ASSERT(efct->rxq[i].new_apps == NULL);
   }
-  drain_workqueue(system_wq);
 
   rtnl_lock();
   net_dev = efhw_nic_get_net_dev(nic);

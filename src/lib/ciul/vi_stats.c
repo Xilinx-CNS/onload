@@ -63,7 +63,6 @@ ef_vi_stats_query_layout(ef_vi* vi,
   case EF_VI_ARCH_EF10:
     return ef10_query_layout(vi, layout_out);
   default:
-    EF_VI_BUG_ON(1);
     return -EINVAL;
   }
 }

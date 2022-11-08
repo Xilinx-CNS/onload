@@ -242,11 +242,17 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
     .unsol_credit = efhw_params->flags & EFHW_VI_TX_TIMESTAMPS ? CI_CFG_TIME_SYNC_EVENT_EVQ_CAPACITY  - 1 : 0,
   };
   struct efhw_nic_efct *efct = nic->arch_extra;
-  struct efhw_nic_efct_evq *efct_evq = &efct->evq[efhw_params->evq];
+  struct efhw_nic_efct_evq *efct_evq;
   int rc;
 #ifndef NDEBUG
   int i;
 #endif
+
+  /* This is a dummy EVQ, so nothing to do. */
+  if( efhw_params->evq >= CI_EFCT_MAX_EVQS )
+    return 0;
+
+  efct_evq = &efct->evq[efhw_params->evq];
 
   /* We only look at the first page because this memory should be physically
    * contiguous, but the API provides us with an address per 4K (NIC page)
@@ -288,8 +294,14 @@ efct_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
   struct efhw_nic_efct *efct = nic->arch_extra;
-  struct efhw_nic_efct_evq *efct_evq = &efct->evq[evq];
+  struct efhw_nic_efct_evq *efct_evq;
   int rc = 0;
+
+  /* This is a dummy EVQ, so nothing to do. */
+  if( evq >= CI_EFCT_MAX_EVQS )
+    return;
+
+  efct_evq = &efct->evq[evq];
 
   /* In the normal case we'll be disabling the queue because all outstanding
    * flushes have completed. However, in the case of a flush timeout there may
@@ -322,6 +334,26 @@ efct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
 
 static void efct_nic_sw_event(struct efhw_nic *nic, int data, int evq)
 {
+}
+
+static bool efct_accept_vi_constraints(struct efhw_nic *nic, int low,
+                                       unsigned order, void* arg)
+{
+  struct efhw_vi_constraints *vc = arg;
+  struct efhw_nic_efct *efct = nic->arch_extra;
+
+  /* If this VI will want a TXQ it needs a HW EVQ. These all fall within
+   * the range 0-CI_EFCT_MAX_EVQS. We use the space above that to provide
+   * dummy EVQS. */
+  if( vc->want_txq ) {
+    if( low < CI_EFCT_MAX_EVQS )
+      return efct->evq[low].txq != EFCT_EVQ_NO_TXQ;
+    else
+      return false;
+  }
+  else {
+    return low >= CI_EFCT_MAX_EVQS;
+  }
 }
 
 /*--------------------------------------------------------------------
@@ -383,6 +415,7 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
   };
   int rc;
 
+  EFHW_ASSERT(txq_params->evq < CI_EFCT_MAX_EVQS);
   EFHW_ASSERT(params.qid != EFCT_EVQ_NO_TXQ);
 
   EFCT_PRE(dev, edev, cli, nic, rc);
@@ -1381,6 +1414,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_nic_wakeup_request,
   efct_nic_sw_event,
   efct_handle_event,
+  efct_accept_vi_constraints,
   efct_dmaq_tx_q_init,
   efct_dmaq_rx_q_init,
   efct_flush_tx_dma_channel,

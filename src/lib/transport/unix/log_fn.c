@@ -63,11 +63,8 @@ void citp_log_fn_ul(const char* msg)
 
 void citp_log_fn_drv(const char* msg)
 {
-  if( citp.log_fd < 0 ) {
-    /* This fd is already marked as reserved in the fdtable, so there is no
-     * need to reserve it again. */
-    citp.log_fd = oo_service_fd();
-  }
+  if( citp.log_fd < 0 )
+    init_citp_log_fd();
 
   my_syscall3(ioctl, citp.log_fd, OO_IOC_PRINTK, (long) msg);
 }

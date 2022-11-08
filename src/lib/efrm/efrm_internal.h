@@ -81,13 +81,20 @@ extern int  efrm_vi_allocator_ctor(struct efrm_nic *,
 				   const struct vi_resource_dimensions *);
 extern void efrm_vi_allocator_dtor(struct efrm_nic *);
 
+struct efrm_alloc_vi_constraints {
+	struct efhw_nic *efhw_nic;
+	int channel;
+	int min_vis_in_set;
+	int has_rss_context;
+	bool want_txq;
+};
+
 /* Allocate a set of VIs with given properties.  Returns 0 or negative
  * error code.  If more than one VI is requested, then a consecutive block
  * of VIs are allocated (if possible).
  */
 extern int  efrm_vi_allocator_alloc_set(struct efrm_nic *,
-					int min_vis_in_set,
-					int has_rss_context, int channel,
+					struct efrm_alloc_vi_constraints *,
 					struct efrm_vi_allocation *set_out);
 extern void efrm_vi_allocator_free_set(struct efrm_nic *,
 				       struct efrm_vi_allocation *);

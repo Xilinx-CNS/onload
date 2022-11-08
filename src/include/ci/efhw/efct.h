@@ -38,6 +38,7 @@ struct efhw_efct_rxq {
 /* TODO EFCT find somewhere better to put this */
 #define CI_EFCT_MAX_RXQS  8
 #define CI_EFCT_MAX_EVQS 24
+#define CI_EFCT_EVQ_DUMMY_MAX 1024
 
 struct efhw_nic_efct_rxq {
   struct efhw_efct_rxq *new_apps;  /* Owned by process context */

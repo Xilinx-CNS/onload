@@ -56,7 +56,6 @@
 
 typedef struct {
   int			log_fd;
-  int                   onload_fd;
 
   ci_uint64             spin_cycles;
   ci_uint64             poll_nonblock_fast_cycles;
@@ -788,7 +787,7 @@ extern void        __citp_fdtable_reserve(int fd, int reserve) CI_HF;
 
 
 ci_inline bool citp_fd_is_special(int fd) {
-   return fd == citp.log_fd || fd == citp.onload_fd;
+   return fd == citp.log_fd;
 }
 
 /* Extend the initialisation of the FD table, marking each FD as unknown */
@@ -1148,22 +1147,8 @@ ci_inline int citp_getpid(void)
 }
 #endif
 
-/* Provides a non-specialised Onload fd to any user who needs it
- * just to call ioctls.  The users must not convert it to a stack fd,
- * socket fd and alike.
- *
- * fdtable_locked == true means that the fdtable is locked.
- * fdtable_locked == false means that we do not know (typically from
- * ci_log).
- */
-extern void __oo_service_fd(bool fdtable_locked);
-ci_inline int oo_service_fd(void)
-{
-  if( citp.onload_fd < 0 )
-    __oo_service_fd(false);
-
-  return citp.onload_fd;
-}
+/* Provides a non-specialised Onload fd solely for logging. */
+extern void init_citp_log_fd(void);
 
 extern void oo_signal_terminate(int signum);
 

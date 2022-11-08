@@ -444,6 +444,7 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 
 	nic = &lnic->efrm_nic.efhw_nic;
 	nic->mtu = net_dev->mtu + ETH_HLEN; /* ? + ETH_VLAN_HLEN */
+	nic->rss_channel_count = ef10_res->rss_channel_count;
 	efrm_dev->priv = nic;
 
 	efrm_notify_nic_probe(net_dev);

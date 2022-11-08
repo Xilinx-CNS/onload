@@ -796,6 +796,7 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_nic_wakeup_request,
 	ef100_nic_sw_event,
 	ef100_handle_event,
+	ef10_ef100_accept_vi_constraints,
 	ef100_dmaq_tx_q_init,
 	ef100_dmaq_rx_q_init,
 	ef10_ef100_flush_tx_dma_channel,

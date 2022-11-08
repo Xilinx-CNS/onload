@@ -30,13 +30,10 @@ efhw_nic_release_efct_device(struct efhw_nic* nic,
   if (!dev) { \
     rc = -ENODEV; \
   } \
-  /* [nic->resetting] means we have detected that we are in a reset.
-   * There is potentially a period after [nic->resetting] is cleared
-   * but before driverlink is re-enabled, during which time [efct_cli]
-   * will be NULL. */ \
-  else if ((nic)->resetting || (efct_cli) == NULL) { \
-    /* user should not handle any errors */ \
-    rc = 0; \
+  else if ((efct_cli) == NULL) { \
+    /* This means the NIC has been removed. We don't have hotplug support
+     * for efct, so need to report the error. */ \
+    rc = -ENETDOWN; \
   } \
   else { \
     /* Driverlink handle is valid and we're not resetting, so issue

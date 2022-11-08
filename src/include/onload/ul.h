@@ -31,9 +31,10 @@ int ef_onload_handle_move_and_do_cloexec(ef_driver_handle* pfd,
 
 /*! Close a driver handle. */
 ci_inline int
-ef_onload_driver_close(ef_driver_handle nic)
+ef_onload_driver_close(ef_driver_handle fd)
 {
-  return oo_close(nic);
+  if( ci_sys_close(fd) < 0 )  return -errno;
+  return 0;
 }
 
 /*! Open and save a driver handle for later cloning. */

@@ -42,6 +42,9 @@ extern int ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
 extern void ef10_ef100_mcdi_cmd_event_queue_disable(struct efhw_nic *nic,
 						    uint32_t client_id, uint evq);
 
+extern bool ef10_ef100_accept_vi_constraints(struct efhw_nic *nic, int low,
+					     unsigned order, void* arg);
+
 extern void ef10_ef100_mcdi_cmd_driver_event(struct efhw_nic *nic, uint64_t data,
 					     uint32_t evq);
 

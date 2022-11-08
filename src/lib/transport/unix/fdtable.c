@@ -172,9 +172,7 @@ static long oo_close_nocancel_entry(long fd)
      * cases of infinite recursion, most notably when grabbing the TLS entry
      * requires doing TLS init (which might require initialising malloc too,
      * which might call close()) */
-    if( citp.onload_fd >= 0 )
-      return ci_tcp_helper_close_no_trampoline(fd);
-    return my_syscall3(close, fd, 0, 0);
+    return ci_tcp_helper_close_no_trampoline(fd);
   }
 
   Log_CALL(ci_log("%s: close_nocancel(%ld)", __func__, fd));
@@ -2121,25 +2119,15 @@ int citp_ep_close(unsigned fd)
   if( fd < 0 )
     RET_WITH_ERRNO(EINVAL);
 
-  /* Do not touch fdtable when in vfork.
-   * Avoid ci_tcp_helper_close_no_trampoline() when citp.onload_fd is not
-   * present, because it modifies fdtable. */
-  if( oo_per_thread_get()->in_vfork_child ) {
-    if( citp.onload_fd >= 0 )
-      ci_tcp_helper_close_no_trampoline(fd);
-    else
-      ci_sys_close(fd);
-  }
+  /* Do not touch fdtable when in vfork. */
+  if( oo_per_thread_get()->in_vfork_child )
+    ci_tcp_helper_close_no_trampoline(fd);
 
-  /* Initialise fdtable and trampolining (i.e. citp.onload_fd) if needed.
-   * Do not allow to close log_fd or onload_fd unknowingly. */
+  /* Initialise fdtable and log fd if needed */
   if( fd >= citp_fdtable.inited_count ) {
     if( citp_fdtable.inited_count == 0 || citp_fd_is_special(fd) ) {
       CITP_FDTABLE_LOCK();
-      if( citp.onload_fd < 0 )
-        __oo_service_fd(true);
-      else
-        __citp_fdtable_extend(CI_MAX(citp.log_fd, citp.onload_fd));
+      __citp_fdtable_extend(citp.log_fd);
       CITP_FDTABLE_UNLOCK();
     }
     if( fd >= citp_fdtable.inited_count )
@@ -2335,54 +2323,33 @@ int citp_reprobe_moved_common(citp_fdinfo* fdinfo, int from_fast_lookup,
   return rc;
 }
 
-void __oo_service_fd(bool fdtable_locked)
+void init_citp_log_fd(void)
 {
   int fd;
 
-  ci_assert_equal(citp.onload_fd, -1);
   if( ef_onload_driver_open(&fd, OO_STACK_DEV, 1) )  return;
-  if( ci_cas32_succeed(&citp.onload_fd, -1, fd) ) {
-    if( fdtable_locked ) {
-      /* __citp_fdtable_extend() handles citp.onload_fd, so there is no
-       * need to call __citp_fdtable_reserve() after it. */
-      if( fd < citp_fdtable.size )
-        __citp_fdtable_extend(fd);
-      else
-        __citp_fdtable_reserve(fd, 0);
-    }
-    else {
-      /* We do not know the current context, so we can't lock fdtable,
-       * or leverage the already-taken lock.
-       * Let's hope that logging happens at start of day, so our fd is
-       * small enough.
-       * __citp_fdtable_extend() will take care about our fd as well.
-       */
-      if( citp_fdtable.table ) {
-        ci_assert_lt(fd, citp_fdtable.size);
-        citp_fdtable.table[citp.onload_fd].fdip =
-                                        fdi_to_fdip(&citp_the_reserved_fd);
-      }
+  if( ci_cas32_succeed(&citp.log_fd, -1, fd) ) {
+    /* We do not know the current context, so we can't lock fdtable,
+     * or leverage the already-taken lock.
+     * Let's hope that logging happens at start of day, so our fd is
+     * small enough.
+     * __citp_fdtable_extend() will take care about our fd as well.
+     */
+    if( citp_fdtable.table ) {
+      ci_assert_lt(fd, citp_fdtable.size);
+      citp_fdtable.table[citp.log_fd].fdip =
+                                      fdi_to_fdip(&citp_the_reserved_fd);
     }
   }
   else {
-    /* Unspecialised /dev/onload does not trampoline,
-     * so simple close is OK.  */
-    ci_sys_close(fd);
+    ci_tcp_helper_close_no_trampoline(fd);
   }
 }
 
 
 int ci_tcp_helper_close_no_trampoline(int fd)
 {
-  ci_uint32 op = fd;
-  int onload_fd = oo_service_fd();
-
-  if( onload_fd == fd )
-    return -EBADF;
-  else if( onload_fd >= 0 )
-    return ci_sys_ioctl(onload_fd, OO_IOC_CLOSE, &op);
-  else
-    return my_syscall3(close, fd, 0, 0);
+  return my_syscall3(close, fd, 0, 0);
 }
 
 /*! \cidoxg_end */
