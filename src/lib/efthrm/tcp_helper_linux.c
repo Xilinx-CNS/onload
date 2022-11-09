@@ -31,16 +31,11 @@
 #ifdef EFRM_HAVE_FOP_READ_ITER
 /* linux >= 3.16 */
 
-#ifndef EFRM_HAS_ITER_TYPE
-/* linux < 5.14 */
-#define iter_type type
-#endif
-
 #define DEFINE_FOP_RW_ITER(base_handler, rw_iter_handler) \
   static ssize_t rw_iter_handler(struct kiocb *iocb, struct iov_iter *v)    \
   { if (!is_sync_kiocb(iocb))                                               \
       return -EOPNOTSUPP;                                                   \
-    if( ~v->iter_type & ITER_IOVEC )                                             \
+    if( !iter_is_iovec(v) )                                                 \
       return -EOPNOTSUPP;                                                   \
     return base_handler(iocb->ki_filp, v->iov, v->nr_segs); }
 #else
