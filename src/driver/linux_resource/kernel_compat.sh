@@ -152,6 +152,7 @@ EFRM_HAVE_LOWCASE_PDE_DATA symbol pde_data include/linux/proc_fs.h
 EFRM_HAVE_NETIF_RX_NI symbol netif_rx_ni include/linux/netdevice.h
 
 EFRM_HAVE_MODULE_MUTEX		symbol	module_mutex	include/linux/module.h
+EFRM_HAVE_ITER_UBUF symbol ITER_UBUF include/linux/uio.h
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
