@@ -1045,7 +1045,8 @@ static bool af_xdp_accept_vi_constraints(struct efhw_nic *nic, int low,
 					 unsigned order, void* arg)
 {
 	struct efhw_vi_constraints *avc = arg;
-	return avc->channel == low;
+	/* The only constrain is "no RSS, no sets". */
+	return avc->min_vis_in_set == 1 && avc->has_rss_context == 0;
 }
 
 /*--------------------------------------------------------------------
