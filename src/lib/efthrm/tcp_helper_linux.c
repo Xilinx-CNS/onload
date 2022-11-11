@@ -31,18 +31,43 @@
 #ifdef EFRM_HAVE_FOP_READ_ITER
 /* linux >= 3.16 */
 
-#ifndef EFRM_HAS_ITER_TYPE
-/* linux < 5.14 */
-#define iter_type type
-#endif
+#ifdef EFRM_HAVE_ITER_UBUF
+/* linux >= 6.0
+ * See kernel commits
+ * fcb14cb1bdacec5b4374fe161e83fb8208164a85
+ * and
+ * 3e20a751aff0e099cff496511fef8cdf655b3360 */
+
+#define iov_iter_type_supported user_backed_iter
+
+#define FOP_RW_ITER_CALL_BASE_HANDLER(base_handler, iocb, iter)         \
+  do {                                                                  \
+    if( iter_is_ubuf(v) ) {                                             \
+      struct iovec iov = { .iov_base = v->ubuf, .iov_len = v->count };  \
+      return base_handler(iocb->ki_filp, &iov, 1);                      \
+    }                                                                   \
+    return base_handler(iocb->ki_filp, v->iov, v->nr_segs);             \
+  } while (0);
+
+#else
+
+#define iov_iter_type_supported iter_is_iovec
+
+#define FOP_RW_ITER_CALL_BASE_HANDLER(base_handler, iocb, iter)         \
+  do {                                                                  \
+    return base_handler(iocb->ki_filp, v->iov, v->nr_segs);             \
+  } while (0);
+
+#endif /* EFRM_HAVE_ITER_UBUF */
 
 #define DEFINE_FOP_RW_ITER(base_handler, rw_iter_handler) \
   static ssize_t rw_iter_handler(struct kiocb *iocb, struct iov_iter *v)    \
   { if (!is_sync_kiocb(iocb))                                               \
       return -EOPNOTSUPP;                                                   \
-    if( ~v->iter_type & ITER_IOVEC )                                             \
+    if( !iov_iter_type_supported(v) )                                       \
       return -EOPNOTSUPP;                                                   \
-    return base_handler(iocb->ki_filp, v->iov, v->nr_segs); }
+    FOP_RW_ITER_CALL_BASE_HANDLER(base_handler, iocb, v); }
+
 #else
 
 #define DEFINE_FOP_READ(base_handler, rw_handler) \
