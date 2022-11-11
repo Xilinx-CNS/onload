@@ -83,6 +83,7 @@ mkdirs:
 # Define the high-level dependencies between libraries:
 $(obj)/src/driver/linux_resource: $(AUTOCOMPAT) mkdirs
 $(obj)/src/lib/transport/ip: $(AUTOCOMPAT)
+$(obj)/src/lib/ciul: $(AUTOCOMPAT)
 $(obj)/src/lib/citools: $(AUTOCOMPAT)
 $(obj)/src/lib/cplane: $(AUTOCOMPAT) $(obj)/src/lib/ciul
 $(obj)/src/driver/linux_char: $(AUTOCOMPAT)
