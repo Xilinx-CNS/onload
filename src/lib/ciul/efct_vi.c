@@ -19,6 +19,10 @@
 #include <ci/tools/byteorder.h>
 
 
+#define M_(FIELD) (CI_MASK64(FIELD ## _WIDTH) << FIELD ## _LBN)
+#define M(FIELD) M_(EFCT_RX_HEADER_ ## FIELD)
+#define CHECK_FIELDS (M(L2_STATUS) | M(L3_STATUS) | M(L4_STATUS) | M(ROLLOVER))
+
 struct efct_rx_descriptor
 {
   uint16_t refcnt;
@@ -709,7 +713,7 @@ static int rx_rollover(ef_vi* vi, int qid)
   return 0;
 }
 
-static void efct_rx_discard(int qid, uint32_t pkt_id,
+static void efct_rx_discard(int qid, uint32_t pkt_id, uint16_t discard_flags,
                             const ci_oword_t* header, ef_event* ev)
 {
   ev->rx_ref_discard.type = EF_EVENT_TYPE_RX_REF_DISCARD;
@@ -719,15 +723,41 @@ static void efct_rx_discard(int qid, uint32_t pkt_id,
   ev->rx_ref_discard.q_id = qid;
   ev->rx_ref_discard.user = CI_OWORD_FIELD(*header,
                                               EFCT_RX_HEADER_USER);
-  ev->rx_ref_discard.flags =
-    (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) & 1 ?
-            EF_VI_DISCARD_RX_ETH_LEN_ERR : 0) |
-    (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) & 2 ?
-            EF_VI_DISCARD_RX_ETH_FCS_ERR : 0) |
-    (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L3_STATUS) ?
-            EF_VI_DISCARD_RX_L3_CSUM_ERR : 0) |
-    (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L4_STATUS) ?
-            EF_VI_DISCARD_RX_L4_CSUM_ERR : 0);
+  ev->rx_ref_discard.flags = discard_flags;
+}
+
+static inline uint16_t header_status_flags(const ci_oword_t *header)
+{
+  uint16_t flags = 0;
+
+  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_CLASS) ==
+                       EFCT_RX_HEADER_L2_CLASS_ETH_01VLAN) &&
+       (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) ==
+                       EFCT_RX_HEADER_L2_STATUS_FCS_ERR) )
+    flags |= EF_VI_DISCARD_RX_ETH_FCS_ERR;
+  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_CLASS) ==
+                       EFCT_RX_HEADER_L2_CLASS_ETH_01VLAN) &&
+       (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) ==
+                       EFCT_RX_HEADER_L2_STATUS_LEN_ERR) )
+    flags |= EF_VI_DISCARD_RX_ETH_LEN_ERR;
+  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L3_CLASS) ==
+                       EFCT_RX_HEADER_L3_CLASS_IP4) &&
+       (header->u64[0] & M(L3_STATUS)) )
+    flags |= EF_VI_DISCARD_RX_L3_CSUM_ERR;
+  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L3_CLASS) ==
+                       EFCT_RX_HEADER_L3_CLASS_IP6) &&
+       (header->u64[0] & M(L3_STATUS)) )
+    flags |= EF_VI_DISCARD_RX_L3_CSUM_ERR;
+  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L4_CLASS) ==
+                       EFCT_RX_HEADER_L4_CLASS_TCP) &&
+       (header->u64[0] & M(L4_STATUS)) )
+    flags |= EF_VI_DISCARD_RX_L4_CSUM_ERR;
+  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L4_CLASS) ==
+                       EFCT_RX_HEADER_L4_CLASS_UDP) &&
+       (header->u64[0] & M(L4_STATUS)) )
+    flags |= EF_VI_DISCARD_RX_L4_CSUM_ERR;
+
+  return flags;
 }
 
 static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
@@ -772,6 +802,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     const ci_oword_t* header;
     struct efct_rx_descriptor* desc;
     uint32_t pkt_id;
+    uint16_t discard_flags = 0;
 
     header = efct_rx_next_header(vi, rxq_ptr->next);
     if( header == NULL )
@@ -780,11 +811,10 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     pkt_id = rxq_ptr->prev;
     desc = efct_rx_desc(vi, pkt_id);
 
-#define M_(FIELD) (CI_MASK64(FIELD ## _WIDTH) << FIELD ## _LBN)
-#define M(FIELD) M_(EFCT_RX_HEADER_ ## FIELD)
-#define CHECK_FIELDS (M(L2_STATUS) | M(L3_STATUS) | M(L4_STATUS) | M(ROLLOVER))
-    if(unlikely( header->u64[0] & CHECK_FIELDS )) {
-
+    /* Do a course grained check first, then get rid of the false positives.*/
+    if(unlikely( header->u64[0] & CHECK_FIELDS ) &&
+       (header->u64[0] & M(ROLLOVER) ||
+        (discard_flags = header_status_flags(header))) ) {
       if( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_ROLLOVER) ) {
         /* We created the desc->refcnt assuming that this superbuf would be
          * full of packets. It wasn't, so consume all the unused refs */
@@ -813,7 +843,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
         break;
       }
 
-      efct_rx_discard(qid, pkt_id, header, &evs[i]);
+      efct_rx_discard(qid, pkt_id, discard_flags, header, &evs[i]);
     }
     else {
       /* For simplicity, require configuration for a fixed data offset.
