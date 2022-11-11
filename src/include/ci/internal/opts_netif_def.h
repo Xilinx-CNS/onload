@@ -1735,3 +1735,11 @@ CI_CFG_OPT("EF_ICMP_PKTS", icmp_msg_max, ci_uint32,
            "Maximum number of ICMP messages which can be queued to "
            "one Onload stack.",
            , , 64, 2, 1024, count)
+
+CI_CFG_OPT("EF_NO_HW", no_hw, ci_uint32,
+"Prevents the stack from allocating hardware resources. Local connections are "
+"still accelerated, but remote connections are handed over to the kernel. If "
+"the use of SO_REUSEPORT creates a cluster, then new stacks in the cluster "
+"will allocate resources, and will be fully accelerated.",
+           1, , 0, 0, 1, yesno)
+

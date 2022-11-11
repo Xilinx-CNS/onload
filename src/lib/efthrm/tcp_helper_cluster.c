@@ -892,6 +892,10 @@ static int thc_alloc_thr(tcp_helper_cluster_t* thc,
       * reset accordingly. */
      opts->scalable_filter_enable = CITP_SCALABLE_FILTERS_ENABLE;
 
+  /* New stack will allocate hardware resources, whether or not the original
+   * stack did so. TODO should this be configurable? */
+  opts->no_hw = 0;
+
   rc = tcp_helper_rm_alloc(&roa, opts, -1, thc, &thr_walk);
   kfree(opts);
   if( rc != 0 )
