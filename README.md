@@ -71,6 +71,7 @@ The following adapters at least are able to support OpenOnload without AF_XDP:
 
 * X2541
 * X2522, X2522-25G
+* X3522
 * SFN8042
 * SFN8522, SFN8542
 
@@ -79,10 +80,11 @@ The following adapters at least are able to support OpenOnload without AF_XDP:
 This source tree is known to work with Xilinx network adapters on following
 Linux distributions:
 
-* Ubuntu LTS 18.04, LTS 20.04, 21.04
+* Ubuntu LTS 18.04, LTS 20.04, LTS 22.04
 * Debian 10, 11
-* Redhat Enterprise Linux 7.9, 8.3, 8.4
-* Linux kernel in the range 4.15 - 5.16
+* Redhat Enterprise Linux 7.9, 8.1 - 8.7, 9.0 - 9.1
+* SuSE Linux Enterprise Server 15 SP1 - SP4
+* Linux kernel in the range 4.15 - 5.19
 
 ## Support
 
