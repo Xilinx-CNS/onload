@@ -392,7 +392,7 @@ def fake_ip_subnet(v6, part1, part2=1, suffix=8):
 # machine having been uprgaded.  Ensure we're not passing the tests by
 # inadvertantly running in the wrong environment.
 @cpdecorate()
-def test_ensure_running_in_expected_environment(cpserver,cp,netns):
+def do_test_ensure_running_in_expected_environment(cpserver,cp,netns):
     hwports = list(range(2))
     bond_name, _ = prep_bond(cpserver,cp,netns,hwports,mode=1)
 
@@ -411,6 +411,10 @@ def test_ensure_running_in_expected_environment(cpserver,cp,netns):
         # (3.10.0-957) kernels.  Don't know why, yet.  Hence this assertion lies
         # currently.
         #assert actual == expectation, desc
+
+
+def test_ensure_running_in_expected_environment():
+    do_test_ensure_running_in_expected_environment()
 
 
 @cpdecorate()
@@ -438,8 +442,7 @@ def test_singleroute(v6):
 # Not yet converted to IPv6 because it looks at route src - need
 # CONFIG_IPV6_SUBTREES
 @cpdecorate()
-@pytest.mark.skip(reason="ON-14312")
-def test_singleroute_transparent(cpserver,cp,netns):
+def do_test_singleroute_transparent(cpserver,cp,netns):
     hwport = 1
     ifname = 'O%d'%hwport
     ifindex = build_intf(netns, ifname, '192.168.%d.2/24'%hwport,
@@ -464,6 +467,12 @@ def test_singleroute_transparent(cpserver,cp,netns):
     check_route(d, CICP_ROUTE_TYPE.NORMAL, mac, 1 << hwport)
     assert ip2str(d['base']['src']) == transparent_IP
     assert ip2str(d['base']['next_hop']) == remote_IP
+
+
+@pytest.mark.skip(reason="ON-14312")
+def test_singleroute_transparent():
+    do_test_singleroute_transparent()
+
 
 def create_bond(cpserver, netns, ifname, ifnames, mode):
     netns.link('add', kind='bond', ifname=ifname)
@@ -1232,7 +1241,7 @@ def test_multipath_uneven(v6, n):
 
 
 @cpdecorate()
-def test_multipath_add_del(cpserver,cp,netns):
+def do_test_multipath_add_del(cpserver,cp,netns):
     v6 = False
     interfaces = []
     weights = [1, 2, 1, 2]
@@ -1303,3 +1312,7 @@ def test_multipath_add_del(cpserver,cp,netns):
     wait_for_route_update(netns, cp, v6)
 
     check_multipath_distribution(cp, {'00:00:00:00:00:00': 1}, ip, 1000)
+
+
+def test_multipath_add_del():
+    do_test_multipath_add_del()
