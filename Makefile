@@ -168,8 +168,12 @@ ifneq ($(MMAKE_LIBERAL),1)
 ONLOAD_CFLAGS += -Werror
 endif
 
+ONLOAD_MAKEFLAGS ?=
+
 ifeq ($(HAVE_SFC),1)
   ONLOAD_CFLAGS += -DCI_HAVE_SFC=1
+  # This code base does not support Solarflare Siena.
+  ONLOAD_MAKEFLAGS += CONFIG_SFC_SIENA=
 else
   ONLOAD_CFLAGS += -DCI_HAVE_SFC=0
 endif
@@ -188,7 +192,8 @@ modules modules_install: $(OUTMAKEFILES)
 		"SRCPATH=$$PWD/src" \
 		'subdir-ccflags-y=$(subst ','\'',$(ONLOAD_CFLAGS))' \
 		MMAKE_IN_KBUILD=1 MMAKE_USE_KBUILD=1 MMAKE_NO_RULES=1 \
-		DRIVER=1 LINUX=1 $(patsubst modules,,$@)
+		DRIVER=1 LINUX=1 $(patsubst modules,,$@) \
+		$(ONLOAD_MAKEFLAGS)
 
 kernel: modules
 
