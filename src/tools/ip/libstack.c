@@ -400,39 +400,39 @@ void libstack_stack_mapping_print(void)
     return;
 
   if( cfg_nopids )
-    printf("#stack-id stack-name\n");
+    ci_log("#stack-id stack-name");
   else
-    printf("#stack-id stack-name      pids\n");
+    ci_log("#stack-id stack-name      pids");
 
   for( sm = stack_mappings; sm != NULL; sm = sm->next ) {
-    printf("%-9d ", sm->stack_id);
+    ci_log_nonl("%-9d ", sm->stack_id);
 
     stack_attach(sm->stack_id);
     netif_t* netif = stack_attached(sm->stack_id);
 
     if( netif == NULL ) {
-      printf("unaccessable\n");
+      ci_log("unaccessable");
       continue;
     }
     if( ! netif->ni.state )
-      printf("<zombie>        ");
+      ci_log_nonl("<zombie>        ");
     else if( strlen(netif->ni.state->name) != 0 )
-      printf("%-16s", netif->ni.state->name);
+      ci_log_nonl("%-16s", netif->ni.state->name);
     else
-      printf("-               ");
+      ci_log_nonl("-               ");
 
     if( !cfg_nopids ) {
       if( sm->n_pids == 0 )
-        printf("-");
+        ci_log_nonl("-");
       else {
         for( i = 0; i < sm->n_pids; ++i ) {
-          printf("%d", sm->pids[i]);
+          ci_log_nonl("%d", sm->pids[i]);
           if( i != sm->n_pids - 1 )
-            printf(",");
+            ci_log_nonl(",");
         }
       }
     }
-    printf("\n");
+    ci_log(" ");
   }
 }
 
@@ -446,13 +446,13 @@ static void print_cmdline(int pid)
   while( (cnt = read(cmdline, buf, MAX_PATHNAME)) > 0 ) {
     for( i = 0; i < cnt; ++i ) {
       if( buf[i] == '\0' )
-        printf(" ");
+        ci_log_nonl(" ");
       else
-        printf("%c", buf[i]);
+        ci_log_nonl("%c", buf[i]);
     }
   }
   close(cmdline);
-  printf("\n");
+  ci_log(" ");
 }
 
 void libstack_pid_mapping_print(void)
@@ -473,30 +473,30 @@ void libstack_pid_mapping_print(void)
     pm = pm->next;
   }
 
-  printf("#pid      stack-id");
+  ci_log_nonl("#pid      stack-id");
   if( max_spacing > strlen("stack-id") ) {
     for(i = 0; i < max_spacing - strlen("stack-id") - 1; ++i )
-      printf(" ");
+      ci_log_nonl(" ");
   }
   else
-    printf(" ");
-  printf("cmdline\n");
+    ci_log_nonl(" ");
+  ci_log("cmdline");
 
   pm = pid_mappings;
   while( pm ) {
-    printf("%-10d", pm->pid);
+    ci_log_nonl("%-10d", pm->pid);
     for( i = 0; i < pm->n_stack_ids; ++i ) {
-      printf("%d", pm->stack_ids[i]);
+      ci_log_nonl("%d", pm->stack_ids[i]);
       if( i != pm->n_stack_ids - 1 )
-        printf(",");
+        ci_log_nonl(",");
     }
     if( max_spacing > strlen("stack-id") ) {
       for( i = 0; i < max_spacing - pm->n_stack_ids * 2; ++i )
-        printf(" ");
+        ci_log_nonl(" ");
     }
     else {
       for( i = 0; i < strlen("stack-id") - pm->n_stack_ids * 2 + 2; ++i )
-        printf(" ");
+        ci_log_nonl(" ");
     }
 
     print_cmdline(pm->pid);
@@ -535,7 +535,7 @@ int libstack_threads_print(void)
 
   struct pid_mapping* pm = pid_mappings;
 
-  printf("#pid thread affinity priority realtime\n");
+  ci_log("#pid thread affinity priority realtime");
 
   while( pm ) {
     snprintf(task_path, MAX_PATHNAME, "/proc/%d/task", pm->pid);
@@ -546,7 +546,7 @@ int libstack_threads_print(void)
       if( ent->d_name[0] == '.' )
         continue;
 
-      printf("%d %s ", pm->pid, ent->d_name);
+      ci_log_nonl("%d %s ", pm->pid, ent->d_name);
 
       /* task affinity */
       char file_path[MAX_PATHNAME];
@@ -564,7 +564,7 @@ int libstack_threads_print(void)
         ++ptr;
       char* newline = strchr(ptr, '\n');
       *newline = '\0';
-      printf("%s ", ptr);
+      ci_log_nonl("%s ", ptr);
       fclose(status);
 
       snprintf(file_path, MAX_PATHNAME, "/proc/%d/task/%s/stat",
@@ -577,15 +577,15 @@ int libstack_threads_print(void)
       }
       if( get_int_from_tok_str(&buf[cnt], " ", 15, &cnt) ) {
         if( cnt < 0 )
-          printf("%ld 1\n", (-cnt)-1);
+          ci_log_nonl("%ld 1\n", (-cnt)-1);
         else
-          printf("%ld 0\n", cnt-20);
+          ci_log_nonl("%ld 0\n", cnt-20);
       }
       else
-        printf("N/A N/A");
+        ci_log_nonl("N/A N/A");
 
       if( pm->next )
-        printf("\n");
+        ci_log(" ");
     }
     pm = pm->next;
     closedir(task_dir);
@@ -617,11 +617,11 @@ static void print_env(char* buf, int file_len)
     char* var = buf;
     while( var ) {
       if( ! strncmp(var, "EF_", strlen("EF_")) )
-        printf("env: %s\n", var);
+        ci_log_nonl("env: %s\n", var);
       if( ! strncmp(var, "LD_PRELOAD", strlen("LD_PRELOAD")) )
-        printf("env: %s\n", var);
+        ci_log_nonl("env: %s\n", var);
       if( ! strncmp(var, "TP_LOG", strlen("TP_LOG")) )
-        printf("env: %s\n", var);
+        ci_log_nonl("env: %s\n", var);
       while( *var != '\0' )
         ++var;
       ++var;
@@ -643,9 +643,9 @@ int libstack_env_print(void)
 
   struct pid_mapping* pm = pid_mappings;
   while( pm ) {
-    printf("--------------------------------------------\n");
-    printf("pid: %d\n", pm->pid);
-    printf("cmdline: ");
+    ci_log("--------------------------------------------");
+    ci_log("pid: %d", pm->pid);
+    ci_log_nonl("cmdline: ");
     print_cmdline(pm->pid);
     char env_path[MAX_PATHNAME];
     snprintf(env_path, MAX_PATHNAME, "/proc/%d/environ", pm->pid);
@@ -669,7 +669,7 @@ int libstack_env_print(void)
     print_env(buf, file_len);
     pm = pm->next;
   }
-  printf("--------------------------------------------\n");
+  ci_log("--------------------------------------------");
   return 0;
 }
 
@@ -906,13 +906,13 @@ static void print_stats_header_line(const stat_desc_t* stats_fields,
   const stat_desc_t* s;
   int j, i = 1;
 
-  printf("#\ttime(%d)", i++);
+  ci_log_nonl("#\ttime(%d)", i++);
   for( s = stats_fields; s < stats_fields + n_stats_fields; ++s )
-    printf("\t%s(%d)", s->name, i++);
-  printf("\n");
+    ci_log_nonl("\t%s(%d)", s->name, i++);
+  ci_log(" ");
   printf("#");
-  for( j = 1; j < i; ++j )  printf("\t(%d)", j);
-  printf("\n");
+  for( j = 1; j < i; ++j )  ci_log_nonl("\t(%d)", j);
+  ci_log(" ");
 }
 
 
@@ -970,7 +970,7 @@ static void watch_stats(const stat_desc_t* stats_fields, int n_stats_fields,
         ci_log("%30s: %llu", s->name, v);
     }
     if( ! cfg_notable ) {
-      printf("%s\n", line);
+      ci_log("%s", line);
       fflush(stdout);
     }
   }
@@ -1050,7 +1050,7 @@ static int dump_via_buffers(oo_dump_request_fn_t dump_req_fn, void* arg,
     }
     rc = dump_req_fn(arg, buf, buf_len);
     if( rc >= 0 && rc <= buf_len )
-      printf("%s", buf);
+      ci_log_nonl("%s", buf);
     free(buf);
     if( rc < 0 ) {
       if( flags & DVB_LOG_FAILURE )
@@ -2061,7 +2061,7 @@ static void process_dump(ci_netif* ni)
   struct stack_mapping* sm = stack_mappings;
     
   if( cfg_nopids ){ //pid mappings not available
-    printf("No environment state as --nopids set on command line\n");
+    ci_log("No environment state as --nopids set on command line");
     return;
   }
 
@@ -2070,7 +2070,7 @@ static void process_dump(ci_netif* ni)
   while( sm && sm->stack_id != stack_id )
     sm = sm->next;
   if( sm == NULL ) {
-    printf("No stack_mapping for stack %d found", stack_id);
+    ci_log_nonl("No stack_mapping for stack %d found", stack_id);
     return;
   }
   
@@ -2078,38 +2078,38 @@ static void process_dump(ci_netif* ni)
   for( i = 0; i < sm->n_pids; ++i ) {
     pid = sm->pids[i];
 
-    printf("--------------------------------------------\n");
-    printf("pid: %d\n", pid);
-    printf("cmdline: ");
+    ci_log("--------------------------------------------");
+    ci_log("pid: %d", pid);
+    ci_log_nonl("cmdline: ");
     print_cmdline(pid);
     char env_path[MAX_PATHNAME];
     snprintf(env_path, MAX_PATHNAME, "/proc/%d/environ", pid);
 
     int file_len = get_file_size(env_path);
     if( file_len == -1 ){
-      printf("error: got file size -1 for pid %d\n", pid);
+      ci_log("error: got file size -1 for pid %d", pid);
       continue;
     }
 
     char* buf = calloc(file_len, sizeof(*buf));
     int env = open(env_path, O_RDONLY);
     if( env == -1 ){ //failed to open the env path
-      printf("error: failed to open env for pid %d\n", pid);
+      ci_log("error: failed to open env for pid %d", pid);
       continue;
     }
     int rc = read(env, buf, file_len);
     if( rc == -1 ){ //failed to read the env file
-      printf("error: failed to read env for pid %d\n", pid);
+      ci_log("error: failed to read env for pid %d", pid);
       continue;
     }
     if( rc != file_len ) {
-      printf("error: read less than the expected amount for pid %d\n", pid);
+      ci_log("error: read less than the expected amount for pid %d", pid);
       continue;
     }
 
     print_env(buf, file_len);
   }
-  printf("--------------------------------------------\n");
+  ci_log("--------------------------------------------");
 }
 
 
@@ -2137,7 +2137,6 @@ static void stack_lots(ci_netif* ni)
   stack_time(ni);
   ci_log("--------------------- process env --------------------------");
   process_dump(ni);
-  fflush(NULL);
 }
 
 static void stack_describe_stats(ci_netif* ni){
@@ -2534,7 +2533,7 @@ void sockets_watch_bw(void)
     sockets_bw_poll(i);
   }
 
-  printf("# usec delta");
+  ci_log_nonl("# usec delta");
   for( s = sockets; s < sockets + sockets_n; ++s ) {
     ci_uint32 be32;
     netif_t* n = stacks[s->stack];
@@ -2542,9 +2541,9 @@ void sockets_watch_bw(void)
     wo = SP_TO_WAITABLE_OBJ(&n->ni, s->id);
     if( ! is_tcp_stream(wo) )  continue;
     be32 = tcp_raddr_be32(&wo->tcp);
-    printf(" "CI_IP_PRINTF_FORMAT,CI_IP_PRINTF_ARGS(&be32));
+    ci_log_nonl(" "CI_IP_PRINTF_FORMAT,CI_IP_PRINTF_ARGS(&be32));
   }
-  printf("\n");
+  ci_log(" ");
   blen = sockets_n * 2 * 10 + 20;
   CI_TEST(b = (char*) malloc(blen));
 
@@ -2561,7 +2560,7 @@ void sockets_watch_bw(void)
                            SEQ_SUB(sam[i].rx, sam[i-1].rx),
                            SEQ_SUB(sam[i].tx, sam[i-1].tx));
     }
-    printf("%s\n", b);
+    ci_log("%s", b);
   }
 
   free(b);
@@ -2597,7 +2596,7 @@ void sockets_bw(void)
     txbw = (unsigned) ((ci_uint64) (sam[1].tx - sam[0].tx) * 8 / usec);
     rxbw = (unsigned) ((ci_uint64) (sam[1].rx - sam[0].rx) * 8 / usec);
     if( txbw || rxbw )
-      printf("%d:%d  %d %d\n", NI_ID(&n->ni), s->id, txbw, rxbw);
+      ci_log("%d:%d  %d %d", NI_ID(&n->ni), s->id, txbw, rxbw);
   }
 
   for( s = sockets; s < sockets + sockets_n; ++s )  free(s->s);
