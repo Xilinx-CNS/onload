@@ -601,6 +601,7 @@ enum ef_vi_out_flags {
 
 /*! \brief Flags that define which errors will cause either:
 ** - RX_DISCARD events; or
+** - EF_EVENT_TYPE_RX_REF_DISCARD; or
 ** - reporting of errors in EF_EVENT_TYPE_RX_MULTI_PKTS events.
 */
 enum ef_vi_rx_discard_err_flags {
@@ -614,12 +615,29 @@ enum ef_vi_rx_discard_err_flags {
   EF_VI_DISCARD_RX_ETH_LEN_ERR       = 0x8,
   /** To be discard in software (includes frame length error) */
   EF_VI_DISCARD_RX_TOBE_DISC         = 0x10,     /* Siena only */
-  /* Inner TCP or UDP checksum error */
+  /** Inner TCP or UDP checksum error */
   EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR = 0x20,
-  /* Inner IP checksum error */
-  EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR = 0x40
-
-
+  /** Inner IP checksum error */
+  EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR = 0x40,
+  /** Error flags ending with OTHER are only supported on NIC
+   ** architectures that support shared RXQs. Their purpose is 
+   ** for scenarios where the layer N header is corrupt and the packet
+   ** may not be successfully classed as that protocol, so may appear
+   ** as LN_other instead. In this case any layer N checksum validation
+   ** will not have been performed. By marking packets that are not the
+   ** expected protocol as discards the application can ensure that it
+   ** can distinguish correctly checksummed packets. For example,
+   ** if an application is expecting only TCP or UDP packets,
+   ** it can set EF_VI_DISCARD_RX_L4_CLASS_OTHER as part of the discard mask 
+   ** (along with the various _ERR discard types), and anything that didn't 
+   ** have its checksum validated, as it wasn't recognised as TCP or UDP, 
+   ** will be marked as a discard. */
+  /** Matches unrecognised ethernet frames or traffic containing more than 1 vlan tag. */
+  EF_VI_DISCARD_RX_L2_CLASS_OTHER    = 0x80,
+  /** Matches traffic that doesn't parse as IPv4 or IPv6. */
+  EF_VI_DISCARD_RX_L3_CLASS_OTHER    = 0x100,
+  /** Matches protocols other than TCP/UDP/fragmented traffic. */
+  EF_VI_DISCARD_RX_L4_CLASS_OTHER    = 0x200
 };
 
 
