@@ -35,3 +35,14 @@ endif
 MMAKE_KBUILD_ARGS_CONST := -C $(KPATH) NDEBUG=$(NDEBUG) GCOV=$(GCOV) CC=$(CC)
 MMAKE_KBUILD_ARGS = $(MMAKE_KBUILD_ARGS_CONST) $(MMAKE_KBUILD_ARGS_DBG)
 
+# Print the greatest version number from $(1) and $(2).
+greater_version = $(shell printf "$(1)\n$(2)\n" | sort --version-sort | tail -1)
+
+# To build library in kbuild with Linux >= 6.1, we must pass its path as a
+# target to make.
+# This approach does not work on Linux < 5.4, so in order not to break old
+# kernels, do it only with Linux >= 6.0.
+KBUILD_LIB_MAKE_TRG ?=
+ifeq ($(call greater_version,$(LINUX_VERSION_3),6.0), $(LINUX_VERSION_3))
+KBUILD_LIB_MAKE_TRG += $(lib_obj_path)
+endif
