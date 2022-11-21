@@ -7,7 +7,7 @@ endif
 
 LINUX		   := 1
 
-LINUX_VERSION_3	   := $(shell cat $(KPATH)/include/{linux/utsrelease.h,generated/utsrelease.h,linux/version.h} 2>/dev/null | sed 's/^\#define UTS_RELEASE \"\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/; t; d')
+LINUX_VERSION_3	   := $(shell cat $(KPATH)/include/generated/utsrelease.h 2>/dev/null | sed 's/^\#define UTS_RELEASE \"\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/; t; d')
 
 DRIVER		   := 1
 MMAKE_USE_KBUILD   := 1
