@@ -92,7 +92,6 @@
 #define EFCT_EVENT_TYPE_RX 0
 #define EFCT_EVENT_TYPE_TX 1
 #define EFCT_EVENT_TYPE_CONTROL 3
-#define EFCT_EVENT_TYPE_CONTROL_LEGACY 2
 
 /* control events */
 #define EFCT_CTRL_SUBTYPE_LBN 53
