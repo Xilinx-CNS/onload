@@ -949,7 +949,6 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
         n_evs++;
         break;
       case EFCT_EVENT_TYPE_CONTROL:
-      case EFCT_EVENT_TYPE_CONTROL_LEGACY:
         n_evs += efct_tx_handle_control_event(vi, *event, &evs[n_evs]);
         break;
       default:
