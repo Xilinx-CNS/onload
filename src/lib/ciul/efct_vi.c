@@ -655,7 +655,14 @@ static int efct_ef_vi_transmit_alt_go(ef_vi* vi, unsigned alt_id)
 
 static int efct_ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags)
 {
-  return -EOPNOTSUPP;
+  if ( discard_err_flags & EF_VI_DISCARD_RX_TOBE_DISC )
+    return -EINVAL;
+  if ( discard_err_flags & EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR )
+    return -EINVAL;
+  if ( discard_err_flags & EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR )
+    return -EINVAL;
+  vi->rx_discard_mask = discard_err_flags;
+  return 0;
 }
 
 static int efct_ef_vi_transmit_alt_discard(ef_vi* vi, unsigned alt_id)
@@ -761,7 +768,15 @@ static inline uint16_t header_status_flags(const ci_oword_t *header)
                        EFCT_RX_HEADER_L4_CLASS_UDP) &&
        (header->u64[0] & M(L4_STATUS)) )
     flags |= EF_VI_DISCARD_RX_L4_CSUM_ERR;
-
+  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L4_CLASS) ==
+                        EFCT_RX_HEADER_L4_CLASS_OTHER) )
+      flags |= EF_VI_DISCARD_RX_L4_CLASS_OTHER;
+  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L3_CLASS) ==
+                        EFCT_RX_HEADER_L3_CLASS_OTHER) )
+      flags |= EF_VI_DISCARD_RX_L3_CLASS_OTHER;
+  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_CLASS) ==
+                        EFCT_RX_HEADER_L2_CLASS_OTHER) )
+      flags |= EF_VI_DISCARD_RX_L2_CLASS_OTHER;
   return flags;
 }
 
@@ -819,7 +834,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     /* Do a course grained check first, then get rid of the false positives.*/
     if(unlikely( header->u64[0] & CHECK_FIELDS ) &&
        (header->u64[0] & M(ROLLOVER) ||
-        (discard_flags = header_status_flags(header))) ) {
+        (discard_flags = header_status_flags(header) & vi->rx_discard_mask)) ) {
       if( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_ROLLOVER) ) {
         /* We created the desc->refcnt assuming that this superbuf would be
          * full of packets. It wasn't, so consume all the unused refs */
@@ -1511,4 +1526,11 @@ void efct_vi_init(ef_vi* vi)
 
   efct_vi_initialise_ops(vi);
   vi->evq_phase_bits = 1;
+  /* Set default rx_discard_mask for EFCT */
+  vi->rx_discard_mask = (
+     EF_VI_DISCARD_RX_L4_CSUM_ERR |
+     EF_VI_DISCARD_RX_L3_CSUM_ERR |
+     EF_VI_DISCARD_RX_ETH_FCS_ERR |
+     EF_VI_DISCARD_RX_ETH_LEN_ERR
+  );
 }
