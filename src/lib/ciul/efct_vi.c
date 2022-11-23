@@ -653,6 +653,11 @@ static int efct_ef_vi_transmit_alt_go(ef_vi* vi, unsigned alt_id)
   return -EOPNOTSUPP;
 }
 
+static int efct_ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags)
+{
+  return -EOPNOTSUPP;
+}
+
 static int efct_ef_vi_transmit_alt_discard(ef_vi* vi, unsigned alt_id)
 {
   return -EOPNOTSUPP;
@@ -1462,6 +1467,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_alt_select_default = efct_ef_vi_transmit_alt_select_default;
   vi->ops.transmit_alt_stop      = efct_ef_vi_transmit_alt_stop;
   vi->ops.transmit_alt_go        = efct_ef_vi_transmit_alt_go;
+  vi->ops.receive_set_discards   = efct_ef_vi_receive_set_discards;
   vi->ops.transmit_alt_discard   = efct_ef_vi_transmit_alt_discard;
   vi->ops.receive_init           = efct_ef_vi_receive_init;
   vi->ops.receive_push           = efct_ef_vi_receive_push;

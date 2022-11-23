@@ -43,7 +43,6 @@ LIB_SRCS	+=		\
 		vi_layout.c	\
 		vi_stats.c	\
 		vi_prime.c	\
-		vi_discard.c	\
 		capabilities.c	\
 		smartnic_exts.c	\
 		ctpio.c

@@ -1039,6 +1039,8 @@ typedef struct ef_vi {
     int (*transmit_alt_stop)(struct ef_vi*, unsigned alt_id);
     /** Transition a TX alternative to the GO state */
     int (*transmit_alt_go)(struct ef_vi*, unsigned alt_id);
+    /** Specify vi_discard behaviour */
+    int (*receive_set_discards)(struct ef_vi* vi, unsigned discard_err_flags);
     /** Transition a TX alternative to the DISCARD state */
     int (*transmit_alt_discard)(struct ef_vi*, unsigned alt_id);
     /** Initialize an RX descriptor on the RX descriptor ring */
@@ -1527,9 +1529,8 @@ extern ef_request_id ef_vi_rxq_next_desc_id(ef_vi* vi);
 **
 ** Set which errors cause an EF_EVENT_TYPE_RX_DISCARD event
 */
-extern int
-ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags);
-
+#define ef_vi_receive_set_discards(vi, discard_err_flags)          \
+  (vi)->ops.receive_set_discards((vi), discard_err_flags)
 
 /**********************************************************************
  * Transmit interface *************************************************
