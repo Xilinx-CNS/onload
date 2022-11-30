@@ -1619,6 +1619,17 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
   ef_vi_set_ts_format(vi, vm->ts_format);
   ef_vi_init_rx_timestamping(vi, vm->rx_ts_correction);
   ef_vi_init_tx_timestamping(vi, vm->tx_ts_correction);
+  ef_vi_receive_set_discards(vi,
+      EF_VI_DISCARD_RX_L4_CSUM_ERR |
+      EF_VI_DISCARD_RX_L3_CSUM_ERR |
+      EF_VI_DISCARD_RX_ETH_FCS_ERR |
+      EF_VI_DISCARD_RX_ETH_LEN_ERR |
+      EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR |
+      EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR |
+      EF_VI_DISCARD_RX_L2_CLASS_OTHER |
+      EF_VI_DISCARD_RX_L3_CLASS_OTHER |
+      EF_VI_DISCARD_RX_L4_CLASS_OTHER 
+  );
   return 0;
 }
 

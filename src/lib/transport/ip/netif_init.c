@@ -1970,6 +1970,17 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   ef_vi_init_tx_timestamping(vi, nsn->tx_ts_correction);
   ef_vi_add_queue(vi, vi);
   ef_vi_set_stats_buf(vi, vi_stats);
+  ef_vi_receive_set_discards(vi,
+      EF_VI_DISCARD_RX_L4_CSUM_ERR |
+      EF_VI_DISCARD_RX_L3_CSUM_ERR |
+      EF_VI_DISCARD_RX_ETH_FCS_ERR |
+      EF_VI_DISCARD_RX_ETH_LEN_ERR |
+      EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR |
+      EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR |
+      EF_VI_DISCARD_RX_L2_CLASS_OTHER |
+      EF_VI_DISCARD_RX_L3_CLASS_OTHER |
+      EF_VI_DISCARD_RX_L4_CLASS_OTHER 
+  );
   return 0;
 }
 
