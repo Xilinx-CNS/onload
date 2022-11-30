@@ -68,6 +68,10 @@ EXTRA_CFLAGS += -DTRANSPORT_CONFIG_OPT_HDR='<$(TRANSPORT_CONFIG_OPT_HDR)>'
 EXTRA_CFLAGS += $(MMAKE_CFLAGS) $(EXTRA_CPPFLAGS)
 EXTRA_AFLAGS += $(EXTRA_CPPFLAGS)
 
+ifdef M_NO_OUTLINE_ATOMICS
+EXTRA_CFLAGS += -mno-outline-atomics
+endif
+
 # Linux 4.6 added some object-file validation, which was also merged into
 # RHEL 7.3.  Unfortunately, it assumes that all functions that don't end with
 # a return or a jump are recorded in a hard-coded table inside objtool.  That

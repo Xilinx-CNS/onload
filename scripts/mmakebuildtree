@@ -96,6 +96,7 @@ do_top_level () {
 	W_NO_IGNORED_ATTRIBUTES := $W_NO_IGNORED_ATTRIBUTES
 	W_NO_STRINGOP_OVERFLOW := $W_NO_STRINGOP_OVERFLOW
 	W_NO_DEPRECATED_DECLARATIONS := $W_NO_DEPRECATED_DECLARATIONS
+	M_NO_OUTLINE_ATOMICS := $M_NO_OUTLINE_ATOMICS
 	$nt
 	$kpath
 EOF
@@ -352,6 +353,9 @@ fi
 
 if [ "$($mmaketool --gcc_major_version)" -ge 10 ] ; then
   W_NO_STRINGOP_OVERFLOW="1"
+  if [ "$($mmaketool --processor)" = "aarch64" ] ; then
+    M_NO_OUTLINE_ATOMICS="1"
+  fi
 fi
 
 if [ "$($mmaketool --libc_minor_version)" -ge 32 ] ; then
