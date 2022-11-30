@@ -292,7 +292,7 @@ def SysFsAction( action ):
 		#return action
 
 def GenerateInterfaces():
-	p = subprocess.Popen( ['ls', '/proc/sys/net/ipv4/conf/'], stdout=subprocess.PIPE )
+	p = subprocess.Popen( ['ls', '/proc/sys/net/ipv4/conf/'], stdout=subprocess.PIPE, encoding="ascii" )
 	for line in p.stdout:
 		yield line
 
