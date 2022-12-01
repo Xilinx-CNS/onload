@@ -669,7 +669,7 @@ int main(int argc, char* argv[])
                           -1, cfg_max_fill, 0, NULL, -1, vi_flags));
 
   if ( cfg_discard > -1 )
-    TRY(res->vi.ops.receive_set_discards(&res->vi, cfg_discard));
+    TRY(ef_vi_receive_set_discards(&res->vi, cfg_discard));
 
   res->rx_prefix_len = ef_vi_receive_prefix_len(&res->vi);
 
@@ -696,6 +696,7 @@ int main(int argc, char* argv[])
   LOGI("max_fill=%d\n", cfg_max_fill);
   LOGI("evq_size=%d\n", ef_eventq_capacity(&res->vi));
   LOGI("rx_prefix_len=%d\n", res->rx_prefix_len);
+  LOGI("discards=0x%"PRIx64"\n", ef_vi_receive_get_discards(&res->vi));
 
   /* Allocate memory for DMA transfers. Try mmap() with MAP_HUGETLB to get huge
    * pages. If that fails, fall back to posix_memalign() and hope that we do

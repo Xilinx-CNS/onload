@@ -435,7 +435,12 @@ static int ef100_ef_vi_transmit_alt_stop(ef_vi* vi, unsigned alt_id)
 
 static int ef100_ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags)
 {
-  return -EOPNOTSUPP;
+  return 0;
+}
+
+static uint64_t ef100_ef_vi_receive_get_discards(ef_vi* vi)
+{
+  return 0;
 }
 
 static int ef100_ef_vi_transmit_alt_discard(ef_vi* vi, unsigned alt_id)
@@ -591,6 +596,7 @@ static void ef100_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_alt_stop      = ef100_ef_vi_transmit_alt_stop;
   vi->ops.transmit_alt_go        = ef100_ef_vi_transmit_alt_go;
   vi->ops.receive_set_discards   = ef100_ef_vi_receive_set_discards;
+  vi->ops.receive_get_discards   = ef100_ef_vi_receive_get_discards;
   vi->ops.transmit_alt_discard   = ef100_ef_vi_transmit_alt_discard;
   vi->ops.receive_init           = ef100_ef_vi_receive_init;
   vi->ops.receive_push           = ef100_ef_vi_receive_push;

@@ -1059,6 +1059,8 @@ typedef struct ef_vi {
     int (*transmit_alt_go)(struct ef_vi*, unsigned alt_id);
     /** Specify vi_discard behaviour */
     int (*receive_set_discards)(struct ef_vi* vi, unsigned discard_err_flags);
+    /** Retrieve vi_discard behaviour */
+    uint64_t (*receive_get_discards)(struct ef_vi* vi);
     /** Transition a TX alternative to the DISCARD state */
     int (*transmit_alt_discard)(struct ef_vi*, unsigned alt_id);
     /** Initialize an RX descriptor on the RX descriptor ring */
@@ -1545,10 +1547,23 @@ extern ef_request_id ef_vi_rxq_next_desc_id(ef_vi* vi);
 **
 ** \return 0 on success, or a negative error code.
 **
-** Set which errors cause an EF_EVENT_TYPE_RX_DISCARD event
+** Set which errors cause an EF_EVENT_TYPE_RX_DISCARD event. Not all flags
+** are supported on all NIC versions. To query which flags have been set
+** successfully use the ef_vi_receive_get_discards() function.
 */
 #define ef_vi_receive_set_discards(vi, discard_err_flags)          \
   (vi)->ops.receive_set_discards((vi), discard_err_flags)
+
+/*! \brief Retrieve which errors cause an EF_EVENT_TYPE_RX_[REF_]DISCARD event
+**
+** \param vi                The virtual interface to query.
+**
+** \return mask of set ef_vi_rx_discard_err_flags
+**
+** Retrieve which errors cause an EF_EVENT_TYPE_RX_[REF_]DISCARD event
+*/
+#define ef_vi_receive_get_discards(vi)          \
+  (vi)->ops.receive_get_discards((vi))
 
 /**********************************************************************
  * Transmit interface *************************************************
