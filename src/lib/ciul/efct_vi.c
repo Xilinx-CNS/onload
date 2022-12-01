@@ -655,8 +655,6 @@ static int efct_ef_vi_transmit_alt_go(ef_vi* vi, unsigned alt_id)
 
 static int efct_ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags)
 {
-  if ( discard_err_flags & EF_VI_DISCARD_RX_TOBE_DISC )
-    return -EINVAL;
   if ( discard_err_flags & EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR )
     return -EINVAL;
   if ( discard_err_flags & EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR )

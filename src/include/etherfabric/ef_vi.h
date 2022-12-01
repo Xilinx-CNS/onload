@@ -613,8 +613,8 @@ enum ef_vi_rx_discard_err_flags {
   EF_VI_DISCARD_RX_ETH_FCS_ERR       = 0x4,
   /** Ethernet frame length error */
   EF_VI_DISCARD_RX_ETH_LEN_ERR       = 0x8,
-  /** To be discard in software (includes frame length error) */
-  EF_VI_DISCARD_RX_TOBE_DISC         = 0x10,     /* Siena only */
+  /** DEPRECATED FLAG */
+  EF_VI_DISCARD_RX_TOBE_DISC         = 0x10,
   /** Inner TCP or UDP checksum error */
   EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR = 0x20,
   /** Inner IP checksum error */

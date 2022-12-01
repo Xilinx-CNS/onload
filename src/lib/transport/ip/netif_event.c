@@ -529,8 +529,6 @@ static unsigned convert_discard_flags_efct_ef10(unsigned flags)
     return EF_EVENT_RX_DISCARD_CSUM_BAD;
   if( flags & EF_VI_DISCARD_RX_L3_CSUM_ERR )
     return EF_EVENT_RX_DISCARD_CSUM_BAD;
-  if( flags & EF_VI_DISCARD_RX_TOBE_DISC )
-    return EF_EVENT_RX_DISCARD_OTHER;
   if( flags & EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR )
     return EF_EVENT_RX_DISCARD_INNER_CSUM_BAD;
   if( flags & EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR )
