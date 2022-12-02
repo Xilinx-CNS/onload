@@ -667,6 +667,28 @@ static int ef10_ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags
 }
 
 
+static uint64_t ef10_ef_vi_receive_get_discards(ef_vi* vi)
+{
+  uint64_t vi_mask = CI_BSWAPC_LE64(vi->rx_discard_mask);
+  uint64_t mask = 0;
+
+  if( vi_mask & 1LL << ESF_DZ_RX_ECC_ERR_LBN )
+    mask |= EF_VI_DISCARD_RX_ETH_LEN_ERR;
+  if( vi_mask & 1LL << ESF_DZ_RX_TCPUDP_CKSUM_ERR_LBN )
+    mask |= EF_VI_DISCARD_RX_L4_CSUM_ERR;
+  if( vi_mask & 1LL << ESF_DZ_RX_IPCKSUM_ERR_LBN )
+    mask |= EF_VI_DISCARD_RX_L3_CSUM_ERR;
+  if( vi_mask & 1LL << ESF_DZ_RX_INNER_TCPUDP_CKSUM_ERR_LBN )
+    mask |= EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR;
+  if( vi_mask & 1LL << ESF_DZ_RX_INNER_IPCKSUM_ERR_LBN )
+    mask |= EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR;
+  if( vi_mask & 1LL << ESF_DZ_RX_ECRC_ERR_LBN )
+    mask |= EF_VI_DISCARD_RX_ETH_FCS_ERR;
+
+  return mask;
+}
+
+
 static int ef10_ef_vi_transmit_alt_discard(ef_vi* vi, unsigned alt_id)
 {
   uint32_t* doorbell = (uint32_t*) (vi->io + ER_DZ_TX_DESC_UPD_REG + 8);
@@ -809,6 +831,7 @@ static void ef10_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_alt_stop      = ef10_ef_vi_transmit_alt_stop;
   vi->ops.transmit_alt_go        = ef10_ef_vi_transmit_alt_go;
   vi->ops.receive_set_discards   = ef10_ef_vi_receive_set_discards;
+  vi->ops.receive_get_discards   = ef10_ef_vi_receive_get_discards;
   vi->ops.transmit_alt_discard   = ef10_ef_vi_transmit_alt_discard;
   if( vi->vi_flags & EF_VI_RX_PACKED_STREAM ) {
     vi->ops.receive_init   = ef10_ef_vi_receive_init_ps;

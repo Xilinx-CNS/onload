@@ -655,12 +655,21 @@ static int efct_ef_vi_transmit_alt_go(ef_vi* vi, unsigned alt_id)
 
 static int efct_ef_vi_receive_set_discards(ef_vi* vi, unsigned discard_err_flags)
 {
-  if ( discard_err_flags & EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR )
-    return -EINVAL;
-  if ( discard_err_flags & EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR )
-    return -EINVAL;
+  discard_err_flags &= EF_VI_DISCARD_RX_L4_CSUM_ERR |
+                       EF_VI_DISCARD_RX_L3_CSUM_ERR |
+                       EF_VI_DISCARD_RX_ETH_FCS_ERR |
+                       EF_VI_DISCARD_RX_ETH_LEN_ERR |
+                       EF_VI_DISCARD_RX_L2_CLASS_OTHER |
+                       EF_VI_DISCARD_RX_L3_CLASS_OTHER |
+                       EF_VI_DISCARD_RX_L4_CLASS_OTHER;
+
   vi->rx_discard_mask = discard_err_flags;
   return 0;
+}
+
+static uint64_t efct_ef_vi_receive_get_discards(ef_vi* vi)
+{
+  return vi->rx_discard_mask;
 }
 
 static int efct_ef_vi_transmit_alt_discard(ef_vi* vi, unsigned alt_id)
@@ -1481,6 +1490,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_alt_stop      = efct_ef_vi_transmit_alt_stop;
   vi->ops.transmit_alt_go        = efct_ef_vi_transmit_alt_go;
   vi->ops.receive_set_discards   = efct_ef_vi_receive_set_discards;
+  vi->ops.receive_get_discards   = efct_ef_vi_receive_get_discards;
   vi->ops.transmit_alt_discard   = efct_ef_vi_transmit_alt_discard;
   vi->ops.receive_init           = efct_ef_vi_receive_init;
   vi->ops.receive_push           = efct_ef_vi_receive_push;
