@@ -867,10 +867,10 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 		q_params.rx.ps_buf_size = virs->ps_buf_size;
 		rc = efhw_nic_dmaq_rx_q_init(nic,
 			efrm_pd_get_nic_client_id(virs->pd), &q_params);
-                if( rc >= 0 ) {
-                  virs->rx_prefix_len = rc;
-                  rc = 0;
-                }
+		if( rc >= 0 ) {
+			virs->rx_prefix_len = rc;
+			rc = 0;
+		}
 		break;
 	case EFHW_EVQ:
 		qid = instance;
@@ -1307,7 +1307,7 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 {
 	struct efrm_vi_attr attr;
 	struct efrm_vi *virs;
-        unsigned ctpio_mmap_bytes = 0;
+	unsigned ctpio_mmap_bytes = 0;
 	int rc;
 	size_t io_size;
 	resource_size_t io_addr;
@@ -1350,8 +1350,8 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 		if (evq_capacity < 0)
 			evq_capacity = rxq_capacity + txq_capacity;
 
-        /* TODO AF_XDP: allocation order must match the order that ef_vi
-         * expects the queues to be mapped into user memory. */
+		/* TODO AF_XDP: allocation order must match the order that
+		 * ef_vi expects the queues to be mapped into user memory. */
 		if ((rc = efrm_vi_q_alloc(virs, EFHW_EVQ, evq_capacity,
 					0, vi_flags, NULL)) < 0)
 			goto fail_q_alloc;
@@ -1635,7 +1635,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 		}
 		goto fail_alloc_id;
 	}
-       	EFRM_ASSERT(virs->allocation.instance >= 0);
+	EFRM_ASSERT(virs->allocation.instance >= 0);
 
 	nic_client_id = efrm_pd_get_nic_client_id(pd);
 	if (nic_client_id != EFRM_NIC_CLIENT_ID_NONE) {
@@ -1947,8 +1947,8 @@ int efrm_vi_tx_alt_alloc(struct efrm_vi *virs, int num_alt, int num_32b_words)
 	struct efhw_nic *nic = virs->rs.rs_client->nic;
 	int rc;
 
-        if ((num_alt <= 0) || (num_32b_words <= 0))
-                return -EINVAL;
+	if ((num_alt <= 0) || (num_32b_words <= 0))
+		return -EINVAL;
 
 	if (virs->tx_alt_num > 0)
 		return -EALREADY;
@@ -1973,7 +1973,7 @@ int efrm_vi_tx_alt_free(struct efrm_vi *virs)
 	rc = nic->efhw_func->tx_alt_free(nic, virs->tx_alt_num,
 					 virs->tx_alt_cp, virs->tx_alt_ids);
 	if (rc == 0)
-                virs->tx_alt_num = 0;
+		virs->tx_alt_num = 0;
 	return rc;
 }
 EXPORT_SYMBOL(efrm_vi_tx_alt_free);
