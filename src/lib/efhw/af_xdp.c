@@ -1046,8 +1046,8 @@ static bool af_xdp_accept_vi_constraints(struct efhw_nic *nic, int low,
 {
 	struct efhw_vi_constraints *avc = arg;
 
-	// More than one VI or RSS support request for AF_XDP
-	// means a bug somewhere in the call chain.
+	/* More than one VI or RSS support request for AF_XDP
+	 * means a bug somewhere in the call chain. */
 	EFHW_ASSERT(avc->min_vis_in_set == 1);
 	EFHW_ASSERT(!avc->has_rss_context);
 
