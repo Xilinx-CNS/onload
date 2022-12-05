@@ -47,11 +47,11 @@ the remote TCP"
 
   We do implement the reopening of connections in the TIME-WAIT
   state; rfc1122 section 4.2.2.13 says this should only be done if
-  the sequence number on the incomming SYN is higher than any previous
+  the sequence number on the incoming SYN is higher than any previous
   sequence number.  Unfortunately the ANVL test generates a random
   (new Initial Sequence Number) and will therefore be accepted only
   50% of the time.
-  We copy Linux and take any time-stamp on the SYN into accont, allowing
+  We copy Linux and take any time-stamp on the SYN into account, allowing
   the reopen if the SYN has a timestamp later than the last one we saw
   on the connection.  ANVL, however, does not use PAWS timestamps and
   so this does not modertate the failure.
@@ -61,7 +61,7 @@ length for MSS, in a SYN,ACK segment, without crashing and should
 reset the connection"
 
   The action after an illegal option is underspecified. We could either
-  ignore all options or send a reset; compile time switchs are available to
+  ignore all options or send a reset; compile time switches are available to
   set this. The ANVL test expects the connection to send a RST *and*
   progress to the established state; this seems against the spirit of
   sending active RSTs which denote the dropping of a connection in all
@@ -152,10 +152,10 @@ TCP must not buffer data indefinitely"
   We do not support transmission of a non-full MSS into a smaller receive
   window and so fail this test.
 
-tcp-core 18.21: "TCP may aggregate data requested by an applicatoin
+tcp-core 18.21: "TCP may aggregate data requested by an application
 for sending until accumulated data exceeds effective send MSS"
 
-  We do not support transmission queue coalesing yet and so fail this
+  We do not support transmission queue coalescing yet and so fail this
   test.
 
 
@@ -238,7 +238,7 @@ RFC2581 - TCP Congestion Control
 
 Compliance:
 
-3. "... a TCP MUST NOT be more agressive than the following algorithms
+3. "... a TCP MUST NOT be more aggressive than the following algorithms
    allow" - OK
 
 3.1a "The slow-start and congestion avoidance algorithms MUST be used"
@@ -322,7 +322,7 @@ Note we do not do the "bugfix" version to avoid multiple fast
 retransmits; instead the whole state is reset on an RTO for safety.
 
 ?? We could add a TCP_CONG_CAUTION state which is invoked before
-reseting congstate to zero. This would opencwnd but would bypass fast
+resetting congstate to zero. This would opencwnd but would bypass fast
 recovery until the we have fully recovered past congrecover. However
 this would require some careful catching in handle_ack. For now we
 stick with the naive variant of NewReno, and take the hit of potential
@@ -334,7 +334,7 @@ RFC2988 - Computing TCP's Retransmission Timer
 
 Compliance: OK 
 
-?? being more agressive with the RTO than the RFC allows could be a
+?? being more aggressive with the RTO than the RFC allows could be a
 performance improvement but breaks compliance with the spec.
 
 NB see 4. Clock Granularity for discussion of G. The timer management
