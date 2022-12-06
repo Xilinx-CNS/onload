@@ -669,6 +669,7 @@ int main(int argc, char* argv[])
         ci_app_usage("Cannot mix threads with other commands");
       if( cfg_nopids )
         ci_app_usage("Cannot mix threads command with --nopids");
+      ci_log_fn = ci_log_stdout;
       CI_TRY(libstack_threads_print());
     }
     else if( ! strcmp(argv[0], "env") ) {
@@ -676,6 +677,7 @@ int main(int argc, char* argv[])
         ci_app_usage("Cannot mix env with other commands");
       if( cfg_nopids )
         ci_app_usage("Cannot mix env command with --nopids");
+      ci_log_fn = ci_log_stdout;
       CI_TRY(libstack_env_print());
     }
     else if( ! strcmp(argv[0], "processes") ) {
@@ -683,11 +685,13 @@ int main(int argc, char* argv[])
         ci_app_usage("Cannot mix processes with other commands");
       if( cfg_nopids )
         ci_app_usage("Cannot mix processes command with --nopids");
+      ci_log_fn = ci_log_stdout;
       libstack_pid_mapping_print();
     }
     else if( ! strcmp(argv[0], "stacks") ) {
       if( doing_sockets || doing_stacks )
         ci_app_usage("Cannot mix stacks with other commands");
+      ci_log_fn = ci_log_stdout;
       libstack_stack_mapping_print();
     }
     else if( ! cfg_zombie && ! strcmp(argv[0], "kill") ) {
