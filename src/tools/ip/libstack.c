@@ -1050,7 +1050,7 @@ static int dump_via_buffers(oo_dump_request_fn_t dump_req_fn, void* arg,
     }
     rc = dump_req_fn(arg, buf, buf_len);
     if( rc >= 0 && rc <= buf_len )
-      ci_log_nonl("%s", buf);
+      printf("%s", buf);
     free(buf);
     if( rc < 0 ) {
       if( flags & DVB_LOG_FAILURE )
