@@ -10,9 +10,12 @@ SUBDIRS += oof onload_remote_monitor
 ifneq ($(NO_TEAMING),1)
 ifneq ($(NO_NETLINK),1)
 SUBDIRS += cplane_unit cplane_sysunit
-endif
-endif
-endif
+endif # NO_NETLINK
+endif # NO_TEAMING
+ifeq ($(GNU),1)
+SUBDIRS += buddy
+endif # GNU
+endif # ONLOAD_ONLY
 
 
 all:
