@@ -4,21 +4,12 @@ APPS	:= onload_stackdump \
            onload_tcpdump.bin \
            onload_fuser
 
-ifneq ($(ONLOAD_ONLY),1)
-
-ifeq ($(GNU),1)
-APPS	+= pio_buddy_test
-endif
-
-endif  # ONLOAD_ONLY
-
 
 TARGETS	:= $(APPS:%=$(AppPattern))
 
 onload_stackdump:= $(patsubst %,$(AppPattern),onload_stackdump)
 onload_tcpdump.bin := $(patsubst %,$(AppPattern),onload_tcpdump.bin)
 onload_fuser	:= $(patsubst %,$(AppPattern),onload_fuser)
-pio_buddy_test	:= $(patsubst %,$(AppPattern),pio_buddy_test)
 
 ifeq  ($(shell CC="${CC}" CFLAGS="${CFLAGS} ${MMAKE_CFLAGS}" check_library_presence pcap.h pcap 2>/dev/null),1)
 MMAKE_LIBS_LIBPCAP=-lpcap
@@ -43,9 +34,6 @@ $(onload_tcpdump.bin): tcpdump_bin.o libstack.o $(MMAKE_LIB_DEPS)
 	(libs="$(MMAKE_LIBS)"; $(MMakeLinkCApp))
 
 $(onload_fuser): fuser.o $(MMAKE_LIB_DEPS)
-	(libs="$(MMAKE_LIBS)"; $(MMakeLinkCApp))
-
-$(pio_buddy_test): pio_buddy_test.o libstack.o $(MMAKE_LIB_DEPS)
 	(libs="$(MMAKE_LIBS)"; $(MMakeLinkCApp))
 
 
