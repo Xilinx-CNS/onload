@@ -110,7 +110,7 @@ ifeq ($(KPATH),)
   endif
   KPATH := /lib/modules/$(KVER)/build
 else
- KVERARCH := $(subst ",,$(shell echo 'UTS_RELEASE UTS_MACHINE'|gcc -E -P -include $(KPATH)/include/generated/utsrelease.h -include $(KPATH)/include/generated/compile.h -))
+ KVERARCH := $(subst $\",,$(shell echo 'UTS_RELEASE UTS_MACHINE'|gcc -E -P -include $(KPATH)/include/generated/utsrelease.h -include $(KPATH)/include/generated/compile.h -))
  ifeq ($(KVERARCH),)
    $(error Cannot extract kernel info from KPATH "$(KPATH)" - not a built tree?)
  endif
