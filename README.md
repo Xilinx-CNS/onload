@@ -61,6 +61,14 @@ level of AF_XDP support for Onload:
 * Redhat Enterprise Linux 9.x
 * Linux kernel in the range 5.4 - 5.19
 
+If a netdriver does not support AF_XDP in native mode, Onload will try to use
+generic XDP mode when registering an interface. To make it work, one has to set
+up userland helper before registering the interface:
+```sh
+$ make -C ./src/tools/bpf_link_helper/
+$ echo $(realpath ./src/tools/bpf_link_helper/bpf-link-helper) | sudo tee /sys/module/sfc_resource/parameters/bpf_link_helper
+```
+
 ### Building without Xilinx NICs, for AF_XDP only
 
 OpenOnload can be built without SFC driver:
