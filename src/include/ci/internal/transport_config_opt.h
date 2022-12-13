@@ -316,14 +316,6 @@
  * Default value for EF_TCP_TIME_WAIT_ASSASSINATION. */
 #define CI_CFG_TIME_WAIT_ASSASSINATE 1
 
-#ifndef __KERNEL__
-#include <limits.h>
-#endif
-
-/* The Linux kernel disables challenge ACK limitation (in count per second),
- * by default since 6.0.*/
-#define CI_CFG_CHALLENGE_ACK_LIMIT INT_MAX
-
 /* Default ACK limitation when sending respnse to invalid packet,
  * in ms, same as of linux-4.19 */
 #define CI_CFG_TCP_OUT_OF_WINDOW_ACK_RATELIMIT 500

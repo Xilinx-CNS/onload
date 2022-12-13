@@ -854,14 +854,6 @@ CI_CFG_OPT("EF_DYNAMIC_ACK_THRESH", dynack_thresh, ci_uint16,
            , , 16, 0, 65535, count)
 #endif
 
-CI_CFG_OPT("EF_CHALLENGE_ACK_LIMIT", challenge_ack_limit,
-           ci_uint32,
-"Limit the number of \"challenge ACK packets\" sent as part of TCP blind "
-"window attack mitigation, RFC 5961; in packets per second.  "
-"The limitation applies for each Onload stack separately.\n"
-"The value from /proc/sys/net/ipv4/tcp_challenge_ack_limit is used by default.",
-          , , CI_CFG_CHALLENGE_ACK_LIMIT, 0, INT_MAX, count)
-
 CI_CFG_OPT("EF_INVALID_ACK_RATELIMIT", oow_ack_ratelimit, ci_uint32,
 "Limit the rate of ACKs sent because of invalid incoming TCP packet, "
 "in milliseconds.  The limitation is applied per-socket.  "

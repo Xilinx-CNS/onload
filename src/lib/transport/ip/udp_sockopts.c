@@ -16,6 +16,7 @@
 #include "ip_internal.h"
 
 #ifndef __KERNEL__
+#include <limits.h>
 #include <ci/internal/efabcfg.h>
 #endif
 

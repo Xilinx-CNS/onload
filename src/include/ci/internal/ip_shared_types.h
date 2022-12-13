@@ -739,12 +739,9 @@ typedef struct {
   ci_iptime_t tconst_pmtu_discover_recover;
 #define CI_PMTU_TCONST_DISCOVER_RECOVER (30*1000)
 
-  /* RFC 5961: limit for challenge ack packets per tick,
-   * derived from NI_OPTS(netif).challenge_ack_limit. */
-  ci_uint32 tconst_challenge_ack_limit;
-
   /* Rate limit for ACKs sent in response to invalid TCP packets,
-   * time period in ticks. */
+   * time period in ticks.
+   * It is used to limit challenge ACKs from RFC 5961 as well. */
   ci_iptime_t tconst_invalid_ack_ratelimit;
 
   /* Maximum time to defer a packet with unresolved MAC. */
@@ -1301,10 +1298,6 @@ struct ci_netif_state_s {
 
   /* List of sockets that may have reapable buffers. */
   struct oo_p_dllink        reap_list;
-
-  /* RFC 5961: limit the number of challenge ACKs */
-  ci_uint32     challenge_ack_num;
-  ci_iptime_t   challenge_ack_time;
 
 #if CI_CFG_SUPPORT_STATS_COLLECTION
   ci_int32              stats_fmt; /**< Output format */

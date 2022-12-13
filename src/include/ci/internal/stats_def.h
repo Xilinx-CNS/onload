@@ -484,8 +484,6 @@ OO_STAT("Number of challenge ACKs sent (RFC 5961).",
 OO_STAT("Number of challenge ACKs not sent because of packet allocation "
         "failure.",
         ci_uint32, challenge_ack_out_of_pkts, count)
-OO_STAT("Number of challenge ACKs not sent because of rate-limiting.",
-        ci_uint32, challenge_ack_limited, count)
 OO_STAT("Number of deferred packets when next hop MAC address is not known.",
         ci_uint32, tx_defer_pkt, count)
 OO_STAT("Number of deferred packets sent without any real delay.",

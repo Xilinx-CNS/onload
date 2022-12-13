@@ -316,8 +316,6 @@ typedef struct oo_p_dllink oo_p_dllink_t;
                  ci_iptime_t, tconst_pmtu_discover_fast, ORM_OUTPUT_STACK)                \
   FTL_TFIELD_INT(ctx, \
                  ci_iptime_t, tconst_pmtu_discover_recover, ORM_OUTPUT_STACK)             \
-  FTL_TFIELD_INT(ctx, \
-                 ci_uint32, tconst_challenge_ack_limit, ORM_OUTPUT_STACK) \
   FTL_TFIELD_INT(ctx, ci_iptime_t, tconst_stats, ORM_OUTPUT_STACK)       \
   FTL_TSTRUCT_END(ctx)                                                 
 
@@ -519,8 +517,6 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TFIELD_ARRAYOFSTRUCT(ctx, oo_p_dllink_t, timeout_q, \
                            OO_TIMEOUT_Q_MAX, ORM_OUTPUT_STACK, 1)         \
   FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, reap_list, ORM_OUTPUT_EXTRA)     \
-  FTL_TFIELD_INT(ctx, ci_uint32, challenge_ack_num, ORM_OUTPUT_STACK)     \
-  FTL_TFIELD_INT(ctx, ci_iptime_t, challenge_ack_time, ORM_OUTPUT_STACK)  \
   ON_CI_CFG_SUPPORT_STATS_COLLECTION(                                   \
     FTL_TFIELD_INT(ctx, ci_int32, stats_fmt, ORM_OUTPUT_STACK)            \
     FTL_TFIELD_STRUCT(ctx, ci_ip_timer, stats_tid, ORM_OUTPUT_STACK)      \
