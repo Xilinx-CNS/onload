@@ -10,8 +10,6 @@ AUX_BUS_PATH ?= $(TOPPATH)/../cns-auxiliary-bus
 HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
 endif
 
-X3_NET_PATH ?= $(TOPPATH)/../x3-net-linux
-HAVE_X3_NET := $(or $(and $(wildcard $(X3_NET_PATH)),1),0)
 HAVE_SFC ?= 1
 include $(BUILD)/config.mk
 include $(BUILDPATH)/options_config.mk

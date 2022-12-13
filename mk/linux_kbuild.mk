@@ -54,12 +54,17 @@ ifneq ($(HAVE_CNS_AUX),0)
 EXTRA_CFLAGS += -I$(AUX_BUS_PATH)/include
 endif
 
-X3_NET_HDR := linux/net/xilinx/xlnx_efct.h
+ifeq ($(CI_HAVE_AUX_BUS),0)
+else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/net/xilinx/xlnx_efct.h),)
+HAVE_KERNEL_EFCT := 1
+else
 X3_NET_PATH ?= $(TOPPATH)/../x3-net-linux
-HAVE_X3_NET := $(or $(and $(wildcard $(X3_NET_PATH)),1),0)
-EXTRA_CFLAGS += -DCI_HAVE_X3_NET=$(HAVE_X3_NET)
-ifneq ($(HAVE_X3_NET),0)
- EXTRA_CFLAGS += -DCI_XLNX_EFCT_HEADER='"$(X3_NET_PATH)/include/$(X3_NET_HDR)"'
+HAVE_CNS_EFCT := $(or $(and $(wildcard $(X3_NET_PATH)),1),0)
+endif
+
+EXTRA_CFLAGS += -DCI_HAVE_EFCT_AUX=$(or $(filter 1, $(HAVE_KERNEL_EFCT) $(HAVE_CNS_EFCT)),0)
+ifneq ($(HAVE_CNS_EFCT),0)
+EXTRA_CFLAGS += -I$(X3_NET_PATH)/include
 endif
 
 HAVE_SFC ?= 1

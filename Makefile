@@ -171,16 +171,17 @@ ifneq ($(HAVE_CNS_AUX),0)
 ONLOAD_CFLAGS += -I$(AUX_BUS_PATH)/include
 endif
 
-X3_NET_HDR := linux/net/xilinx/xlnx_efct.h
-X3_NET_PATH ?= $(abspath ../x3-net-linux)
-ifneq ($(wildcard $(X3_NET_PATH)/include/$(X3_NET_HDR)),)
- ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=1 -DCI_XLNX_EFCT_HEADER='"$(X3_NET_PATH)/include/$(X3_NET_HDR)"'
+ifeq ($(CI_HAVE_AUX_BUS),0)
+else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/net/xilinx/xlnx_efct.h),)
+HAVE_KERNEL_EFCT := 1
 else
- ifneq ($(wildcard $(KPATH)/include/$(X3_NET_HDR)),)
-  ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=1 -DCI_XLNX_EFCT_HEADER='"$(X3_NET_HDR)"'
- else
-  ONLOAD_CFLAGS += -DCI_HAVE_X3_NET=0
- endif
+X3_NET_PATH ?= $(abspath ../x3-net-linux)
+HAVE_CNS_EFCT := $(or $(and $(wildcard $(X3_NET_PATH)),1),0)
+endif
+
+ONLOAD_CFLAGS += -DCI_HAVE_EFCT_AUX=$(or $(filter 1, $(HAVE_KERNEL_EFCT) $(HAVE_CNS_EFCT)),0)
+ifneq ($(HAVE_CNS_EFCT),0)
+ONLOAD_CFLAGS += -I$(X3_NET_PATH)/include
 endif
 
 ifneq ($(MMAKE_LIBERAL),1)
