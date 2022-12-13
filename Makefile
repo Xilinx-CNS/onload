@@ -46,6 +46,24 @@ endif
 DRIVER_SUBDIRS := src/driver/linux_char src/driver/linux_onload \
                   src/driver/linux_resource src/lib/citools src/lib/ciul \
                   src/lib/cplane src/lib/transport/ip
+
+ifeq ($(KPATH),)
+  ifeq ($(KVER),)
+  KVER := $(shell uname -r)
+  endif
+  ifeq ($(KARCH),)
+  KARCH := $(shell uname -m)
+  endif
+  KPATH := /lib/modules/$(KVER)/build
+else
+ KVERARCH := $(subst $\",,$(shell echo 'UTS_RELEASE UTS_MACHINE'|gcc -E -P -include $(KPATH)/include/generated/utsrelease.h -include $(KPATH)/include/generated/compile.h -))
+ ifeq ($(KVERARCH),)
+   $(error Cannot extract kernel info from KPATH "$(KPATH)" - not a built tree?)
+ endif
+ KVER ?= $(firstword $(KVERARCH))
+ KARCH ?= $(lastword $(KVERARCH))
+endif
+
 export AUX_BUS_PATH ?= $(abspath ../cns-auxiliary-bus)
 export HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
 ifneq ($(HAVE_CNS_AUX),0)
@@ -101,22 +119,6 @@ else
 Q := @
 endif
 
-ifeq ($(KPATH),)
-  ifeq ($(KVER),)
-  KVER := $(shell uname -r)
-  endif
-  ifeq ($(KARCH),)
-  KARCH := $(shell uname -m)
-  endif
-  KPATH := /lib/modules/$(KVER)/build
-else
- KVERARCH := $(subst $\",,$(shell echo 'UTS_RELEASE UTS_MACHINE'|gcc -E -P -include $(KPATH)/include/generated/utsrelease.h -include $(KPATH)/include/generated/compile.h -))
- ifeq ($(KVERARCH),)
-   $(error Cannot extract kernel info from KPATH "$(KPATH)" - not a built tree?)
- endif
- KVER ?= $(firstword $(KVERARCH))
- KARCH ?= $(lastword $(KVERARCH))
-endif
 KBUILDTOP := $(BUILD_ROOT)/$(BUILDTOP_EXTRA_PREFIX)$(KARCH)_linux-$(KVER)$(BUILDTOP_EXTRA_SUFFIX)
 override KBUILDTOP := $(abspath $(KBUILDTOP))
 OUTMAKEFILES := $(foreach D,$(DRIVER_SUBDIRS), \
