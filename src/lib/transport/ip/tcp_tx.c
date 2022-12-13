@@ -2058,22 +2058,8 @@ int ci_tcp_send_challenge_ack(ci_netif* netif, ci_tcp_state* ts,
   if( ! ci_tcp_may_send_ack_ratelimited(netif, ts) )
     return 0;
 
-  if( netif->state->challenge_ack_time != ci_tcp_time_now(netif) ) {
-    netif->state->challenge_ack_time = ci_tcp_time_now(netif);
-    netif->state->challenge_ack_num = 0;
-  }
-  if( netif->state->challenge_ack_num >=
-      NI_CONF(netif).tconst_challenge_ack_limit ) {
-    CITP_STATS_NETIF_INC(netif, challenge_ack_limited);
-    return 0;
-  }
-
-  netif->state->challenge_ack_num++;
   pkt = ci_netif_pkt_rx_to_tx(netif, pkt);
   if( pkt == NULL ) {
-    /* Avoid more challenge ACK during this tick. */
-    netif->state->challenge_ack_num =
-                    NI_CONF(netif).tconst_challenge_ack_limit;
     CITP_STATS_NETIF_INC(netif, challenge_ack_out_of_pkts);
     return 1; /* The packet have been consumed in any case */
   }

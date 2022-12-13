@@ -298,7 +298,6 @@ static ci_uint32 citp_syn_opts = CI_TCPT_SYN_FLAGS;
 static ci_uint32 citp_tcp_dsack = CI_CFG_TCP_DSACK;
 static ci_uint32 citp_tcp_time_wait_assassinate = CI_CFG_TIME_WAIT_ASSASSINATE;
 static ci_uint32 citp_tcp_early_retransmit = 3;  /* default as of 3.10 */
-static ci_uint32 citp_challenge_ack_limit = CI_CFG_CHALLENGE_ACK_LIMIT;
 static ci_uint32 citp_tcp_invalid_ratelimit =
                         CI_CFG_TCP_OUT_OF_WINDOW_ACK_RATELIMIT;
 
@@ -455,9 +454,6 @@ ci_setup_ipstack_params(void)
   if (ci_sysctl_get_values("net/ipv4/tcp_early_retrans", opt, 1) == 0)
     citp_tcp_early_retransmit = opt[0];
 
-  if (ci_sysctl_get_values("net/ipv4/tcp_challenge_ack_limit", opt, 1) == 0)
-    citp_challenge_ack_limit = opt[0];
-
   if (ci_sysctl_get_values("net/ipv4/tcp_invalid_ratelimit", opt, 1) == 0)
     citp_tcp_invalid_ratelimit = opt[0];
 
@@ -536,7 +532,6 @@ void ci_netif_config_opts_defaults(ci_netif_config_opts* opts)
     opts->tcp_early_retransmit = citp_tcp_early_retransmit > 0 &&
                                  citp_tcp_early_retransmit < 4;
     opts->tail_drop_probe = citp_tcp_early_retransmit >= 3;
-    opts->challenge_ack_limit = citp_challenge_ack_limit;
     opts->oow_ack_ratelimit = citp_tcp_invalid_ratelimit;
 #if CI_CFG_IPV6
     opts->auto_flowlabels = citp_auto_flowlabels;
@@ -916,8 +911,6 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   opts->dynack_thresh = CI_MAX(opts->dynack_thresh, opts->delack_thresh);
 #endif
 
-  if ( (s = getenv("EF_CHALLENGE_ACK_LIMIT")) )
-    opts->challenge_ack_limit = atoi(s);
   if ( (s = getenv("EF_INVALID_ACK_RATELIMIT")) )
     opts->oow_ack_ratelimit = atoi(s);
 #if CI_CFG_FD_CACHING

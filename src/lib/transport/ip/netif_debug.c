@@ -696,9 +696,6 @@ void ci_stack_time_dump(ci_netif* ni, oo_dump_log_fn_t logger, void* log_arg)
             NI_CONF(ni).tconst_pmtu_discover_fast, CI_PMTU_TCONST_DISCOVER_FAST,
             NI_CONF(ni).tconst_pmtu_discover_recover,
             CI_PMTU_TCONST_DISCOVER_RECOVER);
-  LOG_PRINT("  RFC 5961 challenge ack limit: %d per tick, %d per sec\n",
-            NI_CONF(ni).tconst_challenge_ack_limit,
-            NI_OPTS(ni).challenge_ack_limit);
   LOG_PRINT("  Time between ACKs sent as a response to invalid "
             "incoming TCP packets: %uticks (%ums)\n",
             NI_CONF(ni).tconst_invalid_ack_ratelimit,

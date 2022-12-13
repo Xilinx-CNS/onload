@@ -69,11 +69,6 @@ void ci_tcp_timer_init(ci_netif* netif)
   NI_CONF(netif).tconst_pmtu_discover_recover = 
     ci_tcp_time_ms2ticks(netif, CI_PMTU_TCONST_DISCOVER_RECOVER);
 
-  /* Convert per-second challenge ACK limit to a per-tick.
-   * +1 to ensure that the result is non-zero. */
-  NI_CONF(netif).tconst_challenge_ack_limit =
-      ci_ip_time_freq_hz2tick(netif, NI_OPTS(netif).challenge_ack_limit) + 1;
-
   if( NI_OPTS(netif).oow_ack_ratelimit == 0 )
     NI_CONF(netif).tconst_invalid_ack_ratelimit = 0;
   else

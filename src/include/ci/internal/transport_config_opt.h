@@ -316,10 +316,6 @@
  * Default value for EF_TCP_TIME_WAIT_ASSASSINATION. */
 #define CI_CFG_TIME_WAIT_ASSASSINATE 1
 
-/* Default challenge ACK limitation (in count per second),
- * same as of linux-4.19 */
-#define CI_CFG_CHALLENGE_ACK_LIMIT 1000
-
 /* Default ACK limitation when sending respnse to invalid packet,
  * in ms, same as of linux-4.19 */
 #define CI_CFG_TCP_OUT_OF_WINDOW_ACK_RATELIMIT 500
