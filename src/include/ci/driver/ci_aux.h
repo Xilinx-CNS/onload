@@ -12,15 +12,8 @@
  * If we have an aux bus available we use the appropriate header and indicate
  * aux bus availability through CI_HAVE_AUX_BUS.
  */
-#ifdef EFRM_HAS_AUXBUS_H
+#if defined (EFRM_HAS_AUXBUS_H) || CI_HAVE_CNS_AUX
   #include <linux/auxiliary_bus.h>
-  #ifdef EFRM_HAS_MOD_DT_AUXBUS_H
-    #include <linux/mod_devicetable_auxiliary.h>
-  #endif
-  #define CI_HAVE_AUX_BUS 1
-#elif CI_HAVE_CNS_AUX
-  #include CI_AUX_MOD_HEADER
-  #include CI_AUX_HEADER
   #define CI_HAVE_AUX_BUS 1
 #else
   #define CI_HAVE_AUX_BUS 0

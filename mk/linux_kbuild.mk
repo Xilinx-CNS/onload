@@ -43,8 +43,7 @@ AUX_BUS_PATH ?= $(TOPPATH)/../cns-auxiliary-bus
 HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
 EXTRA_CFLAGS += -DCI_HAVE_CNS_AUX=$(HAVE_CNS_AUX)
 ifneq ($(HAVE_CNS_AUX),0)
-EXTRA_CFLAGS += -DCI_AUX_HEADER='"$(AUX_BUS_PATH)/include/linux/auxiliary_bus.h"'
-EXTRA_CFLAGS += -DCI_AUX_MOD_HEADER='"$(AUX_BUS_PATH)/drivers/base/mod_devicetable_auxiliary.h"'
+EXTRA_CFLAGS += -I$(AUX_BUS_PATH)/include
 endif
 
 X3_NET_HDR := linux/net/xilinx/xlnx_efct.h

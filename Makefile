@@ -148,8 +148,7 @@ else
 ONLOAD_CFLAGS += -g
 endif
 ifneq ($(HAVE_CNS_AUX),0)
-ONLOAD_CFLAGS += -DCI_AUX_HEADER='"$(AUX_BUS_PATH)/include/linux/auxiliary_bus.h"'
-ONLOAD_CFLAGS += -DCI_AUX_MOD_HEADER='"$(AUX_BUS_PATH)/drivers/base/mod_devicetable_auxiliary.h"'
+ONLOAD_CFLAGS += -I$(AUX_BUS_PATH)/include
 endif
 
 X3_NET_HDR := linux/net/xilinx/xlnx_efct.h
