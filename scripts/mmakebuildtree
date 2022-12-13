@@ -274,7 +274,7 @@ fi
   [ -d "$KPATH" ] || {
     modules="/lib/modules/$KVER"
     [ -d "${modules}" ] || fail "No kernel modules at '$modules'"
-    KPATH=$(readlink -f "${modules}/build")
+    KPATH="${modules}/build"
     [ -d "$KPATH" ] || fail "No kernel build at '$KPATH'"
   }
 }

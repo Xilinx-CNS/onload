@@ -39,9 +39,17 @@ ifndef NDEBUG
 EXTRA_CFLAGS += -g
 endif
 
+ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
+HAVE_KERNEL_AUX := 1
+HAVE_CNS_AUX := 0
+else
 AUX_BUS_PATH ?= $(TOPPATH)/../cns-auxiliary-bus
 HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
-EXTRA_CFLAGS += -DCI_HAVE_CNS_AUX=$(HAVE_CNS_AUX)
+endif
+
+CI_HAVE_AUX_BUS := $(or $(filter 1, $(HAVE_CNS_AUX) $(HAVE_KERNEL_AUX)),0)
+EXTRA_CFLAGS += -DCI_HAVE_AUX_BUS=$(CI_HAVE_AUX_BUS)
+
 ifneq ($(HAVE_CNS_AUX),0)
 EXTRA_CFLAGS += -I$(AUX_BUS_PATH)/include
 endif

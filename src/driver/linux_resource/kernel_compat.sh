@@ -143,7 +143,6 @@ EFRM_HAS_FLUSH_DELAYED_FPUT	export	flush_delayed_fput	include/linux/file.h	fs/fi
 EFRM_IRQ_FREE_RETURNS_NAME	symtype	free_irq	include/linux/interrupt.h void *(unsigned int, void *)
 
 EFRM_HAS_LINUX_STDARG_H			file	include/linux/stdarg.h
-EFRM_HAS_AUXBUS_H			file	include/linux/auxiliary_bus.h
 EFRM_HAS_XLNX_EFCT_H			file	include/linux/net/xilinx/xlnx_efct.h
 EFRM_TASK_HAS_CPUMASK		member	struct_task_struct	cpus_mask	include/linux/sched.h
 
