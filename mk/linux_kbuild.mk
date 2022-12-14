@@ -67,9 +67,17 @@ X3_NET_PATH ?= $(TOPPATH)/../x3-net-linux
 HAVE_CNS_EFCT := $(or $(and $(wildcard $(X3_NET_PATH)),1),0)
 endif
 
-EXTRA_CFLAGS += -DCI_HAVE_EFCT_AUX=$(or $(filter 1, $(HAVE_KERNEL_EFCT) $(HAVE_CNS_EFCT)),0)
-ifneq ($(HAVE_CNS_EFCT),0)
-EXTRA_CFLAGS += -I$(X3_NET_PATH)/include
+ifeq ($(or $(filter 1, $(HAVE_KERNEL_EFCT) $(HAVE_CNS_EFCT)),0),1)
+  EXTRA_CFLAGS += -DCI_HAVE_EFCT_AUX=1
+  ifneq ($(HAVE_CNS_EFCT),0)
+    EXTRA_CFLAGS += -I$(X3_NET_PATH)/include
+  endif
+else
+  ifneq ($(HAVE_EFCT),1)
+    EXTRA_CFLAGS += -DCI_HAVE_EFCT_AUX=0
+  else
+    $(error Unable to build Onload with EFCT or AUX bus support)
+  endif
 endif
 
 HAVE_SFC ?= 1
