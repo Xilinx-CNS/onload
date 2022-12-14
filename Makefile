@@ -18,6 +18,7 @@ Options:
   MMAKE_LIBERAL=1  Turn off -Werror
   HAVE_SFC=0       Build without netdriver and driverlink support to work in
                    AF_XDP mode only
+  HAVE_EFCT=0      Build without EFCT and AUX bus support.
   BUILD_PROFILE=x  Onload configuration, e.g. "cloud" (default: extra)
   KBUILDTOP=<path> Where to put driver build (default: build/$$KARCH_linux-$$KVER)
   KPATH=<path>     Kernel to build for (default: /lib/modules/`uname -r`/build)
@@ -64,11 +65,16 @@ else
  KARCH ?= $(lastword $(KVERARCH))
 endif
 
+export HAVE_EFCT ?=
+
 # There are three options here: native kernel aux bus support, support
 # through the out of tree cns aux bus repo for older kernels, or no aux
-# bus support at all, in that order of preference.
+# bus support at all, in that order of preference unless explicitly
+# asked to build without efct support.
 #
-ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
+ifeq ($(HAVE_EFCT),0)
+export HAVE_CNS_AUX := 0
+else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
 export HAVE_KERNEL_AUX := 1
 export HAVE_CNS_AUX := 0
 else
@@ -171,7 +177,8 @@ ifneq ($(HAVE_CNS_AUX),0)
 ONLOAD_CFLAGS += -I$(AUX_BUS_PATH)/include
 endif
 
-ifeq ($(CI_HAVE_AUX_BUS),0)
+ifeq ($(HAVE_EFCT),0)
+else ifeq ($(CI_HAVE_AUX_BUS),0)
 else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/net/xilinx/xlnx_efct.h),)
 HAVE_KERNEL_EFCT := 1
 else

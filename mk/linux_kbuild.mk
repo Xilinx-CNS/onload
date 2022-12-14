@@ -39,7 +39,11 @@ ifndef NDEBUG
 EXTRA_CFLAGS += -g
 endif
 
-ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
+HAVE_EFCT ?=
+
+ifeq ($(HAVE_EFCT),0)
+HAVE_CNS_AUX := 0
+else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
 HAVE_KERNEL_AUX := 1
 HAVE_CNS_AUX := 0
 else
@@ -54,7 +58,8 @@ ifneq ($(HAVE_CNS_AUX),0)
 EXTRA_CFLAGS += -I$(AUX_BUS_PATH)/include
 endif
 
-ifeq ($(CI_HAVE_AUX_BUS),0)
+ifeq ($(HAVE_EFCT),0)
+else ifeq ($(CI_HAVE_AUX_BUS),0)
 else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/net/xilinx/xlnx_efct.h),)
 HAVE_KERNEL_EFCT := 1
 else

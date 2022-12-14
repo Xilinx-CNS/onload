@@ -2,7 +2,11 @@
 # X-SPDX-Copyright-Text: (c) Copyright 2002-2020 Xilinx, Inc.
 TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_extra.h
 
-ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
+HAVE_EFCT ?=
+
+ifeq ($(HAVE_EFCT),0)
+HAVE_CNS_AUX := 0
+else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
 HAVE_KERNEL_AUX := 1
 HAVE_CNS_AUX := 0
 else

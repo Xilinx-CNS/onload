@@ -76,6 +76,9 @@ OpenOnload can be built without SFC driver:
 * `onload_build` & `onload_install`: use `--no-sfc` parameter;
 * `onload_tool reload`: use `--onload-only` parameter.
 
+Also, it can be built without EFCT and AUX support:
+* `make`: use `HAVE_EFCT=0` variable;
+* `onload_build`: use `--no-efct` parameter.
 
 ## Native Onload with Xilinx/AMD NICs
 
