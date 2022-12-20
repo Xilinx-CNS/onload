@@ -76,7 +76,7 @@ usage () {
   err "  -allowload      - Ignore test failures during load"
   err "  -noselftest     - Don't do an offline self-test during load"
   err "  -nolro          - turn off Large Recieve Offload"
-  err "  -singlequeue   - use one RX queue only"
+  err "  -singlequeue    - use one RX queue only"
   err "  -netparm        - Add a module parameter setting for net driver"
   err "  -charparm       - Add a module parameter setting for char driver"
   err "  -suspend        - Suspend all interfaces by default"
