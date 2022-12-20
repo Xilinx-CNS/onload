@@ -25,6 +25,7 @@ CHAR_OPT=
 LOAD_CONFIG=false
 PROBE_CP_SERVER_PATH=true
 LINUX_NET="sfc"
+USER_NET="xilinx_efct"
 
 
 usage () {
@@ -243,7 +244,7 @@ get_interfaces() {
   declare -a interfaces
   for d in /sys/class/net/*; do
     driver="$(readlink "$d"/device/driver/module)"
-    for m in $LINUX_NET; do
+    for m in $LINUX_NET $USER_NET; do
         if [ "${driver%/"$m"}" != "$driver" ]; then
           interfaces[${#interfaces[*]}]="$(basename "$d")"
         fi
