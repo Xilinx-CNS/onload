@@ -57,10 +57,10 @@ def get_stats(b, dataset, val_t):
     if b.n:
         b.min = dataset[0]
         b.max = dataset[-1]
-        b.median = dataset[b.n / 2]
-        b.p90 = dataset[b.n * 90 / 100]
-        b.p95 = dataset[b.n * 95 / 100]
-        b.p99 = dataset[b.n * 99 / 100]
+        b.median = dataset[b.n // 2]
+        b.p90 = dataset[b.n * 90 // 100]
+        b.p95 = dataset[b.n * 95 // 100]
+        b.p99 = dataset[b.n * 99 // 100]
         b.sum = sum(dataset)
         b.mean = b.sum / b.n
         var = val_t(0)
