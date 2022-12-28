@@ -27,6 +27,11 @@
 #include "ethtool_rxclass.h"
 #include "ethtool_flow.h"
 
+#define XDP_PROG_NAME "xdpsock"
+
+static char *bpf_link_helper = NULL;
+module_param(bpf_link_helper, charp, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(bpf_link_helper, "Path to the bpf-link-helper application");
 
 int enable_af_xdp_flow_filters = 1;
 module_param(enable_af_xdp_flow_filters, int, S_IRUGO | S_IWUSR);
@@ -359,7 +364,7 @@ static int xdp_prog_load(struct sys_call_area* area, int map_fd)
   attr->insn_cnt = sizeof(const_prog) / sizeof(struct bpf_insn);
   attr->insns = sys_call_area_user_addr(area, prog);
   attr->license = sys_call_area_user_addr(area, license);
-  strncpy(attr->prog_name, "xdpsock", strlen("xdpsock"));
+  strncpy(attr->prog_name, XDP_PROG_NAME, strlen(XDP_PROG_NAME));
 
   return xdp_sys_bpf(BPF_PROG_LOAD, sys_call_area_user_addr(area, attr));
 }
@@ -437,19 +442,50 @@ static int xdp_bind(struct socket* sock, int ifindex, unsigned queue, unsigned f
 }
 
 /* Link an XDP program to an interface */
-static int xdp_set_link(struct net_device* dev, struct bpf_prog* prog)
+static int xdp_set_link(struct net_device* dev, int prog_fd)
 {
-  struct netdev_bpf bpf = {
-    .command = XDP_SETUP_PROG,
-    .prog = prog
-  };
+  if( dev->netdev_ops->ndo_bpf ) {
+    struct netdev_bpf bpf = {
+      .command = XDP_SETUP_PROG,
+      .prog = NULL,
+    };
 
-  if( !dev->netdev_ops->ndo_bpf ) {
-    EFHW_ERR("%s: %s does not support XDP", __FUNCTION__, dev->name);
-    return -ENOSYS;
+    if( prog_fd > 0 ) {
+      struct bpf_prog* prog = bpf_prog_get_type_dev(prog_fd, BPF_PROG_TYPE_XDP, 1);
+      ci_close_fd(prog_fd);
+      if( IS_ERR(prog) )
+        return PTR_ERR(prog);
+      bpf.prog = prog;
+    }
+
+    return dev->netdev_ops->ndo_bpf(dev, &bpf);
   }
+  else {
+    char *envp[] = { NULL };
+    char *argv[] = {
+      NULL,
+      dev->name,
+      prog_fd > 0 ? XDP_PROG_NAME : NULL,
+      NULL
+    };
 
-  return dev->netdev_ops->ndo_bpf(dev, &bpf);
+    EFHW_WARN("%s: %s does not support native XDP, using generic mode",
+              __FUNCTION__, dev->name);
+
+    if( bpf_link_helper ) {
+      argv[0] = strim(bpf_link_helper);
+    }
+    else {
+      EFHW_ERR("%s: bpf_link_helper parameter is not set. Failed to link.",
+               __FUNCTION__);
+      return -1;
+    }
+
+    EFHW_WARN("%s: spawning %s %s %s", __FUNCTION__,
+              argv[0], argv[1], argv[2] ? argv[2] : "");
+
+    return call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
+  }
 }
 
 /* Fault handler to provide buffer memory pages for our user mapping */
@@ -903,7 +939,6 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 			   struct sys_call_area* sys_call_area)
 {
 	int map_fd, rc;
-	struct bpf_prog* prog;
 	struct efhw_nic_af_xdp* xdp;
 
 	xdp = kzalloc(sizeof(*xdp) +
@@ -925,14 +960,7 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	if( rc < 0 )
 		goto fail;
 
-	prog = bpf_prog_get_type_dev(rc, BPF_PROG_TYPE_XDP, 1);
-	ci_close_fd(rc);
-	if( IS_ERR(prog) ) {
-		rc = PTR_ERR(prog);
-		goto fail;
-	}
-
-	rc = xdp_set_link(nic->net_dev, prog);
+	rc = xdp_set_link(nic->net_dev, rc);
 	if( rc < 0 )
 		goto fail;
 
@@ -974,7 +1002,7 @@ static void
 af_xdp_nic_release_hardware(struct efhw_nic* nic)
 {
   struct efhw_nic_af_xdp* xdp = nic->arch_extra;
-  xdp_set_link(nic->net_dev, NULL);
+  xdp_set_link(nic->net_dev, -1);
   if( xdp ) {
     fput(xdp->map);
     kfree(xdp);
