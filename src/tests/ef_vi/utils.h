@@ -144,6 +144,7 @@ extern void get_ipaddr_of_vlan_intf(const char* intf, int vlan,
                                     char** ipaddr_out);
 extern int my_getaddrinfo(const char* host, const char* port,
                           struct addrinfo**ai_out);
+extern int parse_long(char* s, long min_val, long max_val, long* out);
 extern int parse_host(const char* s, struct in_addr* ip_out);
 extern int parse_interface(const char* s, int* ifindex_out);
 

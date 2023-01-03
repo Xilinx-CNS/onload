@@ -7,7 +7,6 @@
 #include <ci/app.h>
 
 #include <net/if.h>
-#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -462,6 +461,32 @@ int my_getaddrinfo(const char* host, const char* port,
   hints.ai_canonname = NULL;
   hints.ai_next = NULL;
   return getaddrinfo(host, port, &hints, ai_out);
+}
+
+
+int parse_long(char* s, long min_val, long max_val, long* out)
+{
+  char *endptr;
+  long ret;
+
+  errno = 0;
+  ret = strtol(s, &endptr, 10);
+  if( errno != 0 ) {
+    return 0;
+  }
+
+  if( s == endptr ) {
+    errno = EINVAL;
+    return 0;
+  }
+
+  if( ret < min_val || ret > max_val ) {
+    errno = ERANGE;
+    return 0;
+  }
+
+  *out = ret;
+  return 1;
 }
 
 

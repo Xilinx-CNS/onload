@@ -19,11 +19,13 @@
 #include <ci/tools/ipcsum_base.h>
 #include <ci/tools/ippacket.h>
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <inttypes.h>
 #include <arpa/inet.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <limits.h>
 
 
 /* Forward declarations. */
@@ -675,10 +677,18 @@ static void prepare(ef_vi* vi)
 }
 
 
-static CI_NORETURN usage(void)
+static CI_NORETURN usage(const char* fmt, ...)
 {
+  if( fmt ) {
+    va_list args;
+    va_start(args, fmt);
+    fprintf(stderr, "\n");
+    vfprintf(stderr, fmt, args);
+    fprintf(stderr, "\n");
+    va_end(args);
+  }
   fprintf(stderr, "\nusage:\n");
-  fprintf(stderr, "  eflatency [options] <ping|pong> <interface> <tx_interface>\n");
+  fprintf(stderr, "  eflatency [options] <ping|pong> <interface> [<tx_interface>]\n");
   fprintf(stderr, "\noptions:\n");
   fprintf(stderr, "  -n <iterations>     - set number of iterations\n");
   fprintf(stderr, "  -s <message-size>   - set udp payload size. Accepts Python slices\n");
@@ -686,7 +696,7 @@ static CI_NORETURN usage(void)
   fprintf(stderr, "  -c <cut-through>    - CTPIO cut-through threshold\n");
   fprintf(stderr, "  -p                  - CTPIO no-poison mode\n");
   fprintf(stderr, "  -m <modes>          - allow mode of the set: [c]tpio, \n");
-  fprintf(stderr, "                      [pio], [a]lternatives, [d]ma, [x]dp\n");
+  fprintf(stderr, "                        [pio], [a]lternatives, [d]ma, [x]dp\n");
   fprintf(stderr, "  -t <modes>          - set TX_PUSH: [a]lways, [d]isable\n");
   fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
   fprintf(stderr, "\n");
@@ -710,28 +720,46 @@ int main(int argc, char* argv[])
 
   printf("# ef_vi_version_str: %s\n", ef_vi_version_str());
 
+  #define OPT_INT(s, p) do {                                 \
+    long __v;                                                \
+    if( ! parse_long(s, INT_MIN, INT_MAX, &__v) ) {          \
+      usage("Unable to parse '%s': %s", s, strerror(errno)); \
+    }                                                        \
+    p = (int)__v;                                            \
+  } while( 0 );
+
+  #define OPT_UINT(s, p) do {                                \
+    long __v;                                                \
+    if( ! parse_long(s, 0, INT_MAX, &__v) ) {                \
+      usage("Unable to parse '%s': %s", s, strerror(errno)); \
+    }                                                        \
+    p = (unsigned int)__v;                                   \
+  } while( 0 );
+
   while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:")) != -1 )
     switch( c ) {
     case 'n':
-      cfg_iter = atoi(optarg);
+      OPT_INT(optarg, cfg_iter);
       break;
     case 's': {
       char* colon;
-      cfg_payload_end = cfg_payload_len = atoi(optarg);
+      OPT_INT(optarg, cfg_payload_len);
       colon = strchr(optarg, ':');
       if( colon ) {
-        cfg_payload_end = atoi(colon + 1);
+        OPT_INT(colon + 1, cfg_payload_end);
         colon = strchr(colon + 1, ':');
         if( colon )
-          cfg_payload_step = atoi(colon + 1);
+          OPT_INT(colon + 1, cfg_payload_step);
+      } else {
+        cfg_payload_end = cfg_payload_len;
       }
       break;
     }
     case 'w':
-      cfg_warmups = atoi(optarg);
+      OPT_INT(optarg, cfg_warmups);
       break;
     case 'c':
-      cfg_ctpio_thresh = atoi(optarg);
+      OPT_UINT(optarg, cfg_ctpio_thresh);
       break;
     case 'p':
       cfg_ctpio_no_poison = 1;
@@ -740,52 +768,63 @@ int main(int argc, char* argv[])
       cfg_save_file = optarg;
       break;
     case 'm':
-      #define OPT_C(ch) (strchr(optarg, ch) != NULL)
-      cfg_mode =
-        OPT_C('c') * MODE_CTPIO |
-        OPT_C('a') * MODE_ALT |
-        OPT_C('p') * MODE_PIO |
-        OPT_C('d') * MODE_DMA;
+      cfg_mode = 0;
+      for( i = 0; i < strlen(optarg); ++i ) {
+        switch( optarg[i] ) {
+        case 'c': cfg_mode |= MODE_CTPIO; break;
+        case 'a': cfg_mode |= MODE_ALT; break;
+        case 'p': cfg_mode |= MODE_PIO; break;
+        case 'd': cfg_mode |= MODE_DMA; break;
+        default:
+          usage("Unknown mode '%c'", optarg[i]);
+        }
+      }
       break;
     case 't':
-      cfg_vi_flags |=
-        OPT_C('a') * EF_VI_TX_PUSH_ALWAYS |
-        OPT_C('d') * EF_VI_TX_PUSH_DISABLE;
-      #undef OPT_C
+      for( i = 0; i < strlen(optarg); ++i ) {
+        switch( optarg[i] ) {
+        case 'a': cfg_vi_flags |= EF_VI_TX_PUSH_ALWAYS; break;
+        case 'd': cfg_vi_flags |= EF_VI_TX_PUSH_DISABLE; break;
+        default:
+          usage("Unknown mode '%c'", optarg[i]);
+        }
+      }
       break;
     case '?':
-      usage();
+      usage(NULL);
     default:
       TEST(0);
     }
+
+  #undef OPT_INT
+  #undef OPT_UINT
 
   argc -= optind;
   argv += optind;
 
   if( argc != 2 && argc != 3 )
-    usage();
+    usage(NULL);
   if( ! parse_interface(argv[1], &rx_ifindex) )
-    usage();
+    usage("Unable to parse RX interface '%s': %s", argv[1], strerror(errno));
 
   if( argc == 3 && ! parse_interface(argv[2], &tx_ifindex) )
-    usage();
+    usage("Unable to parse TX interface '%s': %s", argv[2], strerror(errno));
 
   if( cfg_payload_len > MAX_UDP_PAYLEN || cfg_payload_end > MAX_UDP_PAYLEN ) {
     fprintf(stderr, "WARNING: UDP payload length %d is larger than standard "
             "MTU\n", cfg_payload_len);
   }
   if( cfg_payload_step == 0 && cfg_payload_len != cfg_payload_end )
-    usage();
+    usage("Please provide payload step");
   if( (cfg_payload_step < 0 && cfg_payload_end > cfg_payload_len) ||
       (cfg_payload_step > 0 && cfg_payload_end < cfg_payload_len) ) {
-    fprintf(stderr, "Max payload size not reachable from min\n");
-    usage();
+    usage("Max payload size not reachable from min");
   }
 
   if( strcmp(argv[0], "ping") == 0 )
     ping = true;
   else if( strcmp(argv[0], "pong") != 0 )
-    usage();
+    usage("Unknown command '%s'", argv[0]);
 
   TRY(ef_driver_open(&driver_handle));
   TRY(ef_vi_capabilities_get(driver_handle, rx_ifindex,
