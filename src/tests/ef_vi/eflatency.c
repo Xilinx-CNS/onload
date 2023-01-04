@@ -51,6 +51,7 @@ enum mode {
   MODE_DEFAULT = MODE_CTPIO | MODE_ALT | MODE_PIO | MODE_DMA
 };
 static unsigned         cfg_mode = MODE_DEFAULT;
+static enum ef_vi_flags cfg_vi_flags = 0;
 
 
 #define N_RX_BUFS	256u
@@ -561,7 +562,7 @@ static const test_t* do_init(int ifindex, int mode,
   ef_vi* vi = &latency_vi->vi;
   enum ef_pd_flags pd_flags = 0;
   ef_filter_spec filter_spec;
-  enum ef_vi_flags vi_flags = EF_VI_RX_EXCLUSIVE;
+  enum ef_vi_flags vi_flags = cfg_vi_flags | EF_VI_RX_EXCLUSIVE;
   int rc;
   const test_t* t;
   unsigned long capability_val;
@@ -686,6 +687,7 @@ static CI_NORETURN usage(void)
   fprintf(stderr, "  -p                  - CTPIO no-poison mode\n");
   fprintf(stderr, "  -m <modes>          - allow mode of the set: [c]tpio, \n");
   fprintf(stderr, "                      [pio], [a]lternatives, [d]ma, [x]dp\n");
+  fprintf(stderr, "  -t <modes>          - set TX_PUSH: [a]lways, [d]isable\n");
   fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
   fprintf(stderr, "\n");
   exit(1);
@@ -708,7 +710,7 @@ int main(int argc, char* argv[])
 
   printf("# ef_vi_version_str: %s\n", ef_vi_version_str());
 
-  while( (c = getopt (argc, argv, "n:s:w:c:pm:o:")) != -1 )
+  while( (c = getopt (argc, argv, "n:s:w:c:pm:t:o:")) != -1 )
     switch( c ) {
     case 'n':
       cfg_iter = atoi(optarg);
@@ -744,6 +746,11 @@ int main(int argc, char* argv[])
         OPT_C('a') * MODE_ALT |
         OPT_C('p') * MODE_PIO |
         OPT_C('d') * MODE_DMA;
+      break;
+    case 't':
+      cfg_vi_flags |=
+        OPT_C('a') * EF_VI_TX_PUSH_ALWAYS |
+        OPT_C('d') * EF_VI_TX_PUSH_DISABLE;
       #undef OPT_C
       break;
     case '?':
