@@ -40,6 +40,18 @@
 #
 # If you want to specify a build profile add:
 #    --define "build_profile <profile>"
+#
+# By default, the OpenOnload build system enables the auxiliary bus and EFCT
+# support if build prerequisites are available on a build machine or implicitly
+# disables them otherwise. The user can adjust this behaviour by setting or
+# resetting the have_efct macro.
+#
+# If you want to disable EFCT support explicitly:
+#    --define "have_efct 0"
+#
+# If you want to fail the OpenOnload build if either AUX or EFCT
+# is available at build time:
+#    --define "have_efct 1"
 
 
 %define pkgversion 20100910
@@ -146,6 +158,15 @@ Provides	: openonload-kmod = %{kpkgver}_%{version}-%{release}
 Provides	: sfc-kmod-symvers = %{kernel}
 AutoReqProv	: no
 
+%if 0%{?have_efct:%have_efct}
+BuildRequires	: kernel-module-xilinx-efct-%{dist}-%{kernel}
+
+%if "%{dist}" == ".el7"
+BuildRequires	: kernel-module-auxiliary-%{dist}-%{kernel} >= 1.0.3.0
+Requires	: kernel-module-auxiliary-%{dist}-%{kernel} >= 1.0.3.0
+%endif
+%endif
+
 %description kmod-%{kverrel}
 OpenOnload is a high performance user-level network stack.  Please see
 www.openonload.org for more information.
@@ -179,6 +200,7 @@ This package comprises the kernel module components of OpenOnload.
 }
 
 export KPATH=%{kpath}
+export HAVE_EFCT=%{?have_efct:%have_efct}
 %ifarch x86_64
 ./scripts/onload_build %{?build_profile:--build-profile %build_profile} \
   --kernelver "%{kernel}" %{?debug:--debug}
