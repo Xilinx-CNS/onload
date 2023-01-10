@@ -114,6 +114,8 @@ efrm_vi_resource_tx_flush_done(struct efrm_vi *virs, bool *completed)
 			  __FUNCTION__, virs->rs.rs_instance);	
 }
 
+static void efrm_vi_resource_process_flushes(struct efrm_nic *efrm_nic,
+                                             bool *completed);
 void efrm_vi_rm_may_complete_flushes(struct efrm_nic *efrm_nic);
 
 static void
@@ -143,10 +145,12 @@ __efrm_vi_resource_issue_flush(struct efrm_vi *virs, int queue, bool *completed)
 	/* If the VI was shut down forcibly, its queues have been flushed
 	 * already.  Simulate the completion to keep our state consistent. */
 	if (atomic_read(&virs->shut_down_flags) & efrm_vi_shut_down_flag(queue)) {
-		if (queue == EFHW_TXQ)
+		if (queue == EFHW_TXQ) {
 			efrm_vi_resource_tx_flush_done(virs, completed);
-		else
+		} else {
 			efrm_vi_resource_rx_flush_done(virs, completed);
+			efrm_vi_resource_process_flushes(efrm_nic, completed);
+		}
 		efrm_vi_rm_may_complete_flushes(efrm_nic);
 		return;
 	}
@@ -154,18 +158,23 @@ __efrm_vi_resource_issue_flush(struct efrm_vi *virs, int queue, bool *completed)
 	/* Drop spin lock as efhw_nic_* calls can block */
 	spin_unlock_bh(&efrm_vi_manager->rm.rm_lock);
 
-	EFRM_TRACE("%s: %s queue %d flush requested for nic %d",
+	rc = efrm_vi_q_flush(virs, queue);
+	EFRM_TRACE("%s: %s queue %d flush requested for nic %d rc %d",
 		   __FUNCTION__, queue == EFHW_TXQ ? "tx" : "rx",
-                   instance, efrm_nic->efhw_nic.index);
-        rc = efrm_vi_q_flush(virs, queue);
+		   instance, efrm_nic->efhw_nic.index, rc);
 
 	spin_lock_bh(&efrm_vi_manager->rm.rm_lock);
 
 	if (rc != 0) {
-		if (queue == EFHW_TXQ)
+		if (queue == EFHW_TXQ) {
 			efrm_vi_resource_tx_flush_done(virs, completed);
-		else
+		} else {
 			efrm_vi_resource_rx_flush_done(virs, completed);
+
+			/* A failed RX flush request potentially releases a HW
+			 * slot giving a chance to process the waiting list. */
+			efrm_vi_resource_process_flushes(efrm_nic, completed);
+		}
 		efrm_vi_rm_may_complete_flushes(efrm_nic);
 	}
 	if (!q->flushing)
