@@ -4,7 +4,9 @@
 
 set -o noglob
 
-trap "pkill -P $$" SIGTERM
+# on exiting or being killed, make sure we clean up child processes to avoid ghost
+#  tcpdump/onload_tcpdump.bin processes causing issues.
+trap "pkill -P $$" SIGINT SIGKILL SIGTERM EXIT
 
 usage() {
   script=$(basename $0)
@@ -117,13 +119,12 @@ else
     # Exit scenarios:
     # - onload_tcpdump.bin finishes; tcpdump gets EOF; exit
     # - onload_tcpdump.bin killed by signal (^C or whatever);
-    #   tcpdump gets EOF; exit:
-    #   * take care that tcpdump is not killed by ^C: use setsid
-    # - tcpdump prints error (incorrect pcap expression or anything);
-    #   onload_tcpdump.bin is killed by SIGHUP.
-    # - onload_tcpdump is killed: trap signal and pkill all children
+    #     tcpdump gets EOF; exit:
+    #     * take care that tcpdump is not killed by ^C: use setsid
+    # - tcpdump exits with error (incorrect pcap expression or anything);
+    #     onload_tcpdump.bin is killed; exit
+    # - onload_tcpdump is killed: trap signal and pkill all children; exit
     onload_tcpdump.bin $both_opts $onload_opts $stack_names_or_ids | \
-        ( setsid tcpdump -r- $w_opt $both_opts $tcpdump_opts || \
-        ( pgrep --parent $$ onload_tcpdump. | xargs kill -HUP ) ) &
+        (setsid -wf tcpdump -r- $w_opt $both_opts $tcpdump_opts || pkill -P $$) &
     wait
 fi
