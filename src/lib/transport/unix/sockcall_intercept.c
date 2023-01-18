@@ -2816,7 +2816,7 @@ OO_INTERCEPT(void, _exit, (int status))
 
   /* Internal libc call to _exit(2) is not intercepted, so we don't get here
    * if the app calls exit(3).  In the case of gracious exit() we call
-   * oo_exit_hook() graciously, via _fini().
+   * oo_exit_hook() graciously, via exit_fn().
    */
   oo_exit_hook(status << 8);
   return ci_sys__exit(status);

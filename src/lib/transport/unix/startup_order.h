@@ -4,6 +4,9 @@
 /* First of all, allow to use ci_log */
 STARTUP_ITEM(CITP_INIT_LOGGING, citp_setup_logging_early)
 
+/* Register the library exit handler */
+STARTUP_ITEM(CITP_INIT_ATEXIT, citp_atexit_init)
+
 /* resolve ci_sys_* symbols for a 'basic' set of syscalls, sufficient to get
  * other early-init libraries functional */
 STARTUP_ITEM(CITP_INIT_BASIC_SYSCALLS, citp_basic_syscall_init)

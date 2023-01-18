@@ -99,7 +99,7 @@ void oo_exit_hook(int status)
   /* exit status as in waitpid:
    *   (exit_status << 8) | exit_sig
    * combined with OO_EXIT_STATUS_SET when really exiting.
-   * _fini() exits with status=0, so we have to mark it somehow.
+   * exit_fn() exits with status=0, so we have to mark it somehow.
    */
 #define OO_EXIT_STATUS_SET 0x10000
   static ci_uint32 exit_status;
@@ -122,7 +122,7 @@ void oo_exit_hook(int status)
     }
     else {
       /* This hook have already been called, from either _exit() or signal.
-       * Now we are in _fini(): return.
+       * Now we are in exit_fn(): return.
        */
       return;
     }

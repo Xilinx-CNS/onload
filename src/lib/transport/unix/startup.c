@@ -616,6 +616,19 @@ static int citp_transport_register(void)
 }
 
 
+static void exit_fn(int, void*);
+
+
+static int citp_atexit_init(void)
+{
+  /* atexit() would be a better alternative, but it requires __dso_handle in
+   * the absence of the CRT library, e.g. when built with -nostartfiles like
+   * this file/library. Stick to on_exit() until we come across runtime where
+   * it's not available. */
+  return on_exit(exit_fn, NULL);
+}
+
+
 int _citp_do_init_inprogress = 0;
 
 typedef int (*cipt_init_func_t)(void);
@@ -676,7 +689,7 @@ void _init(void)
 }
 
 
-void _fini(void)
+static void exit_fn(int status, void* arg)
 {
   Log_S(log("citp: finishing up"));
   oo_exit_hook(0);
