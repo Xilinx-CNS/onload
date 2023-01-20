@@ -83,6 +83,5 @@ exit 0
 echo -e
 echo -e "Uninstall of openonload module (version %{pkgversion}) beginning:"
 dkms remove -m openonload -v %{pkgversion} --all --rpm_safe_upgrade
-onload_tool unload
 onload_uninstall
 exit 0
