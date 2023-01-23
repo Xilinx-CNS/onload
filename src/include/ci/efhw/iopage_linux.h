@@ -131,18 +131,6 @@ static inline caddr_t efhw_iopages_ptr(struct efhw_iopages *p)
 	return p->ptr;
 }
 
-static inline unsigned efhw_iopages_pfn(struct efhw_iopages *p, int page_i)
-{
-	if (p->phys_cont) {
-		struct page *page = virt_to_page(p->ptr);
-		int order = compound_order(page);
-
-		return page_to_pfn(page) + (page_i & ((1 << order) - 1));
-	} else {
-		return vmalloc_to_pfn(p->ptr + (page_i << PAGE_SHIFT));
-	}
-}
-
 static inline dma_addr_t efhw_iopages_dma_addr(struct efhw_iopages *p,
 					       int page_i)
 {
