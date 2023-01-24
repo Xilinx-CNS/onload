@@ -563,7 +563,7 @@ static int xdp_create_ring(struct socket* sock,
 
   if( rc >= 0 ) {
     ring_base = phys_to_virt(pfn << PAGE_SHIFT);
-    rc = efhw_page_map_add_lump(page_map, ring_base, pages);
+    rc = efhw_page_map_add_lump(page_map, ring_base, pages, 1);
   }
 
   vm_munmap(addr, map_size);
