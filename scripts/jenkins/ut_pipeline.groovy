@@ -104,7 +104,7 @@ void doDeveloperBuild(String build_profile=null) {
                     echo("Checking out Aux")
                     aux = checkout([
                       $class: 'GitSCM',
-                      branches: [[name: 'master']],
+                      branches: [[name: 'v1.0.2.0']],
                       userRemoteConfigs: [[url: 'ssh://git@github.com/Xilinx-CNS/cns-auxiliary-bus.git']]
                     ])
                   }
