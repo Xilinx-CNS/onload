@@ -78,7 +78,18 @@ void oo_signal_terminate(int signum)
 
 static void sighandler_sigonload(int sig, siginfo_t* info, void* context)
 {
-  /* The signal was sent solely in order to wake up the app, so nothing to do */
+  /* This signal is raised by dup2()/dup3() to interrupt blocking operations
+   * such as recv(). It comes from pthread_kill(), via the tgkill() syscall,
+   * which uses the SI_TKILL code. The assertion can catch some unexpected
+   * uses of the signal.
+   */
+  ci_assert_equal(info->si_code, SI_TKILL);
+
+  /* Ensure that blocking operations are not restarted */
+  ci_atomic32_or(&citp_signal_get_specific_inited()->c.aflags,
+                 OO_SIGNAL_FLAG_HAVE_PENDING);
+  ci_atomic32_and(&citp_signal_get_specific_inited()->c.aflags,
+                  ~OO_SIGNAL_FLAG_NEED_RESTART);
 }
 
 /* Hook to be called at gracious exit */
