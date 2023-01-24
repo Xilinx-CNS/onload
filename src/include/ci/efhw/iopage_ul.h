@@ -96,9 +96,6 @@ struct efhw_iopages {
 ci_inline char* efhw_iopages_ptr(struct efhw_iopages* p)
 { return p->kva; }
 
-ci_inline unsigned efhw_iopages_pfn(struct efhw_iopages* p, int page_i)
-{ return (unsigned) (__pa(p->kva) >> CI_PAGE_SHIFT) + page_i; }
-
 ci_inline dma_addr_t efhw_iopages_dma_addr(struct efhw_iopages* p, int page_i)
 { return p->dma_addr + (page_i << CI_PAGE_SHIFT); }
 
