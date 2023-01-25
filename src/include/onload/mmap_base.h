@@ -30,20 +30,14 @@
 #define OO_MMAP_TYPE(offset) \
     (((offset) >> OO_MMAP_TYPE_SHIFT) & OO_MMAP_TYPE_MASK)
 
-typedef uint64_t oo_mmap_id_t;
-typedef uint8_t oo_mmap_type_t;
-
-/* Note that, in order to pass 64-bit offsets around, both UL and kernel have
- * to be 64-bit.  This means in practice that Onload proper is limited to using
- * 32-bit offsets, but that the control plane can use the full width. */
-static inline oo_mmap_id_t
+static inline uint64_t
 OO_MMAP_OFFSET_TO_MAP_ID(off_t offset)
 {
   return (uint64_t) offset >> OO_MMAP_ID_SHIFT;
 }
 
 static inline off_t
-OO_MMAP_MAKE_OFFSET(oo_mmap_type_t map_type, oo_mmap_id_t map_id)
+OO_MMAP_MAKE_OFFSET(uint8_t map_type, uint64_t map_id)
 {
   off_t offset = map_id << OO_MMAP_ID_SHIFT;
   offset |= ((off_t) map_type) << OO_MMAP_TYPE_SHIFT;

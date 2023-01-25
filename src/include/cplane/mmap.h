@@ -22,7 +22,7 @@
 #define CP_MMAP_TYPE_MASK          ((1ull << CP_MMAP_TYPE_WIDTH) - 1)
 #define CP_MMAP_PARAM_MASK         ((1ull << CP_MMAP_PARAM_WIDTH) - 1)
 
-typedef oo_mmap_id_t cp_mmap_type_t;
+typedef uint64_t cp_mmap_type_t;
 typedef uint32_t cp_mmap_param_t;
 
 static inline cp_mmap_type_t CP_MMAP_TYPE(uint64_t oo_mmap_type)
@@ -35,10 +35,10 @@ static inline cp_mmap_param_t CP_MMAP_PARAM(uint64_t oo_mmap_type)
   return (oo_mmap_type >> CP_MMAP_PARAM_SHIFT) & CP_MMAP_PARAM_MASK;
 }
 
-static inline oo_mmap_id_t
+static inline uint64_t
 CP_MAKE_MMAP_ID(cp_mmap_type_t map_type, cp_mmap_param_t param)
 {
-  return map_type | ((oo_mmap_id_t) param << CP_MMAP_PARAM_SHIFT);
+  return map_type | ((uint64_t) param << CP_MMAP_PARAM_SHIFT);
 }
 
 
@@ -58,7 +58,7 @@ CP_MMAP_MAKE_FWD_OFFSET(cp_fwd_table_id fwd_table_id)
    * prevented. */
   return CP_SHIM_MIB_BYTES;
 #else
-  oo_mmap_id_t oo_id = CP_MAKE_MMAP_ID(OO_MMAP_CPLANE_ID_FWD, fwd_table_id);
+  uint64_t oo_id = CP_MAKE_MMAP_ID(OO_MMAP_CPLANE_ID_FWD, fwd_table_id);
   return (OO_MMAP_TYPE_CPLANE << OO_MMAP_TYPE_SHIFT) |
          (oo_id << OO_MMAP_ID_SHIFT);
 #endif
@@ -73,7 +73,7 @@ CP_MMAP_MAKE_FWD_RW_OFFSET(cp_fwd_table_id fwd_table_id)
    * prevented. */
   return CP_SHIM_MIB_BYTES + CP_SHIM_FWD_BYTES;
 #else
-  oo_mmap_id_t oo_id = CP_MAKE_MMAP_ID(OO_MMAP_CPLANE_ID_FWD_RW, fwd_table_id);
+  uint64_t oo_id = CP_MAKE_MMAP_ID(OO_MMAP_CPLANE_ID_FWD_RW, fwd_table_id);
   return (OO_MMAP_TYPE_CPLANE << OO_MMAP_TYPE_SHIFT) |
          (oo_id << OO_MMAP_ID_SHIFT);
 #endif
