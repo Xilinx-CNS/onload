@@ -411,7 +411,7 @@ void libstack_stack_mapping_print(void)
     netif_t* netif = stack_attached(sm->stack_id);
 
     if( netif == NULL ) {
-      ci_log("unaccessable");
+      ci_log("inaccessible");
       continue;
     }
     if( ! netif->ni.state )
