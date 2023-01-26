@@ -731,7 +731,7 @@ static vm_fault_t vm_op_fault(
   struct vm_area_struct *vma = vmf->vma;
 #endif
   struct oo_cplane_handle* cp = cp_get_vm_data(vma)->cp;
-  oo_mmap_id_t oo_mmap_id = OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma));
+  uint64_t oo_mmap_id = OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma));
   cp_mmap_type_t cp_mmap_type = CP_MMAP_TYPE(oo_mmap_id);
 
   /* Is the server running?  It is silly to use cplane when server has
@@ -1294,7 +1294,7 @@ oo_cplane_mmap(struct file* file, struct vm_area_struct* vma)
   struct oo_cplane_handle* cp;
   struct cp_vm_private_data* cp_vm_data;
   int rc;
-  oo_mmap_id_t oo_mmap_id = OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma));
+  uint64_t oo_mmap_id = OO_MMAP_OFFSET_TO_MAP_ID(VMA_OFFSET(vma));
   cp_mmap_type_t cp_mmap_type = CP_MMAP_TYPE(oo_mmap_id);
   cp_mmap_param_t cp_mmap_param = CP_MMAP_PARAM(oo_mmap_id);
 
