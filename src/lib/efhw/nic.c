@@ -131,6 +131,8 @@ int efhw_nondl_device_type_init(struct efhw_device_type *dt)
 {
 	*dt = (struct efhw_device_type) {
 		.arch = EFHW_ARCH_AF_XDP,
+		.variant = 'X',
+		.revision = 0,
 	};
 	return 0;
 }
