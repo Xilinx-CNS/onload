@@ -68,7 +68,6 @@ efhw_iopages_alloc_phys_cont(struct device *dev, struct efhw_iopages *p,
 	for (i = 0; i < p->n_pages; ++i)
 		p->free_addrs[i] = base_dma_addr + (i << PAGE_SHIFT);
 
-	p->phys_cont = 1;
 	return 0;
 
 fail2:
@@ -105,7 +104,6 @@ efhw_iopages_alloc_kernel_cont(struct device *dev, struct efhw_iopages *p,
 		}
 	}
 
-	p->phys_cont = 0;
 	return 0;
 
 fail2:
@@ -189,15 +187,7 @@ void efhw_iopages_free(struct efhw_nic *nic, struct efhw_iopages *p)
 {
 	struct pci_dev *pci_dev = efhw_nic_get_pci_dev(nic);
 
-	if (p->phys_cont) {
-		unsigned order = __ffs64(p->n_pages);
-		if( pci_dev ) {
-			dma_unmap_page(&pci_dev->dev, p->free_addrs[0],
-				       PAGE_SIZE << order, DMA_BIDIRECTIONAL);
-		}
-
-		free_pages((unsigned long)p->ptr, order);
-	} else {
+	if (is_vmalloc_addr(p->ptr)) {
 		int i;
 		if( pci_dev ) {
 			for (i = 0; i < p->n_pages; ++i)
@@ -209,6 +199,14 @@ void efhw_iopages_free(struct efhw_nic *nic, struct efhw_iopages *p)
 		schedule();
 #endif
 		vfree(p->ptr);
+	} else {
+		unsigned order = __ffs64(p->n_pages);
+		if( pci_dev ) {
+			dma_unmap_page(&pci_dev->dev, p->free_addrs[0],
+				       PAGE_SIZE << order, DMA_BIDIRECTIONAL);
+		}
+
+		free_pages((unsigned long)p->ptr, order);
 	}
 	kfree(p->dma_addrs);
 	kfree(p->free_addrs);

@@ -108,14 +108,13 @@ static inline void efhw_page_init_from_va(struct efhw_page *p, void *va)
  *
  * struct efhw_iopages: A set of pages that are contiguous in the kernel
  * address space, may be mapped to user-level and may be DMA mapped.  Not
- * physically contiguous.
+ * necessarily physically contiguous.
  *
  *--------------------------------------------------------------------*/
 
 struct efhw_iopages {
 	void *ptr;
 	unsigned n_pages;
-	unsigned phys_cont;
 	/* For NICs which provide a pci_dev for DMA mapping these are the
 	 * DMA mapped (free_addrs) and translated (dma_addrs) page addresses
 	 * for this memory.
@@ -163,12 +162,11 @@ struct efhw_page_map {
 	struct efhw_page_map_lump {
 	  void* ptr;
 	  unsigned n_pages;
-	  unsigned phys_cont;
 	} lumps[EFHW_PAGE_MAP_MAX_LUMPS];
 };
 
 static inline int
-efhw_page_map_add_lump(struct efhw_page_map* map, void* ptr, long n_pages, unsigned phys_cont)
+efhw_page_map_add_lump(struct efhw_page_map* map, void* ptr, long n_pages)
 {
 	struct efhw_page_map_lump* lump = &map->lumps[map->n_lumps];
 
@@ -177,7 +175,6 @@ efhw_page_map_add_lump(struct efhw_page_map* map, void* ptr, long n_pages, unsig
 
 	lump->ptr = ptr;
 	lump->n_pages = n_pages;
-	lump->phys_cont = phys_cont;
 
 	map->n_lumps += 1;
 	map->n_pages += n_pages;
@@ -189,15 +186,14 @@ efhw_page_map_add_lump(struct efhw_page_map* map, void* ptr, long n_pages, unsig
 static inline int
 efhw_page_map_add_page(struct efhw_page_map* map, struct efhw_page* page)
 {
-	return efhw_page_map_add_lump(map, efhw_page_ptr(page), 1, 1);
+	return efhw_page_map_add_lump(map, efhw_page_ptr(page), 1);
 }
 
 static inline int
 efhw_page_map_add_pages(struct efhw_page_map* map, struct efhw_iopages* pages)
 {
 	return efhw_page_map_add_lump(map, efhw_iopages_ptr(pages),
-		                           efhw_iopages_n_pages(pages),
-								   pages->phys_cont);
+		                           efhw_iopages_n_pages(pages));
 }
 
 static inline struct page*
@@ -208,11 +204,8 @@ efhw_page_map_page(struct efhw_page_map* map, int page_i)
 		struct efhw_page_map_lump* lump = &map->lumps[i];
 
 		if (page_i < lump->n_pages) {
-			if (lump->phys_cont) {
-				return virt_to_page((char*)lump->ptr + (page_i << PAGE_SHIFT));
-			} else {
-				return vmalloc_to_page((char*)lump->ptr + (page_i << PAGE_SHIFT));
-			}
+			void* addr = (char*)lump->ptr + (page_i << PAGE_SHIFT);
+			return is_vmalloc_addr(addr) ? vmalloc_to_page(addr) : virt_to_page(addr);
 		}
 			
 		page_i -= lump->n_pages;
