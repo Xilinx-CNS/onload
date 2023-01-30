@@ -445,13 +445,6 @@ uint32_t efrm_pd_get_nic_client_id(struct efrm_pd *pd)
 EXPORT_SYMBOL(efrm_pd_get_nic_client_id);
 
 
-int efrm_pd_share_dma_mapping(struct efrm_pd *pd, struct efrm_pd *pd1)
-{
-	return false;
-}
-EXPORT_SYMBOL(efrm_pd_share_dma_mapping);
-
-
 int
 efrm_pd_has_vport(struct efrm_pd *pd)
 {

@@ -6228,23 +6228,12 @@ efab_tcp_helper_iobufset_map(tcp_helper_resource_t* trs,
 {
   ci_netif* ni = &trs->netif;
   int rc, intf_i;
-  struct efrm_pd *first_pd = NULL;
-  struct oo_iobufset *first_iobuf = NULL;
   int map_order = INT_MAX;
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     struct efrm_pd *pd = efrm_vi_get_pd(tcp_helper_vi(trs, intf_i));
     struct oo_iobufset *iobuf;
     int cur_map_order;
-
-    if( first_pd != NULL && efrm_pd_share_dma_mapping(first_pd, pd) ) {
-      ci_assert(first_iobuf);
-      all_out[intf_i] = first_iobuf;
-      o_iobufset_resource_ref(first_iobuf);
-      memcpy(&hw_addrs[intf_i * n_hw_pages], hw_addrs,
-             sizeof(hw_addrs[0]) * n_hw_pages);
-      continue;
-    }
 
     rc = oo_iobufset_resource_alloc(pages, pd, &iobuf,
                                     &hw_addrs[intf_i * n_hw_pages],
@@ -6257,10 +6246,6 @@ efab_tcp_helper_iobufset_map(tcp_helper_resource_t* trs,
     }
     map_order = CI_MIN(map_order, cur_map_order);
     all_out[intf_i] = iobuf;
-    if( first_pd == NULL ) {
-      first_pd = pd;
-      first_iobuf = iobuf;
-    }
   }
   if( page_order )
     *page_order = map_order;

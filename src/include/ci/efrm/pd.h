@@ -144,13 +144,6 @@ efrm_pd_get_nic_client_id(struct efrm_pd *pd);
 
 #define EFRM_NIC_CLIENT_ID_NONE (~0u)
 
-/* Return true if a mapping to one protection domain may be re-used by
- * another.  It happens when:
- * - DMA map is the same (for example, same IOMMU domain);
- * - buffer table is not used (physicall address mode).
- */
-int efrm_pd_share_dma_mapping(struct efrm_pd *pd, struct efrm_pd *pd1);
-
 /* Return true if this PD is using a non-default vport. */
 extern int
 efrm_pd_has_vport(struct efrm_pd *);
