@@ -436,8 +436,8 @@ static void oo_iobufset_free_memory(struct oo_iobufset *rs)
   kfree(rs);
 
 }
-static void
-oo_iobufset_resource_free(struct oo_iobufset *rs, int reset_pending)
+
+void oo_iobufset_resource_release(struct oo_iobufset *rs, int reset_pending)
 {
   efrm_pd_dma_unmap(rs->pd, rs->pages->n_bufs,
                     EFHW_GFP_ORDER_TO_NIC_ORDER(
@@ -450,14 +450,6 @@ oo_iobufset_resource_free(struct oo_iobufset *rs, int reset_pending)
   oo_iobufset_pages_release(rs->pages);
 
   oo_iobufset_free_memory(rs);
-}
-
-
-void
-oo_iobufset_resource_release(struct oo_iobufset *iobrs, int reset_pending)
-{
-  if (oo_atomic_dec_and_test(&iobrs->ref_count))
-    oo_iobufset_resource_free(iobrs, reset_pending);
 }
 
 static void put_user_fake(uint64_t v, uint64_t *p)
@@ -490,7 +482,6 @@ oo_iobufset_resource_alloc(struct oo_buffer_pages * pages, struct efrm_pd *pd,
     return -ENOMEM;
   iobrs->free_addrs = iobrs->dma_addrs + pages->n_bufs;
 
-  oo_atomic_set(&iobrs->ref_count, 1);
   iobrs->pd = pd;
   iobrs->pages = pages;
 

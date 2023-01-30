@@ -78,7 +78,6 @@ struct oo_buffer_pages {
 /*! Iobufset resource structture. */
 struct oo_iobufset {
   struct efrm_pd *pd;
-  oo_atomic_t ref_count;
   struct efrm_bt_collection buf_tbl_alloc;
   struct oo_buffer_pages *pages;   /*!< allocated memory */
   dma_addr_t *dma_addrs;            /*!< array of pages->n_buf entries */
@@ -122,11 +121,6 @@ ci_inline unsigned long oo_iobufset_pfn(struct oo_buffer_pages *pages, int offse
 ci_inline int oo_iobufset_npages(struct oo_buffer_pages *pages)
 {
   return pages->n_bufs;
-}
-
-ci_inline void o_iobufset_resource_ref(struct oo_iobufset *iobrs)
-{
-  oo_atomic_inc(&iobrs->ref_count);
 }
 
 /************** Alloc/free buffer ****************/
