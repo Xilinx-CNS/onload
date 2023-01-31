@@ -72,6 +72,10 @@ struct efrm_pd_owner_ids;
 #define EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID 0x4
 /* Try again without client IDs if the hardware fails it */
 #define EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID_OPT 0x8
+/*   EFRM_PD_ALLOC_CLUSTER indicates this pd will be used for a vi set. This
+ *       is only relevant for certain NIC HW.
+ */
+#define EFRM_PD_ALLOC_CLUSTER 0x10
 
 /* Allocate a protection domain.
  *

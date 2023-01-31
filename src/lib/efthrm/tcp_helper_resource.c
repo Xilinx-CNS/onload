@@ -1213,7 +1213,16 @@ static int allocate_pd(ci_netif* ni, struct vi_allocate_info* info,
     return rc;
   }
 
-  if( info->cluster == NULL ) {
+  if( info->cluster ) {
+    int hwport = ni->intf_i_to_hwport[info->intf_i];
+    ci_assert_ge(hwport, 0);
+    info->vi_set = info->cluster->thc_vi_set[hwport];
+  }
+  else {
+    info->vi_set = NULL;
+  }
+
+  if( info->cluster == NULL || !(nic->flags & NIC_FLAG_SHARED_PD) ) {
     rc = efrm_pd_alloc(&info->pd, info->client,
         ((info->ef_vi_flags & EF_VI_RX_PHYS_ADDR) ?
             EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE : 0) |
@@ -1226,12 +1235,8 @@ static int allocate_pd(ci_netif* ni, struct vi_allocate_info* info,
     }
     ci_assert(info->pd);
     info->release_pd = 1;
-    info->vi_set = NULL;
   }
   else {
-    int hwport = ni->intf_i_to_hwport[info->intf_i];
-    ci_assert_ge(hwport, 0);
-    info->vi_set = info->cluster->thc_vi_set[hwport];
     info->release_pd = 0;
     info->pd = efrm_vi_set_get_pd(info->vi_set);
   }

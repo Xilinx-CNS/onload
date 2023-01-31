@@ -177,6 +177,9 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
   int tproxy = flags & THC_FLAG_TPROXY;
   int hw_loopback_enable = flags & THC_FLAG_HW_LOOPBACK_ENABLE;
   tcp_helper_cluster_t* thc;
+  int pd_flags = EFRM_PD_ALLOC_CLUSTER |
+                 (phys_buffer_mode ? EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE : 0) |
+                 (hw_loopback_enable ? EFRM_PD_ALLOC_FLAG_HW_LOOPBACK : 0);
 
   ci_assert(mutex_is_locked(&thc_init_mutex));
   ci_assert(mutex_is_locked(&thc_mutex));
@@ -252,9 +255,8 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
     if( oo_nics[i].efrm_client == NULL ||
         ! oo_check_nic_suitable_for_onload(&(oo_nics[i])) )
       continue;
-    if( (rc = efrm_pd_alloc(&pd, oo_nics[i].efrm_client,
-                (phys_buffer_mode ? EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE : 0) |
-                (hw_loopback_enable ? EFRM_PD_ALLOC_FLAG_HW_LOOPBACK : 0))) )
+    rc = efrm_pd_alloc(&pd, oo_nics[i].efrm_client, pd_flags);
+    if( rc != 0 )
       goto fail;
     /*
      * Currently we move on if we fail to get special tproxy RSS_MODE on

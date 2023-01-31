@@ -182,6 +182,7 @@ efct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_VLAN_FILTERS
              | NIC_FLAG_RX_FILTER_ETHERTYPE
              | NIC_FLAG_HW_MULTICAST_REPLICATION
+             | NIC_FLAG_SHARED_PD
              ;
   efct_nic_tweak_hardware(nic);
   return 0;

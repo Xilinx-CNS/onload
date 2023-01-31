@@ -1574,7 +1574,8 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	pd = NULL;
 	if (attr->pd != NULL)
 		pd = attr->pd;
-	if (attr->vi_set != NULL)
+	if ((attr->vi_set != NULL) &&
+	    (client->nic->flags & NIC_FLAG_SHARED_PD))
 		pd = attr->vi_set->pd;
 	if (pd == NULL) {
 		/* Legacy compatibility.  Create a [pd] from [client]. */
