@@ -173,7 +173,7 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
   int rc, i;
   int rss_flags;
   struct efrm_pd* pd;
-  int packet_buffer_mode = flags & THC_FLAG_PACKET_BUFFER_MODE;
+  bool phys_buffer_mode = flags & THC_FLAG_PHYS_BUFFER_MODE;
   int tproxy = flags & THC_FLAG_TPROXY;
   int hw_loopback_enable = flags & THC_FLAG_HW_LOOPBACK_ENABLE;
   tcp_helper_cluster_t* thc;
@@ -253,7 +253,7 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
         ! oo_check_nic_suitable_for_onload(&(oo_nics[i])) )
       continue;
     if( (rc = efrm_pd_alloc(&pd, oo_nics[i].efrm_client,
-                (packet_buffer_mode ? EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE : 0) |
+                (phys_buffer_mode ? EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE : 0) |
                 (hw_loopback_enable ? EFRM_PD_ALLOC_FLAG_HW_LOOPBACK : 0))) )
       goto fail;
     /*
@@ -1110,8 +1110,8 @@ int tcp_helper_cluster_from_cluster(tcp_helper_resource_t* thr)
 static int tcp_helper_cluster_thc_flags(const ci_netif_config_opts* ni_opts)
 {
   int flags =
-    (ni_opts->packet_buffer_mode ?
-     THC_FLAG_PACKET_BUFFER_MODE : 0) |
+    (ni_opts->packet_buffer_mode & CITP_PKTBUF_MODE_PHYS ?
+     THC_FLAG_PHYS_BUFFER_MODE : 0) |
     (ni_opts->mcast_send & CITP_MCAST_SEND_FLAG_EXT ?
      THC_FLAG_HW_LOOPBACK_ENABLE : 0);
   int maybe_prealloc_lports = ni_opts->tcp_shared_local_ports_per_ip ?

@@ -103,7 +103,7 @@ typedef struct tcp_helper_cluster_s {
   uid_t                           thc_keuid;
   ci_dllist                       thc_tlos;
 
-#define THC_FLAG_PACKET_BUFFER_MODE 0x1
+#define THC_FLAG_PHYS_BUFFER_MODE 0x1
 #define THC_FLAG_HW_LOOPBACK_ENABLE 0x2
 
 /* Various RSS hash settings, note that they are targetted at TCP. */
