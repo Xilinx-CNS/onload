@@ -19,6 +19,9 @@
 #include <ci/internal/pio_buddy.h>
 #include "tcp_tx.h"
 
+#ifndef __KERNEL__
+#include <limits.h>
+#endif
 
 #if OO_DO_STACK_POLL
 #define LPF "TCP TX "
@@ -2063,7 +2066,8 @@ int ci_tcp_send_challenge_ack(ci_netif* netif, ci_tcp_state* ts,
     netif->state->challenge_ack_num = 0;
   }
   if( netif->state->challenge_ack_num >=
-      NI_CONF(netif).tconst_challenge_ack_limit ) {
+      NI_CONF(netif).tconst_challenge_ack_limit &&
+      NI_OPTS(netif).challenge_ack_limit != INT_MAX ) {
     CITP_STATS_NETIF_INC(netif, challenge_ack_limited);
     return 0;
   }
