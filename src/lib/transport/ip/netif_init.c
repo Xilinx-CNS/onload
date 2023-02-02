@@ -606,14 +606,14 @@ void ci_netif_config_opts_rangecheck(ci_netif_config_opts* opts)
   _min = (type)(minimum); /* about silly comparisons          */          \
   if (_val > _max) {                                                      \
     ci_log("config: "CI_CFG_MSG" - option " #name                         \
-           " (%"CI_PRIu64") larger than maximum " #maximum" (%"CI_PRIu64")",		  \
-           (ci_uint64)_val, (ci_uint64) _max);                                     \
+           " (%"CI_PRIu64") larger than maximum (%"CI_PRIu64")",          \
+           (ci_uint64)_val, (ci_uint64) _max);                            \
     CI_CFG_REDRESS(opts->name, _max);                                     \
   }                                                                       \
   if (_val < _min) {                                                      \
     ci_log("config: "CI_CFG_MSG" - option " #name                         \
-           " (%"CI_PRIu64") smaller than minimum " #minimum,		  \
-           (ci_uint64)_val);                                              \
+           " (%"CI_PRIu64") smaller than minimum (%"CI_PRIu64")",         \
+           (ci_uint64)_val, (ci_uint64) _min);                            \
     CI_CFG_REDRESS(opts->name, _min);                                     \
   }                                                                       \
 }                                               
