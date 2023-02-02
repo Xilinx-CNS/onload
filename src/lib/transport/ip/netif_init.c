@@ -24,6 +24,7 @@
 #ifndef __KERNEL__
 #include <cplane/cplane.h>
 #include <cplane/create.h>
+#include <limits.h>
 #include <net/if.h>
 #include <ci/internal/efabcfg.h>
 #if CI_CFG_PKTS_AS_HUGE_PAGES
@@ -922,8 +923,11 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   opts->dynack_thresh = CI_MAX(opts->dynack_thresh, opts->delack_thresh);
 #endif
 
-  if ( (s = getenv("EF_CHALLENGE_ACK_LIMIT")) )
+  if ( (s = getenv("EF_CHALLENGE_ACK_LIMIT")) ) {
+    ci_log("EF_CHALLENGE_ACK_LIMIT is deprecated, "
+           "use EF_INVALID_ACK_RATELIMIT instead");
     opts->challenge_ack_limit = atoi(s);
+  }
   if ( (s = getenv("EF_INVALID_ACK_RATELIMIT")) )
     opts->oow_ack_ratelimit = atoi(s);
 #if CI_CFG_FD_CACHING
