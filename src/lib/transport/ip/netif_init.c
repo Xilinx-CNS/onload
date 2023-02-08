@@ -2971,7 +2971,7 @@ int ci_netif_ctor(ci_netif* ni, ef_driver_handle fd, const char* stack_name,
   return 0;
 }
 
-#else  /* __KERNEL__ */
+#endif  /* __KERNEL__ */
 
 int ci_netif_set_rxq_limit(ci_netif* ni)
 {
@@ -3003,7 +3003,9 @@ int ci_netif_set_rxq_limit(ci_netif* ni)
                    "max_ring_pkts=%d rxq_cap=%d n_intf=%d",
                    N_PRI_ARGS(ni), NI_OPTS(ni).rxq_limit, fill_limit,
                    max_ring_pkts, rxq_cap, n_intf));
+#ifdef __KERNEL__
     ni->opts.rxq_limit = fill_limit;
+#endif
     ni->state->opts.rxq_limit = fill_limit;
   }
   if( ni->nic_n == 0 ) {
@@ -3029,6 +3031,7 @@ int ci_netif_set_rxq_limit(ci_netif* ni)
   return rc;
 }
 
+#ifdef __KERNEL__
 static void ci_netif_af_xdp_post_fill(ci_netif* ni)
 {
   /* some ZC UMEM implementation can take a jiffy to schedule HW rx ring refill */
