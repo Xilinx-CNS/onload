@@ -582,7 +582,7 @@ static void ci_netif_mem_pressure_exit_critical(ci_netif* ni)
 {
   ci_assert(OO_PP_IS_NULL(ni->state->mem_pressure_pkt_pool));
   ci_netif_mem_pressure_pkt_pool_fill(ni);
-  ni->state->rxq_limit = NI_OPTS(ni).rxq_limit;
+  ni->state->rxq_limit = ni->state->rxq_base_limit;
   ni->state->mem_pressure &= ~OO_MEM_PRESSURE_CRITICAL;
 }
 
@@ -599,7 +599,7 @@ int ci_netif_mem_pressure_try_exit(ci_netif* ni)
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     ef_vi* vi = ci_netif_vi(ni, intf_i);
-    pkts_needed += NI_OPTS(ni).rxq_limit - ef_vi_receive_fill_level(vi);
+    pkts_needed += ni->state->rxq_base_limit - ef_vi_receive_fill_level(vi);
   }
 
   if( NI_OPTS(ni).max_rx_packets - ni->state->n_rx_pkts < pkts_needed ||

@@ -1233,10 +1233,14 @@ struct ci_netif_state_s {
   /* Set if one or more descriptor rings is getting low on buffers. */
   ci_int32              rxq_low;
 
-  /* The currently enforced RXQ limit.  Usually this is the same as the
-   * rxq_limit config option, but can be reduced when suffering memory
-   * pressure.
-   */
+  /* The usual value of rxq_limit, based on EF_RXQ_LIMIT but subject
+   * to various constraints applied during initialisation. This value does
+   * not change; always use rxq_limit for the currently enforced limit
+   * which may be reduced while suffering memory pressure. */
+  ci_int32              rxq_base_limit;
+
+  /* The currently enforced RXQ limit.  Usually this is the same as
+   * rxq_base_limit but can be reduced when suffering memory pressure. */
   ci_int32              rxq_limit;
 
   /* Set when we're short of packet buffers in the RX rings. */

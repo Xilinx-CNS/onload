@@ -2977,6 +2977,7 @@ int ci_netif_set_rxq_limit(ci_netif* ni)
 {
   int intf_i, n_intf, max_ring_pkts, fill_limit;
   int rc = 0, rxq_cap = 0;
+  int rxq_limit = NI_OPTS(ni).rxq_limit;
 
   /* Ensure we use a sensible [rxq_limit] when packet buf constrained.
    * This is necessary to ensure that the first interface doesn't fill its
@@ -2997,27 +2998,24 @@ int ci_netif_set_rxq_limit(ci_netif* ni)
   fill_limit = rxq_cap;
   if( fill_limit * n_intf > max_ring_pkts )
     fill_limit = max_ring_pkts / n_intf;
-  if( fill_limit < NI_OPTS(ni).rxq_limit ) {
+  if( fill_limit < rxq_limit ) {
     if( fill_limit < rxq_cap )
       LOG_W(ci_log("WARNING: "N_FMT "RX ring fill level reduced from %d to %d "
                    "max_ring_pkts=%d rxq_cap=%d n_intf=%d",
-                   N_PRI_ARGS(ni), NI_OPTS(ni).rxq_limit, fill_limit,
+                   N_PRI_ARGS(ni), rxq_limit, fill_limit,
                    max_ring_pkts, rxq_cap, n_intf));
-#ifdef __KERNEL__
-    ni->opts.rxq_limit = fill_limit;
-#endif
-    ni->state->opts.rxq_limit = fill_limit;
+    rxq_limit = fill_limit;
   }
   if( ni->nic_n == 0 ) {
     /* we do not use .rxq_limit, but let's make all checkers happy */
-     NI_OPTS(ni).rxq_limit = CI_CFG_RX_DESC_BATCH;
+     rxq_limit = CI_CFG_RX_DESC_BATCH;
   }
-  else if( NI_OPTS(ni).rxq_limit < NI_OPTS(ni).rxq_min ) {
+  else if( rxq_limit < NI_OPTS(ni).rxq_min ) {
     /* Do not allow user to create a stack that is too severely
      * constrained.
      */
     LOG_E(ci_log("ERROR: "N_FMT "rxq_limit=%d is too small (rxq_min=%d)",
-                 N_PRI_ARGS(ni), NI_OPTS(ni).rxq_limit, NI_OPTS(ni).rxq_min);
+                 N_PRI_ARGS(ni), rxq_limit, NI_OPTS(ni).rxq_min);
           ci_log("HINT: Use a larger value for EF_RXQ_LIMIT or "
                  "EF_MAX_RX_PACKETS or EF_MAX_PACKETS"));
     rc = -ENOMEM;
@@ -3025,9 +3023,9 @@ int ci_netif_set_rxq_limit(ci_netif* ni)
      * failure to allocate more packet buffers.  So we must leave
      * [rxq_limit] with a legal value.
      */
-    NI_OPTS(ni).rxq_limit = 2 * CI_CFG_RX_DESC_BATCH + 1;
+    rxq_limit = 2 * CI_CFG_RX_DESC_BATCH + 1;
   }
-  ni->state->rxq_limit = NI_OPTS(ni).rxq_limit;
+  ni->state->rxq_limit = ni->state->rxq_base_limit = rxq_limit;
   return rc;
 }
 
@@ -3111,7 +3109,7 @@ int ci_netif_init_fill_rx_rings(ci_netif* ni)
    * are short of packet buffers, we don't fill some rings completely and
    * leave others empty.
    */
-  for( lim = CI_CFG_RX_DESC_BATCH; lim <= NI_OPTS(ni).rxq_limit;
+  for( lim = CI_CFG_RX_DESC_BATCH; lim <= ni->state->rxq_base_limit;
        lim += CI_CFG_RX_DESC_BATCH ) {
     ni->state->rxq_limit = lim;
     if( (rc = __ci_netif_init_fill_rx_rings(ni)) < 0 || ni->state->rxq_low ) {
@@ -3119,7 +3117,7 @@ int ci_netif_init_fill_rx_rings(ci_netif* ni)
       if( lim < NI_OPTS(ni).rxq_min )
         LOG_E(ci_log("%s: ERROR: Insufficient packet buffers to fill RX rings "
                      "(rxq_limit=%d rxq_low=%d rxq_min=%d)", __FUNCTION__,
-                     NI_OPTS(ni).rxq_limit, ni->state->rxq_low,
+                     ni->state->rxq_base_limit, ni->state->rxq_low,
                      NI_OPTS(ni).rxq_min));
 #if CI_CFG_PKTS_AS_HUGE_PAGES
       else if( NI_OPTS(ni).huge_pages == OO_IOBUFSET_FLAG_HUGE_PAGE_FORCE )
@@ -3139,7 +3137,7 @@ int ci_netif_init_fill_rx_rings(ci_netif* ni)
      * packets as indicated by EF_MIN_FREE_PACKETS */
     ci_netif_pkt_reserve_free(ni, pkt_list, n_reserved);
   }
-  ni->state->rxq_limit =  NI_OPTS(ni).rxq_limit;
+  ni->state->rxq_limit = ni->state->rxq_base_limit;
 
 #if CI_CFG_PKTS_AS_HUGE_PAGES
   /* Initial packets allocated: allow other packets to be in non-huge pages

@@ -6217,7 +6217,7 @@ efab_tcp_helper_no_more_bufs(tcp_helper_resource_t* trs)
                  ci_log(FN_FMT "New limits: max_packets=%d rx=%d tx=%d "
                         "rxq_limit=%d", FN_PRI_ARGS(ni),
                         NI_OPTS(ni).max_packets, NI_OPTS(ni).max_rx_packets,
-                        NI_OPTS(ni).max_tx_packets, NI_OPTS(ni).rxq_limit));
+                        NI_OPTS(ni).max_tx_packets, ni->state->rxq_base_limit));
 }
 
 

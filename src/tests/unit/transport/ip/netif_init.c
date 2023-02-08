@@ -47,7 +47,7 @@ static void test_ci_netif_set_rxq_limit_(
   rc = ci_netif_set_rxq_limit(ni);
 
   CHECK(rc, ==, expect_rc);
-  STATE_CHECK(ns, opts.rxq_limit, expect_rxq_limit);
+  STATE_CHECK(ns, rxq_base_limit, expect_rxq_limit);
   STATE_CHECK(ns, rxq_limit, expect_rxq_limit);
 
   STATE_FREE(ni);
