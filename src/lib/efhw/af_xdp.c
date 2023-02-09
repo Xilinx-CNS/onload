@@ -1074,11 +1074,6 @@ static bool af_xdp_accept_vi_constraints(struct efhw_nic *nic, int low,
 {
 	struct efhw_vi_constraints *avc = arg;
 
-	/* More than one VI or RSS support request for AF_XDP
-	 * means a bug somewhere in the call chain. */
-	EFHW_ASSERT(avc->min_vis_in_set == 1);
-	EFHW_ASSERT(!avc->has_rss_context);
-
 	if( avc->channel >= 0 )
 		return avc->channel == low;
 
@@ -1402,7 +1397,59 @@ static int
 af_xdp_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
 		 u32 efhw_rss_mode, int num_qs, u32 *rss_context_out)
 {
-	return -ENOSYS;
+	struct net_device *dev = nic->net_dev;
+	int rc = 0;
+	const struct ethtool_ops *ops;
+
+	EFHW_ASSERT(efhw_rss_mode == EFHW_RSS_MODE_DEFAULT);
+
+	/* We enter the function with rtnl held */
+	EFHW_ASSERT(rtnl_is_locked());
+
+	ops = dev->ethtool_ops;
+	if (!ops->get_rxfh_key_size) {
+		EFHW_WARN("%s: %s does not support `get_rxfh_key_size` operation",
+							__FUNCTION__, dev->name);
+		rc = -EOPNOTSUPP;
+		goto unlock_out;
+	}
+	if (ops->get_rxfh_key_size(dev) != EFRM_RSS_KEY_LEN) {
+		EFHW_ERR("%s: ERROR: Onload does not support this device's RSS hash key size", __FUNCTION__);
+		rc = -ENOSYS;
+		goto unlock_out;
+	}
+
+	if (!ops->get_rxfh_indir_size) {
+		EFHW_WARN("%s: %s does not support `get_rxfh_indir_size` operation",
+							__FUNCTION__, dev->name);
+		rc = -EOPNOTSUPP;
+		goto unlock_out;
+	}
+	if (ops->get_rxfh_indir_size(dev) != EFRM_RSS_INDIRECTION_TABLE_LEN) {
+		EFHW_ERR("%s: ERROR: Onload does not support this device's indirection table size", __FUNCTION__);
+		rc = -ENOSYS;
+		goto unlock_out;
+	}
+
+	if (!ops->set_rxfh_context) {
+		EFHW_WARN("%s: %s does not support `set_rxfh_context` operation",
+							__FUNCTION__, dev->name);
+		rc = -EOPNOTSUPP;
+		goto unlock_out;
+	}
+
+	/* We want to allocate a context */
+	*rss_context_out = ETH_RXFH_CONTEXT_ALLOC;
+
+	/* TODO AF_XDP: We want to check that this device can use a toeplitz hash */
+	rc = ops->set_rxfh_context(dev, indir, key, /*hfunc*/ 0, rss_context_out, false);
+
+	if( rc < 0 ) {
+		EFHW_WARN("%s: rc = %d", __FUNCTION__, rc);
+	}
+
+unlock_out:
+	return rc;
 }
 
 static int
@@ -1415,7 +1462,29 @@ af_xdp_rss_update(struct efhw_nic *nic, const u32 *indir, const u8 *key,
 static int
 af_xdp_rss_free(struct efhw_nic *nic, u32 rss_context)
 {
-	return -ENOSYS;
+	struct net_device *dev = nic->net_dev;
+	int rc = 0;
+	const struct ethtool_ops *ops;
+
+	rtnl_lock();
+
+	ops = dev->ethtool_ops;
+	if (!ops->set_rxfh_context) {
+		EFHW_WARN("%s: %s does not support `set_rxfh_context` operation",
+							__FUNCTION__, dev->name);
+		rc = -EOPNOTSUPP;
+		goto unlock_out;
+	}
+
+	rc = ops->set_rxfh_context(dev, NULL, NULL, 0, &rss_context, true);
+
+	if (rc < 0) {
+		EFHW_WARN("%s: rc = %d", __FUNCTION__, rc);
+	}
+
+unlock_out:
+	rtnl_unlock();
+	return rc;
 }
 
 static int af_xdp_efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
@@ -1446,7 +1515,10 @@ static int af_xdp_efx_spec_to_ethtool_flow(struct efx_filter_spec* efx_spec,
 	if (rc < 0)
 		return rc;
 
-	switch (fs->flow_type) {
+	/* FLOW_RSS is not mutually exclusive with the other flow_type options
+	* so temporarily ignore it.
+	*/
+	switch (fs->flow_type & ~(FLOW_RSS)) {
 	case UDP_V4_FLOW:
 		if (fs->m_u.udp_ip4_spec.tos)
 			return -EOPNOTSUPP;
@@ -1494,6 +1566,9 @@ af_xdp_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 	rc = af_xdp_efx_spec_to_ethtool_flow(spec, &info.fs);
 	if ( rc < 0 )
 		return rc;
+
+	if (info.fs.flow_type & FLOW_RSS)
+		info.rss_context = spec->rss_context;
 
 	rtnl_lock();
 

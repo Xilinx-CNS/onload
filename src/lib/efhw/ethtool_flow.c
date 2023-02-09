@@ -24,7 +24,8 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
   dst->location = RX_CLS_LOC_ANY;
 
   if( src->flags & ~(EFX_FILTER_FLAG_RX | EFX_FILTER_FLAG_STACK_ID |
-                     EFX_FILTER_FLAG_VPORT_ID | EFX_FILTER_FLAG_RX_SCATTER) )
+                     EFX_FILTER_FLAG_VPORT_ID | EFX_FILTER_FLAG_RX_SCATTER |
+                     EFX_FILTER_FLAG_RX_RSS ) )
     return -EPROTONOSUPPORT;
 
   if( (src->match_flags & ~EFX_FILTER_MATCH_OUTER_VID) == EFX_FILTER_MATCH_LOC_MAC_IG ) {
@@ -143,6 +144,9 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
       dst->m_u.usr_ip4_spec.l4_4_bytes = combine_ports(loc_port_mask,
                                                       rem_port_mask);
       break;
+    }
+    if( src->flags & EFX_FILTER_FLAG_RX_RSS ) {
+      dst->flow_type |= FLOW_RSS;
     }
   }
   if( src->match_flags & EFX_FILTER_MATCH_OUTER_VID ) {
