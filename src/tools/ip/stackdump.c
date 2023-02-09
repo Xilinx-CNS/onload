@@ -648,6 +648,7 @@ int main(int argc, char* argv[])
    * - just list stacks and pids and return
    */
   if( no_args ) {
+    ci_log_fn = ci_log_stdout;
     libstack_stack_mapping_print();
     return 0;
   }
