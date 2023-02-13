@@ -87,12 +87,12 @@ static void efct_reset_up(struct efhw_nic_efct *efct, bool success)
 }
 
 static int efct_handle_event(void *driver_data,
-                             const struct xlnx_efct_event *event, int budget)
+                             const struct efct_client_event *event, int budget)
 {
   struct efhw_nic_efct *efct = (struct efhw_nic_efct *) driver_data;
 
   switch( event->type ) {
-    case XLNX_EVENT_WAKEUP: {
+    case EFCT_CLIENT_EVENT_WAKEUP: {
       struct efhw_nic_efct_rxq* q = &efct->rxq[event->rxq];
       struct efhw_efct_rxq *app;
       unsigned sbseq = event->value >> 32;
@@ -120,7 +120,7 @@ static int efct_handle_event(void *driver_data,
       return spent;
     }
 
-    case XLNX_EVENT_TIME_SYNC: {
+    case EFCT_CLIENT_EVENT_TIME_SYNC: {
       struct efhw_nic_efct_rxq* q = &efct->rxq[event->rxq];
       struct efhw_efct_rxq *app;
       int spent = 0;
@@ -133,13 +133,13 @@ static int efct_handle_event(void *driver_data,
       return spent;
     }
 
-    case XLNX_EVENT_RESET_DOWN:
+    case EFCT_CLIENT_EVENT_RESET_DOWN:
       efct_reset_down(efct);
       break;
-    case XLNX_EVENT_RESET_UP:
+    case EFCT_CLIENT_EVENT_RESET_UP:
       efct_reset_up(efct, event->value);
       break;
-    case XLNX_EVENT_RX_FLUSH:
+    case EFCT_CLIENT_EVENT_RX_FLUSH:
       return -ENOSYS;
   }
   return -ENOSYS;
@@ -220,11 +220,11 @@ static struct file* efct_hugetlb_file_setup(off_t* off)
 }
 
 static int efct_alloc_hugepage(void *driver_data,
-                               struct xlnx_efct_hugepage *result_out)
+                               struct efct_client_hugepage *result_out)
 {
   /* The rx ring is owned by the net driver, not by us, so it does all
    * DMA handling. We do need to supply it with some memory, though. */
-  struct xlnx_efct_hugepage result;
+  struct efct_client_hugepage result;
   struct inode* inode;
   struct address_space* mapping;
   long rc;
@@ -281,7 +281,7 @@ static int efct_alloc_hugepage(void *driver_data,
 }
 
 static void efct_free_hugepage(void *driver_data,
-                               struct xlnx_efct_hugepage *mem)
+                               struct efct_client_hugepage *mem)
 {
   /* EFCT TODO (minor): When we're using a memfd we could fallocate(PUNCH_HOLE)
    * to free up the memory properly, in case the entire file isn't about to be
@@ -308,7 +308,7 @@ static void efct_hugepage_list_changed(void *driver_data, int rxq)
   }
 }
 
-struct xlnx_efct_drvops efct_ops = {
+struct efct_client_drvops efct_ops = {
   .name = "sfc_resource",
   .poll = efct_poll,
   .handle_event = efct_handle_event,
@@ -321,22 +321,22 @@ struct xlnx_efct_drvops efct_ops = {
 };
 
 
-static int efct_devtype_init(struct xlnx_efct_device *edev,
-                             struct xlnx_efct_client *client,
+static int efct_devtype_init(struct efct_client_device *edev,
+                             struct efct_client *client,
                              struct efhw_device_type *dev_type)
 {
-  union xlnx_efct_param_value val;
+  union efct_client_param_value val;
   int rc;
 
   dev_type->arch = EFHW_ARCH_EFCT;
   dev_type->function = EFHW_FUNCTION_PF;
 
-  rc = edev->ops->get_param(client, XLNX_EFCT_VARIANT, &val);
+  rc = edev->ops->get_param(client, EFCT_CLIENT_VARIANT, &val);
   if( rc < 0 )
     return rc;
   dev_type->variant = val.variant;
 
-  rc = edev->ops->get_param(client, XLNX_EFCT_REVISION, &val);
+  rc = edev->ops->get_param(client, EFCT_CLIENT_REVISION, &val);
   if( rc < 0 )
     return rc;
   dev_type->revision = val.value;
@@ -344,17 +344,17 @@ static int efct_devtype_init(struct xlnx_efct_device *edev,
   return 0;
 }
 
-static int efct_resource_init(struct xlnx_efct_device *edev,
-                              struct xlnx_efct_client *client,
+static int efct_resource_init(struct efct_client_device *edev,
+                              struct efct_client *client,
                               struct efhw_nic_efct *efct,
                               struct vi_resource_dimensions *res_dim)
 {
-  union xlnx_efct_param_value val;
+  union efct_client_param_value val;
   int rc;
   int i;
   int n_txqs;
 
-  rc = edev->ops->get_param(client, XLNX_EFCT_NIC_RESOURCES, &val);
+  rc = edev->ops->get_param(client, EFCT_CLIENT_NIC_RESOURCES, &val);
   if( rc < 0 )
     return rc;
 
@@ -369,7 +369,7 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   for( i = 0; i < n_txqs && val.nic_res.evq_min + i < CI_EFCT_MAX_EVQS; i++ )
     efct->evq[val.nic_res.evq_min + i].txq = val.nic_res.txq_min + i;
 
-  rc = edev->ops->get_param(client, XLNX_EFCT_IRQ_RESOURCES, &val);
+  rc = edev->ops->get_param(client, EFCT_CLIENT_IRQ_RESOURCES, &val);
   if( rc < 0 )
     return rc;
 
@@ -388,11 +388,11 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
 int efct_probe(struct auxiliary_device *auxdev,
                const struct auxiliary_device_id *id)
 {
-  struct xlnx_efct_device *edev = to_xlnx_efct_device(auxdev);
+  struct efct_client_device *edev = to_efct_client_device(auxdev);
   struct vi_resource_dimensions res_dim = {};
   struct efhw_device_type dev_type;
-  struct xlnx_efct_client *client;
-  union xlnx_efct_param_value val;
+  struct efct_client *client;
+  union efct_client_param_value val;
   struct linux_efhw_nic *lnic = NULL;
   struct net_device *net_dev;
   struct efhw_nic *nic;
@@ -402,9 +402,9 @@ int efct_probe(struct auxiliary_device *auxdev,
 
   EFRM_NOTICE("%s name %s version %#x", __func__, id->name, edev->version);
 
-  if( edev->version >> 16 != XLNX_EFCT_AUX_VERSION >> 16 ) {
-    EFRM_ERR("%s: incompatible xilinx_efct driver: have %#x want %#x",
-             __func__, edev->version, XLNX_EFCT_AUX_VERSION);
+  if( edev->version >> 16 != EFCT_CLIENT_AUX_VERSION >> 16 ) {
+    EFRM_ERR("%s: incompatible efct driver: have %#x want %#x",
+             __func__, edev->version, EFCT_CLIENT_AUX_VERSION);
     return -EPROTOTYPE;
   }
 
@@ -421,7 +421,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   }
   efct->client = client;
 
-  rc = edev->ops->get_param(client, XLNX_EFCT_NETDEV, &val);
+  rc = edev->ops->get_param(client, EFCT_CLIENT_NETDEV, &val);
   if( rc < 0 )
     goto fail2;
 
@@ -474,8 +474,8 @@ int efct_probe(struct auxiliary_device *auxdev,
 
 void efct_remove(struct auxiliary_device *auxdev)
 {
-  struct xlnx_efct_device *edev = to_xlnx_efct_device(auxdev);
-  struct xlnx_efct_client *client;
+  struct efct_client_device *edev = to_efct_client_device(auxdev);
+  struct efct_client *client;
   struct linux_efhw_nic *lnic;
   struct net_device *net_dev;
   struct efhw_nic* nic;
@@ -489,7 +489,7 @@ void efct_remove(struct auxiliary_device *auxdev)
     return;
 
   lnic = linux_efhw_nic(nic);
-  client = (struct xlnx_efct_client*)lnic->drv_device;
+  client = (struct efct_client*)lnic->drv_device;
   if( !client )
     return;
 
@@ -537,7 +537,7 @@ void efct_remove(struct auxiliary_device *auxdev)
 
 
 static const struct auxiliary_device_id efct_id_table[] = {
-  { .name = "xilinx_efct." XLNX_EFCT_DEVNAME, },
+  { .name = "efct." EFCT_CLIENT_DEVNAME, },
   {},
 };
 MODULE_DEVICE_TABLE(auxiliary, efct_id_table);

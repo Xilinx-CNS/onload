@@ -135,7 +135,7 @@ EXPORT_SYMBOL(efrm_rxq_release);
 #define EFCT_INVALID_PFN   (~0ull)
 
 static int map_one_superbuf(unsigned long addr,
-                            const struct xlnx_efct_hugepage *kern)
+                            const struct efct_client_hugepage *kern)
 {
 	unsigned long rc;
 	rc = vm_mmap(kern->file, addr, CI_HUGEPAGE_SIZE, PROT_READ,
@@ -149,8 +149,8 @@ static int map_one_superbuf(unsigned long addr,
 
 static int fixup_superbuf_mapping(unsigned long addr,
                                   uint64_t *user,
-                                  const struct xlnx_efct_hugepage *kern,
-                                  const struct xlnx_efct_hugepage *spare_page)
+                                  const struct efct_client_hugepage *kern,
+                                  const struct efct_client_hugepage *spare_page)
 {
 	uint64_t pfn = kern->page ? __pa(kern->page) : EFCT_INVALID_PFN;
 	if (*user == pfn)
@@ -184,8 +184,8 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
                      uint64_t __user *user_current, unsigned max_superbufs)
 {
 #if CI_HAVE_EFCT_AUX
-	struct xlnx_efct_hugepage *pages;
-	struct xlnx_efct_hugepage spare_page = {};
+	struct efct_client_hugepage *pages;
+	struct efct_client_hugepage spare_page = {};
 	size_t i;
 	int rc = 0;
 
@@ -271,7 +271,7 @@ int efrm_rxq_refresh_kernel(struct efhw_nic *nic, int hwqid,
 						    const char** superbufs)
 {
 #if CI_HAVE_EFCT_AUX
-	struct xlnx_efct_hugepage *pages;
+	struct efct_client_hugepage *pages;
 	size_t i;
 	int rc = 0;
 

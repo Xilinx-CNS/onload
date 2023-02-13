@@ -159,7 +159,7 @@ Provides	: sfc-kmod-symvers = %{kernel}
 AutoReqProv	: no
 
 %if 0%{?have_efct:%have_efct}
-BuildRequires	: kernel-module-xilinx-efct-%{dist}-%{kernel}
+BuildRequires	: kernel-module-efct-%{dist}-%{kernel} >= 2.0.0.0
 
 %if "%{dist}" == ".el7"
 BuildRequires	: kernel-module-auxiliary-%{dist}-%{kernel} >= 1.0.3.0

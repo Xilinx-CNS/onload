@@ -9,9 +9,9 @@
 void efct_destruct_apps_work(struct work_struct* work);
 
 int
-__efct_nic_rxq_bind(struct xlnx_efct_device* edev,
-                    struct xlnx_efct_client* cli,
-                    struct xlnx_efct_rxq_params *rxq_params,
+__efct_nic_rxq_bind(struct efct_client_device* edev,
+                    struct efct_client* cli,
+                    struct efct_client_rxq_params *rxq_params,
                     struct efhw_nic_efct *efct,
                     int n_hugepages,
                     struct efab_efct_rxq_uk_shm_q *shm,
@@ -19,8 +19,8 @@ __efct_nic_rxq_bind(struct xlnx_efct_device* edev,
                     struct efhw_efct_rxq *rxq);
 
 void
-__efct_nic_rxq_free(struct xlnx_efct_device* edev,
-                    struct xlnx_efct_client* cli,
+__efct_nic_rxq_free(struct efct_client_device* edev,
+                    struct efct_client* cli,
                     struct efhw_efct_rxq *rxq,
                     efhw_efct_rxq_free_func_t *freer);
 

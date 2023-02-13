@@ -10,8 +10,8 @@
 extern struct efhw_func_ops efct_char_functional_units;
 
 struct efhw_efct_rxq;
-struct xlnx_efct_hugepage;
-struct xlnx_efct_rxq_params;
+struct efct_client_hugepage;
+struct efct_client_rxq_params;
 typedef void efhw_efct_rxq_free_func_t(struct efhw_efct_rxq*);
 typedef void efhw_efct_rxq_int_wake_func_t(struct efhw_efct_rxq*);
 
@@ -169,8 +169,8 @@ struct efct_hw_filter {
 struct efhw_nic_efct {
   struct efhw_nic_efct_rxq rxq[CI_EFCT_MAX_RXQS];
   struct efhw_nic_efct_evq evq[CI_EFCT_MAX_EVQS];
-  struct xlnx_efct_device *edev;
-  struct xlnx_efct_client *client;
+  struct efct_client_device *edev;
+  struct efct_client *client;
   struct efhw_nic *nic;
 #ifdef __KERNEL__
   /* ZF emu includes this file from UL */
@@ -192,7 +192,7 @@ int efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
 void efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
                        efhw_efct_rxq_free_func_t *freer);
 int efct_get_hugepages(struct efhw_nic *nic, int hwqid,
-                       struct xlnx_efct_hugepage *pages, size_t n_pages);
+                       struct efct_client_hugepage *pages, size_t n_pages);
 int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
                         unsigned sbseq, unsigned pktix, bool allow_recursion);
 void efct_nic_filter_init(struct efhw_nic_efct *efct);
