@@ -2618,20 +2618,17 @@ static void citp_epoll_get_ordering_limit(ci_netif* ni,
     else {
       /* In single interface WODA mode we don't need to ensure that all
        * interfaces have been polled, as ordering is only relative to other
-       * traffic on the same interface.  This means that we can also do a
-       * limited poll rather than a full poll.
+       * traffic on the same interface.  This means that we just need to find
+       * the latest timestamp after our poll, which is done before we start
+       * putting together the ordered events list. This is necessary to ensure
+       * that if a poll happens in another context we don't consider any data
+       * that it finds, as we may have already finished processing some of our
+       * sockets by that point.
        */
       ci_netif_lock(ni);
       ci_netif_poll(ni);
+      citp_epoll_latest_rx(ni, limit_out);
       ci_netif_unlock(ni);
-
-      /* We don't need a limit as this is only required to avoid returning
-       * traffic on one interface that arrived later than the poll on another
-       * interface.  This gives us an effective limit of The End of Time, but
-       * does assume we're on a system where __time_t is a signed int.
-       */
-      limit_out->tv_sec = CI_MAX_TIME_T;
-      limit_out->tv_nsec = 0;
     }
 
     Log_POLL(ci_log("%s: %s poll limit %ld:%09lu", __FUNCTION__,
