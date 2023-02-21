@@ -69,6 +69,11 @@ int efrm_vi_allocator_ctor(struct efrm_nic *efrm_nic,
 			goto fail;
 		}
 	}
+	else {
+		EFRM_ERR("%s: No VIs, not handling", __FUNCTION__);
+		rc = -ERANGE;
+		goto fail;
+        }
 
 	return 0;
 
