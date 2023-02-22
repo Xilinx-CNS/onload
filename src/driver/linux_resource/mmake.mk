@@ -62,7 +62,7 @@ TARGETS		:= $(RESOURCE_TARGET)
 
 x86_TARGET_SRCS   := syscall_x86.o
 
-arm64_TARGET_SRCS := syscall_aarch64.o
+arm64_TARGET_SRCS := syscall_aarch64.o ci_arm64_patching.o ci_arm64_insn.o
 
 
 ######################################################
