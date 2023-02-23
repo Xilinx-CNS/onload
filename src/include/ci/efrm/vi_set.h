@@ -49,9 +49,6 @@ efrm_vi_set_alloc(struct efrm_pd *, int n_vis,
 		  int efhw_rss_mode,
 		  struct efrm_vi_set **vi_set_out);
 
-extern int
-efrm_vi_set_redistribute_queue(struct efrm_vi_set*, uint32_t q_id);
-
 extern void
 efrm_vi_set_release(struct efrm_vi_set *);
 
