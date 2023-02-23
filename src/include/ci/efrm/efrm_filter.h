@@ -40,7 +40,6 @@
 #ifndef __CI_EFRM_FILTER_H__
 #define __CI_EFRM_FILTER_H__
 
-#define EFRM_RSS_INDIRECTION_TABLE_LEN 128
 #define EFRM_RSS_KEY_LEN 40
 
 

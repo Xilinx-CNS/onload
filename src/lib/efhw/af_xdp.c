@@ -912,6 +912,39 @@ af_xdp_nic_v3_license_challenge(struct efhw_nic *nic,
 	return 0;
 }
 
+/* Update the efhw_nic struct with the nic's supported RSS hash key length
+ * and indirection table length. */
+static int
+af_xdp_rss_get_support(struct efhw_nic *nic)
+{
+	struct net_device *dev = nic->net_dev;
+	int rc = 0;
+	const struct ethtool_ops *ops;
+
+	ASSERT_RTNL();
+
+	ops = dev->ethtool_ops;
+	if (!ops->get_rxfh_indir_size) {
+		EFHW_WARN("%s: %s does not support `get_rxfh_indir_size` operation",
+							__FUNCTION__, dev->name);
+		rc = -EOPNOTSUPP;
+		goto unlock_out;
+	}
+
+	nic->rss_indir_size = ops->get_rxfh_indir_size(dev);
+
+	if (!ops->get_rxfh_key_size) {
+		EFHW_WARN("%s: %s does not support `get_rxfh_key_size` operation",
+							__FUNCTION__, dev->name);
+		rc = -EOPNOTSUPP;
+		goto unlock_out;
+	}
+
+	nic->rss_key_size = ops->get_rxfh_key_size(dev);
+
+unlock_out:
+	return rc;
+}
 
 static void
 af_xdp_nic_tweak_hardware(struct efhw_nic *nic)
@@ -971,7 +1004,9 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
 
 	af_xdp_nic_tweak_hardware(nic);
-	return 0;
+
+	rc = af_xdp_rss_get_support(nic);
+	return rc;
 
 fail:
 	ci_close_fd(map_fd);
@@ -1404,33 +1439,21 @@ af_xdp_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
 	EFHW_ASSERT(efhw_rss_mode == EFHW_RSS_MODE_DEFAULT);
 
 	/* We enter the function with rtnl held */
-	EFHW_ASSERT(rtnl_is_locked());
+	ASSERT_RTNL();
+
+	/* TODO AF_XDP: Establish whether the RSS hash key can be expanded or
+	* contracted while still maintaining favourable properties.
+	* For now error out if the NIC has the wrong value.
+	*/
+	if (nic->rss_key_size != EFRM_RSS_KEY_LEN) {
+		EFHW_ERR("%s: ERROR: Onload does not support this device's RSS hash key size.\n"
+				"Expecting hash key size of %u, %s's current size = %u",
+				__FUNCTION__, EFRM_RSS_KEY_LEN, dev->name, nic->rss_key_size);
+		rc = -ENOSYS;
+		goto unlock_out;
+	}
 
 	ops = dev->ethtool_ops;
-	if (!ops->get_rxfh_key_size) {
-		EFHW_WARN("%s: %s does not support `get_rxfh_key_size` operation",
-							__FUNCTION__, dev->name);
-		rc = -EOPNOTSUPP;
-		goto unlock_out;
-	}
-	if (ops->get_rxfh_key_size(dev) != EFRM_RSS_KEY_LEN) {
-		EFHW_ERR("%s: ERROR: Onload does not support this device's RSS hash key size", __FUNCTION__);
-		rc = -ENOSYS;
-		goto unlock_out;
-	}
-
-	if (!ops->get_rxfh_indir_size) {
-		EFHW_WARN("%s: %s does not support `get_rxfh_indir_size` operation",
-							__FUNCTION__, dev->name);
-		rc = -EOPNOTSUPP;
-		goto unlock_out;
-	}
-	if (ops->get_rxfh_indir_size(dev) != EFRM_RSS_INDIRECTION_TABLE_LEN) {
-		EFHW_ERR("%s: ERROR: Onload does not support this device's indirection table size", __FUNCTION__);
-		rc = -ENOSYS;
-		goto unlock_out;
-	}
-
 	if (!ops->set_rxfh_context) {
 		EFHW_WARN("%s: %s does not support `set_rxfh_context` operation",
 							__FUNCTION__, dev->name);

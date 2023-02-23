@@ -53,7 +53,8 @@ struct efrm_rss_context {
 	 * indirection table. */
 	uint64_t indirected_vis;
 	/* The indirection table programmed to the NIC for this RSS context. */
-	uint32_t indirection_table[EFRM_RSS_INDIRECTION_TABLE_LEN];
+	uint32_t *indirection_table;
+	uint32_t indirection_table_size;
 	/* The hash key programmed to the NIC for this RSS context. */
 	uint8_t rss_hash_key[EFRM_RSS_KEY_LEN];
 };

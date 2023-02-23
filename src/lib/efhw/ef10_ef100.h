@@ -178,4 +178,7 @@ static inline void efhw_nic_release_dl_device(struct efhw_nic* nic,
 	efhw_nic_release_dl_device((nic), (efx_dev)); \
 }
 
+#define EF10_EF100_RSS_INDIRECTION_TABLE_LEN 128
+#define EF10_EF100_RSS_KEY_LEN 40
+
 #endif /* EFHW_EF10_EF100_H */

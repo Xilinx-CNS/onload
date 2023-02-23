@@ -534,6 +534,15 @@ struct efhw_nic {
 	} vi_irq_ranges[NIC_IRQ_MAX_RANGES];
 	unsigned rss_channel_count;
 
+	/* Size of the RSS indirection table.
+	 * Needed to support different NIC vendors in AF_XDP mode
+	 */
+	unsigned rss_indir_size;
+	/* Size of the RSS hash key.
+	 * Needed to support different NIC vendors in AF_XDP mode
+	 */
+	unsigned rss_key_size;
+
 	/* Size of PIO buffer */
 	unsigned pio_size;
 	/* Total number of PIO buffers */

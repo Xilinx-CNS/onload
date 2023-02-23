@@ -95,8 +95,18 @@ efrm_rss_context_alloc_and_init(struct efrm_pd *pd,
 	 */
 	shared = 0;
 
+	rss_context->indirection_table_size =
+		efrm_client_get_nic(client)->rss_indir_size;
+	/* Allocate indirection table */
+	rss_context->indirection_table = kmalloc_array(
+			rss_context->indirection_table_size,
+			sizeof(uint32_t), GFP_KERNEL);
+
+	if (rss_context->indirection_table == NULL)
+		return -ENOMEM;
+
 	/* Set up the indirection table to stripe evenly(ish) across VIs. */
-	for (index = 0; index < EFRM_RSS_INDIRECTION_TABLE_LEN; index++)
+	for (index = 0; index < rss_context->indirection_table_size; index++)
 		rss_context->indirection_table[index] = index % num_qs;
 
 	/* Currently we always use the same key for the RSS hash. */
@@ -175,8 +185,13 @@ int efrm_vi_set_alloc(struct efrm_pd *pd, int n_vis,
 	rss_limited =
 		efrm_client_get_nic(client)->flags & NIC_FLAG_RX_RSS_LIMITED;
 
-	for (i = 0; i <= EFRM_RSS_MODE_ID_MAX; ++i)
-		vi_set->rss_context[i].rss_context_id = -1;
+	for (i = 0; i <= EFRM_RSS_MODE_ID_MAX; ++i) {
+		struct efrm_rss_context* context = &vi_set->rss_context[i];
+		struct efhw_nic *nic = efrm_client_get_nic(client);
+		context->rss_context_id = -1;
+		context->indirection_table = NULL;
+		context->indirection_table_size = nic->rss_indir_size;
+	}
 
 	if (!(n_vis > 1 || rss_limited)) {
 		/* Don't bother allocating a context of size 1, just use
@@ -411,6 +426,8 @@ void efrm_vi_set_free(struct efrm_vi_set *vi_set)
 		if (context->rss_context_id != -1)
 			efrm_rss_context_free(vi_set->rs.rs_client,
 					      context->rss_context_id);
+		if (context->indirection_table != NULL)
+			kfree(context->indirection_table);
 	}
 	efrm_vi_allocator_free_set(efrm_nic, &vi_set->allocation);
 	efrm_pd_release(vi_set->pd);

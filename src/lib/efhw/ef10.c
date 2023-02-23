@@ -850,6 +850,9 @@ ef10_nic_init_hardware(struct efhw_nic *nic,
 	/* No buffer_table_ctor() on EF10 */
 	/* No non_irq_evq on EF10 */
 
+	nic->rss_indir_size = EF10_EF100_RSS_INDIRECTION_TABLE_LEN;
+	nic->rss_key_size = EF10_EF100_RSS_KEY_LEN;
+
 	return 0;
 }
 
