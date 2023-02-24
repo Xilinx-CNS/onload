@@ -22,6 +22,7 @@ const char onload_product[] = "PRODUCT";
 int (*ci_sys_open)(const char*, int, ...);
 int (*ci_sys_close)(int);
 ssize_t (*ci_sys_read)(int, void*, size_t);
+int (*ci_sys_execvpe)(const char *, char *const [], char *const []);
 
 /* Parametrised test case */
 static void test_ci_netif_set_rxq_limit_(
