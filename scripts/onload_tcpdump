@@ -125,6 +125,6 @@ else
     #     onload_tcpdump.bin is killed; exit
     # - onload_tcpdump is killed: trap signal and pkill all children; exit
     onload_tcpdump.bin $both_opts $onload_opts $stack_names_or_ids | \
-        (setsid -wf tcpdump -r- $w_opt $both_opts $tcpdump_opts || pkill -P $$) &
+        (setsid tcpdump -r- $w_opt $both_opts $tcpdump_opts || pkill -P $$) &
     wait
 fi
