@@ -43,11 +43,6 @@
 #define EFRM_RSS_INDIRECTION_TABLE_LEN 128
 #define EFRM_RSS_KEY_LEN 40
 
-/* note mode default and src are mutually exclusive */
-#define EFRM_RSS_MODE_DEFAULT 0x1 /* standard non-tproxy mode */
-#define EFRM_RSS_MODE_SRC     0x2 /* semi transparent proxy passive side */
-#define EFRM_RSS_MODE_DST     0x4 /* transparent proxy active side */
-
 
 struct efx_filter_spec;
 struct device;
@@ -79,13 +74,13 @@ extern int efrm_ethtool_filter_insert(struct net_device* dev,
 int efrm_rss_context_alloc(struct efrm_client*, u32 vport_id,
 			   int shared,
 			   const u32 *indir,
-			   const u8 *key, u32 efrm_rss_mode,
+			   const u8 *key, u32 efhw_rss_mode,
 			   int num_qs,
 			   u32 *rss_context_out);
 
 extern int
 efrm_rss_context_update(struct efrm_client*, u32 rss_context, const u32 *indir,
-			const u8 *key, u32 efrm_rss_mode);
+			const u8 *key, u32 efhw_rss_mode);
 
 extern int efrm_rss_context_free(struct efrm_client*,
 				 u32 rss_context_id);

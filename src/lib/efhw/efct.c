@@ -643,26 +643,20 @@ efct_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
  *--------------------------------------------------------------------*/
 static int
 efct_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-               u32 nic_rss_flags, int num_qs, u32 *rss_context_out)
+               u32 efhw_rss_mode, int num_qs, u32 *rss_context_out)
 {
   return -EOPNOTSUPP;
 }
 
 static int
 efct_rss_update(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-                u32 nic_rss_flags, u32 rss_context)
+                u32 efhw_rss_mode, u32 rss_context)
 {
   return -EOPNOTSUPP;
 }
 
 static int
 efct_rss_free(struct efhw_nic *nic, u32 rss_context)
-{
-  return -EOPNOTSUPP;
-}
-
-static int
-efct_rss_flags(struct efhw_nic *nic, u32 *flags_out)
 {
   return -EOPNOTSUPP;
 }
@@ -1442,7 +1436,6 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_rss_alloc,
   efct_rss_update,
   efct_rss_free,
-  efct_rss_flags,
   efct_filter_insert,
   efct_filter_remove,
   efct_filter_redirect,

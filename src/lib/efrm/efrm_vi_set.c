@@ -68,7 +68,7 @@ efrm_rss_context_alloc_and_init(struct efrm_pd *pd,
         /* With some hardware and/or firmware variants only
          * default mode is supported.  If any other mode is
          * asked for - fail. */
-	if (num_qs > 1 && rss_mode != EFRM_RSS_MODE_DEFAULT &&
+	if (num_qs > 1 && rss_mode != EFHW_RSS_MODE_DEFAULT &&
 	    (!(efrm_client_get_nic(client)->flags & NIC_FLAG_ADDITIONAL_RSS_MODES) ||
 	     (efrm_client_get_nic(client)->flags & NIC_FLAG_RX_RSS_LIMITED)))
 		return -EOPNOTSUPP;
@@ -83,7 +83,7 @@ efrm_rss_context_alloc_and_init(struct efrm_pd *pd,
 	 */
 	if (CI_IS_POW2(num_qs) &&
 	    !(efrm_client_get_nic(client)->flags & NIC_FLAG_RX_RSS_LIMITED) &&
-	    rss_mode == EFRM_RSS_MODE_DEFAULT) {
+	    rss_mode == EFHW_RSS_MODE_DEFAULT) {
 		shared = 1;
 	}
 
@@ -156,10 +156,10 @@ int efrm_vi_set_alloc(struct efrm_pd *pd, int n_vis,
 		.want_txq = true,
 	};
 	EFRM_ASSERT(0 == (rss_modes &
-		  ~(EFRM_RSS_MODE_DEFAULT|EFRM_RSS_MODE_SRC|EFRM_RSS_MODE_DST)));
-	EFRM_ASSERT(rss_modes & (EFRM_RSS_MODE_DEFAULT|EFRM_RSS_MODE_SRC));
+		  ~(EFHW_RSS_MODE_DEFAULT|EFHW_RSS_MODE_SRC|EFHW_RSS_MODE_DST)));
+	EFRM_ASSERT(rss_modes & (EFHW_RSS_MODE_DEFAULT|EFHW_RSS_MODE_SRC));
 	/* mode default and src are exclusive */
-	EFRM_ASSERT(~rss_modes & (EFRM_RSS_MODE_DEFAULT|EFRM_RSS_MODE_SRC));
+	EFRM_ASSERT(~rss_modes & (EFHW_RSS_MODE_DEFAULT|EFHW_RSS_MODE_SRC));
 	if (n_vis < 1 || n_vis > 64) {
 		EFRM_ERR("%s: ERROR: set size=%d out of range (max=64)",
 			 __FUNCTION__, n_vis);

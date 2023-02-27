@@ -55,7 +55,7 @@ vi_set_rm_alloc(ci_resource_alloc_t* alloc_,
   }
 
   rc = efrm_vi_set_alloc(pd, alloc->in_n_vis,
-                         EFRM_RSS_MODE_DEFAULT, &vi_set);
+                         EFHW_RSS_MODE_DEFAULT, &vi_set);
   if( rc != 0 )
     goto fail3;
 

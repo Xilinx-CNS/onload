@@ -1400,26 +1400,20 @@ af_xdp_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
  *--------------------------------------------------------------------*/
 static int
 af_xdp_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-		 u32 nic_rss_flags, int num_qs, u32 *rss_context_out)
+		 u32 efhw_rss_mode, int num_qs, u32 *rss_context_out)
 {
 	return -ENOSYS;
 }
 
 static int
 af_xdp_rss_update(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-		  u32 nic_rss_flags, u32 rss_context)
+		  u32 efhw_rss_mode, u32 rss_context)
 {
 	return -ENOSYS;
 }
 
 static int
 af_xdp_rss_free(struct efhw_nic *nic, u32 rss_context)
-{
-	return -ENOSYS;
-}
-
-static int
-af_xdp_rss_flags(struct efhw_nic *nic, u32 *flags_out)
 {
 	return -ENOSYS;
 }
@@ -1664,7 +1658,6 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_rss_alloc,
 	af_xdp_rss_update,
 	af_xdp_rss_free,
-	af_xdp_rss_flags,
 	af_xdp_filter_insert,
 	af_xdp_filter_remove,
 	af_xdp_filter_redirect,

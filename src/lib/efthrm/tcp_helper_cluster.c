@@ -262,16 +262,16 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
      * Currently we move on if we fail to get special tproxy RSS_MODE on
      * interface(s) (expect Huntington old fw, run out of rss contexts).
      */
-    rss_flags = tproxy ? EFRM_RSS_MODE_DST | EFRM_RSS_MODE_SRC :
-                         EFRM_RSS_MODE_DEFAULT;
+    rss_flags = tproxy ? EFHW_RSS_MODE_DST | EFHW_RSS_MODE_SRC :
+                         EFHW_RSS_MODE_DEFAULT;
 redo:
     rc = efrm_vi_set_alloc(pd, thc->thc_cluster_size,
                            rss_flags, &thc->thc_vi_set[i]);
-    if( rc != 0 && (rss_flags != EFRM_RSS_MODE_DEFAULT) ) {
+    if( rc != 0 && (rss_flags != EFHW_RSS_MODE_DEFAULT) ) {
       LOG_E(ci_log("Installing special RSS mode filter failed on hwport %d, "
                    "falling back to default mode.  Transparent proxy will not "
                    "work with this interface.", i));
-      rss_flags = EFRM_RSS_MODE_DEFAULT;
+      rss_flags = EFHW_RSS_MODE_DEFAULT;
       goto redo;
     }
 

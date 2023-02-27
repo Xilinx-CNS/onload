@@ -826,7 +826,6 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef10_ef100_rss_alloc,
 	ef10_ef100_rss_update,
 	ef10_ef100_rss_free,
-	ef10_ef100_rss_flags,
 	ef10_ef100_filter_insert,
 	ef10_ef100_filter_remove,
 	ef10_ef100_filter_redirect,

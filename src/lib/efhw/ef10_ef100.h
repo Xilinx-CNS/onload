@@ -102,13 +102,15 @@ void ef10_ef100_nic_buffer_table_clear(struct efhw_nic *nic,
 				       int first_entry, int n_entries);
 
 extern int ef10_ef100_rss_alloc(struct efhw_nic *nic, const u32 *indir,
-				const u8 *key, u32 nic_rss_flags, int num_qs,
+				const u8 *key, u32 efhw_rss_mode, int num_qs,
 				u32 *rss_context_out);
 extern int ef10_ef100_rss_update(struct efhw_nic *nic, const u32 *indir,
-				 const u8 *key, u32 nic_rss_flags,
+				 const u8 *key, u32 efhw_rss_mode,
 				 u32 rss_context);
 extern int ef10_ef100_rss_free(struct efhw_nic *nic, u32 rss_context);
 extern int ef10_ef100_rss_flags(struct efhw_nic *nic, u32 *flags_out);
+extern int ef10_ef100_rss_mode_to_nic_flags(struct efhw_nic *efhw_nic,
+				u32 efhw_rss_mode, u32 *flags_out);
 
 struct efx_filter_spec;
 extern int ef10_ef100_filter_insert(struct efhw_nic *nic,

@@ -46,7 +46,7 @@ struct efrm_pd;
 
 extern int
 efrm_vi_set_alloc(struct efrm_pd *, int n_vis,
-		  int efrm_rss_mode,
+		  int efhw_rss_mode,
 		  struct efrm_vi_set **vi_set_out);
 
 extern int

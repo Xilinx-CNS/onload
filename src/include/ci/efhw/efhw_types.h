@@ -160,6 +160,11 @@ struct efhw_vi_constraints {
  * Portable HW interface. ***************************************
  **********************************************************************/
 
+/* note mode default and src are mutually exclusive */
+#define EFHW_RSS_MODE_DEFAULT 0x1 /* standard non-tproxy mode */
+#define EFHW_RSS_MODE_SRC     0x2 /* semi transparent proxy passive side */
+#define EFHW_RSS_MODE_DST     0x4 /* transparent proxy active side */
+
 /* At the moment we define our filters in terms of an efx_filter_spec. Although
  * this is really the internal format for a subset of supported NIC types,
  * for ease of handling we use it here, and translate into other formats
@@ -341,14 +346,12 @@ struct efhw_func_ops {
   /*-------------- filtering --------------------- */
 	/* Allocate a new RSS context */
 	int (*rss_alloc)(struct efhw_nic *nic, const u32 *indir,const u8 *key,
-			 u32 nic_rss_flags, int num_qs, u32 *rss_context_out);
+			 u32 efhw_rss_mode, int num_qs, u32 *rss_context_out);
 	/* Update an existing RSS context */
 	int (*rss_update)(struct efhw_nic *nic, const u32 *indir,
-			  const u8 *key, u32 nic_rss_flags, u32 rss_context);
+			  const u8 *key, u32 efhw_rss_mode, u32 rss_context);
 	/* Free an existing RSS context */
 	int (*rss_free)(struct efhw_nic *nic, u32 rss_context);
-	/* Get the default RSS flags */
-	int (*rss_flags)(struct efhw_nic *nic, u32 *flags_out);
 
 	/* Insert a filter */
 	int (*filter_insert)(struct efhw_nic *nic,

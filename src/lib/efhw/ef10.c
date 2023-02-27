@@ -2320,10 +2320,15 @@ ef10_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
  *--------------------------------------------------------------------*/
 int
 ef10_ef100_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-		     u32 nic_rss_flags, int num_qs, u32 *rss_context_out)
+		     u32 efhw_rss_mode, int num_qs, u32 *rss_context_out)
 {
 	int rc;
 	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+	u32 nic_rss_flags;
+
+	rc = ef10_ef100_rss_mode_to_nic_flags(nic, efhw_rss_mode, &nic_rss_flags);
+	if (rc < 0)
+		return rc;
 
 	if (efx_dev == NULL)
 		return -ENETDOWN;
@@ -2335,10 +2340,15 @@ ef10_ef100_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
 
 int
 ef10_ef100_rss_update(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-		      u32 nic_rss_flags, u32 rss_context)
+		      u32 efhw_rss_mode, u32 rss_context)
 {
 	int rc;
 	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
+	u32 nic_rss_flags;
+
+	rc = ef10_ef100_rss_mode_to_nic_flags(nic, efhw_rss_mode, &nic_rss_flags);
+	if (rc < 0)
+		return rc;
 
 	if (efx_dev == NULL)
 		return -ENETDOWN;
@@ -2370,6 +2380,65 @@ ef10_ef100_rss_flags(struct efhw_nic *nic, u32 *flags_out)
 		return -ENETDOWN;
 	*flags_out = efx_dl_rss_flags_default(efx_dev);
 	efhw_nic_release_dl_device(nic, efx_dev);
+	return 0;
+}
+
+int ef10_ef100_rss_mode_to_nic_flags(struct efhw_nic *efhw_nic,
+					u32 rss_mode, u32 *flags_out)
+{
+	int rc;
+	u32 rss_flags;
+	u32 nic_tcp_mode;
+	u32 nic_src_mode = (1 << RSS_MODE_HASH_SRC_ADDR_LBN) |
+			   (1 << RSS_MODE_HASH_SRC_PORT_LBN);
+	u32 nic_dst_mode = (1 << RSS_MODE_HASH_DST_ADDR_LBN) |
+			   (1 << RSS_MODE_HASH_DST_PORT_LBN);
+	u32 nic_all_mode = nic_src_mode | nic_dst_mode;
+	ci_dword_t nic_flags_new;
+	ci_dword_t nic_flags_mask;
+
+	rc = ef10_ef100_rss_flags(efhw_nic, &rss_flags);
+	if( rc < 0 )
+		return rc;
+
+        /* we need to use default flags in packed stream mode,
+         * note in that case TCP hashing will surely be enabled,
+         * so nothing to do there anyway */
+        if( efhw_nic->flags & NIC_FLAG_RX_RSS_LIMITED ) {
+		*flags_out = rss_flags;
+		return 0;
+	}
+
+	switch(rss_mode) {
+	case EFHW_RSS_MODE_SRC:
+		nic_tcp_mode = nic_src_mode;
+		break;
+	case EFHW_RSS_MODE_DST:
+		nic_tcp_mode = nic_dst_mode;
+		break;
+	case EFHW_RSS_MODE_DEFAULT:
+		nic_tcp_mode = nic_all_mode;
+		break;
+	default:
+		EFHW_ASSERT(!"Unknown rss mode");
+		return -EINVAL;
+	};
+
+	CI_POPULATE_DWORD_2(nic_flags_mask,
+		MC_CMD_RSS_CONTEXT_SET_FLAGS_IN_TOEPLITZ_TCPV4_EN,
+                     (1 << MC_CMD_RSS_CONTEXT_SET_FLAGS_IN_TOEPLITZ_IPV4_EN_WIDTH) - 1,
+		MC_CMD_RSS_CONTEXT_SET_FLAGS_IN_TCP_IPV4_RSS_MODE,
+                     ( efhw_nic->flags & NIC_FLAG_ADDITIONAL_RSS_MODES ) ?
+                     (1 << MC_CMD_RSS_CONTEXT_SET_FLAGS_IN_TCP_IPV4_RSS_MODE_WIDTH) - 1 :
+                     0
+		);
+	CI_POPULATE_DWORD_2(nic_flags_new,
+		MC_CMD_RSS_CONTEXT_SET_FLAGS_IN_TOEPLITZ_TCPV4_EN, 1,
+		MC_CMD_RSS_CONTEXT_SET_FLAGS_IN_TCP_IPV4_RSS_MODE, nic_tcp_mode
+		);
+        EFHW_ASSERT((nic_flags_new.u32[0] & nic_flags_mask.u32[0]) == nic_flags_new.u32[0]);
+	*flags_out = (rss_flags & ~nic_flags_mask.u32[0]) |
+		     nic_flags_new.u32[0];
 	return 0;
 }
 
@@ -2645,7 +2714,6 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_ef100_rss_alloc,
 	ef10_ef100_rss_update,
 	ef10_ef100_rss_free,
-	ef10_ef100_rss_flags,
 	ef10_ef100_filter_insert,
 	ef10_ef100_filter_remove,
 	ef10_ef100_filter_redirect,
