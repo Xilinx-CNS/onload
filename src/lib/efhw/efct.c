@@ -1001,7 +1001,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       node.ethertype == htons(ETH_P_IP) ) {
     int i;
     int avail = -1;
-    for( i = 0; i < MAX_EFCT_HW_FILTERS; ++i ) {
+    for( i = 0; i < efct->hw_filters_n; ++i ) {
       if( ! efct->hw_filters[i].refcount )
         avail = i;
       else {

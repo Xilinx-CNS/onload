@@ -140,8 +140,6 @@ struct efct_filter_set {
   size_t ethertype_n;
 };
 
-#define MAX_EFCT_HW_FILTERS  256
-
 /* Totally arbitrary numbers: */
 static const size_t MAX_ALLOWED_full_match = 32768;
 static const size_t MAX_ALLOWED_semi_wild = 32768;
@@ -178,7 +176,8 @@ struct efhw_nic_efct {
    * to the hash key. Let's not for now: the memory trade-off doesn't seem
    * worth it */
   struct efct_filter_set filters;
-  struct efct_hw_filter hw_filters[MAX_EFCT_HW_FILTERS];
+  uint32_t hw_filters_n;
+  struct efct_hw_filter *hw_filters;
   struct mutex driver_filters_mtx;
   uint8_t block_kernel;
 #endif

@@ -358,6 +358,11 @@ static int efct_resource_init(struct efct_client_device *edev,
   if( rc < 0 )
     return rc;
 
+  efct->hw_filters_n = val.design_params.num_filter;
+  efct->hw_filters = vzalloc(sizeof(*efct->hw_filters) * efct->hw_filters_n);
+  if( ! efct->hw_filters )
+    return -ENOMEM;
+
   efct->rxq_n = val.design_params.rx_queues;
   efct->rxq = vzalloc(sizeof(*efct->rxq) * efct->rxq_n);
   if( ! efct->rxq )
@@ -479,6 +484,8 @@ int efct_probe(struct auxiliary_device *auxdev,
  fail2:
   edev->ops->close(client);
  fail1:
+  if( efct->hw_filters )
+    vfree(efct->hw_filters);
   if( efct->rxq )
     vfree(efct->rxq);
   if( efct->evq )
@@ -549,6 +556,7 @@ void efct_remove(struct auxiliary_device *auxdev)
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */
   edev->ops->close(client);
+  vfree(efct->hw_filters);
   vfree(efct->rxq);
   vfree(efct->evq);
   vfree(efct);
