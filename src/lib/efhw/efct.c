@@ -110,7 +110,8 @@ efct_get_hugepages(struct efhw_nic *nic, int hwqid,
 static size_t
 efct_max_shared_rxqs(struct efhw_nic *nic)
 {
-  return CI_EFCT_MAX_RXQS;
+  struct efhw_nic_efct* efct = nic->arch_extra;
+  return efct->rxq_n;
 }
 
 /*----------------------------------------------------------------------------

@@ -36,7 +36,6 @@ struct efhw_efct_rxq {
 };
 
 /* TODO EFCT find somewhere better to put this */
-#define CI_EFCT_MAX_RXQS  8
 #define CI_EFCT_MAX_EVQS 24
 #define CI_EFCT_EVQ_DUMMY_MAX 1024
 
@@ -167,7 +166,8 @@ struct efct_hw_filter {
 #define EFCT_NIC_BLOCK_KERNEL_MULTICAST 0x2
 
 struct efhw_nic_efct {
-  struct efhw_nic_efct_rxq rxq[CI_EFCT_MAX_RXQS];
+  uint32_t rxq_n;
+  struct efhw_nic_efct_rxq *rxq;
   struct efhw_nic_efct_evq evq[CI_EFCT_MAX_EVQS];
   struct efct_client_device *edev;
   struct efct_client *client;

@@ -354,6 +354,18 @@ static int efct_resource_init(struct efct_client_device *edev,
   int i;
   int n_txqs;
 
+  rc = edev->ops->get_param(client, EFCT_CLIENT_DESIGN_PARAM, &val);
+  if( rc < 0 )
+    return rc;
+
+  efct->rxq_n = val.design_params.rx_queues;
+  efct->rxq = vzalloc(sizeof(*efct->rxq) * efct->rxq_n);
+  if( ! efct->rxq )
+    return -ENOMEM;
+
+  for( i = 0; i < efct->rxq_n; ++i)
+    INIT_WORK(&efct->rxq[i].destruct_wq, efct_destruct_apps_work);
+
   rc = edev->ops->get_param(client, EFCT_CLIENT_NIC_RESOURCES, &val);
   if( rc < 0 )
     return rc;
@@ -398,7 +410,6 @@ int efct_probe(struct auxiliary_device *auxdev,
   struct efhw_nic *nic;
   struct efhw_nic_efct *efct = NULL;
   int rc;
-  int i;
 
   EFRM_NOTICE("%s name %s version %#x", __func__, id->name, edev->version);
 
@@ -434,9 +445,6 @@ int efct_probe(struct auxiliary_device *auxdev,
     goto fail2;
   }
 
-  for( i = 0; i < CI_ARRAY_SIZE(efct->rxq); ++i)
-    INIT_WORK(&efct->rxq[i].destruct_wq, efct_destruct_apps_work);
-
   rc = efct_devtype_init(edev, client, &dev_type);
   if( rc < 0 )
     goto fail2;
@@ -466,6 +474,8 @@ int efct_probe(struct auxiliary_device *auxdev,
  fail2:
   edev->ops->close(client);
  fail1:
+  if( efct->rxq )
+    vfree(efct->rxq);
   vfree(efct);
   EFRM_ERR("%s rc %d", __func__, rc);
   return rc;
@@ -494,7 +504,7 @@ void efct_remove(struct auxiliary_device *auxdev)
     return;
 
   efct = nic->arch_extra;
-  for( i = 0; i < CI_ARRAY_SIZE(efct->rxq); ++i ) {
+  for( i = 0; i < efct->rxq_n; ++i ) {
     /* All workqueues should be already shut down by now, but it may happen
      * that the final efct_poll() did not happen.  Do it now. */
     efct_poll(efct, i, 0);
@@ -503,7 +513,7 @@ void efct_remove(struct auxiliary_device *auxdev)
 
   /* Now any destruct work items we queued as a result of the final poll have
    * been drained, so everything should be gone. */
-  for( i = 0; i < CI_ARRAY_SIZE(efct->rxq); ++i ) {
+  for( i = 0; i < efct->rxq_n; ++i ) {
     EFHW_ASSERT(efct->rxq[i].live_apps == NULL);
     EFHW_ASSERT(efct->rxq[i].new_apps == NULL);
   }
@@ -532,6 +542,7 @@ void efct_remove(struct auxiliary_device *auxdev)
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */
   edev->ops->close(client);
+  vfree(efct->rxq);
   vfree(efct);
 }
 
