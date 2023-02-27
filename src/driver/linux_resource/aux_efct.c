@@ -370,15 +370,20 @@ static int efct_resource_init(struct efct_client_device *edev,
   if( rc < 0 )
     return rc;
 
+  efct->evq_n = val.nic_res.evq_lim;
+  efct->evq = vzalloc(sizeof(*efct->evq) * efct->evq_n);
+  if( ! efct->evq )
+    return -ENOMEM;
+
   res_dim->vi_min = val.nic_res.evq_min;
   res_dim->vi_lim = CI_EFCT_EVQ_DUMMY_MAX;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
 
-  for( i = 0; i < CI_EFCT_MAX_EVQS; i++ )
+  for( i = 0; i < efct->evq_n; i++ )
     efct->evq[i].txq = EFCT_EVQ_NO_TXQ;
 
   n_txqs = val.nic_res.txq_lim - val.nic_res.txq_min;
-  for( i = 0; i < n_txqs && val.nic_res.evq_min + i < CI_EFCT_MAX_EVQS; i++ )
+  for( i = 0; i < n_txqs && val.nic_res.evq_min + i < val.nic_res.evq_lim; ++i )
     efct->evq[val.nic_res.evq_min + i].txq = val.nic_res.txq_min + i;
 
   rc = edev->ops->get_param(client, EFCT_CLIENT_IRQ_RESOURCES, &val);
@@ -476,6 +481,8 @@ int efct_probe(struct auxiliary_device *auxdev,
  fail1:
   if( efct->rxq )
     vfree(efct->rxq);
+  if( efct->evq )
+    vfree(efct->evq);
   vfree(efct);
   EFRM_ERR("%s rc %d", __func__, rc);
   return rc;
@@ -543,6 +550,7 @@ void efct_remove(struct auxiliary_device *auxdev)
    * the rest. */
   edev->ops->close(client);
   vfree(efct->rxq);
+  vfree(efct->evq);
   vfree(efct);
 }
 
