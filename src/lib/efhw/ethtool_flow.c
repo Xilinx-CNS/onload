@@ -145,9 +145,11 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
                                                       rem_port_mask);
       break;
     }
+#ifdef EFRM_HAVE_FLOW_RSS
     if( src->flags & EFX_FILTER_FLAG_RX_RSS ) {
       dst->flow_type |= FLOW_RSS;
     }
+#endif
   }
   if( src->match_flags & EFX_FILTER_MATCH_OUTER_VID ) {
     dst->flow_type |= FLOW_EXT;
