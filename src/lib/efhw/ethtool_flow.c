@@ -3,6 +3,7 @@
 #include <uapi/linux/ethtool.h>
 #include <ci/driver/driverlink_api.h>
 #include <ci/efhw/debug.h>
+#include <ci/driver/kernel_compat.h>
 
 static uint32_t combine_ports(uint16_t loc, uint16_t rem)
 {
