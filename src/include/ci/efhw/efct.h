@@ -36,8 +36,6 @@ struct efhw_efct_rxq {
 };
 
 /* TODO EFCT find somewhere better to put this */
-#define CI_EFCT_MAX_RXQS  8
-#define CI_EFCT_MAX_EVQS 24
 #define CI_EFCT_EVQ_DUMMY_MAX 1024
 
 struct efhw_nic_efct_rxq {
@@ -142,8 +140,6 @@ struct efct_filter_set {
   size_t ethertype_n;
 };
 
-#define MAX_EFCT_HW_FILTERS  256
-
 /* Totally arbitrary numbers: */
 static const size_t MAX_ALLOWED_full_match = 32768;
 static const size_t MAX_ALLOWED_semi_wild = 32768;
@@ -167,8 +163,10 @@ struct efct_hw_filter {
 #define EFCT_NIC_BLOCK_KERNEL_MULTICAST 0x2
 
 struct efhw_nic_efct {
-  struct efhw_nic_efct_rxq rxq[CI_EFCT_MAX_RXQS];
-  struct efhw_nic_efct_evq evq[CI_EFCT_MAX_EVQS];
+  uint32_t rxq_n;
+  uint32_t evq_n;
+  struct efhw_nic_efct_rxq *rxq;
+  struct efhw_nic_efct_evq *evq;
   struct efct_client_device *edev;
   struct efct_client *client;
   struct efhw_nic *nic;
@@ -178,7 +176,8 @@ struct efhw_nic_efct {
    * to the hash key. Let's not for now: the memory trade-off doesn't seem
    * worth it */
   struct efct_filter_set filters;
-  struct efct_hw_filter hw_filters[MAX_EFCT_HW_FILTERS];
+  uint32_t hw_filters_n;
+  struct efct_hw_filter *hw_filters;
   struct mutex driver_filters_mtx;
   uint8_t block_kernel;
 #endif

@@ -110,7 +110,8 @@ efct_get_hugepages(struct efhw_nic *nic, int hwqid,
 static size_t
 efct_max_shared_rxqs(struct efhw_nic *nic)
 {
-  return CI_EFCT_MAX_RXQS;
+  struct efhw_nic_efct* efct = nic->arch_extra;
+  return efct->rxq_n;
 }
 
 /*----------------------------------------------------------------------------
@@ -250,7 +251,7 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 #endif
 
   /* This is a dummy EVQ, so nothing to do. */
-  if( efhw_params->evq >= CI_EFCT_MAX_EVQS )
+  if( efhw_params->evq >= efct->evq_n )
     return 0;
 
   efct_evq = &efct->evq[efhw_params->evq];
@@ -299,7 +300,7 @@ efct_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
   int rc = 0;
 
   /* This is a dummy EVQ, so nothing to do. */
-  if( evq >= CI_EFCT_MAX_EVQS )
+  if( evq >= efct->evq_n )
     return;
 
   efct_evq = &efct->evq[evq];
@@ -344,16 +345,16 @@ static bool efct_accept_vi_constraints(struct efhw_nic *nic, int low,
   struct efhw_nic_efct *efct = nic->arch_extra;
 
   /* If this VI will want a TXQ it needs a HW EVQ. These all fall within
-   * the range 0-CI_EFCT_MAX_EVQS. We use the space above that to provide
+   * the range [0,efct->evq_n). We use the space above that to provide
    * dummy EVQS. */
   if( vc->want_txq ) {
-    if( low < CI_EFCT_MAX_EVQS )
+    if( low < efct->evq_n )
       return efct->evq[low].txq != EFCT_EVQ_NO_TXQ;
     else
       return false;
   }
   else {
-    return low >= CI_EFCT_MAX_EVQS;
+    return low >= efct->evq_n;
   }
 }
 
@@ -416,7 +417,7 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
   };
   int rc;
 
-  EFHW_ASSERT(txq_params->evq < CI_EFCT_MAX_EVQS);
+  EFHW_ASSERT(txq_params->evq < efct->evq_n);
   EFHW_ASSERT(params.qid != EFCT_EVQ_NO_TXQ);
 
   EFCT_PRE(dev, edev, cli, nic, rc);
@@ -995,7 +996,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       node.ethertype == htons(ETH_P_IP) ) {
     int i;
     int avail = -1;
-    for( i = 0; i < MAX_EFCT_HW_FILTERS; ++i ) {
+    for( i = 0; i < efct->hw_filters_n; ++i ) {
       if( ! efct->hw_filters[i].refcount )
         avail = i;
       else {

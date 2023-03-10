@@ -79,43 +79,84 @@ static inline void
 ci_rx_pkt_timestamp_cpacket(const ci_ip_pkt_fmt* pkt,
                             struct onload_timestamp* ts_out)
 {
+  ts_out->sec = 0;
+
   /* fixme: fragmented packets will need different treatment */
   if(CI_LIKELY( OO_PP_IS_NULL(pkt->frag_next) )) {
 
-    /* These fields are appended to the packet, after the IP payload.
+    /* These fields are appended to the packet, after the IP payload, the
+     * original Ethernet FCS, and any extension tags. A new FCS was added to
+     * the end to make a valid packet, then checked and removed by the NIC.
      *
-     * [crc] is the original Ethernet FCS; a new one is added to the end to
-     * make a valid packet. That was checked and removed by the NIC.
-     *
-     * We need to support extensions, which place additional data between [crc]
-     * and [sec]. Therefore don't assume that [crc] actually contains the
-     * original FCS, and look for this data at the very end of the packet, not
-     * necessarily straight after the IP payload.
+     * We look for this at the very end of the packet, assuming that nothing
+     * else has added any other trailer after it. If there are multiple cpacket
+     * trailers, then we will take the last (most recent) one.
      */
     struct cpacket {
-      uint32_t crc;
       uint32_t sec;
       uint32_t nsec;
-      uint8_t  ver;
+      uint8_t  flags;
       uint16_t dev;
       uint8_t  port;
     } __attribute__((packed));
 
-    char* buf_end = PKT_START(pkt) + pkt->pay_len;
-    char* pkt_end = (char*)RX_PKT_IPX_HDR(pkt) + RX_PKT_PAYLOAD_LEN(pkt);
+    const char* buf_end = PKT_START(pkt) + pkt->pay_len;
+    const char* pkt_end = (char*)RX_PKT_IPX_HDR(pkt) + RX_PKT_PAYLOAD_LEN(pkt);
     ci_assert_ge(buf_end, pkt_end);
 
     if( buf_end >= pkt_end + sizeof(struct cpacket) ) {
-      struct cpacket* cp = (struct cpacket*)buf_end - 1;
+      const struct cpacket* cp = (const struct cpacket*)buf_end - 1;
       ts_out->sec = ntohl(cp->sec);
       ts_out->nsec = ntohl(cp->nsec);
-      /* fixme: look for sub-nanosecond Metamako extension */
       ts_out->nsec_frac = 0;
-      return;
+
+      /* If extensions are present, search for a sub-ns timestamp */
+      if( cp->flags & 0x2 ) {
+        /* This points to the last byte of the current tag */
+        const uint8_t* ext = (const uint8_t*)cp - 1;
+        const uint8_t* end = (const uint8_t*)pkt_end;
+
+        for( ;; ) {
+          int tag = *ext;
+          int type = tag & 0x1f;
+          int len;
+
+          /* Optimise for the expected case of a single sub-ns timestamp tag.
+           *
+           * NOTE: it's possible that a malformed trailer could cause us to read
+           * a garbage value here, and we do not check for that. That should be
+           * the worst possible failure since, however badly formed the trailer,
+           * we will always calculate a non-zero length below and eventually
+           * reach the packet data and bail out. */
+          if(CI_LIKELY( type == 0x01 )) {
+            ts_out->nsec_frac = ext[-1] | (ext[-2] << 8) | (ext[-3] << 16);
+            break;
+          }
+
+          /* Check the flag that indicates this is the last extension */
+          if( tag & 0x20 )
+            break;
+
+          /* Extract the length depending on tag type */
+          if( type == 0x1f )
+            /* secondary tag: 10 bits excluding first and second words */
+            len = ((tag >> 6) | (ext[-1] << 2)) + 2;
+          else
+            /* primary tag: 2 bits excluding first word */
+            len = (tag >> 6) + 1;
+
+          /* length field gives 32-bit words */
+          len *= 4;
+
+          /* Bail out if a bogus length takes us out of range */
+          if( ext - end < len )
+            break;
+
+          ext -= len;
+        }
+      }
     }
   }
-
-  ts_out->sec = 0;
 }
 
 static inline void

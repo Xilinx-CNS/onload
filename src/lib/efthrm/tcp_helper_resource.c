@@ -3114,9 +3114,6 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   efrm_nic_set_clear(&ni->nic_set);
   trs->netif.nic_n = 0;
 
-  if( NI_OPTS(ni).no_hw )
-    ifindices_len = 0;
-
   if( ifindices_len > CI_CFG_MAX_INTERFACES )
     return -E2BIG;
 

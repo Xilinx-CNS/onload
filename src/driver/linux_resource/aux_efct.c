@@ -354,19 +354,41 @@ static int efct_resource_init(struct efct_client_device *edev,
   int i;
   int n_txqs;
 
+  rc = edev->ops->get_param(client, EFCT_CLIENT_DESIGN_PARAM, &val);
+  if( rc < 0 )
+    return rc;
+
+  efct->hw_filters_n = val.design_params.num_filter;
+  efct->hw_filters = vzalloc(sizeof(*efct->hw_filters) * efct->hw_filters_n);
+  if( ! efct->hw_filters )
+    return -ENOMEM;
+
+  efct->rxq_n = val.design_params.rx_queues;
+  efct->rxq = vzalloc(sizeof(*efct->rxq) * efct->rxq_n);
+  if( ! efct->rxq )
+    return -ENOMEM;
+
+  for( i = 0; i < efct->rxq_n; ++i)
+    INIT_WORK(&efct->rxq[i].destruct_wq, efct_destruct_apps_work);
+
   rc = edev->ops->get_param(client, EFCT_CLIENT_NIC_RESOURCES, &val);
   if( rc < 0 )
     return rc;
+
+  efct->evq_n = val.nic_res.evq_lim;
+  efct->evq = vzalloc(sizeof(*efct->evq) * efct->evq_n);
+  if( ! efct->evq )
+    return -ENOMEM;
 
   res_dim->vi_min = val.nic_res.evq_min;
   res_dim->vi_lim = CI_EFCT_EVQ_DUMMY_MAX;
   res_dim->mem_bar = VI_RES_MEM_BAR_UNDEFINED;
 
-  for( i = 0; i < CI_EFCT_MAX_EVQS; i++ )
+  for( i = 0; i < efct->evq_n; i++ )
     efct->evq[i].txq = EFCT_EVQ_NO_TXQ;
 
   n_txqs = val.nic_res.txq_lim - val.nic_res.txq_min;
-  for( i = 0; i < n_txqs && val.nic_res.evq_min + i < CI_EFCT_MAX_EVQS; i++ )
+  for( i = 0; i < n_txqs && val.nic_res.evq_min + i < val.nic_res.evq_lim; ++i )
     efct->evq[val.nic_res.evq_min + i].txq = val.nic_res.txq_min + i;
 
   rc = edev->ops->get_param(client, EFCT_CLIENT_IRQ_RESOURCES, &val);
@@ -398,7 +420,6 @@ int efct_probe(struct auxiliary_device *auxdev,
   struct efhw_nic *nic;
   struct efhw_nic_efct *efct = NULL;
   int rc;
-  int i;
 
   EFRM_NOTICE("%s name %s version %#x", __func__, id->name, edev->version);
 
@@ -434,9 +455,6 @@ int efct_probe(struct auxiliary_device *auxdev,
     goto fail2;
   }
 
-  for( i = 0; i < CI_ARRAY_SIZE(efct->rxq); ++i)
-    INIT_WORK(&efct->rxq[i].destruct_wq, efct_destruct_apps_work);
-
   rc = efct_devtype_init(edev, client, &dev_type);
   if( rc < 0 )
     goto fail2;
@@ -466,6 +484,12 @@ int efct_probe(struct auxiliary_device *auxdev,
  fail2:
   edev->ops->close(client);
  fail1:
+  if( efct->hw_filters )
+    vfree(efct->hw_filters);
+  if( efct->rxq )
+    vfree(efct->rxq);
+  if( efct->evq )
+    vfree(efct->evq);
   vfree(efct);
   EFRM_ERR("%s rc %d", __func__, rc);
   return rc;
@@ -494,7 +518,7 @@ void efct_remove(struct auxiliary_device *auxdev)
     return;
 
   efct = nic->arch_extra;
-  for( i = 0; i < CI_ARRAY_SIZE(efct->rxq); ++i ) {
+  for( i = 0; i < efct->rxq_n; ++i ) {
     /* All workqueues should be already shut down by now, but it may happen
      * that the final efct_poll() did not happen.  Do it now. */
     efct_poll(efct, i, 0);
@@ -503,7 +527,7 @@ void efct_remove(struct auxiliary_device *auxdev)
 
   /* Now any destruct work items we queued as a result of the final poll have
    * been drained, so everything should be gone. */
-  for( i = 0; i < CI_ARRAY_SIZE(efct->rxq); ++i ) {
+  for( i = 0; i < efct->rxq_n; ++i ) {
     EFHW_ASSERT(efct->rxq[i].live_apps == NULL);
     EFHW_ASSERT(efct->rxq[i].new_apps == NULL);
   }
@@ -532,6 +556,9 @@ void efct_remove(struct auxiliary_device *auxdev)
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */
   edev->ops->close(client);
+  vfree(efct->hw_filters);
+  vfree(efct->rxq);
+  vfree(efct->evq);
   vfree(efct);
 }
 
