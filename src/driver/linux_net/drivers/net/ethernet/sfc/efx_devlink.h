@@ -17,7 +17,7 @@
 int efx_probe_devlink(struct efx_nic *efx);
 void efx_fini_devlink(struct efx_nic *efx);
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_GET_DEVLINK_PORT)
 struct devlink_port *efx_get_devlink_port(struct net_device *dev);
 #endif
 

@@ -560,7 +560,7 @@ efx_rx_alloc_method_set(const char *val, const struct kernel_param *kp)
 efx_rx_alloc_method_set(const char *val, struct kernel_param *kp)
 #endif
 {
-	pr_warning("sfc: module parameter rx_alloc_method is obsolete\n");
+	pr_warn("sfc: module parameter rx_alloc_method is obsolete\n");
 	return 0;
 }
 #ifdef EFX_HAVE_KERNEL_PARAM_OPS
@@ -591,8 +591,8 @@ rx_copybreak_set(const char *val, struct kernel_param *kp)
 		rx_cb_size = ETH_HLEN;
 	} else if (rx_cb_size < ETH_ZLEN) {
 		rx_cb_size = ETH_ZLEN;
-		pr_warning("sfc: Invalid rx_copybreak value. Clamping to %u.\n",
-			   rx_cb_size);
+		pr_warn("sfc: Invalid rx_copybreak value. Clamping to %u.\n",
+			rx_cb_size);
 	}
 
 	return 0;

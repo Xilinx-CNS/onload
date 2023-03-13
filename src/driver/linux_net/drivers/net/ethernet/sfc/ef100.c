@@ -469,8 +469,7 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 	if (!efx)
 		return;
 
-	probe_data = container_of(efx, struct efx_probe_data, efx);
-	ef100_remove_netdev(probe_data);
+	efx_ef100_set_bar_config(efx, EF100_BAR_CONFIG_NONE);
 	efx_auxbus_unregister(efx);
 	efx_fini_struct_tc(efx);
 	ef100_remove(efx);
@@ -480,6 +479,7 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 	pci_disable_pcie_error_reporting(pci_dev);
 
 	pci_set_drvdata(pci_dev, NULL);
+	probe_data = container_of(efx, struct efx_probe_data, efx);
 	efx_fini_struct(efx);
 	kfree(probe_data);
 };
@@ -570,7 +570,7 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 	(void)pci_enable_pcie_error_reporting(pci_dev);
 
 	efx->state = STATE_PROBED;
-	rc = ef100_probe_netdev(probe_data);
+	rc = efx_ef100_set_bar_config(efx, EF100_BAR_CONFIG_EF100);
 	if (rc)
 		goto fail;
 

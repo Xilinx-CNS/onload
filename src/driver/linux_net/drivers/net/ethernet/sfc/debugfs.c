@@ -20,6 +20,7 @@
 #include "nic.h"
 #ifdef CONFIG_SFC_VDPA
 #include "ef100_vdpa.h"
+#include "mcdi_filters.h"
 #endif
 
 
@@ -500,6 +501,13 @@ static int efx_debugfs_read_vdpa_mac(struct seq_file *file, void *data)
         return 0;
 }
 
+static int ef100_vdpa_debugfs_read_filter_list(struct seq_file *file, void *data)
+{
+	struct ef100_vdpa_nic *vdpa_nic = data;
+
+	return efx_debugfs_read_filter_list(file, vdpa_nic->efx);
+}
+
 /* Per vdpa parameters */
 static struct efx_debugfs_parameter efx_debugfs_vdpa_parameters[] = {
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, vdpa_state),
@@ -508,6 +516,7 @@ static struct efx_debugfs_parameter efx_debugfs_vdpa_parameters[] = {
 	EFX_X64_PARAMETER(struct ef100_vdpa_nic, features),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, max_queue_pairs),
 	_EFX_RAW_PARAMETER(mac_address, efx_debugfs_read_vdpa_mac),
+	_EFX_RAW_PARAMETER(filters, ef100_vdpa_debugfs_read_filter_list),
 	{NULL},
 };
 

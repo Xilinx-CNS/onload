@@ -19,6 +19,9 @@
  */
 #define EFX_RECYCLE_RING_SIZE_10G	256
 
+/* vDPA queues starts from 2nd VI or qid 1 */
+#define EFX_VDPA_BASE_RX_QID 1
+
 void efx_rx_config_page_split(struct efx_nic *efx);
 
 int efx_probe_rx_queue(struct efx_rx_queue *rx_queue);

@@ -19,6 +19,7 @@
 #include "ef100_vdpa.h"
 #include "ef100_iova.h"
 #include "mcdi_vdpa.h"
+#include "mcdi_filters.h"
 #ifdef CONFIG_SFC_DEBUGFS
 #include "debugfs.h"
 #endif
@@ -326,8 +327,9 @@ static int delete_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 	if (vdpa_nic->vring[idx].vring_ctx)
 		delete_vring_ctx(vdpa_nic, idx);
 
-	if ((idx == 0) && (vdpa_nic->filter_cnt != 0)) {
-		rc = ef100_vdpa_filter_remove(vdpa_nic);
+	if (idx == 0) {
+		rc = efx_mcdi_filter_remove_all(vdpa_nic->efx,
+						EFX_FILTER_PRI_AUTO);
 		if (rc < 0) {
 			dev_err(&vdpa_nic->vdpa_dev.dev,
 				"%s: vdpa remove filter failed, err:%d\n",
@@ -338,9 +340,41 @@ static int delete_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 	return rc;
 }
 
+static void ef100_vdpa_kick_vq(struct vdpa_device *vdev, u16 idx)
+{
+	struct ef100_vdpa_nic *vdpa_nic;
+	struct efx_nic *efx;
+	u32 idx_val;
+
+	vdpa_nic = get_vdpa_nic(vdev);
+	if (idx >= (vdpa_nic->max_queue_pairs * 2)) {
+		dev_err(&vdev->dev, "%s: Invalid queue Id %u\n", __func__, idx);
+		return;
+	}
+
+	if (!vdpa_nic->vring[idx].vring_created) {
+		dev_err(&vdev->dev, "%s: Invalid vring%u\n", __func__, idx);
+		return;
+	}
+
+	efx = vdpa_nic->efx;
+	if (!efx) {
+		dev_err(&vdev->dev, "%s: Invalid efx pointer %u\n", __func__,
+			idx);
+		return;
+	}
+	idx_val = idx;
+	dev_vdbg(&vdev->dev, "%s: Writing value:%u in offset register:%u\n",
+		 __func__, idx_val,
+		 vdpa_nic->vring[idx].doorbell_offset);
+	_efx_writed(efx, cpu_to_le32(idx_val),
+		    vdpa_nic->vring[idx].doorbell_offset);
+}
+
 static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 {
 	struct efx_vring_dyn_cfg vring_dyn_cfg;
+	struct efx_nic *efx = vdpa_nic->efx;
 	struct efx_vring_ctx *vring_ctx;
 	struct efx_vring_cfg vring_cfg;
 	u32 vector;
@@ -403,25 +437,28 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 
 	/* Configure filters on rxq 0 */
 	if (idx == 0) {
-		rc = ef100_vdpa_filter_configure(vdpa_nic);
-		if (rc < 0) {
-			dev_err(&vdpa_nic->vdpa_dev.dev,
-				"%s: vdpa configure filter failed, err:%d\n",
-				__func__, rc);
-			goto err_filter_configure;
-		}
+		rc = efx->type->filter_table_up(efx);
+		if (rc)
+			goto err_debugfs_vdpa_init;
+
+		efx_mcdi_push_default_indir_table(efx,
+						  vdpa_nic->max_queue_pairs);
+		ef100_vdpa_insert_filter(vdpa_nic->efx);
 	}
 
 #ifdef CONFIG_SFC_DEBUGFS
 	rc = efx_init_debugfs_vdpa_vring(vdpa_nic, &vdpa_nic->vring[idx], idx);
 	if (rc)
-		goto err_filter_configure;
+		goto err_debugfs_vdpa_init;
 #endif
+	/* A VQ kick allows the device to read the avail_idx, which will be
+	 * required at the destination after live migration.
+	 */
+	ef100_vdpa_kick_vq(&vdpa_nic->vdpa_dev, idx);
 
 	return 0;
 
-err_filter_configure:
-	ef100_vdpa_filter_remove(vdpa_nic);
+err_debugfs_vdpa_init:
 	vdpa_nic->vring[idx].doorbell_offset_valid = false;
 err_get_doorbell_offset:
 	efx_vdpa_vring_destroy(vdpa_nic->vring[idx].vring_ctx,
@@ -558,39 +595,6 @@ static void ef100_vdpa_set_vq_num(struct vdpa_device *vdev, u16 idx, u32 num)
 	mutex_unlock(&vdpa_nic->lock);
 }
 
-static void ef100_vdpa_kick_vq(struct vdpa_device *vdev, u16 idx)
-{
-	struct ef100_vdpa_nic *vdpa_nic;
-	struct efx_nic *efx;
-	u32 idx_val;
-
-	vdpa_nic = get_vdpa_nic(vdev);
-	if (idx >= (vdpa_nic->max_queue_pairs * 2)) {
-		dev_err(&vdev->dev, "%s: Invalid queue Id %u\n", __func__, idx);
-		return;
-	}
-
-        if (!vdpa_nic->vring[idx].vring_created) {
-                dev_err(&vdev->dev, "%s: Invalid vring%u\n", __func__, idx);
-                return;
-        }
-
-	efx = vdpa_nic->efx;
-	if (!efx) {
-		dev_err(&vdev->dev, "%s: Invalid efx pointer %u\n", __func__,
-			idx);
-		return;
-	}
-	idx_val = idx;
-#if defined(VERBOSE_DEBUG)
-	dev_info(&vdev->dev, "%s: Writing value:%u in offset register:%u\n",
-		 __func__, idx_val,
-		 vdpa_nic->vring[idx].doorbell_offset);
-#endif
-	_efx_writed(efx, cpu_to_le32(idx_val),
-		    vdpa_nic->vring[idx].doorbell_offset);
-}
-
 static void ef100_vdpa_set_vq_cb(struct vdpa_device *vdev, u16 idx,
 				 struct vdpa_callback *cb)
 {
@@ -695,14 +699,17 @@ static int ef100_vdpa_set_vq_state(struct vdpa_device *vdev, u16 idx,
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE_SPLIT)
 	vdpa_nic->vring[idx].last_avail_idx = state->split.avail_index;
+	vdpa_nic->vring[idx].last_used_idx = state->split.avail_index;
 #else
 	vdpa_nic->vring[idx].last_avail_idx = state->avail_index;
+	vdpa_nic->vring[idx].last_used_idx = state->avail_index;
 #endif
 #else
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Queue:%u State:0x%llx", __func__, idx, state);
 #endif
 	vdpa_nic->vring[idx].last_avail_idx = state;
+	vdpa_nic->vring[idx].last_used_idx = state;
 #endif
 	mutex_unlock(&vdpa_nic->lock);
 	return 0;
@@ -731,12 +738,15 @@ static u64 ef100_vdpa_get_vq_state(struct vdpa_device *vdev, u16 idx)
 	mutex_lock(&vdpa_nic->lock);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_VQ_STATE_SPLIT)
-	state->split.avail_index = (u16)vdpa_nic->vring[idx].last_avail_idx;
+	/* In get_vq_state, we have to return the indices of the
+	 * last processed descriptor buffer by the device.
+	 */
+	state->split.avail_index = (u16)vdpa_nic->vring[idx].last_used_idx;
 #else
-	state->avail_index = (u16)vdpa_nic->vring[idx].last_avail_idx;
+	state->avail_index = (u16)vdpa_nic->vring[idx].last_used_idx;
 #endif
 #else
-	last_avail_index = vdpa_nic->vring[idx].last_avail_idx;
+	last_avail_index = vdpa_nic->vring[idx].last_used_idx;
 #endif
 	mutex_unlock(&vdpa_nic->lock);
 
@@ -861,6 +871,10 @@ static u64 ef100_vdpa_get_device_features(struct vdpa_device *vdev)
 		features &= ~(1ULL << VIRTIO_F_IN_ORDER);
 #endif
 	features |= (1ULL << VIRTIO_NET_F_MAC);
+	/* TODO: QEMU Shadow VirtQueue (SVQ) doesn't support
+	 * VIRTIO_F_ORDER_PLATFORM, so masking it off to allow Live Migration
+	 */
+	features &= ~(1ULL << VIRTIO_F_ORDER_PLATFORM);
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Features returned:\n", __func__);
 	print_features_str(features, vdev);
@@ -1094,15 +1108,12 @@ static void ef100_vdpa_set_config(struct vdpa_device *vdev, unsigned int offset,
 	}
 
 	memcpy((u8 *)&vdpa_nic->net_config + offset, buf, len);
-	if (is_valid_ether_addr(vdpa_nic->mac_address)) {
-		vdpa_nic->mac_configured = true;
-		ef100_vdpa_add_filter(vdpa_nic, EF100_VDPA_UCAST_MAC_FILTER);
-	}
+	ef100_vdpa_insert_filter(vdpa_nic->efx);
 
 	dev_dbg(&vdpa_nic->vdpa_dev.dev,
-		 "%s: Status:%u MAC(conf):%pM(%d) max_qps:%u MTU:%u\n",
+		 "%s: Status:%u MAC:%pM max_qps:%u MTU:%u\n",
 		 __func__, vdpa_nic->net_config.status,
-		 vdpa_nic->net_config.mac, vdpa_nic->mac_configured,
+		 vdpa_nic->net_config.mac,
 		 vdpa_nic->net_config.max_virtqueue_pairs,
 		 vdpa_nic->net_config.mtu);
 }
@@ -1249,6 +1260,25 @@ static void ef100_vdpa_free(struct vdpa_device *vdev)
 	vdpa_nic->efx->vdpa_nic = NULL;
 }
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_CONFIG_OP_SUSPEND)
+static int ef100_vdpa_suspend(struct vdpa_device *vdev)
+{
+	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
+	int i, rc;
+
+	mutex_lock(&vdpa_nic->lock);
+	for (i = 0; i < vdpa_nic->max_queue_pairs * 2; i++) {
+		if (vdpa_nic->vring[i].vring_created) {
+			rc = delete_vring(vdpa_nic, i);
+			if (rc)
+				break;
+		}
+	}
+	mutex_unlock(&vdpa_nic->lock);
+	return rc;
+}
+#endif
+
 const struct vdpa_config_ops ef100_vdpa_config_ops = {
 	.set_vq_address	     = ef100_vdpa_set_vq_address,
 	.set_vq_num	     = ef100_vdpa_set_vq_num,
@@ -1291,6 +1321,9 @@ const struct vdpa_config_ops ef100_vdpa_config_ops = {
 	.set_map             = NULL,
 	.dma_map	     = ef100_vdpa_dma_map,
 	.dma_unmap           = ef100_vdpa_dma_unmap,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_CONFIG_OP_SUSPEND)
+	.suspend             = ef100_vdpa_suspend,
+#endif
 	.free	             = ef100_vdpa_free,
 };
 #endif

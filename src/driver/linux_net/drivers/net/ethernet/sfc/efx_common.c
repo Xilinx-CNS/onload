@@ -2430,7 +2430,7 @@ int __efx_dl_init_txq(struct efx_dl_device *efx_dev, u32 client_id,
 		      bool ctpio, bool ctpio_uthresh, bool m2m_d2c, u32 instance,
 		      u32 label, u32 target_evq, u32 num_entries)
 {
-	MCDI_DECLARE_PROXYABLE_BUF(inbuf, MC_CMD_INIT_TXQ_EXT_IN_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_INIT_TXQ_EXT_IN_LEN);
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 	struct efx_vport *vpx;
 	u32 port_id;
@@ -2493,7 +2493,7 @@ int __efx_dl_init_rxq(struct efx_dl_device *efx_dev, u32 client_id,
 		      u32 label, u32 target_evq, u32 num_entries,
 		      u8 ps_buf_size, bool force_rx_merge, int ef100_rx_buffer_size)
 {
-	MCDI_DECLARE_PROXYABLE_BUF(inbuf, MC_CMD_INIT_RXQ_V4_IN_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_INIT_RXQ_V4_IN_LEN);
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
 	struct efx_vport *vpx;
 	u32 port_id;
@@ -2685,14 +2685,13 @@ static int __efx_dl_mcdi_rpc_client(struct efx_dl_device *efx_dev,
 static int __efx_dl_client_alloc(struct efx_dl_device *efx_dev, u32 parent,
                                  u32 *id)
 {
-	int rc;
-	MCDI_DECLARE_PROXYABLE_BUF(inbuf, MC_CMD_CLIENT_ALLOC_IN_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_CLIENT_ALLOC_OUT_LEN);
 	struct efx_nic *efx = efx_dl_device_priv(efx_dev);
+	int rc;
 
+	BUILD_BUG_ON(MC_CMD_CLIENT_ALLOC_IN_LEN != 0);
 	rc = efx_mcdi_rpc_client(efx, parent, MC_CMD_CLIENT_ALLOC,
-	                         inbuf, MC_CMD_CLIENT_ALLOC_IN_LEN,
-	                         outbuf, sizeof(outbuf), NULL);
+				 NULL, 0, outbuf, sizeof(outbuf), NULL);
 	if (rc)
 		return rc;
 	*id = MCDI_DWORD(outbuf, CLIENT_ALLOC_OUT_CLIENT_ID);

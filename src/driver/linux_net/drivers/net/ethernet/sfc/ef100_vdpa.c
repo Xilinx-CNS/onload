@@ -21,65 +21,9 @@
 #include "debugfs.h"
 #endif
 #include "ef100_iova.h"
-#include "ef100_netdev.h"
 
 #if defined(CONFIG_SFC_VDPA)
 #define EFX_VDPA_NAME_LEN 32
-#define EFX_INVALID_FILTER_ID -1
-
-static const char * const filter_names[] = { "bcast", "ucast", "mcast" };
-
-static int ef100_vdpa_set_mac_filter(struct efx_nic *efx,
-				     struct efx_filter_spec *spec,
-				     u32 qid,
-				     u8 *mac_addr)
-{
-	int rc;
-
-	efx_filter_init_rx(spec, EFX_FILTER_PRI_MANUAL, 0, qid);
-
-	if (mac_addr) {
-		rc = efx_filter_set_eth_local(spec, EFX_FILTER_VID_UNSPEC,
-					      mac_addr);
-		if (rc != 0)
-			pci_err(efx->pci_dev,
-				"Filter set eth local failed, err: %d\n", rc);
-	} else {
-		efx_filter_set_mc_def(spec);
-	}
-
-	rc = efx_filter_insert_filter(efx, spec, true);
-	if (rc < 0)
-		pci_err(efx->pci_dev,
-			"Filter insert failed, err: %d\n", rc);
-
-	return rc;
-}
-
-static int ef100_vdpa_delete_filter(struct ef100_vdpa_nic *vdpa_nic,
-				    enum ef100_vdpa_mac_filter_type type)
-{
-	struct vdpa_device *vdev = &vdpa_nic->vdpa_dev;
-	int rc = 0;
-
-	if (vdpa_nic->filters[type].filter_id == EFX_INVALID_FILTER_ID)
-		return rc;
-
-	rc = efx_filter_remove_id_safe(vdpa_nic->efx,
-				       EFX_FILTER_PRI_MANUAL,
-				       vdpa_nic->filters[type].filter_id);
-	if (rc) {
-		dev_err(&vdev->dev, "%s filter id: %d remove failed, err: %d\n",
-			filter_names[type], vdpa_nic->filters[type].filter_id,
-			rc);
-	} else {
-		dev_dbg(&vdev->dev, "%s filter id: %d removed\n",
-			filter_names[type], vdpa_nic->filters[type].filter_id);
-		vdpa_nic->filters[type].filter_id = EFX_INVALID_FILTER_ID;
-		vdpa_nic->filter_cnt--;
-	}
-	return rc;
-}
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
 
@@ -96,32 +40,21 @@ static const struct virtio_device_id ef100_vdpa_id_table[] =
 static void ef100_vdpa_net_dev_del(struct vdpa_mgmt_dev *mgmt_dev,
 				   struct vdpa_device *vdev)
 {
-	struct efx_probe_data *probe_data;
 	struct ef100_nic_data *nic_data;
 	struct efx_nic *efx;
 	int rc;
 
 	efx = pci_get_drvdata(to_pci_dev(mgmt_dev->device));
-	probe_data = container_of(efx, struct efx_probe_data, efx);
 	nic_data = efx->nic_data;
 
-	ef100_vdpa_fini(probe_data);
-	rc = ef100_probe_netdev(probe_data);
-	/* Update the bar_config value to maintain consistency across
-	 * different user interfaces for vdpa device management
-	 */
-	if (rc) {
-#ifdef EFX_NOT_UPSTREAM
-		nic_data->bar_config = EF100_BAR_CONFIG_NONE;
-#endif
+	rc = efx_ef100_set_bar_config(efx, EF100_BAR_CONFIG_EF100);
+	if (rc)
 		pci_err(efx->pci_dev,
-			"netdev initialisation failed, err: %d\n", rc);
-	} else {
-		nic_data->bar_config = EF100_BAR_CONFIG_EF100;
+			"set_bar_config EF100 failed, err: %d\n", rc);
+	else
 		pci_dbg(efx->pci_dev,
 			"vdpa net device deleted, vf: %u\n",
 			nic_data->vf_index);
-	}
 }
 
 static int ef100_vdpa_net_dev_add(struct vdpa_mgmt_dev *mgmt_dev,
@@ -132,19 +65,19 @@ static int ef100_vdpa_net_dev_add(struct vdpa_mgmt_dev *mgmt_dev,
 				  const char *name)
 #endif
 {
-	struct efx_probe_data *probe_data;
 	struct ef100_vdpa_nic *vdpa_nic;
 	struct ef100_nic_data *nic_data;
 	struct efx_nic *efx;
 	int rc, err;
 
 	efx = pci_get_drvdata(to_pci_dev(mgmt_dev->device));
+	nic_data = efx->nic_data;
+
 	if (efx->vdpa_nic) {
 		pci_warn(efx->pci_dev,
 			 "vDPA device already exists on this VF\n");
 		return -EEXIST;
 	}
-
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
 	if (config->mask & BIT_ULL(VDPA_ATTR_DEV_NET_CFG_MACADDR)) {
 		if (!is_valid_ether_addr(config->net.mac)) {
@@ -155,21 +88,12 @@ static int ef100_vdpa_net_dev_add(struct vdpa_mgmt_dev *mgmt_dev,
 	}
 #endif
 
-	probe_data = container_of(efx, struct efx_probe_data, efx);
-	nic_data = efx->nic_data;
-
-	ef100_remove_netdev(probe_data);
-	rc = ef100_vdpa_init(probe_data);
+	rc = efx_ef100_set_bar_config(efx, EF100_BAR_CONFIG_VDPA);
 	if (rc) {
 		pci_err(efx->pci_dev,
-			"ef100_vdpa_init failed, err: %d\n", rc);
-		goto err_vdpa_init;
+			"set_bar_config vDPA failed, err: %d\n", rc);
+		goto err_set_bar_config;
 	}
-
-	/* Update the bar_config value to maintain consistency across
-	 * different user interfaces for vdpa device management
-	 */
-	nic_data->bar_config = EF100_BAR_CONFIG_VDPA;
 
 	/* TODO: handle in_order feature with management interface
 	 * This will be done in VDPALINUX-242
@@ -181,8 +105,7 @@ static int ef100_vdpa_net_dev_add(struct vdpa_mgmt_dev *mgmt_dev,
 			"vDPA device creation failed, vf: %u, err: %ld\n",
 			nic_data->vf_index, PTR_ERR(vdpa_nic));
 		rc = PTR_ERR(vdpa_nic);
-		ef100_vdpa_fini(probe_data);
-		goto err_vdpa_init;
+		goto err_set_bar_config;
 	} else {
 		pci_info(efx->pci_dev,
 			 "vDPA net device created, vf: %u\n",
@@ -192,30 +115,25 @@ static int ef100_vdpa_net_dev_add(struct vdpa_mgmt_dev *mgmt_dev,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
 	if (config->mask & BIT_ULL(VDPA_ATTR_DEV_NET_CFG_MACADDR)) {
 		ether_addr_copy(vdpa_nic->mac_address, config->net.mac);
-		vdpa_nic->mac_configured = true;
 
+		/* It has been observed during testing with virtio-vdpa
+		 * that virtio feature negotiation and vring creation
+		 * happens before control reaches here.
+		 */
 		if (vdpa_nic->vring[0].vring_created)
-			ef100_vdpa_add_filter(vdpa_nic, EF100_VDPA_UCAST_MAC_FILTER);
+			ef100_vdpa_insert_filter(efx);
 	}
 #endif
 
-	/* TODO: handle MAC and MTU configuration from config parameter */
+	/* TODO: handle MTU configuration from config parameter */
 	return 0;
 
-err_vdpa_init:
-	err = ef100_probe_netdev(probe_data);
-	if (err) {
-#ifdef EFX_NOT_UPSTREAM
-		nic_data->bar_config = EF100_BAR_CONFIG_NONE;
-#endif
+err_set_bar_config:
+	err = efx_ef100_set_bar_config(efx, EF100_BAR_CONFIG_EF100);
+	if (err)
 		pci_err(efx->pci_dev,
-			"netdev initialisation failed, err: %d\n", err);
-	} else {
-		nic_data->bar_config = EF100_BAR_CONFIG_EF100;
-		pci_dbg(efx->pci_dev,
-			"ef100 netdev initialized, vf: %u\n",
-			nic_data->vf_index);
-	}
+			"set_bar_config EF100 failed, err: %d\n", err);
+
 	return rc;
 }
 
@@ -227,16 +145,30 @@ static const struct vdpa_mgmtdev_ops ef100_vdpa_net_mgmtdev_ops = {
 int ef100_vdpa_register_mgmtdev(struct efx_nic *efx)
 {
 	struct vdpa_mgmt_dev *mgmt_dev;
+	u64 features;
 	int rc;
 
 	mgmt_dev = kzalloc(sizeof(*mgmt_dev), GFP_KERNEL);
 	if (!mgmt_dev)
 		return -ENOMEM;
 
+	rc = efx_vdpa_get_features(efx, EF100_VDPA_DEVICE_TYPE_NET, &features);
+	if (rc != 0) {
+		pci_err(efx->pci_dev, "%s: MCDI get features error:%d\n",
+			__func__, rc);
+		return rc;
+	}
+
 	efx->mgmt_dev = mgmt_dev;
 	mgmt_dev->device = &efx->pci_dev->dev;
 	mgmt_dev->id_table = ef100_vdpa_id_table;
 	mgmt_dev->ops = &ef100_vdpa_net_mgmtdev_ops;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_SUPPORTED_FEATURES)
+	mgmt_dev->supported_features = features;
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MAX_SUPPORTED_VQS)
+	mgmt_dev->max_supported_vqs = EF100_VDPA_MAX_QUEUES_PAIRS * 2;
+#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM)
 	mgmt_dev->config_attr_mask = BIT_ULL(VDPA_ATTR_DEV_NET_CFG_MACADDR);
 #endif
@@ -263,123 +195,43 @@ void ef100_vdpa_unregister_mgmtdev(struct efx_nic *efx)
 }
 #endif
 
-int ef100_vdpa_add_filter(struct ef100_vdpa_nic *vdpa_nic,
-			  enum ef100_vdpa_mac_filter_type type)
+static void
+ef100_vdpa_addr_source(struct efx_nic *efx,
+		       bool *uc_promisc,
+		       bool *mc_promisc)
 {
-	struct vdpa_device *vdev = &vdpa_nic->vdpa_dev;
-	struct efx_nic *efx = vdpa_nic->efx;
-	/* Configure filter on base Rx queue only */
-	u32 qid = EF100_VDPA_BASE_RX_QID;
-	struct efx_filter_spec *spec;
-	u8 baddr[ETH_ALEN];
-	int rc;
+	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
+	struct efx_mcdi_dev_addr addr;
 
-	/* remove existing filter */
-	rc = ef100_vdpa_delete_filter(vdpa_nic, type);
-	if (rc < 0) {
-		dev_err(&vdev->dev, "%s MAC filter deletion failed, err: %d",
-			filter_names[type], rc);
-		return rc;
-	}
+	*uc_promisc = false;
+	/* As Control Virtqueue is yet to be implemented in vDPA
+	 * driver, it is not possible to pass on the MAC address
+	 * corresponding to Solicited-Node Multicast Address via
+	 * VIRTIO_NET_CTRL_MAC_TABLE_SET to hypervisor. To deal
+	 * with this limitation, enable multicast promiscuous to
+	 * receive neighbor solicitation messages in order to
+	 * allow the IPv6 ping to succeed.
+	 */
+	*mc_promisc = true;
 
-	/* Configure MAC Filter */
-	spec = &vdpa_nic->filters[type].spec;
-	if (type == EF100_VDPA_BCAST_MAC_FILTER) {
-		eth_broadcast_addr(baddr);
-		rc = ef100_vdpa_set_mac_filter(efx, spec, qid, baddr);
-	} else if (type == EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER) {
-		rc = ef100_vdpa_set_mac_filter(efx, spec, qid, NULL);
+	if (is_valid_ether_addr(vdpa_nic->mac_address)) {
+		dev_dbg(&vdpa_nic->vdpa_dev.dev, "ucast mac: %pM\n",
+			vdpa_nic->mac_address);
+		ether_addr_copy(addr.addr, vdpa_nic->mac_address);
+		efx_mcdi_filter_uc_addr(efx, &addr);
 	} else {
-		if (!vdpa_nic->mac_configured ||
-		    !vdpa_nic->vring[0].vring_created ||
-		    !is_valid_ether_addr(vdpa_nic->mac_address)) {
-			dev_err(&vdev->dev,
-				"MAC: %pM, mac_conf: %d, vring_created: %d\n",
-				vdpa_nic->mac_address, vdpa_nic->mac_configured,
-				vdpa_nic->vring[0].vring_created);
-			return -EINVAL;
-		}
-
-		rc = ef100_vdpa_set_mac_filter(efx, spec, qid,
-					       vdpa_nic->mac_address);
-		dev_dbg(&vdev->dev, "ucast mac: %pM\n", vdpa_nic->mac_address);
+		dev_dbg(&vdpa_nic->vdpa_dev.dev, "Invalid MAC address %pM\n",
+			 vdpa_nic->mac_address);
 	}
-
-	if (rc < 0) {
-		if (type != EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER) {
-			dev_err(&vdev->dev,
-				"%s MAC filter insert failed, err: %d\n",
-				filter_names[type], rc);
-			goto fail;
-		} else {
-			dev_warn(&vdev->dev,
-				 "%s MAC filter insert failed, err: %d\n",
-				 filter_names[type], rc);
-			/* return success, mcast filter not mandatory */
-			return 0;
-		}
-	}
-
-	vdpa_nic->filters[type].filter_id = rc;
-	vdpa_nic->filter_cnt++;
-	dev_dbg(&vdev->dev, "vDPA %s filter created, filter_id: %d\n",
-		filter_names[type], rc);
-	return 0;
-
-fail:
-	ef100_vdpa_filter_remove(vdpa_nic);
-	return rc;
 }
 
-int ef100_vdpa_filter_remove(struct ef100_vdpa_nic *vdpa_nic)
+void ef100_vdpa_insert_filter(struct efx_nic *efx)
 {
-	enum ef100_vdpa_mac_filter_type filter;
-	int err = 0;
-	int rc = 0;
-
-	for (filter = EF100_VDPA_BCAST_MAC_FILTER;
-	     filter <= EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER; filter++) {
-		rc = ef100_vdpa_delete_filter(vdpa_nic, filter);
-		if (rc < 0)
-			/* store status of last failed filter remove */
-			err = rc;
-	}
-	return err;
-}
-
-int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic)
-{
-	struct vdpa_device *vdev = &vdpa_nic->vdpa_dev;
-	enum ef100_vdpa_mac_filter_type filter;
-	struct efx_nic *efx = vdpa_nic->efx;
-	int rc = 0;
-
-	/* remove existing filters, if any */
-	rc = ef100_vdpa_filter_remove(vdpa_nic);
-	if (rc < 0) {
-		dev_err(&vdev->dev,
-			"MAC filter deletion failed, err: %d", rc);
-		goto fail;
-	}
-
-	rc = efx->type->filter_table_up(efx);
-	if (rc < 0) {
-		dev_err(&vdev->dev,
-			"filter_table_up failed, err: %d", rc);
-		goto fail;
-	}
-
-	for (filter = EF100_VDPA_BCAST_MAC_FILTER;
-	     filter <= EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER; filter++) {
-		if (filter == EF100_VDPA_UCAST_MAC_FILTER &&
-		    !vdpa_nic->mac_configured)
-			continue;
-		rc = ef100_vdpa_add_filter(vdpa_nic, filter);
-		if (rc < 0)
-			goto fail;
-	}
-fail:
-	return rc;
+	mutex_lock(&efx->mac_lock);
+	down_read(&efx->filter_sem);
+	efx_mcdi_filter_sync_rx_mode(efx);
+	up_read(&efx->filter_sem);
+	mutex_unlock(&efx->mac_lock);
 }
 
 #ifdef EFX_NOT_UPSTREAM
@@ -441,10 +293,9 @@ static ssize_t vdpa_mac_store(struct device *dev,
 	}
 
 	ether_addr_copy(vdpa_nic->mac_address, (const u8 *)&mac_address);
-	vdpa_nic->mac_configured = true;
 
 	if (vdpa_nic->vring[0].vring_created)
-		ef100_vdpa_add_filter(vdpa_nic, EF100_VDPA_UCAST_MAC_FILTER);
+		ef100_vdpa_insert_filter(efx);
 
 err:
 	mutex_unlock(&vdpa_nic->lock);
@@ -644,13 +495,8 @@ static int vdpa_update_domain(struct ef100_vdpa_nic *vdpa_nic)
 	struct vdpa_device *vdpa = &vdpa_nic->vdpa_dev;
 	struct device *dma_dev = vdpa_get_dma_dev(vdpa);
 	struct iommu_domain_geometry *geo;
-	struct bus_type *bus;
 
-	bus = dma_dev->bus;
-	if (!bus)
-		return -EFAULT;
-
-	if (!iommu_capable(bus, IOMMU_CAP_CACHE_COHERENCY))
+	if (!device_iommu_capable(dma_dev, IOMMU_CAP_CACHE_COHERENCY))
 		return -ENOTSUPP;
 
 	vdpa_nic->domain = iommu_get_domain_for_dev(dma_dev);
@@ -677,6 +523,9 @@ static int vdpa_update_domain(struct ef100_vdpa_nic *vdpa_nic)
 
 int ef100_vdpa_init(struct efx_probe_data *probe_data)
 {
+	struct efx_mcdi_filter_addr_source addr_source = {
+		&ef100_vdpa_addr_source
+	};
 	struct efx_nic *efx = &probe_data->efx;
 	int rc = 0;
 
@@ -697,14 +546,23 @@ int ef100_vdpa_init(struct efx_probe_data *probe_data)
 		goto err_remove_vdpa_files;
 	}
 
+	/* Add unspecified VID to support VLAN filtering being disabled */
+	rc = efx_mcdi_filter_add_vlan(efx, EFX_FILTER_VID_UNSPEC);
+	if (rc)
+		goto err_remove_filter_table;
+
+	efx_mcdi_filter_set_addr_source(efx, addr_source);
+
 	if (!efx->type->filter_table_probe)
-		goto err_remove_vdpa_files;
+		goto err_remove_filter_table;
 
 	rc = efx->type->filter_table_probe(efx);
 	if (!rc)
 		return 0;
 
 	pci_err(efx->pci_dev, "filter_table_probe failed, err: %d\n", rc);
+
+err_remove_filter_table:
 	efx_mcdi_filter_table_remove(efx);
 
 err_remove_vdpa_files:
@@ -721,7 +579,8 @@ void ef100_vdpa_fini(struct efx_probe_data *probe_data)
 #endif
 
 	if (efx->state != STATE_VDPA && efx->state != STATE_DISABLED) {
-		pci_err(efx->pci_dev, "Invalid efx state %u", efx->state);
+		pci_dbg(efx->pci_dev, "%s: Invalid efx state %u",
+			__func__, efx->state);
 		return;
 	}
 
@@ -748,7 +607,6 @@ static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 	u8 duplex;
 	int rc = 0;
 
-	vdpa_nic->mac_configured = false;
 	rc = efx_vdpa_get_mac_address(efx,
 				      vdpa_nic->net_config.mac);
 	if (rc) {
@@ -757,10 +615,6 @@ static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 			 __func__, vdpa_nic->vf_index, rc);
 		return rc;
 	}
-
-	/* Set mac_configured to true for Non-Zero MAC address */
-	if (!is_zero_ether_addr(vdpa_nic->mac_address))
-		vdpa_nic->mac_configured = true;
 
 	vdpa_nic->net_config.max_virtqueue_pairs =
 		(__virtio16 __force)vdpa_nic->max_queue_pairs;
@@ -1066,9 +920,6 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
 	dev_info(dev, "%s: vDPA dev pf_index:%u vf_index:%u max_queues:%u\n",
 		 __func__, vdpa_nic->pf_index, vdpa_nic->vf_index,
 		 vdpa_nic->max_queue_pairs);
-
-	for (i = 0; i < EF100_VDPA_MAC_FILTER_NTYPES; i++)
-		vdpa_nic->filters[i].filter_id = EFX_INVALID_FILTER_ID;
 
 	for (i = 0; i < (2 * vdpa_nic->max_queue_pairs); i++)
 		vdpa_nic->vring[i].irq = -EINVAL;

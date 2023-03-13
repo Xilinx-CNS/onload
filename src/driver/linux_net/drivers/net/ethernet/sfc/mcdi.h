@@ -113,6 +113,7 @@ typedef void efx_mcdi_async_completer(struct efx_nic *efx,
  * @outlen: Size of @outbuf
  * @outbuf: Output buffer
  * @proxy_handle: Handle if this command was proxied
+ * @client_id: client ID on which to send this MCDI command
  */
 struct efx_mcdi_cmd {
 	struct kref ref;
@@ -138,6 +139,7 @@ struct efx_mcdi_cmd {
 	size_t outlen;
 	efx_dword_t *outbuf;
 	u32 proxy_handle;
+	u32 client_id;
 	/* followed by inbuf data if necessary */
 };
 
@@ -179,6 +181,7 @@ struct efx_mcdi_iface {
 	bool logging_enabled;
 	char *logging_buffer;
 #ifdef EFX_NOT_UPSTREAM
+	/** @log_commands: Subset of MCDI commands to log */
 	DECLARE_BITMAP(log_commands, MCDI_NUM_LOG_COMMANDS);
 #endif
 #endif
@@ -231,18 +234,111 @@ int efx_mcdi_init(struct efx_nic *efx);
 void efx_mcdi_detach(struct efx_nic *efx);
 void efx_mcdi_fini(struct efx_nic *efx);
 
-int efx_mcdi_rpc(struct efx_nic *efx, unsigned int cmd,
-		 const efx_dword_t *inbuf, size_t inlen,
-		 efx_dword_t *outbuf, size_t outlen, size_t *outlen_actual);
-int efx_mcdi_rpc_quiet(struct efx_nic *efx, unsigned int cmd,
-		       const efx_dword_t *inbuf, size_t inlen,
-		       efx_dword_t *outbuf, size_t outlen,
-		       size_t *outlen_actual);
+int efx_mcdi_rpc_client_sync(struct efx_nic *efx, u32 client_id,
+			     unsigned int cmd, const efx_dword_t *inbuf,
+			     size_t inlen, efx_dword_t *outbuf, size_t outlen,
+			     size_t *outlen_actual, bool quiet);
+
+/**
+ * efx_mcdi_rpc_client - Issue an MCDI command on a non-base client.
+ *
+ * @efx: NIC through which to issue the command.
+ * @client_id: A dynamic client ID on which to send this MCDI command, or
+ *	       MC_CMD_CLIENT_ID_SELF to send the command to the base client
+ *	       (which makes this function identical to efx_mcdi_rpc()).
+ * @cmd: Command type number.
+ * @inbuf: Command parameters.
+ * @inlen: Length of command parameters, in bytes.  Must be a multiple
+ *	   of 4 and no greater than %MCDI_CTL_SDU_LEN_MAX_V1.
+ * @outbuf: Response buffer.  May be %NULL if @outlen is 0.
+ * @outlen: Length of response buffer, in bytes.  If the actual
+ *	    response is longer than @outlen & ~3, it will be truncated
+ *	    to that length.
+ * @outlen_actual: Pointer through which to return the actual response
+ *		   length.  May be %NULL if this is not needed.
+ *
+ * This is a superset of the functionality of efx_mcdi_rpc(), adding the
+ * @client_id. This function may sleep and therefore must be called in
+ * process context.
+ *
+ * Return: a negative error code or 0 on success.
+ */
+static inline int efx_mcdi_rpc_client(struct efx_nic *efx, u32 client_id,
+				      unsigned int cmd, const efx_dword_t *inbuf,
+				      size_t inlen, efx_dword_t *outbuf,
+				      size_t outlen, size_t *outlen_actual)
+{
+	return efx_mcdi_rpc_client_sync(efx, client_id, cmd, inbuf, inlen,
+					outbuf, outlen, outlen_actual, false);
+}
+
+/**
+ * efx_mcdi_rpc - Issue an MCDI command and wait for completion
+ * @efx: NIC through which to issue the command
+ * @cmd: Command type number
+ * @inbuf: Command parameters
+ * @inlen: Length of command parameters, in bytes.  Must be a multiple
+ *	of 4 and no greater than %MCDI_CTL_SDU_LEN_MAX_V1.
+ * @outbuf: Response buffer.  May be %NULL if @outlen is 0.
+ * @outlen: Length of response buffer, in bytes.  If the actual
+ *	response is longer than @outlen & ~3, it will be truncated
+ *	to that length.
+ * @outlen_actual: Pointer through which to return the actual response
+ *	length.  May be %NULL if this is not needed.
+ *
+ * This function may sleep and therefore must be called in process
+ * context.
+ *
+ * Return: A negative error code, or zero if successful.  The error
+ *	code may come from the MCDI response or may indicate a failure
+ *	to communicate with the MC.  In the former case, the response
+ *	will still be copied to @outbuf and *@outlen_actual will be
+ *	set accordingly.  In the latter case, *@outlen_actual will be
+ *	set to zero.
+ */
+static inline int efx_mcdi_rpc(struct efx_nic *efx, unsigned int cmd,
+			       const efx_dword_t *inbuf, size_t inlen,
+			       efx_dword_t *outbuf, size_t outlen,
+			       size_t *outlen_actual)
+{
+	return efx_mcdi_rpc_client_sync(efx, MC_CMD_CLIENT_ID_SELF, cmd,
+					inbuf, inlen, outbuf, outlen,
+					outlen_actual, false);
+}
+
+/* Normally, on receiving an error code in the MCDI response,
+ * efx_mcdi_rpc/efx_mcdi_rpc_client will log an error message
+ * containing (among other things) the raw error code, by means of
+ * efx_mcdi_display_error. This _quiet version suppresses that;
+ * if the caller wishes to log the error conditionally on the
+ * return code, it should call this function and is then responsible
+ * for calling efx_mcdi_display_error as needed.
+ */
+static inline int efx_mcdi_rpc_client_quiet(struct efx_nic *efx, u32 client_id,
+					    unsigned int cmd,
+					    const efx_dword_t *inbuf,
+					    size_t inlen, efx_dword_t *outbuf,
+					    size_t outlen, size_t *outlen_actual)
+{
+	return efx_mcdi_rpc_client_sync(efx, client_id, cmd, inbuf, inlen,
+					outbuf, outlen, outlen_actual, true);
+}
+
+static inline int efx_mcdi_rpc_quiet(struct efx_nic *efx, unsigned int cmd,
+				     const efx_dword_t *inbuf, size_t inlen,
+				     efx_dword_t *outbuf, size_t outlen,
+				     size_t *outlen_actual)
+{
+	return efx_mcdi_rpc_client_quiet(efx, MC_CMD_CLIENT_ID_SELF, cmd,
+					 inbuf, inlen, outbuf, outlen,
+					 outlen_actual);
+}
 
 int efx_mcdi_rpc_async(struct efx_nic *efx, unsigned int cmd,
 		       const efx_dword_t *inbuf, size_t inlen,
 		       efx_mcdi_async_completer *complete,
 		       unsigned long cookie);
+
 int efx_mcdi_rpc_async_quiet(struct efx_nic *efx, unsigned int cmd,
 			     const efx_dword_t *inbuf, size_t inlen,
 			     efx_mcdi_async_completer *complete,
@@ -253,9 +349,6 @@ int efx_mcdi_rpc_async_ext(struct efx_nic *efx, unsigned int cmd,
 			   efx_mcdi_async_completer *completer,
 			   unsigned long cookie, bool quiet,
 			   bool immediate_only, unsigned int *handle);
-int efx_mcdi_rpc_client(struct efx_nic *efx, u32 client_id, unsigned int cmd,
-			efx_dword_t *inbuf, size_t inlen, efx_dword_t *outbuf,
-			size_t outlen, size_t *outlen_actual);
 
 /* Attempt to cancel an outstanding command.
  * This function guarantees that the completion function will never be called
@@ -305,9 +398,6 @@ static inline void efx_mcdi_dynamic_sensor_event(struct efx_nic *efx, efx_qword_
 	_MCDI_DECLARE_BUF(_name, _len) = {{{0}}}
 #define MCDI_DECLARE_BUF_ERR(_name)					\
 	MCDI_DECLARE_BUF(_name, 8)
-/* See efx_mcdi_rpc_client() for the purpose of this macro: */
-#define MCDI_DECLARE_PROXYABLE_BUF(_name, _len)				\
-	MCDI_DECLARE_BUF(_name, (_len) + 8 + MC_CMD_CLIENT_CMD_IN_LEN)
 #define _MCDI_PTR(_buf, _offset)					\
 	((u8 *)(_buf) + (_offset))
 #define MCDI_PTR(_buf, _field)						\

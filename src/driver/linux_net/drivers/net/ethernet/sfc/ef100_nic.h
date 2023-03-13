@@ -80,12 +80,11 @@ enum {
 	EF100_STAT_COUNT
 };
 
+/* Keep this in sync with the contents of bar_config_name. */
 enum ef100_bar_config {
+	EF100_BAR_CONFIG_NONE,
 	EF100_BAR_CONFIG_EF100,
 	EF100_BAR_CONFIG_VDPA,
-#ifdef EFX_NOT_UPSTREAM
-	EF100_BAR_CONFIG_NONE,	/* For internal testing of the PROBED state */
-#endif
 };
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_VDPA_MGMT_INTERFACE)
@@ -188,4 +187,7 @@ static inline bool efx_have_mport_journal_event(struct efx_nic *efx)
 	return efx_ef100_has_cap(nic_data->datapath_caps3,
 				 DYNAMIC_MPORT_JOURNAL);
 }
+
+int efx_ef100_set_bar_config(struct efx_nic *efx,
+			     enum ef100_bar_config new_config);
 #endif	/* EFX_EF100_NIC_H */

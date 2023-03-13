@@ -1136,6 +1136,8 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 			  "%u VIs are not sufficient to map %u PIO buffers\n",
 			  nic_data->n_allocated_vis, nic_data->n_piobufs);
 		efx_ef10_free_piobufs(efx);
+		pio_write_vi_base = 0;
+		wc_mem_map_size = 0;
 	}
 
 	/* Extend the original UC mapping of the memory BAR */
@@ -5806,20 +5808,12 @@ static unsigned int efx_ef10_recycle_ring_size(const struct efx_nic *efx)
 	return ret;
 }
 
-#if !defined(EFX_USE_KCOMPAT) || defined(NETIF_F_IPV6_CSUM)
 #define EF10_OFFLOAD_FEATURES		\
 	(NETIF_F_IP_CSUM |		\
 	 NETIF_F_HW_VLAN_CTAG_FILTER |	\
 	 NETIF_F_IPV6_CSUM |		\
 	 NETIF_F_RXHASH |		\
 	 NETIF_F_NTUPLE)
-#else
-#define EF10_OFFLOAD_FEATURES		\
-	(NETIF_F_IP_CSUM |		\
-	 NETIF_F_HW_VLAN_CTAG_FILTER |	\
-	 NETIF_F_RXHASH |		\
-	 NETIF_F_NTUPLE)
-#endif
 
 #ifdef CONFIG_SFC_SRIOV
 const struct efx_nic_type efx_hunt_a0_vf_nic_type = {

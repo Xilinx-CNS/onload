@@ -702,7 +702,7 @@ static const struct net_device_ops ef100_netdev_ops = {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 	.ndo_setup_tc		= efx_setup_tc,
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_GET_DEVLINK_PORT)
 #ifdef CONFIG_NET_DEVLINK
 	.ndo_get_devlink_port	= efx_get_devlink_port,
 #endif
@@ -779,6 +779,11 @@ static int ef100_register_netdev(struct efx_nic *efx)
 		goto fail_locked;
 	ef100_update_name(efx);
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
+#ifdef CONFIG_NET_DEVLINK
+	SET_NETDEV_DEVLINK_PORT(net_dev, efx->devlink_port);
+#endif
+#endif
 	rc = register_netdevice(net_dev);
 	if (rc)
 		goto fail_locked;

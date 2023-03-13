@@ -14,6 +14,9 @@
 #define TRACE_EVENTS_SFC_H
 
 #include <linux/tracepoint.h>
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_GRO_H)
+#include <net/gro.h>
+#endif
 
 TRACE_EVENT(sfc_receive,
 

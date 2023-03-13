@@ -35,6 +35,17 @@ static inline void efx_ether_addr_copy(u8 *dst, const u8 *src)
 #define ether_addr_copy efx_ether_addr_copy
 #endif
 
+#if defined(EFX_USE_KCOMPAT) || !defined(struct_group)
+/* Standalone KCOMPAT for driverlink headers */
+#define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
+	union { \
+		struct { MEMBERS } ATTRS; \
+		struct TAG { MEMBERS } ATTRS NAME; \
+	}
+#define struct_group(NAME, MEMBERS...)	\
+	__struct_group(/* no tag */, NAME, /* no attrs */, MEMBERS)
+#endif
+
 /**
  * enum efx_filter_match_flags - Flags for hardware filter match type
  * @EFX_FILTER_MATCH_REM_HOST: Match by remote IP host address
@@ -218,20 +229,22 @@ struct efx_filter_spec {
 	u32	dmaq_id:16;
 	u32	stack_id:16;
 	u32	rss_context;
-	u32	vport_id;
-	__be16	outer_vid;
-	__be16	inner_vid;
-	u8	loc_mac[ETH_ALEN];
-	u8	rem_mac[ETH_ALEN];
-	__be16	ether_type;
-	u8	ip_proto;
-	__be32	loc_host[4];
-	__be32	rem_host[4];
-	__be16	loc_port;
-	__be16	rem_port;
-	u32	tni:24;
-	u32     encap_type:4;
-	u8	outer_loc_mac[ETH_ALEN];
+	struct_group(match_key,
+		u32	vport_id;
+		__be16	outer_vid;
+		__be16	inner_vid;
+		u8	loc_mac[ETH_ALEN];
+		u8	rem_mac[ETH_ALEN];
+		__be16	ether_type;
+		u8	ip_proto;
+		__be32	loc_host[4];
+		__be32	rem_host[4];
+		__be16	loc_port;
+		__be16	rem_port;
+		u32	tni:24;
+		u32     encap_type:4;
+		u8	outer_loc_mac[ETH_ALEN];
+	);
 	/* total 82 bytes */
 };
 

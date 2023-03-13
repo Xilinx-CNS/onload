@@ -28,9 +28,6 @@
 /* Max Queue pairs currently supported */
 #define EF100_VDPA_MAX_QUEUES_PAIRS 1
 
-/* vDPA queues starts from 2nd VI or qid 1 */
-#define EF100_VDPA_BASE_RX_QID 1
-
 /* Vector 0 assigned for vring */
 #define EF100_VDPA_VRING_VECTOR_BASE 0
 
@@ -93,20 +90,6 @@ enum ef100_vdpa_vq_type {
 	EF100_VDPA_VQ_NTYPES
 };
 
-/* Enum defining the vdpa filter type
- * @EF100_VDPA_BCAST_MAC_FILTER: Broadcast MAC filter
- * @EF100_VDPA_UCAST_MAC_FILTER: Unicast MAC filter
- * @EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER: Unknown multicast MAC filter
- *
- */
-enum ef100_vdpa_mac_filter_type {
-	EF100_VDPA_BCAST_MAC_FILTER,
-	EF100_VDPA_UCAST_MAC_FILTER,
-	EF100_VDPA_UNKNOWN_MCAST_MAC_FILTER,
-	EF100_VDPA_MAC_FILTER_NTYPES,
-};
-
-
 /* struct ef100_vdpa_vring_info - vDPA vring data structure
  * @desc: Descriptor area address of the vring
  * @avail: Available area address of the vring
@@ -146,15 +129,6 @@ struct ef100_vdpa_vring_info {
 #endif
 };
 
-/* struct ef100_vdpa_filter - vDPA filter data structure
- * @filter_id: filter id of this filter
- * @efx_filter_spec: hardware filter specs for this vdpa device
- */
-struct ef100_vdpa_filter {
-	s32 filter_id;
-	struct efx_filter_spec spec;
-};
-
 /* struct ef100_vdpa_nic - vDPA NIC data structure
  * @vdpa_dev: vdpa_device object which registers on the vDPA bus.
  * @vdpa_state: NIC state machine governed by ef100_vdpa_nic_state
@@ -167,8 +141,6 @@ struct ef100_vdpa_filter {
  * @net_config: virtio_net_config data
  * @vring: vring information of the vDPA device.
  * @mac_address: mac address of interface associated with this vdpa device
- * @filter_cnt: total number of filters created on this vdpa device
- * @filters: details of all filters created on this vdpa device
  * @cfg_cb: callback for config change
  * @domain: IOMMU domain
  * @debug_dir: vDPA debugfs directory
@@ -192,9 +164,6 @@ struct ef100_vdpa_nic {
 	struct virtio_net_config net_config;
 	struct ef100_vdpa_vring_info vring[EF100_VDPA_MAX_QUEUES_PAIRS * 2];
 	u8 *mac_address;
-	u32 filter_cnt;
-	bool mac_configured;
-	struct ef100_vdpa_filter filters[EF100_VDPA_MAC_FILTER_NTYPES];
 	struct vdpa_callback cfg_cb;
 	struct iommu_domain *domain;
 #ifdef CONFIG_SFC_DEBUGFS
@@ -222,8 +191,7 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
 int ef100_vdpa_init(struct efx_probe_data *probe_data);
 void ef100_vdpa_fini(struct efx_probe_data *probe_data);
 void ef100_vdpa_delete(struct efx_nic *efx);
-int ef100_vdpa_filter_configure(struct ef100_vdpa_nic *vdpa_nic);
-int ef100_vdpa_filter_remove(struct ef100_vdpa_nic *vdpa_nic);
+void ef100_vdpa_insert_filter(struct efx_nic *efx);
 int ef100_vdpa_irq_vectors_alloc(struct pci_dev *pci_dev, u16 min, u16 max);
 void ef100_vdpa_irq_vectors_free(void *data);
 int ef100_vdpa_free_buffer(struct ef100_vdpa_nic *vdpa_nic,
@@ -234,8 +202,6 @@ bool ef100_vdpa_dev_in_use(struct efx_nic *efx);
 int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic);
 int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
 int remap_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
-int ef100_vdpa_add_filter(struct ef100_vdpa_nic *vdpa_nic,
-			  enum ef100_vdpa_mac_filter_type type);
 
 extern const struct vdpa_config_ops ef100_vdpa_config_ops;
 #endif /* CONFIG_SFC_VDPA */

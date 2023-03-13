@@ -58,10 +58,6 @@ struct efx_mcdi_filter_vlan {
 	bool warn_on_zero_filters;
 };
 
-struct efx_mcdi_dev_addr {
-	u8 addr[ETH_ALEN];
-};
-
 struct efx_mcdi_filter_table {
 /* The MCDI match masks supported by this fw & hw, in order of priority */
 	u32 rx_match_mcdi_flags[
@@ -79,6 +75,8 @@ struct efx_mcdi_filter_table {
 	} *entry;
 	/* are the filters meant to be on the NIC */
 	bool push_filters;
+	/* Function to get addresses from */
+	struct efx_mcdi_filter_addr_source addr_source;
 	/* Shadow of net_device address lists, guarded by mac_lock */
 	struct efx_mcdi_dev_addr dev_uc_list[EFX_MCDI_FILTER_DEV_UC_MAX];
 	struct efx_mcdi_dev_addr dev_mc_list[EFX_MCDI_FILTER_DEV_MC_MAX];
@@ -171,7 +169,7 @@ static int efx_debugfs_read_dev_mc_list(struct seq_file *file, void *data)
 	return 0;
 }
 
-static int efx_debugfs_read_filter_list(struct seq_file *file, void *data)
+int efx_debugfs_read_filter_list(struct seq_file *file, void *data)
 {
 	struct efx_mcdi_filter_table *table;
 	struct efx_nic *efx = data;
@@ -240,6 +238,10 @@ static bool efx_mcdi_filter_vlan_filter(struct efx_nic *efx)
 	if (WARN_ON(!table))
 		return false;
 
+	/* vDPA VLAN filter support to be added in VDPALINUX-184 */
+	if (efx->state == STATE_VDPA)
+		return false;
+
 	if (!(efx->net_dev->features & NETIF_F_HW_VLAN_CTAG_FILTER))
 		return false;
 
@@ -290,12 +292,45 @@ static bool efx_mcdi_filter_is_exclusive(const struct efx_filter_spec *spec)
 }
 
 static void
-efx_mcdi_filter_set_entry(struct efx_mcdi_filter_table *table,
+efx_mcdi_filter_invalidate_filter_id(struct efx_mcdi_filter_table *table,
+				     unsigned int filter_idx)
+{
+	struct efx_mcdi_filter_vlan *vlan;
+	int i;
+
+	list_for_each_entry(vlan, &table->vlan_list, list) {
+		for (i = 0; i < EFX_MCDI_NUM_DEFAULT_FILTERS; ++i)
+			if (vlan->default_filters[i] == filter_idx) {
+				vlan->default_filters[i] =
+					EFX_MCDI_FILTER_ID_INVALID;
+				return;
+			}
+
+		for (i = 0; i < table->dev_uc_count; i++)
+			if (vlan->uc[i] == filter_idx) {
+				vlan->uc[i] = EFX_MCDI_FILTER_ID_INVALID;
+				return;
+			}
+
+		for (i = 0; i < table->dev_mc_count; i++)
+			if (vlan->mc[i] == filter_idx) {
+				vlan->mc[i] = EFX_MCDI_FILTER_ID_INVALID;
+				return;
+			}
+	}
+}
+
+static void
+efx_mcdi_filter_set_entry(struct efx_nic *efx,
 			  unsigned int filter_idx,
 			  const struct efx_filter_spec *spec,
 			  unsigned int flags)
 {
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+
 	table->entry[filter_idx].spec = (unsigned long)spec | flags;
+	if (!spec)
+		efx_mcdi_filter_invalidate_filter_id(table, filter_idx);
 }
 
 static void
@@ -832,7 +867,7 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 		*saved_spec = *spec;
 		priv_flags = 0;
 	}
-	efx_mcdi_filter_set_entry(table, ins_index, saved_spec, priv_flags);
+	efx_mcdi_filter_set_entry(efx, ins_index, saved_spec, priv_flags);
 
 	/* Actually insert the filter on the HW */
 	rc = efx_mcdi_filter_push(efx, spec, &table->entry[ins_index].handle,
@@ -863,7 +898,7 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 		 * thing, so nothing extra is needed here.
 		 */
 	}
-	efx_mcdi_filter_set_entry(table, ins_index, saved_spec, priv_flags);
+	efx_mcdi_filter_set_entry(efx, ins_index, saved_spec, priv_flags);
 
 	/* Remove and finalise entries for lower-priority multicast
 	 * recipients
@@ -899,7 +934,7 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 				saved_spec = NULL;
 				priv_flags = 0;
 			}
-			efx_mcdi_filter_set_entry(table, i, saved_spec,
+			efx_mcdi_filter_set_entry(efx, i, saved_spec,
 						  priv_flags);
 		}
 	}
@@ -1010,7 +1045,7 @@ static int efx_mcdi_filter_remove_internal(struct efx_nic *efx,
 			 * the MC is resetting.
 			 */
 			kfree(spec);
-			efx_mcdi_filter_set_entry(table, filter_idx, NULL, 0);
+			efx_mcdi_filter_set_entry(efx, filter_idx, NULL, 0);
 			table->entry[filter_idx].handle =
 				EFX_MCDI_FILTER_ID_INVALID;
 		} else {
@@ -1101,9 +1136,13 @@ static int efx_mcdi_filter_insert_addr_list(struct efx_nic *efx,
 	u8 baddr[ETH_ALEN];
 	unsigned int i, j;
 	int addr_count;
+	int qid = 0;
 	int rc;
 
 	WARN_ON(!mutex_is_locked(&efx->mac_lock));
+
+	if (efx->state == STATE_VDPA)
+		qid = EFX_VDPA_BASE_RX_QID;
 
 	if (multicast) {
 		addr_list = table->dev_mc_list;
@@ -1121,7 +1160,7 @@ static int efx_mcdi_filter_insert_addr_list(struct efx_nic *efx,
 	/* Insert/renew filters */
 	for (i = 0; i < addr_count; i++) {
 		EFX_WARN_ON_PARANOID(ids[i] != EFX_MCDI_FILTER_ID_INVALID);
-		efx_filter_init_rx(&spec, EFX_FILTER_PRI_AUTO, filter_flags, 0);
+		efx_filter_init_rx(&spec, EFX_FILTER_PRI_AUTO, filter_flags, qid);
 		efx_filter_set_eth_local(&spec, vlan->vid, addr_list[i].addr);
 		rc = efx_mcdi_filter_insert_locked(efx, &spec, true);
 		if (rc < 0) {
@@ -1155,7 +1194,7 @@ static int efx_mcdi_filter_insert_addr_list(struct efx_nic *efx,
 		/* Also need an Ethernet broadcast filter */
 		EFX_WARN_ON_PARANOID(vlan->default_filters[EFX_MCDI_BCAST] !=
 				    EFX_MCDI_FILTER_ID_INVALID);
-		efx_filter_init_rx(&spec, EFX_FILTER_PRI_AUTO, filter_flags, 0);
+		efx_filter_init_rx(&spec, EFX_FILTER_PRI_AUTO, filter_flags, qid);
 		eth_broadcast_addr(baddr);
 		efx_filter_set_eth_local(&spec, vlan->vid, baddr);
 		rc = efx_mcdi_filter_insert_locked(efx, &spec, true);
@@ -1190,7 +1229,7 @@ static int efx_mcdi_filter_insert_def(struct efx_nic *efx,
 	enum efx_filter_flags filter_flags;
 	struct efx_filter_spec spec;
 	u8 baddr[ETH_ALEN];
-	int rc;
+	int rc, qid = 0;
 	u16 *id;
 
 #ifdef EFX_NOT_UPSTREAM
@@ -1204,7 +1243,10 @@ static int efx_mcdi_filter_insert_def(struct efx_nic *efx,
 	filter_flags = efx_rss_active(&efx->rss_context) ?
 		       EFX_FILTER_FLAG_RX_RSS : 0;
 
-	efx_filter_init_rx(&spec, EFX_FILTER_PRI_AUTO, filter_flags, 0);
+	if (efx->state == STATE_VDPA)
+		qid = EFX_VDPA_BASE_RX_QID;
+
+	efx_filter_init_rx(&spec, EFX_FILTER_PRI_AUTO, filter_flags, qid);
 
 	if (multicast)
 		efx_filter_set_mc_def(&spec);
@@ -1281,7 +1323,7 @@ static int efx_mcdi_filter_insert_def(struct efx_nic *efx,
 		if (!table->mc_chaining && !encap_type) {
 			/* Also need an Ethernet broadcast filter */
 			efx_filter_init_rx(&spec, EFX_FILTER_PRI_AUTO,
-					   filter_flags, 0);
+					   filter_flags, qid);
 			eth_broadcast_addr(baddr);
 			efx_filter_set_eth_local(&spec, vlan->vid, baddr);
 			rc = efx_mcdi_filter_insert_locked(efx, &spec, true);
@@ -1495,6 +1537,29 @@ int efx_mcdi_filter_clear_rx(struct efx_nic *efx,
 		rc = 0;
 	}
 
+	up_write(&table->lock);
+	up_read(&efx->filter_sem);
+	return rc;
+}
+
+int efx_mcdi_filter_remove_all(struct efx_nic *efx,
+			       enum efx_filter_priority priority)
+{
+	struct efx_mcdi_filter_table *table;
+	int rc = -ENETDOWN;
+	unsigned int i;
+
+	down_read(&efx->filter_sem);
+	table = efx->filter_state;
+	down_write(&table->lock);
+
+	for (i = 0; i < EFX_MCDI_FILTER_TBL_ROWS; i++) {
+		rc = efx_mcdi_filter_remove_internal(efx, priority,
+						     i, true);
+		if (rc && rc != -ENOENT)
+			break;
+		rc = 0;
+	}
 	up_write(&table->lock);
 	up_read(&efx->filter_sem);
 	return rc;
@@ -2009,7 +2074,20 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool rss_limited,
 	INIT_LIST_HEAD(&table->vlan_list);
 	init_rwsem(&table->lock);
 
+	/* default to netdev address source */
+	efx_mcdi_filter_set_addr_source(efx,
+					efx_mcdi_filter_netdev_addr_source());
+
 	return 0;
+}
+
+void
+efx_mcdi_filter_set_addr_source(struct efx_nic *efx,
+				struct efx_mcdi_filter_addr_source addr_source)
+{
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	table->addr_source = addr_source;
 }
 
 int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
@@ -2045,8 +2123,10 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 #endif
 
 	/* Ignore net_dev features for vDPA devices */
-	if (efx->state == STATE_VDPA)
+	if (efx->state == STATE_VDPA) {
+		table->vlan_filter = efx_mcdi_filter_vlan_filter(efx);
 		return 0;
+	}
 
 	if (!efx_mcdi_filter_match_supported(efx, false,
 					     EFX_FILTER_MATCH_FLAGS_RFS)) {
@@ -2083,21 +2163,6 @@ fail:
 	kfree(table->entry);
 	table->entry = NULL;
 	return rc;
-}
-
-static void efx_mcdi_filter_invalidate_filter_id(struct efx_nic *efx,
-						 unsigned int filter_idx)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-	struct efx_mcdi_filter_vlan *vlan;
-	int i;
-
-	list_for_each_entry(vlan, &table->vlan_list, list)
-		for (i = 0; i < EFX_MCDI_NUM_DEFAULT_FILTERS; ++i)
-			if (vlan->default_filters[i] == filter_idx)
-				vlan->default_filters[i] =
-					EFX_MCDI_FILTER_ID_INVALID;
-	efx_mcdi_filter_set_entry(table, filter_idx, NULL, 0);
 }
 
 void efx_mcdi_filter_table_reset_mc_allocations(struct efx_nic *efx)
@@ -2156,7 +2221,7 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 
 		table->entry[filter_idx].handle = EFX_MCDI_FILTER_ID_INVALID;
 		kfree(spec);
-		efx_mcdi_filter_invalidate_filter_id(efx, filter_idx);
+		efx_mcdi_filter_set_entry(efx, filter_idx, NULL, 0);
 		++invalid_filters;
 	}
 	/* This can happen validly if the MC's capabilities have changed, so
@@ -2227,7 +2292,8 @@ int efx_mcdi_filter_table_up(struct efx_nic *efx)
 invalid:
 				fail_rc = rc;
 				kfree(spec);
-				efx_mcdi_filter_invalidate_filter_id(efx, filter_idx);
+				efx_mcdi_filter_set_entry(efx, filter_idx,
+							  NULL, 0);
 			}
 		}
 	}
@@ -2418,78 +2484,105 @@ static void efx_mcdi_filter_remove_old(struct efx_nic *efx)
 				__func__, remove_noent);
 }
 
-static void efx_mcdi_filter_uc_addr_list(struct efx_nic *efx)
+void efx_mcdi_filter_uc_addr(struct efx_nic *efx,
+			     const struct efx_mcdi_dev_addr *addr)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
-	struct net_device *net_dev = efx->net_dev;
-	struct netdev_hw_addr *uc;
-	unsigned int i;
 
 	WARN_ON(!mutex_is_locked(&efx->mac_lock));
 
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_UCAST]) {
-		table->dev_uc_count = 0;
+	if (table->dev_uc_count >= EFX_MCDI_FILTER_DEV_UC_MAX) {
+		table->uc_promisc = true;
 		return;
 	}
-#endif
-#endif
-	table->uc_promisc = !!(net_dev->flags & IFF_PROMISC);
-	ether_addr_copy(table->dev_uc_list[0].addr, net_dev->dev_addr);
-	i = 1;
-	netdev_for_each_uc_addr(uc, net_dev) {
-		if (i >= EFX_MCDI_FILTER_DEV_UC_MAX) {
-			table->uc_promisc = true;
-			break;
-		}
-		ether_addr_copy(table->dev_uc_list[i].addr, uc->addr);
-		i++;
-	}
-	table->dev_uc_count = i;
+
+	table->dev_uc_list[table->dev_uc_count++] = *addr;
 }
 
-static void efx_mcdi_filter_mc_addr_list(struct efx_nic *efx)
+void efx_mcdi_filter_mc_addr(struct efx_nic *efx,
+			     const struct efx_mcdi_dev_addr *addr)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	WARN_ON(!mutex_is_locked(&efx->mac_lock));
+
+	if (table->dev_mc_count >= EFX_MCDI_FILTER_DEV_MC_MAX) {
+		table->mc_promisc = true;
+		table->mc_overflow = true;
+		return;
+	}
+
+	table->dev_mc_list[table->dev_mc_count++] = *addr;
+}
+
+static void
+_efx_mcdi_filter_netdev_addr_source(struct efx_nic *efx,
+				    bool *uc_promisc,
+				    bool *mc_promisc)
+{
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+#endif
+#endif
 	struct net_device *net_dev = efx->net_dev;
+	struct efx_mcdi_dev_addr addr;
+	struct netdev_hw_addr *uc;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
 	struct netdev_hw_addr *mc;
 #else
 	struct dev_mc_list *mc;
 #endif
-	unsigned int i;
-
-	WARN_ON(!mutex_is_locked(&efx->mac_lock));
-
-	table->mc_overflow = false;
 
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
-	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST]) {
-		table->dev_mc_count = 0;
+	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST])
 		return;
-	}
 #endif
 #endif
-	table->mc_promisc = !!(net_dev->flags & (IFF_PROMISC | IFF_ALLMULTI));
 
-	i = 0;
+	/* If we're currently resetting, then this isn't going to go well (and
+	 * we'll try it again when the reset is complete).  So skip it.
+	 * This is typically triggered by adding a new UDP tunnel port and
+	 * adding a multicast address (for the UDP tunnel) at the same time.
+	 */
+	if (!netif_device_present(net_dev))
+		return;
+
+	netif_addr_lock_bh(net_dev);
+
+	/* Copy/convert the address lists; add the primary station
+	 * address and broadcast address
+	 */
+	*uc_promisc = !!(net_dev->flags & IFF_PROMISC);
+
+	ether_addr_copy(addr.addr, net_dev->dev_addr);
+	efx_mcdi_filter_uc_addr(efx, &addr);
+	netdev_for_each_uc_addr(uc, net_dev) {
+		ether_addr_copy(addr.addr, uc->addr);
+		efx_mcdi_filter_uc_addr(efx, &addr);
+	}
+
+	*mc_promisc = !!(net_dev->flags & (IFF_PROMISC | IFF_ALLMULTI));
+
 	netdev_for_each_mc_addr(mc, net_dev) {
-		if (i >= EFX_MCDI_FILTER_DEV_MC_MAX) {
-			table->mc_promisc = true;
-			table->mc_overflow = true;
-			break;
-		}
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
-		ether_addr_copy(table->dev_mc_list[i].addr, mc->addr);
+		ether_addr_copy(addr.addr, mc->addr);
 #else
-		ether_addr_copy(table->dev_mc_list[i].addr, mc->dmi_addr);
+		ether_addr_copy(addr.addr, mc->dmi_addr);
 #endif
-		i++;
+		efx_mcdi_filter_mc_addr(efx, &addr);
 	}
 
-	table->dev_mc_count = i;
+	netif_addr_unlock_bh(net_dev);
+}
+
+struct efx_mcdi_filter_addr_source efx_mcdi_filter_netdev_addr_source(void)
+{
+	struct efx_mcdi_filter_addr_source addr_source = {
+		&_efx_mcdi_filter_netdev_addr_source,
+	};
+	return addr_source;
 }
 
 static unsigned int efx_mcdi_filter_vlan_count_filters(struct efx_nic *efx,
@@ -2520,11 +2613,12 @@ void efx_mcdi_filter_sync_rx_mode(struct efx_nic *efx)
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 	struct net_device *net_dev = efx->net_dev;
 	struct efx_mcdi_filter_vlan *vlan;
+	bool uc_promisc, mc_promisc;
 	bool vlan_filter;
 
 	WARN_ON(!mutex_is_locked(&efx->mac_lock));
 
-	if (!efx->datapath_started)
+	if (efx->state != STATE_VDPA && !efx->datapath_started)
 		return;
 
 	/* If we're currently resetting, then this isn't going to go well (and
@@ -2532,7 +2626,7 @@ void efx_mcdi_filter_sync_rx_mode(struct efx_nic *efx)
 	 * This is typically triggered by adding a new UDP tunnel port and
 	 * adding a multicast address (for the UDP tunnel) at the same time.
 	 */
-	if (!netif_device_present(net_dev))
+	if (efx->state != STATE_VDPA && !netif_device_present(net_dev))
 		return;
 
 	if (!table || !table->entry)
@@ -2540,13 +2634,21 @@ void efx_mcdi_filter_sync_rx_mode(struct efx_nic *efx)
 
 	efx_mcdi_filter_mark_old(efx);
 
-	/* Copy/convert the address lists; add the primary station
-	 * address and broadcast address
-	 */
-	netif_addr_lock_bh(net_dev);
-	efx_mcdi_filter_uc_addr_list(efx);
-	efx_mcdi_filter_mc_addr_list(efx);
-	netif_addr_unlock_bh(net_dev);
+	/* Get the address list from net device or VDPA */
+	table->dev_uc_count = 0;
+	table->dev_mc_count = 0;
+	table->uc_promisc = false;
+	table->mc_promisc = false;
+	table->mc_overflow = false;
+	uc_promisc = false;
+	mc_promisc = false;
+	WARN_ON(!table->addr_source.get_addrs);
+	if (table->addr_source.get_addrs)
+		table->addr_source.get_addrs(efx, &uc_promisc, &mc_promisc);
+	if (uc_promisc)
+		table->uc_promisc = true;
+	if (mc_promisc)
+		table->mc_promisc = true;
 
 	/* If VLAN filtering changes, all old filters are finally removed.
 	 * Do it in advance to avoid conflicts for unicast untagged and

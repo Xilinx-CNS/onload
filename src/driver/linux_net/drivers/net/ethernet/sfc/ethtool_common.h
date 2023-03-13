@@ -75,7 +75,7 @@ int efx_ethtool_get_rxnfc(struct net_device *net_dev,
 int efx_ethtool_get_rxnfc(struct net_device *net_dev,
 			  struct ethtool_rxnfc *info, u32 *rule_locs);
 #endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXNFC)
+#ifdef EFX_USE_KCOMPAT
 int efx_ethtool_get_rxnfc_wrapper(struct net_device *net_dev,
 					 struct ethtool_rxnfc *info,
 #ifdef EFX_HAVE_OLD_ETHTOOL_GET_RXNFC

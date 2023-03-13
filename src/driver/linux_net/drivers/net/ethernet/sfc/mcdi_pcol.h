@@ -78,19 +78,19 @@
  *               |                      \------- Error
  *               \------------------------------ Resync (always set)
  *
- * The client writes it's request into MC shared memory, and rings the
- * doorbell. Each request is completed by either by the MC writting
- * back into shared memory, or by writting out an event.
+ * The client writes its request into MC shared memory, and rings the
+ * doorbell. Each request is completed either by the MC writing
+ * back into shared memory, or by writing out an event.
  *
  * All MCDI commands support completion by shared memory response. Each
  * request may also contain additional data (accounted for by HEADER.LEN),
- * and some response's may also contain additional data (again, accounted
+ * and some responses may also contain additional data (again, accounted
  * for by HEADER.LEN).
  *
  * Some MCDI commands support completion by event, in which any associated
  * response data is included in the event.
  *
- * The protocol requires one response to be delivered for every request, a
+ * The protocol requires one response to be delivered for every request; a
  * request should not be sent unless the response for the previous request
  * has been received (either by polling shared memory, or by receiving
  * an event).
@@ -336,7 +336,7 @@
 /* enum: The requesting client is not a function */
 #define          MC_CMD_ERR_CLIENT_NOT_FN 0x100c
 /* enum: The requested operation might require the command to be passed between
- * MCs, and thetransport doesn't support that. Should only ever been seen over
+ * MCs, and the transport doesn't support that. Should only ever been seen over
  * the UART.
  */
 #define          MC_CMD_ERR_TRANSPORT_NOPROXY 0x100d
@@ -373,7 +373,7 @@
  * sub-variant switching.
  */
 #define          MC_CMD_ERR_FILTERS_PRESENT 0x1014
-/* enum: The clock whose frequency you've attempted to set set doesn't exist on
+/* enum: The clock whose frequency you've attempted to set doesn't exist on
  * this NIC
  */
 #define          MC_CMD_ERR_NO_CLOCK 0x1015
@@ -655,7 +655,11 @@
  * be allocated by different counter blocks, so e.g. AR counter 42 is different
  * from CT counter 42. Generation counts are also type-specific. This value is
  * also present in the header of streaming counter packets, in the IDENTIFIER
- * field (see packetiser packet format definitions).
+ * field (see packetiser packet format definitions). Also note that LACP
+ * counter IDs are not allocated individually, instead the counter IDs are
+ * directly tied to the LACP balance table indices. These in turn are allocated
+ * in large contiguous blocks as a LAG config. Calling MAE_COUNTER_ALLOC/FREE
+ * with an LACP counter type will return EPERM.
  */
 /* enum: Action Rule counters - can be referenced in AR response. */
 #define          MAE_COUNTER_TYPE_AR 0x0
@@ -663,6 +667,14 @@
 #define          MAE_COUNTER_TYPE_CT 0x1
 /* enum: Outer Rule counters - can be referenced in OR response. */
 #define          MAE_COUNTER_TYPE_OR 0x2
+/* enum: LACP counters - linked to LACP balance table entries. */
+#define          MAE_COUNTER_TYPE_LACP 0x3
+
+/* MAE_COUNTER_ID enum: ID of allocated counter or counter list. */
+/* enum: A counter ID that is guaranteed never to represent a real counter or
+ * counter list.
+ */
+#define          MAE_COUNTER_ID_NULL 0xffffffff
 
 /* TABLE_ID enum: Unique IDs for tables. The 32-bit ID values have been
  * structured with bits [31:24] reserved (0), [23:16] indicating which major
@@ -671,7 +683,9 @@
  * variations of the same table. (All of the tables currently defined within
  * the streaming engines are listed here, but this does not imply that they are
  * all supported - MC_CMD_TABLE_LIST returns the list of actually supported
- * tables.)
+ * tables.) The DPU offload engines' enumerators follow a deliberate pattern:
+ * 0x01010000 + is_dpu_net * 0x10000 + is_wr_or_tx * 0x8000 + is_lite_pipe *
+ * 0x1000 + oe_engine_type * 0x100 + oe_instance_within_pipe * 0x10
  */
 /* enum: Outer_Rule_Table in the MAE - refer to SF-123102-TC. */
 #define          TABLE_ID_OUTER_RULE_TABLE 0x10000
@@ -709,6 +723,70 @@
 #define          TABLE_ID_RSS_CONTEXT_TABLE 0x20200
 /* enum: Indirection_Table in VNIC Rx - refer to SF-123102-TC. */
 #define          TABLE_ID_INDIRECTION_TABLE 0x20300
+/* enum: DPU.host read pipe first CRC offload engine profiles - refer to
+ * XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_HOST_RD_CRC0_OE_PROFILE 0x1010000
+/* enum: DPU.host read pipe second CRC offload engine profiles - refer to
+ * XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_HOST_RD_CRC1_OE_PROFILE 0x1010010
+/* enum: DPU.host write pipe first CRC offload engine profiles - refer to
+ * XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_HOST_WR_CRC0_OE_PROFILE 0x1018000
+/* enum: DPU.host write pipe second CRC offload engine profiles - refer to
+ * XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_HOST_WR_CRC1_OE_PROFILE 0x1018010
+/* enum: DPU.net 'full' receive pipe CRC offload engine profiles - refer to
+ * XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_RX_CRC0_OE_PROFILE 0x1020000
+/* enum: DPU.net 'full' receive pipe first checksum offload engine profiles -
+ * refer to XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_RX_CSUM0_OE_PROFILE 0x1020100
+/* enum: DPU.net 'full' receive pipe second checksum offload engine profiles -
+ * refer to XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_RX_CSUM1_OE_PROFILE 0x1020110
+/* enum: DPU.net 'full' receive pipe AES-GCM offload engine profiles - refer to
+ * XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_RX_AES_GCM0_OE_PROFILE 0x1020200
+/* enum: DPU.net 'lite' receive pipe CRC offload engine profiles - refer to
+ * XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_RXLITE_CRC0_OE_PROFILE 0x1021000
+/* enum: DPU.net 'lite' receive pipe checksum offload engine profiles - refer
+ * to XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_RXLITE_CSUM0_OE_PROFILE 0x1021100
+/* enum: DPU.net 'full' transmit pipe CRC offload engine profiles - refer to
+ * XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_TX_CRC0_OE_PROFILE 0x1028000
+/* enum: DPU.net 'full' transmit pipe first checksum offload engine profiles -
+ * refer to XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_TX_CSUM0_OE_PROFILE 0x1028100
+/* enum: DPU.net 'full' transmit pipe second checksum offload engine profiles -
+ * refer to XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_TX_CSUM1_OE_PROFILE 0x1028110
+/* enum: DPU.net 'full' transmit pipe AES-GCM offload engine profiles - refer
+ * to XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_TX_AES_GCM0_OE_PROFILE 0x1028200
+/* enum: DPU.net 'lite' transmit pipe CRC offload engine profiles - refer to
+ * XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_TXLITE_CRC0_OE_PROFILE 0x1029000
+/* enum: DPU.net 'lite' transmit pipe checksum offload engine profiles - refer
+ * to XN-200147-AN.
+ */
+#define          TABLE_ID_DPU_NET_TXLITE_CSUM0_OE_PROFILE 0x1029100
 
 /* TABLE_COMPRESSED_VLAN enum: Compressed VLAN TPID as used by some field
  * types; can be calculated by (((ether_type_msb >> 2) & 0x4) ^ 0x4) |
@@ -748,6 +826,42 @@
 #define          TABLE_RSS_SPREAD_MODE_INDIRECTION 0x0
 /* enum: RSS uses even spreading calculation. */
 #define          TABLE_RSS_SPREAD_MODE_EVEN 0x1
+
+/* CRC_VARIANT enum: Operation for the DPU CRC engine to perform. */
+/* enum: Calculate a 32-bit CRC. */
+#define          CRC_VARIANT_CRC32 0x1
+/* enum: Calculate a 64-bit CRC. */
+#define          CRC_VARIANT_CRC64 0x2
+
+/* DPU_CSUM_OP enum: Operation for the DPU checksum engine to perform. */
+/* enum: Calculate the checksum for a TCP payload, output result on OPR bus. */
+#define          DPU_CSUM_OP_CALC_TCP 0x0
+/* enum: Calculate the checksum for a UDP payload, output result on OPR bus. */
+#define          DPU_CSUM_OP_CALC_UDP 0x1
+/* enum: Calculate the checksum for a TCP payload, output match/not match value
+ * on OPR bus.
+ */
+#define          DPU_CSUM_OP_VALIDATE_TCP 0x2
+/* enum: Calculate the checksum for a UDP payload, output match/not match value
+ * on OPR bus.
+ */
+#define          DPU_CSUM_OP_VALIDATE_UDP 0x3
+
+/* GCM_OP_CODE enum: Operation for the DPU AES-GCM engine to perform. */
+/* enum: Encrypt/decrypt a stream of data. */
+#define          GCM_OP_CODE_BULK_CRYPT 0x0
+/* enum: Calculate the authentication tag for a stream of data. */
+#define          GCM_OP_CODE_BULK_AUTH 0x1
+/* enum: Encrypt/decrypt an IPsec packet. */
+#define          GCM_OP_CODE_IPSEC_CRYPT 0x2
+/* enum: Calculate the authentication tag of an IPsec packet. */
+#define          GCM_OP_CODE_IPSEC_AUTH 0x3
+
+/* AES_KEY_LEN enum: Key size for AES crypto operations */
+/* enum: 128 bit key size. */
+#define          AES_KEY_LEN_AES_KEY_128 0x0
+/* enum: 256 bit key size. */
+#define          AES_KEY_LEN_AES_KEY_256 0x1
 
 /* TABLE_FIELD_ID enum: Unique IDs for fields. Related concepts have been
  * loosely grouped together into blocks with gaps for expansion, but the values
@@ -1041,6 +1155,16 @@
 #define          TABLE_FIELD_ID_BAL_TBL_BASE_DIV64 0xde
 /* enum: Length of balance table region: 0=>64, 1=>128, 2=>256. */
 #define          TABLE_FIELD_ID_BAL_TBL_LEN_ID 0xdf
+/* enum: LACP LAG ID (i.e. the low 3 bits of LACP LAG mport ID), indexing
+ * LACP_LAG_Config_Table. Refer to SF-123102-TC.
+ */
+#define          TABLE_FIELD_ID_LACP_LAG_ID 0xe0
+/* enum: Address in LACP_Balance_Table. The balance table is partitioned
+ * between LAGs according to the settings in LACP_LAG_Config_Table and then
+ * indexed by the LACP hash, providing the mapping to destination mports. Refer
+ * to SF-123102-TC.
+ */
+#define          TABLE_FIELD_ID_BAL_TBL_ADDR 0xe1
 /* enum: UDP port to match for UDP-based encapsulations; required to be 0 for
  * other encapsulation types.
  */
@@ -1097,6 +1221,58 @@
 #define          TABLE_FIELD_ID_INDIR_TBL_LEN_ID 0x105
 /* enum: An offset to be applied to the base destination queue ID. */
 #define          TABLE_FIELD_ID_INDIR_OFFSET 0x106
+/* enum: DPU offload engine profile ID to address. */
+#define          TABLE_FIELD_ID_OE_PROFILE 0x3e8
+/* enum: Width of the CRC to calculate - see CRC_VARIANT enum. */
+#define          TABLE_FIELD_ID_CRC_VARIANT 0x3f2
+/* enum: If set, reflect the bits of each input byte, bit 7 is LSB, bit 0 is
+ * MSB. If clear, bit 7 is MSB, bit 0 is LSB.
+ */
+#define          TABLE_FIELD_ID_CRC_REFIN 0x3f3
+/* enum: If set, reflect the bits of each output byte, bit 7 is LSB, bit 0 is
+ * MSB. If clear, bit 7 is MSB, bit 0 is LSB.
+ */
+#define          TABLE_FIELD_ID_CRC_REFOUT 0x3f4
+/* enum: If set, invert every bit of the output value. */
+#define          TABLE_FIELD_ID_CRC_INVOUT 0x3f5
+/* enum: The CRC polynomial to use for checksumming, in normal form. See
+ * https://en.wikipedia.org/wiki/Cyclic_redundancy_check#Specification for a
+ * description of normal form.
+ */
+#define          TABLE_FIELD_ID_CRC_POLY 0x3f6
+/* enum: Operation for the checksum engine to perform - see DPU_CSUM_OP enum.
+ */
+#define          TABLE_FIELD_ID_CSUM_OP 0x410
+/* enum: Byte offset of checksum relative to region_start (for VALIDATE_*
+ * operations only).
+ */
+#define          TABLE_FIELD_ID_CSUM_OFFSET 0x411
+/* enum: Indicates there is additional data on OPR bus that needs to be
+ * incorporated into the payload checksum.
+ */
+#define          TABLE_FIELD_ID_CSUM_OPR_ADDITIONAL_DATA 0x412
+/* enum: Log2 data size of additional data on OPR bus. */
+#define          TABLE_FIELD_ID_CSUM_OPR_DATA_SIZE_LOG2 0x413
+/* enum: 4 byte offset of where to find the additional data on the OPR bus. */
+#define          TABLE_FIELD_ID_CSUM_OPR_4B_OFF 0x414
+/* enum: Operation type for the AES-GCM core - see GCM_OP_CODE enum. */
+#define          TABLE_FIELD_ID_GCM_OP_CODE 0x41a
+/* enum: Key length - AES_KEY_LEN enum. */
+#define          TABLE_FIELD_ID_GCM_KEY_LEN 0x41b
+/* enum: OPR 4 byte offset for ICV or GHASH output (only in BULK_* mode) or
+ * IPSEC descrypt output.
+ */
+#define          TABLE_FIELD_ID_GCM_OPR_4B_OFFSET 0x41c
+/* enum: If OP_CODE is BULK_*, indicates Emit GHASH (Fragment mode). Else,
+ * indicates IPSEC-ESN mode.
+ */
+#define          TABLE_FIELD_ID_GCM_EMIT_GHASH_ISESN 0x41d
+/* enum: Replay Protection Enable. */
+#define          TABLE_FIELD_ID_GCM_REPLAY_PROTECT_EN 0x41e
+/* enum: IPSEC Encrypt ESP trailer NEXT_HEADER byte. */
+#define          TABLE_FIELD_ID_GCM_NEXT_HDR 0x41f
+/* enum: Replay Window Size. */
+#define          TABLE_FIELD_ID_GCM_REPLAY_WIN_SIZE 0x420
 
 /* MCDI_EVENT structuredef: The structure of an MCDI_EVENT on Siena/EF10/EF100
  * platforms
@@ -1252,7 +1428,7 @@
 #define          MCDI_EVENT_AOE_FPGA_LOAD_FAILED 0xe
 /* enum: Notify that invalid flash type detected */
 #define          MCDI_EVENT_AOE_INVALID_FPGA_FLASH_TYPE 0xf
-/* enum: Notify that the attempt to run FPGA Controller firmware timedout */
+/* enum: Notify that the attempt to run FPGA Controller firmware timed out */
 #define          MCDI_EVENT_AOE_FC_RUN_TIMEDOUT 0x10
 /* enum: Failure to probe one or more FPGA boot flash chips */
 #define          MCDI_EVENT_AOE_FPGA_BOOT_FLASH_INVALID 0x11
@@ -1270,7 +1446,7 @@
 #define        MCDI_EVENT_AOE_ERR_FC_ASSERT_INFO_WIDTH 8
 /* enum: FC Assert happened, but the register information is not available */
 #define          MCDI_EVENT_AOE_ERR_FC_ASSERT_SEEN 0x0
-/* enum: The register information for FC Assert is ready for readinng by driver
+/* enum: The register information for FC Assert is ready for reading by driver
  */
 #define          MCDI_EVENT_AOE_ERR_FC_ASSERT_DATA_READY 0x1
 #define        MCDI_EVENT_AOE_ERR_CODE_FPGA_HEADER_VERIFY_FAILED_OFST 0
@@ -1379,6 +1555,12 @@
 #define        MCDI_EVENT_MODULECHANGE_SEQ_OFST 0
 #define        MCDI_EVENT_MODULECHANGE_SEQ_LBN 30
 #define        MCDI_EVENT_MODULECHANGE_SEQ_WIDTH 2
+#define        MCDI_EVENT_DESC_PROXY_VIRTQ_VI_ID_OFST 0
+#define        MCDI_EVENT_DESC_PROXY_VIRTQ_VI_ID_LBN 0
+#define        MCDI_EVENT_DESC_PROXY_VIRTQ_VI_ID_WIDTH 16
+#define        MCDI_EVENT_DESC_PROXY_VIRTQ_ID_OFST 0
+#define        MCDI_EVENT_DESC_PROXY_VIRTQ_ID_LBN 16
+#define        MCDI_EVENT_DESC_PROXY_VIRTQ_ID_WIDTH 16
 #define       MCDI_EVENT_DATA_LBN 0
 #define       MCDI_EVENT_DATA_WIDTH 32
 /* Alias for PTP_DATA. */
@@ -1515,6 +1697,12 @@
  * change to the journal.
  */
 #define          MCDI_EVENT_CODE_MPORT_JOURNAL_CHANGE 0x27
+/* enum: Notification that a source queue is enabled and attached to its proxy
+ * sink queue. SRC field contains the handle of the affected descriptor proxy
+ * function. DATA field contains the relative source queue number and absolute
+ * VI ID.
+ */
+#define          MCDI_EVENT_CODE_DESC_PROXY_FUNC_QUEUE_START 0x28
 /* enum: Artificial event generated by host and posted via MC for test
  * purposes.
  */
@@ -3958,11 +4146,15 @@
 /***********************************/
 /* MC_CMD_CSR_READ32
  * Read 32bit words from the indirect memory map.
+ *
+ * Note - this command originally belonged to INSECURE category. But access is
+ * required to specific registers for customer diagnostics. The command handler
+ * has additional checks to reject insecure calls.
  */
 #define MC_CMD_CSR_READ32 0xc
 #undef MC_CMD_0xc_PRIVILEGE_CTG
 
-#define MC_CMD_0xc_PRIVILEGE_CTG SRIOV_CTG_INSECURE
+#define MC_CMD_0xc_PRIVILEGE_CTG SRIOV_CTG_ADMIN
 
 /* MC_CMD_CSR_READ32_IN msgrequest */
 #define    MC_CMD_CSR_READ32_IN_LEN 12
@@ -4946,6 +5138,53 @@
 /* MC_CMD_GET_PHY_CFG_IN msgrequest */
 #define    MC_CMD_GET_PHY_CFG_IN_LEN 0
 
+/* MC_CMD_GET_PHY_CFG_IN_V2 msgrequest */
+#define    MC_CMD_GET_PHY_CFG_IN_V2_LEN 8
+/* Target port to request PHY state for. Uses MAE_LINK_ENDPOINT_SELECTOR which
+ * identifies a real or virtual network port by MAE port and link end. See the
+ * structure definition for more details
+ */
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_OFST 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_LEN 8
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_LO_OFST 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_LO_LEN 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_LO_LBN 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_LO_WIDTH 32
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_HI_OFST 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_HI_LEN 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_HI_LBN 32
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_HI_WIDTH 32
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_OFST 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_LEN 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FLAT_OFST 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FLAT_LEN 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_TYPE_OFST 3
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_TYPE_LEN 1
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_OFST 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_LEN 3
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_LBN 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_WIDTH 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_LBN 20
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_WIDTH 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_LBN 16
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_WIDTH 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_OFST 2
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_LEN 1
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_OFST 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_LEN 2
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_LINK_END_OFST 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_LINK_END_LEN 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_OFST 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_LEN 8
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_LO_OFST 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_LO_LEN 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_LO_LBN 0
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_LO_WIDTH 32
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_HI_OFST 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_HI_LEN 4
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_HI_LBN 32
+#define       MC_CMD_GET_PHY_CFG_IN_V2_TARGET_FLAT_HI_WIDTH 32
+
 /* MC_CMD_GET_PHY_CFG_OUT msgresponse */
 #define    MC_CMD_GET_PHY_CFG_OUT_LEN 72
 /* flags */
@@ -5041,6 +5280,9 @@
 #define        MC_CMD_PHY_CAP_25G_BASER_FEC_REQUESTED_OFST 8
 #define        MC_CMD_PHY_CAP_25G_BASER_FEC_REQUESTED_LBN 21
 #define        MC_CMD_PHY_CAP_25G_BASER_FEC_REQUESTED_WIDTH 1
+#define        MC_CMD_PHY_CAP_200000FDX_OFST 8
+#define        MC_CMD_PHY_CAP_200000FDX_LBN 22
+#define        MC_CMD_PHY_CAP_200000FDX_WIDTH 1
 /* ?? */
 #define       MC_CMD_GET_PHY_CFG_OUT_CHANNEL_OFST 12
 #define       MC_CMD_GET_PHY_CFG_OUT_CHANNEL_LEN 4
@@ -5334,6 +5576,53 @@
 
 /* MC_CMD_GET_LOOPBACK_MODES_IN msgrequest */
 #define    MC_CMD_GET_LOOPBACK_MODES_IN_LEN 0
+
+/* MC_CMD_GET_LOOPBACK_MODES_IN_V2 msgrequest */
+#define    MC_CMD_GET_LOOPBACK_MODES_IN_V2_LEN 8
+/* Target port to request loopback modes for. Uses MAE_LINK_ENDPOINT_SELECTOR
+ * which identifies a real or virtual network port by MAE port and link end.
+ * See the structure definition for more details
+ */
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_LO_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_LO_LBN 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_HI_OFST 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_HI_LBN 32
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_HI_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FLAT_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FLAT_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_TYPE_OFST 3
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_TYPE_LEN 1
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_LEN 3
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_LBN 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_WIDTH 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_LBN 20
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_WIDTH 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_LBN 16
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_WIDTH 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_OFST 2
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_LEN 1
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_LEN 2
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_LINK_END_OFST 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_LINK_END_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_LO_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_LO_LBN 0
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_HI_OFST 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_HI_LBN 32
+#define       MC_CMD_GET_LOOPBACK_MODES_IN_V2_TARGET_FLAT_HI_WIDTH 32
 
 /* MC_CMD_GET_LOOPBACK_MODES_OUT msgresponse */
 #define    MC_CMD_GET_LOOPBACK_MODES_OUT_LEN 40
@@ -5664,6 +5953,204 @@
 /*            Enum values, see field(s): */
 /*               100M */
 
+/* MC_CMD_GET_LOOPBACK_MODES_OUT_V3 msgresponse: Supported loopback modes for
+ * newer NICs with 200G support
+ */
+#define    MC_CMD_GET_LOOPBACK_MODES_OUT_V3_LEN 72
+/* Supported loopbacks. */
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_LO_OFST 0
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_LO_LBN 0
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_HI_OFST 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_HI_LBN 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100M_HI_WIDTH 32
+/* enum: None. */
+/*               MC_CMD_LOOPBACK_NONE 0x0 */
+/* enum: Data. */
+/*               MC_CMD_LOOPBACK_DATA 0x1 */
+/* enum: GMAC. */
+/*               MC_CMD_LOOPBACK_GMAC 0x2 */
+/* enum: XGMII. */
+/*               MC_CMD_LOOPBACK_XGMII 0x3 */
+/* enum: XGXS. */
+/*               MC_CMD_LOOPBACK_XGXS 0x4 */
+/* enum: XAUI. */
+/*               MC_CMD_LOOPBACK_XAUI 0x5 */
+/* enum: GMII. */
+/*               MC_CMD_LOOPBACK_GMII 0x6 */
+/* enum: SGMII. */
+/*               MC_CMD_LOOPBACK_SGMII 0x7 */
+/* enum: XGBR. */
+/*               MC_CMD_LOOPBACK_XGBR 0x8 */
+/* enum: XFI. */
+/*               MC_CMD_LOOPBACK_XFI 0x9 */
+/* enum: XAUI Far. */
+/*               MC_CMD_LOOPBACK_XAUI_FAR 0xa */
+/* enum: GMII Far. */
+/*               MC_CMD_LOOPBACK_GMII_FAR 0xb */
+/* enum: SGMII Far. */
+/*               MC_CMD_LOOPBACK_SGMII_FAR 0xc */
+/* enum: XFI Far. */
+/*               MC_CMD_LOOPBACK_XFI_FAR 0xd */
+/* enum: GPhy. */
+/*               MC_CMD_LOOPBACK_GPHY 0xe */
+/* enum: PhyXS. */
+/*               MC_CMD_LOOPBACK_PHYXS 0xf */
+/* enum: PCS. */
+/*               MC_CMD_LOOPBACK_PCS 0x10 */
+/* enum: PMA-PMD. */
+/*               MC_CMD_LOOPBACK_PMAPMD 0x11 */
+/* enum: Cross-Port. */
+/*               MC_CMD_LOOPBACK_XPORT 0x12 */
+/* enum: XGMII-Wireside. */
+/*               MC_CMD_LOOPBACK_XGMII_WS 0x13 */
+/* enum: XAUI Wireside. */
+/*               MC_CMD_LOOPBACK_XAUI_WS 0x14 */
+/* enum: XAUI Wireside Far. */
+/*               MC_CMD_LOOPBACK_XAUI_WS_FAR 0x15 */
+/* enum: XAUI Wireside near. */
+/*               MC_CMD_LOOPBACK_XAUI_WS_NEAR 0x16 */
+/* enum: GMII Wireside. */
+/*               MC_CMD_LOOPBACK_GMII_WS 0x17 */
+/* enum: XFI Wireside. */
+/*               MC_CMD_LOOPBACK_XFI_WS 0x18 */
+/* enum: XFI Wireside Far. */
+/*               MC_CMD_LOOPBACK_XFI_WS_FAR 0x19 */
+/* enum: PhyXS Wireside. */
+/*               MC_CMD_LOOPBACK_PHYXS_WS 0x1a */
+/* enum: PMA lanes MAC-Serdes. */
+/*               MC_CMD_LOOPBACK_PMA_INT 0x1b */
+/* enum: KR Serdes Parallel (Encoder). */
+/*               MC_CMD_LOOPBACK_SD_NEAR 0x1c */
+/* enum: KR Serdes Serial. */
+/*               MC_CMD_LOOPBACK_SD_FAR 0x1d */
+/* enum: PMA lanes MAC-Serdes Wireside. */
+/*               MC_CMD_LOOPBACK_PMA_INT_WS 0x1e */
+/* enum: KR Serdes Parallel Wireside (Full PCS). */
+/*               MC_CMD_LOOPBACK_SD_FEP2_WS 0x1f */
+/* enum: KR Serdes Parallel Wireside (Sym Aligner to TX). */
+/*               MC_CMD_LOOPBACK_SD_FEP1_5_WS 0x20 */
+/* enum: KR Serdes Parallel Wireside (Deserializer to Serializer). */
+/*               MC_CMD_LOOPBACK_SD_FEP_WS 0x21 */
+/* enum: KR Serdes Serial Wireside. */
+/*               MC_CMD_LOOPBACK_SD_FES_WS 0x22 */
+/* enum: Near side of AOE Siena side port */
+/*               MC_CMD_LOOPBACK_AOE_INT_NEAR 0x23 */
+/* enum: Medford Wireside datapath loopback */
+/*               MC_CMD_LOOPBACK_DATA_WS 0x24 */
+/* enum: Force link up without setting up any physical loopback (snapper use
+ * only)
+ */
+/*               MC_CMD_LOOPBACK_FORCE_EXT_LINK 0x25 */
+/* Supported loopbacks. */
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_OFST 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_LO_OFST 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_LO_LBN 64
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_HI_OFST 12
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_HI_LBN 96
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_1G_HI_WIDTH 32
+/*            Enum values, see field(s): */
+/*               100M */
+/* Supported loopbacks. */
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_OFST 16
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_LO_OFST 16
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_LO_LBN 128
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_HI_OFST 20
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_HI_LBN 160
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_10G_HI_WIDTH 32
+/*            Enum values, see field(s): */
+/*               100M */
+/* Supported loopbacks. */
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_OFST 24
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_LO_OFST 24
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_LO_LBN 192
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_HI_OFST 28
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_HI_LBN 224
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_SUGGESTED_HI_WIDTH 32
+/*            Enum values, see field(s): */
+/*               100M */
+/* Supported loopbacks. */
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_OFST 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_LO_OFST 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_LO_LBN 256
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_HI_OFST 36
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_HI_LBN 288
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_40G_HI_WIDTH 32
+/*            Enum values, see field(s): */
+/*               100M */
+/* Supported 25G loopbacks. */
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_OFST 40
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_LO_OFST 40
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_LO_LBN 320
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_HI_OFST 44
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_HI_LBN 352
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_25G_HI_WIDTH 32
+/*            Enum values, see field(s): */
+/*               100M */
+/* Supported 50 loopbacks. */
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_OFST 48
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_LO_OFST 48
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_LO_LBN 384
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_HI_OFST 52
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_HI_LBN 416
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_50G_HI_WIDTH 32
+/*            Enum values, see field(s): */
+/*               100M */
+/* Supported 100G loopbacks. */
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_OFST 56
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_LO_OFST 56
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_LO_LBN 448
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_HI_OFST 60
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_HI_LBN 480
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_100G_HI_WIDTH 32
+/*            Enum values, see field(s): */
+/*               100M */
+/* Supported 200G loopbacks. */
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_OFST 64
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_LEN 8
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_LO_OFST 64
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_LO_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_LO_LBN 512
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_LO_WIDTH 32
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_HI_OFST 68
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_HI_LEN 4
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_HI_LBN 544
+#define       MC_CMD_GET_LOOPBACK_MODES_OUT_V3_200G_HI_WIDTH 32
+/*            Enum values, see field(s): */
+/*               100M */
+
 /* AN_TYPE structuredef: Auto-negotiation types defined in IEEE802.3 */
 #define    AN_TYPE_LEN 4
 #define       AN_TYPE_TYPE_OFST 0
@@ -5708,6 +6195,53 @@
 
 /* MC_CMD_GET_LINK_IN msgrequest */
 #define    MC_CMD_GET_LINK_IN_LEN 0
+
+/* MC_CMD_GET_LINK_IN_V2 msgrequest */
+#define    MC_CMD_GET_LINK_IN_V2_LEN 8
+/* Target port to request link state for. Uses MAE_LINK_ENDPOINT_SELECTOR which
+ * identifies a real or virtual network port by MAE port and link end. See the
+ * structure definition for more details.
+ */
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_OFST 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_LEN 8
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_LO_OFST 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_LO_LEN 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_LO_LBN 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_LO_WIDTH 32
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_HI_OFST 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_HI_LEN 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_HI_LBN 32
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_HI_WIDTH 32
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_OFST 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_LEN 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FLAT_OFST 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FLAT_LEN 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_TYPE_OFST 3
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_TYPE_LEN 1
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_OFST 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_LEN 3
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_LBN 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_WIDTH 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_LBN 20
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_WIDTH 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_LBN 16
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_WIDTH 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_OFST 2
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_LEN 1
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_OFST 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_LEN 2
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_LINK_END_OFST 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_LINK_END_LEN 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_OFST 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_LEN 8
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_LO_OFST 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_LO_LEN 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_LO_LBN 0
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_LO_WIDTH 32
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_HI_OFST 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_HI_LEN 4
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_HI_LBN 32
+#define       MC_CMD_GET_LINK_IN_V2_TARGET_FLAT_HI_WIDTH 32
 
 /* MC_CMD_GET_LINK_OUT msgresponse */
 #define    MC_CMD_GET_LINK_OUT_LEN 28
@@ -5984,6 +6518,94 @@
 #define        MC_CMD_SET_LINK_IN_V2_MODULE_SEQ_IGNORE_LBN 7
 #define        MC_CMD_SET_LINK_IN_V2_MODULE_SEQ_IGNORE_WIDTH 1
 
+/* MC_CMD_SET_LINK_IN_V3 msgrequest */
+#define    MC_CMD_SET_LINK_IN_V3_LEN 28
+/* Near-side advertised capabilities. Refer to
+ * MC_CMD_GET_PHY_CFG_OUT/SUPPORTED_CAP for bit definitions.
+ */
+#define       MC_CMD_SET_LINK_IN_V3_CAP_OFST 0
+#define       MC_CMD_SET_LINK_IN_V3_CAP_LEN 4
+/* Flags */
+#define       MC_CMD_SET_LINK_IN_V3_FLAGS_OFST 4
+#define       MC_CMD_SET_LINK_IN_V3_FLAGS_LEN 4
+#define        MC_CMD_SET_LINK_IN_V3_LOWPOWER_OFST 4
+#define        MC_CMD_SET_LINK_IN_V3_LOWPOWER_LBN 0
+#define        MC_CMD_SET_LINK_IN_V3_LOWPOWER_WIDTH 1
+#define        MC_CMD_SET_LINK_IN_V3_POWEROFF_OFST 4
+#define        MC_CMD_SET_LINK_IN_V3_POWEROFF_LBN 1
+#define        MC_CMD_SET_LINK_IN_V3_POWEROFF_WIDTH 1
+#define        MC_CMD_SET_LINK_IN_V3_TXDIS_OFST 4
+#define        MC_CMD_SET_LINK_IN_V3_TXDIS_LBN 2
+#define        MC_CMD_SET_LINK_IN_V3_TXDIS_WIDTH 1
+#define        MC_CMD_SET_LINK_IN_V3_LINKDOWN_OFST 4
+#define        MC_CMD_SET_LINK_IN_V3_LINKDOWN_LBN 3
+#define        MC_CMD_SET_LINK_IN_V3_LINKDOWN_WIDTH 1
+/* Loopback mode. */
+#define       MC_CMD_SET_LINK_IN_V3_LOOPBACK_MODE_OFST 8
+#define       MC_CMD_SET_LINK_IN_V3_LOOPBACK_MODE_LEN 4
+/*            Enum values, see field(s): */
+/*               MC_CMD_GET_LOOPBACK_MODES/MC_CMD_GET_LOOPBACK_MODES_OUT/100M */
+/* A loopback speed of "0" is supported, and means (choose any available
+ * speed).
+ */
+#define       MC_CMD_SET_LINK_IN_V3_LOOPBACK_SPEED_OFST 12
+#define       MC_CMD_SET_LINK_IN_V3_LOOPBACK_SPEED_LEN 4
+#define       MC_CMD_SET_LINK_IN_V3_MODULE_SEQ_OFST 16
+#define       MC_CMD_SET_LINK_IN_V3_MODULE_SEQ_LEN 1
+#define        MC_CMD_SET_LINK_IN_V3_MODULE_SEQ_NUMBER_OFST 16
+#define        MC_CMD_SET_LINK_IN_V3_MODULE_SEQ_NUMBER_LBN 0
+#define        MC_CMD_SET_LINK_IN_V3_MODULE_SEQ_NUMBER_WIDTH 7
+#define        MC_CMD_SET_LINK_IN_V3_MODULE_SEQ_IGNORE_OFST 16
+#define        MC_CMD_SET_LINK_IN_V3_MODULE_SEQ_IGNORE_LBN 7
+#define        MC_CMD_SET_LINK_IN_V3_MODULE_SEQ_IGNORE_WIDTH 1
+/* Padding */
+#define       MC_CMD_SET_LINK_IN_V3_RESERVED_OFST 17
+#define       MC_CMD_SET_LINK_IN_V3_RESERVED_LEN 3
+/* Target port to set link state for. Uses MAE_LINK_ENDPOINT_SELECTOR which
+ * identifies a real or virtual network port by MAE port and link end. See the
+ * structure definition for more details
+ */
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_OFST 20
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_LEN 8
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_LO_OFST 20
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_LO_LEN 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_LO_LBN 160
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_LO_WIDTH 32
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_HI_OFST 24
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_HI_LEN 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_HI_LBN 192
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_HI_WIDTH 32
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_OFST 20
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_LEN 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FLAT_OFST 20
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FLAT_LEN 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_TYPE_OFST 23
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_TYPE_LEN 1
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_MPORT_ID_OFST 20
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_MPORT_ID_LEN 3
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_PPORT_ID_LBN 160
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_PPORT_ID_WIDTH 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_LBN 180
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_WIDTH 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_LBN 176
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_WIDTH 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FUNC_PF_ID_OFST 22
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FUNC_PF_ID_LEN 1
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FUNC_VF_ID_OFST 20
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_MPORT_SELECTOR_FUNC_VF_ID_LEN 2
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_LINK_END_OFST 24
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_LINK_END_LEN 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_OFST 20
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_LEN 8
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_LO_OFST 20
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_LO_LEN 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_LO_LBN 160
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_LO_WIDTH 32
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_HI_OFST 24
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_HI_LEN 4
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_HI_LBN 192
+#define       MC_CMD_SET_LINK_IN_V3_TARGET_FLAT_HI_WIDTH 32
+
 /* MC_CMD_SET_LINK_OUT msgresponse */
 #define    MC_CMD_SET_LINK_OUT_LEN 0
 
@@ -6203,19 +6825,9 @@
 #define        MC_CMD_SET_MAC_V3_IN_CFG_FCS_OFST 28
 #define        MC_CMD_SET_MAC_V3_IN_CFG_FCS_LBN 4
 #define        MC_CMD_SET_MAC_V3_IN_CFG_FCS_WIDTH 1
-/* Identifies the MAC to update by the specifying the end of a logical MAE
- * link. Setting TARGET to MAE_LINK_ENDPOINT_COMPAT is equivalent to using the
- * previous version of the command (MC_CMD_SET_MAC_EXT). Not all possible
- * combinations of MPORT_END and MPORT_SELECTOR in TARGET will work in all
- * circumstances. 1. Some will always work (e.g. a VF can always address its
- * logical MAC using MPORT_SELECTOR=ASSIGNED,LINK_END=VNIC), 2. Some are not
- * meaningful and will always fail with EINVAL (e.g. attempting to address the
- * VNIC end of a link to a physical port), 3. Some are meaningful but require
- * the MCDI client to have the required permission and fail with EPERM
- * otherwise (e.g. trying to set the MAC on a VF the caller cannot administer),
- * and 4. Some could be implementation-specific and fail with ENOTSUP if not
- * available (no examples exist right now). See SF-123581-TC section 4.3 for
- * more details.
+/* Target port to set mac state for. Uses MAE_LINK_ENDPOINT_SELECTOR which
+ * identifies a real or virtual network port by MAE port and link end. See the
+ * structure definition for more details
  */
 #define       MC_CMD_SET_MAC_V3_IN_TARGET_OFST 32
 #define       MC_CMD_SET_MAC_V3_IN_TARGET_LEN 8
@@ -6419,6 +7031,97 @@
 /* port id so vadapter stats can be provided */
 #define       MC_CMD_MAC_STATS_IN_PORT_ID_OFST 16
 #define       MC_CMD_MAC_STATS_IN_PORT_ID_LEN 4
+
+/* MC_CMD_MAC_STATS_V2_IN msgrequest */
+#define    MC_CMD_MAC_STATS_V2_IN_LEN 28
+/* ??? */
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_OFST 0
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_LEN 8
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_LO_OFST 0
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_LO_LEN 4
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_LO_LBN 0
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_LO_WIDTH 32
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_HI_OFST 4
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_HI_LEN 4
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_HI_LBN 32
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_ADDR_HI_WIDTH 32
+#define       MC_CMD_MAC_STATS_V2_IN_CMD_OFST 8
+#define       MC_CMD_MAC_STATS_V2_IN_CMD_LEN 4
+#define        MC_CMD_MAC_STATS_V2_IN_DMA_OFST 8
+#define        MC_CMD_MAC_STATS_V2_IN_DMA_LBN 0
+#define        MC_CMD_MAC_STATS_V2_IN_DMA_WIDTH 1
+#define        MC_CMD_MAC_STATS_V2_IN_CLEAR_OFST 8
+#define        MC_CMD_MAC_STATS_V2_IN_CLEAR_LBN 1
+#define        MC_CMD_MAC_STATS_V2_IN_CLEAR_WIDTH 1
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_CHANGE_OFST 8
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_CHANGE_LBN 2
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_CHANGE_WIDTH 1
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_ENABLE_OFST 8
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_ENABLE_LBN 3
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_ENABLE_WIDTH 1
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_CLEAR_OFST 8
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_CLEAR_LBN 4
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_CLEAR_WIDTH 1
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_NOEVENT_OFST 8
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_NOEVENT_LBN 5
+#define        MC_CMD_MAC_STATS_V2_IN_PERIODIC_NOEVENT_WIDTH 1
+#define        MC_CMD_MAC_STATS_V2_IN_PERIOD_MS_OFST 8
+#define        MC_CMD_MAC_STATS_V2_IN_PERIOD_MS_LBN 16
+#define        MC_CMD_MAC_STATS_V2_IN_PERIOD_MS_WIDTH 16
+/* DMA length. Should be set to MAC_STATS_NUM_STATS * sizeof(uint64_t), as
+ * returned by MC_CMD_GET_CAPABILITIES_V4_OUT. For legacy firmware not
+ * supporting MC_CMD_GET_CAPABILITIES_V4_OUT, DMA_LEN should be set to
+ * MC_CMD_MAC_NSTATS * sizeof(uint64_t)
+ */
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_LEN_OFST 12
+#define       MC_CMD_MAC_STATS_V2_IN_DMA_LEN_LEN 4
+/* port id so vadapter stats can be provided */
+#define       MC_CMD_MAC_STATS_V2_IN_PORT_ID_OFST 16
+#define       MC_CMD_MAC_STATS_V2_IN_PORT_ID_LEN 4
+/* Target port to request statistics for. Uses MAE_LINK_ENDPOINT_SELECTOR which
+ * identifies a real or virtual network port by MAE port and link end. See the
+ * structure definition for more details
+ */
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_OFST 20
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_LEN 8
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_LO_OFST 20
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_LO_LEN 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_LO_LBN 160
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_LO_WIDTH 32
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_HI_OFST 24
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_HI_LEN 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_HI_LBN 192
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_HI_WIDTH 32
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_OFST 20
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_LEN 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FLAT_OFST 20
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FLAT_LEN 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_TYPE_OFST 23
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_TYPE_LEN 1
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_MPORT_ID_OFST 20
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_MPORT_ID_LEN 3
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_PPORT_ID_LBN 160
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_PPORT_ID_WIDTH 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_LBN 180
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_WIDTH 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_LBN 176
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_WIDTH 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FUNC_PF_ID_OFST 22
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FUNC_PF_ID_LEN 1
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FUNC_VF_ID_OFST 20
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_MPORT_SELECTOR_FUNC_VF_ID_LEN 2
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_LINK_END_OFST 24
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_LINK_END_LEN 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_OFST 20
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_LEN 8
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_LO_OFST 20
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_LO_LEN 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_LO_LBN 160
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_LO_WIDTH 32
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_HI_OFST 24
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_HI_LEN 4
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_HI_LBN 192
+#define       MC_CMD_MAC_STATS_V2_IN_TARGET_FLAT_HI_WIDTH 32
 
 /* MC_CMD_MAC_STATS_OUT_DMA msgresponse */
 #define    MC_CMD_MAC_STATS_OUT_DMA_LEN 0
@@ -8076,6 +8779,53 @@
 /* MC_CMD_GET_PHY_STATE_IN msgrequest */
 #define    MC_CMD_GET_PHY_STATE_IN_LEN 0
 
+/* MC_CMD_GET_PHY_STATE_IN_V2 msgrequest */
+#define    MC_CMD_GET_PHY_STATE_IN_V2_LEN 8
+/* Target port to request PHY state for. Uses MAE_LINK_ENDPOINT_SELECTOR which
+ * identifies a real or virtual network port by MAE port and link end. See the
+ * structure definition for more details.
+ */
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_OFST 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_LEN 8
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_LO_OFST 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_LO_LEN 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_LO_LBN 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_LO_WIDTH 32
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_HI_OFST 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_HI_LEN 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_HI_LBN 32
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_HI_WIDTH 32
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_OFST 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_LEN 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FLAT_OFST 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FLAT_LEN 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_TYPE_OFST 3
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_TYPE_LEN 1
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_OFST 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_LEN 3
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_LBN 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_WIDTH 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_LBN 20
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_WIDTH 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_LBN 16
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_WIDTH 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_OFST 2
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_LEN 1
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_OFST 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_LEN 2
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_LINK_END_OFST 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_LINK_END_LEN 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_OFST 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_LEN 8
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_LO_OFST 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_LO_LEN 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_LO_LBN 0
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_LO_WIDTH 32
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_HI_OFST 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_HI_LEN 4
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_HI_LBN 32
+#define       MC_CMD_GET_PHY_STATE_IN_V2_TARGET_FLAT_HI_WIDTH 32
+
 /* MC_CMD_GET_PHY_STATE_OUT msgresponse */
 #define    MC_CMD_GET_PHY_STATE_OUT_LEN 4
 #define       MC_CMD_GET_PHY_STATE_OUT_STATE_OFST 0
@@ -8338,6 +9088,61 @@
 #define        MC_CMD_GET_PHY_MEDIA_INFO_IN_DSFP_BANK_OFST 0
 #define        MC_CMD_GET_PHY_MEDIA_INFO_IN_DSFP_BANK_LBN 16
 #define        MC_CMD_GET_PHY_MEDIA_INFO_IN_DSFP_BANK_WIDTH 16
+
+/* MC_CMD_GET_PHY_MEDIA_INFO_IN_V2 msgrequest */
+#define    MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_LEN 12
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_PAGE_OFST 0
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_PAGE_LEN 4
+#define        MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_DSFP_PAGE_OFST 0
+#define        MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_DSFP_PAGE_LBN 0
+#define        MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_DSFP_PAGE_WIDTH 16
+#define        MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_DSFP_BANK_OFST 0
+#define        MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_DSFP_BANK_LBN 16
+#define        MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_DSFP_BANK_WIDTH 16
+/* Target port to request PHY state for. Uses MAE_LINK_ENDPOINT_SELECTOR which
+ * identifies a real or virtual network port by MAE port and link end. See the
+ * structure definition for more details
+ */
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_OFST 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_LEN 8
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_LO_OFST 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_LO_LEN 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_LO_LBN 32
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_LO_WIDTH 32
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_HI_OFST 8
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_HI_LEN 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_HI_LBN 64
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_HI_WIDTH 32
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_OFST 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_LEN 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FLAT_OFST 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FLAT_LEN 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_TYPE_OFST 7
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_TYPE_LEN 1
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_OFST 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_MPORT_ID_LEN 3
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_LBN 32
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_PPORT_ID_WIDTH 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_LBN 52
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FUNC_INTF_ID_WIDTH 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_LBN 48
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FUNC_MH_PF_ID_WIDTH 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_OFST 6
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FUNC_PF_ID_LEN 1
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_OFST 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_MPORT_SELECTOR_FUNC_VF_ID_LEN 2
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_LINK_END_OFST 8
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_LINK_END_LEN 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_OFST 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_LEN 8
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_LO_OFST 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_LO_LEN 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_LO_LBN 32
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_LO_WIDTH 32
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_HI_OFST 8
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_HI_LEN 4
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_HI_LBN 64
+#define       MC_CMD_GET_PHY_MEDIA_INFO_IN_V2_TARGET_FLAT_HI_WIDTH 32
 
 /* MC_CMD_GET_PHY_MEDIA_INFO_OUT msgresponse */
 #define    MC_CMD_GET_PHY_MEDIA_INFO_OUT_LENMIN 5
@@ -9515,27 +10320,22 @@
  * and a generation count for this version of the sensor table. On systems
  * advertising the DYNAMIC_SENSORS capability bit, this replaces the
  * MC_CMD_READ_SENSORS command. On multi-MC systems this may include sensors
- * added by the NMC.
- *
- * Sensor handles are persistent for the lifetime of the sensor and are used to
- * identify sensors in MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS and
- * MC_CMD_DYNAMIC_SENSORS_GET_VALUES.
- *
- * The generation count is maintained by the MC, is persistent across reboots
- * and will be incremented each time the sensor table is modified. When the
- * table is modified, a CODE_DYNAMIC_SENSORS_CHANGE event will be generated
- * containing the new generation count. The driver should compare this against
- * the current generation count, and if it is different, call
- * MC_CMD_DYNAMIC_SENSORS_LIST again to update it's copy of the sensor table.
- *
- * The sensor count is provided to allow a future path to supporting more than
+ * added by the NMC. Sensor handles are persistent for the lifetime of the
+ * sensor and are used to identify sensors in
+ * MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS and
+ * MC_CMD_DYNAMIC_SENSORS_GET_VALUES. The generation count is maintained by the
+ * MC, is persistent across reboots and will be incremented each time the
+ * sensor table is modified. When the table is modified, a
+ * CODE_DYNAMIC_SENSORS_CHANGE event will be generated containing the new
+ * generation count. The driver should compare this against the current
+ * generation count, and if it is different, call MC_CMD_DYNAMIC_SENSORS_LIST
+ * again to update it's copy of the sensor table. The sensor count is provided
+ * to allow a future path to supporting more than
  * MC_CMD_DYNAMIC_SENSORS_GET_READINGS_IN_HANDLES_MAXNUM_MCDI2 sensors, i.e.
  * the maximum number that will fit in a single response. As this is a fairly
  * large number (253) it is not anticipated that this will be needed in the
- * near future, so can currently be ignored.
- *
- * On Riverhead this command is implemented as a a wrapper for `list` in the
- * sensor_query SPHINX service.
+ * near future, so can currently be ignored. On Riverhead this command is
+ * implemented as a wrapper for `list` in the sensor_query SPHINX service.
  */
 #define MC_CMD_DYNAMIC_SENSORS_LIST 0x66
 #undef MC_CMD_0x66_PRIVILEGE_CTG
@@ -9572,15 +10372,13 @@
 /***********************************/
 /* MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS
  * Get descriptions for a set of sensors, specified as an array of sensor
- * handles as returned by MC_CMD_DYNAMIC_SENSORS_LIST
- *
- * Any handles which do not correspond to a sensor currently managed by the MC
- * will be dropped from from the response. This may happen when a sensor table
- * update is in progress, and effectively means the set of usable sensors is
- * the intersection between the sets of sensors known to the driver and the MC.
- *
- * On Riverhead this command is implemented as a a wrapper for
- * `get_descriptions` in the sensor_query SPHINX service.
+ * handles as returned by MC_CMD_DYNAMIC_SENSORS_LIST. Any handles which do not
+ * correspond to a sensor currently managed by the MC will be dropped from from
+ * the response. This may happen when a sensor table update is in progress, and
+ * effectively means the set of usable sensors is the intersection between the
+ * sets of sensors known to the driver and the MC. On Riverhead this command is
+ * implemented as a wrapper for `get_descriptions` in the sensor_query SPHINX
+ * service.
  */
 #define MC_CMD_DYNAMIC_SENSORS_GET_DESCRIPTIONS 0x67
 #undef MC_CMD_0x67_PRIVILEGE_CTG
@@ -9617,19 +10415,15 @@
 /***********************************/
 /* MC_CMD_DYNAMIC_SENSORS_GET_READINGS
  * Read the state and value for a set of sensors, specified as an array of
- * sensor handles as returned by MC_CMD_DYNAMIC_SENSORS_LIST.
- *
- * In the case of a broken sensor, then the state of the response's
- * MC_CMD_DYNAMIC_SENSORS_VALUE entry will be set to BROKEN, and any value
- * provided should be treated as erroneous.
- *
- * Any handles which do not correspond to a sensor currently managed by the MC
- * will be dropped from from the response. This may happen when a sensor table
- * update is in progress, and effectively means the set of usable sensors is
- * the intersection between the sets of sensors known to the driver and the MC.
- *
- * On Riverhead this command is implemented as a a wrapper for `get_readings`
- * in the sensor_query SPHINX service.
+ * sensor handles as returned by MC_CMD_DYNAMIC_SENSORS_LIST. In the case of a
+ * broken sensor, then the state of the response's MC_CMD_DYNAMIC_SENSORS_VALUE
+ * entry will be set to BROKEN, and any value provided should be treated as
+ * erroneous. Any handles which do not correspond to a sensor currently managed
+ * by the MC will be dropped from from the response. This may happen when a
+ * sensor table update is in progress, and effectively means the set of usable
+ * sensors is the intersection between the sets of sensors known to the driver
+ * and the MC. On Riverhead this command is implemented as a wrapper for
+ * `get_readings` in the sensor_query SPHINX service.
  */
 #define MC_CMD_DYNAMIC_SENSORS_GET_READINGS 0x68
 #undef MC_CMD_0x68_PRIVILEGE_CTG
@@ -13928,10 +14722,9 @@
 
 /***********************************/
 /* MC_CMD_GET_CAPABILITIES
- * Get device capabilities.
- *
- * This is supplementary to the MC_CMD_GET_BOARD_CFG command, and intended to
- * reference inherent device capabilities as opposed to current NVRAM config.
+ * Get device capabilities. This is supplementary to the MC_CMD_GET_BOARD_CFG
+ * command, and intended to reference inherent device capabilities as opposed
+ * to current NVRAM config.
  */
 #define MC_CMD_GET_CAPABILITIES 0xbe
 #undef MC_CMD_0xbe_PRIVILEGE_CTG
@@ -16889,9 +17682,15 @@
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_RSS_STEER_ON_OUTER_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_RSS_STEER_ON_OUTER_SUPPORTED_LBN 12
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_RSS_STEER_ON_OUTER_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_LBN 13
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_WIDTH 1
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_DYNAMIC_MPORT_JOURNAL_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_DYNAMIC_MPORT_JOURNAL_LBN 14
 #define        MC_CMD_GET_CAPABILITIES_V7_OUT_DYNAMIC_MPORT_JOURNAL_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_CLIENT_CMD_VF_PROXY_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_CLIENT_CMD_VF_PROXY_LBN 15
+#define        MC_CMD_GET_CAPABILITIES_V7_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
 
 /* MC_CMD_GET_CAPABILITIES_V8_OUT msgresponse */
 #define    MC_CMD_GET_CAPABILITIES_V8_OUT_LEN 160
@@ -17393,9 +18192,15 @@
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_RSS_STEER_ON_OUTER_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_RSS_STEER_ON_OUTER_SUPPORTED_LBN 12
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_RSS_STEER_ON_OUTER_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_LBN 13
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_WIDTH 1
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_DYNAMIC_MPORT_JOURNAL_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_DYNAMIC_MPORT_JOURNAL_LBN 14
 #define        MC_CMD_GET_CAPABILITIES_V8_OUT_DYNAMIC_MPORT_JOURNAL_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_CLIENT_CMD_VF_PROXY_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_CLIENT_CMD_VF_PROXY_LBN 15
+#define        MC_CMD_GET_CAPABILITIES_V8_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -17911,9 +18716,15 @@
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_RSS_STEER_ON_OUTER_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_RSS_STEER_ON_OUTER_SUPPORTED_LBN 12
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_RSS_STEER_ON_OUTER_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_LBN 13
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_WIDTH 1
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_DYNAMIC_MPORT_JOURNAL_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_DYNAMIC_MPORT_JOURNAL_LBN 14
 #define        MC_CMD_GET_CAPABILITIES_V9_OUT_DYNAMIC_MPORT_JOURNAL_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_CLIENT_CMD_VF_PROXY_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_CLIENT_CMD_VF_PROXY_LBN 15
+#define        MC_CMD_GET_CAPABILITIES_V9_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -18464,9 +19275,15 @@
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_RSS_STEER_ON_OUTER_SUPPORTED_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_RSS_STEER_ON_OUTER_SUPPORTED_LBN 12
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_RSS_STEER_ON_OUTER_SUPPORTED_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_LBN 13
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_MAE_ACTION_SET_ALLOC_V3_SUPPORTED_WIDTH 1
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_DYNAMIC_MPORT_JOURNAL_OFST 148
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_DYNAMIC_MPORT_JOURNAL_LBN 14
 #define        MC_CMD_GET_CAPABILITIES_V10_OUT_DYNAMIC_MPORT_JOURNAL_WIDTH 1
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_CLIENT_CMD_VF_PROXY_OFST 148
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_CLIENT_CMD_VF_PROXY_LBN 15
+#define        MC_CMD_GET_CAPABILITIES_V10_OUT_CLIENT_CMD_VF_PROXY_WIDTH 1
 /* These bits are reserved for communicating test-specific capabilities to
  * host-side test software. All production drivers should treat this field as
  * opaque.
@@ -18561,6 +19378,13 @@
  * are not defined.
  */
 #define          MC_CMD_V2_EXTN_IN_MCDI_MESSAGE_TYPE_TSA 0x1
+/* enum: MCDI command used for platform management. Typically, these commands
+ * are used for low-level operations directed at the platform as a whole (e.g.
+ * MMIO device enumeration) rather than individual functions and use a
+ * dedicated comms channel (e.g. RPmsg/IPI). May be handled by the same or
+ * different CPU as MCDI_MESSAGE_TYPE_MC.
+ */
+#define          MC_CMD_V2_EXTN_IN_MCDI_MESSAGE_TYPE_PLATFORM 0x2
 
 
 /***********************************/
@@ -22398,8 +23222,8 @@
  * TLV_PORT_MODE_*). A superset of MC_CMD_GET_PORT_MODES_OUT/MODES that
  * contains all modes implemented in firmware for a particular board. Modes
  * listed in MODES are considered production modes and should be exposed in
- * userland tools. Modes listed in in ENGINEERING_MODES, but not in MODES
- * should be considered hidden (not to be exposed in userland tools) and for
+ * userland tools. Modes listed in ENGINEERING_MODES, but not in MODES should
+ * be considered hidden (not to be exposed in userland tools) and for
  * engineering use only. There are no other semantic differences and any mode
  * listed in either MODES or ENGINEERING_MODES can be set on the board.
  */
@@ -26893,6 +27717,64 @@
 /* MC_CMD_EXTERNAL_MAE_SET_LINK_MODE_OUT msgresponse */
 #define    MC_CMD_EXTERNAL_MAE_SET_LINK_MODE_OUT_LEN 0
 
+
+/***********************************/
+/* MC_CMD_GET_BUFTBL_STATS
+ * Currently EF10 only. Read usage and limits for Buffer Table
+ */
+#define MC_CMD_GET_BUFTBL_STATS 0x6a
+#undef MC_CMD_0x6a_PRIVILEGE_CTG
+
+#define MC_CMD_0x6a_PRIVILEGE_CTG SRIOV_CTG_GENERAL
+
+/* MC_CMD_GET_BUFTBL_STATS_IN msgrequest */
+#define    MC_CMD_GET_BUFTBL_STATS_IN_LEN 0
+
+/* MC_CMD_GET_BUFTBL_STATS_OUT msgresponse */
+#define    MC_CMD_GET_BUFTBL_STATS_OUT_LEN 40
+/* number of buffer table entries per set */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_ENTRIES_PER_SET_OFST 0
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_ENTRIES_PER_SET_LEN 4
+/* number of buffer table entries per cluster */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_ENTRIES_PER_CLUSTER_OFST 4
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_ENTRIES_PER_CLUSTER_LEN 4
+/* Maximum size buffer table can grow to, in clusters. On EF10, this can
+ * potentially vary depending on the size of the Descriptor Cache.
+ */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_MAX_CLUSTERS_OFST 8
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_MAX_CLUSTERS_LEN 4
+/* High water mark for number of buffer table clusters which have been
+ * allocated.
+ */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_HIGH_WATER_CLUSTERS_OFST 12
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_HIGH_WATER_CLUSTERS_LEN 4
+/* Number of free buffer table clusters on the free cluster list. */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_FREE_CLUSTERS_OFST 16
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_FREE_CLUSTERS_LEN 4
+/* Number of free buffer table sets on the free set list. */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_FREE_SETS_OFST 20
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_FREE_SETS_LEN 4
+/* Number of chunks of fully-used clusters allocated to the MC for EVQ, RXQ and
+ * TXQs.
+ */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_MC_FULL_CLUSTERS_OFST 24
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_MC_FULL_CLUSTERS_LEN 4
+/* Number of chunks in partially-used clusters allocated to the MC for EVQ, RXQ
+ * and TXQs.
+ */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_MC_PART_CLUSTERS_OFST 28
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_MC_PART_CLUSTERS_LEN 4
+/* Number of buffer table sets (chunks) allocated to the host via
+ * MC_CMD_ALLOC_BUFTBL_CHUNK.
+ */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_HOST_SETS_OFST 32
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_BUFTBL_HOST_SETS_LEN 4
+/* Maximum number of VIs per NIC. On EF10 this is the current value as used to
+ * size the Descriptor Cache in hardware.
+ */
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_VI_MAX_OFST 36
+#define       MC_CMD_GET_BUFTBL_STATS_OUT_VI_MAX_LEN 4
+
 /* CLIENT_HANDLE structuredef: A client is an abstract entity that can make
  * requests of the device and that can own resources managed by the device.
  * Examples of clients include PCIe functions and dynamic clients. A client
@@ -26960,8 +27842,8 @@
 
 /* SCHED_CREDIT_CHECK_RESULT structuredef */
 #define    SCHED_CREDIT_CHECK_RESULT_LEN 16
-/* The instance of the scheduler. Refer to XN-200389-AW for the location of
- * these schedulers in the hardware.
+/* The instance of the scheduler. Refer to XN-200389-AW (snic/hnic) and
+ * XN-200425-TC (cdx) for the location of these schedulers in the hardware.
  */
 #define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_OFST 0
 #define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_LEN 1
@@ -26975,6 +27857,16 @@
 #define          SCHED_CREDIT_CHECK_RESULT_DMAC_H2C 0x7 /* enum */
 #define          SCHED_CREDIT_CHECK_RESULT_HUB_NET_B 0x8 /* enum */
 #define          SCHED_CREDIT_CHECK_RESULT_HUB_NET_REPLAY 0x9 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_ADAPTER_C2H_C 0xa /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_A2_H2C_C 0xb /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_A3_SOFT_ADAPTOR_C 0xc /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_A4_DPU_WRITE_C 0xd /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_JRC_RRU 0xe /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_CDM_SINK 0xf /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_PCIE_SINK 0x10 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_UPORT_SINK 0x11 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_PSX_SINK 0x12 /* enum */
+#define          SCHED_CREDIT_CHECK_RESULT_A5_DPU_READ_C 0x13 /* enum */
 #define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_LBN 0
 #define       SCHED_CREDIT_CHECK_RESULT_SCHED_INSTANCE_WIDTH 8
 /* The type of node that this result refers to. */
@@ -26984,6 +27876,10 @@
 #define          SCHED_CREDIT_CHECK_RESULT_DEST 0x0
 /* enum: Source node */
 #define          SCHED_CREDIT_CHECK_RESULT_SOURCE 0x1
+/* enum: Destination node credit type 1 (new to the Keystone schedulers, see
+ * SF-120268-TC)
+ */
+#define          SCHED_CREDIT_CHECK_RESULT_DEST_CREDIT1 0x2
 #define       SCHED_CREDIT_CHECK_RESULT_NODE_TYPE_LBN 8
 #define       SCHED_CREDIT_CHECK_RESULT_NODE_TYPE_WIDTH 8
 /* Level of node in scheduler hierarchy (level 0 is the bottom of the
@@ -29137,6 +30033,26 @@
 #define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_MINNUM 0
 #define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_MAXNUM 4
 #define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_MAXNUM_MCDI2 19
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_OFST 4
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_LEN 8
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_LO_OFST 4
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_LO_LEN 4
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_LO_LBN 32
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_LO_WIDTH 32
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_HI_OFST 8
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_HI_LEN 4
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_HI_LBN 64
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_HI_WIDTH 32
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_PF_OFST 4
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_PF_LEN 2
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_VF_OFST 6
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_VF_LEN 2
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_INTF_OFST 8
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_FUNC_INTF_LEN 4
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_PERSONALITY_OFST 12
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_PERSONALITY_LEN 4
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_LABEL_OFST 16
+#define       MC_CMD_DESC_PROXY_FUNC_ENUM_OUT_FUNC_MAP_LABEL_LEN 40
 
 
 /***********************************/
@@ -30411,7 +31327,7 @@
 /* MAE_MPORT_SELECTOR structuredef: MPORTS are identified by an opaque unsigned
  * integer value (mport_id) that is guaranteed to be representable within
  * 32-bits or within any NIC interface field that needs store the value
- * (whichever is narrowers). This selector structure provides a stable way to
+ * (whichever is narrower). This selector structure provides a stable way to
  * refer to m-ports.
  */
 #define    MAE_MPORT_SELECTOR_LEN 4
@@ -30486,10 +31402,22 @@
 #define       MAE_MPORT_SELECTOR_FLAT_WIDTH 32
 
 /* MAE_LINK_ENDPOINT_SELECTOR structuredef: Structure that identifies a real or
- * virtual network port by MAE port and link end
+ * virtual network port by MAE port and link end. Intended to be used by
+ * network port MCDI commands. Setting FLAT to MAE_LINK_ENDPOINT_COMPAT is
+ * equivalent to using the previous version of the command. Not all possible
+ * combinations of MPORT_END and MPORT_SELECTOR in MAE_LINK_ENDPOINT_SELECTOR
+ * will work in all circumstances. 1. Some will always work (e.g. a VF can
+ * always address its logical MAC using MPORT_SELECTOR=ASSIGNED,LINK_END=VNIC),
+ * 2. Some are not meaningful and will always fail with EINVAL (e.g. attempting
+ * to address the VNIC end of a link to a physical port), 3. Some are
+ * meaningful but require the MCDI client to have the required permission and
+ * fail with EPERM otherwise (e.g. trying to set the MAC on a VF the caller
+ * cannot administer), and 4. Some could be implementation-specific and fail
+ * with ENOTSUP if not available (no examples exist right now). See
+ * SF-123581-TC section 4.3 for more details.
  */
 #define    MAE_LINK_ENDPOINT_SELECTOR_LEN 8
-/* The MAE MPORT of interest */
+/* Identifier for the MAE MPORT of interest */
 #define       MAE_LINK_ENDPOINT_SELECTOR_MPORT_SELECTOR_OFST 0
 #define       MAE_LINK_ENDPOINT_SELECTOR_MPORT_SELECTOR_LEN 4
 #define       MAE_LINK_ENDPOINT_SELECTOR_MPORT_SELECTOR_LBN 0
@@ -30890,6 +31818,8 @@
 #define       MC_CMD_MAE_COUNTER_ALLOC_OUT_COUNTER_ID_MAXNUM_MCDI2 253
 /* enum: A counter ID that is guaranteed never to represent a real counter */
 #define          MC_CMD_MAE_COUNTER_ALLOC_OUT_COUNTER_ID_NULL 0xffffffff
+/*            Other enum values, see field(s): */
+/*               MAE_COUNTER_ID */
 
 
 /***********************************/
@@ -31327,6 +32257,24 @@
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_SUPPRESS_SELF_DELIVERY_OFST 0
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_SUPPRESS_SELF_DELIVERY_LBN 14
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_SUPPRESS_SELF_DELIVERY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_REPLACE_RDP_C_PL_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_REPLACE_RDP_C_PL_LBN 15
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_REPLACE_RDP_C_PL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_REPLACE_RDP_D_PL_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_REPLACE_RDP_D_PL_LBN 16
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_REPLACE_RDP_D_PL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_REPLACE_RDP_OUT_HOST_CHAN_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_REPLACE_RDP_OUT_HOST_CHAN_LBN 17
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_REPLACE_RDP_OUT_HOST_CHAN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_SET_NET_CHAN_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_SET_NET_CHAN_LBN 18
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_DO_SET_NET_CHAN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_LACP_PLUGIN_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_LACP_PLUGIN_LBN 19
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_LACP_PLUGIN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_LACP_INC_L4_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_LACP_INC_L4_LBN 20
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_IN_LACP_INC_L4_WIDTH 1
 /* If VLAN_PUSH >= 1, TCI value to be inserted as outermost VLAN. */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_VLAN0_TCI_BE_OFST 4
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_VLAN0_TCI_BE_LEN 2
@@ -31352,19 +32300,23 @@
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_DELIVER_OFST 20
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_DELIVER_LEN 4
 /* Allows an action set to trigger several counter updates. Set to
- * COUNTER_LIST_ID_NULL to request no counter action.
+ * MAE_COUNTER_ID_NULL to request no counter action.
  */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_COUNTER_LIST_ID_OFST 24
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_COUNTER_LIST_ID_LEN 4
+/*            Enum values, see field(s): */
+/*               MAE_COUNTER_ID */
 /* If a driver only wished to update one counter within this action set, then
  * it can supply a COUNTER_ID instead of allocating a single-element counter
  * list. The ID must have been allocated with COUNTER_TYPE=AR. This field
- * should be set to COUNTER_ID_NULL if this behaviour is not required. It is
- * not valid to supply a non-NULL value for both COUNTER_LIST_ID and
+ * should be set to MAE_COUNTER_ID_NULL if this behaviour is not required. It
+ * is not valid to supply a non-NULL value for both COUNTER_LIST_ID and
  * COUNTER_ID.
  */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_COUNTER_ID_OFST 28
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_COUNTER_ID_LEN 4
+/*            Enum values, see field(s): */
+/*               MAE_COUNTER_ID */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_MARK_VALUE_OFST 32
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_IN_MARK_VALUE_LEN 4
 /* Set to MAC_ID_NULL to request no source MAC replacement. */
@@ -31408,6 +32360,24 @@
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_SUPPRESS_SELF_DELIVERY_OFST 0
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_SUPPRESS_SELF_DELIVERY_LBN 14
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_SUPPRESS_SELF_DELIVERY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_RDP_C_PL_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_RDP_C_PL_LBN 15
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_RDP_C_PL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_RDP_D_PL_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_RDP_D_PL_LBN 16
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_RDP_D_PL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_RDP_OUT_HOST_CHAN_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_RDP_OUT_HOST_CHAN_LBN 17
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_REPLACE_RDP_OUT_HOST_CHAN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_SET_NET_CHAN_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_SET_NET_CHAN_LBN 18
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DO_SET_NET_CHAN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_LACP_PLUGIN_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_LACP_PLUGIN_LBN 19
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_LACP_PLUGIN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_LACP_INC_L4_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_LACP_INC_L4_LBN 20
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_LACP_INC_L4_WIDTH 1
 /* If VLAN_PUSH >= 1, TCI value to be inserted as outermost VLAN. */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN0_TCI_BE_OFST 4
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_VLAN0_TCI_BE_LEN 2
@@ -31433,19 +32403,23 @@
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DELIVER_OFST 20
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_DELIVER_LEN 4
 /* Allows an action set to trigger several counter updates. Set to
- * COUNTER_LIST_ID_NULL to request no counter action.
+ * MAE_COUNTER_ID_NULL to request no counter action.
  */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_COUNTER_LIST_ID_OFST 24
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_COUNTER_LIST_ID_LEN 4
+/*            Enum values, see field(s): */
+/*               MAE_COUNTER_ID */
 /* If a driver only wished to update one counter within this action set, then
  * it can supply a COUNTER_ID instead of allocating a single-element counter
  * list. The ID must have been allocated with COUNTER_TYPE=AR. This field
- * should be set to COUNTER_ID_NULL if this behaviour is not required. It is
- * not valid to supply a non-NULL value for both COUNTER_LIST_ID and
+ * should be set to MAE_COUNTER_ID_NULL if this behaviour is not required. It
+ * is not valid to supply a non-NULL value for both COUNTER_LIST_ID and
  * COUNTER_ID.
  */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_COUNTER_ID_OFST 28
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_COUNTER_ID_LEN 4
+/*            Enum values, see field(s): */
+/*               MAE_COUNTER_ID */
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_MARK_VALUE_OFST 32
 #define       MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_MARK_VALUE_LEN 4
 /* Set to MAC_ID_NULL to request no source MAC replacement. */
@@ -31497,6 +32471,172 @@
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_ECT_1_TO_CE_OFST 50
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_ECT_1_TO_CE_LBN 6
 #define        MC_CMD_MAE_ACTION_SET_ALLOC_V2_IN_ECN_ECT_1_TO_CE_WIDTH 1
+
+/* MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN msgrequest: Only supported if
+ * MAE_ACTION_SET_ALLOC_V3_SUPPORTED is advertised in
+ * MC_CMD_GET_CAPABILITIES_V10_OUT.
+ */
+#define    MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_LEN 53
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_FLAGS_OFST 0
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_FLAGS_LEN 4
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN_PUSH_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN_PUSH_LBN 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN_PUSH_WIDTH 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN_POP_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN_POP_LBN 4
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN_POP_WIDTH 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DECAP_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DECAP_LBN 8
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DECAP_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_MARK_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_MARK_LBN 9
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_MARK_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_FLAG_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_FLAG_LBN 10
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_FLAG_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_NAT_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_NAT_LBN 11
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_NAT_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_DECR_IP_TTL_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_DECR_IP_TTL_LBN 12
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_DECR_IP_TTL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_SET_SRC_MPORT_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_SET_SRC_MPORT_LBN 13
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_SET_SRC_MPORT_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_SUPPRESS_SELF_DELIVERY_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_SUPPRESS_SELF_DELIVERY_LBN 14
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_SUPPRESS_SELF_DELIVERY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_RDP_C_PL_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_RDP_C_PL_LBN 15
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_RDP_C_PL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_RDP_D_PL_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_RDP_D_PL_LBN 16
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_RDP_D_PL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_RDP_OUT_HOST_CHAN_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_RDP_OUT_HOST_CHAN_LBN 17
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_RDP_OUT_HOST_CHAN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_SET_NET_CHAN_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_SET_NET_CHAN_LBN 18
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_SET_NET_CHAN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_LACP_PLUGIN_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_LACP_PLUGIN_LBN 19
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_LACP_PLUGIN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_LACP_INC_L4_OFST 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_LACP_INC_L4_LBN 20
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_LACP_INC_L4_WIDTH 1
+/* If VLAN_PUSH >= 1, TCI value to be inserted as outermost VLAN. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN0_TCI_BE_OFST 4
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN0_TCI_BE_LEN 2
+/* If VLAN_PUSH >= 1, TPID value to be inserted as outermost VLAN. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN0_PROTO_BE_OFST 6
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN0_PROTO_BE_LEN 2
+/* If VLAN_PUSH == 2, inner TCI value to be inserted. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN1_TCI_BE_OFST 8
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN1_TCI_BE_LEN 2
+/* If VLAN_PUSH == 2, inner TPID value to be inserted. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN1_PROTO_BE_OFST 10
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_VLAN1_PROTO_BE_LEN 2
+/* Reserved. Ignored by firmware. Should be set to zero or 0xffffffff. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RSVD_OFST 12
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RSVD_LEN 4
+/* Set to ENCAP_HEADER_ID_NULL to request no encap action */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ENCAP_HEADER_ID_OFST 16
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ENCAP_HEADER_ID_LEN 4
+/* An m-port selector identifying the m-port that the modified packet should be
+ * delivered to. Set to MPORT_SELECTOR_NULL to request no delivery of the
+ * packet.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DELIVER_OFST 20
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DELIVER_LEN 4
+/* Allows an action set to trigger several counter updates. Set to
+ * MAE_COUNTER_ID_NULL to request no counter action.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_COUNTER_LIST_ID_OFST 24
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_COUNTER_LIST_ID_LEN 4
+/*            Enum values, see field(s): */
+/*               MAE_COUNTER_ID */
+/* If a driver only wished to update one counter within this action set, then
+ * it can supply a COUNTER_ID instead of allocating a single-element counter
+ * list. The ID must have been allocated with COUNTER_TYPE=AR. This field
+ * should be set to MAE_COUNTER_ID_NULL if this behaviour is not required. It
+ * is not valid to supply a non-NULL value for both COUNTER_LIST_ID and
+ * COUNTER_ID.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_COUNTER_ID_OFST 28
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_COUNTER_ID_LEN 4
+/*            Enum values, see field(s): */
+/*               MAE_COUNTER_ID */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_MARK_VALUE_OFST 32
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_MARK_VALUE_LEN 4
+/* Set to MAC_ID_NULL to request no source MAC replacement. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_SRC_MAC_ID_OFST 36
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_SRC_MAC_ID_LEN 4
+/* Set to MAC_ID_NULL to request no destination MAC replacement. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DST_MAC_ID_OFST 40
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DST_MAC_ID_LEN 4
+/* Source m-port ID to be reported for DO_SET_SRC_MPORT action. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_REPORTED_SRC_MPORT_OFST 44
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_REPORTED_SRC_MPORT_LEN 4
+/* Actions for modifying the Differentiated Services Code-Point (DSCP) bits
+ * within IPv4 and IPv6 headers.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DSCP_CONTROL_OFST 48
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DSCP_CONTROL_LEN 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_DSCP_ENCAP_COPY_OFST 48
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_DSCP_ENCAP_COPY_LBN 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_DSCP_ENCAP_COPY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_DSCP_DECAP_COPY_OFST 48
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_DSCP_DECAP_COPY_LBN 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_DSCP_DECAP_COPY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_DSCP_OFST 48
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_DSCP_LBN 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_DSCP_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DSCP_VALUE_OFST 48
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DSCP_VALUE_LBN 3
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DSCP_VALUE_WIDTH 6
+/* Actions for modifying the Explicit Congestion Notification (ECN) bits within
+ * IPv4 and IPv6 headers.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_CONTROL_OFST 50
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_CONTROL_LEN 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_ECN_ENCAP_COPY_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_ECN_ENCAP_COPY_LBN 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_ECN_ENCAP_COPY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_ECN_DECAP_COPY_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_ECN_DECAP_COPY_LBN 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_ECN_DECAP_COPY_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_ECN_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_ECN_LBN 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_DO_REPLACE_ECN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_VALUE_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_VALUE_LBN 3
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_VALUE_WIDTH 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_ECT_0_TO_CE_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_ECT_0_TO_CE_LBN 5
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_ECT_0_TO_CE_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_ECT_1_TO_CE_OFST 50
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_ECT_1_TO_CE_LBN 6
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_ECN_ECT_1_TO_CE_WIDTH 1
+/* Actions for overwriting CH_ROUTE subfields. */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_OVERWRITE_OFST 51
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_OVERWRITE_LEN 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_C_PL_OFST 51
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_C_PL_LBN 0
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_C_PL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_D_PL_OFST 51
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_D_PL_LBN 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_D_PL_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_PL_CHAN_OFST 51
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_PL_CHAN_LBN 2
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_PL_CHAN_WIDTH 1
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_OUT_HOST_CHAN_OFST 51
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_OUT_HOST_CHAN_LBN 3
+#define        MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_RDP_OUT_HOST_CHAN_WIDTH 1
+/* Override outgoing CH_VC to network port for DO_SET_NET_CHAN action. Cannot
+ * be used in conjunction with DO_SET_SRC_MPORT action.
+ */
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_NET_CHAN_OFST 52
+#define       MC_CMD_MAE_ACTION_SET_ALLOC_V3_IN_NET_CHAN_LEN 1
 
 /* MC_CMD_MAE_ACTION_SET_ALLOC_OUT msgresponse */
 #define    MC_CMD_MAE_ACTION_SET_ALLOC_OUT_LEN 4

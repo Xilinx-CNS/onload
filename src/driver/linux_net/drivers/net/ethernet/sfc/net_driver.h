@@ -45,6 +45,9 @@
 #ifndef EFX_USE_KCOMPAT
 #include <net/busy_poll.h>
 #endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
+#include <net/devlink.h>
+#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_RXQ_INFO)
 #include <net/xdp.h>
 #endif
@@ -94,7 +97,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.13.1006"
+#define EFX_DRIVER_VERSION	"5.3.14.1007"
 #endif
 
 #ifdef DEBUG
@@ -439,10 +442,10 @@ struct efx_tx_queue {
  * @addr: virtual address of buffer
  * @handle: hande to the umem buffer
  * @xsk_buf: umem buffer
- * @page_offset: If pending: offset in @page of DMA base address.
- *	If completed: offset in @page of Ethernet header.
- * @len: If pending: length for DMA descriptor.
- *	If completed: received length, excluding hash prefix.
+ * @page_offset: If pending this is the offset in @page of the DMA base address.
+ *	If completed this is the offset in @page of the Ethernet header.
+ * @len: If pending this is the length of a DMA descriptor.
+ *	If completed this is the received length, excluding hash prefix.
  * @flags: Flags for buffer and packet state.  These are only set on the
  *	first buffer of a scattered packet.
  * @vlan_tci: VLAN tag in host byte order. If the EFX_RX_PKT_VLAN_XTAG
@@ -1878,6 +1881,8 @@ struct efx_nic {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
 	/** @devlink: Devlink instance */
 	struct devlink *devlink;
+	/** @devlink_port: Devlink port instance */
+	struct devlink_port *devlink_port;
 #endif
 	unsigned int mem_bar;
 	u32 reg_base;

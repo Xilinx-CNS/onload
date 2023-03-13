@@ -372,6 +372,8 @@ int efx_probe_rx_queue(struct efx_rx_queue *rx_queue)
 	unsigned int entries;
 	int rc;
 
+	INIT_DELAYED_WORK(&rx_queue->slow_fill_work, efx_rx_slow_fill);
+
 	/* Create the smallest power-of-two aligned ring */
 	entries = max(roundup_pow_of_two(efx->rxq_entries),
 		      efx_min_dmaq_size(efx));
@@ -425,8 +427,6 @@ int efx_init_rx_queue(struct efx_rx_queue *rx_queue)
 
 	netif_dbg(rx_queue->efx, drv, rx_queue->efx->net_dev,
 		  "initialising RX queue %d\n", efx_rx_queue_index(rx_queue));
-
-	INIT_DELAYED_WORK(&rx_queue->slow_fill_work, efx_rx_slow_fill);
 
 	/* Initialise ptr fields */
 	rx_queue->added_count = 0;
@@ -1303,17 +1303,15 @@ bool efx_filter_spec_equal(const struct efx_filter_spec *left,
 	     (EFX_FILTER_FLAG_RX | EFX_FILTER_FLAG_TX)))
 		return false;
 
-	return memcmp(&left->vport_id, &right->vport_id,
-		      sizeof(struct efx_filter_spec) -
-		      offsetof(struct efx_filter_spec, vport_id)) == 0;
+	return memcmp(&left->match_key, &right->match_key,
+		      sizeof(left->match_key)) == 0;
 }
 
 u32 efx_filter_spec_hash(const struct efx_filter_spec *spec)
 {
-	BUILD_BUG_ON(offsetof(struct efx_filter_spec, vport_id) & 3);
-	return jhash2((const u32 *)&spec->vport_id,
-		      (sizeof(struct efx_filter_spec) -
-		       offsetof(struct efx_filter_spec, vport_id)) / 4,
+	BUILD_BUG_ON(offsetof(struct efx_filter_spec, match_key) & 3);
+	return jhash2((const u32 *)&spec->match_key,
+		      sizeof(spec->match_key) / 4,
 		      0);
 }
 
