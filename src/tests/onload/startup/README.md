@@ -17,3 +17,7 @@ $ LD_LIBRARY_PATH="${BUILD}"/tests/onload/startup scripts/onload "${BUILD}"/test
 ```
 
 The application should gracefully exit.
+
+## Copyright
+
+This file: (c) Copyright 2023 Advanced Micro Devices, Inc.

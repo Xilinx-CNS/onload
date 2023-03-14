@@ -36,3 +36,7 @@ if( ! conditional_expr ) {
   statement2;
 }
 ```
+
+## Copyright
+
+This file: (c) Copyright 2020 Xilinx, Inc.

@@ -2,7 +2,7 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2012-2020 Xilinx, Inc. */
 /**************************************************************************\
 ** <L5_PRIVATE L5_SOURCE>
-**   Copyright: (c) Solarflare Communications
+**   Copyright: (c) Xilinx, Inc.
 **      Author: sasha
 **     Started: 2012/01/03
 ** Description: OnloadFS implementation

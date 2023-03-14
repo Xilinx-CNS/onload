@@ -147,3 +147,8 @@ Installing from repository
  OR
 
     scripts/onload <app>
+
+Copyright
+=========
+
+This file: (c) Copyright 2020,2023 Xilinx, Inc.

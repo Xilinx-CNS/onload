@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2019-2023 Xilinx, Inc.
+
 BUILD_PROFILE ?= extra
 export TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_$(BUILD_PROFILE).h
 BUILD_ROOT ?= $(abspath build)

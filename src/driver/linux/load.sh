@@ -1,7 +1,9 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2002-2023 Xilinx, Inc.
 ###############################################################################
 # <L5_PRIVATE L5_SCRIPT>
-#   Copyright: (c) Level 5 Networks Limited.
+#   Copyright: (c) Xilinx, Inc.
 #      Author: slp
 #     Started: 07/08/2002
 # Description: Script to load linux drivers and make device nodes.

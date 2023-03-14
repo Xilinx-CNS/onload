@@ -2,7 +2,7 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2005-2020 Xilinx, Inc. */
 /**************************************************************************\
 ** <L5_PRIVATE L5_SOURCE>
-**   Copyright: (c) Level 5 Networks Limited.
+**   Copyright: (c) Xilinx, Inc.
 **      Author: gel
 **     Started: 2005/01/05
 ** Description: TCP helper resource OS socket calls (linux specific)
