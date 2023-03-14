@@ -115,3 +115,7 @@ The publicly-hosted repository is a community-supported project.
 
 Supported releases of OpenOnload are available from
 https://www.xilinx.com/support/download/nic-software-and-drivers.html#open
+
+## Copyright
+
+This file: (c) Copyright 2020-2022 Xilinx, Inc.

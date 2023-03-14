@@ -1,9 +1,9 @@
 Format: http://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: #TYPE#
-Source: http://www.solarflare.com
+Source: http://www.openonload.org
 
 Files: *
-Copyright: 2019-2020 Xilinx, Inc.
+Copyright: 2019-2023 Xilinx, Inc.
            2005-2019 Solarflare Communications Inc. 7505 Irvine Center Drive, Irvine, CA 92618, USA
            2002-2005 Level 5 Networks Inc.
 License: GPL-2
@@ -17,7 +17,7 @@ License: GPL-2
  GNU General Public License for more details.
 
 Files: debian/*
-Copyright: 2015 Support <support@solarflare.com>
+Copyright: 2015 Xilinx, Inc. <support-nic@amd.com>
 License: GPL-2
  This package is free software; you can redistribute it and/or modify
  it under the terms of version 2 of the GNU General Public License as

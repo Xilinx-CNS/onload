@@ -1,4 +1,6 @@
 #!/bin/bash -eu
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2010-2021 Xilinx, Inc.
 ##############################################################################
 # Mix specified netdriver + onload from this tree
 # Push to onload-tests repo

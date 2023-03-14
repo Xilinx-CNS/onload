@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2017-2022 Xilinx, Inc.
+
 # This file is included by scripts that need to prepare Onload source files
 # for distribution to customers.
 

@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
+
 #include <onload/debug.h>
 #include <onload/oo_shmbuf.h>
 

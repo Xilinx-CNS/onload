@@ -1,3 +1,6 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Copyright 2021 Xilinx, Inc. */
+
 /* There is no standard
 #ifndef __ONLOAD_OO_P_DLLIST_H__
 #define __ONLOAD_OO_P_DLLIST_H__

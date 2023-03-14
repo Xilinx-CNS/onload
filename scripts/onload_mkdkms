@@ -1,4 +1,6 @@
 #!/bin/bash -u
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2012-2020 Xilinx, Inc.
 ##############################################################################
 # Copy only portions of source tree needed for onload, apply copyright
 # messages and pre-process to strip platforms we're not releasing.
