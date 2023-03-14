@@ -51,8 +51,12 @@ static int efx_ef100_rep_open(struct net_device *net_dev)
 {
 	struct efx_rep *efv = netdev_priv(net_dev);
 
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_OLD_NETIF_NAPI_ADD)
 	netif_napi_add(net_dev, &efv->napi, efx_ef100_rep_poll,
 		       NAPI_POLL_WEIGHT);
+#else
+	netif_napi_add(net_dev, &efv->napi, efx_ef100_rep_poll);
+#endif
 	napi_enable(&efv->napi);
 	return 0;
 }
@@ -92,13 +96,20 @@ static int efx_ef100_rep_get_port_parent_id(struct net_device *dev,
 	struct efx_rep *efv = netdev_priv(dev);
 	struct efx_nic *efx = efv->parent;
 	struct ef100_nic_data *nic_data;
+	netdevice_tracker dev_tracker;
 
-	if (!efx || !efx_net_active(efx->state))
+	/* Block removal of the parent network device */
+	netdev_hold(efx->net_dev, &dev_tracker, GFP_KERNEL);
+	if (!netif_device_present(efx->net_dev)) {
+		netdev_put(efx->net_dev, &dev_tracker);
 		return -EOPNOTSUPP;
+	}
+
 	nic_data = efx->nic_data;
 	/* nic_data->port_id is a u8[] */
 	ppid->id_len = sizeof(nic_data->port_id);
 	memcpy(ppid->id, nic_data->port_id, sizeof(nic_data->port_id));
+	netdev_put(efx->net_dev, &dev_tracker);
 	return 0;
 }
 #endif
@@ -110,16 +121,24 @@ static int efx_ef100_rep_get_phys_port_name(struct net_device *dev,
 	struct efx_rep *efv = netdev_priv(dev);
 	struct efx_nic *efx = efv->parent;
 	struct ef100_nic_data *nic_data;
+	netdevice_tracker dev_tracker;
 	int ret;
 
-	if (!efx || !efx_net_active(efx->state))
+	/* Block removal of the parent network device */
+	netdev_hold(efx->net_dev, &dev_tracker, GFP_KERNEL);
+	if (!netif_device_present(efx->net_dev)) {
+		netdev_put(efx->net_dev, &dev_tracker);
 		return -EOPNOTSUPP;
+	}
+
 	if (efv->remote) {
 		struct mae_mport_desc *mport_desc;
 
 		mport_desc = efx_mae_get_mport(efx, efv->mport);
-		if (IS_ERR_OR_NULL(mport_desc))
+		if (IS_ERR_OR_NULL(mport_desc)) {
+			netdev_put(efx->net_dev, &dev_tracker);
 			return PTR_ERR_OR_ZERO(mport_desc) ?: -EOPNOTSUPP;
+		}
 
 		ret = snprintf(buf, len, "p%uif%upf%u", efx->port_num,
 			       mport_desc->interface_idx, mport_desc->pf_idx);
@@ -129,11 +148,14 @@ static int efx_ef100_rep_get_phys_port_name(struct net_device *dev,
 		efx_mae_put_mport(efx, mport_desc);
 	} else {
 		nic_data = efx->nic_data;
-		if (!nic_data)
+		if (!nic_data) {
+			netdev_put(efx->net_dev, &dev_tracker);
 			return -EOPNOTSUPP;
+		}
 		ret = snprintf(buf, len, "p%upf%uvf%u", efx->port_num,
 			       nic_data->pf_index, efv->idx);
 	}
+	netdev_put(efx->net_dev, &dev_tracker);
 	if (ret >= len)
 		return -EOPNOTSUPP;
 
@@ -649,20 +671,21 @@ struct net_device *efx_ef100_find_rep_by_mport(struct efx_nic *efx, u16 mport)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
 	struct mae_mport_desc *mport_desc;
-	struct efx_rep *efv;
+	struct efx_rep *efv = NULL;
 #if defined(CONFIG_SFC_SRIOV)
 	unsigned int i;
 #endif
 
 	if (likely(efx_have_mport_journal_event(efx))) {
 		mport_desc = efx_mae_get_mport(efx, mport);
-		if (!IS_ERR_OR_NULL(mport_desc) && mport_desc->efv) {
+		if (!IS_ERR_OR_NULL(mport_desc)) {
 			efv = mport_desc->efv;
 			/* Caller should have taken the RCU read lock to ensure
 			 * that efv doesn't go away while we're using it.
 			 */
 			efx_mae_put_mport(efx, mport_desc);
-			return efv->net_dev;
+			if (efv)
+				return efv->net_dev;
 		}
 	}
 	/* Backward compatibility with old firmwares */

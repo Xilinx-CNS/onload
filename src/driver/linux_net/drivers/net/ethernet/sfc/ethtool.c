@@ -76,10 +76,8 @@ static int efx_ethtool_set_tso(struct net_device *net_dev, u32 enable)
 	u32 features;
 
 	features = NETIF_F_TSO;
-#if !defined(EFX_USE_KCOMPAT) || defined(NETIF_F_IPV6_CSUM)
 	if (efx->type->offload_features & (NETIF_F_IPV6_CSUM | NETIF_F_HW_CSUM))
 		features |= NETIF_F_TSO6;
-#endif
 
 	if (enable)
 		net_dev->features |= features;
@@ -526,7 +524,7 @@ const struct ethtool_ops efx_ethtool_ops = {
 #if !defined(EFX_USE_KCOMPAT)
 	.get_rxnfc		= efx_ethtool_get_rxnfc,
 	.set_rxnfc		= efx_ethtool_set_rxnfc,
-#elif defined(EFX_HAVE_ETHTOOL_RXNFC)
+#else
 	.get_rxnfc		= efx_ethtool_get_rxnfc_wrapper,
 	.set_rxnfc		= efx_ethtool_set_rxnfc_wrapper,
 #endif

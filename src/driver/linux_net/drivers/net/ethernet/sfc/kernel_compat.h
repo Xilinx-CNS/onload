@@ -37,6 +37,7 @@
 #include <linux/ktime.h>
 #include <linux/ctype.h>
 #include <linux/aer.h>
+#include <linux/iommu.h>
 #ifdef CONFIG_SFC_MTD
 /* This is conditional because it's fairly disgusting */
 #include "linux_mtd_mtd.h"
@@ -117,13 +118,8 @@
 #endif
 
 #ifndef NETIF_F_CSUM_MASK
-#ifdef NETIF_F_IPV6_CSUM
 	#define NETIF_F_CSUM_MASK \
 		(NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM | NETIF_F_HW_CSUM)
-#else
-	#define NETIF_F_CSUM_MASK \
-		(NETIF_F_IP_CSUM | NETIF_F_HW_CSUM)
-#endif
 #endif
 
 #ifdef NETIF_F_RXHASH
@@ -155,12 +151,6 @@
 #endif
 
 /* This reduces the need for #ifdefs */
-#ifndef NETIF_F_TSO6
-	#define NETIF_F_TSO6 0
-#endif
-#ifndef NETIF_F_TSO_ECN
-	#define NETIF_F_TSO_ECN 0
-#endif
 #ifndef NETIF_F_ALL_TSO
 	#define NETIF_F_ALL_TSO (NETIF_F_TSO | NETIF_F_TSO6 | NETIF_F_TSO_ECN)
 #endif
@@ -222,25 +212,8 @@
 	#define PCI_EXT_CAP_ID_VNDR 0x0B
 #endif
 
-#if !defined(for_each_cpu_mask) && !defined(CONFIG_SMP)
-	#define for_each_cpu_mask(cpu, mask)            \
-		for ((cpu) = 0; (cpu) < 1; (cpu)++, (void)mask)
-#endif
-
 #if defined(__GNUC__) && !defined(inline)
 	#define inline inline __attribute__ ((always_inline))
-#endif
-
-#if defined(__GNUC__) && !defined(__packed)
-	#define __packed __attribute__((packed))
-#endif
-
-#if defined(__GNUC__) && !defined(__aligned)
-	#define __aligned(x) __attribute__((aligned(x)))
-#endif
-
-#ifndef DIV_ROUND_UP
-	#define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
 #endif
 
 #if !defined(round_up) && !defined(round_down) && !defined(__round_mask)
@@ -253,20 +226,6 @@
 #define __round_mask(x, y) ((__typeof__(x))((y)-1))
 #define round_up(x, y) ((((x)-1) | __round_mask(x, y))+1)
 #define round_down(x, y) ((x) & ~__round_mask(x, y))
-#endif
-
-#ifndef __ATTR
-	#define __ATTR(_name, _mode, _show, _store) {			\
-		.attr = {.name = __stringify(_name), .mode = _mode },	\
-		.show   = _show,					\
-		.store  = _store,					\
-	}
-#endif
-
-#ifndef DEVICE_ATTR
-	#define DEVICE_ATTR(_name, _mode, _show, _store)		\
-		struct device_attribute dev_attr_ ## _name =		\
-			__ATTR(_name, _mode, _show, _store)
 #endif
 
 #ifndef DEVICE_ATTR_RO
@@ -283,14 +242,6 @@
 
 #if defined(CONFIG_X86) && !defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
 	#define CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS
-#endif
-
-#ifndef BUILD_BUG_ON_ZERO
-	#define BUILD_BUG_ON_ZERO(e) (sizeof(char[1 - 2 * !!(e)]) - 1)
-#endif
-
-#ifndef __bitwise
-	#define __bitwise
 #endif
 
 #ifndef VLAN_PRIO_MASK
@@ -388,26 +339,6 @@
 	#define ETHTOOL_RESET		0x00000034
 #endif
 
-#ifndef ETHTOOL_GRXFH
-	#define ETHTOOL_GRXFH		0x00000029
-#endif
-
-#ifdef ETHTOOL_GRXRINGS
-	#define EFX_HAVE_ETHTOOL_RXNFC yes
-#else
-	#define ETHTOOL_GRXRINGS	0x0000002d
-#endif
-
-#ifndef TCP_V4_FLOW
-	#define	TCP_V4_FLOW	0x01
-	#define	UDP_V4_FLOW	0x02
-	#define	SCTP_V4_FLOW	0x03
-	#define	AH_ESP_V4_FLOW	0x04
-	#define	TCP_V6_FLOW	0x05
-	#define	UDP_V6_FLOW	0x06
-	#define	SCTP_V6_FLOW	0x07
-	#define	AH_ESP_V6_FLOW	0x08
-#endif
 #ifndef AH_V4_FLOW
 	#define	AH_V4_FLOW	0x09
 	#define	ESP_V4_FLOW	0x0a
@@ -427,45 +358,6 @@
 #endif
 #ifndef FLOW_RSS
 	#define	FLOW_RSS	0x20000000
-#endif
-#ifndef RXH_L2DA
-	#define	RXH_L2DA	(1 << 1)
-	#define	RXH_VLAN	(1 << 2)
-	#define	RXH_L3_PROTO	(1 << 3)
-	#define	RXH_IP_SRC	(1 << 4)
-	#define	RXH_IP_DST	(1 << 5)
-	#define	RXH_L4_B_0_1	(1 << 6)
-	#define	RXH_L4_B_2_3	(1 << 7)
-	#define	RXH_DISCARD	(1 << 31)
-#endif
-
-#ifndef ETHTOOL_GRXCLSRULE
-	struct ethtool_tcpip4_spec {
-		__be32	ip4src;
-		__be32	ip4dst;
-		__be16	psrc;
-		__be16	pdst;
-		__u8    tos;
-	};
-
-	struct ethtool_usrip4_spec {
-		__be32  ip4src;
-		__be32  ip4dst;
-		__be32  l4_4_bytes;
-		__u8    tos;
-		__u8    ip_ver;
-		__u8    proto;
-	};
-
-	#define RX_CLS_FLOW_DISC	0xffffffffffffffffULL
-
-	#define ETH_RX_NFC_IP4  1
-
-	#define ETHTOOL_GRXCLSRLCNT	0x0000002e
-	#define ETHTOOL_GRXCLSRULE	0x0000002f
-	#define ETHTOOL_GRXCLSRLALL	0x00000030
-	#define ETHTOOL_SRXCLSRLDEL     0x00000031
-	#define ETHTOOL_SRXCLSRLINS	0x00000032
 #endif
 
 /* We want to use the latest definition of ethtool_rxnfc, even if the
@@ -556,7 +448,10 @@
 	#define EFX_HAVE_ETHTOOL_GMODULEEEPROM yes
 	#ifndef ETH_MODULE_SFF_8436
 	#define ETH_MODULE_SFF_8436     0x3
-	#define ETH_MODULE_SFF_8436_LEN 640
+	#define ETH_MODULE_SFF_8436_LEN 256
+	#endif
+	#ifndef ETH_MODULE_SFF_8436_MAX_LEN
+	#define ETH_MODULE_SFF_8436_MAX_LEN 640
 	#endif
 #else
 	struct ethtool_modinfo {
@@ -571,7 +466,8 @@
 	#define ETH_MODULE_SFF_8472     0x2
 	#define ETH_MODULE_SFF_8472_LEN 512
 	#define ETH_MODULE_SFF_8436     0x3
-	#define ETH_MODULE_SFF_8436_LEN 640
+	#define ETH_MODULE_SFF_8436_LEN 256
+	#define ETH_MODULE_SFF_8436_MAX_LEN 640
 
 	#define ETHTOOL_GMODULEINFO     0x00000042
 	#define ETHTOOL_GMODULEEEPROM   0x00000043
@@ -590,31 +486,10 @@
 	#define ETHTOOL_GET_TS_INFO	0x00000041 /* Get time stamping and PHC info */
 #endif
 
-#ifndef FLOW_CTRL_TX
-	#define FLOW_CTRL_TX		0x01
-	#define FLOW_CTRL_RX		0x02
-#endif
-
 #ifndef PORT_DA
 	#define PORT_DA			0x05
 #endif
 
-#ifndef PORT_OTHER
-	#define PORT_OTHER		0xff
-#endif
-
-#ifndef SUPPORTED_Pause
-	#define SUPPORTED_Pause			(1 << 13)
-	#define SUPPORTED_Asym_Pause		(1 << 14)
-#endif
-
-#ifndef SUPPORTED_Backplane
-	#define SUPPORTED_Backplane		(1 << 16)
-	#define SUPPORTED_1000baseKX_Full	(1 << 17)
-	#define SUPPORTED_10000baseKX4_Full	(1 << 18)
-	#define SUPPORTED_10000baseKR_Full	(1 << 19)
-	#define SUPPORTED_10000baseR_FEC	(1 << 20)
-#endif
 #ifndef SUPPORTED_40000baseKR4_Full
 	#define SUPPORTED_40000baseKR4_Full	(1 << 23)
 	#define SUPPORTED_40000baseCR4_Full	(1 << 24)
@@ -725,10 +600,6 @@
 	#endif
 #endif
 
-#ifndef IS_ALIGNED
-	#define IS_ALIGNED(x, a) (((x) & ((typeof(x))(a) - 1)) == 0)
-#endif
-
 #ifndef netif_printk
 
 	static inline const char *netdev_name(const struct net_device *dev)
@@ -805,15 +676,6 @@
 #undef netdev_WARN
 #define netdev_WARN(dev, format, args...)			\
 	WARN(1, "netdevice: %s\n" format, netdev_name(dev), ##args)
-
-#ifndef pr_err
-	#define pr_err(fmt, arg...) \
-		printk(KERN_ERR fmt, ##arg)
-#endif
-#ifndef pr_warning
-	#define pr_warning(fmt, arg...) \
-		printk(KERN_WARNING fmt, ##arg)
-#endif
 
 #ifndef netif_cond_dbg
 /* if @cond then downgrade to debug, else print at @level */
@@ -1395,6 +1257,42 @@ krealloc_array(void *p, size_t new_n, size_t new_size, gfp_t flags)
 }
 #endif
 
+#ifndef struct_group
+#define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
+	union { \
+		struct { MEMBERS } ATTRS; \
+		struct TAG { MEMBERS } ATTRS NAME; \
+	}
+#define struct_group(NAME, MEMBERS...)	\
+	__struct_group(/* no tag */, NAME, /* no attrs */, MEMBERS)
+#endif
+
+#ifdef EFX_NEED_NETDEV_HOLD
+#ifdef EFX_HAVE_DEV_HOLD_TRACK
+/* Commit d62607c3fe45 ("net: rename reference+tracking helpers")
+ * renamed these.
+ */
+#define netdev_hold(_n, _t, _g)	dev_hold_track(_n, _t, _g)
+#define netdev_put(_n, _t)	dev_put_track(_n, _t)
+#else
+/* This was introduced in the same commit that adds dev_hold_track */
+typedef struct {} netdevice_tracker;
+
+static inline void netdev_hold(struct net_device *dev,
+			       netdevice_tracker *tracker __always_unused,
+			       gfp_t gfp __always_unused)
+{
+	dev_hold(dev);
+}
+
+static inline void netdev_put(struct net_device *dev,
+			      netdevice_tracker *tracker __always_unused)
+{
+	dev_put(dev);
+}
+#endif
+#endif
+
 /**************************************************************************
  *
  * Missing functions provided by kernel_compat.c
@@ -1482,10 +1380,6 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 	#define vlan_gro_receive(_napi, _group, _tag, _skb)	\
 		({ vlan_gro_receive(_napi, _group, _tag, _skb);	\
 		   GRO_MERGED; })
-#endif
-
-#ifndef order_base_2
-#define order_base_2(x) fls((x) - 1)
 #endif
 
 #ifndef list_first_entry_or_null
@@ -1695,6 +1589,34 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 #define PTP_CLOCK_PPSUSR (PTP_CLOCK_PPS + 1)
 #endif
 
+#ifdef EFX_NEED_SCALED_PPM_TO_PPB
+/**
+ * scaled_ppm_to_ppb() - convert scaled ppm to ppb
+ *
+ * @ppm:    Parts per million, but with a 16 bit binary fractional field
+ */
+static inline long scaled_ppm_to_ppb(long ppm)
+{
+	/*
+	 * The 'freq' field in the 'struct timex' is in parts per
+	 * million, but with a 16 bit binary fractional field.
+	 *
+	 * We want to calculate
+	 *
+	 *    ppb = scaled_ppm * 1000 / 2^16
+	 *
+	 * which simplifies to
+	 *
+	 *    ppb = scaled_ppm * 125 / 2^13
+	 */
+	s64 ppb = 1 + ppm;
+
+	ppb *= 125;
+	ppb >>= 13;
+	return (long)ppb;
+}
+#endif
+
 #ifdef EFX_NEED_RCU_ACCESS_POINTER
 #define rcu_access_pointer rcu_dereference
 #endif
@@ -1882,6 +1804,16 @@ static inline int efx_unregister_netdevice_notifier(struct notifier_block *b)
 
 #define register_netdevice_notifier efx_register_netdevice_notifier
 #define unregister_netdevice_notifier efx_unregister_netdevice_notifier
+#endif
+
+#ifdef EFX_NEED_NETIF_NAPI_ADD_WEIGHT
+static inline void netif_napi_add_weight(struct net_device *dev,
+					 struct napi_struct *napi,
+					 int (*poll)(struct napi_struct *, int),
+					 int weight)
+{
+	netif_napi_add(dev, napi, poll, weight);
+}
 #endif
 
 #ifdef EFX_HAVE_NAPI_HASH_ADD
@@ -2168,10 +2100,12 @@ static inline void csum_replace_by_diff(__sum16 *sum, __wsum diff)
 #ifdef EFX_HAVE_NEW_NDO_SETUP_TC
 #if defined(EFX_HAVE_TC_BLOCK_OFFLOAD) || defined(EFX_HAVE_FLOW_BLOCK_OFFLOAD)
 #if !defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER) || defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_ALLOC)
+#if defined(CONFIG_NET_CLS_ACT) || defined(EFX_HAVE_TC_FLOW_OFFLOAD)
 #define EFX_TC_OFFLOAD	yes
 /* Further features needed for conntrack offload */
 #if defined(EFX_HAVE_NF_FLOW_TABLE_OFFLOAD) && defined(EFX_HAVE_TC_ACT_CT)
 #define EFX_CONNTRACK_OFFLOAD	yes
+#endif
 #endif
 #endif
 #endif
@@ -2545,7 +2479,7 @@ int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 #define VIRTIO_NET_F_RSC_EXT 61
 #endif
 
-#if defined(EFX_HAVE_NET_DEVLINK_H) && defined(EFX_HAVE_NDO_GET_DEVLINK) && defined(EFX_HAVE_DEVLINK_INFO) && defined(CONFIG_NET_DEVLINK)
+#if defined(EFX_HAVE_NET_DEVLINK_H) && defined(EFX_HAVE_DEVLINK_INFO) && defined(CONFIG_NET_DEVLINK)
 /* Minimum requirements met to use the kernel's devlink suppport */
 #include <net/devlink.h>
 
@@ -2624,7 +2558,7 @@ static inline void devlink_flash_update_timeout_notify(struct devlink *devlink,
 	/* Do nothing */
 }
 
-#endif	/* EFX_HAVE_NET_DEVLINK_H && EFX_HAVE_NDO_GET_DEVLINK && EFX_HAVE_DEVLINK_INFO && CONFIG_NET_DEVLINK */
+#endif	/* EFX_HAVE_NET_DEVLINK_H && EFX_HAVE_DEVLINK_INFO && CONFIG_NET_DEVLINK */
 
 /* Irrespective of whether devlink is available, use the generic devlink info
  * version object names where possible.  Many of these definitions were added
@@ -2679,6 +2613,21 @@ typedef atomic_t refcount_t;
 #define refcount_set	atomic_set
 #define refcount_inc_not_zero	atomic_inc_not_zero
 #define refcount_dec_and_test	atomic_dec_and_test
+#endif
+
+#ifdef EFX_NEED_DEVICE_IOMMU_CAPABLE
+#ifndef EFX_HAVE_IOMMU_CAPABLE
+enum iommu_cap { IOMMU_CAP_DUMMY, };
+#endif
+
+static inline bool device_iommu_capable(struct device *dev, enum iommu_cap cap)
+{
+#ifdef EFX_HAVE_IOMMU_CAPABLE
+	return iommu_capable(dev->bus, cap);
+#else
+	return false;
+#endif
+}
 #endif
 
 #endif /* EFX_KERNEL_COMPAT_H */

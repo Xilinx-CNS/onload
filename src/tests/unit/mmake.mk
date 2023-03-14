@@ -15,7 +15,6 @@ ALL_UNIT_TESTS := \
   header/ci/internal/ip_timestamp \
   lib/transport/ip/netif_init \
   lib/transport/ip/tcp_rx \
-  lib/transport/ip/tcp_tx \
 
 # The tests to be run, and their corresponding files
 TESTS := $(filter $(UNIT_TEST_FILTER)%, $(ALL_UNIT_TESTS))

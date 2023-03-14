@@ -404,7 +404,7 @@ static void efx_mcdi_send_request(struct efx_nic *efx,
 #ifdef CONFIG_SFC_MCDI_LOGGING
 	char *buf = mcdi->logging_buffer; /* page-sized */
 #endif
-	efx_dword_t hdr[2];
+	efx_dword_t hdr[5];
 	size_t hdr_len;
 	u32 xflags;
 	const efx_dword_t *inbuf = cmd->inbuf;
@@ -430,9 +430,9 @@ static void efx_mcdi_send_request(struct efx_nic *efx,
 				     MCDI_HEADER_XFLAGS, xflags,
 				     MCDI_HEADER_NOT_EPOCH, !mcdi->new_epoch);
 		hdr_len = 4;
-	} else {
+	} else if (cmd->client_id == MC_CMD_CLIENT_ID_SELF) {
 		/* MCDI v2 */
-		BUG_ON(inlen > MCDI_CTL_SDU_LEN_MAX_V2);
+		WARN_ON(inlen > MCDI_CTL_SDU_LEN_MAX_V2);
 		EFX_POPULATE_DWORD_7(hdr[0],
 				     MCDI_HEADER_RESPONSE, 0,
 				     MCDI_HEADER_RESYNC, 1,
@@ -445,6 +445,36 @@ static void efx_mcdi_send_request(struct efx_nic *efx,
 				     MC_CMD_V2_EXTN_IN_EXTENDED_CMD, cmd->cmd,
 				     MC_CMD_V2_EXTN_IN_ACTUAL_LEN, inlen);
 		hdr_len = 8;
+	} else {
+		WARN_ON(inlen > MCDI_CTL_SDU_LEN_MAX_V2);
+		/* MCDI v2 with credentials of a different client */
+		BUILD_BUG_ON(MC_CMD_CLIENT_CMD_IN_LEN != 4);
+		/* Outer CLIENT_CMD wrapper command with client ID */
+		EFX_POPULATE_DWORD_7(hdr[0],
+				     MCDI_HEADER_RESPONSE, 0,
+				     MCDI_HEADER_RESYNC, 1,
+				     MCDI_HEADER_CODE, MC_CMD_V2_EXTN,
+				     MCDI_HEADER_DATALEN, 0,
+				     MCDI_HEADER_SEQ, cmd->seq,
+				     MCDI_HEADER_XFLAGS, xflags,
+				     MCDI_HEADER_NOT_EPOCH, !mcdi->new_epoch);
+		EFX_POPULATE_DWORD_2(hdr[1],
+				     MC_CMD_V2_EXTN_IN_EXTENDED_CMD,
+				     MC_CMD_CLIENT_CMD,
+				     MC_CMD_V2_EXTN_IN_ACTUAL_LEN, inlen + 12);
+		MCDI_SET_DWORD(&hdr[2],
+			       CLIENT_CMD_IN_CLIENT_ID, cmd->client_id);
+
+		/* MCDIv2 header for inner command */
+		EFX_POPULATE_DWORD_2(hdr[3],
+				     MCDI_HEADER_CODE, MC_CMD_V2_EXTN,
+				     MCDI_HEADER_DATALEN, 0);
+		EFX_POPULATE_DWORD_2(hdr[4],
+				     MC_CMD_V2_EXTN_IN_EXTENDED_CMD,
+				     cmd->cmd,
+				     MC_CMD_V2_EXTN_IN_ACTUAL_LEN,
+				     inlen);
+		hdr_len = 20;
 	}
 
 #ifdef CONFIG_SFC_MCDI_LOGGING
@@ -794,76 +824,6 @@ static void efx_mcdi_rpc_completer(struct efx_nic *efx, unsigned long cookie,
 	kref_put(&wait_data->ref, efx_mcdi_blocking_data_release);
 }
 
-static int efx_mcdi_rpc_sync(struct efx_nic *efx, unsigned int cmd,
-			     const efx_dword_t *inbuf, size_t inlen,
-			     efx_dword_t *outbuf, size_t outlen,
-			     size_t *outlen_actual, bool quiet)
-{
-	struct efx_mcdi_blocking_data *wait_data;
-	struct efx_mcdi_cmd *cmd_item;
-	unsigned int handle;
-	int rc;
-
-	if (outlen_actual)
-		*outlen_actual = 0;
-
-	wait_data = kmalloc(sizeof(*wait_data), GFP_KERNEL);
-	if (!wait_data)
-		return -ENOMEM;
-
-	cmd_item = kmalloc(sizeof(*cmd_item), GFP_KERNEL);
-	if (!cmd_item) {
-		kfree(wait_data);
-		return -ENOMEM;
-	}
-
-	kref_init(&wait_data->ref);
-	wait_data->done = false;
-	init_waitqueue_head(&wait_data->wq);
-	wait_data->outbuf = outbuf;
-	wait_data->outlen = outlen;
-
-	kref_init(&cmd_item->ref);
-	cmd_item->quiet = quiet;
-	cmd_item->cookie = (unsigned long) wait_data;
-	cmd_item->atomic_completer = NULL;
-	cmd_item->completer = &efx_mcdi_rpc_completer;
-	cmd_item->cmd = cmd;
-	cmd_item->inlen = inlen;
-	cmd_item->inbuf = inbuf;
-
-	/* Claim an extra reference for the completer to put. */
-	kref_get(&wait_data->ref);
-	rc = efx_mcdi_rpc_async_internal(efx, cmd_item, &handle, true, false);
-	if (rc) {
-		kref_put(&wait_data->ref, efx_mcdi_blocking_data_release);
-		goto out;
-	}
-
-	if (!wait_event_timeout(wait_data->wq, wait_data->done,
-				MCDI_ACQUIRE_TIMEOUT +
-				efx_mcdi_rpc_timeout(efx, cmd)) &&
-	    !wait_data->done) {
-		netif_err(efx, drv, efx->net_dev,
-			  "MC command 0x%x inlen %zu timed out (sync)\n",
-			  cmd, inlen);
-
-		efx_mcdi_cancel_cmd(efx, handle);
-
-		wait_data->rc = -ETIMEDOUT;
-		wait_data->outlen_actual = 0;
-	}
-
-	if (outlen_actual)
-		*outlen_actual = wait_data->outlen_actual;
-	rc = wait_data->rc;
-
-out:
-	kref_put(&wait_data->ref, efx_mcdi_blocking_data_release);
-
-	return rc;
-}
-
 int efx_mcdi_rpc_async_ext(struct efx_nic *efx, unsigned int cmd,
 			   const efx_dword_t *inbuf, size_t inlen,
 			   efx_mcdi_async_completer *atomic_completer,
@@ -882,6 +842,7 @@ int efx_mcdi_rpc_async_ext(struct efx_nic *efx, unsigned int cmd,
 	cmd_item->cookie = cookie;
 	cmd_item->completer = completer;
 	cmd_item->atomic_completer = atomic_completer;
+	cmd_item->client_id = MC_CMD_CLIENT_ID_SELF;
 	cmd_item->cmd = cmd;
 	cmd_item->inlen = inlen;
 	/* inbuf is probably not valid after return, so take a copy */
@@ -1388,56 +1349,6 @@ static void efx_mcdi_timeout_cmd(struct efx_mcdi_iface *mcdi,
 }
 
 /**
- * efx_mcdi_rpc - Issue an MCDI command and wait for completion
- * @efx: NIC through which to issue the command
- * @cmd: Command type number
- * @inbuf: Command parameters
- * @inlen: Length of command parameters, in bytes.  Must be a multiple
- *	of 4 and no greater than %MCDI_CTL_SDU_LEN_MAX_V1.
- * @outbuf: Response buffer.  May be %NULL if @outlen is 0.
- * @outlen: Length of response buffer, in bytes.  If the actual
- *	response is longer than @outlen & ~3, it will be truncated
- *	to that length.
- * @outlen_actual: Pointer through which to return the actual response
- *	length.  May be %NULL if this is not needed.
- *
- * This function may sleep and therefore must be called in process
- * context.
- *
- * Return: A negative error code, or zero if successful.  The error
- *	code may come from the MCDI response or may indicate a failure
- *	to communicate with the MC.  In the former case, the response
- *	will still be copied to @outbuf and *@outlen_actual will be
- *	set accordingly.  In the latter case, *@outlen_actual will be
- *	set to zero.
- */
-int efx_mcdi_rpc(struct efx_nic *efx, unsigned int cmd,
-		 const efx_dword_t *inbuf, size_t inlen,
-		 efx_dword_t *outbuf, size_t outlen,
-		 size_t *outlen_actual)
-{
-	return efx_mcdi_rpc_sync(efx, cmd, inbuf, inlen, outbuf, outlen,
-				 outlen_actual, false);
-}
-
-/* Normally, on receiving an error code in the MCDI response,
- * efx_mcdi_rpc will log an error message containing (among other
- * things) the raw error code, by means of efx_mcdi_display_error.
- * This _quiet version suppresses that; if the caller wishes to log
- * the error conditionally on the return code, it should call this
- * function and is then responsible for calling efx_mcdi_display_error
- * as needed.
- */
-int efx_mcdi_rpc_quiet(struct efx_nic *efx, unsigned int cmd,
-		       const efx_dword_t *inbuf, size_t inlen,
-		       efx_dword_t *outbuf, size_t outlen,
-		       size_t *outlen_actual)
-{
-	return efx_mcdi_rpc_sync(efx, cmd, inbuf, inlen, outbuf, outlen,
-				 outlen_actual, true);
-}
-
-/**
  * efx_mcdi_rpc_async - Schedule an MCDI command to run asynchronously
  * @efx: NIC through which to issue the command
  * @cmd: Command type number
@@ -1476,61 +1387,75 @@ int efx_mcdi_rpc_async_quiet(struct efx_nic *efx, unsigned int cmd,
 				      complete, cookie, true, false, NULL);
 }
 
-/**
- * efx_mcdi_rpc_client - Issue an MCDI command on a non-base client.
- *
- * @efx: NIC through which to issue the command.
- * @client_id: A dynamic client ID on which to send this MCDI command, or
- *	       MC_CMD_CLIENT_ID_SELF to send the command to the base client
- *	       (which makes this function identical to efx_mcdi_rpc()).
- * @cmd: Command type number.
- * @inbuf: Command parameters.
- * @inlen: Length of command parameters, in bytes.  Must be a multiple
- *	   of 4 and no greater than %MCDI_CTL_SDU_LEN_MAX_V1.
- * @outbuf: Response buffer.  May be %NULL if @outlen is 0.
- * @outlen: Length of response buffer, in bytes.  If the actual
- *	    response is longer than @outlen & ~3, it will be truncated
- *	    to that length.
- * @outlen_actual: Pointer through which to return the actual response
- *		   length.  May be %NULL if this is not needed.
- *
- * This is a superset of the functionality of efx_mcdi_rpc(), adding the
- * @client_id.
- * The caller must provide space for 12 additional bytes (beyond inlen) in the
- * memory at inbuf since inbuf may be modified in-situ.
- * MCDI_DECLARE_PROXYABLE_BUF should be used for this. This function may sleep
- * and therefore must be called in process context.
- *
- * Return: a negative error code or 0 on success.
- */
-int efx_mcdi_rpc_client(struct efx_nic *efx, u32 client_id, unsigned int cmd,
-			efx_dword_t *inbuf, size_t inlen, efx_dword_t *outbuf,
-			size_t outlen, size_t *outlen_actual)
+int efx_mcdi_rpc_client_sync(struct efx_nic *efx, u32 client_id,
+			     unsigned int cmd, const efx_dword_t *inbuf,
+			     size_t inlen, efx_dword_t *outbuf, size_t outlen,
+			     size_t *outlen_actual, bool quiet)
 {
-	MCDI_DECLARE_BUF(client_cmd, MC_CMD_CLIENT_CMD_IN_LEN);
-	efx_dword_t inner_mcdi[2];
+	struct efx_mcdi_blocking_data *wait_data;
+	struct efx_mcdi_cmd *cmd_item;
+	unsigned int handle;
+	int rc;
 
-	if (client_id == MC_CMD_CLIENT_ID_SELF)
-		return efx_mcdi_rpc(efx, cmd, inbuf, inlen, outbuf, outlen,
-		                    outlen_actual);
+	if (outlen_actual)
+		*outlen_actual = 0;
 
-	MCDI_SET_DWORD(client_cmd, CLIENT_CMD_IN_CLIENT_ID, client_id);
-	/* There's lots of other fields in the MCDI header, but
-	 * they're all ignored for proxied commands */
-	EFX_POPULATE_DWORD_2(inner_mcdi[0],
-		MCDI_HEADER_CODE, MC_CMD_V2_EXTN,
-		MCDI_HEADER_DATALEN, 0);
-	EFX_POPULATE_DWORD_2(inner_mcdi[1],
-		MC_CMD_V2_EXTN_IN_EXTENDED_CMD, cmd,
-		MC_CMD_V2_EXTN_IN_ACTUAL_LEN, inlen);
-	memmove((char*)inbuf + sizeof(client_cmd) + sizeof(inner_mcdi),
-	         inbuf, inlen);
-	memcpy(inbuf, client_cmd, sizeof(client_cmd));
-	memcpy((char*)inbuf + sizeof(client_cmd),
-	       inner_mcdi, sizeof(inner_mcdi));
-	inlen += sizeof(client_cmd) + sizeof(inner_mcdi);
-	return efx_mcdi_rpc(efx, MC_CMD_CLIENT_CMD, inbuf, inlen,
-	                    outbuf, outlen, outlen_actual);
+	wait_data = kmalloc(sizeof(*wait_data), GFP_KERNEL);
+	if (!wait_data)
+		return -ENOMEM;
+
+	cmd_item = kmalloc(sizeof(*cmd_item), GFP_KERNEL);
+	if (!cmd_item) {
+		kfree(wait_data);
+		return -ENOMEM;
+	}
+
+	kref_init(&wait_data->ref);
+	wait_data->done = false;
+	init_waitqueue_head(&wait_data->wq);
+	wait_data->outbuf = outbuf;
+	wait_data->outlen = outlen;
+
+	kref_init(&cmd_item->ref);
+	cmd_item->quiet = quiet;
+	cmd_item->cookie = (unsigned long)wait_data;
+	cmd_item->atomic_completer = NULL;
+	cmd_item->completer = &efx_mcdi_rpc_completer;
+	cmd_item->cmd = cmd;
+	cmd_item->inlen = inlen;
+	cmd_item->inbuf = inbuf;
+	cmd_item->client_id = client_id;
+
+	/* Claim an extra reference for the completer to put. */
+	kref_get(&wait_data->ref);
+	rc = efx_mcdi_rpc_async_internal(efx, cmd_item, &handle, true, false);
+	if (rc) {
+		kref_put(&wait_data->ref, efx_mcdi_blocking_data_release);
+		goto out;
+	}
+
+	if (!wait_event_timeout(wait_data->wq, wait_data->done,
+				MCDI_ACQUIRE_TIMEOUT +
+				efx_mcdi_rpc_timeout(efx, cmd)) &&
+	    !wait_data->done) {
+		netif_err(efx, drv, efx->net_dev,
+			  "MC command 0x%x inlen %zu timed out (sync)\n",
+			  cmd, inlen);
+
+		efx_mcdi_cancel_cmd(efx, handle);
+
+		wait_data->rc = -ETIMEDOUT;
+		wait_data->outlen_actual = 0;
+	}
+
+	if (outlen_actual)
+		*outlen_actual = wait_data->outlen_actual;
+	rc = wait_data->rc;
+
+out:
+	kref_put(&wait_data->ref, efx_mcdi_blocking_data_release);
+
+	return rc;
 }
 
 static void _efx_mcdi_display_error(struct efx_nic *efx, unsigned int cmd,

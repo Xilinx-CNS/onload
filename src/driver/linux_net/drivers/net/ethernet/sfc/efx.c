@@ -752,14 +752,14 @@ static int efx_netdev_event(struct notifier_block *this,
 }
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_SFC_LRO)
-static ssize_t show_lro(struct device *dev, struct device_attribute *attr,
+static ssize_t lro_show(struct device *dev, struct device_attribute *attr,
 			char *buf)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 	return scnprintf(buf, PAGE_SIZE, "%d\n", efx_ssr_enabled(efx));
 }
-static ssize_t set_lro(struct device *dev, struct device_attribute *attr,
-		       const char *buf, size_t count)
+static ssize_t lro_store(struct device *dev, struct device_attribute *attr,
+			 const char *buf, size_t count)
 {
 	struct efx_nic *efx = pci_get_drvdata(to_pci_dev(dev));
 	bool enable = count > 0 && *buf != '0';
@@ -783,7 +783,7 @@ out:
 	rtnl_unlock();
 	return rc;
 }
-static DEVICE_ATTR(lro, 0644, show_lro, set_lro);
+static DEVICE_ATTR_RW(lro);
 #endif
 
 static ssize_t phy_type_show(struct device *dev,
@@ -802,10 +802,8 @@ static void efx_init_features(struct efx_nic *efx)
 	net_dev->features |= (efx->type->offload_features | NETIF_F_SG |
 			      NETIF_F_TSO | NETIF_F_TSO_ECN |
 			      NETIF_F_RXCSUM | NETIF_F_RXALL);
-#if !defined(EFX_USE_KCOMPAT) || defined(NETIF_F_IPV6_CSUM)
 	if (efx->type->offload_features & (NETIF_F_IPV6_CSUM | NETIF_F_HW_CSUM))
 		net_dev->features |= NETIF_F_TSO6;
-#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_USE_GRO)
 	if (lro)
 		net_dev->features |= NETIF_F_GRO;
@@ -903,6 +901,11 @@ static int efx_register_netdev(struct efx_nic *efx)
 		goto fail_locked;
 	efx_update_name(efx);
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
+#ifdef CONFIG_NET_DEVLINK
+	SET_NETDEV_DEVLINK_PORT(net_dev, efx->devlink_port);
+#endif
+#endif
 	rc = register_netdevice(net_dev);
 	if (rc)
 		goto fail_locked;
@@ -1802,7 +1805,7 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_xdp_flush		= efx_xdp_flush,
 #endif
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_USE_DEVLINK)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_GET_DEVLINK_PORT)
 #ifdef CONFIG_NET_DEVLINK
 	.ndo_get_devlink_port	= efx_get_devlink_port,
 #endif

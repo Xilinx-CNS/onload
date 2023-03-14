@@ -511,6 +511,9 @@ struct efx_ptp_data {
 	void (*xmit_skb)(struct efx_nic *efx, struct sk_buff *skb);
 };
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFINE)
+static int efx_phc_adjfine(struct ptp_clock_info *ptp, long scaled_ppm);
+#endif
 static int efx_phc_adjfreq(struct ptp_clock_info *ptp, s32 delta);
 static int efx_phc_adjtime(struct ptp_clock_info *ptp, s64 delta);
 static int efx_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts);
@@ -1041,7 +1044,7 @@ int efx_ptp_get_attributes(struct efx_nic *efx)
 		} else if (rc == -EINVAL) {
 			fmt = MC_CMD_PTP_OUT_GET_ATTRIBUTES_SECONDS_NANOSECONDS;
 		} else if (rc == -EPERM) {
-			netif_info(efx, probe, efx->net_dev, "no PTP support\n");
+			pci_info(efx->pci_dev, "no PTP support\n");
 			return rc;
 		} else {
 			efx_mcdi_display_error(efx, MC_CMD_PTP, sizeof(inbuf),
@@ -1187,8 +1190,7 @@ static int efx_ptp_adapter_has_support(struct efx_nic *efx)
 	 * EPERM => the NIC doesn't have a PTP license.
 	 */
 	if (rc == -ENOSYS || rc == -EPERM)
-		netif_info(efx, probe, efx->net_dev, "no PTP support (rc=%d)\n",
-			rc);
+		pci_info(efx->pci_dev, "no PTP support (rc=%d)\n", rc);
 	else if (rc)
 		efx_mcdi_display_error(efx, MC_CMD_PTP,
 				       MC_CMD_PTP_IN_READ_NIC_TIME_LEN,
@@ -2596,7 +2598,11 @@ static const struct ptp_clock_info efx_phc_clock_info = {
 #endif
 	.n_per_out	= 0,
 	.pps		= 1,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFINE)
+	.adjfine	= efx_phc_adjfine,
+#elif defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFREQ)
 	.adjfreq	= efx_phc_adjfreq,
+#endif
 	.adjtime	= efx_phc_adjtime,
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_64BIT_PHC)
 	.gettime	= efx_phc_gettime32,
@@ -3166,8 +3172,10 @@ static int efx_ptp_ts_init(struct efx_nic *efx, struct hwtstamp_config *init)
 {
 	int rc;
 
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_HWTSTAMP_FLAGS)
 	if (init->flags)
 		return -EINVAL;
+#endif
 
 	if ((init->tx_type != HWTSTAMP_TX_OFF) &&
 	    (init->tx_type != HWTSTAMP_TX_ON))
@@ -3637,6 +3645,13 @@ static int efx_phc_adjfreq(struct ptp_clock_info *ptp, s32 delta)
 	ptp_data->current_adjfreq = adjustment_ns;
 	return 0;
 }
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFINE)
+static int efx_phc_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
+{
+	return efx_phc_adjfreq(ptp, scaled_ppm_to_ppb(scaled_ppm));
+}
+#endif
 
 static int efx_phc_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {

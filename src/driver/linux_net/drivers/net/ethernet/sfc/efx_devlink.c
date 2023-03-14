@@ -369,7 +369,9 @@ static void efx_devlink_info_running_versions(struct efx_nic *efx,
 static void efx_devlink_info_query_all(struct efx_nic *efx,
 				       struct devlink_info_req *req)
 {
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_DEVLINK_INFO_DRIVER_NAME_PUT)
 	devlink_info_driver_name_put(req, efx->pci_dev->driver->name);
+#endif
 	efx_devlink_info_board_cfg(efx, req);
 	efx_devlink_info_stored_versions(efx, req);
 	efx_devlink_info_running_versions(efx, req);
@@ -380,9 +382,9 @@ static void efx_devlink_info_query_all(struct efx_nic *efx,
 /* This is the private data we have in struct devlink */
 struct efx_devlink {
 	struct efx_nic *efx;
-	struct devlink_port dl_port;
 };
 
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_GET_DEVLINK_PORT)
 struct devlink_port *efx_get_devlink_port(struct net_device *dev)
 {
 	struct efx_nic *efx = efx_netdev_priv(dev);
@@ -393,10 +395,11 @@ struct devlink_port *efx_get_devlink_port(struct net_device *dev)
 
 	devlink_private = devlink_priv(efx->devlink);
 	if (devlink_private)
-		return &devlink_private->dl_port;
+		return efx->devlink_port;
 	else
 		return NULL;
 }
+#endif
 
 static int efx_devlink_info_get(struct devlink *devlink,
 				struct devlink_info_req *req,
@@ -465,10 +468,9 @@ static const struct devlink_ops sfc_devlink_ops = {
 void efx_fini_devlink(struct efx_nic *efx)
 {
 	if (efx->devlink) {
-		struct efx_devlink *devlink_private;
-
-		devlink_private = devlink_priv(efx->devlink);
-		devlink_port_unregister(&devlink_private->dl_port);
+		devlink_port_unregister(efx->devlink_port);
+		kfree(efx->devlink_port);
+		efx->devlink_port = NULL;
 
 		devlink_unregister(efx->devlink);
 		devlink_free(efx->devlink);
@@ -505,13 +507,23 @@ int efx_probe_devlink(struct efx_nic *efx)
 		goto out_free;
 #endif
 
-	rc = devlink_port_register(efx->devlink, &devlink_private->dl_port,
-				   efx->port_num);
-	if (rc)
+	efx->devlink_port = kzalloc(sizeof(*efx->devlink_port), GFP_KERNEL);
+	if (!efx->devlink_port)
 		goto out_unreg;
 
-	devlink_port_type_eth_set(&devlink_private->dl_port, efx->net_dev);
+	rc = devlink_port_register(efx->devlink, efx->devlink_port,
+				   efx->port_num);
+	if (rc)
+		goto out_free_port;
+
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
+	devlink_port_type_eth_set(efx->devlink_port, efx->net_dev);
+#endif
 	return 0;
+
+out_free_port:
+	kfree(efx->devlink_port);
+	efx->devlink_port = NULL;
 
 out_unreg:
 	devlink_unregister(efx->devlink);

@@ -2264,8 +2264,8 @@ static int efx_init_napi_channel(struct efx_channel *channel)
 	struct efx_nic *efx = channel->efx;
 
 	channel->napi_dev = efx->net_dev;
-	netif_napi_add(channel->napi_dev, &channel->napi_str,
-		       efx_poll, napi_weight);
+	netif_napi_add_weight(channel->napi_dev, &channel->napi_str,
+			      efx_poll, napi_weight);
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_DRIVER_BUSY_POLL)
 	efx_channel_busy_poll_init(channel);
 #endif
