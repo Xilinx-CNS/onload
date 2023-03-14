@@ -1,8 +1,8 @@
 #!/usr/bin/python3
-# SPDX-License-Identifier: Solarflare-Binary
-# X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc.
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2019-2023 Xilinx, Inc.
 from __future__ import print_function
-import sys, os, os.path, re, argparse, collections, fnmatch
+import sys, os, os.path, re, argparse, collections, fnmatch, subprocess
 
 # Python 2 backwards compatibility
 if sys.version_info < (3,0):
@@ -213,6 +213,7 @@ parser = argparse.ArgumentParser(
                         'all have correctly-formed SPDX data')
 parser.add_argument('--blacklist-file', action='append', default=[])
 parser.add_argument('--blacklist', action='append', default=[])
+parser.add_argument('--git', action='store_true')
 parser.add_argument('root', default='.', nargs='?')
 args = parser.parse_args()
 
@@ -221,7 +222,16 @@ for bf in args.blacklist_file:
     blacklist.update(line.strip() for line in open(bf, 'rt')
                      if not line.strip().startswith('#'))
 if blacklist:
-    blacklist_re = re.compile('|'.join(fnmatch.translate(b)
+    def fixdir(path):
+        if args.git:
+            if path.endswith('$'):
+                path = path[:-1]
+            elif path.endswith('\Z'):
+                path = path[:-2]
+            path = path + "(?:/.*)?\Z"
+        return path
+
+    blacklist_re = re.compile('|'.join(fixdir(fnmatch.translate(b))
                                        for b in blacklist))
 else:
     # no blacklist: create a regex which cannot possibly match any filename
@@ -230,15 +240,23 @@ else:
 def in_blacklist(name):
     return blacklist_re.match(name) is not None
 
-for dirpath, dirnames, filenames in os.walk(args.root):
-    i = 0
-    while i < len(dirnames):
-        if in_blacklist(os.path.join(dirpath[len(args.root)+1:], dirnames[i])):
-            del dirnames[i]
-        else:
-            i += 1
-    for f in filenames:
-        if not in_blacklist(os.path.join(dirpath[len(args.root)+1:], f)):
-            validate(os.path.join(dirpath, f))
+if args.git:
+    for f in (subprocess.check_output(["git", "ls-files", args.root])
+              .decode()
+              .splitlines()):
+        if not in_blacklist(f):
+            validate(f)
+else:
+    for dirpath, dirnames, filenames in os.walk(args.root):
+        i = 0
+        while i < len(dirnames):
+            if in_blacklist(os.path.join(dirpath[len(args.root)+1:],
+                            dirnames[i])):
+                del dirnames[i]
+            else:
+                i += 1
+        for f in filenames:
+            if not in_blacklist(os.path.join(dirpath[len(args.root)+1:], f)):
+                validate(os.path.join(dirpath, f))
 
 sys.exit(1 if _error_count else 0)
