@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Copyright 2022 Xilinx, Inc. */
 #ifndef __CRC32C_H__
 #define __CRC32C_H__
 
