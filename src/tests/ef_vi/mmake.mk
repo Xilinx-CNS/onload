@@ -3,7 +3,7 @@
 
 EFSEND_APPS := efsend efsend_pio efsend_timestamping efsend_pio_warm
 TEST_APPS	:= efforward efrss efsink \
-		   efsink_packed efforward_packed eflatency stats \
+		   efsink_packed efforward_packed eflatency efexclusivity stats \
 		   efjumborx $(EFSEND_APPS)
 
 ifeq (${PLATFORM},gnu_x86_64)
@@ -25,6 +25,8 @@ clean:
 
 eflatency: eflatency.o utils.o
 
+efexclusivity: efexclusivity.o utils.o
+
 $(EFSEND_APPS): utils.o efsend_common.o
 
 efsink: efsink.o utils.o
@@ -43,6 +45,10 @@ $(EFSEND_APPS): MMAKE_LIB_DEPS := $(CITOOLS_LIB_DEPEND) $(MMAKE_LIB_DEPS)
 
 eflatency: MMAKE_LIBS     := $(LINK_CITOOLS_LIB) $(MMAKE_LIBS)
 eflatency: MMAKE_LIB_DEPS := $(CITOOLS_LIB_DEPEND) $(MMAKE_LIB_DEPS)
+
+
+efexclusivity: MMAKE_LIBS     := $(LINK_CITOOLS_LIB) $(MMAKE_LIBS)
+efexclusivity: MMAKE_LIB_DEPS := $(CITOOLS_LIB_DEPEND) $(MMAKE_LIB_DEPS)
 
 efrink_controller: efrink_controller.o utils.o
 
