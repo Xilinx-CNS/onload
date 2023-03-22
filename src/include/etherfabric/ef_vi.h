@@ -580,17 +580,7 @@ enum ef_vi_flags {
   EF_VI_ALLOW_MEMCPY = 0x8000000,
   /** Disallow efct backward-compatibility emulation */
   EF_VI_EFCT_UNIQUEUE = 0x10000000,
-  /** Require no shared traffic on the receive queue(s) of this application. */
-  /** Useful only for X3 series: other cards never use shared queues.
-   ** Exclusive queues have two effects:
-   **
-   ** -# Other applications cannot snoop on traffic filtered to this
-   **    application
-   ** -# This application can guarantee that it will not receive any packets
-   **    for which it did not explicitly add a filter */
-  EF_VI_RX_EXCLUSIVE = 0x20000000,
 };
-
 
 /*! \brief Flags that can be returned when an ef_vi has been allocated */
 enum ef_vi_out_flags {

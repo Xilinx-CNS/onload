@@ -13,6 +13,7 @@
 #include <ci/efch/op_types.h>
 #endif
 #include "ef_vi_internal.h"
+#include <etherfabric/vi.h>
 #include <etherfabric/efct_vi.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/common.h>
@@ -1169,37 +1170,17 @@ void efct_vi_munmap_internal(ef_vi* vi)
 #endif
 }
 
-int efct_vi_find_free_rxq(ef_vi* vi, int qid)
-{
-  int ix;
 
-  for( ix = 0; ix < vi->max_efct_rxq; ++ix ) {
-    if( vi->efct_shm->q[ix].qid == qid )
-      return -EALREADY;
-    if( ! efct_rxq_is_active(&vi->efct_shm->q[ix]) )
-      return ix;
-  }
-  return -ENOSPC;
-}
 
 #ifndef __KERNEL__
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 {
   int rc;
   ci_resource_alloc_t ra;
-  int ix;
   int mfd = -1;
   unsigned n_hugepages = (n_superbufs + CI_EFCT_SUPERBUFS_PER_PAGE - 1) /
                          CI_EFCT_SUPERBUFS_PER_PAGE;
 
-  ix = efct_vi_find_free_rxq(vi, qid);
-  if( ix < 0 )
-    return ix;
-  if( ix > 0 && vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
-    /* An attempt to add a filter which caused this must mean that some other
-     * app is already using the same 3-tuple, hence the error EADDRINUSE */
-    return -EADDRINUSE;
-  }
 
   /* The kernel code can cope with no memfd being provided, but only on older
    * kernels, i.e. older than 5.7 where the fallback with efrm_find_ksym()
@@ -1283,21 +1264,53 @@ void efct_vi_start_rxq(ef_vi* vi, int ix)
 
 /* efct_vi_detach_rxq not yet implemented */
 
+int efct_vi_find_free_rxq(ef_vi* vi, int qid, int start_ix)
+{
+  int ix;
+ 
+  for( ix = start_ix; ix < vi->max_efct_rxq; ++ix ) {
+    if( vi->efct_shm->q[ix].exclusivity == 1 )
+      continue;
+    if( vi->efct_shm->q[ix].qid == qid )
+      return -EALREADY;
+    if( ! efct_rxq_is_active(&vi->efct_shm->q[ix]) )
+      return ix;
+  }
+  return -ENOSPC;
+}
+
 static int efct_post_filter_add(struct ef_vi* vi,
-                                const struct ef_filter_spec* fs,
-                                const struct ef_filter_cookie* cookie, int rxq)
+                                const ef_filter_spec* fs,
+                                const ef_filter_cookie* cookie, int rxq)
 {
 #ifdef __KERNEL__
   return 0; /* EFCT TODO */
 #else
   int rc;
+  int ix;
+  int start_ix;
   unsigned n_superbufs;
   EF_VI_ASSERT(rxq >= 0);
   n_superbufs = CI_ROUND_UP((vi->vi_rxq.mask + 1) * EFCT_PKT_STRIDE,
                             EFCT_RX_SUPERBUF_BYTES) / EFCT_RX_SUPERBUF_BYTES;
-  rc = efct_vi_attach_rxq(vi, rxq, n_superbufs);
+
+  if ( ( fs->flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ ) )
+    start_ix = 1;
+
+  ix = efct_vi_find_free_rxq(vi, rxq, start_ix);
+  rc = ix;
+  if( ix > 0 && vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
+    /* An attempt to add a filter which caused this must mean that some other
+     * app is already using the same 3-tuple, hence the error EADDRINUSE */
+    rc = -EADDRINUSE;
+  }
+  if ( rc >= 0 )
+    rc = efct_vi_attach_rxq(vi, rxq, ix, n_superbufs);
+  
   if( rc == -EALREADY )
     rc = 0;
+  if( ( fs->flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ ) && rc == 0 ) 
+    vi->efct_shm->q[ix].exclusivity = 1;
   return rc;
 #endif
 }
@@ -1492,13 +1505,6 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_ctpio_fallback = efct_ef_vi_transmit_ctpio_fallback;
   vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
   vi->internal_ops.post_filter_add = efct_post_filter_add;
-
-  /* The guarantees offered by RX_EXCLUSIVE imply that it's impossible for
-   * there to be more than one queue. These semantics aren't strictly
-   * necessary, but coming up with intelligible documentation of what the
-   * semantics would actually be were this not the case is hard. */
-  if( vi->vi_flags & EF_VI_RX_EXCLUSIVE )
-    vi->vi_flags |= EF_VI_EFCT_UNIQUEUE;
 
   if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
     vi->max_efct_rxq = 1;

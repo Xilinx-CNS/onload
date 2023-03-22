@@ -439,7 +439,11 @@ enum ef_filter_flags {
   /** If set, the filter will receive looped back packets for matching (see
   ** ef_filter_spec_set_tx_port_sniff()) */
   EF_FILTER_FLAG_MCAST_LOOP_RECEIVE     = 0x2,
+  /** This flag is intended to be used by the ef_filter_spec_set_dest() function.
+  ** It's purpose is for reserving the usage of an rxq to a singular pd. */
+  EF_FILTER_FLAG_EFCT_EXCLUSIVE_RXQ     = 0x4,
 };
+
 
 /*! \brief Specification of a filter */
 typedef struct ef_filter_spec {

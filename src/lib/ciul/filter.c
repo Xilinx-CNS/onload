@@ -259,14 +259,21 @@ int ef_filter_spec_set_eth_type(ef_filter_spec *fs, uint16_t ether_type_be16)
 
 int ef_filter_spec_set_dest(ef_filter_spec* fs, int dest, unsigned flags)
 {
-  if (flags)
-    return -EINVAL;
   if (fs->type & (EF_FILTER_PORT_SNIFF | EF_FILTER_TX_PORT_SNIFF |
                   EF_FILTER_BLOCK_KERNEL | EF_FILTER_BLOCK_KERNEL_MULTICAST |
                   EF_FILTER_BLOCK_KERNEL_UNICAST))
     return -EPROTONOSUPPORT;
-  fs->type |= EF_FILTER_HAS_DEST;
-  fs->data[0] = (fs->data[0] & 0xffff) | (dest << 16);
+  if (fs->flags & EF_FILTER_FLAG_MCAST_LOOP_RECEIVE)
+    return -EPROTONOSUPPORT;
+
+  fs->flags |= ( flags & EF_FILTER_FLAG_EFCT_EXCLUSIVE_RXQ );
+  if ( dest == -1 ) {
+    fs->flags |= CI_FILTER_FLAG_ANY_RXQ;
+  } else {
+    fs->type |= EF_FILTER_HAS_DEST;
+    fs->data[0] = (fs->data[0] & 0xffff) | (dest << 16);
+    fs->flags |= CI_FILTER_FLAG_PREF_RXQ;
+  }
   return 0;
 }
 
@@ -513,23 +520,18 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     int rc;
     int rxq;
     ef_filter_cookie cookie;
-    unsigned flags = 0;
+    unsigned flags = fs->flags;
     int rxq_no = 0;
 
-    if( vi->vi_flags & EF_VI_RX_EXCLUSIVE )
-      flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
-      
     if( vi->efct_shm ) {
-      if( vi->efct_shm->q[0].superbuf_pkts ) {
+      if( !( flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ ) && vi->efct_shm->q[0].superbuf_pkts ) {
         flags |= CI_FILTER_FLAG_PREF_RXQ;
         rxq_no = vi->efct_shm->q[0].qid;
       }
       
-      if ( flags == 0 && !(fs->type & EF_FILTER_HAS_DEST) )
+      if ( !( flags & ( CI_FILTER_FLAG_PREF_RXQ | CI_FILTER_FLAG_ANY_RXQ ) ) )
         flags |= CI_FILTER_FLAG_ANY_RXQ;
     }
-    
-
 
     rc = ef_filter_add(dh, vi->vi_resource_id, rxq_no, fs, flags, &cookie, &rxq);
     if( rc < 0 )
