@@ -1564,6 +1564,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	struct efrm_pd *pd;
 	uint32_t nic_client_id;
 	size_t n_shm_rxqs;
+	struct efrm_client *set_client;
 
 	if (o_attr == NULL) {
 		efrm_vi_attr_init(&s_attr);
@@ -1574,9 +1575,16 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	pd = NULL;
 	if (attr->pd != NULL)
 		pd = attr->pd;
-	if ((attr->vi_set != NULL) &&
-	    (client->nic->flags & NIC_FLAG_SHARED_PD))
-		pd = attr->vi_set->pd;
+	if (attr->vi_set != NULL) {
+		EFRM_ASSERT(attr->vi_set->pd);
+		set_client = client ?
+			client :
+			efrm_pd_to_resource(attr->vi_set->pd)->rs_client;
+
+		EFRM_ASSERT(set_client);
+		if (set_client->nic->flags & NIC_FLAG_SHARED_PD)
+			pd = attr->vi_set->pd;
+	}
 	if (pd == NULL) {
 		/* Legacy compatibility.  Create a [pd] from [client]. */
 		if (client == NULL) {
