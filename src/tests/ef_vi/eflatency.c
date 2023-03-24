@@ -564,7 +564,7 @@ static const test_t* do_init(int ifindex, int mode,
   ef_vi* vi = &latency_vi->vi;
   enum ef_pd_flags pd_flags = 0;
   ef_filter_spec filter_spec;
-  enum ef_vi_flags vi_flags = cfg_vi_flags | EF_VI_RX_EXCLUSIVE;
+  enum ef_vi_flags vi_flags = cfg_vi_flags;
   int rc;
   const test_t* t;
   unsigned long capability_val;
@@ -618,7 +618,7 @@ static const test_t* do_init(int ifindex, int mode,
 
  got_vi:
   if( latency_vi == &rx_vi ) {
-    ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_NONE);
+    ef_filter_spec_init(&filter_spec, EF_FILTER_FLAG_EXCLUSIVE_RXQ);
     TRY(ef_filter_spec_set_ip4_local(&filter_spec, IPPROTO_UDP, htonl(raddr_he),
                                     htons(port_he)));
     TRY(ef_vi_filter_add(vi, driver_handle, &filter_spec, NULL));
