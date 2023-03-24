@@ -226,8 +226,6 @@ static bool efct_rx_check_event(const ef_vi* vi)
 
   if( ! vi->vi_rxq.mask )
     return false;
-  if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE )
-    return efct_rxq_check_event(vi, 0);
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
     if( efct_rxq_check_event(vi, i) )
       return true;
@@ -986,17 +984,6 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
   return n_evs;
 }
 
-static int efct_ef_eventq_poll_1rxtx(ef_vi* vi, ef_event* evs, int evs_len)
-{
-  int i = 0;
-
-  if( efct_rxq_is_active(&vi->efct_shm->q[0]) )
-    i = efct_poll_rx(vi, 0, evs, evs_len);
-  i += efct_poll_tx(vi, evs + i, evs_len - i);
-
-  return i;
-}
-
 static int efct_ef_eventq_poll_generic(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int n = 0;
@@ -1299,11 +1286,6 @@ static int efct_post_filter_add(struct ef_vi* vi,
 
   ix = efct_vi_find_free_rxq(vi, rxq, start_ix);
   rc = ix;
-  if( ix > 0 && vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
-    /* An attempt to add a filter which caused this must mean that some other
-     * app is already using the same 3-tuple, hence the error EADDRINUSE */
-    rc = -EADDRINUSE;
-  }
   if ( rc >= 0 )
     rc = efct_vi_attach_rxq(vi, rxq, ix, n_superbufs);
   
@@ -1505,17 +1487,8 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_ctpio_fallback = efct_ef_vi_transmit_ctpio_fallback;
   vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
   vi->internal_ops.post_filter_add = efct_post_filter_add;
-
-  if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
-    vi->max_efct_rxq = 1;
-    vi->ops.eventq_poll = efct_ef_eventq_poll_1rxtx;
-  }
-  else {
-    /* It wouldn't be difficult to specialise this by txable too, but this is
-     * the slow, backward-compatible variant so there's not much point */
-    vi->ops.eventq_poll = efct_ef_eventq_poll_generic;
-    vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
-  }
+  vi->ops.eventq_poll = efct_ef_eventq_poll_generic;
+  vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
 }
 
 void efct_vi_init(ef_vi* vi)
