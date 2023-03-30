@@ -984,7 +984,7 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
   return n_evs;
 }
 
-static int efct_ef_eventq_poll_generic(ef_vi* vi, ef_event* evs, int evs_len)
+static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int n = 0;
   uint64_t qs = vi->efct_shm->active_qs;
@@ -1157,17 +1157,32 @@ void efct_vi_munmap_internal(ef_vi* vi)
 #endif
 }
 
+int efct_vi_find_free_rxq(ef_vi* vi, int qid)
+{
+  int ix;
 
+  for( ix = 0; ix < vi->max_efct_rxq; ++ix ) {
+    if( vi->efct_shm->q[ix].qid == qid )
+      return -EALREADY;
+    if( ! efct_rxq_is_active(&vi->efct_shm->q[ix]) )
+      return ix;
+  }
+  return -ENOSPC;
+}
 
 #ifndef __KERNEL__
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 {
   int rc;
   ci_resource_alloc_t ra;
+  int ix;
   int mfd = -1;
   unsigned n_hugepages = (n_superbufs + CI_EFCT_SUPERBUFS_PER_PAGE - 1) /
                          CI_EFCT_SUPERBUFS_PER_PAGE;
 
+  ix = efct_vi_find_free_rxq(vi, qid);
+  if( ix < 0 )
+    return ix;
 
   /* The kernel code can cope with no memfd being provided, but only on older
    * kernels, i.e. older than 5.7 where the fallback with efrm_find_ksym()
@@ -1251,20 +1266,6 @@ void efct_vi_start_rxq(ef_vi* vi, int ix)
 
 /* efct_vi_detach_rxq not yet implemented */
 
-int efct_vi_find_free_rxq(ef_vi* vi, int qid, int start_ix)
-{
-  int ix;
- 
-  for( ix = start_ix; ix < vi->max_efct_rxq; ++ix ) {
-    if( vi->efct_shm->q[ix].exclusivity == 1 )
-      continue;
-    if( vi->efct_shm->q[ix].qid == qid )
-      return -EALREADY;
-    if( ! efct_rxq_is_active(&vi->efct_shm->q[ix]) )
-      return ix;
-  }
-  return -ENOSPC;
-}
 
 static int efct_post_filter_add(struct ef_vi* vi,
                                 const ef_filter_spec* fs,
@@ -1274,25 +1275,13 @@ static int efct_post_filter_add(struct ef_vi* vi,
   return 0; /* EFCT TODO */
 #else
   int rc;
-  int ix;
-  int start_ix;
   unsigned n_superbufs;
   EF_VI_ASSERT(rxq >= 0);
   n_superbufs = CI_ROUND_UP((vi->vi_rxq.mask + 1) * EFCT_PKT_STRIDE,
                             EFCT_RX_SUPERBUF_BYTES) / EFCT_RX_SUPERBUF_BYTES;
-
-  if ( ( fs->flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ ) )
-    start_ix = 1;
-
-  ix = efct_vi_find_free_rxq(vi, rxq, start_ix);
-  rc = ix;
-  if ( rc >= 0 )
-    rc = efct_vi_attach_rxq(vi, rxq, ix, n_superbufs);
-  
+  rc = efct_vi_attach_rxq(vi, rxq, n_superbufs);
   if( rc == -EALREADY )
     rc = 0;
-  if( ( fs->flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ ) && rc == 0 ) 
-    vi->efct_shm->q[ix].exclusivity = 1;
   return rc;
 #endif
 }
@@ -1487,8 +1476,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_ctpio_fallback = efct_ef_vi_transmit_ctpio_fallback;
   vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
   vi->internal_ops.post_filter_add = efct_post_filter_add;
-  vi->ops.eventq_poll = efct_ef_eventq_poll_generic;
-  vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
+  vi->ops.eventq_poll = efct_ef_eventq_poll;
 }
 
 void efct_vi_init(ef_vi* vi)
@@ -1500,6 +1488,7 @@ void efct_vi_init(ef_vi* vi)
   EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
 
   efct_vi_initialise_ops(vi);
+  vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
   vi->evq_phase_bits = 1;
   /* Set default rx_discard_mask for EFCT */
   vi->rx_discard_mask = (

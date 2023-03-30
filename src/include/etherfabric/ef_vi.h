@@ -578,6 +578,10 @@ enum ef_vi_flags {
   EF_VI_RX_ZEROCOPY = 0x4000000,
   /** Support ef_vi_transmit_memcpy() (SN1000 series and newer). */
   EF_VI_ALLOW_MEMCPY = 0x8000000,
+  /** DEPRECATED FLAG */
+  EF_VI_EFCT_UNIQUEUE = 0x10000000,
+  /** DEPRECATED FLAG */
+  EF_VI_RX_EXCLUSIVE = 0x20000000,
 };
 
 /*! \brief Flags that can be returned when an ef_vi has been allocated */

@@ -64,8 +64,9 @@ enum efrm_filter_block_flags {
 
 
 extern int  efrm_filter_insert(struct efrm_client *,
-			       struct efx_filter_spec *spec, int *rxq,
-			       const struct cpumask *mask, unsigned flags);
+				   struct efx_filter_spec *spec, int *rxq,
+				   unsigned pd_excl_token, const struct cpumask *mask,
+				   unsigned flags);
 extern void efrm_filter_remove(struct efrm_client *, int filter_id);
 extern int efrm_filter_redirect(struct efrm_client *,
 				int filter_id, struct efx_filter_spec *spec);

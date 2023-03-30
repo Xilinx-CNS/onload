@@ -995,7 +995,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
      * triggered the filter update. However, we are always called from oof
      * with fm_outer_lock held, which protects our qix between looking it up
      * and using it in the alloc. */
-    qix = efct_vi_find_free_rxq(vi, rxq, 0);
+    qix = efct_vi_find_free_rxq(vi, rxq);
     if( qix == -EALREADY )
       return 0;
 

@@ -263,17 +263,15 @@ int ef_filter_spec_set_dest(ef_filter_spec* fs, int dest, unsigned flags)
                   EF_FILTER_BLOCK_KERNEL | EF_FILTER_BLOCK_KERNEL_MULTICAST |
                   EF_FILTER_BLOCK_KERNEL_UNICAST))
     return -EPROTONOSUPPORT;
-  if (fs->flags & EF_FILTER_FLAG_MCAST_LOOP_RECEIVE)
-    return -EPROTONOSUPPORT;
 
-  fs->flags |= ( flags & EF_FILTER_FLAG_EFCT_EXCLUSIVE_RXQ );
-  if ( dest == -1 ) {
-    fs->flags |= CI_FILTER_FLAG_ANY_RXQ;
-  } else {
-    fs->type |= EF_FILTER_HAS_DEST;
-    fs->data[0] = (fs->data[0] & 0xffff) | (dest << 16);
-    fs->flags |= CI_FILTER_FLAG_PREF_RXQ;
-  }
+  if ( dest < 0 || dest > 0xffff )
+    return -EINVAL;
+
+  if ( (fs->flags & EF_FILTER_FLAG_EXCLUSIVE_RXQ) && ( dest == 0) )
+    return -EINVAL;
+  
+  fs->data[0] = (fs->data[0] & 0xffff) | (dest << 16);
+  fs->type |= EF_FILTER_HAS_DEST;
   return 0;
 }
 
@@ -444,6 +442,9 @@ static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
     return -EINVAL;
   }
 
+  if (fs->flags & EF_FILTER_FLAG_EXCLUSIVE_RXQ)
+    filter_add.in.flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
+
   if (fs->type & EF_FILTER_HAS_DEST) {
     filter_add.in.fields |= CI_FILTER_FIELD_RXQ;
     filter_add.in.rxq_no = fs->data[0] >> 16;
@@ -520,18 +521,29 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     int rc;
     int rxq;
     ef_filter_cookie cookie;
-    unsigned flags = fs->flags;
+    unsigned flags = 0;
     int rxq_no = 0;
 
+
     if( vi->efct_shm ) {
-      if( !( flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ ) && vi->efct_shm->q[0].superbuf_pkts ) {
+
+      /* The main intention for this is to reuse an rxq already given to the application if already given.
+       * This means that if an application requests an ANY queue, subsequent calls to filter_add should steer
+       * traffic to this preferred queue. Hence we should transform the CI_FILTER_FLAG_ANY_RXQ to
+       * CI_FILTER_FLAG_PREF_RXQ.
+       */
+      if( vi->efct_shm->q[0].superbuf_pkts ) {
         flags |= CI_FILTER_FLAG_PREF_RXQ;
         rxq_no = vi->efct_shm->q[0].qid;
       }
       
-      if ( !( flags & ( CI_FILTER_FLAG_PREF_RXQ | CI_FILTER_FLAG_ANY_RXQ ) ) )
+      /* If there is no preferred queue strategy, any should be fine so best hence let the driver choose. */
+      if ( flags == 0 && !(fs->type & EF_FILTER_HAS_DEST) )
         flags |= CI_FILTER_FLAG_ANY_RXQ;
     }
+
+    if ( fs->flags & EF_FILTER_FLAG_EXCLUSIVE_RXQ )
+      flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
 
     rc = ef_filter_add(dh, vi->vi_resource_id, rxq_no, fs, flags, &cookie, &rxq);
     if( rc < 0 )

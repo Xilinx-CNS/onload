@@ -926,7 +926,8 @@ static void do_filter_del(struct efhw_nic_efct *efct, int filter_id,
 
 static int
 efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-                   int *rxq, const struct cpumask *mask, unsigned flags)
+                   int *rxq, unsigned pd_excl_token, const struct cpumask *mask,
+                   unsigned flags)
 {
   int rc;
   struct ethtool_rx_flow_spec hw_filter;
@@ -940,6 +941,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   int clas;
   bool insert_hw_filter = false;
   unsigned no_vlan_flags = spec->match_flags & ~EFX_FILTER_MATCH_OUTER_VID;
+  unsigned q_excl_token = 0;
 
   if( flags & EFHW_FILTER_F_REPLACE )
     return -EOPNOTSUPP;
@@ -950,8 +952,6 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     .spec = &hw_filter,
     .mask = mask ? mask : cpu_all_mask,
   };
-  if( *rxq >= 0 )
-    hw_filter.ring_cookie = *rxq;
   if( flags & EFHW_FILTER_F_ANY_RXQ )
     params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
   if( flags & EFHW_FILTER_F_PREF_RXQ )
@@ -959,6 +959,8 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   if( flags & EFHW_FILTER_F_EXCL_RXQ )
     params.flags |= XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
 
+  if( *rxq >= 0 )
+    hw_filter.ring_cookie = *rxq;
 
   /* Step 1 of 2: Convert ethtool_rx_flow_spec to efct_filter_node */
   memset(&node, 0, sizeof(node));
@@ -1043,6 +1045,19 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   /* Step 2 of 2: Insert efct_filter_node in to the correct hash table */
   mutex_lock(&efct->driver_filters_mtx);
 
+  if ( *rxq > 0 ) {
+    q_excl_token = efct->exclusive_rxq_mapping[*rxq];
+
+    /* If the q excl tokens are 0, we are in a fresh state and can claim it.
+    *  If both the pd and q are EFHW_PD_NON_EXC_TOKEN, we are in a non-exclusive queue.
+    *  If the q one is set, but the pd one does not match, than the pd is overstepping on another rxq.
+    *  The q state is owned and managed by the driver and persists external to the application. */
+    if ( ( q_excl_token > 0 ) && ( q_excl_token != pd_excl_token ) ) {
+      mutex_unlock(&efct->driver_filters_mtx);
+      return -EPERM;
+    }
+  }
+
   if( (spec->match_flags & EFX_FILTER_MATCH_LOC_HOST &&
       node.ethertype == htons(ETH_P_IP)) ||
       (spec->match_flags & EFX_FILTER_MATCH_LOC_MAC) ) {
@@ -1053,11 +1068,20 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
         avail = i;
       else {
         if( hw_filters_are_equal(&node, &efct->hw_filters[i]) ) {
+
           if( ! (flags & (EFHW_FILTER_F_ANY_RXQ | EFHW_FILTER_F_PREF_RXQ) ) &&
               *rxq >= 0 && *rxq != efct->hw_filters[i].rxq ) {
             mutex_unlock(&efct->driver_filters_mtx);
             return -EEXIST;
           }
+
+          if ( efct->hw_filters[i].rxq > 0 && 
+               pd_excl_token != efct->exclusive_rxq_mapping[efct->hw_filters[i].rxq] ) {
+            /* Trying to attach onto an rxq owned by someone else. */
+            mutex_unlock(&efct->driver_filters_mtx);
+            return -EPERM;
+          }
+
           node.hw_filter = i;
           break;
         }
@@ -1108,6 +1132,8 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
         efct->hw_filters[node.hw_filter].drv_id = params.filter_id_out;
       }
       *rxq = efct->hw_filters[node.hw_filter].rxq;
+      if ( *rxq > 0 )
+        efct->exclusive_rxq_mapping[*rxq] = pd_excl_token;
     }
     else {
       *rxq = 0;
@@ -1117,6 +1143,31 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 
   return rc < 0 ? rc : node.filter_id;
 }
+
+static void
+remove_exclusive_rxq_ownership(struct efhw_nic_efct* efct, int hw_filter)
+{
+  int i;
+  bool delete_owner = true;
+
+  if ( efct->exclusive_rxq_mapping[efct->hw_filters[hw_filter].rxq] ) {
+    /* Only bother worrying about exclusive mapping iff the filter has an exclusive entry */
+    for( i = 0; i < efct->hw_filters_n; ++i ) {
+      if ( efct->hw_filters[i].refcount ) {
+        /* Iff any of the currently active filters (ie refcount > 0) share the same rxq
+          * as the one we are attempting to delete, we cannot clear the rxq ownership.*/
+        if ( efct->hw_filters[i].rxq == efct->hw_filters[hw_filter].rxq ) {
+          delete_owner = false;
+          break;
+        }
+      }
+    }
+  }
+  
+  if ( delete_owner )
+    efct->exclusive_rxq_mapping[efct->hw_filters[hw_filter].rxq] = 0;
+}
+
 
 static void
 efct_filter_remove(struct efhw_nic *nic, int filter_id)
@@ -1130,11 +1181,17 @@ efct_filter_remove(struct efhw_nic *nic, int filter_id)
   int drv_id = -1;
 
   mutex_lock(&efct->driver_filters_mtx);
+
   do_filter_del(efct, filter_id, &hw_filter);
+
   if( hw_filter >= 0 ) {
-    if( efct->hw_filters[hw_filter].refcount == 0 )
-      drv_id = efct->hw_filters[hw_filter].drv_id;
+    if( efct->hw_filters[hw_filter].refcount == 0 ) {
+        /* The above check implies the current filter is unused. */
+        drv_id = efct->hw_filters[hw_filter].drv_id;
+        remove_exclusive_rxq_ownership(efct, hw_filter);
+    }
   }
+
 
   mutex_unlock(&efct->driver_filters_mtx);
 

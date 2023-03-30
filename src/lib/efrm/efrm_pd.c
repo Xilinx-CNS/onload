@@ -81,6 +81,9 @@ struct efrm_pd {
 	/* Unique ID allocated by the NIC for all NIC resources in this pd */
 	uint32_t nic_client_id;
 
+	/* cookie used to claim exclusive ownership of an efct RXQ. */
+	unsigned exclusive_rxq_token; 
+
 	/* serializes remapping of buffers on NIC reset */
 	struct mutex remap_lock;
 
@@ -231,6 +234,11 @@ unsigned efrm_pd_stack_id_get(struct efrm_pd *pd)
 }
 EXPORT_SYMBOL(efrm_pd_stack_id_get);
 
+unsigned efrm_pd_exclusive_rxq_token_get(struct efrm_pd *pd)
+{
+       return pd->exclusive_rxq_token;
+}
+EXPORT_SYMBOL(efrm_pd_exclusive_rxq_token_get);
 
 /***********************************************************************/
 
@@ -302,6 +310,8 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 
 	spin_lock_bh(&pd_manager->rm.rm_lock);
 	instance = pd_manager->next_instance++;
+	pd->exclusive_rxq_token = pd_manager->next_instance;
+
 	if (!use_buffer_table) {
 		pd->owner_id = OWNER_ID_PHYS_MODE;
 	}

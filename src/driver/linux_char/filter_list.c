@@ -158,7 +158,15 @@ static int efch_filter_insert(struct efrm_resource *rs, struct efrm_pd *pd,
                               struct efx_filter_spec *spec, struct filter *f,
                               unsigned flags)
 {
-  int rc = efrm_filter_insert(rs->rs_client, spec, &f->rxq, NULL, flags);
+  int rc;
+  /* This is the default exclusive token for non-exclusive applications.
+   * By doing so, we can ensure queues that are already non-exclusive
+   * cannot be used for exclusive purposes. */
+  unsigned exclusive_rxq_token = EFHW_PD_NON_EXC_TOKEN;
+
+  if ( flags & EFHW_FILTER_F_EXCL_RXQ )
+    exclusive_rxq_token = efrm_pd_exclusive_rxq_token_get(pd);
+  rc = efrm_filter_insert(rs->rs_client, spec, &f->rxq, exclusive_rxq_token, NULL, flags);
   if( rc < 0 )
     return rc;
 
@@ -630,20 +638,18 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
   f->flags = 0;
   f->rxq = -1;
 
-  if ( filter_add->in.flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ )
-    onload_filter_flags |= EFHW_FILTER_F_EXCL_RXQ;
-  
+
   if( filter_add->in.fields & CI_FILTER_FIELD_RXQ )
     f->rxq = filter_add->in.rxq_no;
+
   if( filter_add->in.flags & CI_FILTER_FLAG_PREF_RXQ )
     onload_filter_flags |= EFHW_FILTER_F_PREF_RXQ;
   if( filter_add->in.flags & CI_FILTER_FLAG_ANY_RXQ )
     onload_filter_flags |= EFHW_FILTER_F_ANY_RXQ;
-
-  ci_log("filter rxq %d rxq_no %d", f->rxq, filter_add->in.rxq_no);
+  if ( filter_add->in.flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ )
+    onload_filter_flags |= EFHW_FILTER_F_EXCL_RXQ;
 
   rc = efch_filter_insert(rs, pd, &spec, f, onload_filter_flags);
-  ci_log("filter out rxq %d", f->rxq);
 
   if( rc < 0 ) {
     efch_filter_delete(rs, pd, f);
@@ -666,5 +672,6 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
   filter_add->out.out_len = sizeof(filter_add->out);
   filter_add->out.filter_id = f->filter_id;
   filter_add->out.rxq = f->rxq;
+ 
   return 0;
 }

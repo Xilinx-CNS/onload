@@ -112,8 +112,9 @@ extern int ef10_ef100_rss_flags(struct efhw_nic *nic, u32 *flags_out);
 
 struct efx_filter_spec;
 extern int ef10_ef100_filter_insert(struct efhw_nic *nic,
-				    struct efx_filter_spec *spec, int *rxq,
-				    const struct cpumask *mask, unsigned flags);
+				 	struct efx_filter_spec *spec, int *rxq,
+				 	unsigned pd_excl_token, const struct cpumask *mask,
+				 	unsigned flags);
 extern void ef10_ef100_filter_remove(struct efhw_nic *nic, int filter_id);
 extern int ef10_ef100_filter_redirect(struct efhw_nic *nic, int filter_id,
 				      struct efx_filter_spec *spec);

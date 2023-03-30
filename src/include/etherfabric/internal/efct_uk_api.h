@@ -56,7 +56,6 @@ struct efab_efct_rxq_uk_shm_q {
   unsigned config_generation;
   uint32_t superbuf_pkts;            /* number of packets per superbuf.
                                       * 0 indicates inactive queue. */
-  uint8_t exclusivity;                /* Used to indicate whether a queue in use is intended for exclusivity */
   uint64_t time_sync;                /* latest time sync event */
   struct {
     unsigned no_rxq_space;

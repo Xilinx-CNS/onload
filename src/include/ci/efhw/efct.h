@@ -182,6 +182,12 @@ struct efhw_nic_efct {
   struct xlnx_efct_device *edev;
   struct xlnx_efct_client *client;
   struct efhw_nic *nic;
+  /* This array is used for marking whether a given hw_qid is exclusively owned.
+   * The index represents the hardware_queue, and the value should correspond to a 
+   * token representing exclusive ownership of the rxq. In this case, a token_id
+   * of 0 indicates the rxq is not being used. Otherwise the queue is owned and in-use.
+   */
+  uint32_t* exclusive_rxq_mapping;
 #ifdef __KERNEL__
   /* ZF emu includes this file from UL */
   /* We could have one filter set per rxq, effectively adding a few more bits

@@ -439,11 +439,47 @@ enum ef_filter_flags {
   /** If set, the filter will receive looped back packets for matching (see
   ** ef_filter_spec_set_tx_port_sniff()) */
   EF_FILTER_FLAG_MCAST_LOOP_RECEIVE     = 0x2,
-  /** This flag is intended to be used by the ef_filter_spec_set_dest() function.
-  ** It's purpose is for reserving the usage of an rxq to a singular pd. */
-  EF_FILTER_FLAG_EFCT_EXCLUSIVE_RXQ     = 0x4,
+  /** The flag below is intended to be used by the ef_filter_spec_init() function.
+  **
+  **  If set, this will attempt to reserve the use of a hardware receive_queue for a
+  **  singular application. This is useful only for X3 supported hardware as
+  **  other cards do not use shared queues.
+  **
+  **  Exclusivity is defined by the following properties:
+  **    1) Other applications will be unable to snoop on traffic filtered to this
+  **       application.
+  **    2) This application can guarantee that it will not receive any packets
+  **       for which it did not explicitly add a filter.
+  **
+  **  If no free hardware queues are currently available then the filter addition
+  **  will fail. Exclusivity is reserved from hardware_queue 1+, the default
+  **  0th queue cannot be exclusively owned.
+  **
+  **  Subsequent filters added by the same application, with or without the
+  **  exclusive flag, may use the exclusive queue. Filters added by other
+  **  applications will not be able to use the queue.
+  **
+  **  If an application has already added at least one filter to a VI without
+  **  using the exclusive flag then a subsequent filter using the flag will not
+  **  be able to 'upgrade' the existing hardware queue to be exclusive: another
+  **  hardware queue will be allocated and associated with the VI. This may not
+  **  be the most efficient way to organise the system.
+  **
+  **  Similarly, it is not possible to 'downgrade' an exclusivity owned queue
+  **  whilst an exclusive filter is in place. As such, all subsequent filter
+  **  insertions to the same queue, should use the exclusivity flag.
+  **
+  **  If a multicast stream is required by multiple applications and one
+  **  application has added it to an exclusive queue of their own then all
+  **  subsequent applications attempting to listen to that multicast stream will
+  **  fail since they cannot share the queue.
+  **
+  **  Filters inserted externally to onload via ethtool can bypass the above
+  **  exclusivity restrictions.
+  **
+  */
+  EF_FILTER_FLAG_EXCLUSIVE_RXQ     = 0x4,
 };
-
 
 /*! \brief Specification of a filter */
 typedef struct ef_filter_spec {

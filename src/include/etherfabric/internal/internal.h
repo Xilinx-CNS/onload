@@ -128,7 +128,7 @@ extern void ef_vi_reset_evq(struct ef_vi*, int clear_ring);
 extern int efct_vi_mmap_init_internal(ef_vi* vi,
                                       struct efab_efct_rxq_uk_shm_base *shm);
 void efct_vi_munmap_internal(ef_vi* vi);
-int efct_vi_find_free_rxq(ef_vi* vi, int qid, int start_ix);
+int efct_vi_find_free_rxq(ef_vi* vi, int qid);
 void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
                                  ef_vi_efct_superbuf_refresh_t *refresh_func);
 void efct_vi_start_rxq(ef_vi* vi, int ix);

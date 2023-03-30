@@ -2184,8 +2184,9 @@ EXPORT_SYMBOL(efrm_vport_free);
 /* ************************************************************* */
 
 int efrm_filter_insert(struct efrm_client *client,
-		       struct efx_filter_spec *spec, int *rxq,
-		       const struct cpumask *mask, unsigned flags)
+			   struct efx_filter_spec *spec, int *rxq,
+			   unsigned pd_excl_owner, const struct cpumask *mask,
+			   unsigned flags)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
 	struct net_device* net_dev;
@@ -2195,7 +2196,7 @@ int efrm_filter_insert(struct efrm_client *client,
 	/* FIXME: add IPv6 support to firewall rules (bug 85208) */
 	if ( (spec->match_flags & EFX_FILTER_MATCH_ETHER_TYPE) &&
 	     (spec->ether_type == htons(ETH_P_IPV6)) ) {
-		return efhw_nic_filter_insert( efhw_nic, spec, rxq, mask, flags );
+		return efhw_nic_filter_insert( efhw_nic, spec, rxq, pd_excl_owner, mask, flags );
 	}
 #endif
 
@@ -2211,7 +2212,7 @@ int efrm_filter_insert(struct efrm_client *client,
 		}
 		dev_put(net_dev);
 		if ( rc >= 0 )
-			rc = efhw_nic_filter_insert( efhw_nic, spec, rxq, mask, flags );
+			rc = efhw_nic_filter_insert( efhw_nic, spec, rxq, pd_excl_owner, mask, flags );
 	}
 	else {
 		rc = -ENODEV;
