@@ -89,6 +89,8 @@ int filter_parse(ef_filter_spec* fs, const char* s_in, struct in_addr *sa_mcast)
     if( strchr(remainder, ',') ) {
       hostport = strtok(remainder, ",");
       remainder = strtok(NULL, "");
+      if( remainder == NULL )
+        goto out;
       TRY(ci_hostport_to_sockaddr(AF_UNSPEC, hostport, &laddr.ss));
       TRY(ci_hostport_to_sockaddr(laddr.ss.ss_family, remainder, &raddr.ss));
       if( laddr.ss.ss_family == AF_INET && raddr.ss.ss_family == AF_INET ) {
