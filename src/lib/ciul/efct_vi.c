@@ -1254,7 +1254,6 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   ra.u.rxq.in_n_hugepages = n_hugepages;
   ra.u.rxq.in_timestamp_req = true;
   ra.u.rxq.in_memfd = mfd;
-  ra.u.rxq.in_memfd_off = 0;
   rc = ci_resource_alloc(vi->dh, &ra);
   if( mfd >= 0 )
     close(mfd);

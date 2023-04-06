@@ -12,6 +12,7 @@ extern struct efhw_func_ops efct_char_functional_units;
 struct efhw_efct_rxq;
 struct efct_client_hugepage;
 struct efct_client_rxq_params;
+struct oo_hugetlb_allocator;
 typedef void efhw_efct_rxq_free_func_t(struct efhw_efct_rxq*);
 typedef void efhw_efct_rxq_int_wake_func_t(struct efhw_efct_rxq*);
 
@@ -185,7 +186,8 @@ struct efhw_nic_efct {
 
 #if CI_HAVE_EFCT_AUX
 int efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
-                      size_t n_hugepages, struct file* memfd, off_t* memfd_off,
+                      size_t n_hugepages,
+                      struct oo_hugetlb_allocator *hugetlb_alloc,
                       struct efab_efct_rxq_uk_shm_q *shm,
                       unsigned wakeup_instance, struct efhw_efct_rxq *rxq);
 void efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,

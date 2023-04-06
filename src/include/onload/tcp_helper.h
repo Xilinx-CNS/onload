@@ -352,10 +352,7 @@ typedef struct tcp_helper_resource_s {
   /* bucket of rss hardware filter */
   int thc_rss_instance;
   /* backing store for efct's mmappable hugepages */
-  struct file*          thc_efct_memfd;
-  /* byte offset in thc_efct_memfd of the next hugepage to allocate */
-  off_t                 thc_efct_memfd_off;
-
+  struct oo_hugetlb_allocator* thc_efct_alloc;
   /* backing store for packet buffers */
   struct oo_hugetlb_allocator* thc_pktbuf_alloc;
 

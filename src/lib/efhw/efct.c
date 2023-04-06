@@ -45,7 +45,8 @@ static void efct_check_for_flushes(struct work_struct *work);
 
 int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
-                  size_t n_hugepages, struct file* memfd, off_t* memfd_off,
+                  size_t n_hugepages,
+                  struct oo_hugetlb_allocator *hugetlb_alloc,
                   struct efab_efct_rxq_uk_shm_q *shm,
                   unsigned wakeup_instance, struct efhw_efct_rxq *rxq)
 {
@@ -66,12 +67,12 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
      * check as well */
     return -EINVAL;
   }
-  efct_provide_bind_memfd(memfd, *memfd_off);
+  efct_provide_hugetlb_alloc(hugetlb_alloc);
   EFCT_PRE(dev, edev, cli, nic, rc);
 
   rc = __efct_nic_rxq_bind(edev, cli, &qparams, nic->arch_extra, n_hugepages, shm, wakeup_instance, rxq);
   EFCT_POST(dev, edev, cli, nic, rc);
-  efct_unprovide_bind_memfd(memfd_off);
+  efct_unprovide_hugetlb_alloc();
   return rc;
 }
 
