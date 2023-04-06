@@ -2367,6 +2367,13 @@ ci_inline void netif_tcp_helper_free(ci_netif* ni)
   ci_netif_deinit(ni);
 }
 
+#define MFD_CLOEXEC 1U
+#define MFD_HUGETLB 4U
+#if defined __x86_64__
+#define __NR_memfd_create 319
+#elif defined __aarch64__
+#define __NR_memfd_create 279
+#endif
 
 static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
                                 const ci_netif_config_opts* opts,
@@ -2390,17 +2397,16 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
     strncpy(ra->in_name, name, CI_CFG_STACK_NAME_LEN);
 
   ra->in_memfd = -1;
-#ifdef MFD_HUGETLB
   /* The kernel code can cope with no memfd being provided, but only on older
    * kernels */
   {
     char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
     snprintf(mfd_name, sizeof(mfd_name), "efct/%s", name);
-    ra->in_memfd = memfd_create(mfd_name, MFD_CLOEXEC | MFD_HUGETLB);
+    ra->in_memfd = syscall(__NR_memfd_create, mfd_name,
+                           MFD_CLOEXEC | MFD_HUGETLB);
     if( ra->in_memfd < 0 && errno != ENOSYS )
       LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
   }
-#endif
 }
 
 
