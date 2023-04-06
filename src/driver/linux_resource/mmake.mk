@@ -43,6 +43,9 @@ EFRM_SRCS	:=			\
 EFRM_HDRS	:= efrm_internal.h efrm_vi.h efrm_vi_set.h \
 		efrm_pd.h efrm_pio.h bt_manager.h
 
+UTILS_HDRS	:= hugetlb.h
+UTILS_SRCS	:= hugetlb.c
+
 ifeq ($(HAVE_SFC),1)
 RESOURCE_SRCS += driverlink_new.c
 EFHW_SRCS += ef10.c ef100.c
@@ -52,11 +55,13 @@ IMPORT		:= $(EFHW_SRCS:%=../../lib/efhw/%) \
 		   $(EFHW_HDRS:%=../../lib/efhw/%) \
 		   $(EFRM_SRCS:%=../../lib/efrm/%) \
 		   $(EFRM_HDRS:%=../../lib/efrm/%) \
+		   $(UTILS_SRCS:%=../../lib/kernel_utils/%) \
+		   $(UTILS_HDRS:%=../../include/kernel_utils/%) \
 		   ../linux_net/drivers/net/ethernet/sfc/driverlink_api.h
 
 
 RESOURCE_TARGET	:= sfc_resource.o
-RESOURCE_TARGET_SRCS := $(RESOURCE_SRCS) $(EFHW_SRCS) $(EFRM_SRCS)
+RESOURCE_TARGET_SRCS := $(RESOURCE_SRCS) $(EFHW_SRCS) $(EFRM_SRCS) $(UTILS_SRCS)
 
 TARGETS		:= $(RESOURCE_TARGET)
 

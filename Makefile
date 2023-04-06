@@ -123,6 +123,7 @@ mkdirs:
 	@mkdir -p $(obj)/src/lib/efhw
 	@mkdir -p $(obj)/src/lib/efrm
 	@mkdir -p $(obj)/src/lib/efthrm
+	@mkdir -p $(obj)/src/lib/kernel_utils
 
 # Define the high-level dependencies between libraries:
 $(obj)/src/driver/linux_resource: $(AUTOCOMPAT) mkdirs
@@ -130,6 +131,7 @@ $(obj)/src/lib/transport/ip: $(AUTOCOMPAT)
 $(obj)/src/lib/ciul: $(AUTOCOMPAT)
 $(obj)/src/lib/citools: $(AUTOCOMPAT)
 $(obj)/src/lib/cplane: $(AUTOCOMPAT) $(obj)/src/lib/ciul
+$(obj)/src/lib/kernel_utils: $(AUTOCOMPAT)
 $(obj)/src/driver/linux_char: $(AUTOCOMPAT)
 $(obj)/src/driver/linux_char: $(obj)/src/lib/citools $(obj)/src/lib/ciul
 $(obj)/src/driver/linux_onload: $(obj)/src/lib/citools $(obj)/src/lib/ciul \
