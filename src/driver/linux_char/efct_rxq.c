@@ -8,6 +8,7 @@
 #include <ci/efhw/mc_driver_pcol.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include "char_internal.h"
+#include <kernel_utils/hugetlb.h>
 
 
 
@@ -22,9 +23,8 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   struct efch_efct_rxq_alloc* alloc = &alloc_->u.rxq;
   struct efrm_efct_rxq* rxq;
   struct efrm_vi* vi;
+  struct oo_hugetlb_allocator *hugetlb_alloc;
   efch_resource_t* vi_rs;
-  struct file* memfd = NULL;
-  off_t memfd_off;
   int rc;
 
   if (alloc->in_flags != 0) {
@@ -56,20 +56,18 @@ rxq_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
 
   vi = efrm_vi_from_resource(vi_rs->rs_base);
 
-  if (alloc->in_memfd >= 0) {
-    memfd = fget(alloc->in_memfd);
-    if (!memfd) {
-      EFCH_ERR("%s: ERROR: memfd is not an fd", __FUNCTION__);
-      return -EINVAL;
-    }
+  hugetlb_alloc = oo_hugetlb_allocator_create(alloc->in_memfd);
+  if (IS_ERR(hugetlb_alloc)) {
+    EFCH_ERR("%s: ERROR: Unable to create hugetlb allocator (%ld)",
+             __FUNCTION__, PTR_ERR(hugetlb_alloc));
+    return PTR_ERR(hugetlb_alloc);
   }
 
-  memfd_off = alloc->in_memfd_off;
   rc = efrm_rxq_alloc(vi, alloc->in_qid, alloc->in_shm_ix,
-                      alloc->in_timestamp_req, alloc->in_n_hugepages, memfd,
-                      &memfd_off, &rxq);
-  if (memfd)
-    fput(memfd);
+                      alloc->in_timestamp_req, alloc->in_n_hugepages,
+                      hugetlb_alloc, &rxq);
+  oo_hugetlb_allocator_put(hugetlb_alloc);
+
   if (rc < 0) {
     EFCH_ERR("%s: ERROR: rxq_alloc failed (%d)", __FUNCTION__, rc);
     return rc;

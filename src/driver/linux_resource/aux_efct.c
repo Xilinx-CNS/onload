@@ -17,6 +17,7 @@
 #include <ci/driver/kernel_compat.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/bitfield.h>
+#include <kernel_utils/hugetlb.h>
 
 #include "efct_superbuf.h"
 
@@ -24,23 +25,19 @@
 
 /* EFCT TODO: enhance aux API to provide an extra cookie for this stuff so we
  * can get rid of this global variable filth */
-static DEFINE_MUTEX(memfd_provision_mtx);
-static struct file* memfd_provided = NULL;
-static off_t memfd_provided_off = -1;
+static DEFINE_MUTEX(efct_hugetlb_provision_mtx);
+static struct oo_hugetlb_allocator *efct_hugetlb_alloc = NULL;
 
-void efct_provide_bind_memfd(struct file* memfd, off_t memfd_off)
+void efct_provide_hugetlb_alloc(struct oo_hugetlb_allocator *hugetlb_alloc)
 {
-  mutex_lock(&memfd_provision_mtx);
-  memfd_provided = memfd;
-  memfd_provided_off = memfd_off;
+  mutex_lock(&efct_hugetlb_provision_mtx);
+  efct_hugetlb_alloc = hugetlb_alloc;
 }
 
-void efct_unprovide_bind_memfd(off_t *final_off)
+void efct_unprovide_hugetlb_alloc(void)
 {
-  if( final_off )
-    *final_off = memfd_provided_off;
-  memfd_provided = NULL;
-  mutex_unlock(&memfd_provision_mtx);
+  efct_hugetlb_alloc = NULL;
+  mutex_unlock(&efct_hugetlb_provision_mtx);
 }
 
 static bool seq_lt(uint32_t a, uint32_t b)
@@ -181,113 +178,36 @@ int efct_request_wakeup(struct efhw_nic_efct *efct, struct efhw_efct_rxq *app,
   return -EAGAIN;
 }
 
-/* Allocating huge pages which are able to be mapped to userspace is a
- * nightmarish problem: the only thing that mmap() will accept is hugetlbfs
- * files, so we need to get ourselves one of them. And there's no single
- * way. */
-static struct file* efct_hugetlb_file_setup(off_t* off)
-{
-  if( memfd_provided ) {
-    get_file(memfd_provided);
-    *off = memfd_provided_off;
-    memfd_provided_off += CI_HUGEPAGE_SIZE;
-    return memfd_provided;
-  }
-
-#ifdef EFRM_HAVE_NEW_KALLSYMS
-  {
-    /* This fallback only exists on old kernels, but that's fine: new kernels
-     * all have memfd_create, and there's considerable overlap between 'old'
-     * and 'new' (e.g. RHEL8) so we can deal with potential oddballs */
-    static __typeof__(hugetlb_file_setup)* fn_hugetlb_file_setup;
-
-    if( ! fn_hugetlb_file_setup )
-      fn_hugetlb_file_setup = efrm_find_ksym("hugetlb_file_setup");
-
-    if( fn_hugetlb_file_setup ) {
-      struct user_struct* user;
-      *off = 0;
-      return fn_hugetlb_file_setup(HUGETLB_ANON_FILE, CI_HUGEPAGE_SIZE,
-                                   0, &user, HUGETLB_ANONHUGE_INODE,
-                                   ilog2(CI_HUGEPAGE_SIZE));
-    }
-  }
-#endif
-
-  EFHW_ERR("%s: ERROR: efct hugepages not possible on this kernel",
-            __func__);
-  return ERR_PTR(-EOPNOTSUPP);
-}
-
 static int efct_alloc_hugepage(void *driver_data,
                                struct efct_client_hugepage *result_out)
 {
   /* The rx ring is owned by the net driver, not by us, so it does all
    * DMA handling. We do need to supply it with some memory, though. */
   struct efct_client_hugepage result;
-  struct inode* inode;
-  struct address_space* mapping;
-  long rc;
-  off_t off;
+  int rc;
 
-  result.file = efct_hugetlb_file_setup(&off);
-  if( IS_ERR(result.file) ) {
-    rc = PTR_ERR(result.file);
-    EFHW_ERR("%s: ERROR: insufficient hugepage memory for rxq (%ld)",
+  if( ! efct_hugetlb_alloc ) {
+    EFHW_ERR("%s: ERROR: hugetlb allocator not supplied", __func__);
+    return -EINVAL;
+  }
+
+  rc = oo_hugetlb_page_alloc_raw(efct_hugetlb_alloc,
+                                 &result.file, &result.page);
+  if( rc ) {
+    EFHW_ERR("%s: ERROR: unable to allocate hugepage for rxq (%d)",
              __func__, rc);
     return rc;
   }
 
-  inode = file_inode(result.file);
-  if( i_size_read(inode) < off + CI_HUGEPAGE_SIZE ) {
-    rc = vfs_truncate(&result.file->f_path, off + CI_HUGEPAGE_SIZE);
-    if( rc < 0 ) {
-      EFHW_ERR("%s: ERROR: ftruncate hugepage memory failed for rxq (%ld)",
-              __func__, rc);
-      goto fail;
-    }
-  }
-
-  rc = vfs_fallocate(result.file, 0, off, CI_HUGEPAGE_SIZE);
-  if( rc < 0 ) {
-    EFHW_ERR("%s: ERROR: fallocate hugepage memory failed for rxq (%ld)",
-             __func__, rc);
-    goto fail;
-  }
-
-  inode_lock(inode);
-  mapping = inode->i_mapping;
-  result.page = find_get_page(mapping, off / CI_HUGEPAGE_SIZE);
-  inode_unlock(inode);
-
-  if( ! result.page || ! PageHuge(result.page) || PageTail(result.page) ) {
-    /* memfd originated in userspace, so we have to check we actually got what
-     * we thought we would */
-    EFHW_ERR("%s: ERROR: rxq memfd was badly created (%ld / %d / %d)",
-             __func__, off, result.page ? PageHuge(result.page) : -1,
-             result.page ? PageTail(result.page) : -1);
-    rc = -EINVAL;
-    goto fail;
-  }
-
   *result_out = result;
-  return 0;
 
- fail:
-  if( memfd_provided )
-    memfd_provided_off -= CI_HUGEPAGE_SIZE;
-  fput(result.file);
-  return rc;
+  return 0;
 }
 
 static void efct_free_hugepage(void *driver_data,
                                struct efct_client_hugepage *mem)
 {
-  /* EFCT TODO (minor): When we're using a memfd we could fallocate(PUNCH_HOLE)
-   * to free up the memory properly, in case the entire file isn't about to be
-   * freed */
-  put_page(mem->page);
-  fput(mem->file);
+  oo_hugetlb_page_free_raw(mem->file, mem->page);
 }
 
 static void efct_hugepage_list_changed(void *driver_data, int rxq)

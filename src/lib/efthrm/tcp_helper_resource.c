@@ -999,8 +999,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
     if( qix == -EALREADY )
       return 0;
 
-    rc = efrm_rxq_alloc(vi_rs, rxq, qix, true, hugepages,
-                        trs->thc_efct_memfd, &trs->thc_efct_memfd_off,
+    rc = efrm_rxq_alloc(vi_rs, rxq, qix, true, hugepages, trs->thc_efct_alloc,
                         &trs->nic[intf_i].thn_efct_rxq[qix]);
     if( rc < 0 ) {
       ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc);
@@ -2848,7 +2847,7 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
 
   OO_DEBUG_SHM(ci_log("%s:", __func__));
 
-  if( NI_OPTS(ni).prealloc_packets && trs->thc_efct_memfd ) {
+  if( NI_OPTS(ni).prealloc_packets && trs->thc_efct_alloc ) {
     int n_rxqs = 0;
     OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
       struct efhw_nic* nic =
@@ -2856,8 +2855,8 @@ allocate_netif_hw_resources(ci_resource_onload_alloc_t* alloc,
       n_rxqs += efhw_nic_max_shared_rxqs(nic);
     }
     if( n_rxqs ) {
-      off_t bytes = CI_HUGEPAGE_SIZE * EFCT_HUGEPAGES_PER_RXQ * n_rxqs;
-      rc = vfs_fallocate(trs->thc_efct_memfd, 0, 0, bytes);
+      int nr_pages = EFCT_HUGEPAGES_PER_RXQ * n_rxqs;
+      rc = oo_hugetlb_pages_prealloc(trs->thc_efct_alloc, nr_pages);
       if( rc < 0 ) {
         if( rc == -ENOSPC )
           OO_DEBUG_ERR(ci_log("tcp_helper_alloc: fallocate hugepage memory "
@@ -4581,16 +4580,19 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   ci_dllist_push(&THR_TABLE.started_stacks, &rs->all_stacks_link);
   ci_irqlock_unlock(&THR_TABLE.lock, &lock_flags);
 
-  rs->thc_efct_memfd = NULL;
-  rs->thc_efct_memfd_off = 0;
-  if( alloc->in_efct_memfd >= 0 ) {
-    rs->thc_efct_memfd = fget(alloc->in_efct_memfd);
-    if( ! rs->thc_efct_memfd ) {
-      rc = -EBADF;
-      OO_DEBUG_ERR(ci_log("%s: [%d] Bad fd for efct (%d).",
-                  __func__, NI_ID(ni), alloc->in_efct_memfd));
-      goto fail_memfd;
-    }
+  rs->thc_efct_alloc = oo_hugetlb_allocator_create(alloc->in_efct_memfd);
+  if( IS_ERR(rs->thc_efct_alloc) ) {
+    long rc = PTR_ERR(rs->thc_efct_alloc);
+    rs->thc_efct_alloc = NULL;
+
+    OO_DEBUG_ERR(ci_log("%s: [%d] Unable to create EFCT hugetlb allocator "
+                        "(%ld).", __func__, NI_ID(ni), rc));
+
+    /* -EINVAL means we failed to pass the parameters around.
+     * Otherwise, we carry on but still may fail in EFCT that
+     * requires hugetlb support. */
+    if( rc == -EINVAL )
+      goto fail_efct_memfd;
   }
 
   if( thc && thc->thc_pktbuf_alloc ) {
@@ -4872,9 +4874,9 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
     oo_hugetlb_allocator_put(rs->thc_pktbuf_alloc);
 
  fail_pktbuf_memfd:
-  if( rs->thc_efct_memfd )
-    fput(rs->thc_efct_memfd);
- fail_memfd:
+  if( rs->thc_efct_alloc )
+    oo_hugetlb_allocator_put(rs->thc_efct_alloc);
+ fail_efct_memfd:
 #if CI_CFG_NIC_RESET_SUPPORT
   destroy_workqueue(rs->reset_wq);
  fail5a:
@@ -5929,8 +5931,8 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
   release_netif_resources(trs);
   if( trs->thc_pktbuf_alloc )
     oo_hugetlb_allocator_put(trs->thc_pktbuf_alloc);
-  if( trs->thc_efct_memfd )
-    fput(trs->thc_efct_memfd);
+  if( trs->thc_efct_alloc )
+    oo_hugetlb_allocator_put(trs->thc_efct_alloc);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   destroy_workqueue(trs->wq);
