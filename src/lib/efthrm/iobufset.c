@@ -499,10 +499,10 @@ oo_iobufset_resource_alloc(struct oo_buffer_pages * pages, struct efrm_pd *pd,
   }
 
   rc = efrm_pd_dma_map(iobrs->pd, pages->n_bufs,
-		       nic_order,
-		       addrs, iobrs->dma_addrs, iobrs->free_addrs,
-		       hw_addrs, sizeof(hw_addrs[0]),
-		       put_user_fake, &iobrs->buf_tbl_alloc, reset_pending, page_order);
+                       nic_order,
+                       addrs, iobrs->dma_addrs, iobrs->free_addrs,
+                       hw_addrs, sizeof(hw_addrs[0]),
+                       put_user_fake, &iobrs->buf_tbl_alloc, reset_pending, page_order);
   kfree(addrs);
 
   if( rc < 0 )

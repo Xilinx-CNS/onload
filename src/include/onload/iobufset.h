@@ -62,7 +62,7 @@ struct efrm_pd;
  */
 
 
-/*! Continuous memorry allocation structure.
+/*! Continuous memory allocation structure.
  * All pages MUST have the same order. */
 struct oo_buffer_pages {
   int n_bufs;               /*!< number of entries in pages array */
@@ -75,7 +75,7 @@ struct oo_buffer_pages {
   struct page **pages;     /*!< array of Linux compound pages */
 };
 
-/*! Iobufset resource structture. */
+/*! Iobufset resource structure. */
 struct oo_iobufset {
   struct efrm_pd *pd;
   struct efrm_bt_collection buf_tbl_alloc;

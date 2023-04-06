@@ -1002,7 +1002,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
                         trs->thc_efct_memfd, &trs->thc_efct_memfd_off,
                         &trs->nic[intf_i].thn_efct_rxq[qix]);
     if( rc < 0 ) {
-      ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)\n", __func__, rc);
+      ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc);
       return rc;
     }
     efct_vi_start_rxq(vi, qix);
@@ -2539,9 +2539,9 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   /* The shared netif-state buffer and EP buffers are part of the mem mmap */
   trs->mem_mmap_bytes += ns->netif_mmap_bytes;
   OO_DEBUG_MEMSIZE(ci_log(
-	"added %d (0x%x) bytes for shared netif state and ep buffers, "
-	"reached %d (0x%x)", ns->netif_mmap_bytes, ns->netif_mmap_bytes,
-	trs->mem_mmap_bytes, trs->mem_mmap_bytes));
+        "added %d (0x%x) bytes for shared netif state and ep buffers, "
+        "reached %d (0x%x)", ns->netif_mmap_bytes, ns->netif_mmap_bytes,
+        trs->mem_mmap_bytes, trs->mem_mmap_bytes));
 
   if( trs->name[0] == '\0' )
     snprintf(ns->pretty_name, sizeof(ns->pretty_name), "%d", ns->stack_id);
@@ -3196,7 +3196,7 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   if( trs->netif.nic_n == 0 && ifindices_len != 0 ) {
     ci_log("%s: ERROR: No Solarflare network interfaces are active/UP,\n"
            "or they are configured with packed stream firmware, disabled,\n"
-	   "or unlicensed for Onload. Please check your configuration.",
+           "or unlicensed for Onload. Please check your configuration.",
            __FUNCTION__);
     return -ENODEV;
   }

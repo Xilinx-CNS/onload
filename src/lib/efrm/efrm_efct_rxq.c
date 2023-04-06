@@ -78,7 +78,7 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 	rc = efct_nic_rxq_bind(vi_rs->rs_client->nic, qid, timestamp_req,
 	                       n_hugepages, memfd, memfd_off,
 	                       &vi->efct_shm->q[shm_ix], vi->rs.rs_instance,
-						   &rxq->hw);
+	                       &rxq->hw);
 	if (rc < 0) {
 		kfree(rxq);
 		return rc;
