@@ -14,9 +14,24 @@
 
 #if !defined(__KERNEL__)
 #include <onload/mmap.h>
-#include <sys/shm.h>
 
 pthread_mutex_t citp_pkt_map_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* Returns MAP_FAILED (that is, (void*) -1) on failure. */
+static void* __ci_pkt_buf_map(ci_netif* ni, off_t offset)
+{
+  oo_pkt_buf_map_t arg;
+  int rc;
+
+  arg.offset = offset;
+  rc = oo_resource_op(ci_netif_get_driver_handle(ni),
+                      OO_IOC_PKT_BUF_MMAP, &arg);
+
+  if( rc != 0 )
+    return MAP_FAILED;
+
+  return CI_USER_PTR_GET(arg.addr);
+}
 
 ci_ip_pkt_fmt* __ci_netif_pkt(ci_netif* ni, unsigned id)
 {
@@ -34,8 +49,8 @@ ci_ip_pkt_fmt* __ci_netif_pkt(ci_netif* ni, unsigned id)
     goto got_pkt_out;
 
 #if CI_CFG_PKTS_AS_HUGE_PAGES
-  if( ni->packets->set[setid].shm_id >= 0 ) {
-    p = shmat(ni->packets->set[setid].shm_id, NULL, 0);
+  if( ni->packets->set[setid].page_offset >= 0 ) {
+    p = __ci_pkt_buf_map(ni, ni->packets->set[setid].page_offset);
     if( p == (void *)-1) {
       if( errno == EACCES ) {
         ci_log("Failed to mmap packet buffer for [%s] with errno=EACCES.\n"
@@ -46,8 +61,8 @@ ci_ip_pkt_fmt* __ci_netif_pkt(ci_netif* ni, unsigned id)
                ni->state->pretty_name);
       }
       else {
-        ci_log("%s: shmat(0x%x) failed for pkt set %d (%d)", __FUNCTION__,
-               ni->packets->set[setid].shm_id, setid, -errno);
+        ci_log("%s: mmap(0x%08x) failed for pkt set %d (%d)", __FUNCTION__,
+               ni->packets->set[setid].page_offset, setid, -errno);
       }
       goto out;
     }

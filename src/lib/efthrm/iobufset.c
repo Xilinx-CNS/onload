@@ -46,195 +46,31 @@
 #include <onload/tcp_driver.h>
 #include "ci/driver/kernel_compat.h"
 
-
-/************** IO page operations ****************/
+/************** Alloc/free page set ****************/
 
 void oo_iobufset_kfree(struct oo_buffer_pages *pages)
 {
-
   if( (void *)(pages + 1) != (void *)pages->pages )
     kfree(pages->pages);
   kfree(pages);
 }
 
-#ifdef OO_DO_HUGE_PAGES
-
-#define OO_SHM_KEY_BASE 0xefab
-#define OO_SHM_KEY(id) (OO_SHM_KEY_BASE | (id << 16))
-#define OO_SHM_KEY_ID_MASK 0xffff
-#define OO_SHM_NEXT_ID(id) ((id + 1) & OO_SHM_KEY_ID_MASK)
-
-static int oo_bufpage_huge_alloc(struct oo_buffer_pages *p, int *flags)
-{
-  int shmid = -1;
-  long uaddr;
-  static unsigned volatile last_key_id = 0;
-  unsigned start_key_id;
-  unsigned id;
-  int rc;
-  const struct cred *orig_creds = NULL;
-  struct cred *creds = NULL;
-  struct vm_area_struct* vma;
-
-  ci_assert( current->mm );
-
-  /* sys_shmget(SHM_HUGETLB) need CAP_IPC_LOCK.
-   * So, we give this capability and reset it back.
-   * Since we modify per-thread capabilities,
-   * there are no side effects. */
-  if (~current_cred()->cap_effective.cap[0] & (1 << CAP_IPC_LOCK)) {
-    creds = prepare_creds();
-    if( creds != NULL ) {
-      creds->cap_effective.cap[0] |= 1 << CAP_IPC_LOCK;
-      orig_creds = override_creds(creds);
-    }
-  }
-
-  /* Simultaneous access to last_key_id is possible, but we do not care.
-   * It is just a hint where we should look for free ids. */
-  start_key_id = last_key_id;
-
-  for (id = OO_SHM_NEXT_ID(start_key_id);
-       id != start_key_id;
-       id = OO_SHM_NEXT_ID(id)) {
-    /* NOTE: The flag SHM_HUGE_2MB was added in kernel 3.8. All supported
-     * kernels are newer than this so we don't need any kernel compat here. */
-    shmid = efab_linux_sys_shmget(OO_SHM_KEY(id), HPAGE_SIZE,
-                                  SHM_HUGETLB | IPC_CREAT | IPC_EXCL |
-                                  SHM_HUGE_2MB | SHM_R | SHM_W);
-    if (shmid == -EEXIST)
-      continue; /* try another id */
-    if (shmid < 0) {
-      if (shmid == -ENOMEM && !(*flags & OO_IOBUFSET_FLAG_HUGE_PAGE_FAILED) )
-        *flags |= OO_IOBUFSET_FLAG_HUGE_PAGE_FAILED;
-      rc = shmid;
-      goto out;
-    }
-    last_key_id = id;
-    break;
-  }
-  if (shmid < 0) {
-    ci_log("%s: Failed to allocate huge page: EEXIST", __func__);
-    last_key_id = 0; /* reset last_key_id */
-    rc = shmid;
-    goto out;
-  }
-
-  /* There is a somewhat intricate dance to be performed around the allocation
-   * of SHM segments and their IDs.  We need shmat() to work at user-level on
-   * the SHM segments for as long as the stack is not orphaned, but we also
-   * need to delete the segments from the context of the IPC namespace in which
-   * they were allocated.  To do the latter reliably, we delete the segments
-   * almost immediately after allocating them.  Deleted segments can still be
-   * attached as long as their reference-count never hits zero, which we
-   * arrange.  Everything eventually gets cleaned up when we release the last
-   * reference when freeing the oo_buffer_pages structure.  */
-
-  /* Map the SHM segment into our address space. */
-  uaddr = efab_linux_sys_shmat(shmid, NULL, 0);
-  if (uaddr < 0) {
-    rc = (int)uaddr;
-    goto fail3;
-  }
-
-  mmap_read_lock(current->mm);
-
-  /* Pin the pages. */
-  rc = pin_user_pages((unsigned long)uaddr, 1, FOLL_WRITE, &(p->pages[0]),
-                      NULL);
-  if (rc < 0) {
-    mmap_read_unlock(current->mm);
-    goto fail2;
-  }
-
-  /* Before we detach the segment, take out an extra reference to it. */
-  vma = find_vma(current->mm, (unsigned long) uaddr);
-  if (vma == NULL) {
-    mmap_read_unlock(current->mm);
-    /* This shouldn't be possible: we mapped the SHM successfully, so its vma
-     * had better be where we expect it to be. */
-    ci_assert(0);
-    rc = -ENOENT;
-    goto fail1;
-  }
-  vma->vm_ops->open(vma);
-
-  /* We need to use the close vm_op to release the reference when we're
-   * finished with it, but it won't be directly available in the context in
-   * which we'll need it, so take a note of it now. */
-  p->close = vma->vm_ops->close;
-  p->shm_map_file = vma->vm_file;
-  get_file(p->shm_map_file);
-
-  mmap_read_unlock(current->mm);
-
-  /* Now that we've ensured that the kernel will not free the SHM segment and
-   * we have pinned its pages, we have no further use for the UL mapping. */
-  rc = efab_linux_sys_shmdt((char __user *)uaddr);
-  if (rc < 0)
-    goto fail1;
-
-  /* While we're still in the right namespace, delete the segment.  Anyone who
-   * knows [shmid] can continue to attach to it. */
-  efab_linux_sys_shmctl(shmid, IPC_RMID, NULL);
-
-  p->shmid = shmid;
-  rc = 0;
-  goto out;
-
-fail1:
-  unpin_user_page(p->pages[0]);
-fail2:
-  efab_linux_sys_shmdt((char __user *)uaddr);
-fail3:
-  efab_linux_sys_shmctl(shmid, IPC_RMID, NULL);
-out:
-  if (orig_creds != NULL) {
-    revert_creds(orig_creds);
-    put_cred(creds);
-  }
-  return rc;
-}
-
-static void oo_bufpage_huge_free(struct oo_buffer_pages *p)
-{
-  struct vm_area_struct vma;
-
-  ci_assert(p->shmid >= 0);
-  ci_assert(current);
-
-  /* Release the reference to the SHM segment.  The only interface that we have
-   * to the function that does this is via the memory mapper, so we have to
-   * mock up a little bit of state.  This is pretty unpleasant.  We zero-
-   * initialise the vma to make any future kernel changes that break our
-   * assumptions about this interface more apparent. */
-  memset(&vma, 0, sizeof(vma));
-  vma.vm_file = p->shm_map_file;
-  p->close(&vma);
-  fput(p->shm_map_file);
-
-  unpin_user_page(p->pages[0]);
-  oo_iobufset_kfree(p);
-}
-#endif
- 
-
-/************** Alloc/free page set ****************/
 
 static void oo_iobufset_free_pages(struct oo_buffer_pages *pages)
 {
 #ifdef OO_DO_HUGE_PAGES
-  if( pages->shmid >= 0 )
-    oo_bufpage_huge_free(pages);
-  else
+  if( oo_hugetlb_page_valid(&pages->hugetlb_page) ) {
+    oo_hugetlb_page_free(&pages->hugetlb_page);
+  } else
 #endif
   {
     int i;
 
     for (i = 0; i < pages->n_bufs; ++i)
       __free_pages(pages->pages[i], compound_order(pages->pages[i]));
-    oo_iobufset_kfree(pages);
   }
+
+  oo_iobufset_kfree(pages);
 }
 
 
@@ -284,7 +120,7 @@ static int oo_bufpage_init(struct oo_buffer_pages **pages_out,
     return -ENOMEM;
   pages->n_bufs = n_bufs;
 #ifdef OO_DO_HUGE_PAGES
-  pages->shmid = -1;
+  oo_hugetlb_page_reset(&pages->hugetlb_page);
 #endif
   oo_atomic_set(&pages->ref_count, 1);
   *pages_out = pages;
@@ -294,7 +130,8 @@ static int oo_bufpage_init(struct oo_buffer_pages **pages_out,
 
 static int oo_bufpage_alloc(struct oo_buffer_pages **pages_out,
                             int user_order, int low_order, int min_nic_order,
-                            int *flags, int gfp_flag)
+                            int *flags, int gfp_flag,
+                            struct oo_hugetlb_allocator *hugetlb_alloc)
 {
   struct oo_buffer_pages *pages;
   int n_bufs = 1 << (user_order - low_order);
@@ -313,10 +150,19 @@ static int oo_bufpage_alloc(struct oo_buffer_pages **pages_out,
                  OO_IOBUFSET_FLAG_HUGE_PAGE_FORCE)) &&
       gfp_flag == GFP_KERNEL &&
       low_order == HPAGE_SHIFT - PAGE_SHIFT ) {
-    if (oo_bufpage_huge_alloc(pages, flags) == 0) {
-      *pages_out = pages;
-      return 0;
+
+    if( hugetlb_alloc ) {
+      rc = oo_hugetlb_page_alloc(hugetlb_alloc, &pages->hugetlb_page);
+      if( ! rc ) {
+        pages->pages[0] = pages->hugetlb_page.page;
+        *pages_out = pages;
+        return 0;
+      }
     }
+
+    /* Failure path. */
+    if( ! (*flags & OO_IOBUFSET_FLAG_HUGE_PAGE_FAILED) )
+      *flags |= OO_IOBUFSET_FLAG_HUGE_PAGE_FAILED;
   }
   if( *flags & OO_IOBUFSET_FLAG_HUGE_PAGE_FORCE ) {
     ci_assert_equal(low_order, HPAGE_SHIFT - PAGE_SHIFT);
@@ -360,7 +206,8 @@ void oo_iobufset_pages_release(struct oo_buffer_pages *pages)
 
 int
 oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
-                        struct oo_buffer_pages **pages_out)
+                        struct oo_buffer_pages **pages_out,
+                        struct oo_hugetlb_allocator *hugetlb_alloc)
 {
   int rc;
   int gfp_flag = (in_atomic() || in_interrupt()) ? GFP_ATOMIC : GFP_KERNEL;
@@ -374,7 +221,7 @@ oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
   if( *flags & OO_IOBUFSET_FLAG_HUGE_PAGE_FORCE ) {
 # ifdef OO_DO_HUGE_PAGES
     rc = oo_bufpage_alloc(pages_out, order, order, min_order, flags,
-                          gfp_flag);
+                          gfp_flag, hugetlb_alloc);
 # else
     rc = -ENOMEM;
 # endif
@@ -399,10 +246,11 @@ oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
       low_order = HPAGE_SHIFT - PAGE_SHIFT;
 
     rc = oo_bufpage_alloc(pages_out, order, low_order, min_order, flags,
-                          gfp_flag);
+                          gfp_flag, hugetlb_alloc);
 
     if( rc != 0 && low_order != 0 )
-      rc = oo_bufpage_alloc(pages_out, order, 0, min_order, flags, gfp_flag);
+      rc = oo_bufpage_alloc(pages_out, order, 0, min_order, flags, gfp_flag,
+                            hugetlb_alloc);
   }
 
   if( rc == -EMSGSIZE ) {

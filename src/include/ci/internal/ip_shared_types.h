@@ -871,7 +871,7 @@ typedef struct {
   oo_pkt_p              free;   /**< List of free packet buffers */
   ci_int32              n_free; /**< Number of buffers in free list */
 #if defined(CI_CFG_PKTS_AS_HUGE_PAGES)
-  CI_ULCONST ci_int32   shm_id; /**< shared memory id for huge page  */
+  CI_ULCONST ci_int32   page_offset;
 #endif
   CI_ULCONST ci_uint32  dma_addr_base; /**< Index into ci_netif::dma_addrs */
   ci_uint8              page_order; /**< Bitshift to get from packet ID to the
