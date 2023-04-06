@@ -25,6 +25,7 @@
 
 /* Forwards. */
 typedef struct tcp_helper_endpoint_s tcp_helper_endpoint_t;
+struct oo_hugetlb_allocator;
 
 
 struct tcp_helper_nic {
@@ -127,6 +128,11 @@ typedef struct tcp_helper_cluster_s {
    * keyed by local IP address. */
   struct efab_ephemeral_port_head* thc_ephem_table;
   uint32_t                         thc_ephem_table_entries;
+
+  /* We retain a reference to the hugepage allocator merely to share it with
+   * the tcp_helper_resource_t instances that use it for the packet buffer
+   * allocation. */
+  struct oo_hugetlb_allocator*    thc_pktbuf_alloc;
 } tcp_helper_cluster_t;
 
 
@@ -349,6 +355,9 @@ typedef struct tcp_helper_resource_s {
   struct file*          thc_efct_memfd;
   /* byte offset in thc_efct_memfd of the next hugepage to allocate */
   off_t                 thc_efct_memfd_off;
+
+  /* backing store for packet buffers */
+  struct oo_hugetlb_allocator* thc_pktbuf_alloc;
 
   ci_waitable_t         ready_list_waitqs[CI_CFG_N_READY_LISTS];
   ci_dllist             os_ready_lists[CI_CFG_N_READY_LISTS];

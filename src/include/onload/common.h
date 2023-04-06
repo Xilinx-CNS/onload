@@ -83,7 +83,8 @@ typedef struct ci_resource_onload_alloc_s {
   char                    in_name[CI_CFG_STACK_NAME_LEN + 1];
   int                     in_cluster_size;
   int                     in_cluster_restart;
-  int                     in_memfd;
+  int                     in_efct_memfd;
+  int                     in_pktbuf_memfd;
   efrm_nic_set_t          out_nic_set;
   ci_uint32               out_netif_mmap_bytes;
 } ci_resource_onload_alloc_t;
@@ -292,6 +293,11 @@ typedef struct {
   ci_user_ptr_t superbufs;
   ci_user_ptr_t current_mappings;
 } oo_efct_superbuf_config_refresh_t;
+
+typedef struct {
+  ci_uint32     offset;
+  ci_user_ptr_t addr;
+} oo_pkt_buf_map_t;
 
 /* Flags & types.  It could be enum if enum had fixed size. */
 typedef ci_uint16 oo_fd_flags;

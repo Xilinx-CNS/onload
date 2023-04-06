@@ -50,6 +50,7 @@
 #include "tcp_helper_stats_dump.h"
 #include <onload/tcp-ceph.h>
 #include <onload/tx_plugin.h>
+#include <kernel_utils/hugetlb.h>
 
 #ifdef NDEBUG
 # define DEBUG_STR  ""
@@ -3465,6 +3466,7 @@ tcp_helper_rm_alloc_proxy(ci_resource_onload_alloc_t* alloc,
     rc = tcp_helper_cluster_alloc_thr(alloc->in_name,
                                       alloc->in_cluster_size,
                                       alloc->in_cluster_restart,
+                                      alloc->in_pktbuf_memfd,
                                       in_flags,
                                       opts,
                                       &rs);
@@ -4581,14 +4583,35 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
 
   rs->thc_efct_memfd = NULL;
   rs->thc_efct_memfd_off = 0;
-  if( alloc->in_memfd >= 0 ) {
-    rs->thc_efct_memfd = fget(alloc->in_memfd);
+  if( alloc->in_efct_memfd >= 0 ) {
+    rs->thc_efct_memfd = fget(alloc->in_efct_memfd);
     if( ! rs->thc_efct_memfd ) {
       rc = -EBADF;
       OO_DEBUG_ERR(ci_log("%s: [%d] Bad fd for efct (%d).",
-                  __func__, NI_ID(ni), alloc->in_memfd));
+                  __func__, NI_ID(ni), alloc->in_efct_memfd));
       goto fail_memfd;
     }
+  }
+
+  if( thc && thc->thc_pktbuf_alloc ) {
+    rs->thc_pktbuf_alloc = oo_hugetlb_allocator_get(thc->thc_pktbuf_alloc);
+  } else {
+    rs->thc_pktbuf_alloc = oo_hugetlb_allocator_create(alloc->in_pktbuf_memfd);
+    if( IS_ERR(rs->thc_pktbuf_alloc) ) {
+      long rc = PTR_ERR(rs->thc_pktbuf_alloc);
+      rs->thc_pktbuf_alloc = NULL;
+
+      OO_DEBUG_ERR(ci_log("%s: [%d] Unable to create packet buffer hugetlb "
+                          "allocator (%ld).", __func__, NI_ID(ni), rc));
+
+      /* -EINVAL means we failed to pass the parameters around.
+       * Otherwise, we can carry on without hugepages. */
+      if( rc == -EINVAL )
+        goto fail_pktbuf_memfd;
+    }
+
+    if( thc && rs->thc_pktbuf_alloc )
+      thc->thc_pktbuf_alloc = oo_hugetlb_allocator_get(rs->thc_pktbuf_alloc);
   }
 
   /* Allocate hardware resources */
@@ -4845,6 +4868,10 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
   tcp_helper_stop_periodic_work(rs);
 #endif
 
+  if( rs->thc_pktbuf_alloc )
+    oo_hugetlb_allocator_put(rs->thc_pktbuf_alloc);
+
+ fail_pktbuf_memfd:
   if( rs->thc_efct_memfd )
     fput(rs->thc_efct_memfd);
  fail_memfd:
@@ -5900,6 +5927,8 @@ void tcp_helper_dtor(tcp_helper_resource_t* trs)
 
   release_netif_hw_resources(trs);
   release_netif_resources(trs);
+  if( trs->thc_pktbuf_alloc )
+    oo_hugetlb_allocator_put(trs->thc_pktbuf_alloc);
   if( trs->thc_efct_memfd )
     fput(trs->thc_efct_memfd);
 
@@ -6339,7 +6368,7 @@ efab_tcp_helper_iobufset_alloc(tcp_helper_resource_t* trs,
   }
 #endif
   rc = oo_iobufset_pages_alloc(HW_PAGES_PER_SET_S, min_nics_order, &flags,
-                               &pages);
+                               &pages, trs->thc_pktbuf_alloc);
   if( rc != 0 )
     return rc;
 #if CI_CFG_PKTS_AS_HUGE_PAGES
@@ -6673,6 +6702,9 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
 {
   struct oo_iobufset* iobrs[CI_CFG_MAX_INTERFACES];
   struct oo_buffer_pages* pages;
+#ifdef OO_DO_HUGE_PAGES
+  struct oo_hugetlb_page *hugetlb_page;
+#endif
   uint64_t *hw_addrs;
   ci_irqlock_state_t lock_flags;
   ci_netif* ni = &trs->netif;
@@ -6742,7 +6774,8 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
   ++ni->pkt_sets_n;
   ni->pkt_bufs[bufset_id] = pages;
 #ifdef OO_DO_HUGE_PAGES
-  if( oo_iobufset_get_shmid(pages) >= 0 )
+  hugetlb_page = oo_iobufset_get_hugetlb_page(pages);
+  if( hugetlb_page )
     CITP_STATS_NETIF_INC(ni, pkt_huge_pages);
 #endif
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
@@ -6763,9 +6796,10 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
   ni->packets->set[bufset_id].free = OO_PP_NULL;
   ni->packets->set[bufset_id].n_free = PKTS_PER_SET;
 #ifdef OO_DO_HUGE_PAGES
-  ni->packets->set[bufset_id].shm_id = oo_iobufset_get_shmid(pages);
+  ni->packets->set[bufset_id].page_offset =
+    hugetlb_page ? hugetlb_page->page->index * CI_HUGEPAGE_SIZE : -1;
 #else
-  ni->packets->set[bufset_id].shm_id = -1;
+  ni->packets->set[bufset_id].page_offset = -1;
 #endif
   ni->packets->set[bufset_id].dma_addr_base = ni->dma_addr_next;
   if( page_order > CI_CFG_PKTS_PER_SET_S ) {
@@ -8641,6 +8675,26 @@ int efab_tcp_helper_efct_superbuf_config_refresh(
                           (unsigned long)CI_USER_PTR_GET(op->superbufs),
                           CI_USER_PTR_GET(op->current_mappings),
                           op->max_superbufs);
+}
+
+int efab_tcp_helper_pkt_buf_map(tcp_helper_resource_t* trs,
+                                oo_pkt_buf_map_t* arg)
+{
+  unsigned long addr;
+
+  if( trs->thc_pktbuf_alloc->offset < arg->offset)
+    return -EINVAL;
+
+  addr = vm_mmap(trs->thc_pktbuf_alloc->filp, 0, CI_HUGEPAGE_SIZE,
+                 PROT_READ | PROT_WRITE,
+                 MAP_SHARED | MAP_HUGETLB | MAP_HUGE_2MB,
+                 arg->offset);
+
+  if( IS_ERR((void*)addr) )
+    return PTR_ERR((void*)addr);
+
+  CI_USER_PTR_SET(arg->addr, addr);
+  return 0;
 }
 
 static tcp_helper_resource_t*

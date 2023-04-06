@@ -244,6 +244,9 @@ enum {
                                OO_IOC_W(EFCT_SUPERBUF_CONFIG_REFRESH, \
                                         oo_efct_superbuf_config_refresh_t)
 
+  OO_OP_PKT_BUF_MAP,
+#define OO_IOC_PKT_BUF_MMAP OO_IOC_RW(PKT_BUF_MAP, oo_pkt_buf_map_t)
+
   OO_OP_CONTIG_END,  /* This is the last in range of contigous opcodes */
 
   /* Here come only placeholder for operations with arbitrary codes */

@@ -27,9 +27,6 @@
 #include <limits.h>
 #include <net/if.h>
 #include <ci/internal/efabcfg.h>
-#if CI_CFG_PKTS_AS_HUGE_PAGES
-#include <sys/shm.h>
-#endif
 #endif
 
 
@@ -488,8 +485,8 @@ void ci_netif_config_opts_defaults(ci_netif_config_opts* opts)
 # undef  CI_CFG_OPTGROUP
 # undef  CI_CFG_OPT
 # undef  CI_CFG_STR_OPT
-# define CI_CFG_OPT(env, name, type, doc, type_modifider, group,       \
-                    default, minimum, maximum, presentation)           \
+# define CI_CFG_OPT(env, name, type, doc, type_modifider, group,     \
+                    default, minimum, maximum, presentation)	      \
   opts->name = default;
 
 # define CI_CFG_STR_OPT(env, name, type, doc, type_modifider, group,   \
@@ -595,13 +592,13 @@ void ci_netif_config_opts_rangecheck(ci_netif_config_opts* opts)
 #define CI_CFG_STR_OPT(...)
 
 #define CI_CFG_OPT(env, name, type, doc, bits, group, default, minimum, maximum, pres) \
-{ type _val = opts->name;                                                 \
-  type _max;                                                              \
-  type _min;                                                              \
+{ type _val = opts->name;					          \
+  type _max;								  \
+  type _min;								  \
   _optbits=sizeof(type)*8;                                                \
-  _bitwidth=_CI_CFG_BITVAL##bits;                                         \
+  _bitwidth=_CI_CFG_BITVAL##bits;					  \
   MIN = 0;                                                                \
-  MAX = ((1ull<<(_bitwidth-1))<<1) - 1ull;                                \
+  MAX = ((1ull<<(_bitwidth-1))<<1) - 1ull;       			  \
   SMAX = MAX >> 1; SMIN = -SMAX-1;                                        \
   _max = (type)(maximum); /* try to stop the compiler warning */          \
   _min = (type)(minimum); /* about silly comparisons          */          \
@@ -1748,8 +1745,8 @@ static void netif_tcp_helper_munmap(ci_netif* ni)
     for( id = 0; id < ni->packets->sets_n; id++ ) {
       if( PKT_BUFSET_U_MMAPPED(ni, id) ) {
 #if CI_CFG_PKTS_AS_HUGE_PAGES
-        if( ni->packets->set[id].shm_id >= 0 )
-          rc = shmdt(ni->pkt_bufs[id]);
+        if( ni->packets->set[id].page_offset >= 0 )
+          rc = munmap(ni->pkt_bufs[id], CI_HUGEPAGE_SIZE);
         else
 #endif
         {
@@ -2399,15 +2396,25 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
   if( name != NULL )
     strncpy(ra->in_name, name, CI_CFG_STACK_NAME_LEN);
 
-  ra->in_memfd = -1;
+  ra->in_efct_memfd = -1;
+  ra->in_pktbuf_memfd = -1;
   /* The kernel code can cope with no memfd being provided, but only on older
    * kernels */
   {
     char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
     snprintf(mfd_name, sizeof(mfd_name), "efct/%s", name);
-    ra->in_memfd = syscall(__NR_memfd_create, mfd_name,
-                           MFD_CLOEXEC | MFD_HUGETLB);
-    if( ra->in_memfd < 0 && errno != ENOSYS )
+    ra->in_efct_memfd = syscall(__NR_memfd_create, mfd_name,
+                                MFD_CLOEXEC | MFD_HUGETLB);
+    if( ra->in_efct_memfd < 0 && errno != ENOSYS )
+      LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
+  }
+  /* Packet buffers */
+  {
+    char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
+    snprintf(mfd_name, sizeof(mfd_name), "pktbuf/%s", name);
+    ra->in_pktbuf_memfd = syscall(__NR_memfd_create, mfd_name,
+                                  MFD_CLOEXEC | MFD_HUGETLB);
+    if( ra->in_pktbuf_memfd < 0 && errno != ENOSYS )
       LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
   }
 }
@@ -2433,8 +2440,11 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
    * we get an EINTR and want to try again. */
   while( (rc = oo_resource_alloc(fd, &ra)) == -EINTR );
 
-  if( ra.in_memfd >= 0 )
-    ci_sys_close(ra.in_memfd);
+  if( ra.in_efct_memfd >= 0 )
+    ci_sys_close(ra.in_efct_memfd);
+
+  if( ra.in_pktbuf_memfd >= 0 )
+    ci_sys_close(ra.in_pktbuf_memfd);
 
   if( rc < 0 ) {
     switch( rc ) {

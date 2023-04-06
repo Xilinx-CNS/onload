@@ -20,6 +20,7 @@
 #include <ci/efrm/vi_set.h>
 #include <onload/nic.h>
 #include <onload/drv/dump_to_user.h>
+#include <kernel_utils/hugetlb.h>
 
 
 #if CI_CFG_ENDPOINT_MOVE
@@ -168,7 +169,8 @@ static int /*bool*/ thc_has_live_stacks(tcp_helper_cluster_t* thc)
 static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
                      uid_t euid, int cluster_size, int ephemeral_port_count,
                      unsigned ephem_table_entries, unsigned flags,
-                     struct net* netns, tcp_helper_cluster_t** thc_out)
+                     struct net* netns, tcp_helper_resource_t* thr,
+                     tcp_helper_cluster_t** thc_out)
 {
   int rc, i;
   int rss_flags;
@@ -229,6 +231,11 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
   init_waitqueue_head(&thc->thr_release_done);
   thc->thc_switch_port        = 0;
   thc->thc_switch_addr        = addr_any;
+  thc->thc_pktbuf_alloc       = NULL;
+
+  if( thr && thr->thc_pktbuf_alloc ) {
+    thc->thc_pktbuf_alloc = oo_hugetlb_allocator_get(thr->thc_pktbuf_alloc);
+  }
 
   if( flags & THC_FLAG_PREALLOC_LPORTS ) {
     /* We know on this path that shared local ports are not per-IP, so pass
@@ -242,6 +249,8 @@ static int thc_alloc(const char* cluster_name, int protocol, int port_be16,
       tcp_helper_free_ephemeral_ports(thc->thc_ephem_table,
                                       thc->thc_ephem_table_entries);
       tcp_helper_put_ns_components(thc->thc_cplane, thc->thc_filter_ns);
+      if( thc->thc_pktbuf_alloc )
+        oo_hugetlb_allocator_put(thc->thc_pktbuf_alloc);
       kfree(thc->thc_thr_rrobin);
       kfree(thc);
       return rc;
@@ -440,6 +449,8 @@ static void thc_cluster_free(tcp_helper_cluster_t* thc)
   for( i = 0; i < CI_CFG_MAX_HWPORTS; ++i )
     if( thc->thc_vi_set[i] != NULL )
       efrm_vi_set_release(thc->thc_vi_set[i]);
+  if( thc->thc_pktbuf_alloc )
+    oo_hugetlb_allocator_put(thc->thc_pktbuf_alloc);
   kfree(thc->thc_thr_rrobin);
   ci_assert(ci_dllist_is_empty(&thc->thc_tlos));
   kfree(thc);
@@ -833,6 +844,7 @@ static void thc_round_robin_add(tcp_helper_cluster_t*   thc,
 static int thc_alloc_thr(tcp_helper_cluster_t* thc,
                          int cluster_restart_opt,
                          int cluster_hot_restart_opt,
+                         int pktbuf_memfd,
                          const ci_netif_config_opts* ni_opts,
                          int ni_flags,
                          tcp_helper_resource_t** thr_out)
@@ -879,6 +891,7 @@ static int thc_alloc_thr(tcp_helper_cluster_t* thc,
                               CI_NETIF_FLAG_IN_DL_CONTEXT);
   strncpy(roa.in_version, onload_version, sizeof(roa.in_version));
   strncpy(roa.in_uk_intf_ver, oo_uk_intf_ver, sizeof(roa.in_uk_intf_ver));
+  roa.in_pktbuf_memfd = pktbuf_memfd;
   if( (opts = kmalloc(sizeof(*opts), GFP_KERNEL)) == NULL )
     return -ENOMEM;
   memcpy(opts, ni_opts, sizeof(*opts));
@@ -1165,6 +1178,7 @@ static int tcp_helper_cluster_thc_flags(const ci_netif_config_opts* ni_opts)
 int tcp_helper_cluster_alloc_thr(const char* cname,
                                  int cluster_size,
                                  int cluster_restart,
+                                 int pktbuf_memfd,
                                  int ni_flags,
                                  const ci_netif_config_opts* ni_opts,
                                  tcp_helper_resource_t** thr_out)
@@ -1195,7 +1209,7 @@ int tcp_helper_cluster_alloc_thr(const char* cname,
                    ni_opts->tcp_shared_local_ports,
                    CI_MAX(ni_opts->tcp_shared_local_ports,
                           ni_opts->tcp_shared_local_ports_max), thc_flags,
-                   current->nsproxy->net_ns, &thc);
+                   current->nsproxy->net_ns, /* thr */ NULL, &thc);
     if( rc < 0 )
       goto fail;
     thc_alloced = 1;
@@ -1204,7 +1218,8 @@ int tcp_helper_cluster_alloc_thr(const char* cname,
     goto fail;
   }
 
-  rc = thc_alloc_thr(thc, cluster_restart, 0, ni_opts, ni_flags, &thr);
+  rc = thc_alloc_thr(thc, cluster_restart, /* cluster_hot_restart_opt */ 0,
+                     pktbuf_memfd, ni_opts, ni_flags, &thr);
 
  fail:
   mutex_unlock(&thc_mutex);
@@ -1469,7 +1484,7 @@ int efab_tcp_helper_reuseport_bind(ci_private_t *priv, void *arg)
                       trb->cluster_size, NI_OPTS(ni).tcp_shared_local_ports,
                       CI_MAX(NI_OPTS(ni).tcp_shared_local_ports,
                              NI_OPTS(ni).tcp_shared_local_ports_max),
-                      flags, netns, &thc)) != 0 )
+                      flags, netns, priv->thr, &thc)) != 0 )
       goto alloc_fail;
 
   alloced = 1;
@@ -1502,8 +1517,13 @@ int efab_tcp_helper_reuseport_bind(ci_private_t *priv, void *arg)
     if( thc_is_scalable(thc->thc_flags) &&
         ! (thc->thc_flags & THC_FLAG_TPROXY) )
       drop_flags = 0;
+
+    /* There's no pktbuf_memfd at hand at this point, but it's not a problem
+     * because the newly created THR will get an instance of the already
+     * existing hugepage allocator from THC. */
     rc = thc_alloc_thr(thc, trb->cluster_restart_opt,
                        trb->cluster_hot_restart_opt,
+                       /* pktbuf_memfd */ -1,
                        &ni->opts,
                        ni->flags | drop_flags,
                        &thr);
