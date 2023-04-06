@@ -320,6 +320,7 @@ static int oo_bufpage_alloc(struct oo_buffer_pages **pages_out,
   }
   if( *flags & OO_IOBUFSET_FLAG_HUGE_PAGE_FORCE ) {
     ci_assert_equal(low_order, HPAGE_SHIFT - PAGE_SHIFT);
+    oo_iobufset_kfree(pages);
     return -ENOMEM;
   }
 #endif
