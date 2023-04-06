@@ -171,6 +171,16 @@ static inline void unpin_user_page(struct page *page)
 }
 #endif
 
+#ifndef EFRM_GUP_HAS_DMA_PINNED
+/* page_maybe_dma_pinned() was not added at the same time as pin_user_pages(),
+ * but shortly after, around linux-5.7. We could mimic it, but the real value
+ * for us is the post linux-6.1 kernels, which may change the pinning semantics
+ * and break our assumptions that vm_munmap() does not unpin pages. */
+static inline bool page_maybe_dma_pinned(struct page *page)
+{
+  return true;
+}
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4,10,0)
 #define VM_FAULT_ADDRESS(_vmf) (_vmf)->address

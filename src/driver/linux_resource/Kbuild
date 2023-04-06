@@ -10,4 +10,5 @@ obj-m := $(RESOURCE_TARGET)
 sfc_resource-objs := $(RESOURCE_SRCS:%.c=%.o) \
                      $(EFHW_SRCS:%.c=../../lib/efhw/%.o) \
                      $(EFRM_SRCS:%.c=../../lib/efrm/%.o) \
+                     $(UTILS_SRCS:%.c=../../lib/kernel_utils/%.o) \
                      $($(ARCH)_TARGET_SRCS:%.c=%.o)
