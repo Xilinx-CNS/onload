@@ -37,7 +37,7 @@ EFRM_SRCS	:=			\
 		vi_allocator.c		\
 		buddy.c			\
 		bt_manager.c		\
-		driver_object.c         \
+		driver_object.c		\
 		licensing.c
 
 EFRM_HDRS	:= efrm_internal.h efrm_vi.h efrm_vi_set.h \

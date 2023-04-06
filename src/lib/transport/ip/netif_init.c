@@ -488,8 +488,8 @@ void ci_netif_config_opts_defaults(ci_netif_config_opts* opts)
 # undef  CI_CFG_OPTGROUP
 # undef  CI_CFG_OPT
 # undef  CI_CFG_STR_OPT
-# define CI_CFG_OPT(env, name, type, doc, type_modifider, group,     \
-                    default, minimum, maximum, presentation)	      \
+# define CI_CFG_OPT(env, name, type, doc, type_modifider, group,       \
+                    default, minimum, maximum, presentation)           \
   opts->name = default;
 
 # define CI_CFG_STR_OPT(env, name, type, doc, type_modifider, group,   \
@@ -595,13 +595,13 @@ void ci_netif_config_opts_rangecheck(ci_netif_config_opts* opts)
 #define CI_CFG_STR_OPT(...)
 
 #define CI_CFG_OPT(env, name, type, doc, bits, group, default, minimum, maximum, pres) \
-{ type _val = opts->name;					          \
-  type _max;								  \
-  type _min;								  \
+{ type _val = opts->name;                                                 \
+  type _max;                                                              \
+  type _min;                                                              \
   _optbits=sizeof(type)*8;                                                \
-  _bitwidth=_CI_CFG_BITVAL##bits;					  \
+  _bitwidth=_CI_CFG_BITVAL##bits;                                         \
   MIN = 0;                                                                \
-  MAX = ((1ull<<(_bitwidth-1))<<1) - 1ull;       			  \
+  MAX = ((1ull<<(_bitwidth-1))<<1) - 1ull;                                \
   SMAX = MAX >> 1; SMIN = -SMAX-1;                                        \
   _max = (type)(maximum); /* try to stop the compiler warning */          \
   _min = (type)(minimum); /* about silly comparisons          */          \
@@ -2471,7 +2471,7 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
    */
   ni->nic_set = ra.out_nic_set;
   LOG_NC(ci_log("%s: nic set %" EFRM_NIC_SET_FMT, __FUNCTION__,
-	                efrm_nic_set_pri_arg(&ni->nic_set)));
+                efrm_nic_set_pri_arg(&ni->nic_set)));
   ni->mmap_bytes = ra.out_netif_mmap_bytes;
 
   /****************************************************************************
@@ -2499,7 +2499,7 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
 
   if( ns->flags & CI_NETIF_FLAG_ONLOAD_UNSUPPORTED ) {
     ci_log("*** Warning: use of %s with this adapter is likely",
-	   onload_product);
+           onload_product);
     ci_log("***  to show suboptimal performance for all cases other than the");
     ci_log("***  most trivial benchmarks.  Please see your Solarflare");
     ci_log("***  representative/reseller to obtain an Onload-capable");
