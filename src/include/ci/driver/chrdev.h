@@ -43,8 +43,14 @@ ci_inline void destroy_chrdev_and_mknod(struct ci_chrdev_registration* reg)
 }
 
 
+#ifdef EFRM_CLASS_DEVNODE_DEV_IS_CONST
+/* Linux >= 6.2 */
+ci_inline char* chrdev_devnode_set_mode(const struct device* dev,
+                                        umode_t* mode)
+#else
 ci_inline char* chrdev_devnode_set_mode(struct device* dev,
                                         umode_t* mode)
+#endif
 {
   if( mode )
     *mode = (umode_t)(uintptr_t)dev_get_drvdata(dev);
