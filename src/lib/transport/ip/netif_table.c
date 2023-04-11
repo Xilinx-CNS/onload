@@ -52,17 +52,17 @@ ci_inline ci_uint32 OCCUPIED(ci_netif_filter_table_entry_fast* entry)
   return ~STATE(entry) & EMPTY & TOMBSTONE;
 }
 
-#define __ID(entry) ((entry)->__id_and_state & FILTER_TABLE_ID_MASK)
+#define __CI_TBL_ID(entry) ((entry)->__id_and_state & FILTER_TABLE_ID_MASK)
 ci_inline ci_uint32 ID(ci_netif_filter_table_entry_fast* entry)
 {
   ci_assert(OCCUPIED(entry));
-  return __ID(entry);
+  return __CI_TBL_ID(entry);
 }
 
 ci_inline void
 set_entry_state(ci_netif_filter_table_entry_fast* entry, ci_uint32 state)
 {
-  entry->__id_and_state = __ID(entry) | state;
+  entry->__id_and_state = __CI_TBL_ID(entry) | state;
 }
 
 #if OO_DO_STACK_POLL
@@ -382,7 +382,7 @@ ci_ip4_netif_filter_insert(ci_netif_filter_table* tbl,
                 CI_IP_PROTOCOL_STR(protocol),
     ip_addr_str(laddr), (unsigned) CI_BSWAP_BE16(lport),
     ip_addr_str(raddr), (unsigned) CI_BSWAP_BE16(rport),
-    first, hash2, hash1, STATE(entry), __ID(entry), hops));
+    first, hash2, hash1, STATE(entry), __CI_TBL_ID(entry), hops));
 
 #if CI_CFG_STATS_NETIF
   if( hops > netif->state->stats.table_max_hops )
