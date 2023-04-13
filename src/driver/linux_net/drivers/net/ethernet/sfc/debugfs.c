@@ -144,7 +144,7 @@ void efx_fini_debugfs_child(struct dentry *dir, const char *name)
  * to subdirectories.
  */
 static void efx_fini_debugfs_dir(struct dentry *dir,
-				 struct efx_debugfs_parameter *params,
+				 const struct efx_debugfs_parameter *params,
 				 const char *const *symlink_names)
 {
 	if (!dir)
@@ -303,7 +303,7 @@ int efx_debugfs_read_string(struct seq_file *file, void *data)
  */
 static int
 efx_init_debugfs_files(struct dentry *parent,
-		       struct efx_debugfs_parameter *params, u64 ignore,
+		       const struct efx_debugfs_parameter *params, u64 ignore,
 		       void *(*get_struct)(void *, unsigned int),
 		       void *ref, unsigned int struct_index)
 {
@@ -415,8 +415,17 @@ void efx_fini_debugfs_netdev(struct net_device *net_dev)
 	efx->debug_symlink = NULL;
 }
 
+void efx_update_debugfs_netdev(struct efx_nic *efx)
+{
+	mutex_lock(&efx->debugfs_symlink_mutex);
+	if (efx->debug_symlink)
+		efx_fini_debugfs_netdev(efx->net_dev);
+	efx_init_debugfs_netdev(efx->net_dev);
+	mutex_unlock(&efx->debugfs_symlink_mutex);
+}
+
 /* Per-port parameters */
-static struct efx_debugfs_parameter efx_debugfs_port_parameters[] = {
+static const struct efx_debugfs_parameter efx_debugfs_port_parameters[] = {
 	EFX_NAMED_PARAMETER(enabled, struct efx_nic, port_enabled,
 			    bool, efx_debugfs_read_bool),
 #if defined(EFX_USE_KCOMPAT) && !defined(NETIF_F_LRO)
@@ -461,7 +470,7 @@ static void *efx_debugfs_get_same(void *ref, unsigned int index)
  */
 int efx_extend_debugfs_port(struct efx_nic *efx,
 			    void *structure, u64 ignore,
-			    struct efx_debugfs_parameter *params)
+			    const struct efx_debugfs_parameter *params)
 {
 	if (WARN_ON(!efx->debug_port_dir))
 		return -ENOENT;
@@ -479,12 +488,12 @@ int efx_extend_debugfs_port(struct efx_nic *efx,
  * for @efx using efx_extend_debugfs_port().
  */
 void efx_trim_debugfs_port(struct efx_nic *efx,
-			   struct efx_debugfs_parameter *params)
+			   const struct efx_debugfs_parameter *params)
 {
 	struct dentry *dir = efx->debug_port_dir;
 
 	if (dir) {
-		struct efx_debugfs_parameter *field;
+		const struct efx_debugfs_parameter *field;
 		for (field = params; field->name; field++)
 			efx_fini_debugfs_child(dir, field->name);
 	}
@@ -509,7 +518,7 @@ static int ef100_vdpa_debugfs_read_filter_list(struct seq_file *file, void *data
 }
 
 /* Per vdpa parameters */
-static struct efx_debugfs_parameter efx_debugfs_vdpa_parameters[] = {
+static const struct efx_debugfs_parameter efx_debugfs_vdpa_parameters[] = {
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, vdpa_state),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, pf_index),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_nic, vf_index),
@@ -579,7 +588,8 @@ void efx_fini_debugfs_vdpa(struct ef100_vdpa_nic *vdpa)
 }
 
 /* Per vring parameters */
-static struct efx_debugfs_parameter efx_debugfs_vdpa_vring_parameters[] = {
+static const
+struct efx_debugfs_parameter efx_debugfs_vdpa_vring_parameters[] = {
 	EFX_UINT_PARAMETER(struct ef100_vdpa_vring_info, size),
 	EFX_USHORT_PARAMETER(struct ef100_vdpa_vring_info, vring_state),
 	EFX_UINT_PARAMETER(struct ef100_vdpa_vring_info, last_avail_idx),
@@ -648,14 +658,15 @@ err_mem:
  */
 void efx_fini_debugfs_vdpa_vring(struct ef100_vdpa_vring_info *vdpa_vring)
 {
-	efx_fini_debugfs_dir(vdpa_vring->debug_dir,
-			     efx_debugfs_vdpa_vring_parameters, NULL);
+	if (vdpa_vring->debug_dir)
+		efx_fini_debugfs_dir(vdpa_vring->debug_dir,
+				     efx_debugfs_vdpa_vring_parameters, NULL);
 	vdpa_vring->debug_dir = NULL;
 }
 #endif
 
 /* Per-TX-queue parameters */
-static struct efx_debugfs_parameter efx_debugfs_tx_queue_parameters[] = {
+static const struct efx_debugfs_parameter efx_debugfs_tx_queue_parameters[] = {
 	EFX_UINT_PARAMETER(struct efx_tx_queue, queue),
 	EFX_UINT_PARAMETER(struct efx_tx_queue, insert_count),
 	EFX_UINT_PARAMETER(struct efx_tx_queue, write_count),
@@ -762,7 +773,7 @@ static void efx_fini_debugfs_tx_queue(struct efx_tx_queue *tx_queue)
 }
 
 /* Per-RX-queue parameters */
-static struct efx_debugfs_parameter efx_debugfs_rx_queue_parameters[] = {
+static const struct efx_debugfs_parameter efx_debugfs_rx_queue_parameters[] = {
 	EFX_UINT_PARAMETER(struct efx_rx_queue, added_count),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, removed_count),
 	EFX_UINT_PARAMETER(struct efx_rx_queue, max_fill),
@@ -884,7 +895,7 @@ static void efx_fini_debugfs_rx_queue(struct efx_rx_queue *rx_queue)
 }
 
 /* Per-channel parameters */
-static struct efx_debugfs_parameter efx_debugfs_channel_parameters[] = {
+static const struct efx_debugfs_parameter efx_debugfs_channel_parameters[] = {
 	EFX_BOOL_PARAMETER(struct efx_channel, enabled),
 	EFX_INT_PARAMETER(struct efx_channel, irq),
 	EFX_UINT_PARAMETER(struct efx_channel, irq_moderation_us),
@@ -1011,7 +1022,7 @@ static int efx_nic_debugfs_read_tx_channels(struct seq_file *file, void *data)
 }
 
 /* Per-NIC parameters */
-static struct efx_debugfs_parameter efx_debugfs_nic_parameters[] = {
+static const struct efx_debugfs_parameter efx_debugfs_nic_parameters[] = {
 	/* Runbench requires we call this n_rx_queues and use decimal format */
 	{.name = "n_rx_queues",
 	 .offset = 0,
@@ -1035,7 +1046,8 @@ static struct efx_debugfs_parameter efx_debugfs_nic_parameters[] = {
 };
 
 /* Per-NIC error counts */
-static struct efx_debugfs_parameter efx_debugfs_nic_error_parameters[] = {
+static const
+struct efx_debugfs_parameter efx_debugfs_nic_error_parameters[] = {
 	EFX_ATOMIC_PARAMETER(struct efx_nic_errors, missing_event),
 	EFX_ATOMIC_PARAMETER(struct efx_nic_errors, rx_reset),
 	EFX_ATOMIC_PARAMETER(struct efx_nic_errors, rx_desc_fetch),

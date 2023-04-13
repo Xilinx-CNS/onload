@@ -76,7 +76,7 @@ struct efx_mcdi_filter_table {
 	/* are the filters meant to be on the NIC */
 	bool push_filters;
 	/* Function to get addresses from */
-	struct efx_mcdi_filter_addr_source addr_source;
+	const struct efx_mcdi_filter_addr_ops *addr_ops;
 	/* Shadow of net_device address lists, guarded by mac_lock */
 	struct efx_mcdi_dev_addr dev_uc_list[EFX_MCDI_FILTER_DEV_UC_MAX];
 	struct efx_mcdi_dev_addr dev_mc_list[EFX_MCDI_FILTER_DEV_MC_MAX];
@@ -139,7 +139,7 @@ static u32 efx_mcdi_filter_make_filter_id(unsigned int pri, u16 idx)
 	return pri * EFX_MCDI_FILTER_TBL_ROWS * 2 + idx;
 }
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 static void efx_debugfs_read_dev_list(struct seq_file *file,
 				      struct efx_mcdi_dev_addr *dev_list,
 				      size_t list_len)
@@ -204,12 +204,12 @@ int efx_debugfs_read_filter_list(struct seq_file *file, void *data)
 	return 0;
 }
 
-static struct efx_debugfs_parameter efx_debugfs[] = {
+static const struct efx_debugfs_parameter efx_debugfs[] = {
 	_EFX_RAW_PARAMETER(filters, efx_debugfs_read_filter_list),
 	{NULL}
 };
 
-static struct efx_debugfs_parameter filter_debugfs[] = {
+static const struct efx_debugfs_parameter filter_debugfs[] = {
 	EFX_INT_PARAMETER(struct efx_mcdi_filter_table, dev_uc_count),
 	EFX_INT_PARAMETER(struct efx_mcdi_filter_table, dev_mc_count),
 	_EFX_PARAMETER(struct efx_mcdi_filter_table, dev_uc_list,
@@ -229,7 +229,15 @@ static struct efx_debugfs_parameter filter_debugfs[] = {
 #endif
 	{NULL}
 };
-#endif
+#else	/* CONFIG_DEBUG_FS */
+static const struct efx_debugfs_parameter efx_debugfs[] = {
+	{NULL}
+};
+
+static const struct efx_debugfs_parameter filter_debugfs[] = {
+	{NULL}
+};
+#endif	/* CONFIG_DEBUG_FS */
 
 static bool efx_mcdi_filter_vlan_filter(struct efx_nic *efx)
 {
@@ -1799,6 +1807,122 @@ static int efx_mcdi_filter_match_flags_from_mcdi(bool encap, u32 mcdi_flags)
 	return match_flags;
 }
 
+void efx_mcdi_filter_uc_addr(struct efx_nic *efx,
+			     const struct efx_mcdi_dev_addr *addr)
+{
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	WARN_ON(!mutex_is_locked(&efx->mac_lock));
+
+	if (table->dev_uc_count >= EFX_MCDI_FILTER_DEV_UC_MAX) {
+		table->uc_promisc = true;
+		return;
+	}
+
+	table->dev_uc_list[table->dev_uc_count++] = *addr;
+}
+
+void efx_mcdi_filter_mc_addr(struct efx_nic *efx,
+			     const struct efx_mcdi_dev_addr *addr)
+{
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	WARN_ON(!mutex_is_locked(&efx->mac_lock));
+
+	if (table->dev_mc_count >= EFX_MCDI_FILTER_DEV_MC_MAX) {
+		table->mc_promisc = true;
+		table->mc_overflow = true;
+		return;
+	}
+
+	table->dev_mc_list[table->dev_mc_count++] = *addr;
+}
+
+static void efx_mcdi_filter_netdev_uc_addrs(struct efx_nic *efx,
+					    bool *uc_promisc)
+{
+	struct net_device *net_dev = efx->net_dev;
+	struct efx_mcdi_dev_addr addr;
+	struct netdev_hw_addr *uc;
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_UCAST])
+		return;
+#endif
+#endif
+
+	/* Copy/convert the address lists; add the primary station
+	 * address and broadcast address
+	 */
+	*uc_promisc = !!(net_dev->flags & IFF_PROMISC);
+
+	ether_addr_copy(addr.addr, net_dev->dev_addr);
+	efx_mcdi_filter_uc_addr(efx, &addr);
+	netdev_for_each_uc_addr(uc, net_dev) {
+		ether_addr_copy(addr.addr, uc->addr);
+		efx_mcdi_filter_uc_addr(efx, &addr);
+	}
+}
+
+static void efx_mcdi_filter_netdev_mc_addrs(struct efx_nic *efx,
+					    bool *mc_promisc)
+{
+	struct net_device *net_dev = efx->net_dev;
+	struct efx_mcdi_dev_addr addr;
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
+	struct netdev_hw_addr *mc;
+#else
+	struct dev_mc_list *mc;
+#endif
+
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_SFC_DRIVERLINK
+	struct efx_mcdi_filter_table *table = efx->filter_state;
+
+	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST])
+		return;
+#endif
+#endif
+
+	*mc_promisc = !!(net_dev->flags & (IFF_PROMISC | IFF_ALLMULTI));
+
+	netdev_for_each_mc_addr(mc, net_dev) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
+		ether_addr_copy(addr.addr, mc->addr);
+#else
+		ether_addr_copy(addr.addr, mc->dmi_addr);
+#endif
+		efx_mcdi_filter_mc_addr(efx, &addr);
+	}
+}
+
+static void efx_mcdi_filter_netdev_get_addrs(struct efx_nic *efx,
+					     bool *uc_promisc,
+					     bool *mc_promisc)
+{
+	struct net_device *net_dev = efx->net_dev;
+
+	/* If we're currently resetting, then this isn't going to go well (and
+	 * we'll try it again when the reset is complete).  So skip it.
+	 * This is typically triggered by adding a new UDP tunnel port and
+	 * adding a multicast address (for the UDP tunnel) at the same time.
+	 */
+	if (!netif_device_present(net_dev))
+		return;
+
+	netif_addr_lock_bh(net_dev);
+	efx_mcdi_filter_netdev_uc_addrs(efx, uc_promisc);
+	efx_mcdi_filter_netdev_mc_addrs(efx, mc_promisc);
+	netif_addr_unlock_bh(net_dev);
+}
+
+static const struct efx_mcdi_filter_addr_ops efx_netdev_addr_ops = {
+	.get_addrs = efx_mcdi_filter_netdev_get_addrs,
+};
+
 static struct efx_mcdi_filter_vlan *
 efx_mcdi_filter_find_vlan(struct efx_nic *efx, u16 vid)
 {
@@ -2075,19 +2199,18 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool rss_limited,
 	init_rwsem(&table->lock);
 
 	/* default to netdev address source */
-	efx_mcdi_filter_set_addr_source(efx,
-					efx_mcdi_filter_netdev_addr_source());
+	efx_mcdi_filter_set_addr_ops(efx, &efx_netdev_addr_ops);
 
 	return 0;
 }
 
 void
-efx_mcdi_filter_set_addr_source(struct efx_nic *efx,
-				struct efx_mcdi_filter_addr_source addr_source)
+efx_mcdi_filter_set_addr_ops(struct efx_nic *efx,
+			     const struct efx_mcdi_filter_addr_ops *addr_ops)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 
-	table->addr_source = addr_source;
+	table->addr_ops = addr_ops;
 }
 
 int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
@@ -2117,10 +2240,8 @@ int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 	if (rc)
 		goto fail;
 
-#ifdef CONFIG_SFC_DEBUGFS
 	efx_extend_debugfs_port(efx, efx, 0, efx_debugfs);
 	efx_extend_debugfs_port(efx, efx->filter_state, 0, filter_debugfs);
-#endif
 
 	/* Ignore net_dev features for vDPA devices */
 	if (efx->state == STATE_VDPA) {
@@ -2370,11 +2491,8 @@ void efx_mcdi_filter_table_fini(struct efx_nic *efx)
 	if (!table)
 		return;
 
-#ifdef CONFIG_SFC_DEBUGFS
 	efx_trim_debugfs_port(efx, efx_debugfs);
 	efx_trim_debugfs_port(efx, filter_debugfs);
-#endif
-
 	if (!table->entry)
 		return;
 
@@ -2484,107 +2602,6 @@ static void efx_mcdi_filter_remove_old(struct efx_nic *efx)
 				__func__, remove_noent);
 }
 
-void efx_mcdi_filter_uc_addr(struct efx_nic *efx,
-			     const struct efx_mcdi_dev_addr *addr)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-
-	WARN_ON(!mutex_is_locked(&efx->mac_lock));
-
-	if (table->dev_uc_count >= EFX_MCDI_FILTER_DEV_UC_MAX) {
-		table->uc_promisc = true;
-		return;
-	}
-
-	table->dev_uc_list[table->dev_uc_count++] = *addr;
-}
-
-void efx_mcdi_filter_mc_addr(struct efx_nic *efx,
-			     const struct efx_mcdi_dev_addr *addr)
-{
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-
-	WARN_ON(!mutex_is_locked(&efx->mac_lock));
-
-	if (table->dev_mc_count >= EFX_MCDI_FILTER_DEV_MC_MAX) {
-		table->mc_promisc = true;
-		table->mc_overflow = true;
-		return;
-	}
-
-	table->dev_mc_list[table->dev_mc_count++] = *addr;
-}
-
-static void
-_efx_mcdi_filter_netdev_addr_source(struct efx_nic *efx,
-				    bool *uc_promisc,
-				    bool *mc_promisc)
-{
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	struct efx_mcdi_filter_table *table = efx->filter_state;
-#endif
-#endif
-	struct net_device *net_dev = efx->net_dev;
-	struct efx_mcdi_dev_addr addr;
-	struct netdev_hw_addr *uc;
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
-	struct netdev_hw_addr *mc;
-#else
-	struct dev_mc_list *mc;
-#endif
-
-#ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
-	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST])
-		return;
-#endif
-#endif
-
-	/* If we're currently resetting, then this isn't going to go well (and
-	 * we'll try it again when the reset is complete).  So skip it.
-	 * This is typically triggered by adding a new UDP tunnel port and
-	 * adding a multicast address (for the UDP tunnel) at the same time.
-	 */
-	if (!netif_device_present(net_dev))
-		return;
-
-	netif_addr_lock_bh(net_dev);
-
-	/* Copy/convert the address lists; add the primary station
-	 * address and broadcast address
-	 */
-	*uc_promisc = !!(net_dev->flags & IFF_PROMISC);
-
-	ether_addr_copy(addr.addr, net_dev->dev_addr);
-	efx_mcdi_filter_uc_addr(efx, &addr);
-	netdev_for_each_uc_addr(uc, net_dev) {
-		ether_addr_copy(addr.addr, uc->addr);
-		efx_mcdi_filter_uc_addr(efx, &addr);
-	}
-
-	*mc_promisc = !!(net_dev->flags & (IFF_PROMISC | IFF_ALLMULTI));
-
-	netdev_for_each_mc_addr(mc, net_dev) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_DEVICE_MC)
-		ether_addr_copy(addr.addr, mc->addr);
-#else
-		ether_addr_copy(addr.addr, mc->dmi_addr);
-#endif
-		efx_mcdi_filter_mc_addr(efx, &addr);
-	}
-
-	netif_addr_unlock_bh(net_dev);
-}
-
-struct efx_mcdi_filter_addr_source efx_mcdi_filter_netdev_addr_source(void)
-{
-	struct efx_mcdi_filter_addr_source addr_source = {
-		&_efx_mcdi_filter_netdev_addr_source,
-	};
-	return addr_source;
-}
-
 static unsigned int efx_mcdi_filter_vlan_count_filters(struct efx_nic *efx,
 						       struct efx_mcdi_filter_vlan *vlan)
 {
@@ -2642,9 +2659,10 @@ void efx_mcdi_filter_sync_rx_mode(struct efx_nic *efx)
 	table->mc_overflow = false;
 	uc_promisc = false;
 	mc_promisc = false;
-	WARN_ON(!table->addr_source.get_addrs);
-	if (table->addr_source.get_addrs)
-		table->addr_source.get_addrs(efx, &uc_promisc, &mc_promisc);
+	WARN_ON(!table->addr_ops);
+	WARN_ON(!table->addr_ops->get_addrs);
+	if (table->addr_ops && table->addr_ops->get_addrs)
+		table->addr_ops->get_addrs(efx, &uc_promisc, &mc_promisc);
 	if (uc_promisc)
 		table->uc_promisc = true;
 	if (mc_promisc)

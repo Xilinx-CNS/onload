@@ -1353,7 +1353,7 @@ void efx_fini_struct(struct efx_nic *efx)
 	kfree(efx->rps_hash_table);
 #endif
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	mutex_destroy(&efx->debugfs_symlink_mutex);
 #endif
 }
@@ -1481,6 +1481,8 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	efx->num_mac_stats = MC_CMD_MAC_NSTATS;
 	BUILD_BUG_ON(MC_CMD_MAC_NSTATS - 1 != MC_CMD_MAC_GENERATION_END);
 	efx->stats_period_ms = STATS_PERIOD_MS_DEFAULT;
+	INIT_DELAYED_WORK(&efx->stats_monitor_work, efx_mac_stats_monitor);
+	efx->stats_monitor_generation = EFX_MC_STATS_GENERATION_INVALID;
 	efx->vi_stride = EFX_DEFAULT_VI_STRIDE;
 	mutex_init(&efx->mac_lock);
 	init_rwsem(&efx->filter_sem);
@@ -1495,7 +1497,7 @@ int efx_init_struct(struct efx_nic *efx, struct pci_dev *pci_dev)
 	INIT_WORK(&efx->mac_work, efx_mac_work);
 	init_waitqueue_head(&efx->flush_wq);
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	mutex_init(&efx->debugfs_symlink_mutex);
 #endif
 	efx->tx_queues_per_channel = 1;
@@ -1631,7 +1633,7 @@ int efx_probe_common(struct efx_nic *efx)
 		return rc;
 
 	/* Create debugfs symlinks */
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	mutex_lock(&efx->debugfs_symlink_mutex);
 	rc = efx_init_debugfs_nic(efx);
 	mutex_unlock(&efx->debugfs_symlink_mutex);
@@ -1644,7 +1646,7 @@ int efx_probe_common(struct efx_nic *efx)
 
 void efx_remove_common(struct efx_nic *efx)
 {
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	mutex_lock(&efx->debugfs_symlink_mutex);
 	efx_fini_debugfs_nic(efx);
 	mutex_unlock(&efx->debugfs_symlink_mutex);

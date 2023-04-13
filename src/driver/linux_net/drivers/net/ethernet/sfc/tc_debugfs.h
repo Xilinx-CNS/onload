@@ -14,9 +14,7 @@
 #include "debugfs.h"
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
-#ifdef CONFIG_SFC_DEBUGFS
-extern struct efx_debugfs_parameter efx_tc_debugfs[];
-#endif
+extern const struct efx_debugfs_parameter efx_tc_debugfs[];
 #endif
 
 #endif /* EFX_TC_DEBUGFS_H */

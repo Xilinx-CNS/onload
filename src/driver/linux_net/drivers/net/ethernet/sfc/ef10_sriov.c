@@ -376,9 +376,10 @@ fail1:
 
 static int efx_ef10_pci_sriov_disable(struct efx_nic *efx, bool force)
 {
-	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	struct pci_dev *dev = efx->pci_dev;
+	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 	unsigned int vfs_assigned = 0;
+	int i;
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PCI_DEV_FLAGS_ASSIGNED)
 	vfs_assigned = pci_vfs_assigned(dev);
@@ -390,8 +391,11 @@ static int efx_ef10_pci_sriov_disable(struct efx_nic *efx, bool force)
 	}
 #endif
 
-	if (!vfs_assigned)
+	if (!vfs_assigned) {
+		for (i = 0; i < nic_data->vf_count; i++)
+			nic_data->vf[i].pci_dev = NULL;
 		pci_disable_sriov(dev);
+	}
 
 	efx_ef10_sriov_free_vf_vswitching(efx);
 	nic_data->vf_count = 0;

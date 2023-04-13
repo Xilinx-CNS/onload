@@ -124,7 +124,7 @@ struct ef100_vdpa_vring_info {
 	char msix_name[EF100_VDPA_MAX_MSIX_NAME_SIZE];
 	u32 irq;
 	struct vdpa_callback cb;
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	struct dentry *debug_dir;
 #endif
 };
@@ -166,7 +166,7 @@ struct ef100_vdpa_nic {
 	u8 *mac_address;
 	struct vdpa_callback cfg_cb;
 	struct iommu_domain *domain;
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 
 	struct dentry *debug_dir;
 #endif

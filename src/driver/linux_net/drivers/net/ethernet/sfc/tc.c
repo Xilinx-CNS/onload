@@ -3435,9 +3435,7 @@ int efx_init_tc(struct efx_nic *efx)
 	if (rc)
 		goto out_free;
 
-#ifdef CONFIG_SFC_DEBUGFS
 	efx_extend_debugfs_port(efx, efx, 0, efx_tc_debugfs);
-#endif
 	efx->tc->up = true;
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
 	rc = flow_indr_dev_register(efx_tc_indr_setup_cb, efx);
@@ -3461,9 +3459,8 @@ void efx_fini_tc(struct efx_nic *efx)
 	/* We can get called even if efx_init_struct_tc() failed */
 	if (!efx->tc)
 		return;
-#ifdef CONFIG_SFC_DEBUGFS
+
 	efx_trim_debugfs_port(efx, efx_tc_debugfs);
-#endif
 	mutex_lock(&efx->tc->mutex);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_INDR_DEV_REGISTER)
 	if (efx->tc->up)

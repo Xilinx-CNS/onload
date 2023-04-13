@@ -1399,6 +1399,17 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 	}
 #endif
 
+#ifdef EFX_NEED_KTIME_COMPARE
+	static inline int ktime_compare(const ktime_t cmp1, const ktime_t cmp2)
+	{
+	       if (cmp1.tv64 < cmp2.tv64)
+	               return -1;
+	       if (cmp1.tv64 > cmp2.tv64)
+	               return 1;
+	       return 0;
+	}
+#endif
+
 #include <linux/net_tstamp.h>
 
 #ifndef EFX_HAVE_TIMESPEC64
@@ -1545,6 +1556,34 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
 	#endif
 	}
 #endif
+
+
+#ifdef EFX_NEED_KTIME_GET_SNAPSHOT
+/* simplified structure for systems which don't have a kernel definition
+ * we only need a couple of fields and layout doesn't matter for this usage */
+struct system_time_snapshot {
+	ktime_t			real;
+	ktime_t			raw;
+};
+
+static inline void ktime_get_snapshot(struct system_time_snapshot *systime_snapshot)
+{
+	struct timespec64 ts_real;
+	struct timespec64 ts_raw = {};
+
+#ifdef CONFIG_NTP_PPS
+	getnstime_raw_and_real(&ts_raw, &ts_real);
+#else
+	getnstimeofday(&ts_real);
+#endif
+
+	systime_snapshot->real = timespec64_to_ktime(ts_real);
+	systime_snapshot->raw = timespec64_to_ktime(ts_raw);
+}
+#else
+#include <linux/timekeeping.h>
+#endif
+
 
 #ifndef EFX_HAVE_PHC_SUPPORT
 	struct ptp_clock_time {
@@ -2628,6 +2667,17 @@ static inline bool device_iommu_capable(struct device *dev, enum iommu_cap cap)
 	return false;
 #endif
 }
+#endif
+
+#ifndef EFX_HAVE_IOMMU_MAP_GFP_PARAM
+static inline int efx_iommu_map(struct iommu_domain *domain,
+				unsigned long iova, phys_addr_t paddr,
+				size_t size, int prot, gfp_t gfp)
+{
+	return iommu_map(domain, iova, paddr, size, prot);
+}
+#undef iommu_map
+#define iommu_map efx_iommu_map
 #endif
 
 #endif /* EFX_KERNEL_COMPAT_H */

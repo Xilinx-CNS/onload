@@ -36,9 +36,7 @@
 #include <linux/ip.h>
 #include <linux/udp.h>
 #include <linux/time.h>
-#ifndef EFX_USE_KCOMPAT
 #include <linux/ktime.h>
-#endif
 #include <linux/module.h>
 #ifndef EFX_USE_KCOMPAT
 #include <linux/net_tstamp.h>
@@ -161,14 +159,8 @@ enum ptp_packet_state {
 /* Maximum parts-per-billion adjustment that is acceptable */
 #define MAX_PPB			100000000
 
-/* Precalculate scale word to avoid long long division at runtime */
-/* This is equivalent to 2^66 / 10^9. */
-#define PPB_SCALE_WORD  ((1LL << (57)) / 1953125LL)
-
-/* How much to shift down after scaling to convert to FP40 */
-#define PPB_SHIFT_FP40		26
-/* ... and FP44. */
-#define PPB_SHIFT_FP44		22
+/* One billion: maximum ppb adjustment that is sane to express in API */
+#define ONE_BILLION		1000000000
 
 #define PTP_SYNC_ATTEMPTS	4
 
@@ -226,7 +218,7 @@ struct efx_ptp_timeset {
 	s64 mc_host_diff;	/* Derived: mc_time - host_time */
 };
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 /* Fordward declaration */
 struct efx_ptp_data;
 
@@ -329,11 +321,15 @@ struct efx_pps_dev_attr {
  * @evt_code: Last event code
  * @start: Address at which MC indicates ready for synchronisation
  * @host_time_pps: Host time at last PPS
- * @adjfreq_ppb_shift: Shift required to convert scaled parts-per-billion
+ * @adjfreq_prec: Fractional bits in frequency adjustment factor register
  * frequency adjustment into a fixed point fractional nanosecond format.
- * @max_adjfreq: Current ppb adjustment, lives here instead of phc_clock_info as
+ * @max_adjfreq: Maximum ppb adjustment, lives here instead of phc_clock_info as
  *		 it must be accessable without PHC support, using private ioctls.
+ * @max_adjfine: Maximum FP16 ppm adjustment, corresponding to max_adjfreq.
  * @current_adjfreq: Current ppb adjustment.
+ * @last_mc_time: MC time corresponding to last measurement.
+ * @last_host_time_real: Host real time MC corresponding to last measurement.
+ * @last_host_time_raw: Host raw time MC corresponding to last measurement.
  * @phc_clock: Pointer to registered phc device
  * @phc_clock_info: Registration structure for phc device
  * @pps_work: pps work task for handling pps events
@@ -415,8 +411,9 @@ struct efx_ptp_data {
 	int evt_code;
 	struct efx_buffer start;
 	struct pps_event_time host_time_pps;
-	unsigned int adjfreq_ppb_shift;
+	unsigned int adjfreq_prec;
 	s64 max_adjfreq;
+	s64 max_adjfine;
 	s64 current_adjfreq;
 #if defined(EFX_NOT_UPSTREAM)
 	/**
@@ -427,11 +424,14 @@ struct efx_ptp_data {
 	/** @last_delta_valid: indicates if @last_delta is valid. */
 	bool last_delta_valid;
 #endif
+	struct timespec64 last_mc_time;
+	struct timespec64 last_host_time_real;
+	struct timespec64 last_host_time_raw;
 	struct ptp_clock *phc_clock;
 	struct ptp_clock_info phc_clock_info;
 	struct work_struct pps_work;
 	struct workqueue_struct *pps_workwq;
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 	/** @pps_data: Data associated with optional HW PPS events. */
 	struct efx_pps_data *pps_data;
 #endif
@@ -457,7 +457,7 @@ struct efx_ptp_data {
 	} sw_stats;
 	bool initialised_stats;
 	__le16 initial_mc_stats[MC_CMD_PTP_OUT_STATUS_LEN / sizeof(__le16)];
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	/** @last_sync_time_host: Host nanoseconds at last synchronisation. */
 	unsigned int last_sync_time_host;
 	/** @min_sync_delta: Minimum time between event and synchronisation. */
@@ -511,10 +511,6 @@ struct efx_ptp_data {
 	void (*xmit_skb)(struct efx_nic *efx, struct sk_buff *skb);
 };
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFINE)
-static int efx_phc_adjfine(struct ptp_clock_info *ptp, long scaled_ppm);
-#endif
-static int efx_phc_adjfreq(struct ptp_clock_info *ptp, s32 delta);
 static int efx_phc_adjtime(struct ptp_clock_info *ptp, s64 delta);
 static int efx_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts);
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
@@ -584,9 +580,7 @@ void efx_ptp_reset_stats(struct efx_nic *efx)
 
 		memset(&ptp->sw_stats, 0, sizeof(ptp->sw_stats));
 
-#ifdef CONFIG_SFC_DEBUGFS
 		ptp->initialised_stats = false;
-#endif
 		efx_ptp_update_stats(efx, temp);
 	}
 }
@@ -596,6 +590,7 @@ size_t efx_ptp_update_stats(struct efx_nic *efx, u64 *stats)
 	struct efx_ptp_data *ptp = efx->ptp_data;
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_STATUS_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_PTP_OUT_STATUS_LEN);
+	void *initial_mc_stats;
 	size_t i;
 	int rc;
 
@@ -620,21 +615,19 @@ size_t efx_ptp_update_stats(struct efx_nic *efx, u64 *stats)
 			  outbuf, sizeof(outbuf), NULL);
 	if (rc)
 		memset(outbuf, 0, sizeof(outbuf));
-#ifdef CONFIG_SFC_DEBUGFS
-	if (!ptp->initialised_stats) {
+
+	if (IS_ENABLED(CONFIG_DEBUG_FS) && !ptp->initialised_stats) {
 		memcpy(ptp->initial_mc_stats, _MCDI_PTR(outbuf, 0),
 		       sizeof(ptp->initial_mc_stats));
 		ptp->initialised_stats = !rc;
 	}
-#endif
+
+	if (ptp->initialised_stats)
+		initial_mc_stats = ptp->initial_mc_stats;
+	else
+		initial_mc_stats = NULL;
 	efx_nic_update_stats(efx_ptp_stat_desc, PTP_STAT_COUNT,
-			     efx_ptp_stat_mask,
-			     stats,
-#ifdef CONFIG_SFC_DEBUGFS
-			     ptp->initial_mc_stats,
-#else
-			     NULL,
-#endif
+			     efx_ptp_stat_mask, stats, initial_mc_stats,
 			     _MCDI_PTR(outbuf, 0));
 
 	return PTP_STAT_COUNT;
@@ -646,14 +639,14 @@ static void efx_ptp_delete_data(struct kref *kref)
 	struct efx_ptp_data *ptp = container_of(kref, struct efx_ptp_data,
 						kref);
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 	if (ptp->pps_data)
 		kfree(ptp->pps_data);
 #endif
 	ptp->efx = NULL;
 	kfree(ptp);
 }
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 /* Read one MC PTP related statistic.  This actually gathers
  * all PTP statistics, throwing away the others.
  */
@@ -784,7 +777,7 @@ static struct kobj_type efx_sysfs_ktype = {
 
 #endif
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 
 #define EFX_PTP_UINT_PARAMETER(container_type, parameter)		\
 	EFX_NAMED_PARAMETER(ptp_ ## parameter, container_type, parameter, \
@@ -799,7 +792,7 @@ static struct kobj_type efx_sysfs_ktype = {
 			    parameter[idx], int, efx_debugfs_read_int)
 
 /* PTP parameters */
-static struct efx_debugfs_parameter efx_debugfs_ptp_parameters[] = {
+static const struct efx_debugfs_parameter efx_debugfs_ptp_parameters[] = {
 	EFX_PTP_UINT_PARAMETER(struct efx_ptp_data, last_sync_time_host),
 	EFX_PTP_UINT_PARAMETER(struct efx_ptp_data, min_sync_delta),
 	EFX_PTP_UINT_PARAMETER(struct efx_ptp_data, max_sync_delta),
@@ -846,8 +839,9 @@ static ssize_t set_ptp_stats(struct device *dev,
 }
 
 static DEVICE_ATTR(ptp_stats, S_IWUSR, NULL, set_ptp_stats);
-
-#endif
+#else	/* CONFIG_DEBUG_FS */
+static const struct efx_debugfs_parameter efx_debugfs_ptp_parameters[] = {};
+#endif	/* CONFIG_DEBUG_FS */
 
 /* To convert from s27 format to ns we multiply then divide by a power of 2.
  * For the conversion from ns to s27, the operation is also converted to a
@@ -1112,9 +1106,9 @@ int efx_ptp_get_attributes(struct efx_nic *efx)
 		 * fractional ns format that the adapter uses.
 		 */
 		if (ptp->capabilities & (1 << MC_CMD_PTP_OUT_GET_ATTRIBUTES_FP44_FREQ_ADJ_LBN))
-			ptp->adjfreq_ppb_shift = PPB_SHIFT_FP44;
+			ptp->adjfreq_prec = 44;
 		else
-			ptp->adjfreq_ppb_shift = PPB_SHIFT_FP40;
+			ptp->adjfreq_prec = 40;
 	}
 
 	return 0;
@@ -1284,15 +1278,6 @@ static void efx_ptp_handle_no_channel(struct efx_nic *efx)
 /* Repeatedly send the host time to the MC which will capture the hardware
  * time.
  */
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PPS_EVENT_TIME_TIMESPEC) && defined(EFX_HAVE_TIMESPEC64)
-/* struct pps_event_time is old-style struct timespec, so map timespec64 to the
- * old names, just for this function.
- */
-#define timespec64 timespec
-#define timespec64_add_ns timespec_add_ns
-#define timespec64_compare timespec_compare
-#endif
-
 struct efx_ptp_mcdi_data {
 	struct kref ref;
 	bool done;
@@ -1309,30 +1294,31 @@ static void efx_ptp_mcdi_data_release(struct kref *ref)
 }
 
 static void efx_ptp_send_times(struct efx_nic *efx,
-			       struct pps_event_time *last_time,
+			       struct timespec64 *last_time_real,
+			       struct timespec64 *last_time_raw,
 			       struct efx_ptp_mcdi_data *mcdi_data)
 {
-	struct pps_event_time now;
-	struct timespec64 limit;
 	struct efx_ptp_data *ptp = efx->ptp_data;
 	int *mc_running = ptp->start.addr;
+	struct system_time_snapshot now;
+	struct timespec64 ts_real;
+	ktime_t limit;
 
-	pps_get_ts(&now);
-	limit = now.ts_real;
-	timespec64_add_ns(&limit, SYNCHRONISE_PERIOD_NS);
+	ktime_get_snapshot(&now);
+	limit = ktime_add_ns(now.real, SYNCHRONISE_PERIOD_NS);
 
 	/* Write host time for specified period or until MC is done */
-	while ((timespec64_compare(&now.ts_real, &limit) < 0) &&
+	while ((ktime_compare(now.real, limit) < 0) &&
 	       READ_ONCE(*mc_running) && !READ_ONCE(mcdi_data->done)) {
-		struct timespec64 update_time;
+		ktime_t update_time;
 		unsigned int host_time;
 
 		/* Don't update continuously to avoid saturating the PCIe bus */
-		update_time = now.ts_real;
-		timespec64_add_ns(&update_time, SYNCHRONISATION_GRANULARITY_NS);
+		update_time = ktime_add_ns(now.real,
+					   SYNCHRONISATION_GRANULARITY_NS);
 		do {
-			pps_get_ts(&now);
-		} while ((timespec64_compare(&now.ts_real, &update_time) < 0) &&
+			ktime_get_snapshot(&now);
+		} while ((ktime_compare(now.real, update_time) < 0) &&
 			 READ_ONCE(*mc_running));
 
 		/* Synchronize against the MCDI completion to ensure we don't
@@ -1342,11 +1328,12 @@ static void efx_ptp_send_times(struct efx_nic *efx,
 		spin_lock_bh(&mcdi_data->done_lock);
 
 		/* Read time again to make sure we're as up-to-date as possible */
-		pps_get_ts(&now);
+		ktime_get_snapshot(&now);
 
 		/* Synchronise NIC with single word of time only */
-		host_time = (now.ts_real.tv_sec << MC_NANOSECOND_BITS |
-			     now.ts_real.tv_nsec);
+		ts_real = ktime_to_timespec64(now.real);
+		host_time = (ts_real.tv_sec << MC_NANOSECOND_BITS |
+			     ts_real.tv_nsec);
 
 		/* Update host time in NIC memory */
 		if (!mcdi_data->done)
@@ -1354,17 +1341,12 @@ static void efx_ptp_send_times(struct efx_nic *efx,
 
 		spin_unlock_bh(&mcdi_data->done_lock);
 	}
-	*last_time = now;
-#ifdef CONFIG_SFC_DEBUGFS
-	ptp->last_sync_time_host = (unsigned int) now.ts_real.tv_nsec;
+	*last_time_real = ts_real;
+	*last_time_raw = ktime_to_timespec64(now.raw);
+#ifdef CONFIG_DEBUG_FS
+	ptp->last_sync_time_host = (unsigned int)ts_real.tv_nsec;
 #endif
 }
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PPS_EVENT_TIME_TIMESPEC) && defined(EFX_HAVE_TIMESPEC64)
-/* Remove name mappings. */
-#undef timespec64
-#undef timespec64_add_ns
-#undef timespec64_compare
-#endif
 
 /* Read a timeset from the MC's results and partial process. */
 static void efx_ptp_read_timeset(MCDI_DECLARE_STRUCT_PTR(data),
@@ -1388,7 +1370,7 @@ static void efx_ptp_read_timeset(MCDI_DECLARE_STRUCT_PTR(data),
 	timeset->window = end_ns - start_ns;
 }
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 /* Calculate synchronisation window statistics */
 static void efx_ptp_sync_stats_update_window(struct efx_ptp_data *ptp,
 					     unsigned int idx, s32 window,
@@ -1422,6 +1404,12 @@ static void efx_ptp_sync_stats_update_window(struct efx_ptp_data *ptp,
 		(AVERAGE_LENGTH - 1) * ptp->corrected_sync_window_average +
 		corrected, AVERAGE_LENGTH);
 }
+#else
+static void efx_ptp_sync_stats_update_window(struct efx_ptp_data *ptp,
+					     unsigned int idx, s32 window,
+					     s32 corrected)
+{
+}
 #endif
 
 /* Process times received from MC.
@@ -1434,8 +1422,9 @@ static void efx_ptp_sync_stats_update_window(struct efx_ptp_data *ptp,
  */
 static int
 efx_ptp_process_times(struct efx_nic *efx, MCDI_DECLARE_STRUCT_PTR(synch_buf),
-		      size_t response_length,
-		      const struct pps_event_time *last_time)
+		size_t response_length,
+		const struct timespec64 *last_time_real,
+		const struct timespec64 *last_time_raw)
 {
 	unsigned int number_readings =
 		MCDI_VAR_ARRAY_LEN(response_length,
@@ -1446,8 +1435,8 @@ efx_ptp_process_times(struct efx_nic *efx, MCDI_DECLARE_STRUCT_PTR(synch_buf),
 	struct efx_ptp_data *ptp = efx->ptp_data;
 	u32 last_sec;
 	u32 start_sec;
-	struct timespec64 delta;
 	struct timespec64 mc_time;
+	struct timespec64 delta;
 	struct timespec64 diff;
 	s64 diff_min = LONG_MAX;
 	s64 diff_avg = 0;
@@ -1508,9 +1497,7 @@ efx_ptp_process_times(struct efx_nic *efx, MCDI_DECLARE_STRUCT_PTR(synch_buf),
 			ptp->timeset[i].mc_host_diff = timespec64_to_ns(&diff);
 			diff_avg += ptp->timeset[i].mc_host_diff; /* Avg normalised below */
 		}
-#ifdef CONFIG_SFC_DEBUGFS
 		efx_ptp_sync_stats_update_window(ptp, i, window, corrected);
-#endif
 	}
 
 	if (ngood == 0)
@@ -1537,7 +1524,7 @@ efx_ptp_process_times(struct efx_nic *efx, MCDI_DECLARE_STRUCT_PTR(synch_buf),
 	 * expected.  delta is *not* normalised.
 	 */
 	start_sec = ptp->timeset[last_good].host_start >> MC_NANOSECOND_BITS;
-	last_sec = last_time->ts_real.tv_sec & MC_SECOND_MASK;
+	last_sec = last_time_real->tv_sec & MC_SECOND_MASK;
 	if (start_sec != last_sec &&
 	    ((start_sec + 1) & MC_SECOND_MASK) != last_sec) {
 		netif_warn(efx, hw, efx->net_dev,
@@ -1546,7 +1533,7 @@ efx_ptp_process_times(struct efx_nic *efx, MCDI_DECLARE_STRUCT_PTR(synch_buf),
 	}
 	delta.tv_sec = (last_sec - start_sec) & 1;
 	delta.tv_nsec =
-		last_time->ts_real.tv_nsec -
+		last_time_real->tv_nsec -
 		(ptp->timeset[last_good].host_start & MC_NANOSECOND_MASK);
 
 	/* Convert the NIC time at last good sync into kernel time.
@@ -1554,20 +1541,17 @@ efx_ptp_process_times(struct efx_nic *efx, MCDI_DECLARE_STRUCT_PTR(synch_buf),
 	 * firmware process.
 	 */
 	mc_time = ktime_to_timespec64(ptp->nic_to_kernel_time(
-				ptp->timeset[last_good].major,
-				ptp->timeset[last_good].minor, 0));
+					ptp->timeset[last_good].major,
+					ptp->timeset[last_good].minor, 0));
+	ptp->last_mc_time = mc_time;
+	ptp->last_host_time_real = timespec64_sub(*last_time_real, delta);
+	ptp->last_host_time_raw = timespec64_sub(*last_time_raw, delta);
 
 #if defined(EFX_NOT_UPSTREAM)
 	{
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PPS_EVENT_TIME_TIMESPEC)
-		struct timespec64 host_time =
-			timespec64_sub(timespec_to_timespec64(last_time->ts_real), delta);
-#else
-		struct timespec64 host_time =
-			timespec64_sub(last_time->ts_real, delta);
-#endif
 		struct timespec64 last_delta =
-			timespec64_sub(mc_time, host_time);
+			timespec64_sub(mc_time,
+				       ptp->last_host_time_real);
 
 		/* Don't let compiler treat last_delta as an alias for
 		 * ptp->last_delta, which would exacerbate bug 41339
@@ -1580,13 +1564,21 @@ efx_ptp_process_times(struct efx_nic *efx, MCDI_DECLARE_STRUCT_PTR(synch_buf),
 #endif
 
 	/* Calculate delay from NIC top of second to last_time */
-	delta.tv_nsec += mc_time.tv_nsec;
+	delta.tv_nsec += ptp->last_mc_time.tv_nsec;
 
 	/* Set PPS timestamp to match NIC top of second */
-	ptp->host_time_pps = *last_time;
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PPS_EVENT_TIME_TIMESPEC)
+	/* struct pps_event_time is old-style struct timespec, so convert */
+	ptp->host_time_pps.ts_real = timespec64_to_timespec(*last_time_real);
+#ifdef CONFIG_NTP_PPS
+	ptp->host_time_pps.ts_raw = timespec64_to_timespec(*last_time_raw);
+#endif /* CONFIG_NTP_PPS */
 	pps_sub_ts(&ptp->host_time_pps, timespec64_to_timespec(delta));
-#else
+#else /* pps_event_time uses timespec64 */
+	ptp->host_time_pps.ts_real = *last_time_real;
+#ifdef CONFIG_NTP_PPS
+	ptp->host_time_pps.ts_raw = *last_time_raw;
+#endif /* CONFIG_NTP_PPS */
 	pps_sub_ts(&ptp->host_time_pps, delta);
 #endif
 
@@ -1619,7 +1611,8 @@ static int efx_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_SYNCHRONIZE_LEN);
 	int rc;
 	unsigned long timeout;
-	struct pps_event_time last_time = {};
+	struct timespec64 last_time_real = {};
+	struct timespec64 last_time_raw = {};
 	unsigned int loops = 0;
 	int *start = ptp->start.addr;
 	static const unsigned int PTP_SYNC_TIMEOUT = 10 * HZ;
@@ -1685,7 +1678,8 @@ static int efx_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 			++ptp->sw_stats.fast_syncs;
 
 		if (!mcdi_data->done && READ_ONCE(*start))
-			efx_ptp_send_times(efx, &last_time, mcdi_data);
+			efx_ptp_send_times(efx, &last_time_real,
+					   &last_time_raw, mcdi_data);
 
 		if (!wait_event_timeout(mcdi_data->wq, mcdi_data->done,
 					PTP_SYNC_TIMEOUT) &&
@@ -1699,7 +1693,9 @@ static int efx_ptp_synchronize(struct efx_nic *efx, unsigned int num_readings)
 
 	if (rc == 0) {
 		rc = efx_ptp_process_times(efx, mcdi_data->outbuf,
-					   mcdi_data->resplen, &last_time);
+					mcdi_data->resplen,
+					&last_time_real,
+					&last_time_raw);
 		if (rc == 0)
 			++ptp->sw_stats.good_syncs;
 		else
@@ -1899,7 +1895,8 @@ static void efx_ptp_process_events(struct efx_nic *efx, struct sk_buff_head *q)
 	}
 }
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef EFX_NOT_UPSTREAM
+#ifdef CONFIG_DEBUG_FS
 /* Calculate synchronisation delta statistics */
 static void efx_ptp_update_delta_stats(struct efx_nic *efx,
 				       struct skb_shared_hwtstamps *timestamps)
@@ -1924,7 +1921,13 @@ static void efx_ptp_update_delta_stats(struct efx_nic *efx,
 		(AVERAGE_LENGTH - 1) * ptp->average_sync_delta +
 		ptp->last_sync_delta, AVERAGE_LENGTH);
 }
+#else
+static void efx_ptp_update_delta_stats(struct efx_nic *efx,
+				       struct skb_shared_hwtstamps *timestamps)
+{
+}
 #endif
+#endif /* EFX_NOT_UPSTREAM */
 
 /* Complete processing of a received packet */
 static inline void efx_ptp_process_rx(struct efx_nic *efx, struct sk_buff *skb)
@@ -1944,9 +1947,7 @@ static inline void efx_ptp_process_rx(struct efx_nic *efx, struct sk_buff *skb)
 	    timestamps->hwtstamp.tv64) {
 #endif
 		efx_ptp_get_host_time(efx, timestamps);
-#ifdef CONFIG_SFC_DEBUGFS
 		efx_ptp_update_delta_stats(efx, timestamps);
-#endif
 	}
 
 #endif
@@ -2033,7 +2034,7 @@ efx_ptp_aoe_attach_timestamp(struct efx_nic *efx, struct sk_buff *skb)
 				WARN_ON(pskb_trim(skb, skb->len -
 						  PTP_AOE_TIMESTAMP_LENGTH));
 			}
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 			else {
 				struct efx_ptp_data *ptp = efx->ptp_data;
 				++ptp->bad_trailing_timestamps;
@@ -2287,7 +2288,7 @@ static int efx_ptp_restart(struct efx_nic *efx)
 	return 0;
 }
 
-#ifdef CONFIG_SFC_PPS
+#ifdef EFX_NOT_UPSTREAM
 static void efx_ptp_pps_worker(struct work_struct *work)
 {
 	struct efx_ptp_data *ptp =
@@ -2314,9 +2315,7 @@ static void efx_ptp_pps_worker(struct work_struct *work)
 out:
 	kref_put(&ptp->kref, efx_ptp_delete_data);
 }
-#endif
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
 int efx_ptp_pps_get_event(struct efx_nic *efx, struct efx_ts_get_pps *event)
 {
 	struct timespec64 nic_time;
@@ -2453,7 +2452,7 @@ static inline bool efx_phc_exposed(struct efx_nic *efx)
 	return efx->phc_ptp_data == efx->ptp_data && efx->ptp_data != NULL;
 }
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 {
 	struct pps_source_info efx_pps_info = {
@@ -2542,6 +2541,46 @@ static void efx_ptp_destroy_pps(struct efx_ptp_data *ptp)
 }
 #endif
 
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_GETTIMEX64)
+static int efx_phc_gettimex64(struct ptp_clock_info *ptp, struct timespec64 *ts,
+			      struct ptp_system_timestamp *sts)
+{
+	struct efx_ptp_data *ptp_data = container_of(ptp,
+						     struct efx_ptp_data,
+						     phc_clock_info);
+	MCDI_DECLARE_BUF(outbuf, MC_CMD_PTP_OUT_READ_NIC_TIME_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_READ_NIC_TIME_LEN);
+	struct efx_nic *efx = ptp_data->efx;
+	struct system_time_snapshot snap;
+	ktime_t kt;
+	int rc;
+
+	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_READ_NIC_TIME);
+	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
+
+	if (sts) {
+		ktime_get_snapshot(&snap);
+		sts->pre_ts = ktime_to_timespec64(snap.real);
+	}
+
+	rc = efx_mcdi_rpc(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
+			  outbuf, sizeof(outbuf), NULL);
+	if (rc)
+		return rc;
+
+	if (sts) {
+		ktime_get_snapshot(&snap);
+		sts->post_ts = ktime_to_timespec64(snap.real);
+	}
+
+	kt = ptp_data->nic_to_kernel_time(
+		MCDI_DWORD(outbuf, PTP_OUT_READ_NIC_TIME_MAJOR),
+		MCDI_DWORD(outbuf, PTP_OUT_READ_NIC_TIME_MINOR), 0);
+	*ts = ktime_to_timespec64(kt);
+	return 0;
+}
+#endif
+
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 static int efx_phc_enable(struct ptp_clock_info *ptp,
 			  struct ptp_clock_request *request,
@@ -2569,8 +2608,9 @@ static int efx_phc_enable(struct ptp_clock_info *ptp,
 	}
 	return 0;
 }
+#endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_PHC_SUPPORT) && defined(EFX_HAVE_PTP_PF_NONE))
 static int efx_phc_verify(struct ptp_clock_info *ptp, unsigned int pin,
 			  enum ptp_pin_function func, unsigned int chan)
 {
@@ -2585,6 +2625,111 @@ static int efx_phc_verify(struct ptp_clock_info *ptp, unsigned int pin,
 }
 #endif
 
+#if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_PHC_SUPPORT) && defined(EFX_HAVE_PTP_GETCROSSTSTAMP))
+static int efx_phc_getcrosststamp(struct ptp_clock_info *ptp,
+				  struct system_device_crosststamp *cts)
+{
+	struct efx_ptp_data *ptp_data = container_of(ptp,
+						     struct efx_ptp_data,
+						     phc_clock_info);
+	struct efx_nic *efx = ptp_data->efx;
+	int rc;
+
+	if (!efx->ptp_data)
+		return -ENOTTY;
+
+	rc = efx_ptp_synchronize(efx, PTP_SYNC_ATTEMPTS);
+	if (rc)
+		return rc;
+
+	cts->device = timespec64_to_ktime(ptp_data->last_mc_time);
+	cts->sys_realtime = timespec64_to_ktime(ptp_data->last_host_time_real);
+	cts->sys_monoraw = timespec64_to_ktime(ptp_data->last_host_time_raw);
+	return 0;
+}
+#endif
+
+/* Convert FP16 ppm value to frequency adjustment in specified fixed point form.
+ *
+ * Input should be within the range +/- 0.1. If MAX_PPB is increased beyond
+ * 10^8 then the formula here must be revised to avoid overflow.
+ *
+ * Precalculate multipliers to scale FP16 PPM values to a fixed point frequency
+ * adjustment factor.
+ * - The required scaling factor is: 1 / (10^6 * 2^16).
+ * - The resultant factor will be represented in FP40 or FP44 as specified.
+ * - Required adjustment range is: +/- 0.1.
+ * - This requires 33 bits to represent FP16 PPM precision plus sign bit.
+ * - The multiplier width cannot exceed 31 bits, to avoid overflow.
+ * - 2^50 / 10^6 fits into 31 bits so we precalculate this as the scale word.
+ * - Cancelling out the 2^16 in the denominator this gives a result in FP66.
+ * - Shifting this down by 22 gets us the FP44 value required for some hardware.
+ * - Shifting this down by 26 gets us the FP40 value required by other hardware.
+ * - A further scale word corrects error in low order bits of large adjustments.
+ * - This additional scale word arbitrarily use 30 bits of precision.
+ */
+static s64 ppm_fp16_to_factor(s64 ppm_fp16, unsigned int prec)
+{
+	/* FP66 multipliers to achieve division of multiplicand */
+	static const s64 scale_word_whole = (1LL << 50) / 1000000LL;
+	static const s64 scale_word_frac = (((1LL << 50) % 1000000LL) << 30) / 1000000LL;
+
+	/* 1. Apply whole and fractional scale words to effect division.
+	 * 2. Round to nearest at target precision.
+	 * 3. Shift down to target precision.
+	 */
+	return (ppm_fp16 * scale_word_whole +
+		(ppm_fp16 * scale_word_frac >> 30) +
+		(1 << (66 - prec - 1))) >> (66 - prec);
+}
+
+static int efx_phc_adjfine(struct ptp_clock_info *ptp, long ppm_fp16)
+{
+	struct efx_ptp_data *ptp_data = container_of(ptp,
+						     struct efx_ptp_data,
+						     phc_clock_info);
+	MCDI_DECLARE_BUF(inadj, MC_CMD_PTP_IN_ADJUST_LEN);
+	struct efx_nic *efx = ptp_data->efx;
+	s64 adjustment;
+	int rc;
+
+	ppm_fp16 = clamp_val(ppm_fp16, -ptp_data->max_adjfine, ptp_data->max_adjfine);
+	adjustment = ppm_fp16_to_factor(ppm_fp16, ptp_data->adjfreq_prec);
+
+	MCDI_SET_DWORD(inadj, PTP_IN_OP, MC_CMD_PTP_OP_ADJUST);
+	MCDI_SET_DWORD(inadj, PTP_IN_PERIPH_ID, 0);
+	MCDI_SET_QWORD(inadj, PTP_IN_ADJUST_FREQ, adjustment);
+	MCDI_SET_DWORD(inadj, PTP_IN_ADJUST_SECONDS, 0);
+	MCDI_SET_DWORD(inadj, PTP_IN_ADJUST_NANOSECONDS, 0);
+	rc = efx_mcdi_rpc(efx, MC_CMD_PTP, inadj, sizeof(inadj),
+			  NULL, 0, NULL);
+	if (rc != 0)
+		return rc;
+
+	ptp_data->current_adjfreq = adjustment;
+	return 0;
+}
+
+/* Convert ppb value, clamped to +/- 10^9, to FP16 ppm. */
+static s64 ppb_to_ppm_fp16(s64 ppb)
+{
+	ppb = clamp_val(ppb, -ONE_BILLION, ONE_BILLION);
+
+	/* Multiply by floor(2^41 / 1000) and shift right by 41 - 16). */
+	return (ppb * 2199023255LL) >> (41 - 16);
+}
+
+#if defined(EFX_NOT_UPSTREAM) || (defined(EFX_USE_KCOMPAT) &&	\
+	defined(EFX_HAVE_PHC_SUPPORT) &&			\
+	defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFREQ) &&		\
+	!defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFINE))
+static int efx_phc_adjfreq(struct ptp_clock_info *ptp, s32 ppb)
+{
+	return efx_phc_adjfine(ptp, ppb_to_ppm_fp16(ppb));
+}
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 static const struct ptp_clock_info efx_phc_clock_info = {
 	.owner		= THIS_MODULE,
 	.name		= "sfc",
@@ -2611,6 +2756,12 @@ static const struct ptp_clock_info efx_phc_clock_info = {
 	.gettime64	= efx_phc_gettime,
 	.settime64	= efx_phc_settime,
 #endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_GETTIMEX64)
+	.gettimex64	= efx_phc_gettimex64,
+#endif
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_GETCROSSTSTAMP)
+	.getcrosststamp = efx_phc_getcrosststamp,
+#endif
 	.enable		= efx_phc_enable,
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_PF_NONE)
 	.verify		= efx_phc_verify,
@@ -2618,8 +2769,7 @@ static const struct ptp_clock_info efx_phc_clock_info = {
 };
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT) || defined(EFX_NOT_UPSTREAM)
-#ifdef CONFIG_SFC_PPS
+#ifdef EFX_NOT_UPSTREAM
 static int efx_create_pps_worker(struct efx_ptp_data *ptp)
 {
 	char busdevice[11];
@@ -2643,7 +2793,6 @@ static int efx_create_pps_worker(struct efx_ptp_data *ptp)
 		return -ENOMEM;
 	return 0;
 }
-#endif
 #endif
 bool efx_ptp_uses_separate_channel(struct efx_nic *efx)
 {
@@ -2708,14 +2857,12 @@ static void efx_dissociate_phc(struct efx_nic *efx)
 
 static int efx_ptp_probe_post_io(struct efx_nic *efx)
 {
+	unsigned int __maybe_unused pos;
 	struct efx_ptp_data *ptp;
 #if !defined(EFX_USE_KCOMPAT) || (defined(EFX_HAVE_PTP_PF_NONE) && defined(EFX_HAVE_PHC_SUPPORT))
 	struct ptp_pin_desc *ppd;
 #endif
-#ifdef CONFIG_SFC_DEBUGFS
-	unsigned int pos;
-#endif
-#ifdef CONFIG_SFC_PPS
+#ifdef EFX_NOT_UPSTREAM
 	bool pps_ok;
 #endif
 	int rc = 0;
@@ -2741,14 +2888,13 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 	if (rc != 0)
 		goto fail2;
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	for (pos = 0; pos < (MC_CMD_PTP_OUT_STATUS_LEN / sizeof(u32)); pos++)
 		ptp->mc_stats[pos] = pos;
-
+#endif
 	rc = efx_extend_debugfs_port(efx, ptp, 0, efx_debugfs_ptp_parameters);
 	if (rc < 0)
 		goto fail3;
-#endif
 
 	INIT_WORK(&ptp->work, efx_ptp_worker);
 	ptp->config.flags = 0;
@@ -2768,11 +2914,11 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 	/* Set the NIC clock maximum frequency adjustment */
 	/* TODO: add MCDI call to get this value from the NIC */
 	ptp->max_adjfreq = MAX_PPB;
+	ptp->max_adjfine = ppb_to_ppm_fp16(ptp->max_adjfreq);
 
-#ifdef CONFIG_SFC_PPS
+#ifdef EFX_NOT_UPSTREAM
 	pps_ok = efx_is_pps_possible(efx);
 #endif
-
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 	if (efx_phc_exposed(efx)) {
 		ptp->phc_clock_info = efx_phc_clock_info;
@@ -2791,32 +2937,26 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 			goto fail4;
 		}
 		kref_get(&ptp->kref);
-
-#ifdef CONFIG_SFC_PPS
+#ifdef EFX_NOT_UPSTREAM
 		rc = pps_ok ? efx_create_pps_worker(ptp) : 0;
 		if (rc < 0)
 			goto fail5;
-
 #endif
 	}
 	ptp->usr_evt_enabled = 0;
 #else
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_PPS
 	rc = pps_ok ? efx_create_pps_worker(ptp) : 0;
 	if (rc < 0)
 		goto fail4;
 #endif
 #endif
-#endif
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_PPS
 	rc = pps_ok ? efx_ptp_create_pps(ptp) : 0;
 	if (rc < 0)
 		goto fail5;
-#endif
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	ptp->min_sync_delta = UINT_MAX;
 	ptp->sync_window_min = INT_MAX;
 	ptp->sync_window_max = INT_MIN;
@@ -2829,25 +2969,21 @@ static int efx_ptp_probe_post_io(struct efx_nic *efx)
 		goto fail7;
 #endif
 
-#ifdef CONFIG_SFC_PPS
 	rc = device_create_file(&efx->pci_dev->dev, &dev_attr_max_adjfreq);
 	if (rc < 0)
 		goto fail8;
-#endif
 #endif /* EFX_NOT_UPSTREAM */
 
 	return 0;
 #ifdef EFX_NOT_UPSTREAM
 fail8:
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	device_remove_file(&efx->pci_dev->dev, &dev_attr_ptp_stats);
 fail7:
 #endif
-#ifdef CONFIG_SFC_PPS
 	if (pps_ok)
 		efx_ptp_destroy_pps(ptp);
 fail5:
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 	if (ptp->pps_workwq)
 		destroy_workqueue(ptp->pps_workwq);
@@ -2861,12 +2997,9 @@ fail5:
 #endif
 
 fail4:
-#ifdef CONFIG_SFC_DEBUGFS
 	efx_trim_debugfs_port(efx, efx_debugfs_ptp_parameters);
-
 fail3:
 	efx_nic_free_buffer(efx, &ptp->start);
-#endif
 fail2:
 	efx_dissociate_phc(efx);
 fail1:
@@ -2942,27 +3075,22 @@ static inline void efx_ptp_remove_pps_workqueue(struct efx_ptp_data *ptp_data)
 
 void efx_ptp_remove_post_io(struct efx_nic *efx)
 {
+	struct pci_dev __maybe_unused *pci_dev = efx->pci_dev;
 	struct efx_ptp_data *ptp_data = efx->ptp_data;
-#if defined(EFX_NOT_UPSTREAM) || defined(CONFIG_SFC_DEBUGFS)
-	struct pci_dev *pci_dev = efx->pci_dev;
-#endif
 
 	/* ensure that the work queues are canceled and destroyed only once. */
 	if (!ptp_data)
 		return;
 
 	(void)efx_ptp_disable(efx);
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 	efx_ptp_destroy_pps(ptp_data);
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_PPS
 	device_remove_file(&pci_dev->dev, &dev_attr_max_adjfreq);
 #endif
-#endif
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	device_remove_file(&pci_dev->dev, &dev_attr_ptp_stats);
 #endif
 	efx_ptp_remove_pps_workqueue(ptp_data);
@@ -2973,9 +3101,7 @@ void efx_ptp_remove_post_io(struct efx_nic *efx)
 
 	efx_dissociate_phc(efx);
 	efx_nic_free_buffer(efx, &ptp_data->start);
-#ifdef CONFIG_SFC_DEBUGFS
 	efx_trim_debugfs_port(efx, efx_debugfs_ptp_parameters);
-#endif
 
 	efx->ptp_data = NULL;
 	ptp_data->efx = NULL;
@@ -3306,11 +3432,6 @@ int efx_ptp_ts_adjtime(struct efx_nic *efx, struct efx_ts_adjtime *adjtime)
 	if (!phc_clock_info)
 		return -ENOTTY;
 
-	if (adjtime->adjustment > MAX_PPB)
-		adjtime->adjustment = MAX_PPB;
-	else if (adjtime->adjustment < -MAX_PPB)
-		adjtime->adjustment = -MAX_PPB;
-
 	return efx_phc_adjfreq(phc_clock_info, adjtime->adjustment);
 }
 
@@ -3384,7 +3505,7 @@ static void ptp_event_fault(struct efx_nic *efx, struct efx_ptp_data *ptp)
 
 static void ptp_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 {
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 	struct ptp_clock_event ptp_evt;
 
@@ -3408,7 +3529,7 @@ static void ptp_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 		queue_work(ptp->pps_workwq, &ptp->pps_work);
 }
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 static void hw_pps_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 {
 	struct efx_pps_data *pps = efx->ptp_data->pps_data;
@@ -3483,7 +3604,7 @@ void efx_ptp_event(struct efx_nic *efx, efx_qword_t *ev)
 		case MCDI_EVENT_CODE_PTP_PPS:
 			ptp_event_pps(efx, ptp);
 			break;
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 		case MCDI_EVENT_CODE_HW_PPS:
 			hw_pps_event_pps(efx, ptp);
 			break;
@@ -3611,48 +3732,6 @@ void __efx_rx_skb_attach_timestamp(struct efx_channel *channel,
 #endif
 }
 
-static int efx_phc_adjfreq(struct ptp_clock_info *ptp, s32 delta)
-{
-	struct efx_ptp_data *ptp_data = container_of(ptp,
-						     struct efx_ptp_data,
-						     phc_clock_info);
-	struct efx_nic *efx = ptp_data->efx;
-	s64 max_adjfreq = ptp_data->max_adjfreq;
-	MCDI_DECLARE_BUF(inadj, MC_CMD_PTP_IN_ADJUST_LEN);
-	s64 adjustment_ns;
-	int rc;
-
-	if (delta > (s32)max_adjfreq)
-		delta = max_adjfreq;
-	else if (delta < -((s32)max_adjfreq))
-		delta = -max_adjfreq;
-
-	/* Convert ppb to fixed point ns taking care to round correctly. */
-	adjustment_ns =
-		((s64)delta * PPB_SCALE_WORD + (1 << (ptp_data->adjfreq_ppb_shift-1)))
-			 >> ptp_data->adjfreq_ppb_shift;
-
-	MCDI_SET_DWORD(inadj, PTP_IN_OP, MC_CMD_PTP_OP_ADJUST);
-	MCDI_SET_DWORD(inadj, PTP_IN_PERIPH_ID, 0);
-	MCDI_SET_QWORD(inadj, PTP_IN_ADJUST_FREQ, adjustment_ns);
-	MCDI_SET_DWORD(inadj, PTP_IN_ADJUST_SECONDS, 0);
-	MCDI_SET_DWORD(inadj, PTP_IN_ADJUST_NANOSECONDS, 0);
-	rc = efx_mcdi_rpc(efx, MC_CMD_PTP, inadj, sizeof(inadj),
-			  NULL, 0, NULL);
-	if (rc != 0)
-		return rc;
-
-	ptp_data->current_adjfreq = adjustment_ns;
-	return 0;
-}
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PTP_CLOCK_INFO_ADJFINE)
-static int efx_phc_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
-{
-	return efx_phc_adjfreq(ptp, scaled_ppm_to_ppb(scaled_ppm));
-}
-#endif
-
 static int efx_phc_adjtime(struct ptp_clock_info *ptp, s64 delta)
 {
 	u32 nic_major, nic_minor;
@@ -3691,9 +3770,9 @@ static int efx_phc_gettime(struct ptp_clock_info *ptp, struct timespec64 *ts)
 	struct efx_ptp_data *ptp_data = container_of(ptp,
 						     struct efx_ptp_data,
 						     phc_clock_info);
-	struct efx_nic *efx = ptp_data->efx;
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_READ_NIC_TIME_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_PTP_OUT_READ_NIC_TIME_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_READ_NIC_TIME_LEN);
+	struct efx_nic *efx = ptp_data->efx;
 	ktime_t kt;
 	int rc;
 
