@@ -1182,17 +1182,6 @@ int efct_vi_find_free_rxq(ef_vi* vi, int qid)
 }
 
 #ifndef __KERNEL__
-/* These definitions are needed to be able to build on old distros, but we
- * have them on new builds too so that we get 'free' checking that they're
- * the correct values */
-#define MFD_CLOEXEC 1U
-#define MFD_HUGETLB 4U
-#if defined __x86_64__
-#define __NR_memfd_create 319
-#elif defined __aarch64__
-#define __NR_memfd_create 279
-#endif
-
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 {
   int rc;
@@ -1212,9 +1201,12 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   }
 
   /* The kernel code can cope with no memfd being provided, but only on older
-   * kernels. MFD_HUGETLB is available in >=4.14 (after memfd_create() itself
-   * in >=3.17). The fallback employs efrm_find_ksym(), so stopped working in
-   * >=5.7. Plenty of overlap. */
+   * kernels, i.e. older than 5.7 where the fallback with efrm_find_ksym()
+   * stopped working. Overall:
+   * - Onload uses the efrm_find_ksym() fallback on Linux older than 4.14.
+   * - Both efrm_find_ksym() and memfd_create(MFD_HUGETLB) are available
+   *   on Linux between 4.14 and 5.7.
+   * - Onload can use only memfd_create(MFD_HUGETLB) on Linux 5.7+. */
   {
     char name[32];
     snprintf(name, sizeof(name), "ef_vi:%d", qid);

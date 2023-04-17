@@ -92,6 +92,20 @@ typedef struct iovec ci_iovec;
 #define CI_IOVEC_BASE(i) ((i)->iov_base)
 #define CI_IOVEC_LEN(i)  ((i)->iov_len)
 
+/* The memfd_create() system call first appeared in Linux 3.17, glibc
+ * support was added in version 2.27, MFD_HUGETLB is available on Linux
+ * since 4.14, as per man 2 memfd_create. To support newer kernels with
+ * older glibc (e.g. in containers), we define these ourselves. At the
+ * same time, they won't cause issues in the newer configurations where
+ * they are available, as long as they are the correct values because
+ * the macro redefinition is silently ignored. */
+#define MFD_CLOEXEC 1U
+#define MFD_HUGETLB 4U
+#if defined __x86_64__
+#define __NR_memfd_create 319
+#elif defined __aarch64__
+#define __NR_memfd_create 279
+#endif
 
 #endif  /* __CI_TOOLS_UNIX_H__ */
 

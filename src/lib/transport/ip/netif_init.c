@@ -2364,14 +2364,6 @@ ci_inline void netif_tcp_helper_free(ci_netif* ni)
   ci_netif_deinit(ni);
 }
 
-#define MFD_CLOEXEC 1U
-#define MFD_HUGETLB 4U
-#if defined __x86_64__
-#define __NR_memfd_create 319
-#elif defined __aarch64__
-#define __NR_memfd_create 279
-#endif
-
 static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
                                 const ci_netif_config_opts* opts,
                                 unsigned flags, const char* name)
@@ -2395,8 +2387,15 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
 
   ra->in_efct_memfd = -1;
   ra->in_pktbuf_memfd = -1;
-  /* The kernel code can cope with no memfd being provided, but only on older
-   * kernels */
+
+  /* The kernel code can cope with no memfd being provided in both cases
+   * (in_efct_memfd and in_pktbuf_memfd), but only on older kernels, i.e.
+   * older than 5.7 where the fallback with efrm_find_ksym() stopped working.
+   * Overall:
+   * - Onload uses the efrm_find_ksym() fallback on Linux older than 4.14.
+   * - Both efrm_find_ksym() and memfd_create(MFD_HUGETLB) are available
+   *   on Linux between 4.14 and 5.7.
+   * - Onload can use only memfd_create(MFD_HUGETLB) on Linux 5.7+. */
   {
     char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
     snprintf(mfd_name, sizeof(mfd_name), "efct/%s", name);
