@@ -151,6 +151,8 @@ EFRM_HAVE_NETIF_RX_NI symbol netif_rx_ni include/linux/netdevice.h
 
 EFRM_HAVE_MODULE_MUTEX		symbol	module_mutex	include/linux/module.h
 EFRM_HAVE_ITER_UBUF symbol ITER_UBUF include/linux/uio.h
+
+EFRM_HAVE_GET_RANDOM_U32	symbol get_random_u32	include/linux/random.h
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

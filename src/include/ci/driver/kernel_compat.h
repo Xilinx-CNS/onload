@@ -421,4 +421,12 @@ oo_remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
 #define ci_netif_rx_non_irq netif_rx
 #endif /* EFRM_HAVE_NETIF_RX_NI */
 
+#ifndef EFRM_HAVE_GET_RANDOM_U32
+/* linux < 4.11 */
+static inline u32 get_random_u32(void)
+{
+	return get_random_int();
+}
+#endif
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */
