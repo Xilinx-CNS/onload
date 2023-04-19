@@ -1432,7 +1432,12 @@ int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
     ci_resource_prime_qs_op_t  op;
     int i;
 
+    /* The loop below assumes that all rxqs will fit in the fixed array in
+     * the operations's arguments. If that assumption no longer holds, then
+     * this assertion will fail and we'll need a more complicated loop to split
+     * the queues across multiple operations. */
     EF_VI_BUILD_ASSERT(CI_ARRAY_SIZE(op.rxq_current) >= EF_VI_MAX_EFCT_RXQS);
+
     op.crp_id = efch_make_resource_id(vi->vi_resource_id);
     for( i = 0; i < vi->max_efct_rxq; ++i ) {
       ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
