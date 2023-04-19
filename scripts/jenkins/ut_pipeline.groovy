@@ -113,7 +113,6 @@ void doDeveloperBuild(String build_profile=null) {
               utils.rake(["build:${component}"], defines: defines)
               deleteDir() // Delete the manually allocated workspace
             }
-            deleteDir() // Delete the workspace allocated implicitly by node
           }
         }
       }
