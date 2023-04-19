@@ -111,8 +111,26 @@ efct_get_hugepages(struct efhw_nic *nic, int hwqid,
 static size_t
 efct_max_shared_rxqs(struct efhw_nic *nic)
 {
-  struct efhw_nic_efct* efct = nic->arch_extra;
-  return efct->rxq_n;
+  /* FIXME: this should perhaps return the per-nic limit:
+   *
+   *  struct efhw_nic_efct* efct = nic->arch_extra;
+   *  return efct->rxq_n;
+   *
+   * However, in practice this is only used to determine the per-vi resources
+   * to be allocated in efab_efct_rxq_uk_shm_base, which currently has a fixed
+   * limit separate from the per-nic limit.
+   *
+   * Three ways to resolve this mismatch are:
+   *  - modify ef_vi to support an arbitrary limit (defined at run-time),
+   *    which can be set to match the per-nic limit;
+   *  - implement a separate mechanism to provide the per-vi limit to efrm so
+   *    that it can allocate the appropriate resources;
+   *  - hack this function so that existing code uses the correct per-vi limit.
+   *
+   * As we don't yet have the means to test extensive code changes on hardware
+   * with different per-nic and per-vi limits, I choose hackery for now.
+   */
+   return EF_VI_MAX_EFCT_RXQS;
 }
 
 /*----------------------------------------------------------------------------
