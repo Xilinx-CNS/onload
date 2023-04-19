@@ -6,7 +6,7 @@
  * under the terms of the GNU General Public License version 2 as published
  * by the Free Software Foundation, incorporated herein by reference.
  */
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 #include <linux/seq_file.h>
 #endif
 #include "efx.h"
@@ -20,7 +20,7 @@ static int efx_mcdi_phy_sff_8472_level(struct efx_nic *efx);
 static u32 efx_mcdi_phy_module_type(struct efx_nic *efx);
 
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 
 /* DMA all of the phy statistics, and return a single statistic out of the block.
  * Means we can't view a snapshot of all the statistics, but they're not
@@ -55,7 +55,7 @@ static int efx_mcdi_phy_stats_read(struct seq_file *file, void *data)
 				       index[_index], u8,		\
 				       efx_mcdi_phy_stats_read)
 
-static struct efx_debugfs_parameter debug_entries[] = {
+static const struct efx_debugfs_parameter debug_entries[] = {
 	PHY_STAT_PARAMETER(MC_CMD_OUI, oui),
 	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_LINK_UP, pma_pmd_link_up),
 	PHY_STAT_PARAMETER(MC_CMD_PMA_PMD_RX_FAULT, pma_pmd_rx_fault),
@@ -122,8 +122,14 @@ static void efx_mcdi_phy_stats_fini(struct efx_nic *efx)
 		dma_free_coherent(&efx->pci_dev->dev, EFX_PAGE_SIZE,
 				  phy_data->stats, phy_data->stats_addr);
 }
+#else	/* CONFIG_DEBUG_FS */
+static int efx_mcdi_phy_stats_init(struct efx_nic *efx)
+{
+	return 0;
+}
 
-#endif
+static void efx_mcdi_phy_stats_fini(struct efx_nic *efx) {}
+#endif	/* CONFIG_DEBUG_FS */
 
 static u8 efx_mcdi_link_state_flags(struct efx_link_state *link_state)
 {
@@ -867,11 +873,9 @@ int efx_mcdi_phy_probe(struct efx_nic *efx)
 		efx->wanted_fc |= EFX_FC_AUTO;
 	efx_link_set_wanted_fc(efx, efx->wanted_fc);
 
-#ifdef CONFIG_SFC_DEBUGFS
 	rc = efx_mcdi_phy_stats_init(efx);
 	if (rc != 0)
 		goto fail;
-#endif
 
 	return 0;
 
@@ -884,9 +888,7 @@ void efx_mcdi_phy_remove(struct efx_nic *efx)
 {
 	struct efx_mcdi_phy_data *phy_data = efx->phy_data;
 
-#ifdef CONFIG_SFC_DEBUGFS
 	efx_mcdi_phy_stats_fini(efx);
-#endif
 	efx->phy_data = NULL;
 	kfree(phy_data);
 }
@@ -1298,6 +1300,51 @@ static int efx_mcdi_mac_stats(struct efx_nic *efx,
 	return rc;
 }
 
+/*	Periodic MAC statistics monitoring
+ */
+static void efx_mac_stats_schedule_monitor_work(struct efx_nic *efx)
+{
+	unsigned int period_ms = max(500u, efx->stats_period_ms * 2);
+
+	schedule_delayed_work(&efx->stats_monitor_work,
+			      msecs_to_jiffies(period_ms));
+}
+
+static void efx_mac_stats_start_monitor(struct efx_nic *efx)
+{
+	efx_mac_stats_schedule_monitor_work(efx);
+}
+
+static void efx_mac_stats_stop_monitor(struct efx_nic *efx)
+{
+	cancel_delayed_work_sync(&efx->stats_monitor_work);
+}
+
+void efx_mac_stats_monitor(struct work_struct *data)
+{
+	struct efx_nic *efx = container_of(data, struct efx_nic,
+					   stats_monitor_work.work);
+	__le64 *dma_stats = efx->stats_buffer.addr;
+	__le64 generation;
+
+	if (!efx->stats_enabled)
+		return;
+
+	generation = READ_ONCE(dma_stats[efx->num_mac_stats - 1]);
+
+	if (generation == efx->stats_monitor_generation &&
+	    efx->stats_initialised) {
+		pci_warn(efx->pci_dev,
+			 "Periodic DMA statistics are not updating. Restarting periodic collection.\n");
+
+		cancel_delayed_work(&efx->stats_monitor_work);
+		efx_mcdi_mac_stats(efx, EFX_STATS_PERIOD, 0);
+	} else if (generation != EFX_MC_STATS_GENERATION_INVALID) {
+		efx->stats_monitor_generation = generation;
+	}
+	efx_mac_stats_schedule_monitor_work(efx);
+}
+
 void efx_mcdi_mac_start_stats(struct efx_nic *efx)
 {
 	__le64 *dma_stats = efx->stats_buffer.addr;
@@ -1305,16 +1352,20 @@ void efx_mcdi_mac_start_stats(struct efx_nic *efx)
 	dma_stats[efx->num_mac_stats - 1] = EFX_MC_STATS_GENERATION_INVALID;
 
 	efx_mcdi_mac_stats(efx, EFX_STATS_ENABLE, 0);
+	efx_mac_stats_start_monitor(efx);
 }
 
 void efx_mcdi_mac_stop_stats(struct efx_nic *efx)
 {
+	efx_mac_stats_stop_monitor(efx);
 	efx_mcdi_mac_stats(efx, EFX_STATS_DISABLE, 0);
 }
 
 void efx_mcdi_mac_update_stats_period(struct efx_nic *efx)
 {
+	efx_mac_stats_stop_monitor(efx);
 	efx_mcdi_mac_stats(efx, EFX_STATS_PERIOD, 0);
+	efx_mac_stats_start_monitor(efx);
 }
 
 #define EFX_MAC_STATS_WAIT_MS 1000

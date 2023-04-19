@@ -38,7 +38,7 @@ struct efx_mcdi_phy_data {
 	u32 media;
 	u32 mmd_mask;
 	u8 revision[20];
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	struct efx_nic *efx;
 	void *stats;
 	dma_addr_t stats_addr;
@@ -88,6 +88,7 @@ u32 efx_get_mcdi_caps(struct efx_nic *efx);
 int efx_mcdi_set_mac(struct efx_nic *efx);
 int efx_mcdi_set_mtu(struct efx_nic *efx);
 
+void efx_mac_stats_monitor(struct work_struct *data);
 void efx_mcdi_mac_update_stats_period(struct efx_nic *efx);
 void efx_mcdi_mac_start_stats(struct efx_nic *efx);
 void efx_mcdi_mac_stop_stats(struct efx_nic *efx);

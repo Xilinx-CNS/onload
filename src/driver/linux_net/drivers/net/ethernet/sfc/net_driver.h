@@ -97,7 +97,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.14.1007"
+#define EFX_DRIVER_VERSION	"5.3.14.1011"
 #endif
 
 #ifdef DEBUG
@@ -386,7 +386,7 @@ struct efx_tx_queue {
 #endif
 #endif
 #endif
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	/** @debug_dir: debugfs directory for this queue */
 	struct dentry *debug_dir;
 #endif
@@ -734,7 +734,7 @@ struct efx_rx_queue {
 	struct efx_ssr_state ssr;
 #endif
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	struct dentry *debug_dir;
 #endif
 
@@ -910,7 +910,7 @@ struct efx_channel {
 	u32 *rps_flow_id;
 #endif
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	struct dentry *debug_dir;
 #endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_NEED_SAVE_MSIX_MESSAGES)
@@ -1247,7 +1247,7 @@ struct efx_nic_errors {
 	atomic_t tx_desc_fetch;
 	atomic_t spurious_tx;
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	struct dentry *debug_dir;
 #endif
 };
@@ -1513,6 +1513,8 @@ struct efx_mae;
  *	field of %MC_CMD_GET_CAPABILITIES_V4 response, or %MC_CMD_MAC_NSTATS)
  * @stats_period_ms: Interval between statistic updates in milliseconds.
  *	Set from ethtool -C parameter stats-block-usecs.
+ * @stats_monitor_work: Work item to monitor periodic statistics updates
+ * @stats_monitor_generation: Periodic stats most recent generation count
  * @stats_buffer: DMA buffer for statistics
  * @mc_initial_stats: Buffer for statistics as they were when probing the device
  * @rx_nodesc_drops_total: Count packets dropped when no RX descriptor is
@@ -1582,7 +1584,6 @@ struct efx_mae;
  *	and must be released by caller after statistics processing/copying
  *	if required.
  * @n_rx_noskb_drops: Count of RX packets dropped due to failure to allocate an skb
- * @debugfs_symlink_mutex: Mutex to protect access to debugfs symlinks.
  *
  * This is stored in the private area of the &struct net_device.
  */
@@ -1776,6 +1777,9 @@ struct efx_nic {
 	u16 num_mac_stats;
 	unsigned int stats_period_ms;
 
+	struct delayed_work stats_monitor_work;
+	__le64 stats_monitor_generation;
+
 	struct efx_buffer stats_buffer;
 	__le64 *mc_initial_stats;
 	u64 rx_nodesc_drops_total;
@@ -1842,7 +1846,7 @@ struct efx_nic {
 #endif
 #endif
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	/** @debug_dir: NIC debugfs directory */
 	struct dentry *debug_dir;
 	/** @debug_symlink: NIC debugfs symlink (``nic_eth%d``) */
@@ -1911,7 +1915,7 @@ struct efx_nic {
 	bool forward_fcs;
 #endif
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	/**
 	 * @debugfs_symlink_mutex: Protect debugfs @debug_symlink and
 	 *	@debug_port_symlink

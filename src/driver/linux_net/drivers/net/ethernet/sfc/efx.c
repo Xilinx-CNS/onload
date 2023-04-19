@@ -722,13 +722,7 @@ static void efx_update_name(struct efx_nic *efx)
 #endif
 
 	efx_set_channel_names(efx);
-#ifdef CONFIG_SFC_DEBUGFS
-	mutex_lock(&efx->debugfs_symlink_mutex);
-	if (efx->debug_symlink)
-		efx_fini_debugfs_netdev(efx->net_dev);
-	efx_init_debugfs_netdev(efx->net_dev);
-	mutex_unlock(&efx->debugfs_symlink_mutex);
-#endif
+	efx_update_debugfs_netdev(efx);
 }
 
 static int efx_netdev_event(struct notifier_block *this,
@@ -1068,7 +1062,7 @@ void efx_pci_remove_post_io(struct efx_nic *efx,
 	efx->type->remove_port(efx);
 	nic_remove(efx);
 	efx_remove_common(efx);
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	mutex_lock(&efx->debugfs_symlink_mutex);
 	efx_fini_debugfs_netdev(efx->net_dev);
 	mutex_unlock(&efx->debugfs_symlink_mutex);

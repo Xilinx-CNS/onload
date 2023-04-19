@@ -20,9 +20,7 @@
 #include "ef100_iova.h"
 #include "mcdi_vdpa.h"
 #include "mcdi_filters.h"
-#ifdef CONFIG_SFC_DEBUGFS
 #include "debugfs.h"
-#endif
 
 #if defined(CONFIG_SFC_VDPA)
 
@@ -303,11 +301,8 @@ static int delete_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 	struct efx_vring_dyn_cfg vring_dyn_cfg;
 	int rc = 0;
 
-#ifdef CONFIG_SFC_DEBUGFS
 	/* delete vring debugfs directory */
-	if (vdpa_nic->vring[idx].debug_dir)
-		efx_fini_debugfs_vdpa_vring(&vdpa_nic->vring[idx]);
-#endif
+	efx_fini_debugfs_vdpa_vring(&vdpa_nic->vring[idx]);
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdpa_nic->vdpa_dev.dev,
 		 "%s: Called for %u\n", __func__, idx);
@@ -446,11 +441,10 @@ static int create_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx)
 		ef100_vdpa_insert_filter(vdpa_nic->efx);
 	}
 
-#ifdef CONFIG_SFC_DEBUGFS
 	rc = efx_init_debugfs_vdpa_vring(vdpa_nic, &vdpa_nic->vring[idx], idx);
 	if (rc)
 		goto err_debugfs_vdpa_init;
-#endif
+
 	/* A VQ kick allows the device to read the avail_idx, which will be
 	 * required at the destination after live migration.
 	 */
@@ -1191,7 +1185,7 @@ static int ef100_vdpa_dma_map(struct vdpa_device *vdev,
 		}
 	}
 
-	rc = iommu_map(vdpa_nic->domain, iova, pa, size, perm);
+	rc = iommu_map(vdpa_nic->domain, iova, pa, size, perm, GFP_KERNEL);
 	if (rc) {
 		dev_err(&vdev->dev,
 			"%s: iommu_map iova: %llx size: %llx rc: %d\n",
@@ -1238,9 +1232,7 @@ static void ef100_vdpa_free(struct vdpa_device *vdev)
 	dev_info(&vdev->dev, "%s: Releasing vDPA resources\n", __func__);
 #endif
 	if (vdpa_nic) {
-#ifdef CONFIG_SFC_DEBUGFS
 		efx_fini_debugfs_vdpa(vdpa_nic);
-#endif
 		/* clean-up the mappings and iova tree */
 		efx_ef100_delete_iova(vdpa_nic);
 		if (vdpa_nic->efx->mcdi_buf_mode == EFX_BUF_MODE_VDPA) {

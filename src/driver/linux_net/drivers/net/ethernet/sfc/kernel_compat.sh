@@ -98,6 +98,7 @@ EFX_HAVE_HEX_TO_BIN			symbol hex_to_bin		include/linux/kernel.h
 EFX_NEED_NS_TO_TIMESPEC			nexport ns_to_timespec		include/linux/time.h	kernel/time.c
 EFX_HAVE_TIMESPEC64			symbol	timespec64		include/linux/time64.h	include/linux/time.h
 EFX_NEED_KTIME_GET_REAL_TS64		nsymbol	ktime_get_real_ts64	include/linux/timekeeping.h	include/linux/ktime.h
+EFX_NEED_KTIME_COMPARE			nsymbol	ktime_compare		include/linux/ktime.h
 EFX_NEED_RTC_TIME64_TO_TM		nsymbol	rtc_time64_to_tm	include/linux/rtc.h
 EFX_NEED_SET_NORMALIZED_TIMESPEC	custom
 EFX_HAVE_VLAN_RX_PATH			symbol	vlan_hwaccel_receive_skb include/linux/if_vlan.h
@@ -106,9 +107,12 @@ EFX_HAVE_CPU_RMAP			file				include/linux/cpu_rmap.h
 EFX_HAVE_PTP_PF_NONE			symbol	PTP_PF_NONE		include/linux/ptp_clock.h include/uapi/linux/ptp_clock.h
 EFX_NEED_PTP_CLOCK_PPSUSR		custom
 EFX_USE_64BIT_PHC			member	struct_ptp_clock_info gettime64	include/linux/ptp_clock_kernel.h
+EFX_HAVE_PTP_GETCROSSTSTAMP		member	struct_ptp_clock_info getcrosststamp include/linux/ptp_clock_kernel.h
+EFX_NEED_KTIME_GET_SNAPSHOT		nsymbol	ktime_get_snapshot	include/linux/timekeeping.h
 EFX_HAVE_PHC_SUPPORT			custom
 EFX_HAVE_PTP_CLOCK_INFO_ADJFINE		member	struct_ptp_clock_info adjfine	include/linux/ptp_clock_kernel.h
 EFX_HAVE_PTP_CLOCK_INFO_ADJFREQ		member	struct_ptp_clock_info adjfreq	include/linux/ptp_clock_kernel.h
+EFX_HAVE_PTP_CLOCK_GETTIMEX64		member	struct_ptp_clock_info gettimex64	include/linux/ptp_clock_kernel.h
 EFX_NEED_SCALED_PPM_TO_PPB		nsymbol scaled_ppm_to_ppb		include/linux/ptp_clock_kernel.h
 EFX_NEED_PPS_SUB_TS			nsymbol pps_sub_ts		include/linux/pps_kernel.h
 EFX_NEED_PPS_EVENT_TIME			nsymbol	pps_event_time		include/linux/pps_kernel.h
@@ -376,6 +380,7 @@ EFX_NEED_KREALLOC_ARRAY			nsymbol	krealloc_array		include/linux/slab.h
 EFX_HAVE_VDPA_MGMT_INTERFACE		symbol	vdpa_mgmtdev_register	include/linux/vdpa.h
 EFX_HAVE_IOMMU_CAPABLE			symbol	iommu_capable		include/linux/iommu.h
 EFX_NEED_DEVICE_IOMMU_CAPABLE		nsymbol	device_iommu_capable	include/linux/iommu.h
+EFX_HAVE_IOMMU_MAP_GFP_PARAM		symtype iommu_map		include/linux/iommu.h int(struct iommu_domain *, unsigned long iova, phys_addr_t paddr, size_t, int, gfp_t)
 EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM	memtype	struct_vdpa_mgmtdev_ops	dev_add	include/linux/vdpa.h int (*)(struct vdpa_mgmt_dev *, const char *, const struct vdpa_dev_set_config *)
 EFX_HAVE_VDPA_SUPPORTED_FEATURES	member	struct_vdpa_mgmt_dev	supported_features	include/linux/vdpa.h
 EFX_HAVE_VDPA_MAX_SUPPORTED_VQS		member	struct_vdpa_mgmt_dev	max_supported_vqs	include/linux/vdpa.h

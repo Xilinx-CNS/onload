@@ -17,9 +17,7 @@
 #include "filter.h"
 #include "mcdi_functions.h"
 #include "mcdi_filters.h"
-#ifdef CONFIG_SFC_DEBUGFS
 #include "debugfs.h"
-#endif
 #include "ef100_iova.h"
 
 #if defined(CONFIG_SFC_VDPA)
@@ -196,9 +194,9 @@ void ef100_vdpa_unregister_mgmtdev(struct efx_nic *efx)
 #endif
 
 static void
-ef100_vdpa_addr_source(struct efx_nic *efx,
-		       bool *uc_promisc,
-		       bool *mc_promisc)
+ef100_vdpa_get_addrs(struct efx_nic *efx,
+		     bool *uc_promisc,
+		     bool *mc_promisc)
 {
 	struct ef100_vdpa_nic *vdpa_nic = efx->vdpa_nic;
 	struct efx_mcdi_dev_addr addr;
@@ -521,11 +519,12 @@ static int vdpa_update_domain(struct ef100_vdpa_nic *vdpa_nic)
 					  vdpa_nic->geo_aper_end + 1, 0);
 }
 
+static const struct efx_mcdi_filter_addr_ops vdpa_addr_ops = {
+	.get_addrs = ef100_vdpa_get_addrs,
+};
+
 int ef100_vdpa_init(struct efx_probe_data *probe_data)
 {
-	struct efx_mcdi_filter_addr_source addr_source = {
-		&ef100_vdpa_addr_source
-	};
 	struct efx_nic *efx = &probe_data->efx;
 	int rc = 0;
 
@@ -551,7 +550,7 @@ int ef100_vdpa_init(struct efx_probe_data *probe_data)
 	if (rc)
 		goto err_remove_filter_table;
 
-	efx_mcdi_filter_set_addr_source(efx, addr_source);
+	efx_mcdi_filter_set_addr_ops(efx, &vdpa_addr_ops);
 
 	if (!efx->type->filter_table_probe)
 		goto err_remove_filter_table;
@@ -697,7 +696,8 @@ static int ef100_vdpa_alloc_buffer(struct efx_nic *efx, struct efx_buffer *buf)
 
        rc = iommu_map(vdpa_nic->domain, buf->dma_addr,
                       virt_to_phys(buf->addr), buf->len,
-                      IOMMU_READ|IOMMU_WRITE|IOMMU_CACHE);
+                      IOMMU_READ|IOMMU_WRITE|IOMMU_CACHE,
+		      GFP_KERNEL);
        if (rc)
                dev_err(dev, "iommu_map failed, rc: %d\n", rc);
 
@@ -829,7 +829,8 @@ int remap_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova)
 	rc = iommu_map(vdpa_nic->domain, mcdi_iova,
 		       virt_to_phys(mcdi_buf->addr),
 		       mcdi_buf->len,
-		       IOMMU_READ | IOMMU_WRITE | IOMMU_CACHE);
+		       IOMMU_READ | IOMMU_WRITE | IOMMU_CACHE,
+		       GFP_KERNEL);
 	if (rc) {
 		pci_err(efx->pci_dev, "iommu_map failed, rc: %d\n", rc);
 		goto out;
@@ -955,11 +956,9 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
 		goto err_put_device;
 	}
 
-#ifdef CONFIG_SFC_DEBUGFS
 	rc = efx_init_debugfs_vdpa(vdpa_nic);
 	if (rc)
 		goto err_put_device;
-#endif
 
 	rc = get_net_config(vdpa_nic);
 	if (rc)

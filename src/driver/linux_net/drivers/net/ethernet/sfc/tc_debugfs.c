@@ -18,7 +18,7 @@
 #include "tc_conntrack.h"
 #include "nic.h"
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_TC_OFFLOAD)
 static void efx_tc_debugfs_dump_encap_match(struct seq_file *file,
 					    struct efx_tc_encap_match *encap)
@@ -1097,7 +1097,7 @@ static int efx_tc_debugfs_dump_mae_tables(struct seq_file *file, void *data)
 	return 0;
 }
 
-struct efx_debugfs_parameter efx_tc_debugfs[] = {
+const struct efx_debugfs_parameter efx_tc_debugfs[] = {
 	_EFX_RAW_PARAMETER(mae_rules, efx_tc_debugfs_dump_rules),
 	_EFX_RAW_PARAMETER(lhs_rules, efx_tc_debugfs_dump_lhs_rules),
 	_EFX_RAW_PARAMETER(mae_default_rules, efx_tc_debugfs_dump_default_rules),
@@ -1119,4 +1119,8 @@ struct efx_debugfs_parameter efx_tc_debugfs[] = {
 	{NULL}
 };
 #endif /* EFX_TC_OFFLOAD */
-#endif /* CONFIG_SFC_DEBUGFS */
+#else /* CONFIG_DEBUG_FS */
+const struct efx_debugfs_parameter efx_tc_debugfs[] = {
+	{NULL}
+};
+#endif /* CONFIG_DEBUG_FS */

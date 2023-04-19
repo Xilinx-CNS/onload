@@ -46,13 +46,7 @@
 static void ef100_update_name(struct efx_nic *efx)
 {
 	strcpy(efx->name, efx->net_dev->name);
-#ifdef CONFIG_SFC_DEBUGFS
-	mutex_lock(&efx->debugfs_symlink_mutex);
-	if (efx->debug_symlink)
-		efx_fini_debugfs_netdev(efx->net_dev);
-	efx_init_debugfs_netdev(efx->net_dev);
-	mutex_unlock(&efx->debugfs_symlink_mutex);
-#endif
+	efx_update_debugfs_netdev(efx);
 }
 
 static int ef100_alloc_vis(struct efx_nic *efx, unsigned int *allocated_vis)
@@ -853,7 +847,7 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 		efx_fini_tc(efx);
 	}
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 	mutex_lock(&efx->debugfs_symlink_mutex);
 	efx_fini_debugfs_netdev(efx->net_dev);
 	mutex_unlock(&efx->debugfs_symlink_mutex);

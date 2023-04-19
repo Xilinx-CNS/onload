@@ -277,7 +277,6 @@ static int efx_ioctl_get_ts_info(struct efx_nic *efx,
 #endif
 #endif
 
-#ifdef CONFIG_SFC_PPS
 static int efx_ioctl_get_pps_event(struct efx_nic *efx,
 				   union efx_ioctl_data *data)
 {
@@ -289,7 +288,6 @@ efx_ioctl_hw_pps_enable(struct efx_nic *efx, union efx_ioctl_data *data)
 {
 	return efx_ptp_hw_pps_enable(efx, data->pps_enable.enable != 0);
 }
-#endif
 
 static int efx_ioctl_get_device_ids(struct efx_nic *efx,
 				    union efx_ioctl_data *data)
@@ -521,7 +519,6 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 #endif
 	case EFX_SFCTOOL:
 		return efx_ioctl_sfctool(efx, user_data);
-#ifdef CONFIG_SFC_PPS
 	case EFX_TS_GET_PPS:
 		size = sizeof(data->pps_event);
 		op = efx_ioctl_get_pps_event;
@@ -530,7 +527,6 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 		size = sizeof(data->pps_enable);
 		op = efx_ioctl_hw_pps_enable;
 		break;
-#endif
 	case EFX_GET_DEVICE_IDS:
 		size = sizeof(data->device_ids);
 		op = efx_ioctl_get_device_ids;

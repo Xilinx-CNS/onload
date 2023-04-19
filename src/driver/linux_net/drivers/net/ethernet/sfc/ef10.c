@@ -2883,7 +2883,7 @@ static unsigned int efx_ef10_tx_max_skb_descs(struct efx_nic *efx)
 	return max_descs;
 }
 
-#ifdef CONFIG_SFC_DEBUGFS
+#ifdef CONFIG_DEBUG_FS
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 static int efx_debugfs_udp_tunnels(struct seq_file *file, void *data)
 {
@@ -2977,14 +2977,14 @@ static int efx_debugfs_read_netdev_dev_addr(struct seq_file *file, void *data)
 	return 0;
 }
 
-static struct efx_debugfs_parameter efx_debugfs[] = {
+static const struct efx_debugfs_parameter efx_debugfs[] = {
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 	_EFX_RAW_PARAMETER(udp_tunnels, efx_debugfs_udp_tunnels),
 #endif
 	{NULL},
 };
 
-static struct efx_debugfs_parameter netdev_debugfs[] = {
+static const struct efx_debugfs_parameter netdev_debugfs[] = {
 	_EFX_RAW_PARAMETER(netdev_uc_addr, efx_debugfs_read_netdev_uc_addr),
 	_EFX_RAW_PARAMETER(netdev_mc_addr, efx_debugfs_read_netdev_mc_addr),
 	_EFX_RAW_PARAMETER(netdev_uc_count, efx_debugfs_read_netdev_uc_count),
@@ -2993,7 +2993,15 @@ static struct efx_debugfs_parameter netdev_debugfs[] = {
 	_EFX_RAW_PARAMETER(netdev_dev_addr, efx_debugfs_read_netdev_dev_addr),
 	{NULL},
 };
-#endif /* CONFIG_SFC_DEBUGFS */
+#else /* CONFIG_DEBUG_FS */
+static const struct efx_debugfs_parameter efx_debugfs[] = {
+	{NULL}
+};
+
+static const struct efx_debugfs_parameter netdev_debugfs[] = {
+	{NULL}
+};
+#endif /* CONFIG_DEBUG_FS */
 
 static int efx_ef10_probe_multicast_chaining(struct efx_nic *efx)
 {
@@ -3075,11 +3083,8 @@ static int efx_ef10_filter_table_init(struct efx_nic *efx)
 	if (rc)
 		return rc;
 
-#ifdef CONFIG_SFC_DEBUGFS
 	efx_extend_debugfs_port(efx, efx, 0, efx_debugfs);
 	efx_extend_debugfs_port(efx, efx->net_dev, 0, netdev_debugfs);
-#endif
-
 	return 0;
 }
 
@@ -3103,10 +3108,8 @@ static void efx_ef10_filter_table_down(struct efx_nic *efx)
 
 static void efx_ef10_filter_table_fini(struct efx_nic *efx)
 {
-#ifdef CONFIG_SFC_DEBUGFS
 	efx_trim_debugfs_port(efx, efx_debugfs);
 	efx_trim_debugfs_port(efx, netdev_debugfs);
-#endif
 	efx_mcdi_filter_table_fini(efx);
 }
 

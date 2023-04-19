@@ -130,7 +130,7 @@ static inline ktime_t efx_ptp_nic_to_kernel_time(struct efx_tx_queue *tx_queue)
 }
 #endif
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PPS)
+#if defined(EFX_NOT_UPSTREAM)
 struct efx_ts_get_pps;
 struct efx_ts_hw_pps;
 #ifdef CONFIG_SFC_PTP

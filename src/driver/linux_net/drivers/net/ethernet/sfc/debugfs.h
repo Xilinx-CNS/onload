@@ -10,8 +10,6 @@
 
 #ifndef EFX_DEBUGFS_H
 #define EFX_DEBUGFS_H
-
-#ifdef CONFIG_SFC_DEBUGFS
 #ifdef CONFIG_SFC_VDPA
 #include "ef100_vdpa.h"
 #endif
@@ -24,9 +22,11 @@ struct efx_debugfs_parameter {
 	int (*reader)(struct seq_file *, void *);
 };
 
+#ifdef CONFIG_DEBUG_FS
 void efx_fini_debugfs_child(struct dentry *dir, const char *name);
 int efx_init_debugfs_netdev(struct net_device *net_dev);
 void efx_fini_debugfs_netdev(struct net_device *net_dev);
+void efx_update_debugfs_netdev(struct efx_nic *efx);
 int efx_init_debugfs_nic(struct efx_nic *efx);
 void efx_fini_debugfs_nic(struct efx_nic *efx);
 int efx_init_debugfs_channels(struct efx_nic *efx);
@@ -35,9 +35,9 @@ int efx_init_debugfs(const char *module);
 void efx_fini_debugfs(void);
 int efx_extend_debugfs_port(struct efx_nic *efx,
 			    void *context, u64 ignore,
-			    struct efx_debugfs_parameter *params);
+			    const struct efx_debugfs_parameter *params);
 void efx_trim_debugfs_port(struct efx_nic *efx,
-			   struct efx_debugfs_parameter *params);
+			   const struct efx_debugfs_parameter *params);
 #ifdef CONFIG_SFC_VDPA
 int efx_init_debugfs_vdpa(struct ef100_vdpa_nic *vdpa);
 void efx_fini_debugfs_vdpa(struct ef100_vdpa_nic *vdpa);
@@ -182,13 +182,16 @@ void efx_debugfs_print_filter(char *s, size_t l, struct efx_filter_spec *spec);
 int efx_debugfs_read_kernel_blocked(struct seq_file *file, void *data);
 #endif
 
-#else /* !CONFIG_SFC_DEBUGFS */
+#else /* !CONFIG_DEBUG_FS */
 
 static inline int efx_init_debugfs_netdev(struct net_device *net_dev)
 {
 	return 0;
 }
 static inline void efx_fini_debugfs_netdev(struct net_device *net_dev) {}
+
+static inline void efx_update_debugfs_netdev(struct efx_nic *efx) {}
+
 static inline int efx_init_debugfs_port(struct efx_nic *efx)
 {
 	return 0;
@@ -210,6 +213,43 @@ static inline int efx_init_debugfs(const char *module)
 }
 static inline void efx_fini_debugfs(void) {}
 
-#endif /* CONFIG_SFC_DEBUGFS */
+static inline
+int efx_extend_debugfs_port(struct efx_nic *efx,
+			    void *context, u64 ignore,
+			    const struct efx_debugfs_parameter *params)
+{
+	return 0;
+}
+
+static inline
+void efx_trim_debugfs_port(struct efx_nic *efx,
+			   const struct efx_debugfs_parameter *params)
+{
+}
+
+#ifdef CONFIG_SFC_VDPA
+static inline int efx_init_debugfs_vdpa(struct ef100_vdpa_nic *vdpa)
+{
+	return 0;
+}
+
+static inline void efx_fini_debugfs_vdpa(struct ef100_vdpa_nic *vdpa)
+{
+}
+
+static inline
+int efx_init_debugfs_vdpa_vring(struct ef100_vdpa_nic *vdpa,
+				struct ef100_vdpa_vring_info *vdpa_vring,
+				u16 idx)
+{
+	return 0;
+}
+
+static inline
+void efx_fini_debugfs_vdpa_vring(struct ef100_vdpa_vring_info *vdpa_vring)
+{
+}
+#endif
+#endif /* CONFIG_DEBUG_FS */
 
 #endif /* EFX_DEBUGFS_H */

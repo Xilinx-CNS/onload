@@ -57,16 +57,15 @@ struct efx_mcdi_dev_addr {
 	u8 addr[ETH_ALEN];
 };
 
-struct efx_mcdi_filter_addr_source {
+struct efx_mcdi_filter_addr_ops {
 	void (*get_addrs)(struct efx_nic *efx,
 			  bool *uc_promisc,
 			  bool *mc_promisc);
 };
 
-struct efx_mcdi_filter_addr_source efx_mcdi_filter_netdev_addr_source(void);
 void
-efx_mcdi_filter_set_addr_source(struct efx_nic *efx,
-				struct efx_mcdi_filter_addr_source addr_source);
+efx_mcdi_filter_set_addr_ops(struct efx_nic *efx,
+			     const struct efx_mcdi_filter_addr_ops *addr_ops);
 void efx_mcdi_filter_sync_rx_mode(struct efx_nic *efx);
 s32 efx_mcdi_filter_insert(struct efx_nic *efx,
 			   const struct efx_filter_spec *spec,
@@ -148,11 +147,11 @@ void efx_mcdi_rx_restore_rss_contexts(struct efx_nic *efx);
 
 bool efx_mcdi_filter_rfs_expire_one(struct efx_nic *efx, u32 flow_id,
 				    unsigned int filter_idx);
-#if defined(CONFIG_SFC_DEBUGFS)
+#if defined(CONFIG_DEBUG_FS)
 int efx_debugfs_read_filter_list(struct seq_file *file, void *data);
 #endif
 
-/* only to be called from an addr_source->get_addrs() */
+/* only to be called from an addr_ops->get_addrs() */
 void efx_mcdi_filter_uc_addr(struct efx_nic *efx,
 			     const struct efx_mcdi_dev_addr *addr);
 void efx_mcdi_filter_mc_addr(struct efx_nic *efx,

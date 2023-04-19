@@ -749,15 +749,11 @@ static inline uint16_t header_status_flags(const ci_oword_t *header)
 {
   uint16_t flags = 0;
 
-  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_CLASS) ==
-                       EFCT_RX_HEADER_L2_CLASS_ETH_01VLAN) &&
-       (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) ==
-                       EFCT_RX_HEADER_L2_STATUS_FCS_ERR) )
+  if ( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) ==
+                      EFCT_RX_HEADER_L2_STATUS_FCS_ERR )
     flags |= EF_VI_DISCARD_RX_ETH_FCS_ERR;
-  if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_CLASS) ==
-                       EFCT_RX_HEADER_L2_CLASS_ETH_01VLAN) &&
-       (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) ==
-                       EFCT_RX_HEADER_L2_STATUS_LEN_ERR) )
+  if ( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L2_STATUS) ==
+                      EFCT_RX_HEADER_L2_STATUS_LEN_ERR )
     flags |= EF_VI_DISCARD_RX_ETH_LEN_ERR;
   if ( (CI_OWORD_FIELD(*header, EFCT_RX_HEADER_L3_CLASS) ==
                        EFCT_RX_HEADER_L3_CLASS_IP4) &&

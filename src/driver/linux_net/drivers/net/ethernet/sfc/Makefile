@@ -25,18 +25,11 @@ ifndef EFX_UPSTREAM
 ifndef KERNELRELEASE
 export CONFIG_NET_VENDOR_SOLARFLARE := y
 export CONFIG_SFC := m
-ifdef EFX_FOR_UPSTREAM
-# match UNIFDEF_DEFINES in export.sh
-export CONFIG_SFC_DEBUGFS :=
-else
-export CONFIG_SFC_DEBUGFS := y
-endif
 export CONFIG_SFC_DUMP := y
 export CONFIG_SFC_MCDI_MON := y
 export CONFIG_SFC_MTD := y
 export CONFIG_SFC_SRIOV := y
 export CONFIG_SFC_PTP := y
-export CONFIG_SFC_PPS := y
 export CONFIG_SFC_TRACING :=
 export CONFIG_SFC_MCDI_LOGGING := y
 export CONFIG_SFC_SIENA :=
@@ -88,13 +81,6 @@ endif
 ifdef CONFIG_SFC_TRACING
 ifndef CONFIG_EVENT_TRACING
 $(error Kernel does not support EVENT_TRACING)
-endif
-endif
-ifdef CONFIG_SFC_DEBUGFS
-ifndef CONFIG_DEBUG_FS
-$(warning Kernel does not support DEBUG_FS)
-override CONFIG_SFC_DEBUGFS :=
-$(warning => Some diagnostic information will be unavailable)
 endif
 endif
 ifndef CONFIG_SFC_MCDI_LOGGING
@@ -163,6 +149,7 @@ sfc-$(CONFIG_SFC_MTD)	+= mtd.o
 sfc-$(CONFIG_SFC_VDPA) += ef100_vdpa.o ef100_vdpa_ops.o mcdi_vdpa.o \
 			  ef100_iova.o
 sfc-$(CONFIG_AUXILIARY_BUS)	+= efx_auxbus.o
+sfc-$(CONFIG_DEBUG_FS) += debugfs.o
 ifndef EFX_NO_KCOMPAT
 ifneq ($(MAKECMDGOALS),export)
 ifndef EFX_FOR_UPSTREAM
@@ -177,7 +164,6 @@ ifeq ($(filter export export-xen,$(MAKECMDGOALS)),)
 ifndef EFX_FOR_UPSTREAM
 sfc-y			+= sfctool.o ef100_dump.o
 sfc-$(CONFIG_SFC_AOE)	+= aoe.o
-sfc-$(CONFIG_SFC_DEBUGFS) += debugfs.o
 endif # !EFX_FOR_UPSTREAM
 sfc-$(CONFIG_SFC_DUMP) += dump.o
 endif
@@ -225,7 +211,7 @@ TOPDIR = $(src)/../../../..
 include $(TOPDIR)/scripts/Makefile.common
 
 define filechk_config.h
-	printf "$(foreach name,SFC_DEBUGFS SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_AOE SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL SFC_VDPA,#undef CONFIG_$(name)\n$(if $(filter y m,$(CONFIG_$(name))),#define CONFIG_$(name) $(CONFIG_$(name))\n))"
+	printf "$(foreach name,SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_AOE SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL SFC_VDPA,#undef CONFIG_$(name)\n$(if $(filter y m,$(CONFIG_$(name))),#define CONFIG_$(name) $(CONFIG_$(name))\n))"
 endef
 
 $(obj)/config.h: $(src)/Makefile FORCE
@@ -337,20 +323,20 @@ endif # EFX_NOT_EXPORTED
 
 # Export into kernel tree
 export:
-	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) efx_auxbus.c
+	$(EXPORT_CMD) $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) efx_auxbus.c debugfs.c
 	$(MAKE) -C siena $@
 
 export-resolve-kcompat:
-	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c) efx_auxbus.c
+	$(EXPORT_CMD) -k -kk $(KDIR) $(sfc-y:%.o=%.c) efx_auxbus.c debugfs.c
 
 # Export into a Xen kernel tree
 export-xen:
-	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) efx_auxbus.c
+	$(EXPORT_CMD) -k -kk --suffix=xen $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) efx_auxbus.c debugfs.c
 
 # Export for SRPM
 export-srpm:
 	mkdir -p $(KDIR)/mtd
-	$(EXPORT_CMD) -o $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh efx_auxbus.c
+	$(EXPORT_CMD) -o $(KDIR) $(sfc_driverlink-y:%.o=%.c) $(sfc-y:%.o=%.c) mtd/mtd-abi.h trace/events/sfc.h kernel_compat.sh $(TOPDIR)/scripts/kernel_compat_funcs.sh efx_auxbus.c debugfs.c
 
 .PHONY : intranet doc clean_doc util clean_util export export-xen export-srpm
 

@@ -41,11 +41,6 @@
 #include <linux/fs.h>
 #include <linux/compat.h>
 
-/* Major device number */
-static int major;
-module_param(major, int, 0444);
-MODULE_PARM_DESC(major, "char device major number to use");
-
 static int efx_ioctl_do_mcdi_old(struct efx_nic *efx, union efx_ioctl_data *data)
 {
 	struct efx_mcdi_request *req = &data->mcdi_request;
