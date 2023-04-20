@@ -507,7 +507,8 @@ app=$(basename "$1")
 handler="$HOME/.openonload/apps/$app"
 [ -f "$handler" ] || handler="$handler_d/$app"
 if [ -f "$handler" ] && $usehandler; then
-  vlog "app-handler: $app ($handler)"
+  log "app-handler: $app ($handler)"
+  log "Use -v option to see which tuning options are being automatically applied."
   . "$handler"
   vlog "app-handler-done: $app"
   # NB. Handler should exit if it doesn't want to fall through...
