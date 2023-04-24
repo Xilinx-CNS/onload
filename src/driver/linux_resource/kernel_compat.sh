@@ -154,6 +154,8 @@ EFRM_HAVE_ITER_UBUF symbol ITER_UBUF include/linux/uio.h
 
 EFRM_CLASS_DEVNODE_DEV_IS_CONST memtype struct_class devnode include/linux/device/class.h char*(*)(const struct device *, umode_t *)
 
+EFRM_HAVE_VM_FLAGS_SET symbol vm_flags_set include/linux/mm.h
+
 EFRM_HAVE_GET_RANDOM_U32	symbol get_random_u32	include/linux/random.h
 
 EFRM_HUGETLB_FILE_SETUP		symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, int, int)

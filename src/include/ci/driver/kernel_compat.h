@@ -421,6 +421,18 @@ oo_remap_vmalloc_range_partial(struct vm_area_struct *vma, unsigned long uaddr,
 #define ci_netif_rx_non_irq netif_rx
 #endif /* EFRM_HAVE_NETIF_RX_NI */
 
+#ifndef EFRM_HAVE_VM_FLAGS_SET
+/* Linux < 6.3 */
+static inline void vm_flags_set(struct vm_area_struct *vma, vm_flags_t flags)
+{
+  vma->vm_flags |= flags;
+}
+static inline void vm_flags_clear(struct vm_area_struct *vma, vm_flags_t flags)
+{
+  vma->vm_flags &= ~flags;
+}
+#endif /* EFRM_HAVE_VM_FLAGS_SET */
+
 #ifndef EFRM_HAVE_GET_RANDOM_U32
 /* linux < 4.11 */
 static inline u32 get_random_u32(void)
