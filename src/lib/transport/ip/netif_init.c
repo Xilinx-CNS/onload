@@ -27,9 +27,6 @@
 #include <limits.h>
 #include <net/if.h>
 #include <ci/internal/efabcfg.h>
-#if CI_CFG_PKTS_AS_HUGE_PAGES
-#include <sys/shm.h>
-#endif
 #endif
 
 
@@ -1748,8 +1745,8 @@ static void netif_tcp_helper_munmap(ci_netif* ni)
     for( id = 0; id < ni->packets->sets_n; id++ ) {
       if( PKT_BUFSET_U_MMAPPED(ni, id) ) {
 #if CI_CFG_PKTS_AS_HUGE_PAGES
-        if( ni->packets->set[id].shm_id >= 0 )
-          rc = shmdt(ni->pkt_bufs[id]);
+        if( ni->packets->set[id].page_offset >= 0 )
+          rc = munmap(ni->pkt_bufs[id], CI_HUGEPAGE_SIZE);
         else
 #endif
         {
@@ -2370,7 +2367,6 @@ ci_inline void netif_tcp_helper_free(ci_netif* ni)
   ci_netif_deinit(ni);
 }
 
-
 static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
                                 const ci_netif_config_opts* opts,
                                 unsigned flags, const char* name)
@@ -2392,18 +2388,34 @@ static void init_resource_alloc(ci_resource_onload_alloc_t* ra,
   if( name != NULL )
     strncpy(ra->in_name, name, CI_CFG_STACK_NAME_LEN);
 
-  ra->in_memfd = -1;
-#ifdef MFD_HUGETLB
-  /* The kernel code can cope with no memfd being provided, but only on older
-   * kernels */
+  ra->in_efct_memfd = -1;
+  ra->in_pktbuf_memfd = -1;
+
+  /* The kernel code can cope with no memfd being provided in both cases
+   * (in_efct_memfd and in_pktbuf_memfd), but only on older kernels, i.e.
+   * older than 5.7 where the fallback with efrm_find_ksym() stopped working.
+   * Overall:
+   * - Onload uses the efrm_find_ksym() fallback on Linux older than 4.14.
+   * - Both efrm_find_ksym() and memfd_create(MFD_HUGETLB) are available
+   *   on Linux between 4.14 and 5.7.
+   * - Onload can use only memfd_create(MFD_HUGETLB) on Linux 5.7+. */
   {
     char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
     snprintf(mfd_name, sizeof(mfd_name), "efct/%s", name);
-    ra->in_memfd = memfd_create(mfd_name, MFD_CLOEXEC | MFD_HUGETLB);
-    if( ra->in_memfd < 0 && errno != ENOSYS )
+    ra->in_efct_memfd = syscall(__NR_memfd_create, mfd_name,
+                                MFD_CLOEXEC | MFD_HUGETLB);
+    if( ra->in_efct_memfd < 0 && errno != ENOSYS )
       LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
   }
-#endif
+  /* Packet buffers */
+  {
+    char mfd_name[CI_CFG_STACK_NAME_LEN + 8];
+    snprintf(mfd_name, sizeof(mfd_name), "pktbuf/%s", name);
+    ra->in_pktbuf_memfd = syscall(__NR_memfd_create, mfd_name,
+                                  MFD_CLOEXEC | MFD_HUGETLB);
+    if( ra->in_pktbuf_memfd < 0 && errno != ENOSYS )
+      LOG_S(ci_log("%s: memfd_create failed %d", __FUNCTION__, errno));
+  }
 }
 
 
@@ -2427,8 +2439,11 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
    * we get an EINTR and want to try again. */
   while( (rc = oo_resource_alloc(fd, &ra)) == -EINTR );
 
-  if( ra.in_memfd >= 0 )
-    ci_sys_close(ra.in_memfd);
+  if( ra.in_efct_memfd >= 0 )
+    ci_sys_close(ra.in_efct_memfd);
+
+  if( ra.in_pktbuf_memfd >= 0 )
+    ci_sys_close(ra.in_pktbuf_memfd);
 
   if( rc < 0 ) {
     switch( rc ) {
@@ -2474,7 +2489,7 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
    */
   ni->nic_set = ra.out_nic_set;
   LOG_NC(ci_log("%s: nic set %" EFRM_NIC_SET_FMT, __FUNCTION__,
-	                efrm_nic_set_pri_arg(&ni->nic_set)));
+                efrm_nic_set_pri_arg(&ni->nic_set)));
   ni->mmap_bytes = ra.out_netif_mmap_bytes;
 
   /****************************************************************************
@@ -2502,7 +2517,7 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
 
   if( ns->flags & CI_NETIF_FLAG_ONLOAD_UNSUPPORTED ) {
     ci_log("*** Warning: use of %s with this adapter is likely",
-	   onload_product);
+           onload_product);
     ci_log("***  to show suboptimal performance for all cases other than the");
     ci_log("***  most trivial benchmarks.  Please see your Solarflare");
     ci_log("***  representative/reseller to obtain an Onload-capable");

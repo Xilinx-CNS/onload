@@ -142,7 +142,6 @@ struct efch_efct_rxq_alloc {
   /*bool*/uint8_t     in_timestamp_req;
   uint32_t            in_n_hugepages;
   int32_t             in_memfd;
-  uint64_t            in_memfd_off;
 };
 
 

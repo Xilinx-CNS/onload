@@ -465,7 +465,7 @@ static int tcp_helper_rm_mmap_pkts(tcp_helper_resource_t* trs,
     return -EINVAL;
   }
 #ifdef OO_DO_HUGE_PAGES
-  if( oo_iobufset_get_shmid(ni->pkt_bufs[bufid]) >= 0 ) {
+  if( oo_iobufset_get_hugetlb_page(ni->pkt_bufs[bufid]) ) {
     OO_DEBUG_ERR(ci_log("%s: [%d] WARNING mmapping huge page from bufset=0x%"
                         PRIx64 " will split it", __func__, trs->id, bufid));
   }

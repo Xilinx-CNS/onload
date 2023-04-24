@@ -5,6 +5,8 @@
 #define LIB_EFHW_EFCT_H
 
 struct efct_client;
+struct oo_hugetlb_allocator;
+
 static inline struct efct_client*
 efhw_nic_acquire_efct_device(struct efhw_nic* nic)
 {
@@ -53,8 +55,8 @@ efhw_nic_release_efct_device(struct efhw_nic* nic,
   put_device((dev)); \
 }
 
-void efct_provide_bind_memfd(struct file* memfd, off_t memfd_off);
-void efct_unprovide_bind_memfd(off_t *final_off);
+void efct_provide_hugetlb_alloc(struct oo_hugetlb_allocator *hugetlb_alloc);
+void efct_unprovide_hugetlb_alloc(void);
 
 #endif
 

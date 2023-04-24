@@ -261,6 +261,9 @@ extern int efab_tcp_helper_efct_superbuf_config_refresh(
                                         tcp_helper_resource_t* trs,
                                         oo_efct_superbuf_config_refresh_t* op);
 
+extern int efab_tcp_helper_pkt_buf_map(tcp_helper_resource_t* trs,
+                                       oo_pkt_buf_map_t* arg);
+
 extern void
 tcp_helper_cluster_ref(tcp_helper_cluster_t* thc);
 
@@ -282,6 +285,7 @@ tcp_helper_cluster_dump(tcp_helper_resource_t* thr, void* buf, int buf_len);
 extern int tcp_helper_cluster_alloc_thr(const char* name,
                                         int cluster_size,
                                         int cluster_restart,
+                                        int pktbuf_memfd,
                                         int ni_flags,
                                         const ci_netif_config_opts* ni_opts,
                                         tcp_helper_resource_t** thr_out);

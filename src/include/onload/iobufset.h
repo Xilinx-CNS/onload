@@ -43,6 +43,7 @@
 #include <onload/common.h>
 #include <onload/linux_onload.h>
 #include <onload/atomics.h>
+#include <kernel_utils/hugetlb.h>
 
 /********************************************************************
  *
@@ -51,6 +52,7 @@
  ********************************************************************/
 
 struct efrm_pd;
+struct oo_hugetlb_allocator;
 
 /*
  * For all these structures, users should not access the structure fields
@@ -62,20 +64,18 @@ struct efrm_pd;
  */
 
 
-/*! Continuous memorry allocation structure.
+/*! Continuous memory allocation structure.
  * All pages MUST have the same order. */
 struct oo_buffer_pages {
   int n_bufs;               /*!< number of entries in pages array */
   oo_atomic_t ref_count;
 #ifdef OO_DO_HUGE_PAGES
-  int shmid;
-  struct file* shm_map_file;
-  void (*close)(struct vm_area_struct*);
+  struct oo_hugetlb_page hugetlb_page;
 #endif
   struct page **pages;     /*!< array of Linux compound pages */
 };
 
-/*! Iobufset resource structture. */
+/*! Iobufset resource structure. */
 struct oo_iobufset {
   struct efrm_pd *pd;
   struct efrm_bt_collection buf_tbl_alloc;
@@ -87,10 +87,12 @@ struct oo_iobufset {
 
 /*********** Find memory parameters ******************/
 #ifdef OO_DO_HUGE_PAGES
-/*! Are we shared memory backed? */
-ci_inline int oo_iobufset_get_shmid(struct oo_buffer_pages *pages)
+/*! Are we hugetlb backed? */
+ci_inline struct oo_hugetlb_page *
+oo_iobufset_get_hugetlb_page(struct oo_buffer_pages *pages)
 {
-  return pages->shmid;
+  return oo_hugetlb_page_valid(&pages->hugetlb_page) ? &pages->hugetlb_page :
+                                                    NULL;
 }
 #endif
 
@@ -110,7 +112,7 @@ ci_inline unsigned long oo_iobufset_pfn(struct oo_buffer_pages *pages, int offse
   /* This function is used from nopage handler.  Huge pages should not be
    * mmaped in this way. */
 #ifdef OO_DO_HUGE_PAGES
-  ci_assert_equal(pages->shmid, -1);
+  ci_assert(! oo_hugetlb_page_valid(&pages->hugetlb_page));
 #endif
 
   return page_to_pfn(pages->pages[offset >> PAGE_SHIFT >> order]) +
@@ -145,6 +147,7 @@ void oo_iobufset_kfree(struct oo_buffer_pages *pages);
  * \param min_nic_order minimum NIC page order
  * \param flags         see OO_IOBUFSET_FLAG_*, in/out
  * \param pages_out     pointer to return the allocated pages
+ * \param hugetlb_alloc pointer to the allocator, can be NULL
  *
  * \return              status code; if non-zero, pages_out is unchanged
  *
@@ -154,7 +157,8 @@ void oo_iobufset_kfree(struct oo_buffer_pages *pages);
  */
 extern int
 oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
-                        struct oo_buffer_pages **pages_out);
+                        struct oo_buffer_pages **pages_out,
+                        struct oo_hugetlb_allocator *hugetlb_alloc);
 extern void oo_iobufset_pages_release(struct oo_buffer_pages *);
 
 /*!

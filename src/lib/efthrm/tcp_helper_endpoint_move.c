@@ -793,6 +793,7 @@ int efab_tcp_loopback_connect(ci_private_t *priv, void *arg)
          * todo: no hardware interfaces are necessary */
         strcpy(alloc.in_version, onload_short_version);
         strcpy(alloc.in_uk_intf_ver, oo_uk_intf_ver);
+        alloc.in_pktbuf_memfd = -1;
 
         /* There will be no more active connections in the new stack
          * - tcp_shared_local_ports is useless. */

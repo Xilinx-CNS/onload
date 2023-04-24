@@ -54,7 +54,8 @@ EXPORT_SYMBOL(efrm_rxq_from_resource);
 
 
 int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
-                   size_t n_hugepages, struct file* memfd, off_t* memfd_off,
+                   size_t n_hugepages,
+                   struct oo_hugetlb_allocator *hugetlb_alloc,
                    struct efrm_efct_rxq **rxq_out)
 {
 #if CI_HAVE_EFCT_AUX
@@ -67,7 +68,7 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 
 	if (shm_ix < 0 ||
 	    shm_ix >= efhw_nic_max_shared_rxqs(vi_rs->rs_client->nic) ||
-	    memfd_off < 0 )
+	    !hugetlb_alloc)
 		return -EINVAL;
 
 	rxq = kzalloc(sizeof(struct efrm_efct_rxq), GFP_KERNEL);
@@ -76,9 +77,9 @@ int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix, bool timestamp_req,
 
 	rxq->vi = vi;
 	rc = efct_nic_rxq_bind(vi_rs->rs_client->nic, qid, timestamp_req,
-	                       n_hugepages, memfd, memfd_off,
+	                       n_hugepages, hugetlb_alloc,
 	                       &vi->efct_shm->q[shm_ix], vi->rs.rs_instance,
-						   &rxq->hw);
+	                       &rxq->hw);
 	if (rc < 0) {
 		kfree(rxq);
 		return rc;

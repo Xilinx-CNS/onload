@@ -8,6 +8,7 @@ struct efrm_resource;
 struct efrm_resource_manager;
 struct efrm_vi;
 struct efrm_efct_rxq;
+struct oo_hugetlb_allocator;
 
 int efrm_create_rxq_resource_manager(struct efrm_resource_manager **rm_out);
 
@@ -16,7 +17,7 @@ extern struct efrm_efct_rxq* efrm_rxq_from_resource(struct efrm_resource *rs);
 
 extern int efrm_rxq_alloc(struct efrm_vi *vi, int qid, int shm_ix,
                           bool timestamp_req, size_t n_hugepages,
-                          struct file* memfd, off_t* memfd_off,
+                          struct oo_hugetlb_allocator *hugetlb_alloc,
                           struct efrm_efct_rxq **rxq_out);
 
 extern void efrm_rxq_release(struct efrm_efct_rxq *rxq);

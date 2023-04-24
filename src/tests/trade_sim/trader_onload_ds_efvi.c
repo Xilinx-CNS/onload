@@ -381,9 +381,9 @@ static void ef_vi_init(struct client_state* cs)
     TRY( ef_vi_alloc_from_pd(&(cs->vi), cs->dh, &(cs->pd), cs->dh,
                              -1, 0, -1, NULL, -1, EF_VI_FLAGS_DEFAULT) );
     cs->use_ctpio = 0;
+    TRY( ef_pio_alloc(&(cs->pio), cs->dh, &(cs->pd), -1, cs->dh));
+    TRY( ef_pio_link_vi(&(cs->pio), cs->dh, &(cs->vi), cs->dh));
   }
-  TRY( ef_pio_alloc(&(cs->pio), cs->dh, &(cs->pd), -1, cs->dh));
-  TRY( ef_pio_link_vi(&(cs->pio), cs->dh, &(cs->vi), cs->dh));
 
   int bytes = N_TX_BUFS * PKT_BUF_SIZE;
   void* p;

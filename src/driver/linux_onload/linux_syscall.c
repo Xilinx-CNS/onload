@@ -94,28 +94,3 @@ asmlinkage int efab_linux_sys_epoll_wait(int epfd, struct epoll_event *events,
 #endif
 }
 
-#ifdef OO_DO_HUGE_PAGES
-asmlinkage int efab_linux_sys_shmget(key_t key, size_t size, int shmflg)
-{
-  return (int)SYSCALL_DISPATCHn(3, shmget, (key_t, size_t, int),
-                                key, size, shmflg);
-}
-
-asmlinkage long efab_linux_sys_shmat(int shmid, char __user *addr, int shmflg)
-{
-  return (long)SYSCALL_DISPATCHn(3, shmat, (int, char*, int),
-                                 shmid, addr, shmflg);
-}
-
-asmlinkage int efab_linux_sys_shmdt(char __user *addr)
-{
-  return (int)SYSCALL_DISPATCHn(1, shmdt, (char*), addr);
-}
-
-asmlinkage int efab_linux_sys_shmctl(int shmid, int cmd, struct shmid_ds __user *buf)
-{
-  return (int)SYSCALL_DISPATCHn(3, shmctl, (int, int, struct shmid_ds*),
-                                shmid, cmd, buf);
-}
-#endif
-
