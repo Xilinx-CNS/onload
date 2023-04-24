@@ -44,7 +44,7 @@ oo_cplane_empower_cap_net_raw(struct net* netns, struct cred **my_creds_p)
 #endif
     struct cred *creds = prepare_creds();
     if( creds != NULL ) {
-      creds->cap_effective.cap[0] |= 1 << CAP_NET_RAW;
+      cap_raise(creds->cap_effective, CAP_NET_RAW);
       *my_creds_p = creds;
       return override_creds(creds);
     }
