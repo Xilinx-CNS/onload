@@ -5,9 +5,10 @@
 #include <linux/mman.h>
 #include <uapi/linux/falloc.h>
 #include <kernel_utils/hugetlb.h>
-#include <ci/driver/kernel_compat.h> /* For pin_user_pages(). */
+
+/* For pin_user_pages(), fget() and fput(). */
+#include <ci/driver/kernel_compat.h>
 #include <ci/efrm/sysdep.h> /* For efrm_find_ksym(). */
-#include <driver/linux_onload/onload_kernel_compat.h> /* For fget(), fput(). */
 
 #ifdef EFRM_HAVE_NEW_KALLSYMS
 /*

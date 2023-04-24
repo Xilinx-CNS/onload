@@ -17,6 +17,7 @@
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/common.h>
 #include <ci/tools/byteorder.h>
+#include <ci/tools/sysdep.h>
 
 
 #define M_(FIELD) (CI_MASK64(FIELD ## _WIDTH) << FIELD ## _LBN)
