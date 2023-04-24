@@ -52,6 +52,7 @@
 #include <linux/uaccess.h>
 #include <linux/syscalls.h>
 #include <linux/fdtable.h>
+#include <linux/file.h>
 #include <asm/syscall.h>
 #include <net/sock.h>
 #include <linux/filter.h>
