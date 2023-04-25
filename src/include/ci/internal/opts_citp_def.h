@@ -408,7 +408,9 @@ CI_CFG_OPT("EF_FDTABLE_SIZE", fdtable_size, ci_uint32,
 #define CI_UL_LOG_S     0x4            /* setup */
 #define CI_UL_LOG_V     0x8            /* verbose */
 #define CI_UL_LOG_SEL   0x10
-#define CI_UL_LOG_POLL  0x20
+#define CI_UL_LOG_POLL  0x20           /* muxers */
+#define CI_UL_LOG_VPOLL 0x40           /* verbose muxers (per poll) */
+#define CI_UL_LOG_VVPOLL 0x80          /* very verbose muxers (per event) */
 
 #define CI_UL_LOG_VSS   0x100          /* socket set-up */
 #define CI_UL_LOG_VSC   0x200          /* socket control */

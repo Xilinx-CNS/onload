@@ -43,6 +43,8 @@ extern unsigned citp_log_level CI_HV;
 #define Log_V(x)      Log_FL(CI_UL_LOG_V, x)
 #define Log_SEL(x)    Log_FL(CI_UL_LOG_SEL, x)
 #define Log_POLL(x)   Log_FL(CI_UL_LOG_POLL, x)
+#define Log_VPOLL(x)  Log_FL(CI_UL_LOG_VPOLL, x)
+#define Log_VVPOLL(x) Log_FL(CI_UL_LOG_VVPOLL, x)
 #define Log_VSS(x)    Log_FL(CI_UL_LOG_VSS, x)
 #define Log_VSC(x)    Log_FL(CI_UL_LOG_VSC, x)
 #define Log_EP(x)     Log_FL(CI_UL_LOG_EP, x)
