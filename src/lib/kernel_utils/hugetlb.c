@@ -186,13 +186,13 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 
 	/* Did we get a good hugepage? */
 	if (rc != 1) {
-		EFRM_ERR("%s: Unable to pin page at 0x%08lx rc=%d", __func__,
+		EFRM_ERR("%s: Unable to pin page at 0x%016llx rc=%d", __func__,
 				allocator->offset, rc);
 		goto fail_vfs;
 	}
 
 	if (!(*page_out)) {
-		EFRM_ERR("%s: Unable to create hugepage at 0x%08lx", __func__,
+		EFRM_ERR("%s: Unable to create hugepage at 0x%016llx", __func__,
 				allocator->offset);
 		rc = -ENOMEM;
 		goto fail_vfs;
@@ -229,7 +229,7 @@ EXPORT_SYMBOL(oo_hugetlb_page_alloc_raw);
 
 void oo_hugetlb_page_free_raw(struct file *filp, struct page *page)
 {
-	off_t offset;
+	loff_t offset;
 	int rc;
 
 	EFRM_ASSERT(filp);

@@ -31,7 +31,7 @@
 
 struct oo_hugetlb_allocator {
 	struct file *filp;
-	off_t offset;
+	loff_t offset;
 	atomic_t refcnt;
 };
 

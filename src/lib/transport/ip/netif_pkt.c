@@ -61,7 +61,7 @@ ci_ip_pkt_fmt* __ci_netif_pkt(ci_netif* ni, unsigned id)
                ni->state->pretty_name);
       }
       else {
-        ci_log("%s: mmap(0x%08x) failed for pkt set %d (%d)", __FUNCTION__,
+        ci_log("%s: mmap(0x%016lx) failed for pkt set %d (%d)", __FUNCTION__,
                ni->packets->set[setid].page_offset, setid, -errno);
       }
       goto out;
