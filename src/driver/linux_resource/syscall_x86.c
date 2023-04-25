@@ -253,39 +253,24 @@ void** find_syscall_table(void)
          (p[2] == 0xe7 && p[4] == 0x63 && p[5] == 0xf0)) ) {
       /* Skip IBRS: search for the nearest "call", 0xe8. */
       unsigned char *p1 = p + 6;
-      while( *p1 != 0xe8 )
-        p1++;
-      /* Is this our "call do_syscall_64", or something from UNTRAIN_RET?
-       * In the second case these calls go one after another, and we should
-       * take the second one.
-       *
-       * To get into this case, you need to pass retbleed=unret or
-       * retbleed=ibpb via the kernel command line.
-       * Tested with Intel(R) Xeon(R) CPU E3-1220 v6 @ 3.00GHz.
-       *
-       * No kernel I know about has a "call" after "call do_syscall_64",
-       * so 2 consecutive calls mean that do_syscall_64 is the second one. */
-      if( p1[5] == 0xe8 )
-        p1 += 5;
+      unsigned char *ret;
+      do {
+        while( *p1 != 0xe8 )
+          p1++;
+        result = (unsigned long)p1 + 5;
+        result += p1[1] | (p1[2] << 8) | (p1[3] << 16) | (p1[4] << 24);
 
-      result = (unsigned long)p1 + 5;
-      result += p1[1] | (p1[2] << 8) | (p1[3] << 16) | (p1[4] << 24);
-      break;
+        ret = find_syscall_table_from_do_syscall_64((void*)result);
+        if( ret != NULL )
+          return (void**)ret;
+        p1 += 5; /* skip this e8 XX XX XX XX instruction */
+      } while( p1 < pend );
     }
     p++;
   }
 
-  if( result == 0 ) {
-    EFRM_WARN("%s: didn't find do_syscall_64()", __func__);
-    return 0;
-  }
-
-  p = (void*)result;
-  p = find_syscall_table_from_do_syscall_64(p);
-
-  if( p == NULL )
-    TRAMP_DEBUG("didn't find syscall table address");
-  return (void**)p;
+  TRAMP_DEBUG("didn't find syscall table address");
+  return NULL;
 }
 
 
