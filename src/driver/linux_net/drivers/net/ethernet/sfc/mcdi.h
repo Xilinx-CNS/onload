@@ -230,6 +230,24 @@ static inline struct efx_mcdi_mon *efx_mcdi_mon(struct efx_nic *efx)
 }
 #endif
 
+#ifdef CONFIG_SFC_VDPA
+static bool is_mode_vdpa(struct efx_nic *efx)
+{
+	if (efx->pci_dev->is_virtfn &&
+	    efx->pci_dev->physfn &&
+	    efx->state == STATE_VDPA &&
+	    efx->vdpa_nic)
+		return true;
+
+	return false;
+}
+#else
+static bool is_mode_vdpa(struct efx_nic *efx)
+{
+	return false;
+}
+#endif
+
 int efx_mcdi_init(struct efx_nic *efx);
 void efx_mcdi_detach(struct efx_nic *efx);
 void efx_mcdi_fini(struct efx_nic *efx);
@@ -301,6 +319,15 @@ static inline int efx_mcdi_rpc(struct efx_nic *efx, unsigned int cmd,
 			       efx_dword_t *outbuf, size_t outlen,
 			       size_t *outlen_actual)
 {
+	struct efx_nic *efx_pf;
+
+	if (is_mode_vdpa(efx)) {
+		efx_pf = pci_get_drvdata(efx->pci_dev->physfn);
+		return efx_mcdi_rpc_client_sync(efx_pf, efx->client_id, cmd,
+						inbuf, inlen, outbuf, outlen,
+						outlen_actual, false);
+	}
+
 	return efx_mcdi_rpc_client_sync(efx, MC_CMD_CLIENT_ID_SELF, cmd,
 					inbuf, inlen, outbuf, outlen,
 					outlen_actual, false);
@@ -329,6 +356,15 @@ static inline int efx_mcdi_rpc_quiet(struct efx_nic *efx, unsigned int cmd,
 				     efx_dword_t *outbuf, size_t outlen,
 				     size_t *outlen_actual)
 {
+	struct efx_nic *efx_pf;
+
+	if (is_mode_vdpa(efx)) {
+		efx_pf = pci_get_drvdata(efx->pci_dev->physfn);
+		return efx_mcdi_rpc_client_quiet(efx_pf, efx->client_id, cmd,
+						 inbuf, inlen, outbuf, outlen,
+						 outlen_actual);
+	}
+
 	return efx_mcdi_rpc_client_quiet(efx, MC_CMD_CLIENT_ID_SELF, cmd,
 					 inbuf, inlen, outbuf, outlen,
 					 outlen_actual);

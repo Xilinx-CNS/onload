@@ -4097,10 +4097,14 @@ static int efx_ef10_mac_reconfigure(struct efx_nic *efx, bool mtu_only)
 
 	efx_mcdi_filter_sync_rx_mode(efx);
 
-	rc = efx_mcdi_set_mac(efx);
-	if (rc == -EPERM && mtu_only &&
+	if (mtu_only &&
 	    efx_ef10_has_cap(nic_data->datapath_caps, SET_MAC_ENHANCED))
 		return efx_mcdi_set_mtu(efx);
+
+	rc = efx_mcdi_set_mac(efx);
+	if (rc == -EPERM && efx_ef10_is_vf(efx))
+		return 0;
+
 	return rc;
 }
 

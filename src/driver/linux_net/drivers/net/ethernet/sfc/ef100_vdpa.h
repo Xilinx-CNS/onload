@@ -39,11 +39,13 @@
 
 /* Vring configuration definitions */
 #define EF100_VRING_ADDRESS_CONFIGURED 0x1
-#define EF100_VRING_SIZE_CONFIGURED 0x10
-#define EF100_VRING_READY_CONFIGURED 0x100
+#define EF100_VRING_SIZE_CONFIGURED 0x2
+#define EF100_VRING_READY_CONFIGURED 0x4
 #define EF100_VRING_CONFIGURED (EF100_VRING_ADDRESS_CONFIGURED | \
 				EF100_VRING_SIZE_CONFIGURED | \
 				EF100_VRING_READY_CONFIGURED)
+
+#define EF100_VRING_CREATED 0x8
 
 /* Maximum size of msix name */
 #define EF100_VDPA_MAX_MSIX_NAME_SIZE 256
@@ -68,25 +70,19 @@ enum ef100_vdpa_nic_state {
 
 /* Enum defining the virtio device types
  * @EF100_VDPA_DEVICE_TYPE_NET: virtio net device type
- * @EF100_VDPA_DEVICE_TYPE_BLOCK: virtio block device type
  */
 enum ef100_vdpa_device_type {
-	EF100_VDPA_DEVICE_TYPE_RESERVED,
 	EF100_VDPA_DEVICE_TYPE_NET,
-	EF100_VDPA_DEVICE_TYPE_BLOCK,
 	EF100_VDPA_DEVICE_NTYPES
 };
 
 /* Enum defining the virtquque types
  * @EF100_VDPA_VQ_TYPE_NET_RXQ: NET RX type
  * @EF100_VDPA_VQ_TYPE_NET_TXQ: NET TX type
- * @EF100_VDPA_VQ_TYPE_BLOCK:  block type
- *
  */
 enum ef100_vdpa_vq_type {
 	EF100_VDPA_VQ_TYPE_NET_RXQ,
 	EF100_VDPA_VQ_TYPE_NET_TXQ,
-	EF100_VDPA_VQ_TYPE_BLOCK,
 	EF100_VDPA_VQ_NTYPES
 };
 
@@ -114,7 +110,6 @@ struct ef100_vdpa_vring_info {
 	dma_addr_t used;
 	u32 size;
 	u16 vring_state;
-	bool vring_created;
 	u32 last_avail_idx;
 	u32 last_used_idx;
 	u32 doorbell_offset;
@@ -132,6 +127,7 @@ struct ef100_vdpa_vring_info {
 /* struct ef100_vdpa_nic - vDPA NIC data structure
  * @vdpa_dev: vdpa_device object which registers on the vDPA bus.
  * @vdpa_state: NIC state machine governed by ef100_vdpa_nic_state
+ * @mcdi_mode: MCDI mode at the time of unmapping VF mcdi buffer
  * @efx: pointer to the VF's efx_nic object
  * @lock: Managing access to vdpa config operations
  * @pf_index: PF index of the vDPA VF
@@ -142,18 +138,13 @@ struct ef100_vdpa_vring_info {
  * @vring: vring information of the vDPA device.
  * @mac_address: mac address of interface associated with this vdpa device
  * @cfg_cb: callback for config change
- * @domain: IOMMU domain
  * @debug_dir: vDPA debugfs directory
- * @iova_root: iova rbtree root
- * @iova_lock: lock to synchronize updates to rbtree and freelist
- * @free_list: list to store free iova areas of size >= MCDI buffer length
- * @geo_aper_start: start of valid IOVA range
- * @geo_aper_end: end of valid IOVA range
  * @in_order: if true, allow VIRTIO_F_IN_ORDER feature negotiation
  */
 struct ef100_vdpa_nic {
 	struct vdpa_device vdpa_dev;
 	enum ef100_vdpa_nic_state vdpa_state;
+	enum efx_mcdi_mode mcdi_mode;
 	struct efx_nic *efx;
 	struct mutex lock;
 	u32 pf_index;
@@ -165,16 +156,9 @@ struct ef100_vdpa_nic {
 	struct ef100_vdpa_vring_info vring[EF100_VDPA_MAX_QUEUES_PAIRS * 2];
 	u8 *mac_address;
 	struct vdpa_callback cfg_cb;
-	struct iommu_domain *domain;
 #ifdef CONFIG_DEBUG_FS
-
 	struct dentry *debug_dir;
 #endif
-	struct rb_root iova_root;
-	struct mutex iova_lock;
-	struct list_head free_list;
-	u64 geo_aper_start;
-	u64 geo_aper_end;
 	bool in_order;
 };
 
@@ -192,16 +176,12 @@ int ef100_vdpa_init(struct efx_probe_data *probe_data);
 void ef100_vdpa_fini(struct efx_probe_data *probe_data);
 void ef100_vdpa_delete(struct efx_nic *efx);
 void ef100_vdpa_insert_filter(struct efx_nic *efx);
-int ef100_vdpa_irq_vectors_alloc(struct pci_dev *pci_dev, u16 min, u16 max);
 void ef100_vdpa_irq_vectors_free(void *data);
-int ef100_vdpa_free_buffer(struct ef100_vdpa_nic *vdpa_nic,
-			   struct efx_buffer *buf);
 void reset_vdpa_device(struct ef100_vdpa_nic *vdpa_nic);
 int ef100_vdpa_reset(struct vdpa_device *vdev);
 bool ef100_vdpa_dev_in_use(struct efx_nic *efx);
-int setup_ef100_mcdi_buffer(struct ef100_vdpa_nic *vdpa_nic);
-int setup_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
-int remap_vdpa_mcdi_buffer(struct efx_nic *efx, u64 mcdi_iova);
+int ef100_vdpa_init_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx);
+int ef100_vdpa_map_mcdi_buffer(struct efx_nic *efx);
 
 extern const struct vdpa_config_ops ef100_vdpa_config_ops;
 #endif /* CONFIG_SFC_VDPA */

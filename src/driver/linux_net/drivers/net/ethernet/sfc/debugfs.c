@@ -972,76 +972,13 @@ static void efx_fini_debugfs_channel(struct efx_channel *channel)
 	channel->debug_dir = NULL;
 }
 
-static int efx_nic_debugfs_read_desc(struct seq_file *file, void *data)
-{
-	struct efx_nic *efx = data;
-	const char *rev_name;
-	uint8_t revision;
-
-	switch (efx_nic_rev(efx)) {
-	case EFX_REV_HUNT_A0:
-		rev_name = "Huntington";
-		break;
-	case EFX_REV_EF100:
-		rev_name = "Riverhead";
-		break;
-	default:
-		WARN_ON(1);
-		rev_name = "???";
-		break;
-	}
-
-	pci_read_config_byte(efx->pci_dev, PCI_REVISION_ID, &revision);
-	seq_printf(file, "%s %s (rev A%d) board\n", rev_name, efx->phy_name,
-		   revision);
-	return 0;
-}
-
-static int efx_nic_debugfs_read_name(struct seq_file *file, void *data)
-{
-	struct efx_nic *efx = data;
-
-	seq_printf(file, "%s\n", efx->name);
-	return 0;
-}
-
-static int efx_nic_debugfs_read_rx_channels(struct seq_file *file, void *data)
-{
-	struct efx_nic *efx = data;
-
-	seq_printf(file, "%d\n", efx_rx_channels(efx));
-	return 0;
-}
-
-static int efx_nic_debugfs_read_tx_channels(struct seq_file *file, void *data)
-{
-	struct efx_nic *efx = data;
-
-	seq_printf(file, "%d\n", efx_tx_channels(efx));
-	return 0;
-}
-
 /* Per-NIC parameters */
 static const struct efx_debugfs_parameter efx_debugfs_nic_parameters[] = {
-	/* Runbench requires we call this n_rx_queues and use decimal format */
-	{.name = "n_rx_queues",
-	 .offset = 0,
-	 .reader = efx_nic_debugfs_read_rx_channels},
-	{.name = "n_tx_channels",
-	 .offset = 0,
-	 .reader = efx_nic_debugfs_read_tx_channels},
-	EFX_UINT_PARAMETER(struct efx_nic, n_combined_channels),
 	EFX_UINT_PARAMETER(struct efx_nic, rx_dma_len),
 	EFX_UINT_PARAMETER(struct efx_nic, rx_buffer_order),
 	EFX_UINT_PARAMETER(struct efx_nic, rx_buffer_truesize),
 	EFX_INT_MODE_PARAMETER(struct efx_nic, interrupt_mode),
 	EFX_NIC_STATE_PARAMETER(struct efx_nic, state),
-	{.name = "hardware_desc",
-	 .offset = 0,
-	 .reader = efx_nic_debugfs_read_desc},
-	{.name = "name",
-	 .offset = 0,
-	 .reader = efx_nic_debugfs_read_name},
 	{NULL},
 };
 

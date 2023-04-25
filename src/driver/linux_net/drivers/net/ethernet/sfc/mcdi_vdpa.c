@@ -47,8 +47,6 @@ struct efx_vring_ctx *efx_vdpa_vring_init(struct efx_nic *efx,  u32 vi,
 		queue_cmd = MC_CMD_VIRTIO_INIT_QUEUE_REQ_NET_RXQ;
 	} else if (vring_type == EF100_VDPA_VQ_TYPE_NET_TXQ) {
 		queue_cmd = MC_CMD_VIRTIO_INIT_QUEUE_REQ_NET_TXQ;
-	} else if (vring_type == EF100_VDPA_VQ_TYPE_BLOCK) {
-		queue_cmd = MC_CMD_VIRTIO_INIT_QUEUE_REQ_BLOCK;
 	} else {
 		pr_err("%s: Invalid Queue type %u\n", __func__, vring_type);
 		kfree(vring_ctx);
@@ -75,8 +73,7 @@ int efx_vdpa_get_features(struct efx_nic *efx,
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_VIRTIO_GET_FEATURES_OUT_LEN);
 	u32 high_val = 0, low_val = 0;
 	ssize_t outlen;
-	u32 dev_type;
-	int rc = 0;
+	int rc;
 
 	if (!efx) {
 		pr_err("%s: Invalid NIC pointer\n", __func__);
@@ -86,18 +83,11 @@ int efx_vdpa_get_features(struct efx_nic *efx,
 		pr_err("%s: Invalid features pointer\n", __func__);
 		return -EINVAL;
 	}
-	switch (type) {
-	case EF100_VDPA_DEVICE_TYPE_NET:
-		dev_type = MC_CMD_VIRTIO_GET_FEATURES_IN_NET;
-		break;
-	case EF100_VDPA_DEVICE_TYPE_BLOCK:
-		dev_type = MC_CMD_VIRTIO_GET_FEATURES_IN_BLOCK;
-		break;
-	default:
-		pr_err("%s: Device type not supported %d\n", __func__, type);
+	if (type != EF100_VDPA_DEVICE_TYPE_NET)
 		return -EINVAL;
-	}
-	MCDI_SET_DWORD(inbuf, VIRTIO_GET_FEATURES_IN_DEVICE_ID, dev_type);
+
+	MCDI_SET_DWORD(inbuf, VIRTIO_GET_FEATURES_IN_DEVICE_ID,
+		       MC_CMD_VIRTIO_GET_FEATURES_IN_NET);
 	rc = efx_mcdi_rpc(efx, MC_CMD_VIRTIO_GET_FEATURES, inbuf, sizeof(inbuf),
 			  outbuf, sizeof(outbuf), &outlen);
 	if (rc)
@@ -115,35 +105,32 @@ int efx_vdpa_verify_features(struct efx_nic *efx,
 {
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_VIRTIO_TEST_FEATURES_IN_LEN);
 	ssize_t outlen;
-	u32 dev_type;
-	int rc = 0;
+	int rc;
 
 	if (!efx) {
 		pr_err("%s: Invalid NIC pointer\n", __func__);
 		return -EINVAL;
 	}
-	switch (type) {
-	case EF100_VDPA_DEVICE_TYPE_NET:
-		dev_type = MC_CMD_VIRTIO_GET_FEATURES_IN_NET;
-		break;
-	case EF100_VDPA_DEVICE_TYPE_BLOCK:
-		dev_type = MC_CMD_VIRTIO_GET_FEATURES_IN_BLOCK;
-		break;
-	default:
+
+	if (type != EF100_VDPA_DEVICE_TYPE_NET) {
 		pr_err("%s: Device type not supported %d\n", __func__, type);
 		return -EINVAL;
 	}
+
 	BUILD_BUG_ON(MC_CMD_VIRTIO_TEST_FEATURES_OUT_LEN != 0);
-	MCDI_SET_DWORD(inbuf, VIRTIO_TEST_FEATURES_IN_DEVICE_ID, type);
+	MCDI_SET_DWORD(inbuf, VIRTIO_TEST_FEATURES_IN_DEVICE_ID,
+		       MC_CMD_VIRTIO_GET_FEATURES_IN_NET);
 	MCDI_SET_DWORD(inbuf, VIRTIO_TEST_FEATURES_IN_FEATURES_LO,
 		       features & 0xFFFFFFFF);
 	MCDI_SET_DWORD(inbuf, VIRTIO_TEST_FEATURES_IN_FEATURES_HI,
 		       (features >> 32) & 0xFFFFFFFF);
 	rc = efx_mcdi_rpc(efx, MC_CMD_VIRTIO_TEST_FEATURES, inbuf, sizeof(inbuf),
 			  NULL, 0, &outlen);
+	if (rc)
+		return rc;
 	if (outlen != MC_CMD_VIRTIO_TEST_FEATURES_OUT_LEN)
 		return -EIO;
-	return rc;
+	return 0;
 }
 
 int efx_vdpa_vring_create(struct efx_vring_ctx *vring_ctx,
@@ -153,7 +140,7 @@ int efx_vdpa_vring_create(struct efx_vring_ctx *vring_ctx,
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_VIRTIO_INIT_QUEUE_REQ_LEN);
 	struct efx_nic *efx;
 	ssize_t outlen;
-	int rc = 0;
+	int rc;
 
 #ifdef EFX_NOT_UPSTREAM
 	pr_info("%s: vf:%u type:%u vi:%u last_avail: %x last_used: %x\n",
@@ -211,7 +198,7 @@ int efx_vdpa_vring_create(struct efx_vring_ctx *vring_ctx,
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_VIRTIO_INIT_QUEUE, inbuf, sizeof(inbuf),
 			  NULL, 0, &outlen);
-	if (rc != 0)
+	if (rc)
 		return rc;
 	if (outlen != MC_CMD_VIRTIO_INIT_QUEUE_RESP_LEN)
 		return -EMSGSIZE;
@@ -225,7 +212,7 @@ int efx_vdpa_vring_destroy(struct efx_vring_ctx *vring_ctx,
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_VIRTIO_FINI_QUEUE_RESP_LEN);
 	struct efx_nic *efx;
 	ssize_t outlen;
-	int rc = 0;
+	int rc;
 
 	efx = vring_ctx->nic;
 #ifdef EFX_NOT_UPSTREAM
@@ -243,7 +230,7 @@ int efx_vdpa_vring_destroy(struct efx_vring_ctx *vring_ctx,
 	rc = efx_mcdi_rpc(efx, MC_CMD_VIRTIO_FINI_QUEUE, inbuf, sizeof(inbuf),
 			  outbuf, sizeof(outbuf), &outlen);
 
-	if (rc != 0)
+	if (rc)
 		return rc;
 
 	if (outlen <  MC_CMD_VIRTIO_FINI_QUEUE_RESP_LEN)
@@ -265,34 +252,28 @@ int efx_vdpa_get_doorbell_offset(struct efx_vring_ctx *vring_ctx,
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_VIRTIO_GET_DOORBELL_OFFSET_REQ_LEN);
 	MCDI_DECLARE_BUF(outbuf,
 			 MC_CMD_VIRTIO_GET_NET_DOORBELL_OFFSET_RESP_LEN);
-	struct efx_nic *efx;
-	u32 device_type;
+	struct efx_nic *efx = vring_ctx->nic;
 	ssize_t outlen;
-	int rc = 0;
+	int rc;
 
-	efx = vring_ctx->nic;
 #ifdef EFX_NOT_UPSTREAM
 	pr_info("%s: Called for vf:0x%x type:%u vi:%u\n", __func__,
 		vring_ctx->vf_index, vring_ctx->mcdi_vring_type,
 		vring_ctx->vi_index);
 #endif
-	switch (vring_ctx->mcdi_vring_type) {
-	case MC_CMD_VIRTIO_INIT_QUEUE_REQ_NET_RXQ:
-	case MC_CMD_VIRTIO_INIT_QUEUE_REQ_NET_TXQ:
-		device_type = MC_CMD_VIRTIO_GET_FEATURES_IN_NET;
-		break;
-	case MC_CMD_VIRTIO_INIT_QUEUE_REQ_BLOCK:
-		device_type = MC_CMD_VIRTIO_GET_FEATURES_IN_BLOCK;
-		break;
-	default:
-		return -EINVAL;
-	}
-
 	if (!offsetp)
 		return -EINVAL;
 
+	if (vring_ctx->mcdi_vring_type != MC_CMD_VIRTIO_INIT_QUEUE_REQ_NET_RXQ &&
+	    vring_ctx->mcdi_vring_type != MC_CMD_VIRTIO_INIT_QUEUE_REQ_NET_TXQ) {
+		pci_err(efx->pci_dev,
+			"%s: Invalid Queue type %u\n",
+			__func__, vring_ctx->mcdi_vring_type);
+		return -EINVAL;
+	}
+
 	MCDI_SET_BYTE(inbuf, VIRTIO_GET_DOORBELL_OFFSET_REQ_DEVICE_ID,
-		      device_type);
+		      MC_CMD_VIRTIO_GET_FEATURES_IN_NET);
 	MCDI_SET_WORD(inbuf, VIRTIO_GET_DOORBELL_OFFSET_REQ_TARGET_VF,
 		      vring_ctx->vf_index);
 	MCDI_SET_DWORD(inbuf, VIRTIO_GET_DOORBELL_OFFSET_REQ_INSTANCE,
@@ -300,32 +281,18 @@ int efx_vdpa_get_doorbell_offset(struct efx_vring_ctx *vring_ctx,
 
 	rc = efx_mcdi_rpc(efx, MC_CMD_VIRTIO_GET_DOORBELL_OFFSET, inbuf,
 			  sizeof(inbuf), outbuf, sizeof(outbuf), &outlen);
-	if (rc != 0)
+	if (rc)
 		return rc;
 
-	switch (device_type) {
-	case MC_CMD_VIRTIO_GET_FEATURES_IN_NET:
-		if (outlen <
-			MC_CMD_VIRTIO_GET_NET_DOORBELL_OFFSET_RESP_LEN)
-			return -EMSGSIZE;
-		if (vring_ctx->mcdi_vring_type ==
-				MC_CMD_VIRTIO_INIT_QUEUE_REQ_NET_RXQ)
-			*offsetp = MCDI_DWORD(outbuf,
-					      VIRTIO_GET_NET_DOORBELL_OFFSET_RESP_RX_DBL_OFFSET);
-		else
-			*offsetp = MCDI_DWORD(outbuf,
-					      VIRTIO_GET_NET_DOORBELL_OFFSET_RESP_TX_DBL_OFFSET);
-		break;
-	case MC_CMD_VIRTIO_GET_FEATURES_IN_BLOCK:
-		if (outlen <
-			MC_CMD_VIRTIO_GET_BLOCK_DOORBELL_OFFSET_RESP_LEN)
-			return -EMSGSIZE;
+	if (outlen < MC_CMD_VIRTIO_GET_NET_DOORBELL_OFFSET_RESP_LEN)
+		return -EIO;
+
+	if (vring_ctx->mcdi_vring_type == MC_CMD_VIRTIO_INIT_QUEUE_REQ_NET_RXQ)
 		*offsetp = MCDI_DWORD(outbuf,
-				      VIRTIO_GET_BLOCK_DOORBELL_OFFSET_RESP_DBL_OFFSET);
-		break;
-	default:
-		return -EINVAL;
-	}
+				      VIRTIO_GET_NET_DOORBELL_OFFSET_RESP_RX_DBL_OFFSET);
+	else
+		*offsetp = MCDI_DWORD(outbuf,
+				      VIRTIO_GET_NET_DOORBELL_OFFSET_RESP_TX_DBL_OFFSET);
 
 	return 0;
 }
@@ -364,7 +331,7 @@ int efx_vdpa_get_mtu(struct efx_nic *efx, u16 *mtu)
 	MCDI_DECLARE_BUF(inbuf, MC_CMD_SET_MAC_EXT_IN_LEN);
 	MCDI_DECLARE_BUF(outbuf, MC_CMD_SET_MAC_V2_OUT_LEN);
 	ssize_t outlen;
-	int rc = 0;
+	int rc;
 
 	MCDI_SET_DWORD(inbuf, SET_MAC_EXT_IN_CONTROL, 0);
 	rc =  efx_mcdi_rpc(efx, MC_CMD_SET_MAC, inbuf, sizeof(inbuf),

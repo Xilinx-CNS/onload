@@ -1282,8 +1282,8 @@ struct efx_ptp_mcdi_data {
 	struct kref ref;
 	bool done;
 	spinlock_t done_lock;
-	wait_queue_head_t wq;
 	int rc;
+	wait_queue_head_t wq;
 	size_t resplen;
 	_MCDI_DECLARE_BUF(outbuf, MC_CMD_PTP_OUT_SYNCHRONIZE_LENMAX);
 };
@@ -1305,6 +1305,10 @@ static void efx_ptp_send_times(struct efx_nic *efx,
 	ktime_t limit;
 
 	ktime_get_snapshot(&now);
+	/* Initialise ts_real in case the MC is very fast and the while loop
+	 * below is skipped.
+	 */
+	ts_real = ktime_to_timespec64(now.real);
 	limit = ktime_add_ns(now.real, SYNCHRONISE_PERIOD_NS);
 
 	/* Write host time for specified period or until MC is done */

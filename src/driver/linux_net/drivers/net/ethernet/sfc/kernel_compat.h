@@ -2680,4 +2680,15 @@ static inline int efx_iommu_map(struct iommu_domain *domain,
 #define iommu_map efx_iommu_map
 #endif
 
+#ifndef EFX_HAVE_SK_BUFF_LIST
+static inline void efx__skb_queue_tail(struct sk_buff_head *list,
+				       struct sk_buff *newsk)
+{
+        // This calls __skb_queue_before(list, (struct sk_buff *)list, newsk)
+	__skb_insert(newsk, list->prev, (struct sk_buff *)list, list);
+}
+#undef __skb_queue_tail
+#define __skb_queue_tail efx__skb_queue_tail
+#endif
+
 #endif /* EFX_KERNEL_COMPAT_H */

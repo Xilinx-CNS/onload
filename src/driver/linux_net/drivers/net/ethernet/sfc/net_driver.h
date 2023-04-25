@@ -97,7 +97,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.14.1011"
+#define EFX_DRIVER_VERSION	"5.3.14.1012"
 #endif
 
 #ifdef DEBUG
@@ -1402,6 +1402,7 @@ struct efx_mae;
  * @type: Controller type attributes
  * @mgmt_dev: vDPA Management device
  * @port_num: Port number as reported by MCDI
+ * @client_id: client ID of this PCIe function
  * @adapter_base_addr: MAC address of port0 (used as unique identifier)
  * @reset_work: Scheduled reset workitem
  * @membase_phys: Memory BAR value as physical address
@@ -1597,6 +1598,7 @@ struct efx_nic {
 	struct vdpa_mgmt_dev *mgmt_dev;
 #endif
 	unsigned int port_num;
+	u32 client_id;
 	/* Aligned for efx_mcdi_get_board_cfg()+ether_addr_copy() */
 	u8 adapter_base_addr[ETH_ALEN] __aligned(2);
 	struct work_struct reset_work;

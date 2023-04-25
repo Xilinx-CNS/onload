@@ -283,6 +283,11 @@ int efx_ef100_init_datapath_caps(struct efx_nic *efx)
 	pci_dbg(efx->pci_dev,
 		"firmware reports num_mac_stats = %u\n",
 		efx->num_mac_stats);
+#ifdef CONFIG_SFC_VDPA
+	nic_data->vdpa_supported = efx_ef100_has_cap(nic_data->datapath_caps3,
+						     CLIENT_CMD_VF_PROXY) &&
+				   efx->type->is_vf;
+#endif
 	return 0;
 }
 
@@ -1270,13 +1275,6 @@ static char *bar_config_name[] = {
 	[EF100_BAR_CONFIG_VDPA] = "vDPA",
 };
 
-#ifdef CONFIG_SFC_VDPA
-static bool efx_vdpa_supported(struct efx_nic *efx)
-{
-	return efx->type->is_vf;
-}
-#endif
-
 int efx_ef100_set_bar_config(struct efx_nic *efx,
 			     enum ef100_bar_config new_config)
 {
@@ -1292,7 +1290,7 @@ int efx_ef100_set_bar_config(struct efx_nic *efx,
 	/* Current EF100 hardware supports vDPA on VFs only
 	 * (see SF-122427-SW)
 	 */
-	if (new_config == EF100_BAR_CONFIG_VDPA && !efx_vdpa_supported(efx)) {
+	if (new_config == EF100_BAR_CONFIG_VDPA && !nic_data->vdpa_supported) {
 		pci_err(efx->pci_dev, "vdpa over PF not supported : %s",
 			efx->name);
 		return -EOPNOTSUPP;
@@ -1578,6 +1576,35 @@ out:
 	return rc;
 }
 
+static int efx_ef100_update_client_id(struct efx_nic *efx)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+	unsigned int pf_index = PCIE_FUNCTION_PF_NULL;
+	unsigned int vf_index = PCIE_FUNCTION_VF_NULL;
+	efx_qword_t pciefn;
+	int rc;
+
+	if (efx->pci_dev->is_virtfn)
+		vf_index = nic_data->vf_index;
+	else
+		pf_index = nic_data->pf_index;
+
+	/* Construct PCIE_FUNCTION structure */
+	EFX_POPULATE_QWORD_3(pciefn,
+			     PCIE_FUNCTION_PF, pf_index,
+			     PCIE_FUNCTION_VF, vf_index,
+			     PCIE_FUNCTION_INTF, PCIE_INTERFACE_CALLER);
+	/* look up self client ID */
+	rc = efx_ef100_lookup_client_id(efx, pciefn, &efx->client_id);
+	if (rc) {
+		pci_warn(efx->pci_dev,
+			 "%s: Failed to get client ID, rc %d\n",
+			 __func__, rc);
+	}
+
+	return rc;
+}
+
 /*	NIC probe and remove
  */
 static int ef100_probe_main(struct efx_nic *efx)
@@ -1671,6 +1698,10 @@ static int ef100_probe_main(struct efx_nic *efx)
 	}
 
 	rc = efx_get_fn_info(efx, &nic_data->pf_index, &nic_data->vf_index);
+	if (rc)
+		goto fail;
+
+	rc = efx_ef100_update_client_id(efx);
 	if (rc)
 		goto fail;
 
@@ -1787,11 +1818,6 @@ void ef100_remove(struct efx_nic *efx)
 	if (nic_data) {
 		if (efx->mcdi_buf_mode == EFX_BUF_MODE_EF100)
 			efx_nic_free_buffer(efx, &nic_data->mcdi_buf);
-#if defined(CONFIG_SFC_VDPA)
-		else
-			ef100_vdpa_free_buffer(efx->vdpa_nic,
-					       &nic_data->mcdi_buf);
-#endif
 		mutex_destroy(&nic_data->bar_config_lock);
 	}
 
