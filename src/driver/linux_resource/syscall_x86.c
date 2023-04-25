@@ -103,6 +103,81 @@ static bool is_movq_to_rdi(const unsigned char *p)
 }
 
 
+static unsigned char*
+find_syscall_table_from_do_syscall_64(unsigned char *my_do_syscall_64)
+{
+  unsigned char *p = my_do_syscall_64;
+  unsigned char *pend;
+  unsigned long result;
+
+  TRAMP_DEBUG("try do_syscall_64=%px", p);
+  /* For linux>=4.6 do_syscall_64() resides in
+   * linux/arch/x86/entry/common.c:
+   * regs->ax = sys_call_table[nr](regs);
+   * Debian linux-5.7 has following:
+   *    48 8b 04 fd XX XX XX XX	mov    0x0(,%rdi,8),%rax
+   *    48 89 ef            	mov    %rbp,%rdi
+   *    e8 YY YY YY YY      	callq
+   *
+   * See the comments at is_movq_indirect_8() and is_movq_to_rdi().
+   * And 2 mov instructions can be swapped.
+   * Kernels built for retpoline but running on a modern, mitigated chip will
+   * patch the call instruction with "callq *%rax; nop3"
+   *
+   * Without RETPOLINE (see ON-13350) it can be following:
+   *    48 89 ef             	mov    %rbp,%rdi
+   *    ff 14 c5 XX XX XX XX 	callq  *0x0(,%rax,8)
+   */
+  p += 0x20; /* skip the first part of do_syscall_64() */
+  result = 0;
+  pend = p + 1024 - 12;
+#if 0
+  printk("%px: %02x %02x %02x %02x %02x %02x %02x %02x %02x\n"
+              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
+              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
+              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
+              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
+              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
+              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
+              "%02x %02x %02x %02x %02x %02x %02x %02x\n",
+              p, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8],
+              p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16],
+              p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24],
+              p[25], p[26], p[27], p[28], p[29], p[30], p[31], p[32],
+              p[33], p[34], p[35], p[36], p[37], p[38], p[39], p[40],
+              p[41], p[42], p[43], p[44], p[45], p[46], p[47], p[48],
+              p[49], p[50], p[51], p[52], p[53], p[54], p[55], p[56],
+              p[57], p[58], p[59], p[60], p[61], p[62], p[63], p[64]
+              );
+#endif
+
+  while (p < pend) {
+#ifdef CONFIG_RETPOLINE
+    if( is_movq_indirect_8(p) ) {
+      if( (is_movq_to_rdi(p + 8) && is_callq_indirect_reg(p + 11)) ||
+          (is_movq_to_rdi(p-3) && is_callq_indirect_reg(p + 8)) ) {
+        s32 addr = p[4] | (p[5] << 8) | (p[6] << 16) | (p[7] << 24);
+        result = (long)addr;
+        TRAMP_DEBUG("sys_call_table=%lx", result);
+        return (void*)result;
+      }
+    }
+#else
+    if( is_callq_indirect_8(p) ) {
+      if( is_movq_to_rdi(p-3) ) {
+        s32 addr = p[3] | (p[4] << 8) | (p[5] << 16) | (p[6] << 24);
+        result = (long)addr;
+        return (void*)result;
+      }
+    }
+#endif
+    p++;
+  }
+
+  /* This pointer does not look like do_syscall_64 */
+  return NULL;
+}
+
 void** find_syscall_table(void)
 {
   unsigned char *p = NULL;
@@ -206,72 +281,11 @@ void** find_syscall_table(void)
   }
 
   p = (void*)result;
-  TRAMP_DEBUG("do_syscall_64=%px", p);
-  /* For linux>=4.6 do_syscall_64() resides in
-   * linux/arch/x86/entry/common.c:
-   * regs->ax = sys_call_table[nr](regs);
-   * Debian linux-5.7 has following:
-   *    48 8b 04 fd XX XX XX XX	mov    0x0(,%rdi,8),%rax
-   *    48 89 ef            	mov    %rbp,%rdi
-   *    e8 YY YY YY YY      	callq
-   *
-   * See the comments at is_movq_indirect_8() and is_movq_to_rdi().
-   * And 2 mov instructions can be swapped.
-   * Kernels built for retpoline but running on a modern, mitigated chip will
-   * patch the call instruction with "callq *%rax; nop3"
-   *
-   * Without RETPOLINE (see ON-13350) it can be following:
-   *    48 89 ef             	mov    %rbp,%rdi
-   *    ff 14 c5 XX XX XX XX 	callq  *0x0(,%rax,8)
-   */
-  p += 0x20; /* skip the first part of do_syscall_64() */
-  result = 0;
-  pend = p + 1024 - 12;
-#if 0
-  printk("%px: %02x %02x %02x %02x %02x %02x %02x %02x %02x\n"
-              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
-              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
-              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
-              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
-              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
-              "%02x %02x %02x %02x %02x %02x %02x %02x\n"
-              "%02x %02x %02x %02x %02x %02x %02x %02x\n",
-              p, p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8],
-              p[9], p[10], p[11], p[12], p[13], p[14], p[15], p[16],
-              p[17], p[18], p[19], p[20], p[21], p[22], p[23], p[24],
-              p[25], p[26], p[27], p[28], p[29], p[30], p[31], p[32],
-              p[33], p[34], p[35], p[36], p[37], p[38], p[39], p[40],
-              p[41], p[42], p[43], p[44], p[45], p[46], p[47], p[48],
-              p[49], p[50], p[51], p[52], p[53], p[54], p[55], p[56],
-              p[57], p[58], p[59], p[60], p[61], p[62], p[63], p[64]
-              );
-#endif
+  p = find_syscall_table_from_do_syscall_64(p);
 
-  while (p < pend) {
-#ifdef CONFIG_RETPOLINE
-    if( is_movq_indirect_8(p) ) {
-      if( (is_movq_to_rdi(p + 8) && is_callq_indirect_reg(p + 11)) ||
-          (is_movq_to_rdi(p-3) && is_callq_indirect_reg(p + 8)) ) {
-        s32 addr = p[4] | (p[5] << 8) | (p[6] << 16) | (p[7] << 24);
-        result = (long)addr;
-        TRAMP_DEBUG("sys_call_table=%lx", result);
-        return (void**)result;
-      }
-    }
-#else
-    if( is_callq_indirect_8(p) ) {
-      if( is_movq_to_rdi(p-3) ) {
-        s32 addr = p[3] | (p[4] << 8) | (p[5] << 16) | (p[6] << 24);
-        result = (long)addr;
-        return (void**)result;
-      }
-    }
-#endif
-    p++;
-  }
-
-  TRAMP_DEBUG("didn't find syscall table address");
-  return NULL;
+  if( p == NULL )
+    TRAMP_DEBUG("didn't find syscall table address");
+  return (void**)p;
 }
 
 
