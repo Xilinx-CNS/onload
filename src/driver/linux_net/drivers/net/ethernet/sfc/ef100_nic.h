@@ -92,7 +92,6 @@ enum ef100_bar_config {
 enum ef100_vdpa_class {
 	EF100_VDPA_CLASS_NONE,
 	EF100_VDPA_CLASS_NET,
-	EF100_VDPA_CLASS_BLOCK,
 };
 #endif
 #endif
@@ -149,6 +148,7 @@ struct ef100_nic_data {
 	bool have_local_intf; /* local_mae_intf was populated successfully */
 	bool filters_up; /* filter table has been upped */
 	bool grp_mae; /* MAE Privilege */
+	bool vdpa_supported; /* true if vdpa is supported on this PCIe FN */
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_TC_OFFLOAD) && \
     !defined(EFX_HAVE_FLOW_INDR_BLOCK_CB_REGISTER)
 	spinlock_t udp_tunnels_lock;

@@ -512,6 +512,7 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 
 	efx->type = (const struct efx_nic_type *)entry->driver_data;
 	efx->pci_dev = pci_dev;
+	efx->client_id = MC_CMD_CLIENT_ID_SELF;
 	pci_set_drvdata(pci_dev, efx);
 	rc = efx_init_struct(efx, pci_dev);
 	if (rc)

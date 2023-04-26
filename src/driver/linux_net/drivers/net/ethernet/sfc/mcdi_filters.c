@@ -2189,8 +2189,6 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool rss_limited,
 
 	efx->filter_state = table;
 
-	INIT_LIST_HEAD(&table->vlan_list);
-
 	table->rss_limited = rss_limited;
 	table->additional_rss_modes = additional_rss_modes;
 
