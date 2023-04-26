@@ -109,11 +109,13 @@ oo_hugetlb_page_alloc(struct oo_hugetlb_allocator *alloc,
 	return oo_hugetlb_page_alloc_raw(alloc, &page->filp, &page->page);
 }
 
-extern void oo_hugetlb_page_free_raw(struct file *, struct page *);
+extern void oo_hugetlb_page_free_raw(struct file *, struct page *,
+		bool atomic_context);
 
-static inline void oo_hugetlb_page_free(struct oo_hugetlb_page *page)
+static inline void oo_hugetlb_page_free(struct oo_hugetlb_page *page,
+		bool atomic_context)
 {
-	oo_hugetlb_page_free_raw(page->filp, page->page);
+	oo_hugetlb_page_free_raw(page->filp, page->page, atomic_context);
 	oo_hugetlb_page_reset(page);
 }
 

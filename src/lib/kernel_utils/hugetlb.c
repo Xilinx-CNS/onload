@@ -6,7 +6,7 @@
 #include <uapi/linux/falloc.h>
 #include <kernel_utils/hugetlb.h>
 
-/* For pin_user_pages(), fget() and fput(). */
+/* For pin_user_pages(), fget(), fput(), etc. */
 #include <ci/driver/kernel_compat.h>
 #include <ci/efrm/sysdep.h> /* For efrm_find_ksym(). */
 
@@ -227,7 +227,8 @@ fail_vfs:
 }
 EXPORT_SYMBOL(oo_hugetlb_page_alloc_raw);
 
-void oo_hugetlb_page_free_raw(struct file *filp, struct page *page)
+void oo_hugetlb_page_free_raw(struct file *filp, struct page *page,
+		bool atomic_context)
 {
 	loff_t offset;
 	int rc;
@@ -238,10 +239,15 @@ void oo_hugetlb_page_free_raw(struct file *filp, struct page *page)
 	offset = page->index * OO_HUGEPAGE_SIZE;
 
 	unpin_user_page(page);
-	rc = vfs_fallocate(filp, FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
-			offset, OO_HUGEPAGE_SIZE);
-	if (rc)
-		EFRM_WARN("%s: vfs_fallocate() failed: %d", __func__, rc);
+
+	if (!atomic_context) {
+		rc = vfs_fallocate(filp,
+				FALLOC_FL_PUNCH_HOLE | FALLOC_FL_KEEP_SIZE,
+				offset, OO_HUGEPAGE_SIZE);
+		if (rc)
+			EFRM_WARN("%s: vfs_fallocate() failed: %d", __func__,
+					rc);
+	}
 
 	fput(filp);
 }
