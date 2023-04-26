@@ -115,6 +115,7 @@ int oo_shmbuf_fault(struct oo_shmbuf* sh, struct vm_area_struct* vma,
   rc = oo_remap_vmalloc_range_partial(vma, vma->vm_start + start_off,
                                       (void*)sh->addrs[i], size);
   if( rc >= 0 )
-    vma->vm_flags &= ~VM_DONTDUMP; /* remap_vmalloc_range_partial sets this */
+    /* remap_vmalloc_range_partial sets this */
+    vm_flags_clear(vma, VM_DONTDUMP);
   return rc;
 }

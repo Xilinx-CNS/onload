@@ -127,7 +127,7 @@ ci_char_fop_mmap(struct file* file, struct vm_area_struct* vma)
   if( (rc = efch_resource_id_lookup(rsid, &priv->rt, &rs)) < 0 )
     return rc;
 
-  vma->vm_flags |= EFRM_VM_BASE_FLAGS;
+  vm_flags_set(vma, EFRM_VM_BASE_FLAGS);
 
   /* Hook into the VM so we can keep a proper reference count on this
   ** resource.

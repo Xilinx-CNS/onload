@@ -543,7 +543,7 @@ oo_stack_mmap(ci_private_t* priv, struct vm_area_struct* vma)
 
   ci_assert((offset & PAGE_MASK) == offset);
 
-  vma->vm_flags |= EFRM_VM_BASE_FLAGS;
+  vm_flags_set(vma, EFRM_VM_BASE_FLAGS);
   vma->vm_private_data = (void *) priv->thr;
 
   vma->vm_ops = &vm_ops;
@@ -575,7 +575,7 @@ oo_fop_mmap(struct file* file, struct vm_area_struct* vma)
 
   /* We never turn read-only mmaps into read-write.  Forbid it. */
   if( ! (vma->vm_flags & VM_WRITE) )
-    vma->vm_flags &= ~VM_MAYWRITE;
+    vm_flags_clear(vma, VM_MAYWRITE);
 
   switch( map_type ) {
   case OO_MMAP_TYPE_NETIF:

@@ -30,7 +30,7 @@ ci_mmap_io(struct efhw_nic* nic, resource_size_t page_addr, size_t len,
   ci_assert((*offset &~ CI_PAGE_MASK) == 0);
   ci_assert(*map_num == 0 || *offset > 0);
 
-  vma->vm_flags |= EFRM_VM_IO_FLAGS;
+  vm_flags_set(vma, EFRM_VM_IO_FLAGS);
 
   if( set_wc )
     vma->vm_page_prot = pgprot_writecombine(vma->vm_page_prot);
