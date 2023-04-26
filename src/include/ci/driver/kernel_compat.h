@@ -433,4 +433,12 @@ static inline void vm_flags_clear(struct vm_area_struct *vma, vm_flags_t flags)
 }
 #endif /* EFRM_HAVE_VM_FLAGS_SET */
 
+#ifndef EFRM_HAVE_GET_RANDOM_U32
+/* linux < 4.11 */
+static inline u32 get_random_u32(void)
+{
+	return get_random_int();
+}
+#endif
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */

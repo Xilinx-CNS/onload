@@ -195,7 +195,7 @@ void efct_nic_filter_init(struct efhw_nic_efct *efct)
 {
   if( ! filter_hash_table_seed_inited ) {
     filter_hash_table_seed_inited = true;
-    filter_hash_table_seed = get_random_int();
+    filter_hash_table_seed = get_random_u32();
   }
 
 #define ACTION_INIT_HASH_TABLE(F) \
@@ -819,7 +819,7 @@ do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
     struct efct_filter_node* old;
     bool id_dup = false;
     node->filter_id = clas | (bkt << FILTER_CLASS_BITS) |
-                      (get_random_int() << (FILTER_CLASS_BITS + hash_bits));
+                      (get_random_u32() << (FILTER_CLASS_BITS + hash_bits));
     node->filter_id &= 0x7fffffff;
     hlist_for_each_entry_rcu(old, &table[bkt], node) {
       if( old->filter_id == node->filter_id ) {
