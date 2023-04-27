@@ -5774,7 +5774,7 @@ efab_tcp_helper_rm_free_locked(tcp_helper_resource_t* trs)
  * (waiting for any running callbacks to complete)
  *
  * Split into a separate function from tcp_helper_dtor only to make the
- * protection against potentail race conditions clearer
+ * protection against potential race conditions clearer
  *
  * \param trs             TCP helper resource
  *
@@ -5801,7 +5801,7 @@ tcp_helper_stop(tcp_helper_resource_t* trs)
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
   /* stop postponed packet allocations: we are the only thread using this
-   * thr, so nobody can scedule anything new */
+   * thr, so nobody can schedule anything new */
   flush_workqueue(trs->wq);
 #endif
 #if CI_CFG_NIC_RESET_SUPPORT
