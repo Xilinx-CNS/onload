@@ -207,7 +207,9 @@ static int efct_alloc_hugepage(void *driver_data,
 static void efct_free_hugepage(void *driver_data,
                                struct efct_client_hugepage *mem)
 {
-  oo_hugetlb_page_free_raw(mem->file, mem->page);
+  /* Almost certainly, we are called from the softirq context, e.g. with
+   * call_rcu(), so assume the "worst" and disallow non-atomic operations. */
+  oo_hugetlb_page_free_raw(mem->file, mem->page, /* atomic_context */ true);
 }
 
 static void efct_hugepage_list_changed(void *driver_data, int rxq)

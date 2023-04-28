@@ -46,7 +46,8 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
                             EFX_FILTER_MATCH_LOC_PORT |
                             EFX_FILTER_MATCH_IP_PROTO |
                             EFX_FILTER_MATCH_ETHER_TYPE |
-                            EFX_FILTER_MATCH_OUTER_VID) )
+                            EFX_FILTER_MATCH_OUTER_VID |
+                            EFX_FILTER_MATCH_LOC_MAC) )
     return -EPROTONOSUPPORT;
   if( (src->match_flags &
        (EFX_FILTER_MATCH_REM_HOST | EFX_FILTER_MATCH_LOC_HOST)) ==
@@ -57,7 +58,8 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
     return -EPROTONOSUPPORT;
   if( src->match_flags & EFX_FILTER_MATCH_ETHER_TYPE &&
       src->ether_type != htons(ETH_P_IP) &&
-      src->ether_type != htons(ETH_P_IPV6) )
+      src->ether_type != htons(ETH_P_IPV6) &&
+      src->ether_type != htons(ETH_P_ARP) )
     return -EPROTONOSUPPORT;
 
   if( src->match_flags & EFX_FILTER_MATCH_IP_PROTO )
@@ -117,7 +119,7 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
       break;
     }
   }
-  else {
+  else if( src->ether_type == htons(ETH_P_IP) ) {
     switch( proto ) {
     case IPPROTO_UDP:
     case IPPROTO_TCP:
@@ -139,11 +141,13 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
       dst->h_u.usr_ip4_spec.ip4dst = loc_ip[0];
       dst->h_u.usr_ip4_spec.ip4src = rem_ip[0];
       dst->h_u.usr_ip4_spec.l4_4_bytes = combine_ports(loc_port, rem_port);
+      dst->h_u.usr_ip4_spec.ip_ver = ETH_RX_NFC_IP4;
       dst->m_u.usr_ip4_spec.proto = proto < 0 ? 0 : -1;
       dst->m_u.usr_ip4_spec.ip4dst = loc_ip_mask[0];
       dst->m_u.usr_ip4_spec.ip4src = rem_ip_mask[0];
       dst->m_u.usr_ip4_spec.l4_4_bytes = combine_ports(loc_port_mask,
                                                       rem_port_mask);
+      dst->m_u.usr_ip4_spec.ip_ver = 0;
       break;
     }
 #ifdef EFRM_HAVE_FLOW_RSS
@@ -151,6 +155,33 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
       dst->flow_type |= FLOW_RSS;
     }
 #endif
+    if( src->match_flags & EFX_FILTER_MATCH_LOC_MAC) {
+      dst->flow_type |= FLOW_MAC_EXT;
+
+      memcpy(dst->h_ext.h_dest, src->loc_mac, sizeof(dst->h_ext.h_dest));
+      memcpy(dst->m_ext.h_dest, minus1, sizeof(dst->m_ext.h_dest));
+    }
+  }
+  /* This should only be entered when installing an ETHER_FLOW type filter.
+   * If the requested filter also includes IP specific things (protocol number,
+   * ports, addresses etc.) then the handling of MAC addresses should be done
+   * by setting FLOW_MAC_EXT in dst->flow_type and updating dst->h_ext.
+   */
+  if( (src->match_flags & EFX_FILTER_MATCH_LOC_MAC) &&
+     !(src->match_flags & (EFX_FILTER_MATCH_IP_PROTO |
+                           EFX_FILTER_MATCH_LOC_HOST |
+                           EFX_FILTER_MATCH_LOC_PORT)) ) {
+    dst->flow_type = ETHER_FLOW;
+
+    memcpy(dst->h_u.ether_spec.h_dest, src->loc_mac,
+      sizeof(dst->h_u.ether_spec.h_dest));
+    memcpy(dst->m_u.ether_spec.h_dest, minus1,
+      sizeof(dst->m_u.ether_spec.h_dest));
+
+    if( src->match_flags & EFX_FILTER_MATCH_ETHER_TYPE ) {
+      dst->h_u.ether_spec.h_proto = src->ether_type;
+      dst->m_u.ether_spec.h_proto = (__be16)~0u;
+    }
   }
   if( src->match_flags & EFX_FILTER_MATCH_OUTER_VID ) {
     dst->flow_type |= FLOW_EXT;

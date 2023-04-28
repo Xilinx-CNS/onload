@@ -185,6 +185,9 @@ efct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_RX_FILTER_ETHERTYPE
              | NIC_FLAG_HW_MULTICAST_REPLICATION
              | NIC_FLAG_SHARED_PD
+             /* TODO: This will need to be updated to check for nic capabilities. */
+             | NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL
+             | NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL_VLAN
              ;
   efct_nic_tweak_hardware(nic);
   return 0;
@@ -719,6 +722,8 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
                           zero_remote_port(dst->m_u.usr_ip6_spec.l4_4_bytes);
     break;
   case ETHER_FLOW:
+    dst->h_u.ether_spec.h_proto = 0;
+    dst->m_u.ether_spec.h_proto = 0;
     break;
   default:
     return -EPROTONOSUPPORT;
@@ -728,10 +733,34 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
     if (dst->m_ext.vlan_etype || dst->m_ext.vlan_tci != 0xffff ||
         dst->m_ext.data[0] || dst->m_ext.data[1])
       return -EPROTONOSUPPORT;
-    dst->flow_type &= ~FLOW_EXT;
+    /* VLAN tags are only supported with flow_type ETHER_FLOW */
+    if ((dst->flow_type & (UDP_V4_FLOW | TCP_V4_FLOW | IPV4_USER_FLOW |
+                          UDP_V6_FLOW | TCP_V6_FLOW | IPV6_USER_FLOW)) != 0)
+      dst->flow_type &= ~FLOW_EXT;
   }
 
   return 0;
+}
+
+static bool
+hw_filters_are_equal(const struct efct_filter_node *node,
+                     const struct efct_hw_filter *hw_filter)
+{
+  /* Check for a matching ip filter */
+  if (hw_filter->proto == node->proto &&
+      hw_filter->ip == node->u.ip4.lip &&
+      hw_filter->port == node->lport)
+    return true;
+
+  /* Check for a matching MAC(+VLAN) filter
+   * The vlan id is checked for every filter, including MAC filters without a
+   * specified vlan, as otherwise we could get false positives between vlans.
+   */
+  if (!memcmp(&hw_filter->loc_mac, &node->loc_mac, sizeof(node->loc_mac)) &&
+      hw_filter->outer_vlan == node->vlan)
+    return true;
+
+  return false;
 }
 
 
@@ -760,16 +789,20 @@ static bool find_one_filter(struct hlist_head* table, size_t hash_bits,
 }
 
 /* True iff 'node' is in 'table', i.e. if a packet matches one of our stored
- * filters for one specific class of filter. */
+ * filters for one specific class of filter.
+ *
+ * vlan_required parameter is used for filters that match on a single vlan id.
+ */
 static bool
 filter_matches(struct hlist_head* table, size_t hash_bits,
-               struct efct_filter_node* node, size_t node_len)
+               struct efct_filter_node* node, size_t node_len,
+               bool vlan_required)
 {
   bool found;
 
   rcu_read_lock();
   found = find_one_filter(table, hash_bits, node, node_len);
-  if( ! found ) {
+  if( ! found && ! vlan_required ) {
     int32_t vlan = node->vlan;
     node->vlan = -1;
     found = find_one_filter(table, hash_bits, node, node_len);
@@ -983,6 +1016,18 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     node.ethertype = EFCT_ETHERTYPE_IG_FILTER;
     node.proto = (spec->loc_mac[0] ? EFCT_PROTO_MCAST_IG_FILTER : EFCT_PROTO_UCAST_IG_FILTER);
   }
+  else if( no_vlan_flags == EFX_FILTER_MATCH_LOC_MAC ) {
+    if (spec->match_flags & EFX_FILTER_MATCH_OUTER_VID) {
+      clas = FILTER_CLASS_mac_vlan;
+      node.vlan = spec->outer_vid;
+    } else {
+      clas = FILTER_CLASS_mac;
+      node.vlan = -1;
+    }
+    node_len = offsetof(struct efct_filter_node, loc_mac) +
+               sizeof(node.loc_mac);
+    memcpy(&node.loc_mac, spec->loc_mac, sizeof(node.loc_mac));
+  }
   else {
     return -EPROTONOSUPPORT;
   }
@@ -993,17 +1038,16 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   /* Step 2 of 2: Insert efct_filter_node in to the correct hash table */
   mutex_lock(&efct->driver_filters_mtx);
 
-  if( spec->match_flags & EFX_FILTER_MATCH_LOC_HOST &&
-      node.ethertype == htons(ETH_P_IP) ) {
+  if( (spec->match_flags & EFX_FILTER_MATCH_LOC_HOST &&
+      node.ethertype == htons(ETH_P_IP)) ||
+      (spec->match_flags & EFX_FILTER_MATCH_LOC_MAC) ) {
     int i;
     int avail = -1;
     for( i = 0; i < efct->hw_filters_n; ++i ) {
       if( ! efct->hw_filters[i].refcount )
         avail = i;
       else {
-        if( efct->hw_filters[i].proto == node.proto &&
-            efct->hw_filters[i].ip == node.u.ip4.lip &&
-            efct->hw_filters[i].port == node.lport ) {
+        if( hw_filters_are_equal(&node, &efct->hw_filters[i]) ) {
           if( ! (flags & (EFHW_FILTER_F_ANY_RXQ | EFHW_FILTER_F_PREF_RXQ) ) &&
               *rxq >= 0 && *rxq != efct->hw_filters[i].rxq ) {
             mutex_unlock(&efct->driver_filters_mtx);
@@ -1021,6 +1065,9 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
         efct->hw_filters[avail].proto = node.proto;
         efct->hw_filters[avail].ip = node.u.ip4.lip;
         efct->hw_filters[avail].port = node.lport;
+        memcpy(&efct->hw_filters[avail].loc_mac, &node.loc_mac,
+                sizeof(node.loc_mac));
+        efct->hw_filters[avail].outer_vlan = node.vlan;
         insert_hw_filter = true;
       }
     }
@@ -1125,6 +1172,10 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
   size_t pkt_len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
   struct netdev_hw_addr *hw_addr;
   bool is_mcast = false;
+  bool is_outer_vlan;
+  int32_t vlan;
+  size_t mac_node_len = offsetof(struct efct_filter_node, loc_mac) +
+                        sizeof(node.loc_mac);
 
   if( pkt_len < ETH_HLEN )
     return false;
@@ -1139,13 +1190,13 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
   /* -------- layer 2 -------- */
   l3_off = ETH_HLEN;
   memcpy(&node.ethertype, pkt + l3_off - 2, 2);
-  if( ethertype_is_vlan(node.ethertype) ) {
-    uint16_t tpid;
+  if( (is_outer_vlan = ethertype_is_vlan(node.ethertype)) ) {
+    uint16_t vid;
     l3_off += 4;
     if( pkt_len >= l3_off ) {
-      memcpy(&tpid, pkt + l3_off - 4, 2);
+      memcpy(&vid, pkt + l3_off - 4, 2);
       memcpy(&node.ethertype, pkt + l3_off - 2, 2);
-      node.vlan = tpid;
+      node.vlan = vid;
 
       /* Like U26z, we support only two VLAN nestings. The inner is only used
        * for skipping-over */
@@ -1156,6 +1207,23 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
       }
     }
   }
+  memcpy(&node.loc_mac, pkt + 0, ETH_ALEN);
+  /* Check for MAC+VLAN filter match */
+  if( is_outer_vlan ) {
+    if( filter_matches(efct->filters.mac_vlan,
+                      HASH_BITS(efct->filters.mac_vlan),
+                      &node, mac_node_len, true) )
+      return true;
+  }
+  /* Check for MAC filter match */
+  vlan = node.vlan;
+  node.vlan = -1;
+  if( filter_matches(efct->filters.mac,
+                      HASH_BITS(efct->filters.mac),
+                      &node, mac_node_len, true) )
+    return true;
+  node.vlan = vlan;
+
   /* If there's no VLAN tag then we leave node.vlan=0, making us match EF10
    * and EF100 firmware behaviour by having a filter with vid==0 match packets
    * with no VLAN tag in addition to packets with the (technically-illegal)
@@ -1208,19 +1276,20 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
 
     if( filter_matches(efct->filters.full_match,
                        HASH_BITS(efct->filters.full_match),
-                       &node, full_match_node_len) )
+                       &node, full_match_node_len, false) )
       return true;
     node.rport = 0;
 
     if( filter_matches(efct->filters.semi_wild,
                           HASH_BITS(efct->filters.semi_wild),
-                          &node, semi_wild_node_len) )
+                          &node, semi_wild_node_len, false) )
       return true;
   }
 
   if( filter_matches(efct->filters.ethertype,
                         HASH_BITS(efct->filters.ethertype),
-                        &node, offsetof(struct efct_filter_node, proto)) )
+                        &node, offsetof(struct efct_filter_node, proto),
+                        false) )
     return true;
 
   if( !is_mcast ) {
@@ -1235,7 +1304,8 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
     node.proto = EFCT_PROTO_UCAST_IG_FILTER;
     if( filter_matches(efct->filters.ethertype,
                           HASH_BITS(efct->filters.ethertype),
-                          &node, offsetof(struct efct_filter_node, rport)) )
+                          &node, offsetof(struct efct_filter_node, rport),
+                          false) )
       return true;
   }
   else {
@@ -1254,7 +1324,8 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
     node.proto = EFCT_PROTO_MCAST_IG_FILTER;
     if( filter_matches(efct->filters.ethertype,
                           HASH_BITS(efct->filters.ethertype),
-                          &node, offsetof(struct efct_filter_node, rport)) )
+                          &node, offsetof(struct efct_filter_node, rport),
+                          false) )
       return true;
   }
 

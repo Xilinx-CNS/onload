@@ -60,7 +60,11 @@ static void oo_iobufset_free_pages(struct oo_buffer_pages *pages)
 {
 #ifdef OO_DO_HUGE_PAGES
   if( oo_hugetlb_page_valid(&pages->hugetlb_page) ) {
-    oo_hugetlb_page_free(&pages->hugetlb_page);
+    /* We are likely called from a non-atomic context, e.g. in a work queue
+     * or even on behalf of the UL process. However, play safe and check if
+     * we can perform non-atomic operations. */
+    bool atomic_context = in_atomic() || in_interrupt();
+    oo_hugetlb_page_free(&pages->hugetlb_page, atomic_context);
   } else
 #endif
   {

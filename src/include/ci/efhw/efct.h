@@ -94,6 +94,7 @@ struct efct_filter_node {
     u32 key_start;   /* marker for 'this is the beginning of the key' */
     int32_t vlan;   /* -1 for any (i.e. don't care if it has a VLAN tag) */
   };
+  uint8_t loc_mac[ETH_ALEN];
   uint16_t ethertype;
   uint8_t proto;
   uint16_t rport;
@@ -139,17 +140,25 @@ struct efct_filter_set {
   size_t semi_wild_n;
   struct hlist_head ethertype[64];
   size_t ethertype_n;
+  struct hlist_head mac[64];
+  size_t mac_n;
+  struct hlist_head mac_vlan[64];
+  size_t mac_vlan_n;
 };
 
 /* Totally arbitrary numbers: */
 static const size_t MAX_ALLOWED_full_match = 32768;
 static const size_t MAX_ALLOWED_semi_wild = 32768;
 static const size_t MAX_ALLOWED_ethertype = 128;
+static const size_t MAX_ALLOWED_mac = 128;
+static const size_t MAX_ALLOWED_mac_vlan = 128;
 
 #define FOR_EACH_FILTER_CLASS(action) \
   action(full_match) \
   action(semi_wild) \
-  action(ethertype)
+  action(ethertype) \
+  action(mac) \
+  action(mac_vlan)
 
 struct efct_hw_filter {
   int drv_id;
@@ -158,6 +167,8 @@ struct efct_hw_filter {
   uint8_t proto;
   uint16_t port;
   uint32_t ip;
+  uint8_t loc_mac[ETH_ALEN];
+  uint16_t outer_vlan;
 };
 
 #define EFCT_NIC_BLOCK_KERNEL_UNICAST 0x1
