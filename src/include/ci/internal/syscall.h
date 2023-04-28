@@ -47,6 +47,10 @@ my_do_syscall3(int num, long a1, long a2, long a3)
    : "r11","rcx","memory"
 
   );
+  if (rc < 0) {
+    errno = -rc;
+    rc = -1;
+  }
 
   return rc;
 }
@@ -64,6 +68,10 @@ my_do_syscall3(int num, long a1, long a2, long a3)
 		       : "=a" (rc)
 		       : "0"(num), "D"(a1), "c"(a2), "d"(a3)
                        : "memory");
+  if (rc < 0) {
+    errno = -rc;
+    rc = -1;
+  }
   return rc;
 }
 
@@ -130,6 +138,10 @@ ci_inline int my_do_syscall3(int num, long a1, long a2, long a3)
       : "memory"
   );
 
+  if (r0 < 0) {
+    errno = -r0;
+    r0 = -1;
+  }
   return (int) r0;
 }
 
