@@ -908,6 +908,10 @@ void ef_vi_start_transmit_warm(ef_vi* vi, ef_vi_tx_warm_state* saved_state,
 {
   ef_vi_txq_state* qs = &vi->ep_state->txq;
   ef_vi_txq* q = &vi->vi_txq;
+
+  /* EFCT has a different warmup mechanism. Use efct_vi_start_transmit_warm. */
+  EF_VI_ASSERT(vi->nic_type.arch != EF_VI_ARCH_EFCT);
+
   saved_state->removed = qs->removed;
   /* qs->removed is modified so ( qs->added - qs->removed < q->mask )
    * is false and packet is not sent.  Descriptor will be written to
@@ -927,6 +931,9 @@ void ef_vi_start_transmit_warm(ef_vi* vi, ef_vi_tx_warm_state* saved_state,
 void ef_vi_stop_transmit_warm(ef_vi* vi, const ef_vi_tx_warm_state* state)
 {
   ef_vi_txq_state* qs = &vi->ep_state->txq;
+
+  EF_VI_ASSERT(vi->nic_type.arch != EF_VI_ARCH_EFCT);
+
 #if ! defined(__KERNEL__) && ! defined(NDEBUG)
   /* We assert that the queue id was not modified by any transmit
    * since warming was started. */

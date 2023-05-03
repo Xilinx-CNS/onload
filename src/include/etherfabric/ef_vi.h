@@ -753,6 +753,8 @@ typedef struct {
   uint32_t         mask;
   /** Maximum space in the cut-through FIFO, reduced to account for header */
   uint32_t         ct_fifo_bytes;
+  /** EFCT header bytes that do not usually change between packets */
+  uint64_t         efct_fixed_header;
   /** Pointer to descriptors */
   void*            descriptors;
   /** Pointer to IDs */

@@ -164,6 +164,26 @@ int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len);
 */
 #define EFCT_FUTURE_VALID_BYTES 62
 
+/*! \brief Start transmit warming for this VI
+**
+** Calling transmit functions during warming will exercise the code path but
+** will not send any data on the wire. This can potentially improve transmit
+** performance for packets sent in shortly after warming.
+**
+** Each warming transmit will generate a completion event of type
+** EF_EVENT_TYPE_TX with an invalid dma_id field of EF_REQUEST_ID_MASK.
+** There will be no timestamp whether or not transmit timestamping is
+** enabled for this VI.
+*/
+void efct_vi_start_transmit_warm(ef_vi* vi);
+
+/*! \brief Stop transmit warming for this VI
+**
+** Transmit functions will behave normally, attempting to send data on the
+** wire, after warming has been stopped.
+*/
+void efct_vi_stop_transmit_warm(ef_vi* vi);
+
 #ifdef __cplusplus
 }
 #endif
