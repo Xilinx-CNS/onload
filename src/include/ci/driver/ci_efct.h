@@ -7,7 +7,7 @@
 #include <ci/driver/ci_aux.h>
 
 #if CI_HAVE_EFCT_AUX
-#include <linux/net/amd/efct_client.h>
+#include <linux/net/xilinx/xlnx_efct.h>
 #endif
 
 #endif /* CI_DRIVER_CI_EFCT_H */
