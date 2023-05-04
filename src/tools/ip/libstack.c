@@ -93,6 +93,11 @@ int             cfg_zombie = 0;
 int             cfg_nopids = 0;
 const char*     cfg_filter = NULL;
 
+/* 
+ * In stackdump universe option: We need to print filters ouput and table only once. 
+ * Use this global var to prevent it from printing on every stack.
+ */
+int universe_print_once = 1;
 
 ci_inline void libstack_defer_signals(citp_signal_info* si)
 {
@@ -1050,7 +1055,7 @@ static int dump_via_buffers(oo_dump_request_fn_t dump_req_fn, void* arg,
     }
     rc = dump_req_fn(arg, buf, buf_len);
     if( rc >= 0 && rc <= buf_len )
-      printf("%s", buf);
+      ci_log_nonl("%s", buf);
     free(buf);
     if( rc < 0 ) {
       if( flags & DVB_LOG_FAILURE )
@@ -2058,6 +2063,8 @@ static void stack_set_rxq_limit(ci_netif* ni)
 
 static void process_dump(ci_netif* ni)
 {
+  char task_path[MAX_PATHNAME];
+  char buf[MAX_PATHNAME];
   struct stack_mapping* sm = stack_mappings;
     
   if( cfg_nopids ){ //pid mappings not available
@@ -2077,9 +2084,90 @@ static void process_dump(ci_netif* ni)
   int i, pid;
   for( i = 0; i < sm->n_pids; ++i ) {
     pid = sm->pids[i];
-
     ci_log("--------------------------------------------");
-    ci_log("pid: %d", pid);
+    snprintf(task_path, MAX_PATHNAME, "/proc/%d/task", pid);
+    DIR* task_dir = opendir(task_path);
+    /* check if open directory succeeded */
+    if ( task_dir == NULL ) {
+      ci_log("failed reading /proc/%d/task directory. error: %s", pid, strerror(errno));
+      exit(1);
+    }
+    struct dirent* ent;
+
+    while( (ent = readdir(task_dir)) ) {
+      if( ent->d_name[0] == '.' )
+        continue;
+
+      ci_log_nonl("PID: %d Thread: %s", (int) sm->pids[i], ent->d_name);
+      char file_path[MAX_PATHNAME];
+      snprintf(file_path, MAX_PATHNAME, "/proc/%d/task/%s/status",(int) sm->pids[i], ent->d_name);
+      /* open the command line */
+      FILE* status = fopen(file_path, "r");
+      /* check if fopen succeeded */
+      if ( status == NULL ) {
+        ci_log("failed reading the /proc/%d/task/%s/status file. error: %s",(int) sm->pids[i], ent->d_name, strerror(errno));
+        exit(1);
+      }
+      char line[1024];
+      char values[3][256];
+      char labels[][256] = {
+        "Cpus_allowed:",
+        "voluntary_ctxt_switches:",
+        "nonvoluntary_ctxt_switches:"
+      };
+
+      /* check each line in the file */
+      while( fgets(line, sizeof(line), status) != NULL ) {
+        /* we're looking for three counters */
+        for( int i = 0; i < 3; i++ ) {
+          int len = strlen(labels[i]);
+          /* find the required counter */
+          if( strncmp(line, labels[i], len) == 0 ) {
+            char *tmp = line + len;
+            /* remove the first character. 
+            ** output of counters in /proc/pid/task/pid/status (from source code) 
+            ** contains /t character as the first character. */
+            tmp++;
+            /* remove newline and print */
+            tmp[strcspn(tmp, "\n")] = '\0';
+            /* Copy the counter values in array and later print them */
+            strncpy(values[i], tmp, (sizeof(tmp)-1));
+            /* extra safety: terminating the string */
+            values[i][sizeof(values[i]) - 1] = 0;
+          }
+        }
+      }
+      ci_log_nonl(" Cpus_allowed: %s voluntary_ctxt_switches: %s nonvoluntary_ctxt_switches: %s",values[0],values[1],values[2]);
+      fclose(status);
+      /* read /proc/pid/task/pid/stat */
+      snprintf(file_path, MAX_PATHNAME, "/proc/%d/task/%s/stat",(int) sm->pids[i], ent->d_name);
+      int stat = open(file_path, O_RDONLY);
+      /* check if open succeeded */
+      if ( stat == -1 ) {
+        ci_log("failed reading /proc/%d/task/%s/stat file. error: %s",(int) sm->pids[i], ent->d_name,strerror(errno));
+        exit(1);
+      }
+      long cnt = read(stat, buf, MAX_PATHNAME);
+      close(stat);
+
+      while( cnt && (buf[cnt-1] != ')') ) {
+        cnt--;
+      }
+      /* get the values for priority and realtime for the threads */
+      if( get_int_from_tok_str(&buf[cnt], " ", 15, &cnt) ) { 
+        if( cnt < 0 ) {
+          ci_log_nonl(" priority: %ld realtime: 1\n", (-cnt)-1 );
+        }    
+        else {
+          ci_log_nonl(" priority: %ld realtime: 0\n", cnt-20 );
+        }
+      }
+      else {
+        ci_log_nonl("priority: N/A realtime: N/A");
+      }
+    }
+    closedir(task_dir);
+    
     ci_log_nonl("cmdline: ");
     print_cmdline(pid);
     char env_path[MAX_PATHNAME];
@@ -2112,6 +2200,41 @@ static void process_dump(ci_netif* ni)
   ci_log("--------------------------------------------");
 }
 
+
+static void stack_universe(ci_netif* ni)
+{
+  if(universe_print_once == 1){
+    ci_log("--------------------- Filters output  ------------------------------");
+    ci_netif_filter_dump(ni);
+    filter_dump_args args = {ci_netif_get_driver_handle(ni), OO_SP_NULL};
+    dump_via_buffers(ci_tcp_helper_ep_filter_dump, &args, DVB_LOG_FAILURE);
+    universe_print_once = 0;
+  }
+  ci_log("============================================================");
+  ci_netif_dump(ni);
+  ci_netif_dump_extra(ni);
+  libstack_stack_mapping_print_pids(NI_ID(ni));
+  ci_log("--------------------- sockets ------------------------------");
+  ci_netif_dump_sockets(ni);
+  stack_stats(ni);
+  stack_more_stats(ni);
+
+#if CI_CFG_SUPPORT_STATS_COLLECTION
+  stack_ip_stats(ni);
+  stack_tcp_stats(ni);
+  stack_tcp_ext_stats(ni);
+  stack_udp_stats(ni);
+#endif
+  
+  ci_log("--------------------- vi stats ------------------------------");
+  ci_netif_dump_vi_stats(ni);
+  ci_log("--------------------- config opts --------------------------");
+  ci_netif_config_opts_dump(&NI_OPTS(ni), NULL, NULL);
+  ci_log("--------------------- stack time ---------------------------");
+  stack_time(ni);
+  ci_log("--------------------- process env --------------------------");
+  process_dump(ni);
+}
 
 static void stack_lots(ci_netif* ni)
 {
@@ -2294,6 +2417,7 @@ static const stack_op_t stack_ops[] = {
   STACK_OP_A(get_opt,          "get stack option", "<name>", 1, FL_ARG_S),
   STACK_OP_AU(set_rxq_limit,   "set the rxq_limit", "<limit>"),
   STACK_OP(lots,               "dump state, opts, stats"),
+  STACK_OP(universe,           "filters, vi stats, threads with context switches, dump state, opts, stats"),
   STACK_OP(reap_list,          "dump list of sockets on the reap_list"),
   STACK_OP(reap_list_verbose,  "dump sockets on the reap_list"),
   STACK_OP(pkt_reap,           "reap packet buffers from sockets"),
