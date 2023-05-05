@@ -1229,6 +1229,10 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
     return true;
   node.vlan = vlan;
 
+  /* Only filters inserted into the mac and mac_vlan tables include a MAC, so
+   * unset this field now that we've failed to match those filter types. */
+  memset(&node.loc_mac, 0, sizeof(node.loc_mac));
+
   /* If there's no VLAN tag then we leave node.vlan=0, making us match EF10
    * and EF100 firmware behaviour by having a filter with vid==0 match packets
    * with no VLAN tag in addition to packets with the (technically-illegal)
