@@ -153,6 +153,11 @@ EFRM_HAVE_MODULE_MUTEX		symbol	module_mutex	include/linux/module.h
 EFRM_HAVE_ITER_UBUF symbol ITER_UBUF include/linux/uio.h
 
 EFRM_HAVE_GET_RANDOM_U32	symbol get_random_u32	include/linux/random.h
+
+EFRM_HUGETLB_FILE_SETUP		symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, int, int)
+EFRM_HUGETLB_FILE_SETUP_UCOUNTS	symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, struct ucounts **, int, int)
+EFRM_HUGETLB_FILE_SETUP_USER	symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, struct user_struct**, int, int)
+
 # TODO move onload-related stuff from net kernel_compat
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
