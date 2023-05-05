@@ -360,8 +360,12 @@ static int ci_udp_recvmsg_get(ci_udp_recv_info* rinf, ci_iovec_ptr* piov)
 
   if(CI_LIKELY( rc >= 0 )) {
 #if HAVE_MSG_FLAGS
-    if(CI_UNLIKELY( rc < pkt->pf.udp.pay_len && msg != NULL ))
-      rinf->msg_flags |= LOCAL_MSG_TRUNC;
+    if(CI_UNLIKELY( rc < pkt->pf.udp.pay_len )) {
+      if( msg != NULL )
+        rinf->msg_flags |= LOCAL_MSG_TRUNC;
+      if( rinf->flags & MSG_TRUNC )
+        rc = pkt->pf.udp.pay_len;
+    }
 #endif
     ci_udp_recvmsg_fill_msghdr(ni, msg, pkt, &us->s);
     if( ! (rinf->flags & MSG_PEEK) ) {

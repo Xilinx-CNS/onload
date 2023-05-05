@@ -12,16 +12,13 @@
 
 #ifdef EFRM_HAVE_NEW_KALLSYMS
 /*
- * oo_hugetlb_file_setup - Create a pseudo hugetlb file.
- *
- * This fallback only exists on old kernels, but that's fine: new kernels
- * all have memfd_create, and there's considerable overlap between 'old'
- * and 'new' (e.g. RHEL8) so we can deal with potential oddballs.
- *
- * Return:
- *   A file struct on success or an error code.
- */
-static struct file *oo_hugetlb_file_setup(void)
+* oo_hugetlb_file_setup - Create a pseudo hugetlb file.
+*
+* Return:
+*   A file struct on success or an error code.
+*/
+static struct file *oo_hugetlb_file_setup(const char *name, size_t size,
+		vm_flags_t acctflag, int creat_flags, int page_size_log)
 {
 	static __typeof__(hugetlb_file_setup)* fn_hugetlb_file_setup;
 
@@ -29,11 +26,17 @@ static struct file *oo_hugetlb_file_setup(void)
 		fn_hugetlb_file_setup = efrm_find_ksym("hugetlb_file_setup");
 
 	if (fn_hugetlb_file_setup) {
-		struct user_struct* user;
-		return fn_hugetlb_file_setup(HUGETLB_ANON_FILE,
-				OO_HUGEPAGE_SIZE, 0, &user,
-				HUGETLB_ANONHUGE_INODE,
-				ilog2(OO_HUGEPAGE_SIZE));
+#ifdef EFRM_HUGETLB_FILE_SETUP_UCOUNTS
+		struct ucounts* user_acct;
+#elif defined(EFRM_HUGETLB_FILE_SETUP_USER)
+		struct user_struct* user_acct;
+#endif
+
+		return fn_hugetlb_file_setup(name, size, acctflag,
+#if defined(EFRM_HUGETLB_FILE_SETUP_UCOUNTS) || defined(EFRM_HUGETLB_FILE_SETUP_USER)
+				&user_acct,
+#endif
+				creat_flags, page_size_log);
 	}
 
 	return ERR_PTR(-ENOSYS);
@@ -44,7 +47,6 @@ static struct file *oo_hugetlb_file_setup(void)
 	return ERR_PTR(-ENOSYS);
 }
 #endif
-
 
 static struct oo_hugetlb_allocator *
 do_hugetlb_allocator_create(struct file *filp)
@@ -74,7 +76,14 @@ struct oo_hugetlb_allocator *oo_hugetlb_allocator_create(int fd)
 	struct file *filp;
 	int rc;
 
-	/* Either use the given (memfd) file or try create a new pseudo file.*/
+	/* Prefer the donated (memfd) file as a backend for hugetlb allocation.
+	 * Otherwise, create a new pseudo file with hugetlb_file_setup().
+	 *
+	 * This fallback only exists on old kernels (as identified with
+	 * EFRM_HAVE_NEW_KALLSYMS, typically older than 5.6), but that's fine:
+	 * new kernels all have memfd_create, and there's considerable overlap
+	 * between 'old' and 'new' (e.g. RHEL8) so we can deal with potential
+	 * oddballs. */
 	if (fd >= 0) {
 		filp = fget(fd);
 		if (!filp) {
@@ -82,7 +91,9 @@ struct oo_hugetlb_allocator *oo_hugetlb_allocator_create(int fd)
 			goto fail_setup;
 		}
 	} else {
-		filp = oo_hugetlb_file_setup();
+		filp = oo_hugetlb_file_setup(HUGETLB_ANON_FILE,
+				OO_HUGEPAGE_SIZE, 0, HUGETLB_ANONHUGE_INODE,
+				ilog2(OO_HUGEPAGE_SIZE));
 		if (IS_ERR(filp)) {
 			rc = PTR_ERR(filp);
 			goto fail_setup;
@@ -160,7 +171,7 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 	rc = vfs_fallocate(allocator->filp, 0, allocator->offset,
 			OO_HUGEPAGE_SIZE);
 	if (rc < 0) {
-		EFRM_ERR("%s: fallocate() failed: %d", __func__, rc);
+		EFRM_NOTICE("%s: fallocate() failed: %d", __func__, rc);
 		goto fail_vfs;
 	}
 
@@ -186,14 +197,14 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 
 	/* Did we get a good hugepage? */
 	if (rc != 1) {
-		EFRM_ERR("%s: Unable to pin page at 0x%016llx rc=%d", __func__,
-				allocator->offset, rc);
+		EFRM_NOTICE("%s: Unable to pin page at 0x%016llx rc=%d",
+				__func__, allocator->offset, rc);
 		goto fail_vfs;
 	}
 
 	if (!(*page_out)) {
-		EFRM_ERR("%s: Unable to create hugepage at 0x%016llx", __func__,
-				allocator->offset);
+		EFRM_NOTICE("%s: Unable to create hugepage at 0x%016llx",
+				__func__, allocator->offset);
 		rc = -ENOMEM;
 		goto fail_vfs;
 	}

@@ -89,6 +89,8 @@ int efx_mcdi_set_mac(struct efx_nic *efx);
 int efx_mcdi_set_mtu(struct efx_nic *efx);
 
 void efx_mac_stats_monitor(struct work_struct *data);
+void efx_mac_stats_reset_monitor(struct efx_nic *efx);
+
 void efx_mcdi_mac_update_stats_period(struct efx_nic *efx);
 void efx_mcdi_mac_start_stats(struct efx_nic *efx);
 void efx_mcdi_mac_stop_stats(struct efx_nic *efx);
