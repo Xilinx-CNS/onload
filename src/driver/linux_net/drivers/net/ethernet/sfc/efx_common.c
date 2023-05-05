@@ -1312,6 +1312,11 @@ void efx_schedule_reset(struct efx_nic *efx, enum reset_type type)
 		if (!efx_net_active(READ_ONCE(efx->state)))
 			return;
 
+		/* Stop the periodic statistics monitor to prevent it firing
+		 * while we are handling the reset.
+		 */
+		efx_mac_stats_reset_monitor(efx);
+
 		/* we might be resetting because things are broken, so detach
 		 * so we don't get things like the TX watchdog firing while we
 		 * wait to reset.

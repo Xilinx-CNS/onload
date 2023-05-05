@@ -1318,6 +1318,13 @@ static void efx_mac_stats_start_monitor(struct efx_nic *efx)
 static void efx_mac_stats_stop_monitor(struct efx_nic *efx)
 {
 	cancel_delayed_work_sync(&efx->stats_monitor_work);
+	efx->stats_monitor_generation = EFX_MC_STATS_GENERATION_INVALID;
+}
+
+void efx_mac_stats_reset_monitor(struct efx_nic *efx)
+{
+	cancel_delayed_work(&efx->stats_monitor_work);
+	efx->stats_monitor_generation = EFX_MC_STATS_GENERATION_INVALID;
 }
 
 void efx_mac_stats_monitor(struct work_struct *data)
