@@ -60,7 +60,7 @@ void citp_setup_logging_prefix(void)
 }
 
 
-/* Called to intialise thread-specific state, the first time a thread needs
+/* Called to initialise thread-specific state, the first time a thread needs
  * to use part of the per-thread state that requires explicit
  * initialisation.
  *

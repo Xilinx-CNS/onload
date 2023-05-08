@@ -1741,7 +1741,7 @@ gcov_proc_callback(enum gcov_cmd cmd, struct bb *bb)
 
 /**************************************************************************
  *
- * Module intialisation and cleanup
+ * Module initialisation and cleanup
  *
  **************************************************************************/
 
