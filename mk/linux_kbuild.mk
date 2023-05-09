@@ -60,11 +60,11 @@ endif
 
 ifeq ($(HAVE_EFCT),0)
 else ifeq ($(CI_HAVE_AUX_BUS),0)
-else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/net/amd/efct_client.h),)
+else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/net/xilinx/xlnx_efct.h),)
 HAVE_KERNEL_EFCT := 1
 else
 X3_NET_PATH ?= $(TOPPATH)/../x3-net-linux
-HAVE_CNS_EFCT := $(or $(and $(wildcard $(X3_NET_PATH)/include/linux/net/amd/efct_client.h),1),0)
+HAVE_CNS_EFCT := $(or $(and $(wildcard $(X3_NET_PATH)/include/linux/net/xilinx/xlnx_efct.h),1),0)
 endif
 
 ifeq ($(or $(filter 1, $(HAVE_KERNEL_EFCT) $(HAVE_CNS_EFCT)),0),1)

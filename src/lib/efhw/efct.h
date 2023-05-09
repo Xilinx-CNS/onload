@@ -4,10 +4,10 @@
 #ifndef LIB_EFHW_EFCT_H
 #define LIB_EFHW_EFCT_H
 
-struct efct_client;
+struct xlnx_efct_client;
 struct oo_hugetlb_allocator;
 
-static inline struct efct_client*
+static inline struct xlnx_efct_client*
 efhw_nic_acquire_efct_device(struct efhw_nic* nic)
 {
   EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EFCT);
@@ -16,7 +16,7 @@ efhw_nic_acquire_efct_device(struct efhw_nic* nic)
 
 static inline void
 efhw_nic_release_efct_device(struct efhw_nic* nic,
-                             struct efct_client* cli)
+                             struct xlnx_efct_client* cli)
 {
   EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EFCT);
   efhw_nic_release_drv_device(nic, cli);
@@ -25,7 +25,7 @@ efhw_nic_release_efct_device(struct efhw_nic* nic,
 #define EFCT_PRE(dev, efct_dev, efct_cli, nic, rc) \
 { \
   (dev) = efhw_nic_get_dev(nic); \
-  (efct_dev) = to_efct_client_device(to_auxiliary_dev(dev)); \
+  (efct_dev) = to_xlnx_efct_device(to_auxiliary_dev(dev)); \
   (efct_cli) = efhw_nic_acquire_efct_device((nic));\
   EFHW_ASSERT(!in_atomic()); \
   \

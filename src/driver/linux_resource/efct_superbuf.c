@@ -87,8 +87,8 @@ static bool post_superbuf_to_apps(struct efhw_nic_efct_rxq* q)
 }
 
 
-static void finished_with_superbuf(struct efct_client_device *edev,
-                                   struct efct_client *client, int qid,
+static void finished_with_superbuf(struct xlnx_efct_device *edev,
+                                   struct xlnx_efct_client *client, int qid,
                                    struct efhw_nic_efct_rxq* q,
                                    struct efhw_efct_rxq* app, int sbid)
 {
@@ -109,8 +109,8 @@ static void finished_with_superbuf(struct efct_client_device *edev,
   post_superbuf_to_app(q, app);
 }
 
-static void reap_superbufs_from_apps(struct efct_client_device *edev,
-                                     struct efct_client *client, int qid,
+static void reap_superbufs_from_apps(struct xlnx_efct_device *edev,
+                                     struct xlnx_efct_client *client, int qid,
                                      struct efhw_nic_efct_rxq* q)
 {
   struct efhw_efct_rxq **pprev;
@@ -243,9 +243,9 @@ int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
 }
 
 int
-__efct_nic_rxq_bind(struct efct_client_device* edev,
-                    struct efct_client* cli,
-                    struct efct_client_rxq_params *rxq_params,
+__efct_nic_rxq_bind(struct xlnx_efct_device* edev,
+                    struct xlnx_efct_client* cli,
+                    struct xlnx_efct_rxq_params *rxq_params,
                     struct efhw_nic_efct *efct,
                     int n_hugepages,
                     struct efab_efct_rxq_uk_shm_q *shm,
@@ -271,14 +271,14 @@ __efct_nic_rxq_bind(struct efct_client_device* edev,
      * EFCT TODO: rationalise other uses of poison (onload, and tcpdirect's
      * partial-packet detection) so they all take the same value.
      */
-    union efct_client_param_value poison = {
+    union xlnx_efct_param_value poison = {
       .poison = {
         .qid = rc,
         .value = CI_EFCT_DEFAULT_POISON,
         .length = 8
       }
     };
-    edev->ops->set_param(cli, EFCT_CLIENT_POISON_CONFIG, &poison);
+    edev->ops->set_param(cli, XLNX_EFCT_POISON_CONFIG, &poison);
 
     rxq->qid = rc;
     efct_app_list_push(&q->new_apps, rxq);
@@ -294,8 +294,8 @@ __efct_nic_rxq_bind(struct efct_client_device* edev,
 }
 
 void
-__efct_nic_rxq_free(struct efct_client_device* edev,
-                    struct efct_client* cli,
+__efct_nic_rxq_free(struct xlnx_efct_device* edev,
+                    struct xlnx_efct_client* cli,
                     struct efhw_efct_rxq *rxq,
                     efhw_efct_rxq_free_func_t *freer)
 {

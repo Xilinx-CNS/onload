@@ -51,11 +51,11 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
                   unsigned wakeup_instance, struct efhw_efct_rxq *rxq)
 {
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   int rc;
 
-  struct efct_client_rxq_params qparams = {
+  struct xlnx_efct_rxq_params qparams = {
     .qid = qid,
     .timestamp_req = timestamp_req,
     .n_hugepages = n_hugepages,
@@ -82,8 +82,8 @@ efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
                   efhw_efct_rxq_free_func_t *freer)
 {
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc)
@@ -94,11 +94,11 @@ efct_nic_rxq_free(struct efhw_nic *nic, struct efhw_efct_rxq *rxq,
 
 int
 efct_get_hugepages(struct efhw_nic *nic, int hwqid,
-                   struct efct_client_hugepage *pages, size_t n_pages)
+                   struct xlnx_efct_hugepage *pages, size_t n_pages)
 {
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc)
@@ -233,9 +233,9 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
                             struct efhw_evq_params *efhw_params)
 {
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
-  struct efct_client_evq_params qparams = {
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  struct xlnx_efct_evq_params qparams = {
     .qid = efhw_params->evq,
     .entries = efhw_params->evq_size,
     /* We don't provide a pci_dev to enable queue memory to be mapped for us,
@@ -297,8 +297,8 @@ efct_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
                              uint evq, int time_sync_events_enabled)
 {
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct efhw_nic_efct_evq *efct_evq;
   int rc = 0;
@@ -410,11 +410,11 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
                     struct efhw_dmaq_params *txq_params)
 {
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct efhw_nic_efct_evq *efct_evq = &efct->evq[txq_params->evq];
-  struct efct_client_txq_params params = {
+  struct xlnx_efct_txq_params params = {
     .evq = txq_params->evq,
     .qid = efct_evq->txq,
     .label = txq_params->tag,
@@ -492,8 +492,8 @@ static int efct_flush_tx_dma_channel(struct efhw_nic *nic,
                                      uint32_t client_id, uint dmaq, uint evq)
 {
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct efhw_nic_efct_evq *efct_evq = &efct->evq[evq];
   int rc = 0;
@@ -925,11 +925,11 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 {
   int rc;
   struct ethtool_rx_flow_spec hw_filter;
-  struct efct_client_filter_params params;
+  struct xlnx_efct_filter_params params;
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   struct efct_filter_node node;
   size_t node_len;
   int clas;
@@ -941,18 +941,18 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   rc = filter_spec_to_ethtool_spec(spec, &hw_filter);
   if( rc < 0 )
     return rc;
-  params = (struct efct_client_filter_params){
+  params = (struct xlnx_efct_filter_params){
     .spec = &hw_filter,
     .mask = mask ? mask : cpu_all_mask,
   };
   if( *rxq >= 0 )
     hw_filter.ring_cookie = *rxq;
   if( flags & EFHW_FILTER_F_ANY_RXQ )
-    params.flags |= EFCT_CLIENT_FILTER_F_ANYQUEUE_LOOSE;
+    params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
   if( flags & EFHW_FILTER_F_PREF_RXQ )
-    params.flags |= EFCT_CLIENT_FILTER_F_PREF_QUEUE;
+    params.flags |= XLNX_EFCT_FILTER_F_PREF_QUEUE;
   if( flags & EFHW_FILTER_F_EXCL_RXQ )
-    params.flags |= EFCT_CLIENT_FILTER_F_EXCLUSIVE_QUEUE;
+    params.flags |= XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
 
 
   /* Step 1 of 2: Convert ethtool_rx_flow_spec to efct_filter_node */
@@ -1118,8 +1118,8 @@ efct_filter_remove(struct efhw_nic *nic, int filter_id)
 {
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   int rc;
   int hw_filter;
   int drv_id = -1;
@@ -1422,13 +1422,13 @@ efct_vi_io_region(struct efhw_nic *nic, int instance, size_t* size_out,
                   resource_size_t* addr_out)
 {
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
-  union efct_client_param_value val;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  union xlnx_efct_param_value val;
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc)
-  rc = edev->ops->get_param(cli, EFCT_CLIENT_EVQ_WINDOW, &val);
+  rc = edev->ops->get_param(cli, XLNX_EFCT_EVQ_WINDOW, &val);
   EFCT_POST(dev, edev, cli, nic, rc);
 
   *size_out = val.evq_window.stride;
@@ -1454,8 +1454,8 @@ static int
 efct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
 {
   struct device *dev;
-  struct efct_client_device* edev;
-  struct efct_client* cli;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
   size_t region_size;
   int rc;
 
