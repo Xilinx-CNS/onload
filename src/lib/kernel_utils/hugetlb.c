@@ -42,7 +42,8 @@ static struct file *oo_hugetlb_file_setup(const char *name, size_t size,
 	return ERR_PTR(-ENOSYS);
 }
 #else
-static struct file *oo_hugetlb_file_setup(void)
+static struct file *oo_hugetlb_file_setup(const char *name, size_t size,
+		vm_flags_t acctflag, int creat_flags, int page_size_log)
 {
 	return ERR_PTR(-ENOSYS);
 }
