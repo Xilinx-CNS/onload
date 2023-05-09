@@ -430,8 +430,8 @@ ci_inline void ci_tcp_sendmsg_prep_pkt(ci_netif* ni, ci_tcp_state* ts,
   ** being connected from another thread: when this happens there is a race
   ** condition between connection setup and ci_tcp_sendmsg().  Note that no
   ** sane app would do this!)  So, if the setting we saved away on buffer
-  ** intialisation does not match the current setting, the packet must be fixed
-  ** up.
+  ** initialisation does not match the current setting, the packet must be
+  ** fixed up.
   */
   extra_opts = ts->outgoing_hdrs_len - orig_hdrlen;
   if( extra_opts )

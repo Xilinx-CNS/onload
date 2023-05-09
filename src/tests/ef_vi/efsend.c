@@ -129,7 +129,7 @@ int main(int argc, char* argv[])
   if( cfg_disable_tx_push )
     vi_flags |= EF_VI_TX_PUSH_DISABLE;
 
-  /* Intialize and configure hardware resources */
+  /* Initialize and configure hardware resources */
   TRY(ef_driver_open(&dh));
   TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
   TRY(ef_vi_alloc_from_pd(&vi, dh, &pd, dh, -1, 0, -1, NULL, -1, vi_flags));
@@ -156,7 +156,7 @@ int main(int argc, char* argv[])
   else {
     TEST(posix_memalign(&p, min_page_size, alloc_size) == 0);
   }
-  /* Regiser memory with NIC */
+  /* Register memory with NIC */
   TRY(ef_memreg_alloc(&mr, dh, &pd, dh, p, alloc_size));
   /* Store DMA address of the packet buffer memory */
   dma_buf_addr = ef_memreg_dma_addr(&mr, 0);

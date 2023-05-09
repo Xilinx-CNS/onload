@@ -136,7 +136,7 @@ int main(int argc, char* argv[])
     assert_capability(dh, ifindex, EF_VI_CAP_HW_TX_TIMESTAMPING);
     vi_flags |= EF_VI_TX_TIMESTAMPS;
   }
-  /* Intialize and configure hardware resources */
+  /* Initialize and configure hardware resources */
   TRY(ef_pd_alloc(&pd, dh, ifindex, EF_PD_DEFAULT));
   TRY(ef_vi_alloc_from_pd(&vi, dh, &pd, dh, -1, 0, -1, NULL, -1, vi_flags));
   TRY(ef_pio_alloc(&pio, dh, &pd, -1, dh));

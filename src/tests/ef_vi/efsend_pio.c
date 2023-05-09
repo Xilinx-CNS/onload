@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
   if( cfg_loopback )
     pd_flags |= EF_PD_MCAST_LOOP;
 
-  /* Intialize and configure hardware resources */
+  /* Initialize and configure hardware resources */
   TRY(ef_driver_open(&dh));
   TRY(ef_pd_alloc(&pd, dh, ifindex, pd_flags));
   /* In the following call, note that no rxq is allocated because this app

@@ -297,7 +297,7 @@ void ci_init_eh_mac(unsigned char* smac,
 }
 
 /* initialize the packet. Note you must also call ci_init_eh_mac
-   to intialize the MAC addresses in the ethernet header */
+   to initialize the MAC addresses in the ethernet header */
 void ci_init_pkt(ci_uint32 src_ip_addr_be32,
 		 ci_uint32 dest_ip_addr_be32,
 		 ci_uint16 src_ip_port_be16,
