@@ -50,6 +50,34 @@ struct efct_rx_descriptor
 #define PKT_ID_RXQ_BITS   3
 #define PKT_ID_TOTAL_BITS (PKT_ID_PKT_BITS + PKT_ID_SBUF_BITS + PKT_ID_RXQ_BITS)
 
+/* Enforce compile-time restrictions on the pkt_id fields */
+static inline void assert_pkt_id_fields(void)
+{
+  /* Packet index must be large enough for the number of packets in a superbuf.
+   * We check against the expected value here, and (at runtime) against the
+   * actual value provided by the driver in rx_rollover.
+   *
+   * The value of 16 is fairly arbitrary and could be reduced to 9 if more
+   * bits are needed elsewhere.
+   */
+  EF_VI_BUILD_ASSERT((1u << PKT_ID_PKT_BITS) >=
+                     (EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE));
+
+  /* Superbuf index must be exactly the right size for the number of superbufs
+   * per rxq, since the two fields are combined to give the global index.
+   *
+   * In principle, CI_EFCT_MAX_SUPERBUFS can be changed, but the bitfield size
+   * must be changed to match.
+   */
+  EF_VI_BUILD_ASSERT((1u << PKT_ID_SBUF_BITS) == CI_EFCT_MAX_SUPERBUFS);
+
+  /* Queue index must be large enough for the number of queues. */
+  EF_VI_BUILD_ASSERT((1u << PKT_ID_RXQ_BITS) >= EF_VI_MAX_EFCT_RXQS);
+
+  /* Bit 31 must be available for abuse. */
+  EF_VI_BUILD_ASSERT(PKT_ID_TOTAL_BITS <= 31);
+}
+
 static int pkt_id_to_index_in_superbuf(uint32_t pkt_id)
 {
   return pkt_id & ((1u << PKT_ID_PKT_BITS) - 1);
@@ -57,11 +85,7 @@ static int pkt_id_to_index_in_superbuf(uint32_t pkt_id)
 
 static int pkt_id_to_global_superbuf_ix(uint32_t pkt_id)
 {
-  EF_VI_BUILD_ASSERT((1u << PKT_ID_SBUF_BITS) == CI_EFCT_MAX_SUPERBUFS);
-  EF_VI_BUILD_ASSERT((1u << PKT_ID_RXQ_BITS) == EF_VI_MAX_EFCT_RXQS);
-  EF_VI_BUILD_ASSERT(PKT_ID_TOTAL_BITS <= 31);
   EF_VI_ASSERT(pkt_id >> PKT_ID_TOTAL_BITS == 0);
-
   return pkt_id >> PKT_ID_PKT_BITS;
 }
 
