@@ -76,7 +76,7 @@ else
   ifneq ($(HAVE_EFCT),1)
     EXTRA_CFLAGS += -DCI_HAVE_EFCT_AUX=0
   else
-    $(error Unable to build Onload with EFCT v2 or AUX bus support)
+    $(error Unable to build Onload with EFCT or AUX bus support)
   endif
 endif
 

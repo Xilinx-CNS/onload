@@ -27,7 +27,7 @@ CHAR_OPT=
 LOAD_CONFIG=false
 PROBE_CP_SERVER_PATH=true
 LINUX_NET="sfc"
-USER_NET="efct"
+USER_NET="xilinx_efct"
 
 
 usage () {
