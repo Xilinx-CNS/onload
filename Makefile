@@ -77,7 +77,7 @@ export HAVE_EFCT ?=
 #
 ifeq ($(HAVE_EFCT),0)
 export HAVE_CNS_AUX := 0
-else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
+else ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/auxiliary_bus.h),)
 export HAVE_KERNEL_AUX := 1
 export HAVE_CNS_AUX := 0
 else
@@ -184,7 +184,7 @@ endif
 
 ifeq ($(HAVE_EFCT),0)
 else ifeq ($(CI_HAVE_AUX_BUS),0)
-else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/net/amd/efct_client.h),)
+else ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/net/amd/efct_client.h),)
 HAVE_KERNEL_EFCT := 1
 else
 X3_NET_PATH ?= $(abspath ../x3-net-linux)
