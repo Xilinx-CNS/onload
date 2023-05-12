@@ -43,7 +43,7 @@ HAVE_EFCT ?=
 
 ifeq ($(HAVE_EFCT),0)
 HAVE_CNS_AUX := 0
-else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
+else ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/auxiliary_bus.h),)
 HAVE_KERNEL_AUX := 1
 HAVE_CNS_AUX := 0
 else
@@ -60,7 +60,7 @@ endif
 
 ifeq ($(HAVE_EFCT),0)
 else ifeq ($(CI_HAVE_AUX_BUS),0)
-else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/net/xilinx/xlnx_efct.h),)
+else ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/net/xilinx/xlnx_efct.h),)
 HAVE_KERNEL_EFCT := 1
 else
 X3_NET_PATH ?= $(TOPPATH)/../x3-net-linux
@@ -76,7 +76,7 @@ else
   ifneq ($(HAVE_EFCT),1)
     EXTRA_CFLAGS += -DCI_HAVE_EFCT_AUX=0
   else
-    $(error Unable to build Onload with EFCT v2 or AUX bus support)
+    $(error Unable to build Onload with EFCT or AUX bus support)
   endif
 endif
 
