@@ -1653,6 +1653,7 @@ static ssize_t efrm_add_rule(struct file *file, const char __user *ubuf,
 static const struct proc_ops efrm_fops_add_rule = {
 	PROC_OPS_SET_OWNER
 	.proc_write		= efrm_add_rule,
+	.proc_lseek		= default_llseek,
 };
 
 static ssize_t efrm_del_rule(struct file *file, const char __user *ubuf,
@@ -1725,6 +1726,7 @@ static ssize_t efrm_del_rule(struct file *file, const char __user *ubuf,
 static const struct proc_ops efrm_fops_del_rule = {
 	PROC_OPS_SET_OWNER
 	.proc_write		= efrm_del_rule,
+	.proc_lseek		= default_llseek,
 };
 
 /* ********************************************* */
