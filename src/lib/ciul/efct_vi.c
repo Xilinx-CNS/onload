@@ -998,23 +998,28 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 {
   ef_eventq_state* evq = &vi->ep_state->evq;
   ci_qword_t* event;
-  int i;
   int n_evs = 0;
 
   /* Check for overflow. If the previous entry has been overwritten already,
    * then it will have the wrong phase value and will appear invalid */
   BUG_ON(efct_tx_get_event(vi, evq->evq_ptr - sizeof(*event)) == NULL);
 
-  for( i = 0; i < evs_len; ++i, evq->evq_ptr += sizeof(*event) ) {
+  while( n_evs < evs_len ) {
     event = efct_tx_get_event(vi, evq->evq_ptr);
     if( event == NULL )
       break;
+    evq->evq_ptr += sizeof(*event);
 
     switch( CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) ) {
       case EFCT_EVENT_TYPE_TX:
         efct_tx_handle_event(vi, *event, &evs[n_evs]);
         n_evs++;
-        break;
+        /* Don't report more than one tx event per poll. This is to avoid a
+         * horrendous sequencing problem if a simple TX event is followed by a
+         * TX_WITH_TIMESTAMP; we'd need to update the queue state for the
+         * second event *after* the later call to ef_vi_transmit_unbundle()
+         * for the first event. */
+        return n_evs;
       case EFCT_EVENT_TYPE_CONTROL:
         n_evs += efct_tx_handle_control_event(vi, *event, &evs[n_evs]);
         break;
