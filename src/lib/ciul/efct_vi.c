@@ -143,7 +143,7 @@ static const char* efct_superbuf_base(const ef_vi* vi, size_t pkt_id)
    * an array lookup (or, more specifically, relying on the TLB to do the
    * lookup for us) */
   return vi->efct_rxq[0].superbuf +
-         pkt_id_to_global_superbuf_ix(pkt_id) * EFCT_RX_SUPERBUF_BYTES;
+         (size_t)pkt_id_to_global_superbuf_ix(pkt_id) * EFCT_RX_SUPERBUF_BYTES;
 #endif
 }
 
