@@ -141,6 +141,9 @@ efrm_pd_set_min_align(struct efrm_pd *pd, int alignment);
 extern int
 efrm_pd_get_min_align(struct efrm_pd *pd);
 
+extern unsigned
+efrm_pd_exclusive_rxq_token_get(struct efrm_pd *pd);
+
 /* Returns the NIC's dynamic client entity grouping everything in this PD
  * together */
 extern uint32_t

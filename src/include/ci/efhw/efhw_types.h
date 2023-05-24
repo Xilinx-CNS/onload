@@ -173,9 +173,25 @@ struct efhw_vi_constraints {
 struct efx_filter_spec;
 
 #define EFHW_FILTER_F_REPLACE  0x0001
+/* The below three flags are particularly relevant on X3.
+ *
+ * The PREF rxq indicates to the driver that it would prefer
+ * for packets to be steered to a given rxq if available.
+ *
+ * The ANY rxq leaves queue selection to the driver to pick
+ * the nearest available and free hardware queue.
+ *
+ * The exclusivity flag is used for exclusivity purposes.
+ * (see EF_FILTER_FLAG_EXCLUSIVE_RXQ)
+ *
+ * The absense of a specific flag, with a field defined for rxq_no
+ * indicates to the driver that a given hardware queue must be used.
+ */
 #define EFHW_FILTER_F_PREF_RXQ 0x0002
 #define EFHW_FILTER_F_ANY_RXQ  0x0004
 #define EFHW_FILTER_F_EXCL_RXQ 0x0008
+
+#define EFHW_PD_NON_EXC_TOKEN 0xFFFFFFFF
 
 /*--------------------------------------------------------------------
  *
@@ -356,7 +372,8 @@ struct efhw_func_ops {
 	/* Insert a filter */
 	int (*filter_insert)(struct efhw_nic *nic,
 			     struct efx_filter_spec *spec, int *rxq,
-			     const struct cpumask *mask, unsigned flags);
+				 unsigned exclusive_rxq_token, const struct cpumask *mask,
+				 unsigned flags);
 	/* Remove a filter */
 	void (*filter_remove)(struct efhw_nic *nic, int filter_id);
 	/* Redirect an existing filter */

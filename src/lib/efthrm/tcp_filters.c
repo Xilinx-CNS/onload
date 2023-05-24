@@ -296,7 +296,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
     }
     if( replace )
       insert_flags |= EFHW_FILTER_F_REPLACE;
-    rc = efrm_filter_insert(get_client(hwport), &spec, &rxq,
+    rc = efrm_filter_insert(get_client(hwport), &spec, &rxq, EFHW_PD_NON_EXC_TOKEN,
                             cluster || kernel_redirect ? NULL :
                                               &oofilter->trs->filter_irqmask,
                             insert_flags);

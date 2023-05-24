@@ -11,6 +11,7 @@
 struct tcp_helper_cluster_s;
 struct efhw_nic;
 #define EFHW_FILTER_F_REPLACE  0x0001
+#define EFHW_PD_NON_EXC_TOKEN 0xFFFFFFFF
 
 #include <onload/oof_hw_filter.h>
 #include <onload/nic.h>

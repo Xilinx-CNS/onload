@@ -2447,7 +2447,8 @@ int ef10_ef100_rss_mode_to_nic_flags(struct efhw_nic *efhw_nic,
 
 int
 ef10_ef100_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
-			 int *rxq, const struct cpumask *mask, unsigned flags)
+						int *rxq, unsigned pd_excl_token, const struct cpumask *mask,
+						unsigned flags)
 {
 	int rc;
 	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);

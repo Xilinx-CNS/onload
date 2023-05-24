@@ -13,6 +13,7 @@
 #include <ci/efch/op_types.h>
 #endif
 #include "ef_vi_internal.h"
+#include <etherfabric/vi.h>
 #include <etherfabric/efct_vi.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/common.h>
@@ -225,8 +226,6 @@ static bool efct_rx_check_event(const ef_vi* vi)
 
   if( ! vi->vi_rxq.mask )
     return false;
-  if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE )
-    return efct_rxq_check_event(vi, 0);
   for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
     if( efct_rxq_check_event(vi, i) )
       return true;
@@ -985,18 +984,7 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
   return n_evs;
 }
 
-static int efct_ef_eventq_poll_1rxtx(ef_vi* vi, ef_event* evs, int evs_len)
-{
-  int i = 0;
-
-  if( efct_rxq_is_active(&vi->efct_shm->q[0]) )
-    i = efct_poll_rx(vi, 0, evs, evs_len);
-  i += efct_poll_tx(vi, evs + i, evs_len - i);
-
-  return i;
-}
-
-static int efct_ef_eventq_poll_generic(ef_vi* vi, ef_event* evs, int evs_len)
+static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int n = 0;
   uint64_t qs = vi->efct_shm->active_qs;
@@ -1195,11 +1183,6 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
   ix = efct_vi_find_free_rxq(vi, qid);
   if( ix < 0 )
     return ix;
-  if( ix > 0 && vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
-    /* An attempt to add a filter which caused this must mean that some other
-     * app is already using the same 3-tuple, hence the error EADDRINUSE */
-    return -EADDRINUSE;
-  }
 
   /* The kernel code can cope with no memfd being provided, but only on older
    * kernels, i.e. older than 5.7 where the fallback with efrm_find_ksym()
@@ -1283,9 +1266,10 @@ void efct_vi_start_rxq(ef_vi* vi, int ix)
 
 /* efct_vi_detach_rxq not yet implemented */
 
+
 static int efct_post_filter_add(struct ef_vi* vi,
-                                const struct ef_filter_spec* fs,
-                                const struct ef_filter_cookie* cookie, int rxq)
+                                const ef_filter_spec* fs,
+                                const ef_filter_cookie* cookie, int rxq)
 {
 #ifdef __KERNEL__
   return 0; /* EFCT TODO */
@@ -1492,24 +1476,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_ctpio_fallback = efct_ef_vi_transmit_ctpio_fallback;
   vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
   vi->internal_ops.post_filter_add = efct_post_filter_add;
-
-  /* The guarantees offered by RX_EXCLUSIVE imply that it's impossible for
-   * there to be more than one queue. These semantics aren't strictly
-   * necessary, but coming up with intelligible documentation of what the
-   * semantics would actually be were this not the case is hard. */
-  if( vi->vi_flags & EF_VI_RX_EXCLUSIVE )
-    vi->vi_flags |= EF_VI_EFCT_UNIQUEUE;
-
-  if( vi->vi_flags & EF_VI_EFCT_UNIQUEUE ) {
-    vi->max_efct_rxq = 1;
-    vi->ops.eventq_poll = efct_ef_eventq_poll_1rxtx;
-  }
-  else {
-    /* It wouldn't be difficult to specialise this by txable too, but this is
-     * the slow, backward-compatible variant so there's not much point */
-    vi->ops.eventq_poll = efct_ef_eventq_poll_generic;
-    vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
-  }
+  vi->ops.eventq_poll = efct_ef_eventq_poll;
 }
 
 void efct_vi_init(ef_vi* vi)
@@ -1521,6 +1488,7 @@ void efct_vi_init(ef_vi* vi)
   EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
 
   efct_vi_initialise_ops(vi);
+  vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
   vi->evq_phase_bits = 1;
   /* Set default rx_discard_mask for EFCT */
   vi->rx_discard_mask = (

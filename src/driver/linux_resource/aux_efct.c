@@ -290,6 +290,10 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   if( ! efct->rxq )
     return -ENOMEM;
 
+  efct->exclusive_rxq_mapping = vzalloc(sizeof(*efct->exclusive_rxq_mapping) * efct->rxq_n);
+  if( ! efct->exclusive_rxq_mapping )
+    return -ENOMEM;
+
   for( i = 0; i < efct->rxq_n; ++i)
     INIT_WORK(&efct->rxq[i].destruct_wq, efct_destruct_apps_work);
 
@@ -412,6 +416,8 @@ int efct_probe(struct auxiliary_device *auxdev,
     vfree(efct->rxq);
   if( efct->evq )
     vfree(efct->evq);
+  if( efct->exclusive_rxq_mapping )
+    vfree(efct->exclusive_rxq_mapping);
   vfree(efct);
   EFRM_ERR("%s rc %d", __func__, rc);
   return rc;
@@ -481,6 +487,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   vfree(efct->hw_filters);
   vfree(efct->rxq);
   vfree(efct->evq);
+  vfree(efct->exclusive_rxq_mapping);
   vfree(efct);
 }
 
