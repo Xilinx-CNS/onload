@@ -118,6 +118,8 @@ extern int ef10_ef100_filter_insert(struct efhw_nic *nic,
 extern void ef10_ef100_filter_remove(struct efhw_nic *nic, int filter_id);
 extern int ef10_ef100_filter_redirect(struct efhw_nic *nic, int filter_id,
 				      struct efx_filter_spec *spec);
+extern int ef10_ef100_filter_query(struct efhw_nic *nic, int filter_id,
+                                   struct efhw_filter_info *info);
 
 extern int ef10_ef100_multicast_block(struct efhw_nic *nic, bool block);
 extern int ef10_ef100_unicast_block(struct efhw_nic *nic, bool block);

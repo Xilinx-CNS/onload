@@ -210,6 +210,8 @@
 	((nic)->efhw_func->filter_remove((nic), (filter_id)))
 #define efhw_nic_filter_redirect(nic, filter_id, spec) \
 	((nic)->efhw_func->filter_redirect((nic), (filter_id), (spec)))
+#define efhw_nic_filter_query(nic, filter_id, info) \
+	((nic)->efhw_func->filter_query((nic), (filter_id), (info)))
 
 #define efhw_nic_multicast_block(nic, block) \
 	((nic)->efhw_func->multicast_block((nic), (block)))

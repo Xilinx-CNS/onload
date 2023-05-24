@@ -1556,6 +1556,14 @@ af_xdp_filter_redirect(struct efhw_nic *nic, int filter_id,
 }
 
 static int
+af_xdp_filter_query(struct efhw_nic *nic, int filter_id,
+                    struct efhw_filter_info *info)
+{
+  return -EOPNOTSUPP;
+}
+
+
+static int
 af_xdp_multicast_block(struct efhw_nic *nic, bool block)
 {
 	return -ENOSYS;
@@ -1669,6 +1677,7 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_filter_insert,
 	af_xdp_filter_remove,
 	af_xdp_filter_redirect,
+	af_xdp_filter_query,
 	af_xdp_multicast_block,
 	af_xdp_unicast_block,
 	af_xdp_vport_alloc,

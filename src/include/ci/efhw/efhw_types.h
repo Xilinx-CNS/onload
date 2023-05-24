@@ -156,6 +156,11 @@ struct efhw_vi_constraints {
 	bool want_txq;
 };
 
+struct efhw_filter_info {
+	int rxq;
+	int hw_id;
+};
+
 /**********************************************************************
  * Portable HW interface. ***************************************
  **********************************************************************/
@@ -376,6 +381,9 @@ struct efhw_func_ops {
 	/* Redirect an existing filter */
 	int (*filter_redirect)(struct efhw_nic *nic, int filter_id,
 			       struct efx_filter_spec *spec);
+	/* Query info about an existing filter */
+	int (*filter_query)(struct efhw_nic *nic, int filter_id,
+	                    struct efhw_filter_info *info);
 
 	/* Set multicast blocking behaviour */
 	int (*multicast_block)(struct efhw_nic *nic, bool block);

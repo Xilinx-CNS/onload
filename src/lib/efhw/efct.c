@@ -1424,6 +1424,13 @@ efct_filter_redirect(struct efhw_nic *nic, int filter_id,
 }
 
 static int
+efct_filter_query(struct efhw_nic *nic, int filter_id,
+                  struct efhw_filter_info *info)
+{
+  return -EOPNOTSUPP;
+}
+
+static int
 efct_multicast_block(struct efhw_nic *nic, bool block)
 {
   /* Keep track of whether this has been set to allow us to tell if our *
@@ -1597,6 +1604,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_filter_insert,
   efct_filter_remove,
   efct_filter_redirect,
+  efct_filter_query,
   efct_multicast_block,
   efct_unicast_block,
   efct_vport_alloc,
