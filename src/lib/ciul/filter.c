@@ -570,6 +570,47 @@ int ef_vi_filter_del(ef_vi *vi, ef_driver_handle dh,
 }
 
 
+int ef_vi_filter_query(ef_vi* vi, ef_driver_handle vi_dh,
+                       const ef_filter_cookie* filter_cookie,
+                       ef_filter_info* filter_info, size_t filter_info_size)
+{
+  ci_resource_op_t op;
+  int rc;
+
+  if( filter_info_size != sizeof(ef_filter_info) )
+    return -EINVAL;
+
+  memset(filter_info, 0, filter_info_size);
+  if (filter_cookie->filter_type == EF_FILTER_PORT_SNIFF ||
+      filter_cookie->filter_type == EF_FILTER_TX_PORT_SNIFF ) {
+    /* These filter types are special and don't have IDs. Just claim success
+     * (without even validating) but return no info */
+    return 0;
+  }
+
+  memset(&op, 0, sizeof(op));
+  op.id = efch_make_resource_id(vi->vi_resource_id);
+  op.op = CI_RSOP_FILTER_QUERY;
+  op.u.filter_query.filter_id = filter_cookie->filter_id;
+  rc = ci_resource_op(vi_dh, &op);
+  if( rc < 0 ) {
+    /* EOPNOTSUPP comes back from hardware types which do not return any useful
+     * info. This function represents that by returning valid_fields==0, not by
+     * returning an error. */
+    return rc == -EOPNOTSUPP ? 0 : rc;
+  }
+  if( op.u.filter_query.out_hw_id >= 0 ) {
+    filter_info->valid_fields |= EF_FILTER_FIELD_ID;
+    filter_info->filter_id = op.u.filter_query.out_hw_id;
+  }
+  if( op.u.filter_query.out_rxq >= 0 ) {
+    filter_info->valid_fields |= EF_FILTER_FIELD_QUEUE;
+    filter_info->q_id = op.u.filter_query.out_rxq;
+  }
+  return 0;
+}
+
+
 int ef_vi_set_filter_add(ef_vi_set* vi_set, ef_driver_handle dh,
 			 const ef_filter_spec* fs,
 			 ef_filter_cookie *filter_cookie_out)

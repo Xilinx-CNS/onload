@@ -540,6 +540,12 @@ efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
                                    &rs->vi.fl, op);
       break;
 
+    case CI_RSOP_FILTER_QUERY:
+      rc = efch_filter_list_op_query(rs->rs_base, efrm_vi_get_pd(virs),
+                                     &rs->vi.fl, op);
+      *copy_out = 1;
+      break;
+
     case CI_RSOP_VI_GET_RX_ERROR_STATS:
       {
         size_t data_len = op->u.vi_stats.data_len;

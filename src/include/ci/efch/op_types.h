@@ -213,6 +213,7 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_EXT_FREE                0x89
 # define                CI_RSOP_EXT_MSG                 0x8A
 # define                CI_RSOP_RXQ_REFRESH             0x8B
+# define                CI_RSOP_FILTER_QUERY            0x8C
 
   union {
     struct {
@@ -270,6 +271,11 @@ typedef struct ci_resource_op_s {
     struct {
       int32_t           filter_id;
     } filter_del;
+    struct {
+      int32_t           filter_id;
+      int32_t           out_rxq;
+      int32_t           out_hw_id;
+    } filter_query;
     struct {
       int32_t           out_rx_ts_correction;
     } vi_rx_ts_correction;

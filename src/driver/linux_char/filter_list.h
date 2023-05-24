@@ -21,6 +21,10 @@ extern int efch_filter_list_op_del(struct efrm_resource *rs, struct efrm_pd *,
                                    struct efch_filter_list *fl,
                                    ci_resource_op_t *op);
 
+extern int efch_filter_list_op_query(struct efrm_resource *rs, struct efrm_pd *,
+                                     struct efch_filter_list *fl,
+                                     ci_resource_op_t *op);
+
 extern int efch_filter_list_op(struct efrm_resource *rs,
                                struct efch_filter_list *fl,
                                ci_resource_op_t *op);
