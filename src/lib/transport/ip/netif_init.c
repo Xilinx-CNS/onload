@@ -1041,23 +1041,6 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_TCP_RCVBUF_ESTABLISHED_DEFAULT")) )
     opts->tcp_rcvbuf_est_def = atoi(s);
 
-  if( opts->tcp_sndbuf_user != 0 ) {
-    opts->tcp_sndbuf_min = opts->tcp_sndbuf_max = opts->tcp_sndbuf_user;
-    opts->tcp_sndbuf_def = oo_adjust_SO_XBUF(opts->tcp_sndbuf_user);
-  }
-  if( opts->tcp_rcvbuf_user != 0 ) {
-    opts->tcp_rcvbuf_min = opts->tcp_rcvbuf_max = opts->tcp_rcvbuf_user;
-    opts->tcp_rcvbuf_def = oo_adjust_SO_XBUF(opts->tcp_rcvbuf_user);
-  }
-  if( opts->udp_sndbuf_user != 0 ) {
-    opts->udp_sndbuf_min = opts->udp_sndbuf_max = opts->udp_sndbuf_user;
-    opts->udp_sndbuf_def = oo_adjust_SO_XBUF(opts->udp_sndbuf_user);
-  }
-  if( opts->udp_rcvbuf_user != 0 ) {
-    opts->udp_rcvbuf_min = opts->udp_rcvbuf_max = opts->udp_rcvbuf_user;
-    opts->udp_rcvbuf_def = oo_adjust_SO_XBUF(opts->udp_rcvbuf_user);
-  }
-
   if ( (s = getenv("EF_RETRANSMIT_THRESHOLD_SYNACK")) )
     opts->retransmit_threshold_synack = atoi(s);
 
@@ -1340,6 +1323,29 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
     opts->nvme_crc_table_cap = atoi(s);
 #endif
 }
+
+
+/* Set derived after the range check has been applied */
+void ci_netif_config_opts_set_derived(ci_netif_config_opts* opts)
+{
+  if( opts->tcp_sndbuf_user != 0 ) {
+    opts->tcp_sndbuf_min = opts->tcp_sndbuf_max = opts->tcp_sndbuf_user;
+    opts->tcp_sndbuf_def = oo_adjust_SO_XBUF(opts->tcp_sndbuf_user);
+  }
+  if( opts->tcp_rcvbuf_user != 0 ) {
+    opts->tcp_rcvbuf_min = opts->tcp_rcvbuf_max = opts->tcp_rcvbuf_user;
+    opts->tcp_rcvbuf_def = oo_adjust_SO_XBUF(opts->tcp_rcvbuf_user);
+  }
+  if( opts->udp_sndbuf_user != 0 ) {
+    opts->udp_sndbuf_min = opts->udp_sndbuf_max = opts->udp_sndbuf_user;
+    opts->udp_sndbuf_def = oo_adjust_SO_XBUF(opts->udp_sndbuf_user);
+  }
+  if( opts->udp_rcvbuf_user != 0 ) {
+    opts->udp_rcvbuf_min = opts->udp_rcvbuf_max = opts->udp_rcvbuf_user;
+    opts->udp_rcvbuf_def = oo_adjust_SO_XBUF(opts->udp_rcvbuf_user);
+  }
+}
+
 
 static int
 handle_str_opt(ci_netif_config_opts* opts,

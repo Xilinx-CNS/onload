@@ -47,6 +47,7 @@ int ci_cfg_query(void)
   /* adjust the netif options again... */
   ci_netif_config_opts_getenv(&ci_cfg_opts.netif_opts);
   ci_netif_config_opts_rangecheck(&ci_cfg_opts.netif_opts);
+  ci_netif_config_opts_set_derived(&ci_cfg_opts.netif_opts);
   LOG_S(ci_netif_config_opts_dump(&ci_cfg_opts.netif_opts, NULL, NULL));
 
   return 0;
