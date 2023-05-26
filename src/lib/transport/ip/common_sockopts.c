@@ -1579,6 +1579,9 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
     if( (rc = opt_not_ok(optval, optlen, int)) )
       goto fail_inval;
     v = *(int*) optval;
+    /* To match kernel behaviour, limit input value to INT_MAX/2
+     * so it can't wrap to a negative value when doubled */
+    v = CI_MIN(v, INT_MAX/2);
 
     /* UDP case is handled in ci_udp_setsockopt_lk() */
     ci_assert_flags(s->b.state, CI_TCP_STATE_TCP);
@@ -1612,6 +1615,9 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
     if( (rc = opt_not_ok(optval, optlen, int)) )
       goto fail_inval;
     v = *(int*) optval;
+    /* To match kernel behaviour, limit input value to INT_MAX/2
+     * so it can't wrap to a negative value when doubled */
+    v = CI_MIN(v, INT_MAX/2);
 
     /* UDP case is handled in ci_udp_setsockopt_lk() */
     ci_assert_flags(s->b.state, CI_TCP_STATE_TCP);
