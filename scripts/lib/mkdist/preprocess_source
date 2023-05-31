@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Copyright 2017-2022 Xilinx, Inc.
+# X-SPDX-Copyright-Text: (c) Copyright 2017-2023 Xilinx, Inc.
 
 # This file is included by scripts that need to prepare Onload source files
 # for distribution to customers.
 
 year=$(date '+%Y')
 # Copyright banner for version.h
-banner="Copyright 2019-$year Xilinx, 2006-2019 Solarflare Communications, 2002-2005 Level 5 Networks"
+banner="Copyright (c) 2002-$year Advanced Micro Devices, Inc."
 git=${GIT_PATH:-"git"}
 
 copy_distfiles() {
