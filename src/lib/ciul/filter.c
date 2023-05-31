@@ -442,9 +442,6 @@ static int ef_filter_add_normal(ef_driver_handle dh, int resource_id,
     return -EINVAL;
   }
 
-  if (fs->flags & EF_FILTER_FLAG_EXCLUSIVE_RXQ)
-    filter_add.in.flags |= CI_FILTER_FLAG_EXCLUSIVE_RXQ;
-
   if (fs->type & EF_FILTER_HAS_DEST) {
     filter_add.in.fields |= CI_FILTER_FIELD_RXQ;
     filter_add.in.rxq_no = fs->data[0] >> 16;

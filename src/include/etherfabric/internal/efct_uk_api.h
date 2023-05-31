@@ -13,9 +13,8 @@
  * low-level contraints and properties of the efhw interface */
 
 /* Max superbufs permitted to be assigned to a single rxq, across the whole
- * system. Can be adjusted at whim, but affects the size of preallocated
- * arrays in various places. Most notably the enormous address space
- * reservation done by ef_vi. */
+ * system.
+ * With current data structures, the value should be left at 512 */
 #define CI_EFCT_MAX_SUPERBUFS   512
 
 /* As defined by the CPU architecture */

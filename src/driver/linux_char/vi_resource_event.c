@@ -267,7 +267,7 @@ int efch_vi_prime_qs(ci_private_char_t* priv,
 {
   int rc;
 
-  if( args->n_rxqs > EF_VI_MAX_EFCT_RXQS || args->n_txqs > 1 )
+  if( args->n_rxqs > CI_ARRAY_SIZE(args->rxq_current) || args->n_txqs > 1 )
     return -EINVAL;
 
   rc = efab_vi_rm_prime_lookup_vi(priv, args->crp_id, true);

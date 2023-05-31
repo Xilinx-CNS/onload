@@ -36,26 +36,57 @@ struct efct_rx_descriptor
 
 /* pkt_ids are:
  *  bits 0..15 packet index in superbuf
- *  bits 16..25 superbuf index
- *  bits 26..28 rxq (as an index in to vi->efct_rxq, not as a hardware ID)
- *  bits 29..31 unused/zero
+ *  bits 16..24 superbuf index
+ *  bits 25..27 rxq (as an index in to vi->efct_rxq, not as a hardware ID)
+ *  bits 28..31 unused/zero
  *  [NB: bit 31 is stolen by some users to cache the superbuf's sentinel]
  * This layout is not part of the stable ABI. rxq index is slammed up against
  * superbuf index to allow for dirty tricks where we mmap all superbufs in
  * contiguous virtual address space and thus avoid some arithmetic.
  */
 
-#define PKTS_PER_SUPERBUF_BITS 16
+#define PKT_ID_PKT_BITS  16
+#define PKT_ID_SBUF_BITS  9
+#define PKT_ID_RXQ_BITS   3
+#define PKT_ID_TOTAL_BITS (PKT_ID_PKT_BITS + PKT_ID_SBUF_BITS + PKT_ID_RXQ_BITS)
+
+/* Enforce compile-time restrictions on the pkt_id fields */
+static inline void assert_pkt_id_fields(void)
+{
+  /* Packet index must be large enough for the number of packets in a superbuf.
+   * We check against the expected value here, and (at runtime) against the
+   * actual value provided by the driver in rx_rollover.
+   *
+   * The value of 16 is fairly arbitrary and could be reduced to 9 if more
+   * bits are needed elsewhere.
+   */
+  EF_VI_BUILD_ASSERT((1u << PKT_ID_PKT_BITS) >=
+                     (EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE));
+
+  /* Superbuf index must be exactly the right size for the number of superbufs
+   * per rxq, since the two fields are combined to give the global index.
+   *
+   * In principle, CI_EFCT_MAX_SUPERBUFS can be changed, but the bitfield size
+   * must be changed to match.
+   */
+  EF_VI_BUILD_ASSERT((1u << PKT_ID_SBUF_BITS) == CI_EFCT_MAX_SUPERBUFS);
+
+  /* Queue index must be large enough for the number of queues. */
+  EF_VI_BUILD_ASSERT((1u << PKT_ID_RXQ_BITS) >= EF_VI_MAX_EFCT_RXQS);
+
+  /* Bit 31 must be available for abuse. */
+  EF_VI_BUILD_ASSERT(PKT_ID_TOTAL_BITS <= 31);
+}
 
 static int pkt_id_to_index_in_superbuf(uint32_t pkt_id)
 {
-  return pkt_id & ((1u << PKTS_PER_SUPERBUF_BITS) - 1);
+  return pkt_id & ((1u << PKT_ID_PKT_BITS) - 1);
 }
 
 static int pkt_id_to_global_superbuf_ix(uint32_t pkt_id)
 {
-  EF_VI_ASSERT(pkt_id >> 29 == 0);
-  return pkt_id >> PKTS_PER_SUPERBUF_BITS;
+  EF_VI_ASSERT(pkt_id >> PKT_ID_TOTAL_BITS == 0);
+  return pkt_id >> PKT_ID_PKT_BITS;
 }
 
 static int pkt_id_to_local_superbuf_ix(uint32_t pkt_id)
@@ -703,7 +734,7 @@ static int rx_rollover(ef_vi* vi, int qid)
   if( rc < 0 )
     return rc;
 
-  pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKTS_PER_SUPERBUF_BITS;
+  pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
   next = pkt_id | ((uint32_t)sentinel << 31);
 
   if( pkt_id_to_index_in_superbuf(rxq_ptr->next) > superbuf_pkts ) {
@@ -724,7 +755,7 @@ static int rx_rollover(ef_vi* vi, int qid)
 
   /* Preload the superbuf's refcount with all the (potential) packets in
    * it - more efficient than incrementing for each rx individually */
-  EF_VI_ASSERT(superbuf_pkts < (1 << PKTS_PER_SUPERBUF_BITS));
+  EF_VI_ASSERT(superbuf_pkts < (1 << PKT_ID_PKT_BITS));
   desc = efct_rx_desc(vi, pkt_id);
   desc->refcnt = superbuf_pkts;
   desc->superbuf_pkts = superbuf_pkts;
@@ -1425,7 +1456,12 @@ int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
     ci_resource_prime_qs_op_t  op;
     int i;
 
+    /* The loop below assumes that all rxqs will fit in the fixed array in
+     * the operations's arguments. If that assumption no longer holds, then
+     * this assertion will fail and we'll need a more complicated loop to split
+     * the queues across multiple operations. */
     EF_VI_BUILD_ASSERT(CI_ARRAY_SIZE(op.rxq_current) >= EF_VI_MAX_EFCT_RXQS);
+
     op.crp_id = efch_make_resource_id(vi->vi_resource_id);
     for( i = 0; i < vi->max_efct_rxq; ++i ) {
       ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];

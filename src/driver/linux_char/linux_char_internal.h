@@ -36,7 +36,6 @@ typedef struct ci_private_char_s {
   struct efrm_vi*      cpcp_vi;
   int                  cpcp_readable;
   wait_queue_head_t    cpcp_poll_queue;
-  struct efrm_efct_rxq* cpcp_rxq[EF_VI_MAX_EFCT_RXQS];
 } ci_private_char_t;
 
 
