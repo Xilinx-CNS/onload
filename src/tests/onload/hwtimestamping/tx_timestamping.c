@@ -31,6 +31,7 @@
 #include <string.h>
 #include <inttypes.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <time.h>
 #include <getopt.h>
 
@@ -58,6 +59,7 @@
 #ifndef NO_KERNEL_TS_INCLUDE
   #include <linux/net_tstamp.h>
   #include <linux/sockios.h>
+  #include <linux/errqueue.h>
 #else
   #include <time.h>
   struct hwtstamp_config {
@@ -121,6 +123,10 @@ struct configuration {
   unsigned int   cfg_max_packets; /* Stop after this many (0=forever) */
   int            cfg_templated; /* use templated send */
   int            cfg_ext;       /* Use extension API? */
+  bool           cfg_data;      /* Return a copy of TX packet.
+                                 * Clears SOF_TIMESTAMPING_OPT_TSONLY */
+  bool           cfg_cmsg;      /* Set SOF_TIMESTAMPING_OPT_CMSG */
+  bool           cfg_no_id;     /* Clear SOF_TIMESTAMPING_OPT_ID */
 };
 
 /* Commandline options, configuration etc. */
@@ -137,6 +143,9 @@ void print_help(void)
            "Default: None\n"
          "\t--max\t<num>\tStop after n packets.  Default: Run forever\n"
          "\t--mcast\t<group>\tSubscribe to multicast group.\n"
+         "\t--data\tRequest a copy of outgoing packet with timestamp\n"
+         "\t--cmsg\tUse SOF_TIMESTAMPING_OPT_CMSG (off by default)\n"
+         "\t--no-id\tDon't use SOF_TIMESTAMPING_OPT_ID (default to using SOF_TIMESTAMPING_OPT_ID)\n"
 #ifdef ONLOADEXT_AVAILABLE
          "\t--templated\tUse templated sends.\n"
          "\t--ext\t\tUse extensions API rather than SO_TIMESTAMPING.\n"
@@ -169,6 +178,9 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
     { "port", required_argument, 0, 'p' },
     { "mcast", required_argument, 0, 'c' },
     { "max", required_argument, 0, 'n' },
+    { "data", no_argument, 0, 'd' },
+    { "cmsg", no_argument, 0, 'C' },
+    { "no-id", no_argument, 0, 'I' },
     { "templated", no_argument, 0, 'T' },
     { "ext", no_argument, 0, 'e' },
     { "help", no_argument, 0, 'h' },
@@ -201,6 +213,15 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
         break;
       case 'n':
         cfg->cfg_max_packets = atoi(optarg);
+        break;
+      case 'd':
+        cfg->cfg_data = true;
+        break;
+    case 'C':
+        cfg->cfg_cmsg = true;
+        break;
+    case 'I':
+        cfg->cfg_no_id = true;
         break;
 #ifdef ONLOADEXT_AVAILABLE
       case 'T':
@@ -338,8 +359,20 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
 
     enable = SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_SYS_HARDWARE |
       SOF_TIMESTAMPING_RAW_HARDWARE;
-    if (cfg->cfg_protocol == IPPROTO_TCP)
+
+    if( ! cfg->cfg_no_id )
+      enable |= SOF_TIMESTAMPING_OPT_ID;
+    if( ! (cfg->cfg_data || cfg->cfg_cmsg))
+      enable |= SOF_TIMESTAMPING_OPT_TSONLY;
+    if( cfg->cfg_cmsg )
+      enable |= SOF_TIMESTAMPING_OPT_CMSG;
+    if( cfg->cfg_protocol == IPPROTO_TCP ) {
       enable |= ONLOAD_SOF_TIMESTAMPING_STREAM;
+#if defined(SOF_TIMESTAMPING_OPT_ID_TCP)
+      if( enable & SOF_TIMESTAMPING_OPT_ID )
+        enable |= SOF_TIMESTAMPING_OPT_ID_TCP;
+#endif
+    }
     ok = setsockopt(sock, SOL_SOCKET, SO_TIMESTAMPING, &enable, sizeof(int));
     if (ok < 0) {
       printf("Timestamp socket option failed.  %d (%d - %s)\n",
@@ -409,6 +442,34 @@ static int add_socket(struct configuration* cfg)
 
 
 /* Processing */
+static void hexdump(const void* pv, int len)
+{
+  const unsigned char* p = (const unsigned char*) pv;
+  int i;
+  for( i = 0; i < len; ++i ) {
+    const char* eos;
+    switch( i & 15 ) {
+    case 0:
+      printf("%08x  ", i);
+      eos = "";
+      break;
+    case 1:
+      eos = " ";
+      break;
+    case 15:
+      eos = "\n";
+      break;
+    default:
+      eos = (i & 1) ? " " : "";
+      break;
+    }
+    printf("%02x%s", (unsigned) p[i], eos);
+  }
+  if( len & 15 )
+    printf("\n");
+}
+
+
 #define TIME_FMT "%" PRIu64 ".%.9" PRIu64 " "
 #define OTIME_FMT "%" PRIu64 ".%.9" PRIu32 " "
 static void print_time(char *s, struct timespec* ts)
@@ -424,9 +485,11 @@ static void handle_time(struct msghdr* msg, int tx_num,
   struct onload_scm_timestamping_stream* tcp_tx_stamps;
   struct timespec* udp_tx_stamp;
   struct cmsghdr* cmsg;
+  struct sock_extended_err* err;
 
   for (cmsg = CMSG_FIRSTHDR(msg); cmsg != NULL; cmsg = CMSG_NXTHDR(msg, cmsg)) {
-    if (cmsg->cmsg_level != SOL_SOCKET)
+    if (cmsg->cmsg_level != SOL_SOCKET &&
+        cmsg->cmsg_level != SOL_IP )
       continue;
     switch(cmsg->cmsg_type) {
     case ONLOAD_SCM_TIMESTAMPING_STREAM:
@@ -449,6 +512,20 @@ static void handle_time(struct msghdr* msg, int tx_num,
       print_time("System", &(udp_tx_stamp[0]));
       print_time("Transformed", &(udp_tx_stamp[1]));
       print_time("Raw", &(udp_tx_stamp[2]));
+      break;
+    case IP_RECVERR:
+      err = (struct sock_extended_err*) CMSG_DATA(cmsg);
+      if( err->ee_origin == SO_EE_ORIGIN_TIMESTAMPING ) {
+        if( ! cfg->cfg_no_id)
+          printf("Timestamp ID %u\n", err->ee_data);
+        if( cfg->cfg_cmsg ) {
+          struct sockaddr_in* saddr;
+          char ip[INET_ADDRSTRLEN];
+          saddr = (struct sockaddr_in*) ((void*) (err + 1));
+          inet_ntop(AF_INET, &(saddr->sin_addr), ip, INET_ADDRSTRLEN);
+          printf("Source address: %s\n", ip);
+        }
+      }
       break;
     default:
       /* Ignore other cmsg options */
@@ -543,18 +620,21 @@ int get_tx_ts(int sock, unsigned int tx_num, struct configuration* cfg)
   struct sockaddr_in host_address;
   char buffer[2048];
   char control[1024];
+  int got;
 
   make_address(0, 0, &host_address);
   iov.iov_base = buffer;
   iov.iov_len = 2048;
-  msg.msg_iov = &iov;
-  msg.msg_iovlen = 1;
+  msg.msg_iov = cfg->cfg_data ? &iov : NULL;
+  msg.msg_iovlen = cfg->cfg_data ? 1 : 0;
   msg.msg_name = &host_address;
   msg.msg_namelen = sizeof(struct sockaddr_in);
   msg.msg_control = control;
   msg.msg_controllen = 1024;
-  TRY( recvmsg(sock, &msg, MSG_ERRQUEUE | MSG_DONTWAIT) );
+  TRY( got = recvmsg(sock, &msg, MSG_ERRQUEUE | MSG_DONTWAIT) );
   handle_time(&msg, tx_num, cfg);
+  if( cfg->cfg_data && got > 0 )
+    hexdump(buffer, got);
   return 0;
 };
 
