@@ -34,6 +34,10 @@
 #define LPFIN LPF
 #define LPFOUT LPF
 
+/* Special return codes from ci_udp_recvmsg_socklocked_slowpath() */
+#define SLOWPATH_RET_IOVLEN_INITED (1<<30)
+#define SLOWPATH_RET_ZERO (SLOWPATH_RET_IOVLEN_INITED + 1)
+
 /* Implementation:
 **  MSG_PEEK         supported
 **  MSG_ERRQUEUE     supported (Linux only)
@@ -455,7 +459,7 @@ static int ci_udp_recvmsg_socklocked_slowpath(ci_udp_recv_info* rinf,
 
       rc = ci_ip_tx_timestamping_to_cmsg(IPPROTO_UDP, ni, pkt, &us->s,
                                          &cmsg_state, piov);
-
+      rc = rc ? rc : SLOWPATH_RET_ZERO;
       ci_rmb(); /* we are done with pkt - somebody can free it now */
       ci_udp_recv_q_deliver(ni, &us->timestamp_q, pkt);
 

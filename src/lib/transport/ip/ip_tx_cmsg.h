@@ -1,9 +1,5 @@
 /* TX timestamp to CMSG  including support functions */
 
-/* Special return codes from ci_udp_recvmsg_socklocked_slowpath() */
-#define SLOWPATH_RET_IOVLEN_INITED (1<<30)
-#define SLOWPATH_RET_ZERO (SLOWPATH_RET_IOVLEN_INITED + 1)
-
 #define LOCAL_MSG_TRUNC	MSG_TRUNC
 
 struct oo_copy_state {
@@ -15,10 +11,10 @@ struct oo_copy_state {
   const ci_ip_pkt_fmt* pkt;
 };
 
-ci_inline int do_copy(void* to, const void* from, int n_bytes)
+ci_inline int __oo_do_copy(void* to, const void* from, int n_bytes)
 {
 #ifdef __KERNEL__
-  return copy_to_user(to, from, n_bytes) != 0;
+  return copy_to_user(to, from, n_bytes);
 #else
   memcpy(to, from, n_bytes);
   return 0;
@@ -27,23 +23,23 @@ ci_inline int do_copy(void* to, const void* from, int n_bytes)
 
 
 ci_inline int
-__oo_copy_frag_to_iovec_no_adv(ci_netif* ni, 
-                               ci_iovec_ptr* piov, 
+__oo_copy_frag_to_iovec_no_adv(ci_netif* ni,
+                               ci_iovec_ptr* piov,
                                struct oo_copy_state *ocs)
 {
   int n;
 
   n = CI_MIN((size_t)ocs->pkt_left, CI_IOVEC_LEN(&piov->io));
   n = CI_MIN(n, ocs->bytes_to_copy);
-  if(CI_UNLIKELY( do_copy(CI_IOVEC_BASE(&piov->io),
+  if(CI_UNLIKELY( __oo_do_copy(CI_IOVEC_BASE(&piov->io),
                           ocs->from + ocs->pkt_off, n) != 0 ))
     return -EFAULT;
-  
+
   ocs->bytes_copied += n;
   ocs->pkt_off += n;
   if( n == ocs->bytes_to_copy )
     return 0;
-  
+
   ocs->bytes_to_copy -= n;
   if( n == ocs->pkt_left ) {
     /* Caller guarantees that packet contains at least [bytes_to_copy]. */
@@ -56,7 +52,7 @@ __oo_copy_frag_to_iovec_no_adv(ci_netif* ni,
      */
     return 1;
   }
-  
+
   ci_assert_equal(n, CI_IOVEC_LEN(&piov->io));
   if( piov->iovlen == 0 )
     return 0;
@@ -71,8 +67,8 @@ __oo_copy_frag_to_iovec_no_adv(ci_netif* ni,
 #if CI_CFG_TIMESTAMPING
 /* Very similar to oo_copy_pkt_to_iovec_no_adv() but doesn't use pkt->buf */
 static int 
-ci_udp_timestamp_q_pkt_to_iovec(ci_netif* ni, const ci_ip_pkt_fmt* pkt,
-                                ci_iovec_ptr* piov)
+ci_timestamp_q_pkt_to_iovec(ci_netif* ni, const ci_ip_pkt_fmt* pkt,
+                            ci_iovec_ptr* piov)
 {
   int rc;
   struct oo_copy_state ocs;
@@ -122,13 +118,56 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
 
   int do_data = ( cmsg_state->msg->msg_iovlen > 0 );
   if( do_data )
-    ci_iovec_ptr_init_nz(piov, cmsg_state->msg->msg_iov, cmsg_state->msg->msg_iovlen);
+    ci_iovec_ptr_init_nz(piov, cmsg_state->msg->msg_iov,
+                         cmsg_state->msg->msg_iovlen);
 
   if( s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD ) {
-    struct onload_timestamp ts = {pkt->hw_stamp.tv_sec,
-                                  pkt->hw_stamp.tv_nsec};
-    ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING,
-                sizeof(ts), &ts);
+          if( pkt->flags & ~CI_PKT_FLAG_RTQ_RETRANS ) {
+            struct onload_timestamp ts = {pkt->hw_stamp.tv_sec,
+                                          pkt->hw_stamp.tv_nsec};
+            ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING,
+                        sizeof(ts), &ts);
+          }
+          else {
+            /* Ignore retransmit timestamps. We might want something like
+            * ONLOAD_SCM_TIMESTAMPING_STREAM to report them along with the
+            * original transmission time */
+            return -EAGAIN;
+          }
+    }
+  }
+  else if( proto == IPPROTO_TCP &&
+           (s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_STREAM) ) {
+    struct onload_scm_timestamping_stream stamps;
+    int tx_hw_stamp_in_sync;
+    memset(&stamps, 0, sizeof(stamps));
+    tx_hw_stamp_in_sync = pkt->hw_stamp.tv_nsec &
+      CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC;
+
+    if( pkt->flags & CI_PKT_FLAG_RTQ_RETRANS ) {
+      if( pkt->pf.tcp_tx.first_tx_hw_stamp.tv_nsec &
+          CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC ) {
+        stamps.first_sent.tv_sec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_sec;
+        stamps.first_sent.tv_nsec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_nsec;
+      }
+      if( tx_hw_stamp_in_sync ) {
+        stamps.last_sent.tv_sec = pkt->hw_stamp.tv_sec;
+        stamps.last_sent.tv_nsec = pkt->hw_stamp.tv_nsec;
+      }
+    }
+    else if( tx_hw_stamp_in_sync ) {
+      stamps.first_sent.tv_sec = pkt->hw_stamp.tv_sec;
+      stamps.first_sent.tv_nsec = pkt->hw_stamp.tv_nsec;
+    }
+    stamps.len = pkt->pf.tcp_tx.end_seq - pkt->pf.tcp_tx.start_seq;
+
+    /* FIN and SYN eat seq space, but the user is not interested in them */
+    if( TX_PKT_IPX_TCP(ipcache_af(&ts->s.pkt), pkt)->tcp_flags &
+        (CI_TCP_FLAG_SYN|CI_TCP_FLAG_FIN) )
+      stamps.len--;
+
+    ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING_STREAM,
+                sizeof(stamps), &stamps);
   }
   else {
     struct timespec ts[3];
@@ -148,23 +187,26 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
   }
 
   if( s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_OPT_TSONLY ) {
-    rc = SLOWPATH_RET_ZERO;
+    rc = 0;
   }
   else if( do_data ) {
-    rc = ci_udp_timestamp_q_pkt_to_iovec(ni, pkt, piov);
+    rc = ci_timestamp_q_pkt_to_iovec(ni, pkt, piov);
     if( rc < pkt->buf_len )
       *cmsg_state->p_msg_flags |= LOCAL_MSG_TRUNC;
   }
   else {
     *cmsg_state->p_msg_flags |= LOCAL_MSG_TRUNC;
-    rc = SLOWPATH_RET_ZERO;
+    rc = 0;
   }
 
   memset(&errhdr, 0, sizeof(errhdr));
   errhdr.ee.ee_errno = ENOMSG;
   errhdr.ee.ee_origin = SO_EE_ORIGIN_TIMESTAMPING;
   errhdr.ee.ee_info = 0;
-  errhdr.ee.ee_data = pkt->ts_key;
+  if( proto == IPPROTO_TCP )
+    errhdr.ee.ee_data = pkt->pf.tcp_tx.start_seq - s->ts_key;
+  else
+    errhdr.ee.ee_data = pkt->ts_key;
 
   if( s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_OPT_CMSG ) {
     ci_addr_t saddr = ipx_hdr_saddr(oo_pkt_af(pkt), oo_ipx_hdr(pkt));

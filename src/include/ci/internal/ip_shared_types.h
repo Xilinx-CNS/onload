@@ -2079,7 +2079,10 @@ struct ci_sock_cmn_s {
    * to give them back to getsockopt regardless of what we support
    */
   ci_uint32             timestamping_flags;
-  ci_uint32             ts_key;           /**< TIMESTAMPING_OPT_ID key */
+  ci_uint32             ts_key;           /**< TIMESTAMPING_OPT_ID key for UDP
+                                           *   For TCP this is the initial
+                                           *   sequence number.
+                                           */
 #endif
 
   /* This uid is in the scope of the user_namespace of the stack.  It is

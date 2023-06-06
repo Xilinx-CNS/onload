@@ -1372,7 +1372,7 @@ void ci_tcp_set_sndbuf(ci_netif* ni, ci_tcp_state* ts)
     ts->so_sndbuf_pkts = ts->so_sndbuf_pkts * 3 / 2;
 #if CI_CFG_TIMESTAMPING
     /* and some packets for tx timestamps: */
-    if( ts->s.timestamping_flags & ONLOAD_SOF_TIMESTAMPING_STREAM )
+    if( onload_timestamping_want_tx_nic(ts->s.timestamping_flags) )
       ts->so_sndbuf_pkts = ts->so_sndbuf_pkts * 3 / 2;
 #endif
   }
@@ -1403,7 +1403,7 @@ void ci_tcp_set_sndbuf_from_sndbuf_pkts(ci_netif* ni, ci_tcp_state* ts)
   ts->s.so.sndbuf = (ts->s.so.sndbuf / 3) * 2;
 #if CI_CFG_TIMESTAMPING
   /* and possible some packets for tx timestamps: */
-  if( ts->s.timestamping_flags & ONLOAD_SOF_TIMESTAMPING_STREAM )
+  if( onload_timestamping_want_tx_nic(ts->s.timestamping_flags) )
     ts->s.so.sndbuf = (ts->s.so.sndbuf / 3) * 2;
 #endif
 }
