@@ -309,10 +309,11 @@ ci_inline uint64_t efct_tx_header(unsigned packet_length, unsigned ct_thresh,
 }
 
 /* tx header for standard (non-templated) send */
-ci_inline uint64_t efct_tx_pkt_header(ef_vi* vi, unsigned length, unsigned ct_thresh)
+ci_inline uint64_t
+efct_tx_pkt_header(ef_vi* vi, unsigned length, unsigned ct_thresh)
 {
-  unsigned timestamp_flag = (vi->vi_flags & EF_VI_TX_TIMESTAMPS ? 1 : 0);
-  return efct_tx_header(length, ct_thresh, timestamp_flag, 0, 0);
+  return efct_tx_header(length, ct_thresh, 0, 0, 0) |
+         vi->vi_txq.efct_fixed_header;
 }
 
 /* check that we have space to send a packet of this length */
@@ -470,11 +471,12 @@ static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
     qs->previous += 1;
   }
 
-  if ( vi->vi_flags & EF_VI_TX_TIMESTAMPS ) {
+  if( CI_QWORD_FIELD(event, EFCT_TX_EVENT_TIMESTAMP_STATUS) ) {
     uint64_t ptstamp;
     uint32_t ptstamp_seconds;
     uint32_t timesync_seconds;
 
+    EF_VI_ASSERT(vi->vi_flags & EF_VI_TX_TIMESTAMPS);
     EF_VI_ASSERT(CI_QWORD_FIELD(event, EFCT_TX_EVENT_TIMESTAMP_STATUS) == 1);
     ptstamp = CI_QWORD_FIELD64(event, EFCT_TX_EVENT_PARTIAL_TSTAMP);
     ptstamp_seconds = ptstamp >> 32;
@@ -569,6 +571,13 @@ static void efct_ef_vi_transmit_copy_pio_warm(ef_vi* vi, int pio_offset,
 {
 }
 
+static bool tx_warm_active(ef_vi* vi)
+{
+  ci_qword_t qword;
+  qword.u64[0] = vi->vi_txq.efct_fixed_header;
+  return CI_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG);
+}
+
 #define EFCT_TX_POSTED_ID 0xefc7efc7
 static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
                                        const struct iovec* iov, int iovcnt,
@@ -577,6 +586,7 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
   struct efct_tx_state tx;
   unsigned threshold_extra;
   int i;
+  uint32_t dma_id;
 
   /* If we didn't have space then we must report this in _fallback and have
    * another go */
@@ -603,12 +613,15 @@ static void efct_ef_vi_transmitv_ctpio(ef_vi* vi, size_t len,
 
   /* Use a valid but bogus dma_id rather than invalid EF_REQUEST_ID_MASK to
    * support tcpdirect, which relies on the correct return value from
-   * ef_vi_transmit_unbundle to free its otherwise * unused transmit buffers.
+   * ef_vi_transmit_unbundle to free its otherwise unused transmit buffers.
    *
    * For compat with existing ef_vi apps which will post a fallback and may
    * want to use the dma_id we'll replace this value with the real one then.
+   *
+   * For transmit warmup, use an invalid dma_id so that it is ignored.
    */
-  efct_tx_complete(vi, &tx, EFCT_TX_POSTED_ID, len);
+  dma_id = tx_warm_active(vi) ? EF_REQUEST_ID_MASK : EFCT_TX_POSTED_ID;
+  efct_tx_complete(vi, &tx, dma_id, len);
 }
 
 static void efct_ef_vi_transmitv_ctpio_copy(ef_vi* vi, size_t frame_len,
@@ -985,23 +998,28 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 {
   ef_eventq_state* evq = &vi->ep_state->evq;
   ci_qword_t* event;
-  int i;
   int n_evs = 0;
 
   /* Check for overflow. If the previous entry has been overwritten already,
    * then it will have the wrong phase value and will appear invalid */
   BUG_ON(efct_tx_get_event(vi, evq->evq_ptr - sizeof(*event)) == NULL);
 
-  for( i = 0; i < evs_len; ++i, evq->evq_ptr += sizeof(*event) ) {
+  while( n_evs < evs_len ) {
     event = efct_tx_get_event(vi, evq->evq_ptr);
     if( event == NULL )
       break;
+    evq->evq_ptr += sizeof(*event);
 
     switch( CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) ) {
       case EFCT_EVENT_TYPE_TX:
         efct_tx_handle_event(vi, *event, &evs[n_evs]);
         n_evs++;
-        break;
+        /* Don't report more than one tx event per poll. This is to avoid a
+         * horrendous sequencing problem if a simple TX event is followed by a
+         * TX_WITH_TIMESTAMP; we'd need to update the queue state for the
+         * second event *after* the later call to ef_vi_transmit_unbundle()
+         * for the first event. */
+        return n_evs;
       case EFCT_EVENT_TYPE_CONTROL:
         n_evs += efct_tx_handle_control_event(vi, *event, &evs[n_evs]);
         break;
@@ -1481,6 +1499,30 @@ int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
 }
 #endif
 
+void efct_vi_start_transmit_warm(ef_vi* vi)
+{
+  ci_qword_t qword;
+  qword.u64[0] = vi->vi_txq.efct_fixed_header;
+
+  EF_VI_ASSERT(vi->nic_type.arch == EF_VI_ARCH_EFCT);
+  EF_VI_ASSERT(CI_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG) == 0);
+
+  CI_SET_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG, 1);
+  vi->vi_txq.efct_fixed_header = qword.u64[0];
+}
+
+void efct_vi_stop_transmit_warm(ef_vi* vi)
+{
+  ci_qword_t qword;
+  qword.u64[0] = vi->vi_txq.efct_fixed_header;
+
+  EF_VI_ASSERT(vi->nic_type.arch == EF_VI_ARCH_EFCT);
+  EF_VI_ASSERT(CI_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG) == 1);
+
+  CI_SET_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG, 0);
+  vi->vi_txq.efct_fixed_header = qword.u64[0];
+}
+
 static void efct_vi_initialise_ops(ef_vi* vi)
 {
   vi->ops.transmit               = efct_ef_vi_transmit;
@@ -1533,4 +1575,7 @@ void efct_vi_init(ef_vi* vi)
      EF_VI_DISCARD_RX_ETH_FCS_ERR |
      EF_VI_DISCARD_RX_ETH_LEN_ERR
   );
+
+  vi->vi_txq.efct_fixed_header =
+      efct_tx_header(0, 0, (vi->vi_flags & EF_VI_TX_TIMESTAMPS) ? 1 : 0, 0, 0);
 }
