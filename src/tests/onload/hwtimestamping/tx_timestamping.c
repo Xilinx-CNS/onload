@@ -38,6 +38,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/ioctl.h>
+#include <sys/epoll.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <netinet/ip.h>
@@ -417,7 +418,8 @@ static void print_time(char *s, struct timespec* ts)
 }
 
 /* Given a packet, extract the timestamp(s) */
-static void handle_time(struct msghdr* msg, struct configuration* cfg)
+static void handle_time(struct msghdr* msg, int tx_num,
+                        struct configuration* cfg)
 {
   struct onload_scm_timestamping_stream* tcp_tx_stamps;
   struct timespec* udp_tx_stamp;
@@ -429,7 +431,8 @@ static void handle_time(struct msghdr* msg, struct configuration* cfg)
     switch(cmsg->cmsg_type) {
     case ONLOAD_SCM_TIMESTAMPING_STREAM:
       tcp_tx_stamps = (struct onload_scm_timestamping_stream*)CMSG_DATA(cmsg);
-      printf("Timestamp for %d bytes:\n", (int)tcp_tx_stamps->len);
+      printf("Timestamp for tx %d - %d bytes:\n",
+             tx_num, (int)tcp_tx_stamps->len);
       print_time("First sent", &tcp_tx_stamps->first_sent);
       print_time("Last sent", &tcp_tx_stamps->last_sent);
       break;
@@ -442,6 +445,7 @@ static void handle_time(struct msghdr* msg, struct configuration* cfg)
       }
 #endif
       udp_tx_stamp = (struct timespec*) CMSG_DATA(cmsg);
+      printf("Timestamp for tx %d\n", tx_num);
       print_time("System", &(udp_tx_stamp[0]));
       print_time("Transformed", &(udp_tx_stamp[1]));
       print_time("Raw", &(udp_tx_stamp[2]));
@@ -478,7 +482,7 @@ int templated_send(int handle, struct iovec* iov)
 }
 #endif
 
-/* Receive a packet, and print out the timestamps from it */
+/* Receive a packet, and echo back a response */
 int do_echo(int sock, unsigned int pkt_num, struct configuration* cfg)
 {
   struct msghdr msg;
@@ -487,8 +491,6 @@ int do_echo(int sock, unsigned int pkt_num, struct configuration* cfg)
   char buffer[2048];
   char control[1024];
   int got;
-  int check = 0;
-  const int check_max = 999999;
 
   /* recvmsg header structure */
   make_address(0, 0, &host_address);
@@ -501,8 +503,8 @@ int do_echo(int sock, unsigned int pkt_num, struct configuration* cfg)
   msg.msg_control = control;
   msg.msg_controllen = 1024;
 
-  /* block for message */
-  got = recvmsg(sock, &msg, 0);
+  /* message should be ready */
+  got = recvmsg(sock, &msg, MSG_DONTWAIT);
   TEST(got >= 0);
 
   printf("Packet %d - %d bytes\n", pkt_num, got);
@@ -517,23 +519,42 @@ int do_echo(int sock, unsigned int pkt_num, struct configuration* cfg)
 #endif
     TRY(sendmsg(sock, &msg, 0));
 
-  /* retrieve TX timestamp
-   * Note: Waiting for it this way isn't the most efficient option.
-   * For higher throughput, check associate times to packets afterwards.
-   */
-  msg.msg_control = control;
-  iov.iov_len = 2048;
-  do {
-    msg.msg_controllen = 1024;
-    got = recvmsg(sock, &msg, MSG_ERRQUEUE);
-  } while (got < 0 && errno == EAGAIN && check++ < check_max);
-  if ( got < 0 && errno == EAGAIN ) {
-    printf("Gave up acquiring timestamp.\n");
-    return -EAGAIN;
-  }
-  TEST(got >= 0);
+  return 0;
+}
 
-  handle_time(&msg, cfg);
+/* Receive a packet, and discard it */
+int do_drop(int sock, unsigned int pkt_num, struct configuration* cfg)
+{
+  char buffer[2048];
+
+  /* message should be ready */
+  TRY(recv(sock, buffer, sizeof(buffer), MSG_DONTWAIT));
+
+  printf("Ignoring extra packet. pkt_num = %d\n", pkt_num);
+
+  return 0;
+}
+
+/* retrieve TX timestamp and print it*/
+int get_tx_ts(int sock, unsigned int tx_num, struct configuration* cfg)
+{
+  struct msghdr msg;
+  struct iovec iov;
+  struct sockaddr_in host_address;
+  char buffer[2048];
+  char control[1024];
+
+  make_address(0, 0, &host_address);
+  iov.iov_base = buffer;
+  iov.iov_len = 2048;
+  msg.msg_iov = &iov;
+  msg.msg_iovlen = 1;
+  msg.msg_name = &host_address;
+  msg.msg_namelen = sizeof(struct sockaddr_in);
+  msg.msg_control = control;
+  msg.msg_controllen = 1024;
+  TRY( recvmsg(sock, &msg, MSG_ERRQUEUE | MSG_DONTWAIT) );
+  handle_time(&msg, tx_num, cfg);
   return 0;
 };
 
@@ -541,8 +562,11 @@ int do_echo(int sock, unsigned int pkt_num, struct configuration* cfg)
 int main(int argc, char** argv)
 {
   struct configuration cfg;
-  int sock;
+  int sock, epoll;
   unsigned int pkt_num = 0;
+  unsigned int tx_num = 0;
+  int rc;
+  struct epoll_event e;
 
   parse_options(argc, argv, &cfg);
 
@@ -552,9 +576,55 @@ int main(int argc, char** argv)
   do_ioctl(&cfg, sock);
   do_ts_sockopt(&cfg, sock);
 
+  TRY( epoll = epoll_create(10) );
+  e.events = EPOLLIN | EPOLLRDHUP;
+  e.data.fd = sock;
+  TRY( epoll_ctl(epoll, EPOLL_CTL_ADD, sock, &e) );
+
   /* Run until we've got enough packets, or an error occurs */
-  while( (pkt_num++ < cfg.cfg_max_packets) || (cfg.cfg_max_packets == 0) )
-    TRY( do_echo(sock, pkt_num, &cfg) );
+  while( 1 ) {
+    /* break out of loop if all timestamps received */
+    if( (cfg.cfg_max_packets != 0) &&
+        (tx_num >= cfg.cfg_max_packets) )
+      break;
+
+
+    TRY( rc = epoll_wait(epoll, &e, 1, 1000) );
+
+    /* break out of the loop after timeout if we've echoed all packets */
+    if( rc == 0 ) {
+      if( (cfg.cfg_max_packets != 0) &&
+          (pkt_num >= cfg.cfg_max_packets) )
+        break;
+      else
+        continue;
+    }
+
+    TEST( e.data.fd == sock );
+
+    if( e.events & EPOLLRDHUP ) {
+      /* TCP connection closed */
+      printf("Remote end closed connection\n");
+      break;
+    }
+
+    if( e.events & EPOLLIN ) {
+      /* RX packet */
+      if( (pkt_num < cfg.cfg_max_packets) || (cfg.cfg_max_packets == 0)) {
+        TRY( do_echo(sock, pkt_num, &cfg) );
+        ++pkt_num;
+      }
+      else {
+        TRY( do_drop(sock, pkt_num, &cfg) );
+        ++pkt_num;
+      }
+    }
+    if( e.events & EPOLLERR ) {
+      /* TX timestamp */
+      TRY( get_tx_ts(sock, tx_num, &cfg) );
+      ++tx_num;
+    }
+  }
 
   close(sock);
   return 0;
