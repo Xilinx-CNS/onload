@@ -127,6 +127,7 @@ struct configuration {
                                  * Clears SOF_TIMESTAMPING_OPT_TSONLY */
   bool           cfg_cmsg;      /* Set SOF_TIMESTAMPING_OPT_CMSG */
   bool           cfg_no_id;     /* Clear SOF_TIMESTAMPING_OPT_ID */
+  bool           cfg_stream;    /* Set ONLOAD_SOF_TIMESTAMPING_STREAM */
 };
 
 /* Commandline options, configuration etc. */
@@ -146,6 +147,7 @@ void print_help(void)
          "\t--data\tRequest a copy of outgoing packet with timestamp\n"
          "\t--cmsg\tUse SOF_TIMESTAMPING_OPT_CMSG (off by default)\n"
          "\t--no-id\tDon't use SOF_TIMESTAMPING_OPT_ID (default to using SOF_TIMESTAMPING_OPT_ID)\n"
+         "\t--stream\tSet ONLOAD_SOF_TIMESTAMPING_STREAM (proprietary format)\n"
 #ifdef ONLOADEXT_AVAILABLE
          "\t--templated\tUse templated sends.\n"
          "\t--ext\t\tUse extensions API rather than SO_TIMESTAMPING.\n"
@@ -181,6 +183,7 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
     { "data", no_argument, 0, 'd' },
     { "cmsg", no_argument, 0, 'C' },
     { "no-id", no_argument, 0, 'I' },
+    { "stream", no_argument, 0, 's' },
     { "templated", no_argument, 0, 'T' },
     { "ext", no_argument, 0, 'e' },
     { "help", no_argument, 0, 'h' },
@@ -222,6 +225,9 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
         break;
     case 'I':
         cfg->cfg_no_id = true;
+        break;
+    case 's':
+        cfg->cfg_stream = true;
         break;
 #ifdef ONLOADEXT_AVAILABLE
       case 'T':
@@ -366,7 +372,8 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
       enable |= SOF_TIMESTAMPING_OPT_TSONLY;
     if( cfg->cfg_cmsg )
       enable |= SOF_TIMESTAMPING_OPT_CMSG;
-    if( cfg->cfg_protocol == IPPROTO_TCP ) {
+    if( cfg->cfg_stream &&
+        cfg->cfg_protocol == IPPROTO_TCP ) {
       enable |= ONLOAD_SOF_TIMESTAMPING_STREAM;
 #if defined(SOF_TIMESTAMPING_OPT_ID_TCP)
       if( enable & SOF_TIMESTAMPING_OPT_ID )
