@@ -94,7 +94,6 @@ struct efx_mcdi_filter_table {
 	bool must_restore_rss_contexts;
 	bool rss_context_exclusive;
 	bool additional_rss_modes;
-	bool rss_limited;
 #ifdef EFX_NOT_UPSTREAM
 #ifdef CONFIG_SFC_DRIVERLINK
 	bool kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MAX];
@@ -2175,8 +2174,7 @@ int efx_mcdi_filter_probe_supported_filters(struct efx_nic *efx)
 	return rc;
 }
 
-int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool rss_limited,
-				bool additional_rss_modes)
+int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool additional_rss_modes)
 {
 	struct efx_mcdi_filter_table *table;
 
@@ -2189,7 +2187,6 @@ int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool rss_limited,
 
 	efx->filter_state = table;
 
-	table->rss_limited = rss_limited;
 	table->additional_rss_modes = additional_rss_modes;
 
 	table->mc_promisc_last = false;
@@ -2920,9 +2917,6 @@ static int efx_mcdi_filter_alloc_rss_context(struct efx_nic *efx, bool exclusive
 		return 0;
 	}
 
-	if (table->rss_limited)
-		return -EOPNOTSUPP;
-
 	MCDI_SET_DWORD(inbuf, RSS_CONTEXT_ALLOC_IN_UPSTREAM_PORT_ID,
 		       efx->vport.vport_id);
 	MCDI_SET_DWORD(inbuf, RSS_CONTEXT_ALLOC_IN_TYPE, alloc_type);
@@ -3026,13 +3020,12 @@ void efx_mcdi_rx_free_indir_table(struct efx_nic *efx)
 	efx->rss_context.context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
 }
 
-static int efx_mcdi_filter_rx_push_shared_rss_config(struct efx_nic *efx,
-					      unsigned int *context_size)
+int efx_mcdi_rx_push_shared_rss_config(struct efx_nic *efx,
+				       unsigned int *context_size)
 {
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 	int rc = efx_mcdi_filter_alloc_rss_context(efx, false,
 					    &efx->rss_context, context_size);
-
 	if (rc != 0)
 		return rc;
 
@@ -3229,9 +3222,9 @@ void efx_mcdi_rx_restore_rss_contexts(struct efx_nic *efx)
 	table->must_restore_rss_contexts = false;
 }
 
-int efx_mcdi_pf_rx_push_rss_config(struct efx_nic *efx, bool user,
-				   const u32 *rx_indir_table,
-				   const u8 *key)
+int efx_mcdi_rx_push_rss_config(struct efx_nic *efx, bool user,
+				const u32 *rx_indir_table,
+				const u8 *key)
 {
 	u32 flags = efx->rss_context.flags;
 	int rc;
@@ -3255,7 +3248,7 @@ int efx_mcdi_pf_rx_push_rss_config(struct efx_nic *efx, bool user,
 			mismatch = rx_indir_table[i] !=
 				ethtool_rxfh_indir_default(i, efx->rss_spread);
 
-		rc = efx_mcdi_filter_rx_push_shared_rss_config(efx, &context_size);
+		rc = efx_mcdi_rx_push_shared_rss_config(efx, &context_size);
 		if (rc == 0) {
 			if (context_size != efx->rss_spread)
 				netif_warn(efx, probe, efx->net_dev,
@@ -3283,21 +3276,6 @@ int efx_mcdi_pf_rx_push_rss_config(struct efx_nic *efx, bool user,
 	}
 	return rc;
 }
-
-#ifdef CONFIG_SFC_SRIOV
-int efx_mcdi_vf_rx_push_rss_config(struct efx_nic *efx, bool user,
-				   const u32 *rx_indir_table
-				   __attribute__ ((unused)),
-				   const u8 *key
-				   __attribute__ ((unused)))
-{
-	if (user)
-		return -EOPNOTSUPP;
-	if (efx->rss_context.context_id != EFX_MCDI_RSS_CONTEXT_INVALID)
-		return 0;
-	return efx_mcdi_filter_rx_push_shared_rss_config(efx, NULL);
-}
-#endif
 
 int efx_mcdi_push_default_indir_table(struct efx_nic *efx,
 				      unsigned int rss_spread)

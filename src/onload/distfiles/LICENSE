@@ -6,10 +6,12 @@ The following components are distributed under the BSD 2-Clause License,
 shown in LICENSES-ALL.
 
   - Etherfabric API and library (ef_vi)
+  - Onload headers neaded for ef_vi (dual-licensed)
   - Onload Extensions Stub Library
-  - The Onload control plane (files under usr/lib/cplane and usr/inclued cplane)
+  - The Onload control plane (files under src/lib/cplane and src/include/cplane)
+  - User-modifiable scripts and examples
 
-This package includes software derived from lwIP and other software as listed
+This package includes software derived from other software as listed
 in LICENSES-ALL.
 
 Users should refer to the individual source files

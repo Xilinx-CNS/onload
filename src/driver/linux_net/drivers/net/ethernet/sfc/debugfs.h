@@ -23,7 +23,6 @@ struct efx_debugfs_parameter {
 };
 
 #ifdef CONFIG_DEBUG_FS
-void efx_fini_debugfs_child(struct dentry *dir, const char *name);
 int efx_init_debugfs_netdev(struct net_device *net_dev);
 void efx_fini_debugfs_netdev(struct net_device *net_dev);
 void efx_update_debugfs_netdev(struct efx_nic *efx);
@@ -31,7 +30,7 @@ int efx_init_debugfs_nic(struct efx_nic *efx);
 void efx_fini_debugfs_nic(struct efx_nic *efx);
 int efx_init_debugfs_channels(struct efx_nic *efx);
 void efx_fini_debugfs_channels(struct efx_nic *efx);
-int efx_init_debugfs(const char *module);
+int efx_init_debugfs(void);
 void efx_fini_debugfs(void);
 int efx_extend_debugfs_port(struct efx_nic *efx,
 			    void *context, u64 ignore,
@@ -54,7 +53,6 @@ int efx_debugfs_read_ulong(struct seq_file *, void *);
 int efx_debugfs_read_string(struct seq_file *, void *);
 int efx_debugfs_read_int(struct seq_file *, void *);
 int efx_debugfs_read_atomic(struct seq_file *, void *);
-int efx_debugfs_read_dword(struct seq_file *, void *);
 int efx_debugfs_read_u64(struct seq_file *, void *);
 int efx_debugfs_read_bool(struct seq_file *, void *);
 #ifdef CONFIG_SFC_VDPA
@@ -99,29 +97,6 @@ int efx_debugfs_read_x64(struct seq_file *, void *);
 	.reader = reader_function,					\
 }
 
-/* Likewise, but with one file for each of 4 lanes */
-#define EFX_PER_LANE_PARAMETER(prefix, suffix, container_type, parameter, \
-				field_type, reader_function) {		\
-	.name = prefix "0" suffix,					\
-	.offset = ((((field_type *) 0) ==				\
-		      ((container_type *) 0)->parameter) ?		\
-		    offsetof(container_type, parameter[0]) :		\
-		    offsetof(container_type, parameter[0])),		\
-	.reader = reader_function,					\
-},  {									\
-	.name = prefix "1" suffix,					\
-	.offset = offsetof(container_type, parameter[1]),		\
-	.reader = reader_function,					\
-}, {									\
-	.name = prefix "2" suffix,					\
-	.offset = offsetof(container_type, parameter[2]),		\
-	.reader = reader_function,					\
-}, {									\
-	.name = prefix "3" suffix,					\
-	.offset = offsetof(container_type, parameter[3]),		\
-	.reader = reader_function,					\
-}
-
 /* A string parameter (string embedded in the structure) */
 #define EFX_STRING_PARAMETER(container_type, parameter) {	\
 	.name = #parameter,					\
@@ -146,11 +121,6 @@ int efx_debugfs_read_x64(struct seq_file *, void *);
 #define EFX_ULONG_PARAMETER(container_type, parameter)		\
 	EFX_PARAMETER(container_type, parameter,		\
 		      unsigned long, efx_debugfs_read_ulong)
-
-/* A dword parameter */
-#define EFX_DWORD_PARAMETER(container_type, parameter)		\
-	EFX_PARAMETER(container_type, parameter,		\
-		      efx_dword_t, efx_debugfs_read_dword)
 
 /* A u64 parameter */
 #define EFX_U64_PARAMETER(container_type, parameter)		\

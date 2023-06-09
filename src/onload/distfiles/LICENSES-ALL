@@ -6,12 +6,12 @@ Licenses Applicable to original components in the Onload project.
 EXHIBIT B
 Third-Party Components included in the Onload project.
 
-----------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 
 EXHIBIT A
 Licenses Applicable to original components in the Onload project.
-----------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 GNU GENERAL PUBLIC LICENSE
 
 Version 2, June 1991
@@ -334,7 +334,7 @@ it more useful to permit linking proprietary applications with the library. If
 this is what you want to do, use the GNU Library General Public License instead
 of this License.
 
----------------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 Xilinx's Onload Extensions Stub Library
 Xilinx's Etherfabric API and library (ef_vi)
@@ -365,230 +365,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 EXHIBIT B
 Third-Party Components included in the Onload project.
-----------------------------------------------------------------------------------------------------------
-
-Component: lwip 1.4.1 
-
-(distributed in connection with the Licensed Materials known as TCP Direct API and related library and utilities)
-
-/*
- * Copyright (c) 2001-2004 Swedish Institute of Computer Science.
- * All rights reserved. 
- * 
- * Redistribution and use in source and binary forms, with or without modification, 
- * are permitted provided that the following conditions are met:
- *
- * 1. Redistributions of source code must retain the above copyright notice,
- *    this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright notice,
- *    this list of conditions and the following disclaimer in the documentation
- *    and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission. 
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED 
- * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF 
- * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT 
- * SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, 
- * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT 
- * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS 
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN 
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING 
- * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY 
- * OF SUCH DAMAGE.
- *
- * Author: Adam Dunkels <adam@sics.se>
- *
- */
-
-Sub-component: ppp
-* Copyright (c) 2003 by Marc Boucher, Services Informatiques (MBSI) inc.
-* portions Copyright (c) 1998 Global Election Systems Inc.
-*
-* The authors hereby grant permission to use, copy, modify, distribute,
-* and license this software and its documentation for any purpose, provided
-* that existing copyright notices are retained in all copies and that this
-* notice and the following disclaimer are included verbatim in any 
-* distributions. No written agreement, license, or royalty fee is required
-* for any of the authorized uses.
-*
-* THIS SOFTWARE IS PROVIDED BY THE CONTRIBUTORS *AS IS* AND ANY EXPRESS OR
-* IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
-* OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. 
-* IN NO EVENT SHALL THE CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
-* INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
-* NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-* DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-* THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-* (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
-* THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-
-Copyright 2002 CITEL Technologies Ltd
-Copyright 1995 Eric Rosenquist Strata Software Ltd
-Copyright 2001-2004 Leon Woestenberg <leon.woestenberg@axon.tv>
-Copyright (c) 2001 by Cognizant Pty Ltd. 
-Copyright (c) 2001-2004 Leon Woestenberg <leon.woestenberg@gmx.net> 
-Copyright 1990 RSA Data Security Inc
-Copyright 1997-1998 Global Election Systems Inc
-Copyright 1993-1994 The Australian National University
-Copyright 1989 Carnegie Mellon University
-Copyright 2001-2004, 2006 Axon Digital Design B.V. The Netherlands
-Copyright 2002-2003 Adam Dunkels
-Copyright 1991 Gregory M. Christy
-Copyright 2007 Dominik Spies <kontakt@dspies.de>
-Copyright 2001-2004 Swedish Institute of Computer Science
-Copyright 1989 Regents of the University of California
-Copyright 2002 The NetBSD Foundation Inc
-Copyright 2003, 2006 Marc Boucher Services Informatiques
-
-
 --------------------------------------------------------------------------------
 
+Component: fuser.c
 
-Component: Net-driver and other kernel code files 
-
-
-
-Copyright 2004 Stelian Pop <stelian@popies.net>
-Copyright 2009 Stefani Seibold <stefani@seibold.net>
-Copyright 2002-2005 Networks Inc
-Copyright 2002-2003 International Business Machines Corp
-
-
-* This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- *
-
-
---------------------------------------------------------------------------------
-
-
-Component: System Statistics Collection Daemon (collectd) (https://github.com/collectd/collectd) 
-
-
-collectd consists of a daemon and numerous plugins. The daemon is licensed
-under the "MIT License"; its source files are located at src/daemon/. The
-plugins are licenses individually, please check the top of the plugin's source
-file(s) to see which license applies. The majority of plugins is licensed
-either under the "MIT License" or the "GNU General Public License".
-
-The "MIT License" follows and the "GNU General Public License version 2" is
-printed in Exhibit A above. Other licenses not printed below may be found in
-the source files.
-
-
-MIT License
-===========
-
-Permission is hereby granted, free of charge, to any person obtaining a copy of
-this software and associated documentation files (the "Software"), to deal in
-the Software without restriction, including without limitation the rights to
-use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
-of the Software, and to permit persons to whom the Software is furnished to do
-so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-See the "Authors" file at https://github.com/collectd/collectd for collectd
-project authors and contributors
-
-
---------------------------------------------------------------------------------
-
-
-Component: Doxygen (https://github.com/doxygen/doxygen/blob/Release_1_8_13/LICENSE) 
-
-
-
-* This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation; either version 2 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
- *
-
-
---------------------------------------------------------------------------------
-
-
-Component: bignum.{h,c} 
-
-
-
-
-Crypto library: bignum routines for RSA
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Taken from PuTTY 0.62:
-
----------------------------------------------------------------------
-PuTTY is copyright 1997-2011 Simon Tatham.
-
-Portions copyright Robert de Bath, Joris van Rantwijk, Delian
-Delchev, Andreas Schultz, Jeroen Massar, Wez Furlong, Nicolas Barry,
-Justin Bradford, Ben Harris, Malcolm Smith, Ahmad Khalifa, Markus
-Kuhn, Colin Watson, and CORE SDI S.A.
-
-Permission is hereby granted, free of charge, to any person
-obtaining a copy of this software and associated documentation files
-(the "Software"), to deal in the Software without restriction,
-including without limitation the rights to use, copy, modify, merge,
-publish, distribute, sublicense, and/or sell copies of the Software,
-and to permit persons to whom the Software is furnished to do so,
-subject to the following conditions:
-
-The above copyright notice and this permission notice shall be
-included in all copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
-NONINFRINGEMENT.  IN NO EVENT SHALL THE COPYRIGHT HOLDERS BE LIABLE
-FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
-CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
-WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
----------------------------------------------------------------------
-
-
-Component: fuser.c 
-
-
-
-* fuser.c - identify processes using files
- *
- * Based on fuser.c Copyright (C) 1993-2005 Werner Almesberger and Craig Small
- *
- * Completely re-written
- * Copyright (C) 2005-2011 Craig Small
+ * fuser.c - identify processes using files
+ * Based on fuser.c
+ * Copyright (c) 2005-2011 Craig Small
+ * Copyright (c) 1993-2005 Werner Almesberger and Craig Small
+ * SPDX-License-Identifier: GPL-2.0-or-later
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -604,3 +389,10 @@ Component: fuser.c
  *  along with this program; if not, write to the Free Software
  *  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+--------------------------------------------------------------------------------
+
+Component: ethtool_rxclass.c
+
+ * Based on rxclass.c
+ * Copyright (c) 2008 Sun Microsystems, Inc. All rights reserved.
+ * SPDX-License-Identifier: GPL-2.0-only

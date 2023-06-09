@@ -167,16 +167,19 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
    * ports, addresses etc.) then the handling of MAC addresses should be done
    * by setting FLOW_MAC_EXT in dst->flow_type and updating dst->h_ext.
    */
-  if( (src->match_flags & EFX_FILTER_MATCH_LOC_MAC) &&
+  if( (src->match_flags & (EFX_FILTER_MATCH_LOC_MAC |
+                           EFX_FILTER_MATCH_ETHER_TYPE)) &&
      !(src->match_flags & (EFX_FILTER_MATCH_IP_PROTO |
                            EFX_FILTER_MATCH_LOC_HOST |
                            EFX_FILTER_MATCH_LOC_PORT)) ) {
     dst->flow_type = ETHER_FLOW;
 
-    memcpy(dst->h_u.ether_spec.h_dest, src->loc_mac,
-      sizeof(dst->h_u.ether_spec.h_dest));
-    memcpy(dst->m_u.ether_spec.h_dest, minus1,
-      sizeof(dst->m_u.ether_spec.h_dest));
+    if( src->match_flags & EFX_FILTER_MATCH_LOC_MAC ) {
+      memcpy(dst->h_u.ether_spec.h_dest, src->loc_mac,
+        sizeof(dst->h_u.ether_spec.h_dest));
+      memcpy(dst->m_u.ether_spec.h_dest, minus1,
+        sizeof(dst->m_u.ether_spec.h_dest));
+    }
 
     if( src->match_flags & EFX_FILTER_MATCH_ETHER_TYPE ) {
       dst->h_u.ether_spec.h_proto = src->ether_type;

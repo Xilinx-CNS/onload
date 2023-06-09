@@ -1293,6 +1293,16 @@ static inline void netdev_put(struct net_device *dev,
 #endif
 #endif
 
+#ifdef EFX_NEED_DEBUGFS_LOOKUP_AND_REMOVE
+#ifdef CONFIG_DEBUG_FS
+void debugfs_lookup_and_remove(const char *name, struct dentry *parent);
+#else
+static inline void debugfs_lookup_and_remove(const char *name,
+					     struct dentry *parent)
+{ }
+#endif
+#endif
+
 /**************************************************************************
  *
  * Missing functions provided by kernel_compat.c
@@ -2516,6 +2526,15 @@ int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 
 #ifndef VIRTIO_NET_F_RSC_EXT
 #define VIRTIO_NET_F_RSC_EXT 61
+#endif
+
+#ifndef VIRTIO_F_IN_ORDER
+/* Virtio feature bit number 35 is not defined in
+ * include/uapi/linux/virtio_config.h for kernel versions < 5.18.
+ * So make it available for the out-of-tree builds. VIRTIO_F_IN_ORDER
+ * is defined in section 6 (Reserved Feature Bits) of the VirtIO v1.1 spec
+ */
+#define VIRTIO_F_IN_ORDER 35
 #endif
 
 #if defined(EFX_HAVE_NET_DEVLINK_H) && defined(EFX_HAVE_DEVLINK_INFO) && defined(CONFIG_NET_DEVLINK)

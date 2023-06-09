@@ -585,15 +585,12 @@ int ef100_phy_probe(struct efx_nic *efx)
 int ef100_filter_table_probe(struct efx_nic *efx)
 {
 	struct ef100_nic_data *nic_data = efx->nic_data;
-	bool rss_limited, additional_rss;
+	bool additional_rss;
 
-	rss_limited = efx_ef100_has_cap(nic_data->datapath_caps,
-					RX_RSS_LIMITED);
 	additional_rss = efx_ef100_has_cap(nic_data->datapath_caps,
 					   ADDITIONAL_RSS_MODES);
 
-	return efx_mcdi_filter_table_probe(efx, rss_limited,
-					   additional_rss);
+	return efx_mcdi_filter_table_probe(efx, additional_rss);
 }
 
 static int ef100_filter_table_init(struct efx_nic *efx)
@@ -644,6 +641,21 @@ static void ef100_filter_table_down(struct efx_nic *efx)
 	nic_data->filters_up = false;
 out:
 	up_write(&efx->filter_sem);
+}
+
+static int efx_ef100_rx_push_rss_config(struct efx_nic *efx, bool user,
+					const u32 *rx_indir_table,
+					const u8 *key)
+{
+	struct ef100_nic_data *nic_data = efx->nic_data;
+
+	if (efx_ef100_has_cap(nic_data->datapath_caps, RX_RSS_LIMITED))
+		return -EOPNOTSUPP;
+	/* on EF100 we have many available RSS contexts, so use the PF version
+	 * of push_rss_config for both PFs and VFs rather than the "VF"
+	 * version that's conservative about allocating RSS contexts.
+	 */
+	return efx_mcdi_rx_push_rss_config(efx, user, rx_indir_table, key);
 }
 
 /*	Other
@@ -1937,7 +1949,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.rx_ts_offset = ESF_GZ_RX_PREFIX_PARTIAL_TSTAMP_LBN / 8,
 	.rx_hash_key_size = 40,
 	.rx_pull_rss_config = efx_mcdi_rx_pull_rss_config,
-	.rx_push_rss_config = efx_mcdi_pf_rx_push_rss_config,
+	.rx_push_rss_config = efx_ef100_rx_push_rss_config,
 	.rx_push_rss_context_config = efx_mcdi_rx_push_rss_context_config,
 	.rx_pull_rss_context_config = efx_mcdi_rx_pull_rss_context_config,
 	.rx_restore_rss_contexts = efx_mcdi_rx_restore_rss_contexts,
@@ -2070,7 +2082,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.rx_ts_offset = ESF_GZ_RX_PREFIX_PARTIAL_TSTAMP_LBN / 8,
 	.rx_hash_key_size = 40,
 	.rx_pull_rss_config = efx_mcdi_rx_pull_rss_config,
-	.rx_push_rss_config = efx_mcdi_pf_rx_push_rss_config,
+	.rx_push_rss_config = efx_ef100_rx_push_rss_config,
 	.rx_restore_rss_contexts = efx_mcdi_rx_restore_rss_contexts,
 	.rx_recycle_ring_size = efx_ef100_recycle_ring_size,
 

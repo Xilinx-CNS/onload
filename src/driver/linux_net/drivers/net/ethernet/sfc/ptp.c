@@ -2370,16 +2370,14 @@ int efx_ptp_pps_get_event(struct efx_nic *efx, struct efx_ts_get_pps *event)
 
 static bool efx_is_pps_possible(struct efx_nic *efx)
 {
-	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_PPS_ENABLE_LEN);
+	MCDI_DECLARE_BUF(inbuf, MC_CMD_PTP_IN_RESET_STATS_LEN);
 	int rc;
 
-	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_PPS_ENABLE);
+	MCDI_SET_DWORD(inbuf, PTP_IN_OP, MC_CMD_PTP_OP_RESET_STATS);
 	MCDI_SET_DWORD(inbuf, PTP_IN_PERIPH_ID, 0);
-	MCDI_SET_DWORD(inbuf, PTP_IN_PPS_ENABLE_OP, MC_CMD_PTP_DISABLE_PPS);
-	MCDI_SET_DWORD(inbuf, PTP_IN_PPS_ENABLE_QUEUE_ID, 0);
 
 	rc = efx_mcdi_rpc_quiet(efx, MC_CMD_PTP, inbuf, sizeof(inbuf),
-			  NULL, 0, NULL);
+				NULL, 0, NULL);
 
 	return rc != -EPERM;
 }
@@ -3514,16 +3512,12 @@ static void ptp_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 	struct ptp_clock_event ptp_evt;
 
 	if (ptp->usr_evt_enabled & (1 << PTP_CLK_REQ_EXTTS)) {
-		struct efx_pps_data *pps = ptp->pps_data;
-
-		pps->n_assert = ptp->nic_to_kernel_time(
-			EFX_QWORD_FIELD(ptp->evt_frags[0], MCDI_EVENT_DATA),
-			EFX_QWORD_FIELD(ptp->evt_frags[1], MCDI_EVENT_DATA),
-			ptp->ts_corrections.pps_in);
-
 		ptp_evt.type = PTP_CLOCK_EXTTS;
 		ptp_evt.index = 0;
-		ptp_evt.timestamp = ktime_to_ns(pps->n_assert);
+		ptp_evt.timestamp = ktime_to_ns(ptp->nic_to_kernel_time(
+			EFX_QWORD_FIELD(ptp->evt_frags[0], MCDI_EVENT_DATA),
+			EFX_QWORD_FIELD(ptp->evt_frags[1], MCDI_EVENT_DATA),
+			ptp->ts_corrections.pps_in));
 		ptp_clock_event(ptp->phc_clock, &ptp_evt);
 	}
 #endif

@@ -15,7 +15,9 @@
 /* MAE Port selector value*/
 #define MAE_MPORT_SELECTOR_ASSIGNED 0x1000000
 
-/* struct efx_vring_ctx: Store the vring context
+/**
+ * struct efx_vring_ctx: The vring context
+ *
  * @nic: pointer of the VF's efx_nic object
  * @vf_index: VF index of the vDPA VF
  * @vi_index: vi index to be used for queue creation
@@ -28,7 +30,9 @@ struct efx_vring_ctx {
 	u32 mcdi_vring_type;
 };
 
-/* struct efx_vring_cfg: Configuration for vring creation
+/**
+ * struct efx_vring_cfg: Configuration for vring creation
+ *
  * @desc: Descriptor area address of the vring
  * @avail: Available area address of the vring
  * @used: Device area address of the vring
@@ -49,7 +53,9 @@ struct efx_vring_cfg {
 	u64 features;
 };
 
-/* struct efx_vring_dyn_cfg:
+/**
+ * struct efx_vring_dyn_cfg - dynamic vring configuration
+ *
  * @avail_idx: last available index of the vring
  * @used_idx: last used index of the vring
  */

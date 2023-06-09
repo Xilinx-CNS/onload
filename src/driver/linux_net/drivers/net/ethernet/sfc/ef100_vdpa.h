@@ -23,7 +23,7 @@
 #define EF100_VDPA_VIRTIO_NET_DEVICE_ID VIRTIO_ID_NET
 
 /* Vendor ID of Xilinx vDPA NIC */
-#define EF100_VDPA_XNX_VENDOR_ID  PCI_VENDOR_ID_XILINX
+#define EF100_VDPA_VENDOR_ID  PCI_VENDOR_ID_XILINX
 
 /* Max Queue pairs currently supported */
 #define EF100_VDPA_MAX_QUEUES_PAIRS 1
@@ -56,43 +56,42 @@
 #define EFX_VDPA_NAME(_vdpa) "vdpa_%d_%d", (_vdpa)->pf_index, (_vdpa)->vf_index
 #define EFX_VDPA_VRING_NAME(_idx) "vring_%d", _idx
 
-/* Following are the states for a vDPA NIC
+/**
+ * enum ef100_vdpa_nic_state - possible states for a vDPA NIC
+ *
  * @EF100_VDPA_STATE_INITIALIZED: State after vDPA NIC created
  * @EF100_VDPA_STATE_NEGOTIATED: State after feature negotiation
  * @EF100_VDPA_STATE_STARTED: State after driver ok
+ * @EF100_VDPA_STATE_SUSPENDED: State after device suspend
+ * @EF100_VDPA_STATE_NSTATES: Number of VDPA states
  */
 enum ef100_vdpa_nic_state {
-	EF100_VDPA_STATE_INITIALIZED = 0,
-	EF100_VDPA_STATE_NEGOTIATED = 1,
-	EF100_VDPA_STATE_STARTED = 2,
+	EF100_VDPA_STATE_INITIALIZED,
+	EF100_VDPA_STATE_NEGOTIATED,
+	EF100_VDPA_STATE_STARTED,
+	EF100_VDPA_STATE_SUSPENDED,
 	EF100_VDPA_STATE_NSTATES
 };
 
-/* Enum defining the virtio device types
- * @EF100_VDPA_DEVICE_TYPE_NET: virtio net device type
- */
 enum ef100_vdpa_device_type {
 	EF100_VDPA_DEVICE_TYPE_NET,
 	EF100_VDPA_DEVICE_NTYPES
 };
 
-/* Enum defining the virtquque types
- * @EF100_VDPA_VQ_TYPE_NET_RXQ: NET RX type
- * @EF100_VDPA_VQ_TYPE_NET_TXQ: NET TX type
- */
 enum ef100_vdpa_vq_type {
 	EF100_VDPA_VQ_TYPE_NET_RXQ,
 	EF100_VDPA_VQ_TYPE_NET_TXQ,
 	EF100_VDPA_VQ_NTYPES
 };
 
-/* struct ef100_vdpa_vring_info - vDPA vring data structure
+/**
+ *  struct ef100_vdpa_vring_info - vDPA vring data structure
+ *
  * @desc: Descriptor area address of the vring
  * @avail: Available area address of the vring
  * @used: Device area address of the vring
- * @size: Size of the vring
+ * @size: Number of entries in the vring
  * @vring_state: bit map to track vring configuration
- * @vring_created: set to true when vring is created.
  * @last_avail_idx: last available index of the vring
  * @last_used_idx: last used index of the vring
  * @doorbell_offset: doorbell offset
@@ -124,9 +123,11 @@ struct ef100_vdpa_vring_info {
 #endif
 };
 
-/* struct ef100_vdpa_nic - vDPA NIC data structure
+/**
+ * struct ef100_vdpa_nic - vDPA NIC data structure
+ *
  * @vdpa_dev: vdpa_device object which registers on the vDPA bus.
- * @vdpa_state: NIC state machine governed by ef100_vdpa_nic_state
+ * @vdpa_state: ensures correct device status transitions via set_status cb
  * @mcdi_mode: MCDI mode at the time of unmapping VF mcdi buffer
  * @efx: pointer to the VF's efx_nic object
  * @lock: Managing access to vdpa config operations
@@ -134,6 +135,7 @@ struct ef100_vdpa_vring_info {
  * @vf_index: VF index of the vDPA VF
  * @status: device status as per VIRTIO spec
  * @features: negotiated feature bits
+ * @max_queue_pairs: maximum number of queue pairs supported
  * @net_config: virtio_net_config data
  * @vring: vring information of the vDPA device.
  * @mac_address: mac address of interface associated with this vdpa device
@@ -146,6 +148,7 @@ struct ef100_vdpa_nic {
 	enum ef100_vdpa_nic_state vdpa_state;
 	enum efx_mcdi_mode mcdi_mode;
 	struct efx_nic *efx;
+	/* for synchronizing access to vdpa config operations */
 	struct mutex lock;
 	u32 pf_index;
 	u32 vf_index;
@@ -182,6 +185,36 @@ int ef100_vdpa_reset(struct vdpa_device *vdev);
 bool ef100_vdpa_dev_in_use(struct efx_nic *efx);
 int ef100_vdpa_init_vring(struct ef100_vdpa_nic *vdpa_nic, u16 idx);
 int ef100_vdpa_map_mcdi_buffer(struct efx_nic *efx);
+
+static inline bool efx_vdpa_is_little_endian(struct ef100_vdpa_nic *vdpa_nic)
+{
+	return virtio_legacy_is_little_endian() ||
+		(vdpa_nic->features & (1ULL << VIRTIO_F_VERSION_1));
+}
+
+static inline u16 efx_vdpa16_to_cpu(struct ef100_vdpa_nic *vdpa_nic,
+				    __virtio16 val)
+{
+	return __virtio16_to_cpu(efx_vdpa_is_little_endian(vdpa_nic), val);
+}
+
+static inline __virtio16 cpu_to_efx_vdpa16(struct ef100_vdpa_nic *vdpa_nic,
+					   u16 val)
+{
+	return __cpu_to_virtio16(efx_vdpa_is_little_endian(vdpa_nic), val);
+}
+
+static inline u32 efx_vdpa32_to_cpu(struct ef100_vdpa_nic *vdpa_nic,
+				    __virtio32 val)
+{
+	return __virtio32_to_cpu(efx_vdpa_is_little_endian(vdpa_nic), val);
+}
+
+static inline __virtio32 cpu_to_efx_vdpa32(struct ef100_vdpa_nic *vdpa_nic,
+					   u32 val)
+{
+	return __cpu_to_virtio32(efx_vdpa_is_little_endian(vdpa_nic), val);
+}
 
 extern const struct vdpa_config_ops ef100_vdpa_config_ops;
 #endif /* CONFIG_SFC_VDPA */

@@ -8,18 +8,15 @@
  */
 
 #include <linux/vdpa.h>
-#include <linux/virtio_ids.h>
-#include <linux/pci_ids.h>
-#include <linux/netdevice.h>
-#include <linux/pci.h>
-#include <uapi/linux/virtio_config.h>
-#include <uapi/linux/virtio_net.h>
 #include "ef100_nic.h"
 #include "io.h"
 #include "ef100_vdpa.h"
 #include "mcdi_vdpa.h"
 #include "mcdi_filters.h"
 #include "debugfs.h"
+#ifdef EFX_NOT_UPSTREAM
+#include "ef100_vdpa_dbg.h"
+#endif
 
 #if defined(CONFIG_SFC_VDPA)
 
@@ -28,141 +25,19 @@
  */
 #define EFX_GET_VI_INDEX(vq_num) (((vq_num) / 2) + 1)
 
-#if defined(EFX_USE_KCOMPAT) && !defined(VIRTIO_F_IN_ORDER)
-/* Virtio feature bit number 35 is not defined in
- * include/uapi/linux/virtio_config.h, make it available for the
- * out-of-tree builds. VIRTIO_F_IN_ORDER is defined in section 6
- * (Reserved Feature Bits) of the VirtIO v1.1 spec
- */
-#define VIRTIO_F_IN_ORDER 35
-#endif
+static const char *get_vdpa_state_str(enum ef100_vdpa_nic_state state)
+{
+	const char *vdpa_state_str[] = {"INITIALIZED", "NEGOTIATED",
+					"STARTED", "SUSPENDED"};
 
-
-struct feature_bit {
-	u8 bit;
-	char *str;
-};
-
-static const struct feature_bit feature_table[] = {
-	{VIRTIO_F_NOTIFY_ON_EMPTY, "VIRTIO_F_NOTIFY_ON_EMPTY"},
-	{VIRTIO_F_ANY_LAYOUT, "VIRTIO_F_ANY_LAYOUT"},
-	{VIRTIO_F_VERSION_1, "VIRTIO_F_VERSION_1"},
-	{VIRTIO_F_ACCESS_PLATFORM, "VIRTIO_F_ACCESS_PLATFORM"},
-	{VIRTIO_F_RING_PACKED, "VIRTIO_F_RING_PACKED"},
-	{VIRTIO_F_ORDER_PLATFORM, "VIRTIO_F_ORDER_PLATFORM"},
-#if defined(EFX_USE_KCOMPAT)
-	{VIRTIO_F_IN_ORDER, "VIRTIO_F_IN_ORDER"},
-#endif
-	{VIRTIO_F_SR_IOV, "VIRTIO_F_SR_IOV"},
-	{VIRTIO_NET_F_CSUM, "VIRTIO_NET_F_CSUM"},
-	{VIRTIO_NET_F_GUEST_CSUM, "VIRTIO_NET_F_GUEST_CSUM"},
-	{VIRTIO_NET_F_CTRL_GUEST_OFFLOADS, "VIRTIO_NET_F_CTRL_GUEST_OFFLOADS"},
-	{VIRTIO_NET_F_MTU, "VIRTIO_NET_F_MTU"},
-	{VIRTIO_NET_F_MAC, "VIRTIO_NET_F_MAC"},
-	{VIRTIO_NET_F_GUEST_TSO4, "VIRTIO_NET_F_GUEST_TSO4"},
-	{VIRTIO_NET_F_GUEST_TSO6, "VIRTIO_NET_F_GUEST_TSO6"},
-	{VIRTIO_NET_F_GUEST_ECN, "VIRTIO_NET_F_GUEST_ECN"},
-	{VIRTIO_NET_F_GUEST_UFO, "VIRTIO_NET_F_GUEST_UFO"},
-	{VIRTIO_NET_F_HOST_TSO4, "VIRTIO_NET_F_HOST_TSO4"},
-	{VIRTIO_NET_F_HOST_TSO6, "VIRTIO_NET_F_HOST_TSO6"},
-	{VIRTIO_NET_F_HOST_ECN, "VIRTIO_NET_F_HOST_ECN"},
-	{VIRTIO_NET_F_HOST_UFO, "VIRTIO_NET_F_HOST_UFO"},
-	{VIRTIO_NET_F_MRG_RXBUF, "VIRTIO_NET_F_MRG_RXBUF"},
-	{VIRTIO_NET_F_STATUS, "VIRTIO_NET_F_STATUS"},
-	{VIRTIO_NET_F_CTRL_VQ, "VIRTIO_NET_F_CTRL_VQ"},
-	{VIRTIO_NET_F_CTRL_RX, "VIRTIO_NET_F_CTRL_RX"},
-	{VIRTIO_NET_F_CTRL_VLAN, "VIRTIO_NET_F_CTRL_VLAN"},
-	{VIRTIO_NET_F_CTRL_RX_EXTRA, "VIRTIO_NET_F_CTRL_RX_EXTRA"},
-	{VIRTIO_NET_F_GUEST_ANNOUNCE, "VIRTIO_NET_F_GUEST_ANNOUNCE"},
-	{VIRTIO_NET_F_MQ, "VIRTIO_NET_F_MQ"},
-	{VIRTIO_NET_F_CTRL_MAC_ADDR, "VIRTIO_NET_F_CTRL_MAC_ADDR"},
-	{VIRTIO_NET_F_HASH_REPORT, "VIRTIO_NET_F_HASH_REPORT"},
-	{VIRTIO_NET_F_RSS, "VIRTIO_NET_F_RSS"},
-	{VIRTIO_NET_F_RSC_EXT, "VIRTIO_NET_F_RSC_EXT"},
-	{VIRTIO_NET_F_STANDBY, "VIRTIO_NET_F_STANDBY"},
-	{VIRTIO_NET_F_SPEED_DUPLEX, "VIRTIO_NET_F_SPEED_DUPLEX"},
-	{VIRTIO_NET_F_GSO, "VIRTIO_NET_F_GSO"},
-};
-
-struct status_val {
-	u8 bit;
-	char *str;
-};
-
-static const struct status_val status_val_table[] = {
-	{VIRTIO_CONFIG_S_ACKNOWLEDGE, "ACKNOWLEDGE"},
-	{VIRTIO_CONFIG_S_DRIVER, "DRIVER"},
-	{VIRTIO_CONFIG_S_FEATURES_OK, "FEATURES_OK"},
-	{VIRTIO_CONFIG_S_DRIVER_OK, "DRIVER_OK"},
-	{VIRTIO_CONFIG_S_FAILED, "FAILED"}
-};
+	if (state < EF100_VDPA_STATE_NSTATES)
+		return vdpa_state_str[state];
+	return "UNKNOWN";
+}
 
 static struct ef100_vdpa_nic *get_vdpa_nic(struct vdpa_device *vdev)
 {
 	return container_of(vdev, struct ef100_vdpa_nic, vdpa_dev);
-}
-
-static void print_status_str(u8 status, struct vdpa_device *vdev)
-{
-	u16 table_len =  sizeof(status_val_table) / sizeof(struct status_val);
-	char concat_str[] = ", ";
-	char buf[100];
-	u16 i = 0;
-
-	buf[0] = '\0';
-	if (status == 0) {
-		dev_info(&vdev->dev, "RESET\n");
-		return;
-	}
-	for ( ; (i < table_len) && status; i++) {
-		if (status & status_val_table[i].bit) {
-			snprintf(buf + strlen(buf), sizeof(buf) - strlen(buf),
-				 "%s", status_val_table[i].str);
-			status &= ~status_val_table[i].bit;
-			if (status > 0)
-				snprintf(buf + strlen(buf),
-					 sizeof(buf) - strlen(buf), "%s",
-					 concat_str);
-		}
-	}
-	dev_info(&vdev->dev, "%s\n", buf);
-	if (status)
-		dev_info(&vdev->dev, "Unknown status:0x%x\n", status);
-}
-
-#ifdef EFX_NOT_UPSTREAM
-static void print_features_str(u64 features, struct vdpa_device *vdev)
-{
-	int table_len = sizeof(feature_table) / sizeof(struct feature_bit);
-	int i = 0;
-
-	for (; (i < table_len) && features; i++) {
-		if (features & (1ULL << feature_table[i].bit)) {
-			dev_info(&vdev->dev, "%s: %s\n", __func__,
-				 feature_table[i].str);
-			features &= ~(1ULL << feature_table[i].bit);
-		}
-	}
-	if (features) {
-		dev_info(&vdev->dev,
-			 "%s: Unknown Features:0x%llx\n",
-			 __func__, features);
-	}
-}
-#endif
-
-static char *get_vdpa_state_str(enum ef100_vdpa_nic_state state)
-{
-	switch (state) {
-	case EF100_VDPA_STATE_INITIALIZED:
-		return "INITIALIZED";
-	case EF100_VDPA_STATE_NEGOTIATED:
-		return "NEGOTIATED";
-	case EF100_VDPA_STATE_STARTED:
-		return "STARTED";
-	default:
-		return "UNKNOWN";
-	}
 }
 
 static irqreturn_t vring_intr_handler(int irq, void *arg)
@@ -174,21 +49,6 @@ static irqreturn_t vring_intr_handler(int irq, void *arg)
 
 	return IRQ_NONE;
 }
-
-#ifdef EFX_NOT_UPSTREAM
-static void print_vring_state(u16 state, struct vdpa_device *vdev)
-{
-	dev_info(&vdev->dev, "%s: Vring state:\n", __func__);
-	dev_info(&vdev->dev, "%s: Address Configured:%s\n", __func__,
-		 (state & EF100_VRING_ADDRESS_CONFIGURED) ? "true" : "false");
-	dev_info(&vdev->dev, "%s: Size Configured:%s\n", __func__,
-		 (state & EF100_VRING_SIZE_CONFIGURED) ? "true" : "false");
-	dev_info(&vdev->dev, "%s: Ready Configured:%s\n", __func__,
-		 (state & EF100_VRING_READY_CONFIGURED) ? "true" : "false");
-	dev_info(&vdev->dev, "%s: Vring Created:%s\n", __func__,
-		 (state & EF100_VRING_CREATED) ? "true" : "false");
-}
-#endif
 
 static int ef100_vdpa_irq_vectors_alloc(struct pci_dev *pci_dev, u16 nvqs)
 {
@@ -420,8 +280,10 @@ static void ef100_vdpa_kick_vq(struct vdpa_device *vdev, u16 idx)
 		return;
 	}
 	idx_val = idx;
+#ifdef EFX_NOT_UPSTREAM
 	dev_vdbg(&vdev->dev, "%s: Writing value:%u in offset register:%u\n",
 		 __func__, idx_val, vdpa_nic->vring[idx].doorbell_offset);
+#endif
 	_efx_writed(vdpa_nic->efx, cpu_to_le32(idx_val),
 		    vdpa_nic->vring[idx].doorbell_offset);
 }
@@ -828,8 +690,9 @@ static int ef100_get_vq_irq(struct vdpa_device *vdev, u16 idx)
 	mutex_lock(&vdpa_nic->lock);
 	irq = vdpa_nic->vring[idx].irq;
 	mutex_unlock(&vdpa_nic->lock);
-
+#ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Queue Id %u, irq: %d\n", __func__, idx, irq);
+#endif
 
 	return irq;
 }
@@ -861,11 +724,8 @@ static u64 ef100_vdpa_get_device_features(struct vdpa_device *vdev)
 		 */
 		return 0;
 	}
-
-#if defined(EFX_USE_KCOMPAT)
 	if (!vdpa_nic->in_order)
-		features &= ~(1ULL << VIRTIO_F_IN_ORDER);
-#endif
+		features &= ~BIT_ULL(VIRTIO_F_IN_ORDER);
 	features |= (1ULL << VIRTIO_NET_F_MAC);
 	/* TODO: QEMU Shadow VirtQueue (SVQ) doesn't support
 	 * VIRTIO_F_ORDER_PLATFORM, so masking it off to allow Live Migration
@@ -893,8 +753,7 @@ static int ef100_vdpa_set_driver_features(struct vdpa_device *vdev,
 	mutex_lock(&vdpa_nic->lock);
 	if (vdpa_nic->vdpa_state != EF100_VDPA_STATE_INITIALIZED) {
 		dev_err(&vdev->dev, "%s: Invalid current state %s\n",
-			__func__,
-			get_vdpa_state_str(vdpa_nic->vdpa_state));
+			__func__, get_vdpa_state_str(vdpa_nic->vdpa_state));
 		rc = -EINVAL;
 		goto err;
 	}
@@ -959,9 +818,9 @@ static u32 ef100_vdpa_get_vendor_id(struct vdpa_device *vdev)
 {
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: Returning value:0x%x\n", __func__,
-		 EF100_VDPA_XNX_VENDOR_ID);
+		 EF100_VDPA_VENDOR_ID);
 #endif
-	return EF100_VDPA_XNX_VENDOR_ID;
+	return EF100_VDPA_VENDOR_ID;
 }
 
 static u8 ef100_vdpa_get_status(struct vdpa_device *vdev)
@@ -973,9 +832,9 @@ static u8 ef100_vdpa_get_status(struct vdpa_device *vdev)
 	status = vdpa_nic->status;
 	mutex_unlock(&vdpa_nic->lock);
 #ifdef EFX_NOT_UPSTREAM
-		dev_info(&vdev->dev, "%s: Returning current status bit(s):\n",
-			 __func__);
-		print_status_str(status, vdev);
+	dev_info(&vdev->dev, "%s: Returning current status bit(s):\n",
+		 __func__);
+	print_status_str(status, vdev);
 #endif
 	return status;
 }
@@ -1000,9 +859,11 @@ static void ef100_vdpa_set_status(struct vdpa_device *vdev, u8 status)
 			 "%s: New status equal/subset of existing status:\n",
 			 __func__);
 		dev_info(&vdev->dev, "%s: New status bits:\n", __func__);
+#ifdef EFX_NOT_UPSTREAM
 		print_status_str(status, vdev);
 		dev_info(&vdev->dev, "%s: Existing status bits:\n", __func__);
 		print_status_str(vdpa_nic->status, vdev);
+#endif
 		goto unlock_return;
 	}
 	if (new_status & VIRTIO_CONFIG_S_FAILED) {
@@ -1047,7 +908,9 @@ static void ef100_vdpa_set_status(struct vdpa_device *vdev, u8 status)
 			dev_warn(&vdev->dev, "%s: Mismatch Status & State\n",
 				 __func__);
 			dev_warn(&vdev->dev, "%s: New status Bits:\n", __func__);
+#ifdef EFX_NOT_UPSTREAM
 			print_status_str(new_status, &vdpa_nic->vdpa_dev);
+#endif
 			dev_warn(&vdev->dev, "%s: Current vDPA State: %s\n",
 				 __func__,
 				 get_vdpa_state_str(vdpa_nic->vdpa_state));
@@ -1092,6 +955,11 @@ static void ef100_vdpa_set_config(struct vdpa_device *vdev, unsigned int offset,
 {
 	struct ef100_vdpa_nic *vdpa_nic = get_vdpa_nic(vdev);
 
+	if (vdpa_nic->vdpa_state == EF100_VDPA_STATE_SUSPENDED) {
+		dev_err(&vdev->dev,
+			"config update not allowed in suspended state\n");
+		return;
+	}
 #ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdev->dev, "%s: offset:%u len:%u config size:%lu\n",
 		 __func__, offset, len, sizeof(vdpa_nic->net_config));
@@ -1106,12 +974,14 @@ static void ef100_vdpa_set_config(struct vdpa_device *vdev, unsigned int offset,
 	memcpy((u8 *)&vdpa_nic->net_config + offset, buf, len);
 	ef100_vdpa_insert_filter(vdpa_nic->efx);
 
+#ifdef EFX_NOT_UPSTREAM
 	dev_dbg(&vdpa_nic->vdpa_dev.dev,
 		 "%s: Status:%u MAC:%pM max_qps:%u MTU:%u\n",
 		 __func__, vdpa_nic->net_config.status,
 		 vdpa_nic->net_config.mac,
 		 vdpa_nic->net_config.max_virtqueue_pairs,
 		 vdpa_nic->net_config.mtu);
+#endif
 }
 
 static void ef100_vdpa_free(struct vdpa_device *vdev)
@@ -1155,6 +1025,7 @@ static int ef100_vdpa_suspend(struct vdpa_device *vdev)
 		if (rc)
 			break;
 	}
+	vdpa_nic->vdpa_state = EF100_VDPA_STATE_SUSPENDED;
 	mutex_unlock(&vdpa_nic->lock);
 	return rc;
 }
