@@ -503,7 +503,13 @@ static void handle_time(struct msghdr* msg, int tx_num,
       tcp_tx_stamps = (struct onload_scm_timestamping_stream*)CMSG_DATA(cmsg);
       printf("Timestamp for tx %d - %d bytes:\n",
              tx_num, (int)tcp_tx_stamps->len);
+      bool retrans = ( (tcp_tx_stamps->last_sent.tv_sec != 0) ||
+                       (tcp_tx_stamps->last_sent.tv_nsec != 0) );
+      if( retrans )
+        printf("TCP retransmission:\n");
+      /* Time data was originally sent */
       print_time("First sent", &tcp_tx_stamps->first_sent);
+      /* Time retransmit sent */
       print_time("Last sent", &tcp_tx_stamps->last_sent);
       break;
     case SO_TIMESTAMPING:
