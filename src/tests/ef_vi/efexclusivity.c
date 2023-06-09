@@ -52,30 +52,44 @@ static struct efexclusivity_vi rx_vi;
 
 static ef_driver_handle  driver_handle;
 
-static void filter_add(ef_vi* vi, bool exclusive, int rxq_no, uint32_t raddr_he, uint16_t port_he, ef_filter_cookie* cookie)
+static int filter_add(ef_vi* vi, bool exclusive, int rxq_no, uint32_t raddr_he, uint16_t port_he, ef_filter_cookie* cookie, int i)
 {
+  int rc = 0;
   ef_filter_spec filter_spec;
   ef_filter_spec_init(&filter_spec, (exclusive ? EF_FILTER_FLAG_EXCLUSIVE_RXQ : 0));
   TRY(ef_filter_spec_set_ip4_local(&filter_spec, IPPROTO_UDP, htonl(raddr_he),
                                   htons(port_he)));
   if ( rxq_no >= 0 )
-    TRY(ef_filter_spec_set_dest(&filter_spec, rxq_no, 0));
-  TRY(ef_vi_filter_add(vi, driver_handle, &filter_spec, cookie));
-}
+    rc = ef_filter_spec_set_dest(&filter_spec, rxq_no, 0);
 
+  if ( rc != 0 ) {
+    fprintf(stderr, "Specifying the filter hardware rxq failed with errno %d (%s).\n", errno, strerror(errno));
+    fprintf(stderr, "This error occurred on call number %d.", i);
+    return rc;
+  }
+
+  rc = ef_vi_filter_add(vi, driver_handle, &filter_spec, cookie);
+  if ( rc != 0 ) {
+    fprintf(stderr, "Inserting the filter has failed with errno %d (%s).\n", errno, strerror(errno));
+    fprintf(stderr, "This error occurred on call number %d.", i);
+  }
+
+  return rc;
+}
 
 static void filter_del(ef_vi* vi, ef_filter_cookie* cookie) {
   TRY(ef_vi_filter_del(vi, driver_handle, cookie));
 }
 
-static const int do_init(int ifindex, struct efexclusivity_vi* exclusivity_vi, void* pkt_mem,
+
+static const int do_test(int ifindex, struct efexclusivity_vi* exclusivity_vi, void* pkt_mem,
                              size_t pkt_mem_bytes)
 {
   ef_vi* vi = &exclusivity_vi->vi;
   enum ef_pd_flags pd_flags = 0;
   enum ef_vi_flags vi_flags = cfg_vi_flags;
   int rc;
-  ef_filter_cookie* cookie = NULL;
+  ef_filter_cookie cookie = {0, 0};
 
   uint32_t raddr_he = 0xac010203;
   uint16_t port_he = 8080;
@@ -99,27 +113,21 @@ static const int do_init(int ifindex, struct efexclusivity_vi* exclusivity_vi, v
       TRY( rc );
   }
 
-  cookie = malloc(sizeof(ef_filter_cookie));
-  if ( !cookie )
-    fprintf(stderr, "malloc of cookie failed, something spectacular has gone wrong!\n");
+  rc = filter_add(vi, cfg_excl & 1, cfg_fst_rxq_no, raddr_he, port_he, &cookie, 1);
 
-  filter_add(vi, cfg_excl & 1, cfg_fst_rxq_no, raddr_he, port_he, cookie);
-  if ( cfg_delete_fst ) {
-    if ( cookie )
-      filter_del(vi, cookie);
-    else
-      fprintf(stderr, "Something went wrong with setting the filter cookie!\n");
+  if ( rc == 0 ) {
+    if ( cfg_delete_fst )
+      filter_del(vi, &cookie);
+
+    if ( snd_filter_enabled )
+      rc = filter_add(vi, cfg_excl & 2, cfg_snd_rxq_no, raddr_he + 1, port_he + 1, NULL, 2);
+
+    if ( rc == 0 && cfg_timeout > 0 )
+      sleep(cfg_timeout);
   }
 
-  if ( cookie )
-    free(cookie);
 
-  if ( snd_filter_enabled )
-    filter_add(vi, cfg_excl & 2, cfg_snd_rxq_no, raddr_he + 1, port_he + 1, NULL);
-
-  if ( cfg_timeout > 0 )
-    sleep(cfg_timeout);
-  return 0;
+  return rc;
 }
 
 
@@ -214,14 +222,11 @@ int main(int argc, char* argv[])
 
   TRY(ef_driver_open(&driver_handle));
 
+  rc = do_test(rx_ifindex, &rx_vi, pkt_mem, pkt_mem_bytes);
 
-  /* Initialize a VI and configure it to operate with the lowest latency
-   * possible.  The return value specifies the test that the application must
-   * run to use the VI in its configured mode. */
-  rc = do_init(rx_ifindex, &rx_vi, pkt_mem, pkt_mem_bytes);
-
-  printf("Test passed successfully");
-  return rc;
+  if ( rc == 0 )
+    printf("Test passed successfully");
+  return 0;
 }
 
 /*! \cidoxg_end */
