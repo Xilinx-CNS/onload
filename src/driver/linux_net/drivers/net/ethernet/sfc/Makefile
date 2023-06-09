@@ -32,11 +32,16 @@ export CONFIG_SFC_SRIOV := y
 export CONFIG_SFC_PTP := y
 export CONFIG_SFC_TRACING :=
 export CONFIG_SFC_MCDI_LOGGING := y
-export CONFIG_SFC_SIENA :=
 export CONFIG_SFC_DRIVERLINK := m
 export CONFIG_SFC_AOE := $(subst m,y,$(CONFIG_SFC_DRIVERLINK))
 export CONFIG_SFC_BUSYPOLL := n
 export CONFIG_SFC_VDPA := y
+
+ifndef CONFIG_SFC_SIENA
+export CONFIG_SFC_SIENA :=
+endif
+else
+export CONFIG_SFC_SIENA :=
 endif
 
 ifdef KSRCDIR
@@ -163,6 +168,7 @@ ifeq ($(filter export export-xen,$(MAKECMDGOALS)),)
 ifndef EFX_FOR_UPSTREAM
 sfc-y			+= sfctool.o ef100_dump.o
 sfc-$(CONFIG_SFC_AOE)	+= aoe.o
+sfc-$(CONFIG_SFC_VDPA)	+= ef100_vdpa_dbg.o
 endif # !EFX_FOR_UPSTREAM
 sfc-$(CONFIG_SFC_DUMP) += dump.o
 endif

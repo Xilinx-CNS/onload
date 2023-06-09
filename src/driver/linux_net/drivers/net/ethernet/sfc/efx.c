@@ -1863,7 +1863,7 @@ static int __init efx_init_module(void)
 	printk(KERN_INFO "Solarflare NET driver\n");
 #endif
 
-	rc = efx_init_debugfs("sfc");
+	rc = efx_init_debugfs();
 	if (rc)
 		goto err_debugfs;
 

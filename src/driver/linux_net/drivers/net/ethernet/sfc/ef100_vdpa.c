@@ -151,10 +151,10 @@ int ef100_vdpa_register_mgmtdev(struct efx_nic *efx)
 		return -ENOMEM;
 
 	rc = efx_vdpa_get_features(efx, EF100_VDPA_DEVICE_TYPE_NET, &features);
-	if (rc != 0) {
+	if (rc) {
 		pci_err(efx->pci_dev, "%s: MCDI get features error:%d\n",
 			__func__, rc);
-		return rc;
+		goto free_mgmt_dev;
 	}
 
 	efx->mgmt_dev = mgmt_dev;
@@ -175,21 +175,31 @@ int ef100_vdpa_register_mgmtdev(struct efx_nic *efx)
 		pci_err(efx->pci_dev,
 			"vdpa management device register failed, err: %d\n",
 			rc);
-		kfree(mgmt_dev);
-		efx->mgmt_dev = NULL;
+		goto free_mgmt_dev;
+#ifdef EFX_NOT_UPSTREAM
 	} else {
 		pci_dbg(efx->pci_dev, "vdpa management device created\n");
+#endif
 	}
 
+	return 0;
+
+free_mgmt_dev:
+	kfree(mgmt_dev);
+	efx->mgmt_dev = NULL;
 	return rc;
 }
 
 void ef100_vdpa_unregister_mgmtdev(struct efx_nic *efx)
 {
+#ifdef EFX_NOT_UPSTREAM
 	pci_dbg(efx->pci_dev, "Unregister vdpa_management_device\n");
-	if (efx->mgmt_dev)
+#endif
+	if (efx->mgmt_dev) {
 		vdpa_mgmtdev_unregister(efx->mgmt_dev);
-	efx->mgmt_dev = NULL;
+		kfree(efx->mgmt_dev);
+		efx->mgmt_dev = NULL;
+	}
 }
 #endif
 
@@ -528,7 +538,7 @@ void ef100_vdpa_fini(struct efx_probe_data *probe_data)
 #endif
 
 	if (efx->state != STATE_VDPA && efx->state != STATE_DISABLED) {
-		pci_dbg(efx->pci_dev, "%s: Invalid efx state %u",
+		pci_err(efx->pci_dev, "%s: Invalid efx state %u",
 			__func__, efx->state);
 		return;
 	}
@@ -566,7 +576,7 @@ static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 	}
 
 	vdpa_nic->net_config.max_virtqueue_pairs =
-		(__virtio16 __force)vdpa_nic->max_queue_pairs;
+		cpu_to_efx_vdpa16(vdpa_nic, vdpa_nic->max_queue_pairs);
 
 	rc = efx_vdpa_get_mtu(efx, &mtu);
 	if (rc) {
@@ -575,7 +585,7 @@ static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 			vdpa_nic->vf_index, rc);
 		return rc;
 	}
-	vdpa_nic->net_config.mtu = (__virtio16 __force)mtu;
+	vdpa_nic->net_config.mtu = cpu_to_efx_vdpa16(vdpa_nic, mtu);
 
 	rc = efx_vdpa_get_link_details(efx, &link_up, &speed, &duplex);
 	if (rc) {
@@ -584,10 +594,11 @@ static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 			vdpa_nic->vf_index, rc);
 		return rc;
 	}
-	vdpa_nic->net_config.status = (__virtio16 __force)link_up;
-	vdpa_nic->net_config.speed = (__le32 __force)speed;
+	vdpa_nic->net_config.status = cpu_to_efx_vdpa16(vdpa_nic, link_up);
+	vdpa_nic->net_config.speed = cpu_to_efx_vdpa32(vdpa_nic, speed);
 	vdpa_nic->net_config.duplex = duplex;
 
+#ifdef EFX_NOT_UPSTREAM
 	dev_info(&vdpa_nic->vdpa_dev.dev, "%s: mac address: %pM\n", __func__,
 		 vdpa_nic->net_config.mac);
 	dev_info(&vdpa_nic->vdpa_dev.dev, "%s: MTU:%u\n", __func__,
@@ -597,6 +608,7 @@ static int get_net_config(struct ef100_vdpa_nic *vdpa_nic)
 		 vdpa_nic->net_config.status,
 		 vdpa_nic->net_config.speed,
 		 vdpa_nic->net_config.duplex);
+#endif
 	return 0;
 }
 
@@ -716,9 +728,11 @@ struct ef100_vdpa_nic *ef100_vdpa_create(struct efx_nic *efx,
 	vdpa_nic->mac_address = (u8 *)&vdpa_nic->net_config.mac;
 
 	dev = &vdpa_nic->vdpa_dev.dev;
+#ifdef EFX_NOT_UPSTREAM
 	dev_info(dev, "%s: vDPA dev pf_index:%u vf_index:%u max_queues:%u\n",
 		 __func__, vdpa_nic->pf_index, vdpa_nic->vf_index,
 		 vdpa_nic->max_queue_pairs);
+#endif
 
 	for (i = 0; i < (2 * vdpa_nic->max_queue_pairs); i++) {
 		rc = ef100_vdpa_init_vring(vdpa_nic, i);

@@ -13,8 +13,7 @@
 #include "net_driver.h"
 
 /* set up basic operations required for all net devices */
-int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool rss_limited,
-				bool additional_rss);
+int efx_mcdi_filter_table_probe(struct efx_nic *efx, bool additional_rss);
 /* enable operations we can do once we know the number of queues we have */
 int efx_mcdi_filter_table_init(struct efx_nic *efx, bool mc_chaining,
 			       bool encap);
@@ -125,14 +124,11 @@ int efx_mcdi_rx_push_rss_context_config(struct efx_nic *efx,
 				 	struct efx_rss_context *ctx,
 					const u32 *rx_indir_table,
 					const u8 *key);
-int efx_mcdi_pf_rx_push_rss_config(struct efx_nic *efx, bool user,
-				   const u32 *rx_indir_table,
-				   const u8 *key);
-int efx_mcdi_vf_rx_push_rss_config(struct efx_nic *efx, bool user,
-				   const u32 *rx_indir_table
-				   __attribute__ ((unused)),
-				   const u8 *key
-				   __attribute__ ((unused)));
+int efx_mcdi_rx_push_rss_config(struct efx_nic *efx, bool user,
+				const u32 *rx_indir_table,
+				const u8 *key);
+int efx_mcdi_rx_push_shared_rss_config(struct efx_nic *efx,
+				       unsigned int *context_size);
 int efx_mcdi_push_default_indir_table(struct efx_nic *efx,
 				      unsigned int rss_spread);
 int efx_mcdi_rx_pull_rss_config(struct efx_nic *efx);

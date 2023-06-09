@@ -93,8 +93,8 @@ EFX_NEED_ETH_ZERO_ADDR			nsymbol eth_zero_addr		include/linux/etherdevice.h
 EFX_NEED_ETH_BROADCAST_ADDR		nsymbol	eth_broadcast_addr	include/linux/etherdevice.h
 EFX_NEED_ETH_RANDOM_ADDR		nsymbol	eth_random_addr		include/linux/etherdevice.h
 EFX_NEED_ETH_HW_ADDR_SET		nsymbol	eth_hw_addr_set		include/linux/etherdevice.h
-EFX_NEED_MAC_PTON			nsymbol mac_pton		include/linux/kernel.h	include/linux/if_ether.h
-EFX_HAVE_HEX_TO_BIN			symbol hex_to_bin		include/linux/kernel.h
+EFX_NEED_MAC_PTON			nsymbol mac_pton		include/linux/kernel.h	include/linux/hex.h include/linux/if_ether.h
+EFX_HAVE_HEX_TO_BIN			symbol hex_to_bin		include/linux/kernel.h include/linux/hex.h
 EFX_NEED_NS_TO_TIMESPEC			nexport ns_to_timespec		include/linux/time.h	kernel/time.c
 EFX_HAVE_TIMESPEC64			symbol	timespec64		include/linux/time64.h	include/linux/time.h
 EFX_NEED_KTIME_GET_REAL_TS64		nsymbol	ktime_get_real_ts64	include/linux/timekeeping.h	include/linux/ktime.h
@@ -163,8 +163,6 @@ EFX_HAVE_IOREMAP_WC			symbol	ioremap_wc		arch/$SRCARCH/include/asm/io.h include/
 EFX_HAVE_IOREMAP_NOCACHE		symbol	ioremap_nocache		include/asm-generic/io.h
 EFX_NEED_SKB_TRANSPORT_HEADER_WAS_SET	nsymbol	skb_transport_header_was_set include/linux/skbuff.h
 EFX_HAVE_OLD_KMAP_ATOMIC		custom
-EFX_HAVE_DEBUGFS_CREATE_SYMLINK		symbol	debugfs_create_symlink	include/linux/debugfs.h
-EFX_HAVE_INODE_U_GENERIC_IP		symbol	generic_ip		include/linux/fs.h
 EFX_HAVE_NAPI_STRUCT			symbol	napi_struct		include/linux/netdevice.h
 EFX_HAVE_NAPI_STRUCT_NAPI_ID		member	struct_napi_struct	napi_id	include/linux/netdevice.h
 EFX_HAVE_NAPI_HASH_ADD			symbol	napi_hash_add		include/linux/netdevice.h
@@ -388,6 +386,7 @@ EFX_HAVE_VDPA_MAX_SUPPORTED_VQS		member	struct_vdpa_mgmt_dev	max_supported_vqs	i
 EFX_NEED_TIMESPEC64_TO_NS_SIGNED	custom
 EFX_HAVE_KOBJECT_DEFAULT_GROUPS		member	struct_kobj_type	default_groups	include/linux/kobject.h
 EFX_NEED_REFCOUNT_T			nsymbol	refcount_t		include/linux/refcount.h
+EFX_NEED_DEBUGFS_LOOKUP_AND_REMOVE	nsymbol	debugfs_lookup_and_remove	include/linux/debugfs.h
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 

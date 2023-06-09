@@ -22,6 +22,9 @@ override CONFIG_SFC_DRIVERLINK :=
 override CONFIG_SFC_AOE :=
 override CONFIG_SFC_VDPA :=
 
+# For CONFIG_SFC_TRACING includes via linux <include/trace/define_trace.h>
+EXTRA_CFLAGS += -I$(src)
+
 ifdef EFX_FOR_UPSTREAM
 # match UNIFDEF_DEFINES in export.sh
 override CONFIG_SFC_DEBUGFS :=
