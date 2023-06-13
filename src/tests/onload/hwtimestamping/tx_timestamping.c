@@ -126,7 +126,6 @@ struct configuration {
   bool           cfg_data;      /* Return a copy of TX packet.
                                  * Clears SOF_TIMESTAMPING_OPT_TSONLY */
   bool           cfg_cmsg;      /* Set SOF_TIMESTAMPING_OPT_CMSG */
-  bool           cfg_no_id;     /* Clear SOF_TIMESTAMPING_OPT_ID */
   bool           cfg_stream;    /* Set ONLOAD_SOF_TIMESTAMPING_STREAM */
 };
 
@@ -146,7 +145,6 @@ void print_help(void)
          "\t--mcast\t<group>\tSubscribe to multicast group.\n"
          "\t--data\tRequest a copy of outgoing packet with timestamp\n"
          "\t--cmsg\tUse SOF_TIMESTAMPING_OPT_CMSG (off by default)\n"
-         "\t--no-id\tDon't use SOF_TIMESTAMPING_OPT_ID (default to using SOF_TIMESTAMPING_OPT_ID)\n"
          "\t--stream\tSet ONLOAD_SOF_TIMESTAMPING_STREAM (proprietary format)\n"
 #ifdef ONLOADEXT_AVAILABLE
          "\t--templated\tUse templated sends.\n"
@@ -182,7 +180,6 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
     { "max", required_argument, 0, 'n' },
     { "data", no_argument, 0, 'd' },
     { "cmsg", no_argument, 0, 'C' },
-    { "no-id", no_argument, 0, 'I' },
     { "stream", no_argument, 0, 's' },
     { "templated", no_argument, 0, 'T' },
     { "ext", no_argument, 0, 'e' },
@@ -222,9 +219,6 @@ static void parse_options( int argc, char** argv, struct configuration* cfg )
         break;
     case 'C':
         cfg->cfg_cmsg = true;
-        break;
-    case 'I':
-        cfg->cfg_no_id = true;
         break;
     case 's':
         cfg->cfg_stream = true;
@@ -366,8 +360,7 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
     enable = SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_SYS_HARDWARE |
       SOF_TIMESTAMPING_RAW_HARDWARE;
 
-    if( ! cfg->cfg_no_id )
-      enable |= SOF_TIMESTAMPING_OPT_ID;
+enable |= SOF_TIMESTAMPING_OPT_ID;
     if( ! (cfg->cfg_data || cfg->cfg_cmsg))
       enable |= SOF_TIMESTAMPING_OPT_TSONLY;
     if( cfg->cfg_cmsg )
@@ -529,8 +522,7 @@ static void handle_time(struct msghdr* msg, int tx_num,
     case IP_RECVERR:
       err = (struct sock_extended_err*) CMSG_DATA(cmsg);
       if( err->ee_origin == SO_EE_ORIGIN_TIMESTAMPING ) {
-        if( ! cfg->cfg_no_id)
-          printf("Timestamp ID %u\n", err->ee_data);
+        printf("Timestamp ID %u\n", err->ee_data);
         if( cfg->cfg_cmsg ) {
           struct sockaddr_in* saddr;
           char ip[INET_ADDRSTRLEN];
