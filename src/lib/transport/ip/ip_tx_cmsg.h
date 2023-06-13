@@ -122,18 +122,20 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
                          cmsg_state->msg->msg_iovlen);
 
   if( s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD ) {
-          if( pkt->flags & ~CI_PKT_FLAG_RTQ_RETRANS ) {
-            struct onload_timestamp ts = {pkt->hw_stamp.tv_sec,
-                                          pkt->hw_stamp.tv_nsec};
-            ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING,
-                        sizeof(ts), &ts);
-          }
-          else {
-            /* Ignore retransmit timestamps. We might want something like
-            * ONLOAD_SCM_TIMESTAMPING_STREAM to report them along with the
-            * original transmission time */
-            return -EAGAIN;
-          }
+    if( pkt->flags & CI_PKT_FLAG_RTQ_RETRANS ) {
+      /* Ignore retransmit timestamps. We might want something like
+       * ONLOAD_SCM_TIMESTAMPING_STREAM to report them along with the
+       * original transmission time */
+      return -EAGAIN;
+    }
+    else {
+      struct onload_timestamp ts = {pkt->hw_stamp.tv_sec,
+                                    pkt->hw_stamp.tv_nsec};
+      ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING,
+                  sizeof(ts), &ts);
+      /* For now we just return the timestamp and
+       * don't add additional sections e.g. OPT_ID / CMSG */
+      return 0;
     }
   }
   else if( proto == IPPROTO_TCP &&
