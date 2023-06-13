@@ -114,6 +114,8 @@
       }                                                                 \
   } while( 0 )
 
+#define SEQ_LE(s1, s2)      ((uint32_t)((s1) - (s2)) <= 0)
+
 struct configuration {
   int            cfg_protocol;  /* protocol: udp or tcp */
   char const*    cfg_host;      /* listen address */
@@ -360,7 +362,7 @@ static void do_ts_sockopt(struct configuration* cfg, int sock)
     enable = SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_SYS_HARDWARE |
       SOF_TIMESTAMPING_RAW_HARDWARE;
 
-enable |= SOF_TIMESTAMPING_OPT_ID;
+    enable |= SOF_TIMESTAMPING_OPT_ID;
     if( ! (cfg->cfg_data || cfg->cfg_cmsg))
       enable |= SOF_TIMESTAMPING_OPT_TSONLY;
     if( cfg->cfg_cmsg )
@@ -479,13 +481,13 @@ static void print_time(char *s, struct timespec* ts)
 }
 
 /* Given a packet, extract the timestamp(s) */
-static void handle_time(struct msghdr* msg, int tx_num,
-                        struct configuration* cfg)
+static void handle_time(struct msghdr* msg, struct configuration* cfg)
 {
   struct onload_scm_timestamping_stream* tcp_tx_stamps;
   struct timespec* udp_tx_stamp;
   struct cmsghdr* cmsg;
   struct sock_extended_err* err;
+  static uint32_t last_id = (uint32_t) -1;
 
   for (cmsg = CMSG_FIRSTHDR(msg); cmsg != NULL; cmsg = CMSG_NXTHDR(msg, cmsg)) {
     if (cmsg->cmsg_level != SOL_SOCKET &&
@@ -494,8 +496,8 @@ static void handle_time(struct msghdr* msg, int tx_num,
     switch(cmsg->cmsg_type) {
     case ONLOAD_SCM_TIMESTAMPING_STREAM:
       tcp_tx_stamps = (struct onload_scm_timestamping_stream*)CMSG_DATA(cmsg);
-      printf("Timestamp for tx %d - %d bytes:\n",
-             tx_num, (int)tcp_tx_stamps->len);
+      printf("Timestamp for tx - %d bytes:\n",
+             (int)tcp_tx_stamps->len);
       bool retrans = ( (tcp_tx_stamps->last_sent.tv_sec != 0) ||
                        (tcp_tx_stamps->last_sent.tv_nsec != 0) );
       if( retrans )
@@ -514,7 +516,6 @@ static void handle_time(struct msghdr* msg, int tx_num,
       }
 #endif
       udp_tx_stamp = (struct timespec*) CMSG_DATA(cmsg);
-      printf("Timestamp for tx %d\n", tx_num);
       print_time("System", &(udp_tx_stamp[0]));
       print_time("Transformed", &(udp_tx_stamp[1]));
       print_time("Raw", &(udp_tx_stamp[2]));
@@ -523,6 +524,11 @@ static void handle_time(struct msghdr* msg, int tx_num,
       err = (struct sock_extended_err*) CMSG_DATA(cmsg);
       if( err->ee_origin == SO_EE_ORIGIN_TIMESTAMPING ) {
         printf("Timestamp ID %u\n", err->ee_data);
+        bool retrans = SEQ_LE(err->ee_data, last_id);
+        last_id = err->ee_data;
+        if( retrans )
+          printf("TCP retransmission:\n");
+
         if( cfg->cfg_cmsg ) {
           struct sockaddr_in* saddr;
           char ip[INET_ADDRSTRLEN];
@@ -618,7 +624,7 @@ int do_drop(int sock, unsigned int pkt_num, struct configuration* cfg)
 }
 
 /* retrieve TX timestamp and print it*/
-int get_tx_ts(int sock, unsigned int tx_num, struct configuration* cfg)
+int get_tx_ts(int sock, struct configuration* cfg)
 {
   struct msghdr msg;
   struct iovec iov;
@@ -637,7 +643,7 @@ int get_tx_ts(int sock, unsigned int tx_num, struct configuration* cfg)
   msg.msg_control = control;
   msg.msg_controllen = 1024;
   TRY( got = recvmsg(sock, &msg, MSG_ERRQUEUE | MSG_DONTWAIT) );
-  handle_time(&msg, tx_num, cfg);
+  handle_time(&msg, cfg);
   if( cfg->cfg_data && got > 0 )
     hexdump(buffer, got);
   return 0;
@@ -649,7 +655,6 @@ int main(int argc, char** argv)
   struct configuration cfg;
   int sock, epoll;
   unsigned int pkt_num = 0;
-  unsigned int tx_num = 0;
   int rc;
   struct epoll_event e;
 
@@ -668,12 +673,6 @@ int main(int argc, char** argv)
 
   /* Run until we've got enough packets, or an error occurs */
   while( 1 ) {
-    /* break out of loop if all timestamps received */
-    if( (cfg.cfg_max_packets != 0) &&
-        (tx_num >= cfg.cfg_max_packets) )
-      break;
-
-
     TRY( rc = epoll_wait(epoll, &e, 1, 1000) );
 
     /* break out of the loop after timeout if we've echoed all packets */
@@ -706,8 +705,7 @@ int main(int argc, char** argv)
     }
     if( e.events & EPOLLERR ) {
       /* TX timestamp */
-      TRY( get_tx_ts(sock, tx_num, &cfg) );
-      ++tx_num;
+      TRY( get_tx_ts(sock, &cfg) );
     }
   }
 
