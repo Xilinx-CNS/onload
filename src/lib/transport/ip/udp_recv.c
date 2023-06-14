@@ -264,7 +264,7 @@ static int ci_udp_recvmsg_get(ci_udp_recv_info* rinf, ci_iovec_ptr* piov)
 #if HAVE_MSG_FLAGS
     if(CI_UNLIKELY( rc < pkt->pf.udp.pay_len )) {
       if( msg != NULL )
-        rinf->msg_flags |= LOCAL_MSG_TRUNC;
+        rinf->msg_flags |= MSG_TRUNC;
       if( rinf->flags & MSG_TRUNC )
         rc = pkt->pf.udp.pay_len;
     }

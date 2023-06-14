@@ -1,7 +1,5 @@
 /* TX timestamp to CMSG  including support functions */
 
-#define LOCAL_MSG_TRUNC	MSG_TRUNC
-
 struct oo_copy_state {
   int pkt_left;
   int pkt_off;
@@ -194,10 +192,10 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
   else if( do_data ) {
     rc = ci_timestamp_q_pkt_to_iovec(ni, pkt, piov);
     if( rc < pkt->buf_len )
-      *cmsg_state->p_msg_flags |= LOCAL_MSG_TRUNC;
+      *cmsg_state->p_msg_flags |= MSG_TRUNC;
   }
   else {
-    *cmsg_state->p_msg_flags |= LOCAL_MSG_TRUNC;
+    *cmsg_state->p_msg_flags |= MSG_TRUNC;
     rc = 0;
   }
 
