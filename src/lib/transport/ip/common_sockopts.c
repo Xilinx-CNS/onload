@@ -1729,6 +1729,15 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
     if( v & ~(ONLOAD_SOF_TIMESTAMPING_MASK |
               ONLOAD_SOF_TIMESTAMPING_STREAM) )
       goto fail_inval;
+    /* We don't currently support any of these */
+    if( v & (ONLOAD_SOF_TIMESTAMPING_OPT_STATS |
+             ONLOAD_SOF_TIMESTAMPING_OPT_PKTINFO |
+             ONLOAD_SOF_TIMESTAMPING_OPT_TX_SWHW |
+             ONLOAD_SOF_TIMESTAMPING_BIND_PHC) )
+      goto fail_inval;
+    if ( (v & ONLOAD_SOF_TIMESTAMPING_OPT_ID_TCP) &&
+         !(v & ONLOAD_SOF_TIMESTAMPING_OPT_ID) )
+      goto fail_inval;
     if( (v & ONLOAD_SOF_TIMESTAMPING_STREAM) &&
         ( ! (s->b.state & CI_TCP_STATE_TCP) ||
           ! (v & ONLOAD_SOF_TIMESTAMPING_TX_HARDWARE) ) )
@@ -1779,9 +1788,16 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
     /* SOF_TIMESTAMPING_OPT_ID support for TX */
     if( v & ONLOAD_SOF_TIMESTAMPING_OPT_ID &&
         ~s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_OPT_ID ) {
-      s->ts_key = 0;
-      if( s->b.state & CI_TCP_STATE_TCP_CONN )
-        s->ts_key = SOCK_TO_TCP(s)->snd_una;
+      if( s->b.state & CI_TCP_STATE_TCP_CONN ) {
+        if( v & ONLOAD_SOF_TIMESTAMPING_OPT_ID_TCP )
+          s->ts_key = SOCK_TO_TCP(s)->snd_nxt;
+        else
+          s->ts_key = SOCK_TO_TCP(s)->snd_una;
+      }
+      else
+        s->ts_key = 0;
+
+      ci_wmb(); /* atomic update */
     }
 
     rc = 0;

@@ -14,6 +14,7 @@
 /*! \cidoxg_lib_transport_ip */
 
 #include "ip_internal.h"
+#include "ip_tx_cmsg.h"
 #include <ci/internal/ip_timestamp.h>
 #include <onload/sleep.h>
 #include <onload/tcp-ceph.h>
@@ -961,6 +962,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
   if( flags & MSG_ERRQUEUE ) {
 #if CI_CFG_TIMESTAMPING
     ci_ip_pkt_fmt* pkt;
+    int rc3 = 0;
 
   timestamp_q_check:
 
@@ -995,53 +997,15 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
       cmsg_state.cmsg_bytes_used = 0;
       cmsg_state.p_msg_flags = &rinf.msg_flags;
 
+
       if( pkt->flags & CI_PKT_FLAG_TX_TIMESTAMPED ) {
-        if( ts->s.timestamping_flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD ) {
-          if( pkt->flags & ~CI_PKT_FLAG_RTQ_RETRANS ) {
-            struct onload_timestamp ts = {pkt->hw_stamp.tv_sec,
-                                          pkt->hw_stamp.tv_nsec};
-            ci_put_cmsg(&cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING,
-                        sizeof(ts), &ts);
-          }
-          else {
-            /* Ignore retransmit timestamps. We might want something like
-            * ONLOAD_SCM_TIMESTAMPING_STREAM to report them along with the
-            * original transmission time */
-            goto timestamp_q_check;
-          }
-        }
-        else {
-          struct onload_scm_timestamping_stream stamps;
-          int tx_hw_stamp_in_sync;
-          memset(&stamps, 0, sizeof(stamps));
-          tx_hw_stamp_in_sync = pkt->hw_stamp.tv_nsec &
-                                CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC;
+	rc3 = ci_ip_tx_timestamping_to_cmsg(IPPROTO_TCP, ni, pkt, &ts->s,
+					       &cmsg_state, &rinf.piov);
 
-          if( pkt->flags & CI_PKT_FLAG_RTQ_RETRANS ) {
-            if( pkt->pf.tcp_tx.first_tx_hw_stamp.tv_nsec &
-                CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC ) {
-              stamps.first_sent.tv_sec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_sec;
-              stamps.first_sent.tv_nsec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_nsec;
-            }
-            if( tx_hw_stamp_in_sync ) {
-              stamps.last_sent.tv_sec = pkt->hw_stamp.tv_sec;
-              stamps.last_sent.tv_nsec = pkt->hw_stamp.tv_nsec;
-            }
-          }
-          else if( tx_hw_stamp_in_sync ) {
-            stamps.first_sent.tv_sec = pkt->hw_stamp.tv_sec;
-            stamps.first_sent.tv_nsec = pkt->hw_stamp.tv_nsec;
-          }
-          stamps.len = pkt->pf.tcp_tx.end_seq - pkt->pf.tcp_tx.start_seq;
+        /* Preserve original behaviour */
+	if( rc3 == -EAGAIN )
+          goto timestamp_q_check;
 
-          /* FIN and SYN eat seq space, but the user is not interested in them */
-          if( TX_PKT_IPX_TCP(ipcache_af(&ts->s.pkt), pkt)->tcp_flags &
-              (CI_TCP_FLAG_SYN|CI_TCP_FLAG_FIN) )
-            stamps.len--;
-
-          ci_put_cmsg(&cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING_STREAM,
-                      sizeof(stamps), &stamps);
-        }
       }
       if( pkt->flags & CI_PKT_FLAG_INDIRECT ) {
         struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
@@ -1068,7 +1032,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
         rinf.stack_locked = 0;
       }
 
-      rinf.rc = 0;
+      rinf.rc = rc3 > 0 ? rc3 : 0;
       goto unlock_out;
     }
     else {

@@ -287,10 +287,6 @@ int onload_timestamping_request(int fd, unsigned flags)
       sock->cmsg_flags &= ~CI_IP_CMSG_TIMESTAMPING;
 
     sock->timestamping_flags = ONLOAD_SOF_TIMESTAMPING_ONLOAD | flags;
-    if( flags & ONLOAD_TIMESTAMPING_FLAG_TX_MASK )
-      /* HACK: this tricks the TCP receive path into providing timestamps */
-      sock->timestamping_flags |= ONLOAD_SOF_TIMESTAMPING_STREAM;
-
     rc = 0;
   }
   else {

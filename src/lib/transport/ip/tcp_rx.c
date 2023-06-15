@@ -1415,7 +1415,7 @@ static void ci_tcp_rx_free_acked_bufs(ci_netif* netif, ci_tcp_state* ts,
 
 #if CI_CFG_TIMESTAMPING
     if( (p->flags & CI_PKT_FLAG_TX_TIMESTAMPED &&
-         ts->s.timestamping_flags & ONLOAD_SOF_TIMESTAMPING_STREAM) ||
+         onload_timestamping_want_tx_nic(ts->s.timestamping_flags)) ||
         (p->flags & CI_PKT_FLAG_INDIRECT &&
          ci_tcp_zc_has_cookies(netif, p)) ) {
       ci_udp_recv_q_put_pending(netif, &ts->timestamp_q, p);

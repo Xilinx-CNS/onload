@@ -2210,7 +2210,7 @@ citp_tcp_ds_prepare(citp_fdinfo* fdi, int size, unsigned flags,
   /* Basic checks */
   if( s->tx_errno != 0
 #if CI_CFG_TIMESTAMPING
-      || (s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_STREAM)
+      || onload_timestamping_want_tx_nic(s->timestamping_flags)
 #endif
       )
     return ONLOAD_DELEGATED_SEND_RC_BAD_SOCKET;
