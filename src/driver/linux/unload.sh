@@ -60,7 +60,7 @@ dochar () {
 
   # onload_helper is spawned from UL, so kernel does not have a list of
   # them.  Let's kill them by name!
-  pkill '\<onload_helper\>'
+  pkill -x onload_helper
 
   modusedby sfc_resource sfc_affinity &&
     tryunload sfc_affinity
