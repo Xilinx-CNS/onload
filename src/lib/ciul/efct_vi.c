@@ -1166,6 +1166,8 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
     free(mappings);
     return -ENOMEM;
   }
+  
+  madvise(space, vi->max_efct_rxq * bytes_per_rxq, MADV_DONTDUMP);
 #endif
 
   vi->efct_shm = shm;
