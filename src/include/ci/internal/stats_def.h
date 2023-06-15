@@ -860,6 +860,9 @@ OO_STAT("Number of times the urgent flag was processed in received packets",
 
 OO_STAT("Number of packets received that contained IP options.",
         ci_uint32, ip_options, count)
+OO_STAT("Number of packets received via discard that subsequently passed sw "
+        "csum checking.",
+        ci_uint32, rx_sw_csum_pass, count)
 
 #if CI_CFG_TCPDUMP
 OO_STAT("Number of packets not captured by onload_tcpdump because the "

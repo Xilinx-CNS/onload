@@ -350,6 +350,9 @@ static int ci_udp_setsockopt_lk(citp_socket* ep, ci_fd_t fd, ci_fd_t os_sock,
         /* We don't have an OS socket or we can't read the buffer size back.
         ** Emulate the OS behaviour. */
         v = *(int*) optval;
+        /* To match kernel behaviour, limit input value to INT_MAX/2
+         * so it can't wrap to a negative value when doubled */
+        v = CI_MIN(v, INT_MAX/2);
         v = CI_MAX(v, (int)NI_OPTS(netif).udp_sndbuf_min);
         if( optname == SO_SNDBUF ) {
           v = CI_MIN(v, (int)NI_OPTS(netif).udp_sndbuf_max);
@@ -389,6 +392,9 @@ static int ci_udp_setsockopt_lk(citp_socket* ep, ci_fd_t fd, ci_fd_t os_sock,
         /* We don't have an OS socket or we can't read the buffer size back.
         ** Emulate the OS behaviour. */
         v = *(int*) optval;
+        /* To match kernel behaviour, limit input value to INT_MAX/2
+         * so it can't wrap to a negative value when doubled */
+        v = CI_MIN(v, INT_MAX/2);
         v = CI_MAX(v, (int)NI_OPTS(netif).udp_rcvbuf_min);
         if( optname == SO_RCVBUF ) {
           v = CI_MIN(v, (int)NI_OPTS(netif).udp_rcvbuf_max);

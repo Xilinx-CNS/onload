@@ -451,6 +451,7 @@ typedef struct {
 
 extern void ci_netif_config_opts_rangecheck(ci_netif_config_opts* opts) CI_HF;
 extern void ci_netif_config_opts_getenv(ci_netif_config_opts* opts) CI_HF;
+extern void ci_netif_config_opts_set_derived(ci_netif_config_opts* opts) CI_HF;
 extern void ci_netif_config_opts_defaults(ci_netif_config_opts* opts) CI_HF;
 #ifdef __KERNEL__
 extern void ci_netif_state_init(ci_netif* ni, int cpu_khz, 

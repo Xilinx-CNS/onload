@@ -1110,7 +1110,7 @@ CI_CFG_OPT("EF_TCP_SNDBUF_ESTABLISHED_DEFAULT", tcp_sndbuf_est_def, ci_uint32,
 "This variable overrides OS default SO_SNDBUF value only, it does not "
 "change SO_SNDBUF if the application explicitly sets it "
 "(see EF_TCP_SNDBUF variable which overrides application-supplied value).",
-           ,  , 128 * 1024, MIN, MAX, bincount)
+           ,  , 128 * 1024, 0, SMAX/4, bincount)
 
 CI_CFG_OPT("EF_TCP_RCVBUF_ESTABLISHED_DEFAULT", tcp_rcvbuf_est_def, ci_uint32,
 "Overrides the OS default SO_RCVBUF value for TCP sockets in the ESTABLISHED "
@@ -1124,7 +1124,7 @@ CI_CFG_OPT("EF_TCP_RCVBUF_ESTABLISHED_DEFAULT", tcp_rcvbuf_est_def, ci_uint32,
 "This variable overrides OS default SO_RCVBUF value only, it does not "
 "change SO_RCVBUF if the application explicitly sets it "
 "(see EF_TCP_RCVBUF variable which overrides application-supplied value).",
-           ,  , 128 * 1024, MIN, MAX, bincount)
+           ,  , 128 * 1024, 0, SMAX/4, bincount)
 
 CI_CFG_OPT("", tcp_sndbuf_min, ci_uint32,
 "Minimum value for SO_SNDBUF for TCP sockets.  Set via O/S interface.",
@@ -1177,22 +1177,22 @@ CI_CFG_OPT("", udp_rcvbuf_max, ci_uint32,
 CI_CFG_OPT("EF_TCP_SNDBUF", tcp_sndbuf_user, ci_uint32,
 "Override SO_SNDBUF for TCP sockets (Note: the actual size of the buffer is "
 "double the amount requested, mimicking the behavior of the Linux kernel.)",
-           ,  tcp_sndbuf,     0, MIN, MAX, bincount)
+           ,  tcp_sndbuf,     0, 0, SMAX/2, bincount)
 
 CI_CFG_OPT("EF_TCP_RCVBUF", tcp_rcvbuf_user, ci_uint32,
 "Override SO_RCVBUF for TCP sockets. (Note: the actual size of the buffer is "
 "double the amount requested, mimicking the behavior of the Linux kernel.)",
-           ,  tcp_rcvbuf, 0, MIN, MAX, bincount)
+           ,  tcp_rcvbuf, 0, 0, SMAX/2, bincount)
 
 CI_CFG_OPT("EF_UDP_SNDBUF", udp_sndbuf_user, ci_uint32,
 "Override SO_SNDBUF for UDP sockets. (Note: the actual size of the buffer is "
 "double the amount requested, mimicking the behavior of the Linux kernel.)",
-           ,  udp_sndbuf, 0, MIN, MAX, bincount)
+           ,  udp_sndbuf, 0, 0, SMAX/2, bincount)
 
 CI_CFG_OPT("EF_UDP_RCVBUF", udp_rcvbuf_user, ci_uint32,
 "Override SO_RCVBUF for UDP sockets. (Note: the actual size of the buffer is "
 "double the amount requested, mimicking the behavior of the Linux kernel.)",
-           ,  udp_rcvbuf, 0, MIN, MAX, bincount)
+           ,  udp_rcvbuf, 0, 0, SMAX/2, bincount)
 
 CI_CFG_OPT("EF_TCP_BACKLOG_MAX", tcp_backlog_max, ci_uint32,
 "Places an upper limit on the number of embryonic (half-open) connections for "
