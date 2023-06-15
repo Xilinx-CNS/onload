@@ -56,10 +56,12 @@ static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_r
    * (e.g. the app got stalled) in that case pick the oldest sbuf we have
    */
   if( (uint32_t)(q->sbufs.added - app->next_sbuf_seq) < driver_buf_count &&
-      (uint32_t)(app->next_sbuf_seq - q->sbufs.removed) < driver_buf_count )
+      (uint32_t)(app->next_sbuf_seq - q->sbufs.removed) < driver_buf_count ) {
     sbuf_seq = app->next_sbuf_seq;
-  else
+  } else {
     sbuf_seq = q->sbufs.removed;
+    app->shm->stats.skipped_bufs += (q->sbufs.removed - app->next_sbuf_seq);
+  }
 
   sbufs_q_entry = q->sbufs.q[sbuf_seq % CI_ARRAY_SIZE(q->sbufs.q)];
   sbid = sbufs_q_entry.sbid;
