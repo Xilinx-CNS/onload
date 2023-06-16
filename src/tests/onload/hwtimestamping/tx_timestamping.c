@@ -94,6 +94,9 @@
 #ifndef SOF_TIMESTAMPING_OPT_ID
   #define SOF_TIMESTAMPING_OPT_ID (1<<7)
 #endif
+#ifndef SOF_TIMESTAMPING_OPT_TSONLY
+  #define SOF_TIMESTAMPING_OPT_TSONLY (1<<11)
+#endif
 
 /* Assert-like macros */
 #define TEST(x)                                                 \
