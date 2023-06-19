@@ -200,7 +200,8 @@ static inline ci_uint8 dump_hwport_val_get(void) {
  * dump_hwports. */
 static void ifindex_to_intf_i(ci_netif *ni)
 {
-  cicp_hwport_mask_t hwports;
+  /* Explicit initialization is needed to appease gcc. */
+  cicp_hwport_mask_t hwports = 0;
   int rc;
 
   memset(dump_hwports, OO_INTF_I_DUMP_NONE, sizeof(dump_hwports));
