@@ -13,6 +13,9 @@
 #include "nic.h"
 #include "efx_common.h"
 #include "tx_common.h"
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_GSO_H)
+#include <net/gso.h>
+#endif
 
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_TX_ACCEL)
 static struct sk_buff *efx_tx_vlan_sw(struct efx_tx_queue *tx_queue,
