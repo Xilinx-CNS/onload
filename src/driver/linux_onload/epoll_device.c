@@ -24,11 +24,6 @@
 #include <linux/unistd.h> /* for __NR_epoll_pwait */
 #include "onload_internal.h"
 
-/* This is needed for RHEL4 and similar vintage kernels */
-#ifndef __MODULE_PARM_TYPE
-#define __MODULE_PARM_TYPE(name, _type)                 \
-  __MODULE_INFO(parmtype, name##type, #name ":" _type)
-#endif
 
 static int set_max_stacks(const char *val, 
                           const struct kernel_param *kp);
