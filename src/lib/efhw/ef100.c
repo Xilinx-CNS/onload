@@ -832,6 +832,7 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef10_ef100_filter_insert,
 	ef10_ef100_filter_remove,
 	ef10_ef100_filter_redirect,
+	ef10_ef100_filter_query,
 	ef10_ef100_multicast_block,
 	ef10_ef100_unicast_block,
 	ef10_ef100_vport_alloc,

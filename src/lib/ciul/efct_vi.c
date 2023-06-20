@@ -784,6 +784,7 @@ static void efct_rx_discard(int qid, uint32_t pkt_id, uint16_t discard_flags,
                                              EFCT_RX_HEADER_PACKET_LENGTH);
   ev->rx_ref_discard.pkt_id = pkt_id;
   ev->rx_ref_discard.q_id = qid;
+  ev->rx_ref_discard.filter_id = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_FILTER);
   ev->rx_ref_discard.user = CI_OWORD_FIELD(*header,
                                               EFCT_RX_HEADER_USER);
   ev->rx_ref_discard.flags = discard_flags;
@@ -924,6 +925,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
       evs[i].rx_ref.len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
       evs[i].rx_ref.pkt_id = pkt_id;
       evs[i].rx_ref.q_id = qid;
+      evs[i].rx_ref.filter_id = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_FILTER);
       evs[i].rx_ref.user = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_USER);
     }
 

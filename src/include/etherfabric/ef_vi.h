@@ -247,7 +247,8 @@ typedef union {
     unsigned       len        :16;
     unsigned       pkt_id     :32;
     unsigned       q_id       :8;
-    unsigned       user       :24;
+    unsigned       filter_id  :16;
+    unsigned       user       :8;
   } rx_ref;
   /** An event of type EF_EVENT_TYPE_RX_REF_DISCARD */
   struct {
@@ -255,7 +256,8 @@ typedef union {
     unsigned       len        :16;
     unsigned       pkt_id     :32;
     unsigned       q_id       :8;
-    unsigned       user       :24;
+    unsigned       filter_id  :16;
+    unsigned       user       :8;
     unsigned       flags      :16;
   } rx_ref_discard;
 } ef_event;

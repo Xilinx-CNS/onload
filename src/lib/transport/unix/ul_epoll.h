@@ -341,7 +341,7 @@ citp_ul_epoll_set_ul_events(struct oo_ul_epoll_state*__restrict__ eps,
                             volatile ci_uint64* sleep_seq_p,
                             int* seq_mismatch)
 {
-  Log_POLL(
+  Log_VVPOLL(
     if( events )
       ci_log("%s: member=%llx mask=%x events=%x report=%x",
                __FUNCTION__, (long long) eitem->epoll_data.data.u64,

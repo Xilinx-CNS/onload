@@ -162,7 +162,7 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
     stamps.len = pkt->pf.tcp_tx.end_seq - pkt->pf.tcp_tx.start_seq;
 
     /* FIN and SYN eat seq space, but the user is not interested in them */
-    if( TX_PKT_IPX_TCP(ipcache_af(&ts->s.pkt), pkt)->tcp_flags &
+    if( TX_PKT_IPX_TCP(ipcache_af(&s->pkt), pkt)->tcp_flags &
         (CI_TCP_FLAG_SYN|CI_TCP_FLAG_FIN) )
       stamps.len--;
 

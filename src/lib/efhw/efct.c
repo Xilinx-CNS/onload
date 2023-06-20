@@ -906,14 +906,13 @@ do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
   return 0;
 }
 
-static void do_filter_del(struct efhw_nic_efct *efct, int filter_id,
-                         int* hw_filter)
+static struct efct_filter_node*
+lookup_filter_by_id(struct efhw_nic_efct *efct, int filter_id, size_t **class_n)
 {
   int clasi = 0;
   int clas = get_filter_class(filter_id);
 
-  *hw_filter = -1;
-#define ACTION_DEL_BY_FILTER_ID(F) \
+#define ACTION_LOOKUP_BY_FILTER_ID(F) \
     if( clasi++ == clas ) { \
       int bkt = (filter_id >> FILTER_CLASS_BITS) & \
                 (HASH_SIZE(efct->filters.F) - 1); \
@@ -921,20 +920,34 @@ static void do_filter_del(struct efhw_nic_efct *efct, int filter_id,
       hlist_for_each_entry_rcu(node, &efct->filters.F[bkt], node) { \
         if( node->filter_id == filter_id ) { \
           EFHW_ASSERT(efct->filters.F##_n > 0); \
-          *hw_filter = node->hw_filter; \
-          if ( node->hw_filter >= 0 ) {\
-            --efct->hw_filters[node->hw_filter].refcount; \
-          } \
-          if ( --node->refcount == 0 ) { \
-            hash_del_rcu(&node->node); \
-            --efct->filters.F##_n; \
-            kfree_rcu(node, free_list); \
-          } \
-          return; \
+          if( class_n ) \
+            *class_n = &efct->filters.F##_n; \
+          return node; \
         } \
       } \
     }
-  FOR_EACH_FILTER_CLASS(ACTION_DEL_BY_FILTER_ID)
+  FOR_EACH_FILTER_CLASS(ACTION_LOOKUP_BY_FILTER_ID)
+  return NULL;
+}
+
+static void do_filter_del(struct efhw_nic_efct *efct, int filter_id,
+                         int* hw_filter)
+{
+  size_t *class_n;
+  struct efct_filter_node *node = lookup_filter_by_id(efct, filter_id, &class_n);
+
+  *hw_filter = -1;
+  if( node ) {
+    *hw_filter = node->hw_filter;
+    if( node->hw_filter >= 0 ) {
+      --efct->hw_filters[node->hw_filter].refcount;
+    }
+    if( --node->refcount == 0 ) {
+      hash_del_rcu(&node->node);
+      --*class_n;
+      kfree_rcu(node, free_list);
+    }
+  }
 }
 
 static int
@@ -1143,6 +1156,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       if( insert_hw_filter ) {
         efct->hw_filters[node.hw_filter].rxq = params.rxq_out;
         efct->hw_filters[node.hw_filter].drv_id = params.filter_id_out;
+        efct->hw_filters[node.hw_filter].hw_id = params.filter_handle;
       }
       *rxq = efct->hw_filters[node.hw_filter].rxq;
       if ( *rxq > 0 )
@@ -1419,6 +1433,36 @@ efct_filter_redirect(struct efhw_nic *nic, int filter_id,
 }
 
 static int
+efct_filter_query(struct efhw_nic *nic, int filter_id,
+                  struct efhw_filter_info *info)
+{
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  int rc;
+  struct efct_filter_node *node;
+
+  mutex_lock(&efct->driver_filters_mtx);
+  node = lookup_filter_by_id(efct, filter_id, NULL);
+  if( ! node ) {
+    rc = -ENOENT;
+  }
+  else if( node->hw_filter >= 0 ) {
+    info->hw_id = efct->hw_filters[node->hw_filter].hw_id;
+    info->rxq = efct->hw_filters[node->hw_filter].rxq;
+    rc = 0;
+  }
+  else {
+    info->hw_id = -1;
+    /* No hardware filter was used, i.e. the traffic all goes to the default
+     * queue 0 and the filter exists only in software to tell the kernel
+     * networking stack to ignore these packets. */
+    info->rxq = 0;
+    rc = 0;
+  }
+  mutex_unlock(&efct->driver_filters_mtx);
+  return rc;
+}
+
+static int
 efct_multicast_block(struct efhw_nic *nic, bool block)
 {
   /* Keep track of whether this has been set to allow us to tell if our *
@@ -1591,6 +1635,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_filter_insert,
   efct_filter_remove,
   efct_filter_redirect,
+  efct_filter_query,
   efct_multicast_block,
   efct_unicast_block,
   efct_vport_alloc,

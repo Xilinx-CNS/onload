@@ -396,6 +396,28 @@ int efch_filter_list_del(struct efrm_resource *rs, struct efrm_pd *pd,
 }
 
 
+static int efch_filter_list_query(struct efrm_resource *rs, struct efrm_pd *pd,
+                                  struct efch_filter_list *fl, int filter_id,
+                                  int *rxq, int *hw_id)
+{
+  struct filter* f;
+  int rc = -EINVAL;
+
+  spin_lock(&fl->lock);
+  CI_DLLIST_FOR_EACH2(struct filter, f, link, &fl->filters)
+    if( f->filter_id == filter_id ) {
+      rc = 0;
+      break;
+    }
+  spin_unlock(&fl->lock);
+
+  if( rc == 0 )
+    rc = efrm_filter_query(rs->rs_client, f->efrm_filter_id, rxq, hw_id);
+
+  return rc;
+}
+
+
 int efch_filter_list_op_add(struct efrm_resource *rs, struct efrm_pd *pd,
                             struct efch_filter_list *fl, ci_resource_op_t *op,
                             int *copy_out, unsigned efx_filter_flags,
@@ -518,6 +540,13 @@ int efch_filter_list_op_del(struct efrm_resource *rs, struct efrm_pd *pd,
   return efch_filter_list_del(rs, pd, fl, op->u.filter_del.filter_id);
 }
 
+int efch_filter_list_op_query(struct efrm_resource *rs, struct efrm_pd *pd,
+                              struct efch_filter_list *fl, ci_resource_op_t *op)
+{
+  return efch_filter_list_query(rs, pd, fl, op->u.filter_query.filter_id,
+                                &op->u.filter_query.out_rxq,
+                                &op->u.filter_query.out_hw_id);
+}
 
 int efch_filter_list_op_block(struct efrm_resource *rs, struct efrm_pd *pd,
                               struct efch_filter_list *fl,

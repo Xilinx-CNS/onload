@@ -2509,6 +2509,13 @@ ef10_ef100_filter_redirect(struct efhw_nic *nic, int filter_id,
 }
 
 int
+ef10_ef100_filter_query(struct efhw_nic *nic, int filter_id,
+                        struct efhw_filter_info *info)
+{
+  return -EOPNOTSUPP;
+}
+
+int
 ef10_ef100_multicast_block(struct efhw_nic *nic, bool block)
 {
 	int rc = 0;
@@ -2721,6 +2728,7 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_ef100_filter_insert,
 	ef10_ef100_filter_remove,
 	ef10_ef100_filter_redirect,
+	ef10_ef100_filter_query,
 	ef10_ef100_multicast_block,
 	ef10_ef100_unicast_block,
 	ef10_ef100_vport_alloc,

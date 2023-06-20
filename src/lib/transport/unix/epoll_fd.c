@@ -1712,7 +1712,7 @@ ci_inline int citp_epoll_os_fds(citp_epoll_fdi *efdi,
   if( (ep->shared->flag & OO_EPOLL1_FLAG_EVENT) == 0 )
     return 0;
 
-  Log_POLL(ci_log("%s(%d): poll os fds", __FUNCTION__, efdi->fdinfo.fd));
+  Log_VVPOLL(ci_log("%s(%d): poll os fds", __FUNCTION__, efdi->fdinfo.fd));
 
   op.epfd = efdi->fdinfo.fd;
   op.maxevents = maxevents;
@@ -1806,12 +1806,12 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
   if( ordering )
     ordering->next_timeout_hr = timeout_hr;
 
-  Log_POLL(ci_log("%s(%d, max_ev=%d, timeout=%" CI_PRId64 ") ul=%d dead=%d "
-                  "syncs=%d",
-                  __FUNCTION__, fdi->fd, maxevents, timeout_hr,
-                  ! ci_dllist_is_empty(&ep->oo_sockets),
-                  ! ci_dllist_is_empty(&ep->dead_sockets),
-                  ep->epfd_syncs_needed));
+  Log_VPOLL(ci_log("%s(%d, max_ev=%d, timeout=%" CI_PRId64 ") ul=%d dead=%d "
+                   "syncs=%d",
+                   __FUNCTION__, fdi->fd, maxevents, timeout_hr,
+                   ! ci_dllist_is_empty(&ep->oo_sockets),
+                   ! ci_dllist_is_empty(&ep->dead_sockets),
+                   ep->epfd_syncs_needed));
 
   CITP_EPOLL_EP_LOCK(ep);
 
@@ -1830,7 +1830,7 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
     citp_exit_lib(lib_context, FALSE);
     if( timeout_ms )
       ep->blocking = 1;
-    Log_POLL(ci_log("%s(%d, ..): passthrough", __FUNCTION__, fdi->fd));
+    Log_VPOLL(ci_log("%s(%d, ..): passthrough", __FUNCTION__, fdi->fd));
     if( sigmask != NULL )
       rc = ci_sys_epoll_pwait(fdi->fd, events, maxevents, timeout_ms, sigmask);
     else
@@ -1994,8 +1994,8 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
       ordering->next_timeout_hr = timeout_hr;
     }
 
-    Log_POLL(ci_log("%s(%d): return %d ul + %d kernel",
-                    __FUNCTION__, fdi->fd, rc, rc_os));
+    Log_VPOLL(ci_log("%s(%d): return %d ul + %d kernel",
+                     __FUNCTION__, fdi->fd, rc, rc_os));
     goto unlock_release_exit_ret;
   }
   /* eps.events == events */
@@ -2004,7 +2004,7 @@ no_events:
   rc = citp_epoll_os_fds(fdi_to_epoll_fdi(fdi), events,
                          ordering ?  ordering->ordering_info : NULL, maxevents);
   if( rc != 0 || timeout_hr == 0 ) {
-    Log_POLL(ci_log("%s(%d): %d kernel events", __FUNCTION__, fdi->fd, rc));
+    Log_VPOLL(ci_log("%s(%d): %d kernel events", __FUNCTION__, fdi->fd, rc));
     goto unlock_release_exit_ret;
   }
 
@@ -2040,7 +2040,7 @@ no_events:
     /* Timeout while spinning? */
     if( timeout_hr > 0 &&
         (eps.this_poll_frc - poll_start_frc >= timeout_hr) ) {
-      Log_POLL(ci_log("%s(%d): timeout during spin", __FUNCTION__, fdi->fd));
+      Log_VPOLL(ci_log("%s(%d): timeout during spin", __FUNCTION__, fdi->fd));
       rc = 0;
       timeout_hr = 0;
       goto unlock_release_exit_ret;
@@ -2073,7 +2073,7 @@ no_events:
 
       rc = ci_sys_ioctl(ep->epfd_os, OO_EPOLL1_IOC_SPIN_ON, &op);
       citp_epoll_find_timeout(&timeout_hr, &poll_start_frc);
-      Log_POLL(ci_log("%s(%d): SPIN ON", __FUNCTION__, fdi->fd));
+      Log_VVPOLL(ci_log("%s(%d): SPIN ON", __FUNCTION__, fdi->fd));
     }
     goto poll_again;
   } /* endif ul_epoll_spin spinning*/
@@ -2083,8 +2083,8 @@ no_events:
     timeout_hr -= eps.this_poll_frc - poll_start_frc;
     poll_start_frc = eps.this_poll_frc;
     timeout_hr = CI_MAX(timeout_hr, 0);
-    Log_POLL(ci_log("%s: blocking timeout reduced to %" CI_PRId64,
-                    __FUNCTION__, timeout_hr));
+    Log_VVPOLL(ci_log("%s: blocking timeout reduced to %" CI_PRId64,
+                      __FUNCTION__, timeout_hr));
   }
 
  unlock_release_exit_ret:
@@ -2092,10 +2092,10 @@ no_events:
   citp_epoll_ctl_try_sync(ep, fdi, timeout_hr, rc);
 
   CITP_EPOLL_EP_UNLOCK(ep, 0);
-  Log_POLL(ci_log("%s(%d): to kernel", __FUNCTION__, fdi->fd));
+  Log_VPOLL(ci_log("%s(%d): to kernel", __FUNCTION__, fdi->fd));
 
   if( pwait_was_spinning) {
-    Log_POLL(ci_log("%s(%d): pwait_was_spinning", __FUNCTION__, fdi->fd));
+    Log_VPOLL(ci_log("%s(%d): pwait_was_spinning", __FUNCTION__, fdi->fd));
     /* Fixme:
      * if we've got both signal and event, we can't return both to user.
      * As signal will be processed anyway (in exit_lib), we MUST
@@ -2122,8 +2122,8 @@ no_events:
   if( rc != 0 || timeout_hr == 0 )
     return rc;
 
-  Log_POLL(ci_log("%s(%d): rc=0 timeout=%" CI_PRId64 " sigmask=%p",
-                  __FUNCTION__, fdi->fd, timeout_hr, sigmask));
+  Log_VPOLL(ci_log("%s(%d): rc=0 timeout=%" CI_PRId64 " sigmask=%p",
+                   __FUNCTION__, fdi->fd, timeout_hr, sigmask));
   ci_assert( eps.events_top == (eps.events + maxevents) );
 
   ep->blocking = 1;
@@ -2146,7 +2146,7 @@ no_events:
     rc = ci_sys_ioctl(ep->epfd_os, OO_EPOLL1_IOC_BLOCK_ON, &op);
 
     ep->blocking = 0;
-    Log_POLL(ci_log("%s(%d): BLOCK_ON rc=%d op.flags=%d", __FUNCTION__,
+    Log_VPOLL(ci_log("%s(%d): BLOCK_ON rc=%d op.flags=%d", __FUNCTION__,
                     fdi->fd, rc, op.flags));
 
     if( rc == 0 && !ordering ) {
@@ -2198,8 +2198,8 @@ no_events:
     ordering->next_timeout_hr = timeout_hr;
   }
 
-  Log_POLL(ci_log("%s(%d): to kernel => %d (%d)", __FUNCTION__, fdi->fd,
-                  rc, errno));
+  Log_VPOLL(ci_log("%s(%d): to kernel => %d (%d)", __FUNCTION__, fdi->fd,
+                   rc, errno));
   return rc;
 }
 
@@ -2479,8 +2479,8 @@ citp_ul_epoll_store_event(struct oo_ul_epoll_state*__restrict__ eps,
                           struct citp_epoll_member*__restrict__ eitem,
                           unsigned events)
 {
-  Log_POLL(ci_log("%s: member=%llx events=%x", __FUNCTION__,
-                  (long long) eitem->epoll_data.data.u64, events));
+  Log_VVPOLL(ci_log("%s: member=%llx events=%x", __FUNCTION__,
+                    (long long) eitem->epoll_data.data.u64, events));
 
   ci_assert(eps->events_top - eps->events > 0);
   eps->events[0].events = events;
@@ -2537,10 +2537,10 @@ citp_ul_epoll_find_events(struct oo_ul_epoll_state*__restrict__ eps,
       return 0;
     }
     polled_sleep_seq.all = sleep_seq;
-    Log_POLL(ci_log("%s: EPOLLET fd=%d rx_seq=%d,%d tx_seq=%d,%d",
-                    __FUNCTION__, eitem->fd,
-                    eitem->reported_sleep_seq.rw.rx, polled_sleep_seq.rw.rx,
-                    eitem->reported_sleep_seq.rw.tx, polled_sleep_seq.rw.tx));
+    Log_VVPOLL(ci_log("%s: EPOLLET fd=%d rx_seq=%d,%d tx_seq=%d,%d",
+                      __FUNCTION__, eitem->fd,
+                      eitem->reported_sleep_seq.rw.rx, polled_sleep_seq.rw.rx,
+                      eitem->reported_sleep_seq.rw.tx, polled_sleep_seq.rw.tx));
     if( polled_sleep_seq.all == eitem->reported_sleep_seq.all )
       report = 0;
     else if( polled_sleep_seq.rw.rx == eitem->reported_sleep_seq.rw.rx )
@@ -2631,9 +2631,9 @@ static void citp_epoll_get_ordering_limit(ci_netif* ni,
       ci_netif_unlock(ni);
     }
 
-    Log_POLL(ci_log("%s: %s poll limit %ld:%09lu", __FUNCTION__,
-                    ni->state->pretty_name,
-                    limit_out->tv_sec, limit_out->tv_nsec));
+    Log_VPOLL(ci_log("%s: %s poll limit %ld:%09lu", __FUNCTION__,
+                     ni->state->pretty_name,
+                     limit_out->tv_sec, limit_out->tv_nsec));
   }
 }
 
@@ -2680,14 +2680,14 @@ citp_epoll_sort_results(struct epoll_event*__restrict__ events,
    * If a socket has additional data that is after the next socket's, but
    * still earlier than the limit, then reduce the limit to that timestamp.
    */
-  Log_POLL(ci_log("%s: maxevents=%d limit %lus %dns", __func__, maxevents,
-                  (unsigned long)limit->tv_sec, (int)limit->tv_nsec));
+  Log_VPOLL(ci_log("%s: maxevents=%d limit %lus %dns", __func__, maxevents,
+                   (unsigned long)limit->tv_sec, (int)limit->tv_nsec));
   for( i = 0; i < maxevents; i++ ) {
     /* If this event has a valid timestamp, then get ordering data for it. */
     if( ordering_info[i].oo_event.ts.tv_sec != 0 ) {
-      Log_POLL(ci_log("%s: ev=%d ts %lus %dns", __func__, i,
-                      (unsigned long)ordering_info[i].oo_event.ts.tv_sec,
-                      (int)ordering_info[i].oo_event.ts.tv_nsec));
+      Log_VPOLL(ci_log("%s: ev=%d ts %lus %dns", __func__, i,
+                       (unsigned long)ordering_info[i].oo_event.ts.tv_sec,
+                       (int)ordering_info[i].oo_event.ts.tv_nsec));
       /* If this event is after the limit, stop here. */
       if( citp_timespec_compare(limit, &ordering_info[i].oo_event.ts) < 0 )
         break;
@@ -2719,7 +2719,7 @@ citp_epoll_sort_results(struct epoll_event*__restrict__ events,
            sizeof(struct onload_ordered_epoll_event));
     ordered_events++;
   }
-  Log_POLL(ci_log("%s: got %d ordered events", __FUNCTION__, ordered_events));
+  Log_VPOLL(ci_log("%s: got %d ordered events", __FUNCTION__, ordered_events));
 
   return ordered_events;
 }
@@ -2741,11 +2741,11 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
   int n_socks;
   ci_int64 timeout_hr = oo_epoll_ms_to_frc(timeout);
 
-  Log_POLL(ci_log("%s(%d, max_ev=%d, timeout=%d) ul=%d dead=%d syncs=%d",
-                  __FUNCTION__, fdi->fd, maxevents, timeout,
-                  ! ci_dllist_is_empty(&ep->oo_sockets),
-                  ! ci_dllist_is_empty(&ep->dead_sockets),
-                  ep->epfd_syncs_needed));
+  Log_VPOLL(ci_log("%s(%d, max_ev=%d, timeout=%d) ul=%d dead=%d syncs=%d",
+                   __FUNCTION__, fdi->fd, maxevents, timeout,
+                   ! ci_dllist_is_empty(&ep->oo_sockets),
+                   ! ci_dllist_is_empty(&ep->dead_sockets),
+                   ep->epfd_syncs_needed));
 
  new_stack:
   ni = NULL;
@@ -2854,7 +2854,7 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
   if( wait.poll_again ) {
     ci_int64 old_timeout_hr = wait.next_timeout_hr;
     ci_assert_gt(rc, 0);
-    Log_POLL(ci_log("%s: need repoll at user level", __FUNCTION__));
+    Log_VPOLL(ci_log("%s: need repoll at user level", __FUNCTION__));
     citp_reenter_lib(lib_context);
     if( ni == NULL )
       goto new_stack;
@@ -2868,7 +2868,7 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
     if( rc == 0 && old_timeout_hr != 0 ) {
       citp_reenter_lib(lib_context);
       timeout_hr = wait.next_timeout_hr;
-      Log_POLL(ci_log("%s: start over", __FUNCTION__));
+      Log_VPOLL(ci_log("%s: start over", __FUNCTION__));
       goto again;
     }
   }
@@ -2882,7 +2882,7 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
     if( rc == 0 && wait.next_timeout_hr != 0 ) {
       citp_reenter_lib(lib_context);
       timeout_hr = wait.next_timeout_hr;
-      Log_POLL(ci_log("%s: all events vanished.  Stack change?", __FUNCTION__));
+      Log_VPOLL(ci_log("%s: all events vanished.  Stack change?", __FUNCTION__));
       if( ni )
         citp_netif_release_ref(ni, 0);
       goto new_stack;

@@ -1049,6 +1049,66 @@ extern int ef_vi_filter_del(ef_vi* vi, ef_driver_handle vi_dh,
                             ef_filter_cookie* filter_cookie);
 
 
+/*! \brief Values for the ef_filter_info::valid_fields bitmask */
+enum ef_filter_info_fields {
+  /*! The ef_filter_info::filter_id field has a valid value */
+  EF_FILTER_FIELD_ID    = 0x0001,
+  /*! The ef_filter_info::q_id field has a valid value */
+  EF_FILTER_FIELD_QUEUE = 0x0002,
+};
+
+/*! \brief Output information from the ef_vi_filter_query() function */
+typedef struct ef_filter_info {
+  /*! A bitmask of ef_filter_info_fields values indicating which of the
+  ** following fields in this structure has a valid value.
+  **
+  ** For a specific filter, the validity of a field may depend on any of the
+  ** type of NIC used, the type of the filter, the amount of free hardware
+  ** resources at the time the filter was added, or the configuration of the
+  ** VI.
+  */
+  uint64_t valid_fields;
+  /*! Bitmask of additional flags about the filter. Always 0: no flags are
+   ** currently defined.
+   */
+  unsigned flags;
+  /*! A hardware-assigned unique identifier of this filter, which may be
+  ** available in a \p filter_id field of an \p ef_event. If this field is
+  ** valid, this may be used by applications to determine when a specific
+  ** filter has been matched and hence allow the software to skip some amount
+  ** of packet validation and dispatch.
+  */
+  unsigned filter_id;
+  /*! The hardware queue identifier on which the filter was added. This matches
+  ** the \p q_id field of an \p ef_event, allowing an application to query
+  ** details of how the filter arbitrator has handled this filter request.
+  */
+  unsigned q_id;
+} ef_filter_info;
+
+/*! \brief Returns information about how a filter insertion request was mapped
+** on to the NIC hardware.
+**
+** \param vi               The virtual interface on which the filter was added.
+** \param vi_dh            The ef_driver_handle for the virtual interface.
+** \param filter_cookie    The filter cookie for the filter to query, as set
+**                         on return from ef_vi_filter_add().
+** \param filter_info      Output value to contain the information queried.
+** \param filter_info_size To be populated with \p sizeof(filter_info) by the
+**                         application, to allow for forward-compatibility.
+**
+** \return 0 on success, or a negative error code.
+**
+** In the returned \param filter_info, only the \p valid_fields member is
+** guaranteed to be populated. All other fields may not be meaningful for this
+** particular filter.
+*/
+extern int ef_vi_filter_query(ef_vi* vi, ef_driver_handle vi_dh,
+                              const ef_filter_cookie* filter_cookie,
+                              ef_filter_info* filter_info,
+                              size_t filter_info_size);
+
+
 /*! \brief Add a filter to a virtual interface set.
 **
 ** \param vi_set            The virtual interface set on which to add the
