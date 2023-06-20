@@ -177,7 +177,7 @@ static inline int efx_init_debugfs_channels(struct efx_nic *efx)
 	return 0;
 }
 static inline void efx_fini_debugfs_channels(struct efx_nic *efx) {}
-static inline int efx_init_debugfs(const char *module)
+static inline int efx_init_debugfs(void)
 {
 	return 0;
 }

@@ -78,7 +78,7 @@
  */
 
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,32)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,10,0)
 	#error "This kernel version is now unsupported"
 #endif
 
