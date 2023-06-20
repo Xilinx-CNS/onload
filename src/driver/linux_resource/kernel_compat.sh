@@ -165,7 +165,7 @@ EFRM_HUGETLB_FILE_SETUP_UCOUNTS	symtype	hugetlb_file_setup	include/linux/hugetlb
 EFRM_HUGETLB_FILE_SETUP_USER	symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, struct user_struct**, int, int)
 
 # TODO move onload-related stuff from net kernel_compat
-" | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
+" | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 
 ######################################################################
