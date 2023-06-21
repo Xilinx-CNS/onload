@@ -151,6 +151,17 @@ struct event_waiter
   int budget;
 };
 
+/* Ring memory mapping artifacts */
+struct ring_map {
+  int n_pages;
+  struct page** pages;
+  void* vmapped_addr;
+};
+
+/* Are rings allocated as physically-continuous memory (linux<6.3) or
+ * via vmalloc (linux>=6.3)? */
+static bool rings_are_physically_continuous = true;
+
 /* Per-VI AF_XDP resources */
 struct efhw_af_xdp_vi
 {
@@ -163,6 +174,8 @@ struct efhw_af_xdp_vi
   struct efab_af_xdp_offsets kernel_offsets;
   struct efhw_page user_offsets_page;
   struct event_waiter waiter;
+
+  struct ring_map ring_mapping[4];
 };
 
 struct protection_domain
@@ -564,7 +577,8 @@ static int xdp_create_ring(struct socket* sock,
                            int capacity, int desc_size, int sockopt, long pgoff,
                            const struct xdp_ring_offset* xdp_offset,
                            struct efab_af_xdp_offsets_ring* kern_offset,
-                           struct efab_af_xdp_offsets_ring* user_offset)
+                           struct efab_af_xdp_offsets_ring* user_offset,
+                           struct ring_map* ring_mapping)
 {
   int rc;
   unsigned long map_size, addr, pfn, pages;
@@ -592,15 +606,43 @@ static int xdp_create_ring(struct socket* sock,
     rc = -EFAULT;
   }
   else {
-    rc = follow_pfn(vma, addr, &pfn);
+    if( rings_are_physically_continuous )
+      rc = follow_pfn(vma, addr, &pfn);
     pages = (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
   }
   mmap_write_unlock(current->mm);
 
-  if( rc >= 0 ) {
-    ring_base = phys_to_virt(pfn << PAGE_SHIFT);
-    rc = efhw_page_map_add_lump(page_map, ring_base, pages);
+  if( ! rings_are_physically_continuous || rc == -EINVAL ) {
+    /* Probably the rings were vmalloc'ed, as in linux>=6.3 */
+
+    ring_mapping->pages = kzalloc(sizeof(struct page *) * pages, GFP_KERNEL);
+    if( ring_mapping->pages == NULL ) {
+      rc = -ENOMEM;
+    }
+    else {
+      mmap_read_lock(current->mm);
+      rc = pin_user_pages(addr, pages, FOLL_WRITE, ring_mapping->pages, NULL);
+      mmap_read_unlock(current->mm);
+
+      if( rc == pages )
+        ring_mapping->vmapped_addr = vmap(ring_mapping->pages,
+                                          pages, VM_MAP, PAGE_KERNEL);
+      else if( rc >= 0 )
+        rc = -EFAULT;
+    }
+
+    if( rc > 0 ) {
+      ring_mapping->n_pages = pages;
+      ring_base = ring_mapping->vmapped_addr;
+      if( rings_are_physically_continuous )
+        rings_are_physically_continuous = false;
+    }
   }
+  else if( rc >= 0 ) {
+    ring_base = phys_to_virt(pfn << PAGE_SHIFT);
+  }
+  if( rc >= 0 )
+    rc = efhw_page_map_add_lump(page_map, ring_base, pages);
 
   vm_munmap(addr, map_size);
 
@@ -623,7 +665,8 @@ static int xdp_create_rings(struct socket* sock,
                             struct efhw_page_map* page_map, void* kern_mem_base,
                             long rxq_capacity, long txq_capacity,
                             struct efab_af_xdp_offsets_rings* kern_offsets,
-                            struct efab_af_xdp_offsets_rings* user_offsets)
+                            struct efab_af_xdp_offsets_rings* user_offsets,
+                            struct ring_map* ring_mapping)
 {
   int rc;
   struct sys_call_area rw_area;
@@ -668,28 +711,32 @@ static int xdp_create_rings(struct socket* sock,
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        rxq_capacity, sizeof(struct xdp_desc),
                        XDP_RX_RING, XDP_PGOFF_RX_RING,
-                       &mmap_offsets->rx, &kern_offsets->rx, &user_offsets->rx);
+                       &mmap_offsets->rx, &kern_offsets->rx, &user_offsets->rx,
+                       ring_mapping++);
   if( rc < 0 )
     goto out;
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        txq_capacity, sizeof(struct xdp_desc),
                        XDP_TX_RING, XDP_PGOFF_TX_RING,
-                       &mmap_offsets->tx, &kern_offsets->tx, &user_offsets->tx);
+                       &mmap_offsets->tx, &kern_offsets->tx, &user_offsets->tx,
+                       ring_mapping++);
   if( rc < 0 )
     goto out;
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        rxq_capacity, sizeof(uint64_t),
                        XDP_UMEM_FILL_RING, XDP_UMEM_PGOFF_FILL_RING,
-                       &mmap_offsets->fr, &kern_offsets->fr, &user_offsets->fr);
+                       &mmap_offsets->fr, &kern_offsets->fr, &user_offsets->fr,
+                       ring_mapping++);
   if( rc < 0 )
     goto out;
 
   rc = xdp_create_ring(sock, page_map, kern_mem_base,
                        txq_capacity, sizeof(uint64_t),
                        XDP_UMEM_COMPLETION_RING, XDP_UMEM_PGOFF_COMPLETION_RING,
-                       &mmap_offsets->cr, &kern_offsets->cr, &user_offsets->cr);
+                       &mmap_offsets->cr, &kern_offsets->cr, &user_offsets->cr,
+                       ring_mapping);
   if( rc < 0 )
     goto out;
 
@@ -713,6 +760,8 @@ static void xdp_release_pd(struct efhw_nic* nic, int owner)
 
 static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 {
+  int i;
+
   if( !vi->sock )
     /* We expect uninitialized vi in cases where af_xdp_init()
      * has not been called after enabling evq.
@@ -739,6 +788,14 @@ static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 
   /* Release the resources attached to the socket */
   efhw_page_free(&vi->user_offsets_page);
+
+  for( i = 0; i < CI_ARRAY_SIZE(vi->ring_mapping); i++ ) {
+    if( vi->ring_mapping[i].n_pages > 0 ) {
+      vunmap(vi->ring_mapping[i].vmapped_addr);
+      unpin_user_pages(vi->ring_mapping[i].pages, vi->ring_mapping[i].n_pages);
+    }
+  }
+
   memset(vi, 0, sizeof(*vi));
 }
 
@@ -799,26 +856,27 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
 
   rc = efhw_page_alloc_zeroed(&vi->user_offsets_page);
   if( rc < 0 )
-    goto out_free_sock;
+    goto fail;
   user_offsets = (void*)efhw_page_ptr(&vi->user_offsets_page);
 
   rc = efhw_page_map_add_page(page_map, &vi->user_offsets_page);
   if( rc < 0 )
-    goto out_free_user_offsets;
+    goto fail;
 
   rc = xdp_register_umem(sock, &pd->umem, chunk_size, headroom);
   if( rc < 0 )
-    goto out_free_user_offsets;
+    goto fail;
 
   rc = xdp_create_rings(sock, page_map, &vi->kernel_offsets,
                         vi->rxq_capacity, vi->txq_capacity,
-                        &vi->kernel_offsets.rings, &user_offsets->rings);
+                        &vi->kernel_offsets.rings, &user_offsets->rings,
+                        vi->ring_mapping);
   if( rc < 0 )
-    goto out_free_user_offsets;
+    goto fail;
 
   rc = xdp_map_update(nic->arch_extra, instance, file);
   if( rc < 0 )
-    goto out_free_user_offsets;
+    goto fail;
 
   /* TODO AF_XDP: currently instance number matches net_device channel */
   rc = xdp_bind(sock, nic->net_dev->ifindex, instance, vi->flags);
@@ -835,7 +893,7 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
     rc = xdp_bind(sock, nic->net_dev->ifindex, instance, vi->flags);
   }
   if( rc < 0 )
-    goto xdp_bind_failed;
+    goto fail;
 
   if( vi->waiter.wait.func != NULL )
     add_wait_queue(sk_sleep(vi->sock->sk), &vi->waiter.wait);
@@ -843,12 +901,9 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   user_offsets->mmap_bytes = efhw_page_map_bytes(page_map);
   return 0;
 
- xdp_bind_failed:
- out_free_user_offsets:
-  efhw_page_free(&vi->user_offsets_page);
- out_free_sock:
-  fput(file);
-  memset(vi, 0, sizeof(*vi));
+ fail:
+  vi->waiter.wait.func = NULL;
+  xdp_release_vi(nic, vi);
   return rc;
 }
 

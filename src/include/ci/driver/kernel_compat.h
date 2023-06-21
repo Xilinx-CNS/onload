@@ -170,6 +170,14 @@ static inline void unpin_user_page(struct page *page)
 {
   put_page(page);
 }
+
+static inline void unpin_user_pages(struct page **pages, unsigned long npages)
+{
+  int i;
+
+  for( i = 0; i < npages; i++ )
+    put_page(pages[i]);
+}
 #endif
 
 #ifndef EFRM_GUP_HAS_DMA_PINNED
