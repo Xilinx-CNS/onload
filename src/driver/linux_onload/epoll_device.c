@@ -1153,6 +1153,7 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
 
     rc = oo_epoll1_spin_on(filp, other_filp, local_arg.timeout_us,
                                              local_arg.sleep_iter_us);
+    fput(other_filp);
 
     if( signal_pending(current) )
       rc = -EINTR;
@@ -1191,6 +1192,7 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
 #endif
 
     rc = oo_epoll1_block_on(filp, other_filp, local_arg.timeout_us);
+    fput(other_filp);
 
     if( signal_pending(current) )
       rc = -EINTR;
