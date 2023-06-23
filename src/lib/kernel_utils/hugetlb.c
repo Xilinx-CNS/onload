@@ -198,8 +198,14 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 
 	/* Did we get a good hugepage? */
 	if (rc != 1) {
-		EFRM_NOTICE("%s: Unable to pin page at 0x%016llx rc=%d",
-				__func__, allocator->offset, rc);
+		/* pin_user_pages can return EFAULT if a fatal signal is
+		 * raised at the wrong moment. Detect that case here to
+		 * avoid excessive logging noise. */
+		if (fatal_signal_pending(current))
+			rc = -EINTR;
+		else
+			EFRM_NOTICE("%s: Unable to pin page at 0x%016llx rc=%d",
+					__func__, allocator->offset, rc);
 		goto fail_vfs;
 	}
 
