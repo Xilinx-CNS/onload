@@ -162,6 +162,10 @@ static int oo_bufpage_alloc(struct oo_buffer_pages **pages_out,
         *pages_out = pages;
         return 0;
       }
+      if( rc == -EINTR ) {
+        oo_iobufset_kfree(pages);
+        return rc;
+      }
     }
 
     /* Failure path. */
@@ -252,7 +256,7 @@ oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
     rc = oo_bufpage_alloc(pages_out, order, low_order, min_order, flags,
                           gfp_flag, hugetlb_alloc);
 
-    if( rc != 0 && low_order != 0 )
+    if( rc != 0 && rc != -EINTR && low_order != 0 )
       rc = oo_bufpage_alloc(pages_out, order, 0, min_order, flags, gfp_flag,
                             hugetlb_alloc);
   }
