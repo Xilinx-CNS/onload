@@ -3086,11 +3086,16 @@ int ci_netif_init_fill_rx_rings(ci_netif* ni)
   oo_pkt_p pkt_list;
   int lim, rc, n_reserved, n_requested, n_accounted;
 
+  /* This could legitimately fail for AF_XDP, having already allocated all
+   * available buffers earlier in the initialisation process. So we check
+   * whether there has been a successful allocation at some point, rather than
+   * whether this particular attempt succeeds. */
   rc = ci_tcp_helper_more_bufs(ni);
   if( ni->packets->n_free == 0 ) {
-    LOG_E(ci_log("%s: [%d] ERROR: failed to allocate initial packet set: %d",
-                 __func__, NI_ID(ni), rc));
-    return -ENOMEM;
+    if( rc != -EINTR )
+      LOG_E(ci_log("%s: [%d] ERROR: failed to allocate initial packet set: %d",
+                   __func__, NI_ID(ni), rc));
+    return rc < 0 ? rc : -ENOMEM;
   }
   ni->packets->id = 0;
 
