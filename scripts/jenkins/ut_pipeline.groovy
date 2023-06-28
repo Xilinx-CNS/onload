@@ -219,7 +219,7 @@ void doUnitTestsPipeline() {
         echo("Profiles: ${build_profiles}")
 
         timeout(30) {
-          sh 'bundle install'
+          sh 'bundle check || bundle install'
         }
         def gcov = utils.rake(['build:which_gcov'], capture: true)
         gcovr_options = [
