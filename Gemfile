@@ -3,6 +3,5 @@
 
 source "https://rubygems.org"
 
-gem "mini_portile"
 gem "rake"
 gem "nokogiri"
