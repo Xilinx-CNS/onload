@@ -6742,9 +6742,10 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
      * allocation failure) and permanent failure (out of buffer table
      * entries).
      */
-    if( rc == -ENOSPC )
+    if( rc == -ENOSPC ) {
       efab_tcp_helper_no_more_bufs(trs);
-    else {
+    }
+    else if( rc != -EINTR ) {
       ++ni->state->stats.bufset_alloc_fails;
       NI_LOG(ni, RESOURCE_WARNINGS,
              FN_FMT "Failed to allocate packet buffers (%d)",
