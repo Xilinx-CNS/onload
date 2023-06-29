@@ -88,6 +88,10 @@ static int efct_handle_event(void *driver_data,
 {
   struct efhw_nic_efct *efct = (struct efhw_nic_efct *) driver_data;
 
+  /* Check we actually have a nic to act on before proceeding. */
+  if( ! efct->nic )
+    return 0;
+
   switch( event->type ) {
     case XLNX_EVENT_WAKEUP: {
       struct efhw_nic_efct_rxq* q = &efct->rxq[event->rxq];
@@ -361,6 +365,14 @@ int efct_probe(struct auxiliary_device *auxdev,
 
   mutex_init(&efct->driver_filters_mtx);
   efct->edev = edev;
+
+  /* As soon as we've opened the handle we can start getting callbacks through
+   * our supplied efct_ops. Most of these will only occur once we've actually
+   * attached to an RXQ, however handle_event can start happening straight
+   * away. To avoid trying to use a device we will check in that function
+   * whether efct->nic is initted, which is our final step of init. This
+   * occurs with the rtnl lock held, which is also held for the suspend/resume
+   * ops which require us to use it. */
   client = edev->ops->open(auxdev, &efct_ops, efct);
   if( IS_ERR(client) ) {
     rc = PTR_ERR(client);
@@ -399,6 +411,8 @@ int efct_probe(struct auxiliary_device *auxdev,
   nic->mtu = net_dev->mtu + ETH_HLEN;
   nic->arch_extra = efct;
   efct_nic_filter_init(efct);
+
+  /* Setting the nic here marks the device as ready for use. */
   efct->nic = nic;
 
   efrm_notify_nic_probe(net_dev);

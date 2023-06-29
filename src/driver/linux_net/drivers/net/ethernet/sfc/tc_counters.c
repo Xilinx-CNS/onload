@@ -312,9 +312,17 @@ static void efx_tc_counter_work(struct work_struct *work)
 		/* We have passed traffic using this ARP entry, so
 		 * indicate to the ARP cache that it's still active
 		 */
-		n = neigh_lookup(&arp_tbl, &encap->neigh->dst_ip,
-		/* XXX is this the right device? */
-				 encap->neigh->egdev);
+		if (encap->neigh->dst_ip)
+			n = neigh_lookup(&arp_tbl, &encap->neigh->dst_ip,
+					 encap->neigh->egdev);
+		else
+#ifdef CONFIG_IPV6
+			n = neigh_lookup(ipv6_stub->nd_tbl,
+					 &encap->neigh->dst_ip6,
+					 encap->neigh->egdev);
+#else
+			n = NULL;
+#endif
 		if (!n)
 			continue;
 
