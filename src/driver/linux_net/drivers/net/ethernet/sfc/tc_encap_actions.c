@@ -434,7 +434,7 @@ static void efx_gen_tun_header_ipv6(struct efx_tc_encap_action *encap, u8 ipprot
 	ip->daddr = key->u.ipv6.dst;
 	ip->saddr = key->u.ipv6.src;
 	ip->hop_limit = neigh->ttl;
-	ip->nexthdr = IPPROTO_UDP;
+	ip->nexthdr = ipproto;
 	ip->version = 0x6;
 	ip->payload_len = cpu_to_be16(len);
 }

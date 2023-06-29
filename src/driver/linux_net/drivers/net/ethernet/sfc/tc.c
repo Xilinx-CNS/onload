@@ -747,26 +747,18 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 #undef MAP_KEY_AND_MASK
 
 static void efx_tc_describe_encap_match(const struct efx_tc_encap_match *encap,
-					unsigned char ipv, char *outbuf,
-					size_t outlen)
+					bool ipv6, char *outbuf, size_t outlen)
 {
 	char buf[128], tbuf[48] = "";
 
-	switch (ipv) {
-	case 4:
-		snprintf(buf, sizeof(buf), "%pI4->%pI4",
-			 &encap->src_ip, &encap->dst_ip);
-		break;
 #ifdef CONFIG_IPV6
-	case 6:
+	if (ipv6)
 		snprintf(buf, sizeof(buf), "%pI6c->%pI6c",
 			 &encap->src_ip6, &encap->dst_ip6);
-		break;
+	else
 #endif
-	default: /* can't happen */
-		snprintf(buf, sizeof(buf), "[IP version %d, huh?]", ipv);
-		break;
-	}
+		snprintf(buf, sizeof(buf), "%pI4->%pI4",
+			 &encap->src_ip, &encap->dst_ip);
 
 	if (encap->ip_tos_mask)
 		snprintf(tbuf, sizeof(tbuf), " ToS %#x/%#04x",
@@ -801,7 +793,7 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 					    u8 child_ip_tos_mask)
 {
 	struct efx_tc_encap_match *encap, *old, *pseudo = NULL;
-	unsigned char ipv;
+	bool ipv6 = false;
 	int rc;
 
 	/* We require that the socket-defining fields (IP addrs and UDP dest
@@ -811,7 +803,6 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 	 * come up if we allowed masks or varying sets of match fields.
 	 */
 	if (match->mask.enc_dst_ip | match->mask.enc_src_ip) {
-		ipv = 4;
 		if (!IS_ALL_ONES(match->mask.enc_dst_ip)) {
 			efx_tc_err(efx, "Egress encap match is not exact on dst IP address\n");
 			return -EOPNOTSUPP;
@@ -826,11 +817,8 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			efx_tc_err(efx, "Egress encap match on both IPv4 and IPv6, don't understand\n");
 			return -EOPNOTSUPP;
 		}
-#endif
-	}
-#ifdef CONFIG_IPV6
-	else {
-		ipv = 6;
+	} else {
+		ipv6 = true;
 		if (!efx_ipv6_addr_all_ones(&match->mask.enc_dst_ip6)) {
 			efx_tc_err(efx, "Egress encap match is not exact on dst IP address\n");
 			return -EOPNOTSUPP;
@@ -839,8 +827,8 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			efx_tc_err(efx, "Egress encap match is not exact on src IP address\n");
 			return -EOPNOTSUPP;
 		}
-	}
 #endif
+	}
 	if (!IS_ALL_ONES(match->mask.enc_dport)) {
 		efx_tc_err(efx, "Egress encap match is not exact on dst UDP port\n");
 		return -EOPNOTSUPP;
@@ -871,9 +859,10 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 		goto fail_pseudo;
 	}
 
-	rc = efx_mae_check_encap_match_caps(efx, ipv, match->mask.enc_ip_tos);
+	rc = efx_mae_check_encap_match_caps(efx, ipv6, match->mask.enc_ip_tos);
 	if (rc) {
-		efx_tc_err(efx, "MAE hw reports no support for IPv%d encap matches\n", ipv);
+		efx_tc_err(efx, "MAE hw reports no support for IPv%d encap matches\n",
+			   ipv6 ? 6 : 4);
 		goto fail_pseudo;
 	}
 
@@ -882,23 +871,12 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 		rc = -ENOMEM;
 		goto fail_pseudo;
 	}
-	switch (ipv) {
-	case 4:
-		encap->src_ip = match->value.enc_src_ip;
-		encap->dst_ip = match->value.enc_dst_ip;
-		break;
+	encap->src_ip = match->value.enc_src_ip;
+	encap->dst_ip = match->value.enc_dst_ip;
 #ifdef CONFIG_IPV6
-	case 6:
-		encap->src_ip6 = match->value.enc_src_ip6;
-		encap->dst_ip6 = match->value.enc_dst_ip6;
-		break;
+	encap->src_ip6 = match->value.enc_src_ip6;
+	encap->dst_ip6 = match->value.enc_dst_ip6;
 #endif
-	default: /* can't happen */
-		netif_err(efx, hw, efx->net_dev, "Egress encap match is IP version %d, huh?\n", ipv);
-		kfree(encap);
-		rc = -EOPNOTSUPP;
-		goto fail_pseudo;
-	}
 	encap->udp_dport = match->value.enc_dport;
 	encap->tun_type = type;
 	encap->ip_tos = match->value.enc_ip_tos;
@@ -912,6 +890,8 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 	if (old) {
 		/* don't need our new entry */
 		kfree(encap);
+		if (pseudo) /* don't need our new pseudo either */
+			efx_tc_flower_release_encap_match(efx, pseudo);
 		switch (old->type) {
 		case EFX_TC_EM_DIRECT:
 			/* old EM is in hardware, so mustn't overlap with a
@@ -921,8 +901,7 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 				break;
 			netif_err(efx, drv, efx->net_dev,
 				  "Pseudo encap match conflicts with existing direct entry\n");
-			rc = -EEXIST;
-			goto fail_pseudo;
+			return -EEXIST;
 		case EFX_TC_EM_PSEUDO_OR:
 			/* old EM corresponds to an OR that has to be unique
 			 * (it must not overlap with any other OR, whether
@@ -930,9 +909,8 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			 */
 			netif_err(efx, drv, efx->net_dev,
 				  "%s encap match conflicts with existing pseudo(OR) entry\n",
-				  encap->type ? "Pseudo" : "Direct");
-			rc = -EEXIST;
-			goto fail_pseudo;
+				  em_type ? "Pseudo" : "Direct");
+			return -EEXIST;
 		case EFX_TC_EM_PSEUDO_TOS:
 			/* old EM is protecting a ToS-qualified filter, so may
 			 * only be shared with another pseudo for the same
@@ -941,41 +919,35 @@ static int efx_tc_flower_record_encap_match(struct efx_nic *efx,
 			if (em_type != EFX_TC_EM_PSEUDO_TOS) {
 				netif_err(efx, drv, efx->net_dev,
 					  "%s encap match conflicts with existing pseudo(TOS) entry\n",
-					  encap->type ? "Pseudo" : "Direct");
-				rc = -EEXIST;
-				goto fail_pseudo;
+					  em_type ? "Pseudo" : "Direct");
+				return -EEXIST;
 			}
 			if (child_ip_tos_mask != old->child_ip_tos_mask) {
 				netif_err(efx, drv, efx->net_dev,
 					  "Pseudo encap match for TOS mask %#04x conflicts with existing pseudo(TOS) entry for mask %#04x\n",
 					  child_ip_tos_mask,
 					  old->child_ip_tos_mask);
-				rc = -EEXIST;
-				goto fail_pseudo;
+				return -EEXIST;
 			}
 			break;
 		default: /* Unrecognised pseudo-type.  Just say no */
 			netif_err(efx, drv, efx->net_dev,
 				  "%s encap match conflicts with existing pseudo(%d) entry\n",
-				  encap->type ? "Pseudo" : "Direct", old->type);
-			rc = -EEXIST;
-			goto fail_pseudo;
+				  em_type ? "Pseudo" : "Direct", old->type);
+			return -EEXIST;
 		}
 		if (old->tun_type != type) {
 			netif_err(efx, drv, efx->net_dev, "Egress encap match with conflicting tun_type\n");
-			rc = -EEXIST;
-			goto fail_pseudo;
+			return -EEXIST;
 		}
-		if (!refcount_inc_not_zero(&old->ref)) {
-			rc = -EAGAIN;
-			goto fail_pseudo;
-		}
+		if (!refcount_inc_not_zero(&old->ref))
+			return -EAGAIN;
 		/* existing entry found */
 		encap = old;
 	} else {
 		char buf[192];
 
-		efx_tc_describe_encap_match(encap, ipv, buf, sizeof(buf));
+		efx_tc_describe_encap_match(encap, ipv6, buf, sizeof(buf));
 
 		if (em_type == EFX_TC_EM_DIRECT) {
 			rc = efx_mae_register_encap_match(efx, encap);
@@ -1004,19 +976,14 @@ fail_pseudo:
 static void efx_tc_flower_release_encap_match(struct efx_nic *efx,
 					      struct efx_tc_encap_match *encap)
 {
-	unsigned char ipv = 4;
+	bool ipv6 = !(encap->src_ip | encap->dst_ip);
 	char buf[192];
 	int rc;
 
 	if (!refcount_dec_and_test(&encap->ref))
 		return; /* still in use */
 
-#ifdef CONFIG_IPV6
-	if (!(encap->src_ip | encap->dst_ip))
-		ipv = 6;
-#endif
-
-	efx_tc_describe_encap_match(encap, ipv, buf, sizeof(buf));
+	efx_tc_describe_encap_match(encap, ipv6, buf, sizeof(buf));
 
 	if (encap->type == EFX_TC_EM_DIRECT) {
 		rc = efx_mae_unregister_encap_match(efx, encap);
@@ -1953,9 +1920,10 @@ release:
 	if (act)
 		efx_tc_free_action_set(efx, act, false);
 	if (rule) {
-		rhashtable_remove_fast(&efx->tc->match_action_ht,
-				       &rule->linkage,
-				       efx_tc_match_action_ht_params);
+		if (!old)
+			rhashtable_remove_fast(&efx->tc->match_action_ht,
+					       &rule->linkage,
+					       efx_tc_match_action_ht_params);
 		efx_tc_free_action_set_list(efx, &rule->acts, false);
 	}
 	kfree(rule);
@@ -2369,8 +2337,8 @@ static int efx_tc_flower_replace(struct efx_nic *efx,
 #else
 	struct netlink_ext_ack *extack = NULL;
 #endif
+	struct efx_tc_flow_rule *rule = NULL, *old = NULL;
 	const struct ip_tunnel_info *encap_info = NULL;
-	struct efx_tc_flow_rule *rule = NULL, *old;
 	struct efx_tc_mangler_state mung = {};
 	struct efx_tc_action_set *act = NULL;
 	const struct flow_action_entry *fa;
@@ -2895,9 +2863,10 @@ release:
 	if (act)
 		efx_tc_free_action_set(efx, act, false);
 	if (rule) {
-		rhashtable_remove_fast(&efx->tc->match_action_ht,
-				       &rule->linkage,
-				       efx_tc_match_action_ht_params);
+		if (!old)
+			rhashtable_remove_fast(&efx->tc->match_action_ht,
+					       &rule->linkage,
+					       efx_tc_match_action_ht_params);
 		efx_tc_free_action_set_list(efx, &rule->acts, false);
 	}
 	kfree(rule);

@@ -1018,7 +1018,7 @@ int efx_mae_match_check_caps_lhs(struct efx_nic *efx,
 /* Checks that the fields needed for encap-rule matches are supported by the
  * MAE.  All the fields are exact-match, except possibly ENC_IP_TOS.
  */
-int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv,
+int efx_mae_check_encap_match_caps(struct efx_nic *efx, bool ipv6,
 				   u8 ip_tos_mask)
 {
 	u8 *supported_fields = efx->tc->caps->outer_rule_fields;
@@ -1026,18 +1026,12 @@ int efx_mae_check_encap_match_caps(struct efx_nic *efx, unsigned char ipv,
 	int rc;
 
 	CHECK(ENC_ETHER_TYPE);
-	switch (ipv) {
-	case 4:
-		CHECK(ENC_SRC_IP4);
-		CHECK(ENC_DST_IP4);
-		break;
-	case 6:
+	if (ipv6) {
 		CHECK(ENC_SRC_IP6);
 		CHECK(ENC_DST_IP6);
-		break;
-	default: /* shouldn't happen */
-		EFX_WARN_ON_PARANOID(1);
-		break;
+	} else {
+		CHECK(ENC_SRC_IP4);
+		CHECK(ENC_DST_IP4);
 	}
 	CHECK(ENC_L4_DPORT);
 	CHECK(ENC_IP_PROTO);

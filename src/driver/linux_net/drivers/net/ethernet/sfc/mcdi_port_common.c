@@ -1885,6 +1885,7 @@ static u8 efx_mcdi_phy_connector(struct efx_nic *efx)
 
 	/* Check connector type (SFF-8024 table 4-3). */
 	switch (connector) {
+	case 0x07: /* LC (Lucent connector) */
 	case 0x0b: /* Optical pigtail */
 		return PORT_FIBRE;
 	case 0x21: /* Copper pigtail */

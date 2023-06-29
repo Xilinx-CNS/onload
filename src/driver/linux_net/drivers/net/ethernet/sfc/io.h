@@ -64,48 +64,6 @@ static inline u32 efx_reg(struct efx_nic *efx, unsigned int reg)
 	return efx->reg_base + reg;
 }
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_X86_64)
-static inline void _efx_writeo(struct efx_nic *efx, __le64 value[2],
-			       unsigned int reg)
-{
-	unsigned long cr0;
-	__le64 xmm_save[2];
-	void __iomem *addr = efx_mem(efx, reg);
-
-	preempt_disable();
-
-	/* Save the xmm0 register to stack */
-	asm volatile(
-		"movq %%cr0,%0          ;\n\t"
-		"clts                   ;\n\t"
-		"movups %%xmm0,(%1)     ;\n\t"
-		: "=&r" (cr0)
-		: "r" (xmm_save)
-		: "memory");
-
-	/* First read the data into register xmm0
-	 * Then write this out to the address that was given
-	 */
-	asm volatile(
-		"movdqu %1,%%xmm0       ;\n\t"
-		"movdqa %%xmm0,%0       ;\n\t"
-		: "=m" (*(unsigned long __force *)addr)
-		: "m" (*value)
-		: "memory");
-
-	/* Restore the xmm0 register */
-	asm volatile(
-		"sfence                 ;\n\t"
-		"movups (%1),%%xmm0     ;\n\t"
-		"movq   %0,%%cr0        ;\n\t"
-		:
-		: "r" (cr0), "r" (xmm_save)
-		: "memory");
-
-	preempt_enable();
-}
-#endif /* EFX_NOT_UPSTREAM && CONFIG_X86_64 */
-
 #ifdef EFX_USE_QWORD_IO
 static inline void _efx_writeq(struct efx_nic *efx, __le64 value,
 				  unsigned int reg)
@@ -254,25 +212,7 @@ static inline unsigned int efx_paged_reg(struct efx_nic *efx, unsigned int page,
 static inline void _efx_writeo_page(struct efx_nic *efx, efx_oword_t *value,
 				    unsigned int reg, unsigned int page)
 {
-	reg = efx_paged_reg(efx, page, reg);
-
-	netif_vdbg(efx, hw, efx->net_dev,
-		   "writing register %x with " EFX_OWORD_FMT "\n", reg,
-		   EFX_OWORD_VAL(*value));
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_X86_64)
-	_efx_writeo(efx, value->u64, reg + 0);
-#else
-#ifdef EFX_USE_QWORD_IO
-	_efx_writeq(efx, value->u64[0], reg + 0);
-	_efx_writeq(efx, value->u64[1], reg + 8);
-#else
-	_efx_writed(efx, value->u32[0], reg + 0);
-	_efx_writed(efx, value->u32[1], reg + 4);
-	_efx_writed(efx, value->u32[2], reg + 8);
-	_efx_writed(efx, value->u32[3], reg + 12);
-#endif
-#endif
+	efx_writeo(efx, value, efx_paged_reg(efx, page, reg));
 }
 #define efx_writeo_page(efx, value, reg, page)				\
 	_efx_writeo_page(efx, value,					\
