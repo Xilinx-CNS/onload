@@ -206,15 +206,17 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
   errhdr.ee.ee_errno = ENOMSG;
   errhdr.ee.ee_origin = SO_EE_ORIGIN_TIMESTAMPING;
   errhdr.ee.ee_info = 0;
-  if( proto == IPPROTO_TCP ) {
-    errhdr.ee.ee_data = pkt->pf.tcp_tx.end_seq - 1 - s->ts_key;
-    /* FIN and SYN eat seq space, but the user is not interested in them */
-    if( TX_PKT_IPX_TCP(ipcache_af(&s->pkt), pkt)->tcp_flags &
-        (CI_TCP_FLAG_SYN|CI_TCP_FLAG_FIN) )
-      errhdr.ee.ee_data--;
-  }
-  else {
-    errhdr.ee.ee_data = pkt->ts_key;
+  if( s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_OPT_ID ) {
+    if( proto == IPPROTO_TCP ) {
+      errhdr.ee.ee_data = pkt->pf.tcp_tx.end_seq - 1 - s->ts_key;
+      /* FIN and SYN eat seq space, but the user is not interested in them */
+      if( TX_PKT_IPX_TCP(ipcache_af(&s->pkt), pkt)->tcp_flags &
+          (CI_TCP_FLAG_SYN|CI_TCP_FLAG_FIN) )
+        errhdr.ee.ee_data--;
+    }
+    else {
+      errhdr.ee.ee_data = pkt->ts_key;
+    }
   }
 
   if( s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_OPT_CMSG ) {
