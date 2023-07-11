@@ -911,7 +911,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
         break;
       }
 
-      efct_rx_discard(qid, pkt_id, discard_flags, header, &evs[i]);
+      efct_rx_discard(shm->qid, pkt_id, discard_flags, header, &evs[i]);
     }
     else {
       /* For simplicity, require configuration for a fixed data offset.
@@ -924,7 +924,10 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
       evs[i].rx_ref.type = EF_EVENT_TYPE_RX_REF;
       evs[i].rx_ref.len = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_PACKET_LENGTH);
       evs[i].rx_ref.pkt_id = pkt_id;
-      evs[i].rx_ref.q_id = qid;
+      /* q_id should technically be set to the queue label, however currently
+       * we don't allow the label to be changed so it's always the hardware
+       * qid */
+      evs[i].rx_ref.q_id = shm->qid;
       evs[i].rx_ref.filter_id = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_FILTER);
       evs[i].rx_ref.user = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_USER);
     }
