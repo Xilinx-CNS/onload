@@ -45,13 +45,21 @@ $(OBJECTS): % : $$(@D)/.unit_test_dir
 	@mkdir -p $(@D)
 	@touch $@
 
+# Attempting to ignore unresolved symbols at link time will fail if building
+# a position-independent executable (PIE). Different compiler versions have
+# different requirements to specify this:
+# - if there is a -no-pie option, we must use that as the default may be PIE
+# - otherwise, we don't specify PIE, and hope that the default is non-PIE
+NO_PIE = $(shell echo 'int main(void){return 0;}' | \
+                 $(CC) -x c -no-pie - -o /dev/null 2>/dev/null && echo -no-pie)
+
 # Test programs are linked with the object under test, and stub dependencies.
 #
 # CAVEAT: the fragmented build system means that the object under test will NOT
 # be rebuilt if out of date. A top-level build is needed to make sure it's up
 # to date before building the tests. This sadly means we can't reliably run an
 # invididual test without waiting for several seconds of flappery first.
-$(TARGETS): MMAKE_DIR_LINKFLAGS += -Wl,--unresolved-symbols=ignore-all -no-pie
+$(TARGETS): MMAKE_DIR_LINKFLAGS += -Wl,--unresolved-symbols=ignore-all $(NO_PIE)
 $(filter lib/%, $(TARGETS)): $$(call lib_object,$$@)
 $(TARGETS): %: %.o stubs.o
 	$(MMakeLinkCApp)
