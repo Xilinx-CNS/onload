@@ -159,8 +159,9 @@ ut_check_mem(const char* file, int line,
              const unsigned char* lptr, const unsigned char* rptr,
              long long bytes)
 {
+  long long i;
   ++checks_total;
-  for( long long i = 0; i < bytes; ++i ) {
+  for( i = 0; i < bytes; ++i ) {
     if( lptr[i] != rptr[i] ) {
       ++checks_failed;
       fprintf(stderr,
