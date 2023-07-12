@@ -1057,6 +1057,14 @@ enum ef_filter_info_fields {
   EF_FILTER_FIELD_QUEUE = 0x0002,
 };
 
+/*! \brief Flags set for the ef_filter_info::flags bitmask */
+enum ef_filter_info_flags {
+  /*! The inserted filter has been marked as exclusive under the conditions
+   ** defined by EF_FILTER_FLAG_EXCLUSIVE_RXQ.
+   */
+  EF_FILTER_IS_EXCLUSIVE = 0x0004
+};
+
 /*! \brief Output information from the ef_vi_filter_query() function */
 typedef struct ef_filter_info {
   /*! A bitmask of ef_filter_info_fields values indicating which of the
@@ -1068,8 +1076,10 @@ typedef struct ef_filter_info {
   ** VI.
   */
   uint64_t valid_fields;
-  /*! Bitmask of additional flags about the filter. Always 0: no flags are
-   ** currently defined.
+  /*! Bitmask of additional flags about the filter that describe properties
+   ** of a given filter.
+   **
+   ** For further detail on these properties, please see ef_filter_info_flags.
    */
   unsigned flags;
   /*! A hardware-assigned unique identifier of this filter, which may be

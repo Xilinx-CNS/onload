@@ -607,6 +607,7 @@ int ef_vi_filter_query(ef_vi* vi, ef_driver_handle vi_dh,
     filter_info->valid_fields |= EF_FILTER_FIELD_QUEUE;
     filter_info->q_id = op.u.filter_query.out_rxq;
   }
+  filter_info->flags = op.u.filter_query.out_flags;
   return 0;
 }
 

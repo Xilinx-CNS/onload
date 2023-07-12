@@ -1444,6 +1444,7 @@ efct_filter_query(struct efhw_nic *nic, int filter_id,
   struct efhw_nic_efct *efct = nic->arch_extra;
   int rc;
   struct efct_filter_node *node;
+  int exclusivity_id = 0;
 
   mutex_lock(&efct->driver_filters_mtx);
   node = lookup_filter_by_id(efct, filter_id, NULL);
@@ -1453,6 +1454,9 @@ efct_filter_query(struct efhw_nic *nic, int filter_id,
   else if( node->hw_filter >= 0 ) {
     info->hw_id = efct->hw_filters[node->hw_filter].hw_id;
     info->rxq = efct->hw_filters[node->hw_filter].rxq;
+    exclusivity_id = efct->exclusive_rxq_mapping[info->rxq];
+    if ( exclusivity_id != 0 && exclusivity_id != EFHW_PD_NON_EXC_TOKEN )
+      info->flags |= EFHW_FILTER_F_IS_EXCL;
     rc = 0;
   }
   else {
@@ -1461,6 +1465,7 @@ efct_filter_query(struct efhw_nic *nic, int filter_id,
      * queue 0 and the filter exists only in software to tell the kernel
      * networking stack to ignore these packets. */
     info->rxq = 0;
+    info->flags = 0;
     rc = 0;
   }
   mutex_unlock(&efct->driver_filters_mtx);

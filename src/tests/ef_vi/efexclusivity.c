@@ -77,6 +77,22 @@ static int filter_add(ef_vi* vi, bool exclusive, int rxq_no, uint32_t raddr_he, 
   return rc;
 }
 
+static int check_filter(ef_vi* vi, bool expected_exclusive, ef_filter_cookie* cookie)
+{
+  ef_filter_info filter_info = {};
+  int expected_flag = (expected_exclusive ? EF_FILTER_IS_EXCLUSIVE : 0);
+
+  TRY(ef_vi_filter_query(vi, driver_handle, cookie, &filter_info, sizeof(filter_info)));
+
+  if ( ( filter_info.flags & EF_FILTER_IS_EXCLUSIVE ) != expected_flag ) {
+      fprintf(stderr, "Inserted filter failed to be marked with the correct exclusivity state.");
+      fprintf(stderr, "filter_flags %d, expected_exclusivity %d \n", filter_info.flags, expected_exclusive);
+      return -EINVAL;
+  }
+
+  return 0;
+}
+
 static void filter_del(ef_vi* vi, ef_filter_cookie* cookie) {
   TRY(ef_vi_filter_del(vi, driver_handle, cookie));
 }
@@ -89,7 +105,8 @@ static const int do_test(int ifindex, struct efexclusivity_vi* exclusivity_vi, v
   enum ef_pd_flags pd_flags = 0;
   enum ef_vi_flags vi_flags = cfg_vi_flags;
   int rc;
-  ef_filter_cookie cookie = {0, 0};
+  ef_filter_cookie fst_cookie = {};
+  ef_filter_cookie snd_cookie = {};
 
   uint32_t raddr_he = 0xac010203;
   uint16_t port_he = 8080;
@@ -113,14 +130,19 @@ static const int do_test(int ifindex, struct efexclusivity_vi* exclusivity_vi, v
       TRY( rc );
   }
 
-  rc = filter_add(vi, cfg_excl & 1, cfg_fst_rxq_no, raddr_he, port_he, &cookie, 1);
-
+  rc = filter_add(vi, cfg_excl & 1, cfg_fst_rxq_no, raddr_he, port_he, &fst_cookie, 1);
   if ( rc == 0 ) {
-    if ( cfg_delete_fst )
-      filter_del(vi, &cookie);
 
-    if ( snd_filter_enabled )
-      rc = filter_add(vi, cfg_excl & 2, cfg_snd_rxq_no, raddr_he + 1, port_he + 1, NULL, 2);
+    TRY( check_filter(vi, cfg_excl & 1, &fst_cookie) );
+
+    if ( cfg_delete_fst )
+      filter_del(vi, &fst_cookie);
+
+    if ( snd_filter_enabled ) {
+      rc = filter_add(vi, cfg_excl & 2, cfg_snd_rxq_no, raddr_he + 1, port_he + 1, &snd_cookie, 2);
+      if ( rc == 0 )
+        TRY( check_filter(vi, cfg_excl & 2, &snd_cookie) );
+    }
 
     if ( rc == 0 && cfg_timeout > 0 )
       sleep(cfg_timeout);

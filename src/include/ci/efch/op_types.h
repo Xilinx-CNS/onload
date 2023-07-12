@@ -275,6 +275,7 @@ typedef struct ci_resource_op_s {
       int32_t           filter_id;
       int32_t           out_rxq;
       int32_t           out_hw_id;
+      int32_t           out_flags;
     } filter_query;
     struct {
       int32_t           out_rx_ts_correction;
