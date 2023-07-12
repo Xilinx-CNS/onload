@@ -19,3 +19,8 @@ Description: source for the #TYPE# driver.
  This package provides the source code for the #TYPE# kernel modules.
  The #TYPE# package is also required in order to make use of these
  modules. Kernel source or headers are required to compile these modules.
+
+Package: #TYPE#-dkms
+Architecture: all
+Depends: dkms, #TYPE#-user (>= ${source:Version}), #TYPE#-user (<< ${source:Version}.1~), ${misc:Depends}
+Description: Onload debian package with DKMS

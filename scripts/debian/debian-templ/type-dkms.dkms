@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# SPDX-FileCopyrightText: (c) Copyright 2023 Advanced Micro Devices, Inc.
+
+PACKAGE_NAME=openonload
+PACKAGE_VERSION=
+
+# Items below here should not have to change with each driver version.
+# We quote make to avoid a misfeature of DKMS which adds a definition
+# of KERNELRELEASE, which should only be defined by kbuild.
+if which onload_uninstall >/dev/null 2>&1; then
+  MAKE[0]="${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build/scripts/onload_install --kernelfiles --newkernel ${kernelver}"
+else
+  MAKE[0]="${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build/scripts/onload_install --kernelfiles --kernelver ${kernelver}"
+fi
+
+#CLEAN="${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/source/scripts/onload_misc/onload_uninstall"
+
+# DKMS does not rely on overriding in-tree modules by installing new
+# modules in a specific directory; instead it moves the in-tree module
+# out of the way.
+
+# DEST_MODULE_LOCATION is usually overridden on installation according
+# to distribution conventions.  However, it is used on uninstallation
+# to move the in-tree module back into the right place.  So if there
+# is an in-tree module make sure it's set appropriately.
+
+BUILT_MODULE_NAME[0]="sfc_driverlink"
+BUILT_MODULE_NAME[1]="sfc"
+BUILT_MODULE_NAME[2]="sfc_resource"
+BUILT_MODULE_NAME[3]="sfc_char"
+BUILT_MODULE_NAME[4]="onload"
+
+BUILT_MODULE_LOCATION[0]="build/${arch}_linux-${kernelver}/driver/linux"
+BUILT_MODULE_LOCATION[1]="build/${arch}_linux-${kernelver}/driver/linux"
+BUILT_MODULE_LOCATION[2]="build/${arch}_linux-${kernelver}/driver/linux"
+BUILT_MODULE_LOCATION[3]="build/${arch}_linux-${kernelver}/driver/linux"
+BUILT_MODULE_LOCATION[4]="build/${arch}_linux-${kernelver}/driver/linux"
+
+DEST_MODULE_LOCATION[0]="/extra"
+DEST_MODULE_LOCATION[1]="/extra"
+DEST_MODULE_LOCATION[2]="/extra"
+DEST_MODULE_LOCATION[3]="/extra"
+DEST_MODULE_LOCATION[4]="/extra"
+
+if grep -q "^CONFIG_SFC=m" "${kernel_source_dir}/.config" 2>/dev/null; then
+  DEST_MODULE_LOCATION[1]="/kernel/drivers/net/"
+else
+  DEST_MODULE_LOCATION[1]="/extra"
+fi
+
+AUTOINSTALL="yes"

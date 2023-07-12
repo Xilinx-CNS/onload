@@ -86,7 +86,11 @@ try mkdir -p $tempfile/$onloaddir/debian
 for i in $(find $TOP/debian/debian-templ/* -type f); do
   try sed -e "s/#VERSION#/$onloadver/g" -e "s/#TYPE#/$onloadtype/g" -e "s/#SOVERSION#/${soversion}/g" -e "s/#BUILDPROFILE#/${buildprofile}/g" < $i > "${tempfile}/${onloaddir}/debian/$(basename $i)";
 done
-try mv "${tempfile}/${onloaddir}/debian/type-user.shlibs" "${tempfile}/${onloaddir}/debian/${onloadtype}-user.shlibs"
+
+for i in $(find "${tempfile}"/"${onloaddir}"/debian/type-* -type f); do
+  ni=$(basename "$i" | sed -e "s/type/${onloadtype}/g")
+  try mv "$i" "${tempfile}/${onloaddir}/debian/$ni"
+done
 
 # Format is in a separate directory and can't have replacements, just copy it
 # separately
