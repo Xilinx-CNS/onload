@@ -29,9 +29,9 @@ static void pkt_append(ci_ip_pkt_fmt* pkt, const void* data, int len)
 
 static void pkt_udp(ci_ip_pkt_fmt* pkt, const void* data, int len)
 {
-  struct oo_eth_hdr eth = {0};
-  ci_ip4_hdr ip4 = {0};
-  ci_udp_hdr udp = {0};
+  struct oo_eth_hdr eth = {};
+  ci_ip4_hdr ip4 = {};
+  ci_udp_hdr udp = {};
 
   eth.ether_type = 0x0008;
   ip4.ip_ihl_version = 0x45;

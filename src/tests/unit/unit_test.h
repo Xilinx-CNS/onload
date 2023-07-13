@@ -26,7 +26,7 @@
 
 /* End a test suite, exiting the program with 0 for success, 1 for failure */
 #define TEST_END() \
-  ut_test_end()
+  return ut_test_end()
 
 
 /* Checking values within tests
@@ -117,15 +117,15 @@ static inline void ut_test_run(const char* name, void (*fn)(void))
   fn();
 }
 
-static inline void ut_test_end(void)
+static inline int ut_test_end(void)
 {
   if( checks_failed == 0 ) {
     fprintf(stderr, "Passed %d checks\n", checks_total);
-    exit(0);
+    return 0;
   }
   else {
     fprintf(stderr, "FAILED %d/%d checks\n", checks_failed, checks_total);
-    exit(1);
+    return 1;
   }
 }
 
