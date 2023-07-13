@@ -43,7 +43,7 @@
 #undef EFX_USE_OVERLAY_TX_CSUM
 #endif
 
-static unsigned int tx_push_max_fill = 0x1;
+static unsigned int tx_push_max_fill = 0xffffffff;
 module_param(tx_push_max_fill, uint, 0444);
 MODULE_PARM_DESC(tx_push_max_fill,
 		 "[SFC9100-family] Only use Tx push when the queue is below "
