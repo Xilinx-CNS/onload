@@ -90,6 +90,14 @@ types are:
   SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE
 
 
+DKMS packaging for Debian
+-------------------------
+
+Added the option for Debian users to install the kernel modules for
+onload using DKMS. This is provided as an alternative to using the
+existing source installation via module-assistant.
+
+
 Unsupported SN1000 functionality removed
 ----------------------------------------
 
