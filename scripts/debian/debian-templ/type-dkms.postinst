@@ -2,8 +2,8 @@
 # SPDX-FileCopyrightText: (c) Copyright 2023 Advanced Micro Devices, Inc.
 
 # Unpack onload.tar.bz2
-cd /usr/src && bzip2 -d onload.tar.bz2 && tar xf onload.tar
-rm -f /usr/src/onload.tar
+cd /usr/src && bzip2 -d #TYPE#.tar.bz2 && tar xf #TYPE#.tar
+rm -f /usr/src/#TYPE#.tar
 
 # Put the DKMS config file in the right place
 sed -e "s/^PACKAGE_VERSION=.*/PACKAGE_VERSION=#VERSION#/" -e "s/openonload/#TYPE#/g" \
