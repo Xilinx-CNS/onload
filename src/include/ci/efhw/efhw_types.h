@@ -159,6 +159,7 @@ struct efhw_vi_constraints {
 struct efhw_filter_info {
 	int rxq;
 	int hw_id;
+	int flags;
 };
 
 /**********************************************************************
@@ -197,6 +198,8 @@ struct efx_filter_spec;
 #define EFHW_FILTER_F_EXCL_RXQ 0x0008
 
 #define EFHW_PD_NON_EXC_TOKEN 0xFFFFFFFF
+
+#define EFHW_FILTER_F_IS_EXCL 0x0004
 
 /*--------------------------------------------------------------------
  *

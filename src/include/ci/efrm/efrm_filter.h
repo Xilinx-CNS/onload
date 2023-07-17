@@ -65,7 +65,7 @@ extern void efrm_filter_remove(struct efrm_client *, int filter_id);
 extern int efrm_filter_redirect(struct efrm_client *,
 				int filter_id, struct efx_filter_spec *spec);
 extern int efrm_filter_query(struct efrm_client *, int filter_id, int *rxq,
-                             int *hw_id);
+                             int *hw_id, int* flags);
 extern int efrm_filter_block_kernel(struct efrm_client *client, int flags,
                                     bool block);
 extern int efrm_ethtool_filter_remove(struct net_device* dev, int filter_id);

@@ -2171,14 +2171,15 @@ EXPORT_SYMBOL(efrm_filter_redirect);
 
 
 int efrm_filter_query(struct efrm_client *client, int filter_id, int *rxq,
-                      int *hw_id)
+                      int *hw_id, int* flags)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	struct efhw_filter_info info = {.rxq = -1, .hw_id = -1};
+	struct efhw_filter_info info = {.rxq = -1, .hw_id = -1, .flags = 0};
 	int rc = efhw_nic_filter_query(efhw_nic, filter_id, &info);
 	/* No reason not to set these unconditionally (i.e. ignore rc): */
 	*rxq = info.rxq;
 	*hw_id = info.hw_id;
+	*flags = info.flags;
 	return rc;
 }
 EXPORT_SYMBOL(efrm_filter_query);
