@@ -198,8 +198,9 @@ static int efct_alloc_hugepage(void *driver_data,
   rc = oo_hugetlb_page_alloc_raw(efct_hugetlb_alloc,
                                  &result.file, &result.page);
   if( rc ) {
-    EFHW_ERR("%s: ERROR: unable to allocate hugepage for rxq (%d)",
-             __func__, rc);
+    if( rc != -EINTR )
+      EFHW_ERR("%s: ERROR: unable to allocate hugepage for rxq (%d)",
+               __func__, rc);
     return rc;
   }
 
