@@ -8,9 +8,9 @@ PACKAGE_VERSION=
 # We quote make to avoid a misfeature of DKMS which adds a definition
 # of KERNELRELEASE, which should only be defined by kbuild.
 if which onload_uninstall >/dev/null 2>&1; then
-  MAKE[0]="${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build/scripts/onload_install --kernelfiles --newkernel ${kernelver}"
+  MAKE[0]="${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build/scripts/onload_install --kernelfiles --newkernel ${kernelver} #BUILDPROFILE#"
 else
-  MAKE[0]="${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build/scripts/onload_install --kernelfiles --kernelver ${kernelver}"
+  MAKE[0]="${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/build/scripts/onload_install --kernelfiles --kernelver ${kernelver} #BUILDPROFILE#"
 fi
 
 #CLEAN="${dkms_tree}/${PACKAGE_NAME}/${PACKAGE_VERSION}/source/scripts/onload_misc/onload_uninstall"
