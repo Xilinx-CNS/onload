@@ -169,6 +169,8 @@ try cp "$TOP/scripts/onload_misc/openonload.dkms-spec" "$RPM/SPECS/openonload-dk
 
 if [ "$product" != "openonload" ]; then
   try sed -i -e " s/openonload/$product/g" "$RPM/SPECS/openonload-dkms.spec"
+  try sed -i -e "/Provides:\t$product/p;s/Provides:\t$product/Provides:\topenonload/g" \
+    "$RPM/SPECS/openonload-dkms.spec"
 fi
 
 try sed -i  "/define pkgversion/ c%define pkgversion $version" \
