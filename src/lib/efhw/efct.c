@@ -770,21 +770,32 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
 
 static bool
 hw_filters_are_equal(const struct efct_filter_node *node,
-                     const struct efct_hw_filter *hw_filter)
+                     const struct efct_hw_filter *hw_filter,
+                     int clas)
 {
-  /* Check for a matching ip filter */
-  if (hw_filter->proto == node->proto &&
-      hw_filter->ip == node->u.ip4.lip &&
-      hw_filter->port == node->lport)
-    return true;
-
-  /* Check for a matching MAC(+VLAN) filter
-   * The vlan id is checked for every filter, including MAC filters without a
+  switch (clas) {
+  case FILTER_CLASS_semi_wild:
+  case FILTER_CLASS_full_match:
+    if (hw_filter->proto == node->proto &&
+        hw_filter->ip == node->u.ip4.lip &&
+        hw_filter->port == node->lport)
+      return true;
+    break;
+  case FILTER_CLASS_mac:
+  case FILTER_CLASS_mac_vlan:
+  /* The vlan id is checked for every filter, including MAC filters without a
    * specified vlan, as otherwise we could get false positives between vlans.
    */
-  if (!memcmp(&hw_filter->loc_mac, &node->loc_mac, sizeof(node->loc_mac)) &&
-      hw_filter->outer_vlan == node->vlan)
-    return true;
+    if (!memcmp(&hw_filter->loc_mac, &node->loc_mac,
+        sizeof(node->loc_mac)) && hw_filter->outer_vlan == node->vlan)
+      return true;
+    break;
+  default:
+    /* This should only be called for filter types that correspond to a real
+     * HW filter. */
+    EFHW_ASSERT(0);
+    break;
+  }
 
   return false;
 }
@@ -1101,7 +1112,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       if( ! efct->hw_filters[i].refcount )
         avail = i;
       else {
-        if( hw_filters_are_equal(&node, &efct->hw_filters[i]) ) {
+        if( hw_filters_are_equal(&node, &efct->hw_filters[i], clas) ) {
 
           if( ! (flags & (EFHW_FILTER_F_ANY_RXQ | EFHW_FILTER_F_PREF_RXQ) ) &&
               *rxq >= 0 && *rxq != efct->hw_filters[i].rxq ) {

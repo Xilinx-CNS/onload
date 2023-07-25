@@ -169,7 +169,11 @@ struct efct_hw_filter {
   uint16_t port;
   uint32_t ip;
   uint8_t loc_mac[ETH_ALEN];
-  uint16_t outer_vlan;
+  /* Although the VLAN field is 16 bits, we use an int32_t so we can use -1
+   * mean unset. We use this for comparisons with the vlan field in
+   * efct_filter_node, so keeping the types aligned avoids unpleasant
+   * size/signedness shenanigans in those cases. */
+  int32_t outer_vlan;
 };
 
 #define EFCT_NIC_BLOCK_KERNEL_UNICAST 0x1
