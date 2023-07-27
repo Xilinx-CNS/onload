@@ -42,7 +42,8 @@ static int consume_parameter(char **arg)
 }
 
 
-int filter_parse(ef_filter_spec* fs, const char* s_in, struct in_addr *sa_mcast)
+int filter_parse(ef_filter_spec* fs, const char* s_in,
+                 struct in_addr *sa_mcast, enum ef_filter_flags flags)
 {
   union {
     struct sockaddr_storage ss;
@@ -58,7 +59,7 @@ int filter_parse(ef_filter_spec* fs, const char* s_in, struct in_addr *sa_mcast)
   int protocol;
   int i;
 
-  ef_filter_spec_init(fs, EF_FILTER_FLAG_NONE);
+  ef_filter_spec_init(fs, flags);
 
   s = strdup(s_in);
 

@@ -118,7 +118,8 @@
 
 
 #ifdef __EFAB_VI_H__
-extern int filter_parse(ef_filter_spec* fs, const char* s_in, struct in_addr *sa_mcast);
+extern int filter_parse(ef_filter_spec* fs, const char* s_in,
+                        struct in_addr *sa_mcast, enum ef_filter_flags flags);
 #endif
 
 

@@ -99,6 +99,7 @@ static int cfg_max_fill = -1;
 static int cfg_exit_pkts = -1;
 static int cfg_register_mcast;
 static int cfg_discard = -1;
+static bool cfg_exclusive = false;
 
 /* Mutex to protect printing from different threads */
 static pthread_mutex_t printf_mutex;
@@ -574,6 +575,7 @@ static __attribute__ ((__noreturn__)) void usage(void)
   fprintf(stderr, "  -j       join multicast ipv4 address mentioned in filter-spec\n");
   fprintf(stderr, "  -D <num> set specific discard mask. For specifics of possible discard masks,"
                               "look at the enum defined for ef_vi_rx_discard_err_flags.\n");
+  fprintf(stderr, "  -x       require an exclusive RX queue\n");
   exit(1);
 }
 
@@ -587,7 +589,7 @@ int main(int argc, char* argv[])
   struct in_addr sa_mcast;
   int c, sock;
 
-  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:")) != -1 )
+  while( (c = getopt (argc, argv, "dtVL:vmbefF:n:jD:x")) != -1 )
     switch( c ) {
     case 'd':
       cfg_hexdump = 1;
@@ -627,6 +629,9 @@ int main(int argc, char* argv[])
       break;
     case 'D':
       cfg_discard = strtol(optarg, NULL, 0);
+      break;
+    case 'x':
+      cfg_exclusive = true;
       break;
     case '?':
       usage();
@@ -739,7 +744,8 @@ int main(int argc, char* argv[])
   /* Add filters so that adapter will send packets to this VI. */
   while( argc > 0 ) {
     ef_filter_spec filter_spec;
-    if( filter_parse(&filter_spec, argv[0], &sa_mcast) != 0 ) {
+    if( filter_parse(&filter_spec, argv[0], &sa_mcast,
+                     cfg_exclusive ? EF_FILTER_FLAG_EXCLUSIVE_RXQ : EF_FILTER_FLAG_NONE) != 0 ) {
       LOGE("ERROR: Bad filter spec '%s'\n", argv[0]);
       exit(1);
     }
