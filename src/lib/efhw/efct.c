@@ -1162,6 +1162,13 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     }
   }
 
+  /* If we aren't going to have a hw filter, then we definitely don't have an
+   * exclusive queue available. */
+  if( node.hw_filter < 0 && (flags & EFHW_FILTER_F_EXCL_RXQ) ) {
+    mutex_unlock(&efct->driver_filters_mtx);
+    return -EPERM;
+  }
+
 #define ACTION_DO_FILTER_INSERT(F) \
     if( clas == FILTER_CLASS_##F ) { \
       rc = do_filter_insert(clas, efct->filters.F, &efct->filters.F##_n, \
@@ -1202,6 +1209,10 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   }
   mutex_unlock(&efct->driver_filters_mtx);
 
+  /* If we are returning successfully having requested an exclusive queue, that
+   * queue should not be shared with the net driver. */
+  EFHW_ASSERT((rc < 0) || !(flags & EFHW_FILTER_F_EXCL_RXQ) || (*rxq > 0));
+
   return rc < 0 ? rc : node.filter_id;
 }
 
@@ -1210,14 +1221,19 @@ remove_exclusive_rxq_ownership(struct efhw_nic_efct* efct, int hw_filter)
 {
   int i;
   bool delete_owner = true;
+  int rxq = efct->hw_filters[hw_filter].rxq;
 
-  if ( efct->exclusive_rxq_mapping[efct->hw_filters[hw_filter].rxq] ) {
+  if( efct->exclusive_rxq_mapping[rxq] ) {
+    /* We should never have claimed rxq 0 as exclusive as this is always shared
+     * with the net driver. */
+    EFHW_ASSERT(rxq > 0);
+
     /* Only bother worrying about exclusive mapping iff the filter has an exclusive entry */
     for( i = 0; i < efct->hw_filters_n; ++i ) {
       if ( efct->hw_filters[i].refcount ) {
         /* Iff any of the currently active filters (ie refcount > 0) share the same rxq
           * as the one we are attempting to delete, we cannot clear the rxq ownership.*/
-        if ( efct->hw_filters[i].rxq == efct->hw_filters[hw_filter].rxq ) {
+        if( efct->hw_filters[i].rxq == rxq ) {
           delete_owner = false;
           break;
         }
@@ -1226,7 +1242,7 @@ remove_exclusive_rxq_ownership(struct efhw_nic_efct* efct, int hw_filter)
   }
   
   if ( delete_owner )
-    efct->exclusive_rxq_mapping[efct->hw_filters[hw_filter].rxq] = 0;
+    efct->exclusive_rxq_mapping[rxq] = 0;
 }
 
 
