@@ -182,7 +182,8 @@ int efx_spec_to_ethtool_flow(const struct efx_filter_spec *src,
   if( src->match_flags & EFX_FILTER_MATCH_OUTER_VID ) {
     dst->flow_type |= FLOW_EXT;
     dst->h_ext.vlan_tci = src->outer_vid;
-    dst->m_ext.vlan_tci = 0xffff;
+    /* VID is the bottom 12 bits of the vlan_tci field */
+    dst->m_ext.vlan_tci = htons(0xfff);
   }
   return 0;
 }
