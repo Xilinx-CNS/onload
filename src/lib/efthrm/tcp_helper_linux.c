@@ -31,6 +31,11 @@
 #ifdef EFRM_HAVE_FOP_READ_ITER
 /* linux >= 3.16 */
 
+#ifndef EFRM_HAVE_ITER_IOV
+/* linux < 6.4 */
+#define iter_iov(iter) (iter)->iov
+#endif
+
 #ifdef EFRM_HAVE_ITER_UBUF
 /* linux >= 6.0
  * See kernel commits
@@ -46,7 +51,7 @@
       struct iovec iov = { .iov_base = v->ubuf, .iov_len = v->count };  \
       return base_handler(iocb->ki_filp, &iov, 1);                      \
     }                                                                   \
-    return base_handler(iocb->ki_filp, v->iov, v->nr_segs);             \
+    return base_handler(iocb->ki_filp, iter_iov(v), v->nr_segs);        \
   } while (0);
 
 #else
@@ -55,7 +60,7 @@
 
 #define FOP_RW_ITER_CALL_BASE_HANDLER(base_handler, iocb, iter)         \
   do {                                                                  \
-    return base_handler(iocb->ki_filp, v->iov, v->nr_segs);             \
+    return base_handler(iocb->ki_filp, iter_iov(v), v->nr_segs);        \
   } while (0);
 
 #endif /* EFRM_HAVE_ITER_UBUF */
