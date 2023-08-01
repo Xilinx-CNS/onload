@@ -177,6 +177,21 @@ static int efch_filter_insert(struct efrm_resource *rs, struct efrm_pd *pd,
 }
 
 
+static unsigned filter_flags_to_efhw_flags(unsigned filter_flags)
+{
+  unsigned efhw_flags = 0;
+
+  if( filter_flags & CI_FILTER_FLAG_PREF_RXQ )
+    efhw_flags |= EFHW_FILTER_F_PREF_RXQ;
+  if( filter_flags & CI_FILTER_FLAG_ANY_RXQ )
+    efhw_flags |= EFHW_FILTER_F_ANY_RXQ;
+  if( filter_flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ )
+    efhw_flags |= EFHW_FILTER_F_EXCL_RXQ;
+
+  return efhw_flags;
+}
+
+
 static int efch_filter_list_rsops_add(struct efrm_resource *rs,
                                       struct efrm_pd *pd,
                                       struct efch_filter_list *fl,
@@ -186,6 +201,7 @@ static int efch_filter_list_rsops_add(struct efrm_resource *rs,
   struct filter* f;
   int rc;
   int block_flags = 0;
+  unsigned flags = 0;
 
   if( (f = ci_alloc(sizeof(*f))) == NULL )
     return -ENOMEM;
@@ -218,8 +234,11 @@ static int efch_filter_list_rsops_add(struct efrm_resource *rs,
   }
 
   if( ! is_op_block_kernel_only(op->op) ) {
-    rc = efch_filter_insert(rs, pd, spec, f,
-                            replace ? EFHW_FILTER_F_REPLACE : 0);
+    flags |= filter_flags_to_efhw_flags(op->u.filter_add.u.in.flags);
+    if( replace )
+      flags |= EFHW_FILTER_F_REPLACE;
+
+    rc = efch_filter_insert(rs, pd, spec, f, flags);
     if( rc < 0 ) {
       efch_filter_delete(rs, pd, f);
       return rc;
@@ -672,12 +691,7 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
   if( filter_add->in.fields & CI_FILTER_FIELD_RXQ )
     f->rxq = filter_add->in.rxq_no;
 
-  if( filter_add->in.flags & CI_FILTER_FLAG_PREF_RXQ )
-    onload_filter_flags |= EFHW_FILTER_F_PREF_RXQ;
-  if( filter_add->in.flags & CI_FILTER_FLAG_ANY_RXQ )
-    onload_filter_flags |= EFHW_FILTER_F_ANY_RXQ;
-  if ( filter_add->in.flags & CI_FILTER_FLAG_EXCLUSIVE_RXQ )
-    onload_filter_flags |= EFHW_FILTER_F_EXCL_RXQ;
+  onload_filter_flags |= filter_flags_to_efhw_flags(filter_add->in.flags);
 
   rc = efch_filter_insert(rs, pd, &spec, f, onload_filter_flags);
 

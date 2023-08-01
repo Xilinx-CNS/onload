@@ -282,7 +282,7 @@ int ef_filter_spec_set_dest(ef_filter_spec* fs, int dest, unsigned flags)
  */
 
 static int ef_filter_add_special(ef_driver_handle dh, int resource_id,
-                                 int pref_rxq_no, int type,
+                                 int pref_rxq_no, unsigned flags, int type,
                                  bool promisc, uint16_t vlan_id,
                                  ef_filter_cookie *filter_cookie_out, int *rxq_out)
 {
@@ -303,32 +303,41 @@ static int ef_filter_add_special(ef_driver_handle dh, int resource_id,
     break;
   case EF_FILTER_BLOCK_KERNEL:
     op.op = CI_RSOP_FILTER_ADD_BLOCK_KERNEL;
+    op.u.filter_add.u.in.flags = flags;
     break;
   case EF_FILTER_BLOCK_KERNEL_UNICAST:
     op.op = CI_RSOP_FILTER_ADD_BLOCK_KERNEL_UNICAST;
+    op.u.filter_add.u.in.flags = flags;
     break;
   case EF_FILTER_BLOCK_KERNEL_MULTICAST:
     op.op = CI_RSOP_FILTER_ADD_BLOCK_KERNEL_MULTICAST;
+    op.u.filter_add.u.in.flags = flags;
     break;
   case EF_FILTER_ALL_UNICAST:
     op.op = CI_RSOP_FILTER_ADD_ALL_UNICAST;
+    op.u.filter_add.u.in.flags = flags;
     break;
   case EF_FILTER_ALL_MULTICAST:
     op.op = CI_RSOP_FILTER_ADD_ALL_MULTICAST;
+    op.u.filter_add.u.in.flags = flags;
     break;
   case EF_FILTER_MISMATCH_UNICAST | EF_FILTER_VLAN:
     op.op = CI_RSOP_FILTER_ADD_MISMATCH_UNICAST_VLAN;
     op.u.filter_add.mac.vlan_id = vlan_id;
+    op.u.filter_add.u.in.flags = flags;
     break;
   case EF_FILTER_MISMATCH_UNICAST:
     op.op = CI_RSOP_FILTER_ADD_MISMATCH_UNICAST;
+    op.u.filter_add.u.in.flags = flags;
     break;
   case EF_FILTER_MISMATCH_MULTICAST | EF_FILTER_VLAN:
     op.op = CI_RSOP_FILTER_ADD_MISMATCH_MULTICAST_VLAN;
     op.u.filter_add.mac.vlan_id = vlan_id;
+    op.u.filter_add.u.in.flags = flags;
     break;
   case EF_FILTER_MISMATCH_MULTICAST:
     op.op = CI_RSOP_FILTER_ADD_MISMATCH_MULTICAST;
+    op.u.filter_add.u.in.flags = flags;
     break;
   default:
     return -EINVAL;
@@ -478,7 +487,7 @@ static int ef_filter_add(ef_driver_handle dh, int resource_id, int rxq_no,
     case EF_FILTER_MISMATCH_UNICAST:
     case EF_FILTER_MISMATCH_MULTICAST | EF_FILTER_VLAN:
     case EF_FILTER_MISMATCH_MULTICAST:
-      return ef_filter_add_special(dh, resource_id, rxq_no, fs->type,
+      return ef_filter_add_special(dh, resource_id, rxq_no, flags, fs->type,
                                    get_proto(fs), fs->data[5],
                                    filter_cookie_out, rxq_out);
     default:
