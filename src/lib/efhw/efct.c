@@ -694,13 +694,8 @@ static uint32_t zero_remote_port(uint32_t l4_4_bytes)
   return htonl(ntohl(l4_4_bytes) & 0xffff);
 }
 
-static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
-                                       struct ethtool_rx_flow_spec *dst)
+static int sanitise_ethtool_flow(struct ethtool_rx_flow_spec *dst)
 {
-  int rc = efx_spec_to_ethtool_flow(src, dst);
-  if( rc < 0 )
-    return rc;
-
   /* Blat out the remote fields: we can soft-filter them even though the
    * hardware can't */
   switch (dst->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT)) {
@@ -990,9 +985,14 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 
   if( flags & EFHW_FILTER_F_REPLACE )
     return -EOPNOTSUPP;
-  rc = filter_spec_to_ethtool_spec(spec, &hw_filter);
+
+  /* Get the straight translation to ethtool spec of the requested filter.
+   * This allows us to make any necessary checks on the actually requested
+   * filter before we furtle it later on. */
+  rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
   if( rc < 0 )
     return rc;
+
   params = (struct xlnx_efct_filter_params){
     .spec = &hw_filter,
     .mask = mask ? mask : cpu_all_mask,
@@ -1001,8 +1001,23 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
   if( flags & EFHW_FILTER_F_PREF_RXQ )
     params.flags |= XLNX_EFCT_FILTER_F_PREF_QUEUE;
-  if( flags & EFHW_FILTER_F_EXCL_RXQ )
+  if( flags & EFHW_FILTER_F_EXCL_RXQ ) {
     params.flags |= XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
+
+    EFCT_PRE(dev, edev, cli, nic, rc);
+    rc = edev->ops->is_filter_supported(cli, &hw_filter);
+    EFCT_POST(dev, edev, cli, nic, rc);
+
+    if( !rc )
+      return -EPERM;
+  }
+
+  /* For some filter types we use wider HW filters to represent a more specific
+   * SW filter. This function handles any modifications that are needed to do
+   * this. */
+  rc = sanitise_ethtool_flow(&hw_filter);
+  if( rc < 0 )
+    return rc;
 
   if( *rxq >= 0 )
     hw_filter.ring_cookie = *rxq;
