@@ -441,4 +441,17 @@ static inline u32 get_random_u32(void)
 }
 #endif
 
+#ifdef EFRM_CLASS_CREATE_NO_MODULE
+/* linux >= 6.4 */
+/* NOTE: there are revisions between linux-6.3 and linux-6.4 where
+ *       'class_create' is defined as follows:
+ *       #define class_create(name)
+ *       Such definition is not handled by this compat code, so build is broken
+ *       on those revisions. It does not involve any release Linux versions, but
+ *       you may face build problems when bisecting Linux. */
+#define ci_class_create(__name) class_create(__name)
+#else
+#define ci_class_create(__name) class_create(THIS_MODULE, __name)
+#endif
+
 #endif /* DRIVER_LINUX_RESOURCE_KERNEL_COMPAT_H */
