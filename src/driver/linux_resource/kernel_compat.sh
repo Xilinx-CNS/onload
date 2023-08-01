@@ -162,6 +162,8 @@ EFRM_HUGETLB_FILE_SETUP		symtype	hugetlb_file_setup	include/linux/hugetlb.h	stru
 EFRM_HUGETLB_FILE_SETUP_UCOUNTS	symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, struct ucounts **, int, int)
 EFRM_HUGETLB_FILE_SETUP_USER	symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, struct user_struct**, int, int)
 
+EFRM_CLASS_CREATE_NO_MODULE symtype class_create include/linux/device/class.h struct class *(const char *)
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
