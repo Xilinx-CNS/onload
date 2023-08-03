@@ -1549,7 +1549,7 @@ static void stack_unlock(ci_netif* ni)
 static void stack_netif_unlock(ci_netif* ni)
 {
   if( cfg_lock )
-    ci_log("stupid");
+    ci_log("%s: already locked due to --lock option", __FUNCTION__);
   else {
     if( ! ci_netif_is_locked(ni) )
       ci_log("%d: not locked", NI_ID(ni));
