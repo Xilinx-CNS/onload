@@ -5,7 +5,7 @@
 #include <linux/fs.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
-#include "driver/linux_resource/autocompat.h"
+#include "ci/driver/kernel_compat.h"
 
 /* This file contains some simple utility functions for creating char
  * devices and their corresponding nodes in /dev, which are needed by most of
@@ -85,7 +85,7 @@ ci_inline int create_chrdev_and_mknod(int major, int minor, const char* name,
     goto fail_free;
   }
 
-  reg->class = class_create(THIS_MODULE, name);
+  reg->class = ci_class_create(name);
   if( IS_ERR(reg->class) ) {
     rc = PTR_ERR(reg->class);
     reg->class = NULL;
