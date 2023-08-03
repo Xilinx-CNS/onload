@@ -612,6 +612,17 @@ int ef_vi_filter_query(ef_vi* vi, ef_driver_handle vi_dh,
 }
 
 
+int ef_vi_filter_is_block_only(const struct ef_filter_cookie* cookie)
+{
+  if( (cookie->filter_type & ~(EF_FILTER_BLOCK_KERNEL |
+                               EF_FILTER_BLOCK_KERNEL_UNICAST |
+                               EF_FILTER_BLOCK_KERNEL_MULTICAST)) == 0 )
+    return 1;
+  else
+    return 0;
+}
+
+
 int ef_vi_set_filter_add(ef_vi_set* vi_set, ef_driver_handle dh,
 			 const ef_filter_spec* fs,
 			 ef_filter_cookie *filter_cookie_out)
