@@ -698,7 +698,7 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
 
   /* Blat out the remote fields: we can soft-filter them even though the
    * hardware can't */
-  switch (dst->flow_type & ~FLOW_EXT) {
+  switch (dst->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT)) {
   case UDP_V4_FLOW:
   case TCP_V4_FLOW:
     EFHW_ASSERT(&dst->h_u.udp_ip4_spec == &dst->h_u.tcp_ip4_spec);
@@ -747,13 +747,16 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
     return -EPROTONOSUPPORT;
   }
 
+  /* We don't support MAC in combination with IP filters */
+  if (dst->flow_type & FLOW_MAC_EXT)
+    return -EPROTONOSUPPORT;
+
   if (dst->flow_type & FLOW_EXT) {
-    if (dst->m_ext.vlan_etype || dst->m_ext.vlan_tci != 0xffff ||
+    if (dst->m_ext.vlan_etype || dst->m_ext.vlan_tci != htons(0xfff) ||
         dst->m_ext.data[0] || dst->m_ext.data[1])
       return -EPROTONOSUPPORT;
     /* VLAN tags are only supported with flow_type ETHER_FLOW */
-    if ((dst->flow_type & (UDP_V4_FLOW | TCP_V4_FLOW | IPV4_USER_FLOW |
-                          UDP_V6_FLOW | TCP_V6_FLOW | IPV6_USER_FLOW)) != 0)
+    if ((dst->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT)) != ETHER_FLOW)
       dst->flow_type &= ~FLOW_EXT;
   }
 

@@ -50,7 +50,7 @@
 #    --define "have_efct 0"
 #
 # If you want to fail the OpenOnload build if either AUX or EFCT
-# is available at build time:
+# is unavailable at build time:
 #    --define "have_efct 1"
 
 

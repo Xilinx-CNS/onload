@@ -322,7 +322,7 @@ int main(int argc, char* argv[])
 
   while( argc > 0 ) {
     ef_filter_spec filter_spec;
-    if( filter_parse(&filter_spec, argv[0], NULL) != 0 ) {
+    if( filter_parse(&filter_spec, argv[0], NULL, EF_FILTER_FLAG_NONE) != 0 ) {
       LOGE("ERROR: Bad filter spec '%s'\n", argv[0]);
       exit(1);
     }

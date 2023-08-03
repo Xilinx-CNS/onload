@@ -4386,7 +4386,11 @@ ci_inline void ci_tcp_set_initialcwnd(ci_netif* ni, ci_tcp_state* ts) {
 
 /*! ?? \TODO should we use fackets to make things more exact ? */ 
 ci_inline unsigned ci_tcp_inflight(ci_tcp_state* ts)
-{ return SEQ_SUB(ts->snd_nxt, ts->snd_una);  }
+{
+  /* It is possible (e.g. during delegated sends) for snd_una to get ahead
+   * of snd_nxt. Return zero to avoid unsigned wrapping in that case. */
+  return CI_MAX(0, SEQ_SUB(ts->snd_nxt, ts->snd_una));
+}
 
 /* New value for [ssthresh] after loss (RFC2581 p5). */
 ci_inline unsigned ci_tcp_losswnd(ci_tcp_state* ts) {
