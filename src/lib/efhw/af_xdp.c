@@ -581,10 +581,10 @@ static int xdp_create_ring(struct socket* sock,
                            struct ring_map* ring_mapping)
 {
   int rc;
-  unsigned long map_size, addr, pfn, pages;
+  unsigned long map_size, addr, pfn, pages = 0;
   int64_t user_base, kern_base;
   struct vm_area_struct* vma;
-  void* ring_base;
+  void* ring_base = kern_mem_base;
 
   user_base = page_map->n_pages << PAGE_SHIFT;
 
