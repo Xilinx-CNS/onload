@@ -228,9 +228,23 @@ static int modify_glibc_code(void* dst, const void* src, size_t n)
   memcpy(dst, src, n);
   rc = mprotect(patch_page_start, patch_page_size, PROT_READ | PROT_EXEC);
   if( rc != 0 ) {
+    /* Normally, ci_log() would be used here to log the error however if
+     * SELinux is running on RHEL9/glibc 2.34 then the call to ci_log() will
+     * cause a seg fault before writing anything. To ensure that the error
+     * message is printed the write() syscall is used directly.
+     *
+     * The crash has been observed on entry to __fcntl64_nocancel_adjusted(),
+     * In the failing version of libc __fcntl64_nocancel comes immediately
+     * after __close_nocancel. So I think that the code for fcntl64 is no
+     * longer marked as executable causing the crash. */
+    char err_msg[256];
+    snprintf(err_msg, sizeof(err_msg),
+             "CRITICAL: mprotect(glibc exec) = %d\n"
+             "If you have SELinux enabled either disable it or give permission"
+             " for your application to execmod lib_t files\n"
+             "Process will likely crash now\n", errno);
+    ci_sys_write(STDERR_FILENO, err_msg, strlen(err_msg));
     rc = -errno;
-    ci_log("CRITICAL: mprotect(glibc exec) = %d. "
-            "Process will likely crash now", errno);
     return rc;
   }
   return 0;
@@ -348,8 +362,11 @@ static int patch_libc_close_nocancel(void)
     memcpy(trampoline + 6, &target, sizeof(void*));
     rc = mprotect(trampoline, CI_PAGE_SIZE, PROT_READ | PROT_EXEC);
     if( rc != 0 ) {
+      char err_msg[64];
+      snprintf(err_msg, sizeof(err_msg),
+               "CRITICAL: mprotect(trampoline) = %d\n", errno);
+      ci_sys_write(STDERR_FILENO, err_msg, strlen(err_msg));
       rc = -errno;
-      LOG_S(ci_log("ERROR: mprotect(trampoline) = %d", errno));
       return rc;
     }
 
@@ -416,8 +433,11 @@ static int patch_libc_close_nocancel(void)
     aarch64_write_ptr_insns(trampoline + 8, (unsigned*)close_nocancel + 3);
     rc = mprotect(trampoline, CI_PAGE_SIZE, PROT_READ | PROT_EXEC);
     if( rc != 0 ) {
+      char err_msg[64];
+      snprintf(err_msg, sizeof(err_msg),
+               "CRITICAL: mprotect(trampoline) = %d\n", errno);
+      ci_sys_write(STDERR_FILENO, err_msg, strlen(err_msg));
       rc = -errno;
-      LOG_S(ci_log("ERROR: mprotect(trampoline) = %d", errno));
       return rc;
     }
 
