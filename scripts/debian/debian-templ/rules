@@ -43,6 +43,30 @@ userpackage:=#TYPE#-user
 
 pdkms:=#TYPE#-dkms
 
+get_build_config = $(patsubst pkg.$(sname).%,%,\
+                     $(filter pkg.$(sname).$(1),$(DEB_BUILD_PROFILES)))
+
+BUILD_PROFILE=$(patsubst profile-%,%,$(call get_build_config,profile-%))
+ifeq ($(shell test $(words $(BUILD_PROFILE)) -gt 1; echo $$?),0)
+  $(error Too many onload build profiles, profile-*, provided. Only one allowed!)
+endif
+
+BUILD_FLAGS=
+ifneq ($(BUILD_PROFILE),)
+  $(info Using Onload build profile $(BUILD_PROFILE))
+  BUILD_FLAGS+=--build-profile $(BUILD_PROFILE)
+endif
+ifneq ($(call get_build_config,debug),)
+  BUILD_FLAGS+=--debug
+endif
+ifneq ($(call get_build_config,noefct),)
+  BUILD_FLAGS+=--no-efct
+endif
+
+SETUID=
+ifneq ($(call get_build_config,setuid),)
+  SETUID=--setuid
+endif
 
 # module assistant calculates all needed things for us and sets
 # following variables:
@@ -80,7 +104,7 @@ build-arch-stamp:
 	dh_testdir
 
 	# Add here command to compile/build the package.
-	scripts/onload_build #BUILDPROFILE# --user
+	scripts/onload_build $(BUILD_FLAGS) --user
 
 	touch $@
 
@@ -95,11 +119,11 @@ binary-modules:
 	dh_installdirs lib/modules/$(KVERS)/misc
 
 	# Build the module
-	scripts/onload_build #BUILDPROFILE# --kernel
+	scripts/onload_build $(BUILD_FLAGS) --kernel
 
 	# Install the module
 	i_prefix=$(CURDIR)/debian/$(PKGNAME) scripts/onload_install --verbose \
-		--packaged --kernelfiles
+		--packaged --kernelfiles $(BUILD_FLAGS) $(SET_UID)
 
 	dh_installdocs
 	dh_installchangelogs
@@ -144,6 +168,7 @@ install: build
 	dh_installdirs -p$(psource)  usr/src/modules/$(sname)/debian
 
 	# Copy only the driver source to the proper location
+	cp Makefile  debian/$(psource)/usr/src/modules/$(sname)
 	cp -r src  debian/$(psource)/usr/src/modules/$(sname)
 	cp -r scripts  debian/$(psource)/usr/src/modules/$(sname)
 	cp -r mk  debian/$(psource)/usr/src/modules/$(sname)
@@ -162,6 +187,7 @@ install: build
 	dh_installdirs -p$(pdkms)  usr/src/modules/$(sname)-#VERSION#/debian
 
 	# Copy only the driver source to the proper location
+	cp Makefile  debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#
 	cp -r src  debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#
 	cp -r scripts  debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#
 	cp -r mk  debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#
@@ -172,7 +198,8 @@ install: build
 		debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#/debian
 	cp debian/rules debian/changelog debian/copyright \
 		debian/compat debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#/debian/
-	cp debian/#TYPE#-dkms.dkms debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#/debian
+	sed -e "s,#BUILDFLAGS#,$(BUILD_FLAGS),g" \
+		< debian/#TYPE#-dkms.dkms > debian/$(pdkms)/usr/src/modules/$(sname)-#VERSION#/debian/#TYPE#-dkms.dkms
 	cd debian/$(pdkms)/usr/src && tar c modules | bzip2 -9 > $(sname).tar.bz2 && rm -rf modules
 
 	# Add here commands to install the package into debian/#TYPE#.
@@ -243,7 +270,8 @@ binary-arch: build install
 	dh_installdirs -p$(userpackage) lib/onload
 
 	i_prefix=$(CURDIR)/debian/$(userpackage) scripts/onload_install --verbose \
-		--packaged --userfiles --modprobe --modulesloadd --python-layout=deb
+		--packaged --userfiles --modprobe --modulesloadd --python-layout=deb \
+		$(BUILD_FLAGS) $(SETUID)
 	dh_builddeb -a
 
 binary: binary-indep binary-arch

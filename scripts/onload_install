@@ -677,6 +677,7 @@ while [ $# -gt 0 ]; do
   --debug)	buildargs="$buildargs $1"; debug_dir=debug;;
   --strict)	buildargs="$buildargs $1";;
   --require-optional-targets) buildargs="$buildargs $1";;
+  --no-efct) buildargs="$buildargs --no-efct";;
   --ppc-at)     is_ppc || usage; ppc_at="$2"; shift;;
   --userfiles)	all=false; userfiles=true;;
   --ldconfig)	all=false; ldconfig=true;;

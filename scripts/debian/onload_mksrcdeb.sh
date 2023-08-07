@@ -21,7 +21,6 @@ usage() {
   err "options:"
   err "  --tarball <path>   - onload tarball to create packages for"
   err "  --out <path>       - directory to write source package to"
-  err "  --build-profile    - override the build profile"
   err
   exit 1
 }
@@ -37,13 +36,11 @@ onloadver=
 package=
 basename=
 outdir=$(pwd)
-buildprofile=
 
 while [ $# -gt 0 ]; do
   case "$1" in
   --tarball)        shift; tarball=$1;;
   --out)            shift; outdir=$1;;
-  --build-profile)  shift; buildprofile="--build-profile $1";;
   -*)               usage;;
   *)                break;;
   esac
@@ -87,7 +84,7 @@ try mkdir -p "$tempfile/$onloaddir/debian"
 # control files
 for i in $(find "$TOP"/debian/debian-templ/* -type f); do
   ni="${tempfile}/${onloaddir}/debian/$(basename "$i")"
-  try sed -e "s/#VERSION#/$onloadver/g" -e "s/#TYPE#/$onloadtype/g" -e "s/#SOVERSION#/${soversion}/g" -e "s/#BUILDPROFILE#/${buildprofile}/g" < "$i" > "$ni";
+  try sed -e "s/#VERSION#/$onloadver/g" -e "s/#TYPE#/$onloadtype/g" -e "s/#SOVERSION#/${soversion}/g" < "$i" > "$ni";
 done
 
 for i in $(find "${tempfile}"/"${onloaddir}"/debian/type-* -type f); do
