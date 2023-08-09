@@ -63,14 +63,14 @@ static int filter_add(ef_vi* vi, bool exclusive, int rxq_no, uint32_t raddr_he, 
     rc = ef_filter_spec_set_dest(&filter_spec, rxq_no, 0);
 
   if ( rc != 0 ) {
-    fprintf(stderr, "Specifying the filter hardware rxq failed with errno %d (%s).\n", errno, strerror(errno));
+    fprintf(stderr, "Specifying the filter hardware rxq failed with rc %d (%s).\n", rc, strerror(-rc));
     fprintf(stderr, "This error occurred on call number %d.", i);
     return rc;
   }
 
   rc = ef_vi_filter_add(vi, driver_handle, &filter_spec, cookie);
   if ( rc != 0 ) {
-    fprintf(stderr, "Inserting the filter has failed with errno %d (%s).\n", errno, strerror(errno));
+    fprintf(stderr, "Inserting the filter has failed with rc %d (%s).\n", rc, strerror(-rc));
     fprintf(stderr, "This error occurred on call number %d.", i);
   }
 
