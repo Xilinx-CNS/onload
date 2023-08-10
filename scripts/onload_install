@@ -35,6 +35,7 @@ usage() {
   err "  --userfiles    / --nouserfiles    - Only install user-level components"
   err "  --kernelfiles  / --nokernelfiles  - Only install kernel driver components"
   err "  --modprobe     / --nomodprobe     - Only install modprobe configuration"
+  err "  --udev         / --noudev         - Only install udev rules"
   err "  --ldconfig     / --noldconfig     - Only link new libraries with ldconfig"
   err "  --adduser      / --noadduser      - Only call 'onload_tool add_cplane_user'"
   err "  --modulesloadd / --nomodulesloadd - Only install config to modules-load.d"
@@ -441,6 +442,11 @@ install_modules_load_d() {
   fi
 }
 
+install_udev_rules() {
+  try $docd "$TOP/scripts"
+  install_f onload_misc/82-onload.rules "$i_usr/lib/udev/rules.d/82-onload.rules"
+}
+
 
 conflict() {
   msg="$1"
@@ -597,6 +603,7 @@ adduser=
 kernelfiles=
 modprobe=
 modulesloadd=
+udev=
 uninstall=true
 test=false
 do=
@@ -654,6 +661,7 @@ while [ $# -gt 0 ]; do
   --kernelfiles)all=false; kernelfiles=true;;
   --modprobe)	all=false; modprobe=true;;
   --modulesloadd) all=false; modulesloadd=true;;
+  --udev) all=false; udev=true;;
   --packaged) set -x; build=false; sfccheck=false; check_install=false uninstall=false;;
   --uninstall)  uninstall=true;;
   --nouserfiles)userfiles=false;;
@@ -662,6 +670,7 @@ while [ $# -gt 0 ]; do
   --nokernelfiles)kernelfiles=false;;
   --nomodprobe)	modprobe=false;;
   --nomodulesloadd) modulesloadd=false;;
+  --noudev) udev=false;;
   --nouninstall)uninstall=false;;
   --noinstallcheck) check_install=false;;
   --nosfccheck) sfccheck=false;;
@@ -744,6 +753,7 @@ ${ldconfig:-$all}     && install_ldconfig
 ${modprobe:-$all}     && install_modprobe_conf
 ${adduser:-$all}      && install_adduser
 ${kernelfiles:-$all}  && install_kernel_modules
+${udev:-$all}         && install_udev_rules
 ${modulesloadd:-$all} && install_modules_load_d
 
 logprog "Install complete."

@@ -247,7 +247,8 @@ mkdir -p "$i_prefix/etc/depmod.d"
   %{?build_profile:--build-profile %build_profile} \
   %{?debug:--debug} %{?setuid:--setuid} \
   --userfiles --modprobe --modulesloadd \
-  --kernelfiles --kernelver "%{kernel}"
+  --kernelfiles --kernelver "%{kernel}" \
+  --udev
 docdir="$i_prefix%{_defaultdocdir}/%{name}-%{pkgversion}"
 mkdir -p "$docdir"
 install -m 644 LICENSE* README* ChangeLog* ReleaseNotes* "$docdir"
@@ -343,6 +344,7 @@ rm -fR $RPM_BUILD_ROOT
 %attr(644, -, -) %{_sysconfdir}/modprobe.d/onload.conf
 %attr(644, -, -) %{_sysconfdir}/depmod.d/onload.conf
 %config(noreplace) %attr(644, -, -) %{_sysconfdir}/sysconfig/openonload
+/usr/lib/udev/rules.d/*
 
 /usr/share/onload/onload_modules-load.d.conf
 /usr/share/onload/sysconfig_onload_modules

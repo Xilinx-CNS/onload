@@ -390,6 +390,9 @@ case "$cmd" in
   post_install)
     cmd_post_install "$@"
     ;;
+  set_dev_perms)
+    set_dev_perms "$@"
+    ;;
   *)
     usage
     ;;
