@@ -259,6 +259,7 @@ typedef union {
 /* A protection domain and associated buffer allocation can be shared between
    vis. */
 #define NIC_FLAG_SHARED_PD 0x40000000000000LL
+#define NIC_FLAG_RX_FILTER_MAC_IP4_PROTO 0x80000000000000LL
 
 /* Reserved space in evq for a reasonable number of time sync events.
  * They arrive at a rate of 4 per second.  This allows app to get

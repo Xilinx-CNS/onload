@@ -173,6 +173,9 @@ enum ef_vi_capability {
   /** Ability to specify a destination for a filter */
   EF_VI_CAP_RX_FILTER_SET_DEST,
 
+  /** Filter on MAC + IPv4 protocol */
+  EF_VI_CAP_RX_FILTER_MAC_IP4_PROTO,
+
   /** Maximum value of capabilities enumeration */
   EF_VI_CAP_MAX, /* Keep this last */
 };

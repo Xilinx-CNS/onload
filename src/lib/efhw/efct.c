@@ -689,13 +689,8 @@ static uint32_t zero_remote_port(uint32_t l4_4_bytes)
   return htonl(ntohl(l4_4_bytes) & 0xffff);
 }
 
-static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
-                                       struct ethtool_rx_flow_spec *dst)
+static int sanitise_ethtool_flow(struct ethtool_rx_flow_spec *dst)
 {
-  int rc = efx_spec_to_ethtool_flow(src, dst);
-  if( rc < 0 )
-    return rc;
-
   /* Blat out the remote fields: we can soft-filter them even though the
    * hardware can't */
   switch (dst->flow_type & ~(FLOW_EXT | FLOW_MAC_EXT)) {
@@ -765,21 +760,32 @@ static int filter_spec_to_ethtool_spec(const struct efx_filter_spec *src,
 
 static bool
 hw_filters_are_equal(const struct efct_filter_node *node,
-                     const struct efct_hw_filter *hw_filter)
+                     const struct efct_hw_filter *hw_filter,
+                     int clas)
 {
-  /* Check for a matching ip filter */
-  if (hw_filter->proto == node->proto &&
-      hw_filter->ip == node->u.ip4.lip &&
-      hw_filter->port == node->lport)
-    return true;
-
-  /* Check for a matching MAC(+VLAN) filter
-   * The vlan id is checked for every filter, including MAC filters without a
+  switch (clas) {
+  case FILTER_CLASS_semi_wild:
+  case FILTER_CLASS_full_match:
+    if (hw_filter->proto == node->proto &&
+        hw_filter->ip == node->u.ip4.lip &&
+        hw_filter->port == node->lport)
+      return true;
+    break;
+  case FILTER_CLASS_mac:
+  case FILTER_CLASS_mac_vlan:
+  /* The vlan id is checked for every filter, including MAC filters without a
    * specified vlan, as otherwise we could get false positives between vlans.
    */
-  if (!memcmp(&hw_filter->loc_mac, &node->loc_mac, sizeof(node->loc_mac)) &&
-      hw_filter->outer_vlan == node->vlan)
-    return true;
+    if (!memcmp(&hw_filter->loc_mac, &node->loc_mac,
+        sizeof(node->loc_mac)) && hw_filter->outer_vlan == node->vlan)
+      return true;
+    break;
+  default:
+    /* This should only be called for filter types that correspond to a real
+     * HW filter. */
+    EFHW_ASSERT(0);
+    break;
+  }
 
   return false;
 }
@@ -974,9 +980,14 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
 
   if( flags & EFHW_FILTER_F_REPLACE )
     return -EOPNOTSUPP;
-  rc = filter_spec_to_ethtool_spec(spec, &hw_filter);
+
+  /* Get the straight translation to ethtool spec of the requested filter.
+   * This allows us to make any necessary checks on the actually requested
+   * filter before we furtle it later on. */
+  rc = efx_spec_to_ethtool_flow(spec, &hw_filter);
   if( rc < 0 )
     return rc;
+
   params = (struct xlnx_efct_filter_params){
     .spec = &hw_filter,
     .mask = mask ? mask : cpu_all_mask,
@@ -985,8 +996,23 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     params.flags |= XLNX_EFCT_FILTER_F_ANYQUEUE_LOOSE;
   if( flags & EFHW_FILTER_F_PREF_RXQ )
     params.flags |= XLNX_EFCT_FILTER_F_PREF_QUEUE;
-  if( flags & EFHW_FILTER_F_EXCL_RXQ )
+  if( flags & EFHW_FILTER_F_EXCL_RXQ ) {
     params.flags |= XLNX_EFCT_FILTER_F_EXCLUSIVE_QUEUE;
+
+    EFCT_PRE(dev, edev, cli, nic, rc);
+    rc = edev->ops->is_filter_supported(cli, &hw_filter);
+    EFCT_POST(dev, edev, cli, nic, rc);
+
+    if( !rc )
+      return -EPERM;
+  }
+
+  /* For some filter types we use wider HW filters to represent a more specific
+   * SW filter. This function handles any modifications that are needed to do
+   * this. */
+  rc = sanitise_ethtool_flow(&hw_filter);
+  if( rc < 0 )
+    return rc;
 
   if( *rxq >= 0 )
     hw_filter.ring_cookie = *rxq;
@@ -1096,7 +1122,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
       if( ! efct->hw_filters[i].refcount )
         avail = i;
       else {
-        if( hw_filters_are_equal(&node, &efct->hw_filters[i]) ) {
+        if( hw_filters_are_equal(&node, &efct->hw_filters[i], clas) ) {
 
           if( ! (flags & (EFHW_FILTER_F_ANY_RXQ | EFHW_FILTER_F_PREF_RXQ) ) &&
               *rxq >= 0 && *rxq != efct->hw_filters[i].rxq ) {
@@ -1129,6 +1155,13 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
         insert_hw_filter = true;
       }
     }
+  }
+
+  /* If we aren't going to have a hw filter, then we definitely don't have an
+   * exclusive queue available. */
+  if( node.hw_filter < 0 && (flags & EFHW_FILTER_F_EXCL_RXQ) ) {
+    mutex_unlock(&efct->driver_filters_mtx);
+    return -EPERM;
   }
 
 #define ACTION_DO_FILTER_INSERT(F) \
@@ -1171,6 +1204,10 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   }
   mutex_unlock(&efct->driver_filters_mtx);
 
+  /* If we are returning successfully having requested an exclusive queue, that
+   * queue should not be shared with the net driver. */
+  EFHW_ASSERT((rc < 0) || !(flags & EFHW_FILTER_F_EXCL_RXQ) || (*rxq > 0));
+
   return rc < 0 ? rc : node.filter_id;
 }
 
@@ -1179,14 +1216,19 @@ remove_exclusive_rxq_ownership(struct efhw_nic_efct* efct, int hw_filter)
 {
   int i;
   bool delete_owner = true;
+  int rxq = efct->hw_filters[hw_filter].rxq;
 
-  if ( efct->exclusive_rxq_mapping[efct->hw_filters[hw_filter].rxq] ) {
+  if( efct->exclusive_rxq_mapping[rxq] ) {
+    /* We should never have claimed rxq 0 as exclusive as this is always shared
+     * with the net driver. */
+    EFHW_ASSERT(rxq > 0);
+
     /* Only bother worrying about exclusive mapping iff the filter has an exclusive entry */
     for( i = 0; i < efct->hw_filters_n; ++i ) {
       if ( efct->hw_filters[i].refcount ) {
         /* Iff any of the currently active filters (ie refcount > 0) share the same rxq
           * as the one we are attempting to delete, we cannot clear the rxq ownership.*/
-        if ( efct->hw_filters[i].rxq == efct->hw_filters[hw_filter].rxq ) {
+        if( efct->hw_filters[i].rxq == rxq ) {
           delete_owner = false;
           break;
         }
@@ -1195,7 +1237,7 @@ remove_exclusive_rxq_ownership(struct efhw_nic_efct* efct, int hw_filter)
   }
   
   if ( delete_owner )
-    efct->exclusive_rxq_mapping[efct->hw_filters[hw_filter].rxq] = 0;
+    efct->exclusive_rxq_mapping[rxq] = 0;
 }
 
 

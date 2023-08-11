@@ -1332,6 +1332,11 @@ static int efct_post_filter_add(struct ef_vi* vi,
 #else
   int rc;
   unsigned n_superbufs;
+
+   /* Block filters don't attach to an RXQ */
+  if( ef_vi_filter_is_block_only(cookie) )
+    return 0;
+
   EF_VI_ASSERT(rxq >= 0);
   n_superbufs = CI_ROUND_UP((vi->vi_rxq.mask + 1) * EFCT_PKT_STRIDE,
                             EFCT_RX_SUPERBUF_BYTES) / EFCT_RX_SUPERBUF_BYTES;

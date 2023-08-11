@@ -250,6 +250,8 @@ extern void ef_vi_packed_stream_update_credit(ef_vi* vi);
 
 extern void ef_vi_set_intf_ver(char* intf_ver, size_t len);
 
+extern int ef_vi_filter_is_block_only(const struct ef_filter_cookie* cookie);
+
 enum ef_vi_capability;
 extern int
 __ef_vi_capabilities_get(ef_driver_handle handle, int ifindex, int pd_id,

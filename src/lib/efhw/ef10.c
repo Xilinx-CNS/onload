@@ -263,7 +263,9 @@ static int _ef10_nic_check_35388_workaround(struct efhw_nic *nic)
 #define MC_FILTER_IP_PROTOCOL	(1 << MC_CMD_FILTER_OP_IN_MATCH_ETHER_TYPE_LBN |\
 				 1 << MC_CMD_FILTER_OP_IN_MATCH_IP_PROTO_LBN)
 #define MC_FILTER_ETHERTYPE	(1 << MC_CMD_FILTER_OP_IN_MATCH_ETHER_TYPE_LBN)
-
+#define MC_FILTER_MAC_IP4_PROTO	(1 << MC_CMD_FILTER_OP_IN_MATCH_ETHER_TYPE_LBN |\
+				 1 << MC_CMD_FILTER_OP_IN_MATCH_IP_PROTO_LBN |\
+				 1 << MC_CMD_FILTER_OP_IN_MATCH_DST_MAC_LBN)
 
 static int
 _ef10_ef100_nic_check_supported_filter(ci_dword_t* matches, int len, unsigned filter)
@@ -320,6 +322,8 @@ ef10_ef100_nic_check_supported_filters(struct efhw_nic *nic) {
 		nic->flags |= NIC_FLAG_RX_FILTER_IP4_PROTO;
 	if( _ef10_ef100_nic_check_supported_filter(out, num_matches, MC_FILTER_ETHERTYPE) )
 		nic->flags |= NIC_FLAG_RX_FILTER_ETHERTYPE;
+	if( _ef10_ef100_nic_check_supported_filter(out, num_matches, MC_FILTER_MAC_IP4_PROTO) )
+		nic->flags |= NIC_FLAG_RX_FILTER_MAC_IP4_PROTO;
 	if( _ef10_ef100_nic_check_supported_filter(out, num_matches, MC_FILTER_UCAST_MISMATCH) )
 		nic->flags |= NIC_FLAG_RX_FILTER_TYPE_UCAST_MISMATCH;
 	if( _ef10_ef100_nic_check_supported_filter(out, num_matches, MC_FILTER_MCAST_MISMATCH) )

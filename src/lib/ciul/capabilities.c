@@ -65,6 +65,7 @@ static const char* names[EF_VI_CAP_MAX + 1] = {
   [EF_VI_CAP_CTPIO_ONLY] = "TX exclusively supports CTPIO transmit method",
   [EF_VI_CAP_RX_SHARED] = "VI may report packets destined to other VIs sharing RX queue",
   [EF_VI_CAP_RX_FILTER_SET_DEST] = "Set destination for filter",
+  [EF_VI_CAP_RX_FILTER_MAC_IP4_PROTO] = "MAC + IPv4 protocol RX filters",
   [EF_VI_CAP_MAX] = "Unknown",
 };
 

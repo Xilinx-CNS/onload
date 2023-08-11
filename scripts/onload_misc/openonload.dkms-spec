@@ -19,7 +19,7 @@ BuildArch:	noarch
 Requires:	dkms >= 2.00
 Requires:	binutils, gcc, make
 Source0:	openonload-%{pkgversion}.dkms.tar.gz
-Provides:	onload = %{version}-%{release}
+Provides:	openonload = %{version}-%{release}
 BuildRoot:	%{_tmppath}/openonload-%{pkgversion}}-root-%(%{__id_u} -n)/
 
 %description
