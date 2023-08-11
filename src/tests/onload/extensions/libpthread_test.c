@@ -24,11 +24,14 @@
  * and checks that they got put into the expected stacks (by the intercept)
  */
 
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <errno.h>
+#include <unistd.h>
 #include <pthread.h>
-#include <linux/prctl.h>
+#include <sys/prctl.h>
 #include <sys/socket.h>
 #include <onload/extensions.h>
 
