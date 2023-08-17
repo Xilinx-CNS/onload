@@ -77,6 +77,7 @@ void efrm_vi_get_mappings(struct efrm_vi* vi, struct efrm_vi_mappings* vm)
     ef100_vi_get_mappings(vi, nic, vm);
     break;
   case EFHW_ARCH_EFCT:
+  case EFHW_ARCH_EF10CT:
     efct_vi_get_mappings(vi, nic, vm);
     break;
   case EFHW_ARCH_AF_XDP:

@@ -18,7 +18,7 @@ EFHW_SRCS	:= nic.c eventq.c af_xdp.c ethtool_rxclass.c \
 		ethtool_flow.c efct.c debugfs_nic.c debugfs_efct.c
 
 EFHW_HDRS	:= ef10_mcdi.h ethtool_rxclass.h ethtool_flow.h ef10_ef100.h \
-		efct.h
+		efct.h ef10ct.h
 
 EFRM_SRCS	:=			\
 		assert_valid.c		\
@@ -51,8 +51,16 @@ RESOURCE_SRCS += driverlink_new.c
 EFHW_SRCS += ef10.c ef100.c
 endif
 
+ifeq ($(HAVE_EF10CT),1)
+EFHW_EF10CT_SRCS := aux_ef10ct.c
+EFHW_SRCS += ef10ct.c
+else
+EFHW_EF10CT_SRCS :=
+endif
+
 IMPORT		:= $(EFHW_SRCS:%=../../lib/efhw/%) \
 		   $(EFHW_HDRS:%=../../lib/efhw/%) \
+		   $(EFHW_EF10CT_SRCS:%=../../lib/efhw/ef10ct/%) \
 		   $(EFRM_SRCS:%=../../lib/efrm/%) \
 		   $(EFRM_HDRS:%=../../lib/efrm/%) \
 		   $(UTILS_SRCS:%=../../lib/kernel_utils/%) \
@@ -61,7 +69,7 @@ IMPORT		:= $(EFHW_SRCS:%=../../lib/efhw/%) \
 
 
 RESOURCE_TARGET	:= sfc_resource.o
-RESOURCE_TARGET_SRCS := $(RESOURCE_SRCS) $(EFHW_SRCS) $(EFRM_SRCS) $(UTILS_SRCS)
+RESOURCE_TARGET_SRCS := $(RESOURCE_SRCS) $(EFHW_SRCS) $(EFHW_EF10CT_SRCS) $(EFRM_SRCS) $(UTILS_SRCS)
 
 TARGETS		:= $(RESOURCE_TARGET)
 

@@ -3,20 +3,51 @@
 
 #include "linux_resource_internal.h"
 #include <ci/driver/ci_efct.h>
+#include <ci/driver/ci_ef10ct.h>
 
 int efrm_auxbus_register(void)
 {
+  int rc = 0;
+
 #if CI_HAVE_EFCT_AUX
-  return auxiliary_driver_register(&efct_drv);
-#else
-  return 0;
+  rc = auxiliary_driver_register(&efct_drv);
+  if( rc < 0 ) {
+    EFRM_ERR("WARNING: Failed to register efct driver with auxbus, rc %d", rc);
+    goto fail_efct;
+  }
 #endif
+
+#if CI_HAVE_EF10CT
+  rc = auxiliary_driver_register(&ef10ct_drv);
+  if( rc < 0 ) {
+    EFRM_ERR("WARNING: Failed to register ef10ct driver with auxbus, rc %d", rc);
+    goto fail_ef10ct;
+  }
+#endif
+
+  goto out;
+
+#if CI_HAVE_EF10CT
+ fail_ef10ct:
+#if CI_HAVE_EFCT_AUX
+  auxiliary_driver_unregister(&efct_drv);
+#endif
+#endif
+#if CI_HAVE_EFCT_AUX
+ fail_efct:
+#endif
+ out:
+  return rc;
 }
 
 void efrm_auxbus_unregister(void)
 {
 #if CI_HAVE_EFCT_AUX
   auxiliary_driver_unregister(&efct_drv);
+#endif
+
+#if CI_HAVE_EF10CT
+  auxiliary_driver_unregister(&ef10ct_drv);
 #endif
 }
 

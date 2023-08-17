@@ -568,6 +568,7 @@ static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 		}
 		break;
 	case EFHW_ARCH_EFCT:
+	case EFHW_ARCH_EF10CT:
 	case EFHW_ARCH_AF_XDP:
 		break;
 	};
@@ -598,6 +599,7 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 		}
 		break;
 	case EFHW_ARCH_EFCT:
+	case EFHW_ARCH_EF10CT:
 	case EFHW_ARCH_AF_XDP:
 		rc = efrm_pd_dma_map_nonpci(n_pages, nic_order, addrs,
 					    pci_addrs);

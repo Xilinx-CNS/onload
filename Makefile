@@ -21,7 +21,8 @@ Options:
   MMAKE_LIBERAL=1   Turn off -Werror
   HAVE_SFC=0        Build without netdriver and driverlink support to work in
                     AF_XDP mode only
-  HAVE_EFCT=0       Build without EFCT and AUX bus support.
+  HAVE_EFCT=0       Build without EFCT support.
+  HAVE_EF10CT=0     Build without EF10CT support.
   BUILD_PROFILE=x   Onload configuration, e.g. "cloud" (default: extra)
   KBUILDTOP=<path>  Where to put driver build (default: build/$$KARCH_linux-$$KVER)
   KPATH=<path>      Kernel to build for (default: /lib/modules/`uname -r`/build)
@@ -70,15 +71,13 @@ else
 endif
 
 export HAVE_EFCT ?=
+export HAVE_EF10CT ?= 1
 
 # There are three options here: native kernel aux bus support, support
 # through the out of tree cns aux bus repo for older kernels, or no aux
-# bus support at all, in that order of preference unless explicitly
-# asked to build without efct support.
+# bus support at all, in that order of preference.
 #
-ifeq ($(HAVE_EFCT),0)
-export HAVE_CNS_AUX := 0
-else ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/auxiliary_bus.h),)
+ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/auxiliary_bus.h),)
 export HAVE_KERNEL_AUX := 1
 export HAVE_CNS_AUX := 0
 else
@@ -126,6 +125,7 @@ $(AUTOCOMPAT): $(LINUX_RESOURCE)/kernel_compat.sh $(LINUX_RESOURCE)/kernel_compa
 
 mkdirs:
 	@mkdir -p $(obj)/src/lib/efhw
+	@mkdir -p $(obj)/src/lib/efhw/ef10ct
 	@mkdir -p $(obj)/src/lib/efrm
 	@mkdir -p $(obj)/src/lib/efthrm
 	@mkdir -p $(obj)/src/lib/kernel_utils
@@ -208,6 +208,15 @@ else
   else
     $(error Unable to build Onload with EFCT or AUX bus support)
   endif
+endif
+
+
+ifeq ($(HAVE_EF10CT),0)
+  ONLOAD_CFLAGS += -DCI_HAVE_EF10CT=0
+else ifeq ($(CI_HAVE_AUX_BUS),0)
+  ONLOAD_CFLAGS += -DCI_HAVE_EF10CT=0
+else
+  ONLOAD_CFLAGS += -DCI_HAVE_EF10CT=1
 endif
 
 ifneq ($(MMAKE_LIBERAL),1)

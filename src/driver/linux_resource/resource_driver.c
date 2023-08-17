@@ -235,6 +235,10 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 		map_min = res_dim->vi_min;
 		map_max = res_dim->vi_lim;;
 	}
+	else if (dev_type->arch == EFHW_ARCH_EF10CT) {
+		map_min = res_dim->vi_min;
+		map_max = res_dim->vi_lim;;
+	}
 	else {
 		rc = -EINVAL;
 		goto fail;

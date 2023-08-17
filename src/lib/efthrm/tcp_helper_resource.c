@@ -1294,6 +1294,7 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
    * EF100 has different Rx merging mechanism and hasn't RX cut-through. */
   if( NI_OPTS(ni).rx_merge_mode ||
       (nic->devtype.arch != EFHW_ARCH_EF100 &&
+       nic->devtype.arch != EFHW_ARCH_EF10CT &&
        nic->devtype.arch != EFHW_ARCH_EFCT &&
        ! (nic->flags & NIC_FLAG_RX_CUT_THROUGH)) ) {
     info->efhw_flags |= HIGH_THROUGHPUT_EFHW_VI_FLAGS;

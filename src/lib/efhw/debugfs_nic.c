@@ -41,6 +41,7 @@ static const char *const arch_names[] = {
   [EFHW_ARCH_EF10] = "EF10",
   [EFHW_ARCH_EF100] = "EF100",
   [EFHW_ARCH_EFCT] = "EFCT",
+  [EFHW_ARCH_EF10CT] = "EF10CT",
   [EFHW_ARCH_AF_XDP] = "AF_XDP",
 };
 static const unsigned int arch_max = CI_ARRAY_SIZE(arch_names);

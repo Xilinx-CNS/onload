@@ -98,6 +98,7 @@ extern int efrm_nic_set_accel_allowed(struct efhw_nic* nic,
 extern int efrm_nic_get_accel_allowed(struct efhw_nic* nic);
 
 extern struct auxiliary_driver efct_drv;
+extern struct auxiliary_driver ef10ct_drv;
 extern int efrm_auxbus_register(void);
 extern void efrm_auxbus_unregister(void);
 

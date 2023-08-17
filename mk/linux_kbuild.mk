@@ -41,9 +41,7 @@ endif
 
 HAVE_EFCT ?=
 
-ifeq ($(HAVE_EFCT),0)
-HAVE_CNS_AUX := 0
-else ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/auxiliary_bus.h),)
+ifneq ($(wildcard $(dir $(KPATH))/*/include/linux/auxiliary_bus.h),)
 HAVE_KERNEL_AUX := 1
 HAVE_CNS_AUX := 0
 else
@@ -78,6 +76,15 @@ else
   else
     $(error Unable to build Onload with EFCT or AUX bus support)
   endif
+endif
+
+HAVE_EF10CT ?= 1
+ifeq ($(HAVE_EF10CT),0)
+  EXTRA_CFLAGS += -DCI_HAVE_EF10CT=0
+else ifeq ($(CI_HAVE_AUX_BUS),0)
+  EXTRA_CFLAGS += -DCI_HAVE_EF10CT=0
+else
+  EXTRA_CFLAGS += -DCI_HAVE_EF10CT=1
 endif
 
 HAVE_SFC ?= 1

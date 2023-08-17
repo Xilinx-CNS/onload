@@ -50,6 +50,7 @@ int efrm_vi_allocator_ctor(struct efrm_nic *efrm_nic,
 	if (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10 ||
 	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP ||
 	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF100 ||
+	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10CT ||
 	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EFCT) {
 		vi_min = dims->vi_min;
 		vi_lim = dims->vi_lim;

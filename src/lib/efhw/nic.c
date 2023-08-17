@@ -37,6 +37,7 @@
 #include <ci/driver/ci_efct.h>
 #include <ci/efhw/ef10.h>
 #include <ci/efhw/ef100.h>
+#include <ci/efhw/ef10ct.h>
 #include <ci/efhw/af_xdp.h>
 #include <ci/efhw/efct.h>
 #include <ci/efhw/nic.h>
@@ -265,6 +266,20 @@ void efhw_nic_init(struct efhw_nic *nic, unsigned flags,
 		nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096 | 8192 |
 		  16384 | 32768 | 65536 | 131072;
 		nic->efhw_func = &efct_char_functional_units;
+		break;
+#endif
+#if CI_HAVE_EF10CT
+	case EFHW_ARCH_EF10CT:
+		nic->q_sizes[EFHW_EVQ] = 128 | 256 | 512 | 1024 | 2048 | 4096 |
+			8192 | 16384 | 32768;
+		/* Effective TXQ size is potentially variable, as we can
+		 * configure how the CTPIO windows are sized. For now assume
+		 * we're sticking with fixed EFCT equivalent regions. */
+		nic->q_sizes[EFHW_TXQ] = 512;
+		/* Placeholder values consistent with ef_vi powers of 2 */
+		nic->q_sizes[EFHW_RXQ] = 512 | 1024 | 2048 | 4096 | 8192 |
+		  16384 | 32768 | 65536 | 131072;
+		nic->efhw_func = &ef10ct_char_functional_units;
 		break;
 #endif
 	default:

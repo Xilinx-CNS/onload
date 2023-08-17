@@ -659,6 +659,8 @@ enum ef_vi_arch {
   EF_VI_ARCH_EFCT,
   /** Arbitrary NICs using AF_XDP */
   EF_VI_ARCH_AF_XDP,
+  /** ef10ct NICs (low latency datapath) */
+  EF_VI_ARCH_EF10CT,
 };
 
 /*! \brief State of TX descriptor ring

@@ -9,6 +9,7 @@ enum efhw_arch {
 	EFHW_ARCH_EF100,
 	EFHW_ARCH_EFCT,
 	EFHW_ARCH_AF_XDP,
+	EFHW_ARCH_EF10CT,
 };
 
 /*----------------------------------------------------------------------------

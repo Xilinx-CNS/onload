@@ -362,6 +362,11 @@ static int efrm_vi_request_irq(struct efhw_nic *nic, struct efrm_vi *virs)
 {
 	int rc;
 
+	/* TODO EF10CT */
+	if( (nic->devtype.arch == EFHW_ARCH_EF10CT) &&
+	    (nic->devtype.variant == 'L') )
+		return 0;
+
 	rc = efrm_interrupt_vector_choose(efrm_nic(nic), virs);
 	if (rc != 0) {
 		EFRM_ERR("%s: Failed to assign IRQ: %d\n", __FUNCTION__, rc);
@@ -598,6 +603,8 @@ static uint32_t efrm_vi_rm_txq_bytes(struct efrm_vi *virs, int n_entries)
 		return n_entries * EFAB_AF_XDP_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
 		return n_entries * EFCT_TX_DESCRIPTOR_BYTES;
+	else if (nic->devtype.arch == EFHW_ARCH_EF10CT)
+		return n_entries * EFCT_TX_DESCRIPTOR_BYTES;
 	else {
 		EFRM_ASSERT(0);
 		return -EINVAL;
@@ -617,6 +624,9 @@ static uint32_t efrm_vi_rm_rxq_bytes(struct efrm_vi *virs, int n_entries)
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
 		bytes_per_desc = EFAB_AF_XDP_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
+		return EFCT_RX_DESCRIPTOR_BYTES * CI_EFCT_MAX_SUPERBUFS *
+		       EF_VI_MAX_EFCT_RXQS;
+	else if (nic->devtype.arch == EFHW_ARCH_EF10CT)
 		return EFCT_RX_DESCRIPTOR_BYTES * CI_EFCT_MAX_SUPERBUFS *
 		       EF_VI_MAX_EFCT_RXQS;
 	else {
@@ -884,7 +894,11 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 
 		evq_params.interrupting = nic->flags & NIC_FLAG_EVQ_IRQ;
 		evq_params.wakeup_evq = efrm_vi_get_channel(virs);
-		EFRM_ASSERT(evq_params.interrupting == (virs->vec != NULL));
+		/* TODO EF10CT test driver doesn't support interrupts */
+		if( (nic->devtype.arch != EFHW_ARCH_EF10CT) ||
+		    (nic->devtype.variant != 'L') ) {
+			EFRM_ASSERT(evq_params.interrupting == (virs->vec != NULL));
+		}
 
 		rc = efhw_nic_event_queue_enable(nic,
 					efrm_pd_get_nic_client_id(virs->pd),
@@ -958,9 +972,15 @@ efrm_vi_io_map(struct efrm_vi* virs, struct efhw_nic *nic, int instance)
 {
 	resource_size_t addr;
 	size_t io_size;
+
 	int rc = efhw_nic_vi_io_region(nic, instance, &io_size, &addr);
 	if (rc == 0 && io_size > 0)  {
-		virs->io_page = ci_ioremap(addr, io_size);
+		/* TODO EF10CT test driver doesn't have actual iomem */
+		if( (nic->devtype.arch == EFHW_ARCH_EF10CT) &&
+		    (nic->devtype.variant == 'L') )
+			virs->io_page = (volatile char*)addr;
+		else
+			virs->io_page = ci_ioremap(addr, io_size);
 		if (virs->io_page == NULL)
 			return -ENOMEM;
 	}

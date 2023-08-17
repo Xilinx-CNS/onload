@@ -9,6 +9,7 @@ obj-m := $(RESOURCE_TARGET)
 
 sfc_resource-objs := $(RESOURCE_SRCS:%.c=%.o) \
                      $(EFHW_SRCS:%.c=../../lib/efhw/%.o) \
+                     $(EFHW_EF10CT_SRCS:%.c=../../lib/efhw/ef10ct/%.o) \
                      $(EFRM_SRCS:%.c=../../lib/efrm/%.o) \
                      $(UTILS_SRCS:%.c=../../lib/kernel_utils/%.o) \
                      $($(ARCH)_TARGET_SRCS:%.c=%.o)

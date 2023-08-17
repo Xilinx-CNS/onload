@@ -4,9 +4,7 @@ TRANSPORT_CONFIG_OPT_HDR ?= ci/internal/transport_config_opt_extra.h
 
 HAVE_EFCT ?=
 
-ifeq ($(HAVE_EFCT),0)
-HAVE_CNS_AUX := 0
-else ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
+ifneq ($(wildcard $(dir $(KPATH))/source/include/linux/auxiliary_bus.h),)
 HAVE_KERNEL_AUX := 1
 HAVE_CNS_AUX := 0
 else
@@ -14,6 +12,7 @@ AUX_BUS_PATH ?= $(TOPPATH)/../cns-auxiliary-bus
 HAVE_CNS_AUX := $(or $(and $(wildcard $(AUX_BUS_PATH)),1),0)
 endif
 
+HAVE_EF10CT ?= 1
 HAVE_SFC ?= 1
 include $(BUILD)/config.mk
 include $(BUILDPATH)/options_config.mk
