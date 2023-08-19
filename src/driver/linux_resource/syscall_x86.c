@@ -48,16 +48,22 @@ static bool is_movq_indirect_8(const unsigned char *p)
  * or
  *  0f ae e8  lfence
  *  ff d0     callq *%rax     (linux-5.16 amd, see patch_retpoline())
+ * or
+ *  41 ff d3  callq *%r11     (linux-5.15 clang)
+ *  66 90     nop2
  */
 static bool is_callq_indirect_reg(const unsigned char *p)
 {
   if( p[0] == 0xe8 )
     return true;
-  if( p[0] == 0xff && p[1] == 0xd0 && p[2] == 0x0f && p[3] == 0x1f &&
+  if( p[0] == 0xff && (p[1] & 0xf8) == 0xd0 && p[2] == 0x0f && p[3] == 0x1f &&
       p[4] == 0x00 )
     return true;
   if( p[0] == 0x0f && p[1] == 0xae && p[2] == 0xe8 && p[3] == 0xff &&
-      p[4] == 0xd0 )
+      (p[1] & 0xf8) == 0xd0 )
+    return true;
+  if( p[0] == 0x41 && p[1] == 0xff && (p[2] & 0xf8) == 0xd0 && p[3] == 0x66 &&
+      p[4] == 0x90 )
     return true;
   return false;
 }
