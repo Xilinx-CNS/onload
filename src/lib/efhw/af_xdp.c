@@ -29,6 +29,7 @@
 #include "ethtool_flow.h"
 
 #define XDP_PROG_NAME "xdpsock"
+#define BPF_FS_PATH "/sys/fs/bpf/"
 
 static char *bpf_link_helper = NULL;
 module_param(bpf_link_helper, charp, S_IRUGO | S_IWUSR);
@@ -321,6 +322,22 @@ static int xdp_alloc_fd(struct file* file)
   get_file(file);
   fd_install(rc, file);
   return rc;
+}
+
+static int xdp_map_lookup(struct sys_call_area* area, const char *map_path)
+{
+	union bpf_attr* attr = sys_call_area_ptr(area);
+	char *filepath = (void *)(attr + 1);
+	int ret;
+
+	ret = strscpy(filepath, map_path, PAGE_SIZE - sizeof(*attr));
+	if (ret < 0)
+		return ret;
+
+	memset(attr, 0, sizeof(*attr));
+	attr->pathname = sys_call_area_user_addr(area, filepath);
+
+	return xdp_sys_bpf(BPF_OBJ_GET, sys_call_area_user_addr(area, attr));
 }
 
 /* Create the xdp socket map to share with the BPF program */
@@ -1018,6 +1035,17 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	xdp->vi = (struct efhw_af_xdp_vi*) (xdp + 1);
 	xdp->pd = (struct protection_domain*) (xdp->vi + nic->vi_lim);
 
+	rc = af_xdp_vi_allocator_ctor(xdp, nic->vi_min, nic->vi_lim);
+	if( rc < 0 )
+		goto fail_map;
+
+	/* Open a pre existing map if it exists, else create one */
+	map_fd = xdp_map_lookup(sys_call_area, BPF_FS_PATH "onload_xdp_xsk");
+	if( map_fd >= 0 ) {
+		EFHW_NOTICE("%s: attaching to existing map", __func__);
+		goto has_map_and_bound_prog;
+	}
+
 	rc = map_fd = xdp_map_create(sys_call_area, nic->vi_lim);
 	if( rc < 0 )
 		goto fail_map;
@@ -1030,10 +1058,7 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	if( rc < 0 )
 		goto fail;
 
-	rc = af_xdp_vi_allocator_ctor(xdp, nic->vi_min, nic->vi_lim);
-	if( rc < 0 )
-		goto fail;
-
+has_map_and_bound_prog:
 	xdp->map = fget(map_fd);
 	ci_close_fd(map_fd);
 
