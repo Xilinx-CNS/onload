@@ -132,6 +132,7 @@ $(obj)/src/lib/ciul: $(AUTOCOMPAT)
 $(obj)/src/lib/citools: $(AUTOCOMPAT)
 $(obj)/src/lib/cplane: $(AUTOCOMPAT) $(obj)/src/lib/ciul
 $(obj)/src/lib/kernel_utils: $(AUTOCOMPAT)
+$(obj)/src/tests/resource/efct_test: $(AUTOCOMPAT)
 $(obj)/src/driver/linux_char: $(AUTOCOMPAT)
 $(obj)/src/driver/linux_char: $(obj)/src/lib/citools $(obj)/src/lib/ciul
 $(obj)/src/driver/linux_onload: $(obj)/src/lib/citools $(obj)/src/lib/ciul \
