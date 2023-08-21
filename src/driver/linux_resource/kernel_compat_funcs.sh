@@ -329,7 +329,7 @@ function test_export()
     #        May give a false positive if the export is conditional.
     #     3. The MAP file if present. May give a false positive
     #        because it lists all extern (not only exported) symbols.
-    if [ -f $KBUILD_MODULE_SYMVERS ]; then
+    if [ -f "$KBUILD_MODULE_SYMVERS" ]; then
         if [ $efx_verbose = true ]; then
             echo >&2 "Looking for export of $symbol in $KBUILD_MODULE_SYMVERS"
 	fi
