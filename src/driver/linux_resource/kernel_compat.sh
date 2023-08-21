@@ -155,6 +155,7 @@ EFRM_HAVE_ITER_UBUF symbol ITER_UBUF include/linux/uio.h
 EFRM_HAVE_FLOW_RSS      symbol  FLOW_RSS    include/uapi/linux/ethtool.h
 
 EFRM_CLASS_DEVNODE_DEV_IS_CONST memtype struct_class devnode include/linux/device/class.h char*(*)(const struct device *, umode_t *)
+EFRM_CLASS_DEVNODE_DEV_IS_CONST memtype struct_class devnode include/linux/device.h char*(*)(const struct device *, umode_t *)
 
 EFRM_HAVE_VM_FLAGS_SET symbol vm_flags_set include/linux/mm.h
 
