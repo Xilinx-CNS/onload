@@ -21,6 +21,7 @@
 #include <linux/fdtable.h>
 #include <linux/sched/signal.h>
 #include <net/sock.h>
+#include <net/xdp.h>
 
 #include <ci/efrm/syscall.h>
 #include <ci/efrm/efrm_filter.h>
@@ -1066,6 +1067,12 @@ has_map_and_bound_prog:
 	memcpy(nic->mac_addr, mac_addr, ETH_ALEN);
 
 	af_xdp_nic_tweak_hardware(nic);
+
+#ifdef EFRM_NETDEV_HAS_XDP_METADATA_OPS
+	if (nic->net_dev->xdp_metadata_ops &&
+	    nic->net_dev->xdp_metadata_ops->xmo_rx_timestamp)
+		nic->flags |= NIC_FLAG_HW_RX_TIMESTAMPING;
+#endif
 
 	rc = af_xdp_rss_get_support(nic);
 	return rc;
