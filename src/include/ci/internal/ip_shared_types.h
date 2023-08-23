@@ -1409,6 +1409,7 @@ struct ci_netif_state_s {
 
   /* are we in the poll loop? */
   ci_int32              in_poll;
+  ci_int32              poll_start_intf;
   struct oo_p_dllink    post_poll_list;
 
   oo_pkt_p              rx_defrag_head;       /*  rx buffers re-assembly */

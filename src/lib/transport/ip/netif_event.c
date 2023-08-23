@@ -2040,7 +2040,7 @@ have_events:
 }
 
 
-static int ci_netif_poll_intf(ci_netif* ni, int intf_i, int max_evs)
+ci_inline int ci_netif_poll_intf(ci_netif* ni, int intf_i, int max_evs)
 {
   struct ci_netif_poll_state ps;
   int total_evs = 0;
@@ -2311,7 +2311,7 @@ void ci_netif_loopback_pkts_send(ci_netif* ni)
 
 int ci_netif_poll_n(ci_netif* netif, int max_evs)
 {
-  int intf_i, n_evs_handled = 0;
+  int offset, intf_i, intf_max, n_evs_handled = 0;
 
 #if defined(__KERNEL__) || ! defined(NDEBUG)
   if( netif->error_flags )
@@ -2344,11 +2344,29 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
 
   ci_assert(netif->state->in_poll == 0);
   ++netif->state->in_poll;
-  OO_STACK_FOR_EACH_INTF_I(netif, intf_i) {
+
+  /* Poll all interfaces in a cycle, then set the next interface we start with
+   * to be the next interface in the cycle. For example, suppose we have three
+   * interfaces (0, 1, 2), then polling a bond of these interfaces will result
+   * in the sequence below:
+   * Poll 1: 0, 1, 2
+   * Poll 2: 1, 2, 0
+   * Poll 3: 2, 0, 1
+   * Poll 4: 0, 1, 2
+   * ... */
+  offset = netif->state->poll_start_intf;
+  intf_max = oo_stack_intf_max(netif);
+  for( intf_i = offset; intf_i < intf_max; intf_i++ ) {
     int n = ci_netif_poll_intf(netif, intf_i, max_evs);
     ci_assert(n >= 0);
     n_evs_handled += n;
   }
+  for( intf_i = 0; intf_i < offset; intf_i++ ) {
+    int n = ci_netif_poll_intf(netif, intf_i, max_evs);
+    ci_assert(n >= 0);
+    n_evs_handled += n;
+  }
+  netif->state->poll_start_intf = (offset == intf_max - 1) ? 0 : offset  + 1;
 
   while( OO_PP_NOT_NULL(netif->state->looppkts) ) {
     ci_netif_loopback_pkts_send(netif);
