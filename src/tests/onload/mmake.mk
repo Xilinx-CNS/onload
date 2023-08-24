@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2002-2020 Xilinx, Inc.
 SUBDIRS	:= wire_order tproxy_preload hwtimestamping \
-           sync_preload l3xudp_preload startup
+           sync_preload l3xudp_preload
 
 ifneq ($(ONLOAD_ONLY),1)
 # These tests have dependency on kernel_compat lib,
@@ -15,6 +15,9 @@ endif # NO_TEAMING
 ifeq ($(GNU),1)
 SUBDIRS += buddy
 endif # GNU
+ifeq ($(USE_CXX),1)
+SUBDIRS += startup
+endif # USE_CXX
 endif # ONLOAD_ONLY
 
 
