@@ -97,7 +97,7 @@ static int __sys_call_area_alloc(struct sys_call_area* area, const char* func)
   }
 
   mmap_read_lock(current->mm);
-  rc = pin_user_pages(area->user_addr, 1, FOLL_WRITE, &area->page, NULL);
+  rc = ci_pin_user_pages(area->user_addr, 1, FOLL_WRITE, &area->page);
   mmap_read_unlock(current->mm);
   if( rc != 1 ) {
     EFHW_ERR("%s: ERROR: failed to get a page: rc=%d:", func, rc);
@@ -621,7 +621,7 @@ static int xdp_create_ring(struct socket* sock,
     }
     else {
       mmap_read_lock(current->mm);
-      rc = pin_user_pages(addr, pages, FOLL_WRITE, ring_mapping->pages, NULL);
+      rc = ci_pin_user_pages(addr, pages, FOLL_WRITE, ring_mapping->pages);
       mmap_read_unlock(current->mm);
 
       if( rc == pages )
