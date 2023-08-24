@@ -66,6 +66,7 @@ EFRM_GUP_RCLONG_TASK_SEPARATEFLAGS symtype get_user_pages include/linux/mm.h lon
 EFRM_GUP_RCLONG_TASK_COMBINEDFLAGS symtype get_user_pages include/linux/mm.h long(struct task_struct *, struct mm_struct *, unsigned long, unsigned long, unsigned int, struct page **, struct vm_area_struct **)
 EFRM_GUP_RCLONG_NOTASK_COMBINEDFLAGS symtype get_user_pages include/linux/mm.h long(unsigned long, unsigned long, unsigned int, struct page **, struct vm_area_struct **)
 EFRM_GUP_HAS_PIN	symbol	pin_user_pages	include/linux/mm.h
+EFRM_GUP_PIN_HAS_VMAS	symtype	pin_user_pages	include/linux/mm.h	long(unsigned long, unsigned long, unsigned int, struct page **, struct vm_area_struct **)
 EFRM_GUP_HAS_DMA_PINNED	symbol	page_maybe_dma_pinned	include/linux/mm.h
 
 EFRM_HAVE_USERMODEHELPER_SETUP		symbol	call_usermodehelper_setup	include/linux/kmod.h

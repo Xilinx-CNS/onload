@@ -104,9 +104,8 @@
 /* linux-5.6 have got pin_user_pages() */
 #ifndef EFRM_GUP_HAS_PIN
 static inline long
-pin_user_pages(unsigned long start, unsigned long nr_pages,
-	       unsigned int gup_flags, struct page **pages,
-	       struct vm_area_struct **vmas)
+ci_pin_user_pages(unsigned long start, unsigned long nr_pages,
+		  unsigned int gup_flags, struct page **pages)
 {
   /* We support four get_user_pages() function prototypes here,
    * including an intermediate one that has one of the changes but not
@@ -163,7 +162,7 @@ pin_user_pages(unsigned long start, unsigned long nr_pages,
                                          gup_flags & FOLL_WRITE, 
                                          gup_flags & FOLL_FORCE,
 #endif
-                                         pages, vmas);
+                                         pages, NULL);
 }
 
 static inline void unpin_user_page(struct page *page)
@@ -178,6 +177,16 @@ static inline void unpin_user_pages(struct page **pages, unsigned long npages)
   for( i = 0; i < npages; i++ )
     put_page(pages[i]);
 }
+#else /* EFRM_GUP_HAS_PIN */
+
+/* linux-6.5 removes vmas parameter from pin_user_pages() */
+#ifndef EFRM_GUP_PIN_HAS_VMAS
+#define ci_pin_user_pages pin_user_pages
+#else
+#define ci_pin_user_pages(start, nr_pages, gup_flags, pages) \
+  pin_user_pages((start), (nr_pages), (gup_flags), (pages), NULL)
+#endif
+
 #endif
 
 #ifndef EFRM_GUP_HAS_DMA_PINNED
