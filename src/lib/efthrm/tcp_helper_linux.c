@@ -873,6 +873,230 @@ static unsigned linux_tcp_helper_fop_poll_alien(struct file* filp,
   return alien_file->f_op->poll(alien_file, wait);
 }
 
+#ifndef EFRM_HAVE_FOP_SENDPAGE
+/* Linux >= 6.5 */
+#include <linux/splice.h>
+static int
+tcp_helper_bvec_sendmsg(ci_netif* ni, ci_tcp_state* ts, struct msghdr *msg)
+{
+  int i, ret;
+  struct iovec *io = CI_ALLOC_ARRAY(typeof(*io), msg->msg_iter.nr_segs);
+
+  if( io == NULL )
+    return -ENOMEM;
+
+  for( i = 0; i < msg->msg_iter.nr_segs; ++i ) {
+    const struct bio_vec *bvec = &msg->msg_iter.bvec[i];
+
+    io[i].iov_base = (char*)kmap(bvec->bv_page) + bvec->bv_offset;
+    io[i].iov_len = bvec->bv_len;
+  }
+
+  ret = ci_tcp_sendmsg(ni, ts, io, msg->msg_iter.nr_segs,
+                        (ts->s.b.sb_aflags & CI_SB_AFLAG_O_NONBLOCK) | msg->msg_flags,
+                        CI_ADDR_SPC_KERNEL);
+  ci_free(io);
+  return ret;
+}
+
+/* X-SPDX-Source-URL: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git */
+/* X-SPDX-Source-Tag: v6.5 */
+/* X-SPDX-Source-File: fs/pipe.c */
+/* X-SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Comment: These functions are not exported from Linux; Onload uses
+ *                 them in ci_splice_to_socket() below.
+ *                 'ci' prefix is added in order not to clash with Linux names.*/
+static inline bool ci_pipe_readable(const struct pipe_inode_info *pipe)
+{
+	unsigned int head = READ_ONCE(pipe->head);
+	unsigned int tail = READ_ONCE(pipe->tail);
+	unsigned int writers = READ_ONCE(pipe->writers);
+
+	return !pipe_empty(head, tail) || !writers;
+}
+static void ci_pipe_wait_readable(struct pipe_inode_info *pipe)
+{
+	pipe_unlock(pipe);
+	wait_event_interruptible(pipe->rd_wait, ci_pipe_readable(pipe));
+	pipe_lock(pipe);
+}
+/* X-SPDX-Restore: */
+
+/* X-SPDX-Source-URL: https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git */
+/* X-SPDX-Source-Tag: v6.5 */
+/* X-SPDX-Source-File: fs/splice.c */
+/* X-SPDX-License-Identifier: GPL-2.0-only */
+/* X-SPDX-Comment: splice_to_socket() function exists in Linux-6.5 and replaces
+ *                 removed generic_splice_sendpage(). The function is not exported
+ *                 for modules, so we define it here with slight modifications to
+ *                 work with Onload sockets.
+ *                 Tab indentation comes from Linux.
+ *                 Space indented lines are Onload related code.
+ *                 'ci' prefix is added in order not to clash with Linux names.*/
+static void ci_wakeup_pipe_writers(struct pipe_inode_info *pipe)
+{
+	smp_mb();
+	if (waitqueue_active(&pipe->wr_wait))
+		wake_up_interruptible(&pipe->wr_wait);
+	kill_fasync(&pipe->fasync_writers, SIGIO, POLL_OUT);
+}
+static ssize_t ci_splice_to_socket(struct pipe_inode_info *pipe, struct file *out,
+			 loff_t *ppos, size_t len, unsigned int flags)
+{
+  ci_private_t* priv = out->private_data;
+  tcp_helper_endpoint_t* ep = efab_priv_to_ep(priv);
+  struct file* os_sock;
+
+	struct socket *sock;
+	struct bio_vec bvec[16];
+	struct msghdr msg = {};
+	ssize_t ret = 0;
+	size_t spliced = 0;
+	bool need_wakeup = false;
+
+	pipe_lock(pipe);
+
+	while (len > 0) {
+		unsigned int head, tail, mask, bc = 0;
+		size_t remain = len;
+
+		/*
+		 * Check for signal early to make process killable when there
+		 * are always buffers available
+		 */
+		ret = -ERESTARTSYS;
+		if (signal_pending(current))
+			break;
+
+		while (pipe_empty(pipe->head, pipe->tail)) {
+			ret = 0;
+			if (!pipe->writers)
+				goto out;
+
+			if (spliced)
+				goto out;
+
+			ret = -EAGAIN;
+			if (flags & SPLICE_F_NONBLOCK)
+				goto out;
+
+			ret = -ERESTARTSYS;
+			if (signal_pending(current))
+				goto out;
+
+			if (need_wakeup) {
+				ci_wakeup_pipe_writers(pipe);
+				need_wakeup = false;
+			}
+
+			ci_pipe_wait_readable(pipe);
+		}
+
+		head = pipe->head;
+		tail = pipe->tail;
+		mask = pipe->ring_size - 1;
+
+		while (!pipe_empty(head, tail)) {
+			struct pipe_buffer *buf = &pipe->bufs[tail & mask];
+			size_t seg;
+
+			if (!buf->len) {
+				tail++;
+				continue;
+			}
+
+			seg = min_t(size_t, remain, buf->len);
+
+			ret = pipe_buf_confirm(pipe, buf);
+			if (unlikely(ret)) {
+				if (ret == -ENODATA)
+					ret = 0;
+				break;
+			}
+
+			bvec_set_page(&bvec[bc++], buf->page, seg, buf->offset);
+			remain -= seg;
+			if (remain == 0 || bc >= ARRAY_SIZE(bvec))
+				break;
+			tail++;
+		}
+
+		if (!bc)
+			break;
+
+		msg.msg_flags = MSG_SPLICE_PAGES;
+		if (flags & SPLICE_F_MORE)
+			msg.msg_flags |= MSG_MORE;
+		if (remain && pipe_occupancy(pipe->head, tail) > 0)
+			msg.msg_flags |= MSG_MORE;
+		if (out->f_flags & O_NONBLOCK)
+			msg.msg_flags |= MSG_DONTWAIT;
+
+		iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, bvec, bc,
+			      len - remain);
+
+                if( priv->fd_flags & OO_FDFLAG_EP_TCP ) {
+                  tcp_helper_resource_t* trs = efab_priv_to_thr(priv);
+                  ci_sock_cmn* s = SP_TO_SOCK(&trs->netif, priv->sock_id);
+                  if(CI_LIKELY( s->b.state & CI_TCP_STATE_TCP_CONN )) {
+                    ret = tcp_helper_bvec_sendmsg(&trs->netif, SOCK_TO_TCP(s),
+                                                  &msg);
+                  }
+                  else {
+                    /* Closed or listening.  Return epipe.  Do not send SIGPIPE,
+                     * because Linux will do it for us. */
+                    return -s->tx_errno;
+                  }
+                }
+                else {
+                  ret = oo_os_sock_get_from_ep(ep, &os_sock);
+                  if( ret == 0 ) {
+                    sock = SOCKET_I(os_sock->f_path.dentry->d_inode);
+                    ret = sock_sendmsg(sock, &msg);
+                  }
+                }
+		if (ret <= 0)
+			break;
+
+		spliced += ret;
+		len -= ret;
+		tail = pipe->tail;
+		while (ret > 0) {
+			struct pipe_buffer *buf = &pipe->bufs[tail & mask];
+			size_t seg = min_t(size_t, ret, buf->len);
+
+			buf->offset += seg;
+			buf->len -= seg;
+			ret -= seg;
+
+			if (!buf->len) {
+				pipe_buf_release(pipe, buf);
+				tail++;
+			}
+		}
+
+		if (tail != pipe->tail) {
+			pipe->tail = tail;
+			if (pipe->files)
+				need_wakeup = true;
+		}
+	}
+
+out:
+	pipe_unlock(pipe);
+	if (need_wakeup)
+		ci_wakeup_pipe_writers(pipe);
+	return spliced ?: ret;
+}
+/* X-SPDX-Restore: */
+#endif /* ! EFRM_HAVE_FOP_SENDPAGE */
+
+#ifdef EFRM_HAVE_FOP_SENDPAGE
+#define oo_fop_splice_write generic_splice_sendpage
+#else
+/* Linux >= 6.5 */
+#define oo_fop_splice_write ci_splice_to_socket
+#endif
 
 /* Linux file operations for TCP and UDP.
 */
@@ -889,8 +1113,10 @@ struct file_operations linux_tcp_helper_fops_tcp =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_read_tcp),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_write_tcp),
 #endif
+#ifdef EFRM_HAVE_FOP_SENDPAGE
   CI_STRUCT_MBR(sendpage, linux_tcp_helper_fop_sendpage),
-  CI_STRUCT_MBR(splice_write, generic_splice_sendpage),
+#endif /* EFRM_HAVE_FOP_SENDPAGE */
+  CI_STRUCT_MBR(splice_write, oo_fop_splice_write),
 #endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_tcp),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
@@ -915,8 +1141,10 @@ struct file_operations linux_tcp_helper_fops_udp =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_read_udp),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_write_udp),
 #endif
+#ifdef EFRM_HAVE_FOP_SENDPAGE
   CI_STRUCT_MBR(sendpage, linux_tcp_helper_fop_sendpage_udp),
-  CI_STRUCT_MBR(splice_write, generic_splice_sendpage),
+#endif /* EFRM_HAVE_FOP_SENDPAGE */
+  CI_STRUCT_MBR(splice_write, oo_fop_splice_write),
 #endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_udp),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
@@ -940,7 +1168,7 @@ struct file_operations linux_tcp_helper_fops_passthrough =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_read_passthrough),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_write_passthrough),
 #endif
-  CI_STRUCT_MBR(splice_write, generic_splice_sendpage),
+  CI_STRUCT_MBR(splice_write, oo_fop_splice_write),
 #endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_passthrough),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),
@@ -964,7 +1192,7 @@ struct file_operations linux_tcp_helper_fops_alien =
   CI_STRUCT_MBR(aio_read, linux_tcp_helper_fop_aio_read_alien),
   CI_STRUCT_MBR(aio_write, linux_tcp_helper_fop_aio_write_alien),
 #endif
-  CI_STRUCT_MBR(splice_write, generic_splice_sendpage),
+  CI_STRUCT_MBR(splice_write, oo_fop_splice_write),
 #endif /* ! CI_CFG_UL_INTERRUPT_HELPER */
   CI_STRUCT_MBR(poll, linux_tcp_helper_fop_poll_alien),
   CI_STRUCT_MBR(unlocked_ioctl, oo_fop_unlocked_ioctl),

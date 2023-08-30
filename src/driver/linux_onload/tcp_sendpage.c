@@ -18,6 +18,7 @@
 #if ! CI_CFG_UL_INTERRUPT_HELPER
 CI_BUILD_ASSERT(CI_SB_AFLAG_O_NONBLOCK == MSG_DONTWAIT);
 
+#ifdef EFRM_HAVE_FOP_SENDPAGE
 
 ci_inline int sendpage_copy(ci_netif* ni, ci_tcp_state* ts, struct page* page,
                             int offset, size_t size, int flags)
@@ -91,4 +92,5 @@ ssize_t linux_tcp_helper_fop_sendpage_udp(struct file* filp,
                    page, offset, size, ppos, flags);
   return rc;
 }
+#endif /* EFRM_HAVE_FOP_SENDPAGE */
 #endif

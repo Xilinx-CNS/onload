@@ -27,6 +27,7 @@ EFRM_SOCK_SENDMSG_NEEDS_LEN	symtype	sock_sendmsg	include/linux/net.h int(struct 
 EFRM_SOCK_RECVMSG_NEEDS_BYTES	symtype sock_recvmsg	include/linux/net.h int(struct socket *, struct msghdr *, size_t, int)
 
 EFRM_HAVE_FOP_READ_ITER	memtype	struct_file_operations	read_iter	include/linux/fs.h ssize_t (*) (struct kiocb *, struct iov_iter *)
+EFRM_HAVE_FOP_SENDPAGE		memtype	struct_file_operations	sendpage	include/linux/fs.h ssize_t (*) (struct file *, struct page *, int, size_t, loff_t *, int)
 
 EFRM_SOCK_CREATE_KERN_HAS_NET	symtype	sock_create_kern	include/linux/net.h int(struct net *, int, int, int, struct socket **)
 
