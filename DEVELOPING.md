@@ -23,7 +23,6 @@ Build requirements
  * libcap-devel
  * libmnl-devel
  * perl-Test-Harness
- * gcc-c++ or g++
 
 
  You will also need to install the kernel and its development headers (i.e. kernel
