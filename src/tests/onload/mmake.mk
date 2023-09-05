@@ -5,8 +5,8 @@ SUBDIRS	:= wire_order tproxy_preload hwtimestamping \
 
 ifneq ($(ONLOAD_ONLY),1)
 # These tests have dependency on kernel_compat lib,
-# tests/tap, libmnl that are !ONLOAD_ONLY
-SUBDIRS += oof onload_remote_monitor
+# tests/tap, libmnl, C++ that are !ONLOAD_ONLY
+SUBDIRS += oof onload_remote_monitor startup
 ifneq ($(NO_TEAMING),1)
 ifneq ($(NO_NETLINK),1)
 SUBDIRS += cplane_unit cplane_sysunit
@@ -15,9 +15,6 @@ endif # NO_TEAMING
 ifeq ($(GNU),1)
 SUBDIRS += buddy
 endif # GNU
-ifeq ($(USE_CXX),1)
-SUBDIRS += startup
-endif # USE_CXX
 endif # ONLOAD_ONLY
 
 
