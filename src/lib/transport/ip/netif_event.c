@@ -2158,10 +2158,10 @@ int ci_netif_poll_intf_future(ci_netif* ni, int intf_i, ci_uint64 start_frc)
   ps.tx_pkt_free_list_n = 0;
 
   /* We expect the completion event within a microsecond or so. The timeout
-   * of 100us is to avoid wedging the stack in the case of hardware
+   * of 10us is to avoid wedging the stack in the case of hardware
    * failure/removal or a bug which prevents us getting the event.
    */
-  max_spin = IPTIMER_STATE(ni)->khz / 10000;
+  max_spin = IPTIMER_STATE(ni)->khz / 100;
   ci_prefetch(pkt->dma_start + CI_CACHE_LINE_SIZE);
   while( (rc = future_poll(evq, ev, EF_VI_EVENT_POLL_MIN_EVS)) == 0 ) {
     ci_frc64(&now_frc);
