@@ -696,7 +696,7 @@ static CI_NORETURN usage(const char* fmt, ...)
   fprintf(stderr, "  -c <cut-through>    - CTPIO cut-through threshold\n");
   fprintf(stderr, "  -p                  - CTPIO no-poison mode\n");
   fprintf(stderr, "  -m <modes>          - allow mode of the set: [c]tpio, \n");
-  fprintf(stderr, "                        [pio], [a]lternatives, [d]ma, [x]dp\n");
+  fprintf(stderr, "                        [pio], [a]lternatives, [d]ma\n");
   fprintf(stderr, "  -t <modes>          - set TX_PUSH: [a]lways, [d]isable\n");
   fprintf(stderr, "  -o <filename>       - save raw timings to file\n");
   fprintf(stderr, "\n");
