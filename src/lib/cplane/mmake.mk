@@ -1,27 +1,39 @@
 # SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2015-2020 Xilinx, Inc.
-TARGET		:= $(CPLANE_LIB)
+TARGETS		:= $(CPLANE_LIB) $(CPLANE_API_SHARED_REALNAME) $(CPLANE_API_SHARED_SONAME) $(CPLANE_API_SHARED_LINKNAME)
 MMAKE_TYPE	:= LIB
 
 LIB_SRCS	:= mib.c mib_fwd.c services.c onload.c version.c onload_version.c
 LIB_OBJS	:= $(LIB_SRCS:%.c=$(MMAKE_OBJ_PREFIX)%.o)
+UAPI_LIB_OBJS := uapi_top.o uapi_llap.o uapi_resolve.o
 
-ALL		:= $(TARGET)
+ALL		:= $(TARGETS)
 
+MMAKE_CFLAGS += -fvisibility=hidden
 
 ifndef MMAKE_NO_RULES
 
 all: $(ALL)
 
-lib: $(TARGET)
+lib: $(TARGETS)
 
 clean:
 	@$(MakeClean)
 
 $(LIB_OBJS): $(CP_INTF_VER_HDR)
 
-$(TARGET): $(LIB_OBJS)
+$(CPLANE_LIB): $(LIB_OBJS)
 	$(MMakeLinkStaticLib)
+
+$(UAPI_LIB_OBJS) : $(CP_INTF_VER_HDR)
+$(CPLANE_API_SHARED_REALNAME): $(UAPI_LIB_OBJS) $(CPLANE_LIB)
+	@(soname="$(CPLANE_API_SHARED_SONAME)" libs="$(LINK_CPLANE_LIB) $(LINK_CITOOLS_LIB)"; $(MMakeLinkDynamicLib))
+
+$(CPLANE_API_SHARED_SONAME): $(CPLANE_API_SHARED_REALNAME)
+	ln -fs $(<F) $@
+
+$(CPLANE_API_SHARED_LINKNAME): $(CPLANE_API_SHARED_REALNAME)
+	ln -fs $(<F) $@
 
 endif
 

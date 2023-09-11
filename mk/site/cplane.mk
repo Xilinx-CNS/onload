@@ -27,3 +27,14 @@ CP_INTF_VER_CFLAGS := -include $(CP_INTF_VER_HDR)
 $(CP_INTF_VER_HDR): $(CP_INTF_HDRS)
 	@md5=$$(cat $(CP_INTF_HDRS) | md5sum | sed 's/ .*//'); \
 	echo "#define OO_CP_INTF_VER $$md5" >"$@"
+
+lib_maj   := 1
+lib_min   := 0
+lib_mic   := 0
+lib_name  := efcp
+lib_where := lib/cplane
+CPLANE_API_SHARED_REALNAME	:= $(MMakeGenerateDllRealname)
+CPLANE_API_SHARED_SONAME	:= $(MMakeGenerateDllSoname)
+CPLANE_API_SHARED_LINKNAME	:= $(MMakeGenerateDllLinkname)
+CPLANE_API_SHARED_LINK		:= $(MMakeGenerateDllLink)
+CPLANE_API_SHARED_DEPEND	:= $(MMakeGenerateDllDepend)
