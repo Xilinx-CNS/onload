@@ -21,6 +21,99 @@ bool ef_cp_intf_version_verify(struct ef_cp_handle *cp,
   return ver->version == *cp->cp.mib[0].llap_version;
 }
 
+static inline int trie_slice(int ifindex, int level_num)
+{
+  return (ifindex >> (level_num * EF_CP_LLAP_TRIE_BITS)) &
+         EF_CP_LLAP_TRIE_MASK;
+}
+
+void cp_uapi_ifindex_table_init(struct ef_cp_handle *cp)
+{
+  int i;
+  for( i = 0; i < EF_CP_LLAP_TRIE_DEPTH - 1; ++i)
+    cp->llap_levels[i][0] = (void*)cp->llap_levels[i + 1];
+}
+
+static void ifindex_table_destroy_recurse(struct llap_extra** level, int level_num)
+{
+  if( ! level )
+    return;
+  if( level_num > 1 ) {
+    int i;
+    for( i = 0; i < EF_CP_LLAP_TRIE_NUM; ++i )
+      ifindex_table_destroy_recurse((void*)level[i], level_num - 1);
+  }
+  free(level);
+}
+
+void cp_uapi_ifindex_table_destroy(struct ef_cp_handle *cp)
+{
+  int level_num, i;
+
+  for( level_num = 1; level_num < EF_CP_LLAP_TRIE_DEPTH; ++level_num) {
+    /* Skip i=0 because that level is statically allocated in the cp */
+    for( i = 1; i < EF_CP_LLAP_TRIE_NUM; ++i )
+      ifindex_table_destroy_recurse(
+              (void*)cp->llap_levels[EF_CP_LLAP_TRIE_DEPTH - level_num - 1][i],
+              level_num);
+  }
+}
+
+struct llap_extra* cp_uapi_lookup_ifindex(struct ef_cp_handle *cp, int ifindex)
+{
+  /* The |1 here solves the special case of ifindex=0, which would overrun the
+   * array (and require use of lzcnt rather than bsf opcode) */
+  int rev_level_num = __builtin_clz(ifindex | 1) / EF_CP_LLAP_TRIE_BITS;
+  CI_BUILD_ASSERT(offsetof(struct ef_cp_handle, llap_level0) ==
+                  offsetof(struct ef_cp_handle, llap_levels[EF_CP_LLAP_TRIE_DEPTH-1]));
+  struct llap_extra **level = cp->llap_levels[rev_level_num];
+  int level_num = EF_CP_LLAP_TRIE_DEPTH - rev_level_num - 1;
+  while( level_num > 0 ) {
+    level = (void*)level[trie_slice(ifindex, level_num)];
+    if(CI_UNLIKELY( ! level ))
+      return NULL;
+    --level_num;
+  }
+  return &((struct llap_extra*)level)[trie_slice(ifindex, 0)];
+}
+
+static struct llap_extra* cp_uapi_insert_ifindex(struct ef_cp_handle *cp,
+                                                 int ifindex)
+{
+  int rev_level_num = __builtin_clz(ifindex | 1) / EF_CP_LLAP_TRIE_BITS;
+  struct llap_extra **level = cp->llap_levels[rev_level_num];
+  int level_num = EF_CP_LLAP_TRIE_DEPTH - rev_level_num - 1;
+
+  while( level_num > 0 ) {
+    struct llap_extra **next = (void*)level[trie_slice(ifindex, level_num)];
+    if( ! next )
+      break;
+    level = next;
+    --level_num;
+  }
+  if( level_num > 0 ) {
+    struct llap_extra **new_levels[EF_CP_LLAP_TRIE_DEPTH];
+    int i;
+
+    new_levels[0] = calloc(EF_CP_LLAP_TRIE_NUM, sizeof(struct llap_extra));
+    if( ! new_levels[0] )
+      return NULL;
+    for( i = 1; i < level_num; ++i ) {
+      new_levels[i] = calloc(EF_CP_LLAP_TRIE_NUM, sizeof(struct llap_extra*));
+      if( ! new_levels[i] ) {
+        for( ; i >= 0; --i)
+          free(new_levels[i]);
+        return NULL;
+      }
+      new_levels[i][trie_slice(ifindex, i)] = (void*)new_levels[i - 1];
+    }
+    ci_wmb();
+    level[trie_slice(ifindex, level_num)] = (void*)new_levels[i - 1];
+    level = new_levels[0];
+  }
+  return &((struct llap_extra*)level)[trie_slice(ifindex, 0)];
+}
+
 static bool llap_matches_filter_flags(const cicp_llap_row_t *row,
                                       unsigned flags)
 {
@@ -141,7 +234,8 @@ static void cp_intf_to_ef(const cicp_llap_row_t *row,
   CI_BUILD_ASSERT(EF_CP_INTF_F_ALIEN == CP_LLAP_ALIEN);
   intf->flags = row->flags;
   intf->mtu = row->mtu;
-  intf->registered_cookie = extra->is_registered ? extra->cookie : NULL;
+  intf->registered_cookie = extra && extra->is_registered ?
+                               extra->cookie : NULL;
   CI_BUILD_ASSERT(EF_CP_ENCAP_F_VLAN == CICP_LLAP_TYPE_VLAN);
   CI_BUILD_ASSERT(EF_CP_ENCAP_F_BOND == CICP_LLAP_TYPE_BOND);
   CI_BUILD_ASSERT(EF_CP_ENCAP_F_BOND_PORT == CICP_LLAP_TYPE_SLAVE);
@@ -172,7 +266,7 @@ int ef_cp_get_intf(struct ef_cp_handle *cp, int ifindex,
     if( cicp_llap_row_is_free(&mib->llap[rowid]) )
       break;
     if( mib->llap[rowid].ifindex == ifindex ) {
-      cp_intf_to_ef(&mib->llap[rowid], &cp->llap_extra[rowid], intf);
+      cp_intf_to_ef(&mib->llap[rowid], cp_uapi_lookup_ifindex(cp, ifindex), intf);
       rc = 0;
       break;
     }
@@ -200,7 +294,8 @@ int ef_cp_get_intf_by_name(struct ef_cp_handle *cp, const char* name,
     if( cicp_llap_row_is_free(&mib->llap[rowid]) )
       break;
     if( ! strncmp(mib->llap[rowid].name, name, sizeof(mib->llap[rowid].name)) ) {
-      cp_intf_to_ef(&mib->llap[rowid], &cp->llap_extra[rowid], intf);
+      cp_intf_to_ef(&mib->llap[rowid],
+                    cp_uapi_lookup_ifindex(cp, mib->llap[rowid].ifindex), intf);
       rc = 0;
       break;
     }
@@ -275,27 +370,19 @@ int ef_cp_get_intf_addrs(struct ef_cp_handle *cp, int ifindex,
   return rc;
 }
 
-EF_CP_PUBLIC_API
-int ef_cp_register_intf(struct ef_cp_handle *cp, int ifindex, void *user_cookie,
-                        unsigned flags)
+static bool llap_row_exists(struct oo_cplane_handle *cp, int ifindex)
 {
   struct cp_mibs* mib;
   cp_version_t version;
   int rowid;
-  int rc;
+  bool rc = false;
 
-  if( flags )
-    return -EINVAL;
-  CP_VERLOCK_START(version, mib, &cp->cp)
-  rc = -ENOENT;
+  CP_VERLOCK_START(version, mib, cp)
   for( rowid = 0; rowid < mib->dim->llap_max; ++rowid ) {
     if( cicp_llap_row_is_free(&mib->llap[rowid]) )
       break;
     if( mib->llap[rowid].ifindex == ifindex ) {
-      cp->llap_extra[rowid].cookie = user_cookie;
-      ci_wmb();
-      cp->llap_extra[rowid].is_registered = true;
-      rc = 0;
+      rc = true;
       break;
     }
   }
@@ -304,26 +391,44 @@ int ef_cp_register_intf(struct ef_cp_handle *cp, int ifindex, void *user_cookie,
 }
 
 EF_CP_PUBLIC_API
-int ef_cp_unregister_intf(struct ef_cp_handle *cp, int ifindex, unsigned flags)
+int ef_cp_register_intf(struct ef_cp_handle *cp, int ifindex, void *user_cookie,
+                        unsigned flags)
 {
-  struct cp_mibs* mib;
-  cp_version_t version;
-  int rowid;
   int rc;
 
   if( flags )
     return -EINVAL;
-  CP_VERLOCK_START(version, mib, &cp->cp)
-  rc = -ENOENT;
-  for( rowid = 0; rowid < mib->dim->llap_max; ++rowid ) {
-    if( cicp_llap_row_is_free(&mib->llap[rowid]) )
-      break;
-    if( mib->llap[rowid].ifindex == ifindex ) {
-      cp->llap_extra[rowid].is_registered = false;
-      rc = 0;
-      break;
+  pthread_mutex_lock(&cp->llap_update_mtx);
+  rc = llap_row_exists(&cp->cp, ifindex) ? 0 : -ENOENT;
+  if( rc == 0 ) {
+    struct llap_extra *extra = cp_uapi_insert_ifindex(cp, ifindex);
+    if( ! extra )
+      rc = -ENOMEM;
+    else {
+      extra->cookie = user_cookie;
+      ci_wmb();
+      extra->is_registered = true;
     }
   }
-  CP_VERLOCK_STOP(version, mib)
+  pthread_mutex_unlock(&cp->llap_update_mtx);
+  return rc;
+}
+
+EF_CP_PUBLIC_API
+int ef_cp_unregister_intf(struct ef_cp_handle *cp, int ifindex, unsigned flags)
+{
+  int rc;
+  struct llap_extra *extra;
+
+  if( flags )
+    return -EINVAL;
+  pthread_mutex_lock(&cp->llap_update_mtx);
+  rc = llap_row_exists(&cp->cp, ifindex) ? 0 : -ENOENT;
+  /* even if the row doesn't exist now, unregister the entry in case it existed
+   * in the past */
+  extra = cp_uapi_lookup_ifindex(cp, ifindex);
+  if( extra )
+    extra->is_registered = false;
+  pthread_mutex_unlock(&cp->llap_update_mtx);
   return rc;
 }

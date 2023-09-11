@@ -13,10 +13,12 @@ static unsigned ip_ver(const void *ip_hdr)
 static int64_t apply_fwd_result(struct ef_cp_handle *cp, void *ip_hdr,
                                 size_t *prefix_space,
                                 struct ef_cp_fwd_meta *meta,
-                                const struct cp_fwd_data *data)
+                                const struct cp_fwd_data *data, uint64_t flags)
 {
   size_t space_needed = ETH_HLEN;
   uint16_t ethertype;
+  struct llap_extra *extra;
+  int64_t rc = 0;
 
   if( ! (data->flags & CICP_FWD_DATA_FLAG_ARP_VALID) ) {
     if( data->flags & CICP_FWD_DATA_FLAG_ARP_FAILED )
@@ -30,7 +32,15 @@ static int64_t apply_fwd_result(struct ef_cp_handle *cp, void *ip_hdr,
   if( *prefix_space < space_needed )
     return -E2BIG;
   meta->ifindex = data->base.ifindex;
-  meta->intf_cookie = NULL /*FIXME todo*/;
+  extra = cp_uapi_lookup_ifindex(cp, data->base.ifindex);
+  if( extra && extra->is_registered )
+    meta->intf_cookie = extra->cookie;
+  else if( ! (flags & EF_CP_RESOLVE_F_UNREGISTERED) )
+    return -EADDRNOTAVAIL;
+  else {
+    meta->intf_cookie = NULL;
+    rc |= EF_CP_RESOLVE_S_UNREGISTERED;
+  }
   meta->mtu = data->base.mtu;
   if( ip_ver(ip_hdr) == 4 ) {
     ((uint8_t*)ip_hdr)[8] = data->base.hop_limit;
@@ -49,12 +59,14 @@ static int64_t apply_fwd_result(struct ef_cp_handle *cp, void *ip_hdr,
     ((uint16_t*)ip_hdr)[1] = ethertype;
     ethertype = htons(ETH_P_8021Q);
   }
+  if( data->encap.type & CICP_LLAP_TYPE_LOOP )
+    rc |= EF_CP_RESOLVE_S_LOOPBACK;
   ip_hdr = (char*)ip_hdr - ETH_HLEN;
   memcpy(ip_hdr, data->dst_mac, ETH_ALEN);
   memcpy((char*)ip_hdr + ETH_ALEN, data->src_mac, ETH_ALEN);
   memcpy((char*)ip_hdr + ETH_ALEN * 2, &ethertype, 2);
   *prefix_space = space_needed;
-  return data->encap.type & CICP_LLAP_TYPE_LOOP ? EF_CP_RESOLVE_S_LOOPBACK : 0;
+  return rc;
 }
 
 static struct cp_fwd_key build_key(const void *ip_hdr,
@@ -117,7 +129,7 @@ int64_t ef_cp_resolve(struct ef_cp_handle *cp, void *ip_hdr,
     struct cp_mibs *mib = &cp->cp.mib[0];
     cp_get_fwd_rw(&mib->fwd_table, verinfo)->frc_used = ci_frc64_get();
     rc = apply_fwd_result(cp, ip_hdr, prefix_space, meta,
-                          cp_get_fwd_data(&mib->fwd_table, verinfo));
+                          cp_get_fwd_data(&mib->fwd_table, verinfo), flags);
     if( rc < 0 ) {
       /* It's convenient for callers if we invalidate the verinfo when we
        * return an error, since it makes the application's dispatch loop
@@ -143,7 +155,7 @@ int64_t ef_cp_resolve(struct ef_cp_handle *cp, void *ip_hdr,
        * allow a zero-initialized verinfo to be classed as invalid (thus making
        * the API harder to misuse). */
       ver->generation = 1;
-      rc = apply_fwd_result(cp, ip_hdr, prefix_space, meta, &data);
+      rc = apply_fwd_result(cp, ip_hdr, prefix_space, meta, &data, flags);
     }
     if( rc < 0 )
       ver->generation = 0;

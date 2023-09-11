@@ -23,11 +23,10 @@ int ef_cp_init(struct ef_cp_handle **cph, unsigned flags)
   rc = oo_cp_create(cp->drv_fd, &cp->cp, CP_SYNC_LIGHT, 0);
   if( rc )
     goto fail2;
-  cp->llap_extra = calloc(cp->cp.mib->dim->llap_max, sizeof(*cp->llap_extra));
-  if( ! cp->llap_extra ) {
-    rc = -ENOMEM;
+  rc = -pthread_mutex_init(&cp->llap_update_mtx, NULL);
+  if( rc )
     goto fail3;
-  }
+  cp_uapi_ifindex_table_init(cp);
   *cph = cp;
   return 0;
 
@@ -43,6 +42,8 @@ fail1:
 EF_CP_PUBLIC_API
 void ef_cp_fini(struct ef_cp_handle *cp)
 {
+  cp_uapi_ifindex_table_destroy(cp);
+  pthread_mutex_destroy(&cp->llap_update_mtx);
   oo_cp_destroy(&cp->cp);
   oo_fd_close(cp->drv_fd);
   free(cp);
