@@ -1753,6 +1753,12 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
 		rc;
 }
 
+int ef10_ef100_design_parameters(struct efhw_nic *nic,
+                                 struct efab_nic_design_parameters *dp)
+{
+	return 0;
+}
+
 size_t ef10_ef100_max_shared_rxqs(struct efhw_nic *nic)
 {
 	return 0;
@@ -2744,5 +2750,6 @@ struct efhw_func_ops ef10_char_functional_units = {
 	ef10_vi_io_region,
 	ef10_inject_reset_ev,
 	ef10_ctpio_addr,
+        ef10_ef100_design_parameters,
 	ef10_ef100_max_shared_rxqs,
 };

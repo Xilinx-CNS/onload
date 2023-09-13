@@ -232,3 +232,8 @@
 /*-------------- ctpio ------------------------ */
 #define efhw_nic_ctpio_addr(nic, instance, addr) \
 	((nic)->efhw_func->ctpio_addr((nic), (instance), (addr)))
+
+/*-------------- design parameters ------------ */
+#define efhw_nic_design_parameters(nic, dp) \
+	((nic)->efhw_func->design_parameters((nic), (dp)))
+

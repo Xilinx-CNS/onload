@@ -1248,6 +1248,12 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
   return 0;
 }
 
+static int
+af_xdp_design_parameters(struct efhw_nic *nic,
+                         struct efab_nic_design_parameters *dp)
+{
+  return 0;
+}
 
 static size_t af_xdp_max_shared_rxqs(struct efhw_nic *nic)
 {
@@ -1835,6 +1841,7 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_vi_io_region,
 	af_xdp_inject_reset_ev,
 	af_xdp_ctpio_addr,
+	af_xdp_design_parameters,
 	af_xdp_max_shared_rxqs,
 };
 

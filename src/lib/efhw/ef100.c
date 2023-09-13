@@ -844,5 +844,6 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_vi_io_region,
 	ef100_inject_reset_ev,
 	ef100_ctpio_addr,
+	ef10_ef100_design_parameters,
 	ef10_ef100_max_shared_rxqs,
 };

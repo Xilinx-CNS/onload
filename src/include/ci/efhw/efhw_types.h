@@ -56,6 +56,7 @@
 
 struct efhw_nic;
 struct efhw_ev_handler;
+struct efab_nic_design_parameters;
 
 typedef uint32_t efhw_btb_handle;
 
@@ -453,6 +454,16 @@ struct efhw_func_ops {
 	 */
 	int (*ctpio_addr)(struct efhw_nic* nic, int instance,
 			  resource_size_t* addr);
+
+  /*-------------- design parameters ------------------------ */
+
+	/*! Obtain the design parameters for the NIC. Any parameters that are
+	 * not known to the requester won't be filled in, but might be checked
+	 * for compatibility with the hardware spec that the requester is
+	 * assumed to be using.
+	 * Returns 0 on success, a negative error otherwise. */
+	int (*design_parameters)(struct efhw_nic* nic,
+	                         struct efab_nic_design_parameters* dp);
 
 	/*! Maximum permitted number of rxqs carrying shared packets. Shared
 	 * queues are attached-to by multiple clients and they're read-only to

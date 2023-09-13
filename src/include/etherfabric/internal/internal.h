@@ -171,6 +171,70 @@ extern int ef10_receive_get_timestamp_with_sync_flags_internal
 /*! Calibrate the CTPIO write timing loop */
 extern int ef_vi_ctpio_init(ef_vi* vi);
 
+
+/* Hardware design parameters for NICs, typically acquired in the driver and
+ * provided to userspace. Not all parameters make sense for all architectures;
+ * unused ones should be left as zero. The structure is tagged with its size to
+ * allow new ones to be added without breaking ABI compatibility.
+ *
+ * If an older userspace library does not know about a new parameter, the driver
+ * can detect this and check that the parameter's value is compatible with the
+ * library's assumptions.
+ *
+ * If an older driver does not know about a new parameter, the library can
+ * detect this and infer a value based on the hardware spec before it was
+ * parametrised. (A special case is when the driver cannot provide parameters
+ * at all).
+ *
+ * For correct behaviour when adding new parameters, we need the driver to be
+ * up to date with the NIC, so there are no parameters unknown to the driver.
+ *
+ * If the new parameter could modify existing behaviour, such that the library
+ * assumes a particular known value:
+ *  - define a default value below, based on the assumption
+ *  - the driver should check that EITHER the parameter is known to the library,
+ *    OR the value matches the assumption
+ *  - the library should use parameterised value if known to the driver,
+ *    otherwise the default value.
+ *
+ * If the new parameter is for new behaviour, with no prior assumptions:
+ *  - there should be no need for a default value, though it might be useful
+ *    to provide one if it makes sense
+ *  - the driver can provide the value unconditionally; values unknown to the
+ *    library will be truncated when copied to userland
+ *  - the library should check whether the parameter is known to the driver and
+ *    otherwise assume the new behaviour does not exist on this NIC.
+ *
+ * NOTE: we don't currently have a good solution for the case where the user
+ * library is too old to have a concept of design parameters, and therefore
+ * does not request them. In that case, we do not check its assumptions, giving
+ * undefined behaviour if they do not match the NIC's parameters.
+ */
+struct efab_nic_design_parameters {
+  /* This must come first */
+  uint64_t known_size;
+
+  /* New parameters must be added at the end */
+};
+
+/* Default value for a parameter */
+#define EFAB_NIC_DP_DEFAULT(PARAM) EFAB_NIC_DP_DEFAULT_ ## PARAM
+
+/* Initializer to set the known size according to the current context.
+ * This (or equivalent) must be done before passing it to another context. */
+#define EFAB_NIC_DP_INITIALIZER \
+  {.known_size = sizeof(struct efab_nic_design_parameters)}
+
+/* Check whether a parameter is known in the context that created the structure.
+ * This must be done before accessing that parameter. */
+#define EFAB_NIC_DP_KNOWN(DP, PARAM) \
+  (offsetof(struct efab_nic_design_parameters, PARAM) < (DP).known_size)
+
+/* Get a parameter value, or the default if not known */
+#define EFAB_NIC_DP_GET(DP, PARAM) \
+  (EFAB_NIC_DP_KNOWN(DP, PARAM) ? (DP).PARAM : EFAB_NIC_DP_DEFAULT(PARAM))
+
+
 /* Internal interfaces, so exclude from doxygen documentation */
 /*! \endcond internal */
 

@@ -70,6 +70,8 @@ extern int ef10_ef100_mcdi_cmd_init_rxq(struct efhw_nic *nic,
 					uint32_t numentries, int ps_buf_size,
 					int flag_force_rx_merge, int ef100_rx_buffer_size);
 
+extern int ef10_ef100_design_parameters(struct efhw_nic *nic,
+                                        struct efab_nic_design_parameters *dp);
 extern size_t ef10_ef100_max_shared_rxqs(struct efhw_nic *nic);
 
 extern int ef10_ef100_flush_tx_dma_channel(struct efhw_nic *nic,

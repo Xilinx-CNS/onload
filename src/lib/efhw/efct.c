@@ -107,6 +107,27 @@ efct_get_hugepages(struct efhw_nic *nic, int hwqid,
   return rc;
 }
 
+static int
+efct_design_parameters(struct efhw_nic *nic,
+                       struct efab_nic_design_parameters *dp)
+{
+  struct device *dev;
+  struct xlnx_efct_device* edev;
+  struct xlnx_efct_client* cli;
+  union xlnx_efct_param_value val;
+  int rc = 0;
+
+  EFCT_PRE(dev, edev, cli, nic, rc)
+  rc = edev->ops->get_param(cli, XLNX_EFCT_DESIGN_PARAM, &val);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  if( rc < 0 )
+    return rc;
+
+  /* TODO extract parameters from val.design_params to dp */
+
+  return 0;
+}
 
 static size_t
 efct_max_shared_rxqs(struct efhw_nic *nic)
@@ -1697,6 +1718,7 @@ struct efhw_func_ops efct_char_functional_units = {
   efct_vi_io_region,
   efct_inject_reset_ev,
   efct_ctpio_addr,
+  efct_design_parameters,
   efct_max_shared_rxqs,
 };
 
