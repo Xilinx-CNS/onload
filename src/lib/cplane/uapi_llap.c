@@ -370,7 +370,8 @@ int ef_cp_get_intf_addrs(struct ef_cp_handle *cp, int ifindex,
   return rc;
 }
 
-static bool llap_row_exists(struct oo_cplane_handle *cp, int ifindex)
+static bool llap_row_exists(struct oo_cplane_handle *cp, int ifindex,
+                            cicp_hwport_mask_t *tx_hwports)
 {
   struct cp_mibs* mib;
   cp_version_t version;
@@ -382,6 +383,9 @@ static bool llap_row_exists(struct oo_cplane_handle *cp, int ifindex)
     if( cicp_llap_row_is_free(&mib->llap[rowid]) )
       break;
     if( mib->llap[rowid].ifindex == ifindex ) {
+      if( tx_hwports )
+        *tx_hwports = mib->llap[rowid].encap.type & CICP_LLAP_TYPE_BOND ?
+                      0 : mib->llap[rowid].tx_hwports;
       rc = true;
       break;
     }
@@ -395,16 +399,24 @@ int ef_cp_register_intf(struct ef_cp_handle *cp, int ifindex, void *user_cookie,
                         unsigned flags)
 {
   int rc;
+  cicp_hwport_mask_t tx_hwports;
 
   if( flags )
     return -EINVAL;
   pthread_mutex_lock(&cp->llap_update_mtx);
-  rc = llap_row_exists(&cp->cp, ifindex) ? 0 : -ENOENT;
+  rc = llap_row_exists(&cp->cp, ifindex, &tx_hwports) ? 0 : -ENOENT;
   if( rc == 0 ) {
     struct llap_extra *extra = cp_uapi_insert_ifindex(cp, ifindex);
     if( ! extra )
       rc = -ENOMEM;
     else {
+      if( tx_hwports && (tx_hwports & (tx_hwports - 1)) == 0 ) {
+        int ix = ffs(tx_hwports);
+        cp->hwport_ifindex[ix] = ifindex;
+        if( ! extra->is_registered )
+          ++cp->registered_hwport_refcount[ix];
+        cp->registered_hwports |= tx_hwports;
+      }
       extra->cookie = user_cookie;
       ci_wmb();
       extra->is_registered = true;
@@ -419,16 +431,23 @@ int ef_cp_unregister_intf(struct ef_cp_handle *cp, int ifindex, unsigned flags)
 {
   int rc;
   struct llap_extra *extra;
+  cicp_hwport_mask_t tx_hwports;
 
   if( flags )
     return -EINVAL;
   pthread_mutex_lock(&cp->llap_update_mtx);
-  rc = llap_row_exists(&cp->cp, ifindex) ? 0 : -ENOENT;
+  rc = llap_row_exists(&cp->cp, ifindex, &tx_hwports) ? 0 : -ENOENT;
   /* even if the row doesn't exist now, unregister the entry in case it existed
    * in the past */
   extra = cp_uapi_lookup_ifindex(cp, ifindex);
-  if( extra )
+  if( extra ) {
     extra->is_registered = false;
+    if( rc == 0 && tx_hwports && (tx_hwports & (tx_hwports - 1)) == 0 ) {
+      int ix = ffs(tx_hwports);
+      if( --cp->registered_hwport_refcount[ix] == 0 )
+        cp->registered_hwports &= ~tx_hwports;
+    }
+  }
   pthread_mutex_unlock(&cp->llap_update_mtx);
   return rc;
 }

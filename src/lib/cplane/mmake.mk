@@ -25,6 +25,7 @@ $(LIB_OBJS): $(CP_INTF_VER_HDR)
 $(CPLANE_LIB): $(LIB_OBJS)
 	$(MMakeLinkStaticLib)
 
+uapi_resolve.o: MMAKE_CFLAGS+=-mbmi2
 $(UAPI_LIB_OBJS) : $(CP_INTF_VER_HDR)
 $(CPLANE_API_SHARED_REALNAME): $(UAPI_LIB_OBJS) $(CPLANE_LIB)
 	@(soname="$(CPLANE_API_SHARED_SONAME)" libs="$(LINK_CPLANE_LIB) $(LINK_CITOOLS_LIB)"; $(MMakeLinkDynamicLib))

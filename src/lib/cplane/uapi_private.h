@@ -37,6 +37,9 @@ struct ef_cp_handle {
   struct llap_extra* llap_levels[EF_CP_LLAP_TRIE_DEPTH-1][EF_CP_LLAP_TRIE_NUM];
   struct llap_extra llap_level0[EF_CP_LLAP_TRIE_NUM];
   pthread_mutex_t llap_update_mtx;
+  int hwport_ifindex[sizeof(cicp_hwport_mask_t) * CHAR_BIT];
+  cicp_hwport_mask_t registered_hwports;
+  int registered_hwport_refcount[sizeof(cicp_hwport_mask_t) * CHAR_BIT];
 };
 
 void cp_uapi_ifindex_table_init(struct ef_cp_handle *cp);

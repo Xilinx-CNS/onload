@@ -2,12 +2,90 @@
 #include <net/ethernet.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
+#include <endian.h>
+#include <immintrin.h>
 
 #define VLAN_HLEN 4
 
 static unsigned ip_ver(const void *ip_hdr)
 {
   return *(const uint8_t*)ip_hdr >> 4;
+}
+
+static unsigned swizzle_hashify(uint32_t x, unsigned nports)
+{
+  /* Take an input with its bits not-especially-well distributed and return a
+   * value in [0,nports) which is reasonably even. The magic number is picked
+   * by experimentation to give decent results for 2-4 ports even when the only
+   * variation is in the low-order bits of x
+   *
+   * Onload uses a different formula in cicp_user_bond_hash_get_hwport() which
+   * is less performant, but it matches that implemented in the kernel */
+  return ((uint64_t)(x * 0xc1c1c1c1) * nports) >> 32;
+}
+
+static int bond_hash_route(struct ef_cp_handle *cp, const void *ip_hdr,
+                           const struct cp_fwd_data *data,
+                           cicp_hwport_mask_t hwports)
+{
+  unsigned nports = __builtin_popcount(hwports);
+  unsigned hash_input;
+  unsigned index;
+  int hwport;
+
+  assert(nports >= 1);
+  if( data->encap.type & CICP_LLAP_TYPE_XMIT_HASH_LAYER34 ) {
+    if( ip_ver(ip_hdr) == 4 ) {
+      int hlen = *(const uint8_t*)ip_hdr & 0x0f;
+      /* We should be checking the ipproto here, but let's save a couple of
+       * cycles by not doing so */
+      hash_input = data->base.src.ip4 ^ ((uint32_t*)ip_hdr)[4] ^
+                   ((uint16_t*)ip_hdr)[hlen * 2] ^
+                   ((uint16_t*)ip_hdr)[hlen * 2 + 1];
+    }
+    else {
+      unsigned l4off = 40;
+      uint8_t next_hdr = ((const uint8_t*)ip_hdr)[6];
+
+      hash_input = data->base.src.u32[3] ^ ((uint32_t*)ip_hdr)[9];
+      /* Very shoddy header chain parsing */
+      while( next_hdr == 0 || next_hdr == 60 || next_hdr == 43 ) {
+        next_hdr = ((const uint8_t*)ip_hdr)[l4off];
+        l4off += 8 + 8 * ((const uint8_t*)ip_hdr)[l4off + 1];
+      }
+      if( next_hdr == IPPROTO_TCP || next_hdr == IPPROTO_UDP )
+        hash_input ^= ((uint16_t*)ip_hdr)[l4off / 2] ^
+                      ((uint16_t*)ip_hdr)[l4off / 2 + 1];
+    }
+  }
+  else if( data->encap.type & CICP_LLAP_TYPE_XMIT_HASH_LAYER23 ) {
+    if( ip_ver(ip_hdr) == 4 ) {
+      hash_input = data->src_mac[5] ^ data->dst_mac[5] ^
+                   data->base.src.ip4 ^ ((uint32_t*)ip_hdr)[4];
+    }
+    else {
+      hash_input = data->src_mac[5] ^ data->dst_mac[5] ^
+                   data->base.src.u32[3] ^ ((uint32_t*)ip_hdr)[9];
+    }
+  }
+  else {
+    assert(data->encap.type & CICP_LLAP_TYPE_XMIT_HASH_LAYER2);
+    hash_input = data->src_mac[5] ^ data->dst_mac[5];
+  }
+  index = swizzle_hashify(hash_input, nports);
+  assert(index < nports);
+  /* Cunning use of rarely-encountered CPU instructions: we have an input mask
+   * of (e.g.) 0b0010'1100, nports will be 3 (using the popcount opcode). We
+   * generate a number in [0,3) by multiplying a well-distributed 32-bit hash
+   * value by 3 and taking the top 32-bits.
+   * So given a value in [0,3) we need to find the index of the nth set bit of
+   * that original hwports mask. The pdep opcode is exactly what we want: it
+   * 'expands out' a dense value in to a sparse set of bits, for example given
+   * an input of 0bABC and a mask of 0b0010'1100 it'll produce 0b00A0'BC00. The
+   * way to use this then becomes clear: set the nth bit of the input, expand
+   * that using the mask, then count the trailing zeros. 5 cycles latency. */
+  hwport = ffs(_pdep_u32(1 << index, hwports));
+  return cp->hwport_ifindex[hwport];
 }
 
 static int64_t apply_fwd_result(struct ef_cp_handle *cp, void *ip_hdr,
@@ -19,6 +97,7 @@ static int64_t apply_fwd_result(struct ef_cp_handle *cp, void *ip_hdr,
   uint16_t ethertype;
   struct llap_extra *extra;
   int64_t rc = 0;
+  int ifindex = data->base.ifindex;
 
   if( ! (data->flags & CICP_FWD_DATA_FLAG_ARP_VALID) ) {
     if( data->flags & CICP_FWD_DATA_FLAG_ARP_FAILED )
@@ -31,16 +110,33 @@ static int64_t apply_fwd_result(struct ef_cp_handle *cp, void *ip_hdr,
     space_needed += VLAN_HLEN;
   if( *prefix_space < space_needed )
     return -E2BIG;
-  meta->ifindex = data->base.ifindex;
-  extra = cp_uapi_lookup_ifindex(cp, data->base.ifindex);
+  if( data->encap.type & CICP_LLAP_TYPE_USES_HASH ) {
+    if( ! (flags & EF_CP_RESOLVE_F_UNREGISTERED) ) {
+      cicp_hwport_mask_t hwports = data->hwports & cp->registered_hwports;
+      if( ! hwports )
+        return -EADDRNOTAVAIL;
+      ifindex = bond_hash_route(cp, ip_hdr, data, hwports);
+    }
+  }
+  extra = cp_uapi_lookup_ifindex(cp, ifindex);
   if( extra && extra->is_registered )
     meta->intf_cookie = extra->cookie;
-  else if( ! (flags & EF_CP_RESOLVE_F_UNREGISTERED) )
-    return -EADDRNOTAVAIL;
-  else {
+  else if( flags & EF_CP_RESOLVE_F_UNREGISTERED ) {
     meta->intf_cookie = NULL;
     rc |= EF_CP_RESOLVE_S_UNREGISTERED;
   }
+  else {
+    cicp_hwport_mask_t hwports = data->hwports & cp->registered_hwports;
+    if( ! hwports ) {
+      meta->ifindex = ifindex;  /* Undocumented feature, used by TCPDirect for
+                                 * better error reporting */
+      return -EADDRNOTAVAIL;
+    }
+    ifindex = cp->hwport_ifindex[ffs(hwports)];
+    extra = cp_uapi_lookup_ifindex(cp, ifindex);
+    meta->intf_cookie = extra->cookie;
+  }
+  meta->ifindex = ifindex;
   meta->mtu = data->base.mtu;
   if( ip_ver(ip_hdr) == 4 ) {
     ((uint8_t*)ip_hdr)[8] = data->base.hop_limit;

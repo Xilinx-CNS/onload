@@ -10,6 +10,7 @@ EF_CP_PUBLIC_API
 int ef_cp_init(struct ef_cp_handle **cph, unsigned flags)
 {
   int rc = 0;
+  int i;
   struct ef_cp_handle *cp;
 
   if( flags )
@@ -17,6 +18,8 @@ int ef_cp_init(struct ef_cp_handle **cph, unsigned flags)
   cp = calloc(1, sizeof(*cp));
   if( ! cp )
     return -ENOMEM;
+  for( i = 0; i < CI_ARRAY_SIZE(cp->hwport_ifindex); ++i )
+    cp->hwport_ifindex[i] = -1;
   rc = oo_fd_open(&cp->drv_fd);
   if( rc )
     goto fail1;
