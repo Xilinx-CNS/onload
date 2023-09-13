@@ -410,7 +410,7 @@ int ef_cp_register_intf(struct ef_cp_handle *cp, int ifindex, void *user_cookie,
     if( ! extra )
       rc = -ENOMEM;
     else {
-      if( tx_hwports && (tx_hwports & (tx_hwports - 1)) == 0 ) {
+      if( tx_hwports ) {
         int ix = ffs(tx_hwports);
         cp->hwport_ifindex[ix] = ifindex;
         if( ! extra->is_registered )
@@ -442,7 +442,7 @@ int ef_cp_unregister_intf(struct ef_cp_handle *cp, int ifindex, unsigned flags)
   extra = cp_uapi_lookup_ifindex(cp, ifindex);
   if( extra ) {
     extra->is_registered = false;
-    if( rc == 0 && tx_hwports && (tx_hwports & (tx_hwports - 1)) == 0 ) {
+    if( rc == 0 && tx_hwports ) {
       int ix = ffs(tx_hwports);
       if( --cp->registered_hwport_refcount[ix] == 0 )
         cp->registered_hwports &= ~tx_hwports;
