@@ -196,24 +196,6 @@ static int tx_desc_bytes(struct ef_vi* vi)
   }
 }
 
-static int tx_fifo_bytes(struct ef_vi* vi)
-{
-  switch( vi->nic_type.arch ) {
-  case EF_VI_ARCH_EF10:
-  case EF_VI_ARCH_EF100:
-  case EF_VI_ARCH_AF_XDP:
-    /* No FIFO, so return a large number to indicate no limit */
-    return INT_MAX;
-  case EF_VI_ARCH_EFCT:
-    /* 32k FIFO, reduced by 8 bytes for the TX header. Hardware reduces this
-     * by one cache line to make their overflow tracking easier */
-    return EFCT_TX_FIFO_BYTES - EFCT_TX_ALIGNMENT - EFCT_TX_HEADER_BYTES;
-  default:
-    EF_VI_BUG_ON(1);
-    return 0;
-  }
-}
-
 int ef_vi_rx_ring_bytes(struct ef_vi* vi)
 {
   EF_VI_ASSERT(vi->inited & EF_VI_INITED_RXQ);
@@ -298,7 +280,7 @@ void ef_vi_init_txq(struct ef_vi* vi, int ring_size, void* descriptors,
 {
   EF_VI_BUG_ON(vi->inited & EF_VI_INITED_TXQ);
   vi->vi_txq.mask = ring_size - 1;
-  vi->vi_txq.ct_fifo_bytes = tx_fifo_bytes(vi);
+  vi->vi_txq.ct_fifo_bytes = INT_MAX;
   vi->vi_txq.descriptors = descriptors;
   vi->vi_txq.ids = ids;
   vi->tx_push_thresh = 16;

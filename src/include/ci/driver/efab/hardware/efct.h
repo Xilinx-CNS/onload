@@ -192,9 +192,6 @@
 /* size of a transmit descriptor in bytes */
 #define EFCT_TX_DESCRIPTOR_BYTES 2
 
-/* size of the transmit FIFO in bytes */
-#define EFCT_TX_FIFO_BYTES 32768
-
 /* alignment requirement for tx packets written to the aperture */
 #define EFCT_TX_ALIGNMENT 64
 

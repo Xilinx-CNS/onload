@@ -1363,6 +1363,11 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
   }
   vi->vi_txq.efct_aperture_mask = (GET(tx_aperture_bytes) - 1) >> 3;
 
+  /* FIFO size, reduced by 8 bytes for the TX header. Hardware reduces this
+   * by one cache line to make their overflow tracking easier */
+  vi->vi_txq.ct_fifo_bytes = GET(tx_fifo_bytes) -
+                             EFCT_TX_ALIGNMENT - EFCT_TX_HEADER_BYTES;
+
   return 0;
 }
 
