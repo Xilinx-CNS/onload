@@ -1,22 +1,13 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2019-2020 Xilinx, Inc.
 
-require 'nokogiri'
-
 test_results_root = nil
 
 def rewrite_junit_xml(test_results_dir, new_tag)
   Dir.glob(File.join(test_results_dir, '*'))
      .select { |filename| File.file?(filename) }
      .each do |filename|
-
-    doc = Nokogiri::XML(File.open(filename))
-    doc.xpath('//testsuite').each do |node|
-      testsuite_name = node.attribute('name')
-      testsuite_name.value = new_tag + '.' + testsuite_name.value
-    end
-    f = File.open(filename, 'w')
-    f.puts(doc.to_s)
+    system 'jenkins_junit_rewriter', *["-i", filename, "-o", filename, "-k", new_tag]
   end
 end
 
