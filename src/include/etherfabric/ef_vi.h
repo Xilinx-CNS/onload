@@ -1015,6 +1015,9 @@ typedef struct ef_vi {
   int                         (*xdp_kick)(struct ef_vi*);
   void*                         xdp_kick_context;
 
+  /** mask to apply to unsol_credit_seq */
+  uint32_t                      unsol_credit_seq_mask;
+
   /*! \brief Driver-dependent operations. */
   /* Doxygen comment above is the detailed description of ef_vi::ops */
   struct ops {

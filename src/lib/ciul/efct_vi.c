@@ -448,8 +448,9 @@ static void efct_grant_unsol_credit(ef_vi* vi, bool clear_overflow, uint32_t cre
   uint32_t* unsol_reg = (void*) (vi->io + EFCT_EVQ_UNSOL_CREDIT_REGISTER_OFFSET);
   ci_qword_t qword;
 
+  credit_seq &= vi->unsol_credit_seq_mask;
   CI_POPULATE_QWORD_2(qword,
-                      EFCT_EVQ_UNSOL_GRANT_SEQ, credit_seq & CI_MASK32(EFCT_EVQ_UNSOL_GRANT_MAX_SEQ_WIDTH),
+                      EFCT_EVQ_UNSOL_GRANT_SEQ, credit_seq,
                       EFCT_EVQ_UNSOL_CLEAR_OVERFLOW, clear_overflow);
 
   writel(qword.u64[0], unsol_reg);
@@ -1368,6 +1369,7 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
   vi->vi_txq.ct_fifo_bytes = GET(tx_fifo_bytes) -
                              EFCT_TX_ALIGNMENT - EFCT_TX_HEADER_BYTES;
   vi->ts_subnano_bits = GET(timestamp_subnano_bits);
+  vi->unsol_credit_seq_mask = GET(unsol_credit_seq_mask);
 
   return 0;
 }
