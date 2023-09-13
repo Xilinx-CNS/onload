@@ -274,8 +274,7 @@ struct efct_tx_descriptor
 /* state of a partially-completed tx operation */
 struct efct_tx_state
 {
-  /* next write location within the aperture. NOTE: we assume the aperture is
-   * mapped twice, so that each packet can be written contiguously */
+  /* base address of the aperture */
   volatile uint64_t* aperture;
   /* up to 7 bytes left over after writing a block in 64-bit chunks */
   uint64_t tail;
@@ -283,6 +282,8 @@ struct efct_tx_state
   unsigned tail_len;
   /* number of 64-bit words from start of aperture */
   uint64_t offset;
+  /* mask to keep offset within the aperture range */
+  uint64_t mask;
 };
 
 /* generic tx header */
@@ -331,12 +332,13 @@ ci_inline bool efct_tx_check(ef_vi* vi, int len)
 /* initialise state for a transmit operation */
 ci_inline void efct_tx_init(ef_vi* vi, struct efct_tx_state* tx)
 {
-  unsigned offset = vi->ep_state->txq.ct_added % EFCT_TX_APERTURE;
+  unsigned offset = vi->ep_state->txq.ct_added;
   BUG_ON(offset % EFCT_TX_ALIGNMENT != 0);
   tx->aperture = (void*) vi->vi_ctpio_mmap_ptr;
   tx->tail = 0;
   tx->tail_len = 0;
   tx->offset = offset >> 3;
+  tx->mask = vi->vi_txq.efct_aperture_mask;
 }
 
 /* store a left-over byte from the start or end of a block */
@@ -350,8 +352,7 @@ ci_inline void efct_tx_tail_byte(struct efct_tx_state* tx, uint8_t byte)
 /* write a 64-bit word to the CTPIO aperture, dealing with wrapping */
 ci_inline void efct_tx_word(struct efct_tx_state* tx, uint64_t value)
 {
-  *(tx->aperture + tx->offset++) = value;
-  tx->offset %= EFCT_TX_APERTURE >> 3;
+  tx->aperture[tx->offset++ & tx->mask] = value;
 }
 
 /* write a block of bytes to the CTPIO aperture, dealing with wrapping and leftovers */
@@ -1350,6 +1351,17 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
                (long)GET(rx_frame_offset), EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2));
     return -EOPNOTSUPP;
   }
+
+  /* When writing to the aperture we use a bitmask to keep within range. This
+   * requires the size a power of two, and we shift by 3 because we write
+   * a uint64_t (8 bytes) at a time.
+   */
+  if( ! EF_VI_IS_POW2(GET(tx_aperture_bytes)) ) {
+    LOG(ef_log("%s: unsupported tx_aperture_bytes, %ld not a power of 2",
+               __FUNCTION__, (long)GET(tx_aperture_bytes)));
+    return -EOPNOTSUPP;
+  }
+  vi->vi_txq.efct_aperture_mask = (GET(tx_aperture_bytes) - 1) >> 3;
 
   return 0;
 }

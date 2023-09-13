@@ -758,6 +758,8 @@ typedef struct {
   uint32_t         ct_fifo_bytes;
   /** EFCT header bytes that do not usually change between packets */
   uint64_t         efct_fixed_header;
+  /** Mask to keep EFCT writes within the aperture */
+  uint32_t         efct_aperture_mask;
   /** Pointer to descriptors */
   void*            descriptors;
   /** Pointer to IDs */
