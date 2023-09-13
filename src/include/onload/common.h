@@ -299,6 +299,12 @@ typedef struct {
   ci_user_ptr_t addr;
 } oo_pkt_buf_map_t;
 
+typedef struct {
+  uint32_t intf_i;
+  ci_user_ptr_t data_ptr; /* struct efab_nic_design_parameters */
+  uint64_t data_len;
+} oo_design_parameters_t;
+
 /* Flags & types.  It could be enum if enum had fixed size. */
 typedef ci_uint16 oo_fd_flags;
 /* File type: */

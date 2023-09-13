@@ -264,6 +264,9 @@ extern int efab_tcp_helper_efct_superbuf_config_refresh(
 extern int efab_tcp_helper_pkt_buf_map(tcp_helper_resource_t* trs,
                                        oo_pkt_buf_map_t* arg);
 
+extern int efab_tcp_helper_design_parameters(tcp_helper_resource_t* trs,
+                                             oo_design_parameters_t* arg);
+
 extern void
 tcp_helper_cluster_ref(tcp_helper_cluster_t* thc);
 

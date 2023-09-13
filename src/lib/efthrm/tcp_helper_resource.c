@@ -8701,6 +8701,29 @@ int efab_tcp_helper_pkt_buf_map(tcp_helper_resource_t* trs,
   return 0;
 }
 
+int efab_tcp_helper_design_parameters(tcp_helper_resource_t* trs,
+                                      oo_design_parameters_t* op)
+{
+  int rc;
+  struct efhw_nic* nic;
+  void* user_data = CI_USER_PTR_GET(op->data_ptr);
+  struct efab_nic_design_parameters dp = EFAB_NIC_DP_INITIALIZER;
+
+  if( op->intf_i >= oo_stack_intf_max(&trs->netif) )
+    return -EINVAL;
+
+  nic = efrm_client_get_nic(trs->nic[op->intf_i].thn_oo_nic->efrm_client);
+
+  if( dp.known_size > op->data_len )
+    dp.known_size = op->data_len;
+
+  rc = efhw_nic_design_parameters(nic, &dp);
+  if( rc < 0 )
+    return rc;
+
+  return copy_to_user(user_data, &dp, dp.known_size) ? -EFAULT : 0;
+}
+
 static tcp_helper_resource_t*
 thr_ref2thr(oo_thr_ref_t ref)
 {
