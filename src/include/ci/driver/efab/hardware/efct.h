@@ -204,9 +204,6 @@
 /* magic value of ct_thresh to disable cut-through */
 #define EFCT_TX_CT_DISABLE 0xff
 
-/* size of a receive header in bytes */
-#define EFCT_RX_HEADER_BYTES 16
-
 /* size of a transmit descriptor in bytes */
 #define EFCT_RX_DESCRIPTOR_BYTES 16
 
