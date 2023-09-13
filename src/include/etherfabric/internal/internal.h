@@ -214,11 +214,15 @@ struct efab_nic_design_parameters {
   /* This must come first */
   uint64_t known_size;
 
+  /* Do not change or remove any existing parameters */
+  uint64_t rx_superbuf_bytes;
+
   /* New parameters must be added at the end */
 };
 
 /* Default value for a parameter */
 #define EFAB_NIC_DP_DEFAULT(PARAM) EFAB_NIC_DP_DEFAULT_ ## PARAM
+#define EFAB_NIC_DP_DEFAULT_rx_superbuf_bytes 1048576
 
 /* Initializer to set the known size according to the current context.
  * This (or equivalent) must be done before passing it to another context. */

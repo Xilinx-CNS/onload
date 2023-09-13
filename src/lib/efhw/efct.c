@@ -20,6 +20,7 @@
 #include <uapi/linux/ethtool.h>
 #include "ethtool_flow.h"
 #include <linux/hashtable.h>
+#include <etherfabric/internal/internal.h>
 #include "efct.h"
 #include "efct_superbuf.h"
 
@@ -115,6 +116,8 @@ efct_design_parameters(struct efhw_nic *nic,
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
   union xlnx_efct_param_value val;
+  struct xlnx_efct_design_params* xp = &val.design_params;
+
   int rc = 0;
 
   EFCT_PRE(dev, edev, cli, nic, rc)
@@ -124,7 +127,20 @@ efct_design_parameters(struct efhw_nic *nic,
   if( rc < 0 )
     return rc;
 
-  /* TODO extract parameters from val.design_params to dp */
+  /* Where older versions of ef_vi make assumptions about parameter values, we
+   * must check that either they know about the parameter, or that the value
+   * matches the assumption.
+   *
+   * See documentation of efab_nic_design_parameters for details of
+   * compatibility issues.
+   */
+#define SET(PARAM, VALUE) \
+  if( EFAB_NIC_DP_KNOWN(*dp, PARAM) ) \
+    dp->PARAM = (VALUE);  \
+  else if( (VALUE) != EFAB_NIC_DP_DEFAULT(PARAM) ) \
+    return -ENODEV;
+
+  SET(rx_superbuf_bytes, xp->rx_buffer_len * 4096);
 
   return 0;
 }

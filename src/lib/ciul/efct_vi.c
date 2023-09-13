@@ -1326,7 +1326,21 @@ void efct_vi_start_rxq(ef_vi* vi, int ix)
 static int
 efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
 {
-  /* No parameters yet */
+#define GET(PARAM) EFAB_NIC_DP_GET(*dp, PARAM)
+
+  /* Some values which are used on the critical path which we don't expect to
+   * change are hard-coded. We need to check these values, and will need to
+   * accommodate run-time values if the parameter ever does change.
+   */
+
+  /* If the superbuf size changes, we will need to use it as a runtime value,
+   * replacing EFCT_RX_SUPERBUF_BYTES and its dependent values */
+  if( GET(rx_superbuf_bytes) != EFCT_RX_SUPERBUF_BYTES ) {
+    LOG(ef_log("%s: unsupported rx_superbuf_bytes, %ld != %d", __FUNCTION__,
+               (long)GET(rx_superbuf_bytes), EFCT_RX_SUPERBUF_BYTES));
+    return -EOPNOTSUPP;
+  }
+
   return 0;
 }
 
