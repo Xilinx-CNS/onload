@@ -214,6 +214,7 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_EXT_MSG                 0x8A
 # define                CI_RSOP_RXQ_REFRESH             0x8B
 # define                CI_RSOP_FILTER_QUERY            0x8C
+# define                CI_RSOP_VI_DESIGN_PARAMETERS    0x8D
 
   union {
     struct {
@@ -325,6 +326,10 @@ typedef struct ci_resource_op_s {
       uint64_t          current_mappings;
       uint32_t          max_superbufs;
     } rxq_refresh;
+    struct {
+      uint64_t          data_ptr; /* struct efab_nic_design_parameters */
+      uint64_t          data_len;
+    } design_parameters;
   } u CI_ALIGN(8);
 } ci_resource_op_t;
 
