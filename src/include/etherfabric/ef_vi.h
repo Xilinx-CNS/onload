@@ -929,7 +929,10 @@ typedef struct ef_vi {
   /** The timestamp correction (ns) for transmitted packets */
   int                           tx_ts_correction_ns;
   /** The timestamp format used by the hardware */
-  enum ef_timestamp_format      ts_format;
+  union {
+    enum ef_timestamp_format    ts_format;
+    uint8_t                     ts_subnano_bits;
+  };
   /** Pointer to virtual interface memory */
   char*                         vi_mem_mmap_ptr;
   /** Length of virtual interface memory */

@@ -144,6 +144,7 @@ efct_design_parameters(struct efhw_nic *nic,
   SET(rx_frame_offset, xp->frame_offset_fixed);
   SET(tx_aperture_bytes, xp->tx_aperture_size);
   SET(tx_fifo_bytes, xp->tx_fifo_size);
+  SET(timestamp_subnano_bits, xp->ts_subnano_bit);
 
   return 0;
 }

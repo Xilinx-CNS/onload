@@ -486,7 +486,7 @@ static void efct_tx_handle_event(ef_vi* vi, ci_qword_t event, ef_event* ev_out)
     if ( ptstamp_seconds == ((timesync_seconds + 1) % 256) ) {
       ev_out->tx_timestamp.ts_sec++;
     } 
-    ev_out->tx_timestamp.ts_nsec = (ptstamp & 0xFFFFFFFF) >> DP_PARTIAL_TSTAMP_SUB_NANO_BITS;
+    ev_out->tx_timestamp.ts_nsec = (ptstamp & 0xFFFFFFFF) >> vi->ts_subnano_bits;
     ev_out->tx_timestamp.ts_nsec &= ~EF_EVENT_TX_WITH_TIMESTAMP_SYNC_MASK;
     ev_out->tx_timestamp.ts_nsec |= vi->ep_state->evq.sync_flags;
     ev_out->tx_timestamp.type = EF_EVENT_TYPE_TX_WITH_TIMESTAMP;
@@ -1367,6 +1367,7 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
    * by one cache line to make their overflow tracking easier */
   vi->vi_txq.ct_fifo_bytes = GET(tx_fifo_bytes) -
                              EFCT_TX_ALIGNMENT - EFCT_TX_HEADER_BYTES;
+  vi->ts_subnano_bits = GET(timestamp_subnano_bits);
 
   return 0;
 }

@@ -219,6 +219,7 @@ struct efab_nic_design_parameters {
   uint64_t rx_frame_offset;
   uint64_t tx_aperture_bytes;
   uint64_t tx_fifo_bytes;
+  uint64_t timestamp_subnano_bits;
 
   /* New parameters must be added at the end */
 };
@@ -229,6 +230,7 @@ struct efab_nic_design_parameters {
 #define EFAB_NIC_DP_DEFAULT_rx_frame_offset 64
 #define EFAB_NIC_DP_DEFAULT_tx_aperture_bytes 4096
 #define EFAB_NIC_DP_DEFAULT_tx_fifo_bytes 32768
+#define EFAB_NIC_DP_DEFAULT_timestamp_subnano_bits 2
 
 /* Initializer to set the known size according to the current context.
  * This (or equivalent) must be done before passing it to another context. */
