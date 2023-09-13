@@ -1341,6 +1341,16 @@ efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
     return -EOPNOTSUPP;
   }
 
+  /* If the frame offset changes or is no longer fixed, we will need to
+   * update efct_vi_rxpkt_get (and duplicated code in efct_vi_rx_future_peek).
+   * It could use the parameter if it is still fixed, or read from the header.
+   */
+  if( GET(rx_frame_offset) != EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2) {
+    LOG(ef_log("%s: unsupported rx_frame_offset, %ld != %d", __FUNCTION__,
+               (long)GET(rx_frame_offset), EFCT_RX_HEADER_NEXT_FRAME_LOC_1 - 2));
+    return -EOPNOTSUPP;
+  }
+
   return 0;
 }
 

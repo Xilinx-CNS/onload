@@ -141,6 +141,7 @@ efct_design_parameters(struct efhw_nic *nic,
     return -ENODEV;
 
   SET(rx_superbuf_bytes, xp->rx_buffer_len * 4096);
+  SET(rx_frame_offset, xp->frame_offset_fixed);
 
   return 0;
 }
