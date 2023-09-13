@@ -97,6 +97,7 @@ typedef uint64_t ef_addrspace;
 struct ef_vi;
 struct ef_filter_spec;
 struct ef_filter_cookie;
+struct efab_nic_design_parameters;
 
 /**********************************************************************
  * Dimensions *********************************************************
@@ -1095,6 +1096,8 @@ typedef struct ef_vi {
   /** The difference between this and ops is purely documentational. Functions
    * here may be NULL if the driver doesn't need the feature. */
   struct internal_ops {
+    /** Configure based on hardware design parameters */
+    int (*design_parameters)(struct ef_vi*, struct efab_nic_design_parameters*);
     /** A filter has just been added to the given VI */
     int (*post_filter_add)(struct ef_vi*, const struct ef_filter_spec* fs,
                            const struct ef_filter_cookie* cookie, int rxq);

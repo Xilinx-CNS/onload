@@ -1575,8 +1575,7 @@ static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int qid)
 
 static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
                          struct efrm_vi_mappings* vm, void* vi_state,
-                         int vi_arch, int vi_variant, int vi_revision,
-                         unsigned char vi_nic_flags,
+                         struct efhw_nic* nic,
                          struct vi_allocate_info* alloc_info,
                          unsigned* vi_out_flags, ef_vi_stats* vi_stats)
 {
@@ -1584,8 +1583,9 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
 
   efrm_vi_get_mappings(vi_rs, vm);
 
-  ef_vi_init(vi, vi_arch, vi_variant, vi_revision, alloc_info->ef_vi_flags,
-             vi_nic_flags, (ef_vi_state*) vi_state);
+  ef_vi_init(vi, nic->devtype.arch, nic->devtype.variant, nic->devtype.revision,
+             alloc_info->ef_vi_flags, efhw_vi_nic_flags(nic),
+             (ef_vi_state*) vi_state);
   *vi_out_flags = (vm->out_flags & EFHW_VI_CLOCK_SYNC_STATUS) ?
                         EF_VI_OUT_CLOCK_SYNC_STATUS : 0;
 
@@ -1608,6 +1608,16 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
     ef_vi_init_txq(vi, vm->txq_size, vm->txq_descriptors, vi_ids);
   vi->vi_i = EFAB_VI_RESOURCE_INSTANCE(vi_rs);
   vi->dh = efrm_client_get_nic(vi_rs->rs.rs_client);
+  if( vi->internal_ops.design_parameters ) {
+    int rc;
+    struct efab_nic_design_parameters dp = EFAB_NIC_DP_INITIALIZER;
+    rc = efhw_nic_design_parameters(nic, &dp);
+    if( rc < 0 )
+      return rc;
+    rc = vi->internal_ops.design_parameters(vi, &dp);
+    if( rc < 0 )
+      return rc;
+  }
   if( vi->max_efct_rxq ) {
     int i;
     int rc = efct_vi_mmap_init_internal(vi, vi_rs->efct_shm);
@@ -1781,9 +1791,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     }
 
     vi = ci_netif_vi(ni, intf_i);
-    rc = initialise_vi(ni, vi, tcp_helper_vi(trs, intf_i), vm,
-                       vi_state, nic->devtype.arch, nic->devtype.variant,
-                       nic->devtype.revision, efhw_vi_nic_flags(nic),
+    rc = initialise_vi(ni, vi, tcp_helper_vi(trs, intf_i), vm, vi_state, nic,
                        &alloc_info, &vi_out_flags, &ni->state->vi_stats);
     if( rc < 0 )
       goto error_out;
@@ -1897,9 +1905,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
         }
         vi_rs = trs_nic->thn_vi_rs[vi_i];
         rc = initialise_vi(ni, &ni->nic_hw[intf_i].vis[vi_i],
-                           vi_rs, vm,
-                           vi_state, nic->devtype.arch, nic->devtype.variant,
-                           nic->devtype.revision, efhw_vi_nic_flags(nic),
+                           vi_rs, vm, vi_state, nic,
                            &alloc_info, &vi_out_flags, &ni->state->vi_stats);
         if( rc < 0 ) {
           if( release_pd )

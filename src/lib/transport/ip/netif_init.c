@@ -1981,7 +1981,8 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
                       int vi_io_offset, int vi_efct_shm_offset,
                       char** vi_mem_ptr,
                       ef_vi* vi, unsigned vi_instance, unsigned abs_idx,
-                      int evq_bytes, int txq_size, ef_vi_stats* vi_stats)
+                      int evq_bytes, int txq_size, ef_vi_stats* vi_stats,
+                      struct efab_nic_design_parameters* dp)
 {
   ef_vi_state* state = (void*) ((char*) ni->state + vi_state_offset);
   ci_netif_state_nic_t* nsn = &(ni->state->nic[nic_i]);
@@ -1999,6 +2000,11 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   vi->dh = ci_netif_get_driver_handle(ni);
   *vi_mem_ptr = ef_vi_init_qs(vi, *vi_mem_ptr, ids, evq_bytes / 8,
                               nsn->vi_rxq_size, nsn->rx_prefix_len, txq_size);
+  if( vi->internal_ops.design_parameters ) {
+    int rc = vi->internal_ops.design_parameters(vi, dp);
+    if( rc < 0 )
+      return rc;
+  }
   if( vi->max_efct_rxq ) {
     int i;
     int rc = efct_vi_mmap_init_internal(vi,
@@ -2087,6 +2093,18 @@ static int af_xdp_kick(ef_vi* vi)
   return oo_resource_op(fd, OO_IOC_AF_XDP_KICK, &intf_i);
 }
 
+static int get_design_parameters(ci_netif* ni, int nic_i,
+                                 struct efab_nic_design_parameters* dp)
+{
+  oo_design_parameters_t op;
+  int fd = ci_netif_get_driver_handle(ni);
+
+  op.intf_i = nic_i;
+  CI_USER_PTR_SET(op.data_ptr, dp);
+  op.data_len = sizeof(*dp);
+  return oo_resource_op(fd, OO_IOC_DESIGN_PARAMETERS, &op);
+}
+
 static int netif_tcp_helper_build(ci_netif* ni)
 {
   /* On entry we require the following to be initialised:
@@ -2137,6 +2155,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
     ef_vi* vi;
     int i;
     int num_vis = ci_netif_num_vis(ni);
+    struct efab_nic_design_parameters dp;
 
     /* Get interface properties. */
     rc = oo_cp_get_hwport_properties(ni->cplane, ns->intf_i_to_hwport[nic_i],
@@ -2153,6 +2172,10 @@ static int netif_tcp_helper_build(ci_netif* ni)
     rc = ef_vi_arch_from_efhw_arch(nsn->vi_arch);
     CI_TEST(rc >= 0);
 
+    rc = get_design_parameters(ni, nic_i, &dp);
+    if( rc < 0 )
+      goto fail1;
+
     vi_state_bytes = 0;
     for( i = 0; i < num_vis; ++i ) {
       vi = &ni->nic_hw[nic_i].vis[i];
@@ -2160,7 +2183,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
                       vi_efct_shm_offset,
                       &vi_mem_ptr, vi, nsn->vi_instance[i], nsn->vi_abs_idx[i],
                       i ? 0 : nsn->vi_evq_bytes, nsn->vi_txq_size,
-                      &ni->state->vi_stats);
+                      &ni->state->vi_stats, &dp);
       if( rc )
         goto fail2;
       ++vis_inited;

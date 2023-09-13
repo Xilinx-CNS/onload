@@ -1323,6 +1323,13 @@ void efct_vi_start_rxq(ef_vi* vi, int ix)
 /* efct_vi_detach_rxq not yet implemented */
 
 
+static int
+efct_design_parameters(struct ef_vi* vi, struct efab_nic_design_parameters* dp)
+{
+  /* No parameters yet */
+  return 0;
+}
+
 static int efct_post_filter_add(struct ef_vi* vi,
                                 const ef_filter_spec* fs,
                                 const ef_filter_cookie* cookie, int rxq)
@@ -1565,6 +1572,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_memcpy_sync   = efct_ef_vi_transmit_memcpy_sync;
   vi->ops.transmit_ctpio_fallback = efct_ef_vi_transmit_ctpio_fallback;
   vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
+  vi->internal_ops.design_parameters = efct_design_parameters;
   vi->internal_ops.post_filter_add = efct_post_filter_add;
   vi->ops.eventq_poll = efct_ef_eventq_poll;
 }

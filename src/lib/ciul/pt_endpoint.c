@@ -376,6 +376,27 @@ void ef_vi_set_intf_ver(char* intf_ver, size_t len)
   }
 }
 
+static int init_design_parameters(ef_vi* vi)
+{
+  int rc;
+  ci_resource_op_t op;
+  struct efab_nic_design_parameters dp;
+
+  if( ! vi->internal_ops.design_parameters )
+    return 0;
+
+  op.op = CI_RSOP_VI_DESIGN_PARAMETERS;
+  op.id = efch_make_resource_id(vi->vi_resource_id);
+  op.u.design_parameters.data_ptr = (uint64_t)&dp;
+  op.u.design_parameters.data_len = sizeof(dp);
+  rc = ci_resource_op(vi->dh, &op);
+  if( rc == -EOPNOTSUPP )
+    dp.known_size = 0;
+  else if( rc < 0 )
+    return rc;
+
+  return vi->internal_ops.design_parameters(vi, &dp);
+}
 
 int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
                   efch_resource_id_t pd_or_vi_set_id,
@@ -542,6 +563,10 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
     ? ra.u.vi_out.abs_idx : -1;
   ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
+
+  rc = init_design_parameters(vi);
+  if( rc < 0 )
+    goto fail5;
 
   if( vi->max_efct_rxq ) {
     rc = efct_vi_mmap_init(vi, rxq_capacity);
