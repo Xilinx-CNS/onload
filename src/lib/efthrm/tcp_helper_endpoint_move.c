@@ -483,7 +483,9 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
     ci_tcp_rx_queue_drop(&old_thr->netif, old_ts, &old_ts->recv1);
     ci_tcp_rx_queue_drop(&old_thr->netif, old_ts, &old_ts->recv2);
     new_ts->recv1_extract = new_ts->recv1.head;
-    
+    /* Old extract pointer can still get used during reaping */
+    old_ts->recv1_extract = old_ts->recv1.head;
+
     /* Ensure we update rcv_added with the data received in the last
      * ci_netif_poll(). */
     new_ts->rcv_added = old_ts->rcv_added;
