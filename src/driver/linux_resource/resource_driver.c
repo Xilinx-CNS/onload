@@ -69,6 +69,7 @@
 #include "sfcaffinity.h"
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/resource/driverlink.h>
+#include "debugfs.h"
 
 MODULE_AUTHOR("Solarflare Communications");
 MODULE_LICENSE("GPL");
@@ -693,6 +694,7 @@ static int init_sfc_resource(void)
 
 	efrm_filter_init();
 
+	efrm_init_debugfs();
         /* efrm_driverlink_register() attempts to create files in
          * /proc, so it is important that /proc is initialised
          * first. */
@@ -776,6 +778,7 @@ static void cleanup_sfc_resource(void)
 	efrm_filter_shutdown();
 	efrm_filter_remove_proc_entries();
 	efrm_uninstall_proc_entries();
+	efrm_fini_debugfs();
 
 	efrm_driver_stop();
 	efrm_resources_fini();

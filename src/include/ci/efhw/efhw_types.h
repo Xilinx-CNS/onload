@@ -576,6 +576,8 @@ struct efhw_nic {
         /* TX datapath firmware variant */
         uint16_t tx_variant;
 
+	struct dentry *debug_dir;
+
         /* arch-specific state */
         void* arch_extra;
 };

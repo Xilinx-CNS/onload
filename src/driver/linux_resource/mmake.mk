@@ -12,10 +12,10 @@ RESOURCE_SRCS	:= resource_driver.c \
 	iopage.c kernel_proc.c filter.c \
 	bt_stats.c compat_pat_wc.c port_sniff.c nondl_resource.c sysfs.c \
 	nondl_driver.c sfcaffinity.c nic_notifier.c \
-	aux_driver.c aux_efct.c efct_superbuf.c
+	aux_driver.c aux_efct.c efct_superbuf.c debugfs.c
 
 EFHW_SRCS	:= nic.c eventq.c af_xdp.c ethtool_rxclass.c \
-		ethtool_flow.c efct.c
+		ethtool_flow.c efct.c debugfs_nic.c
 
 EFHW_HDRS	:= ef10_mcdi.h ethtool_rxclass.h ethtool_flow.h ef10_ef100.h \
 		efct.h

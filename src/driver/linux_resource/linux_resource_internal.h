@@ -64,7 +64,6 @@ efrm_nic_unplug_hard(struct efhw_nic* nic);
 extern void
 efrm_nic_del_device(struct net_device *);
 
-
 extern int efrm_install_proc_entries(void);
 extern void efrm_uninstall_proc_entries(void);
 
