@@ -20,6 +20,7 @@
 #include <kernel_utils/hugetlb.h>
 
 #include "efct_superbuf.h"
+#include "debugfs.h"
 
 #if CI_HAVE_EFCT_AUX
 
@@ -418,6 +419,9 @@ int efct_probe(struct auxiliary_device *auxdev,
 
   efrm_notify_nic_probe(net_dev);
   rtnl_unlock();
+
+  efhw_init_debugfs_efct(nic);
+
   return 0;
 
  fail3:
@@ -454,6 +458,8 @@ void efct_remove(struct auxiliary_device *auxdev)
   nic = efhw_nic_find_by_dev(&auxdev->dev);
   if( !nic )
     return;
+
+  efhw_fini_debugfs_efct(nic);
 
   lnic = linux_efhw_nic(nic);
   client = (struct xlnx_efct_client*)lnic->drv_device;
