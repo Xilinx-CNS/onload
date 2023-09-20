@@ -872,7 +872,7 @@ void ef10_vi_init(ef_vi* vi)
    * Still documenting this in case in future we stop pusing the
    * enable checksum offload at startup. */
 
-  /* In future we should provide a way for applications to override.
+  /* Applications can override with ef_vi_receive_set_buffer_len()
    */
   vi->rx_buffer_len = 2048 - 256;
 
