@@ -2116,13 +2116,14 @@ static void process_dump(ci_netif* ni)
         "nonvoluntary_ctxt_switches:"
       };
 
+      int j;
       /* check each line in the file */
       while( fgets(line, sizeof(line), status) != NULL ) {
         /* we're looking for three counters */
-        for( int i = 0; i < 3; i++ ) {
-          int len = strlen(labels[i]);
+        for( j = 0; j < 3; j++ ) {
+          int len = strlen(labels[j]);
           /* find the required counter */
-          if( strncmp(line, labels[i], len) == 0 ) {
+          if( strncmp(line, labels[j], len) == 0 ) {
             char *tmp = line + len;
             /* remove the first character. 
             ** output of counters in /proc/pid/task/pid/status (from source code) 
@@ -2131,9 +2132,9 @@ static void process_dump(ci_netif* ni)
             /* remove newline and print */
             tmp[strcspn(tmp, "\n")] = '\0';
             /* Copy the counter values in array and later print them */
-            strncpy(values[i], tmp, (sizeof(tmp)-1));
+            strncpy(values[j], tmp, (sizeof(tmp)-1));
             /* extra safety: terminating the string */
-            values[i][sizeof(values[i]) - 1] = 0;
+            values[i][sizeof(values[j]) - 1] = 0;
           }
         }
       }
