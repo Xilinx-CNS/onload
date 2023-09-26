@@ -54,7 +54,6 @@ ssize_t linux_tcp_helper_fop_sendpage(struct file* filp, struct page* page,
   ci_assert(page);
   ci_assert_ge(offset, 0);
   ci_assert_gt(size, 0);
-  ci_assert_le(offset + size, CI_PAGE_SIZE);
 
 #ifndef MSG_SENDPAGE_NOTLAST
   /* "flags" is really "more".  Convert it. */
