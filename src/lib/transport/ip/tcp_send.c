@@ -1617,21 +1617,20 @@ ci_inline int ci_tcp_sendmsg_spin(ci_netif* ni, ci_tcp_state* ts,
 
   do {
     if( ci_netif_may_poll(ni) ) {
-      if( ci_netif_need_poll_spinning(ni, now_frc) && si_trylock(ni, sinf) ) {
+      if( ci_netif_need_poll_spinning(ni, now_frc) && si_trylock(ni, sinf) )
         ci_netif_poll(ni);
-        sinf->sendq_credit = ci_tcp_tx_send_space(ni, ts);
-        if( sinf->sendq_credit > 0 ) {
-          ni->state->is_spinner = 0;
-          return 0;
-        }
-        if( ts->s.tx_errno ) {
-          ni->state->is_spinner = 0;
-          ci_tcp_sendmsg_handle_tx_errno(ni, ts, flags, sinf);
-          return -1;
-        }
-      }
       else if( ! ni->state->is_spinner )
         ni->state->is_spinner = 1;
+    }
+    sinf->sendq_credit = ci_tcp_tx_send_space(ni, ts);
+    if( sinf->sendq_credit > 0 ) {
+      ni->state->is_spinner = 0;
+      return 0;
+    }
+    if( ts->s.tx_errno ) {
+      ni->state->is_spinner = 0;
+      ci_tcp_sendmsg_handle_tx_errno(ni, ts, flags, sinf);
+      return -1;
     }
     if( sinf->stack_locked ) {
       ci_netif_unlock(ni);
