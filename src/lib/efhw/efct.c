@@ -180,45 +180,6 @@ efct_max_shared_rxqs(struct efhw_nic *nic)
  * Initialisation and configuration discovery
  *
  *---------------------------------------------------------------------------*/
-static int
-efct_nic_license_check(struct efhw_nic *nic, const uint32_t feature,
-                       int* licensed)
-{
-  return 0;
-}
-
-
-static int
-efct_nic_v3_license_check(struct efhw_nic *nic, const uint64_t app_id,
-                          int* licensed)
-{
-  return 0;
-}
-
-
-static int
-efct_nic_license_challenge(struct efhw_nic *nic,
-                           const uint32_t feature,
-                           const uint8_t* challenge,
-                           uint32_t* expiry,
-                           uint8_t* signature)
-{
-  return 0;
-}
-
-
-static int
-efct_nic_v3_license_challenge(struct efhw_nic *nic,
-                              const uint64_t app_id,
-                              const uint8_t* challenge,
-                              uint32_t* expiry,
-                              uint32_t* days,
-                              uint8_t* signature,
-                              uint8_t* base_mac,
-                              uint8_t* vadaptor_mac)
-{
-  return 0;
-}
 
 
 static void
@@ -398,9 +359,6 @@ efct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
 	mmiowb();
 }
 
-static void efct_nic_sw_event(struct efhw_nic *nic, int data, int evq)
-{
-}
 
 static bool efct_accept_vi_constraints(struct efhw_nic *nic, int low,
                                        unsigned order, void* arg)
@@ -420,41 +378,6 @@ static bool efct_accept_vi_constraints(struct efhw_nic *nic, int low,
   else {
     return low >= efct->evq_n;
   }
-}
-
-/*--------------------------------------------------------------------
- *
- * EF10 specific event callbacks
- *
- *--------------------------------------------------------------------*/
-
-static int
-efct_handle_event(struct efhw_nic *nic, efhw_event_t *ev, int budget)
-{
-  return -EOPNOTSUPP;
-}
-
-
-/*----------------------------------------------------------------------------
- *
- * TX Alternatives
- *
- *---------------------------------------------------------------------------*/
-
-
-static int
-efct_tx_alt_alloc(struct efhw_nic *nic, int tx_q_id, int num_alt,
-                  int num_32b_words, unsigned *cp_id_out, unsigned *alt_ids_out)
-{
-  return -EOPNOTSUPP;
-}
-
-
-static int
-efct_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
-                 const unsigned *alt_ids)
-{
-  return -EOPNOTSUPP;
 }
 
 
@@ -595,136 +518,11 @@ static int efct_translate_dma_addrs(struct efhw_nic* nic,
 static const int __efct_nic_buffer_table_get_orders[] = {};
 
 
-static int
-efct_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
-                            struct efhw_buffer_table_block **block_out,
-                            int reset_pending)
-{
-  return -EOPNOTSUPP;
-}
-
-
-static int
-efct_nic_buffer_table_realloc(struct efhw_nic *nic, int owner, int order,
-                              struct efhw_buffer_table_block *block)
-{
-  return -EOPNOTSUPP;
-}
-
-
-static void
-efct_nic_buffer_table_free(struct efhw_nic *nic,
-                           struct efhw_buffer_table_block *block,
-                           int reset_pending)
-{
-}
-
-
-static int
-efct_nic_buffer_table_set(struct efhw_nic *nic,
-                          struct efhw_buffer_table_block *block,
-                          int first_entry, int n_entries,
-                          dma_addr_t *dma_addrs)
-{
-  return -EOPNOTSUPP;
-}
-
-
-static void
-efct_nic_buffer_table_clear(struct efhw_nic *nic,
-                            struct efhw_buffer_table_block *block,
-                            int first_entry, int n_entries)
-{
-}
-
-
-/*--------------------------------------------------------------------
- *
- * Port Sniff
- *
- *--------------------------------------------------------------------*/
-
-static int
-efct_nic_set_tx_port_sniff(struct efhw_nic *nic, int instance, int enable,
-                           int rss_context)
-{
-  return -EOPNOTSUPP;
-}
-
-
-static int
-efct_nic_set_port_sniff(struct efhw_nic *nic, int instance, int enable,
-                        int promiscuous, int rss_context)
-{
-  return -EOPNOTSUPP;
-}
-
-/*--------------------------------------------------------------------
- *
- * Error Stats
- *
- *--------------------------------------------------------------------*/
-
-static int
-efct_get_rx_error_stats(struct efhw_nic *nic, int instance,
-                        void *data, int data_len, int do_reset)
-{
-  return -EOPNOTSUPP;
-}
-
-/*--------------------------------------------------------------------
- *
- * Dynamic client IDs
- *
- *--------------------------------------------------------------------*/
-
-static int
-efct_client_alloc(struct efhw_nic *nic, uint32_t parent, uint32_t *id)
-{
-  /* The specific return value of ENOSYS is recognised by clients to mean that
-   * we don't provide or require client ids.
-   */
-  return -ENOSYS;
-}
-
-
-static int
-efct_client_free(struct efhw_nic *nic, uint32_t id)
-{
-  return -EOPNOTSUPP;
-}
-
-
-static int
-efct_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
-{
-  return -EOPNOTSUPP;
-}
-
 /*--------------------------------------------------------------------
  *
  * Filtering
  *
  *--------------------------------------------------------------------*/
-static int
-efct_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-               u32 efhw_rss_mode, int num_qs, u32 *rss_context_out)
-{
-  return -EOPNOTSUPP;
-}
-
-static int
-efct_rss_update(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-                u32 efhw_rss_mode, u32 rss_context)
-{
-  return -EOPNOTSUPP;
-}
-
-static int
-efct_rss_free(struct efhw_nic *nic, u32 rss_context)
-{
-  return -EOPNOTSUPP;
-}
 
 static uint32_t zero_remote_port(uint32_t l4_4_bytes)
 {
@@ -1513,13 +1311,6 @@ bool efct_packet_handled(void *driver_data, int rxq, bool flow_lookup,
 }
 
 static int
-efct_filter_redirect(struct efhw_nic *nic, int filter_id,
-                     struct efx_filter_spec *spec)
-{
-  return -EOPNOTSUPP;
-}
-
-static int
 efct_filter_query(struct efhw_nic *nic, int filter_id,
                   struct efhw_filter_info *info)
 {
@@ -1578,55 +1369,9 @@ efct_unicast_block(struct efhw_nic *nic, bool block)
 
 /*--------------------------------------------------------------------
  *
- * vports
- *
- *--------------------------------------------------------------------*/
-static int
-efct_vport_alloc(struct efhw_nic *nic, u16 vlan_id, u16 *vport_handle_out)
-{
-  return -EOPNOTSUPP;
-}
-
-static int
-efct_vport_free(struct efhw_nic *nic, u16 vport_handle)
-{
-  return -EOPNOTSUPP;
-}
-
-/*--------------------------------------------------------------------
- *
- * AF_XDP
- *
- *--------------------------------------------------------------------*/
-static int
-efct_dmaq_kick(struct efhw_nic* nic, int instance)
-{
-  return 0;
-}
-
-static void*
-efct_af_xdp_mem(struct efhw_nic* nic, int instance)
-{
-  return NULL;
-}
-
-static int
-efct_af_xdp_init(struct efhw_nic* nic, int instance, int chunk_size,
-                 int headroom, struct efhw_page_map* pages_out)
-{
-  return 0;
-}
-
-/*--------------------------------------------------------------------
- *
  * Device
  *
  *--------------------------------------------------------------------*/
-static struct pci_dev*
-efct_get_pci_dev(struct efhw_nic *nic)
-{
-  return NULL;
-}
 
 static int
 efct_vi_io_region(struct efhw_nic *nic, int instance, size_t* size_out,
@@ -1647,13 +1392,6 @@ efct_vi_io_region(struct efhw_nic *nic, int instance, size_t* size_out,
   *addr_out += (instance - nic->vi_min) * val.evq_window.stride;
 
   return rc;
-}
-
-static int
-efct_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
-                      const volatile uint32_t* evq_ptr)
-{
-	return -EOPNOTSUPP;
 }
 
 /*--------------------------------------------------------------------
@@ -1688,59 +1426,29 @@ efct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
  *--------------------------------------------------------------------*/
 
 struct efhw_func_ops efct_char_functional_units = {
-  efct_nic_init_hardware,
-  efct_nic_tweak_hardware,
-  efct_nic_release_hardware,
-  efct_nic_event_queue_enable,
-  efct_nic_event_queue_disable,
-  efct_nic_wakeup_request,
-  efct_nic_sw_event,
-  efct_handle_event,
-  efct_accept_vi_constraints,
-  efct_dmaq_tx_q_init,
-  efct_dmaq_rx_q_init,
-  efct_flush_tx_dma_channel,
-  efct_flush_rx_dma_channel,
-  efct_translate_dma_addrs,
-  __efct_nic_buffer_table_get_orders,
-  0,
-  efct_nic_buffer_table_alloc,
-  efct_nic_buffer_table_realloc,
-  efct_nic_buffer_table_free,
-  efct_nic_buffer_table_set,
-  efct_nic_buffer_table_clear,
-  efct_nic_set_port_sniff,
-  efct_nic_set_tx_port_sniff,
-  efct_nic_license_challenge,
-  efct_nic_license_check,
-  efct_nic_v3_license_challenge,
-  efct_nic_v3_license_check,
-  efct_get_rx_error_stats,
-  efct_tx_alt_alloc,
-  efct_tx_alt_free,
-  efct_client_alloc,
-  efct_client_free,
-  efct_vi_set_user,
-  efct_rss_alloc,
-  efct_rss_update,
-  efct_rss_free,
-  efct_filter_insert,
-  efct_filter_remove,
-  efct_filter_redirect,
-  efct_filter_query,
-  efct_multicast_block,
-  efct_unicast_block,
-  efct_vport_alloc,
-  efct_vport_free,
-  efct_dmaq_kick,
-  efct_af_xdp_mem,
-  efct_af_xdp_init,
-  efct_get_pci_dev,
-  efct_vi_io_region,
-  efct_inject_reset_ev,
-  efct_ctpio_addr,
-  efct_design_parameters,
-  efct_max_shared_rxqs,
+  .init_hardware = efct_nic_init_hardware,
+  .post_reset = efct_nic_tweak_hardware,
+  .release_hardware = efct_nic_release_hardware,
+  .event_queue_enable = efct_nic_event_queue_enable,
+  .event_queue_disable = efct_nic_event_queue_disable,
+  .wakeup_request = efct_nic_wakeup_request,
+  .accept_vi_constraints = efct_accept_vi_constraints,
+  .dmaq_tx_q_init = efct_dmaq_tx_q_init,
+  .dmaq_rx_q_init = efct_dmaq_rx_q_init,
+  .flush_tx_dma_channel = efct_flush_tx_dma_channel,
+  .flush_rx_dma_channel = efct_flush_rx_dma_channel,
+  .translate_dma_addrs = efct_translate_dma_addrs,
+  .buffer_table_orders = __efct_nic_buffer_table_get_orders,
+  .buffer_table_orders_num = 0,
+  .filter_insert = efct_filter_insert,
+  .filter_remove = efct_filter_remove,
+  .filter_query = efct_filter_query,
+  .multicast_block = efct_multicast_block,
+  .unicast_block = efct_unicast_block,
+  .vi_io_region = efct_vi_io_region,
+  .ctpio_addr = efct_ctpio_addr,
+  .design_parameters = efct_design_parameters,
+  .max_shared_rxqs = efct_max_shared_rxqs,
 };
 
 #endif

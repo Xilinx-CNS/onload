@@ -96,10 +96,12 @@
 	((nic)->efhw_func->wakeup_mask_set((nic), (mask)))
 
 #define efhw_nic_sw_event(nic, data, ev) \
-	((nic)->efhw_func->sw_event(nic, data, ev))
+	((nic)->efhw_func->sw_event ? \
+	 (nic)->efhw_func->sw_event(nic, data, ev) : (void) 0)
 
 #define efhw_nic_handle_event(nic, ev, budget) \
-	((nic)->efhw_func->handle_event((nic), (ev), (budget)))
+	((nic)->efhw_func->handle_event ? \
+	 (nic)->efhw_func->handle_event((nic), (ev), (budget)) : -EOPNOTSUPP)
 
 #define efhw_nic_accept_vi_constraints(nic, low, order, arg) \
 	((nic)->efhw_func->accept_vi_constraints((nic), (low), (order), (arg)))
@@ -126,14 +128,17 @@
 
 /* xdp specific */
 #define efhw_nic_dmaq_kick(nic,instance) \
-	((nic)->efhw_func->dmaq_kick((nic), (instance)))
+	((nic)->efhw_func->dmaq_kick ? \
+	 (nic)->efhw_func->dmaq_kick((nic), (instance)) : 0)
 
 #define efhw_nic_af_xdp_mem(nic, instance) \
-	((nic)->efhw_func->af_xdp_mem((nic), (instance)))
+	((nic)->efhw_func->af_xdp_mem ? \
+	 (nic)->efhw_func->af_xdp_mem((nic), (instance)) : NULL)
 
 #define efhw_nic_af_xdp_init(nic, instance, chunk_size, headroom, pages_out) \
-	((nic)->efhw_func->af_xdp_init((nic), (instance), (chunk_size), \
-	 (headroom), (pages_out)))
+	((nic)->efhw_func->af_xdp_init ? \
+	 (nic)->efhw_func->af_xdp_init((nic), (instance), (chunk_size), \
+	 (headroom), (pages_out)) : 0)
 
 /*-------------- MAC Low level interface ---- */
 #define efhw_gmac_get_mac_addr(nic) \
@@ -146,75 +151,104 @@
 	((nic)->efhw_func->buffer_table_orders_num)
 #define efhw_nic_buffer_table_alloc(nic, owner, order, block_out,	    \
 				    reset_pending)			    \
-	((nic)->efhw_func->buffer_table_alloc(nic, owner, order, block_out, \
-					      reset_pending))
+	((nic)->efhw_func->buffer_table_alloc ? \
+	 (nic)->efhw_func->buffer_table_alloc(nic, owner, order, block_out, \
+					      reset_pending) : -EOPNOTSUPP)
 #define efhw_nic_buffer_table_realloc(nic, owner, order, block)         \
-	((nic)->efhw_func->buffer_table_realloc(nic, owner, order, block))
+	((nic)->efhw_func->buffer_table_realloc ? \
+	 (nic)->efhw_func->buffer_table_realloc(nic, owner, order, block) : \
+	 -EOPNOTSUPP)
 #define efhw_nic_buffer_table_free(nic, block, reset_pending)		\
-	((nic)->efhw_func->buffer_table_free(nic, block, reset_pending))
+	((nic)->efhw_func->buffer_table_free ? \
+	 (nic)->efhw_func->buffer_table_free(nic, block, reset_pending) : \
+	 (void) 0)
 #define efhw_nic_buffer_table_set(nic, block, first_entry, n_entries,   \
 				  addrs)                                \
-	((nic)->efhw_func->buffer_table_set(nic, block, first_entry,    \
-					    n_entries, addrs))
+	((nic)->efhw_func->buffer_table_set ? \
+	 (nic)->efhw_func->buffer_table_set(nic, block, first_entry,    \
+					    n_entries, addrs) : -EOPNOTSUPP)
 #define efhw_nic_buffer_table_clear(nic, block, first_entry, n_entries) \
-	((nic)->efhw_func->buffer_table_clear(nic, block, first_entry,  \
-					      n_entries))
+	((nic)->efhw_func->buffer_table_clear ? \
+	 (nic)->efhw_func->buffer_table_clear(nic, block, first_entry,  \
+					      n_entries) : (void) 0)
 /*-------------- Sniff ------------ */
 #define efhw_nic_set_port_sniff(nic, instance, enable, promiscuous, handle) \
-	((nic)->efhw_func->set_port_sniff((nic), (instance), (enable),      \
-					  (promiscuous), (handle)))
+	((nic)->efhw_func->set_port_sniff ? \
+	 (nic)->efhw_func->set_port_sniff((nic), (instance), (enable),      \
+					  (promiscuous), (handle)) : \
+	 -EOPNOTSUPP)
 
 #define efhw_nic_set_tx_port_sniff(nic, instance, enable, handle)         \
-	((nic)->efhw_func->set_tx_port_sniff((nic), (instance), (enable), \
-					     (handle)))
+	((nic)->efhw_func->set_tx_port_sniff ? \
+	 (nic)->efhw_func->set_tx_port_sniff((nic), (instance), (enable), \
+					     (handle)) : -EOPNOTSUPP)
 
 /*-------------- Licensing ---------------- */
 #define efhw_nic_license_challenge(nic, feature, challenge, expiry, signature) \
-	((nic)->efhw_func->license_challenge(nic, feature, challenge, expiry,  \
-                                             signature))
+	((nic)->efhw_func->license_challenge ? \
+	 (nic)->efhw_func->license_challenge(nic, feature, challenge, expiry, \
+                                             signature) : \
+	 0)
 
 #define efhw_nic_license_check(nic, feature, licensed) \
-	((nic)->efhw_func->license_check(nic, feature, licensed))
+	((nic)->efhw_func->license_check ? \
+	 (nic)->efhw_func->license_check(nic, feature, licensed) : \
+	 0)
 
 #define efhw_nic_v3_license_challenge(nic, app_id, challenge, expiry, \
 					days, signature, base_mac, v_mac) \
-	((nic)->efhw_func->v3_license_challenge(nic, app_id, \
+	((nic)->efhw_func->v3_license_challenge ? \
+	 (nic)->efhw_func->v3_license_challenge(nic, app_id, \
 						challenge, expiry, days, \
-						signature, base_mac, v_mac))
+						signature, base_mac, v_mac) : \
+	 0)
+
 #define efhw_nic_v3_license_check(nic, feature, licensed) \
-	((nic)->efhw_func->v3_license_check(nic, feature, licensed))
+	((nic)->efhw_func->v3_license_check ? \
+	 (nic)->efhw_func->v3_license_check(nic, feature, licensed) : \
+	 0)
 
 /*-------------- Stats ---------------- */
 #define efhw_nic_get_rx_error_stats(nic, instance, data, data_len, do_reset) \
-	((nic)->efhw_func->get_rx_error_stats(nic, instance, data, data_len, \
-                                              do_reset))
+	((nic)->efhw_func->get_rx_error_stats ? \
+	 (nic)->efhw_func->get_rx_error_stats(nic, instance, data, data_len, \
+                                              do_reset) : -EOPNOTSUPP)
 
 /*-------------- Dynamic clients IDs ------ */
 #define efhw_nic_client_alloc(nic, parent, id) \
-	((nic)->efhw_func->client_alloc((nic), (parent), (id)))
+	((nic)->efhw_func->client_alloc ? \
+	 (nic)->efhw_func->client_alloc((nic), (parent), (id)) : -ENOSYS)
 
 #define efhw_nic_client_free(nic, id) \
-	((nic)->efhw_func->client_free((nic), (id)))
+	((nic)->efhw_func->client_free((nic), (id)) ? \
+	 (nic)->efhw_func->client_free((nic), (id)) : -EOPNOTSUPP)
 
 #define efhw_nic_vi_set_user(nic, vi_instance, user) \
-	((nic)->efhw_func->vi_set_user((nic), (vi_instance), (user)))
+	((nic)->efhw_func->vi_set_user ? \
+	 (nic)->efhw_func->vi_set_user((nic), (vi_instance), (user)) : \
+	 -EOPNOTSUPP)
 
 /*-------------- filtering --------------------- */
 #define efhw_nic_rss_alloc(nic, indir, key, efhw_rss_mode, num_qs, context) \
-        ((nic)->efhw_func->rss_alloc((nic), (indir), (key), (efhw_rss_mode), \
-				     (num_qs), (context)))
+        ((nic)->efhw_func->rss_alloc ? \
+         (nic)->efhw_func->rss_alloc((nic), (indir), (key), (efhw_rss_mode), \
+				     (num_qs), (context)) : -EOPNOTSUPP)
 #define efhw_nic_rss_update(nic, indir, key, efhw_rss_mode, rss_context) \
-	((nic)->efhw_func->rss_update((nic), (indir), (key), (efhw_rss_mode), \
-				      (rss_context)))
+	((nic)->efhw_func->rss_update ? \
+	 (nic)->efhw_func->rss_update((nic), (indir), (key), (efhw_rss_mode), \
+				      (rss_context)) : -EOPNOTSUPP)
 #define efhw_nic_rss_free(nic, rss_context) \
-	((nic)->efhw_func->rss_free((nic), (rss_context)))
+	((nic)->efhw_func->rss_free ? \
+	 (nic)->efhw_func->rss_free((nic), (rss_context)) : -EOPNOTSUPP)
 
 #define efhw_nic_filter_insert(nic, spec, rxq, exclusive_rxq_token, mask, flags) \
 	((nic)->efhw_func->filter_insert((nic), (spec), (rxq), (exclusive_rxq_token), (mask), (flags)))
 #define efhw_nic_filter_remove(nic, filter_id) \
 	((nic)->efhw_func->filter_remove((nic), (filter_id)))
 #define efhw_nic_filter_redirect(nic, filter_id, spec) \
-	((nic)->efhw_func->filter_redirect((nic), (filter_id), (spec)))
+	((nic)->efhw_func->filter_redirect ? \
+	 (nic)->efhw_func->filter_redirect((nic), (filter_id), (spec)) : \
+	 -EOPNOTSUPP)
 #define efhw_nic_filter_query(nic, filter_id, info) \
 	((nic)->efhw_func->filter_query((nic), (filter_id), (info)))
 
@@ -225,19 +259,24 @@
 
 /*-------------- vports ------------------------ */
 #define efhw_nic_vport_alloc(nic, vlan_id, vport_handle_out) \
-	((nic)->efhw_func->vport_alloc((nic), (vlan_id), (vport_handle_out)))
+	((nic)->efhw_func->vport_alloc ? \
+	 (nic)->efhw_func->vport_alloc((nic), (vlan_id), (vport_handle_out)) : \
+	 -EOPNOTSUPP)
 #define efhw_nic_vport_free(nic, vport_handle) \
-	((nic)->efhw_func->vport_free((nic), (vport_handle)))
+	((nic)->efhw_func->vport_free ? \
+	 (nic)->efhw_func->vport_free((nic), (vport_handle)) : -EOPNOTSUPP)
 
 /*-------------- device ------------------------ */
 #define efhw_nic_get_pci_dev(nic) \
-	((nic)->efhw_func->get_pci_dev(nic))
+	((nic)->efhw_func->get_pci_dev ? \
+	 (nic)->efhw_func->get_pci_dev(nic) : NULL)
 #define efhw_nic_vi_io_region(nic, instance, size_out, addr_out) \
 	((nic)->efhw_func->vi_io_region((nic), (instance), (size_out), \
 					(addr_out)))
 #define efhw_nic_inject_reset_ev(nic, base, capacity, evq_ptr) \
-	((nic)->efhw_func->inject_reset_ev((nic), (base), (capacity), \
-	 (evq_ptr)))
+	((nic)->efhw_func->inject_reset_ev ? \
+	 (nic)->efhw_func->inject_reset_ev((nic), (base), (capacity), \
+	 (evq_ptr)) : -EOPNOTSUPP)
 
 /*-------------- ctpio ------------------------ */
 #define efhw_nic_ctpio_addr(nic, instance, addr) \
@@ -250,9 +289,14 @@
 /*-------------- TX Alternatives ------------ */
 #define efhw_nic_tx_alt_alloc(nic, tx_q_id, num_alt, num_32b_words, \
                               cp_id_out, alt_ids_out) \
-	((nic)->efhw_func->tx_alt_alloc((nic), (tx_q_id), (num_alt), \
+	((nic)->efhw_func->tx_alt_alloc ? \
+	 (nic)->efhw_func->tx_alt_alloc((nic), (tx_q_id), (num_alt), \
                                         (num_32b_words), (cp_id_out), \
-                                        (alt_ids_out)))
+                                        (alt_ids_out)) : \
+         -EOPNOTSUPP)
 
 #define efhw_nic_tx_alt_free(nic, num_alt, cp_id, alt_ids) \
-	((nic)->efhw_func->tx_alt_free((nic), (num_alt), (cp_id), (alt_ids)))
+	((nic)->efhw_func->tx_alt_free ? \
+	 (nic)->efhw_func->tx_alt_free((nic), (num_alt), (cp_id), \
+                                       (alt_ids)) : \
+	 -EOPNOTSUPP)
