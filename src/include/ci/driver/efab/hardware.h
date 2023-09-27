@@ -128,6 +128,13 @@
 #define efhw_nic_dmaq_kick(nic,instance) \
 	((nic)->efhw_func->dmaq_kick((nic), (instance)))
 
+#define efhw_nic_af_xdp_mem(nic, instance) \
+	((nic)->efhw_func->af_xdp_mem((nic), (instance)))
+
+#define efhw_nic_af_xdp_init(nic, instance, chunk_size, headroom, pages_out) \
+	((nic)->efhw_func->af_xdp_init((nic), (instance), (chunk_size), \
+	 (headroom), (pages_out)))
+
 /*-------------- MAC Low level interface ---- */
 #define efhw_gmac_get_mac_addr(nic) \
 	((nic)->gmac->get_mac_addr((nic)->gmac))
@@ -228,6 +235,9 @@
 #define efhw_nic_vi_io_region(nic, instance, size_out, addr_out) \
 	((nic)->efhw_func->vi_io_region((nic), (instance), (size_out), \
 					(addr_out)))
+#define efhw_nic_inject_reset_ev(nic, base, capacity, evq_ptr) \
+	((nic)->efhw_func->inject_reset_ev((nic), (base), (capacity), \
+	 (evq_ptr)))
 
 /*-------------- ctpio ------------------------ */
 #define efhw_nic_ctpio_addr(nic, instance, addr) \
@@ -237,3 +247,12 @@
 #define efhw_nic_design_parameters(nic, dp) \
 	((nic)->efhw_func->design_parameters((nic), (dp)))
 
+/*-------------- TX Alternatives ------------ */
+#define efhw_nic_tx_alt_alloc(nic, tx_q_id, num_alt, num_32b_words, \
+                              cp_id_out, alt_ids_out) \
+	((nic)->efhw_func->tx_alt_alloc((nic), (tx_q_id), (num_alt), \
+                                        (num_32b_words), (cp_id_out), \
+                                        (alt_ids_out)))
+
+#define efhw_nic_tx_alt_free(nic, num_alt, cp_id, alt_ids) \
+	((nic)->efhw_func->tx_alt_free((nic), (num_alt), (cp_id), (alt_ids)))

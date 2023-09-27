@@ -1164,7 +1164,7 @@ void efrm_nic_flush_all_queues(struct efhw_nic *nic, int flags)
 			INIT_LIST_HEAD(&virs->q[type].init_link);
 			if (flags & EFRM_FLUSH_QUEUES_F_INJECT_EV && type == EFHW_EVQ &&
 			    virs->ep_state) {
-				rc = nic->efhw_func->inject_reset_ev(nic,
+				rc = efhw_nic_inject_reset_ev(nic,
 				                             virs->q[EFHW_EVQ].host_pages.ptr,
 				                             virs->q[EFHW_EVQ].capacity,
 				                             &virs->ep_state->evq.evq_ptr);
@@ -1401,8 +1401,8 @@ efrm_vi_resource_deferred(struct efrm_vi *virs, int chunk_size, int headroom,
 	int rc;
 	struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
 
-	rc = nic->efhw_func->af_xdp_init(nic, virs->allocation.instance,
-	                                 chunk_size, headroom, &virs->mem_mmap);
+	rc = efhw_nic_af_xdp_init(nic, virs->allocation.instance,
+	                          chunk_size, headroom, &virs->mem_mmap);
 	if (rc < 0)
 		return rc;
 
@@ -1961,9 +1961,9 @@ int efrm_vi_tx_alt_alloc(struct efrm_vi *virs, int num_alt, int num_32b_words)
 	if (virs->tx_alt_num > 0)
 		return -EALREADY;
 
-	rc = nic->efhw_func->tx_alt_alloc(nic, virs->rs.rs_instance,
-					  num_alt, num_32b_words,
-					  &(virs->tx_alt_cp), virs->tx_alt_ids);
+	rc = efhw_nic_tx_alt_alloc(nic, virs->rs.rs_instance, num_alt,
+				   num_32b_words, &(virs->tx_alt_cp),
+				   virs->tx_alt_ids);
 	if (rc == 0)
 		virs->tx_alt_num = num_alt;
 	return rc;
@@ -1978,8 +1978,8 @@ int efrm_vi_tx_alt_free(struct efrm_vi *virs)
 	if (virs->tx_alt_num == 0)
 		return 0;
 
-	rc = nic->efhw_func->tx_alt_free(nic, virs->tx_alt_num,
-					 virs->tx_alt_cp, virs->tx_alt_ids);
+	rc = efhw_nic_tx_alt_free(nic, virs->tx_alt_num, virs->tx_alt_cp,
+				  virs->tx_alt_ids);
 	if (rc == 0)
 		virs->tx_alt_num = 0;
 	return rc;

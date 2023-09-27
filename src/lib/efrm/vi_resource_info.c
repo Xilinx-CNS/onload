@@ -52,7 +52,7 @@ static void af_xdp_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
 				   struct efrm_vi_mappings* vm)
 {
   vm->io_page = NULL;
-  vm->evq_base = nic->efhw_func->af_xdp_mem(nic, vi_rs->allocation.instance);
+  vm->evq_base = efhw_nic_af_xdp_mem(nic, vi_rs->allocation.instance);
 }
 
 static void efct_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
