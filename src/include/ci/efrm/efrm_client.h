@@ -33,10 +33,10 @@ struct efrm_client_attr {
 /* NB. Callbacks may be invoked even before this returns. */
 extern int  efrm_client_get(int ifindex, struct efrm_client_callbacks *,
                             void *user_data, struct efrm_client **client_out);
-extern int  efrm_client_get_by_dev(const struct net_device*,
-                                   struct efrm_client_callbacks *,
-                                   void *user_data,
-                                   struct efrm_client **client_out);
+extern int  efrm_client_get_by_net_dev(const struct net_device*,
+                                       struct efrm_client_callbacks *,
+                                       void *user_data,
+                                       struct efrm_client **client_out);
 extern void efrm_client_set_callbacks(struct efrm_client *client,
                                       struct efrm_client_callbacks *callbacks,
                                       void *user_data);

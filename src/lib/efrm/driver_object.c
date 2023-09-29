@@ -364,9 +364,9 @@ static void efrm_client_init_from_nic(struct efrm_nic *rnic,
 	list_add(&client->link, &rnic->clients);
 }
 
-int efrm_client_get_by_dev(const struct net_device *dev,
-                           struct efrm_client_callbacks *callbacks,
-                           void *user_data, struct efrm_client **client_out)
+int efrm_client_get_by_net_dev(const struct net_device *dev,
+                               struct efrm_client_callbacks *callbacks,
+                               void *user_data, struct efrm_client **client_out)
 {
 	struct efrm_nic *n, *rnic = NULL;
 	struct list_head *link;
@@ -413,7 +413,7 @@ int efrm_client_get_by_dev(const struct net_device *dev,
 	*client_out = client;
 	return 0;
 }
-EXPORT_SYMBOL(efrm_client_get_by_dev);
+EXPORT_SYMBOL(efrm_client_get_by_net_dev);
 
 
 int efrm_client_get(int ifindex, struct efrm_client_callbacks *callbacks,
@@ -427,7 +427,7 @@ int efrm_client_get(int ifindex, struct efrm_client_callbacks *callbacks,
 		if (!dev)
 			return -ENODEV;
 	}
-	rc = efrm_client_get_by_dev(dev, callbacks, user_data, client_out);
+	rc = efrm_client_get_by_net_dev(dev, callbacks, user_data, client_out);
 	if (dev)
 		dev_put(dev);
 	return rc;

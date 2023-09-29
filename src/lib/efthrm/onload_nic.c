@@ -133,8 +133,8 @@ struct oo_nic* oo_nic_add(const struct net_device* dev)
 
   CI_DEBUG(ASSERT_RTNL());
 
-  rc = efrm_client_get_by_dev(dev, &oo_efrm_client_callbacks, NULL,
-                              &efrm_client);
+  rc = efrm_client_get_by_net_dev(dev, &oo_efrm_client_callbacks, NULL,
+                                  &efrm_client);
   if( rc != 0 )
     /* Resource driver doesn't know about this ifindex. */
     goto fail1;
