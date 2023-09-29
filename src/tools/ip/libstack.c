@@ -1055,10 +1055,7 @@ static int dump_via_buffers(oo_dump_request_fn_t dump_req_fn, void* arg,
     }
     rc = dump_req_fn(arg, buf, buf_len);
     if( rc >= 0 && rc <= buf_len )
-      /* This buffer often outputs more than 511 characters. 
-       * So, printf() is used instead of ci_log_nonl().
-       */
-      printf("%s", buf);
+      ci_log_stdout_nonl(buf);
     free(buf);
     if( rc < 0 ) {
       if( flags & DVB_LOG_FAILURE )
