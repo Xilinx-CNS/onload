@@ -8401,7 +8401,11 @@ corrupted:
 struct oo_inject_packets_work_data {
   struct work_struct work;
   tcp_helper_resource_t* trs;
+
+  /* This is kernel_packets_* field from the stack state,
+   * detached from the stack itself under the stack lock. */
   oo_pkt_p pkt_head;
+  unsigned n_pkts;
 };
 
 static void oo_inject_packets_work(struct work_struct* work)
@@ -8411,9 +8415,12 @@ static void oo_inject_packets_work(struct work_struct* work)
   ci_netif* ni = &data->trs->netif;
   ci_ip_pkt_fmt* pkt;
   int netif_is_locked;
+  unsigned n;
 
-  /* Part one: inject all packets to the kernel */
-  for( pkt = PKT_CHK(ni, data->pkt_head); ; pkt = PKT_CHK(ni, pkt->next) ) {
+  /* Part one: inject all packets to the kernel without stack lock. */
+  for( pkt = PKT_CHK(ni, data->pkt_head), n = 0;
+       n < data->n_pkts;
+       pkt = PKT_CHK(ni, pkt->next), n++ ) {
     /* No need to check the return value here.  If the function fails, the
      * packet is dropped, and a counter is incremented. */
     oo_inject_packet_kernel(ni, pkt);
@@ -8422,16 +8429,32 @@ static void oo_inject_packets_work(struct work_struct* work)
       break;
   }
 
-  /* Part two: free Onload packets */
+  /* If the packet list was not corrupted, then we break from the above
+   * loop just before n becomes equal to data->n_pkts. */
+  ci_assert_equal(n + 1, data->n_pkts);
+
+  /* Part two: free Onload packets, and get the stack lock if necessary. */
   netif_is_locked = 0;
-  for( pkt = PKT_CHK(ni, data->pkt_head); ; pkt = PKT_CHK(ni, data->pkt_head)) {
+  for( pkt = PKT_CHK(ni, data->pkt_head), n = 0;
+       n < data->n_pkts;
+       pkt = PKT_CHK(ni, data->pkt_head), n++ ) {
     data->pkt_head = pkt->next;
     ci_netif_pkt_release_mnl(ni, pkt, &netif_is_locked);
+
     if( OO_PP_IS_NULL(data->pkt_head) )
       break;
   }
+
   if( netif_is_locked )
     ci_netif_unlock(ni);
+
+  /* Check the length of the list again, and print a message for NDEBUG
+   * build. */
+  ci_assert_equal(n + 1, data->n_pkts);
+  if( n + 1 != data->n_pkts ) {
+    ci_log("ERROR: packet list corruption when inserting to kernel: "
+           "n=%d n_pkts=%d", n, data->n_pkts);
+  }
 
   kfree(data);
 }
@@ -8476,7 +8499,18 @@ void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
   INIT_WORK(&data->work, oo_inject_packets_work);
   data->trs = trs;
   data->pkt_head = ni->state->kernel_packets_head;
+  data->n_pkts = ni->state->kernel_packets_pending;
 
+  CITP_STATS_NETIF_INC(ni, no_match_pass_to_kernel_batches);
+
+  /* Ensure that all new packets will go to the new empty list. */
+  ni->state->kernel_packets_head = OO_PP_NULL;
+  ni->state->kernel_packets_tail = OO_PP_NULL;
+  ni->state->kernel_packets_pending = 0;
+  ci_frc64(&ni->state->kernel_packets_last_forwarded);
+
+  /* Now the list in the data structure is detached from the stack,
+   * and it is safe to spawn the injection itself. */
   if( sync ) {
     oo_inject_packets_work(&data->work);
   }
@@ -8484,13 +8518,6 @@ void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
     /* Push data to kernel without holding the stack lock */
     queue_work(trs->wq, &data->work);
   }
-
-  CITP_STATS_NETIF_INC(ni, no_match_pass_to_kernel_batches);
-
-  ni->state->kernel_packets_head = OO_PP_NULL;
-  ni->state->kernel_packets_tail = OO_PP_NULL;
-  ni->state->kernel_packets_pending = 0;
-  ci_frc64(&ni->state->kernel_packets_last_forwarded);
 }
 #endif /* CI_CFG_INJECT_PACKETS */
 
