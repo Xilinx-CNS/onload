@@ -2610,6 +2610,13 @@ static void citp_epoll_get_ordering_limit(ci_netif* ni,
       citp_epoll_earliest_rx(ni, limit_out);
       ci_netif_unlock(ni);
 
+      /* It's always the case that the earliest RX across all interfaces
+       * provides a safe limit. However, if we have one or more interfaces
+       * that aren't receiving traffic our earliest RX stamp may be from a
+       * very long time ago. To deal with that possibility we have a fallback
+       * base_ts. Because we've done a full poll after that stamp we know that
+       * it's safe too, so fall back to using base_ts if it's more recent than
+       * limit. */
       if( citp_timespec_compare(&base_ts, limit_out) > 0 ) {
         limit_out->tv_sec = base_ts.tv_sec;
         limit_out->tv_nsec = base_ts.tv_nsec;
