@@ -1403,3 +1403,229 @@ def do_test_efcp_get_all_intfs(cpserver,cp,netns,efcp):
 
 def test_efcp_get_all_intfs():
     do_test_efcp_get_all_intfs()
+
+@efcpdecorate()
+def do_test_efcp_get_related_intfs(cpserver,cp,netns,efcp):
+    import ef_cplane
+    o0ix = build_intf(netns, 'O0', fake_ip_subnet(False, 1), cp=cp, hwport=1)
+    o1ix = build_intf(netns, 'O1', fake_ip_subnet(False, 2), cp=cp, hwport=2, state=None)
+    o2ix = build_intf(netns, 'O2', fake_ip_subnet(False, 3), cp=cp, hwport=3, state=None)
+    netns.link('add', kind='vlan', ifname='v1o0', vlan_id=1, link=o0ix)
+    v1ix = netns.link_lookup(ifname='v1o0')[0]
+    netns.link('add', kind='vlan', ifname='v2o0', vlan_id=2, link=o0ix)
+    v2ix = netns.link_lookup(ifname='v2o0')[0]
+    b0ix = create_bond(cpserver, netns, 'bond0', ['O1','O2'], mode=1)
+    netns.link('add', kind='vlan', ifname='v3b0', vlan_id=3, link=b0ix)
+    v3ix = netns.link_lookup(ifname='v3b0')[0]
+    get_lowest_intfs = lambda i: efcp.get_lower_intfs(i, ef_cplane.GET_INTFS_F_NATIVE | ef_cplane.GET_INTFS_F_MOST_DERIVED)
+    assert efcp.get_all_intfs() == [o0ix,o1ix,o2ix,v1ix,v2ix,b0ix,v3ix]
+    assert efcp.get_upper_intfs(o0ix) == [v1ix,v2ix]
+    assert efcp.get_lower_intfs(o0ix) == []
+    assert get_lowest_intfs(o0ix) == [o0ix]
+    assert efcp.get_upper_intfs(o1ix) == [b0ix]
+    assert efcp.get_lower_intfs(o1ix) == []
+    assert get_lowest_intfs(o1ix) == [o1ix]
+    assert efcp.get_upper_intfs(o2ix) == [b0ix]
+    assert efcp.get_lower_intfs(o2ix) == []
+    assert get_lowest_intfs(o2ix) == [o2ix]
+
+    assert efcp.get_upper_intfs(v1ix) == []
+    assert efcp.get_lower_intfs(v1ix) == [o0ix]
+    assert get_lowest_intfs(v1ix) == [o0ix]
+    assert efcp.get_upper_intfs(v2ix) == []
+    assert efcp.get_lower_intfs(v2ix) == [o0ix]
+    assert get_lowest_intfs(v2ix) == [o0ix]
+
+    assert efcp.get_upper_intfs(b0ix) == [v3ix]
+    assert efcp.get_lower_intfs(b0ix) == [o1ix,o2ix]
+    assert get_lowest_intfs(b0ix) == [o1ix,o2ix]
+    assert efcp.get_upper_intfs(v3ix) == []
+    assert efcp.get_lower_intfs(v3ix) == [b0ix]
+    assert get_lowest_intfs(v3ix) == [o1ix,o2ix]
+
+def test_efcp_get_related_intfs():
+    do_test_efcp_get_related_intfs()
+
+@efcpdecorate()
+def do_test_efcp_get_intf(cpserver,cp,netns,efcp):
+    import ef_cplane
+    o0ix = build_intf(netns, 'O0', fake_ip_subnet(False, 1), cp=cp, hwport=1, state=None)
+    b0ix = create_bond(cpserver, netns, 'bond0', ['O0'], mode=1)
+    netns.link('add', kind='vlan', ifname='v1o0', vlan_id=1, link=b0ix)
+    v1ix = netns.link_lookup(ifname='v1o0')[0]
+    assert efcp.get_all_intfs() == [o0ix,b0ix,v1ix]
+    o0 = efcp.get_intf(o0ix)
+    assert o0.ifindex == o0ix
+    assert (o0.flags & (ef_cplane.INTF_F_UP|ef_cplane.INTF_F_ALIEN)) == ef_cplane.INTF_F_UP
+    assert o0.mtu == 1500
+    assert o0.encap == ef_cplane.ENCAP_F_BOND_PORT
+    assert o0.mac != b'\0\0\0\0\0\0'
+    assert o0.name == b'O0'
+    lo = efcp.get_intf('lo')
+    assert lo.ifindex == 1
+    assert lo.encap & ef_cplane.ENCAP_F_LOOP
+    b0 = efcp.get_intf(b0ix)
+    assert b0.encap & ef_cplane.ENCAP_F_BOND
+    v1 = efcp.get_intf('v1o0')
+    assert v1.encap & ef_cplane.ENCAP_F_VLAN
+
+def test_efcp_get_intf():
+    do_test_efcp_get_intf()
+
+@efcpdecorate()
+def do_test_efcp_get_addrs(cpserver,cp,netns,efcp):
+    o0ix = build_intf(netns, 'O0', fake_ip_subnet(False, 1), cp=cp, hwport=1, state=None)
+    a = efcp.get_intf_addrs(o0ix)
+    assert len(a) == 1
+    a = a[0]
+    assert a.ifindex == o0ix
+    assert a.prefix_len == 24
+    assert str(a.ip) == '192.168.1.1'
+
+def test_efcp_get_addrs():
+    do_test_efcp_get_addrs()
+
+def build_efcp_pkt(dst, src=None, dport=12345, sport=23456, ipproto=socket.IPPROTO_TCP, tos=0, ttl=0):
+    v6 = ':' in dst
+    af = socket.AF_INET6 if v6 else socket.AF_INET
+    dst = socket.inet_pton(af, dst)
+    if src:
+        src = socket.inet_pton(af, src)
+    else:
+        src = b'\0' * (16 if v6 else 4)
+    totlen = 1234
+    if v6:
+        pkt = struct.pack('>BBHHBB', 0x60 | (tos & 15), tos & 0xf0, 0, totlen - 40, ipproto, ttl)
+    else:
+        pkt = struct.pack('>BBHHHBBH', 0x45, tos, totlen, 0, 0, ttl, ipproto, 0)
+    return pkt + src + dst + struct.pack('>HH', sport, dport)
+
+@efcpdecorate()
+def do_test_efcp_resolve_simple(cpserver,cp,netns,efcp):
+    import ef_cplane
+    o0ix = build_intf(netns, 'O0', fake_ip_subnet(False, 1, 2), cp=cp, hwport=1)
+    netns.route('add', dst='224.0.0.0/8', oif=o0ix)
+    r = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 3)), flags=ef_cplane.RESOLVE_F_UNREGISTERED|ef_cplane.RESOLVE_F_NO_ARP)
+    assert r.ifindex == o0ix
+    assert r.intf_cookie is None
+    assert r.mtu == 1500
+    assert r.pkt[12:14] == b'\x08\0'
+    assert r.flags & ef_cplane.RESOLVE_S_UNREGISTERED
+    assert r.pkt[14:38] == build_efcp_pkt(fake_ip_str(False, 1, 3),
+                                          fake_ip_str(False, 1, 2), ttl=64)
+
+    try:
+        efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 3)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+        pytest.fail()
+    except ef_cplane.CplaneException as e:
+        assert e.errno == errno.EADDRNOTAVAIL
+
+    cookie = type('magic', (), {})
+    efcp.register_intf(o0ix, cookie)
+    r = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 3)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    assert r.intf_cookie is cookie
+
+    r = efcp.resolve(build_efcp_pkt('224.12.34.56'), ifindex=o0ix)
+    assert r.ifindex == o0ix
+    assert socket.inet_ntoa(r.pkt[14+12:14+16]) == fake_ip_str(False, 1, 2)
+    assert r.pkt[:6] == b'\x01\0\x5e\x0c\x22\x38'
+
+    r = efcp.resolve(build_efcp_pkt('224.12.34.56'))
+    assert r.ifindex == o0ix
+    assert socket.inet_ntoa(r.pkt[14+12:14+16]) == fake_ip_str(False, 1, 2)
+    assert r.pkt[:6] == b'\x01\0\x5e\x0c\x22\x38'
+
+    r = efcp.resolve(build_efcp_pkt('224.12.34.56', fake_ip_str(False, 1, 2)), flags=ef_cplane.RESOLVE_F_BIND_SRC)
+    assert r.ifindex == o0ix
+    assert socket.inet_ntoa(r.pkt[14+12:14+16]) == fake_ip_str(False, 1, 2)
+    assert r.pkt[:6] == b'\x01\0\x5e\x0c\x22\x38'
+
+def test_efcp_resolve_simple():
+    do_test_efcp_resolve_simple()
+
+@efcpdecorate()
+def do_test_efcp_resolve_vlan(cpserver,cp,netns,efcp):
+    import ef_cplane
+    o0ix = build_intf(netns, 'O0', address=None, cp=cp, hwport=1)
+    netns.link('add', kind='vlan', ifname='v1o0', vlan_id=0x123, link=o0ix)
+    v1ix = netns.link_lookup(ifname='v1o0')[0]
+    addr_add(netns, index=v1ix, address=fake_ip_str(False, 1, 2), mask=24)
+    netns.link('set', index=v1ix, state='up')
+
+    efcp.register_intf(o0ix, '0')
+    r = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 4)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    assert r.ifindex == o0ix
+    assert r.pkt[12:18] == b'\x81\0\x01\x23\x08\0'
+
+def test_efcp_resolve_vlan():
+    do_test_efcp_resolve_vlan()
+
+@efcpdecorate()
+def do_test_efcp_resolve_bond_ab(cpserver,cp,netns,efcp):
+    import ef_cplane
+    prep_bond(cpserver, cp, netns, (0,1), ifname='bond0',
+              address=fake_ip_str(False, 1, 2), mask=24)
+    b0ix = netns.link_lookup(ifname='bond0')[0]
+    o0ix = netns.link_lookup(ifname='O0')[0]
+    o1ix = netns.link_lookup(ifname='O1')[0]
+
+    r = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 4)), flags=ef_cplane.RESOLVE_F_UNREGISTERED | ef_cplane.RESOLVE_F_NO_ARP)
+    assert r.ifindex == b0ix
+
+    efcp.register_intf(o0ix, '0')
+    efcp.register_intf(o1ix, '1')
+    r = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 4)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    assert r.ifindex == o0ix
+    r = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 5)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    assert r.ifindex == o0ix
+
+    efcp.register_intf(b0ix, 'b')
+    r = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 4)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    assert r.ifindex == b0ix
+
+    efcp.unregister_intf(b0ix)
+    r = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 4)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    assert r.ifindex == o0ix
+
+def test_efcp_resolve_bond_ab():
+    do_test_efcp_resolve_bond_ab()
+
+@efcpdecorate()
+def do_test_efcp_resolve_bond_hash(cpserver,cp,netns,efcp):
+    import ef_cplane
+    prep_bond(cpserver, cp, netns, (0,1), ifname='bond0',
+              address=fake_ip_str(False, 1, 2), mask=24, mode=4)
+    o0ix = netns.link_lookup(ifname='O0')[0]
+    o1ix = netns.link_lookup(ifname='O1')[0]
+    cpsystem(cpserver,
+             "bash -c 'echo layer3+4 > /sys/class/net/bond0/bonding/xmit_hash_policy'")
+    b0ix = netns.link_lookup(ifname='bond0')[0]
+
+    r = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 4)), flags=ef_cplane.RESOLVE_F_UNREGISTERED | ef_cplane.RESOLVE_F_NO_ARP)
+    assert r.ifindex == b0ix
+
+    efcp.register_intf(o1ix, '1')
+    r1 = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 3)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    r2 = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 4)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    assert r1.ifindex == o1ix
+    assert r2.ifindex == o1ix
+
+    efcp.register_intf(o0ix, '0')
+    r1 = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 3)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    r2 = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 4)), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    assert r1.ifindex in (o0ix,o1ix)
+    assert r2.ifindex in (o0ix,o1ix)
+    # It's not required that these two route to different interfaces, but we'd
+    # like for it to do so in order to ensure that the spreading is nice for a
+    # trivial case like two adjacent IPs
+    assert r1.ifindex != r2.ifindex
+
+    r1 = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 3), dport=12345), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    r2 = efcp.resolve(build_efcp_pkt(fake_ip_str(False, 1, 3), dport=12346), flags=ef_cplane.RESOLVE_F_NO_ARP)
+    assert r1.ifindex in (o0ix,o1ix)
+    assert r2.ifindex in (o0ix,o1ix)
+    # Same as above: check for good spreading
+    assert r1.ifindex != r2.ifindex
+
+def test_efcp_resolve_bond_hash():
+    do_test_efcp_resolve_bond_hash()
