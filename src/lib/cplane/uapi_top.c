@@ -2,9 +2,14 @@
 #include <cplane/create.h>
 #include <errno.h>
 #include <ci/compat.h>
-#include <onload/driveraccess.h>
 
+#ifndef CP_SYSUNIT
+#include <onload/driveraccess.h>
 int (* ci_sys_ioctl)(int, long unsigned int, ...) = ioctl;
+#else
+int oo_fd_open(int * fd_out);
+#define oo_fd_close close
+#endif
 
 EF_CP_PUBLIC_API
 int ef_cp_init(struct ef_cp_handle **cph, unsigned flags)

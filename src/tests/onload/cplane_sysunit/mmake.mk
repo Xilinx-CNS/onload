@@ -35,6 +35,8 @@ $(SHIM_OBJS): MMAKE_CFLAGS += -I$(TOPPATH)/$(CURRENT)/$(CP_SERVER_SRC_DIR)
 
 CP_CLIENT_LIB_SRC_DIR := ../../../lib/cplane
 CP_CLIENT_LIB_OBJ_DIR := cp_client_lib
+SHIM_EFCP_OBJS := $(addprefix $(CP_CLIENT_LIB_OBJ_DIR)/,uapi_top.o uapi_llap.o uapi_resolve.o)
+$(CP_CLIENT_LIB_OBJ_DIR)/uapi_resolve.o: MMAKE_CFLAGS+=-mbmi2
 
 # This defines CLIENT_LIB_OBJS, which lists object files for the control plane
 # itself.
@@ -110,7 +112,7 @@ $(shim_mibdump): $(SHIM_MIBDUMP_OBJS) $(MMAKE_LIB_DEPS)
 	(libs="$(MMAKE_LIBS)"; $(MMakeLinkCApp))
 
 
-SHIM_SHARED_CPLANE_LIB_OBJS := cplane_lib.o $(SHIM_CLIENT_LIB_OBJS)
+SHIM_SHARED_CPLANE_LIB_OBJS := cplane_lib.o $(SHIM_CLIENT_LIB_OBJS) $(SHIM_EFCP_OBJS)
 
 shim_shared_cplane_lib = shim_cplane_lib.so
 $(shim_shared_cplane_lib): $(SHIM_SHARED_CPLANE_LIB_OBJS) $(MMAKE_LIB_DEPS)
@@ -124,10 +126,12 @@ SCRIPT_SRC_DIR := scripts
 
 $(SCRIPTS): %: $(SCRIPT_SRC_DIR)/%
 	@cp $^ $@
+ef_cplane.py: $(TOPPATH)/src/lib/cplane/ef_cplane.py
+	@cp $^ $@
 
 
 TARGETS := $(shim_cp_server) $(shim_cp_client) $(shim_mibdump) \
-           $(shim_shared_cplane_lib) $(SCRIPTS)
+           $(shim_shared_cplane_lib) $(SCRIPTS) ef_cplane.py
 
 all: $(TARGETS)
 

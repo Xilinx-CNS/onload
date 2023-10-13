@@ -197,7 +197,7 @@ def create_interface(netns, cp, ifname, nic, ifindex=None):
     before passing it to the decorated functions. This also allows the decorator
     to be stacked.
 '''
-def cpdecorate(tag=None, parent_tag=None):
+def cpdecorate(tag=None, parent_tag=None, efcp=False):
     def real_cpdecorate(func):
         def wrapper(*args, **kwargs):
             main_shim_file = None
@@ -212,6 +212,9 @@ def cpdecorate(tag=None, parent_tag=None):
                     d = dict(cpserver=cpserver, netns=netns, cp=cp)
                     if tag:
                         d = { tag: type('onload_cp_server', (object,), d) }
+                    if efcp:
+                        import ef_cplane
+                        d['efcp'] = ef_cplane.Cplane()
                     kwargs.update(d)
                     func(*args, **kwargs)
             except:
@@ -232,6 +235,8 @@ def cpdecorate(tag=None, parent_tag=None):
         return wrapper
     return real_cpdecorate
 
+def efcpdecorate():
+    return cpdecorate(efcp=True)
 
 # needs kernel >= 3.19 but 4 is good approximation
 want_macandipvlan = int(platform.release().split('.')[0]) < 4
@@ -1383,3 +1388,18 @@ def do_test_multipath_add_del(cpserver,cp,netns):
 
 def test_multipath_add_del():
     do_test_multipath_add_del()
+
+@efcpdecorate()
+def do_test_efcp_get_all_intfs(cpserver,cp,netns,efcp):
+    import ef_cplane
+    lo = 1
+    o0ix = build_intf(netns, 'O0', fake_ip_subnet(False, 1), cp=cp, hwport=1)
+    o1ix = build_intf(netns, 'O1', fake_ip_subnet(False, 2), cp=cp, hwport=2)
+    x0ix = build_intf(netns, 'X0', fake_ip_subnet(False, 3), cp=cp)
+    assert efcp.get_all_intfs() == [o0ix,o1ix]
+    assert efcp.get_all_intfs(ef_cplane.GET_INTFS_F_OTHER) == [lo,x0ix]
+    assert efcp.get_all_intfs(0) == []
+    assert efcp.get_all_intfs(ef_cplane.GET_INTFS_F_NATIVE|ef_cplane.GET_INTFS_F_OTHER) == [lo,o0ix,o1ix,x0ix]
+
+def test_efcp_get_all_intfs():
+    do_test_efcp_get_all_intfs()

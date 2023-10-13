@@ -109,15 +109,18 @@ def _load_libefcp():
     global _libcp
     if _libcp is not None:
         return _libcp
-    soname = 'libefcp.so.1'
-    try:
-        _libcp = ctypes.CDLL(soname)
-    except OSError:
-        here = os.path.dirname(__file__)
+    if 'CP_SHIM_FILE' in os.environ:
+        _libcp = ctypes.CDLL(os.path.join(os.path.dirname(__file__), 'shim_cplane_lib.so'))
+    else:
+        soname = 'libefcp.so.1'
         try:
-            _libcp = ctypes.CDLL(os.path.join(here, soname))
+            _libcp = ctypes.CDLL(soname)
         except OSError:
-            _libcp = ctypes.CDLL(os.path.join(here, '../../../build/gnu_x86_64/lib/cplane', soname))
+            here = os.path.dirname(__file__)
+            try:
+                _libcp = ctypes.CDLL(os.path.join(here, soname))
+            except OSError:
+                _libcp = ctypes.CDLL(os.path.join(here, '../../../build/gnu_x86_64/lib/cplane', soname))
     _libcp.ef_cp_init.argtypes = (ctypes.POINTER(ctypes.c_void_p), ctypes.c_uint)
     _libcp.ef_cp_init.restype = ctypes.c_int
     _libcp.ef_cp_fini.argtypes = (ctypes.c_void_p,)
