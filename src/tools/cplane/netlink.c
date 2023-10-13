@@ -412,6 +412,8 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
 
   if( link_ifindex == 0)
     link_ifindex = ifindex;
+  if( master_ifindex == 0)
+    master_ifindex = ifindex;
 
   cicp_rowid_t vlan_rowid = CICP_ROWID_BAD;
   const cicp_llap_row_t* lower_llap = NULL;
@@ -503,6 +505,7 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
           ((llap->flags & CP_LLAP_IMPORTED) != 0 &&
             (llap->encap.type & type) != type) ||
           llap->encap.link_ifindex != link_ifindex ||
+          llap->encap.master_ifindex != master_ifindex ||
           llap->xdp_prog_id != xdp_prog_id ) {
         changed = true;
         old_rx_hwports = llap->rx_hwports;
@@ -521,6 +524,7 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
         llap->encap.type &=~ (s->llap_type_os_mask & ~type);
 
         llap->encap.link_ifindex = link_ifindex;
+        llap->encap.master_ifindex = master_ifindex;
         llap->encap.vlan_id = vlan;
         if( vlan_rowid != CICP_ROWID_BAD ) {
           if( ! unsupported ) {

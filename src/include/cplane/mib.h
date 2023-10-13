@@ -110,6 +110,7 @@ typedef struct {
   cicp_llap_type_t type;
   ci_uint16 vlan_id;
   ci_ifid_t link_ifindex;     /*< ifindex for VLAN master, veth-peer, etc. */
+  ci_ifid_t master_ifindex;   /*< ifindex for bond, if this is a slave */
 } cicp_encap_t;
 
 
