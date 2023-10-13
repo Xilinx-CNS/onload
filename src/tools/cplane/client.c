@@ -76,18 +76,21 @@ static int fwd_resolve( struct oo_cplane_handle* cp, int argc, char** argv)
   struct cp_fwd_key key;
   struct cp_fwd_data data;
   cicp_verinfo_t verinfo;
+  int sin_family;
   int rc;
 
   memset(&key, 0, sizeof(key));
   oo_cp_verinfo_init(&verinfo);
-  if( ci_addr_sh_from_str(argv[0], &key.dst) == AF_UNSPEC ) {
+
+  sin_family = ci_addr_sh_from_str(argv[0], &key.dst);
+  if( sin_family == AF_UNSPEC ) {
     ci_log("Failed to parse destination address %s", argv[0]);
     usage();
     return 1;
   }
   key.ifindex = 0;
   key.iif_ifindex = 0;
-  key.src = addr_sh_any;
+  key.src = sin_family == AF_INET ? ip4_addr_sh_any: addr_sh_any;
   key.tos = 0;
   key.flag = CP_FWD_KEY_REQ_WAIT;
   argc--;
