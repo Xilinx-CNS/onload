@@ -22,6 +22,8 @@
 
 
 oo_cp_version_check_t oo_cplane_api_version;
+static pthread_mutex_t fwd_resolve_complete_mtx = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t fwd_resolve_complete_cv = PTHREAD_COND_INITIALIZER;
 
 int ef_driver_open(ef_driver_handle* dh_out)
 {
@@ -144,7 +146,10 @@ int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
   case OO_IOC_OOF_CP_IP_MOD:
   case OO_IOC_CP_INIT_KERNEL_MIBS:
   case OO_IOC_CP_ARP_RESOLVE:
+    break;
+
   case OO_IOC_CP_FWD_RESOLVE_COMPLETE:
+    pthread_cond_broadcast(&fwd_resolve_complete_cv);
     break;
 
   case OO_IOC_GET_CPU_KHZ:
@@ -255,12 +260,18 @@ int shim_oo_op_route_resolve(struct cp_mibs* mib,
                              struct cp_fwd_key* key)
 {
   struct cp_helper_msg msg;
+  struct timespec end;
   msg.hmsg_type = CP_HMSG_FWD_REQUEST;
   msg.u.fwd_request.id = 0;
   memcpy(&msg.u.fwd_request.key, key, sizeof(*key));
   int rc = shim_cp_hmsg_send(mib, &msg);
 
-  /* FIXME implement wait */
+  /* FIXME super-dodgy wait */
+  pthread_mutex_lock(&fwd_resolve_complete_mtx);
+  clock_gettime(CLOCK_REALTIME, &end);
+  end.tv_sec += 1;
+  pthread_cond_timedwait(&fwd_resolve_complete_cv, &fwd_resolve_complete_mtx, &end);
+  pthread_mutex_unlock(&fwd_resolve_complete_mtx);
 
   return rc;
 }
