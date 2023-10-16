@@ -239,7 +239,7 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
   ci_sock_cmn *new_s;
   ci_sock_cmn *mid_s;
   tcp_helper_endpoint_t *old_ep, *new_ep;
-  int rc, i;
+  int rc;
   struct file *old_os_file, *new_os_file;
   unsigned long lock_flags;
   struct oo_p_dllink_state link;
@@ -249,30 +249,26 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
 
   ci_assert(new_sock_id != NULL);
   /* Lock the second stack */
-  i = 0;
   while( ! ci_netif_trylock(alien_ni) ) {
     ci_netif_unlock(&old_thr->netif);
-    if( i++ >= 1000 ) {
-      rc = -EBUSY;
-      goto fail1_ni_unlocked;
-    }
-    /* We are trying to win a race for locking of the new stack.
-     * The lock might be held either by one of the stack workqueues or
-     * an app.  Workqueue tasks might take long time (pkt set alloc or
-     * reset) but they eventually complete - so let us wait untill
-     * they have finished.
-     * More of an issue is that an app might be spinning on the lock -
-     * we should be able to get it if we spin ourselves for a while; or
-     * might be performing a long op such as hw filter insertion or a
-     * stack poll - empirically we spin long enough to outlive couple of
-     * filter insertions. In all of these cases when we contend with app
-     * there is a fair chance we might give up prematurely and fail to move
-     * the socket.
-     * Finally, an app might have reverse dependency or the stack
-     * lock is stuck - that is why we need to give up eventually.
+    /* We're trying to lock both stacks, but another thread may be doing the
+     * same thing in the opposite order and so we can't just lock both in
+     * sequence.
+     * This code alternates locking one stack then trylocking the other,
+     * ensuring both that deadlocks are impossible and that we block
+     * efficiently to wait for the currently-busy stack.
+     * There is no escape hatch here for a stuck stack. Any timeout we
+     * impose would result in an API which could intermittently fail, which
+     * is not conducive to reliable software. Interruption by a signal will
+     * always work, of course.
      */
-    flush_workqueue(new_thr->wq);
-    flush_workqueue(new_thr->reset_wq);
+    rc = ci_netif_lock(alien_ni);
+    if( rc != 0 )
+      goto fail1_ni_unlocked;
+    if( ci_netif_trylock(&old_thr->netif) )
+      break;
+    ci_netif_unlock(alien_ni);
+
     rc = ci_netif_lock(&old_thr->netif);
     if( rc != 0 )
       goto fail1_ni_unlocked;
