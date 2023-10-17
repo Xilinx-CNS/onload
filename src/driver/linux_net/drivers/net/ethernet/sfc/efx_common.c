@@ -126,7 +126,7 @@ const char *const efx_loopback_mode_names[] = {
 };
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 static struct efx_dl_ops efx_driverlink_ops;
 #endif
 #endif
@@ -366,7 +366,7 @@ int efx_change_mtu(struct net_device *net_dev, int new_mtu)
 }
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 /* Is Driverlink supported on this device? */
 bool efx_dl_supported(struct efx_nic *efx)
 {
@@ -962,7 +962,7 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 
 	efx_mcdi_post_reset(efx);
 
-	if (efx->port_initialized && efx->type->init)
+	if (efx_net_allocated(efx->state) && efx->type->init)
 		rc = efx->type->init(efx);
 	if (rc) {
 		if (rc != -EAGAIN)
@@ -1113,7 +1113,7 @@ int efx_reset(struct efx_nic *efx, enum reset_type method)
 	ASSERT_RTNL();
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/* Notify driverlink clients of imminent reset then serialise
 	 * against other driver operations
 	 */
@@ -1178,7 +1178,7 @@ int efx_reset(struct efx_nic *efx, enum reset_type method)
 			efx_mcdi_log_puts(efx, efx_reset_type_names[method]);
 	}
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_reset_resume(&efx->dl_nic, !disabled);
 #endif
 #endif
@@ -2201,7 +2201,7 @@ int efx_set_features(struct net_device *net_dev, u32 data)
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 static struct efx_nic *efx_dl_device_priv(struct efx_dl_device *efx_dev)
 {
 	return container_of(efx_dev->nic, struct efx_nic, dl_nic);

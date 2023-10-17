@@ -210,10 +210,6 @@ struct efx_ef10_nic_data {
 	/** @vf: Pointer to VF data structure */
 	struct ef10_vf *vf;
 #endif
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-	/** @caps: Capabilities of AOE firmware */
-	uint32_t caps;
-#endif
 	u8 vport_mac[ETH_ALEN];
 	struct efx_udp_tunnel udp_tunnels[16];
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
@@ -249,11 +245,6 @@ struct efx_ef10_nic_data {
 
 #define efx_ef10_has_cap(caps, flag) \
 	(!!((caps) & BIT_ULL(MC_CMD_GET_CAPABILITIES_V4_OUT_ ## flag ## _LBN)))
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-int efx_aoe_attach(struct efx_nic *efx);
-void efx_aoe_detach(struct efx_nic *efx);
-#endif
 
 #ifdef EFX_NOT_UPSTREAM
 struct efx_update_license2;

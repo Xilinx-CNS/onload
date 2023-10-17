@@ -1097,7 +1097,7 @@ void efx_fini_debugfs(void)
 }
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 int efx_debugfs_read_kernel_blocked(struct seq_file *file, void *data)
 {
 	unsigned int i;

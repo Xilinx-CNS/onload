@@ -1928,7 +1928,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.filter_get_rx_ids = efx_mcdi_filter_get_rx_ids,
 #ifdef EFX_NOT_UPSTREAM
 	.filter_redirect = efx_mcdi_filter_redirect,
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.filter_block_kernel = efx_mcdi_filter_block_kernel,
 	.filter_unblock_kernel = efx_mcdi_filter_unblock_kernel,
 	.regionmap_buffer = ef100_regionmap_buffer,
@@ -1988,7 +1988,7 @@ const struct efx_nic_type ef100_pf_nic_type = {
 	.remove_mport = efx_ef100_remove_mport,
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.ef10_resources = {
 		.hdr.type = EFX_DL_EF10_RESOURCES,
 	},
@@ -2065,7 +2065,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.filter_get_rx_ids = efx_mcdi_filter_get_rx_ids,
 #ifdef EFX_NOT_UPSTREAM
 	.filter_redirect = efx_mcdi_filter_redirect,
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.filter_block_kernel = efx_mcdi_filter_block_kernel,
 	.filter_unblock_kernel = efx_mcdi_filter_unblock_kernel,
 	.regionmap_buffer = ef100_regionmap_buffer,
@@ -2097,7 +2097,7 @@ const struct efx_nic_type ef100_vf_nic_type = {
 	.mem_map_size = NULL,
 	.max_dma_mask = DMA_BIT_MASK(ESF_GZ_TX_SEND_ADDR_WIDTH),
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.ef10_resources = {
 		.hdr.type = EFX_DL_EF10_RESOURCES,
 	},

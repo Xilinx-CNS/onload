@@ -400,6 +400,9 @@ static void efx_allocate_xdp_channels(struct efx_nic *efx,
 	int n_xdp_tx;
 	int n_xdp_ev;
 
+	if (!efx->xdp_tx)
+		goto xdp_disabled;
+
 	n_xdp_tx = num_possible_cpus();
 	n_xdp_ev = DIV_ROUND_UP(n_xdp_tx, tx_per_ev);
 
@@ -411,24 +414,27 @@ static void efx_allocate_xdp_channels(struct efx_nic *efx,
 		pci_err(efx->pci_dev,
 			"Insufficient resources for %d XDP event queues (%d current channels, max %d)\n",
 			n_xdp_ev, n_channels, max_channels);
-		efx->n_xdp_channels = 0;
-		efx->xdp_tx_per_channel = 0;
-		efx->xdp_tx_queue_count = 0;
+		goto xdp_disabled;
 	} else if (n_channels + n_xdp_tx > efx->max_vis) {
 		pci_err(efx->pci_dev,
 			"Insufficient resources for %d XDP TX queues (%d current channels, max VIs %d)\n",
 			n_xdp_tx, n_channels, efx->max_vis);
-		efx->n_xdp_channels = 0;
-		efx->xdp_tx_per_channel = 0;
-		efx->xdp_tx_queue_count = 0;
-	} else {
-		efx->n_xdp_channels = n_xdp_ev;
-		efx->xdp_tx_per_channel = tx_per_ev;
-		efx->xdp_tx_queue_count = n_xdp_tx;
-		pci_dbg(efx->pci_dev,
-			"Allocating %d TX and %d event queues for XDP\n",
-			n_xdp_tx, n_xdp_ev);
+		goto xdp_disabled;
 	}
+
+	efx->n_xdp_channels = n_xdp_ev;
+	efx->xdp_tx_per_channel = tx_per_ev;
+	efx->xdp_tx_queue_count = n_xdp_tx;
+	pci_dbg(efx->pci_dev,
+		"Allocating %d TX and %d event queues for XDP\n",
+		n_xdp_tx, n_xdp_ev);
+	return;
+
+xdp_disabled:
+	efx->n_xdp_channels = 0;
+	efx->xdp_tx_per_channel = 0;
+	efx->xdp_tx_queue_count = 0;
+	return;
 }
 
 static int efx_allocate_msix_channels(struct efx_nic *efx,
@@ -463,7 +469,7 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 
 #ifdef EFX_HAVE_MSIX_CAP
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/* dl IRQs don't need VIs, so no need to clamp to max_channels */
 	n_channels += efx->n_dl_irqs;
 #endif
@@ -485,7 +491,7 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 			"WARNING: Performance may be reduced.\n");
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 		/* reduce driverlink allocated IRQs first, to a minimum of 1 */
 		n_channels -= efx->n_dl_irqs;
 		efx->n_dl_irqs = vec_count == min_channels ? 0 :
@@ -504,7 +510,7 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 		n_channels = vec_count;
 	}
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	else {
 		/* driverlink IRQs don't have a channel in the net driver, so
 		 * remove them from further calculations.
@@ -559,7 +565,7 @@ static int efx_allocate_msix_channels(struct efx_nic *efx,
 }
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 static u16 efx_dl_make_irq_resources_(struct efx_dl_irq_resources *res,
 				      size_t entries,
 				      struct msix_entry *xentries)
@@ -643,7 +649,7 @@ int efx_probe_interrupts(struct efx_nic *efx)
 
 		n_irqs = min(n_irqs, efx_channels(efx));
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 		n_irqs += efx->n_dl_irqs;
 #endif
 #endif
@@ -691,7 +697,7 @@ int efx_probe_interrupts(struct efx_nic *efx)
 
 		if (rc > 0) {
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 			n_irqs = rc - efx->n_dl_irqs;
 			efx_dl_make_irq_resources(efx, efx->n_dl_irqs,
 						  xentries + n_irqs);
@@ -753,7 +759,7 @@ void efx_remove_interrupts(struct efx_nic *efx)
 	pci_disable_msi(efx->pci_dev);
 	pci_disable_msix(efx->pci_dev);
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	kfree(efx->irq_resources);
 	efx->irq_resources = NULL;
 #endif
@@ -1112,7 +1118,7 @@ static int efx_probe_eventq(struct efx_channel *channel)
 	entries += channel->channel == 0 ? 256 : 128;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/* Add additional event queue entries for driverlink activity on
 	 * channel zero.
 	 */
@@ -1597,7 +1603,10 @@ int efx_probe_channels(struct efx_nic *efx)
 	}
 	efx_set_channel_names(efx);
 
-	return efx_init_debugfs_channels(efx);
+	/* initialising debugfs is not a fatal error */
+	efx_init_debugfs_channels(efx);
+
+	return 0;
 }
 
 static void efx_remove_tx_queue(struct efx_tx_queue *tx_queue)
@@ -2205,7 +2214,7 @@ static int efx_poll(struct napi_struct *napi, int budget)
 	spent = efx_process_channel(channel, budget);
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_XDP_REDIR)
-	xdp_do_flush_map();
+	xdp_do_flush();
 #endif
 
 #ifdef EFX_NOT_UPSTREAM

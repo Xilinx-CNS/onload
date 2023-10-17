@@ -142,7 +142,11 @@ static int efx_tc_ct_parse_match(struct efx_nic *efx, struct flow_rule *fr,
 	      BIT(FLOW_DISSECTOR_KEY_PORTS) |
 	      BIT(FLOW_DISSECTOR_KEY_TCP) |
 	      BIT(FLOW_DISSECTOR_KEY_META))) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_DISSECTOR_64BIT_USED_KEYS)
+		efx_tc_err(efx, "Unsupported conntrack keys %#llx\n", dissector->used_keys);
+#else
 		efx_tc_err(efx, "Unsupported conntrack keys %#x\n", dissector->used_keys);
+#endif
 		return -EOPNOTSUPP;
 	}
 

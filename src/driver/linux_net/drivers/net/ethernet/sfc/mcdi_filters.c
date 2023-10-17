@@ -95,7 +95,7 @@ struct efx_mcdi_filter_table {
 	bool rss_context_exclusive;
 	bool additional_rss_modes;
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	bool kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MAX];
 #endif
 #endif
@@ -221,7 +221,7 @@ static const struct efx_debugfs_parameter filter_debugfs[] = {
 	EFX_BOOL_PARAMETER(struct efx_mcdi_filter_table, mc_overflow),
 	EFX_BOOL_PARAMETER(struct efx_mcdi_filter_table, mc_chaining),
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	_EFX_PARAMETER(struct efx_mcdi_filter_table, kernel_blocked,
 		       efx_debugfs_read_kernel_blocked),
 #endif
@@ -793,7 +793,7 @@ static s32 efx_mcdi_filter_insert_locked(struct efx_nic *efx,
 	 * else a free slot to insert at.
 	 */
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (spec->priority <= EFX_FILTER_PRI_AUTO &&
 	    table->kernel_blocked[is_mc_recip ?
 				  EFX_DL_FILTER_BLOCK_KERNEL_MCAST :
@@ -1193,7 +1193,7 @@ static int efx_mcdi_filter_insert_addr_list(struct efx_nic *efx,
 	}
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (!table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST])
 #endif
 #endif
@@ -1240,7 +1240,7 @@ static int efx_mcdi_filter_insert_def(struct efx_nic *efx,
 	u16 *id;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (table->kernel_blocked[multicast ? EFX_DL_FILTER_BLOCK_KERNEL_MCAST :
 					      EFX_DL_FILTER_BLOCK_KERNEL_UCAST])
 		return 0;
@@ -1500,7 +1500,7 @@ static void efx_mcdi_filter_vlan_sync_rx_mode(struct efx_nic *efx,
 				   true, false);
 
 	n_filters = efx_mcdi_filter_vlan_count_filters(efx, vlan);
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_DRIVERLINK)
+#if defined(EFX_NOT_UPSTREAM) && IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (n_filters == 0 && vlan->warn_on_zero_filters &&
 	    !(table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_UCAST] &&
 	      table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST])) {
@@ -1845,7 +1845,7 @@ static void efx_mcdi_filter_netdev_uc_addrs(struct efx_nic *efx,
 	struct netdev_hw_addr *uc;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 
 	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_UCAST])
@@ -1878,7 +1878,7 @@ static void efx_mcdi_filter_netdev_mc_addrs(struct efx_nic *efx,
 #endif
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	struct efx_mcdi_filter_table *table = efx->filter_state;
 
 	if (table->kernel_blocked[EFX_DL_FILTER_BLOCK_KERNEL_MCAST])
@@ -2756,7 +2756,7 @@ out_unlock:
 #endif /* CONFIG_RFS_ACCEL*/
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 int efx_mcdi_filter_block_kernel(struct efx_nic *efx,
 				 enum efx_dl_filter_block_kernel_type type)
 {

@@ -81,7 +81,7 @@
 #include "bitfield.h"
 #ifdef EFX_NOT_UPSTREAM
 #include "sfctool.h" /* Provides missing 'struct ethtool_*' declarations */
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 #define EFX_DRIVERLINK_API_VERSION_MINOR EFX_DRIVERLINK_API_VERSION_MINOR_MAX
 #include "driverlink_api.h" /* Indirectly includes filter.h */
 #endif
@@ -97,7 +97,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.14.1019"
+#define EFX_DRIVER_VERSION	"5.3.16.1001"
 #endif
 
 #ifdef DEBUG
@@ -183,11 +183,6 @@
 /* Forward declare Precision Time Protocol (PTP) support structure. */
 struct efx_ptp_data;
 struct hwtstamp_config;
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-/* Forward declare structure used in the AOE support */
-struct efx_aoe_data;
-#endif
 
 struct efx_self_tests;
 
@@ -1662,13 +1657,11 @@ struct efx_nic {
 	unsigned int rx_dc_base;
 	unsigned int sram_lim_qw;
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/** @n_dl_irqs: Number of IRQs to reserve for driverlink */
 	int n_dl_irqs;
 	/** @ef10_resources: EF10 driverlink parameters */
 	struct efx_dl_ef10_resources ef10_resources;
-	/** @aoe_resources: AOE driverlink parameters */
-	struct efx_dl_aoe_resources aoe_resources;
 	/** @irq_resources: IRQ driverlink parameters */
 	struct efx_dl_irq_resources *irq_resources;
 #endif
@@ -1743,7 +1736,7 @@ struct efx_nic {
 	struct mutex mac_lock;
 	struct work_struct mac_work;
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/** @open_count: Count netdev opens */
 	u16 open_count;
 #endif
@@ -1832,7 +1825,7 @@ struct efx_nic {
 	struct list_head ntuple_list;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/** @dl_nic: Efx driverlink nic */
 	struct efx_dl_nic dl_nic;
 	/**
@@ -1875,12 +1868,6 @@ struct efx_nic {
 #ifdef CONFIG_SFC_DUMP
 	struct efx_dump_data *dump_data;
 #endif
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-	/** @aoe_data: state for AOE firmware */
-	struct efx_aoe_data *aoe_data;
-#endif
-
 	struct notifier_block netdev_notifier;
 	struct notifier_block netevent_notifier;
 	struct efx_tc_state *tc;
@@ -2374,7 +2361,7 @@ struct efx_nic_type {
 	 */
 	int (*filter_redirect)(struct efx_nic *efx, u32 filter_id,
 			       u32 *rss_context, int rxq_i, int stack_id);
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/**
 	 * @filter_block_kernel: Block kernel from receiving packets except
 	 *	through explicit configuration, i.e. remove and disable
@@ -2483,7 +2470,7 @@ struct efx_nic_type {
 	unsigned int supported_interrupt_modes;
 	unsigned int timer_period_max;
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/**
 	 * @ef10_resources: Resources to be shared via driverlink (copied
 	 * and updated as struct efx_nic.ef10_resources).
@@ -2768,8 +2755,6 @@ static inline int efx_skb_encapsulation(const struct sk_buff *skb)
 {
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB_ENCAPSULATION)
 	return skb->encapsulation;
-#elif defined(vmklnx_skb_encap_present)
-	return vmklnx_skb_encap_present(skb);
 #else
 	return 0;
 #endif

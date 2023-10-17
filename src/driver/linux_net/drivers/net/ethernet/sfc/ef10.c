@@ -24,7 +24,6 @@
 #include "workarounds.h"
 #include "selftest.h"
 #include "sriov.h"
-#include "aoe.h"
 #include "ef10_sriov.h"
 #include <linux/in.h>
 #include <linux/jhash.h>
@@ -202,13 +201,6 @@ static unsigned int efx_ef10_initial_mem_map_size(struct efx_nic *efx)
 #endif
 	return EFX_DEFAULT_VI_STRIDE;
 }
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-static inline bool aoe_enabled(struct efx_ef10_nic_data *nic)
-{
-	return (nic->caps & (1 << MC_CMD_CAPABILITIES_AOE_LBN));
-}
-#endif
 
 static unsigned int efx_ef10_bar_size(struct efx_nic *efx)
 {
@@ -954,7 +946,7 @@ static int efx_ef10_alloc_vis(struct efx_nic *efx,
 	struct efx_ef10_nic_data *nic_data = efx->nic_data;
 
 	return efx_mcdi_alloc_vis(efx, min_vis, max_vis,
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_DRIVERLINK)
+#if defined(EFX_NOT_UPSTREAM) && IS_MODULE(CONFIG_SFC_DRIVERLINK)
 				  &efx->ef10_resources.vi_base,
 				  &efx->ef10_resources.vi_shift,
 #else
@@ -981,7 +973,7 @@ static void efx_ef10_free_resources(struct efx_nic *efx)
 static int efx_ef10_dimension_resources(struct efx_nic *efx)
 {
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	struct efx_dl_ef10_resources *res = &efx->ef10_resources;
 #endif
 #endif
@@ -1185,7 +1177,7 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 		  uc_mem_map_size, nic_data->wc_membase, wc_mem_map_size);
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	res->vi_min = DIV_ROUND_UP(uc_mem_map_size + wc_mem_map_size,
 				   efx->vi_stride);
 	res->vi_lim = nic_data->n_allocated_vis;
@@ -1197,18 +1189,6 @@ static int efx_ef10_dimension_resources(struct efx_nic *efx)
 	res->mem_bar = efx->type->mem_bar(efx);
 
 	efx->dl_nic.dl_info = &res->hdr;
-
-#ifdef CONFIG_SFC_AOE
-	/* If the board is AOE enabled */
-	if (efx->nic_data && (aoe_enabled(efx->nic_data))) {
-		/* Number of MACs is hardcoded for now */
-		efx->aoe_resources.internal_macs = 2;
-		efx->aoe_resources.external_macs = 2;
-		efx->aoe_resources.hdr.type = EFX_DL_AOE_RESOURCES;
-		efx->aoe_resources.hdr.next = efx->ef10_resources.hdr.next;
-		efx->ef10_resources.hdr.next = &efx->aoe_resources.hdr;
-	}
-#endif
 #endif
 #endif
 	return 0;
@@ -3657,7 +3637,7 @@ efx_ef10_handle_driver_event(struct efx_channel *channel,
 	case ESE_DZ_DRV_TIMER_EV:
 	case ESE_DZ_DRV_WAKE_UP_EV:
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 		return efx_dl_handle_event(&efx->dl_nic, event, budget);
 #endif
 #endif
@@ -3683,9 +3663,6 @@ static bool efx_ef10_port_process_event(struct efx_channel *channel,
 	int code = EFX_QWORD_FIELD(*event, MCDI_EVENT_CODE);
 
 	switch (code) {
-	case MCDI_EVENT_CODE_AOE:
-		*rc = efx_aoe_event(efx, event, budget);
-		return true;
 	case MCDI_EVENT_CODE_SENSOREVT:
 		efx_mcdi_sensor_event(efx, event);
 		return true;
@@ -5355,11 +5332,6 @@ static void efx_ef10_remove_post_io(struct efx_nic *efx)
 	if (!nic_data)
 		return;
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-	if ((aoe_enabled(nic_data)) && efx->aoe_data)
-		efx_aoe_detach(efx);
-#endif
-
 	efx_mcdi_filter_table_remove(efx);
 
 	efx_mcdi_mon_remove(efx);
@@ -5477,28 +5449,12 @@ static int efx_ef10_probe_post_io(struct efx_nic *efx)
 	if (rc < 0)
 		return rc;
 
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-	/* Get capabilities mask */
-	nic_data->caps = 0;
-	rc = efx_mcdi_get_board_cfg(efx, efx_port_num(efx), NULL, NULL,
-				    &nic_data->caps);
-	if (rc)
-		return rc;
-#endif
 	rc = efx_mcdi_mon_probe(efx);
 	if (rc && rc != -EPERM)
 		return rc;
 
 #ifdef CONFIG_SFC_SRIOV
 	efx_sriov_init_max_vfs(efx, nic_data->pf_index);
-#endif
-
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_AOE)
-	if (aoe_enabled(efx->nic_data)) {
-		rc = efx_aoe_attach(efx);
-		if (rc)
-			return rc;
-	}
 #endif
 
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_NEED_GET_PHYS_PORT_ID)
@@ -5942,7 +5898,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	.filter_redirect = efx_mcdi_filter_redirect,
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.filter_block_kernel = efx_mcdi_filter_block_kernel,
 	.filter_unblock_kernel = efx_mcdi_filter_unblock_kernel,
 #endif
@@ -5976,7 +5932,7 @@ const struct efx_nic_type efx_hunt_a0_vf_nic_type = {
 	.supported_interrupt_modes = BIT(EFX_INT_MODE_MSIX),
 	.timer_period_max = 1 << ERF_DD_EVQ_IND_TIMER_VAL_WIDTH,
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.ef10_resources = {
 		.hdr.next = ((struct efx_dl_device_info *)
 			     &efx_hunt_a0_nic_type.dl_hash_insertion.hdr),
@@ -6105,7 +6061,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 #endif
 #ifdef EFX_NOT_UPSTREAM
 	.filter_redirect = efx_mcdi_filter_redirect,
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.filter_block_kernel = efx_mcdi_filter_block_kernel,
 	.filter_unblock_kernel = efx_mcdi_filter_unblock_kernel,
 #endif
@@ -6171,7 +6127,7 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 				     BIT(EFX_INT_MODE_MSI),
     .timer_period_max = 1 << ERF_DD_EVQ_IND_TIMER_VAL_WIDTH,
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	.ef10_resources = {
 		.hdr.next = ((struct efx_dl_device_info *)
 			     &efx_hunt_a0_nic_type.dl_hash_insertion.hdr),

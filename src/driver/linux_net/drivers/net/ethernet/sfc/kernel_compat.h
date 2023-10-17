@@ -1806,18 +1806,37 @@ static inline bool __must_check IS_ERR_OR_NULL(__force const void *ptr)
 #define cpu_to_mem(cpu) cpu_to_node(cpu)
 #endif
 
+/* As in include/linux/kconfig.h */
+#ifndef __take_second_arg
+#define __take_second_arg(__ignored, val, ...) val
+#endif
+#ifndef __and
+#define __ARG_PLACEHOLDER_1 0,
+
+#define __and(x, y)			___and(x, y)
+#define ___and(x, y)			____and(__ARG_PLACEHOLDER_##x, y)
+#define ____and(arg1_or_junk, y)	__take_second_arg(arg1_or_junk y, 0)
+
+#define __or(x, y)			___or(x, y)
+#define ___or(x, y)			____or(__ARG_PLACEHOLDER_##x, y)
+#define ____or(arg1_or_junk, y)		__take_second_arg(arg1_or_junk 1, y)
+#endif
+
 #if !defined(IS_ENABLED) || LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0)
 #undef IS_ENABLED
+#undef IS_BUILTIN
+#undef IS_MODULE
+#undef IS_REACHABLE
 
-/* As in include/linux/kconfig.h */
-#define __ARG_PLACEHOLDER_1 0,
-#define config_enabled(cfg) _config_enabled(cfg)
-#define _config_enabled(value) __config_enabled(__ARG_PLACEHOLDER_##value)
-#define __config_enabled(arg1_or_junk) ___config_enabled(arg1_or_junk 1, 0)
-#define ___config_enabled(__ignored, val, ...) val
+#define __is_defined(x)			___is_defined(x)
+#define ___is_defined(val)		____is_defined(__ARG_PLACEHOLDER_##val)
+#define ____is_defined(arg1_or_junk)	__take_second_arg(arg1_or_junk 1, 0)
 
-#define IS_ENABLED(option)	(config_enabled(option) ||	\
-				 config_enabled(option##_MODULE))
+#define IS_BUILTIN(option) __is_defined(option)
+#define IS_MODULE(option) __is_defined(option##_MODULE)
+#define IS_REACHABLE(option) __or(IS_BUILTIN(option), \
+				__and(IS_MODULE(option), __is_defined(MODULE)))
+#define IS_ENABLED(option) __or(IS_BUILTIN(option), IS_MODULE(option))
 #endif
 
 #ifndef EFX_HAVE_NETIF_XMIT_STOPPED
@@ -2006,10 +2025,6 @@ struct device *hwmon_device_register_with_info(
 
 #if defined(EFX_HAVE_XDP) && !defined(EFX_HAVE_XDP_TRACE)
 #define trace_xdp_exception(dev, prog, act)
-#endif
-
-#if !defined(EFX_HAVE_XDP_HEAD) && !defined(XDP_PACKET_HEADROOM)
-#define XDP_PACKET_HEADROOM 0
 #endif
 
 #ifndef EFX_HAVE_XDP_RXQ_INFO_NAPI_ID
@@ -2512,6 +2527,10 @@ int pci_find_next_ext_capability(struct pci_dev *dev, int pos, int cap);
 #include <net/xdp_sock.h>
 #endif /* EFX_HAVE_XDP_SOCK_DRV */
 
+#if !defined(EFX_HAVE_XDP_HEAD) && !defined(XDP_PACKET_HEADROOM)
+#define XDP_PACKET_HEADROOM 0
+#endif
+
 #if defined(VIRTIO_F_IOMMU_PLATFORM) && !defined(VIRTIO_F_ACCESS_PLATFORM)
 #define VIRTIO_F_ACCESS_PLATFORM VIRTIO_F_IOMMU_PLATFORM
 #endif
@@ -2708,6 +2727,11 @@ static inline void efx__skb_queue_tail(struct sk_buff_head *list,
 }
 #undef __skb_queue_tail
 #define __skb_queue_tail efx__skb_queue_tail
+#endif
+
+/* xdp_do_flush_map has been renamed xdp_do_flush */
+#ifdef EFX_NEED_XDP_DO_FLUSH
+#define xdp_do_flush xdp_do_flush_map
 #endif
 
 #endif /* EFX_KERNEL_COMPAT_H */
