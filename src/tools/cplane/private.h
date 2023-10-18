@@ -932,9 +932,6 @@ cp_veth_fwd_table_id_do(struct cp_session* s, ci_ifid_t veth_ifindex,
 extern void cp_llap_fix_upper_layers(struct cp_session* s);
 
 extern void
-cp_set_hwport_flags(struct cp_session* s, struct cp_mibs* mib,
-                    ci_hwport_id_t hwport, int flags);
-extern void
 cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
                           ci_hwport_id_t hwport, ci_ifid_t ifindex,
                           cp_xdp_prog_id_t id);
@@ -1073,8 +1070,6 @@ void cp_newrule_handle(struct cp_session* s, uint16_t nlmsg_type,
                        struct fib_rule_hdr* rule, size_t bytes);
 void cp_routes_update_laddr(struct cp_session* s,
                             struct cp_route_table** tables, int af);
-
-void cp_verify_hwport_flags(struct cp_session* s);
 
 static inline bool cp_mac_need_refresh(cicp_mac_row_t* mrow, ci_uint64 now)
 {
