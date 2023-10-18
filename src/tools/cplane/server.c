@@ -48,6 +48,9 @@ extern int oo_fd_open(int * fd_out);
 #endif
 
 
+/* The HW port mask must be able to store the maximum HW port number. */
+CI_BUILD_ASSERT(CHAR_BIT * sizeof(cicp_hwport_mask_t) >= CI_CFG_MAX_HWPORTS);
+
 #define DEV_KMSG "/dev/kmsg"
 
 static char* cp_log_prefix;

@@ -127,7 +127,7 @@ typedef struct {
     (encap & CICP_LLAP_TYPE_XMIT_HASH_LAYER23 ? "L23 " : ""),   \
     (encap & CICP_LLAP_TYPE_ROUTE_ACROSS_NS ? "XNS " : "")      \
 
-typedef ci_uint16 cicp_hwport_mask_t;
+typedef ci_uint32 cicp_hwport_mask_t;
 
 #define CICP_ALL_HWPORTS ((cicp_hwport_mask_t) -1)
 
