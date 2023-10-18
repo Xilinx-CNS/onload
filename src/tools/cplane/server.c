@@ -48,6 +48,9 @@ extern int oo_fd_open(int * fd_out);
 #endif
 
 
+/* The HW port mask must be able to store the maximum HW port number. */
+CI_BUILD_ASSERT(CHAR_BIT * sizeof(cicp_hwport_mask_t) >= CI_CFG_MAX_HWPORTS);
+
 #define DEV_KMSG "/dev/kmsg"
 
 static char* cp_log_prefix;
@@ -374,7 +377,7 @@ cp_session_init_memory(struct cp_session* s, struct cp_tables_dim* m,
 }
 
 
-/* Allocate aligned memory and set up mibs. All dimentions are supposed
+/* Allocate aligned memory and set up mibs. All dimensions are supposed
  * to be divisible by 4. */
 static void init_memory(struct cp_tables_dim* m, struct cp_session* s)
 {
@@ -383,7 +386,7 @@ static void init_memory(struct cp_tables_dim* m, struct cp_session* s)
   size_t mib_size = cp_calc_mib_size(m);
 
   /* We need continuous chunk of memory to put the MIB tables.  The memory
-   * should be continouus in kernel, cplane process and Onloaded processes.
+   * should be continuous in kernel, cplane process and Onloaded processes.
    * The best way to archive this is to allocate continuous memory in
    * kernel and than mmap it to UL processes.
    */
@@ -610,7 +613,7 @@ static void init_signals(struct cp_session* s)
     init_failed("sigaction(SIGALRM) failed: %s", strerror(errno));
 
   /* We do not need a separate thread to handle signals, so let's use
-   * SIGEV_THREAD_ID instead of SIGEV_SIGNAL to delive all the signals to
+   * SIGEV_THREAD_ID instead of SIGEV_SIGNAL to deliver all the signals to
    * the main thread. */
   sev.sigev_notify = SIGEV_THREAD_ID;
   sev.sigev_signo = SIGALRM;
@@ -1199,7 +1202,7 @@ int main(int argc, char** argv)
     if( s->flags & CP_SESSION_LADDR_REFRESH_NEEDED )
       cp_laddr_refresh(s);
     if( s->main_cp_handle == NULL && mib_ver != *s->mib[0].version ) {
-        /* We are the main cp_server instace and have a duty to notify clients of
+        /* We are the main cp_server instance and have a duty to notify clients of
          * our llap changes.
          * TODO: Not every update is worth sending a notification
          */

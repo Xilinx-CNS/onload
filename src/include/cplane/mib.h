@@ -127,7 +127,7 @@ typedef struct {
     (encap & CICP_LLAP_TYPE_XMIT_HASH_LAYER23 ? "L23 " : ""),   \
     (encap & CICP_LLAP_TYPE_ROUTE_ACROSS_NS ? "XNS " : "")      \
 
-typedef ci_uint16 cicp_hwport_mask_t;
+typedef ci_uint32 cicp_hwport_mask_t;
 
 #define CICP_ALL_HWPORTS ((cicp_hwport_mask_t) -1)
 
@@ -138,7 +138,7 @@ static inline ci_hwport_id_t cp_hwport_mask_first(cicp_hwport_mask_t mask)
 }
 static inline cicp_hwport_mask_t cp_hwport_make_mask(ci_hwport_id_t hwport)
 {
-  /* Address potential shif overflow when:
+  /* Address potential shift overflow when:
    *  * hwport == dim->hwports_max == bits(ci_hwport_id_t)
    *  * CI_HWPORT_ID_BAD is passed*/
   if( hwport >= sizeof(cicp_hwport_mask_t) * 8 )

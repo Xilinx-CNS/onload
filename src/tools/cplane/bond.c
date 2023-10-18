@@ -127,9 +127,9 @@ cp_bond_handle_active_slave(struct cp_session* s, ci_ifid_t bond_ifindex,
 
 
 /* Store aggregator id of LACP bond */
-void cp_bond_handle_aggregator_id(struct cp_session* s,
-                                  ci_ifid_t bond_ifindex,
-                                  uint16_t agg_id)
+static void cp_bond_handle_aggregator_id(struct cp_session* s,
+                                         ci_ifid_t bond_ifindex,
+                                         uint16_t agg_id)
 {
   cicp_rowid_t team_id = cp_team_find_or_add(s, bond_ifindex);
   if( ! CICP_ROWID_IS_VALID(team_id) )
