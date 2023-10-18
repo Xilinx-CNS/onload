@@ -93,7 +93,7 @@
                                  CP_FWD_FLAG_KEY2NL_SHIFT)
 
 /* The following values are at least as large as 1 << CP_FWD_FLAG_KEY2NL_SHIFT,
- * so care is required not to clash wih flags that are defined with respect to
+ * so care is required not to clash with flags that are defined with respect to
  * that shift. */
 
 /* The key was remembered in the list of outstanding fwd requests.  Only valid

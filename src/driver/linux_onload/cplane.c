@@ -251,7 +251,7 @@ static inline void cp_lock_init(void)
 struct cp_vm_private_data {
   struct oo_cplane_handle* cp;
   /* This mapping defines the association of a UL server with the kernel
-   * control plane instance.  There are in gerenal other mappings held by the
+   * control plane instance.  There are in general other mappings held by the
    * server that do not have this flag set. */
 #define CP_VM_PRIV_FLAG_SERVERLINK   0x0001ull
   uint64_t cp_vm_flags;
@@ -568,7 +568,7 @@ ssize_t cp_fop_read(struct file* file, char __user* buf,
   list_del(&msg->link);
   spin_unlock_bh(&cp->msg_lock);
 
-  /* Cplane server MUST proved valid and large buffer */
+  /* Cplane server MUST provide valid and large buffer */
   ci_assert_ge(len, sizeof(struct cp_helper_msg));
   len = CI_MIN(len, sizeof(struct cp_helper_msg));
   if( copy_to_user(buf, msg->buf, len) )

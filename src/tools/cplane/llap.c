@@ -58,8 +58,8 @@ cp_llap_notify_oof_of_removal(struct cp_session* s, ci_ifid_t ifindex)
 }
 
 /*
- * Retreive MIB table index in cp_session structure to pass it into ioctl call
- * withing oo_op_cplane_ipmod structure mib_id parameter.
+ * Retrieve MIB table index in cp_session structure to pass it into ioctl call
+ * within oo_op_cplane_ipmod structure mib_id parameter.
  */
 static inline int cp_get_mib_index(struct cp_session* s, struct cp_mibs* mib)
 {
@@ -315,7 +315,7 @@ find_base_properties(struct cp_session* s, cicp_rowid_t llap_id,
   if( llap->encap.type & CICP_LLAP_TYPE_CHILD ) {
     cicp_rowid_t lower_id = cp_llap_find_row(mib, llap->encap.link_ifindex);
     if( lower_id != CICP_ROWID_BAD ) {
-      /* we have found llap row in the local namepsace */
+      /* we have found llap row in the local namespace */
       cicp_llap_row_t* lower_l = &mib->llap[lower_id];
       *base_llap_out = *lower_l;
     }

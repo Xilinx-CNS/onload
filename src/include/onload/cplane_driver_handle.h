@@ -58,7 +58,7 @@ struct oo_cplane_handle {
   spinlock_t cp_handle_lock;
   wait_queue_head_t cp_waitq;
 
-  /* Workitem to schedule descruction from potentially atomic context. */
+  /* Workitem to schedule destruction from potentially atomic context. */
   struct delayed_work destroy_work;
   int/*bool*/ killed;
 

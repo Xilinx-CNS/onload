@@ -401,7 +401,7 @@ llap_handle(struct cp_session* s, uint16_t nlmsg_type,
 
   /* If this interface was but is no longer a bond-slave, we get no explicit
    * notification, but instead the RTM_NEWLINK message will be missing its
-   * slave parameters.  So if we se a message for a non-slave, we need to check
+   * slave parameters.  So if we see a message for a non-slave, we need to check
    * whether we think it is currently a slave, and take the slave-update path
    * if so.  Note that, while this is only necessary for bonding and not for
    * teaming, it's harmless in the latter case, and it's not worth going to the

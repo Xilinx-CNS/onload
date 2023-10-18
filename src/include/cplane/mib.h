@@ -138,7 +138,7 @@ static inline ci_hwport_id_t cp_hwport_mask_first(cicp_hwport_mask_t mask)
 }
 static inline cicp_hwport_mask_t cp_hwport_make_mask(ci_hwport_id_t hwport)
 {
-  /* Address potential shif overflow when:
+  /* Address potential shift overflow when:
    *  * hwport == dim->hwports_max == bits(ci_hwport_id_t)
    *  * CI_HWPORT_ID_BAD is passed*/
   if( hwport >= sizeof(cicp_hwport_mask_t) * 8 )

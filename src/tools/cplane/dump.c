@@ -237,7 +237,7 @@ void cp_do_dump(struct cp_session* s)
       (s->flags & CP_SESSION_NO_IPV6) )
     s->state++;
 
-  /* If team dump in in progress, it will call cp_dump_start() later,
+  /* If team dump is in progress, it will call cp_dump_start() later,
    * see team_dump_next(). */
   if( s->team_dump != NULL )
     return;

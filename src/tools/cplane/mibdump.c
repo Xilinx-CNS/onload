@@ -76,7 +76,7 @@ void cp_mibdump_sock_handle(struct cp_session* s,
   msg.msg_control = NULL;
   msg.msg_controllen = 0;
   if( sendmsg(s->mibdump_sock, &msg, 0) < 0 ) {
-    /* client have gone.
+    /* client has gone.
      * TODO: Increment a counter */
     ;
   }
