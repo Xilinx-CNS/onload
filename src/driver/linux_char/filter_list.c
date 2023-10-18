@@ -309,7 +309,7 @@ int efch_filter_list_set_ip6(struct efx_filter_spec* spec,
                                   filter->in.spec.l4.ports.source);
   else
     rc = efx_filter_set_ipv6_local(spec, filter->in.spec.l3.protocol,
-                                   filter->in.spec.l3.u.ipv6.daddr,
+                                   &filter->in.spec.l3.u.ipv6.daddr,
                                    filter->in.spec.l4.ports.dest);
   return rc;
 }
@@ -674,7 +674,7 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
                                      filter_add->in.spec.l4.ports.source));
       else
         TRY(efx_filter_set_ipv6_local(&spec, filter_add->in.spec.l3.protocol,
-                                      filter_add->in.spec.l3.u.ipv6.daddr,
+                                      &filter_add->in.spec.l3.u.ipv6.daddr,
                                       filter_add->in.spec.l4.ports.dest));
     }
     else
