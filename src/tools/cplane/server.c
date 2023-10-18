@@ -19,6 +19,7 @@
 #include <unistd.h>
 #include <syslog.h>
 #include <sched.h>
+#include <limits.h>
 
 #include <ci/compat.h>
 #include <ci/tools/log.h>
