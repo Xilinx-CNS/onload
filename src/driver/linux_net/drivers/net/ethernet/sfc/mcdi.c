@@ -14,7 +14,6 @@
 #include "efx_devlink.h"
 #include "io.h"
 #include "mcdi_pcol.h"
-#include "aoe.h"
 
 struct efx_mcdi_copy_buffer {
 	_MCDI_DECLARE_BUF(buffer, MCDI_CTL_SDU_LEN_MAX);

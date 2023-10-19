@@ -32,7 +32,6 @@
 #include "mcdi.h"
 #include "mcdi_port_common.h"
 #include "mcdi_pcol.h"
-#include "aoe.h"
 #include "ethtool_common.h"
 
 #include <linux/module.h>
@@ -106,27 +105,6 @@ efx_ioctl_rxfh_indir(struct efx_nic *efx, union efx_ioctl_data *data)
 }
 
 #endif
-
-#ifdef CONFIG_SFC_AOE
-static int
-efx_ioctl_update_cpld(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	return efx_aoe_update_cpld(efx, &data->cpld);
-}
-
-static int
-efx_ioctl_update_license_old(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	return efx_aoe_update_keys(efx, &data->key_stats);
-}
-
-static int
-efx_ioctl_reset_aoe(struct efx_nic *efx, union efx_ioctl_data *data)
-{
-	return efx_aoe_reset_aoe(efx, &data->aoe_reset);
-}
-#endif
-
 
 static int
 efx_ioctl_get_mod_eeprom(struct efx_nic *efx,
@@ -209,21 +187,6 @@ efx_ioctl_update_license(struct efx_nic *efx, union efx_ioctl_data *data)
 	}
 
 	memset(stats, 0, sizeof(*stats));
-
-#ifdef CONFIG_SFC_AOE
-	if (efx->aoe_data) {
-		struct efx_update_license aoe_stats;
-
-		rc = efx_aoe_update_keys(efx, &aoe_stats);
-		if (rc)
-			return rc;
-
-		stats->valid_keys += aoe_stats.valid_keys;
-		stats->invalid_keys += aoe_stats.invalid_keys;
-		stats->blacklisted_keys += aoe_stats.blacklisted_keys;
-	}
-#endif
-
 	return 0;
 }
 #endif
@@ -331,20 +294,6 @@ int efx_private_ioctl(struct efx_nic *efx, u16 cmd,
 	case EFX_RXFHINDIR:
 		size = sizeof(data->rxfh_indir);
 		op = efx_ioctl_rxfh_indir;
-		break;
-#endif
-#ifdef CONFIG_SFC_AOE
-	case EFX_UPDATE_CPLD:
-		size = sizeof(data->cpld);
-		op = efx_ioctl_update_cpld;
-		break;
-	case EFX_LICENSE_UPDATE:
-		size = sizeof(data->key_stats);
-		op = efx_ioctl_update_license_old;
-		break;
-	case EFX_RESET_AOE:
-		size = sizeof(data->aoe_reset);
-		op = efx_ioctl_reset_aoe;
 		break;
 #endif
 	case EFX_MODULEEEPROM:

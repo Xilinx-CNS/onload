@@ -33,7 +33,6 @@ export CONFIG_SFC_PTP := y
 export CONFIG_SFC_TRACING :=
 export CONFIG_SFC_MCDI_LOGGING := y
 export CONFIG_SFC_DRIVERLINK := m
-export CONFIG_SFC_AOE := $(subst m,y,$(CONFIG_SFC_DRIVERLINK))
 export CONFIG_SFC_BUSYPOLL := n
 export CONFIG_SFC_VDPA := y
 
@@ -167,7 +166,6 @@ ifndef EFX_UPSTREAM
 ifeq ($(filter export export-xen,$(MAKECMDGOALS)),)
 ifndef EFX_FOR_UPSTREAM
 sfc-y			+= sfctool.o ef100_dump.o
-sfc-$(CONFIG_SFC_AOE)	+= aoe.o
 sfc-$(CONFIG_SFC_VDPA)	+= ef100_vdpa_dbg.o
 endif # !EFX_FOR_UPSTREAM
 sfc-$(CONFIG_SFC_DUMP) += dump.o
@@ -216,7 +214,7 @@ TOPDIR = $(src)/../../../..
 include $(TOPDIR)/scripts/Makefile.common
 
 define filechk_config.h
-	printf "$(foreach name,SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_AOE SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL SFC_VDPA,#undef CONFIG_$(name)\n$(if $(filter y m,$(CONFIG_$(name))),#define CONFIG_$(name) $(CONFIG_$(name))\n))"
+	printf "$(foreach name,SFC SFC_DUMP SFC_MCDI_MON SFC_MTD SFC_SIENA SFC_SRIOV SFC_PTP SFC_PPS SFC_TRACING SFC_MCDI_LOGGING SFC_DRIVERLINK SFC_BUSYPOLL SFC_VDPA,$(if $(filter y,$(CONFIG_$(name))),#undef CONFIG_$(name)\n#define CONFIG_$(name) 1\n,$(if $(filter m,$(CONFIG_$(name))),#undef CONFIG_$(name)_MODULE\n#define CONFIG_$(name)_MODULE 1\n,#undef CONFIG_$(name)\n#undef CONFIG_$(name)_MODULE\n)))"
 endef
 
 $(obj)/config.h: $(src)/Makefile FORCE

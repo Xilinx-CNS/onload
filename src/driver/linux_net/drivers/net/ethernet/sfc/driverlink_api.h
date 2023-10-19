@@ -28,7 +28,7 @@ struct efx_dl_device_info;
  * kbuild and the module loader using symbol versions.
  */
 #define EFX_DRIVERLINK_API_VERSION 33
-#define EFX_DRIVERLINK_API_VERSION_MINOR_MAX 0
+#define EFX_DRIVERLINK_API_VERSION_MINOR_MAX 1
 
 /* If the client didn't define their VERSION_MINOR, default to 0 */
 #ifndef EFX_DRIVERLINK_API_VERSION_MINOR
@@ -136,10 +136,13 @@ struct efx_dl_driver {
 
 /**
  * enum efx_dl_device_info_type - Device information identifier.
+ *
+ * Used to identify each item in the &struct efx_dl_device_info linked list
+ * provided to each driverlink client in the probe() @dev_info member.
+ * Value 4 is reserved, it was used for AOE.
+ *
  * @EFX_DL_HASH_INSERTION: Information type is &struct efx_dl_hash_insertion
  * @EFX_DL_MCDI_RESOURCES: Obsolete and unused.
- * @EFX_DL_AOE_RESOURCES: Information type is &struct efx_dl_aoe_resources.
- *	Defined from API version 6.
  * @EFX_DL_EF10_RESOURCES: Information type is &struct efx_dl_ef10_resources.
  *	Defined from API version 9.
  * @EFX_DL_IRQ_RESOURCES: Information type is &struct efx_dl_irq_resources.
@@ -151,7 +154,6 @@ struct efx_dl_driver {
 enum efx_dl_device_info_type {
 	EFX_DL_HASH_INSERTION = 1,
 	EFX_DL_MCDI_RESOURCES = 3,
-	EFX_DL_AOE_RESOURCES = 4,
 	EFX_DL_EF10_RESOURCES = 5,
 	EFX_DL_IRQ_RESOURCES = 6,
 };
@@ -195,21 +197,6 @@ struct efx_dl_hash_insertion {
 	unsigned int data_offset;
 	unsigned int hash_offset;
 	enum efx_dl_hash_type_flags flags;
-};
-
-/**
- * struct efx_dl_aoe - Information about an AOE attached to the NIC
- *
- * @hdr: Resource linked list header
- * @internal_macs: Number of internal MACs (connected to the NIC)
- * @external_macs: Number of external MACs
- *
- * Defined from API version 6.
- */
-struct efx_dl_aoe_resources {
-	struct efx_dl_device_info hdr;
-	unsigned internal_macs;
-	unsigned int external_macs;
 };
 
 /**

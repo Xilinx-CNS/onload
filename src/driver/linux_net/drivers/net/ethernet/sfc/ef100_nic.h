@@ -14,7 +14,7 @@
 #include "mcdi_pcol.h"
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 
 #ifdef EFX_C_MODEL
 #define EF100_ONLOAD_VIS 4

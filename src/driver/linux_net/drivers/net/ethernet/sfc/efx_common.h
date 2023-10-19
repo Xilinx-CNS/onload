@@ -104,7 +104,7 @@ int efx_set_mac_address(struct net_device *net_dev, void *data);
 void efx_set_rx_mode(struct net_device *net_dev);
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 void efx_dl_probe(struct efx_nic *efx);
 bool efx_dl_supported(struct efx_nic *efx);
 #endif

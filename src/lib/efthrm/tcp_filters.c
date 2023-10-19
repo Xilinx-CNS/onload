@@ -240,7 +240,7 @@ oo_hw_filter_set_hwport(struct oo_hw_filter* oofilter, int hwport,
         else
           rc = efx_filter_set_ipv6_local(&spec,
                                          oo_filter_spec->addr.ip.protocol,
-                                         daddr,
+                                         &daddr,
                                          oo_filter_spec->addr.ip.dport);
       }
       else

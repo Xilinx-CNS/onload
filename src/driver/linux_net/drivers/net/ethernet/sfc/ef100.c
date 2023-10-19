@@ -9,7 +9,9 @@
 
 #include "net_driver.h"
 #include <linux/module.h>
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING)
 #include <linux/aer.h>
+#endif
 #include "efx_common.h"
 #include "efx_channels.h"
 #include "efx_auxbus.h"
@@ -476,8 +478,10 @@ static void ef100_pci_remove(struct pci_dev *pci_dev)
 	efx_fini_io(efx);
 	pci_dbg(pci_dev, "shutdown successful\n");
 
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING)
 	pci_disable_pcie_error_reporting(pci_dev);
 
+#endif
 	pci_set_drvdata(pci_dev, NULL);
 	probe_data = container_of(efx, struct efx_probe_data, efx);
 	efx_fini_struct(efx);
@@ -568,8 +572,10 @@ static int ef100_pci_probe(struct pci_dev *pci_dev,
 		pci_warn(pci_dev,
 			 "Unable to register auxiliary bus driver (%d)\n", rc);
 
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING)
 	(void)pci_enable_pcie_error_reporting(pci_dev);
 
+#endif
 	efx->state = STATE_PROBED;
 	rc = efx_ef100_set_bar_config(efx, EF100_BAR_CONFIG_EF100);
 	if (rc)

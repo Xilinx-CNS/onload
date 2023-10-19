@@ -46,6 +46,7 @@ EFX_USE_ETHTOOL_FLAGS			symbol	get_flags		include/linux/ethtool.h
 EFX_USE_ETHTOOL_LP_ADVERTISING		symbol	lp_advertising		include/linux/ethtool.h
 EFX_USE_ETHTOOL_MDIO_SUPPORT		symbol	mdio_support		include/linux/ethtool.h
 EFX_USE_MTD_WRITESIZE			symbol	writesize		include/linux/mtd/mtd.h
+EFX_HAVE_MTD_USECOUNT			member  struct_mtd_info	usecount		include/linux/mtd/mtd.h
 EFX_USE_NETDEV_STATS			custom
 EFX_USE_NETDEV_STATS64			member	struct_net_device_ops	ndo_get_stats64 include/linux/netdevice.h
 EFX_HAVE_NETDEV_STATS64_VOID		memtype	struct_net_device_ops	ndo_get_stats64	include/linux/netdevice.h	void(*)(struct net_device *, struct rtnl_link_stats64 *)
@@ -157,6 +158,7 @@ EFX_NEED_NETDEV_NOTIFIER_INFO_TO_DEV	nsymbol	netdev_notifier_info_to_dev	include
 EFX_HAVE_NETDEV_REGISTER_RH		symbol	register_netdevice_notifier_rh	include/linux/netdevice.h
 EFX_HAVE_NETDEV_RFS_INFO		symbol	netdev_rfs_info		include/linux/netdevice.h
 EFX_NEED_PCI_AER_CLEAR_NONFATAL_STATUS	nsymbol pci_aer_clear_nonfatal_status	include/linux/aer.h
+EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING	symbol	pci_enable_pcie_error_reporting	include/linux/aer.h
 EFX_HAVE_EEH_DEV_CHECK_FAILURE		symbol	eeh_dev_check_failure	arch/powerpc/include/asm/eeh.h
 EFX_NEED_PCI_DEV_TO_EEH_DEV		nsymbol	pci_dev_to_eeh_dev	include/linux/pci.h
 EFX_HAVE_IOREMAP_WC			symbol	ioremap_wc		arch/$SRCARCH/include/asm/io.h include/asm-$SRCARCH/io.h include/asm-generic/io.h
@@ -302,6 +304,7 @@ EFX_NEED_FLOW_RULE_MATCH_CVLAN		nsymbol	flow_rule_match_cvlan	include/net/flow_o
 EFX_NEED_FLOW_RULE_MATCH_CT		nsymbol	flow_rule_match_ct	include/net/flow_offload.h
 EFX_HAVE_FLOW_DISSECTOR_KEY_CVLAN	symbol	FLOW_DISSECTOR_KEY_CVLAN	include/net/flow_dissector.h
 EFX_HAVE_FLOW_DISSECTOR_KEY_ENC_IP	symbol	FLOW_DISSECTOR_KEY_ENC_IP	include/net/flow_dissector.h
+EFX_HAVE_FLOW_DISSECTOR_64BIT_USED_KEYS memtype struct_flow_dissector   used_keys   include/net/flow_dissector.h unsigned long long
 EFX_HAVE_FLOW_DISSECTOR_VLAN_TPID	member	struct_flow_dissector_key_vlan	vlan_tpid	include/net/flow_dissector.h
 EFX_HAVE_OLD_TCF_ACTION_STATS_UPDATE	symtype	tcf_action_stats_update	include/net/act_api.h	void(struct tc_action *a, u64 bytes, u64 packets, u64 lastuse)
 EFX_HAVE_FLOW_STATS_TYPE		symbol	flow_action_hw_stats	include/net/flow_offload.h
@@ -353,6 +356,7 @@ EFX_HAVE_XDP_QUERY_PROG			symbol XDP_QUERY_PROG	include/linux/netdevice.h
 EFX_HAVE_XDP_FRAME_SZ			member struct_xdp_buff	frame_sz	include/net/xdp.h
 EFX_NEED_XDP_INIT_BUFF			nsymbol	xdp_init_buff	include/net/xdp.h
 EFX_NEED_XDP_PREPARE_BUFF		nsymbol	xdp_prepare_buff	include/net/xdp.h
+EFX_NEED_XDP_DO_FLUSH                   nsymbol xdp_do_flush    include/linux/filter.h
 EFX_HAVE_VDPA_VQ_STATE			symbol vdpa_vq_state		include/linux/vdpa.h
 EFX_HAVE_VDPA_VQ_STATE_SPLIT		symbol vdpa_vq_state_split	include/linux/vdpa.h
 EFX_HAVE_GET_VQ_IRQ			member struct_vdpa_config_ops get_vq_irq include/linux/vdpa.h
@@ -384,6 +388,7 @@ EFX_HAVE_IOMMU_MAP_GFP_PARAM		symtype iommu_map		include/linux/iommu.h int(struc
 EFX_HAVE_VDPA_MGMT_OPS_CONFIG_PARAM	memtype	struct_vdpa_mgmtdev_ops	dev_add	include/linux/vdpa.h int (*)(struct vdpa_mgmt_dev *, const char *, const struct vdpa_dev_set_config *)
 EFX_HAVE_VDPA_SUPPORTED_FEATURES	member	struct_vdpa_mgmt_dev	supported_features	include/linux/vdpa.h
 EFX_HAVE_VDPA_MAX_SUPPORTED_VQS		member	struct_vdpa_mgmt_dev	max_supported_vqs	include/linux/vdpa.h
+EFX_HAVE_VIRTIO_NET_SPEED_LE32		memtype struct_virtio_net_config speed include/uapi/linux/virtio_net.h __le32
 EFX_NEED_TIMESPEC64_TO_NS_SIGNED	custom
 EFX_HAVE_KOBJECT_DEFAULT_GROUPS		member	struct_kobj_type	default_groups	include/linux/kobject.h
 EFX_NEED_REFCOUNT_T			nsymbol	refcount_t		include/linux/refcount.h

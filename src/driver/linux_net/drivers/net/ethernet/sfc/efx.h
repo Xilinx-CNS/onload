@@ -95,7 +95,7 @@ static inline bool efx_rx_buf_hash_valid(struct efx_nic *efx, const u8 *prefix)
 #define EFX_MAX_EVQ_SIZE 16384UL
 #define EFX_MIN_EVQ_SIZE 512UL
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 /* Additional event queue entries to add on channel zero for driverlink. */
 #define EFX_EVQ_DL_EXTRA_ENTRIES 7936UL
 #endif

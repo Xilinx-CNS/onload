@@ -511,9 +511,32 @@ int efx_tx_map_data(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 	struct efx_tx_buffer *buffer;
 	unsigned short dma_flags;
 	size_t len, unmap_len;
+#ifdef EFX_NOT_UPSTREAM
+	/* Avoid -Wmaybe-uninitialised warning with gcc 4.8.5 */
+	int header_len = 0;
+#else
+	int header_len;
+#endif
 
-	nr_frags = skb_shinfo(skb)->nr_frags;
-	frag_index = 0;
+	if (segment_count) {
+		/* Ensure linear headers for TSO offload */
+		header_len = efx_tx_tso_header_length(skb);
+
+		if (header_len < 0)
+			{
+			/* We shouldn't have advertised encap TSO support,
+			 * because this kernel doesn't have the bits we need
+			 * to make it work.  So let's complain loudly.
+			 */
+			WARN_ON_ONCE(1);
+			return -EINVAL;
+		}
+		if (unlikely(header_len > skb_headlen(skb))) {
+			/* Pull headers into linear area */
+			if (!pskb_may_pull(skb, header_len))
+				return -ENOMEM;
+		}
+	}
 
 	/* Map header data. */
 	len = skb_headlen(skb);
@@ -529,19 +552,6 @@ int efx_tx_map_data(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 		/* For TSO we need to put the header in to a separate
 		 * descriptor. Map this separately if necessary.
 		 */
-		int header_len = efx_tx_tso_header_length(skb);
-
-		if (header_len < 0)
-		{
-			/* We shouldn't have advertised encap TSO support,
-			 * because this kernel doesn't have the bits we need
-			 * to make it work.  So let's complain loudly.
-			 */
-			dma_unmap_single(dma_dev, dma_addr, len, DMA_TO_DEVICE);
-			WARN_ON_ONCE(1);
-			return -EINVAL;
-		}
-
 		if (header_len != len) {
 			buffer = efx_tx_map_chunk(tx_queue, dma_addr, header_len);
 			if (!buffer)
@@ -552,6 +562,8 @@ int efx_tx_map_data(struct efx_tx_queue *tx_queue, struct sk_buff *skb,
 	}
 
 	/* Add descriptors for each fragment. */
+	nr_frags = skb_shinfo(skb)->nr_frags;
+	frag_index = 0;
 	do {
 		skb_frag_t *fragment;
 

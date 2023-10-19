@@ -559,7 +559,11 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 	      BIT(FLOW_DISSECTOR_KEY_ENC_IP) |
 #endif
 	      BIT(FLOW_DISSECTOR_KEY_IP))) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_DISSECTOR_64BIT_USED_KEYS)
+		efx_tc_err(efx, "Unsupported flower keys %#llx\n", dissector->used_keys);
+#else
 		efx_tc_err(efx, "Unsupported flower keys %#x\n", dissector->used_keys);
+#endif
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported flower keys encountered");
 		return -EOPNOTSUPP;
 	}
@@ -575,8 +579,13 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 		     BIT(FLOW_DISSECTOR_KEY_PORTS) |
 		     BIT(FLOW_DISSECTOR_KEY_IP) |
 		     BIT(FLOW_DISSECTOR_KEY_TCP))) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_DISSECTOR_64BIT_USED_KEYS)
+			efx_tc_err(efx, "Flower keys %#llx require protocol ipv[46]\n",
+				   dissector->used_keys);
+#else
 			efx_tc_err(efx, "Flower keys %#x require protocol ipv[46]\n",
 				   dissector->used_keys);
+#endif
 			NL_SET_ERR_MSG_MOD(extack, "L3/L4 keys without L2 protocol IPv4/6");
 			return -EINVAL;
 		}
@@ -640,8 +649,13 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 		if (dissector->used_keys &
 		    (BIT(FLOW_DISSECTOR_KEY_PORTS) |
 		     BIT(FLOW_DISSECTOR_KEY_TCP))) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_DISSECTOR_64BIT_USED_KEYS)
+			efx_tc_err(efx, "Flower keys %#llx require ipproto udp or tcp\n",
+				   dissector->used_keys);
+#else
 			efx_tc_err(efx, "Flower keys %#x require ipproto udp or tcp\n",
 				   dissector->used_keys);
+#endif
 			NL_SET_ERR_MSG_MOD(extack, "L4 keys without ipproto udp/tcp");
 			return -EINVAL;
 		}
@@ -712,8 +726,13 @@ static int efx_tc_flower_parse_match(struct efx_nic *efx,
 		    BIT(FLOW_DISSECTOR_KEY_ENC_IP) |
 #endif
 		    BIT(FLOW_DISSECTOR_KEY_ENC_PORTS))) {
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_FLOW_DISSECTOR_64BIT_USED_KEYS)
+		efx_tc_err(efx, "Flower enc keys require enc_control (keys: %#llx)\n",
+			   dissector->used_keys);
+#else
 		efx_tc_err(efx, "Flower enc keys require enc_control (keys: %#x)\n",
 			   dissector->used_keys);
+#endif
 		NL_SET_ERR_MSG_MOD(extack, "Flower enc keys without enc_control");
 		return -EOPNOTSUPP;
 	}

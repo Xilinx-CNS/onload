@@ -440,9 +440,21 @@ void __efx_rx_packet(struct efx_rx_queue *rx_queue)
 	/* Read length from the prefix if necessary.  This already
 	 * excludes the length of the prefix itself.
 	 */
-	if (rx_buf->flags & EFX_RX_PKT_PREFIX_LEN)
+	if (rx_buf->flags & EFX_RX_PKT_PREFIX_LEN) {
 		rx_buf->len = le16_to_cpup((__le16 *)
 					   (eh + efx->rx_packet_len_offset));
+		/* A known issue may prevent this being filled in;
+		 * if that happens, just drop the packet.
+		 * Must do that in the driver since passing a zero-length
+		 * packet up to the stack may cause a crash.
+		 */
+		if (unlikely(!rx_buf->len)) {
+			efx_free_rx_buffers(rx_queue, rx_buf,
+					    rx_queue->rx_pkt_n_frags);
+			rx_queue->n_rx_frm_trunc++;
+			goto out;
+		}
+	}
 
 	/* If we're in loopback test, then pass the packet directly to the
 	 * loopback layer, and free the rx_buf here

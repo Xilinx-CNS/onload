@@ -1306,8 +1306,10 @@ static void efx_mac_stats_schedule_monitor_work(struct efx_nic *efx)
 {
 	unsigned int period_ms = max(500u, efx->stats_period_ms * 2);
 
-	schedule_delayed_work(&efx->stats_monitor_work,
-			      msecs_to_jiffies(period_ms));
+	/* Only run the check when regular DMA is expected */
+	if (efx->stats_period_ms > 0)
+		schedule_delayed_work(&efx->stats_monitor_work,
+                                      msecs_to_jiffies(period_ms));
 }
 
 static void efx_mac_stats_start_monitor(struct efx_nic *efx)
@@ -1608,7 +1610,7 @@ bool efx_mcdi_port_process_event_common(struct efx_channel *channel,
 		if (!MCDI_EVENT_FIELD(*event, TX_FLUSH_TO_DRIVER))
 			efx_handle_drain_event(efx);
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 		else
 			*rc = efx_dl_handle_event(&efx->dl_nic, event, budget);
 #endif

@@ -38,7 +38,7 @@
 #include "xdp.h"
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 #include "io.h"
 #endif
 #endif
@@ -61,7 +61,7 @@ static int ef100_alloc_vis(struct efx_nic *efx, unsigned int *allocated_vis)
 	max_vis = max(rx_vis, tx_vis);
 	min_vis = efx->tx_queues_per_channel;
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/* We will consume all VIs with IDs less than the current value of
 	 * max_vis, so report that as the ID of the first VI available to the
 	 * driverlink client, and then bump the requested number of VIs by the
@@ -71,13 +71,15 @@ static int ef100_alloc_vis(struct efx_nic *efx, unsigned int *allocated_vis)
 #endif
 #endif
 	rc = efx_mcdi_alloc_vis(efx, min_vis, max_vis,
-#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_DRIVERLINK)
+#if defined(EFX_NOT_UPSTREAM) && IS_MODULE(CONFIG_SFC_DRIVERLINK)
 				&efx->ef10_resources.vi_base,
 				&efx->ef10_resources.vi_shift,
 #else
 				NULL, NULL,
 #endif
 				allocated_vis);
+	if (rc)
+		return rc;
 	if ((*allocated_vis >= min_vis) && (*allocated_vis < max_vis))
 		rc = -EAGAIN;
 
@@ -139,7 +141,7 @@ void ef100_net_dealloc(struct efx_nic *efx)
 	struct ef100_nic_data *nic_data;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (--efx->open_count) {
 		netif_dbg(efx, drv, efx->net_dev, "still open\n");
 		return;
@@ -278,7 +280,7 @@ int ef100_net_alloc(struct efx_nic *efx)
 	int rc;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (efx->open_count++) {
 		netif_dbg(efx, drv, efx->net_dev, "already open\n");
 		/* inform the kernel about link state again */
@@ -370,7 +372,7 @@ int ef100_net_alloc(struct efx_nic *efx)
 		return rc;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/* Register with driverlink layer */
 	efx->ef10_resources.vi_lim = allocated_vis;
 	efx->ef10_resources.timer_quantum_ns = efx->timer_quantum_ns;
@@ -816,7 +818,7 @@ void ef100_remove_netdev(struct efx_probe_data *probe_data)
 
 	rtnl_lock();
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (efx_dl_supported(efx))
 		efx_dl_unregister_nic(&efx->dl_nic);
 #endif
@@ -909,7 +911,7 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 				       ESE_EF100_DP_GZ_TSO_MAX_HDR_NUM_SEGS_DEFAULT);
 #endif
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_probe(efx);
 	efx->ef10_resources = efx->type->ef10_resources;
 	efx->n_dl_irqs = EF100_ONLOAD_IRQS;
@@ -1009,7 +1011,7 @@ int ef100_probe_netdev(struct efx_probe_data *probe_data)
 		efx_ef100_init_reps(efx);
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (efx_dl_supported(efx)) {
 		rtnl_lock();
 		efx_dl_register_nic(&efx->dl_nic);

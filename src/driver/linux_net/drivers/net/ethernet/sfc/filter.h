@@ -336,14 +336,14 @@ efx_filter_set_ipv4_full(struct efx_filter_spec *spec, u8 proto,
  */
 static inline int
 efx_filter_set_ipv6_local(struct efx_filter_spec *spec, u8 proto,
-			  struct in6_addr host, __be16 port)
+			  const struct in6_addr *host, __be16 port)
 {
 	spec->match_flags |=
 		EFX_FILTER_MATCH_ETHER_TYPE | EFX_FILTER_MATCH_IP_PROTO |
 		EFX_FILTER_MATCH_LOC_HOST | EFX_FILTER_MATCH_LOC_PORT;
 	spec->ether_type = htons(ETH_P_IPV6);
 	spec->ip_proto = proto;
-	memcpy(spec->loc_host, host.s6_addr32, sizeof(spec->loc_host));
+	memcpy(spec->loc_host, host->s6_addr32, sizeof(spec->loc_host));
 	spec->loc_port = port;
 	return 0;
 }

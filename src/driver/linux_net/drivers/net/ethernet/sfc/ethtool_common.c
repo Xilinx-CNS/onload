@@ -219,7 +219,7 @@ void efx_ethtool_set_msglevel(struct net_device *net_dev, u32 msg_enable)
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	efx->msg_enable = msg_enable;
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx->dl_nic.msg_enable = efx->msg_enable;
 #endif
 #endif
@@ -701,7 +701,7 @@ int efx_ethtool_set_priv_flags(struct net_device *net_dev, u32 flags)
 		(prev_flags & EFX_ETHTOOL_PRIV_FLAGS_XDP);
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (xdp_change && efx->open_count > is_up) {
 		netif_err(efx, drv, efx->net_dev,
 			  "unable to set XDP. device in use by driverlink stack\n");
@@ -878,7 +878,7 @@ int efx_ethtool_set_channels(struct net_device *net_dev,
 		return -EINVAL;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (efx->open_count > is_up) {
 		netif_err(efx, drv, efx->net_dev,
 			  "unable to set channels. device in use by driverlink stack\n");

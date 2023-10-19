@@ -20,7 +20,9 @@
 #include <linux/ethtool.h>
 #include <linux/topology.h>
 #include <linux/gfp.h>
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING)
 #include <linux/aer.h>
+#endif
 #include <linux/interrupt.h>
 #ifdef EFX_NOT_UPSTREAM
 #include <linux/uaccess.h>
@@ -432,7 +434,7 @@ int __efx_net_alloc(struct efx_nic *efx)
 	int rc;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (efx->open_count++) {
 		netif_dbg(efx, drv, efx->net_dev,
 			  "already open, now by %hu clients\n", efx->open_count);
@@ -553,7 +555,7 @@ int efx_net_stop(struct net_device *net_dev)
 void __efx_net_dealloc(struct efx_nic *efx)
 {
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (efx->open_count && --efx->open_count) {
 		netif_dbg(efx, drv, efx->net_dev, "still open by %hu clients\n",
 			  efx->open_count);
@@ -1097,7 +1099,7 @@ int efx_pci_probe_post_io(struct efx_nic *efx,
 	pci_dbg(efx->pci_dev, "creating NIC\n");
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	/* Initialise NIC resource information */
 	efx->ef10_resources = efx->type->ef10_resources;
 #endif
@@ -1201,7 +1203,7 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 		efx->state = STATE_UNINIT;
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	if (efx_dl_supported(efx))
 		efx_dl_unregister_nic(&efx->dl_nic);
 #endif
@@ -1248,8 +1250,10 @@ static void efx_pci_remove(struct pci_dev *pci_dev)
 	free_netdev(efx->net_dev);
 	probe_data = container_of(efx, struct efx_probe_data, efx);
 	kfree(probe_data);
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING)
 
 	pci_disable_pcie_error_reporting(pci_dev);
+#endif
 };
 
 /* NIC initialisation
@@ -1389,10 +1393,11 @@ static int efx_pci_probe(struct pci_dev *pci_dev,
 		netif_warn(efx, probe, efx->net_dev,
 			   "failed to create MTDs (%d)\n", rc);
 
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_PCI_ENABLE_PCIE_ERROR_REPORTING)
 	(void)pci_enable_pcie_error_reporting(pci_dev);
-
+#endif
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_probe(efx);
 	if (efx_dl_supported(efx)) {
 		rtnl_lock();
@@ -1444,7 +1449,7 @@ static int efx_pm_freeze(struct device *dev)
 	rtnl_lock();
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_reset_suspend(&efx->dl_nic);
 #endif
 #endif
@@ -1508,7 +1513,7 @@ static int efx_pm_thaw(struct device *dev)
 	}
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_reset_resume(&efx->dl_nic, efx->state != STATE_DISABLED);
 #endif
 #endif
@@ -1522,7 +1527,7 @@ static int efx_pm_thaw(struct device *dev)
 
 fail:
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_reset_resume(&efx->dl_nic, false);
 #endif
 #endif
@@ -1574,7 +1579,7 @@ static int efx_pm_resume(struct device *dev)
 
 fail:
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_reset_resume(&efx->dl_nic, false);
 #endif
 #endif

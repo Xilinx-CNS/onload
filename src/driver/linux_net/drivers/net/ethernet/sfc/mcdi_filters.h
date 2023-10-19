@@ -79,7 +79,7 @@ int efx_mcdi_filter_get_safe(struct efx_nic *efx,
 			     u32 filter_id, struct efx_filter_spec *spec);
 
 #ifdef EFX_NOT_UPSTREAM
-#ifdef CONFIG_SFC_DRIVERLINK
+#if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 int efx_mcdi_filter_block_kernel(struct efx_nic *efx,
 				 enum efx_dl_filter_block_kernel_type type);
 void efx_mcdi_filter_unblock_kernel(struct efx_nic *efx,
