@@ -12,6 +12,7 @@ import com.solarflarecom.onload.packaging.OnloadPackaging
 import com.solarflarecom.onload.publishing.ArtifactoryPublisher;
 import com.solarflarecom.onload.test.TestManager
 import com.solarflarecom.onload.utils.UtilityManager
+import com.solarflarecom.onload.scm.SCMManager
 
 @Field
 def nm = new NotificationManager(this)
@@ -30,6 +31,9 @@ def packager = new OnloadPackaging(this)
 
 @Field
 def tm = new TestManager(this)
+
+@Field
+def scmmanager = new SCMManager(this)
 
 @Field
 def coverage_files = [:]
@@ -94,22 +98,18 @@ void doDeveloperBuild(String build_profile=null) {
               if( component == 'efct_driver' ) {
                   dir("x3-net") {
                     echo("Checking out x3")
-                    x3net = checkout([
-                      $class: 'GitSCM',
-                      branches: [[name: 'dev']],
-                      userRemoteConfigs: [[url: 'ssh://git@github.com/Xilinx-CNS/x3-net-linux.git']]
-                    ])
+                    Map options = [:]
+                    options['branch'] = 'dev'
+                    x3net = scmmanager.cloneGit(options, 'ssh://git@github.com/Xilinx-CNS/x3-net-linux.git')
                   }
                   dir("aux-bus"){
                     echo("Checking out Aux")
-                    aux = checkout([
-                      $class: 'GitSCM',
-                      branches: [[name: 'master']],
-                      userRemoteConfigs: [[url: 'ssh://git@github.com/Xilinx-CNS/cns-auxiliary-bus.git']]
-                    ])
+                    Map options = [:]
+                    options['branch'] = 'master'
+                    aux = scmmanager.cloneGit(options, 'ssh://git@github.com/Xilinx-CNS/cns-auxiliary-bus.git')
                   }
               }
-              checkout scm
+              scmmanager.cloneGit(scm)
               utils.rake(["build:${component}"], defines: defines)
               deleteDir() // Delete the manually allocated workspace
             }
@@ -201,7 +201,7 @@ void doUnitTestsPipeline() {
   nm.slack_notify {
     node('unit-test-parallel') {
       stage('Checkout') {
-        def scmVars = checkout scm
+        def scmVars = scmmanager.cloneGit(scm)
         long_revision = scmVars.GIT_COMMIT
         short_revision = scmVars.GIT_COMMIT.substring(0,12)
         echo("Got onload revision: ${long_revision}")
