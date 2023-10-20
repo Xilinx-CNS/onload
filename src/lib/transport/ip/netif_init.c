@@ -1176,9 +1176,16 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
   if( (s = getenv("EF_RX_TIMESTAMPING")) )
     opts->rx_timestamping = atoi(s);
 
-  static const char* const timestamping_opts[] = { "nic", "cpacket", 0 };
+  static const char* const timestamping_opts[] = { "nic", "trailer", "cpacket", 0 };
   opts->rx_timestamping_ordering =
     parse_enum(opts, "EF_RX_TIMESTAMPING_ORDERING", timestamping_opts, "nic");
+  /* cpacket (2) is a synonym for trailer (1) */
+  if (opts->rx_timestamping_ordering > 1)
+    opts->rx_timestamping_ordering--;
+
+  static const char* const ts_trailer_formats[] = { "cpacket", "ttag", "brcm", 0 };
+  opts->rx_timestamping_trailer_fmt =
+    parse_enum(opts, "EF_RX_TIMESTAMPING_TRAILER_FORMAT", ts_trailer_formats, "cpacket");
 
   if( (s = getenv("EF_TX_TIMESTAMPING")) )
     opts->tx_timestamping = atoi(s);

@@ -329,7 +329,8 @@ void ip_cmsg_recv_timestamping(ci_netif *ni, const ci_ip_pkt_fmt *pkt,
     }
     if( flags & ONLOAD_TIMESTAMPING_FLAG_RX_CPACKET ) {
       ci_assert_lt(n, ONLOAD_TIMESTAMPING_FLAG_RX_COUNT);
-      ci_rx_pkt_timestamp_cpacket(pkt, &ts[n++]);
+      ci_rx_pkt_timestamp_trailer(pkt, &ts[n++],
+                                  NI_OPTS(ni).rx_timestamping_trailer_fmt);
     }
 
     ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SO_TIMESTAMPING,
