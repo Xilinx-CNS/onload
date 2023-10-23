@@ -129,6 +129,15 @@ MODULE_PARM_DESC(periodic_poll_skew,
                  "Allowed time skew for periodic polls.  "
                  "Defaults to 10ms.");
 
+unsigned int xdp_headroom = offsetof(ci_ip_pkt_fmt, dma_start);
+static const struct kernel_param_ops xdp_headroom_param_ops;
+module_param_cb(xdp_headroom, &xdp_headroom_param_ops, &xdp_headroom,
+                S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(xdp_headroom,
+                 "Additional headroom for AF_XDP.  "
+                 "Minimum is Onload reserved area size.  "
+                 "Defaults to minimum.");
+
 
 /* Global structure for onload driver */
 efab_tcp_driver_t efab_tcp_driver;
@@ -1986,7 +1995,7 @@ static int deferred_vis(tcp_helper_resource_t* trs)
 
       rc = efrm_vi_resource_deferred(trs_nic->thn_vi_rs[vi_i],
                                      CI_CFG_PKT_BUF_SIZE,
-                                     offsetof(ci_ip_pkt_fmt, dma_start),
+                                     xdp_headroom,
                                      &mmap_bytes);
       if( rc < 0 )
         return rc;
@@ -8778,6 +8787,29 @@ oo_thr_ref_release_fn oo_thr_ref_release[OO_THR_REF_INFTY] =
   thr_release_base,
   thr_release_file,
   thr_release_app
+};
+
+static int xdp_headroom_set(const char *val, const struct kernel_param *kp)
+{
+  unsigned int num;
+  int ret;
+
+  ret = kstrtouint(val, 10, &num);
+  if( ret != 0 )
+    return -EINVAL;
+  if( num % EF_VI_DMA_ALIGN )
+    return -EINVAL;
+  if( num < offsetof(ci_ip_pkt_fmt, dma_start) )
+    return -EINVAL;
+  if( num >= CI_CFG_PKT_BUF_SIZE - XDP_PACKET_HEADROOM )
+    return -EINVAL;
+
+  return param_set_uint(val, kp);
+}
+
+static const struct kernel_param_ops xdp_headroom_param_ops = {
+  .set = xdp_headroom_set,
+  .get = param_get_uint,
 };
 
 /*! \cidoxg_end */
