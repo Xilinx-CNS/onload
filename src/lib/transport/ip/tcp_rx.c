@@ -2874,6 +2874,15 @@ static void handle_rx_listen(ci_netif* netif, ci_tcp_socket_listen* tls,
       if( !do_syncookie )
         goto freepkt_out;
     }
+
+    /* If accept queue is full, there is no point accepting a SYN,
+     * sending SYNACK, and dropping the following ACK.
+     * So drop the SYN. Linux does the same in this case -
+     * see tcp_conn_request() function. */
+    if( ci_tcp_acceptq_n(tls) >= tls->acceptq_max ) {
+      ci_tcp_acceptq_drop_stats_inc(netif, tls, LPF);
+      goto freepkt_out;
+    }
   }
 
   /* Do control plane lookup to find out how to contact the other end.

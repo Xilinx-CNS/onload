@@ -4694,6 +4694,16 @@ ci_inline void ci_tcp_acceptq_put_back(ci_netif* ni, ci_tcp_socket_listen* tls,
 }
 
 
+ci_inline void ci_tcp_acceptq_drop_stats_inc(ci_netif* ni,
+                                             ci_tcp_socket_listen* tls,
+                                             const char* lpf) {
+  CI_TCP_EXT_STATS_INC_LISTEN_OVERFLOWS(ni);
+  LOG_U(ci_log("%s" NT_FMT "accept queue is full (n=%d max=%d)",
+               lpf, NT_PRI_ARGS(ni, tls), ci_tcp_acceptq_n(tls),
+               tls->acceptq_max));
+  CITP_STATS_TCP_LISTEN(++tls->stats.n_acceptq_overflow);
+}
+
 /*********************************************************************
 ******************************** Netif *******************************
 *********************************************************************/
