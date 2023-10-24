@@ -2606,7 +2606,7 @@ static void citp_epoll_get_ordering_limit(ci_netif* ni,
     if( CITP_OPTS.woda_single_if == 0 ) {
       ci_netif_lock(ni);
       citp_epoll_latest_rx(ni, &base_ts);
-      ci_netif_poll(ni);
+      ci_netif_poll_n(ni, 0x7fffffff);
       citp_epoll_earliest_rx(ni, limit_out);
       ci_netif_unlock(ni);
 
