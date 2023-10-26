@@ -419,47 +419,6 @@ ef100_nic_set_tx_port_sniff(struct efhw_nic *nic, int instance, int enable,
 }
 
 static int
-ef100_nic_license_challenge(struct efhw_nic *nic, 
-			   const uint32_t feature, 
-			   const uint8_t* challenge, 
-			   uint32_t* expiry,
-			   uint8_t* signature) {
-	EFHW_TRACE("%s: NIC license check is not supported for EF100", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
-static int
-ef100_nic_license_check(struct efhw_nic *nic, const uint32_t feature,
-		       int* licensed) {
-	EFHW_TRACE("%s: NIC license check is not supported for EF100", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
-static int
-ef100_nic_v3_license_challenge(struct efhw_nic *nic,
-			   const uint64_t app_id,
-			   const uint8_t* challenge,
-			   uint32_t* expiry,
-			   uint32_t* days,
-			   uint8_t* signature,
-                           uint8_t* base_mac,
-                           uint8_t* vadaptor_mac) {
-	EFHW_TRACE("%s: NIC license check is not supported for EF100", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
-static int
-ef100_nic_v3_license_check(struct efhw_nic *nic, const uint64_t app_id,
-		       int* licensed) {
-	EFHW_TRACE("%s: NIC license check is not supported for EF100", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
-static int
 ef100_get_rx_error_stats(struct efhw_nic *nic, int instance,
 			void *data, int data_len, int do_reset)
 {
@@ -811,10 +770,6 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef10_ef100_nic_buffer_table_clear,
 	ef100_nic_set_port_sniff,
 	ef100_nic_set_tx_port_sniff,
-	ef100_nic_license_challenge,
-	ef100_nic_license_check,
-	ef100_nic_v3_license_challenge,
-	ef100_nic_v3_license_check,
 	ef100_get_rx_error_stats,
 	ef100_tx_alt_alloc,
 	ef100_tx_alt_free,

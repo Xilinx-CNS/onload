@@ -923,50 +923,6 @@ static int af_xdp_dmaq_kick(struct efhw_nic *nic, int instance)
  * Initialisation and configuration discovery
  *
  *---------------------------------------------------------------------------*/
-static int
-af_xdp_nic_license_check(struct efhw_nic *nic, const uint32_t feature,
-		       int* licensed)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	return 0;
-}
-
-
-static int
-af_xdp_nic_v3_license_check(struct efhw_nic *nic, const uint64_t app_id,
-		       int* licensed)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	return 0;
-}
-
-
-static int
-af_xdp_nic_license_challenge(struct efhw_nic *nic,
-			   const uint32_t feature,
-			   const uint8_t* challenge,
-			   uint32_t* expiry,
-			   uint8_t* signature)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	return 0;
-}
-
-
-static int
-af_xdp_nic_v3_license_challenge(struct efhw_nic *nic,
-			   const uint64_t app_id,
-			   const uint8_t* challenge,
-			   uint32_t* expiry,
-			   uint32_t* days,
-			   uint8_t* signature,
-                           uint8_t* base_mac,
-                           uint8_t* vadaptor_mac)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	return 0;
-}
-
 /* Update the efhw_nic struct with the nic's supported RSS hash key length
  * and indirection table length. */
 static int
@@ -1813,10 +1769,6 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	af_xdp_nic_buffer_table_clear,
 	af_xdp_nic_set_port_sniff,
 	af_xdp_nic_set_tx_port_sniff,
-	af_xdp_nic_license_challenge,
-	af_xdp_nic_license_check,
-	af_xdp_nic_v3_license_challenge,
-	af_xdp_nic_v3_license_check,
 	af_xdp_get_rx_error_stats,
 	af_xdp_tx_alt_alloc,
 	af_xdp_tx_alt_free,

@@ -87,19 +87,6 @@ ioctl_resource_op (ci_private_char_t *priv, ulong arg)
 }
 
 ci_noinline int
-ioctl_license_challenge (ci_private_char_t *priv, ulong arg)
-{
-  struct ci_license_challenge_op_s local;
-  int rc, copy_out = 0;
-  copy_from_user_ret(&local, (caddr_t) arg, sizeof(local), -EFAULT);
-  rc = efch_license_challenge(&priv->rt, &local, &copy_out);
-  if( copy_out )
-    copy_to_user_ret((caddr_t) arg, &local, sizeof(local), -EFAULT);
-
-  return rc;
-}
-
-ci_noinline int
 ioctl_resource_prime (ci_private_char_t *priv, ulong arg)
 {
   ci_resource_prime_op_t local;
@@ -156,19 +143,6 @@ ioctl_capabilities_op (ci_private_char_t *priv, ulong arg)
   return rc;
 }
 
-ci_noinline int
-ioctl_v3_license_challenge (ci_private_char_t *priv, ulong arg)
-{
-  struct ci_v3_license_challenge_op_s local;
-  int rc, copy_out = 0;
-  copy_from_user_ret(&local, (caddr_t) arg, sizeof(local), -EFAULT);
-  rc = efch_v3_license_challenge(&priv->rt, &local, &copy_out);
-  if( (rc == 0) && copy_out )
-    copy_to_user_ret((caddr_t) arg, &local, sizeof(local), -EFAULT);
-
-  return rc;
-}
-
 
 static long
 ci_char_fop_ioctl(struct file *filp, uint cmd, ulong arg) 
@@ -183,7 +157,7 @@ ci_char_fop_ioctl(struct file *filp, uint cmd, ulong arg)
     return ioctl_resource_alloc (priv, arg);
 
   case CI_LICENSE_CHALLENGE:
-    return ioctl_license_challenge (priv, arg);
+    return -ENOTSUPP;
 
   case CI_RESOURCE_PRIME:
     return ioctl_resource_prime (priv, arg);
@@ -198,7 +172,7 @@ ci_char_fop_ioctl(struct file *filp, uint cmd, ulong arg)
     return ioctl_capabilities_op (priv, arg);
 
   case CI_V3_LICENSE_CHALLENGE:
-    return ioctl_v3_license_challenge (priv, arg);
+    return -ENOTSUPP;
 
     default:
     ci_log("unknown ioctl (%u)", cmd);

@@ -13,7 +13,6 @@
 #include <onload/nic.h>
 #include <ci/efhw/efhw_types.h>
 #include <ci/efrm/efrm_client.h>
-#include <ci/efrm/licensing.h>
 #include <ci/efch/op_types.h>
 #include <ci/driver/efab/hardware.h>
 #include <onload/tcp_driver.h>

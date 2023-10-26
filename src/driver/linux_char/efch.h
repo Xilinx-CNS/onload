@@ -191,33 +191,11 @@ extern int efch_resource_id_lookup(efch_resource_id_t id,
 				   ci_resource_table_t *rt,
 				   efch_resource_t **out);
 
-/*--------------------------------------------------------------------
- * licensing
- */
-
-struct ci_license_challenge_op_s;
-
-/* (efch_license.c)
- * Check if the given feature is licensed in the NIC and respond to the
- * challenge. */
-extern int efch_license_challenge(ci_resource_table_t* rt,
-                                  struct ci_license_challenge_op_s* op, 
-                                  int* copy_out);
-
 extern int efch_vi_filter_add(efch_resource_t* rs,
                               union ci_filter_add_u* filter_add,
                               int* copy_out);
 
 extern int efch_capabilities_op(struct efch_capabilities_in* cap_in,
                                 struct efch_capabilities_out* cap_out);
-
-struct ci_v3_license_challenge_op_s;
-
-/* (efch_license.c)
- * Check if the given feature is licensed in the NIC and respond to the
- * challenge. */
-extern int efch_v3_license_challenge(ci_resource_table_t* rt,
-                                     struct ci_v3_license_challenge_op_s* op,
-                                     int* copy_out);
 
 #endif /* __EFCH_H__ */

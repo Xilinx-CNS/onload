@@ -327,26 +327,6 @@ struct efhw_func_ops {
 	int (*set_tx_port_sniff) (struct efhw_nic *nic, int instance,
 				  int enable, int rss_context_handle);
 
-  /*-------------- Licensing ------------------------ */
-	int (*license_challenge) (struct efhw_nic *nic,
-				   const uint32_t feature,
-				   const uint8_t* challenge,
-				   uint32_t* expiry,
-				   uint8_t* signature);
-
-	int (*license_check) (struct efhw_nic *nic, const uint32_t feature,
-			      int* licensed);
-	int (*v3_license_challenge) (struct efhw_nic *nic,
-				   const uint64_t app_id,
-				   const uint8_t* challenge,
-				   uint32_t* expiry,
-				   uint32_t* days,
-				   uint8_t* signature,
-				   uint8_t* base_mac,
-				   uint8_t* v_mac);
-	int (*v3_license_check) (struct efhw_nic *nic, uint64_t app_id,
-			         int* licensed);
-
   /*-------------- Stats ------------------------ */
 	int (*get_rx_error_stats) (struct efhw_nic *nic, int instance,
 				   void *data, int data_len, int do_reset);

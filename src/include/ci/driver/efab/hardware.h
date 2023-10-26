@@ -183,31 +183,6 @@
 	 (nic)->efhw_func->set_tx_port_sniff((nic), (instance), (enable), \
 					     (handle)) : -EOPNOTSUPP)
 
-/*-------------- Licensing ---------------- */
-#define efhw_nic_license_challenge(nic, feature, challenge, expiry, signature) \
-	((nic)->efhw_func->license_challenge ? \
-	 (nic)->efhw_func->license_challenge(nic, feature, challenge, expiry, \
-                                             signature) : \
-	 0)
-
-#define efhw_nic_license_check(nic, feature, licensed) \
-	((nic)->efhw_func->license_check ? \
-	 (nic)->efhw_func->license_check(nic, feature, licensed) : \
-	 0)
-
-#define efhw_nic_v3_license_challenge(nic, app_id, challenge, expiry, \
-					days, signature, base_mac, v_mac) \
-	((nic)->efhw_func->v3_license_challenge ? \
-	 (nic)->efhw_func->v3_license_challenge(nic, app_id, \
-						challenge, expiry, days, \
-						signature, base_mac, v_mac) : \
-	 0)
-
-#define efhw_nic_v3_license_check(nic, feature, licensed) \
-	((nic)->efhw_func->v3_license_check ? \
-	 (nic)->efhw_func->v3_license_check(nic, feature, licensed) : \
-	 0)
-
 /*-------------- Stats ---------------- */
 #define efhw_nic_get_rx_error_stats(nic, instance, data, data_len, do_reset) \
 	((nic)->efhw_func->get_rx_error_stats ? \
