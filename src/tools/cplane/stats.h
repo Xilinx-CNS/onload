@@ -60,24 +60,6 @@ CP_STAT("Number of Kubernetes external-service deletions", int, svc_del)
 CP_STAT("Number of Kubernetes external-service resets", int, svc_erase_all)
 CP_STAT_GROUP_END(notify)
 
-CP_STAT_GROUP_START("Licensing", license)
-CP_STAT("Number of good Onload licenses", int, onload)
-CP_STAT("Number of good Onload UDP licenses", int, onload_udp)
-CP_STAT("Number of good Onload ULL licenses", int, onload_ull)
-CP_STAT("Number of NICs without any Onload license", int, non_onload)
-CP_STAT("Number of good TCP Direct licenses", int, tcp_direct)
-CP_STAT("Number of 7000-series NICs", int, ef10)
-CP_STAT("Number of 8000-series NICs", int, medford)
-CP_STAT("Number of times we detected rename of a network interface",
-        int, rename)
-CP_STAT("Number of times we failed to find network interface name "
-        "because of too many renames",
-        int, too_many_renames)
-CP_STAT("Number of network interfaces with sfc driver", int, sfc_driver)
-CP_STAT("Number of network interfaces with non-sfc driver",
-        int, non_sfc_driver)
-CP_STAT_GROUP_END(license)
-
 CP_STAT_GROUP_START("Multipath routing", route)
 CP_STAT("Netlink refers to unknown table", int, unknown_table)
 CP_STAT("No matching route in the given table", int, no_match)

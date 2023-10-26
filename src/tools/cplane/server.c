@@ -56,7 +56,6 @@ CI_BUILD_ASSERT(CHAR_BIT * sizeof(cicp_hwport_mask_t) >= CI_CFG_MAX_HWPORTS);
 
 static char* cp_log_prefix;
 
-/* cfg_dump_sec should be larger than license check time.  2s is too small. */
 static int cfg_dump_sec = 3;
 static int cfg_fwd_sec = 5;
 static int ci_ver = false;
@@ -282,10 +281,6 @@ static void init_files(struct cp_session* s)
     s->sock_gen[CP_GENL_GROUP_TEAM] =
                                 init_netlink_sock(s, NETLINK_GENERIC, 0);
   }
-
-  rc = pipe(s->pipe);
-  if( rc != 0 )
-    init_failed("Pipe creation failed: %s", strerror(errno));
 
   s->sock = socket(AF_INET, SOCK_DGRAM, 0);
   if( s->sock < 0 )

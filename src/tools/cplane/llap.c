@@ -52,8 +52,6 @@ void
 cp_llap_notify_oof_of_removal(struct cp_session* s, ci_ifid_t ifindex)
 {
   ci_mac_addr_t zero_mac = {0};
-  /* Since we're removing the interface, we don't need to check the licence
-   * before issuing the filter-update ioctl. */
   __cp_llap_notify_oof(s, ifindex, 0, 0, 0, zero_mac);
 }
 
@@ -380,8 +378,7 @@ void cp_set_hwport_xdp_prog_id(struct cp_session* s, struct cp_mibs* mib,
 
 /* Imports hwports specified in *hwports_in_out from the main namespace, and
  * inserts them into the current control plane.  The mask is updated to be
- * equal to the hwports actually imported.  The function returns one if
- * licence-resolution is still pending, and zero otherwise. */
+ * equal to the hwports actually imported. */
 static void
 import_main_hwports(struct cp_session* s, cicp_hwport_mask_t* hwports_in_out)
 {
@@ -458,10 +455,9 @@ propagate_base_properties(struct cp_session* s, cicp_rowid_t llap_id,
 }
 
 
-/* Resolves all dependencies between interfaces.  Called once all the licences
- * have been resolved and before the cplane server signals to the client that
- * it is ready, and whenever the main namespace's control plane tells us that
- * something has changed. */
+/* Resolves all dependencies between interfaces.  Called before the cplane
+ * server signals to the client that it is ready, and whenever the main
+ * namespace's control plane tells us that something has changed. */
 void cp_llap_fix_upper_layers(struct cp_session* s)
 {
   struct cp_mibs* mib = cp_get_active_mib(s);

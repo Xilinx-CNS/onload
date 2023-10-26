@@ -398,9 +398,6 @@ struct cp_session {
   /* Netlink socket name */
   struct sockaddr_nl sock_net_name;
 
-  /* Pipe to get the results of license check */
-  int pipe[2];
-
   /* AF_INET SOCK_DGRAM socket, to be used with SIOCETHTOOL */
   int sock;
 

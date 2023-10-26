@@ -45,10 +45,6 @@ void cp_unit_init_session(struct cp_session* s)
 
   s->sock_net_name.nl_pid = CP_UNIT_NL_PID;
 
-  /* operation of license pipe is needed in
-   * tests that call cp_license_checked() */
-  CP_TRY(pipe2(s->pipe, O_NONBLOCK));
-
   /* Initial sizes for route_dst and rule_src are enlarged at need. */
   cp_ippl_init(&s->route_dst, sizeof(struct cp_ip_with_prefix), NULL, 4);
   cp_ippl_init(&s->rule_src, sizeof(struct cp_ip_with_prefix), NULL, 1);
