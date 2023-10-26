@@ -90,7 +90,7 @@ static int shim_cp_set_hwport(int fd, ci_ifid_t ifindex, ci_hwport_id_t hwport)
   msg.hmsg_type = CP_HMSG_SET_HWPORT;
   msg.u.set_hwport.ifindex = ifindex;
   msg.u.set_hwport.hwport = hwport;
-  msg.u.set_hwport.nic_flags = ~(ci_uint64) NIC_FLAG_ONLOAD_UNSUPPORTED;
+  msg.u.set_hwport.nic_flags = (ci_uint64) -1;
   int rc = shim_cp_hmsg_send(&cp.mib[0], &msg);
   oo_cp_destroy(&cp);
   return rc;

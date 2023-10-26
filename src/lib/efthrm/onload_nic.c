@@ -246,9 +246,6 @@ int oo_check_nic_suitable_for_onload(struct oo_nic* onic)
 {
   struct efhw_nic *nic = efrm_client_get_nic(onic->efrm_client);
 
-  if( nic->flags & NIC_FLAG_ONLOAD_UNSUPPORTED )
-    return 0;
-
   if( ! efrm_client_accel_allowed(onic->efrm_client) )
     return 0;
 

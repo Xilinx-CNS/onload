@@ -908,12 +908,10 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
   if(ni->state->netns_id != 0) {
     logger(log_arg, "  namespace=net:[%u]", ni->state->netns_id);
   }
-  logger(log_arg, "  %s %s uid=%d pid=%d ns_flags=%x%s%s%s%s",
+  logger(log_arg, "  %s %s uid=%d pid=%d ns_flags=%x%s%s%s",
          ni->cplane->mib->sku->value, onload_version
       , (int) ns->uuid, (int) ns->pid
       , ns->flags
-      , (ns->flags & CI_NETIF_FLAG_ONLOAD_UNSUPPORTED)
-          ? " ONLOAD_UNSUPPORTED" : ""
 #if CI_CFG_FD_CACHING
       , (ns->flags & CI_NETIF_FLAG_SOCKCACHE_FORKED)
           ? " SOCKCACHE_FORKED" : ""

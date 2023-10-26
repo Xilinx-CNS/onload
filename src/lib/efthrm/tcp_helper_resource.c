@@ -4657,8 +4657,6 @@ int tcp_helper_rm_alloc(ci_resource_onload_alloc_t* alloc,
       ni->flags |= CI_NETIF_FLAG_AF_XDP;
     if( nic->devtype.arch == EFHW_ARCH_EFCT )
       ni->flags |= CI_NETIF_FLAG_EFCT;
-    if( nic->flags & NIC_FLAG_ONLOAD_UNSUPPORTED )
-      ni->state->flags |= CI_NETIF_FLAG_ONLOAD_UNSUPPORTED;
 #if CI_CFG_NIC_RESET_SUPPORT
     if( nic->resetting )
       tcp_helper_suspend_interface(ni, intf_i);

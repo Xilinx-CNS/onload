@@ -195,7 +195,6 @@ typedef union {
 
 
 /* --- NIC-feature flags --- */
-#define NIC_FLAG_ONLOAD_UNSUPPORTED 0x20
 #define NIC_FLAG_VLAN_FILTERS 0x40
 #define NIC_FLAG_BUG35388_WORKAROUND 0x80
 #define NIC_FLAG_MCAST_LOOP_HW 0x100

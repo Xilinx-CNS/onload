@@ -537,12 +537,6 @@ void cp_populate_llap_hwports(struct cp_session* s, ci_ifid_t ifindex,
       }
     }
 
-    /* If this hwport doesn't support Onload, don't propagate it to any LLAP
-     * entries.  This will cause routes over the hwport to appear
-     * unacceleratable. */
-    if( nic_flags & NIC_FLAG_ONLOAD_UNSUPPORTED )
-      continue;
-
     cicp_hwport_mask_t hwports = cp_hwport_make_mask(hwport);
     cicp_rowid_t llap_id = cp_llap_find_row(mib, ifindex);
     if( llap_id == CICP_ROWID_BAD ) {

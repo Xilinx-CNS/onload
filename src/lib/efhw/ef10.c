@@ -778,11 +778,6 @@ ef10_nic_tweak_hardware(struct efhw_nic *nic)
 	 * per-descriptor
 	 */
 
-	/* The ONLOAD_UNSUPPORTED flag is managed by the resource manager, so
-	 * we don't reset the value here.
-	 */
-	nic->flags &= ~NIC_FLAG_ONLOAD_UNSUPPORTED;
-
 	/* Some capabilities are always present on ef10 */
 	nic->flags |= NIC_FLAG_PIO | NIC_FLAG_HW_MULTICAST_REPLICATION |
 		      NIC_FLAG_PHYS_MODE | NIC_FLAG_BUFFER_MODE |

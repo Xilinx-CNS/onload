@@ -113,11 +113,6 @@ ef100_nic_tweak_hardware(struct efhw_nic *nic)
 	 * per-descriptor by net driver
 	 */
 
-	/* The ONLOAD_UNSUPPORTED flag is managed by the resource manager, so
-	 * we don't reset the value here.
-	 */
-	nic->flags &= ~NIC_FLAG_ONLOAD_UNSUPPORTED;
-
 	/* Some capabilities are always present on ef100 */
 	nic->flags |= NIC_FLAG_PHYS_MODE;
 	nic->flags |= NIC_FLAG_PHYS_CONTIG_EVQ | NIC_FLAG_PHYS_CONTIG_TXQ |

@@ -2533,15 +2533,6 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
     goto fail;
   }
 
-  if( ns->flags & CI_NETIF_FLAG_ONLOAD_UNSUPPORTED ) {
-    ci_log("*** Warning: use of %s with this adapter is likely",
-           onload_product);
-    ci_log("***  to show suboptimal performance for all cases other than the");
-    ci_log("***  most trivial benchmarks.  Please see your Solarflare");
-    ci_log("***  representative/reseller to obtain an Onload-capable");
-    ci_log("***  adapter.");
-  }
-
   /****************************************************************************
    * Construct / attach to resources which are described in the shared state
    */

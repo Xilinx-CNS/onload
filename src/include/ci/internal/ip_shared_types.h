@@ -1156,7 +1156,6 @@ struct ci_netif_state_s {
 
   ci_uint32  flags;
 # define CI_NETIF_FLAG_DEBUG              0x1 /* driver is debug build   */
-# define CI_NETIF_FLAG_ONLOAD_UNSUPPORTED 0x2 /* OOL unsupported on this h/w */
 #if CI_CFG_FD_CACHING
 # define CI_NETIF_FLAG_SOCKCACHE_FORKED   0x4 /* Post-fork w/ socket caching */
 #endif
