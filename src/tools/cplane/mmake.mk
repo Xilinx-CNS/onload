@@ -26,8 +26,8 @@ endif
 onload_cp_server := $(patsubst %,$(AppPattern),onload_cp_server)
 onload_cp_client := $(patsubst %,$(AppPattern),onload_cp_client)
 
-MMAKE_LIBS	:= $(LINK_CIAPP_LIB) $(LINK_CITOOLS_LIB) $(LINK_CIUL_LIB) $(LINK_CPLANE_LIB)
-MMAKE_LIB_DEPS	:= $(CIAPP_LIB_DEPEND) $(CITOOLS_LIB_DEPEND) $(CIUL_LIB_DEPEND) $(CPLANE_LIB_DEPEND)
+MMAKE_LIBS	:= $(LINK_CIAPP_LIB) $(LINK_CITOOLS_LIB) $(LINK_CPLANE_LIB)
+MMAKE_LIB_DEPS	:= $(CIAPP_LIB_DEPEND) $(CITOOLS_LIB_DEPEND) $(CPLANE_LIB_DEPEND)
 
 MMAKE_CFLAGS += $(CP_INTF_VER_CFLAGS)
 

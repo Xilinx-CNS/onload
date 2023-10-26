@@ -61,9 +61,8 @@ else
 all:
 endif
 
-cluster_protocol.so: $(OBJS) $(CIUL_LIB_DEPEND)
-	$(CC) -shared -g -Wl,-E $^ $(MMAKE_LIBS) $(PYTHON_LIBS) \
-	$(LINK_CIUL_LIB) -o $@
+cluster_protocol.so: $(OBJS)
+	$(CC) -shared -g -Wl,-E $^ $(MMAKE_LIBS) $(PYTHON_LIBS) -o $@
 
 clean:
 	@$(MakeClean)
