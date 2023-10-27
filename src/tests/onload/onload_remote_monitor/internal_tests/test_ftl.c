@@ -155,6 +155,9 @@ int main(int argc, char* argv[])
 #define FTL_TFIELD_ARRAYOFINT(ctx, type, field_name, len, flag) \
   CI_BUILD_ASSERT2( TYPE_TEST((v.field_name), type[len]) );
 
+#define FTL_TFIELD_FLEXARRAYOFSTRUCT(ctx, type, field_name, len, flag, cond) \
+  CI_BUILD_ASSERT2( TYPE_TEST((v.field_name), type[]) );
+
 #define FTL_TFIELD_ARRAYOFSTRUCT(ctx, type, field_name, len, flag, cond) \
   FTL_TFIELD_ARRAYOFINT(ctx, type, field_name, len, flag)
 
