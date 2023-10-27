@@ -747,6 +747,8 @@ static void orm_dump_struct_ci_netif_config_opts(char* label, ci_netif_config_op
     }                                                                   \
   }
 
+#define FTL_TFIELD_FLEXARRAYOFSTRUCT FTL_TFIELD_ARRAYOFSTRUCT
+
 #define FTL_TFIELD_ANON_STRUCT_BEGIN(ctx, field_name, display_flags) \
      if (output_flags & display_flags) {                                \
       dump_buf_literal("\"" #field_name "\":{");

@@ -1222,7 +1222,7 @@ typedef struct oo_tcp_socket_stats oo_tcp_socket_stats;
 #define STRUCT_FILTER_TABLE(ctx)                                              \
     FTL_TSTRUCT_BEGIN(ctx, ci_netif_filter_table, )                           \
     FTL_TFIELD_INT(ctx, unsigned, table_size_mask, ORM_OUTPUT_STACK)    \
-    FTL_TFIELD_ARRAYOFSTRUCT(ctx, \
+    FTL_TFIELD_FLEXARRAYOFSTRUCT(ctx, \
 			     ci_netif_filter_table_entry_fast, table, 1, ORM_OUTPUT_STACK, 1) \
     FTL_TSTRUCT_END(ctx)
     
