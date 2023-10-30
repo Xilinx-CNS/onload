@@ -4392,6 +4392,11 @@ ci_inline unsigned ci_tcp_inflight(ci_tcp_state* ts)
   return CI_MAX(0, SEQ_SUB(ts->snd_nxt, ts->snd_una));
 }
 
+ci_inline bool ci_tcp_is_inflight(ci_tcp_state* ts)
+{
+  return SEQ_GT(ts->snd_nxt, ts->snd_una);
+}
+
 /* New value for [ssthresh] after loss (RFC2581 p5). */
 ci_inline unsigned ci_tcp_losswnd(ci_tcp_state* ts) {
   unsigned x = ci_tcp_inflight(ts) >> 1u;

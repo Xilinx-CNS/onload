@@ -52,7 +52,7 @@ static inline void get_more_stats(ci_netif* ni, more_stats_t* s)
       }
       /* NB. Can have pkts even if no bytes... */
       s->tcp_recvq_pkts += ts->recv1.num + ts->recv2.num;
-      if( ci_tcp_inflight(ts) ) {
+      if( ci_tcp_is_inflight(ts) ) {
         ++s->tcp_has_inflight;
         s->tcp_inflight_bytes += ci_tcp_inflight(ts);
         s->tcp_inflight_pkts += ts->retrans.num;

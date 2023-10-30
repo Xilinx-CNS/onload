@@ -1265,7 +1265,7 @@ static int ci_tcp_tx_handle_cork(ci_netif* ni, ci_tcp_state* ts,
     /* Don't send yet, but ensure packet will be sent eventually.  If there
      * are packets in-flight, rely on the ACK, else set the CORK timer.
      */
-    if( ! ci_tcp_inflight(ts) ) {
+    if( ! ci_tcp_is_inflight(ts) ) {
       /* Timeout is double the delack timeout (50ms).  Gives about the
        * right timeout once granularity of periodic timer is taken into
        * account.
@@ -1316,8 +1316,8 @@ void ci_tcp_tx_advance(ci_tcp_state* ts, ci_netif* ni)
     ci_assert_nflags(ts->tcpflags, CI_TCPT_FLAG_LIMITED_TRANSMIT);
   }
   else {
-    cwnd_right_edge = ts->snd_nxt + ts->cwnd + ts->cwnd_extra
-      - ci_tcp_inflight(ts);
+    cwnd_right_edge = ts->cwnd + ts->cwnd_extra + ts->snd_una;
+
     /* Limited Transmit, RFC 3042: if the RX path has identified that we've met
      * the conditions for Limited Transmit, allow sending up to two segments
      * beyond the end of the congestion window.
@@ -1341,8 +1341,7 @@ void ci_tcp_tx_advance(ci_tcp_state* ts, ci_netif* ni)
         ts->burst_window = ci_tcp_inflight(ts) +
           NI_OPTS(ni).burst_control_limit * tcp_eff_mss(ts);
     if( ts->burst_window ) {
-      unsigned burst_right_edge =
-        tcp_snd_nxt(ts) + ts->burst_window - ci_tcp_inflight(ts);
+      unsigned burst_right_edge = ts->burst_window + ts->snd_una;
       if( SEQ_LT(burst_right_edge, right_edge) ) {
         p_stop_cntr = &ts->stats.tx_stop_burst;
         right_edge = burst_right_edge;
@@ -1380,7 +1379,7 @@ void ci_tcp_tx_advance_to(ci_netif* ni, ci_tcp_state* ts,
        * good for efficiency, we want to split this anyway because
        * pathological deadlocks are possible with some peers (ON-11312)
        */
-      if( ci_tcp_inflight(ts) ||
+      if( ci_tcp_is_inflight(ts) ||
           SEQ_LE(ts->snd_max, pkt->pf.tcp_tx.start_seq) ||
           ci_tcp_tx_split(ni, ts, sendq, pkt,
                           SEQ_SUB(ts->snd_max, pkt->pf.tcp_tx.start_seq), 1) ){
