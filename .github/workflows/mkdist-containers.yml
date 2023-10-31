@@ -1,0 +1,184 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc.
+
+name: "Mkdist Container Images"
+
+on:
+  workflow_dispatch:
+    inputs:
+      registry-prefix:
+        description: Registry host and org
+        type: string
+      mkdist-url:
+        description: Download tarball from (override mkdist)
+        type: string
+      mkdist-params:
+        description: onload_mkdist script params
+        type: string
+      product:
+        description: Onload product name (override mkdist)
+        type: string
+      brand:
+        description: Onload brand name (override mkdist)
+        type: string
+      version:
+        description: Onload version (override mkdist)
+        type: string
+  push:
+    tags: [ onload-* ]
+
+env:
+  REGISTRY_PREFIX: ${{ inputs.registry-prefix || format('ghcr.io/{0}', github.repository_owner) }}
+permissions:
+  packages: write
+  contents: read
+jobs:
+
+  mkdist-caller:
+    uses: ./.github/workflows/mkdist.yml
+    with:
+      mkdist-params: ${{ inputs.mkdist-params }}
+      mkdist-url: ${{ inputs.mkdist-url }}
+
+  source-container-build:
+    name: Source Container Build
+    needs: mkdist-caller
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE_NAME: ${{ inputs.product || needs.mkdist-caller.outputs.product }}-source
+      BRAND: ${{ inputs.brand || needs.mkdist-caller.outputs.brand }}
+      PRODUCT: ${{ inputs.product || needs.mkdist-caller.outputs.product }}
+      VERSION: ${{ inputs.version || needs.mkdist-caller.outputs.version }}
+      REVISION: ${{ needs.mkdist-caller.outputs.revision }}
+      CREATED: ${{ needs.mkdist-caller.outputs.created }}
+    outputs:
+      image: ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+      digest: ${{ steps.build.outputs.digest }}
+      brand: ${{ env.BRAND }}
+      product: ${{ env.PRODUCT }}
+      version: ${{ env.VERSION }}
+      revision: ${{ env.REVISION }}
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        sparse-checkout: |
+          scripts/onload-user.Dockerfile
+
+    - name: Get mkdist tarball
+      uses: actions/download-artifact@v3
+      with:
+        name: ${{ needs.mkdist-caller.outputs.dir }}
+
+    - name: Login to registry
+      if: ${{ contains(env.REGISTRY_PREFIX, 'ghcr.io') }}
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Build and push image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: scripts/onload-user.Dockerfile
+        target: onload-source-subdir
+        tags: |
+          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}-dev
+          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:git-${{ env.REVISION }}-dev
+        build-args: |
+          BRAND=${{ env.BRAND }}
+          PRODUCT=${{ env.PRODUCT }}
+          VERSION=${{ env.VERSION }}
+          REVISION=${{ env.REVISION }}
+          CREATED=${{ env.CREATED }}
+          SOURCE=${{ github.repositoryUrl }}
+        push: true
+
+    - name: Summarise
+      env:
+        DIGEST: ${{ steps.build.outputs.digest }}
+        IMAGEID: ${{ steps.build.outputs.imageid }}
+      run: |
+        echo "
+        # $IMAGE_NAME
+        [\`$REGISTRY_PREFIX/$IMAGE_NAME\`](https://$REGISTRY_PREFIX/$IMAGE_NAME)@\`$DIGEST\`
+        Image ID (Config): \`$IMAGEID\`
+        " >> $GITHUB_STEP_SUMMARY
+
+  user-container-build:
+    name: User Container Build
+    needs: source-container-build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      IMAGE_NAME: ${{ needs.source-container-build.outputs.product }}-user
+      SOURCE_IMAGE: ${{ needs.source-container-build.outputs.image }}
+      SOURCE_IMAGE_DIGEST: ${{ needs.source-container-build.outputs.digest }}
+      BRAND: ${{ needs.source-container-build.outputs.brand }}
+      PRODUCT: ${{ needs.source-container-build.outputs.product }}
+      VERSION: ${{ needs.source-container-build.outputs.version }}
+      REVISION: ${{ needs.source-container-build.outputs.revision }}
+    strategy:
+      matrix:
+        mode: [Default, Debug]
+        include:
+          - mode: Default
+            suffix: -ubi8-dev
+          - mode: Debug
+            suffix: -debug-ubi8-dev
+            build-params: --debug
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        sparse-checkout: |
+          scripts/onload-user.Dockerfile
+
+    - name: Login to registry
+      if: ${{ contains(env.REGISTRY_PREFIX, 'ghcr.io') }}
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Date
+      id: date
+      run: echo created=$(date --rfc-3339=seconds) >> $GITHUB_OUTPUT
+
+    - name: Build and push image
+      id: build
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: scripts/onload-user.Dockerfile
+        tags: |
+          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}${{ matrix.suffix }}
+          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:git-${{ env.REVISION }}${{ matrix.suffix }}
+        build-args: |
+          BRAND=${{ env.BRAND }}
+          VERSION=${{ env.VERSION }}
+          REVISION=${{ env.REVISION }}
+          CREATED=${{ steps.date.outputs.created }}
+          SOURCE_IMAGE=${{ env.SOURCE_IMAGE }}
+          ONLOAD_BUILD_PARAMS=${{ matrix.build-params }}
+          SOURCE=${{ github.repositoryUrl }}
+        push: true
+
+    - name: Summarise
+      env:
+        MODE: ${{ matrix.mode }}
+        DIGEST: ${{ steps.build.outputs.digest }}
+        IMAGEID: ${{ steps.build.outputs.imageid }}
+      run: |
+        echo "
+        # $IMAGE_NAME ($MODE)
+        [\`$REGISTRY_PREFIX/$IMAGE_NAME\`](https://$REGISTRY_PREFIX/$IMAGE_NAME)@\`$DIGEST\`
+        Image ID (Config): \`$IMAGEID\`
+        " >> $GITHUB_STEP_SUMMARY
