@@ -1335,13 +1335,7 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
   }
 
 #if CI_CFG_CTPIO
-  get_if_name(ni, info->intf_i, if_name);
   if( should_try_ctpio(ni, nic, info) ) {
-    if( NI_OPTS(ni).ctpio == 0 && nic->flags & NIC_FLAG_CTPIO_ONLY ) {
-      ci_log("[%s]: CTPIO is disabled, but interface %s requires it.",
-             ni->state->pretty_name, if_name);
-      return -EINVAL;
-    }
     info->try_ctpio = 1;
     info->retry_without_ctpio = NI_OPTS(ni).ctpio < 2 &&
                                 ! (nic->flags & NIC_FLAG_CTPIO_ONLY);
@@ -1358,6 +1352,8 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
   else {
     info->vi_ctpio_mmap_bytes = 0;
     if( NI_OPTS(ni).ctpio == 2 ) {
+      char if_name[IFNAMSIZ];
+      get_if_name(ni, info->intf_i, if_name);
       ci_log("[%s]: CTPIO is required, but interface %s does not support it.",
              ni->state->pretty_name, if_name);
       return -EINVAL;
