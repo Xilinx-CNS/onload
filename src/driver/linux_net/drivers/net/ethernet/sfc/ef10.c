@@ -6078,6 +6078,9 @@ const struct efx_nic_type efx_hunt_a0_nic_type = {
 	.ptp_write_host_time = efx_ef10_ptp_write_host_time,
 	.ptp_set_ts_sync_events = efx_ef10_ptp_set_ts_sync_events,
 	.ptp_set_ts_config = efx_ef10_ptp_set_ts_config,
+#ifdef EFX_NOT_UPSTREAM
+	.pps_reset = efx_ptp_pps_reset,
+#endif
 #endif
 	.vlan_rx_add_vid = efx_mcdi_filter_add_vid,
 	.vlan_rx_kill_vid = efx_mcdi_filter_del_vid,

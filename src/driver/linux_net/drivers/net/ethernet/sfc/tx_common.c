@@ -31,6 +31,20 @@ static struct sk_buff *efx_tx_vlan_sw(struct efx_tx_queue *tx_queue,
 		if (delta || skb_header_cloned(skb)) {
 			int rc;
 
+			/* pskb_expand_head will crash if skb_shared */
+			if (skb_shared(skb)) {
+				struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
+				struct sock *sk = skb->sk;
+
+				if (unlikely(!nskb))
+					return ERR_PTR(-ENOMEM);
+
+				if (sk)
+					skb_set_owner_w(nskb, sk);
+				consume_skb(skb);
+				skb = nskb;
+			}
+
 			rc = pskb_expand_head(skb, ALIGN(delta, NET_SKB_PAD),
 					      0, GFP_ATOMIC);
 			if (rc) {

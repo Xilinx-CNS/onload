@@ -97,7 +97,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.16.1001"
+#define EFX_DRIVER_VERSION	"5.3.16.1003"
 #endif
 
 #ifdef DEBUG
@@ -2157,6 +2157,7 @@ struct mae_mport_desc;
  * @ptp_set_ts_config: Set hardware timestamp configuration.  The flags
  *	and tx_type will already have been validated but this operation
  *	must validate and update rx_filter.
+ * @pps_reset: Re-enable PPS if nic_hw_pps_enabled
  * @vlan_rx_add_vid: Add RX VLAN filter
  * @vlan_rx_kill_vid: Delete RX VLAN filter
  * @get_phys_port_id: Get the underlying physical port id.
@@ -2394,6 +2395,7 @@ struct efx_nic_type {
 	int (*ptp_set_ts_sync_events)(struct efx_nic *efx, bool en, bool temp);
 	int (*ptp_set_ts_config)(struct efx_nic *efx,
 				 struct hwtstamp_config *init);
+	int (*pps_reset)(struct efx_nic *efx);
 #endif
 	int (*vlan_rx_add_vid)(struct efx_nic *efx, __be16 proto, u16 vid);
 	int (*vlan_rx_kill_vid)(struct efx_nic *efx, __be16 proto, u16 vid);

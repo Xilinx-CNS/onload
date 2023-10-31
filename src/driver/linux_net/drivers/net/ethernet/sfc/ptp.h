@@ -136,6 +136,7 @@ struct efx_ts_hw_pps;
 #ifdef CONFIG_SFC_PTP
 int efx_ptp_pps_get_event(struct efx_nic *efx, struct efx_ts_get_pps *data);
 int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable);
+int efx_ptp_pps_reset(struct efx_nic *efx);
 #else
 static inline int efx_ptp_pps_get_event(struct efx_nic *efx,
 					struct efx_ts_get_pps *data)
@@ -143,6 +144,10 @@ static inline int efx_ptp_pps_get_event(struct efx_nic *efx,
 	return -EOPNOTSUPP;
 }
 static inline int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable)
+{
+	return -EOPNOTSUPP;
+}
+static inline int efx_ptp_pps_reset(struct efx_nic *efx)
 {
 	return -EOPNOTSUPP;
 }

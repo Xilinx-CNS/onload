@@ -468,10 +468,15 @@ static const struct devlink_ops sfc_devlink_ops = {
 void efx_fini_devlink(struct efx_nic *efx)
 {
 	if (efx->devlink) {
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
+		efx->net_dev->devlink_port->type = DEVLINK_PORT_TYPE_NOTSET;
+#endif
 		devlink_port_unregister(efx->devlink_port);
 		kfree(efx->devlink_port);
 		efx->devlink_port = NULL;
-
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
+		efx->net_dev->devlink_port = NULL;
+#endif
 		devlink_unregister(efx->devlink);
 		devlink_free(efx->devlink);
 	}
@@ -516,8 +521,13 @@ int efx_probe_devlink(struct efx_nic *efx)
 	if (rc)
 		goto out_free_port;
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
+#if defined(EFX_USE_KCOMPAT)
+#if defined(EFX_HAVE_SET_NETDEV_DEVLINK_PORT)
+	efx->net_dev->devlink_port = efx->devlink_port;
+	efx->net_dev->devlink_port->type = DEVLINK_PORT_TYPE_ETH;
+#else
 	devlink_port_type_eth_set(efx->devlink_port, efx->net_dev);
+#endif
 #endif
 	return 0;
 
