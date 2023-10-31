@@ -276,7 +276,6 @@ struct efx_ptp_data;
  * @major: device major number
  * @last_ev: Last event sequence number
  * @last_ev_taken: Last event sequence number read by API
- * @device: Pointer to the kernel PPS device
  */
 struct efx_pps_data {
 	struct efx_ptp_data *ptp;
@@ -290,7 +289,6 @@ struct efx_pps_data {
 	int major;
 	int last_ev;
 	int last_ev_taken;
-	struct pps_device *device;
 };
 
 /**
@@ -2492,6 +2490,25 @@ int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable)
 
 	return 0;
 }
+
+int efx_ptp_pps_reset(struct efx_nic *efx)
+{
+	struct efx_pps_data *pps_data;
+
+	if (!efx->ptp_data)
+		return -ENOTTY;
+
+	if (!efx->ptp_data->pps_data)
+		return -ENOTTY;
+
+	pps_data = efx->ptp_data->pps_data;
+
+	/* If PPS was enabled before MC reset, re-enable PPS*/
+	if (pps_data->nic_hw_pps_enabled)
+		return efx_ptp_hw_pps_enable(efx, true);
+
+	return 0;
+}
 #endif
 
 static void efx_ptp_worker(struct work_struct *work)
@@ -2526,16 +2543,7 @@ static inline bool efx_phc_exposed(struct efx_nic *efx)
 #if defined(EFX_NOT_UPSTREAM)
 static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 {
-	struct pps_source_info efx_pps_info = {
-		.name         = "sfc",
-		.path         = "",
-		.mode         = PPS_CAPTUREASSERT | PPS_OFFSETASSERT | PPS_CANWAIT |
-		                PPS_TSFMT_TSPEC,
-		.echo         = NULL,
-		.owner        = THIS_MODULE,
-	};
 	struct efx_pps_data *pps;
-	int rc;
 
 	pps = kzalloc(sizeof(*pps), GFP_ATOMIC);
 	if (!pps)
@@ -2554,34 +2562,14 @@ static int efx_ptp_create_pps(struct efx_ptp_data *ptp)
 	ptp->pps_data = pps;
 
 	if (efx_phc_exposed(ptp->efx)) {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
-		snprintf(efx_pps_info.name, PPS_MAX_NAME_LEN, "ptp%d.ext",
-			 ptp_clock_index(ptp->phc_clock));
-#endif
-
-		pps->device = pps_register_source(&efx_pps_info,
-						  PPS_CAPTUREASSERT |
-						  PPS_OFFSETASSERT);
-
-		if (IS_ERR(pps->device))
-			goto fail2;
-
 		if (efx_ptp_hw_pps_enable(ptp->efx, true))
-			goto fail3;
-
-		rc = sysfs_create_link(&ptp->efx->pci_dev->dev.kobj,
-				       &pps->device->dev->kobj,
-				       "pps_device");
-
-		(void)rc;
+			goto fail2;
 	}
 
 	kref_get(&ptp->kref);
 
 	return 0;
 
-fail3:
-	pps_unregister_source(pps->device);
 fail2:
 	kobject_del(&ptp->pps_data->kobj);
 	kobject_put(&ptp->pps_data->kobj);
@@ -2601,11 +2589,8 @@ static void efx_ptp_destroy_pps(struct efx_ptp_data *ptp)
 	/* Stop generating user space events */
 	ptp->usr_evt_enabled = 0;
 #endif
-	if (ptp->pps_data->device) {
-		sysfs_remove_link(&ptp->efx->pci_dev->dev.kobj, "pps_device");
+	if (efx_phc_exposed(ptp->efx))
 		efx_ptp_hw_pps_enable(ptp->efx, false);
-		pps_unregister_source(ptp->pps_data->device);
-	}
 
 	kobject_del(&ptp->pps_data->kobj);
 	kobject_put(&ptp->pps_data->kobj);
@@ -3599,7 +3584,6 @@ static void hw_pps_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_PHC_SUPPORT)
 	struct ptp_clock_event ptp_evt;
 #endif
-	struct pps_event_time ts;
 
 	pps->n_assert = ptp->nic_to_kernel_time(
 		EFX_QWORD_FIELD(ptp->evt_frags[0], MCDI_EVENT_DATA),
@@ -3612,15 +3596,6 @@ static void hw_pps_event_pps(struct efx_nic *efx, struct efx_ptp_data *ptp)
 			pps->ptp->last_delta);
 		pps->s_delta = pps->ptp->last_delta;
 		pps->last_ev++;
-
-		if (pps->device) {
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_USE_64BIT_PHC)
-			ts.ts_real = ktime_to_timespec(pps->n_assert);
-#else
-			ts.ts_real = ktime_to_timespec64(pps->n_assert);
-#endif
-			pps_event(pps->device, &ts, PPS_CAPTUREASSERT, NULL);
-		}
 
 		if (waitqueue_active(&pps->read_data))
 			wake_up(&pps->read_data);

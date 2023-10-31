@@ -1036,6 +1036,13 @@ int efx_reset_up(struct efx_nic *efx, enum reset_type method, bool ok)
 	if (efx->type->udp_tnl_push_ports)
 		efx->type->udp_tnl_push_ports(efx);
 
+#if defined(EFX_NOT_UPSTREAM) && defined(CONFIG_SFC_PTP)
+	/* If PPS possible re-enable after MC reset */
+	if (efx->type->pps_reset)
+		if (efx->type->pps_reset(efx))
+			netif_warn(efx, drv, efx->net_dev, "failed to reset PPS");
+#endif
+
 	return 0;
 
 fail:
@@ -1181,6 +1188,7 @@ int efx_reset(struct efx_nic *efx, enum reset_type method)
 #if IS_MODULE(CONFIG_SFC_DRIVERLINK)
 	efx_dl_reset_resume(&efx->dl_nic, !disabled);
 #endif
+
 #endif
 	return rc;
 }
