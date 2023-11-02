@@ -325,22 +325,22 @@ static int patch_libc_close_nocancel(void)
     static const unsigned char call_rax[] = {
       0xff, 0xd0                      /* call *%rax */
     };
+    static const unsigned char call_rel[] = {
+      0xe8, 0x78, 0x56, 0x34, 0x12,   /* call $+0x12345678 */
+      0x66, 0x90,                     /* nop */
+    };
     static const unsigned char trampo_code[] = {
       0xf3, 0x0f, 0x1e, 0xfa,         /* endbr64 */
       0x48, 0xb8, 0xef, 0xcd, 0xab, 0x89, 0x67,
       0x45, 0x23, 0x01,               /* movabs $0x123456789abcdef,%rax */
       0xff, 0xe0,                     /* jmpq *%rax */
     };
-    unsigned char new_glibc_bytes[6];
+    unsigned char new_glibc_bytes[7];
     unsigned char* trampoline;
     long (*target)(long) = &oo_close_nocancel_entry;
     int rc;
+    ptrdiff_t call_offset;
 
-    /* One x86-64 we somehow have to replace the 7 bytes "mov $3,eax;syscall"
-     * with a call to an 8-byte absolute address. The fundamental insight here
-     * is to use mmap(MAP_32BIT) to get ourselves a 32-bit address and put an
-     * intermediate trampoline there. That allows us to replace those 7 bytes
-     * with a call to a 4-byte absolute address. Doable. */
     if( ! memcmp(close_nocancel, x64_endbr, sizeof(x64_endbr)) )
       close_nocancel += sizeof(x64_endbr);
     /* Needed for SLES15 sp4 with GNU libc 2.31 */
@@ -350,6 +350,27 @@ static int patch_libc_close_nocancel(void)
       LOG_S(ci_log("Mismatching syscall implementation in __close_nocancel"));
       return -ESRCH;
     }
+    /* On x86-64 we somehow have to replace the 7 bytes "mov $3,eax;syscall"
+     * with a call to an 8-byte absolute address. We're often lucky, however,
+     * and onload is mapped close to libc; in that case we can use a normal
+     * 32-bit call. */
+    call_offset = (uintptr_t)target - ((uintptr_t)close_nocancel + 5);
+    if( call_offset >= -0x80000000ll && call_offset <= 0x7fffffffll ) {
+      memcpy(new_glibc_bytes, call_rel, 7);
+      memcpy(new_glibc_bytes + 1, &call_offset, 4);
+      return modify_glibc_code(close_nocancel, new_glibc_bytes, 7);
+    }
+
+    /* We weren't lucky. The fundamental insight here is to use
+     * mmap(MAP_32BIT) to get ourselves a 32-bit address and put an
+     * intermediate trampoline there. That allows us to replace those 7 bytes
+     * with a call to a 4-byte absolute address. Doable.
+     * The 32-bit address space is sometimes valuable: libhugetlbfs, for
+     * example, uses it by default for its allocations so our trampoline can
+     * get in the way. If we are falling back to here on some systems then more
+     * research is needed in to how their ld.so is configured. */
+    LOG_S(ci_log("Distance between libc and libonload requires a MAP_32BIT "
+                 "trampoline"));
     trampoline = mmap(NULL, sizeof(trampo_code), PROT_READ | PROT_WRITE,
                       MAP_32BIT | MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     if( trampoline == MAP_FAILED ) {
@@ -372,8 +393,7 @@ static int patch_libc_close_nocancel(void)
 
     memcpy(new_glibc_bytes, &trampoline, 4);
     memcpy(new_glibc_bytes + 4, call_rax, sizeof(call_rax));
-    return modify_glibc_code(close_nocancel + 1, new_glibc_bytes,
-                             sizeof(new_glibc_bytes));
+    return modify_glibc_code(close_nocancel + 1, new_glibc_bytes, 6);
   }
 #elif defined __aarch64__
   {
