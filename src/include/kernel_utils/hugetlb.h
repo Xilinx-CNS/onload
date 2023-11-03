@@ -33,6 +33,7 @@ struct oo_hugetlb_allocator {
 	struct file *filp;
 	loff_t offset;
 	atomic_t refcnt;
+	struct mutex lock;
 };
 
 struct oo_hugetlb_page {
@@ -92,9 +93,6 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *,
  *   returns False, if allocation fails.
  *
  * Notes:
- *   The hugepage allocator does not implement locking. The user must
- *   serialise accesses to the allocator to prevent race conditions.
- *
  *   The hugepage instance is not tied to the allocator lifespan,
  *   i.e. the users can legally destroy the allocator while the
  *   hugepage is still in use.
