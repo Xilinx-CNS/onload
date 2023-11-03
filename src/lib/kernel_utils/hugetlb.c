@@ -67,6 +67,7 @@ do_hugetlb_allocator_create(struct file *filp)
 	allocator->filp = filp;
 	allocator->offset = 0;
 	atomic_set(&allocator->refcnt, 1);
+	mutex_init(&allocator->lock);
 
 	return allocator;
 }
@@ -138,6 +139,7 @@ void oo_hugetlb_allocator_put(struct oo_hugetlb_allocator *allocator)
 
 	if (atomic_dec_and_test(&allocator->refcnt)) {
 		fput(allocator->filp);
+		mutex_destroy(&allocator->lock);
 		kfree(allocator);
 	}
 }
@@ -155,6 +157,8 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 	EFRM_ASSERT(allocator->filp);
 	EFRM_ASSERT(filp_out);
 	EFRM_ASSERT(page_out);
+
+	mutex_lock(&allocator->lock);
 
 	*filp_out = get_file(allocator->filp);
 
@@ -231,6 +235,8 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 
 	allocator->offset = allocator->offset + OO_HUGEPAGE_SIZE;
 
+	mutex_unlock(&allocator->lock);
+
 	return 0;
 
 fail_check:
@@ -242,6 +248,7 @@ fail_vfs:
 	fput(*filp_out);
 	*filp_out = NULL;
 
+	mutex_unlock(&allocator->lock);
 	return rc;
 }
 EXPORT_SYMBOL(oo_hugetlb_page_alloc_raw);
