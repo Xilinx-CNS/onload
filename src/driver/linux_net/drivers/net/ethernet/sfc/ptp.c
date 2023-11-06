@@ -2491,6 +2491,11 @@ int efx_ptp_hw_pps_enable(struct efx_nic *efx, bool enable)
 	return 0;
 }
 
+static inline bool efx_phc_exposed(struct efx_nic *efx)
+{
+	return efx->phc_ptp_data == efx->ptp_data && efx->ptp_data != NULL;
+}
+
 int efx_ptp_pps_reset(struct efx_nic *efx)
 {
 	struct efx_pps_data *pps_data;
@@ -2504,7 +2509,7 @@ int efx_ptp_pps_reset(struct efx_nic *efx)
 	pps_data = efx->ptp_data->pps_data;
 
 	/* If PPS was enabled before MC reset, re-enable PPS*/
-	if (pps_data->nic_hw_pps_enabled)
+	if (pps_data->nic_hw_pps_enabled && efx_phc_exposed(efx))
 		return efx_ptp_hw_pps_enable(efx, true);
 
 	return 0;
@@ -2533,11 +2538,6 @@ static void efx_ptp_worker(struct work_struct *work)
 
 	while ((skb = __skb_dequeue(&tempq)))
 		efx_ptp_process_rx(efx, skb);
-}
-
-static inline bool efx_phc_exposed(struct efx_nic *efx)
-{
-	return efx->phc_ptp_data == efx->ptp_data && efx->ptp_data != NULL;
 }
 
 #if defined(EFX_NOT_UPSTREAM)
