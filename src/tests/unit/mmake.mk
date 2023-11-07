@@ -17,6 +17,7 @@ ALL_UNIT_TESTS := \
   lib/transport/ip/tcp_rx \
   lib/ciul/checksum \
   lib/ciul/efct_vi \
+  lib/ciul/shrub_pool \
 
 # The tests to be run, and their corresponding files
 TESTS := $(filter $(UNIT_TEST_FILTER)%, $(ALL_UNIT_TESTS))
@@ -66,6 +67,7 @@ $(filter lib/%, $(TARGETS)): MMAKE_DIR_CFLAGS += -I$(TOPPATH)/src/$(dir $@)
 # to date before building the tests. This sadly means we can't reliably run an
 # invididual test without waiting for several seconds of flappery first.
 $(TARGETS): MMAKE_DIR_LINKFLAGS += -Wl,--unresolved-symbols=ignore-all $(NO_PIE)
+$(filter lib/%, $(TARGETS)): MMAKE_DIR_CFLAGS += -I$(TOPPATH)/src/$(dir $@)
 $(filter lib/%, $(TARGETS)): $$(call lib_object,$$@)
 $(TARGETS): %: %.o stubs.o
 	$(MMakeLinkCApp)
