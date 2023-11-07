@@ -89,7 +89,7 @@ static void ci_tcp_tx_advance_nagle(ci_netif* ni, ci_tcp_state* ts)
   ci_assert(ci_ip_queue_is_valid(ni, sendq));
   ci_assert(! ci_ip_queue_is_empty(sendq));
 
-  if( (sendq->num != 1) | (ci_tcp_inflight(ts) == 0) |
+  if( (sendq->num != 1) | (!ci_tcp_is_inflight(ts)) |
       OO_SP_NOT_NULL(ts->local_peer)) {
   advance_now:
     /* NB. We call advance() before poll() to get best latency. */
