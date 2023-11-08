@@ -203,6 +203,7 @@ struct efhw_nic_efct {
   struct efct_hw_filter *hw_filters;
   struct mutex driver_filters_mtx;
   uint8_t block_kernel;
+  struct dentry* debug_dir;
 #endif
 };
 

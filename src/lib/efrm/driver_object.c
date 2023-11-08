@@ -49,6 +49,7 @@
 #include <ci/driver/ci_efct.h>
 #include <linux/nsproxy.h>
 #include "efrm_internal.h"
+#include "debugfs.h"
 
 
 /* These routines are all methods on the architecturally singleton
@@ -228,6 +229,8 @@ int efrm_driver_register_nic(struct efrm_nic *rnic)
 	list_add(&rnic->link, &efrm_nics);
 	efrm_nic_vi_ctor(&rnic->nvi);
 	spin_unlock_bh(&efrm_nic_tablep->lock);
+	efhw_init_debugfs_nic(nic);
+
 	return 0;
 
 done:
@@ -245,6 +248,7 @@ void efrm_driver_unregister_nic(struct efrm_nic *rnic)
 
 	efrm_nic_vi_dtor(&rnic->nvi);
 
+	efhw_fini_debugfs_nic(nic);
 	spin_lock_bh(&efrm_nic_tablep->lock);
 	EFRM_ASSERT(efrm_nic_tablep->nic[nic_index] == nic);
 	list_del(&rnic->link);
