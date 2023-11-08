@@ -16,15 +16,16 @@ Targets:
   clean   Delete build tree
 
 Options:
-  V=1              Print full build command lines
-  NDEBUG=1         Create optimized build
-  MMAKE_LIBERAL=1  Turn off -Werror
-  HAVE_SFC=0       Build without netdriver and driverlink support to work in
-                   AF_XDP mode only
-  HAVE_EFCT=0      Build without EFCT and AUX bus support.
-  BUILD_PROFILE=x  Onload configuration, e.g. "cloud" (default: extra)
-  KBUILDTOP=<path> Where to put driver build (default: build/$$KARCH_linux-$$KVER)
-  KPATH=<path>     Kernel to build for (default: /lib/modules/`uname -r`/build)
+  V=1               Print full build command lines
+  NDEBUG=1          Create optimized build
+  MMAKE_LIBERAL=1   Turn off -Werror
+  HAVE_SFC=0        Build without netdriver and driverlink support to work in
+                    AF_XDP mode only
+  HAVE_EFCT=0       Build without EFCT and AUX bus support.
+  BUILD_PROFILE=x   Onload configuration, e.g. "cloud" (default: extra)
+  KBUILDTOP=<path>  Where to put driver build (default: build/$$KARCH_linux-$$KVER)
+  KPATH=<path>      Kernel to build for (default: /lib/modules/`uname -r`/build)
+  BUILD_EFCT_TEST=1 Build the efct test driver
 endef
 help:
 	$(info $(helptext))
@@ -99,6 +100,10 @@ endif
 export HAVE_SFC ?= 1
 ifeq ($(HAVE_SFC),1)
 DRIVER_SUBDIRS += src/driver/linux_net/drivers/net/ethernet/sfc
+endif
+
+ifeq ($(BUILD_EFCT_TEST),1)
+DRIVER_SUBDIRS += src/tests/resource/efct_test
 endif
 
 # Linux 4.6 added some object-file validation, which was also merged into

@@ -27,6 +27,7 @@ endif
 
 all: $(KBUILD_EXTRA_SYMBOLS)
 	$(MAKE) $(MMAKE_KBUILD_ARGS) M=$(CURDIR)
+	cp -f efct_test.ko $(BUILDPATH)/driver/linux
 
 clean:
 	@$(MakeClean)

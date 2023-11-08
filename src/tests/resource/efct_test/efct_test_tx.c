@@ -7,9 +7,11 @@
 #include <ci/tools.h>
 #include <ci/tools/bitfield.h>
 #include <ci/driver/efab/hardware/efct.h>
+#include <ci/driver/kernel_compat.h>
 
 #include "efct_test_device.h"
 
+#define EFCT_TX_APERTURE 4096
 
 struct efct_tx_ctpio_header
 {
@@ -47,7 +49,7 @@ static void efct_test_inject_pkt(struct net_device *dev, struct iovec* iov,
 
   /* Inject the skb into the kernel.  The return value indicates whether the
    * kernel decided to drop the packet, but we don't need to check that. */
-  netif_rx_ni(skb);
+  ci_netif_rx_non_irq(skb);
 }
 
 

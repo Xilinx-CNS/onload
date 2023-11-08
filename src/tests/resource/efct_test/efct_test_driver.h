@@ -9,7 +9,5 @@
 
 extern int efct_test_add_netdev(struct net_device* dev);
 extern int efct_test_remove_netdev(struct net_device* dev);
-extern int efct_test_netdev_set_rxq_ms_per_pkt(struct net_device* dev, int rxq,
-                                               int ms_per_pkt);
 
 #endif /* EFCT_TEST_DRIVER_H */

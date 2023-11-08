@@ -43,6 +43,7 @@ usage () {
   err "  [net]char       - Load drivers needed for char access"
   err "  mknod           - Create /dev/* nodes for char and onload"
   err "  onload_xdp      - Load onload and register SFC interfaces as af_xdp ones"
+  err "  onload_test     - Load onload and efct_test drivers, and register interface"
   err
   err "configuration options"
   err "  -char           - Load sfc_char module (where available)"
@@ -226,6 +227,20 @@ doxdp () {
       echo "Register $ethif in sfc_resource/afxdp"
     done
   )
+}
+
+do_test_driver () {
+  doonload
+
+  # Load efct_test driver
+  loadmod efct_test
+
+  for ethif in $(get_interfaces); do
+    mkdir "/sys/kernel/config/efct_test/$ethif"
+    # It fails to create subsequent directories, maybe this is a limitation of
+    # the test driver.
+    break;
+  done
 }
 
 ###############################################################################
@@ -716,6 +731,9 @@ else
       ;;
     onload_xdp)
       doxdp
+      ;;
+    onload_test)
+      do_test_driver
       ;;
     *)
       err "arg = $1"

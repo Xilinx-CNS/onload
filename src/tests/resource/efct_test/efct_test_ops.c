@@ -18,11 +18,13 @@
 #include <asm/io.h>
 
 #include <ci/driver/ci_aux.h>
-#include <ci/driver/ci_efct.h>
+#include <ci/driver/ci_ef10ct_test.h>
 #include <ci/compat.h>
+#include <ci/efrm/debug_linux.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/tools/byteorder.h>
 #include <ci/tools/bitfield.h>
+#include <ci/efhw/mc_driver_pcol.h>
 
 #include "efct_test_device.h"
 #include "efct_test_ops.h"
@@ -33,116 +35,12 @@
 #define page_to_virt(x)        __va(PFN_PHYS(page_to_pfn(x)))
 #endif
 
-struct xlnx_efct_client {
-  struct efct_test_device *tdev;
-  const struct xlnx_efct_drvops *drvops;
-  void* drv_priv;
-};
 
-#define EFCT_TEST_PKT_BYTES          2048
-#define EFCT_TEST_PKTS_PER_SUPERBUF  \
-                          (EFCT_RX_SUPERBUF_BYTES / EFCT_TEST_PKT_BYTES)
-
-static const unsigned char fake_pkt[] = {
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-  0x08, 0x00,
-  /* IP hdr: */
-  0x45, 0x00, 0x00, 0x21, 0x3f, 0xba, 0x40, 0x00, 0x40, 0x11, 0xfd, 0x0e,
-  0x7f, 0x00, 0x00, 0x01, 0x7f, 0x00, 0x00, 0x02,
-  /* UDP hdr: */
-  0x92, 0x55, 0x30, 0x39, 0x00, 0x0d, 0x4d, 0x68,
-  /* payload: */
-  0x74, 0x65, 0x73, 0x74, 0x0a,
-};
-
-
-static void do_rollover(struct efct_test_device *tdev, struct efct_test_rxq *q)
+static struct efx_auxiliary_client*
+efct_test_open(struct auxiliary_device *adev, efx_event_handler func,
+               unsigned int events_requested, void *driver_data)
 {
-  int sbid = -1;
-
-  if( q->current_sbid >= 0 )
-    __change_bit(q->current_sbid, q->curr_sentinel);
-
-  if( q->target_n_hugepages ) {
-    sbid = find_first_bit(q->freelist, EFCT_TEST_MAX_SUPERBUFS);
-    if( sbid == EFCT_TEST_MAX_SUPERBUFS ) {
-      printk(KERN_INFO "q%d: no free superbufs\n", q->ix);
-      sbid = -1;
-    }
-    else {
-      __clear_bit(sbid, q->freelist);
-      tdev->client->drvops->buffer_start(tdev->client->drv_priv, q->ix,
-                                         q->sbseq, sbid,
-                                         test_bit(sbid, q->curr_sentinel));
-    }
-  }
-  printk(KERN_DEBUG "q%d: superbuf rollover %d -> %d\n",
-         q->ix, q->current_sbid, sbid);
-  ++q->sbseq;
-  q->current_sbid = sbid;
-  q->next_pkt = round_up(q->next_pkt, EFCT_TEST_PKTS_PER_SUPERBUF);
-}
-
-static void* superbuf_ptr(struct efct_test_rxq *q)
-{
-  return (char*)page_to_virt(q->hugepages[q->current_sbid/2].page) +
-         q->current_sbid % 2 * EFCT_RX_SUPERBUF_BYTES;
-}
-
-enum hrtimer_restart efct_rx_tick(struct hrtimer *hr)
-{
-  /* Totally artificially do superbuf rollover once a second */
-  struct efct_test_rxq* q = container_of(hr, struct efct_test_rxq, rx_tick);
-  struct efct_test_device* tdev = container_of(q, struct efct_test_device,
-                                               rxqs[q->ix]);
-
-  tdev->client->drvops->poll(tdev->client->drv_priv, q->ix, 9999);
-
-  if( q->current_sbid >= 0 ) {
-    char *buf = superbuf_ptr(q);
-    int ix = q->next_pkt % EFCT_TEST_PKTS_PER_SUPERBUF;
-    char *dst = buf + ix * EFCT_TEST_PKT_BYTES + 64;
-    /* packet data actually starts 2 bytes in to the cache line, so L3 header
-     * ends up 4-byte aligned. */
-    memset(dst, 0, 2);
-    dst += 2;
-    /* NB: doesn't necessarily copy forwards. Never mind */
-    memcpy(dst, fake_pkt, sizeof(fake_pkt));
-    memcpy(dst + sizeof(fake_pkt), &q->next_pkt, sizeof(q->next_pkt));
-  }
-
-  ++q->next_pkt;
-  if( q->next_pkt % EFCT_TEST_PKTS_PER_SUPERBUF == 0 )
-    do_rollover(tdev, q);
-
-  if( q->current_sbid >= 0 ) {
-    char *buf = superbuf_ptr(q);
-    int ix = q->next_pkt % EFCT_TEST_PKTS_PER_SUPERBUF;
-    ci_oword_t meta;
-    ci_oword_t *dst = (ci_oword_t*)(buf + ix * EFCT_TEST_PKT_BYTES);
-    CI_POPULATE_OWORD_4(meta,
-                        EFCT_RX_HEADER_PACKET_LENGTH, sizeof(fake_pkt) +
-                                                      sizeof(q->next_pkt),
-                        EFCT_RX_HEADER_NEXT_FRAME_LOC, 1,
-                        EFCT_RX_HEADER_L4_CLASS, 1,
-                        EFCT_RX_HEADER_SENTINEL,
-                                  test_bit(q->current_sbid, q->curr_sentinel));
-    WRITE_ONCE(dst->u64[1], meta.u64[1]);
-    wmb();
-    WRITE_ONCE(dst->u64[0], meta.u64[0]);
-  }
-
-  hrtimer_forward_now(hr, ms_to_ktime(q->ms_per_pkt));
-  return HRTIMER_RESTART;
-}
-
-
-static struct xlnx_efct_client* efct_test_open(struct auxiliary_device *adev,
-                                            const struct xlnx_efct_drvops *ops,
-                                            void *driver_data)
-{
-  struct xlnx_efct_client *client;
+  struct efx_auxiliary_client *client;
   struct efct_test_device *tdev;
 
   printk(KERN_INFO "%s\n", __func__);
@@ -150,15 +48,16 @@ static struct xlnx_efct_client* efct_test_open(struct auxiliary_device *adev,
   /* Currently support exactly one test device, which should be opened at most
    * once by the efct driver.
    */
-  tdev = container_of(adev, struct efct_test_device, dev.adev);
+  tdev = container_of(adev, struct efct_test_device, dev.auxdev);
   BUG_ON(tdev->client);
 
   client = kzalloc(sizeof(*client), GFP_KERNEL);
   if( !client )
     return ERR_PTR(-ENOMEM);
 
-  client->drvops = ops;
+  client->event_handler = func;
   client->drv_priv = driver_data;
+  client->net_dev = tdev->net_dev;
   tdev->client = client;
   client->tdev = tdev;
 
@@ -166,24 +65,13 @@ static struct xlnx_efct_client* efct_test_open(struct auxiliary_device *adev,
 }
 
 
-static int efct_test_close(struct xlnx_efct_client *handle)
+static int efct_test_close(struct efx_auxiliary_client *handle)
 {
   struct efct_test_device *tdev = handle->tdev;
-  int rxq;
   printk(KERN_INFO "%s\n", __func__);
 
   if( ! tdev )
     return -EINVAL;
-
-  for( rxq = 0; rxq < EFCT_TEST_RXQS_N; ++rxq ) {
-    int i;
-    if( tdev->rxqs[rxq].current_n_hugepages == 0 )
-      continue;
-    for( i = 0; i < ARRAY_SIZE(tdev->rxqs[rxq].hugepages); ++i )
-      if( tdev->rxqs[rxq].hugepages[i].page )
-        handle->drvops->free_hugepage(handle->drv_priv,
-                                      &tdev->rxqs[rxq].hugepages[i]);
-  }
 
   tdev->client = NULL;
   kfree(handle);
@@ -192,31 +80,58 @@ static int efct_test_close(struct xlnx_efct_client *handle)
 }
 
 
-static int efct_test_get_param(struct xlnx_efct_client *handle,
-                               enum xlnx_efct_param p,
-                               union xlnx_efct_param_value *arg)
+static int efct_test_ctpio_addr(struct efx_auxiliary_client *handle,
+                                struct efx_auxiliary_io_addr *io)
+{
+  struct efct_test_device *tdev = handle->tdev;
+  int txq = io->qid_in;
+
+  printk(KERN_INFO "%s\n", __func__);
+
+  if( tdev->txqs[txq].evq < 0 )
+    return -EINVAL;
+
+  io->base = virt_to_phys(tdev->txqs[txq].ctpio);
+  io->size = 0x1000;
+  return 0;
+}
+
+
+static int efct_test_get_param(struct efx_auxiliary_client *handle,
+                               enum efx_auxiliary_param p,
+                               union efx_auxiliary_param_value *arg)
 {
   int rc = -ENOSYS;
 
   printk(KERN_INFO "%s: param %d\n", __func__, p);
 
   switch(p) {
-   case XLNX_EFCT_NETDEV:
-    arg->net_dev = handle->tdev->net_dev;
+   case EFX_AUXILIARY_NETDEV:
+    arg->net_dev = handle->net_dev;
     rc = 0;
     break;
-   case XLNX_EFCT_VARIANT:
+   case EFX_AUXILIARY_VARIANT:
     arg->variant = 'T';
     rc = 0;
     break;
-   case XLNX_EFCT_REVISION:
+   case EFX_AUXILIARY_REVISION:
     arg->value = 1;
     rc = 0;
     break;
-   case XLNX_EFCT_NIC_RESOURCES:
+   case EFX_AUXILIARY_NIC_RESOURCES:
     arg->nic_res.evq_min = 0;
     arg->nic_res.evq_lim = EFCT_TEST_EVQS_N - 1;
+    arg->nic_res.txq_min = 0;
+    arg->nic_res.txq_lim = EFCT_TEST_TXQS_N - 1;
     rc = 0;
+    break;
+   case EFX_AUXILIARY_EVQ_WINDOW:
+    arg->evq_window.base = virt_to_phys(handle->tdev->evq_window);
+    arg->evq_window.stride = 0x1000;
+    rc = 0;
+    break;
+   case EFX_AUXILIARY_CTPIO_WINDOW:
+    rc = efct_test_ctpio_addr(handle, &arg->io_addr);
     break;
    default:
     break;
@@ -226,9 +141,9 @@ static int efct_test_get_param(struct xlnx_efct_client *handle,
 }
 
 
-static int efct_test_set_param(struct xlnx_efct_client *handle,
-                               enum xlnx_efct_param p,
-                               union xlnx_efct_param_value *arg)
+static int efct_test_set_param(struct efx_auxiliary_client *handle,
+                               enum efx_auxiliary_param p,
+                               union efx_auxiliary_param_value *arg)
 {
   int rc = -ENOSYS;
 
@@ -238,16 +153,8 @@ static int efct_test_set_param(struct xlnx_efct_client *handle,
 }
 
 
-static int efct_test_fw_rpc(struct xlnx_efct_client *handle,
-                            struct xlnx_efct_rpc *rpc)
-{
-  printk(KERN_INFO "%s: cmd %d\n", __func__, rpc->cmd);
-  return -ENOSYS;
-}
-
-
-static int efct_test_init_evq(struct xlnx_efct_client *handle,
-                              struct xlnx_efct_evq_params *params)
+static int efct_test_init_evq(struct efx_auxiliary_client *handle,
+                              struct efx_auxiliary_evq_params *params)
 {
   struct efct_test_evq *evq = &handle->tdev->evqs[params->qid];
 
@@ -267,7 +174,7 @@ static int efct_test_init_evq(struct xlnx_efct_client *handle,
 }
 
 
-static void efct_test_free_evq(struct xlnx_efct_client *handle, int evq)
+static void efct_test_free_evq(struct efx_auxiliary_client *handle, int evq)
 {
   printk(KERN_INFO "%s: qid %d\n", __func__, evq);
   WARN(!handle->tdev->evqs[evq].inited,
@@ -281,16 +188,17 @@ static void efct_test_free_evq(struct xlnx_efct_client *handle, int evq)
 }
 
 
-static int efct_test_alloc_txq(struct xlnx_efct_client *handle,
-                               struct xlnx_efct_txq_params *params)
+static int efct_test_init_txq(struct efx_auxiliary_client *handle,
+                              struct efx_auxiliary_txq_params *params)
 {
   struct efct_test_device *tdev = handle->tdev;
   struct efct_test_txq *txq;
   int txq_idx = -1;
   int i;
+  int evq = params->evq;
 
-  printk(KERN_INFO "%s: evq %d\n", __func__, params->evq);
-  if( !tdev->evqs[params->evq].inited )
+  printk(KERN_INFO "%s: evq %d\n", __func__, evq);
+  if( !tdev->evqs[evq].inited )
     return -EINVAL;
 
   /* Onload allocate vis (and hence EVQs) through a buddy allocator, so we can
@@ -318,20 +226,20 @@ static int efct_test_alloc_txq(struct xlnx_efct_client *handle,
   INIT_DELAYED_WORK(&txq->timer, efct_test_tx_timer);
   schedule_delayed_work(&txq->timer, 100);
 
-  txq->evq = params->evq;
+  txq->evq = evq;
   txq->tdev = tdev;
-  tdev->evqs[params->evq].txqs |= 1 << txq_idx;
+  tdev->evqs[evq].txqs |= 1 << txq_idx;
   txq->ptr = 0;
   txq->pkt_ctr = 0;
 
   printk(KERN_INFO "%s: bound txq %d to evq %d\n", __func__, txq_idx,
-         params->evq);
+         evq);
 
   return txq_idx;
 }
 
 
-static void efct_test_free_txq(struct xlnx_efct_client *handle, int txq_idx)
+static void efct_test_free_txq(struct efx_auxiliary_client *handle, int txq_idx)
 {
   struct efct_test_device *tdev = handle->tdev;
   int evq = tdev->txqs[txq_idx].evq;
@@ -354,150 +262,74 @@ static void efct_test_free_txq(struct xlnx_efct_client *handle, int txq_idx)
 }
 
 
-static int efct_test_ctpio_addr(struct xlnx_efct_client *handle, int txq,
-                                resource_size_t *addr, size_t *size)
+static int efct_test_fw_rpc(struct efx_auxiliary_client *handle,
+                            struct efx_auxiliary_rpc *rpc)
 {
-  struct efct_test_device *tdev = handle->tdev;
+  int rc;
 
-  printk(KERN_INFO "%s\n", __func__);
-
-  if( tdev->txqs[txq].evq < 0 )
-    return -EINVAL;
-
-  *addr = virt_to_phys(tdev->txqs[txq].ctpio);
-  *size = 0x1000;
-  return 0;
-}
-
-
-static int efct_test_bind_rxq(struct xlnx_efct_client *handle,
-                              struct xlnx_efct_rxq_params *params)
-{
-  struct efct_test_device *tdev = handle->tdev;
-  int qid = params->qid;
-  int i, j;
-  int n_hugepages = params->n_hugepages;
-  struct efct_test_rxq* q;
-  struct xlnx_efct_hugepage* new_pages;
-
-  printk(KERN_INFO "%s q=%d ts=%d hp=%zu\n", __func__, params->qid,
-         params->timestamp_req, params->n_hugepages);
-
-  if( qid < 0 )
-    qid = get_random_int() % EFCT_TEST_RXQS_N;
-  if( qid >= EFCT_TEST_RXQS_N )
-    return -EINVAL;
-
-  q = &tdev->rxqs[qid];
-  n_hugepages = q->target_n_hugepages + n_hugepages - q->current_n_hugepages;
-  if( n_hugepages > 0 ) {
-    new_pages = kmalloc_array(n_hugepages, sizeof(*new_pages), GFP_KERNEL);
-    if( ! new_pages )
-      return -ENOMEM;
-
-    for( i = 0; i < n_hugepages; ++i ) {
-      int rc = tdev->client->drvops->alloc_hugepage(handle->drv_priv,
-                                                    &new_pages[i]);
-      if( rc ) {
-        for( --i; i >= 0; --i )
-          tdev->client->drvops->free_hugepage(handle->drv_priv, &new_pages[i]);
-        kfree(new_pages);
-        return rc;
-      }
+  switch(rpc->cmd) {
+   case MC_CMD_INIT_EVQ:
+    if( rpc->inlen != sizeof(struct efx_auxiliary_evq_params) )
+      rc = -EINVAL;
+    else
+      rc = efct_test_init_evq(handle,
+                             (struct efx_auxiliary_evq_params *)rpc->inbuf);
+    break;
+   case MC_CMD_FINI_EVQ:
+    if( rpc->inlen != sizeof(int) ) {
+      rc = -EINVAL;
     }
-    for( i = 0, j = 0; i < ARRAY_SIZE(q->hugepages) && j < n_hugepages; ++i ) {
-      if( ! q->hugepages[i].page ) {
-        ++q->current_n_hugepages;
-        q->hugepages[i] = new_pages[j++];
-        __set_bit(i * 2, q->freelist);
-        __set_bit(i * 2 + 1, q->freelist);
-        __set_bit(i * 2, q->curr_sentinel);
-        __set_bit(i * 2 + 1, q->curr_sentinel);
-      }
+    else {
+      efct_test_free_evq(handle, *rpc->inbuf);
+      rc = 0;
     }
-    for( ; j < n_hugepages; ++j )
-      tdev->client->drvops->free_hugepage(handle->drv_priv, &new_pages[j]);
-    kfree(new_pages);
-  }
-  q->target_n_hugepages += params->n_hugepages;
-
-  return qid;
-}
-
-static int efct_test_rollover_rxq(struct xlnx_efct_client *handle, int rxq)
-{
-  printk(KERN_INFO "%s q=%d\n", __func__, rxq);
-  return 0;
-}
-
-static void efct_test_free_rxq(struct xlnx_efct_client *handle, int rxq,
-                               size_t n_hugepages)
-{
-  struct efct_test_device *tdev = handle->tdev;
-  struct efct_test_rxq* q = &tdev->rxqs[rxq];
-  size_t i;
-
-  printk(KERN_INFO "%s q=%d hp=%zu\n", __func__, rxq, n_hugepages);
-  if( q->target_n_hugepages < n_hugepages )
-    printk(KERN_ERR "%s BAD DECREMENT\n", __func__);
-  q->target_n_hugepages -= n_hugepages;
-  for( i = 0; i < ARRAY_SIZE(q->hugepages) &&
-              q->current_n_hugepages > q->target_n_hugepages; ++i ) {
-    /* This check is all nastily racey. Whatever */
-    if( test_bit(i * 2, q->freelist) && test_bit(i * 2 + 1, q->freelist) &&
-        q->current_sbid != i * 2 && q->current_sbid != i * 2 + 1 ) {
-      __clear_bit(i * 2, q->freelist);
-      __clear_bit(i * 2 + 1, q->freelist);
-      tdev->client->drvops->free_hugepage(handle->drv_priv, &q->hugepages[i]);
-      q->hugepages[i] = (struct xlnx_efct_hugepage){};
-      --q->current_n_hugepages;
+    break;
+   case MC_CMD_INIT_TXQ:
+    if( rpc->inlen != sizeof(struct efx_auxiliary_txq_params) )
+      rc = -EINVAL;
+    else
+      rc = efct_test_init_txq(handle,
+                             (struct efx_auxiliary_txq_params *)rpc->inbuf);
+    break;
+   case MC_CMD_FINI_TXQ:
+    if( rpc->inlen != sizeof(int) ) {
+      rc = -EINVAL;
     }
-  }
+    else {
+      efct_test_free_txq(handle, *rpc->inbuf);
+      rc = 0;
+    }
+    break;
+   default:
+    rc = -ENOSYS;
+  };
+
+  printk(KERN_INFO "%s: cmd %d rc %d\n", __func__, rpc->cmd, rc);
+  return rc;
 }
 
-static int efct_test_get_hugepages(struct xlnx_efct_client *handle, int rxq,
-                                   struct xlnx_efct_hugepage *pages,
-                                   size_t n_pages)
+
+int efct_test_queues_alloc(struct efx_auxiliary_client *handle,
+			   struct efx_auxiliary_queues_alloc_params *params)
 {
-  struct efct_test_device *tdev = handle->tdev;
-  printk(KERN_INFO "%s q=%d n=%zu\n", __func__, rxq, n_pages);
-  memset(pages, 0, sizeof(*pages) * n_pages);
-  memcpy(pages, tdev->rxqs[rxq].hugepages,
-         min(n_pages, ARRAY_SIZE(tdev->rxqs[rxq].hugepages)) * sizeof(*pages));
-  return 0;
+  return -ENOSYS;
 }
 
 
-static void efct_test_release_superbuf(struct xlnx_efct_client *handle,
-                                       int rxq, int sbid)
+int efct_test_queues_free(struct efx_auxiliary_client *handle,
+			  struct efx_auxiliary_queues_alloc_params *params)
 {
-  struct efct_test_device *tdev = handle->tdev;
-  printk(KERN_INFO "%s q=%d sb=%d\n", __func__, rxq, sbid);
-  if( rxq < 0 || sbid < 0 || rxq >= EFCT_TEST_RXQS_N ||
-      sbid >= EFCT_TEST_MAX_SUPERBUFS )
-    printk(KERN_ERR "%s BAD PARAMETER\n", __func__);
-  else if( test_bit(sbid, tdev->rxqs[rxq].freelist) )
-    printk(KERN_ERR "%s DOUBLE FREE\n", __func__);
-  else
-    __set_bit(sbid, tdev->rxqs[rxq].freelist);
+  return -ENOSYS;
 }
 
 
-const struct xlnx_efct_devops test_devops = {
+const struct efx_auxiliary_devops test_devops = {
   .open = efct_test_open,
   .close = efct_test_close,
   .get_param = efct_test_get_param,
   .set_param = efct_test_set_param,
   .fw_rpc = efct_test_fw_rpc,
-  .init_evq = efct_test_init_evq,
-  .free_evq = efct_test_free_evq,
-  .init_txq = efct_test_alloc_txq,
-  .free_txq = efct_test_free_txq,
-  .bind_rxq = efct_test_bind_rxq,
-  .rollover_rxq = efct_test_rollover_rxq,
-  .free_rxq = efct_test_free_rxq,
-  .ctpio_addr = efct_test_ctpio_addr,
-  .get_hugepages = efct_test_get_hugepages,
-  .release_superbuf = efct_test_release_superbuf,
+  .queues_alloc = efct_test_queues_alloc,
+  .queues_free = efct_test_queues_free,
 };
 

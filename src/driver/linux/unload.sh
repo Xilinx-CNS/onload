@@ -124,6 +124,13 @@ donet () {
   [ -f /dev/sfc_control ] || rm -f /dev/sfc_tweak
 }
 
+do_test_driver () {
+  for d in /sys/kernel/config/efct_test/*; do
+    [ -d "$d" ] && rmdir "$d"
+  done
+  tryunload efct_test
+}
+
 
 ###############################################################################
 # main
@@ -145,13 +152,15 @@ done
 
 do_char=true
 do_net=true
+do_test=true
 
 [ $# -gt 0 ] && {
-  do_char=false; do_net=false;
+  do_char=false; do_net=false; do_test=false;
   while [ $# -gt 0 ]; do
     case "$1" in
       char)	do_char=true;;
       net)	do_net=true;;
+      onload_test) do_test=true;;
       *)	usage;;
     esac
     shift
@@ -162,6 +171,7 @@ if isloaded sfc_suspend; then
   fail "ERROR: Do not use unload.sh when sfc_suspend is loaded"
 fi
 
+$do_test && do_test_driver
 $do_char && dochar
 $do_net && donet
 $do_fake_hotplug && do_fake_hotplug

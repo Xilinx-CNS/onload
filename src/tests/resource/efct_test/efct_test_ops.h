@@ -4,8 +4,8 @@
 #ifndef EFCT_TEST_OPS_H
 #define EFCT_TEST_OPS_H
 
-#include <ci/driver/ci_efct.h>
+#include <ci/driver/ci_ef10ct_test.h>
 
-extern const struct xlnx_efct_devops test_devops;
+extern const struct efx_auxiliary_devops test_devops;
 
 #endif /* EFCT_TEST_OPS_H */

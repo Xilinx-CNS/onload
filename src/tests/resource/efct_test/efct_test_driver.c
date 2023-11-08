@@ -70,19 +70,6 @@ int efct_test_remove_netdev(struct net_device* net_dev)
   return 0;
 }
 
-int efct_test_netdev_set_rxq_ms_per_pkt(struct net_device* net_dev, int rxq,
-                                        int ms_per_pkt)
-{
-  int rc;
-
-  printk(KERN_INFO "efct_test ms_per_pkt dev=%s q=%d ms=%d\n",
-         net_dev->name, rxq, ms_per_pkt);
-  if( (rc = check_netdev(__func__, net_dev)) < 0 )
-    return rc;
-
-  return efct_test_set_rxq_ms_per_pkt(tdev, rxq, ms_per_pkt);
-}
-
 static int __init efct_test_init(void)
 {
   int rc;
