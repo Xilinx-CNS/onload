@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc.
+
+name: "Mkdist"
+
+on:
+  workflow_dispatch:
+    inputs:
+      mkdist-params:
+        description: onload_mkdist script params
+        type: string
+  workflow_call:
+    inputs:
+      mkdist-params:
+        description: onload_mkdist script params
+        type: string
+      mkdist-url:
+        description: Download package (override generation)
+        type: string
+    outputs:
+      brand:
+        value: ${{ jobs.mkdist.outputs.brand }}
+      product:
+        value: ${{ jobs.mkdist.outputs.product }}
+      version:
+        value: ${{ jobs.mkdist.outputs.version }}
+      tarball:
+        value: ${{ jobs.mkdist.outputs.tarball }}
+      dir:
+        value: ${{ jobs.mkdist.outputs.dir }}
+      revision:
+        value: ${{ jobs.mkdist.outputs.revision }}
+      created:
+        value: ${{ jobs.mkdist.outputs.created }}
+
+permissions:
+  contents: read
+jobs:
+
+  mkdist:
+    name: onload_mkdist
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MKDIST_PARAMS: ${{ inputs.mkdist-params }}
+    outputs:
+      brand: ${{ steps.mkcontainer.outputs.brand }}
+      product: ${{ steps.mkcontainer.outputs.product }}
+      version: ${{ steps.mkcontainer.outputs.version }}
+      tarball: ${{ steps.mkcontainer.outputs.tarball_name }}
+      dir: ${{ steps.mkcontainer.outputs.tarball_subdir }}
+      revision: ${{ steps.mkcontainer.outputs.readme_revision }}
+      created: ${{ steps.mkcontainer.outputs.created }}
+    steps:
+
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - if: ${{ inputs.mkdist-url == '' }}
+      name: Run onload_mkdist
+      run: |
+        ./scripts/onload_mkdist $MKDIST_PARAMS
+
+    - if: ${{ inputs.mkdist-url }}
+      name: Download mkdist tarball
+      run: |
+        wget "$URL"
+        [ "${URL##*.}" == "zip" ] && unzip "$(basename "$URL")"
+      env:
+        URL: ${{ inputs.mkdist-url }}
+
+    - name: Output container vars
+      id: mkcontainer
+      run: |
+        ./scripts/onload_mkcontainer --output-vars *.tgz | tr -d '"' >> $GITHUB_OUTPUT
+
+    - name: Cache tarball
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ steps.mkcontainer.outputs.tarball_subdir }}
+        path: ${{ steps.mkcontainer.outputs.tarball_name }}

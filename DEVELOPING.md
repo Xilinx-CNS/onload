@@ -19,12 +19,15 @@ Build requirements
  * sed
  * make
  * bash
+ * which
+ * kmod
+ * tar
+ * gzip
  * glibc-common
  * libcap-devel
  * libmnl-devel
  * perl-Test-Harness
  * gcc-c++ or g++
-
 
  You will also need to install the kernel and its development headers (i.e. kernel
  and kernel-devel) for which you wish to build against.
@@ -32,6 +35,8 @@ Build requirements
  Note that these dependencies are given for building on Redhat distributions, and
  package names may differ on other distributions.
 
+ Additionally, building RPMs requires `python3-devel` and
+ automatic versioning by `onload_mkdist` requires `git`.
 
 Distributing as tarball
 ============
@@ -54,6 +59,42 @@ Distributing as tarball
  target machine. Note that the built tarball can be installed with `--debug`
  to enable debugging mode, which provides additional logging and error-checking.
 
+Distributing as container image
+===============================
+
+ To create a container image with compiled userland components
+ from a mkdist tarball:
+
+    ./scripts/onload_mkdist
+    ./scripts/onload_mkcontainer --user onload-user:latest *.tgz
+
+ Note that the Kernel modules and control plane need separate installation.
+ See further documentation specific to your use case.
+
+ To use an existing mkdist contents container image,
+ add `--user-from-source onload-source:latest`.
+
+ To create using different UBI base images, set the env var:
+
+    USER_DOCKER_EXTRA_ARGS="--build-arg BUILDER_UBI_BASE=... --build-arg USER_BASE=..."
+
+ To build a debug version of Onload, set the env var:
+
+    USER_DOCKER_EXTRA_ARGS="--build-arg ONLOAD_BUILD_PARAMS=--debug"
+
+ To only create a container image with mkdist contents:
+
+    ./scripts/onload_mkdist
+    ./scripts/onload_mkcontainer --source onload-source:latest *.tgz
+
+ Both `--source` and `--user` can be specified at once to create both.
+
+ Further env vars can be specified. See
+   [onload-user.Dockerfile](scripts/onload-user.Dockerfile) and
+   [onload_mkcontainer](scripts/onload_mkcontainer).
+
+ These images are designed for reuse in compatible libc environments (eg. as input
+ to `COPY --from=`) rather than as a base image (ie. not `FROM onload-user`).
 
 Building directly from repository
 ============

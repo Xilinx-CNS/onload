@@ -1,0 +1,174 @@
+#!/bin/bash -e
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc.
+
+bin=$(cd "$(dirname "$0")" && /bin/pwd)
+source "${bin}/lib/mkdist/utils"
+
+usage() {
+  err
+  err "Usage:"
+  err "  $me [OPTIONS] [MKDIST_TGZ]"
+  err
+  err "Options:"
+  err "  -u, --user [onload-user:latest|AUTO]     Build onload-user image"
+  err "  -s, --source [onload-source:latest|AUTO] Build onload-source image"
+  err "  -f, --user-from-source [SOURCE_IMAGE]    User image using source image"
+  err "  -r, --repo-url                           Label image with 'source' URL"
+  err "  -o, --output-vars                        Print mkdist variables"
+  err "  -d, --debug                              Debug this script"
+  err
+  err "Env vars:"
+  err "  SOURCE_DOCKER_EXTRA_ARGS                 Source image extra args"
+  err "  USER_DOCKER_EXTRA_ARGS                   User image extra args"
+  err
+  exit 1
+}
+
+user=false
+source=false
+output_vars=false
+tarball_path=
+source_image=
+user_image=
+repo_url=
+context="$bin/../"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -u|--user) user=true; shift; user_image="$1";;
+    -s|--source) source=true; shift; source_image="$1";;
+    -f|--user-from-source) shift; source_image="$1";;
+    -r|--repo-url) shift; repo_url="$1";;
+    -o|--output-vars) output_vars=true;;
+    -d|--debug) set -x;;
+    *.tgz|*.tar.gz) { [ -z "$tarball_path" ] && tarball_path="$1"; } || fail "Supply one tarball only.";;
+    -*)  usage;;
+    *)   break;;
+  esac
+  shift
+done
+[ $# = 0 ] || usage
+
+if [ -n "$tarball_path" ]; then
+
+  tarball_name=$(basename "$tarball_path")
+  tarball_subdir=$(tar tf "$tarball_path" | head -1 | tr -d '/')
+  context=$(dirname "$tarball_path")
+
+  readme_date=; readme_revision=; readme_version=
+  readme_vars=$(tar xzf "$tarball_path" -O "$tarball_subdir/README" | sed '0,/^==========$/d;s/^\s*\(\w*\):\s\(.*\)/readme_\1="\2"/')
+  eval "$readme_vars"
+
+  product=${readme_version%-*}
+  version=${readme_version#*-}
+  readme_date_C=$(echo "$readme_date" | sed -E 's/^(\w+) +([0-9]+) +(\w+)/\1 \3 \2/' || echo "$readme_date")
+  created="$(date --date="$readme_date_C" --rfc-3339=seconds || echo "$readme_date")"
+  revision="$readme_revision"
+
+elif $source; then
+
+  err "Missing an Onload distribution tarball (output of onload_mkdist)."
+  usage
+
+elif [ -n "$source_image" ]; then
+
+  docker inspect "$source_image" >/dev/null 2>&1 || docker pull "$source_image"
+  product=$(docker inspect -f '{{index .Config.Labels "com.amd.onload.product"}}' "$source_image")
+  brand=$(docker inspect -f '{{index .Config.Labels "com.amd.onload.brand"}}' "$source_image")
+  version=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.version"}}' "$source_image")
+  revision=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$source_image")
+  created=$(docker inspect -f '{{index .Config.Labels "org.opencontainers.image.created"}}' "$source_image")
+  source_image_digest=$(docker inspect -f '{{.Id}}' "$source_image")
+
+  if [ -z "$product" ]; then
+    err "Supplied source image does not contain expected LABELs. Continuing anyway."
+    product=onload
+  fi
+
+else
+
+  err "Supply either path to Onload distribution tarball (output of onload_mkdist)"
+  err "or existing onload-source container image."
+  usage
+
+fi
+
+if [ -z "$brand" ]; then
+  case "$product" in
+    onload) brand='OpenOnload';;
+    enterpriseonload) brand='EnterpriseOnload';;
+    *) brand=Onload;;
+  esac
+fi
+
+if $source; then
+
+  [ "$source_image" == "AUTO" ] && source_image="${product}-source:${version}"
+
+  iidfile=$(mktemp)
+  # shellcheck disable=SC2086
+  DOCKER_BUILDKIT=1 docker build \
+    --file scripts/onload-user.Dockerfile \
+    --target onload-source-subdir \
+    --tag "$source_image" \
+    --network="host" \
+    --build-arg BRAND="$brand" \
+    --build-arg PRODUCT="$product" \
+    --build-arg VERSION="$version" \
+    --build-arg REVISION="$revision" \
+    --build-arg CREATED="$created" \
+    --build-arg SOURCE="$repo_url" \
+    --build-arg ONLOAD_LOCATION="$tarball_name" \
+    --iidfile=$iidfile \
+    $SOURCE_DOCKER_EXTRA_ARGS \
+    "$context"
+    source_image_digest=$(cat "$iidfile")
+    rm "$iidfile"
+
+fi
+
+
+if $user; then
+
+  [ "$user_image" == "AUTO" ] && user_image="${product}-user:${version}"
+  [ -z "$source_image" ] && ! $source && source_image=onload-source-subdir
+
+  # shellcheck disable=SC2086
+  DOCKER_BUILDKIT=1 docker build \
+    --file scripts/onload-user.Dockerfile \
+    --tag "$user_image" \
+    --network="host" \
+    --build-arg BRAND="$brand" \
+    --build-arg PRODUCT="$product" \
+    --build-arg VERSION="$version" \
+    --build-arg REVISION="$revision" \
+    --build-arg CREATED="$(date --rfc-3339=seconds || echo "$created")" \
+    --build-arg SOURCE_IMAGE="$source_image" \
+    --build-arg SOURCE_IMAGE_DIGEST="$source_image_digest" \
+    --build-arg SOURCE="$repo_url" \
+    --build-arg ONLOAD_LOCATION="$tarball_name" \
+    $USER_DOCKER_EXTRA_ARGS \
+    "$context"
+
+elif [ -n "$source_image" ] && ! $source; then
+
+  err "Supply --user output image when building from existing source."
+  $output_vars || usage
+
+fi
+
+if $output_vars; then
+  echo "tarball_name=\"$tarball_name\""
+  echo "tarball_subdir=\"$tarball_subdir\""
+  echo "context=\"$context\""
+  echo "$readme_vars"
+  echo "created=\"$created\""
+  echo "product=\"$product\""
+  echo "version=\"$version\""
+  echo "revision=\"$revision\""
+  echo "source_image_digest=$source_image_digest"
+  echo "brand=\"$brand\""
+  echo "source_image=$source_image"
+  echo "user_image=$user_image"
+fi

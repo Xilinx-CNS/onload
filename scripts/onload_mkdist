@@ -27,6 +27,7 @@ usage() {
   err "  --srcrev <changeset>"
   err "  --force"
   err "  --testciul"
+  err "  --output-vars"
   err "  --debug"
   err
   exit 1
@@ -74,6 +75,7 @@ cloud=false
 enterprise=false
 force=false
 testciul=false
+output_vars=false
 git=${GIT_PATH:-"git"}
 
 while [ $# -gt 0 ]; do
@@ -86,6 +88,7 @@ while [ $# -gt 0 ]; do
     --enterprise)  enterprise=true;;
     --force)    force=true;;
     --testciul) testciul=true;;
+    --output-vars) output_vars=true;;
     --debug)    set -x;;
     -*)  usage;;
     *)   break;;
@@ -250,3 +253,11 @@ try cd ..
 try tar czf "$releasedir.tgz" --owner=root --group=root "$releasedir"
 try md5sum "$releasedir.tgz" >"$releasedir.tgz.md5"
 try rm -r "$releasedir"
+
+if $output_vars; then
+  echo "tarball_name=$releasedir.tgz"
+  echo "releasedir=$releasedir"
+  echo "product=$product"
+  echo "Product=$Product"
+  echo "version=$version"
+fi
