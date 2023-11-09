@@ -5,7 +5,7 @@ on: [push, pull_request]
 
 jobs:
   ssa:
-    if: github.repository == 'Xilinx-CNS\onload_internal'
+    if: github.repository == 'Xilinx-CNS/onload_internal'
     runs-on: ubuntu-latest
     steps:
       - name: onload_internal
