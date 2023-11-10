@@ -176,7 +176,7 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 	rc = vfs_fallocate(allocator->filp, 0, allocator->offset,
 			OO_HUGEPAGE_SIZE);
 	if (rc < 0) {
-		if (rc != -EINTR)
+		if (rc != -EINTR && rc != -ENOSPC)
 			EFRM_ERR("%s: fallocate() failed: %d", __func__, rc);
 		goto fail_vfs;
 	}

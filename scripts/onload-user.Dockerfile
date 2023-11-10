@@ -47,7 +47,7 @@ LABEL \
   org.opencontainers.image.revision="$REVISION" \
   org.opencontainers.image.source="$SOURCE" \
   org.opencontainers.image.url="$URL" \
-  org.opencontainers.image.licenses="GPL-2.0 OR BSD-2-Clause"
+  org.opencontainers.image.licenses="GPL-2.0 AND BSD-2-Clause"
 USER 1001
 COPY --from=onload-source-root ${PRODUCT}-${VERSION} /
 COPY --from=onload-source-root \
@@ -144,7 +144,7 @@ LABEL \
   org.opencontainers.image.revision="$REVISION" \
   org.opencontainers.image.source="$SOURCE" \
   org.opencontainers.image.url="$URL" \
-  org.opencontainers.image.licenses="GPL-2.0 OR BSD-2-Clause" \
+  org.opencontainers.image.licenses="GPL-2.0 AND BSD-2-Clause" \
   org.opencontainers.image.base.name="$USER_BASE"
 COPY --from=user-builder /opt/onload /opt/onload
 COPY --from=user-builder /licenses /
