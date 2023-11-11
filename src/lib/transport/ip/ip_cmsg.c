@@ -149,7 +149,7 @@ ci_ifid_t ci_rx_pkt_ifindex(ci_netif* ni, const ci_ip_pkt_fmt* pkt)
     LOG_E(ci_log("%s: oo_cp_hwport_vlan_to_ifindex(intf_i=%d => hwport=%d, "
                  "vlan_id=%d mac="CI_MAC_PRINTF_FORMAT" ) failed",
                  __FUNCTION__, pkt->intf_i, l.hwport, l.vlan_id,
-                 CI_MAC_PRINTF_ARGS(l.mac)));
+                 CI_MAC_PRINTF_ARGS(oo_ether_hdr_const(pkt)->ether_dhost)));
   }
 
   return ifindex;
