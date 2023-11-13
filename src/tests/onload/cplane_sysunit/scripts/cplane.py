@@ -141,7 +141,7 @@ class cp_fwd_data(Structure):
     _fields_ = [
         ("base", cp_fwd_data_base),
         ('flags', c_ubyte),  ('src_mac', c_ubyte * 6),
-        ('hwports', c_ushort), ('dst_mac', c_ubyte * 6),
+        ('hwports', c_uint), ('dst_mac', c_ubyte * 6),
         ('encap', cicp_encap_t),
         ('weight', cp_fwd_multipath_weight)
       ]
