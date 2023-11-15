@@ -68,7 +68,7 @@ update_product_strings() {
 # This is a wrapper around the various preprocessing stages for environments
 # with appropriately-defined global variables.
 preprocess_source() {
-  [ -n "$src_rev" ] || src_rev=$(cd "$TOP" && "$git" rev-parse HEAD)
+  [ -n "$src_rev" ] || src_rev=$(cd "$TOP" && "$git" rev-parse --short=7 HEAD)
 
   copy_distfiles "$distfiles_d"
   update_readme_strings "$product" "$version" "$src_rev"
