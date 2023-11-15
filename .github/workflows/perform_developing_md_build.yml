@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc.
+
+on: [push, pull_request]
+
+jobs:
+  perform_developing_md_build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: onload_internal
+        uses: actions/checkout@v4
+        with:
+          path: onload_internal
+
+      - name: Install Onload Deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcap-dev libmnl-dev
+
+      - name: setup Env
+        run: |
+          echo "$GITHUB_WORKSPACE/onload_internal/scripts" >> $GITHUB_PATH
+
+      - name: mmake buildtrees
+        run: |
+          cd $GITHUB_WORKSPACE/onload_internal
+          mmakebuildtree --driver
+          mmakebuildtree --user
+
+      - name: build driver
+        run: |
+          make -C "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)" -j 2
+          
+      - name: build user
+        run: |
+          make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j 2
+
+      - name: upload build dir
+        uses: actions/upload-artifact@v3
+        with:
+          name: onload-build
+          path: $GITHUB_WORKSPACE/onload_internal/build

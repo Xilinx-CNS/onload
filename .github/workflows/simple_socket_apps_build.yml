@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: BSD-2-Clause
+# X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc.
+
+on: [push, pull_request]
+
+jobs:
+  ssa:
+    if: github.repository == 'Xilinx-CNS/onload_internal'
+    runs-on: ubuntu-latest
+    steps:
+      - name: onload_internal
+        uses: actions/checkout@v4
+        with:
+          path: onload_internal
+
+      - name: ssa checkout
+        uses: actions/checkout@v4
+        with: 
+          repository: ${{ github.repository_owner }}/simple_sockets_apps
+          ssh-key: ${{ secrets.SIMPLE_SOCKET_APPS_READ_PRIVATE_KEY }}
+          path: ssa
+
+      - name: ssa build
+        run: |
+          cd $GITHUB_WORKSPACE/ssa
+          make ONLOAD_TREE=$GITHUB_WORKSPACE/onload_internal
+
+      - name: upload build dir
+        uses: actions/upload-artifact@v3
+        with:
+          name: ssa-build
+          path: $GITHUB_WORKSPACE/ssa/build
+
