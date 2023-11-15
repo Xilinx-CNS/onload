@@ -81,7 +81,7 @@ git=${GIT_PATH:-"git"}
 while [ $# -gt 0 ]; do
   case "$1" in
     --version)  shift; version="$1";;
-    --srcrev)   shift; src_rev="$1";;
+    --srcrev)   shift; src_rev="${1:0:7}";;
     --release)  release=true;;
     --product)  shift; Product="$1";;
     --cloud)    cloud=true;;
@@ -107,8 +107,10 @@ TOP=$("$bin/mmaketool" --toppath)
 if [ -z "$version" ]; then
   if $release; then
     version=$(date '+%Y%m%d')
+  elif [ -n "$src_rev" ]; then
+    version="$src_rev"
   else
-    version=$(cd "$TOP" && "$git" rev-parse HEAD)
+    version=$(cd "$TOP" && "$git" rev-parse --short=7 HEAD)
     [ -z "$version" ] && fail "ERROR: Could not find HEAD revision"
   fi
 fi
