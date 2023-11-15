@@ -27,6 +27,7 @@ EFRM_SOCK_SENDMSG_NEEDS_LEN	symtype	sock_sendmsg	include/linux/net.h int(struct 
 EFRM_SOCK_RECVMSG_NEEDS_BYTES	symtype sock_recvmsg	include/linux/net.h int(struct socket *, struct msghdr *, size_t, int)
 
 EFRM_HAVE_FOP_READ_ITER	memtype	struct_file_operations	read_iter	include/linux/fs.h ssize_t (*) (struct kiocb *, struct iov_iter *)
+EFRM_HAVE_FOP_SENDPAGE		memtype	struct_file_operations	sendpage	include/linux/fs.h ssize_t (*) (struct file *, struct page *, int, size_t, loff_t *, int)
 
 EFRM_SOCK_CREATE_KERN_HAS_NET	symtype	sock_create_kern	include/linux/net.h int(struct net *, int, int, int, struct socket **)
 
@@ -66,6 +67,7 @@ EFRM_GUP_RCLONG_TASK_SEPARATEFLAGS symtype get_user_pages include/linux/mm.h lon
 EFRM_GUP_RCLONG_TASK_COMBINEDFLAGS symtype get_user_pages include/linux/mm.h long(struct task_struct *, struct mm_struct *, unsigned long, unsigned long, unsigned int, struct page **, struct vm_area_struct **)
 EFRM_GUP_RCLONG_NOTASK_COMBINEDFLAGS symtype get_user_pages include/linux/mm.h long(unsigned long, unsigned long, unsigned int, struct page **, struct vm_area_struct **)
 EFRM_GUP_HAS_PIN	symbol	pin_user_pages	include/linux/mm.h
+EFRM_GUP_PIN_HAS_VMAS	symtype	pin_user_pages	include/linux/mm.h	long(unsigned long, unsigned long, unsigned int, struct page **, struct vm_area_struct **)
 EFRM_GUP_HAS_DMA_PINNED	symbol	page_maybe_dma_pinned	include/linux/mm.h
 
 EFRM_HAVE_USERMODEHELPER_SETUP		symbol	call_usermodehelper_setup	include/linux/kmod.h

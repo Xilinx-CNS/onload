@@ -232,9 +232,9 @@ memreg_rm_alloc(ci_resource_alloc_t* alloc_,
 
   mmap_read_lock(current->mm);
   for (mr->n_pages = 0; mr->n_pages < max_pages; mr->n_pages += rc) {
-    rc = pin_user_pages(first_page + mr->n_pages * PAGE_SIZE,
-                        max_pages - mr->n_pages, FOLL_WRITE,
-                        mr->pages + mr->n_pages, NULL);
+    rc = ci_pin_user_pages(first_page + mr->n_pages * PAGE_SIZE,
+                           max_pages - mr->n_pages, FOLL_WRITE,
+                           mr->pages + mr->n_pages);
     if (rc <= 0) {
       EFCH_ERR("%s: ERROR: pin_user_pages(%d) returned %d",
                __FUNCTION__, max_pages - mr->n_pages, rc);
