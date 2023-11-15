@@ -16,10 +16,34 @@
 
 #ifdef CONFIG_DEBUG_FS
 
+
+static int efct_debugfs_read_hw_filters(struct seq_file *file,
+                                        const void *data)
+{
+  const struct efhw_nic_efct *efct = data;
+  struct efct_hw_filter *filter;
+  int i;
+
+  for( i = 0; i < efct->hw_filters_n; i++ ) {
+    filter = &efct->hw_filters[i];
+    if( filter->refcount > 0 )
+      seq_printf(file, "%03x: ref: %d\tid: %d/%d\trxq: %d\t%s:%pI4:%d "
+                       "%pM %d\n", i,
+                 filter->refcount, filter->hw_id, filter->drv_id, filter->rxq,
+                 filter->proto == IPPROTO_UDP ? "udp" :
+                 filter->proto == IPPROTO_TCP ? "tcp" : "unknown",
+                 &filter->ip, ntohs(filter->port), &filter->loc_mac,
+                 filter->outer_vlan < 0 ? -1 :
+                 ntohs(filter->outer_vlan & 0xffff));
+  }
+  return 0;
+}
+
 static const struct efrm_debugfs_parameter efhw_debugfs_efct_parameters[] = {
   EFRM_U32_PARAMETER(struct efhw_nic_efct, rxq_n),
   EFRM_U32_PARAMETER(struct efhw_nic_efct, evq_n),
   EFRM_U32_PARAMETER(struct efhw_nic_efct, hw_filters_n),
+  _EFRM_RAW_PARAMETER(hw_filters, efct_debugfs_read_hw_filters),
   {NULL},
 };
 
