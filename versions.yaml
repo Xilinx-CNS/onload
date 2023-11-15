@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
-# X-SPDX-Copyright-Text: (c) Copyright 2018-2022 Xilinx, Inc.
+# X-SPDX-Copyright-Text: (c) Copyright 2018-2023 Xilinx, Inc.
 
 ---
 products:
   Onload:
-    version: 8.1.1
+    version: 8.1.2
 ...
