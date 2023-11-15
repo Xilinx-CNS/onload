@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc.
 
+name: "perform_simple_socket_apps_build"
+
 on: [push, pull_request]
 
 jobs:
@@ -23,11 +25,4 @@ jobs:
       - name: ssa build
         run: |
           cd $GITHUB_WORKSPACE/ssa
-          make ONLOAD_TREE=$GITHUB_WORKSPACE/onload_internal
-
-      - name: upload build dir
-        uses: actions/upload-artifact@v3
-        with:
-          name: ssa-build
-          path: $GITHUB_WORKSPACE/ssa/build
-
+          make ONLOAD_TREE=$GITHUB_WORKSPACE/onload_internal -j 2
