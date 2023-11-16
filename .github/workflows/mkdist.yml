@@ -59,6 +59,7 @@ jobs:
     - if: ${{ inputs.mkdist-url == '' }}
       name: Run onload_mkdist
       run: |
+        # shellcheck disable=SC2086
         ./scripts/onload_mkdist $MKDIST_PARAMS
 
     - if: ${{ inputs.mkdist-url }}
@@ -72,7 +73,7 @@ jobs:
     - name: Output container vars
       id: mkcontainer
       run: |
-        ./scripts/onload_mkcontainer --output-vars *.tgz | tr -d '"' >> $GITHUB_OUTPUT
+        ./scripts/onload_mkcontainer --output-vars ./*.tgz | tr -d '"' >> "$GITHUB_OUTPUT"
 
     - name: Cache tarball
       uses: actions/upload-artifact@v3
