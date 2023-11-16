@@ -24,16 +24,28 @@ on:
       version:
         description: Onload version (override mkdist)
         type: string
+      release-tag:
+        description: Release tag (no -dev suffix)
+        type: boolean
+        default: false
+      build-ubi-base:
+        description: Base image for builder (override workflow)
+        type: string
+      user-base:
+        description: Base image for user (override workflow)
+        type: string
   push:
     tags: [ onload-* ]
 
 env:
   REGISTRY_PREFIX: ${{ inputs.registry-prefix || format('ghcr.io/{0}', github.repository_owner) }}
+  IMAGE_TAG_SUFFIX: ${{ inputs.release-tag == false && '-dev' || '' }}
+  BUILDER_UBI_BASE: ${{ inputs.build-ubi-base || 'registry.access.redhat.com/ubi8-minimal:8.9' }}
+  USER_BASE: ${{ inputs.user-base || 'registry.access.redhat.com/ubi8-micro:8.9' }}
 permissions:
   packages: write
   contents: read
 jobs:
-
   mkdist-caller:
     uses: ./.github/workflows/mkdist.yml
     with:
@@ -80,6 +92,9 @@ jobs:
         username: ${{ github.actor }}
         password: ${{ github.token }}
 
+    - name: Env - lowercase registry prefix
+      run: echo "REGISTRY_PREFIX=${REGISTRY_PREFIX@L}" >> "$GITHUB_ENV"
+
     - name: Build and push image
       id: build
       uses: docker/build-push-action@v5
@@ -88,8 +103,8 @@ jobs:
         file: scripts/onload-user.Dockerfile
         target: onload-source-subdir
         tags: |
-          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}-dev
-          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:git-${{ env.REVISION }}-dev
+          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}${{ env.IMAGE_TAG_SUFFIX }}
+          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:git-${{ env.REVISION }}
         build-args: |
           BRAND=${{ env.BRAND }}
           PRODUCT=${{ env.PRODUCT }}
@@ -108,7 +123,7 @@ jobs:
         # $IMAGE_NAME
         [\`$REGISTRY_PREFIX/$IMAGE_NAME\`](https://$REGISTRY_PREFIX/$IMAGE_NAME)@\`$DIGEST\`
         Image ID (Config): \`$IMAGEID\`
-        " >> $GITHUB_STEP_SUMMARY
+        " >> "$GITHUB_STEP_SUMMARY"
 
   user-container-build:
     name: User Container Build
@@ -125,13 +140,11 @@ jobs:
       REVISION: ${{ needs.source-container-build.outputs.revision }}
     strategy:
       matrix:
-        mode: [Default, Debug]
+        mode: [UBI8]
         include:
-          - mode: Default
-            suffix: -ubi8-dev
-          - mode: Debug
-            suffix: -debug-ubi8-dev
-            build-params: --debug
+          - mode: UBI8
+            suffix: -ubi8
+            build-params:
     steps:
 
     - name: Checkout repository
@@ -150,7 +163,7 @@ jobs:
 
     - name: Date
       id: date
-      run: echo created=$(date --rfc-3339=seconds) >> $GITHUB_OUTPUT
+      run: echo "created=$(date --rfc-3339=seconds)" >> "$GITHUB_OUTPUT"
 
     - name: Build and push image
       id: build
@@ -159,7 +172,7 @@ jobs:
         context: .
         file: scripts/onload-user.Dockerfile
         tags: |
-          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}${{ matrix.suffix }}
+          ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }}${{ matrix.suffix }}${{ env.IMAGE_TAG_SUFFIX }}
           ${{ env.REGISTRY_PREFIX }}/${{ env.IMAGE_NAME }}:git-${{ env.REVISION }}${{ matrix.suffix }}
         build-args: |
           BRAND=${{ env.BRAND }}
@@ -169,6 +182,8 @@ jobs:
           SOURCE_IMAGE=${{ env.SOURCE_IMAGE }}
           ONLOAD_BUILD_PARAMS=${{ matrix.build-params }}
           SOURCE=${{ github.repositoryUrl }}
+          BUILDER_UBI_BASE=${{ env.BUILDER_UBI_BASE }}
+          USER_BASE=${{ env.USER_BASE }}
         push: true
 
     - name: Summarise
@@ -181,4 +196,4 @@ jobs:
         # $IMAGE_NAME ($MODE)
         [\`$REGISTRY_PREFIX/$IMAGE_NAME\`](https://$REGISTRY_PREFIX/$IMAGE_NAME)@\`$DIGEST\`
         Image ID (Config): \`$IMAGEID\`
-        " >> $GITHUB_STEP_SUMMARY
+        " >> "$GITHUB_STEP_SUMMARY"

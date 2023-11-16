@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc.
-
+# hadolint ignore=DL3006,DL3041
 ARG SOURCE_IMAGE=onload-source-subdir
-ARG BUILDER_UBI_BASE=redhat/ubi8-minimal:8.8
-ARG USER_BASE=redhat/ubi8-micro:8.8
+ARG BUILDER_UBI_BASE=redhat/ubi8-minimal:8.9
+ARG USER_BASE=redhat/ubi8-micro:8.9
 ARG URL=https://github.com/Xilinx-CNS/onload
 ARG PRODUCT=Onload
 ARG VENDOR=Advanced Micro Devices, Inc.
