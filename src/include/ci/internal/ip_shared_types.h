@@ -501,9 +501,12 @@ struct ci_pkt_zc_payload {
     struct {
       ci_uint64 app_cookie CI_ALIGN(8);  /* From onload_zc_iovec::app_cookie */
       ef_addrspace addr_space CI_ALIGN(8); /* Address space of this data segment */
-      ef_addr dma_addr[0] CI_ALIGN(8);   /* Length is oo_stack_intf_max() */
+      __DECLARE_FLEX_ARRAY(ef_addr, dma_addr) CI_ALIGN(8); /* Length is oo_stack_intf_max() */
     } remote;
-    char local[1];
+    union {
+      char padding;
+       __DECLARE_FLEX_ARRAY(char, local);
+    };
   };
 
   /* Space of length prefix_space is reserved at the end of the structure. */
@@ -539,7 +542,7 @@ struct ci_pkt_zc_header {
                           * cached here to allow determination of free space in
                           * the buffer without walking the payloads. */
   ci_uint8 segs;         /* Number of zc_payload structs following */
-  struct ci_pkt_zc_payload data[0];
+  __DECLARE_FLEX_ARRAY(struct ci_pkt_zc_payload, data);
 };
 
 
@@ -636,7 +639,15 @@ typedef struct {
 
 typedef struct {
   CI_ULCONST unsigned              table_size_mask;
-  ci_netif_filter_table_entry_fast table[1];
+  /* table[1] declaration is invalid in linux-6.5 and triggers UBSAN
+   * "array-index-out-of-bounds" warnings. Instead declare it as table[] with
+   * __DECLARE_FLEX_ARRAY macro.
+   * Use a union here (and in other similar places) to keep the same size
+   * of the structure to avoid any potential side effects. */
+  union {
+    ci_netif_filter_table_entry_fast padding;
+    __DECLARE_FLEX_ARRAY(ci_netif_filter_table_entry_fast, table);
+  };
 } ci_netif_filter_table;
 
 
@@ -662,7 +673,10 @@ typedef struct {
 
 typedef struct {
   CI_ULCONST unsigned table_size_mask;
-  ci_ip6_netif_filter_table_entry table[1];
+  union {
+    ci_ip6_netif_filter_table_entry padding;
+    __DECLARE_FLEX_ARRAY(ci_ip6_netif_filter_table_entry, table);
+  };
 } ci_ip6_netif_filter_table;
 #endif
 
@@ -885,7 +899,7 @@ typedef struct {
   /* Packet buffers allocated.  This is [sets_n * PKTS_PER_SET]. */
   CI_ULCONST ci_int32  n_pkts_allocated;
 
-  oo_pktbuf_set set[0];
+  __DECLARE_FLEX_ARRAY(oo_pktbuf_set, set);
 } oo_pktbuf_manager;
 
 

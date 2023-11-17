@@ -90,7 +90,7 @@ struct efrm_pd {
 	/* Buffer table manager.  Needed iff vf==NULL.
 	 * For Huntington, we'll need separate managers for different
 	 * page orders.*/
-	struct efrm_bt_manager bt_managers[0];
+	__DECLARE_FLEX_ARRAY(struct efrm_bt_manager, bt_managers);
 
 	/* !! DANGER !!  Do not add any fields here; bt_managers must be
 	 * the last field.
@@ -112,7 +112,10 @@ struct efrm_pd_owner_ids {
 	 * owner_ids on base VI ID.  On ef10 all owner_ids are 0 based as they
 	 * are function relative. */
 	int base, n;
-	unsigned long used_ids[1];
+	union {
+		unsigned long padding;
+		__DECLARE_FLEX_ARRAY(unsigned long, used_ids);
+	};
 	/* When allocating an owner id block enough memory is allocated to
 	 * continue the used_ids array sufficiently to contain n owner ids.
 	 */
