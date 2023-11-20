@@ -1,4 +1,15 @@
-/* TX timestamp to CMSG  including support functions */
+/* SPDX-License-Identifier: GPL-2.0 */
+/* X-SPDX-Copyright-Text: (c) Copyright 2003-2023 Xilinx, Inc. */
+/**************************************************************************\
+*//*! \file
+** <L5_PRIVATE L5_SOURCE>
+** \author  djr
+**  \brief  TX timestamp to CMSG including support functions
+**   \date  2003/12/29
+**    \cop  (c) Level 5 Networks Limited.
+** </L5_PRIVATE>
+*//*
+\**************************************************************************/
 
 struct oo_copy_state {
   int pkt_left;
