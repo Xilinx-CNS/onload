@@ -721,6 +721,7 @@ typedef struct {
   /** Credit for packed stream handling (7000-series only) */
   uint16_t  rx_ps_credit_avail;                 /* ef10 only */
   ef_vi_efct_rxq_ptr rxq_ptr[EF_VI_MAX_EFCT_RXQS]; /* efct only */
+  int16_t sb_desc_free_head[EF_VI_MAX_EFCT_RXQS]; /* efct only */
 } ef_vi_rxq_state;
 
 /*! \brief State of event queue
