@@ -159,6 +159,7 @@ void efhw_fini_debugfs_nic(struct efhw_nic *nic)
 {
   debugfs_remove_recursive(nic->debug_dir);
   nic->debug_dir = NULL;
+  memset(nic->rs_debug_dirs, 0, sizeof(nic->rs_debug_dirs));
 }
 
 #else /* !CONFIG_DEBUG_FS */

@@ -46,6 +46,7 @@
 #include <ci/efhw/sysdep.h>
 #include <ci/efhw/common.h>
 #include <ci/compat.h>
+#include <ci/efrm/resource_id.h>
 #include <etherfabric/ef_vi.h>
 
 /*--------------------------------------------------------------------
@@ -577,6 +578,7 @@ struct efhw_nic {
         uint16_t tx_variant;
 
 	struct dentry *debug_dir;
+	struct dentry *rs_debug_dirs[EFRM_RESOURCE_NUM];
 
         /* arch-specific state */
         void* arch_extra;

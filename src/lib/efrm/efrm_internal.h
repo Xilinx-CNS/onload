@@ -47,6 +47,8 @@ static inline void efrm_resource_init(struct efrm_resource *rs,
 	rs->rs_type = type;
 	rs->rs_instance = instance;
 	rs->rs_client = NULL;
+	rs->debug_dir = NULL;
+	memset(rs->rs_debug_dirs, 0, sizeof(rs->rs_debug_dirs));
 }
 
 #ifdef __KERNEL__

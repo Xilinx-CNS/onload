@@ -60,6 +60,7 @@
 #include "efrm_pd.h"
 #include "bt_manager.h"
 #include "sfcaffinity.h"
+#include "debugfs_rs.h"
 #include <ci/driver/resource/linux_efhw_nic.h>
 
 
@@ -1017,6 +1018,28 @@ efrm_vi_evq_id(struct efrm_vi *virs, enum efhw_q_type queue_type)
 }
 
 
+static void efrm_init_debugfs_vi(struct efrm_vi *virs)
+{
+#ifdef CONFIG_DEBUG_FS
+	/* Currently only need vi debugfs folders to hold efct queues
+	 * Avoid creating others to avoid empty folder clutter */
+	if (virs->efct_shm) {
+		struct efrm_resource *rs = &virs->rs;
+		efrm_debugfs_add_rs(rs, NULL, rs->rs_instance);
+	}
+	/* VI resource doesn't currently have debugfs files */
+#endif
+}
+
+
+static void efrm_fini_debugfs_vi(struct efrm_vi *virs)
+{
+#ifdef CONFIG_DEBUG_FS
+	efrm_debugfs_remove_rs(&virs->rs);
+#endif
+}
+
+
 static int
 __efrm_vi_q_flush(struct efhw_nic* nic, struct efrm_vi* virs,
 		  enum efhw_q_type queue_type)
@@ -1138,6 +1161,7 @@ __efrm_vi_resource_free(struct efrm_vi *virs)
 	vfree(virs->efct_shm);
 	efrm_vi_rm_free_instance(virs->rs.rs_client, virs);
 	efrm_pd_release(virs->pd);
+	efrm_fini_debugfs_vi(virs);
 	efrm_client_put(virs->rs.rs_client);
 	EFRM_DO_DEBUG(memset(virs, 0, sizeof(*virs)));
 	kfree(virs);
@@ -1717,6 +1741,7 @@ int  efrm_vi_alloc(struct efrm_client *client,
 #endif
 
 	efrm_client_add_resource(client, &virs->rs);
+	efrm_init_debugfs_vi(virs);
 	*p_virs_out = virs;
 	return 0;
 

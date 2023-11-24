@@ -38,10 +38,11 @@ EFRM_SRCS	:=			\
 		buddy.c			\
 		bt_manager.c		\
 		driver_object.c		\
-		licensing.c
+		licensing.c		\
+		debugfs_rs.c
 
 EFRM_HDRS	:= efrm_internal.h efrm_vi.h efrm_vi_set.h \
-		efrm_pd.h efrm_pio.h bt_manager.h
+		efrm_pd.h efrm_pio.h bt_manager.h debugfs_rs.h
 
 UTILS_HDRS	:= hugetlb.h
 UTILS_SRCS	:= hugetlb.c
