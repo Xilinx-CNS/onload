@@ -65,6 +65,46 @@ static void pkt_cpacket(ci_ip_pkt_fmt* pkt, uint32_t sec, uint32_t nsec)
   pkt_append(pkt, data, 12);
 }
 
+static void pkt_ttag(ci_ip_pkt_fmt* pkt, uint32_t sec, uint32_t nsec)
+{
+  const uint64_t nsec_per_sec = 1000ULL * 1000 * 1000;
+  uint8_t ttag[6];
+  uint64_t ts;
+
+  ts = (sec * nsec_per_sec) + nsec;
+  assert((ts & 0xFF00000000000000ULL) == 0);
+
+  ttag[0] = (ts & 0xFF0000000000) >> 40;
+  ttag[1] = (ts & 0xFF00000000) >> 32;
+  ttag[2] = (ts & 0xFF000000) >> 24;
+  ttag[3] = (ts & 0xFF0000) >> 16;
+  ttag[4] = (ts & 0xFF00) >> 8;
+  ttag[5] = ts & 0xFF;
+
+  pkt_fcs(pkt);
+  pkt_append(pkt, ttag, sizeof(ttag));
+}
+
+static void pkt_trailer_brcm(ci_ip_pkt_fmt* pkt, uint32_t sec, uint32_t nsec)
+{
+  uint8_t trailer[10];
+
+  assert((sec & ~0x3FFFF) == 0);
+  assert((nsec & ~0x3FFFFFFF) == 0);
+
+  trailer[2] = (nsec & 0x3F000000) >> 24;
+  trailer[3] = (nsec & 0x00FF0000) >> 16;
+  trailer[4] = (nsec & 0x0000FF00) >> 8;
+  trailer[5] =  nsec & 0x000000FF;
+
+  trailer[0] = ((sec >> 2) & 0xFF00) >> 8;
+  trailer[1] =  (sec >> 2) & 0x00FF;
+  trailer[2] |= (sec & 0x3) << 6;
+
+  pkt_fcs(pkt);
+  pkt_append(pkt, trailer, sizeof(trailer));
+}
+
 static void pkt_tag_header(ci_ip_pkt_fmt* pkt, int type, int len)
 {
   assert(type < (1 << 5));
@@ -134,7 +174,7 @@ static void test_rx_pkt_timestamp_cpacket_none(void)
   pkt_udp(pkt, NULL, 0);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_cpacket(pkt, ts);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, 0);
 
   STATE_FREE(buf);
@@ -157,7 +197,7 @@ static void test_rx_pkt_timestamp_cpacket_basic(void)
   pkt_cpacket(pkt, sec, nsec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_cpacket(pkt, ts);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
 
@@ -183,7 +223,7 @@ static void test_rx_pkt_timestamp_cpacket_subnano(void)
   pkt_cpacket(pkt, sec, nsec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_cpacket(pkt, ts);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
   STATE_CHECK(ts, nsec_frac, subnano);
@@ -218,7 +258,7 @@ static void test_rx_pkt_timestamp_cpacket_many(void)
   pkt_cpacket(pkt, sec, nsec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_cpacket(pkt, ts);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
   STATE_CHECK(ts, nsec_frac, subnano);
@@ -248,7 +288,7 @@ static void test_rx_pkt_timestamp_cpacket_bogus(void)
   pkt_cpacket(pkt, sec, nsec);
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_cpacket(pkt, ts);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
   STATE_CHECK(ts, nsec_frac, 0); /* didn't find it, but no disastrous outcome */
@@ -369,7 +409,7 @@ static void test_rx_pkt_timestamp_cpacket_pcap_metawatch(void)
   pkt_append(pkt, pcap, sizeof(pcap));
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_cpacket(pkt, ts);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, 0x5c9a4c08);
   STATE_CHECK(ts, nsec, 0x313ac683);
   STATE_CHECK(ts, nsec_frac, 0x536c8b);
@@ -433,10 +473,60 @@ static void test_rx_pkt_timestamp_cpacket_pcap_wireshark(void)
   pkt_append(pkt, pcap, sizeof(pcap));
   STATE_STASH(buf);
 
-  ci_rx_pkt_timestamp_cpacket(pkt, ts);
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, 0x40a34b24);
   STATE_CHECK(ts, nsec, 0x0d4399db);
   STATE_CHECK(ts, nsec_frac, 0x2c52de);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_ttag(void)
+{
+  const uint64_t nsec_per_sec = 1000ULL * 1000 * 1000;
+  const uint64_t max_48b_nsec = (1UL << 48) - 1;
+  ci_ip_pkt_fmt* pkt;
+  uint32_t sec = (max_48b_nsec / nsec_per_sec) - 1;
+  uint32_t nsec = 999999999;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_ttag(pkt, sec, nsec);
+  STATE_STASH(buf);
+
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_TTAG);
+  STATE_CHECK(ts, sec, sec);
+  STATE_CHECK(ts, nsec, nsec);
+  STATE_CHECK(ts, nsec_frac, 0);
+
+  STATE_FREE(buf);
+  STATE_FREE(ts);
+}
+
+static void test_rx_pkt_timestamp_trailer_brcm(void)
+{
+  ci_ip_pkt_fmt* pkt;
+  uint32_t sec = 0x3FFFF;	/* largest 18b value */
+  uint32_t nsec = 999999999;
+
+  STATE_ALLOC(union pkt_buf, buf);
+  STATE_ALLOC(struct onload_timestamp, ts);
+
+  pkt = &buf->pkt;
+  pkt_init(pkt);
+  pkt_udp(pkt, NULL, 0);
+  pkt_trailer_brcm(pkt, sec, nsec);
+  STATE_STASH(buf);
+
+  ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_BRCM);
+  STATE_CHECK(ts, sec, sec);
+  STATE_CHECK(ts, nsec, nsec);
+  STATE_CHECK(ts, nsec_frac, 0);
 
   STATE_FREE(buf);
   STATE_FREE(ts);
@@ -450,5 +540,7 @@ int main(void) {
   TEST_RUN(test_rx_pkt_timestamp_cpacket_bogus);
   TEST_RUN(test_rx_pkt_timestamp_cpacket_pcap_metawatch);
   TEST_RUN(test_rx_pkt_timestamp_cpacket_pcap_wireshark);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_ttag);
+  TEST_RUN(test_rx_pkt_timestamp_trailer_brcm);
   TEST_END();
 }
