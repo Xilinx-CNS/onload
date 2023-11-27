@@ -53,14 +53,19 @@ struct efhw_nic_efct_rxq {
    *  * start new app (without rollover)
    */
   struct {
-    struct efab_efct_rxq_uk_shm_rxq_entry q[16];
+    struct efab_efct_rxq_uk_shm_rxq_entry q[CI_EFCT_MAX_SUPERBUFS];
     uint32_t added;
+    /* Points one past the last buffer the x3 driver has finished with. */
     uint32_t removed;
+    /* Points one past the last buffer all apps have finished with. */
+    uint32_t oldest_app_seq;
   } sbufs;
+  uint32_t apps_max_sbufs;
   struct work_struct destruct_wq;
   uint32_t now;
   uint32_t awaiters;
   uint64_t time_sync;
+  uint16_t total_sbufs;
 };
 
 #define EFCT_EVQ_NO_TXQ -1

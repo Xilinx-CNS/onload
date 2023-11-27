@@ -10,6 +10,7 @@
 #include <ci/tools/sysdep.h>
 #include <ci/efhw/efct.h>
 #include <ci/driver/ci_efct.h>
+#include <ci/internal/seq.h>
 #include "efct_superbuf.h"
 
 #if CI_HAVE_EFCT_AUX
@@ -19,7 +20,6 @@
 /* returns true if we can/should squeeze more buffers into the app */
 static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_rxq *app)
 {
-  uint32_t driver_buf_count;
   uint32_t sbuf_seq;
   struct efab_efct_rxq_uk_shm_rxq_entry sbufs_q_entry;
   uint16_t sbid;
@@ -43,24 +43,20 @@ static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_r
   added = CI_READ_ONCE(app->shm->rxq.added);
   removed = CI_READ_ONCE(app->shm->rxq.removed);
   if( (uint32_t)(added - removed) >= CI_ARRAY_SIZE(app->shm->rxq.q) ) {
-    /* the shared state is actually corrupted */
-    EFHW_ASSERT(app->max_allowed_superbufs <= CI_ARRAY_SIZE(app->shm->rxq.q));
     ++app->shm->stats.no_rxq_space;
     return false;
   }
 
-  driver_buf_count = q->sbufs.added - q->sbufs.removed;
-  EFHW_ASSERT(driver_buf_count <= CI_ARRAY_SIZE(q->sbufs.q));
-
   /* pick the next buffer the app wants ... unless there is something wrong
    * (e.g. the app got stalled) in that case pick the oldest sbuf we have
    */
-  if( (uint32_t)(q->sbufs.added - app->next_sbuf_seq) < driver_buf_count &&
-      (uint32_t)(app->next_sbuf_seq - q->sbufs.removed) < driver_buf_count ) {
+  if( SEQ_LE(q->sbufs.oldest_app_seq, app->next_sbuf_seq) ) {
     sbuf_seq = app->next_sbuf_seq;
   } else {
-    sbuf_seq = q->sbufs.removed;
-    app->shm->stats.skipped_bufs += (q->sbufs.removed - app->next_sbuf_seq);
+    sbuf_seq = q->sbufs.oldest_app_seq;
+    app->shm->stats.skipped_bufs += (q->sbufs.oldest_app_seq - app->next_sbuf_seq);
+    /* If an app has fallen behind, we should never advance up to added */
+    EFHW_ASSERT(SEQ_LT(q->sbufs.oldest_app_seq, q->sbufs.added));
   }
 
   sbufs_q_entry = q->sbufs.q[sbuf_seq % CI_ARRAY_SIZE(q->sbufs.q)];
@@ -77,17 +73,89 @@ static bool post_superbuf_to_app(struct efhw_nic_efct_rxq* q, struct efhw_efct_r
   return true;
 }
 
-static bool post_superbuf_to_apps(struct efhw_nic_efct_rxq* q)
+static bool drop_sbuf_ref(struct xlnx_efct_device *edev,
+                          struct xlnx_efct_client *client, int qid,
+                          struct efhw_nic_efct_rxq* q,
+                          int sbid)
+{
+  if( --q->superbuf_refcount[sbid] == 0 ) {
+    edev->ops->release_superbuf(client, qid, sbid);
+    --q->total_sbufs;
+    return true;
+  }
+  return false;
+}
+
+static uint32_t next_app_seq_min(struct efhw_efct_rxq *app,
+                         struct efhw_nic_efct_rxq* q,
+                         uint32_t min) {
+  if( SEQ_LT(app->next_sbuf_seq, q->sbufs.oldest_app_seq) ) {
+    app->shm->stats.skipped_bufs += q->sbufs.oldest_app_seq - app->next_sbuf_seq;
+    app->next_sbuf_seq = q->sbufs.oldest_app_seq;
+  }
+  return SEQ_MIN(app->next_sbuf_seq, min);
+}
+
+static void advance_oldest_app_seq(struct xlnx_efct_device *edev,
+                               struct xlnx_efct_client *client, int qid,
+                               struct efhw_nic_efct_rxq* q, uint32_t until) {
+  EFHW_ASSERT(SEQ_GE(until, q->sbufs.oldest_app_seq));
+  while(q->sbufs.oldest_app_seq != until) {
+    uint16_t sbid_to_drop = q->sbufs.q[q->sbufs.oldest_app_seq++ %
+                                       CI_ARRAY_SIZE(q->sbufs.q)].sbid;
+    drop_sbuf_ref(edev, client, qid, q, sbid_to_drop);
+  }
+}
+
+static void update_oldest_app_seq(struct xlnx_efct_device *edev,
+                              struct xlnx_efct_client *client, int qid,
+                              struct efhw_nic_efct_rxq* q)
+{
+  /* Update the oldest_app_seq pointer. When it advances, drop references
+   * to the sbufs it went past. */
+  uint32_t min = q->sbufs.added;
+  struct efhw_efct_rxq *app;
+  for( app = q->live_apps; app; app = app->next ) {
+    min = next_app_seq_min(app, q, min);
+  }
+
+  advance_oldest_app_seq(edev, client, qid, q, min);
+}
+
+static bool post_superbuf_to_apps(struct xlnx_efct_device *edev,
+                                  struct xlnx_efct_client *client,
+                                  int qid,
+                                  struct efhw_nic_efct_rxq* q)
 {
   struct efhw_efct_rxq *app;
+  bool is_successful_post = false;
+  uint32_t min = q->sbufs.added;
 
   for( app = q->live_apps; app; app = app->next ) {
     /* post app to single buffer */
-    post_superbuf_to_app(q, app);
+    is_successful_post |= post_superbuf_to_app(q, app);
+    min = next_app_seq_min(app, q, min);
   }
+  if( is_successful_post )
+    advance_oldest_app_seq(edev, client, qid, q, min);
   return true;
 }
 
+static void skip_sbufs(struct xlnx_efct_device *edev,
+                       struct xlnx_efct_client *client,
+                       int qid,
+                       struct efhw_nic_efct_rxq* q)
+{
+  /* Starting from removed, find and drop superbufs until one is freed
+   * or `q->sbufs.oldest_app_seq >= q->sbufs.removed`. There is no point
+   * in skipping past bufs the driver hasn't yet removed. */
+  uint16_t sbid_to_free;
+  do {
+    if( SEQ_GE(q->sbufs.oldest_app_seq, q->sbufs.removed) )
+      return;
+    sbid_to_free = q->sbufs.q[q->sbufs.oldest_app_seq++ % CI_ARRAY_SIZE(q->sbufs.q)].sbid;
+  } while(!drop_sbuf_ref(edev, client, qid, q, sbid_to_free));
+}
 
 static void finished_with_superbuf(struct xlnx_efct_device *edev,
                                    struct xlnx_efct_client *client, int qid,
@@ -102,13 +170,11 @@ static void finished_with_superbuf(struct xlnx_efct_device *edev,
   EFHW_ASSERT(ci_bit_test(app->owns_superbuf, sbid));
   __ci_bit_clear(app->owns_superbuf, sbid);
   --app->current_owned_superbufs;
-  if( --q->superbuf_refcount[sbid] == 0 )
-    edev->ops->release_superbuf(client, qid, sbid);
-
+  drop_sbuf_ref(edev, client, qid, q, sbid);
   EFHW_ASSERT(app->current_owned_superbufs < app->max_allowed_superbufs);
-
   /* perhaps we can feed more buffer(s) to the app */
-  post_superbuf_to_app(q, app);
+  if(post_superbuf_to_app(q, app))
+    update_oldest_app_seq(edev, client, qid, q);
 }
 
 static void reap_superbufs_from_apps(struct xlnx_efct_device *edev,
@@ -121,10 +187,18 @@ static void reap_superbufs_from_apps(struct xlnx_efct_device *edev,
     struct efhw_efct_rxq *app = *pprev;
     if( app->destroy ) {
       int sbid;
+
       ci_bit_for_each_set(sbid, app->owns_superbuf, CI_EFCT_MAX_SUPERBUFS)
         finished_with_superbuf(edev, client, qid, q, app, sbid);
       EFHW_ASSERT(app->current_owned_superbufs == 0);
+
+      /* Now this app is destroyed, its donated sbufs are gone and so
+       * we must free sbufs until we have an apropriate amount. */
       *pprev = app->next;
+      q->apps_max_sbufs -= app->max_allowed_superbufs;
+      while( SEQ_LT(q->sbufs.oldest_app_seq, q->sbufs.removed) &&
+             q->total_sbufs > q->apps_max_sbufs )
+        skip_sbufs(edev, client, qid, q);
       efct_app_list_push(&q->destroy_apps, app);
       schedule_work(&q->destruct_wq);
     }
@@ -171,6 +245,7 @@ static void activate_new_apps(struct efhw_nic_efct_rxq *q)
         app->next_sbuf_seq = q->sbufs.added;
         app->shm->time_sync = q->time_sync;
         last = app;
+        q->apps_max_sbufs += app->max_allowed_superbufs;
       }
       last->next = q->live_apps;
       q->live_apps = new_apps;
@@ -209,14 +284,23 @@ int efct_buffer_end(void *driver_data, int qid, int sbid, bool force)
   struct efhw_nic_efct *efct = (struct efhw_nic_efct *) driver_data;
 
   struct efhw_nic_efct_rxq *q;
+  bool free_sbuf;
   EFHW_ASSERT(sbid >= 0);
   EFHW_ASSERT(sbid < CI_EFCT_MAX_SUPERBUFS);
   q = &efct->rxq[qid];
-  EFHW_ASSERT((uint32_t)(q->sbufs.added - q->sbufs.removed) < CI_ARRAY_SIZE(q->sbufs.q));
+  EFHW_ASSERT((uint32_t)(q->sbufs.added - q->sbufs.removed) <
+              CI_ARRAY_SIZE(q->sbufs.q));
   EFHW_ASSERT(q->sbufs.q[q->sbufs.removed % CI_ARRAY_SIZE(q->sbufs.q)].sbid == sbid);
   q->sbufs.removed++;
+
   EFHW_ASSERT((int)q->superbuf_refcount[sbid] > 0);
-  return --q->superbuf_refcount[sbid] == 0;
+
+  if( q->total_sbufs > q->apps_max_sbufs )
+    skip_sbufs(efct->edev, efct->client, qid, q);
+
+  free_sbuf = --q->superbuf_refcount[sbid] == 0;
+  q->total_sbufs -= free_sbuf;
+  return free_sbuf;
 }
 
 int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
@@ -232,15 +316,21 @@ int efct_buffer_start(void *driver_data, int qid, unsigned sbseq,
     return -1;
 
   activate_new_apps(q);
-
-  /* remember buffers owned by x3net */
-  ++q->superbuf_refcount[sbid];
+  EFHW_ASSERT(q->apps_max_sbufs <= CI_EFCT_MAX_SUPERBUFS);
+  /* We have taken too many sbufs from x3-net, we need to skip buffers
+   * and return the oldest one. */
+  if( q->total_sbufs >= q->apps_max_sbufs )
+    skip_sbufs(efct->edev, efct->client, qid, q);
+  /* buffers owned by x3net, Also add a ref as the sbuf hasn't been
+   * removed */
+  q->superbuf_refcount[sbid] = 2;
   entry.sbid = sbid;
   entry.sentinel = sentinel;
   entry.sbseq = sbseq;
   q->sbufs.q[(q->sbufs.added++) % CI_ARRAY_SIZE(q->sbufs.q)] = entry;
 
-  post_superbuf_to_apps(q);
+  ++q->total_sbufs;
+  post_superbuf_to_apps(efct->edev, efct->client, qid, q);
   return 1; /* always hold on to buffer until efct_buffer_end() is called */
 }
 
