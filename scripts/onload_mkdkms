@@ -148,7 +148,7 @@ fi
 # Add the source to DKMS.  It will create a sym-link to the source using
 # an absolute path which won't work in the chroot, so replace that with
 # a relative path.
-try dkms add --dkmstree "$DKMS/var_lib" \
+try fakeroot dkms add --dkmstree "$DKMS/var_lib" \
   --sourcetree "$DKMS/usr_src" \
   -m $product -v "$version"
 rm -f "$DKMS/var_lib/$product/$version/source"

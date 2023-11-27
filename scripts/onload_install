@@ -802,20 +802,28 @@ if $failorm; then
   err
 fi
 
-if $sfccheck; then
+if $sfccheck && { [ "$kernelfiles" = "true" ] || [ "$all" = "true" ] ; } ; then
   if /sbin/lsmod | grep -qw sfc; then
     err
     log "WARNING: An 'sfc' driver is already loaded.  You should"
     log "WARNING: unload and reload (or reboot) to ensure you are"
     log "WARNING: using the version supplied with OpenOnload."
     err
-    log "WARNING: Try:   onload_tool reload"
+    if $all; then
+      log "WARNING: Try:   onload_tool reload"
+    else
+      log "WARNING: Try:   modprobe -r sfc; modprobe sfc"
+    fi
     err
     log "WARNING: If this problem persists you may need to update"
     log "WARNING: your initramfs to include the correct sfc module"
   else
     echo
-    echo "$me: To load the newly installed drivers run:  onload_tool reload"
+    if $all; then
+      echo "$me: To load the newly installed drivers run:  onload_tool reload"
+    else
+      echo "$me: To load the newly installed drivers run: modprobe sfc"
+    fi
     echo
   fi
 fi
