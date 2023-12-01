@@ -49,7 +49,6 @@ oo_shmbuf_off2ptr(const struct oo_shmbuf* sh, unsigned long off)
          (off & ((1UL << sh->order << PAGE_SHIFT) - 1));
 }
 
-extern unsigned long __oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr);
 static inline unsigned long
 oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr)
 {
@@ -61,7 +60,9 @@ oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr)
     return off;
 
   /* Slow path: find the pointer in non-continuous chunks */
-  return __oo_shmbuf_ptr2off(sh, ptr);
+  /* We'd better never hit this path! */
+  ci_assert(0);
+  return -1;
 }
 
 static inline long oo_shmbuf_size(struct oo_shmbuf* sh)
