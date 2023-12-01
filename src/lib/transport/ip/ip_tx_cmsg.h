@@ -138,8 +138,11 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
       return -EAGAIN;
     }
     else {
+      /* Shift fractional 16-bit fractional nanoseconds value to left align
+       * with the 24-bit fractional nanoseconds value in onload extension. */
       struct onload_timestamp ts = {pkt->hw_stamp.tv_sec,
-                                    pkt->hw_stamp.tv_nsec};
+                                    pkt->hw_stamp.tv_nsec,
+                                    ((uint32_t) pkt->hw_stamp.tv_nsec_frac) << 8};
       ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING,
                   sizeof(ts), &ts);
     }
@@ -149,11 +152,11 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
     struct onload_scm_timestamping_stream stamps;
     int tx_hw_stamp_in_sync;
     memset(&stamps, 0, sizeof(stamps));
-    tx_hw_stamp_in_sync = pkt->hw_stamp.tv_nsec &
+    tx_hw_stamp_in_sync = pkt->hw_stamp.tv_flags &
       CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC;
 
     if( pkt->flags & CI_PKT_FLAG_RTQ_RETRANS ) {
-      if( pkt->pf.tcp_tx.first_tx_hw_stamp.tv_nsec &
+      if( pkt->pf.tcp_tx.first_tx_hw_stamp.tv_flags &
           CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC ) {
         stamps.first_sent.tv_sec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_sec;
         stamps.first_sent.tv_nsec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_nsec;
@@ -189,7 +192,7 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
       ts[2].tv_nsec = pkt->hw_stamp.tv_nsec;
     }
     if( (s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE) &&
-        (pkt->hw_stamp.tv_nsec & CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC) ) {
+        (pkt->hw_stamp.tv_flags & CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC) ) {
       ts[1].tv_sec = pkt->hw_stamp.tv_sec;
       ts[1].tv_nsec = pkt->hw_stamp.tv_nsec;
     }

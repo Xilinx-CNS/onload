@@ -566,6 +566,13 @@ static void dump_buf_quoted_uint_comma(uint64_t value)
   __dump_buf_cat0("\"", 1);
 }
 
+static void dump_buf_quoted_int_comma(uint64_t value)
+{
+  __dump_buf_cat0("\"", 1);
+  dump_buf_int_comma(value);
+  __dump_buf_cat0("\"", 1);
+}
+
 #if 0
 /* Unused for now, but looks potentially useful */
 static void dump_buf_int_comma_oo_sp(oo_sp value)
@@ -580,6 +587,7 @@ static void dump_buf_int_comma_oo_sp(oo_sp value)
     dump_buf_##to##_comma(value member);               \
   }
 
+REDISPATCH_INT_DUMP(ci_int64, quoted_int, )
 REDISPATCH_INT_DUMP(ci_uint64, quoted_uint, )
 REDISPATCH_INT_DUMP(uint64_t, quoted_uint, )
 REDISPATCH_INT_DUMP(ci_uint32, uint, )

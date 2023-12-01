@@ -186,21 +186,24 @@ int ci_ip_options_parse(ci_netif* netif, ci_ip4_hdr* ip, const int hdr_size)
 
 static void record_rx_timestamp(ci_netif* netif, ci_netif_state_nic_t* nsn,
                                 ci_ip_pkt_fmt* pkt,
-                                ef_timespec stamp, unsigned sync_flags)
+                                ef_precisetime stamp)
 {
   int tsf = (NI_OPTS(netif).timestamping_reporting &
                CITP_TIMESTAMPING_RECORDING_FLAG_CHECK_SYNC) ?
                  EF_VI_SYNC_FLAG_CLOCK_IN_SYNC :
                  EF_VI_SYNC_FLAG_CLOCK_SET;
   pkt->hw_stamp.tv_sec = stamp.tv_sec;
-  pkt->hw_stamp.tv_nsec = stamp.tv_nsec =
-            (stamp.tv_nsec & ~CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC) |
-            ((sync_flags & tsf) ? CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC : 0);
+  pkt->hw_stamp.tv_nsec = stamp.tv_nsec;
+  pkt->hw_stamp.tv_nsec_frac = stamp.tv_nsec_frac;
+  pkt->hw_stamp.tv_flags =
+            (stamp.tv_flags & ~CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC) |
+            ((stamp.tv_flags & tsf) ? CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC : 0);
   nsn->last_rx_timestamp = pkt->hw_stamp;
-  nsn->last_sync_flags = sync_flags;
+  nsn->last_sync_flags = stamp.tv_flags;
 
-  LOG_NR(log(LPF "RX id=%d timestamp: %lu.%09lu sync %d",
-      OO_PKT_FMT(pkt), (long)stamp.tv_sec, stamp.tv_nsec, sync_flags));
+  LOG_NR(log(LPF "RX id=%d timestamp: %" CI_PRId64 ".%09" CI_PRIu32 "%03u sync %hd",
+      OO_PKT_FMT(pkt), stamp.tv_sec, stamp.tv_nsec,
+      (1000 * (uint32_t) stamp.tv_nsec_frac) >> 16, stamp.tv_flags));
 }
 
 static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
@@ -229,13 +232,12 @@ static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
 
   if( (vi->nic_type.arch != EF_VI_ARCH_EFCT) &&
       (nsn->oo_vi_flags & OO_VI_FLAGS_RX_HW_TS_EN) ) {
-    unsigned sync_flags;
-    ef_timespec stamp;
-    int rc = ef_vi_receive_get_timestamp_with_sync_flags(
-               vi, PKT_START(pkt) - nsn->rx_prefix_len, &stamp, &sync_flags);
+    ef_precisetime stamp;
+    int rc = ef_vi_receive_get_precise_timestamp(
+               vi, PKT_START(pkt) - nsn->rx_prefix_len, &stamp);
 
     if( rc == 0 )
-      record_rx_timestamp(netif, nsn, pkt, stamp, sync_flags);
+      record_rx_timestamp(netif, nsn, pkt, stamp);
     else
       LOG_NR(log(LPF "RX id=%d missing timestamp", OO_PKT_FMT(pkt)));
   }
@@ -514,9 +516,10 @@ static void get_efct_timestamp(ci_netif* netif, ef_vi* vi,
     unsigned sync_flags;
     ef_timespec stamp;
     int rc = efct_vi_rxpkt_get_timestamp(vi, pkt_id, &stamp, &sync_flags);
+    ef_precisetime pstamp = { stamp.tv_sec, stamp.tv_nsec, 0, sync_flags };
 
     if( rc == 0 )
-      record_rx_timestamp(netif, nsn, pkt, stamp, sync_flags);
+      record_rx_timestamp(netif, nsn, pkt, pstamp);
     else
       LOG_NR(log(LPF "RX pkt=%d efct_id=%08x missing timestamp",
                  OO_PKT_FMT(pkt), pkt_id));
@@ -1743,11 +1746,18 @@ ci_inline void __ci_netif_tx_pkt_complete(ci_netif* ni,
       int pkt_tsf = EF_EVENT_TX_WITH_TIMESTAMP_SYNC_FLAGS(*ev);
 
       pkt->hw_stamp.tv_sec = EF_EVENT_TX_WITH_TIMESTAMP_SEC(*ev);
-      pkt->hw_stamp.tv_nsec =
-                    (EF_EVENT_TX_WITH_TIMESTAMP_NSEC(*ev) &
-                     (~CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC)) |
-                    ((pkt_tsf & opt_tsf) ?
-                     CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC : 0);
+      pkt->hw_stamp.tv_nsec = EF_EVENT_TX_WITH_TIMESTAMP_NSEC(*ev);
+      pkt->hw_stamp.tv_nsec_frac = EF_EVENT_TX_WITH_TIMESTAMP_NSEC_FRAC16(*ev);
+      pkt->hw_stamp.tv_flags =
+        /* Clear packet in-sync flag */
+        (pkt_tsf & (~CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC)) |
+
+        /* Test packet clock-set or both clock-set and in-sync flags
+         * depending on timestamp reporting configuration */
+        ((pkt_tsf & opt_tsf) ?
+
+        /* and set the effective in-sync flag accordingly */
+         CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC : 0);
     }
     else if( ev == NULL ) {
       /* This is NIC reset. The TIMESTAMPED flag needs to stay
@@ -1756,6 +1766,8 @@ ci_inline void __ci_netif_tx_pkt_complete(ci_netif* ni,
        * TCP stream */
       pkt->hw_stamp.tv_sec = 0;
       pkt->hw_stamp.tv_nsec = 0;
+      pkt->hw_stamp.tv_nsec_frac = 0;
+      pkt->hw_stamp.tv_flags = 0;
     }
     else {
       if( CI_NETIF_TX_VI(ni, pkt->intf_i, ev->tx_timestamp.q_id)->vi_flags &

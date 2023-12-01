@@ -145,12 +145,14 @@ typedef struct {
   ci_uint64 ptr CI_ALIGN(8);
 } ci_ss_ptr;
 
-/* Fixed width type equivalent of struct timespec */
+/* Timestamp structure including fractional nanoseconds and the sync
+ * flags that apply to the timetamp. Equivalent to ef_precisetime. */
 struct oo_timespec {
-  ci_int32 tv_sec;
-  ci_int32 tv_nsec;
+  ci_int64 tv_sec;
+  ci_uint32 tv_nsec;
+  ci_uint16 tv_nsec_frac;
+  ci_uint16 tv_flags;
 };
-
 
 typedef struct {
   /* We cache EPs between close and accept to speed up passive opens.  See
@@ -190,8 +192,8 @@ typedef struct {
 *************************** Packet buffers ***************************
 *********************************************************************/
 
-/*! Indicates whether timetsamp is taken when adapter clock has sync with ptp
- * To be tested tested against *hw_stamp.tv_nsec */
+/*! Indicates whether timestamp is taken when adapter clock has sync with ptp
+ * To be tested against *hw_stamp.tv_flags */
 #define CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC 1
 
 /*!

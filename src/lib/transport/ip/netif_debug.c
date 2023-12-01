@@ -772,7 +772,9 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
          0,
 #endif
          nic->tx_dmaq_done_seq, nic->tx_bytes_added - nic->tx_bytes_removed);
-  logger(log_arg, "  txq: ts_nsec=%x", vi->ep_state->txq.ts_nsec);
+  logger(log_arg, "  txq: ts_nsec=%x.%04x",
+         vi->ep_state->txq.ts_nsec,
+         vi->ep_state->txq.ts_nsec_frac);
 
 #if CI_CFG_TCP_OFFLOAD_RECYCLER
   {
@@ -796,8 +798,9 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   logger(log_arg, "  clk: %s%s",
          (nic->last_sync_flags & EF_VI_SYNC_FLAG_CLOCK_SET) ? "SET " : "",
          (nic->last_sync_flags & EF_VI_SYNC_FLAG_CLOCK_IN_SYNC) ? "SYNC" : "");
-  logger(log_arg, "  last_rx_stamp: %x:%x",
-         nic->last_rx_timestamp.tv_sec, nic->last_rx_timestamp.tv_nsec);
+  logger(log_arg, "  last_rx_stamp: %" CI_PRIx64 ":%x.%04x",
+         nic->last_rx_timestamp.tv_sec, nic->last_rx_timestamp.tv_nsec,
+         nic->last_rx_timestamp.tv_nsec_frac);
 #endif
 #if CI_CFG_CTPIO
   logger(log_arg, "  ctpio: max_frame_len=%u frame_len_check=%u ct_thresh=%u",

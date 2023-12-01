@@ -83,7 +83,10 @@ ci_rx_pkt_timestamp_nic(const ci_ip_pkt_fmt* pkt,
 {
   ts_out->sec = pkt->hw_stamp.tv_sec;
   ts_out->nsec = pkt->hw_stamp.tv_nsec;
-  ts_out->nsec_frac = 0;
+
+  /* Shift fractional 16-bit fractional nanoseconds value to left align
+   * with the 24-bit fractional nanoseconds value in onload extension. */
+  ts_out->nsec_frac = ((uint32_t) pkt->hw_stamp.tv_nsec_frac) << 8;
 }
 
 static inline void

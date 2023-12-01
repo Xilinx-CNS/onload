@@ -229,8 +229,10 @@ typedef struct oo_p_dllink oo_p_dllink_t;
 
 #define STRUCT_OO_TIMESPEC(ctx)                                \
   FTL_TSTRUCT_BEGIN(ctx, oo_timespec, )                        \
-  FTL_TFIELD_INT(ctx, ci_int32, tv_sec, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))           \
-  FTL_TFIELD_INT(ctx, ci_int32, tv_nsec, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))          \
+  FTL_TFIELD_INT(ctx, ci_int64, tv_sec, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))           \
+  FTL_TFIELD_INT(ctx, ci_uint32, tv_nsec, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))          \
+  FTL_TFIELD_INT(ctx, ci_uint16, tv_nsec_frac, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))     \
+  FTL_TFIELD_INT(ctx, ci_uint16, tv_flags, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))         \
   FTL_TSTRUCT_END(ctx)
 
 
