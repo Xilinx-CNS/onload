@@ -145,7 +145,6 @@ __ci_ip_send_tcp(ci_netif* ni, ci_ip_pkt_fmt* pkt, ci_tcp_state* ts)
     ci_netif_send(ni, pkt);
   }
   else {
-    oo_tcp_ipcache_update(ni, ts);
     ci_ip_send_tcp_slow(ni, ts, pkt);
   }
 }
