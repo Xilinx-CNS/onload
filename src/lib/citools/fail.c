@@ -69,6 +69,11 @@ CI_NORETURN __ci_fail(const char* fmt, ...)
   ci_backtrace_internal(0);  /* if kernel, don't want duplicate backtrace */
   ci_fail_stop_fn();
 }
+#ifdef STACK_FRAME_NON_STANDARD
+/* Tell objtool to ignore __ci_fail(). It triggers warning:
+ * __ci_fail() falls through to next function ci_backtrace() */
+STACK_FRAME_NON_STANDARD(__ci_fail);
+#endif
 
 
 void ci_backtrace(void)
