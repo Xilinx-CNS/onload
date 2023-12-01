@@ -345,7 +345,7 @@ ci_ipp_pmtu_rx_tcp(tcp_helper_resource_t* thr, ci_tcp_state* ts,
   ci_ipp_pmtu_rx(&thr->netif, pmtus, &ts->s.pkt, addr, icmp);
 
   DEBUGPMTU(ci_log("%s: set eff_mss & change tx q to match", __FUNCTION__));
-  ci_tcp_tx_change_mss(&thr->netif, ts);
+  ci_tcp_tx_change_mss(&thr->netif, ts, true/*may send*/);
 }
 
 struct ipp_pmtu_udp_work {

@@ -2533,7 +2533,7 @@ static void socket_rst(ci_netif* ni, ci_tcp_state* ts)
 static void socket_set_mss(ci_netif* ni, ci_tcp_state* ts)
 {
   ts->eff_mss = (ci_uint16) CI_MIN(arg_u[0], (1 << sizeof(ts->eff_mss)) - 1);
-  ci_tcp_tx_change_mss(ni, ts); 
+  ci_tcp_tx_change_mss(ni, ts, true/*may send*/);
 }
 
 static void socket_set_sndbuf(ci_netif* ni, ci_tcp_state* ts)
