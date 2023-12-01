@@ -129,6 +129,8 @@ typedef int			ef_request_id;
 /*! \brief Mask to use with an ef_request_id. */
 #define EF_REQUEST_ID_MASK      0xffffffff
 
+/*! \brief Number of bits for fractional nanosecond part in Tx events */
+#define EF_VI_TX_TS_FRAC_NS_BITS 4
 
 /*! \brief A token that identifies something that has happened.
 **
@@ -166,14 +168,16 @@ typedef union {
   struct {
     unsigned       type         :16;
     unsigned       q_id         :8;
-    unsigned       flags        :8;
+    unsigned       flags        :(8 - EF_VI_TX_TS_FRAC_NS_BITS);
+    unsigned       __reserved   :EF_VI_TX_TS_FRAC_NS_BITS;
     unsigned       desc_id      :16;
   } tx;
   /** An event of type EF_EVENT_TYPE_TX_ERROR */
   struct {  /* This *must* have same layout as [tx]. */
     unsigned       type         :16;
     unsigned       q_id         :8;
-    unsigned       flags        :8;
+    unsigned       flags        :(8 - EF_VI_TX_TS_FRAC_NS_BITS);
+    unsigned       __reserved   :EF_VI_TX_TS_FRAC_NS_BITS;
     unsigned       desc_id      :16;
     unsigned       subtype      :16;
   } tx_error;
@@ -181,10 +185,12 @@ typedef union {
   struct {  /* This *must* have same layout as [tx] up to [flags]. */
     unsigned       type         :16;
     unsigned       q_id         :8;
-    unsigned       flags        :8;
+    unsigned       flags        :(8 - EF_VI_TX_TS_FRAC_NS_BITS);
+    unsigned       ts_nsec_frac :EF_VI_TX_TS_FRAC_NS_BITS;
     unsigned       rq_id        :32;
     unsigned       ts_sec       :32;
-    unsigned       ts_nsec      :32;
+    unsigned       ts_nsec      :30;
+    unsigned       ts_flags     :2;
   } tx_timestamp;
   /** An event of type EF_EVENT_TYPE_TX_ALT */
   struct {
@@ -418,12 +424,16 @@ enum {
 /*! \brief Get the number of nanoseconds from the timestamp of a transmitted
 ** packet */
 #define EF_EVENT_TX_WITH_TIMESTAMP_NSEC(e)     ((e).tx_timestamp.ts_nsec)
+/*! \brief Get the fractional nanosecond part from the timestamp of a transmitted
+** packet */
+#define EF_EVENT_TX_WITH_TIMESTAMP_NSEC_FRAC16(e) (((uint16_t) (e).tx_timestamp.ts_nsec_frac) \
+  << (16 - EF_VI_TX_TS_FRAC_NS_BITS))
 /*! \brief Mask for the sync flags in the timestamp of a transmitted packet */
 #define EF_EVENT_TX_WITH_TIMESTAMP_SYNC_MASK \
   (EF_VI_SYNC_FLAG_CLOCK_SET | EF_VI_SYNC_FLAG_CLOCK_IN_SYNC)
 /*! \brief Get the sync flags from the timestamp of a transmitted packet */
 #define EF_EVENT_TX_WITH_TIMESTAMP_SYNC_FLAGS(e) \
-  ((e).tx_timestamp.ts_nsec & EF_EVENT_TX_WITH_TIMESTAMP_SYNC_MASK)
+  ((e).tx_timestamp.ts_flags & EF_EVENT_TX_WITH_TIMESTAMP_SYNC_MASK)
 
 /*! \brief Get the TX descriptor ring ID used for a TX alternative packet. */
 #define EF_EVENT_TX_ALT_Q_ID(e)                ((e).tx_alt.q_id)
@@ -498,6 +508,16 @@ typedef struct {
 #else
 #define ef_timespec struct timespec
 #endif
+
+/*! \brief ef_precisetime is a high precision time structure including
+ * a 16-bit fractional nanoseconds part and separate timestamp flags field.
+*/
+typedef struct {
+  int64_t tv_sec;
+  uint32_t tv_nsec;
+  uint16_t tv_nsec_frac;
+  uint16_t tv_flags;
+} ef_precisetime;
 
 /**********************************************************************
  * ef_vi **************************************************************
@@ -681,6 +701,10 @@ typedef struct {
   uint32_t  ct_removed;
   /** Timestamp in nanoseconds */
   uint32_t  ts_nsec;
+  /** Timestamp fractional nanoseconds part */
+  uint16_t  ts_nsec_frac;
+  /** Sync status flags */
+  uint16_t  ts_flags;
 } ef_vi_txq_state;
 
 /*! \brief State of efct receive queue
@@ -1518,6 +1542,56 @@ ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
                                             ef_timespec* ts_out,
                                             unsigned* flags_out);
 
+/*! \brief Retrieve the UTC timestamp associated with a received packet,
+**         to sub-nanosecond precision with clock sync status flags
+**
+** \param vi        The virtual interface that received the packet.
+** \param pkt       The first packet buffer for the received packet.
+** \param ts_out    Pointer to a hi precision timespec, that is updated on
+**                  return with the UTC timestamp and sync flags for the packet.
+**                  the sync flags for the packet.
+**
+** \return 0 on success, or a negative error code:\n
+**         - ENOMSG - Synchronization with adapter has not yet been
+**           achieved.\n
+**           This only happens with old firmware.\n
+**         - ENODATA - Packet does not have a timestamp.\n
+**           On current Solarflare adapters, packets that are switched from
+**           TX to RX do not get timestamped.\n
+**         - EL2NSYNC - Synchronization with adapter has been lost.\n
+**           This should never happen!
+**
+** Retrieve the sub-nanosecond UTC timestamp associated with a received packet,
+** with the clock sync status flags.
+**
+** This function:
+** - must be called after retrieving the associated RX event via
+**   ef_eventq_poll(), and before calling ef_eventq_poll() again
+** - must only be called for the first segment of a jumbo packet
+** - must not be called for any events other than RX.
+** - must not be called for X3 packets.
+**
+** If the virtual interface does not have RX timestamps enabled, the
+** behavior of this function is undefined.
+**
+** This function will also fail if the virtual interface has not yet
+** synchronized with the adapter clock. This can take from a few hundred
+** milliseconds up to several seconds from when the virtual interface is
+** allocated.
+**
+** On success the ts_out fields is updated, and a value of zero is returned.
+** The ts_flags field of ts_out contains the following flags:
+** - EF_VI_SYNC_FLAG_CLOCK_SET is set if the adapter clock has ever been
+**   set (in sync with system)
+** - EF_VI_SYNC_FLAG_CLOCK_IN_SYNC is set if the adapter clock is in sync
+**   with the external clock (PTP).
+**
+** In case of error the timestamp result (*ts_out) is set to zero, and a
+** non-zero error code is returned (see Return value above).
+*/
+extern int
+ef_vi_receive_get_precise_timestamp(ef_vi* vi, const void* pkt,
+                                    ef_precisetime* ts_out);
 
 /*! \brief Retrieve the number of bytes in a received packet in RX event
 **         merge mode

@@ -407,12 +407,7 @@ void ef_vi_init_tx_timestamping(struct ef_vi* vi, int tx_ts_correction)
   if( vi->nic_type.variant >= 'C' )
     tx_ts_correction /= 4;  /* convert to ns */
 
-  /* Bottom two bits of the nsec field contain the sync flags, and we
-   * don't want to affect those when we add in the correction, so
-   * ensure those bits are zero 
-   */
-  vi->tx_ts_correction_ns =
-    tx_ts_correction &~ EF_EVENT_TX_WITH_TIMESTAMP_SYNC_MASK;
+  vi->tx_ts_correction_ns = tx_ts_correction;
   vi->inited |= EF_VI_INITED_TX_TIMESTAMPING;
 }
 

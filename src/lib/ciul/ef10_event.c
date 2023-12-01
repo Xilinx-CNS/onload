@@ -321,14 +321,26 @@ static uint32_t timestamp_extract_medford_seconds(ef_vi_event ev,
 static inline void ef10_tx_event_ts_lo(ef_vi* evq, const ef_vi_event* ev)
 {
   ef_vi_txq_state* qs = &evq->ep_state->txq;
+  uint32_t rawts = timestamp_extract(*ev);
   EF_VI_DEBUG(EF_VI_BUG_ON(qs->ts_nsec != EF_VI_TX_TIMESTAMP_TS_NSEC_INVALID));
-  if( evq->ts_format == TS_FORMAT_SECONDS_QTR_NANOSECONDS )
-    qs->ts_nsec = ((uint64_t) timestamp_extract(*ev) >> 4) << 2;
-  else
-    qs->ts_nsec =
-      (((uint64_t) timestamp_extract(*ev) * 1000000000UL) >> 29) << 2;
-
-  qs->ts_nsec |= evq->ep_state->evq.sync_flags;
+  if( evq->ts_format == TS_FORMAT_SECONDS_QTR_NANOSECONDS ) {
+    /* Convert 2-bit binary fixed-point nanoseconds value into:
+     *  - an integral ns part
+     *  - a 16-bit binary fixed point fractional ns part. */
+    qs->ts_nsec = rawts >> 2;
+    qs->ts_nsec_frac = rawts << (16 - 2);
+  } else {
+    /* Convert fractional part of 27-bit binary fixed-point seconds value into:
+     *  - an integral ns part
+     *  - a 16-bit binary fixed point fractional ns part. This fractional part
+     *    represents the correction from the binary to decimal seconds
+     *    fractional seconds conversion not any real fractional precision;
+     *    we could happily omit this. */
+    uint64_t nanosecs_fp27 = ((uint64_t) rawts) * 1000000000UL;
+    qs->ts_nsec = nanosecs_fp27 >> 27;
+    qs->ts_nsec_frac = nanosecs_fp27 >> (27 - 16);
+  }
+  qs->ts_flags = evq->ep_state->evq.sync_flags;
 }
 
 
@@ -339,6 +351,11 @@ static inline void ef10_tx_event_ts_hi(ef_vi* evq, const ef_vi_event* ev,
   ev_out->tx_timestamp.q_id = QWORD_GET_U(ESF_DZ_TX_QLABEL, *ev);
   EF_VI_DEBUG(EF_VI_BUG_ON(qs->ts_nsec == EF_VI_TX_TIMESTAMP_TS_NSEC_INVALID));
   ev_out->tx_timestamp.ts_nsec = qs->ts_nsec;
+  /* Squeeze the 16-bit fractional nanoseconds part of the timestamp into
+   * the limited bits available in the ef_vi transmit event structure */
+  ev_out->tx_timestamp.ts_nsec_frac = qs->ts_nsec_frac >>
+      (16 - EF_VI_TX_TS_FRAC_NS_BITS);
+  ev_out->tx_timestamp.ts_flags = qs->ts_flags;
   EF_VI_DEBUG(qs->ts_nsec = EF_VI_TX_TIMESTAMP_TS_NSEC_INVALID);
 
   if( (evq)->nic_type.variant > 'A' ) {
@@ -519,8 +536,8 @@ ef_vi_inline void ef10_tx_event(ef_vi* evq, const ef_vi_event* ev,
 }
 
 ef_vi_inline int
-ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync(ef_vi* vi,
-	const void* pkt, ef_timespec* ts_out, unsigned* flags_out,
+ef10_ef_vi_receive_get_precise_timestamp_from_tsync(ef_vi* vi,
+	const void* pkt, ef_precisetime* ts_out,
 	uint32_t tsync_minor, uint32_t tsync_major)
 {
   const uint32_t FLAG_NO_TIMESTAMP = 0x80000000;
@@ -561,7 +578,9 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync(ef_vi* vi,
   if( ~pkt_minor_raw & FLAG_NO_TIMESTAMP ) {
     uint32_t pkt_minor =
       ( pkt_minor_raw + vi->rx_ts_correction) & 0x7FFFFFF;
-    ts_out->tv_nsec = ((uint64_t) pkt_minor * 1000000000) >> 27;
+    uint64_t nsec_fp27 = ((uint64_t) pkt_minor) * 1000000000UL;
+    ts_out->tv_nsec = nsec_fp27 >> 27;
+    ts_out->tv_nsec_frac = nsec_fp27 >> (27 - 16);
     diff = (pkt_minor - tsync_minor) & (ONE_SEC - 1);
     if (diff < (ONE_SEC / SYNC_EVENTS_PER_SECOND) +
         MAX_TIME_SYNC_DELAY) {
@@ -573,7 +592,7 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync(ef_vi* vi,
       ts_out->tv_sec = tsync_major;
       ts_out->tv_sec +=
         diff + tsync_minor >= ONE_SEC;
-      *flags_out = evqs->sync_flags;
+      ts_out->tv_flags = evqs->sync_flags;
       return 0;
     } else if (diff > ONE_SEC - MAX_RX_PKT_DELAY) {
       /* pkt_minor taken before sync event in the
@@ -584,7 +603,7 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync(ef_vi* vi,
       ts_out->tv_sec = tsync_major;
       ts_out->tv_sec -=
         diff + tsync_minor < ONE_SEC;
-      *flags_out = evqs->sync_flags;
+      ts_out->tv_flags = evqs->sync_flags;
       return 0;
     } else {
       /* diff between pkt_minor and sync event in
@@ -594,17 +613,16 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync(ef_vi* vi,
       evqs->sync_timestamp_synchronised = 0;
     }
   }
-  ts_out->tv_sec = 0;
-  ts_out->tv_nsec = 0;
+  *ts_out = (ef_precisetime) { 0 };
   if( (pkt_minor_raw & FLAG_NO_TIMESTAMP) != 0 )
     return -ENODATA;
   return (tsync_major == ~0u) ? -ENOMSG : -EL2NSYNC;
 }
 
 ef_vi_inline int
-ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync_qns
-	(ef_vi* vi, const void* pkt, ef_timespec* ts_out,
-	 unsigned* flags_out, uint32_t tsync_minor, uint32_t tsync_major)
+ef10_ef_vi_receive_get_precise_timestamp_from_tsync_qns
+	(ef_vi* vi, const void* pkt, ef_precisetime* ts_out,
+	 uint32_t tsync_minor, uint32_t tsync_major)
 {
   const uint32_t NO_TIMESTAMP = 0xFFFFFFFF;
   /* Since M2, timestamp_minor unit is quarter nanoseconds */
@@ -620,7 +638,7 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync_qns
   const uint32_t BUG75412_OVERRUN    = 20;
 
   /* Comments in sibling function,
-   * ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync apply here.
+   * ef10_ef_vi_receive_get_precise_timestamp_from_tsync apply here.
    */
 
   ef_eventq_state* evqs = &(vi->ep_state->evq);
@@ -658,7 +676,7 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync_qns
   else if(likely( pkt_minor != NO_TIMESTAMP + vi->rx_ts_correction ))
     pkt_minor += ONE_SEC;
   else {
-    *ts_out = (ef_timespec) { 0 };
+    *ts_out = (ef_precisetime) { 0 };
     return -ENODATA;
   }
   EF_VI_ASSERT( pkt_minor < ONE_SEC );
@@ -685,37 +703,37 @@ ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync_qns
   }
   else {
     /* Zero ts_out in case of failure to avoid returning garbage. */
-    *ts_out = (ef_timespec) { 0 };
+    *ts_out = (ef_precisetime) { 0 };
     evqs->sync_timestamp_synchronised = 0;
     return (tsync_major == ~0u) ? -ENOMSG : -EL2NSYNC;
   }
 
-  ts_out->tv_nsec = pkt_minor >> 2;
   ts_out->tv_sec = tsync_major;
-  *flags_out = evqs->sync_flags;
+  ts_out->tv_nsec = pkt_minor >> 2;
+  ts_out->tv_nsec_frac = pkt_minor << (16 - 2);
+  ts_out->tv_flags = evqs->sync_flags;
   return 0;
 }
 
-int ef10_receive_get_timestamp_with_sync_flags_internal
-	(ef_vi* vi, const void* pkt, ef_timespec* ts_out,
-	 unsigned* flags_out, uint32_t tsync_minor, uint32_t tsync_major)
+int ef10_receive_get_precise_timestamp_internal
+	(ef_vi* vi, const void* pkt, ef_precisetime* ts_out,
+	 uint32_t tsync_minor, uint32_t tsync_major)
 {
   /* This function is where TCPDirect hooks in to implement its own
    * timestamping API; making changes hereon has the benefit of not needing
    * any TCPDirect changes.
    */
   if( vi->ts_format == TS_FORMAT_SECONDS_QTR_NANOSECONDS )
-    return ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync_qns
-             (vi, pkt, ts_out, flags_out, tsync_minor, tsync_major);
+    return ef10_ef_vi_receive_get_precise_timestamp_from_tsync_qns
+             (vi, pkt, ts_out, tsync_minor, tsync_major);
   else
-    return ef10_ef_vi_receive_get_timestamp_with_sync_flags_from_tsync
-             (vi, pkt, ts_out, flags_out, tsync_minor, tsync_major);
+    return ef10_ef_vi_receive_get_precise_timestamp_from_tsync
+             (vi, pkt, ts_out, tsync_minor, tsync_major);
 }
 
 int
-ef10_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
-					   ef_timespec* ts_out,
-					   unsigned* flags_out)
+ef10_receive_get_precise_timestamp(ef_vi* vi, const void* pkt,
+                                   ef_precisetime* ts_out)
 {
 
   /* Divided so we can calculate timestamps for packets using older
@@ -732,25 +750,41 @@ ef10_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
    * storing timestamps to translate them later and will be dealing with
    * the case of the eventq being out of sync itself. */
   if(unlikely( ! evqs->sync_timestamp_synchronised )) {
-    *ts_out = (ef_timespec) { 0 };
+    *ts_out = (ef_precisetime) { 0 };
     return -EL2NSYNC;
   }
   else {
-    return ef10_receive_get_timestamp_with_sync_flags_internal
-	    (vi, pkt, ts_out, flags_out, tsync_minor, tsync_major);
+    return ef10_receive_get_precise_timestamp_internal
+	    (vi, pkt, ts_out, tsync_minor, tsync_major);
   }
 }
 
 
-int
-ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
-					    ef_timespec* ts_out,
-				            unsigned* flags_out)
+extern int
+ef_vi_receive_get_precise_timestamp(ef_vi* vi, const void* pkt,
+                                    ef_precisetime* ts_out)
 {
   /* TODO EFCT: ef_vi compatiblity */
   EF_VI_ASSERT(vi->nic_type.arch != EF_VI_ARCH_EFCT);
-  return ef10_receive_get_timestamp_with_sync_flags(vi, pkt, ts_out,
-                                                    flags_out);
+  return ef10_receive_get_precise_timestamp(vi, pkt, ts_out);
+}
+
+
+extern int
+ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
+                                            ef_timespec* ts_out,
+                                            unsigned* flags_out)
+{
+  ef_precisetime ts;
+  int rc;
+
+  /* TODO EFCT: ef_vi compatiblity */
+  EF_VI_ASSERT(vi->nic_type.arch != EF_VI_ARCH_EFCT);
+  rc = ef10_receive_get_precise_timestamp(vi, pkt, &ts);
+  ts_out->tv_sec = ts.tv_sec;
+  ts_out->tv_nsec = ts.tv_nsec;
+  *flags_out = ts.tv_flags;
+  return rc;
 }
 
 
@@ -758,9 +792,14 @@ extern int
 ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
 			    ef_timespec* ts_out)
 {
-  unsigned flags_out;
-  int rc = ef10_receive_get_timestamp_with_sync_flags
-    (vi, pkt, ts_out, &flags_out);
+  ef_precisetime ts;
+  int rc;
+
+  /* TODO EFCT: ef_vi compatiblity */
+  EF_VI_ASSERT(vi->nic_type.arch != EF_VI_ARCH_EFCT);
+  rc = ef10_receive_get_precise_timestamp(vi, pkt, &ts);
+  ts_out->tv_sec = ts.tv_sec;
+  ts_out->tv_nsec = ts.tv_nsec;
   return rc < 0 ? -1 : 0;
 }
 
@@ -976,8 +1015,7 @@ ef_vi_inline int ef10_unbundle_one_packet(ef_vi* vi,
 {
   const uint8_t* prefix = (void*)((char*) pkt + EF_VI_PS_METADATA_OFFSET);
   uint16_t pkt_len, orig_len;
-  unsigned ts_flags = 0;
-  ef_timespec ts;
+  ef_precisetime ts = { 0 };
   int offset, rc;
 
   EF_VI_ASSERT(((ci_uintptr_t) prefix & (EF_VI_PS_ALIGNMENT - 1)) == 0);
@@ -990,10 +1028,10 @@ ef_vi_inline int ef10_unbundle_one_packet(ef_vi* vi,
   pkt->ps_orig_len = orig_len;
   pkt->ps_pkt_start_offset =
     EF_VI_PS_METADATA_OFFSET + ES_DZ_PS_RX_PREFIX_SIZE;
-  rc = ef10_receive_get_timestamp_with_sync_flags
+  rc = ef10_receive_get_precise_timestamp
     (vi, (prefix + ES_DZ_PS_RX_PREFIX_TSTAMP_OFST -
           ES_DZ_RX_PREFIX_TSTAMP_OFST),
-     &ts, &ts_flags);
+     &ts);
   pkt->ps_ts_sec = ts.tv_sec;
   pkt->ps_ts_nsec = ts.tv_nsec;
   /* Zeroing space after header to avoid it being interpreted as an option
@@ -1004,9 +1042,9 @@ ef_vi_inline int ef10_unbundle_one_packet(ef_vi* vi,
                EF_VI_SYNC_FLAG_CLOCK_SET);
   EF_VI_ASSERT(EF_VI_PS_FLAG_CLOCK_IN_SYNC ==
                EF_VI_SYNC_FLAG_CLOCK_IN_SYNC);
-  EF_VI_ASSERT((ts_flags & ~(EF_VI_SYNC_FLAG_CLOCK_SET |
+  EF_VI_ASSERT((ts.tv_flags & ~(EF_VI_SYNC_FLAG_CLOCK_SET |
                              EF_VI_SYNC_FLAG_CLOCK_IN_SYNC)) == 0);
-  pkt->ps_flags = ts_flags;
+  pkt->ps_flags = ts.tv_flags;
   offset = EF_VI_ALIGN_FWD(pkt_len + ES_DZ_PS_RX_PREFIX_SIZE
                            + EF_VI_PS_PACKET_GAP,
                            (ci_uintptr_t) EF_VI_PS_ALIGNMENT);
