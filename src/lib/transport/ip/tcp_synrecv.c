@@ -1001,11 +1001,7 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
     *ts_out = ts;
     return 0;
   }
-  CI_TCP_EXT_STATS_INC_LISTEN_OVERFLOWS( netif );
-  LOG_U(log(LPF LNT_FMT" accept queue is full (n=%d max=%d)",
-            LNT_PRI_ARGS(netif, tls), ci_tcp_acceptq_n(tls), tls->acceptq_max));
-  CITP_STATS_TCP_LISTEN(++tls->stats.n_acceptq_overflow);
-
+  ci_tcp_acceptq_drop_stats_inc(netif, tls, LPF);
   return -ENOSPC;
 }
 

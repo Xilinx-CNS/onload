@@ -279,6 +279,7 @@ static ci_uint32 citp_udp_sndbuf_def = CI_CFG_UDP_SNDBUF_DEFAULT;
 static ci_uint32 citp_udp_rcvbuf_max = CI_CFG_UDP_RCVBUF_MAX;
 static ci_uint32 citp_udp_rcvbuf_def = CI_CFG_UDP_RCVBUF_DEFAULT;
 static ci_uint32 citp_tcp_backlog_max = CI_TCP_LISTENQ_MAX;
+static ci_uint32 citp_somaxconn = SOMAXCONN;
 static ci_uint32 citp_tcp_adv_win_scale_max = CI_TCP_WSCL_MAX;
 static ci_uint32 citp_fin_timeout = CI_CFG_TCP_FIN_TIMEOUT;
 static ci_uint32 citp_retransmit_threshold = CI_TCP_RETRANSMIT_THRESHOLD;
@@ -385,6 +386,9 @@ ci_setup_ipstack_params(void)
     citp_udp_rcvbuf_max = opt[0];
   if( ci_sysctl_get_values("net/core/rmem_default", opt, 1) == 0 )
     citp_udp_rcvbuf_def = opt[0];
+
+  if( ci_sysctl_get_values("net/core/somaxconn", opt, 1) == 0 )
+    citp_somaxconn = opt[0];
 
   if (ci_sysctl_get_values("net/ipv4/tcp_max_syn_backlog", opt, 1) == 0)
     citp_tcp_backlog_max = opt[0];
@@ -530,6 +534,8 @@ void ci_netif_config_opts_defaults(ci_netif_config_opts* opts)
                                  citp_tcp_early_retransmit < 4;
     opts->tail_drop_probe = citp_tcp_early_retransmit >= 3;
     opts->oow_ack_ratelimit = citp_tcp_invalid_ratelimit;
+
+    opts->acceptq_max_backlog = citp_somaxconn;
 #if CI_CFG_IPV6
     opts->auto_flowlabels = citp_auto_flowlabels;
 #endif
@@ -1015,6 +1021,8 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_ACCEPTQ_MIN_BACKLOG")) )
     opts->acceptq_min_backlog = atoi(s);
+  if( (s = getenv("EF_ACCEPTQ_MAX_BACKLOG")) )
+    opts->acceptq_max_backlog = atoi(s);
 
   if ( (s = getenv("EF_TCP_SNDBUF")) )
     opts->tcp_sndbuf_user = atoi(s);

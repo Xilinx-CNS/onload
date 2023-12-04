@@ -893,6 +893,11 @@ CI_CFG_OPT("EF_ACCEPTQ_MIN_BACKLOG", acceptq_min_backlog, ci_uint16,
 "call.  If the application requests a smaller value, use this value instead.",
            , , 1, MIN, MAX, count)
 
+CI_CFG_OPT("EF_ACCEPTQ_MAX_BACKLOG", acceptq_max_backlog, ci_uint32,
+"Maximum value of 'backlog' argument in listen() call (accept queue maximum "
+"size). The value from /proc/sys/core/somaxconn is used by default.",
+           , , SOMAXCONN, MIN, MAX, count)
+
 CI_CFG_OPT("EF_NONAGLE_INFLIGHT_MAX", nonagle_inflight_max, ci_uint16,
 "This option affects the behaviour of TCP sockets with the TCP_NODELAY socket "
 "option.  Nagle's algorithm is enabled when the number of packets in-flight "

@@ -527,6 +527,9 @@ static int citp_tcp_listen(citp_fdinfo* fdinfo, int backlog)
   Log_VSS(ci_log(LPF "listen("EF_FMT", %d)", EF_PRI_ARGS(epi,fdinfo->fd),
               backlog));
 
+  if( (unsigned)backlog > NI_OPTS(epi->sock.netif).acceptq_max_backlog )
+    backlog = NI_OPTS(epi->sock.netif).acceptq_max_backlog;
+
   if( epi->sock.s->s_flags & (CI_SOCK_FLAGS_SCALABLE & ~CI_SOCK_FLAG_SCALPASSIVE) ) {
     /* We do not support IP_TRANSPARENT on listening sockets.  If this has
      * already been bound then we're past the point where we should have
