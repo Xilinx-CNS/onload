@@ -2366,7 +2366,7 @@ int ci_netif_poll_n(ci_netif* netif, int max_evs)
     ci_assert(n >= 0);
     n_evs_handled += n;
   }
-  netif->state->poll_start_intf = (offset == intf_max - 1) ? 0 : offset  + 1;
+  netif->state->poll_start_intf = (offset + 1 >= intf_max) ? 0 : offset + 1;
 
   while( OO_PP_NOT_NULL(netif->state->looppkts) ) {
     ci_netif_loopback_pkts_send(netif);
