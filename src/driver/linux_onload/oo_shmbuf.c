@@ -70,30 +70,6 @@ int oo_shmbuf_add(struct oo_shmbuf* sh)
   return i;
 }
 
-unsigned long __oo_shmbuf_ptr2off(const struct oo_shmbuf* sh, char* ptr)
-{
-  int i;
-  unsigned long off;
-
-  /* Fast path is handled at oo_shmbuf_ptr2off().
-   * This function is for slow path only.
-   */
-  off = ptr - oo_shmbuf_idx2ptr(sh, 0);
-  ci_assert(off < 0 || off >= oo_shmbuf_chunk_size(sh) * sh->init_num);
-
-  /* We'd better never hit this path! */
-  ci_assert(0);
-
-  for(i = sh->init_num; i < sh->num; i++) {
-    off = ptr - oo_shmbuf_idx2ptr(sh, i);
-
-    if( off >= 0 && off < oo_shmbuf_chunk_size(sh) )
-      return (i << sh->order << PAGE_SHIFT) + off;
-  }
-  ci_assert(0);
-  return -1;
-}
-
 int oo_shmbuf_fault(struct oo_shmbuf* sh, struct vm_area_struct* vma,
                     unsigned long off)
 {

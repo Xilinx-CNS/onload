@@ -16,7 +16,7 @@
 #include "citools_internal.h"
 
 
-void __ci_sys_fail(const char* fn, int rc, const char* file, int line)
+CI_NORETURN __ci_sys_fail(const char* fn, int rc, const char* file, int line)
 {
   ci_log("*** UNEXPECTED ERROR ***");
   ci_log("        what: %s", fn);

@@ -59,6 +59,11 @@ static CI_NORETURN my_stop_fn(void)
   ci_log_buffer_dump();
   real_stop_fn();
 }
+#ifdef STACK_FRAME_NON_STANDARD
+/* Tell objtool to ignore __ci_fail(). It triggers warning:
+ * my_stop_fn() falls through to next function ci_log_buffer_till_fail() */
+STACK_FRAME_NON_STANDARD(my_stop_fn);
+#endif
 
 
 extern void ci_log_buffer_till_fail(void)

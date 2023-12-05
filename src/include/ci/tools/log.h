@@ -209,7 +209,7 @@ __ci_fail(const char* fmt, ...) CI_PRINTF_LIKE(1,2) CI_HF;
 #define ci_fail(x)							   \
   do{ ci_log("FAIL at %s:%d", __FILE__, __LINE__);  __ci_fail x; }while(0)
 
-extern void __ci_sys_fail(const char* fn, int rc,
+extern CI_NORETURN __ci_sys_fail(const char* fn, int rc,
 			  const char* file, int line) CI_HF;
 #define ci_sys_fail(fn, rc)  __ci_sys_fail(fn, rc, __FILE__, __LINE__)
 
