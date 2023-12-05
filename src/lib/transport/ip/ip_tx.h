@@ -121,7 +121,7 @@ ci_inline void oo_tcp_ipcache_update(ci_netif* ni, ci_tcp_state* ts)
   if( CI_UNLIKELY(ts->s.pkt.mtu != prev_mtu) &&
      (ts->s.pkt.status == retrrc_success ||
        ts->s.pkt.status == retrrc_nomac) )
-    ci_tcp_tx_change_mss(ni, ts);
+    ci_tcp_tx_change_mss(ni, ts, false/*don't send*/);
 }
 
 ci_inline void
@@ -145,7 +145,6 @@ __ci_ip_send_tcp(ci_netif* ni, ci_ip_pkt_fmt* pkt, ci_tcp_state* ts)
     ci_netif_send(ni, pkt);
   }
   else {
-    oo_tcp_ipcache_update(ni, ts);
     ci_ip_send_tcp_slow(ni, ts, pkt);
   }
 }

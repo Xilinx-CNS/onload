@@ -1658,7 +1658,7 @@ extern void ci_tcp_rx_deliver2(ci_tcp_state*,ci_netif*,ciip_tcp_rx_pkt*) CI_HF;
 extern void ci_tcp_rx_plugin_meta(ci_netif*, struct ci_netif_poll_state*,
                                   ci_ip_pkt_fmt* pkt) CI_HF;
 
-extern void ci_tcp_tx_change_mss(ci_netif*, ci_tcp_state*) CI_HF;
+extern void ci_tcp_tx_change_mss(ci_netif*, ci_tcp_state*, bool may_send) CI_HF;
 extern void ci_tcp_enqueue_no_data(ci_tcp_state* ts, ci_netif* netif,
                                    ci_ip_pkt_fmt* pkt) CI_HF;
 extern int ci_tcp_send_sim_synack(ci_netif* netif, ci_tcp_state* ts) CI_HF;

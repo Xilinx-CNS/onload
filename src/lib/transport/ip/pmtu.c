@@ -93,7 +93,7 @@ void ci_pmtu_timeout_pmtu(ci_netif* ni, ci_pmtu_state_t* pmtus)
   ci_tcp_state* ts;
   ts = SP_TO_TCP(ni, pmtus->sp);
   __ci_pmtu_timeout_handler(ni, pmtus, &ts->s.pkt);
-  ci_tcp_tx_change_mss(ni, ts);
+  ci_tcp_tx_change_mss(ni, ts, true/*may send*/);
 }
 
 

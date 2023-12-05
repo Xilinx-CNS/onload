@@ -576,7 +576,7 @@ static void ci_tcp_tx_reset_q_end(ci_netif* ni, ci_tcp_state* ts,
 }
 
 
-void ci_tcp_tx_change_mss(ci_netif* ni, ci_tcp_state* ts)
+void ci_tcp_tx_change_mss(ci_netif* ni, ci_tcp_state* ts, bool may_send)
 {
   int prev_eff_mss = tcp_eff_mss(ts);
   ci_assert(ci_netif_is_locked(ni));
@@ -589,7 +589,7 @@ void ci_tcp_tx_change_mss(ci_netif* ni, ci_tcp_state* ts)
   ci_tcp_tx_reset_q_end(ni, ts, &ts->send);
   ci_tcp_tx_reset_q_end(ni, ts, &ts->retrans);
 
-  if( tcp_eff_mss(ts) < (unsigned) prev_eff_mss &&
+  if( may_send && tcp_eff_mss(ts) < (unsigned) prev_eff_mss &&
       ! ci_ip_queue_is_empty(&ts->retrans) ) {
 
     /* Use RTO recovery to retransmit reformatted packets. */

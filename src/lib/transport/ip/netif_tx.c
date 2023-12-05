@@ -307,7 +307,7 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
             ci_assert(pkt->pio_addr == -1);
             pkt->pio_addr = offset;
             pkt->pio_order = order;
-            goto done;
+            return;
           }
           else {
             CITP_STATS_NETIF_INC(netif, no_pio_err);
@@ -356,7 +356,7 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
     if( rc == 0 ) {
       LOG_AT(ci_analyse_pkt(oo_ether_hdr(pkt), pkt->buf_len));
       LOG_DT(ci_hex_dump(ci_log_fn, oo_ether_hdr(pkt), pkt->buf_len, 0));
-      goto done;
+      return;
     }
   }
 
@@ -365,28 +365,6 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
    */
   LOG_NT(log("%s: ENQ id=%d", __FUNCTION__, OO_PKT_FMT(pkt)));
   __ci_netif_dmaq_put(netif, dmaq, pkt);
-
- done:
-
-  /* Poll every now and then to ensure we keep up with completions.  If we
-   * don't do this then we can ignore completions for so long that we start
-   * putting stuff on the overflow queue when we don't really need to.
-   */
-  if( netif->state->send_may_poll ) {
-    ci_netif_state_nic_t* nsn = &netif->state->nic[intf_i];
-    if( nsn->tx_dmaq_insert_seq - nsn->tx_dmaq_insert_seq_last_poll >
-        NI_OPTS(netif).send_poll_thresh ) {
-      nsn->tx_dmaq_insert_seq_last_poll = nsn->tx_dmaq_insert_seq;
-      if( ci_netif_intf_has_event(netif, intf_i) ) {
-        /* The poll call may get us back here, so we need to ensure that we
-         * doesn't recurse back into another poll.
-         */
-        netif->state->send_may_poll = 0;
-        ci_netif_poll_n(netif, NI_OPTS(netif).send_poll_max_events);
-        netif->state->send_may_poll = 1;
-      }
-    }
-  }
 }
 
 
