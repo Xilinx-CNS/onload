@@ -1415,8 +1415,6 @@ struct ci_netif_state_s {
   oo_pkt_p              rx_defrag_head;       /*  rx buffers re-assembly */
   oo_pkt_p              rx_defrag_tail;
 
-  ci_int32              send_may_poll;
-
   char                  name[CI_CFG_STACK_NAME_LEN + 1];
   ci_int32              pid;
   ci_int32              exiting_pid;

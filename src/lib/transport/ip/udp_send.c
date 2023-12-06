@@ -768,9 +768,6 @@ static void ci_udp_sendmsg_send(ci_netif* ni, ci_udp_state* us,
     ci_log("%s: pkt mtu=%d exceeds path mtu=%d", __FUNCTION__,
            tot_len, ipcache->mtu);
 
-  ci_assert_equal(ni->state->send_may_poll, 0);
-  ni->state->send_may_poll = ci_netif_may_poll(ni);
-
   /* Linux allows sending IPv6 packets with zero Hop Limit field */
   if( ipcache_ttl(ipcache) || ipcache_is_ipv6(ipcache) ) {
     if(CI_LIKELY( ipcache_onloadable )) {
@@ -838,7 +835,6 @@ static void ci_udp_sendmsg_send(ci_netif* ni, ci_udp_state* us,
                  __FUNCTION__));
   }
 
-  ni->state->send_may_poll = 0;
   return;
 
  send_pkt_via_os:
