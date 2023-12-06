@@ -42,6 +42,8 @@ static bool filter_hash_table_seed_inited = false;
 
 
 static void efct_check_for_flushes(struct work_struct *work);
+static ssize_t
+efct_get_used_hugepages(struct efhw_nic *nic, int qid);
 
 int
 efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
@@ -53,6 +55,7 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
   struct device *dev;
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
+  ssize_t used_hugepages;
   int rc;
 
   struct xlnx_efct_rxq_params qparams = {
@@ -61,17 +64,29 @@ efct_nic_rxq_bind(struct efhw_nic *nic, int qid, bool timestamp_req,
     .n_hugepages = n_hugepages,
   };
 
-  if( n_hugepages > CI_EFCT_MAX_HUGEPAGES ) {
+  /* We implicitly lock here by calling `efct_provide_hugetlb_alloc` so that
+   * `used_hugepages` does not become invalid between now and binding */
+  efct_provide_hugetlb_alloc(hugetlb_alloc);
+  used_hugepages = efct_get_used_hugepages(nic, qid);
+  if( used_hugepages < 0 ) {
+    efct_unprovide_hugetlb_alloc();
+    return used_hugepages;
+  }
+
+  EFHW_ASSERT(used_hugepages <= CI_EFCT_MAX_HUGEPAGES);
+
+  if( n_hugepages + used_hugepages > CI_EFCT_MAX_HUGEPAGES ) {
     /* We'd fail later on in bind_rxq(), but only after we'd done a load of
      * shuffling-about and memory allocation. So let's have this early sanity
      * check as well */
+    efct_unprovide_hugetlb_alloc();
     return -EINVAL;
   }
-  efct_provide_hugetlb_alloc(hugetlb_alloc);
-  EFCT_PRE(dev, edev, cli, nic, rc);
 
+  EFCT_PRE(dev, edev, cli, nic, rc);
   rc = __efct_nic_rxq_bind(edev, cli, &qparams, nic->arch_extra, n_hugepages, shm, wakeup_instance, rxq);
   EFCT_POST(dev, edev, cli, nic, rc);
+
   efct_unprovide_hugetlb_alloc();
   return rc;
 }
@@ -105,6 +120,39 @@ efct_get_hugepages(struct efhw_nic *nic, int hwqid,
   rc = edev->ops->get_hugepages(cli, hwqid, pages, n_pages);
   EFCT_POST(dev, edev, cli, nic, rc);
   return rc;
+}
+
+static ssize_t
+efct_get_used_hugepages(struct efhw_nic *nic, int qid)
+{
+  struct xlnx_efct_hugepage *pages;
+  ssize_t used;
+  int i, rc;
+
+  pages = kvzalloc(sizeof(pages[0]) * CI_EFCT_MAX_HUGEPAGES, GFP_KERNEL);
+  if( ! pages )
+    return -ENOMEM;
+
+  /* This call can return `EINVAL` for a few reasons, including the case where
+   * the provided `qid` is not bound to by `nic`. Instead of returning an error
+   * here, we should instead validly claim that no hugepages are being used. */
+  rc = efct_get_hugepages(nic, qid, pages, CI_EFCT_MAX_HUGEPAGES);
+  if( rc < 0 ) {
+    kfree(pages);
+    return (rc != -EINVAL) ? rc : 0;
+  }
+
+  used = 0;
+  for( i = 0; i < CI_EFCT_MAX_HUGEPAGES; i++ ) {
+    if( pages[i].page ) {
+      used++;
+      put_page(pages[i].page);
+      fput(pages[i].file);
+    }
+  }
+
+  kfree(pages);
+  return used;
 }
 
 
