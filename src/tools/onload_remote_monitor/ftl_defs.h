@@ -572,7 +572,6 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TFIELD_STRUCT(ctx, oo_p_dllink_t, post_poll_list, ORM_OUTPUT_EXTRA) \
   FTL_TFIELD_INT(ctx, ci_int32, rx_defrag_head, ORM_OUTPUT_STACK)         \
   FTL_TFIELD_INT(ctx, ci_int32, rx_defrag_tail, ORM_OUTPUT_STACK)         \
-  FTL_TFIELD_INT(ctx, ci_int32, send_may_poll, ORM_OUTPUT_STACK)          \
   FTL_TFIELD_SSTR(ctx, name,  ORM_OUTPUT_STACK)                          \
   FTL_TFIELD_INT(ctx, ci_int32, pid, ORM_OUTPUT_STACK)                    \
   FTL_TFIELD_INT(ctx, uid_t, uuid, ORM_OUTPUT_STACK)                       \

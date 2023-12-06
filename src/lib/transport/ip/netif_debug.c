@@ -580,9 +580,9 @@ void ci_netif_dump_extra_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
          ns->poll_did_wake);
   logger(log_arg, "  rx_defrag_head=%d rx_defrag_tail=%d",
          OO_PP_FMT(ns->rx_defrag_head), OO_PP_FMT(ns->rx_defrag_tail));
-  logger(log_arg, "  tx_may_alloc=%d can=%d nonb_pool=%d send_may_poll=%d is_spinner=%d,%d",
+  logger(log_arg, "  tx_may_alloc=%d can=%d nonb_pool=%d is_spinner=%d,%d",
          ci_netif_pkt_tx_may_alloc(ni), ci_netif_pkt_tx_can_alloc_now(ni),
-         ci_netif_pkt_nonb_pool_not_empty(ni), ns->send_may_poll,
+         ci_netif_pkt_nonb_pool_not_empty(ni),
          (int) ns->is_spinner, ns->n_spinners);
   logger(log_arg, "  hwport_to_intf_i=%s intf_i_to_hwport=%s", hp2i, i2hp);
   logger(log_arg, "  uk_intf_ver=%s", OO_UK_INTF_VER);

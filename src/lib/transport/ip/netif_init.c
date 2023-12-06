@@ -155,8 +155,6 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   nis->rx_defrag_head = OO_PP_NULL;
   nis->rx_defrag_tail = OO_PP_NULL;
 
-  assert_zero(nis->send_may_poll);
-
   strncpy(nis->name, name, CI_CFG_STACK_NAME_LEN);
   nis->name[CI_CFG_STACK_NAME_LEN] = '\0';
 
