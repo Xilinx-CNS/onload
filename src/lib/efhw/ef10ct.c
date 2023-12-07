@@ -81,6 +81,7 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_RX_FILTER_TYPE_ETH_LOCAL_VLAN
              | NIC_FLAG_PHYS_CONTIG_EVQ
              | NIC_FLAG_EVQ_IRQ
+             | NIC_FLAG_LLCT
              ;
   return 0;
 }

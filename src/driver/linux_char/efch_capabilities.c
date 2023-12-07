@@ -42,7 +42,7 @@ int efch_capabilities_op(struct efch_capabilities_in* in,
 
   if( in->ifindex >= 0 ) {
     /* Query by ifindex. */
-    if ((rc = efrm_client_get(in->ifindex, NULL, NULL, &client)) < 0) {
+    if ((rc = efrm_client_get(in->ifindex, 0, 0, NULL, NULL, &client)) < 0) {
       EFCH_ERR("%s: ERROR: ifindex=%d rc=%d", __FUNCTION__,
                in->ifindex, rc);
       goto out;

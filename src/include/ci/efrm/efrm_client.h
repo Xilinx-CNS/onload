@@ -3,6 +3,7 @@
 #ifndef __EFRM_CLIENT_H__
 #define __EFRM_CLIENT_H__
 
+#include <ci/efrm/resource.h>
 #include <ci/internal/transport_config_opt.h>
 
 struct efrm_client;
@@ -32,7 +33,9 @@ struct efrm_client_attr {
 
 
 /* NB. Callbacks may be invoked even before this returns. */
-extern int  efrm_client_get(int ifindex, struct efrm_client_callbacks *,
+extern int  efrm_client_get(int ifindex, uint64_t nic_flags,
+                            uint64_t nic_flags_mask,
+                            struct efrm_client_callbacks *,
                             void *user_data, struct efrm_client **client_out);
 extern int  efrm_client_get_by_nic(const struct efhw_nic*,
                                    struct efrm_client_callbacks *,

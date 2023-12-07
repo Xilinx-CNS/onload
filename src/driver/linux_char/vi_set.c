@@ -40,7 +40,7 @@ vi_set_rm_alloc(ci_resource_alloc_t* alloc_,
     efrm_client_add_ref(client);
   }
   else {
-    rc = efrm_client_get(alloc->in_ifindex, NULL, NULL, &client);
+    rc = efrm_client_get(alloc->in_ifindex, 0, 0, NULL, NULL, &client);
     if( rc != 0 ) {
       EFCH_ERR("%s: ERROR: ifindex=%d not found rc=%d",
                __FUNCTION__, alloc->in_ifindex, rc);

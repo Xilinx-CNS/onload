@@ -365,7 +365,6 @@ static void efrm_client_init_from_nic(struct efrm_nic *rnic,
 	list_add(&client->link, &rnic->clients);
 }
 
-
 typedef bool (*nic_match_func)(const struct efhw_nic *nic,
 			       const void *opaque_data);
 static int efrm_client_get_by_foo(nic_match_func match, const void *match_data,
@@ -428,28 +427,42 @@ int efrm_client_get_by_nic(const struct efhw_nic *nic,
 EXPORT_SYMBOL(efrm_client_get_by_nic);
 
 
+struct client_match_data {
+	const struct net_device *net_dev;
+	uint64_t nic_flags;
+	uint64_t nic_flags_mask;
+};
 static bool efrm_client_matches_net_dev(const struct efhw_nic *nic,
 					const void *data)
 {
-	return (nic->net_dev == data || !data);
+	const struct client_match_data *match = data;
+	return !match->net_dev ||
+	       ((nic->net_dev == match->net_dev) &&
+		((nic->flags & match->nic_flags_mask) == match->nic_flags));
 }
 
 
 /* This variant is called for each user of this interface, to get a client to
  * use for onload or ef_vi. In the case a negative ifindex is passed we just
  * select any old NIC for historical compatibility. */
-int efrm_client_get(int ifindex, struct efrm_client_callbacks *callbacks,
+int efrm_client_get(int ifindex, uint64_t nic_flags, uint64_t nic_flags_mask,
+		    struct efrm_client_callbacks *callbacks,
 		    void *user_data, struct efrm_client **client_out)
 {
 	int rc;
 	struct net_device *dev = NULL;
+	struct client_match_data match = {
+		.nic_flags = nic_flags,
+		.nic_flags_mask = nic_flags_mask,
+	};
 
 	if (ifindex >= 0) {
 		dev = dev_get_by_index(current->nsproxy->net_ns, ifindex);
 		if (!dev)
 			return -ENODEV;
 	}
-	rc = efrm_client_get_by_foo(efrm_client_matches_net_dev, dev,
+	match.net_dev = dev;
+	rc = efrm_client_get_by_foo(efrm_client_matches_net_dev, &match,
 				    callbacks, user_data, client_out);
 #if ! CI_HAVE_EFCT_AUX
 	if( rc == -ENODEV ) {

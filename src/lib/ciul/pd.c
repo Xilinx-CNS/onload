@@ -46,6 +46,8 @@ static enum ef_pd_flags __ef_env2flags(enum ef_pd_flags flags)
             flags = 0;
         else if( __ef_tok_eq(s, tok_end - s, "mcast_loop") )
             new_flags |= EF_PD_MCAST_LOOP;
+        else if( __ef_tok_eq(s, tok_end - s, "llct") )
+            new_flags |= EF_PD_LLCT;
         s = tok_end + 1;
     } while( *tok_end != '\0' );
 
@@ -88,6 +90,8 @@ static int __ef_pd_alloc(ef_pd* pd, ef_driver_handle pd_dh,
     ra.u.pd.in_flags |= EFCH_PD_FLAG_RX_PACKED_STREAM;
   if( flags & EF_PD_IGNORE_BLACKLIST )
     ra.u.pd.in_flags |= EFCH_PD_FLAG_IGNORE_BLACKLIST;
+  if( flags & EF_PD_LLCT )
+    ra.u.pd.in_flags |= EFCH_PD_FLAG_LLCT;
   ra.u.pd.in_vlan_id = vlan_id;
 
   rc = ci_resource_alloc(pd_dh, &ra);

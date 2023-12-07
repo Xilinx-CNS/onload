@@ -117,6 +117,7 @@ struct efch_pio_alloc {
 #define EFCH_PD_FLAG_VPORT            0x10
 #define EFCH_PD_FLAG_MCAST_LOOP       0x20
 #define EFCH_PD_FLAG_IGNORE_BLACKLIST 0x40
+#define EFCH_PD_FLAG_LLCT             0x80
 
 
 struct efch_pd_alloc {

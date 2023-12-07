@@ -17,8 +17,15 @@ pd_rm_alloc(ci_resource_alloc_t* alloc_, ci_resource_table_t* priv_opt,
   struct efhw_nic* nic;
   struct efrm_pd *pd_rs;
   int rc, phys_mode, hw_loopback;
+  uint64_t nic_flags = 0;
+  uint64_t nic_flags_mask = NIC_FLAG_LLCT;
 
-  if ((rc = efrm_client_get(alloc->in_ifindex, NULL, NULL, &client)) < 0) {
+  if (alloc->in_flags & EFCH_PD_FLAG_LLCT)
+    nic_flags |= NIC_FLAG_LLCT;
+
+  rc = efrm_client_get(alloc->in_ifindex, nic_flags, nic_flags_mask, NULL,
+                       NULL, &client);
+  if (rc < 0) {
     EFCH_ERR("%s: ERROR: ifindex=%d rc=%d", __FUNCTION__,
              alloc->in_ifindex, rc);
     goto out;

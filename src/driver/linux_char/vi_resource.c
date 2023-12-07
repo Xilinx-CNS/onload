@@ -280,7 +280,7 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
     efrm_vi_attr_set_pd(&attr, rmpd);
   }
   else {
-    rc = efrm_client_get(alloc_in->ifindex, NULL, NULL, &client);
+    rc = efrm_client_get(alloc_in->ifindex, 0, 0, NULL, NULL, &client);
     if( rc != 0 ) {
       EFCH_ERR("%s: ERROR: ifindex=%d not known rc=%d",
                __FUNCTION__, alloc_in->ifindex, rc);
