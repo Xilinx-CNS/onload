@@ -650,6 +650,7 @@ static void fixup_pkt_not_transmitted(ci_netif *ni, ci_ip_pkt_fmt* pkt)
 
 static void ci_udp_sendmsg_send(ci_netif* ni, ci_udp_state* us,
                                 ci_ip_pkt_fmt* pkt, int flags,
+                                bool may_poll,
                                 struct udp_send_info* sinf)
 {
   ci_ip_pkt_fmt* first_pkt = pkt;
@@ -768,9 +769,6 @@ static void ci_udp_sendmsg_send(ci_netif* ni, ci_udp_state* us,
     ci_log("%s: pkt mtu=%d exceeds path mtu=%d", __FUNCTION__,
            tot_len, ipcache->mtu);
 
-  ci_assert_equal(ni->state->send_may_poll, 0);
-  ni->state->send_may_poll = ci_netif_may_poll(ni);
-
   /* Linux allows sending IPv6 packets with zero Hop Limit field */
   if( ipcache_ttl(ipcache) || ipcache_is_ipv6(ipcache) ) {
     if(CI_LIKELY( ipcache_onloadable )) {
@@ -838,7 +836,20 @@ static void ci_udp_sendmsg_send(ci_netif* ni, ci_udp_state* us,
                  __FUNCTION__));
   }
 
-  ni->state->send_may_poll = 0;
+  /* For an application which does almost nothing but sending UDP
+   * it would help to handle TX complete events in time.
+   * We should do it from direct user calls only, and avoid any internal
+   * recursion.
+   */
+  if( may_poll && ipcache->status == retrrc_success ) {
+    ci_netif_state_nic_t* nsn = &ni->state->nic[ipcache->intf_i];
+    if( nsn->tx_dmaq_insert_seq - nsn->tx_dmaq_insert_seq_last_poll >
+        NI_OPTS(ni).send_poll_thresh ) {
+      nsn->tx_dmaq_insert_seq_last_poll = nsn->tx_dmaq_insert_seq;
+      ci_netif_poll(ni);
+    }
+  }
+
   return;
 
  send_pkt_via_os:
@@ -922,7 +933,7 @@ void ci_udp_sendmsg_send_async_q(ci_netif* ni, ci_udp_state* us)
     else
       flags = 0;
     ++us->stats.n_tx_lock_defer;
-    ci_udp_sendmsg_send(ni, us, pkt, flags, NULL);
+    ci_udp_sendmsg_send(ni, us, pkt, flags, false/*don't poll*/, NULL);
     ci_netif_pkt_release(ni, pkt);
     if( OO_PP_IS_NULL(pp) )  break;
     pkt = PKT_CHK(ni, pp);
@@ -1459,7 +1470,8 @@ void ci_udp_sendmsg_onload(ci_netif* ni, ci_udp_state* us,
         sinf->ipcache.dport_be16;
 
     if( si_trylock_and_inc(ni, sinf, us->stats.n_tx_lock_snd) ) {
-      ci_udp_sendmsg_send(ni, us, pf.pkt, flags, sinf);
+      ci_udp_sendmsg_send(ni, us, pf.pkt, flags,
+                          ci_netif_may_poll(ni), sinf);
       ci_netif_pkt_release(ni, pf.pkt);
       ci_netif_unlock(ni);
       sinf->stack_locked = 0;
