@@ -447,7 +447,7 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 	nic->rss_channel_count = ef10_res->rss_channel_count;
 	efrm_dev->priv = nic;
 
-	efrm_notify_nic_probe(net_dev);
+	efrm_notify_nic_probe(nic, net_dev);
 	return 0;
 }
 
@@ -461,11 +461,9 @@ static void efrm_dl_remove(struct efx_dl_device *efrm_dev)
 	EFRM_TRACE("%s called", __func__);
 	efrm_nic_del_sysfs(&efrm_dev->pci_dev->dev);
 	if (nic) {
-		struct net_device* net_dev = efhw_nic_get_net_dev(nic);
 		struct linux_efhw_nic *lnic = linux_efhw_nic(nic);
 
-		efrm_notify_nic_remove(net_dev);
-		dev_put(net_dev);
+		efrm_notify_nic_remove(nic);
 
                 /* flush all outstanding dma queues */
                 efrm_nic_flush_all_queues(nic, 0);

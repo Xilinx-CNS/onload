@@ -5,12 +5,12 @@
 #define CI_EFRM_NIC_NOTIFIER_H
 
 
-struct net_device;
+struct efhw_nic;
 
 
 struct efrm_nic_notifier {
-        int (*probe)(const struct net_device *net_dev);
-        void (*remove)(const struct net_device *net_dev);
+        int (*probe)(const struct efhw_nic *nic, const struct net_device *dev);
+        void (*remove)(const struct efhw_nic *nic);
 };
 
 

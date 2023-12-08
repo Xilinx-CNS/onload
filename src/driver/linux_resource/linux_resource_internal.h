@@ -89,8 +89,9 @@ int efrm_nondl_register_netdev(struct net_device *netdev,
                               unsigned int n_vis);
 
 
-void efrm_notify_nic_probe(const struct net_device* netdev);
-void efrm_notify_nic_remove(const struct net_device* netdev);
+void efrm_notify_nic_probe(const struct efhw_nic* nic,
+                           const struct net_device *netdev);
+void efrm_notify_nic_remove(const struct efhw_nic* nic);
 
 extern int efrm_nic_set_accel_allowed(struct efhw_nic* nic,
 				      int enable);

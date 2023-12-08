@@ -23,6 +23,7 @@ static void efrm_nondl_try_add_device(struct efrm_nondl_device *device,
                                       struct efrm_nondl_driver *driver)
 {
   int rc = 0;
+  struct efhw_nic *nic;
 
   ASSERT_RTNL();
 
@@ -37,8 +38,10 @@ static void efrm_nondl_try_add_device(struct efrm_nondl_device *device,
   device->driver = driver;
   list_add_tail(&device->driver_node, &driver->devices);
 
-  if(device->is_up)
-    efrm_notify_nic_probe(device->netdev);
+  if(device->is_up) {
+    nic = efhw_nic_find(device->netdev);
+    efrm_notify_nic_probe(nic, device->netdev);
+  }
 
   return;
 
@@ -49,10 +52,13 @@ fail:
 /* Destroy an existing association between a device and a driver. */
 static void efrm_nondl_del_device(struct efrm_nondl_device *device)
 {
+  struct efhw_nic *nic;
   ASSERT_RTNL();
 
-  if(device->is_up)
-    efrm_notify_nic_remove(device->netdev);
+  if(device->is_up) {
+    nic = efhw_nic_find(device->netdev);
+    efrm_notify_nic_remove(nic);
+  }
 
   if( device->driver ) {
     device->driver->unregister_device(device);

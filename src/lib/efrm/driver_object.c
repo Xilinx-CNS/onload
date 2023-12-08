@@ -364,9 +364,13 @@ static void efrm_client_init_from_nic(struct efrm_nic *rnic,
 	list_add(&client->link, &rnic->clients);
 }
 
-int efrm_client_get_by_net_dev(const struct net_device *dev,
-                               struct efrm_client_callbacks *callbacks,
-                               void *user_data, struct efrm_client **client_out)
+
+typedef bool (*nic_match_func)(const struct efhw_nic *nic,
+			       const void *opaque_data);
+static int efrm_client_get_by_foo(nic_match_func match, const void *match_data,
+				  struct efrm_client_callbacks *callbacks,
+				  void *user_data,
+				  struct efrm_client **client_out)
 {
 	struct efrm_nic *n, *rnic = NULL;
 	struct list_head *link;
@@ -382,7 +386,7 @@ int efrm_client_get_by_net_dev(const struct net_device *dev,
 	spin_lock_bh(&efrm_nic_tablep->lock);
 	list_for_each(link, &efrm_nics) {
 		n = container_of(link, struct efrm_nic, link);
-		if (n->efhw_nic.net_dev == dev || !dev) {
+		if (match(&n->efhw_nic, match_data)) {
 			rnic = n;
 			break;
 		}
@@ -396,26 +400,43 @@ int efrm_client_get_by_net_dev(const struct net_device *dev,
 
 	if (rnic == NULL) {
 		kfree(client);
-#if ! CI_HAVE_EFCT_AUX
-		if (dev && dev->dev.parent && dev_is_pci(dev->dev.parent)) {
-			struct pci_dev* pci_dev = to_pci_dev(dev->dev.parent);
-			if (pci_dev->vendor == 0x10ee && pci_dev->device == 0x5084) {
-				EFRM_ERR("%s: device %s (ifindex %d) is an X3, "
-				         "but this Onload was built without X3 support",
-				         __func__, dev->name, dev->ifindex);
-				return -EOPNOTSUPP;
-			}
-		}
-#endif
 		return -ENODEV;
 	}
 
 	*client_out = client;
 	return 0;
 }
-EXPORT_SYMBOL(efrm_client_get_by_net_dev);
 
 
+static bool efrm_client_matches_nic(const struct efhw_nic *nic,
+				    const void *data)
+{
+	return (nic == data);
+}
+
+
+/* This variant is called at NIC probe time by the onload driver, to get a
+ * client to associated with a newly probed interface. */
+int efrm_client_get_by_nic(const struct efhw_nic *nic,
+			   struct efrm_client_callbacks *callbacks,
+			   void *user_data, struct efrm_client **client_out)
+{
+	return efrm_client_get_by_foo(efrm_client_matches_nic, nic,
+				      callbacks, user_data, client_out);
+}
+EXPORT_SYMBOL(efrm_client_get_by_nic);
+
+
+static bool efrm_client_matches_net_dev(const struct efhw_nic *nic,
+					const void *data)
+{
+	return (nic->net_dev == data || !data);
+}
+
+
+/* This variant is called for each user of this interface, to get a client to
+ * use for onload or ef_vi. In the case a negative ifindex is passed we just
+ * select any old NIC for historical compatibility. */
 int efrm_client_get(int ifindex, struct efrm_client_callbacks *callbacks,
 		    void *user_data, struct efrm_client **client_out)
 {
@@ -427,7 +448,21 @@ int efrm_client_get(int ifindex, struct efrm_client_callbacks *callbacks,
 		if (!dev)
 			return -ENODEV;
 	}
-	rc = efrm_client_get_by_net_dev(dev, callbacks, user_data, client_out);
+	rc = efrm_client_get_by_foo(efrm_client_matches_net_dev, dev,
+				    callbacks, user_data, client_out);
+#if ! CI_HAVE_EFCT_AUX
+	if( rc == -ENODEV ) {
+		if (dev && dev->dev.parent && dev_is_pci(dev->dev.parent)) {
+			struct pci_dev* pci_dev = to_pci_dev(dev->dev.parent);
+			if (pci_dev->vendor == 0x10ee && pci_dev->device == 0x5084) {
+				EFRM_ERR("%s: device %s (ifindex %d) is an X3, "
+				         "but this Onload was built without X3 support",
+				         __func__, dev->name, dev->ifindex);
+				rc = -EOPNOTSUPP;
+			}
+		}
+	}
+#endif
 	if (dev)
 		dev_put(dev);
 	return rc;
@@ -542,6 +577,7 @@ struct efhw_nic* efhw_nic_find_by_dev(const struct device *dev)
 
 	return result;
 }
+EXPORT_SYMBOL(efhw_nic_find_by_dev);
 
 /* Arguably this should be in lib/efhw.  However, right now this function
  * is a layer violation because it assumes that the efhw_nic is embedded in

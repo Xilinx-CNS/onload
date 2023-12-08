@@ -37,7 +37,7 @@
 
 struct oo_nic oo_nics[CI_CFG_MAX_HWPORTS];
 
-static struct oo_nic* oo_nic_find(struct efhw_nic* nic)
+struct oo_nic* oo_nic_find(const struct efhw_nic* nic)
 {
   int i, max = sizeof(oo_nics) / sizeof(oo_nics[0]);
 
@@ -124,28 +124,31 @@ static struct efrm_client_callbacks oo_efrm_client_callbacks = {
 };
 
 
-struct oo_nic* oo_nic_add(const struct net_device* dev)
+struct oo_nic* oo_nic_add(const struct efhw_nic* nic)
 {
   struct oo_nic* onic;
   int i, max = sizeof(oo_nics) / sizeof(oo_nics[0]);
   struct efrm_client* efrm_client;
+  int ifindex;
   int rc;
 
   CI_DEBUG(ASSERT_RTNL());
 
-  rc = efrm_client_get_by_net_dev(dev, &oo_efrm_client_callbacks, NULL,
-                                  &efrm_client);
+  rc = efrm_client_get_by_nic(nic, &oo_efrm_client_callbacks, NULL,
+                              &efrm_client);
   /* This function is only called via a resource driver notification, so the
    * client must have been added and cannot have been removed while the rtnl
    * lock is still held. */
   EFRM_ASSERT(rc == 0);
+  ifindex = efrm_client_get_ifindex(efrm_client);
 
-  for( i = 0; i < max; ++i )
+  for( i = 0; i < max; ++i ) {
     if( (onic = &oo_nics[i])->efrm_client == NULL )
       break;
+  }
   if( i == max ) {
-    ci_log("%s: NOT registering ifindex=%d (too many)", __FUNCTION__,
-           dev->ifindex);
+    ci_log("%s: NOT registering index=%d dev=%s (too many)", __FUNCTION__,
+           ifindex, dev_name(nic->dev));
     goto fail2;
   }
 
@@ -158,10 +161,10 @@ struct oo_nic* oo_nic_add(const struct net_device* dev)
   if( rc < 0 && rc != -ENOENT ) {
     /* -ENOENT means there is no cp_server yet; it is OK */
     ci_log("%s: failed to announce ifindex=%d oo_index=%d to cp_server: %d",
-           __func__, dev->ifindex, i, rc);
+           __func__, ifindex, i, rc);
   }
 
-  ci_log("%s: ifindex=%d oo_index=%d", __FUNCTION__, dev->ifindex, i);
+  ci_log("%s: ifindex=%d oo_index=%d", __FUNCTION__, ifindex, i);
 
   return onic;
 
@@ -188,10 +191,11 @@ static void oo_nic_remove(struct oo_nic* onic)
 }
 
 
-struct oo_nic* oo_nic_find_dev(const struct net_device* dev)
+struct oo_nic* oo_nic_find_by_net_dev(const struct net_device* dev)
 {
   return oo_nic_find(efhw_nic_find(dev));
 }
+
 
 int oo_nic_announce(struct oo_cplane_handle* cp, ci_ifid_t ifindex)
 {

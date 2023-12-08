@@ -417,7 +417,7 @@ int efct_probe(struct auxiliary_device *auxdev,
   /* Setting the nic here marks the device as ready for use. */
   efct->nic = nic;
 
-  efrm_notify_nic_probe(net_dev);
+  efrm_notify_nic_probe(nic, net_dev);
   rtnl_unlock();
 
   efhw_init_debugfs_efct(nic);
@@ -448,7 +448,6 @@ void efct_remove(struct auxiliary_device *auxdev)
   struct xlnx_efct_device *edev = to_xlnx_efct_device(auxdev);
   struct xlnx_efct_client *client;
   struct linux_efhw_nic *lnic;
-  struct net_device *net_dev;
   struct efhw_nic* nic;
   struct efhw_nic_efct *efct;
   int i;
@@ -482,9 +481,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   }
 
   rtnl_lock();
-  net_dev = efhw_nic_get_net_dev(nic);
-  efrm_notify_nic_remove(net_dev);
-  dev_put(net_dev);
+  efrm_notify_nic_remove(nic);
 
   /* flush all outstanding dma queues */
   efrm_nic_flush_all_queues(nic, 0);

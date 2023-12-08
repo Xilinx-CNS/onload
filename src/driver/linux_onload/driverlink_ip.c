@@ -245,9 +245,7 @@ static void oo_hwport_up(struct oo_nic* onic, int up)
  */
 struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
 {
-  struct oo_nic* onic;
-
-  onic = oo_nic_find_dev(net_dev);
+  struct oo_nic* onic = oo_nic_find_by_net_dev(net_dev);
 
   if( onic != NULL ) {
     oo_hwport_up(onic, net_dev->flags & IFF_UP);
@@ -267,9 +265,10 @@ struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
   return onic;
 }
 
-static int oo_nic_probe(const struct net_device* net_dev)
+static int oo_nic_probe(const struct efhw_nic* nic,
+                        const struct net_device *net_dev)
 {
-  struct oo_nic* onic = oo_nic_find_dev(net_dev);
+  struct oo_nic* onic = oo_nic_find(nic);
 
   if( onic != NULL ) {
     if( ! netif_running(net_dev) ) {
@@ -290,7 +289,7 @@ static int oo_nic_probe(const struct net_device* net_dev)
     }
   }
   else {
-    onic = oo_nic_add(net_dev);
+    onic = oo_nic_add(nic);
     if( onic == NULL )
       return -1;
   }
@@ -302,7 +301,7 @@ static int oo_nic_probe(const struct net_device* net_dev)
   return 0;
 }
 
-void oo_nic_remove(const struct net_device* netdev)
+void oo_nic_remove(const struct efhw_nic* nic)
 {
   /* We need to fini all of the hardware queues immediately. The net driver
    * will tidy up its own queues and *all* VIs, so if we don't free our own
@@ -318,7 +317,7 @@ void oo_nic_remove(const struct net_device* netdev)
   ci_netif* ni = NULL;
 #endif
   struct oo_nic* onic;
-  if( (onic = oo_nic_find_dev(netdev)) != NULL ) {
+  if( (onic = oo_nic_find(nic)) != NULL ) {
     /* Filter status need to be synced as after this function is finished
      * no further operations will be allowed.
      * Also note on polite hotplug oo_nic_remove() is called before
@@ -360,7 +359,7 @@ static void oo_fixup_wakeup_breakage(const struct net_device* dev)
   struct oo_nic* onic;
   ci_netif* ni = NULL;
   int hwport, intf_i;
-  if( (onic = oo_nic_find_dev(dev)) != NULL ) {
+  if( (onic = oo_nic_find_by_net_dev(dev)) != NULL ) {
     hwport = onic - oo_nics;
     while( iterate_netifs_unlocked(&ni, OO_THR_REF_BASE,
                                    OO_THR_REF_INFTY) == 0 )
@@ -390,7 +389,7 @@ static void oo_netdev_going_down(struct net_device* netdev)
 {
   struct oo_nic *onic;
 
-  onic = oo_nic_find_dev(netdev);
+  onic = oo_nic_find_by_net_dev(netdev);
   if( onic != NULL )
       oo_hwport_up(onic, 0);
 }

@@ -26,9 +26,11 @@ extern struct oo_nic oo_nics[];
 
 extern void oo_nic_failover_from_hwport(int hwport);
 
-extern struct oo_nic* oo_nic_add(const struct net_device* dev);
+struct efhw_nic;
+extern struct oo_nic* oo_nic_add(const struct efhw_nic* nic);
 
-extern struct oo_nic* oo_nic_find_dev(const struct net_device* dev);
+extern struct oo_nic* oo_nic_find(const struct efhw_nic* nic);
+extern struct oo_nic* oo_nic_find_by_net_dev(const struct net_device* dev);
 
 extern int oo_nic_hwport(struct oo_nic*);
 
