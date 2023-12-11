@@ -165,6 +165,9 @@ jobs:
       id: date
       run: echo "created=$(date --rfc-3339=seconds)" >> "$GITHUB_OUTPUT"
 
+    - name: Env - lowercase registry prefix
+      run: echo "REGISTRY_PREFIX=${REGISTRY_PREFIX@L}" >> "$GITHUB_ENV"
+
     - name: Build and push image
       id: build
       uses: docker/build-push-action@v5
