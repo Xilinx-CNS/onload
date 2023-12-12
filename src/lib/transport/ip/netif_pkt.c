@@ -105,6 +105,10 @@ int ci_netif_pktset_best(ci_netif* ni)
 {
   int i, ret = -1, n_free = 0;
   
+  /* Skip search if we know upfront there's no bufset with free packets. */
+  if( ! ni->packets->n_free )
+    return ret;
+
   for( i = 0; i < ni->packets->sets_n; i ++ ) {
     if( ni->packets->set[i].n_free > n_free ) {
       n_free = ni->packets->set[i].n_free;
@@ -121,7 +125,7 @@ int ci_netif_pktset_best(ci_netif* ni)
 }
 
 
-ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif* ni, int flags)
+ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow_ptrerr(ci_netif* ni, int flags)
 {
   /* This is the slow path of ci_netif_pkt_alloc() and
   ** ci_netif_pkt_tx_tcp_alloc().  Either free pool is empty, or we have
@@ -129,6 +133,7 @@ ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif* ni, int flags)
   */
   ci_ip_pkt_fmt* pkt;
   int bufset_id;
+  int err = -ENOBUFS;
 
   ci_assert(ci_netif_is_locked(ni));
 
@@ -144,7 +149,7 @@ ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif* ni, int flags)
 
   if( flags & CI_PKT_ALLOC_FOR_TCP_TX )
     if(CI_UNLIKELY( ! ci_netif_pkt_tx_may_alloc(ni) ))
-      return NULL;
+      return ERR_PTR(err);
 
   ci_assert_equal(ni->packets->id, NI_PKT_SET(ni));
   ci_assert_equal(ni->packets->set[NI_PKT_SET(ni)].n_free, 0);
@@ -162,8 +167,10 @@ ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif* ni, int flags)
   while( ni->packets->sets_n < ni->packets->sets_max ) {
     int old_n_freepkts = ni->packets->n_free;
     int rc = ci_tcp_helper_more_bufs(ni);
-    if( rc != 0 )
+    if( rc != 0 ) {
+      err = rc;
       break;
+    }
     CHECK_FREEPKTS(ni);
     if( old_n_freepkts == ni->packets->n_free )
       ci_assert_equal(ni->packets->sets_n, ni->packets->sets_max);
@@ -180,7 +187,7 @@ ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif* ni, int flags)
   }
 #endif
 
-  return NULL;
+  return ERR_PTR(err);
 }
 
 

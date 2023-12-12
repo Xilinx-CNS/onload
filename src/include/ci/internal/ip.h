@@ -667,7 +667,19 @@ extern void ci_netif_pkt_free(ci_netif* ni, ci_ip_pkt_fmt* pkt
 #define CI_PKT_ALLOC_FOR_TCP_TX 1
 #define CI_PKT_ALLOC_USE_NONB   2
 #define CI_PKT_ALLOC_NO_REAP    4
-extern ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif*, int flags) CI_HF;
+extern ci_ip_pkt_fmt*
+ci_netif_pkt_alloc_slow_ptrerr(ci_netif*, int flags) CI_HF;
+
+ci_inline ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif *ni, int flags)
+{
+  ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc_slow_ptrerr(ni, flags);
+  if( CI_UNLIKELY(IS_ERR(pkt)) )
+    return NULL;
+
+  ci_assert(pkt);
+  return pkt;
+}
+
 extern int ci_netif_pkt_try_to_free(ci_netif* ni, int desperation,
                                     int stop_once_freed_n) CI_HF;
 extern void ci_netif_try_to_reap(ci_netif* ni, int stop_once_freed_n) CI_HF;
@@ -3095,7 +3107,7 @@ ci_inline void ci_netif_pkt_set_change(ci_netif* ni, int bufset_id,
   ci_assert(OO_PP_NOT_NULL(ni->packets->set[bufset_id].free));
 }
 
-ci_inline ci_ip_pkt_fmt* ci_netif_pkt_alloc(ci_netif* ni, int flags) {
+ci_inline ci_ip_pkt_fmt* ci_netif_pkt_alloc_ptrerr(ci_netif* ni, int flags) {
   ci_ip_pkt_fmt* pkt;
   int bufset_id;
   ci_assert( ci_netif_is_locked(ni) );
@@ -3103,7 +3115,16 @@ ci_inline ci_ip_pkt_fmt* ci_netif_pkt_alloc(ci_netif* ni, int flags) {
   if(CI_LIKELY( ni->packets->set[bufset_id].n_free > 0 ))
     pkt = ci_netif_pkt_get(ni, bufset_id);
   else
-    pkt = ci_netif_pkt_alloc_slow(ni, flags);
+    pkt = ci_netif_pkt_alloc_slow_ptrerr(ni, flags);
+  return pkt;
+}
+
+ci_inline ci_ip_pkt_fmt* ci_netif_pkt_alloc(ci_netif* ni, int flags) {
+  ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc_ptrerr(ni, flags);
+  if( CI_UNLIKELY(IS_ERR(pkt)) )
+    return NULL;
+
+  ci_assert(pkt);
   return pkt;
 }
 
