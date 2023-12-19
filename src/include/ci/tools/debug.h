@@ -387,6 +387,17 @@ static inline ci_uint64 _ci_force_to_u64(T v)
 #define ci_assert_addrs_equal(exp1, exp2) \
         _ci_assert_addrs_equal(exp1, exp2, __FILE__, __LINE__)
 
+#ifdef NDEBUG
+#define ci_assume(exp)                          \
+  do{                                           \
+    if( CI_UNLIKELY(!(exp)) )                   \
+      ci_unreachable();                         \
+  }while(0)
+
+#else
+#define ci_assume(exp) ci_assert(exp)
+#endif
+
 
 #define CI_TEST(exp)                            \
   do{                                           \

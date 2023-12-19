@@ -676,7 +676,7 @@ ci_inline ci_ip_pkt_fmt* ci_netif_pkt_alloc_slow(ci_netif *ni, int flags)
   if( CI_UNLIKELY(IS_ERR(pkt)) )
     return NULL;
 
-  ci_assert(pkt);
+  ci_assume(pkt);
   return pkt;
 }
 
@@ -3112,9 +3112,13 @@ ci_inline ci_ip_pkt_fmt* ci_netif_pkt_alloc_ptrerr(ci_netif* ni, int flags) {
   int bufset_id;
   ci_assert( ci_netif_is_locked(ni) );
   bufset_id = NI_PKT_SET(ni);
-  if(CI_LIKELY( ni->packets->set[bufset_id].n_free > 0 ))
+  if(CI_LIKELY( ni->packets->set[bufset_id].n_free > 0 )) {
     pkt = ci_netif_pkt_get(ni, bufset_id);
-  else
+
+    /* This optimisation lets the compiler skip the "unlikely"
+     * check in the ci_netif_pkt_alloc's fast path. */
+    ci_assume(!IS_ERR(pkt));
+  } else
     pkt = ci_netif_pkt_alloc_slow_ptrerr(ni, flags);
   return pkt;
 }
@@ -3124,7 +3128,7 @@ ci_inline ci_ip_pkt_fmt* ci_netif_pkt_alloc(ci_netif* ni, int flags) {
   if( CI_UNLIKELY(IS_ERR(pkt)) )
     return NULL;
 
-  ci_assert(pkt);
+  ci_assume(pkt);
   return pkt;
 }
 

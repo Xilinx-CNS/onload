@@ -262,7 +262,7 @@ int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
       return 0;
   }
   ci_assert(! "No ioctl ops into onload expected");
-  __builtin_unreachable();
+  ci_unreachable();
 }
 
 extern int cplane_ioctl(int, long unsigned int, ...)
@@ -272,6 +272,6 @@ extern int cplane_ioctl(int, long unsigned int, ...)
 int oo_fd_open(int fd, long unsigned int op, ...)
 {
   ci_assert(! "No calls to oo_fd_open ops expected");
-  __builtin_unreachable();
+  ci_unreachable();
 }
 
