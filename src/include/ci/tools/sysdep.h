@@ -81,6 +81,13 @@ typedef ci_int32 ci_kerr_t; /* range of OS kernel-mode return codes */
 #endif /* ! __cplusplus */
 #endif /* ! __DECLARE_FLEX_ARRAY */
 
+#define CI_MAX_ERRNO 1024
+#define IS_ERR(ptr) \
+  CI_UNLIKELY((uintptr_t)(ptr) >= (uintptr_t)-CI_MAX_ERRNO)
+#define PTR_ERR(ptr) ((long)((uintptr_t)(ptr)))
+#define PTR_ERR_OR_ZERO(ptr) (PTR_ERR(ptr) ? PTR_ERR(ptr) : 0)
+#define ERR_PTR(err) ((void*)(uintptr_t)(long)(err))
+
 /**********************************************************************
  * Compiler and processor dependencies.
  */

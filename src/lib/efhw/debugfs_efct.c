@@ -39,11 +39,27 @@ static int efct_debugfs_read_hw_filters(struct seq_file *file,
   return 0;
 }
 
+static int efct_debugfs_read_exclusive_rxq_mapping(struct seq_file *file,
+                                                   const void *data)
+{
+  const struct efhw_nic_efct *efct = data;
+  int qid;
+  for( qid = 0; qid < efct->rxq_n; ++qid ) {
+    uint32_t excl = efct->exclusive_rxq_mapping[qid];
+    seq_printf(file, "%s%d",
+               qid == 0 ? "" : " ",
+               excl && excl != EFHW_PD_NON_EXC_TOKEN);
+  }
+  seq_printf(file, "\n");
+  return 0;
+}
+
 static const struct efrm_debugfs_parameter efhw_debugfs_efct_parameters[] = {
   EFRM_U32_PARAMETER(struct efhw_nic_efct, rxq_n),
   EFRM_U32_PARAMETER(struct efhw_nic_efct, evq_n),
   EFRM_U32_PARAMETER(struct efhw_nic_efct, hw_filters_n),
   _EFRM_RAW_PARAMETER(hw_filters, efct_debugfs_read_hw_filters),
+  _EFRM_RAW_PARAMETER(exclusive_rxq_mapping, efct_debugfs_read_exclusive_rxq_mapping),
   {NULL},
 };
 

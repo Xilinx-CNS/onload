@@ -99,13 +99,6 @@ ci_inline void *kcalloc(size_t n, size_t size, gfp_t flags)
 #define kfree(p)  do{ if ((p) != NULL)  ci_free(p); }while(0)
 
 
-#define CI_MAX_ERRNO 1024
-#define IS_ERR(ptr) \
-  CI_UNLIKELY((uintptr_t)(ptr) >= (uintptr_t)-CI_MAX_ERRNO)
-#define PTR_ERR(ptr) ((long)((uintptr_t)(ptr)))
-#define ERR_PTR(err) ((void*)(uintptr_t)(long)(err))
-
-
 
 #define roundup_pow_of_two(n) (1 << ci_log2_ge(n,0))
 #define is_power_of_2(N) CI_IS_POW2(N)

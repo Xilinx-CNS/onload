@@ -163,6 +163,7 @@ void ci_netif_verify_freepkts(ci_netif *ni, const char *file, int line)
       verify(c2 == ni->packets->set[i].n_free);
     }
   }
+  verify(c1 == ni->packets->n_free);
 }
 
 #endif  /* NDEBUG */
@@ -700,7 +701,7 @@ void ci_stack_time_dump(ci_netif* ni, oo_dump_log_fn_t logger, void* log_arg)
             "incoming TCP packets: %uticks (%ums)\n",
             NI_CONF(ni).tconst_invalid_ack_ratelimit,
             NI_OPTS(ni).oow_ack_ratelimit);
-  LOG_PRINT("  Intrumentation: %uticks (%ums)",
+  LOG_PRINT("  Instrumentation: %uticks (%ums)",
             NI_CONF(ni).tconst_stats, CI_TCONST_STATS);
 }
 

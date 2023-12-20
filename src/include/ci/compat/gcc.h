@@ -122,6 +122,9 @@ typedef ci_uint64                       ci_fixed_descriptor_t;
 #define CI_READ_ONCE(x) OO_ACCESS_ONCE((x))
 
 
+#define ci_unreachable  __builtin_unreachable
+
+
 /**********************************************************************
  * Attributes
  */

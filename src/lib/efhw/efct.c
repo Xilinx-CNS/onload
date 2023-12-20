@@ -701,7 +701,8 @@ get_filter_class(int filter_id)
 static int
 do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
                  size_t hash_bits, size_t max_n, struct efct_filter_node* node,
-                 struct efhw_nic_efct *efct, size_t node_len, bool allow_dups)
+                 struct efhw_nic_efct *efct, size_t node_len, bool allow_dups,
+                 struct efct_filter_node** used_node)
 {
   size_t key_len = node_len - offsetof(struct efct_filter_node, key_start);
   struct efct_filter_node* node_ptr;
@@ -731,6 +732,7 @@ do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
           return -EEXIST;
         ++old->refcount;
         node->filter_id = old->filter_id;
+        *used_node = old;
         is_duplicate = true;
         break;
       }
@@ -748,6 +750,7 @@ do_filter_insert(int clas, struct hlist_head* table, size_t *table_n,
     memcpy(node_ptr, node, node_len);
     hlist_add_head_rcu(&node_ptr->node, &table[bkt]);
     ++*table_n;
+    *used_node = node_ptr;
   }
 
   if ( node->hw_filter >= 0 )
@@ -812,6 +815,7 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
   struct xlnx_efct_device* edev;
   struct xlnx_efct_client* cli;
   struct efct_filter_node node;
+  struct efct_filter_node* sw_filter_node;
   size_t node_len;
   int clas;
   bool insert_hw_filter = false;
@@ -1008,7 +1012,8 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     if( clas == FILTER_CLASS_##F ) { \
       rc = do_filter_insert(clas, efct->filters.F, &efct->filters.F##_n, \
                             HASH_BITS(efct->filters.F), MAX_ALLOWED_##F, \
-                            &node, efct, node_len, clas != FILTER_CLASS_full_match); \
+                            &node, efct, node_len, \
+                            clas != FILTER_CLASS_full_match, &sw_filter_node); \
     }
   FOR_EACH_FILTER_CLASS(ACTION_DO_FILTER_INSERT)
 
@@ -1021,6 +1026,15 @@ efct_filter_insert(struct efhw_nic *nic, struct efx_filter_spec *spec,
     EFCT_PRE(dev, edev, cli, nic, rc);
     rc = edev->ops->filter_insert(cli, &params);
     EFCT_POST(dev, edev, cli, nic, rc);
+
+    if( rc == -ENOSPC && sw_filter_node->refcount == 1 ) {
+      /* We discovered we had fewer hardware filters than we thought - undo a bit
+       * and use rxq0 / sw filtering only */
+      rc = flags & EFHW_FILTER_F_EXCL_RXQ ? -EPERM : 0;
+      --efct->hw_filters[node.hw_filter].refcount;
+      sw_filter_node->hw_filter = -1;
+      node.hw_filter = -1;
+    }
   }
 
   if( rc < 0 ) {

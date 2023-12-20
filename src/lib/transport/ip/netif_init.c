@@ -2613,19 +2613,22 @@ static void ci_netif_sanity_checks(void)
 #endif
 
 
-static int ci_netif_pkt_reserve(ci_netif* ni, int n, oo_pkt_p* p_pkt_list)
+static int ci_netif_pkt_reserve(ci_netif* ni, int n_requested,
+                                int* n_reserved, oo_pkt_p* p_pkt_list)
 {
-  ci_ip_pkt_fmt* pkt;
+  ci_ip_pkt_fmt* pkt = NULL;
   int i;
 
-  for( i = 0; i < n; ++i ) {
-    if( (pkt = ci_netif_pkt_alloc(ni, 0)) == NULL )
+  for( i = 0; i < n_requested; ++i ) {
+    pkt = ci_netif_pkt_alloc_ptrerr(ni, 0);
+    if( IS_ERR(pkt) )
       break;
     *p_pkt_list = OO_PKT_P(pkt);
     p_pkt_list = &pkt->next;
   }
   *p_pkt_list = OO_PP_NULL;
-  return i;
+  *n_reserved = i;
+  return PTR_ERR_OR_ZERO(pkt);
 }
 
 
@@ -2738,7 +2741,7 @@ static void ci_netif_pkt_prefault_reserve(ci_netif* ni)
 
   ci_netif_lock(ni);
   /* Try to reserve enough so that total allocation reaches target level */
-  n = ci_netif_pkt_reserve(ni, target_allocated - already_reserved, &pkt_list);
+  ci_netif_pkt_reserve(ni, target_allocated - already_reserved, &n, &pkt_list);
   if( ni->packets->n_pkts_allocated < target_allocated )
     LOG_E(ci_log("%s: Prefaulting only allocated %d of %d (reserved +%d)",
                  __FUNCTION__,
@@ -3128,18 +3131,21 @@ int ci_netif_init_fill_rx_rings(ci_netif* ni)
     n_requested = NI_OPTS(ni).max_packets;
   else
     n_requested = NI_OPTS(ni).min_free_packets;
-  n_accounted = n_reserved = ci_netif_pkt_reserve(ni, n_requested, &pkt_list);
+  rc = ci_netif_pkt_reserve(ni, n_requested, &n_reserved, &pkt_list);
+  n_accounted = n_reserved;
+
   if( NI_OPTS(ni).prealloc_packets )
     n_accounted += ni->state->mem_pressure_pkt_pool_n;
   if( n_accounted < n_requested ) {
     if( NI_OPTS(ni).prealloc_packets )
       LOG_E(ci_log("%s: ERROR: Insufficient packet buffers available for "
-                   "EF_PREALLOC_PACKETS=1 EF_MAX_PACKETS=%d got %d",
-                   __FUNCTION__, n_requested, n_accounted));
+                   "EF_PREALLOC_PACKETS=1 EF_MAX_PACKETS=%d got %d rc %d",
+                   __FUNCTION__, n_requested, n_accounted, rc));
     else
       LOG_E(ci_log("%s: ERROR: Insufficient packet buffers available for "
-                   "EF_MIN_FREE_PACKETS=%d", __FUNCTION__, n_requested));
-    return -ENOMEM;
+                   "EF_MIN_FREE_PACKETS=%d got %d rc %d",
+                   __FUNCTION__, n_requested, n_accounted, rc));
+    return rc ? : -ENOMEM;
   }
 
   if( NI_OPTS(ni).prealloc_packets ) {
