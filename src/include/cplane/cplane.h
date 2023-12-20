@@ -270,22 +270,34 @@ oo_cp_route_resolve(struct oo_cplane_handle* cp,
 #endif
 
 static inline int/*bool*/
-oo_cp_llap_params_check(cicp_llap_row_t* llap,
-                        ci_hwport_id_t hwport, ci_uint16 vlan_id,
-                        const uint8_t* mac)
+oo_cp_llap_params_check_hwport_mac(cicp_llap_row_t* llap,
+                                   ci_hwport_id_t hwport, const uint8_t* mac)
 {
   return (llap->rx_hwports & cp_hwport_make_mask(hwport)) &&
-         ! (llap->encap.type & CICP_LLAP_TYPE_SLAVE) &&
+         (mac == NULL || memcmp(mac, llap->mac, 6) == 0);
+}
+
+static inline int/*bool*/
+oo_cp_llap_params_check_logical(cicp_llap_row_t* llap,
+                                ci_hwport_id_t hwport, ci_uint16 vlan_id,
+                                const uint8_t* mac)
+{
+  return oo_cp_llap_params_check_hwport_mac(llap, hwport, mac) &&
          (llap->encap.type & CICP_LLAP_TYPE_VLAN) == (vlan_id != 0) &&
          ( ! (llap->encap.type & CICP_LLAP_TYPE_VLAN) ||
            llap->encap.vlan_id == vlan_id ) &&
-         (mac == NULL || memcmp(mac, llap->mac, 6) == 0);
+         ! (llap->encap.type & CICP_LLAP_TYPE_SLAVE);
 }
+
+typedef int (*oo_cp_llap_params_check)(cicp_llap_row_t *llap,
+                                      ci_hwport_id_t hwport, ci_uint16 vlan_id,
+                                      const uint8_t *mac);
 
 /* Find the network interface by the incoming packet:
  * hwport + vlan => ifindex. */
 static inline ci_ifid_t
 oo_cp_hwport_vlan_to_ifindex(struct oo_cplane_handle* cp,
+                             oo_cp_llap_params_check params_check,
                              ci_hwport_id_t hwport, ci_uint16 vlan_id,
                              const uint8_t* mac)
 {
@@ -300,7 +312,7 @@ oo_cp_hwport_vlan_to_ifindex(struct oo_cplane_handle* cp,
   CP_VERLOCK_START(version, mib, cp)
 
   for( i = 0; i < mib->dim->llap_max; i++ ) {
-    if( oo_cp_llap_params_check(&mib->llap[i], hwport, vlan_id, mac) ) {
+    if( params_check(&mib->llap[i], hwport, vlan_id, mac) ) {
       ifindex = mib->llap[i].ifindex;
       break;
     }

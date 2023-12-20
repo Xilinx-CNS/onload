@@ -770,7 +770,9 @@ static inline int ci_intf_i_to_ifindex(ci_netif* ni, int intf_i)
   ci_assert_lt((unsigned) intf_i, CI_CFG_MAX_INTERFACES);
   hwport = ni->state->intf_i_to_hwport[intf_i];
   ci_assert_lt((unsigned) hwport, CI_CFG_MAX_HWPORTS);
-  return oo_cp_hwport_vlan_to_ifindex(ni->cplane, hwport, 0, NULL);
+  return oo_cp_hwport_vlan_to_ifindex(ni->cplane,
+                                      oo_cp_llap_params_check_logical,
+                                      hwport, 0, NULL);
 }
 
 

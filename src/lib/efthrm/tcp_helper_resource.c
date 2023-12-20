@@ -1157,7 +1157,9 @@ static void get_if_name(ci_netif* ni, int intf_i, char* buf_out)
 
   memset(buf_out, 0, IFNAMSIZ);
 
-  ifindex = oo_cp_hwport_vlan_to_ifindex(ni->cplane, hwport, 0, NULL);
+  ifindex = oo_cp_hwport_vlan_to_ifindex(ni->cplane,
+                                         oo_cp_llap_params_check_logical,
+                                         hwport, 0, NULL);
   if( ifindex == 0 )
     goto no_dev;
   ndev = dev_get_by_index(&init_net, ifindex);

@@ -90,6 +90,7 @@ void ci_put_cmsg(struct cmsg_state *cmsg_state,
 
 
 struct llap_data {
+  oo_cp_llap_params_check check;
   ci_hwport_id_t hwport;
   ci_uint16 vlan_id;
   const uint8_t* mac;
@@ -101,7 +102,7 @@ llap_vs_pktinfo(struct oo_cplane_handle* cp,
                 void* llap_data)
 {
   struct llap_data* l = llap_data;
-  if( oo_cp_llap_params_check(llap, l->hwport, l->vlan_id, l->mac) ) {
+  if( l->check && l->check(llap, l->hwport, l->vlan_id, l->mac) ) {
     l->ifindex = llap->ifindex;
     return 1;
   }
@@ -112,6 +113,7 @@ ci_ifid_t ci_rx_pkt_ifindex(ci_netif* ni, const ci_ip_pkt_fmt* pkt)
 {
   int ifindex = 0;
   struct llap_data l = {
+    .check = oo_cp_llap_params_check_logical,
     .hwport = ni->state->intf_i_to_hwport[pkt->intf_i],
     .vlan_id = pkt->vlan,
     .mac = oo_ether_hdr_const(pkt)->ether_dhost,
@@ -143,7 +145,7 @@ ci_ifid_t ci_rx_pkt_ifindex(ci_netif* ni, const ci_ip_pkt_fmt* pkt)
    * multicast packets when there are multiple macvlan interfaces in the same
    * net namespace, or basic and macvlan interface in the same net namespace.
    * See bug 72886 for details. */
-  ifindex = oo_cp_hwport_vlan_to_ifindex(ni->cplane,
+  ifindex = oo_cp_hwport_vlan_to_ifindex(ni->cplane, l.check,
                                          l.hwport, l.vlan_id, l.mac);
   if( ifindex <= 0 ) {
     LOG_E(ci_log("%s: oo_cp_hwport_vlan_to_ifindex(intf_i=%d => hwport=%d, "

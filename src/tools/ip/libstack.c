@@ -2293,7 +2293,9 @@ static void stack_hwport_to_base_ifindex(ci_netif* ni)
   int i;
   for( i = 0; i < CI_CFG_MAX_HWPORTS; ++i )
     ci_log("hwport[%d] ->= %d", i,
-           oo_cp_hwport_vlan_to_ifindex(ni->cplane, i, 0, NULL));
+           oo_cp_hwport_vlan_to_ifindex(ni->cplane,
+                                        oo_cp_llap_params_check_logical,
+                                        i, 0, NULL));
 }
 
 static void stack_vi_stats(ci_netif* ni)
