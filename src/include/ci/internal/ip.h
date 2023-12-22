@@ -5297,7 +5297,8 @@ ci_sock_set_ip6_scope_id(ci_netif* ni, ci_sock_cmn* s,
 }
 #endif
 
-extern ci_ifid_t ci_rx_pkt_ifindex(ci_netif* ni, const ci_ip_pkt_fmt* pkt);
+extern ci_ifid_t ci_rx_pkt_ifindex(ci_netif* ni, const ci_ip_pkt_fmt* pkt,
+                                   bool phys_intf);
 
 
 /*********************************************************************

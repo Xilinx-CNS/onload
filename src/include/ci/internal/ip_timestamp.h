@@ -51,6 +51,12 @@ enum {
   ONLOAD_TIMESTAMPING_FLAG_RX_COUNT = 2,
 };
 
+struct ci_scm_ts_pktinfo {
+  ci_uint32 if_index;
+  ci_uint32 pkt_length;
+  ci_uint32 reserved[2];
+};
+
 /* Indicates whether we want TX NIC timestamping, regardless of whether
  * SO_TIMESTAMPING has been overridden for onload timestamps */
 static inline int /*bool*/

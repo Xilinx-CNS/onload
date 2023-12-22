@@ -109,11 +109,13 @@ llap_vs_pktinfo(struct oo_cplane_handle* cp,
   return 0;
 }
 
-ci_ifid_t ci_rx_pkt_ifindex(ci_netif* ni, const ci_ip_pkt_fmt* pkt)
+ci_ifid_t ci_rx_pkt_ifindex(ci_netif* ni, const ci_ip_pkt_fmt* pkt,
+                            bool phys_intf)
 {
   int ifindex = 0;
   struct llap_data l = {
-    .check = oo_cp_llap_params_check_logical,
+    .check = phys_intf ? oo_cp_llap_params_check_physical
+                       : oo_cp_llap_params_check_logical,
     .hwport = ni->state->intf_i_to_hwport[pkt->intf_i],
     .vlan_id = pkt->vlan,
     .mac = oo_ether_hdr_const(pkt)->ether_dhost,
@@ -148,9 +150,9 @@ ci_ifid_t ci_rx_pkt_ifindex(ci_netif* ni, const ci_ip_pkt_fmt* pkt)
   ifindex = oo_cp_hwport_vlan_to_ifindex(ni->cplane, l.check,
                                          l.hwport, l.vlan_id, l.mac);
   if( ifindex <= 0 ) {
-    LOG_E(ci_log("%s: oo_cp_hwport_vlan_to_ifindex(intf_i=%d => hwport=%d, "
-                 "vlan_id=%d mac="CI_MAC_PRINTF_FORMAT" ) failed",
-                 __FUNCTION__, pkt->intf_i, l.hwport, l.vlan_id,
+    LOG_E(ci_log("%s: oo_cp_hwport_vlan_to_ifindex(intf_i=%d => physical=%d, "
+                 "hwport=%d, vlan_id=%d mac="CI_MAC_PRINTF_FORMAT" ) failed",
+                 __FUNCTION__, !!phys_intf, pkt->intf_i, l.hwport, l.vlan_id,
                  CI_MAC_PRINTF_ARGS(oo_ether_hdr_const(pkt)->ether_dhost)));
   }
 
@@ -189,7 +191,7 @@ static void ip_cmsg_recv_pktinfo(ci_netif* netif, ci_udp_state* us,
     return;
   }
 
-  ifindex = ci_rx_pkt_ifindex(netif, pkt);
+  ifindex = ci_rx_pkt_ifindex(netif, pkt, 0);
 
   if( af_info == AF_INET ) {
     struct in_pktinfo info;
@@ -364,6 +366,17 @@ void ip_cmsg_recv_timestamping(ci_netif *ni, const ci_ip_pkt_fmt *pkt,
       ts.hwtimeraw = nic;
 
     ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SO_TIMESTAMPING, sizeof(ts), &ts);
+  }
+
+  if( flags & ONLOAD_SOF_TIMESTAMPING_OPT_PKTINFO ) {
+    struct ci_scm_ts_pktinfo ts_pktinfo;
+
+    ts_pktinfo.if_index = ci_rx_pkt_ifindex(ni, pkt, 1);
+    /* Length at L2 = L2 header length + length reported at IP level */
+    ts_pktinfo.pkt_length = oo_pre_l3_len(pkt) + RX_PKT_PAYLOAD_LEN(pkt);
+
+    ci_put_cmsg(cmsg_state, SOL_SOCKET, ONLOAD_SCM_TIMESTAMPING_PKTINFO,
+                sizeof(ts_pktinfo), &ts_pktinfo);
   }
 }
 #endif

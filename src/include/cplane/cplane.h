@@ -289,6 +289,16 @@ oo_cp_llap_params_check_logical(cicp_llap_row_t* llap,
          ! (llap->encap.type & CICP_LLAP_TYPE_SLAVE);
 }
 
+static inline int/*bool*/
+oo_cp_llap_params_check_physical(cicp_llap_row_t* llap,
+                                 ci_hwport_id_t hwport, ci_uint16 vlan_id,
+                                 const uint8_t* mac)
+{
+  return oo_cp_llap_params_check_hwport_mac(llap, hwport, mac) &&
+         (llap->encap.type == CICP_LLAP_TYPE_SLAVE ||
+          llap->encap.type == CICP_LLAP_TYPE_NONE);
+}
+
 typedef int (*oo_cp_llap_params_check)(cicp_llap_row_t *llap,
                                       ci_hwport_id_t hwport, ci_uint16 vlan_id,
                                       const uint8_t *mac);

@@ -408,6 +408,7 @@ ci_tcp_ep_mcast_add_del(ci_netif*         ni,
  */
 #define ONLOAD_SO_TIMESTAMPING 37
 #define ONLOAD_SCM_TIMESTAMPING ONLOAD_SO_TIMESTAMPING
+#define ONLOAD_SCM_TIMESTAMPING_PKTINFO 58
 #endif
 
 /* Replica of sock_extended_err - just in case we do not have ee_data in

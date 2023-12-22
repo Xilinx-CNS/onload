@@ -1731,7 +1731,6 @@ int ci_set_sol_socket(ci_netif* netif, ci_sock_cmn* s,
       goto fail_inval;
     /* We don't currently support any of these */
     if( v & (ONLOAD_SOF_TIMESTAMPING_OPT_STATS |
-             ONLOAD_SOF_TIMESTAMPING_OPT_PKTINFO |
              ONLOAD_SOF_TIMESTAMPING_OPT_TX_SWHW |
              ONLOAD_SOF_TIMESTAMPING_BIND_PHC) )
       goto fail_inval;
