@@ -48,6 +48,9 @@ update_product_strings() {
   local version="$3"
 
   (
+    echo "echo \"#ifndef ONLOAD_BUILD_PROFILE\""
+    echo "echo \"#define ONLOAD_BUILD_PROFILE \\\"\\\"\""
+    echo "echo \"#endif\""
     echo "echo \"#define ONLOAD_VERSION  \\\"$version \\\"ONLOAD_BUILD_PROFILE\""
     echo "echo \"#define ONLOAD_SHORT_VERSION ONLOAD_VERSION\""
     echo "echo \"#define ONLOAD_PRODUCT \\\"$Product\\\"\""
