@@ -244,6 +244,8 @@ extern void efct_vi_init(ef_vi*) EF_VI_HF;
 extern int efct_vi_mmap_init(ef_vi* vi, int rxq_capacity) EF_VI_HF;
 extern void efct_vi_munmap(ef_vi* vi) EF_VI_HF;
 
+extern void ef10ct_vi_init(ef_vi*) EF_VI_HF;
+
 extern int ef_pd_cluster_free(ef_pd*, ef_driver_handle);
 
 extern void ef_vi_packed_stream_update_credit(ef_vi* vi);

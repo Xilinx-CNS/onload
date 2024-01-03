@@ -173,6 +173,8 @@ static int ef_vi_calc_rxq_descriptors_bytes(enum ef_vi_arch arch, int qsize)
   case EF_VI_ARCH_EF100:
     return 8 * qsize;
   case EF_VI_ARCH_EFCT:
+  /* TODO EF10CT */
+  case EF_VI_ARCH_EF10CT:
     return EFCT_RX_DESCRIPTOR_BYTES * CI_EFCT_MAX_SUPERBUFS *
            EF_VI_MAX_EFCT_RXQS;
   default:
@@ -189,6 +191,7 @@ static int tx_desc_bytes(struct ef_vi* vi)
   case EF_VI_ARCH_EF100:
     return 16;
   case EF_VI_ARCH_EFCT:
+  case EF_VI_ARCH_EF10CT:
     return EFCT_TX_DESCRIPTOR_BYTES;
   default:
     EF_VI_BUG_ON(1);
@@ -244,6 +247,9 @@ int ef_vi_init(struct ef_vi* vi, int arch, int variant, int revision,
     break;
   case EF_VI_ARCH_AF_XDP:
     efxdp_vi_init(vi);
+    break;
+  case EF_VI_ARCH_EF10CT:
+    ef10ct_vi_init(vi);
     break;
   default:
     return -EINVAL;

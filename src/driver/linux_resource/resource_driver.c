@@ -217,31 +217,26 @@ linux_efrm_nic_ctor(struct linux_efhw_nic *lnic, struct device *dev,
 		get_device(dev);
 	dev_hold(net_dev);
 
-	if (dev_type->arch == EFHW_ARCH_EF10 ||
-	    dev_type->arch == EFHW_ARCH_EF100) {
-		map_min = res_dim->vi_min;
-		map_max = res_dim->vi_lim;
-		vi_base = res_dim->vi_base;
-		vi_shift = res_dim->vi_shift;
-		if( res_dim->mem_bar != VI_RES_MEM_BAR_UNDEFINED )
-			mem_bar = res_dim->mem_bar;
-		vi_stride = res_dim->vi_stride;
-	}
-	else if (dev_type->arch == EFHW_ARCH_AF_XDP) {
-		map_min = res_dim->vi_min;
-		map_max = res_dim->vi_lim;;
-	}
-	else if (dev_type->arch == EFHW_ARCH_EFCT) {
-		map_min = res_dim->vi_min;
-		map_max = res_dim->vi_lim;;
-	}
-	else if (dev_type->arch == EFHW_ARCH_EF10CT) {
-		map_min = res_dim->vi_min;
-		map_max = res_dim->vi_lim;;
-	}
-	else {
-		rc = -EINVAL;
-		goto fail;
+	switch (dev_type->arch) {
+		case EFHW_ARCH_EF10:
+		case EFHW_ARCH_EF100:
+			map_min = res_dim->vi_min;
+			map_max = res_dim->vi_lim;
+			vi_base = res_dim->vi_base;
+			vi_shift = res_dim->vi_shift;
+			if( res_dim->mem_bar != VI_RES_MEM_BAR_UNDEFINED )
+				mem_bar = res_dim->mem_bar;
+			vi_stride = res_dim->vi_stride;
+			break;
+		case EFHW_ARCH_AF_XDP:
+		case EFHW_ARCH_EFCT:
+		case EFHW_ARCH_EF10CT:
+			map_min = res_dim->vi_min;
+			map_max = res_dim->vi_lim;
+			break;
+		default:
+			rc = -EINVAL;
+			goto fail;
 	}
 
 	efhw_nic_init(nic, nic_flags, dev_type, map_min,
