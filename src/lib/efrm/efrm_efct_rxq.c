@@ -325,10 +325,15 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 	struct xlnx_efct_hugepage spare_page = {};
 	size_t i;
 	int rc = 0;
+	bool is_sbuf_err_logged = false;
+	unsigned n_hugepages = CI_MIN(max_superbufs, (unsigned)CI_EFCT_MAX_SUPERBUFS) /
+	                       CI_EFCT_SUPERBUFS_PER_PAGE;
 
 	if (max_superbufs != CI_EFCT_MAX_SUPERBUFS) {
-		/* Could be supported without much difficulty, but no need for now */
-		return -EINVAL;
+		EFRM_TRACE("max_superbufs: %u passed in by user not equal to kernel's: %u. "
+		           "Ensure you do not create enough apps to donate more than %u "
+		           "superbufs!", max_superbufs, CI_EFCT_MAX_SUPERBUFS,
+		           n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
 	}
 
 	pages = kmalloc_array(sizeof(pages[0]), CI_EFCT_MAX_HUGEPAGES,
@@ -354,11 +359,11 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 			break;
 		}
 	}
-	for (i = 0; i < CI_EFCT_MAX_HUGEPAGES; i += REFRESH_BATCH_SIZE) {
+	for (i = 0; i < n_hugepages; i += REFRESH_BATCH_SIZE) {
 		uint64_t local_current[REFRESH_BATCH_SIZE];
 		size_t j;
 		size_t n = min((size_t)REFRESH_BATCH_SIZE,
-		               CI_EFCT_MAX_HUGEPAGES - i);
+		               n_hugepages - i);
 		bool changes = false;
 
 		if (copy_from_user(local_current, user_current + i,
@@ -390,6 +395,13 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 		if (pages[i].page != NULL) {
 			put_page(pages[i].page);
 			fput(pages[i].file);
+			if (i > n_hugepages && !is_sbuf_err_logged) {
+				EFRM_ERR("More than %d superbufs have been donated. User max: %u, "
+				         "kernel max: %u. There are likely too many applications running.",
+				         n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE, max_superbufs,
+				         CI_EFCT_MAX_SUPERBUFS);
+				is_sbuf_err_logged = true;
+			}
 		}
 	}
 
