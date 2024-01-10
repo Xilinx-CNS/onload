@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: BSD-2-Clause
 # X-SPDX-Copyright-Text: (c) Copyright 2023 Advanced Micro Devices, Inc.
 
-name: "perform_simple_socket_apps_build"
+name: "repo_compatibility_check"
 
-on: [push, pull_request]
+
+on: push
 
 jobs:
   ssa:
-    if: github.repository == 'Xilinx-CNS/onload_internal'
+    if: vars.INTERNAL_REPO
     runs-on: ubuntu-latest
     steps:
       - name: onload_internal
@@ -17,7 +18,7 @@ jobs:
 
       - name: ssa checkout
         uses: actions/checkout@v4
-        with: 
+        with:
           repository: ${{ github.repository_owner }}/simple_sockets_apps
           ssh-key: ${{ secrets.SIMPLE_SOCKET_APPS_READ_PRIVATE_KEY }}
           path: ssa
@@ -25,4 +26,4 @@ jobs:
       - name: ssa build
         run: |
           cd $GITHUB_WORKSPACE/ssa
-          make ONLOAD_TREE=$GITHUB_WORKSPACE/onload_internal -j 2
+          make ONLOAD_TREE=$GITHUB_WORKSPACE/onload_internal -j $(nproc)
