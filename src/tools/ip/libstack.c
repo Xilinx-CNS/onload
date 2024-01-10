@@ -617,23 +617,60 @@ static int get_file_size(const char* path)
 }
 
 
-static void print_env(char* buf, int file_len)
+static int libstack_pid_env_print(int pid)
 {
-    char* var = buf;
-    while( var ) {
-      if( ! strncmp(var, "EF_", strlen("EF_")) )
-        ci_log_nonl("env: %s\n", var);
-      if( ! strncmp(var, "LD_PRELOAD", strlen("LD_PRELOAD")) )
-        ci_log_nonl("env: %s\n", var);
-      if( ! strncmp(var, "TP_LOG", strlen("TP_LOG")) )
-        ci_log_nonl("env: %s\n", var);
-      while( *var != '\0' )
-        ++var;
+  int rc;
+  int env = -1;
+  char *buf = NULL;
+
+  ci_log_nonl("cmdline: ");
+  print_cmdline(pid);
+  char env_path[MAX_PATHNAME];
+  snprintf(env_path, MAX_PATHNAME, "/proc/%d/environ", pid);
+
+  int file_len = get_file_size(env_path);
+  if( file_len < 0 ) {
+    rc = file_len;
+    goto out;
+  }
+
+  env = open(env_path, O_RDONLY);
+  if( env < 0 ) {
+    rc = env;
+    goto out;
+  }
+
+  buf = calloc(1, file_len);
+  rc = read(env, buf, file_len);
+  if( rc < 0 )
+    goto out;
+
+  if( rc != file_len ) {
+    fprintf(stderr, "%s: Read less than expected amount\n", __FUNCTION__);
+    goto out;
+  }
+
+  char* var = buf;
+  while( var ) {
+    if( ! strncmp(var, "EF_", strlen("EF_")) )
+      ci_log_nonl("env: %s\n", var);
+    if( ! strncmp(var, "LD_PRELOAD", strlen("LD_PRELOAD")) )
+      ci_log_nonl("env: %s\n", var);
+    if( ! strncmp(var, "TP_LOG", strlen("TP_LOG")) )
+      ci_log_nonl("env: %s\n", var);
+    while( *var != '\0' )
       ++var;
-      if( var - buf >= file_len )
-        break;
-    }
-    free(buf);
+    ++var;
+    if( var - buf >= file_len )
+      break;
+  }
+
+ out:
+  free(buf);
+  if( env >= 0 )
+    close(env);
+
+  return rc;
 }
 
 int libstack_env_print(void)
@@ -650,28 +687,7 @@ int libstack_env_print(void)
   while( pm ) {
     ci_log("--------------------------------------------");
     ci_log("pid: %d", pm->pid);
-    ci_log_nonl("cmdline: ");
-    print_cmdline(pm->pid);
-    char env_path[MAX_PATHNAME];
-    snprintf(env_path, MAX_PATHNAME, "/proc/%d/environ", pm->pid);
-
-    int file_len = get_file_size(env_path);
-    if( file_len == -1 )
-      return -1;
-
-    char* buf = calloc(file_len, sizeof(*buf));
-    int env = open(env_path, O_RDONLY);
-    if( env == -1 )
-      return -1;
-    int rc = read(env, buf, file_len);
-    if( rc == -1 )
-      return rc;
-    if( rc != file_len ) {
-      fprintf(stderr, "%s: Read less than expected amount\n", __FUNCTION__);
-      return -1;
-    }
-
-    print_env(buf, file_len);
+    libstack_pid_env_print(pm->pid);
     pm = pm->next;
   }
   ci_log("--------------------------------------------");
@@ -2087,10 +2103,11 @@ static void process_dump(ci_netif* ni)
     ci_log("--------------------------------------------");
     snprintf(task_path, MAX_PATHNAME, "/proc/%d/task", pid);
     DIR* task_dir = opendir(task_path);
-    /* check if open directory succeeded */
+    /* We treat failure to open the pid dir as non-fatal, as this legitimately
+     * occurs if the process exited since we learned about it. */
     if ( task_dir == NULL ) {
       ci_log("failed reading /proc/%d/task directory. error: %s", pid, strerror(errno));
-      exit(1);
+      continue;
     }
     struct dirent* ent;
 
@@ -2106,7 +2123,7 @@ static void process_dump(ci_netif* ni)
       /* check if fopen succeeded */
       if ( status == NULL ) {
         ci_log("failed reading the /proc/%d/task/%s/status file. error: %s",(int) sm->pids[i], ent->d_name, strerror(errno));
-        exit(1);
+        continue;
       }
       char line[1024];
       char values[3][256];
@@ -2146,12 +2163,12 @@ static void process_dump(ci_netif* ni)
       /* check if open succeeded */
       if ( stat == -1 ) {
         ci_log("failed reading /proc/%d/task/%s/stat file. error: %s",(int) sm->pids[i], ent->d_name,strerror(errno));
-        exit(1);
+        continue;
       }
       long cnt = read(stat, buf, MAX_PATHNAME);
       close(stat);
 
-      while( cnt && (buf[cnt-1] != ')') ) {
+      while( cnt > 0 && (buf[cnt-1] != ')') ) {
         cnt--;
       }
       /* get the values for priority and realtime for the threads */
@@ -2169,34 +2186,7 @@ static void process_dump(ci_netif* ni)
     }
     closedir(task_dir);
     
-    ci_log_nonl("cmdline: ");
-    print_cmdline(pid);
-    char env_path[MAX_PATHNAME];
-    snprintf(env_path, MAX_PATHNAME, "/proc/%d/environ", pid);
-
-    int file_len = get_file_size(env_path);
-    if( file_len == -1 ){
-      ci_log("error: got file size -1 for pid %d", pid);
-      continue;
-    }
-
-    char* buf = calloc(file_len, sizeof(*buf));
-    int env = open(env_path, O_RDONLY);
-    if( env == -1 ){ //failed to open the env path
-      ci_log("error: failed to open env for pid %d", pid);
-      continue;
-    }
-    int rc = read(env, buf, file_len);
-    if( rc == -1 ){ //failed to read the env file
-      ci_log("error: failed to read env for pid %d", pid);
-      continue;
-    }
-    if( rc != file_len ) {
-      ci_log("error: read less than the expected amount for pid %d", pid);
-      continue;
-    }
-
-    print_env(buf, file_len);
+    libstack_pid_env_print(pid);
   }
   ci_log("--------------------------------------------");
 }
