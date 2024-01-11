@@ -5,7 +5,7 @@
 # ceased to exist
 # If references to old onload stacks are still being released - wait.
 
-if echo "$@" | perl -n -e 'if(/\s-s/) {exit 1}'; then
+if echo "$@" | grep -q -e '[[:space:]]-s'; then
   ITER=0
   while true; do
     stackdump_contents=$(onload_stackdump --nopids stacks) || break
