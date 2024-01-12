@@ -100,14 +100,14 @@ The following adapters at least are able to support OpenOnload without AF_XDP:
 
 ### Compatible Linux kernels and distributions for Xilinx network adapters
 
-This source tree is known to work with Xilinx network adapters on following
+This source tree is known to work with Xilinx network adapters on the following
 Linux distributions:
 
 * Ubuntu LTS 18.04, LTS 20.04, LTS 22.04
-* Debian 10, 11
-* Redhat Enterprise Linux 7.9, 8.1 - 8.7, 9.0 - 9.1
-* SuSE Linux Enterprise Server 15 SP1 - SP4
-* Linux kernel in the range 4.15 - 5.19
+* Debian 10, 11, 12
+* Redhat Enterprise Linux 7.9, 8.1 - 8.9, 9.0 - 9.3
+* SuSE Linux Enterprise Server 15 SP1 - SP5
+* Linux kernel in the range 4.15 - 6.4
 
 ## Support
 
@@ -118,4 +118,4 @@ https://www.xilinx.com/support/download/nic-software-and-drivers.html#open
 
 ## Copyright
 
-This file: (c) Copyright 2020-2022 Xilinx, Inc.
+This file: (c) Copyright 2020-2024 Xilinx, Inc.
