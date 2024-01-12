@@ -138,6 +138,7 @@ $(AUTOCOMPAT): $(LINUX_RESOURCE)/kernel_compat.sh $(LINUX_RESOURCE)/kernel_compa
 
 mkdirs:
 	@mkdir -p $(obj)/src/lib/efhw
+	@mkdir -p $(obj)/src/lib/efhw/ef10
 	@mkdir -p $(obj)/src/lib/efhw/ef10ct
 	@mkdir -p $(obj)/src/lib/efrm
 	@mkdir -p $(obj)/src/lib/efthrm

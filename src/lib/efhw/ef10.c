@@ -50,14 +50,13 @@
 #include "ef10_mcdi.h"
 #include "ef10_ef100.h"
 
-
-int force_ev_timer = 1;
-module_param(force_ev_timer, int, S_IRUGO);
-MODULE_PARM_DESC(force_ev_timer,
-                 "Set to 0 to avoid forcing allocation of event timer with wakeup queue");
-
+extern int force_ev_timer;
 
 #define EFHW_CLIENT_ID_NONE (~0u)
+
+#define MCDI_CHECK(op, rc, actual_len, rate_limit)			   \
+	ef10_ef100_mcdi_check_response(__func__, #op, (rc), op##_OUT_LEN,  \
+				       (actual_len), (rate_limit))
 
 /*----------------------------------------------------------------------------
  *

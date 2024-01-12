@@ -278,9 +278,9 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
         unsigned timer_quantum_ns = 0;
 	int rc;
 
-	if (!enable_driverlink) {
-		EFRM_NOTICE("%s: Driverlink reports sfc device %s, "
-			    "ignoring as module param enable_driverlink=0",
+	if (!enable_legacy_driverlink) {
+		EFRM_NOTICE("%s: Driverlink reports sfc device %s, ignoring "
+			    "as module param enable_legacy_driverlink=0",
 			    __func__, net_dev->name);
 		return -EPERM;
 	}

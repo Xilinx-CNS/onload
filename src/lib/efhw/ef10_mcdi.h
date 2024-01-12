@@ -287,3 +287,4 @@ ci_inline ci_uint16 efhw_mcdi_read(char *addr)
 			     MC_CMD_ ## _name9, _value9,		\
 			     MC_CMD_ ## _name10, _value10,		\
 			     MC_CMD_ ## _name11, _value11)
+

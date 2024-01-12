@@ -170,6 +170,7 @@ struct vi_resource_dimensions {
 #define VI_RES_MEM_BAR_UNDEFINED ((unsigned)~0)
 	unsigned mem_bar;
 	unsigned vi_stride;
+	struct pci_dev *pci_dev;
 
 	/* EF100/X3 only */
 	/* 16 is an arbitrary number which is empirically larger than any
@@ -516,6 +517,7 @@ struct efhw_nic {
 
 	struct net_device *net_dev; /*!< Network device */
 	struct device *dev;         /*!< HW device */
+	struct pci_dev *pci_dev;    /*!< PCI device */
 	spinlock_t pci_dev_lock;    /*!< Protects access to dev & net_dev */
 
 	/*! Event handlers. */

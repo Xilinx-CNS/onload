@@ -25,10 +25,6 @@ extern void ef10_ef100_mcdi_check_response(const char* caller, const char* faile
 					   int rate_limit);
 
 
-#define MCDI_CHECK(op, rc, actual_len, rate_limit)			   \
-	ef10_ef100_mcdi_check_response(__func__, #op, (rc), op##_OUT_LEN,  \
-				       (actual_len), (rate_limit))
-
 extern void ef10_ef100_nic_check_supported_filters(struct efhw_nic *nic);
 
 extern int ef10_ef100_nic_mac_spoofing_privilege(struct efhw_nic *nic);
@@ -142,6 +138,20 @@ static inline void efhw_nic_release_dl_device(struct efhw_nic* nic,
 {
   EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10);
   efhw_nic_release_drv_device(nic, dl_device);
+}
+
+static inline struct efx_auxdev_client*
+efhw_nic_acquire_auxdev(struct efhw_nic* nic)
+{
+  EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10);
+  return efhw_nic_acquire_drv_device(nic);
+}
+
+static inline void
+efhw_nic_release_auxdev(struct efhw_nic* nic, struct efx_auxdev_client* cli)
+{
+  EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10);
+  efhw_nic_release_drv_device(nic, cli);
 }
 
 #define EFX_DL_PRE(efx_dev, nic, rc) \

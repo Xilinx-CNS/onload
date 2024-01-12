@@ -111,9 +111,15 @@ MODULE_PARM_DESC(enable_accel_by_default,
 int enable_driverlink = 1;
 module_param(enable_driverlink, int, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(enable_driverlink,
-				 "Attach SFC devices using driverlink interface."
-				 "When disabled, it is possible to attach SFC devices "
-				 "with AF_XDP interface.");
+		 "Attach SFC devices using native interface."
+		 "When disabled, it is possible to attach SFC devices "
+		 "with AF_XDP interface.");
+
+int enable_legacy_driverlink = 0;
+module_param(enable_legacy_driverlink, int, S_IRUGO | S_IWUSR);
+MODULE_PARM_DESC(enable_legacy_driverlink,
+		 "Attach SFC devices using legacy driverlink interface."
+		 "By default devices will be attached using aux bus.");
 
 
 /*********************************************************************
@@ -266,6 +272,7 @@ linux_efrm_nic_reclaim(struct linux_efhw_nic *lnic,
 	old_net_dev = nic->net_dev;
 #endif
 	nic->net_dev = net_dev;
+	nic->pci_dev = res_dim->pci_dev;
 	spin_unlock_bh(&nic->pci_dev_lock);
 
 	/* Tidy up old state. */

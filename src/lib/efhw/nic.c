@@ -165,6 +165,7 @@ void efhw_nic_ctor(struct efhw_nic *nic, unsigned flags,
 	nic->vi_lim = nic_res->vi_lim;
 	nic->net_dev = net_dev;
 	nic->dev = dev;
+	nic->pci_dev = nic_res->pci_dev;
 	spin_lock_init(&nic->pci_dev_lock);
 
 	efhw_nic_sw_ctor(nic, nic_res);
