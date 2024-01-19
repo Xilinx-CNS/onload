@@ -295,6 +295,61 @@ uint32_t ef_tcp_checksum_ipx(int af, const void* ipx, const struct tcphdr* tcp,
     return ef_tcp_checksum((const struct iphdr*)ipx, tcp, iov, iovlen);
 }
 
+int ef_udp_checksum_is_correct(const struct iphdr* ip, const struct udphdr* udp,
+                               const struct iovec* iov, int iovlen)
+{
+  uint64_t csum64;
+  uint32_t csum;
+
+  csum64 = (uint64_t)ip->saddr + ip->daddr +    /* This is the UDP */
+           htons(IPPROTO_UDP) + udp->len;       /* pseudo-header */
+  csum64 = ip_csum64_partial(csum64, udp, sizeof(*udp));
+  csum64 = ip_csum64_partialv(csum64, iov, iovlen);
+  csum = ip_proto_csum64_finish(csum64);
+
+  return csum == 0;
+}
+
+int ef_udp_checksum_ip6_is_correct(const struct ipv6hdr* ip6,
+                                   const struct udphdr* udp,
+                                   const struct iovec* iov, int iovlen)
+{
+  uint32_t csum;
+  uint64_t csum64 = ef_ip6_pseudo_hdr_checksum(ip6, udp->len, IPPROTO_UDP);
+  csum64 = ip_csum64_partial(csum64, udp, sizeof(*udp));
+  csum64 = ip_csum64_partialv(csum64, iov, iovlen);
+  csum = ip_proto_csum64_finish(csum64);
+
+  return csum == 0;
+}
+
+int ef_tcp_checksum_is_correct(const struct iphdr* ip, const struct tcphdr* tcp,
+                               const struct iovec* iov, int iovlen)
+{
+  uint16_t paylen;
+  uint64_t csum64;
+
+  paylen = ntohs(ip->tot_len) - (ip->ihl * 4);
+
+  csum64 = (uint64_t)ip->saddr + ip->daddr +       /* This is the TCP */
+           htonl((IPPROTO_TCP << 16) | paylen);    /* pseudo-header */
+  csum64 = ip_csum64_partial(csum64, tcp, (tcp->doff * 4));
+  csum64 = ip_csum64_partialv(csum64, iov, iovlen);
+  return ip_proto_csum64_finish(csum64) == 0;
+}
+
+int ef_tcp_checksum_ip6_is_correct(const struct ipv6hdr* ip6,
+                                   const struct tcphdr* tcp,
+                                   const struct iovec* iov, int iovlen)
+{
+
+  uint64_t csum64 =
+      ef_ip6_pseudo_hdr_checksum(ip6, ip6->payload_len, IPPROTO_TCP);
+  csum64 = ip_csum64_partial(csum64, tcp, (tcp->doff * 4));
+  csum64 = ip_csum64_partialv(csum64, iov, iovlen);
+  return ip_proto_csum64_finish(csum64) == 0;
+}
+
 uint32_t ef_icmpv6_checksum(const struct ipv6hdr* ip6, const void* icmp,
                             const struct iovec* iov, int iovlen)
 {

@@ -201,6 +201,112 @@ ef_tcp_checksum_ipx_buf(int af, const void* ipx, const struct tcphdr* tcp,
   return ef_tcp_checksum_ipx(af, ipx, tcp, &iov, 1);
 }
 
+/*! \brief Check IPv4 UDP checksum correctness
+**
+** \param ip     The IPv4 header for the packet.
+** \param udp    The UDP header for the packet.
+** \param iov    Start of the iovec array describing the UDP payload.
+** \param iovlen Length of the iovec array.
+**
+** \return Non-zero code if the checksum is correct, zero otherwise.
+**
+** IPv4 UDP packets are allowed to omit their checksum. Caller needs to check
+** whether the checksum field is zero before calling the function.
+*/
+extern int
+ef_udp_checksum_is_correct(const struct iphdr* ip, const struct udphdr* udp,
+                           const struct iovec* iov, int iovlen);
+
+/*! \brief Check IPv6 UDP checksum correctness
+**
+** \param ip     The IPv6 header for the packet.
+** \param udp    The UDP header for the packet.
+** \param iov    Start of the iovec array describing the UDP payload.
+** \param iovlen Length of the iovec array.
+**
+** \return Non-zero code if the checksum is correct, zero otherwise.
+*/
+extern int
+ef_udp_checksum_ip6_is_correct(const struct ipv6hdr* ip6,
+                               const struct udphdr* udp,
+                               const struct iovec* iov, int iovlen);
+
+/*! \brief Check UDP checksum correctness
+**
+** \param ip            The IP header for the packet (struct iphdr or ipv6hdr).
+** \param udp           The UDP header for the packet.
+** \param payload       UDP payload.
+** \param payload_len   Length of the payload.
+**
+** \return Non-zero code if the checksum is correct, zero otherwise.
+**
+** IPv4 UDP packets are allowed to omit their checksum. Caller needs to check
+** whether the checksum field is zero before calling the function.
+*/
+ef_vi_inline int
+ef_udp_checksum_ipx_is_correct(int af, const void* ipx, const struct udphdr* udp,
+                               const void* payload, size_t payload_len)
+{
+  const struct iovec iov = {
+    .iov_base = (void*)payload,
+    .iov_len = payload_len
+  };
+
+  return af == AF_INET6 ?
+    ef_udp_checksum_ip6_is_correct((const struct ipv6hdr*)ipx, udp, &iov, 1) :
+    ef_udp_checksum_is_correct((const struct iphdr*)ipx, udp, &iov, 1);
+}
+
+/*! \brief Check IPv4 TCP checksum correctness
+**
+** \param ip     The IPv4 header for the packet.
+** \param tcp    The TCP header for the packet.
+** \param iov    Start of the iovec array describing the TCP payload.
+** \param iovlen Length of the iovec array.
+**
+** \return Non-zero code if the checksum is correct, zero otherwise.
+*/
+extern int
+ef_tcp_checksum_is_correct(const struct iphdr* ip, const struct tcphdr* tcp,
+                           const struct iovec* iov, int iovlen);
+
+/*! \brief Check IPv6 TCP checksum correctness
+**
+** \param ip     The IPv6 header for the packet.
+** \param tcp    The TCP header for the packet.
+** \param iov    Start of the iovec array describing the TCP payload.
+** \param iovlen Length of the iovec array.
+**
+** \return Non-zero code if the checksum is correct, zero otherwise.
+*/
+extern int
+ef_tcp_checksum_ip6_is_correct(const struct ipv6hdr* ip6,
+                               const struct tcphdr* tcp,
+                               const struct iovec* iov, int iovlen);
+
+/*! \brief Check TCP checksum correctness
+**
+** \param ip            The IP header for the packet (struct iphdr or ipv6hdr).
+** \param tcp           The TCP header for the packet.
+** \param payload       TCP payload.
+** \param payload_len   Length of the payload.
+**
+** \return Non-zero code if the checksum is correct, zero otherwise.
+*/
+ef_vi_inline int
+ef_tcp_checksum_ipx_is_correct(int af, const void* ipx, const struct tcphdr* tcp,
+                               const void* payload, size_t payload_len)
+{
+  const struct iovec iov = {
+    .iov_base = (void*)payload,
+    .iov_len = payload_len
+  };
+
+  return af == AF_INET6 ?
+    ef_tcp_checksum_ip6_is_correct((const struct ipv6hdr*)ipx, tcp, &iov, 1) :
+    ef_tcp_checksum_is_correct((const struct iphdr*)ipx, tcp, &iov, 1);
+}
+
 /*! \brief Calculate the checksum for an IPv6 ICMP packet
 **
 ** \param ip6    The IPv6 header for the packet.
