@@ -115,9 +115,9 @@ int ci_udp_csum_correct(ci_ip_pkt_fmt* pkt, ci_udp_hdr* udp)
      )
     return 1;  /* RFC768: csum not computed */
 
-  return ef_udp_checksum_ipx_buf(af, ipx_hdr_ptr(af, ipx), (struct udphdr*)udp,
-                                 CI_UDP_PAYLOAD(udp), CI_UDP_PAYLEN(udp)) ==
-         udp->udp_check_be16;
+  return ef_udp_checksum_ipx_is_correct(af, ipx_hdr_ptr(af, ipx),
+                                        (struct udphdr*)udp, CI_UDP_PAYLOAD(udp),
+                                        CI_UDP_PAYLEN(udp));
 }
 
 

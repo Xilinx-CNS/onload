@@ -108,9 +108,8 @@ static int ci_tcp_csum_correct(ci_ip_pkt_fmt* pkt, int ip_paylen)
   if( ip_paylen < tcp_hlen )
     return 0;
 
-  return ef_tcp_checksum_ipx_buf(af, ipx_hdr, (struct tcphdr*)tcp,
-                                 CI_TCP_PAYLOAD(tcp), tcp_paylen) ==
-         tcp->tcp_check_be16;
+  return ef_tcp_checksum_ipx_is_correct(af, ipx_hdr, (struct tcphdr*)tcp,
+                                        CI_TCP_PAYLOAD(tcp), tcp_paylen);
 }
 
 
