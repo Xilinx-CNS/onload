@@ -21,8 +21,6 @@ LIB_SRCS	:= \
 		ipcsum.c \
 		ip_csum_partial.c \
 		memchk.c \
-		tcp_checksum.c \
-		udp_checksum.c \
 		icmp_checksum.c \
 		log.c \
 		log_nonl.c \

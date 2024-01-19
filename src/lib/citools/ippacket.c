@@ -18,6 +18,7 @@
 #include <ci/net/ethernet.h>
 #include <ci/tools/ipcsum_base.h>
 #include <ci/tools/ippacket.h>
+#include <etherfabric/checksum.h>
 
 void ci_ip4_hdr_init(ci_ip4_hdr* ip, int opts_len, int tot_len, int id_be16,
 		     int protocol, unsigned saddr_be32, unsigned daddr_be32,
@@ -57,10 +58,9 @@ void ci_udp_hdr_init(ci_udp_hdr* udp, ci_ip4_hdr* ip,
   udp->udp_len_be16 = payload_len + sizeof(*udp);
   udp->udp_len_be16 = CI_BSWAP_BE16(udp->udp_len_be16);
   if (checksum)  {
-    ci_iovec iov;
-    CI_IOVEC_BASE(&iov) = (void *)payload;
-    CI_IOVEC_LEN(&iov) = payload_len;
-    udp->udp_check_be16 = ci_udp_checksum(ip, udp, &iov, 1);
+    udp->udp_check_be16 = ef_udp_checksum_ipx_buf(AF_INET, ip,
+                                                  (struct udphdr*)udp,
+                                                  payload, payload_len);
   }
   else
     udp->udp_check_be16 = 0;
@@ -89,7 +89,8 @@ void ci_tcp_hdr_init(ci_tcp_hdr* tcp, ci_ip4_hdr* ip, int opts_len,
   tcp->tcp_window_be16 = 0;
   tcp->tcp_urg_ptr_be16 = 0;
   if (checksum)
-    tcp->tcp_check_be16 = ci_tcp_checksum(ip, tcp, payload);
+    tcp->tcp_check_be16 = ef_tcp_checksum_ipx_buf(AF_INET, ip, (struct tcphdr*)tcp,
+                                                  payload, payload_len);
   else
     tcp->tcp_check_be16 = 0;
 }
@@ -245,17 +246,16 @@ void ci_pkt_checksums(uint encap, uint proto, ci_pkt_t* pkt)
   /* checksums */
   if (proto == IPPROTO_UDP) {
     ci_udp_hdr* udp = ci_pkt_udp_ptr(encap, pkt);
-    ci_iovec iov;
-    CI_IOVEC_BASE(&iov) = data;
-    CI_IOVEC_LEN(&iov) = CI_BSWAP_BE16(ip->ip_tot_len_be16) -
-        CI_IP4_IHL(ip) - sizeof(ci_udp_hdr);
-    udp->udp_check_be16 = ci_udp_checksum(ip,udp,&iov,1);
+    udp->udp_check_be16 = ef_udp_checksum_ipx_buf(AF_INET, ip,
+                                                  (struct udphdr*)udp,
+                                                  data, CI_UDP_PAYLEN(udp));
   }
   else if (proto == IPPROTO_TCP) {
     /* make sure the data is aligned properly for the tcp checksum */
     ci_tcp_hdr* tcp = ci_pkt_tcp_ptr(encap, pkt);
     ci_tcp_hdr* tcp_copy = tcp;
     ci_ip4_hdr* ip_copy = ip;
+    size_t datalen = CI_TCP_PAYLEN(ip_copy, tcp_copy);
 
     if (CI_PTR_OFFSET(tcp, 4) != 0) {
       memcpy(&aligned_tcp_hdr, tcp, sizeof(ci_tcp_hdr));
@@ -265,7 +265,9 @@ void ci_pkt_checksums(uint encap, uint proto, ci_pkt_t* pkt)
       memcpy(&aligned_ip_hdr, ip, sizeof(ci_ip4_hdr));
       ip_copy = &aligned_ip_hdr;
     }
-    tcp->tcp_check_be16 = ci_tcp_checksum(ip_copy,tcp_copy,data);
+    tcp->tcp_check_be16 = ef_tcp_checksum_ipx_buf(AF_INET, ip_copy,
+                                                  (struct tcphdr*)tcp_copy,
+                                                  data, datalen);
   }
   else if (proto == IPPROTO_ICMP) {
     ci_icmp_hdr* icmp = ci_pkt_icmp_hdr_ptr(encap,pkt);

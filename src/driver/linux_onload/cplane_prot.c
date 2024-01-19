@@ -33,6 +33,7 @@
 #include "onload/cplane_ops.h"
 #include "onload/debug.h"
 #include <ci/net/arp.h>
+#include <etherfabric/checksum.h>
 
 
 #ifndef TRUE
@@ -260,13 +261,18 @@ int cicp_raw_ip_send(struct oo_cplane_handle* cp, int af,
   void* ipx_data = ci_ipx_data_ptr(af, ipx);
   ci_tcp_hdr* tcp;
   ci_udp_hdr* udp;
+  int l4paylen;
 
   switch( ipx_hdr_protocol(af, ipx) ) {
   case IPPROTO_TCP:
     if( af == AF_INET )
       ci_assert_equal(ipx->ip4.ip_frag_off_be16, CI_IP4_FRAG_DONT);
     tcp = ipx_data;
-    tcp->tcp_check_be16 = ci_ipx_tcp_checksum(af, ipx, tcp, CI_TCP_PAYLOAD(tcp));
+    l4paylen = len - CI_IPX_IHL(af, ipx) - CI_TCP_HDR_LEN(tcp);
+    tcp->tcp_check_be16 = ef_tcp_checksum_ipx_buf(af, ipx_hdr_ptr(af, ipx),
+                                                  (struct tcphdr*)tcp,
+                                                  CI_TCP_PAYLOAD(tcp),
+                                                  l4paylen);
     break;
   case IPPROTO_UDP:
   {
@@ -274,7 +280,11 @@ int cicp_raw_ip_send(struct oo_cplane_handle* cp, int af,
     if( ci_ipx_is_frag(af, ipx) )
       break;
     udp = ipx_data;
-    udp->udp_check_be16 = ci_ipx_udp_checksum(af, ipx, udp, CI_UDP_PAYLOAD(udp));
+    l4paylen = len - CI_IPX_IHL(af, ipx) - sizeof(ci_udp_hdr);
+    udp->udp_check_be16 = ef_udp_checksum_ipx_buf(af, ipx_hdr_ptr(af, ipx),
+                                                  (struct udphdr*)udp,
+                                                  CI_UDP_PAYLOAD(udp),
+                                                  l4paylen);
     break;
   }
   }

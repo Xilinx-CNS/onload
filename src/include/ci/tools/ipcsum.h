@@ -22,25 +22,6 @@ struct ci_udp_hdr_s;
 struct ci_icmp_hdr_s;
 struct ci_ip6_hdr_s;
 
-  /*! Compute the checksum for a TCP packet. */
-extern unsigned ci_tcp_checksum(const struct ci_ip4_hdr_s* ip,
-				const struct ci_tcp_hdr_s* tcp,
-				const void* payload) CI_HF;
-
-extern unsigned ci_ip6_tcp_checksum(const struct ci_ip6_hdr_s* ip6,
-                                    const struct ci_tcp_hdr_s* tcp,
-                                    const void* payload) CI_HF;
-
-  /*! Compute the checksum for a UDP packet. */
-extern unsigned ci_udp_checksum(const struct ci_ip4_hdr_s* ip,
-				const struct ci_udp_hdr_s* udp,
-				const ci_iovec *iov, int iovlen) CI_HF;
-
-extern unsigned
-ci_ip6_udp_checksum(const struct ci_ip6_hdr_s* ip6,
-                    const struct ci_udp_hdr_s* udp,
-                    const ci_iovec *iov, int iovlen) CI_HF;
-
   /*! Compute the checksum for a ICMP packet. */
 extern unsigned ci_icmp_checksum(const struct ci_ip4_hdr_s* ip,
 				 const struct ci_icmp_hdr_s* icmp) CI_HF;

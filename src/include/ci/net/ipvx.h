@@ -324,6 +324,13 @@ typedef union ci_ipx_hdr {
 #endif
 } ci_ipx_hdr_t;
 
+#if CI_CFG_IPV6
+#define ipx_hdr_ptr(af, ipx) \
+  (af == AF_INET6 ? (void*)&ipx->ip6 : (void*)&ipx->ip4)
+#else
+#define ipx_hdr_ptr(af, ipx) (&ipx->ip4)
+#endif
+
 #define ipx_hdr_saddr(af, hdr) ({ struct { ci_addr_t a[1]; } a = {};     \
   a.a[0] = IS_AF_INET6(af) ? CI_ADDR_FROM_IP6((hdr)->ip6.saddr) :        \
                              CI_ADDR_FROM_IP4((hdr)->ip4.ip_saddr_be32); \

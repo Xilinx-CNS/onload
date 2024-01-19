@@ -20,6 +20,7 @@
 #include <onload/osfile.h>
 #include <onload/pkt_filler.h>
 #include <onload/sleep.h>
+#include <etherfabric/checksum.h>
 
 #ifndef __KERNEL__
 #include <ci/internal/efabcfg.h>
@@ -192,9 +193,8 @@ ci_noinline void ci_udp_sendmsg_chksum(ci_netif* ni, ci_ip_pkt_fmt* pkt,
     }
   }
   
-  udp->udp_check_be16 = WITH_CI_CFG_IPV6( IS_AF_INET6(af) ?
-                        ci_ip6_udp_checksum(&first_hdr->ip6, udp, iov, n+1) : )
-                        ci_udp_checksum(&first_hdr->ip4, udp, iov, n+1);
+  udp->udp_check_be16 = ef_udp_checksum_ipx(af, ipx_hdr_ptr(af, first_hdr),
+                                            (struct udphdr*)udp, iov, n+1);
 }
 
 
