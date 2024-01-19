@@ -261,6 +261,7 @@ uint32_t ef_tcp_checksum(const struct iphdr* ip, const struct tcphdr* tcp,
 {
   uint16_t paylen;
   uint64_t csum64;
+  uint32_t csum;
 
   paylen = ntohs(ip->tot_len) - (ip->ihl * 4);
 
@@ -271,19 +272,26 @@ uint32_t ef_tcp_checksum(const struct iphdr* ip, const struct tcphdr* tcp,
    * that the subtraction doesn't borrow. 0xffff is -0 in ones' complement. */
   csum64 += 0xffff - tcp->check;
   csum64 = ip_csum64_partialv(csum64, iov, iovlen);
-  return ip_proto_csum64_finish(csum64);
+  csum = ip_proto_csum64_finish(csum64);
+  /* RFC 768 (UDP) tells that zero checksum is replaced with all ones.
+   * Real TCP implementations do the same. Let's follow it. */
+  return csum ? csum : 0xffff;
 }
 
 uint32_t ef_tcp_checksum_ip6(const struct ipv6hdr* ip6, const struct tcphdr* tcp,
                              const struct iovec* iov, int iovlen)
 {
 
+  uint32_t csum;
   uint64_t csum64 =
       ef_ip6_pseudo_hdr_checksum(ip6, ip6->payload_len, IPPROTO_TCP);
   csum64 = ip_csum64_partial(csum64, tcp, (tcp->doff * 4));
   csum64 += 0xffff - tcp->check;
   csum64 = ip_csum64_partialv(csum64, iov, iovlen);
-  return ip_proto_csum64_finish(csum64);
+  csum = ip_proto_csum64_finish(csum64);
+  /* RFC 768 (UDP) tells that zero checksum is replaced with all ones.
+   * Real TCP implementations do the same. Let's follow it. */
+  return csum ? csum : 0xffff;
 }
 
 uint32_t ef_tcp_checksum_ipx(int af, const void* ipx, const struct tcphdr* tcp,
