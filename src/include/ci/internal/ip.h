@@ -4542,40 +4542,6 @@ ci_inline void ci_tcp_tx_pkt_set_zc_header_pos(ci_tcp_state* ts,
 ci_inline ci_uint32 ci_tcp_listenq_max(ci_netif* ni)
 { return NI_OPTS(ni).tcp_backlog_max; }
 
-ci_inline unsigned ci_ipx_tcp_checksum(int af, const ci_ipx_hdr_t* ipx,
-                                       const ci_tcp_hdr* tcp, void* payload)
-{
-#if CI_CFG_IPV6
-  if( af == AF_INET6 )
-  {
-    return ci_ip6_tcp_checksum(&ipx->ip6, tcp, payload);
-  }
-  else
-#endif
-  {
-    return ci_tcp_checksum(&ipx->ip4, tcp, payload);
-  }
-}
-
-ci_inline unsigned ci_ipx_udp_checksum(int af, const ci_ipx_hdr_t* ipx,
-                                       const ci_udp_hdr* udp, void* payload)
-{
-  ci_iovec iov = {.iov_base = payload};
-#if CI_CFG_IPV6
-  if( af == AF_INET6 )
-  {
-    iov.iov_len = CI_BSWAP_BE16(ipx->ip6.payload_len) - sizeof(ci_udp_hdr);
-    return ci_ip6_udp_checksum(&ipx->ip6, udp, &iov, 1);
-  }
-  else
-#endif
-  {
-    iov.iov_len = CI_BSWAP_BE16(ipx->ip4.ip_tot_len_be16) -
-        CI_IP4_IHL(&ipx->ip4) - sizeof(ci_udp_hdr);
-    return ci_udp_checksum(&ipx->ip4, udp, &iov, 1);
-  }
-}
-
 /**********************************************************************
 ************************** Per-socket locks ***************************
 **********************************************************************/
