@@ -81,12 +81,14 @@ void cp_dump_llap_table(struct cp_mibs* mib)
     }
 
     if( mib->llap[id].encap.type &
-        (CICP_LLAP_TYPE_VLAN | CICP_LLAP_TYPE_MACVLAN) ) {
+        (CICP_LLAP_TYPE_VLAN | CICP_LLAP_TYPE_MACVLAN | CICP_LLAP_TYPE_IPVLAN) ) {
       printf("\t ");
       if( mib->llap[id].encap.type & CICP_LLAP_TYPE_VLAN )
         printf("vlan id %d, ", mib->llap[id].encap.vlan_id);
       if( mib->llap[id].encap.type & CICP_LLAP_TYPE_MACVLAN )
         printf("macvlan, ");
+      if( mib->llap[id].encap.type & CICP_LLAP_TYPE_IPVLAN )
+        printf("ipvlan, ");
       printf("base interface %s (%d)\n",
              cp_ifindex2name(mib, mib->llap[id].encap.link_ifindex),
              mib->llap[id].encap.link_ifindex);
