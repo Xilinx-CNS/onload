@@ -7,23 +7,42 @@
 #include "efct_test_driver.h"
 #include "efct_test_device.h"
 
+struct efct_configfs_rxq_item {
+  struct config_group group;
+  int ix;
+  int ms_per_pkt;
+  int num_pkts;
+};
 
 struct efct_configfs_dev_item {
   struct config_group group;
   struct net_device *dev;
+  struct efct_configfs_rxq_item rxqs[EFCT_TEST_RXQS_N];
 };
 
 static struct config_item_type dev_item_type;
+static struct config_item_type rxq_item_type;
 
 static struct efct_configfs_dev_item* to_dev_item(struct config_item *item)
 {
   return container_of(item, struct efct_configfs_dev_item, group.cg_item);
 }
 
+static struct efct_configfs_rxq_item* to_rxq_item(struct config_item *item)
+{
+  return container_of(item, struct efct_configfs_rxq_item, group.cg_item);
+}
+
+static struct efct_configfs_dev_item* rxq_item_to_dev(
+                                        struct efct_configfs_rxq_item *item)
+{
+  return container_of(item, struct efct_configfs_dev_item, rxqs[item->ix]);
+}
+
 static struct config_group* efct_test_register_interface(
                                  struct config_group *group, const char *name)
 {
-  int rc;
+  int rc, i;
   struct net_device *dev;
   struct efct_configfs_dev_item *item;
 
@@ -38,6 +57,14 @@ static struct config_group* efct_test_register_interface(
   }
   item->dev = dev;
   config_group_init_type_name(&item->group, name, &dev_item_type);
+
+  for( i = 0; i < EFCT_TEST_RXQS_N; ++i ) {
+    char rxname[8];
+    item->rxqs[i].ix = i;
+    sprintf(rxname, "rx%d", i);
+    config_group_init_type_name(&item->rxqs[i].group, rxname, &rxq_item_type);
+    configfs_add_default_group(&item->rxqs[i].group, &item->group);
+  }
 
   rc = efct_test_add_netdev(dev);
   if( rc < 0 )
@@ -59,6 +86,71 @@ static void efct_test_unregister_interface(struct config_item *cfs_item)
   efct_test_remove_netdev(item->dev);
   dev_put(item->dev);
 }
+
+static ssize_t rxq_ms_per_pkt_store(struct config_item *item,
+                                    const char *page, size_t count)
+{
+  struct efct_configfs_rxq_item *rxq = to_rxq_item(item);
+  int v;
+  int rc = kstrtoint(page, 10, &v);
+
+  if( rc )
+    return rc;
+  if( v < 0 )
+    return -EINVAL;
+  rc = efct_test_netdev_set_rxq_ms_per_pkt(rxq_item_to_dev(rxq)->dev, rxq->ix,
+                                           v);
+  if( rc < 0 )
+    return rc;
+  rxq->ms_per_pkt = v;
+  return count;
+}
+
+static ssize_t rxq_ms_per_pkt_show(struct config_item *item, char *page)
+{
+  return sprintf(page, "%d\n", to_rxq_item(item)->ms_per_pkt);
+}
+
+CONFIGFS_ATTR(rxq_, ms_per_pkt);
+
+
+static ssize_t rxq_num_pkts_store(struct config_item *item,
+                                    const char *page, size_t count)
+{
+  struct efct_configfs_rxq_item *rxq = to_rxq_item(item);
+  int v;
+  int rc = kstrtoint(page, 10, &v);
+
+  if( rc )
+    return rc;
+  if( v < 0 ) {
+    return -EINVAL;
+  }
+  rc = efct_test_netdev_set_rxq_num_pkts(rxq_item_to_dev(rxq)->dev, rxq->ix,
+                                           v);
+  if( rc < 0 )
+    return rc;
+  rxq->num_pkts = v;
+  return count;
+}
+
+static ssize_t rxq_num_pkts_show(struct config_item *item, char *page)
+{
+  return sprintf(page, "%d\n", to_rxq_item(item)->num_pkts);
+}
+
+CONFIGFS_ATTR(rxq_, num_pkts);
+
+static struct configfs_attribute *rxq_attrs[] = {
+  &rxq_attr_ms_per_pkt,
+  &rxq_attr_num_pkts,
+  NULL,
+};
+
+static struct config_item_type rxq_item_type = {
+  .ct_attrs = rxq_attrs,
+  .ct_owner = THIS_MODULE,
+};
 
 static ssize_t dev_ifindex_show(struct config_item *item, char *page)
 {

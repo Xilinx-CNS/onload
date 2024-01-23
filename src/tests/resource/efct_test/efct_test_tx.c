@@ -53,13 +53,13 @@ static void efct_test_inject_pkt(struct net_device *dev, struct iovec* iov,
 }
 
 
-static ci_qword_t* evq_next_desc(struct efct_test_evq *evq)
+ci_qword_t* evq_next_desc(struct efct_test_evq *evq)
 {
   return (ci_qword_t*) &evq->q_base[evq->ptr & evq->mask];
 }
 
 
-static unsigned evq_next_phase(struct efct_test_evq *evq)
+unsigned evq_next_phase(struct efct_test_evq *evq)
 {
   if( (evq->ptr & (evq->mask + 1)) == 0 )
     return 0;

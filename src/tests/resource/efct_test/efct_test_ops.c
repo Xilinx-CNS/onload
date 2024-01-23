@@ -22,6 +22,7 @@
 #include <ci/compat.h>
 #include <ci/efrm/debug_linux.h>
 #include <etherfabric/internal/efct_uk_api.h>
+#include <ci/tools.h>
 #include <ci/tools/byteorder.h>
 #include <ci/tools/bitfield.h>
 #include <ci/efhw/mc_driver_pcol.h>
@@ -29,6 +30,7 @@
 #include "efct_test_device.h"
 #include "efct_test_ops.h"
 #include "efct_test_tx.h"
+#include "efct_test_rx.h"
 
 #ifndef page_to_virt
 /* Only RHEL7 doesn't have this macro */
@@ -96,6 +98,27 @@ static int efct_test_ctpio_addr(struct efx_auxiliary_client *handle,
   return 0;
 }
 
+static int efct_test_buffer_post_addr(struct efx_auxiliary_client *handle,
+                               struct efx_auxiliary_io_addr *io)
+{
+  /* Give onload the address of the RX_POST_BUFFER register for this queue,
+   * rather than forcing them to calculate the location based off an offset from
+   * the BAR. */
+  struct efct_test_device *tdev = handle->tdev;
+  int rxq = io->qid_in;
+  
+  if( rxq < 0 || rxq >= EFCT_TEST_RXQS_N)
+    return -EINVAL;
+
+  if( tdev->rxqs[rxq].evq < 0 )
+    return -EINVAL;
+
+  io->base = virt_to_phys(tdev->rxqs[rxq].post_register);
+  io->size = 0x1000;
+
+  return 0;
+}
+
 
 static int efct_test_get_param(struct efx_auxiliary_client *handle,
                                enum efx_auxiliary_param p,
@@ -132,6 +155,9 @@ static int efct_test_get_param(struct efx_auxiliary_client *handle,
     break;
    case EFX_AUXILIARY_CTPIO_WINDOW:
     rc = efct_test_ctpio_addr(handle, &arg->io_addr);
+    break;
+   case EFX_AUXILIARY_RXQ_POST:
+    rc = efct_test_buffer_post_addr(handle, &arg->io_addr);
     break;
    default:
     break;
@@ -262,6 +288,92 @@ static void efct_test_free_txq(struct efx_auxiliary_client *handle, int txq_idx)
 }
 
 
+static int efct_test_init_rxq(struct efx_auxiliary_client *handle,
+                              struct efx_auxiliary_rxq_params *params)
+{
+  struct efct_test_device *tdev = handle->tdev;
+  struct efct_test_rxq *rxq;
+  int rxq_idx = -1;
+  int i;
+  int evq = params->evq;
+
+  printk(KERN_INFO "%s: evq %d\n", __func__, evq);
+
+  /* Check evq is valid */
+  if( !tdev->evqs[evq].inited )
+    return -EINVAL;
+
+  /* Find rxq */
+  for( i = 0; i < EFCT_TEST_RXQS_N; i++ )
+    if( tdev->rxqs[i].evq < 0 ) {
+      rxq_idx = i;
+      break;
+    }
+
+  if( rxq_idx < 0 )
+    return -EBUSY;
+
+  rxq = &tdev->rxqs[rxq_idx];
+
+  /* Allocate memory */
+  rxq->post_register = kmalloc(0x1000, GFP_KERNEL);
+  if( !rxq->post_register )
+    return -ENOMEM;
+  memset(rxq->post_register, 0x00, 0x1000);
+  set_memory_wc((unsigned long)rxq->post_register, 1);
+
+  atomic_set(&rxq->timer_running, 1);
+  INIT_DELAYED_WORK(&rxq->timer, efct_test_rx_timer);
+  schedule_delayed_work(&rxq->timer, 100);
+
+  hrtimer_init(&tdev->rxqs[i].rx_tick, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+  tdev->rxqs[i].rx_tick.function = efct_rx_tick;
+
+  /* Set fields */
+  rxq->evq = evq;
+  rxq->tdev = tdev;
+  tdev->evqs[evq].rxqs |= 1 << rxq_idx;
+
+  /* Everything should be memset to 0, but I want to be sure */
+  if(rxq->next_bid != 0)
+    return -1;
+  if(rxq->curr_bid != 0)
+    return -1;
+  if(rxq->pkt != 0)
+    return -1;
+
+  printk(KERN_INFO "%s: bound rxq %d to evq %d\n", __func__, rxq_idx, evq);
+
+  return rxq_idx;
+}
+
+
+static void efct_test_free_rxq(struct efx_auxiliary_client *handle, int rxq_idx)
+{
+  struct efct_test_device *tdev = handle->tdev;
+  int evq = tdev->rxqs[rxq_idx].evq;
+  struct efct_test_rxq *rxq = &tdev->rxqs[rxq_idx];
+
+  printk(KERN_INFO "%s: rxq %d\n", __func__, rxq_idx);
+  WARN(evq < 0,
+       "%s: Error: freeing q %d, but not bound to evq\n", __func__, rxq_idx);
+
+  atomic_set(&rxq->timer_running, 0);
+  cancel_delayed_work_sync(&rxq->timer);
+
+  hrtimer_cancel(&rxq->rx_tick);
+
+  evq_push_rx_flush_complete(&tdev->evqs[evq], rxq_idx);
+
+  tdev->evqs[evq].rxqs &= ~(1 << rxq_idx);
+  kfree(rxq->post_register);
+  set_memory_wb((unsigned long)rxq->post_register, 1);
+
+  memset(rxq, 0, sizeof(*rxq));
+  rxq->evq = -1;
+}
+
+
 static int efct_test_fw_rpc(struct efx_auxiliary_client *handle,
                             struct efx_auxiliary_rpc *rpc)
 {
@@ -297,6 +409,21 @@ static int efct_test_fw_rpc(struct efx_auxiliary_client *handle,
     }
     else {
       efct_test_free_txq(handle, *rpc->inbuf);
+      rc = 0;
+    }
+    break;
+   case MC_CMD_INIT_RXQ:
+    if( rpc->inlen != sizeof(struct efx_auxiliary_rxq_params) )
+      rc = -EINVAL;
+    else
+      rc = efct_test_init_rxq(handle, (struct efx_auxiliary_rxq_params *)rpc->inbuf);
+    break;
+   case MC_CMD_FINI_RXQ:
+    if( rpc->inlen != sizeof(int) ) {
+      rc = -EINVAL;
+    }
+    else {
+      efct_test_free_rxq(handle, *rpc->inbuf);
       rc = 0;
     }
     break;

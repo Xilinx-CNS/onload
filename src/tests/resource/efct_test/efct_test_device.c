@@ -70,6 +70,8 @@ struct efct_test_device* efct_test_add_test_dev(struct device* parent,
   adev = &tdev->dev.auxdev;
   for( i = 0; i < EFCT_TEST_TXQS_N; i++ )
     tdev->txqs[i].evq = -1;
+  for( i = 0; i < EFCT_TEST_RXQS_N; i++)
+    tdev->rxqs[i].evq = -1;
 
   /* Once we have successfully initted the aux dev then the lifetime of the
    * wrapping test dev must be associated with the aux device. This means
@@ -114,3 +116,31 @@ void efct_test_remove_test_dev(struct efct_test_device* tdev)
   kfree(tdev->evq_window);
 }
 
+int efct_test_set_rxq_ms_per_pkt(struct efct_test_device* tdev, int rxq,
+                                 int ms_per_pkt)
+{
+  struct efct_test_rxq* q = &tdev->rxqs[rxq];
+
+  if( rxq < 0 || rxq >= EFCT_TEST_RXQS_N || ms_per_pkt < 0 || q->evq == -1 )
+    return -EINVAL;
+  hrtimer_cancel(&q->rx_tick);
+
+  q->ms_per_pkt = ms_per_pkt;
+  if( ms_per_pkt ){
+    hrtimer_start(&q->rx_tick, ms_to_ktime(ms_per_pkt), HRTIMER_MODE_REL);
+  }
+  return 0;
+}
+
+int efct_test_set_rxq_num_pkts(struct efct_test_device* tdev, int rxq,
+                                 int num_pkts)
+{
+  struct efct_test_rxq* q = &tdev->rxqs[rxq];
+
+  if( rxq < 0 || rxq >= EFCT_TEST_RXQS_N || num_pkts < 0 )
+    return -EINVAL;
+
+  q->num_pkts = num_pkts;
+  q->curr_pkts = 0;
+  return 0;
+}
