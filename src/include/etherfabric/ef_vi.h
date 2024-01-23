@@ -691,6 +691,9 @@ typedef struct {
    * 0). Usually next-1, but not if there was a rollover. This is effectively
    * the pointer to the packet payload. */
   uint32_t prev;
+  /** Past-the-end pkt_id value for this superbuf, without bit 31 abused.
+   *  Set to zero to force a rollover. */
+  uint32_t end;
   /** Combi-value of (sbseq << 32) | next.
    * 'next' is the next pkt_id, with bit 31 abused to contain the expected
    * sentinel of the pointed-to superbuf (this is duplicated info, but

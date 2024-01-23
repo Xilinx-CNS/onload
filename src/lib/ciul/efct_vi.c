@@ -223,11 +223,9 @@ static int rxq_ptr_to_sentinel(uint32_t ptr)
   return ptr >> 31;
 }
 
-static bool efct_rxq_need_rollover(const struct efab_efct_rxq_uk_shm_q* shm,
-                                   uint32_t next)
+static bool efct_rxq_need_rollover(const ef_vi_efct_rxq_ptr* rxq_ptr)
 {
-  uint32_t pkt_id = rxq_ptr_to_pkt_id(next);
-  return pkt_id_to_index_in_superbuf(pkt_id) >= shm->superbuf_pkts;
+  return rxq_ptr_to_pkt_id(rxq_ptr->next) >= rxq_ptr->end;
 }
 
 ci_inline bool efct_rxq_can_rollover(const ef_vi* vi, int qid)
@@ -257,11 +255,11 @@ static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
 static bool efct_rxq_check_event(const ef_vi* vi, int qid)
 {
   const ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  const ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
   struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
-  uint32_t next = OO_ACCESS_ONCE(vi->ep_state->rxq.rxq_ptr[qid].next);
   if( ! efct_rxq_is_active(shm) )
     return false;
-  if( efct_rxq_need_rollover(shm, next) )
+  if( efct_rxq_need_rollover(rxq_ptr) )
 #ifndef __KERNEL__
     /* only signal new event if rollover can be done */
     return efct_rxq_can_rollover(vi, qid);
@@ -272,7 +270,7 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
 #endif
 
   return efct_rxq_need_config(rxq, shm) ||
-     efct_rx_next_header(vi, next) != NULL;
+     efct_rx_next_header(vi, rxq_ptr->next) != NULL;
 }
 
 /* Check whether a received packet is available */
@@ -777,7 +775,7 @@ static int rx_rollover(ef_vi* vi, int qid)
   pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
   next = pkt_id | ((uint32_t)sentinel << 31);
 
-  if( pkt_id_to_index_in_superbuf(rxq_ptr->next) > superbuf_pkts ) {
+  if( rxq_ptr->end == 0 ) {
     /* special case for when we want to ignore the first metadata, e.g. at
      * queue startup */
     rxq_ptr->prev = pkt_id;
@@ -792,9 +790,11 @@ static int rx_rollover(ef_vi* vi, int qid)
     ++next;
   }
   rxq_ptr->next = ((uint64_t)sbseq << 32) | next;
+  rxq_ptr->end = pkt_id + superbuf_pkts;
 
   /* Preload the superbuf's refcount with all the (potential) packets in
    * it - more efficient than incrementing for each rx individually */
+  EF_VI_ASSERT(superbuf_pkts > 0);
   EF_VI_ASSERT(superbuf_pkts < (1 << PKT_ID_PKT_BITS));
   desc = efct_rx_desc(vi, pkt_id);
   desc->refcnt = superbuf_pkts;
@@ -863,7 +863,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
   int i;
 
-  if( efct_rxq_need_rollover(shm, rxq_ptr->next) )
+  if( efct_rxq_need_rollover(rxq_ptr) )
     if( rx_rollover(vi, qid) < 0 )
       /* ef_eventq_poll() has historically never been able to fail, so we
        * maintain that policy */
@@ -890,8 +890,8 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
 
   /* Avoid crossing a superbuf in a single poll. Otherwise we'd need to check
    * for rollover after each packet. */
-  evs_len = CI_MIN(evs_len, (int)(shm->superbuf_pkts -
-                                  pkt_id_to_index_in_superbuf(rxq_ptr->next)));
+  evs_len = CI_MIN(evs_len, (int)(rxq_ptr->end -
+                                  rxq_ptr_to_pkt_id(rxq_ptr->next)));
 
   for( i = 0; i < evs_len; ++i ) {
     const ci_oword_t* header;
@@ -911,30 +911,32 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
        (header->u64[0] & M(ROLLOVER) ||
         (discard_flags = header_status_flags(header) & vi->rx_discard_mask)) ) {
       if( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_ROLLOVER) ) {
-        /* We created the desc->refcnt assuming that this superbuf would be
-         * full of packets. It wasn't, so consume all the unused refs */
-        int nskipped = shm->superbuf_pkts -
-                       pkt_id_to_index_in_superbuf(pkt_id);
+        int prev_sb = pkt_id_to_local_superbuf_ix(pkt_id);
+        int next_sb = pkt_id_to_local_superbuf_ix(rxq_ptr_to_pkt_id(rxq_ptr->next));
+        int nskipped;
+        if( next_sb == prev_sb ) {
+          /* We created the desc->refcnt assuming that this superbuf would be
+           * full of packets. It wasn't, so consume all the unused refs */
+          nskipped = rxq_ptr->end - pkt_id;
+        }
+        else {
+          /* i.e. the current packet is the one straddling a superbuf
+           * boundary. We consume the last packet of the first superbuf
+           * (it's the bogus 'manual rollover' packet) and the
+           * entirety of the current superbuf, which is the one the NIC wants
+           * to get rid of */
+          nskipped = 1;
+          superbuf_free(vi, qid, next_sb);
+        }
+
         EF_VI_ASSERT(nskipped > 0);
         EF_VI_ASSERT(nskipped <= desc->refcnt);
         desc->refcnt -= nskipped;
         if( desc->refcnt == 0 )
-          superbuf_free(vi, qid, pkt_id_to_local_superbuf_ix(pkt_id));
-        if( nskipped == 1 ) {
-          /* i.e. the current packet is the one straddling a superbuf
-           * boundary. We consume the last packet of the first superbuf above
-           * (it's the bogus 'manual rollover' packet) and here we consume the
-           * entirety of the current superbuf, which is the one the NIC wants
-           * to get rid of */
-          superbuf_free(vi, qid, pkt_id_to_local_superbuf_ix(
-                                          rxq_ptr_to_pkt_id(rxq_ptr->next)));
-        }
+          superbuf_free(vi, qid, prev_sb);
 
-        /* Force a rollover on the next poll, while preserving the superbuf
-         * index encoded in rxq_ptr->next. The +1 is necessary to avoid ending
-         * up with exactly superbuf_pkts (which means normal rollover)
-         */
-        rxq_ptr->next += 1 + shm->superbuf_pkts;
+        /* Force a rollover on the next poll */
+        rxq_ptr->end = 0;
         break;
       }
 
@@ -1342,10 +1344,8 @@ void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
 
 void efct_vi_start_rxq(ef_vi* vi, int ix)
 {
-  /* This is a totally fake pkt_id, but it makes efct_poll_rx() think that a
-   * rollover is needed. We use +1 as a marker that this is the first packet,
-   * i.e. ignore the first metadata: */
-  vi->ep_state->rxq.rxq_ptr[ix].next = 1 + vi->efct_shm->q[ix].superbuf_pkts;
+  /* TBD do we need this? Or is it already zero-initialised at this point? */
+  vi->ep_state->rxq.rxq_ptr[ix].end = 0;
 }
 
 /* efct_vi_detach_rxq not yet implemented */
@@ -1452,11 +1452,11 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
 
     /* Skip queues that have pending non-packet related work
      * The work will be picked up by poll or noticed by efct_rxq_check_event */
-    if( efct_rxq_need_rollover(shm, OO_ACCESS_ONCE(rxq_ptr->next))  ||
+    if( efct_rxq_need_rollover(rxq_ptr)  ||
         efct_rxq_need_config(&vi->efct_rxq[qid], shm) )
       continue;
     pkt_id = OO_ACCESS_ONCE(rxq_ptr->prev);
-    EF_VI_ASSERT(pkt_id_to_index_in_superbuf(pkt_id) < shm->superbuf_pkts);
+    EF_VI_ASSERT(pkt_id < rxq_ptr->end);
     {
       const char* start = (char*)efct_rx_header(vi, pkt_id) +
                           EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
@@ -1540,19 +1540,21 @@ int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
   ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
   struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
   uint64_t sbseq_next;
+  unsigned ix;
 
   if( ! efct_rxq_is_active(shm) )
     return -ENOENT;
 
   sbseq_next = OO_ACCESS_ONCE(rxq_ptr->next);
+  ix = pkt_id_to_index_in_superbuf(sbseq_next);
 
-  if( efct_rxq_need_rollover(shm, sbseq_next) ) {
+  if( ix >= shm->superbuf_pkts ) {
     *sbseq = (sbseq_next >> 32) + 1;
     *pktix = 0;
   }
   else {
     *sbseq = sbseq_next >> 32;
-    *pktix = pkt_id_to_index_in_superbuf(sbseq_next);
+    *pktix = ix;
   }
   return 0;
 }
