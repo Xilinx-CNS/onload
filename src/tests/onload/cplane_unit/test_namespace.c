@@ -13,7 +13,8 @@
 
 static void init_sessions(struct cp_session *s_local,
                           struct cp_session *s_main,
-                          int *next_ifindex)
+                          int *next_ifindex,
+                          int *next_hwport)
 {
   cp_unit_init_session(s_local);
   cp_unit_init_session(s_main);
@@ -25,10 +26,17 @@ static void init_sessions(struct cp_session *s_local,
   const char mac1[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x00};
   const char mac2[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x01};
   *next_ifindex = 1;
-  cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, (*next_ifindex)++, "ethO0",
-                             mac1);
-  cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, (*next_ifindex)++, "ethO1",
-                             mac2);
+  *next_hwport = 1;
+
+  /* The first interface is a multiarch nic.  There are two hwports
+   * with the same interface index. */
+  cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, (*next_ifindex),
+                             (*next_hwport), "ethO0", mac1);
+  cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, (*next_ifindex)++,
+                             (*next_hwport) << 1, "ethO0", mac1);
+  cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, (*next_ifindex)++,
+                             (*next_hwport) << 2, "ethO1", mac2);
+  *next_hwport <<= 3;
 }
 
 
@@ -46,13 +54,14 @@ static cicp_hwport_mask_t get_all_rxports_mask(struct cp_session *s)
 }
 
 
-#define MACVLAN_TEST_COUNT 4
+#define MACVLAN_TEST_COUNT 5
 void test_macvlan_interface(void)
 {
   struct cp_session s_local, s_main;
   int next_ifindex = 1;
+  int next_hwport = 1;
   int macvlan_ifindex;
-  init_sessions(&s_local, &s_main, &next_ifindex);
+  init_sessions(&s_local, &s_main, &next_ifindex, &next_hwport);
 
   /* Add a macvlan interface in the other namespace. */
   /* Bug70993: the control plane assumes that ifindices are unique across namespaces. */
@@ -77,21 +86,25 @@ void test_macvlan_interface(void)
   cmp_ok(ifindex, "==", macvlan_ifindex,
          "Get macvlan interface by one hwport");
   ifindex = cp_get_hwport_ifindex(&s_local.mib[0], 1);
-  cmp_ok(ifindex, "==", CI_IFID_BAD,
+  cmp_ok(ifindex, "==", macvlan_ifindex,
          "Get macvlan interface by another hwport");
+  ifindex = cp_get_hwport_ifindex(&s_local.mib[0], 2);
+  cmp_ok(ifindex, "==", CI_IFID_BAD,
+         "No visible interfaces");
 
   cp_unit_destroy_session(&s_local);
   cp_unit_destroy_session(&s_main);
 }
 
 
-#define VETH_TEST_COUNT 5
+#define VETH_TEST_COUNT 6
 void test_veth_interface(void)
 {
   struct cp_session s_local, s_main;
   int next_ifindex = 1;
+  int next_hwport = 1;
   unsigned i;
-  init_sessions(&s_local, &s_main, &next_ifindex);
+  init_sessions(&s_local, &s_main, &next_ifindex, &next_hwport);
 
   /* Add a veth interface in the other namespace.  In the real world there
    * would be an additional peer interface for this veth, but onload doesn't
@@ -117,7 +130,7 @@ void test_veth_interface(void)
 
   /* Check if we can resolve the ifindex by hwport ID.  All hwports should
    * point at the same interface. */
-  for( i = 0; i < 2; i++) {
+  for( i = 0; i < 3; i++) {
     ci_ifid_t ifindex = cp_get_hwport_ifindex(&s_local.mib[0], i);
     cmp_ok(ifindex, "==", CI_IFID_BAD,
            "Get veth interface");

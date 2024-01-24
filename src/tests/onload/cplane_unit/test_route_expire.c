@@ -50,7 +50,7 @@ int main(void)
   n_fwd_entries = n_fwd_rows * 4;
 
   const char mac1[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x00};
-  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, 1, "ethO0", mac1);
+  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, 1, 0x01, "ethO0", mac1);
 
   /* Tell the control plane about more route-resolutions than it has
    * space to store. */

@@ -35,7 +35,7 @@
 enum {
   LOOP_IFINDEX = 1,
   ETHO0_IFINDEX,
-  ETHO1_IFINDEX,
+  ETHO1_IFINDEX, /* It is a multiarch nic, i.e. with two hwports. */
   VETH_IFINDEX,
 
   /* The following interfaces are configured in a separate namespace, but
@@ -45,16 +45,24 @@ enum {
   XNSO1_IFINDEX,
 };
 
+enum {
+  ETHO0_HWPORTS = 0x01,
+  ETHO1_HWPORTS = 0x02 | 0x04,
+
+  XNSO0_HWPORTS = 0x08,
+  XNSO1_HWPORTS = 0x10,
+};
+
 static void init_session(struct cp_session* s_local, struct cp_session* s_main)
 {
   cp_unit_init_session(s_local);
 
   const char mac1[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x00};
   const char mac2[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x01};
-  cp_unit_nl_handle_link_msg(s_local, RTM_NEWLINK, ETHO0_IFINDEX, "ethO0",
-                             mac1);
-  cp_unit_nl_handle_link_msg(s_local, RTM_NEWLINK, ETHO1_IFINDEX, "ethO1",
-                             mac2);
+  cp_unit_nl_handle_link_msg(s_local, RTM_NEWLINK, ETHO0_IFINDEX,
+                             ETHO0_HWPORTS, "ethO0", mac1);
+  cp_unit_nl_handle_link_msg(s_local, RTM_NEWLINK, ETHO1_IFINDEX,
+                             ETHO1_HWPORTS, "ethO1", mac2);
 
   if( s_main != NULL ) {
     cp_unit_init_session(s_main);
@@ -62,10 +70,10 @@ static void init_session(struct cp_session* s_local, struct cp_session* s_main)
 
     const char xns_mac1[] = {0x00, 0x0f, 0x53, 0xff, 0xff, 0x00};
     const char xns_mac2[] = {0x00, 0x0f, 0x53, 0xff, 0xff, 0x01};
-    cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, XNSO0_IFINDEX, "xnsO0",
-                               xns_mac1);
-    cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, XNSO1_IFINDEX, "xnsO1",
-                               xns_mac2);
+    cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, XNSO0_IFINDEX,
+                               XNSO0_HWPORTS, "xnsO0", xns_mac1);
+    cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, XNSO1_IFINDEX,
+                               XNSO1_HWPORTS, "xnsO1", xns_mac2);
   }
 
   const char veth_mac[] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
@@ -155,6 +163,7 @@ static void populate_expected_rows(struct expected_fwd_row *expected,
         .base.src = ASH("1.2.3.4"),
         .base.next_hop = ASH("1.2.1.1"),
         .base.ifindex = ETHO0_IFINDEX,
+        .hwports = ETHO0_HWPORTS,
       }
     },
     {
@@ -164,6 +173,7 @@ static void populate_expected_rows(struct expected_fwd_row *expected,
         .base.src = ASH("1.2.3.4"),
         .base.next_hop = ASH("1.2.1.1"),
         .base.ifindex = ETHO0_IFINDEX,
+        .hwports = ETHO0_HWPORTS,
       }
     },
     /* 1.0.0.0/15 all goes via default gateway. */
@@ -174,6 +184,7 @@ static void populate_expected_rows(struct expected_fwd_row *expected,
         .base.src = ASH("9.9.9.1"),
         .base.next_hop = ASH("9.9.9.9"),
         .base.ifindex = ETHO1_IFINDEX,
+        .hwports = ETHO1_HWPORTS,
       }
     },
     {
@@ -183,6 +194,7 @@ static void populate_expected_rows(struct expected_fwd_row *expected,
         .base.src = ASH("9.9.9.1"),
         .base.next_hop = ASH("9.9.9.9"),
         .base.ifindex = ETHO1_IFINDEX,
+        .hwports = ETHO1_HWPORTS,
       }
     },
     /* So does 16.0.0.0/4. */
@@ -193,6 +205,7 @@ static void populate_expected_rows(struct expected_fwd_row *expected,
         .base.src = ASH("9.9.9.1"),
         .base.next_hop = ASH("9.9.9.9"),
         .base.ifindex = ETHO1_IFINDEX,
+        .hwports = ETHO1_HWPORTS,
       }
     },
     {
@@ -202,6 +215,7 @@ static void populate_expected_rows(struct expected_fwd_row *expected,
         .base.src = ASH("9.9.9.1"),
         .base.next_hop = ASH("9.9.9.9"),
         .base.ifindex = ETHO1_IFINDEX,
+        .hwports = ETHO1_HWPORTS,
       }
     },
     /* 2.0.0.0/8 goes via its own gateway. */
@@ -212,6 +226,7 @@ static void populate_expected_rows(struct expected_fwd_row *expected,
         .base.src = ASH("9.9.9.1"),
         .base.next_hop = ASH("9.9.9.8"),
         .base.ifindex = ETHO1_IFINDEX,
+        .hwports = ETHO1_HWPORTS,
       }
     },
     {
@@ -221,6 +236,7 @@ static void populate_expected_rows(struct expected_fwd_row *expected,
         .base.src = ASH("9.9.9.1"),
         .base.next_hop = ASH("9.9.9.8"),
         .base.ifindex = ETHO1_IFINDEX,
+        .hwports = ETHO1_HWPORTS,
       }
     }
   };
@@ -242,7 +258,8 @@ bool fwd_data_equal(struct cp_fwd_data *lhs, struct cp_fwd_data *rhs)
 {
   return ci_ipx_addr_sh_eq(&lhs->base.src, &rhs->base.src) &&
          ci_ipx_addr_sh_eq(&lhs->base.next_hop, &rhs->base.next_hop) &&
-         lhs->base.ifindex == rhs->base.ifindex;
+         lhs->base.ifindex == rhs->base.ifindex &&
+         lhs->hwports == rhs->hwports;
 }
 
 

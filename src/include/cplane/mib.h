@@ -213,6 +213,9 @@ struct cp_hwport_row {
   cp_hwport_flags_t flags;
   cp_nic_flags_t nic_flags CI_ALIGN(8);
 
+  /* Originating interface to identify sibling multiarch hwports. */
+  ci_ifid_t ifindex;
+
   cp_xdp_prog_id_t xdp_prog_id;
 };
 

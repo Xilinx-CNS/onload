@@ -265,6 +265,25 @@ ci_find_ifindex_hwports(struct cp_mibs* mib, ci_ifid_t ifindex,
 }
 
 
+/* Find all hwports by their originating interface index. */
+static cicp_hwport_mask_t
+cp_hwport_mask_by_ifindex(struct cp_mibs* mib, ci_ifid_t ifindex)
+{
+  cicp_hwport_mask_t hwports = 0;
+  ci_hwport_id_t hwp;
+
+  for( hwp = 0; hwp < mib->dim->hwport_max; hwp++ ) {
+    if( cicp_hwport_row_is_free(&mib->hwport[hwp]) )
+      continue;
+
+    if( mib->hwport[hwp].ifindex == ifindex)
+      hwports |= cp_hwport_make_mask(hwp);
+  }
+
+  return hwports;
+}
+
+
 /* Returns the ifindex of the 'best' interface for using hwport. Used by zf
  * to find the interface to use for ef_vi underneath bonds, vlans, etc.
  * The caller is responsible for performing a version-check before and after
@@ -272,8 +291,12 @@ ci_find_ifindex_hwports(struct cp_mibs* mib, ci_ifid_t ifindex,
 ci_ifid_t cp_get_hwport_ifindex(struct cp_mibs* mib, ci_hwport_id_t hwport)
 {
   int rowid;
-  cicp_hwport_mask_t hwports = cp_hwport_make_mask(hwport);
+  cicp_hwport_mask_t hwports;
   ci_ifid_t id = CI_IFID_BAD;
+
+  /* Compute the hwport mask.  It would normally have one bit unless it is
+   * a multiarch NIC with multiple hwports that would have multiple bits. */
+  hwports = cp_hwport_mask_by_ifindex(mib, mib->hwport[hwport].ifindex);
 
   for( rowid = 0; rowid < mib->dim->llap_max; ++rowid ) {
     if( cicp_llap_row_is_free(&mib->llap[rowid]) )

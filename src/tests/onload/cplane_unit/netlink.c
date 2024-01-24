@@ -47,9 +47,9 @@ build_nl_link_msg_base(char* buf, uint16_t nlmsg_type, int ifindex,
  * passes it to the control plane. */
 void
 cp_unit_nl_handle_link_msg(struct cp_session* s, uint16_t nlmsg_type,
-                           int ifindex, const char* name, const char* mac)
+                           int ifindex, cicp_hwport_mask_t hwports,
+                           const char* name, const char* mac)
 {
-  static int hwport = 0;
   char buf[MNL_SOCKET_BUFFER_SIZE];
   struct nlmsghdr* nlh = build_nl_link_msg_base(buf, nlmsg_type, ifindex, name,
 						mac);
@@ -57,8 +57,11 @@ cp_unit_nl_handle_link_msg(struct cp_session* s, uint16_t nlmsg_type,
   /* Pass the message to the control plane. */
   cp_nl_net_handle_msg(s, nlh, nlh->nlmsg_len);
 
-  /* Tell the control plane that this llap has hwport. */
-  cp_populate_llap_hwports(s, ifindex, hwport++, (ci_uint64) -1);
+  /* Tell the control plane that this llap has hwport(s). */
+  for( ; hwports; hwports &= (hwports - 1) ) {
+    ci_hwport_id_t hwport = cp_hwport_mask_first(hwports);
+    cp_populate_llap_hwports(s, ifindex, hwport, (ci_uint64) -1);
+  }
 }
 
 

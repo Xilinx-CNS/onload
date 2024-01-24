@@ -253,7 +253,8 @@ int __oo_cp_route_resolve(struct oo_cplane_handle* cp,
 int
 oo_cp_get_hwport_properties(struct oo_cplane_handle* cp, ci_hwport_id_t hwport,
                             cp_hwport_flags_t* out_mib_flags,
-                            cp_nic_flags_t* out_nic_flags)
+                            cp_nic_flags_t* out_nic_flags,
+                            ci_ifid_t* out_ifindex)
 {
   struct cp_mibs* mib;
   cp_version_t version;
@@ -272,6 +273,8 @@ oo_cp_get_hwport_properties(struct oo_cplane_handle* cp, ci_hwport_id_t hwport,
     *out_mib_flags = mib->hwport[hwport].flags;
   if( out_nic_flags != NULL )
     *out_nic_flags = mib->hwport[hwport].nic_flags;
+  if( out_ifindex != NULL )
+    *out_ifindex = mib->hwport[hwport].ifindex;
 
  out:
   CP_VERLOCK_STOP(version, mib)

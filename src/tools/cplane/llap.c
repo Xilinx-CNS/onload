@@ -173,9 +173,6 @@ llap_update_tx_hwports(struct cp_session* s, struct cp_mibs* mib,
   if( mib->llap[llap_id].tx_hwports == hwports )
     return false;
 
-  ci_assert_impl(! (mib->llap[llap_id].encap.type & CICP_LLAP_TYPE_USES_HASH),
-                 CI_IS_POW2(hwports) || hwports == 0);
-
   cp_mibs_llap_under_change(s);
   mib->llap[llap_id].tx_hwports = hwports;
   return true;
@@ -251,7 +248,7 @@ fix_upper_layers(struct cp_session* s, struct cp_mibs* mib,
       cicp_rowid_t llap_bond;
       ci_assert_nequal(master, CICP_ROWID_BAD);
 
-      cp_bond_slave_set_hwport(&s->bond[id], base);
+      cp_bond_slave_set_hwports(&s->bond[id], base);
 
       llap_bond = cp_llap_find_row(mib, s->bond[master].ifid);
       if( llap_bond == CICP_ROWID_BAD )
@@ -392,7 +389,8 @@ import_main_hwports(struct cp_session* s, cicp_hwport_mask_t* hwports_in_out)
   for( ; hwports != 0; hwports &= (hwports - 1) ) {
     ci_hwport_id_t hwport = cp_hwport_mask_first(hwports);
     int rc = oo_cp_get_hwport_properties(s->main_cp_handle, hwport,
-                                         &hwp.flags, &hwp.nic_flags);
+                                         &hwp.flags, &hwp.nic_flags,
+                                         &hwp.ifindex);
     if( rc != 0 ) {
       continue;
     }
@@ -413,6 +411,7 @@ import_main_hwports(struct cp_session* s, cicp_hwport_mask_t* hwports_in_out)
         cp_mibs_llap_under_change(s);
         mib->hwport[hwport].flags = hwp.flags | CP_LLAP_IMPORTED;
         mib->hwport[hwport].nic_flags = hwp.nic_flags;
+        mib->hwport[hwport].ifindex = hwp.ifindex;
       }
     MIB_UPDATE_LOOP_END(mib, s)
   }
@@ -523,10 +522,12 @@ void cp_populate_llap_hwports(struct cp_session* s, ci_ifid_t ifindex,
       hwp = &mib->hwport[hwport];
       new_flags = (hwp->flags & CP_LLAP_UP) |
                   CP_HWPORT_ROW_IN_USE;
-      if( new_flags != hwp->flags || nic_flags != hwp->nic_flags ) {
+      if( new_flags != hwp->flags || nic_flags != hwp->nic_flags ||
+          ifindex != hwp->ifindex ) {
         cp_mibs_llap_under_change(s);
         mib->hwport[hwport].flags = new_flags;
         mib->hwport[hwport].nic_flags = nic_flags;
+        mib->hwport[hwport].ifindex = ifindex;
       }
     }
     else {
@@ -553,6 +554,14 @@ void cp_populate_llap_hwports(struct cp_session* s, ci_ifid_t ifindex,
       }
       continue;
     }
+
+    /* As soon as we receive the second port announcement for the same
+     * interface, we assume it is a multiarch nic and allow multiple
+     * hwports for this llap.  Be careful, because it also makes this
+     * llap look similar to the aggregated interfaces, e.g. bonds. */
+    if( mib->llap[llap_id].rx_hwports )
+      hwports |= mib->llap[llap_id].rx_hwports;
+
     cp_llap_set_hwports(s, mib, llap_id, hwports, hwports,
                         mib->llap[llap_id].encap.type, ! mib_i);
     cp_set_hwport_xdp_prog_id(s, mib, hwport, mib->llap[llap_id].ifindex,

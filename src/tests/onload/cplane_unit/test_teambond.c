@@ -447,9 +447,9 @@ static bool verify_cplane_state(struct cp_session* s, struct test_state* state)
              cplane_bond_ifid);
         return false;
       }
-      if( cplane_slave->slave.hwport != row->slave.hwport ) {
-        diag("Row %d: Expected hwport %d, found %d", i, row->slave.hwport,
-             cplane_slave->slave.hwport);
+      if( cplane_slave->slave.hwports != row->slave.hwports ) {
+        diag("Row %d: Expected hwport 0x%08x, found 0x%08x", i,
+             row->slave.hwports, cplane_slave->slave.hwports);
         return false;
       }
       if( test_bond->master.mode != CICP_BOND_MODE_UNSUPPORTED &&
@@ -610,7 +610,7 @@ static int add_slave(struct cp_session* s, struct test_state* state)
   ci_fifo2_get(&state->free_ifindices, &slave->ifid);
   ci_assert_nequal(slave->ifid, CI_IFID_BAD);
   slave->slave.master = bond - state->expected_table;
-  slave->slave.hwport = ifindex_to_hwport(slave->ifid);
+  slave->slave.hwports = cp_hwport_make_mask(ifindex_to_hwport(slave->ifid));
   bool up = rand() & 1;
   slave->slave.flags = up ? CICP_BOND_ROW_FLAG_UP : 0;
   slave->next = bond->next;

@@ -73,8 +73,10 @@ int main(void)
 /* Cplane ignores neighbour entries for loopback (ifindex=1), so we use
  * different value here. */
 #define ETHO0_IFINDEX 2
+#define ETHO0_HWPORT 1
   const char mac1[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x00};
-  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, ETHO0_IFINDEX, "ethO0", mac1);
+  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, ETHO0_IFINDEX, ETHO0_HWPORT,
+                             "ethO0", mac1);
 
   /* Initially the table should be empty. */
   cmp_ok(cp_mac_rows_occupied(&s), "==", 0,

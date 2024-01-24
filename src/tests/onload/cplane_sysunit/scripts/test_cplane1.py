@@ -136,10 +136,55 @@ def cpresolve(cp, v, k, attempts=10, af=None):
           time.sleep(0.2)
     return data
 
-def cpmakenic(netns, cp, ifname, hwport, ifindex=None):
+
+class nic(object):
+    ''' Represents a nic with an arbitrary number of acceleratable ports.
+    '''
+    def __init__(self, hwports):
+        for hwport in hwports:
+            if hwport < 0 or hwport >= CI_CFG_MAX_HWPORTS:
+                raise Exception('Invalid port number %d'%(hwport))
+
+        # Port numbers must be unique.
+        if len(hwports) > len(set(hwports)):
+            raise Exception('Found non-unique ports in nic constructor')
+
+        self.__hwports = hwports
+
+    def hwports(self):
+        return self.__hwports
+
+    def mask(self):
+        ''' Computes the hardware port mask.
+        '''
+        return sum(1 << ix for ix in self.__hwports)
+
+
+def create_nic(hwport):
+    ''' Creates a regular SFC/X3 nic with one port.
+    '''
+    return nic([hwport])
+
+
+def create_nonsf_nic():
+    ''' Creates a non-SFC nic without acceleratable ports.
+    '''
+    return nic([])
+
+
+def create_multiarch_nic(hwports):
+    ''' Creates a multi-arch SFC nic with a couple of ports (data paths).
+    '''
+    if len(hwports) != 2:
+        raise Exception('Expected exactly two ports but %d given'%len(hwports))
+    return nic(hwports)
+
+
+def create_interface(netns, cp, ifname, nic, ifindex=None):
     netns.link('add', kind='dummy', ifname=ifname, index=ifindex or 0)
     ix = netns.link_lookup(ifname=ifname)[0]
-    cp.newHwport(ix, hwport)
+    for hwport in nic.hwports():
+      cp.newHwport(ix, hwport)
     return ix
 
 
@@ -393,8 +438,8 @@ def fake_ip_subnet(v6, part1, part2=1, suffix=8):
 # inadvertantly running in the wrong environment.
 @cpdecorate()
 def do_test_ensure_running_in_expected_environment(cpserver,cp,netns):
-    hwports = list(range(2))
-    bond_name, _ = prep_bond(cpserver,cp,netns,hwports,mode=1)
+    nics = [create_nic(i) for i in range(2)]
+    bond_name, _ = prep_bond(cpserver,cp,netns,nics,mode=1)
 
     envvar = 'CPLANE_SYS_ASSERT_NETLINK_BOND'
     if envvar in os.environ:
@@ -485,7 +530,7 @@ def create_bond(cpserver, netns, ifname, ifnames, mode):
 
     return ifix
 
-def prep_bond(cpserver,cp,netns,hwports,v6=False,mode=1,
+def prep_bond(cpserver,cp,netns,nics,v6=False,mode=1,
               include_non_sf_intf=False, ifname='bond2', address=None, mask=None):
     if address is None:
         address = fake_ip_str(v6, 0, 2)
@@ -496,16 +541,20 @@ def prep_bond(cpserver,cp,netns,hwports,v6=False,mode=1,
     # Used to validate getHwportIfindex
     _hwport2ifindex = {}
 
-    for hwport in hwports:
-        if include_non_sf_intf and hwport == 0:
+    for nic in nics:
+        if nic.hwports():
+            slifname = 'O' + '_'.join([str(i) for i in nic.hwports()])
+            ifix = create_interface(netns, cp, slifname, nic)
+
+            for hwport in nic.hwports():
+                assert _hwport2ifindex.get(hwport) is None
+                _hwport2ifindex[hwport] = ifix
+
+        elif include_non_sf_intf:
             slifname = 'x0'
             netns.link('add', kind='dummy', ifname=slifname)
         else:
-            slifname = 'O%d'%hwport
-            ifix = cpmakenic(netns, cp, slifname, hwport)
-
-            assert _hwport2ifindex.get(hwport) is None
-            _hwport2ifindex[hwport] = ifix
+            continue # it is a non-SFC nic and @include_non_sf_intf is False
 
         ifnames.append(slifname)
 
@@ -522,20 +571,21 @@ def prep_bond(cpserver,cp,netns,hwports,v6=False,mode=1,
 
 @cpdecorate()
 def do_test_bond(cpserver,cp,netns,v6):
-    hwports = list(range(2))
-    bond_name, slavenames = prep_bond(cpserver,cp,netns,hwports,v6,mode=1)
+    nics = [create_nic(0), create_multiarch_nic([1, 2])]
+    bond_name, slavenames = prep_bond(cpserver,cp,netns,nics,v6,mode=1)
     mac = mac_addr(netns, ifname=bond_name)
 
     v = cicp_verinfo(0,0)
     k = cp_fwd_key(any_ip(v6), fake_ip(v6, 0))
 
 
-    for active in hwports + list(reversed(hwports)):
+    nics_indexes = list(range(len(nics)))
+    for active in nics_indexes + list(reversed(nics_indexes)):
         bond_set_active(cpserver, bond_name, slavenames[active])
 
         sleep_if_netlink_incapable(netns, bond_name)
 
-        expected_hwports = 1 << active
+        expected_hwports = nics[active].mask()
         d = wait_for_hwports(cp, v, k, 3, expected_hwports, netns)
 
         check_route(d, CICP_ROUTE_TYPE.NORMAL, mac, expected_hwports)
@@ -548,14 +598,14 @@ def test_bond(v6):
 
 @cpdecorate()
 def do_test_accelerated_bond(cpserver,cp,netns,mode,v6):
-    hwports = list(range(2))
-    bond_name, slavenames = prep_bond(cpserver, cp, netns, hwports,
+    nics = [create_nic(0), create_multiarch_nic([1, 2])]
+    bond_name, slavenames = prep_bond(cpserver, cp, netns, nics,
                                       v6, mode=mode)
 
     sleep_if_netlink_incapable(netns, bond_name)
 
-    expected_hwports = sum(1 << hwport for hwport in hwports) if mode == 4 \
-                       else 1 << hwports[0]
+    expected_hwports = sum(nic.mask() for nic in nics) if mode == 4 \
+                       else nics[0].mask()
     v = cicp_verinfo(0,0)
     k = cp_fwd_key(any_ip(v6), fake_ip(v6, 0))
     d = wait_for_hwports(cp, v, k, 3, expected_hwports)
@@ -573,8 +623,8 @@ def test_accelerated_bond(mode, v6):
 
 @cpdecorate()
 def do_test_alien_bond(cpserver,cp,netns,mode,v6,include_non_sf_intf=False):
-    hwports = list(range(2))
-    bond_name, slavenames = prep_bond(cpserver, cp, netns, hwports, v6,
+    nics = [create_nonsf_nic(), create_nic(0)]
+    bond_name, slavenames = prep_bond(cpserver, cp, netns, nics, v6,
                                       mode=mode,
                                       include_non_sf_intf=include_non_sf_intf)
     mac = mac_addr(netns, ifname=bond_name)
@@ -582,7 +632,11 @@ def do_test_alien_bond(cpserver,cp,netns,mode,v6,include_non_sf_intf=False):
     v = cicp_verinfo(0,0)
     k = cp_fwd_key(any_ip(v6), fake_ip(v6, 0))
 
-    for active in hwports + list(reversed(hwports)):
+    # The number of aggregated interfaces might be less
+    # than the number of nic depending on the value of
+    # @include_non_sf_intf.
+    slave_indexes = list(range(len(slavenames)))
+    for active in slave_indexes + list(reversed(slave_indexes)):
         if mode not in [0, 2, 3]: # some modes do not allow setting active inteface
             bond_set_active(cpserver, bond_name, slavenames[active])
         # FIMXE: for some reason the system call to check bond is needed
@@ -800,7 +854,7 @@ def do_test_nic_order(myns, encap):
 
     # the 'physical' NICs, note they get fixed indexes far ahead
     for i in slave_hwports:
-        cpmakenic(netns, cp, 'O%d'%i, i, ifindex=30+i);
+        create_interface(netns, cp, 'O%d'%i, create_nic(i), ifindex=30+i);
 
     for i in slave_hwports:
         netns.link('add', kind='macvlan', ifname = 's%dmv'%i,
@@ -863,7 +917,7 @@ def do_test_multi_ns(main_ns, myns, encap):
         in the lower one.
     '''
 
-    main_ix = cpmakenic(main_ns.netns, main_ns.cp, 'P0', 0);
+    main_ix = create_interface(main_ns.netns, main_ns.cp, 'P0', create_nic(0));
 
     vifname= 'p0dmv'
     main_ns.netns.link('add', kind=encap, ifname=vifname,
@@ -897,9 +951,10 @@ def test_multi_ns(encap):
 @cpdecorate(tag='main_ns')
 @cpdecorate(tag='myns', parent_tag='main_ns')
 def do_test_multi_ns_bond(main_ns, myns, encap):
-    hwports = list(range(3))
-    prep_bond(main_ns.cpserver, main_ns.cp, main_ns.netns,
-              hwports=hwports, address=None)
+    nics = [create_nic(i) for i in range(3)]
+
+    bond_name, slavenames = prep_bond(main_ns.cpserver, main_ns.cp,
+                                      main_ns.netns, nics=nics, address=None)
 
     main_ns.netns.link('add', kind=encap, ifname='bond2mv',
                        link=main_ns.netns.link_lookup(ifname='bond2')[0])
@@ -915,8 +970,9 @@ def do_test_multi_ns_bond(main_ns, myns, encap):
     v = cicp_verinfo(0,0)
     k = cp_fwd_key(any_ip4, IP('192.168.0.1'))
 
-    for active in hwports + list(reversed(hwports)):
-        bond_set_active(main_ns.cpserver, 'bond2', 'O%d'%active)
+    nics_indexes = list(range(len(nics)))
+    for active in nics_indexes + list(reversed(nics_indexes)):
+        bond_set_active(main_ns.cpserver, 'bond2', slavenames[active])
         expected_hwports = 1 << active
 
         d = wait_for_hwports(myns.cp, v, k, 3, expected_hwports)

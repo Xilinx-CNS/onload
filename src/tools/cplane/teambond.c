@@ -79,7 +79,7 @@ port_find_or_add(struct cp_session* s, ci_ifid_t ifindex)
 
   bond->slave.master = CICP_ROWID_BAD;
   bond->slave.flags = 0;
-  cp_bond_slave_set_hwport(bond, &mib->llap[llap_id]);
+  cp_bond_slave_set_hwports(bond, &mib->llap[llap_id]);
 
   return id;
 }
@@ -200,17 +200,14 @@ team_get_hwports(struct cp_session* s, cicp_rowid_t team_id,
   }
 
   do {
-    cicp_hwport_mask_t m;
-
     ci_assert_nequal(slave, CICP_ROWID_BAD);
     if( s->bond[slave].slave.flags & CICP_BOND_ROW_FLAG_UNSUPPORTED ) {
       return false;
     }
 
-    m = cp_hwport_make_mask(s->bond[slave].slave.hwport);
-    *rx_ports |= m;
+    *rx_ports |= s->bond[slave].slave.hwports;
     if( s->bond[slave].slave.flags & CICP_BOND_ROW_FLAG_ACTIVE )
-      *tx_ports |= m;
+      *tx_ports |= s->bond[slave].slave.hwports;
   } while( (slave = s->bond[slave].next) != CICP_ROWID_BAD );
 
   return true;
@@ -624,9 +621,9 @@ __cp_team_print(struct cp_session* s, cicp_bond_row_t* bond_table)
         break;
       case CICP_BOND_ROW_TYPE_SLAVE:
         cp_print(s, "  Row %d: SLV if %d, master %d, agg_id %d, "
-                 "next %d, hwport %d, flags %d (%s %s%s%s)",
+                 "next %d, hwports 0x%08x, flags %d (%s %s%s%s)",
                  id, row->ifid, row->slave.master, row->agg_id,
-                 row->next, row->slave.hwport, row->slave.flags,
+                 row->next, row->slave.hwports, row->slave.flags,
                  row->slave.flags & CICP_BOND_ROW_FLAG_ACTIVE ?
                  "Active" : "Inactive",
                  row->slave.flags & CICP_BOND_ROW_FLAG_UNSUPPORTED ?

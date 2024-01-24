@@ -12,6 +12,7 @@ MY_DIR = os.path.abspath(os.path.dirname(__file__))
 # FIXME add mechanism to verify their correctness automatically
 
 CI_CFG_IPV6 = True
+CI_CFG_MAX_HWPORTS = 30
 
 '''
 /* Keys for forward cache table. */

@@ -48,7 +48,7 @@ void cp_dump_llap_table(struct cp_mibs* mib)
     if( cicp_llap_row_is_free(&mib->llap[id]) )
       return;
 
-    ci_uint8 flags = mib->llap[id].flags;
+    cp_llap_flags_t flags = mib->llap[id].flags;
     printf("llap[%03d]: %8s (%d) %s mtu %d xdp/id:%d\n",
            id, mib->llap[id].name, mib->llap[id].ifindex,
            (flags & CP_LLAP_UP) ? "UP" : "DOWN",

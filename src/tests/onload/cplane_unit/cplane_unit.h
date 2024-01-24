@@ -74,7 +74,8 @@ extern void cp_timer_expire(struct cp_timer* which, int type);
 
 extern void
 cp_unit_nl_handle_link_msg(struct cp_session* s, uint16_t nlmsg_type,
-			   int ifindex, const char* name, const char* mac);
+			   int ifindex, cicp_hwport_mask_t hwports,
+			   const char* name, const char* mac);
 
 extern void
 cp_unit_nl_handle_macvlan_link_msg(struct cp_session* s, uint16_t nlmsg_type,

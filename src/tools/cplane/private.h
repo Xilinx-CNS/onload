@@ -217,7 +217,7 @@ typedef struct {
   ci_uint16 agg_id; /* used by bond_3ad only */
   union{
     struct {
-      ci_hwport_id_t hwport;
+      cicp_hwport_mask_t hwports;
       cicp_rowid_t master;
       ci_uint8 flags;
     } slave;
@@ -1105,11 +1105,11 @@ cp_mac_find_row(struct cp_session* s, int af, ci_addr_t addr, ci_ifid_t ifindex)
 }
 
 static inline void
-cp_bond_slave_set_hwport(cicp_bond_row_t* bond, const cicp_llap_row_t* llap)
+cp_bond_slave_set_hwports(cicp_bond_row_t* bond, const cicp_llap_row_t* llap)
 {
-  bond->slave.hwport = cp_hwport_mask_first(llap->tx_hwports);
+  bond->slave.hwports = llap->tx_hwports;
   if( (llap->encap.type & (CICP_LLAP_TYPE_VLAN | CICP_LLAP_TYPE_BOND)) ||
-      bond->slave.hwport == CI_HWPORT_ID_BAD ) {
+      bond->slave.hwports == 0 ) {
     bond->slave.flags |= CICP_BOND_ROW_FLAG_UNSUPPORTED;
   }
   else {

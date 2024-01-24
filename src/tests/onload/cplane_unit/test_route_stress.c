@@ -15,6 +15,7 @@
 static const int ITERATIONS = 1000000;
 static const int TABLE_VALIDITY_CHECKS = 1000;
 static const int IFINDEX = 1;
+static const int IFHWPORTS = 0x01;
 
 /* The control plane doesn't do anything very much with preferred source
  * addresses and next hops, so we just use one of each when building
@@ -263,7 +264,7 @@ int main(void)
   /* There is not much in the way of interaction between the routing and LLAP
    * tables, so we only use a single interface. */
   const char mac[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x00};
-  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, IFINDEX, "ethO0", mac);
+  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, IFINDEX, IFHWPORTS, "ethO0", mac);
 
   generate_random_route_table(&s);
 
