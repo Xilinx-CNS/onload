@@ -231,14 +231,14 @@ static void oo_hwport_up(struct oo_nic* onic, int up)
 }
 
 
-/* This function will create an oo_nic if one hasn't already been created.
- *
- * There are two code paths whereby this function can be called multiple
- * times for the same device:
- *
- * - If the interface was IFF_UP when this driver was loaded, then
- *   oo_netdev_event() will call oo_netdev_may_add() before dl_probe is run,
- *   which will call oo_netdev_may_add() itself.
+/* This function is called when an interface comes up and handles doing any
+ * necessary notifications to the interested parts of onload.  It can be
+ * called multiple times for the same device if the interface was IFF_UP when
+ * this driver was loaded, then oo_netdev_event() will call oo_netdev_may_add()
+ * before dl_probe is run, which will call oo_netdev_may_add() itself.
+ * However, in that case we will ignore it as the NIC will not yet be known
+ * to the resource driver. Instead we will check if the interface is up at
+ * probe time and call it again if so.
  *
  * Once a device is noticed by onload, it should stay registered in cplane
  * despite going up or being hotplugged.
@@ -248,8 +248,6 @@ struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
   struct oo_nic* onic;
 
   onic = oo_nic_find_dev(net_dev);
-  if( onic == NULL )
-    onic = oo_nic_add(net_dev);
 
   if( onic != NULL ) {
     oo_hwport_up(onic, net_dev->flags & IFF_UP);
@@ -271,11 +269,12 @@ struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev)
 
 static int oo_nic_probe(const struct net_device* net_dev)
 {
-  struct oo_nic* onic = NULL;
-  if( ! netif_running(net_dev) ) {
-    onic = oo_nic_find_dev(net_dev);
-    if( onic != NULL ) {
-      /* We are dealing here with hotplug.  We block kernel traffic using drop
+  struct oo_nic* onic = oo_nic_find_dev(net_dev);
+
+  if( onic != NULL ) {
+    if( ! netif_running(net_dev) ) {
+      /* We are dealing here with hotplug so we already have relevant NIC
+       * structure in place. We just need to block kernel traffic using drop
        * filters to prevent it hitting kernel and causing connection resets.
        * The filters will be redirected towards our RXQ when the interface
        * comes up.  The branch above that deals with the case where the device
@@ -290,15 +289,15 @@ static int oo_nic_probe(const struct net_device* net_dev)
       oof_onload_hwport_removed(&efab_tcp_driver, oo_nic_hwport(onic));
     }
   }
-
-  if( onic == NULL ) {
-    onic = oo_netdev_may_add(net_dev);
+  else {
+    onic = oo_nic_add(net_dev);
     if( onic == NULL )
       return -1;
-    /* If a NIC is already up when it's probed we need to notify now. */
-    else if( netif_running(net_dev) )
-      oo_netdev_up(net_dev);
   }
+
+  /* If a NIC is already up when it's probed we need to notify now. */
+  if( netif_running(net_dev) )
+    oo_netdev_up(net_dev);
 
   return 0;
 }

@@ -135,9 +135,10 @@ struct oo_nic* oo_nic_add(const struct net_device* dev)
 
   rc = efrm_client_get_by_net_dev(dev, &oo_efrm_client_callbacks, NULL,
                                   &efrm_client);
-  if( rc != 0 )
-    /* Resource driver doesn't know about this ifindex. */
-    goto fail1;
+  /* This function is only called via a resource driver notification, so the
+   * client must have been added and cannot have been removed while the rtnl
+   * lock is still held. */
+  EFRM_ASSERT(rc == 0);
 
   for( i = 0; i < max; ++i )
     if( (onic = &oo_nics[i])->efrm_client == NULL )
@@ -166,7 +167,6 @@ struct oo_nic* oo_nic_add(const struct net_device* dev)
 
  fail2:
   efrm_client_put(efrm_client);
- fail1:
   return NULL;
 }
 
