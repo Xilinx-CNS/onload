@@ -134,10 +134,8 @@ void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
 void efct_vi_start_rxq(ef_vi* vi, int ix);
 int efct_vi_prime(ef_vi* vi, ef_driver_handle dh);
 int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len);
-#ifdef __KERNEL__
 int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
                               unsigned* pktix);
-#endif
 
 
 /* This returns the ID of the next RX buffer in the RXQ.  In the absence of

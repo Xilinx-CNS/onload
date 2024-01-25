@@ -20,6 +20,7 @@ EFVI_SRCS	:=		\
 		ef100_vi.c      \
 		efxdp_vi.c      \
 		efct_vi.c       \
+		efct_kbufs.c    \
 		ef10ct_vi.c
 
 LIB_SRCS	:=		\
