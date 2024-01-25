@@ -5,12 +5,10 @@ $(shell echo >&2 "KPATH is not set.")
 $(error KPATH is not set.)
 endif
 
-# Extract the Linux kernel version from a line read from utsrelease.h.
-linux_version = $(shell printf '$(1)' | sed -r 's/^#define UTS_RELEASE "([0-9]+(\.[0-9]+)*).*/\1/; t; d')
-
 LINUX		   := 1
 
-LINUX_VERSION_N := $(call linux_version,$(file < $(KPATH)/include/generated/utsrelease.h))
+KVER := $(subst $\",,$(shell echo 'UTS_RELEASE' | gcc -E -P -include $(KPATH)/include/generated/utsrelease.h -))
+LINUX_VERSION_N := $(shell printf '$(KVER)' | sed -r 's/([0-9]+(\.[0-9]+)*).*/\1/; t; d')
 ifeq ($(LINUX_VERSION_N),)
 $(error Failed to extract kernel version from utsrelease.h)
 endif
