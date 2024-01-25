@@ -5,9 +5,15 @@ $(shell echo >&2 "KPATH is not set.")
 $(error KPATH is not set.)
 endif
 
+# Extract the Linux kernel version from a line read from utsrelease.h.
+linux_version = $(shell printf '$(1)' | sed -r 's/^#define UTS_RELEASE "([0-9]+(\.[0-9]+)*).*/\1/; t; d')
+
 LINUX		   := 1
 
-LINUX_VERSION_3	   := $(shell cat $(KPATH)/include/generated/utsrelease.h 2>/dev/null | sed 's/^\#define UTS_RELEASE \"\([0-9]\+\.[0-9]\+\.[0-9]\+\).*/\1/; t; d')
+LINUX_VERSION_N := $(call linux_version,$(file < $(KPATH)/include/generated/utsrelease.h))
+ifeq ($(LINUX_VERSION_N),)
+$(error Failed to extract kernel version from utsrelease.h)
+endif
 
 DRIVER		   := 1
 MMAKE_USE_KBUILD   := 1
@@ -43,6 +49,6 @@ greater_version = $(shell printf "$(1)\n$(2)\n" | sort --version-sort | tail -1)
 # This approach does not work on Linux < 5.4, so in order not to break old
 # kernels, do it only with Linux >= 6.0.
 KBUILD_LIB_MAKE_TRG ?=
-ifeq ($(call greater_version,$(LINUX_VERSION_3),6.0), $(LINUX_VERSION_3))
+ifeq ($(call greater_version,$(LINUX_VERSION_N),6.0), $(LINUX_VERSION_N))
 KBUILD_LIB_MAKE_TRG += $(lib_obj_path)
 endif
