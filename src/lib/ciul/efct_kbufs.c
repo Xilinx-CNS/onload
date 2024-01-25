@@ -23,7 +23,7 @@
 #ifndef __KERNEL__
 int superbuf_config_refresh(ef_vi* vi, int qid)
 {
-  ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
   ci_resource_op_t op;
   op.op = CI_RSOP_RXQ_REFRESH;
   op.id = efch_make_resource_id(rxq->resource_id);
@@ -36,7 +36,7 @@ int superbuf_config_refresh(ef_vi* vi, int qid)
 
 int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 {
-  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
+  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_rxqs.shm->q[qid];
   struct efab_efct_rxq_uk_shm_rxq_entry* entry;
   uint32_t added, removed;
   int sbid;
@@ -59,7 +59,7 @@ int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 
 void superbuf_free(ef_vi* vi, int qid, int sbid)
 {
-  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
+  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_rxqs.shm->q[qid];
   uint32_t added, removed, freeq_size;
 
   added = shm->freeq.added;
@@ -89,7 +89,7 @@ void superbuf_free(ef_vi* vi, int qid, int sbid)
 
 bool efct_rxq_can_rollover(const ef_vi* vi, int qid)
 {
-  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
+  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_rxqs.shm->q[qid];
   return OO_ACCESS_ONCE(shm->rxq.added) != shm->rxq.removed;
 }
 
@@ -163,7 +163,7 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
 
   efct_vi_attach_rxq_internal(vi, ix, ra.out_id.index,
                               superbuf_config_refresh);
-  efct_vi_start_rxq(vi, ix);
+  efct_vi_start_rxq(vi, ix, qid);
   return 0;
 }
 #endif
@@ -173,7 +173,7 @@ void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
 {
   ef_vi_efct_rxq* rxq;
 
-  rxq = &vi->efct_rxq[ix];
+  rxq = &vi->efct_rxqs.q[ix];
   rxq->resource_id = resource_id;
   rxq->config_generation = 0;
   rxq->refresh_func = refresh_func;
@@ -192,8 +192,8 @@ int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
     EF_VI_BUILD_ASSERT(CI_ARRAY_SIZE(op.rxq_current) >= EF_VI_MAX_EFCT_RXQS);
 
     op.crp_id = efch_make_resource_id(vi->vi_resource_id);
-    for( i = 0; i < vi->max_efct_rxq; ++i ) {
-      ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
+    for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
+      ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
 
       op.rxq_current[i].rxq_id = efch_make_resource_id(rxq->resource_id);
       if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
@@ -213,11 +213,11 @@ int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
 void efct_vi_munmap_internal(ef_vi* vi)
 {
 #ifdef __KERNEL__
-  kvfree(vi->efct_rxq[0].superbufs);
+  kvfree(vi->efct_rxqs.q[0].superbufs);
 #else
-  munmap((void*)vi->efct_rxq[0].superbuf,
-         (size_t)vi->max_efct_rxq * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
-  free(vi->efct_rxq[0].current_mappings);
+  munmap((void*)vi->efct_rxqs.q[0].superbuf,
+         (size_t)vi->efct_rxqs.max_qs * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
+  free(vi->efct_rxqs.q[0].current_mappings);
 #endif
 }
 
@@ -225,7 +225,7 @@ void efct_vi_munmap_internal(ef_vi* vi)
 void efct_vi_munmap(ef_vi* vi)
 {
   efct_vi_munmap_internal(vi);
-  ci_resource_munmap(vi->dh, vi->efct_shm,
+  ci_resource_munmap(vi->dh, vi->efct_rxqs.shm,
                      CI_ROUND_UP(CI_EFCT_SHM_BYTES(EF_VI_MAX_EFCT_RXQS),
                                  CI_PAGE_SIZE));
 }
@@ -237,10 +237,12 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
   void* space;
   int i;
 
+  vi->efct_rxqs.max_qs = EF_VI_MAX_EFCT_RXQS;
+
 #ifdef __KERNEL__
-  space = kvmalloc((size_t)vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES *
+  space = kvmalloc(vi->efct_rxqs.max_qs * CI_EFCT_MAX_HUGEPAGES *
                    CI_EFCT_SUPERBUFS_PER_PAGE *
-                   sizeof(vi->efct_rxq[0].superbufs[0]), GFP_KERNEL);
+                   sizeof(vi->efct_rxqs.q[0].superbufs[0]), GFP_KERNEL);
   if( space == NULL )
     return -ENOMEM;
 #else
@@ -248,7 +250,7 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
   const size_t bytes_per_rxq =
     (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
   const size_t mappings_bytes =
-    vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES * sizeof(mappings[0]);
+    vi->efct_rxqs.max_qs * CI_EFCT_MAX_HUGEPAGES * sizeof(mappings[0]);
 
   mappings = malloc(mappings_bytes);
   if( mappings == NULL )
@@ -266,7 +268,7 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
    * In kernelspace we can't do this trickery (see the other #ifdef branch), so
    * we pay the price of doing the naive array lookups: we have an array of
    * pointers to superbufs. */
-  space = mmap(NULL, vi->max_efct_rxq * bytes_per_rxq, PROT_NONE,
+  space = mmap(NULL, vi->efct_rxqs.max_qs * bytes_per_rxq, PROT_NONE,
                MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
                -1, 0);
   if( space == MAP_FAILED ) {
@@ -274,13 +276,15 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
     return -ENOMEM;
   }
   
-  madvise(space, vi->max_efct_rxq * bytes_per_rxq, MADV_DONTDUMP);
+  madvise(space, vi->efct_rxqs.max_qs * bytes_per_rxq, MADV_DONTDUMP);
 #endif
 
-  vi->efct_shm = shm;
+  vi->efct_rxqs.active_qs = &shm->active_qs;
+  vi->efct_rxqs.shm = shm;
 
-  for( i = 0; i < vi->max_efct_rxq; ++i ) {
-    ef_vi_efct_rxq* rxq = &vi->efct_rxq[i];
+  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
+    ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
+    rxq->qid = shm->q[i].qid;
 #ifdef __KERNEL__
     rxq->superbufs = (const char**)space +
                      i * CI_EFCT_MAX_HUGEPAGES * CI_EFCT_SUPERBUFS_PER_PAGE;
@@ -289,26 +293,22 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
     rxq->superbuf = (char*)space + i * bytes_per_rxq;
     rxq->current_mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
 #endif
+    rxq->live.superbuf_pkts = &shm->q[i].superbuf_pkts;
+    rxq->live.config_generation = &shm->q[i].config_generation;
+    rxq->live.time_sync = &shm->q[i].time_sync;
   }
 
   return 0;
 }
 
 #ifndef __KERNEL__
-static struct efab_efct_rxq_uk_shm_base zero_efct_shm = {
-  .active_qs = 0,
-};
-
 int efct_vi_mmap_init(ef_vi* vi, int rxq_capacity)
 {
   int rc;
   void* p;
 
-  if( rxq_capacity == 0 ) {
-    vi->efct_shm = &zero_efct_shm;
-    vi->max_efct_rxq = 0;
+  if( rxq_capacity == 0 )
     return 0;
-  }
 
   rc = ci_resource_mmap(vi->dh, vi->vi_resource_id, EFCH_VI_MMAP_RXQ_SHM,
                         CI_ROUND_UP(CI_EFCT_SHM_BYTES(EF_VI_MAX_EFCT_RXQS),
@@ -321,7 +321,7 @@ int efct_vi_mmap_init(ef_vi* vi, int rxq_capacity)
 
   rc = efct_vi_mmap_init_internal(vi, p);
   if( rc )
-    ci_resource_munmap(vi->dh, vi->efct_shm,
+    ci_resource_munmap(vi->dh, vi->efct_rxqs.shm,
                        CI_ROUND_UP(CI_EFCT_SHM_BYTES(EF_VI_MAX_EFCT_RXQS),
                                    CI_PAGE_SIZE));
   return rc;

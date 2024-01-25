@@ -119,7 +119,7 @@ int ef_vi_rxq_reinit(ef_vi* vi, ef_vi_reinit_callback cb, void* cb_arg)
   
   /* shared rxqs always claim to have a full rxq because buffer posting is
    * managed elsewhere, but it's a lie. */
-  if( vi->vi_rxq.mask && !vi->max_efct_rxq ) {
+  if( vi->vi_rxq.mask && ! vi->efct_rxqs.active_qs ) {
     while( state->rxq.removed < state->rxq.added ) {
       di = state->rxq.removed & vi->vi_rxq.mask;
       BUG_ON(vi->vi_rxq.ids[di] == EF_REQUEST_ID_MASK);
@@ -430,7 +430,7 @@ void ef_vi_reset_rxq(struct ef_vi* vi)
   qs->posted = 0;
   /* shared rxqs have their buffer posting managed elsewhere, not by the app,
    * so let's make it look like the queue is constantly full */
-  if( vi->max_efct_rxq )
+  if( vi->efct_rxqs.active_qs )
     qs->added = vi->vi_rxq.mask + 1;
   else
     qs->added = 0;

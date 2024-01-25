@@ -787,12 +787,26 @@ typedef struct {
 
 typedef int ef_vi_efct_superbuf_refresh_t(struct ef_vi*, int);
 
-/*! \brief EFCT RX buffer memory and metadata
+/*! \brief EFCT RX buffer memory and metadata accessors
 **
 ** Users should not access this structure.
 */
 typedef struct {
-  unsigned resource_id;
+  /** Pointers to status which might be updated in the background */
+  struct {
+    /* Number of packets per superbuf, zero for an inactive queue */
+    const uint32_t* superbuf_pkts;
+    /* Compare with our local copy to indicate whether to update config */
+    const unsigned* config_generation;
+    /* Latest timesync event */
+    const uint64_t* time_sync;
+  } live;
+
+  /** Hardware queue ID */
+  int qid;
+  /** Last known configuration generation to compare with live value.
+    * Also used as a zero superbuf_pkts value if the queue is inactive. */
+  uint32_t config_generation;
 #ifdef __KERNEL__
   /** array of CI_EFCT_MAX_SUPERBUFS elements */
   const char** superbufs;
@@ -801,9 +815,32 @@ typedef struct {
   const char* superbuf;
   uint64_t* current_mappings;
 #endif
-  uint32_t config_generation;
+
+  /* TODO hide the rest */
+  unsigned resource_id;
   ef_vi_efct_superbuf_refresh_t* refresh_func;
 } ef_vi_efct_rxq;
+
+/*! \brief The collection of EFCT RX queue accessors
+**
+** Users should not access this structure.
+*/
+typedef struct {
+  /** Points to a bitmask indicating which queues are active.
+    * The pointer can be compared with NULL to check whether this interface
+    * has an efct rx path, whether or not it's configured to use it. */
+  const uint64_t*               active_qs;
+  /** 1 + highest allowed index of a used element in the q array.
+    * Also used as a zero active_qs bitmask if the interface is tx-only. */
+  uint64_t                      max_qs;
+  /** Attached rxqs for efct VIs (NB: not necessarily in rxq order) */
+  ef_vi_efct_rxq                q[EF_VI_MAX_EFCT_RXQS];
+
+  /** efct kernel/userspace shared queue area. Exposed for debugging.
+   ** TODO provide generic access to stats and hide this */
+  struct efab_efct_rxq_uk_shm_base* shm;
+} ef_vi_efct_rxqs;
+
 
 /*! \brief State of a virtual interface
 **
@@ -999,12 +1036,8 @@ typedef struct ef_vi {
   int                           vi_qs_n;
   /** Id of queue a pending PFTF packet belongs to */
   uint8_t                       future_qid;
-  /** Attached rxqs for efct VIs (NB: not necessarily in rxq order) */
-  ef_vi_efct_rxq                efct_rxq[EF_VI_MAX_EFCT_RXQS];
-  /** efct kernel/userspace shared queue area. */
-  struct efab_efct_rxq_uk_shm_base* efct_shm;
-  /** 1 + highest allowed index of a used element in efct_rxq */
-  int                           max_efct_rxq;
+  /** Access to EFCT queues */
+  ef_vi_efct_rxqs               efct_rxqs;
 
   /** Number of TX alternatives for the virtual interface */
   unsigned                      tx_alt_num;

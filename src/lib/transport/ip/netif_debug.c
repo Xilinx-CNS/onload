@@ -306,7 +306,7 @@ static void ci_netif_dump_pkt_summary(ci_netif* ni, oo_dump_log_fn_t logger,
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     for( i = 0; i < ci_netif_num_vis(ni); ++i ) {
       ef_vi* pvi = &ni->nic_hw[intf_i].vis[i];
-      if( ! pvi->efct_shm )
+      if( ! pvi->efct_rxqs.active_qs )
         rx_ring += ef_vi_receive_fill_level(pvi);
       tx_ring += ef_vi_transmit_fill_level(pvi);
       tx_oflow += ns->nic[intf_i].dmaq[i].num;
@@ -739,9 +739,9 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   logger(log_arg, "  evq: sync_synced=%x sync_flags=%x",
          vi->ep_state->evq.sync_timestamp_synchronised,
          vi->ep_state->evq.sync_flags);
-  if( vi->efct_shm ) {
-    for( i = 0; i < vi->max_efct_rxq; ++i ) {
-      struct efab_efct_rxq_uk_shm_q* q = &vi->efct_shm->q[i];
+  if( vi->efct_rxqs.shm ) {
+    for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
+      const struct efab_efct_rxq_uk_shm_q* q = &vi->efct_rxqs.shm->q[i];
       if( ! q->superbuf_pkts )
         continue;
       logger(log_arg, "  rxq[%d]: hw=%d cfg=%u pkts=%u in=%u out=%u",

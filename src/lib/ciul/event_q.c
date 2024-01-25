@@ -33,7 +33,7 @@ int ef_eventq_wait(ef_vi* evq, ef_driver_handle fd,
   */
   ci_resource_op_t  op;
 
-  if( evq->max_efct_rxq ) {
+  if( evq->efct_rxqs.active_qs ) {
     struct pollfd pfd = {.fd = fd, .events = POLLIN};
     struct timespec t = {0, 0};
     /* An inefficient implementation (it enters the kernel twice) but, as the

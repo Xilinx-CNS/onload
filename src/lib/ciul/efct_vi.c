@@ -39,7 +39,7 @@ struct efct_rx_descriptor
 /* pkt_ids are:
  *  bits 0..15 packet index in superbuf
  *  bits 16..26 superbuf index
- *  bits 27..29 rxq (as an index in to vi->efct_rxq, not as a hardware ID)
+ *  bits 27..29 rxq (as an index in to vi->efct_rxqs.q, not as a hardware ID)
  *  bits 30..31 unused/zero
  *  [NB: bit 31 is stolen by some users to cache the superbuf's sentinel]
  * This layout is not part of the stable ABI. rxq index is slammed up against
@@ -119,9 +119,9 @@ int16_t efct_rx_sb_free_next(ef_vi* vi, uint32_t qid, uint32_t sbid)
   return efct_rx_desc_for_sb(vi, qid, sbid)->sbid_next;
 }
 
-static bool efct_rxq_is_active(const struct efab_efct_rxq_uk_shm_q* shm)
+static bool efct_rxq_is_active(const ef_vi_efct_rxq* rxq)
 {
-  return shm->superbuf_pkts != 0;
+  return *rxq->live.superbuf_pkts != 0;
 }
 
 /* The superbuf descriptor for this packet */
@@ -136,12 +136,12 @@ static const char* efct_superbuf_base(const ef_vi* vi, size_t pkt_id)
 {
 #ifdef __KERNEL__
   /* FIXME: is this right? I think the table is indexed by huge page not sbuf */
-  return vi->efct_rxq[0].superbufs[pkt_id_to_global_superbuf_ix(pkt_id)];
+  return vi->efct_rxqs.q[0].superbufs[pkt_id_to_global_superbuf_ix(pkt_id)];
 #else
-  /* Sneakily rely on vi->efct_rxq[i].superbuf being contiguous, thus avoiding
+  /* Sneakily rely on vi->efct_rxqs.q[i].superbuf being contiguous, thus avoiding
    * an array lookup (or, more specifically, relying on the TLB to do the
    * lookup for us) */
-  return vi->efct_rxq[0].superbuf +
+  return vi->efct_rxqs.q[0].superbuf +
          (size_t)pkt_id_to_global_superbuf_ix(pkt_id) * EFCT_RX_SUPERBUF_BYTES;
 #endif
 }
@@ -170,10 +170,9 @@ static bool efct_rxq_need_rollover(const ef_vi_efct_rxq_ptr* rxq_ptr)
   return rxq_ptr_to_pkt_id(rxq_ptr->next) >= rxq_ptr->end;
 }
 
-static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq,
-                                 const struct efab_efct_rxq_uk_shm_q* shm)
+static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq)
 {
-  return rxq->config_generation != shm->config_generation;
+  return *rxq->live.config_generation != rxq->config_generation;
 }
 
 /* The header following the next packet, or null if not available.
@@ -190,10 +189,9 @@ static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
  * efct_poll_rx to ensure none are missed. */
 static bool efct_rxq_check_event(const ef_vi* vi, int qid)
 {
-  const ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  const ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
   const ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
-  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
-  if( ! efct_rxq_is_active(shm) )
+  if( ! efct_rxq_is_active(rxq) )
     return false;
   if( efct_rxq_need_rollover(rxq_ptr) )
 #ifndef __KERNEL__
@@ -205,7 +203,7 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
     return true;
 #endif
 
-  return efct_rxq_need_config(rxq, shm) ||
+  return efct_rxq_need_config(rxq) ||
      efct_rx_next_header(vi, rxq_ptr->next) != NULL;
 }
 
@@ -698,7 +696,7 @@ static int rx_rollover(ef_vi* vi, int qid)
 {
   uint32_t pkt_id;
   uint32_t next;
-  uint32_t superbuf_pkts = vi->efct_shm->q[qid].superbuf_pkts;
+  uint32_t superbuf_pkts = *vi->efct_rxqs.q[qid].live.superbuf_pkts;
   ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
   unsigned sbseq;
   bool sentinel;
@@ -795,8 +793,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
-  ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
-  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
+  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
   int i;
 
   if( efct_rxq_need_rollover(rxq_ptr) )
@@ -805,9 +802,9 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
        * maintain that policy */
       return 0;
 
-  if( efct_rxq_need_config(rxq, shm) ) {
-    unsigned new_generation = OO_ACCESS_ONCE(shm->config_generation);
-    /* We have to use the shm->config_generation from before we started
+  if( efct_rxq_need_config(rxq) ) {
+    unsigned new_generation = OO_ACCESS_ONCE(*rxq->live.config_generation);
+    /* We have to use the live config_generation from before we started
      * thinking, to deal with multiple successive refreshes correctly, but we
      * must write it after we're done, to deal with concurrent calls to
      * efct_rxq_check_event() */
@@ -817,11 +814,11 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
        * every poll is unlikely to be productive either. Except in
        * kernelspace, since one of the possible outcomes is a crash and we
        * don't want that */
-      OO_ACCESS_ONCE(rxq->config_generation) = new_generation;
+      rxq->config_generation = new_generation;
 #endif
       return 0;
     }
-    OO_ACCESS_ONCE(rxq->config_generation) = new_generation;
+    rxq->config_generation = new_generation;
   }
 
   /* Avoid crossing a superbuf in a single poll. Otherwise we'd need to check
@@ -876,7 +873,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
         break;
       }
 
-      efct_rx_discard(shm->qid, pkt_id, discard_flags, header, &evs[i]);
+      efct_rx_discard(rxq->qid, pkt_id, discard_flags, header, &evs[i]);
     }
     else {
       /* For simplicity, require configuration for a fixed data offset.
@@ -892,7 +889,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
       /* q_id should technically be set to the queue label, however currently
        * we don't allow the label to be changed so it's always the hardware
        * qid */
-      evs[i].rx_ref.q_id = shm->qid;
+      evs[i].rx_ref.q_id = rxq->qid;
       evs[i].rx_ref.filter_id = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_FILTER);
       evs[i].rx_ref.user = CI_OWORD_FIELD(*header, EFCT_RX_HEADER_USER);
     }
@@ -1006,7 +1003,7 @@ int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len)
 static int efct_ef_eventq_poll(ef_vi* vi, ef_event* evs, int evs_len)
 {
   int n = 0;
-  uint64_t qs = vi->efct_shm->active_qs;
+  uint64_t qs = *vi->efct_rxqs.active_qs;
   for ( ; ; ) {
     int i = __builtin_ffsll(qs);
     if (i == 0)
@@ -1064,17 +1061,18 @@ int efct_vi_find_free_rxq(ef_vi* vi, int qid)
 {
   int ix;
 
-  for( ix = 0; ix < vi->max_efct_rxq; ++ix ) {
-    if( vi->efct_shm->q[ix].qid == qid )
+  for( ix = 0; ix < vi->efct_rxqs.max_qs; ++ix ) {
+    if( vi->efct_rxqs.q[ix].qid == qid )
       return -EALREADY;
-    if( ! efct_rxq_is_active(&vi->efct_shm->q[ix]) )
+    if( ! efct_rxq_is_active(&vi->efct_rxqs.q[ix]) )
       return ix;
   }
   return -ENOSPC;
 }
 
-void efct_vi_start_rxq(ef_vi* vi, int ix)
+void efct_vi_start_rxq(ef_vi* vi, int ix, int qid)
 {
+  vi->efct_rxqs.q[ix].qid = qid;
   /* TBD do we need this? Or is it already zero-initialised at this point? */
   vi->ep_state->rxq.rxq_ptr[ix].end = 0;
 }
@@ -1171,17 +1169,16 @@ void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
 
 const void* efct_vi_rx_future_peek(ef_vi* vi)
 {
-  uint64_t qs = vi->efct_shm->active_qs;
+  uint64_t qs = *vi->efct_rxqs.active_qs;
   for( ; CI_LIKELY( qs ); qs &= (qs - 1) ) {
     unsigned qid = __builtin_ctzll(qs);
-    struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
     ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
     unsigned pkt_id;
 
     /* Skip queues that have pending non-packet related work
      * The work will be picked up by poll or noticed by efct_rxq_check_event */
     if( efct_rxq_need_rollover(rxq_ptr)  ||
-        efct_rxq_need_config(&vi->efct_rxq[qid], shm) )
+        efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
       continue;
     pkt_id = OO_ACCESS_ONCE(rxq_ptr->prev);
     EF_VI_ASSERT(pkt_id < rxq_ptr->end);
@@ -1203,7 +1200,7 @@ int efct_vi_rx_future_poll(ef_vi* vi, ef_event* evs, int evs_len)
   int count;
 
   EF_VI_ASSERT(((ci_int8) vi->future_qid) >= 0);
-  EF_VI_ASSERT(efct_rxq_is_active(&vi->efct_shm->q[vi->future_qid]));
+  EF_VI_ASSERT(efct_rxq_is_active(&vi->efct_rxqs.q[vi->future_qid]));
   count = efct_poll_rx(vi, vi->future_qid, evs, evs_len);
 #ifndef NDEBUG
   if( count )
@@ -1219,7 +1216,7 @@ int efct_ef_eventq_check_event(const ef_vi* vi)
 
 unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid)
 {
-  if( efct_rxq_need_config(&vi->efct_rxq[qid], &vi->efct_shm->q[qid]) )
+  if( efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
     return ~0u;
   return vi->ep_state->rxq.rxq_ptr[qid].prev;
 }
@@ -1233,7 +1230,7 @@ int efct_vi_rxpkt_get_timestamp(ef_vi* vi, uint32_t pkt_id,
   ci_qword_t time_sync;
 
   time_sync.u64[0] =
-    OO_ACCESS_ONCE(vi->efct_shm->q[pkt_id_to_rxq_ix(pkt_id)].time_sync);
+    OO_ACCESS_ONCE(*vi->efct_rxqs.q[pkt_id_to_rxq_ix(pkt_id)].live.time_sync);
 
   if( pkt_id_to_index_in_superbuf(pkt_id) == desc->superbuf_pkts - 1 ) {
     ts = desc->final_timestamp;
@@ -1263,17 +1260,17 @@ int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
 {
   ef_vi_rxq_state* qs = &vi->ep_state->rxq;
   ef_vi_efct_rxq_ptr* rxq_ptr = &qs->rxq_ptr[qid];
-  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
+  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
   uint64_t sbseq_next;
   unsigned ix;
 
-  if( ! efct_rxq_is_active(shm) )
+  if( ! efct_rxq_is_active(rxq) )
     return -ENOENT;
 
   sbseq_next = OO_ACCESS_ONCE(rxq_ptr->next);
   ix = pkt_id_to_index_in_superbuf(sbseq_next);
 
-  if( ix >= shm->superbuf_pkts ) {
+  if( ix >= *rxq->live.superbuf_pkts ) {
     *sbseq = (sbseq_next >> 32) + 1;
     *pktix = 0;
   }
@@ -1353,7 +1350,6 @@ void efct_vi_init(ef_vi* vi)
   EF_VI_ASSERT( vi->nic_type.nic_flags & EFHW_VI_NIC_CTPIO_ONLY );
 
   efct_vi_initialise_ops(vi);
-  vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
   vi->evq_phase_bits = 1;
   /* Set default rx_discard_mask for EFCT */
   vi->rx_discard_mask = (
@@ -1367,4 +1363,8 @@ void efct_vi_init(ef_vi* vi)
       efct_tx_header(0, 0, (vi->vi_flags & EF_VI_TX_TIMESTAMPS) ? 1 : 0, 0, 0);
   for( i = 0; i < CI_ARRAY_SIZE(vi->ep_state->rxq.sb_desc_free_head); i++ )
     vi->ep_state->rxq.sb_desc_free_head[i] = -1;
+
+  vi->efct_rxqs.active_qs = &vi->efct_rxqs.max_qs;
+  for( i = 0; i < EF_VI_MAX_EFCT_RXQS; ++i )
+    vi->efct_rxqs.q[i].live.superbuf_pkts = &vi->efct_rxqs.q[i].config_generation;
 }

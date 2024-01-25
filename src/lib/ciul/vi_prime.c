@@ -17,7 +17,7 @@
 
 int ef_vi_prime(ef_vi* vi, ef_driver_handle dh, unsigned current_ptr)
 {
-  if( vi->max_efct_rxq ) {
+  if( vi->efct_rxqs.active_qs ) {
     /* current_ptr is ignored on this architecture - it's not permitted to use
      * any value other than the equivalent of ef_eventq_current() */
     return efct_vi_prime(vi, dh);

@@ -549,16 +549,16 @@ int ef_vi_filter_add(ef_vi *vi, ef_driver_handle dh, const ef_filter_spec *fs,
     int rxq_no = 0;
 
 
-    if( vi->efct_shm ) {
+    if( vi->efct_rxqs.active_qs ) {
 
       /* The main intention for this is to reuse an rxq already given to the application if already given.
        * This means that if an application requests an ANY queue, subsequent calls to filter_add should steer
        * traffic to this preferred queue. Hence we should transform the CI_FILTER_FLAG_ANY_RXQ to
        * CI_FILTER_FLAG_PREF_RXQ.
        */
-      if( vi->efct_shm->q[0].superbuf_pkts ) {
+      if( *vi->efct_rxqs.active_qs & 1 ) {
         flags |= CI_FILTER_FLAG_PREF_RXQ;
-        rxq_no = vi->efct_shm->q[0].qid;
+        rxq_no = vi->efct_rxqs.q[0].qid;
       }
       
       /* If there is no preferred queue strategy, any should be fine so best hence let the driver choose. */

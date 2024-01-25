@@ -155,7 +155,7 @@ static int tcp_helper_request_wakeup_nic_impl(tcp_helper_resource_t* trs,
       ef_eventq_current(vi) / sizeof(efhw_event_t);
     efrm_eventq_request_wakeup(tcp_helper_vi(trs, intf_i), current_i);
 
-    for( i = 0; i < vi->max_efct_rxq; ++i ) {
+    for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
       struct efrm_efct_rxq* rxq = trs->nic[intf_i].thn_efct_rxq[i];
       if( rxq ) {
         unsigned sbseq, pktix;

@@ -964,9 +964,9 @@ void tcp_helper_get_filter_params(tcp_helper_resource_t* trs, int hwport,
       *rxq = NI_OPTS_TRS(trs).shared_rxq_num;
       *flags |= EFHW_FILTER_F_PREF_RXQ;
     }
-    else if( vi->efct_shm ) {
-      if( vi->efct_shm->q[0].superbuf_pkts ) {
-        *rxq = vi->efct_shm->q[0].qid;
+    else if( vi->efct_rxqs.active_qs ) {
+      if( *vi->efct_rxqs.active_qs & 1 ) {
+        *rxq = vi->efct_rxqs.q[0].qid;
         *flags |= EFHW_FILTER_F_PREF_RXQ;
       }
       else {
@@ -1015,7 +1015,7 @@ int tcp_helper_post_filter_add(tcp_helper_resource_t* trs, int hwport,
         ci_log("%s: ERROR: efrm_rxq_alloc failed (%d)", __func__, rc);
       return rc;
     }
-    efct_vi_start_rxq(vi, qix);
+    efct_vi_start_rxq(vi, qix, rxq);
 
 #if ! CI_CFG_UL_INTERRUPT_HELPER
     if( NI_OPTS(&trs->netif).int_driven ) {
@@ -1580,8 +1580,8 @@ static int allocate_vi(ci_netif* ni, struct vi_allocate_info* info,
 
 static int tcp_helper_superbuf_config_refresh(ef_vi* vi, int qid)
 {
-  return efrm_rxq_refresh_kernel(vi->dh, vi->efct_shm->q[qid].qid,
-                                 vi->efct_rxq[qid].superbufs);
+  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
+  return efrm_rxq_refresh_kernel(vi->dh, rxq->qid, rxq->superbufs);
 }
 
 
@@ -1610,12 +1610,6 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
                    vm->rxq_prefix_len);
     vi_ids += vm->rxq_size;
   }
-  else {
-    /* efct_poll_rx() will crash if called when rx hasn't been inited, so
-     * guarantee that it never will be even if somebody corrupts the shared
-     * memory */
-    vi->max_efct_rxq = 0;
-  }
   if( vm->txq_size > 0 )
     ef_vi_init_txq(vi, vm->txq_size, vm->txq_descriptors, vi_ids);
   vi->vi_i = EFAB_VI_RESOURCE_INSTANCE(vi_rs);
@@ -1630,12 +1624,12 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
     if( rc < 0 )
       return rc;
   }
-  if( vi->max_efct_rxq ) {
+  if( vi->efct_rxqs.active_qs ) {
     int i;
     int rc = efct_vi_mmap_init_internal(vi, vi_rs->efct_shm);
     if( rc < 0 )
       return rc;
-    for( i = 0; i < vi->max_efct_rxq; ++i )
+    for( i = 0; i < vi->efct_rxqs.max_qs; ++i )
       efct_vi_attach_rxq_internal(vi, i, -1 /* resource ID not needed */,
                                   tcp_helper_superbuf_config_refresh);
   }
@@ -1725,7 +1719,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     for( vi_i = 0; vi_i < CI_MAX_VIS_PER_INTF; ++vi_i ) {
       trs->nic[intf_i].thn_vi_rs[vi_i] = NULL;
       trs->nic[intf_i].thn_vi_mmap_bytes[vi_i] = 0;
-      ni->nic_hw[intf_i].vis[vi_i].efct_rxq[0].superbufs = NULL;
+      ni->nic_hw[intf_i].vis[vi_i].efct_rxqs.q[0].superbufs = NULL;
     }
 #if CI_CFG_PIO
     trs->nic[intf_i].thn_pio_rs = NULL;
@@ -1950,7 +1944,7 @@ error_out:
     for( vi_i = ci_netif_num_vis(ni) - 1; vi_i >= 0; --vi_i ) {
       if( trs->nic[intf_i].thn_vi_rs[vi_i] ) {
         ef_vi* vi = &ni->nic_hw[intf_i].vis[vi_i];
-        if( vi->efct_rxq[0].superbufs )
+        if( vi->efct_rxqs.max_qs )
           efct_vi_munmap_internal(vi);
         efrm_vi_resource_release(trs->nic[intf_i].thn_vi_rs[vi_i]);
         trs->nic[intf_i].thn_vi_rs[vi_i] = NULL;
@@ -2126,7 +2120,7 @@ static void release_vi(tcp_helper_resource_t* trs)
 #endif
     for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
       ef_vi* vi = &trs->netif.nic_hw[intf_i].vis[vi_i];
-      if( vi->efct_rxq[0].superbufs )
+      if( vi->efct_rxqs.max_qs )
         efct_vi_munmap_internal(vi);
       efrm_vi_resource_release_flushed(trs_nic->thn_vi_rs[vi_i]);
       trs_nic->thn_vi_rs[vi_i] = NULL;

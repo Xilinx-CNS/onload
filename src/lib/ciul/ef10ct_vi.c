@@ -222,7 +222,9 @@ static void ef10ct_initialise_ops(ef_vi *vi) {
 void ef10ct_vi_init(ef_vi* vi) {
     ef10ct_initialise_ops(vi);
 
-    vi->max_efct_rxq = EF_VI_MAX_EFCT_RXQS;
+    /* TODO initialise receive path. Hopefully we can use efct_vi.c directly
+     * rather than attempting to duplicate it here. */
+
     vi->evq_phase_bits = 1;
 
     vi->rx_discard_mask = (

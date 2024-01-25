@@ -1980,7 +1980,7 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
 static int oo_efct_superbuf_config_refresh(ef_vi* vi, int qid)
 {
   oo_efct_superbuf_config_refresh_t op;
-  ef_vi_efct_rxq* rxq = &vi->efct_rxq[qid];
+  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
   op.intf_i = rxq->resource_id;
   op.qid = qid;
   op.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
@@ -2018,13 +2018,13 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
     if( rc < 0 )
       return rc;
   }
-  if( vi->max_efct_rxq ) {
+  if( vi->efct_rxqs.active_qs ) {
     int i;
     int rc = efct_vi_mmap_init_internal(vi,
                         (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset));
     if( rc < 0 )
       return rc;
-    for( i = 0; i < vi->max_efct_rxq; ++i )
+    for( i = 0; i < vi->efct_rxqs.max_qs; ++i )
       efct_vi_attach_rxq_internal(vi, i, nic_i,
                                   oo_efct_superbuf_config_refresh);
   }
@@ -2050,7 +2050,7 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
 
 static void cleanup_ef_vi(ef_vi* vi)
 {
-  if( vi->max_efct_rxq )
+  if( vi->efct_rxqs.max_qs )
     efct_vi_munmap_internal(vi);
 }
 

@@ -578,7 +578,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   if( rc < 0 )
     goto fail5;
 
-  if( vi->max_efct_rxq ) {
+  if( vi->efct_rxqs.active_qs ) {
     rc = efct_vi_mmap_init(vi, rxq_capacity);
     if( rc ) {
       LOGVV(ef_log("%s: mmap (efct reserve) %d", __FUNCTION__, rc));
@@ -637,7 +637,7 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   return q_label;
 
  fail6:
-  if( vi->max_efct_rxq )
+  if( vi->efct_rxqs.max_qs )
     efct_vi_munmap(vi);
  fail5:
   if( ctpio_mmap_ptr != NULL )
@@ -708,7 +708,7 @@ int ef_vi_free(ef_vi* ep, ef_driver_handle fd)
 {
   int rc;
 
-  if( ep->max_efct_rxq )
+  if( ep->efct_rxqs.max_qs )
     efct_vi_munmap(ep);
 
   if( ep->vi_ctpio_mmap_ptr != NULL ) {

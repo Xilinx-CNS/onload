@@ -131,7 +131,7 @@ void efct_vi_munmap_internal(ef_vi* vi);
 int efct_vi_find_free_rxq(ef_vi* vi, int qid);
 void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
                                  ef_vi_efct_superbuf_refresh_t *refresh_func);
-void efct_vi_start_rxq(ef_vi* vi, int ix);
+void efct_vi_start_rxq(ef_vi* vi, int ix, int qid);
 int efct_vi_prime(ef_vi* vi, ef_driver_handle dh);
 int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len);
 int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
