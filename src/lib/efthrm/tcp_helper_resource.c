@@ -8537,6 +8537,7 @@ void oo_inject_packets_kernel(tcp_helper_resource_t* trs, int sync)
 #include <linux/syscalls.h>
 #include <uapi/linux/bpf.h>
 #include <linux/bpf.h>
+#include <net/xdp.h>
 
 
 ci_inline int oo_xdp_rx_pkt_locked(ci_netif* ni,
