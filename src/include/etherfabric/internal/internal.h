@@ -129,7 +129,6 @@ extern int efct_vi_mmap_init_internal(ef_vi* vi,
                                       struct efab_efct_rxq_uk_shm_base *shm);
 int efct_vi_find_free_rxq(ef_vi* vi, int qid);
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid);
-int efct_vi_prime(ef_vi* vi, ef_driver_handle dh);
 int efct_poll_tx(ef_vi* vi, ef_event* evs, int evs_len);
 int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
                               unsigned* pktix);

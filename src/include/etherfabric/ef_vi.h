@@ -831,6 +831,8 @@ typedef struct {
   int  (*attach)(struct ef_vi*, int qid, unsigned n_superbufs);
   /** Refresh the internal config; called if config_generation changes */
   int  (*refresh)(struct ef_vi*, int qid);
+  /** Prime the virtual interface's queues (both rx and tx) */
+  int  (*prime)(struct ef_vi*, ef_driver_handle dh);
   /** De-allocate internal resources */
   void (*cleanup)(struct ef_vi*);
 } ef_vi_efct_rxq_ops;
