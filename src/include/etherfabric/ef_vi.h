@@ -856,7 +856,7 @@ typedef struct {
 
   /** efct kernel/userspace shared queue area. Exposed for debugging.
    ** TODO provide generic access to stats and hide this */
-  struct efab_efct_rxq_uk_shm_base* shm;
+  const struct efab_efct_rxq_uk_shm_base* shm;
 } ef_vi_efct_rxqs;
 
 

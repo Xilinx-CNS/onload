@@ -241,7 +241,7 @@ extern void efxdp_vi_init(ef_vi*) EF_VI_HF;
 extern long efxdp_vi_mmap_bytes(ef_vi*);
 
 extern void efct_vi_init(ef_vi*) EF_VI_HF;
-extern int efct_vi_mmap_init(ef_vi* vi, int rxq_capacity) EF_VI_HF;
+extern int efct_kbufs_init(ef_vi* vi) EF_VI_HF;
 void efct_rx_sb_free_push(ef_vi* vi, uint32_t qid, uint32_t sbid);
 int16_t efct_rx_sb_free_next(ef_vi* vi, uint32_t qid, uint32_t sbid);
 

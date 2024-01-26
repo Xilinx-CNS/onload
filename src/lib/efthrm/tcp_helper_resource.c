@@ -1625,10 +1625,10 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
       return rc;
   }
   if( vi->efct_rxqs.active_qs ) {
-    int rc = efct_vi_mmap_init_internal(vi, vi_rs->efct_shm);
+    int rc = efct_kbufs_init_internal(vi, vi_rs->efct_shm,
+        tcp_helper_superbuf_config_refresh, 0);
     if( rc < 0 )
       return rc;
-    vi->efct_rxqs.ops->refresh = tcp_helper_superbuf_config_refresh;
   }
   ef_vi_init_state(vi);
   ef_vi_set_stats_buf(vi, vi_stats);

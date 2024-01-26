@@ -2024,12 +2024,11 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
       return rc;
   }
   if( vi->efct_rxqs.active_qs ) {
-    int rc = efct_vi_mmap_init_internal(vi,
-                        (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset));
+    int rc = efct_kbufs_init_internal(vi,
+                        (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset),
+                        oo_efct_superbuf_config_refresh, nic_i);
     if( rc < 0 )
       return rc;
-    vi->efct_rxqs.ops->refresh = oo_efct_superbuf_config_refresh;
-    efct_kbufs_set_refresh_user(vi, nic_i);
   }
   ef_vi_set_ts_format(vi, nsn->ts_format);
   ef_vi_init_rx_timestamping(vi, nsn->rx_ts_correction);

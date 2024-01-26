@@ -578,8 +578,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   if( rc < 0 )
     goto fail5;
 
-  if( vi->efct_rxqs.active_qs ) {
-    rc = efct_vi_mmap_init(vi, rxq_capacity);
+  if( vi->efct_rxqs.active_qs && rxq_capacity != 0 ) {
+    rc = efct_kbufs_init(vi);
     if( rc ) {
       LOGVV(ef_log("%s: mmap (efct reserve) %d", __FUNCTION__, rc));
       goto fail5;
