@@ -818,7 +818,7 @@ int ci_tcp_listenq_try_promote(ci_netif* netif, ci_tcp_socket_listen* tls,
     TS_IPX_TCP(ts)->tcp_check_be16 = 0;
 
     if( CI_IPX_IS_LINKLOCAL(ts->s.cp.laddr) &&
-        (ts->s.cp.so_bindtodevice = ci_rx_pkt_ifindex(netif, pkt)) == 0 ) {
+        (ts->s.cp.so_bindtodevice = ci_rx_pkt_ifindex(netif, pkt, 0)) == 0 ) {
 #if CI_CFG_FD_CACHING
       if( ci_tcp_is_cached(ts) )
         oo_p_dllink_add(netif, cache_list,

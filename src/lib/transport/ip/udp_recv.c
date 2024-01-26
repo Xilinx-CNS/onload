@@ -99,7 +99,7 @@ ci_inline void ci_udp_recvmsg_fill_msghdr(ci_netif* ni, ci_msghdr* msg,
 
 #if CI_CFG_IPV6
       if( CI_IPX_IS_LINKLOCAL(saddr) )
-        s->cp.so_bindtodevice = ci_rx_pkt_ifindex(ni, pkt);
+        s->cp.so_bindtodevice = ci_rx_pkt_ifindex(ni, pkt, 0);
 #endif
 
       ci_addr_to_user(CI_SA(msg->msg_name), &msg->msg_namelen, af, s->domain,

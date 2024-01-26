@@ -2916,7 +2916,7 @@ static void handle_rx_listen(ci_netif* netif, ci_tcp_socket_listen* tls,
     sock_cp.laddr = RX_PKT_DADDR(pkt);
 #if CI_CFG_IPV6
     if( CI_IPX_IS_LINKLOCAL(sock_cp.laddr) &&
-        (sock_cp.so_bindtodevice = ci_rx_pkt_ifindex(netif, pkt)) == 0 ) {
+        (sock_cp.so_bindtodevice = ci_rx_pkt_ifindex(netif, pkt, 0)) == 0 ) {
       LOG_U(ci_log("%s: no interface matching link-local address " IPX_FMT
                    " found", __FUNCTION__, IPX_ARG(AF_IP_L3(sock_cp.laddr))));
       goto freepkt_out;
