@@ -31,6 +31,7 @@
 #  include <asm/errno.h>
 #  include <linux/uio.h>
 # else
+#  include <stdbool.h>
 #  include <stdint.h>
 #  ifndef __STDC_FORMAT_MACROS
 #   define __STDC_FORMAT_MACROS
@@ -822,6 +823,13 @@ typedef struct {
 ** Users should not access this structure.
 */
 typedef struct {
+  /** Indicates whether a buffer is available in the queue */
+  bool (*available)(const struct ef_vi*, int qid);
+  /** Acquire the next buffer in a queue.
+   ** \returns superbuf id or negative error code, plus metadata via pointers */
+  int  (*next)(struct ef_vi*, int qid, bool* sentinel, unsigned* seq);
+  /** Free a buffer acquired from next() */
+  void (*free)(struct ef_vi*, int qid, int sbid);
   /** Refresh the internal config; called if config_generation changes */
   int  (*refresh)(struct ef_vi*, int qid);
   /** De-allocate internal resources */

@@ -12,9 +12,6 @@
 
 /* TODO these functions are temporarily external but need to be virtualised
  * to support different forms of rx buffer mananagement */
-int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq);
-void superbuf_free(ef_vi* vi, int qid, int sbid);
-bool efct_rxq_can_rollover(const ef_vi* vi, int qid);
 int efct_vi_mmap_init(ef_vi* vi, int rxq_capacity);
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs);
 
@@ -194,7 +191,7 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
   if( efct_rxq_need_rollover(rxq_ptr) )
 #ifndef __KERNEL__
     /* only signal new event if rollover can be done */
-    return efct_rxq_can_rollover(vi, qid);
+    return vi->efct_rxqs.ops->available(vi, qid);
 #else
     /* Returning no event interferes with oo_handle_wakeup_int_driven
      * Let the interrupt handler deal with the event */
@@ -700,7 +697,7 @@ static int rx_rollover(ef_vi* vi, int qid)
   bool sentinel;
   struct efct_rx_descriptor* desc;
 
-  int rc = superbuf_next(vi, qid, &sentinel, &sbseq);
+  int rc = vi->efct_rxqs.ops->next(vi, qid, &sentinel, &sbseq);
   if( rc < 0 )
     return rc;
 
@@ -857,14 +854,14 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
            * entirety of the current superbuf, which is the one the NIC wants
            * to get rid of */
           nskipped = 1;
-          superbuf_free(vi, qid, next_sb);
+          vi->efct_rxqs.ops->free(vi, qid, next_sb);
         }
 
         EF_VI_ASSERT(nskipped > 0);
         EF_VI_ASSERT(nskipped <= desc->refcnt);
         desc->refcnt -= nskipped;
         if( desc->refcnt == 0 )
-          superbuf_free(vi, qid, prev_sb);
+          vi->efct_rxqs.ops->free(vi, qid, prev_sb);
 
         /* Force a rollover on the next poll */
         rxq_ptr->end = 0;
@@ -1161,8 +1158,8 @@ void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
   EF_VI_ASSERT(efct_rx_desc(vi, pkt_id)->refcnt > 0);
 
   if( --efct_rx_desc(vi, pkt_id)->refcnt == 0 )
-    superbuf_free(vi, pkt_id_to_rxq_ix(pkt_id),
-                  pkt_id_to_local_superbuf_ix(pkt_id));
+    vi->efct_rxqs.ops->free(vi, pkt_id_to_rxq_ix(pkt_id),
+                            pkt_id_to_local_superbuf_ix(pkt_id));
 }
 
 const void* efct_vi_rx_future_peek(ef_vi* vi)

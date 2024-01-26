@@ -41,6 +41,11 @@ static struct efct_kbufs* get_kbufs(ef_vi* vi)
   return CI_CONTAINER(struct efct_kbufs, ops, vi->efct_rxqs.ops);
 }
 
+static const struct efct_kbufs* const_kbufs(const ef_vi* vi)
+{
+  return CI_CONTAINER(struct efct_kbufs, ops, vi->efct_rxqs.ops);
+}
+
 #ifndef __KERNEL__
 void efct_kbufs_get_refresh_params(ef_vi* vi, int qid,
                                    unsigned* resource_id,
@@ -76,9 +81,9 @@ static int efct_kbufs_refresh(ef_vi* vi, int qid)
 #endif
 }
 
-int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
+static int efct_kbufs_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 {
-  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_rxqs.shm->q[qid];
+  struct efab_efct_rxq_uk_shm_q* shm = &get_kbufs(vi)->shm->q[qid];
   struct efab_efct_rxq_uk_shm_rxq_entry* entry;
   uint32_t added, removed;
   int sbid;
@@ -99,9 +104,9 @@ int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
   return sbid;
 }
 
-void superbuf_free(ef_vi* vi, int qid, int sbid)
+static void efct_kbufs_free(ef_vi* vi, int qid, int sbid)
 {
-  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_rxqs.shm->q[qid];
+  struct efab_efct_rxq_uk_shm_q* shm = &get_kbufs(vi)->shm->q[qid];
   uint32_t added, removed, freeq_size;
 
   added = shm->freeq.added;
@@ -129,9 +134,9 @@ void superbuf_free(ef_vi* vi, int qid, int sbid)
   }
 }
 
-bool efct_rxq_can_rollover(const ef_vi* vi, int qid)
+static bool efct_kbufs_available(const ef_vi* vi, int qid)
 {
-  struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_rxqs.shm->q[qid];
+  const struct efab_efct_rxq_uk_shm_q* shm = &const_kbufs(vi)->shm->q[qid];
   return OO_ACCESS_ONCE(shm->rxq.added) != shm->rxq.removed;
 }
 
@@ -353,6 +358,9 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
   }
 
   rxqs->shm = shm;
+  rxqs->ops.available = efct_kbufs_available;
+  rxqs->ops.next = efct_kbufs_next;
+  rxqs->ops.free = efct_kbufs_free;
   rxqs->ops.refresh = efct_kbufs_refresh;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
 
