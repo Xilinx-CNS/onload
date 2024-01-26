@@ -251,7 +251,7 @@ int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
 }
 #endif
 
-void efct_vi_munmap_internal(ef_vi* vi)
+static void efct_kbufs_cleanup_internal(ef_vi* vi)
 {
 #ifdef __KERNEL__
   kvfree(vi->efct_rxqs.q[0].superbufs);
@@ -265,10 +265,10 @@ void efct_vi_munmap_internal(ef_vi* vi)
 }
 
 #ifndef __KERNEL__
-void efct_vi_munmap(ef_vi* vi)
+static void efct_kbufs_cleanup(ef_vi* vi)
 {
-  efct_vi_munmap_internal(vi);
-  ci_resource_munmap(vi->dh, vi->efct_rxqs.shm,
+  efct_kbufs_cleanup_internal(vi);
+  ci_resource_munmap(vi->dh, get_kbufs(vi)->shm,
                      CI_ROUND_UP(CI_EFCT_SHM_BYTES(EF_VI_MAX_EFCT_RXQS),
                                  CI_PAGE_SIZE));
 }
@@ -354,6 +354,7 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
 
   rxqs->shm = shm;
   rxqs->ops.refresh = efct_kbufs_refresh;
+  rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
 
   vi->efct_rxqs.active_qs = &shm->active_qs;
   vi->efct_rxqs.ops = &rxqs->ops;
@@ -382,9 +383,10 @@ int efct_vi_mmap_init(ef_vi* vi, int rxq_capacity)
 
   rc = efct_vi_mmap_init_internal(vi, p);
   if( rc )
-    ci_resource_munmap(vi->dh, vi->efct_rxqs.shm,
+    ci_resource_munmap(vi->dh, get_kbufs(vi)->shm,
                        CI_ROUND_UP(CI_EFCT_SHM_BYTES(EF_VI_MAX_EFCT_RXQS),
                                    CI_PAGE_SIZE));
+  vi->efct_rxqs.ops->cleanup = efct_kbufs_cleanup;
   return rc;
 }
 #endif

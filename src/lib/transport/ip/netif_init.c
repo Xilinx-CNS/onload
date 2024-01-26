@@ -2055,8 +2055,8 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
 
 static void cleanup_ef_vi(ef_vi* vi)
 {
-  if( vi->efct_rxqs.max_qs )
-    efct_vi_munmap_internal(vi);
+  if( vi->efct_rxqs.ops )
+    vi->efct_rxqs.ops->cleanup(vi);
 }
 
 

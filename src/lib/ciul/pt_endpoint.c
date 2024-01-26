@@ -637,8 +637,8 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   return q_label;
 
  fail6:
-  if( vi->efct_rxqs.max_qs )
-    efct_vi_munmap(vi);
+  if( vi->efct_rxqs.ops )
+    vi->efct_rxqs.ops->cleanup(vi);
  fail5:
   if( ctpio_mmap_ptr != NULL )
     ci_resource_munmap(vi_dh, ctpio_mmap_ptr, CTPIO_MMAP_LEN);
@@ -708,8 +708,8 @@ int ef_vi_free(ef_vi* ep, ef_driver_handle fd)
 {
   int rc;
 
-  if( ep->efct_rxqs.max_qs )
-    efct_vi_munmap(ep);
+  if( ep->efct_rxqs.ops )
+    ep->efct_rxqs.ops->cleanup(ep);
 
   if( ep->vi_ctpio_mmap_ptr != NULL ) {
     rc = ci_resource_munmap(fd, ep->vi_ctpio_mmap_ptr, CTPIO_MMAP_LEN);

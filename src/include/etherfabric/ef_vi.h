@@ -824,6 +824,8 @@ typedef struct {
 typedef struct {
   /** Refresh the internal config; called if config_generation changes */
   int  (*refresh)(struct ef_vi*, int qid);
+  /** De-allocate internal resources */
+  void (*cleanup)(struct ef_vi*);
 } ef_vi_efct_rxq_ops;
 
 /*! \brief The collection of EFCT RX queue accessors

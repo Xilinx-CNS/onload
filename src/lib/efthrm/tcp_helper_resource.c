@@ -1944,8 +1944,8 @@ error_out:
     for( vi_i = ci_netif_num_vis(ni) - 1; vi_i >= 0; --vi_i ) {
       if( trs->nic[intf_i].thn_vi_rs[vi_i] ) {
         ef_vi* vi = &ni->nic_hw[intf_i].vis[vi_i];
-        if( vi->efct_rxqs.max_qs )
-          efct_vi_munmap_internal(vi);
+        if( vi->efct_rxqs.ops )
+          vi->efct_rxqs.ops->cleanup(vi);
         efrm_vi_resource_release(trs->nic[intf_i].thn_vi_rs[vi_i]);
         trs->nic[intf_i].thn_vi_rs[vi_i] = NULL;
       }
@@ -2120,8 +2120,8 @@ static void release_vi(tcp_helper_resource_t* trs)
 #endif
     for( vi_i = num_vis - 1; vi_i >= 0; --vi_i ) {
       ef_vi* vi = &trs->netif.nic_hw[intf_i].vis[vi_i];
-      if( vi->efct_rxqs.max_qs )
-        efct_vi_munmap_internal(vi);
+      if( vi->efct_rxqs.ops )
+        vi->efct_rxqs.ops->cleanup(vi);
       efrm_vi_resource_release_flushed(trs_nic->thn_vi_rs[vi_i]);
       trs_nic->thn_vi_rs[vi_i] = NULL;
       CI_DEBUG_ZERO(&trs->netif.nic_hw[intf_i].vis[vi_i]);

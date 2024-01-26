@@ -16,7 +16,6 @@ int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq);
 void superbuf_free(ef_vi* vi, int qid, int sbid);
 bool efct_rxq_can_rollover(const ef_vi* vi, int qid);
 int efct_vi_mmap_init(ef_vi* vi, int rxq_capacity);
-void efct_vi_munmap(ef_vi* vi);
 int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs);
 
 
