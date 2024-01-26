@@ -1980,12 +1980,17 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
 static int oo_efct_superbuf_config_refresh(ef_vi* vi, int qid)
 {
   oo_efct_superbuf_config_refresh_t op;
-  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
-  op.intf_i = rxq->resource_id;
+  unsigned resource_id;
+  const void* superbufs;
+  const void* mappings;
+
+  efct_kbufs_get_refresh_params(vi, qid, &resource_id, &superbufs, &mappings);
+
+  op.intf_i = resource_id;
   op.qid = qid;
   op.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
-  CI_USER_PTR_SET(op.superbufs,rxq->superbuf);
-  CI_USER_PTR_SET(op.current_mappings, rxq->current_mappings);
+  CI_USER_PTR_SET(op.superbufs, superbufs);
+  CI_USER_PTR_SET(op.current_mappings, mappings);
   return oo_resource_op(vi->dh, OO_IOC_EFCT_SUPERBUF_CONFIG_REFRESH, &op);
 }
 

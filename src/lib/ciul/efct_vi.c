@@ -12,7 +12,6 @@
 
 /* TODO these functions are temporarily external but need to be virtualised
  * to support different forms of rx buffer mananagement */
-int superbuf_config_refresh(ef_vi* vi, int qid);
 int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq);
 void superbuf_free(ef_vi* vi, int qid, int sbid);
 bool efct_rxq_can_rollover(const ef_vi* vi, int qid);
@@ -808,7 +807,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
      * thinking, to deal with multiple successive refreshes correctly, but we
      * must write it after we're done, to deal with concurrent calls to
      * efct_rxq_check_event() */
-    if( rxq->refresh_func(vi, qid) < 0 ) {
+    if( vi->efct_rxqs.ops->refresh(vi, qid) < 0 ) {
 #ifndef __KERNEL__
       /* Update rxq's value even if the refresh_func fails, since retrying it
        * every poll is unlikely to be productive either. Except in

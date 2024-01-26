@@ -785,8 +785,6 @@ typedef struct {
   uint32_t*        ids;
 } ef_vi_rxq;
 
-typedef int ef_vi_efct_superbuf_refresh_t(struct ef_vi*, int);
-
 /*! \brief EFCT RX buffer memory and metadata accessors
 **
 ** Users should not access this structure.
@@ -813,13 +811,20 @@ typedef struct {
 #else
   /** contiguous area of superbuf memory */
   const char* superbuf;
-  uint64_t* current_mappings;
 #endif
 
   /* TODO hide the rest */
   unsigned resource_id;
-  ef_vi_efct_superbuf_refresh_t* refresh_func;
 } ef_vi_efct_rxq;
+
+/*! \brief EFCT RX buffer memory management operations
+**
+** Users should not access this structure.
+*/
+typedef struct {
+  /** Refresh the internal config; called if config_generation changes */
+  int  (*refresh)(struct ef_vi*, int qid);
+} ef_vi_efct_rxq_ops;
 
 /*! \brief The collection of EFCT RX queue accessors
 **
@@ -835,6 +840,8 @@ typedef struct {
   uint64_t                      max_qs;
   /** Attached rxqs for efct VIs (NB: not necessarily in rxq order) */
   ef_vi_efct_rxq                q[EF_VI_MAX_EFCT_RXQS];
+  /** Buffer access/management operations */
+  ef_vi_efct_rxq_ops*           ops;
 
   /** efct kernel/userspace shared queue area. Exposed for debugging.
    ** TODO provide generic access to stats and hide this */
