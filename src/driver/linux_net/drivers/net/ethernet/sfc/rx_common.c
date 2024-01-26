@@ -1167,25 +1167,14 @@ efx_rx_packet_gro(struct efx_rx_queue *rx_queue, struct efx_rx_buffer *rx_buf,
 	efx_rx_skb_attach_timestamp(channel, skb,
 			eh - efx->type->rx_prefix_size);
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
-#if !defined(EFX_USE_KCOMPAT) || !defined(EFX_HAVE_VLAN_RX_PATH)
 	if (head_buf->flags & EFX_RX_BUF_VLAN_XTAG)
 		__vlan_hwaccel_put_tag(napi->skb, htons(ETH_P_8021Q),
 				       head_buf->vlan_tci);
-#endif
 #endif
 
 #ifdef CONFIG_SFC_TRACING
 	trace_sfc_receive(skb, true, head_buf->flags & EFX_RX_BUF_VLAN_XTAG,
 			  head_buf->vlan_tci);
-#endif
-#if IS_ENABLED(CONFIG_VLAN_8021Q)
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_VLAN_RX_PATH)
-	if (head_buf->flags & EFX_RX_BUF_VLAN_XTAG)
-		vlan_gro_frags(napi, efx->vlan_group,
-					    head_buf->vlan_tci);
-	else
-		/* fall through */
-#endif
 #endif
 		napi_gro_frags(napi);
 }
@@ -1490,7 +1479,7 @@ int efx_filter_ntuple_insert(struct efx_nic *efx, struct efx_filter_spec *spec)
 	list_for_each_entry(rule, head, list) {
 		/* is this rule here already? */
 		if (efx_filter_spec_equal(&rule->spec, spec))
-			return rule->user_id;
+			return -EEXIST;
 
 		/* if we haven't found a gap yet, see if there's one here */
 		if (!gap) {
