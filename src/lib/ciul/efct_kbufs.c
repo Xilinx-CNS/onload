@@ -23,6 +23,7 @@
 #ifndef __KERNEL__
 struct efct_kbufs_rxq
 {
+  unsigned resource_id;
   uint64_t* current_mappings;
 };
 #endif
@@ -32,6 +33,7 @@ struct efct_kbufs
   ef_vi_efct_rxq_ops ops;
   struct efab_efct_rxq_uk_shm_base* shm;
 #ifndef __KERNEL__
+  uintptr_t refresh_user;
   struct efct_kbufs_rxq q[EF_VI_MAX_EFCT_RXQS];
 #endif
 };
@@ -47,17 +49,19 @@ static const struct efct_kbufs* const_kbufs(const ef_vi* vi)
 }
 
 #ifndef __KERNEL__
+void efct_kbufs_set_refresh_user(ef_vi* vi, uintptr_t user)
+{
+  get_kbufs(vi)->refresh_user = user;
+}
+
 void efct_kbufs_get_refresh_params(ef_vi* vi, int qid,
-                                   unsigned* resource_id,
+                                   uintptr_t* user,
                                    const void** superbufs,
                                    const void** mappings)
 {
-  ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
-  struct efct_kbufs_rxq* kbq = &get_kbufs(vi)->q[qid];
-
-  *resource_id = rxq->resource_id;
-  *superbufs = rxq->superbuf;
-  *mappings = kbq->current_mappings;
+  *user = get_kbufs(vi)->refresh_user;
+  *superbufs = vi->efct_rxqs.q[qid].superbuf;
+  *mappings = get_kbufs(vi)->q[qid].current_mappings;
 }
 #endif
 
@@ -73,7 +77,7 @@ static int efct_kbufs_refresh(ef_vi* vi, int qid)
 
   ci_resource_op_t op;
   op.op = CI_RSOP_RXQ_REFRESH;
-  op.id = efch_make_resource_id(rxq->resource_id);
+  op.id = efch_make_resource_id(kbq->resource_id);
   op.u.rxq_refresh.superbufs = (uintptr_t)rxq->superbuf;
   op.u.rxq_refresh.current_mappings = (uintptr_t)kbq->current_mappings;
   op.u.rxq_refresh.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
@@ -140,9 +144,13 @@ static bool efct_kbufs_available(const ef_vi* vi, int qid)
   return OO_ACCESS_ONCE(shm->rxq.added) != shm->rxq.removed;
 }
 
-#ifndef __KERNEL__
-int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
+static int efct_kbufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
 {
+#ifdef __KERNEL__
+  /* Onload does its own thing before calling attach_internal */
+  BUG();
+  return -EOPNOTSUPP;
+#else
   int rc;
   ci_resource_alloc_t ra;
   int ix;
@@ -208,21 +216,10 @@ int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs)
     return rc;
   }
 
-  vi->efct_rxqs.q[ix].resource_id = ra.out_id.index;
-  vi->efct_rxqs.q[ix].config_generation = 0;
+  get_kbufs(vi)->q[ix].resource_id = ra.out_id.index;
   efct_vi_start_rxq(vi, ix, qid);
   return 0;
-}
 #endif
-
-void efct_vi_attach_rxq_internal(ef_vi* vi, int ix, int resource_id,
-                                 ef_vi_efct_superbuf_refresh_t *refresh_func)
-{
-#ifndef __KERNEL__
-  vi->efct_rxqs.q[ix].resource_id = resource_id;
-#endif
-  vi->efct_rxqs.ops->refresh = refresh_func;
-  vi->efct_rxqs.q[ix].config_generation = 0;
 }
 
 #ifndef __KERNEL__
@@ -239,9 +236,8 @@ int efct_vi_prime(ef_vi* vi, ef_driver_handle dh)
 
     op.crp_id = efch_make_resource_id(vi->vi_resource_id);
     for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
-      ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
-
-      op.rxq_current[i].rxq_id = efch_make_resource_id(rxq->resource_id);
+      op.rxq_current[i].rxq_id =
+        efch_make_resource_id(get_kbufs(vi)->q[i].resource_id);
       if( efch_resource_id_is_none(op.rxq_current[i].rxq_id) )
         break;
       if( efct_vi_get_wakeup_params(vi, i, &op.rxq_current[i].sbseq,
@@ -348,7 +344,7 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
     rxq->superbufs = (const char**)space +
                      i * CI_EFCT_MAX_HUGEPAGES * CI_EFCT_SUPERBUFS_PER_PAGE;
 #else
-    rxq->resource_id = EFCH_RESOURCE_ID_PRI_ARG(efch_resource_id_none());
+    rxqs->q[i].resource_id = EFCH_RESOURCE_ID_PRI_ARG(efch_resource_id_none());
     rxq->superbuf = (char*)space + i * bytes_per_rxq;
     rxqs->q[i].current_mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
 #endif
@@ -361,6 +357,7 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
   rxqs->ops.available = efct_kbufs_available;
   rxqs->ops.next = efct_kbufs_next;
   rxqs->ops.free = efct_kbufs_free;
+  rxqs->ops.attach = efct_kbufs_attach;
   rxqs->ops.refresh = efct_kbufs_refresh;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
 

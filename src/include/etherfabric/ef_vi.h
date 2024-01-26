@@ -813,9 +813,6 @@ typedef struct {
   /** contiguous area of superbuf memory */
   const char* superbuf;
 #endif
-
-  /* TODO hide the rest */
-  unsigned resource_id;
 } ef_vi_efct_rxq;
 
 /*! \brief EFCT RX buffer memory management operations
@@ -830,6 +827,8 @@ typedef struct {
   int  (*next)(struct ef_vi*, int qid, bool* sentinel, unsigned* seq);
   /** Free a buffer acquired from next() */
   void (*free)(struct ef_vi*, int qid, int sbid);
+  /** Attach a queue */
+  int  (*attach)(struct ef_vi*, int qid, unsigned n_superbufs);
   /** Refresh the internal config; called if config_generation changes */
   int  (*refresh)(struct ef_vi*, int qid);
   /** De-allocate internal resources */

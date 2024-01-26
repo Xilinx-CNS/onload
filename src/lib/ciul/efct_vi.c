@@ -10,11 +10,6 @@
 #include <ci/tools/byteorder.h>
 #include <ci/tools/sysdep.h>
 
-/* TODO these functions are temporarily external but need to be virtualised
- * to support different forms of rx buffer mananagement */
-int efct_vi_mmap_init(ef_vi* vi, int rxq_capacity);
-int efct_vi_attach_rxq(ef_vi* vi, int qid, unsigned n_superbufs);
-
 
 #define M_(FIELD) (CI_MASK64(FIELD ## _WIDTH) << FIELD ## _LBN)
 #define M(FIELD) M_(EFCT_RX_HEADER_ ## FIELD)
@@ -1068,7 +1063,7 @@ int efct_vi_find_free_rxq(ef_vi* vi, int qid)
 void efct_vi_start_rxq(ef_vi* vi, int ix, int qid)
 {
   vi->efct_rxqs.q[ix].qid = qid;
-  /* TBD do we need this? Or is it already zero-initialised at this point? */
+  vi->efct_rxqs.q[ix].config_generation = 0;
   vi->ep_state->rxq.rxq_ptr[ix].end = 0;
 }
 
@@ -1138,7 +1133,7 @@ static int efct_post_filter_add(struct ef_vi* vi,
   EF_VI_ASSERT(rxq >= 0);
   n_superbufs = CI_ROUND_UP((vi->vi_rxq.mask + 1) * EFCT_PKT_STRIDE,
                             EFCT_RX_SUPERBUF_BYTES) / EFCT_RX_SUPERBUF_BYTES;
-  rc = efct_vi_attach_rxq(vi, rxq, n_superbufs);
+  rc = vi->efct_rxqs.ops->attach(vi, rxq, n_superbufs);
   if( rc == -EALREADY )
     rc = 0;
   return rc;

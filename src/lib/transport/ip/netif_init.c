@@ -1980,13 +1980,13 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
 static int oo_efct_superbuf_config_refresh(ef_vi* vi, int qid)
 {
   oo_efct_superbuf_config_refresh_t op;
-  unsigned resource_id;
+  uintptr_t intf_i;
   const void* superbufs;
   const void* mappings;
 
-  efct_kbufs_get_refresh_params(vi, qid, &resource_id, &superbufs, &mappings);
+  efct_kbufs_get_refresh_params(vi, qid, &intf_i, &superbufs, &mappings);
 
-  op.intf_i = resource_id;
+  op.intf_i = intf_i;
   op.qid = qid;
   op.max_superbufs = CI_EFCT_MAX_SUPERBUFS;
   CI_USER_PTR_SET(op.superbufs, superbufs);
@@ -2024,14 +2024,12 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
       return rc;
   }
   if( vi->efct_rxqs.active_qs ) {
-    int i;
     int rc = efct_vi_mmap_init_internal(vi,
                         (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset));
     if( rc < 0 )
       return rc;
-    for( i = 0; i < vi->efct_rxqs.max_qs; ++i )
-      efct_vi_attach_rxq_internal(vi, i, nic_i,
-                                  oo_efct_superbuf_config_refresh);
+    vi->efct_rxqs.ops->refresh = oo_efct_superbuf_config_refresh;
+    efct_kbufs_set_refresh_user(vi, nic_i);
   }
   ef_vi_set_ts_format(vi, nsn->ts_format);
   ef_vi_init_rx_timestamping(vi, nsn->rx_ts_correction);
