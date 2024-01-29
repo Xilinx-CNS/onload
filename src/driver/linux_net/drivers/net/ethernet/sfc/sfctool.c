@@ -101,13 +101,11 @@ static noinline_for_stack int sfctool_get_rxfh(struct efx_nic *efx,
 	if (user_key_size)
 		hkey = rss_config + indir_bytes;
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 	if (rxfh.rss_context)
 		ret = efx_sfctool_get_rxfh_context(efx, indir, hkey,
 						   &dev_hfunc,
 						   rxfh.rss_context);
 	else
-#endif
 #if defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 		return -EOPNOTSUPP; /* use ethtool instead */
 #else
@@ -228,12 +226,10 @@ static noinline_for_stack int sfctool_set_rxfh(struct efx_nic *efx,
 		}
 	}
 
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 	if (rxfh.rss_context)
 		ret = efx_sfctool_set_rxfh_context(efx, indir, hkey, rxfh.hfunc,
 						   &rxfh.rss_context, delete);
 	else
-#endif
 #if defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 		return -EOPNOTSUPP; /* use ethtool instead */
 #else

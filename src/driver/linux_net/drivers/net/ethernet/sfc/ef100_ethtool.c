@@ -113,9 +113,6 @@ static void ef100_ethtool_get_drvinfo(struct net_device *net_dev,
 /*	Ethtool options available
  */
 const struct ethtool_ops ef100_ethtool_ops = {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
-	.cap_rss_ctx_supported	= true,
-#endif
 	.get_drvinfo		= ef100_ethtool_get_drvinfo,
 	.get_msglevel		= efx_ethtool_get_msglevel,
 	.set_msglevel		= efx_ethtool_set_msglevel,
@@ -182,7 +179,7 @@ const struct ethtool_ops ef100_ethtool_ops = {
 	.set_rxfh_indir		= efx_ethtool_set_rxfh_indir,
 # endif
 #endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 	.get_rxfh_context	= efx_ethtool_get_rxfh_context,
 	.set_rxfh_context	= efx_ethtool_set_rxfh_context,
 #endif

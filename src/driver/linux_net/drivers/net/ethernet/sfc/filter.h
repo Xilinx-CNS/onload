@@ -35,8 +35,7 @@ static inline void efx_ether_addr_copy(u8 *dst, const u8 *src)
 #define ether_addr_copy efx_ether_addr_copy
 #endif
 
-#ifdef EFX_NOT_UPSTREAM
-#if !defined(struct_group)
+#if defined(EFX_USE_KCOMPAT) || !defined(struct_group)
 /* Standalone KCOMPAT for driverlink headers */
 #define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
 	union { \
@@ -45,7 +44,6 @@ static inline void efx_ether_addr_copy(u8 *dst, const u8 *src)
 	}
 #define struct_group(NAME, MEMBERS...)	\
 	__struct_group(/* no tag */, NAME, /* no attrs */, MEMBERS)
-#endif
 #endif
 
 /**

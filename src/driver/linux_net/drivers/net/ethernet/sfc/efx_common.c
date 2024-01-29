@@ -1369,9 +1369,6 @@ void efx_fini_struct(struct efx_nic *efx)
 #ifdef CONFIG_DEBUG_FS
 	mutex_destroy(&efx->debugfs_symlink_mutex);
 #endif
-#ifdef CONFIG_SFC_MTD
-	efx_mtd_free(efx);
-#endif
 }
 
 bool efx_is_supported_ringsize(struct efx_nic *efx, unsigned long entries)
@@ -1791,25 +1788,6 @@ void efx_vlan_rx_kill_vid(struct net_device *net_dev, unsigned short vid)
 
 	if (efx->type->vlan_rx_kill_vid)
 		efx->type->vlan_rx_kill_vid(efx, htons(ETH_P_8021Q), vid);
-}
-#endif
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_HWTSTAMP_GET)
-int efx_hwtstamp_set(struct net_device *net_dev,
-		     struct kernel_hwtstamp_config *config,
-		     struct netlink_ext_ack *extack)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	return efx_ptp_set_ts_config(efx, config, extack);
-}
-
-int efx_hwtstamp_get(struct net_device *net_dev,
-		     struct kernel_hwtstamp_config *config)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-	return efx_ptp_get_ts_config(efx, config);
 }
 #endif
 

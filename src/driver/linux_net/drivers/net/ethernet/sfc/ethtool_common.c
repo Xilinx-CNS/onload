@@ -1740,71 +1740,17 @@ u32 efx_ethtool_get_rxfh_key_size(struct net_device *net_dev)
 	return efx->type->rx_hash_key_size;
 }
 
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
-int efx_sfctool_get_rxnfc(struct efx_nic *efx,
-			  struct efx_ethtool_rxnfc *info, u32 *rule_locs)
-{
-	return efx_ethtool_get_rxnfc(efx->net_dev, info, rule_locs);
-}
-
-/* RSS support
- */
-u32 efx_sfctool_get_rxfh_indir_size(struct efx_nic *efx)
-{
-	return efx_ethtool_get_rxfh_indir_size(efx->net_dev);
-}
-
-u32 efx_sfctool_get_rxfh_key_size(struct efx_nic *efx)
-{
-	return efx_ethtool_get_rxfh_key_size(efx->net_dev);
-}
-#endif
-
-static int _efx_ethtool_get_rxfh_context(struct net_device *net_dev,
-					 struct ethtool_rxfh_param *rxfh)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
+int efx_ethtool_get_rxfh(struct net_device *net_dev, u32 *indir, u8 *key,
+			 u8 *hfunc)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	struct efx_rss_context *ctx;
-	int rc = 0;
-
-	if (!efx->type->rx_pull_rss_context_config)
-		return -EOPNOTSUPP;
-
-	mutex_lock(&efx->rss_lock);
-	ctx = efx_find_rss_context_entry(efx, rxfh->rss_context);
-	if (!ctx) {
-		rc = -ENOENT;
-		goto out_unlock;
-	}
-	rc = efx->type->rx_pull_rss_context_config(efx, ctx);
-	if (rc)
-		goto out_unlock;
-
-	rxfh->hfunc = ETH_RSS_HASH_TOP;
-	if (rxfh->indir)
-		memcpy(rxfh->indir, ctx->rx_indir_table,
-		       sizeof(ctx->rx_indir_table));
-	if (rxfh->key)
-		memcpy(rxfh->key, ctx->rx_hash_key,
-		       efx->type->rx_hash_key_size);
-out_unlock:
-	mutex_unlock(&efx->rss_lock);
-	return rc;
-}
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
-int efx_ethtool_get_rxfh(struct net_device *net_dev,
-			 struct ethtool_rxfh_param *rxfh)
 #else
-static int _efx_ethtool_get_rxfh(struct net_device *net_dev,
-				 struct ethtool_rxfh_param *rxfh)
-#endif
+int efx_sfctool_get_rxfh(struct efx_nic *efx, u32 *indir, u8 *key,
+			 u8 *hfunc)
 {
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
+#endif
 	int rc;
-
-	if (rxfh->rss_context)
-		return _efx_ethtool_get_rxfh_context(net_dev, rxfh);
 
 	if (!efx->type->rx_pull_rss_config)
 		return -EOPNOTSUPP;
@@ -1813,109 +1759,34 @@ static int _efx_ethtool_get_rxfh(struct net_device *net_dev,
 	if (rc)
 		return rc;
 
-	rxfh->hfunc = ETH_RSS_HASH_TOP;
-	if (rxfh->indir)
-		memcpy(rxfh->indir, efx->rss_context.rx_indir_table,
+	if (hfunc)
+		*hfunc = ETH_RSS_HASH_TOP;
+	if (indir)
+		memcpy(indir, efx->rss_context.rx_indir_table,
 		       sizeof(efx->rss_context.rx_indir_table));
-	if (rxfh->key)
-		memcpy(rxfh->key, efx->rss_context.rx_hash_key,
+	if (key)
+		memcpy(key, efx->rss_context.rx_hash_key,
 		       efx->type->rx_hash_key_size);
 	return 0;
 }
 
-static int _efx_ethtool_set_rxfh_context(struct net_device *net_dev,
-					 struct ethtool_rxfh_param *rxfh,
-					 struct netlink_ext_ack *extack)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	u32 *rss_context = &rxfh->rss_context;
-	struct efx_rss_context *ctx;
-	u32 *indir = rxfh->indir;
-	bool allocated = false;
-	u8 *key = rxfh->key;
-	int rc;
-
-	if (!efx->type->rx_push_rss_context_config)
-		return -EOPNOTSUPP;
-	/* Hash function is Toeplitz, cannot be changed */
-	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
-	    rxfh->hfunc != ETH_RSS_HASH_TOP)
-		return -EOPNOTSUPP;
-
-	mutex_lock(&efx->rss_lock);
-
-	if (*rss_context == ETH_RXFH_CONTEXT_ALLOC) {
-		if (rxfh->rss_delete) {
-			/* alloc + delete == Nothing to do */
-			rc = -EINVAL;
-			goto out_unlock;
-		}
-		ctx = efx_alloc_rss_context_entry(efx);
-		if (!ctx) {
-			rc = -ENOMEM;
-			goto out_unlock;
-		}
-		ctx->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
-		/* Initialise indir table and key to defaults */
-		efx_set_default_rx_indir_table(efx, ctx);
-		netdev_rss_key_fill(ctx->rx_hash_key, sizeof(ctx->rx_hash_key));
-		allocated = true;
-	} else {
-		ctx = efx_find_rss_context_entry(efx, *rss_context);
-		if (!ctx) {
-			rc = -ENOENT;
-			goto out_unlock;
-		}
-	}
-
-	if (rxfh->rss_delete) {
-		/* delete this context */
-		rc = efx->type->rx_push_rss_context_config(efx, ctx, NULL, NULL);
-		if (!rc)
-			efx_free_rss_context_entry(ctx);
-		goto out_unlock;
-	}
-
-	if (!key)
-		key = ctx->rx_hash_key;
-	if (!indir)
-		indir = ctx->rx_indir_table;
-
-	rc = efx->type->rx_push_rss_context_config(efx, ctx, indir, key);
-	if (rc && allocated)
-		efx_free_rss_context_entry(ctx);
-	else
-		*rss_context = ctx->user_id;
-out_unlock:
-	mutex_unlock(&efx->rss_lock);
-	return rc;
-}
-
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 int efx_ethtool_set_rxfh(struct net_device *net_dev,
-			 struct ethtool_rxfh_param *rxfh,
-			 struct netlink_ext_ack *extack)
-#else
-static int _efx_ethtool_set_rxfh(struct net_device *net_dev,
-				 struct ethtool_rxfh_param *rxfh,
-				 struct netlink_ext_ack *extack)
-#endif
+			 const u32 *indir, const u8 *key, const u8 hfunc)
 {
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
-	u32 *indir = rxfh->indir;
-	u8 *key = rxfh->key;
 
+#else
+int efx_sfctool_set_rxfh(struct efx_nic *efx,
+			 const u32 *indir, const u8 *key, const u8 hfunc)
+{
+#endif
 	if (!efx->type->rx_push_rss_config)
 		return -EOPNOTSUPP;
 
-	/* Hash function is Toeplitz, cannot be changed */
-	if (rxfh->hfunc != ETH_RSS_HASH_NO_CHANGE &&
-	    rxfh->hfunc != ETH_RSS_HASH_TOP)
+	/* We do not allow change in unsupported parameters */
+	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
 		return -EOPNOTSUPP;
-
-	if (rxfh->rss_context)
-		return _efx_ethtool_set_rxfh_context(net_dev, rxfh, extack);
-
 	if (!indir && !key)
 		return 0;
 
@@ -1926,63 +1797,7 @@ static int _efx_ethtool_set_rxfh(struct net_device *net_dev,
 
 	return efx->type->rx_push_rss_config(efx, true, indir, key);
 }
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
 
-/* Wrappers for the old APIs call the new ones above */
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
-int efx_ethtool_get_rxfh_context(struct net_device *net_dev, u32 *indir,
-				 u8 *key, u8 *hfunc, u32 rss_context)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-#else
-int efx_sfctool_get_rxfh_context(struct efx_nic *efx, u32 *indir,
-				 u8 *key, u8 *hfunc, u32 rss_context)
-{
-#endif
-	struct ethtool_rxfh_param rxfh = {};
-	int rc;
-
-	if (rss_context)
-		rc = _efx_ethtool_get_rxfh_context(efx->net_dev, &rxfh);
-	else
-		rc = _efx_ethtool_get_rxfh(efx->net_dev, &rxfh);
-	if (rc)
-		return rc;
-
-	if (hfunc)
-		*hfunc = rxfh.hfunc;
-	if (indir)
-		memcpy(indir, rxfh.indir, rxfh.indir_size);
-	if (key)
-		memcpy(key, rxfh.key, rxfh.key_size);
-	return 0;
-}
-
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
-int efx_ethtool_get_rxfh(struct net_device *net_dev, u32 *indir, u8 *key,
-			 u8 *hfunc)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-#else
-int efx_sfctool_get_rxfh(struct efx_nic *efx, u32 *indir, u8 *key,
-			 u8 *hfunc)
-{
-#endif
-	struct ethtool_rxfh_param rxfh = {};
-	int rc;
-
-	rc = _efx_ethtool_get_rxfh(efx->net_dev, &rxfh);
-	if (rc)
-		return rc;
-
-	if (hfunc)
-		*hfunc = rxfh.hfunc;
-	if (indir)
-		memcpy(indir, rxfh.indir, rxfh.indir_size);
-	if (key)
-		memcpy(key, rxfh.key, rxfh.key_size);
-	return 0;
-}
 
 #if defined(EFX_HAVE_ETHTOOL_GET_RXFH) && !defined(EFX_HAVE_CONFIGURABLE_RSS_HASH)
 /* Wrappers without hash function getting and setting. */
@@ -2010,7 +1825,7 @@ int efx_ethtool_set_rxfh_no_hfunc(struct net_device *net_dev,
 # endif
 #endif
 
-#if defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
+#if defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 int efx_ethtool_old_get_rxfh_indir(struct net_device *net_dev,
 				   struct ethtool_rxfh_indir *indir)
 {
@@ -2051,6 +1866,7 @@ int efx_ethtool_old_set_rxfh_indir(struct net_device *net_dev,
 }
 #endif
 
+#if defined(EFX_USE_KCOMPAT)
 #if defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) && !defined(EFX_HAVE_ETHTOOL_GET_RXFH) && !defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
 /* Wrappers that only set the indirection table, not the key. */
 int efx_ethtool_get_rxfh_indir(struct net_device *net_dev, u32 *indir)
@@ -2064,28 +1880,68 @@ int efx_ethtool_set_rxfh_indir(struct net_device *net_dev, const u32 *indir)
 				    ETH_RSS_HASH_NO_CHANGE);
 }
 #endif
-
-#if defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
-int efx_ethtool_set_rxfh(struct net_device *net_dev,
-			 const u32 *indir, const u8 *key, const u8 hfunc)
-{
-	struct efx_nic *efx = efx_netdev_priv(net_dev);
-
-#else
-int efx_sfctool_set_rxfh(struct efx_nic *efx,
-			 const u32 *indir, const u8 *key, const u8 hfunc)
-{
 #endif
-	struct ethtool_rxfh_param rxfh = {};
 
-	rxfh.hfunc = hfunc;
-	rxfh.indir = (u32 *)indir;
-	rxfh.key = (u8 *)key;
+/*	sfctool
+ */
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
+int efx_sfctool_get_rxnfc(struct efx_nic *efx,
+			  struct efx_ethtool_rxnfc *info, u32 *rule_locs)
+{
+	return efx_ethtool_get_rxnfc(efx->net_dev, info, rule_locs);
+}
+#endif
 
-	return _efx_ethtool_set_rxfh(efx->net_dev, &rxfh, NULL);
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
+u32 efx_sfctool_get_rxfh_indir_size(struct efx_nic *efx)
+{
+	return efx_ethtool_get_rxfh_indir_size(efx->net_dev);
 }
 
-#if defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
+u32 efx_sfctool_get_rxfh_key_size(struct efx_nic *efx)
+{
+	return efx_ethtool_get_rxfh_key_size(efx->net_dev);
+}
+#endif
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
+int efx_ethtool_get_rxfh_context(struct net_device *net_dev, u32 *indir,
+				 u8 *key, u8 *hfunc, u32 rss_context)
+{
+	struct efx_nic *efx = efx_netdev_priv(net_dev);
+#else
+int efx_sfctool_get_rxfh_context(struct efx_nic *efx, u32 *indir,
+				 u8 *key, u8 *hfunc, u32 rss_context)
+{
+#endif
+	struct efx_rss_context *ctx;
+	int rc = 0;
+
+	if (!efx->type->rx_pull_rss_context_config)
+		return -EOPNOTSUPP;
+
+	mutex_lock(&efx->rss_lock);
+	ctx = efx_find_rss_context_entry(efx, rss_context);
+	if (!ctx) {
+		rc = -ENOENT;
+		goto out_unlock;
+	}
+	rc = efx->type->rx_pull_rss_context_config(efx, ctx);
+	if (rc)
+		goto out_unlock;
+
+	if (hfunc)
+		*hfunc = ETH_RSS_HASH_TOP;
+	if (indir)
+		memcpy(indir, ctx->rx_indir_table, sizeof(ctx->rx_indir_table));
+	if (key)
+		memcpy(key, ctx->rx_hash_key, efx->type->rx_hash_key_size);
+out_unlock:
+	mutex_unlock(&efx->rss_lock);
+	return rc;
+}
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 int efx_ethtool_set_rxfh_context(struct net_device *net_dev,
 				 const u32 *indir, const u8 *key,
 				 const u8 hfunc, u32 *rss_context,
@@ -2099,18 +1955,64 @@ int efx_sfctool_set_rxfh_context(struct efx_nic *efx,
 				 bool delete)
 {
 #endif
-	struct ethtool_rxfh_param rxfh = {};
+	struct efx_rss_context *ctx;
+	bool allocated = false;
+	int rc;
 
-	rxfh.hfunc = ETH_RSS_HASH_TOP;
-	rxfh.indir = (u32 *)indir;
-	rxfh.key = (u8 *)key;
-	if (rss_context)
-		rxfh.rss_context = *rss_context;
-	rxfh.rss_delete = delete;
+	if (!efx->type->rx_push_rss_context_config)
+		return -EOPNOTSUPP;
+	/* Hash function is Toeplitz, cannot be changed */
+	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
+		return -EOPNOTSUPP;
 
-	return _efx_ethtool_set_rxfh_context(efx->net_dev, &rxfh, NULL);
+	mutex_lock(&efx->rss_lock);
+
+	if (*rss_context == ETH_RXFH_CONTEXT_ALLOC) {
+		if (delete) {
+			/* alloc + delete == Nothing to do */
+			rc = -EINVAL;
+			goto out_unlock;
+		}
+		ctx = efx_alloc_rss_context_entry(efx);
+		if (!ctx) {
+			rc = -ENOMEM;
+			goto out_unlock;
+		}
+		ctx->context_id = EFX_MCDI_RSS_CONTEXT_INVALID;
+		/* Initialise indir table and key to defaults */
+		efx_set_default_rx_indir_table(efx, ctx);
+		netdev_rss_key_fill(ctx->rx_hash_key, sizeof(ctx->rx_hash_key));
+		allocated = true;
+	} else {
+		ctx = efx_find_rss_context_entry(efx, *rss_context);
+		if (!ctx) {
+			rc = -ENOENT;
+			goto out_unlock;
+		}
+	}
+
+	if (delete) {
+		/* delete this context */
+		rc = efx->type->rx_push_rss_context_config(efx, ctx, NULL, NULL);
+		if (!rc)
+			efx_free_rss_context_entry(ctx);
+		goto out_unlock;
+	}
+
+	if (!key)
+		key = ctx->rx_hash_key;
+	if (!indir)
+		indir = ctx->rx_indir_table;
+
+	rc = efx->type->rx_push_rss_context_config(efx, ctx, indir, key);
+	if (rc && allocated)
+		efx_free_rss_context_entry(ctx);
+	else
+		*rss_context = ctx->user_id;
+out_unlock:
+	mutex_unlock(&efx->rss_lock);
+	return rc;
 }
-#endif	/* EFX_USE_KCOMPAT && !EFX_HAVE_ETHTOOL_RXFH_PARAM */
 
 int efx_ethtool_reset(struct net_device *net_dev, u32 *flags)
 {

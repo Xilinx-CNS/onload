@@ -100,13 +100,7 @@ static inline void ip6_fill_mask(__be32 *mask)
 
 u32 efx_ethtool_get_rxfh_indir_size(struct net_device *net_dev);
 u32 efx_ethtool_get_rxfh_key_size(struct net_device *net_dev);
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
-int efx_ethtool_get_rxfh(struct net_device *net_dev,
-			 struct ethtool_rxfh_param *rxfh);
-int efx_ethtool_set_rxfh(struct net_device *net_dev,
-			 struct ethtool_rxfh_param *rxfh,
-			 struct netlink_ext_ack *extack);
-#elif defined(EFX_USE_KCOMPAT) && (defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR))
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_GET_RXFH) || defined(EFX_HAVE_ETHTOOL_GET_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 int efx_ethtool_get_rxfh(struct net_device *net_dev, u32 *indir, u8 *key,
 			 u8 *hfunc);
 int efx_ethtool_set_rxfh(struct net_device *net_dev,
@@ -125,7 +119,8 @@ int efx_sfctool_set_rxfh(struct efx_nic *efx,
 int efx_ethtool_get_rxfh_indir(struct net_device *net_dev, u32 *indir);
 int efx_ethtool_set_rxfh_indir(struct net_device *net_dev,const u32 *indir);
 #endif
-#if defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR)
+#endif
+#if defined(EFX_HAVE_OLD_ETHTOOL_RXFH_INDIR) || !defined(EFX_HAVE_ETHTOOL_RXFH_INDIR)
 int efx_ethtool_old_get_rxfh_indir(struct net_device *net_dev,
 				   struct ethtool_rxfh_indir *indir);
 int efx_ethtool_old_set_rxfh_indir(struct net_device *net_dev,
@@ -145,9 +140,8 @@ int efx_ethtool_set_rxfh_no_hfunc(struct net_device *net_dev,
 				  const u32 *indir, const u8 *key);
 # endif
 #endif
-#endif
-#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
-#if defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
+
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 int efx_ethtool_get_rxfh_context(struct net_device *net_dev, u32 *indir,
 				 u8 *key, u8 *hfunc, u32 rss_context);
 int efx_ethtool_set_rxfh_context(struct net_device *net_dev,
@@ -162,7 +156,9 @@ int efx_sfctool_set_rxfh_context(struct efx_nic *efx,
 				 const u8 hfunc, u32 *rss_context,
 				 bool delete);
 #endif
+
 #endif
+
 int efx_ethtool_get_module_eeprom(struct net_device *net_dev,
 				  struct ethtool_eeprom *ee,
 				  u8 *data);
@@ -172,5 +168,4 @@ int efx_ethtool_get_module_info(struct net_device *net_dev,
 #if defined(EFX_USE_KCOMPAT) && (!defined(EFX_USE_DEVLINK) || defined(EFX_NEED_ETHTOOL_FLASH_DEVICE))
 int efx_ethtool_flash_device(struct net_device *net_dev,
 			     struct ethtool_flash *flash);
-#endif
 #endif

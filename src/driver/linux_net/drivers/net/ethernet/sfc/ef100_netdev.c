@@ -650,6 +650,11 @@ static const struct net_device_ops ef100_netdev_ops = {
 	.ndo_get_phys_port_name = efx_get_phys_port_name,
 #endif
 #endif
+#if 0
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
+	.ndo_vlan_rx_register   = efx_vlan_rx_register,
+#endif
+#endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_NDO_POLL_CONTROLLER)
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	.ndo_poll_controller    = efx_netpoll,

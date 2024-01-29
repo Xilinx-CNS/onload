@@ -38,6 +38,10 @@ static inline void efx_net_dealloc(struct efx_nic *efx)
 	efx->type->net_dealloc(efx);
 }
 
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
+void efx_vlan_rx_register(struct net_device *dev, struct vlan_group *vlan_group);
+#endif
+
 int efx_pci_probe_post_io(struct efx_nic *efx,
 			  int (*nic_probe)(struct efx_nic *efx));
 void efx_pci_remove_post_io(struct efx_nic *efx,

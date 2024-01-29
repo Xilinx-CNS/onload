@@ -402,6 +402,14 @@ static void efx_rx_deliver(struct efx_rx_queue *rx_queue, u8 *eh,
 	trace_sfc_receive(skb, false, rx_buf_flags & EFX_RX_BUF_VLAN_XTAG,
 			  rx_buf_vlan_tci);
 #endif
+#if IS_ENABLED(CONFIG_VLAN_8021Q) && defined(EFX_USE_KCOMPAT) && \
+	defined(EFX_HAVE_VLAN_RX_PATH)
+	if (rx_buf_flags & EFX_RX_BUF_VLAN_XTAG) {
+		vlan_hwaccel_receive_skb(skb, efx->vlan_group,
+					 rx_buf_vlan_tci);
+		return;
+	}
+#endif
 	if (channel->rx_list != NULL)
 		/* Add to list, will pass up later */
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_SKB__LIST)
@@ -485,12 +493,16 @@ void __efx_rx_packet(struct efx_rx_queue *rx_queue)
 #if defined(EFX_NOT_UPSTREAM) && defined(EFX_USE_FAKE_VLAN_RX_ACCEL)
 	/* Fake VLAN tagging */
 	veh = (struct vlan_ethhdr *) eh;
+#if defined(EFX_HAVE_VLAN_RX_PATH)
+	if ((rx_buf->flags & EFX_RX_PKT_VLAN) && efx->vlan_group) {
+#else
 	if ((rx_buf->flags & EFX_RX_PKT_VLAN) &&
 	    ((veh->h_vlan_proto == htons(ETH_P_8021Q)) ||
 	     (veh->h_vlan_proto == htons(ETH_P_QINQ1)) ||
 	     (veh->h_vlan_proto == htons(ETH_P_QINQ2)) ||
 	     (veh->h_vlan_proto == htons(ETH_P_QINQ3)) ||
 	     (veh->h_vlan_proto == htons(ETH_P_8021AD)))) {
+#endif
 		rx_buf->vlan_tci = ntohs(veh->h_vlan_TCI);
 		memmove(eh - efx->rx_prefix_size + VLAN_HLEN,
 			eh - efx->rx_prefix_size,
@@ -833,16 +845,27 @@ static void efx_ssr_deliver(struct efx_ssr_state *st, struct efx_ssr_conn *c)
 	}
 
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
+#ifndef EFX_HAVE_VLAN_RX_PATH
 	if (EFX_SSR_CONN_IS_VLAN_ENCAP(c))
 		__vlan_hwaccel_put_tag(c->skb, htons(ETH_P_8021Q),
 				       EFX_SSR_CONN_VLAN_TCI(c));
+#endif
 #endif
 
 #ifdef CONFIG_SFC_TRACING
 	trace_sfc_receive(c->skb, false, EFX_SSR_CONN_IS_VLAN_ENCAP(c),
 			  EFX_SSR_CONN_VLAN_TCI(c));
 #endif
-	netif_receive_skb(c->skb);
+#if IS_ENABLED(CONFIG_VLAN_8021Q)
+#ifdef EFX_HAVE_VLAN_RX_PATH
+	if (EFX_SSR_CONN_IS_VLAN_ENCAP(c))
+		vlan_hwaccel_receive_skb(c->skb, st->efx->vlan_group,
+					 EFX_SSR_CONN_VLAN_TCI(c));
+	else
+		/* fall through */
+#endif
+#endif
+		netif_receive_skb(c->skb);
 
 	c->skb = NULL;
 	c->delivered = 1;

@@ -158,13 +158,5 @@ void efx_vlan_rx_add_vid(struct net_device *net_dev, unsigned short vid);
 void efx_vlan_rx_kill_vid(struct net_device *net_dev, unsigned short vid);
 #endif
 
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_HWTSTAMP_GET)
-int efx_hwtstamp_set(struct net_device *net_dev,
-		     struct kernel_hwtstamp_config *config,
-		     struct netlink_ext_ack *extack);
-int efx_hwtstamp_get(struct net_device *net_dev,
-		     struct kernel_hwtstamp_config *config);
-#endif
-
 #endif
 

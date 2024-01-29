@@ -97,7 +97,7 @@
  **************************************************************************/
 
 #ifdef EFX_NOT_UPSTREAM
-#define EFX_DRIVER_VERSION	"5.3.18.1003"
+#define EFX_DRIVER_VERSION	"5.3.16.1004"
 #endif
 
 #ifdef DEBUG
@@ -182,7 +182,7 @@
 
 /* Forward declare Precision Time Protocol (PTP) support structure. */
 struct efx_ptp_data;
-struct kernel_hwtstamp_config;
+struct hwtstamp_config;
 
 struct efx_self_tests;
 
@@ -1781,6 +1781,11 @@ struct efx_nic {
 	u64 rx_nodesc_drops_while_down;
 	bool rx_nodesc_drops_prev_state;
 
+#if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
+	/** @vlan_group: VLAN group */
+	struct vlan_group *vlan_group;
+#endif
+
 	unsigned int phy_type;
 	char phy_name[20];
 	void *phy_data;
@@ -1980,7 +1985,7 @@ struct efx_mtd_partition {
 #endif
 	const char *dev_type_name;
 	const char *type_name;
-	char name[IFNAMSIZ + 40];
+	char name[IFNAMSIZ + 20];
 	/* MCDI related attributes */
 	bool updating;
 	u32 nvram_type;
@@ -2389,7 +2394,7 @@ struct efx_nic_type {
 	void (*ptp_write_host_time)(struct efx_nic *efx, u32 host_time);
 	int (*ptp_set_ts_sync_events)(struct efx_nic *efx, bool en, bool temp);
 	int (*ptp_set_ts_config)(struct efx_nic *efx,
-				 struct kernel_hwtstamp_config *init);
+				 struct hwtstamp_config *init);
 	int (*pps_reset)(struct efx_nic *efx);
 #endif
 	int (*vlan_rx_add_vid)(struct efx_nic *efx, __be16 proto, u16 vid);

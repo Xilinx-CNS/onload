@@ -2978,17 +2978,8 @@ void efx_mcdi_mtd_rename(struct efx_mtd_partition *part)
 	if (!efx)
 		return;
 
-	BUILD_BUG_ON(sizeof(part->name) <
-		     (IFNAMSIZ + NVRAM_PARTITION_NAME_MAX_LEN +
-		      sizeof(":00 (0000:00:00.0)")));
-
-	/* TESTING: include PCI details */
-	snprintf(part->name, sizeof(part->name), "%s %s:%02x (%04x:%02x:%02x.%d)",
-		 efx->name, part->type_name, part->fw_subtype,
-		 pci_domain_nr(efx->pci_dev->bus),
-		 efx->pci_dev->bus->number,
-		 PCI_SLOT(efx->pci_dev->devfn),
-		 PCI_FUNC(efx->pci_dev->devfn));
+	snprintf(part->name, sizeof(part->name), "%s %s:%02x",
+		 efx->name, part->type_name, part->fw_subtype);
 }
 
 #endif /* CONFIG_SFC_MTD */

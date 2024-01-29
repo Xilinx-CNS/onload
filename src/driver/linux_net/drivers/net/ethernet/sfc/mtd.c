@@ -97,13 +97,6 @@ static void efx_mtd_free_parts(struct kref *kref)
 
 static void efx_mtd_scrub(struct efx_mtd_partition *part)
 {
-	/* Clear the MTD type to prevent new files being opened for the
-	 * device. Clear the partition name so that user space tools will
-	 * not find a match for it.
-	 */
-	part->mtd.type = MTD_ABSENT;
-	part->name[0] = '\0';
-
 	/* The MTD wrappers check for NULL, except for the read
 	 * function. We render that harmless by setting the
 	 * size to 0.
@@ -278,24 +271,28 @@ void efx_mtd_remove(struct efx_nic *efx)
 	/* This is done here because it can't be performed when the
 	 *  mtd_struct is actually freed as efx might not exist
 	 */
+
+	WARN_ON(efx_dev_registered(efx));
+
 	if (list_empty(&mtd_struct->list))
 		return;
 
 	list_for_each_entry_safe(part, next, &mtd_struct->list, node)
 		efx_mtd_remove_partition(mtd_struct, part);
 	kref_put(&mtd_struct->parts_kref, efx_mtd_free_parts);
+
+	efx_mtd_free(efx);
 }
 
 void efx_mtd_rename(struct efx_nic *efx)
 {
+	struct efx_mtd_partition *part;
+	struct efx_mtd *mtd_struct = efx->mtd_struct;
+
 	ASSERT_RTNL();
 
-#if defined(EFX_WORKAROUND_87308)
-	if (atomic_read(&efx->mtd_struct->probed_flag) == 0)
-		return;
-#endif
-	efx_mtd_remove(efx);
-	efx_mtd_probe(efx);
+	list_for_each_entry(part, &mtd_struct->list, node)
+		efx->type->mtd_rename(part);
 }
 
 #if defined(CONFIG_SFC_MTD) && defined(EFX_WORKAROUND_87308)

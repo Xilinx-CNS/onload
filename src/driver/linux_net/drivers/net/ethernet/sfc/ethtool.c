@@ -454,9 +454,6 @@ int efx_ethtool_flash_device(struct net_device *net_dev,
 #endif
 
 const struct ethtool_ops efx_ethtool_ops = {
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_PARAM)
-	.cap_rss_ctx_supported	= true,
-#endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_COALESCE_PARAMS)
 	.supported_coalesce_params = (ETHTOOL_COALESCE_USECS |
 				      ETHTOOL_COALESCE_USECS_IRQ |
@@ -560,7 +557,7 @@ const struct ethtool_ops_ext efx_ethtool_ops_ext = {
 	.set_rxfh_indir		= efx_ethtool_set_rxfh_indir,
 # endif
 #endif
-#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_ETHTOOL_RXFH_CONTEXT)
 	.get_rxfh_context	= efx_ethtool_get_rxfh_context,
 	.set_rxfh_context	= efx_ethtool_set_rxfh_context,
 #endif
