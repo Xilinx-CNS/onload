@@ -889,7 +889,14 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
      * socket release to have completed, and try again.
      */
     rcu_barrier();
+#ifdef EFRM_HAVE_WARN_FLUSHING_SYSTEMWIDE_WQ
+    /* linux >= 6.6 forbids flushing system global workqueues.
+     * flush_scheduled_work() is not available anymore for modules, so we use
+     * __flush_workqueue(). */
+    __flush_workqueue(system_wq);
+#else
     flush_scheduled_work();
+#endif
     rc = xdp_bind(sock, nic->net_dev->ifindex, instance, vi->flags);
   }
   if( rc < 0 )

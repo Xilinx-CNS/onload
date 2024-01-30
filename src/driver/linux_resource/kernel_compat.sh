@@ -140,6 +140,7 @@ EFRM_HAS_REMAP_VMALLOC_RANGE_PARTIAL	export	remap_vmalloc_range_partial	include/
 EFRM_HAS_KTIME_GET_REAL_SECONDS	export	ktime_get_real_seconds	include/linux/timekeeping.h	kernel/time/timekeeping.c
 EFRM_FILE_HAS_F_EP	member	struct_file	f_ep	include/linux/fs.h
 EFRM_HAS_LOOKUP_FD_RCU	symbol	lookup_fd_rcu	include/linux/fdtable.h
+EFRM_HAS_LOOKUP_FDGET_RCU	symbol	lookup_fdget_rcu	include/linux/fdtable.h
 
 EFRM_HAS_FLUSH_DELAYED_FPUT	export	flush_delayed_fput	include/linux/file.h	fs/file_table.c
 
@@ -172,6 +173,8 @@ EFRM_CLASS_CREATE_NO_MODULE symtype class_create include/linux/device/class.h st
 EFRM_HAVE_ITER_IOV symbol iter_iov include/linux/uio.h
 
 EFRM_NEED_DEBUGFS_LOOKUP_AND_REMOVE nsymbol debugfs_lookup_and_remove include/linux/debugfs.h
+
+EFRM_HAVE_WARN_FLUSHING_SYSTEMWIDE_WQ symbol __warn_flushing_systemwide_wq include/linux/workqueue.h
 
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
