@@ -23,9 +23,9 @@
 #include <etherfabric/vi.h>
 #include <ci/internal/pio_buddy.h>
 #include <ci/driver/efab/hardware/efct.h>
+#include <etherfabric/checksum.h>
 
 #if OO_DO_STACK_POLL
-#include <linux/ip.h>
 #ifdef __KERNEL__
 #include <linux/time.h>
 #else
@@ -98,16 +98,18 @@ static int ci_tcp_csum_correct(ci_ip_pkt_fmt* pkt, int ip_paylen)
 {
   int af = oo_pkt_af(pkt);
   ci_ipx_hdr_t* ipx = oo_ipx_hdr(pkt);
+  void *ipx_hdr = ipx_hdr_ptr(af, ipx);
   ci_tcp_hdr* tcp = ipx_hdr_data(af, ipx);
   int tcp_hlen = CI_TCP_HDR_LEN(tcp);
+  int tcp_paylen = ip_paylen - tcp_hlen;
 
   if( tcp_hlen < sizeof(ci_tcp_hdr) )
     return 0;
   if( ip_paylen < tcp_hlen )
     return 0;
 
-  return ci_ipx_tcp_checksum(af, ipx, tcp, CI_TCP_PAYLOAD(tcp)) ==
-         tcp->tcp_check_be16;
+  return ef_tcp_checksum_ipx_is_correct(af, ipx_hdr, (struct tcphdr*)tcp,
+                                        CI_TCP_PAYLOAD(tcp), tcp_paylen);
 }
 
 

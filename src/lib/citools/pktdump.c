@@ -20,6 +20,7 @@
 #include <ci/net/ethernet.h>
 #include <ci/net/ipv4.h>
 #include <ci/net/arp.h>
+#include <etherfabric/checksum.h>
 
 
 const char* ci_ether_type_str(unsigned ether_type)
@@ -367,7 +368,8 @@ int ci_analyse_tcp(const ci_ip4_hdr* ip,
       "TCP ***** bad header length %x %x *****")))
     return rc;
 
-  csum = ci_tcp_checksum(ip, tcp, CI_TCP_PAYLOAD(tcp));
+  csum = ef_tcp_checksum_ipx_buf(AF_INET, ip, (struct tcphdr*)tcp,
+                                 CI_TCP_PAYLOAD(tcp), CI_TCP_PAYLEN(ip, tcp));
 
   rc = ci_analyse_check_eq(tcp->tcp_check_be16, csum,
     "TCP ***** bad checksum %x (I get %x) *****");
@@ -401,16 +403,12 @@ int ci_analyse_udp(const ci_ip4_hdr* ip,
     ci_pprint_udp_hdr(udp);
     
     if( ~ip->ip_frag_off_be16 & CI_IP4_FRAG_MORE ) { 
-      ci_iovec iov;
-
       rc = ci_analyse_check_eq(bytes, CI_BSWAP_BE16(udp->udp_len_be16),
 	"UDP ***** datagram length doesn't match IP total length %x %x *****");
 
       bytes -= sizeof(*udp);      
-      CI_IOVEC_BASE(&iov) = (void *)(udp + 1);
-      CI_IOVEC_LEN(&iov) = CI_BSWAP_BE16(ip->ip_tot_len_be16) -
-          CI_IP4_IHL(ip) - sizeof(ci_udp_hdr);
-      csum = ci_udp_checksum(ip, udp, &iov, 1);
+      csum = ef_udp_checksum_ipx_buf(AF_INET, ip, (struct udphdr*)udp,
+                                     CI_UDP_PAYLOAD(udp), CI_UDP_PAYLEN(udp));
 
       rc = ci_analyse_check_eq(udp->udp_check_be16, csum,
         "UDP ***** bad checksum %x (I get %x) *****");

@@ -275,7 +275,7 @@ typedef struct ci_udp_hdr_s {
 
 
 #define CI_UDP_PAYLOAD(hdr)	((char*) &(hdr)->udp_check_be16 + 2)
-#define CI_UDP_PAYLEN(hdr)	CI_BSWAP_BE16((hdr)->udp_len_be16)
+#define CI_UDP_PAYLEN(hdr)	(CI_BSWAP_BE16((hdr)->udp_len_be16) - sizeof(ci_udp_hdr))
 
 
 /**********************************************************************
