@@ -257,6 +257,11 @@ typedef struct ci_resource_op_s {
       } mac;
 #     define            CI_RSOP_FILTER_ADD_FLAG_REPLACE            1
 #     define            CI_RSOP_FILTER_ADD_FLAG_MCAST_LOOP_RECEIVE 2
+/* New flags here must match those defined for the new filter interface, and
+ * are used as placeholders solely to avoid adding new clashing flags. */
+#     define            CI_RSOP_FILTER_ADD_FLAG_EXCLUSIVE_RXQ      4
+#     define            CI_RSOP_FILTER_ADD_FLAG_PREF_RXQ           8
+#     define            CI_RSOP_FILTER_ADD_FLAG_ANY_RXQ            0x10
       union {
         struct {
           int32_t       flags;

@@ -182,6 +182,8 @@ static unsigned filter_flags_to_efhw_flags(unsigned filter_flags)
 {
   unsigned efhw_flags = 0;
 
+  /* These flags are common between the legacy and new filter interface. The
+   * flags that differ aren't needed by efhw and have already been handled. */
   if( filter_flags & CI_FILTER_FLAG_PREF_RXQ )
     efhw_flags |= EFHW_FILTER_F_PREF_RXQ;
   if( filter_flags & CI_FILTER_FLAG_ANY_RXQ )
@@ -444,8 +446,8 @@ int efch_filter_list_op_add(struct efrm_resource *rs, struct efrm_pd *pd,
                             int rss_context)
 {
   /* This whole function is the legacy filter_add ioctl interface, maintained
-   * solely for backward-compatibility with old userspace. All current
-   * userspace code uses efch_filter_list_add() instead */
+   * for backward-compatibility with old userspace and handling of special
+   * filter types. */
   int rc;
   int replace;
   struct efx_filter_spec spec;
