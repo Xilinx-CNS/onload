@@ -5,6 +5,7 @@
 #include <ci/efrm/efrm_filter.h>
 #include <ci/efrm/pd.h>
 #include <ci/efrm/vi_resource.h>
+#include <ci/efrm/vi_set.h>
 #include <ci/efhw/nic.h>
 #include <ci/net/ethernet.h>
 #include "efch.h"
@@ -593,6 +594,8 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
   unsigned onload_filter_flags = 0;
   enum efx_filter_flags filter_flags = EFX_FILTER_FLAG_RX_SCATTER;
   uint16_t vid;
+  struct efrm_vi_set *vi_set;
+  int rss_context = 0;
 
   if( ! capable(CAP_NET_ADMIN) ) {
     if( (filter_add->in.fields & (CI_FILTER_FIELD_LOC_HOST |
@@ -620,11 +623,21 @@ int efch_filter_list_add(struct efrm_resource *rs, struct efrm_pd *pd,
 
   if( filter_add->in.flags & CI_FILTER_FLAG_MCAST_LOOP )
     filter_flags |= EFX_FILTER_FLAG_TX;
-  if( filter_add->in.flags & CI_FILTER_FLAG_RSS )
+  if( filter_add->in.flags & CI_FILTER_FLAG_RSS ) {
+    if( rs->rs_type != EFRM_RESOURCE_VI_SET )
+      return -EINVAL;
+    vi_set = efrm_vi_set_from_resource(rs);
+    rss_context = efrm_vi_set_get_rss_context(vi_set,
+                                              EFRM_RSS_MODE_ID_DEFAULT);
+    /* We don't have our own context, so fall back to sharing with the net
+     * driver. */
+    if( rss_context == -1 )
+      rss_context = EFX_FILTER_RSS_CONTEXT_DEFAULT;
     filter_flags |= EFX_FILTER_FLAG_RX_RSS;
+  }
   efx_filter_init_rx(&spec, EFX_FILTER_PRI_REQUIRED, filter_flags,
                      rs->rs_instance);
-  spec.rss_context = filter_add->in.rss_context;
+  spec.rss_context = rss_context;
 
   *copy_out = 1;
 

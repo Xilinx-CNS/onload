@@ -396,7 +396,6 @@ typedef union ci_filter_add_u {
       } l4;
     } spec;
     union {
-      uint32_t            rss_context;
       uint32_t            rxq_no;
     };
   } in;
