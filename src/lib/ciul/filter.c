@@ -282,15 +282,34 @@ int ef_filter_spec_set_dest(ef_filter_spec* fs, int dest, unsigned flags)
  */
 
 static int ef_filter_add_special(ef_driver_handle dh, int resource_id,
-                                 int pref_rxq_no, unsigned flags, int type,
-                                 bool promisc, uint16_t vlan_id,
-                                 ef_filter_cookie *filter_cookie_out, int *rxq_out)
+                                 int pref_rxq_no, const ef_filter_spec *fs,
+                                 unsigned flags,
+                                 ef_filter_cookie *filter_cookie_out,
+                                 int *rxq_out)
 {
   ci_resource_op_t op;
   int rc;
+  unsigned op_flags;
+  int type = fs->type;
+  bool promisc = get_proto(fs);
+  uint16_t vlan_id = fs->data[5];
 
   memset(&op, 0, sizeof(op));
   op.id = efch_make_resource_id(resource_id);
+
+  /* Special filters continue to use the legacy filter interface with the char
+   * driver. The flags passed here are new interface flags, but the legacy
+   * interface expects legacy flags, so we need special handling here to deal
+   * with the incompatible intersection of the two sets of flags.
+   * CI_FILTER_FLAG_MCAST_LOOP has an equivalent in the filter spec
+   * CI_FILTER_FLAG_RSS is not needed on the legacy path as the vi set op
+   * deals with this.
+   * Subsequent flags have the same meaning in both interfaces.
+   */
+  op_flags = fs->flags & EF_FILTER_FLAG_MCAST_LOOP_RECEIVE ?
+                CI_RSOP_FILTER_ADD_FLAG_MCAST_LOOP_RECEIVE : 0;
+  op_flags |= flags & ~(CI_FILTER_FLAG_MCAST_LOOP|CI_FILTER_FLAG_RSS);
+
   switch (type) {
   case EF_FILTER_PORT_SNIFF:
     op.op = CI_RSOP_PT_SNIFF;
@@ -303,41 +322,41 @@ static int ef_filter_add_special(ef_driver_handle dh, int resource_id,
     break;
   case EF_FILTER_BLOCK_KERNEL:
     op.op = CI_RSOP_FILTER_ADD_BLOCK_KERNEL;
-    op.u.filter_add.u.in.flags = flags;
+    op.u.filter_add.u.in.flags = op_flags;
     break;
   case EF_FILTER_BLOCK_KERNEL_UNICAST:
     op.op = CI_RSOP_FILTER_ADD_BLOCK_KERNEL_UNICAST;
-    op.u.filter_add.u.in.flags = flags;
+    op.u.filter_add.u.in.flags = op_flags;
     break;
   case EF_FILTER_BLOCK_KERNEL_MULTICAST:
     op.op = CI_RSOP_FILTER_ADD_BLOCK_KERNEL_MULTICAST;
-    op.u.filter_add.u.in.flags = flags;
+    op.u.filter_add.u.in.flags = op_flags;
     break;
   case EF_FILTER_ALL_UNICAST:
     op.op = CI_RSOP_FILTER_ADD_ALL_UNICAST;
-    op.u.filter_add.u.in.flags = flags;
+    op.u.filter_add.u.in.flags = op_flags;
     break;
   case EF_FILTER_ALL_MULTICAST:
     op.op = CI_RSOP_FILTER_ADD_ALL_MULTICAST;
-    op.u.filter_add.u.in.flags = flags;
+    op.u.filter_add.u.in.flags = op_flags;
     break;
   case EF_FILTER_MISMATCH_UNICAST | EF_FILTER_VLAN:
     op.op = CI_RSOP_FILTER_ADD_MISMATCH_UNICAST_VLAN;
     op.u.filter_add.mac.vlan_id = vlan_id;
-    op.u.filter_add.u.in.flags = flags;
+    op.u.filter_add.u.in.flags = op_flags;
     break;
   case EF_FILTER_MISMATCH_UNICAST:
     op.op = CI_RSOP_FILTER_ADD_MISMATCH_UNICAST;
-    op.u.filter_add.u.in.flags = flags;
+    op.u.filter_add.u.in.flags = op_flags;
     break;
   case EF_FILTER_MISMATCH_MULTICAST | EF_FILTER_VLAN:
     op.op = CI_RSOP_FILTER_ADD_MISMATCH_MULTICAST_VLAN;
     op.u.filter_add.mac.vlan_id = vlan_id;
-    op.u.filter_add.u.in.flags = flags;
+    op.u.filter_add.u.in.flags = op_flags;
     break;
   case EF_FILTER_MISMATCH_MULTICAST:
     op.op = CI_RSOP_FILTER_ADD_MISMATCH_MULTICAST;
-    op.u.filter_add.u.in.flags = flags;
+    op.u.filter_add.u.in.flags = op_flags;
     break;
   default:
     return -EINVAL;
@@ -487,8 +506,7 @@ static int ef_filter_add(ef_driver_handle dh, int resource_id, int rxq_no,
     case EF_FILTER_MISMATCH_UNICAST:
     case EF_FILTER_MISMATCH_MULTICAST | EF_FILTER_VLAN:
     case EF_FILTER_MISMATCH_MULTICAST:
-      return ef_filter_add_special(dh, resource_id, rxq_no, flags, fs->type,
-                                   get_proto(fs), fs->data[5],
+      return ef_filter_add_special(dh, resource_id, rxq_no, fs, flags,
                                    filter_cookie_out, rxq_out);
     default:
       return ef_filter_add_normal(dh, resource_id, rxq_no, fs, flags,
