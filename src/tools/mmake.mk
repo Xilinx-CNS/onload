@@ -12,7 +12,7 @@ endif
 
 SUBDIRS		+= onload_helper ip \
 		   solar_clusterd onload_remote_monitor \
-		   onload_mibdump
+		   onload_mibdump shrub_controller
 
 endif
 
