@@ -3,7 +3,7 @@
 
 name: "perform_developing_md_build"
 
-on: [push, pull_request]
+on: push
 
 jobs:
   perform_developing_md_build:
@@ -29,10 +29,23 @@ jobs:
           mmakebuildtree --driver
           mmakebuildtree --user
 
-      - name: build driver
+      - name: build DEBUG driver
         run: |
-          make -C "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)" -j 2
-          
-      - name: build user
+          make -C "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)" -j $(nproc)
+
+      - name: build DEBUG user
         run: |
-          make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j 2
+          make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j $(nproc)
+
+      - name: build NDEBUG driver
+        run: |
+          make -C "$(mmaketool --toppath)/build/$(mmaketool --driverbuild)" -j $(nproc) NDEBUG=1
+
+      - name: build NDEBUG user
+        run: |
+          make -C "$(mmaketool --toppath)/build/$(mmaketool --userbuild)" -j $(nproc) NDEBUG=1
+
+      - name: NEW Make build check
+        run: |
+          rm -rf "$(mmaketool --toppath)/build"
+          make -C "$(mmaketool --toppath)" -j $(nproc)
