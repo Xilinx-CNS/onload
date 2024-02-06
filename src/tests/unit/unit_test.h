@@ -6,7 +6,7 @@
 #define ONLOAD_UNIT_TEST_H
 
 #include <stdlib.h>
-
+#include <stdio.h>
 
 /* Running test suites
  *
@@ -39,8 +39,12 @@
 /* Check that two values satisfy an equality or inequality comparison, reporting
  * the observed values on failure. */
 #define CHECK(LHS, CMP, RHS) \
-  ut_check(__FILE__, __LINE__, (LHS) CMP (RHS), #LHS, #CMP, #RHS, \
-           (long long)LHS, (long long)RHS)
+  do { \
+    typeof(LHS) lhs = (LHS); \
+    typeof(RHS) rhs = (RHS); \
+    ut_check(__FILE__, __LINE__, lhs CMP rhs, #LHS, #CMP, #RHS, \
+        (long long)lhs, (long long)rhs); \
+  } while (0)
 
 /* Check that an expression is true/non-zero */
 #define CHECK_TRUE(EXPR) \
@@ -88,11 +92,25 @@
 #define STATE_STASH(NAME) \
   memcpy(NAME + 1, NAME, sizeof(*NAME))
 
+#define STATE_CHECK_(NAME, FIELD, EXPECTED, CAST) \
+  do { \
+    CHECK(CAST(NAME->FIELD), ==, EXPECTED);   \
+    NAME->FIELD = (NAME + 1)->FIELD; \
+  } while (0)
+
 /* Check the value of a field of an object, restoring the stashed value */
 #define STATE_CHECK(NAME, FIELD, EXPECTED) \
+  STATE_CHECK_(NAME, FIELD, EXPECTED,)
+
+/* Version that works for bitfields */
+#define STATE_CHECK_BF(NAME, FIELD, EXPECTED) \
+  STATE_CHECK_(NAME, FIELD, EXPECTED, (long long))
+
+/* Check the value of a field of an object, updating the stashed value */
+#define STATE_UPDATE(NAME, FIELD, EXPECTED) \
   do { \
     CHECK(NAME->FIELD, ==, EXPECTED);   \
-    NAME->FIELD = (NAME + 1)->FIELD; \
+    (NAME + 1)->FIELD = NAME->FIELD; \
   } while (0)
 
 /* Check there are no unchecked changes before freeing the objects.
@@ -166,7 +184,7 @@ ut_check_mem(const char* file, int line,
       ++checks_failed;
       fprintf(stderr,
           "%s:%d: %s failed %s == %s\n  %s[%lld] = %02x\n  %s[%lld] = %02x\n",
-          __FILE__, __LINE__, current_test, lstr, rstr,
+          file, line, current_test, lstr, rstr,
           lstr, i, lptr[i], rstr, i, rptr[i]);
       break;
     }

@@ -55,6 +55,9 @@ $(OBJECTS): % : $$(@D)/.unit_test_dir
 NO_PIE = $(shell echo 'int main(void){return 0;}' | \
                  $(CC) -x c -no-pie - -o /dev/null 2>/dev/null && echo -no-pie)
 
+# Allow tests to include headers in the same directory as the code under test
+$(filter lib/%, $(TARGETS)): MMAKE_DIR_CFLAGS += -I$(TOPPATH)/src/$(dir $@)
+
 # Test programs are linked with the object under test, and stub dependencies.
 #
 # CAVEAT: the fragmented build system means that the object under test will NOT

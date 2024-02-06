@@ -226,7 +226,7 @@ static void test_rx_pkt_timestamp_cpacket_subnano(void)
   ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
-  STATE_CHECK(ts, nsec_frac, subnano);
+  STATE_CHECK_BF(ts, nsec_frac, subnano);
 
   STATE_FREE(buf);
   STATE_FREE(ts);
@@ -261,7 +261,7 @@ static void test_rx_pkt_timestamp_cpacket_many(void)
   ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
-  STATE_CHECK(ts, nsec_frac, subnano);
+  STATE_CHECK_BF(ts, nsec_frac, subnano);
 
   STATE_FREE(buf);
   STATE_FREE(ts);
@@ -291,7 +291,7 @@ static void test_rx_pkt_timestamp_cpacket_bogus(void)
   ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
-  STATE_CHECK(ts, nsec_frac, 0); /* didn't find it, but no disastrous outcome */
+  STATE_CHECK_BF(ts, nsec_frac, 0); /* didn't find it, but no disastrous outcome */
 
   STATE_FREE(buf);
   STATE_FREE(ts);
@@ -412,7 +412,7 @@ static void test_rx_pkt_timestamp_cpacket_pcap_metawatch(void)
   ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, 0x5c9a4c08);
   STATE_CHECK(ts, nsec, 0x313ac683);
-  STATE_CHECK(ts, nsec_frac, 0x536c8b);
+  STATE_CHECK_BF(ts, nsec_frac, 0x536c8b);
 
   STATE_FREE(buf);
   STATE_FREE(ts);
@@ -476,7 +476,7 @@ static void test_rx_pkt_timestamp_cpacket_pcap_wireshark(void)
   ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_CPACKET);
   STATE_CHECK(ts, sec, 0x40a34b24);
   STATE_CHECK(ts, nsec, 0x0d4399db);
-  STATE_CHECK(ts, nsec_frac, 0x2c52de);
+  STATE_CHECK_BF(ts, nsec_frac, 0x2c52de);
 
   STATE_FREE(buf);
   STATE_FREE(ts);
@@ -502,7 +502,7 @@ static void test_rx_pkt_timestamp_trailer_ttag(void)
   ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_TTAG);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
-  STATE_CHECK(ts, nsec_frac, 0);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
 
   STATE_FREE(buf);
   STATE_FREE(ts);
@@ -526,7 +526,7 @@ static void test_rx_pkt_timestamp_trailer_brcm(void)
   ci_rx_pkt_timestamp_trailer(pkt, ts, CITP_RX_TIMESTAMPING_TRAILER_FORMAT_BRCM);
   STATE_CHECK(ts, sec, sec);
   STATE_CHECK(ts, nsec, nsec);
-  STATE_CHECK(ts, nsec_frac, 0);
+  STATE_CHECK_BF(ts, nsec_frac, 0);
 
   STATE_FREE(buf);
   STATE_FREE(ts);
