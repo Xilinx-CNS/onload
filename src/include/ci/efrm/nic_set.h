@@ -51,7 +51,7 @@
  *
  *--------------------------------------------------------------------*/
 
-/* Internal suructure of efrm_nic_set_t should not be referenced outside of
+/* Internal structure of efrm_nic_set_t should not be referenced outside of
  * this file.  Add a new accessor if you should do it. */
 typedef struct {
 	uint64_t nics CI_ALIGN(8);

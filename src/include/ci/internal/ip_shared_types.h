@@ -98,7 +98,7 @@
 /* Where we know that a field of shared state is supposed to be written
 ** only by the kernel - and never by the user mode we use this pseudo-type
 ** to identify it.  Some fields can only be compiled as "const" if the compile
-** time option to force initilaiztion to occur in the kernel is set.
+** time option to force initialization to occur in the kernel is set.
 */
 
 #ifdef __KERNEL__
@@ -1149,7 +1149,7 @@ struct ci_netif_state_s {
 #define OO_CLOSED_EPS_RING_SIZE 512
   struct oo_ringbuffer_state closed_eps;
 
-  /* We do not expect a lot of filter operations happaning at once, with
+  /* We do not expect a lot of filter operations happening at once, with
    * one exception: add/remove IP addresses.  In such a case all listening
    * (or UDP-wildcard) socket filters are adjusted.  Let's use the number
    * of IP addresses as a size of ringbuffer her.  Twice, to be sure.
@@ -1197,7 +1197,7 @@ struct ci_netif_state_s {
    */
   ci_uint32             evq_prime_deferred;
 
-  cicp_hwport_mask_t    hwport_mask; /* hwports accelearted by the stack */
+  cicp_hwport_mask_t    hwport_mask; /* hwports accelerated by the stack */
   ci_int8               hwport_to_intf_i[CI_CFG_MAX_HWPORTS];
   ci_int8               intf_i_to_hwport[CI_CFG_MAX_INTERFACES];
 
@@ -1205,7 +1205,7 @@ struct ci_netif_state_s {
   ci_uint32             n_spinners;
 
   /* Set to true by a thread that is "spinning" waiting for network events
-   * and leared when no longer spinning.  May be set/cleared by multiple
+   * and cleared when no longer spinning.  May be set/cleared by multiple
    * threads without synchronisation.
    */
   ci_int8               is_spinner;

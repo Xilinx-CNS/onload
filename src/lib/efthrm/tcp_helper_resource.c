@@ -1383,7 +1383,7 @@ get_vi_settings(ci_netif* ni, struct efhw_nic* nic,
 
 
 /* Function to find the orphaned stacks and release the resources
- * occupied by the this stack by kiling it so that it can be used
+ * occupied by the this stack by killing it so that it can be used
  * for allocation of new stack.
  * \return  Zero when stack has been released ENODEV otherwise */
 static int find_and_release_orphaned_stack(void)
