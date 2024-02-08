@@ -1725,11 +1725,9 @@ static int allocate_vis(tcp_helper_resource_t* trs,
 
     BUILD_BUG_ON(sizeof(ni->vi_data) < sizeof(struct efrm_vi_mappings));
 
-    alloc_info.hwport_flags = 0;        /* Placate compiler. */
-
     /* Get interface properties. */
     rc = oo_cp_get_hwport_properties(ni->cplane, ns->intf_i_to_hwport[intf_i],
-                                     &alloc_info.hwport_flags, NULL);
+                                     NULL, NULL);
     if( rc < 0 )
       goto error_out;
 

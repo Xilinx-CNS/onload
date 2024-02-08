@@ -17,7 +17,6 @@ struct vi_allocate_info {
   unsigned ef_vi_flags;
   unsigned efhw_flags;
   unsigned oo_vi_flags;
-  unsigned int hwport_flags;
   int evq_capacity;
   int txq_capacity;
   int rxq_capacity;
