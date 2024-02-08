@@ -85,7 +85,7 @@ typedef ci_int32 ci_kerr_t; /* range of OS kernel-mode return codes */
 #define IS_ERR(ptr) \
   CI_UNLIKELY((uintptr_t)(ptr) >= (uintptr_t)-CI_MAX_ERRNO)
 #define PTR_ERR(ptr) ((long)((uintptr_t)(ptr)))
-#define PTR_ERR_OR_ZERO(ptr) (PTR_ERR(ptr) ? PTR_ERR(ptr) : 0)
+#define PTR_ERR_OR_ZERO(ptr) (IS_ERR(ptr) ? PTR_ERR(ptr) : 0)
 #define ERR_PTR(err) ((void*)(uintptr_t)(long)(err))
 
 /**********************************************************************
