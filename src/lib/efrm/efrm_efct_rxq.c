@@ -329,10 +329,11 @@ int efrm_rxq_refresh(struct efrm_efct_rxq *rxq, unsigned long superbufs,
 	unsigned n_hugepages = CI_MIN(max_superbufs, (unsigned)CI_EFCT_MAX_SUPERBUFS) /
 	                       CI_EFCT_SUPERBUFS_PER_PAGE;
 
-	if (max_superbufs <= CI_EFCT_MAX_SUPERBUFS) {
-		EFRM_TRACE("max_superbufs: %u passed in by user not equal to kernel's: %u. "
+	if (max_superbufs < CI_EFCT_MAX_SUPERBUFS) {
+		EFRM_TRACE("max_superbufs: %u passed in by user less than kernel's: %u. "
 		           "Ensure you do not create enough apps to donate more than %u "
-		           "superbufs!", max_superbufs, CI_EFCT_MAX_SUPERBUFS,
+		           "superbufs! Alternatively, applications should be compiled with"
+							 "a newer userspace.", max_superbufs, CI_EFCT_MAX_SUPERBUFS,
 		           n_hugepages * CI_EFCT_SUPERBUFS_PER_PAGE);
 	}
 
