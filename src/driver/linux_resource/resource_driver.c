@@ -114,9 +114,6 @@ MODULE_PARM_DESC(enable_driverlink,
 				 "When disabled, it is possible to attach SFC devices "
 				 "with AF_XDP interface.");
 
-#ifdef HAS_COMPAT_PAT_WC
-static int compat_pat_wc_inited = 0;
-#endif
 
 /*********************************************************************
  *
@@ -724,13 +721,6 @@ static int init_sfc_resource(void)
 	efrm_install_sysfs_entries();
 	efrm_nondl_register();
 
-#ifdef HAS_COMPAT_PAT_WC
-	compat_pat_wc_inited = 0;
-	if (pio)
-		if (compat_pat_wc_init() == 0)
-			compat_pat_wc_inited = 1;
-#endif
-
 	return 0;
 
 failed_auxbus:
@@ -755,13 +745,6 @@ failed_resources:
  ****************************************************************************/
 static void cleanup_sfc_resource(void)
 {
-#ifdef HAS_COMPAT_PAT_WC
-	if (compat_pat_wc_inited) {
-		compat_pat_wc_inited = 0;
-		compat_pat_wc_shutdown();
-	}
-#endif
-
 	efrm_nondl_unregister();
 	efrm_remove_sysfs_entries();
 	efrm_nondl_shutdown();

@@ -10,7 +10,7 @@
 
 RESOURCE_SRCS	:= resource_driver.c \
 	iopage.c kernel_proc.c filter.c \
-	bt_stats.c compat_pat_wc.c port_sniff.c nondl_resource.c sysfs.c \
+	bt_stats.c port_sniff.c nondl_resource.c sysfs.c \
 	nondl_driver.c sfcaffinity.c nic_notifier.c \
 	aux_driver.c aux_efct.c efct_superbuf.c debugfs.c
 
