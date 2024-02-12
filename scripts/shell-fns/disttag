@@ -63,3 +63,23 @@ sfc_disttag() {
   return 0
 }
 
+efct_disttag() {
+  if [ -f /etc/redhat-release ]; then
+    awk '
+	/Red Hat Linux release/ { gsub(/\./,""); printf "RH%s\n", $5; exit }
+	/Red Hat Enterprise Linux release/ { printf "RHEL%s\n", substr($6, 1, 1); exit }
+	/Red Hat Enterprise Linux (WS|Server|Client|Workstation)/ { printf "RHEL%s\n", substr($7, 1, 1); exit }
+	/CentOS Linux release 7/ { printf "RHEL7\n"; exit }
+	' /etc/redhat-release
+  elif [ -f /etc/debian_version ]; then
+    echo "Debian"`sed 's/\//-/g' /etc/debian_version`
+  elif [ -x "$(command -v hostnamectl)" ]; then
+    hostnamectl | awk '
+	/SUSE Linux Enterprise Server/ { printf "SLES%s\n", $7; exit }
+	'
+  else
+    echo "unsupportedOS"
+    return 1
+  fi
+  return 0
+}
