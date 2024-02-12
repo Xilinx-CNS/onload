@@ -29,3 +29,9 @@ int py_oo_cp_set_hwport(struct oo_cplane_handle* cp,
   arg.hwport = hwport;
   return cplane_ioctl(cp->fd, OO_IOC_CP_SYSUNIT_MAKE_NIC, &arg);
 }
+
+int py_oo_cp_get_hwport_ifindex(struct oo_cplane_handle* cp,
+                                ci_hwport_id_t hwport)
+{
+  return oo_cp_get_hwport_ifindex(cp, hwport);
+}

@@ -492,19 +492,30 @@ def prep_bond(cpserver,cp,netns,hwports,v6=False,mode=1,
     if mask is None:
         mask = 112 if v6 else 24
     ifnames = []
+
+    # Used to validate getHwportIfindex
+    _hwport2ifindex = {}
+
     for hwport in hwports:
         if include_non_sf_intf and hwport == 0:
             slifname = 'x0'
             netns.link('add', kind='dummy', ifname=slifname)
         else:
             slifname = 'O%d'%hwport
-            cpmakenic(netns, cp, slifname, hwport)
+            ifix = cpmakenic(netns, cp, slifname, hwport)
+
+            assert _hwport2ifindex.get(hwport) is None
+            _hwport2ifindex[hwport] = ifix
+
         ifnames.append(slifname)
 
     ifix = create_bond(cpserver, netns, ifname, ifnames, mode)
     if address:
         addr_add(netns, index=ifix, address=address, mask=mask)
     netns.link('set', index=ifix, state='up')
+
+    for hwport in _hwport2ifindex:
+        assert cp.getHwportIfindex(hwport) == _hwport2ifindex[hwport]
 
     return (ifname, ifnames)
 

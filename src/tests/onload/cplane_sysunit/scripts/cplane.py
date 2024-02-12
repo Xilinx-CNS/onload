@@ -230,6 +230,15 @@ class CPlane(object):
         if rc < 0:
             raise Exception("Setting new hwport failed %d"%rc)
 
+    def getHwportIfindex(self, hwport):
+        ''' Find out the "best" interface index by hwport ID.  The resultant
+            index might not be the one announced with the above newHwport()
+            due to the network namespaces whose boundaries we won't cross.
+
+            Return CI_IFID_BAD on failure.
+        '''
+        return self.cp.py_oo_cp_get_hwport_ifindex(self.handle, hwport)
+
 
 ''' The class manages CPServer process life within its own private
     anonymous network namespace and the state backed with temporary file.

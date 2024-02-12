@@ -46,11 +46,12 @@ static cicp_hwport_mask_t get_all_rxports_mask(struct cp_session *s)
 }
 
 
-#define MACVLAN_TEST_COUNT 2
+#define MACVLAN_TEST_COUNT 4
 void test_macvlan_interface(void)
 {
   struct cp_session s_local, s_main;
   int next_ifindex = 1;
+  int macvlan_ifindex;
   init_sessions(&s_local, &s_main, &next_ifindex);
 
   /* Add a macvlan interface in the other namespace. */
@@ -60,6 +61,7 @@ void test_macvlan_interface(void)
   cp_unit_nl_handle_macvlan_link_msg(&s_local, RTM_NEWLINK, next_ifindex,
                                      "macvlan0", macvlan_mac,
                                      base_llap_row->ifindex);
+  macvlan_ifindex = next_ifindex++;
 
   /* Check hwports.  The macvlan interface should be built on top of the
    * first base interface. */
@@ -69,16 +71,26 @@ void test_macvlan_interface(void)
   cmp_ok(macvlan_llap_row->tx_hwports, "==", base_llap_row->tx_hwports,
          "Macvlan TX hwports");
 
+  /* Check if we can resolve the ifindex by hwport ID.  We should not be
+   * able to cross the namespaces and should return macvlan where possible. */
+  ci_ifid_t ifindex = cp_get_hwport_ifindex(&s_local.mib[0], 0);
+  cmp_ok(ifindex, "==", macvlan_ifindex,
+         "Get macvlan interface by one hwport");
+  ifindex = cp_get_hwport_ifindex(&s_local.mib[0], 1);
+  cmp_ok(ifindex, "==", CI_IFID_BAD,
+         "Get macvlan interface by another hwport");
+
   cp_unit_destroy_session(&s_local);
   cp_unit_destroy_session(&s_main);
 }
 
 
-#define VETH_TEST_COUNT 3
+#define VETH_TEST_COUNT 5
 void test_veth_interface(void)
 {
   struct cp_session s_local, s_main;
   int next_ifindex = 1;
+  unsigned i;
   init_sessions(&s_local, &s_main, &next_ifindex);
 
   /* Add a veth interface in the other namespace.  In the real world there
@@ -102,6 +114,14 @@ void test_veth_interface(void)
          get_all_rxports_mask(&s_main),
          "Veth RX hwports");
   cmp_ok(veth_llap_row->tx_hwports, "==", 0, "Veth TX hwports");
+
+  /* Check if we can resolve the ifindex by hwport ID.  All hwports should
+   * point at the same interface. */
+  for( i = 0; i < 2; i++) {
+    ci_ifid_t ifindex = cp_get_hwport_ifindex(&s_local.mib[0], i);
+    cmp_ok(ifindex, "==", CI_IFID_BAD,
+           "Get veth interface");
+  }
 
   cp_unit_destroy_session(&s_local);
   cp_unit_destroy_session(&s_main);
