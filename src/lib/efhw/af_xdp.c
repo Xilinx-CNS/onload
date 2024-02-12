@@ -1133,45 +1133,6 @@ static bool af_xdp_accept_vi_constraints(struct efhw_nic *nic, int low,
 	return true;
 }
 
-/*--------------------------------------------------------------------
- *
- * EF10 specific event callbacks
- *
- *--------------------------------------------------------------------*/
-
-static int
-af_xdp_handle_event(struct efhw_nic *nic, efhw_event_t *ev, int budget)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
-
-/*----------------------------------------------------------------------------
- *
- * TX Alternatives
- *
- *---------------------------------------------------------------------------*/
-
-
-static int
-af_xdp_tx_alt_alloc(struct efhw_nic *nic, int tx_q_id, int num_alt,
-		  int num_32b_words, unsigned *cp_id_out, unsigned *alt_ids_out)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	return -EOPNOTSUPP;
-}
-
-
-static int
-af_xdp_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
-		 const unsigned *alt_ids)
-{
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
 
 /*----------------------------------------------------------------------------
  *
@@ -1211,17 +1172,6 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
   return 0;
 }
 
-static int
-af_xdp_design_parameters(struct efhw_nic *nic,
-                         struct efab_nic_design_parameters *dp)
-{
-  return 0;
-}
-
-static size_t af_xdp_max_shared_rxqs(struct efhw_nic *nic)
-{
-  return 0;
-}
 
 /*--------------------------------------------------------------------
  *
@@ -1302,15 +1252,6 @@ af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
 }
 
 
-static int
-af_xdp_nic_buffer_table_realloc(struct efhw_nic *nic, int owner, int order,
-                                struct efhw_buffer_table_block *block)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	return -EOPNOTSUPP;
-}
-
-
 static void
 af_xdp_nic_buffer_table_free(struct efhw_nic *nic,
                              struct efhw_buffer_table_block *block,
@@ -1386,69 +1327,6 @@ af_xdp_nic_buffer_table_clear(struct efhw_nic *nic,
 
 /*--------------------------------------------------------------------
  *
- * Port Sniff
- *
- *--------------------------------------------------------------------*/
-
-static int
-af_xdp_nic_set_tx_port_sniff(struct efhw_nic *nic, int instance, int enable,
-			   int rss_context)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	return -EOPNOTSUPP;
-}
-
-
-static int
-af_xdp_nic_set_port_sniff(struct efhw_nic *nic, int instance, int enable,
-			int promiscuous, int rss_context)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	return -EOPNOTSUPP;
-}
-
-/*--------------------------------------------------------------------
- *
- * Error Stats
- *
- *--------------------------------------------------------------------*/
-
-static int
-af_xdp_get_rx_error_stats(struct efhw_nic *nic, int instance,
-			void *data, int data_len, int do_reset)
-{
-	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
-	return -EOPNOTSUPP;
-}
-
-/*--------------------------------------------------------------------
- *
- * Dynamic client IDs
- *
- *--------------------------------------------------------------------*/
-
-static int
-af_xdp_client_alloc(struct efhw_nic *nic, uint32_t parent, uint32_t *id)
-{
-	return -ENOSYS;
-}
-
-
-static int
-af_xdp_client_free(struct efhw_nic *nic, uint32_t id)
-{
-	return -ENOSYS;
-}
-
-
-static int
-af_xdp_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
-{
-	return -ENOSYS;
-}
-
-/*--------------------------------------------------------------------
- *
  * Filtering
  *
  *--------------------------------------------------------------------*/
@@ -1499,12 +1377,6 @@ unlock_out:
 	return rc;
 }
 
-static int
-af_xdp_rss_update(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-		  u32 efhw_rss_mode, u32 rss_context)
-{
-	return -ENOSYS;
-}
 
 static int
 af_xdp_rss_free(struct efhw_nic *nic, u32 rss_context)
@@ -1671,53 +1543,12 @@ af_xdp_filter_redirect(struct efhw_nic *nic, int filter_id,
 	return -ENODEV;
 }
 
-static int
-af_xdp_filter_query(struct efhw_nic *nic, int filter_id,
-                    struct efhw_filter_info *info)
-{
-  return -EOPNOTSUPP;
-}
-
-
-static int
-af_xdp_multicast_block(struct efhw_nic *nic, bool block)
-{
-	return -ENOSYS;
-}
-
-static int
-af_xdp_unicast_block(struct efhw_nic *nic, bool block)
-{
-	return -ENOSYS;
-}
-
-/*--------------------------------------------------------------------
- *
- * vports
- *
- *--------------------------------------------------------------------*/
-static int
-af_xdp_vport_alloc(struct efhw_nic *nic, u16 vlan_id, u16 *vport_handle_out)
-{
-	return -ENOSYS;
-}
-
-static int
-af_xdp_vport_free(struct efhw_nic *nic, u16 vport_handle)
-{
-	return -ENOSYS;
-}
 
 /*--------------------------------------------------------------------
  *
  * Device
  *
  *--------------------------------------------------------------------*/
-static struct pci_dev*
-af_xdp_get_pci_dev(struct efhw_nic *nic)
-{
-	return NULL;
-}
 
 static int
 af_xdp_vi_io_region(struct efhw_nic *nic, int instance, size_t* size_out,
@@ -1727,23 +1558,6 @@ af_xdp_vi_io_region(struct efhw_nic *nic, int instance, size_t* size_out,
 	return 0;
 }
 
-static int
-af_xdp_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
-                       const volatile uint32_t* evq_ptr)
-{
-	return -EOPNOTSUPP;
-}
-
-/*--------------------------------------------------------------------
- *
- * CTPIO
- *
- *--------------------------------------------------------------------*/
-static int
-af_xdp_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
-{
-	return -ENOSYS;
-}
 
 /*--------------------------------------------------------------------
  *
@@ -1752,56 +1566,35 @@ af_xdp_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
  *--------------------------------------------------------------------*/
 
 struct efhw_func_ops af_xdp_char_functional_units = {
-	af_xdp_nic_init_hardware,
-	af_xdp_nic_tweak_hardware,
-	af_xdp_nic_release_hardware,
-	af_xdp_nic_event_queue_enable,
-	af_xdp_nic_event_queue_disable,
-	af_xdp_nic_wakeup_request,
-	af_xdp_nic_sw_event,
-	af_xdp_handle_event,
-	af_xdp_accept_vi_constraints,
-	af_xdp_dmaq_tx_q_init,
-	af_xdp_dmaq_rx_q_init,
-	af_xdp_flush_tx_dma_channel,
-	af_xdp_flush_rx_dma_channel,
-	af_xdp_translate_dma_addrs,
-	__af_xdp_nic_buffer_table_get_orders,
-	sizeof(__af_xdp_nic_buffer_table_get_orders) /
+	.init_hardware = af_xdp_nic_init_hardware,
+	.post_reset = af_xdp_nic_tweak_hardware,
+	.release_hardware = af_xdp_nic_release_hardware,
+	.event_queue_enable = af_xdp_nic_event_queue_enable,
+	.event_queue_disable = af_xdp_nic_event_queue_disable,
+	.wakeup_request = af_xdp_nic_wakeup_request,
+	.sw_event = af_xdp_nic_sw_event,
+	.accept_vi_constraints = af_xdp_accept_vi_constraints,
+	.dmaq_tx_q_init = af_xdp_dmaq_tx_q_init,
+	.dmaq_rx_q_init = af_xdp_dmaq_rx_q_init,
+	.flush_tx_dma_channel = af_xdp_flush_tx_dma_channel,
+	.flush_rx_dma_channel = af_xdp_flush_rx_dma_channel,
+	.translate_dma_addrs = af_xdp_translate_dma_addrs,
+	.buffer_table_orders = __af_xdp_nic_buffer_table_get_orders,
+	.buffer_table_orders_num = sizeof(__af_xdp_nic_buffer_table_get_orders) /
 		sizeof(__af_xdp_nic_buffer_table_get_orders[0]),
-	af_xdp_nic_buffer_table_alloc,
-	af_xdp_nic_buffer_table_realloc,
-	af_xdp_nic_buffer_table_free,
-	af_xdp_nic_buffer_table_set,
-	af_xdp_nic_buffer_table_clear,
-	af_xdp_nic_set_port_sniff,
-	af_xdp_nic_set_tx_port_sniff,
-	af_xdp_get_rx_error_stats,
-	af_xdp_tx_alt_alloc,
-	af_xdp_tx_alt_free,
-	af_xdp_client_alloc,
-	af_xdp_client_free,
-	af_xdp_vi_set_user,
-	af_xdp_rss_alloc,
-	af_xdp_rss_update,
-	af_xdp_rss_free,
-	af_xdp_filter_insert,
-	af_xdp_filter_remove,
-	af_xdp_filter_redirect,
-	af_xdp_filter_query,
-	af_xdp_multicast_block,
-	af_xdp_unicast_block,
-	af_xdp_vport_alloc,
-	af_xdp_vport_free,
-	af_xdp_dmaq_kick,
-	af_xdp_mem,
-	af_xdp_init,
-	af_xdp_get_pci_dev,
-	af_xdp_vi_io_region,
-	af_xdp_inject_reset_ev,
-	af_xdp_ctpio_addr,
-	af_xdp_design_parameters,
-	af_xdp_max_shared_rxqs,
+	.buffer_table_alloc = af_xdp_nic_buffer_table_alloc,
+	.buffer_table_free = af_xdp_nic_buffer_table_free,
+	.buffer_table_set = af_xdp_nic_buffer_table_set,
+	.buffer_table_clear = af_xdp_nic_buffer_table_clear,
+	.rss_alloc = af_xdp_rss_alloc,
+	.rss_free = af_xdp_rss_free,
+	.filter_insert = af_xdp_filter_insert,
+	.filter_remove = af_xdp_filter_remove,
+	.filter_redirect = af_xdp_filter_redirect,
+	.dmaq_kick = af_xdp_dmaq_kick,
+	.af_xdp_mem = af_xdp_mem,
+	.af_xdp_init = af_xdp_init,
+	.vi_io_region = af_xdp_vi_io_region,
 };
 
 #endif /* EFHW_HAS_AF_XDP */

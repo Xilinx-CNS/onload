@@ -396,55 +396,9 @@ static const int __ef100_nic_buffer_table_get_orders[] = {9};
 
 /*--------------------------------------------------------------------
  *
- * EF100 unsupported functions
+ * EF100 special functions
  *
  *--------------------------------------------------------------------*/
-
-static int
-ef100_nic_set_port_sniff(struct efhw_nic *nic, int instance, int enable,
-			int promiscuous, int rss_context)
-{
-	EFHW_TRACE("%s: Port sniffering is not supported for EF100", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
-static int
-ef100_nic_set_tx_port_sniff(struct efhw_nic *nic, int instance, int enable,
-			   int rss_context)
-{
-	EFHW_TRACE("%s: Port sniffering is not supported for EF100", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
-static int
-ef100_get_rx_error_stats(struct efhw_nic *nic, int instance,
-			void *data, int data_len, int do_reset)
-{
-	EFHW_TRACE("%s: RX error stats are not supported for EF100", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
-/* TX Alternatives are not supported for EF100 */
-static int
-ef100_tx_alt_alloc(struct efhw_nic *nic, int tx_q_id, int num_alt,
-		  int num_32b_words, unsigned *cp_id_out, unsigned *alt_ids_out)
-{
-	EFHW_TRACE("%s: TX Alternatives are not supported for EF100", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
-
-static int
-ef100_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
-		 const unsigned *alt_ids)
-{
-	EFHW_TRACE("%s: TX Alternatives are not supported for EF100", __FUNCTION__);
-	EFHW_ASSERT(0);
-	return -EOPNOTSUPP;
-}
 
 int ef100_nic_ext_alloc(struct efhw_nic* nic, uint32_t client_id,
                         const unsigned char* service_guid,
@@ -644,30 +598,6 @@ ef100_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
 
 /*--------------------------------------------------------------------
  *
- * AF_XDP
- *
- *--------------------------------------------------------------------*/
-
-static int ef100_dmaq_kick(struct efhw_nic *nic, int instance)
-{
-  return 0;
-}
-
-static void* ef100_af_xdp_mem(struct efhw_nic* nic, int instance)
-{
-  return NULL;
-}
-
-static int ef100_af_xdp_init(struct efhw_nic* nic, int instance,
-                             int chunk_size, int headroom,
-                             struct efhw_page_map* pages_out)
-{
-  return 0;
-}
-
-
-/*--------------------------------------------------------------------
- *
  * Device
  *
  *--------------------------------------------------------------------*/
@@ -727,17 +657,6 @@ ef100_inject_reset_ev(struct efhw_nic* nic, void* base, unsigned capacity,
 	return 0;
 }
 
-/*--------------------------------------------------------------------
- *
- * CTPIO
- *
- *--------------------------------------------------------------------*/
-static int ef100_ctpio_addr(struct efhw_nic* nic, int instance,
-			    resource_size_t* addr)
-{
-	return -ENOSYS;
-}
-
 
 /*--------------------------------------------------------------------
  *
@@ -746,54 +665,43 @@ static int ef100_ctpio_addr(struct efhw_nic* nic, int instance,
  *--------------------------------------------------------------------*/
 
 struct efhw_func_ops ef100_char_functional_units = {
-	ef100_nic_init_hardware,
-	ef100_nic_tweak_hardware,
-	ef100_nic_release_hardware,
-	ef100_nic_event_queue_enable,
-	ef100_nic_event_queue_disable,
-	ef100_nic_wakeup_request,
-	ef100_nic_sw_event,
-	ef100_handle_event,
-	ef10_ef100_accept_vi_constraints,
-	ef100_dmaq_tx_q_init,
-	ef100_dmaq_rx_q_init,
-	ef10_ef100_flush_tx_dma_channel,
-	ef10_ef100_flush_rx_dma_channel,
-	ef10_ef100_translate_dma_addrs,
-	__ef100_nic_buffer_table_get_orders,
-	sizeof(__ef100_nic_buffer_table_get_orders) /
+	.init_hardware = ef100_nic_init_hardware,
+	.post_reset = ef100_nic_tweak_hardware,
+	.release_hardware = ef100_nic_release_hardware,
+	.event_queue_enable = ef100_nic_event_queue_enable,
+	.event_queue_disable = ef100_nic_event_queue_disable,
+	.wakeup_request = ef100_nic_wakeup_request,
+	.sw_event = ef100_nic_sw_event,
+	.handle_event = ef100_handle_event,
+	.accept_vi_constraints = ef10_ef100_accept_vi_constraints,
+	.dmaq_tx_q_init = ef100_dmaq_tx_q_init,
+	.dmaq_rx_q_init = ef100_dmaq_rx_q_init,
+	.flush_tx_dma_channel = ef10_ef100_flush_tx_dma_channel,
+	.flush_rx_dma_channel = ef10_ef100_flush_rx_dma_channel,
+	.translate_dma_addrs = ef10_ef100_translate_dma_addrs,
+	.buffer_table_orders = __ef100_nic_buffer_table_get_orders,
+	.buffer_table_orders_num = sizeof(__ef100_nic_buffer_table_get_orders) /
 		sizeof(__ef100_nic_buffer_table_get_orders[0]),
-	ef10_ef100_nic_buffer_table_alloc,
-	ef10_ef100_nic_buffer_table_realloc,
-	ef10_ef100_nic_buffer_table_free,
-	ef10_ef100_nic_buffer_table_set,
-	ef10_ef100_nic_buffer_table_clear,
-	ef100_nic_set_port_sniff,
-	ef100_nic_set_tx_port_sniff,
-	ef100_get_rx_error_stats,
-	ef100_tx_alt_alloc,
-	ef100_tx_alt_free,
-	ef100_client_alloc,
-	ef100_client_free,
-	ef100_vi_set_user,
-	ef10_ef100_rss_alloc,
-	ef10_ef100_rss_update,
-	ef10_ef100_rss_free,
-	ef10_ef100_filter_insert,
-	ef10_ef100_filter_remove,
-	ef10_ef100_filter_redirect,
-	ef10_ef100_filter_query,
-	ef10_ef100_multicast_block,
-	ef10_ef100_unicast_block,
-	ef10_ef100_vport_alloc,
-	ef10_ef100_vport_free,
-	ef100_dmaq_kick,
-	ef100_af_xdp_mem,
-	ef100_af_xdp_init,
-	ef10_ef100_get_pci_dev,
-	ef100_vi_io_region,
-	ef100_inject_reset_ev,
-	ef100_ctpio_addr,
-	ef10_ef100_design_parameters,
-	ef10_ef100_max_shared_rxqs,
+	.buffer_table_alloc = ef10_ef100_nic_buffer_table_alloc,
+	.buffer_table_realloc = ef10_ef100_nic_buffer_table_realloc,
+	.buffer_table_free = ef10_ef100_nic_buffer_table_free,
+	.buffer_table_set = ef10_ef100_nic_buffer_table_set,
+	.buffer_table_clear = ef10_ef100_nic_buffer_table_clear,
+	.client_alloc = ef100_client_alloc,
+	.client_free = ef100_client_free,
+	.vi_set_user = ef100_vi_set_user,
+	.rss_alloc = ef10_ef100_rss_alloc,
+	.rss_update = ef10_ef100_rss_update,
+	.rss_free = ef10_ef100_rss_free,
+	.filter_insert = ef10_ef100_filter_insert,
+	.filter_remove = ef10_ef100_filter_remove,
+	.filter_redirect = ef10_ef100_filter_redirect,
+	.filter_query = ef10_ef100_filter_query,
+	.multicast_block = ef10_ef100_multicast_block,
+	.unicast_block = ef10_ef100_unicast_block,
+	.vport_alloc = ef10_ef100_vport_alloc,
+	.vport_free = ef10_ef100_vport_free,
+	.get_pci_dev = ef10_ef100_get_pci_dev,
+	.vi_io_region = ef100_vi_io_region,
+	.inject_reset_ev = ef100_inject_reset_ev,
 };

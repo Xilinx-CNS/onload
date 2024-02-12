@@ -125,7 +125,8 @@
 	((nic))->efhw_func->translate_dma_addrs((nic), (src), (dst), (n)) \
 
 #define efhw_nic_max_shared_rxqs(nic) \
-	((nic)->efhw_func->max_shared_rxqs((nic)))
+	((nic)->efhw_func->max_shared_rxqs ? \
+	 (nic)->efhw_func->max_shared_rxqs((nic)) : 0)
 
 /* xdp specific */
 #define efhw_nic_dmaq_kick(nic,instance) \
@@ -226,12 +227,16 @@
 	 (nic)->efhw_func->filter_redirect((nic), (filter_id), (spec)) : \
 	 -EOPNOTSUPP)
 #define efhw_nic_filter_query(nic, filter_id, info) \
-	((nic)->efhw_func->filter_query((nic), (filter_id), (info)))
+	((nic)->efhw_func->filter_query ? \
+	 (nic)->efhw_func->filter_query((nic), (filter_id), (info)) : \
+         -EOPNOTSUPP)
 
 #define efhw_nic_multicast_block(nic, block) \
-	((nic)->efhw_func->multicast_block((nic), (block)))
+	((nic)->efhw_func->multicast_block ? \
+	 (nic)->efhw_func->multicast_block((nic), (block)) : -ENOSYS)
 #define efhw_nic_unicast_block(nic, block) \
-	((nic)->efhw_func->unicast_block((nic), (block)))
+	((nic)->efhw_func->unicast_block ? \
+	 (nic)->efhw_func->unicast_block((nic), (block)) : -ENOSYS)
 
 /*-------------- vports ------------------------ */
 #define efhw_nic_vport_alloc(nic, vlan_id, vport_handle_out) \
@@ -256,11 +261,13 @@
 
 /*-------------- ctpio ------------------------ */
 #define efhw_nic_ctpio_addr(nic, instance, addr) \
-	((nic)->efhw_func->ctpio_addr((nic), (instance), (addr)))
+	((nic)->efhw_func->ctpio_addr ? \
+	 (nic)->efhw_func->ctpio_addr((nic), (instance), (addr)) : -ENOSYS)
 
 /*-------------- design parameters ------------ */
 #define efhw_nic_design_parameters(nic, dp) \
-	((nic)->efhw_func->design_parameters((nic), (dp)))
+	((nic)->efhw_func->design_parameters ? \
+	 (nic)->efhw_func->design_parameters((nic), (dp)) : 0)
 
 /*-------------- TX Alternatives ------------ */
 #define efhw_nic_tx_alt_alloc(nic, tx_q_id, num_alt, num_32b_words, \
