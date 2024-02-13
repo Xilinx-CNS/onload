@@ -10,11 +10,12 @@
 #include <ci/efhw/efhw_buftable.h>
 
 #include <ci/driver/driverlink_api.h>
+#include <ci/driver/resource/driverlink.h>
 
-#include <ci/efhw/ef10.h>
-#include <ci/efhw/ef100.h>
 #include <ci/efhw/mc_driver_pcol.h>
 #include <ci/efhw/mcdi_pcol_plugins.h>
+#include <ci/efhw/ef10.h>
+#include <ci/efhw/ef100.h>
 #include "ef10_mcdi.h"
 #include "ef10_ef100.h"
 
@@ -165,6 +166,7 @@ ef100_nic_init_hardware(struct efhw_nic *nic,
 		       struct efhw_ev_handler *ev_handlers,
 		       const uint8_t *mac_addr)
 {
+	int rc;
 	EFHW_TRACE("%s:", __FUNCTION__);
 
 	nic->ev_handlers = ev_handlers;
@@ -191,14 +193,11 @@ ef100_nic_init_hardware(struct efhw_nic *nic,
 	nic->rss_indir_size = EF10_EF100_RSS_INDIRECTION_TABLE_LEN;
 	nic->rss_key_size = EF10_EF100_RSS_KEY_LEN;
 
+	rc = ef10_ef100_init_vi_allocator(nic);
+	if( rc < 0 ) {
+		return rc;
+	}
 	return 0;
-}
-
-
-static void
-ef100_nic_release_hardware(struct efhw_nic *nic)
-{
-	EFHW_TRACE("%s:", __FUNCTION__);
 }
 
 
@@ -728,13 +727,14 @@ struct efhw_func_ops ef100_char_functional_units = {
 	.sw_ctor = ef100_nic_sw_ctor,
 	.init_hardware = ef100_nic_init_hardware,
 	.post_reset = ef100_nic_tweak_hardware,
-	.release_hardware = ef100_nic_release_hardware,
+	.release_hardware = ef10_ef100_nic_release_hardware,
 	.event_queue_enable = ef100_nic_event_queue_enable,
 	.event_queue_disable = ef100_nic_event_queue_disable,
 	.wakeup_request = ef100_nic_wakeup_request,
 	.sw_event = ef100_nic_sw_event,
 	.handle_event = ef100_handle_event,
-	.accept_vi_constraints = ef10_ef100_accept_vi_constraints,
+	.vi_alloc = ef10_ef100_vi_alloc,
+	.vi_free = ef10_ef100_vi_free,
 	.dmaq_tx_q_init = ef100_dmaq_tx_q_init,
 	.dmaq_rx_q_init = ef100_dmaq_rx_q_init,
 	.flush_tx_dma_channel = ef10_ef100_flush_tx_dma_channel,

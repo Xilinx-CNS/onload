@@ -4,7 +4,6 @@
 #define __EFRM_NIC_H__
 
 #include <ci/efhw/efhw_types.h>
-#include <ci/efrm/buddy.h>
 
 
 struct efrm_nic_per_vi {
@@ -51,7 +50,6 @@ struct efrm_nic {
 	struct efrm_nic_per_vi *vis;
         int max_vis;
 	struct efrm_nic_vi      nvi;
-	struct efrm_buddy_allocator vi_allocator;
 	unsigned rss_channel_count;
 	const struct efx_dl_device_info *dl_dev_info;
 	unsigned stack_id_usage[(EFRM_MAX_STACK_ID + sizeof(unsigned) * 8)

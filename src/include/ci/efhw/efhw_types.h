@@ -274,8 +274,11 @@ struct efhw_func_ops {
 	int (*handle_event) (struct efhw_nic *nic, efhw_event_t *ev,
 			     int budget);
 
-	bool (*accept_vi_constraints) (struct efhw_nic *nic, int low,
-				       unsigned order, void* arg);
+	int (*vi_alloc) (struct efhw_nic *nic, struct efhw_vi_constraints *evc,
+			     unsigned order);
+
+	void (*vi_free) (struct efhw_nic *nic, int instance,
+			     unsigned order);
 
   /*-------------- DMA support  ------------ */
 

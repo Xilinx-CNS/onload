@@ -12,7 +12,8 @@ RESOURCE_SRCS	:= resource_driver.c \
 	iopage.c kernel_proc.c filter.c \
 	bt_stats.c port_sniff.c nondl_resource.c sysfs.c \
 	nondl_driver.c sfcaffinity.c nic_notifier.c \
-	aux_driver.c aux_efct.c efct_superbuf.c debugfs.c
+	aux_driver.c aux_efct.c efct_superbuf.c debugfs.c \
+	buddy.c
 
 EFHW_SRCS	:= nic.c eventq.c af_xdp.c ethtool_rxclass.c \
 		ethtool_flow.c efct.c debugfs_nic.c debugfs_efct.c
@@ -35,7 +36,6 @@ EFRM_SRCS	:=			\
 		vi_resource_manager.c	\
 		vi_resource_info.c	\
 		vi_allocator.c		\
-		buddy.c			\
 		bt_manager.c		\
 		driver_object.c		\
 		debugfs_rs.c

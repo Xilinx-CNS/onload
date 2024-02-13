@@ -38,10 +38,8 @@
  ****************************************************************************
  */
 
-#include <ci/efrm/buddy.h>
+#include <ci/efhw/buddy.h>
 #include <ci/efhw/common.h>
-#include <ci/efrm/sysdep.h>
-#include <ci/efrm/debug.h>
 
 #if 1
 #define DEBUG_ALLOC(x)
@@ -54,50 +52,50 @@
  * understandable names to the simple actions.
  */
 static inline void
-efrm_buddy_free_list_add(struct efrm_buddy_allocator *b,
+efhw_buddy_free_list_add(struct efhw_buddy_allocator *b,
 			 unsigned order, unsigned addr)
 {
 	list_add(&b->links[addr], &b->free_lists[order]);
 	b->orders[addr] = (uint8_t) order;
 }
 static inline void
-efrm_buddy_free_list_del(struct efrm_buddy_allocator *b, unsigned addr)
+efhw_buddy_free_list_del(struct efhw_buddy_allocator *b, unsigned addr)
 {
 	list_del(&b->links[addr]);
 	b->links[addr].next = NULL;
 }
 static inline int
-efrm_buddy_free_list_empty(struct efrm_buddy_allocator *b, unsigned order)
+efhw_buddy_free_list_empty(struct efhw_buddy_allocator *b, unsigned order)
 {
 	return list_empty(&b->free_lists[order]);
 }
 static inline unsigned
-efrm_buddy_free_list_pop(struct efrm_buddy_allocator *b, unsigned order)
+efhw_buddy_free_list_pop(struct efhw_buddy_allocator *b, unsigned order)
 {
 	struct list_head *l = list_pop(&b->free_lists[order]);
 	l->next = NULL;
 	return (unsigned)(l - b->links);
 }
 static inline int
-efrm_buddy_addr_in_free_list(struct efrm_buddy_allocator *b, unsigned addr)
+efhw_buddy_addr_in_free_list(struct efhw_buddy_allocator *b, unsigned addr)
 {
 	return b->links[addr].next != NULL;
 }
 static inline unsigned
-efrm_buddy_free_list_first(struct efrm_buddy_allocator *b, unsigned order)
+efhw_buddy_free_list_first(struct efhw_buddy_allocator *b, unsigned order)
 {
 	return (unsigned)(b->free_lists[order].next - b->links);
 }
 
 
-int efrm_buddy_ctor(struct efrm_buddy_allocator *b, unsigned order)
+int efhw_buddy_ctor(struct efhw_buddy_allocator *b, unsigned order)
 {
 	unsigned o;
 	unsigned size = 1 << order;
 
-	DEBUG_ALLOC(EFRM_NOTICE("%s(%u)", __FUNCTION__, order));
-	EFRM_ASSERT(b);
-	EFRM_ASSERT(order <= sizeof(unsigned) * 8 - 1);
+	DEBUG_ALLOC(EFHW_NOTICE("%s(%u)", __FUNCTION__, order));
+	EFHW_ASSERT(b);
+	EFHW_ASSERT(order <= sizeof(unsigned) * 8 - 1);
 
 	b->order = order;
 	b->free_lists = kmalloc((order + 1) * sizeof(b->free_lists[0]),
@@ -118,7 +116,7 @@ int efrm_buddy_ctor(struct efrm_buddy_allocator *b, unsigned order)
 	for (o = 0; o <= b->order; ++o)
 		INIT_LIST_HEAD(b->free_lists + o);
 
-	efrm_buddy_free_list_add(b, b->order, 0);
+	efhw_buddy_free_list_add(b, b->order, 0);
 
 	return 0;
 
@@ -131,26 +129,26 @@ fail1:
 }
 
 
-int efrm_buddy_range_ctor(struct efrm_buddy_allocator *b, int low, int high)
+int efhw_buddy_range_ctor(struct efhw_buddy_allocator *b, int low, int high)
 {
 	int i, rc, log2_n;
 	log2_n = fls(high - 1);
-	if ((rc = efrm_buddy_ctor(b, log2_n)) < 0 )
+	if ((rc = efhw_buddy_ctor(b, log2_n)) < 0 )
 		return rc;
 	for (i = 0; i < (1 << log2_n); ++i) {
-		rc = efrm_buddy_alloc(b, 0);
-		EFRM_ASSERT(rc >= 0);
-		EFRM_ASSERT(rc < (1 << log2_n));
+		rc = efhw_buddy_alloc(b, 0);
+		EFHW_ASSERT(rc >= 0);
+		EFHW_ASSERT(rc < (1 << log2_n));
 	}
 	for (i = low; i < high; ++i)
-		efrm_buddy_free(b, i, 0);
+		efhw_buddy_free(b, i, 0);
 	return 0;
 }
 
 
-void efrm_buddy_dtor(struct efrm_buddy_allocator *b)
+void efhw_buddy_dtor(struct efhw_buddy_allocator *b)
 {
-	EFRM_ASSERT(b);
+	EFHW_ASSERT(b);
 
 	kfree(b->free_lists);
 	vfree(b->links);
@@ -158,45 +156,45 @@ void efrm_buddy_dtor(struct efrm_buddy_allocator *b)
 }
 
 
-int efrm_buddy_alloc(struct efrm_buddy_allocator *b, unsigned order)
+int efhw_buddy_alloc(struct efhw_buddy_allocator *b, unsigned order)
 {
 	unsigned smallest;
 	unsigned addr;
 
-	DEBUG_ALLOC(EFRM_NOTICE("%s(%u)", __FUNCTION__, order));
-	EFRM_ASSERT(b);
+	DEBUG_ALLOC(EFHW_NOTICE("%s(%u)", __FUNCTION__, order));
+	EFHW_ASSERT(b);
 
 	/* Find smallest chunk that is big enough.  ?? Can optimise this by
 	 ** keeping array of pointers to smallest chunk for each order.
 	 */
 	smallest = order;
 	while (smallest <= b->order &&
-	       efrm_buddy_free_list_empty(b, smallest))
+	       efhw_buddy_free_list_empty(b, smallest))
 		++smallest;
 
 	if (smallest > b->order) {
-		DEBUG_ALLOC(EFRM_NOTICE
+		DEBUG_ALLOC(EFHW_NOTICE
 			    ("buddy - alloc order %d failed - max order %d",
 			     order, b->order););
 		return -ENOMEM;
 	}
 
 	/* Split blocks until we get one of the correct size. */
-	addr = efrm_buddy_free_list_pop(b, smallest);
+	addr = efhw_buddy_free_list_pop(b, smallest);
 
-	DEBUG_ALLOC(EFRM_NOTICE("buddy - alloc %x order %d cut from order %d",
+	DEBUG_ALLOC(EFHW_NOTICE("buddy - alloc %x order %d cut from order %d",
 				addr, order, smallest););
 	while (smallest-- > order)
-		efrm_buddy_free_list_add(b, smallest, addr + (1 << smallest));
+		efhw_buddy_free_list_add(b, smallest, addr + (1 << smallest));
 
-	EFRM_DO_DEBUG(b->orders[addr] = (uint8_t) order);
+	EFHW_DO_DEBUG(b->orders[addr] = (uint8_t) order);
 
-	EFRM_ASSERT(addr < 1u << b->order);
+	EFHW_ASSERT(addr < 1u << b->order);
 	return addr;
 }
 
 
-int efrm_buddy_alloc_special(struct efrm_buddy_allocator *b,
+int efhw_buddy_alloc_special(struct efhw_buddy_allocator *b,
 			     unsigned order,
 			     bool (*accept_fn)(int low, unsigned order,
 					       void* arg),
@@ -213,11 +211,11 @@ int efrm_buddy_alloc_special(struct efrm_buddy_allocator *b,
 	struct list_head *l;
 	int addr;
 
-	DEBUG_ALLOC(EFRM_NOTICE("%s(%u)", __FUNCTION__, order));
-	EFRM_ASSERT(b);
+	DEBUG_ALLOC(EFHW_NOTICE("%s(%u)", __FUNCTION__, order));
+	EFHW_ASSERT(b);
 
 	while (1) {
-		addr = efrm_buddy_alloc(b, order);
+		addr = efhw_buddy_alloc(b, order);
 		if (addr < 0 || accept_fn(addr, order, arg))
 			break;
 		b->links[addr].prev = rejects;
@@ -225,39 +223,39 @@ int efrm_buddy_alloc_special(struct efrm_buddy_allocator *b,
 	}
 	while ((l = rejects) != NULL) {
 		rejects = l->prev;
-		efrm_buddy_free(b, l - b->links, order);
+		efhw_buddy_free(b, l - b->links, order);
 	}
 	return addr;
 }
 
 
 void
-efrm_buddy_free(struct efrm_buddy_allocator *b, unsigned addr,
+efhw_buddy_free(struct efhw_buddy_allocator *b, unsigned addr,
 		unsigned order)
 {
 	unsigned buddy_addr;
 
-	DEBUG_ALLOC(EFRM_NOTICE("%s(%u, %u)", __FUNCTION__, addr, order));
-	EFRM_ASSERT(b);
-	EFRM_ASSERT(order <= b->order);
-	EFRM_ASSERT((unsigned long)addr + ((unsigned long)1 << order) <=
+	DEBUG_ALLOC(EFHW_NOTICE("%s(%u, %u)", __FUNCTION__, addr, order));
+	EFHW_ASSERT(b);
+	EFHW_ASSERT(order <= b->order);
+	EFHW_ASSERT((unsigned long)addr + ((unsigned long)1 << order) <=
 		    (unsigned long)1 << b->order);
-	EFRM_ASSERT(!efrm_buddy_addr_in_free_list(b, addr));
-	EFRM_ASSERT(b->orders[addr] == order);
+	EFHW_ASSERT(!efhw_buddy_addr_in_free_list(b, addr));
+	EFHW_ASSERT(b->orders[addr] == order);
 
 	/* merge free blocks */
 	while (order < b->order) {
 		buddy_addr = addr ^ (1 << order);
-		if (!efrm_buddy_addr_in_free_list(b, buddy_addr) ||
+		if (!efhw_buddy_addr_in_free_list(b, buddy_addr) ||
 		    b->orders[buddy_addr] != order)
 			break;
-		efrm_buddy_free_list_del(b, buddy_addr);
+		efhw_buddy_free_list_del(b, buddy_addr);
 		if (buddy_addr < addr)
 			addr = buddy_addr;
 		++order;
 	}
 
-	DEBUG_ALLOC(EFRM_NOTICE
+	DEBUG_ALLOC(EFHW_NOTICE
 		    ("buddy - free %x merged into order %d", addr, order););
-	efrm_buddy_free_list_add(b, order, addr);
+	efhw_buddy_free_list_add(b, order, addr);
 }

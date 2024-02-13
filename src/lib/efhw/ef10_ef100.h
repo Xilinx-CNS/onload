@@ -11,6 +11,11 @@
  */
 #define REAL_OWNER_ID(owner_id) ((owner_id) ? ((owner_id) - 1) : 0)
 
+struct ef10_ef100_alloc_vi_constraints {
+	struct efhw_nic *nic;
+	struct efhw_vi_constraints *evc;
+};
+
 extern int ef10_ef100_mcdi_rpc(struct efhw_nic *nic, unsigned int cmd,
 			       size_t inlen, size_t outlen, size_t *outlen_actual,
 			       const void *inbuf, void *outbuf);
@@ -42,8 +47,16 @@ extern int ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
 extern void ef10_ef100_mcdi_cmd_event_queue_disable(struct efhw_nic *nic,
 						    uint32_t client_id, uint evq);
 
-extern bool ef10_ef100_accept_vi_constraints(struct efhw_nic *nic, int low,
-					     unsigned order, void* arg);
+extern bool ef10_ef100_accept_vi_constraints(int low, unsigned order, void* arg);
+
+extern void ef10_ef100_vi_free(struct efhw_nic *nic, int instance, unsigned order);
+
+extern int ef10_ef100_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
+															 unsigned order);
+
+extern int ef10_ef100_init_vi_allocator(struct efhw_nic *nic);
+
+extern void ef10_ef100_nic_release_hardware(struct efhw_nic *nic);
 
 extern void ef10_ef100_mcdi_cmd_driver_event(struct efhw_nic *nic, uint64_t data,
 					     uint32_t evq);

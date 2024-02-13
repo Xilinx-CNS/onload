@@ -5,7 +5,6 @@ TARGET		:= $(CITOOLS_LIB)
 MMAKE_TYPE	:= LIB
 
 LIB_SRCS	:= \
-		buddy.c \
 		buffer.c \
 		bufrange.c \
 		crc16.c \

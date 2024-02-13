@@ -255,12 +255,18 @@ ef10ct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
 }
 
 
+struct alloc_vi_constraints {
+  struct efhw_nic_ef10ct *ef10ct;
+  struct efhw_vi_constraints *evc;
+};
+
 static bool
-ef10ct_accept_vi_constraints(struct efhw_nic *nic, int low, unsigned order,
-                             void* arg)
+ef10ct_accept_vi_constraints(int low, unsigned order, void* arg)
 {
-  struct efhw_vi_constraints *vc = arg;
-  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+
+  struct alloc_vi_constraints *avc = arg;
+  struct efhw_vi_constraints *vc = avc->evc;
+  struct efhw_nic_ef10ct *ef10ct = avc->ef10ct;
 
   EFHW_ERR("%s: FIXME SCJ want txq %d low %d evq_n %d txq %d", __func__,
            vc->want_txq, low, ef10ct->evq_n,
@@ -280,6 +286,21 @@ ef10ct_accept_vi_constraints(struct efhw_nic *nic, int low, unsigned order,
   return true;
 }
 
+static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
+			                     unsigned order) {
+ struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct alloc_vi_constraints avc = {
+    .ef10ct = ef10ct,
+    .evc = evc,
+  };
+  return efhw_buddy_alloc_special(&ef10ct->vi_allocator, order,
+                                  ef10ct_accept_vi_constraints, &avc);
+}
+
+static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned order) {
+  struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
+  efhw_buddy_free(&ef10ct->vi_allocator, instance, order);
+}
 
 /*----------------------------------------------------------------------------
  *
@@ -548,7 +569,8 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .event_queue_enable = ef10ct_nic_event_queue_enable,
   .event_queue_disable = ef10ct_nic_event_queue_disable,
   .wakeup_request = ef10ct_nic_wakeup_request,
-  .accept_vi_constraints = ef10ct_accept_vi_constraints,
+  .vi_alloc = ef10ct_vi_alloc,
+  .vi_free = ef10ct_vi_free,
   .dmaq_tx_q_init = ef10ct_dmaq_tx_q_init,
   .dmaq_rx_q_init = ef10ct_dmaq_rx_q_init,
   .flush_tx_dma_channel = ef10ct_flush_tx_dma_channel,

@@ -8,6 +8,7 @@
 
 #include <ci/efhw/nic.h>
 #include <ci/efhw/eventq.h>
+#include <ci/efhw/buddy.h>
 #include <ci/driver/efab/hardware/af_xdp.h>
 
 #include <linux/socket.h>
@@ -191,6 +192,7 @@ struct efhw_nic_af_xdp
   struct file* map;
   struct efhw_af_xdp_vi* vi;
   struct protection_domain* pd;
+  struct efhw_buddy_allocator vi_allocator;
 };
 
 
@@ -981,7 +983,20 @@ af_xdp_nic_tweak_hardware(struct efhw_nic *nic)
 		   ;
 }
 
+static int af_xdp_vi_allocator_ctor(struct efhw_nic_af_xdp *nic,
+                                    unsigned vi_min, unsigned vi_lim) {
+  int rc = efhw_buddy_range_ctor(&nic->vi_allocator, vi_min, vi_lim);
+  if (rc < 0) {
+       EFHW_ERR("%s: efhw_buddy_range_ctor(%d, %d) "
+                "failed (%d)",
+                __FUNCTION__, vi_min, vi_lim, rc);
+  }
+  return rc;
+}
 
+static void af_xdp_vi_allocator_dtor(struct efhw_nic_af_xdp *nic) {
+  efhw_buddy_dtor(&nic->vi_allocator);
+}
 
 static int
 __af_xdp_nic_init_hardware(struct efhw_nic *nic,
@@ -1012,6 +1027,10 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 		goto fail;
 
 	rc = xdp_set_link(nic->net_dev, rc);
+	if( rc < 0 )
+		goto fail;
+
+	rc = af_xdp_vi_allocator_ctor(xdp, nic->vi_min, nic->vi_lim);
 	if( rc < 0 )
 		goto fail;
 
@@ -1070,6 +1089,7 @@ af_xdp_nic_release_hardware(struct efhw_nic* nic)
   struct efhw_nic_af_xdp* xdp = nic->arch_extra;
   xdp_set_link(nic->net_dev, -1);
   if( xdp ) {
+    af_xdp_vi_allocator_dtor(xdp);
     fput(xdp->map);
     kfree(xdp);
   }
@@ -1135,7 +1155,7 @@ static void af_xdp_nic_sw_event(struct efhw_nic *nic, int data, int evq)
 	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
 }
 
-static bool af_xdp_accept_vi_constraints(struct efhw_nic *nic, int low,
+static bool af_xdp_accept_vi_constraints(int low,
 					 unsigned order, void* arg)
 {
 	struct efhw_vi_constraints *avc = arg;
@@ -1146,6 +1166,18 @@ static bool af_xdp_accept_vi_constraints(struct efhw_nic *nic, int low,
 	return true;
 }
 
+
+static int af_xdp_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
+			     unsigned order) {
+  struct efhw_nic_af_xdp* xdp = nic->arch_extra;
+  return efhw_buddy_alloc_special(&xdp->vi_allocator, order,
+                                  af_xdp_accept_vi_constraints, evc);
+}
+
+static void af_xdp_vi_free(struct efhw_nic *nic, int instance, unsigned order) {
+  struct efhw_nic_af_xdp* xdp = nic->arch_extra;
+  efhw_buddy_free(&xdp->vi_allocator, instance, order);
+}
 
 /*----------------------------------------------------------------------------
  *
@@ -1587,7 +1619,8 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	.event_queue_disable = af_xdp_nic_event_queue_disable,
 	.wakeup_request = af_xdp_nic_wakeup_request,
 	.sw_event = af_xdp_nic_sw_event,
-	.accept_vi_constraints = af_xdp_accept_vi_constraints,
+	.vi_alloc = af_xdp_vi_alloc,
+	.vi_free = af_xdp_vi_free,
 	.dmaq_tx_q_init = af_xdp_dmaq_tx_q_init,
 	.dmaq_rx_q_init = af_xdp_dmaq_rx_q_init,
 	.flush_tx_dma_channel = af_xdp_flush_tx_dma_channel,

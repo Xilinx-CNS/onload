@@ -33,61 +33,11 @@
 #include <ci/efrm/nic_table.h>
 #include <ci/efrm/efrm_nic.h>
 #include <ci/efrm/driver_private.h>
-#include <ci/efrm/buddy.h>
 #include <ci/efrm/debug.h>
 #include <ci/efhw/common.h>
 #include <ci/efhw/efhw_types.h>
 #include <ci/driver/efab/hardware.h>
 #include "efrm_internal.h"
-
-
-int efrm_vi_allocator_ctor(struct efrm_nic *efrm_nic,
-			   const struct vi_resource_dimensions *dims)
-{
-	int rc;
-	unsigned vi_min, vi_lim;
-
-	if (efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10 ||
-	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP ||
-	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF100 ||
-	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10CT ||
-	    efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EFCT) {
-		vi_min = dims->vi_min;
-		vi_lim = dims->vi_lim;
-	} else {
-		rc = -EINVAL;
-		EFRM_ERR("%s: unknown efhw device architecture %u",
-			 __FUNCTION__, efrm_nic->efhw_nic.devtype.arch);
-		goto fail;
-	}
-
-	if (vi_lim > vi_min) {
-		rc = efrm_buddy_range_ctor(&efrm_nic->vi_allocator, vi_min, vi_lim);
-		if (rc < 0) {
-			EFRM_ERR("%s: efrm_buddy_range_ctor(%d, %d) "
-				 "failed (%d)",
-				 __FUNCTION__, vi_min, vi_lim, rc);
-			goto fail;
-		}
-	}
-	else {
-		EFRM_ERR("%s: No VIs, not handling", __FUNCTION__);
-		rc = -ERANGE;
-		goto fail;
-        }
-
-	return 0;
-
-fail:
-	return rc;
-}
-
-
-void efrm_vi_allocator_dtor(struct efrm_nic *efrm_nic)
-{
-	efrm_buddy_dtor(&efrm_nic->vi_allocator);
-}
-
 
 struct alloc_vi_constraints {
 	struct efhw_nic *efhw_nic;
@@ -97,36 +47,24 @@ struct alloc_vi_constraints {
 };
 
 
-static bool accept_vi_constraints(int low, unsigned order, void* arg)
+int efrm_vi_allocator_alloc_set(struct efrm_nic *efrm_nic,
+				 struct efrm_alloc_vi_constraints *avc,
+				 struct efrm_vi_allocation *set_out)
 {
-	struct efrm_alloc_vi_constraints *avc = arg;
+	int rc;
 	struct efhw_vi_constraints evc = {
 		.channel = avc->channel,
 		.min_vis_in_set = avc->min_vis_in_set,
 		.has_rss_context = avc->has_rss_context,
 		.want_txq = avc->want_txq,
 	};
-	return efhw_nic_accept_vi_constraints(avc->efhw_nic, low, order, &evc);
-}
-
-
-int  efrm_vi_allocator_alloc_set(struct efrm_nic *efrm_nic,
-				 struct efrm_alloc_vi_constraints *avc,
-				 struct efrm_vi_allocation *set_out)
-{
-	int rc;
-
-	EFRM_ASSERT(efrm_nic->vi_allocator.orders != NULL);
 
 	if (avc->min_vis_in_set < 1)
 		return -EINVAL;
 
 	set_out->order = fls(avc->min_vis_in_set - 1);
 	spin_lock_bh(&efrm_nic->lock);
-	set_out->instance = efrm_buddy_alloc_special(&efrm_nic->vi_allocator,
-						     set_out->order,
-						     accept_vi_constraints,
-						     avc);
+	set_out->instance = efhw_nic_vi_alloc(avc->efhw_nic, &evc, set_out->order);
 	spin_unlock_bh(&efrm_nic->lock);
 	rc = (set_out->instance >= 0) ? 0 : -EBUSY;
 	return rc;
@@ -139,6 +77,6 @@ void efrm_vi_allocator_free_set(struct efrm_nic *efrm_nic,
 	EFRM_ASSERT(set->instance >= 0);
 
 	spin_lock_bh(&efrm_nic->lock);
-	efrm_buddy_free(&efrm_nic->vi_allocator, set->instance, set->order);
+	efhw_nic_vi_free(&efrm_nic->efhw_nic, set->instance, set->order);
 	spin_unlock_bh(&efrm_nic->lock);
 }

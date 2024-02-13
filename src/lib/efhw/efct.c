@@ -422,12 +422,16 @@ efct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
 	mmiowb();
 }
 
+struct alloc_vi_constraints {
+  struct efhw_nic_efct *efct;
+  struct efhw_vi_constraints *evc;
+};
 
-static bool efct_accept_vi_constraints(struct efhw_nic *nic, int low,
-                                       unsigned order, void* arg)
+static bool efct_accept_vi_constraints(int low, unsigned order, void* arg)
 {
-  struct efhw_vi_constraints *vc = arg;
-  struct efhw_nic_efct *efct = nic->arch_extra;
+  struct alloc_vi_constraints *avc = arg;
+  struct efhw_vi_constraints *vc = avc->evc;
+  struct efhw_nic_efct *efct = avc->efct;
 
   /* If this VI will want a TXQ it needs a HW EVQ. These all fall within
    * the range [0,efct->evq_n). We use the space above that to provide
@@ -443,7 +447,21 @@ static bool efct_accept_vi_constraints(struct efhw_nic *nic, int low,
   }
 }
 
+static int efct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
+			                     unsigned order) {
+  struct efhw_nic_efct *efct = nic->arch_extra;
+  struct alloc_vi_constraints avc = {
+    .efct = efct,
+    .evc = evc,
+  };
+  return efhw_buddy_alloc_special(&efct->vi_allocator, order,
+                                  efct_accept_vi_constraints, &avc);
+}
 
+static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned order) {
+  struct efhw_nic_efct* efct = nic->arch_extra;
+  efhw_buddy_free(&efct->vi_allocator, instance, order);
+}
 /*----------------------------------------------------------------------------
  *
  * DMAQ low-level register interface
@@ -1510,7 +1528,8 @@ struct efhw_func_ops efct_char_functional_units = {
   .event_queue_enable = efct_nic_event_queue_enable,
   .event_queue_disable = efct_nic_event_queue_disable,
   .wakeup_request = efct_nic_wakeup_request,
-  .accept_vi_constraints = efct_accept_vi_constraints,
+  .vi_alloc = efct_vi_alloc,
+  .vi_free = efct_vi_free,
   .dmaq_tx_q_init = efct_dmaq_tx_q_init,
   .dmaq_rx_q_init = efct_dmaq_rx_q_init,
   .flush_tx_dma_channel = efct_flush_tx_dma_channel,

@@ -38,13 +38,13 @@
  ****************************************************************************
  */
 
-#ifndef __CI_EFRM_BUDDY_H__
-#define __CI_EFRM_BUDDY_H__
+#ifndef __CI_EFHW_BUDDY_H__
+#define __CI_EFHW_BUDDY_H__
 
-#include <ci/efrm/sysdep.h>
+#include <ci/efhw/efhw_types.h>
 
 /*! Comment? */
-struct efrm_buddy_allocator {
+struct efhw_buddy_allocator {
 	struct list_head *free_lists;	/* array[order+1] */
 	struct list_head *links;	/* array[1<<order] */
 	uint8_t *orders;		/* array[1<<order] */
@@ -54,18 +54,18 @@ struct efrm_buddy_allocator {
 	 */
 };
 
-extern int efrm_buddy_ctor(struct efrm_buddy_allocator *b, unsigned order);
-extern int efrm_buddy_range_ctor(struct efrm_buddy_allocator *b,
+extern int efhw_buddy_ctor(struct efhw_buddy_allocator *b, unsigned order);
+extern int efhw_buddy_range_ctor(struct efhw_buddy_allocator *b,
 				 int low, int high);
-extern void efrm_buddy_dtor(struct efrm_buddy_allocator *b);
-extern int efrm_buddy_alloc(struct efrm_buddy_allocator *b, unsigned order);
-extern int efrm_buddy_alloc_special(struct efrm_buddy_allocator *b,
+extern void efhw_buddy_dtor(struct efhw_buddy_allocator *b);
+extern int efhw_buddy_alloc(struct efhw_buddy_allocator *b, unsigned order);
+extern int efhw_buddy_alloc_special(struct efhw_buddy_allocator *b,
 				    unsigned order,
 				    bool (*)(int low, unsigned order,
 					     void* arg),
 				    void* arg);
-extern void efrm_buddy_free(struct efrm_buddy_allocator *b, unsigned addr,
+extern void efhw_buddy_free(struct efhw_buddy_allocator *b, unsigned addr,
 			    unsigned order);
 
 
-#endif /* __CI_EFRM_BUDDY_H__ */
+#endif /* __CI_EFHW_BUDDY_H__ */

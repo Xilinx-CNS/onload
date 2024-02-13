@@ -79,10 +79,6 @@ static inline struct efrm_nic *efrm_nic_from_rs(struct efrm_resource *rs)
 }
 
 
-extern int  efrm_vi_allocator_ctor(struct efrm_nic *,
-				   const struct vi_resource_dimensions *);
-extern void efrm_vi_allocator_dtor(struct efrm_nic *);
-
 struct efrm_alloc_vi_constraints {
 	struct efhw_nic *efhw_nic;
 	int channel;
@@ -98,8 +94,8 @@ struct efrm_alloc_vi_constraints {
 extern int  efrm_vi_allocator_alloc_set(struct efrm_nic *,
 					struct efrm_alloc_vi_constraints *,
 					struct efrm_vi_allocation *set_out);
-extern void efrm_vi_allocator_free_set(struct efrm_nic *,
-				       struct efrm_vi_allocation *);
+extern void efrm_vi_allocator_free_set(struct efrm_nic *efrm_nic,
+                                       struct efrm_vi_allocation *set);
 
 #define EFRM_PORT_SNIFF_NO_OWNER -1
 #define EFRM_PORT_SNIFF_OP_IN_PROGRESS -2

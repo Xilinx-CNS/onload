@@ -341,6 +341,22 @@ static int efct_resource_init(struct xlnx_efct_device *edev,
   return 0;
 }
 
+static int efct_vi_allocator_ctor(struct efhw_nic_efct *nic,
+                                  struct vi_resource_dimensions *res_dim) {
+  int rc = efhw_buddy_range_ctor(&nic->vi_allocator, res_dim->vi_min,
+                             res_dim->vi_lim);
+  if (rc < 0) {
+       EFRM_ERR("%s: efhw_buddy_range_ctor(%d, %d) "
+                "failed (%d)",
+                __FUNCTION__, res_dim->vi_min, res_dim->vi_lim, rc);
+  }
+  return rc;
+}
+
+static void efct_vi_allocator_dtor(struct efhw_nic_efct *nic) {
+  efhw_buddy_dtor(&nic->vi_allocator);
+}
+
 int efct_probe(struct auxiliary_device *auxdev,
                const struct auxiliary_device_id *id)
 {
@@ -405,6 +421,10 @@ int efct_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail2;
 
+  rc = efct_vi_allocator_ctor(efct, &res_dim);
+  if( rc < 0 )
+    goto fail2;
+
   rtnl_lock();
   rc = efrm_nic_add(client, &auxdev->dev, &dev_type, 0, net_dev, &lnic,
                     &res_dim, 0);
@@ -428,6 +448,7 @@ int efct_probe(struct auxiliary_device *auxdev,
 
  fail3:
   rtnl_unlock();
+  efct_vi_allocator_dtor(efct);
  fail2:
   edev->ops->close(client);
  fail1:
@@ -500,6 +521,7 @@ void efct_remove(struct auxiliary_device *auxdev)
   ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNPLUGGED);
   rtnl_unlock();
 
+  efct_vi_allocator_dtor(efct);
   /* mind we might still expect callbacks from close() context
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */

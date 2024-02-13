@@ -82,6 +82,21 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
   return 0;
 }
 
+static int ef10ct_vi_allocator_ctor(struct efhw_nic_ef10ct *nic,
+                                  struct vi_resource_dimensions *res_dim) {
+  int rc = efhw_buddy_range_ctor(&nic->vi_allocator, res_dim->vi_min,
+                             res_dim->vi_lim);
+  if (rc < 0) {
+       EFRM_ERR("%s: efhw_buddy_range_ctor(%d, %d) "
+                "failed (%d)",
+                __FUNCTION__, res_dim->vi_min, res_dim->vi_lim, rc);
+  }
+  return rc;
+}
+
+static void ef10ct_vi_allocator_dtor(struct efhw_nic_ef10ct *nic) {
+  efhw_buddy_dtor(&nic->vi_allocator);
+}
 
 static int ef10ct_probe(struct auxiliary_device *auxdev,
                         const struct auxiliary_device_id *id)
@@ -126,10 +141,14 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   if( rc < 0 )
     goto fail2;
 
+  rc = ef10ct_vi_allocator_ctor(ef10ct, &res_dim);
+  if( rc < 0 )
+    goto fail2;
+
   rc = efrm_nic_add(client, &auxdev->dev, &dev_type, 0, val.net_dev, &lnic,
                     &res_dim, 0);
   if( rc < 0 )
-    goto fail2;
+    goto fail3;
 
   nic = &lnic->efrm_nic.efhw_nic;
   nic->mtu = val.net_dev->mtu + ETH_HLEN;
@@ -141,6 +160,8 @@ static int ef10ct_probe(struct auxiliary_device *auxdev,
   efrm_notify_nic_probe(nic, val.net_dev);
   return 0;
 
+ fail3:
+  ef10ct_vi_allocator_dtor(ef10ct);
  fail2:
   edev->ops->close(client);
  fail1:
@@ -187,6 +208,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
   efrm_nic_reset_suspend(nic);
   ci_atomic32_or(&nic->resetting, NIC_RESETTING_FLAG_UNPLUGGED);
 
+  ef10ct_vi_allocator_dtor(ef10ct);
   /* mind we might still expect callbacks from close() context
    * TODO: rethink where to call close and how to synchronise with
    * the rest. */

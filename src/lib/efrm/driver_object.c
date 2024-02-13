@@ -131,13 +131,6 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 	}
 	memset(efrm_nic->vis, 0, max_vis * sizeof(efrm_nic->vis[0]));
 
-	rc = efrm_vi_allocator_ctor(efrm_nic, res_dim);
-	if (rc < 0) {
-		EFRM_ERR("%s: efrm_vi_allocator_ctor failed (%d)",
-			 __FUNCTION__, rc);
-		goto fail2;
-	}
-
 	/* We request ids based on 1, as we use a 0 owner_id within Onload to 
 	 * show we're using physical addressing mode.  On ef10 0 is part of
 	 * our available owner id space, so we will map owner id back to 0
@@ -148,14 +141,14 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 		EFRM_ERR("%s: Out of memory (max_vis=%u)",
 			 __FUNCTION__, max_vis);
 		rc = -ENOMEM;
-		goto fail3;
+		goto fail2;
 	}
 
 	rc = efrm_interrupt_vectors_ctor(efrm_nic, res_dim);
 	if (rc < 0) {
 		EFRM_ERR("%s: efrm_interrupt_vectors_ctor failed (%d)",
 			 __FUNCTION__, rc);
-		goto fail4;
+		goto fail3;
 	}
 
 	spin_lock_init(&efrm_nic->lock);
@@ -171,10 +164,8 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 
 	return 0;
 
-fail4:
-	efrm_pd_owner_ids_dtor(efrm_nic->owner_ids);
 fail3:
-	efrm_vi_allocator_dtor(efrm_nic);
+	efrm_pd_owner_ids_dtor(efrm_nic->owner_ids);
 fail2:
 	vfree(efrm_nic->vis);
 fail1:
@@ -193,7 +184,6 @@ void efrm_nic_dtor(struct efrm_nic *efrm_nic)
 
 	efrm_interrupt_vectors_dtor(efrm_nic);
 	efrm_pd_owner_ids_dtor(efrm_nic->owner_ids);
-	efrm_vi_allocator_dtor(efrm_nic);
 	vfree(efrm_nic->vis);
 
 	/* Nobble some fields. */

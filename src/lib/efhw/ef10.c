@@ -38,6 +38,7 @@
 #include <ci/efhw/eventq.h>
 #include <ci/efhw/checks.h>
 #include <ci/efhw/efhw_buftable.h>
+#include <ci/efhw/buddy.h>
 
 #include <ci/driver/driverlink_api.h>
 #include <ci/driver/resource/driverlink.h>
@@ -686,6 +687,34 @@ ef10_nic_tweak_hardware(struct efhw_nic *nic)
 			      0;
 }
 
+static int ef10_ef100_vi_allocator_ctor(struct efhw_nic* nic,
+                                   unsigned vi_min, unsigned vi_lim)
+{
+	struct efhw_buddy_allocator *vi_allocator = nic->arch_extra;
+	int rc = efhw_buddy_range_ctor(vi_allocator, vi_min, vi_lim);
+	if (rc < 0) {
+		EFHW_ERR("%s: efhw_buddy_range_ctor(%d, %d) "
+	           "failed (%d)",
+	            __FUNCTION__, vi_min, vi_lim, rc);
+	}
+	return rc;
+}
+
+int ef10_ef100_init_vi_allocator(struct efhw_nic *nic)
+{
+	int rc;
+	struct efhw_buddy_allocator* vi_allocator = vzalloc(sizeof(*vi_allocator));
+	if( !vi_allocator )
+		return -ENOMEM;
+	nic->arch_extra = vi_allocator;
+	rc = ef10_ef100_vi_allocator_ctor(nic, nic->vi_min, nic->vi_lim);
+	if( rc < 0 ) {
+		vfree(vi_allocator);
+		nic->arch_extra = NULL;
+		return rc;
+	}
+	return 0;
+}
 
 static int
 ef10_nic_init_hardware(struct efhw_nic *nic,
@@ -740,14 +769,22 @@ ef10_nic_init_hardware(struct efhw_nic *nic,
 	nic->rss_indir_size = EF10_EF100_RSS_INDIRECTION_TABLE_LEN;
 	nic->rss_key_size = EF10_EF100_RSS_KEY_LEN;
 
+	rc = ef10_ef100_init_vi_allocator(nic);
+	if( rc < 0 ) {
+		return rc;
+	}
 	return 0;
 }
 
 
-static void
-ef10_nic_release_hardware(struct efhw_nic *nic)
+void ef10_ef100_nic_release_hardware(struct efhw_nic *nic)
 {
 	EFHW_TRACE("%s:", __FUNCTION__);
+	if( nic->arch_extra ) {
+		efhw_buddy_dtor(nic->arch_extra);
+		vfree(nic->arch_extra);
+		nic->arch_extra = NULL;
+	}
 }
 
 
@@ -1048,22 +1085,41 @@ static void ef10_nic_sw_event(struct efhw_nic *nic, int data, int evq)
 	EFHW_TRACE("%s: evq[%d]->%x", __FUNCTION__, evq, data);
 }
 
-
-bool ef10_ef100_accept_vi_constraints(struct efhw_nic *nic, int low,
-				      unsigned order, void* arg)
+bool ef10_ef100_accept_vi_constraints(int low, unsigned order, void* arg)
 {
-	struct efhw_vi_constraints *avc = arg;
-	int high = low + avc->min_vis_in_set;
+	struct ef10_ef100_alloc_vi_constraints *avc = arg;
+	struct efhw_vi_constraints *vc = avc->evc;
+	struct efhw_nic *nic = avc->nic;
+
+	int high = low + vc->min_vis_in_set;
 	int ok = 1;
-	if ((avc->min_vis_in_set > 1) && (!avc->has_rss_context)) {
+	if ((vc->min_vis_in_set > 1) && (!vc->has_rss_context)) {
 		/* We need to ensure that if an RSS-enabled filter is
 		 * pointed at this VI-set then the queue selected will be
-		 * within the default set.  The queue selected by RSS will be 
+		 * within the default set.  The queue selected by RSS will be
 		 * in the range (low | (rss_channel_count - 1)).
 		 */
 		ok &= ((low | (nic->rss_channel_count - 1)) < high);
 	}
 	return ok;
+}
+
+
+int ef10_ef100_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
+                          unsigned order) {
+	struct efhw_buddy_allocator *vi_allocator = nic->arch_extra;
+	struct ef10_ef100_alloc_vi_constraints avc = {
+	  .nic = nic,
+	  .evc = evc,
+	};
+	int alloc = efhw_buddy_alloc_special(vi_allocator, order,
+                                  ef10_ef100_accept_vi_constraints, &avc);
+	return alloc;
+}
+
+void ef10_ef100_vi_free(struct efhw_nic *nic, int instance, unsigned order) {
+	struct efhw_buddy_allocator *vi_allocator = nic->arch_extra;
+	efhw_buddy_free(vi_allocator, instance, order);
 }
 
 /*--------------------------------------------------------------------
@@ -2509,13 +2565,14 @@ struct efhw_func_ops ef10_char_functional_units = {
 	.sw_ctor = ef10_nic_sw_ctor,
 	.init_hardware = ef10_nic_init_hardware,
 	.post_reset = ef10_nic_tweak_hardware,
-	.release_hardware = ef10_nic_release_hardware,
+	.release_hardware = ef10_ef100_nic_release_hardware,
 	.event_queue_enable = ef10_nic_event_queue_enable,
 	.event_queue_disable = ef10_nic_event_queue_disable,
 	.wakeup_request = ef10_nic_wakeup_request,
 	.sw_event = ef10_nic_sw_event,
 	.handle_event = ef10_handle_event,
-	.accept_vi_constraints = ef10_ef100_accept_vi_constraints,
+	.vi_alloc = ef10_ef100_vi_alloc,
+	.vi_free = ef10_ef100_vi_free,
 	.dmaq_tx_q_init = ef10_dmaq_tx_q_init,
 	.dmaq_rx_q_init = ef10_dmaq_rx_q_init,
 	.flush_tx_dma_channel = ef10_ef100_flush_tx_dma_channel,
