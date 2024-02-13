@@ -488,6 +488,34 @@ ef100_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 	return -EOPNOTSUPP;
 }
 
+static int
+ef100_translate_dma_addrs(struct efhw_nic* nic, const dma_addr_t *src,
+			  dma_addr_t *dst, int n)
+{
+	struct efx_dl_device *efx_dev;
+	int rc;
+
+	efx_dev = efhw_nic_acquire_dl_device(nic);
+	if (!efx_dev)
+		return -ENETDOWN;
+	rc = efx_dl_dma_xlate(efx_dev, src, dst, n);
+	if (rc < 0) {
+		EFHW_ERR("%s: ERROR: DMA address translation failed (%d)",
+		         __FUNCTION__, rc);
+	}
+	else if (rc < n) {
+		EFHW_ERR("%s: ERROR: DMA address translation failed on "
+		         "%d/%d (%llx)", __FUNCTION__, rc, n, src[rc]);
+		rc = -EIO;
+	}
+	else {
+		rc = 0;
+	}
+	efhw_nic_release_dl_device(nic, efx_dev);
+	return rc;
+}
+
+
 int ef100_nic_ext_alloc(struct efhw_nic* nic, uint32_t client_id,
                         const unsigned char* service_guid,
                         bool flag_info_only,
@@ -801,7 +829,7 @@ struct efhw_func_ops ef100_char_functional_units = {
 	ef100_dmaq_rx_q_init,
 	ef10_ef100_flush_tx_dma_channel,
 	ef10_ef100_flush_rx_dma_channel,
-	ef10_ef100_translate_dma_addrs,
+	ef100_translate_dma_addrs,
 	__ef100_nic_buffer_table_get_orders,
 	sizeof(__ef100_nic_buffer_table_get_orders) /
 		sizeof(__ef100_nic_buffer_table_get_orders[0]),

@@ -77,9 +77,6 @@ extern int ef10_ef100_flush_tx_dma_channel(struct efhw_nic *nic,
 					   uint evq);
 extern int ef10_ef100_flush_rx_dma_channel(struct efhw_nic *nic,
 					   uint32_t client_id, uint dmaq);
-extern int ef10_ef100_translate_dma_addrs(struct efhw_nic* nic,
-					  const dma_addr_t *src,
-					  dma_addr_t *dst, int n);
 
 extern int ef10_ef100_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
 					     struct efhw_buffer_table_block **block_out,
