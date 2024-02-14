@@ -156,7 +156,7 @@ static ssize_t enable_store(struct device *dev,
 	nic = efhw_nic_find_by_dev(dev);
 	if (!nic)
 		return -ENOENT;
-	if (strtobool(buf, &enable) < 0) {
+	if (kstrtobool(buf, &enable) < 0) {
 		EFRM_ERR("%s: Cannot parse data written to %s/onload_enable.",
 		         __func__, to_net_dev(dev)->name);
 		return -EINVAL;

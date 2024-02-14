@@ -91,6 +91,7 @@ EFRM_HAVE_ARRAY_SIZE                    symbol array_size include/linux/overflow
 EFRM_HAVE_WRITE_ONCE                    symbol WRITE_ONCE include/linux/compiler.h
 EFRM_HAVE_INIT_LIST_HEAD_RCU            symbol INIT_LIST_HEAD_RCU include/linux/rculist.h
 EFRM_HAVE_S_MIN_MAX                     symbol S32_MIN include/linux/kernel.h include/linux/limits.h
+EFRM_HAVE_KSTRTOBOOL                    symbol kstrtobool include/linux/kstrtox.h include/linux/kernel.h
 
 EFRM_RTNL_LINK_OPS_HAS_GET_LINK_NET	member	struct_rtnl_link_ops	get_link_net	include/net/rtnetlink.h
 
