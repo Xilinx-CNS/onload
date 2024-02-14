@@ -29,8 +29,6 @@ EFRM_SOCK_RECVMSG_NEEDS_BYTES	symtype sock_recvmsg	include/linux/net.h int(struc
 EFRM_HAVE_FOP_READ_ITER	memtype	struct_file_operations	read_iter	include/linux/fs.h ssize_t (*) (struct kiocb *, struct iov_iter *)
 EFRM_HAVE_FOP_SENDPAGE		memtype	struct_file_operations	sendpage	include/linux/fs.h ssize_t (*) (struct file *, struct page *, int, size_t, loff_t *, int)
 
-EFRM_SOCK_CREATE_KERN_HAS_NET	symtype	sock_create_kern	include/linux/net.h int(struct net *, int, int, int, struct socket **)
-
 EFRM_HAVE_SK_SLEEP_FUNC	symtype	sk_sleep	include/net/sock.h wait_queue_head_t *(struct sock *)
 
 # Before 4.8, set_restore_sigmask() is defined by some architectures only, and
@@ -43,8 +41,6 @@ EFRM_HAVE_SK_SLEEP_FUNC	symtype	sk_sleep	include/net/sock.h wait_queue_head_t *(
 EFRM_HAVE_SET_RESTORE_SIGMASK	symbol	set_restore_sigmask	include/linux/sched.h
 EFRM_HAVE_SET_RESTORE_SIGMASK1	symbol	set_restore_sigmask	include/linux/sched/signal.h
 
-EFRM_ALLOC_FILE_TAKES_STRUCT_PATH	symtype	alloc_file	include/linux/file.h struct file *(struct path *, fmode_t, const struct file_operations *)
-EFRM_ALLOC_FILE_TAKES_CONST_STRUCT_PATH	symtype	alloc_file	include/linux/file.h struct file *(const struct path *, fmode_t, const struct file_operations *)
 EFRM_FSTYPE_HAS_INIT_PSEUDO		symbol	init_pseudo	include/linux/pseudo_fs.h
 EFRM_HAVE_ALLOC_FILE_PSEUDO		symbol	alloc_file_pseudo	include/linux/file.h
 
@@ -81,23 +77,11 @@ EFRM_DEV_GET_BY_NAME_TAKES_NS	symtype	dev_get_by_name	include/linux/netdevice.h	
 EFRM_HAVE_NS_SYSCTL_TCP_MEM		nsymbol sysctl_tcp_wmem include/net/tcp.h
 
 EFRM_HAVE_TIMER_SETUP                   symbol timer_setup include/linux/timer.h
-EFRM_HAVE_READ_SEQCOUNT_LATCH           symbol raw_read_seqcount_latch include/linux/seqlock.h
-EFRM_HAVE_WRITE_SEQCOUNT_LATCH          symbol raw_write_seqcount_latch include/linux/seqlock.h
-EFRM_HAVE_RBTREE                        symbol rb_link_node_rcu include/linux/rbtree.h
-EFRM_HAVE_SKB_METADATA                  symbol skb_metadata_len include/linux/skbuff.h
-EFRM_HAVE_BIN2HEX                       symbol bin2hex include/linux/kernel.h
-EFRM_HAVE_ALLSYMS_SHOW_VALUE            symbol kallsyms_show_value include/linux/kallsyms.h
-EFRM_HAVE_ARRAY_SIZE                    symbol array_size include/linux/overflow.h
-EFRM_HAVE_WRITE_ONCE                    symbol WRITE_ONCE include/linux/compiler.h
-EFRM_HAVE_INIT_LIST_HEAD_RCU            symbol INIT_LIST_HEAD_RCU include/linux/rculist.h
-EFRM_HAVE_S_MIN_MAX                     symbol S32_MIN include/linux/kernel.h include/linux/limits.h
 EFRM_HAVE_KSTRTOBOOL                    symbol kstrtobool include/linux/kstrtox.h include/linux/kernel.h
 
 EFRM_RTNL_LINK_OPS_HAS_GET_LINK_NET	member	struct_rtnl_link_ops	get_link_net	include/net/rtnetlink.h
 
 EFRM_ACCESS_OK_HAS_2_ARGS    custom
-
-EFRM_PUT_USER_ACCEPTS_VOLATILE custom
 
 EFRM_IP6_ROUTE_INPUT_LOOKUP_EXPORTED	export	ip6_route_input_lookup	include/net/ip6_route.h	net/ipv6/route.c
 
