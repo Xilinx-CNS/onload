@@ -228,6 +228,9 @@ int onload_fd_check_feature(int fd, enum onload_fd_feature feature)
   case ONLOAD_FD_FEAT_UDP_TX_TS_HDR:
     return 1;
     break;
+  case ONLOAD_FD_FEAT_TX_SCM_TS_PKTINFO:
+    return 1;
+    break;
   default:
     break;
   }

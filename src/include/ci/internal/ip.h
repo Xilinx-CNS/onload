@@ -936,8 +936,12 @@ struct cmsg_state {
 extern void ci_put_cmsg(struct cmsg_state *cmsg_state, int level, int type,
                         socklen_t len, const void *data) CI_HF;
 /* info_out contains a pointer to struct in_pktinfo or struct in6_pktinfo */
-extern int ci_ip_cmsg_send(const struct msghdr*, void** info_out) CI_HF;
+extern int ci_ip_cmsg_send(const struct msghdr*, void** info_out,
+                           void** ts_pktinfo_out) CI_HF;
 extern void ci_ip_cmsg_finish(struct cmsg_state* cmsg_state) CI_HF;
+extern bool ci_ip_cmsg_is_custom_tx(int level, int type) CI_HF;
+extern void ci_ip_cmsg_filter_custom_tx(struct msghdr*,
+                                        const struct msghdr*) CI_HF;
 
 #ifndef __KERNEL__
 

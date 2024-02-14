@@ -225,6 +225,9 @@ enum onload_fd_feature {
    * timestamps on UDP sockets
    */
   ONLOAD_FD_FEAT_UDP_TX_TS_HDR = 1,
+  /* Check whether this version of onload allows requesting
+   * a physical transmit ifindex */
+  ONLOAD_FD_FEAT_TX_SCM_TS_PKTINFO = 2,
 };
 
 extern int onload_fd_check_feature(int fd, enum onload_fd_feature feature);

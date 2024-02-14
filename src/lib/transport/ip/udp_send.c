@@ -437,8 +437,53 @@ ci_inline int ci_udp_sendmsg_os(ci_netif* ni, ci_udp_state* us,
                              const struct msghdr* msg, int flags,
                              int user_buffers, int atomic)
 {
+  int rc;
+  struct msghdr filtered_msg;
+  char control_buffer[128];
+  char* filtered_control = NULL;
+
+  /* We have some custom CMSGs on transmit, so we need to make sure the
+   * kernel never sees these; otherwise it won't send the packets. */
+  if( msg->msg_controllen > 0 && msg->msg_control != NULL ) {
+    struct cmsghdr *cmsg;
+
+    /* Lets have a quick look to see if we actually use any custom
+     * options so we can avoid allocation and copying if we don't. */
+    for( cmsg = CMSG_FIRSTHDR(msg); cmsg;
+         cmsg = CMSG_NXTHDR((struct msghdr*)msg, cmsg) ) {
+      if( ci_ip_cmsg_is_custom_tx(cmsg->cmsg_level, cmsg->cmsg_type) ) {
+        break;
+      }
+    }
+
+    if( cmsg ) {
+      size_t size = sizeof(char) * msg->msg_controllen;
+      /* It would be nice if we could fit the control data into the buffer on
+       * the stack, but if we can't then we take the hit and use the heap. */
+      filtered_control = (size > sizeof(control_buffer)) ? malloc(size)
+                                                         : &control_buffer[0];
+      if( ! filtered_control ) {
+        LOG_E(ci_log("%s: no space to allocate control buffer for filtering "
+                     "custom Onload CMSGs, dropping packet!", __FUNCTION__));
+        return -ENOMEM;
+      }
+
+      memcpy(&filtered_msg, msg, sizeof(filtered_msg));
+      filtered_msg.msg_control = filtered_control;
+      ci_ip_cmsg_filter_custom_tx(&filtered_msg, msg);
+      msg = (const struct msghdr*)&filtered_msg;
+    }
+  }
+
   ++us->stats.n_tx_os;
-  return oo_os_sock_sendmsg(ni, S_SP(us), msg, flags);
+  rc = oo_os_sock_sendmsg(ni, S_SP(us), msg, flags);
+
+  /* Only free the filtered control message if we allocated it on the heap. */
+  if( filtered_control && filtered_control != &control_buffer[0] ) {
+    free(filtered_control);
+  }
+
+  return rc;
 }
 
 #endif
@@ -1542,6 +1587,7 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
   ci_netif *ni = a->ni;
   ci_udp_state *us = a->us;
   struct udp_send_info sinf;
+  ci_hwport_id_t requested_hwport = CI_HWPORT_ID_BAD;
   int rc;
 
   /* Caller should have checked this. */
@@ -1564,8 +1610,25 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
 #else
   if(CI_UNLIKELY( CMSG_FIRSTHDR(msg) != NULL )) {
     void* info = NULL;
-    if( ci_ip_cmsg_send(msg, &info) != 0 || info != NULL )
+    struct ci_scm_ts_pktinfo *ts_pktinfo = NULL;
+    if( ci_ip_cmsg_send(msg, &info, (void**)&ts_pktinfo) != 0 || info != NULL )
       goto send_via_os;
+
+    if( ts_pktinfo != NULL ) {
+      cicp_hwport_mask_t hwports = 0;
+      ci_hwport_id_t hwport;
+      cicp_encap_t encap = { 0 };
+      /* If we have requested routing over a specific ifindex in a bond, then
+       * get the corresponding hwport and make sure it is valid. */
+      if( ts_pktinfo->if_index > 0 &&
+          oo_cp_find_llap(ni->cplane, ts_pktinfo->if_index,
+                          NULL/*mtu*/, &hwports, NULL/*rxhwports*/,
+                          NULL/*mac*/, &encap) == 0 &&
+          (encap.type == CICP_LLAP_TYPE_SLAVE) &&
+          (hwport = cp_hwport_mask_first(hwports)) != CI_HWPORT_ID_BAD ) {
+        requested_hwport = hwport;
+      }
+    }
   }
 #endif
 #endif
@@ -1614,6 +1677,17 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
     if( ! (us->s.s_flags & CI_SOCK_FLAG_CONNECTED) ) {
       rc = -EDESTADDRREQ;
       goto error;
+    }
+
+    /* If we have requested a specific hwport to send over, or we requested one
+     * in the last send, and it is different now then invalidate the ipcache */
+    if(CI_UNLIKELY( (requested_hwport != CI_HWPORT_ID_BAD ||
+                     us->s.pkt.flags & CI_IP_CACHE_REQUEST_HWPORT) &&
+                     requested_hwport != us->s.pkt.hwport )) {
+      ci_ip_cache_invalidate(&us->s.pkt);
+      us->s.pkt.flags = (requested_hwport != CI_HWPORT_ID_BAD)
+                          ? CI_IP_CACHE_REQUEST_HWPORT : 0;
+      us->s.pkt.hwport = requested_hwport;
     }
 
     ci_ipcache_set_daddr(&sinf.ipcache, addr_any);
@@ -1697,7 +1771,10 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
     reuse_ipcache = (sinf.ipcache.dport_be16 ==
                      us->ephemeral_pkt.dport_be16) &&
                     CI_IPX_ADDR_EQ(pkt_daddr,
-                                   ipcache_raddr(&us->ephemeral_pkt));
+                                   ipcache_raddr(&us->ephemeral_pkt)) &&
+                    ((requested_hwport == CI_HWPORT_ID_BAD &&
+                      ~us->ephemeral_pkt.flags & CI_IP_CACHE_REQUEST_HWPORT) ||
+                     requested_hwport == us->ephemeral_pkt.hwport);
     if( ! reuse_ipcache )
       us->udpflags &=~ CI_UDPF_LAST_SEND_NOMAC;
     if( reuse_ipcache &&
@@ -1723,6 +1800,9 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
         ci_ipcache_set_daddr(&us->ephemeral_pkt, ipcache_raddr(&sinf.ipcache));
         us->ephemeral_pkt.dport_be16 = sinf.ipcache.dport_be16;
         ci_ip_cache_invalidate(&us->ephemeral_pkt);
+        us->ephemeral_pkt.flags = (requested_hwport != CI_HWPORT_ID_BAD)
+                                    ? CI_IP_CACHE_REQUEST_HWPORT : 0;
+        us->ephemeral_pkt.hwport = requested_hwport;
       }
       if(CI_UNLIKELY( ! oo_cp_ipcache_is_valid(ni, &us->ephemeral_pkt) )) {
         ++us->stats.n_tx_cp_uc_lookup;
@@ -1742,6 +1822,9 @@ int ci_udp_sendmsg(ci_udp_iomsg_args *a,
       sinf.used_ipcache = 1;
       ++us->stats.n_tx_cp_a_lookup;
       ci_ip_cache_invalidate(&sinf.ipcache);
+      sinf.ipcache.flags = (requested_hwport != CI_HWPORT_ID_BAD)
+                             ? CI_IP_CACHE_REQUEST_HWPORT : 0;
+      sinf.ipcache.hwport = requested_hwport;
       cicp_user_retrieve(ni, &sinf.ipcache, &us->s.cp);
       if( sinf.ipcache.status != retrrc_success &&
           sinf.ipcache.status != retrrc_nomac )

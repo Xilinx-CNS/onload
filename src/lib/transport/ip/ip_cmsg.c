@@ -460,7 +460,8 @@ void ci_ip_cmsg_recv(ci_netif* ni, ci_udp_state* us, const ci_ip_pkt_fmt *pkt,
  * \param info_out    Must be a valid pointer. Contains a pointer to
  * struct in_pktinfo or struct in6_pktinfo.
  */
-int ci_ip_cmsg_send(const struct msghdr* msg, void** info_out)
+int ci_ip_cmsg_send(const struct msghdr* msg, void** info_out,
+                    void** ts_pktinfo_out)
 {
   struct cmsghdr *cmsg;
 
@@ -499,9 +500,71 @@ int ci_ip_cmsg_send(const struct msghdr* msg, void** info_out)
       else
         return -EINVAL;
     }
+    else if( cmsg->cmsg_level == SOL_SOCKET ) {
+      /* SCM_TIMESTAMPING_PKTINFO was added as an extension of IP_PKTINFO
+       * where the ifindex of the physical device that received a message
+       * was required, rather than the logical one returned by IP_PKTINFO.
+       * Linux currently only supports SCM_TIMESTAMPING_PKTINFO on RX, so
+       * we have decided to extend this behaviour to also allow it on TX
+       * to more closely match IP_PKTINFO which is valid on both TX and
+       * RX. In this case, we use the `if_index` variable to try and pick
+       * the physical device/port to send a packet from.
+       * Currently, we do not perform routing ourselves and rely on the
+       * kernel to do this. As such, we make no guarantees about whether
+       * or not a packet will actually be sent (via a valid route). */
+      if( cmsg->cmsg_type == SCM_TIMESTAMPING_PKTINFO ) {
+        if( cmsg->cmsg_len != CMSG_LEN(sizeof(struct ci_scm_ts_pktinfo)) )
+          return -EINVAL;
+
+        *ts_pktinfo_out = CMSG_DATA(cmsg);
+      }
+    }
   }
 
   return 0;
+}
+
+
+/**
+ * Check if a given CMSG is one of our custom options
+ */
+bool ci_ip_cmsg_is_custom_tx(int level, int type)
+{
+  return (level == SOL_SOCKET && type == SCM_TIMESTAMPING_PKTINFO);
+}
+
+
+/**
+ * Reconstruct `msg->msg_control` into `filtered_msg->msg_control` and skip
+ * copying the cmsgs that are custom to onload.
+ */
+void ci_ip_cmsg_filter_custom_tx(struct msghdr* filtered_msg,
+                                 const struct msghdr *msg)
+{
+  struct cmsghdr *cmsg, *next;
+  void *filtered_control = filtered_msg->msg_control;
+  size_t original_length = 0, length;
+
+  filtered_msg->msg_controllen = 0;
+  for( cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = next ) {
+    next = CMSG_NXTHDR((struct msghdr*)msg, cmsg);
+    /* It is valid for users to provide a CMSG buffer that is not aligned at
+     * the end, and equally `msg_controllen` does not need to be a multiple
+     * of the aligned size. We will assume that the control buffer does not
+     * have padding, so for the final CMSG in the buffer, we only copy the
+     * header and corresponding data. */
+    length = (next) ?  CMSG_ALIGN(cmsg->cmsg_len) : cmsg->cmsg_len;
+    original_length += length;
+
+    /* We only want to copy non-custom CMSGs to our new buffer, and we most
+     * certainly don't want to copy past the original control length */
+    if( ! ci_ip_cmsg_is_custom_tx(cmsg->cmsg_level, cmsg->cmsg_type) &&
+        original_length <= msg->msg_controllen ) {
+      memcpy(filtered_control, cmsg, length);
+      filtered_control = (char*)filtered_control + length;
+      filtered_msg->msg_controllen += length;
+    }
+  }
 }
 
 /*! \cidoxg_end */

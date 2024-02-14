@@ -123,11 +123,20 @@ cicp_user_bond_hash_get_hwport(ci_netif* ni, ci_ip_cached_hdrs* ipcache,
                                ci_uint16 src_port_be16,
                                ci_addr_t daddr)
 {
+  struct cicp_hash_state hs;
+
+  if(CI_UNLIKELY( ipcache->flags & CI_IP_CACHE_REQUEST_HWPORT )) {
+    /* If we have requested use of a single hwport, that is both valid and a
+     * member of this bond then we can skip hashing and just use this one. */
+    if( ipcache->hwport != CI_HWPORT_ID_BAD &&
+        (ipcache->hwport & hwports) != 0 ) {
+      goto out;
+    }
+  }
+
   /* For an active-active bond that uses hashing, choose the appropriate
    * interface to send out of.
    */
-  struct cicp_hash_state hs;
-
   if( src_port_be16 != 0 || ipcache->dport_be16 != 0)
     hs.flags = CICP_HASH_STATE_FLAGS_IS_TCP_UDP | 
       CICP_HASH_STATE_FLAGS_IS_IP;
@@ -140,6 +149,8 @@ cicp_user_bond_hash_get_hwport(ci_netif* ni, ci_ip_cached_hdrs* ipcache,
   hs.src_port_be16 = src_port_be16;
   hs.dst_port_be16 = ipcache->dport_be16;
   ipcache->hwport = oo_cp_hwport_bond_get(ipcache->encap.type, hwports, &hs);
+
+out:
   return ! ci_ip_cache_is_onloadable(ni, ipcache);
 }
 #endif

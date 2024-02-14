@@ -1796,6 +1796,9 @@ typedef struct {
   ci_uint8        flags;
   /* retrrc_localroute, and we really CAN handle it */
 #define CI_IP_CACHE_IS_LOCALROUTE       1
+  /* when the ipcache is invalid, and this flag is set, we will try to use the
+   * value in `hwport` for routing when in a bond that uses hashing */
+#define CI_IP_CACHE_REQUEST_HWPORT     2
 
   ci_mtu_t        mtu;
   ci_ifid_t       ifindex;
