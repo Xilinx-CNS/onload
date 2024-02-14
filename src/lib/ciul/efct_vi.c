@@ -30,16 +30,18 @@ struct efct_rx_descriptor
 {
   uint16_t refcnt;
   uint16_t superbuf_pkts;
-  uint8_t  padding_[3];
+  /* Points to the next descriptor in the descriptor buf -1 if NONE*/
+  int16_t  sbid_next;
+  uint8_t  padding_[1];
   uint8_t  final_ts_status;
   uint64_t final_timestamp;
 };
 
 /* pkt_ids are:
  *  bits 0..15 packet index in superbuf
- *  bits 16..24 superbuf index
- *  bits 25..27 rxq (as an index in to vi->efct_rxq, not as a hardware ID)
- *  bits 28..31 unused/zero
+ *  bits 16..26 superbuf index
+ *  bits 27..29 rxq (as an index in to vi->efct_rxq, not as a hardware ID)
+ *  bits 30..31 unused/zero
  *  [NB: bit 31 is stolen by some users to cache the superbuf's sentinel]
  * This layout is not part of the stable ABI. rxq index is slammed up against
  * superbuf index to allow for dirty tricks where we mmap all superbufs in
@@ -47,7 +49,7 @@ struct efct_rx_descriptor
  */
 
 #define PKT_ID_PKT_BITS  16
-#define PKT_ID_SBUF_BITS  9
+#define PKT_ID_SBUF_BITS 11
 #define PKT_ID_RXQ_BITS   3
 #define PKT_ID_TOTAL_BITS (PKT_ID_PKT_BITS + PKT_ID_SBUF_BITS + PKT_ID_RXQ_BITS)
 
@@ -100,6 +102,12 @@ static int pkt_id_to_rxq_ix(uint32_t pkt_id)
   return pkt_id_to_global_superbuf_ix(pkt_id) / CI_EFCT_MAX_SUPERBUFS;
 }
 
+static struct efct_rx_descriptor* efct_rx_desc_for_sb(ef_vi* vi, uint32_t qid, uint32_t sbid) {
+  ef_vi_rxq* q = &vi->vi_rxq;
+  struct efct_rx_descriptor* desc = q->descriptors;
+  return desc + ((qid * CI_EFCT_MAX_SUPERBUFS) | sbid);
+}
+
 #ifndef __KERNEL__
 static int superbuf_config_refresh(ef_vi* vi, int qid)
 {
@@ -140,17 +148,33 @@ static int superbuf_next(ef_vi* vi, int qid, bool* sentinel, unsigned* sbseq)
 static void superbuf_free(ef_vi* vi, int qid, int sbid)
 {
   struct efab_efct_rxq_uk_shm_q* shm = &vi->efct_shm->q[qid];
-  uint32_t added, removed;
+  uint32_t added, removed, freeq_size;
 
   added = shm->freeq.added;
   removed = OO_ACCESS_ONCE(shm->freeq.removed);
-  /* TODO: need to make this smarter and/or have a much bigger freeq if we
-   * allow apps to hold on to superbufs for longer */
-  (void)removed;
-  EF_VI_ASSERT(added - removed < CI_ARRAY_SIZE(shm->freeq.q));
-  shm->freeq.q[added & (CI_ARRAY_SIZE(shm->freeq.q) - 1)] = sbid;
-  ci_wmb();
-  OO_ACCESS_ONCE(shm->freeq.added) = added + 1;
+  EF_VI_ASSERT(added - removed <= CI_ARRAY_SIZE(shm->freeq.q));
+  freeq_size = added - removed;
+  if( freeq_size < CI_ARRAY_SIZE(shm->freeq.q) ) {
+    int16_t sbid_cur;
+    shm->freeq.q[added++ & (CI_ARRAY_SIZE(shm->freeq.q) - 1)] = sbid;
+    /* See if we can free any remaining sbufs in the descriptor free
+     * list. */
+    for( sbid_cur = vi->ep_state->rxq.sb_desc_free_head[qid];
+         sbid_cur != -1 && added - removed < CI_ARRAY_SIZE(shm->freeq.q);
+         added++ ) {
+      shm->freeq.q[added & (CI_ARRAY_SIZE(shm->freeq.q) - 1)] = sbid_cur;
+      sbid_cur = efct_rx_desc_for_sb(vi, qid, sbid_cur)->sbid_next;
+    }
+    ci_wmb();
+    OO_ACCESS_ONCE(shm->freeq.added) = added;
+    vi->ep_state->rxq.sb_desc_free_head[qid] = sbid_cur;
+  }
+  else {
+    /* No space in the freeq add to descriptor free list */
+    struct efct_rx_descriptor* desc = efct_rx_desc_for_sb(vi, qid, sbid);
+    desc->sbid_next = vi->ep_state->rxq.sb_desc_free_head[qid];
+    vi->ep_state->rxq.sb_desc_free_head[qid] = sbid;
+  }
 }
 
 static bool efct_rxq_is_active(const struct efab_efct_rxq_uk_shm_q* shm)
@@ -1140,14 +1164,15 @@ int efct_vi_mmap_init_internal(ef_vi* vi,
   int i;
 
 #ifdef __KERNEL__
-  space = kvmalloc(vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES *
+  space = kvmalloc((size_t)vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES *
                    CI_EFCT_SUPERBUFS_PER_PAGE *
                    sizeof(vi->efct_rxq[0].superbufs[0]), GFP_KERNEL);
   if( space == NULL )
     return -ENOMEM;
 #else
   uint64_t* mappings;
-  const size_t bytes_per_rxq = CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
+  const size_t bytes_per_rxq =
+    (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
   const size_t mappings_bytes =
     vi->max_efct_rxq * CI_EFCT_MAX_HUGEPAGES * sizeof(mappings[0]);
 
@@ -1624,6 +1649,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
 
 void efct_vi_init(ef_vi* vi)
 {
+  int i;
   EF_VI_BUILD_ASSERT(sizeof(struct efct_tx_descriptor) ==
                      EFCT_TX_DESCRIPTOR_BYTES);
   EF_VI_BUILD_ASSERT(sizeof(struct efct_rx_descriptor) ==
@@ -1643,4 +1669,6 @@ void efct_vi_init(ef_vi* vi)
 
   vi->vi_txq.efct_fixed_header =
       efct_tx_header(0, 0, (vi->vi_flags & EF_VI_TX_TIMESTAMPS) ? 1 : 0, 0, 0);
+  for( i = 0; i < CI_ARRAY_SIZE(vi->ep_state->rxq.sb_desc_free_head); i++ )
+    vi->ep_state->rxq.sb_desc_free_head[i] = -1;
 }

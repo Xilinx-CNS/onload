@@ -803,6 +803,8 @@ int efx_mcdi_mtd_erase(struct mtd_info *mtd, loff_t start, size_t len);
 int efx_mcdi_mtd_write(struct mtd_info *mtd, loff_t start, size_t len,
 		       size_t *retlen, const u8 *buffer);
 int efx_mcdi_mtd_sync(struct mtd_info *mtd);
+
+#define NVRAM_PARTITION_NAME_MAX_LEN	(21)
 void efx_mcdi_mtd_rename(struct efx_mtd_partition *part);
 #endif
 

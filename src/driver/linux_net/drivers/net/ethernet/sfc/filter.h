@@ -35,17 +35,6 @@ static inline void efx_ether_addr_copy(u8 *dst, const u8 *src)
 #define ether_addr_copy efx_ether_addr_copy
 #endif
 
-#if defined(EFX_USE_KCOMPAT) || !defined(struct_group)
-/* Standalone KCOMPAT for driverlink headers */
-#define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
-	union { \
-		struct { MEMBERS } ATTRS; \
-		struct TAG { MEMBERS } ATTRS NAME; \
-	}
-#define struct_group(NAME, MEMBERS...)	\
-	__struct_group(/* no tag */, NAME, /* no attrs */, MEMBERS)
-#endif
-
 /**
  * enum efx_filter_match_flags - Flags for hardware filter match type
  * @EFX_FILTER_MATCH_REM_HOST: Match by remote IP host address

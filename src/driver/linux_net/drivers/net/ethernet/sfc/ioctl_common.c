@@ -234,16 +234,6 @@ out_free:
 
 #ifdef CONFIG_SFC_PTP
 #ifdef EFX_NOT_UPSTREAM
-static int efx_ioctl_get_ts_config(struct efx_nic *efx,
-				   union efx_ioctl_data __user *user_data)
-{
-	struct ifreq ifr;
-
-	/* ifr_data is declared as __user */
-	ifr.ifr_data = &user_data->ts_init;
-	return efx_ptp_get_ts_config(efx, &ifr);
-}
-
 static int efx_ioctl_ts_settime(struct efx_nic *efx, union efx_ioctl_data *data)
 {
 	return efx_ptp_ts_settime(efx, &data->ts_settime);
@@ -490,9 +480,6 @@ int efx_private_ioctl_common(struct efx_nic *efx, u16 cmd,
 	case EFX_TS_INIT:
 		return -EOPNOTSUPP;
 #if defined(EFX_NOT_UPSTREAM)
-	case EFX_GET_TS_CONFIG:
-		return efx_ioctl_get_ts_config(efx, user_data);
-
 	case EFX_TS_SETTIME:
 		size = sizeof(data->ts_settime);
 		op = efx_ioctl_ts_settime;

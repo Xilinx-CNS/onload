@@ -4232,29 +4232,32 @@ struct efx_ef10_nvram_type_info {
 };
 
 static const struct efx_ef10_nvram_type_info efx_ef10_nvram_types[] = {
-	{ NVRAM_PARTITION_TYPE_MC_FIRMWARE,	   0,    0, "sfc_mcfw" },
-	{ NVRAM_PARTITION_TYPE_MC_FIRMWARE_BACKUP, 0,    0, "sfc_mcfw_backup" },
-	{ NVRAM_PARTITION_TYPE_EXPANSION_ROM,	   0,    0, "sfc_exp_rom" },
-	{ NVRAM_PARTITION_TYPE_STATIC_CONFIG,	   0,    0, "sfc_static_cfg" },
-	{ NVRAM_PARTITION_TYPE_DYNAMIC_CONFIG,	   0,    0, "sfc_dynamic_cfg" },
-	{ NVRAM_PARTITION_TYPE_EXPROM_CONFIG_PORT0, 0,   0, "sfc_exp_rom_cfg" },
-	{ NVRAM_PARTITION_TYPE_EXPROM_CONFIG_PORT1, 0,   1, "sfc_exp_rom_cfg" },
-	{ NVRAM_PARTITION_TYPE_EXPROM_CONFIG_PORT2, 0,   2, "sfc_exp_rom_cfg" },
-	{ NVRAM_PARTITION_TYPE_EXPROM_CONFIG_PORT3, 0,   3, "sfc_exp_rom_cfg" },
-	{ NVRAM_PARTITION_TYPE_LICENSE,		   0,    0, "sfc_license" },
-	{ NVRAM_PARTITION_TYPE_PHY_MIN,		   0xff, 0, "sfc_phy_fw" },
-	{ NVRAM_PARTITION_TYPE_FPGA,		   0,    0, "sfc_fpga" },
-	{ NVRAM_PARTITION_TYPE_FPGA_BACKUP,	   0,    0, "sfc_fpgadiag" },
-	{ NVRAM_PARTITION_TYPE_FC_FIRMWARE,	   0,    0, "sfc_fcfw" },
-	{ NVRAM_PARTITION_TYPE_MUM_FIRMWARE,	   0,    0, "sfc_mumfw" },
-	{ NVRAM_PARTITION_TYPE_EXPANSION_UEFI,	   0,    0, "sfc_uefi" },
-	{ NVRAM_PARTITION_TYPE_DYNCONFIG_DEFAULTS, 0,    0, "sfc_dynamic_cfg_dflt" },
-	{ NVRAM_PARTITION_TYPE_ROMCONFIG_DEFAULTS, 0,    0, "sfc_exp_rom_cfg_dflt" },
-	{ NVRAM_PARTITION_TYPE_STATUS,		   0,    0, "sfc_status" },
-	{ NVRAM_PARTITION_TYPE_BUNDLE,		   0,    0, "sfc_bundle" },
-	{ NVRAM_PARTITION_TYPE_BUNDLE_METADATA,    0,    0, "sfc_bundle_metadata" }
+#define NAME(name) \
+	(BUILD_BUG_ON_ZERO(sizeof(name) > NVRAM_PARTITION_NAME_MAX_LEN) + (name))
 
+	{ NVRAM_PARTITION_TYPE_MC_FIRMWARE,	   0,    0, NAME("sfc_mcfw") },
+	{ NVRAM_PARTITION_TYPE_MC_FIRMWARE_BACKUP, 0,    0, NAME("sfc_mcfw_backup") },
+	{ NVRAM_PARTITION_TYPE_EXPANSION_ROM,	   0,    0, NAME("sfc_exp_rom") },
+	{ NVRAM_PARTITION_TYPE_STATIC_CONFIG,	   0,    0, NAME("sfc_static_cfg") },
+	{ NVRAM_PARTITION_TYPE_DYNAMIC_CONFIG,	   0,    0, NAME("sfc_dynamic_cfg") },
+	{ NVRAM_PARTITION_TYPE_EXPROM_CONFIG_PORT0, 0,   0, NAME("sfc_exp_rom_cfg") },
+	{ NVRAM_PARTITION_TYPE_EXPROM_CONFIG_PORT1, 0,   1, NAME("sfc_exp_rom_cfg") },
+	{ NVRAM_PARTITION_TYPE_EXPROM_CONFIG_PORT2, 0,   2, NAME("sfc_exp_rom_cfg") },
+	{ NVRAM_PARTITION_TYPE_EXPROM_CONFIG_PORT3, 0,   3, NAME("sfc_exp_rom_cfg") },
+	{ NVRAM_PARTITION_TYPE_LICENSE,		   0,    0, NAME("sfc_license") },
+	{ NVRAM_PARTITION_TYPE_PHY_MIN,		   0xff, 0, NAME("sfc_phy_fw") },
+	{ NVRAM_PARTITION_TYPE_FPGA,		   0,    0, NAME("sfc_fpga") },
+	{ NVRAM_PARTITION_TYPE_FPGA_BACKUP,	   0,    0, NAME("sfc_fpgadiag") },
+	{ NVRAM_PARTITION_TYPE_FC_FIRMWARE,	   0,    0, NAME("sfc_fcfw") },
+	{ NVRAM_PARTITION_TYPE_MUM_FIRMWARE,	   0,    0, NAME("sfc_mumfw") },
+	{ NVRAM_PARTITION_TYPE_EXPANSION_UEFI,	   0,    0, NAME("sfc_uefi") },
+	{ NVRAM_PARTITION_TYPE_DYNCONFIG_DEFAULTS, 0,    0, NAME("sfc_dynamic_cfg_dflt") },
+	{ NVRAM_PARTITION_TYPE_ROMCONFIG_DEFAULTS, 0,    0, NAME("sfc_exp_rom_cfg_dflt") },
+	{ NVRAM_PARTITION_TYPE_STATUS,		   0,    0, NAME("sfc_status") },
+	{ NVRAM_PARTITION_TYPE_BUNDLE,		   0,    0, NAME("sfc_bundle") },
+	{ NVRAM_PARTITION_TYPE_BUNDLE_METADATA,    0,    0, NAME("sfc_bundle_metadata") }
 
+#undef NAME
 };
 #define EF10_NVRAM_PARTITION_COUNT	ARRAY_SIZE(efx_ef10_nvram_types)
 
@@ -4552,7 +4555,7 @@ static int efx_ef10_ptp_set_ts_sync_events(struct efx_nic *efx, bool en,
 }
 
 static int efx_ef10_ptp_set_ts_config(struct efx_nic *efx,
-				      struct hwtstamp_config *init)
+				      struct kernel_hwtstamp_config *init)
 {
 	int rc;
 

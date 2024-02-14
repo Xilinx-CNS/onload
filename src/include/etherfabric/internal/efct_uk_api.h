@@ -13,9 +13,8 @@
  * low-level contraints and properties of the efhw interface */
 
 /* Max superbufs permitted to be assigned to a single rxq, across the whole
- * system.
- * With current data structures, the value should be left at 512 */
-#define CI_EFCT_MAX_SUPERBUFS   512
+ * system. */
+#define CI_EFCT_MAX_SUPERBUFS   2048
 
 /* As defined by the CPU architecture */
 #define CI_HUGEPAGE_SIZE   2097152

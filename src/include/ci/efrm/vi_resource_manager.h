@@ -44,8 +44,8 @@
 
 #define EFRM_VI_RM_DMA_QUEUE_COUNT 2
 
-/* Sufficient for 32K x 8byte entry ring */
-#define EFRM_VI_MAX_DMA_ADDR 64
+/* Sufficient for 64K x 8byte entry ring */
+#define EFRM_VI_MAX_DMA_ADDR 128
 
 #define EFRM_VI_TX_ALTERNATIVES_MAX  17
 
@@ -59,7 +59,7 @@ struct efrm_pd;
 /** This bit is set if the wakeup is valid for the sleeping process. */
 #define VI_RESOURCE_EVQ_STATE_CALLBACK_REGISTERED 2
 /** The remaining bits of the fields are the busyness, i.e. the number of
- * wakeup or timeout event calbacks currently being processed. */
+ * wakeup or timeout event callbacks currently being processed. */
 #define VI_RESOURCE_EVQ_STATE_BUSY_BITSHIFT 2
 
 

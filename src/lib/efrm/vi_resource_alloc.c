@@ -1879,6 +1879,8 @@ efrm_vi_q_init_common(struct efrm_vi *virs, enum efhw_q_type q_type,
 	if (efhw_iopages_n_pages(&q->host_pages) > 0) {
 		n_pages = 1 << qsize.q_len_page_order;
 		EFRM_ASSERT(n_pages == efhw_iopages_n_pages(&q->host_pages));
+		/* Ensure we don't write past `q->dma_addrs` in the loop below. */
+		EFRM_ASSERT(n_pages*EFHW_NIC_PAGES_IN_OS_PAGE <= EFRM_VI_MAX_DMA_ADDR);
 
 		for (i = 0; i < n_pages; ++i) {
 			for (j = 0; j < EFHW_NIC_PAGES_IN_OS_PAGE; ++j) {

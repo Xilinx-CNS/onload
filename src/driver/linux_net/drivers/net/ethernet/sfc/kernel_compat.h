@@ -486,6 +486,22 @@
 	#define ETHTOOL_GET_TS_INFO	0x00000041 /* Get time stamping and PHC info */
 #endif
 
+#ifndef EFX_HAVE_ETHTOOL_RXFH_PARAM
+/* We want to use this struct even if older kernels do not have it, so old
+ * APIs can use it.
+ */
+struct ethtool_rxfh_param {
+	u8	hfunc;
+	u32	indir_size;
+	u32	*indir;
+	u32	key_size;
+	u8	*key;
+	u32	rss_context;
+	u8	rss_delete;
+	u8	input_xfrm;
+};
+#endif
+
 #ifndef PORT_DA
 	#define PORT_DA			0x05
 #endif
@@ -1594,45 +1610,7 @@ static inline void ktime_get_snapshot(struct system_time_snapshot *systime_snaps
 #include <linux/timekeeping.h>
 #endif
 
-
-#ifndef EFX_HAVE_PHC_SUPPORT
-	struct ptp_clock_time {
-		__s64 sec;
-		__u32 nsec;
-		__u32 reserved;
-	};
-
-	struct ptp_extts_request {
-		unsigned int index;
-		unsigned int flags;
-		unsigned int rsv[2];
-	};
-
-	struct ptp_perout_request {
-		struct ptp_clock_time start;
-		struct ptp_clock_time period;
-		unsigned int index;
-		unsigned int flags;
-		unsigned int rsv[4];
-	};
-
-	struct ptp_clock_request {
-		enum {
-			PTP_CLK_REQ_EXTTS,
-			PTP_CLK_REQ_PEROUT,
-			PTP_CLK_REQ_PPS,
-		} type;
-		union {
-			struct ptp_extts_request extts;
-			struct ptp_perout_request perout;
-		};
-	};
-
-	struct ptp_clock_info {
-	};
-#else
 #include <linux/ptp_clock_kernel.h>
-#endif
 
 #ifdef EFX_NEED_PTP_CLOCK_PPSUSR
 #define PTP_CLOCK_PPSUSR (PTP_CLOCK_PPS + 1)
@@ -2173,6 +2151,11 @@ static inline void csum_replace_by_diff(__sum16 *sum, __wsum diff)
 #endif
 #endif
 #endif
+#endif
+
+#ifdef EFX_NEED_NETLINK_EXT_ACK
+/* We only pass this by reference, so a forward declaration is enough. */
+struct netlink_ext_ack;
 #endif
 
 /* We only need netif_is_{vxlan,geneve} & flow_rule_match_cvlan if we have TC offload support */
@@ -2732,6 +2715,42 @@ static inline void efx__skb_queue_tail(struct sk_buff_head *list,
 /* xdp_do_flush_map has been renamed xdp_do_flush */
 #ifdef EFX_NEED_XDP_DO_FLUSH
 #define xdp_do_flush xdp_do_flush_map
+#endif
+
+#ifndef EFX_HAVE_KERNEL_HWTSTAMP_CONFIG
+enum hwtstamp_source {
+	HWTSTAMP_SOURCE_NETDEV,
+	HWTSTAMP_SOURCE_PHYLIB,
+};
+
+struct kernel_hwtstamp_config {
+	int flags;
+	int tx_type;
+	int rx_filter;
+	struct ifreq *ifr;
+	bool copied_to_user;
+	enum hwtstamp_source source;
+};
+#endif
+
+#ifndef EFX_HAVE_HWTSTAMP_CONFIG_TO_KERNEL
+static inline void hwtstamp_config_to_kernel(struct kernel_hwtstamp_config *kernel_cfg,
+					     const struct hwtstamp_config *cfg)
+{
+	kernel_cfg->flags = cfg->flags;
+	kernel_cfg->tx_type = cfg->tx_type;
+	kernel_cfg->rx_filter = cfg->rx_filter;
+}
+#endif
+
+#ifndef EFX_HAVE_HWTSTAMP_CONFIG_FROM_KERNEL
+static inline void hwtstamp_config_from_kernel(struct hwtstamp_config *cfg,
+					       const struct kernel_hwtstamp_config *kernel_cfg)
+{
+	cfg->flags = kernel_cfg->flags;
+	cfg->tx_type = kernel_cfg->tx_type;
+	cfg->rx_filter = kernel_cfg->rx_filter;
+}
 #endif
 
 #endif /* EFX_KERNEL_COMPAT_H */
