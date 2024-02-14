@@ -37,7 +37,12 @@ EFX_HAVE_CSUM_LEVEL			symbol	csum_level		include/linux/skbuff.h
 EFX_HAVE_SKBTX_HW_TSTAMP		symbol	SKBTX_HW_TSTAMP		include/linux/skbuff.h
 EFX_HAVE_SKB_SYSTSTAMP			member	struct_skb_shared_hwtstamps	syststamp	include/linux/skbuff.h
 EFX_HAVE_SKB_TX_TIMESTAMP		symbol	skb_tx_timestamp	include/linux/skbuff.h
-EFX_HAVE_HWTSTAMP_FLAGS			symbol	hwtstamp_flags		include/uapi/linux/net_tstamp.h
+EFX_HAVE_HWTSTAMP_FLAGS         symbol	hwtstamp_flags		include/uapi/linux/net_tstamp.h
+EFX_HAVE_KERNEL_HWTSTAMP_CONFIG         symbol kernel_hwtstamp_config include/linux/net_tstamp.h
+EFX_HAVE_KERNEL_HWTSTAMP_CONFIG_IFR     member struct_kernel_hwtstamp_config ifr include/linux/net_tstamp.h
+EFX_HAVE_NDO_HWTSTAMP_GET               member  struct_net_device_ops ndo_hwtstamp_get include/linux/netdevice.h
+EFX_HAVE_HWTSTAMP_CONFIG_TO_KERNEL      symbol hwtstamp_config_to_kernel    include/linux/net_tstamp.h
+EFX_HAVE_HWTSTAMP_CONFIG_FROM_KERNEL    symbol hwtstamp_config_from_kernel  include/linux/net_tstamp.h
 EFX_NEED_WQ_SYSFS			nsymbol	WQ_SYSFS		include/linux/workqueue.h
 EFX_HAVE_ALLOC_WORKQUEUE		symbol	alloc_workqueue		include/linux/workqueue.h
 EFX_HAVE_NEW_ALLOC_WORKQUEUE		custom
@@ -102,7 +107,6 @@ EFX_NEED_KTIME_GET_REAL_TS64		nsymbol	ktime_get_real_ts64	include/linux/timekeep
 EFX_NEED_KTIME_COMPARE			nsymbol	ktime_compare		include/linux/ktime.h
 EFX_NEED_RTC_TIME64_TO_TM		nsymbol	rtc_time64_to_tm	include/linux/rtc.h
 EFX_NEED_SET_NORMALIZED_TIMESPEC	custom
-EFX_HAVE_VLAN_RX_PATH			symbol	vlan_hwaccel_receive_skb include/linux/if_vlan.h
 EFX_HAVE_OLD_ETHTOOL_GET_RXNFC		memtype	struct_ethtool_ops	get_rxnfc	include/linux/ethtool.h int (*)(struct net_device *, struct ethtool_rxnfc *, void *)
 EFX_HAVE_CPU_RMAP			file				include/linux/cpu_rmap.h
 EFX_HAVE_PTP_PF_NONE			symbol	PTP_PF_NONE		include/linux/ptp_clock.h include/uapi/linux/ptp_clock.h
@@ -110,7 +114,6 @@ EFX_NEED_PTP_CLOCK_PPSUSR		custom
 EFX_USE_64BIT_PHC			member	struct_ptp_clock_info gettime64	include/linux/ptp_clock_kernel.h
 EFX_HAVE_PTP_GETCROSSTSTAMP		member	struct_ptp_clock_info getcrosststamp include/linux/ptp_clock_kernel.h
 EFX_NEED_KTIME_GET_SNAPSHOT		nsymbol	ktime_get_snapshot	include/linux/timekeeping.h
-EFX_HAVE_PHC_SUPPORT			custom
 EFX_HAVE_PTP_CLOCK_INFO_ADJFINE		member	struct_ptp_clock_info adjfine	include/linux/ptp_clock_kernel.h
 EFX_HAVE_PTP_CLOCK_INFO_ADJFREQ		member	struct_ptp_clock_info adjfreq	include/linux/ptp_clock_kernel.h
 EFX_HAVE_PTP_CLOCK_GETTIMEX64		member	struct_ptp_clock_info gettimex64	include/linux/ptp_clock_kernel.h
@@ -352,6 +355,8 @@ EFX_HAVE_XSK_UMEM_CONS_TX_2PARAM	symtype xsk_umem_consume_tx	include/net/xdp_soc
 EFX_HAVE_XSK_NEED_WAKEUP		symbol	xsk_umem_uses_need_wakeup	include/net/xdp_sock.h include/net/xdp_sock_drv.h
 EFX_HAVE_COALESCE_PARAMS		member struct_ethtool_ops supported_coalesce_params include/linux/ethtool.h
 EFX_HAVE_ETHTOOL_COALESCE_CQE		memtype	struct_ethtool_ops	get_coalesce	include/linux/ethtool.h	int (*)(struct net_device *, struct ethtool_coalesce *, struct kernel_ethtool_coalesce *, struct netlink_ext_ack *)
+EFX_NEED_NETLINK_EXT_ACK		nsymbol	netlink_ext_ack	include/linux/netlink.h
+EFX_HAVE_ETHTOOL_RXFH_PARAM		symbol	ethtool_rxfh_param	include/linux/ethtool.h
 EFX_HAVE_XDP_QUERY_PROG			symbol XDP_QUERY_PROG	include/linux/netdevice.h
 EFX_HAVE_XDP_FRAME_SZ			member struct_xdp_buff	frame_sz	include/net/xdp.h
 EFX_NEED_XDP_INIT_BUFF			nsymbol	xdp_init_buff	include/net/xdp.h
@@ -494,19 +499,6 @@ function do_EFX_NEED_PTP_CLOCK_PPSUSR
     # If the enum is not complete
     test_symbol PTP_CLOCK_PPS include/linux/ptp_clock_kernel.h && \
       ! test_symbol PTP_CLOCK_PPSUSR include/linux/ptp_clock_kernel.h
-}
-
-function do_EFX_HAVE_PHC_SUPPORT
-{
-    if [ "${CONFIG_PTP_1588_CLOCK:-}" = "y" ] || [ "${CONFIG_PTP_1588_CLOCK:-}" = "m" ]; then
-        # Ideally this would use this (but it is a deferred test)
-        #   test_member struct ptp_clock_event ptp_evt pps_times
-        # NB pps_times is needed for the PTP_CLOCK_PPSUSR event
-        test_export ptp_clock_register && \
-          test_symbol pps_times include/linux/ptp_clock_kernel.h
-    else
-        return 1
-    fi
 }
 
 function do_EFX_HAVE_OLD_KMAP_ATOMIC

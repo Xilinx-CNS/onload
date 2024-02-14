@@ -32,8 +32,16 @@ int efx_ptp_probe(struct efx_nic *efx, struct efx_channel *channel);
 int efx_ptp_defer_probe_with_channel(struct efx_nic *efx);
 struct efx_channel *efx_ptp_channel(struct efx_nic *efx);
 void efx_ptp_remove(struct efx_nic *efx);
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_HWTSTAMP_GET)
+int efx_ptp_set_ts_config(struct efx_nic *efx,
+			  struct kernel_hwtstamp_config *config,
+			  struct netlink_ext_ack *extack);
+int efx_ptp_get_ts_config(struct efx_nic *efx,
+			  struct kernel_hwtstamp_config *config);
+#else
 int efx_ptp_set_ts_config(struct efx_nic *efx, struct ifreq *ifr);
 int efx_ptp_get_ts_config(struct efx_nic *efx, struct ifreq *ifr);
+#endif
 void efx_ptp_get_ts_info(struct efx_nic *efx, struct ethtool_ts_info *ts_info);
 int efx_ptp_get_attributes(struct efx_nic *efx);
 bool efx_ptp_uses_separate_channel(struct efx_nic *efx);
@@ -153,4 +161,5 @@ static inline int efx_ptp_pps_reset(struct efx_nic *efx)
 }
 #endif
 #endif
+
 #endif /* EFX_PTP_H */

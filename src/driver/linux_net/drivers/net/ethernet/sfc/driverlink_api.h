@@ -13,6 +13,18 @@
 
 #include <linux/list.h>
 #include <linux/module.h>
+#include <linux/stddef.h>
+#if !defined(struct_group)
+/* Standalone KCOMPAT for driverlink headers */
+#define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
+	union { \
+		struct { MEMBERS } ATTRS; \
+		struct TAG { MEMBERS } ATTRS NAME; \
+	}
+#define struct_group(NAME, MEMBERS...)	\
+	__struct_group(/* no tag */, NAME, /* no attrs */, MEMBERS)
+#endif
+
 #include "filter.h"
 
 /* Forward declarations */

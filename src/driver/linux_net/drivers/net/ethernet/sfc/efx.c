@@ -337,6 +337,7 @@ static int efx_siocdevprivate(struct net_device *net_dev, struct ifreq *ifr,
 #endif
 #endif
 
+#if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_HWTSTAMP_GET)
 static int efx_eth_ioctl(struct net_device *net_dev, struct ifreq *ifr,
 			 int cmd)
 {
@@ -351,6 +352,7 @@ static int efx_eth_ioctl(struct net_device *net_dev, struct ifreq *ifr,
 		return -EOPNOTSUPP;
 	}
 }
+#endif
 
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SIOCDEVPRIVATE) && !defined(EFX_HAVE_NDO_ETH_IOCTL)
 /* Net device ioctl
@@ -588,30 +590,6 @@ void __efx_net_dealloc(struct efx_nic *efx)
 	efx->state = STATE_NET_DOWN;
 }
 
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
-void efx_vlan_rx_register(struct net_device *dev, struct vlan_group *vlan_group)
-{
-	struct efx_nic *efx = efx_netdev_priv(dev);
-	struct efx_channel *channel;
-
-	/* Before changing efx_nic::vlan_group to null, we must flush
-	 * out all VLAN-tagged skbs currently in the software RX
-	 * pipeline.  Changing it to non-null might be safe, but we
-	 * conservatively pause the RX path in both cases.
-	 */
-	efx_for_each_channel(channel, efx)
-		if (efx_channel_has_rx_queue(channel))
-			efx_stop_eventq(channel);
-
-	efx->vlan_group = vlan_group;
-
-	efx_for_each_channel(channel, efx)
-		if (efx_channel_has_rx_queue(channel))
-			efx_start_eventq(channel);
-}
-
-#endif /* EFX_NOT_UPSTREAM */
-
 #if defined(EFX_USE_KCOMPAT)
 #if defined(EFX_HAVE_NDO_UDP_TUNNEL_ADD) && !defined(EFX_HAVE_UDP_TUNNEL_NIC_INFO)
 static int efx_udp_tunnel_type_map(enum udp_parsable_tunnel_type in)
@@ -719,7 +697,7 @@ static void efx_update_name(struct efx_nic *efx)
 {
 	strcpy(efx->name, efx->net_dev->name);
 
-#if defined(CONFIG_SFC_MTD) && !defined(EFX_WORKAROUND_87308)
+#if defined(CONFIG_SFC_MTD)
 	efx_mtd_rename(efx);
 #endif
 
@@ -1694,7 +1672,7 @@ const struct net_device_ops efx_netdev_ops = {
 	.ndo_siocdevprivate     = efx_siocdevprivate,
 #endif
 #endif
-#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_ETH_IOCTL)
+#if defined(EFX_USE_KCOMPAT) && defined(EFX_HAVE_NDO_ETH_IOCTL) && !defined(EFX_HAVE_NDO_HWTSTAMP_GET)
 	.ndo_eth_ioctl		= efx_eth_ioctl,
 #endif
 #if defined(EFX_USE_KCOMPAT) && !defined(EFX_HAVE_NDO_SIOCDEVPRIVATE) && !defined(EFX_HAVE_NDO_ETH_IOCTL)
@@ -1727,6 +1705,10 @@ const struct net_device_ops efx_netdev_ops = {
 #endif
 	.ndo_vlan_rx_add_vid	= efx_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid	= efx_vlan_rx_kill_vid,
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_HWTSTAMP_GET)
+	.ndo_hwtstamp_set	= efx_hwtstamp_set,
+	.ndo_hwtstamp_get	= efx_hwtstamp_get,
+#endif
 #ifdef CONFIG_SFC_SRIOV
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_SET_VF_MAC)
 	.ndo_set_vf_mac         = efx_sriov_set_vf_mac,
@@ -1746,9 +1728,6 @@ const struct net_device_ops efx_netdev_ops = {
 #endif
 #if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NDO_GET_PHYS_PORT_ID)
 	.ndo_get_phys_port_id	= efx_get_phys_port_id,
-#endif
-#if defined(EFX_NOT_UPSTREAM) && defined(EFX_HAVE_VLAN_RX_PATH)
-	.ndo_vlan_rx_register	= efx_vlan_rx_register,
 #endif
 #if defined(EFX_USE_KCOMPAT) && defined(EFX_WANT_NDO_POLL_CONTROLLER)
 #ifdef CONFIG_NET_POLL_CONTROLLER

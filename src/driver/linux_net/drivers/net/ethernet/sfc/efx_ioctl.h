@@ -331,6 +331,8 @@ struct efx_timespec {
 
 /* Set/get hardware timestamp config, like SIOC{S,G}HWTSTAMP ****************/
 #define EFX_TS_INIT 0xef12
+
+/* Obsolete (do not use) */
 #define EFX_GET_TS_CONFIG 0xef25
 
 #define EFX_TS_INIT_FLAGS_PTP_V2_ENHANCED 0x80000000
