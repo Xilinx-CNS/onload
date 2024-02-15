@@ -81,6 +81,8 @@ static int
 oo_fd_replace_file(struct file* old_filp, struct file* new_filp,
                    int old_fd, int* new_fd_p)
 {
+  struct file* tmp_filp = NULL;
+
   task_lock(current);
   if( atomic_read(&current->files->count) != 1 ) {
     /* This is a multithreaded application, and someone can be already
@@ -111,16 +113,18 @@ oo_fd_replace_file(struct file* old_filp, struct file* new_filp,
     return 0;
   }
 
-  rcu_read_lock();
-  if( lookup_fdget_rcu(old_fd) != old_filp ) {
-    rcu_read_unlock();
+  tmp_filp = fget(old_fd);
+  if( tmp_filp != old_filp ) {
+    if( tmp_filp )
+      fput(tmp_filp);
     task_unlock(current);
     return -EINVAL;
   }
 
+  fput(tmp_filp);
+
   get_file(new_filp);
   rcu_assign_pointer(files_fdtable(current->files)->fd[old_fd], new_filp);
-  rcu_read_unlock();
   task_unlock(current);
 
   /* No synchronize_rcu() is needed here.  See do_dup2() for an example,
