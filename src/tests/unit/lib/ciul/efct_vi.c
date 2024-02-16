@@ -36,6 +36,7 @@ struct efct_mock_rxq {
 
   char* next_pkt;
   char* next_meta;
+  char* superbuf;
   char* superbuf_end;
 };
 
@@ -100,7 +101,6 @@ static int efct_mock_next(ef_vi* vi, int qid, bool* sentinel, unsigned* seq)
   struct efct_mock_ops* ops = mock_ops(vi);
   struct efct_mock_rxq* rxq = &ops->rxqs->q[qid];
   int sbid = rxq->next_sbid;
-  char* superbuf;
 
   ops->anything_called += 1;
   ops->next_called += 1;
@@ -110,17 +110,17 @@ static int efct_mock_next(ef_vi* vi, int qid, bool* sentinel, unsigned* seq)
     *sentinel = rxq->next_sentinel;
     *seq = rxq->next_seq++;
 
-    superbuf = ops->rxqs->superbuf +
+    rxq->superbuf = ops->rxqs->superbuf +
       (size_t)(qid * CI_EFCT_MAX_SUPERBUFS + sbid) * EFCT_RX_SUPERBUF_BYTES;
-    rxq->superbuf_end = superbuf + EFCT_RX_SUPERBUF_BYTES;
+    rxq->superbuf_end = rxq->superbuf + EFCT_RX_SUPERBUF_BYTES;
     if( rxq->next_pkt ) {
       /* Natural rollover */
-      rxq->next_meta = superbuf;
+      rxq->next_meta = rxq->superbuf;
     }
     else {
       /* First buffer or forced rollover */
-      rxq->next_pkt = superbuf + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
-      rxq->next_meta = superbuf + EFCT_PKT_STRIDE;
+      rxq->next_pkt = rxq->superbuf + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+      rxq->next_meta = rxq->superbuf + EFCT_PKT_STRIDE;
     }
   }
   return sbid;
@@ -712,8 +712,10 @@ static void test_efct_forced_rollover_all(void)
     efct_test_attach(t, q);
 
   for( q = 0; q < 3; ++q ) {
+    struct efct_mock_rxq* rxq = &t->mock_rxqs.q[q];
+
     /* Consume most of the buffer leaving one slot */
-    for( i = 0; i < t->mock_rxqs.q[q].superbuf_pkts - 2; ++i ) {
+    for( i = 0; i < rxq->superbuf_pkts - 2; ++i ) {
       efct_test_rx_meta(t, q);
       efct_test_rx_poll(t, q, 1, 16);
     }
@@ -727,7 +729,7 @@ static void test_efct_forced_rollover_all(void)
     STATE_CHECK(t->mock_ops, anything_called, 0);
 
     /* Natural rollover */
-    t->mock_rxqs.q[q].next_sbid = 1;
+    rxq->next_sbid = 1;
     CHECK(ef_eventq_poll(t->vi, evs, 16), ==, 0);
     STATE_CHECK(t->mock_ops, anything_called, 1);
     STATE_CHECK(t->mock_ops, next_called, 1);
@@ -735,25 +737,13 @@ static void test_efct_forced_rollover_all(void)
 
     /* Set the ROLLOVER bit in the next metadata (first in the new buffer) */
     efct_test_rx_meta_extra(t, q, 1ll << EFCT_RX_HEADER_ROLLOVER_LBN, 0);
+    rxq->next_pkt = rxq->superbuf + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
 
-    /* The next poll should free the new buffer */
-    /* TODO: this behaviour seems to be wrong.
-     * XN-200500-TC 7.5.4: "The host needs to take care not to interpret this
-     * as moving to a third driver buffer."
-     */
+    /* The next poll should skip to the new buffer */
     CHECK(ef_eventq_poll(t->vi, evs, 16), ==, 0);
-    STATE_CHECK(t->mock_ops, anything_called, 1);
-    STATE_CHECK(t->mock_ops, free_called, 1);
-    STATE_CHECK(t->mock_ops, free_qid, q);
-    STATE_CHECK(t->mock_ops, free_sbid, 1);
-
-    /* That should force a rollover on the next poll */
-    t->mock_rxqs.q[q].next_sbid = 2;
-    t->mock_rxqs.q[q].next_pkt = NULL;
-    CHECK(ef_eventq_poll(t->vi, evs, 16), ==, 0);
-    STATE_CHECK(t->mock_ops, anything_called, 1);
-    STATE_CHECK(t->mock_ops, next_called, 1);
-    STATE_CHECK(t->mock_ops, next_qid, q);
+    STATE_CHECK(t->mock_ops, anything_called, 0);
+    efct_test_rx_meta(t, q);
+    efct_test_rx_poll(t, q, 1, 16);
 
     /* Releasing the packet should free the old buffer */
     efct_vi_rxpkt_release(t->vi, evs[0].rx_ref.pkt_id);

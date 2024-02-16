@@ -843,15 +843,17 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
           /* We created the desc->refcnt assuming that this superbuf would be
            * full of packets. It wasn't, so consume all the unused refs */
           nskipped = rxq_ptr->end - pkt_id;
+
+          /* Force a rollover on the next poll */
+          rxq_ptr->end = 0;
         }
         else {
           /* i.e. the current packet is the one straddling a superbuf
            * boundary. We consume the last packet of the first superbuf
-           * (it's the bogus 'manual rollover' packet) and the
-           * entirety of the current superbuf, which is the one the NIC wants
-           * to get rid of */
+           * (it's the bogus 'manual rollover' packet) and continue with
+           * the new superbuf */
           nskipped = 1;
-          vi->efct_rxqs.ops->free(vi, qid, next_sb);
+          rxq_ptr->prev = rxq_ptr_to_pkt_id(rxq_ptr->next++);
         }
 
         EF_VI_ASSERT(nskipped > 0);
@@ -860,8 +862,6 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
         if( desc->refcnt == 0 )
           vi->efct_rxqs.ops->free(vi, qid, prev_sb);
 
-        /* Force a rollover on the next poll */
-        rxq_ptr->end = 0;
         break;
       }
 
