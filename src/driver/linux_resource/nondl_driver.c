@@ -8,8 +8,10 @@
 #include <ci/efrm/efrm_client.h>
 #include <ci/efrm/nondl.h>
 #include <ci/efhw/nic.h>
+#include <ci/efhw/af_xdp.h>
 #include <linux/rtnetlink.h>
 
+#ifdef EFHW_HAS_AF_XDP
 
 static int efrm_nondl_add_device(struct net_device *net_dev, int n_vis)
 {
@@ -92,12 +94,18 @@ static struct efrm_nondl_driver efrm_nondl_driver = {
   .unregister_device = efrm_nondl_unregister_device,
 };
 
+#endif /* EFHW_HAS_AF_XDP */
+
 extern void efrm_nondl_register(void)
 {
+#ifdef EFHW_HAS_AF_XDP
   efrm_nondl_register_driver(&efrm_nondl_driver);
+#endif
 }
 
 extern void efrm_nondl_unregister(void)
 {
+#ifdef EFHW_HAS_AF_XDP
   efrm_nondl_unregister_driver(&efrm_nondl_driver);
+#endif
 }
