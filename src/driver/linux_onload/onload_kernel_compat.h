@@ -115,18 +115,5 @@ static inline int efrm_unregister_netdevice_notifier(struct notifier_block *b)
 #define unregister_netdevice_notifier efrm_unregister_netdevice_notifier
 #endif
 
-/* Linux-6.7 introduces lookup_fdget_rcu().
- * 5.11 >= linux < 6.7 - lookup_fd_rcu().
- * linux < 5.11 - fcheck(). */
-#ifndef EFRM_HAS_LOOKUP_FDGET_RCU
-static inline struct file *lookup_fdget_rcu(unsigned int fd)
-{
-#ifdef EFRM_HAS_LOOKUP_FD_RCU
-  return lookup_fd_rcu(fd);
-#else
-  return fcheck(fd);
-#endif
-}
-#endif
 
 #endif /* __ONLOAD_KERNEL_COMPAT_H__ */
