@@ -422,48 +422,38 @@ efct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
 	mmiowb();
 }
 
-struct alloc_vi_constraints {
-  struct efhw_nic_efct *efct;
-  struct efhw_vi_constraints *evc;
-};
-
-static bool efct_accept_vi_constraints(int low, unsigned order, void* arg)
+static bool efct_accept_tx_vi_constraints(int instance, void* arg)
 {
-  struct alloc_vi_constraints *avc = arg;
-  struct efhw_vi_constraints *vc = avc->evc;
-  struct efhw_nic_efct *efct = avc->efct;
+  struct efhw_nic_efct *efct = arg;
+  return efct->evq[instance].txq != EFCT_EVQ_NO_TXQ;
+}
 
-  /* If this VI will want a TXQ it needs a HW EVQ. These all fall within
-   * the range [0,efct->evq_n). We use the space above that to provide
-   * dummy EVQS. */
-  if( vc->want_txq ) {
-    if( low < efct->evq_n )
-      return efct->evq[low].txq != EFCT_EVQ_NO_TXQ;
-    else
-      return false;
-  }
-  else {
-    return low >= efct->evq_n;
-  }
+static bool efct_accept_rx_vi_constraints(int instance, void* arg) {
+  return true;
 }
 
 static int efct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
-			                     unsigned n_vis) {
-  unsigned order = fls(n_vis - 1);
+                         unsigned n_vis)
+{
   struct efhw_nic_efct *efct = nic->arch_extra;
-  struct alloc_vi_constraints avc = {
-    .efct = efct,
-    .evc = evc,
-  };
-  return efhw_buddy_alloc_special(&efct->vi_allocator, order,
-                                  efct_accept_vi_constraints, &avc);
+  EFHW_ASSERT(n_vis == 1);
+  if( evc->want_txq ) {
+    return efhw_stack_vi_alloc(&efct->vi_allocator.tx, efct_accept_rx_vi_constraints, efct);
+  }
+  return efhw_stack_vi_alloc(&efct->vi_allocator.rx, efct_accept_tx_vi_constraints, efct);
 }
 
-static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
-  unsigned order = fls(n_vis - 1);
+static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
+{
   struct efhw_nic_efct* efct = nic->arch_extra;
-  efhw_buddy_free(&efct->vi_allocator, instance, order);
+  EFHW_ASSERT(n_vis == 1);
+  /* If this vi is in the range [0..efct->evq_n) it has a txq */
+  if( instance < efct->evq_n )
+    efhw_stack_vi_free(&efct->vi_allocator.tx, instance);
+  else
+    efhw_stack_vi_free(&efct->vi_allocator.rx, instance);
 }
+
 /*----------------------------------------------------------------------------
  *
  * DMAQ low-level register interface

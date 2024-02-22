@@ -82,21 +82,39 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
   return 0;
 }
 
+
 static int ef10ct_vi_allocator_ctor(struct efhw_nic_ef10ct *nic,
-                                  struct vi_resource_dimensions *res_dim) {
-  int rc = efhw_buddy_range_ctor(&nic->vi_allocator, res_dim->vi_min,
-                             res_dim->vi_lim);
+                                  struct vi_resource_dimensions *res_dim)
+{
+  int rc = 0;
+  /* tx vis are allocated in the range [res_dim->vi_min,ef10ct->evq_n)
+   * The space above this is used for virtual rx vis */
+  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.tx, res_dim->vi_min, nic->evq_n);
+  if(rc < 0)
+    goto fail1;
+  rc = efhw_stack_vi_allocator_ctor(&nic->vi_allocator.rx, nic->evq_n, res_dim->vi_lim);
+  if(rc < 0)
+    goto fail2;
+  return rc;
+
+ fail2:
+  efhw_stack_vi_allocator_dtor(&nic->vi_allocator.tx);
+ fail1:
   if (rc < 0) {
-       EFRM_ERR("%s: efhw_buddy_range_ctor(%d, %d) "
-                "failed (%d)",
-                __FUNCTION__, res_dim->vi_min, res_dim->vi_lim, rc);
+    EFRM_ERR("%s: ef10ct_vi_allocator_ctor(%d, %d) "
+              "failed (%d)",
+              __FUNCTION__, res_dim->vi_min, res_dim->vi_lim, rc);
   }
   return rc;
 }
 
-static void ef10ct_vi_allocator_dtor(struct efhw_nic_ef10ct *nic) {
-  efhw_buddy_dtor(&nic->vi_allocator);
+
+static void ef10ct_vi_allocator_dtor(struct efhw_nic_ef10ct *nic)
+{
+  efhw_stack_vi_allocator_dtor(&nic->vi_allocator.tx);
+  efhw_stack_vi_allocator_dtor(&nic->vi_allocator.rx);
 }
+
 
 static int ef10ct_probe(struct auxiliary_device *auxdev,
                         const struct auxiliary_device_id *id)

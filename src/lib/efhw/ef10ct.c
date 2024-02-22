@@ -254,54 +254,36 @@ ef10ct_nic_wakeup_request(struct efhw_nic *nic, volatile void __iomem* io_page,
 {
 }
 
-
-struct alloc_vi_constraints {
-  struct efhw_nic_ef10ct *ef10ct;
-  struct efhw_vi_constraints *evc;
-};
-
-static bool
-ef10ct_accept_vi_constraints(int low, unsigned order, void* arg)
+static bool ef10ct_accept_tx_vi_constraints(int instance, void* arg)
 {
+  struct efhw_nic_ef10ct *ef10ct = arg;
+  return ef10ct->evq[instance].txq != EF10CT_EVQ_NO_TXQ;
+}
 
-  struct alloc_vi_constraints *avc = arg;
-  struct efhw_vi_constraints *vc = avc->evc;
-  struct efhw_nic_ef10ct *ef10ct = avc->ef10ct;
-
-  EFHW_ERR("%s: FIXME SCJ want txq %d low %d evq_n %d txq %d", __func__,
-           vc->want_txq, low, ef10ct->evq_n,
-           low < ef10ct->evq_n ? ef10ct->evq[low].txq : -1);
-  /* If this VI will want a TXQ it needs a HW EVQ. These all fall within
-   * the range [0,ef10ct->evq_n). We use the space above that to provide
-   * dummy EVQS. */
-  if( vc->want_txq ) {
-    if( low < ef10ct->evq_n )
-      return ef10ct->evq[low].txq != EFCT_EVQ_NO_TXQ;
-    else
-      return false;
-  }
-  else {
-    return low >= ef10ct->evq_n;
-  }
+static bool ef10ct_accept_rx_vi_constraints(int instance, void* arg) {
   return true;
 }
 
 static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
-			                     unsigned n_vis) {
-  unsigned order = fls(n_vis - 1);
- struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  struct alloc_vi_constraints avc = {
-    .ef10ct = ef10ct,
-    .evc = evc,
-  };
-  return efhw_buddy_alloc_special(&ef10ct->vi_allocator, order,
-                                  ef10ct_accept_vi_constraints, &avc);
+                         unsigned n_vis)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  EFHW_ASSERT(n_vis == 1);
+  if( evc->want_txq ) {
+    return efhw_stack_vi_alloc(&ef10ct->vi_allocator.tx, ef10ct_accept_rx_vi_constraints, ef10ct);
+  }
+  return efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx, ef10ct_accept_tx_vi_constraints, ef10ct);
 }
 
-static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
-  unsigned order = fls(n_vis - 1);
+static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
+{
   struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
-  efhw_buddy_free(&ef10ct->vi_allocator, instance, order);
+  EFHW_ASSERT(n_vis == 1);
+  /* If this vi is in the range [0..ef10ct->evq_n) it has a txq */
+  if( instance < ef10ct->evq_n )
+    efhw_stack_vi_free(&ef10ct->vi_allocator.tx, instance);
+  else
+    efhw_stack_vi_free(&ef10ct->vi_allocator.rx, instance);
 }
 
 /*----------------------------------------------------------------------------

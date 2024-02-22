@@ -6,7 +6,7 @@
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/tools/sysdep.h>
-#include <ci/efhw/buddy.h>
+#include <ci/efhw/stack_vi_allocator.h>
 
 extern struct efhw_func_ops efct_char_functional_units;
 
@@ -193,7 +193,10 @@ struct efhw_nic_efct {
   struct xlnx_efct_device *edev;
   struct xlnx_efct_client *client;
   struct efhw_nic *nic;
-  struct efhw_buddy_allocator vi_allocator;
+  struct {
+    struct efhw_stack_vi_allocator tx;
+    struct efhw_stack_vi_allocator rx;
+  } vi_allocator;
   /* This array is used for marking whether a given hw_qid is exclusively owned.
    * The index represents the hardware_queue, and the value should correspond to a 
    * token representing exclusive ownership of the rxq. In this case, a token_id

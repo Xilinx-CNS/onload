@@ -6,7 +6,7 @@
 
 #include <ci/driver/ci_ef10ct.h>
 #include <ci/tools/sysdep.h>
-#include <ci/efhw/buddy.h>
+#include <ci/efhw/stack_vi_allocator.h>
 
 extern struct efhw_func_ops ef10ct_char_functional_units;
 
@@ -27,7 +27,10 @@ struct efhw_nic_ef10ct {
   struct efx_auxiliary_device *edev;
   struct efx_auxiliary_client *client;
   struct efhw_nic *nic;
-  struct efhw_buddy_allocator vi_allocator;
+  struct {
+    struct efhw_stack_vi_allocator tx;
+    struct efhw_stack_vi_allocator rx;
+  } vi_allocator;
 };
 
 #endif /* CI_EFHW_EF10CT_H */
