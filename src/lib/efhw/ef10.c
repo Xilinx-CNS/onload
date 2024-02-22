@@ -1106,7 +1106,8 @@ bool ef10_ef100_accept_vi_constraints(int low, unsigned order, void* arg)
 
 
 int ef10_ef100_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
-                          unsigned order) {
+                          unsigned n_vis) {
+	unsigned order = fls(n_vis - 1);
 	struct efhw_buddy_allocator *vi_allocator = nic->arch_extra;
 	struct ef10_ef100_alloc_vi_constraints avc = {
 	  .nic = nic,
@@ -1117,7 +1118,8 @@ int ef10_ef100_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
 	return alloc;
 }
 
-void ef10_ef100_vi_free(struct efhw_nic *nic, int instance, unsigned order) {
+void ef10_ef100_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
+	unsigned order = fls(n_vis - 1);
 	struct efhw_buddy_allocator *vi_allocator = nic->arch_extra;
 	efhw_buddy_free(vi_allocator, instance, order);
 }

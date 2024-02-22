@@ -38,6 +38,7 @@
  ****************************************************************************
  */
 
+#include <ci/efrm/sysdep_linux.h>
 #include <ci/efhw/buddy.h>
 #include <ci/efhw/common.h>
 

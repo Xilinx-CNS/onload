@@ -39,7 +39,7 @@
 
 struct efrm_vi_allocation {
 	int     instance;
-	int16_t order;
+	unsigned n_vis;
 };
 
 

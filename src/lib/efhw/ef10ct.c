@@ -287,7 +287,8 @@ ef10ct_accept_vi_constraints(int low, unsigned order, void* arg)
 }
 
 static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
-			                     unsigned order) {
+			                     unsigned n_vis) {
+  unsigned order = fls(n_vis - 1);
  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
   struct alloc_vi_constraints avc = {
     .ef10ct = ef10ct,
@@ -297,7 +298,8 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
                                   ef10ct_accept_vi_constraints, &avc);
 }
 
-static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned order) {
+static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
+  unsigned order = fls(n_vis - 1);
   struct efhw_nic_ef10ct* ef10ct = nic->arch_extra;
   efhw_buddy_free(&ef10ct->vi_allocator, instance, order);
 }

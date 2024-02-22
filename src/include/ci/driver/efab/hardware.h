@@ -106,11 +106,11 @@
 	((nic)->efhw_func->handle_event ? \
 	 (nic)->efhw_func->handle_event((nic), (ev), (budget)) : -EOPNOTSUPP)
 
-#define efhw_nic_vi_alloc(nic, evc, order) \
-	((nic)->efhw_func->vi_alloc((nic), (evc), (order)))
+#define efhw_nic_vi_alloc(nic, evc, n_vis) \
+	((nic)->efhw_func->vi_alloc((nic), (evc), (n_vis)))
 
-#define efhw_nic_vi_free(nic, instance, order) \
-	((nic)->efhw_func->vi_free((nic), (instance), (order)))
+#define efhw_nic_vi_free(nic, instance, n_vis) \
+	((nic)->efhw_func->vi_free((nic), (instance), (n_vis)))
 
 /*-------------- DMA support  ------------ */
 #define efhw_nic_dmaq_tx_q_init(nic, client_id, params) \

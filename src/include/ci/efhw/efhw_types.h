@@ -274,11 +274,16 @@ struct efhw_func_ops {
 	int (*handle_event) (struct efhw_nic *nic, efhw_event_t *ev,
 			     int budget);
 
+	/*! Allocate at least n_vis contiguously. Note that n_vis>1 is only
+	 *  valid on nics that support RSS
+	 * 	Param n_vis: minimum number of vis to allocate
+	 *  Return: base vi index of allocation
+	 */
 	int (*vi_alloc) (struct efhw_nic *nic, struct efhw_vi_constraints *evc,
-			     unsigned order);
+			     unsigned n_vis);
 
-	void (*vi_free) (struct efhw_nic *nic, int instance,
-			     unsigned order);
+	/*! Free the vis allocated with vi_alloc */
+	void (*vi_free) (struct efhw_nic *nic, int instance, unsigned n_vis);
 
   /*-------------- DMA support  ------------ */
 

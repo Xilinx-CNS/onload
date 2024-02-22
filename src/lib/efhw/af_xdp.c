@@ -1168,13 +1168,15 @@ static bool af_xdp_accept_vi_constraints(int low,
 
 
 static int af_xdp_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
-			     unsigned order) {
+			     unsigned n_vis) {
+  unsigned order = fls(n_vis - 1);
   struct efhw_nic_af_xdp* xdp = nic->arch_extra;
   return efhw_buddy_alloc_special(&xdp->vi_allocator, order,
                                   af_xdp_accept_vi_constraints, evc);
 }
 
-static void af_xdp_vi_free(struct efhw_nic *nic, int instance, unsigned order) {
+static void af_xdp_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
+  unsigned order = fls(n_vis - 1);
   struct efhw_nic_af_xdp* xdp = nic->arch_extra;
   efhw_buddy_free(&xdp->vi_allocator, instance, order);
 }

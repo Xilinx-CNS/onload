@@ -448,7 +448,8 @@ static bool efct_accept_vi_constraints(int low, unsigned order, void* arg)
 }
 
 static int efct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
-			                     unsigned order) {
+			                     unsigned n_vis) {
+  unsigned order = fls(n_vis - 1);
   struct efhw_nic_efct *efct = nic->arch_extra;
   struct alloc_vi_constraints avc = {
     .efct = efct,
@@ -458,7 +459,8 @@ static int efct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
                                   efct_accept_vi_constraints, &avc);
 }
 
-static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned order) {
+static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
+  unsigned order = fls(n_vis - 1);
   struct efhw_nic_efct* efct = nic->arch_extra;
   efhw_buddy_free(&efct->vi_allocator, instance, order);
 }

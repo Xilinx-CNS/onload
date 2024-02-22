@@ -387,10 +387,10 @@ static int efrm_vi_set_alloc_instance_try(struct efrm_vi *virs,
 {
 	assert_spin_locked(&vi_set->allocation_lock);
 	if (instance != 0xff) {
-		if (instance >= (1 << vi_set->allocation.order) ) {
+		if (instance >= vi_set->allocation.n_vis) {
 			EFRM_ERR("%s: ERROR: vi_set instance=%d out-of-range "
 				 "(size=%d)", __FUNCTION__, instance,
-				 1 << vi_set->allocation.order);
+				 vi_set->allocation.n_vis);
 			return -EDOM;
 		}
 	} else {
