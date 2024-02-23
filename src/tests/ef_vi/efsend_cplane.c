@@ -1,31 +1,39 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
-/* X-SPDX-Copyright-Text: (c) Copyright 2014-2020 Xilinx, Inc. */
-/* efsend
+/* X-SPDX-Copyright-Text: (c) Copyright 2024 Advanced Micro Devices, Inc. */
+/* efsend_cplane
  *
- * Sample app that sends UDP packets on a specified interface.
+ * Sample app that sends UDP packets to a specified destination. This app is
+ * based on the "efsend" app, with the addition of the cplane API. A key
+ * feature of this API allows the user to resolve routes to find which
+ * interface to send a packet over, including handling of logical interfaces
+ * such as bonds and VLANs.
  *
- * The application cycles between posting packets to the TX ring
- * and handling TX completion events which allows TX ring slots
- * to be re-used.
- *
- * The number of packets sent, the size of the packet, the amount of
- * time to wait between sends can be controlled.
- *
- * 2014 Solarflare Communications Inc.
- * Author: Akhi Singhania
- * Date: 2014/02/17
+ * Limitations of this sample app:
+ * - Only supports traffic routing over interfaces with at least one physical
+ *   interface below it, notably excluding loopback or an empty bond.
+ * - Multicast data can only be sent if the interface to send it over is
+ *   provided, as any interface could be valid as the sender.
+ * - Route re-resolution can be quite noisy as the fwd data may change rapidly,
+ *   leading to excess work done to free/init similar state.
  */
 
-#include "efsend_common.h"
-
+#include "utils.h"
+#include <etherfabric/vi.h>
 #include <etherfabric/pd.h>
 #include <etherfabric/memreg.h>
 #include <etherfabric/capabilities.h>
+#include <etherfabric/checksum.h>
+#include <ci/tools.h>
+#include <ci/tools/ipcsum_base.h>
+#include <ci/tools/ippacket.h>
+#include <ci/net/ipv4.h>
+#include <cplane/api.h>
 
 static int parse_opts(int argc, char* argv[], int *ifindex);
 
-
-#define MAX_UDP_PAYLEN	(1500 - sizeof(ci_ip4_hdr) - sizeof(ci_udp_hdr))
+#define PREFIX_RESERVED 64
+#define HEADER_LEN      (PREFIX_RESERVED + sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr))
+#define MAX_UDP_PAYLEN  (1500 - HEADER_LEN)
 #define N_BUFS          1
 #define BUF_SIZE        4096
 #define BUF_HUGE_SIZE   (2 * 1024 * 1024)
@@ -52,18 +60,21 @@ static int                   cfg_phys_mode = 0;
 static int                   cfg_disable_tx_push = 0;
 static int                   cfg_use_vf = 0;
 static int                   cfg_max_batch = 8192;
-static int                   cfg_vlan = -1;
 static int                   n_sent = 0;
 static int                   n_pushed = 0;
 static enum ef_pd_flags      pd_flags = EF_PD_DEFAULT;
 static enum ef_vi_flags      vi_flags = EF_VI_FLAGS_DEFAULT;
+static struct ef_cp_fwd_meta route_meta = { 0 };
 
 struct intf_state {
   ef_vi vi;
   ef_pd pd;
   ef_memreg mr;
   ef_addr dma_buf_addr;
+  ef_addr dma_start;
   int tx_frame_len;
+  int ifindex;
+  struct intf_state *next;
 };
 
 struct pkt_buf {
@@ -74,6 +85,21 @@ struct pkt_buf {
 bool dest_is_mcast(void)
 {
   return (ntohl(sa_dest.sin_addr.s_addr) & 0xf0000000) == 0xe0000000;
+}
+
+void init_ip_udp_pkt(void* ip_pkt, int paylen)
+{
+  int ip_len = sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr) + paylen;
+  ci_ip4_hdr* ip4;
+  ci_udp_hdr* udp;
+
+  ip4 = (void*) (ip_pkt);
+  udp = (void*) (ip4 + 1);
+
+  ci_ip4_hdr_init(ip4, CI_NO_OPTS, ip_len, 0, IPPROTO_UDP,
+                  sa_local.sin_addr.s_addr, sa_dest.sin_addr.s_addr, 0);
+  ci_udp_hdr_init(udp, ip4, sa_local.sin_port, sa_dest.sin_port, udp + 1,
+                  paylen, 0);
 }
 
 static void handle_completions(ef_vi* vi)
@@ -106,7 +132,7 @@ int send_more_packets(int desired, struct intf_state *intf)
   /* This is sending the same packet buffer over and over again.
    * a real application would usually send new data. */
   for( i = 0; i < to_send; ++i ) {
-    rc = ef_vi_transmit_init(&intf->vi, intf->dma_buf_addr, intf->tx_frame_len,
+    rc = ef_vi_transmit_init(&intf->vi, intf->dma_start, intf->tx_frame_len,
                              n_pushed + i);
     if( rc == -EAGAIN )
       break;
@@ -178,49 +204,238 @@ static void allocate_vi_memory(struct intf_state *intf, int ifindex,
   intf->dma_buf_addr = ef_memreg_dma_addr(&intf->mr, 0);
 }
 
-static struct intf_state* register_intf(int ifindex, struct pkt_buf *buf)
+static struct intf_state* register_intf(struct ef_cp_handle *cp, int ifindex,
+                                        struct pkt_buf *buf)
 {
   struct intf_state *intf;
+  struct ef_cp_intf port_cp_intf;
+
+  TRY(ef_cp_get_intf(cp, ifindex, &port_cp_intf, 0));
+  if( port_cp_intf.registered_cookie != NULL ) {
+    /* We have registered this interface already, so just skip it. */
+    return NULL;
+  }
 
   intf = calloc(1, sizeof(struct intf_state));
   TEST(intf != NULL);
+  intf->ifindex = ifindex;
 
   allocate_vi_memory(intf, ifindex, buf);
-  print_vi_stats(&intf->vi);
+  TRY(ef_cp_register_intf(cp, ifindex, intf, 0));
 
-  /* Populate the IP and UDP headers of the packet. */
-  intf->tx_frame_len = init_udp_pkt(buf->p, cfg_payload_len, &intf->vi, dh,
-                                    cfg_vlan, 1);
+  printf("%d %s:\n", ifindex, port_cp_intf.name);
+  print_vi_stats(&intf->vi);
 
   return intf;
 }
 
+static struct intf_state* init_intfs(struct ef_cp_handle *cp,
+                                     struct intf_state **intfs,
+                                     int ifindex, struct pkt_buf *pkt_buf)
+{
+  struct ef_cp_intf cp_intf;
+  struct intf_state *intf;
+  int rc, i;
+  /* Allocate space for a decent number of physical interfaces to avoid having
+   * to reallocate the memory dynamically. */
+  int n_physical_intfs = 8;
+  int *physical_ifindices;
+  int flags = EF_CP_GET_INTFS_F_NATIVE | EF_CP_GET_INTFS_F_MOST_DERIVED |
+              EF_CP_GET_INTFS_F_UP_ONLY;
+
+  TRY(ef_cp_get_intf(cp, ifindex, &cp_intf, 0));
+
+  physical_ifindices = malloc(sizeof(int) * n_physical_intfs);
+  TEST(physical_ifindices != NULL);
+  rc = ef_cp_get_lower_intfs(cp, cp_intf.ifindex, physical_ifindices,
+                             n_physical_intfs, flags);
+  TRY(rc);
+
+  while( rc > n_physical_intfs ) {
+    n_physical_intfs = rc;
+
+    free(physical_ifindices);
+    physical_ifindices = malloc(sizeof(int) * n_physical_intfs);
+    TEST(physical_ifindices != NULL);
+
+    rc = ef_cp_get_lower_intfs(cp, cp_intf.ifindex, physical_ifindices,
+                               n_physical_intfs, flags);
+    TRY(rc);
+  }
+  n_physical_intfs = rc;
+  /* We could reasonably have n_physical_intfs=0 if a logical interface has no
+   * physical interfaces below it, or they are all down. For the sake of
+   * simplicity, we just assume this can never happen. */
+  if( n_physical_intfs <= 0 ) {
+    printf("Interface parsing resulted in no physical interfaces. Either you "
+           "are trying to send over a logical interface, such as loopback, or "
+           "there are no physical interfaces that are UP below the provided "
+           "interface. These are unsupported in efsend_cplane, so the program "
+           "will now exit.\n");
+    TEST(n_physical_intfs > 0);
+  }
+
+  for( i = 0; i < n_physical_intfs; i++ ) {
+    intf = register_intf(cp, physical_ifindices[i], pkt_buf);
+    if( intf ) {
+      intf->next = *intfs;
+      *intfs = intf;
+    }
+  }
+  free(physical_ifindices);
+
+  return intf;
+}
+
+static void free_intfs(struct ef_cp_handle *cp, struct intf_state **intfs)
+{
+  struct intf_state *intf, *next;
+
+  for( intf = *intfs; intf; intf = next ) {
+    next = intf->next;
+    TRY(ef_cp_unregister_intf(cp, intf->ifindex, 0));
+    TRY(ef_memreg_free(&intf->mr, dh));
+    TRY(ef_vi_free(&intf->vi, dh));
+    TRY(ef_pd_free(&intf->pd, dh));
+    free(intf);
+  }
+
+  *intfs = NULL;
+}
+
+static void resolve_route(struct ef_cp_handle *cp, struct pkt_buf *pkt_buf,
+                          struct ef_cp_route_verinfo *route_ver,
+                          struct intf_state **active_intf,
+                          int *ifindex)
+{
+  int rc;
+  size_t prefix_space = PREFIX_RESERVED;
+  void *pkt_ip = (char*)pkt_buf->p + prefix_space;
+  int flags = (*ifindex == 0) ? EF_CP_RESOLVE_F_UNREGISTERED : 0;
+  struct intf_state *intf;
+  ci_ip4_hdr *ip4;
+  ci_udp_hdr *udp;
+  struct iovec iov;
+
+  /* If we are sending to a multicast address, route resolution could
+   * reasonably return any valid ifindex. In that case, lets suggest
+   * an appropriate one to use instead. */
+  route_meta.ifindex = dest_is_mcast() ? *ifindex : -1;
+
+  /* Route resolution could come back before we have the destination
+   * MAC address, so if we get -EAGAIN just jump right back into it. */
+  do {
+    rc = ef_cp_resolve(cp, pkt_ip, &prefix_space, &route_meta,
+                       route_ver, flags);
+  } while( -EAGAIN == rc );
+  TEST(rc == 0 || rc & EF_CP_RESOLVE_S_UNREGISTERED);
+
+  /* We could retry in this case, but lets just give
+   * up if we don't resolve to a valid ifindex. */
+  TEST(route_meta.ifindex > 0);
+
+  intf = (struct intf_state*)route_meta.intf_cookie;
+  *active_intf = intf;
+  if( intf == NULL ) {
+    if ( cfg_interface == NULL ) {
+      printf("Routing over ifindex=%d\n", route_meta.ifindex);
+      *ifindex = route_meta.ifindex;
+      /* We want to reset the route version so we resolve the actual
+       * VI to send over after initialising all possible VIs. */
+      *route_ver = EF_CP_ROUTE_VERINFO_INIT;
+    }
+
+    /* Either the interface config has changed, or we are hot-loading intfs
+     * to send over. In any case, we need to reinitialise the interfaces. */
+    return;
+  }
+
+  printf("Sending over ifindex=%d\n", route_meta.ifindex);
+
+  /* Let's recalculate the checksums; this is not always necessary where the HW
+   * being used can do this instead, but we just assume it can't. */
+  ip4 = pkt_ip;
+  udp = (ci_udp_hdr*)(ip4 + 1);
+  iov.iov_base = udp + 1;
+  iov.iov_len = cfg_payload_len;
+  ip4->ip_check_be16 = ef_ip_checksum((const struct iphdr*)ip4);
+  udp->udp_check_be16 = ef_udp_checksum((const struct iphdr*)ip4,
+                                        (const struct udphdr*)udp, &iov, 1);
+
+  /* Update the DMA address to be the start of the packet headers, and
+   * calculate the full length of the packet. */
+  intf->dma_start = intf->dma_buf_addr + PREFIX_RESERVED - prefix_space;
+  intf->tx_frame_len = cfg_payload_len + prefix_space +
+                       sizeof(ci_ip4_hdr) + sizeof(ci_udp_hdr);
+}
+
 int main(int argc, char* argv[])
 {
+  struct ef_cp_handle *cp;
+  struct ef_cp_intf_verinfo ver = EF_CP_INTF_VERINFO_INIT;
+  struct intf_state *intfs_head = NULL;
+  struct intf_state *intf = NULL;
   struct intf_state *active_intf = NULL;
   struct pkt_buf pkt_buf = { 0 };
+  struct ef_cp_route_verinfo route_ver = EF_CP_ROUTE_VERINFO_INIT;
   int tx_ifindex = 0;
 
   TRY(parse_opts(argc, argv, &tx_ifindex));
 
   TRY(ef_driver_open(&dh));
+  TRY(ef_cp_init(&cp, 0));
+
   allocate_packet_buffer(&pkt_buf);
-  active_intf = register_intf(tx_ifindex);
 
   /* Continue until all sends are complete */
   while( n_sent < cfg_iter ) {
-    /* Try to push up to the requested iterations, likely fewer get sent */
-    n_pushed += send_more_packets(cfg_iter - n_pushed, &active_intf->vi,
-                                  active_intf->dma_buf_addr);
-    /* Check for transmit complete */
-    handle_completions(&active_intf->vi);
+    /* If our interface version is outdated, then lets have a look at what the
+     * current state is, and register any new interfaces we may need. */
+    if( ! ef_cp_intf_version_verify(cp, &ver) ) {
+      /* If we don't have a fixed interface to send over, then we should have
+       * the route re-resolved, so we skip initialisation for now. */
+      if( cfg_interface == NULL && active_intf != NULL ) {
+        tx_ifindex = 0;
+      }
+
+      /* Only (re)initialise our state if we have a valid ifindex. */
+      if( tx_ifindex != 0 ) {
+        printf("Detected outdated interface version... Reinitialising.\n");
+        ver = ef_cp_intf_version_get(cp);
+        init_intfs(cp, &intfs_head, tx_ifindex, &pkt_buf);
+        TEST(intfs_head != NULL);
+      }
+
+      /* Invalidate our route as we either need to resolve an ifindex to send
+       * over, or the specific VI to use. */
+      route_ver = EF_CP_ROUTE_VERINFO_INIT;
+    }
+
+    /* If our route is outdated then lets try to resolve it, and potentially
+     * fallback to reinitialising our state if we don't have a valid active
+     * interface to send over. */
+    if( ! ef_cp_route_verify(cp, &route_ver) ) {
+      active_intf = NULL;
+      resolve_route(cp, &pkt_buf, &route_ver, &active_intf, &tx_ifindex);
+      if( active_intf == NULL ) {
+        ver = EF_CP_INTF_VERINFO_INIT;
+        continue;
+      }
+    }
+    TEST(active_intf != NULL);
+
+    /* Send our packets, and check for completions on any of our VIs. */
+    n_pushed += send_more_packets(cfg_iter - n_pushed, active_intf);
+    for( intf = intfs_head; intf; intf = intf->next ) {
+      handle_completions(&intf->vi);
+    }
     if( cfg_usleep )
       usleep(cfg_usleep);
   }
 
   printf("Sent %d packets\n", n_sent);
 
-  free(active_intf);
+  free_intfs(cp, &intfs_head);
   if( pkt_buf.size == BUF_HUGE_SIZE )
     munmap(pkt_buf.p, pkt_buf.size);
   else
