@@ -126,6 +126,7 @@ EFRM_HAS_KTIME_GET_REAL_SECONDS	export	ktime_get_real_seconds	include/linux/time
 EFRM_FILE_HAS_F_EP	member	struct_file	f_ep	include/linux/fs.h
 
 EFRM_HAS_FLUSH_DELAYED_FPUT	export	flush_delayed_fput	include/linux/file.h	fs/file_table.c
+EFRM_NETDEV_HAS_XDP_METADATA_OPS	member	struct_net_device	xdp_metadata_ops	include/linux/netdevice.h
 
 EFRM_IRQ_FREE_RETURNS_NAME	symtype	free_irq	include/linux/interrupt.h void *(unsigned int, void *)
 
