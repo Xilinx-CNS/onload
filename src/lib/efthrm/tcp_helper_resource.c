@@ -1626,7 +1626,7 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
   }
   if( vi->efct_rxqs.active_qs ) {
     int rc = efct_kbufs_init_internal(vi, vi_rs->efct_shm,
-        tcp_helper_superbuf_config_refresh, 0);
+        tcp_helper_superbuf_config_refresh, 0, NULL);
     if( rc < 0 )
       return rc;
   }

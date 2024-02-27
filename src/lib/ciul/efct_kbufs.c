@@ -271,10 +271,10 @@ static void efct_kbufs_cleanup(ef_vi* vi)
 int efct_kbufs_init_internal(ef_vi* vi,
                              struct efab_efct_rxq_uk_shm_base *shm,
                              int (*refresh)(ef_vi* vi, int qid),
-                             uintptr_t refresh_user)
+                             uintptr_t refresh_user,
+                             void* space)
 {
   struct efct_kbufs* rxqs;
-  void* space;
   int i;
 
   vi->efct_rxqs.max_qs = EF_VI_MAX_EFCT_RXQS;
@@ -311,25 +311,27 @@ int efct_kbufs_init_internal(ef_vi* vi,
 
   memset(mappings, 0xff, mappings_bytes);
 
-  /* This is reserving a gigantic amount of virtual address space (with no
-   * memory behind it) so we can later on (in efct_vi_attach_rxq()) plonk the
-   * actual mmappings for each specific superbuf into a computable place
-   * within this space, i.e. so that conversion from {rxq#,superbuf#} to
-   * memory address is trivial arithmetic rather than needing various array
-   * lookups.
-   *
-   * In kernelspace we can't do this trickery (see the other #ifdef branch), so
-   * we pay the price of doing the naive array lookups: we have an array of
-   * pointers to superbufs. */
-  space = mmap(NULL, vi->efct_rxqs.max_qs * bytes_per_rxq, PROT_NONE,
-               MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
-               -1, 0);
-  if( space == MAP_FAILED ) {
-    free(mappings);
-    free(rxqs);
-    return -ENOMEM;
+  if( space == NULL ) {
+    /* This is reserving a gigantic amount of virtual address space (with no
+     * memory behind it) so we can later on (in efct_vi_attach_rxq()) plonk the
+     * actual mmappings for each specific superbuf into a computable place
+     * within this space, i.e. so that conversion from {rxq#,superbuf#} to
+     * memory address is trivial arithmetic rather than needing various array
+     * lookups.
+     *
+     * In kernelspace we can't do this trickery (see the other #ifdef branch), so
+     * we pay the price of doing the naive array lookups: we have an array of
+     * pointers to superbufs. */
+    space = mmap(NULL, vi->efct_rxqs.max_qs * bytes_per_rxq, PROT_NONE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
+                 -1, 0);
+    if( space == MAP_FAILED ) {
+      free(mappings);
+      free(rxqs);
+      return -ENOMEM;
+    }
   }
-  
+
   madvise(space, vi->efct_rxqs.max_qs * bytes_per_rxq, MADV_DONTDUMP);
 #endif
 
@@ -379,7 +381,7 @@ int efct_kbufs_init(ef_vi* vi)
     return rc;
   }
 
-  rc = efct_kbufs_init_internal(vi, p, efct_kbufs_refresh, 0);
+  rc = efct_kbufs_init_internal(vi, p, efct_kbufs_refresh, 0, NULL);
   if( rc )
     ci_resource_munmap(vi->dh, get_kbufs(vi)->shm,
                        CI_ROUND_UP(CI_EFCT_SHM_BYTES(EF_VI_MAX_EFCT_RXQS),

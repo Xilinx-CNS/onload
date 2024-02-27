@@ -2026,7 +2026,7 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   if( vi->efct_rxqs.active_qs ) {
     int rc = efct_kbufs_init_internal(vi,
                         (void*)((char*)ni->efct_shm_ptr + vi_efct_shm_offset),
-                        oo_efct_superbuf_config_refresh, nic_i);
+                        oo_efct_superbuf_config_refresh, nic_i, NULL);
     if( rc < 0 )
       return rc;
   }
