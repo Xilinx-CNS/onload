@@ -140,8 +140,10 @@ static const char* efct_superbuf_base(const ef_vi* vi, size_t pkt_id)
  * previous packet, not this one. */
 static const ci_oword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
 {
-  return (const ci_oword_t*)(efct_superbuf_base(vi, pkt_id) +
-                        pkt_id_to_index_in_superbuf(pkt_id) * EFCT_PKT_STRIDE);
+  unsigned ix = pkt_id_to_index_in_superbuf(pkt_id);
+  EF_VI_ASSERT(ix < *vi->efct_rxqs.q[pkt_id_to_rxq_ix(pkt_id)].live.superbuf_pkts);
+
+  return (const ci_oword_t*)(efct_superbuf_base(vi, pkt_id) + ix * EFCT_PKT_STRIDE);
 }
 
 static uint32_t rxq_ptr_to_pkt_id(uint32_t ptr)
@@ -1171,7 +1173,6 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
         efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
       continue;
     pkt_id = OO_ACCESS_ONCE(rxq_ptr->prev);
-    EF_VI_ASSERT(pkt_id < rxq_ptr->end);
     {
       const char* start = (char*)efct_rx_header(vi, pkt_id) +
                           EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
