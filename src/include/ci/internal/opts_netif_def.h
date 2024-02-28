@@ -1400,10 +1400,11 @@ CI_CFG_OPT("EF_LOG", log_category, ci_uint32,
 "Designed to control how chatty Onload's informative/warning messages are.  "
 "Specified as a comma seperated list of options to enable and disable "
 "(with a minus sign).  Valid options are 'banner' (on by default), "
-"'resource_warnings' (on by default), 'config_warnings' (on by default) "
-"'conn_drop' (off by default) and 'usage_warnings' (on by default).  E.g.: "
-"To enable conn_drop: EF_LOG=conn_drop.  " "E.g.: To enable conn_drop and "
-"turn off resource warnings: EF_LOG=conn_drop,-resource_warnings",
+"'resource_warnings' (on by default), 'config_warnings' (on by default), "
+"'more_config_warnings' (off by default), 'conn_drop' (off by default) and "
+"'usage_warnings' (on by default).  E.g.: To enable conn_drop: EF_LOG=conn_drop. "
+"E.g.: To enable conn_drop and turn off resource warnings: "
+"EF_LOG=conn_drop,-resource_warnings",
            , , CI_EF_LOG_DEFAULT, 0, MAX, count)
 
 
