@@ -6,7 +6,7 @@
 #ifndef __CI_EFHW_STACK_VI_ALLOCATOR_H__
 #define __CI_EFHW_STACK_VI_ALLOCATOR_H__
 
-#include <ci/efhw/efhw_types.h>
+#include <ci/efhw/common.h>
 
 /* Stack allocates downwards. Therefore, when full, head == 0 */
 struct efhw_stack_vi_allocator {

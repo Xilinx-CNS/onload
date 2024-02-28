@@ -2,6 +2,7 @@
 /* X-SPDX-Copyright-Text: Copyright (C) 2024, Advanced Micro Devices, Inc. */
 
 #include <ci/efhw/stack_vi_allocator.h>
+#include <ci/efhw/efhw_types.h>
 
 int efhw_stack_vi_allocator_ctor(struct efhw_stack_vi_allocator *alloc,
               unsigned vi_min, unsigned vi_lim)
