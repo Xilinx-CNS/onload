@@ -440,9 +440,9 @@ static int efct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
     return -EOPNOTSUPP;
   }
   if( evc->want_txq ) {
-    return efhw_stack_vi_alloc(&efct->vi_allocator.tx, efct_accept_rx_vi_constraints, efct);
+    return efhw_stack_vi_alloc(&efct->vi_allocator.tx, efct_accept_tx_vi_constraints, efct);
   }
-  return efhw_stack_vi_alloc(&efct->vi_allocator.rx, efct_accept_tx_vi_constraints, efct);
+  return efhw_stack_vi_alloc(&efct->vi_allocator.rx, efct_accept_rx_vi_constraints, efct);
 }
 
 static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)

@@ -272,9 +272,9 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
     return -EOPNOTSUPP;
   }
   if( evc->want_txq ) {
-    return efhw_stack_vi_alloc(&ef10ct->vi_allocator.tx, ef10ct_accept_rx_vi_constraints, ef10ct);
+    return efhw_stack_vi_alloc(&ef10ct->vi_allocator.tx, ef10ct_accept_tx_vi_constraints, ef10ct);
   }
-  return efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx, ef10ct_accept_tx_vi_constraints, ef10ct);
+  return efhw_stack_vi_alloc(&ef10ct->vi_allocator.rx, ef10ct_accept_rx_vi_constraints, ef10ct);
 }
 
 static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
