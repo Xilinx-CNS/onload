@@ -244,7 +244,7 @@ typedef union ci_oword_u {
 	_field1, _value1, _field2, _value2, _field3, _value3,		\
 	_field4, _value4, _field5, _value5, _field6, _value6,		\
     	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11)						\
+	_field10, _value10, _field11, _value11, _field12, _value12)						\
   (CI_BITFIELD_INSERT_FIELD_NATIVE(_min, _max, _field1, _value1) |	\
    CI_BITFIELD_INSERT_FIELD_NATIVE(_min, _max, _field2, _value2) |	\
    CI_BITFIELD_INSERT_FIELD_NATIVE(_min, _max, _field3, _value3) |	\
@@ -255,120 +255,45 @@ typedef union ci_oword_u {
    CI_BITFIELD_INSERT_FIELD_NATIVE(_min, _max, _field8, _value8) |	\
    CI_BITFIELD_INSERT_FIELD_NATIVE(_min, _max, _field9, _value9) |	\
    CI_BITFIELD_INSERT_FIELD_NATIVE(_min, _max, _field10, _value10) |	\
-   CI_BITFIELD_INSERT_FIELD_NATIVE(_min, _max, _field11, _value11))
+   CI_BITFIELD_INSERT_FIELD_NATIVE(_min, _max, _field11, _value11) |	\
+   CI_BITFIELD_INSERT_FIELD_NATIVE(_min, _max, _field12, _value12))
 
 /* 64bit field cnostruction */
-#define CI_BITFIELD_INSERT_FIELDS64(_min, _max,				\
-	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-    	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11)						\
-  CI_BSWAP_LE64(CI_BITFIELD_INSERT_FIELDS_NATIVE(_min, _max,		\
-	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-    	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11))
+#define CI_BITFIELD_INSERT_FIELDS64(...)				\
+  CI_BSWAP_LE64(CI_BITFIELD_INSERT_FIELDS_NATIVE(__VA_ARGS__))
 
-#define CI_POPULATE_OWORD64(_oword,					\
-	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-    	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11)						\
+#define CI_POPULATE_OWORD64(_oword, ...)				\
   do {									\
-    (_oword).u64[0] = CI_BITFIELD_INSERT_FIELDS64(0, 63,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);						\
-    (_oword).u64[1] = CI_BITFIELD_INSERT_FIELDS64(64, 127,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);						\
+    (_oword).u64[0] = CI_BITFIELD_INSERT_FIELDS64(0, 63, __VA_ARGS__);	\
+    (_oword).u64[1] = CI_BITFIELD_INSERT_FIELDS64(64, 127, __VA_ARGS__);\
   } while (0)
 
-#define CI_POPULATE_QWORD64(_qword,					\
-	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-    	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11)						\
+#define CI_POPULATE_QWORD64(_qword, ...)				\
   do {									\
-    (_qword).u64[0] = CI_BITFIELD_INSERT_FIELDS64(0, 63,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);						\
+    (_qword).u64[0] = CI_BITFIELD_INSERT_FIELDS64(0, 63, __VA_ARGS__);	\
   } while (0)
 
 /* 32bit field construction */
-#define CI_BITFIELD_INSERT_FIELDS32(_min, _max,				\
-	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-    	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11)						\
-  CI_BSWAP_LE32(CI_BITFIELD_INSERT_FIELDS_NATIVE(_min, _max,		\
-	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-    	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11))
+#define CI_BITFIELD_INSERT_FIELDS32(...)				\
+  CI_BSWAP_LE32(CI_BITFIELD_INSERT_FIELDS_NATIVE(__VA_ARGS__))
 
-#define CI_POPULATE_OWORD32(_oword,					\
-	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-    	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11)						\
+#define CI_POPULATE_OWORD32(_oword, ...)				\
   do {									\
-    (_oword).u32[0] = CI_BITFIELD_INSERT_FIELDS32(0, 31,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);						\
-    (_oword).u32[1] = CI_BITFIELD_INSERT_FIELDS32(32, 63,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);						\
-    (_oword).u32[2] = CI_BITFIELD_INSERT_FIELDS32(64, 95,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);						\
-    (_oword).u32[3] = CI_BITFIELD_INSERT_FIELDS32(96, 127,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);						\
+    (_oword).u32[0] = CI_BITFIELD_INSERT_FIELDS32(0, 31, __VA_ARGS__);	\
+    (_oword).u32[1] = CI_BITFIELD_INSERT_FIELDS32(32, 63, __VA_ARGS__);	\
+    (_oword).u32[2] = CI_BITFIELD_INSERT_FIELDS32(64, 95, __VA_ARGS__);	\
+    (_oword).u32[3] = CI_BITFIELD_INSERT_FIELDS32(96, 127, __VA_ARGS__);\
   } while (0)
 
-#define CI_POPULATE_QWORD32(_qword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-    	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11)						\
+#define CI_POPULATE_QWORD32(_qword, ...)				\
   do {									\
-    (_qword).u32[0] = CI_BITFIELD_INSERT_FIELDS64(0, 31,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);						\
-    (_qword).u32[1] = CI_BITFIELD_INSERT_FIELDS64(32, 63,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);						\
+    (_qword).u32[0] = CI_BITFIELD_INSERT_FIELDS64(0, 31, __VA_ARGS__);	\
+    (_qword).u32[1] = CI_BITFIELD_INSERT_FIELDS64(32, 63, __VA_ARGS__);	\
   } while (0)
 
-#define CI_POPULATE_DWORD(_dword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-    	_field7, _value7, _field8, _value8, _field9, _value9,		\
-        _field10, _value10, _field11, _value11)				\
+#define CI_POPULATE_DWORD(_dword, ...)					\
   do {									\
-    (_dword).u32[0] = CI_BITFIELD_INSERT_FIELDS32(0, 31,		\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10, _field11, _value11);			\
+    (_dword).u32[0] = CI_BITFIELD_INSERT_FIELDS32(0, 31, __VA_ARGS__);	\
   } while (0)
 
 #if CI_WORD_SIZE == 8
@@ -380,226 +305,112 @@ typedef union ci_oword_u {
 #endif
 
 /* Populate oword fields*/
-#define CI_POPULATE_OWORD_11 CI_POPULATE_OWORD
+#define CI_POPULATE_OWORD_12 CI_POPULATE_OWORD
 
-#define CI_POPULATE_OWORD_10(_oword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-        _field7, _value7, _field8, _value8, _field9, _value9,		\
-        _field10, _value10)                                             \
-    CI_POPULATE_OWORD_11(_oword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-        _field7, _value7, _field8, _value8, _field9, _value9,		\
-        _field10, _value10)
+#define CI_POPULATE_OWORD_11(_oword, ...)				\
+    CI_POPULATE_OWORD_12(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_OWORD_9(_oword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9)		\
-    CI_POPULATE_OWORD_10(_oword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9)
+#define CI_POPULATE_OWORD_10(_oword, ...)				\
+    CI_POPULATE_OWORD_11(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_OWORD_8(_oword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8)				\
-    CI_POPULATE_OWORD_9(_oword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8)
+#define CI_POPULATE_OWORD_9(_oword, ...)				\
+    CI_POPULATE_OWORD_10(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_OWORD_7(_oword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7)						\
-    CI_POPULATE_OWORD_8(_oword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7)
+#define CI_POPULATE_OWORD_8(_oword, ...)				\
+    CI_POPULATE_OWORD_9(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_OWORD_6(_oword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6)		\
-    CI_POPULATE_OWORD_7(_oword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6)
+#define CI_POPULATE_OWORD_7(_oword, ...)				\
+    CI_POPULATE_OWORD_8(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_OWORD_5(_oword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5)				\
-    CI_POPULATE_OWORD_6(_oword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5)
+#define CI_POPULATE_OWORD_6(_oword, ...)				\
+    CI_POPULATE_OWORD_7(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_OWORD_4(_oword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4)						\
-    CI_POPULATE_OWORD_5(_oword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4)
+#define CI_POPULATE_OWORD_5(_oword, ...)				\
+    CI_POPULATE_OWORD_6(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_OWORD_3(_oword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3)		\
-    CI_POPULATE_OWORD_4(_oword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3)
+#define CI_POPULATE_OWORD_4(_oword, ...)				\
+    CI_POPULATE_OWORD_5(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_OWORD_2(_oword, _field1, _value1, _field2, _value2)	\
-    CI_POPULATE_OWORD_3(_oword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2)
+#define CI_POPULATE_OWORD_3(_oword, ...)				\
+    CI_POPULATE_OWORD_4(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_OWORD_1(_oword, _field1, _value1)			\
-    CI_POPULATE_OWORD_2(_oword, CI_DUMMY_FIELD, 0, _field1, _value1)
+#define CI_POPULATE_OWORD_2(_oword, ...)				\
+    CI_POPULATE_OWORD_3(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
+
+#define CI_POPULATE_OWORD_1(_oword, ...)				\
+    CI_POPULATE_OWORD_2(_oword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
 /* Populate qword fields*/
-#define CI_POPULATE_QWORD_11 CI_POPULATE_QWORD
+#define CI_POPULATE_QWORD_12 CI_POPULATE_QWORD
 
-#define CI_POPULATE_QWORD_10(_qword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-        _field7, _value7, _field8, _value8, _field9, _value9,		\
-        _field10, _value10)                                             \
-    CI_POPULATE_QWORD_11(_qword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-        _field7, _value7, _field8, _value8, _field9, _value9,		\
-        _field10, _value10)
+#define CI_POPULATE_QWORD_11(_qword, ...)				\
+    CI_POPULATE_QWORD_12(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_QWORD_9(_qword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9)		\
-    CI_POPULATE_QWORD_10(_qword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9)
+#define CI_POPULATE_QWORD_10(_qword, ...)				\
+    CI_POPULATE_QWORD_11(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_QWORD_8(_qword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8)				\
-    CI_POPULATE_QWORD_9(_qword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8)
+#define CI_POPULATE_QWORD_9(_qword, ...)				\
+    CI_POPULATE_QWORD_10(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_QWORD_7(_qword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7)						\
-    CI_POPULATE_QWORD_8(_qword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7)
+#define CI_POPULATE_QWORD_8(_qword, ...)				\
+    CI_POPULATE_QWORD_9(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_QWORD_6(_qword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6)		\
-    CI_POPULATE_QWORD_7(_qword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6)
+#define CI_POPULATE_QWORD_7(_qword, ...)				\
+    CI_POPULATE_QWORD_8(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_QWORD_5(_qword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5)				\
-    CI_POPULATE_QWORD_6(_qword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5)
+#define CI_POPULATE_QWORD_6(_qword, ...)				\
+    CI_POPULATE_QWORD_7(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_QWORD_4(_qword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4)						\
-    CI_POPULATE_QWORD_5(_qword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4)
+#define CI_POPULATE_QWORD_5(_qword, ...)				\
+    CI_POPULATE_QWORD_6(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_QWORD_3(_qword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3)		\
-    CI_POPULATE_QWORD_4(_qword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3)
+#define CI_POPULATE_QWORD_4(_qword, ...)				\
+    CI_POPULATE_QWORD_5(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_QWORD_2(_qword, _field1, _value1, _field2, _value2)	\
-    CI_POPULATE_QWORD_3(_qword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2)
+#define CI_POPULATE_QWORD_3(_qword, ...)				\
+    CI_POPULATE_QWORD_4(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_QWORD_1(_qword, _field1, _value1)			\
-    CI_POPULATE_QWORD_2(_qword, CI_DUMMY_FIELD, 0, _field1, _value1)
+#define CI_POPULATE_QWORD_2(_qword, ...)				\
+    CI_POPULATE_QWORD_3(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
+
+#define CI_POPULATE_QWORD_1(_qword, ...)				\
+    CI_POPULATE_QWORD_2(_qword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
 /* Populate dword fields */
-#define CI_POPULATE_DWORD_11 CI_POPULATE_DWORD
+#define CI_POPULATE_DWORD_12 CI_POPULATE_DWORD
 
-#define CI_POPULATE_DWORD_10(_dword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-        _field7, _value7, _field8, _value8, _field9, _value9,		\
-        _field10, _value10)                                             \
-    CI_POPULATE_DWORD_11(_dword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-        _field7, _value7, _field8, _value8, _field9, _value9,		\
-	_field10, _value10)
+#define CI_POPULATE_DWORD_11(_dword, ...)				\
+    CI_POPULATE_DWORD_12(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_DWORD_9(_dword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9)		\
-    CI_POPULATE_DWORD_10(_dword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8, _field9, _value9)
+#define CI_POPULATE_DWORD_10(_dword, ...)				\
+    CI_POPULATE_DWORD_11(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_DWORD_8(_dword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8)				\
-    CI_POPULATE_DWORD_9(_dword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7, _field8, _value8)
+#define CI_POPULATE_DWORD_9(_dword, ...)				\
+    CI_POPULATE_DWORD_10(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_DWORD_7(_dword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7)						\
-    CI_POPULATE_DWORD_8(_dword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6,		\
-	_field7, _value7)
+#define CI_POPULATE_DWORD_8(_dword, ...)				\
+    CI_POPULATE_DWORD_9(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_DWORD_6(_dword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6)		\
-    CI_POPULATE_DWORD_7(_dword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5, _field6, _value6)
+#define CI_POPULATE_DWORD_7(_dword, ...)				\
+    CI_POPULATE_DWORD_8(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_DWORD_5(_dword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5)				\
-    CI_POPULATE_DWORD_6(_dword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4, _field5, _value5)
+#define CI_POPULATE_DWORD_6(_dword, ...)				\
+    CI_POPULATE_DWORD_7(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_DWORD_4(_dword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4)						\
-    CI_POPULATE_DWORD_5(_dword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3,		\
-	_field4, _value4)
+#define CI_POPULATE_DWORD_5(_dword, ...)				\
+    CI_POPULATE_DWORD_6(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_DWORD_3(_dword,					\
-   	_field1, _value1, _field2, _value2, _field3, _value3)		\
-    CI_POPULATE_DWORD_4(_dword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2, _field3, _value3)
+#define CI_POPULATE_DWORD_4(_dword, ...)				\
+    CI_POPULATE_DWORD_5(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_DWORD_2(_dword, _field1, _value1, _field2, _value2)	\
-    CI_POPULATE_DWORD_3(_dword, CI_DUMMY_FIELD, 0,			\
-   	_field1, _value1, _field2, _value2)
+#define CI_POPULATE_DWORD_3(_dword, ...)				\
+    CI_POPULATE_DWORD_4(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
-#define CI_POPULATE_DWORD_1(_dword, _field1, _value1)			\
-    CI_POPULATE_DWORD_2(_dword, CI_DUMMY_FIELD, 0, _field1, _value1)
+#define CI_POPULATE_DWORD_2(_dword, ...)				\
+    CI_POPULATE_DWORD_3(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
+
+#define CI_POPULATE_DWORD_1(_dword, ...)				\
+    CI_POPULATE_DWORD_2(_dword, CI_DUMMY_FIELD, 0, __VA_ARGS__)
 
 /* Zero fields */
 #define CI_ZERO_OWORD(_oword)				\
