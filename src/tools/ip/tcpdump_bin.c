@@ -52,7 +52,9 @@ static int cfg_dump_no_match_only = 0;
 
 /* capture precision */
 static const char *cfg_precision = "micro";
+static const char *cfg_timestamp_type = "host";
 static int do_nano = 0;
+static int hw_stamping = 0;
 
 /* Interface to dump */
 static const char *cfg_interface = "any";
@@ -87,6 +89,8 @@ static ci_cfg_desc cfg_opts[] = {
                            "dump only packets not matching onload sockets"},
   {  2, "time-stamp-precision", CI_CFG_STR, &cfg_precision,
                  "set the timestamp precision, default to \"micro\", man tcpdump"},
+  {'j', "time-stamp-type", CI_CFG_STR, &cfg_timestamp_type,
+          "set the timestamp type, defaults to \"host\", man tcpdump"},
 };
 #define N_CFG_OPTS (sizeof(cfg_opts) / sizeof(cfg_opts[0]))
 
@@ -152,6 +156,14 @@ static void frc_resync(struct frc_sync* fs)
 
 static void pkt_tstamp(const ci_ip_pkt_fmt* pkt, struct timespec* ts_out)
 {
+  /* Use the HW timestamps if available and enabled (time_stamp_type setting).
+   * Uses onloads HW timestamps equivalent to adapter_unsynced setting. */
+  if( pkt->hw_stamp.tv_sec && hw_stamping ) {
+    ts_out->tv_nsec = pkt->hw_stamp.tv_nsec;
+    ts_out->tv_sec = pkt->hw_stamp.tv_sec;
+    return;
+  }
+
   static struct frc_sync fs;
   int64_t ns, frc_diff = pkt->tstamp_frc - fs.sync_frc;
 
@@ -268,6 +280,15 @@ static void stack_dump_on(ci_netif *ni)
         return;
       }
     }
+  }
+
+  /* Warn user if stack does not have RX or TX HW timestamps
+   * when HW timestamps are requested. */
+  if( hw_stamping && (!ni->state->opts.rx_timestamping
+        || !ni->state->opts.tx_timestamping) ) {
+    ci_log("ERROR: Onload stack [%d,%s] does not have both RX and TX HW "
+        "timestamps enabled. Timestamps may be a mix of HW and SW.",
+        ni->state->stack_id, ni->state->name);
   }
 
   /* No data from other tcpdump processes should be available. */
@@ -685,6 +706,15 @@ int main(int argc, char* argv[])
   if( strcmp(cfg_precision, "nano") == 0 ){
     do_nano = 1;
   }
+
+  /* Set HW Timestamping. */
+  if( strcmp(cfg_timestamp_type, "adapter") == 0
+      || strcmp(cfg_timestamp_type, "adapter_unsynced") == 0 ) {
+    hw_stamping = 1;
+    ci_log("HW Timestamping enabled - Onload tcpdump will use HW timestamps"
+        " when available");
+  }
+
   /* Fix cfg_snaplen value. */
   if( cfg_snaplen == 0 )
     cfg_snaplen = MAXIMUM_SNAPLEN; /* tcpdump compatibility */

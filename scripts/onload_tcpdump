@@ -97,6 +97,22 @@ while [ -n "$1" ]; do
       both_opts+=" $1"
       shift
       ;;
+    -j)
+      both_opts+=" $1 $2"
+      shift 2
+      ;;
+    -j*)
+      both_opts+=" $1"
+      shift
+      ;;
+    --time-stamp-type)
+      both_opts+=" $1=$2"
+      shift 2
+      ;;
+    --time-stamp-type=*)
+      both_opts+=" $1"
+      shift
+      ;;
     *)
       tcpdump_opts+=" $1"
       shift 1
