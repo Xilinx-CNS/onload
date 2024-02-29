@@ -275,9 +275,10 @@ struct efhw_func_ops {
 			     int budget);
 
 	/*! Allocate at least n_vis contiguously. Note that n_vis>1 is only
-	 *  valid on nics that support RSS
+	 *  valid on nics that support RSS.
 	 * 	Param n_vis: minimum number of vis to allocate
-	 *  Return: base vi index of allocation
+	 *  Return: -EOPNOTSUPP if n_vis > 1 and nic does not support RSS.
+	 *  Otherwise return base vi index of allocation.
 	 */
 	int (*vi_alloc) (struct efhw_nic *nic, struct efhw_vi_constraints *evc,
 			     unsigned n_vis);

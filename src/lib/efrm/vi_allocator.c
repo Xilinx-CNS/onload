@@ -51,7 +51,6 @@ int efrm_vi_allocator_alloc_set(struct efrm_nic *efrm_nic,
 				 struct efrm_alloc_vi_constraints *avc,
 				 struct efrm_vi_allocation *set_out)
 {
-	int rc;
 	struct efhw_vi_constraints evc = {
 		.channel = avc->channel,
 		.min_vis_in_set = avc->min_vis_in_set,
@@ -66,8 +65,7 @@ int efrm_vi_allocator_alloc_set(struct efrm_nic *efrm_nic,
 	spin_lock_bh(&efrm_nic->lock);
 	set_out->instance = efhw_nic_vi_alloc(avc->efhw_nic, &evc, set_out->n_vis);
 	spin_unlock_bh(&efrm_nic->lock);
-	rc = (set_out->instance >= 0) ? 0 : -EBUSY;
-	return rc;
+	return (set_out->instance >= 0) ? 0 : set_out->instance;
 }
 
 

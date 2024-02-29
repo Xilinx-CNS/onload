@@ -436,7 +436,9 @@ static int efct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc,
                          unsigned n_vis)
 {
   struct efhw_nic_efct *efct = nic->arch_extra;
-  EFHW_ASSERT(n_vis == 1);
+  if(n_vis != 1) {
+    return -EOPNOTSUPP;
+  }
   if( evc->want_txq ) {
     return efhw_stack_vi_alloc(&efct->vi_allocator.tx, efct_accept_rx_vi_constraints, efct);
   }

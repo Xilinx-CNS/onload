@@ -268,7 +268,9 @@ static int ef10ct_vi_alloc(struct efhw_nic *nic, struct efhw_vi_constraints *evc
                          unsigned n_vis)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
-  EFHW_ASSERT(n_vis == 1);
+  if(n_vis != 1) {
+    return -EOPNOTSUPP;
+  }
   if( evc->want_txq ) {
     return efhw_stack_vi_alloc(&ef10ct->vi_allocator.tx, ef10ct_accept_rx_vi_constraints, ef10ct);
   }
