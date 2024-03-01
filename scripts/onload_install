@@ -392,17 +392,15 @@ install_kernel_modules() {
   fi
 
   # Install driver meta-data.
-  try $docd "$TOP/build/$d/driver"
-  if ! $nosfc; then
-    install_f linux_net/drivers/net/ethernet/sfc/Module.symvers "$i_kernelmodules/sfc.symvers"
+  try $docd "$TOP/build/$d/"
+  install_f Module.symvers "$i_kernelmodules/onload.symvers"
 
+  if ! $nosfc; then
+    try $docd "$TOP/"
     # Install driver headers
-    install_f linux_net/drivers/net/ethernet/sfc/driverlink_api.h "$i_kernelmodules/driverlink_api.h"
-    install_f linux_net/drivers/net/ethernet/sfc/filter.h "$i_kernelmodules/filter.h"
+    install_f src/driver/linux_net/drivers/net/ethernet/sfc/driverlink_api.h "$i_kernelmodules/driverlink_api.h"
+    install_f src/driver/linux_net/drivers/net/ethernet/sfc/filter.h "$i_kernelmodules/filter.h"
   fi
-  install_f linux_resource/Module.symvers "$i_kernelmodules/sfc_resource.symvers"
-  install_f linux_char/Module.symvers "$i_kernelmodules/sfc_char.symvers"
-  install_f linux_onload/Module.symvers "$i_kernelmodules/onload.symvers"
 }
 
 

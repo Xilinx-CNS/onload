@@ -188,7 +188,7 @@ while [ $# -gt 0 ]; do
     -d)	if [ -z "$2" ]; then usage; fi; dest="$2"; shift;;
     -c|--custom) custom=1; what="--allplatforms"; shift;;
     -b|--build-dir) if [ -z "$2" ]; then usage; fi; builddir="$2";  shift;;
-    --driver) driver=1;;
+    --driver) driver=1; newdriver=1;;
     --newdriver) driver=1; newdriver=1;;
     --gnu|--user) gnu=1;;
     --cc) CC="$2"; shift;;
@@ -295,6 +295,7 @@ clean:
 	\$(MAKE) -C ../.. KPATH=$KPATH KBUILDTOP=\$(abspath .) clean_kernel
 .PHONY: all clean
 HERE
+  echo "Build tree made for $PLATFORM as $dest"
   exit 0
 fi
 

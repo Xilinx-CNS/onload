@@ -230,6 +230,7 @@ while read dir; do
     [ -e "$TOP/$dir/$f" ] && try cp -a "$TOP/$dir/$f" "$dir"
   done
 done < <(find . -type d)
+try cp -a "$TOP/Makefile" Makefile
 
 preprocess_source
 

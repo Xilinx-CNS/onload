@@ -55,7 +55,7 @@ kernel_files = {
 # If files are added to the above dictionaries, any dependencies should be
 # added here.
 kernel_build_dirs = [
-    'driver/linux',
+    '.',
 ]
 
 ul_build_dirs = [

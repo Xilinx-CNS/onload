@@ -233,13 +233,17 @@ else
   ONLOAD_CFLAGS += -DCI_HAVE_SFC=0
 endif
 
+scripts := $(addprefix $(KBUILDTOP)/driver/linux/,$(notdir $(wildcard src/driver/linux/*.sh)))
 
 .PHONY: modules modules_install clean_kernel kernel
 
-kernel: modules
+kernel: modules $(scripts)
 	@mkdir -p $(KBUILDTOP)/driver/linux
 	$(Q)ln -rsf $(wildcard $(patsubst %,$(KBUILDTOP)/%/*.ko,$(DRIVER_SUBDIRS))) $(KBUILDTOP)/driver/linux
-	$(Q)cp src/driver/linux/*.sh $(KBUILDTOP)/driver/linux
+
+$(scripts): $(KBUILDTOP)/driver/linux/%.sh: src/driver/linux/%.sh
+	@mkdir -p $(@D)
+	$(Q)cp $< $@
 
 modules modules_install: $(OUTMAKEFILES)
 	$(Q)$(MAKE) -C $(KPATH) M=$(KBUILDTOP) \
@@ -249,8 +253,6 @@ modules modules_install: $(OUTMAKEFILES)
 		MMAKE_IN_KBUILD=1 MMAKE_USE_KBUILD=1 MMAKE_NO_RULES=1 \
 		DRIVER=1 LINUX=1 $(patsubst modules,,$@) \
 		$(ONLOAD_MAKEFLAGS)
-
-kernel: modules
 
 clean_kernel:
 	$(RM) -r $(KBUILDTOP)/src
