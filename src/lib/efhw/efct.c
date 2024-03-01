@@ -175,13 +175,16 @@ efct_get_used_hugepages(struct efhw_nic *nic, int qid)
   if( ! pages )
     return -ENOMEM;
 
-  /* This call can return `EINVAL` for a few reasons, including the case where
-   * the provided `qid` is not bound to by `nic`. Instead of returning an error
-   * here, we should instead validly claim that no hugepages are being used. */
+  /* This call will return `EACCES` when `qid` is not bound to by `nic`. This
+   * will happen when we have not yet allocated any hugepages with this pair
+   * of parameters, so instead of returning an error code,  we validly return
+   * that no hugepages are being used.
+   * NOTE: older versions of the x3 net driver may return `EINVAL`, so we
+   * will allow this for now to maintain compatibility. */
   rc = efct_get_hugepages(nic, qid, pages, CI_EFCT_MAX_HUGEPAGES);
   if( rc < 0 ) {
     kfree(pages);
-    return (rc != -EINVAL) ? rc : 0;
+    return (rc != -EACCES && rc != -EINVAL) ? rc : 0;
   }
 
   used = 0;
