@@ -47,6 +47,7 @@ LIB_SRCS	+=		\
 		ctpio.c         \
 		shrub_pool.c    \
 		shrub_server.c  \
+		efct_ubufs.c    \
 
 # librt is needed on old glibc, e.g. on RHEL 6
 MMAKE_DIR_LINKFLAGS	:= $(MMAKE_DIR_LINKFLAGS) -lrt

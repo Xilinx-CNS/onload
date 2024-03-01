@@ -17,6 +17,7 @@ ALL_UNIT_TESTS := \
   lib/transport/ip/tcp_rx \
   lib/ciul/checksum \
   lib/ciul/efct_vi \
+  lib/ciul/efct_ubufs \
   lib/ciul/shrub_pool \
 
 # The tests to be run, and their corresponding files

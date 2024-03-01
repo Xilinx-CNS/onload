@@ -848,6 +848,8 @@ typedef struct {
   int  (*next)(struct ef_vi*, int qid, bool* sentinel, unsigned* seq);
   /** Free a buffer acquired from next() */
   void (*free)(struct ef_vi*, int qid, int sbid);
+  /** Post a buffer to the hardware FIFO (called internally) */
+  void (*post)(struct ef_vi*, int qid, int sbid, bool sentinel);
   /** Attach a queue */
   int  (*attach)(struct ef_vi*, int qid, unsigned n_superbufs);
   /** Refresh the internal config; called if config_generation changes */
