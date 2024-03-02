@@ -125,12 +125,14 @@ ci_ifid_t ci_rx_pkt_ifindex(ci_netif* ni, const ci_ip_pkt_fmt* pkt)
    * It is the only way to handle ipvlan interfaces.  */
   if( ! IS_AF_INET6(oo_pkt_af(pkt)) ) {
     if( oo_cp_find_llap_by_ip(ni->cplane, RX_PKT_DADDR(pkt).ip4,
+                              cicp_ipif_check_ok, NULL,
                               llap_vs_pktinfo, &l) )
       return l.ifindex;
   }
 #if CI_CFG_IPV6
   else {
     if( oo_cp_find_llap_by_ip6(ni->cplane, RX_PKT_DADDR(pkt).ip6,
+                              cicp_ipif_check_ok, NULL,
                               llap_vs_pktinfo, &l) )
       return l.ifindex;
   }

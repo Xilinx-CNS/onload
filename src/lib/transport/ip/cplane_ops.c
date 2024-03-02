@@ -455,7 +455,7 @@ cicp_ip_cache_update_from(ci_netif* ni, ci_ip_cached_hdrs* ipcache,
 
 int
 cicp_ipif_check_ok(struct oo_cplane_handle* cp,
-                   ci_ifid_t ifindex, void* data)
+                   ci_ifid_t ifindex, uint8_t scope, void* data)
 {
   return 1;
 }
