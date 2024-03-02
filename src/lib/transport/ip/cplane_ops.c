@@ -461,6 +461,15 @@ cicp_ipif_check_ok(struct oo_cplane_handle* cp,
 }
 
 int
+cicp_ipif_check_scope(struct oo_cplane_handle* cp,
+                      ci_ifid_t ifindex, uint8_t scope, void* data)
+{
+  struct cicp_ipif_check_scope_data* check_scope = data;
+  ci_assert_equal(check_scope->op, CICP_IPIF_CHECK_SCOPE_LT);
+  return scope < check_scope->scope;
+}
+
+int
 cicp_llap_check_onloaded(struct oo_cplane_handle* cp,
                          cicp_llap_row_t* llap, void* data)
 {
