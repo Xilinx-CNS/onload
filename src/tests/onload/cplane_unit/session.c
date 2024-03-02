@@ -25,7 +25,7 @@ void cp_unit_init_session(struct cp_session* s)
   /* XXX: These are duplicated from tools/cplane/server.c.  I don't think it's
    * worth defining constants for these right now. */
   struct cp_tables_dim dim = {
-    .hwport_max = 8,
+    .hwport_max = 30, /* CI_CFG_MAX_HWPORTS */
     .llap_max = 32,
     .ipif_max = 64,
     .fwd_ln2 = 8,
