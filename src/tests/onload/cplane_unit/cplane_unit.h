@@ -83,7 +83,7 @@ cp_unit_nl_handle_macvlan_link_msg(struct cp_session* s, uint16_t nlmsg_type,
 
 extern void
 cp_unit_nl_handle_veth_link_msg(struct cp_session* s, uint16_t nlmsg_type,
-                                int ifindex, const char* name,
+                                int ifindex, int peer_ifindex, const char* name,
                                 const char* mac);
 
 extern void
@@ -99,8 +99,8 @@ extern void
 cp_unit_nl_handle_route_msg(struct cp_session*, in_addr_t dest,
 			    int dest_prefix, in_addr_t src,
 			    in_addr_t src_prefix, in_addr_t pref_src,
-			    in_addr_t gateway, int ifindex, uint32_t nlmsg_pid,
-			    uint32_t nlmsg_seq);
+			    in_addr_t gateway, int ifindex, int iif_ifindex,
+			    uint32_t nlmsg_pid, uint32_t nlmsg_seq);
 
 extern void
 cp_unit_nl_handle_neigh_msg(struct cp_session* s, int ifindex, int type,
@@ -120,6 +120,11 @@ cp_unit_insert_gateway(struct cp_session* s, in_addr_t gateway, in_addr_t dest,
 extern void
 cp_unit_insert_resolution(struct cp_session* s, in_addr_t dest, in_addr_t src,
                           in_addr_t pref_src, in_addr_t next_hop, int ifindex);
+
+extern void
+cp_unit_insert_resolution_xns(struct cp_session* s, in_addr_t dest,
+                              in_addr_t src, in_addr_t pref_src,
+                              in_addr_t next_hop, int ifindex, int iif_ifindex);
 
 extern void
 cp_unit_insert_neighbour(struct cp_session* s, int ifindex, in_addr_t dest,
