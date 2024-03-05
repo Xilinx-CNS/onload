@@ -54,6 +54,9 @@ namespace :check do
     namespace :cplane do |nm|
       namespace_leaf_name = ENV['TEST_THREAD_NAME'] || nm.scope.path.split(':')[-1]
 
+      # enable IPv6 and extra test coverage with the cloud build profile
+      ENV['TRANSPORT_CONFIG_OPT_HDR'] = 'ci/internal/transport_config_opt_cloud.h'
+
       # build the cplane unit tests
       task build: ['build:lib:citools', 'build:lib:ciapp', 'build:lib:ciul', 'build:lib:cplane', 'build:lib:ip'] do
         Dir.chdir($user_build_dir) do
@@ -73,7 +76,7 @@ namespace :check do
         end
       end
     end
-    desc 'Run cplane unit tests'
+    desc 'Run cplane unit tests (profile: cloud)'
     task cplane: [:'cplane:execute']
 
     # oof unit tests
