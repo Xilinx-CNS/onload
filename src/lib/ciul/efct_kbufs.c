@@ -211,7 +211,7 @@ static int efct_kbufs_attach(ef_vi* vi, int qid, unsigned n_superbufs)
 #endif
 }
 
-int efct_kbufs_prime(ef_vi* vi, ef_driver_handle dh)
+static int efct_kbufs_prime(ef_vi* vi, ef_driver_handle dh)
 {
 #ifdef __KERNEL__
   /* Onload does its own thing before calling attach_internal */
@@ -356,6 +356,7 @@ int efct_kbufs_init_internal(ef_vi* vi,
   rxqs->ops.next = efct_kbufs_next;
   rxqs->ops.free = efct_kbufs_free;
   rxqs->ops.attach = efct_kbufs_attach;
+  rxqs->ops.prime = efct_kbufs_prime;
   rxqs->ops.refresh = refresh;
   rxqs->ops.cleanup = efct_kbufs_cleanup_internal;
 
