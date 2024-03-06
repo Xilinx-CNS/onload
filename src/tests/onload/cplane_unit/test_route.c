@@ -518,6 +518,33 @@ static void test_cross_namespace_routing(void)
 
   cp_unit_netif_mock_destroy(&ni);
 }
+
+static void test_scope(void)
+{
+  struct cp_session s;
+  init_session(&s, NULL);
+
+  ci_netif ni;
+  cp_unit_netif_mock(&ni, &s, NULL);
+
+  const char mac1[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x00};
+  const char mac2[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x01};
+  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, ETHO0_IFINDEX, "ethO0", mac1);
+  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, ETHO1_IFINDEX, "ethO1", mac2);
+
+  cp_unit_nl_handle_addr_msg(&s, A("198.18.0.0"), ETHO0_IFINDEX, 16,
+                             RT_SCOPE_HOST);
+
+  cp_unit_nl_handle_addr_msg(&s, A("198.19.0.0"), ETHO1_IFINDEX, 16,
+                             RT_SCOPE_UNIVERSE);
+
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("198.18.0.0")), "==", 0,
+         "localhost is not acceleratable");
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("198.19.0.0")), "==", 1,
+         "any scope larger than localhost is acceleratable");
+
+  cp_unit_netif_mock_destroy(&ni);
+}
 #endif
 
 
@@ -531,6 +558,7 @@ int main(void)
 #ifdef CAN_TEST_ONLOAD_CPLANE_CALLS
   test_user_retrieve();
   test_cross_namespace_routing();
+  test_scope();
 #endif
 
   done_testing();

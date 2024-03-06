@@ -253,6 +253,37 @@ cp_unit_nl_handle_neigh_msg(struct cp_session* s, int ifindex, int type,
 }
 
 
+/* This function fabricates a netlink message simulating the message
+ * that the kernel generates to describe the properties of an IP address
+ * associated with an interface, and passes it to the control plane. */
+void
+cp_unit_nl_handle_addr_msg(struct cp_session* s, in_addr_t laddr, int ifindex,
+                           int prefixlen, int scope)
+{
+  struct nlmsghdr* nlh;
+  char buf[MNL_SOCKET_BUFFER_SIZE];
+  struct ifaddrmsg *ifmsg;
+
+  CP_TEST(ifindex != 0);
+
+  /* Build the generic header, indicating that this is a route message. */
+  nlh = mnl_nlmsg_put_header(buf);
+  nlh->nlmsg_type = RTM_NEWADDR;
+
+  /* Allocate and populate the ifmsg header. */
+  ifmsg = mnl_nlmsg_put_extra_header(nlh, sizeof(struct ifaddrmsg));
+  ifmsg->ifa_family = AF_INET;
+  ifmsg->ifa_index = ifindex;
+  ifmsg->ifa_prefixlen = prefixlen;
+  ifmsg->ifa_scope = scope;
+
+  mnl_attr_put_u32(nlh, IFA_LOCAL, laddr);
+
+  /* Pass the message to the control plane. */
+  cp_nl_net_handle_msg(s, nlh, nlh->nlmsg_len);
+}
+
+
 int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
 {
   void* arg __attribute__((unused));
@@ -266,6 +297,7 @@ int cp_unit_cplane_ioctl(int fd, long unsigned int op, ...)
     case OO_IOC_CP_ARP_RESOLVE:
     case OO_IOC_CP_CHECK_VETH_ACCELERATION:
     case OO_IOC_CP_DUMP_HWPORTS:
+    case OO_IOC_OOF_CP_IP_MOD:
       return 0;
   }
   ci_assert(! "No ioctl ops into onload expected");

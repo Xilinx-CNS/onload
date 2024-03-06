@@ -108,6 +108,10 @@ cp_unit_nl_handle_neigh_msg(struct cp_session* s, int ifindex, int type,
                             int reachable_ms, uint32_t nlmsg_pid,
                             uint32_t nlmsg_seq);
 
+extern void
+cp_unit_nl_handle_addr_msg(struct cp_session* s, in_addr_t laddr, int ifindex,
+                           int prefixlen, int scope);
+
 /* Functions for inserting simulated netlink replies. */
 extern void
 cp_unit_insert_route(struct cp_session* s, in_addr_t dest, int dest_prefix,

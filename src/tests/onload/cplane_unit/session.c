@@ -49,9 +49,10 @@ void cp_unit_init_session(struct cp_session* s)
    * tests that call cp_license_checked() */
   CP_TRY(pipe2(s->pipe, O_NONBLOCK));
 
-  /* Initial sizes for route_dst and rule_src are enlarged at need. */
+  /* Initial sizes for route_dst, rule_src and laddr are enlarged at need. */
   cp_ippl_init(&s->route_dst, sizeof(struct cp_ip_with_prefix), NULL, 4);
   cp_ippl_init(&s->rule_src, sizeof(struct cp_ip_with_prefix), NULL, 1);
+  cp_ippl_init(&s->laddr, sizeof(struct cp_ip_with_prefix), NULL, 1);
 
   /* Rather than go to the effort of finding the CPU's frequency, use a value
    * of 1 KHz.  Times will therefore not be reported in milliseconds as
