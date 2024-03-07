@@ -160,6 +160,8 @@ static int efct_mock_attach(ef_vi* vi, int qid, unsigned n_superbufs)
   ops->rxqs->q[qid].superbuf_pkts = EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE;
   ops->rxqs->q[qid].next_sbid = -EAGAIN;
 
+  efct_vi_start_rxq(vi, qid, qid);
+
   return 0;
 }
 
