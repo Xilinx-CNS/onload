@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause */
+/* X-SPDX-Copyright-Text: Copyright (C) 2024, Advanced Micro Devices, Inc. */
 #ifndef INCLUDED_ONLOAD_CPLANE_API_H_
 #define INCLUDED_ONLOAD_CPLANE_API_H_
 #include <stdbool.h>

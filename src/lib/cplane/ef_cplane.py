@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: GPL-2.0 OR BSD-2-Clause
+# X-SPDX-Copyright-Text: Copyright (C) 2024, Advanced Micro Devices, Inc.
 import ctypes, os.path, socket, typing, os
 from sys import base_prefix
 
