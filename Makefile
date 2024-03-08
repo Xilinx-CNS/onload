@@ -105,16 +105,18 @@ ifeq ($(BUILD_EFCT_TEST),1)
 DRIVER_SUBDIRS += src/tests/resource/efct_test
 endif
 
+ifneq ($(KERNELRELEASE),)
+################## Stuff run within kbuild
+
 # Linux 4.6 added some object-file validation, which was also merged into
 # RHEL 7.3.  Unfortunately, it assumes that all functions that don't end with
 # a return or a jump are recorded in a hard-coded table inside objtool.  That
 # is not of much use to an out-of-tree driver, and we have far too many such
 # functions to rewrite them, so we turn off the checks.
-export OBJECT_FILES_NON_STANDARD := y
-
-ifneq ($(KERNELRELEASE),)
-################## Stuff run within kbuild
-
+# The kernel makefiles furtle with OBJECT_FILES_NON_STANDARD in such a way
+# that we need $$
+export NON_STANDARD_OBJ_DIR_sfc := n
+export OBJECT_FILES_NON_STANDARD = $$(or $$(NON_STANDARD_OBJ_DIR_$$(notdir $$(@D))),y)
 obj-m := $(addsuffix /,$(DRIVER_SUBDIRS))
 
 AUTOCOMPAT := $(obj)/src/driver/linux_resource/autocompat.h
