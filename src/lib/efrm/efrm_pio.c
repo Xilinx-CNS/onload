@@ -36,21 +36,8 @@
 #include <ci/efrm/vi_resource_manager.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/efab/hardware.h>
-#include <ci/efhw/ef10.h>
 #include "efrm_pio.h"
 #include "efrm_internal.h"
-
-#if ! CI_HAVE_SFC
-static int _dummy_ef10_nic_piobuf(struct efhw_nic *nic, ...)
-{
-	return -EOPNOTSUPP;
-}
-
-#define ef10_nic_piobuf_alloc _dummy_ef10_nic_piobuf
-#define ef10_nic_piobuf_free _dummy_ef10_nic_piobuf
-#define ef10_nic_piobuf_link _dummy_ef10_nic_piobuf
-#define ef10_nic_piobuf_unlink _dummy_ef10_nic_piobuf
-#endif /* ! CI_HAVE_SFC */
 
 #define efrm_pio(rs1)  container_of((rs1), struct efrm_pio, epio_rs)
 
@@ -76,34 +63,27 @@ int efrm_pio_realloc(struct efrm_pd *pd, struct efrm_pio *pio,
 		return -EINVAL;
 	}
 
-	if (nic->devtype.arch != EFHW_ARCH_EF10) {
-		EFRM_ERR("%s: Only ef10 supports PIO."
-			 "  Expected arch=%d but got %d\n", __FUNCTION__,
-			 EFHW_ARCH_EF10, nic->devtype.arch);
-		return -EINVAL;
-	}
-
 	EFRM_ASSERT(pio->epio_pd == pd);
 	EFRM_ASSERT(pio->epio_len == nic->pio_size);
 
 	pio->epio_handle = 0;
 
-	rc = ef10_nic_piobuf_alloc(nic, &pio->epio_handle);
+	rc = efhw_nic_piobuf_alloc(nic, &pio->epio_handle);
 	if (rc < 0) {
 		if( rc == -ENOSPC )
-			EFRM_TRACE("%s: ef10_nic_piobuf_alloc failed: %d\n",
+			EFRM_TRACE("%s: efhw_nic_piobuf_alloc failed: %d\n",
 				 __FUNCTION__, rc);
 		else
-			EFRM_ERR("%s: ef10_nic_piobuf_alloc failed: %d\n",
+			EFRM_ERR("%s: efhw_nic_piobuf_alloc failed: %d\n",
 				 __FUNCTION__, rc);
 		pio->epio_handle = -1;
 		return rc;
 	}
 	EFRM_ASSERT(pio->epio_handle != -1);
 
-	rc = ef10_nic_piobuf_link(nic, vi->rs.rs_instance, pio->epio_handle);
+	rc = efhw_nic_piobuf_link(nic, vi->rs.rs_instance, pio->epio_handle);
 	if (rc < 0) {
-		EFRM_ERR("%s: ef10_nic_piobuf_link failed: %d\n",
+		EFRM_ERR("%s: efhw_nic_piobuf_link failed: %d\n",
 			 __FUNCTION__, rc);
 		return rc;
 	}
@@ -132,13 +112,6 @@ int efrm_pio_alloc(struct efrm_pd *pd, struct efrm_pio **pio_out)
 		return -EPERM;
 	}
 
-	if (nic->devtype.arch != EFHW_ARCH_EF10) {
-		EFRM_TRACE("%s: Only EF10 NIC supports PIO."
-			   "  Expected arch=%d but got %d\n", __FUNCTION__,
-			   EFHW_ARCH_EF10, nic->devtype.arch);
-		return -EOPNOTSUPP;
-	}
-
 	if ((pio = kmalloc(sizeof(*pio), GFP_KERNEL)) == NULL)
 		return -ENOMEM;
 	memset(pio, 0, sizeof(*pio));
@@ -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm_pd *pd, struct efrm_pio **pio_out)
 	pio->epio_pd = pd;
 	pio->epio_len = nic->pio_size;
 
-	rc = ef10_nic_piobuf_alloc(nic, &pio->epio_handle);
+	rc = efhw_nic_piobuf_alloc(nic, &pio->epio_handle);
 	if (rc < 0) {
 		if( rc == -ENOSPC || rc == -ENETDOWN || rc == -EPERM )
-			EFRM_TRACE("%s: ef10_nic_piobuf_alloc failed: %d\n",
+			EFRM_TRACE("%s: efhw_nic_piobuf_alloc failed: %d\n",
 				 __FUNCTION__, rc);
 		else
-			EFRM_ERR("%s: ef10_nic_piobuf_alloc failed: %d\n",
+			EFRM_ERR("%s: efhw_nic_piobuf_alloc failed: %d\n",
 				 __FUNCTION__, rc);
 		goto fail;
 	}
@@ -186,10 +159,10 @@ int efrm_pio_link_vi(struct efrm_pio *pio, struct efrm_vi *vi)
 	}
 
 	EFRM_ASSERT(pio->epio_handle != -1);
-	rc = ef10_nic_piobuf_link(pio_nic, vi->rs.rs_instance,
+	rc = efhw_nic_piobuf_link(pio_nic, vi->rs.rs_instance,
 				  pio->epio_handle);
 	if (rc < 0) {
-		EFRM_ERR("%s: ef10_nic_piobuf_link failed: %d\n",
+		EFRM_ERR("%s: efhw_nic_piobuf_link failed: %d\n",
 			 __FUNCTION__, rc);
 		return rc;
 	}
@@ -211,7 +184,7 @@ int efrm_pio_unlink_vi(struct efrm_pio *pio, struct efrm_vi *vi,
 
 	/* Unlink can fail if the associated txq has already been
 	 * flushed. */
-	rc = ef10_nic_piobuf_unlink(nic, vi->rs.rs_instance);
+	rc = efhw_nic_piobuf_unlink(nic, vi->rs.rs_instance);
 	freed_resource = efrm_pio_release(pio, rc != -EALREADY);
 	if (freed_resource_out != NULL)
 		*freed_resource_out = freed_resource;
@@ -229,9 +202,9 @@ void efrm_pio_free_buffer(struct efrm_pio *pio)
 
 	nic = pio->epio_rs.rs_client->nic;
 
-	rc = ef10_nic_piobuf_free(nic, pio->epio_handle);
+	rc = efhw_nic_piobuf_free(nic, pio->epio_handle);
 		if (rc < 0)
-			EFRM_ERR("%s: ef10_nic_piobuf_free failed: %d\n",
+			EFRM_ERR("%s: efhw_nic_piobuf_free failed: %d\n",
 				 __FUNCTION__, rc);
 }
 

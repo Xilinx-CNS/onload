@@ -288,3 +288,17 @@
 	 (nic)->efhw_func->tx_alt_free((nic), (num_alt), (cp_id), \
                                        (alt_ids)) : \
 	 -EOPNOTSUPP)
+
+/*-------------- pio ------------ */
+#define efhw_nic_piobuf_alloc(nic, handle_out) \
+	((nic)->efhw_func->piobuf_alloc ? \
+	 (nic)->efhw_func->piobuf_alloc((nic), (handle_out)) : -EPERM)
+#define efhw_nic_piobuf_free(nic, handle) \
+	((nic)->efhw_func->piobuf_free ? \
+	 (nic)->efhw_func->piobuf_free((nic), (handle)) : -EINVAL)
+#define efhw_nic_piobuf_link(nic, txq, handle) \
+	((nic)->efhw_func->piobuf_link ? \
+	 (nic)->efhw_func->piobuf_link((nic), (txq), (handle)) : -EINVAL)
+#define efhw_nic_piobuf_unlink(nic, txq) \
+	((nic)->efhw_func->piobuf_unlink ? \
+	 (nic)->efhw_func->piobuf_unlink((nic), (txq)) : -EINVAL)

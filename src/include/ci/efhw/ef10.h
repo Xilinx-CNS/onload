@@ -46,11 +46,4 @@ struct efhw_buffer_table_block;
 
 extern struct efhw_func_ops ef10_char_functional_units;
 
-extern int ef10_nic_piobuf_alloc(struct efhw_nic*, unsigned *handle_out);
-extern int ef10_nic_piobuf_free(struct efhw_nic*, unsigned handle);
-extern int ef10_nic_piobuf_link(struct efhw_nic*, unsigned txq,
-                                unsigned handle);
-extern int ef10_nic_piobuf_unlink(struct efhw_nic*, unsigned txq);
-
-
 #endif /* __CI_EFHW_EF10_H__ */

@@ -2038,7 +2038,7 @@ ef10_ef100_nic_buffer_table_clear(struct efhw_nic *nic,
  *
  *--------------------------------------------------------------------*/
 
-int ef10_nic_piobuf_alloc(struct efhw_nic *nic, unsigned *handle_out)
+static int ef10_nic_piobuf_alloc(struct efhw_nic *nic, unsigned *handle_out)
 {
 	int rc;
 	size_t out_size;
@@ -2057,7 +2057,7 @@ int ef10_nic_piobuf_alloc(struct efhw_nic *nic, unsigned *handle_out)
 }
 
 
-int ef10_nic_piobuf_free(struct efhw_nic *nic, unsigned handle)
+static int ef10_nic_piobuf_free(struct efhw_nic *nic, unsigned handle)
 {
 	int rc;
 	size_t out_size;
@@ -2074,7 +2074,7 @@ int ef10_nic_piobuf_free(struct efhw_nic *nic, unsigned handle)
 }
 
 
-int ef10_nic_piobuf_link(struct efhw_nic *nic, unsigned txq, unsigned handle)
+static int ef10_nic_piobuf_link(struct efhw_nic *nic, unsigned txq, unsigned handle)
 {
 	int rc;
 	size_t out_size;
@@ -2092,7 +2092,7 @@ int ef10_nic_piobuf_link(struct efhw_nic *nic, unsigned txq, unsigned handle)
 }
 
 
-int ef10_nic_piobuf_unlink(struct efhw_nic *nic, unsigned txq)
+static int ef10_nic_piobuf_unlink(struct efhw_nic *nic, unsigned txq)
 {
 	int rc;
 	size_t out_size;
@@ -2608,4 +2608,8 @@ struct efhw_func_ops ef10_char_functional_units = {
 	.vi_io_region = ef10_vi_io_region,
 	.inject_reset_ev = ef10_inject_reset_ev,
 	.ctpio_addr = ef10_ctpio_addr,
+	.piobuf_alloc = ef10_nic_piobuf_alloc,
+	.piobuf_free = ef10_nic_piobuf_free,
+	.piobuf_link = ef10_nic_piobuf_link,
+	.piobuf_unlink = ef10_nic_piobuf_unlink,
 };

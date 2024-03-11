@@ -487,6 +487,18 @@ struct efhw_func_ops {
 	 * queues are attached-to by multiple clients and they're read-only to
 	 * all of them. */
 	size_t (*max_shared_rxqs)(struct efhw_nic* nic);
+
+  /*-------------- pio ------------------------ */
+
+	/*! Allocate a piobuf */
+	int (*piobuf_alloc)(struct efhw_nic* nic, unsigned *handle_out);
+	/*! Free a previously allocated piobuf */
+	int (*piobuf_free)(struct efhw_nic* nic, unsigned handle);
+	/*! Link a previously allocated piobuf to a specific txq */
+	int (*piobuf_link)(struct efhw_nic* nic, unsigned txq,
+			   unsigned handle);
+	/*! Unlink any previously linked piobuf from a specific txq */
+	int (*piobuf_unlink)(struct efhw_nic* nic, unsigned txq);
 };
 
 
