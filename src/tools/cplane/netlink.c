@@ -822,6 +822,7 @@ ipif_handle(struct cp_session* s, uint16_t nlmsg_type,
 
   ci_assert_nequal(net_ip, INADDR_ANY);
   MIB_UPDATE_LOOP(mib, s, mib_i)
+    bool is_new = false;
     id = ipif_find_row(ifindex, net_ip, net_ipset, mib);
 
     if( nlmsg_type == RTM_NEWADDR ) {
@@ -841,10 +842,12 @@ ipif_handle(struct cp_session* s, uint16_t nlmsg_type,
           }
           MIB_UPDATE_LOOP_UNCHANGED(mib, s, return);
         }
+        is_new = true;
         ipif = &mib->ipif[id];
         cp_mibs_under_change(s);
         ipif->ifindex = ifindex;
         ipif->net_ip = net_ip;
+        ipif->scope = ifmsg->ifa_scope;
         if( ! mib_i )
           cp_ipif_notify_oof(s, mib, AF_INET, id);
       }
@@ -855,7 +858,8 @@ ipif_handle(struct cp_session* s, uint16_t nlmsg_type,
 
       if( ipif->scope != ifmsg->ifa_scope ||
           ipif->bcast_ip != net_bcast ||
-          ipif->net_ipset != net_ipset ) {
+          ipif->net_ipset != net_ipset ||
+          is_new ) {
         cp_mibs_under_change(s);
         s->flags |= CP_SESSION_FLAG_FWD_REFRESH_NEEDED;
         ipif->scope = ifmsg->ifa_scope;
@@ -1008,6 +1012,7 @@ ip6if_handle(struct cp_session* s, uint16_t nlmsg_type,
 
   ci_assert(memcmp(net_ip, in6addr_any.s6_addr, sizeof(net_ip)));
   MIB_UPDATE_LOOP(mib, s, mib_i)
+    bool is_new = false;
     id = ip6if_find_row(ifindex, net_ip, net_ipset, mib);
 
     if( nlmsg_type == RTM_NEWADDR ) {
@@ -1026,10 +1031,12 @@ ip6if_handle(struct cp_session* s, uint16_t nlmsg_type,
           }
           MIB_UPDATE_LOOP_UNCHANGED(mib, s, return);
         }
+        is_new = true;
         ip6if = &mib->ip6if[id];
         cp_mibs_under_change(s);
         ip6if->ifindex = ifindex;
         memcpy(ip6if->net_ip6, net_ip, sizeof(net_ip));
+        ip6if->scope = ifmsg->ifa_scope;
         if( ! mib_i )
           cp_ipif_notify_oof(s, mib, AF_INET6, id);
       }
@@ -1039,7 +1046,8 @@ ip6if_handle(struct cp_session* s, uint16_t nlmsg_type,
       src_rule.prefix = 128;
 
       if( ip6if->scope != ifmsg->ifa_scope ||
-          ip6if->net_ipset != net_ipset ) {
+          ip6if->net_ipset != net_ipset ||
+          is_new ) {
         cp_mibs_under_change(s);
         s->flags |= CP_SESSION_FLAG_FWD_REFRESH_NEEDED;
         ip6if->scope = ifmsg->ifa_scope;

@@ -340,7 +340,7 @@ oo_cp_hwport_vlan_to_ifindex(struct oo_cplane_handle* cp,
 
 typedef int/*bool*/ (*oo_cp_ifindex_check)(
         struct oo_cplane_handle* cp,
-        ci_ifid_t ifindex, void* data);
+        ci_ifid_t ifindex, uint8_t scope, void* data);
 
 /* Find the network interface by an IP address.  Returns 1 if found,
  * 0 otherwise.  The "check" parameter is the local function which checks if
@@ -367,7 +367,7 @@ oo_cp_find_ipif_by_ip(struct oo_cplane_handle* cp, ci_ip_addr_t ip,
       break;
 
     if( mib->ipif[id].net_ip == ip ) {
-      if( check(cp, mib->ipif[id].ifindex, data) ) {
+      if( check(cp, mib->ipif[id].ifindex, mib->ipif[id].scope, data) ) {
         rc = 1;
         break;
       }
@@ -393,7 +393,7 @@ oo_cp_find_ipif_by_ip6(struct oo_cplane_handle* cp, ci_ip6_addr_t ip,
       break;
 
     if( CI_IP6_ADDR_CMP(mib->ip6if[id].net_ip6, ip) == 0 ) {
-      if( check(cp, mib->ip6if[id].ifindex, data) ) {
+      if( check(cp, mib->ip6if[id].ifindex, mib->ip6if[id].scope, data) ) {
         rc = 1;
         break;
       }
@@ -411,10 +411,11 @@ typedef int/*bool*/ (*oo_cp_llap_check)(
 /* Same as oo_cp_find_ipif_by_ip(), but also looks up a llap row. */
 static inline int
 oo_cp_find_llap_by_ip(struct oo_cplane_handle* cp, ci_ip_addr_t ip,
-                      oo_cp_llap_check check, void* data)
+                      oo_cp_ifindex_check ifindex_check, void *ifindex_data,
+                      oo_cp_llap_check llap_check, void* llap_data)
 {
   struct cp_mibs* mib;
-  cicp_rowid_t id;
+  cicp_rowid_t id, llap_id;
   cp_version_t version;
   int rc = 0;
 
@@ -424,14 +425,20 @@ oo_cp_find_llap_by_ip(struct oo_cplane_handle* cp, ci_ip_addr_t ip,
     if( cicp_ipif_row_is_free(&mib->ipif[id]) )
       break;
 
-    if( mib->ipif[id].net_ip == ip ) {
-      cicp_rowid_t llap_id = cp_llap_find_row(mib, mib->ipif[id].ifindex);
-      if( llap_id == CICP_ROWID_BAD )
-        continue;
-      if( check(cp, &mib->llap[llap_id], data) ) {
-        rc = 1;
-        break;
-      }
+    if( mib->ipif[id].net_ip != ip )
+      continue;
+
+    if( !ifindex_check(cp, mib->ipif[id].ifindex, mib->ipif[id].scope,
+                       ifindex_data) )
+      continue;
+
+    llap_id = cp_llap_find_row(mib, mib->ipif[id].ifindex);
+    if( llap_id == CICP_ROWID_BAD )
+      continue;
+
+    if( llap_check(cp, &mib->llap[llap_id], llap_data) ) {
+      rc = 1;
+      break;
     }
   }
 
@@ -441,10 +448,11 @@ oo_cp_find_llap_by_ip(struct oo_cplane_handle* cp, ci_ip_addr_t ip,
 
 static inline int
 oo_cp_find_llap_by_ip6(struct oo_cplane_handle* cp, ci_ip6_addr_t ip6,
-                       oo_cp_llap_check check, void* data)
+                       oo_cp_ifindex_check ifindex_check, void *ifindex_data,
+                       oo_cp_llap_check llap_check, void* llap_data)
 {
   struct cp_mibs* mib;
-  cicp_rowid_t id;
+  cicp_rowid_t id, llap_id;
   cp_version_t version;
   int rc = 0;
 
@@ -454,14 +462,20 @@ oo_cp_find_llap_by_ip6(struct oo_cplane_handle* cp, ci_ip6_addr_t ip6,
     if( cicp_ip6if_row_is_free(&mib->ip6if[id]) )
       break;
 
-    if( !CI_IP6_ADDR_CMP(mib->ip6if[id].net_ip6, ip6) ) {
-      cicp_rowid_t llap_id = cp_llap_find_row(mib, mib->ip6if[id].ifindex);
-      if( llap_id == CICP_ROWID_BAD )
-        continue;
-      if( check(cp, &mib->llap[llap_id], data) ) {
-        rc = 1;
-        break;
-      }
+    if( CI_IP6_ADDR_CMP(mib->ip6if[id].net_ip6, ip6) )
+      continue;
+
+    if( !ifindex_check(cp, mib->ipif[id].ifindex, mib->ipif[id].scope,
+                       ifindex_data) )
+      continue;
+
+    llap_id = cp_llap_find_row(mib, mib->ip6if[id].ifindex);
+    if( llap_id == CICP_ROWID_BAD )
+      continue;
+
+    if( llap_check(cp, &mib->llap[llap_id], llap_data) ) {
+      rc = 1;
+      break;
     }
   }
 

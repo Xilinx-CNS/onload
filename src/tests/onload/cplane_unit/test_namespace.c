@@ -111,8 +111,9 @@ void test_veth_interface(void)
    * use it so we don't create it here. */
   /* Bug70993: the control plane assumes that ifindices are unique across namespaces. */
   const char veth_mac[] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
-  cp_unit_nl_handle_veth_link_msg(&s_local, RTM_NEWLINK, next_ifindex++,
-                                  "veth0", veth_mac);
+  cp_unit_nl_handle_veth_link_msg(&s_local, RTM_NEWLINK, next_ifindex,
+                                  next_ifindex, "veth0", veth_mac);
+  next_ifindex++;
 
   cicp_llap_row_t* veth_llap_row = &s_local.mib[0].llap[0];
   cicp_llap_type_t type = veth_llap_row->encap.type;

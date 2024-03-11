@@ -424,8 +424,9 @@ static int ci_tcp_connect_check_dest(citp_socket* ep, ci_addr_t dst,
 
 static int/*bool*/
 cicp_check_ipif_ifindex(struct oo_cplane_handle* cp,
-                        ci_ifid_t ifindex, void* data)
+                        ci_ifid_t ifindex, uint8_t scope, void* data)
 {
+  (void) scope;
   return ifindex == *(ci_ifid_t*)data;
 }
 

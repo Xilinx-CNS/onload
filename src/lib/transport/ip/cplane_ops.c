@@ -466,9 +466,18 @@ cicp_ip_cache_update_from(ci_netif* ni, ci_ip_cached_hdrs* ipcache,
 
 int
 cicp_ipif_check_ok(struct oo_cplane_handle* cp,
-                   ci_ifid_t ifindex, void* data)
+                   ci_ifid_t ifindex, uint8_t scope, void* data)
 {
   return 1;
+}
+
+int
+cicp_ipif_check_scope(struct oo_cplane_handle* cp,
+                      ci_ifid_t ifindex, uint8_t scope, void* data)
+{
+  struct cicp_ipif_check_scope_data* check_scope = data;
+  ci_assert_equal(check_scope->op, CICP_IPIF_CHECK_SCOPE_LT);
+  return scope < check_scope->scope;
 }
 
 int

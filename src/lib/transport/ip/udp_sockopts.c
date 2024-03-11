@@ -37,8 +37,9 @@ static void ci_mcast_opts_updated(ci_netif* ni, ci_udp_state* us)
 
 static int/*bool*/
 ip_to_ifindex_check(struct oo_cplane_handle* cp,
-                    ci_ifid_t ifindex, void* data)
+                    ci_ifid_t ifindex, uint8_t scope, void* data)
 {
+  (void) scope;
   *(ci_ifid_t*)data = ifindex;
   /* as in Linux, we accept any interface */
   return 1;
@@ -112,7 +113,8 @@ static int ci_mcast_join_leave(ci_netif* ni, ci_udp_state* us,
     struct llap_param_data data;
     data.hwports = &hwports;
     data.ifindex = &ifindex;
-    rc = ! oo_cp_find_llap_by_ip(ni->cplane, laddr, llap_param_from_ip, &data);
+    rc = ! oo_cp_find_llap_by_ip(ni->cplane, laddr, cicp_ipif_check_ok, NULL,
+                                 llap_param_from_ip, &data);
   }
   else {
     /* The application did not specify the interface on which to join the

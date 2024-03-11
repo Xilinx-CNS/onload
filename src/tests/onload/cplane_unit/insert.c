@@ -11,7 +11,7 @@ cp_unit_insert_route(struct cp_session* s, in_addr_t dest, int dest_prefix,
   CP_TEST(dest != 0);
   CP_TEST(pref_src != 0);
   cp_unit_nl_handle_route_msg(s, dest, dest_prefix, 0, 0, pref_src, 0, ifindex,
-			      0, 0);
+			      0, 0, 0);
 }
 
 
@@ -20,7 +20,8 @@ cp_unit_insert_gateway(struct cp_session* s, in_addr_t gateway, in_addr_t dest,
                        int prefix, int ifindex)
 {
   CP_TEST(gateway != 0);
-  cp_unit_nl_handle_route_msg(s, dest, prefix, 0, 0, 0, gateway, ifindex, 0, 0);
+  cp_unit_nl_handle_route_msg(s, dest, prefix, 0, 0, 0, gateway, ifindex, 0, 0,
+                              0);
 }
 
 
@@ -30,7 +31,19 @@ cp_unit_insert_resolution(struct cp_session* s, in_addr_t dest, in_addr_t src,
 {
   CP_TEST((src == 0) != (pref_src == 0));
   cp_unit_nl_handle_route_msg(s, dest, 32, src, src ? 32 : 0, pref_src,
-			      next_hop, ifindex, CP_UNIT_NL_PID,
+			      next_hop, ifindex, 0, CP_UNIT_NL_PID,
+			      CP_FWD_FLAG_REQ);
+}
+
+
+void
+cp_unit_insert_resolution_xns(struct cp_session* s, in_addr_t dest,
+                              in_addr_t src, in_addr_t pref_src,
+                              in_addr_t next_hop, int ifindex, int iif_ifindex)
+{
+  CP_TEST((src == 0) != (pref_src == 0));
+  cp_unit_nl_handle_route_msg(s, dest, 32, src, src ? 32 : 0, pref_src,
+			      next_hop, ifindex, iif_ifindex, CP_UNIT_NL_PID,
 			      CP_FWD_FLAG_REQ);
 }
 

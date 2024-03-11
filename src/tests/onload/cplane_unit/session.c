@@ -25,7 +25,7 @@ void cp_unit_init_session(struct cp_session* s)
   /* XXX: These are duplicated from tools/cplane/server.c.  I don't think it's
    * worth defining constants for these right now. */
   struct cp_tables_dim dim = {
-    .hwport_max = 8,
+    .hwport_max = 30, /* CI_CFG_MAX_HWPORTS */
     .llap_max = 32,
     .ipif_max = 64,
     .fwd_ln2 = 8,
@@ -45,9 +45,10 @@ void cp_unit_init_session(struct cp_session* s)
 
   s->sock_net_name.nl_pid = CP_UNIT_NL_PID;
 
-  /* Initial sizes for route_dst and rule_src are enlarged at need. */
+  /* Initial sizes for route_dst, rule_src and laddr are enlarged at need. */
   cp_ippl_init(&s->route_dst, sizeof(struct cp_ip_with_prefix), NULL, 4);
   cp_ippl_init(&s->rule_src, sizeof(struct cp_ip_with_prefix), NULL, 1);
+  cp_ippl_init(&s->laddr, sizeof(struct cp_ip_with_prefix), NULL, 1);
 
   /* Rather than go to the effort of finding the CPU's frequency, use a value
    * of 1 KHz.  Times will therefore not be reported in milliseconds as

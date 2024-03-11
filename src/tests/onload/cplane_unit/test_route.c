@@ -36,7 +36,11 @@ enum {
   LOOP_IFINDEX = 1,
   ETHO0_IFINDEX,
   ETHO1_IFINDEX, /* It is a multiarch nic, i.e. with two hwports. */
+
+  /* An interconnected pair of veth the interfaces for the cross-namespace
+   * tests. */
   VETH_IFINDEX,
+  VETH_XNS_IFINDEX,
 
   /* The following interfaces are configured in a separate namespace, but
    * bug70993 means that we need global uniqueness of ifindices, so we keep
@@ -74,11 +78,15 @@ static void init_session(struct cp_session* s_local, struct cp_session* s_main)
                                XNSO0_HWPORTS, "xnsO0", xns_mac1);
     cp_unit_nl_handle_link_msg(s_main, RTM_NEWLINK, XNSO1_IFINDEX,
                                XNSO1_HWPORTS, "xnsO1", xns_mac2);
+
+    const char veth_main_mac[] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x01};
+    cp_unit_nl_handle_veth_link_msg(s_main, RTM_NEWLINK, VETH_XNS_IFINDEX,
+                                    VETH_IFINDEX, "veth0_xns", veth_main_mac);
   }
 
   const char veth_mac[] = {0x02, 0x00, 0x00, 0x00, 0x00, 0x00};
-  cp_unit_nl_handle_veth_link_msg(s_local, RTM_NEWLINK, VETH_IFINDEX, "veth0",
-                                  veth_mac);
+  cp_unit_nl_handle_veth_link_msg(s_local, RTM_NEWLINK, VETH_IFINDEX,
+                                  VETH_XNS_IFINDEX, "veth0", veth_mac);
 }
 
 
@@ -430,8 +438,11 @@ void test_user_retrieve(void)
 /* The routes in the local namespace include one route over a veth
  * interface.  This function inserts the routes that we are pretending are
  * configured in the main namespace. */
-static void insert_cross_namespace_routes(struct cp_session* s_main)
+static void insert_cross_namespace_routes(struct cp_session* s_local,
+                                          struct cp_session* s_main)
 {
+  cp_unit_insert_route(s_local, A("10.0.0.0"), 24, A("10.0.0.3"), VETH_IFINDEX);
+
   cp_unit_insert_route(s_main, A("10.0.1.0"), 24, A("10.0.1.2"), XNSO0_IFINDEX);
   cp_unit_insert_gateway(s_main, A("10.0.0.1"), 0, 0, XNSO1_IFINDEX);
 }
@@ -448,21 +459,27 @@ insert_cross_namespace_resolutions(struct cp_session* s_local,
                             A("3.0.0.0"), VETH_IFINDEX);
   cp_unit_insert_resolution(s_local, A("10.0.0.2"), A("10.0.0.3"), 0,
                             A("3.0.0.0"), VETH_IFINDEX);
-  cp_unit_insert_resolution(s_local, A("10.0.1.1"),  0, A("10.0.1.3"),
+  cp_unit_insert_resolution(s_local, A("10.0.1.1"),  0, A("10.0.1.2"),
                             A("3.0.0.0"), VETH_IFINDEX);
-  cp_unit_insert_resolution(s_local, A("10.0.1.1"), A("10.0.1.3"), 0,
+  cp_unit_insert_resolution(s_local, A("10.0.1.1"), A("10.0.1.2"), 0,
                             A("3.0.0.0"), VETH_IFINDEX);
 
+  /* Tell the main control plane about the cross-namespace veth interface.
+   * This must be done before inserting the "xns" resolutions with the RTA_IIF
+   * attribute.  Otherwise, the control plane refuses to update the fwd
+   * table. */
+  cp_veth_fwd_table_id_do(s_main, VETH_XNS_IFINDEX, 0);
+
   /* Link-scoped. */
-  cp_unit_insert_resolution(s_main, A("10.0.1.1"), 0, A("10.0.1.2"), 0,
-                            XNSO0_IFINDEX);
-  cp_unit_insert_resolution(s_main, A("10.0.1.1"), A("10.0.1.2"), 0, 0,
-                            XNSO0_IFINDEX);
+  cp_unit_insert_resolution_xns(s_main, A("10.0.1.1"), 0, A("10.0.1.2"), 0,
+                                XNSO0_IFINDEX, VETH_XNS_IFINDEX);
+  cp_unit_insert_resolution_xns(s_main, A("10.0.1.1"), A("10.0.1.2"), 0, 0,
+                                XNSO0_IFINDEX, VETH_XNS_IFINDEX);
   /* Via gateway. */
-  cp_unit_insert_resolution(s_main, A("10.0.0.2"), 0, A("10.0.0.3"),
-                            A("10.0.0.1"), XNSO1_IFINDEX);
-  cp_unit_insert_resolution(s_main, A("10.0.0.2"), A("10.0.0.3"), 0,
-                            A("10.0.0.1"), XNSO1_IFINDEX);
+  cp_unit_insert_resolution_xns(s_main, A("10.0.0.2"), 0, A("10.0.0.3"),
+                                A("10.0.0.1"), XNSO1_IFINDEX, VETH_XNS_IFINDEX);
+  cp_unit_insert_resolution_xns(s_main, A("10.0.0.2"), A("10.0.0.3"), 0,
+                                A("10.0.0.1"), XNSO1_IFINDEX, VETH_XNS_IFINDEX);
 }
 
 
@@ -482,7 +499,7 @@ static void test_cross_namespace_routing(void)
   init_session(&s_local, &s_main);
   insert_test_routes(&s_local);
   insert_test_resolutions(&s_local);
-  insert_cross_namespace_routes(&s_main);
+  insert_cross_namespace_routes(&s_local, &s_main);
   insert_cross_namespace_resolutions(&s_local, &s_main);
 
   ci_ip_cached_hdrs ipcache;
@@ -515,6 +532,38 @@ static void test_cross_namespace_routing(void)
          "cross-ns gateway lookup mapped to correct hwport");
   ok(CI_IPX_ADDR_EQ(ipcache.nexthop, CI_ADDR_FROM_IP4(A("10.0.1.1"))),
      "ipcache next_hop correct for entry");
+
+  cp_unit_netif_mock_destroy(&ni);
+}
+
+static void test_scope(void)
+{
+  struct cp_session s;
+  init_session(&s, NULL);
+
+  ci_netif ni;
+  cp_unit_netif_mock(&ni, &s, NULL);
+
+  const char mac1[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x00};
+  const char mac2[] = {0x00, 0x0f, 0x53, 0x00, 0x00, 0x01};
+
+  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, ETHO0_IFINDEX, ETHO0_HWPORTS,
+                             "ethO0", mac1);
+  cp_unit_nl_handle_link_msg(&s, RTM_NEWLINK, ETHO1_IFINDEX, ETHO1_HWPORTS,
+                             "ethO1", mac2);
+
+  cp_unit_nl_handle_addr_msg(&s, A("198.18.0.0"), ETHO0_IFINDEX, 16,
+                             RT_SCOPE_HOST);
+
+  cp_unit_nl_handle_addr_msg(&s, A("198.19.0.0"), ETHO1_IFINDEX, 16,
+                             RT_SCOPE_UNIVERSE);
+
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("198.18.0.0")), "==", 0,
+         "localhost is not acceleratable");
+  cmp_ok(cicp_user_addr_is_local_efab(&ni, ASH("198.19.0.0")), "==", 1,
+         "any scope larger than localhost is acceleratable");
+
+  cp_unit_netif_mock_destroy(&ni);
 }
 #endif
 
@@ -529,6 +578,7 @@ int main(void)
 #ifdef CAN_TEST_ONLOAD_CPLANE_CALLS
   test_user_retrieve();
   test_cross_namespace_routing();
+  test_scope();
 #endif
 
   done_testing();

@@ -4,6 +4,7 @@
 #ifndef __ONLOAD_CPLANE_OPS_H__
 #define __ONLOAD_CPLANE_OPS_H__
 
+#include <linux/rtnetlink.h>
 #include <ci/internal/ip.h>
 
 #ifndef __KERNEL__
@@ -97,6 +98,20 @@ cicp_ipcache_vlan_set(ci_ip_cached_hdrs*  ipcache)
   }
 }
 
+enum cicp_ipif_check_scope_op {
+  /* The "less than" check means a "broader" scope. */
+  CICP_IPIF_CHECK_SCOPE_LT,
+};
+
+struct cicp_ipif_check_scope_data {
+  enum cicp_ipif_check_scope_op op;
+  uint8_t scope;
+};
+
+extern int
+cicp_ipif_check_scope(struct oo_cplane_handle* cp,
+                      ci_ifid_t ifindex, uint8_t scope, void* data);
+
 extern int
 cicp_llap_check_onloaded(struct oo_cplane_handle* cp,
                          cicp_llap_row_t* llap, void* data);
@@ -107,14 +122,20 @@ cicp_llap_check_onloaded(struct oo_cplane_handle* cp,
 ci_inline int
 cicp_user_addr_is_local_efab(ci_netif* ni, ci_addr_t ip)
 { 
+  struct cicp_ipif_check_scope_data check_scope;
+  check_scope.op = CICP_IPIF_CHECK_SCOPE_LT;
+  check_scope.scope = RT_SCOPE_HOST;
+
 #if CI_CFG_IPV6
   if( CI_IS_ADDR_IP6(ip) ) {
     return oo_cp_find_llap_by_ip6(ni->cplane, ip.ip6,
+                                  cicp_ipif_check_scope, &check_scope,
                                   cicp_llap_check_onloaded, ni);
   }
   else
 #endif
   return oo_cp_find_llap_by_ip(ni->cplane, ip.ip4,
+                               cicp_ipif_check_scope, &check_scope,
                                cicp_llap_check_onloaded, ni);
 }
 
@@ -133,7 +154,7 @@ cicp_find_ifindex_by_ip(struct oo_cplane_handle* cp, ci_addr_t ip,
 
 extern int
 cicp_ipif_check_ok(struct oo_cplane_handle* cp,
-                   ci_ifid_t ifindex, void* data);
+                   ci_ifid_t ifindex, uint8_t scope, void* data);
 ci_inline int /* bool */
 cicp_user_is_local_addr(struct oo_cplane_handle *cplane, ci_addr_t ip)
 {
