@@ -1563,7 +1563,8 @@ def test_efcp_resolve_vlan():
 @efcpdecorate()
 def do_test_efcp_resolve_bond_ab(cpserver,cp,netns,efcp):
     import ef_cplane
-    prep_bond(cpserver, cp, netns, (0,1), ifname='bond0',
+    nics = [create_nic(i) for i in range(2)]
+    prep_bond(cpserver, cp, netns, nics, ifname='bond0',
               address=fake_ip_str(False, 1, 2), mask=24)
     b0ix = netns.link_lookup(ifname='bond0')[0]
     o0ix = netns.link_lookup(ifname='O0')[0]
@@ -1593,7 +1594,8 @@ def test_efcp_resolve_bond_ab():
 @efcpdecorate()
 def do_test_efcp_resolve_bond_hash(cpserver,cp,netns,efcp):
     import ef_cplane
-    prep_bond(cpserver, cp, netns, (0,1), ifname='bond0',
+    nics = [create_nic(i) for i in range(2)]
+    prep_bond(cpserver, cp, netns, nics, ifname='bond0',
               address=fake_ip_str(False, 1, 2), mask=24, mode=4)
     o0ix = netns.link_lookup(ifname='O0')[0]
     o1ix = netns.link_lookup(ifname='O1')[0]
