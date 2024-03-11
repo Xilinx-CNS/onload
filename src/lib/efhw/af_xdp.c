@@ -1237,7 +1237,7 @@ af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 
   vi->owner_id = params->owner;
   vi->txq_capacity = params->dmaq_size;
-  params->tx.qid_out = params->dmaq;
+  params->qid_out = params->dmaq;
 
   return 0;
 }
@@ -1254,6 +1254,7 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
   vi->owner_id = params->owner;
   vi->rxq_capacity = params->dmaq_size;
   vi->flags |= (params->flags & EFHW_VI_RX_ZEROCOPY) ? XDP_ZEROCOPY : XDP_COPY;
+  params->qid_out = params->dmaq;
 
   return 0;
 }

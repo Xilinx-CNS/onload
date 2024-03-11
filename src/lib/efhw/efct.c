@@ -490,7 +490,7 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
   EFCT_POST(dev, edev, cli, nic, rc);
 
   if( rc >= 0 ) {
-    txq_params->tx.qid_out = rc;
+    txq_params->qid_out = rc;
     rc = 0;
   }
 
@@ -503,6 +503,7 @@ efct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
                     struct efhw_dmaq_params *params)
 {
   /* efct doesn't do rxqs like this, so nothing to do here */
+  params->qid_out = params->dmaq;
   return 0;
 }
 

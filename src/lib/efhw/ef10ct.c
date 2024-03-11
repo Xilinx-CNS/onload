@@ -320,7 +320,7 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
   rc = ef10ct_fw_rpc(nic, &dummy);
 
   if( rc >= 0 ) {
-    txq_params->tx.qid_out = rc;
+    txq_params->qid_out = rc;
     rc = 0;
   }
 

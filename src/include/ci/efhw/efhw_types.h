@@ -141,14 +141,10 @@ struct efhw_dmaq_params {
 	uint vport_id;
 	uint stack_id;
 	uint flags;
-	union {
-		struct {
-			uint ps_buf_size;
-		} rx;
-		struct {
-			uint qid_out;
-		} tx;
-	};
+	uint qid_out;
+	struct {
+		uint ps_buf_size;
+	} rx;
 };
 
 struct efhw_vi_constraints {

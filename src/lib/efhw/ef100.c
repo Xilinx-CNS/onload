@@ -295,7 +295,7 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 		rc = -ENOKEY;
 
 	if (rc == 0)
-		params->tx.qid_out = params->dmaq;
+		params->qid_out = params->dmaq;
 
 	return rc;
 }
@@ -326,6 +326,9 @@ ef100_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
 		 flag_rx_prefix, flag_packed_stream, params->dmaq, params->tag,
 		 params->evq, params->dmaq_size, params->rx.ps_buf_size,
 		 flag_force_rx_merge, EF100_RX_USR_BUF_SIZE);
+
+	if (rc == 0)
+		params->qid_out = params->dmaq;
 
 	return nic->rx_prefix_len;
 }

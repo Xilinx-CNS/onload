@@ -871,10 +871,9 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 	case EFHW_TXQ:
 		rc = efhw_nic_dmaq_tx_q_init(nic,
 			efrm_pd_get_nic_client_id(virs->pd), &q_params);
-		qid = q_params.tx.qid_out;
+		qid = q_params.qid_out;
 		break;
 	case EFHW_RXQ:
-		qid = instance;
 		q_params.rx.ps_buf_size = virs->ps_buf_size;
 		rc = efhw_nic_dmaq_rx_q_init(nic,
 			efrm_pd_get_nic_client_id(virs->pd), &q_params);
@@ -882,6 +881,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 			virs->rx_prefix_len = rc;
 			rc = 0;
 		}
+		qid = q_params.qid_out;
 		break;
 	case EFHW_EVQ:
 		qid = instance;
