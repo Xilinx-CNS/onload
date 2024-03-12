@@ -301,8 +301,6 @@ static int xdp_sys_bpf(int cmd, unsigned long user_addr)
 {
   int rc = SYSCALL_DISPATCHn(3, bpf, (int, unsigned long, size_t),
                              cmd, user_addr, sizeof(union bpf_attr));
-  if( rc < 0 )
-    EFHW_ERR("%s: sys_bpf(%d) failed: %d", __func__, cmd, rc);
   return rc;
 }
 
@@ -447,8 +445,11 @@ static int xdp_map_update(struct efhw_nic_af_xdp* af_xdp, int key,
     goto fail_sock;
 
   rc = xdp_map_update_fd(map_fd, key, sock_fd);
-  if( rc < 0 )
+  if( rc < 0 ) {
+    EFHW_ERR("%s: xdp_map_update_fd(%d, %d) returned %d",
+             __func__, key, sock_fd, rc);
     goto fail_update_map;
+  }
 
 
   /* We do not need to roll back xdp_map_update_fd(map_fd) in case of
@@ -1048,12 +1049,18 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 	}
 
 	rc = map_fd = xdp_map_create(sys_call_area, nic->vi_lim);
-	if( rc < 0 )
+	if( rc < 0 ) {
+		EFHW_ERR("%s: xdp_map_create(%d) returned %d",
+				__func__, nic->vi_lim, rc);
 		goto fail_map;
+	}
 
 	rc = xdp_prog_load(sys_call_area, map_fd);
-	if( rc < 0 )
+	if( rc < 0 ) {
+		EFHW_ERR("%s: xdp_prog_load(%d) returned %d",
+				__func__, map_fd, rc);
 		goto fail;
+	}
 
 	rc = xdp_set_link(nic->net_dev, rc);
 	if( rc < 0 )
