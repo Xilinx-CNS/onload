@@ -15,6 +15,9 @@
  * readers can detect newly posted buffers with no further shared state.
  */
 
+#ifndef __CI_CIUL_SHRUB_SHARED_H__
+#define __CI_CIUL_SHRUB_SHARED_H__
+
 #include <stdint.h>
 
 /* Identifier for a buffer, an index into the shared buffer memory */
@@ -60,3 +63,6 @@ struct ef_shrub_shared_metrics {
   uint64_t client_fifo_offset;
   uint64_t client_fifo_size;
 };
+
+#endif
+
