@@ -471,6 +471,14 @@ struct efhw_func_ops {
 
   /*-------------- superbufs ------------------------ */
 
+	/*! Provides the size and address (if present) of the io area for the
+	 * RX_BUFFER_POST register of an rxq (ef10ct only).
+	 * addr_out and size_out are only valid when the return value is 0.
+	 * Returns 0 on success.
+	 * Returns negative error on other failure. */
+	int (*superbuf_io_region)(struct efhw_nic* nic, int instance,
+                                  size_t* size_out, resource_size_t* addr_out);
+
 	/*! Posts a superbuf to the nic.
 	 * Returns 0 on success, a negative error otherwise. */
 	int (*post_superbuf)(struct efhw_nic* nic, int instance,

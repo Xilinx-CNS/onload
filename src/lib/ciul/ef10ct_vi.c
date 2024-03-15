@@ -11,6 +11,8 @@
 
 #include "driver_access.h"
 
+#include <ci/driver/efab/hardware/ef10ct.h>
+
 /* Needed for `offsetof` in expansion of macro EFAB_NIC_DP_GET */
 #include <stddef.h>
 #endif
@@ -188,8 +190,8 @@ int ef10ct_design_parameters(struct ef_vi *vi,
 }
 
 #ifndef __KERNEL__
-int ef10ct_vi_post_superbuf(struct ef_vi *vi, void *addr,
-                            int sentinel, int rollover)
+int ef10ct_vi_post_superbuf_ioctl(struct ef_vi *vi, ef_addr addr,
+                                  int sentinel, int rollover)
 {
     ci_resource_op_t op = {};
 
@@ -200,6 +202,44 @@ int ef10ct_vi_post_superbuf(struct ef_vi *vi, void *addr,
     op.u.buffer_post.rollover = rollover;
 
     return ci_resource_op(vi->dh, &op);
+}
+
+int ef10ct_vi_post_superbuf_direct(struct ef_vi *vi, ef_addr addr,
+                                   int sentinel, int rollover)
+{
+    ci_qword_t qword;
+    volatile uint64_t *reg = vi->vi_rx_post_buffer_mmap_ptr;
+
+    EF_VI_ASSERT( reg != NULL );
+
+    CI_POPULATE_QWORD_3(qword,
+                        EFCT_TEST_PAGE_ADDRESS, addr >> 12,
+                        EFCT_TEST_SENTINEL_VALUE, sentinel,
+                        EFCT_TEST_ROLLOVER, rollover);
+
+    /* Due to limitations with the efct_test driver it is possible to write
+     * multiple values to RX_BUFFER_POST register before the first one is read.
+     * As a crude workaround for the issue the test driver resets the register 0
+     * once it has processed the buffer. We poll the value of the register here
+     * in case the test driver hasn't finished yet. */
+    /* TODO EFCT_TEST: remove this when no longer using the testdriver */
+    while( *reg != 0 );
+
+    *reg = qword.u64[0];
+
+    return 0;
+}
+
+int ef10ct_vi_post_superbuf(struct ef_vi *vi, ef_addr addr,
+                            int sentinel, int rollover)
+{
+    int rc;
+    if( vi->vi_flags & EF_VI_RX_PHYS_ADDR )
+        rc = ef10ct_vi_post_superbuf_direct(vi, addr, sentinel, rollover);
+    else /* Post via ioctl */
+        rc = ef10ct_vi_post_superbuf_ioctl(vi, addr, sentinel, rollover);
+
+    return rc;
 }
 #endif
 

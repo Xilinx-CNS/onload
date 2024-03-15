@@ -739,6 +739,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .get_pci_dev = ef10ct_get_pci_dev,
   .vi_io_region = ef10ct_vi_io_region,
   .ctpio_addr = ef10ct_ctpio_addr,
+  .superbuf_io_region = ef10ct_superbuf_io_region,
   .post_superbuf =  ef10ct_rxq_post_superbuf,
   .design_parameters = ef10ct_design_parameters,
   .max_shared_rxqs = ef10ct_max_shared_rxqs,

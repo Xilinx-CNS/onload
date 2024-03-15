@@ -236,7 +236,7 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   int in_flags;
   struct efrm_pd* rmpd = NULL;
   resource_size_t io_addr;
-  size_t io_size;
+  size_t io_size, buf_io_size = 0;
 
   ci_assert(alloc != NULL);
   ci_assert(rt != NULL);
@@ -334,6 +334,11 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   if( rc < 0 )
     goto fail4;
 
+  rc = efhw_nic_superbuf_io_region(nic, efrm_vi_qid(virs, EFHW_RXQ),
+                                   &buf_io_size, &io_addr);
+  if( rc < 0 && rc != -EOPNOTSUPP )
+    goto fail4;
+
   /* Initialise the outputs. */
   alloc_out = &alloc->u.vi_out;
   CI_DEBUG(alloc = NULL);
@@ -349,6 +354,7 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   alloc_out->nic_flags = efhw_vi_nic_flags(nic);
   alloc_out->io_mmap_bytes = io_size;
   alloc_out->mem_mmap_bytes = efhw_page_map_bytes(&virs->mem_mmap);
+  alloc_out->rx_post_buffer_mmap_bytes = buf_io_size;
   alloc_out->rx_prefix_len = virs->rx_prefix_len;
   alloc_out->out_flags = virs->out_flags;
   alloc_out->out_flags |= EFHW_VI_PS_BUF_SIZE_SET;

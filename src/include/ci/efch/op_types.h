@@ -77,6 +77,7 @@ struct efch_vi_alloc_out {
   uint8_t             nic_flags;
   uint32_t            mem_mmap_bytes;
   uint32_t            io_mmap_bytes;
+  uint32_t            rx_post_buffer_mmap_bytes;
   int32_t             instance;
   uint32_t            rx_prefix_len;
   uint32_t            out_flags; /* EFAB_VI_* flags */

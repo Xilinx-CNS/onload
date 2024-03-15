@@ -1028,6 +1028,12 @@ typedef struct ef_vi {
   char*                         vi_ctpio_mmap_ptr;
   /** Controls rate of writes into CTPIO aperture */
   uint32_t                      vi_ctpio_wb_ticks;
+  /** Location of the rx_post_buffer for EF10CT LL rx data path */
+  /* TODO EF10CT: Need to support multiple rx queues per vi */
+  uint64_t*                     vi_rx_post_buffer_mmap_ptr;
+  /** Length of rx_post_buffer I/O region */
+  /* TODO EF10CT: Need to support multiple rx queues per vi */
+  int                           vi_rx_post_buffer_mmap_bytes;
   /** Length of region allocated at ep_state */
   int                           ep_state_bytes;
   /** True if the virtual interface is in a cluster */
