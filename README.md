@@ -51,15 +51,14 @@ support these primitives.
 The AF_XDP support is currently under development and is not yet at final
 release quality.
 
-The following operating system distributions are known to provide an adequate
-level of AF_XDP support for Onload:
+The following operating system distributions are the minimum versions known
+to provide an adequate level of AF_XDP support for Onload:
 
-* Ubuntu LTS 20.04, 22.04
+* Ubuntu LTS 20.04
 * Debian 10 with Linux kernel 5.10
-* Debian 11
-* Redhat Enterprise Linux 8.3 and newer
-* Redhat Enterprise Linux 9.x
-* Linux kernel in the range 5.4 - 5.19
+* Redhat Enterprise Linux 8.3
+* Redhat Enterprise Linux 9.0
+* kernel.org Linux kernels from version 5.4
 
 If a netdriver does not support AF_XDP in native mode, Onload will try to use
 generic XDP mode when registering an interface. To make it work, one has to set
@@ -98,16 +97,16 @@ The following adapters at least are able to support OpenOnload without AF_XDP:
 * SFN8042
 * SFN8522, SFN8542
 
-### Compatible Linux kernels and distributions for Xilinx network adapters
+### Compatible Linux kernels and distributions for AMD Solarflare network adapters
 
-This source tree is known to work with Xilinx network adapters on the following
-Linux distributions:
+This source tree is known to work with AMD Solarflare network adapters
+on the following Linux distributions:
 
-* Ubuntu LTS 18.04, LTS 20.04, LTS 22.04
-* Debian 10, 11, 12
-* Redhat Enterprise Linux 7.9, 8.1 - 8.9, 9.0 - 9.3
-* SuSE Linux Enterprise Server 15 SP1 - SP5
-* Linux kernel in the range 4.15 - 6.4
+* Ubuntu LTS 20.04, LTS 22.04
+* Debian 11, 12
+* Redhat Enterprise Linux 8.1 - 8.9
+* Redhat Enterprise Linux 9.0 - 9.3
+* Linux kernel in the range 4.15 - 6.6
 
 ## Support
 
