@@ -41,9 +41,7 @@
 #include <ci/driver/efab/hardware.h>
 #include <ci/efrm/resource.h>
 #include <ci/efrm/pd.h>
-#include <onload/iobufset.h>
-#include <onload/debug.h>
-#include <onload/tcp_driver.h>
+#include <kernel_utils/iobufset.h>
 #include "ci/driver/kernel_compat.h"
 
 /************** Alloc/free page set ****************/
@@ -54,6 +52,7 @@ void oo_iobufset_kfree(struct oo_buffer_pages *pages)
     kfree(pages->pages);
   kfree(pages);
 }
+EXPORT_SYMBOL(oo_iobufset_kfree);
 
 
 static void oo_iobufset_free_pages(struct oo_buffer_pages *pages)
@@ -173,7 +172,7 @@ static int oo_bufpage_alloc(struct oo_buffer_pages **pages_out,
       *flags |= OO_IOBUFSET_FLAG_HUGE_PAGE_FAILED;
   }
   if( *flags & OO_IOBUFSET_FLAG_HUGE_PAGE_FORCE ) {
-    ci_assert_equal(low_order, HPAGE_SHIFT - PAGE_SHIFT);
+    EFRM_ASSERT(low_order == HPAGE_SHIFT - PAGE_SHIFT);
     oo_iobufset_kfree(pages);
     return -ENOMEM;
   }
@@ -190,9 +189,9 @@ static int oo_bufpage_alloc(struct oo_buffer_pages **pages_out,
   for( i = 0; i < n_bufs; ++i ) {
     pages->pages[i] = alloc_pages_node(numa_node_id(), gfp_flag, low_order);
     if( pages->pages[i] == NULL ) {
-      OO_DEBUG_VERB(ci_log("%s: failed to allocate page (i=%u) "
+      EFRM_ERR("%s: failed to allocate page (i=%u) "
                            "user_order=%d page_order=%d",
-                           __FUNCTION__, i, user_order, low_order));
+                           __FUNCTION__, i, user_order, low_order);
       pages->n_bufs = i;
       oo_iobufset_free_pages(pages);
       return -ENOMEM;
@@ -211,6 +210,7 @@ void oo_iobufset_pages_release(struct oo_buffer_pages *pages)
   if (oo_atomic_dec_and_test(&pages->ref_count))
     oo_iobufset_free_pages(pages);
 }
+EXPORT_SYMBOL(oo_iobufset_pages_release);
 
 int
 oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
@@ -222,8 +222,8 @@ oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
   int order = nic_order - fls(EFHW_NIC_PAGES_IN_OS_PAGE) + 1;
   int min_order = min_nic_order - fls(EFHW_NIC_PAGES_IN_OS_PAGE) + 1;
 
-  ci_assert(pages_out);
-  ci_assert_ge(order, min_order);
+  EFRM_ASSERT(pages_out);
+  EFRM_ASSERT(order >= min_order);
 
 #if CI_CFG_PKTS_AS_HUGE_PAGES
   if( *flags & OO_IOBUFSET_FLAG_HUGE_PAGE_FORCE ) {
@@ -262,15 +262,14 @@ oo_iobufset_pages_alloc(int nic_order, int min_nic_order, int *flags,
   }
 
   if( rc == -EMSGSIZE ) {
-    LOG_E(ci_log("%s: ERROR: oo_bufpage_alloc() failed (%d), requested page "
+    EFRM_ERR("%s: ERROR: oo_bufpage_alloc() failed (%d), requested page "
                  "size order is larger than the minimum NIC page size order",
-                 __FUNCTION__, rc));
+                 __FUNCTION__, rc);
   }
-
-  OO_DEBUG_VERB(ci_log("%s: [%p] order %d", __FUNCTION__, *pages_out, order));
 
   return rc;
 }
+EXPORT_SYMBOL(oo_iobufset_pages_alloc);
 
 int oo_iobufset_init(struct oo_buffer_pages **pages_out, int n_bufs)
 {
@@ -282,6 +281,7 @@ int oo_iobufset_init(struct oo_buffer_pages **pages_out, int n_bufs)
   oo_atomic_set(&(*pages_out)->ref_count, 2);
   return 0;
 }
+EXPORT_SYMBOL(oo_iobufset_init);
 
 
 /************** Alloc/free iobufset structure ****************/
@@ -308,6 +308,7 @@ void oo_iobufset_resource_release(struct oo_iobufset *rs, int reset_pending)
 
   oo_iobufset_free_memory(rs);
 }
+EXPORT_SYMBOL(oo_iobufset_resource_release);
 
 static void put_user_fake(uint64_t v, uint64_t *p)
 {
@@ -326,8 +327,8 @@ oo_iobufset_resource_alloc(struct oo_buffer_pages * pages, struct efrm_pd *pd,
   void **addrs;
   unsigned int i;
 
-  ci_assert(iobrs_out);
-  ci_assert(pd);
+  EFRM_ASSERT(iobrs_out);
+  EFRM_ASSERT(pd);
 
   /* Request space for two arrays of n_bufs, then treat the first as
    * iobrs->dma_addrs and the second as iobrs->free_addrs. */
@@ -365,9 +366,6 @@ oo_iobufset_resource_alloc(struct oo_buffer_pages * pages, struct efrm_pd *pd,
   if( rc < 0 )
     goto fail;
 
-  OO_DEBUG_VERB(ci_log("%s: [%p] %d pages", __FUNCTION__,
-                       iobrs, iobrs->pages->n_bufs));
-
   efrm_resource_ref(efrm_pd_to_resource(pd));
   oo_atomic_inc(&pages->ref_count);
   *iobrs_out = iobrs;
@@ -377,6 +375,7 @@ fail:
   oo_iobufset_free_memory(iobrs);
   return rc;
 }
+EXPORT_SYMBOL(oo_iobufset_resource_alloc);
 
 
 int oo_iobufset_resource_remap_bt(struct oo_iobufset *iobrs, uint64_t *hw_addrs)
@@ -388,3 +387,4 @@ int oo_iobufset_resource_remap_bt(struct oo_iobufset *iobrs, uint64_t *hw_addrs)
                               put_user_fake,
                               &iobrs->buf_tbl_alloc);
 }
+EXPORT_SYMBOL(oo_iobufset_resource_remap_bt);

@@ -582,7 +582,7 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 {
 	struct efhw_nic* nic = efrm_client_get_nic(pd->rs.rs_client);
 	struct device* dev;
-	int rc = -ENODEV;
+	int rc = -ENODEV, i;
 	switch (nic->devtype.arch) {
 	case EFHW_ARCH_EF10:
 	case EFHW_ARCH_EF100:
@@ -598,9 +598,21 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 								  n_pages);
 		}
 		break;
-	case EFHW_ARCH_EFCT:
 	case EFHW_ARCH_EF10CT:
 	case EFHW_ARCH_AF_XDP:
+		/* Translate the virtual addresses into physical ones. Physical
+		 * addresses are needed for ef10ct when in physical addressing
+		 * mode and posting superbufs from userspace. AF_XDP is included
+		 * here as the software buffer table implementation in efhw
+		 * expects the "dma" addresses to be of the same type (virtual
+		 * or physical) for all nics. */
+		for (i = 0; i < n_pages; i++) {
+			free_addrs[i] = virt_to_phys(addrs[i]);
+		}
+		rc = efhw_nic_translate_dma_addrs(nic, free_addrs, pci_addrs,
+		                                  n_pages);
+		break;
+	case EFHW_ARCH_EFCT:
 		rc = efrm_pd_dma_map_nonpci(n_pages, nic_order, addrs,
 					    pci_addrs);
 		memcpy(free_addrs, pci_addrs, n_pages * sizeof(pci_addrs[0]));

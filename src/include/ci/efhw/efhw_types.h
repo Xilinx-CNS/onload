@@ -553,6 +553,9 @@ struct efhw_nic {
 
 	void *bt_blocks_memory;
 
+	/* Pointer to software based buffer tables, used on AF_XDP and EF10CT */
+	struct efhw_sw_bt *sw_bts;
+
 	/*! Bit masks of the sizes of event queues and dma queues supported
 	 * by this nic.
 	 */

@@ -112,7 +112,7 @@ ci_inline unsigned long oo_iobufset_pfn(struct oo_buffer_pages *pages, int offse
   /* This function is used from nopage handler.  Huge pages should not be
    * mmaped in this way. */
 #ifdef OO_DO_HUGE_PAGES
-  ci_assert(! oo_hugetlb_page_valid(&pages->hugetlb_page));
+  EFRM_ASSERT(! oo_hugetlb_page_valid(&pages->hugetlb_page));
 #endif
 
   return page_to_pfn(pages->pages[offset >> PAGE_SHIFT >> order]) +

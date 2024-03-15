@@ -28,6 +28,7 @@
 
 #include "ethtool_rxclass.h"
 #include "ethtool_flow.h"
+#include "sw_buffer_table.h"
 
 #define XDP_PROG_NAME "xdpsock"
 #define BPF_FS_PATH "/sys/fs/bpf/"
@@ -124,26 +125,6 @@ sys_call_area_user_addr(struct sys_call_area* area, void* ptr)
          ((uintptr_t)ptr - (uintptr_t)sys_call_area_ptr(area));
 }
 
-
-#define UMEM_BLOCK (PAGE_SIZE / sizeof(void*))
-#define MAX_PDS 256
-
-/* A block of addresses of user memory pages */
-struct umem_block
-{
-  void* addrs[UMEM_BLOCK];
-};
-
-/* A collection of all the user memory pages for a VI */
-struct umem_pages
-{
-  long page_count;
-  long block_count;
-  long used_page_count;
-
-  struct umem_block** blocks;
-};
-
 /* Resources for waiting for and handling events */
 struct event_waiter
 {
@@ -181,84 +162,13 @@ struct efhw_af_xdp_vi
   struct ring_map ring_mapping[4];
 };
 
-struct protection_domain
-{
-  struct umem_pages umem;
-  long buffer_table_count;
-  long freed_buffer_table_count;
-};
-
 /* Per-NIC AF_XDP resources */
 struct efhw_nic_af_xdp
 {
   struct file* map;
   struct efhw_af_xdp_vi* vi;
-  struct protection_domain* pd;
   struct efhw_buddy_allocator vi_allocator;
 };
-
-
-/*----------------------------------------------------------------------------
- *
- * User memory helper functions
- *
- *---------------------------------------------------------------------------*/
-
-/* Free the collection of page addresses. Does not free the pages themselves. */
-static void umem_pages_free(struct umem_pages* pages)
-{
-  long block;
-
-  for( block = 0; block < pages->block_count; ++block )
-    kfree(pages->blocks[block]);
-
-  kfree(pages->blocks);
-}
-
-/* Allocate storage for a number of new page addresses, initially NULL */
-static int umem_pages_alloc(struct umem_pages* pages, long new_pages)
-{
-  long blocks = (pages->page_count + new_pages + UMEM_BLOCK - 1) / UMEM_BLOCK;
-  void* alloc;
-
-  alloc = krealloc(pages->blocks, blocks * sizeof(void*), GFP_KERNEL);
-  if( alloc == NULL )
-    return -ENOMEM;
-  pages->blocks = alloc;
-
-  /* It is important to update block_count after each allocation so that
-   * it has the correct value if an allocation fails. umem_pages_free
-   * will need the correct value to free everything that was allocated.
-   */
-  while( pages->block_count < blocks ) {
-    alloc = kzalloc(sizeof(struct umem_block), GFP_KERNEL);
-    if( alloc == NULL )
-      return -ENOMEM;
-
-    pages->blocks[pages->block_count++] = alloc;
-  }
-
-  pages->page_count += new_pages;
-  return 0;
-}
-
-/* Access the user memory page address with the given linear index */
-static void** umem_pages_addr_ptr(struct umem_pages* pages, long index)
-{
-  return &pages->blocks[index / UMEM_BLOCK]->addrs[index % UMEM_BLOCK];
-}
-
-static void umem_pages_set_addr(struct umem_pages* pages, long page, void* addr)
-{
-  *umem_pages_addr_ptr(pages, page) = addr;
-  if( page > pages->used_page_count )
-    pages->used_page_count = page;
-}
-
-static void* umem_pages_get_addr(struct umem_pages* pages, long page)
-{
-  return *umem_pages_addr_ptr(pages, page);
-}
 
 /*----------------------------------------------------------------------------
  *
@@ -275,17 +185,6 @@ static struct efhw_af_xdp_vi* vi_by_instance(struct efhw_nic* nic, int instance)
     return NULL;
 
   return &xdp->vi[instance];
-}
-
-/* Get the VI with the given owner ID */
-static struct protection_domain* pd_by_owner(struct efhw_nic* nic, int owner_id)
-{
-  struct efhw_nic_af_xdp* xdp = nic->arch_extra;
-
-  if( xdp == NULL || owner_id > MAX_PDS || owner_id < 0 )
-    return NULL;
-
-  return &xdp->pd[owner_id];
 }
 
 /*----------------------------------------------------------------------------
@@ -524,13 +423,13 @@ static int xdp_set_link(struct net_device* dev, int prog_fd)
 
 /* Fault handler to provide buffer memory pages for our user mapping */
 static vm_fault_t xdp_umem_fault(struct vm_fault* vmf) {
-  struct umem_pages* pages = vmf->vma->vm_private_data;
+  struct efhw_sw_bt* table = vmf->vma->vm_private_data;
   struct page* page;
 
-  if( vmf->pgoff >= pages->used_page_count )
+  if( vmf->pgoff >= oo_iobufset_npages(table->pages) )
     return VM_FAULT_SIGSEGV;
 
-  page = virt_to_page(umem_pages_get_addr(pages, vmf->pgoff));
+  page = virt_to_page(oo_iobufset_ptr(table->pages, vmf->pgoff << PAGE_SHIFT));
 
   /* Linux page management assumes we won't provide individual pages from a
    * hugetlbfs page, and goes wrong in bad ways if we do. Prevent that by
@@ -554,7 +453,7 @@ static struct vm_operations_struct vm_ops = {
 };
 
 /* Register user memory with an XDP socket */
-static int xdp_register_umem(struct socket* sock, struct umem_pages* pages,
+static int xdp_register_umem(struct socket* sock, struct efhw_sw_bt* table,
                              int chunk_size, int headroom)
 {
   struct vm_area_struct* vma;
@@ -565,7 +464,7 @@ static int xdp_register_umem(struct socket* sock, struct umem_pages* pages,
    * so just zero everything we don't use.
    */
   struct xdp_umem_reg mr = {
-    .len = pages->used_page_count << PAGE_SHIFT,
+    .len = oo_iobufset_npages(table->pages) << PAGE_SHIFT,
     .chunk_size = chunk_size,
     .headroom = headroom
   };
@@ -582,7 +481,7 @@ static int xdp_register_umem(struct socket* sock, struct umem_pages* pages,
   BUG_ON(vma == NULL);
   BUG_ON(vma->vm_start != mr.addr);
 
-  vma->vm_private_data = pages;
+  vma->vm_private_data = table;
   vma->vm_ops = &vm_ops;
 
   rc = sock_ops_setsockopt(sock, SOL_XDP, XDP_UMEM_REG,
@@ -766,19 +665,6 @@ static int xdp_create_rings(struct socket* sock,
   return rc;
 }
 
-static void xdp_release_pd(struct efhw_nic* nic, int owner)
-{
-  struct protection_domain* pd = pd_by_owner(nic, owner);
-  BUG_ON(pd == NULL);
-  BUG_ON(pd->freed_buffer_table_count >= pd->buffer_table_count);
-
-  if( ++pd->freed_buffer_table_count != pd->buffer_table_count )
-    return;
-
-  umem_pages_free(&pd->umem);
-  memset(pd, 0, sizeof(*pd));
-}
-
 static void xdp_release_vi(struct efhw_nic* nic, struct efhw_af_xdp_vi* vi)
 {
   int i;
@@ -838,7 +724,7 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   int rc;
   struct efhw_af_xdp_vi* vi;
   int owner_id;
-  struct protection_domain* pd;
+  struct efhw_sw_bt* sw_bt;
   struct socket* sock;
   struct file* file;
   struct efab_af_xdp_offsets* user_offsets;
@@ -857,8 +743,8 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
     return -EBUSY;
 
   owner_id = vi->owner_id;
-  pd = pd_by_owner(nic, owner_id);
-  if( pd == NULL )
+  sw_bt = efhw_sw_bt_by_owner(nic, owner_id);
+  if( sw_bt == NULL )
     return -EINVAL;
 
   /* We need to use network namespace of network device so that
@@ -884,7 +770,7 @@ static int af_xdp_init(struct efhw_nic* nic, int instance,
   if( rc < 0 )
     goto fail;
 
-  rc = xdp_register_umem(sock, &pd->umem, chunk_size, headroom);
+  rc = xdp_register_umem(sock, sw_bt, chunk_size, headroom);
   if( rc < 0 )
     goto fail;
 
@@ -1028,14 +914,14 @@ __af_xdp_nic_init_hardware(struct efhw_nic *nic,
 
 	xdp = kzalloc(sizeof(*xdp) +
 		      nic->vi_lim * sizeof(struct efhw_af_xdp_vi) +
-		      MAX_PDS * sizeof(struct protection_domain),
+		      EFHW_MAX_SW_BTS * sizeof(struct efhw_sw_bt),
 		      GFP_KERNEL);
 	if( xdp == NULL )
 		return -ENOMEM;
 
 	nic->ev_handlers = ev_handlers;
 	xdp->vi = (struct efhw_af_xdp_vi*) (xdp + 1);
-	xdp->pd = (struct protection_domain*) (xdp->vi + nic->vi_lim);
+	nic->sw_bts = (struct efhw_sw_bt*) (xdp->vi + nic->vi_lim);
 
 	rc = af_xdp_vi_allocator_ctor(xdp, nic->vi_min, nic->vi_lim);
 	if( rc < 0 )
@@ -1287,7 +1173,8 @@ static int af_xdp_translate_dma_addrs(struct efhw_nic* nic,
 				      const dma_addr_t *src, dma_addr_t *dst,
 				      int n)
 {
-	return -EOPNOTSUPP;
+	memmove(dst, src, n * sizeof(src[0]));
+	return 0;
 }
 
 /*--------------------------------------------------------------------
@@ -1298,119 +1185,7 @@ static int af_xdp_translate_dma_addrs(struct efhw_nic* nic,
 
 static const int __af_xdp_nic_buffer_table_get_orders[] = {0,1,2,3,4,5,6,7,8,9,10};
 
-
-static int
-af_xdp_nic_buffer_table_alloc(struct efhw_nic *nic, int owner, int order,
-                              struct efhw_buffer_table_block **block_out,
-                              int reset_pending)
-{
-  struct efhw_buffer_table_block* block;
-  struct protection_domain* pd = pd_by_owner(nic, owner);
-  int rc;
-
-  if( pd == NULL )
-    return -ENODEV;
-
-  /* We reserve some bits of the handle to store the order, needed later to
-   * calculate the address of each entry within the block. This limits the
-   * number of owners we can support. Alternatively, we could use the high bits
-   * of btb_vaddr (as ef10 does), and mask these out when using the addresses.
-   */
-  if( owner >= (1 << 24) )
-    return -ENOSPC;
-
-  block = kzalloc(sizeof(**block_out), GFP_KERNEL);
-  if( block == NULL )
-    return -ENOMEM;
-
-  /* TODO use af_xdp-specific data rather than repurposing ef10-specific */
-  block->btb_hw.ef10.handle = order | (owner << 8);
-  block->btb_vaddr = pd->umem.page_count << PAGE_SHIFT;
-
-  rc = umem_pages_alloc(&pd->umem, EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
-  if( rc < 0 ) {
-    kfree(block);
-    return rc;
-  }
-  ++pd->buffer_table_count;
-
-  *block_out = block;
-  return 0;
-}
-
-
-static void
-af_xdp_nic_buffer_table_free(struct efhw_nic *nic,
-                             struct efhw_buffer_table_block *block,
-                             int reset_pending)
-{
-  int owner = block->btb_hw.ef10.handle >> 8;
-  kfree(block);
-  xdp_release_pd(nic, owner);
-}
-
-
-static int
-af_xdp_nic_buffer_table_set(struct efhw_nic *nic,
-                            struct efhw_buffer_table_block *block,
-                            int first_entry, int n_entries,
-                            dma_addr_t *dma_addrs)
-{
-  int i, j, owner, order;
-  long page;
-  struct protection_domain* pd;
-
-  owner = block->btb_hw.ef10.handle >> 8;
-  order = block->btb_hw.ef10.handle & 0xff;
-  pd = pd_by_owner(nic, owner);
-  if( pd == NULL )
-    return -ENODEV;
-
-  /* We are mapping between two address types.
-   *
-   * block->btb_vaddr stores the byte offset within the umem block, suitable for
-   * use with AF_XDP descriptor queues. This is eventually used to provide the
-   * "user" addresses returned from efrm_pd_dma_map, which in turn provide the
-   * packet "dma" addresses posted to ef_vi, which are passed on to AF_XDP.
-   * (Note: "user" and "dma" don't mean userland and DMA in this context).
-   *
-   * dma_addr is the corresponding kernel address, which we use to calculate the
-   * addresses to store in vi->addrs, and later map into userland. This comes
-   * from the "dma" (or "pci") addresses obtained by efrm_pd_dma_map which, for
-   * a non-PCI device, are copied from the provided kernel addresses.
-   * (Note: "dma" and "pci" don't mean DMA and PCI in this context either).
-   *
-   * We get one umem address giving the start of each buffer table block. The
-   * block might contain several consecutive pages, which might be compound
-   * (but all with the same order).
-   *
-   * We store one kernel address for each single page in the umem block. This is
-   * somewhat profligate with memory; we could store one per buffer table block,
-   * or one per compound page, with a slightly more complicated lookup when
-   * finding each page during mmap.
-   */
-
-  page = (block->btb_vaddr >> PAGE_SHIFT) + (first_entry << order);
-  if( page + (n_entries << order) > pd->umem.page_count )
-    return -EINVAL;
-
-  for( i = 0; i < n_entries; ++i ) {
-    char* dma_addr = (char*)dma_addrs[i];
-    for( j = 0; j < (1 << order); ++j, ++page, dma_addr += PAGE_SIZE )
-      umem_pages_set_addr(&pd->umem, page, dma_addr);
-  }
-
-  return 0;
-}
-
-
-static void
-af_xdp_nic_buffer_table_clear(struct efhw_nic *nic,
-                              struct efhw_buffer_table_block *block,
-                              int first_entry, int n_entries)
-{
-}
-
+/* Func op implementations are provided by efhw_sw_bt */
 
 /*--------------------------------------------------------------------
  *
@@ -1698,10 +1473,10 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	.buffer_table_orders = __af_xdp_nic_buffer_table_get_orders,
 	.buffer_table_orders_num = sizeof(__af_xdp_nic_buffer_table_get_orders) /
 		sizeof(__af_xdp_nic_buffer_table_get_orders[0]),
-	.buffer_table_alloc = af_xdp_nic_buffer_table_alloc,
-	.buffer_table_free = af_xdp_nic_buffer_table_free,
-	.buffer_table_set = af_xdp_nic_buffer_table_set,
-	.buffer_table_clear = af_xdp_nic_buffer_table_clear,
+	.buffer_table_alloc = efhw_sw_bt_alloc,
+	.buffer_table_free = efhw_sw_bt_free,
+	.buffer_table_set = efhw_sw_bt_set,
+	.buffer_table_clear = efhw_sw_bt_clear,
 	.rss_alloc = af_xdp_rss_alloc,
 	.rss_free = af_xdp_rss_free,
 	.filter_insert = af_xdp_filter_insert,

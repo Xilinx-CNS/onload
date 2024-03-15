@@ -16,10 +16,11 @@ RESOURCE_SRCS	:= resource_driver.c \
 	buddy.c stack_vi_allocator.c
 
 EFHW_SRCS	:= nic.c eventq.c af_xdp.c ethtool_rxclass.c \
-		ethtool_flow.c efct.c debugfs_nic.c debugfs_efct.c
+		ethtool_flow.c efct.c debugfs_nic.c debugfs_efct.c \
+		sw_buffer_table.c
 
 EFHW_HDRS	:= ef10_mcdi.h ethtool_rxclass.h ethtool_flow.h ef10_ef100.h \
-		efct.h ef10ct.h
+		efct.h ef10ct.h sw_buffer_table.h
 
 EFRM_SRCS	:=			\
 		assert_valid.c		\
@@ -43,8 +44,8 @@ EFRM_SRCS	:=			\
 EFRM_HDRS	:= efrm_internal.h efrm_vi.h efrm_vi_set.h \
 		efrm_pd.h efrm_pio.h bt_manager.h debugfs_rs.h
 
-UTILS_HDRS	:= hugetlb.h
-UTILS_SRCS	:= hugetlb.c
+UTILS_HDRS	:= hugetlb.h iobufset.h
+UTILS_SRCS	:= hugetlb.c iobufset.c
 
 ifeq ($(HAVE_SFC),1)
 RESOURCE_SRCS += driverlink_new.c
