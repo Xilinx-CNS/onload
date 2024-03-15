@@ -469,6 +469,14 @@ struct efhw_func_ops {
 	int (*ctpio_addr)(struct efhw_nic* nic, int instance,
 			  resource_size_t* addr);
 
+  /*-------------- superbufs ------------------------ */
+
+	/*! Posts a superbuf to the nic.
+	 * Returns 0 on success, a negative error otherwise. */
+	int (*post_superbuf)(struct efhw_nic* nic, int instance,
+			     resource_size_t dma_addr, bool sentinel,
+			     bool rollover, int owner_id);
+
   /*-------------- design parameters ------------------------ */
 
 	/*! Obtain the design parameters for the NIC. Any parameters that are

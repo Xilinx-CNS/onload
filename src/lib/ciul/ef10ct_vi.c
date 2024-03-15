@@ -8,6 +8,9 @@
 #include <etherfabric/internal/efct_uk_api.h>
 
 #ifndef __KERNEL__
+
+#include "driver_access.h"
+
 /* Needed for `offsetof` in expansion of macro EFAB_NIC_DP_GET */
 #include <stddef.h>
 #endif
@@ -183,6 +186,22 @@ int ef10ct_design_parameters(struct ef_vi *vi,
 
     return 0;
 }
+
+#ifndef __KERNEL__
+int ef10ct_vi_post_superbuf(struct ef_vi *vi, void *addr,
+                            int sentinel, int rollover)
+{
+    ci_resource_op_t op = {};
+
+    op.op = CI_RSOP_RX_BUFFER_POST;
+    op.id = efch_make_resource_id(vi->vi_resource_id);
+    op.u.buffer_post.user_addr = (uint64_t)addr;
+    op.u.buffer_post.sentinel = sentinel;
+    op.u.buffer_post.rollover = rollover;
+
+    return ci_resource_op(vi->dh, &op);
+}
+#endif
 
 static void ef10ct_initialise_ops(ef_vi *vi) {
     vi->ops.transmit                    = efct_ef_vi_transmit;

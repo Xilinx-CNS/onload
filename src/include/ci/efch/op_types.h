@@ -216,6 +216,7 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_RXQ_REFRESH             0x8B
 # define                CI_RSOP_FILTER_QUERY            0x8C
 # define                CI_RSOP_VI_DESIGN_PARAMETERS    0x8D
+# define                CI_RSOP_RX_BUFFER_POST          0x8E
 
   union {
     struct {
@@ -336,6 +337,11 @@ typedef struct ci_resource_op_s {
       uint64_t          data_ptr; /* struct efab_nic_design_parameters */
       uint64_t          data_len;
     } design_parameters;
+    struct {
+      uint64_t          user_addr;
+      /*bool*/uint8_t   sentinel;
+      /*bool*/uint8_t   rollover;
+    } buffer_post;
   } u CI_ALIGN(8);
 } ci_resource_op_t;
 

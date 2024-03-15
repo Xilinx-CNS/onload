@@ -251,6 +251,12 @@ struct efab_nic_design_parameters {
   (EFAB_NIC_DP_KNOWN(DP, PARAM) ? (DP).PARAM : EFAB_NIC_DP_DEFAULT(PARAM))
 
 
+/* Post a superbuf to the vi's rxq */
+/* TODO EF10CT What should this look like with multiple rxqs? */
+int ef10ct_vi_post_superbuf(struct ef_vi *vi, ef_addr addr, int sentinel,
+                            int rollover);
+
+
 /* Internal interfaces, so exclude from doxygen documentation */
 /*! \endcond internal */
 

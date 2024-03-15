@@ -50,7 +50,7 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
   ef10ct->evq_n = val.nic_res.evq_lim;
   ef10ct->evq = vzalloc(sizeof(*ef10ct->evq) * ef10ct->evq_n);
   if( ! ef10ct->evq )
-    return -ENOMEM;
+    goto fail;
 
   res_dim->vi_min = val.nic_res.evq_min;
   res_dim->vi_lim = EF10CT_EVQ_DUMMY_MAX;
@@ -65,10 +65,8 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
 
   ef10ct->rxq_n = val.nic_res.rxq_lim;
   ef10ct->rxq = vzalloc(sizeof(*ef10ct->rxq) * ef10ct->rxq_n);
-  if( ! ef10ct->rxq ) {
-    vfree(ef10ct->evq);
-    return -ENOMEM;
-  }
+  if( ! ef10ct->rxq )
+    goto fail1;
   for( i = 0; i < ef10ct->rxq_n; i++ )
     ef10ct->rxq[i].evq = -1;
 
@@ -89,6 +87,11 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
 #endif
 
   return 0;
+
+fail1:
+  vfree(ef10ct->evq);
+fail:
+  return -ENOMEM;
 }
 
 
@@ -241,6 +244,7 @@ void ef10ct_remove(struct auxiliary_device *auxdev)
    * the rest. */
   edev->ops->close(client);
   vfree(ef10ct->evq);
+  vfree(ef10ct->rxq);
   vfree(ef10ct);
 }
 

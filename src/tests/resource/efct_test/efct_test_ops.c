@@ -146,6 +146,8 @@ static int efct_test_get_param(struct efx_auxiliary_client *handle,
     arg->nic_res.evq_lim = EFCT_TEST_EVQS_N - 1;
     arg->nic_res.txq_min = 0;
     arg->nic_res.txq_lim = EFCT_TEST_TXQS_N - 1;
+    arg->nic_res.rxq_min = 0;
+    arg->nic_res.rxq_lim = EFCT_TEST_RXQS_N - 1;
     rc = 0;
     break;
    case EFX_AUXILIARY_EVQ_WINDOW:

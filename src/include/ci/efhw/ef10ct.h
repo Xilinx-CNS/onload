@@ -24,6 +24,7 @@ struct efhw_nic_ef10ct_evq {
 
 struct efhw_nic_ef10ct_rxq {
   int evq;
+  uint64_t *post_buffer_addr;
 };
 
 struct efhw_nic_ef10ct {

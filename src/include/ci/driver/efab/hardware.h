@@ -269,6 +269,13 @@
 	((nic)->efhw_func->ctpio_addr ? \
 	 (nic)->efhw_func->ctpio_addr((nic), (instance), (addr)) : -ENOSYS)
 
+/*-------------- superbufs ------------------------ */
+#define efhw_nic_post_superbuf(nic, instance, addr, sentinel, rollover, owner_id) \
+	((nic)->efhw_func->post_superbuf ? \
+	 (nic)->efhw_func->post_superbuf((nic), (instance), (addr), \
+					 (sentinel), (rollover), (owner_id)) : \
+	 -EOPNOTSUPP)
+
 /*-------------- design parameters ------------ */
 #define efhw_nic_design_parameters(nic, dp) \
 	((nic)->efhw_func->design_parameters ? \

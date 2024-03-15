@@ -465,6 +465,21 @@ static int efch_vi_design_parameters(struct efrm_vi* virs, ci_resource_op_t* op)
   return copy_to_user(user_data, &dp, dp.known_size) ? -EFAULT : 0;
 }
 
+static int efch_vi_post_superbuf(struct efrm_vi *virs, ci_resource_op_t *op)
+{
+  int rc;
+  uint64_t user_addr = op->u.buffer_post.user_addr;
+  bool sentinel = op->u.buffer_post.sentinel;
+  bool rollover = op->u.buffer_post.rollover;
+  struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
+  int owner_id = efrm_pd_owner_id(virs->pd);
+
+  rc = efhw_nic_post_superbuf(nic, efrm_vi_qid(virs, EFHW_RXQ), user_addr,
+                              sentinel, rollover, owner_id);
+
+  return rc;
+}
+
 static int
 efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
                  ci_resource_op_t* op, int* copy_out)
@@ -603,6 +618,10 @@ efch_vi_rm_rsops(efch_resource_t* rs, ci_resource_table_t* rt,
 
     case CI_RSOP_VI_DESIGN_PARAMETERS:
       rc = efch_vi_design_parameters(virs, op);
+      break;
+
+    case CI_RSOP_RX_BUFFER_POST:
+      rc = efch_vi_post_superbuf(virs, op);
       break;
 
     default:

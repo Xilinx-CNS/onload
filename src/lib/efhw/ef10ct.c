@@ -21,6 +21,7 @@
 #include "etherfabric/internal/internal.h"
 
 #include "ef10ct.h"
+#include "sw_buffer_table.h"
 
 
 #if CI_HAVE_EF10CT
@@ -100,6 +101,10 @@ ef10ct_nic_init_hardware(struct efhw_nic *nic,
              | NIC_FLAG_EVQ_IRQ
              | NIC_FLAG_LLCT
              ;
+
+  nic->sw_bts = kzalloc(EFHW_MAX_SW_BTS * sizeof(struct efhw_sw_bt),
+                        GFP_KERNEL);
+
   return 0;
 }
 
@@ -329,6 +334,29 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
   return 0;
 }
 
+static int
+ef10ct_superbuf_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
+                          resource_size_t* addr_out)
+{
+  int rc;
+  struct device *dev;
+  struct efx_auxiliary_device* edev;
+  struct efx_auxiliary_client* cli;
+  union efx_auxiliary_param_value val = {.io_addr.qid_in = instance};
+  val.io_addr.qid_in = instance;
+
+  EFCT_PRE(dev, edev, cli, nic, rc);
+  rc = edev->ops->get_param(cli, EFX_AUXILIARY_RXQ_POST, &val);
+  EFCT_POST(dev, edev, cli, nic, rc);
+
+  if( rc < 0 )
+    return rc;
+
+  *size_out = sizeof(resource_size_t);
+  *addr_out = val.io_addr.base;
+
+  return 0;
+}
 
 static int 
 ef10ct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
@@ -342,8 +370,10 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
     .label = rxq_params->tag,
     .suppress_events = true, /* Do we ever want this to be false? Maybe false if int-driven */
   };
-  int rc;
+  int rc, rxq;
+  size_t io_size;
   struct efx_auxiliary_rpc dummy;
+  resource_size_t register_phys_addr;
 
   if(!(rxq_params->evq < ef10ct->evq_n)) {
     return -EINVAL;
@@ -361,14 +391,29 @@ ef10ct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
   dummy.outlen = sizeof(struct efx_auxiliary_rxq_params);
   dummy.outbuf = (void*)&params;
   rc = ef10ct_fw_rpc(nic, &dummy);
-
-  if( rc >= 0 ) {
-    rxq_params->qid_out = rc;
-    ef10ct->rxq[rc].evq = rxq_params->evq;
-    rc = 0;
+  if( rc < 0 ) {
+    EFHW_ERR("%s ef10ct_fw_rpc failed. rc = %d\n", __FUNCTION__, rc);
+    return rc;
   }
 
-  return 0;
+  rxq_params->qid_out = rc;
+  rxq = rc;
+
+  if( rxq < 0 || rxq >= ef10ct->rxq_n ) {
+    EFHW_ERR(KERN_INFO "%s rxq outside of expected range. rxq = %d",
+             __func__, rxq);
+    return -EINVAL;
+  }
+
+  rc = ef10ct_superbuf_io_region(nic, rxq, &io_size, &register_phys_addr);
+  if( rc < 0 ) {
+    EFHW_ERR("%s Failed to get rx post register. rc = %d\n", __FUNCTION__, rc);
+    return rc;
+  }
+  ef10ct->rxq[rxq].post_buffer_addr = phys_to_virt(register_phys_addr);
+  ef10ct->rxq[rxq].evq = rxq_params->evq;
+
+  return rc;
 }
 
 static size_t
@@ -452,7 +497,11 @@ ef10ct_translate_dma_addrs(struct efhw_nic* nic, const dma_addr_t *src,
  *
  *--------------------------------------------------------------------*/
 
-static const int __ef10ct_nic_buffer_table_get_orders[] = {};
+/* Buffer table order 9 corresponds to 2MiB hugepages. Currently these are the
+ * only sizes supported. */
+static const int __ef10ct_nic_buffer_table_get_orders[] = {9};
+
+/* Func op implementations are provided by efhw_sw_bt */
 
 /*--------------------------------------------------------------------
  *
@@ -600,6 +649,61 @@ ef10ct_ctpio_addr(struct efhw_nic* nic, int instance, resource_size_t* addr)
 
 /*--------------------------------------------------------------------
  *
+ * Superbuf Management
+ *
+ *--------------------------------------------------------------------*/
+
+static uint64_t
+translate_dma_address(struct efhw_nic *nic, resource_size_t dma_addr,
+                      int owner_id)
+{
+  struct efhw_sw_bt *sw_bt = efhw_sw_bt_by_owner(nic, owner_id);
+  uint64_t pfn = oo_iobufset_pfn(sw_bt->pages, dma_addr);
+
+  return pfn << PAGE_SHIFT;
+}
+
+static int ef10ct_rxq_post_superbuf(struct efhw_nic *nic, int instance,
+                                    resource_size_t dma_addr,
+                                    bool sentinel, bool rollover, int owner_id)
+{
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  uint64_t phys_addr;
+  ci_qword_t qword;
+  volatile uint64_t *reg;
+
+  if( instance < 0 || instance >= ef10ct->rxq_n )
+    return -EINVAL;
+  reg = ef10ct->rxq[instance].post_buffer_addr;
+  if( reg == NULL )
+    return -EINVAL;
+
+  phys_addr = translate_dma_address(nic, dma_addr, owner_id) >> CI_PAGE_SHIFT;
+
+  CI_POPULATE_QWORD_3(qword,
+                      EFCT_TEST_PAGE_ADDRESS, phys_addr,
+                      EFCT_TEST_SENTINEL_VALUE, sentinel,
+                      EFCT_TEST_ROLLOVER, rollover);
+
+  /* Due to limitations with the efct_test driver it is possible to write
+   * multiple values to RX_BUFFER_POST register before the first one is
+   * read. As a crude workaround for the issue the test driver resets the
+   * register 0 once it has processed the buffer. We poll the value of the
+   * register here in case the test driver hasn't finished yet. */
+  /* TODO EFCT_TEST: remove this when no longer using the testdriver */
+  while(*reg != 0) {
+    msleep(20); /* Ran into softlockups even with reg being declared
+                * as volatile. Maybe this is because the test
+                * driver is scheduled on the core as the one that
+                * is spinning, so can never actually run? */
+  }
+  *reg = qword.u64[0];
+
+  return 0;
+}
+
+/*--------------------------------------------------------------------
+ *
  * Abstraction Layer Hooks
  *
  *--------------------------------------------------------------------*/
@@ -620,7 +724,12 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .flush_rx_dma_channel = ef10ct_flush_rx_dma_channel,
   .translate_dma_addrs = ef10ct_translate_dma_addrs,
   .buffer_table_orders = __ef10ct_nic_buffer_table_get_orders,
-  .buffer_table_orders_num = 0,
+  .buffer_table_orders_num = sizeof(__ef10ct_nic_buffer_table_get_orders) /
+    sizeof(__ef10ct_nic_buffer_table_get_orders[0]),
+  .buffer_table_alloc = efhw_sw_bt_alloc,
+  .buffer_table_free = efhw_sw_bt_free,
+  .buffer_table_set = efhw_sw_bt_set,
+  .buffer_table_clear = efhw_sw_bt_clear,
   .filter_insert = ef10ct_filter_insert,
   .filter_remove = ef10ct_filter_remove,
   .filter_redirect = ef10ct_filter_redirect,
@@ -630,6 +739,7 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .get_pci_dev = ef10ct_get_pci_dev,
   .vi_io_region = ef10ct_vi_io_region,
   .ctpio_addr = ef10ct_ctpio_addr,
+  .post_superbuf =  ef10ct_rxq_post_superbuf,
   .design_parameters = ef10ct_design_parameters,
   .max_shared_rxqs = ef10ct_max_shared_rxqs,
 };

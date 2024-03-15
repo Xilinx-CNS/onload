@@ -288,7 +288,8 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 		/* FIXME EF100: The only buffer table order supported in
 		 * Riverhead is 9. But EF100 will have orders starting from 0
 		 * in the future. */
-		if( client_opt->nic->devtype.arch != EFHW_ARCH_EF100 )
+		if( client_opt->nic->devtype.arch != EFHW_ARCH_EF100 &&
+		    client_opt->nic->devtype.arch != EFHW_ARCH_EF10CT )
 			EFRM_ASSERT(efhw_nic_buffer_table_orders(
 						client_opt->nic)[0] == 0);
 	}
