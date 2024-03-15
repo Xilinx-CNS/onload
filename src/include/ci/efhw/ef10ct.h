@@ -19,11 +19,18 @@ struct efhw_nic_ef10ct_evq {
   void *base;
   unsigned capacity;
   int txq;
+  int rxq;
+};
+
+struct efhw_nic_ef10ct_rxq {
+  int evq;
 };
 
 struct efhw_nic_ef10ct {
   uint32_t evq_n;
   struct efhw_nic_ef10ct_evq *evq;
+  uint32_t rxq_n;
+  struct efhw_nic_ef10ct_rxq *rxq;
   struct efx_auxiliary_device *edev;
   struct efx_auxiliary_client *client;
   struct efhw_nic *nic;

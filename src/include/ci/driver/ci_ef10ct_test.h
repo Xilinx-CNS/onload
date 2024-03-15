@@ -384,9 +384,10 @@ struct efx_auxiliary_txq_params {
  * @evq: The event queue to associate with the allocated RXQ.
  */
 struct efx_auxiliary_rxq_params {
-        int evq;
-        int label;
-        int qid;
+        int  evq;
+        int  label;
+        int  qid;
+        bool suppress_events;
 };
 
 #endif /* CI_DRIVER_CI_EF10CT_TEST_H */

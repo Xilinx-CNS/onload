@@ -63,6 +63,15 @@ static int ef10ct_resource_init(struct efx_auxiliary_device *edev,
   for( i = 0; i < n_txqs && val.nic_res.evq_min + i < val.nic_res.evq_lim; ++i )
     ef10ct->evq[val.nic_res.evq_min + i].txq = val.nic_res.txq_min + i;
 
+  ef10ct->rxq_n = val.nic_res.rxq_lim;
+  ef10ct->rxq = vzalloc(sizeof(*ef10ct->rxq) * ef10ct->rxq_n);
+  if( ! ef10ct->rxq ) {
+    vfree(ef10ct->evq);
+    return -ENOMEM;
+  }
+  for( i = 0; i < ef10ct->rxq_n; i++ )
+    ef10ct->rxq[i].evq = -1;
+
   res_dim->irq_n_ranges = 0;
 #if 0
   rc = edev->ops->get_param(client, EFX_AUXILIARY_IRQ_RESOURCES, &val);

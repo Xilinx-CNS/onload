@@ -61,7 +61,9 @@ struct efct_test_rxq {
   int evq;
   /* Location of the "register" which uses post buffer locations */
   ci_qword_t *post_register;
-  /* Periodic timer to check for writes to post_register*/
+  /* Are rx completion events suppressed for this queue? */
+  bool events_suppressed;
+  /* Periodic timer to check for writes to post_register */
   struct delayed_work timer;
   /* Is the timer currently running? */
   atomic_t timer_running;

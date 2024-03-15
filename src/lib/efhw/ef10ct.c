@@ -123,7 +123,7 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
     container_of(work, struct efhw_nic_ef10ct_evq, check_flushes.work);
   ci_qword_t *event = evq->base;
   bool found_flush = false;
-  int txq;
+  int q_id;
   int i;
 
   /* In the case of a flush timeout this may have been rescheduled following
@@ -134,18 +134,20 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
 
   for(i = 0; i < evq->capacity; i++) {
     if(CI_QWORD_FIELD(*event, EFCT_EVENT_TYPE) == EFCT_EVENT_TYPE_CONTROL &&
-       CI_QWORD_FIELD(*event, EFCT_CTRL_SUBTYPE) == EFCT_CTRL_EV_FLUSH &&
-       CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX) {
+       CI_QWORD_FIELD(*event, EFCT_CTRL_SUBTYPE) == EFCT_CTRL_EV_FLUSH) {
       found_flush = true;
-      txq = CI_QWORD_FIELD(*event, EFCT_FLUSH_QUEUE_ID);
-      efhw_handle_txdmaq_flushed(evq->nic, txq);
+      q_id = CI_QWORD_FIELD(*event, EFCT_FLUSH_QUEUE_ID);
+      if(CI_QWORD_FIELD(*event, EFCT_FLUSH_TYPE) == EFCT_FLUSH_TYPE_TX)
+        efhw_handle_txdmaq_flushed(evq->nic, q_id);
+      else /* EFCT_FLUSH_TYPE_RX */
+        efhw_handle_rxdmaq_flushed(evq->nic, q_id, false);
       break;
     }
     event++;
   }
 
   if( !found_flush || !atomic_dec_and_test(&evq->queues_flushing) ) {
-    EFHW_ERR("%s: WARNING: No TX flush found, scheduling delayed work",
+    EFHW_ERR("%s: WARNING: No flush found, scheduling delayed work",
              __FUNCTION__);
     schedule_delayed_work(&evq->check_flushes, 100);
   }
@@ -330,8 +332,42 @@ ef10ct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 
 static int 
 ef10ct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
-                      struct efhw_dmaq_params *params)
+                      struct efhw_dmaq_params *rxq_params)
 {
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efhw_nic_ef10ct_evq *ef10ct_evq = &ef10ct->evq[rxq_params->evq];
+  struct efx_auxiliary_rxq_params params = {
+    .evq = rxq_params->evq,
+    .qid = ef10ct_evq->rxq,
+    .label = rxq_params->tag,
+    .suppress_events = true, /* Do we ever want this to be false? Maybe false if int-driven */
+  };
+  int rc;
+  struct efx_auxiliary_rpc dummy;
+
+  if(!(rxq_params->evq < ef10ct->evq_n)) {
+    return -EINVAL;
+  }
+  if(!(params.qid != EFCT_EVQ_NO_TXQ)) {
+    return -EINVAL;
+  }
+
+  EFHW_ASSERT(rxq_params->evq < ef10ct->evq_n);
+  EFHW_ASSERT(params.qid != EFCT_EVQ_NO_TXQ);
+
+  dummy.cmd = MC_CMD_INIT_RXQ;
+  dummy.inlen = sizeof(struct efx_auxiliary_rxq_params);
+  dummy.inbuf = (void*)&params;
+  dummy.outlen = sizeof(struct efx_auxiliary_rxq_params);
+  dummy.outbuf = (void*)&params;
+  rc = ef10ct_fw_rpc(nic, &dummy);
+
+  if( rc >= 0 ) {
+    rxq_params->qid_out = rc;
+    ef10ct->rxq[rc].evq = rxq_params->evq;
+    rc = 0;
+  }
+
   return 0;
 }
 
@@ -375,7 +411,28 @@ ef10ct_flush_tx_dma_channel(struct efhw_nic *nic, uint32_t client_id,
 static int
 ef10ct_flush_rx_dma_channel(struct efhw_nic *nic, uint32_t client_id, uint dmaq)
 {
-  return -ENOSYS;
+  int rc = 0, evq_id;
+  struct efx_auxiliary_rpc dummy;
+  struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
+  struct efhw_nic_ef10ct_evq *ef10ct_evq;
+
+  dummy.cmd = MC_CMD_FINI_RXQ;
+  dummy.inlen = sizeof(int);
+  dummy.inbuf = &dmaq;
+  dummy.outlen = 0;
+  rc = ef10ct_fw_rpc(nic, &dummy);
+
+  evq_id = ef10ct->rxq[dmaq].evq;
+  if( evq_id < 0 )
+    return -EINVAL;
+  ef10ct_evq = &ef10ct->evq[evq_id];
+
+  atomic_inc(&ef10ct_evq->queues_flushing);
+  schedule_delayed_work(&ef10ct_evq->check_flushes, 0);
+
+  memset(&ef10ct->rxq[dmaq], 0, sizeof(ef10ct->rxq[dmaq]));
+  ef10ct->rxq[dmaq].evq = -1;
+  return rc;
 }
 
 

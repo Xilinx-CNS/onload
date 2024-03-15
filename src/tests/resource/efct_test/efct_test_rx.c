@@ -227,7 +227,8 @@ enum hrtimer_restart efct_rx_tick(struct hrtimer *hr)
   write_real_fake_metadata(rxq);
 
   /* Push event to queue*/
-  evq_push_rx(evq, 1);
+  if( !rxq->events_suppressed )
+    evq_push_rx(evq, 1);
 
   /* We have to wait until after the metadata is written before we can
   * increment pkt, otherwise the frame and the metadata would end up in

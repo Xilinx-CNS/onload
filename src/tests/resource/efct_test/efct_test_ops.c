@@ -333,6 +333,7 @@ static int efct_test_init_rxq(struct efx_auxiliary_client *handle,
   rxq->evq = evq;
   rxq->tdev = tdev;
   tdev->evqs[evq].rxqs |= 1 << rxq_idx;
+  rxq->events_suppressed = params->suppress_events;
 
   /* Everything should be memset to 0, but I want to be sure */
   if(rxq->next_bid != 0)
