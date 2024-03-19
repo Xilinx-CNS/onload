@@ -157,6 +157,8 @@ EFRM_NEED_DEBUGFS_LOOKUP_AND_REMOVE nsymbol debugfs_lookup_and_remove include/li
 
 EFRM_HAVE_WARN_FLUSHING_SYSTEMWIDE_WQ symbol __warn_flushing_systemwide_wq include/linux/workqueue.h
 
+EFRM_NEED_STRSCPY	nsymbol	strscpy	include/linux/fortify-string.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

@@ -129,7 +129,7 @@ efrm_proc_dir_get(char const* dirname, struct proc_dir_entry* parent,
 		rval->efrm_pd_next = *entry_list_head;
 		rval->efrm_pd_child = NULL;
 		*entry_list_head = rval;
-		strlcpy(rval->efrm_pd_name, dirname, EFRM_PROC_NAME_LEN);
+		strscpy(rval->efrm_pd_name, dirname, EFRM_PROC_NAME_LEN);
 	}
 
 out:
@@ -239,7 +239,7 @@ efrm_proc_create_file( char const* name, mode_t mode, efrm_pd_handle parent,
 		goto done_create_file;
 	}
 	rval->efrm_pf_parent = handle;
-	strlcpy( rval->efrm_pf_name, name, EFRM_PROC_NAME_LEN );
+	strscpy( rval->efrm_pf_name, name, EFRM_PROC_NAME_LEN );
 	rval->efrm_pf_next = handle ? handle->efrm_pd_child : NULL;
 	
 	entry = proc_create_data( name, mode, root, fops, context );
