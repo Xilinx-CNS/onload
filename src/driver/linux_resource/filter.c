@@ -663,7 +663,7 @@ find_interface_name( char const* ifname,
                 return 0;
         memset( cur_name, 0, sizeof(efrm_interface_name_t) );
 
-        strlcpy( cur_name->efrm_in_interface_name, ifname, IFNAMSIZ );
+        strscpy( cur_name->efrm_in_interface_name, ifname, IFNAMSIZ );
         cur_name->efrm_in_n_tables = 0;
 
         spin_lock_bh(&efrm_ft_lock);
@@ -787,7 +787,7 @@ efrm_allocate_new_table( char const* dev_name,
 		table->efrm_ft_dev_name = name;
 		table->efrm_ft_interface_name = NULL;
 		if ( dev_name ) {
-			strlcpy( name, dev_name, IFNAMSIZ );
+			strscpy( name, dev_name, IFNAMSIZ );
 		}
 	}
 	return table;
@@ -1966,7 +1966,7 @@ void efrm_map_table( struct net* netns, char const* ifname,
 	}
 	if ( table ) {
 		efrm_add_files( table );
-		strlcpy( table->efrm_ft_dev_name, devname,
+		strscpy( table->efrm_ft_dev_name, devname,
 			 IFNAMSIZ );
 	}
 }
