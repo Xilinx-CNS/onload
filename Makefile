@@ -225,6 +225,9 @@ ifneq ($(MMAKE_LIBERAL),1)
 ONLOAD_CFLAGS += -Werror
 endif
 
+# TODO Address these in the source code.
+ONLOAD_CFLAGS += -Wno-missing-prototypes -Wno-missing-declarations
+
 ONLOAD_MAKEFLAGS ?=
 
 ifeq ($(HAVE_SFC),1)

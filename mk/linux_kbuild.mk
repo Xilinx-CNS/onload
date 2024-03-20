@@ -31,6 +31,9 @@ ifndef MMAKE_LIBERAL
 EXTRA_CFLAGS += -Werror
 endif # MMAKE_LIBERAL
 
+# TODO Address these in the source code.
+EXTRA_CFLAGS += -Wno-missing-prototypes -Wno-missing-declarations
+
 ifdef W_NO_STRING_TRUNCATION
 EXTRA_CFLAGS += -Wno-stringop-truncation
 endif
