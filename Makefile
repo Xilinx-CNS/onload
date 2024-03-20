@@ -146,6 +146,11 @@ $(obj)/src/driver/linux_onload: $(obj)/src/lib/citools $(obj)/src/lib/ciul \
                                 $(obj)/src/lib/transport/ip \
                                 $(obj)/src/lib/cplane mkdirs
 
+# Linux-6.8 turns on -Wmissing-declarations and -Wmissing-prototypes globally.
+# Onload has too many places which trigger those warnings. So, just remove
+# the options to keep build working.
+KBUILD_CFLAGS := $(filter-out -Wmissing-prototypes -Wmissing-declarations, $(KBUILD_CFLAGS))
+
 else
 ################## Top-level makefile
 
