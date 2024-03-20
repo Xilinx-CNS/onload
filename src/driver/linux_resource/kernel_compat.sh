@@ -160,6 +160,8 @@ EFRM_NEED_DEBUGFS_LOOKUP_AND_REMOVE nsymbol debugfs_lookup_and_remove include/li
 
 EFRM_HAVE_WARN_FLUSHING_SYSTEMWIDE_WQ symbol __warn_flushing_systemwide_wq include/linux/workqueue.h
 
+EFRM_HAVE_SET_RXFH_CONTEXT memtype struct_ethtool_ops set_rxfh_context include/linux/ethtool.h int (*)(struct net_device*, const u32*, const u8*, const u8, u32*, bool)
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
