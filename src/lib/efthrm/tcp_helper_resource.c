@@ -6806,7 +6806,7 @@ efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs)
   ni->packets->set[bufset_id].n_free = PKTS_PER_SET;
 #ifdef OO_DO_HUGE_PAGES
   ni->packets->set[bufset_id].page_offset =
-    hugetlb_page ? hugetlb_page->page->index * CI_HUGEPAGE_SIZE : -1;
+    hugetlb_page ? oo_hugetlb_page_offset(hugetlb_page->page) : -1;
 #else
   ni->packets->set[bufset_id].page_offset = -1;
 #endif

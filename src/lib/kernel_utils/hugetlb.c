@@ -224,8 +224,8 @@ oo_hugetlb_page_alloc_raw(struct oo_hugetlb_allocator *allocator,
 	/* memfd originated in userspace, so we have to check we actually
 	 * got what we thought we would. */
 	if (!PageHuge(*page_out) || PageTail(*page_out)) {
-		EFRM_ERR("%s: hugepage was badly created (0x%08lx / %d / %d)",
-				__func__, (*page_out)->index * OO_HUGEPAGE_SIZE,
+		EFRM_ERR("%s: hugepage was badly created (0x%08llx / %d / %d)",
+				__func__, oo_hugetlb_page_offset(*page_out),
 				PageHuge(*page_out), PageTail(*page_out));
 		rc = -ENOMEM;
 		goto fail_check;
@@ -262,7 +262,7 @@ void oo_hugetlb_page_free_raw(struct file *filp, struct page *page,
 	EFRM_ASSERT(filp);
 	EFRM_ASSERT(page);
 
-	offset = page->index * OO_HUGEPAGE_SIZE;
+	offset = oo_hugetlb_page_offset(page);
 
 	unpin_user_page(page);
 
@@ -303,3 +303,18 @@ oo_hugetlb_pages_prealloc(struct oo_hugetlb_allocator *allocator,
 			nr_pages * OO_HUGEPAGE_SIZE);
 }
 EXPORT_SYMBOL(oo_hugetlb_pages_prealloc);
+
+loff_t
+oo_hugetlb_page_offset(struct page *page)
+{
+	/* In Linux 6.7+, the huge page ->index is in the PAGE_SIZE and not in
+	 * the 2 MiB units. The patch series that makes that change also removes
+	 * the hugetlb_basepage_index() function so that we can use it for the
+	 * conditional compilation. */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6,0,0) && ! defined(EFRM_HUGETLB_HAS_BASEPAGE_INDEX)
+	return page->index * PAGE_SIZE;
+#else
+	return page->index * OO_HUGEPAGE_SIZE;
+#endif
+}
+EXPORT_SYMBOL(oo_hugetlb_page_offset);

@@ -465,6 +465,10 @@ static inline int kstrtobool(const char *s, bool *res)
 }
 #endif
 
+#ifdef EFRM_NEED_STRSCPY
+#define strscpy strlcpy
+#endif
+
 #ifdef EFRM_CLASS_CREATE_NO_MODULE
 /* linux >= 6.4 */
 /* NOTE: there are revisions between linux-6.3 and linux-6.4 where

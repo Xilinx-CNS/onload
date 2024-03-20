@@ -128,7 +128,12 @@ void oo_exit_hook(int status)
     }
   }
 
-  if( ! have_active_netifs() )
+  /* It is possible to reach this function without ci_setup_fork having run
+   * because citp_atexit_init registers this function to intercept the exit
+   * syscall. We therefore exit early as the code below assumes more advanced
+   * initialisation.
+   */
+  if( citp.init_level < CITP_INIT_FORK_HOOKS || ! have_active_netifs() )
     return;
 
   citp_enter_lib(&lib_context);

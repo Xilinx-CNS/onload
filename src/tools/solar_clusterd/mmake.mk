@@ -27,6 +27,9 @@ CFLAGS += $(PYTHON_CFLAGS) $(PYTHON_VERDEF)
 CFLAGS += -Werror $(CWARNINGS) -g -O2 -DNDEBUG
 LIBS   += $(PYTHON_LIBS)
 
+MMAKE_LIBS	:= $(LINK_CIUL_LIB) $(LINK_CPLANE_LIB)
+MMAKE_LIB_DEPS	:= $(CIUL_LIB_DEPEND) $(CPLANE_LIB_DEPEND)
+
 SRCS := filter_string cluster_protocol
 
 OBJS := $(patsubst %,%.o,$(SRCS))
@@ -61,7 +64,7 @@ else
 all:
 endif
 
-cluster_protocol.so: $(OBJS)
+cluster_protocol.so: $(OBJS) $(MMAKE_LIB_DEPS)
 	$(CC) -shared -g -Wl,-E $^ $(MMAKE_LIBS) $(PYTHON_LIBS) -o $@
 
 clean:

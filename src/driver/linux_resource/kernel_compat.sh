@@ -151,6 +151,7 @@ EFRM_HAVE_GET_RANDOM_U32	symbol get_random_u32	include/linux/random.h
 EFRM_HUGETLB_FILE_SETUP		symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, int, int)
 EFRM_HUGETLB_FILE_SETUP_UCOUNTS	symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, struct ucounts **, int, int)
 EFRM_HUGETLB_FILE_SETUP_USER	symtype	hugetlb_file_setup	include/linux/hugetlb.h	struct file *(const char *, size_t, vm_flags_t, struct user_struct**, int, int)
+EFRM_HUGETLB_HAS_BASEPAGE_INDEX	symbol	hugetlb_basepage_index	include/linux/pagemap.h
 
 EFRM_CLASS_CREATE_NO_MODULE symtype class_create include/linux/device/class.h struct class *(const char *)
 
@@ -159,6 +160,8 @@ EFRM_HAVE_ITER_IOV symbol iter_iov include/linux/uio.h
 EFRM_NEED_DEBUGFS_LOOKUP_AND_REMOVE nsymbol debugfs_lookup_and_remove include/linux/debugfs.h
 
 EFRM_HAVE_WARN_FLUSHING_SYSTEMWIDE_WQ symbol __warn_flushing_systemwide_wq include/linux/workqueue.h
+
+EFRM_NEED_STRSCPY	nsymbol	strscpy	include/linux/fortify-string.h
 
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'

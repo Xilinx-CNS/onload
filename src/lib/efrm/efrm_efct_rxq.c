@@ -8,6 +8,7 @@
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/efab/hardware.h>
 #include <ci/efhw/efct.h>
+#include <kernel_utils/hugetlb.h>
 #include <linux/mman.h>
 #include <linux/file.h>
 #include <ci/driver/ci_efct.h>
@@ -278,7 +279,7 @@ static int map_one_superbuf(unsigned long addr,
 	rc = vm_mmap(kern->file, addr, CI_HUGEPAGE_SIZE, PROT_READ,
 	             MAP_FIXED | MAP_SHARED | MAP_POPULATE |
 	                 MAP_HUGETLB | MAP_HUGE_2MB,
-	             kern->page->index * CI_HUGEPAGE_SIZE);
+	             oo_hugetlb_page_offset(kern->page));
 	if (IS_ERR((void*)rc))
 		return PTR_ERR((void*)rc);
 	return 0;

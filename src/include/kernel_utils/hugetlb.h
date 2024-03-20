@@ -136,4 +136,13 @@ oo_hugetlb_page_valid(struct oo_hugetlb_page *page)
 	return page->filp && page->page;
 }
 
+/*
+ * oo_hugetlb_page_offset - Get the page offset in the donated memfd file.
+ *
+ * Return:
+ *   The hugepage offset in bytes.
+ */
+extern loff_t
+oo_hugetlb_page_offset(struct page *);
+
 #endif /* __OO_HUGETLB_H__ */
