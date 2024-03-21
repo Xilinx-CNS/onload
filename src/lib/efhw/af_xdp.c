@@ -1416,13 +1416,58 @@ af_xdp_nic_buffer_table_clear(struct efhw_nic *nic,
  * Filtering
  *
  *--------------------------------------------------------------------*/
+
+static int
+af_xdp_ethtool_set_rxfh_context(struct efhw_nic *nic, const u32 *indir,
+                                const u8 *key, u8 hfunc, u32 *rss_context,
+                                u8 delete)
+{
+  struct net_device *dev = nic->net_dev;
+  const struct ethtool_ops *ops = dev->ethtool_ops;
+
+  EFHW_ASSERT(rss_context);
+
+#ifndef EFRM_HAVE_SET_RXFH_CONTEXT
+  /* linux >= 6.8 removes ethtool_ops::set_rxfh_context(). We use set_rxfh(). */
+
+  int rc;
+  struct ethtool_rxfh_param rxfh = {
+    .hfunc = hfunc,
+    .indir_size = nic->rss_indir_size,
+    .indir = (u32 *)indir,
+    .key_size = nic->rss_key_size,
+    .key = (u8 *)key,
+    .rss_context = *rss_context,
+    .rss_delete = delete,
+  };
+
+  if( !ops->set_rxfh ) {
+    EFHW_WARN("%s: %s does not support `set_rxfh` operation", __FUNCTION__,
+              dev->name);
+    return -EOPNOTSUPP;
+  }
+
+  rc = ops->set_rxfh(dev, &rxfh, NULL);
+  if( rc == 0 )
+    *rss_context = rxfh.rss_context;
+
+  return rc;
+#else
+  if( !ops->set_rxfh_context ) {
+    EFHW_WARN("%s: %s does not support `set_rxfh_context` operation",
+              __FUNCTION__, dev->name);
+    return -EOPNOTSUPP;
+  }
+  return ops->set_rxfh_context(dev, indir, key, hfunc, rss_context, delete);
+#endif
+}
+
 static int
 af_xdp_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
 		 u32 efhw_rss_mode, int num_qs, u32 *rss_context_out)
 {
 	struct net_device *dev = nic->net_dev;
 	int rc = 0;
-	const struct ethtool_ops *ops;
 
 	EFHW_ASSERT(efhw_rss_mode == EFHW_RSS_MODE_DEFAULT);
 
@@ -1441,19 +1486,12 @@ af_xdp_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
 		goto unlock_out;
 	}
 
-	ops = dev->ethtool_ops;
-	if (!ops->set_rxfh_context) {
-		EFHW_WARN("%s: %s does not support `set_rxfh_context` operation",
-							__FUNCTION__, dev->name);
-		rc = -EOPNOTSUPP;
-		goto unlock_out;
-	}
-
 	/* We want to allocate a context */
 	*rss_context_out = ETH_RXFH_CONTEXT_ALLOC;
 
 	/* TODO AF_XDP: We want to check that this device can use a toeplitz hash */
-	rc = ops->set_rxfh_context(dev, indir, key, /*hfunc*/ 0, rss_context_out, false);
+	rc = af_xdp_ethtool_set_rxfh_context(nic, indir, key, /*hfunc*/ 0,
+						rss_context_out, false);
 
 	if( rc < 0 ) {
 		EFHW_WARN("%s: rc = %d", __FUNCTION__, rc);
@@ -1467,27 +1505,16 @@ unlock_out:
 static int
 af_xdp_rss_free(struct efhw_nic *nic, u32 rss_context)
 {
-	struct net_device *dev = nic->net_dev;
 	int rc = 0;
-	const struct ethtool_ops *ops;
 
 	rtnl_lock();
 
-	ops = dev->ethtool_ops;
-	if (!ops->set_rxfh_context) {
-		EFHW_WARN("%s: %s does not support `set_rxfh_context` operation",
-							__FUNCTION__, dev->name);
-		rc = -EOPNOTSUPP;
-		goto unlock_out;
-	}
-
-	rc = ops->set_rxfh_context(dev, NULL, NULL, 0, &rss_context, true);
+	rc = af_xdp_ethtool_set_rxfh_context(nic, NULL, NULL, 0, &rss_context, true);
 
 	if (rc < 0) {
 		EFHW_WARN("%s: rc = %d", __FUNCTION__, rc);
 	}
 
-unlock_out:
 	rtnl_unlock();
 	return rc;
 }
