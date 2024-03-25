@@ -465,7 +465,9 @@ typedef struct oo_p_dllink oo_p_dllink_t;
 #define STRUCT_NETIF_STATE(ctx)                                         \
   FTL_TSTRUCT_BEGIN(ctx, ci_netif_state, )                              \
   FTL_TFIELD_ARRAYOFSTRUCT(ctx, ci_netif_state_nic_t, nic, CI_CFG_MAX_INTERFACES, \
-                           ORM_OUTPUT_EXTRA, stats->hwport_mask & (1 << i) )  \
+                           ORM_OUTPUT_EXTRA, stats->tx_hwport_mask & (1 << i) )   \
+  FTL_TFIELD_ARRAYOFSTRUCT(ctx, ci_netif_state_nic_t, nic, CI_CFG_MAX_INTERFACES, \
+                           ORM_OUTPUT_EXTRA, stats->rx_hwport_mask & (1 << i) )   \
   FTL_TFIELD_INT(ctx, ci_int32, nic_n, ORM_OUTPUT_STACK)                  \
   FTL_TFIELD_INT(ctx, ci_uint64, evq_last_prime, ORM_OUTPUT_STACK)        \
   FTL_TFIELD_INT(ctx, ci_uint32, stack_id, ORM_OUTPUT_STACK)              \
@@ -477,7 +479,8 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   FTL_TFIELD_INT(ctx, ci_uint32, error_flags, ORM_OUTPUT_STACK)           \
   FTL_TFIELD_INT(ctx, ci_uint32, evq_primed, ORM_OUTPUT_STACK)            \
   FTL_TFIELD_INT(ctx, ci_uint32, evq_prime_deferred, ORM_OUTPUT_STACK)    \
-  FTL_TFIELD_INT(ctx, cicp_hwport_mask_t, hwport_mask, ORM_OUTPUT_STACK)  \
+  FTL_TFIELD_INT(ctx, cicp_hwport_mask_t, tx_hwport_mask, ORM_OUTPUT_STACK) \
+  FTL_TFIELD_INT(ctx, cicp_hwport_mask_t, rx_hwport_mask, ORM_OUTPUT_STACK) \
   FTL_TFIELD_ARRAYOFINT(ctx, ci_int8,                   \
                         hwport_to_intf_i, CI_CFG_MAX_HWPORTS, ORM_OUTPUT_STACK) \
   FTL_TFIELD_ARRAYOFINT(ctx, ci_int8,                   \

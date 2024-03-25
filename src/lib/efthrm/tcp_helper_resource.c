@@ -2434,7 +2434,8 @@ allocate_netif_resources(ci_resource_onload_alloc_t* alloc,
   /* An entry in intf_i_to_hwport should not be touched if the intf does
    * not exist.  Belt-and-braces: initialise to 0.
    */
-  ns->hwport_mask = ni->hwport_mask;
+  ns->tx_hwport_mask = ni->tx_hwport_mask;
+  ns->rx_hwport_mask = ni->rx_hwport_mask;
   memset(ns->intf_i_to_hwport, 0, sizeof(ns->intf_i_to_hwport));
   memcpy(ns->hwport_to_intf_i, ni->hwport_to_intf_i,
          sizeof(ns->hwport_to_intf_i));
@@ -3118,6 +3119,7 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   int rc, i, intf_i;
   ci_hwport_id_t hwport;
   cicp_hwport_mask_t hwport_mask, whitelist_mask;
+  cicp_hwport_mask_t tx_hwport_mask, rx_hwport_mask;
 
   efrm_nic_set_clear(&ni->nic_set);
   trs->netif.nic_n = 0;
@@ -3157,6 +3159,9 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
     }
     hwport_mask &= ~whitelist_mask;
   }
+
+  tx_hwport_mask = hwport_mask;
+  rx_hwport_mask = hwport_mask;
 
   if( ifindices_len < 0 ) {
     /* Needed to protect against oo_nics changes */
@@ -3208,7 +3213,8 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
            __FUNCTION__);
     return -ENODEV;
   }
-  ni->hwport_mask = hwport_mask;
+  ni->tx_hwport_mask = tx_hwport_mask;
+  ni->rx_hwport_mask = rx_hwport_mask;
   return 0;
 
  fail:

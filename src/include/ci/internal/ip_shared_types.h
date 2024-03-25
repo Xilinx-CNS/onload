@@ -1193,7 +1193,9 @@ struct ci_netif_state_s {
    */
   ci_uint32             evq_prime_deferred;
 
-  cicp_hwport_mask_t    hwport_mask; /* hwports accelerated by the stack */
+  /* hwports accelerated by the stack */
+  cicp_hwport_mask_t    tx_hwport_mask;
+  cicp_hwport_mask_t    rx_hwport_mask;
   ci_int8               hwport_to_intf_i[CI_CFG_MAX_HWPORTS];
   ci_int8               intf_i_to_hwport[CI_CFG_MAX_INTERFACES];
 
