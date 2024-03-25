@@ -3099,6 +3099,82 @@ static int oo_get_listed_hwports(tcp_helper_resource_t* trs, const char* list,
   return found_iface ? 0 : 1;
 }
 
+/* Find LL hwports of the multiarch NICs within the given hwports mask. */
+static cicp_hwport_mask_t oo_get_llct_hwports(cicp_hwport_mask_t hwport_mask)
+{
+  cicp_hwport_mask_t llct_hwports = 0;
+
+  for( ; hwport_mask != 0; hwport_mask &= (hwport_mask - 1) ) {
+    ci_hwport_id_t hwport = cp_hwport_mask_first(hwport_mask);
+
+    if( oo_check_nic_llct(&oo_nics[hwport]) )
+      llct_hwports |= cp_hwport_make_mask(hwport);
+  }
+
+  return llct_hwports;
+}
+
+/* Find FF hwports of the multiarch NICs within the given hwports mask.
+ *
+ * This is a bit fiddly at the moment because the regular/plain SFC
+ * NICs look similar to the FF datapaths of the multiarch NICs.
+ *
+ * To distinguish, we use the net_device object which is shared
+ * between the FF and LL datapaths of the same multiarch NIC.
+ */
+static bool oo_ff_hwport_match(const struct efhw_nic *nic,
+                               const void *opaque_data)
+{
+  const struct net_device* net_dev = opaque_data;
+  return nic->net_dev == net_dev && ! (nic->flags & NIC_FLAG_LLCT);
+}
+
+static cicp_hwport_mask_t oo_get_ff_hwports(cicp_hwport_mask_t hwport_mask,
+                                            cicp_hwport_mask_t llct_hwports)
+{
+  cicp_hwport_mask_t ff_hwports = 0;
+
+  /* Protect against the oo_nics changes. */
+  rtnl_lock();
+
+  /* Iterate over LL hwports and find FF hwports with the same net_device. */
+  for( ; llct_hwports != 0; llct_hwports &= (llct_hwports - 1) ) {
+    ci_hwport_id_t hwport = cp_hwport_mask_first(llct_hwports);
+    struct efhw_nic* nic;
+    struct oo_nic* onic;
+
+    if( ! oo_nics[hwport].efrm_client )
+      continue;
+
+    /* Find the LLCT efhw_nic first. */
+    nic = efrm_client_get_nic(oo_nics[hwport].efrm_client);
+
+    /* Then find the matching FF efhw_nic. */
+    nic = efhw_nic_find_by_foo(oo_ff_hwport_match, nic->net_dev);
+    if( ! nic ) {
+      ci_log("%s: WARNING: Unable to find FF port matching LL port id=%d",
+             __FUNCTION__, hwport);
+      continue;
+    }
+
+    /* Finally, find the matching oo_nic */
+    onic = oo_nic_find(nic);
+    if( ! onic ) {
+      ci_log("%s: WARNING: Unable to find oo_nic for efhw_nic index=%d",
+             __FUNCTION__, nic->index);
+      continue;
+    }
+
+    ff_hwports |= cp_hwport_make_mask(onic - oo_nics);
+  }
+
+  /* Mask out possibly previously unselected hwports. */
+  ff_hwports &= hwport_mask;
+
+  rtnl_unlock();
+  return ff_hwports;
+}
+
 /* This function is used to retrive the list of currently active SF
  * interfaces.
  *
@@ -3118,7 +3194,7 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   struct oo_nic* onic;
   int rc, i, intf_i;
   ci_hwport_id_t hwport;
-  cicp_hwport_mask_t hwport_mask, whitelist_mask;
+  cicp_hwport_mask_t hwport_mask, whitelist_mask, llct_hwports;
   cicp_hwport_mask_t tx_hwport_mask, rx_hwport_mask;
 
   efrm_nic_set_clear(&ni->nic_set);
@@ -3160,8 +3236,25 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
     hwport_mask &= ~whitelist_mask;
   }
 
+  /* Enable all hwports for everything by default. */
   tx_hwport_mask = hwport_mask;
   rx_hwport_mask = hwport_mask;
+
+  /* If there are LLCT hwports (and therefore multiarch NICs), the TX and RX
+   * hwports in this stack are going to be different.  We need to recompute
+   * them depending on the user-supplied configuration. */
+  llct_hwports = oo_get_llct_hwports(hwport_mask);
+  if( llct_hwports ) {
+    cicp_hwport_mask_t ff_hwports = oo_get_ff_hwports(hwport_mask,
+                                                      llct_hwports);
+
+    /* TODO User-defined knob to select datapaths. */
+    rx_hwport_mask = hwport_mask & ~llct_hwports;
+    tx_hwport_mask = hwport_mask | ff_hwports;
+  }
+
+  /* Some hwports might end up being unselected. */
+  hwport_mask = tx_hwport_mask | rx_hwport_mask;
 
   if( ifindices_len < 0 ) {
     /* Needed to protect against oo_nics changes */

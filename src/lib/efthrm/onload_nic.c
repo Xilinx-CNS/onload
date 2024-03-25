@@ -257,6 +257,18 @@ int oo_check_nic_suitable_for_onload(struct oo_nic* onic)
 }
 
 
+int oo_check_nic_llct(struct oo_nic* onic)
+{
+  struct efhw_nic *nic;
+
+  if( ! onic->efrm_client )
+    return 0;
+
+  nic = efrm_client_get_nic(onic->efrm_client);
+  return !!(nic->flags & NIC_FLAG_LLCT);
+}
+
+
 /* Tidies up all oo_nic state. Called at module unload. */
 void oo_nic_shutdown(void)
 {

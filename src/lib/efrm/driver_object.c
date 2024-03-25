@@ -355,8 +355,6 @@ static void efrm_client_init_from_nic(struct efrm_nic *rnic,
 	list_add(&client->link, &rnic->clients);
 }
 
-typedef bool (*nic_match_func)(const struct efhw_nic *nic,
-			       const void *opaque_data);
 static int efrm_client_get_by_foo(nic_match_func match, const void *match_data,
 				  struct efrm_client_callbacks *callbacks,
 				  void *user_data,
@@ -582,6 +580,25 @@ struct efhw_nic* efhw_nic_find_by_dev(const struct device *dev)
 	return result;
 }
 EXPORT_SYMBOL(efhw_nic_find_by_dev);
+
+struct efhw_nic* efhw_nic_find_by_foo(nic_match_func match,
+                                      const void *match_data)
+{
+	struct efhw_nic *result = NULL;
+	struct efrm_nic *nic;
+
+	spin_lock_bh(&efrm_nic_tablep->lock);
+	list_for_each_entry(nic, &efrm_nics, link) {
+		if (match(&nic->efhw_nic, match_data)) {
+			result = &nic->efhw_nic;
+			break;
+		}
+	}
+	spin_unlock_bh(&efrm_nic_tablep->lock);
+
+	return result;
+}
+EXPORT_SYMBOL(efhw_nic_find_by_foo);
 
 /* Arguably this should be in lib/efhw.  However, right now this function
  * is a layer violation because it assumes that the efhw_nic is embedded in

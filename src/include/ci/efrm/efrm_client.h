@@ -28,6 +28,10 @@ struct efrm_client_attr {
 };
 
 
+typedef bool (*nic_match_func)(const struct efhw_nic *nic,
+                               const void *opaque_data);
+
+
 /* Selects an arbitrary interface. */
 #define EFRM_IFINDEX_DEFAULT  -1
 
@@ -58,7 +62,9 @@ extern int efrm_client_get_ifindex(struct efrm_client *);
 extern int efrm_client_accel_allowed(struct efrm_client *client);
 
 extern struct efhw_nic* efhw_nic_find(const struct net_device *);
-struct efhw_nic* efhw_nic_find_by_dev(const struct device *dev);
+extern struct efhw_nic* efhw_nic_find_by_dev(const struct device *dev);
+extern struct efhw_nic* efhw_nic_find_by_foo(nic_match_func match,
+                                             const void *match_data);
 
 extern void efrm_client_disable_post_reset(struct efrm_client*);
 

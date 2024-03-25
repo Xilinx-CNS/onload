@@ -36,6 +36,8 @@ extern int oo_nic_hwport(struct oo_nic*);
 
 extern int oo_check_nic_suitable_for_onload(struct oo_nic* onic);
 
+extern int oo_check_nic_llct(struct oo_nic* onic);
+
 extern void oo_nic_shutdown(void);
 
 extern struct oo_nic *oo_netdev_may_add(const struct net_device *net_dev);
