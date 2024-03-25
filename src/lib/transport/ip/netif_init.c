@@ -2035,17 +2035,17 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   ef_vi_init_tx_timestamping(vi, nsn->tx_ts_correction);
   ef_vi_add_queue(vi, vi);
   ef_vi_set_stats_buf(vi, vi_stats);
-  ef_vi_receive_set_discards(vi,
-      EF_VI_DISCARD_RX_L4_CSUM_ERR |
-      EF_VI_DISCARD_RX_L3_CSUM_ERR |
-      EF_VI_DISCARD_RX_ETH_FCS_ERR |
-      EF_VI_DISCARD_RX_ETH_LEN_ERR |
-      EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR |
-      EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR |
-      EF_VI_DISCARD_RX_L2_CLASS_OTHER |
-      EF_VI_DISCARD_RX_L3_CLASS_OTHER |
-      EF_VI_DISCARD_RX_L4_CLASS_OTHER 
-  );
+  if( ef_vi_receive_capacity(vi) > 0 )
+    ef_vi_receive_set_discards(vi,
+        EF_VI_DISCARD_RX_L4_CSUM_ERR |
+        EF_VI_DISCARD_RX_L3_CSUM_ERR |
+        EF_VI_DISCARD_RX_ETH_FCS_ERR |
+        EF_VI_DISCARD_RX_ETH_LEN_ERR |
+        EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR |
+        EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR |
+        EF_VI_DISCARD_RX_L2_CLASS_OTHER |
+        EF_VI_DISCARD_RX_L3_CLASS_OTHER |
+        EF_VI_DISCARD_RX_L4_CLASS_OTHER);
   return 0;
 }
 
@@ -2207,8 +2207,8 @@ static int netif_tcp_helper_build(ci_netif* ni)
       if( NI_OPTS(ni).tx_push )
         ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
 
-      vi_state_bytes += ef_vi_calc_state_bytes(nsn->vi_rxq_size,
-                                               nsn->vi_txq_size);
+      vi_state_bytes += ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size,
+                                               NI_OPTS(ni).txq_size);
       vi_io_offset += nsn->vi_io_mmap_bytes;
       vi_efct_shm_offset += nsn->vi_efct_shm_mmap_bytes;
     }
@@ -3028,7 +3028,16 @@ int ci_netif_set_rxq_limit(ci_netif* ni)
   n_intf = 0;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     ef_vi* vi = ci_netif_vi(ni, intf_i);
-    rxq_cap = ef_vi_receive_capacity(vi);
+    int vi_rxq_cap = ef_vi_receive_capacity(vi);
+
+    /* Some interfaces do not receive packets.  We remove them from
+     * the new RX limit calculations. */
+    if( ! vi_rxq_cap )
+      continue;
+
+    /* Otherwise, operate on the assumption that all other interfaces
+     * have identical receive capacity. */
+    rxq_cap = vi_rxq_cap;
     ++n_intf;
   }
   /* We allow up to 80% of the total RX packet buf allocation to go in the
@@ -3091,6 +3100,8 @@ static int __ci_netif_init_fill_rx_rings(ci_netif* ni)
     int n_posted = 0;
     for( vi_i = 0; vi_i < ci_netif_num_vis(ni); ++vi_i ) {
       ef_vi* vi = &ni->nic_hw[intf_i].vis[vi_i];
+      if( ! ef_vi_receive_capacity(vi) )
+        continue;
       n_posted = ci_netif_rx_post(ni, intf_i, vi);
       if( ef_vi_receive_fill_level(vi) < rxq_limit )
         return -ENOMEM;

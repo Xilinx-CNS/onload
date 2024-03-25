@@ -1640,17 +1640,19 @@ static int initialise_vi(ci_netif* ni, struct ef_vi* vi, struct efrm_vi* vi_rs,
   ef_vi_set_ts_format(vi, vm->ts_format);
   ef_vi_init_rx_timestamping(vi, vm->rx_ts_correction);
   ef_vi_init_tx_timestamping(vi, vm->tx_ts_correction);
-  ef_vi_receive_set_discards(vi,
-      EF_VI_DISCARD_RX_L4_CSUM_ERR |
-      EF_VI_DISCARD_RX_L3_CSUM_ERR |
-      EF_VI_DISCARD_RX_ETH_FCS_ERR |
-      EF_VI_DISCARD_RX_ETH_LEN_ERR |
-      EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR |
-      EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR |
-      EF_VI_DISCARD_RX_L2_CLASS_OTHER |
-      EF_VI_DISCARD_RX_L3_CLASS_OTHER |
-      EF_VI_DISCARD_RX_L4_CLASS_OTHER 
-  );
+
+  if( ef_vi_receive_capacity(vi) > 0 )
+    ef_vi_receive_set_discards(vi,
+        EF_VI_DISCARD_RX_L4_CSUM_ERR |
+        EF_VI_DISCARD_RX_L3_CSUM_ERR |
+        EF_VI_DISCARD_RX_ETH_FCS_ERR |
+        EF_VI_DISCARD_RX_ETH_LEN_ERR |
+        EF_VI_DISCARD_RX_INNER_L3_CSUM_ERR |
+        EF_VI_DISCARD_RX_INNER_L4_CSUM_ERR |
+        EF_VI_DISCARD_RX_L2_CLASS_OTHER |
+        EF_VI_DISCARD_RX_L3_CLASS_OTHER |
+        EF_VI_DISCARD_RX_L4_CLASS_OTHER
+    );
   return 0;
 }
 
@@ -1701,7 +1703,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
   alloc_info.wakeup_channel = NI_OPTS(ni).irq_channel,
   alloc_info.name = vf_name;
   alloc_info.cluster = thc;
-  alloc_info.rxq_capacity = NI_OPTS(ni).rxq_size;
 
   /* The flags are slightly more complicated as they might be tweaked per-
    * interface.  These are the base values. */
@@ -1740,12 +1741,13 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     struct device* dev;
     struct efrm_vi* vi_rs;
     ef_vi* vi;
+    ci_hwport_id_t hwport = ns->intf_i_to_hwport[intf_i];
+    bool want_rxq = ni->rx_hwport_mask & cp_hwport_make_mask(hwport);
 
     BUILD_BUG_ON(sizeof(ni->vi_data) < sizeof(struct efrm_vi_mappings));
 
     /* Get interface properties. */
-    rc = oo_cp_get_hwport_properties(ni->cplane, ns->intf_i_to_hwport[intf_i],
-                                     NULL, NULL, NULL);
+    rc = oo_cp_get_hwport_properties(ni->cplane, hwport, NULL, NULL, NULL);
     if( rc < 0 )
       goto error_out;
 
@@ -1757,6 +1759,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     alloc_info.oo_vi_flags = 0;
     alloc_info.efhw_flags = base_efhw_flags;
     alloc_info.ef_vi_flags = base_ef_vi_flags;
+    alloc_info.rxq_capacity = want_rxq ? NI_OPTS(ni).rxq_size : 0;
 
     ci_assert_equal(tcp_helper_vi(trs, intf_i), NULL);
     ci_assert(trs_nic->thn_oo_nic != NULL);

@@ -722,6 +722,9 @@ int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
   if( vi->nic_type.arch == EF_VI_ARCH_EFCT )
     return 0;
 
+  if( ! ef_vi_receive_capacity(vi) )
+    return 0;
+
   ci_assert(ci_netif_is_locked(netif));
   ci_assert(ci_netif_rx_vi_space(netif, vi) >= CI_CFG_RX_DESC_BATCH);
 
