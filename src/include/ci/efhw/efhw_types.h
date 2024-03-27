@@ -567,8 +567,6 @@ struct efhw_nic {
 	/*! EtherFabric Functional Units -- functions */
 	const struct efhw_func_ops *efhw_func;
 
-	void *bt_blocks_memory;
-
 	/* Pointer to software based buffer tables, used on AF_XDP and EF10CT */
 	struct efhw_sw_bt *sw_bts;
 
