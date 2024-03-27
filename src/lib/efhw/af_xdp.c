@@ -1183,7 +1183,7 @@ static int af_xdp_translate_dma_addrs(struct efhw_nic* nic,
  *
  *--------------------------------------------------------------------*/
 
-static const int __af_xdp_nic_buffer_table_get_orders[] = {0,1,2,3,4,5,6,7,8,9,10};
+static const int af_xdp_nic_buffer_table_orders[] = {0,1,2,3,4,5,6,7,8,9,10};
 
 /* Func op implementations are provided by efhw_sw_bt */
 
@@ -1470,9 +1470,8 @@ struct efhw_func_ops af_xdp_char_functional_units = {
 	.flush_tx_dma_channel = af_xdp_flush_tx_dma_channel,
 	.flush_rx_dma_channel = af_xdp_flush_rx_dma_channel,
 	.translate_dma_addrs = af_xdp_translate_dma_addrs,
-	.buffer_table_orders = __af_xdp_nic_buffer_table_get_orders,
-	.buffer_table_orders_num = sizeof(__af_xdp_nic_buffer_table_get_orders) /
-		sizeof(__af_xdp_nic_buffer_table_get_orders[0]),
+	.buffer_table_orders = af_xdp_nic_buffer_table_orders,
+	.buffer_table_orders_num = CI_ARRAY_SIZE(af_xdp_nic_buffer_table_orders),
 	.buffer_table_alloc = efhw_sw_bt_alloc,
 	.buffer_table_free = efhw_sw_bt_free,
 	.buffer_table_set = efhw_sw_bt_set,

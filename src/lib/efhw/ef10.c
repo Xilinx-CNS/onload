@@ -1872,7 +1872,7 @@ _ef10_ef100_mcdi_cmd_buffer_table_program(struct efhw_nic *nic, dma_addr_t *dma_
  *
  *--------------------------------------------------------------------*/
 
-static const int __ef10_nic_buffer_table_get_orders[] = {0,4,8,10};
+static const int ef10_nic_buffer_table_orders[] = {0,4,8,10};
 
 static int __ef10_ef100_nic_buffer_table_alloc(struct efhw_nic *nic, int owner,
 					       int order,
@@ -2584,9 +2584,8 @@ struct efhw_func_ops ef10_char_functional_units = {
 	.flush_tx_dma_channel = ef10_ef100_flush_tx_dma_channel,
 	.flush_rx_dma_channel = ef10_ef100_flush_rx_dma_channel,
 	.translate_dma_addrs = ef10_translate_dma_addrs,
-	.buffer_table_orders = __ef10_nic_buffer_table_get_orders,
-	.buffer_table_orders_num = sizeof(__ef10_nic_buffer_table_get_orders) /
-		sizeof(__ef10_nic_buffer_table_get_orders[0]),
+	.buffer_table_orders = ef10_nic_buffer_table_orders,
+	.buffer_table_orders_num = CI_ARRAY_SIZE(ef10_nic_buffer_table_orders),
 	.buffer_table_alloc = ef10_ef100_nic_buffer_table_alloc,
 	.buffer_table_realloc = ef10_ef100_nic_buffer_table_realloc,
 	.buffer_table_free = ef10_ef100_nic_buffer_table_free,

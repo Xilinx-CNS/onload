@@ -594,7 +594,7 @@ static int efct_translate_dma_addrs(struct efhw_nic* nic,
  *
  *--------------------------------------------------------------------*/
 
-static const int __efct_nic_buffer_table_get_orders[] = {};
+static const int efct_nic_buffer_table_orders[] = {};
 
 
 /*--------------------------------------------------------------------
@@ -1533,8 +1533,8 @@ struct efhw_func_ops efct_char_functional_units = {
   .flush_tx_dma_channel = efct_flush_tx_dma_channel,
   .flush_rx_dma_channel = efct_flush_rx_dma_channel,
   .translate_dma_addrs = efct_translate_dma_addrs,
-  .buffer_table_orders = __efct_nic_buffer_table_get_orders,
-  .buffer_table_orders_num = 0,
+  .buffer_table_orders = efct_nic_buffer_table_orders,
+  .buffer_table_orders_num = CI_ARRAY_SIZE(efct_nic_buffer_table_orders),
   .filter_insert = efct_filter_insert,
   .filter_remove = efct_filter_remove,
   .filter_query = efct_filter_query,

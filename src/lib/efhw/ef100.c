@@ -425,7 +425,7 @@ static void ef100_nic_sw_event(struct efhw_nic *nic, int data, int evq)
  *
  *--------------------------------------------------------------------*/
 
-static const int __ef100_nic_buffer_table_get_orders[] = {9};
+static const int ef100_nic_buffer_table_orders[] = {9};
 
 /*--------------------------------------------------------------------
  *
@@ -743,9 +743,8 @@ struct efhw_func_ops ef100_char_functional_units = {
 	.flush_tx_dma_channel = ef10_ef100_flush_tx_dma_channel,
 	.flush_rx_dma_channel = ef10_ef100_flush_rx_dma_channel,
 	.translate_dma_addrs = ef100_translate_dma_addrs,
-	.buffer_table_orders = __ef100_nic_buffer_table_get_orders,
-	.buffer_table_orders_num = sizeof(__ef100_nic_buffer_table_get_orders) /
-		sizeof(__ef100_nic_buffer_table_get_orders[0]),
+	.buffer_table_orders = ef100_nic_buffer_table_orders,
+	.buffer_table_orders_num = CI_ARRAY_SIZE(ef100_nic_buffer_table_orders),
 	.buffer_table_alloc = ef10_ef100_nic_buffer_table_alloc,
 	.buffer_table_realloc = ef10_ef100_nic_buffer_table_realloc,
 	.buffer_table_free = ef10_ef100_nic_buffer_table_free,

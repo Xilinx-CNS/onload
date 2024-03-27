@@ -499,7 +499,7 @@ ef10ct_translate_dma_addrs(struct efhw_nic* nic, const dma_addr_t *src,
 
 /* Buffer table order 9 corresponds to 2MiB hugepages. Currently these are the
  * only sizes supported. */
-static const int __ef10ct_nic_buffer_table_get_orders[] = {9};
+static const int ef10ct_nic_buffer_table_orders[] = {9};
 
 /* Func op implementations are provided by efhw_sw_bt */
 
@@ -723,9 +723,8 @@ struct efhw_func_ops ef10ct_char_functional_units = {
   .flush_tx_dma_channel = ef10ct_flush_tx_dma_channel,
   .flush_rx_dma_channel = ef10ct_flush_rx_dma_channel,
   .translate_dma_addrs = ef10ct_translate_dma_addrs,
-  .buffer_table_orders = __ef10ct_nic_buffer_table_get_orders,
-  .buffer_table_orders_num = sizeof(__ef10ct_nic_buffer_table_get_orders) /
-    sizeof(__ef10ct_nic_buffer_table_get_orders[0]),
+  .buffer_table_orders = ef10ct_nic_buffer_table_orders,
+  .buffer_table_orders_num = CI_ARRAY_SIZE(ef10ct_nic_buffer_table_orders),
   .buffer_table_alloc = efhw_sw_bt_alloc,
   .buffer_table_free = efhw_sw_bt_free,
   .buffer_table_set = efhw_sw_bt_set,
