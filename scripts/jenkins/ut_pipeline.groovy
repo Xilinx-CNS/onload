@@ -44,7 +44,7 @@ void doCplanePipeline(List gcovr_options)
     'build/**/*.gc*',
     'build/gnu_x86_64/tests/onload/cplane_unit',
   ]
-  coverage_files['cplane'] = tm.runUnitTest('cplane', 'check:unit:cplane', gcov_paths, true, [], gcovr_options)
+  coverage_files['cplane'] = tm.runUnitTest('cplane', 'check:unit:cplane', gcov_paths, true, ['unit-test-master'], gcovr_options)
 }
 
 void doOOFPipeline(List gcovr_options)
@@ -53,7 +53,7 @@ void doOOFPipeline(List gcovr_options)
     'build/**/*.gc*',
     'build/gnu_x86_64/tests/onload/oof/oof_test',
   ]
-  coverage_files['oof'] = tm.runUnitTest('oof', 'check:unit:oof', gcov_paths, true, [], gcovr_options)
+  coverage_files['oof'] = tm.runUnitTest('oof', 'check:unit:oof', gcov_paths, true, ['unit-test-master'], gcovr_options)
 }
 
 void doORMPipeline(List gcovr_options)
@@ -62,7 +62,7 @@ void doORMPipeline(List gcovr_options)
     'build/**/*.gc*',
     'build/gnu_x86_64/tests/onload/onload_remote_monitor/internal_tests/test_ftl',
   ]
-  coverage_files['orm'] = tm.runUnitTest('orm', 'check:unit:orm', gcov_paths, true, [], gcovr_options)
+  coverage_files['orm'] = tm.runUnitTest('orm', 'check:unit:orm', gcov_paths, true, ['unit-test-master'], gcovr_options)
 }
 
 void doDeveloperBuild(String build_profile=null) {
@@ -92,7 +92,7 @@ void doDeveloperBuild(String build_profile=null) {
         }
 
         tasks[thread_title] = {
-          node('dev-build') {
+          node('unit-test-master') {
             def workspace = "workspace/${new URLDecoder().decode(env.JOB_NAME)}/exec-${env.EXECUTOR_NUMBER}-${thread_title}" 
             ws(workspace) {
               if( component == 'efct_driver' ) {
@@ -155,7 +155,7 @@ void doSystemTests() {
             'check:cplane_sys',
             gcov_paths,
             true,
-            ['netlink-inc-bond'],
+            ['netlink-inc-bond', 'unit-test-master'],
           )
         }
       },
@@ -199,7 +199,7 @@ void doUnitTestsPipeline() {
   String[] build_profiles
 
   nm.slack_notify {
-    node('unit-test-parallel') {
+    node('unit-test-master') {
       stage('Checkout') {
         def scmVars = scmmanager.cloneGit(scm)
         long_revision = scmVars.GIT_COMMIT
