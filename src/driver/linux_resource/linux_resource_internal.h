@@ -67,6 +67,10 @@ efrm_nic_del_device(struct net_device *);
 extern int efrm_install_proc_entries(void);
 extern void efrm_uninstall_proc_entries(void);
 
+extern void efrm_nic_add_sysfs(const struct net_device* net_dev,
+			       struct device *dev);
+extern void efrm_nic_del_sysfs(struct device *dev);
+
 #ifdef EFHW_HAS_AF_XDP
 extern void efrm_install_sysfs_entries(void);
 extern void efrm_remove_sysfs_entries(void);

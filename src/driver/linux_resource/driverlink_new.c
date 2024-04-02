@@ -51,7 +51,6 @@
 #include <ci/efhw/nic.h>
 #include <ci/tools/sysdep.h>
 #include <ci/internal/transport_config_opt.h>
-#include "sfcaffinity.h"
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/driver/resource/driverlink.h>
 
@@ -147,91 +146,6 @@ init_vi_resource_dimensions(struct vi_resource_dimensions *rd,
 		rd->irq_n_ranges = 0;
 		rd->irq_prime_reg = NULL;
 	}
-}
-
-
-static ssize_t enable_store(struct device *dev,
-			    struct device_attribute *attr,
-			    const char *buf, size_t count)
-{
-	struct efhw_nic* nic;
-	bool enable;
-	nic = efhw_nic_find_by_dev(dev);
-	if (!nic)
-		return -ENOENT;
-	if (kstrtobool(buf, &enable) < 0) {
-		EFRM_ERR("%s: Cannot parse data written to %s/onload_enable.",
-		         __func__, to_net_dev(dev)->name);
-		return -EINVAL;
-	}
-	efrm_nic_set_accel_allowed(nic, enable);
-	return count;
-}
-
-
-static ssize_t enable_show(struct device *dev,
-			   struct device_attribute *attr,
-			   char *buf_out)
-{
-	struct efhw_nic* nic;
-	int enabled;
-	nic = efhw_nic_find_by_dev(dev);
-	if (!nic)
-		return -ENOENT;
-	enabled = efrm_nic_get_accel_allowed(nic);
-	return scnprintf(buf_out, PAGE_SIZE, "%d\n", enabled);
-}
-
-
-static ssize_t cpu2rxq_store(struct device *dev,
-			    struct device_attribute *attr,
-			    const char *buf, size_t count)
-{
-	struct efhw_nic* nic;
-	nic = efhw_nic_find_by_dev(dev);
-	if (!nic)
-		return -ENOENT;
-	return efrm_affinity_store_cpu2rxq(linux_efhw_nic(nic), buf, count);
-}
-
-
-static ssize_t cpu2rxq_show(struct device *dev,
-			   struct device_attribute *attr,
-			   char *buf_out)
-{
-	struct efhw_nic* nic;
-	nic = efhw_nic_find_by_dev(dev);
-	if (!nic)
-		return -ENOENT;
-	return efrm_affinity_show_cpu2rxq(linux_efhw_nic(nic), buf_out);
-}
-
-
-static DEVICE_ATTR_RW(enable);
-static DEVICE_ATTR_RW(cpu2rxq);
-
-static struct attribute *sfc_resource_attrs[] = {
-	&dev_attr_enable.attr,
-	&dev_attr_cpu2rxq.attr,
-	NULL,
-};
-static const struct attribute_group sfc_resource_group = {
-	.name = "sfc_resource",
-	.attrs = sfc_resource_attrs,
-};
-
-static void efrm_nic_add_sysfs(const struct net_device* net_dev, struct device *dev)
-{
-	int rc = sysfs_create_group(&dev->kobj, &sfc_resource_group);
-	if (!rc)
-		return;
-	EFRM_WARN("%s: Sysfs group `sfc_resource` creation failed intf=%s, rc=%d.",
-		  __func__, net_dev->name, rc);
-}
-
-static void efrm_nic_del_sysfs(struct device *dev)
-{
-	sysfs_remove_group(&dev->kobj, &sfc_resource_group);
 }
 
 
