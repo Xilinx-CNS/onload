@@ -2556,6 +2556,16 @@ ci_inline const cicp_hwport_mask_t ci_netif_get_hwport_mask(ci_netif* ni)
 }
 
 
+ci_inline const cicp_hwport_mask_t ci_netif_get_tx_hwport_mask(ci_netif* ni)
+{
+#ifdef __KERNEL__
+  return ni->tx_hwport_mask;
+#else
+  return ni->state->tx_hwport_mask;
+#endif
+}
+
+
 ci_inline const ci_int8* ci_netif_get_hwport_to_intf_i(ci_netif* ni) {
 #ifdef __KERNEL__
   return ni->hwport_to_intf_i;

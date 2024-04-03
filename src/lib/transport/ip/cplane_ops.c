@@ -361,7 +361,7 @@ cicp_user_retrieve(ci_netif*                    ni,
       cicp_hwport_mask_t hwports = 0;
       /* Can we accelerate interface in this stack ? */
       if( (data.encap.type & CICP_LLAP_TYPE_BOND) == 0 &&
-          (data.hwports & ~(ci_netif_get_hwport_mask(ni))) == 0 )
+          (data.hwports & ci_netif_get_hwport_mask(ni)) != 0 )
         break;
       /* Check bond */
       if( cicp_user_get_fwd_rx_hwports(ni, &data, &hwports) != 0 ||
@@ -373,6 +373,10 @@ cicp_user_retrieve(ci_netif*                    ni,
 
   ipcache->encap = data.encap;
   cicp_ipcache_vlan_set(ipcache);
+
+  /* Mask out unselected hwports. */
+  data.hwports &= ci_netif_get_tx_hwport_mask(ni);
+
 #if CI_CFG_TEAMING
   if( ipcache->encap.type & CICP_LLAP_TYPE_USES_HASH ) {
     if( cicp_user_bond_hash_get_hwport(ni, ipcache, data.hwports,

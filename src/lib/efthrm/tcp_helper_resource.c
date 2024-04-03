@@ -1244,15 +1244,18 @@ static int /*bool*/ should_try_ctpio(ci_netif* ni, struct efhw_nic* nic,
                                      struct vi_allocate_info* info)
 {
   return
-    nic->flags & NIC_FLAG_CTPIO_ONLY ||
-    /* Stack configured to use CTPIO. */
-    (NI_OPTS(ni).ctpio > 0 &&
-     /* NIC claims support for CTPIO. */
-     (nic->flags & NIC_FLAG_TX_CTPIO) != 0 &&
-     /* CTPIO bypasses the NIC's switch.  When the switch is enabled, don't use
-      * CTPIO unless we've been told to do so explicitly. */
-     (~nic->flags & NIC_FLAG_MCAST_LOOP_HW ||
-      NI_OPTS(ni).ctpio_switch_bypass));
+    /* This ef_vi is intended for use with TX. */
+    info->txq_capacity > 0 &&
+    /* Can only do CTPIO. */
+    (nic->flags & NIC_FLAG_CTPIO_ONLY ||
+     /* Stack configured to use CTPIO. */
+     (NI_OPTS(ni).ctpio > 0 &&
+      /* NIC claims support for CTPIO. */
+      (nic->flags & NIC_FLAG_TX_CTPIO) != 0 &&
+      /* CTPIO bypasses the NIC's switch.  When the switch is enabled, don't use
+       * CTPIO unless we've been told to do so explicitly. */
+      (~nic->flags & NIC_FLAG_MCAST_LOOP_HW ||
+       NI_OPTS(ni).ctpio_switch_bypass)));
 }
 #endif
 
@@ -1716,7 +1719,9 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     struct efrm_vi* vi_rs;
     ef_vi* vi;
     ci_hwport_id_t hwport = ns->intf_i_to_hwport[intf_i];
-    bool want_rxq = ni->rx_hwport_mask & cp_hwport_make_mask(hwport);
+    cicp_hwport_mask_t hwport_mask = cp_hwport_make_mask(hwport);
+    bool want_rxq = ni->rx_hwport_mask & hwport_mask;
+    bool want_txq = ni->tx_hwport_mask & hwport_mask;
 
     BUILD_BUG_ON(sizeof(ni->vi_data) < sizeof(struct efrm_vi_mappings));
 
@@ -1734,6 +1739,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     alloc_info.efhw_flags = base_efhw_flags;
     alloc_info.ef_vi_flags = base_ef_vi_flags;
     alloc_info.rxq_capacity = want_rxq ? NI_OPTS(ni).rxq_size : 0;
+    alloc_info.txq_capacity = want_txq ? NI_OPTS(ni).txq_size : 0;
 
     ci_assert_equal(tcp_helper_vi(trs, intf_i), NULL);
     ci_assert(trs_nic->thn_oo_nic != NULL);
@@ -1752,7 +1758,6 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     nsn->pd_owner = efrm_pd_owner_id(alloc_info.pd);
 
     alloc_info.virs = &trs_nic->thn_vi_rs;
-    alloc_info.txq_capacity = NI_OPTS(ni).txq_size;
     rc = allocate_vi(ni, &alloc_info);
     if( rc != 0 )
       goto error_out;
