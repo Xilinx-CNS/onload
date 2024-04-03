@@ -140,127 +140,127 @@ typedef int			ef_request_id;
 typedef union {
   /** A generic event, to query the type when it is unknown */
   struct {
-    unsigned       type       :16;
+    unsigned       type         :16;
   } generic;
   /** An event of type EF_EVENT_TYPE_RX */
   struct {
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       __reserved :8;
-    unsigned       rq_id      :32;
-    unsigned       len        :16;
-    unsigned       flags      :16;
-    unsigned       ofs        :16; /* AF_XDP specific */
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       __reserved   :8;
+    unsigned       rq_id        :32;
+    unsigned       len          :16;
+    unsigned       flags        :16;
+    unsigned       ofs          :16; /* AF_XDP specific */
   } rx;
   /** An event of type EF_EVENT_TYPE_RX_DISCARD */
   struct {  /* This *must* have same initial layout as [rx]. */
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       __reserved :8;
-    unsigned       rq_id      :32;
-    unsigned       len        :16;
-    unsigned       flags      :16;
-    unsigned       subtype    :16;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       __reserved   :8;
+    unsigned       rq_id        :32;
+    unsigned       len          :16;
+    unsigned       flags        :16;
+    unsigned       subtype      :16;
   } rx_discard;
   /** An event of type EF_EVENT_TYPE_TX */
   struct {
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       flags      :8;
-    unsigned       desc_id    :16;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       flags        :8;
+    unsigned       desc_id      :16;
   } tx;
   /** An event of type EF_EVENT_TYPE_TX_ERROR */
   struct {  /* This *must* have same layout as [tx]. */
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       flags      :8;
-    unsigned       desc_id    :16;
-    unsigned       subtype    :16;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       flags        :8;
+    unsigned       desc_id      :16;
+    unsigned       subtype      :16;
   } tx_error;
   /** An event of type EF_EVENT_TYPE_TX_WITH_TIMESTAMP */
   struct {  /* This *must* have same layout as [tx] up to [flags]. */
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       flags      :8;
-    unsigned       rq_id      :32;
-    unsigned       ts_sec     :32;
-    unsigned       ts_nsec    :32;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       flags        :8;
+    unsigned       rq_id        :32;
+    unsigned       ts_sec       :32;
+    unsigned       ts_nsec      :32;
   } tx_timestamp;
   /** An event of type EF_EVENT_TYPE_TX_ALT */
   struct {
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       __reserved :8;
-    unsigned       alt_id     :16;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       __reserved   :8;
+    unsigned       alt_id       :16;
   } tx_alt;
   /** An event of type EF_EVENT_TYPE_RX_NO_DESC_TRUNC */
   struct {
-    unsigned       type       :16;
-    unsigned       q_id       :8;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
   } rx_no_desc_trunc;
   /** An event of type EF_EVENT_TYPE_RX_PACKED_STREAM */
   struct {
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       __reserved :8;
-    unsigned       flags      :16;
-    unsigned       n_pkts     :16;
-    unsigned       ps_flags   :8;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       __reserved   :8;
+    unsigned       flags        :16;
+    unsigned       n_pkts       :16;
+    unsigned       ps_flags     :8;
   } rx_packed_stream;
   /** An event of type EF_EVENT_TYPE_SW */
   struct {
-    unsigned       type       :16;
+    unsigned       type         :16;
     unsigned       data;
   } sw;
   /** An event of type EF_EVENT_TYPE_RX_MULTI */
   struct {
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       __reserved :8;
-    unsigned       n_descs    :16;
-    unsigned       flags      :16;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       __reserved   :8;
+    unsigned       n_descs      :16;
+    unsigned       flags        :16;
   } rx_multi;
   /** An event of type EF_EVENT_TYPE_RX_MULTI_DISCARD */
   struct {  /* Common layout with rx_multi. */
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       __reserved :8;
-    unsigned       n_descs    :16;
-    unsigned       flags      :16;
-    unsigned       subtype    :16;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       __reserved   :8;
+    unsigned       n_descs      :16;
+    unsigned       flags        :16;
+    unsigned       subtype      :16;
   } rx_multi_discard;
   /** An event of type EF_EVENT_TYPE_RX_MULTI_PKTS */
   struct {
-    unsigned       type       :16;
-    unsigned       q_id       :8;
-    unsigned       __reserved :8;
-    unsigned       n_pkts     :16;
-    unsigned       flags      :16;
+    unsigned       type         :16;
+    unsigned       q_id         :8;
+    unsigned       __reserved   :8;
+    unsigned       n_pkts       :16;
+    unsigned       flags        :16;
   } rx_multi_pkts;
   /** An event of type EF_EVENT_TYPE_MEMCPY */
   struct {
-    unsigned       type       :16;
-    unsigned       __reserved :16;
-    unsigned       dma_id     :32;
+    unsigned       type         :16;
+    unsigned       __reserved   :16;
+    unsigned       dma_id       :32;
   } memcpy;
   /** An event of type EF_EVENT_TYPE_RX_REF */
   struct {
-    unsigned       type       :16;
-    unsigned       len        :16;
-    unsigned       pkt_id     :32;
-    unsigned       q_id       :8;
-    unsigned       filter_id  :16;
-    unsigned       user       :8;
+    unsigned       type         :16;
+    unsigned       len          :16;
+    unsigned       pkt_id       :32;
+    unsigned       q_id         :8;
+    unsigned       filter_id    :16;
+    unsigned       user         :8;
   } rx_ref;
   /** An event of type EF_EVENT_TYPE_RX_REF_DISCARD */
   struct {
-    unsigned       type       :16;
-    unsigned       len        :16;
-    unsigned       pkt_id     :32;
-    unsigned       q_id       :8;
-    unsigned       filter_id  :16;
-    unsigned       user       :8;
-    unsigned       flags      :16;
+    unsigned       type         :16;
+    unsigned       len          :16;
+    unsigned       pkt_id       :32;
+    unsigned       q_id         :8;
+    unsigned       filter_id    :16;
+    unsigned       user         :8;
+    unsigned       flags        :16;
   } rx_ref_discard;
 } ef_event;
 
