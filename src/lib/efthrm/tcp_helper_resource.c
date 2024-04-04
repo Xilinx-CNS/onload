@@ -2884,10 +2884,27 @@ static int oo_get_nics(tcp_helper_resource_t* trs, int ifindices_len)
   if( llct_hwports ) {
     cicp_hwport_mask_t ff_hwports = oo_get_ff_hwports(hwport_mask,
                                                       llct_hwports);
+    cicp_hwport_mask_t non_multiarch_hwports;
+    non_multiarch_hwports = hwport_mask & ~(llct_hwports | ff_hwports);
 
-    /* TODO User-defined knob to select datapaths. */
-    rx_hwport_mask = hwport_mask & ~llct_hwports;
-    tx_hwport_mask = hwport_mask | ff_hwports;
+    /* Recompute TX hwports. */
+    if( NI_OPTS(ni).multiarch_tx_datapath == EF_MULTIARCH_DATAPATH_FF )
+      tx_hwport_mask = non_multiarch_hwports | ff_hwports;
+    else
+      tx_hwport_mask = non_multiarch_hwports | llct_hwports;
+
+    /* Recompute RX hwports. */
+    switch( NI_OPTS(ni).multiarch_rx_datapath) {
+    case EF_MULTIARCH_DATAPATH_FF:
+      rx_hwport_mask = non_multiarch_hwports | ff_hwports;
+      break;
+    case EF_MULTIARCH_DATAPATH_LLCT:
+      rx_hwport_mask = non_multiarch_hwports | llct_hwports;
+      break;
+    default:
+      rx_hwport_mask = non_multiarch_hwports | ff_hwports | llct_hwports;
+      break;
+    }
   }
 
   /* Some hwports might end up being unselected. */
