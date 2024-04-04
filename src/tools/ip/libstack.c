@@ -1671,7 +1671,7 @@ static void stack_rxpost(ci_netif* ni)
   ci_uint32 nic_index = CI_DEFAULT_NIC; /* TODO: support multiple NICs */
   int unlock;
   if( try_grab_stack_lock(ni, &unlock) ) {
-    ci_netif_rx_post_all_batch(ni, nic_index);
+    ci_netif_rx_post(ni, nic_index);
     if( unlock )  libstack_netif_unlock(ni);
     ci_log("%d: ci_netif_rx_post", NI_ID(ni));
   }

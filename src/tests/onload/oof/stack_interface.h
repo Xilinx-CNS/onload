@@ -13,8 +13,6 @@ struct efx_filter_spec;
  * or -1 if we don't have a VI for that hwport.
  */
 extern int tcp_helper_rx_vi_id(tcp_helper_resource_t*, int hwport);
-extern int tcp_helper_plugin_vi_id(tcp_helper_resource_t*, int hwport,
-                                   int subvi);
 
 /* Return the hw stack id of the VI associated with the named hwport,
  * or -1 if we don't have a VI for that hwport.

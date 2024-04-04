@@ -46,7 +46,6 @@
 #define EFRM_RESOURCE_MEMREG            0x4
 #define EFRM_RESOURCE_PD                0x5
 #define EFRM_RESOURCE_PIO               0x6
-#define EFRM_RESOURCE_SLICE_EXT         0x7
 #define EFRM_RESOURCE_EFCT_RXQ          0x8
 #define EFRM_RESOURCE_NUM               0x9	/* This isn't a resource! */
 
@@ -57,7 +56,6 @@
 	 (type) == EFRM_RESOURCE_MEMREG?	"MEMREG"	: \
 	 (type) == EFRM_RESOURCE_PD?		"PD"		: \
 	 (type) == EFRM_RESOURCE_PIO?		"PIO"		: \
-	 (type) == EFRM_RESOURCE_SLICE_EXT?	"EXT"		: \
 	 (type) == EFRM_RESOURCE_EFCT_RXQ?	"RXQ"		: \
 						"<invalid>"
 

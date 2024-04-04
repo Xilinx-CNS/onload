@@ -517,8 +517,8 @@ int efrm_vi_rm_alloc_instance(struct efrm_pd *pd,
 }
 
 
-static void efrm_vi_rm_free_instance(struct efrm_client *client,
-                                     struct efrm_vi *virs)
+static void efrm_vi_rm_free_instance(struct efrm_client * client,
+				     struct efrm_vi *virs)
 {
 	struct efrm_nic *nic = efrm_nic(efrm_client_get_nic(client));
 
@@ -716,8 +716,6 @@ static unsigned q_flags_to_vi_flags(unsigned q_flags, enum efhw_q_type q_type)
 			vi_flags |= EFHW_VI_TX_CTPIO;
 		if (q_flags & EFRM_VI_TX_CTPIO_NO_POISON)
 			vi_flags |= EFHW_VI_TX_CTPIO_NO_POISON;
-		if (q_flags & EFRM_VI_TX_M2M_D2C)
-			vi_flags |= EFHW_VI_TX_M2M_D2C;
 		break;
 	case EFHW_RXQ:
 		if (!(q_flags & EFRM_VI_CONTIGUOUS))
@@ -779,8 +777,6 @@ static unsigned vi_flags_to_q_flags(unsigned vi_flags, enum efhw_q_type q_type)
 			q_flags |= EFRM_VI_TX_CTPIO;
 		if (vi_flags & EFHW_VI_TX_CTPIO_NO_POISON)
 			q_flags |= EFRM_VI_TX_CTPIO_NO_POISON;
-		if (vi_flags & EFHW_VI_TX_M2M_D2C)
-			q_flags |= EFRM_VI_TX_M2M_D2C;
 		break;
 	case EFHW_RXQ:
 		if (!(vi_flags & EFHW_VI_JUMBO_EN))
@@ -869,14 +865,12 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 
 	switch (queue_type) {
 	case EFHW_TXQ:
-		rc = efhw_nic_dmaq_tx_q_init(nic,
-			efrm_pd_get_nic_client_id(virs->pd), &q_params);
+		rc = efhw_nic_dmaq_tx_q_init(nic, &q_params);
 		qid = q_params.qid_out;
 		break;
 	case EFHW_RXQ:
 		q_params.rx.ps_buf_size = virs->ps_buf_size;
-		rc = efhw_nic_dmaq_rx_q_init(nic,
-			efrm_pd_get_nic_client_id(virs->pd), &q_params);
+		rc = efhw_nic_dmaq_rx_q_init(nic, &q_params);
 		if( rc >= 0 ) {
 			virs->rx_prefix_len = rc;
 			rc = 0;
@@ -900,9 +894,7 @@ efrm_vi_rm_init_dmaq(struct efrm_vi *virs, enum efhw_q_type queue_type,
 			EFRM_ASSERT(evq_params.interrupting == (virs->vec != NULL));
 		}
 
-		rc = efhw_nic_event_queue_enable(nic,
-					efrm_pd_get_nic_client_id(virs->pd),
-					&evq_params);
+		rc = efhw_nic_event_queue_enable(nic, &evq_params);
 		if( rc == 0 )
 			virs->out_flags = evq_params.flags_out;
 		break;
@@ -1065,7 +1057,6 @@ __efrm_vi_q_flush(struct efhw_nic* nic, struct efrm_vi* virs,
 		  enum efhw_q_type queue_type)
 {
 	int rc;
-	uint32_t client_id = efrm_pd_get_nic_client_id(virs->pd);
 	struct efrm_vi_q *q = &virs->q[queue_type];
 	int evq = efrm_vi_evq_id(virs, queue_type);
 	int time_sync_events_enabled = (virs->flags &
@@ -1073,14 +1064,14 @@ __efrm_vi_q_flush(struct efhw_nic* nic, struct efrm_vi* virs,
 
 	switch (queue_type) {
 	case EFHW_RXQ:
-		rc = efhw_nic_flush_rx_dma_channel(nic, client_id, q->qid);
+		rc = efhw_nic_flush_rx_dma_channel(nic, q->qid);
 		break;
 	case EFHW_TXQ:
-		rc = efhw_nic_flush_tx_dma_channel(nic, client_id, q->qid, evq);
+		rc = efhw_nic_flush_tx_dma_channel(nic, q->qid, evq);
 		break;
 	case EFHW_EVQ:
 		/* flushing EVQ is as good as disabling it */
-		efhw_nic_event_queue_disable(nic, client_id, q->qid,
+		efhw_nic_event_queue_disable(nic, q->qid,
 					     time_sync_events_enabled);
 		rc = 0;
 		break;
@@ -1129,7 +1120,6 @@ __efrm_vi_resource_free(struct efrm_vi *virs)
 	struct efrm_nic *efrm_nic;
 	int instance;
 	int rc;
-	uint32_t nic_client_id;
 
 	EFRM_ASSERT(efrm_vi_manager);
 	EFRM_RESOURCE_MANAGER_ASSERT_VALID(&efrm_vi_manager->rm);
@@ -1170,14 +1160,6 @@ __efrm_vi_resource_free(struct efrm_vi *virs)
 	efrm_vi_detach_evq(virs, EFHW_RXQ);
 	efrm_vi_detach_evq(virs, EFHW_TXQ);
 	efrm_vi_io_unmap(virs, &efrm_nic->efhw_nic);
-	nic_client_id = efrm_pd_get_nic_client_id(virs->pd);
-	if (nic_client_id != EFRM_NIC_CLIENT_ID_NONE) {
-		rc = efhw_nic_vi_set_user(&efrm_nic->efhw_nic, instance,
-		                          EFRM_NIC_CLIENT_ID_NONE);
-		if (rc)
-			EFRM_ERR("%s: couldn't restore user of VI %d: %d\n",
-					__FUNCTION__, instance, rc);
-	}
 	vfree(virs->efct_shm);
 	efrm_vi_rm_free_instance(virs->rs.rs_client, virs);
 	efrm_pd_release(virs->pd);
@@ -1394,9 +1376,9 @@ efrm_vi_resource_alloc(struct efrm_client *client,
 			evq_capacity = rxq_capacity + txq_capacity;
 
 		/* TODO AF_XDP: allocation order must match the order that
-		 * ef_vi expects the queues to be mapped into user memory. */
+	 	* ef_vi expects the queues to be mapped into user memory. */
 		if ((rc = efrm_vi_q_alloc(virs, EFHW_EVQ, evq_capacity,
-					0, vi_flags, NULL)) < 0)
+				  	  0, vi_flags, NULL)) < 0)
 			goto fail_q_alloc;
 	}
 	if ((rc = efrm_vi_q_alloc(virs, EFHW_RXQ, rxq_capacity,
@@ -1606,7 +1588,6 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	struct vi_attr *attr;
 	int rc;
 	struct efrm_pd *pd;
-	uint32_t nic_client_id;
 	size_t n_shm_rxqs;
 	struct efrm_client *set_client;
 
@@ -1689,17 +1670,6 @@ int  efrm_vi_alloc(struct efrm_client *client,
 	}
 	EFRM_ASSERT(virs->allocation.instance >= 0);
 
-	nic_client_id = efrm_pd_get_nic_client_id(pd);
-	if (nic_client_id != EFRM_NIC_CLIENT_ID_NONE) {
-		rc = efhw_nic_vi_set_user(client->nic, virs->allocation.instance,
-		                          nic_client_id);
-		if (rc) {
-			EFRM_ERR("%s: failed to set VI %d user =%u (rc=%d)\n",
-			         __FUNCTION__, virs->rs.rs_instance, nic_client_id, rc);
-			goto fail_set_user;
-		}
-	}
-
 	n_shm_rxqs = efhw_nic_max_shared_rxqs(efrm_client_get_nic(client));
 	if( n_shm_rxqs ) {
 		size_t i;
@@ -1780,10 +1750,6 @@ fail_irq:
 fail_mmap:
 	vfree(virs->efct_shm);
 fail_efct_rxq:
-	if (nic_client_id != EFRM_NIC_CLIENT_ID_NONE)
-		efhw_nic_vi_set_user(client->nic, virs->allocation.instance,
-		                     EFRM_NIC_CLIENT_ID_NONE);
-fail_set_user:
 	efrm_vi_rm_free_instance(client, virs);
 fail_alloc_id:
 	kfree(virs);

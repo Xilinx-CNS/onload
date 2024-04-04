@@ -33,9 +33,6 @@ static int efab_file_move_supported_tcp(ci_netif *ni, ci_tcp_state *ts,
     return false;
   }
 #endif
-  /* Offload plugin has no API for updating the VI info  */
-  if( ci_tcp_is_pluginized(ts) )
-    return false;
 
   /* TCP closed: supported */
   if( ts->s.b.state == CI_TCP_CLOSED ) {
@@ -360,12 +357,6 @@ int efab_file_move_to_alien_stack(ci_private_t *priv, ci_netif *alien_ni,
     link = oo_p_dllink_sb(alien_ni, &new_ts->s.b, &new_ts->epcache_link);
     oo_p_dllink_init(alien_ni, link);
     link = oo_p_dllink_sb(alien_ni, &new_ts->s.b, &new_ts->epcache_fd_link);
-    oo_p_dllink_init(alien_ni, link);
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-    /* We banned pluginized sockets in efab_file_move_supported_tcp(), so only
-     * need to reinitialise here. */
-    link = oo_p_dllink_sb(alien_ni, &new_ts->s.b, &new_ts->recycle_link);
     oo_p_dllink_init(alien_ni, link);
 #endif
 

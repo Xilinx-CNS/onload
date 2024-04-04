@@ -31,12 +31,9 @@ struct oo_hugetlb_allocator;
 struct tcp_helper_nic {
   int                  thn_intf_i;
   struct oo_nic*       thn_oo_nic;
-  struct efrm_vi*      thn_vi_rs[CI_MAX_VIS_PER_INTF];
+  struct efrm_vi*      thn_vi_rs;
   /* Track the size of the VI mmap in the kernel. */
-  unsigned             thn_vi_mmap_bytes[CI_MAX_VIS_PER_INTF];
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  unsigned             thn_plugin_mapped_csr_offset;
-#endif
+  unsigned             thn_vi_mmap_bytes;
 #if CI_CFG_PIO
   struct efrm_pio*     thn_pio_rs;
   unsigned             thn_pio_io_mmap_bytes;
@@ -482,7 +479,6 @@ struct tcp_helper_endpoint_s {
 #define OO_THR_EP_AFLAG_CLEAR_FILTERS  0x8  /* Needs filters clearing */
 #define OO_THR_EP_AFLAG_NEED_FREE      0x10 /* Endpoint to be freed */
 #define OO_THR_EP_AFLAG_OS_NOTIFIER    0x20 /* Pollwait registration for os */
-#define OO_THR_EP_AFLAG_TCP_OFFLOAD_ISN 0x40 /* Send sync_stream to plugin */
 
   struct ci_private_s* alien_ref;
 
@@ -497,11 +493,6 @@ struct tcp_helper_endpoint_s {
   */
   ci_os_file file_ptr;
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_uint32 plugin_stream_id[CI_CFG_MAX_INTERFACES];
-  ci_uint64 plugin_ddr_base[CI_CFG_MAX_INTERFACES];
-  ci_uint64 plugin_ddr_size[CI_CFG_MAX_INTERFACES];
-#endif
 };
 
 
@@ -570,15 +561,6 @@ ci_inline struct pid* ci_netif_pid_lookup(ci_netif* ni, pid_t pid)
   return find_vpid(pid);
 #endif
 }
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-ci_inline bool ci_netif_tcp_plugin_uses_p2h(ci_netif* ni, int intf_i)
-{
-  ci_assert(ni->nic_hw[intf_i].plugin_rx);
-  /* The plugin design using P2H doesn't exist yet. */
-  return false;
-}
-#endif
 
 #endif /* defined(__KERNEL__) */
 

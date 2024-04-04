@@ -46,7 +46,6 @@ LIB_SRCS	+=		\
 		vi_stats.c	\
 		vi_prime.c	\
 		capabilities.c	\
-		smartnic_exts.c	\
 		ctpio.c         \
 		shrub_pool.c    \
 		shrub_server.c  \

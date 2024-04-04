@@ -11,7 +11,7 @@
 
 CHAR_SRCS	:= char_driver.c mmap.c efch_manager.c resource_table.c \
 		mmap_iopage.c vi_resource.c vi_resource_mmap.c \
-		vi_resource_event.c vi_set.c filter_list.c slice_ext.c \
+		vi_resource_event.c vi_set.c filter_list.c \
 		efch_memreg.c efch_pd.c pio.c efch_capabilities.c \
 		efct_rxq.c
 

@@ -296,7 +296,6 @@ donet () {
     /sbin/modprobe -q mtd
     # We also want either mtdchar or mtdblock, but don't mind which.
     /sbin/modprobe -q mtdchar || /sbin/modprobe -q mtdblock
-    modprobe -q vdpa
     # ef100 support requires nf_flow_table if it is configured in
     modprobe nf_flow_table
 

@@ -18,8 +18,6 @@
 #include <ci/net/sockopts.h>
 
 #if !defined(__KERNEL__)
-#  include <onload/extensions_zc.h>
-#  include <onload/extensions_zc_hlrx.h>
 #  include <netinet/tcp.h>
 
 #define LPF "TCP SOCKOPTS "
@@ -48,18 +46,6 @@ static const unsigned char sock_congstate_linux_map[] = {
 #define CI_MAX_TCP_KEEPIDLE 32767
 #define CI_MAX_TCP_KEEPINTVL 32767
 #define CI_MAX_TCP_KEEPCNT 127
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-struct ci_offload_type {
-  int optval;
-  int plugin;
-};
-
-static const struct ci_offload_type tcp_offloads[] = {
-  {6801, CITP_TCP_OFFLOAD_CEPH},
-};
-#endif
-
 
 static int
 ci_tcp_info_get(ci_netif* netif, ci_sock_cmn* s, struct ci_tcp_info* uinfo,
@@ -238,25 +224,6 @@ int ci_get_sol_tcp(ci_netif* netif, ci_sock_cmn* s, int optname, void *optval,
         u = ci_tcp_is_in_faststart(SOCK_TO_TCP(s));
       goto u_out;
     }
-#ifndef __KERNEL__
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  case ONLOAD_TCP_OFFLOAD:
-    {
-      u = (s->s_flags & CI_SOCK_FLAG_TCP_OFFLOAD) != 0;
-      if( u ) {
-        int i;
-        for( i = 0; i < sizeof(tcp_offloads) / sizeof(tcp_offloads[0]); ++i ) {
-          if( NI_OPTS(netif).tcp_offload_plugin == tcp_offloads[i].plugin ) {
-            u = tcp_offloads[i].optval;
-            break;
-          }
-        }
-        ci_assert_nequal(i, sizeof(tcp_offloads) / sizeof(tcp_offloads[0]));
-      }
-      goto u_out;
-    }
-#endif
-#endif
   default:
 #ifndef __KERNEL__
     LOG_TC( log(LPF "getsockopt: unimplemented or bad option: %i", 
@@ -509,29 +476,6 @@ static int ci_tcp_setsockopt_lk(citp_socket* ep, ci_fd_t fd, int level,
         }
       }
       break;
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-    case ONLOAD_TCP_OFFLOAD:
-      {
-        if( s->b.state == CI_TCP_CLOSED ) {
-          int port = *(int*)optval;
-          bool ok = port == 0;
-          int i;
-          for( i = 0; i < sizeof(tcp_offloads) / sizeof(tcp_offloads[0]); ++i )
-            if( tcp_offloads[i].optval == port &&
-                tcp_offloads[i].plugin == NI_OPTS(netif).tcp_offload_plugin )
-              ok = true;
-          if( ! ok ) {
-            rc = -EINVAL;
-            goto fail_inval;
-          }
-          if( port )
-            s->s_flags |= CI_SOCK_FLAG_TCP_OFFLOAD;
-          else
-            s->s_flags &=~ CI_SOCK_FLAG_TCP_OFFLOAD;
-        }
-      }
-      break;
-#endif
     default:
       LOG_TC(log("%s: "NSS_FMT" option %i unimplemented (ENOPROTOOPT)", 
              __FUNCTION__, NSS_PRI_ARGS(netif,s), optname));

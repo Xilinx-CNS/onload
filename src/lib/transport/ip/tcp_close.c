@@ -538,11 +538,6 @@ int ci_tcp_close(ci_netif* netif, ci_tcp_state* ts)
   if( (ts->s.b.sb_flags & CI_SB_FLAG_MOVED) )
     goto drop;
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  oo_p_dllink_del_init(netif, oo_p_dllink_sb(netif, &ts->s.b,
-                                             &ts->recycle_link));
-#endif
-
   if( tcp_rcv_usr(ts) != 0 ) {
     /* Linux specific behaviour: send reset and ditch
      * connection if all rx data not read.

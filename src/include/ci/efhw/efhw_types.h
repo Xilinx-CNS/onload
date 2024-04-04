@@ -251,12 +251,12 @@ struct efhw_func_ops {
   /*-------------- Event support  ------------ */
 
 	/*! Enable the given event queue */
-	int (*event_queue_enable) (struct efhw_nic *nic, uint32_t client_id,
+	int (*event_queue_enable) (struct efhw_nic *nic,
 				   struct efhw_evq_params *params);
 
 	/*! Disable the given event queue (and any associated timer) */
-	void (*event_queue_disable) (struct efhw_nic *nic, uint32_t client_id,
-				     uint evq, int time_sync_events_enabled);
+	void (*event_queue_disable) (struct efhw_nic *nic, uint evq,
+				     int time_sync_events_enabled);
 
 	/*! request wakeup from the NIC on a given event Q */
 	void (*wakeup_request) (struct efhw_nic *nic,
@@ -289,20 +289,19 @@ struct efhw_func_ops {
 	 * This may differ from the resource instance if the hardware queue
 	 * model does not represent VIs with a triple of EVQ/RXQ/TXQ.
 	 */
-	int (*dmaq_tx_q_init) (struct efhw_nic *nic, uint32_t client_id,
+	int (*dmaq_tx_q_init) (struct efhw_nic *nic,
 			       struct efhw_dmaq_params *params);
 
 	/*! Initialise NIC state for a given RX DMAQ */
-	int (*dmaq_rx_q_init) (struct efhw_nic *nic, uint32_t client_id,
+	int (*dmaq_rx_q_init) (struct efhw_nic *nic,
 			       struct efhw_dmaq_params *params);
 
 	/*! Flush a given TX DMA channel */
-	int (*flush_tx_dma_channel) (struct efhw_nic *nic, uint32_t client_id,
+	int (*flush_tx_dma_channel) (struct efhw_nic *nic,
 				     uint dmaq, uint evq);
 
 	/*! Flush a given RX DMA channel */
-	int (*flush_rx_dma_channel) (struct efhw_nic *nic, uint32_t client_id,
-			       uint dmaq);
+	int (*flush_rx_dma_channel) (struct efhw_nic *nic, uint dmaq);
 
 	int (*translate_dma_addrs)(struct efhw_nic* nic, const dma_addr_t *src,
 				   dma_addr_t *dst, int n);
@@ -371,16 +370,6 @@ struct efhw_func_ops {
 			    unsigned *cp_id_out, unsigned *alt_ids_out);
 	int (*tx_alt_free)(struct efhw_nic *nic, int num_alt, unsigned cp_id,
 			   const unsigned *alt_ids);
-
-  /*-------------- dynamic client IDs ------------ */
-
-	/* Create a new dynamic client entity; see MC_CMD_CLIENT_ALLOC */
-	int (*client_alloc)(struct efhw_nic *nic, uint32_t parent, uint32_t *id);
-	/* Destroy something from client_alloc() */
-	int (*client_free)(struct efhw_nic *nic, uint32_t id);
-	/* Change the ID of the client allowed to create queues on a VI */
-	int (*vi_set_user)(struct efhw_nic *nic, uint32_t vi_instance,
-	                   uint32_t user);
 
   /*-------------- filtering --------------------- */
 	/* Allocate a new RSS context */

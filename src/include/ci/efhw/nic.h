@@ -85,12 +85,6 @@ static inline uint8_t efhw_vi_nic_flags(const struct efhw_nic* nic)
 	return flags;
 }
 
-static inline unsigned efhw_nic_rel_to_abs_idx(const struct efhw_nic* nic,
-                                               unsigned rel_idx)
-{
-	return (rel_idx << nic->vi_shift) + nic->vi_base;
-}
-
 extern bool efhw_nic_phys_contig_queue(struct efhw_nic *nic,
 				       enum efhw_q_type type);
 

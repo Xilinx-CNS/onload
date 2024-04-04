@@ -17,11 +17,8 @@
 #include "ip_tx_cmsg.h"
 #include <ci/internal/ip_timestamp.h>
 #include <onload/sleep.h>
-#include <onload/tcp-ceph.h>
 #ifndef __KERNEL__
 #include <onload/extensions_zc.h>
-#include <onload/extensions_zc_hlrx.h>
-#include <stddef.h>
 #endif
 
 
@@ -30,7 +27,7 @@
 
 struct tcp_recv_info;
 typedef int (*pkt_copy_t)(ci_netif* netif, struct tcp_recv_info* rinf,
-                          ci_ip_pkt_fmt* pkt, int peek_off, int* rc);
+                          ci_ip_pkt_fmt* pkt, int peek_off);
 
 struct tcp_recv_info {
   int rc;
@@ -287,162 +284,10 @@ ci_tcp_fill_recv_timestamp(struct tcp_recv_info* rinf, ci_ip_pkt_fmt* pkt)
 #endif
 
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER && CI_CFG_TCP_PLUGIN_RECV_NONZC
-static int offloaded_copy_block(ci_iovec* iov, const void* src, size_t max,
-                                int flags, int* rc)
-{
-  int n = CI_MIN(max, CI_IOVEC_LEN(iov));
-  if(CI_LIKELY( ! (flags & MSG_TRUNC) )) {
-#ifdef __KERNEL__
-    if( copy_to_user(CI_IOVEC_BASE(iov), src, n) )
-      return -EFAULT;
-#else
-    memcpy(CI_IOVEC_BASE(iov), src, n);
-#endif
-  }
-  CI_IOVEC_BASE(iov) = (char*)CI_IOVEC_BASE(iov) + n;
-  CI_IOVEC_LEN(iov) -= n;
-  *rc += n;
-  return n;
-}
-
-static int copy_ceph_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
-                            ci_ip_pkt_fmt* pkt, int peek_off, int* ndata)
-{
-  /* This function is essentially entirely bogus, most prominently in the fact
-   * that it'll emit zeros for all 'remote' data. It exists primarily so that
-   * test tools (e.g. packetdrill) can work on pluginized streams. */
-  int total = oo_offbuf_left(&pkt->buf);
-  int ofs = 0;
-  char* p = oo_offbuf_ptr(&pkt->buf);
-  int out_rc = 0;
-  static const char zeros[64];
-
-  /* Not currently required, and a little tricky to get right: */
-  if( rinf->msg_flags & MSG_PEEK )
-    return -EOPNOTSUPP;
-
-  while( ofs != total && CI_IOVEC_LEN(&rinf->piov.io) != 0 ) {
-    const int hdr_len = offsetof(struct ceph_data_pkt, data);
-    struct ceph_data_pkt data;
-    int n;
-
-    if( total - ofs < hdr_len ) {
-      LOG_TR(log(LNTS_FMT "bogus plugin metastream ofs=%d total=%d", 
-                 LNTS_PRI_ARGS(netif, rinf->a->ts), ofs, total));
-      goto unrecoverable;
-    }
-
-    memcpy(&data, p + ofs, hdr_len);
-    ofs += hdr_len;
-    /* NB: if adding a new msg_type here, don't forget that zc_ceph_callback()
-     * has a similar switch statement */
-    switch( data.msg_type ) {
-    case XSN_CEPH_DATA_INLINE:
-      if( total - ofs < data.msg_len ) {
-        LOG_TR(log(LNTS_FMT "bogus plugin inline len %d-%d<%u", 
-                  LNTS_PRI_ARGS(netif, rinf->a->ts), total, ofs,
-                  data.msg_len));
-        goto unrecoverable;
-      }
-      n = offloaded_copy_block(&rinf->piov.io, p + ofs, data.msg_len,
-                               rinf->a->flags, &out_rc);
-      if( n < 0 )
-        return -EFAULT;
-      if( n != data.msg_len ) {
-        /* Stopped in the middle: hack the packet so that we can resume next
-         * time. NB: this can potentially make onload_tcpdump output a little
-         * odd */
-        data.msg_len -= n;
-        memcpy(p + ofs + n - hdr_len, &data, hdr_len);
-        ofs += n - hdr_len;
-        goto out;
-      }
-      break;
-
-    case XSN_CEPH_DATA_REMOTE:
-      if( total - ofs < sizeof(data.remote) ||
-          data.msg_len != sizeof(data.remote) ) {
-        LOG_TR(log(LNTS_FMT "bogus plugin remote block %d-%d/%u", 
-                  LNTS_PRI_ARGS(netif, rinf->a->ts), total, ofs,
-                  data.msg_len));
-        goto unrecoverable;
-      }
-      memcpy(&data.remote, p + ofs, sizeof(data.remote));
-      while( data.remote.data_len ) {
-        n = offloaded_copy_block(&rinf->piov.io, zeros,
-                                 CI_MIN((uint16_t)sizeof(zeros),
-                                        data.remote.data_len),
-                                 rinf->a->flags, &out_rc);
-        if( n < 0 )
-          return -EFAULT;
-        data.remote.data_len -= n;
-        data.remote.start_ptr += n;
-        if( n != sizeof(zeros) ) {
-          memcpy(p + ofs, &data.remote, sizeof(data.remote));
-          ofs -= hdr_len;
-          goto out;
-        }
-      }
-      break;
-
-    case XSN_CEPH_DATA_LOST_SYNC:
-      if( total - ofs < sizeof(data.lost_sync) ||
-          data.msg_len != sizeof(data.lost_sync) ) {
-        LOG_TR(log(LNTS_FMT "bogus plugin lost-sync block %d-%d/%u", 
-                  LNTS_PRI_ARGS(netif, rinf->a->ts), total, ofs,
-                  data.msg_len));
-        goto unrecoverable;
-      }
-      memcpy(&data.lost_sync, p, sizeof(data.lost_sync));
-      log(LNTS_FMT "plugin lost sync: %u/%u", 
-          LNTS_PRI_ARGS(netif, rinf->a->ts), data.lost_sync.reason,
-          data.lost_sync.subreason);
-      /* Set the return value so that we'll keep hitting this same lost-sync
-       * message on every receive, and hence block the socket from making
-       * further progress */
-      ofs -= hdr_len;
-      goto out;
-
-    default:
-      LOG_TR(log(LNTS_FMT "bogus plugin metastream header %u/%u", 
-                 LNTS_PRI_ARGS(netif, rinf->a->ts), data.msg_type,
-                 data.msg_len));
-      goto unrecoverable;
-    }
-    ofs += data.msg_len;
-  }
-
- out:
-  *ndata = out_rc;
-  return ofs;
-
- unrecoverable:
-  /* Return the number of bytes successfully consumed, so that if the user
-   * tries again then we'll log the same error again. This is a different
-   * decision to the one we made at the identical label in zc_ceph_callback()
-   * because this function is only targetted at debugging/testing scenarios,
-   * where freezing in place and allowing the user to debug it is likely to be
-   * preferable. */
-  return total;
-}
-#endif
-
-
 static int copy_one_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
-                        ci_ip_pkt_fmt* pkt, int peek_off, int* ndata)
+                        ci_ip_pkt_fmt* pkt, int peek_off)
 {
   int n;
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  if( ci_tcp_is_pluginized(rinf->a->ts) ) {
-#if CI_CFG_TCP_PLUGIN_RECV_NONZC
-    return copy_ceph_pkt(netif, rinf, pkt, peek_off, ndata);
-#else
-    return -EOPNOTSUPP;
-#endif
-  }
-#endif
 
   if(CI_LIKELY( ! (rinf->a->flags & MSG_TRUNC) ))
     n = ci_ip_copy_pkt_to_user(netif, &rinf->piov.io, pkt, peek_off);
@@ -454,10 +299,6 @@ static int copy_one_pkt(ci_netif* netif, struct tcp_recv_info* rinf,
                rinf->piov.io.iov_len);
     CI_IOVEC_LEN(&rinf->piov.io) -= n;
   }
-  /* NB: on failure of this function (i.e. n<0) the caller doesn't make any
-   * assumptions about the validity or otherwise of the output (including the
-   * 'out' parameter), so the side-effect of mangling *rc here is fine. */
-  *ndata = n;
   return n;
 }
 
@@ -478,7 +319,7 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
 {
   ci_netif* netif = rinf->a->ni;
   ci_tcp_state* ts = rinf->a->ts;
-  int n, ndata, peek_off, total, rc;
+  int n, peek_off, total;
   ci_ip_pkt_fmt* pkt;
   int max_bytes;
 #if CI_CFG_TIMESTAMPING && ! defined(__KERNEL__)
@@ -494,7 +335,6 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
 
   peek_off = 0;
   total = 0;
-  rc = 0;
 
   /* Maximum number of bytes we have in both recv1 and recv2.
    * In this function, we get data from recv1 only, so the actual amount
@@ -502,13 +342,13 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
   max_bytes = tcp_rcv_usr(ts);
 
   if( max_bytes <= 0 || OO_PP_IS_NULL(ts->recv1_extract))
-    return rc;       /* Receive queue is empty. */
+    return total;       /* Receive queue is empty. */
 
   ci_assert(OO_PP_NOT_NULL(ts->recv1.head));
 
   pkt = PKT_CHK_NNL(netif, ts->recv1_extract);
   if( oo_offbuf_is_empty(&pkt->buf) ) {
-    if( OO_PP_IS_NULL(pkt->next) )  return rc;  /* recv1 is empty. */
+    if( OO_PP_IS_NULL(pkt->next) )  return total;  /* recv1 is empty. */
     /* See ci_tcp_recvmsg_get_nopeek() for barrier discussion. */
     ci_wmb();
     ts->recv1_extract = pkt->next;
@@ -547,18 +387,17 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
   }
 #endif
 
-    n = rinf->copier(netif, rinf, pkt, peek_off, &ndata);
+    n = rinf->copier(netif, rinf, pkt, peek_off);
 #ifdef  __KERNEL__
     if( n < 0 )  break;
 #endif
-    rc += ndata;
     oo_offbuf_advance(&pkt->buf, n);
 
-    total += ndata;
+    total += n;
     ci_assert_le(total, max_bytes);
 
     if(CI_LIKELY( ! (rinf->a->flags & (MSG_PEEK | ONLOAD_MSG_ONEPKT)) )) {
-      if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, ndata,
+      if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, n,
                                     max_bytes) != 0 )
         break;
     }
@@ -572,14 +411,14 @@ ci_tcp_recvmsg_get_impl(struct tcp_recv_info *rinf)
           /* We've emptied the current packet. */
           if( total == max_bytes || OO_PP_IS_NULL(pkt->next) )
             /* We've emptied the receive queue. */
-            return rc;
+            return total;
           pkt = PKT_CHK_NNL(netif, pkt->next);
           peek_off = 0;
           ci_assert(oo_offbuf_not_empty(&pkt->buf));
         }
       }
       else {
-        if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, ndata,
+        if( ci_tcp_recvmsg_get_nopeek(peek_off, ts, netif, &pkt, total, n,
                                       max_bytes) != 0 )
           break;
       }
@@ -796,9 +635,8 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
   ci_tcp_recvmsg_init_piov(&rinf);
 
   LOG_TR(log(LNTS_FMT "recvmsg len=%d flags=%x bytes_in_rxq=%d", 
-             LNTS_PRI_ARGS(ni, ts),
-             zc_args ? -1 : ci_iovec_ptr_bytes_count(&rinf.piov),
-             flags, tcp_rcv_usr(ts)));
+	     LNTS_PRI_ARGS(ni, ts),
+             ci_iovec_ptr_bytes_count(&rinf.piov), flags, tcp_rcv_usr(ts)));
 
 #ifndef __KERNEL__
   tcp_recv_spin = 
@@ -1286,7 +1124,7 @@ static void ci_tcp_recvmsg_recv2_peek2(struct tcp_recv_info *rinfo,
   ci_ip_pkt_queue* recv2 = &ts->recv2;
   ci_ip_pkt_fmt* pkt = PKT_CHK(ni, recv2->head);
   oo_offbuf* buf = &pkt->buf;
-  int rc, n, peek_off = start_skip;
+  int n, peek_off = start_skip;
   int orig_buf_end;
 
   ci_assert(oo_offbuf_left(buf) >= start_skip);
@@ -1314,9 +1152,7 @@ static void ci_tcp_recvmsg_recv2_peek2(struct tcp_recv_info *rinfo,
       pkt->buf.end = CI_MIN(pkt->buf.end, pkt->buf.off + dist_to_urg);
     }
 
-    rc = 0;
-    n = rinfo->copier(ni, rinfo, pkt, peek_off, &rc);
-    ci_assert_equal(n, rc); /* zc shenanigans not supported with urgent data */
+    n = rinfo->copier(ni, rinfo, pkt, peek_off);
     pkt->buf.end = orig_buf_end;
 #ifdef __KERNEL__
     if( n < 0 ) {
@@ -1630,213 +1466,12 @@ static int ci_tcp_recvmsg_recv2(struct tcp_recv_info *rinf)
 
 
 #ifndef __KERNEL__
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-#define CI_ZC_IOV_STATIC_MAX  32
-
-CI_BUILD_ASSERT((ONLOAD_ZC_RECV_FLAG_OFFLOAD_OOB &
-                 ~ONLOAD_ZC_RECV_FLAG_OFFLOAD_RESERVED) == 0);
-
-static int zc_ceph_callback(ci_netif* netif, struct tcp_recv_info* rinf,
-                            ci_ip_pkt_fmt* pkt, int peek_off, int* ndata)
-{
-  int total = oo_offbuf_left(&pkt->buf);
-  int n = total;
-  char* p = oo_offbuf_ptr(&pkt->buf);
-  struct onload_zc_iovec static_iov[CI_ZC_IOV_STATIC_MAX];
-  struct onload_zc_iovec* iov = static_iov;
-  int iovlen = 0;
-  int iov_max = CI_ZC_IOV_STATIC_MAX;
-  int out_rc = 0;
-  enum onload_zc_callback_rc cb_rc;
-  ssize_t overrun;
-
-  /* Not currently a required feature, and a little tricky to get right: */
-  if( rinf->msg_flags & MSG_PEEK )
-    return -EOPNOTSUPP;
-
-  while( n ) {
-    const int hdr_len = offsetof(struct ceph_data_pkt, data);
-    struct ceph_data_pkt data;
-
-    if( n < hdr_len ) {
-      LOG_TR(log(LNTS_FMT "bogus plugin metastream len=%d",
-                 LNTS_PRI_ARGS(netif, rinf->a->ts), n));
-      goto unrecoverable;
-    }
-
-    if( iovlen >= iov_max - 2 ) {
-      /* There are no good options for what to do if we get here. Dynamic
-       * memory allocation is the least-worst option: giving up is mean, and
-       * calling the callback here so we can start again creates immense
-       * difficulties with pkt refcounts.
-       *
-       * NOTE: the -1 here is to account for the fact that in the
-       * CEPH_DATA_REMOTE case, we need two iovs if the data wraps round
-       * the DDR ring buffer. A message will never require more than two
-       * iovs: the plugin will not deliver a message longer than ddr_size. */
-      struct onload_zc_iovec* iov_new;
-      LOG_TR(log(LNTS_FMT "large number of iovs in metapkt (%d @ %d/%d)", 
-                 LNTS_PRI_ARGS(netif, rinf->a->ts), iovlen,
-                 (int)(p - PKT_START(pkt)),
-                 (int)(oo_offbuf_end(&pkt->buf) - PKT_START(pkt))));
-      iov_max = iov_max + (iov_max >> 1);
-      iov_new = realloc(iov == static_iov ? NULL : iov,
-                        iov_max * sizeof(*iov));
-      if( ! iov_new ) {
-        log(LNTS_FMT "OOM growing iov array (%d)", 
-            LNTS_PRI_ARGS(netif, rinf->a->ts), iov_max);
-        goto unrecoverable;
-      }
-      iov = iov_new;
-    }
-
-    memcpy(&data, p, hdr_len);
-    n -= hdr_len;
-    p += hdr_len;
-    /* NB: if adding a new msg_type here, don't forget that copy_ceph_pkt()
-     * has a similar switch statement */
-    switch( data.msg_type ) {
-    case XSN_CEPH_DATA_INLINE:
-      if( n < data.msg_len ) {
-        LOG_TR(log(LNTS_FMT "bogus plugin inline len %d<%u", 
-                  LNTS_PRI_ARGS(netif, rinf->a->ts), n, data.msg_len));
-        goto unrecoverable;
-      }
-      iov[iovlen].iov_base = p;
-      iov[iovlen].iov_len = data.msg_len;
-      iov[iovlen].addr_space = EF_ADDRSPACE_LOCAL;
-      iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
-      iov[iovlen].iov_flags = 0;
-      out_rc += data.msg_len;
-      break;
-
-    case XSN_CEPH_DATA_REMOTE:
-      if( n < sizeof(data.remote) || data.msg_len != sizeof(data.remote) ) {
-        LOG_TR(log(LNTS_FMT "bogus plugin remote block %d/%u", 
-                  LNTS_PRI_ARGS(netif, rinf->a->ts), n, data.msg_len));
-        goto unrecoverable;
-      }
-      memcpy(&data.remote, p, sizeof(data.remote));
-      iov[iovlen].iov_ptr = data.remote.start_ptr + rinf->a->ts->plugin_ddr_base;
-      iov[iovlen].iov_len = data.remote.data_len;
-      iov[iovlen].iov_flags = 0;
-      iov[iovlen].addr_space = netif->state->nic[pkt->intf_i].plugin_addr_space;
-      out_rc += data.remote.data_len;
-
-      overrun = data.remote.start_ptr + data.remote.data_len - rinf->a->ts->plugin_ddr_size;
-      if( overrun > 0 ) {
-        /* This data wraps round the DDR ring buffer; the end of the data
-         * will be found at the start of the ring. */
-        iov[iovlen].iov_len -= overrun;
-        iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
-
-        ++iovlen;
-        iov[iovlen].iov_ptr = rinf->a->ts->plugin_ddr_base;
-        iov[iovlen].iov_len = overrun;
-        iov[iovlen].addr_space = netif->state->nic[pkt->intf_i].plugin_addr_space;
-        iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
-        iov[iovlen].iov_flags = 0;
-      }
-
-      /* CRC iov; we are currently wasting a new iov, since we can't distinguish
-       * whether the CRC is enabled or not. */
-      ++iovlen;
-      iov[iovlen].iov_flags = ONLOAD_ZC_RECV_FLAG_OFFLOAD_OOB;
-
-      /* Pass the address of the CRC within the packet buffer.  This is not
-       * necessarily naturally aligned. */
-      iov[iovlen].iov_len = sizeof(data.remote.data_crc);
-      iov[iovlen].iov_base = p + CI_MEMBER_OFFSET(typeof(data.remote),
-                                                  data_crc);
-      ci_assert_le((uintptr_t) iov[iovlen].iov_base + iov[iovlen].iov_len,
-                   (uintptr_t) p + sizeof(data.remote));
-
-      iov[iovlen].addr_space = EF_ADDRSPACE_LOCAL;
-      iov[iovlen].buf = ONLOAD_ZC_HANDLE_NONZC;
-
-      break;
-
-    case XSN_CEPH_DATA_LOST_SYNC:
-      if( n < sizeof(data.lost_sync) ||
-          data.msg_len != sizeof(data.lost_sync) ) {
-        LOG_TR(log(LNTS_FMT "bogus plugin lost-sync block %d/%u", 
-                  LNTS_PRI_ARGS(netif, rinf->a->ts), n, data.msg_len));
-        goto unrecoverable;
-      }
-      memcpy(&data.lost_sync, p, sizeof(data.lost_sync));
-      log(LNTS_FMT "plugin lost sync: %u/%u", 
-                 LNTS_PRI_ARGS(netif, rinf->a->ts), data.lost_sync.reason,
-                 data.lost_sync.subreason);
-      rinf->a->msg->msg_controllen = 0;
-      *ndata = out_rc;
-      /* Set the return value so that we'll keep hitting this same lost-sync
-       * message on every receive, and hence block the socket from making
-       * further progress */
-      return total - n - hdr_len;
-
-    default:
-      LOG_TR(log(LNTS_FMT "bogus plugin metastream header %u/%u", 
-                 LNTS_PRI_ARGS(netif, rinf->a->ts), data.msg_type,
-                 data.msg_len));
-      goto unrecoverable;
-    }
-
-    ++iovlen;
-    n -= data.msg_len;
-    p += data.msg_len;
-  }
-
-  ci_assert_gt(iovlen, 0);
-
-  /* See comment about refcounting in zc_call_callback() below, but here
-   * it's even more interesting because a single packet may be given to
-   * the callback multiple times. In that case we pass iov.buf as
-   * ONLOAD_ZC_HANDLE_NONZC for all but the last occurrence, because prior
-   * to that it's being kept alive by the recvq. The 'last occurrence', in
-   * this case, is the first iov of the last batch, to match how UDP uses the
-   * zc callback. */
-  pkt->rx_flags |= CI_PKT_RX_FLAG_KEEP;
-  pkt->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
-  iov[0].buf = zc_pktbuf_to_handle(pkt);
-  rinf->zc_args->msg.iov = iov;
-  rinf->zc_args->msg.msghdr.msg_iovlen = iovlen;
-  rinf->zc_args->msg.msghdr.msg_flags = rinf->msg_flags;
-  cb_rc = rinf->zc_args->cb(rinf->zc_args, 0);
-
-  if( cb_rc & ONLOAD_ZC_TERMINATE ) {
-    /* Make it look like the non-zc buffer is full */
-    rinf->piov.io.iov_len = 0;
-    rinf->piov.iovlen = 0;
-  }
-  ci_pkt_zc_free_clean(pkt, cb_rc);
-
-  *ndata = out_rc;
- unrecoverable:
-  /* The correct thing to do with bad framing is debatable. This code throws
-   * away the remainder of the packet and continues on without telling the
-   * app. An easy other option would be to put the app in a continuous loop of
-   * retry, fail, log. Neither of these are great, but at some point we have
-   * to trust that the hardware behaves itself. */
-  if( iov != static_iov )
-    free(iov);
-  rinf->a->msg->msg_controllen = 0;
-  return total;
-}
-#endif
-
-
 static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
-                            ci_ip_pkt_fmt* pkt, int peek_off, int* ndata)
+                            ci_ip_pkt_fmt* pkt, int peek_off)
 {
   int n = oo_offbuf_left(&pkt->buf);
   enum onload_zc_callback_rc cb_rc;
   struct onload_zc_iovec iov;
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  if( ci_tcp_is_pluginized(rinf->a->ts) )
-    return zc_ceph_callback(netif, rinf, pkt, peek_off, ndata);
-#endif
 
   /* Add KEEP flag before calling callback, and remove it after
    * if not needed.  This prevents races where the app releases
@@ -1855,13 +1490,16 @@ static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
   iov.iov_base = oo_offbuf_ptr(&pkt->buf) + peek_off;
   iov.iov_len = oo_offbuf_left(&pkt->buf) - peek_off;
   iov.iov_flags = 0;
-
-  iov.addr_space = EF_ADDRSPACE_LOCAL;
+  iov.rx_memreg_idx = PKT_ID2SET(pkt->pp);
   pkt->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
   cb_rc = rinf->zc_args->cb(rinf->zc_args, 0);
 
-  ci_pkt_zc_free_clean(pkt, cb_rc);
-  if( cb_rc & ONLOAD_ZC_KEEP ) {
+  if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {
+    /* Remove the ref we added earlier iff the user didn't retain it */
+    pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
+    pkt->pio_addr = -1;  /* Reset to normal after user_refcount overwrote it */
+  }
+  else {
     /* The refcount ownership semantics when both peeking and keeping are too
      * horrifying to think about, so just ban it (as stated in the docs). */
     ci_assert_nflags(rinf->msg_flags, MSG_PEEK);
@@ -1875,7 +1513,6 @@ static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
 
   rinf->a->msg->msg_controllen = 0;
 
-  *ndata = n;
   return n;
 }
 

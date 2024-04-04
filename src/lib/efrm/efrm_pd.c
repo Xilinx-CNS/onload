@@ -78,9 +78,6 @@ struct efrm_pd {
 	 * multicast loopback */
 	int stack_id;
 
-	/* Unique ID allocated by the NIC for all NIC resources in this pd */
-	uint32_t nic_client_id;
-
 	/* cookie used to claim exclusive ownership of an efct RXQ. */
 	unsigned exclusive_rxq_token; 
 
@@ -259,8 +256,6 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 	if ((flags &
 	    ~(EFRM_PD_ALLOC_FLAG_PHYS_ADDR_MODE |
 	    EFRM_PD_ALLOC_FLAG_HW_LOOPBACK |
-	    EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID |
-	    EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID_OPT |
 	    EFRM_PD_ALLOC_CLUSTER)) != 0) {
 		rc = -EINVAL;
 		goto fail1;
@@ -300,26 +295,6 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 		goto fail1;
 	}
 	pd->stack_id = 0;
-	pd->nic_client_id = EFRM_NIC_CLIENT_ID_NONE;
-
-	if (flags & EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID) {
-		rc = efhw_nic_client_alloc(client_opt->nic, EFRM_NIC_CLIENT_ID_NONE,
-		                           &pd->nic_client_id);
-		if (rc) {
-			if (!(flags & EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID_OPT)) {
-				EFRM_ERR("%s: ERROR: couldn't allocate client ID (%d)",
-				         __FUNCTION__, rc);
-				goto fail2;
-			}
-			/* Let's say ENOSYS is inherently uninteresting because it's what
-			 * you get on a non-EF100 */
-			if (rc != -ENOSYS)
-				EFRM_NOTICE("%s: NOTICE: couldn't allocate client ID (%d)",
-				            __FUNCTION__, rc);
-			pd->nic_client_id = EFRM_NIC_CLIENT_ID_NONE;
-			rc = 0;
-		}
-	}
 
 	spin_lock_bh(&pd_manager->rm.rm_lock);
 	instance = pd_manager->next_instance++;
@@ -336,7 +311,7 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 	spin_unlock_bh(&pd_manager->rm.rm_lock);
 	if (pd->owner_id == OWNER_ID_ALLOC_FAIL) {
 		rc = -EBUSY;
-		goto fail3;
+		goto fail2;
 	}
 
 	if (use_buffer_table) {
@@ -369,9 +344,6 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 	return 0;
 
 
-fail3:
-	if (pd->nic_client_id != EFRM_NIC_CLIENT_ID_NONE)
-		efhw_nic_client_free(client_opt->nic, pd->nic_client_id);
 fail2:
 	kfree(pd);
 fail1:
@@ -408,10 +380,6 @@ void efrm_pd_free(struct efrm_pd *pd)
 		efrm_pd_owner_id_free(owner_ids, pd->owner_id);
 	}
 	spin_unlock_bh(&pd_manager->rm.rm_lock);
-
-	if (pd->nic_client_id != EFRM_NIC_CLIENT_ID_NONE)
-		efhw_nic_client_free(&efrm_nic_from_rs(&pd->rs)->efhw_nic,
-		                     pd->nic_client_id);
 
 	if (pd->owner_id != OWNER_ID_PHYS_MODE) {
 		int ord;
@@ -459,13 +427,6 @@ int efrm_pd_get_min_align(struct efrm_pd *pd)
 	return ((1 << pd->min_nic_order) << EFHW_NIC_PAGE_SHIFT);
 }
 EXPORT_SYMBOL(efrm_pd_get_min_align);
-
-
-uint32_t efrm_pd_get_nic_client_id(struct efrm_pd *pd)
-{
-	return pd->nic_client_id;
-}
-EXPORT_SYMBOL(efrm_pd_get_nic_client_id);
 
 
 int

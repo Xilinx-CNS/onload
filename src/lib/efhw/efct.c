@@ -316,7 +316,7 @@ efct_nic_release_hardware(struct efhw_nic* nic)
  * properties.
  */
 static int
-efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
+efct_nic_event_queue_enable(struct efhw_nic *nic,
                             struct efhw_evq_params *efhw_params)
 {
   struct device *dev;
@@ -380,7 +380,7 @@ efct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 }
 
 static void
-efct_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
+efct_nic_event_queue_disable(struct efhw_nic *nic,
                              uint evq, int time_sync_events_enabled)
 {
   struct device *dev;
@@ -467,7 +467,7 @@ static void efct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
 
 
 static int
-efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
+efct_dmaq_tx_q_init(struct efhw_nic *nic,
                     struct efhw_dmaq_params *txq_params)
 {
   struct device *dev;
@@ -499,7 +499,7 @@ efct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int
-efct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
+efct_dmaq_rx_q_init(struct efhw_nic *nic,
                     struct efhw_dmaq_params *params)
 {
   /* efct doesn't do rxqs like this, so nothing to do here */
@@ -550,8 +550,7 @@ static void efct_check_for_flushes(struct work_struct *work)
 }
 
 
-static int efct_flush_tx_dma_channel(struct efhw_nic *nic,
-                                     uint32_t client_id, uint dmaq, uint evq)
+static int efct_flush_tx_dma_channel(struct efhw_nic *nic, uint dmaq, uint evq)
 {
   struct device *dev;
   struct xlnx_efct_device* edev;
@@ -571,8 +570,7 @@ static int efct_flush_tx_dma_channel(struct efhw_nic *nic,
 }
 
 
-static int efct_flush_rx_dma_channel(struct efhw_nic *nic,
-                                     uint32_t client_id, uint dmaq)
+static int efct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 {
   /* rxqs are a software-only concept, no flush required */
   return -EALREADY;

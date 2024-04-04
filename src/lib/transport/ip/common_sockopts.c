@@ -47,8 +47,6 @@
 /* Emulate Linux mapping between priority and TOS field */
 #include <linux/types.h>
 #include <linux/pkt_sched.h>
-#include <onload/extensions_zc.h>
-#include <onload/extensions_zc_hlrx.h>
 
 static unsigned ci_tos2priority[] = {
     /*  0 */ TC_PRIO_BESTEFFORT,
@@ -1872,11 +1870,6 @@ int ci_setsockopt_os_fail_ignore(ci_netif* ni, ci_sock_cmn* s, int err,
            ( optname == SO_TIMESTAMP || optname == SO_TIMESTAMPNS ||
              optname == ONLOAD_SO_TIMESTAMPING ) &&
            optlen >= sizeof(int) )
-    return 1;
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  else if( s->b.state & CI_TCP_STATE_TCP && level == IPPROTO_TCP &&
-           optname == ONLOAD_TCP_OFFLOAD && optlen >= sizeof(int) )
     return 1;
 #endif
   return 0;

@@ -24,8 +24,6 @@
 #ifdef __KERNEL__
 # include <onload/oof_interface.h>
 # include <onload/oof_onload.h>
-#else
-# include <onload/extensions_zc.h>
 #endif
 #include <onload/cplane_ops.h>
 
@@ -69,7 +67,10 @@ extern unsigned ci_tp_max_dump CI_HV;
 
 #define log  ci_log
 
-ci_inline unsigned raw_pkt_dump_len(unsigned len) {
+
+ci_inline unsigned ip_pkt_dump_len(unsigned len) {
+  len += ETH_HLEN; /* ?? Cout VLAN tag as well ?? */
+  if( len > ETH_FRAME_LEN )   len = 80;
 #if defined(__ci_driver__)
   if( len > 80 ) len = 80;
 #else
@@ -78,11 +79,6 @@ ci_inline unsigned raw_pkt_dump_len(unsigned len) {
   return len;
 }
 
-ci_inline unsigned ip_pkt_dump_len(unsigned len) {
-  len += ETH_HLEN; /* ?? Cout VLAN tag as well ?? */
-  if( len > ETH_FRAME_LEN )   len = 80;
-  return raw_pkt_dump_len(len);
-}
 
 #ifdef __ci_driver__
 /* definitions for installing/removing IP filters */
@@ -839,32 +835,6 @@ extern void ci_netif_set_merge_atomic_flag(ci_netif* ni);
 void oo_pkt_calc_checksums(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                            struct iovec* host_iov);
 
-
-#ifndef __KERNEL__
-ci_inline void ci_pkt_zc_free_clean(ci_ip_pkt_fmt* pkt,
-                                    enum onload_zc_callback_rc cb_rc)
-{
-  if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {
-    /* Remove the ref we added earlier iff the user didn't retain it */
-    pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
-    pkt->pio_addr = -1;  /* Reset to normal after user_refcount overwrote it */
-  }
-}
-#endif
-
-
-/*********************************************************************
- ****************************** ZC send offloads *********************
- *********************************************************************/
-
-ci_int8
-ci_tcp_offload_zc_send_accum_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
-                                 struct ci_pkt_zc_payload* zcp,
-                                 unsigned payload_offset, void* prefix);
-ci_uint8
-ci_tcp_offload_zc_send_insert_crc(ci_netif* ni, ci_ip_pkt_fmt* pkt,
-                                  struct ci_pkt_zc_payload* zcp,
-                                  unsigned payload_offset, void* prefix);
 
 #endif /* __CI_LIB_IP_INTERNAL_H__ */
 /*! \cidoxg_end */

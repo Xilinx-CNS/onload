@@ -15,7 +15,6 @@
 
 #include <onload/extensions.h>
 #include <onload/extensions_zc.h>
-#include <onload/extensions_zc_hlrx.h>
 
 unsigned int onload_ext_version[] = 
   {ONLOAD_EXT_VERSION_MAJOR,
@@ -177,12 +176,6 @@ int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx)
 }
 
 __attribute__((weak))
-int onload_zc_hlrx_buffer_release(int fd, onload_zc_handle buf)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
 ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
                                  struct msghdr* msg, int flags)
 {
@@ -193,15 +186,6 @@ __attribute__((weak))
 ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
                                struct onload_zc_msg* msg, size_t max_bytes,
                                int flags)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
-ssize_t
-onload_zc_hlrx_recv_oob(struct onload_zc_hlrx* hlrx,
-                        const struct onload_zc_iovec* inband,
-                        void* buf_out, size_t len, int *flags)
 {
   return -ENOSYS;
 }

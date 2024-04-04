@@ -121,10 +121,6 @@ ci_inline ci_uint16 efhw_mcdi_read(char *addr)
 #define EFHW_MCDI_DECLARE_BUF(_name, _len)				\
 	ci_dword_t _name[DIV_ROUND_UP((_len), 4)]
 
-#define EFHW_PROXY_EXTRA_BYTES  (MC_CMD_CLIENT_CMD_IN_LEN + 8)
-#define EFHW_MCDI_DECLARE_PROXYABLE_BUF(_name, _len) \
-	EFHW_MCDI_DECLARE_BUF(_name, EFHW_PROXY_EXTRA_BYTES + (_len))
-
 #define EFHW_MCDI_INITIALISE_BUF_SIZE(_name, _name_size)		\
 	memset(_name, 0, _name_size)
 

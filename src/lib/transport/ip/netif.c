@@ -521,7 +521,9 @@ void ci_netif_rxq_low_on_recv(ci_netif* ni, ci_sock_cmn* s,
       CITP_STATS_NETIF_INC(ni, memory_pressure_exit_recv);
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i)
-    ci_netif_rx_post_all_batch(ni, intf_i);
+    if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i))
+        >= CI_CFG_RX_DESC_BATCH )
+      ci_netif_rx_post(ni, intf_i);
   CITP_STATS_NETIF_INC(ni, rx_refill_recv);
   ci_netif_unlock(ni);
 }
@@ -574,7 +576,9 @@ static void ci_netif_mem_pressure_enter_critical(ci_netif* ni, int intf_i)
   ni->state->mem_pressure |= OO_MEM_PRESSURE_CRITICAL;
   ni->state->rxq_limit = 2*CI_CFG_RX_DESC_BATCH;
   ci_netif_mem_pressure_pkt_pool_use(ni);
-  ci_netif_rx_post_all_batch(ni, intf_i);
+  if( ci_netif_rx_vi_space(ni, ci_netif_vi(ni, intf_i)) >=
+      CI_CFG_RX_DESC_BATCH )
+    ci_netif_rx_post(ni, intf_i);
 }
 
 
@@ -704,7 +708,7 @@ static int __ci_netif_rx_post(ci_netif* ni, ef_vi* vi, int intf_i,
 #define low_thresh(ni)       ((ni)->state->rxq_limit / 2)
 
 
-int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
+void ci_netif_rx_post(ci_netif* netif, int intf_i)
 {
   /* TODO: When under packet buffer pressure, post fewer on the receive
   ** queue.  As an easy first stab could have a threshold for the number of
@@ -714,16 +718,17 @@ int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
   ** possibly be consumed by existing sockets receive windows.  This would
   ** reduce resource consumption for apps that have few sockets.
   */
+  ef_vi* vi = ci_netif_vi(netif, intf_i);
   ci_ip_pkt_fmt* pkt;
-  int max_n_to_post, rx_allowed, n_to_post, n_posted = 0;
+  int max_n_to_post, rx_allowed, n_to_post;
   int bufset_id = NI_PKT_SET(netif);
   int ask_for_more_packets = 0;
 
   if( vi->nic_type.arch == EF_VI_ARCH_EFCT )
-    return 0;
+    return;
 
   if( ! ef_vi_receive_capacity(vi) )
-    return 0;
+    return;
 
   ci_assert(ci_netif_is_locked(netif));
   ci_assert(ci_netif_rx_vi_space(netif, vi) >= CI_CFG_RX_DESC_BATCH);
@@ -742,11 +747,9 @@ int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
 
  good_bufset:
   do {
-    int n;
     n_to_post = CI_MIN(max_n_to_post, netif->packets->set[bufset_id].n_free);
-    n = __ci_netif_rx_post(netif, vi, intf_i, bufset_id, n_to_post);
-    max_n_to_post -= n;
-    n_posted += n;
+    max_n_to_post -= __ci_netif_rx_post(netif, vi, intf_i,
+                                        bufset_id, n_to_post);
     ci_assert_ge(max_n_to_post, 0);
 
     if( max_n_to_post < CI_CFG_RX_DESC_BATCH ) {
@@ -755,7 +758,7 @@ int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
                                 ask_for_more_packets);
       }
       CHECK_FREEPKTS(netif);
-      return n_posted;
+      return;
     }
 
  find_new_bufset:
@@ -809,7 +812,7 @@ int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
   if( ef_vi_receive_fill_level(vi) < CI_CFG_RX_DESC_BATCH )
     ci_netif_mem_pressure_enter_critical(netif, intf_i);
 #endif
-  return n_posted;
+  return;
 
  not_enough_pkts:
   /* The best packet set has less than CI_CFG_RX_DESC_BATCH packets.
@@ -857,7 +860,6 @@ int ci_netif_rx_post(ci_netif* netif, int intf_i, ef_vi* vi)
   if( ef_vi_receive_fill_level(vi) < CI_CFG_RX_DESC_BATCH )
     ci_netif_mem_pressure_enter_critical(netif, intf_i);
 #endif
-  return n_posted;
 }
 
 

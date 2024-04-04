@@ -140,19 +140,6 @@ int ef10ct_transmitv_init_extra(struct ef_vi *vi,
     return -EOPNOTSUPP;
 }
 
-ssize_t ef10ct_transmit_memcpy(struct ef_vi *vi,
-                               const ef_remote_iovec *dst_iov, int dst_iov_len,
-                               const ef_remote_iovec* src_iov, int src_iov_len
-                               ) {
-    ef10ct_unsupported_msg(__func__);
-    return -EOPNOTSUPP;
-}
-
-int ef10ct_transmit_memcpy_sync(struct ef_vi *vi, ef_request_id dma_id) {
-    ef10ct_unsupported_msg(__func__);
-    return -EOPNOTSUPP;
-}
-
 int ef10ct_transmit_ctpio_fallback(struct ef_vi *vi, ef_addr dma_addr,
                                    size_t len, ef_request_id dma_id) {
     ef10ct_unsupported_msg(__func__);
@@ -270,8 +257,6 @@ static void ef10ct_initialise_ops(ef_vi *vi) {
     vi->ops.eventq_timer_clear          = ef10ct_eventq_timer_clear;
     vi->ops.eventq_timer_zero           = ef10ct_eventq_timer_zero;
     vi->ops.transmitv_init_extra        = ef10ct_transmitv_init_extra;
-    vi->ops.transmit_memcpy             = ef10ct_transmit_memcpy;
-    vi->ops.transmit_memcpy_sync        = ef10ct_transmit_memcpy_sync;
     vi->ops.transmit_ctpio_fallback     = ef10ct_transmit_ctpio_fallback;
     vi->ops.transmitv_ctpio_fallback    = ef10ct_transmitv_ctpio_fallback;
 

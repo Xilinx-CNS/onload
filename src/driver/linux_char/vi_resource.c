@@ -359,8 +359,6 @@ efch_vi_rm_alloc(ci_resource_alloc_t* alloc, ci_resource_table_t* rt,
   alloc_out->out_flags = virs->out_flags;
   alloc_out->out_flags |= EFHW_VI_PS_BUF_SIZE_SET;
   alloc_out->ps_buf_size = virs->ps_buf_size;
-  alloc_out->out_flags |= EFHW_VI_ABS_IDX_SET;
-  alloc_out->abs_idx = efhw_nic_rel_to_abs_idx(nic, alloc_out->instance);
 
   EFCH_TRACE("%s: Allocated "EFRM_RESOURCE_FMT" rc=%d", __FUNCTION__,
              EFRM_RESOURCE_PRI_ARG(&virs->rs), rc);

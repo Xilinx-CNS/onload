@@ -551,30 +551,8 @@
 /* Handle incoming ICMP for Onloaded sockets */
 #define CI_CFG_HANDLE_ICMP 1
 
-/* Enable cooperation with the SmartNIC TCP reordering plugin */
-#define CI_CFG_TCP_OFFLOAD_RECYCLER 0
-
-/* When using CI_CFG_TCP_OFFLOAD_RECYCLER, the number of additional VIs
- * (beyond the core TCP recycler) that the TCP processing plugin wants to use
- * to enable whatever application-specific processing it has. */
-#define CI_CFG_TCP_PLUGIN_EXTRA_VIS 0
-
-#ifdef NDEBUG
-/* When using a SmartNIC plugin which can cause complex data to be received by
- * the host (e.g. pointers to non-local memory regions), implement recv().
- * We default to allowing this in debug builds only because testing is the
- * only valid use-case: production apps must use the zero-copy APIs otherwise
- * they will lose the valuable plugin-offloaded data. */
-#define CI_CFG_TCP_PLUGIN_RECV_NONZC 0
-#else
-#define CI_CFG_TCP_PLUGIN_RECV_NONZC 1
-#endif
-
 /* Enable cooperation with the SmartNIC TX CRC-offload plugin */
 #define CI_CFG_TX_CRC_OFFLOAD 0
-/* Do not use SmartNIC TX CRC-offload plugin for NVMeoTCP and instead calculate
- * PDU digests in Onload. Useful for testing of Onload CRC-offload logic. */
-#define CI_CFG_NVME_LOCAL_CRC_MODE 0
 
 #ifdef __KERNEL__
 #include <linux/version.h>

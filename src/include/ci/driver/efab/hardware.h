@@ -84,12 +84,11 @@
 
 /*-------------- Event support  ------------ */
 
-#define efhw_nic_event_queue_enable(nic, client_id, params) \
-  ((nic)->efhw_func->event_queue_enable((nic), (client_id), (params)))
+#define efhw_nic_event_queue_enable(nic, params) \
+  ((nic)->efhw_func->event_queue_enable((nic), (params)))
 
-#define efhw_nic_event_queue_disable(nic, client_id, evq, \
-				    time_sync_events_enabled) \
-	((nic)->efhw_func->event_queue_disable(nic, client_id, evq,		\
+#define efhw_nic_event_queue_disable(nic, evq, time_sync_events_enabled) \
+	((nic)->efhw_func->event_queue_disable(nic, evq,		\
 					       time_sync_events_enabled))
 
 #define efhw_nic_wakeup_request(nic, iopage, vi_id, rd_ptr)                   \
@@ -113,18 +112,17 @@
 	((nic)->efhw_func->vi_free((nic), (instance), (n_vis)))
 
 /*-------------- DMA support  ------------ */
-#define efhw_nic_dmaq_tx_q_init(nic, client_id, params) \
-	((nic)->efhw_func->dmaq_tx_q_init((nic), (client_id), (params)))
+#define efhw_nic_dmaq_tx_q_init(nic, params) \
+	((nic)->efhw_func->dmaq_tx_q_init((nic), (params)))
 
-#define efhw_nic_dmaq_rx_q_init(nic, client_id, params) \
-	((nic)->efhw_func->dmaq_rx_q_init((nic), (client_id), (params)))
+#define efhw_nic_dmaq_rx_q_init(nic, params) \
+	((nic)->efhw_func->dmaq_rx_q_init((nic), (params)))
 
-#define efhw_nic_flush_tx_dma_channel(nic, client_id, dmaq, evq) \
-	((nic)->efhw_func->flush_tx_dma_channel((nic), (client_id), (dmaq), \
-						(evq)))
+#define efhw_nic_flush_tx_dma_channel(nic, dmaq, evq) \
+	((nic)->efhw_func->flush_tx_dma_channel((nic), (dmaq), (evq)))
 
-#define efhw_nic_flush_rx_dma_channel(nic, client_id, dmaq) \
-	((nic)->efhw_func->flush_rx_dma_channel(nic, client_id, dmaq))
+#define efhw_nic_flush_rx_dma_channel(nic, dmaq) \
+	((nic)->efhw_func->flush_rx_dma_channel(nic, dmaq))
 
 #define efhw_nic_translate_dma_addrs(nic, src, dst, n) \
 	((nic))->efhw_func->translate_dma_addrs((nic), (src), (dst), (n)) \
@@ -195,20 +193,6 @@
 	((nic)->efhw_func->get_rx_error_stats ? \
 	 (nic)->efhw_func->get_rx_error_stats(nic, instance, data, data_len, \
                                               do_reset) : -EOPNOTSUPP)
-
-/*-------------- Dynamic clients IDs ------ */
-#define efhw_nic_client_alloc(nic, parent, id) \
-	((nic)->efhw_func->client_alloc ? \
-	 (nic)->efhw_func->client_alloc((nic), (parent), (id)) : -ENOSYS)
-
-#define efhw_nic_client_free(nic, id) \
-	((nic)->efhw_func->client_free((nic), (id)) ? \
-	 (nic)->efhw_func->client_free((nic), (id)) : -EOPNOTSUPP)
-
-#define efhw_nic_vi_set_user(nic, vi_instance, user) \
-	((nic)->efhw_func->vi_set_user ? \
-	 (nic)->efhw_func->vi_set_user((nic), (vi_instance), (user)) : \
-	 -EOPNOTSUPP)
 
 /*-------------- filtering --------------------- */
 #define efhw_nic_rss_alloc(nic, indir, key, efhw_rss_mode, num_qs, context) \

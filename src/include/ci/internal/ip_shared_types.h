@@ -77,11 +77,6 @@
 /* See ci_netif_pkt_try_to_free(). */
 #define CI_NETIF_PKT_TRY_TO_FREE_MAX_DESP  2
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-#define CI_MAX_VIS_PER_INTF (2 + CI_CFG_TCP_PLUGIN_EXTRA_VIS)
-#else
-#define CI_MAX_VIS_PER_INTF 1
-#endif
 
 /* Timer wheels are used to schedule the timers. There are 4 level's on
 ** the wheel each of 256 buckets each bucket is a doubly linked list
@@ -402,10 +397,6 @@ struct ci_ip_pkt_fmt_s {
    *   'tail' they're protected by the socket lock. */
 #define CI_PKT_RX_FLAG_RECV_Q_CONSUMED 0x01 /* recv_q: consumed    */
 #define CI_PKT_RX_FLAG_KEEP            0x02 /* recv_q: do not drop pkt  */
-#define CI_PKT_RX_FLAG_USER_FLAG       0x04 /* The user_flag field of this
-                                   * packet was set by the NIC during datapath
-                                   * processing (EF100 feature). The user_mark
-                                   * is put in pf.tcp_rx.lo.rx_sock */
 #define CI_PKT_RX_FLAG_RX_SHARED       0x08 /* Packet comes from shared RXQ */
   ci_uint8              rx_flags;
 
@@ -445,19 +436,6 @@ struct ci_ip_pkt_fmt_s {
    */
   ci_int16              pkt_outer_l3_off;
 
-#define CI_Q_ID_NORMAL        0
-#define CI_Q_ID_TCP_RECYCLER  1
-#define CI_Q_ID_TCP_APP       2
-/* ...and potentially more q_ids beyond TCP_APP, all of which are also owned
- * by the TCP_APP */
-  /*! For rx packets, the VI/rxq on which this packet was enqueued/received.
-   * For tx packets, the VI/txq on which to send this packet.
-   * If !CI_CFG_TCP_OFFLOAD_RECYCLER then there is only one queue and this
-   * field is irrelevant. Otherwise, plugins tend to use multiple VIs to
-   * distinguish different classes of packet and/or content targetting at
-   * different levels of the stack. */
-  ci_uint8              q_id;
-
   /*! Ensure we have space before [dma_start] so we can expand the Ethernet
    * header to add a VLAN tag.  This member should never be referenced
    * because it may not immediately preceed [dma_start].
@@ -476,29 +454,10 @@ struct ci_ip_pkt_fmt_s {
 #define CI_PKT_ZC_PAYLOAD_ALIGN    8
 struct ci_pkt_zc_payload {
   ci_uint32 len;
-  ci_uint8 prefix_space;       /* Reserved space for building packet prefix. */
-  ci_uint8 is_remote : 1;
-  ci_uint8 use_remote_cookie : 1;  /* Send a completion using app_cookie
-                                    * This is here rather than in the union solely
-                                    * for space efficiency/padding reasons */
-
-  /* For messages with ZC_PAYLOAD_FLAG_INSERT_CRC, these track which
-   * bytes of the CRC to insert. Note that despite the flag name, the
-   * operation is a replacement rather than an insertion - we replace
-   * the last `crc_insert_n_bytes` of the payload with the corresponding
-   * bytes of the CRC.
-   */
-  ci_uint8 crc_insert_first_byte : 2;
-  ci_uint8 crc_insert_n_bytes : 3;
-  ci_uint8 reserved : 1;
-#define ZC_PAYLOAD_FLAG_ACCUM_CRC 0x1
-#define ZC_PAYLOAD_FLAG_INSERT_CRC 0x2
-  ci_uint16 zcp_flags;          /* Flags from onload_zc_iovec::iov_flags. */
-  ci_uint32 crc_id;
-#if CI_CFG_NVME_LOCAL_CRC_MODE
-  void* local_addr;
-#endif
-
+  ci_uint8 is_remote;
+  ci_uint8 use_remote_cookie;  /* Send a completion using app_cookie */
+                               /* This is here rather than in the union solely
+                                * for space efficiency/padding reasons */
   union {
     struct {
       ci_uint64 app_cookie CI_ALIGN(8);  /* From onload_zc_iovec::app_cookie */
@@ -510,8 +469,6 @@ struct ci_pkt_zc_payload {
        __DECLARE_FLEX_ARRAY(char, local);
     };
   };
-
-  /* Space of length prefix_space is reserved at the end of the structure. */
 };
 
 
@@ -525,24 +482,15 @@ struct ci_pkt_zc_payload {
  *    ci_pkt_zc_payload
  *    ci_pkt_zc_payload            /___ zch + zch->end
  *    free space                   \
- *    reserved space for prefixes  <--- length = zch->prefix_spc
  *
  * A single ci_pkt_zc_payload element may be either 'local' or 'remote'. A
  * local payload is just normal in-line bytes, a feature which exists so we
  * can intersperse remote payloads without wasting packet buffers. A 'remote'
- * payload is a pointer to memory owned by the user. Additionally, each
- * ci_pkt_zc_payload can reserve additional space for building packet prefixes
- * to be consumed by plugins, and this space is to be understood to be
- * positioned at the end of the packet buffer.
+ * payload is a pointer to memory owned by the user.
  */
 struct ci_pkt_zc_header {
   ci_uint16 end;         /* Offset from start of this struct to the first
                           * unused byte of the ci_ip_pkt_fmt */
-  ci_uint16 prefix_spc;  /* Length of packet-prefix records stashed at the
-                          * end of the packet buffer.  This is equal to
-                          * sum(zcp->prefix_space for zcp in payloads), and is
-                          * cached here to allow determination of free space in
-                          * the buffer without walking the payloads. */
   ci_uint8 segs;         /* Number of zc_payload structs following */
   __DECLARE_FLEX_ARRAY(struct ci_pkt_zc_payload, data);
 };
@@ -856,7 +804,6 @@ typedef struct {
 # define CI_IP_TIMER_DEBUG_HOOK         0x9  /* Hook for timer debugging */
 # define CI_IP_TIMER_NETIF_STATS        0xa  /* netif statistics timer   */
 # define CI_IP_TIMER_TCP_CORK           0xb  /* TCP_CORK timer           */
-# define CI_IP_TIMER_NETIF_TCP_RECYCLE  0xc  /* EF100 plugin recycling   */
 } ci_ip_timer;
 
 
@@ -1073,8 +1020,7 @@ typedef struct {
   CI_ULCONST ci_uint32  vi_io_mmap_bytes;
   CI_ULCONST ci_uint32  vi_efct_shm_mmap_bytes;
   CI_ULCONST ci_uint32  vi_evq_bytes;
-  CI_ULCONST ci_uint16  vi_instance[CI_MAX_VIS_PER_INTF];
-  CI_ULCONST ci_uint16  vi_abs_idx[CI_MAX_VIS_PER_INTF];
+  CI_ULCONST ci_uint16  vi_instance;
   CI_ULCONST ci_uint16  vi_rxq_size;
   CI_ULCONST ci_uint16  vi_txq_size;
   CI_ULCONST ci_uint8   vi_arch;
@@ -1084,7 +1030,7 @@ typedef struct {
   CI_ULCONST ci_uint8   vi_channel;
   CI_ULCONST char       dev_name[20];
   /* Transmit overflow queue.  Packets here are ready to send. */
-  oo_pktq               dmaq[CI_MAX_VIS_PER_INTF];
+  oo_pktq               dmaq;
   /* Counts bytes of packet payload into and out of the TX descriptor ring. */
   ci_uint32             tx_bytes_added;
   ci_uint32             tx_bytes_removed;
@@ -1114,10 +1060,6 @@ typedef struct {
    */
   ci_uint32             ctpio_frame_len_check;
   ci_uint32             ctpio_max_frame_len;
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_uint32             plugin_app_credit;
-  CI_ULCONST ef_addrspace  plugin_addr_space CI_ALIGN(8);
 #endif
 } ci_netif_state_nic_t;
 
@@ -1307,12 +1249,6 @@ struct ci_netif_state_s {
 #define OO_TIMEOUT_Q_MAX      2
   struct oo_p_dllink    timeout_q[OO_TIMEOUT_Q_MAX]; /**< time-out queues */
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_ip_timer           recycle_tid;
-  struct oo_p_dllink    recycle_retry_q;  /**< linked
-                                               ci_tcp_state_t::recycle_link */
-#endif
-
   /* List of sockets that may have reapable buffers. */
   struct oo_p_dllink        reap_list;
 
@@ -1402,9 +1338,6 @@ struct ci_netif_state_s {
    * between all VIs on this netif.
    */
   CI_ULCONST ci_uint32   ctpio_mmap_bytes;
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  CI_ULCONST ci_uint32   plugin_mmap_bytes;
 #endif
   CI_ULCONST ci_uint32  efct_shm_mmap_bytes;
 
@@ -1516,20 +1449,6 @@ struct ci_netif_state_s {
    * in which events are acquired in kernel, stored here,
    * and processed in UL */
   ef_event      events[256];
-
-/* Id pool capacity is 1 << ZC_NVME_CRC_IDP_CAP.
- * The constant is also used to calculate the base id for the region
- * assigned to the stack */
-#define ZC_NVME_CRC_IDP_CAP 13
-  struct nvme_crc_plugin_idp_t {
-    unsigned    fifo_mask;
-    unsigned    fifo_rd_i;
-    unsigned    fifo_wr_i;
-    ci_uint32   fifo[1 << ZC_NVME_CRC_IDP_CAP];
-#if CI_CFG_NVME_LOCAL_CRC_MODE
-    ci_uint32   crcs[1 << ZC_NVME_CRC_IDP_CAP];
-#endif
-  } nvme_crc_plugin_idp[CI_CFG_MAX_INTERFACES];
 
   /* Followed by:
   **
@@ -1913,9 +1832,6 @@ struct ci_sock_cmn_s {
 #define CI_SOCK_FLAG_FILTER       0x00000040   /* socket has h/w filter      */
 /* bind() has been successfully called on this socket. */
 #define CI_SOCK_FLAG_BOUND        0x00000080 
-/* In-order data is being processed on the FPGA, so Onload must do
- * reordering/recyling for this connection */
-#define CI_SOCK_FLAG_TCP_OFFLOAD  0x00000100
 /* Socket was bound to explicit port number. It is used by Linux stack to
  * determaine if the socket should be re-bound by connect()/listen() after 
  * shutdown().
@@ -1993,8 +1909,7 @@ struct ci_sock_cmn_s {
    CI_SOCK_FLAG_PMTU_DO | CI_SOCK_FLAG_ALWAYS_DF | CI_SOCK_FLAG_BROADCAST | \
    CI_SOCK_FLAG_SET_SNDBUF | CI_SOCK_FLAG_SET_RCVBUF |                      \
    CI_SOCK_FLAG_AUTOFLOWLABEL_REQ | CI_SOCK_FLAG_AUTOFLOWLABEL_OPT |        \
-   CI_SOCK_FLAG_IP6_PMTU_DO | CI_SOCK_FLAG_IP6_ALWAYS_DF |                  \
-   CI_SOCK_FLAG_TCP_OFFLOAD)
+   CI_SOCK_FLAG_IP6_PMTU_DO | CI_SOCK_FLAG_IP6_ALWAYS_DF)
 #define CI_SOCK_AFLAG_TCP_INHERITED \
     (CI_SOCK_AFLAG_CORK | CI_SOCK_AFLAG_NODELAY)
 
@@ -2761,10 +2676,6 @@ struct ci_tcp_state_s {
 
   ci_uint8             incoming_tcp_hdr_len; /* expected TCP header length */
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_uint16            plugin_stream_id;
-#endif
-
   ci_uint32            congrecover; /* snd_nxt when loss detected         */
   oo_pkt_p             retrans_ptr; /* next packet to retransmit          */
   ci_uint32            retrans_seq; /* seq of next packet to retransmit   */
@@ -2872,12 +2783,6 @@ struct ci_tcp_state_s {
 #endif
   ci_ip_timer          cork_tid;    /* TCP timer for TCP_CORK/MSG_MORE   */
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  /* Technically a timer, but it always has a single-tick expiry so we save
-   * space by just having the linked list part and using ns->recycle_tid to
-   * trigger it. */
-  struct oo_p_dllink   recycle_link;
-#endif
 
 #if CI_CFG_TCP_SOCK_STATS
   ci_ip_sock_stats     stats_snapshot CI_ALIGN(8);   /**< statistics snapshot */
@@ -2921,16 +2826,6 @@ struct ci_tcp_state_s {
   } pre_nat;
 
   struct oo_tcp_socket_stats    stats;
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_uint64             plugin_ddr_base;
-  ci_uint64             plugin_ddr_size;
-#endif
-
-  /* NVMe plugin id
-   * The special id is set when a new id should be generated */
-#define ZC_NVME_CRC_ID_INVALID (ci_uint32)(-1)
-  ci_uint32             current_crc_id;
 };
 
 

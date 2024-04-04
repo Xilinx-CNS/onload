@@ -276,29 +276,6 @@ static int ci_ip_timer_cascadewheel(ci_netif* netif, int wheelno,
   return changed;
 }
 
-
-static void ci_ip_timer_do_recycle(ci_netif *netif)
-{
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_netif_state *ns = netif->state;
-  struct oo_p_dllink_state list = oo_p_dllink_ptr(netif,
-                                                  &ns->recycle_retry_q);
-  struct oo_p_dllink_state lnk, tmp;
-  ci_tcp_state* ts;
-
-  /* ci_tcp_timeout_recycle() may add stuff back to the q, so we have to be
-   * careful to iterate once */
-  if( oo_p_dllink_is_empty(netif, list) )
-    return;
-  oo_p_dllink_for_each_safe(netif, lnk, tmp, list) {
-    ts = CI_CONTAINER(ci_tcp_state, recycle_link, lnk.l);
-    oo_p_dllink_del_init(netif, lnk);
-    ci_tcp_timeout_recycle(netif, ts);
-  }
-#endif
-}
-
-
 /* unpick the ci_ip_timer structure to actually do the callback */ 
 static void ci_ip_timer_docallback(ci_netif *netif, ci_ip_timer* ts)
 {
@@ -335,9 +312,6 @@ static void ci_ip_timer_docallback(ci_netif *netif, ci_ip_timer* ts)
   case CI_IP_TIMER_TCP_CORK:
     sp = oo_statep_to_sockp(netif, ts->statep);
     ci_tcp_timeout_cork(netif, SP_TO_TCP(netif, sp));
-    break;
-  case CI_IP_TIMER_NETIF_TCP_RECYCLE:
-    ci_ip_timer_do_recycle(netif);
     break;
   case CI_IP_TIMER_NETIF_TIMEOUT:
     ci_netif_timeout_state(netif);

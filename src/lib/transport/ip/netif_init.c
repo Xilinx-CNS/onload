@@ -19,7 +19,6 @@
 #include <etherfabric/internal/internal.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/tools/sysdep.h>
-#include <onload/tcp-ceph.h>
 
 #ifndef __KERNEL__
 #include <cplane/cplane.h>
@@ -59,24 +58,16 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
 
   nis->opts = ni->opts;
 
-  /* TX DMA overflow queue and id allocator init for nvme plugin */
+  /* TX DMA overflow queue. */
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     nn = &nis->nic[nic_i];
-    for( i = 0; i < sizeof(nn->dmaq) / sizeof(nn->dmaq[0]); ++i )
-      oo_pktq_init(&nn->dmaq[i]);
+    oo_pktq_init(&nn->dmaq);
     assert_zero(nn->tx_bytes_added);
     assert_zero(nn->tx_bytes_removed);
     assert_zero(nn->tx_dmaq_insert_seq);
     assert_zero(nn->tx_dmaq_insert_seq_last_poll);
     assert_zero(nn->tx_dmaq_done_seq);
     nn->rx_frags = OO_PP_NULL;
-
-#if CI_CFG_TX_CRC_OFFLOAD
-  if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
-    ci_nvme_plugin_crc_id_init(&nis->nvme_crc_plugin_idp[nic_i],
-                               ni->nic_hw[nic_i].plugin_tx_region_id,
-                               NI_OPTS(ni).nvme_crc_table_cap);
-#endif
   }
 
   /* List of free packet buffers. */
@@ -120,15 +111,6 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
                    "ttid");
 
   nis->timeout_tid.fn = CI_IP_TIMER_NETIF_TIMEOUT;
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_ip_timer_init(ni, &nis->recycle_tid,
-                   oo_ptr_to_statep(ni, &nis->recycle_tid),
-                   "rctq");
-  nis->recycle_tid.fn = CI_IP_TIMER_NETIF_TCP_RECYCLE;
-
-  oo_p_dllink_init(ni, oo_p_dllink_ptr(ni, &nis->recycle_retry_q));
-#endif
 
 #if CI_CFG_SUPPORT_STATS_COLLECTION
   ci_ip_timer_init(ni, &nis->stats_tid,
@@ -260,7 +242,6 @@ void ci_netif_state_init(ci_netif* ni, int cpu_khz, const char* name)
   assert_zero(nis->kernel_packets_last_forwarded);
   assert_zero(nis->kernel_packets_pending);
 #endif
-
 }
 
 #endif
@@ -1316,18 +1297,6 @@ void ci_netif_config_opts_getenv(ci_netif_config_opts* opts)
 
   if( (s = getenv("EF_NO_HW")) )
     opts->no_hw = atoi(s);
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER || CI_CFG_TX_CRC_OFFLOAD
-  static const char* const tcp_offload_opts[] = { "off", "tcp", "ceph", "nvme", 0 };
-  opts->tcp_offload_plugin = parse_enum(opts, "EF_TCP_OFFLOAD",
-                                        tcp_offload_opts, "off");
-
-  if( (s = getenv("EF_CEPH_DATA_BUF_BYTES")) )
-    opts->ceph_data_buf_bytes = atoi(s);
-
-  if( (s = getenv("EF_NVME_CRC_TABLE_CAP")) )
-    opts->nvme_crc_table_cap = atoi(s);
-#endif
 }
 
 
@@ -1797,14 +1766,6 @@ static void netif_tcp_helper_munmap(ci_netif* ni)
   }
 #endif
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  if( ni->plugin_ptr != NULL ) {
-    rc = oo_resource_munmap(ci_netif_get_driver_handle(ni),
-                            ni->plugin_ptr, CI_PAGE_SIZE);
-    if( rc < 0 )  LOG_NV(ci_log("%s: munmap plugin %d", __FUNCTION__, rc));
-  }
-#endif
-
   if( ni->io_ptr != NULL ) {
     rc = oo_resource_munmap(ci_netif_get_driver_handle(ni),
                             ni->io_ptr, ni->state->io_mmap_bytes);
@@ -1834,9 +1795,6 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
 #if CI_CFG_CTPIO
   ni->ctpio_ptr = NULL;
   ni->ctpio_bytes_mapped = 0;
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ni->plugin_ptr = NULL;
 #endif
   ni->buf_ptr = NULL;
   ni->efct_shm_ptr = NULL;
@@ -1913,32 +1871,6 @@ static int netif_tcp_helper_mmap(ci_netif* ni)
   }
 #endif
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  /****************************************************************************
-   * Create the plugin CSR mapping.
-   */
-  {
-    bool have_plugin_io = false;
-    int nic_i;
-
-    OO_STACK_FOR_EACH_INTF_I(ni, nic_i)
-      if( ns->nic[nic_i].oo_vi_flags & OO_VI_FLAGS_PLUGIN_IO_EN )
-        have_plugin_io = true;
-
-    if( have_plugin_io ) {
-      rc = oo_resource_mmap(ci_netif_get_driver_handle(ni),
-                            OO_MMAP_TYPE_NETIF,
-                            CI_NETIF_MMAP_ID_PLUGIN, CI_PAGE_SIZE,
-                            OO_MMAP_FLAG_POPULATE, &p);
-      if( rc < 0 ) {
-        LOG_NV(ci_log("%s: oo_resource_mmap plugin %d", __FUNCTION__, rc));
-        goto fail2;
-      }
-      ni->plugin_ptr = (uint8_t*) p;
-    }
-  }
-#endif
-
   /****************************************************************************
    * Create the I/O buffer mapping.
    */
@@ -1999,7 +1931,7 @@ static int oo_efct_superbuf_config_refresh(ef_vi* vi, int qid)
 static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
                       int vi_io_offset, int vi_efct_shm_offset,
                       char** vi_mem_ptr,
-                      ef_vi* vi, unsigned vi_instance, unsigned abs_idx,
+                      ef_vi* vi, unsigned vi_instance,
                       int evq_bytes, int txq_size, ef_vi_stats* vi_stats,
                       struct efab_nic_design_parameters* dp)
 {
@@ -2015,7 +1947,6 @@ static int init_ef_vi(ci_netif* ni, int nic_i, int vi_state_offset,
   ef_vi_init_io(vi, ni->io_ptr + vi_io_offset);
   ef_vi_init_timer(vi, nsn->timer_quantum_ns);
   vi->vi_i = vi_instance;
-  vi->abs_idx = abs_idx;
   vi->dh = ci_netif_get_driver_handle(ni);
   *vi_mem_ptr = ef_vi_init_qs(vi, *vi_mem_ptr, ids, evq_bytes / 8,
                               nsn->vi_rxq_size, nsn->rx_prefix_len, txq_size);
@@ -2058,20 +1989,11 @@ static void cleanup_ef_vi(ef_vi* vi)
 }
 
 
-static void cleanup_all_vis(ci_netif* ni, unsigned vis_inited)
+static void cleanup_all_vis(ci_netif* ni)
 {
   int nic_i;
-  OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
-    int i;
-    int num_vis = ci_netif_num_vis(ni);
-
-    for( i = 0; i < num_vis; ++i ) {
-      if( vis_inited > 0 ) {
-        cleanup_ef_vi(&ni->nic_hw[nic_i].vis[i]);
-        --vis_inited;
-      }
-    }
-  }
+  OO_STACK_FOR_EACH_INTF_I(ni, nic_i)
+    cleanup_ef_vi(ci_netif_vi(ni, nic_i));
 }
 
 
@@ -2102,7 +2024,7 @@ unsigned ci_netif_build_future_intf_mask(ci_netif* ni)
 static int af_xdp_kick(ef_vi* vi)
 {
   ci_netif* ni = vi->xdp_kick_context;
-  ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vis[0], vi);
+  ci_netif_nic_t* nic = CI_CONTAINER(ci_netif_nic_t, vi, vi);
   uint32_t intf_i = nic - ni->nic_hw;
   int fd = ci_netif_get_driver_handle(ni);
 
@@ -2133,15 +2055,11 @@ static int netif_tcp_helper_build(ci_netif* ni)
   unsigned vi_io_offset, vi_state_offset, vi_efct_shm_offset;
   char* vi_mem_ptr;
   int vi_state_bytes;
-  int vis_inited = 0;
 #if CI_CFG_PIO
   unsigned pio_io_offset = 0, pio_buf_offset = 0, vi_bar_off;
 #endif
 #if CI_CFG_CTPIO
   unsigned ctpio_io_offset = 0;
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  unsigned plugin_io_offset = 0;
 #endif
 
   /****************************************************************************
@@ -2168,9 +2086,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
 
   OO_STACK_FOR_EACH_INTF_I(ni, nic_i) {
     ci_netif_state_nic_t* nsn = &ns->nic[nic_i];
-    ef_vi* vi;
-    int i;
-    int num_vis = ci_netif_num_vis(ni);
+    ef_vi* vi = ci_netif_vi(ni, nic_i);
     struct efab_nic_design_parameters dp;
 
     /* Get interface properties. */
@@ -2192,34 +2108,27 @@ static int netif_tcp_helper_build(ci_netif* ni)
     if( rc < 0 )
       goto fail1;
 
-    vi_state_bytes = 0;
-    for( i = 0; i < num_vis; ++i ) {
-      vi = &ni->nic_hw[nic_i].vis[i];
-      rc = init_ef_vi(ni, nic_i, vi_state_offset + vi_state_bytes, vi_io_offset,
-                      vi_efct_shm_offset,
-                      &vi_mem_ptr, vi, nsn->vi_instance[i], nsn->vi_abs_idx[i],
-                      i ? 0 : nsn->vi_evq_bytes, nsn->vi_txq_size,
-                      &ni->state->vi_stats, &dp);
-      if( rc )
-        goto fail2;
-      ++vis_inited;
-      if( i )
-        ef_vi_add_queue(ci_netif_vi(ni, nic_i), vi);
-      if( NI_OPTS(ni).tx_push )
-        ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
+    rc = init_ef_vi(ni, nic_i, vi_state_offset, vi_io_offset,
+                    vi_efct_shm_offset,
+                    &vi_mem_ptr, vi, nsn->vi_instance,
+                    nsn->vi_evq_bytes, nsn->vi_txq_size,
+                    &ni->state->vi_stats, &dp);
+    if( rc )
+      goto fail2;
+    if( NI_OPTS(ni).tx_push )
+      ef_vi_set_tx_push_threshold(vi, NI_OPTS(ni).tx_push_thresh);
 
-      vi_state_bytes += ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size,
-                                               NI_OPTS(ni).txq_size);
-      vi_io_offset += nsn->vi_io_mmap_bytes;
-      vi_efct_shm_offset += nsn->vi_efct_shm_mmap_bytes;
-    }
+    vi_state_bytes = ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size,
+                                            NI_OPTS(ni).txq_size);
+    vi_io_offset += nsn->vi_io_mmap_bytes;
+    vi_efct_shm_offset += nsn->vi_efct_shm_mmap_bytes;
     vi_state_offset += vi_state_bytes;
 
-    vi = ci_netif_vi(ni, nic_i);
     vi->xdp_kick = af_xdp_kick;
     vi->xdp_kick_context = ni;
 
-    ci_assert_equal(vi_state_bytes, ns->vi_state_bytes);
+    ci_assert(vi_state_bytes == ns->vi_state_bytes);
+
 
 #if CI_CFG_PIO
     if( NI_OPTS(ni).pio &&
@@ -2237,7 +2146,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
         pio_buf_offset;
       pio_buf_offset += nsn->pio_io_len;
       /* And set up rest of PIO struct so we can call ef_vi_pio_memcpy */
-      vi_bar_off = nsn->vi_instance[0] * 8192;
+      vi_bar_off = nsn->vi_instance * 8192;
       ni->nic_hw[nic_i].pio.pio_io = ni->pio_ptr + pio_io_offset;
       ni->nic_hw[nic_i].pio.pio_io += (vi_bar_off + 4096) & (CI_PAGE_SIZE - 1);
       ni->nic_hw[nic_i].pio.pio_len = nsn->pio_io_len;
@@ -2256,12 +2165,6 @@ static int netif_tcp_helper_build(ci_netif* ni)
 #endif
 #ifdef OO_HAS_POLL_IN_KERNEL
     ni->nic_hw[nic_i].poll_in_kernel = NI_OPTS(ni).poll_in_kernel;
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-    if( ns->nic[nic_i].oo_vi_flags & OO_VI_FLAGS_PLUGIN_IO_EN ) {
-      ni->nic_hw[nic_i].plugin_io = ni->plugin_ptr + plugin_io_offset;
-      plugin_io_offset += CI_PAGE_SIZE;
-    }
 #endif
   }
   ni->future_intf_mask = ci_netif_build_future_intf_mask(ni);
@@ -2346,7 +2249,7 @@ static int netif_tcp_helper_build(ci_netif* ni)
 fail3:
   CI_FREE_OBJ(ni->pkt_bufs);
 fail2:
-  cleanup_all_vis(ni, vis_inited);
+  cleanup_all_vis(ni);
 fail1:
   return rc;
 }
@@ -2391,7 +2294,7 @@ static void ci_netif_deinit(ci_netif* ni);
 ci_inline void netif_tcp_helper_free(ci_netif* ni)
 {
   if( ni->state != NULL ) {
-    cleanup_all_vis(ni, ~0u);
+    cleanup_all_vis(ni);
     netif_tcp_helper_munmap(ni);
   }
   if( ni->eps != NULL )
@@ -2648,51 +2551,6 @@ static void ci_netif_pkt_reserve_free(ci_netif* ni, oo_pkt_p pkt_list, int n)
   ci_assert_equal(n, 0);
   ci_assert(OO_PP_IS_NULL(pkt_list));
 }
-
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-void ci_netif_send_plugin_app_ctrl(ci_netif* ni, int nic_index,
-                                   ci_ip_pkt_fmt* pkt,
-                                   const void* payload, size_t paylen)
-{
-  pkt->intf_i = nic_index;
-  pkt->q_id = CI_Q_ID_TCP_APP;
-  pkt->pay_len = ETH_HLEN + paylen;
-  /* Fake values to ensure this doesn't look like IPv4 or IPv6, both to
-   * various bits of Onload and to the NIC */
-  pkt->pkt_start_off = 0;
-  pkt->pkt_eth_payload_off = 0;
-  pkt->pkt_outer_l3_off = 0;
-  memset(pkt->dma_start, 0, ETH_HLEN);
-
-  pkt->n_buffers = 1;
-  pkt->buf_len = ETH_HLEN + paylen;
-  memcpy(pkt->dma_start + ETH_HLEN, payload, paylen);
-  ci_netif_send(ni, pkt);
-}
-
-
-void __ci_netif_ring_plugin_app_doorbell(ci_netif* ni, int nic_index)
-{
-  union ceph_control_pkt cmd = {
-    .add_credit = {
-      .cmd = XSN_CEPH_CTRL_ADD_CREDIT,
-      .credit = ni->state->nic[nic_index].plugin_app_credit,
-    },
-  };
-  ci_ip_pkt_fmt* pkt = ci_netif_pkt_alloc(ni, 0);
-  if( ! pkt ) {
-    /* Out-of-packets is an unfortunately-probable circumstance, since this
-     * function is run immediately after we've just taken a load of packets to
-     * refill the rxqs. The problem is mitigated by this function getting
-     * (potentially) run on every poll so, assuming we're not totally wedged,
-     * we'll recover eventually. */
-    return;
-  }
-  ci_netif_send_plugin_app_ctrl(ni, nic_index, pkt, &cmd, sizeof(cmd));
-  ni->state->nic[nic_index].plugin_app_credit = 0;
-}
-#endif
 
 
 #ifndef __KERNEL__
@@ -3097,22 +2955,12 @@ static int __ci_netif_init_fill_rx_rings(ci_netif* ni)
    */
   int intf_i, rxq_limit = ni->state->rxq_limit;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    int vi_i;
-    int n_posted = 0;
-    for( vi_i = 0; vi_i < ci_netif_num_vis(ni); ++vi_i ) {
-      ef_vi* vi = &ni->nic_hw[intf_i].vis[vi_i];
-      if( ! ef_vi_receive_capacity(vi) )
-        continue;
-      n_posted = ci_netif_rx_post(ni, intf_i, vi);
-      if( ef_vi_receive_fill_level(vi) < rxq_limit )
-        return -ENOMEM;
-    }
-    (void)n_posted;
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-    /* See ci_netif_rx_post_all_batch() for the description of what's going on
-     * here */
-    ci_netif_ring_ceph_doorbell(ni, intf_i, n_posted);
-#endif
+    ef_vi* vi = ci_netif_vi(ni, intf_i);
+    if( ! ef_vi_receive_capacity(vi) )
+      continue;
+    ci_netif_rx_post(ni, intf_i);
+    if( ef_vi_receive_fill_level(vi) < rxq_limit )
+      return -ENOMEM;
   }
   return 0;
 }

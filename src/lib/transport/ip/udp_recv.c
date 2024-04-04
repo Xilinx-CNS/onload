@@ -178,7 +178,7 @@ static void ci_udp_pkt_to_zc_msg(ci_netif* ni, ci_ip_pkt_fmt* pkt,
     zc_msg->iov[i].iov_base = oo_offbuf_ptr(&frag->buf);
     zc_msg->iov[i].buf = zc_pktbuf_to_handle(handle_frag);
     zc_msg->iov[i].iov_flags = 0;
-    zc_msg->iov[i].addr_space = EF_ADDRSPACE_LOCAL;
+    zc_msg->iov[i].rx_memreg_idx = PKT_ID2SET(frag->pp);
     bytes_left -= zc_msg->iov[i].iov_len;
     ++i;
     if( OO_PP_IS_NULL(frag->frag_next) || 
@@ -1012,7 +1012,6 @@ static int ci_udp_zc_recv_from_os(ci_netif* ni, ci_udp_state* us,
     zc_iov[i].iov_len = rc > iov[i].iov_len ? iov[i].iov_len : rc;
     zc_iov[i].iov_base = iov[i].iov_base;
     zc_iov[i].buf = zc_pktbuf_to_handle(pkt);
-    zc_iov[i].addr_space = EF_ADDRSPACE_LOCAL;
 
     rc -= zc_iov[i].iov_len;
     ++i;
@@ -1171,7 +1170,11 @@ int ci_udp_zc_recv(ci_udp_iomsg_args* a, struct onload_zc_recv_args* args)
 
       cb_rc = (*args->cb)(args, cb_flags);
 
-      ci_pkt_zc_free_clean(pkt, cb_rc);
+      if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {
+        /* Remove the ref we added earlier iff the user didn't retain it */
+        pkt->rx_flags &=~ CI_PKT_RX_FLAG_KEEP;
+        pkt->pio_addr = -1;
+      }
 
       ci_udp_recv_q_deliver(ni, &us->recv_q, pkt);
 

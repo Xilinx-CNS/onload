@@ -243,12 +243,6 @@ typedef union {
     unsigned       n_pkts       :16;
     unsigned       flags        :16;
   } rx_multi_pkts;
-  /** An event of type EF_EVENT_TYPE_MEMCPY */
-  struct {
-    unsigned       type         :16;
-    unsigned       __reserved   :16;
-    unsigned       dma_id       :32;
-  } memcpy;
   /** An event of type EF_EVENT_TYPE_RX_REF */
   struct {
     unsigned       type         :16;
@@ -303,8 +297,6 @@ enum {
   EF_EVENT_TYPE_RX_MULTI_DISCARD,
   /** Event queue has been forcibly halted (hotplug, reset, etc.) */
   EF_EVENT_TYPE_RESET,
-  /** A ef_vi_transmit_memcpy_sync() request has completed. */
-  EF_EVENT_TYPE_MEMCPY,
   /** A batch of packets was received. */
   EF_EVENT_TYPE_RX_MULTI_PKTS,
   /** Good packets have been received on an efct adapter */
@@ -600,7 +592,7 @@ enum ef_vi_flags {
   EF_VI_TX_CTPIO_NO_POISON = 0x2000000,
   /** Zerocopy - relevant for AF_XDP */
   EF_VI_RX_ZEROCOPY = 0x4000000,
-  /** Support ef_vi_transmit_memcpy() (SN1000 series and newer). */
+  /** DEPRECATED FLAG */
   EF_VI_ALLOW_MEMCPY = 0x8000000,
   /** DEPRECATED FLAG */
   EF_VI_EFCT_UNIQUEUE = 0x10000000,
@@ -990,8 +982,6 @@ typedef struct ef_vi {
   unsigned                      vi_resource_id;
   /** The instance ID of the virtual interface */
   unsigned                      vi_i;
-  /** NIC-global ID of this virtual interface, or -1 */
-  unsigned                      abs_idx;
   /** fd used for original initialisation */
   ef_driver_handle              dh;
 
@@ -1174,10 +1164,6 @@ typedef struct ef_vi {
     int (*transmitv_init_extra)(struct ef_vi*, const struct ef_vi_tx_extra*,
                                 const ef_remote_iovec*, int iov_len,
                                 ef_request_id);
-    ssize_t (*transmit_memcpy)(struct ef_vi*, const ef_remote_iovec* dst_iov,
-                               int dst_iov_len, const ef_remote_iovec* src_iov,
-                               int src_iov_len);
-    int (*transmit_memcpy_sync)(struct ef_vi*, ef_request_id dma_id);
     int (*transmit_ctpio_fallback)(struct ef_vi* vi, ef_addr dma_addr,
                                    size_t len, ef_request_id dma_id);
     int (*transmitv_ctpio_fallback)(struct ef_vi* vi, const ef_iovec* dma_iov,
@@ -1632,7 +1618,7 @@ ef_vi_receive_get_bytes(ef_vi* vi, const void* pkt, uint16_t* bytes_out);
 ** will return nonsense data, or assert in a debug build.
 **
 ** The value of the mark and flag may be set by filter rules assigned to the
-** VI or by datapath extensions (see ef_extension_open()).
+** VI or by datapath extensions (see ef_vi_open_extension()).
 **
 ** \return 0 on success, or a negative error code
 */
@@ -2476,59 +2462,6 @@ ef_vi_transmit_ctpio(ef_vi* vi, const void* frame_buf, size_t frame_len,
 ** ef_vi_transmitv_ctpio().
 */
 #define EF_VI_CTPIO_CT_THRESHOLD_SNF  0xffff
-
-
-/*! \brief Request the NIC copy data from one place to another
-**
-** \param vi          A virtual interface on which to request the send. In
-**                    general this has no functional effect on the copy, but
-**                    space is required on the VI's queues to perform the copy
-**                    and the permissions of the VI will apply.
-** \param dst_iov     An array of ef_remote_iovec instances indicating where
-**                    to copy the data to.
-** \param dst_iov_len Number of elements in the dst_iov array.
-** \param src_iov     An array of ef_remote_iovec instances indicating the
-**                    source of the data to copy.
-** \param src_iov_len Number of elements in the src_iov array.
-**
-** After this call, ef_vi_transmit_push() must be used to send the request to
-** the NIC. There is no automatic notification of completion of the copy; see
-** ef_vi_transmit_memcpy_sync().
-**
-** src_iov and dst_iov may add up to different total amounts of data to copy;
-** in this case the copy stops after one or the other is complete, i.e. it
-** uses the minimum of the total lengths.
-**
-** \return The number of bytes actually enqueued to be copied, which may be
-**         less than the input length if the queue is full. Returns a negative
-**         error code on failure:
-**         -EAGAIN if the descriptor ring is full.\n
-**         -EINVAL if \p src_iov or \p dst_iov have bad values.
-**         -EOPNOTSUPP the VI was created without EF_VI_ALLOW_MEMCPY.
-*/
-#define ef_vi_transmit_memcpy(vi, dst_iov, dst_iov_len, src_iov, src_iov_len) \
-  (vi)->ops.transmit_memcpy((vi), (dst_iov), (dst_iov_len), (src_iov), \
-                            (src_iov_len))
-
-
-/*! \brief Require a completion event for all preceding ef_vi_transmit_memcpy()
-**         calls on the given VI.
-**
-** \param vi     The virtual interface which has had previous
-**               ef_vi_transmit_memcpy() calls which must be completed.
-** \param dma_id DMA id to associate with the descriptor. This is completely
-**               arbitrary, and can be used for tracking of requests.
-**
-** After this call, ef_vi_transmit_push() must be used to send the request to
-** the NIC. The completion will be delivered to the application as an
-** EF_EVENT_TYPE_MEMCPY event, with the given \p dma_id.
-**
-** \return 0 on success, or a negative error code:\n
-**         -EAGAIN if the descriptor ring is full.
-**         -EOPNOTSUPP the VI was created without EF_VI_ALLOW_MEMCPY.
-*/
-#define ef_vi_transmit_memcpy_sync(vi, dma_id)   \
-  (vi)->ops.transmit_memcpy_sync((vi), (dma_id))
 
 
 /**********************************************************************

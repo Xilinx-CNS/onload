@@ -312,10 +312,6 @@ static int __oof_hw_filter_set(struct oof_manager* fm,
    * removal of the socket by oof_socket_del_sw. */
   old_oofilter = *oofilter;
   oo_hw_filter_init2(oofilter, trs, thc);
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  oofilter->plugin_vi = (skf->sf_flags & OOF_SOCKET_SUBVI_MASK) >>
-                        OOF_SOCKET_SUBVI_SHIFT;
-#endif
 
   spin_unlock_bh(&fm->fm_inner_lock);
   ci_assert(!in_atomic());
@@ -2995,14 +2991,6 @@ oof_socket_add(struct oof_manager* fm, struct oof_socket* skf,
                     (clustered ? OOF_SOCKET_CLUSTERED : 0) |
                     (no_ucast ? OOF_SOCKET_NO_UCAST : 0);
   }
-
-  {CI_BUILD_ASSERT(
-        OOF_SOCKET_ADD_FLAG_SUBVI_MASK >> OOF_SOCKET_ADD_FLAG_SUBVI_SHIFT ==
-        OOF_SOCKET_SUBVI_MASK >> OOF_SOCKET_SUBVI_SHIFT);}
-
-  skf->sf_flags = (skf->sf_flags &~ OOF_SOCKET_SUBVI_MASK) |
-                  (flags & OOF_SOCKET_ADD_FLAG_SUBVI_MASK) >>
-                  OOF_SOCKET_ADD_FLAG_SUBVI_SHIFT << OOF_SOCKET_SUBVI_SHIFT;
 
   skf->af_space = af_space;
   skf->sf_laddr = laddr;

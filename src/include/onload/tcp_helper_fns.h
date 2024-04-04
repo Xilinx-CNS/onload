@@ -131,11 +131,11 @@ ci_inline tcp_helper_endpoint_t* efab_priv_to_ep(ci_private_t* priv)
   return ci_trs_ep_get(thr, priv->sock_id);
 }
 
-/* Returns the 'base'/'normal'/'non-plugin' VI for the given NIC. */
+/* Returns the VI for the given NIC. */
 ci_inline struct efrm_vi*
 tcp_helper_vi(tcp_helper_resource_t* trs, int intf_i)
 {
-  return trs->nic[intf_i].thn_vi_rs[CI_Q_ID_NORMAL];
+  return trs->nic[intf_i].thn_vi_rs;
 }
 
 extern int efab_thr_get_inaccessible_stack_info(unsigned id,
@@ -246,16 +246,6 @@ extern int efab_file_move_to_alien_stack(ci_private_t *priv,
                                          ci_netif *alien_ni,
                                          int drop_filter,
                                          oo_sp* new_sock_id);
-
-extern int efab_tcp_helper_tcp_offload_set_isn(tcp_helper_resource_t* trs,
-                                               oo_sp ep_id, ci_uint32 isn);
-
-extern int efab_tcp_helper_tcp_offload_get_stream_id(
-                                         tcp_helper_resource_t* trs,
-                                         oo_sp ep_id, ci_int32 intf_i,
-                                         ci_uint32* stream_id,
-                                         ci_uint64* ddr_base,
-                                         ci_uint64* ddr_size);
 
 extern int efab_tcp_helper_efct_superbuf_config_refresh(
                                         tcp_helper_resource_t* trs,

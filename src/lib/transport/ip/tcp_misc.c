@@ -867,10 +867,6 @@ void ci_tcp_drop(ci_netif* netif, ci_tcp_state* ts, int so_error)
     ci_tcp_wake_possibly_not_in_poll(netif, ts,
                                      CI_SB_FLAG_WAKE_RX|CI_SB_FLAG_WAKE_TX);
   }
-#if CI_CFG_TX_CRC_OFFLOAD
-  if( NI_OPTS(netif).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
-    ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
-#endif
 }
 
 /*!
@@ -1117,13 +1113,6 @@ static int ci_tcp_rx_coalesce_recv(ci_netif* ni, ci_tcp_state* ts,
 
   if( OO_PP_IS_NULL(q->head) )
     return 0;
-
-  if( ci_tcp_is_pluginized(ts) ) {
-    /* Not currently supported, but not particularly hard to support:
-     * ci_tcp_rx_pkt_coalesce() just needs rewriting to do plain
-     * packet-concatenating, with none of the TCP header stuff */
-    return 0;
-  }
 
   pkt = PKT_CHK(ni, q->head);
   if( pkt->refcount != 1 )
@@ -1487,46 +1476,6 @@ int /*bool*/ ci_tcp_is_cacheable_active_wild_sharer(ci_sock_cmn* s)
 }
 #endif
 
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-/* This function is called at stream setup time (i.e. accept()/connect()) to
- * grab the plugin stream ID for the rest of the connection. Since the stream
- * ID represents state stored on the NIC, interface changes after that point
- * (e.g. bond failover, routing changes) can't work since we have no means to
- * to migrate that state. The intf_i should be the interface on which packets
- * are being received (often, but not always, the same as the sending
- * interface) since the plugin is operating on rx packets.
- *
- * The special-case when we move a TCP connection from one port on a NIC to a
- * different port on the same NIC can work, but doesn't need special handling
- * since both interfaces will work equally well for talking to the plugin. */
-int ci_tcp_offload_get_stream_id(ci_netif* ni, ci_tcp_state* ts, int intf_i)
-{
-  ci_tcp_offload_get_stream_id_t get = {
-    .ep_id = S_SP(ts),
-    .intf_i = intf_i,
-  };
-  int rc;
-
-  ci_assert(ci_tcp_is_pluginized(ts));
-#ifdef __KERNEL__
-  rc = efab_tcp_helper_tcp_offload_get_stream_id(netif2tcp_helper_resource(ni),
-                                                 get.ep_id, get.intf_i,
-                                                 &get.stream_id, &get.ddr_base,
-                                                 &get.ddr_size);
-#else
-  rc = oo_resource_op(ci_netif_get_driver_handle(ni),
-                      OO_IOC_TCP_OFFLOAD_GET_STREAM_ID, &get);
-#endif
-  if( rc < 0 )
-    return rc;
-  ci_assert_le(get.stream_id, (__typeof__(ts->plugin_stream_id))~0);
-  ts->plugin_stream_id = get.stream_id;
-  ts->plugin_ddr_base = get.ddr_base;
-  ts->plugin_ddr_size = get.ddr_size;
-  return 0;
-}
-#endif
 
 #endif
 /*! \cidoxg_end */

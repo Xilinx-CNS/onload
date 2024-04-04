@@ -54,48 +54,12 @@ ef100_tx_segment_desc_fill(uint64_t src_dma_addr, unsigned bytes,
   CI_POPULATE_OWORD_6(*dp,
                       ESF_GZ_TX_SEG_LEN, bytes,
                       ESF_GZ_TX_SEG_ADDR, src_dma_addr,
-                      ESF_GZ_TX_SEG_ADDR_SPC_ID, as_override ? addr_space : 0,
+                      ESF_GZ_TX_SEG_ADDR_SPC, as_override ? addr_space : 0,
                       ESF_GZ_TX_SEG_ADDR_SPC_EN, as_override,
                       ESF_GZ_TX_SEG_TRANSLATE_ADDR, translate_addr,
                       ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_SEG);
 }
 
-ef_vi_inline void
-ef100_tx_mem2mem_desc_fill(const ef_remote_iovec *iov, unsigned bytes,
-                           ef_vi_ef100_dma_tx_desc* __restrict__ dp)
-{
-  int translate_addr = (iov->flags & EF_RIOV_FLAG_TRANSLATE_ADDR) != 0;
-  int as_override = iov->addrspace != EF_ADDRSPACE_LOCAL;
-  LWCHK(ESF_GZ_M2M_ADDR_LBN, ESF_GZ_M2M_ADDR_WIDTH);
-  RANGECHCK(bytes - 1, ESF_GZ_M2M_LEN_MINUS_1_WIDTH);
-  EF_VI_BUG_ON(bytes == 0);
-
-  CI_POPULATE_OWORD_6(*dp,
-                      ESF_GZ_M2M_ADDR, iov->iov_base,
-                      ESF_GZ_M2M_LEN_MINUS_1, bytes - 1,
-                      ESF_GZ_M2M_ADDR_SPC_ID, as_override ? iov->addrspace : 0,
-                      ESF_GZ_M2M_TRANSLATE_ADDR, translate_addr,
-                      ESF_GZ_M2M_ADDR_SPC_EN, as_override,
-                      ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_MEM2MEM);
-}
-
-ef_vi_inline void
-ef100_tx_desc2cmpt_desc_fill(uint64_t data, bool ordered, uint16_t abs_vi_id,
-                             ef_vi_ef100_dma_tx_desc* __restrict__ dp)
-{
-  LWCHK(ESF_GZ_D2C_COMPLETION_LBN, ESF_GZ_D2C_COMPLETION_WIDTH);
-
-  /* When 'ordered'=1, this descriptor acts as a fence for mem2mems. The 64
-   * bits of 'data' are written as-is to the evq when it's done (thus 'data'
-   * should be carefully constructed so that it's actually parseable by
-   * ef100_event.c). */
-  CI_POPULATE_OWORD_5(*dp,
-                      ESF_GZ_D2C_COMPLETION, data,
-                      ESF_GZ_D2C_ORDERED, ordered,
-                      ESF_GZ_D2C_ABS_VI_ID, 1,  /* 0 not supported on SN1000 */
-                      ESF_GZ_D2C_TGT_VI_ID, abs_vi_id,
-                      ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_DESC2CMPT);
-}
 
 static unsigned ef100_calc_n_segs(ef_vi* vi, const void* piov, int iov_len,
                                   size_t stride)
@@ -237,7 +201,7 @@ static int ef100_ef_vi_transmitv_init_extra(ef_vi* vi,
     dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
     n_segs--;
 
-    CI_POPULATE_OWORD_8(*dp,
+    CI_POPULATE_OWORD_7(*dp,
                         ESF_GZ_TX_PREFIX_MARK_EN,
                         (extra->flags & EF_VI_TX_EXTRA_MARK) != 0,
 
@@ -252,8 +216,7 @@ static int ef100_ef_vi_transmitv_init_extra(ef_vi* vi,
 
                         ESF_GZ_TX_PREFIX_EGRESS_MPORT, extra->egress_mport,
                         ESF_GZ_TX_PREFIX_INGRESS_MPORT, extra->ingress_mport,
-                        ESF_GZ_TX_PREFIX_MARK, extra->mark,
-                        ESF_GZ_TX_DESC_TYPE, ESE_GZ_TX_DESC_TYPE_PREFIX);
+                        ESF_GZ_TX_PREFIX_MARK, extra->mark);
   }
 
   ef100_tx_init_generic(vi, iov, iov_len, sizeof(*iov), n_segs, dma_id);
@@ -457,129 +420,6 @@ static int ef100_ef_vi_transmit_alt_go(ef_vi* vi, unsigned alt_id)
 }
 
 
-static ssize_t ef100_ef_vi_transmit_memcpy_disabled(struct ef_vi* vi,
-                                          const ef_remote_iovec* dst_iov,
-                                          int dst_iov_len,
-                                          const ef_remote_iovec* src_iov,
-                                          int src_iov_len)
-{
-  return -EOPNOTSUPP;
-}
-
-
-static int ef100_ef_vi_transmit_memcpy_sync_disabled(struct ef_vi* vi,
-                                                     ef_request_id dma_id)
-{
-  return -EOPNOTSUPP;
-}
-
-
-struct riov_iter {
-  int iov_len;
-  const ef_remote_iovec* iov;
-  ef_addr ptr;
-  unsigned len;
-};
-
-static inline struct riov_iter riov_init(const ef_remote_iovec* iov,
-                                         int iov_len)
-{
-  EF_VI_BUG_ON(iov_len <= 0);
-  EF_VI_BUG_ON(iov == NULL);
-    /* Don't check iov->iov_base for NULL: that's a valid pointer */
-  return (struct riov_iter){
-    .iov_len = iov_len,
-    .iov = iov,
-    .ptr = iov->iov_base,
-    .len = iov->iov_len,
-  };
-}
-
-static inline bool riov_add(struct riov_iter* iter, unsigned n)
-{
-  EF_VI_BUG_ON(n > iter->len);
-  iter->len -= n;
-  iter->ptr += n;
-  if( iter->len == 0 ) {
-    ++iter->iov;
-    if( --iter->iov_len == 0 )
-      return false;
-    iter->len = iter->iov->iov_len;
-    iter->ptr = iter->iov->iov_base;
-  }
-  return true;
-}
-
-static ssize_t ef100_ef_vi_transmit_memcpy(struct ef_vi* vi,
-                                           const ef_remote_iovec* dst_iov,
-                                           int dst_iov_len,
-                                           const ef_remote_iovec* src_iov,
-                                           int src_iov_len)
-{
-  ef_vi_txq* q = &vi->vi_txq;
-  ef_vi_txq_state* qs = &vi->ep_state->txq;
-  ef_vi_ef100_dma_tx_desc* __restrict__ descriptors = q->descriptors;
-  uint32_t* __restrict__ ids = q->ids;
-  ssize_t done_bytes = 0;
-  unsigned di1;
-  unsigned di2;
-  unsigned this_n;
-  struct riov_iter src = riov_init(src_iov, src_iov_len);
-  struct riov_iter dst = riov_init(dst_iov, dst_iov_len);
-
-  for( ; ; ) {
-    di1 = qs->added++ & q->mask;
-    di2 = qs->added++ & q->mask;
-
-    /* Check for enough space in the queue */
-    if( CI_UNLIKELY(qs->added - qs->removed >= q->mask) ) {
-      qs->added -= 2;
-      return done_bytes ? done_bytes : -EAGAIN;
-    }
-    this_n = CI_MIN(src.len, dst.len);
-    this_n = CI_MIN((unsigned)ESE_EF100_DP_GZ_MEM2MEM_MAX_LEN_DEFAULT, this_n);
-
-    ef100_tx_mem2mem_desc_fill(src_iov, this_n, &descriptors[di1]);
-    ef100_tx_mem2mem_desc_fill(dst_iov, this_n, &descriptors[di2]);
-    ids[di1] = EF_REQUEST_ID_MASK;
-    ids[di2] = EF_REQUEST_ID_MASK;
-
-    done_bytes += this_n;
-    if( ! riov_add(&src, this_n) || ! riov_add(&dst, this_n) )
-      break;
-  }
-
-  return done_bytes;
-}
-
-static int ef100_ef_vi_transmit_memcpy_sync(struct ef_vi* vi,
-                                            ef_request_id dma_id)
-{
-  ef_vi_txq* q = &vi->vi_txq;
-  ef_vi_txq_state* qs = &vi->ep_state->txq;
-  ef_vi_ef100_dma_tx_desc* dp;
-  unsigned di;
-  ci_qword_t data;
-
-  /* Check for enough space in the queue */
-  if( qs->added + 1 - qs->removed >= q->mask )
-    return -EAGAIN;
-
-  di = qs->added++ & q->mask;
-  dp = (ef_vi_ef100_dma_tx_desc*) q->descriptors + di;
-
-  CI_POPULATE_QWORD_3(data,
-                      EF_VI_EV_DRIVER_MEMCPY_SYNC_DMA_ID, (uint32_t)dma_id,
-                      EF_VI_EV_DRIVER_SUBTYPE,
-                                          EF_VI_EV_DRIVER_SUBTYPE_MEMCPY_SYNC,
-                      ESF_GZ_E_TYPE, ESE_GZ_EF100_EV_DRIVER);
-  ef100_tx_desc2cmpt_desc_fill(data.u64[0], true, vi->abs_idx, dp);
-  q->ids[di] = EF_REQUEST_ID_MASK;
-
-  return 0;
-}
-
-
 static void ef100_vi_initialise_ops(ef_vi* vi)
 {
   vi->ops.transmit               = ef100_ef_vi_transmit;
@@ -607,14 +447,6 @@ static void ef100_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_clear     = ef100_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = ef100_ef_eventq_timer_zero;
   vi->ops.transmitv_init_extra   = ef100_ef_vi_transmitv_init_extra;
-  if( vi->vi_flags & EF_VI_ALLOW_MEMCPY ) {
-    vi->ops.transmit_memcpy        = ef100_ef_vi_transmit_memcpy;
-    vi->ops.transmit_memcpy_sync   = ef100_ef_vi_transmit_memcpy_sync;
-  }
-  else {
-    vi->ops.transmit_memcpy        = ef100_ef_vi_transmit_memcpy_disabled;
-    vi->ops.transmit_memcpy_sync   = ef100_ef_vi_transmit_memcpy_sync_disabled;
-  }
   vi->ops.transmit_ctpio_fallback = ef100_ef_vi_transmit_ctpio_fallback;
   vi->ops.transmitv_ctpio_fallback = ef100_ef_vi_transmitv_ctpio_fallback;
 }

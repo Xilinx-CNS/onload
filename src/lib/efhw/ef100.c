@@ -205,7 +205,7 @@ ef100_nic_init_hardware(struct efhw_nic *nic,
  * properties.
  */
 static int
-ef100_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
+ef100_nic_event_queue_enable(struct efhw_nic *nic,
 			     struct efhw_evq_params *params)
 {
 	int rc;
@@ -223,7 +223,7 @@ ef100_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 		return -EOPNOTSUPP;
 	}
 
-	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, client_id, params,
+	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, params,
 						    enable_cut_through,
 						    enable_rx_merging,
 						    enable_timer);
@@ -236,18 +236,18 @@ ef100_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 
 
 static void
-ef100_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
-			     uint evq, int time_sync_events_enabled)
+ef100_nic_event_queue_disable(struct efhw_nic *nic, uint evq,
+			     int time_sync_events_enabled)
 {
 	if( time_sync_events_enabled )
 		EFHW_TRACE("%s: timestamping isn't supported on EF100",
 			   __FUNCTION__);
-	ef10_ef100_mcdi_cmd_event_queue_disable(nic, client_id, evq);
+	ef10_ef100_mcdi_cmd_event_queue_disable(nic, evq);
 }
 
 
 static int
-ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
+ef100_dmaq_tx_q_init(struct efhw_nic *nic,
                      struct efhw_dmaq_params *params)
 {
 	int rc;
@@ -260,7 +260,6 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 	int flag_ctpio = (params->flags & EFHW_VI_TX_CTPIO) != 0;
 	int flag_ctpio_uthresh =
 		(params->flags & EFHW_VI_TX_CTPIO_NO_POISON) == 0;
-	int flag_m2m_d2c = (params->flags & EFHW_VI_TX_M2M_D2C) != 0;
 	int flag_pacer_bypass;
 
 	if (nic->flags & NIC_FLAG_MCAST_LOOP_HW) {
@@ -273,13 +272,13 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 	 * if so we retry without it. */
 	for (flag_pacer_bypass = 1; 1; flag_pacer_bypass = 0) {
 		rc = ef10_ef100_mcdi_cmd_init_txq
-			(nic, client_id, params->dma_addrs,
+			(nic, params->dma_addrs,
 			 params->n_dma_addrs, params->vport_id,
 			 params->stack_id, REAL_OWNER_ID(params->owner),
 			 flag_timestamp, QUEUE_CRC_MODE_NONE,
 			 flag_tcp_udp_only, flag_tcp_csum_dis,
 			 flag_ip_csum_dis, flag_buff_mode, flag_pacer_bypass,
-			 flag_ctpio, flag_ctpio_uthresh, flag_m2m_d2c,
+			 flag_ctpio, flag_ctpio_uthresh,
 			 params->dmaq, params->tag,
 			 params->evq, params->dmaq_size);
 		if ((rc != -EPERM) || (!flag_pacer_bypass))
@@ -302,7 +301,7 @@ ef100_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int
-ef100_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
+ef100_dmaq_rx_q_init(struct efhw_nic *nic,
 		     struct efhw_dmaq_params *params)
 {
 	int rc;
@@ -319,7 +318,7 @@ ef100_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
 		return -EOPNOTSUPP;
 
 	rc = ef10_ef100_mcdi_cmd_init_rxq
-		(nic, client_id, params->dma_addrs, params->n_dma_addrs,
+		(nic, params->dma_addrs, params->n_dma_addrs,
 		 params->vport_id, params->stack_id,
 		 REAL_OWNER_ID(params->owner), QUEUE_CRC_MODE_NONE,
 		 flag_timestamp, flag_hdr_split, flag_buff_mode,
@@ -462,14 +461,13 @@ static int ef100_translate_dma_addrs(struct efhw_nic* nic,
 }
 
 
-int ef100_nic_ext_alloc(struct efhw_nic* nic, uint32_t client_id,
+int ef100_nic_ext_alloc(struct efhw_nic* nic,
                         const unsigned char* service_guid,
-                        bool flag_info_only,
                         uint32_t* out_mc_handle)
 {
 	int rc;
 	size_t out_size;
-	EFHW_MCDI_DECLARE_PROXYABLE_BUF(in, MC_CMD_PLUGIN_ALLOC_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_ALLOC_IN_LEN);
 	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_ALLOC_OUT_LEN);
 
 	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
@@ -478,23 +476,19 @@ int ef100_nic_ext_alloc(struct efhw_nic* nic, uint32_t client_id,
 
 	memcpy(EFHW_MCDI_PTR(in, PLUGIN_ALLOC_IN_UUID),
 	       service_guid, 16);
-	EFHW_MCDI_POPULATE_DWORD_1(in, PLUGIN_ALLOC_IN_FLAGS,
-	                           PLUGIN_ALLOC_IN_FLAG_INFO_ONLY, flag_info_only);
-	rc = ef10_ef100_mcdi_rpc_client(nic, client_id, MC_CMD_PLUGIN_ALLOC,
-				 MC_CMD_PLUGIN_ALLOC_IN_LEN, sizeof(out),
-				 &out_size, in, out);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_ALLOC,
+				 sizeof(in), sizeof(out), &out_size, in, out);
 	MCDI_CHECK(MC_CMD_PLUGIN_ALLOC, rc, out_size, 0);
 	*out_mc_handle = EFHW_MCDI_DWORD(out, PLUGIN_ALLOC_OUT_HANDLE);
 	return rc;
 }
 
 
-int ef100_nic_ext_free(struct efhw_nic* nic, uint32_t client_id,
-                       uint32_t mc_handle)
+int ef100_nic_ext_free(struct efhw_nic* nic, uint32_t mc_handle)
 {
 	int rc;
 	size_t out_size;
-	EFHW_MCDI_DECLARE_PROXYABLE_BUF(in, MC_CMD_PLUGIN_FREE_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_FREE_IN_LEN);
 	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_FREE_OUT_LEN);
 
 	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
@@ -502,26 +496,24 @@ int ef100_nic_ext_free(struct efhw_nic* nic, uint32_t client_id,
 	EFHW_MCDI_INITIALISE_BUF(out);
 
 	EFHW_MCDI_SET_DWORD(in, PLUGIN_FREE_IN_HANDLE, mc_handle);
-	rc = ef10_ef100_mcdi_rpc_client(nic, client_id, MC_CMD_PLUGIN_FREE,
-	                                MC_CMD_PLUGIN_FREE_IN_LEN, sizeof(out),
-					&out_size, in, out);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_FREE,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
 	MCDI_CHECK(MC_CMD_PLUGIN_FREE, rc, out_size, 0);
 	return rc;
 }
 
 
-int ef100_nic_ext_get_meta_global(struct efhw_nic* nic, uint32_t client_id,
-                                  uint32_t mc_handle,
+int ef100_nic_ext_get_meta_global(struct efhw_nic* nic, uint32_t mc_handle,
                                   uint8_t* uuid, uint16_t* minor_ver,
                                   uint16_t* patch_ver, uint32_t* nmsgs,
+                                  uint32_t* nrsrc_classes,
                                   uint16_t* mapped_csr_offset,
                                   uint16_t* mapped_csr_size,
-                                  uint8_t* mapped_csr_flags,
-                                  uint8_t* admin_group)
+                                  uint8_t* mapped_csr_flags)
 {
 	int rc;
 	size_t out_size;
-	EFHW_MCDI_DECLARE_PROXYABLE_BUF(in, MC_CMD_PLUGIN_GET_META_GLOBAL_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_GET_META_GLOBAL_IN_LEN);
 	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_GET_META_GLOBAL_OUT_LEN);
 
 	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
@@ -529,35 +521,56 @@ int ef100_nic_ext_get_meta_global(struct efhw_nic* nic, uint32_t client_id,
 	EFHW_MCDI_INITIALISE_BUF(out);
 
 	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_GLOBAL_IN_HANDLE, mc_handle);
-	rc = ef10_ef100_mcdi_rpc_client(nic, client_id,
-	                                MC_CMD_PLUGIN_GET_META_GLOBAL,
-	                                MC_CMD_PLUGIN_GET_META_GLOBAL_IN_LEN,
-	                                sizeof(out), &out_size, in, out);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_GET_META_GLOBAL,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
 	MCDI_CHECK(MC_CMD_PLUGIN_GET_META_GLOBAL, rc, out_size, 0);
 	memcpy(uuid, EFHW_MCDI_PTR(out, PLUGIN_GET_META_GLOBAL_OUT_UUID), 16);
 	*minor_ver = EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_MINOR_VER);
 	*patch_ver = EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_PATCH_VER);
 	*nmsgs = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_GLOBAL_OUT_NUM_MSGS);
+	*nrsrc_classes = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_GLOBAL_OUT_NUM_RCS);
 	*mapped_csr_offset =
 	        EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_MAPPED_CSR_OFFSET);
 	*mapped_csr_size =
 	        EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_MAPPED_CSR_SIZE);
 	*mapped_csr_flags =
-	        EFHW_MCDI_BYTE(out, PLUGIN_GET_META_GLOBAL_OUT_MAPPED_CSR_FLAGS);
-	*admin_group =
-	        EFHW_MCDI_BYTE(out, PLUGIN_GET_META_GLOBAL_OUT_ADMIN_GROUP);
+	        EFHW_MCDI_WORD(out, PLUGIN_GET_META_GLOBAL_OUT_MAPPED_CSR_FLAGS);
 	return rc;
 }
 
 
-int ef100_nic_ext_get_meta_msg(struct efhw_nic* nic, uint32_t client_id,
-                               uint32_t mc_handle,
-                               uint32_t msg_id, uint32_t* index, char* name,
-                               size_t name_len, uint32_t* mcdi_param_size)
+int ef100_nic_ext_get_meta_rc(struct efhw_nic* nic, uint32_t mc_handle,
+                              uint32_t clas,
+                              uint32_t* max, uint32_t* kern_extra)
 {
 	int rc;
 	size_t out_size;
-	EFHW_MCDI_DECLARE_PROXYABLE_BUF(in, MC_CMD_PLUGIN_GET_META_MSG_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_GET_META_RC_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_GET_META_RC_OUT_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+	EFHW_MCDI_INITIALISE_BUF(out);
+
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_RC_IN_HANDLE, mc_handle);
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_RC_IN_CLASS, clas);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_GET_META_RC,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
+	MCDI_CHECK(MC_CMD_PLUGIN_GET_META_RC, rc, out_size, 0);
+	*max = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_RC_OUT_MAX_ALLOWED);
+	*kern_extra = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_RC_OUT_KERN_EXTRA);
+	return rc;
+}
+
+
+int ef100_nic_ext_get_meta_msg(struct efhw_nic* nic, uint32_t mc_handle,
+                               uint32_t msg_id, uint32_t* index, char* name,
+                               size_t name_len, uint32_t* ef_vi_param_size,
+                               uint32_t* mcdi_param_size, uint32_t* ninsns)
+{
+	int rc;
+	size_t out_size;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_GET_META_MSG_IN_LEN);
 	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_GET_META_MSG_OUT_LEN);
 
 	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
@@ -566,28 +579,60 @@ int ef100_nic_ext_get_meta_msg(struct efhw_nic* nic, uint32_t client_id,
 
 	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_IN_HANDLE, mc_handle);
 	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_IN_ID, msg_id);
-	rc = ef10_ef100_mcdi_rpc_client(nic, client_id, MC_CMD_PLUGIN_GET_META_MSG,
-	                                MC_CMD_PLUGIN_GET_META_MSG_IN_LEN,
-	                                sizeof(out), &out_size, in, out);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_GET_META_MSG,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
 	MCDI_CHECK(MC_CMD_PLUGIN_GET_META_MSG, rc, out_size, 0);
 	*index = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_MSG_OUT_INDEX);
 	memset(name, 0, name_len);
 	memcpy(name, EFHW_MCDI_PTR(out, PLUGIN_GET_META_MSG_OUT_NAME),
 	       CI_MIN(name_len, (size_t)MC_CMD_PLUGIN_GET_META_MSG_OUT_NAME_LEN));
+	*ef_vi_param_size = EFHW_MCDI_DWORD(out,
+	                                 PLUGIN_GET_META_MSG_OUT_USER_PARAM_SIZE);
 	*mcdi_param_size = EFHW_MCDI_DWORD(out,
-	                                   PLUGIN_GET_META_MSG_OUT_DATA_SIZE);
+	                                 PLUGIN_GET_META_MSG_OUT_MCDI_PARAM_SIZE);
+	*ninsns = EFHW_MCDI_DWORD(out, PLUGIN_GET_META_MSG_OUT_PROG_NUM_INSNS);
 	return rc;
 }
 
 
-int ef100_nic_ext_msg(struct efhw_nic* nic, uint32_t client_id,
-                      uint32_t mc_handle,
+int ef100_nic_ext_get_meta_msg_prog(struct efhw_nic* nic, uint32_t mc_handle,
+                                    uint32_t msg_id,
+                                    void* prog, size_t prog_bytes)
+{
+	int rc;
+	size_t out_size;
+	uint32_t offset = 0;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_GET_META_MSG_PROG_IN_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_PROG_IN_HANDLE, mc_handle);
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_PROG_IN_ID, msg_id);
+	do {
+		EFHW_MCDI_SET_DWORD(in, PLUGIN_GET_META_MSG_PROG_IN_OFFSET, offset);
+		rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_GET_META_MSG_PROG,
+								 sizeof(in), prog_bytes - offset, &out_size,
+								 in, (char*)prog + offset);
+		ef10_ef100_mcdi_check_response(__func__,
+		                               "MC_CMD_PLUGIN_GET_META_MSG_PROG",
+		                               rc, 0, out_size, 0);
+		if (rc < 0)
+			break;
+		if (out_size == 0)
+			return -ENODATA;
+		offset += out_size;
+	} while (offset < prog_bytes);
+	return rc;
+}
+
+
+int ef100_nic_ext_msg(struct efhw_nic* nic, uint32_t mc_handle,
                       uint32_t msg_id, void* payload, size_t len)
 {
 	ci_dword_t* bufs;
 	void* out;
 	size_t in_len = len + MC_CMD_PLUGIN_REQ_IN_DATA_OFST;
-	size_t in_space = CI_ROUND_UP(in_len + EFHW_PROXY_EXTRA_BYTES, 8);
 	size_t out_size;
 	int rc;
 
@@ -595,17 +640,16 @@ int ef100_nic_ext_msg(struct efhw_nic* nic, uint32_t client_id,
 	if (len >= MC_CMD_PLUGIN_REQ_IN_DATA_MAXNUM_MCDI2)
 		return -E2BIG;
 	/* space for two, because we're putting the output in the same alloc: */
-	bufs = kzalloc(in_space + CI_ROUND_UP(len, 8), GFP_KERNEL);
+	bufs = kzalloc(CI_ROUND_UP(in_len, 8) + CI_ROUND_UP(len, 8), GFP_KERNEL);
 	if (!bufs)
 		return -ENOMEM;
-	out = (char*)bufs + in_space;
+	out = (char*)bufs + CI_ROUND_UP(in_len, 8);
 
 	EFHW_MCDI_SET_DWORD(bufs, PLUGIN_REQ_IN_HANDLE, mc_handle);
 	EFHW_MCDI_SET_DWORD(bufs, PLUGIN_REQ_IN_ID, msg_id);
 	memcpy(EFHW_MCDI_PTR(bufs, PLUGIN_REQ_IN_DATA), payload, len);
-	rc = ef10_ef100_mcdi_rpc_client(nic, client_id, MC_CMD_PLUGIN_REQ,
-	                                CI_ROUND_UP(in_len, 4),
-									CI_ROUND_UP(len, 8), &out_size, bufs, out);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_REQ, CI_ROUND_UP(in_len, 4),
+	                         CI_ROUND_UP(len, 8), &out_size, bufs, out);
 	ef10_ef100_mcdi_check_response(__func__, "MC_CMD_PLUGIN_REQ", rc,
 	                               len, out_size, 0);
 
@@ -616,47 +660,26 @@ int ef100_nic_ext_msg(struct efhw_nic* nic, uint32_t client_id,
 }
 
 
-/*--------------------------------------------------------------------
- *
- * Dynamic client IDs
- *
- *--------------------------------------------------------------------*/
-
-static int
-ef100_client_alloc(struct efhw_nic *nic, uint32_t parent, uint32_t *id)
+int ef100_nic_ext_destroy_rsrc(struct efhw_nic* nic, uint32_t mc_handle,
+                               uint32_t clas, uint32_t id)
 {
 	int rc;
-	struct efx_dl_device *efx_dev;
-	EFX_DL_PRE(efx_dev, nic, rc)
-		rc = efx_dl_client_alloc(efx_dev, parent, id);
-	EFX_DL_POST(efx_dev, nic, rc)
+	size_t out_size;
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_PLUGIN_DESTROY_RSRC_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_PLUGIN_DESTROY_RSRC_OUT_LEN);
+
+	EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF100);
+	EFHW_MCDI_INITIALISE_BUF(in);
+	EFHW_MCDI_INITIALISE_BUF(out);
+
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_DESTROY_RSRC_IN_HANDLE, mc_handle);
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_DESTROY_RSRC_IN_CLASS, clas);
+	EFHW_MCDI_SET_DWORD(in, PLUGIN_DESTROY_RSRC_IN_ID, id);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_PLUGIN_DESTROY_RSRC,
+	                         sizeof(in), sizeof(out), &out_size, in, out);
+	MCDI_CHECK(MC_CMD_PLUGIN_DESTROY_RSRC, rc, out_size, 0);
 	return rc;
 }
-
-
-static int
-ef100_client_free(struct efhw_nic *nic, uint32_t id)
-{
-	int rc;
-	struct efx_dl_device *efx_dev;
-	EFX_DL_PRE(efx_dev, nic, rc)
-		rc = efx_dl_client_free(efx_dev, id);
-	EFX_DL_POST(efx_dev, nic, rc)
-	return rc;
-}
-
-
-static int
-ef100_vi_set_user(struct efhw_nic *nic, uint32_t vi_instance, uint32_t user)
-{
-	int rc;
-	struct efx_dl_device *efx_dev;
-	EFX_DL_PRE(efx_dev, nic, rc)
-		rc = efx_dl_vi_set_user(efx_dev, vi_instance, user);
-	EFX_DL_POST(efx_dev, nic, rc)
-	return rc;
-}
-
 
 /*--------------------------------------------------------------------
  *
@@ -750,9 +773,6 @@ struct efhw_func_ops ef100_char_functional_units = {
 	.buffer_table_free = ef10_ef100_nic_buffer_table_free,
 	.buffer_table_set = ef10_ef100_nic_buffer_table_set,
 	.buffer_table_clear = ef10_ef100_nic_buffer_table_clear,
-	.client_alloc = ef100_client_alloc,
-	.client_free = ef100_client_free,
-	.vi_set_user = ef100_vi_set_user,
 	.rss_alloc = ef10_ef100_rss_alloc,
 	.rss_update = ef10_ef100_rss_update,
 	.rss_free = ef10_ef100_rss_free,

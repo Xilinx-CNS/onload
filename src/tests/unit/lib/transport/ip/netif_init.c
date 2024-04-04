@@ -39,7 +39,7 @@ static void test_ci_netif_set_rxq_limit_(
   NI_OPTS(ni).max_rx_packets = max_rx_packets;
   ni->nic_n = nic_n;
   for( i = 0; i < nic_n; ++i )
-    ni->nic_hw[i].vis[0].vi_rxq.mask = vi_cap;
+    ni->nic_hw[i].vi.vi_rxq.mask = vi_cap;
   STATE_STASH(ni);
 
   *(ci_int32*)&ns->nic_n = nic_n;

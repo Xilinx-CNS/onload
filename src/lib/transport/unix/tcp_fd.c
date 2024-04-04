@@ -1420,11 +1420,6 @@ static int citp_tcp_cache(citp_fdinfo* fdinfo)
     return 0;
   }
 
-  if( ci_tcp_is_pluginized(ts) ) {
-    Log_EP(ci_log("FD %d not cached - using plugin", fdinfo->fd));
-    return 0;
-  }
-
   /* The rest of the state checks need the netif lock, to ensure we make the
    * right decision.
    */

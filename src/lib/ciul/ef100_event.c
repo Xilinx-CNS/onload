@@ -112,33 +112,12 @@ static void ef100_mcdi_event(ef_vi* evq, const ef_vi_event* ev,
 }
 
 
-static void ef100_driver_event(ef_vi* evq, const ef_vi_event* ev,
-			    ef_event** evs, int* evs_len)
-{
-  int subtype = QWORD_GET_U(EF_VI_EV_DRIVER_SUBTYPE, *ev);
-
-  switch( subtype ) {
-  case EF_VI_EV_DRIVER_SUBTYPE_MEMCPY_SYNC: {
-    ef_event* ev_out = (*evs)++;
-    --(*evs_len);
-    ev_out->memcpy.type = EF_EVENT_TYPE_MEMCPY;
-    ev_out->memcpy.dma_id =
-                      QWORD_GET_U(EF_VI_EV_DRIVER_MEMCPY_SYNC_DMA_ID, *ev);
-    break;
-  }
-  default:
-    ef_log("%s: ERROR: Unhandled driver event code=%u", __FUNCTION__,
-           subtype);
-    break;
-  }
-}
-
-
 ef_vi_inline void ef100_rx_event(ef_vi* evq_vi, const ef_vi_event* ev,
 				ef_event** evs, int* evs_len)
 {
   unsigned q_label = QWORD_GET_U(ESF_GZ_EV_RXPKTS_Q_LABEL, *ev);
   ef_vi* vi = evq_vi->vi_qs[q_label];
+
   if(likely( vi != NULL )) {
     riverhead_rx_pkts_consumed(vi, ev, evs, evs_len, q_label);
   }
@@ -166,7 +145,7 @@ static inline void ef100_tx_event_completion(ef_vi* evq, const ef_vi_event* ev,
                                             unsigned* desc_init)
 {
   int q_label = QWORD_GET_U(ESF_GZ_EV_TXCMPL_Q_LABEL, *ev);
-  unsigned num_desc = QWORD_GET_U(ESF_GZ_EV_TXCMPL_NUM_DESC, *ev);
+  unsigned num_desc = QWORD_GET_U(ESF_GZ_EV_TXCMPL_NUM_DSC, *ev);
 
   if(likely( ! (*desc_init & (1u << q_label)) )) {
     ef_vi* vi = evq->vi_qs[q_label];
@@ -188,7 +167,7 @@ static inline void ef100_tx_event_completion(ef_vi* evq, const ef_vi_event* ev,
       if( *evs_len == 0 ) {
         /* Doubly-unlikely: we expanded this so much that we need to resume
          * next time */
-        CI_SET_QWORD_FIELD(*pev, ESF_GZ_EV_TXCMPL_NUM_DESC, num_desc);
+        CI_SET_QWORD_FIELD(*pev, ESF_GZ_EV_TXCMPL_NUM_DSC, num_desc);
         evq->ep_state->evq.evq_ptr -= sizeof(ef_vi_event);
         return;
       }
@@ -254,10 +233,6 @@ int ef100_ef_eventq_poll(ef_vi* evq, ef_event* evs, int evs_len)
       if (evs_len != evs_len_orig)
         goto out;
       ef100_mcdi_event(evq, &ev, &evs, &evs_len);
-      break;
-
-    case ESE_GZ_EF100_EV_DRIVER:
-      ef100_driver_event(evq, &ev, &evs, &evs_len);
       break;
 
     case ESE_GZ_EF100_EV_CONTROL:
@@ -333,7 +308,7 @@ void ef100_ef_eventq_timer_run(ef_vi* q, unsigned v)
 
 void ef100_ef_eventq_timer_clear(ef_vi* q)
 {
-  /* FIXME: it is used by Onload */
+  ef100_unsupported_msg(__FUNCTION__);
 }
 
 

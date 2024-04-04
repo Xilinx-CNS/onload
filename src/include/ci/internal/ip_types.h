@@ -37,7 +37,7 @@
 ** replicated per NIC.
 */
 typedef struct ci_netif_nic_s {
-  ef_vi                      vis[CI_MAX_VIS_PER_INTF];
+  ef_vi                      vi;
 #if CI_CFG_PIO
   ef_pio                     pio;
 #endif // CI_CFG_PIO
@@ -47,16 +47,6 @@ typedef struct ci_netif_nic_s {
 #if ! defined(__KERNEL__) && CI_CFG_WANT_BPF_NATIVE
 #define OO_HAS_POLL_IN_KERNEL
   ci_uint8              poll_in_kernel;
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-#ifdef __KERNEL__
-#define INVALID_PLUGIN_HANDLE              (~0u)
-  struct efrm_ext*           plugin_rx;
-  ci_uint32                  plugin_rx_app_id;
-  struct efrm_ext*           plugin_tx;
-  ci_uint32                  plugin_tx_region_id;
-#endif
-  volatile void*             plugin_io;
 #endif
 } ci_netif_nic_t;
 
@@ -135,9 +125,6 @@ struct ci_netif_s {
 #if CI_CFG_CTPIO
   uint8_t*             ctpio_ptr;
   ci_uint32            ctpio_bytes_mapped;
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  uint8_t*             plugin_ptr;
 #endif
   char*                buf_ptr;
 #endif

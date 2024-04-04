@@ -93,8 +93,6 @@ oof_socket_is_armed(struct oof_socket* skf);
 #define OOF_SOCKET_ADD_FLAG_DUMMY     0x2
 #define OOF_SOCKET_ADD_FLAG_NO_STACK  0x4
 #define OOF_SOCKET_ADD_FLAG_NO_UCAST  0x8
-#define OOF_SOCKET_ADD_FLAG_SUBVI_MASK  0xf0
-#define OOF_SOCKET_ADD_FLAG_SUBVI_SHIFT 4
 extern int
 oof_socket_add(struct oof_manager*, struct oof_socket*,
                int flags, int protocol, int af_space,

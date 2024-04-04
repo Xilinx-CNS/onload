@@ -218,15 +218,6 @@ enum {
   OO_OP_ZC_UNREGISTER_BUFFERS,
 #define OO_IOC_ZC_UNREGISTER_BUFFERS OO_IOC_W(ZC_UNREGISTER_BUFFERS, ci_uint64)
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  OO_OP_TCP_OFFLOAD_SET_ISN,
-#define OO_IOC_TCP_OFFLOAD_SET_ISN OO_IOC_W(TCP_OFFLOAD_SET_ISN, \
-                                            ci_tcp_offload_set_isn_t)
-
-  OO_OP_TCP_OFFLOAD_GET_STREAM_ID,
-#define OO_IOC_TCP_OFFLOAD_GET_STREAM_ID OO_IOC_RW(TCP_OFFLOAD_GET_STREAM_ID, \
-                                            ci_tcp_offload_get_stream_id_t)
-#endif
 
 #if CI_CFG_UL_INTERRUPT_HELPER
   /* Wait for an interrupt */

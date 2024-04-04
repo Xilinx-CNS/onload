@@ -164,7 +164,7 @@ static void ef10ct_check_for_flushes(struct work_struct *work)
  * X3 net driver does dma mapping
  */
 static int
-ef10ct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
+ef10ct_nic_event_queue_enable(struct efhw_nic *nic,
                               struct efhw_evq_params *efhw_params)
 {
   struct efx_auxiliary_evq_params qparams = {
@@ -228,7 +228,7 @@ ef10ct_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 }
 
 static void
-ef10ct_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
+ef10ct_nic_event_queue_disable(struct efhw_nic *nic,
                                uint evq, int time_sync_events_enabled)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
@@ -303,7 +303,7 @@ static void ef10ct_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis)
 
 
 static int
-ef10ct_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
+ef10ct_dmaq_tx_q_init(struct efhw_nic *nic,
                       struct efhw_dmaq_params *txq_params)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
@@ -359,7 +359,7 @@ ef10ct_superbuf_io_region(struct efhw_nic* nic, int instance, size_t* size_out,
 }
 
 static int 
-ef10ct_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
+ef10ct_dmaq_rx_q_init(struct efhw_nic *nic,
                       struct efhw_dmaq_params *rxq_params)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
@@ -432,7 +432,7 @@ ef10ct_max_shared_rxqs(struct efhw_nic *nic)
 
 
 static int
-ef10ct_flush_tx_dma_channel(struct efhw_nic *nic, uint32_t client_id,
+ef10ct_flush_tx_dma_channel(struct efhw_nic *nic,
                             uint dmaq, uint evq)
 {
   struct efhw_nic_ef10ct *ef10ct = nic->arch_extra;
@@ -454,7 +454,7 @@ ef10ct_flush_tx_dma_channel(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int
-ef10ct_flush_rx_dma_channel(struct efhw_nic *nic, uint32_t client_id, uint dmaq)
+ef10ct_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 {
   int rc = 0, evq_id;
   struct efx_auxiliary_rpc dummy;

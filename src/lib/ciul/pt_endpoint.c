@@ -58,7 +58,6 @@ static unsigned vi_flags_to_efab_flags(unsigned vi_flags)
   if( vi_flags & EF_VI_TX_CTPIO_NO_POISON ) efab_flags |=
                                                     EFHW_VI_TX_CTPIO_NO_POISON;
   if( vi_flags & EF_VI_RX_ZEROCOPY ) efab_flags |= EFHW_VI_RX_ZEROCOPY;
-  if( vi_flags & EF_VI_ALLOW_MEMCPY      ) efab_flags |= EFHW_VI_TX_M2M_D2C;
   return efab_flags;
 }
 
@@ -374,7 +373,7 @@ void ef_vi_set_intf_ver(char* intf_ver, size_t len)
    * It'd also be possible to enhance the checksum computation to be smarter
    * (e.g. by ignoring comments, etc.).
    */
-  if( strcmp(EFCH_INTF_VER, "8aa2f6b283cd928992b5eeacfe0096ac") ) {
+  if( strcmp(EFCH_INTF_VER, "f5156fe4199e518f27a3323ea1f95488") ) {
     fprintf(stderr, "ef_vi: ERROR: char interface has changed\n");
     abort();
   }
@@ -583,8 +582,6 @@ int __ef_vi_alloc(ef_vi* vi, ef_driver_handle vi_dh,
   vi->dh = vi_dh;
   vi->vi_resource_id = ra.out_id.index;
   vi->vi_i = ra.u.vi_out.instance;
-  vi->abs_idx = ( ra.u.vi_out.out_flags & EFHW_VI_ABS_IDX_SET )
-    ? ra.u.vi_out.abs_idx : -1;
   ef_vi_init_qs(vi, (void*)mem_mmap_ptr, ids, evq_capacity, rxq_capacity,
                 ra.u.vi_out.rx_prefix_len, txq_capacity);
 

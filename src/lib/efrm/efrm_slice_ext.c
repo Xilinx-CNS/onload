@@ -2,7 +2,6 @@
 /* X-SPDX-Copyright-Text: (c) Copyright 2020 Xilinx, Inc. */
 #include <ci/efrm/private.h>
 #include <ci/efrm/slice_ext.h>
-#include <ci/efrm/pd.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
 #include <ci/efhw/ef100.h>
 #include "efrm_internal.h"
@@ -20,10 +19,6 @@ static int _dummy_ef100_nic_ext(struct efhw_nic *nic, ...)
 #define ef100_nic_ext_msg _dummy_ef100_nic_ext
 #endif /* ! CI_HAVE_SFC */
 
-struct efrm_ext {
-	struct efrm_resource rs;
-	struct efrm_pd *pd;
-};
 
 static bool check_ef100(const struct efrm_resource *rs)
 {
@@ -36,134 +31,93 @@ static bool check_ef100(const struct efrm_resource *rs)
 	return true;
 }
 
-extern struct efrm_resource* efrm_ext_to_resource(struct efrm_ext *ext)
+
+int efrm_ext_alloc(struct efrm_resource *rs,
+                   const unsigned char* service_guid, uint32_t* out_mc_id)
 {
-	return &ext->rs;
-}
-EXPORT_SYMBOL(efrm_ext_to_resource);
-
-
-extern struct efrm_ext* efrm_ext_from_resource(struct efrm_resource *rs)
-{
-	return container_of(rs, struct efrm_ext, rs);
-}
-EXPORT_SYMBOL(efrm_ext_from_resource);
-
-
-int efrm_ext_alloc_rs(struct efrm_pd* pd, const unsigned char* ext_guid,
-                      struct efrm_ext **ext_out)
-{
-	uint32_t mc_handle;
-	int rc;
-	struct efrm_ext *ext;
-	struct efrm_resource *pd_rs = efrm_pd_to_resource(pd);
-
-	if (!check_ef100(pd_rs))
+	if (!check_ef100(rs))
 		return -EOPNOTSUPP;
-
-	ext = kmalloc(sizeof(struct efrm_ext), GFP_KERNEL);
-	if (!ext)
-		return -ENOMEM;
-
-	ext->pd = pd;
-	rc = ef100_nic_ext_alloc(pd_rs->rs_client->nic,
-	                         efrm_pd_get_nic_client_id(pd),
-	                         ext_guid, false, &mc_handle);
-	if (rc < 0) {
-		kfree(ext);
-		return rc;
-	}
-	efrm_resource_init(&ext->rs, EFRM_RESOURCE_SLICE_EXT, mc_handle);
-	efrm_client_add_resource(pd_rs->rs_client, &ext->rs);
-	efrm_resource_ref(pd_rs);
-	*ext_out = ext;
-	return 0;
+	return ef100_nic_ext_alloc(rs->rs_client->nic, service_guid, out_mc_id);
 }
-EXPORT_SYMBOL(efrm_ext_alloc_rs);
+EXPORT_SYMBOL(efrm_ext_alloc);
 
 
-void efrm_ext_release(struct efrm_ext *ext)
+int efrm_ext_free(struct efrm_resource *rs, uint32_t mc_id)
 {
-	if (__efrm_resource_release(&ext->rs)) {
-		ef100_nic_ext_free(ext->rs.rs_client->nic,
-		                   efrm_pd_get_nic_client_id(ext->pd),
-		                   ext->rs.rs_instance);
-		efrm_pd_release(ext->pd);
-		efrm_client_put(ext->rs.rs_client);
-		kfree(ext);
-	}
+	if (!check_ef100(rs))
+		return -EOPNOTSUPP;
+	return ef100_nic_ext_free(rs->rs_client->nic, mc_id);
 }
-EXPORT_SYMBOL(efrm_ext_release);
+EXPORT_SYMBOL(efrm_ext_free);
 
 
-int efrm_ext_get_meta_global(struct efrm_ext *ext,
+int efrm_ext_get_meta_global(struct efrm_resource *rs, uint32_t mc_handle,
                              struct efrm_ext_svc_meta *out)
 {
-	if (!check_ef100(&ext->rs))
+	if (!check_ef100(rs))
 		return -EOPNOTSUPP;
-	return ef100_nic_ext_get_meta_global(ext->rs.rs_client->nic,
-	                                     efrm_pd_get_nic_client_id(ext->pd),
-	                                     ext->rs.rs_instance,
+	return ef100_nic_ext_get_meta_global(rs->rs_client->nic, mc_handle,
 	                                     out->uuid, &out->minor_ver,
 	                                     &out->patch_ver, &out->nmsgs,
+	                                     &out->nrsrc_classes,
 	                                     &out->mapped_csr_offset,
 	                                     &out->mapped_csr_size,
-	                                     &out->mapped_csr_flags,
-	                                     &out->admin_group);
+	                                     &out->mapped_csr_flags);
 }
 EXPORT_SYMBOL(efrm_ext_get_meta_global);
 
 
-int efrm_ext_get_meta_msg(struct efrm_ext *ext, uint32_t msg_id,
-                          struct efrm_ext_msg_meta *out)
+int efrm_ext_get_meta_rc(struct efrm_resource *rs, uint32_t mc_handle,
+                         uint32_t clas, struct efrm_ext_rc_meta *out)
 {
-	if (!check_ef100(&ext->rs))
+	if (!check_ef100(rs))
+		return -EOPNOTSUPP;
+	return ef100_nic_ext_get_meta_rc(rs->rs_client->nic, mc_handle, clas,
+	                                 &out->max, &out->kern_extra);
+}
+EXPORT_SYMBOL(efrm_ext_get_meta_rc);
+
+
+int efrm_ext_get_meta_msg(struct efrm_resource *rs, uint32_t mc_handle,
+                          uint32_t msg_id, struct efrm_ext_msg_meta *out)
+{
+	if (!check_ef100(rs))
 		return -EOPNOTSUPP;
 	out->id = msg_id;
-	return ef100_nic_ext_get_meta_msg(ext->rs.rs_client->nic,
-	                                  efrm_pd_get_nic_client_id(ext->pd),
-	                                  ext->rs.rs_instance, msg_id,
+	return ef100_nic_ext_get_meta_msg(rs->rs_client->nic, mc_handle, msg_id,
 	                                  &out->ix, out->name, sizeof(out->name),
-	                                  &out->mcdi_param_size);
+	                                  &out->ef_vi_param_size,
+	                                  &out->mcdi_param_size, &out->ninsns);
 }
 EXPORT_SYMBOL(efrm_ext_get_meta_msg);
 
 
-int efrm_ext_msg(struct efrm_ext *ext, uint32_t msg_id, void* buf, size_t len)
+int efrm_ext_get_meta_msg_prog(struct efrm_resource *rs, uint32_t mc_handle,
+                               uint32_t msg_id, void* prog, size_t prog_bytes)
 {
-	if (!check_ef100(&ext->rs))
+	if (!check_ef100(rs))
 		return -EOPNOTSUPP;
-	return ef100_nic_ext_msg(ext->rs.rs_client->nic,
-	                         efrm_pd_get_nic_client_id(ext->pd),
-	                         ext->rs.rs_instance, msg_id, buf, len);
+	return ef100_nic_ext_get_meta_msg_prog(rs->rs_client->nic, mc_handle,
+	                                       msg_id, prog, prog_bytes);
+}
+EXPORT_SYMBOL(efrm_ext_get_meta_msg_prog);
+
+
+int efrm_ext_msg(struct efrm_resource *rs, uint32_t mc_handle,
+                 uint32_t msg_id, void* buf, size_t len)
+{
+	if (!check_ef100(rs))
+		return -EOPNOTSUPP;
+	return ef100_nic_ext_msg(rs->rs_client->nic, mc_handle, msg_id, buf, len);
 }
 EXPORT_SYMBOL(efrm_ext_msg);
 
 
-static void efrm_ext_rm_dtor(struct efrm_resource_manager *rm)
+int efrm_ext_destroy_rsrc(struct efrm_resource *rs, uint32_t mc_handle,
+                          uint32_t clas, uint32_t id)
 {
-	/* NOP */
+	if (!check_ef100(rs))
+		return -EOPNOTSUPP;
+	return ef100_nic_ext_destroy_rsrc(rs->rs_client->nic, mc_handle, clas, id);
 }
-
-
-int efrm_create_ext_resource_manager(struct efrm_resource_manager **rm_out)
-{
-	struct efrm_resource_manager *rm;
-	int rc;
-
-	rm = kzalloc(sizeof(*rm), GFP_KERNEL);
-	if (rm == NULL)
-		return -ENOMEM;
-
-	rc = efrm_resource_manager_ctor(rm, efrm_ext_rm_dtor, "EXT",
-					EFRM_RESOURCE_SLICE_EXT);
-	if (rc < 0)
-		goto fail;
-
-	*rm_out = rm;
-	return 0;
-
-fail:
-	kfree(rm);
-	return rc;
-}
+EXPORT_SYMBOL(efrm_ext_destroy_rsrc);

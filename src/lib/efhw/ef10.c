@@ -57,6 +57,8 @@ MODULE_PARM_DESC(force_ev_timer,
                  "Set to 0 to avoid forcing allocation of event timer with wakeup queue");
 
 
+#define EFHW_CLIENT_ID_NONE (~0u)
+
 /*----------------------------------------------------------------------------
  *
  * Helper for MCDI operations
@@ -109,24 +111,6 @@ int ef10_ef100_mcdi_rpc(struct efhw_nic *nic, unsigned int cmd,
 }
 
 
-int ef10_ef100_mcdi_rpc_client(struct efhw_nic *nic, uint32_t client_id,
-			       unsigned int cmd, size_t inlen, size_t outlen,
-			       size_t *outlen_actual,
-			       void *inbuf, void *outbuf)
-{
-	int rc;
-	struct efx_dl_device *efx_dev;
-
-	*outlen_actual = 0;
-	EFX_DL_PRE(efx_dev, nic, rc)
-		rc = efx_dl_mcdi_rpc_client(efx_dev, client_id, cmd, inlen,
-		                            outlen, outlen_actual, inbuf,
-					    outbuf);
-	EFX_DL_POST(efx_dev, nic, rc)
-	return rc;
-}
-
-
 void
 ef10_ef100_mcdi_check_response(const char* caller, const char* failed_cmd,
 			       int rc, int expected_len, int actual_len,
@@ -158,6 +142,40 @@ ef10_ef100_mcdi_check_response(const char* caller, const char* failed_cmd,
 		EFHW_ERR("%s: ERROR: '%s' expected response len %d, got %d",
 			 caller, failed_cmd, expected_len, actual_len);
 	}
+}
+
+
+#define EFX_DL_PRE(efx_dev, nic, rc) \
+{ \
+	(efx_dev) = efhw_nic_acquire_dl_device((nic)); \
+		\
+	EFHW_ASSERT(!in_atomic()); \
+		\
+	/* [nic->resetting] means we have detected that we are in a reset.
+	 * There is potentially a period after [nic->resetting] is cleared
+	 * but before driverlink is re-enabled, during which time [efx_dev]
+	 * will be NULL. */ \
+	if ((nic)->resetting || (efx_dev) == NULL) { \
+		/* user should not handle any errors */ \
+		rc = 0; \
+	} \
+	else { \
+		/* Driverlink handle is valid and we're not resetting, so issue
+		 * the call. */ \
+
+
+#define EFX_DL_POST(efx_dev, nic, rc) \
+		\
+		/* If we see ENETDOWN here, we must be in the window between
+		 * hardware being removed and being informed about this fact by
+		 * the kernel. */ \
+		if ((rc) == -ENETDOWN) \
+			ci_atomic32_or(&(nic)->resetting, \
+				       NIC_RESETTING_FLAG_VANISHED); \
+	} \
+		\
+	/* This is safe even if [efx_dev] is NULL. */ \
+	efhw_nic_release_dl_device((nic), (efx_dev)); \
 }
 
 
@@ -797,14 +815,13 @@ void ef10_ef100_nic_release_hardware(struct efhw_nic *nic)
 
 int
 ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
-				       uint32_t client_id,
 				       struct efhw_evq_params *params,
 				       uint enable_cut_through,
 				       uint enable_rx_merging,
 				       uint enable_timer)
 {
 	int rc, i;
-	EFHW_MCDI_DECLARE_PROXYABLE_BUF(out, MC_CMD_INIT_EVQ_V2_OUT_LEN);
+	EFHW_MCDI_DECLARE_BUF(out, MC_CMD_INIT_EVQ_V2_OUT_LEN);
 	size_t out_size;
 	size_t in_size = MC_CMD_INIT_EVQ_V2_IN_LEN(params->n_pages);
 	EFHW_MCDI_DECLARE_BUF(in,
@@ -869,9 +886,8 @@ ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
 	EFHW_ASSERT(params->evq >= 0);
 	EFHW_ASSERT(params->evq < nic->num_evqs);
 
-	rc = ef10_ef100_mcdi_rpc_client(nic, client_id, MC_CMD_INIT_EVQ,
-	                                in_size, sizeof(out),
-	                                &out_size, in, &out);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_INIT_EVQ, in_size, sizeof(out),
+				 &out_size, in, &out);
 	if( nic->flags & NIC_FLAG_EVQ_V2 )
 		MCDI_CHECK(MC_CMD_INIT_EVQ_V2, rc, out_size, 0);
 	else
@@ -881,21 +897,19 @@ ef10_ef100_mcdi_cmd_event_queue_enable(struct efhw_nic *nic,
 
 
 void
-ef10_ef100_mcdi_cmd_event_queue_disable(struct efhw_nic *nic,
-					uint32_t client_id, uint evq)
+ef10_ef100_mcdi_cmd_event_queue_disable(struct efhw_nic *nic, uint evq)
 {
 	int rc;
 	size_t out_size;
-	EFHW_MCDI_DECLARE_PROXYABLE_BUF(in, MC_CMD_FINI_EVQ_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FINI_EVQ_IN_LEN);
 	EFHW_MCDI_INITIALISE_BUF(in);
 	EFHW_MCDI_SET_DWORD(in, FINI_EVQ_IN_INSTANCE, evq);
 
 	EFHW_ASSERT(evq >= 0);
 	EFHW_ASSERT(evq < nic->num_evqs);
 
-	rc = ef10_ef100_mcdi_rpc_client(nic, client_id, MC_CMD_FINI_EVQ,
-	                                MC_CMD_FINI_EVQ_IN_LEN, 0, &out_size,
-	                                in, NULL);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_FINI_EVQ, sizeof(in), 0,
+				 &out_size, in, NULL);
 	MCDI_CHECK(MC_CMD_FINI_EVQ, rc, out_size, 0);
 }
 
@@ -990,7 +1004,7 @@ static int _ef10_mcdi_cmd_ptp_time_event_unsubscribe(struct efhw_nic *nic,
  * properties.
  */
 static int
-ef10_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
+ef10_nic_event_queue_enable(struct efhw_nic *nic,
 			    struct efhw_evq_params *params)
 {
 	int rc;
@@ -1009,7 +1023,7 @@ ef10_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 	if( force_ev_timer )
 		enable_timer = 1;
 
-	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, client_id, params,
+	rc = ef10_ef100_mcdi_cmd_event_queue_enable(nic, params,
 						    enable_cut_through,
 						    enable_rx_merging,
 						    enable_timer);
@@ -1021,7 +1035,7 @@ ef10_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 		rc = _ef10_mcdi_cmd_ptp_time_event_subscribe
 			(nic, params->evq, &params->flags_out, __FUNCTION__);
 		if( rc != 0 ) {
-			ef10_ef100_mcdi_cmd_event_queue_disable(nic, client_id,
+			ef10_ef100_mcdi_cmd_event_queue_disable(nic,
 								params->evq);
 			/* Firmware returns EPERM if you do not have
 			 * the licence to subscribe to time sync
@@ -1043,13 +1057,13 @@ ef10_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 }
 
 static void
-ef10_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
-			     uint evq, int time_sync_events_enabled)
+ef10_nic_event_queue_disable(struct efhw_nic *nic, uint evq,
+			     int time_sync_events_enabled)
 {
 	if( time_sync_events_enabled )
 		_ef10_mcdi_cmd_ptp_time_event_unsubscribe
 			(nic, evq, __FUNCTION__);
-	ef10_ef100_mcdi_cmd_event_queue_disable(nic, client_id, evq);
+	ef10_ef100_mcdi_cmd_event_queue_disable(nic, evq);
 }
 
 static void
@@ -1454,14 +1468,13 @@ ef10_tx_alt_free(struct efhw_nic *nic, int num_alt, unsigned cp_id,
  *
  *---------------------------------------------------------------------------*/
 int
-ef10_ef100_mcdi_cmd_init_txq(struct efhw_nic *nic, uint32_t client_id,
-			     dma_addr_t *dma_addrs,
+ef10_ef100_mcdi_cmd_init_txq(struct efhw_nic *nic, dma_addr_t *dma_addrs,
 			     int n_dma_addrs, uint32_t port_id, uint8_t stack_id,
 			     uint32_t owner_id,
 			     int flag_timestamp, int crc_mode, int flag_tcp_udp_only,
 			     int flag_tcp_csum_dis, int flag_ip_csum_dis,
 			     int flag_buff_mode, int flag_pacer_bypass,
-			     int flag_ctpio, int flag_ctpio_uthresh, int flag_m2m_d2c,
+			     int flag_ctpio, int flag_ctpio_uthresh,
 			     uint32_t instance, uint32_t label,
 			     uint32_t target_evq, uint32_t numentries)
 {
@@ -1471,11 +1484,10 @@ ef10_ef100_mcdi_cmd_init_txq(struct efhw_nic *nic, uint32_t client_id,
 		nic->devtype.variant == 'B';
 	EFX_DL_PRE(efx_dev, nic, rc)
 		rc = efx_dl_init_txq(
-			efx_dev, client_id, dma_addrs, n_dma_addrs, port_id, stack_id, owner_id,
+			efx_dev, EFHW_CLIENT_ID_NONE, dma_addrs, n_dma_addrs, port_id, stack_id, owner_id,
 			!!flag_timestamp, crc_mode, !!flag_tcp_udp_only, !!flag_tcp_csum_dis,
 			!!flag_ip_csum_dis, inner, inner, !!flag_buff_mode, !!flag_pacer_bypass,
-			!!flag_ctpio, !!flag_ctpio_uthresh, !!flag_m2m_d2c, instance,
-			label, target_evq,
+			!!flag_ctpio, !!flag_ctpio_uthresh, false, instance, label, target_evq,
 			numentries);
 	EFX_DL_POST(efx_dev, nic, rc)
 	return rc;
@@ -1520,8 +1532,7 @@ _ef10_get_ps_buf_size_mcdi(uint32_t numentries, int ps_buf_size)
 }
 
 int
-ef10_ef100_mcdi_cmd_init_rxq(struct efhw_nic *nic, uint32_t client_id,
-			     dma_addr_t *dma_addrs,
+ef10_ef100_mcdi_cmd_init_rxq(struct efhw_nic *nic, dma_addr_t *dma_addrs,
 			     int n_dma_addrs, uint32_t port_id, uint8_t stack_id,
 			     uint32_t owner_id,
 			     int crc_mode, int flag_timestamp, int flag_hdr_split,
@@ -1544,8 +1555,7 @@ ef10_ef100_mcdi_cmd_init_rxq(struct efhw_nic *nic, uint32_t client_id,
 	}
 	EFX_DL_PRE(efx_dev, nic, rc)
 		rc = efx_dl_init_rxq(
-			efx_dev, client_id, dma_addrs, n_dma_addrs,
-			port_id, stack_id, owner_id,
+			efx_dev, EFHW_CLIENT_ID_NONE, dma_addrs, n_dma_addrs, port_id, stack_id, owner_id,
 			crc_mode, !!flag_timestamp, !!flag_hdr_split, !!flag_buff_mode,
 			!!flag_rx_prefix, dma_mode, instance, label, target_evq,
 			numentries, ps_buf_size_mcdi, !!flag_force_rx_merge,
@@ -1563,8 +1573,7 @@ ef10_ef100_mcdi_cmd_init_rxq(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int
-ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
-		    struct efhw_dmaq_params *params)
+ef10_dmaq_tx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
 {
 	int rc;
 	int flag_timestamp = (params->flags & EFHW_VI_TX_TIMESTAMPS) != 0;
@@ -1577,7 +1586,6 @@ ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 	int flag_ctpio = (params->flags & EFHW_VI_TX_CTPIO) != 0;
 	int flag_ctpio_uthresh =
 		(params->flags & EFHW_VI_TX_CTPIO_NO_POISON) == 0;
-	int flag_m2m_d2c = (params->flags & EFHW_VI_TX_M2M_D2C) != 0;
 	int flag_pacer_bypass;
 
 	if (nic->flags & NIC_FLAG_MCAST_LOOP_HW) {
@@ -1631,13 +1639,13 @@ ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 	 * if so we retry without it. */
 	for (flag_pacer_bypass = 1; 1; flag_pacer_bypass = 0) {
 		rc = ef10_ef100_mcdi_cmd_init_txq
-			(nic, client_id, params->dma_addrs,
+			(nic, params->dma_addrs,
 			 params->n_dma_addrs, params->vport_id,
 			 params->stack_id, REAL_OWNER_ID(params->owner),
 			 flag_timestamp, QUEUE_CRC_MODE_NONE,
 			 flag_tcp_udp_only, flag_tcp_csum_dis,
 			 flag_ip_csum_dis, flag_buff_mode, flag_pacer_bypass,
-			 flag_ctpio, flag_ctpio_uthresh, flag_m2m_d2c,
+			 flag_ctpio, flag_ctpio_uthresh,
 			 params->dmaq, params->tag,
 			 params->evq, params->dmaq_size);
 		if ((rc != -EPERM) || (!flag_pacer_bypass))
@@ -1660,8 +1668,7 @@ ef10_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int 
-ef10_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
-		    struct efhw_dmaq_params *params)
+ef10_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
 {
 	int rc;
 	int flag_rx_prefix = (params->flags & EFHW_VI_RX_PREFIX) != 0;
@@ -1682,7 +1689,7 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
 	}
 
 	rc = ef10_ef100_mcdi_cmd_init_rxq
-		(nic, client_id, params->dma_addrs, params->n_dma_addrs,
+		(nic, params->dma_addrs, params->n_dma_addrs,
 		 params->vport_id, params->stack_id,
 		 REAL_OWNER_ID(params->owner), QUEUE_CRC_MODE_NONE,
 		 flag_timestamp, flag_hdr_split, flag_buff_mode,
@@ -1706,36 +1713,32 @@ ef10_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
  *--------------------------------------------------------------------*/
 
 static int
-_ef10_ef100_mcdi_cmd_fini_rxq(struct efhw_nic *nic, uint32_t client_id,
-					uint32_t instance)
+_ef10_ef100_mcdi_cmd_fini_rxq(struct efhw_nic *nic, uint32_t instance)
 {
 	int rc;
 	size_t out_size;
-	EFHW_MCDI_DECLARE_PROXYABLE_BUF(in, MC_CMD_FINI_RXQ_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FINI_RXQ_IN_LEN);
 	EFHW_MCDI_INITIALISE_BUF(in);
 	EFHW_MCDI_SET_DWORD(in, FINI_RXQ_IN_INSTANCE, instance);
 
-	rc = ef10_ef100_mcdi_rpc_client(nic, client_id, MC_CMD_FINI_RXQ,
-	                                MC_CMD_FINI_RXQ_IN_LEN, 0, &out_size,
-	                                in, NULL);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_FINI_RXQ, sizeof(in), 0, &out_size,
+				 in, NULL);
 	MCDI_CHECK(MC_CMD_FINI_RXQ, rc, out_size, 0);
 	return rc;
 }
 
 
 static int
-_ef10_ef100_mcdi_cmd_fini_txq(struct efhw_nic *nic, uint32_t client_id,
-					uint32_t instance)
+_ef10_ef100_mcdi_cmd_fini_txq(struct efhw_nic *nic, uint32_t instance)
 {
 	int rc;
 	size_t out_size;
-	EFHW_MCDI_DECLARE_PROXYABLE_BUF(in, MC_CMD_FINI_TXQ_IN_LEN);
+	EFHW_MCDI_DECLARE_BUF(in, MC_CMD_FINI_TXQ_IN_LEN);
 	EFHW_MCDI_INITIALISE_BUF(in);
 	EFHW_MCDI_SET_DWORD(in, FINI_TXQ_IN_INSTANCE, instance);
 
-	rc = ef10_ef100_mcdi_rpc_client(nic, client_id, MC_CMD_FINI_TXQ,
-	                                MC_CMD_FINI_TXQ_IN_LEN, 0, &out_size,
-	                                in, NULL);
+	rc = ef10_ef100_mcdi_rpc(nic, MC_CMD_FINI_TXQ, sizeof(in), 0, &out_size,
+				 in, NULL);
 	MCDI_CHECK(MC_CMD_FINI_TXQ, rc, out_size, 0);
 	return rc;
 }
@@ -1748,17 +1751,16 @@ _ef10_ef100_mcdi_cmd_fini_txq(struct efhw_nic *nic, uint32_t client_id,
  *--------------------------------------------------------------------*/
 
 
-int ef10_ef100_flush_tx_dma_channel(struct efhw_nic *nic, uint32_t client_id,
+int ef10_ef100_flush_tx_dma_channel(struct efhw_nic *nic,
 				    uint dmaq, uint evq)
 {
-	return _ef10_ef100_mcdi_cmd_fini_txq(nic, client_id, dmaq);
+	return _ef10_ef100_mcdi_cmd_fini_txq(nic, dmaq);
 }
 
 
-int ef10_ef100_flush_rx_dma_channel(struct efhw_nic *nic, uint32_t client_id,
-					uint dmaq)
+int ef10_ef100_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 {
-	return _ef10_ef100_mcdi_cmd_fini_rxq(nic, client_id, dmaq);
+	return _ef10_ef100_mcdi_cmd_fini_rxq(nic, dmaq);
 }
 
 

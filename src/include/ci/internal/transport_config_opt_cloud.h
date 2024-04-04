@@ -15,12 +15,6 @@
 #undef CI_CFG_BPF
 #define CI_CFG_BPF 1
 
-/* Enable the SmartNIC TCP+Ceph plugin */
-#undef CI_CFG_TCP_OFFLOAD_RECYCLER
-#define CI_CFG_TCP_OFFLOAD_RECYCLER 1
-#undef CI_CFG_TCP_PLUGIN_EXTRA_VIS
-#define CI_CFG_TCP_PLUGIN_EXTRA_VIS 1
-
 /* Enable the SmartNIC TX CRC-offload plugin */
 #undef CI_CFG_TX_CRC_OFFLOAD
 #define CI_CFG_TX_CRC_OFFLOAD 1

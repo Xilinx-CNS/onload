@@ -53,25 +53,22 @@ static void ci_netif_state_assert_valid(ci_netif* ni,
 
   /* check DMAQ overflow queue if non-empty */
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    int i;
-    for( i = 0; i < ci_netif_num_vis(ni); ++i ) {
-      oo_pktq* dmaq = &nis->nic[intf_i].dmaq[i];
-      if( OO_PP_NOT_NULL(dmaq->head) ) {
-        verify( IS_VALID_PKT_ID(ni, dmaq->head) );
-        verify( IS_VALID_PKT_ID(ni, dmaq->tail) );
-        verify( OO_PP_IS_NULL(PKT(ni, dmaq->tail)->netif.tx.dmaq_next) );
-        n = 0;
-        for( last_pp = pp = dmaq->head; OO_PP_NOT_NULL(pp); ) {
-          ++n;
-          last_pp = pp;
-          pp = PKT(ni, pp)->netif.tx.dmaq_next;
-        }
-        verify(OO_PP_EQ(last_pp, dmaq->tail));
-        verify(dmaq->num == n);
+    oo_pktq* dmaq = &nis->nic[intf_i].dmaq;
+    if( OO_PP_NOT_NULL(dmaq->head) ) {
+      verify( IS_VALID_PKT_ID(ni, dmaq->head) );
+      verify( IS_VALID_PKT_ID(ni, dmaq->tail) );
+      verify( OO_PP_IS_NULL(PKT(ni, dmaq->tail)->netif.tx.dmaq_next) );
+      n = 0;
+      for( last_pp = pp = dmaq->head; OO_PP_NOT_NULL(pp); ) {
+        ++n;
+        last_pp = pp;
+        pp = PKT(ni, pp)->netif.tx.dmaq_next;
       }
-      else
-        verify(dmaq->num == 0);
+      verify(OO_PP_EQ(last_pp, dmaq->tail));
+      verify(dmaq->num == n);
     }
+    else
+      verify(dmaq->num == 0);
   }
 
   verify(ni->filter_table->table_size_mask > 0u);
@@ -304,13 +301,11 @@ static void ci_netif_dump_pkt_summary(ci_netif* ni, oo_dump_log_fn_t logger,
   rx_ring = 0;
   tx_ring = 0;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    for( i = 0; i < ci_netif_num_vis(ni); ++i ) {
-      ef_vi* pvi = &ni->nic_hw[intf_i].vis[i];
-      if( ! pvi->efct_rxqs.active_qs )
-        rx_ring += ef_vi_receive_fill_level(pvi);
-      tx_ring += ef_vi_transmit_fill_level(pvi);
-      tx_oflow += ns->nic[intf_i].dmaq[i].num;
-    }
+    ef_vi* pvi = ci_netif_vi(ni, intf_i);
+    if( ! pvi->efct_rxqs.active_qs )
+      rx_ring += ef_vi_receive_fill_level(pvi);
+    tx_ring += ef_vi_transmit_fill_level(pvi);
+    tx_oflow += ns->nic[intf_i].dmaq.num;
   }
   used = ni->packets->n_pkts_allocated - ni->packets->n_free - ns->n_async_pkts;
   rx_queued = ns->n_rx_pkts - rx_ring - ns->mem_pressure_pkt_pool_n;
@@ -493,11 +488,8 @@ void ci_netif_dump_dmaq(ci_netif* ni, int dump)
   int intf_i;
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     ci_netif_state_nic_t* nic = &ni->state->nic[intf_i];
-    int i;
-    for( i = 0; i < ci_netif_num_vis(ni); ++i )
-      log("%s[%d]: head=%d tail=%d num=%d", __FUNCTION__, i,
-          OO_PP_FMT(nic->dmaq[i].head), OO_PP_FMT(nic->dmaq[i].tail),
-          nic->dmaq[i].num);
+    log("%s: head=%d tail=%d num=%d", __FUNCTION__,
+        OO_PP_FMT(nic->dmaq.head), OO_PP_FMT(nic->dmaq.tail), nic->dmaq.num);
     /* Following is bogus, as dmaq uses a different "next" field. */
     /*ci_netif_pkt_list_dump(ni, ni->state->nic[intf_i].dmaq.head, 0, dump);*/
   }
@@ -712,7 +704,6 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   ci_netif_state_nic_t* nic = &ni->state->nic[intf_i];
   ef_vi* vi = ci_netif_vi(ni, intf_i);
   int i;
-  int sum_dmaq_num = 0;
 
   if( intf_i < 0 || intf_i >= CI_CFG_MAX_INTERFACES ||
       ! efrm_nic_set_read(&ni->nic_set, intf_i) ) {
@@ -758,13 +749,11 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
            ci_netif_rx_vi_space(ni, vi), ef_vi_receive_fill_level(vi),
            vi->ep_state->rxq.removed);
   }
-  for( i = 0; i < ci_netif_num_vis(ni); ++i )
-    sum_dmaq_num += nic->dmaq[i].num;
   logger(log_arg, "  txq: cap=%d lim=%d spc=%d level=%d pkts=%d oflow_pkts=%d",
          ef_vi_transmit_capacity(vi), ef_vi_transmit_capacity(vi),
          ef_vi_transmit_space(vi), ef_vi_transmit_fill_level(vi),
-         nic->tx_dmaq_insert_seq - nic->tx_dmaq_done_seq - sum_dmaq_num,
-         nic->dmaq[0].num);
+         nic->tx_dmaq_insert_seq - nic->tx_dmaq_done_seq - nic->dmaq.num,
+         nic->dmaq.num);
   logger(log_arg, "  txq: pio_buf_size=%d tot_pkts=%d bytes=%d",
 #if CI_CFG_PIO
          nic->pio_io_len,
@@ -775,24 +764,6 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
   logger(log_arg, "  txq: ts_nsec=%x.%04x",
          vi->ep_state->txq.ts_nsec,
          vi->ep_state->txq.ts_nsec_frac);
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  {
-    int num_vis = ci_netif_num_vis(ni);
-    int i;
-    for( i = 1; i < num_vis; ++i ) {
-      ef_vi* pvi = &ni->nic_hw[intf_i].vis[i];
-      logger(log_arg, "  rxq[%d]: cap=%d lim=%d spc=%d level=%d total_desc=%d",
-             i, ef_vi_receive_capacity(pvi), ni->state->rxq_limit,
-             ci_netif_rx_vi_space(ni, pvi), ef_vi_receive_fill_level(pvi),
-             pvi->ep_state->rxq.removed);
-      logger(log_arg, "  txq[%d]: cap=%d lim=%d spc=%d level=%d oflow_pkts=%d",
-             i, ef_vi_transmit_capacity(pvi), ef_vi_transmit_capacity(pvi),
-             ef_vi_transmit_space(pvi), ef_vi_transmit_fill_level(pvi),
-             nic->dmaq[i].num);
-    }
-  }
-#endif
 
 #if CI_CFG_TIMESTAMPING
   logger(log_arg, "  clk: %s%s",

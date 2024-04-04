@@ -360,20 +360,6 @@ typedef struct {
 } ci_clone_fd_t;
 
 
-typedef struct {
-  oo_sp ep_id;
-  ci_uint32 isn;
-} ci_tcp_offload_set_isn_t;
-
-
-typedef struct {
-  oo_sp ep_id;
-  ci_int32 intf_i;
-  ci_uint32 stream_id;
-  ci_uint64 ddr_base;
-  ci_uint64 ddr_size;
-} ci_tcp_offload_get_stream_id_t;
-
 /* "Donation" shared memory ioctl structures. */
 
 typedef struct {

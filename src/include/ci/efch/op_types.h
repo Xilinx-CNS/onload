@@ -128,13 +128,6 @@ struct efch_pd_alloc {
 };
 
 
-struct efch_ext_alloc {
-  efch_resource_id_t  in_pd_rs_id;
-  unsigned char       in_ext_id[16];
-  uint32_t            in_flags;
-};
-
-
 struct efch_efct_rxq_alloc {
   efch_resource_id_t  in_vi_rs_id;
   uint32_t            in_flags;  /* none currently defined */
@@ -158,7 +151,6 @@ typedef struct ci_resource_alloc_s {
     struct efch_memreg_alloc   memreg;
     struct efch_pd_alloc       pd;
     struct efch_pio_alloc      pio;
-    struct efch_ext_alloc      ext;
     struct efch_efct_rxq_alloc rxq;
   } u;
 } ci_resource_alloc_t;
@@ -212,8 +204,7 @@ typedef struct ci_resource_op_s {
 # define                CI_RSOP_VI_TX_ALT_ALLOC         0x86
 # define                CI_RSOP_VI_TX_ALT_FREE          0x87
 # define                CI_RSOP_VI_GET_TS_FORMAT        0x88
-# define                CI_RSOP_EXT_FREE                0x89
-# define                CI_RSOP_EXT_MSG                 0x8A
+/* 0x89 and 0x8a removed */
 # define                CI_RSOP_RXQ_REFRESH             0x8B
 # define                CI_RSOP_FILTER_QUERY            0x8C
 # define                CI_RSOP_VI_DESIGN_PARAMETERS    0x8D
@@ -323,12 +314,6 @@ typedef struct ci_resource_op_s {
       /* enum ef_timestamp_format */
       uint32_t          out_ts_format;
     } vi_ts_format;
-    struct {
-      uint32_t          msg_id;
-      uint64_t          payload_ptr;
-      uint64_t          payload_len;
-      uint32_t          flags;
-    } ext_msg;
     struct {
       uint64_t          superbufs;
       uint64_t          current_mappings;

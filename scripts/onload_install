@@ -308,7 +308,6 @@ install_userland() {
   install_f onload/extensions.h "$i_include/onload/extensions.h"
   install_f onload/extensions_timestamping.h "$i_include/onload/extensions_timestamping.h"
   install_f onload/extensions_zc.h "$i_include/onload/extensions_zc.h"
-  install_f onload/extensions_zc_hlrx.h "$i_include/onload/extensions_zc_hlrx.h"
 
   # Install header files for ef_vi app development
   /bin/ls etherfabric/*.h |

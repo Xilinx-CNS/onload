@@ -154,7 +154,6 @@ struct oo_nic* oo_nic_add(const struct efhw_nic* nic)
 
   onic->efrm_client = efrm_client;
   onic->oo_nic_flags = 0;
-  onic->crc_id_pools_mask = 0xffff;
 
   /* Tell cp_server about this hwport */
   rc = cp_announce_hwport(efrm_client_get_nic(efrm_client), i);

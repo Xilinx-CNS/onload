@@ -94,14 +94,12 @@ tcp_helper_rm_nopage_iobuf(tcp_helper_resource_t* trs, struct vm_area_struct *vm
   /* VIs (descriptor rings and event queues). */
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
     struct tcp_helper_nic* trs_nic = &trs->nic[intf_i];
-    int i;
-    int num_vis = ci_netif_num_vis(ni);
-    for( i = 0; i < num_vis; ++i ) {
-      unsigned bytes = trs_nic->thn_vi_mmap_bytes[i];
-      if( offset + CI_PAGE_SIZE <= bytes )
-        return efab_vi_resource_nopage(trs_nic->thn_vi_rs[i], vma, offset,
-                                       bytes);
-      offset -= bytes;
+    if( offset + CI_PAGE_SIZE <= trs_nic->thn_vi_mmap_bytes ) {
+      return efab_vi_resource_nopage(tcp_helper_vi(trs, intf_i), vma,
+                                     offset, trs_nic->thn_vi_mmap_bytes);
+    }
+    else {
+       offset -= trs_nic->thn_vi_mmap_bytes;
     }
   }
   OO_DEBUG_SHM(ci_log("%s: %u offset %ld too great",
@@ -270,23 +268,6 @@ static int tcp_helper_rm_mmap_timesync(tcp_helper_resource_t* trs,
 }
 
 
-static int mmap_all_vis(tcp_helper_resource_t* trs, int intf_i,
-                                 unsigned long *bytes,
-                                 struct vm_area_struct* vma, int *map_num,
-                                 unsigned long *offset, int map_type)
-{
-  int vi_i;
-  int n = ci_netif_num_vis(&trs->netif);
-  for( vi_i = 0; vi_i < n; ++vi_i ) {
-    int rc = efab_vi_resource_mmap(trs->nic[intf_i].thn_vi_rs[vi_i],
-                                   bytes, vma, map_num, offset, map_type);
-    if( rc < 0 )
-      return rc;
-  }
-  return 0;
-}
-
-
 static int tcp_helper_rm_mmap_io(tcp_helper_resource_t* trs,
                                  unsigned long bytes,
                                  struct vm_area_struct* vma)
@@ -300,10 +281,11 @@ static int tcp_helper_rm_mmap_io(tcp_helper_resource_t* trs,
   OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
 
   OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
-    rc = mmap_all_vis(trs, intf_i, &bytes, vma, &map_num, &offset,
-                      EFCH_VI_MMAP_IO);
+    rc = efab_vi_resource_mmap(tcp_helper_vi(trs, intf_i), &bytes, vma,
+                               &map_num, &offset, EFCH_VI_MMAP_IO);
     if( rc < 0 )
       return rc;
+
   }
   ci_assert_equal(bytes, 0);
 
@@ -362,43 +344,6 @@ static int tcp_helper_rm_mmap_ctpio(tcp_helper_resource_t* trs,
 #endif
 
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-static int tcp_helper_rm_mmap_plugin(tcp_helper_resource_t* trs,
-                                     unsigned long bytes,
-                                     struct vm_area_struct* vma)
-{
-  int rc, intf_i;
-  int map_num = 0;
-  unsigned long offset = 0;
-
-  OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
-
-  OO_STACK_FOR_EACH_INTF_I(&trs->netif, intf_i) {
-    unsigned long n = PAGE_SIZE;
-    if( ! trs->netif.nic_hw[intf_i].plugin_rx )
-      continue;
-    if( ! trs->netif.nic_hw[intf_i].plugin_io ) {
-      OO_DEBUG_ERR(ci_log("%s: mapping CSR region when plugin doesn't use it",
-                          __FUNCTION__));
-      return -EINVAL;
-    }
-    rc = efab_vi_resource_mmap(trs->nic[intf_i].thn_vi_rs[CI_Q_ID_TCP_APP], &n,
-                    vma, &map_num, &offset,
-                    EFCH_VI_MMAP_PLUGIN_BASE +
-                    trs->nic[intf_i].thn_plugin_mapped_csr_offset / PAGE_SIZE);
-    if( rc < 0 )
-      return rc;
-    ci_assert_equal(n, 0);
-    bytes -= PAGE_SIZE;
-  }
-  ci_assert_equal(bytes, 0);
-
-  return 0;
-}
-#endif
-
-
-
 static int tcp_helper_rm_mmap_buf(tcp_helper_resource_t* trs,
                                   unsigned long bytes,
                                   struct vm_area_struct* vma)
@@ -412,10 +357,10 @@ static int tcp_helper_rm_mmap_buf(tcp_helper_resource_t* trs,
   OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i ) {
-    rc = mmap_all_vis(trs, intf_i, &bytes, vma, &map_num, &offset,
-                      EFCH_VI_MMAP_MEM);
-    if( rc < 0 )
-      return rc;
+    rc = efab_vi_resource_mmap(tcp_helper_vi(trs, intf_i), &bytes, vma,
+                               &map_num, &offset, EFCH_VI_MMAP_MEM);
+    if( rc < 0 )  return rc;
+
   }
   ci_assert_equal(bytes, 0);
   return 0;
@@ -435,8 +380,8 @@ static int tcp_helper_rm_mmap_efct_shm(tcp_helper_resource_t* trs,
   OO_DEBUG_VM(ci_log("%s: %u bytes=0x%lx", __func__, trs->id, bytes));
 
   OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    mmap_all_vis(trs, intf_i, &bytes, vma, &map_num, &offset,
-                 EFCH_VI_MMAP_RXQ_SHM);
+    efab_vi_resource_mmap(tcp_helper_vi(trs, intf_i), &bytes, vma,
+                          &map_num, &offset, EFCH_VI_MMAP_RXQ_SHM);
   }
   ci_assert_equal(bytes, 0);
   return 0;
@@ -507,11 +452,6 @@ efab_tcp_helper_rm_mmap(tcp_helper_resource_t* trs, unsigned long bytes,
 #if CI_CFG_CTPIO
     case CI_NETIF_MMAP_ID_CTPIO:
       rc = tcp_helper_rm_mmap_ctpio(trs, bytes, vma);
-      break;
-#endif
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-    case CI_NETIF_MMAP_ID_PLUGIN:
-      rc = tcp_helper_rm_mmap_plugin(trs, bytes, vma);
       break;
 #endif
     case CI_NETIF_MMAP_ID_IOBUFS:

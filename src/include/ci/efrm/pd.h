@@ -64,14 +64,6 @@ struct efrm_pd_owner_ids;
 /*   EFRM_PD_ALLOC_FLAG_HW_LOOPBACK determines whether HW LOOPBACK to other
  *       stacks on the same protection domain will be enabled. */
 #define EFRM_PD_ALLOC_FLAG_HW_LOOPBACK    0x2
-/*   EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID causes the NIC to allocate a new
- *       dynamic client ID for this pd, which keeps everything with a single,
- *       unified group which is understood by the firmware. Everything created
- *       within that client ID is isolated and is destroyed when the pd is
- *       freed. */
-#define EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID 0x4
-/* Try again without client IDs if the hardware fails it */
-#define EFRM_PD_ALLOC_FLAG_WITH_CLIENT_ID_OPT 0x8
 /*   EFRM_PD_ALLOC_CLUSTER indicates this pd will be used for a vi set. This
  *       is only relevant for certain NIC HW.
  */
@@ -144,12 +136,6 @@ efrm_pd_get_min_align(struct efrm_pd *pd);
 extern unsigned
 efrm_pd_exclusive_rxq_token_get(struct efrm_pd *pd);
 
-/* Returns the NIC's dynamic client entity grouping everything in this PD
- * together */
-extern uint32_t
-efrm_pd_get_nic_client_id(struct efrm_pd *pd);
-
-#define EFRM_NIC_CLIENT_ID_NONE (~0u)
 
 /* Return true if this PD is using a non-default vport. */
 extern int

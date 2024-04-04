@@ -75,7 +75,6 @@
 #define ONLOAD_SOF_TIMESTAMPING_STREAM (1 << 23)
 #else
 #include <onload/extensions.h>
-#include <onload/extensions_zc.h>
 #endif
 #endif
 
@@ -514,9 +513,7 @@ ci_inline void ci_netif_send(ci_netif* ni, ci_ip_pkt_fmt* pkt)
   pkt->flags |= CI_PKT_FLAG_TX_PENDING;
   __ci_netif_send(ni, pkt);
 }
-extern bool ci_netif_send_immediate(ci_netif* netif, ci_ip_pkt_fmt* pkt,
-                                    const struct ef_vi_tx_extra* extra) CI_HF;
-extern int ci_netif_rx_post(ci_netif* netif, int nic_index, ef_vi* vi) CI_HF;
+extern void ci_netif_rx_post(ci_netif* netif, int nic_index) CI_HF;
 extern int  ci_netif_set_rxq_limit(ci_netif*) CI_HF;
 #ifdef __KERNEL__
 extern int  ci_netif_init_fill_rx_rings(ci_netif*) CI_HF;
@@ -595,18 +592,6 @@ CI_DEBUG(extern void ci_netif_verify_freepkts(ci_netif *, const char *, int);)
   ci_assert((addr) + (size) <= (ni)->state->netif_mmap_bytes);  \
   }while(0)
 
-ci_inline int ci_netif_num_vis(ci_netif* ni)
-{
-#if CI_CFG_TCP_OFFLOAD_RECYCLER || CI_CFG_TX_CRC_OFFLOAD
-  switch( NI_OPTS(ni).tcp_offload_plugin ) {
-    case CITP_TCP_OFFLOAD_OFF:     return 1;
-    case CITP_TCP_OFFLOAD_NVME:    return 1;
-    case CITP_TCP_OFFLOAD_RAW_TCP: return 2;
-    default:                       return 2 + CI_CFG_TCP_PLUGIN_EXTRA_VIS;
-  }
-#endif
-  return 1;
-}
 
 /*********************************************************************
 ************************* Packet buffer mgmt *************************
@@ -1414,30 +1399,6 @@ ci_inline int sock_af_space(ci_sock_cmn* s)
     ((ts)->s.b.sb_aflags & CI_SB_AFLAG_ORPHAN))
 #endif
 
-static inline bool
-ci_tcp_is_pluginized(ci_tcp_state* ts)
-{
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  return (ts->s.s_flags & CI_SOCK_FLAG_TCP_OFFLOAD) != 0;
-#else
-  return false;
-#endif
-}
-
-ci_inline bool ci_tcp_plugin_elided_payload(const ci_ip_pkt_fmt* pkt)
-{
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  return (pkt->rx_flags & CI_PKT_RX_FLAG_USER_FLAG) != 0;
-#else
-  return false;
-#endif
-}
-
-ci_inline bool ci_tcp_plugin_tcp_app_packet(const ci_ip_pkt_fmt* pkt)
-{
-  return pkt->q_id >= CI_Q_ID_TCP_APP;
-}
-
 extern ci_tcp_state* ci_tcp_get_state_buf(ci_netif*) CI_HF;
 #if ! defined(__KERNEL__) && CI_CFG_FD_CACHING
 extern ci_tcp_state* ci_tcp_get_state_buf_from_cache(ci_netif*, int pid) CI_HF;
@@ -1535,9 +1496,6 @@ ci_tcp_sock_clear_stack_filter(ci_netif *ni, ci_tcp_state* ts);
 #if CI_CFG_FD_CACHING
 extern int /*bool*/ ci_tcp_is_cacheable_active_wild_sharer(ci_sock_cmn*);
 #endif
-
-extern int
-ci_tcp_offload_get_stream_id(ci_netif* ni, ci_tcp_state* ts, int intf_i);
 
 extern void ci_tcp_prev_seq_remember(ci_netif*, ci_tcp_state*);
 extern ci_uint32 ci_tcp_prev_seq_lookup(ci_netif*, const ci_tcp_state*);
@@ -1657,8 +1615,6 @@ extern const char* ci_tcp_congstate_str(unsigned state) CI_HF;
 extern void ci_tcp_handle_rx(ci_netif*, struct ci_netif_poll_state*,
                              ci_ip_pkt_fmt*, ci_tcp_hdr*, int ip_paylen) CI_HF;
 extern void ci_tcp_rx_deliver2(ci_tcp_state*,ci_netif*,ciip_tcp_rx_pkt*) CI_HF;
-extern void ci_tcp_rx_plugin_meta(ci_netif*, struct ci_netif_poll_state*,
-                                  ci_ip_pkt_fmt* pkt) CI_HF;
 
 extern void ci_tcp_tx_change_mss(ci_netif*, ci_tcp_state*, bool may_send) CI_HF;
 extern void ci_tcp_enqueue_no_data(ci_tcp_state* ts, ci_netif* netif,
@@ -1911,7 +1867,6 @@ extern void ci_tcp_timeout_zwin(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_timeout_delack(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_timeout_rto(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_timeout_cork(ci_netif* netif, ci_tcp_state* ts) CI_HF;
-extern void ci_tcp_timeout_recycle(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_stop_timers(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 extern void ci_tcp_send_corked_packets(ci_netif* netif, ci_tcp_state* ts) CI_HF;
 
@@ -2340,7 +2295,7 @@ ci_inline ef_vi* ci_netif_vi(ci_netif* ni, int nic_i) {
   ci_assert_ge(nic_i, 0);
   ci_assert_lt(nic_i, oo_stack_intf_max(ni));
 
-  return &ni->nic_hw[nic_i].vis[0];
+  return &ni->nic_hw[nic_i].vi;
 }
 
 
@@ -2359,51 +2314,6 @@ extern void ci_ipcache_update_flowlabel(ci_netif* ni, ci_sock_cmn* s) CI_HF;
  */
 ci_inline int ci_netif_rx_vi_space(ci_netif* ni, ef_vi* vi)
 { return ni->state->rxq_limit - ef_vi_receive_fill_level(vi); }
-
-
-
-extern void ci_netif_send_plugin_app_ctrl(ci_netif* ni, int nic_index,
-                                          ci_ip_pkt_fmt* pkt,
-                                          const void* payload, size_t paylen);
-
-extern void __ci_netif_ring_plugin_app_doorbell(ci_netif* netif,
-                                                int nic_index);
-
-ci_inline void ci_netif_ring_ceph_doorbell(ci_netif* netif,
-                                                 int nic_index, int n)
-{
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  if( NI_OPTS(netif).tcp_offload_plugin == CITP_TCP_OFFLOAD_CEPH ) {
-    netif->state->nic[nic_index].plugin_app_credit += n;
-    /* /4 is an arbitrary slowdown factor, because ringing this doorbell is
-     * quite CPU-costly */
-    if( netif->state->nic[nic_index].plugin_app_credit >=
-        NI_OPTS(netif).rxq_size / 4 )
-      __ci_netif_ring_plugin_app_doorbell(netif, nic_index);
-  }
-#endif
-}
-
-
-ci_inline void ci_netif_rx_post_all_batch(ci_netif* netif, int nic_index)
-{
-  int i;
-  int num_vis = ci_netif_num_vis(netif);
-  int n_posted = 0;
-  for( i = 0; i < num_vis; ++i ) {
-    ef_vi* vi = &netif->nic_hw[nic_index].vis[i];
-    n_posted = 0;
-    if( ci_netif_rx_vi_space(netif, vi) >= CI_CFG_RX_DESC_BATCH )
-      n_posted = ci_netif_rx_post(netif, nic_index, vi);
-  }
-  (void)n_posted;
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  /* The VI owning the doorbell is always the last VI, so the loop above has
-   * the effect of ignoring n_posted for all the others and only passing the
-   * last one here. */
-  ci_netif_ring_ceph_doorbell(netif, nic_index, n_posted);
-#endif
-}
 
 
 /**********************************************************************
@@ -2899,122 +2809,6 @@ oo_tx_zc_payload_next(ci_netif* ni, struct ci_pkt_zc_payload* zcp)
        (char*)(zcp) - (char*)(zch) < (zch)->end; \
        (zcp) = oo_tx_zc_payload_next(ni, zcp) )
 
-#if CI_CFG_TX_CRC_OFFLOAD
-/* Initializes an id pool for the NVMe CRC plugin ids.
- * According to the ci_fifo2 specification, the queue capacity is cap-1
- */
-ci_inline void
-ci_nvme_plugin_crc_id_init(struct nvme_crc_plugin_idp_t* idp, unsigned base, unsigned limit)
-{
-  int i = 0;
-  if( limit == 0 || limit >= (1 << ZC_NVME_CRC_IDP_CAP) )
-    limit = (1 << ZC_NVME_CRC_IDP_CAP) - 1;
-  ci_fifo2_init(idp, 1 << ZC_NVME_CRC_IDP_CAP);
-  for( i = 0; i < limit; i++ )
-      ci_fifo2_put(idp, i + base);
-}
-
-ci_inline int
-ci_nvme_plugin_crc_id_alloc(struct nvme_crc_plugin_idp_t* idp, unsigned *id)
-{
-  if( ci_fifo2_is_empty(idp) )
-    return -EAGAIN;
-  ci_fifo2_get(idp, id);
-  return 0;
-}
-
-ci_inline void
-ci_nvme_plugin_crc_id_release(struct nvme_crc_plugin_idp_t* idp, unsigned id)
-{
-  ci_assert(!ci_fifo2_is_full(idp));
-  ci_assert_nequal(id, ZC_NVME_CRC_ID_INVALID);
-  ci_fifo2_put(idp, id);
-}
-
-ci_inline bool
-ci_nvme_plugin_crc_last_byte_sent(const struct ci_pkt_zc_payload* zcp)
-{
-  return zcp->crc_insert_first_byte + zcp->crc_insert_n_bytes == 4;
-}
-
-/* The acked ids are released when the flag is INSERT and the last
- * CRC byte has been sent */
-ci_inline void
-ci_nvme_plugin_crc_free_acked_ids(ci_netif* ni, ci_ip_pkt_fmt* pkt)
-{
-  struct ci_pkt_zc_payload* zcp;
-  struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
-  int intf_i = pkt->intf_i;
-
-  OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-    if( zcp->zcp_flags & ZC_PAYLOAD_FLAG_INSERT_CRC &&
-        ci_nvme_plugin_crc_last_byte_sent(zcp) ) {
-      ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp[intf_i],
-                                    zcp->crc_id);
-      zcp->crc_id = ZC_NVME_CRC_ID_INVALID;
-    }
-  }
-}
-#endif /* CI_CFG_TX_CRC_OFFLOAD */
-
-/* Free all CRC IDs that were allocated for the specified packet.  This is
- * needed for cleanup when the ID pool is exhausted mid-packet or when TX of
- * the packet fails.  The value of ts->current_crc_id should have been restored
- * by the caller to its pre-failure value before calling this function. */
-ci_inline void
-ci_nvme_plugin_crc_packet_cleanup(ci_netif* ni, ci_tcp_state* ts,
-                                  ci_ip_pkt_fmt* pkt)
-{
-#if CI_CFG_TX_CRC_OFFLOAD
-  struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
-  struct ci_pkt_zc_payload* zcp;
-  ci_uint32 prev_id = ZC_NVME_CRC_ID_INVALID;
-  int intf_i = pkt->intf_i;
-
-  OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-    if( zcp->zcp_flags & (ZC_PAYLOAD_FLAG_ACCUM_CRC |
-                          ZC_PAYLOAD_FLAG_INSERT_CRC) ) {
-      if( zcp->crc_id == ZC_NVME_CRC_ID_INVALID )
-        break;
-      /* Free this ID if it was different from the preceding one, and therefore
-       * newly allocated. */
-      if( zcp->crc_id != ts->current_crc_id &&
-          zcp->crc_id != prev_id ) {
-        ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp[intf_i],
-                                      zcp->crc_id);
-        prev_id = zcp->crc_id;
-      }
-      zcp->crc_id = ZC_NVME_CRC_ID_INVALID;
-    }
-  }
-#endif
-}
-
-/* A dropped queue affects the pending nvme crc plugin ids,
- * which need to be freed. Those ids are the current id and the
- * previously-allocated ones.
- */
-ci_inline void ci_nvme_plugin_idp_dropped_queue_cleanup(ci_netif* ni,
-                                                        ci_tcp_state* ts,
-                                                        ci_ip_pkt_queue *qu)
-{
-#if CI_CFG_TX_CRC_OFFLOAD
-  oo_pkt_p pp = qu->head;
-  ci_ip_pkt_fmt* p;
-  int intf_i = ts->s.pkt.intf_i;
-  while( OO_PP_NOT_NULL(pp) ) {
-    p = PKT_CHK(ni, pp);
-    if( p->flags & CI_PKT_FLAG_INDIRECT )
-      ci_nvme_plugin_crc_packet_cleanup(ni, ts, p);
-    pp = p->next;
-  }
-  if( ts->current_crc_id != ZC_NVME_CRC_ID_INVALID ) {
-    ci_nvme_plugin_crc_id_release(&ni->state->nvme_crc_plugin_idp[intf_i],
-                                  ts->current_crc_id);
-    ts->current_crc_id = ZC_NVME_CRC_ID_INVALID;
-  }
-#endif
-}
 
 /*********************************************************************
 ********************** Packet buffer allocation **********************
@@ -3026,9 +2820,6 @@ ci_inline void __ci_netif_pkt_clean(ci_ip_pkt_fmt* pkt)
   pkt->rx_flags = 0;
   pkt->n_buffers = 1;
   pkt->frag_next = OO_PP_NULL;
-#if CI_CFG_TCP_OFFLOAD_RECYCLER || ! defined NDEBUG
-  pkt->q_id = CI_Q_ID_NORMAL;
-#endif
   CI_DEBUG(pkt->pkt_start_off = PKT_START_OFF_BAD;
            pkt->pkt_eth_payload_off = PKT_START_OFF_BAD);
 #if CI_CFG_TIMESTAMPING
@@ -4092,30 +3883,6 @@ ci_inline void ci_tcp_zwin_set(ci_netif* netif, ci_tcp_state* ts)
 }
 
 
-/* Put ts on the 'some recycling needs to be done for this socket' timer
- * queue, starting the timer if needed. */
-ci_inline void ci_tcp_recycle_reset(ci_netif* netif, ci_tcp_state* ts) {
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  struct oo_p_dllink_state link = oo_p_dllink_sb(netif, &ts->s.b,
-                                                 &ts->recycle_link);
-  ci_assert(ci_ip_queue_not_empty(&ts->rob));
-  if( ! oo_p_dllink_is_empty(netif, link) )
-    return;
-  oo_p_dllink_add(netif,
-                  oo_p_dllink_ptr(netif, &netif->state->recycle_retry_q),
-                  link);
-  if( ! ci_ip_timer_pending(netif, &netif->state->recycle_tid) ) {
-    /* This recycle timer exists to deal with the possibility of drops
-     * and/or queue overflows in the link between plugin and host. Since
-     * that's guaranteed to be a very fast link, we hard-code the minimum
-     * possible timeout and share the timer across all sockets. */
-    ci_ip_timer_set(netif, &netif->state->recycle_tid,
-                    ci_tcp_time_now(netif) + 1);
-  }
-#endif
-}
-
-
 /**********************************************************************
 ****************************** TCP sendq ******************************
 **********************************************************************/
@@ -4133,13 +3900,7 @@ ci_inline void ci_tcp_sendq_drop(ci_netif* ni, ci_tcp_state* ts)
 }
 
 ci_inline void ci_tcp_retrans_drop(ci_netif* ni, ci_tcp_state* ts)
-{
-#if CI_CFG_TX_CRC_OFFLOAD
-  if( NI_OPTS(ni).tcp_offload_plugin == CITP_TCP_OFFLOAD_NVME )
-    ci_nvme_plugin_idp_dropped_queue_cleanup(ni, ts, &ts->retrans);
-#endif
-  ci_ip_queue_drop(ni, &ts->retrans);
-}
+{ ci_ip_queue_drop(ni, &ts->retrans); }
 
 extern int ci_tcp_add_fin(ci_tcp_state* ts, ci_netif* netif) CI_HF;
 /* Try to re-send pending FIN, return true in success. */

@@ -1040,21 +1040,6 @@ static void efct_ef_eventq_timer_zero(ef_vi* vi)
   /* TODO X3 */
 }
 
-static ssize_t efct_ef_vi_transmit_memcpy(struct ef_vi* vi,
-                                          const ef_remote_iovec* dst_iov,
-                                          int dst_iov_len,
-                                          const ef_remote_iovec* src_iov,
-                                          int src_iov_len)
-{
-  return -EOPNOTSUPP;
-}
-
-static int efct_ef_vi_transmit_memcpy_sync(struct ef_vi* vi,
-                                           ef_request_id dma_id)
-{
-  return -EOPNOTSUPP;
-}
-
 int efct_vi_find_free_rxq(ef_vi* vi, int qid)
 {
   int ix;
@@ -1334,8 +1319,6 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.eventq_timer_run       = efct_ef_eventq_timer_run;
   vi->ops.eventq_timer_clear     = efct_ef_eventq_timer_clear;
   vi->ops.eventq_timer_zero      = efct_ef_eventq_timer_zero;
-  vi->ops.transmit_memcpy        = efct_ef_vi_transmit_memcpy;
-  vi->ops.transmit_memcpy_sync   = efct_ef_vi_transmit_memcpy_sync;
   vi->ops.transmit_ctpio_fallback = efct_ef_vi_transmit_ctpio_fallback;
   vi->ops.transmitv_ctpio_fallback = efct_ef_vi_transmitv_ctpio_fallback;
   vi->internal_ops.design_parameters = efct_design_parameters;

@@ -1038,7 +1038,7 @@ static int wait_callback(struct wait_queue_entry* wait, unsigned mode,
  * properties.
  */
 static int
-af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
+af_xdp_nic_event_queue_enable(struct efhw_nic *nic,
 			      struct efhw_evq_params *params)
 {
   struct efhw_af_xdp_vi* vi = vi_by_instance(nic, params->evq);
@@ -1061,8 +1061,8 @@ af_xdp_nic_event_queue_enable(struct efhw_nic *nic, uint32_t client_id,
 }
 
 static void
-af_xdp_nic_event_queue_disable(struct efhw_nic *nic, uint32_t client_id,
-			     uint evq, int time_sync_events_enabled)
+af_xdp_nic_event_queue_disable(struct efhw_nic *nic, uint evq,
+			     int time_sync_events_enabled)
 {
 	struct efhw_af_xdp_vi* vi = vi_by_instance(nic, evq);
 	if( vi != NULL )
@@ -1114,8 +1114,7 @@ static void af_xdp_vi_free(struct efhw_nic *nic, int instance, unsigned n_vis) {
 
 
 static int
-af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
-		      struct efhw_dmaq_params *params)
+af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
 {
   struct efhw_af_xdp_vi* vi = vi_by_instance(nic, params->evq);
   if( vi == NULL )
@@ -1130,8 +1129,7 @@ af_xdp_dmaq_tx_q_init(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int
-af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
-		      struct efhw_dmaq_params *params)
+af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, struct efhw_dmaq_params *params)
 {
   struct efhw_af_xdp_vi* vi = vi_by_instance(nic, params->evq);
   if( vi == NULL )
@@ -1154,15 +1152,14 @@ af_xdp_dmaq_rx_q_init(struct efhw_nic *nic, uint32_t client_id,
 
 
 static int af_xdp_flush_tx_dma_channel(struct efhw_nic *nic,
-		    uint32_t client_id, uint dmaq, uint evq)
+				       uint dmaq, uint evq)
 {
 	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
 	return -EOPNOTSUPP;
 }
 
 
-static int af_xdp_flush_rx_dma_channel(struct efhw_nic *nic,
-		    uint32_t client_id, uint dmaq)
+static int af_xdp_flush_rx_dma_channel(struct efhw_nic *nic, uint dmaq)
 {
 	EFHW_ERR("%s: FIXME AF_XDP", __FUNCTION__);
 	return -EOPNOTSUPP;

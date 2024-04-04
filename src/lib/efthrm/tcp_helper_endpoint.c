@@ -17,9 +17,6 @@
 #include <onload/oof_interface.h>
 #include <onload/oof_onload.h>
 #include <onload/drv/dump_to_user.h>
-#include <onload/tcp-ceph.h>
-#include <ci/efrm/pd.h>
-#include <ci/efrm/slice_ext.h>
 #include "tcp_filters_internal.h"
 #include "oof_impl.h"
 
@@ -62,46 +59,9 @@ tcp_helper_endpoint_ctor(tcp_helper_endpoint_t *ep,
     ci_dllink_self_link(&ep->epoll[i].os_ready_link);
 
   oof_socket_ctor(&ep->oofilter);
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  for( i = 0; i < CI_CFG_MAX_INTERFACES; ++i ) {
-    ep->plugin_stream_id[i] = INVALID_PLUGIN_HANDLE;
-    ep->plugin_ddr_base[i] = 0;
-    ep->plugin_ddr_size[i] = 0;
-  }
-#endif
 }
 
 /*--------------------------------------------------------------------*/
-
-static void
-clear_plugin_state(tcp_helper_endpoint_t * ep)
-{
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  ci_netif* ni = &ep->thr->netif;
-  int intf_i;
-
-  ci_assert( ! in_atomic() );
-  OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-    struct xsn_ceph_destroy_stream param = {};
-    int rc;
-    ci_uint32 conn_id;
-
-    /* This function can be called from tcp_helper_endpoint_clear_filters()
-     * without the stack lock */
-    conn_id = ci_xchg32(&ep->plugin_stream_id[intf_i],
-                        INVALID_PLUGIN_HANDLE);
-    if( conn_id == INVALID_PLUGIN_HANDLE )
-      continue;
-    param.in_conn_id = cpu_to_le32(conn_id);;
-    rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin_rx,
-                      XSN_CEPH_DESTROY_STREAM, &param, sizeof(param));
-    if( rc )
-      OO_DEBUG_ERR(ci_log("%s: ERROR: Destroy Ceph stream failed (%d)",
-                          __FUNCTION__, rc));
-  }
-#endif
-}
 
 #if CI_CFG_UL_INTERRUPT_HELPER
 /* FIXME Sasha
@@ -130,7 +90,6 @@ tcp_helper_endpoint_dtor(tcp_helper_endpoint_t * ep)
      it is freed - therefore ensure properly cleaned up */
   OO_DEBUG_VERB(ci_log(FEP_FMT, FEP_PRI_ARGS(ep)));
 
-  clear_plugin_state(ep);
 #ifndef BREAK_SCALABLE_FILTERS
   if( s->s_flags & CI_SOCK_FLAG_STACK_FILTER )
     ci_tcp_sock_clear_stack_filter(&ep->thr->netif,
@@ -332,10 +291,6 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
   int rc;
   unsigned long lock_flags;
   int use_mac_filter, af_space;
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  bool enable_recycler = s->s_flags & CI_SOCK_FLAG_TCP_OFFLOAD &&
-                         ! CI_IPX_ADDR_IS_ANY(sock_raddr(s));
-#endif
 
   OO_DEBUG_TCPH(ci_log("%s: [%d:%d] bindto_ifindex=%d from_tcp_id=%d",
                        __FUNCTION__, ep->thr->id,
@@ -484,11 +439,6 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
 #endif
             0;
 
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-    if( enable_recycler )
-      flags |= CI_Q_ID_TCP_RECYCLER << OOF_SOCKET_ADD_FLAG_SUBVI_SHIFT;
-#endif
-
     /* We need to add the socket here, even if it doesn't want unicast filters.
      * This ensures that the filter code knows when and how the socket is
      * bound, so can appropriately install multicast filters.
@@ -520,60 +470,6 @@ tcp_helper_endpoint_set_filters(tcp_helper_endpoint_t* ep,
     os_sock_ref = oo_file_xchg(&ep->os_port_keeper, os_sock_ref);
   if( os_sock_ref != NULL )
     fput(os_sock_ref);
-
-#if CI_CFG_TCP_OFFLOAD_RECYCLER
-  if( rc == 0 && enable_recycler ) {
-    int intf_i;
-    int stream_count = 0;
-    ci_assert( ! in_atomic() );
-    OO_STACK_FOR_EACH_INTF_I(ni, intf_i) {
-      struct xsn_ceph_create_stream create;
-      ci_netif_state_nic_t* nsn = &ni->state->nic[intf_i];
-
-      if( ! ni->nic_hw[intf_i].plugin_rx )
-        continue;
-      /* With the non-P2H design, we must only create the stream on one
-       * interface. */
-      if( ! ci_netif_tcp_plugin_uses_p2h(ni, intf_i) &&
-          intf_i != s->pkt.intf_i )
-        continue;
-      create = (struct xsn_ceph_create_stream){
-        .tcp.in_app_id = cpu_to_le32(ni->nic_hw[intf_i].plugin_rx_app_id),
-        .tcp.in_user_mark = cpu_to_le32(ep->id),
-        .tcp.in_synchronised = false,   /* passive-open not supported */
-        .tcp.in_source_ip = raddr.ip4,
-        .tcp.in_dest_ip = laddr.ip4,
-        .tcp.in_source_port = rport,
-        .tcp.in_dest_port = lport,
-        .in_data_buf_capacity = NI_OPTS(ni).ceph_data_buf_bytes,
-      };
-      rc = efrm_ext_msg(ni->nic_hw[intf_i].plugin_rx, XSN_CEPH_CREATE_STREAM,
-                        &create, sizeof(create));
-      if( rc ) {
-        OO_DEBUG_ERR(ci_log("ERROR: Can't create Ceph stream state (%d)", rc));
-        continue;
-      }
-      ++stream_count;
-      ep->plugin_stream_id[intf_i] = le32_to_cpu(create.tcp.out_conn_id);
-      /* In reality, all streams are bound to have the same address space: */
-      ci_assert(nsn->plugin_addr_space == 0 ||
-                nsn->plugin_addr_space == create.out_addr_spc_id);
-      nsn->plugin_addr_space = create.out_addr_spc_id;
-      ep->plugin_ddr_base[intf_i] = create.out_data_buf_base;
-      ep->plugin_ddr_size[intf_i] = create.out_data_buf_capacity;
-    }
-    if( stream_count > 0 ) {
-      rc = 0;
-    }
-    else {
-      /* Current policy is to hand over, so choose an error code that will
-       * cause this. We may add alternative options later. */
-      rc = -EBUSY;
-      oof_socket_del(oo_filter_ns_to_manager(ep->thr->filter_ns),
-                     &ep->oofilter);
-    }
-  }
-#endif
   return rc;
 }
 
@@ -664,7 +560,6 @@ tcp_helper_endpoint_clear_filters(tcp_helper_endpoint_t* ep,
   else
 #endif
   {
-    clear_plugin_state(ep);
     oof_socket_del(oo_filter_ns_to_manager(ep->thr->filter_ns), &ep->oofilter);
     oof_socket_mcast_del_all(oo_filter_ns_to_manager(ep->thr->filter_ns),
                              &ep->oofilter);

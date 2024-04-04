@@ -14,7 +14,6 @@
 #define _GNU_SOURCE
 #include <onload/extensions.h>
 #include <onload/extensions_zc.h>
-#include <onload/extensions_zc_hlrx.h>
 #include <dlfcn.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -187,9 +186,6 @@ wrap(int, onload_zc_hlrx_alloc, (int fd, int flags,
 wrap(int, onload_zc_hlrx_free, (struct onload_zc_hlrx* hlrx),
      (hlrx), -ENOSYS)
 
-wrap(int, onload_zc_hlrx_buffer_release, (int fd, onload_zc_handle buf),
-     (fd, buf), -ENOSYS)
-
 wrap(ssize_t, onload_zc_hlrx_recv_copy, (struct onload_zc_hlrx* hlrx,
                                          struct msghdr* msg, int flags),
      (hlrx, msg, flags), -ENOSYS)
@@ -198,11 +194,6 @@ wrap(ssize_t, onload_zc_hlrx_recv_zc, (struct onload_zc_hlrx* hlrx,
                                struct onload_zc_msg* msg, size_t max_bytes,
                                int flags),
      (hlrx, msg, max_bytes, flags), -ENOSYS)
-
-wrap(ssize_t, onload_zc_hlrx_recv_oob,
-     (struct onload_zc_hlrx* hlrx, const struct onload_zc_iovec* inband,
-      void* buf, size_t len, int* flags),
-     (hlrx, inband, buf, len, flags), -ENOSYS)
 
 
 wrap(int, onload_msg_template_alloc, (int fd, const struct iovec* initial_msg,
