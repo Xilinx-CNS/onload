@@ -378,7 +378,9 @@ static void cp_unit_netif_mock(ci_netif* ni,
     cp_unit_init_cp_handle(ni->cplane_init_net, s_init_net);
   }
 
-  ni->state->hwport_mask = -1;  /* All ports onloaded, good enough for test */
+  /* All ports onloaded, good enough for test */
+  ni->state->tx_hwport_mask = -1;
+  ni->state->rx_hwport_mask = -1;
 }
 
 
