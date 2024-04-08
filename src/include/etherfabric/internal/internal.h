@@ -160,9 +160,9 @@ extern int ef10_ef_vi_transmitv_copy_pio(ef_vi* vi, int offset,
 					 ef_request_id dma_id);
 
 /* Exported for use by TCPDirect */
-extern int ef10_receive_get_timestamp_with_sync_flags_internal
-	(ef_vi* vi, const void* pkt, struct timespec* ts_out,
-	 unsigned* flags, uint32_t t_minor, uint32_t t_major);
+extern int ef10_receive_get_precise_timestamp_internal
+	(ef_vi* vi, const void* pkt, ef_precisetime* ts_out,
+	 uint32_t t_minor, uint32_t t_major);
 
 #endif
 
