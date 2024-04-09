@@ -166,6 +166,10 @@ extern int ef10_receive_get_precise_timestamp_internal
 
 #endif
 
+/* Exported directly for onload to use in the kernel due to limitations with
+ * calculating the pkt_id from the packer pointer in kernel space. */
+extern int efct_vi_rxpkt_get_timestamp_impl(ef_vi* vi, uint32_t pkt_id,
+                                            ef_timespec* ts, unsigned* flags);
 
 /*! Size of the CTPIO aperture in bytes (if present) */
 #define EF_VI_CTPIO_APERTURE_SIZE     4096

@@ -105,6 +105,13 @@ void ef10ct_receive_push(struct ef_vi *vi) {
     ef10ct_unsupported_msg(__func__);
 }
 
+int ef10ct_receive_get_timestamp(ef_vi *vi, const void *pkt,
+                                 ef_precisetime *ts_out)
+{
+    ef10ct_unsupported_msg(__func__);
+    return -EOPNOTSUPP;
+}
+
 int ef10ct_eventq_poll(struct ef_vi *vi, ef_event *evs, int evs_len) {
     int n = 0;
     /* TODO EF10CT poll receive queue(s) */
@@ -251,6 +258,7 @@ static void ef10ct_initialise_ops(ef_vi *vi) {
     vi->ops.transmit_alt_discard        = ef10ct_transmit_alt_discard;
     vi->ops.receive_init                = ef10ct_receive_init;
     vi->ops.receive_push                = ef10ct_receive_push;
+    vi->ops.receive_get_timestamp       = ef10ct_receive_get_timestamp;
     vi->ops.eventq_poll                 = ef10ct_eventq_poll;
     vi->ops.eventq_prime                = ef10ct_eventq_prime;
     vi->ops.eventq_timer_prime          = ef10ct_eventq_timer_prime;

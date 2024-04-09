@@ -72,8 +72,8 @@ extern "C" {
 **/
 extern const void* efct_vi_rxpkt_get(struct ef_vi* vi, uint32_t pkt_id);
 
-/*! \brief Retrieve the UTC timestamp associated with a received packet,
-**         and the clock sync status flags
+/*! \brief _Deprecated:_ use ef_vi_receive_get_precise_timestamp()
+ *         with the packet pointer obtained from efct_vi_rxpkt_get() instead.
 **
 ** \param vi        The virtual interface that received the packet.
 ** \param pkt_id    A valid packet identifier.
@@ -86,6 +86,10 @@ extern const void* efct_vi_rxpkt_get(struct ef_vi* vi, uint32_t pkt_id);
 **    \li ENODATA - Packet does not have a timestamp. This should only happen
 **                  if timestamps are disabled for this adapter.
 **
+** \deprecated _This function is now deprecated._ Use
+** ef_vi_receive_get_precise_timestamp() with the packet pointer obtained from
+** efct_vi_rxpkt_get() instead.
+**
 ** On success the ts_out and flags_out fields are updated, and a value of
 ** zero is returned. The flags_out field contains the following flags:
 ** - EF_VI_SYNC_FLAG_CLOCK_SET is set if the adapter clock has ever been
@@ -96,9 +100,23 @@ extern const void* efct_vi_rxpkt_get(struct ef_vi* vi, uint32_t pkt_id);
 ** \a pkt_id must come from a RX_REF or RX_REF_DISCARD event for this \a vi,
 ** and must not have been released. Behaviour is undefined otherwise.
 **/
-extern int
+__attribute__ ((deprecated("ef_vi_receive_get_precise_timestamp")))
+ef_vi_inline int
 efct_vi_rxpkt_get_timestamp(struct ef_vi* vi, uint32_t pkt_id,
-                            ef_timespec* ts_out, unsigned* flags_out);
+                            ef_timespec* ts_out, unsigned* flags_out)
+{
+  ef_precisetime ts;
+  const void* pkt;
+  int rc;
+
+  pkt = efct_vi_rxpkt_get(vi, pkt_id);
+  rc = ef_vi_receive_get_precise_timestamp(vi, pkt, &ts);
+  ts_out->tv_sec = ts.tv_sec;
+  ts_out->tv_nsec = ts.tv_nsec;
+  *flags_out = ts.tv_flags;
+  return rc;
+}
+
 
 /*! \brief Release a received packet's buffer after use
 **

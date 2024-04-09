@@ -822,6 +822,7 @@ static void ef10_vi_initialise_ops(ef_vi* vi)
     vi->ops.receive_init   = ef10_ef_vi_receive_init;
   }
   vi->ops.receive_push           = ef10_ef_vi_receive_push;
+  vi->ops.receive_get_timestamp  = ef10_receive_get_precise_timestamp;
   vi->ops.eventq_poll            = ef10_ef_eventq_poll;
   if( vi->nic_type.nic_flags & EFHW_VI_NIC_BUG35388_WORKAROUND )
     vi->ops.eventq_prime         = ef10_ef_eventq_prime_bug35388_workaround;

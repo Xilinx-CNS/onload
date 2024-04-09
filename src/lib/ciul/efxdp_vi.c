@@ -248,6 +248,12 @@ static void efxdp_ef_vi_receive_push(ef_vi* vi)
   *RING_PRODUCER(vi, fr) = vi->ep_state->rxq.added;
 }
 
+static int efxdp_ef_vi_receive_get_timestamp(struct ef_vi* vi, const void* pkt,
+                                             ef_precisetime* ts_out)
+{
+  return -EOPNOTSUPP;
+}
+
 static void efxdp_ef_eventq_prime(ef_vi* vi)
 {
   // TODO
@@ -390,6 +396,7 @@ void efxdp_vi_init(ef_vi* vi)
   vi->ops.transmit_alt_discard   = efxdp_ef_vi_transmit_alt_discard;
   vi->ops.receive_init           = efxdp_ef_vi_receive_init;
   vi->ops.receive_push           = efxdp_ef_vi_receive_push;
+  vi->ops.receive_get_timestamp  = efxdp_ef_vi_receive_get_timestamp;
   vi->ops.eventq_poll            = efxdp_ef_eventq_poll;
   vi->ops.eventq_prime           = efxdp_ef_eventq_prime;
   vi->ops.eventq_timer_prime     = efxdp_ef_eventq_timer_prime;

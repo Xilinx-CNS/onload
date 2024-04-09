@@ -1157,6 +1157,9 @@ typedef struct ef_vi {
     int (*receive_init)(struct ef_vi*, ef_addr, ef_request_id);
     /** Submit newly initialized RX descriptors to the NIC */
     void (*receive_push)(struct ef_vi*);
+    /** Get the timestamp for a given packet in an event */
+    int (*receive_get_timestamp)(struct ef_vi*, const void* pkt,
+                                 ef_precisetime*);
     /** Poll an event queue */
     int (*eventq_poll)(struct ef_vi*, ef_event*, int evs_len);
     /** Prime a virtual interface allowing you to go to sleep blocking on it */
@@ -1464,8 +1467,7 @@ ef_vi_inline int ef_vi_receive_capacity(const ef_vi* vi)
 extern int ef_vi_receive_post(ef_vi* vi, ef_addr addr, ef_request_id dma_id);
 
 
-/*! \brief _Deprecated:_ use ef_vi_receive_get_timestamp_with_sync_flags()
-** instead.
+/*! \brief _Deprecated:_ use ef_vi_receive_get_precise_timestamp() instead.
 **
 ** \param vi     The virtual interface that received the packet.
 ** \param pkt    The received packet.
@@ -1474,8 +1476,8 @@ extern int ef_vi_receive_post(ef_vi* vi, ef_addr addr, ef_request_id dma_id);
 **
 ** \return 0 on success, or a negative error code.
 **
-** _This function is now deprecated._ Use
-** ef_vi_receive_get_timestamp_with_sync_flags() instead.
+** \deprecated _This function is now deprecated._ Use
+** ef_vi_receive_get_precise_timestamp() instead.
 **
 ** Retrieve the UTC timestamp associated with a received packet.
 **
@@ -1488,12 +1490,11 @@ extern int ef_vi_receive_post(ef_vi* vi, ef_addr addr, ef_request_id dma_id);
 ** Note: ef_eventq_poll(), efct_vi_rx_future_poll() and efct_vi_rx_future_peek()
 **       invalidate timestamps retrieved by previous poll function.
 */
-extern int ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
-                                       ef_timespec* ts_out);
+extern __attribute__ ((deprecated("ef_vi_receive_get_precise_timestamp"))) int
+ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt, ef_timespec* ts_out);
 
 
-/*! \brief Retrieve the UTC timestamp associated with a received packet,
-**         and the clock sync status flags
+/*! \brief _Deprecated:_ use ef_vi_receive_get_precise_timestamp() instead.
 **
 ** \param vi        The virtual interface that received the packet.
 ** \param pkt       The first packet buffer for the received packet.
@@ -1511,6 +1512,9 @@ extern int ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
 **           TX to RX do not get timestamped.\n
 **         - EL2NSYNC - Synchronization with adapter has been lost.\n
 **           This should never happen!
+**
+** \deprecated _This function is now deprecated._ Use
+** ef_vi_receive_get_precise_timestamp() instead.
 **
 ** Retrieve the UTC timestamp associated with a received packet, and the
 ** clock sync status flags.
@@ -1539,7 +1543,7 @@ extern int ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
 ** In case of error the timestamp result (*ts_out) is set to zero, and a
 ** non-zero error code is returned (see Return value above).
 */
-extern int
+extern __attribute__ ((deprecated("ef_vi_receive_get_precise_timestamp"))) int
 ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
                                             ef_timespec* ts_out,
                                             unsigned* flags_out);
@@ -1571,7 +1575,6 @@ ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
 **   ef_eventq_poll(), and before calling ef_eventq_poll() again
 ** - must only be called for the first segment of a jumbo packet
 ** - must not be called for any events other than RX.
-** - must not be called for X3 packets.
 **
 ** If the virtual interface does not have RX timestamps enabled, the
 ** behavior of this function is undefined.
@@ -1591,9 +1594,8 @@ ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
 ** In case of error the timestamp result (*ts_out) is set to zero, and a
 ** non-zero error code is returned (see Return value above).
 */
-extern int
-ef_vi_receive_get_precise_timestamp(ef_vi* vi, const void* pkt,
-                                    ef_precisetime* ts_out);
+#define ef_vi_receive_get_precise_timestamp(vi, pkt, ts_out) \
+  (vi)->ops.receive_get_timestamp((vi), (pkt), (ts_out))
 
 /*! \brief Retrieve the number of bytes in a received packet in RX event
 **         merge mode

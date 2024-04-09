@@ -1201,6 +1201,44 @@ const void* efct_vi_rxpkt_get(ef_vi* vi, uint32_t pkt_id)
   return (char*)efct_rx_header(vi, pkt_id) + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
 }
 
+/* This function is the inverse of `efct_vi_rxpkt_get` */
+static uint32_t efct_vi_rxpkt_get_pkt_id(ef_vi* vi, const void* pkt)
+{
+#ifndef __KERNEL__
+  char* ptr = (char*)pkt;
+  uint32_t pkt_id = 0;
+  size_t delta;
+
+  EF_VI_ASSERT(vi->nic_type.arch == EF_VI_ARCH_EFCT);
+
+  /* In userspace, we have a contiguous chunk of memory for packets, so we can
+   * calculate the location of a packet as below:
+   * ptr = (char*)vi->efct_rxqs.q[0].superbuf
+   *       + (size_t)(pkt_id >> PKT_ID_PKT_BITS) * EFCT_RX_SUPERBUF_BYTES
+   *       + (pkt_id & ((1u << PKT_ID_PKT_BITS) - 1)) * EFCT_PKT_STRIDE
+   *       + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+   */
+  ptr = ptr - EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+  delta = ptr - (char*)vi->efct_rxqs.q[0].superbuf;
+
+  /* The compiler should be smart enough to optimise this to be bit masks and
+   * shifts as the divisors are all powers of 2. In reality, because the packet
+   * ID squishes all of the rxq, superbuf, and pkt number together this will
+   * likely simplify to (delta >> log_2(EFCT_PKT_STRIDE)). */
+  pkt_id = ((delta / EFCT_RX_SUPERBUF_BYTES) << PKT_ID_PKT_BITS) +
+           ((delta % EFCT_RX_SUPERBUF_BYTES) / EFCT_PKT_STRIDE);
+
+  EF_VI_ASSERT(efct_vi_rxpkt_get(vi, pkt_id) == pkt);
+  return pkt_id;
+#else
+  /* This function could be made to work in the kernel, but it would involve a
+   * lot of dirty work. In the kernel, we instead get an array of superbuf
+   * starting locations with no guarantee of being contiguous. */
+  EF_VI_ASSERT(0);
+  return 0;
+#endif
+}
+
 void efct_vi_rxpkt_release(ef_vi* vi, uint32_t pkt_id)
 {
   EF_VI_ASSERT(efct_rx_desc(vi, pkt_id)->refcnt > 0);
@@ -1263,8 +1301,9 @@ unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid)
   return vi->ep_state->rxq.rxq_ptr[qid].data_pkt;
 }
 
-int efct_vi_rxpkt_get_timestamp(ef_vi* vi, uint32_t pkt_id,
-                                ef_timespec* ts_out, unsigned* flags_out)
+static int efct_vi_rxpkt_get_timestamp_impl(ef_vi* vi, uint32_t pkt_id,
+                                            ef_timespec* ts_out,
+                                            unsigned* flags_out)
 {
   const struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
   uint64_t ts;
@@ -1294,6 +1333,30 @@ int efct_vi_rxpkt_get_timestamp(ef_vi* vi, uint32_t pkt_id,
       EF_VI_SYNC_FLAG_CLOCK_SET : 0) |
     (CI_QWORD_FIELD(time_sync, EFCT_TIME_SYNC_CLOCK_IN_SYNC) ?
       EF_VI_SYNC_FLAG_CLOCK_IN_SYNC : 0);
+  return 0;
+}
+
+static int efct_ef_vi_receive_get_timestamp(struct ef_vi* vi, const void* pkt,
+                                            ef_precisetime* ts_out)
+{
+  uint32_t pkt_id;
+  ef_timespec ts;
+  unsigned flags;
+  int rc;
+
+  EF_VI_ASSERT(vi->nic_type.arch == EF_VI_ARCH_EFCT);
+
+  pkt_id = efct_vi_rxpkt_get_pkt_id(vi, pkt);
+
+  *ts_out = (ef_precisetime) { 0 };
+  rc = efct_vi_rxpkt_get_timestamp_impl(vi, pkt_id, &ts, &flags);
+  if (rc < 0)
+    return rc;
+
+  ts_out->tv_sec = ts.tv_sec;
+  ts_out->tv_nsec = ts.tv_nsec;
+  ts_out->tv_flags = flags;
+
   return 0;
 }
 
@@ -1427,6 +1490,7 @@ static void efct_vi_initialise_ops(ef_vi* vi)
   vi->ops.transmit_alt_discard   = efct_ef_vi_transmit_alt_discard;
   vi->ops.receive_init           = efct_ef_vi_receive_init;
   vi->ops.receive_push           = efct_ef_vi_receive_push;
+  vi->ops.receive_get_timestamp  = efct_ef_vi_receive_get_timestamp;
   vi->ops.eventq_prime           = efct_ef_eventq_prime;
   vi->ops.eventq_timer_prime     = efct_ef_eventq_timer_prime;
   vi->ops.eventq_timer_run       = efct_ef_eventq_timer_run;

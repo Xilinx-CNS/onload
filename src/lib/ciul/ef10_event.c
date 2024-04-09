@@ -761,16 +761,6 @@ ef10_receive_get_precise_timestamp(ef_vi* vi, const void* pkt,
 
 
 extern int
-ef_vi_receive_get_precise_timestamp(ef_vi* vi, const void* pkt,
-                                    ef_precisetime* ts_out)
-{
-  /* TODO EFCT: ef_vi compatiblity */
-  EF_VI_ASSERT(vi->nic_type.arch != EF_VI_ARCH_EFCT);
-  return ef10_receive_get_precise_timestamp(vi, pkt, ts_out);
-}
-
-
-extern int
 ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
                                             ef_timespec* ts_out,
                                             unsigned* flags_out)
@@ -778,9 +768,7 @@ ef_vi_receive_get_timestamp_with_sync_flags(ef_vi* vi, const void* pkt,
   ef_precisetime ts;
   int rc;
 
-  /* TODO EFCT: ef_vi compatiblity */
-  EF_VI_ASSERT(vi->nic_type.arch != EF_VI_ARCH_EFCT);
-  rc = ef10_receive_get_precise_timestamp(vi, pkt, &ts);
+  rc = ef_vi_receive_get_precise_timestamp(vi, pkt, &ts);
   ts_out->tv_sec = ts.tv_sec;
   ts_out->tv_nsec = ts.tv_nsec;
   *flags_out = ts.tv_flags;
@@ -795,9 +783,7 @@ ef_vi_receive_get_timestamp(ef_vi* vi, const void* pkt,
   ef_precisetime ts;
   int rc;
 
-  /* TODO EFCT: ef_vi compatiblity */
-  EF_VI_ASSERT(vi->nic_type.arch != EF_VI_ARCH_EFCT);
-  rc = ef10_receive_get_precise_timestamp(vi, pkt, &ts);
+  rc = ef_vi_receive_get_precise_timestamp(vi, pkt, &ts);
   ts_out->tv_sec = ts.tv_sec;
   ts_out->tv_nsec = ts.tv_nsec;
   return rc < 0 ? -1 : 0;
@@ -1028,7 +1014,7 @@ ef_vi_inline int ef10_unbundle_one_packet(ef_vi* vi,
   pkt->ps_orig_len = orig_len;
   pkt->ps_pkt_start_offset =
     EF_VI_PS_METADATA_OFFSET + ES_DZ_PS_RX_PREFIX_SIZE;
-  rc = ef10_receive_get_precise_timestamp
+  rc = ef_vi_receive_get_precise_timestamp
     (vi, (prefix + ES_DZ_PS_RX_PREFIX_TSTAMP_OFST -
           ES_DZ_RX_PREFIX_TSTAMP_OFST),
      &ts);
