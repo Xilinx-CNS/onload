@@ -493,10 +493,8 @@ static void get_efct_timestamp(ci_netif* netif, ef_vi* vi,
   ci_netif_state_nic_t* nsn = &netif->state->nic[pkt->intf_i];
 
   if( nsn->oo_vi_flags & OO_VI_FLAGS_RX_HW_TS_EN ) {
-    unsigned sync_flags;
-    ef_timespec stamp;
-    int rc = efct_vi_rxpkt_get_timestamp_impl(vi, pkt_id, &stamp, &sync_flags);
-    ef_precisetime pstamp = { stamp.tv_sec, stamp.tv_nsec, 0, sync_flags };
+    ef_precisetime pstamp;
+    int rc = efct_vi_rxpkt_get_precise_timestamp(vi, pkt_id, &pstamp);
 
     if( rc == 0 )
       record_rx_timestamp(netif, nsn, pkt, pstamp);

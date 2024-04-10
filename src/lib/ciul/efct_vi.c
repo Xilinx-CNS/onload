@@ -1301,9 +1301,8 @@ unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid)
   return vi->ep_state->rxq.rxq_ptr[qid].data_pkt;
 }
 
-static int efct_vi_rxpkt_get_timestamp_impl(ef_vi* vi, uint32_t pkt_id,
-                                            ef_timespec* ts_out,
-                                            unsigned* flags_out)
+int efct_vi_rxpkt_get_precise_timestamp(ef_vi* vi, uint32_t pkt_id,
+                                        ef_precisetime* ts_out)
 {
   const struct efct_rx_descriptor* desc = efct_rx_desc(vi, pkt_id);
   uint64_t ts;
@@ -1326,9 +1325,19 @@ static int efct_vi_rxpkt_get_timestamp_impl(ef_vi* vi, uint32_t pkt_id,
   if( status != 1 )
     return -ENODATA;
 
+  /* The `ts` variable contains the full timestamp data for the packet, and has
+   * the following layout:
+   * - Bits  0-31: seconds
+   * - Bits 32-61: nanoseconds
+   * - Bits 62-63: fractional (quarter-) nanoseconds
+   *
+   * Because we only have quarter-nanosecond resolution, we put these two bits
+   * in the most-significant position of `tv_nsec_frac`, such that future
+   * precision may be appended with minimal change. */
   ts_out->tv_sec = ts >> 32;
   ts_out->tv_nsec = (uint32_t)ts >> 2;
-  *flags_out =
+  ts_out->tv_nsec_frac = (uint16_t)ts << 14;
+  ts_out->tv_flags =
     (CI_QWORD_FIELD(time_sync, EFCT_TIME_SYNC_CLOCK_IS_SET) ?
       EF_VI_SYNC_FLAG_CLOCK_SET : 0) |
     (CI_QWORD_FIELD(time_sync, EFCT_TIME_SYNC_CLOCK_IN_SYNC) ?
@@ -1340,24 +1349,12 @@ static int efct_ef_vi_receive_get_timestamp(struct ef_vi* vi, const void* pkt,
                                             ef_precisetime* ts_out)
 {
   uint32_t pkt_id;
-  ef_timespec ts;
-  unsigned flags;
-  int rc;
 
   EF_VI_ASSERT(vi->nic_type.arch == EF_VI_ARCH_EFCT);
 
   pkt_id = efct_vi_rxpkt_get_pkt_id(vi, pkt);
 
-  *ts_out = (ef_precisetime) { 0 };
-  rc = efct_vi_rxpkt_get_timestamp_impl(vi, pkt_id, &ts, &flags);
-  if (rc < 0)
-    return rc;
-
-  ts_out->tv_sec = ts.tv_sec;
-  ts_out->tv_nsec = ts.tv_nsec;
-  ts_out->tv_flags = flags;
-
-  return 0;
+  return efct_vi_rxpkt_get_precise_timestamp(vi, pkt_id, ts_out);
 }
 
 int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
