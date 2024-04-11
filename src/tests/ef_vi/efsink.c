@@ -79,13 +79,6 @@ struct resources {
   uint64_t           n_ht_events;
 };
 
-/* Both pkt pointer used by ef_vi_receive_get_timestamp_with_sync_flags
- * and pkt id used by efct_vi_rxpkt_get_timestamp can be stored in
- * uintptr_t */
-typedef uintptr_t pkt_ts_handle_t;
-typedef int (*get_timestamp_fn)(ef_vi*, pkt_ts_handle_t, ef_timespec*,
-                                unsigned*);
-
 static int cfg_hexdump;
 static int cfg_timestamping;
 static int cfg_vport;
@@ -174,7 +167,7 @@ static void hexdump(const void* pv, int len)
 }
 
 
-static inline int64_t timespec_diff_ns(struct timespec a, struct timespec b)
+static inline int64_t timespec_diff_ns(struct timespec a, ef_precisetime b)
 {
   assert(a.tv_nsec >= 0 && a.tv_nsec < 1000000000);
   assert(b.tv_nsec >= 0 && b.tv_nsec < 1000000000);
@@ -183,36 +176,21 @@ static inline int64_t timespec_diff_ns(struct timespec a, struct timespec b)
 }
 
 
-static int get_timestamp_rx(ef_vi* vi, pkt_ts_handle_t ts_pkt,
-                            ef_timespec* ts_out, unsigned* flags_out)
-{
-  return ef_vi_receive_get_timestamp_with_sync_flags(vi, (void*)ts_pkt,
-                                                     ts_out, flags_out);
-}
-
-
-static int get_timestamp_rx_ref(ef_vi* vi, pkt_ts_handle_t ts_pkt,
-                                ef_timespec* ts_out, unsigned* flags_out)
-{
-  return efct_vi_rxpkt_get_timestamp(vi, (uint32_t)ts_pkt, ts_out, flags_out);
-}
-
-
 static void handle_rx_core(struct resources* res, const void* dma_ptr,
-                           const void* rx_ptr, int len,
-                           get_timestamp_fn get_timestamp,
-                           pkt_ts_handle_t ts_pkt)
+                           const void* rx_ptr, int len)
 {
   if( cfg_timestamping ) {
-    struct timespec hw_ts, sw_ts;
-    unsigned ts_flags;
+    struct timespec sw_ts;
+    ef_precisetime hw_ts;
     TRY(clock_gettime(CLOCK_REALTIME, &sw_ts));
-    TRY(get_timestamp(&res->vi, ts_pkt, &hw_ts, &ts_flags));
+    TRY(ef_vi_receive_get_precise_timestamp(&res->vi, dma_ptr, &hw_ts));
     pthread_mutex_lock(&printf_mutex);
-    printf("HW_TSTAMP=%ld.%09ld  delta=%"PRId64"ns  %s %s\n",
-           hw_ts.tv_sec, hw_ts.tv_nsec, timespec_diff_ns(sw_ts, hw_ts),
-           (ts_flags & EF_VI_SYNC_FLAG_CLOCK_SET) ? "ClockSet" : "",
-           (ts_flags & EF_VI_SYNC_FLAG_CLOCK_IN_SYNC) ? "ClockInSync" : "");
+    printf("HW_TSTAMP=%"PRId64".%09"PRIu32"%03"PRIu32"  delta=%"PRId64"ns  %s %s\n",
+           hw_ts.tv_sec, hw_ts.tv_nsec,
+           (uint32_t) (((uint64_t)(hw_ts.tv_nsec_frac) * 1000 + (1 << 15)) >> 16),
+           timespec_diff_ns(sw_ts, hw_ts),
+           (hw_ts.tv_flags & EF_VI_SYNC_FLAG_CLOCK_SET) ? "ClockSet" : "",
+           (hw_ts.tv_flags & EF_VI_SYNC_FLAG_CLOCK_IN_SYNC) ? "ClockInSync" : "");
     pthread_mutex_unlock(&printf_mutex);
   }
 
@@ -234,8 +212,7 @@ static void handle_rx(struct resources* res, int pkt_buf_i, int len)
 
   pkt_buf = pkt_buf_from_id(res, pkt_buf_i);
   dma_ptr = (char*) pkt_buf + RX_DMA_OFF;
-  handle_rx_core(res, dma_ptr, pkt_buf->rx_ptr, len,
-                 get_timestamp_rx, (pkt_ts_handle_t)dma_ptr);
+  handle_rx_core(res, dma_ptr, pkt_buf->rx_ptr, len);
   pkt_buf_free(res, pkt_buf);
 }
 
@@ -274,8 +251,7 @@ static void handle_rx_ref(struct resources* res, unsigned pkt_id, int len)
 
   LOGV("PKT: received pkt=%u len=%d\n", pkt_id, len);
   p = efct_vi_rxpkt_get(&res->vi, pkt_id);
-  handle_rx_core(res, p, p, len, get_timestamp_rx_ref,
-                 (pkt_ts_handle_t)pkt_id);
+  handle_rx_core(res, p, p, len);
   efct_vi_rxpkt_release(&res->vi, pkt_id);
 }
 
