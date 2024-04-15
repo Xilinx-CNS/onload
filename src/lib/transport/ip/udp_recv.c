@@ -172,14 +172,12 @@ static void ci_udp_pkt_to_zc_msg(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   if( oo_offbuf_left(&frag->buf) == 0 && OO_PP_NOT_NULL(frag->frag_next) )
     frag = PKT_CHK_NNL(ni, frag->frag_next);
 
-  handle_frag->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
   do {
     zc_msg->iov[i].iov_len = CI_MIN(oo_offbuf_left(&frag->buf), 
                                     bytes_left);
     zc_msg->iov[i].iov_base = oo_offbuf_ptr(&frag->buf);
     zc_msg->iov[i].buf = zc_pktbuf_to_handle(handle_frag);
     zc_msg->iov[i].iov_flags = 0;
-    zc_msg->iov[i].rx_memreg_idx = PKT_ID2SET(frag->pp);
     bytes_left -= zc_msg->iov[i].iov_len;
     ++i;
     if( OO_PP_IS_NULL(frag->frag_next) || 
@@ -1032,7 +1030,6 @@ static int ci_udp_zc_recv_from_os(ci_netif* ni, ci_udp_state* us,
    * them from the zc_kernel_datagram list
    */
   first_pkt_p = us->zc_kernel_datagram;
-  PKT_CHK_NNL(ni, first_pkt_p)->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
   us->zc_kernel_datagram = pkt_p;
 #ifndef NDEBUG
   ci_assert_ge(us->zc_kernel_datagram_count, i);

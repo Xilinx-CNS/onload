@@ -55,41 +55,35 @@ void ci_tcp_tx_pkt_assert_valid(ci_netif* ni, ci_tcp_state* ts,
   verify(CI_TCP_HDR_OPT_LEN(tcp) == tcp_outgoing_opts_len(ts)
          || (tcp->tcp_flags & CI_TCP_FLAG_SYN));
 
-  if( pkt->flags & CI_PKT_FLAG_INDIRECT ) {
-    struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
-    struct ci_pkt_zc_payload* zcp;
-    int zclen = 0;
-
-    verify(pkt->n_buffers == 1);
-    OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-      zclen += zcp->len;
-      verify(zcp->len != 0);
-      verify(zcp->len <= 0x7fffffff);
-    }
-    verify(paylen == zclen + pkt->buf_len);
-    verify(pkt->pf.tcp_tx.sock_id == ts->s.b.bufid);
+  verify(pkt->n_buffers >= 1);
+  verify(pkt->n_buffers <= CI_IP_PKT_SEGMENTS_MAX);
+  next_pkt = pkt;
+  for( len = 0, i = 0; i < pkt->n_buffers; ++i ) {
+    verify(next_pkt->buf_len > 0);
+    len += next_pkt->buf_len;
+    if( i < pkt->n_buffers-1 )
+      next_pkt = PKT_CHK(ni, next_pkt->frag_next);
   }
-  else {
-    verify(pkt->n_buffers >= 1);
-    verify(pkt->n_buffers <= CI_IP_PKT_SEGMENTS_MAX);
-    next_pkt = pkt;
-    for( len = 0, i = 0; i < pkt->n_buffers; ++i ) {
-      verify(next_pkt->buf_len > 0);
-      len += next_pkt->buf_len;
-      if( i < pkt->n_buffers-1 )
-        next_pkt = PKT_CHK(ni, next_pkt->frag_next);
-    }
-    verify(len ==
-          oo_tx_pre_l3_len(pkt) + CI_IP4_IHL(oo_tx_ip_hdr(pkt))
-          + CI_TCP_HDR_LEN(tcp) + paylen);
-    verify(len == pkt->pay_len);
+  verify(len ==
+        oo_tx_pre_l3_len(pkt) + CI_IP4_IHL(oo_tx_ip_hdr(pkt))
+        + CI_TCP_HDR_LEN(tcp) + paylen);
+  verify(len == pkt->pay_len);
 
-    verify(oo_offbuf_ptr(&pkt->buf) ==
-          (char*) oo_tx_l3_hdr(pkt) + ts->outgoing_hdrs_len + paylen);
-    verify(oo_offbuf_end(&pkt->buf) ==
-          (char*) oo_tx_l3_hdr(pkt) + ts->outgoing_hdrs_len + ts->eff_mss);
-    verify(oo_offbuf_end(&pkt->buf) <= (char*) pkt + CI_CFG_PKT_BUF_SIZE);
-  }
+  verify(oo_offbuf_ptr(&pkt->buf) ==
+        (char*) oo_tx_l3_hdr(pkt) + ts->outgoing_hdrs_len + paylen);
+  verify(oo_offbuf_end(&pkt->buf) ==
+        (char*) oo_tx_l3_hdr(pkt) + ts->outgoing_hdrs_len + ts->eff_mss);
+  verify(oo_offbuf_end(&pkt->buf) <= (char*) pkt + CI_CFG_PKT_BUF_SIZE);
+  verify(len ==
+         oo_tx_pre_l3_len(pkt) + CI_IP4_IHL(oo_tx_ip_hdr(pkt))
+         + CI_TCP_HDR_LEN(tcp) + paylen);
+  verify(len == pkt->pay_len);
+
+  verify(oo_offbuf_ptr(&pkt->buf) ==
+         (char*) oo_tx_l3_hdr(pkt) + ts->outgoing_hdrs_len + paylen);
+  verify(oo_offbuf_end(&pkt->buf) ==
+         (char*) oo_tx_l3_hdr(pkt) + ts->outgoing_hdrs_len + ts->eff_mss);
+  verify(oo_offbuf_end(&pkt->buf) <= (char*) pkt + CI_CFG_PKT_BUF_SIZE);
 }
 
 

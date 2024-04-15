@@ -28,48 +28,6 @@ ci_inline void ci_netif_pkt_tx_assert_len(ci_netif* ni, ci_ip_pkt_fmt* pkt,
 }
 
 
-ci_inline int ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
-                                           ef_remote_iovec* iov, unsigned iovlen)
-{
-  int i, intf_i = pkt->intf_i;
-#if CI_CFG_TX_CRC_OFFLOAD
-  struct ci_pkt_zc_header* zch;
-  struct ci_pkt_zc_payload* zcp;
-#endif
-
-  ci_assert_flags(pkt->flags, CI_PKT_FLAG_INDIRECT);
-  ci_assert_lt((unsigned) intf_i, CI_CFG_MAX_INTERFACES);
-  ci_assert_ge(iovlen, pkt->n_buffers);
-
-  iov[0].iov_base = pkt_dma_addr(ni, pkt, intf_i) + pkt->pkt_start_off;
-  iov[0].iov_len = pkt->buf_len;
-  iov[0].addrspace = EF_ADDRSPACE_LOCAL;
-  iov[0].flags = 0;
-
-  i = 1;
-#if CI_CFG_TX_CRC_OFFLOAD
-  zch = oo_tx_zc_header(pkt);
-
-  ci_assert_equal(pkt->n_buffers, 1);
-  ci_assert_ge(iovlen, 1 + zch->segs);
-
-  OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-    if( zcp->is_remote ) {
-      iov[i].iov_base = zcp->remote.dma_addr[intf_i];
-      iov[i].addrspace = zcp->remote.addr_space;
-    } else {
-      iov[i].iov_base = pkt_dma_addr(ni, pkt, intf_i) +
-                                     (zcp->local - (char*)pkt->dma_start);
-      iov[i].addrspace = EF_ADDRSPACE_LOCAL;
-    }
-    iov[i].flags = 0;
-    iov[i].iov_len = zcp->len;
-    ++i;
-  }
-#endif
-  return i;
-}
-
 ci_inline int ci_netif_pkt_to_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                     ef_iovec* iov, unsigned iovlen)
 {
@@ -86,32 +44,6 @@ ci_inline int ci_netif_pkt_to_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
 
   iov[0].iov_base = pkt_dma_addr(ni, pkt, intf_i) + pkt->pkt_start_off;
   iov[0].iov_len = pkt->buf_len;
-
-  if(CI_UNLIKELY( pkt->flags & CI_PKT_FLAG_INDIRECT )) {
-    struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
-    struct ci_pkt_zc_payload* zcp;
-
-    ci_assert_equal(n, 1);
-    ci_assert_ge(iovlen, 1 + zch->segs);
-    i = 1;
-    OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-      if( zcp->is_remote ) {
-        if(CI_UNLIKELY( zcp->remote.addr_space != EF_ADDRSPACE_LOCAL )) {
-          LOG_E(log("%s: remote address spaces not supported on pre-EF100 hardware",
-                    __FUNCTION__));
-          return -1;
-        }
-
-        iov[i].iov_base = zcp->remote.dma_addr[intf_i];
-      }
-      else
-        iov[i].iov_base = pkt_dma_addr(ni, pkt, intf_i) +
-                          (zcp->local - (char*)pkt->dma_start);
-      iov[i].iov_len = zcp->len;
-      ++i;
-    }
-    return i;
-  }
 
   ci_netif_pkt_tx_assert_len(ni, pkt, n);
   if(CI_UNLIKELY( n > 1 )) {

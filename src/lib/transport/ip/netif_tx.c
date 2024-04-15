@@ -110,42 +110,27 @@ static void __ci_netif_dmaq_shove(ci_netif* ni, int intf_i, int is_fresh)
       int iov_len;
 
       calc_csum_if_needed(ni, vi, pkt);
-      if( CI_UNLIKELY(vi->nic_type.arch == EF_VI_ARCH_EF100 &&
-                      pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
-        ef_remote_iovec remote_iov[CI_IP_PKT_SEGMENTS_MAX];
-
-        iov_len = ci_netif_pkt_to_remote_iovec(ni, pkt, remote_iov,
-                                               sizeof(remote_iov) / sizeof(remote_iov[0]));
-        rc = ef_vi_transmitv_init_extra(vi, NULL, remote_iov, iov_len, OO_PKT_ID(pkt));
+      iov_len = ci_netif_pkt_to_iovec(ni, pkt, iov,
+                                      sizeof(iov) / sizeof(iov[0]));
+      if( CI_UNLIKELY(iov_len < 0) )
+        break;
+#if CI_CFG_CTPIO
+      if( ctpio && (iov_len < 1 || iov_len > CI_IP_PKT_SEGMENTS_MAX ||
+                    ! ci_netif_may_ctpio(ni, intf_i, pkt->pay_len)) )
+        ctpio = 0;
+      ctpio |= !! (ni->state->nic[pkt->intf_i].oo_vi_flags & OO_VI_FLAGS_TX_CTPIO_ONLY);
+      if( ctpio ) {
+        ci_assert(! posted_dma);
+        rc = tx_ctpio(ni, intf_i, vi, pkt, iov, iov_len);
+      }
+      else
+#endif
+      {
+        rc = ef_vi_transmitv_init(vi, iov, iov_len, OO_PKT_ID(pkt));
 #if CI_CFG_CTPIO
         if( rc >= 0 )
           posted_dma = 1;
 #endif
-      }
-      else {
-        iov_len = ci_netif_pkt_to_iovec(ni, pkt, iov,
-                                        sizeof(iov) / sizeof(iov[0]));
-        if( CI_UNLIKELY(iov_len < 0) )
-          break;
-#if CI_CFG_CTPIO
-        if( ctpio && (iov_len < 1 || iov_len > CI_IP_PKT_SEGMENTS_MAX ||
-                      ! ci_netif_may_ctpio(ni, intf_i, pkt->pay_len) ||
-                      pkt->flags & CI_PKT_FLAG_INDIRECT) )
-          ctpio = 0;
-        ctpio |= !! (ni->state->nic[pkt->intf_i].oo_vi_flags & OO_VI_FLAGS_TX_CTPIO_ONLY);
-        if( ctpio ) {
-          ci_assert(! posted_dma);
-          rc = tx_ctpio(ni, intf_i, vi, pkt, iov, iov_len);
-        }
-        else
-#endif
-        {
-          rc = ef_vi_transmitv_init(vi, iov, iov_len, OO_PKT_ID(pkt));
-#if CI_CFG_CTPIO
-          if( rc >= 0 )
-            posted_dma = 1;
-#endif
-        }
       }
       if( rc >= 0 ) {
         __oo_pktq_next(ni, dmaq, pkt, netif.tx.dmaq_next);
@@ -237,7 +222,7 @@ void __ci_netif_send(ci_netif* netif, ci_ip_pkt_fmt* pkt)
   dmaq = ci_netif_dmaq(netif, intf_i);
   vi = ci_netif_vi(netif, intf_i);
 
-  if( oo_pktq_is_empty(dmaq) && ! (pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
+  if( oo_pktq_is_empty(dmaq) ) {
 #if CI_CFG_PIO
     /* pio_thresh is set to zero if PIO disabled on this stack, so don't
      * need to check NI_OPTS().pio here

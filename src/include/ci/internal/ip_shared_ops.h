@@ -748,19 +748,6 @@ ci_inline void* oo_tx_ipx_data(int af, ci_ip_pkt_fmt* pkt)
   { (void) af; return oo_tx_ip_data(pkt); }
 #endif
 
-ci_inline struct ci_pkt_zc_header* oo_tx_zc_header(ci_ip_pkt_fmt* pkt)
-{
-  ci_assert_flags(pkt->flags, CI_PKT_FLAG_INDIRECT);
-  return (struct ci_pkt_zc_header*)oo_offbuf_end(&pkt->buf);
-}
-
-ci_inline int oo_tx_zc_left(ci_ip_pkt_fmt* pkt)
-{
-  struct ci_pkt_zc_header* zc = oo_tx_zc_header(pkt);
-  int used = CI_MEMBER_OFFSET(ci_ip_pkt_fmt, buf) + pkt->buf.end + zc->end;
-  return CI_CFG_PKT_BUF_SIZE - used;
-}
-
 
 /*********************************************************************
 **************** access to cached IP header fields *******************

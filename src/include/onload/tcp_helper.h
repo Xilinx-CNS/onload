@@ -143,28 +143,6 @@ typedef struct tcp_helper_reheat_state_s {
 } tcp_helper_reheat_state_t;
 
 
-/* Substructure of oo_iobufs_usermem which collects chunks of the same
- * compound_order. */
-struct oo_iobufs_usermem_group {
-  struct oo_buffer_pages* pages;
-  struct oo_iobufset* all[CI_CFG_MAX_HWPORTS];
-};
-
-
-/* Kernel data to track allocations initiated by onload_zc_register_buffers */
-struct oo_iobufs_usermem {
-  int n_groups;
-  struct oo_iobufs_usermem_group* groups;
-};
-
-
-/* Linked list of oo_iobufs_usermem instances */
-struct tcp_helper_usermem {
-  struct tcp_helper_usermem* next;
-  uint64_t id;    /* id we gave to userspace so they can free this */
-  struct oo_iobufs_usermem um;
-};
-
  /*--------------------------------------------------------------------
  *
  * tcp_helper_resource_t
@@ -378,11 +356,6 @@ typedef struct tcp_helper_resource_s {
    * of consumed ports is always per-stack. */
   struct efab_ephemeral_port_head* trs_ephem_table_consumed;
 #endif
-
-  /* Allocations performed by onload_zc_register_buffers */
-  struct mutex usermem_mutex;
-  uint64_t usermem_prev_id;
-  struct tcp_helper_usermem* usermem;
 
   struct oo_icmp_msg* icmp_msg;
   int icmp_msg_n;

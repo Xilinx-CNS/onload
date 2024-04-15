@@ -289,18 +289,6 @@ static int ci_tcp_fill_stolen_buffer(ci_netif* ni, ci_ip_pkt_fmt* pkt,
 }
 
 
-#ifndef __KERNEL__
-/* Returns the length of the TCP payload in the given packet. This does it in
- * the complicated way because indirect packets have a complex structure. */
-static int tcp_payload_len(ci_ip_pkt_fmt* pkt)
-{
-  int hdr_len = CI_TCP_PAYLOAD(TX_PKT_TCP(pkt)) - PKT_START(pkt);
-  ci_assert_ge(pkt->pay_len, hdr_len);
-  return pkt->pay_len - hdr_len;
-}
-#endif
-
-
 static
 void ci_tcp_tx_fill_sendq_tail(ci_netif* ni, ci_tcp_state* ts,
                                ci_iovec_ptr* piov,
@@ -318,48 +306,7 @@ void ci_tcp_tx_fill_sendq_tail(ci_netif* ni, ci_tcp_state* ts,
   if( ts->s.tx_errno == 0 &&
       (NI_OPTS(ni).tcp_combine_sends_mode == 0 ||
        pkt->flags & CI_PKT_FLAG_TX_MORE) ) {
-    if(CI_UNLIKELY( pkt->flags & CI_PKT_FLAG_INDIRECT )) {
-      /* Making this work in kernelspace is not particularly difficult, but
-       * so rarely used that it's not worth the effort. The only thing which
-       * is needed is a version of ci_copy_iovec which calls copy_from_user. */
-#ifndef __KERNEL__
-      /* Here we try to align ourselves back to a multiple of the MTU. We
-       * didn't do that when adding the zc payload(s) originally because we
-       * want to be able to give large TSOable blocks to the NIC, but now we
-       * appear to be going back to normal again so we want to realign (in
-       * such a way that after the NIC has done its TSO we're using full MTUs
-       * throughout) */
-      struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
-      int mss = tcp_eff_mss(ts);
-      int last_seg;
-      int space;
-      if(CI_LIKELY( zch->segs < CI_IP_PKT_SEGMENTS_MAX - 1 &&
-          (space = oo_tx_zc_left(pkt) -
-                   CI_MEMBER_OFFSET(struct ci_pkt_zc_payload, local)) > 0 &&
-          /* NB: annoyingly unavoidable division: */
-          (last_seg = tcp_payload_len(pkt) % mss) != 0 )) {
-        /* Missed optimisation: the last zc_payload could have already been
-         * a non-remote one so we could append there. Figuring that out,
-         * though, would require walking the existing list of payloads. It's
-         * better to be network-inefficient in an extremely rare case than to
-         * be CPU-inefficient always. */
-        struct ci_pkt_zc_payload* zcp = (struct ci_pkt_zc_payload*)
-                                        ((char*)zch + zch->end);
-        int n = ci_copy_iovec(zcp->local, CI_MIN(space, mss - last_seg), piov);
-        zcp->len = n;
-        zcp->is_remote = 0;
-        zch->end += CI_MEMBER_OFFSET(struct ci_pkt_zc_payload, local) +
-                    CI_ALIGN_FWD(n, CI_PKT_ZC_PAYLOAD_ALIGN);
-        ++zch->segs;
-        pkt->pay_len += n;
-        pkt->pf.tcp_tx.end_seq += n;
-        tcp_enq_nxt(ts) += n;
-        sinf->total_sent += n;
-        sinf->total_unsent -= n;
-      }
-#endif
-    }
-    else if( oo_offbuf_left(&pkt->buf) > 0 ) {
+    if( oo_offbuf_left(&pkt->buf) > 0 ) {
       n = ci_tcp_fill_stolen_buffer(ni, pkt, piov  CI_KERNEL_ARG(addr_spc));
       LOG_TV(ci_log("%s: "NT_FMT "sq=%d if=%d bytes=%d piov.left=%d "
                     "pkt.left=%d", __FUNCTION__, NT_PRI_ARGS(ni, ts),
@@ -2300,7 +2247,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
 
 
 #ifndef __KERNEL__
-
 /* 
  * TODO:
  *  - improve TCP send path (in general) to handle fragmented buffers, then:
@@ -2310,21 +2256,6 @@ int ci_tcp_sendmsg(ci_netif* ni, ci_tcp_state* ts,
  *     packet;
  */
 
-static inline bool ci_tcp_tx_has_room_for_zc(ci_netif* ni, ci_ip_pkt_fmt* pkt)
-{
-  if( pkt->flags & CI_PKT_FLAG_INDIRECT ) {
-    return oo_tx_zc_left(pkt) >= oo_tx_zc_payload_size(ni) &&
-           /* We need one additional segment for the header: */
-           oo_tx_zc_header(pkt)->segs < CI_IP_PKT_SEGMENTS_MAX - 1;
-  }
-  else {
-    return CI_PTR_ALIGN_FWD(oo_offbuf_end(&pkt->buf), CI_PKT_ZC_PAYLOAD_ALIGN)
-           + sizeof(struct ci_pkt_zc_header) + oo_tx_zc_payload_size(ni)
-           <= (char*)pkt + CI_CFG_PKT_BUF_SIZE;
-  }
-}
-
-
 int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
                    int flags)
 {
@@ -2332,11 +2263,7 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
   ci_ip_pkt_fmt* pkt;
   int j;
   unsigned eff_mss;
-  uint32_t tcp_pay_len = 0;
   int af = ipcache_af(&ts->s.pkt);
-#if CI_CFG_TIMESTAMPING
-  bool reusing_prev_pkt;
-#endif
 
   ci_assert(msg != NULL);
   ci_assert(ts);
@@ -2403,246 +2330,45 @@ int ci_tcp_zc_send(ci_netif* ni, ci_tcp_state* ts, struct onload_zc_mmsg* msg,
   
  send_q_not_full:
   pkt = NULL;
-#if CI_CFG_TIMESTAMPING
-  reusing_prev_pkt = false;
-#endif
   while( j < msg->msg.msghdr.msg_iovlen ) {
-    if( msg->msg.iov[j].buf == ONLOAD_ZC_HANDLE_NONZC ) {
+    pkt = zc_handle_to_pktbuf(msg->msg.iov[j].buf);
+
+    ci_assert_equal(pkt->stack_id, ni->state->stack_id);
+    ci_assert(msg->msg.iov[j].iov_base != NULL);
+    ci_assert_gt(msg->msg.iov[j].iov_len, 0);
+    ci_assert_le(msg->msg.iov[j].iov_len, eff_mss);
+    ci_assert_gt((char*)msg->msg.iov[j].iov_base,
+                 PKT_START(pkt) + ts->outgoing_hdrs_len);
+    ci_assert_lt((char*)msg->msg.iov[j].iov_base +
+                 msg->msg.iov[j].iov_len,
+                 ((char*)pkt) + CI_CFG_PKT_BUF_SIZE);
+
+    if( pkt->stack_id != ni->state->stack_id ||
+        msg->msg.iov[j].iov_len <= 0 ||
+        msg->msg.iov[j].iov_len > eff_mss ||
+        (char*)msg->msg.iov[j].iov_base <
+        PKT_START(pkt) + ts->outgoing_hdrs_len ||
+        (char*)msg->msg.iov[j].iov_base + msg->msg.iov[j].iov_len >
+        ((char*)pkt) + CI_CFG_PKT_BUF_SIZE )
       goto bad_buffer;
-    }
-    else if( zc_is_pktbuf(msg->msg.iov[j].buf) ) {
-      pkt = zc_handle_to_pktbuf(msg->msg.iov[j].buf);
 
-      ci_assert_equal(pkt->stack_id, ni->state->stack_id);
-      ci_assert(msg->msg.iov[j].iov_base != NULL);
-      ci_assert_gt(msg->msg.iov[j].iov_len, 0);
-      ci_assert_le(msg->msg.iov[j].iov_len, eff_mss);
-      ci_assert_gt((char*)msg->msg.iov[j].iov_base,
-                  PKT_START(pkt) + ts->outgoing_hdrs_len);
-      ci_assert_lt((char*)msg->msg.iov[j].iov_base +
-                  msg->msg.iov[j].iov_len,
-                  ((char*)pkt) + CI_CFG_PKT_BUF_SIZE);
+    pkt->pio_addr = -1;
+    oo_pkt_af_set(pkt, af);
+    __ci_tcp_tx_pkt_init(pkt, ((uint8_t*) msg->msg.iov[j].iov_base -
+                              (uint8_t*) oo_tx_l3_hdr(pkt)), eff_mss);
+    pkt->n_buffers = 1;
+    pkt->buf_len += msg->msg.iov[j].iov_len;
+    pkt->pay_len += msg->msg.iov[j].iov_len;
+    oo_offbuf_advance(&pkt->buf, msg->msg.iov[j].iov_len);
+    pkt->pf.tcp_tx.end_seq = msg->msg.iov[j].iov_len;
 
-      if( pkt->stack_id != ni->state->stack_id ||
-          msg->msg.iov[j].iov_len <= 0 ||
-          msg->msg.iov[j].iov_len > eff_mss ||
-          (char*)msg->msg.iov[j].iov_base <
-          PKT_START(pkt) + ts->outgoing_hdrs_len ||
-          (char*)msg->msg.iov[j].iov_base + msg->msg.iov[j].iov_len >
-          ((char*)pkt) + CI_CFG_PKT_BUF_SIZE )
-        goto bad_buffer;
-
-      pkt->pio_addr = -1;
-      oo_pkt_af_set(pkt, af);
-      __ci_tcp_tx_pkt_init(pkt, ((uint8_t*) msg->msg.iov[j].iov_base -
-                                (uint8_t*) oo_tx_l3_hdr(pkt)), eff_mss);
-      pkt->n_buffers = 1;
-      pkt->buf_len += msg->msg.iov[j].iov_len;
-      pkt->pay_len += msg->msg.iov[j].iov_len;
-      oo_offbuf_advance(&pkt->buf, msg->msg.iov[j].iov_len);
-      pkt->pf.tcp_tx.end_seq = msg->msg.iov[j].iov_len;
-      tcp_pay_len = msg->msg.iov[j].iov_len;
-
-      ci_assert_equal(TX_PKT_LEN(pkt), oo_offbuf_ptr(&pkt->buf) - PKT_START(pkt));
-      CI_USER_PTR_SET(pkt->pf.tcp_tx.next, sinf.fill_list);
-      sinf.fill_list = pkt;
-      --sinf.sendq_credit;
-      sinf.fill_list_bytes += msg->msg.iov[j].iov_len;
-    }
-    else {
-#if ! CI_CFG_TIMESTAMPING
-      /* We use all the TX timestamping delivery machinery to handle
-       * completions, therefore this feature is removed when timestamps are
-       * compiled out */
-      goto bad_buffer;
-#else
-      struct ci_zc_usermem* um = zc_handle_to_usermem(msg->msg.iov[j].buf);
-      struct ci_pkt_zc_header* zch;
-      struct ci_pkt_zc_payload* zcp = NULL;
-      int i;
-      uint64_t iov_base, iov_len;
-
-      if( OO_SP_NOT_NULL(ts->local_peer) ) {
-        /* Sending to loopback gets really complicated. We'd need to
-         * interleave pktbuf-based zc with this kind of zc which means we
-         * can't just dispatch to ci_tcp_sendmsg(). If we tried to reimplement
-         * sendmsg here then that's quite a lot of code, dealing with the
-         * chunking-up and balancing between sendq and recvq.
-         * One could try to deal with it later on, when the packets are
-         * actually being dispatched. That gets to be a lot of code too
-         * because of the need for it to work in the kernel as well (i.e. be
-         * able to retrieve packet payloads retroactively from the right
-         * userspace address space).
-         * And having done all that, it still wouldn't work for addr_space!=0.
-         * We can simply declare that this feature is incompatible with
-         * loopback acceleration.
-         */
-        goto bad_buffer;
-      }
-
-      if( ! sinf.stack_locked ) {
-        /* Reading from ci_zc_usermem is protected by the stack lock. There's
-         * no good behaviour we can expose if we can't take the lock (EAGAIN
-         * is not typically returned completely randomly), so we take the lock
-         * fully here rather than using trylock. This function is not compiled
-         * in to the kernel so that's fine. */
-        sinf.stack_locked = 1;
-        ci_netif_lock(ni);
-      }
-
-      ci_assert(msg->msg.iov[j].iov_base != NULL);
-      ci_assert_ge(msg->msg.iov[j].iov_ptr, um->base);
-      ci_assert_gt(msg->msg.iov[j].iov_len, 0);
-      ci_assert_le(msg->msg.iov[j].iov_len, um->size);
-      ci_assert_le(msg->msg.iov[j].iov_ptr + msg->msg.iov[j].iov_len,
-                   um->base + um->size);
-
-      if( !pkt && ci_ip_queue_not_empty(&ts->send) ) {
-        ci_ip_pkt_fmt *tail_pkt = PKT_CHK(ni, ts->send.tail);
-        if( NI_OPTS(ni).tcp_combine_sends_mode == 0 ||
-            tail_pkt->flags & CI_PKT_FLAG_TX_MORE ) {
-          pkt = tail_pkt;
-          reusing_prev_pkt = true;
-          tcp_pay_len = PKT_TCP_TX_SEQ_SPACE(pkt);
-        }
-      }
-
-      /* Chop up the user's buffer in to contiguous DMA regions */
-      iov_base = (uintptr_t)msg->msg.iov[j].iov_base;
-      iov_len = msg->msg.iov[j].iov_len;
-      while( iov_len ) {
-        const uint64_t NIC_PAGE_MASK = ~(uint64_t)(EF_VI_NIC_PAGE_SIZE - 1);
-        /* Max size is bounded by ci_ip_pkt_fmt::pay_len, minus slack to make
-         * the boundary case in the loop below easier */
-        const uint32_t MAX_CONTIG_LEN = INT_MAX - EF_VI_NIC_PAGE_SIZE;
-        uint32_t contig_len, room_len;
-
-        /* Up to the end of the current page is guaranteed to be contiguous */
-        contig_len = ((iov_base + EF_VI_NIC_PAGE_SIZE) & NIC_PAGE_MASK) -
-                     iov_base;
-        if( NI_OPTS(ni).packet_buffer_mode == CITP_PKTBUF_MODE_PHYS ) {
-          /* Keep going until we find any noncontiguity. It'll be common that
-           * there isn't any, so this optimisation is worth it.
-           * In buffertable mode we always split at NIC page boundaries. This
-           * is because ef_vi_transmitv_init() is going to do the same thing,
-           * so it's a good idea to ensure that we don't try to enqueue such a
-           * large single block that it overflows the whole txq on its own. */
-          while( contig_len < CI_MIN(iov_len, MAX_CONTIG_LEN) ) {
-            uint64_t ix = (iov_base + contig_len - (uintptr_t)um->base) >>
-                          EF_VI_NIC_PAGE_SHIFT;
-            uint64_t size = um->size >> EF_VI_NIC_PAGE_SHIFT;
-            bool noncontig = false;
-            OO_STACK_FOR_EACH_INTF_I(ni, i) {
-              if( um->hw_addrs[i * size + ix] !=
-                  um->hw_addrs[i * size + ix - 1] + EF_VI_NIC_PAGE_SIZE ) {
-                noncontig = true;
-                break;
-              }
-            }
-            if (noncontig)
-              break;
-            contig_len += EF_VI_NIC_PAGE_SIZE;
-          }
-        }
-        if( contig_len > iov_len )
-          contig_len = iov_len;
-
-        do {
-          /* We could arguably make this dependent on
-           * NI_OPTS().tcp_combine_sends_mode But for now assume that
-           * a single call is a single message and can be combined
-           */
-          if( pkt == NULL || ! ci_tcp_tx_has_room_for_zc(ni, pkt) ||
-              tcp_pay_len >= eff_mss ) {
-            tcp_pay_len = 0;
-            reusing_prev_pkt = false;
-            /* No previous packet with space: alloc and init a new one */
-            pkt = ci_netif_pkt_tx_tcp_alloc(ni, ts);
-            if( ! pkt ) {
-              /* Since we're about to give up, ensure that the API remains
-               * consistent about delivering completion events */
-              if( zcp )
-                zcp->use_remote_cookie = 1;
-              goto bad_buffer;
-            }
-            room_len = CI_MIN(eff_mss, contig_len);
-            ++ni->state->n_async_pkts;
-            pkt->flags |= CI_PKT_FLAG_INDIRECT;
-            pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
-            oo_pkt_af_set(pkt, af);
-            oo_tx_pkt_layout_init(pkt);
-            __ci_tcp_tx_pkt_init(pkt, ts->outgoing_hdrs_len, eff_mss);
-            ci_tcp_tx_pkt_set_zc_header_pos(ts, pkt);
-            pkt->pay_len = oo_tx_ether_hdr_size(pkt) + ts->outgoing_hdrs_len;
-            zch = oo_tx_zc_header(pkt);
-            zch->segs = 0;
-            zch->end = sizeof(*zch);
-   
-            CI_USER_PTR_SET(pkt->pf.tcp_tx.next, sinf.fill_list);
-            sinf.fill_list = pkt;
-            --sinf.sendq_credit;
-          }
-          else {
-            room_len = CI_MIN(eff_mss - tcp_pay_len, contig_len);
-   
-            if( ! (pkt->flags & CI_PKT_FLAG_INDIRECT) ) {
-              /* ci_tcp_tx_has_room_for_zc() has already decided that we can do
-               * this */
-              pkt->flags |= CI_PKT_FLAG_INDIRECT;
-              pkt->pf.tcp_tx.sock_id = ts->s.b.bufid;
-              oo_offbuf_set_end(&pkt->buf, CI_PTR_ALIGN_FWD(
-                           CI_MIN(oo_offbuf_end(&pkt->buf),
-                                  oo_offbuf_ptr(&pkt->buf) + CI_TCP_MAX_OPTS_LEN),
-                           CI_PKT_ZC_PAYLOAD_ALIGN));
-              zch = oo_tx_zc_header(pkt);
-              zch->segs = 0;
-              zch->end = sizeof(*zch);
-            }
-          }
-          zch = oo_tx_zc_header(pkt);
-          zcp = (struct ci_pkt_zc_payload*)((char*)zch + zch->end);
-          zch->end += oo_tx_zc_payload_size(ni);
-          ++zch->segs;
-   
-          pkt->pf.tcp_tx.end_seq += room_len;
-          tcp_pay_len += room_len;
-          pkt->pay_len += room_len;
-          zcp->is_remote = 1;
-          zcp->use_remote_cookie = iov_len == room_len;
-          zcp->len = room_len;
-          zcp->remote.app_cookie = (uintptr_t)msg->msg.iov[j].app_cookie;
-          zcp->remote.addr_space = um->addr_space;
-          OO_STACK_FOR_EACH_INTF_I(ni, i)
-            zcp->remote.dma_addr[i] = zc_usermem_dma_addr(um, iov_base, i);
-   
-          ASSERT_VALID_PKT(ni, pkt);
-   
-          iov_base += room_len;
-          iov_len -= room_len;
-   
-          if( reusing_prev_pkt ) {
-            sinf.total_sent += room_len;
-            tcp_enq_nxt(ts) += room_len;
-          }
-          else
-            sinf.fill_list_bytes += room_len;
-   
-          contig_len -= room_len;
-
-          if( contig_len > 0 )
-            pkt = NULL;
-        } while( contig_len > 0 );
-      }
-#endif
-    }
-
+    ci_assert_equal(TX_PKT_LEN(pkt), oo_offbuf_ptr(&pkt->buf) - PKT_START(pkt));
+    CI_USER_PTR_SET(pkt->pf.tcp_tx.next, sinf.fill_list);
+    sinf.fill_list = pkt;
+    --sinf.sendq_credit;
+    sinf.fill_list_bytes += msg->msg.iov[j].iov_len;
     ++sinf.n_filled;
     ++j;
-    /* Note that usermem packets consume much less sendq than you might
-     * expect. sendq limiting is intended to protect the stack's memory
-     * against overconsumption by the user, but since this memory isn't owned
-     * by the stack then it doesn't need protection (except for the single
-     * packet which is used to store the indirection). */
     if( sinf.sendq_credit <= 0 )
       break;
   }

@@ -1259,19 +1259,6 @@ static void ci_tcp_rx_sack_process(ci_netif* netif, ci_tcp_state* ts,
 }
 
 
-#if CI_CFG_TIMESTAMPING
-static bool ci_tcp_zc_has_cookies(ci_netif* ni, ci_ip_pkt_fmt* pkt)
-{
-  struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
-  struct ci_pkt_zc_payload* zcp;
-  OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp)
-    if( zcp->is_remote && zcp->use_remote_cookie )
-      return true;
-  return false;
-}
-#endif
-
-
 static void ci_tcp_rx_free_acked_bufs(ci_netif* netif, ci_tcp_state* ts,
                                       ciip_tcp_rx_pkt* rxp)
 {
@@ -1321,10 +1308,8 @@ static void ci_tcp_rx_free_acked_bufs(ci_netif* netif, ci_tcp_state* ts,
     ci_assert(p->refcount > 0);
 
 #if CI_CFG_TIMESTAMPING
-    if( (p->flags & CI_PKT_FLAG_TX_TIMESTAMPED &&
-         onload_timestamping_want_tx_nic(ts->s.timestamping_flags)) ||
-        (p->flags & CI_PKT_FLAG_INDIRECT &&
-         ci_tcp_zc_has_cookies(netif, p)) ) {
+    if( p->flags & CI_PKT_FLAG_TX_TIMESTAMPED &&
+        onload_timestamping_want_tx_nic(ts->s.timestamping_flags) ) {
       ci_udp_recv_q_put_pending(netif, &ts->timestamp_q, p);
       if( OO_PP_IS_NULL(ts_q_pending) ) {
         if( p->flags & CI_PKT_FLAG_TX_PENDING)

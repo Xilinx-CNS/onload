@@ -318,24 +318,9 @@ struct ci_ip_pkt_fmt_s {
   /* Copied from ni->state->stack_id as check for tmpl/zc sends. */
   ci_uint32             stack_id;
 
-  /* user_refcount is the live field when a packet is owned by the zero-copy
-   * extension API; a packet may be owned exclusively by the zc extension API
-   * user or dual-owned by the user and by the socket's recvq. At all other
-   * times pio_* are the live fields (although they're only used on tx,
-   * they're initialized always). */
-  union {
-    struct {
-      /* PIO region associated with this packet. */
-      ci_int16          pio_addr;
-      ci_int16          pio_order;
-    };
-    /* Owned by the zero-copy extension API. See onload_zc_buffer_incref. Note
-     * that this value stores one less than the refcount the user sees, i.e.
-     * 0 means there's one reference left. This makes the refcount management
-     * code a tiny bit more efficient. */
-    ci_int32           user_refcount;
-#define CI_ZC_USER_REFCOUNT_ONE   0
-  };
+  /* PIO region associated with this packet. */
+  ci_int16              pio_addr;
+  ci_int16              pio_order;
 
   ci_int32              refcount;
 
@@ -375,15 +360,11 @@ struct ci_ip_pkt_fmt_s {
    *  past the extract pointer).  Care needed as they are not atomic.
    */
 #define CI_PKT_FLAG_TX_PENDING     0x0001  /* pkt is transmitting        */
-
 /* Payload is elsewhere
  * Used on rx packets for multicast, when the same payload needs to be on
  * multiple sockets' rx queues. One socket has the real data and all the
  * others have indirect packets where frag_next points to the original.
- * Used on tx packets from onload_zc_send() where the payload is in
- * onload_zc_register_buffers() memory. The memory after the normal payload
- * is a struct ci_pkt_zc_header, not the actual data (use
- * oo_tx_zc_header()). */
+ */
 #define CI_PKT_FLAG_INDIRECT       0x0002  /* payload is elsewhere       */
 #define CI_PKT_FLAG_RTQ_RETRANS    0x0004  /* pkt has been retransmitted */
 #define CI_PKT_FLAG_RTQ_SACKED     0x0008  /* pkt has been SACKed        */
@@ -408,7 +389,7 @@ struct ci_ip_pkt_fmt_s {
 
 #define CI_PKT_FLAG_TX_MASK_ALLOWED                                     \
     (CI_PKT_FLAG_TX_MORE | CI_PKT_FLAG_TX_PSH | CI_PKT_FLAG_NONB_POOL | \
-     CI_PKT_FLAG_TX_PSH_ON_ACK | CI_PKT_FLAG_IS_IP6 | CI_PKT_FLAG_INDIRECT)
+     CI_PKT_FLAG_TX_PSH_ON_ACK | CI_PKT_FLAG_IS_IP6)
 
   ci_uint16             flags;
 
@@ -475,51 +456,6 @@ struct ci_ip_pkt_fmt_s {
 };
 
 CI_BUILD_ASSERT(offsetof(struct ci_ip_pkt_fmt_s, next) == CI_CACHE_LINE_SIZE);
-
-#define CI_PKT_ZC_PAYLOAD_ALIGN    8
-struct ci_pkt_zc_payload {
-  ci_uint32 len;
-  ci_uint8 is_remote;
-  ci_uint8 use_remote_cookie;  /* Send a completion using app_cookie */
-                               /* This is here rather than in the union solely
-                                * for space efficiency/padding reasons */
-  union {
-    struct {
-      ci_uint64 app_cookie CI_ALIGN(8);  /* From onload_zc_iovec::app_cookie */
-      ef_addrspace addr_space CI_ALIGN(8); /* Address space of this data segment */
-      CI_DECLARE_FLEX_ARRAY(ef_addr, dma_addr) CI_ALIGN(8); /* Length is oo_stack_intf_max() */
-    } remote;
-    union {
-      char padding;
-       CI_DECLARE_FLEX_ARRAY(char, local);
-    };
-  };
-};
-
-
-/* Zero-copy tx packets (CI_PKT_FLAG_INDIRECT) look like:
- *    ci_ip_pkt_fmt
- *    ...normal eth/ip/tcp headers...
- *    possible normal payload     /___ p->buf.off
- *    possible free space         \     /___ p->buf.end
- *    ci_pkt_zc_header                  \
- *    ci_pkt_zc_payload
- *    ci_pkt_zc_payload
- *    ci_pkt_zc_payload            /___ zch + zch->end
- *    free space                   \
- *
- * A single ci_pkt_zc_payload element may be either 'local' or 'remote'. A
- * local payload is just normal in-line bytes, a feature which exists so we
- * can intersperse remote payloads without wasting packet buffers. A 'remote'
- * payload is a pointer to memory owned by the user.
- */
-struct ci_pkt_zc_header {
-  ci_uint16 end;         /* Offset from start of this struct to the first
-                          * unused byte of the ci_ip_pkt_fmt */
-  ci_uint8 segs;         /* Number of zc_payload structs following */
-  CI_DECLARE_FLEX_ARRAY(struct ci_pkt_zc_payload, data);
-};
-
 
 /*!
 ** ci_ip_pkt_queue

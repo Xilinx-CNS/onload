@@ -214,13 +214,6 @@ typedef struct {
 } oo_tcp_accept_sock_attach_t;
 
 typedef struct {
-  ci_uint64 base_ptr;
-  ci_uint64 num_pages;
-  ci_uint64 hw_addrs_ptr;
-  ci_uint64 id;
-} oo_zc_register_buffers_t;
-
-typedef struct {
   ci_fixed_descriptor_t rfd, wfd;   /* OUT for Unix */
   oo_sp                 ep_id;
   ci_int32              flags;

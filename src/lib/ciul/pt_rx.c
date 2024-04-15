@@ -5,19 +5,6 @@
 #include "ef_vi_internal.h"
 
 
-/* Helper definitions to work with the prefix of received packet */
-#define EF_VI_PREFIX_OFFSET_DWORDS(_field) (CI_LOW_BIT(_field) / 32)
-#define EF_VI_PREFIX_OFFSET_BITS(_field) (CI_LOW_BIT(_field) % 32)
-#define EF_VI_PREFIX_DWORD(_prefix, _field) \
-  le32_to_cpu(*(uint32_t *)((const uint32_t*) _prefix + \
-                            EF_VI_PREFIX_OFFSET_DWORDS(_field)))
-#define EF_VI_PREFIX_FIELD(_prefix, _field) \
-  ((EF_VI_PREFIX_DWORD(_prefix, _field) >> EF_VI_PREFIX_OFFSET_BITS(_field)) & \
-   CI_MASK32(CI_WIDTH(_field)))
-#define EF_VI_PREFIX_SUBFIELD(_val, _subfield) \
-  ((_val >> CI_LOW_BIT(_subfield)) & CI_MASK32(CI_WIDTH(_subfield)))
-
-
 int ef_vi_receive_post(ef_vi* vi, ef_addr addr, ef_request_id dma_id)
 {
   int rc = ef_vi_receive_init(vi, addr, dma_id);

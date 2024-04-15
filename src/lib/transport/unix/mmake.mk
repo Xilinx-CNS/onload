@@ -24,7 +24,6 @@ LIB_SRCS	:=			\
 		sockcall_intercept.c	\
 		onload_ext_intercept.c	\
 		zc_intercept.c          \
-		zc_hlrx.c          \
 		tmpl_intercept.c	\
 		stackname.c		\
 		stackopt.c		\

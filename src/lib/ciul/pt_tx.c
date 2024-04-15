@@ -98,4 +98,10 @@ unsigned ef_vi_transmit_alt_num_ids(ef_vi* vi)
 }
 
 
+int ef_vi_transmitv_init_extra(struct ef_vi* vi, const struct ef_vi_tx_extra* x,
+                               const ef_remote_iovec* r, int iov_len,
+                               ef_request_id id)
+{
+  return -EINVAL;
+}
 /*! \cidoxg_end */

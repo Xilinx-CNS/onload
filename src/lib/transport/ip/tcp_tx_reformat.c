@@ -80,125 +80,6 @@ static int ci_tcp_tx_merge_segment(ci_netif* ni, ci_ip_pkt_fmt* dest_pkt,
   return n;
 }
 
-
-/* "Copies" payload data from src_pkt to dest_pkt, where both are
- * CI_PKT_FLAG_INDIRECT. This is the same operation as ci_tcp_tx_merge_segment
- * but for indirect packets. See also the documentation of ci_tcp_tx_split:
- * this function is the guts of the implementation of that for zc/indirect
- * packets.
- * On input src_pkt is a single mega-packet and dest_pkt is freshly-allocated
- * and basically empty. On output, src_pkt is modified to have payload length
- * new_paylen (which is typically the TCP MSS) and dest_pkt is given all the
- * payload left over which didn't fit. If dest_pkt is still large then it's
- * very likely that somebody's going to call us again in the future.
- * See also the diagram above the definition of struct ci_pkt_zc_header, which
- * shows what an indirect packet looks like. */
-static void ci_tcp_tx_merge_indirect(ci_netif* __restrict__ ni,
-                                     ci_tcp_state* __restrict__ ts,
-                                     ci_ip_pkt_fmt* dest_pkt,
-                                     ci_ip_pkt_fmt* src_pkt, int new_paylen)
-{
-  struct ci_pkt_zc_header* __restrict__ src_zch = oo_tx_zc_header(src_pkt);
-  struct ci_pkt_zc_header* __restrict__ dest_zch;
-  struct ci_pkt_zc_payload *zcp;
-  int total_paylen;   /* The original number of bytes of payload in src_pkt */
-  char* src_payload = CI_TCP_PAYLOAD(TX_PKT_TCP(src_pkt));
-
-  ci_assert_nequal(dest_pkt, src_pkt);
-  ci_assert_flags(src_pkt->flags, CI_PKT_FLAG_INDIRECT);
-  ci_assert_flags(dest_pkt->flags, CI_PKT_FLAG_INDIRECT);
-  total_paylen = oo_offbuf_ptr(&src_pkt->buf) - src_payload;
-  if( total_paylen >= new_paylen ) {
-    /* Split point is in the pre-zc portion: turn src_pkt into a non-indirect
-     * packet and dump all zc into dest_pkt */
-    int copy_n = total_paylen - new_paylen;
-    OO_TX_FOR_EACH_ZC_PAYLOAD(ni, src_zch, zcp)
-      total_paylen += zcp->len;
-
-    src_pkt->flags &=~ CI_PKT_FLAG_INDIRECT;
-    oo_offbuf_set_start(&src_pkt->buf, src_payload + new_paylen);
-    ci_tcp_tx_pkt_set_end(ts, src_pkt);
-
-    memcpy(oo_offbuf_ptr(&dest_pkt->buf), src_payload + new_paylen, copy_n);
-    oo_offbuf_advance(&dest_pkt->buf, copy_n);
-    src_pkt->buf_len -= copy_n;
-    dest_pkt->buf_len += copy_n;
-    ci_tcp_tx_pkt_set_zc_header_pos(ts, dest_pkt);
-    dest_zch = oo_tx_zc_header(dest_pkt);
-    memcpy(dest_zch, src_zch, src_zch->end);
-  }
-  else {
-    struct ci_pkt_zc_payload *split_zcp = NULL;  /*< zcp in src_pkt which is
-                         * the one containing the new_paylen chop point */
-    void* new_src_end;  /*< where we're going to terminate the whole zc
-                         * payloads array in src_pkt after we've split */
-    void* copy_from;    /*< first zcp in src_pkt which is going to get copied
-                         * into dest_pkt */
-    int split_len = 0;  /*< bytes of payload in src_pkt up to the end of
-                         * split_zcp, used for computing how to chop that
-                         * particular zcp */
-    int src_segs = 0;   /*< number of zcp items prior to split_zcp */
-    int i = 0;
-    int copy_n;
-
-    OO_TX_FOR_EACH_ZC_PAYLOAD(ni, src_zch, zcp) {
-      total_paylen += zcp->len;
-      if( total_paylen >= new_paylen && ! split_zcp ) {
-        split_zcp = zcp;
-        split_len = total_paylen;
-        src_segs = i;
-      }
-      ++i;
-    }
-    ci_assert_nequal(split_zcp, NULL);
-
-    dest_zch = oo_tx_zc_header(dest_pkt);
-    dest_zch->end = sizeof(*dest_zch);
-    copy_from = oo_tx_zc_payload_next(ni, split_zcp);
-    if( split_len == new_paylen ) {
-      new_src_end = copy_from;
-      dest_zch->segs = src_zch->segs - src_segs - 1;
-      src_zch->segs = src_segs + 1;
-    }
-    else {
-      uint32_t new_len;
-
-      zcp = &dest_zch->data[0];
-      zcp->is_remote = split_zcp->is_remote;
-      new_len = split_zcp->len - (split_len - new_paylen);
-      zcp->len = split_len - new_paylen;
-      if( split_zcp->is_remote ) {
-        zcp->use_remote_cookie = split_zcp->use_remote_cookie;
-        split_zcp->use_remote_cookie = 0;
-        zcp->remote.app_cookie = split_zcp->remote.app_cookie;
-        zcp->remote.addr_space = split_zcp->remote.addr_space;
-        for( i = 0; i < oo_stack_intf_max(ni); ++i )
-          zcp->remote.dma_addr[i] = split_zcp->remote.dma_addr[i] + new_len;
-        dest_zch->end += oo_tx_zc_payload_size(ni);
-        split_zcp->len = new_len;
-      }
-      else {
-        memcpy(zcp->local,
-              split_zcp->local + new_len,
-              zcp->len);
-        dest_zch->end += CI_MEMBER_OFFSET(struct ci_pkt_zc_payload, local) +
-                        CI_ALIGN_FWD(zcp->len, CI_PKT_ZC_PAYLOAD_ALIGN);
-        split_zcp->len = new_len;
-      }
-      new_src_end = oo_tx_zc_payload_next(ni, split_zcp);
-      dest_zch->segs = src_zch->segs - src_segs;
-      src_zch->segs = src_segs + 1;
-    }
-    copy_n = (char*)src_zch + src_zch->end - (char*)copy_from;
-    memcpy((char*)dest_zch + dest_zch->end, copy_from, copy_n);
-    dest_zch->end += copy_n;
-    src_zch->end = (char*)new_src_end - (char*)src_zch;
-  }
-  dest_pkt->pay_len += total_paylen - new_paylen;
-  dest_pkt->pf.tcp_tx.end_seq += total_paylen - new_paylen;
-}
-
-
 /* Allocate a packet, copy headers, correct flags and seq nums */
 static ci_ip_pkt_fmt* ci_tcp_tx_allocate_pkt(ci_netif* ni, ci_tcp_state* ts,
 					     ci_ip_pkt_queue* qu, ci_ip_pkt_fmt* pkt,
@@ -290,41 +171,34 @@ extern int ci_tcp_tx_split(ci_netif* ni, ci_tcp_state* ts, ci_ip_pkt_queue* qu,
   next_tcp = TX_PKT_IPX_TCP(af, next);
 
   n = new_paylen + hdrlen + oo_tx_pre_l3_len(pkt);
+  /* Assume that we have all we need in the first segment */
+  ci_assert_ge(pkt->buf_len, n);
   ci_assert_equal(pkt->n_buffers, 1);
-  if( pkt->flags & CI_PKT_FLAG_INDIRECT ) {
-    ci_tcp_tx_pkt_set_zc_header_pos(ts, next);
-    ci_tcp_tx_merge_indirect(ni, ts, next, pkt, new_paylen);
-    pkt->pay_len = n;
+  pkt->intf_i = 0;
+  ci_netif_pkt_to_iovec(ni, pkt, iov, sizeof(iov) / sizeof(iov[0]));
+  ef_iovec_ptr_init_nz(&segs, iov, pkt->n_buffers);
+  ef_iovec_ptr_advance(&segs, n);
+  old_last_seg_size = pkt->buf_len;
+  pkt->buf_len = n;
+  pkt->pay_len -= (old_last_seg_size - n);
+
+  while( ! ef_iovec_ptr_is_empty_proper(&segs) ) {
+#ifndef NDEBUG
+    int moved = ci_tcp_tx_merge_segment(ni, next, pkt, &segs.io, 1);
+    ci_assert_nequal(moved, 0);
+#else
+    ci_tcp_tx_merge_segment(ni, next, pkt, &segs.io, 1);
+#endif
   }
-  else {
-    /* Assume that we have all we need in the first segment */
-    ci_assert_ge(pkt->buf_len, n);
-    pkt->intf_i = 0;
-    ci_netif_pkt_to_iovec(ni, pkt, iov, sizeof(iov) / sizeof(iov[0]));
-    ef_iovec_ptr_init_nz(&segs, iov, pkt->n_buffers);
-    ef_iovec_ptr_advance(&segs, n);
-    old_last_seg_size = pkt->buf_len;
-    pkt->buf_len = n;
-    pkt->pay_len -= (old_last_seg_size - n);
 
-    while( ! ef_iovec_ptr_is_empty_proper(&segs) ) {
-  #ifndef NDEBUG
-      int moved = ci_tcp_tx_merge_segment(ni, next, pkt, &segs.io, 1);
-      ci_assert_nequal(moved, 0);
-  #else
-      ci_tcp_tx_merge_segment(ni, next, pkt, &segs.io, 1);
-  #endif
-    }
+  /* There should still be just one segment in pkt */
+  ci_assert_equal(pkt->n_buffers, 1);
 
-    /* There should still be just one segment in pkt */
-    ci_assert_equal(pkt->n_buffers, 1);
-    ci_tcp_tx_pkt_set_end(ts, next);
-
-    /* Reposition the "end" of the packet buffer to where it should be. */
-    oo_offbuf_set_start(&(pkt->buf),
-                        (char*) oo_tx_l3_hdr(pkt) + ts->outgoing_hdrs_len
-                        + new_paylen);
-  }
+  /* Reposition the "end" of the packet buffer to where it should be. */
+  ci_tcp_tx_pkt_set_end(ts, next);
+  oo_offbuf_set_start(&(pkt->buf),
+                      (char*) oo_tx_l3_hdr(pkt) + ts->outgoing_hdrs_len
+                      + new_paylen);
 
   ci_tcp_tx_add_to_queue(qu, pkt, next);
   if( is_sendq )
@@ -413,9 +287,8 @@ int ci_tcp_tx_coalesce(ci_netif* ni, ci_tcp_state* ts,
   ef_iovec one_segment; /* save stack space: only one seg is pre-alloced */
   int af = ipcache_af(&ts->s.pkt);
 
-  /* Don't touch packets that are transmitting or indirect. */
-  if( (pkt->flags | next->flags) &
-      (CI_PKT_FLAG_TX_PENDING | CI_PKT_FLAG_INDIRECT) )
+  /* Don't touch packets that are transmitting. */
+  if( (pkt->flags | next->flags) & CI_PKT_FLAG_TX_PENDING )
     return -1;
 
   ci_tcp_tx_pkt_set_end(ts, pkt);
@@ -500,6 +373,7 @@ void ci_tcp_tx_insert_option_space(ci_netif* ni, ci_tcp_state* ts,
   ef_iovec_ptr segs;
 
   ci_assert_gt(hdrlen, 0);
+  ci_assert_equal(pkt->n_buffers, 1);
 
   LOG_U(ci_log(LNT_FMT
                "packet %d (%x-%x) - inserting %d bytes for extra options",
@@ -528,45 +402,31 @@ void ci_tcp_tx_insert_option_space(ci_netif* ni, ci_tcp_state* ts,
   new_start = old_start + extra_opts;
   memmove(new_start, old_start, old_end - old_start);
 
-  if( pkt->flags & CI_PKT_FLAG_INDIRECT ) {
-    /* We always construct indirect packets with sufficient additional space
-     * for the maximum number of TCP options, so there's never a need to do a
-     * complicated multi-packet reflow here */
-    struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
-    struct ci_pkt_zc_payload* zcp;
+  ci_assert_equal(oo_offbuf_ptr(&pkt->buf) - PKT_START(pkt), TX_PKT_LEN(pkt));
 
-    ci_assert_le(pkt->buf.off + extra_opts, pkt->buf.end);
-    pkt->buf_len = pkt->pay_len = hdrlen + extra_opts;
-    OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp)
-      pkt->pay_len += zcp->len;
-  }
-  else {
-    ci_assert_equal(oo_offbuf_ptr(&pkt->buf) - PKT_START(pkt), TX_PKT_LEN(pkt));
+  pkt->intf_i = 0;
+  ci_netif_pkt_to_iovec(ni, pkt, &one_segment, 1);
+  ef_iovec_ptr_init_nz(&segs, &one_segment, pkt->n_buffers);
 
-    pkt->intf_i = 0;
-    ci_netif_pkt_to_iovec(ni, pkt, &one_segment, 1);
-    ef_iovec_ptr_init_nz(&segs, &one_segment, pkt->n_buffers);
+  /* Skip over the old header in the old segment data. */
+  ef_iovec_ptr_advance(&segs, hdrlen);
 
-    /* Skip over the old header in the old segment data. */
-    ef_iovec_ptr_advance(&segs, hdrlen);
+  /* Reset the packet to include only the old header plus the extra space. */
+  pkt->buf_len = pkt->pay_len = hdrlen + extra_opts;
+  pkt->pf.tcp_tx.end_seq = pkt->pf.tcp_tx.start_seq;
 
-    /* Reset the packet to include only the old header plus the extra space. */
-    pkt->buf_len = pkt->pay_len = hdrlen + extra_opts;
-    pkt->pf.tcp_tx.end_seq = pkt->pf.tcp_tx.start_seq;
+  /* We need to initialise an over large buffer here, because the size of
+  ** the payload is permitted to exceed [eff_mss].
+  */
+  oo_offbuf_init2(&pkt->buf, PKT_START(pkt) + pkt->buf_len,
+                  (char*) pkt + CI_CFG_PKT_BUF_SIZE);
 
-    /* We need to initialise an over large buffer here, because the size of
-    ** the payload is permitted to exceed [eff_mss].
-    */
-    oo_offbuf_init2(&pkt->buf, PKT_START(pkt) + pkt->buf_len,
-                    (char*) pkt + CI_CFG_PKT_BUF_SIZE);
+  /* Update the segment pointers. */
+  while( ! ef_iovec_ptr_is_empty_proper(&segs) )
+    ci_tcp_tx_merge_segment(ni, pkt, pkt, &segs.io, 0);
 
-    /* Update the segment pointers. */
-    while( ! ef_iovec_ptr_is_empty_proper(&segs) )
-      ci_tcp_tx_merge_segment(ni, pkt, pkt, &segs.io, 0);
-
-    /* Reset end of buffer pointer to reflect [eff_mss]. */
-    ci_tcp_tx_pkt_set_end(ts, pkt);
-  }
+  /* Reset end of buffer pointer to reflect [eff_mss]. */
+  ci_tcp_tx_pkt_set_end(ts, pkt);
 
   /* Check that everything is OK, as far as possible -- we can't expect
   ** ci_tcp_tx_pkt_assert_valid() to pass here, as this function is called for

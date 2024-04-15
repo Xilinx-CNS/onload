@@ -1239,80 +1239,6 @@ static int efab_tcp_helper_evq_poll_rsop(ci_private_t *priv, void* arg)
 #endif
 
 
-static int usermem_release_by_id(tcp_helper_resource_t* trs, ci_uint64 id)
-{
-  struct tcp_helper_usermem* um;
-  struct tcp_helper_usermem** pprev;
-
-  mutex_lock(&trs->usermem_mutex);
-  pprev = &trs->usermem;
-  um = *pprev;
-  while( (um = *pprev) != NULL ) {
-    if( um->id == id ) {
-      *pprev = um->next;
-      break;
-    }
-    pprev = &um->next;
-  }
-  mutex_unlock(&trs->usermem_mutex);
-
-  if( ! um )
-    return -ENOENT;
-
-  efab_tcp_helper_unmap_usermem(trs, &um->um);
-  kfree(um);
-  return 0;
-}
-
-
-static int efab_tcp_helper_zc_register_buffers_rsop(ci_private_t* priv,
-                                                    void* arg)
-{
-  tcp_helper_resource_t* trs = priv->thr;
-  oo_zc_register_buffers_t* rb = arg;
-  int rc;
-  uint64_t* hw_addrs = NULL;
-  struct tcp_helper_usermem* um;
-  size_t nbytes;
-
-  um = kmalloc(sizeof(*um), GFP_KERNEL);
-  if( ! um )
-    return -ENOMEM;
-
-  rc = efab_tcp_helper_map_usermem(trs, &um->um, rb->base_ptr, rb->num_pages,
-                                   &hw_addrs);
-  if( rc < 0 ) {
-    kfree(um);
-    return rc;
-  }
-
-  nbytes = sizeof(hw_addrs[0]) * oo_stack_intf_max(&trs->netif) *
-           rb->num_pages;
-  if( copy_to_user((void __user*)(uintptr_t)rb->hw_addrs_ptr,
-                   hw_addrs, nbytes) == 0 ) {
-    mutex_lock(&trs->usermem_mutex);
-    um->id = ++trs->usermem_prev_id;
-    um->next = trs->usermem;
-    trs->usermem = um;
-    rb->id = um->id;
-    mutex_unlock(&trs->usermem_mutex);
-  }
-  else {
-    usermem_release_by_id(trs, um->id);
-    rc = -EFAULT;
-  }
-  kfree(hw_addrs);
-
-  return rc;
-}
-
-static int efab_tcp_helper_zc_unregister_buffers_rsop(ci_private_t* priv,
-                                                      void* arg)
-{
-  return usermem_release_by_id(priv->thr, *(ci_uint64*)arg);
-}
-
-
 /* "Donation" shared memory ioctls. */
 
 static int oo_dshm_register_rsop(ci_private_t *priv, void *arg)
@@ -1667,10 +1593,6 @@ oo_operations_table_t oo_operations[] = {
 #if CI_CFG_WANT_BPF_NATIVE
   op(OO_IOC_EVQ_POLL, efab_tcp_helper_evq_poll_rsop),
 #endif
-
-
-  op(OO_IOC_ZC_REGISTER_BUFFERS, efab_tcp_helper_zc_register_buffers_rsop),
-  op(OO_IOC_ZC_UNREGISTER_BUFFERS, efab_tcp_helper_zc_unregister_buffers_rsop),
 
 #if CI_CFG_UL_INTERRUPT_HELPER
   op(OO_IOC_WAIT_FOR_INTERRUPT, oo_wait_for_interrupt),

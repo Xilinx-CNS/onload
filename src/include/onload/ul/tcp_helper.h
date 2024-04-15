@@ -215,10 +215,5 @@ extern int ci_tcp_helper_set_tcp_close_os_sock(ci_netif *ni,
 extern int ci_tcp_helper_alloc_active_wild(ci_netif *ni, ci_addr_t laddr);
 #endif
 
-
-int ci_tcp_helper_zc_register_buffers(ci_netif* ni, void* base, int num_pages,
-                                      uint64_t* hw_addrs, uint64_t* id);
-
-int ci_tcp_helper_zc_unregister_buffers(ci_netif* ni, uint64_t id);
 #endif /* __CI_UL_TCP_HELPER_H__ */
 

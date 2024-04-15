@@ -824,8 +824,7 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
        * __ci_netif_tx_pkt_complete() for the counterpart ci_wmb(). */
       ci_rmb();
 
-      if( ! (pkt->flags &
-             (CI_PKT_FLAG_TX_TIMESTAMPED | CI_PKT_FLAG_INDIRECT)) ) {
+      if( ! (pkt->flags & CI_PKT_FLAG_TX_TIMESTAMPED) ) {
         if( ! rinf.stack_locked ) {
           ci_netif_lock(ni);
           rinf.stack_locked = 1;
@@ -841,7 +840,6 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
       cmsg_state.cmsg_bytes_used = 0;
       cmsg_state.p_msg_flags = &rinf.msg_flags;
 
-
       if( pkt->flags & CI_PKT_FLAG_TX_TIMESTAMPED ) {
 	rc3 = ci_ip_tx_timestamping_to_cmsg(IPPROTO_TCP, ni, pkt, &ts->s,
 					       &cmsg_state, &rinf.piov);
@@ -850,17 +848,6 @@ static inline int ci_tcp_recvmsg_impl(const ci_tcp_recvmsg_args* a,
 	if( rc3 == -EAGAIN )
           goto timestamp_q_check;
 
-      }
-      if( pkt->flags & CI_PKT_FLAG_INDIRECT ) {
-        struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
-        struct ci_pkt_zc_payload* zcp;
-        OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-          if( zcp->is_remote && zcp->use_remote_cookie ) {
-            ci_put_cmsg(&cmsg_state, SOL_IP, ONLOAD_SO_ONLOADZC_COMPLETE,
-                        sizeof(zcp->remote.app_cookie),
-                        &zcp->remote.app_cookie);
-          }
-        }
       }
 
       ci_ip_cmsg_finish(&cmsg_state);
@@ -1497,8 +1484,6 @@ static int zc_call_callback(ci_netif* netif, struct tcp_recv_info* rinf,
   iov.iov_base = oo_offbuf_ptr(&pkt->buf) + peek_off;
   iov.iov_len = oo_offbuf_left(&pkt->buf) - peek_off;
   iov.iov_flags = 0;
-  iov.rx_memreg_idx = PKT_ID2SET(pkt->pp);
-  pkt->user_refcount = CI_ZC_USER_REFCOUNT_ONE;
   cb_rc = rinf->zc_args->cb(rinf->zc_args, 0);
 
   if( ! (cb_rc & ONLOAD_ZC_KEEP) ) {

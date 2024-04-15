@@ -170,52 +170,23 @@ void __ci_assert_valid_pkt(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                            const char* file, int line)
 {
   _ci_assert_gt(pkt->refcount, 0, file, line);
-  if( pkt->flags & CI_PKT_FLAG_INDIRECT && ! (pkt->flags & CI_PKT_FLAG_RX) ) {
-    struct ci_pkt_zc_header* zch = oo_tx_zc_header(pkt);
-    struct ci_pkt_zc_payload* zcp;
-    int nsegs = 0;
-    int paylen = oo_offbuf_ptr(&pkt->buf) - (char*)oo_ether_hdr(pkt);
+  _ci_assert_gt(pkt->n_buffers, 0, file, line);
+  _ci_assert_le(pkt->n_buffers, CI_IP_PKT_SEGMENTS_MAX, file, line);
 
-    _ci_assert_equal(pkt->n_buffers, 1, file, line);
-    _ci_assert_equal(pkt->buf_len, paylen, file, line);
-    /* We need one less segment because the header takes one */
-    _ci_assert_lt(zch->segs, CI_IP_PKT_SEGMENTS_MAX, file, line);
-    _ci_assert_le((char*)zch + zch->end, (char*)pkt + CI_CFG_PKT_BUF_SIZE,
+  /* For a packet of more than one buffer, the buffers should be
+   * linked through frag_next
+   */
+  _ci_assert_impl((pkt->n_buffers > 1), OO_PP_NOT_NULL(pkt->frag_next),
                   file, line);
-    OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
-      ++nsegs;
-      paylen += zcp->len;
-      _ci_assert_le((char*)oo_tx_zc_payload_next(ni, zcp),
-                    (char*)zch + zch->end, file, line);
-      _ci_assert_le(zcp->is_remote, 1, file, line);
-      if( zcp->is_remote )
-        _ci_assert_le(zcp->use_remote_cookie, 1, file, line);
-      _ci_assert_gt(zcp->len, 0, file, line);
-      _ci_assert_le(zcp->len, 0x7fffffff, file, line);
-    }
-    _ci_assert_equal(pkt->pay_len, paylen, file, line);
-    _ci_assert_equal(zch->segs, nsegs, file, line);
-    _ci_assert_nequal(nsegs, 0, file, line);
-  }
-  else {
-    _ci_assert_gt(pkt->n_buffers, 0, file, line);
-    _ci_assert_le(pkt->n_buffers, CI_IP_PKT_SEGMENTS_MAX, file, line);
-
-    /* For a packet of more than one buffer, the buffers should be
-    * linked through frag_next
-    */
-    _ci_assert_impl((pkt->n_buffers > 1), OO_PP_NOT_NULL(pkt->frag_next),
-                    file, line);
-    /* For a packet of one buffer, frag_next should be NULL or (in case
-    * of UDP datagram larger than IP packet) should point to next IP
-    * packet
-    */
-    _ci_assert_impl((pkt->n_buffers == 1),
+  /* For a packet of one buffer, frag_next should be NULL or (in case
+   * of UDP datagram larger than IP packet) should point to next IP
+   * packet
+   */
+  _ci_assert_impl((pkt->n_buffers == 1),
                   OO_PP_IS_NULL(pkt->frag_next) || pkt->frag_next == pkt->next,
                   file, line);
-    _ci_assert_impl(OO_PP_IS_NULL(pkt->frag_next), pkt->n_buffers == 1,
-                    file, line);
-  }
+  _ci_assert_impl(OO_PP_IS_NULL(pkt->frag_next), pkt->n_buffers == 1,
+                  file, line);
 }
 
 

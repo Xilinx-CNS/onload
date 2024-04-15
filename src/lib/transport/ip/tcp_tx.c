@@ -80,7 +80,6 @@ ci_inline void ci_ip_tcp_list_to_dmaq(ci_netif* ni, ci_tcp_state* ts,
   buddy = &ni->state->nic[tail_pkt->intf_i].pio_buddy;
   if( n == 1 && oo_pktq_is_empty(dmaq) &&
       ! ci_netif_may_ctpio(ni, tail_pkt->intf_i, tail_pkt->pay_len) &&
-      ! (pkt->flags & CI_PKT_FLAG_INDIRECT) &&
       (ni->state->nic[tail_pkt->intf_i].oo_vi_flags & OO_VI_FLAGS_PIO_EN) ) {
     if( tail_pkt->pay_len <= NI_OPTS(ni).pio_thresh ) {
       if( (offset = ci_pio_buddy_alloc(ni, buddy, order)) >= 0 ) {
@@ -248,7 +247,6 @@ fast:
 #if CI_CFG_PORT_STRIPING
     if( ts->tcpflags & CI_TCPT_FLAG_STRIPE ) {
       ci_assert(! (ts->tcpflags & CI_TCPT_FLAG_MSG_WARM));
-      ci_assert(! (pkt->flags & CI_PKT_FLAG_INDIRECT));
       ci_ip_tcp_list_to_dmaq_striping(ni, ts, head_id, tail_pkt);
     }
     else
@@ -1453,7 +1451,6 @@ void ci_tcp_tx_advance_to(ci_netif* ni, ci_tcp_state* ts,
     if( ts->s.pkt.flags & CI_IP_CACHE_IS_LOCALROUTE ) {
       oo_pkt_p head = sendq->head;
       ci_assert(! (ts->tcpflags & CI_TCPT_FLAG_MSG_WARM ));
-      ci_assert(! (ts->s.pkt.flags & CI_PKT_FLAG_INDIRECT));
       /* No retransmit queue in case of local connection:
        * just send them to peer and clear out from sendq. */
       sendq->head = last_pkt->next;

@@ -134,16 +134,7 @@
     onload_zc_send;
     onload_zc_release_buffers;
     onload_zc_alloc_buffers;
-    onload_zc_buffer_incref;
-    onload_zc_buffer_decref;
-    onload_zc_register_buffers;
-    onload_zc_unregister_buffers;
-    onload_zc_query_rx_memregs;
     onload_set_recv_filter;
-    onload_zc_hlrx_alloc;
-    onload_zc_hlrx_free;
-    onload_zc_hlrx_recv_copy;
-    onload_zc_hlrx_recv_zc;
     onload_recvmsg_kernel;
     onload_thread_set_spin;
     onload_thread_get_spin;

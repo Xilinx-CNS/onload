@@ -151,24 +151,6 @@ wrap(int, onload_zc_release_buffers, (int fd, onload_zc_handle* bufs,
                                       int bufs_len),
      (fd, bufs, bufs_len), -ENOSYS)
 
-wrap(int, onload_zc_register_buffers, (int fd, uint64_t addr_space,
-                                       uint64_t base_ptr, uint64_t len,
-                                       int flags, onload_zc_handle* handle),
-     (fd, addr_space, base_ptr, len, flags, handle), -ENOSYS)
-wrap(int, onload_zc_unregister_buffers, (int fd, onload_zc_handle handle,
-                                         int flags),
-     (fd, handle, flags), -ENOSYS)
-
-wrap(int, onload_zc_query_rx_memregs, (int fd, struct onload_zc_iovec* iov,
-                                       int* iovecs_len, int flags),
-     (fd, iov, iovecs_len, flags), -ENOSYS)
-
-wrap(int, onload_zc_buffer_incref, (int fd, onload_zc_handle buf),
-     (fd, buf), -ENOSYS)
-
-wrap(int, onload_zc_buffer_decref, (int fd, onload_zc_handle buf),
-     (fd, buf), -ENOSYS)
-
 wrap(int, onload_zc_recv, (int fd, struct onload_zc_recv_args* args),
      (fd, args), -ENOSYS)
 
@@ -178,22 +160,6 @@ wrap(int, onload_zc_send, (struct onload_zc_mmsg* msgs, int mlen, int flags),
 wrap(int, onload_set_recv_filter, (int fd, onload_zc_recv_filter_callback filter,
                                    void* cb_arg, int flags),
      (fd, filter, cb_arg, flags), -ENOSYS)
-
-wrap(int, onload_zc_hlrx_alloc, (int fd, int flags,
-                                 struct onload_zc_hlrx** hlrx_out),
-     (fd, flags, hlrx_out), -ENOSYS)
-
-wrap(int, onload_zc_hlrx_free, (struct onload_zc_hlrx* hlrx),
-     (hlrx), -ENOSYS)
-
-wrap(ssize_t, onload_zc_hlrx_recv_copy, (struct onload_zc_hlrx* hlrx,
-                                         struct msghdr* msg, int flags),
-     (hlrx, msg, flags), -ENOSYS)
-
-wrap(ssize_t, onload_zc_hlrx_recv_zc, (struct onload_zc_hlrx* hlrx,
-                               struct onload_zc_msg* msg, size_t max_bytes,
-                               int flags),
-     (hlrx, msg, max_bytes, flags), -ENOSYS)
 
 
 wrap(int, onload_msg_template_alloc, (int fd, const struct iovec* initial_msg,

@@ -477,26 +477,3 @@ int ci_netif_evq_poll_k(ci_netif* ni, int _n)
                         &intf_i);
 }
 #endif
-
-
-int ci_tcp_helper_zc_register_buffers(ci_netif* ni, void* base, int num_pages,
-                                      uint64_t* hw_addrs, uint64_t* id)
-{
-  oo_zc_register_buffers_t arg = {
-    .base_ptr = (uintptr_t)base,
-    .num_pages = num_pages,
-    .hw_addrs_ptr = (uintptr_t)hw_addrs,
-  };
-  int rc = oo_resource_op(ci_netif_get_driver_handle(ni),
-                          OO_IOC_ZC_REGISTER_BUFFERS, &arg);
-  if( rc < 0 )
-    return rc;
-  *id = arg.id;
-  return 0;
-}
-
-int ci_tcp_helper_zc_unregister_buffers(ci_netif* ni, uint64_t id)
-{
-  return oo_resource_op(ci_netif_get_driver_handle(ni),
-                        OO_IOC_ZC_UNREGISTER_BUFFERS, &id);
-}

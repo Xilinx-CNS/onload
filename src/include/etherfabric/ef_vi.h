@@ -609,8 +609,7 @@ enum ef_vi_out_flags {
 
 /*! \brief Flags that define which errors will cause either:
 ** - RX_DISCARD events; or
-** - EF_EVENT_TYPE_RX_REF_DISCARD; or
-** - reporting of errors in EF_EVENT_TYPE_RX_MULTI_PKTS events.
+** - EF_EVENT_TYPE_RX_REF_DISCARD
 */
 enum ef_vi_rx_discard_err_flags {
   /** TCP or UDP checksum error */
@@ -956,9 +955,7 @@ struct ef_vi_transmit_alt_overhead {
 struct ef_pio;
 
 
-/*! \brief Flags that can be passed to ef_vi_transmitv_init_extra()
-**  via the 'struct ef_vi_tx_extra' structure.
-*/
+/*! \brief _Deprecated:_ Not used on existing NICs */
 enum ef_vi_tx_extra_flags {
   /** Enable use of the mark field. */
   EF_VI_TX_EXTRA_MARK = 0x1,
@@ -970,7 +967,7 @@ enum ef_vi_tx_extra_flags {
   EF_VI_TX_EXTRA_CAPSULE_METADATA = 0x8,
 };
 
-/*! \brief TX extra options */
+/*! \brief _Deprecated:_ Not used on existing NICs */
 struct ef_vi_tx_extra {
   /** Flags indicating which options to apply. */
   enum ef_vi_tx_extra_flags flags;
@@ -981,6 +978,7 @@ struct ef_vi_tx_extra {
   /** Port used to leave virtual switch. */
   uint16_t egress_mport;
 };
+
 
 /*! \brief TX state for warming transmit path
 **
@@ -1203,11 +1201,6 @@ typedef struct ef_vi {
     int (*eventq_has_event)(const struct ef_vi*);
     /** Check if the eventq contains strictly greater than n_events */
     int (*eventq_has_many_events)(const struct ef_vi*, int n_events);
-    /** Initialize TX descriptors on the TX descriptor ring, using
-     * extra options and (optionally) remote buffers */
-    int (*transmitv_init_extra)(struct ef_vi*, const struct ef_vi_tx_extra*,
-                                const ef_remote_iovec*, int iov_len,
-                                ef_request_id);
     int (*transmit_ctpio_fallback)(struct ef_vi* vi, ef_addr dma_addr,
                                    size_t len, ef_request_id dma_id);
     int (*transmitv_ctpio_fallback)(struct ef_vi* vi, const ef_iovec* dma_iov,
@@ -1881,9 +1874,7 @@ extern int ef_vi_transmit_init(ef_vi* vi, ef_addr addr, int bytes,
 #define ef_vi_transmitv_init(vi, iov, iov_len, dma_id)          \
   (vi)->ops.transmitv_init((vi), (iov), (iov_len), (dma_id))
 
-/*! \brief Initialize TX descriptors on the TX descriptor ring, with
-**         extra options and a vector of optionally remote packet
-**         buffers
+/*! \brief _Deprecated:_ Not used on existing NICs
 **
 ** \param extra Pointer to extra options to apply to this packet.
 **              May be NULL.
@@ -1894,9 +1885,9 @@ extern int ef_vi_transmit_init(ef_vi* vi, ef_addr addr, int bytes,
 ** space (EF_ADDRSPACE_LOCAL) and cannot be translated; this is a
 ** limitation of the hardware. It can, however, be zero length.
 */
-#define ef_vi_transmitv_init_extra(vi, extra, iov, iov_len, dma_id)     \
-  (vi)->ops.transmitv_init_extra((vi), (extra), (iov),                  \
-                                 (iov_len), (dma_id))
+extern __attribute__ ((deprecated("ef_vi_transmitv_init_extra"))) int
+ef_vi_transmitv_init_extra(struct ef_vi*, const struct ef_vi_tx_extra*,
+                           const ef_remote_iovec*, int iov_len, ef_request_id);
 
 /*! \brief Submit newly initialized TX descriptors to the NIC
 **

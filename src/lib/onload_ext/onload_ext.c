@@ -108,39 +108,6 @@ int onload_zc_release_buffers(int fd, onload_zc_handle* bufs, int bufs_len)
 }
 
 __attribute__((weak))
-int onload_zc_register_buffers(int fd, uint64_t addr_space,
-                               uint64_t base_ptr, uint64_t len,
-                               int flags, onload_zc_handle* handle)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
-int onload_zc_unregister_buffers(int fd, onload_zc_handle handle, int flags)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
-int onload_zc_query_rx_memregs(int fd, struct onload_zc_iovec* iov,
-                               int* iovecs_len, int flags)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
-int onload_zc_buffer_incref(int fd, onload_zc_handle buf)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
-int onload_zc_buffer_decref(int fd, onload_zc_handle buf)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
 int onload_zc_recv(int fd, struct onload_zc_recv_args* args)
 {
   return -ENOSYS;
@@ -157,35 +124,6 @@ int onload_zc_send(struct onload_zc_mmsg* msgs, int mlen, int flags)
 __attribute__((weak))
 int onload_set_recv_filter(int fd, onload_zc_recv_filter_callback filter,
                            void* cb_arg, int flags)
-{
-  return -ENOSYS;
-}
-
-/**************************************************************************/
-
-__attribute__((weak))
-int onload_zc_hlrx_alloc(int fd, int flags, struct onload_zc_hlrx** hlrx_out)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
-int onload_zc_hlrx_free(struct onload_zc_hlrx* hlrx)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
-ssize_t onload_zc_hlrx_recv_copy(struct onload_zc_hlrx* hlrx,
-                                 struct msghdr* msg, int flags)
-{
-  return -ENOSYS;
-}
-
-__attribute__((weak))
-ssize_t onload_zc_hlrx_recv_zc(struct onload_zc_hlrx* hlrx,
-                               struct onload_zc_msg* msg, size_t max_bytes,
-                               int flags)
 {
   return -ENOSYS;
 }

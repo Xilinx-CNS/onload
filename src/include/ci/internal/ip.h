@@ -2804,25 +2804,6 @@ ci_inline int ci_netif_should_allocate_tcp_shared_local_ports(ci_netif* ni)
 #endif
 
 
-ci_inline int oo_tx_zc_payload_size(ci_netif* ni) {
-  return sizeof(struct ci_pkt_zc_payload) +
-         sizeof(ef_addr) * oo_stack_intf_max(ni);
-}
-
-ci_inline struct ci_pkt_zc_payload*
-oo_tx_zc_payload_next(ci_netif* ni, struct ci_pkt_zc_payload* zcp)
-{
-  if( zcp->is_remote )
-    return (void*)((char*)zcp + oo_tx_zc_payload_size(ni));
-  return (void*)(zcp->local + CI_ALIGN_FWD(zcp->len, CI_PKT_ZC_PAYLOAD_ALIGN));
-}
-
-#define OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp)  \
-  for( (zcp) = (zch)->data; \
-       (char*)(zcp) - (char*)(zch) < (zch)->end; \
-       (zcp) = oo_tx_zc_payload_next(ni, zcp) )
-
-
 /*********************************************************************
 ********************** Packet buffer allocation **********************
 *********************************************************************/
@@ -4286,25 +4267,7 @@ ci_inline void ci_tcp_set_rtt_timing(ci_netif* netif,
 ci_inline void ci_tcp_tx_pkt_set_end(ci_tcp_state* ts, ci_ip_pkt_fmt* pkt) {
   uint8_t* end = (uint8_t*) oo_tx_l3_hdr(pkt) + ts->outgoing_hdrs_len +
                  tcp_eff_mss(ts);
-  ci_assert_nflags(pkt->flags, CI_PKT_FLAG_INDIRECT);
   oo_offbuf_set_end(&(pkt->buf), end);
-}
-
-
-/* Sets up the offbuf end pointer correctly for a zero-copy
- * (CI_PKT_FLAG_INDIRECT) packet, prior to populating the ci_pkt_zc_header.
- * See the diagram above ci_pkt_zc_header. This function may only be called
- * immediately after converting a packet to zc (or creating a new packet);
- * doing it again later may change where the zc_header appears to be located
- * and corrupt the packet. */
-ci_inline void ci_tcp_tx_pkt_set_zc_header_pos(ci_tcp_state* ts,
-                                               ci_ip_pkt_fmt* pkt) {
-  char* end = CI_PTR_ALIGN_FWD((char*)oo_tx_l3_hdr(pkt) +
-                               sizeof(ci_tcp_hdr) + CI_TCP_MAX_OPTS_LEN,
-                               CI_PKT_ZC_PAYLOAD_ALIGN);
-  ci_assert_flags(pkt->flags, CI_PKT_FLAG_INDIRECT);
-  oo_offbuf_set_end(&(pkt->buf), end);
-  pkt->buf.end = CI_MAX(pkt->buf.off, pkt->buf.end);
 }
 
 
@@ -5210,11 +5173,10 @@ ci_inline ci_uint64 __oo_usec_to_cycles64(ci_uint32 khz, unsigned usec)
 struct oo_zc_buf;
 typedef struct oo_zc_buf* onload_zc_handle;
 
-/* onload_zc_handle can point to either memory owned by Onload (a
- * ci_ip_pkt_fmt) or memory owned by the app (a ci_zc_usermem). We use the
- * least significant bit of the pointer to disambiguate, so here's a bunch
- * of functions to convert back and forth. Note also that
- * ONLOAD_ZC_HANDLE_NONZC is a valid value. */
+/* onload_zc_handle points to memory owned by Onload (a ci_ip_pkt_fmt). To
+ * allow alternative types we use the least significant bit of the pointer to
+ * disambiguate, so here's a bunch of functions to convert back and forth.
+ * Note also that ONLOAD_ZC_HANDLE_NONZC is a valid value. */
 
 #ifdef __x86_64__
 /* Solely in debugging builds, we put some magic stuff in the top bits of
@@ -5229,16 +5191,6 @@ typedef struct oo_zc_buf* onload_zc_handle;
 #define CI_ZC_HANDLE_MAGIC         ((uintptr_t)0)
 #endif
 
-struct ci_zc_usermem {
-  ef_addrspace addr_space;
-  uint64_t base;
-  uint64_t size;
-  uint64_t kernel_id;
-  /* HW addresses are structured as
-   * hw_addr[page_n + intf_i * size << PAGE_SHIFT] */
-  uint64_t hw_addrs[0];
-};
-
 static inline onload_zc_handle zc_pktbuf_to_handle(ci_ip_pkt_fmt* pkt)
 {
   onload_zc_handle h = (onload_zc_handle)pkt;
@@ -5246,17 +5198,10 @@ static inline onload_zc_handle zc_pktbuf_to_handle(ci_ip_pkt_fmt* pkt)
   return h;
 }
 
-static inline onload_zc_handle zc_usermem_to_handle(struct ci_zc_usermem* um)
-{
-  onload_zc_handle h = (onload_zc_handle)((uintptr_t)um | 1);
-  CI_DEBUG(h = (onload_zc_handle)((uintptr_t)h | CI_ZC_HANDLE_MAGIC));
-  return h;
-}
-
 static inline void zc_handle_check(onload_zc_handle h)
 {
   /* The surprising -2 in the below is because we use the bottom bit to
-   * indicate pktbuf-or-usermem */
+   * indicate handle type */
   ci_assert_equal((uintptr_t)h & (sizeof(void*) - 2), 0);
   ci_assert_equal((uintptr_t)h & CI_ZC_HANDLE_MAGIC_MASK, CI_ZC_HANDLE_MAGIC);
 }
@@ -5267,40 +5212,11 @@ static inline bool zc_is_pktbuf(onload_zc_handle h)
   return ((uintptr_t)h & 1) == 0;
 }
 
-static inline bool zc_is_usermem(onload_zc_handle h)
-{
-  zc_handle_check(h);
-  return ((uintptr_t)h & 1) == 1;
-}
-
 static inline ci_ip_pkt_fmt* zc_handle_to_pktbuf(onload_zc_handle h)
 {
   ci_assert(zc_is_pktbuf(h));
   CI_DEBUG(h = (onload_zc_handle)((uintptr_t)h &~ CI_ZC_HANDLE_MAGIC_MASK));
   return (ci_ip_pkt_fmt*)h;
-}
-
-static inline struct ci_zc_usermem* zc_handle_to_usermem(onload_zc_handle h)
-{
-  ci_assert(zc_is_usermem(h));
-  CI_DEBUG(h = (onload_zc_handle)((uintptr_t)h &~ CI_ZC_HANDLE_MAGIC_MASK));
-  /* -1 rather than &~1 because it allows better codegen */
-  return (struct ci_zc_usermem*)((uintptr_t)h - 1);
-}
-
-static inline ef_addr zc_usermem_dma_addr(struct ci_zc_usermem* um,
-                                          uint64_t user_ptr, int intf_i)
-{
-  if( um->addr_space == EF_ADDRSPACE_LOCAL ) {
-    uint64_t offset = user_ptr - um->base;
-    uint64_t* hw_addrs = um->hw_addrs +
-                         ((intf_i * um->size) >> EF_VI_NIC_PAGE_SHIFT);
-    return hw_addrs[offset >> EF_VI_NIC_PAGE_SHIFT] |
-           (offset & (EF_VI_NIC_PAGE_SIZE - 1));
-  }
-  else {
-    return user_ptr;
-  }
 }
 
 #if CI_CFG_UL_INTERRUPT_HELPER && ! defined(__KERNEL__)

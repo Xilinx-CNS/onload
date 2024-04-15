@@ -223,14 +223,6 @@ extern int efab_tcp_helper_shutdown_os_sock (tcp_helper_endpoint_t* ep,
 struct file *sock_alloc_file(struct socket *sock, int flags, void *unused);
 #endif
 
-extern int efab_tcp_helper_map_usermem(tcp_helper_resource_t* trs,
-                                       struct oo_iobufs_usermem* ioum,
-                                       unsigned long user_base, int n_pages,
-                                       uint64_t** hw_addrs_out);
-
-extern void efab_tcp_helper_unmap_usermem(tcp_helper_resource_t* trs,
-                                          struct oo_iobufs_usermem* ioum);
-
 extern int efab_tcp_helper_more_bufs(tcp_helper_resource_t* trs);
 
 extern int efab_tcp_helper_more_socks(tcp_helper_resource_t* trs);

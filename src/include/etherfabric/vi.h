@@ -905,7 +905,7 @@ extern int
 ef_filter_spec_set_ip_proto(ef_filter_spec *filter_spec, uint8_t ip_proto);
 
 
-/*! \brief Set the value of the user mark associated with a filter.
+/*! \brief _Deprecated:_ Not used on current NICs
 **
 ** \param filter_spec   The ef_filter_spec of the filter.
 ** \param user_mark     Mark value to set.
@@ -927,12 +927,12 @@ ef_filter_spec_set_ip_proto(ef_filter_spec *filter_spec, uint8_t ip_proto);
 ** Attempts to install filters with user marks on unsupported adapters will
 ** fail.
 */
-extern int
+extern __attribute__ ((deprecated("ef_filter_spec_set_user_mark"))) int
 ef_filter_spec_set_user_mark(ef_filter_spec *filter_spec, uint32_t user_mark,
                              int bitwise_or);
 
 
-/*! \brief Set the value of the user flag associated with a filter.
+/*! \brief _Deprecated:_ Not used on current NICs
 **
 ** \param filter_spec   The ef_filter_spec of the filter.
 ** \param user_flag     Flag value to set.  Normalized to Boolean.
@@ -956,7 +956,7 @@ ef_filter_spec_set_user_mark(ef_filter_spec *filter_spec, uint32_t user_mark,
 ** Attempts to install filters with user flags on unsupported adapters will
 ** fail.
 */
-extern int
+extern __attribute__ ((deprecated("ef_filter_spec_set_user_flag"))) int
 ef_filter_spec_set_user_flag(ef_filter_spec *filter_spec, uint8_t user_flag,
                              int bitwise_or);
 

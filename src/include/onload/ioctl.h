@@ -211,14 +211,6 @@ enum {
 #endif
 
 
-  OO_OP_ZC_REGISTER_BUFFERS,
-#define OO_IOC_ZC_REGISTER_BUFFERS   OO_IOC_RW(ZC_REGISTER_BUFFERS, \
-                                               oo_zc_register_buffers_t)
-
-  OO_OP_ZC_UNREGISTER_BUFFERS,
-#define OO_IOC_ZC_UNREGISTER_BUFFERS OO_IOC_W(ZC_UNREGISTER_BUFFERS, ci_uint64)
-
-
 #if CI_CFG_UL_INTERRUPT_HELPER
   /* Wait for an interrupt */
   OO_OP_WAIT_FOR_INTERRUPT,
