@@ -400,8 +400,9 @@ void oo_stackname_state_init(struct oo_stackname_state *spt)
   }
 
   if( CITP_OPTS.stack_per_thread ) {
+    size_t slen = strlen(spt->scoped_stackname);
     spt->context = ONLOAD_SCOPE_THREAD;
-    snprintf(spt->scoped_stackname, CI_CFG_STACK_NAME_LEN, 
+    snprintf(spt->scoped_stackname + slen, CI_CFG_STACK_NAME_LEN - slen,
              "-t%d", (int)syscall(SYS_gettid));
   }
 
