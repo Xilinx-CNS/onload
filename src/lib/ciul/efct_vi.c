@@ -152,28 +152,19 @@ static struct efct_rx_descriptor* efct_rx_desc(ef_vi* vi, uint32_t pkt_id)
   return desc + pkt_id_to_global_superbuf_ix(pkt_id);
 }
 
-static const char* efct_superbuf_base(const ef_vi* vi, size_t pkt_id)
-{
-#ifdef __KERNEL__
-  /* FIXME: is this right? I think the table is indexed by huge page not sbuf */
-  return vi->efct_rxqs.q[0].superbufs[pkt_id_to_global_superbuf_ix(pkt_id)];
-#else
-  /* Sneakily rely on vi->efct_rxqs.q[i].superbuf being contiguous, thus avoiding
-   * an array lookup (or, more specifically, relying on the TLB to do the
-   * lookup for us) */
-  return vi->efct_rxqs.q[0].superbuf +
-         (size_t)pkt_id_to_global_superbuf_ix(pkt_id) * EFCT_RX_SUPERBUF_BYTES;
-#endif
-}
-
 /* The header preceding this packet. Note: this contains metadata for the
  * previous packet, not this one. */
 static const ci_oword_t* efct_rx_header(const ef_vi* vi, size_t pkt_id)
 {
+  /* Sneakily rely on vi->efct_rxqs.q[i].superbuf being contiguous, avoiding
+   * extra arithmetic to extract the queue and sbuf ids separately. */
+  const char* base =
+    efct_superbuf_access(vi, 0, pkt_id_to_global_superbuf_ix(pkt_id));
+
   unsigned ix = pkt_id_to_index_in_superbuf(pkt_id);
   EF_VI_ASSERT(ix < *vi->efct_rxqs.q[pkt_id_to_rxq_ix(pkt_id)].live.superbuf_pkts);
 
-  return (const ci_oword_t*)(efct_superbuf_base(vi, pkt_id) + ix * EFCT_PKT_STRIDE);
+  return (const ci_oword_t*)(base + ix * EFCT_PKT_STRIDE);
 }
 
 static uint32_t rxq_ptr_to_pkt_id(uint32_t ptr)
@@ -1348,6 +1339,64 @@ void efct_vi_stop_transmit_warm(ef_vi* vi)
 
   CI_SET_QWORD_FIELD(qword, EFCT_TX_HEADER_WARM_FLAG, 0);
   vi->vi_txq.efct_fixed_header = qword.u64[0];
+}
+
+static const size_t sbufs_per_rxq = CI_EFCT_MAX_SUPERBUFS;
+static const size_t sbuf_bytes_per_rxq = sbufs_per_rxq * EFCT_RX_SUPERBUF_BYTES;
+
+int efct_superbufs_reserve(ef_vi* vi, void* space)
+{
+  int i;
+
+  vi->efct_rxqs.max_qs = EF_VI_MAX_EFCT_RXQS;
+
+#ifdef __KERNEL__
+  space = kvmalloc(sbufs_per_rxq * vi->efct_rxqs.max_qs * sizeof(const char**),
+                   GFP_KERNEL);
+  if( space == NULL )
+    return -ENOMEM;
+#else
+  if( space == NULL ) {
+    /* This is reserving a gigantic amount of virtual address space (with no
+     * memory behind it) so we can later on (in efct_vi_attach_rxq()) plonk the
+     * actual mmappings for each specific superbuf into a computable place
+     * within this space, i.e. so that conversion from {rxq#,superbuf#} to
+     * memory address is trivial arithmetic rather than needing various array
+     * lookups.
+     *
+     * In kernelspace we can't do this trickery (see the other #ifdef branch), so
+     * we pay the price of doing the naive array lookups: we have an array of
+     * pointers to superbufs. */
+    space = mmap(NULL, sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs, PROT_NONE,
+                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
+                 -1, 0);
+    if( space == MAP_FAILED )
+      return -ENOMEM;
+  }
+
+  madvise(space, sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs, MADV_DONTDUMP);
+#endif
+
+  for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
+    ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
+#ifdef __KERNEL__
+    rxq->superbufs = (const char**)space + i * sbufs_per_rxq;
+#else
+    rxq->superbuf = (const char*)space + i * sbuf_bytes_per_rxq;
+#endif
+  }
+
+  return 0;
+}
+
+void efct_superbufs_cleanup(ef_vi* vi)
+{
+#ifdef __KERNEL__
+  kvfree(vi->efct_rxqs.q[0].superbufs);
+#else
+  munmap((void*)vi->efct_rxqs.q[0].superbuf,
+         sbuf_bytes_per_rxq * vi->efct_rxqs.max_qs);
+#endif
 }
 
 static void efct_vi_initialise_ops(ef_vi* vi)

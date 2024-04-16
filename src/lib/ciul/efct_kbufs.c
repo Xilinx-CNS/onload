@@ -248,12 +248,11 @@ static int efct_kbufs_prime(ef_vi* vi, ef_driver_handle dh)
 
 static void efct_kbufs_cleanup_internal(ef_vi* vi)
 {
+  efct_superbufs_cleanup(vi);
+
 #ifdef __KERNEL__
-  kvfree(vi->efct_rxqs.q[0].superbufs);
   kfree(get_kbufs(vi));
 #else
-  munmap((void*)vi->efct_rxqs.q[0].superbuf,
-         (size_t)vi->efct_rxqs.max_qs * CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES);
   free(get_kbufs(vi)->q[0].current_mappings);
   free(get_kbufs(vi));
 #endif
@@ -276,75 +275,41 @@ int efct_kbufs_init_internal(ef_vi* vi,
                              void* space)
 {
   struct efct_kbufs* rxqs;
-  int i;
+  int i, rc;
 
-  vi->efct_rxqs.max_qs = EF_VI_MAX_EFCT_RXQS;
+  rc = efct_superbufs_reserve(vi, space);
+  if( rc < 0 )
+    return rc;
 
 #ifdef __KERNEL__
   rxqs = kzalloc(sizeof(*rxqs), GFP_KERNEL);
   if( rxqs == NULL )
-    return -ENOMEM;
-
-  space = kvmalloc(vi->efct_rxqs.max_qs * CI_EFCT_MAX_HUGEPAGES *
-                   CI_EFCT_SUPERBUFS_PER_PAGE *
-                   sizeof(vi->efct_rxqs.q[0].superbufs[0]), GFP_KERNEL);
-  if( space == NULL ) {
-    kfree(rxqs);
-    return -ENOMEM;
-  }
+    goto fail_alloc;
 #else
   uint64_t* mappings;
-  const size_t bytes_per_rxq =
-    (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES;
   const size_t mappings_bytes =
     vi->efct_rxqs.max_qs * CI_EFCT_MAX_HUGEPAGES * sizeof(mappings[0]);
 
   rxqs = calloc(1, sizeof(*rxqs));
   if( rxqs == NULL )
-    return -ENOMEM;
+    goto fail_alloc;
+
   rxqs->refresh_user = refresh_user;
 
   mappings = malloc(mappings_bytes);
   if( mappings == NULL ) {
     free(rxqs);
-    return -ENOMEM;
+    goto fail_alloc;
   }
 
   memset(mappings, 0xff, mappings_bytes);
-
-  if( space == NULL ) {
-    /* This is reserving a gigantic amount of virtual address space (with no
-     * memory behind it) so we can later on (in efct_vi_attach_rxq()) plonk the
-     * actual mmappings for each specific superbuf into a computable place
-     * within this space, i.e. so that conversion from {rxq#,superbuf#} to
-     * memory address is trivial arithmetic rather than needing various array
-     * lookups.
-     *
-     * In kernelspace we can't do this trickery (see the other #ifdef branch), so
-     * we pay the price of doing the naive array lookups: we have an array of
-     * pointers to superbufs. */
-    space = mmap(NULL, vi->efct_rxqs.max_qs * bytes_per_rxq, PROT_NONE,
-                 MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_HUGETLB,
-                 -1, 0);
-    if( space == MAP_FAILED ) {
-      free(mappings);
-      free(rxqs);
-      return -ENOMEM;
-    }
-  }
-
-  madvise(space, vi->efct_rxqs.max_qs * bytes_per_rxq, MADV_DONTDUMP);
 #endif
 
   for( i = 0; i < vi->efct_rxqs.max_qs; ++i ) {
     ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[i];
     rxq->qid = shm->q[i].qid;
-#ifdef __KERNEL__
-    rxq->superbufs = (const char**)space +
-                     i * CI_EFCT_MAX_HUGEPAGES * CI_EFCT_SUPERBUFS_PER_PAGE;
-#else
+#ifndef __KERNEL__
     rxqs->q[i].resource_id = EFCH_RESOURCE_ID_PRI_ARG(efch_resource_id_none());
-    rxq->superbuf = (char*)space + i * bytes_per_rxq;
     rxqs->q[i].current_mappings = mappings + i * CI_EFCT_MAX_HUGEPAGES;
 #endif
     rxq->live.superbuf_pkts = &shm->q[i].superbuf_pkts;
@@ -366,6 +331,10 @@ int efct_kbufs_init_internal(ef_vi* vi,
   vi->efct_rxqs.shm = shm;
 
   return 0;
+
+fail_alloc:
+  efct_superbufs_cleanup(vi);
+  return -ENOMEM;
 }
 
 #ifndef __KERNEL__
