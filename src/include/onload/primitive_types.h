@@ -22,12 +22,6 @@ typedef struct ci_active_wild_s         ci_active_wild;
 typedef ci_uint32  ci_iptime_t;
 
 
-/* Fixed width type equivalent of struct timeval */
-struct oo_timeval {
-  ci_int32 tv_sec;
-  ci_int32 tv_usec;
-};
-
 typedef struct {
   volatile ci_uint32 n;
 } oo_atomic_t;

@@ -35,10 +35,20 @@
 #define LOG_DUMP(x)
 #endif
 
+struct pcap_timeval32 {
+  uint32_t tv_sec;
+  uint32_t tv_usec;
+};
+
+struct pcap_timespec32 {
+  uint32_t tv_sec;
+  uint32_t tv_nsec;
+};
+
 struct oo_pcap_pkthdr {
   union{
-    struct oo_timeval tv;
-    struct oo_timespec ts;
+    struct pcap_timeval32 tv;
+    struct pcap_timespec32 ts;
   } t;
   ci_uint32 caplen;
   ci_uint32 len;

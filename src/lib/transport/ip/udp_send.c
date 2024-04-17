@@ -1031,9 +1031,6 @@ static int ci_udp_name_is_ok(int af, ci_udp_state* us, const struct msghdr* msg)
 #endif
 
 
-#define OO_TIMEVAL_UNINITIALISED  ((struct oo_timeval*) 1)
-
-
 static int ci_udp_sendmsg_may_send(ci_udp_state* us, int bytes_to_send)
 {
   int sndbuf = us->s.so.sndbuf;

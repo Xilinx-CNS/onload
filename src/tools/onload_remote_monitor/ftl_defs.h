@@ -751,13 +751,6 @@ typedef struct oo_p_dllink oo_p_dllink_t;
     FTL_TFIELD_INTBE16(ctx, tcp_urg_ptr_be16, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))              \
     FTL_TSTRUCT_END(ctx)
 
-typedef struct oo_timeval oo_timeval;
-
-#define STRUCT_TIMEVAL(ctx)                             \
-    FTL_TSTRUCT_BEGIN(ctx, oo_timeval, )                \
-    FTL_TFIELD_INT(ctx, ci_int32, tv_sec, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))   \
-    FTL_TFIELD_INT(ctx, ci_int32, tv_usec, (ORM_OUTPUT_STACK | ORM_OUTPUT_SOCKETS))  \
-    FTL_TSTRUCT_END(ctx)
 
 typedef struct oo_sock_cplane oo_sock_cplane_t;
 
