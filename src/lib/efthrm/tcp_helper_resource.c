@@ -1819,7 +1819,7 @@ static int allocate_vis(tcp_helper_resource_t* trs,
     trs->io_mmap_bytes += alloc_info.vi_io_mmap_bytes;
     trs->efct_shm_mmap_bytes += alloc_info.vi_efct_shm_mmap_bytes;
     vi_state = (char*) vi_state +
-               ef_vi_calc_state_bytes(vm->rxq_size, vm->txq_size);
+               ef_vi_calc_state_bytes(NI_OPTS(ni).rxq_size, NI_OPTS(ni).txq_size);
 
 #if CI_CFG_CTPIO
     trs_nic->thn_ctpio_io_mmap_bytes = alloc_info.vi_ctpio_mmap_bytes;
