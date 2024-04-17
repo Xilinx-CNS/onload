@@ -924,8 +924,9 @@ void ci_netif_dump_to_logger(ci_netif* ni, oo_dump_log_fn_t logger,
 
   tmp = ni->state->lock.lock;
   logger(log_arg, "  lock=%"CI_PRIx64" "CI_NETIF_LOCK_FMT"  nics=%"CI_PRIx64
-         " primed=%x", tmp, CI_NETIF_LOCK_PRI_ARG(tmp), ni->nic_set.nics,
-         ns->evq_primed);
+         " primed=%x rx_ports=%x tx_ports=%x", tmp, CI_NETIF_LOCK_PRI_ARG(tmp),
+         ni->nic_set.nics, ns->evq_primed, ns->rx_hwport_mask,
+         ns->tx_hwport_mask);
 #ifdef __KERNEL__
   {
     /* This is useful mostly for orphaned stacks */
