@@ -16,8 +16,12 @@
 #include <internal.h>
 
 
-static int citp_timestamp_compare(const ci_uint32 a_sec, const ci_uint32 a_nsec,
-                                  const ci_uint32 b_sec, const ci_uint32 b_nsec)
+static inline int citp_timestamp_compare(const ci_int64 a_sec,
+                                         const ci_uint32 a_nsec,
+                                         const ci_uint32 a_nsec_frac,
+                                         const ci_int64 b_sec,
+                                         const ci_uint32 b_nsec,
+                                         const ci_uint32 b_nsec_frac)
 {
   if( a_sec < b_sec ) {
     return -1;
@@ -25,10 +29,17 @@ static int citp_timestamp_compare(const ci_uint32 a_sec, const ci_uint32 a_nsec,
   else if( a_sec == b_sec ) {
     if( a_nsec < b_nsec )
       return -1;
-    else if( a_nsec == b_nsec )
-      return 0;
-    else
+    else if( a_nsec == b_nsec ) {
+      if( a_nsec_frac < b_nsec_frac )
+        return -1;
+      else if( a_nsec_frac == b_nsec_frac )
+        return 0;
+      else
+        return 1;
+    }
+    else {
       return 1;
+    }
   }
   else {
     return 1;
@@ -38,14 +49,19 @@ static int citp_timestamp_compare(const ci_uint32 a_sec, const ci_uint32 a_nsec,
 
 int citp_timespec_compare(const struct timespec* a, const struct timespec* b)
 {
-  return citp_timestamp_compare(a->tv_sec, a->tv_nsec, b->tv_sec, b->tv_nsec);
+  return citp_timestamp_compare(a->tv_sec, a->tv_nsec, 0,
+                                b->tv_sec, b->tv_nsec, 0);
 }
 
 
 int citp_oo_timespec_compare(const struct oo_timespec* a,
                              const struct timespec* b)
 {
-  return citp_timestamp_compare(a->tv_sec, a->tv_nsec, b->tv_sec, b->tv_nsec);
+  /* Don't compare the midpoint of the low precision timespec with the high
+   * precision one to avoid creating an inconsistent result when the high
+   * precision timestamp is subsequently truncated; truncate both now. */
+  return citp_timestamp_compare(a->tv_sec, a->tv_nsec, 0,
+                                b->tv_sec, b->tv_nsec, 0);
 }
 
 
