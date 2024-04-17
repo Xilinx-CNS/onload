@@ -658,7 +658,7 @@ translate_dma_address(struct efhw_nic *nic, resource_size_t dma_addr,
                       int owner_id)
 {
   struct efhw_sw_bt *sw_bt = efhw_sw_bt_by_owner(nic, owner_id);
-  uint64_t pfn = oo_iobufset_pfn(sw_bt->pages, dma_addr);
+  uint64_t pfn = efhw_sw_bt_get_pfn(sw_bt, dma_addr >> PAGE_SHIFT);
 
   return pfn << PAGE_SHIFT;
 }

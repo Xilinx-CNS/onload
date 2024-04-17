@@ -24,6 +24,7 @@ int efhw_sw_bt_alloc(struct efhw_nic *nic, int owner, int order,
   struct efhw_buffer_table_block* block;
   struct efhw_sw_bt* bt = efhw_sw_bt_by_owner(nic, owner);
   int rc;
+  void *alloc;
 
   if( bt == NULL )
     return -ENODEV;
@@ -42,14 +43,32 @@ int efhw_sw_bt_alloc(struct efhw_nic *nic, int owner, int order,
 
   /* TODO use af_xdp-specific data rather than repurposing ef10-specific */
   block->btb_hw.ef10.handle = order | (owner << 8);
-  block->btb_vaddr = 0;
+  /* This is assuming that all btb have the same order,
+   * we could use used_page_count instead but that would assume that all btbs
+   * are filled before moving onto the next one. */
+  block->btb_vaddr = (bt->block_count *
+                      (EFHW_BUFFER_TABLE_BLOCK_SIZE << order)) << PAGE_SHIFT;
 
-  rc = oo_iobufset_init(&bt->pages, EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
+  if( bt->block_capacity < bt->block_count + 1 ) {
+    alloc = krealloc(bt->blocks,
+                     (bt->block_count + 1) * sizeof(*bt->blocks),
+                     GFP_KERNEL);
+    if( alloc == NULL ) {
+      kfree(block);
+      return -ENOMEM;
+    }
+    bt->blocks = alloc;
+    bt->block_capacity = bt->block_count + 1;
+  }
+
+  rc = oo_iobufset_init(&bt->blocks[bt->block_count],
+                        EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
   if( rc < 0 ) {
     kfree(block);
+    bt->blocks[bt->block_count] = NULL;
     return rc;
   }
-  ++bt->buffer_table_count;
+  ++bt->block_count;
 
   *block_out = block;
   return 0;
@@ -58,13 +77,17 @@ int efhw_sw_bt_alloc(struct efhw_nic *nic, int owner, int order,
 static void release_bt(struct efhw_nic* nic, int owner)
 {
   struct efhw_sw_bt* bt = efhw_sw_bt_by_owner(nic, owner);
+  int i;
   BUG_ON(bt == NULL);
-  BUG_ON(bt->freed_buffer_table_count >= bt->buffer_table_count);
+  BUG_ON(bt->freed_block_count >= bt->block_count);
 
-  if( ++bt->freed_buffer_table_count != bt->buffer_table_count )
+  if( ++bt->freed_block_count != bt->block_count )
     return;
 
-  oo_iobufset_kfree(bt->pages);
+  for( i = 0; i < bt->block_count; i++ )
+    if( bt->blocks[i] != NULL )
+      oo_iobufset_kfree(bt->blocks[i]);
+  kfree(bt->blocks);
   memset(bt, 0, sizeof(*bt));
 }
 
@@ -80,7 +103,7 @@ int efhw_sw_bt_set(struct efhw_nic *nic, struct efhw_buffer_table_block *block,
                    int first_entry, int n_entries, dma_addr_t *dma_addrs)
 {
   int i, owner, order;
-  long page;
+  long page, block_idx;
   struct efhw_sw_bt* bt;
 
   owner = block->btb_hw.ef10.handle >> 8;
@@ -108,16 +131,36 @@ int efhw_sw_bt_set(struct efhw_nic *nic, struct efhw_buffer_table_block *block,
    * (but all with the same order).
    */
 
-  page = (block->btb_vaddr >> PAGE_SHIFT) + (first_entry << order);
-  if( n_entries > oo_iobufset_npages(bt->pages) )
+  block_idx = (block->btb_vaddr >> PAGE_SHIFT) /
+              (EFHW_BUFFER_TABLE_BLOCK_SIZE << order);
+  page = first_entry;
+
+  if( block_idx >= bt->block_count )
+    return -EINVAL;
+
+  if( page + n_entries >= oo_iobufset_npages(bt->blocks[block_idx]))
     return -EINVAL;
 
   for( i = 0; i < n_entries; ++i ) {
     struct page *p = pfn_to_page(dma_addrs[i] >> PAGE_SHIFT);
-    bt->pages->pages[(page >> order) + i] = p;
+    bt->blocks[block_idx]->pages[page + i] = p;
+    bt->used_page_count += 1 << order;
   }
 
   return 0;
+}
+
+unsigned long efhw_sw_bt_get_pfn(struct efhw_sw_bt *table, long index)
+{
+  /* This assumes that the order is the same for all blocks */
+  int order = compound_order(table->blocks[0]->pages[0]);
+  long btb_size = EFHW_BUFFER_TABLE_BLOCK_SIZE << order;
+  int btb_index = index / btb_size;
+
+  EFRM_ASSERT(btb_index < table->block_count);
+
+  return oo_iobufset_pfn(table->blocks[btb_index],
+                         index % btb_size << PAGE_SHIFT);
 }
 
 void efhw_sw_bt_clear(struct efhw_nic *nic,

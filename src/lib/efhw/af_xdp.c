@@ -426,10 +426,10 @@ static vm_fault_t xdp_umem_fault(struct vm_fault* vmf) {
   struct efhw_sw_bt* table = vmf->vma->vm_private_data;
   struct page* page;
 
-  if( vmf->pgoff >= oo_iobufset_npages(table->pages) )
+  if( vmf->pgoff >= table->used_page_count )
     return VM_FAULT_SIGSEGV;
 
-  page = virt_to_page(oo_iobufset_ptr(table->pages, vmf->pgoff << PAGE_SHIFT));
+  page = pfn_to_page(efhw_sw_bt_get_pfn(table, vmf->pgoff));
 
   /* Linux page management assumes we won't provide individual pages from a
    * hugetlbfs page, and goes wrong in bad ways if we do. Prevent that by
@@ -464,7 +464,7 @@ static int xdp_register_umem(struct socket* sock, struct efhw_sw_bt* table,
    * so just zero everything we don't use.
    */
   struct xdp_umem_reg mr = {
-    .len = oo_iobufset_npages(table->pages) << PAGE_SHIFT,
+    .len = table->used_page_count << PAGE_SHIFT,
     .chunk_size = chunk_size,
     .headroom = headroom
   };
