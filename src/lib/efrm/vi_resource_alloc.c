@@ -597,8 +597,6 @@ static uint32_t efrm_vi_rm_txq_bytes(struct efrm_vi *virs, int n_entries)
 	struct efhw_nic *nic = efrm_client_get_nic(virs->rs.rs_client);
 	if (nic->devtype.arch == EFHW_ARCH_EF10)
 		return n_entries * EF10_DMA_TX_DESC_BYTES;
-	else if (nic->devtype.arch == EFHW_ARCH_EF100)
-		return n_entries * EF100_DMA_TX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
 		return n_entries * EFAB_AF_XDP_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
@@ -619,8 +617,6 @@ static uint32_t efrm_vi_rm_rxq_bytes(struct efrm_vi *virs, int n_entries)
 
 	if (nic->devtype.arch == EFHW_ARCH_EF10)
 		bytes_per_desc = EF10_DMA_RX_DESC_BYTES;
-	else if (nic->devtype.arch == EFHW_ARCH_EF100)
-		bytes_per_desc = EF100_DMA_RX_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_AF_XDP)
 		bytes_per_desc = EFAB_AF_XDP_DESC_BYTES;
 	else if (nic->devtype.arch == EFHW_ARCH_EFCT)
@@ -1695,8 +1691,8 @@ int  efrm_vi_alloc(struct efrm_client *client,
 		goto fail_mmap;
 	}
 
-	/* EF100 hasn't wakeup events, so only interrupting
-	 * is supported. Net driver via driverlink provides range of interrupts
+	/* Some NICs don't support wakeup events, so only interrupting
+	 * is supported. Net driver provides range of interrupts
 	 * and register to prime EVQ. Resource manager setups IRQ for VI,
 	 * one VI has one IRQ.
 	 * See ON-10914.

@@ -280,11 +280,8 @@ int efrm_pd_alloc(struct efrm_pd **pd_out, struct efrm_client *client_opt,
 
 	if (use_buffer_table) {
 		EFRM_ASSERT(orders_num);
-		/* FIXME EF100: The only buffer table order supported in
-		 * Riverhead is 9. But EF100 will have orders starting from 0
-		 * in the future. */
-		if( client_opt->nic->devtype.arch != EFHW_ARCH_EF100 &&
-		    client_opt->nic->devtype.arch != EFHW_ARCH_EF10CT )
+		/* EF10CT does not use NIC buffer table and uses huge pages */
+		if( client_opt->nic->devtype.arch != EFHW_ARCH_EF10CT )
 			EFRM_ASSERT(efhw_nic_buffer_table_orders(
 						client_opt->nic)[0] == 0);
 	}
@@ -521,7 +518,6 @@ static void efrm_pd_dma_unmap_nic(struct efrm_pd *pd,
 	struct device* dev;
 	switch (nic->devtype.arch) {
 	case EFHW_ARCH_EF10:
-	case EFHW_ARCH_EF100:
 		dev = efhw_nic_get_dev(nic);
 		if (dev) {
 			efrm_pd_dma_unmap_pci(dev, n_pages, nic_order,
@@ -547,7 +543,6 @@ static int efrm_pd_dma_map_nic(struct efrm_pd *pd,
 	int rc = -ENODEV, i;
 	switch (nic->devtype.arch) {
 	case EFHW_ARCH_EF10:
-	case EFHW_ARCH_EF100:
 		dev = efhw_nic_get_dev(nic);
 		if( dev ) {
 			rc = efrm_pd_dma_map_pci(dev, n_pages, nic_order,

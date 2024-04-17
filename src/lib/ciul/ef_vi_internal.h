@@ -21,7 +21,6 @@
 #include <etherfabric/pd.h>
 #include "sysdep.h"
 #include "ef_vi_ef10.h"
-#include "ef_vi_ef100.h"
 
 
 /**********************************************************************

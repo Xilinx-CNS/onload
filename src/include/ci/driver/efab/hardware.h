@@ -61,7 +61,6 @@
  *---------------------------------------------------------------------------*/
 
 #include <ci/driver/efab/hardware/ef10.h>
-#include <ci/driver/efab/hardware/ef100.h>
 #include <ci/driver/efab/hardware/efct.h>
 #include <ci/driver/efab/hardware/ef10ct.h>
 #include <ci/driver/efab/hardware/af_xdp.h>

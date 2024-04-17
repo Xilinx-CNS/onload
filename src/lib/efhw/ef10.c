@@ -1896,10 +1896,7 @@ static int __ef10_ef100_nic_buffer_table_alloc(struct efhw_nic *nic, int owner,
 		return -EINVAL;
 	}
 
-	if (nic->devtype.arch == EFHW_ARCH_EF10)
-		block->btb_vaddr = EF10_BUF_ID_ORDER_2_VADDR(btb_index, order);
-	else
-		block->btb_vaddr = EF100_BUF_ID_ORDER_2_VADDR(btb_index, order);
+	block->btb_vaddr = EF10_BUF_ID_ORDER_2_VADDR(btb_index, order);
 
 	return 0;
 }
@@ -2000,10 +1997,7 @@ ef10_ef100_nic_buffer_table_set(struct efhw_nic *nic,
 	int rc;
 	int buffer_id;
 
-	if (nic->devtype.arch == EFHW_ARCH_EF10)
-		buffer_id = EF10_BUF_VADDR_2_ID(block->btb_vaddr) + first_entry;
-	else
-		buffer_id = EF100_BUF_VADDR_2_ID(block->btb_vaddr) + first_entry;
+	buffer_id = EF10_BUF_VADDR_2_ID(block->btb_vaddr) + first_entry;
 
 	rc = __ef10_ef100_nic_buffer_table_set(nic, block, buffer_id, n_entries,
 					       dma_addrs);
@@ -2025,10 +2019,7 @@ ef10_ef100_nic_buffer_table_clear(struct efhw_nic *nic,
 	int buffer_id;
 	dma_addr_t null_addrs[MC_CMD_PROGRAM_BUFTBL_ENTRIES_IN_ENTRY_MAXNUM];
 
-	if (nic->devtype.arch == EFHW_ARCH_EF10)
-		buffer_id = EF10_BUF_VADDR_2_ID(block->btb_vaddr) + first_entry;
-	else
-		buffer_id = EF100_BUF_VADDR_2_ID(block->btb_vaddr) + first_entry;
+	buffer_id = EF10_BUF_VADDR_2_ID(block->btb_vaddr) + first_entry;
 
 	memset(null_addrs, 0, sizeof(null_addrs));
 	rc = __ef10_ef100_nic_buffer_table_set(nic, block, buffer_id, n_entries,

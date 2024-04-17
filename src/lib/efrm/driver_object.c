@@ -110,7 +110,6 @@ int efrm_nic_ctor(struct efrm_nic *efrm_nic,
 	int rc;
 
 	if (!(efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10 ||
-	      efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF100 ||
 	      efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EFCT ||
 	      efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_EF10CT ||
 	      efrm_nic->efhw_nic.devtype.arch == EFHW_ARCH_AF_XDP)) {

@@ -49,7 +49,7 @@ UTILS_SRCS	:= hugetlb.c iobufset.c
 
 ifeq ($(HAVE_SFC),1)
 RESOURCE_SRCS += driverlink_new.c
-EFHW_SRCS += ef10.c ef100.c
+EFHW_SRCS += ef10.c
 endif
 
 ifeq ($(HAVE_EF10CT),1)

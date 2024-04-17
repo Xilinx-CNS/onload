@@ -239,9 +239,6 @@ int ef_vi_init(struct ef_vi* vi, int arch, int variant, int revision,
   case EF_VI_ARCH_EF10:
     ef10_vi_init(vi);
     break;
-  case EF_VI_ARCH_EF100:
-    ef100_vi_init(vi);
-    break;
   case EF_VI_ARCH_EFCT:
     efct_vi_init(vi);
     break;

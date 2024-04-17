@@ -1606,25 +1606,20 @@ extern int
 ef_vi_receive_get_bytes(ef_vi* vi, const void* pkt, uint16_t* bytes_out);
 
 
-/*! \brief Retrieve the user_mark and user_flag fields in a received packet
+/*! \brief Deprecated: Retrieve the user_* fields in a received packet
 **
 ** \param vi        The virtual interface that received the packet.
 ** \param pkt       The first packet buffer for the received packet.
 ** \param user_mark On return, set to the 32-bit value assigned by the NIC
 ** \param user_flag On return, set to the 1-bit value assigned by the NIC
 **
-** These fields are available on SN1000-series and later adapters, and only
-** when using the full rx prefix. Use of this function in other configurations
-** will return nonsense data, or assert in a debug build.
-**
-** The value of the mark and flag may be set by filter rules assigned to the
-** VI or by datapath extensions (see ef_vi_open_extension()).
+** This function is not used on currently supported NICs.
 **
 ** \return 0 on success, or a negative error code
 */
 extern int
 ef_vi_receive_get_user_data(ef_vi* vi, const void* pkt, uint32_t* user_mark,
-                            uint8_t* user_flag);
+                            uint8_t* user_flag) __attribute__ ((deprecated));
 
 
 /*! \brief Maximum number of receive completions per receive event. */
@@ -2540,10 +2535,14 @@ ef_eventq_has_event(const ef_vi* vi)
 ef_vi_inline int
 ef_eventq_has_many_events(const ef_vi* evq, int n_events)
 {
-  if( evq->evq_phase_bits )
-    return ef_eventq_check_event_phase_bit(evq, n_events);
-  else
-    return ef_eventq_check_event(evq, n_events);
+  switch( evq->nic_type.arch ) {
+    case EF_VI_ARCH_EF10:
+      return ef_eventq_check_event(evq, n_events);
+    case EF_VI_ARCH_AF_XDP:
+      return efxdp_ef_eventq_check_event(evq, 0);
+    default:
+      return ef_eventq_check_event_phase_bit(evq, n_events);
+  }
 }
 
 
@@ -2668,7 +2667,7 @@ ef_vi_receive_query_layout(ef_vi* vi,
                            int* layout_len_out);
 
 
-/*! \brief Retrieve the discard flags associated with a received packet.
+/*! \brief Deprecated: Retrieve the discard flags from a received packet.
 **
 ** \param vi             The virtual interface to query.
 ** \param pkt            The received packet.
@@ -2677,17 +2676,12 @@ ef_vi_receive_query_layout(ef_vi* vi,
 **
 ** \return 0 on success, or a negative error code
 **
-** For EF_EVENT_TYPE_RX_MULTI_PKTS events an information about Rx offload
-** classification is contained in the prefix of received packet.
-** The EF_EVENT_TYPE_RX_MULTI_PKTS events and prefix type are EF100 specific.
-**
-** Read CLASS field from the prefix of received packet and return discard flags
-** about packet length, CRC or checksum validation errors.
-** 
+** This function is not used on currently supported NICs.
 */
 extern int
 ef_vi_receive_get_discard_flags(ef_vi* vi, const void* pkt,
-                                unsigned* discard_flags);
+                                unsigned* discard_flags)
+                                __attribute__ ((deprecated));
 
 #ifdef __cplusplus
 }

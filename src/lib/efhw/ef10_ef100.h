@@ -133,16 +133,14 @@ extern u32 ef10_ef100_vi_io_size(struct efhw_nic* nic);
 
 static inline struct efx_dl_device* efhw_nic_acquire_dl_device(struct efhw_nic* nic)
 {
-  EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10 ||
-	      nic->devtype.arch == EFHW_ARCH_EF100);
+  EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10);
   return efhw_nic_acquire_drv_device(nic);
 }
 
 static inline void efhw_nic_release_dl_device(struct efhw_nic* nic,
 					      struct efx_dl_device* dl_device)
 {
-  EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10 ||
-	      nic->devtype.arch == EFHW_ARCH_EF100);
+  EFHW_ASSERT(nic->devtype.arch == EFHW_ARCH_EF10);
   efhw_nic_release_drv_device(nic, dl_device);
 }
 

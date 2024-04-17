@@ -36,7 +36,6 @@
 #include <ci/driver/efab/hardware.h>
 #include <ci/driver/ci_efct.h>
 #include <ci/efhw/ef10.h>
-#include <ci/efhw/ef100.h>
 #include <ci/efhw/ef10ct.h>
 #include <ci/efhw/af_xdp.h>
 #include <ci/efhw/efct.h>
@@ -50,17 +49,6 @@ static void ef10_device_type_init(struct efhw_device_type *dt,
 	dt->function = device_id & 0x1000 ? EFHW_FUNCTION_VF :
 		       EFHW_FUNCTION_PF;
 	dt->arch = EFHW_ARCH_EF10;
-	dt->variant = variant;
-	dt->revision = class_revision;
-}
-
-
-static void ef100_device_type_init(struct efhw_device_type *dt,
-				   char variant, int device_id,
-				   int class_revision)
-{
-	dt->function = EFHW_FUNCTION_PF;
-	dt->arch = EFHW_ARCH_EF100;
 	dt->variant = variant;
 	dt->revision = class_revision;
 }
@@ -115,10 +103,6 @@ int efhw_sfc_device_type_init(struct efhw_device_type *dt, struct pci_dev* dev)
 	case 0x1b03:
 	case 0x0b03:
 		ef10_device_type_init(dt, 'C', dev->device, class_revision);
-		break;
-	case 0x0100:
-		/* FIXME: add properly variants and revisions for EF100 */
-		ef100_device_type_init(dt, 'A', dev->device, class_revision);
 		break;
 	default:
 		return -ENODEV;

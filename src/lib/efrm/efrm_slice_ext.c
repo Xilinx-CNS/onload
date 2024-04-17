@@ -3,10 +3,8 @@
 #include <ci/efrm/private.h>
 #include <ci/efrm/slice_ext.h>
 #include <ci/driver/resource/linux_efhw_nic.h>
-#include <ci/efhw/ef100.h>
 #include "efrm_internal.h"
 
-#if ! CI_HAVE_SFC
 static int _dummy_ef100_nic_ext(struct efhw_nic *nic, ...)
 {
 	return -EOPNOTSUPP;
@@ -17,7 +15,9 @@ static int _dummy_ef100_nic_ext(struct efhw_nic *nic, ...)
 #define ef100_nic_ext_get_meta_global _dummy_ef100_nic_ext
 #define ef100_nic_ext_get_meta_msg _dummy_ef100_nic_ext
 #define ef100_nic_ext_msg _dummy_ef100_nic_ext
-#endif /* ! CI_HAVE_SFC */
+#define ef100_nic_ext_get_meta_rc _dummy_ef100_nic_ext
+#define ef100_nic_ext_get_meta_msg_prog _dummy_ef100_nic_ext
+#define ef100_nic_ext_destroy_rsrc _dummy_ef100_nic_ext
 
 
 static bool check_ef100(const struct efrm_resource *rs)

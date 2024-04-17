@@ -14,6 +14,7 @@
 #include <ci/efch/op_types.h>
 #endif
 #include "ef_vi_internal.h"
+#include "logging.h"
 #include <etherfabric/vi.h>
 #include <etherfabric/efct_vi.h>
 #include <etherfabric/internal/efct_uk_api.h>

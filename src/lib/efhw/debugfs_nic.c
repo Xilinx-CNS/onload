@@ -39,7 +39,6 @@ static int efhw_debugfs_read_devname(struct seq_file *file,
 
 static const char *const arch_names[] = {
   [EFHW_ARCH_EF10] = "EF10",
-  [EFHW_ARCH_EF100] = "EF100",
   [EFHW_ARCH_EFCT] = "EFCT",
   [EFHW_ARCH_EF10CT] = "EF10CT",
   [EFHW_ARCH_AF_XDP] = "AF_XDP",

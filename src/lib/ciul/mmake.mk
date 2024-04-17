@@ -16,8 +16,6 @@ EFVI_SRCS	:=		\
 		vi_init.c	\
 		ef10_event.c	\
 		ef10_vi.c	\
-		ef100_event.c	\
-		ef100_vi.c      \
 		efxdp_vi.c      \
 		efct_vi.c       \
 		efct_kbufs.c    \

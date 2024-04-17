@@ -41,13 +41,6 @@ static void ef10_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
   vm->io_page = (void*) vi_rs->io_page;
 }
 
-/* FIXME: just copy from ef10 */
-static void ef100_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
-				 struct efrm_vi_mappings* vm)
-{
-  vm->io_page = (void*) vi_rs->io_page;
-}
-
 static void af_xdp_vi_get_mappings(struct efrm_vi* vi_rs, struct efhw_nic* nic,
 				   struct efrm_vi_mappings* vm)
 {
@@ -72,9 +65,6 @@ void efrm_vi_get_mappings(struct efrm_vi* vi, struct efrm_vi_mappings* vm)
   switch( nic->devtype.arch ) {
   case EFHW_ARCH_EF10:
     ef10_vi_get_mappings(vi, nic, vm);
-    break;
-  case EFHW_ARCH_EF100:
-    ef100_vi_get_mappings(vi, nic, vm);
     break;
   case EFHW_ARCH_EFCT:
   case EFHW_ARCH_EF10CT:

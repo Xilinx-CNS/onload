@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-2-Clause */
 /* SPDX-FileCopyrightText: Copyright (C) 2024, Advanced Micro Devices, Inc. */
 #include "ef_vi_internal.h"
+#include "logging.h"
 
 #include "efct_vi.h"
 

@@ -47,7 +47,6 @@
 #include <ci/efrm/efrm_filter.h>
 #include <ci/efrm/nic_table.h>
 #include <ci/efhw/ef10.h>
-#include <ci/efhw/ef100.h>
 #include <ci/efhw/nic.h>
 #include <ci/tools/sysdep.h>
 #include <ci/internal/transport_config_opt.h>
@@ -327,6 +326,7 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 				  hdr, irq_res);
 
 	init_vi_resource_dimensions(&res_dim, ef10_res, irq_res);
+	res_dim.efhw_ops = &ef10_char_functional_units;
 
 	rc = efhw_sfc_device_type_init(&dev_type, efrm_dev->pci_dev);
 	if (rc < 0) {
@@ -342,16 +342,6 @@ efrm_dl_probe(struct efx_dl_device *efrm_dev,
 		    (unsigned) efrm_dev->pci_dev->device,
 		    dev_type.revision, dev_type.arch, dev_type.variant,
 		    dev_type.revision, net_dev->ifindex);
-	switch (dev_type.arch) {
-	case EFHW_ARCH_EF10:
-		res_dim.efhw_ops = &ef10_char_functional_units;
-		break;
-	case EFHW_ARCH_EF100:
-		res_dim.efhw_ops = &ef100_char_functional_units;
-		break;
-	default:
-		EFRM_ASSERT(false);
-	}
 
 	lnic = efrm_get_rediscovered_nic(efrm_dev->pci_dev, &dev_type,
 					 &res_dim);
@@ -442,9 +432,8 @@ static void efrm_dl_reset_resume(struct efx_dl_device *efrm_dev, int ok)
 	 * them. */
 	efrm_driverlink_resume(nic);
 
-	/* VI base may have changed on EF10 and EF100 hardware */
-	if (nic->devtype.arch == EFHW_ARCH_EF10 ||
-	    nic->devtype.arch == EFHW_ARCH_EF100) {
+	/* VI base may have changed on EF10 hardware */
+	if (nic->devtype.arch == EFHW_ARCH_EF10) {
 		struct efx_dl_ef10_resources *ef10_res = NULL;
 		efx_dl_search_device_info(efrm_nic->dl_dev_info, 
 					  EFX_DL_EF10_RESOURCES,

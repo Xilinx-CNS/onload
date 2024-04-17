@@ -3,12 +3,42 @@
 
 #include "ef_vi_internal.h"
 #include "efct_vi.h"
+#include "logging.h"
 #include <etherfabric/vi.h>
 #include <etherfabric/efct_vi.h>
 #include <etherfabric/internal/efct_uk_api.h>
 #include <ci/efhw/common.h>
 #include <ci/tools/byteorder.h>
 #include <ci/tools/sysdep.h>
+
+
+#define EF_VI_EVENT_OFFSET(q, i)                                \
+  (((q)->ep_state->evq.evq_ptr + (i) * sizeof(ef_vi_qword)) &   \
+   (q)->evq_mask)
+
+#define EF_VI_EVENT_PTR(q, i)                                           \
+  ((ef_vi_qword*) ((q)->evq_base + EF_VI_EVENT_OFFSET((q), (i))))
+
+#define EFCT_PHASE_LBN 59
+#define EFCT_PHASE_WIDTH 1
+#define EF_VI_EVENT_PHASE(evp)                  \
+  QWORD_GET_U(EFCT_PHASE, *(evp))
+
+#define EF_VI_EVQ_PHASE(q, i)                                     \
+  ((((q)->ep_state->evq.evq_ptr + sizeof(ef_vi_qword) * (i)) &    \
+    ((q)->evq_mask + 1)) != 0)
+
+
+int ef_eventq_check_event_phase_bit(const ef_vi* vi, int look_ahead)
+{
+  ef_vi_qword* ev;
+
+  EF_VI_ASSERT(vi->evq_base);
+  EF_VI_BUG_ON(look_ahead < 0);
+
+  ev = EF_VI_EVENT_PTR(vi, look_ahead);
+  return (EF_VI_EVENT_PHASE(ev) == EF_VI_EVQ_PHASE(vi, look_ahead));
+}
 
 
 #define M_(FIELD) (CI_MASK64(FIELD ## _WIDTH) << FIELD ## _LBN)
