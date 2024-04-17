@@ -7,6 +7,7 @@
 #include <linux/netdevice.h>
 
 #include <ci/driver/ci_aux.h>
+#include <ci/driver/kernel_compat.h>
 
 #include "efct_test_device.h"
 #include "configfs.h"
@@ -102,7 +103,7 @@ static int __init efct_test_init(void)
 
   printk(KERN_INFO "efct_test init\n");
 
-  cls = class_create(THIS_MODULE, "efct_test");
+  cls = ci_class_create("efct_test");
   if( IS_ERR(cls) ) {
     rc = PTR_ERR(cls);
     printk(KERN_INFO "Failed to create class rc %d\n", rc);
