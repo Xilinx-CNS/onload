@@ -153,11 +153,11 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
     int tx_hw_stamp_in_sync;
     memset(&stamps, 0, sizeof(stamps));
     tx_hw_stamp_in_sync = pkt->hw_stamp.tv_flags &
-      CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC;
+      OO_TS_FLAG_ACCEPTABLE;
 
     if( pkt->flags & CI_PKT_FLAG_RTQ_RETRANS ) {
       if( pkt->pf.tcp_tx.first_tx_hw_stamp.tv_flags &
-          CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC ) {
+          OO_TS_FLAG_ACCEPTABLE ) {
         stamps.first_sent.tv_sec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_sec;
         stamps.first_sent.tv_nsec = pkt->pf.tcp_tx.first_tx_hw_stamp.tv_nsec;
       }
@@ -192,7 +192,7 @@ static inline int ci_ip_tx_timestamping_to_cmsg(int proto, ci_netif* ni,
       ts[2].tv_nsec = pkt->hw_stamp.tv_nsec;
     }
     if( (s->timestamping_flags & ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE) &&
-        (pkt->hw_stamp.tv_flags & CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC) ) {
+        (pkt->hw_stamp.tv_flags & OO_TS_FLAG_ACCEPTABLE) ) {
       ts[1].tv_sec = pkt->hw_stamp.tv_sec;
       ts[1].tv_nsec = pkt->hw_stamp.tv_nsec;
     }

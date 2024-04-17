@@ -184,22 +184,31 @@ int ci_ip_options_parse(ci_netif* netif, ci_ip4_hdr* ip, const int hdr_size)
   return error;
 }
 
+static inline oo_ts_flags_t compute_oo_ts_flags(ci_netif *netif,
+                                                oo_ts_flags_t ef_vi_ts_flags)
+{
+  oo_ts_flags_t tsf = ((NI_OPTS(netif).timestamping_reporting) &
+                       CITP_TIMESTAMPING_RECORDING_FLAG_CHECK_SYNC) ?
+                      EF_VI_SYNC_FLAG_CLOCK_IN_SYNC :
+                      EF_VI_SYNC_FLAG_CLOCK_SET;
+
+  if( ef_vi_ts_flags & tsf )
+    return ef_vi_ts_flags | OO_TS_FLAG_ACCEPTABLE;
+  else
+    return ef_vi_ts_flags;
+}
+
 static void record_rx_timestamp(ci_netif* netif, ci_netif_state_nic_t* nsn,
                                 ci_ip_pkt_fmt* pkt,
                                 ef_precisetime stamp)
 {
-  int tsf = (NI_OPTS(netif).timestamping_reporting &
-               CITP_TIMESTAMPING_RECORDING_FLAG_CHECK_SYNC) ?
-                 EF_VI_SYNC_FLAG_CLOCK_IN_SYNC :
-                 EF_VI_SYNC_FLAG_CLOCK_SET;
-  pkt->hw_stamp.tv_sec = stamp.tv_sec;
-  pkt->hw_stamp.tv_nsec = stamp.tv_nsec;
-  pkt->hw_stamp.tv_nsec_frac = stamp.tv_nsec_frac;
-  pkt->hw_stamp.tv_flags =
-            (stamp.tv_flags & ~CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC) |
-            ((stamp.tv_flags & tsf) ? CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC : 0);
+  pkt->hw_stamp = (struct oo_timespec) {
+    .tv_sec       = stamp.tv_sec,
+    .tv_nsec      = stamp.tv_nsec,
+    .tv_nsec_frac = stamp.tv_nsec_frac,
+    .tv_flags     = compute_oo_ts_flags(netif, stamp.tv_flags),
+  };
   nsn->last_rx_timestamp = pkt->hw_stamp;
-  nsn->last_sync_flags = stamp.tv_flags;
 
   LOG_NR(log(LPF "RX id=%d timestamp: %" CI_PRId64 ".%09" CI_PRIu32 "%03u sync %hd",
       OO_PKT_FMT(pkt), stamp.tv_sec, stamp.tv_nsec,
@@ -1677,25 +1686,12 @@ ci_inline void __ci_netif_tx_pkt_complete(ci_netif* ni,
 #if CI_CFG_TIMESTAMPING
   if( pkt->flags & CI_PKT_FLAG_TX_TIMESTAMPED ) {
     if( ev != NULL && EF_EVENT_TYPE(*ev) == EF_EVENT_TYPE_TX_WITH_TIMESTAMP ) {
-      int opt_tsf = ((NI_OPTS(ni).timestamping_reporting) &
-                     CITP_TIMESTAMPING_RECORDING_FLAG_CHECK_SYNC) ?
-                    EF_VI_SYNC_FLAG_CLOCK_IN_SYNC :
-                    EF_VI_SYNC_FLAG_CLOCK_SET;
       int pkt_tsf = EF_EVENT_TX_WITH_TIMESTAMP_SYNC_FLAGS(*ev);
 
       pkt->hw_stamp.tv_sec = EF_EVENT_TX_WITH_TIMESTAMP_SEC(*ev);
       pkt->hw_stamp.tv_nsec = EF_EVENT_TX_WITH_TIMESTAMP_NSEC(*ev);
       pkt->hw_stamp.tv_nsec_frac = EF_EVENT_TX_WITH_TIMESTAMP_NSEC_FRAC16(*ev);
-      pkt->hw_stamp.tv_flags =
-        /* Clear packet in-sync flag */
-        (pkt_tsf & (~CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC)) |
-
-        /* Test packet clock-set or both clock-set and in-sync flags
-         * depending on timestamp reporting configuration */
-        ((pkt_tsf & opt_tsf) ?
-
-        /* and set the effective in-sync flag accordingly */
-         CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC : 0);
+      pkt->hw_stamp.tv_flags = compute_oo_ts_flags(ni, pkt_tsf);
     }
     else if( ev == NULL ) {
       /* This is NIC reset. The TIMESTAMPED flag needs to stay

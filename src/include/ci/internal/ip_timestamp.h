@@ -80,7 +80,8 @@ onload_timestamp_to_timespec(const struct onload_timestamp* in,
 
 static inline void
 ci_rx_pkt_timestamp_nic(const ci_ip_pkt_fmt* pkt,
-                        struct onload_timestamp* ts_out)
+                        struct onload_timestamp* ts_out,
+                        oo_ts_flags_t* flags_out)
 {
   ts_out->sec = pkt->hw_stamp.tv_sec;
   ts_out->nsec = pkt->hw_stamp.tv_nsec;
@@ -88,6 +89,8 @@ ci_rx_pkt_timestamp_nic(const ci_ip_pkt_fmt* pkt,
   /* Shift fractional 16-bit fractional nanoseconds value to left align
    * with the 24-bit fractional nanoseconds value in onload extension. */
   ts_out->nsec_frac = ((uint32_t) pkt->hw_stamp.tv_nsec_frac) << 8;
+
+  *flags_out = pkt->hw_stamp.tv_flags;
 }
 
 static inline void
@@ -252,9 +255,11 @@ static inline void
 ci_rx_pkt_timestamp(const ci_ip_pkt_fmt* pkt, struct onload_timestamp* ts_out,
                     int src, int format)
 {
+  oo_ts_flags_t ts_flags;
+
   switch( src ) {
   case CITP_RX_TIMESTAMPING_SOURCE_NIC:
-    ci_rx_pkt_timestamp_nic(pkt, ts_out);
+    ci_rx_pkt_timestamp_nic(pkt, ts_out, &ts_flags);
     break;
   case CITP_RX_TIMESTAMPING_SOURCE_TRAILER:
     ci_rx_pkt_timestamp_trailer(pkt, ts_out, format);

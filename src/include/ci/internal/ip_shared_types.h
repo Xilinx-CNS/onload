@@ -140,13 +140,16 @@ typedef struct {
   ci_uint64 ptr CI_ALIGN(8);
 } ci_ss_ptr;
 
+/* Type for Onload timestamp flags */
+typedef ci_uint16 oo_ts_flags_t;
+
 /* Timestamp structure including fractional nanoseconds and the sync
  * flags that apply to the timetamp. Equivalent to ef_precisetime. */
 struct oo_timespec {
   ci_int64 tv_sec;
   ci_uint32 tv_nsec;
   ci_uint16 tv_nsec_frac;
-  ci_uint16 tv_flags;
+  oo_ts_flags_t tv_flags;
 };
 
 typedef struct {
@@ -187,9 +190,18 @@ typedef struct {
 *************************** Packet buffers ***************************
 *********************************************************************/
 
-/*! Indicates whether timestamp is taken when adapter clock has sync with ptp
- * To be tested against *hw_stamp.tv_flags */
-#define CI_IP_PKT_HW_STAMP_FLAG_IN_SYNC 1
+/*! Flag in oo_ts_flags_t indicating that the clock which generated the
+ *  timestamp has ever been set. Passed directly through from ef_vi. */
+#define OO_TS_FLAG_CLOCK_SET       EF_VI_SYNC_FLAG_CLOCK_SET
+
+/*! Flag in oo_ts_flags_t indicating that the clock which generated the
+ *  timestamp is synchronised with a suitable remote time source.
+ *  Passed directly through from ef_vi. */
+#define OO_TS_FLAG_CLOCK_IN_SYNC   EF_VI_SYNC_FLAG_CLOCK_IN_SYNC
+
+/*! Flag in oo_ts_flags_t indicating that configured requirements for
+ *  timestamp validity are met. */
+#define OO_TS_FLAG_ACCEPTABLE      (1 << 8)
 
 /*!
 ** ci_ip_pkt_fmt_prefix
@@ -1047,8 +1059,6 @@ typedef struct {
 #if CI_CFG_TIMESTAMPING
   /* Timestamp of the last packet received with a hardware timestamp. */
   struct oo_timespec    last_rx_timestamp;
-  /* Sync flags of the last packet received */
-  ci_uint32             last_sync_flags;
 #endif
 
 # define CI_NETIF_NIC_ERROR_REMAP               0x00000001u

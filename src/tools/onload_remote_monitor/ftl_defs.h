@@ -276,7 +276,6 @@ typedef struct oo_p_dllink oo_p_dllink_t;
   ON_CI_CFG_TIMESTAMPING( \
     FTL_TFIELD_STRUCT(ctx, oo_timespec,           \
                       last_rx_timestamp, ORM_OUTPUT_STACK)              \
-    FTL_TFIELD_INT(ctx, ci_uint32, last_sync_flags, ORM_OUTPUT_STACK) \
   ) \
   FTL_TFIELD_INT(ctx, ci_uint32, nic_error_flags, ORM_OUTPUT_STACK) \
   ON_CI_HAVE_CTPIO(                                                 \

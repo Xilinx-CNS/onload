@@ -767,8 +767,8 @@ static void ci_netif_dump_vi(ci_netif* ni, int intf_i, oo_dump_log_fn_t logger,
 
 #if CI_CFG_TIMESTAMPING
   logger(log_arg, "  clk: %s%s",
-         (nic->last_sync_flags & EF_VI_SYNC_FLAG_CLOCK_SET) ? "SET " : "",
-         (nic->last_sync_flags & EF_VI_SYNC_FLAG_CLOCK_IN_SYNC) ? "SYNC" : "");
+         (nic->last_rx_timestamp.tv_flags & OO_TS_FLAG_CLOCK_SET) ? "SET " : "",
+         (nic->last_rx_timestamp.tv_flags & OO_TS_FLAG_CLOCK_IN_SYNC) ? "SYNC" : "");
   logger(log_arg, "  last_rx_stamp: %" CI_PRIx64 ":%x.%04x",
          nic->last_rx_timestamp.tv_sec, nic->last_rx_timestamp.tv_nsec,
          nic->last_rx_timestamp.tv_nsec_frac);
