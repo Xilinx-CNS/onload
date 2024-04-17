@@ -235,6 +235,8 @@ static void get_rx_timestamp(ci_netif* netif, ci_ip_pkt_fmt* pkt)
     if (meta->flags & ONLOAD_XDP_RX_META_TSTAMP) {
       pkt->hw_stamp.tv_sec = meta->tstamp / ns_to_sec;
       pkt->hw_stamp.tv_nsec = meta->tstamp % ns_to_sec;
+      pkt->hw_stamp.tv_nsec_frac = 0;
+      pkt->hw_stamp.tv_flags = 0;
     }
     return;
   }
