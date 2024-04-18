@@ -201,7 +201,7 @@ typedef struct {
 
 /*! Flag in oo_ts_flags_t indicating that configured requirements for
  *  timestamp validity are met. */
-#define OO_TS_FLAG_ACCEPTABLE      (1 << 8)
+#define OO_TS_FLAG_ACCEPTABLE      (1 << 7)
 
 /*!
 ** ci_ip_pkt_fmt_prefix

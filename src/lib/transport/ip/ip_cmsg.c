@@ -327,12 +327,11 @@ void ip_cmsg_recv_timestamping(ci_netif *ni, const ci_ip_pkt_fmt *pkt,
 {
   if( flags & ONLOAD_SOF_TIMESTAMPING_ONLOAD ) {
     struct onload_timestamp ts[ONLOAD_TIMESTAMPING_FLAG_RX_COUNT];
-    oo_ts_flags_t ts_flags;
     int n = 0;
 
     if( flags & ONLOAD_TIMESTAMPING_FLAG_RX_NIC ) {
       ci_assert_lt(n, ONLOAD_TIMESTAMPING_FLAG_RX_COUNT);
-      ci_rx_pkt_timestamp_nic(pkt, &ts[n++], &ts_flags);
+      ci_rx_pkt_timestamp_nic(pkt, &ts[n++]);
     }
     if( flags & ONLOAD_TIMESTAMPING_FLAG_RX_CPACKET ) {
       ci_assert_lt(n, ONLOAD_TIMESTAMPING_FLAG_RX_COUNT);
@@ -358,12 +357,11 @@ void ip_cmsg_recv_timestamping(ci_netif *ni, const ci_ip_pkt_fmt *pkt,
 
     struct onload_timestamp ots;
     struct timespec nic;
-    oo_ts_flags_t ts_flags;
-    ci_rx_pkt_timestamp_nic(pkt, &ots, &ts_flags);
+    ci_rx_pkt_timestamp_nic(pkt, &ots);
     onload_timestamp_to_timespec(&ots, &nic);
 
     if( flags & ONLOAD_SOF_TIMESTAMPING_SYS_HARDWARE &&
-        ts_flags & OO_TS_FLAG_ACCEPTABLE )
+        ots.flags & OO_TS_FLAG_ACCEPTABLE )
       ts.hwtimesys = nic;
 
     if( flags & ONLOAD_SOF_TIMESTAMPING_RAW_HARDWARE )

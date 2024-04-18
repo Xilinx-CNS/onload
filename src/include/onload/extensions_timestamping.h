@@ -42,7 +42,7 @@ struct onload_timestamp {
   uint64_t sec;
   uint32_t nsec;
   unsigned nsec_frac : 24;
-  unsigned reserved  : 8;
+  unsigned flags     : 8;
 };
 
 /* Flags for requesting timestamps */
@@ -53,6 +53,20 @@ enum onload_timestamping_flags {
   /* Request NIC and/or external timestamps for received packets */
   ONLOAD_TIMESTAMPING_FLAG_RX_NIC = 1 << 1,
   ONLOAD_TIMESTAMPING_FLAG_RX_CPACKET = 1 << 2,
+};
+
+/* Flags in received timestamps */
+enum onload_ts_flags {
+  /* The clock from which this timestamp was taken has ever been set. */
+  ONLOAD_TS_FLAG_CLOCK_SET     = 1 << 0,
+
+  /* The clock from which this timestamp was taken was synchronised to
+   * a suitable remote source. */
+  ONLOAD_TS_FLAG_CLOCK_IN_SYNC = 1 << 1,
+
+  /* The state of the above flags meets the configured requirements for
+   * the Onload stack. */
+  ONLOAD_TS_FLAG_ACCEPTABLE    = 1 << 7,
 };
 
 extern int onload_timestamping_request(int fd, unsigned flags);
