@@ -265,7 +265,7 @@ static void uncache_fd(ci_netif* ni, ci_tcp_state* ts)
       }
       else {
         fput(filp);
-        efab_linux_sys_close(fd);
+        ci_close_fd(fd);
       }
     }
     else {

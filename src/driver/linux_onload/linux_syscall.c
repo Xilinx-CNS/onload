@@ -55,16 +55,6 @@
 #include <asm/insn.h>
 #include <asm/percpu.h>
 
-
-
-/* A way to call the original sys_close, exported to other parts of the code.
- */
-asmlinkage int efab_linux_sys_close(int fd)
-{
-  return (int)SYSCALL_DISPATCHn(1, close, (int), fd);
-}
-
-
 asmlinkage int efab_linux_sys_epoll_create1(int flags)
 {
   return (int)SYSCALL_DISPATCHn(1, epoll_create1, (int), flags);
