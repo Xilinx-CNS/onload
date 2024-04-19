@@ -69,14 +69,14 @@ struct oo_epoll1_set_home_arg {
 };
 
 struct oo_epoll1_spin_on_arg {
-  ci_uint64     timeout_us CI_ALIGN(8);
+  ci_uint64     timeout_ns CI_ALIGN(8);
   ci_fixed_descriptor_t epoll_fd;
-  ci_uint32     sleep_iter_us;
+  ci_uint32     sleep_iter_ns;
 };
 
 struct oo_epoll1_block_on_arg {
   ci_uint64     sigmask CI_ALIGN(8);
-  ci_uint64     timeout_us CI_ALIGN(8);
+  ci_uint64     timeout_ns CI_ALIGN(8);
   ci_fixed_descriptor_t epoll_fd;
   ci_uint32     flags; /* INOUT */
 #define OO_EPOLL1_EVENT_ON_HOME  1 /* OUT */

@@ -557,7 +557,7 @@ int citp_epollb_ctl(citp_fdinfo* fdi, int eop, int fd,
 
 int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
                      int maxevents, int timeout, const sigset_t *sigmask,
-                     citp_lib_context_t* lib_context)
+                     const struct timespec *ts, citp_lib_context_t* lib_context)
 {
   citp_epollb_fdi *epi = fdi_to_epollb_fdi(fdi);
   struct oo_epoll2_action_arg op;

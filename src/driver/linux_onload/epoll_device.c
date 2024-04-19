@@ -897,7 +897,7 @@ static int oo_epoll_has_event(struct file* filp)
 
 static int oo_epoll1_spin_on(struct file* home_filp,
                              struct file* other_filp,
-                             ci_uint64 timeout_us, int sleep_iter_us)
+                             ci_uint64 timeout_ns, int sleep_iter_ns)
 {
   struct oo_epoll_poll_table ept;
   int rc, ret = 0;
@@ -911,7 +911,7 @@ static int oo_epoll1_spin_on(struct file* home_filp,
   ept.rc = 0;
   ept.filp = home_filp;
   ept.task = current;
-  end = ktime_to_ns(ktime_add_us(ktime_get(), timeout_us));
+  end = ktime_to_ns(ktime_add_ns(ktime_get(), timeout_ns));
 
 again:
   ept.w[0] = ept.w[1] = NULL;
@@ -950,9 +950,9 @@ again:
   }
   else {
     ktime_t kt;
-    /* sleep up to between iter_usec and 2 * iter_usec */
-    kt = ktime_set(0, sleep_iter_us * 1000);
-    ret = schedule_hrtimeout_range(&kt, sleep_iter_us * 1000, HRTIMER_MODE_REL);
+    /* sleep up to between iter_nsec and 2 * iter_nsec */
+    kt = ktime_set(0, sleep_iter_ns);
+    ret = schedule_hrtimeout_range(&kt, sleep_iter_ns, HRTIMER_MODE_REL);
     if( ret != 0 ) {
       /* We have been woken up by relevant event or a signal,
        * either of these is good to terminate the loop. */
@@ -1146,8 +1146,8 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
     if( other_filp == NULL )
       return -EINVAL;
 
-    rc = oo_epoll1_spin_on(filp, other_filp, local_arg.timeout_us,
-                                             local_arg.sleep_iter_us);
+    rc = oo_epoll1_spin_on(filp, other_filp, local_arg.timeout_ns,
+                           local_arg.sleep_iter_ns);
     fput(other_filp);
 
     if( signal_pending(current) )
@@ -1186,7 +1186,7 @@ static long oo_epoll_fop_unlocked_ioctl(struct file* filp,
     priv->p.p1.flags = 0;
 #endif
 
-    rc = oo_epoll1_block_on(filp, other_filp, local_arg.timeout_us);
+    rc = oo_epoll1_block_on(filp, other_filp, local_arg.timeout_ns);
     fput(other_filp);
 
     if( signal_pending(current) )

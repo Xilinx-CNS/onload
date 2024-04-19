@@ -272,8 +272,8 @@ struct oo_ul_epoll_state {
 
 /* Maximum timeout_hr we can handle.
  * timeout=-1 is converted to this value.
- * See timeout_hr_to_us() to understand why "/1000". */
-#define OO_EPOLL_MAX_TIMEOUT_HR (0x7fffffffffffffffULL / 1000)
+ * See timeout_hr_to_ns() to understand why "/1000000". */
+#define OO_EPOLL_MAX_TIMEOUT_HR (0x7fffffffffffffffULL / 1000000)
 
 static inline ci_int64 oo_epoll_ms_to_frc(int ms_timeout)
 {
@@ -283,6 +283,18 @@ static inline ci_int64 oo_epoll_ms_to_frc(int ms_timeout)
     return (ci_int64)ms_timeout * citp.cpu_khz;
 }
 
+/* Maximum timeout in seconds we could have if running on a 10GHz processor */
+#define OO_EPOLL_MAX_TV_SEC ((OO_EPOLL_MAX_TIMEOUT_HR \
+                             / (10ULL*1000*1000*1000)) - 1)
+
+static inline ci_int64 oo_epoll_ts_to_frc(const struct timespec *ts)
+{
+  if( ts == NULL || ts->tv_sec > OO_EPOLL_MAX_TV_SEC )
+    return OO_EPOLL_MAX_TIMEOUT_HR;
+  return ts->tv_sec * 1000 * citp.cpu_khz +
+         ((ts->tv_nsec * citp.cpu_khz) / 1000000);
+}
+
 
 extern int citp_epoll_create(int size, int flags) CI_HF;
 extern int citp_epoll_ctl(citp_fdinfo* fdi, int op, int fd,
@@ -290,6 +302,7 @@ extern int citp_epoll_ctl(citp_fdinfo* fdi, int op, int fd,
 extern int citp_epoll_wait(citp_fdinfo*, struct epoll_event*,
                            struct citp_ordered_wait* ordering, int maxev,
                            ci_int64 timeout_hr, const sigset_t *sigmask,
+                           const struct timespec *ts,
                            citp_lib_context_t*) CI_HF;
 extern void citp_epoll_on_move(citp_fdinfo*, citp_fdinfo*, citp_fdinfo*,
                                int fdt_locked) CI_HF;
@@ -374,6 +387,7 @@ extern int citp_epollb_ctl(citp_fdinfo* fdi, int op, int fd,
                     struct epoll_event *event) CI_HF;
 extern int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
                      int maxevents, int timeout, const sigset_t *sigmask,
+                     const struct timespec *ts,
                      citp_lib_context_t* lib_context) CI_HF;
 
 extern void citp_epollb_on_handover(citp_fdinfo*, citp_fdinfo*) CI_HF;

@@ -158,6 +158,9 @@ CI_MK_DECL(int           , epoll_create1, (int));
 CI_MK_DECL(int           , epoll_ctl, (int, int, int, struct epoll_event *));
 CI_MK_DECL(int           , epoll_wait, (int, struct epoll_event *, int, int));
 CI_MK_DECL(int           , epoll_pwait, (int, struct epoll_event *, int, int, const sigset_t *));
+#if CI_LIBC_HAS_epoll_pwait2
+CI_MK_DECL(int           , epoll_pwait2, (int, struct epoll_event *, int, const struct timespec *, const sigset_t *));
+#endif /* CI_LIBC_HAS_epoll_pwait2 */
 
 #if CI_CFG_USERSPACE_SYSCALL
 CI_MK_DECL(long          , syscall    , (long, ...));

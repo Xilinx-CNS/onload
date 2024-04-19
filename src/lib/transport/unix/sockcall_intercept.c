@@ -1492,13 +1492,13 @@ OO_INTERCEPT(int, epoll_wait,
     if( fdi->protocol->type == CITP_EPOLL_FD ) {
       /* NB. citp_epoll_wait() calls citp_exit_lib(). */
       rc = citp_epoll_wait(fdi, events, NULL, maxevents,
-                           oo_epoll_ms_to_frc(timeout), NULL,
+                           oo_epoll_ms_to_frc(timeout), NULL, NULL,
                            &lib_context);
       citp_reenter_lib(&lib_context);
     }
 #if CI_CFG_EPOLL2
     else if (fdi->protocol->type == CITP_EPOLLB_FD ) {
-      rc = citp_epollb_wait(fdi, events, maxevents, timeout, NULL,
+      rc = citp_epollb_wait(fdi, events, maxevents, timeout, NULL, NULL,
                             &lib_context);
     }
 #endif
@@ -1543,13 +1543,13 @@ OO_INTERCEPT(int, epoll_pwait,
     if( fdi->protocol->type == CITP_EPOLL_FD ) {
       /* NB. citp_epoll_wait() calls citp_exit_lib(). */
       rc = citp_epoll_wait(fdi, events, NULL, maxevents,
-                           oo_epoll_ms_to_frc(timeout), sigmask,
+                           oo_epoll_ms_to_frc(timeout), sigmask, NULL,
                            &lib_context);
       citp_reenter_lib(&lib_context);
     }
 #if CI_CFG_EPOLL2
     else if (fdi->protocol->type == CITP_EPOLLB_FD ) {
-      rc = citp_epollb_wait(fdi, events, maxevents, timeout, sigmask,
+      rc = citp_epollb_wait(fdi, events, maxevents, timeout, sigmask, NULL,
                             &lib_context);
     }
 #endif
@@ -1571,6 +1571,59 @@ error:
   return ci_sys_epoll_pwait(epfd, events, maxevents, timeout, sigmask);
 }
 
+#if CI_LIBC_HAS_epoll_pwait2
+OO_INTERCEPT(int, epoll_pwait2,
+             (int epfd, struct epoll_event* events, int maxevents,
+              const struct timespec* ts, const sigset_t *sigmask))
+{
+  citp_lib_context_t lib_context;
+  citp_fdinfo* fdi;
+
+  if(CI_UNLIKELY( citp.init_level < CITP_INIT_ALL )) {
+    citp_do_init(CITP_INIT_SYSCALLS);
+    goto pass_through;
+  }
+  if( ! CITP_OPTS.ul_epoll )
+    goto pass_through;
+
+  citp_enter_lib(&lib_context);
+  Log_CALL(ci_log("%s(%d, %p, %d, {%lld, %ld}, %p)", __FUNCTION__, epfd,
+                  events, maxevents, (long long) (ts ? ts->tv_sec : -1),
+                  ts ? ts->tv_nsec : -1, sigmask));
+
+  if( (fdi=citp_fdtable_lookup(epfd)) ) {
+    int rc = CI_SOCKET_HANDOVER;
+    if( fdi->protocol->type == CITP_EPOLL_FD ) {
+      /* NB. citp_epoll_wait() calls citp_exit_lib(). */
+      rc = citp_epoll_wait(fdi, events, NULL, maxevents,
+                           oo_epoll_ts_to_frc(ts), sigmask, ts, &lib_context);
+      citp_reenter_lib(&lib_context);
+    }
+#if CI_CFG_EPOLL2
+    else if (fdi->protocol->type == CITP_EPOLLB_FD ) {
+      rc = citp_epollb_wait(fdi, events, maxevents, -1, sigmask, ts,
+                            &lib_context);
+    }
+#endif
+    citp_fdinfo_release_ref(fdi, 0);
+    citp_exit_lib(&lib_context, rc >= 0);
+    if( rc == CI_SOCKET_HANDOVER )
+      goto error;
+    Log_CALL_RESULT(rc);
+    return rc;
+  }
+  else {
+    citp_exit_lib(&lib_context, TRUE);
+  }
+
+error:
+  Log_PT(log("PT: sys_epoll_pwait2(%d, %p, %d, {%lld, %ld}, %p)", epfd, events,
+             maxevents, (long long) (ts ? ts->tv_sec : -1),
+             ts ? ts->tv_nsec : -1, sigmask));
+ pass_through:
+  return ci_sys_epoll_pwait2(epfd, events, maxevents, ts, sigmask);
+}
+#endif /* CI_LIBC_HAS_epoll_pwait2 */
 
 
 OO_INTERCEPT(ssize_t, read,
@@ -2799,6 +2852,9 @@ OO_INTERCEPT(long, syscall,
     NR(epoll_ctl)
     NR(epoll_wait)
     NR(epoll_pwait)
+#if CI_LIBC_HAS_epoll_pwait2
+    NR(epoll_pwait2)
+#endif /* CI_LIBC_HAS_epoll_pwait2 */
     /* When adding new syscalls here, make sure to check that the libc API
     matches the kernel API. It does for almost everything (on x86-64) but
     there are a few exceptions.  */

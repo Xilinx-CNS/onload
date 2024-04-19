@@ -1789,18 +1789,14 @@ static int timeout_hr_to_ms(ci_int64 hr)
   return CI_MIN(0x7fffffff, ret);
 }
 
-
-static ci_uint64 timeout_hr_to_us(ci_int64 hr)
+static ci_uint64 timeout_hr_to_ns(ci_int64 hr)
 {
   ci_assert_ge(hr, 0);
   /* Ensure that a huge hr-timeout is converted to huge us-timeout */
   if( hr >= OO_EPOLL_MAX_TIMEOUT_HR )
-    return OO_EPOLL_MAX_TIMEOUT_HR * 1000 / citp.cpu_khz;
-  /* Unlike timeout_hr_to_ms() we don't bother doing careful rounding here
-   * because microseconds are sufficiently small that nobody would notice */
-  return hr * 1000 / citp.cpu_khz;
+    return OO_EPOLL_MAX_TIMEOUT_HR * 1000000 / citp.cpu_khz;
+  return hr * 1000000 / citp.cpu_khz;
 }
-
 
 /* Synchronise state to kernel if:
    - EF_EPOLL_CTL_FAST=0;
@@ -1818,7 +1814,7 @@ citp_epoll_ctl_try_sync(struct citp_epoll_fd* ep, citp_fdinfo* fdi,
 int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
                     struct citp_ordered_wait* ordering, int maxevents,
                     ci_int64 timeout_hr, const sigset_t *sigmask,
-                    citp_lib_context_t *lib_context)
+                    const struct timespec *ts, citp_lib_context_t *lib_context)
 {
   struct citp_epoll_fd* ep = fdi_to_epoll(fdi);
   struct oo_ul_epoll_state eps;
@@ -1861,18 +1857,28 @@ int citp_epoll_wait(citp_fdinfo* fdi, struct epoll_event*__restrict__ events,
        ci_dllist_is_empty(&ep->oo_sockets)) ||
       maxevents <= 0 || events == NULL ) {
     /* No accelerated fds or invalid parameters). */
-    int timeout_ms = timeout_hr_to_ms(timeout_hr);
     if( ep->epfd_syncs_needed )
       citp_ul_epoll_ctl_sync(ep, fdi->fd);
     CITP_EPOLL_EP_UNLOCK(ep, 0);
     citp_exit_lib(lib_context, FALSE);
-    if( timeout_ms )
-      ep->blocking = 1;
     Log_VPOLL(ci_log("%s(%d, ..): passthrough", __FUNCTION__, fdi->fd));
-    if( sigmask != NULL )
-      rc = ci_sys_epoll_pwait(fdi->fd, events, maxevents, timeout_ms, sigmask);
+#if CI_LIBC_HAS_epoll_pwait2
+    if( ts != NULL ) {
+      if( ts->tv_sec > 0 || ts->tv_nsec > 0 )
+        ep->blocking = 1;
+      rc = ci_sys_epoll_pwait2(fdi->fd, events, maxevents, ts, sigmask);
+    }
     else
-      rc = ci_sys_epoll_wait(fdi->fd, events, maxevents, timeout_ms);
+#endif /* CI_LIBC_HAS_epoll_pwait2 */
+    {
+      int timeout_ms = timeout_hr_to_ms(timeout_hr);
+      if( timeout_ms )
+        ep->blocking = 1;
+      if( sigmask != NULL )
+        rc = ci_sys_epoll_pwait(fdi->fd, events, maxevents, timeout_ms, sigmask);
+      else
+        rc = ci_sys_epoll_wait(fdi->fd, events, maxevents, timeout_ms);
+    }
 
     /* We don't have valid timestamps for events grabbed via the kernel, so
      * we need to ensure that the ordering info shows that.
@@ -2104,8 +2110,8 @@ no_events:
     if( CITP_OPTS.sleep_spin_usec ) {
       struct oo_epoll1_spin_on_arg op = {};
       op.epoll_fd = fdi->fd;
-      op.timeout_us = timeout_hr_to_us(timeout_hr);
-      op.sleep_iter_us = CITP_OPTS.sleep_spin_usec;
+      op.timeout_ns = timeout_hr_to_ns(timeout_hr);
+      op.sleep_iter_ns = CITP_OPTS.sleep_spin_usec * 1000;
 
       citp_epoll_ctl_try_sync(ep, fdi, timeout_hr, 0);
 
@@ -2180,7 +2186,7 @@ no_events:
      * precise microsecond amount in this epoll3 case. This avoids the whole
      * function call blocking for slightly longer than expected when we have
      * already spun for a bit. */
-    op.timeout_us = timeout_hr_to_us(timeout_hr);
+    op.timeout_ns = timeout_hr_to_ns(timeout_hr);
     rc = ci_sys_ioctl(ep->epfd_os, OO_EPOLL1_IOC_BLOCK_ON, &op);
 
     ep->blocking = 0;
@@ -2889,7 +2895,7 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
   wait.ordering_stack = ni;
   /* citp_epoll_wait will do citp_exit_lib */
   rc = citp_epoll_wait(fdi, ep->wait_events, &wait,
-                       n_socks, timeout_hr, sigmask, lib_context);
+                       n_socks, timeout_hr, sigmask, NULL, lib_context);
   if( rc < 0 )
     goto out;
 
@@ -2906,7 +2912,7 @@ int citp_epoll_ordered_wait(citp_fdinfo* fdi,
     citp_epoll_get_ordering_limit(ni, &limit_ts);
 
     rc = citp_epoll_wait(fdi, ep->wait_events, &wait, n_socks,
-                         0, sigmask, lib_context);
+                         0, sigmask, NULL, lib_context);
     /* We've just called citp_epoll_wait() with timeout=0, and it may
      * have rewritten the wait.next_timeout_hr value.  Rewrite it back. */
     wait.next_timeout_hr = old_timeout_hr;

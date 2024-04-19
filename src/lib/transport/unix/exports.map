@@ -93,6 +93,7 @@
     epoll_ctl;
     epoll_wait;
     epoll_pwait;
+    epoll_pwait2;
     syscall;
     _exit;
     sigaction;
