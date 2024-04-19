@@ -197,8 +197,11 @@ static int efx_ethtool_get_coalesce(struct net_device *net_dev,
 	struct efx_nic *efx = efx_netdev_priv(net_dev);
 	unsigned int tx_usecs, rx_usecs;
 	bool rx_adaptive;
+	int rc;
 
-	efx_get_irq_moderation(efx, &tx_usecs, &rx_usecs, &rx_adaptive);
+	rc = efx_get_irq_moderation(efx, &tx_usecs, &rx_usecs, &rx_adaptive);
+	if (rc)
+		return rc;
 
 	coalesce->tx_coalesce_usecs = tx_usecs;
 	coalesce->tx_coalesce_usecs_irq = tx_usecs;
@@ -241,7 +244,9 @@ static int efx_ethtool_set_coalesce(struct net_device *net_dev,
 	if (!rc)
 		return -ENETDOWN;
 
-	efx_get_irq_moderation(efx, &tx_usecs, &rx_usecs, &adaptive);
+	rc = efx_get_irq_moderation(efx, &tx_usecs, &rx_usecs, &adaptive);
+	if (rc)
+		return rc;
 
 	if (coalesce->rx_coalesce_usecs != rx_usecs)
 		rx_usecs = coalesce->rx_coalesce_usecs;

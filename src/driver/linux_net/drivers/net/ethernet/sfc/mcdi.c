@@ -2982,7 +2982,11 @@ void efx_mcdi_mtd_rename(struct efx_mtd_partition *part)
 		     (IFNAMSIZ + NVRAM_PARTITION_NAME_MAX_LEN +
 		      sizeof(":00 (0000:00:00.0)")));
 
-	/* TESTING: include PCI details */
+	/* User space tools parse the first 3 fields (name type:subtype)
+	 * from the MTD partition name, and ignore later fields. The
+	 * trailing PCI slot information ensures that the MTD partition
+	 * names are unique (different for different boards).
+	 */
 	snprintf(part->name, sizeof(part->name), "%s %s:%02x (%04x:%02x:%02x.%d)",
 		 efx->name, part->type_name, part->fw_subtype,
 		 pci_domain_nr(efx->pci_dev->bus),

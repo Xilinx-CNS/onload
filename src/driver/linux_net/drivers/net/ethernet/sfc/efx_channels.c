@@ -1377,8 +1377,9 @@ struct efx_channel *efx_get_channel(struct efx_nic *efx, unsigned int index)
 
 	list_for_each_entry(this, &efx->channel_list, list)
 		if (this->channel == index)
-			break;
-	return this;
+			return this;
+
+	return NULL;
 }
 
 void efx_fini_interrupts(struct efx_nic *efx)
