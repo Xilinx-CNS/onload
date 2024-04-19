@@ -1792,10 +1792,12 @@ static int timeout_hr_to_ms(ci_int64 hr)
 static ci_uint64 timeout_hr_to_ns(ci_int64 hr)
 {
   ci_assert_ge(hr, 0);
-  /* Ensure that a huge hr-timeout is converted to huge us-timeout */
+  /* Ensure that a huge hr-timeout is converted to huge ns-timeout */
   if( hr >= OO_EPOLL_MAX_TIMEOUT_HR )
-    return OO_EPOLL_MAX_TIMEOUT_HR * 1000000 / citp.cpu_khz;
-  return hr * 1000000 / citp.cpu_khz;
+    return (OO_EPOLL_MAX_TIMEOUT_HR / citp.cpu_khz) * 1000000;
+  ci_int64 nanos = (hr / citp.cpu_khz) * 1000000;
+  ci_int64 nanos_rem = ((hr % citp.cpu_khz) * 1000000) / citp.cpu_khz;
+  return nanos + nanos_rem;
 }
 
 /* Synchronise state to kernel if:

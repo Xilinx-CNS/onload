@@ -271,9 +271,8 @@ struct oo_ul_epoll_state {
 
 
 /* Maximum timeout_hr we can handle.
- * timeout=-1 is converted to this value.
- * See timeout_hr_to_ns() to understand why "/1000000". */
-#define OO_EPOLL_MAX_TIMEOUT_HR (0x7fffffffffffffffULL / 1000000)
+ * timeout=-1 is converted to this value. */
+#define OO_EPOLL_MAX_TIMEOUT_HR 0x7fffffffffffffffULL
 
 static inline ci_int64 oo_epoll_ms_to_frc(int ms_timeout)
 {
