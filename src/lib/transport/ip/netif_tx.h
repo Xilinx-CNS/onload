@@ -32,8 +32,8 @@ ci_inline int ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
                                            ef_remote_iovec* iov, unsigned iovlen)
 {
   int i, intf_i = pkt->intf_i;
-  struct ci_pkt_zc_header* zch;
 #if CI_CFG_TX_CRC_OFFLOAD
+  struct ci_pkt_zc_header* zch;
   struct ci_pkt_zc_payload* zcp;
 #endif
 
@@ -46,12 +46,13 @@ ci_inline int ci_netif_pkt_to_remote_iovec(ci_netif* ni, ci_ip_pkt_fmt* pkt,
   iov[0].addrspace = EF_ADDRSPACE_LOCAL;
   iov[0].flags = 0;
 
+  i = 1;
+#if CI_CFG_TX_CRC_OFFLOAD
   zch = oo_tx_zc_header(pkt);
 
   ci_assert_equal(pkt->n_buffers, 1);
   ci_assert_ge(iovlen, 1 + zch->segs);
-  i = 1;
-#if CI_CFG_TX_CRC_OFFLOAD
+
   OO_TX_FOR_EACH_ZC_PAYLOAD(ni, zch, zcp) {
     if( zcp->is_remote ) {
       iov[i].iov_base = zcp->remote.dma_addr[intf_i];
