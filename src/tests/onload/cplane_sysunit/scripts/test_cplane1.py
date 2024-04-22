@@ -12,6 +12,7 @@ from datetime import datetime
 from random import randint
 from pyroute2 import NetNS, netlink, IPRoute, NetlinkError
 from pyroute2.netlink.rtnl.ifaddrmsg import IFA_F_NODAD
+from pyroute2.netlink.rtnl.ifinfmsg.plugins.ipvlan import ipvlan
 from cplane import *
 
 def ip2v4(ip):
@@ -841,6 +842,18 @@ def test_nic_order(encap):
     do_test_nic_order(encap=encap)
 
 
+def link_options(kind):
+    ''' Return additional options to pass to pyroute2 when creating
+        new acceleratable interfaces (in subordinate namespaces).
+    '''
+
+    # Override the default ipvlan mode L3 because Onload supports only L2
+    if kind == 'ipvlan':
+        return {'ipvlan_mode': ipvlan.modes['IPVLAN_MODE_L2']}
+
+    return {}
+
+
 @cpdecorate(tag='main_ns')
 @cpdecorate(tag='myns', parent_tag='main_ns')
 def do_test_multi_ns(main_ns, myns, encap):
@@ -856,7 +869,7 @@ def do_test_multi_ns(main_ns, myns, encap):
 
     vifname= 'p0dmv'
     main_ns.netns.link('add', kind=encap, ifname=vifname,
-                       link=main_ix)
+                       link=main_ix, **link_options(encap))
 
     ix = main_ns.netns.link_lookup(ifname=vifname)[0]
     main_ns.netns.link('set', index=ix,
@@ -891,7 +904,8 @@ def do_test_multi_ns_bond(main_ns, myns, encap):
               hwports=hwports, address=None)
 
     main_ns.netns.link('add', kind=encap, ifname='bond2mv',
-                       link=main_ns.netns.link_lookup(ifname='bond2')[0])
+                       link=main_ns.netns.link_lookup(ifname='bond2')[0],
+                       **link_options(encap))
     main_ns.netns.link('set',
                        index=main_ns.netns.link_lookup(ifname='bond2mv')[0],
                        net_ns_fd=myns.cpserver.getNetNsPath())
