@@ -176,6 +176,8 @@ $(eval $(patsubst CONFIG_%,export CONFIG_%$(_LF), \
        $(shell echo -e '$(_GET_NET_CONFIG_OPTS)' | \
                MFLAGS= MAKEFLAGS= make -C src/driver/linux_net/drivers/net/ethernet/sfc -r --no-print-directory -f - print_vars)))
 
+gcc_maj_ver := $(shell ./scripts/mmaketool --gcc_major_version)
+
 # CFLAGS
 ONLOAD_CFLAGS += -I$$(obj) -I$$(obj)/src -I$$(src) -I$$(src)/src -I$$(src)/src/include \
                  -D__ci_driver__ "-DTRANSPORT_CONFIG_OPT_HDR=<$(TRANSPORT_CONFIG_OPT_HDR)>"
@@ -236,6 +238,14 @@ ifeq ($(HAVE_SFC),1)
   ONLOAD_MAKEFLAGS += CONFIG_SFC_SIENA=
 else
   ONLOAD_CFLAGS += -DCI_HAVE_SFC=0
+endif
+
+test-ge = $(shell test $1 -ge $2 && echo 1)
+
+ifneq ($(call test-ge, $(gcc_maj_ver), 10), )
+ifeq ($(KARCH), aarch64)
+ONLOAD_CFLAGS += -mno-outline-atomics
+endif
 endif
 
 scripts := $(addprefix $(KBUILDTOP)/driver/linux/,$(notdir $(wildcard src/driver/linux/*.sh)))
