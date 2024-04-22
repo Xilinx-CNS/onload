@@ -26,6 +26,7 @@
 #include <cplane/create.h>
 #include <net/if.h>
 #include <ci/internal/efabcfg.h>
+#include <ci/internal/syscall.h>
 #endif
 
 
@@ -2473,10 +2474,10 @@ netif_tcp_helper_alloc_u(ef_driver_handle fd, ci_netif* ni,
   while( (rc = oo_resource_alloc(fd, &ra)) == -EINTR );
 
   if( ra.in_efct_memfd >= 0 )
-    ci_sys_close(ra.in_efct_memfd);
+    my_syscall3(close, ra.in_efct_memfd, 0, 0);
 
   if( ra.in_pktbuf_memfd >= 0 )
-    ci_sys_close(ra.in_pktbuf_memfd);
+    my_syscall3(close, ra.in_pktbuf_memfd, 0, 0);
 
   if( rc < 0 ) {
     switch( rc ) {

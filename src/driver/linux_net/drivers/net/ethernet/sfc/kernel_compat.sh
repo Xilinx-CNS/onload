@@ -398,6 +398,7 @@ EFX_NEED_TIMESPEC64_TO_NS_SIGNED	custom
 EFX_HAVE_KOBJECT_DEFAULT_GROUPS		member	struct_kobj_type	default_groups	include/linux/kobject.h
 EFX_NEED_REFCOUNT_T			nsymbol	refcount_t		include/linux/refcount.h
 EFX_NEED_DEBUGFS_LOOKUP_AND_REMOVE	nsymbol	debugfs_lookup_and_remove	include/linux/debugfs.h
+EFX_HAVE_NET_RPS_H                     file       include/net/rps.h
 " | egrep -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }
 

@@ -2545,7 +2545,7 @@ static int efx_phc_enable(struct ptp_clock_info *ptp,
 		if (ptp_data->pin_config[0].func != PTP_PF_EXTTS)
 			enable = false;
 
-#ifdef EFX_NOT_UPSTREM
+#ifdef EFX_NOT_UPSTREAM
 		/* Attempt to enable/disable HW PPS */
 		if (efx_phc_exposed(ptp_data->efx))
 			efx_ptp_hw_pps_enable(ptp_data->efx, enable);

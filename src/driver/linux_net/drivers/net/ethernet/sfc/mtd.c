@@ -288,14 +288,17 @@ void efx_mtd_remove(struct efx_nic *efx)
 
 void efx_mtd_rename(struct efx_nic *efx)
 {
+	struct efx_mtd *mtd_struct = efx->mtd_struct;
+	struct efx_mtd_partition *part;
+
 	ASSERT_RTNL();
 
 #if defined(EFX_WORKAROUND_87308)
 	if (atomic_read(&efx->mtd_struct->probed_flag) == 0)
 		return;
 #endif
-	efx_mtd_remove(efx);
-	efx_mtd_probe(efx);
+	list_for_each_entry(part, &mtd_struct->list, node)
+		efx->type->mtd_rename(part);
 }
 
 #if defined(CONFIG_SFC_MTD) && defined(EFX_WORKAROUND_87308)

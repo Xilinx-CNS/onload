@@ -1887,8 +1887,14 @@ static u8 efx_mcdi_phy_connector(struct efx_nic *efx)
 
 	/* Check connector type (SFF-8024 table 4-3). */
 	switch (connector) {
+	case 0x01: /* SC */
+	case 0x06: /* Fiberjack */
 	case 0x07: /* LC (Lucent connector) */
+	case 0x08: /* MT-RJ */
+	case 0x09: /* MU (Multiple Optical) */
 	case 0x0b: /* Optical pigtail */
+	case 0x0c: /* 1x12 MPO (Multifiber Parallel Optic) */
+	case 0x0d: /* 2x16 MPO (Multifiber Parallel Optic) */
 		return PORT_FIBRE;
 	case 0x21: /* Copper pigtail */
 	case 0x23: /* No separable connector */

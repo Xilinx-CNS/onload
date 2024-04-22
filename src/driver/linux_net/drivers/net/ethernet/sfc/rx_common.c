@@ -8,6 +8,9 @@
  */
 #include "net_driver.h"
 #include <linux/module.h>
+#if !defined(EFX_USE_KCOMPAT) || defined(EFX_HAVE_NET_RPS_H)
+#include <net/rps.h>
+#endif
 #include "efx.h"
 #include "nic.h"
 #include "rx_common.h"
