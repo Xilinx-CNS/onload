@@ -61,13 +61,24 @@ ifeq ($(KPATH),)
   KARCH := $(shell uname -m)
   endif
   KPATH := /lib/modules/$(KVER)/build
+else ifneq (,$(wildcard $(dir) $(KPATH)/include/generated/compile.h))
+  KVERARCH := $(subst $\",,$(shell echo 'UTS_RELEASE UTS_MACHINE'|gcc -E -P -include $(KPATH)/include/generated/utsrelease.h -include $(KPATH)/include/generated/compile.h -))
+  ifeq ($(KVERARCH),)
+    $(error Cannot extract kernel info from KPATH "$(KPATH)" - not a built tree?)
+  endif
+  KVER ?= $(firstword $(KVERARCH))
+  KARCH ?= $(lastword $(KVERARCH))
 else
- KVERARCH := $(subst $\",,$(shell echo 'UTS_RELEASE UTS_MACHINE'|gcc -E -P -include $(KPATH)/include/generated/utsrelease.h -include $(KPATH)/include/generated/compile.h -))
- ifeq ($(KVERARCH),)
-   $(error Cannot extract kernel info from KPATH "$(KPATH)" - not a built tree?)
- endif
- KVER ?= $(firstword $(KVERARCH))
- KARCH ?= $(lastword $(KVERARCH))
+  # SLES15 does not include compile.h, so we need another way to determine the
+  # arch we're being asked to build for. If it's the running kernel we can
+  # just ask uname. If not, we give up, as all supported distros should be
+  # providing compile.h anyway.
+  KVER := $(subst $\",,$(shell echo 'UTS_RELEASE'|gcc -E -P -include $(KPATH)/include/generated/utsrelease.h -))
+  ifeq ($(KVER), $(shell uname -r))
+    KARCH := $(shell uname -m)
+  else
+    $(error Cannot determine KARCH info from KPATH "$(KPATH)")
+  endif
 endif
 
 export HAVE_EFCT ?=
