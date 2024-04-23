@@ -33,6 +33,7 @@
 #include <linux/eventpoll.h>
 #include <linux/fcntl.h>
 #include <linux/net.h>
+#include <linux/time_types.h>
 
 #include <ci/driver/kernel_compat.h>
 
@@ -100,6 +101,13 @@ extern asmlinkage int efab_linux_sys_epoll_ctl(int epfd, int op, int fd,
 extern asmlinkage int efab_linux_sys_epoll_wait(int epfd,
                                                 struct epoll_event *events,
                                                 int maxevents, int timeout);
+#ifdef EFRM_HAVE_EPOLL_PWAIT2
+extern asmlinkage
+int efab_linux_sys_epoll_pwait2(int epfd, struct epoll_event *events,
+                                int maxevents,
+                                const struct __kernel_timespec *timeout,
+                                const sigset_t *sigmask);
+#endif /* EFRM_HAVE_EPOLL_PWAIT2 */
 
 
 #if defined(CONFIG_HUGETLB_PAGE) && CI_CFG_PKTS_AS_HUGE_PAGES && \

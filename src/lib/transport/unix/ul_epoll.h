@@ -294,6 +294,15 @@ static inline ci_int64 oo_epoll_ts_to_frc(const struct timespec *ts)
          ((ts->tv_nsec * citp.cpu_khz) / 1000000);
 }
 
+static inline int timeout_hr_to_ms(ci_int64 hr)
+{
+  ci_int64 ret;
+  if( hr < 0 )
+    return -1;
+  ret = (hr + citp.cpu_khz - 1) / citp.cpu_khz;
+  return CI_MIN(0x7fffffff, ret);
+}
+
 
 extern int citp_epoll_create(int size, int flags) CI_HF;
 extern int citp_epoll_ctl(citp_fdinfo* fdi, int op, int fd,
@@ -385,8 +394,8 @@ extern int citp_epollb_create(int size, int flags) CI_HF;
 extern int citp_epollb_ctl(citp_fdinfo* fdi, int op, int fd,
                     struct epoll_event *event) CI_HF;
 extern int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
-                     int maxevents, int timeout, const sigset_t *sigmask,
-                     const struct timespec *ts,
+                     int maxevents, ci_int64 timeout_hr,
+                     const sigset_t *sigmask, const struct timespec *ts,
                      citp_lib_context_t* lib_context) CI_HF;
 
 extern void citp_epollb_on_handover(citp_fdinfo*, citp_fdinfo*) CI_HF;

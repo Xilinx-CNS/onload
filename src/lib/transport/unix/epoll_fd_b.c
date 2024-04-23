@@ -556,8 +556,9 @@ int citp_epollb_ctl(citp_fdinfo* fdi, int eop, int fd,
 
 
 int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
-                     int maxevents, int timeout, const sigset_t *sigmask,
-                     const struct timespec *ts, citp_lib_context_t* lib_context)
+                     int maxevents, ci_int64 timeout_hr,
+                     const sigset_t *sigmask, const struct timespec *ts,
+                     citp_lib_context_t* lib_context)
 {
   citp_epollb_fdi *epi = fdi_to_epollb_fdi(fdi);
   struct oo_epoll2_action_arg op;
@@ -574,20 +575,30 @@ int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
     have_postponed = citp_epollb_postpone_syscall_pre(epi, &op, NULL);
 
   if( epi->kepfd != -1 && !epi->is_accel && !have_postponed) {
-    /* We can always call ci_sys_epoll_pwait, but not every kernel has it.
-     * And from UL, there is no way to find the truth, since libc may know
-     * about epoll_pwait(). */
-    if( sigmask )
-      return ci_sys_epoll_pwait(epi->kepfd, events, maxevents, timeout,
-                                sigmask);
+
+#if CI_LIBC_HAS_epoll_pwait2
+    if( ts != NULL ) {
+      return ci_sys_epoll_pwait2(fdi->fd, events, maxevents, ts, sigmask);
+    }
     else
-      return ci_sys_epoll_wait(epi->kepfd, events, maxevents, timeout);
+#endif /* CI_LIBC_HAS_epoll_pwait2 */
+    {
+      /* We can always call ci_sys_epoll_pwait, but not every kernel has it.
+       * And from UL, there is no way to find the truth, since libc may know
+       * about epoll_pwait(). */
+      int timeout_ms = timeout_hr_to_ms(timeout_hr);
+      if( sigmask )
+        return ci_sys_epoll_pwait(epi->kepfd, events, maxevents, timeout_ms,
+                                  sigmask);
+      else
+         return ci_sys_epoll_wait(epi->kepfd, events, maxevents, timeout_ms);
+    }
   }
 
   op.kepfd = epi->kepfd;
   CI_USER_PTR_SET(op.events, events);
   op.maxevents = maxevents;
-  op.timeout = timeout;
+  op.timeout_hr = timeout_hr;
   CI_USER_PTR_SET(op.sigmask, sigmask);
 
   /* Set up spin_cycles. */
@@ -596,22 +607,22 @@ int citp_epollb_wait(citp_fdinfo* fdi, struct epoll_event *events,
   else
     op.spin_cycles = 0;
 
-  if( have_postponed || timeout == 0 ) {
+  if( have_postponed || timeout_hr == 0 ) {
     /* If we are going to apply postponed epoll_ctls, we do it holding
      * the lock_postponed and fdtable lock.  So, we should not block.
      * From the other side, there is no need to exit the library when
      * non-blocking. */
-    op.timeout = 0;
+    op.timeout_hr = 0;
     rc = ci_sys_ioctl(fdi->fd, OO_EPOLL2_IOC_ACTION, &op);
     if( have_postponed ) {
       citp_epollb_postpone_syscall_post(epi, epi->kepfd == -1 ? rc : 0);
       if( epi->not_mt_safe )
         pthread_mutex_unlock(&epi->lock_postponed);
     }
-    if( timeout == 0 || rc < 0 || op.rc != 0 )
+    if( timeout_hr == 0 || rc < 0 || op.rc != 0 )
       goto out;
     /* If timeout!=0 && op.rc==0, fall through to blocking syscall */
-    op.timeout = timeout;
+    op.timeout_hr = timeout_hr;
   }
 
   citp_exit_lib(lib_context, FALSE);

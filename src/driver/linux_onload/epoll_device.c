@@ -22,6 +22,8 @@
 #include <linux/eventpoll.h>
 #include <linux/poll.h>
 #include <linux/unistd.h> /* for __NR_epoll_pwait */
+#include <linux/time64.h>
+#include <linux/time_types.h>
 #include "onload_internal.h"
 
 
@@ -311,6 +313,14 @@ static int oo_epoll2_apply_ctl(struct oo_epoll_private *priv,
   return rc;
 }
 
+static inline void timeout_hr_to_ts(ci_int64 hr, struct __kernel_timespec *ts)
+{
+  ci_int64 nanos = (hr / oo_timesync_cpu_khz) * NSEC_PER_MSEC +
+                   ((hr % oo_timesync_cpu_khz) * NSEC_PER_MSEC)
+                    / oo_timesync_cpu_khz;
+  ts->tv_sec = nanos / NSEC_PER_SEC;
+  ts->tv_nsec = nanos % NSEC_PER_SEC;
+}
 
 static void oo_epoll2_wait(struct oo_epoll_private *priv,
                            struct oo_epoll2_action_arg *op)
@@ -324,10 +334,10 @@ static void oo_epoll2_wait(struct oo_epoll_private *priv,
   tcp_helper_resource_t* thr;
   ci_netif* ni;
   unsigned i;
-  ci_int32 timeout = op->timeout;
+  ci_int64 timeout_hr = op->timeout_hr;
 
   /* Get the start of time. */
-  if( timeout > 0 || ( timeout < 0 && op->spin_cycles ) )
+  if( timeout_hr > 0 || ( timeout_hr < 0 && op->spin_cycles ) )
     ci_frc64(&start_frc);
 
   /* Declare that we are spinning - even if we are just polling */
@@ -363,7 +373,7 @@ static void oo_epoll2_wait(struct oo_epoll_private *priv,
     op->rc = efab_linux_sys_epoll_wait(op->kepfd, CI_USER_PTR_GET(op->events),
                                        op->maxevents, 0);
   }
-  if( op->rc != 0 || timeout == 0 )
+  if( op->rc != 0 || timeout_hr == 0 )
     goto do_exit;
 
   /* Fixme: eventually, remove NO_USERLAND stacks from this list.
@@ -377,12 +387,9 @@ static void oo_epoll2_wait(struct oo_epoll_private *priv,
     int spin_limited_by_timeout = 0;
     ci_assert(start_frc);
 
-    if( timeout > 0) {
-      ci_uint64 max_timeout_spin = (ci_uint64)timeout * oo_timesync_cpu_khz;
-      if( max_timeout_spin <= max_spin ) {
-        max_spin = max_timeout_spin;
+    if( timeout_hr > 0 && timeout_hr <= max_spin) {
+        max_spin = timeout_hr;
         spin_limited_by_timeout = 1;
-      }
     }
 
     /* spin */
@@ -425,15 +432,14 @@ static void oo_epoll2_wait(struct oo_epoll_private *priv,
 
   /* Even without spinning, netif_poll for 4 netifs takes some time.
    * Count it. */
-  if( timeout > 0 ) {
-    ci_uint64 spend_ms;
+  if( timeout_hr > 0 ) {
+    ci_int64 spend_hr;
     if( ! op->spin_cycles )
       ci_frc64(&now_frc); /* In spin case, re-use now_frc value */
-    spend_ms = now_frc - start_frc;
-    do_div(spend_ms, oo_timesync_cpu_khz);
-    ci_assert_ge((int)spend_ms, 0);
-    if( timeout > (int)spend_ms ) {
-      timeout -= spend_ms;
+    spend_hr = now_frc - start_frc;
+    ci_assert_ge(spend_hr, 0ULL);
+    if( timeout_hr > spend_hr ) {
+      timeout_hr -= spend_hr;
     }
     else
       goto do_exit;
@@ -447,9 +453,18 @@ static void oo_epoll2_wait(struct oo_epoll_private *priv,
   }
 
   /* Block */
-
+#ifdef EFRM_HAVE_EPOLL_PWAIT2
+  {
+    struct __kernel_timespec ts;
+    timeout_hr_to_ts(timeout_hr, &ts);
+    op->rc = efab_linux_sys_epoll_pwait2(op->kepfd, CI_USER_PTR_GET(op->events),
+                                         op->maxevents, &ts, NULL);
+  }
+#else
   op->rc = efab_linux_sys_epoll_wait(op->kepfd, CI_USER_PTR_GET(op->events),
-                                     op->maxevents, timeout);
+                                     op->maxevents,
+                                     timeout_hr / oo_timesync_cpu_khz);
+#endif /* EFRM_HAVE_EPOLL_PWAIT2 */
   return;
 
 do_exit:
@@ -501,9 +516,18 @@ static int oo_epoll2_action(struct oo_epoll_private *priv,
     if( priv->p.p2.do_spin )
       oo_epoll2_wait(priv, op);
     else {
+#ifdef EFRM_HAVE_EPOLL_PWAIT2
+      struct __kernel_timespec ts;
+      timeout_hr_to_ts(op->timeout_hr, &ts);
+      op->rc = efab_linux_sys_epoll_pwait2(op->kepfd,
+                                           CI_USER_PTR_GET(op->events),
+                                           op->maxevents, &ts, NULL);
+#else
       op->rc = efab_linux_sys_epoll_wait(op->kepfd,
                                          CI_USER_PTR_GET(op->events),
-                                         op->maxevents, op->timeout);
+                                         op->maxevents,
+                                         op->timeout_hr / oo_timesync_cpu_khz);
+#endif /* EFRM_HAVE_EPOLL_PWAIT2 */
     }
 
     if( CI_USER_PTR_GET(op->sigmask) ) {

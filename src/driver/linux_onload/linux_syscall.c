@@ -36,6 +36,7 @@
 
 #include <ci/efrm/syscall.h>
 #include <linux/unistd.h>
+#include <linux/time_types.h>
 #include <onload/linux_onload.h>
 
 /*--------------------------------------------------------------------
@@ -84,3 +85,16 @@ asmlinkage int efab_linux_sys_epoll_wait(int epfd, struct epoll_event *events,
 #endif
 }
 
+#ifdef EFRM_HAVE_EPOLL_PWAIT2
+asmlinkage
+int efab_linux_sys_epoll_pwait2(int epfd, struct epoll_event *events,
+                                int maxevents,
+                                const struct __kernel_timespec *timeout,
+                                const sigset_t *sigmask)
+{
+  return (int)SYSCALL_DISPATCHn(5, epoll_pwait2,
+                                (int, struct epoll_event*, int,
+                                 struct timespec *, const sigset_t*),
+                                epfd, events, maxevents, timeout, sigmask);
+}
+#endif /* EFRM_HAVE_EPOLL_PWAIT2 */

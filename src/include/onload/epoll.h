@@ -41,8 +41,8 @@ struct oo_epoll2_action_arg {
   ci_user_ptr_t         sigmask;   /**< const sigset_t * */
   ci_user_ptr_t         events;    /**< struct epoll_event * */
   ci_uint64             spin_cycles;
+  ci_int64              timeout_hr;
   ci_uint32             maxevents;
-  ci_int32              timeout;
   ci_int32              rc;        /**< OUT return code */
   ci_uint32             epoll_ctl_n;
 };

@@ -165,6 +165,8 @@ EFRM_HAVE_WARN_FLUSHING_SYSTEMWIDE_WQ symbol __warn_flushing_systemwide_wq inclu
 EFRM_NEED_STRSCPY	nsymbol	strscpy	include/linux/fortify-string.h
 EFRM_HAVE_SET_RXFH_CONTEXT memtype struct_ethtool_ops set_rxfh_context include/linux/ethtool.h int (*)(struct net_device*, const u32*, const u8*, const u8, u32*, bool)
 
+EFRM_HAVE_EPOLL_PWAIT2 symbol sys_epoll_pwait2 include/linux/syscalls.h
+
 # TODO move onload-related stuff from net kernel_compat
 " | grep -E -v -e '^#' -e '^$' | sed 's/[ \t][ \t]*/:/g'
 }

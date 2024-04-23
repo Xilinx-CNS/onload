@@ -1601,8 +1601,8 @@ OO_INTERCEPT(int, epoll_pwait2,
     }
 #if CI_CFG_EPOLL2
     else if (fdi->protocol->type == CITP_EPOLLB_FD ) {
-      rc = citp_epollb_wait(fdi, events, maxevents, -1, sigmask, ts,
-                            &lib_context);
+      rc = citp_epollb_wait(fdi, events, maxevents, oo_epoll_ts_to_frc(ts),
+                            sigmask, ts, &lib_context);
     }
 #endif
     citp_fdinfo_release_ref(fdi, 0);

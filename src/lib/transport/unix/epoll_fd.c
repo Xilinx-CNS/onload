@@ -1780,24 +1780,13 @@ citp_epoll_find_timeout(ci_int64* timeout_hr, ci_uint64* poll_start_frc)
 }
 
 
-static int timeout_hr_to_ms(ci_int64 hr)
-{
-  ci_int64 ret;
-  if( hr < 0 )
-    return -1;
-  ret = (hr + citp.cpu_khz - 1) / citp.cpu_khz;
-  return CI_MIN(0x7fffffff, ret);
-}
-
 static ci_uint64 timeout_hr_to_ns(ci_int64 hr)
 {
   ci_assert_ge(hr, 0);
+  ci_assert_le((ci_uint64)hr, OO_EPOLL_MAX_TIMEOUT_HR);
   /* Ensure that a huge hr-timeout is converted to huge ns-timeout */
-  if( hr >= OO_EPOLL_MAX_TIMEOUT_HR )
-    return (OO_EPOLL_MAX_TIMEOUT_HR / citp.cpu_khz) * 1000000;
-  ci_int64 nanos = (hr / citp.cpu_khz) * 1000000;
-  ci_int64 nanos_rem = ((hr % citp.cpu_khz) * 1000000) / citp.cpu_khz;
-  return nanos + nanos_rem;
+  return (hr / citp.cpu_khz) * 1000000 +
+         ((hr % citp.cpu_khz) * 1000000) / citp.cpu_khz;
 }
 
 /* Synchronise state to kernel if:
@@ -2185,7 +2174,7 @@ no_events:
     }
    block_again:
     /* Unlike when we fall back to normal epoll_wait(), we can block for a
-     * precise microsecond amount in this epoll3 case. This avoids the whole
+     * precise nanosecond amount in this epoll3 case. This avoids the whole
      * function call blocking for slightly longer than expected when we have
      * already spun for a bit. */
     op.timeout_ns = timeout_hr_to_ns(timeout_hr);
