@@ -81,6 +81,8 @@ struct efct_test {
   struct efct_mock_rxqs mock_rxqs;
 };
 
+static int meta_offset;
+
 /* Mock implementations of rxq operations */
 static struct efct_mock_ops* mock_ops(ef_vi* vi)
 {
@@ -127,7 +129,7 @@ static int efct_mock_next(ef_vi* vi, int qid, bool* sentinel, unsigned* seq)
     else {
       /* First buffer or forced rollover */
       rxq->next_pkt = rxq->superbuf + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
-      rxq->next_meta = rxq->superbuf + EFCT_PKT_STRIDE;
+      rxq->next_meta = rxq->superbuf + EFCT_PKT_STRIDE * meta_offset;
     }
   }
   return sbid;
@@ -241,6 +243,7 @@ static struct efct_test* efct_test_init_rx(int q_max)
     (size_t)CI_EFCT_MAX_SUPERBUFS * EFCT_RX_SUPERBUF_BYTES / EFCT_PKT_STRIDE - 1;
   vi->vi_rxq.descriptors =
     calloc(q_max, CI_EFCT_MAX_SUPERBUFS * EFCT_RX_DESCRIPTOR_BYTES);
+  vi->efct_rxqs.meta_offset = meta_offset;
 
   STATE_STASH(vi);
   STATE_STASH(mock_ops);
@@ -608,9 +611,10 @@ static void test_efct_natural_rollover(void)
         efct_test_rx_poll(t, q, 1, 16);
       }
 
-      /* We've read the final metadata (but not the final packet) so the
-       * next poll should cause a rollover */
-      efct_test_rollover(t, q, sb+1, 1);
+      if( meta_offset == 1 )
+        /* We've read the final metadata (but not the final packet) so the
+         * next poll should cause a rollover */
+        efct_test_rollover(t, q, sb+1, 1);
 
       /* Processing the final packet should free the old buffer */
       efct_test_rx_meta(t, q);
@@ -619,6 +623,9 @@ static void test_efct_natural_rollover(void)
       STATE_CHECK(t->mock_ops, free_called, 1);
       STATE_CHECK(t->mock_ops, free_qid, q);
       STATE_CHECK(t->mock_ops, free_sbid, sb);
+
+      if( meta_offset == 0 )
+        efct_test_rollover(t, q, sb+1, 1);
     } 
   }
 
@@ -724,7 +731,7 @@ static void test_efct_forced_rollover_all(void)
     struct efct_mock_rxq* rxq = &t->mock_rxqs.q[q];
 
     /* Consume most of the buffer leaving one slot */
-    for( i = 0; i < rxq->superbuf_pkts - 2; ++i ) {
+    for( i = meta_offset; i < rxq->superbuf_pkts - 1; ++i ) {
       efct_test_rx_meta(t, q);
       efct_test_rx_poll(t, q, 1, 16);
     }
@@ -746,13 +753,31 @@ static void test_efct_forced_rollover_all(void)
 
     /* Set the ROLLOVER bit in the next metadata (first in the new buffer) */
     efct_test_rx_meta_extra(t, q, 1ll << EFCT_RX_HEADER_ROLLOVER_LBN, 0);
-    rxq->next_pkt = rxq->superbuf + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
 
-    /* The next poll should skip to the new buffer */
-    CHECK(ef_eventq_poll(t->vi, evs, 16), ==, 0);
-    STATE_CHECK(t->mock_ops, anything_called, 0);
-    efct_test_rx_meta(t, q);
-    efct_test_rx_poll(t, q, 1, 16);
+    if( meta_offset == 0 ) {
+      /* The next poll should discard the new buffer */
+      CHECK(ef_eventq_poll(t->vi, evs, 16), ==, 0);
+      STATE_CHECK(t->mock_ops, anything_called, 1);
+      STATE_CHECK(t->mock_ops, free_called, 1);
+      STATE_CHECK(t->mock_ops, free_qid, q);
+      STATE_CHECK(t->mock_ops, free_sbid, 1);
+
+      /* The next poll should rollover to yet another buffer */
+      rxq->next_sbid = 2;
+      rxq->next_pkt = NULL;
+      CHECK(ef_eventq_poll(t->vi, evs, 16), ==, 0);
+      STATE_CHECK(t->mock_ops, anything_called, 1);
+      STATE_CHECK(t->mock_ops, next_called, 1);
+      STATE_CHECK(t->mock_ops, next_qid, q);
+    }
+    else {
+      /* The next poll should skip to the new buffer */
+      rxq->next_pkt = rxq->superbuf + EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
+      CHECK(ef_eventq_poll(t->vi, evs, 16), ==, 0);
+      STATE_CHECK(t->mock_ops, anything_called, 0);
+      efct_test_rx_meta(t, q);
+      efct_test_rx_poll(t, q, 1, 16);
+    }
 
     /* Releasing the packet should free the old buffer */
     efct_vi_rxpkt_release(t->vi, evs[0].rx_ref.pkt_id);
@@ -786,7 +811,7 @@ static void test_efct_future(void)
   q1 = &t->mock_rxqs.q[1];
 
   /* Consume most of the buffer leaving one slot */
-  for( i = 0; i < q0->superbuf_pkts - 2; ++i ) {
+  for( i = meta_offset; i < q0->superbuf_pkts - 1; ++i ) {
     CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
 
     strcpy(q0->next_pkt, "FUTURE");
@@ -810,7 +835,7 @@ static void test_efct_future(void)
     efct_vi_rxpkt_release(t->vi, evs[0].rx_ref.pkt_id);
   }
 
-  /* We will to poll for a rollover after the final packet. */
+  /* We need to poll for a rollover after the final packet. */
   CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
 
   strcpy(q0->next_pkt, "FUTURE");
@@ -824,13 +849,25 @@ static void test_efct_future(void)
   q0->next_pkt += EFCT_PKT_STRIDE;
   efct_vi_rxpkt_release(t->vi, evs[0].rx_ref.pkt_id);
 
-  /* In principle, future_poll could handle rollover, but
-   * we conservatively disable future_peek in that case.
-   * Maybe that behaviour could be improved. */
-  strcpy(q0->next_pkt, "FUTURE");
-  CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+  if( meta_offset == 0 ) {
+    /* We have released the final packet */
+    STATE_CHECK(t->mock_ops, anything_called, 1);
+    STATE_CHECK(t->mock_ops, free_called, 1);
+    STATE_CHECK(t->mock_ops, free_qid, 0);
+    STATE_CHECK(t->mock_ops, free_sbid, 0);
+    efct_test_rollover(t, 0, 1, 1);
+    CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+    strcpy(q0->next_pkt, "FUTURE");
+  }
+  else {
+    /* In principle, future_poll could handle rollover, but
+     * we conservatively disable future_peek in that case.
+     * Maybe that behaviour could be improved. */
+    strcpy(q0->next_pkt, "FUTURE");
+    CHECK(efct_vi_rx_future_peek(t->vi), ==, NULL);
+    efct_test_rollover(t, 0, 1, 1);
+  }
 
-  efct_test_rollover(t, 0, 1, 1);
   CHECK(efct_vi_rx_future_peek(t->vi), ==, q0->next_pkt);
   CHECK(efct_vi_rx_future_poll(t->vi, evs, 16), ==, 0);
 
@@ -840,10 +877,12 @@ static void test_efct_future(void)
 
   q0->next_pkt += EFCT_PKT_STRIDE;
   efct_vi_rxpkt_release(t->vi, evs[0].rx_ref.pkt_id);
-  STATE_CHECK(t->mock_ops, anything_called, 1);
-  STATE_CHECK(t->mock_ops, free_called, 1);
-  STATE_CHECK(t->mock_ops, free_qid, 0);
-  STATE_CHECK(t->mock_ops, free_sbid, 0);
+  if( meta_offset != 0 ) {
+    STATE_CHECK(t->mock_ops, anything_called, 1);
+    STATE_CHECK(t->mock_ops, free_called, 1);
+    STATE_CHECK(t->mock_ops, free_qid, 0);
+    STATE_CHECK(t->mock_ops, free_sbid, 0);
+  }
 
   /* Future detection continues as normal now we're in the next superbuf */
   for( i = 0; i < 10; ++i ) {
@@ -864,15 +903,17 @@ static void test_efct_future(void)
 
 int main(void)
 {
-  TEST_RUN(test_efct_idle);
-  TEST_RUN(test_efct_attach);
-  TEST_RUN(test_efct_refresh);
-  TEST_RUN(test_efct_rx);
-  TEST_RUN(test_efct_rx_discard);
-  TEST_RUN(test_efct_natural_rollover);
-  TEST_RUN(test_efct_forced_rollover_none);
-  TEST_RUN(test_efct_forced_rollover_some);
-  TEST_RUN(test_efct_forced_rollover_all);
-  TEST_RUN(test_efct_future);
+  for( meta_offset = 0; meta_offset < 2; ++meta_offset ) {
+    TEST_RUN(test_efct_idle);
+    TEST_RUN(test_efct_attach);
+    TEST_RUN(test_efct_refresh);
+    TEST_RUN(test_efct_rx);
+    TEST_RUN(test_efct_rx_discard);
+    TEST_RUN(test_efct_natural_rollover);
+    TEST_RUN(test_efct_forced_rollover_none);
+    TEST_RUN(test_efct_forced_rollover_some);
+    TEST_RUN(test_efct_forced_rollover_all);
+    TEST_RUN(test_efct_future);
+  }
   TEST_END();
 }

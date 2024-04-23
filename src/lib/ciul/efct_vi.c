@@ -734,18 +734,29 @@ static int rx_rollover(ef_vi* vi, int qid)
 
   meta_pkt = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
 
-  if( pkt_id_to_index_in_superbuf(rxq_ptr->meta_pkt) > rxq_ptr->superbuf_pkts ) {
+  if( rxq_ptr->meta_offset == 0 ) {
+    /* Simple case, metadata located with data in the first new packet */
+    rxq_ptr->data_pkt = meta_pkt;
+  }
+  else if( pkt_id_to_index_in_superbuf(rxq_ptr->meta_pkt) > rxq_ptr->superbuf_pkts ) {
     /* special case for when we want to ignore the first metadata
      * at queue startup or after manual rollover */
-    rxq_ptr->data_pkt = meta_pkt++;
+    rxq_ptr->data_pkt = meta_pkt;
+    meta_pkt += rxq_ptr->meta_offset;
   }
   else if( sbseq != (rxq_ptr->meta_pkt >> 32) + 1 ) {
     /* nodescdrop on the swrxq. This is the same as the startup case, but it
      * also means that we're going to discard the last packet of the previous
      * superbuf */
     efct_vi_rxpkt_release(vi, rxq_ptr->data_pkt);
-    rxq_ptr->data_pkt = meta_pkt++;
+    rxq_ptr->data_pkt = meta_pkt;
+    meta_pkt += rxq_ptr->meta_offset;
   }
+  else {
+    /* meta_pkt refers to the first packet of the new buffer,
+     * data_pkt remains in the previous buffer. */
+  }
+
   rxq_ptr->meta_pkt =
     ((uint64_t)sbseq << 32) | ((uint64_t)sentinel << 31) | meta_pkt;
 
@@ -885,6 +896,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
            * boundary. We consume the last packet of the first superbuf
            * (it's the bogus 'manual rollover' packet) and continue with
            * the new superbuf */
+          EF_VI_ASSERT(rxq_ptr->meta_offset == 1);
           nskipped = 1;
           rxq_ptr->data_pkt = rxq_ptr_to_pkt_id(rxq_ptr->meta_pkt++);
         }
@@ -926,7 +938,13 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     desc->final_ts_status = CI_OWORD_FIELD(*header,
                                            EFCT_RX_HEADER_TIMESTAMP_STATUS);
 
-    rxq_ptr->data_pkt = rxq_ptr_to_pkt_id(rxq_ptr->meta_pkt++);
+    /* The following arithmetic assumes that the next data packet will be in
+     * the same buffer as the next metadata. That won't be the case for the
+     * first packet(s) in each buffer if the metadata offset is more than 1. */
+    EF_VI_ASSERT(rxq_ptr->meta_offset <= 1);
+
+    rxq_ptr->meta_pkt += 1;
+    rxq_ptr->data_pkt = rxq_ptr_to_pkt_id(rxq_ptr->meta_pkt) - rxq_ptr->meta_offset;
   }
 
   return i;
@@ -1089,6 +1107,7 @@ void efct_vi_start_rxq(ef_vi* vi, int ix, int qid)
   rxq->config_generation = 0;
   rxq_ptr->superbuf_pkts = *rxq->live.superbuf_pkts;
   rxq_ptr->meta_pkt = rxq_ptr->superbuf_pkts + 1;
+  rxq_ptr->meta_offset = vi->efct_rxqs.meta_offset;
 
   EF_VI_ASSERT(rxq_ptr->superbuf_pkts > 0);
 }

@@ -705,11 +705,18 @@ typedef struct {
 */
 typedef struct {
   /** pkt_id for the next packet's payload. Depending on hardware design, this
-   * is either equal to meta_pkt, or refers to the previous buffer
-   * (usually meta_pkt-1, but not if there was a rollover). */
+   * is either equal to 'meta_pkt', or refers to the previous packet.
+   *
+   * The relationship 'meta_pkt == data_pkt + meta_offset' will hold unless
+   * the gap spans a superbuf boundary after rollover.
+   */
   uint32_t data_pkt;
   /** Number of packets per buffer, cached here for easy access when polling */
-  uint32_t superbuf_pkts;
+  uint16_t superbuf_pkts;
+  /** Offset (in packets) between data_pkt and meta_pkt, cached for polling */
+  uint8_t  meta_offset;
+  /** Unused */
+  uint8_t  reserved;
   /** Combi-value of (sbseq << 32) | (sentinel << 31) | meta_pkt.
    * 'meta_pkt' is the pkt_id for the next packet's metadata header, with bit
    * 31 abused to contain the expected sentinel of the pointed-to superbuf
@@ -867,7 +874,7 @@ typedef struct {
   ef_vi_efct_rxq                q[EF_VI_MAX_EFCT_RXQS];
   /** Buffer access/management operations */
   ef_vi_efct_rxq_ops*           ops;
-  /** Offset between a data packet and its associated metadata */
+  /** Offset (in packets) between a data packet and its associated metadata */
   uint8_t meta_offset;
 
   /** efct kernel/userspace shared queue area. Exposed for debugging.
