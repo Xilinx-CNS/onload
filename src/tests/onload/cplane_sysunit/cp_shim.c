@@ -266,6 +266,13 @@ int shim_oo_op_route_resolve(struct cp_mibs* mib,
   memcpy(&msg.u.fwd_request.key, key, sizeof(*key));
   int rc = shim_cp_hmsg_send(mib, &msg);
 
+  /* Return immediately if the caller is unwilling to wait,
+   * i.e. it's a non-blocking resolve request.  Otherwise,
+   * the control plane server won't notify us via ioctl()
+   * when CP_FWD_KEY_REQ_WAIT is unset. */
+  if( ! (key->flag & CP_FWD_KEY_REQ_WAIT) )
+    return rc;
+
   /* FIXME super-dodgy wait */
   pthread_mutex_lock(&fwd_resolve_complete_mtx);
   clock_gettime(CLOCK_REALTIME, &end);
