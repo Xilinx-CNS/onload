@@ -612,6 +612,7 @@ ef10ct_design_parameters(struct efhw_nic *nic,
   SET(tx_fifo_bytes, 0x8000);
   SET(timestamp_subnano_bits, 2);
   SET(unsol_credit_seq_mask, 0x7f);
+  SET(md_location, 1);
 
   return 0;
 }
