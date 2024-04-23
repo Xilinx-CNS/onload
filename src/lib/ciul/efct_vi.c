@@ -189,7 +189,7 @@ static int rxq_ptr_to_sentinel(uint32_t ptr)
 
 static bool efct_rxq_need_rollover(const ef_vi_efct_rxq_ptr* rxq_ptr)
 {
-  return pkt_id_to_index_in_superbuf(rxq_ptr->next) >= rxq_ptr->superbuf_pkts;
+  return pkt_id_to_index_in_superbuf(rxq_ptr->meta_pkt) >= rxq_ptr->superbuf_pkts;
 }
 
 static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq)
@@ -198,13 +198,13 @@ static bool efct_rxq_need_config(const ef_vi_efct_rxq* rxq)
 }
 
 /* The header following the next packet, or null if not available.
- * `next` is a rxq "pointer", containing packet id and sentinel. */
-static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t next)
+ * `meta_pkt` contains both the packet id and sentinel. */
+static const ci_oword_t* efct_rx_next_header(const ef_vi* vi, uint32_t meta_pkt)
 {
-  const ci_oword_t* header = efct_rx_header(vi, rxq_ptr_to_pkt_id(next));
+  const ci_oword_t* header = efct_rx_header(vi, rxq_ptr_to_pkt_id(meta_pkt));
   int sentinel = CI_QWORD_FIELD(*header, EFCT_RX_HEADER_SENTINEL);
 
-  return sentinel == rxq_ptr_to_sentinel(next) ? header : NULL;
+  return sentinel == rxq_ptr_to_sentinel(meta_pkt) ? header : NULL;
 }
 
 /* Check for actions needed on an rxq. This must match the checks made in
@@ -213,7 +213,7 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
 {
   const ef_vi_efct_rxq* rxq = &vi->efct_rxqs.q[qid];
   const ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
-  uint32_t next;
+  uint32_t meta_pkt;
 
   if( ! efct_rxq_is_active(rxq) )
     return false;
@@ -221,8 +221,8 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
   /* This function might be called concurrently with polling (by onload,
    * but not by legitimate ef_vi applications), so make sure we use the same
    * value to check for rollover and access the next header */
-  next = OO_ACCESS_ONCE(rxq_ptr->next);
-  if( pkt_id_to_index_in_superbuf(next) >= rxq_ptr->superbuf_pkts )
+  meta_pkt = OO_ACCESS_ONCE(rxq_ptr->meta_pkt);
+  if( pkt_id_to_index_in_superbuf(meta_pkt) >= rxq_ptr->superbuf_pkts )
 #ifndef __KERNEL__
     /* only signal new event if rollover can be done */
     return vi->efct_rxqs.ops->available(vi, qid);
@@ -232,7 +232,7 @@ static bool efct_rxq_check_event(const ef_vi* vi, int qid)
     return true;
 #endif
 
-  return efct_rxq_need_config(rxq) || efct_rx_next_header(vi, next) != NULL;
+  return efct_rxq_need_config(rxq) || efct_rx_next_header(vi, meta_pkt) != NULL;
 }
 
 /* Check whether a received packet is available */
@@ -722,8 +722,7 @@ static void efct_ef_vi_receive_push(ef_vi* vi)
 
 static int rx_rollover(ef_vi* vi, int qid)
 {
-  uint32_t pkt_id;
-  uint32_t next;
+  uint32_t meta_pkt;
   ef_vi_efct_rxq_ptr* rxq_ptr = &vi->ep_state->rxq.rxq_ptr[qid];
   unsigned sbseq;
   bool sentinel;
@@ -733,30 +732,28 @@ static int rx_rollover(ef_vi* vi, int qid)
   if( rc < 0 )
     return rc;
 
-  pkt_id = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
-  next = pkt_id | ((uint32_t)sentinel << 31);
+  meta_pkt = (qid * CI_EFCT_MAX_SUPERBUFS + rc) << PKT_ID_PKT_BITS;
 
-  if( pkt_id_to_index_in_superbuf(rxq_ptr->next) > rxq_ptr->superbuf_pkts ) {
+  if( pkt_id_to_index_in_superbuf(rxq_ptr->meta_pkt) > rxq_ptr->superbuf_pkts ) {
     /* special case for when we want to ignore the first metadata
      * at queue startup or after manual rollover */
-    rxq_ptr->prev = pkt_id;
-    ++next;
+    rxq_ptr->data_pkt = meta_pkt++;
   }
-  else if( sbseq != (rxq_ptr->next >> 32) + 1 ) {
+  else if( sbseq != (rxq_ptr->meta_pkt >> 32) + 1 ) {
     /* nodescdrop on the swrxq. This is the same as the startup case, but it
      * also means that we're going to discard the last packet of the previous
      * superbuf */
-    efct_vi_rxpkt_release(vi, rxq_ptr->prev);
-    rxq_ptr->prev = pkt_id;
-    ++next;
+    efct_vi_rxpkt_release(vi, rxq_ptr->data_pkt);
+    rxq_ptr->data_pkt = meta_pkt++;
   }
-  rxq_ptr->next = ((uint64_t)sbseq << 32) | next;
+  rxq_ptr->meta_pkt =
+    ((uint64_t)sbseq << 32) | ((uint64_t)sentinel << 31) | meta_pkt;
 
   /* Preload the superbuf's refcount with all the (potential) packets in
    * it - more efficient than incrementing for each rx individually */
   EF_VI_ASSERT(rxq_ptr->superbuf_pkts > 0);
   EF_VI_ASSERT(rxq_ptr->superbuf_pkts < (1 << PKT_ID_PKT_BITS));
-  desc = efct_rx_desc(vi, pkt_id);
+  desc = efct_rx_desc(vi, meta_pkt);
   desc->refcnt = rxq_ptr->superbuf_pkts;
   desc->superbuf_pkts = rxq_ptr->superbuf_pkts;
 
@@ -850,7 +847,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
   /* Avoid crossing a superbuf in a single poll. Otherwise we'd need to check
    * for rollover after each packet. */
   evs_len = CI_MIN(evs_len, (int)(rxq_ptr->superbuf_pkts -
-                                  pkt_id_to_index_in_superbuf(rxq_ptr->next)));
+                                  pkt_id_to_index_in_superbuf(rxq_ptr->meta_pkt)));
 
   for( i = 0; i < evs_len; ++i ) {
     const ci_oword_t* header;
@@ -858,11 +855,11 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     uint32_t pkt_id;
     uint16_t discard_flags = 0;
 
-    header = efct_rx_next_header(vi, rxq_ptr->next);
+    header = efct_rx_next_header(vi, rxq_ptr->meta_pkt);
     if( header == NULL )
       break;
 
-    pkt_id = rxq_ptr->prev;
+    pkt_id = rxq_ptr->data_pkt;
     desc = efct_rx_desc(vi, pkt_id);
 
     /* Do a course grained check first, then get rid of the false positives.*/
@@ -871,7 +868,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
         (discard_flags = header_status_flags(header) & vi->rx_discard_mask)) ) {
       if( CI_OWORD_FIELD(*header, EFCT_RX_HEADER_ROLLOVER) ) {
         int prev_sb = pkt_id_to_local_superbuf_ix(pkt_id);
-        int next_sb = pkt_id_to_local_superbuf_ix(rxq_ptr_to_pkt_id(rxq_ptr->next));
+        int next_sb = pkt_id_to_local_superbuf_ix(rxq_ptr_to_pkt_id(rxq_ptr->meta_pkt));
         int nskipped;
         if( next_sb == prev_sb ) {
           /* We created the desc->refcnt assuming that this superbuf would be
@@ -881,7 +878,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
           /* Force a rollover on the next poll.
            * This sets the packet index greater than superbuf_pkts to trigger
            * the special case for startup/manual rollover in rx_rollover. */
-          rxq_ptr->next += nskipped + 1;
+          rxq_ptr->meta_pkt += nskipped + 1;
         }
         else {
           /* i.e. the current packet is the one straddling a superbuf
@@ -889,7 +886,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
            * (it's the bogus 'manual rollover' packet) and continue with
            * the new superbuf */
           nskipped = 1;
-          rxq_ptr->prev = rxq_ptr_to_pkt_id(rxq_ptr->next++);
+          rxq_ptr->data_pkt = rxq_ptr_to_pkt_id(rxq_ptr->meta_pkt++);
         }
 
         EF_VI_ASSERT(nskipped > 0);
@@ -929,7 +926,7 @@ static inline int efct_poll_rx(ef_vi* vi, int qid, ef_event* evs, int evs_len)
     desc->final_ts_status = CI_OWORD_FIELD(*header,
                                            EFCT_RX_HEADER_TIMESTAMP_STATUS);
 
-    rxq_ptr->prev = rxq_ptr_to_pkt_id(rxq_ptr->next++);
+    rxq_ptr->data_pkt = rxq_ptr_to_pkt_id(rxq_ptr->meta_pkt++);
   }
 
   return i;
@@ -1091,7 +1088,7 @@ void efct_vi_start_rxq(ef_vi* vi, int ix, int qid)
   rxq->qid = qid;
   rxq->config_generation = 0;
   rxq_ptr->superbuf_pkts = *rxq->live.superbuf_pkts;
-  rxq_ptr->next = rxq_ptr->superbuf_pkts + 1;
+  rxq_ptr->meta_pkt = rxq_ptr->superbuf_pkts + 1;
 
   EF_VI_ASSERT(rxq_ptr->superbuf_pkts > 0);
 }
@@ -1210,7 +1207,7 @@ const void* efct_vi_rx_future_peek(ef_vi* vi)
     if( efct_rxq_need_rollover(rxq_ptr)  ||
         efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
       continue;
-    pkt_id = OO_ACCESS_ONCE(rxq_ptr->prev);
+    pkt_id = OO_ACCESS_ONCE(rxq_ptr->data_pkt);
     {
       const char* start = (char*)efct_rx_header(vi, pkt_id) +
                           EFCT_RX_HEADER_NEXT_FRAME_LOC_1;
@@ -1247,7 +1244,7 @@ unsigned efct_vi_next_rx_rq_id(ef_vi* vi, int qid)
 {
   if( efct_rxq_need_config(&vi->efct_rxqs.q[qid]) )
     return ~0u;
-  return vi->ep_state->rxq.rxq_ptr[qid].prev;
+  return vi->ep_state->rxq.rxq_ptr[qid].data_pkt;
 }
 
 int efct_vi_rxpkt_get_timestamp(ef_vi* vi, uint32_t pkt_id,
@@ -1296,7 +1293,7 @@ int efct_vi_get_wakeup_params(ef_vi* vi, int qid, unsigned* sbseq,
   if( ! efct_rxq_is_active(rxq) )
     return -ENOENT;
 
-  sbseq_next = OO_ACCESS_ONCE(rxq_ptr->next);
+  sbseq_next = OO_ACCESS_ONCE(rxq_ptr->meta_pkt);
   ix = pkt_id_to_index_in_superbuf(sbseq_next);
 
   if( ix >= *rxq->live.superbuf_pkts ) {

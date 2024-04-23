@@ -704,23 +704,22 @@ typedef struct {
 ** Users should not access this structure.
 */
 typedef struct {
-  /** Prior value of 'next', however without bit 31 abused (i.e. it's always
-   * 0). Usually next-1, but not if there was a rollover. This is effectively
-   * the pointer to the packet payload. */
-  uint32_t prev;
+  /** pkt_id for the next packet's payload. Depending on hardware design, this
+   * is either equal to meta_pkt, or refers to the previous buffer
+   * (usually meta_pkt-1, but not if there was a rollover). */
+  uint32_t data_pkt;
   /** Number of packets per buffer, cached here for easy access when polling */
   uint32_t superbuf_pkts;
-  /** Combi-value of (sbseq << 32) | next.
-   * 'next' is the next pkt_id, with bit 31 abused to contain the expected
-   * sentinel of the pointed-to superbuf (this is duplicated info, but
-   * improves locality). This is effectively the pointer to the packet
-   * metadata
-   * sbseq is the global sequence number of the current superbuf; used for
+  /** Combi-value of (sbseq << 32) | (sentinel << 31) | meta_pkt.
+   * 'meta_pkt' is the pkt_id for the next packet's metadata header, with bit
+   * 31 abused to contain the expected sentinel of the pointed-to superbuf
+   * (this is duplicated info, but improves locality).
+   * 'sbseq' is the global sequence number of the current superbuf; used for
    * primes/wakeups.
    * The two disparate values are munged together so that they can be read
    * atomically in order to allow wakeups to be primed without holding a lock
    * on the VI. */
-  uint64_t next;
+  uint64_t meta_pkt;
 } ef_vi_efct_rxq_ptr;
 
 /*! \brief State of RX descriptor ring
