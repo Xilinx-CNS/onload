@@ -47,7 +47,7 @@ static void* find_entry_SYSCALL_64(void)
 }
 
 
-#ifdef CONFIG_RETPOLINE
+#if defined(CONFIG_RETPOLINE) || defined(CONFIG_MITIGATION_RETPOLINE)
 /*
  * Test whether p points to something like
  *                            mov    0x0(,%rNN,8),%rax
@@ -109,7 +109,7 @@ static bool is_callq_indirect_8(const unsigned char *p)
 {
   return p[0] == 0xff && p[1] == 0x14 && (p[2] & 0xc7) == 0xc5;
 }
-#endif /* CONFIG_RETPOLINE */
+#endif /* CONFIG_RETPOLINE || CONFIG_MITIGATION_RETPOLINE */
 
 /*
  * Test whether p points to something like
@@ -152,7 +152,7 @@ static void *is_syscall_table(const unsigned char *p)
    *    ff 14 c5 XX XX XX XX 	callq  *0x0(,%rax,8)
    */
   unsigned long result = 0;
-#ifdef CONFIG_RETPOLINE
+#if defined(CONFIG_RETPOLINE) || defined(CONFIG_MITIGATION_RETPOLINE)
   if( is_movq_indirect_8(p) ) {
     if( (is_movq_to_rdi(p + 8) && is_callq_indirect_reg(p + 11)) ||
         (is_movq_to_rdi(p-3) && is_callq_indirect_reg(p + 8)) ) {
