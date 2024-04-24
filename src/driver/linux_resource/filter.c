@@ -2075,19 +2075,6 @@ int efrm_rss_context_alloc(struct efrm_client* client, u32 vport_id,
 EXPORT_SYMBOL(efrm_rss_context_alloc);
 
 
-int efrm_rss_context_update(struct efrm_client* client, u32 rss_context,
-			    const u32 *indir, const u8 *key, u32 efhw_rss_mode)
-{
-	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);
-	int rc;
-
-	rc = efhw_nic_rss_update(efhw_nic, indir, key, efhw_rss_mode, rss_context);
-
-	return rc;
-}
-EXPORT_SYMBOL(efrm_rss_context_update);
-
-
 int efrm_rss_context_free(struct efrm_client* client, u32 rss_context_id)
 {
 	struct efhw_nic *efhw_nic = efrm_client_get_nic(client);

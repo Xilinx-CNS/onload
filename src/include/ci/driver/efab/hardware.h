@@ -199,10 +199,6 @@
         ((nic)->efhw_func->rss_alloc ? \
          (nic)->efhw_func->rss_alloc((nic), (indir), (key), (efhw_rss_mode), \
 				     (num_qs), (context)) : -EOPNOTSUPP)
-#define efhw_nic_rss_update(nic, indir, key, efhw_rss_mode, rss_context) \
-	((nic)->efhw_func->rss_update ? \
-	 (nic)->efhw_func->rss_update((nic), (indir), (key), (efhw_rss_mode), \
-				      (rss_context)) : -EOPNOTSUPP)
 #define efhw_nic_rss_free(nic, rss_context) \
 	((nic)->efhw_func->rss_free ? \
 	 (nic)->efhw_func->rss_free((nic), (rss_context)) : -EOPNOTSUPP)

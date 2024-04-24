@@ -774,7 +774,6 @@ struct efhw_func_ops ef100_char_functional_units = {
 	.buffer_table_set = ef10_ef100_nic_buffer_table_set,
 	.buffer_table_clear = ef10_ef100_nic_buffer_table_clear,
 	.rss_alloc = ef10_ef100_rss_alloc,
-	.rss_update = ef10_ef100_rss_update,
 	.rss_free = ef10_ef100_rss_free,
 	.filter_insert = ef10_ef100_filter_insert,
 	.filter_remove = ef10_ef100_filter_remove,

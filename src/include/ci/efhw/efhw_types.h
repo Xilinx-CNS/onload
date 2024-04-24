@@ -375,9 +375,6 @@ struct efhw_func_ops {
 	/* Allocate a new RSS context */
 	int (*rss_alloc)(struct efhw_nic *nic, const u32 *indir,const u8 *key,
 			 u32 efhw_rss_mode, int num_qs, u32 *rss_context_out);
-	/* Update an existing RSS context */
-	int (*rss_update)(struct efhw_nic *nic, const u32 *indir,
-			  const u8 *key, u32 efhw_rss_mode, u32 rss_context);
 	/* Free an existing RSS context */
 	int (*rss_free)(struct efhw_nic *nic, u32 rss_context);
 

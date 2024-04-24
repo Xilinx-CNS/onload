@@ -2245,25 +2245,6 @@ ef10_ef100_rss_alloc(struct efhw_nic *nic, const u32 *indir, const u8 *key,
 	return rc;
 }
 
-int
-ef10_ef100_rss_update(struct efhw_nic *nic, const u32 *indir, const u8 *key,
-		      u32 efhw_rss_mode, u32 rss_context)
-{
-	int rc;
-	struct efx_dl_device *efx_dev = efhw_nic_acquire_dl_device(nic);
-	u32 nic_rss_flags;
-
-	rc = ef10_ef100_rss_mode_to_nic_flags(nic, efhw_rss_mode, &nic_rss_flags);
-	if (rc < 0)
-		return rc;
-
-	if (efx_dev == NULL)
-		return -ENETDOWN;
-	rc = efx_dl_rss_context_set(efx_dev, indir, key, nic_rss_flags,
-				    rss_context);
-	efhw_nic_release_dl_device(nic, efx_dev);
-	return rc;
-}
 
 int
 ef10_ef100_rss_free(struct efhw_nic *nic, u32 rss_context)
@@ -2599,7 +2580,6 @@ struct efhw_func_ops ef10_char_functional_units = {
 	.tx_alt_alloc = ef10_tx_alt_alloc,
 	.tx_alt_free = ef10_tx_alt_free,
 	.rss_alloc = ef10_ef100_rss_alloc,
-	.rss_update = ef10_ef100_rss_update,
 	.rss_free = ef10_ef100_rss_free,
 	.filter_insert = ef10_ef100_filter_insert,
 	.filter_remove = ef10_ef100_filter_remove,

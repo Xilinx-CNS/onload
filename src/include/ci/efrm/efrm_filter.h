@@ -80,10 +80,6 @@ int efrm_rss_context_alloc(struct efrm_client*, u32 vport_id,
 			   int num_qs,
 			   u32 *rss_context_out);
 
-extern int
-efrm_rss_context_update(struct efrm_client*, u32 rss_context, const u32 *indir,
-			const u8 *key, u32 efhw_rss_mode);
-
 extern int efrm_rss_context_free(struct efrm_client*,
 				 u32 rss_context_id);
 
