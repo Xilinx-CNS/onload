@@ -18,7 +18,7 @@
 
 extern void** efrm_syscall_table;
 
-#if defined(__x86_64__) && defined(EFRM_SYSCALL_PTREGS)
+#if defined(__x86_64__)
 /* forward declaration needed for function pointer */
 struct pt_regs;
 typedef long (*syscall_fn_t)(const struct pt_regs *regs, unsigned int nr);

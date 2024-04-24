@@ -268,7 +268,7 @@ static bool find_syscall(void)
   p = efrm_find_ksym("x64_sys_call");
   if( p != NULL ) {
     TRAMP_DEBUG("syscall function ksym at %px", (unsigned long*)p);
-    efrm_x64_sys_call = p;
+    efrm_x64_sys_call = (syscall_fn_t)p;
     return true;
   }
   /* It works with CONFIG_KALLSYMS_ALL=y only. */
